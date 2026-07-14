@@ -768,6 +768,28 @@ int ObSchemaServiceSQLImpl::get_core_and_sys_version(
   return ret;
 }
 
+int ObSchemaServiceSQLImpl::get_normal_schema_version(
+    common::ObISQLClient &sql_client,
+    const ObRefreshSchemaStatus &schema_status,
+    int64_t &normal_schema_version)
+{
+  int ret = OB_SUCCESS;
+  if (!check_inner_stat()) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("not init", K(ret));
+  } else {
+    normal_schema_version = OB_INVALID_VERSION;
+    const int64_t snapshot_timestamp = schema_status.snapshot_timestamp_;
+    bool check_sys_variable = false;
+    DEFINE_SQL_CLIENT_RETRY_WEAK_WITH_PARAMETER(sql_client, snapshot_timestamp, check_sys_variable);
+    ObGlobalStatProxy proxy(sql_client_retry_weak);
+    if (OB_FAIL(proxy.get_normal_schema_version(normal_schema_version))) {
+      LOG_WARN("get_normal_schema_version failed", KR(ret), K(schema_status));
+    }
+  }
+  return ret;
+}
+
 int ObSchemaServiceSQLImpl::get_baseline_schema_version(
     common::ObISQLClient &sql_client,
     const ObRefreshSchemaStatus &schema_status,
@@ -5850,18 +5872,18 @@ int ObSchemaServiceSQLImpl::can_read_schema_version(
     // fine
   } else {
     int64_t core_schema_version = 0;
-    int64_t schema_version = OB_INVALID_VERSION;
+    int64_t normal_schema_version = OB_INVALID_VERSION;
     ObISQLClient &sql_client = *mysql_proxy_;
     if (OB_FAIL(get_core_version(sql_client, schema_status, core_schema_version))) {
       LOG_WARN("failed to get core schema version", KR(ret), K(schema_status));
-    } else if (OB_FAIL(fetch_schema_version(schema_status, sql_client, schema_version))) {
-      LOG_WARN("fail to fetch normal schema version", KR(ret), K(schema_status));
+    } else if (OB_FAIL(get_normal_schema_version(sql_client, schema_status, normal_schema_version))) {
+      LOG_WARN("failed to get normal schema version", KR(ret), K(schema_status));
     } else if (expected_version > core_schema_version
-               && expected_version > schema_version) {
+               && expected_version > normal_schema_version) {
       ret = OB_SCHEMA_EAGAIN;
-      LOG_WARN("__all_ddl_operation or __all_core_table is older than the expected version",
+      LOG_WARN("__all_global_stat is older than the expected schema version",
                KR(ret), K(schema_status), K(expected_version),
-               K(schema_version), K(core_schema_version));
+               K(normal_schema_version), K(core_schema_version));
     }
   }
   return ret;

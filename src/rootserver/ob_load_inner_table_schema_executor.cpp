@@ -237,6 +237,8 @@ int ObLoadInnerTableSchemaExecutor::load_schema_version(common::ObISQLClient &cl
     LOG_WARN("failed to set core_schema_version", KR(ret));
   } else if (OB_FAIL(proxy.set_sys_schema_version(sys_schema_version))) {
     LOG_WARN("failed to set sys_schema_version", KR(ret));
+  } else if (OB_FAIL(proxy.set_normal_schema_version(sys_schema_version))) {
+    LOG_WARN("failed to set normal_schema_version", KR(ret));
   }
   return ret;
 }
