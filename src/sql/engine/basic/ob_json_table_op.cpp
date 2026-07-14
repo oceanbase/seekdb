@@ -19,10 +19,12 @@
 #include "sql/engine/expr/ob_expr_multi_mode_func_helper.h"
 #include "sql/engine/expr/ob_expr_json_value.h"
 #include "sql/engine/expr/ob_expr_json_query.h"
+#include "sql/engine/expr/ob_expr_lob_utils.h"
 #include "common/xml/ob_binary_aggregate.h"
 #include "sql/engine/expr/ob_expr_rb_func_helper.h"
 #include "sql/engine/expr/ob_array_expr_utils.h"
 #include "share/roaringbitmap/ob_rb_utils.h"
+#include <limits>
 
 namespace oceanbase
 {
@@ -332,7 +334,8 @@ OB_DEF_SERIALIZE(ObJsonTableSpec)
     OB_UNIS_ENCODE(info);
   }
   if (OB_FAIL(ret)) {
-  } else if (table_type_ == MulModeTableType::OB_RB_ITERATE_TABLE_TYPE
+  } else if (table_type_ == MulModeTableType::OB_AI_SPLIT_DOCUMENT_TABLE_TYPE
+             || table_type_ == MulModeTableType::OB_RB_ITERATE_TABLE_TYPE
              || table_type_ == MulModeTableType::OB_UNNEST_TABLE_TYPE) {
     OB_UNIS_ENCODE(table_type_);
     int32_t value_exprs_count = value_exprs_.count() - 1;
@@ -361,7 +364,8 @@ OB_DEF_SERIALIZE_SIZE(ObJsonTableSpec)
     const ObJtColInfo& info = *cols_def_.at(i);
     OB_UNIS_ADD_LEN(info);
   }
-  if (table_type_ == MulModeTableType::OB_RB_ITERATE_TABLE_TYPE
+  if (table_type_ == MulModeTableType::OB_AI_SPLIT_DOCUMENT_TABLE_TYPE
+      || table_type_ == MulModeTableType::OB_RB_ITERATE_TABLE_TYPE
       || table_type_ == MulModeTableType::OB_UNNEST_TABLE_TYPE) {
     OB_UNIS_ADD_LEN(table_type_);
     int32_t value_exprs_count = value_exprs_.count() - 1;
@@ -408,12 +412,16 @@ OB_DEF_DESERIALIZE(ObJsonTableSpec)
         table_type_flag = OB_RB_ITERATE_TABLE;
       } else if (col_info->col_type_ == COL_TYPE_UNNEST) {
         table_type_flag = OB_UNNEST_TABLE;
+      } else if (col_info->col_type_ == COL_TYPE_AI_SPLIT_DOCUMENT) {
+        table_type_flag = OB_AI_SPLIT_DOCUMENT_TABLE;
       }
     }
   }
 
   if (OB_FAIL(ret)) {
-  } else if (table_type_flag == OB_RB_ITERATE_TABLE || table_type_flag == OB_UNNEST_TABLE) {
+  } else if (table_type_flag == OB_RB_ITERATE_TABLE
+             || table_type_flag == OB_UNNEST_TABLE
+             || table_type_flag == OB_AI_SPLIT_DOCUMENT_TABLE) {
     OB_UNIS_DECODE(table_type_);
     int32_t value_exprs_count = 0;
     OB_UNIS_DECODE(value_exprs_count);
@@ -641,6 +649,8 @@ int ObJsonTableOp::inner_rescan()
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObOperator::inner_rescan())) {
     LOG_WARN("failed to inner rescan", K(ret));
+  } else if (OB_FAIL(root_->reset(&jt_ctx_))) {
+    LOG_WARN("failed to reset table function tree", K(ret));
   } else {
     jt_ctx_.row_alloc_.reuse();
   }
@@ -662,8 +672,6 @@ int ObJsonTableOp::reset_variable()
   } else if (MY_SPEC.value_exprs_.empty()) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("failed to open iter, value expr is null.", K(ret));
-  } else if (OB_FAIL(root_->reset(&jt_ctx_))) {
-    LOG_WARN("failed to open table func xml column node.", K(ret));
   } else {
     is_evaled_ = false;
   }
@@ -733,6 +741,16 @@ int ObJsonTableOp::init()
       } else if (OB_ISNULL(jt_ctx_.table_func_ = new (table_func_buf) UnnestTableFunc())) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("failed to new unnest node", K(ret));
+      }
+    } else if (jt_ctx_.is_ai_split_document_table_func()) {
+      table_func_buf = jt_ctx_.op_exec_alloc_->alloc(sizeof(AiSplitDocumentTableFunc));
+      if (OB_ISNULL(table_func_buf)) {
+        ret = OB_ALLOCATE_MEMORY_FAILED;
+        LOG_WARN("failed to allocate ai_split_document table function", K(ret));
+      } else if (OB_ISNULL(jt_ctx_.table_func_ =
+                              new (table_func_buf) AiSplitDocumentTableFunc())) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("failed to create ai_split_document table function", K(ret));
       }
     }
   }
@@ -946,6 +964,44 @@ int RegularCol::eval_unnest_col(ObRegCol &col_node, void* in, JtScanCtx* ctx, Ob
     }
   }
 
+  return ret;
+}
+
+int RegularCol::eval_ai_split_document_col(ObRegCol &col_node, void *in,
+                                           JtScanCtx *ctx, ObExpr *col_expr)
+{
+  INIT_SUCC(ret);
+  ObAiSplitDocAdapter *adapter = static_cast<ObAiSplitDocAdapter *>(in);
+  ObDatum &res_datum = col_expr->locate_datum_for_write(*ctx->eval_ctx_);
+  if (OB_ISNULL(adapter) || !adapter->is_inited() || adapter->get_cur_idx() < 0) {
+    res_datum.set_null();
+  } else {
+    const ObAiSplitDocChunk &chunk = adapter->get_cur_chunk();
+    const ObString &column_name = col_node.col_info_.col_name_;
+    if (0 == column_name.case_compare("CHUNK_ID")) {
+      res_datum.set_int(chunk.chunk_id_);
+    } else if (0 == column_name.case_compare("CHUNK_OFFSET")) {
+      res_datum.set_int(chunk.chunk_offset_);
+    } else if (0 == column_name.case_compare("CHUNK_LENGTH")) {
+      res_datum.set_int(chunk.chunk_length_);
+    } else if (0 == column_name.case_compare("CHUNK_TEXT")) {
+      ObTextStringDatumResult text_result(col_expr->datum_meta_.type_, col_expr,
+                                          ctx->eval_ctx_, &res_datum);
+      if (OB_FAIL(text_result.init(chunk.chunk_text_.length()))) {
+        LOG_WARN("failed to initialize ai_split_document text result", K(ret));
+      } else if (OB_FAIL(text_result.append(chunk.chunk_text_))) {
+        LOG_WARN("failed to write ai_split_document text result", K(ret));
+      } else {
+        text_result.set_result();
+      }
+    } else {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("unexpected ai_split_document output column", K(ret), K(column_name));
+    }
+  }
+  if (OB_SUCC(ret)) {
+    col_expr->get_eval_info(*ctx->eval_ctx_).evaluated_ = true;
+  }
   return ret;
 }
 
@@ -1198,6 +1254,257 @@ int UnnestTableFunc::get_iter_value(ObRegCol &col_node, JtScanCtx* ctx, bool &is
   return ret;
 }
 
+static int parse_ai_split_document_params(const ObIJsonBase *params_node,
+                                          ObAiSplitDocParams &params)
+{
+  INIT_SUCC(ret);
+  ObString type_str = ObString::make_string("markdown");
+  ObString by_str = ObString::make_string("word");
+  int64_t max = 256;
+  int64_t overlap = 0;
+  if (OB_ISNULL(params_node)) {
+    // Use defaults.
+  } else if (params_node->json_type() != ObJsonNodeType::J_OBJECT) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("document split parameters must be a JSON object", K(ret),
+             K(params_node->json_type()));
+    FORWARD_USER_ERROR(ret, "parameters must be a JSON object");
+  } else {
+    JsonObjectIterator iter = params_node->object_iterator();
+    while (OB_SUCC(ret) && !iter.end()) {
+      ObJsonObjPair elem;
+      if (OB_FAIL(iter.get_elem(elem))) {
+        LOG_WARN("failed to read document split parameter", K(ret));
+      } else if (0 == elem.first.case_compare("type")
+                 || 0 == elem.first.case_compare("by")) {
+        const bool is_type = 0 == elem.first.case_compare("type");
+        if (elem.second->json_type() != ObJsonNodeType::J_STRING) {
+          ret = OB_INVALID_ARGUMENT;
+          LOG_WARN("invalid document split parameter type", K(ret), K(elem.first),
+                   K(elem.second->json_type()));
+          FORWARD_USER_ERROR_MSG(ret, "parameter %s must be a string",
+                                 is_type ? "type" : "by");
+        } else if (is_type) {
+          type_str.assign_ptr(elem.second->get_data(), elem.second->get_data_length());
+        } else {
+          by_str.assign_ptr(elem.second->get_data(), elem.second->get_data_length());
+        }
+      } else if (0 == elem.first.case_compare("max")
+                 || 0 == elem.first.case_compare("overlap")) {
+        const bool is_max = 0 == elem.first.case_compare("max");
+        int64_t &value = is_max ? max : overlap;
+        if (elem.second->json_type() != ObJsonNodeType::J_INT
+            && elem.second->json_type() != ObJsonNodeType::J_UINT) {
+          ret = OB_INVALID_ARGUMENT;
+          LOG_WARN("invalid document split parameter type", K(ret), K(elem.first),
+                   K(elem.second->json_type()));
+          FORWARD_USER_ERROR_MSG(ret, "parameter %s must be an integer",
+                                 is_max ? "max" : "overlap");
+        } else if (elem.second->json_type() == ObJsonNodeType::J_UINT) {
+          const uint64_t uint_value = elem.second->get_uint();
+          if (uint_value > static_cast<uint64_t>(std::numeric_limits<int64_t>::max())) {
+            ret = OB_INVALID_ARGUMENT;
+            LOG_WARN("document split parameter is out of range", K(ret), K(elem.first),
+                     K(uint_value));
+            FORWARD_USER_ERROR_MSG(ret, "parameter %s is out of range",
+                                   is_max ? "max" : "overlap");
+          } else {
+            value = static_cast<int64_t>(uint_value);
+          }
+        } else {
+          value = elem.second->get_int();
+        }
+      } else {
+        ret = OB_INVALID_ARGUMENT;
+        LOG_WARN("unknown document split parameter", K(ret), K(elem.first));
+        FORWARD_USER_ERROR_MSG(ret, "unknown parameter '%.*s'",
+                               elem.first.length(), elem.first.ptr());
+      }
+      iter.next();
+    }
+  }
+  if (OB_SUCC(ret) && OB_FAIL(params.init(type_str, by_str, max, overlap))) {
+    LOG_WARN("failed to initialize document split parameters", K(ret));
+  }
+  return ret;
+}
+
+int AiSplitDocumentTableFunc::eval_input(ObJsonTableOp &jt, JtScanCtx &ctx,
+                                         ObEvalCtx &eval_ctx)
+{
+  INIT_SUCC(ret);
+  ObString content;
+  ObAiSplitDocParams params;
+  if (!ctx.is_ai_split_document_table_func()) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("invalid ai_split_document table function", K(ret));
+  } else if (ctx.spec_ptr_->value_exprs_.count() < 2) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("ai_split_document requires two expressions", K(ret),
+             K(ctx.spec_ptr_->value_exprs_.count()));
+  } else {
+    jt.reset_columns();
+  }
+
+  if (OB_SUCC(ret)) {
+    ObExpr *content_expr = ctx.spec_ptr_->value_exprs_.at(0);
+    ObDatum *content_datum = NULL;
+    if (OB_ISNULL(content_expr)) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("ai_split_document content expression is null", K(ret));
+    } else if (OB_FAIL(content_expr->eval(eval_ctx, content_datum))) {
+      LOG_WARN("failed to evaluate ai_split_document content", K(ret));
+    } else if (OB_ISNULL(content_datum) || content_datum->is_null()) {
+      ret = OB_ITER_END;
+    } else if (OB_FAIL(ObTextStringHelper::read_real_string_data(
+                           ctx.row_alloc_, *content_datum, content_expr->datum_meta_,
+                           content_expr->obj_meta_.has_lob_header(), content,
+                           ctx.exec_ctx_))) {
+      LOG_WARN("failed to read ai_split_document content", K(ret));
+    }
+  }
+
+  if (OB_SUCC(ret)) {
+    ObExpr *params_expr = ctx.spec_ptr_->value_exprs_.at(1);
+    ObDatum *params_datum = NULL;
+    if (OB_ISNULL(params_expr)) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("ai_split_document parameters expression is null", K(ret));
+    } else if (OB_FAIL(params_expr->eval(eval_ctx, params_datum))) {
+      LOG_WARN("failed to evaluate ai_split_document parameters", K(ret));
+    } else if (OB_NOT_NULL(params_datum) && !params_datum->is_null()) {
+      const ObObjType params_type = params_expr->datum_meta_.type_;
+      const ObCollationType params_cs_type = params_expr->datum_meta_.cs_type_;
+      ObString params_str;
+      bool is_null = false;
+      MultimodeAlloctor tmp_allocator(ctx.row_alloc_, T_AI_SPLIT_DOCUMENT_EXPRESSION, ret);
+      if (!(params_type == ObJsonType || ob_is_string_type(params_type))) {
+        ret = OB_ERR_INVALID_TYPE_FOR_OP;
+        LOG_WARN("invalid ai_split_document parameters type", K(ret), K(params_type));
+      } else if (OB_FAIL(ObJsonExprHelper::get_json_or_str_data(
+                           params_expr, eval_ctx, tmp_allocator, params_str, is_null))) {
+        LOG_WARN("failed to read ai_split_document parameters", K(ret));
+      } else if (is_null || params_str.empty()) {
+        is_null = true;
+      } else if (OB_FALSE_IT(tmp_allocator.set_baseline_size(params_str.length()))) {
+      } else if (ob_is_string_type(params_type)
+                 && params_cs_type != CS_TYPE_BINARY
+                 && ObCharset::charset_type_by_coll(params_cs_type) != CHARSET_UTF8MB4) {
+        const int64_t buf_len = params_str.length() * 2;
+        uint32_t result_len = 0;
+        char *buf = static_cast<char *>(tmp_allocator.alloc(buf_len));
+        if (OB_ISNULL(buf)) {
+          ret = OB_ALLOCATE_MEMORY_FAILED;
+          LOG_WARN("failed to allocate converted JSON parameters", K(ret));
+        } else if (OB_FAIL(ObCharset::charset_convert(
+                              params_cs_type, params_str.ptr(), params_str.length(),
+                              CS_TYPE_UTF8MB4_BIN, buf, buf_len, result_len))) {
+          LOG_WARN("failed to convert JSON parameters to utf8mb4", K(ret));
+        } else {
+          params_str.assign_ptr(buf, result_len);
+        }
+      }
+      if (OB_SUCC(ret) && !is_null) {
+        ObIJsonBase *params_node = NULL;
+        const ObJsonInType input_type = ObJsonExprHelper::get_json_internal_type(params_type);
+        const ObJsonInType expect_type = ObJsonInType::JSON_TREE;
+        const uint32_t parse_flag = ObJsonParser::JSN_RELAXED_FLAG
+                                    | ObJsonParser::JSN_UNIQUE_FLAG;
+        if (OB_FAIL(ObJsonBaseFactory::get_json_base(
+                        &tmp_allocator, params_str, input_type, expect_type,
+                        params_node, parse_flag,
+                        ObJsonExprHelper::get_json_max_depth_config()))) {
+          LOG_WARN("failed to parse ai_split_document parameters", K(ret), K(params_str));
+        } else if (OB_FAIL(parse_ai_split_document_params(params_node, params))) {
+          LOG_WARN("failed to initialize ai_split_document parameters", K(ret));
+        }
+      }
+    }
+  }
+
+  if (OB_SUCC(ret)) {
+    void *buf = ctx.row_alloc_.alloc(sizeof(ObAiSplitDocInput));
+    if (OB_ISNULL(buf)) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+      LOG_WARN("failed to allocate ai_split_document input", K(ret));
+    } else {
+      ObAiSplitDocInput *input = new (buf) ObAiSplitDocInput();
+      if (OB_FAIL(input->init(content, params))) {
+        LOG_WARN("failed to initialize ai_split_document input", K(ret));
+      } else {
+        jt.input_ = input;
+      }
+    }
+  }
+  return ret;
+}
+
+int AiSplitDocumentTableFunc::reset_ctx(ObRegCol &scan_node, JtScanCtx *&ctx)
+{
+  INIT_SUCC(ret);
+  if (OB_NOT_NULL(scan_node.path_)) {
+    ObAiSplitDocAdapter *adapter = static_cast<ObAiSplitDocAdapter *>(scan_node.path_);
+    OB_DELETEx(ObAiSplitDocAdapter, &ctx->row_alloc_, adapter);
+    scan_node.path_ = NULL;
+    scan_node.iter_ = NULL;
+  }
+  return ret;
+}
+
+int AiSplitDocumentTableFunc::init_ctx(ObRegCol &scan_node, JtScanCtx *&ctx)
+{
+  UNUSED(ctx);
+  INIT_SUCC(ret);
+  scan_node.tab_type_ = MulModeTableType::OB_AI_SPLIT_DOCUMENT_TABLE_TYPE;
+  return ret;
+}
+
+int AiSplitDocumentTableFunc::reset_path_iter(ObRegCol &scan_node, void *in,
+                                              JtScanCtx *&ctx, ScanType init_flag,
+                                              bool &is_null_value)
+{
+  UNUSED(init_flag);
+  INIT_SUCC(ret);
+  ObAiSplitDocInput *input = static_cast<ObAiSplitDocInput *>(in);
+  if (OB_ISNULL(input)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("ai_split_document input is null", K(ret));
+  } else {
+    ObAiSplitDocAdapter *adapter = OB_NEWx(ObAiSplitDocAdapter, &ctx->row_alloc_);
+    if (OB_ISNULL(adapter)) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+      LOG_WARN("failed to allocate ai_split_document adapter", K(ret));
+    } else if (OB_FAIL(adapter->init(ctx->row_alloc_, input->content_, input->params_))) {
+      LOG_WARN("failed to initialize ai_split_document adapter", K(ret));
+      OB_DELETEx(ObAiSplitDocAdapter, &ctx->row_alloc_, adapter);
+    } else {
+      scan_node.iter_ = adapter;
+      scan_node.path_ = adapter;
+      ret = get_iter_value(scan_node, ctx, is_null_value);
+    }
+  }
+  return ret;
+}
+
+int AiSplitDocumentTableFunc::get_iter_value(ObRegCol &col_node, JtScanCtx *ctx,
+                                             bool &is_null_value)
+{
+  UNUSED(ctx);
+  UNUSED(is_null_value);
+  INIT_SUCC(ret);
+  ObAiSplitDocAdapter *adapter = static_cast<ObAiSplitDocAdapter *>(col_node.iter_);
+  if (OB_ISNULL(adapter)) {
+    ret = OB_ITER_END;
+  } else if (OB_FAIL(adapter->get_next_row())) {
+    if (ret != OB_ITER_END) {
+      LOG_WARN("failed to get ai_split_document row", K(ret));
+    }
+  } else {
+    ++col_node.cur_pos_;
+  }
+  return ret;
+}
+
 // default value cast type check
 bool RegularCol::check_cast_allowed(const ObObjType orig_type,
                                     const ObCollationType orig_cs_type,
@@ -1327,8 +1634,13 @@ void ObRegCol::destroy()
     if (tab_type_ == OB_ORA_JSON_TABLE_TYPE) { // do nothing current
       ObJsonPath* json_path = static_cast<ObJsonPath*>(path_);
       json_path->~ObJsonPath();
+    } else if (tab_type_ == OB_AI_SPLIT_DOCUMENT_TABLE_TYPE) {
+      ObAiSplitDocAdapter *adapter = static_cast<ObAiSplitDocAdapter *>(path_);
+      adapter->~ObAiSplitDocAdapter();
+      path_ = NULL;
     }
   }
+  iter_ = NULL;
 }
 
 void UnionNode::destroy()
@@ -1382,6 +1694,11 @@ int ObRegCol::eval_regular_col(void *in, JtScanCtx* ctx, bool& is_null_value)
   } else if (col_type == COL_TYPE_UNNEST) {
     if (OB_FAIL(RegularCol::eval_unnest_col(*this, in, ctx, col_expr))) {
       LOG_WARN("fail to eval unnest col", K(ret), K(col_type), K(cur_pos_), K(col_info_.output_column_idx_));
+    }
+  } else if (col_type == COL_TYPE_AI_SPLIT_DOCUMENT) {
+    if (OB_FAIL(RegularCol::eval_ai_split_document_col(*this, in, ctx, col_expr))) {
+      LOG_WARN("failed to evaluate ai_split_document column", K(ret), K(col_type),
+               K(cur_pos_), K(col_info_.output_column_idx_));
     }
   } else if (col_type == COL_TYPE_ORDINALITY) {
     if (OB_ISNULL(in)) {
@@ -1713,7 +2030,8 @@ int ObJsonTableOp::inner_get_next_row()
   bool is_root_null = false;
   if (!(jt_ctx_.is_json_table_func()
         || jt_ctx_.is_rb_iterate_table_func()
-        || jt_ctx_.is_unnest_table_func())) {
+        || jt_ctx_.is_unnest_table_func()
+        || jt_ctx_.is_ai_split_document_table_func())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unsupport table function", K(ret));
   } else if (is_evaled_) {
