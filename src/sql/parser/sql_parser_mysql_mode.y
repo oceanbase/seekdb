@@ -18451,7 +18451,7 @@ alter_with_opt_hint SYSTEM MINOR FREEZE opt_tenant_list_or_ls_or_tablet_id
 alter_with_opt_hint SYSTEM REFRESH MEMORY STAT
 {
   (void)($1);
-  malloc_non_terminal_node($$, result->malloc_pool_, T_REFRESH_FULLTEXT_DICT, 1, $6);
+  malloc_non_terminal_node($$, result->malloc_pool_, T_REFRESH_MEMORY_STAT, 1, NULL);
 }
 |
 alter_with_opt_hint SYSTEM REFRESH FULLTEXT DICT relation_factor
@@ -18459,13 +18459,6 @@ alter_with_opt_hint SYSTEM REFRESH FULLTEXT DICT relation_factor
   (void)($1);
   (void)($6);
   malloc_non_terminal_node($$, result->malloc_pool_, T_REFRESH_FULLTEXT_DICT, 1, $6);
-}
-|
-alter_with_opt_hint SYSTEM REFRESH FULLTEXT DICT STRING_VALUE
-{
-  (void)($1);
-  (void)($6);
-  malloc_non_terminal_node($$, result->malloc_pool_, T_REFRESH_MEMORY_STAT, 1, NULL);
 }
 |
 alter_with_opt_hint SYSTEM WASH MEMORY FRAGMENTATION
