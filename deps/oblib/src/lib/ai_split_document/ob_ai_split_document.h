@@ -21,6 +21,7 @@
 #include "lib/allocator/page_arena.h"
 #include "lib/string/ob_string.h"
 #include "lib/utility/ob_macro_utils.h"
+#include "lib/utility/ob_print_utils.h"
 #include <unicode/brkiter.h>
 #include <unicode/utext.h>
 
