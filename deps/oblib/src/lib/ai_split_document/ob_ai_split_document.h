@@ -21,8 +21,6 @@
 #include "lib/allocator/page_arena.h"
 #include "lib/string/ob_string.h"
 #include "lib/utility/ob_macro_utils.h"
-#include "common/json_type/ob_json_base.h"
-#include "common/json_type/ob_json_parse.h"
 #include <unicode/brkiter.h>
 #include <unicode/utext.h>
 
@@ -68,7 +66,8 @@ struct ObAiSplitDocParams
     max_ = other.max_;
     overlap_ = other.overlap_;
   }
-  int init(const ObIJsonBase *params_node);
+  int init(const ObString &type_str, const ObString &by_str,
+           const int64_t max, const int64_t overlap);
   int check_validity() const;
 
   ObAiSplitContentType type_;
@@ -117,7 +116,7 @@ struct ObAiSplitDocInput
 {
   ObAiSplitDocInput() : content_(), params_() {}
 
-  int init(const ObString &content, const ObIJsonBase *params_node);
+  int init(const ObString &content, const ObAiSplitDocParams &params);
   void reset()
   {
     content_.reset();

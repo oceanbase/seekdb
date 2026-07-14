@@ -22,7 +22,6 @@
 #include "lib/allocator/ob_malloc.h"
 #include "lib/oblog/ob_log_module.h"
 #include <cctype>
-#include <limits>
 
 namespace oceanbase
 {
@@ -37,87 +36,25 @@ bool is_space(const char ch)
 }
 } // namespace
 
-#define EXTRACT_JSON_STRING(json_key, string_value, process)                         \
-  if (0 == elem.first.case_compare(json_key)) {                                     \
-    if (elem.second->json_type() != ObJsonNodeType::J_STRING) {                     \
-      ret = OB_INVALID_ARGUMENT;                                                     \
-      LOG_WARN("invalid document split parameter type", K(ret), K(elem.first),      \
-               K(elem.second->json_type()));                                         \
-      FORWARD_USER_ERROR(ret, "parameter " json_key " must be a string");          \
-    } else {                                                                         \
-      string_value.assign_ptr(elem.second->get_data(), elem.second->get_data_length()); \
-      process;                                                                       \
-    }                                                                                \
-  } else
-
-#define EXTRACT_JSON_INTEGER(json_key, integer_value)                               \
-  if (0 == elem.first.case_compare(json_key)) {                                     \
-    if (elem.second->json_type() != ObJsonNodeType::J_INT                           \
-        && elem.second->json_type() != ObJsonNodeType::J_UINT) {                    \
-      ret = OB_INVALID_ARGUMENT;                                                     \
-      LOG_WARN("invalid document split parameter type", K(ret), K(elem.first),      \
-               K(elem.second->json_type()));                                         \
-      FORWARD_USER_ERROR(ret, "parameter " json_key " must be an integer");       \
-    } else if (elem.second->json_type() == ObJsonNodeType::J_UINT) {                \
-      const uint64_t uint_value = elem.second->get_uint();                           \
-      if (uint_value > static_cast<uint64_t>(std::numeric_limits<int64_t>::max())) { \
-        ret = OB_INVALID_ARGUMENT;                                                    \
-        LOG_WARN("document split parameter is out of range", K(ret), K(elem.first), \
-                 K(uint_value));                                                      \
-        FORWARD_USER_ERROR(ret, "parameter " json_key " is out of range");       \
-      } else {                                                                        \
-        integer_value = static_cast<int64_t>(uint_value);                            \
-      }                                                                               \
-    } else {                                                                          \
-      integer_value = elem.second->get_int();                                        \
-    }                                                                                \
-  } else
-
-int ObAiSplitDocInput::init(const ObString &content, const ObIJsonBase *params_node)
+int ObAiSplitDocInput::init(const ObString &content, const ObAiSplitDocParams &params)
 {
-  int ret = OB_SUCCESS;
   content_ = content;
-  if (OB_FAIL(params_.init(params_node))) {
-    LOG_WARN("failed to initialize document split parameters", K(ret));
-  }
-  return ret;
+  params_.assign(params);
+  return OB_SUCCESS;
 }
 
-int ObAiSplitDocParams::init(const ObIJsonBase *params_node)
+int ObAiSplitDocParams::init(const ObString &type_str, const ObString &by_str,
+                             const int64_t max, const int64_t overlap)
 {
   int ret = OB_SUCCESS;
   reset();
-  if (OB_ISNULL(params_node)) {
-    // Use defaults.
-  } else if (params_node->json_type() != ObJsonNodeType::J_OBJECT) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("document split parameters must be a JSON object", K(ret),
-             K(params_node->json_type()));
-    FORWARD_USER_ERROR(ret, "parameters must be a JSON object");
-  } else {
-    ObString type_str;
-    ObString by_str;
-    JsonObjectIterator iter = params_node->object_iterator();
-    while (OB_SUCC(ret) && !iter.end()) {
-      ObJsonObjPair elem;
-      if (OB_FAIL(iter.get_elem(elem))) {
-        LOG_WARN("failed to read document split parameter", K(ret));
-      } else {
-        EXTRACT_JSON_STRING("type", type_str, parse_type(type_str))
-        EXTRACT_JSON_STRING("by", by_str, parse_by(by_str))
-        EXTRACT_JSON_INTEGER("max", max_)
-        EXTRACT_JSON_INTEGER("overlap", overlap_)
-        {
-          ret = OB_INVALID_ARGUMENT;
-          LOG_WARN("unknown document split parameter", K(ret), K(elem.first));
-          FORWARD_USER_ERROR_MSG(ret, "unknown parameter '%.*s'",
-                                 elem.first.length(), elem.first.ptr());
-        }
-      }
-      iter.next();
-    }
-  }
-  if (OB_SUCC(ret) && OB_FAIL(check_validity())) {
+  max_ = max;
+  overlap_ = overlap;
+  if (OB_FAIL(parse_type(type_str))) {
+    LOG_WARN("failed to parse document content type", K(ret), K(type_str));
+  } else if (OB_FAIL(parse_by(by_str))) {
+    LOG_WARN("failed to parse document split unit", K(ret), K(by_str));
+  } else if (OB_FAIL(check_validity())) {
     LOG_WARN("invalid document split parameters", K(ret), K(*this));
   }
   return ret;

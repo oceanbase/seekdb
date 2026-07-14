@@ -24,6 +24,7 @@
 #include "sql/engine/expr/ob_expr_rb_func_helper.h"
 #include "sql/engine/expr/ob_array_expr_utils.h"
 #include "share/roaringbitmap/ob_rb_utils.h"
+#include <limits>
 
 namespace oceanbase
 {
@@ -1253,12 +1254,87 @@ int UnnestTableFunc::get_iter_value(ObRegCol &col_node, JtScanCtx* ctx, bool &is
   return ret;
 }
 
+static int parse_ai_split_document_params(const ObIJsonBase *params_node,
+                                          ObAiSplitDocParams &params)
+{
+  INIT_SUCC(ret);
+  ObString type_str = ObString::make_string("markdown");
+  ObString by_str = ObString::make_string("word");
+  int64_t max = 256;
+  int64_t overlap = 0;
+  if (OB_ISNULL(params_node)) {
+    // Use defaults.
+  } else if (params_node->json_type() != ObJsonNodeType::J_OBJECT) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("document split parameters must be a JSON object", K(ret),
+             K(params_node->json_type()));
+    FORWARD_USER_ERROR(ret, "parameters must be a JSON object");
+  } else {
+    JsonObjectIterator iter = params_node->object_iterator();
+    while (OB_SUCC(ret) && !iter.end()) {
+      ObJsonObjPair elem;
+      if (OB_FAIL(iter.get_elem(elem))) {
+        LOG_WARN("failed to read document split parameter", K(ret));
+      } else if (0 == elem.first.case_compare("type")
+                 || 0 == elem.first.case_compare("by")) {
+        const bool is_type = 0 == elem.first.case_compare("type");
+        if (elem.second->json_type() != ObJsonNodeType::J_STRING) {
+          ret = OB_INVALID_ARGUMENT;
+          LOG_WARN("invalid document split parameter type", K(ret), K(elem.first),
+                   K(elem.second->json_type()));
+          FORWARD_USER_ERROR_MSG(ret, "parameter %s must be a string",
+                                 is_type ? "type" : "by");
+        } else if (is_type) {
+          type_str.assign_ptr(elem.second->get_data(), elem.second->get_data_length());
+        } else {
+          by_str.assign_ptr(elem.second->get_data(), elem.second->get_data_length());
+        }
+      } else if (0 == elem.first.case_compare("max")
+                 || 0 == elem.first.case_compare("overlap")) {
+        const bool is_max = 0 == elem.first.case_compare("max");
+        int64_t &value = is_max ? max : overlap;
+        if (elem.second->json_type() != ObJsonNodeType::J_INT
+            && elem.second->json_type() != ObJsonNodeType::J_UINT) {
+          ret = OB_INVALID_ARGUMENT;
+          LOG_WARN("invalid document split parameter type", K(ret), K(elem.first),
+                   K(elem.second->json_type()));
+          FORWARD_USER_ERROR_MSG(ret, "parameter %s must be an integer",
+                                 is_max ? "max" : "overlap");
+        } else if (elem.second->json_type() == ObJsonNodeType::J_UINT) {
+          const uint64_t uint_value = elem.second->get_uint();
+          if (uint_value > static_cast<uint64_t>(std::numeric_limits<int64_t>::max())) {
+            ret = OB_INVALID_ARGUMENT;
+            LOG_WARN("document split parameter is out of range", K(ret), K(elem.first),
+                     K(uint_value));
+            FORWARD_USER_ERROR_MSG(ret, "parameter %s is out of range",
+                                   is_max ? "max" : "overlap");
+          } else {
+            value = static_cast<int64_t>(uint_value);
+          }
+        } else {
+          value = elem.second->get_int();
+        }
+      } else {
+        ret = OB_INVALID_ARGUMENT;
+        LOG_WARN("unknown document split parameter", K(ret), K(elem.first));
+        FORWARD_USER_ERROR_MSG(ret, "unknown parameter '%.*s'",
+                               elem.first.length(), elem.first.ptr());
+      }
+      iter.next();
+    }
+  }
+  if (OB_SUCC(ret) && OB_FAIL(params.init(type_str, by_str, max, overlap))) {
+    LOG_WARN("failed to initialize document split parameters", K(ret));
+  }
+  return ret;
+}
+
 int AiSplitDocumentTableFunc::eval_input(ObJsonTableOp &jt, JtScanCtx &ctx,
                                          ObEvalCtx &eval_ctx)
 {
   INIT_SUCC(ret);
   ObString content;
-  ObIJsonBase *params_node = NULL;
+  ObAiSplitDocParams params;
   if (!ctx.is_ai_split_document_table_func()) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid ai_split_document table function", K(ret));
@@ -1329,6 +1405,7 @@ int AiSplitDocumentTableFunc::eval_input(ObJsonTableOp &jt, JtScanCtx &ctx,
         }
       }
       if (OB_SUCC(ret) && !is_null) {
+        ObIJsonBase *params_node = NULL;
         const ObJsonInType input_type = ObJsonExprHelper::get_json_internal_type(params_type);
         const ObJsonInType expect_type = ObJsonInType::JSON_TREE;
         const uint32_t parse_flag = ObJsonParser::JSN_RELAXED_FLAG
@@ -1338,6 +1415,8 @@ int AiSplitDocumentTableFunc::eval_input(ObJsonTableOp &jt, JtScanCtx &ctx,
                         params_node, parse_flag,
                         ObJsonExprHelper::get_json_max_depth_config()))) {
           LOG_WARN("failed to parse ai_split_document parameters", K(ret), K(params_str));
+        } else if (OB_FAIL(parse_ai_split_document_params(params_node, params))) {
+          LOG_WARN("failed to initialize ai_split_document parameters", K(ret));
         }
       }
     }
@@ -1350,7 +1429,7 @@ int AiSplitDocumentTableFunc::eval_input(ObJsonTableOp &jt, JtScanCtx &ctx,
       LOG_WARN("failed to allocate ai_split_document input", K(ret));
     } else {
       ObAiSplitDocInput *input = new (buf) ObAiSplitDocInput();
-      if (OB_FAIL(input->init(content, params_node))) {
+      if (OB_FAIL(input->init(content, params))) {
         LOG_WARN("failed to initialize ai_split_document input", K(ret));
       } else {
         jt.input_ = input;
