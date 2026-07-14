@@ -1164,6 +1164,8 @@ static const NonReservedKeyword Mysql_none_reserved_keywords[] =
   {"INCONSISTENT", INCONSISTENT},
   {"INDIVIDUAL", INDIVIDUAL},
   {"hybrid_search", HYBRID_SEARCH},
+  // Task2: 将函数名映射到 MySQL 解析器 Token。
+  {"ai_split_document", AI_SPLIT_DOCUMENT},
 };
 
 /** https://dev.mysql.com/doc/refman/5.7/en/sql-syntax-prepared-statements.html
