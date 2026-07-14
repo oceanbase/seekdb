@@ -50,6 +50,167 @@ FULLTEXT write or TOKENIZE -> ObIKFTParser::init_dict()
 
 ## 新增与修改位置
 
+## 待修改 / 待实现接口清单
+
+本节是实施的接口契约。除特别标注“修改现有”外，均为待新增接口；参数类型遵循本仓库现有的 `ObString`、`ObIArray`、`ObTableSchema` 与 `ObFTDictType` 用法。实施时不得另建同职责接口。
+
+### A. 表 schema 与建表校验
+
+```cpp
+// src/share/schema/ob_table_schema.h，ObTableSchema：新增持久化状态访问器
+void set_fulltext_dict_table(const bool is_dict);
+bool is_fulltext_dict_table() const;
+
+// src/sql/resolver/ddl/ob_ddl_resolver.h/.cpp，ObDDLResolver：新增私有 helper
+int resolve_fulltext_dict_option_(const ParseNode &option_node,
+                                  bool &is_fulltext_dict);
+
+// src/sql/resolver/ddl/ob_create_table_resolver.h/.cpp，ObCreateTableResolver：新增私有 helper
+int check_fulltext_dict_table_(const share::schema::ObTableSchema &table_schema) const;
+```
+
+- `set_fulltext_dict_table` 在 `resolve_table_option()` 成功解析 `FULLTEXT_DICT='Y'` 后调用，并必须进入 schema 的 assign、serialize/deserialize 与 schema SQL DML。
+- `resolve_fulltext_dict_option_` 输入 `T_FULLTEXT_DICT` parse node；仅当值为 `Y` 时输出 `true`，否则返回用户可见的非法 table option 错误。
+- `check_fulltext_dict_table_` 不修改 schema，只校验：单列 `word`、varchar(1..500)、主键、utf8mb4、IOT；失败时直接阻断 CREATE TABLE。
+
+### B. 词典引用解析与属性 JSON
+
+```cpp
+// src/sql/resolver/ddl/ob_fts_parser_resolver.h/.cpp：新增静态 helper
+static int resolve_and_validate_dict_table_(
+    ObSchemaChecker &schema_checker,
+    const common::ObString &raw_table_name,
+    const storage::ObFTDictType dict_type,
+    const uint64_t tenant_id,
+    const uint64_t current_database_id,
+    common::ObString &canonical_table_name,
+    uint64_t &dict_table_id);
+
+// src/storage/fts/ob_fts_parser_property.h/.cpp：修改现有接口的行为
+int ObFTParserProperty::parse_for_parser_helper(
+    const ObFTParser &parser, const common::ObString &json_str);
+```
+
+- `resolve_and_validate_dict_table_` 负责将 `table` 或 `db.table` 解析为全限定、已转义的名称，并返回 table ID；它检查表存在、`is_fulltext_dict_table()` 为真及表结构仍合法。三个 `T_PARSER_*_TABLE` 分支均调用该接口。
+- `parse_for_parser_helper` 必须把 JSON 中的值赋给 `dict_table_`、`stopword_table_`、`quantifier_table_`；不得再赋值为 `"dict_table"` 等键名。读取时兼容历史拼写 `quanitfier_table`，写出时仅使用 `quantifier_table`。
+
+### C. 词典描述、用户表读取和缓存
+
+```cpp
+// src/storage/fts/dict/ob_ft_dict_def.h：扩展已有 struct/class
+class ObFTDictDesc {
+public:
+  ObFTDictDesc(const common::ObString &name, storage::ObFTDictType type,
+               common::ObCharsetType charset, common::ObCollationType coll_type,
+               uint64_t tenant_id, uint64_t table_id, int64_t version,
+               bool is_builtin);
+  bool is_builtin() const;
+  uint64_t tenant_id_;
+  uint64_t table_id_;
+  int64_t version_;
+  bool is_builtin_;
+};
+
+// src/storage/fts/dict/ob_ft_dict_table_iter.h/.cpp：替换现有 init
+int ObFTDictTableIter::init(const ObFTDictDesc &dict_desc);
+
+// src/storage/fts/dict/ob_ft_range_dict.h/.cpp：新增用户表构建入口
+static int ObFTRangeDict::build_cache_from_table(
+    const ObFTDictDesc &dict_desc, ObFTCacheRangeContainer &range_container);
+
+// src/storage/fts/dict/ob_ft_dict_hub.h/.cpp：新增失效接口，修改 key 语义
+int ObFTDictHub::invalidate_cache(const ObFTDictDesc &dict_desc);
+```
+
+- `ObFTDictTableIter::init` 只接受已完成 schema 校验的 descriptor，使用其中的全限定库表名生成 `SELECT word ... ORDER BY word`；不能再硬编码 `oceanbase.` 或拼接未经引用处理的字符串。
+- `build_cache_from_table` 以 iterator 读取用户表并复用现有 `build_ranges` / DAT 构建逻辑。
+- `ObFTDictHub::invalidate_cache` 删除 `(tenant_id, table_id, dict_type, version)` 相关元数据与 KV cache；内置词典不受该接口影响。
+- `ObDictCacheKey` 与 `ObFTDictInfoKey` 的现有构造、`hash`、`operator==`、深拷贝接口必须同步扩展为使用词典身份和版本，不能继续仅以 `dict_type` 区分。
+
+### D. IK 分词器接入
+
+```cpp
+// src/storage/fts/ob_ik_ft_parser.h/.cpp：新增 private helper
+int ObIKFTParser::build_dict_descs_(
+    const ObFTParserProperty &property,
+    ObFTDictDesc &main_dict_desc,
+    ObFTDictDesc &quantifier_dict_desc,
+    ObFTDictDesc &stopword_dict_desc);
+
+// src/storage/fts/ob_ik_ft_parser.h/.cpp：修改现有签名
+int ObIKFTParser::init_single_dict(const ObFTDictDesc &desc,
+                                   ObFTCacheRangeContainer &container);
+```
+
+- `build_dict_descs_` 将 `ObFTParserProperty` 的三项真实配置转换为 descriptor；未配置时返回对应内置词典 descriptor。
+- `init_dict()` 改为先调用 `build_dict_descs_`，再依次调用 `init_single_dict`。现有分词器、range container 与 segmenter 接口不变。
+
+### E. 刷新 SQL、执行与 observer 广播
+
+```cpp
+// src/sql/resolver/ddl/ob_refresh_fulltext_dict_stmt.h/.cpp：新建
+class ObRefreshFulltextDictStmt final : public ObStmt {
+public:
+  ObRefreshFulltextDictStmt();
+  uint64_t get_dict_table_id() const;
+  void set_dict_table_id(uint64_t table_id);
+  // 同时持有 tenant_id、database_id、规范化 table_name。
+};
+
+// src/sql/resolver/ddl/ob_ddl_resolver.h/.cpp：新增 resolver 入口
+int ObDDLResolver::resolve_refresh_fulltext_dict_(
+    const ParseNode &parse_tree, ObRefreshFulltextDictStmt &stmt);
+
+// src/sql/engine/cmd/ob_refresh_fulltext_dict_executor.h/.cpp：新建
+class ObRefreshFulltextDictExecutor {
+public:
+  static int execute(ObExecContext &ctx, ObRefreshFulltextDictStmt &stmt);
+};
+
+// src/share/ob_rpc_struct.h/.cpp：新建 RPC 参数
+struct ObRefreshFulltextDictArg : public obrpc::ObRpcArg {
+  OB_UNIS_VERSION(1);
+  uint64_t tenant_id_;
+  uint64_t table_id_;
+  int64_t refresh_version_;
+  bool is_valid() const;
+};
+
+// src/rootserver/ob_root_service.h/.cpp：新增 root RPC handler
+int ObRootService::refresh_fulltext_dict(const obrpc::ObRefreshFulltextDictArg &arg);
+```
+
+- `resolve_refresh_fulltext_dict_` 解析单/双引号与带/不带库名，检查目标必须是词典表，并把稳定的 table ID 写入 stmt。
+- executor 不直接操作本机缓存；它向 root service 发 RPC。
+- root service 生成单调递增 `refresh_version_`，将其广播至所有 observer；observer processor 用同一 descriptor 调用 `ObFTDictHub::invalidate_cache`。广播接口和 processor 的命名、注册位置须遵循仓库现有 root-to-observer RPC 模式。
+
+### F. DDL 依赖保护
+
+```cpp
+// src/share/schema/ob_schema_service.h/.cpp：新增查询接口
+int ObSchemaService::get_fulltext_indexes_referencing_dict_(
+    uint64_t tenant_id, uint64_t dict_table_id,
+    common::ObIArray<uint64_t> &index_table_ids) const;
+
+// src/rootserver/ob_ddl_service.h/.cpp：新增统一校验接口
+int ObDDLService::check_fulltext_dict_ddl_allowed_(
+    const share::schema::ObTableSchema &dict_table_schema,
+    const ObDictTableDdlOperation operation) const;
+```
+
+- `get_fulltext_indexes_referencing_dict_` 扫描 FULLTEXT 索引 parser JSON 中规范化的词典引用并返回引用者 ID。
+- `check_fulltext_dict_ddl_allowed_` 由 DROP TABLE、RENAME TABLE 和 ALTER TABLE 的提交前路径调用；有引用时 DROP 返回 4179，其他受限 DDL 返回 1235。INSERT/UPDATE/DELETE 不调用此接口。
+
+### G. TOKENIZE 复用接口
+
+```cpp
+// src/sql/engine/expr/ob_expr_tokenize.h/.cpp：修改现有成员函数行为
+int ObExprTokenize::TokenizeParam::reform_parser_properties(
+    const common::ObString &properties);
+```
+
+该函数必须复用 B 节的属性规范化/词典引用校验结果，确保 `additional_args` 使用的 JSON 与 DDL 持久化 JSON 相同；禁止在 `ob_expr_tokenize.cpp` 重新实现表名解析、表结构校验或缓存构建。
+
 ### 1. SQL 语法与 parse node
 
 | 文件 | 改动 | 新增逻辑 / 函数 |
