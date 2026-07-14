@@ -502,6 +502,19 @@ int ObRefreshIOCalibraitonExecutor::execute(ObExecContext &ctx, ObRefreshIOCalib
   return ret;
 }
 
+int ObRefreshFulltextDictExecutor::execute(ObExecContext &ctx, ObRefreshFulltextDictStmt &stmt)
+{
+  int ret = OB_SUCCESS;
+  UNUSED(ctx);
+  // The actual cache reload happens in stage 5. For now, REFRESH FULLTEXT DICT is a no-op
+  // that simply returns success. The per-FTS-index loader in ObExprTokenize and the FTS build
+  // path already pulls the latest content from the user dict table on demand.
+  LOG_INFO("ObRefreshFulltextDictExecutor noop",
+           "database_name", stmt.get_database_name(),
+           "table_name", stmt.get_table_name());
+  return ret;
+}
+
 int ObSetConfigExecutor::execute(ObExecContext &ctx, ObSetConfigStmt &stmt)
 {
   int ret = OB_SUCCESS;

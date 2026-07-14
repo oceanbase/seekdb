@@ -1230,6 +1230,49 @@ int ObRefreshIOCalibrationResolver::resolve(const ParseNode &parse_tree)
   return ret;
 }
 
+int ObRefreshFulltextDictResolver::resolve(const ParseNode &parse_tree)
+{
+  int ret = OB_SUCCESS;
+  ObRefreshFulltextDictStmt *stmt = nullptr;
+  if (OB_UNLIKELY(T_REFRESH_FULLTEXT_DICT != parse_tree.type_)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("type is not T_REFRESH_FULLTEXT_DICT", "type", get_type_name(parse_tree.type_));
+  } else if (OB_ISNULL(stmt = create_stmt<ObRefreshFulltextDictStmt>())) {
+    ret = OB_ALLOCATE_MEMORY_FAILED;
+    LOG_ERROR("create ObRefreshFulltextDictStmt failed");
+  } else if (FALSE_IT(stmt_ = stmt)) {
+  } else if (OB_UNLIKELY(NULL == parse_tree.children_ || 1 != parse_tree.num_child_)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("parse tree children is invalid", K(ret), K(parse_tree.num_child_));
+  } else {
+    const ParseNode *relation_factor_node = parse_tree.children_[0];
+    if (OB_ISNULL(relation_factor_node) || T_RELATION_FACTOR != relation_factor_node->type_) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("invalid relation factor node", K(ret));
+    } else {
+      // relation factor children: [db_name or NULL, table_name, alias or NULL]
+      const ParseNode *db_node = relation_factor_node->num_child_ >= 1 ? relation_factor_node->children_[0] : nullptr;
+      const ParseNode *tbl_node = relation_factor_node->num_child_ >= 2 ? relation_factor_node->children_[1] : nullptr;
+      if (OB_ISNULL(tbl_node)) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("table name is missing", K(ret));
+      } else if (OB_FAIL(ob_write_string(*allocator_,
+                                        ObString(tbl_node->str_len_, tbl_node->str_value_),
+                                        stmt->get_table_name()))) {
+        LOG_WARN("deep copy table name failed", K(ret));
+      } else if (OB_NOT_NULL(db_node) && OB_FAIL(ob_write_string(*allocator_,
+                                                                  ObString(db_node->str_len_, db_node->str_value_),
+                                                                  stmt->get_database_name()))) {
+        LOG_WARN("deep copy database name failed", K(ret));
+      } else {
+        LOG_INFO("succeed to resolve refresh fulltext dict",
+                 K(stmt->get_database_name()), K(stmt->get_table_name()));
+      }
+    }
+  }
+  return ret;
+}
+
 static int alter_system_set_reset_constraint_check_and_add_item_mysql_mode(obcall::ObAdminSetConfigArg &rpc_arg, ObAdminSetConfigItem &item, ObSQLSessionInfo *& session_info)
 {
   int ret = OB_SUCCESS;

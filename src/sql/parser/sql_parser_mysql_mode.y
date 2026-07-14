@@ -18451,6 +18451,12 @@ alter_with_opt_hint SYSTEM REFRESH MEMORY STAT
   malloc_non_terminal_node($$, result->malloc_pool_, T_REFRESH_MEMORY_STAT, 1, NULL);
 }
 |
+alter_with_opt_hint SYSTEM REFRESH FULLTEXT_DICT normal_relation_factor
+{
+  (void)($1);
+  malloc_non_terminal_node($$, result->malloc_pool_, T_REFRESH_FULLTEXT_DICT, 1, $5);
+}
+|
 alter_with_opt_hint SYSTEM WASH MEMORY FRAGMENTATION
 {
   (void)($1);
