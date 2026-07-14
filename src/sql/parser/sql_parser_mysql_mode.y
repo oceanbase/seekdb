@@ -307,7 +307,7 @@ END_P SET_VAR DELIMITER
         GENERAL GEOMETRY GEOMCOLLECTION GEOMETRYCOLLECTION GET_FORMAT GLOBAL GRANTS GRANULARITY GROUP_CONCAT GROUPING GTS
         GLOBAL_NAME GLOBAL_ALIAS
 
-        HANDLER HASH HEAP HELP HISTOGRAM HOST HOSTS HOT_RETENTION HOUR HIDDEN HYBRID HYBRID_HIST HYBRID_SEARCH
+        HANDLER HASH HEAP HELP HISTOGRAM HOST HOSTS HOT_RETENTION HOUR HIDDEN HYBRID HYBRID_HIST HYBRID_SEARCH AI_SPLIT_DOCUMENT
 
         ID IDENTIFIED IGNORE_SERVER_IDS IK_MODE ILOG IMMEDIATE IMPORT INCLUDING INCR INDEXES INDEX_TABLE_ID INFO INITIAL_SIZE
         INNODB INSERT_METHOD INSTALL INSTANCE INVOKER IO IOPS_WEIGHT IO_THREAD IPC ISOLATE ISOLATION ISSUER
@@ -537,7 +537,7 @@ END_P SET_VAR DELIMITER
 %type <node> skip_index_type opt_skip_index_type_list
 %type <node> opt_rebuild_column_store
 %type <node> vec_index_params vec_index_param vec_index_param_value opt_with_vector_index_parameters
-%type <node> json_table_expr rb_iterate_expr unnest_expr mock_jt_on_error_on_empty jt_column_list json_table_column_def 
+%type <node> json_table_expr rb_iterate_expr unnest_expr ai_split_document_expr mock_jt_on_error_on_empty jt_column_list json_table_column_def 
 %type <node> json_table_ordinality_column_def json_table_exists_column_def json_table_value_column_def json_table_nested_column_def
 %type <node> opt_value_on_empty_or_error_or_mismatch opt_on_mismatch
 %type <node> table_values_clause table_values_clause_with_order_by_and_limit values_row_list row_value
@@ -12987,6 +12987,10 @@ tbl_name
 {
   $$ = $1;
 }
+| ai_split_document_expr
+{
+  $$ = $1;
+}
 | hybrid_search_expr
 {
   $$ = $1;
@@ -21844,6 +21848,33 @@ UNNEST '(' simple_expr_list ')'
 }
 ;
 
+ai_split_document_expr:
+AI_SPLIT_DOCUMENT '(' simple_expr ')'
+{
+  malloc_non_terminal_node($$, result->malloc_pool_, T_AI_SPLIT_DOCUMENT_EXPRESSION, 3, $3, NULL, NULL);
+}
+| AI_SPLIT_DOCUMENT '(' simple_expr ',' simple_expr ')'
+{
+  malloc_non_terminal_node($$, result->malloc_pool_, T_AI_SPLIT_DOCUMENT_EXPRESSION, 3, $3, $5, NULL);
+}
+| AI_SPLIT_DOCUMENT '(' simple_expr ',' simple_expr ')' relation_name
+{
+  malloc_non_terminal_node($$, result->malloc_pool_, T_AI_SPLIT_DOCUMENT_EXPRESSION, 3, $3, $5, $7);
+}
+| AI_SPLIT_DOCUMENT '(' simple_expr ',' simple_expr ')' AS relation_name
+{
+  malloc_non_terminal_node($$, result->malloc_pool_, T_AI_SPLIT_DOCUMENT_EXPRESSION, 3, $3, $5, $8);
+}
+| AI_SPLIT_DOCUMENT '(' simple_expr ')' relation_name
+{
+  malloc_non_terminal_node($$, result->malloc_pool_, T_AI_SPLIT_DOCUMENT_EXPRESSION, 3, $3, NULL, $5);
+}
+| AI_SPLIT_DOCUMENT '(' simple_expr ')' AS relation_name
+{
+  malloc_non_terminal_node($$, result->malloc_pool_, T_AI_SPLIT_DOCUMENT_EXPRESSION, 3, $3, NULL, $6);
+}
+;
+
 hybrid_search_expr:
 HYBRID_SEARCH '(' literal ',' hybrid_search_param ')'
 {
@@ -22881,6 +22912,7 @@ ACCESS_INFO
 |       INCONSISTENT 
 |       INDIVIDUAL
 |       HYBRID_SEARCH
+|       AI_SPLIT_DOCUMENT
 ;
 
 unreserved_keyword_special:
