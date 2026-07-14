@@ -1719,6 +1719,49 @@ int ObAlterSystemResolverUtil::get_and_verify_tenant_name(
   return ret;
 }
 
+int ObRefreshFulltextDictResolver::resolve(const ParseNode &parse_tree)
+{
+  int ret = OB_SUCCESS;
+  const ParseNode *relation = nullptr;
+  ObSQLSessionInfo *session = params_.session_info_;
+  if (T_REFRESH_FULLTEXT_DICT != parse_tree.type_
+      || parse_tree.num_child_ != 1
+      || OB_ISNULL(parse_tree.children_)
+      || OB_ISNULL(relation = parse_tree.children_[0])
+      || relation->num_child_ < 2
+      || OB_ISNULL(relation->children_)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid REFRESH FULLTEXT DICT parse tree", K(ret), K(parse_tree.type_));
+  } else if (OB_ISNULL(session)) {
+    ret = OB_ERR_UNEXPECTED;
+  } else {
+    ObRefreshFulltextDictStmt *stmt = create_stmt<ObRefreshFulltextDictStmt>();
+    if (OB_ISNULL(stmt)) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+    } else if (OB_ISNULL(relation->children_[1])) {
+      ret = OB_INVALID_ARGUMENT;
+    } else {
+      ObString database_name = session->get_database_name();
+      if (OB_NOT_NULL(relation->children_[0])) {
+        database_name.assign_ptr(relation->children_[0]->str_value_,
+                                 relation->children_[0]->str_len_);
+      }
+      ObString table_name(relation->children_[1]->str_len_,
+                          relation->children_[1]->str_value_);
+      if (database_name.empty()) {
+        ret = OB_ERR_NO_DB_SELECTED;
+      } else if (table_name.empty()) {
+        ret = OB_INVALID_ARGUMENT;
+      } else {
+        stmt->set_database_name(database_name);
+        stmt->set_table_name(table_name);
+        stmt_ = stmt;
+      }
+    }
+  }
+  return ret;
+}
+
 int ObUpgradeVirtualSchemaResolver::resolve(const ParseNode &parse_tree)
 {
   int ret = OB_SUCCESS;

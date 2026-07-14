@@ -21,6 +21,7 @@
 #include "storage/fts/dict/ob_ft_cache_container.h"
 #include "storage/fts/dict/ob_ft_dict.h"
 #include "storage/fts/dict/ob_ft_dict_def.h"
+#include "storage/fts/dict/ob_ft_user_dict.h"
 #include "storage/fts/ik/ob_ik_processor.h"
 #include "plugin/interface/ob_plugin_ftparser_intf.h"
 
@@ -46,7 +47,10 @@ public:
         cache_stop_(allocator),
         dict_main_(nullptr),
         dict_quan_(nullptr),
-        dict_stop_(nullptr)
+        dict_stop_(nullptr),
+        user_main_(),
+        user_quan_(),
+        user_stop_()
   {
   }
 
@@ -87,6 +91,12 @@ private:
   int build_dict_from_cache(const ObFTDictDesc &desc,
                             ObFTCacheRangeContainer &container,
                             ObIFTDict *&dict);
+  int init_dict_category(const common::ObString &configured_table,
+                         const common::ObString &builtin_table,
+                         const ObFTDictDesc &builtin_desc,
+                         ObFTCacheRangeContainer &container,
+                         ObFTUserDictHandle &user_handle,
+                         ObIFTDict *&dict);
 
 private:
   static constexpr int SEGMENT_LIMIT = 1000;
@@ -106,6 +116,9 @@ private:
   ObIFTDict *dict_main_;
   ObIFTDict *dict_quan_;
   ObIFTDict *dict_stop_;
+  ObFTUserDictHandle user_main_;
+  ObFTUserDictHandle user_quan_;
+  ObFTUserDictHandle user_stop_;
 
   DISABLE_COPY_ASSIGN(ObIKFTParser);
 };

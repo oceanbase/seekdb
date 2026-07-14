@@ -65,6 +65,7 @@
 #include "rootserver/parallel_ddl/ob_ddl_helper.h"
 #include "storage/ddl/ob_ddl_alter_auto_part_attr.h"
 #include "sql/resolver/ddl/ob_vec_index_builder_util.h"
+#include "sql/resolver/ddl/ob_fts_index_builder_util.h"
 #include "rootserver/direct_load/ob_direct_load_partition_exchange.h"
 #include "rootserver/truncate_info/ob_truncate_info_service.h"
 #include "share/truncate_info/ob_truncate_info_util.h"
@@ -2281,6 +2282,9 @@ int ObDDLService::create_index_or_mlog_table_in_trans(
     } else if (OB_ISNULL(sql_trans)
         && OB_FAIL(trans.start(sql_proxy_, refreshed_schema_version))) {
       LOG_WARN("failed to start trans", KR(ret), K(refreshed_schema_version));
+    } else if (OB_FAIL(ObFtsIndexBuilderUtil::try_load_and_lock_dictionary_tables(
+                           table_schema, trans))) {
+      LOG_WARN("fail to load fulltext dictionaries", KR(ret), K(table_schema));
     } else if (OB_FAIL(ddl_operator.create_table(table_schema,
                                                  trans,
                                                  ddl_stmt_str))) {
@@ -13931,7 +13935,7 @@ int ObDDLService::alter_table_in_trans(obcall::ObAlterTableArg &alter_table_arg,
                     need_update_index_table))) {
           LOG_WARN("failed to set new table options", K(ret), K(new_table_schema),
           K(*orig_table_schema), K(ret));
-        } else {
+        } else if (!orig_table_schema->is_fulltext_dict()) {
           new_table_schema.set_table_flags(alter_table_schema.get_table_flags());
         }
       }

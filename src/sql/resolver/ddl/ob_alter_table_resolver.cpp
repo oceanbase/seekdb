@@ -26,6 +26,7 @@
 #include "share/table/ob_ttl_util.h"
 #include "rootserver/ob_partition_exchange.h"
 #include "observer/vector_index/ob_vector_index_util.h"
+#include "share/schema/ob_dependency_info.h"
 
 namespace oceanbase
 {
@@ -36,6 +37,37 @@ using namespace common;
 using namespace obcall;
 namespace sql
 {
+namespace
+{
+bool changes_fulltext_dict_structure(const ParseNode &action_list)
+{
+  bool changes_structure = false;
+  for (int64_t i = 0; !changes_structure && i < action_list.num_child_; ++i) {
+    const ParseNode *action = action_list.children_[i];
+    if (OB_ISNULL(action)) {
+    } else if (T_ALTER_TABLE_OPTION == action->type_
+               && action->num_child_ > 0
+               && OB_NOT_NULL(action->children_)
+               && OB_NOT_NULL(action->children_[0])
+               && T_TABLE_RENAME == action->children_[0]->type_) {
+      changes_structure = true;
+    } else if (T_ALTER_COLUMN_OPTION == action->type_
+               && action->num_child_ > 0
+               && OB_NOT_NULL(action->children_)
+               && OB_NOT_NULL(action->children_[0])) {
+      const ObItemType column_action = action->children_[0]->type_;
+      changes_structure = T_COLUMN_ADD == column_action
+                          || T_COLUMN_ADD_WITH_LOB_PARAMS == column_action
+                          || T_COLUMN_DROP == column_action
+                          || T_COLUMN_CHANGE == column_action
+                          || T_COLUMN_MODIFY == column_action
+                          || T_COLUMN_RENAME == column_action;
+    }
+  }
+  return changes_structure;
+}
+} // namespace
+
 ObAlterTableResolver::ObAlterTableResolver(ObResolverParams &params)
     : ObDDLResolver(params),
       table_schema_(NULL),
@@ -177,7 +209,26 @@ int ObAlterTableResolver::resolve(const ParseNode &parse_tree)
     }
     //resolve action list
     if (OB_SUCCESS == ret && NULL != parse_tree.children_[ACTION_LIST]){
-      if (OB_FAIL(resolve_action_list(*(parse_tree.children_[ACTION_LIST])))) {
+      bool has_dictionary_dependency = false;
+      if (table_schema_->is_fulltext_dict()) {
+        ObArray<ObDependencyInfo> dependencies;
+        if (OB_ISNULL(GCTX.sql_proxy_)) {
+          ret = OB_ERR_UNEXPECTED;
+        } else if (OB_FAIL(ObDependencyInfo::collect_dep_infos(
+                               table_schema_->get_table_id(), *GCTX.sql_proxy_, dependencies))) {
+          LOG_WARN("fail to collect dictionary dependencies", K(ret), KPC(table_schema_));
+        } else {
+          for (int64_t i = 0; !has_dictionary_dependency && i < dependencies.count(); ++i) {
+            has_dictionary_dependency = ObObjectType::INDEX == dependencies.at(i).get_dep_obj_type();
+          }
+        }
+      }
+      if (OB_SUCC(ret) && has_dictionary_dependency
+          && changes_fulltext_dict_structure(*(parse_tree.children_[ACTION_LIST]))) {
+        ret = OB_NOT_SUPPORTED;
+        LOG_USER_ERROR(OB_NOT_SUPPORTED,
+                       "structural ALTER on a referenced FULLTEXT_DICT table is");
+      } else if (OB_FAIL(resolve_action_list(*(parse_tree.children_[ACTION_LIST])))) {
         SQL_RESV_LOG(WARN, "failed to resolve action list.", K(ret));
       } else if (alter_table_bitset_.has_member(obcall::ObAlterTableArg::LOCALITY)
                  && alter_table_bitset_.has_member(obcall::ObAlterTableArg::TABLEGROUP_NAME)) {

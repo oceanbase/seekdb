@@ -1413,6 +1413,9 @@ public:
   int set_external_properties(const common::ObString &format) { return deep_copy_str(format, external_properties_); }
   void set_external_table_auto_refresh(const int64_t flag) { table_flags_ |= (flag << EXTERNAL_TABLE_AUTO_REFRESH_FLAG_OFFSET); }
   inline void set_user_specified_partition_for_external_table() { table_flags_ |= EXTERNAL_TABLE_USER_SPECIFIED_PARTITION_FLAG; }
+  inline void set_fulltext_dict() { table_flags_ |= FULLTEXT_DICT_FLAG; }
+  inline bool is_fulltext_dict() const { return (table_flags_ & FULLTEXT_DICT_FLAG) != 0; }
+  int check_fulltext_dict_structure() const;
   template<typename ColumnType>
   int add_column(const ColumnType &column);
   int delete_column(const common::ObString &column_name);

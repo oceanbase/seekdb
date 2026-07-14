@@ -292,7 +292,7 @@ END_P SET_VAR DELIMITER
         CTXCAT CTX_ID CUBE CURDATE CURRENT STACKED CURTIME CURSOR_NAME CUME_DIST CYCLE CALC_PARTITION_ID CONNECT
 
         DAG DATA DATAFILE DATA_DISK_SIZE DATA_SOURCE DATA_TABLE_ID DATE DATE_ADD DATE_SUB DATETIME DAY DEALLOCATE DECRYPT
-        DEFAULT_AUTH DEFAULT_LOB_INROW_THRESHOLD DEFINER DELAY DELAY_KEY_WRITE DEPTH DES_KEY_FILE DENSE_RANK DESCRIPTION DESTINATION DIAGNOSTICS DICT_TABLE
+        DEFAULT_AUTH DEFAULT_LOB_INROW_THRESHOLD DEFINER DELAY DELAY_KEY_WRITE DEPTH DES_KEY_FILE DENSE_RANK DESCRIPTION DESTINATION DIAGNOSTICS DICT_TABLE DICT
         DIFF DIRECTORY DISABLE DISALLOW DISCARD DISK DISKGROUP DO DOT DUMP DUMPFILE DUPLICATE DUPLICATE_SCOPE DUPLICATE_READ_CONSISTENCY DYNAMIC
         DATABASE_ID DEFAULT_TABLEGROUP DISCONNECT DEMAND DELETE_INSERT DYNAMIC_PARTITION_POLICY
 
@@ -302,7 +302,7 @@ END_P SET_VAR DELIMITER
 
         FAIL FAILOVER FAST FAULTS FILE_BLOCK_SIZE FIELDS FILEX FINAL_COUNT FIRST FIRST_VALUE FIXED FLUSH FOLLOWER FORMAT
         FOUND FORK FREEZE FREQUENCY FUNCTION FOLLOWING FLASHBACK FULL FRAGMENTATION FROZEN FILE_ID FILTER
-        FIELD_OPTIONALLY_ENCLOSED_BY FIELD_DELIMITER FIELD_ENCLOSED_BY FILE_EXTENSION
+        FIELD_OPTIONALLY_ENCLOSED_BY FIELD_DELIMITER FIELD_ENCLOSED_BY FILE_EXTENSION FULLTEXT_DICT
 
         GENERAL GEOMETRY GEOMCOLLECTION GEOMETRYCOLLECTION GET_FORMAT GLOBAL GRANTS GRANULARITY GROUP_CONCAT GROUPING GTS
         GLOBAL_NAME GLOBAL_ALIAS
@@ -6942,6 +6942,11 @@ TABLE_MODE opt_equal_mark STRING_VALUE
 {
   (void)($2); /*  make bison mute*/
   malloc_non_terminal_node($$, result->malloc_pool_, T_COMMENT, 1, $3);
+}
+| FULLTEXT_DICT opt_equal_mark STRING_VALUE
+{
+  (void)($2);
+  malloc_non_terminal_node($$, result->malloc_pool_, T_FULLTEXT_DICT, 1, $3);
 }
 | TABLEGROUP opt_equal_mark relation_name_or_string
 {
@@ -18457,6 +18462,31 @@ alter_with_opt_hint SYSTEM REFRESH IO CALIBRATION opt_storage_name opt_calibrati
   malloc_non_terminal_node($$, result->malloc_pool_, T_REFRESH_IO_CALIBRATION, 3, $6, $7, NULL);
 }
 |
+alter_with_opt_hint SYSTEM REFRESH FULLTEXT DICT relation_name
+{
+  (void)($1);
+  ParseNode *dict_relation = NULL;
+  malloc_non_terminal_node(dict_relation, result->malloc_pool_, T_RELATION_FACTOR, 2, NULL, $6);
+  malloc_non_terminal_node($$, result->malloc_pool_, T_REFRESH_FULLTEXT_DICT, 1, dict_relation);
+}
+|
+alter_with_opt_hint SYSTEM REFRESH FULLTEXT DICT relation_name '.' relation_name
+{
+  (void)($1);
+  ParseNode *dict_relation = NULL;
+  malloc_non_terminal_node(dict_relation, result->malloc_pool_, T_RELATION_FACTOR, 2, $6, $8);
+  malloc_non_terminal_node($$, result->malloc_pool_, T_REFRESH_FULLTEXT_DICT, 1, dict_relation);
+}
+|
+alter_with_opt_hint SYSTEM REFRESH FULLTEXT DICT id_dot_id
+{
+  (void)($1);
+  ParseNode *dict_relation = NULL;
+  malloc_non_terminal_node(dict_relation, result->malloc_pool_, T_RELATION_FACTOR, 2,
+                           $6->children_[0], $6->children_[1]);
+  malloc_non_terminal_node($$, result->malloc_pool_, T_REFRESH_FULLTEXT_DICT, 1, dict_relation);
+}
+|
 alter_with_opt_hint SYSTEM opt_set alter_system_set_parameter_actions
 {
   (void)($1);
@@ -22176,6 +22206,8 @@ ACCESS_INFO
 |       DEMAND
 |       DIAGNOSTICS
 |       DICT_TABLE
+|       DICT
+|       FULLTEXT_DICT
 |       DIFF
 |       DIRECTORY
 |       DISABLE
