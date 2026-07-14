@@ -43,6 +43,7 @@ public:
 struct ObAISplitDocumentChunk
 {
   ObAISplitDocumentChunk() : offset_(0), length_(0), text_() {}
+  TO_STRING_KV(K_(offset), K_(length), K_(text));
   int64_t offset_;
   int64_t length_;
   common::ObString text_;
