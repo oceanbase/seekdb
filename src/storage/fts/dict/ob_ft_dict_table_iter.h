@@ -19,6 +19,7 @@
 
 #include "common/mysqlclient/ob_isql_client.h"
 #include "storage/fts/dict/ob_ft_dict_iterator.h"
+#include "storage/fts/dict/ob_ft_dict_def.h"
 
 namespace oceanbase
 {
@@ -37,13 +38,14 @@ public:
   int next() override;
 
 public:
-  int init(const ObString &table_name);
+  int init(const ObFTDictDesc &desc);
 
 private:
   void reset();
 
 private:
   bool is_inited_;
+  bool iter_end_;
   ObISQLClient::ReadResult &res_;
 };
 
