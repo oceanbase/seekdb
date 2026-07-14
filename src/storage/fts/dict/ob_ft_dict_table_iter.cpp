@@ -70,18 +70,27 @@ int ObFTDictTableIter::init(const ObString &table_name)
 {
   int ret = OB_SUCCESS;
   common::ObMySQLProxy *sql_proxy = GCTX.sql_proxy_;
+  ObString qualified_name = table_name;
+  ObString database_name = qualified_name.split_on('.');
 
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
     LOG_WARN("Inited twice.", K(ret));
+  } else if (OB_ISNULL(sql_proxy)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("sql proxy is null", K(ret));
+  } else if (database_name.empty() || qualified_name.empty()
+             || OB_NOT_NULL(qualified_name.find('.'))
+             || OB_NOT_NULL(database_name.find('`'))
+             || OB_NOT_NULL(qualified_name.find('`'))) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid qualified dictionary table name", K(ret), K(table_name));
   } else {
     SMART_VAR(ObSqlString, sql_string)
     {
-      if (OB_FAIL(sql_string.append("SELECT word FROM oceanbase."))) {
-        LOG_WARN("Failed to append sql", K(ret));
-      } else if (OB_FAIL(sql_string.append(table_name))) {
-        LOG_WARN("Failed to append sql", K(ret));
-      } else if (OB_FAIL(sql_string.append(" ORDER BY word"))) {
+      if (OB_FAIL(sql_string.append_fmt("SELECT word FROM `%.*s`.`%.*s` ORDER BY word",
+                                        database_name.length(), database_name.ptr(),
+                                        qualified_name.length(), qualified_name.ptr()))) {
         LOG_WARN("Failed to append sql", K(ret));
       } else if (OB_FAIL(sql_proxy->read(res_, sql_string.ptr()))) {
         LOG_WARN("Failed to execute sql", K(ret));
@@ -97,7 +106,7 @@ int ObFTDictTableIter::init(const ObString &table_name)
       if (OB_ITER_END != ret) {
         LOG_WARN("Failed to get next row", K(ret));
       } else {
-        is_inited_ = true;
+        LOG_INFO("dictionary table is empty", K(table_name));
       }
     } else {
       is_inited_ = true;

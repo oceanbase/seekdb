@@ -169,6 +169,21 @@ private:
   obcall::ObAdminRefreshMemStatArg rpc_arg_;
 };
 
+class ObRefreshFulltextDictStmt : public ObSystemCmdStmt
+{
+public:
+  ObRefreshFulltextDictStmt() : ObSystemCmdStmt(stmt::T_REFRESH_FULLTEXT_DICT), dictionary_name_() {}
+  virtual ~ObRefreshFulltextDictStmt() {}
+
+  int set_dictionary_name(common::ObIAllocator &allocator, const common::ObString &name)
+  { return common::ob_write_string(allocator, name, dictionary_name_); }
+  const common::ObString &get_dictionary_name() const { return dictionary_name_; }
+
+  TO_STRING_KV(N_STMT_TYPE, ((int)stmt_type_), K_(dictionary_name));
+private:
+  common::ObString dictionary_name_;
+};
+
 class ObWashMemFragmentationStmt : public ObSystemCmdStmt
 {
 public:

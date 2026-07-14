@@ -2394,6 +2394,26 @@ int ObDDLResolver::resolve_table_option(const ParseNode *option_node, const bool
         }
         break;
       }
+      case T_FULLTEXT_DICT: {
+        if (is_index_option || stmt_->get_stmt_type() != stmt::T_CREATE_TABLE) {
+          ret = OB_NOT_SUPPORTED;
+          LOG_USER_ERROR(OB_NOT_SUPPORTED, "FULLTEXT_DICT outside CREATE TABLE");
+        } else if (1 != option_node->num_child_ || OB_ISNULL(option_node->children_)
+                   || OB_ISNULL(option_node->children_[0])) {
+          ret = OB_ERR_UNEXPECTED;
+          SQL_RESV_LOG(WARN, "invalid FULLTEXT_DICT option", K(ret));
+        } else {
+          const ObString value(static_cast<int32_t>(option_node->children_[0]->str_len_),
+                               option_node->children_[0]->str_value_);
+          if (0 != value.case_compare("Y")) {
+            ret = OB_INVALID_ARGUMENT;
+            LOG_USER_ERROR(OB_INVALID_ARGUMENT, "FULLTEXT_DICT must be 'Y'");
+          } else {
+            table_mode_.fulltext_dict_table_flag_ = IS_FULLTEXT_DICT_TABLE;
+          }
+        }
+        break;
+      }
       case T_SEMISTRUCT_ENCODING_TYPE: {
         ret = resolve_semistruct_encoding_type(option_node, is_index_option);
         break;

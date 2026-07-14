@@ -223,6 +223,7 @@ int ObExprTokenize::parse_param(const ObExpr &expr,
 
   ObDatum *parser_params_datum;
   ObString raw_parser_name = ObString::make_string(OB_DEFAULT_FULLTEXT_PARSER_NAME);
+  ObString default_database;
 
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
   
@@ -237,7 +238,9 @@ int ObExprTokenize::parse_param(const ObExpr &expr,
     LOG_WARN("Fail to parse parser params.", K(ret));
   } else if (OB_FAIL(parse_parser_properties(expr, ctx, temp_allocator, param))) {
     LOG_WARN("Fail to parse parser params.", K(ret));
-  } else if (OB_FAIL(param.reform_parser_properties(param.properties_))) {
+  } else if (OB_NOT_NULL(ctx.exec_ctx_.get_my_session())
+             && FALSE_IT(default_database = ctx.exec_ctx_.get_my_session()->get_database_name())) {
+  } else if (OB_FAIL(param.reform_parser_properties(param.properties_, default_database))) {
     LOG_WARN("Fail to reform parser params.", K(ret));
   } else if (OB_FAIL(param.try_load_dictionary_for_ik())) {
     LOG_WARN("fail to try load dictionary for ik", K(ret));
@@ -415,10 +418,17 @@ int ObExprTokenize::parse_parser_properties(const ObExpr &expr,
   return ret;
 }
 
-int ObExprTokenize::TokenizeParam::reform_parser_properties(const ObString &properties)
+int ObExprTokenize::TokenizeParam::reform_parser_properties(const ObString &properties,
+                                                            const ObString &default_database)
 {
   int ret = OB_SUCCESS;
   storage::ObFTParserJsonProps parser_properties;
+  storage::ObFTParser parser;
+  bool is_ik_parser = false;
+
+  if (OB_SUCCESS == parser.parse_from_str(parser_name_.ptr(), parser_name_.length())) {
+    is_ik_parser = parser.is_ik();
+  }
 
   if (OB_FAIL(parser_properties.init())) {
     LOG_WARN("fail to init parser properties", K(ret));
@@ -431,6 +441,10 @@ int ObExprTokenize::TokenizeParam::reform_parser_properties(const ObString &prop
     LOG_WARN("fail to serialize to string", K(ret), K(parser_properties));
   } else if (OB_FAIL(parser_properties.to_format_json(allocator_, properties_))) {
     LOG_WARN("fail to serialize to string", K(ret), K(parser_properties));
+  } else if (is_ik_parser
+             && OB_FAIL(ObFtsIndexBuilderUtil::validate_and_qualify_ik_dictionary_tables(
+                            allocator_, default_database, properties_))) {
+    LOG_WARN("fail to validate IK dictionary tables", K(ret), K(default_database), K(properties_));
   }
 
   return ret;

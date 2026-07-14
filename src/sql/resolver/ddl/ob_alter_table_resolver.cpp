@@ -177,7 +177,18 @@ int ObAlterTableResolver::resolve(const ParseNode &parse_tree)
     }
     //resolve action list
     if (OB_SUCCESS == ret && NULL != parse_tree.children_[ACTION_LIST]){
-      if (OB_FAIL(resolve_action_list(*(parse_tree.children_[ACTION_LIST])))) {
+      bool is_dict_table_referenced = false;
+      if (table_schema_->is_fulltext_dict_table()
+          && OB_FAIL(ObFtsIndexBuilderUtil::is_fulltext_dict_table_referenced(
+                         *schema_checker_->get_schema_guard(),
+                         *table_schema_,
+                         is_dict_table_referenced))) {
+        LOG_WARN("failed to check dictionary table reference", K(ret));
+      } else if (is_dict_table_referenced) {
+        ret = OB_NOT_SUPPORTED;
+        LOG_USER_ERROR(OB_NOT_SUPPORTED,
+                       "alter a FULLTEXT_DICT table referenced by a fulltext index");
+      } else if (OB_FAIL(resolve_action_list(*(parse_tree.children_[ACTION_LIST])))) {
         SQL_RESV_LOG(WARN, "failed to resolve action list.", K(ret));
       } else if (alter_table_bitset_.has_member(obcall::ObAlterTableArg::LOCALITY)
                  && alter_table_bitset_.has_member(obcall::ObAlterTableArg::TABLEGROUP_NAME)) {

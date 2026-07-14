@@ -1476,6 +1476,10 @@ int ObSchemaPrinter::print_table_definition_table_options(const ObTableSchema &t
         SHARE_SCHEMA_LOG(WARN, "fail to print default charset", K(ret), K(table_schema));
       }
     }
+    if (OB_SUCC(ret) && table_schema.is_fulltext_dict_table()
+        && OB_FAIL(databuff_printf(buf, buf_len, pos, "FULLTEXT_DICT = 'Y' "))) {
+      SHARE_SCHEMA_LOG(WARN, "fail to print fulltext dictionary table option", K(ret), K(table_schema));
+    }
     uint64_t auto_increment = 0;
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(share::ObAutoincrementService::get_instance().get_sequence_value(

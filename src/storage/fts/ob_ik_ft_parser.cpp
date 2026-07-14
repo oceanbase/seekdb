@@ -24,6 +24,7 @@
 #include "lib/utility/ob_macro_utils.h"
 #include "lib/utility/utility.h"
 #include "storage/fts/ob_fts_struct.h"
+#include "storage/fts/ob_fts_literal.h"
 #include "storage/fts/ob_fts_plugin_helper.h"
 #include "storage/fts/dict/ob_ft_dict.h"
 #include "storage/fts/dict/ob_ft_dict_def.h"
@@ -103,11 +104,10 @@ int ObIKFTParser::get_next_token(const char *&word,
         }
       } else {
         bool is_stop = false;
-        // if (!OB_ISNULL(dict_stop_)
-        //     && OB_FAIL(dict_stop_->match(ObString(len, output_word + offset), is_stop))) {
-        //   LOG_WARN("Failed to match stopwords", K(ret));
-        // } else
-        if (!is_stop) {
+        if (!OB_ISNULL(dict_stop_)
+            && OB_FAIL(dict_stop_->match(ObString(len, output_word + offset), is_stop))) {
+          LOG_WARN("Failed to match stopwords", K(ret));
+        } else if (!is_stop) {
           word = output_word + offset;
           word_len = len;
           char_cnt = cnt;
@@ -278,20 +278,33 @@ int ObIKFTParser::init_dict(const plugin::ObFTParserParam &param)
   }
 
   ObFTRangeDict *dict = nullptr;
-  ObFTDictDesc main_dict_desc("main_dict",
+  const ObString main_dict = param.ik_param_.main_dict_.empty()
+                                 ? ObString(ObFTSLiteral::FT_DEFAULT_IK_DICT_UTF8_TABLE)
+                                 : param.ik_param_.main_dict_;
+  const ObString quan_dict = param.ik_param_.quan_dict_.empty()
+                                 ? ObString(ObFTSLiteral::FT_DEFAULT_IK_QUANTIFIER_UTF8_TABLE)
+                                 : param.ik_param_.quan_dict_;
+  const ObString stopword_dict = param.ik_param_.stopword_dict_.empty()
+                                     ? ObString(ObFTSLiteral::FT_DEFAULT_IK_STOPWORD_UTF8_TABLE)
+                                     : param.ik_param_.stopword_dict_;
+
+  ObFTDictDesc main_dict_desc(main_dict,
                               ObFTDictType::DICT_IK_MAIN,
                               ObCharsetType::CHARSET_UTF8MB4,
-                              ObCollationType::CS_TYPE_UTF8MB4_BIN);
+                              ObCollationType::CS_TYPE_UTF8MB4_BIN,
+                              MTL_CTX()->id());
 
-  ObFTDictDesc quan_dict_desc("quan_dict",
+  ObFTDictDesc quan_dict_desc(quan_dict,
                               ObFTDictType::DICT_IK_QUAN,
                               ObCharsetType::CHARSET_UTF8MB4,
-                              ObCollationType::CS_TYPE_UTF8MB4_BIN);
+                              ObCollationType::CS_TYPE_UTF8MB4_BIN,
+                              MTL_CTX()->id());
 
-  ObFTDictDesc stopword_dict_desc("stopword",
+  ObFTDictDesc stopword_dict_desc(stopword_dict,
                                   ObFTDictType::DICT_IK_STOP,
                                   ObCharsetType::CHARSET_UTF8MB4,
-                                  ObCollationType::CS_TYPE_UTF8MB4_BIN);
+                                  ObCollationType::CS_TYPE_UTF8MB4_BIN,
+                                  MTL_CTX()->id());
 
   if (should_read_newest_table()) {
     // clear dict cache, always false now
