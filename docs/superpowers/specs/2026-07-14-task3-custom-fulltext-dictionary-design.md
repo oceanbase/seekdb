@@ -6,7 +6,7 @@
 
 本工作只实现 Task3 所述的 MySQL 模式能力；不重构内置 IK 词典、不改变既有全文索引结构、不引入第二套分词缓存。
 
-**测试约束：不创建、修改或更新任何测试文件。** 验收唯一使用已存在的 `tools/deploy/mysql_test/test_suite/ai_funcs/t/ik_custom_dict.test` 及其当前 `.result`。
+**测试约束：** 可以为本次新增/修改的接口补充对应的单元或模块测试；端到端任务验收唯一以已存在的 `tools/deploy/mysql_test/test_suite/ai_funcs/t/ik_custom_dict.test` 及其当前 `.result` 为准。不得修改该 mysqltest 文件或其结果文件。
 
 ## 当前基线与缺口
 
@@ -267,12 +267,15 @@ int ObExprTokenize::TokenizeParam::reform_parser_properties(
 | `src/rootserver/ob_ddl_service.cpp` | 在 DROP TABLE、RENAME TABLE 和 ALTER TABLE 的 schema 变更提交前调用依赖查询。 | 新增 `check_fulltext_dict_ddl_allowed_(const ObTableSchema &, ObDictDdlOperation)`：有引用时，DROP 返回 `ERROR 4179`；其他受限操作返回 `ERROR 1235`；DML 不进入该检查。 |
 | `src/sql/resolver/ddl/ob_alter_table_resolver.cpp` | 尽早识别字典表的 column-level/table rename 动作，传递 operation 类型，避免走到通用变更后才失败。 | 新增 `check_dict_table_alter_action_(...)` 或在现有 action switch 中调用共享校验。 |
 
-### 7. TOKENIZE 和现有验收
+### 7. TOKENIZE、接口测试和现有端到端验收
 
 | 文件 | 改动 | 新增逻辑 / 函数 |
 | --- | --- | --- |
 | `src/sql/engine/expr/ob_expr_tokenize.cpp` | `additional_args` 通过与 DDL 相同的属性规范化和字典描述构造逻辑，保证 `TOKENIZE()` 与建索引行为一致；不在表达式层复制 cache 实现。 | 在 `TokenizeParam::reform_parser_properties()` 调用共享 normalize/validate helper；由 parser helper 使用真实表名。 |
-| `tools/deploy/mysql_test/test_suite/ai_funcs/t/ik_custom_dict.test`、`.result` | **不修改。** | 仅运行现有用例；其 CREATE、REFRESH、关联索引和动态更新查询必须通过。 |
+| `unittest/storage/test_fts_property.cpp` | 允许新增接口级测试。 | 覆盖 JSON 正确键与历史 `quanitfier_table` 兼容读取，以及 `parse_for_parser_helper()` 读取三个实际表名。 |
+| `unittest/storage/fts/test_ft_parser.cpp` | 允许新增接口级测试。 | 覆盖 descriptor 身份隔离、默认内置词典回退和 IK parser 使用三个用户词典 descriptor。 |
+| `unittest/sql/parser/test_fts_parser.cpp` | 允许新增接口级测试。 | 覆盖 `FULLTEXT_DICT='Y'` 与 `ALTER SYSTEM REFRESH FULLTEXT DICT` 的 parse tree 类型及带/不带 database 的名称解析。 |
+| `tools/deploy/mysql_test/test_suite/ai_funcs/t/ik_custom_dict.test`、`.result` | **不修改。** | 端到端验收唯一入口；其 CREATE、REFRESH、关联索引和动态更新查询必须通过。 |
 
 ## 错误处理和兼容性
 
@@ -284,7 +287,7 @@ int ObExprTokenize::TokenizeParam::reform_parser_properties(
 
 ## 验收命令
 
-不变更测试文件，只执行：
+接口实现可执行上表所列单元测试；整个任务的端到端验收只执行现有 mysqltest：
 
 ```bash
 cd tools/deploy/mysql_test
@@ -298,4 +301,4 @@ cd tools/deploy/mysql_test
 - 无 TBD/TODO 或待定接口；每一个 Task3 SQL 能力均映射到解析、校验、执行和运行时模块。
 - 三类词典共享同一套 descriptor/cache/refresh 机制，仅以 `ObFTDictType` 区分行为。
 - `TOKENIZE()` 与 FULLTEXT 索引共用属性和缓存入口，避免语义分叉。
-- 测试范围明确为只运行当前 `ik_custom_dict`，不修改测试资产。
+- 允许新增接口级单元/模块测试；端到端验收固定为当前 `ik_custom_dict`，不修改其测试资产。
