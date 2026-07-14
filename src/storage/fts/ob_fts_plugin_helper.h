@@ -154,7 +154,7 @@ public:
    *                                 "ngram_token_size":2,
    *                                 "stopword_table":"default",
    *                                 "dict_table":"none",
-   *                                 "quanitfier_table":"none"
+   *                                 "quantifier_table":"none"
    *                               }
    *
    * @return error code
@@ -226,6 +226,7 @@ private:
   plugin::ObPluginParam *plugin_param_;
   ObFTParser parser_name_;
   ObAddWordFlag add_word_flag_;
+  common::ObArenaAllocator property_allocator_;
   ObFTParserProperty parser_property_;
   bool is_inited_;
 

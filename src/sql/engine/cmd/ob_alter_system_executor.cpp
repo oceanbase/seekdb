@@ -35,6 +35,9 @@
 #include "sql/engine/cmd/ob_timezone_importer.h"
 #include "sql/engine/cmd/ob_srs_importer.h"
 #include "share/ob_internal_table_change_notifier.h"
+#include "share/schema/ob_schema_getter_guard.h"
+#include "storage/fts/ob_fts_plugin_helper.h"
+#include "storage/fts/dict/ob_ft_dict_hub.h"
 
 namespace oceanbase
 {
@@ -549,6 +552,46 @@ int ObClearMergeErrorExecutor::execute(ObExecContext &ctx, ObClearMergeErrorStmt
   } else if (OB_FAIL(GCTX.root_service_->admin_clear_merge_error(arg))) {
 		LOG_WARN("clear merge error failed", K(ret), "rpc_arg", arg);
 	}
+  return ret;
+}
+
+int ObRefreshFulltextDictExecutor::execute(ObExecContext &ctx,
+                                           ObRefreshFulltextDictStmt &stmt)
+{
+  int ret = OB_SUCCESS;
+  share::schema::ObSchemaGetterGuard schema_guard;
+  const share::schema::ObDatabaseSchema *database_schema = nullptr;
+  const share::schema::ObTableSchema *table_schema = nullptr;
+  storage::ObFTDictHub *dict_hub = nullptr;
+  if (OB_ISNULL(GCTX.schema_service_)) {
+    ret = OB_ERR_UNEXPECTED;
+  } else if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(schema_guard))) {
+    LOG_WARN("fail to get schema guard", K(ret));
+  } else if (OB_FAIL(schema_guard.get_database_schema(stmt.get_database_name(), database_schema))) {
+    LOG_WARN("fail to get dictionary database", K(ret), K(stmt));
+  } else if (OB_ISNULL(database_schema)) {
+    ret = OB_ERR_BAD_DATABASE;
+  } else if (OB_FAIL(schema_guard.get_table_schema(database_schema->get_database_id(),
+                                                   stmt.get_table_name(),
+                                                   false,
+                                                   table_schema))) {
+    LOG_WARN("fail to get dictionary table", K(ret), K(stmt));
+  } else if (OB_ISNULL(table_schema)) {
+    ret = OB_TABLE_NOT_EXIST;
+  } else if (!table_schema->is_fulltext_dict()) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_USER_ERROR(OB_INVALID_ARGUMENT, "table is not a FULLTEXT_DICT table");
+  } else if (OB_FAIL(table_schema->check_fulltext_dict_structure())) {
+    LOG_WARN("invalid fulltext dictionary structure", K(ret), KPC(table_schema));
+  } else if (OB_FAIL(storage::ObFTParsePluginData::instance().get_dict_hub(dict_hub))) {
+    LOG_WARN("fail to get fulltext dictionary hub", K(ret));
+  } else if (OB_ISNULL(dict_hub)) {
+    ret = OB_ERR_UNEXPECTED;
+  } else if (OB_FAIL(dict_hub->refresh_user_dict(stmt.get_database_name(),
+                                                stmt.get_table_name(),
+                                                table_schema->get_table_id()))) {
+    LOG_WARN("fail to refresh fulltext dictionary", K(ret), K(stmt));
+  }
   return ret;
 }
 

@@ -237,7 +237,11 @@ int ObExprTokenize::parse_param(const ObExpr &expr,
     LOG_WARN("Fail to parse parser params.", K(ret));
   } else if (OB_FAIL(parse_parser_properties(expr, ctx, temp_allocator, param))) {
     LOG_WARN("Fail to parse parser params.", K(ret));
-  } else if (OB_FAIL(param.reform_parser_properties(param.properties_))) {
+  } else if (OB_FAIL(param.reform_parser_properties(
+                         param.properties_,
+                         OB_ISNULL(ctx.exec_ctx_.get_my_session())
+                             ? ObString()
+                             : ctx.exec_ctx_.get_my_session()->get_database_name()))) {
     LOG_WARN("Fail to reform parser params.", K(ret));
   } else if (OB_FAIL(param.try_load_dictionary_for_ik())) {
     LOG_WARN("fail to try load dictionary for ik", K(ret));
@@ -415,7 +419,8 @@ int ObExprTokenize::parse_parser_properties(const ObExpr &expr,
   return ret;
 }
 
-int ObExprTokenize::TokenizeParam::reform_parser_properties(const ObString &properties)
+int ObExprTokenize::TokenizeParam::reform_parser_properties(const ObString &properties,
+                                                            const ObString &database_name)
 {
   int ret = OB_SUCCESS;
   storage::ObFTParserJsonProps parser_properties;
@@ -425,6 +430,50 @@ int ObExprTokenize::TokenizeParam::reform_parser_properties(const ObString &prop
   } else if (OB_FAIL(parser_properties.parse_from_valid_str(properties))) {
     LOG_WARN("fail to parse properties", K(ret));
     LOG_USER_ERROR(OB_INVALID_ARGUMENT, "parser properties invalid.");
+  } else {
+    const char *property_names[] = {ObFTSLiteral::CONFIG_NAME_DICT_TABLE,
+                                    ObFTSLiteral::CONFIG_NAME_STOPWORD_TABLE,
+                                    ObFTSLiteral::CONFIG_NAME_QUANTIFIER_TABLE};
+    for (int64_t i = 0; OB_SUCC(ret) && i < ARRAYSIZEOF(property_names); ++i) {
+      ObString table_name;
+      if (0 == ObString(property_names[i]).compare(ObFTSLiteral::CONFIG_NAME_DICT_TABLE)) {
+        ret = parser_properties.config_get_dict_table(table_name);
+      } else if (0 == ObString(property_names[i]).compare(ObFTSLiteral::CONFIG_NAME_STOPWORD_TABLE)) {
+        ret = parser_properties.config_get_stopword_table(table_name);
+      } else {
+        ret = parser_properties.config_get_quantifier_table(table_name);
+      }
+      if (OB_SEARCH_NOT_FOUND == ret) {
+        ret = OB_SUCCESS;
+      } else if (OB_SUCC(ret) && nullptr == table_name.find('.')) {
+        ObString qualified_name;
+        if (database_name.empty()) {
+          ret = OB_ERR_NO_DB_SELECTED;
+        } else {
+          const int64_t length = database_name.length() + 1 + table_name.length();
+          char *buffer = static_cast<char *>(allocator_.alloc(length));
+          if (OB_ISNULL(buffer)) {
+            ret = OB_ALLOCATE_MEMORY_FAILED;
+          } else {
+            MEMCPY(buffer, database_name.ptr(), database_name.length());
+            buffer[database_name.length()] = '.';
+            MEMCPY(buffer + database_name.length() + 1, table_name.ptr(), table_name.length());
+            qualified_name.assign_ptr(buffer, length);
+          }
+        }
+        if (OB_FAIL(ret)) {
+          LOG_WARN("fail to qualify TOKENIZE dictionary table", K(ret), K(table_name));
+        } else if (0 == ObString(property_names[i]).compare(ObFTSLiteral::CONFIG_NAME_DICT_TABLE)) {
+          ret = parser_properties.config_set_dict_table(qualified_name);
+        } else if (0 == ObString(property_names[i]).compare(ObFTSLiteral::CONFIG_NAME_STOPWORD_TABLE)) {
+          ret = parser_properties.config_set_stopword_table(qualified_name);
+        } else {
+          ret = parser_properties.config_set_quantifier_table(qualified_name);
+        }
+      }
+    }
+  }
+  if (OB_FAIL(ret)) {
   } else if (OB_FAIL(parser_properties.rebuild_props_for_ddl(parser_name_,
                                                              ObCollationType::CS_TYPE_UTF8MB4_BIN,
                                                              true))) {

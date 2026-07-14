@@ -4227,6 +4227,13 @@ int ObDDLOperator::drop_table(
                       ObObjectType::VIEW))) {
     LOG_WARN("failed to delete_schema_object_dependency", K(ret), K(1UL),
     K(table_schema.get_table_id()));
+  } else if (table_schema.is_index_table()
+            && OB_FAIL(ObDependencyInfo::delete_schema_object_dependency(
+                      trans,
+                      table_schema.get_table_id(),
+                      table_schema.get_schema_version(),
+                      ObObjectType::INDEX))) {
+    LOG_WARN("failed to delete index dependency", K(ret), K(table_schema.get_table_id()));
   }
 
   if (OB_FAIL(ret)) {

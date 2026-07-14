@@ -113,6 +113,7 @@ ObDDLResolver::ObDDLResolver(ObResolverParams &params)
     mocked_external_table_column_ids_(),
     index_params_(),
     table_organization_(ObTableOrganizationType::OB_ORGANIZATION_INVALID),
+    has_explicit_organization_index_(false),
     mv_refresh_dop_(0),
     vec_column_name_(),
     vec_index_type_(INDEX_TYPE_MAX),
@@ -1639,6 +1640,25 @@ int ObDDLResolver::resolve_table_option(const ParseNode *option_node, const bool
         if (OB_SUCCESS == ret && stmt::T_ALTER_TABLE == stmt_->get_stmt_type() && !is_index_option) {
           if (OB_FAIL(alter_table_bitset_.add_member(ObAlterTableArg::COMMENT))) {
             SQL_RESV_LOG(WARN, "failed to add member to bitset!", K(ret));
+          }
+        }
+        break;
+      }
+      case T_FULLTEXT_DICT: {
+        if (OB_ISNULL(option_node->children_[0])) {
+          ret = OB_ERR_UNEXPECTED;
+          SQL_RESV_LOG(WARN, "FULLTEXT_DICT value is null", K(ret));
+        } else if (stmt::T_CREATE_TABLE != stmt_->get_stmt_type() || is_index_option) {
+          ret = OB_NOT_SUPPORTED;
+          LOG_USER_ERROR(OB_NOT_SUPPORTED, "FULLTEXT_DICT outside CREATE TABLE");
+        } else {
+          const ObString value(static_cast<int32_t>(option_node->children_[0]->str_len_),
+                               option_node->children_[0]->str_value_);
+          if (0 != value.case_compare("Y")) {
+            ret = OB_INVALID_ARGUMENT;
+            LOG_USER_ERROR(OB_INVALID_ARGUMENT, "FULLTEXT_DICT must be 'Y'");
+          } else {
+            static_cast<ObCreateTableStmt *>(stmt_)->get_create_table_arg().schema_.set_fulltext_dict();
           }
         }
         break;

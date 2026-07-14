@@ -36,6 +36,8 @@ int ObFTDictHub::init()
     LOG_WARN("init dict map failed", K(ret));
   } else if (OB_FAIL(rw_dict_lock_.init(K_MAX_DICT_BUCKET))) {
     LOG_WARN("init dict lock failed", K(ret));
+  } else if (OB_FAIL(user_dict_manager_.init())) {
+    LOG_WARN("init user dictionary manager failed", K(ret));
   } else {
     is_inited_ = true;
   }
@@ -45,6 +47,7 @@ int ObFTDictHub::init()
 int ObFTDictHub::destroy()
 {
   int ret = OB_SUCCESS;
+  user_dict_manager_.destroy();
   is_inited_ = false;
   return ret;
 }

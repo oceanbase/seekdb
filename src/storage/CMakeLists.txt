@@ -315,6 +315,7 @@ ob_set_subtarget(ob_storage ik
   fts/dict/ob_ft_dict_hub.cpp
   fts/dict/ob_ft_range_dict.cpp
   fts/dict/ob_ft_dict_table_iter.cpp
+  fts/dict/ob_ft_user_dict.cpp
   fts/dict/ob_ft_cache.cpp
 )
 
