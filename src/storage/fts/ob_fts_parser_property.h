@@ -20,6 +20,8 @@
 #include "lib/allocator/ob_allocator.h"
 #include "lib/charset/ob_charset.h"
 #include "lib/json/ob_json.h"
+#include "lib/ob_define.h"
+#include "lib/string/ob_fixed_length_string.h"
 #include "common/json_type/ob_json_base.h"
 #include "lib/oblog/ob_log_module.h"
 #include "lib/string/ob_string.h"
@@ -135,6 +137,9 @@ private:
 struct ObFTParserProperty final
 {
 public:
+  static constexpr int64_t MAX_DICT_TABLE_NAME_LENGTH
+      = (common::OB_MAX_DATABASE_NAME_LENGTH + common::OB_MAX_USER_TABLE_NAME_LENGTH_ORACLE) * 4 + 2;
+
   ObFTParserProperty();
   ~ObFTParserProperty() = default;
   int parse_for_parser_helper(const ObFTParser &parser, const ObString &json_str);
@@ -164,9 +169,9 @@ public:
   int64_t max_token_size_;
   int64_t ngram_token_size_;
   bool ik_mode_smart_;
-  common::ObString stopword_table_;
-  common::ObString dict_table_;
-  common::ObString quantifier_table_;
+  common::ObFixedLengthString<MAX_DICT_TABLE_NAME_LENGTH> stopword_table_;
+  common::ObFixedLengthString<MAX_DICT_TABLE_NAME_LENGTH> dict_table_;
+  common::ObFixedLengthString<MAX_DICT_TABLE_NAME_LENGTH> quantifier_table_;
   int64_t min_ngram_token_size_;
   int64_t max_ngram_token_size_;
 };

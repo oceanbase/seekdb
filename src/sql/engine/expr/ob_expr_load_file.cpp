@@ -150,6 +150,7 @@ int ObExprLoadFile::eval_load_file(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &
   } else {
     ObEvalCtx::TempAllocGuard alloc_guard(ctx);
     ObString file_uri;
+    ObObjectStorageInfo storage_info;
     int64_t file_length = 0;
     int64_t read_size = 0;
     ObTextStringDatumResult output_result(expr.datum_meta_.type_, &expr, &ctx, &res);
@@ -158,7 +159,10 @@ int ObExprLoadFile::eval_load_file(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &
                                file_datum->get_string(),
                                file_uri))) {
       LOG_WARN("build file uri failed", K(ret));
-    } else if (OB_FAIL(ObBackupIoAdapter::adaptively_get_file_length(file_uri, nullptr, file_length))) {
+    } else if (OB_FAIL(storage_info.set(OB_STORAGE_FILE, ""))) {
+      LOG_WARN("initialize local file storage info failed", K(ret));
+    } else if (OB_FAIL(ObBackupIoAdapter::adaptively_get_file_length(
+                           file_uri, &storage_info, file_length))) {
       LOG_WARN("get file length failed", K(ret), K(file_uri));
     } else if (file_length < 0 || file_length > OB_MAX_BLOB_WIDTH) {
       ret = OB_SIZE_OVERFLOW;
@@ -173,7 +177,7 @@ int ObExprLoadFile::eval_load_file(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &
       if (OB_FAIL(output_result.get_reserved_buffer(output_buffer, buffer_size))) {
         LOG_WARN("get BLOB result buffer failed", K(ret));
       } else if (OB_FAIL(ObBackupIoAdapter::adaptively_read_single_file(
-                           file_uri, nullptr, output_buffer, buffer_size, read_size,
+                           file_uri, &storage_info, output_buffer, buffer_size, read_size,
                            ObStorageIdMod::get_default_id_mod()))) {
         LOG_WARN("read location file failed", K(ret), K(file_uri));
       } else if (read_size != file_length) {

@@ -1158,35 +1158,42 @@ int ObFTParserProperty::parse_for_parser_helper(const ObFTParser &parser, const 
     LOG_WARN("fail to parse from json str", K(ret), K(json_str));
   } else {
     if (parser.is_ik()) {
-      if (OB_FAIL(props.config_get_dict_table(dict_table_))) {
+      ObString table_name;
+      if (OB_FAIL(props.config_get_dict_table(table_name))) {
         if (OB_SEARCH_NOT_FOUND == ret) {
           dict_table_.reset();
           ret = OB_SUCCESS;
         }
+      } else if (OB_FAIL(dict_table_.assign(table_name))) {
+        LOG_WARN("fail to copy dict table name", K(ret), K(table_name));
       }
-      if (OB_SUCC(ret) && OB_FAIL(props.config_get_stopword_table(stopword_table_))) {
+      if (OB_SUCC(ret) && OB_FAIL(props.config_get_stopword_table(table_name))) {
         if (OB_SEARCH_NOT_FOUND == ret) {
           stopword_table_.reset();
           ret = OB_SUCCESS;
         }
+      } else if (OB_SUCC(ret) && OB_FAIL(stopword_table_.assign(table_name))) {
+        LOG_WARN("fail to copy stopword table name", K(ret), K(table_name));
       }
-      if (OB_SUCC(ret) && OB_FAIL(props.config_get_quantifier_table(quantifier_table_))) {
+      if (OB_SUCC(ret) && OB_FAIL(props.config_get_quantifier_table(table_name))) {
         if (OB_SEARCH_NOT_FOUND == ret) {
           quantifier_table_.reset();
           ret = OB_SUCCESS;
         }
+      } else if (OB_SUCC(ret) && OB_FAIL(quantifier_table_.assign(table_name))) {
+        LOG_WARN("fail to copy quantifier table name", K(ret), K(table_name));
       }
       ObString ik_smart;
-      if (OB_SUCC(ret) && OB_FAIL(props.config_get_ik_mode(ik_smart))) {
-        if (OB_SEARCH_NOT_FOUND == ret) {
-          // from old version, ik_mode is not set, so use default value
-          ik_mode_smart_ = true;
-          ret = OB_SUCCESS;
-        } else {
-          LOG_WARN("fail to get ik mode", K(ret));
-        }
-      } else {
-        if (0 == ik_smart.case_compare(ObString(ObFTSLiteral::FT_IK_MODE_SMART))) {
+      if (OB_SUCC(ret)) {
+        if (OB_FAIL(props.config_get_ik_mode(ik_smart))) {
+          if (OB_SEARCH_NOT_FOUND == ret) {
+            // from old version, ik_mode is not set, so use default value
+            ik_mode_smart_ = true;
+            ret = OB_SUCCESS;
+          } else {
+            LOG_WARN("fail to get ik mode", K(ret));
+          }
+        } else if (0 == ik_smart.case_compare(ObString(ObFTSLiteral::FT_IK_MODE_SMART))) {
           ik_mode_smart_ = true;
         } else if (0 == ik_smart.case_compare(ObString(ObFTSLiteral::FT_IK_MODE_MAX_WORD))) {
           ik_mode_smart_ = false;
