@@ -1159,8 +1159,40 @@ int ObFTParserProperty::parse_for_parser_helper(const ObFTParser &parser, const 
 {
   int ret = OB_SUCCESS;
   if (parser.is_ik()) {
+    ObString table_name;
+    if (OB_FAIL(props.config_get_dict_table_name(table_name))) {
+      if (OB_SEARCH_NOT_FOUND == ret) {
+        ret = OB_SUCCESS;
+        dict_table_name_.reset();
+      } else {
+        LOG_WARN("fail to get dict table name", K(ret));
+      }
+    } else {
+      dict_table_name_ = table_name;
+    }
+    if (OB_SUCC(ret) && OB_FAIL(props.config_get_quantifier_table_name(table_name))) {
+      if (OB_SEARCH_NOT_FOUND == ret) {
+        ret = OB_SUCCESS;
+        quantifier_table_name_.reset();
+      } else {
+        LOG_WARN("fail to get quantifier table name", K(ret));
+      }
+    } else if (OB_SUCC(ret)) {
+      quantifier_table_name_ = table_name;
+    }
+    if (OB_SUCC(ret) && OB_FAIL(props.config_get_stopword_table_name(table_name))) {
+      if (OB_SEARCH_NOT_FOUND == ret) {
+        ret = OB_SUCCESS;
+        stopword_table_name_.reset();
+      } else {
+        LOG_WARN("fail to get stopword table name", K(ret));
+      }
+    } else if (OB_SUCC(ret)) {
+      stopword_table_name_ = table_name;
+    }
+
     ObString ik_smart;
-    if (OB_FAIL(props.config_get_ik_mode(ik_smart))) {
+    if (OB_SUCC(ret) && OB_FAIL(props.config_get_ik_mode(ik_smart))) {
       if (OB_SEARCH_NOT_FOUND == ret) {
         ik_mode_smart_ = true;
         ret = OB_SUCCESS;
