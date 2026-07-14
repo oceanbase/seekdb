@@ -17,8 +17,7 @@
 #ifndef OCEANBASE_STORAGE_OB_DDL_LOCK_H_
 #define OCEANBASE_STORAGE_OB_DDL_LOCK_H_
 
-#include "common/mysqlclient/ob_mysql_transaction.h"
-#include "storage/tablelock/ob_table_lock_rpc_struct.h"  // previously hidden behind the srv proxy include chain
+#include "lib/mysqlclient/ob_mysql_transaction.h"
 #include "share/schema/ob_table_schema.h"
 #include "observer/ob_inner_sql_connection.h"
 #include "storage/tablelock/ob_table_lock_rpc_struct.h"
@@ -217,7 +216,7 @@ private:
     const uint64_t table_id,
     ObMySQLTransaction &trans,
     bool &has_dependent_task);
-  static constexpr int64_t DEFAULT_TIMEOUT = 0;
+  static int64_t get_default_timeout_us();
 };
 
 class ObOnlineDDLLock {
