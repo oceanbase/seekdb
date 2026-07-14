@@ -48,11 +48,35 @@ FULLTEXT write or TOKENIZE -> ObIKFTParser::init_dict()
        normalized dictionary refs -> table iterator -> DAT range cache -> IK segmentation
 ```
 
-## 新增与修改位置
-
 ## 待修改 / 待实现接口清单
 
-本节是实施的接口契约。除特别标注“修改现有”外，均为待新增接口；参数类型遵循本仓库现有的 `ObString`、`ObIArray`、`ObTableSchema` 与 `ObFTDictType` 用法。实施时不得另建同职责接口。
+本节以接口为最小实施单元，而非以文件为单位。除特别标注“修改现有”外，均为待新增接口；参数类型遵循本仓库现有的 `ObString`、`ObIArray`、`ObTableSchema` 与 `ObFTDictType` 用法。实施时不得另建同职责接口。
+
+### 接口目录
+
+| # | 接口 | 类型 | 所在位置 | 核心职责 |
+| --- | --- | --- | --- | --- |
+| 1 | `ObTableSchema::set_fulltext_dict_table(bool)` | 新增 | `src/share/schema/ob_table_schema.h/.cpp` | 设置并持久化词典表标记。 |
+| 2 | `ObTableSchema::is_fulltext_dict_table() const` | 新增 | `src/share/schema/ob_table_schema.h/.cpp` | 供 DDL、索引创建和刷新检查目标是否为词典表。 |
+| 3 | `ObDDLResolver::resolve_fulltext_dict_option_(...)` | 新增 | `src/sql/resolver/ddl/ob_ddl_resolver.h/.cpp` | 解析 `FULLTEXT_DICT='Y'` 并写入 #1。 |
+| 4 | `ObCreateTableResolver::check_fulltext_dict_table_(...)` | 新增 | `src/sql/resolver/ddl/ob_create_table_resolver.h/.cpp` | 校验词典表列、主键、类型、字符集和 IOT 约束。 |
+| 5 | `ObFTParserResolverHelper::resolve_and_validate_dict_table_(...)` | 新增 | `src/sql/resolver/ddl/ob_fts_parser_resolver.h/.cpp` | 规范化词典名、解析 table ID 并验证 #2。 |
+| 6 | `ObFTParserProperty::parse_for_parser_helper(...)` | 修改现有 | `src/storage/fts/ob_fts_parser_property.cpp` | 从属性 JSON 取出真实的三类词典名。 |
+| 7 | `ObFTDictDesc` 扩展构造函数与 `is_builtin()` | 修改现有 | `src/storage/fts/dict/ob_ft_dict_def.h` | 携带 tenant/table/version 身份并区分用户与内置词典。 |
+| 8 | `ObFTDictTableIter::init(const ObFTDictDesc &)` | 修改现有 | `src/storage/fts/dict/ob_ft_dict_table_iter.h/.cpp` | 安全读取用户库词典表的 `word` 列。 |
+| 9 | `ObFTRangeDict::build_cache_from_table(...)` | 新增 | `src/storage/fts/dict/ob_ft_range_dict.h/.cpp` | 将用户词典表构建为 DAT range cache。 |
+| 10 | `ObFTDictHub::invalidate_cache(...)` | 新增 | `src/storage/fts/dict/ob_ft_dict_hub.h/.cpp` | 失效指定词典所有类型/版本的本地缓存。 |
+| 11 | `ObIKFTParser::build_dict_descs_(...)` | 新增 | `src/storage/fts/ob_ik_ft_parser.h/.cpp` | 从 #6 创建主/停用/量词词典 descriptor。 |
+| 12 | `ObIKFTParser::init_single_dict(...)` | 修改现有 | `src/storage/fts/ob_ik_ft_parser.h/.cpp` | 改为以 #7 的完整身份读写缓存。 |
+| 13 | `ObRefreshFulltextDictStmt` | 新增类 | `src/sql/resolver/ddl/ob_refresh_fulltext_dict_stmt.h/.cpp` | 承载 refresh 所需的 tenant/database/table 身份。 |
+| 14 | `ObDDLResolver::resolve_refresh_fulltext_dict_(...)` | 新增 | `src/sql/resolver/ddl/ob_ddl_resolver.h/.cpp` | 将 refresh parse node 解析为 #13。 |
+| 15 | `ObRefreshFulltextDictExecutor::execute(...)` | 新增 | `src/sql/engine/cmd/ob_refresh_fulltext_dict_executor.h/.cpp` | 向 root service 提交刷新请求。 |
+| 16 | `ObRefreshFulltextDictArg::is_valid()` / `ObRootService::refresh_fulltext_dict(...)` | 新增 | `src/share/ob_rpc_struct.*`、`src/rootserver/ob_root_service.*` | 传递刷新版本并向 observer 广播。 |
+| 17 | `ObSchemaService::get_fulltext_indexes_referencing_dict_(...)` | 新增 | `src/share/schema/ob_schema_service.h/.cpp` | 查询引用指定词典表的全文索引。 |
+| 18 | `ObDDLService::check_fulltext_dict_ddl_allowed_(...)` | 新增 | `src/rootserver/ob_ddl_service.h/.cpp` | 基于 #17 阻止受限的 DROP/RENAME/ALTER。 |
+| 19 | `TokenizeParam::reform_parser_properties(...)` | 修改现有 | `src/sql/engine/expr/ob_expr_tokenize.cpp` | 与 #5、#6 共用词典属性规范化语义。 |
+
+SQL grammar、parse node 枚举和 parser 生成物是 #3、#14 的前置改动，而非独立功能接口：在 `sql_parser_mysql_mode.y` 新增 `FULLTEXT_DICT` table option 与 `ALTER SYSTEM REFRESH FULLTEXT DICT` 产生式，生成 `T_FULLTEXT_DICT`、`T_REFRESH_FULLTEXT_DICT`，并按项目生成规则更新 parser 产物。
 
 ### A. 表 schema 与建表校验
 
