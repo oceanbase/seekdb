@@ -1,17 +1,6 @@
-/*
- * Copyright (c) 2025 OceanBase.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+/**
+ * Copyright (c) 2023 OceanBase
+ * SPDX-License-Identifier: Apache-2.0
  */
 
 #ifndef OCEANBASE_SHARE_OB_TEXT_ANALYZER_H_
@@ -28,7 +17,7 @@ struct ObTextAnalysisCtx final
 public:
   ObTextAnalysisCtx()
     : cs_(nullptr),
-      filter_stopword_(true),
+      filter_stop_token_(false),
       need_grouping_(false)
   {}
   ~ObTextAnalysisCtx() = default;
@@ -36,17 +25,14 @@ public:
   void reset()
   {
     cs_ = nullptr;
-    filter_stopword_ = true;
+    filter_stop_token_ = false;
     need_grouping_ = false;
   }
-  TO_STRING_KV(KP_(cs), K_(filter_stopword), K_(need_grouping));
+  TO_STRING_KV(KP_(cs), K_(filter_stop_token), K_(need_grouping));
 public:
   const ObCharsetInfo *cs_;
-  bool filter_stopword_;
+  bool filter_stop_token_;
   bool need_grouping_;
-  // language type
-  // word segment plugin type
-  // specified normalization tricks
 };
 
 class ObITextAnalyzer

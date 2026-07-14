@@ -1,32 +1,18 @@
-/*
- * Copyright (c) 2025 OceanBase.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+/**
+ * Copyright (c) 2023 OceanBase
+ * SPDX-License-Identifier: Apache-2.0
  */
 
 #pragma once
 
 #include "plugin/interface/ob_plugin_intf.h"
+#include "storage/tx/ob_trans_define_v4.h"
+#include "storage/fts/ob_fts_struct.h"
 
 struct ObCharsetInfo;
 
 namespace oceanbase
 {
-
-namespace storage
-{
-class ObAddWordFlag;
-}
 namespace plugin
 {
 
@@ -77,15 +63,22 @@ public:
   };
 
   ObFTIKParam(Mode mode = Mode::SMART)
-      : mode_(mode), main_dict_(""), quan_dict_(""), stopword_dict_("")
+      : mode_(mode), main_dict_id_(OB_INVALID_ID), quan_dict_id_(OB_INVALID_ID), stopword_dict_id_(OB_INVALID_ID),
+        main_dict_name_(), quan_dict_name_(), stopword_dict_name_()
   {
   }
 
+  TO_STRING_KV(K_(mode), K_(main_dict_id), K_(quan_dict_id), K_(stopword_dict_id),
+               K_(main_dict_name), K_(quan_dict_name), K_(stopword_dict_name));
+
 public:
   Mode mode_;
-  common::ObString main_dict_;
-  common::ObString quan_dict_;
-  common::ObString stopword_dict_;
+  uint64_t main_dict_id_;
+  uint64_t quan_dict_id_;
+  uint64_t stopword_dict_id_;
+  common::ObString main_dict_name_;
+  common::ObString quan_dict_name_;
+  common::ObString stopword_dict_name_;
 };
 
 /**
@@ -101,9 +94,14 @@ public:
 public:
   ObFTParserParam()
       : ObFTParserParamExport(),
+        metadata_alloc_(nullptr),
+        scratch_alloc_(nullptr),
+        ik_param_(),
         ngram_token_size_(NGRAM_TOKEN_SIZE),
         min_ngram_size_(NGRAM_TOKEN_SIZE),
-        max_ngram_size_(NGRAM_TOKEN_SIZE)
+        max_ngram_size_(NGRAM_TOKEN_SIZE),
+        is_ddl_mode_(false),
+        need_casedown_(false)
   {
   }
   virtual ~ObFTParserParam() { reset(); }
@@ -111,20 +109,27 @@ public:
   inline void reset()
   {
     ObFTParserParamExport::reset();
-    allocator_ = nullptr;
+    metadata_alloc_ = nullptr;
+    scratch_alloc_ = nullptr;
     ngram_token_size_ = NGRAM_TOKEN_SIZE;
+    is_ddl_mode_ = false;
+    need_casedown_ = false;
   }
 
-  INHERIT_TO_STRING_KV("base", ObFTParserParamExport, KP_(allocator), K_(ngram_token_size));
+  INHERIT_TO_STRING_KV("ObFTParserParamExport", ObFTParserParamExport,
+      KP_(metadata_alloc), KP_(scratch_alloc), K_(ngram_token_size),
+      K_(min_ngram_size), K_(max_ngram_size), K_(ik_param), K_(is_ddl_mode), K_(need_casedown));
 
 public:
-  common::ObIAllocator *allocator_ = nullptr;
-
-  // ik parser params
+  common::ObIAllocator *metadata_alloc_;
+  common::ObIAllocator *scratch_alloc_;
   ObFTIKParam ik_param_;
   int64_t ngram_token_size_;
   int64_t min_ngram_size_;
   int64_t max_ngram_size_;
+
+  bool is_ddl_mode_;
+  bool need_casedown_;
 };
 
 class ObITokenIterator
@@ -137,6 +142,7 @@ public:
       int64_t &word_len,
       int64_t &char_cnt,
       int64_t &word_freq) = 0;
+  
   DECLARE_PURE_VIRTUAL_TO_STRING;
 };
 
@@ -175,7 +181,7 @@ public:
   /**
    * get AddWordFlag
    * @details ref to ObAddWordFlag for more details
-   * @param[out] flag the AddWordFlag
+   * @param[out] flag the ObAddWordFlag
    */
   virtual int get_add_word_flag(storage::ObAddWordFlag &flag) const = 0;
 

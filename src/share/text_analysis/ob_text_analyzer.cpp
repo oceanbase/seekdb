@@ -1,17 +1,6 @@
-/*
- * Copyright (c) 2025 OceanBase.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+/**
+ * Copyright (c) 2023 OceanBase
+ * SPDX-License-Identifier: Apache-2.0
  */
 
 #define USING_LOG_PREFIX SHARE
@@ -43,7 +32,7 @@ int ObITextAnalyzer::init(const ObTextAnalysisCtx &ctx, ObIAllocator &allocator)
   int ret = OB_SUCCESS;
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("double init", K(ret));
+    LOG_WARN("the text analyzer has been initialized", K(ret));
   } else if (OB_UNLIKELY(!ctx.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid text analysis ctx", K(ret), K(ctx));
@@ -137,8 +126,7 @@ int ObITextAnalyzer::add_normalizer(
   return ret;
 }
 
-template<typename T>
-int ObITextAnalyzer::add_token_stream(ObITokenStream *&token_stream)
+template <typename T> int ObITextAnalyzer::add_token_stream(ObITokenStream *&token_stream)
 {
   int ret = OB_SUCCESS;
   char *buf = nullptr;
@@ -162,10 +150,10 @@ ObITokenStream *ObITextAnalyzer::get_tail_token_stream()
 int ObEnglishTextAnalyzer::inner_init(const ObTextAnalysisCtx &ctx, ObIAllocator &allocator)
 {
   int ret = OB_SUCCESS;
-  UNUSEDx(ctx); // TODO: generate specific analyse pipeline by ctx
+  UNUSED(allocator);
   if (OB_FAIL(add_tokenizer(ObTextTokenizer::WHITESPACE))) {
     LOG_WARN("failed to add white space tokenizer", K(ret));
-  } else if (ctx.filter_stopword_ && OB_FAIL(add_normalizer(ObTokenNormalizer::STOPWORD_FILTER, ctx))) {
+  } else if (ctx.filter_stop_token_ && OB_FAIL(add_normalizer(ObTokenNormalizer::STOPWORD_FILTER, ctx))) {
     LOG_WARN("failed to add stop word filter", K(ret));
   } else if (OB_FAIL(add_normalizer(ObTokenNormalizer::ENG_BASIC_NORM, ctx))) {
     LOG_WARN("failed to add basic english normalizer", K(ret));
