@@ -77,10 +77,22 @@ int ObFTDictTableIter::init(const ObString &table_name)
   } else {
     SMART_VAR(ObSqlString, sql_string)
     {
-      if (OB_FAIL(sql_string.append("SELECT word FROM oceanbase."))) {
+      if (OB_FAIL(sql_string.append("SELECT word FROM "))) {
         LOG_WARN("Failed to append sql", K(ret));
+      } else if (0 == table_name.length() || nullptr == table_name.ptr()) {
+        ret = OB_INVALID_ARGUMENT;
+        LOG_WARN("table name is empty", K(ret), K(table_name));
+      } else if (nullptr == memchr(table_name.ptr(), '.', table_name.length())) {
+        // built-in table: no db qualifier, default to oceanbase
+        if (OB_FAIL(sql_string.append("oceanbase."))) {
+          LOG_WARN("Failed to append sql", K(ret));
+        } else if (OB_FAIL(sql_string.append(table_name))) {
+          LOG_WARN("Failed to append sql", K(ret));
+        }
       } else if (OB_FAIL(sql_string.append(table_name))) {
         LOG_WARN("Failed to append sql", K(ret));
+      }
+      if (OB_FAIL(ret)) {
       } else if (OB_FAIL(sql_string.append(" ORDER BY word"))) {
         LOG_WARN("Failed to append sql", K(ret));
       } else if (OB_FAIL(sql_proxy->read(res_, sql_string.ptr()))) {

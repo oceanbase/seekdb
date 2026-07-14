@@ -1158,10 +1158,20 @@ int ObFTParserProperty::parse_for_parser_helper(const ObFTParser &parser, const 
     LOG_WARN("fail to parse from json str", K(ret), K(json_str));
   } else {
     if (parser.is_ik()) {
-      // set dict tables and copy dict name
-      dict_table_ = ObString(ObFTSLiteral::CONFIG_NAME_DICT_TABLE);
-      stopword_table_ = ObString(ObFTSLiteral::CONFIG_NAME_STOPWORD_TABLE);
-      quantifier_table_ = ObString(ObFTSLiteral::CONFIG_NAME_QUANTIFIER_TABLE);
+      // extract user-provided dict table names from JSON; the resulting ObString
+      // points into the json_str buffer which must outlive this property.
+      ObString tmp_str;
+      if (OB_SUCC(props.config_get_dict_table(tmp_str))) {
+        dict_table_ = tmp_str;
+      }
+      tmp_str.reset();
+      if (OB_SUCC(props.config_get_stopword_table(tmp_str))) {
+        stopword_table_ = tmp_str;
+      }
+      tmp_str.reset();
+      if (OB_SUCC(props.config_get_quantifier_table(tmp_str))) {
+        quantifier_table_ = tmp_str;
+      }
       ObString ik_smart;
       if (OB_FAIL(props.config_get_ik_mode(ik_smart))) {
         if (OB_SEARCH_NOT_FOUND == ret) {

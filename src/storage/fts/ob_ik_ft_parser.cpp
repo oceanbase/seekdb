@@ -278,17 +278,17 @@ int ObIKFTParser::init_dict(const plugin::ObFTParserParam &param)
   }
 
   ObFTRangeDict *dict = nullptr;
-  ObFTDictDesc main_dict_desc("main_dict",
+  ObFTDictDesc main_dict_desc(param.ik_param_.main_dict_,
                               ObFTDictType::DICT_IK_MAIN,
                               ObCharsetType::CHARSET_UTF8MB4,
                               ObCollationType::CS_TYPE_UTF8MB4_BIN);
 
-  ObFTDictDesc quan_dict_desc("quan_dict",
+  ObFTDictDesc quan_dict_desc(param.ik_param_.quan_dict_,
                               ObFTDictType::DICT_IK_QUAN,
                               ObCharsetType::CHARSET_UTF8MB4,
                               ObCollationType::CS_TYPE_UTF8MB4_BIN);
 
-  ObFTDictDesc stopword_dict_desc("stopword",
+  ObFTDictDesc stopword_dict_desc(param.ik_param_.stopword_dict_,
                                   ObFTDictType::DICT_IK_STOP,
                                   ObCharsetType::CHARSET_UTF8MB4,
                                   ObCollationType::CS_TYPE_UTF8MB4_BIN);
