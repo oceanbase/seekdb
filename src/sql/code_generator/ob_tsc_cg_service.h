@@ -327,6 +327,7 @@ private:
   int generate_das_sort_ctdef(const ObIArray<ObExpr *> &sort_keys,
                               ObDASBaseCtDef *child_ctdef,
                               ObDASSortCtDef *&sort_ctdef);
+  int generate_mr_mv_scan_flag(const ObLogTableScan &op, ObQueryFlag &query_flag) const;
   int generate_index_merge_ctdef(const ObLogTableScan &op, ObTableScanCtDef &tsc_ctdef, ObDASIndexMergeCtDef *&root_ctdef);
   int generate_index_merge_node_ctdef(const ObLogTableScan &op,
                                       ObTableScanCtDef &tsc_ctdef,

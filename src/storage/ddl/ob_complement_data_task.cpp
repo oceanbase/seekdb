@@ -80,7 +80,6 @@ int ObComplementDataParam::fill_tablet_param()
   ObLSHandle ls_handle;
   ObTabletHandle tablet_handle;
   ObDDLKvMgrHandle ddl_kv_mgr_handle;
-  bool is_cs_replica_exist = false;
   if (OB_FAIL(share::g_mp->ls_service()->get_ls(dest_ls_id_, ls_handle, ObLSGetMod::DDL_MOD))) {
     LOG_WARN("failed to get log stream", K(ret), K(param));
   } else if (OB_FAIL(ObDDLUtil::ddl_get_tablet(ls_handle,
@@ -91,8 +90,6 @@ int ObComplementDataParam::fill_tablet_param()
   } else if (OB_UNLIKELY(nullptr == tablet_handle.get_obj())) {
     ret = OB_ERR_SYS;
     LOG_WARN("tablet handle is null", K(ret), K(param));
-  } else if (OB_FAIL(ObDirectLoadMgrUtil::check_cs_replica_exist(dest_ls_id_, dest_tablet_id_, is_cs_replica_exist))) {
-    LOG_WARN("failed to check tablet_id exist", K(ret));
   } else if (OB_FAIL(tablet_handle.get_obj()->load_storage_schema(allocator_, tablet_param_.storage_schema_))) {
     LOG_WARN("load storage schema failed", K(ret));
   } else if (OB_FAIL(tablet_handle.get_obj()->get_ddl_kv_mgr(ddl_kv_mgr_handle, true /*try_create]*/))) {
@@ -110,7 +107,6 @@ int ObComplementDataParam::fill_tablet_param()
       } else if (OB_FAIL(lob_meta_tablet_handle.get_obj()->load_storage_schema(allocator_, lob_meta_tablet_param_.storage_schema_))) {
         LOG_WARN("load storage schema failed", K(ret));
       } else {
-        lob_meta_tablet_param_.with_cs_replica_ = false;
         lob_meta_tablet_param_.is_micro_index_clustered_ = lob_meta_tablet_handle.get_obj()->get_tablet_meta().micro_index_clustered_;
         ObDDLKvMgrHandle lob_ddl_kv_mgr_handle;
         if (OB_FAIL(lob_meta_tablet_handle.get_obj()->get_ddl_kv_mgr(lob_ddl_kv_mgr_handle, true /*try_create]*/))) {
@@ -136,7 +132,6 @@ int ObComplementDataParam::init(const ObDDLBuildSingleReplicaRequestArg &arg)
   const int64_t dest_schema_version = arg.dest_schema_version_;
   ObSchemaGetterGuard src_tenant_schema_guard;
   ObSchemaGetterGuard dst_tenant_schema_guard;
-  bool is_dest_schema_row_store = false;
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
     LOG_WARN("ObComplementDataParam has been inited before", K(ret));
@@ -185,13 +180,7 @@ int ObComplementDataParam::init(const ObDDLBuildSingleReplicaRequestArg &arg)
         && OB_UNLIKELY(dest_table_schema->get_association_table_id() != arg.source_table_id_)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("unexpected error", K(ret), K(arg), K(dest_table_schema->get_association_table_id()));
-      } else if (OB_FAIL(dest_table_schema->get_is_row_store(is_dest_schema_row_store))) {
-        LOG_WARN("judge if orig table is column store failed", K(ret), K(arg));
-      } else if (OB_FAIL(dest_table_schema->get_store_column_group_count(dest_schema_cg_cnt_))) {
-        LOG_WARN("fail to get store column group count", K(ret), K(arg));
       } else {
-        /* current impl cs replica is invisible for complement data dag */
-        const bool need_process_cs_replica = false;
         snapshot_version_ = arg.snapshot_version_;
         orig_schema_tablet_size_ = orig_table_schema->get_tablet_size();
       }
@@ -315,12 +304,11 @@ int ObComplementDataContext::init(
     const share::schema::ObTableSchema &hidden_table_schema)
 {
   int ret = OB_SUCCESS;
+  UNUSED(hidden_table_schema);
   ObLSHandle ls_handle;
   ObTabletHandle tablet_handle;
   const ObSSTable *first_major_sstable = nullptr;
   ObTabletMemberWrapper<ObTabletTableStore> table_store_wrapper;
-  bool is_column_store = false;
-  bool is_cs_replica_exist = false;
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
     LOG_WARN("ObComplementDataContext has already been inited", K(ret));
@@ -341,11 +329,6 @@ int ObComplementDataContext::init(
     LOG_WARN("check if major sstable exist failed", K(ret), K(param));
   } else if (nullptr != first_major_sstable) {
     LOG_INFO("major exists, skip create tablet direct load mgr", K(ret), K(param));
-  } else if (OB_FAIL(hidden_table_schema.get_is_column_store(is_column_store))) {
-    LOG_WARN("failed to check is column store", K(ret));
-  } else if (OB_FAIL(ObDirectLoadMgrUtil::check_cs_replica_exist(param.dest_ls_id_, param.dest_tablet_id_, is_cs_replica_exist))) {
-    LOG_WARN("failed to check tablet_id exist", K(ret));
-  } else if (FALSE_IT(is_column_store = is_cs_replica_exist ? true : is_column_store)) {
   } else {
     total_slice_cnt_ = param.ranges_.count();
   }
@@ -1032,7 +1015,6 @@ int ObComplementWriteTask::fill_writer_param(ObWriteMacroParam &param)
   param.tablet_id_ = param_->dest_tablet_id_;
   param.tenant_data_version_ = param_->data_format_version_;
   param.is_no_logging_ = param_->is_no_logging_;
-  param.macro_meta_store_mgr_ = nullptr;
   param.schema_version_ = param_->dest_schema_version_;
   param.slice_idx_ = task_id_;
   param.slice_count_ = param_->concurrent_cnt_;
@@ -1367,10 +1349,6 @@ int ObComplementWriteTask::remote_scan()
   return ret;
 }
 
-/* TODO @zhuoran.zzr add insert monitor like this following
-
-    ObInsertMonitor insert_monitor(context_->row_scanned_, context_->row_inserted_, context_->cg_row_inserted_);
- */
 int ObComplementWriteTask::do_remote_scan()
 {
   int ret = OB_SUCCESS;
@@ -1473,17 +1451,13 @@ int ObComplementMergeTask::process()
     } else {
       const int64_t *column_checksums = sst_meta_hdl.get_sstable_meta().get_col_checksum();
       const int64_t column_count = sst_meta_hdl.get_sstable_meta().get_col_checksum_cnt();
-      ObArray<int64_t> co_column_checksums;
-      co_column_checksums.set_attr(ObMemAttr("Comp_Ccc"));
-      if (OB_FAIL(ObDDLStorageUtil::get_co_column_checksums_if_need(tablet_handle, first_major_sstable, co_column_checksums))) {
-        LOG_WARN("get column checksum from co sstable failed", K(ret));
-      } else if (OB_FAIL(ObTabletDDLUtil::report_ddl_checksum(param_->dest_ls_id_,
+      if (OB_FAIL(ObTabletDDLUtil::report_ddl_checksum(param_->dest_ls_id_,
                                                          param_->dest_tablet_id_,
                                                          param_->dest_table_id_,
                                                          1 /* execution_id */,
                                                          param_->task_id_,
-                                                         co_column_checksums.empty() ? column_checksums : co_column_checksums.get_data(),
-                                                         co_column_checksums.empty() ? column_count : co_column_checksums.count(),
+                                                         column_checksums,
+                                                         column_count,
                                                          param_->data_format_version_))) {
         LOG_WARN("report ddl column checksum failed", K(ret), K(*param_));
       } else if (OB_FAIL(share::g_mp->tablet_table_updater()->submit_tablet_update_task(param_->dest_ls_id_, param_->dest_tablet_id_))) {
@@ -1760,8 +1734,6 @@ int ObLocalScan::construct_access_param(
   read_info_.reset();
   ObArray<int32_t> cols_index;
   ObArray<ObColDesc> tmp_col_ids;
-  ObArray<int32_t> cg_idxs;
-  bool has_all_cg = true; /* default is row store*/
   // to construct column index, i.e., cols_index.
   if (OB_FAIL(data_table_schema.get_store_column_ids(tmp_col_ids, false))) {
     LOG_WARN("fail to get store columns id", K(ret), K(tmp_col_ids));
@@ -1785,21 +1757,6 @@ int ObLocalScan::construct_access_param(
     }
   }
   
-  /*construct cg_idx*/
-  if (OB_FAIL(ret)) {
-  } else if(OB_FAIL(data_table_schema.has_all_column_group(has_all_cg))) {
-    LOG_WARN("fail to check whether table has all cg", K(ret), K(data_table_schema));
-  } else if (!has_all_cg) {
-    for (int64_t i = 0; i < col_params_.count(); i++) {
-      int32_t tmp_cg_idx = -1;
-      if (OB_FAIL(data_table_schema.get_column_group_index(*col_params_.at(i), false /*need_calculate_cg_idx*/, tmp_cg_idx))) {
-        LOG_WARN("fail to get column group idx", K(ret), K(data_table_schema));
-      } else if (OB_FAIL(cg_idxs.push_back(tmp_cg_idx))) {
-        LOG_WARN("fail to push back cg idx", K(ret));
-      }
-    }
-  }
-
   if (OB_FAIL(ret)) {
   } else if (cols_index.count() != extended_gc_.extended_col_ids_.count()) {
     ret = OB_ERR_UNEXPECTED;
@@ -1810,9 +1767,7 @@ int ObLocalScan::construct_access_param(
                                      extended_gc_.extended_col_ids_, // TODO @yiren, remove column id.
                                      &cols_index,
                                      &col_params_,
-                                     has_all_cg ? nullptr : &cg_idxs,
-                                     nullptr, /* don't use skip scan*/
-                                     has_all_cg))) {
+                                     nullptr /* don't use skip scan*/))) {
     LOG_WARN("fail to init read info", K(ret));
   } else {
     ObArray<ObColDesc> &extended_col_ids = extended_gc_.extended_col_ids_;

@@ -72,6 +72,7 @@ int ObColumnSchemaV2::assign(const ObColumnSchemaV2 &src_schema)
     prev_column_id_ = src_schema.prev_column_id_;
     next_column_id_ = src_schema.next_column_id_;
     encoding_type_ = src_schema.encoding_type_;
+    sequence_id_ = src_schema.sequence_id_;
     srs_id_ = src_schema.srs_id_;
     udt_set_id_ = src_schema.udt_set_id_;
     sub_type_ = src_schema.sub_type_;
@@ -190,6 +191,7 @@ void ObColumnSchemaV2::reset()
   prev_column_id_ = UINT64_MAX;
   next_column_id_ = UINT64_MAX;
   encoding_type_ = INT64_MAX;
+  sequence_id_ = INT64_MAX;
   srs_id_ = OB_DEFAULT_COLUMN_SRS_ID;
   udt_set_id_ = 0;
   sub_type_ = 0;
@@ -241,6 +243,7 @@ OB_DEF_SERIALIZE(ObColumnSchemaV2)
     LOG_WARN("serialize_string_array failed", K(ret));
   } else {
     LST_DO_CODE(OB_UNIS_ENCODE,
+                sequence_id_,
                 srs_id_,
                 udt_set_id_,
                 sub_type_,
@@ -308,6 +311,7 @@ OB_DEF_DESERIALIZE(ObColumnSchemaV2)
     LOG_WARN("Fail to deep copy comment, ", K(ret), K_(comment));
   } else {
     LST_DO_CODE(OB_UNIS_DECODE,
+                sequence_id_,
                 srs_id_,
                 udt_set_id_,
                 sub_type_,
@@ -353,6 +357,7 @@ OB_DEF_SERIALIZE_SIZE(ObColumnSchemaV2)
               next_column_id_);
   len += get_string_array_serialize_size(extended_type_info_);
   LST_DO_CODE(OB_UNIS_ADD_LEN,
+              sequence_id_,
               srs_id_,
               udt_set_id_,
               sub_type_,
@@ -422,6 +427,7 @@ int64_t ObColumnSchemaV2::to_string(char *buf, const int64_t buf_len) const
     K_(extended_type_info),
     K_(prev_column_id),
     K_(next_column_id),
+    K_(sequence_id),
     K_(encoding_type),
     K_(srs_id),
     K_(udt_set_id),
@@ -444,7 +450,7 @@ int ObColumnSchemaV2::get_byte_length(
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("collation type is invalid", K(ret));
   } else if (ob_is_text_tc(meta_type_.get_type()) || ob_is_json(meta_type_.get_type())
-             || ob_is_geometry(meta_type_.get_type())) {
+             || ob_is_geometry(meta_type_.get_type()) || ob_is_roaringbitmap(meta_type_.get_type())) {
     if (for_check_length) {
       // when check row length, a lob will occupy at most 512B
       length = min(get_data_length(), OB_MAX_LOB_HANDLE_LENGTH);

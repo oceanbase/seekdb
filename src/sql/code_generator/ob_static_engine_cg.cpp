@@ -540,7 +540,6 @@ int ObStaticEngineCG::clear_all_exprs_specific_flag(
 }
 
 void ObStaticEngineCG::exprs_not_support_vectorize(const ObIArray<ObRawExpr *> &exprs,
-                                                   const bool is_column_store_tbl,
                                                    const bool need_return_lob_locator,
                                                    bool &found)
 {
@@ -5388,7 +5387,6 @@ int ObStaticEngineCG::generate_tsc_flags(ObLogTableScan &op, ObTableScanSpec &sp
   bool pd_filter = false;
   bool enable_skip_index = false;
   bool enable_prefetch_limit = false;
-  bool enable_column_store = false;
   bool enable_filter_reordering = false;
   ObBasicSessionInfo *session_info = NULL;
   ObLogPlan *log_plan = op.get_plan();
@@ -5440,18 +5438,17 @@ int ObStaticEngineCG::generate_tsc_flags(ObLogTableScan &op, ObTableScanSpec &sp
       pd_filter = ObPushdownFilterUtils::is_filter_pushdown_enabled(pd_level);
       enable_skip_index = GCONF._enable_skip_index;
       enable_prefetch_limit = GCONF._enable_prefetch_limiting;
-      enable_column_store = op.use_column_store();
       ObDASScanCtDef &scan_ctdef = spec.tsc_ctdef_.scan_ctdef_;
       ObDASScanCtDef *lookup_ctdef = spec.tsc_ctdef_.lookup_ctdef_;
       enable_filter_reordering = GCONF._enable_filter_reordering;
       scan_ctdef.pd_expr_spec_.pd_storage_flag_.set_flags(pd_blockscan, pd_filter, enable_skip_index,
-                                                          enable_column_store, enable_prefetch_limit, enable_filter_reordering);
+                                                          enable_prefetch_limit, enable_filter_reordering);
       scan_ctdef.table_scan_opt_.io_read_batch_size_ = io_read_batch_size;
       scan_ctdef.table_scan_opt_.io_read_gap_size_ = io_read_gap_size;
       scan_ctdef.table_scan_opt_.storage_rowsets_size_ = GCONF.storage_rowsets_size;
       if (nullptr != lookup_ctdef) {
         lookup_ctdef->pd_expr_spec_.pd_storage_flag_.set_flags(pd_blockscan, pd_filter, enable_skip_index,
-                                                              enable_column_store, enable_prefetch_limit, enable_filter_reordering);
+                                                              enable_prefetch_limit, enable_filter_reordering);
         lookup_ctdef->table_scan_opt_.io_read_batch_size_ = io_read_batch_size;
         lookup_ctdef->table_scan_opt_.io_read_gap_size_ = io_read_gap_size;
         lookup_ctdef->table_scan_opt_.storage_rowsets_size_ = GCONF.storage_rowsets_size;
@@ -6759,7 +6756,7 @@ int ObStaticEngineCG::generate_spec(ObLogInsert &op, ObPxMultiPartSSTableInsertS
     LOG_WARN("invalid argument", K(ret), KP(log_plan), KP(exec_ctx));
   } else {
     ObSqlCtx *sql_ctx = const_cast<ObExecContext *>(exec_ctx)->get_sql_ctx();
-    if (OB_FAIL(generate_rt_expr(*sql_ctx->flashback_query_expr_, spec.flashback_query_expr_))) {
+    if (OB_FAIL(generate_rt_expr(*sql_ctx->snapshot_query_expr_, spec.snapshot_query_expr_))) {
       LOG_WARN("generate rt expr failed", K(ret));
     } else if (log_plan->get_optimizer_context().is_heap_table_ddl()) {
       spec.regenerate_heap_table_pk_ = true;
@@ -8755,26 +8752,6 @@ int ObStaticEngineCG::get_phy_op_type(ObLogicalOperator &log_op,
           type = PHY_TABLE_DIRECT_INSERT;
         } else if (op.get_plan()->get_optimizer_context().get_session_info()->get_ddl_info().is_ddl()) {
           type = PHY_PX_MULTI_PART_SSTABLE_INSERT;
-          const TableItem *insert_table_item = op.get_plan()->get_stmt()->get_table_item(0);
-          const ObSqlSchemaGuard *schema_guard = op.get_plan()->get_optimizer_context().get_sql_schema_guard();
-          if (OB_NOT_NULL(insert_table_item) && OB_NOT_NULL(schema_guard)) {
-            const int64_t ddl_table_id = insert_table_item->ddl_table_id_;
-            const ObTableSchema *table_schema = nullptr;
-            bool is_column_store = false;
-            int tmp_ret = OB_SUCCESS;
-            if (OB_TMP_FAIL(schema_guard->get_table_schema(ddl_table_id, table_schema))) {
-              LOG_WARN("fail to get index schema", K(tmp_ret), K(ddl_table_id));
-            } else if (OB_NOT_NULL(table_schema)) {
-              if (OB_TMP_FAIL(table_schema->get_is_column_store(is_column_store))) {
-                LOG_WARN("get is column store failed", K(tmp_ret), K(ddl_table_id), K(is_column_store));
-              } else if (is_column_store
-                  && !table_schema->is_vec_index() // not vector index
-                  && !table_schema->is_rowkey_doc_id() // not rowkey doc
-                  && (OB_INVALID_ID == table_schema->get_autoinc_column_id() || table_schema->get_autoinc_column_id() <= 0)) { // not table autoinc
-                type = PHY_VEC_PX_MULTI_PART_SSTABLE_INSERT;
-              }
-            }
-          }
         } else {
           type = PHY_PX_MULTI_PART_INSERT;
         }
@@ -9297,7 +9274,6 @@ int ObStaticEngineCG::check_op_vectorization(ObLogicalOperator *op, ObSqlSchemaG
     if (is_virtual_table(table_id)) {
       disable_vectorize = true;
     }
-    bool is_col_store_tbl = false;
     if (disable_vectorize) {
     } else if (OB_FAIL(schema_guard->get_table_schema(tsc->get_table_id(), tsc->get_ref_table_id(),
                                                       op->get_stmt(), table_schema))) {
@@ -9305,13 +9281,9 @@ int ObStaticEngineCG::check_op_vectorization(ObLogicalOperator *op, ObSqlSchemaG
     } else if (OB_NOT_NULL(table_schema) && 0 < table_schema->get_aux_vp_tid_count()) {
       disable_vectorize = true;
     }
-    if (disable_vectorize) {
-    } else if (OB_NOT_NULL(table_schema)
-               && OB_FAIL(table_schema->get_is_column_store(is_col_store_tbl))) {
-      LOG_WARN("get column store info failed", K(ret));
-    } else {
+    if (!disable_vectorize) {
       const bool need_return_lob_locator = op->get_plan()->get_optimizer_context().get_session_info()->need_return_lob_locator();
-      exprs_not_support_vectorize(tsc->get_access_exprs(), is_col_store_tbl, need_return_lob_locator, disable_vectorize);
+      exprs_not_support_vectorize(tsc->get_access_exprs(), need_return_lob_locator, disable_vectorize);
     }
     if (OB_FAIL(ret)) {
     } else if (tsc->is_multivalue_index_scan()) {

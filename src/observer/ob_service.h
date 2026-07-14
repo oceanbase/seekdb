@@ -135,8 +135,6 @@ public:
                               obcall::ObEstPartRes &res) const;
   int estimate_tablet_block_count(const obcall::ObEstBlockArg &arg,
                                   obcall::ObEstBlockRes &res) const;
-  int estimate_skip_rate(const obcall::ObEstSkipRateArg &arg,
-                         obcall::ObEstSkipRateRes &res) const;
   ////////////////////////////////////////////////////////////////
   // ObCallMinorFreezeP @RS minor freeze
   int minor_freeze(const obcall::ObMinorFreezeArg &arg,

@@ -36,12 +36,13 @@ public:
   ~LogHotCache();
   void destroy();
   void reset();
-  int init(IPalfHandleImpl *palf_handle_impl);
+  int init(const int64_t palf_id, IPalfHandleImpl *palf_handle_impl);
   int read(const LSN &read_begin_lsn,
            const int64_t in_read_size,
            char *buf,
            int64_t &out_read_size) const;
 private:
+  int64_t palf_id_;
   IPalfHandleImpl *palf_handle_impl_;
   mutable int64_t read_size_;
   mutable int64_t hit_count_;
@@ -56,20 +57,22 @@ public:
   LogCache();
   ~LogCache();
   void destroy();
-  int init(IPalfHandleImpl *palf_handle_impl);
+  int init(const int64_t palf_id, 
+           IPalfHandleImpl *palf_handle_impl);
   bool is_inited() const;           
   int read(const LSN &lsn,
            const int64_t in_read_size,
            ReadBuf &read_buf,
            int64_t &out_read_size,
            LogIOContext &io_ctx);
-  TO_STRING_KV(K(is_inited_));
+  TO_STRING_KV(K(is_inited_), K(palf_id_));
 private:
   int read_hot_cache_(const LSN &read_begin_lsn,
                       const int64_t in_read_size,
                       char *buf,
                       int64_t &out_read_size);
 private:
+  int64_t palf_id_;
   LogHotCache hot_cache_;
   bool is_inited_;
 };

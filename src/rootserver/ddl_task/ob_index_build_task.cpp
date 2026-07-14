@@ -281,7 +281,7 @@ ObAsyncTask *ObIndexSSTableBuildTask::deep_copy(char *buf, const int64_t buf_siz
 ObIndexBuildTask::ObIndexBuildTask()
   : ObDDLTask(ObDDLType::DDL_CREATE_INDEX), index_table_id_(target_object_id_), root_service_(nullptr),
     is_sstable_complete_task_submitted_(false), sstable_complete_request_time_(0), sstable_complete_ts_(0),
-    check_unique_snapshot_(0), complete_sstable_job_ret_code_(INT64_MAX), create_index_arg_(), target_cg_cnt_(0),
+    check_unique_snapshot_(0), complete_sstable_job_ret_code_(INT64_MAX), create_index_arg_(),
     is_retryable_ddl_(true)
 {
 
@@ -460,10 +460,6 @@ int ObIndexBuildTask::init(
       is_inited_ = true;
     }
 
-    if (OB_FAIL(ret)) {
-    } else if (OB_FAIL(index_schema->get_store_column_group_count(target_cg_cnt_))) {
-      LOG_WARN("fail to get column group cnt", K(ret), K(index_schema));
-    }
   }
   return ret;
 }
@@ -1869,8 +1865,8 @@ int ObIndexBuildTask::collect_longops_stat(ObLongopsValue &value)
           LOG_WARN("failed to init ObSqlMonitorStats", K(ret), K(task_id_), K(task_type_));
         } else if (OB_FAIL(sql_monitor_stats_collector.get_next_sql_plan_monitor_stat(sql_monitor_stats))) {
           LOG_WARN("failed to get next sql plan monitor stats", K(ret));
-        } else if (OB_FAIL(diagnose_info.process_sql_monitor_and_generate_longops_message(sql_monitor_stats, target_cg_cnt_, stat_info_, pos))) {
-          LOG_WARN("failed to process sql monitor and generate longops message", K(ret), K(sql_monitor_stats), K(target_cg_cnt_), K(stat_info_), K(pos)); 
+        } else if (OB_FAIL(diagnose_info.process_sql_monitor_and_generate_longops_message(sql_monitor_stats, stat_info_, pos))) {
+          LOG_WARN("failed to process sql monitor and generate longops message", K(ret), K(sql_monitor_stats), K(stat_info_), K(pos));
         }
       }
       break;
@@ -1937,7 +1933,7 @@ int ObIndexBuildTask::serialize_params_to_message(char *buf, const int64_t buf_l
   } else if (OB_FAIL(create_index_arg_.serialize(buf, buf_len, pos))) {
     LOG_WARN("serialize create index arg failed", K(ret));
   } else {
-    LST_DO_CODE(OB_UNIS_ENCODE, check_unique_snapshot_, target_cg_cnt_, is_retryable_ddl_);
+    LST_DO_CODE(OB_UNIS_ENCODE, check_unique_snapshot_, is_retryable_ddl_);
   }
 
   if (OB_SUCC(ret)) {
@@ -1962,7 +1958,7 @@ int ObIndexBuildTask::deserialize_params_from_message(const char *buf, const int
   } else if (OB_FAIL(deep_copy_table_arg(allocator_, tmp_arg, create_index_arg_))) {
     LOG_WARN("deep copy create index arg failed", K(ret));
   } else {
-    LST_DO_CODE(OB_UNIS_DECODE, check_unique_snapshot_, target_cg_cnt_, is_retryable_ddl_);
+    LST_DO_CODE(OB_UNIS_DECODE, check_unique_snapshot_, is_retryable_ddl_);
   }
 
   if (OB_SUCC(ret) && data_len - pos > 0) {
@@ -1979,7 +1975,6 @@ int64_t ObIndexBuildTask::get_serialize_param_size() const
   return create_index_arg_.get_serialize_size()
       + serialization::encoded_length_i64(check_unique_snapshot_)
       + ObDDLTask::get_serialize_param_size()
-      + serialization::encoded_length_i64(target_cg_cnt_)
       + serialization::encoded_length_i8(is_retryable_ddl_)
       + tablet_scheduler_.get_serialize_size();
 }

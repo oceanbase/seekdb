@@ -115,11 +115,11 @@ int ObDDLInsertDag::update_tablet_range_count()
           LOG_WARN("no partition range", K(ret), K(ddl_slice_info));
         } else if (1 == part_ranges.count() && 0 == part_ranges.at(0).tablet_id_) {
           // for unpartitioned table, there is only one tablet and its tablet id is 0
-          if (tablet_ids_.count() != 1) {
+          if (ls_tablet_ids_.count() != 1) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("tablet count not match", K(ret), K(part_ranges), K(tablet_ids_));
+            LOG_WARN("tablet count not match", K(ret), K(part_ranges), K(ls_tablet_ids_));
           } else {
-            const ObTabletID &tablet_id = tablet_ids_.at(0);
+            const ObTabletID &tablet_id = ls_tablet_ids_.at(0).second;
             total_slice_count_ = part_ranges.at(0).range_cut_.count() + 1;
             ObDDLTabletContext *tablet_context = nullptr;
             if (OB_FAIL(get_tablet_context(tablet_id, tablet_context))) {

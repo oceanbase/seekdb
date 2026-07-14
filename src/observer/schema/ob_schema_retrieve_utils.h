@@ -25,7 +25,7 @@
 #include "share/system_variable/ob_system_variable_alias.h"
 #include "share/ob_time_zone_info_manager.h"
 #include "share/ob_server_struct.h"
-#include "share/ob_timezone_mgr.h"
+#include "share/ob_tenant_timezone_mgr.h"
 
 namespace oceanbase
 {
@@ -252,7 +252,7 @@ public:
  ******************************************************************/
 
   template<typename T, typename SCHEMA>
-  static int retrieve_system_variable(T &result, SCHEMA &runtime_schema);
+  static int retrieve_system_variable(T &result, SCHEMA &tenant_schema);
 
   template<typename T>
   static int retrieve_system_variable_obj(T &result,
@@ -368,7 +368,9 @@ public:
                                           common::ObIArray<S> &schema_array);
   RETRIEVE_SCHEMA_FUNC_DECLARE(user);
   RETRIEVE_SCHEMA_FUNC_DECLARE(database);
+  RETRIEVE_SCHEMA_FUNC_DECLARE(tablegroup);
   RETRIEVE_SCHEMA_FUNC_DECLARE(outline);
+  RETRIEVE_SCHEMA_FUNC_DECLARE(catalog_priv);
   RETRIEVE_SCHEMA_FUNC_DECLARE(db_priv);
   RETRIEVE_SCHEMA_FUNC_DECLARE(table_priv);
   RETRIEVE_SCHEMA_FUNC_DECLARE(routine_priv);
@@ -388,7 +390,12 @@ public:
   RETRIEVE_SCHEMA_FUNC_DECLARE(sys_priv);
   RETRIEVE_SCHEMA_FUNC_DECLARE(obj_priv);
 
+  RETRIEVE_SCHEMA_FUNC_DECLARE(directory);
+  RETRIEVE_SCHEMA_FUNC_DECLARE(location);
+  RETRIEVE_SCHEMA_FUNC_DECLARE(context);
   RETRIEVE_SCHEMA_FUNC_DECLARE(mock_fk_parent_table);
+  RETRIEVE_SCHEMA_FUNC_DECLARE(catalog);
+  RETRIEVE_SCHEMA_FUNC_DECLARE(ccl_rule);
   RETRIEVE_SCHEMA_FUNC_DECLARE(ai_model);
 
   template<typename T>
@@ -396,6 +403,11 @@ public:
   template<typename T>
   static int retrieve_mock_fk_parent_table_schema_column(T &result,
       ObMockFKParentTableSchema &mock_fk_parent_table);
+
+  template<typename T>
+  static int retrieve_tablegroup_schema(T &result,
+                                        ObIAllocator &allocator,
+                                        ObTablegroupSchema *&tablegroup_schema);
 
   template<typename T>
   static int retrieve_recycle_object(T &result, ObIArray<ObRecycleObject> &recycle_objs);
@@ -414,16 +426,26 @@ public:
   //for simple schema
   FILL_SCHEMA_FUNC_DECLARE(user, ObSimpleUserSchema);
   FILL_SCHEMA_FUNC_DECLARE(database, ObSimpleDatabaseSchema);
+  FILL_SCHEMA_FUNC_DECLARE(tablegroup, ObSimpleTablegroupSchema);
   FILL_SCHEMA_FUNC_DECLARE(outline, ObSimpleOutlineSchema);
   FILL_SCHEMA_FUNC_DECLARE(routine, ObSimpleRoutineSchema);
   FILL_SCHEMA_FUNC_DECLARE(package, ObSimplePackageSchema);
   FILL_SCHEMA_FUNC_DECLARE(trigger, ObSimpleTriggerSchema);
+  FILL_SCHEMA_FUNC_DECLARE(udf, ObSimpleUDFSchema);
+  FILL_SCHEMA_FUNC_DECLARE(sequence, ObSequenceSchema);
+  FILL_SCHEMA_FUNC_DECLARE(directory, ObDirectorySchema);
+  FILL_SCHEMA_FUNC_DECLARE(location, ObLocationSchema);
+  FILL_SCHEMA_FUNC_DECLARE(context, ObContextSchema);
   FILL_SCHEMA_FUNC_DECLARE(mock_fk_parent_table, ObSimpleMockFKParentTableSchema);
+  FILL_SCHEMA_FUNC_DECLARE(catalog, ObCatalogSchema);
+  FILL_SCHEMA_FUNC_DECLARE(ccl_rule, ObSimpleCCLRuleSchema);
 
   //for full schema
   FILL_SCHEMA_FUNC_DECLARE(user, ObUserInfo);
   FILL_SCHEMA_FUNC_DECLARE(database, ObDatabaseSchema);
+  FILL_SCHEMA_FUNC_DECLARE(tablegroup, ObTablegroupSchema);
   FILL_SCHEMA_FUNC_DECLARE(outline, ObOutlineInfo);
+  FILL_SCHEMA_FUNC_DECLARE(catalog_priv, ObCatalogPriv);
   FILL_SCHEMA_FUNC_DECLARE(db_priv, ObDBPriv);
   FILL_SCHEMA_FUNC_DECLARE(table_priv, ObTablePriv);
   FILL_SCHEMA_FUNC_DECLARE(routine_priv, ObRoutinePriv);
@@ -434,9 +456,11 @@ public:
   FILL_SCHEMA_FUNC_DECLARE(routine_param, ObRoutineParam);
   FILL_SCHEMA_FUNC_DECLARE(trigger, ObTriggerInfo);
   FILL_SCHEMA_FUNC_DECLARE(sysvar, ObSysVarSchema);
+  FILL_SCHEMA_FUNC_DECLARE(udf, ObUDF);
   // link table
   FILL_SCHEMA_FUNC_DECLARE(link_table, ObTableSchema);
   FILL_SCHEMA_FUNC_DECLARE(link_column, ObColumnSchemaV2);
+  FILL_SCHEMA_FUNC_DECLARE(ccl_rule, ObCCLRuleSchema);
   FILL_SCHEMA_FUNC_DECLARE(ai_model, ObAiModelSchema);
   template<typename T>
   static int fill_mock_fk_parent_table_column_info(T &result, uint64_t &parent_column_id, ObString &parent_column_name,
@@ -544,6 +568,8 @@ public:
 
 //===========================================================================
 
+  template<typename T, typename SCHEMA>
+  static int fill_replica_options(T &result, SCHEMA &schema);
   template<typename T>
   static int fill_recycle_object(T &result, ObRecycleObject &recycle_obj);
   template<typename T>
@@ -552,6 +578,9 @@ public:
   template<typename T>
   static T *find_table_schema(const uint64_t table_id,
                               common::ObArray<T *> &table_schema_array);
+  template<typename T>
+  static int fill_temp_table_schema(T &result, ObTableSchema &table_schema);
+
   template<typename TABLE_SCHEMA>
   static int cascaded_generated_column(TABLE_SCHEMA &table_schema);
   // column-level generated-column cascade(previously an ObSchemaUtils member, real user sql ObResolverUtils; was moved up to observer with the loader removes the member split)

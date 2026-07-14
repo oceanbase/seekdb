@@ -422,6 +422,7 @@ int GetBlockCountFunctor::func(const dirent *entry)
     if (false == is_number(entry_name)) {
       ret = OB_ERR_UNEXPECTED;
       PALF_LOG(WARN, "this is block is not used for palf!!!", K(ret), K(entry_name));
+      // do nothing, skip invalid block like tmp
     } else {
       count_ ++;
     }
@@ -437,9 +438,11 @@ int TrimLogDirectoryFunctor::func(const dirent *entry)
     PALF_LOG(WARN, "invalid args", K(ret), KP(entry));
   } else {
     const char *entry_name = entry->d_name;
-    if (false == is_number(entry_name)) {
+    bool str_is_number = is_number(entry_name);
+    if (false == str_is_number) {
       ret = OB_ERR_UNEXPECTED;
       PALF_LOG(WARN, "this is block is not used for palf!!!", K(ret), K(entry_name));
+      // do nothing, skip invalid block like tmp
     } else {
       uint32_t block_id = static_cast<uint32_t>(strtol(entry->d_name, nullptr, 10));
       if (LOG_INVALID_BLOCK_ID == min_block_id_ || block_id < min_block_id_) {
@@ -449,6 +452,31 @@ int TrimLogDirectoryFunctor::func(const dirent *entry)
         max_block_id_ = block_id;
       }
     }
+  }
+  return ret;
+}
+
+int TrimLogDirectoryFunctor::try_to_remove_block_(const int dir_fd, const char *file_name)
+{
+  int ret = OB_SUCCESS;
+  int fd = -1;
+  if (-1 == (fd = ::openat(dir_fd, file_name, LOG_READ_FLAG))) {
+    ret = convert_sys_errno();
+  }
+  // if file not exist, return OB_SUCCESS;
+  if (OB_FAIL(ret)) {
+    if (OB_NO_SUCH_FILE_OR_DIRECTORY == ret) {
+      ret = OB_SUCCESS;
+      PALF_LOG(INFO, "block file does not exist during restart trim", K(file_name));
+    } else {
+      PALF_LOG(ERROR, "open file failed", K(file_name)); 
+    }
+  } else if (OB_FAIL(log_block_pool_->remove_block_at(dir_fd, file_name))) {
+    PALF_LOG(ERROR, "remove_block_at failed", K(dir_fd), K(file_name));
+  }
+  if (-1 != fd && -1 == ::close(fd)) {
+    ret = convert_sys_errno();
+    PALF_LOG(ERROR, "close fd failed", K(file_name));
   }
   return ret;
 }

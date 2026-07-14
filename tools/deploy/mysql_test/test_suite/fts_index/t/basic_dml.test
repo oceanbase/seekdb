@@ -33,22 +33,24 @@ CREATE TABLE fts_basic_dml_articles (
 );
 
 set _show_ddl_in_compat_mode = 1;
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
 SHOW CREATE TABLE fts_basic_dml_articles;
 
 set _show_ddl_in_compat_mode = 0;
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
 SHOW CREATE TABLE fts_basic_dml_articles;
 
 SHOW INDEX FROM fts_basic_dml_articles;
 
 let $data_table_id = query_get_value(SELECT table_id FROM oceanbase.__all_table WHERE table_name = 'fts_basic_dml_articles' AND database_id = $database_id, table_id, 1);
 
-let $rowkey_doc_table_name = query_get_value(SELECT table_name FROM oceanbase.__all_table WHERE index_type = 11 AND data_table_id = $data_table_id, table_name, 1);
+let $rowkey_doc_table_name = query_get_value(SELECT table_name FROM oceanbase.__all_table WHERE index_type = 13 AND data_table_id = $data_table_id, table_name, 1);
 
-let $doc_rowkey_table_name = query_get_value(SELECT table_name FROM oceanbase.__all_table WHERE index_type = 12 AND data_table_id = $data_table_id, table_name, 1);
+let $doc_rowkey_table_name = query_get_value(SELECT table_name FROM oceanbase.__all_table WHERE index_type = 14 AND data_table_id = $data_table_id, table_name, 1);
 
-let $fts_index_table_name = query_get_value(SELECT table_name FROM oceanbase.__all_table WHERE index_type = 13 AND data_table_id = $data_table_id, table_name, 1);
+let $fts_index_table_name = query_get_value(SELECT table_name FROM oceanbase.__all_table WHERE index_type = 15 AND data_table_id = $data_table_id, table_name, 1);
 
-let $doc_word_table_name = query_get_value(SELECT table_name FROM oceanbase.__all_table WHERE index_type = 14 AND data_table_id = $data_table_id, table_name, 1);
+let $doc_word_table_name = query_get_value(SELECT table_name FROM oceanbase.__all_table WHERE index_type = 16 AND data_table_id = $data_table_id, table_name, 1);
 
 let $__doc_id = query_get_value(SELECT column_name FROM oceanbase.__all_column WHERE table_id = $data_table_id and column_name like '__doc_id_%', column_name, 1);
 
@@ -153,19 +155,20 @@ CREATE TABLE fts_basic_dml_articles (
     FULLTEXT INDEX ctx(title, content) WITH PARSER space
 );
 
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
 SHOW CREATE TABLE fts_basic_dml_articles;
 
 SHOW INDEX FROM fts_basic_dml_articles;
 
 let $data_table_id = query_get_value(SELECT table_id FROM oceanbase.__all_table WHERE table_name = 'fts_basic_dml_articles' AND database_id = $database_id, table_id, 1);
 
-let $rowkey_doc_table_name = query_get_value(SELECT table_name FROM oceanbase.__all_table WHERE index_type = 11 AND data_table_id = $data_table_id, table_name, 1);
+let $rowkey_doc_table_name = query_get_value(SELECT table_name FROM oceanbase.__all_table WHERE index_type = 13 AND data_table_id = $data_table_id, table_name, 1);
 
-let $doc_rowkey_table_name = query_get_value(SELECT table_name FROM oceanbase.__all_table WHERE index_type = 12 AND data_table_id = $data_table_id, table_name, 1);
+let $doc_rowkey_table_name = query_get_value(SELECT table_name FROM oceanbase.__all_table WHERE index_type = 14 AND data_table_id = $data_table_id, table_name, 1);
 
-let $fts_index_table_name = query_get_value(SELECT table_name FROM oceanbase.__all_table WHERE index_type = 13 AND data_table_id = $data_table_id, table_name, 1);
+let $fts_index_table_name = query_get_value(SELECT table_name FROM oceanbase.__all_table WHERE index_type = 15 AND data_table_id = $data_table_id, table_name, 1);
 
-let $doc_word_table_name = query_get_value(SELECT table_name FROM oceanbase.__all_table WHERE index_type = 14 AND data_table_id = $data_table_id, table_name, 1);
+let $doc_word_table_name = query_get_value(SELECT table_name FROM oceanbase.__all_table WHERE index_type = 16 AND data_table_id = $data_table_id, table_name, 1);
 
 
 let $__word_segment_16_17 = query_get_value(SELECT column_name FROM oceanbase.__all_column WHERE table_id = $data_table_id and column_name like '__word_segment_%', column_name, 1);
@@ -253,19 +256,20 @@ CREATE TABLE fts_basic_dml_articles (
     FULLTEXT INDEX ctx(title, content)
 );
 
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
 SHOW CREATE TABLE fts_basic_dml_articles;
 
 SHOW INDEX FROM fts_basic_dml_articles;
 
 let $data_table_id = query_get_value(SELECT table_id FROM oceanbase.__all_table WHERE table_name = 'fts_basic_dml_articles' AND database_id = $database_id, table_id, 1);
 
-let $rowkey_doc_table_name = query_get_value(SELECT table_name FROM oceanbase.__all_table WHERE index_type = 11 AND data_table_id = $data_table_id, table_name, 1);
+let $rowkey_doc_table_name = query_get_value(SELECT table_name FROM oceanbase.__all_table WHERE index_type = 13 AND data_table_id = $data_table_id, table_name, 1);
 
-let $doc_rowkey_table_name = query_get_value(SELECT table_name FROM oceanbase.__all_table WHERE index_type = 12 AND data_table_id = $data_table_id, table_name, 1);
+let $doc_rowkey_table_name = query_get_value(SELECT table_name FROM oceanbase.__all_table WHERE index_type = 14 AND data_table_id = $data_table_id, table_name, 1);
 
-let $fts_index_table_name = query_get_value(SELECT table_name FROM oceanbase.__all_table WHERE index_type = 13 AND data_table_id = $data_table_id, table_name, 1);
+let $fts_index_table_name = query_get_value(SELECT table_name FROM oceanbase.__all_table WHERE index_type = 15 AND data_table_id = $data_table_id, table_name, 1);
 
-let $doc_word_table_name = query_get_value(SELECT table_name FROM oceanbase.__all_table WHERE index_type = 14 AND data_table_id = $data_table_id, table_name, 1);
+let $doc_word_table_name = query_get_value(SELECT table_name FROM oceanbase.__all_table WHERE index_type = 16 AND data_table_id = $data_table_id, table_name, 1);
 
 let $__doc_id = query_get_value(SELECT column_name FROM oceanbase.__all_column WHERE table_id = $data_table_id and column_name like '__doc_id_%', column_name, 1);
 
@@ -379,6 +383,7 @@ select * from fts_basic_dml_articles order by id;
 
 ALTER TABLE fts_basic_dml_articles add FULLTEXT INDEX ctx(title, content) WITH PARSER space;
 
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
 SHOW CREATE TABLE fts_basic_dml_articles;
 
 SHOW INDEX FROM fts_basic_dml_articles;
@@ -387,13 +392,13 @@ SHOW INDEX FROM fts_basic_dml_articles;
 
 let $data_table_id = query_get_value(SELECT table_id FROM oceanbase.__all_table WHERE table_name = 'fts_basic_dml_articles' AND database_id = $database_id, table_id, 1);
 
-let $rowkey_doc_table_name = query_get_value(SELECT table_name FROM oceanbase.__all_table WHERE index_type = 11 AND data_table_id = $data_table_id, table_name, 1);
+let $rowkey_doc_table_name = query_get_value(SELECT table_name FROM oceanbase.__all_table WHERE index_type = 13 AND data_table_id = $data_table_id, table_name, 1);
 
-let $doc_rowkey_table_name = query_get_value(SELECT table_name FROM oceanbase.__all_table WHERE index_type = 12 AND data_table_id = $data_table_id, table_name, 1);
+let $doc_rowkey_table_name = query_get_value(SELECT table_name FROM oceanbase.__all_table WHERE index_type = 14 AND data_table_id = $data_table_id, table_name, 1);
 
-let $fts_index_table_name = query_get_value(SELECT table_name FROM oceanbase.__all_table WHERE index_type = 13 AND data_table_id = $data_table_id, table_name, 1);
+let $fts_index_table_name = query_get_value(SELECT table_name FROM oceanbase.__all_table WHERE index_type = 15 AND data_table_id = $data_table_id, table_name, 1);
 
-let $doc_word_table_name = query_get_value(SELECT table_name FROM oceanbase.__all_table WHERE index_type = 14 AND data_table_id = $data_table_id, table_name, 1);
+let $doc_word_table_name = query_get_value(SELECT table_name FROM oceanbase.__all_table WHERE index_type = 16 AND data_table_id = $data_table_id, table_name, 1);
 
 let $__doc_id = query_get_value(SELECT column_name FROM oceanbase.__all_column WHERE table_id = $data_table_id and column_name like '__doc_id_%', column_name, 1);
 
@@ -475,19 +480,20 @@ CREATE TABLE fts_basic_dml_articles (
 
 ALTER TABLE fts_basic_dml_articles add FULLTEXT INDEX ctx(title, content);
 
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
 SHOW CREATE TABLE fts_basic_dml_articles;
 
 SHOW INDEX FROM fts_basic_dml_articles;
 
 let $data_table_id = query_get_value(SELECT table_id FROM oceanbase.__all_table WHERE table_name = 'fts_basic_dml_articles' AND database_id = $database_id, table_id, 1);
 
-let $rowkey_doc_table_name = query_get_value(SELECT table_name FROM oceanbase.__all_table WHERE index_type = 11 AND data_table_id = $data_table_id, table_name, 1);
+let $rowkey_doc_table_name = query_get_value(SELECT table_name FROM oceanbase.__all_table WHERE index_type = 13 AND data_table_id = $data_table_id, table_name, 1);
 
-let $doc_rowkey_table_name = query_get_value(SELECT table_name FROM oceanbase.__all_table WHERE index_type = 12 AND data_table_id = $data_table_id, table_name, 1);
+let $doc_rowkey_table_name = query_get_value(SELECT table_name FROM oceanbase.__all_table WHERE index_type = 14 AND data_table_id = $data_table_id, table_name, 1);
 
-let $fts_index_table_name = query_get_value(SELECT table_name FROM oceanbase.__all_table WHERE index_type = 13 AND data_table_id = $data_table_id, table_name, 1);
+let $fts_index_table_name = query_get_value(SELECT table_name FROM oceanbase.__all_table WHERE index_type = 15 AND data_table_id = $data_table_id, table_name, 1);
 
-let $doc_word_table_name = query_get_value(SELECT table_name FROM oceanbase.__all_table WHERE index_type = 14 AND data_table_id = $data_table_id, table_name, 1);
+let $doc_word_table_name = query_get_value(SELECT table_name FROM oceanbase.__all_table WHERE index_type = 16 AND data_table_id = $data_table_id, table_name, 1);
 
 let $__doc_id = query_get_value(SELECT column_name FROM oceanbase.__all_column WHERE table_id = $data_table_id and column_name like '__doc_id_%', column_name, 1);
 
@@ -575,19 +581,20 @@ CREATE TABLE fts_basic_dml_articles (
 
 ALTER TABLE fts_basic_dml_articles add FULLTEXT INDEX ctx(title, content);
 
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
 SHOW CREATE TABLE fts_basic_dml_articles;
 
 SHOW INDEX FROM fts_basic_dml_articles;
 
 let $data_table_id = query_get_value(SELECT table_id FROM oceanbase.__all_table WHERE table_name = 'fts_basic_dml_articles' AND database_id = $database_id, table_id, 1);
 
-let $rowkey_doc_table_name = query_get_value(SELECT table_name FROM oceanbase.__all_table WHERE index_type = 11 AND data_table_id = $data_table_id, table_name, 1);
+let $rowkey_doc_table_name = query_get_value(SELECT table_name FROM oceanbase.__all_table WHERE index_type = 13 AND data_table_id = $data_table_id, table_name, 1);
 
-let $doc_rowkey_table_name = query_get_value(SELECT table_name FROM oceanbase.__all_table WHERE index_type = 12 AND data_table_id = $data_table_id, table_name, 1);
+let $doc_rowkey_table_name = query_get_value(SELECT table_name FROM oceanbase.__all_table WHERE index_type = 14 AND data_table_id = $data_table_id, table_name, 1);
 
-let $fts_index_table_name = query_get_value(SELECT table_name FROM oceanbase.__all_table WHERE index_type = 13 AND data_table_id = $data_table_id, table_name, 1);
+let $fts_index_table_name = query_get_value(SELECT table_name FROM oceanbase.__all_table WHERE index_type = 15 AND data_table_id = $data_table_id, table_name, 1);
 
-let $doc_word_table_name = query_get_value(SELECT table_name FROM oceanbase.__all_table WHERE index_type = 14 AND data_table_id = $data_table_id, table_name, 1);
+let $doc_word_table_name = query_get_value(SELECT table_name FROM oceanbase.__all_table WHERE index_type = 16 AND data_table_id = $data_table_id, table_name, 1);
 
 let $__doc_id = query_get_value(SELECT column_name FROM oceanbase.__all_column WHERE table_id = $data_table_id and column_name like '__doc_id_%', column_name, 1);
 
@@ -692,24 +699,26 @@ CREATE TABLE fts_basic_dml_articles (
 );
 
 set _show_ddl_in_compat_mode=1;
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
 SHOW CREATE TABLE fts_basic_dml_articles;
 set _show_ddl_in_compat_mode=0;
 
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
 SHOW CREATE TABLE fts_basic_dml_articles;
 
 SHOW INDEX FROM fts_basic_dml_articles;
 
 let $data_table_id = query_get_value(SELECT table_id FROM oceanbase.__all_table WHERE table_name = 'fts_basic_dml_articles' AND database_id = $database_id, table_id, 1);
 
-let $rowkey_doc_table_name = query_get_value(SELECT table_name FROM oceanbase.__all_table WHERE index_type = 11 AND data_table_id = $data_table_id, table_name, 1);
+let $rowkey_doc_table_name = query_get_value(SELECT table_name FROM oceanbase.__all_table WHERE index_type = 13 AND data_table_id = $data_table_id, table_name, 1);
 
-let $doc_rowkey_table_name = query_get_value(SELECT table_name FROM oceanbase.__all_table WHERE index_type = 12 AND data_table_id = $data_table_id, table_name, 1);
+let $doc_rowkey_table_name = query_get_value(SELECT table_name FROM oceanbase.__all_table WHERE index_type = 14 AND data_table_id = $data_table_id, table_name, 1);
 
-let $fts_index1_table_name = query_get_value(SELECT table_name FROM oceanbase.__all_table WHERE index_type = 13 AND table_name like '%ctx1' AND data_table_id = $data_table_id, table_name, 1);
+let $fts_index1_table_name = query_get_value(SELECT table_name FROM oceanbase.__all_table WHERE index_type = 15 AND table_name like '%ctx1' AND data_table_id = $data_table_id, table_name, 1);
 
-let $fts_index2_table_name = query_get_value(SELECT table_name FROM oceanbase.__all_table WHERE index_type = 13 AND table_name like '%ctx2' AND data_table_id = $data_table_id, table_name, 1);
+let $fts_index2_table_name = query_get_value(SELECT table_name FROM oceanbase.__all_table WHERE index_type = 15 AND table_name like '%ctx2' AND data_table_id = $data_table_id, table_name, 1);
 
-let $fts_index3_table_name = query_get_value(SELECT table_name FROM oceanbase.__all_table WHERE index_type = 13 AND table_name like '%ctx3' AND data_table_id = $data_table_id, table_name, 1);
+let $fts_index3_table_name = query_get_value(SELECT table_name FROM oceanbase.__all_table WHERE index_type = 15 AND table_name like '%ctx3' AND data_table_id = $data_table_id, table_name, 1);
 
 let $__doc_id = query_get_value(SELECT column_name FROM oceanbase.__all_column WHERE table_id = $data_table_id and column_name like '__doc_id_%', column_name, 1);
 
@@ -831,6 +840,7 @@ CREATE TABLE fts_basic_dml_articles (
     FULLTEXT INDEX ctx3(title, content) WITH PARSER space
 ) PARTITION BY HASH(id) PARTITIONS 64;
 
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
 SHOW CREATE TABLE fts_basic_dml_articles;
 
 SHOW INDEX FROM fts_basic_dml_articles;
@@ -891,7 +901,7 @@ eval select HEX(SUBSTRING($__doc_id, 9, 8)) as doc_id, id from $doc_rowkey_table
 #             $doc_rowkey_table_name
 #      where
 #             $fts_index1_table_name.__doc_id = $doc_rowkey_table_name.__doc_id;
-#
+# 
 # eval select
 #             $fts_index2_table_name.__word_segment_18,
 #             $doc_rowkey_table_name.id,
@@ -901,7 +911,7 @@ eval select HEX(SUBSTRING($__doc_id, 9, 8)) as doc_id, id from $doc_rowkey_table
 #             $doc_rowkey_table_name
 #      where
 #             $fts_index2_table_name.__doc_id = $doc_rowkey_table_name.__doc_id;
-#
+# 
 # eval select
 #             $fts_index3_table_name.__word_segment_17_18,
 #             $doc_rowkey_table_name.id,
@@ -938,7 +948,7 @@ eval select HEX(SUBSTRING($__doc_id, 9, 8)) as doc_id, id from $doc_rowkey_table
 #             $doc_rowkey_table_name
 #      where
 #             $fts_index1_table_name.__doc_id = $doc_rowkey_table_name.__doc_id;
-#
+# 
 # eval select
 #             $fts_index2_table_name.__word_segment_18,
 #             $doc_rowkey_table_name.id,
@@ -948,7 +958,7 @@ eval select HEX(SUBSTRING($__doc_id, 9, 8)) as doc_id, id from $doc_rowkey_table
 #             $doc_rowkey_table_name
 #      where
 #             $fts_index2_table_name.__doc_id = $doc_rowkey_table_name.__doc_id;
-#
+# 
 # eval select
 #             $fts_index3_table_name.__word_segment_17_18,
 #             $doc_rowkey_table_name.id,
@@ -982,7 +992,7 @@ eval select HEX(SUBSTRING($__doc_id, 9, 8)) as doc_id, id from $doc_rowkey_table
 #             $doc_rowkey_table_name
 #      where
 #             $fts_index1_table_name.__doc_id = $doc_rowkey_table_name.__doc_id;
-#
+# 
 # eval select
 #             $fts_index2_table_name.__word_segment_18,
 #             $doc_rowkey_table_name.id,
@@ -992,7 +1002,7 @@ eval select HEX(SUBSTRING($__doc_id, 9, 8)) as doc_id, id from $doc_rowkey_table
 #             $doc_rowkey_table_name
 #      where
 #             $fts_index2_table_name.__doc_id = $doc_rowkey_table_name.__doc_id;
-#
+# 
 # eval select
 #             $fts_index3_table_name.__word_segment_17_18,
 #             $doc_rowkey_table_name.id,
@@ -1075,6 +1085,7 @@ CREATE TABLE fts_basic_dml_articles (
     FULLTEXT INDEX ctx3(title, content) WITH PARSER beng
 );
 
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
 SHOW CREATE TABLE fts_basic_dml_articles;
 
 SHOW INDEX FROM fts_basic_dml_articles;
@@ -1156,13 +1167,13 @@ CREATE TABLE fts_min_max_word_articles (
 
 let $data_table_id = query_get_value(SELECT table_id FROM oceanbase.__all_table WHERE table_name = 'fts_min_max_word_articles' AND database_id = $database_id, table_id, 1);
 
-let $rowkey_doc_table_name = query_get_value(SELECT table_name FROM oceanbase.__all_table WHERE index_type = 11 AND data_table_id = $data_table_id, table_name, 1);
+let $rowkey_doc_table_name = query_get_value(SELECT table_name FROM oceanbase.__all_table WHERE index_type = 13 AND data_table_id = $data_table_id, table_name, 1);
 
-let $doc_rowkey_table_name = query_get_value(SELECT table_name FROM oceanbase.__all_table WHERE index_type = 12 AND data_table_id = $data_table_id, table_name, 1);
+let $doc_rowkey_table_name = query_get_value(SELECT table_name FROM oceanbase.__all_table WHERE index_type = 14 AND data_table_id = $data_table_id, table_name, 1);
 
-let $fts_index_table_name = query_get_value(SELECT table_name FROM oceanbase.__all_table WHERE index_type = 13 AND data_table_id = $data_table_id, table_name, 1);
+let $fts_index_table_name = query_get_value(SELECT table_name FROM oceanbase.__all_table WHERE index_type = 15 AND data_table_id = $data_table_id, table_name, 1);
 
-let $doc_word_table_name = query_get_value(SELECT table_name FROM oceanbase.__all_table WHERE index_type = 14 AND data_table_id = $data_table_id, table_name, 1);
+let $doc_word_table_name = query_get_value(SELECT table_name FROM oceanbase.__all_table WHERE index_type = 16 AND data_table_id = $data_table_id, table_name, 1);
 
 let $__doc_id = query_get_value(SELECT column_name FROM oceanbase.__all_column WHERE table_id = $data_table_id and column_name like '__doc_id_%', column_name, 1);
 
@@ -1220,13 +1231,13 @@ CREATE VIEW fts_view as select * from fts;
 
 let $data_table_id = query_get_value(SELECT table_id FROM oceanbase.__all_table WHERE table_name = 'fts' AND database_id = $database_id, table_id, 1);
 
-let $rowkey_doc_table_name = query_get_value(SELECT table_name FROM oceanbase.__all_table WHERE index_type = 11 AND data_table_id = $data_table_id, table_name, 1);
+let $rowkey_doc_table_name = query_get_value(SELECT table_name FROM oceanbase.__all_table WHERE index_type = 13 AND data_table_id = $data_table_id, table_name, 1);
 
-let $doc_rowkey_table_name = query_get_value(SELECT table_name FROM oceanbase.__all_table WHERE index_type = 12 AND data_table_id = $data_table_id, table_name, 1);
+let $doc_rowkey_table_name = query_get_value(SELECT table_name FROM oceanbase.__all_table WHERE index_type = 14 AND data_table_id = $data_table_id, table_name, 1);
 
-let $fts_index_table_name = query_get_value(SELECT table_name FROM oceanbase.__all_table WHERE index_type = 13 AND data_table_id = $data_table_id, table_name, 1);
+let $fts_index_table_name = query_get_value(SELECT table_name FROM oceanbase.__all_table WHERE index_type = 15 AND data_table_id = $data_table_id, table_name, 1);
 
-let $doc_word_table_name = query_get_value(SELECT table_name FROM oceanbase.__all_table WHERE index_type = 14 AND data_table_id = $data_table_id, table_name, 1);
+let $doc_word_table_name = query_get_value(SELECT table_name FROM oceanbase.__all_table WHERE index_type = 16 AND data_table_id = $data_table_id, table_name, 1);
 
 let $__doc_id = query_get_value(SELECT column_name FROM oceanbase.__all_column WHERE table_id = $data_table_id and column_name like '__doc_id_%', column_name, 1);
 
@@ -1497,7 +1508,7 @@ CREATE TABLE `test_alias_tt1` (
   KEY `g_i_1_XVx` (`c10`, `c2`, `c5`, `c15`) BLOCK_SIZE 16384 GLOBAL,
   KEY `i_2_wQbHms` (`c11`, `c1`) BLOCK_SIZE 16384 LOCAL,
   KEY `g_i_3_VQvB` (`c4`) BLOCK_SIZE 16384 GLOBAL
-) DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' BLOCK_SIZE = 16384 TABLET_SIZE = 134217728 PCTFREE = 0;
+) DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = 3 BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0;
 
 --replace_regex /_[0-9]+/_*/
 explain UPDATE test_alias_tt1 AS tt10 set tt10.c1 = tt10.c1 WHERE tt10.c1 like '%000%';
@@ -1554,21 +1565,21 @@ CREATE TABLE fts_parser_name_test (
 
 let $data_table_id = query_get_value(SELECT table_id FROM oceanbase.__all_table WHERE table_name = 'fts_parser_name_test' AND database_id = $database_id, table_id, 1);
 --replace_regex /data_table_id = [0-9]+/*/
-eval SELECT parser_name FROM oceanbase.__all_table WHERE index_type = 11 AND data_table_id = $data_table_id;
---replace_regex /data_table_id = [0-9]+/*/
-eval SELECT parser_name FROM oceanbase.__all_table WHERE index_type = 12 AND data_table_id = $data_table_id;
---replace_regex /data_table_id = [0-9]+/*/
 eval SELECT parser_name FROM oceanbase.__all_table WHERE index_type = 13 AND data_table_id = $data_table_id;
 --replace_regex /data_table_id = [0-9]+/*/
 eval SELECT parser_name FROM oceanbase.__all_table WHERE index_type = 14 AND data_table_id = $data_table_id;
+--replace_regex /data_table_id = [0-9]+/*/
+eval SELECT parser_name FROM oceanbase.__all_table WHERE index_type = 15 AND data_table_id = $data_table_id;
+--replace_regex /data_table_id = [0-9]+/*/
+eval SELECT parser_name FROM oceanbase.__all_table WHERE index_type = 16 AND data_table_id = $data_table_id;
 
-let $rowkey_doc_table_id = query_get_value(SELECT table_id FROM oceanbase.__all_table WHERE index_type = 11 AND data_table_id = $data_table_id, table_id, 1);
+let $rowkey_doc_table_id = query_get_value(SELECT table_id FROM oceanbase.__all_table WHERE index_type = 13 AND data_table_id = $data_table_id, table_id, 1);
 
-let $doc_rowkey_table_id = query_get_value(SELECT table_id FROM oceanbase.__all_table WHERE index_type = 12 AND data_table_id = $data_table_id, table_id, 1);
+let $doc_rowkey_table_id = query_get_value(SELECT table_id FROM oceanbase.__all_table WHERE index_type = 14 AND data_table_id = $data_table_id, table_id, 1);
 
-let $fts_index_table_id = query_get_value(SELECT table_id FROM oceanbase.__all_table WHERE index_type = 13 AND data_table_id = $data_table_id, table_id, 1);
+let $fts_index_table_id = query_get_value(SELECT table_id FROM oceanbase.__all_table WHERE index_type = 15 AND data_table_id = $data_table_id, table_id, 1);
 
-let $doc_word_table_id = query_get_value(SELECT table_id FROM oceanbase.__all_table WHERE index_type = 14 AND data_table_id = $data_table_id, table_id, 1);
+let $doc_word_table_id = query_get_value(SELECT table_id FROM oceanbase.__all_table WHERE index_type = 16 AND data_table_id = $data_table_id, table_id, 1);
 
 --replace_regex /table_id = [0-9]+/*/g  /_[0-9]+/_*/g
 eval SELECT column_name, is_hidden FROM oceanbase.__all_column WHERE table_id = $rowkey_doc_table_id;
@@ -1586,13 +1597,13 @@ CREATE TABLE fts_parser_name_test (
     content TEXT,
     FULLTEXT INDEX ctx(title, content)
 );
-let $rowkey_doc_table_id = query_get_value(SELECT table_id FROM oceanbase.__all_table WHERE index_type = 11 AND data_table_id = $data_table_id, table_id, 1);
+let $rowkey_doc_table_id = query_get_value(SELECT table_id FROM oceanbase.__all_table WHERE index_type = 13 AND data_table_id = $data_table_id, table_id, 1);
 
-let $doc_rowkey_table_id = query_get_value(SELECT table_id FROM oceanbase.__all_table WHERE index_type = 12 AND data_table_id = $data_table_id, table_id, 1);
+let $doc_rowkey_table_id = query_get_value(SELECT table_id FROM oceanbase.__all_table WHERE index_type = 14 AND data_table_id = $data_table_id, table_id, 1);
 
-let $fts_index_table_id = query_get_value(SELECT table_id FROM oceanbase.__all_table WHERE index_type = 13 AND data_table_id = $data_table_id, table_id, 1);
+let $fts_index_table_id = query_get_value(SELECT table_id FROM oceanbase.__all_table WHERE index_type = 15 AND data_table_id = $data_table_id, table_id, 1);
 
-let $doc_word_table_id = query_get_value(SELECT table_id FROM oceanbase.__all_table WHERE index_type = 14 AND data_table_id = $data_table_id, table_id, 1);
+let $doc_word_table_id = query_get_value(SELECT table_id FROM oceanbase.__all_table WHERE index_type = 16 AND data_table_id = $data_table_id, table_id, 1);
 
 --replace_regex /table_id = [0-9]+/*/g  /_[0-9]+/_*/g
 eval SELECT column_name, is_hidden FROM oceanbase.__all_column WHERE table_id = $rowkey_doc_table_id;
@@ -1608,10 +1619,10 @@ create table fts_parser_name_test(seq_id int PRIMARY KEY, detail varchar(4096)) 
 CREATE FULLTEXT INDEX fts_parser_name_test_index on fts_parser_name_test(detail);
 
 let $data_table_id = query_get_value(SELECT table_id FROM oceanbase.__all_table WHERE table_name = 'fts_parser_name_test' AND database_id = $database_id, table_id, 1);
-let $rowkey_doc_table_id = query_get_value(SELECT table_id FROM oceanbase.__all_table WHERE index_type = 11 AND data_table_id = $data_table_id, table_id, 1);
-let $doc_rowkey_table_id = query_get_value(SELECT table_id FROM oceanbase.__all_table WHERE index_type = 12 AND data_table_id = $data_table_id, table_id, 1);
-let $fts_index_table_id = query_get_value(SELECT table_id FROM oceanbase.__all_table WHERE index_type = 13 AND data_table_id = $data_table_id, table_id, 1);
-let $doc_word_table_id = query_get_value(SELECT table_id FROM oceanbase.__all_table WHERE index_type = 14 AND data_table_id = $data_table_id, table_id, 1);
+let $rowkey_doc_table_id = query_get_value(SELECT table_id FROM oceanbase.__all_table WHERE index_type = 13 AND data_table_id = $data_table_id, table_id, 1);
+let $doc_rowkey_table_id = query_get_value(SELECT table_id FROM oceanbase.__all_table WHERE index_type = 14 AND data_table_id = $data_table_id, table_id, 1);
+let $fts_index_table_id = query_get_value(SELECT table_id FROM oceanbase.__all_table WHERE index_type = 15 AND data_table_id = $data_table_id, table_id, 1);
+let $doc_word_table_id = query_get_value(SELECT table_id FROM oceanbase.__all_table WHERE index_type = 16 AND data_table_id = $data_table_id, table_id, 1);
 
 --replace_regex /table_id = [0-9]+/*/  /database_id = [0-9]+/*/
 eval select operation_type, ddl_stmt_str from oceanbase.__all_ddl_operation where database_id = $database_id and table_id = $rowkey_doc_table_id;

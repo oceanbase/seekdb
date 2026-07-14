@@ -35,7 +35,7 @@ static bool need_process_vec_index(const ObIndexType & index_type)
       || schema::is_vec_ivfpq_pq_centroid_index(index_type)
       || schema::is_vec_index_snapshot_data_type(index_type);
   }
-  static int get_tablet_handle(const ObTabletID &tablet_id, ObTabletHandle &tablet_handle);
+  static int get_tablet_handle(const ObLSID &ls_id, const ObTabletID &tablet_id, ObTabletHandle &tablet_handle);
   static int create_tablet_direct_load_mgr(const int64_t execution_id,
                                            const int64_t context_id,
                                            const ObTabletDirectLoadInsertParam &build_param,
@@ -43,7 +43,10 @@ static bool need_process_vec_index(const ObIndexType & index_type)
                                            bool &is_major_eixst,
                                            ObTabletDirectLoadMgrHandle &data_mgr_handle,
                                            ObTabletDirectLoadMgrHandle &lob_mgr_handle);
-  static ObDirectLoadType ddl_get_direct_load_type();
+  static ObDirectLoadType ddl_get_direct_load_type(const uint64_t data_format_version);
+  static ObDirectLoadType load_data_get_direct_load_type(const bool is_incremental,
+                                                         const uint64_t data_format_version);
+  static int check_major_exist(const ObLSID &ls_id, const ObTabletID &talbet_id, bool is_major_eixst);
   static int generate_merge_param(const ObTabletDDLCompleteArg &arg, ObDDLTableMergeDagParam &merge_param);
   static int generate_merge_param(const ObTabletDDLCompleteMdsUserData &data, ObTablet &tablet, ObDDLTableMergeDagParam &merge_param);
   static int is_ddl_need_major_merge(const ObTablet &tablet, bool &ddl_need_merging);
@@ -60,8 +63,8 @@ protected:
                                                 bool &is_major_sstable_exist,
                                                 ObTabletDirectLoadMgrHandle &direct_load_mgr_handle,
                                                 ObTabletDirectLoadMgrHandle &lob_direct_load_mgr_handle);
-  static int check_tablet_major_exist(const ObTabletID &tablet_id, bool &is_major_sstable_exist);
-  static int get_lob_tablet_id(const ObTabletID &tablet_id, ObTabletID &lob_tablet_id);
+  static int check_tablet_major_exist(const ObLSID &ls_id, const ObTabletID &tablet_id, bool &is_major_sstable_exist);
+  static int get_lob_tablet_id(const ObLSID &ls_id, const ObTabletID &tablet_id, ObTabletID &lob_tablet_id);
 };
 } // namespace storage
 } // namespace oceanbaes

@@ -456,7 +456,8 @@ int ObIndexBlockTreeTraverser::PathNodeCaches::prefetch(const ObMicroIndexInfo &
   }
 
   if (OB_SUCC(ret) && !found) {
-    if (OB_FAIL(micro_index_info.row_header_->fill_micro_des_meta(micro_handle.des_meta_))) {
+    if (OB_FAIL(micro_index_info.row_header_->fill_micro_des_meta(true /* deep_copy_key */,
+                                                                  micro_handle.des_meta_))) {
       LOG_WARN("Fail to fill micro block deserialize meta", KR(ret));
     } else if (OB_FAIL(cache->prefetch(micro_index_info.get_macro_id(),
                                        micro_index_info,
@@ -982,6 +983,8 @@ int ObPartitionMultiRangeSpliter::get_tables(ObTableStoreIterator &table_iter,
       } else if (OB_FAIL(tables.push_back(table))) {
         LOG_WARN("Fail to add minor sstable", KR(ret), KPC(table));
       }
+    } else if (table->is_direct_load_memtable()) {
+      // TODO : @suzhi.yt may cause uneven range partitioning, to be implemented later
     }
   }
 
@@ -2265,7 +2268,8 @@ int ObPartitionIncrementalRangeSpliter::ObIncrementalIterator::prepare_table_acc
   } else if (OB_FAIL(tbl_xs_param_.init_merge_param(merge_ctx_.get_tablet_id().id(), 
                                                     merge_ctx_.get_tablet_id(), 
                                                     tbl_read_info_,
-                                                    false/*is_multi_version_minor_merge*/))) {
+                                                    false/*is_multi_version_minor_merge*/,
+                                                    false/*is_delete_insert*/))) {
     STORAGE_LOG(WARN, "Failed to init table access param", KR(ret));
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < rowkey_col_ids_.count(); i++) {
@@ -2282,15 +2286,17 @@ int ObPartitionIncrementalRangeSpliter::ObIncrementalIterator::prepare_table_acc
 int ObPartitionIncrementalRangeSpliter::ObIncrementalIterator::prepare_store_ctx()
 {
   int ret = OB_SUCCESS;
+  const ObLSID &ls_id = merge_ctx_.get_ls_id();
   int64_t snapshot = merge_ctx_.get_snapshot();
   SCN scn;
   if (OB_FAIL(scn.convert_for_tx(snapshot))) {
-    STORAGE_LOG(WARN, "convert for tx fail", K(ret), K(snapshot));
-  } else if (OB_FAIL(store_ctx_.init_for_read(merge_ctx_.get_tablet_id(),
+    STORAGE_LOG(WARN, "convert for tx fail", K(ret), K(ls_id), K(snapshot));
+  } else if (OB_FAIL(store_ctx_.init_for_read(ls_id,
+                                              merge_ctx_.get_tablet_id(),
                                               INT64_MAX,
                                               -1,
                                               scn))) {
-    STORAGE_LOG(WARN, "init store ctx fail", K(ret), K(snapshot));
+    STORAGE_LOG(WARN, "init store ctx fail", K(ret), K(ls_id), K(snapshot));
   }
   return ret;
 }

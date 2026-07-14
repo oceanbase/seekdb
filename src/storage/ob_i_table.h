@@ -27,7 +27,7 @@
 #include "lib/oblog/ob_log_module.h"
 #include "storage/ob_i_store.h"
 #include "storage/access/ob_table_read_info.h"
-#include "storage/meta_mem/ob_storage_meta_obj_pool.h"
+#include "storage/meta_mem/ob_tenant_meta_obj_pool.h"
 #include "storage/meta_mem/ob_storage_meta_cache.h"
 #include "share/ob_table_range.h"
 #include "share/scn.h"
@@ -69,7 +69,7 @@ class ObTxDataMemtable;
 class ObTxCtxMemtable;
 class ObLSMemberMemtable;
 class ObDDLKV;
-class ObStorageMetaMemMgr;
+class ObTenantMetaMemMgr;
 struct ObTableIterParam;
 struct ObTableAccessParam;
 struct ObTableAccessContext;
@@ -90,6 +90,7 @@ public:
     TX_DATA_MEMTABLE = 1,
     TX_CTX_MEMTABLE = 2,
     LOCK_MEMTABLE = 3,
+    DIRECT_LOAD_MEMTABLE = 4,
     MAX_MEMTABLE_TYPE,
     // < add new memtable here
 
@@ -263,6 +264,7 @@ public:
   virtual bool is_memtable() const { return is_memtable(key_.table_type_); }
   virtual bool is_resident_memtable() const { return is_resident_memtable(key_.table_type_); }
   virtual bool is_tablet_memtable() const { return is_tablet_memtable(key_.table_type_); }
+  virtual bool is_direct_load_memtable() const { return is_direct_load_memtable(key_.table_type_); }
   virtual bool is_data_memtable() const { return is_data_memtable(key_.table_type_); }
   virtual bool is_tx_data_memtable() const { return is_tx_data_memtable(key_.table_type_); }
   virtual bool is_tx_ctx_memtable() const { return is_tx_ctx_memtable(key_.table_type_); }
@@ -338,7 +340,12 @@ public:
   }
   static bool is_tablet_memtable(const TableType table_type)
   {
-    return ObITable::TableType::DATA_MEMTABLE == table_type;
+    return (ObITable::TableType::DATA_MEMTABLE == table_type ||
+            ObITable::TableType::DIRECT_LOAD_MEMTABLE == table_type);
+  }
+  static bool is_direct_load_memtable(const TableType table_type)
+  {
+    return ObITable::TableType::DIRECT_LOAD_MEMTABLE == table_type;
   }
   static bool is_data_memtable(const TableType table_type)
   {
@@ -441,7 +448,7 @@ public:
 
   OB_INLINE ObITable *get_table() { return table_; }
   OB_INLINE const ObITable *get_table() const { return table_; }
-  OB_INLINE ObStorageMetaMemMgr *get_t3m() { return t3m_; }
+  OB_INLINE ObTenantMetaMemMgr *get_t3m() { return t3m_; }
   OB_INLINE common::ObIAllocator *get_allocator() { return allocator_; }
 
   int get_sstable(blocksstable::ObSSTable *&sstable);
@@ -453,11 +460,12 @@ public:
   int get_tx_data_memtable(ObTxDataMemtable *&memtable);
   int get_tx_ctx_memtable(ObTxCtxMemtable *&memtable);
   int get_lock_memtable(transaction::tablelock::ObLockMemtable *&memtable);
+  int get_direct_load_memtable(ObDDLKV *&memtable);
 
   ObTableHandleV2(const ObTableHandleV2 &other);
   ObTableHandleV2 &operator= (const ObTableHandleV2 &other);
 
-  int set_table(ObITable *const table, ObStorageMetaMemMgr *const t3m, const ObITable::TableType table_type);
+  int set_table(ObITable *const table, ObTenantMetaMemMgr *const t3m, const ObITable::TableType table_type);
   // TODO: simplify set_sstable interfaces
   // only used when create stand alone sstable
   int set_sstable(ObITable *table, common::ObIAllocator *allocator);
@@ -469,7 +477,7 @@ public:
       K_(meta_handle), K_(lifetime_guaranteed_by_tablet));
 private:
   ObITable *table_;
-  ObStorageMetaMemMgr *t3m_;
+  ObTenantMetaMemMgr *t3m_;
   common::ObIAllocator *allocator_;
   ObStorageMetaHandle meta_handle_;
   ObITable::TableType table_type_;

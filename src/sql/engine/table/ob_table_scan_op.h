@@ -222,7 +222,8 @@ struct ObTableScanRtDef
       fast_final_nlj_range_ctx_(allocator),
       group_size_(0),
       max_group_size_(0),
-      attach_rtinfo_(nullptr)
+      attach_rtinfo_(nullptr),
+      dynamic_selected_tablet_id_()
   { }
 
   void prepare_multi_part_limit_param();
@@ -244,6 +245,13 @@ struct ObTableScanRtDef
   int64_t group_size_;
   int64_t max_group_size_;
   ObDASAttachRtInfo *attach_rtinfo_;
+  // dynamic partition pruning is used for two cases:
+  // 1. dynamic parameter as partitioned key
+  //    In this case, we need to calculate tablet ids every time we get new parameters
+  // 2. prefer to select local replica
+  //    In this case, tablet id only needs to be calculated once. dynamic_selected_tablet_id_
+  //    is used to store it to avoid duplicate calculations
+  ObTabletID dynamic_selected_tablet_id_;
 };
 
 // table scan operator input
@@ -268,10 +276,14 @@ public:
 protected:
   ObDASTabletLoc *tablet_loc_;
   common::ObSEArray<common::ObNewRange, 1> key_ranges_;
+  common::ObSEArray<common::ObNewRange, 1> ss_key_ranges_;
   common::ObSEArray<common::ObSpatialMBR, 1> mbr_filters_;
   common::ObPosArray range_array_pos_;
   // if the query range was extracted before(include whole range), tsc not need to extract every time
   bool not_need_extract_query_range_;
+  // FIXME bin.lb: partition_ranges_ not used, ObTableScanInput keep it for compatibility.
+  // common::ObSEArray<ObPartitionScanRanges, 16> partition_ranges_;
+
   DISALLOW_COPY_AND_ASSIGN(ObTableScanOpInput);
 };
 
@@ -337,7 +349,7 @@ public:
   //         index_name_
   // Currently, those fields will only be used in (g)v$plan_cache_plan so as to find
   // table name of the operator, which means those fields will be used by local plan
-  // and serialized plans do not use those fields. Therefore, those fields need not be serialized.
+  // and remote plan will not use those fields. Therefore, those fields NEED NOT TO BE SERIALIZED.
   common::ObString table_name_; // table name of the table to scan
   common::ObString index_name_; // name of the index to be used
   common::ObTableID table_loc_id_; //table location id
@@ -369,6 +381,7 @@ public:
   int64_t phy_query_range_row_count_;
   int64_t query_range_row_count_;
   int64_t index_back_row_count_;
+  RowCountEstMethod estimate_method_;
   common::ObFixedArray<common::ObEstRowCountRecord, common::ObIAllocator> est_records_;
   common::ObFixedArray<common::ObString, common::ObIAllocator> available_index_name_;
   common::ObFixedArray<common::ObString, common::ObIAllocator> pruned_index_name_;
@@ -405,11 +418,13 @@ public:
     struct {
       uint64_t use_dist_das_                    : 1; //mark whether this table touch data through distributed DAS
       uint64_t is_index_global_                 : 1; //mark if this table is a duplicated table
+      uint64_t force_refresh_lc_                : 1;
       uint64_t is_top_table_scan_               : 1;
       uint64_t gi_above_                        : 1;
       uint64_t batch_scan_flag_                 : 1;
       uint64_t report_col_checksum_             : 1;
       uint64_t is_spatial_ddl_                  : 1;
+      uint64_t is_external_table_               : 1;
       uint64_t is_fts_ddl_                      : 1; // mark if ddl table is the fts index or fts doc word aux table.
       uint64_t is_fts_index_aux_                : 1; // mark if ddl table is the fts index aux table.
       uint64_t is_multivalue_ddl_               : 1;
@@ -417,7 +432,7 @@ public:
       uint64_t is_spiv_ddl_                     : 1;
       uint64_t is_scan_resumable_               : 1; // FARM COMPAT WHITELIST, compact with can_be_paused_
       uint64_t need_check_outrow_lob_           : 1; // mark if need check outrow lob
-      uint64_t reserved_                        : 52;
+      uint64_t reserved_                        : 50;
     };
   };
   int64_t id_col_idx_;
@@ -426,6 +441,7 @@ public:
   common::ObString parser_name_; // word segment for ddl.
   common::ObString parser_properties_;
   ObCostTableScanSimpleInfo est_cost_simple_info_;
+  ExprFixedArray pseudo_column_exprs_;
   int64_t lob_inrow_threshold_;
 };
 
@@ -612,8 +628,6 @@ protected:
   int get_next_row_with_das();
   bool need_init_checksum();
   int init_ddl_column_checksum();
-  int ensure_ddl_column_checksum_array();
-  int get_ddl_checksum_task_idx(int64_t &task_idx) const;
   int add_ddl_column_checksum();
   int add_ddl_column_checksum_batch(const int64_t row_count);
   int check_has_invalid_outrow_lob(const bool is_batch);
@@ -733,7 +747,6 @@ protected:
   common::ObFixedArray<bool, common::ObIAllocator> col_need_reshape_;
   common::ObFixedArray<uint64_t, common::ObIAllocator> column_checksum_;
   int64_t scan_task_id_;
-  bool ddl_checksum_accumulated_;
   bool report_checksum_;
   bool in_rescan_;
   ObDomainIndexCache domain_index_;
@@ -756,6 +769,8 @@ protected:
   int64_t group_rescan_cnt_;
   int64_t group_id_;
 
+  // all tasks belonging to this op share the same key
+  ObDASTCBMemProfileKey das_tasks_key_;
   ObTSCMonitorInfo tsc_monitor_info_;
   bool need_check_outrow_lob_;
 private:

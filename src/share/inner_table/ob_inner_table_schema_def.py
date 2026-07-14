@@ -231,8 +231,7 @@ gen_sqlite_table_def(
       ('data_checksum', 'INTEGER', 'NOT NULL', None),
       ('column_checksums', 'TEXT', 'NULL', None),
       ('b_column_checksums', 'BLOB', 'NULL', None),
-      ('data_checksum_type', 'INTEGER', 'NOT NULL', '0'),
-      ('co_base_snapshot_version', 'INTEGER', 'NOT NULL', None)
+      ('data_checksum_type', 'INTEGER', 'NOT NULL', '0')
   ],
   primary_key = ['tablet_id']
   )
@@ -543,8 +542,6 @@ all_table_def = dict(
       ('kv_attributes', 'varchar:OB_MAX_DEFAULT_VALUE_LENGTH', 'false', ''),
       ('name_generated_type', 'int', 'false', '0'),
       ('lob_inrow_threshold', 'int', 'false', 'OB_DEFAULT_LOB_INROW_THRESHOLD'),
-      ('max_used_column_group_id', 'int', 'false', '1000'),
-      ('column_store', 'int', 'false', '0'),
       ('auto_increment_cache_size', 'int', 'false', '0'),
       ('external_properties', 'varbinary:OB_MAX_VARCHAR_LENGTH', 'true'),
       ('local_session_vars', 'longtext', 'true'),
@@ -2274,10 +2271,7 @@ def_table_schema(
       ('spare3', 'int', 'true'),
       ('spare4', 'varchar:MAX_VALUE_LENGTH', 'true'),
       ('spare5', 'varchar:MAX_VALUE_LENGTH', 'true'),
-      ('spare6', 'varchar:MAX_VALUE_LENGTH', 'true'),
-      ('cg_macro_blk_cnt', 'int', 'false', '0'),
-      ('cg_micro_blk_cnt', 'int', 'false', '0'),
-      ('cg_skip_rate', 'double', 'true')
+      ('spare6', 'varchar:MAX_VALUE_LENGTH', 'true')
   ]
   )
 
@@ -2400,10 +2394,7 @@ def_table_schema(
       ('spare3', 'int', 'true'),
       ('spare4', 'varchar:MAX_VALUE_LENGTH', 'true'),
       ('spare5', 'varchar:MAX_VALUE_LENGTH', 'true'),
-      ('spare6', 'varchar:MAX_VALUE_LENGTH', 'true'),
-      ('cg_macro_blk_cnt', 'int', 'false', '0'),
-      ('cg_micro_blk_cnt', 'int', 'false', '0'),
-      ('cg_skip_rate', 'double', 'true')
+      ('spare6', 'varchar:MAX_VALUE_LENGTH', 'true')
   ]
   )
 
@@ -2884,50 +2875,7 @@ def_table_schema(
 # 417 : abandoned
 # 418 : abandoned
 
-all_column_group = dict(
-    owner = 'donglou.zl',
-    table_name    = '__all_column_group',
-    table_id      = '419',
-    table_type = 'SYSTEM_TABLE',
-    gm_columns = ['gmt_create', 'gmt_modified'],
-    rowkey_columns = [
-        ('table_id', 'int'),
-        ('column_group_id', 'int')
-  ],
-    in_tenant_space = True,
-
-    normal_columns = [
-      ('column_group_name', 'varchar:OB_MAX_COLUMN_GROUP_NAME_LENGTH', 'false', ''),
-      ('column_group_type', 'int'),
-      ('block_size', 'int'),
-      ('compressor_type', 'int'),
-      ('row_store_type', 'int')
-  ]
-  )
-
-def_table_schema(**all_column_group)
-
-def_table_schema(**gen_history_table_def(420, all_column_group))
-
-all_column_group_mapping = dict(
-    owner = 'donglou.zl',
-    table_name    = '__all_column_group_mapping',
-    table_id      = '421',
-    table_type = 'SYSTEM_TABLE',
-    gm_columns = ['gmt_create', 'gmt_modified'],
-    rowkey_columns = [
-        ('table_id', 'int'),
-        ('column_group_id', 'int'),
-        ('column_id', 'int')
-  ],
-    in_tenant_space = True,
-
-    normal_columns = []
-  )
-
-def_table_schema(**all_column_group_mapping)
-
-def_table_schema(**gen_history_table_def(422, all_column_group_mapping))
+# 419-422: abandoned metadata tables
 
 # 429: __all_arbitration_service (abandoned)
 # 430: __all_ls_arb_replica_task (abandoned)
@@ -3810,7 +3758,6 @@ def_table_schema(**all_catalog_privilege_def)
 
 def_table_schema(**gen_history_table_def(540, all_catalog_privilege_def))
 
-# 541: __all_tenant_flashback_log_scn
 # 542: __sslog_table
 # 543: __all_license (abandoned)
 
@@ -5008,8 +4955,7 @@ def_table_schema(
       ('end_key', 'varchar:OB_MAX_ROW_KEY_LENGTH'),
       ('macro_block_type', 'varchar:MAX_VALUE_LENGTH'),
       ('compressor_name', 'varchar:OB_MAX_COMPRESSOR_NAME_LENGTH'),
-      ('row_store_type', 'varchar:OB_MAX_COMPRESSOR_NAME_LENGTH'),
-      ('cg_idx', 'int')
+      ('row_store_type', 'varchar:OB_MAX_COMPRESSOR_NAME_LENGTH')
   ],    vtable_route_policy = 'local'
   )
 
@@ -5417,9 +5363,7 @@ def_table_schema(
     ('progressive_compaction_round', 'int'),
     ('create_time', 'timestamp'),
     ('start_time', 'timestamp'),
-    ('estimated_finish_time', 'timestamp'),
-    ('start_cg_id', 'int'),
-    ('end_cg_id', 'int')
+    ('estimated_finish_time', 'timestamp')
   ],  vtable_route_policy = 'local'
   )
 
@@ -5524,8 +5468,6 @@ def_table_schema(
       ('participant_table', 'varchar:OB_PART_TABLE_INFO_LENGTH'),
       ('macro_id_list', 'varchar:OB_MACRO_ID_INFO_LENGTH'),
       ('comments', 'varchar:OB_COMPACTION_COMMENT_STR_LENGTH'),
-      ('start_cg_id', 'int'),
-      ('end_cg_id', 'int'),
       ('kept_snapshot', 'varchar:OB_COMPACTION_INFO_LENGTH'),
       ('merge_level', 'varchar:OB_MERGE_LEVEL_STR_LENGTH'),
       ('exec_mode', 'varchar:OB_MERGE_TYPE_STR_LENGTH'),
@@ -5533,7 +5475,6 @@ def_table_schema(
       ('io_cost_time_percentage', 'int'),
       ('merge_reason', 'varchar:OB_MERGE_REASON_STR_LENGTH'),
       ('base_major_status', 'varchar:OB_MERGE_TYPE_STR_LENGTH'),
-      ('co_merge_type', 'varchar:OB_MERGE_TYPE_STR_LENGTH'),
       ('mds_filter_info', 'varchar:OB_COMPACTION_COMMENT_STR_LENGTH'),
       ('execute_time', 'int')
   ],  vtable_route_policy = 'local'
@@ -5964,7 +5905,6 @@ def_table_schema(
       ('contain_uncommitted_row', 'varchar:MAX_COLUMN_YES_NO_LENGTH'),
       ('nested_offset', 'int'),
       ('nested_size', 'int'),
-      ('cg_idx', 'int'),
       ('data_checksum', 'int'),
       ('table_flag', 'int')
   ],  vtable_route_policy = 'local'
@@ -6168,7 +6108,7 @@ def_table_schema(
 
 # 12104: __all_virtual_routine_param_history # removed (single-tenant: iterate VT mechanism deleted)
 
-# 12115: __all_virtual_recyclebin # removed (single-tenant: iterate VT mechanism deleted)
+# 12115: reserved for removed recyclebin virtual table
 
 # 12116: __all_virtual_tenant_gc_partition_info # abandoned in 4.0
 
@@ -7906,7 +7846,7 @@ def_table_schema(
   ],  vtable_route_policy = 'local'
   )
 
-# 12398: __all_virtual_column_group # removed (single-tenant: iterate VT mechanism deleted)
+# 12398: removed virtual table
 
 # 12401: __all_virtual_tenant_parameter (abandoned)
 # 12402: __all_virtual_tenant_snapshot (abandoned)
@@ -7986,9 +7926,7 @@ def_table_schema(
   ]
 )
 
-# 12430: __all_virtual_column_group_mapping # removed (single-tenant: iterate VT mechanism deleted)
-# 12431: __all_virtual_column_group_history # removed (single-tenant: iterate VT mechanism deleted)
-# 12432: __all_virtual_column_group_mapping_history # removed (single-tenant: iterate VT mechanism deleted)
+# 12430-12432: removed virtual tables
 
 # 12435: __all_virtual_clone_job (abandoned)
 # 12436: __all_virtual_clone_job_history (abandoned)
@@ -8450,23 +8388,7 @@ def_table_schema(
 
 # 12511: __all_virtual_wr_sql_plan_aux_key2snapshot # removed
 # 12512: __all_virtual_tablet_mds_info
-
-def_table_schema(
-  owner = 'ouyanghongrong.oyh',
-  table_name    = '__all_virtual_cs_replica_tablet_stats',
-  table_id      = '12513',
-  table_type = 'VIRTUAL_TABLE',
-  gm_columns = [],
-  rowkey_columns = [],
-  in_tenant_space=True,
-  normal_columns = [
-    ('tablet_id', 'int'),
-    ('macro_block_cnt', 'int'),
-    ('is_cs', 'bool'),
-    ('is_cs_replica', 'bool'),
-    ('available', 'bool')
-  ],  vtable_route_policy = 'local'
-  )
+# 12513: removed
 
 # 12514: __all_virtual_ddl_diagnose_info
 def_table_schema(
@@ -8524,8 +8446,6 @@ def_table_schema(
 
 # 12520: __all_virtual_sswriter_group_stat
 # 12521: __all_virtual_sswriter_lease_mgr
-
-# 12522: __all_virtual_tenant_flashback_log_scn
 
 # 12523: __all_virtual_pl_recompile_objinfo # removed (single-tenant: iterate VT mechanism deleted)
 
@@ -10503,18 +10423,12 @@ SELECT
     when 3 then 'LOCK_MEMTABLE' when 4 then 'DIRECT_LOAD_MEMTABLE' when 10 then 'MAJOR' when 11 then 'MINOR'
     when 12 then 'MINI' when 13 then 'META'
     when 14 then 'DDL_DUMP' when 15 then 'REMOTE_LOGICAL_MINOR' when 16 then 'DDL_MEM'
-    when 17 then 'CO_MAJOR' when 18 then 'NORMAL_CG' when 19 then 'ROWKEY_CG' when 20 then 'COL_ORIENTED_META'
-    when 21 then 'DDL_MERGE_CO' when 22 then 'DDL_MERGE_CG' when 23 then 'DDL_MEM_CO'
-    when 24 then 'DDL_MEM_CG' when 25 then 'DDL_MEM_MINI_SSTABLE'
-    when 26 then 'MDS_MINI' when 27 then 'MDS_MINOR'
-    when 29 then 'INC_MAJOR' when 30 then 'INC_CO_MAJOR' when 31 then 'INC_NORMAL_CG' when 32 then 'INC_ROWKEY_CG'
-    when 33 then 'INC_DDL_DUMP' when 34 then 'INC_DDL_MERGE_CO' when 35 then 'INC_DDL_MERGE_CG'
-    when 36 then 'INC_DDL_MEM_CO' when 37 then 'INC_DDL_MEM_CG' when 38 then 'INC_DDL_MEM'
-    when 39 then 'INC_DDL_AGGR_CO' when 40 then 'INC_DDL_AGGR_CG'
+    when 17 then 'DDL_MEM_MINI_SSTABLE' when 18 then 'MDS_MINI' when 19 then 'MDS_MINOR'
+    when 20 then 'MICRO_MINI_SSTABLE' when 21 then 'INC_MAJOR'
+    when 22 then 'INC_MAJOR_DDL_DUMP' when 23 then 'INC_MAJOR_DDL_MEM'
     else 'INVALID'
-  end) as TABLE_TYPE,
+ end) as TABLE_TYPE,
  M.TABLET_ID,
- M.CG_IDX,
  M.START_LOG_SCN,
  M.END_LOG_SCN,
  M.DATA_CHECKSUM,
@@ -12713,8 +12627,6 @@ def_table_schema(
       PARTICIPANT_TABLE,
       MACRO_ID_LIST,
       COMMENTS,
-      START_CG_ID,
-      END_CG_ID,
       KEPT_SNAPSHOT,
       MERGE_LEVEL,
       EXEC_MODE,
@@ -12724,7 +12636,6 @@ def_table_schema(
       IO_COST_TIME_PERCENTAGE,
       MERGE_REASON,
       BASE_MAJOR_STATUS,
-      CO_MERGE_TYPE,
       MDS_FILTER_INFO,
       EXECUTE_TIME
     FROM oceanbase.__all_virtual_tablet_compaction_history
@@ -18101,35 +18012,11 @@ def_table_schema(
 
 # 21631: GV$OB_STANDBY_LOG_TRANSPORT_STAT
 # 21632: V$OB_STANDBY_LOG_TRANSPORT_STAT
-
-def_table_schema(
-  owner = 'ouyanghongrong.oyh',
-  table_name      = 'DBA_OB_CS_REPLICA_STATS',
-  table_id        = '21633',
-  table_type      = 'SYSTEM_VIEW',
-  rowkey_columns  = [],
-  normal_columns  = [],
-  gm_columns      = [],
-  in_tenant_space = True,
-  view_definition = """
-  SELECT
-    COUNT(*) AS TOTAL_TABLET_CNT,
-    SUM(CASE WHEN available = TRUE THEN 1 ELSE 0 END) AS AVAILABLE_TABLET_CNT,
-    SUM(macro_block_cnt) AS TOTAL_MACRO_BLOCK_CNT,
-    SUM(CASE WHEN available = TRUE THEN macro_block_cnt ELSE 0 END) AS AVAILABLE_MACRO_BLOCK_CNT,
-    CASE
-      WHEN SUM(CASE WHEN available = FALSE THEN 1 ELSE 0 END) > 0 THEN 'FALSE'
-      ELSE 'TRUE'
-    END AS AVAILABLE
-  FROM oceanbase.__all_virtual_cs_replica_tablet_stats
-""".replace("\n", " ")
-  )
+# 21633: removed
 
 # 21635: GV$OB_PLUGINS # removed (single-tenant GV/V collapse; use oceanbase.__all_virtual_plugin_info)
 # 21636: V$OB_PLUGINS # removed (single-tenant GV/V collapse; use oceanbase.__all_virtual_plugin_info)
 
-# 21637: DBA_OB_TENANT_FLASHBACK_LOG_SCN
-# 21638: CDB_OB_TENANT_FLASHBACK_LOG_SCN
 # 21639: DBA_OB_LICENSE (abandoned)
 
 def_table_schema(

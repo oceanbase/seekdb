@@ -81,6 +81,7 @@ int ObRowsInfo::ExistHelper::init(const ObRelativeTable &table,
       table_iter_param_.table_id_ = table.get_table_id();
       table_iter_param_.tablet_id_ = table.get_tablet_id();
       if (nullptr != table.tablet_iter_.get_tablet()) {
+        table_iter_param_.ls_id_ = table.tablet_iter_.get_tablet()->get_tablet_meta().ls_id_;
       }
       table_iter_param_.out_cols_project_ = NULL;
       table_iter_param_.read_info_ = &rowkey_read_info;

@@ -112,7 +112,7 @@ int ObMicroBlockCacheKey::assign(const ObMicroBlockCacheKey &other)
 bool ObMicroBlockCacheKey::operator ==(const ObIKVCacheKey &other) const
 {
   const ObMicroBlockCacheKey &other_key = reinterpret_cast<const ObMicroBlockCacheKey &> (other);
-  bool equal = mode_ == other_key.mode_ && data_checksum_ == other_key.data_checksum_;
+  bool equal = true && mode_ == other_key.mode_ && data_checksum_ == other_key.data_checksum_;
   if (equal) {
     equal = (ObMicroBlockCacheKeyMode::PHYSICAL_KEY_MODE == mode_ && block_id_ == other_key.block_id_) ||
             (ObMicroBlockCacheKeyMode::LOGICAL_KEY_MODE == mode_ && logic_micro_id_ == other_key.logic_micro_id_ &&
@@ -379,6 +379,8 @@ ObIMicroBlockIOCallback::ObIMicroBlockIOCallback(const ObIOCallbackType type)
     use_block_cache_(true),
     table_read_info_(nullptr)
 {
+  MEMSET(encrypt_key_, 0, sizeof(encrypt_key_));
+  block_des_meta_.encrypt_key_ = encrypt_key_;
   static_assert(sizeof(*this) <= CALLBACK_BUF_SIZE, "IOCallback buf size not enough");
 }
 
@@ -396,7 +398,10 @@ void ObIMicroBlockIOCallback::set_micro_des_meta(const ObIndexBlockRowHeader *id
 {
   OB_ASSERT(nullptr != idx_row_header);
   block_des_meta_.compressor_type_ = idx_row_header->get_compressor_type();
+  block_des_meta_.encrypt_id_ = idx_row_header->get_encrypt_id();
+  block_des_meta_.master_key_id_ = idx_row_header->get_master_key_id();
   block_des_meta_.row_store_type_ = idx_row_header->get_row_store_type();
+  MEMCPY(encrypt_key_, idx_row_header->get_encrypt_key(), share::OB_MAX_TABLESPACE_ENCRYPT_KEY_LENGTH);
 }
 
 int ObIMicroBlockIOCallback::alloc_data_buf(const char *io_data_buffer, const int64_t data_size)
@@ -512,11 +517,11 @@ int ObIMicroBlockIOCallback::read_block_and_copy(
   int ret = OB_SUCCESS;
   block_data.type_ = cache_->get_type();
   bool is_compressed = false;
-  if (OB_FAIL(reader.do_decompress_data(
+  if (OB_FAIL(reader.do_decrypt_and_decompress_data(
         header, block_des_meta_, buffer, size,
         block_data.get_buf(), block_data.get_buf_size(),
         is_compressed, false/*need deep copy*/, nullptr))) {
-    LOG_WARN("fail to decompress data", K(ret));
+    LOG_WARN("fail to do decrypt and decompress data", K(ret));
   }
 
   if (OB_SUCC(ret)) {
@@ -834,10 +839,10 @@ int ObSyncSingleMicroBLockIOCallback::inner_process(const char *data_buffer, con
       if (OB_FAIL(header.deserialize_and_check_header(src_block_buf, src_buf_size))) {
         LOG_WARN("fail to deserialize_and_check_header", K(ret), KP(src_block_buf), K(src_buf_size));
       } else {
-        if (OB_FAIL(macro_reader_->do_decompress_data(
+        if (OB_FAIL(macro_reader_->do_decrypt_and_decompress_data(
             header, block_des_meta_, src_block_buf, src_buf_size, block_data_->get_buf(),
             block_data_->get_buf_size(), is_compressed, true /* need_deep_copy */, allocator_))) {
-          LOG_WARN("Fail to decompress micro block data buf", K(ret));
+          LOG_WARN("Fail to decrypt and decompress micro block data buf", K(ret));
         }
       }
     }
@@ -869,10 +874,10 @@ int ObIMicroBlockCache::get_cache_block(
       if (OB_ENTRY_NOT_EXIST != ret) {
         STORAGE_LOG(WARN, "Fail to get micro block from block cache, ", K(ret));
       }
-      EVENT_INC(BLOCK_CACHE_MISS);
+      EVENT_INC(ObStatEventIds::BLOCK_CACHE_MISS);
       inc_cache_miss();
     } else {
-      EVENT_INC(BLOCK_CACHE_HIT);
+      EVENT_INC(ObStatEventIds::BLOCK_CACHE_HIT);
     }
   }
   return ret;
@@ -883,7 +888,8 @@ int ObIMicroBlockCache::prefetch(
     const ObMicroIndexInfo& idx_row,
     const bool use_cache,
     ObStorageObjectHandle &macro_handle,
-    ObIAllocator *allocator)
+    ObIAllocator *allocator,
+    const bool is_major_macro_preread)
 {
   int ret = OB_SUCCESS;
   const ObIndexBlockRowHeader *idx_header = idx_row.row_header_;
@@ -903,7 +909,7 @@ int ObIMicroBlockCache::prefetch(
       callback = new (buf) ObAsyncSingleMicroBlockIOCallback;
       callback->allocator_ = allocator;
       callback->use_block_cache_ = use_cache;
-      if (OB_FAIL(prefetch(macro_id, idx_row, macro_handle, *callback))) {
+            if (OB_FAIL(prefetch(macro_id, idx_row, macro_handle, *callback, is_major_macro_preread))) {
         LOG_WARN("Fail to prefetch data micro block", K(ret));
       }
     }
@@ -915,7 +921,8 @@ int ObIMicroBlockCache::prefetch(
     const MacroBlockId &macro_id,
     const ObMicroIndexInfo& idx_row,
     ObStorageObjectHandle &macro_handle,
-    ObIMicroBlockIOCallback &callback)
+    ObIMicroBlockIOCallback &callback,
+    const bool is_major_macro_preread)
 {
   int ret = OB_SUCCESS;
   const ObIndexBlockRowHeader *idx_row_header = idx_row.row_header_;
@@ -942,6 +949,13 @@ int ObIMicroBlockCache::prefetch(
     read_info.size_ = idx_row.get_block_size();
     read_info.io_timeout_ms_ = max(THIS_WORKER.get_timeout_remain() / 1000, 0);
 
+    read_info.logic_micro_id_ = idx_row.get_logic_micro_id();
+    read_info.micro_crc_ = idx_row.get_data_checksum();
+    if (is_major_macro_preread) {
+      read_info.bypass_micro_cache_ = true;
+      read_info.is_major_macro_preread_ = true;
+    }
+
     if (OB_FAIL(ObObjectManager::async_read_object(read_info, macro_handle))) {
       STORAGE_LOG(WARN, "Fail to async read block, ", K(ret), K(read_info));
       if (OB_NOT_NULL(callback.get_allocator())) { //Avoid double_free with io_handle
@@ -950,8 +964,8 @@ int ObIMicroBlockCache::prefetch(
         allocator->free(&callback);
       }
     } else {
-      EVENT_INC(IO_READ_PREFETCH_MICRO_COUNT);
-      EVENT_ADD(IO_READ_PREFETCH_MICRO_BYTES, idx_row.get_block_size());
+      EVENT_INC(ObStatEventIds::IO_READ_PREFETCH_MICRO_COUNT);
+      EVENT_ADD(ObStatEventIds::IO_READ_PREFETCH_MICRO_BYTES, idx_row.get_block_size());
     }
   }
   return ret;
@@ -986,6 +1000,10 @@ int ObIMicroBlockCache::prefetch(
   read_info.size_ = size;
   read_info.io_timeout_ms_ = max(THIS_WORKER.get_timeout_remain() / 1000, 0);
 
+  read_info.bypass_micro_cache_ = true;
+  // only prefetch_multi_block need preread major macro
+  read_info.is_major_macro_preread_ = true;
+
   if (OB_FAIL(ObObjectManager::async_read_object(read_info, macro_handle))) {
     STORAGE_LOG(WARN, "Fail to async read block, ", K(ret), K(read_info));
     if (OB_NOT_NULL(callback.get_allocator())) { //Avoid double_free with io_handle
@@ -994,8 +1012,8 @@ int ObIMicroBlockCache::prefetch(
       allocator->free(&callback);
     }
   } else {
-    EVENT_ADD(IO_READ_PREFETCH_MICRO_COUNT, io_param.micro_block_count_);
-    EVENT_ADD(IO_READ_PREFETCH_MICRO_BYTES, size);
+    EVENT_ADD(ObStatEventIds::IO_READ_PREFETCH_MICRO_COUNT, io_param.micro_block_count_);
+    EVENT_ADD(ObStatEventIds::IO_READ_PREFETCH_MICRO_BYTES, size);
   }
   return ret;
 }
@@ -1078,7 +1096,7 @@ int ObDataMicroBlockCache::init(const char *cache_name)
   } else if (OB_FAIL(allocator_.init(mem_limit, OB_MALLOC_MIDDLE_BLOCK_SIZE, OB_MALLOC_MIDDLE_BLOCK_SIZE))) {
     STORAGE_LOG(WARN, "Fail to init io allocator, ", K(ret));
   } else {
-    allocator_.set_attr(ObMemAttr(ObModIds::OB_SSTABLE_MICRO_BLOCK_ALLOCATOR));
+    allocator_.set_attr(SET_USE_500(ObMemAttr(ObModIds::OB_SSTABLE_MICRO_BLOCK_ALLOCATOR)));
   }
   return ret;
 }
@@ -1097,7 +1115,7 @@ int ObDataMicroBlockCache::prefetch_multi_block(const MacroBlockId &macro_id,
   int ret = OB_SUCCESS;
   ObMultiDataBlockIOCallback *callback = nullptr;
   ObIAllocator *allocator = nullptr;
-  if (OB_UNLIKELY(!io_param.is_valid())) {
+  if (OB_UNLIKELY(!io_param.is_valid() || false)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("Invalid input parameters", K(ret));
   } else if (OB_FAIL(get_allocator(allocator))) {
@@ -1166,6 +1184,8 @@ int ObDataMicroBlockCache::load_block(
       macro_read_info.size_ = micro_block_id.size_;
       macro_read_info.io_timeout_ms_ = GCONF._data_storage_io_timeout / 1000L;
 
+      macro_read_info.logic_micro_id_ = logic_micro_id;
+      macro_read_info.micro_crc_ = data_checksum;
 
       if (OB_FAIL(ObObjectManager::async_read_object(macro_read_info, macro_handle))) {
         LOG_WARN("Fail to async read block", K(ret), K(macro_read_info));
@@ -1177,8 +1197,8 @@ int ObDataMicroBlockCache::load_block(
         LOG_WARN("Fail to wait io finish", K(ret), K(macro_read_info));
       } else {
         block_data.type_ = ObMicroBlockData::DATA_BLOCK;
-        EVENT_INC(IO_READ_PREFETCH_MICRO_COUNT);
-        EVENT_ADD(IO_READ_PREFETCH_MICRO_BYTES, micro_block_id.size_);
+        EVENT_INC(ObStatEventIds::IO_READ_PREFETCH_MICRO_COUNT);
+        EVENT_ADD(ObStatEventIds::IO_READ_PREFETCH_MICRO_BYTES, micro_block_id.size_);
       }
     }
   }
@@ -1374,19 +1394,19 @@ ObMicroBlockData::Type ObDataMicroBlockCache::get_type()
 
 void ObDataMicroBlockCache::cache_bypass()
 {
-  EVENT_INC(DATA_BLOCK_READ_CNT);
+  EVENT_INC(ObStatEventIds::DATA_BLOCK_READ_CNT);
 }
 
 void ObDataMicroBlockCache::cache_hit(int64_t &hit_cnt)
 {
   ++hit_cnt;
-  EVENT_INC(DATA_BLOCK_CACHE_HIT);
+  EVENT_INC(ObStatEventIds::DATA_BLOCK_CACHE_HIT);
 }
 
 void ObDataMicroBlockCache::cache_miss(int64_t &miss_cnt)
 {
   ++miss_cnt;
-  EVENT_INC(DATA_BLOCK_READ_CNT);
+  EVENT_INC(ObStatEventIds::DATA_BLOCK_READ_CNT);
 }
 
 /*-------------------------------------ObIndexMicroBlockCache-------------------------------------*/
@@ -1448,6 +1468,8 @@ int ObIndexMicroBlockCache::load_block(
       macro_read_info.size_ = micro_block_id.size_;
       macro_read_info.io_timeout_ms_ = GCONF._data_storage_io_timeout / 1000L;
 
+      macro_read_info.logic_micro_id_ = logic_micro_id;
+      macro_read_info.micro_crc_ = data_checksum;
 
       ObIndexBlockDataTransformer idx_transformer;
       char *transform_buf = nullptr;
@@ -1467,8 +1489,8 @@ int ObIndexMicroBlockCache::load_block(
       if (FAILEDx(idx_transformer.transform(block_data, block_data, *allocator, transform_buf))) {
         LOG_WARN("Fail to transform index block to memory format", K(ret));
       } else {
-        EVENT_INC(IO_READ_PREFETCH_MICRO_COUNT);
-        EVENT_ADD(IO_READ_PREFETCH_MICRO_BYTES, micro_block_id.size_);
+        EVENT_INC(ObStatEventIds::IO_READ_PREFETCH_MICRO_COUNT);
+        EVENT_ADD(ObStatEventIds::IO_READ_PREFETCH_MICRO_BYTES, micro_block_id.size_);
       }
       if (nullptr != raw_idx_block_buf) {
         allocator->free(raw_idx_block_buf);
@@ -1568,19 +1590,19 @@ ObMicroBlockData::Type ObIndexMicroBlockCache::get_type()
 
 void ObIndexMicroBlockCache::cache_bypass()
 {
-  EVENT_INC(INDEX_BLOCK_READ_CNT);
+  EVENT_INC(ObStatEventIds::INDEX_BLOCK_READ_CNT);
 }
 
 void ObIndexMicroBlockCache::cache_hit(int64_t &hit_cnt)
 {
   ++hit_cnt;
-  EVENT_INC(INDEX_BLOCK_CACHE_HIT);
+  EVENT_INC(ObStatEventIds::INDEX_BLOCK_CACHE_HIT);
 }
 
 void ObIndexMicroBlockCache::cache_miss(int64_t &miss_cnt)
 {
   ++miss_cnt;
-  EVENT_INC(INDEX_BLOCK_READ_CNT);
+  EVENT_INC(ObStatEventIds::INDEX_BLOCK_READ_CNT);
 }
 
 }//end namespace blocksstable

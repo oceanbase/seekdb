@@ -21,6 +21,7 @@
 #include "share/ob_ddl_task_executor.h"
 #include "share/ob_rpc_struct.h"
 #include "share/schema/ob_schema_struct.h"
+#include "storage/tablet/ob_tablet_binding_helper.h"
 #include "sql/optimizer/stat/ob_stat_define.h"
 
 namespace oceanbase
@@ -30,26 +31,11 @@ namespace share
 class AutoincParam;
 namespace schema
 {
-struct AlterTableSchema;
-class ObColumnGroupSchema;
-class ObColumnSchemaV2;
-class ObPartition;
-class ObPartitionSchema;
-class ObSubPartition;
 class ObTableSchema;
 }
 }
 namespace rootserver
 {
-using share::schema::AlterTableSchema;
-using share::schema::ObSchemaGetterGuard;
-using share::schema::ObColumnGroupSchema;
-using share::schema::ObColumnSchemaV2;
-using share::schema::ObPartition;
-using share::schema::ObPartitionSchema;
-using share::schema::ObSubPartition;
-using share::schema::ObTableSchema;
-
 class ObDDLService;
 class ObDDLSQLTransaction;
 class ObDDLOperator;
@@ -98,11 +84,16 @@ static inline bool is_partition_exchange_between_subpart_and_part(const ObPartit
 class ObPartitionExchange
 {
 public:
+  typedef std::pair<share::ObLSID, common::ObTabletID> LSTabletID;
+  // 'is_part_id_exchanged = false' only happens in partition-level direct load
   explicit ObPartitionExchange(ObDDLService &ddl_service,
                                const bool is_part_id_exchanged = true);
   virtual ~ObPartitionExchange();
   int check_and_exchange_partition(const obcall::ObExchangePartitionArg &arg, obcall::ObAlterTableRes &res, ObSchemaGetterGuard &schema_guard);
 
+  // direct load promise that the two tables of partition exchange are consistent
+  static int check_exchange_partition_for_direct_load(ObSchemaGetterGuard &schema_guard,
+                                                      const ObTableSchema *table_schema);
   static int check_partition_exchange_schema_for_user(
       const share::schema::ObTableSchema &base_table_schema,
       const share::schema::ObTableSchema &inc_table_schema,
@@ -244,6 +235,16 @@ protected:
   int build_single_table_rw_defensive_(const ObIArray<common::ObTabletID> &tablet_ids,
                                        const int64_t schema_version,
                                        ObDDLSQLTransaction &trans);
+  int build_modify_tablet_binding_args_v1_(const ObIArray<ObTabletID> &tablet_ids,
+                                           const int64_t schema_version,
+                                           ObIArray<storage::ObBatchUnbindTabletArg> &modify_args,
+                                           ObDDLSQLTransaction &trans);
+  int get_tablets_(const ObIArray<common::ObTabletID> &tablet_ids,
+                   ObIArray<LSTabletID> &tablets,
+                   ObDDLSQLTransaction &trans);
+  int adapting_cdc_changes_in_exchange_partition_(const uint64_t partitioned_table_id,
+                                                  const uint64_t non_partitioned_table_id,
+                                                  ObDDLSQLTransaction &trans);
   int sync_exchange_partition_stats_info_(const uint64_t new_table_id,
                                           const uint64_t new_stat_level,
                                           const int64_t old_partition_id,
@@ -341,10 +342,26 @@ private:
   common::hash::ObHashMap<uint64_t, ObArray<ObTabletID>> used_table_to_tablet_ids_map_;
   common::ObSArray<uint64_t> unused_pt_index_id_;
   common::ObSArray<uint64_t> unused_nt_index_id_;
-  bool is_part_id_exchanged_;
+  bool is_part_id_exchanged_; // 'false' for direct-load, 'true' for other situations
   bool is_inited_;
 private:
   DISALLOW_COPY_AND_ASSIGN(ObPartitionExchange);
+};
+
+struct ObChangeTabletToTableArg final
+{
+  OB_UNIS_VERSION_V(1);
+public:
+  ObChangeTabletToTableArg() : ls_id_(), base_table_id_(OB_INVALID_ID), inc_table_id_(OB_INVALID_ID), tablet_ids_(), table_ids_() {}
+  ~ObChangeTabletToTableArg() {}
+  share::ObLSID ls_id_;
+  uint64_t base_table_id_; // PT table, always with the large amount of data.
+  uint64_t inc_table_id_; // NT table, with the incremental data.
+   // tablet ids of data table, index table, lob meta/piece table.
+  common::ObSArray<ObTabletID> tablet_ids_; 
+  // the table ids corresponding to the tablet ids.
+  common::ObSArray<uint64_t> table_ids_;
+  TO_STRING_KV(K_(ls_id), K_(base_table_id), K_(inc_table_id), K_(tablet_ids), K_(table_ids));
 };
 
 }//end namespace rootserver

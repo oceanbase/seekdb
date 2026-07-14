@@ -25,13 +25,14 @@ using namespace oceanbase::common;
 using namespace oceanbase::storage;
 using namespace oceanbase::blocksstable;
 using namespace oceanbase::share;
+using namespace oceanbase::table;
 
 ObChunk::~ObChunk() 
 {
-  if (type_ == DDL_BATCH_DATUM_ROWS && ddl_batch_rows_ != nullptr) {
-    ddl_batch_rows_->~ObDDLBatchDatumRows();
-    ob_free(ddl_batch_rows_);
-    ddl_batch_rows_ = nullptr;
+  if (type_ == DIRECT_LOAD_BATCH_DATUM_ROWS && direct_load_batch_rows_ != nullptr) {
+    direct_load_batch_rows_->~ObDirectLoadBatchDatumRows();
+    ob_free(direct_load_batch_rows_);
+    direct_load_batch_rows_ = nullptr;
     type_ = INVALID_TYPE;
   } else if (DDL_ROW_TMP_FILES == type_ && nullptr != row_file_arr_) {
     for (int64_t i = 0; i < row_file_arr_->count(); ++i) {
@@ -46,6 +47,8 @@ ObChunk::~ObChunk()
     ob_free(row_file_arr_);
     row_file_arr_ = nullptr;
     type_ = INVALID_TYPE;
+  } else if (DIRECT_LOAD_ROW_ARRAY == type_) {
+    OB_DELETE(ObTableLoadTabletObjRowArray, ObMemAttr("TLD_RowArray"), row_array_);
   }
 }
 
@@ -61,9 +64,10 @@ bool ObChunk::is_valid() const
   if (bret) {
     switch (type_) {
       case ChunkType::DATUM_ROW:
-      case ChunkType::DDL_BATCH_DATUM_ROWS:
+      case ChunkType::DIRECT_LOAD_BATCH_DATUM_ROWS:
       case ChunkType::DDL_ROW_TMP_FILES:
       case ChunkType::BATCH_DATUM_ROWS:
+      case ChunkType::DIRECT_LOAD_ROW_ARRAY:
       case ChunkType::TASK_BATCH_INFO:
         bret = nullptr != data_ptr_;
         break;

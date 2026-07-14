@@ -1344,8 +1344,7 @@ int ObIndexBlockTreeCursor::get_next_level_block(
     LOG_WARN("Invalid macro block id or index block row data",
         K(ret), K(macro_block_id), K(idx_row_header));
   } else {
-    absolute_offset =
-        sstable_meta_handle_.get_sstable_meta().get_macro_info().get_nested_offset()
+    absolute_offset = sstable_meta_handle_.get_sstable_meta().get_macro_info().get_nested_offset()
         + idx_row_header.get_block_offset();
   }
   if (OB_SUCC(ret)) {
@@ -1416,7 +1415,7 @@ int ObIndexBlockTreeCursor::load_micro_block_data(const MacroBlockId &macro_bloc
         LOG_WARN("fail to deserialize_and_check_header", K(ret), KP(src_block_buf), K(src_buf_size));
       } else {
         bool is_compressed = false;
-        if (OB_FAIL(macro_reader.do_decompress_data(
+        if (OB_FAIL(macro_reader.do_decrypt_and_decompress_data(
             header, block_des_meta,
             src_block_buf, src_buf_size,
             curr_path_item_->block_data_.get_buf(),
@@ -1424,7 +1423,7 @@ int ObIndexBlockTreeCursor::load_micro_block_data(const MacroBlockId &macro_bloc
             is_compressed,
             true, /* need deep copy */
             cursor_path_.get_allocator()))) {
-          LOG_WARN("Fail to decompress data", K(ret));
+          LOG_WARN("Fail to decrypt and decompress data", K(ret));
         } else {
           curr_path_item_->is_block_allocated_ = true;
         }

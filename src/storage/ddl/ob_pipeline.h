@@ -19,8 +19,9 @@
 
 #include "lib/utility/ob_print_utils.h"
 #include "lib/container/ob_array.h"
-#include "observer/scheduler/ob_dag_scheduler.h"
-#include "storage/ddl/ob_ddl_batch_datum_rows.h"
+#include "observer/scheduler/ob_tenant_dag_scheduler.h"
+#include "observer/table_load/ob_table_load_row_array.h"
+#include "storage/direct_load/ob_direct_load_batch_datum_rows.h"
 #include "storage/ddl/ob_ddl_row_tmp_file.h"
 
 namespace oceanbase
@@ -52,9 +53,10 @@ public:
     ITER_END_TYPE,
     DATUM_ROW,
     DAG_TABLET_CONTEXT,
-    DDL_BATCH_DATUM_ROWS,
+    DIRECT_LOAD_BATCH_DATUM_ROWS,
     DDL_ROW_TMP_FILES,
     BATCH_DATUM_ROWS,
+    DIRECT_LOAD_ROW_ARRAY,
     TASK_BATCH_INFO,
     MAX_TYPE
   };
@@ -66,20 +68,22 @@ public:
   void set_end_chunk() { type_ = ChunkType::ITER_END_TYPE; }
   bool is_end_chunk() const { return ChunkType::ITER_END_TYPE == type_; }
   int get_dag_tablet_context(ObDDLTabletContext *&tablet_context) const;
-  OB_INLINE bool is_ddl_batch_datum_rows_type() const { return ChunkType::DDL_BATCH_DATUM_ROWS == type_; }
+  OB_INLINE bool is_direct_load_batch_datum_rows_type() const { return ChunkType::DIRECT_LOAD_BATCH_DATUM_ROWS == type_; }
   OB_INLINE bool is_batch_datum_rows_type() const { return ChunkType::BATCH_DATUM_ROWS == type_; }
   OB_INLINE bool is_ddl_row_tmp_files_type() const { return ChunkType::DDL_ROW_TMP_FILES == type_; }
   OB_INLINE bool is_datum_row_type() const { return ChunkType::DATUM_ROW == type_; }
+  OB_INLINE bool is_direct_load_row_array_type() const { return ChunkType::DIRECT_LOAD_ROW_ARRAY == type_; }
   OB_INLINE bool is_task_batch_info_type() const { return ChunkType::TASK_BATCH_INFO == type_; }
   TO_STRING_KV(K_(type), KP_(data_ptr));
 public:
   ChunkType type_;
   union {
     void *data_ptr_;
-    storage::ObDDLBatchDatumRows *ddl_batch_rows_;
+    storage::ObDirectLoadBatchDatumRows *direct_load_batch_rows_;
     blocksstable::ObDatumRow *datum_row_;
     ObArray<ObDDLRowFile *> *row_file_arr_;
     blocksstable::ObBatchDatumRows *bdrs_;
+    table::ObTableLoadTabletObjRowArray *row_array_;
     storage::ObTaskBatchInfo *batch_info_;
   };
 };

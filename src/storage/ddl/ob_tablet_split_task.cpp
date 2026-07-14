@@ -294,8 +294,6 @@ int ObTabletSplitCtx::prepare_index_builder(
             tablet_handle.get_obj()->get_tablet_meta().micro_index_clustered_,
             0/*concurrent_cnt*/,
             sstable->get_end_scn(),
-            nullptr/*cg_schema*/,
-            0/*table_cg_idx*/,
             exec_mode))) {
           LOG_WARN("fail to init data store desc", K(ret), K(dst_tablet_id), K(param));
         } else if (OB_ISNULL(buf = allocator_.alloc(sizeof(ObSSTableIndexBuilder)))) {
@@ -934,8 +932,6 @@ int ObTabletSplitWriteTask::prepare_macro_block_writer(
                                         micro_index_clustered,
                                         0/*concurrent_cnt*/,
                                         sstable_->get_end_scn(),
-                                        nullptr/* cg_schema */,
-                                        0/* table_cg_idx */,
                                         exec_mode))) {
         LOG_WARN("fail to init data store desc", K(ret), K(dst_tablet_id), KPC(param_));
       } else if (FALSE_IT(data_desc.get_desc().sstable_index_builder_ = sst_idx_builder)) {
@@ -1723,9 +1719,7 @@ int ObRowScan::build_rowkey_read_info(
                                              full_stored_col_cnt,
                                              param.storage_schema_->get_rowkey_column_num(),
                                              cols_desc,
-                                             false /*is_cg_sstable*/,
-                                             false /*use_default_compat_version*/,
-                                             false/*is_cs_replica_compat*/))) {
+                                             false /*use_default_compat_version*/))) {
     LOG_WARN("fail to init rowkey read info", K(ret), KPC(param.storage_schema_));
   }
   if (OB_FAIL(ret) && nullptr != rowkey_read_info_) {

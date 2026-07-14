@@ -22,8 +22,16 @@
 
 namespace oceanbase
 {
+namespace common
+{
+class ObAddr;
+}
 namespace sql
 {
+
+int resolve_tenant_name(
+    const ParseNode *node,
+    ObString &tenant_name);
 
 class ObSystemCmdStmt;
 class ObFreezeStmt;
@@ -32,10 +40,34 @@ class ObAlterSystemResolverUtil
 public:
   static int sanity_check(const ParseNode *parse_tree, ObItemType item_type);
 
+  // resolve opt_ip_port
+  static int resolve_server(const ParseNode *parse_tree, common::ObAddr &server);
+  // resolve server string (value part of opt_ip_port)
+  static int resolve_server_value(const ParseNode *parse_tree, common::ObAddr &server);
+  // resolve opt_zone_desc
+  static int resolve_zone(const ParseNode *parse_tree, common::ObZone &zone);
+  // resolve opt_tenant_name
+  static int resolve_tenant(const ParseNode *parse_tree,
+                            common::ObFixedLengthString < common::OB_MAX_TENANT_NAME_LENGTH + 1 > &tenant_name);
+  static int resolve_ls_id(const ParseNode *parse_tree, int64_t &ls_id);
+
+  static int resolve_replica_type(const ParseNode *parse_tree,
+                                  common::ObReplicaType &replica_type);
   static int resolve_string(const ParseNode *parse_tree, common::ObString &string);
   static int resolve_relation_name(const ParseNode *parse_tree, common::ObString &string);
+  // resolve opt_server_or_zone
+  template <typename RPC_ARG>
+  static int resolve_server_or_zone(const ParseNode *parse_tree, RPC_ARG &arg);
+
 
   static int resolve_tablet_id(const ParseNode *opt_tablet_id, ObTabletID &tablet_id);
+  static int resolve_tenant(const ParseNode &tenants_node,
+                            int64_t &out_count,
+                            bool &affect_all,
+                            bool &affect_all_user,
+                            bool &affect_all_meta);
+  static int get_and_verify_tenant_name(const ParseNode* tenant_name_node,
+                                        uint64_t &out_tgt_id);
 };
 
 typedef common::ObFixedLengthString<common::OB_MAX_TRACE_ID_BUFFER_SIZE + 1> Task_Id;
@@ -67,10 +99,16 @@ DEF_SIMPLE_CMD_RESOLVER(ObRefreshIOCalibrationResolver);
 
 DEF_SIMPLE_CMD_RESOLVER(ObSetTPResolver);
 
+DEF_SIMPLE_CMD_RESOLVER(ObReloadGtsResolver);
 
 DEF_SIMPLE_CMD_RESOLVER(ObClearMergeErrorResolver);
 
+DEF_SIMPLE_CMD_RESOLVER(ObUpgradeVirtualSchemaResolver);
+
 DEF_SIMPLE_CMD_RESOLVER(ObCancelTaskResolver);
+
+DEF_SIMPLE_CMD_RESOLVER(ObAlterDiskgroupAddDiskResolver);
+DEF_SIMPLE_CMD_RESOLVER(ObAlterDiskgroupDropDiskResolver);
 
 class ObAlterSystemSetResolver : public ObSystemCmdResolver
 {
@@ -94,6 +132,8 @@ public:
   ObSetConfigResolver(ObResolverParams &params) : ObSystemCmdResolver(params) {}
   virtual ~ObSetConfigResolver() {}
   virtual int resolve(const ParseNode &parse_tree);
+private:
+  int convert_param_value(obcall::ObAdminSetConfigItem &item);
 };
 class ObFreezeResolver : public ObSystemCmdResolver {
 public:
@@ -101,8 +141,11 @@ public:
   virtual ~ObFreezeResolver() {}
   virtual int resolve(const ParseNode &parse_tree);
 private:
-  int resolve_major_freeze_(ObFreezeStmt *freeze_stmt, ParseNode *opt_target);
-  int resolve_minor_freeze_(ObFreezeStmt *freeze_stmt, ParseNode *opt_target);
+  int resolve_major_freeze_(ObFreezeStmt *freeze_stmt, ParseNode *opt_tenant_list_or_tablet_id);
+  int resolve_minor_freeze_(ObFreezeStmt *freeze_stmt,
+                            ParseNode *opt_tenant_list_or_ls_or_tablet_id);
+
+  int resolve_tenant_ls_tablet_(ObFreezeStmt *freeze_stmt, ParseNode *opt_tenant_list_or_ls_or_tablet_id);
 
 };
 
@@ -121,6 +164,9 @@ public:
   virtual int resolve(const ParseNode &parse_tree);
 };
 
+DEF_SIMPLE_CMD_RESOLVER(ObEnableSqlThrottleResolver);
+DEF_SIMPLE_CMD_RESOLVER(ObDisableSqlThrottleResolver);
+DEF_SIMPLE_CMD_RESOLVER(ObTableTTLResolver);
 DEF_SIMPLE_CMD_RESOLVER(ObChangeExternalStorageDestResolver);
 
 

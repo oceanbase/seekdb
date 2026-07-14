@@ -120,7 +120,6 @@ TEST_F(TestMacroBlockId, test_path_id)
   test_block_id.set_id_mode((uint64_t)ObMacroBlockIdMode::ID_MODE_SHARE);
   test_block_id.set_storage_object_type(static_cast<int64_t>(curr_opt.object_type_));
   test_block_id.set_incarnation_id(0);
-  test_block_id.set_column_group_id(0);
   test_block_id.set_second_id(curr_opt.ss_private_tablet_opt_.ls_id_);
   test_block_id.set_third_id(curr_opt.ss_private_tablet_opt_.tablet_id_);
   test_block_id.set_meta_version_id(curr_opt.ss_private_tablet_opt_.version_);

@@ -17,7 +17,7 @@
 #include "ob_progressive_merge_helper.h"
 #include "share/rc/ob_module_provider.h"
 #include "storage/compaction/ob_partition_merger.h"
-#include "share/ob_structured_event_logger.h"
+#include "observer/ob_server_event_history_table_operator.h"
 
 namespace oceanbase
 {
@@ -147,6 +147,8 @@ int ObProgressiveMergeHelper::init(
   } else if (static_param.for_unittest_) {
   } else if (static_param.is_full_merge_) {
     full_merge_ = check_macro_need_merge_ = true;
+  } else if (merge_param.is_mv_merge()) {
+    STORAGE_LOG(INFO, "mv merge, not init progressive merge", K(ret));
   } else {
     mgr_ = mgr; // init mgr first
     int64_t rewrite_macro_cnt = 0, reduce_macro_cnt = 0, rewrite_block_cnt_for_progressive = 0;

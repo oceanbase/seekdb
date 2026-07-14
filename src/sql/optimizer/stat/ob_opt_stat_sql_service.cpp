@@ -198,6 +198,25 @@
                                          "user_stats = VALUES(user_stats);"
 // TODO DAISI, add a sys_func to merge NDV by llc.
 
+#define INSERT_TASK_OPT_STAT_GATHER_SQL "INSERT INTO %s(task_id," \
+                                                        "type," \
+                                                        "ret_code," \
+                                                        "failed_count,"\
+                                                        "table_count," \
+                                                        "start_time," \
+                                                        "end_time) VALUES (%s);"
+
+#define INSERT_TABLE_OPT_STAT_GATHER_SQL "INSERT INTO %s(task_id," \
+                                                         "table_id," \
+                                                         "ret_code," \
+                                                         "start_time," \
+                                                         "end_time," \
+                                                         "memory_used," \
+                                                         "stat_refresh_failed_list," \
+                                                         "properties," \
+                                                         "spare3) VALUES (%s);"
+
+
 #define ALL_HISTOGRAM_STAT_COLUMN_NAME "table_id, "      \
                                        "partition_id, "  \
                                        "column_id, "     \
@@ -285,7 +304,7 @@ int ObOptStatSqlService::fetch_table_stat(const ObOptTableStat::Key &key,
   int ret = OB_SUCCESS;
   ObOptTableStat stat;
   stat.set_table_id(key.get_table_id());
-  auto &sql_client_retry_weak = *mysql_proxy_;
+  ObSQLClientRetryWeak sql_client_retry_weak(mysql_proxy_, false, OB_INVALID_TIMESTAMP, false);
   SMART_VAR(ObMySQLProxy::MySQLResult, res) {
     sqlclient::ObMySQLResult *result = NULL;
     ObSqlString sql;
@@ -366,7 +385,7 @@ int ObOptStatSqlService::batch_fetch_table_stats(const uint64_t table_id,
 {
   int ret = OB_SUCCESS;
 
-  auto &sql_client_retry_weak = *mysql_proxy_;
+  ObSQLClientRetryWeak sql_client_retry_weak(mysql_proxy_, false, OB_INVALID_TIMESTAMP, false);
   SMART_VAR(ObMySQLProxy::MySQLResult, res)
   {
     sqlclient::ObMySQLResult *result = NULL;
@@ -1155,7 +1174,7 @@ int ObOptStatSqlService::fetch_column_stat(ObIAllocator &allocator,
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected error", K(key_col_stats), K(ret));
   } else {
-    auto &sql_client_retry_weak = *mysql_proxy_;
+    ObSQLClientRetryWeak sql_client_retry_weak(mysql_proxy_, false, OB_INVALID_TIMESTAMP, false);
     SMART_VAR(ObMySQLProxy::MySQLResult, res) {
       sqlclient::ObMySQLResult *result = NULL;
       ObSqlString sql;
@@ -1867,14 +1886,16 @@ int ObOptStatSqlService::batch_update_online_col_state(const uint64_t table_id,
 
 int ObOptStatSqlService::fetch_table_rowcnt(const uint64_t table_id,
                                             const ObIArray<ObTabletID> &all_tablet_ids,
+                                            const ObIArray<share::ObLSID> &all_ls_ids,
                                             ObIArray<ObOptTableStat> &tstats)
 {
   int ret = OB_SUCCESS;
   ObSqlString raw_sql;
   ObSqlString tablet_list_str;
-  ObSqlString tablet_tuple_list_str;
-  uint64_t real_table_id = table_id;
-  if (OB_FAIL(gen_tablet_list_str(all_tablet_ids, tablet_list_str, tablet_tuple_list_str))) {
+  ObSqlString tablet_ls_list_str;
+  uint64_t real_table_id = share::is_real_table_mapping_virtual_table(table_id) ?
+                           ObSchemaUtils::get_real_table_mappings_tid(table_id) : table_id;
+  if (OB_FAIL(gen_tablet_list_str(all_tablet_ids, all_ls_ids, tablet_list_str, tablet_ls_list_str))) {
     LOG_WARN("failed to gen tablet list str", K(ret));
   } else if (OB_FAIL(raw_sql.append_fmt("select /*+opt_param('enable_in_range_optimization','true') opt_param('use_default_opt_stat','true')*/"\
                                          "tablet_id, max(row_count) from "\
@@ -1888,12 +1909,12 @@ int ObOptStatSqlService::fetch_table_rowcnt(const uint64_t table_id,
                                          tablet_list_str.ptr(),
                                          share::OB_ALL_TABLET_CHECKSUM_TNAME,
                                          share::OB_ALL_FREEZE_INFO_TNAME,
-                                         tablet_tuple_list_str.ptr()))) {
+                                         tablet_ls_list_str.ptr()))) {
     LOG_WARN("failed to append fmt", K(ret));
   } else {
     SMART_VAR(ObMySQLProxy::MySQLResult, proxy_result) {
       sqlclient::ObMySQLResult *client_result = NULL;
-      auto &sql_client_retry_weak = *mysql_proxy_;
+      ObSQLClientRetryWeak sql_client_retry_weak(mysql_proxy_, false, OB_INVALID_TIMESTAMP, false);
       if (OB_FAIL(sql_client_retry_weak.read(proxy_result, raw_sql.ptr()))) {
         LOG_WARN("failed to execute sql", K(ret), K(raw_sql));
       } else if (OB_ISNULL(client_result = proxy_result.get_result())) {
@@ -1940,13 +1961,14 @@ int ObOptStatSqlService::fetch_table_rowcnt(const uint64_t table_id,
 }
 
 int ObOptStatSqlService::gen_tablet_list_str(const ObIArray<ObTabletID> &all_tablet_ids,
+                                             const ObIArray<share::ObLSID> &all_ls_ids,
                                              ObSqlString &tablet_list_str,
-                                             ObSqlString &tablet_tuple_list_str)
+                                             ObSqlString &tablet_ls_list_str)
 {
   int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(all_tablet_ids.empty())) {
+  if (OB_UNLIKELY(all_tablet_ids.empty() || all_tablet_ids.count() != all_ls_ids.count())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected error", K(ret), K(all_tablet_ids));
+    LOG_WARN("get unexpected error", K(ret), K(all_tablet_ids), K(all_ls_ids));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < all_tablet_ids.count(); ++i) {
       char prefix = i == 0 ? '(' : ' ';
@@ -1956,12 +1978,82 @@ int ObOptStatSqlService::gen_tablet_list_str(const ObIArray<ObTabletID> &all_tab
                                              all_tablet_ids.at(i).id(),
                                              suffix))) {
         LOG_WARN("failed to append fmt", K(ret));
-      } else if (OB_FAIL(tablet_tuple_list_str.append_fmt("%c(%lu)%c",
-                                                          prefix,
-                                                          all_tablet_ids.at(i).id(),
-                                                          suffix))) {
+      } else if (OB_FAIL(tablet_ls_list_str.append_fmt("%c(%lu)%c",
+                                                       prefix,
+                                                       all_tablet_ids.at(i).id(),
+                                                       suffix))) {
         LOG_WARN("failed to append fmt", K(ret));
       } else {/*do nothing*/}
+    }
+  }
+  return ret;
+}
+
+int ObOptStatSqlService::update_opt_stat_task_stat(const ObOptStatTaskInfo &task_info)
+{
+  int ret = OB_SUCCESS;
+  ObSqlString raw_sql;
+  ObSqlString value_str;
+  int64_t affected_rows = 0;
+  
+  if (OB_FAIL(get_gather_stat_task_value(task_info, value_str))) {
+    LOG_WARN("failed to get gather stat values list", K(ret));
+  } else if (OB_FAIL(raw_sql.append_fmt(INSERT_TASK_OPT_STAT_GATHER_SQL,
+                                        share::OB_ALL_TASK_OPT_STAT_GATHER_HISTORY_TNAME,
+                                        value_str.ptr()))) {
+    LOG_WARN("failed to append fmt", K(ret), K(raw_sql));
+  } else {
+    ObMySQLTransaction trans;
+    LOG_TRACE("sql string of update opt stat task stat", K(raw_sql));
+    if (OB_FAIL(trans.start(mysql_proxy_))) {
+      LOG_WARN("fail to start transaction", K(ret));
+    } else if (OB_FAIL(trans.write(raw_sql.ptr(), affected_rows))) {
+      LOG_WARN("failed to exec sql", K(ret));
+    } else {/*do nothing*/}
+    if (OB_SUCC(ret)) {
+      if (OB_FAIL(trans.end(true))) {
+        LOG_WARN("fail to commit transaction", K(ret));
+      }
+    } else {
+      int tmp_ret = OB_SUCCESS;
+      if (OB_SUCCESS != (tmp_ret = trans.end(false))) {
+        LOG_WARN("fail to roll back transaction", K(tmp_ret));
+      }
+    }
+  }
+  return ret;
+}
+
+int ObOptStatSqlService::update_opt_stat_gather_stat(const ObOptStatGatherStat &gather_stat)
+{
+  int ret = OB_SUCCESS;
+  ObSqlString raw_sql;
+  ObSqlString value_str;
+  int64_t affected_rows = 0;
+  
+  if (OB_FAIL(get_gather_stat_value(gather_stat, value_str))) {
+    LOG_WARN("failed to get gather stat value", K(ret));
+  } else if (OB_FAIL(raw_sql.append_fmt(INSERT_TABLE_OPT_STAT_GATHER_SQL,
+                                        share::OB_ALL_TABLE_OPT_STAT_GATHER_HISTORY_TNAME,
+                                        value_str.ptr()))) {
+    LOG_WARN("failed to append fmt", K(ret), K(raw_sql));
+  } else {
+    ObMySQLTransaction trans;
+    LOG_TRACE("sql string of update opt stat gather stat", K(raw_sql));
+    if (OB_FAIL(trans.start(mysql_proxy_))) {
+      LOG_WARN("fail to start transaction", K(ret));
+    } else if (OB_FAIL(trans.write(raw_sql.ptr(), affected_rows))) {
+      LOG_WARN("failed to exec sql", K(ret));
+    } else {/*do nothing*/}
+    if (OB_SUCC(ret)) {
+      if (OB_FAIL(trans.end(true))) {
+        LOG_WARN("fail to commit transaction", K(ret));
+      }
+    } else {
+      int tmp_ret = OB_SUCCESS;
+      if (OB_SUCCESS != (tmp_ret = trans.end(false))) {
+        LOG_WARN("fail to roll back transaction", K(tmp_ret));
+      }
     }
   }
   return ret;
@@ -2029,6 +2121,51 @@ int ObOptStatSqlService::get_update_fail_count_value_list(const uint64_t table_i
   return ret;
 }
 
+int ObOptStatSqlService::get_gather_stat_task_value(const ObOptStatTaskInfo &task_info,
+                                                    ObSqlString &value_str)
+{
+  int ret = OB_SUCCESS;
+  share::ObDMLSqlSplicer dml_splicer;
+  
+  if (OB_FAIL(dml_splicer.add_pk_column("task_id", task_info.task_id_)) ||
+      OB_FAIL(dml_splicer.add_column("type", task_info.type_)) ||
+      OB_FAIL(dml_splicer.add_column("ret_code", task_info.ret_code_)) ||
+      OB_FAIL(dml_splicer.add_column("failed_count", task_info.failed_count_)) ||
+      OB_FAIL(dml_splicer.add_column("table_count", task_info.task_table_count_)) ||
+      OB_FAIL(dml_splicer.add_time_column("start_time", task_info.task_start_time_)) ||
+      OB_FAIL(dml_splicer.add_time_column("end_time", task_info.task_end_time_))) {
+    LOG_WARN("failed to add dml splicer column", K(ret));
+  } else if (OB_FAIL(dml_splicer.splice_values(value_str))) {
+    LOG_WARN("failed to get sql string", K(ret));
+  } else { /*do nothing*/ }
+  return ret;
+}
+
+int ObOptStatSqlService::get_gather_stat_value(const ObOptStatGatherStat &gather_stat,
+                                               ObSqlString &values_ptr)
+{
+  int ret = OB_SUCCESS;
+  share::ObDMLSqlSplicer dml_splicer;
+  
+  uint64_t table_id = gather_stat.get_table_id();
+  uint64_t pure_table_id = ObSchemaUtils::get_extract_schema_id(table_id);
+  if (OB_FAIL(dml_splicer.add_pk_column("task_id", gather_stat.get_task_id())) ||
+      OB_FAIL(dml_splicer.add_pk_column("table_id", pure_table_id)) ||
+      OB_FAIL(dml_splicer.add_column("ret_code", gather_stat.get_ret_code())) ||
+      OB_FAIL(dml_splicer.add_time_column("start_time", gather_stat.get_start_time())) ||
+      OB_FAIL(dml_splicer.add_time_column("end_time", gather_stat.get_end_time())) ||
+      OB_FAIL(dml_splicer.add_column("memory_used", gather_stat.get_memory_used())) ||
+      OB_FAIL(dml_splicer.add_column("stat_refresh_failed_list", gather_stat.get_stat_refresh_failed_list())) ||
+      OB_FAIL(dml_splicer.add_column("properties", gather_stat.get_properties())) ||
+      OB_FAIL(dml_splicer.add_column("spare3", gather_stat.get_gather_audit()))) {
+    LOG_WARN("failed to add dml splicer column", K(ret));
+  } else if (OB_FAIL(dml_splicer.splice_values(values_ptr))) {
+    LOG_WARN("failed to get sql string", K(ret));
+  }
+  return ret;
+}
+
+
 int ObOptStatSqlService::update_system_stats(const ObOptSystemStat *system_stat)
 {
   int ret = OB_SUCCESS;
@@ -2092,7 +2229,7 @@ int ObOptStatSqlService::fetch_system_stat(const ObOptSystemStat::Key &key,
                                           ObOptSystemStat &stat)
 {
   int ret = OB_SUCCESS;
-  auto &sql_client_retry_weak = *mysql_proxy_;
+  ObSQLClientRetryWeak sql_client_retry_weak(mysql_proxy_, false, OB_INVALID_TIMESTAMP, false);
   
   SMART_VAR(ObMySQLProxy::MySQLResult, res) {
     sqlclient::ObMySQLResult *result = NULL;

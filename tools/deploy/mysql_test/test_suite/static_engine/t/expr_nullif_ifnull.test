@@ -169,8 +169,6 @@ select * from t1;
 drop table t1;
 
 --disable_result_log
-create table t_nullif_source(id bigint primary key);
-insert into t_nullif_source values (1), (2), (3), (4), (5);
 select
   subq_0.c3,
   nullif(subq_0.c3, cast(32 as decimal)) as c14
@@ -180,17 +178,14 @@ from
           cast(
               (
                 select
-                  id
+                  help_keyword_id
                 from
-                  t_nullif_source
-                order by
-                  id
+                  mysql.help_keyword
                 limit
                   1 offset 4
               ) as DECIMAL
       ) as c3
   ) as subq_0;
-drop table t_nullif_source;
 --enable_result_log
 
 

@@ -24,8 +24,10 @@ namespace oceanbase
 {
 namespace storage
 {
+typedef std::pair<share::ObLSID, common::ObTabletID> LSTabletIDPair;
 struct ObInsertMonitor;
 struct ObTabletSliceParam;
+class ObDirectLoadMgrAgent;
 class ObDDLInsertDag;
 class ObISliceWriter;
 class ObHeapBatchSliceWriter;

@@ -28,7 +28,7 @@ namespace oceanbase
 {
 namespace sql
 {
-inline double revise_selectivity_ndv(double ndv) { return ndv < 1.0 ? 1.0 : ndv; }
+inline double revise_ndv(double ndv) { return ndv < 1.0 ? 1.0 : ndv; }
 
 void OptSelectivityCtx::init_op_ctx(ObLogicalOperator *child_op)
 {
@@ -740,7 +740,7 @@ int OptTableMetas::add_set_child_stmt_meta_info(const ObSelectStmt *parent_stmt,
           ret = OB_ALLOCATE_MEMORY_FAILED;
           LOG_WARN("failed to allocate place holder for column meta", K(ret));
         } else {
-          column_meta->init(OB_APP_MIN_COLUMN_ID + i, revise_selectivity_ndv(ndv), num_null, avg_len);
+          column_meta->init(OB_APP_MIN_COLUMN_ID + i, revise_ndv(ndv), num_null, avg_len);
           column_meta->set_min_max_inited(true);
         }
       }
@@ -843,7 +843,7 @@ int OptTableMetas::add_generate_table_meta_info(const ObDMLStmt *parent_stmt,
           ret = OB_ALLOCATE_MEMORY_FAILED;
           LOG_WARN("failed to allocate place holder for column meta", K(ret));
         } else {
-          column_meta->init(column_item.column_id_, revise_selectivity_ndv(ndv), num_null, avg_len);
+          column_meta->init(column_item.column_id_, revise_ndv(ndv), num_null, avg_len);
           column_meta->set_min_max_inited(true);
           ObObj maxobj;
           ObObj minobj;
@@ -873,7 +873,7 @@ int OptTableMetas::add_generate_table_meta_info(const ObDMLStmt *parent_stmt,
               LOG_WARN("failed to calculate distinct", K(ret));
             } else {
               nns = ObOptSelectivity::revise_between_0_1(nns);
-              base_ndv = revise_selectivity_ndv(base_ndv);
+              base_ndv = revise_ndv(base_ndv);
               column_meta->set_num_null(table_rows * (1 - nns));
               column_meta->set_base_ndv(base_ndv);
             }
@@ -921,7 +921,7 @@ int OptTableMetas::add_values_table_meta_info(const ObDMLStmt *stmt,
       } else {
         double avg_len = ObOptEstCost::get_estimate_width_from_type(column_item.expr_->get_result_type());
         column_meta->init(column_item.column_id_,
-                          revise_selectivity_ndv(table_def->column_ndvs_.at(idx)),
+                          revise_ndv(table_def->column_ndvs_.at(idx)),
                           table_def->column_nnvs_.at(idx),
                           avg_len);
       }
@@ -1653,7 +1653,7 @@ int ObOptSelectivity::update_table_meta_info(const OptTableMetas &base_table_met
         }
         // set new column meta
         if (OB_SUCC(ret)) {
-          column_meta.set_ndv(revise_selectivity_ndv(step2_ndv));
+          column_meta.set_ndv(revise_ndv(step2_ndv));
           column_meta.set_num_null(null_num);
           column_meta.set_hist_scale(hist_scale);
         }
@@ -3355,7 +3355,7 @@ int ObOptSelectivity::calculate_special_ndv(const OptTableMetas &table_metas,
       special_ndv = std::min(special_ndv, ndv_upper_bound);
     }
   }
-  special_ndv = revise_selectivity_ndv(special_ndv);
+  special_ndv = revise_ndv(special_ndv);
   return ret;
 }
 
@@ -3439,7 +3439,7 @@ int ObOptSelectivity::calculate_winfunc_ndv(const OptTableMetas &table_metas,
         } else if (!got_result || result.is_null() || !ob_is_numeric_type(result.get_type())) {
           special_ndv = origin_rows/part_ndv;
         } else if (OB_FAIL(ObOptEstObjToScalar::convert_obj_to_scalar_obj(&result, &out_ptr))) {
-          LOG_WARN("Failed to convert obj using general method", K(ret));
+          LOG_WARN("Failed to convert obj using old method", K(ret));
         } else {
           double scalar = static_cast<double>(out_ptr.get_double());
           special_ndv = std::min(origin_rows/part_ndv, scalar);
@@ -3489,7 +3489,7 @@ int ObOptSelectivity::calculate_winfunc_ndv(const OptTableMetas &table_metas,
     }
     LOG_TRACE("calculate window function ndv", KPC(win_expr), K(special_ndv));
   }
-  special_ndv = revise_selectivity_ndv(special_ndv);
+  special_ndv = revise_ndv(special_ndv);
   return ret;
 }
 // Only retain one distinct expr with the smallest ndv, add it to filtered_exprs;
@@ -3675,6 +3675,110 @@ int ObOptSelectivity::extract_column_ids(const ObIArray<ObRawExpr *> &col_exprs,
     } else if (table_id != column_expr->get_table_id()) {
       from_same_table = false;
       table_id = OB_INVALID_INDEX;
+    }
+  }
+  return ret;
+}
+
+int ObOptSelectivity::classify_quals_deprecated(const OptSelectivityCtx &ctx,
+                                     const ObIArray<ObRawExpr*> &quals,
+                                     ObIArray<ObExprSelPair> &all_predicate_sel,
+                                     ObIArray<OptSelInfo> &column_sel_infos)
+{
+  int ret = OB_SUCCESS;
+  const ObRawExpr *qual = NULL;
+  ObSEArray<ObRawExpr *, 4> column_exprs;
+  OptSelInfo *sel_info = NULL;
+  double tmp_selectivity = 1.0;
+  ObSelEstimatorFactory factory;
+  ObSEArray<ObSelEstimator *, 4> range_estimators;
+  if (OB_ISNULL(ctx.get_session_info())) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected null", K(ret));
+  } else {
+    
+  }
+  for (int64_t i = 0; OB_SUCC(ret) && i < quals.count(); ++i) {
+    column_exprs.reset();
+    uint64_t column_id = OB_INVALID_ID;
+    ObColumnRefRawExpr *column_expr = NULL;
+    ObSelEstimator *range_estimator = NULL;
+    if (OB_ISNULL(qual = quals.at(i))) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("get unexpected expr", K(ret));
+    } else if (OB_FAIL(ObRawExprUtils::extract_column_exprs(qual, column_exprs))) {
+      LOG_WARN("failed to extract column exprs", K(ret));
+    } else if (1 == column_exprs.count()) {
+      column_expr = static_cast<ObColumnRefRawExpr *>(column_exprs.at(0));
+      column_id = column_expr->get_column_id();
+      if (!qual->has_flag(CNT_DYNAMIC_PARAM) &&
+          OB_FAIL(ObRangeSelEstimator::create_estimator(factory, ctx, *qual, range_estimator))) {
+        LOG_WARN("failed to create estimator", K(ret));  
+      } else if (NULL != range_estimator &&
+                 OB_FAIL(ObSelEstimator::append_estimators(range_estimators, range_estimator))) {
+        LOG_WARN("failed to append estimators", K(ret));
+      }
+    } else {
+      // use OB_INVALID_ID represent qual contain more than one column
+    }
+
+    if (OB_SUCC(ret) && OB_INVALID_ID != column_id && OB_NOT_NULL(column_expr)) {
+      sel_info = NULL;
+      int64_t offset = 0;
+      if (OB_FAIL(get_opt_sel_info(column_sel_infos, column_expr->get_column_id(), sel_info))) {
+        LOG_WARN("failed to get opt sel info", K(ret));
+      } else if (sel_info->has_range_exprs_) {
+        // do nothing
+      } else if (ObOptimizerUtil::find_item(all_predicate_sel,
+                                            ObExprSelPair(column_expr, 0, true),
+                                            &offset)) {
+        sel_info->range_selectivity_ = all_predicate_sel.at(offset).sel_;
+        sel_info->has_range_exprs_ = true;
+      }
+    }
+
+    if (OB_SUCC(ret) && OB_INVALID_ID != column_id) {
+      if (OB_LIKELY(get_qual_selectivity(all_predicate_sel, qual, tmp_selectivity))) {
+        // parse qual and set sel info
+        sel_info->selectivity_ *= tmp_selectivity;
+        uint64_t temp_equal_count = 0;
+        if (OB_FAIL(extract_equal_count(*qual, temp_equal_count))) {
+          LOG_WARN("failed to extract equal count", K(ret));
+        } else if (0 == sel_info->equal_count_) {
+          sel_info->equal_count_ = temp_equal_count;
+        } else if (temp_equal_count > 0) {
+          sel_info->equal_count_ = std::min(sel_info->equal_count_, temp_equal_count);
+        }
+      } else {
+        //do nothing, maybe from dynamic sampling.
+      }
+    }
+  }
+
+  for (int64_t i = 0; OB_SUCC(ret) && i < range_estimators.count(); ++i) {
+    column_exprs.reset();
+    uint64_t column_id = OB_INVALID_ID;
+    const ObColumnRefRawExpr *column_expr = NULL;
+    ObRangeSelEstimator *range_estimator = NULL;
+    ObObj obj_min;
+    ObObj obj_max;
+    if (OB_ISNULL(range_estimator = static_cast<ObRangeSelEstimator *>(range_estimators.at(i))) ||
+        OB_UNLIKELY(ObSelEstType::COLUMN_RANGE != range_estimator->get_type()) ||
+        OB_ISNULL(column_expr = range_estimator->get_column_expr())) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("get unexpected expr", K(ret));
+    } else if (OB_FAIL(ObOptSelectivity::get_column_range_min_max(
+        ctx, column_expr, range_estimator->get_range_exprs(), obj_min, obj_max))) {
+      LOG_WARN("failed to get min max", K(ret));
+    } else if (OB_FAIL(get_opt_sel_info(column_sel_infos, column_expr->get_column_id(), sel_info))) {
+      LOG_WARN("failed to get opt sel info", K(ret));
+    } else {
+      if (!obj_min.is_null()) {
+        sel_info->min_ = obj_min;
+      }
+      if (!obj_max.is_null()) {
+        sel_info->max_ = obj_max;
+      }
     }
   }
   return ret;
@@ -3882,7 +3986,7 @@ double ObOptSelectivity::scale_distinct(double selected_rows,
     }
     new_ndv = std::min(new_ndv, selected_rows);
   }
-  new_ndv = revise_selectivity_ndv(new_ndv);
+  new_ndv = revise_ndv(new_ndv);
   return new_ndv;
 }
 
@@ -4565,7 +4669,7 @@ int ObOptSelectivity::calc_const_numeric_value(const OptSelectivityCtx &ctx,
   } else if (!got_result || result.is_null() || !ob_is_numeric_type(result.get_type())) {
     succ = false;
   } else if (OB_FAIL(ObOptEstObjToScalar::convert_obj_to_double(&result, value))) {
-    LOG_WARN("Failed to convert obj using general method", K(ret));
+    LOG_WARN("Failed to convert obj using old method", K(ret));
   } else {
     succ = true;
   }

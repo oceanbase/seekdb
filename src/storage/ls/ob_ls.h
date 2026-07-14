@@ -205,8 +205,7 @@ public:
            const ObMigrationStatus &migration_status,
            const ObRestoreStatus &restore_status,
            const share::SCN &create_scn,
-           const ObMajorMVMergeInfo &major_mv_merge_info,
-           const ObLSStoreFormat &store_format);
+           const ObMajorMVMergeInfo &major_mv_merge_info);
   // I am ready to work now.
   int stop();
   void wait();
@@ -260,10 +259,6 @@ public:
   ObLSPersistentState get_persistent_state() const;
   int finish_create_ls();
 
-  // is current ls replica a column store replica
-  bool is_cs_replica() const;
-  // is current ls replica set contains a column store replica
-  int check_has_cs_replica(bool &has_cs_replica) const;
   // for rebuild
   // remove inner tablet, the memtable and minor sstable of data tablet, disable replay
   // int prepare_rebuild();
@@ -444,8 +439,6 @@ public:
   }
   DELEGATE_WITH_RET(ls_meta_, get_rebuild_info, int);
   DELEGATE_WITH_RET(ls_meta_, get_create_type, int);
-  DELEGATE_WITH_RET(ls_meta_, get_store_format, ObLSStoreFormat);
-
   // get ls_meta_package and sorted tablet_metas for backup. tablet gc is forbidden meanwhile.
   // @param [in] check_archive if need check archive, migration/rebuild is true
   // @param [in] handle_ls_meta_f, ls meta callback, will be first called.

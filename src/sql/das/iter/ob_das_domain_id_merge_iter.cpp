@@ -32,6 +32,7 @@ namespace sql
 
 ObDASDomainIdMergeIterParam::ObDASDomainIdMergeIterParam()
   : ObDASIterParam(DAS_ITER_DOMAIN_ID_MERGE),
+    rowkey_domain_ls_id_(),
     rowkey_domain_tablet_ids_(),
     data_table_iter_(nullptr),
     data_table_ctdef_(nullptr),
@@ -49,7 +50,8 @@ ObDASDomainIdMergeIterParam::~ObDASDomainIdMergeIterParam()
 bool ObDASDomainIdMergeIterParam::is_valid() const
 {
   bool bret = true;
-  bret = data_table_iter_ != nullptr &&
+  bret = rowkey_domain_ls_id_.is_valid() &&
+         data_table_iter_ != nullptr &&
          data_table_ctdef_ != nullptr &&
          data_table_rtdef_ != nullptr &&
          snapshot_ != nullptr &&
@@ -77,6 +79,7 @@ ObDASDomainIdMergeIter::ObDASDomainIdMergeIter()
     rowkey_domain_rtdefs_(),
     data_table_rtdef_(nullptr),
     rowkey_domain_tablet_ids_(),
+    rowkey_domain_ls_id_(),
     merge_memctx_(),
     is_need_multi_get_(false)
 {}
@@ -120,6 +123,7 @@ int ObDASDomainIdMergeIter::rescan()
     LOG_WARN("fail to rescan data table iter", K(ret), KPC(data_table_iter_));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < rowkey_domain_iters_.count(); i++) {
+      rowkey_domain_scan_params_.at(i)->ls_id_ = rowkey_domain_ls_id_;
       rowkey_domain_scan_params_.at(i)->tablet_id_ = rowkey_domain_tablet_ids_.at(i);
       if (OB_ISNULL(rowkey_domain_iters_.at(i))) {
         ret = OB_ERR_UNEXPECTED;
@@ -179,6 +183,7 @@ int ObDASDomainIdMergeIter::inner_init(ObDASIterParam &param)
           LOG_WARN("failed to new rowkey scan param", K(sizeof(ObTableScanParam)), K(ret));
         } else if (OB_FAIL(init_rowkey_domain_scan_param(
             merge_param.rowkey_domain_tablet_ids_.at(i),
+            merge_param.rowkey_domain_ls_id_,
             merge_param.rowkey_domain_ctdefs_.at(i),
             merge_param.rowkey_domain_rtdefs_.at(i),
             merge_param.trans_desc_, merge_param.snapshot_,
@@ -202,6 +207,7 @@ int ObDASDomainIdMergeIter::inner_init(ObDASIterParam &param)
       data_table_iter_  = merge_param.data_table_iter_;
       data_table_ctdef_ = merge_param.data_table_ctdef_;
       data_table_rtdef_ = merge_param.data_table_rtdef_;
+      rowkey_domain_ls_id_ = merge_param.rowkey_domain_ls_id_;
       need_filter_rowkey_domain_ = true;
     }
   }
@@ -209,13 +215,15 @@ int ObDASDomainIdMergeIter::inner_init(ObDASIterParam &param)
 }
 
 int ObDASDomainIdMergeIter::set_domain_id_merge_related_ids(
-    const ObDASRelatedTabletID &tablet_ids)
+    const ObDASRelatedTabletID &tablet_ids,
+    const share::ObLSID &ls_id)
 {
   int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(tablet_ids.domain_tablet_ids_.count() != rowkey_domain_tablet_ids_.count())) {
+  if (OB_UNLIKELY(!ls_id.is_valid() || tablet_ids.domain_tablet_ids_.count() != rowkey_domain_tablet_ids_.count())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("unexpected domain tablet count", K(ret), K(tablet_ids.domain_tablet_ids_), K(rowkey_domain_tablet_ids_));
+    LOG_WARN("invalid ls id", K(ret), K(ls_id), K(tablet_ids.domain_tablet_ids_), K(rowkey_domain_tablet_ids_));
   } else {
+    rowkey_domain_ls_id_ = ls_id;
     for (int64_t i = 0; OB_SUCC(ret) && i < tablet_ids.domain_tablet_ids_.count(); i++) {
       if (OB_UNLIKELY(!tablet_ids.domain_tablet_ids_.at(i).is_valid())) {
         ret = OB_INVALID_ARGUMENT;
@@ -374,6 +382,7 @@ int ObDASDomainIdMergeIter::build_rowkey_domain_range()
     LOG_WARN("faile to check is need mutil get", K(ret));
   } else {
     const common::ObIArray<common::ObNewRange> &key_ranges = data_table_iter_->get_scan_param().key_ranges_;
+    const common::ObIArray<common::ObNewRange> &ss_key_ranges = data_table_iter_->get_scan_param().ss_key_ranges_;
     for (int64_t k = 0; OB_SUCC(ret) && k < rowkey_domain_scan_params_.count(); k++) {
       bool is_emb_vec = rowkey_domain_ctdefs_.at(k)->semantic_index_info_.is_emb_vec_tbl_;
       bool use_rowkey_vid_tbl = rowkey_domain_ctdefs_.at(k)->semantic_index_info_.use_rowkey_vid_tbl_;
@@ -440,9 +449,17 @@ int ObDASDomainIdMergeIter::build_rowkey_domain_range()
               LOG_WARN("fail to push back key range for rowkey domain scan param", K(ret), K(key_range));
             }
           }
+          for (int64_t i = 0; OB_SUCC(ret) && i < ss_key_ranges.count(); ++i) {
+            ObNewRange ss_key_range = ss_key_ranges.at(i);
+            ss_key_range.table_id_ = scan_param.index_id_;
+            if (OB_FAIL(scan_param.ss_key_ranges_.push_back(ss_key_range))) {
+              LOG_WARN("fail to push back ss key range for rowkey domain scan param", K(ret), K(ss_key_range));
+            }
+          }
         }
         if (OB_SUCC(ret)) {
           scan_param.tablet_id_ = rowkey_domain_tablet_ids_.at(k);
+          scan_param.ls_id_ = rowkey_domain_ls_id_;
           scan_param.sample_info_ = data_table_iter_->get_scan_param().sample_info_;
           scan_param.scan_flag_.scan_order_ = data_table_iter_->get_scan_param().scan_flag_.scan_order_;
           scan_param.enable_new_false_range_ = data_table_iter_->get_scan_param().enable_new_false_range_;
@@ -450,7 +467,7 @@ int ObDASDomainIdMergeIter::build_rowkey_domain_range()
             scan_param.need_switch_param_ = false;
           }
           is_no_sample_ = (scan_param.sample_info_.method_ == common::SampleInfo::NO_SAMPLE);
-          LOG_INFO("build rowkey domain range", K(ret), K(scan_param.key_ranges_), K(scan_param.sample_info_));
+          LOG_INFO("build rowkey domain range", K(ret), K(scan_param.key_ranges_), K(scan_param.ss_key_ranges_), K(scan_param.sample_info_));
         }
       }
     }
@@ -469,6 +486,7 @@ int ObDASDomainIdMergeIter::build_rowkey_domain_range()
 
 int ObDASDomainIdMergeIter::init_rowkey_domain_scan_param(
     const common::ObTabletID &tablet_id,
+    const share::ObLSID &ls_id,
     const ObDASScanCtDef *ctdef,
     ObDASScanRtDef *rtdef,
     transaction::ObTxDesc *trans_desc,
@@ -479,14 +497,16 @@ int ObDASDomainIdMergeIter::init_rowkey_domain_scan_param(
   
   
   scan_param.key_ranges_.set_attr(ObMemAttr("SParamKR"));
-  if (OB_UNLIKELY(!tablet_id.is_valid())) {
+  scan_param.ss_key_ranges_.set_attr(ObMemAttr("SParamSSKR"));
+  if (OB_UNLIKELY(!tablet_id.is_valid() || !ls_id.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid tablet id", K(ret), K(tablet_id));
+    LOG_WARN("invalid arguments", K(ret), K(tablet_id), K(ls_id));
   } else if (OB_ISNULL(ctdef) || OB_ISNULL(rtdef)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected nullptr ctdef or rtdef", K(ret), KPC(ctdef), KPC(rtdef));
   } else {
     scan_param.tablet_id_ = tablet_id;
+    scan_param.ls_id_ = ls_id;
     scan_param.scan_allocator_ = &rtdef->scan_allocator_;
     scan_param.allocator_ = &rtdef->stmt_allocator_;
     scan_param.tx_lock_timeout_ = rtdef->tx_lock_timeout_;
@@ -498,6 +518,7 @@ int ObDASDomainIdMergeIter::init_rowkey_domain_scan_param(
     scan_param.reserved_cell_count_ = ctdef->access_column_ids_.count();
     scan_param.sql_mode_ = rtdef->sql_mode_;
     scan_param.frozen_version_ = rtdef->frozen_version_;
+    scan_param.force_refresh_lc_ = rtdef->force_refresh_lc_;
     scan_param.output_exprs_ = &(ctdef->pd_expr_spec_.access_exprs_);
     scan_param.aggregate_exprs_ = &(ctdef->pd_expr_spec_.pd_storage_aggregate_output_);
     scan_param.calc_exprs_ = &(ctdef->pd_expr_spec_.calc_exprs_);
@@ -505,7 +526,7 @@ int ObDASDomainIdMergeIter::init_rowkey_domain_scan_param(
     scan_param.op_ = rtdef->p_pd_expr_op_;
     scan_param.row2exprs_projector_ = rtdef->p_row2exprs_projector_;
     scan_param.schema_version_ = ctdef->schema_version_;
-    scan_param.runtime_schema_version_ = rtdef->runtime_schema_version_;
+    scan_param.tenant_schema_version_ = rtdef->tenant_schema_version_;
     scan_param.limit_param_ = rtdef->limit_param_;
     scan_param.need_scn_ = rtdef->need_scn_;
     scan_param.pd_storage_flag_ = ctdef->pd_expr_spec_.pd_storage_flag_.pd_flag_;
@@ -1500,6 +1521,7 @@ int ObDASDomainIdMergeIter::reset_rowkey_domain_iter_scan_range(int64_t iter_idx
     }
     if (OB_SUCC(ret)) {
       scan_param.tablet_id_ = rowkey_domain_tablet_ids_.at(iter_idx);
+      scan_param.ls_id_ = rowkey_domain_ls_id_;
       scan_param.sample_info_ = data_table_iter_->get_scan_param().sample_info_;
       scan_param.scan_flag_.scan_order_ = data_table_iter_->get_scan_param().scan_flag_.scan_order_;
       if (!data_table_iter_->get_scan_param().need_switch_param_) {

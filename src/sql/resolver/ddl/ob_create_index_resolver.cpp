@@ -19,6 +19,7 @@
 #include "sql/resolver/ddl/ob_fts_index_builder_util.h"
 #include "sql/resolver/ddl/ob_vec_index_builder_util.h"
 #include "sql/session/ob_local_session_var.h"
+#include "share/table/ob_ttl_util.h"
 
 namespace oceanbase
 {
@@ -152,10 +153,6 @@ int ObCreateIndexResolver::resolve_index_column_node(
       } else if (T_SORT_COLUMN_KEY != col_node->type_) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("fail to check node type", K(ret));
-      } else if (OB_ISNULL(col_node->children_) || 3 != col_node->num_child_
-                 || OB_ISNULL(col_node->children_[0])) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("invalid sort column node", K(ret), K(col_node->num_child_));
       } else {
         // If this node type is not identifier, then it is considered a function index.
         if (col_node->children_[0]->type_ != T_IDENT) {
@@ -232,6 +229,10 @@ int ObCreateIndexResolver::resolve_index_column_node(
                                                         sort_item.column_name_,
                                                         index_keyname_value))) {
           SQL_RESV_LOG(WARN, "check fts index constraint fail", K(ret), K(sort_item.column_name_));
+        } else if (OB_UNLIKELY(tbl_schema->mv_container_table())) {
+          ret = OB_NOT_SUPPORTED;
+          LOG_WARN("create fulltext index on materialized view not supported", K(ret));
+          LOG_USER_ERROR(OB_NOT_SUPPORTED, "create fulltext index on materialized view");
         }
       } else if (index_keyname_ == INDEX_KEYNAME::VEC_KEY) {
         if (sort_item.is_func_index_) {
@@ -255,7 +256,31 @@ int ObCreateIndexResolver::resolve_index_column_node(
       // Index sorting method
       if (OB_FAIL(ret)) {
       } else {
+        // Compatible with mysql5.7, descending index does not take effect and no error is reported
         sort_item.order_type_ = common::ObOrderType::ASC;
+      }
+
+      if (OB_FAIL(ret)) {
+        //do nothing
+      } else if (col_node->num_child_ <= 3) {
+        //no id specified, do nothing
+      } else if (col_node->children_[3] &&
+                 col_node->children_[3]->type_ == T_COLUMN_ID) {
+        ParseNode *id_node = col_node->children_[3];
+        bool is_sync_ddl_user = false;
+        if (id_node->num_child_ != 1
+            || OB_ISNULL(id_node->children_[0])
+            || T_INT != id_node->children_[0]->type_) {
+          ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("invalid syntax. a column number expected after id", K(ret));
+        } else if (OB_FAIL(ObResolverUtils::check_sync_ddl_user(session_info_, is_sync_ddl_user))) {
+          LOG_WARN("Failed to check sync_ddl_user", K(ret));
+        } else if (!is_sync_ddl_user) {
+          ret = OB_ERR_PARSE_SQL;
+          LOG_WARN("Only support for sync ddl user to specify column id", K(ret), K(session_info_->get_user_name()));
+        } else {
+          sort_item.column_id_ = static_cast<int32_t>(id_node->children_[0]->value_);
+        }
       }
 
       if (OB_FAIL(ret)) {
@@ -273,7 +298,16 @@ int ObCreateIndexResolver::resolve_index_column_node(
       }
     }
 
+    if (OB_SUCC(ret) && cnt_func_index) {
+      if (OB_UNLIKELY(tbl_schema->mv_container_table())) {
+        ret = OB_NOT_SUPPORTED;
+        LOG_WARN("use functional index on materialized view not supported", K(ret), KPC(tbl_schema));
+        LOG_USER_ERROR(OB_NOT_SUPPORTED, "use functional index on materialized view");
+      }
+    }
+
     // Check whether the new index is on the same columns as old indexes.
+    CHECK_COMPATIBILITY_MODE(session_info_);
   }
   return ret;
 }
@@ -423,6 +457,9 @@ int ObCreateIndexResolver::resolve(const ParseNode &parse_tree)
   } else if (OB_ISNULL(session_info_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("session_info_ is null", K(ret));
+  } else if (is_external_catalog_id(session_info_->get_current_default_catalog())) {
+    ret = OB_NOT_SUPPORTED;
+    LOG_USER_ERROR(OB_NOT_SUPPORTED, "create index in catalog is");
   } else {
     stmt_ = crt_idx_stmt;
     if_not_exist_node = parse_tree.children_[7];
@@ -457,7 +494,38 @@ int ObCreateIndexResolver::resolve(const ParseNode &parse_tree)
   } else if (OB_ISNULL(tbl_schema)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("table schema is NULL", K(ret));
+  } else if (tbl_schema->is_mlog_table()) {
+    ret = OB_NOT_SUPPORTED;
+    LOG_WARN("create index on materialized view log is not supported",
+        KR(ret), K(tbl_schema->get_table_name()));
+    LOG_USER_ERROR(OB_NOT_SUPPORTED, "create index on materialized view log is");
+  } else if (tbl_schema->is_materialized_view()) {
+    
+    const uint64_t mv_container_table_id = tbl_schema->get_data_table_id();
+    const ObTableSchema *mv_container_table_schema = nullptr;
+    ObString mv_container_table_name;
+    if (OB_FAIL(get_mv_container_table(mv_container_table_id,
+                                       mv_container_table_schema,
+                                       mv_container_table_name))) {
+      LOG_WARN("fail to get mv container table", KR(ret), K(1UL), K(mv_container_table_id));
+      if (OB_TABLE_NOT_EXIST == ret) {
+        ret = OB_ERR_UNEXPECTED; // rewrite errno
+      }
+    } else if (mv_container_table_schema->mv_major_refresh()) {
+      ret = OB_NOT_SUPPORTED;
+      LOG_WARN("create index on major refresh materialized view is not supported", KR(ret),
+               K(tbl_schema->get_table_name()));
+      LOG_USER_ERROR(OB_NOT_SUPPORTED, "create index on major refresh materialized view is");
+    } else {
+      ObTableSchema &index_schema = crt_idx_stmt->get_create_index_arg().index_schema_;
+      
+      crt_idx_stmt->set_table_id(mv_container_table_schema->get_table_id());
+      crt_idx_stmt->set_table_name(mv_container_table_name);
+      data_tbl_schema = mv_container_table_schema;
+    }
   } else {
+    ObTableSchema &index_schema = crt_idx_stmt->get_create_index_arg().index_schema_;
+    
     crt_idx_stmt->set_table_id(tbl_schema->get_table_id());
     data_tbl_schema = tbl_schema;
   }
@@ -635,6 +703,11 @@ int ObCreateIndexResolver::set_table_option_to_stmt(
     if (NOT_SPECIFIED == index_scope_) {
       // Partitioned index must be global; otherwise the default index mode is local.
       global_ = is_partitioned;
+      if (!global_) {
+        if (OB_FAIL(get_suggest_index_scope(data_table_id, index_arg, index_keyname_, global_))) {
+          LOG_WARN("get suggest index type failed", K(ret), K(index_arg));
+        }
+      }
     } else {
       global_ = (GLOBAL_INDEX == index_scope_);
     }
@@ -683,15 +756,22 @@ int ObCreateIndexResolver::set_table_option_to_stmt(
         index_arg.index_type_ = INDEX_TYPE_VEC_DELTA_BUFFER_LOCAL;
       }
     }
+    index_arg.data_table_id_ = data_table_id_;
+    index_arg.index_table_id_ = index_table_id_;
     index_arg.index_option_.block_size_ = block_size_;
+    index_arg.index_option_.replica_num_ = replica_num_;
+    index_arg.index_option_.use_bloom_filter_ = use_bloom_filter_;
     index_arg.index_option_.progressive_merge_num_ = progressive_merge_num_;
     index_arg.index_option_.index_attributes_set_ = index_attributes_set_;
     index_arg.index_option_.parser_name_ = parser_name_;
     index_arg.index_option_.parser_properties_ = parser_properties_;
     index_arg.with_rowid_ = with_rowid_;
+    index_arg.index_schema_.set_data_table_id(data_table_id_);
+    index_arg.index_schema_.set_table_id(index_table_id_);
     index_arg.sql_mode_ = session_info_->get_sql_mode();
     index_arg.is_index_scope_specified_ = !(NOT_SPECIFIED == index_scope_);
     create_index_stmt->set_comment(comment_);
+    create_index_stmt->set_storage_cache_policy(storage_cache_policy_);
     if (OB_FAIL(ret)) {
     } else if (INDEX_KEYNAME::VEC_KEY == index_keyname_ &&
                OB_FAIL(ObVecIndexBuilderUtil::generate_vec_index_name(allocator_, index_arg.index_type_, index_arg.index_name_, index_arg.index_name_))) {

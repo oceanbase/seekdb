@@ -33,7 +33,7 @@ int ObStorageEstimator::estimate_row_count(const obcall::ObEstPartArg &arg,
   //est path rows
   ObTableScanParam param;
   share::SCN max_readable_scn;
-  if (OB_FAIL(OB_TS_MGR.get_gts(max_readable_scn))) {
+  if (OB_FAIL(OB_TS_MGR.get_gts(nullptr, max_readable_scn))) {
     LOG_WARN("failed to get gts", K(ret));
   } else {
     param.frozen_version_ = static_cast<int64_t>(max_readable_scn.get_val_for_sql());
@@ -44,6 +44,7 @@ int ObStorageEstimator::estimate_row_count(const obcall::ObEstPartArg &arg,
     param.index_id_ = arg.index_params_.at(i).index_id_;
     param.scan_flag_ = arg.index_params_.at(i).scan_flag_;
     param.tablet_id_ = arg.index_params_.at(i).tablet_id_;
+    param.ls_id_ = arg.index_params_.at(i).ls_id_;
     param.tx_id_ = arg.index_params_.at(i).tx_id_;
     if (OB_FAIL(storage_estimate_rowcount(param,
                   arg.index_params_.at(i).batch_,
@@ -122,7 +123,7 @@ int ObStorageEstimator::storage_estimate_partition_batch_rowcount(const ObSimple
     double &physical_row_count)
 {
   int ret = OB_SUCCESS;
-  SERVER_MODULE_SCOPE {
+  MOD_SCOPE {
     int64_t rc_logical = 0;
     int64_t rc_physical = 0;
     ObArenaAllocator allocator;
@@ -171,13 +172,14 @@ int ObStorageEstimator::storage_estimate_block_count_and_row_count(
     res.memtable_row_count_ = memtable_row_count;
   } else {
     
-    SERVER_MODULE_SCOPE {
+    MOD_SCOPE {
       const int64_t timeout_us = THIS_WORKER.get_timeout_remain();
       ObAccessService *access_service = NULL;
       if (OB_ISNULL(access_service = share::g_mp->access_service())) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("get unexpected null", K(ret), K(access_service));
-      } else if (OB_FAIL(access_service->estimate_block_count_and_row_count(arg.tablet_id_,
+      } else if (OB_FAIL(access_service->estimate_block_count_and_row_count(arg.ls_id_,
+                                                                            arg.tablet_id_,
                                                                             timeout_us,
                                                                             macro_block_count,
                                                                             micro_block_count,

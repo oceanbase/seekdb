@@ -1,0 +1,98 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+#ifndef OB_STORAGE_BLOCKSSTABLE_MAJOR_CHECKSUM_INFO_H_
+#define OB_STORAGE_BLOCKSSTABLE_MAJOR_CHECKSUM_INFO_H_
+#include "lib/container/ob_array.h"
+#include "storage/compaction/ob_compaction_util.h"
+#include "storage/blocksstable/ob_column_checksum_struct.h"
+namespace oceanbase
+{
+namespace compaction
+{
+class ObBasicTabletMergeCtx;
+}
+namespace storage
+{
+class ObStorageSchema;
+}
+namespace blocksstable
+{
+struct ObSSTableMergeRes;
+class ObSSTable;
+
+class ObMajorChecksumInfo
+{
+public:
+  ObMajorChecksumInfo();
+  virtual ~ObMajorChecksumInfo() { reset(); }
+  void reset();
+  int init_from_merge_result(
+    ObArenaAllocator &allocator,
+    const compaction::ObBasicTabletMergeCtx &ctx,
+    const blocksstable::ObSSTableMergeRes &res);
+  int init_from_sstable(
+    ObArenaAllocator &allocator,
+    const compaction::ObExecMode exec_mode,
+    const storage::ObStorageSchema &storage_schema,
+    const blocksstable::ObSSTable &sstable);
+  bool is_empty() const;
+  bool is_valid() const;
+  int assign(const ObMajorChecksumInfo &other, ObArenaAllocator *allocator);
+  int deep_copy(
+      char *buf,
+      const int64_t buf_len,
+      int64_t &pos,
+      ObMajorChecksumInfo &dest) const;
+  void gene_info(char* buf, const int64_t buf_len, int64_t &pos) const;
+  compaction::ObExecMode get_exec_mode() const { return (compaction::ObExecMode)exec_mode_; }
+  int64_t get_compaction_scn() const { return is_empty() ? 0 : compaction_scn_; }
+  int64_t get_report_compaction_scn() const { return (is_empty() || !is_output_exec_mode(get_exec_mode())) ? 0 : compaction_scn_; }
+  int64_t get_row_count() const { return row_count_; }
+  int64_t get_data_checksum() const { return data_checksum_; }
+  const ObColumnCkmStruct &get_column_checksum_struct() const { return column_ckm_struct_; }
+  int get_column_checksums(ObIArray<int64_t> &column_checksums) const
+  {
+    return column_ckm_struct_.get_column_checksums(column_checksums);
+  }
+  int serialize(char *buf, const int64_t buf_len, int64_t &pos) const;
+  int deserialize(common::ObArenaAllocator &allocator, const char *buf, const int64_t data_len, int64_t &pos);
+  int64_t get_serialize_size() const;
+  int64_t get_deep_copy_size() const { return column_ckm_struct_.get_deep_copy_size(); }
+  int64_t to_string(char *buf, const int64_t buf_len) const;
+
+protected:
+  static const int32_t SRCS_ONE_BYTE = 8;
+  static const int32_t SRCS_FOUR_BITS = 4;
+  static const int32_t SRCS_RESERVED_BITS = 52;
+  static const int64_t MAJOR_CHECKSUM_INFO_VERSION_V1 = 1;
+  union {
+    uint64_t info_;
+    struct {
+      uint64_t version_   : SRCS_ONE_BYTE;
+      uint64_t exec_mode_ : SRCS_FOUR_BITS;
+      uint64_t reserved_  : SRCS_RESERVED_BITS;
+    };
+  };
+  int64_t compaction_scn_;
+  int64_t row_count_;
+  int64_t data_checksum_;
+  ObColumnCkmStruct column_ckm_struct_;
+};
+
+} // namespace compaction
+} // namespace oceanbase
+
+#endif // OB_STORAGE_BLOCKSSTABLE_MAJOR_CHECKSUM_INFO_H_

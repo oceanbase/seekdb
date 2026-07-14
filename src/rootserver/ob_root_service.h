@@ -228,7 +228,6 @@ public:
   int clean_splitted_tablet(const obcall::ObCleanSplittedTabletArg &arg);
 
   //the interface only for switchover: execute skip check enable_ddl
-  int flashback_index(const obcall::ObFlashBackIndexArg &arg);
   int purge_index(const obcall::ObPurgeIndexArg &arg);
   int create_table_like(const obcall::ObCreateTableLikeArg &arg);
   int parallel_create_table_like(const obcall::ObCreateTableLikeArg &arg, obcall::ObCreateTableRes &res);
@@ -237,10 +236,9 @@ public:
   int update_mview_status(const obcall::ObUpdateMViewStatusArg &arg);
   int parallel_update_index_status(const obcall::ObUpdateIndexStatusArg &arg, obcall::ObParallelDDLRes &res);
   int purge_table(const obcall::ObPurgeTableArg &arg);
-  int flashback_table_from_recyclebin(const obcall::ObFlashBackTableFromRecyclebinArg &arg);
-  int flashback_table_to_time_point(const obcall::ObFlashBackTableToScnArg &arg);
+  int restore_table_from_recyclebin(const obcall::ObRecyclebinRestoreTableArg &arg);
   int purge_database(const obcall::ObPurgeDatabaseArg &arg);
-  int flashback_database(const obcall::ObFlashBackDatabaseArg &arg);
+  int restore_database(const obcall::ObRecyclebinRestoreDatabaseArg &arg);
 
   int drop_index_on_failed(const obcall::ObDropIndexArg &arg, obcall::ObDropIndexRes &res);
 

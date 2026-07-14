@@ -47,7 +47,6 @@
 #include "share/ob_global_merge_table_operator.h"
 #include "share/ob_column_checksum_error_operator.h"
 #include "storage/meta_store/ob_server_storage_meta_service.h"
-#include "storage/column_store/ob_column_store_replica_util.h"
 // ObLogRestoreSourceMgr removed - using config parameter instead
 #include "share/ob_all_tenant_info.h"  // ObAllTenantInfoProxy
 #include "share/ob_server_struct.h"    // GCTX
@@ -763,7 +762,7 @@ int ObService::tablet_major_freeze(const obcall::ObTabletMajorFreezeArg &arg,
   } else {
     MOD_SCOPE {
       if (OB_FAIL(share::g_mp->tenant_tablet_scheduler()->user_request_schedule_medium_merge(
-        arg.ls_id_, arg.tablet_id_, arg.is_rebuild_column_group_))) {
+        arg.ls_id_, arg.tablet_id_))) {
         LOG_WARN("failed to try schedule tablet major freeze", K(ret), K(arg));
       }
     }
@@ -1915,7 +1914,6 @@ int ObService::inner_fill_tablet_info_(
   ObLSHandle ls_handle;
   ObTabletHandle tablet_handle;
   int ret = OB_SUCCESS;
-  bool need_wait_for_report = false;
   ObTablet *tablet = nullptr;
   if (OB_UNLIKELY(!inited_)) {
     ret = OB_NOT_INIT;
@@ -1942,15 +1940,10 @@ int ObService::inner_fill_tablet_info_(
   } else if (OB_ISNULL(gctx_.config_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("gctx_.config_ is null", KR(ret), K(tablet_id));
-  } else if (OB_FAIL(ObCSReplicaUtil::check_need_wait_for_report(*ls, *tablet, need_wait_for_report))) {
-    LOG_WARN("fail to check need wait report", K(ret), KPC(ls), KPC(tablet));
-  } else if (need_wait_for_report) {
-    ret = OB_EAGAIN;
-    LOG_WARN("need wait report for cs replica", K(ret), K(tablet_id));
   } else if (OB_FAIL(tablet->get_tablet_report_info(
-     gctx_.self_addr(), tablet_replica, tablet_checksum, need_checksum, ls->is_cs_replica()))) {
+     gctx_.self_addr(), tablet_replica, tablet_checksum, need_checksum))) {
     LOG_WARN("fail to get tablet report info from tablet", KR(ret),
-      "ls_id", ls->get_ls_id(), "is_cs_replica", ls->is_cs_replica(), K(tablet_id));
+      "ls_id", ls->get_ls_id(), K(tablet_id));
   }
   return ret;
 }
@@ -2010,20 +2003,6 @@ int ObService::estimate_tablet_block_count(const obcall::ObEstBlockArg &arg,
     LOG_WARN("service is not inited", K(ret));
   } else if (OB_FAIL(sql::ObStorageEstimator::estimate_block_count_and_row_count(arg, res))) {
     LOG_WARN("failed to estimate block count and row count", K(ret));
-  }
-  return ret;
-}
-
-int ObService::estimate_skip_rate(const obcall::ObEstSkipRateArg &arg,
-                                  obcall::ObEstSkipRateRes &res) const
-{
-  int ret = OB_SUCCESS;
-  LOG_DEBUG("receive estimate tablet skip rate request", K(arg));
-  if (!inited_) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("service is not inited", K(ret));
-  } else if (OB_FAIL(sql::ObStorageEstimator::estimate_skip_rate(arg, res))) {
-    LOG_WARN("failed to estimate skip rate", K(ret));
   }
   return ret;
 }

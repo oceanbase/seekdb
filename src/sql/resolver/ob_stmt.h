@@ -126,6 +126,7 @@ public:
   inline bool is_update_stmt() const { return stmt::T_UPDATE == stmt_type_; }
   inline bool is_delete_stmt() const { return stmt::T_DELETE == stmt_type_; }
   inline bool is_explain_stmt() const { return stmt::T_EXPLAIN == stmt_type_; }
+  inline bool is_help_stmt() const { return stmt::T_HELP == stmt_type_; }
   bool is_dml_stmt() const;
   bool is_pdml_supported_stmt() const;
   bool is_px_dml_supported_stmt() const;
@@ -154,6 +155,15 @@ public:
             || stmt_type_ == stmt::T_UPDATE;
   }
 
+  bool is_allowed_reroute() const
+  {
+    return (stmt_type_ == stmt::T_SELECT
+            || stmt_type_ == stmt::T_DELETE
+            || stmt_type_ == stmt::T_UPDATE
+            || stmt_type_ == stmt::T_INSERT
+            || stmt_type_ == stmt::T_REPLACE);
+  }
+
   inline bool is_support_instead_of_trigger_stmt() const {
     return stmt::T_DELETE == stmt_type_
            || stmt::T_UPDATE == stmt_type_
@@ -164,7 +174,9 @@ public:
   {
     return (stmt_type >= stmt::T_SHOW_TABLES && stmt_type <= stmt::T_SHOW_GRANTS)
            || stmt_type == stmt::T_SHOW_TRIGGERS
-           || stmt_type == stmt::T_SHOW_CREATE_USER;
+           || stmt_type == stmt::T_SHOW_CREATE_USER
+           || stmt_type == stmt::T_SHOW_CATALOGS
+           || stmt_type == stmt::T_SHOW_CREATE_CATALOG;
   }
 
   static inline bool is_dml_write_stmt(stmt::StmtType stmt_type)
@@ -244,6 +256,10 @@ public:
             || stmt_type == stmt::T_ALTER_DATABASE
             || stmt_type == stmt::T_DROP_DATABASE
             || stmt_type == stmt::T_FORK_DATABASE
+            // tablegroup
+            || stmt_type == stmt::T_CREATE_TABLEGROUP
+            || stmt_type == stmt::T_ALTER_TABLEGROUP
+            || stmt_type == stmt::T_DROP_TABLEGROUP
             // table
             || stmt_type == stmt::T_CREATE_TABLE
             || stmt_type == stmt::T_DROP_TABLE
@@ -262,6 +278,8 @@ public:
             //|| stmt_type == stmt::T_ANALYZE
             // optimize
             || stmt_type == stmt::T_OPTIMIZE_TABLE
+            || stmt_type == stmt::T_OPTIMIZE_TENANT
+            || stmt_type == stmt::T_OPTIMIZE_ALL
             // view
             || stmt_type == stmt::T_CREATE_VIEW
             || stmt_type == stmt::T_ALTER_VIEW
@@ -269,6 +287,9 @@ public:
             // index
             || stmt_type == stmt::T_CREATE_INDEX
             || stmt_type == stmt::T_DROP_INDEX
+            // materialized view log
+            || stmt_type == stmt::T_CREATE_MLOG
+            || stmt_type == stmt::T_DROP_MLOG
             // recyclebin restore
             || stmt_type == stmt::T_RECYCLEBIN_RESTORE_DATABASE
             || stmt_type == stmt::T_RECYCLEBIN_RESTORE_TABLE
@@ -281,6 +302,11 @@ public:
             || stmt_type == stmt::T_CREATE_OUTLINE
             || stmt_type == stmt::T_ALTER_OUTLINE
             || stmt_type == stmt::T_DROP_OUTLINE
+            // sequence
+            || stmt_type == stmt::T_CREATE_SEQUENCE
+            || stmt_type == stmt::T_ALTER_SEQUENCE
+            || stmt_type == stmt::T_DROP_SEQUENCE
+
             // grant and revoke
             || stmt_type == stmt::T_GRANT
             || stmt_type == stmt::T_REVOKE
@@ -313,12 +339,233 @@ public:
             || stmt_type == stmt::T_DROP_TRIGGER
             || stmt_type == stmt::T_ALTER_TRIGGER
 
+            // keystore
+            || stmt_type == stmt::T_CREATE_KEYSTORE
+            || stmt_type == stmt::T_ALTER_KEYSTORE
             // tablespace
             || stmt_type == stmt::T_CREATE_TABLESPACE
             || stmt_type == stmt::T_ALTER_TABLESPACE
             || stmt_type == stmt::T_DROP_TABLESPACE
             // user function
+            || stmt_type == stmt::T_CREATE_FUNC
+            || stmt_type == stmt::T_DROP_FUNC
+            // directory
+            || stmt_type == stmt::T_CREATE_DIRECTORY
+            || stmt_type == stmt::T_DROP_DIRECTORY
+            // application context
+            || stmt_type == stmt::T_CREATE_CONTEXT
+            || stmt_type == stmt::T_DROP_CONTEXT
+            // catalog
+            || stmt_type == stmt::T_CREATE_CATALOG
+            || stmt_type == stmt::T_ALTER_CATALOG
+            || stmt_type == stmt::T_DROP_CATALOG
+            // ccl
+            || stmt_type == stmt::T_CREATE_CCL_RULE
+            || stmt_type == stmt::T_DROP_CCL_RULE
+            // location
+            || stmt_type == stmt::T_CREATE_LOCATION
+            || stmt_type == stmt::T_ALTER_LOCATION
+            || stmt_type == stmt::T_DROP_LOCATION
             );
+  }
+
+  static inline bool is_catalog_supported_ddl_stmt(stmt::StmtType stmt_type, bool has_global_variable)
+  {
+    return (
+        // database
+        // || stmt_type == stmt::T_CREATE_DATABASE
+        // || stmt_type == stmt::T_ALTER_DATABASE
+        // || stmt_type == stmt::T_DROP_DATABASE
+        // tablegroup
+        // || stmt_type == stmt::T_CREATE_TABLEGROUP
+        // || stmt_type == stmt::T_ALTER_TABLEGROUP
+        // || stmt_type == stmt::T_DROP_TABLEGROUP
+        // table
+        // || stmt_type == stmt::T_CREATE_TABLE
+        // || stmt_type == stmt::T_DROP_TABLE
+        // || stmt_type == stmt::T_RENAME_TABLE
+        // || stmt_type == stmt::T_TRUNCATE_TABLE
+        // || stmt_type == stmt::T_CREATE_TABLE_LIKE
+        // || stmt_type == stmt::T_ALTER_TABLE
+        // || stmt_type == stmt::T_SET_TABLE_COMMENT
+        // column
+        // || stmt_type == stmt::T_SET_COLUMN_COMMENT
+        // audit and noaudit
+        stmt_type == stmt::T_AUDIT
+        // analyze needs special handling before it can be treated as DDL here
+        // TODO: wait for Xi Feng to finish the analyze issue before releasing
+        //|| stmt_type == stmt::T_ANALYZE
+        // optimize
+        // || stmt_type == stmt::T_OPTIMIZE_TABLE
+        // || stmt_type == stmt::T_OPTIMIZE_TENANT
+        // || stmt_type == stmt::T_OPTIMIZE_ALL
+        // view
+        // || stmt_type == stmt::T_CREATE_VIEW
+        // || stmt_type == stmt::T_ALTER_VIEW
+        // || stmt_type == stmt::T_DROP_VIEW
+        // index
+        // || stmt_type == stmt::T_CREATE_INDEX
+        // || stmt_type == stmt::T_DROP_INDEX
+        // materialized view log
+        // || stmt_type == stmt::T_CREATE_MLOG
+        // || stmt_type == stmt::T_DROP_MLOG
+        // recyclebin restore
+        // || stmt_type == stmt::T_RECYCLEBIN_RESTORE_DATABASE
+        // || stmt_type == stmt::T_RECYCLEBIN_RESTORE_TABLE
+        // purge
+        // || stmt_type == stmt::T_PURGE_RECYCLEBIN
+        // || stmt_type == stmt::T_PURGE_DATABASE
+        // || stmt_type == stmt::T_PURGE_TABLE
+        // || stmt_type == stmt::T_PURGE_INDEX
+        // outline
+        // || stmt_type == stmt::T_CREATE_OUTLINE
+        // || stmt_type == stmt::T_ALTER_OUTLINE
+        // || stmt_type == stmt::T_DROP_OUTLINE
+        // sequence
+        // || stmt_type == stmt::T_CREATE_SEQUENCE
+        // || stmt_type == stmt::T_ALTER_SEQUENCE
+        // || stmt_type == stmt::T_DROP_SEQUENCE
+
+        // grant and revoke
+        || stmt_type == stmt::T_GRANT
+        || stmt_type == stmt::T_REVOKE
+
+        // synonym
+        //  || stmt_type == stmt::T_CREATE_SYNONYM
+        //  || stmt_type == stmt::T_DROP_SYNONYM
+
+        // variable
+        // Currently only set global variable is DDL operation, session level variable change is not DDL
+        || (stmt_type == stmt::T_VARIABLE_SET && has_global_variable)
+
+        // stored procedure
+        // || stmt_type == stmt::T_CREATE_ROUTINE
+        // || stmt_type == stmt::T_DROP_ROUTINE
+        // || stmt_type == stmt::T_ALTER_ROUTINE
+
+        // package
+        // || stmt_type == stmt::T_CREATE_PACKAGE
+        // || stmt_type == stmt::T_CREATE_PACKAGE_BODY
+        // || stmt_type == stmt::T_ALTER_PACKAGE
+        // || stmt_type == stmt::T_DROP_PACKAGE
+
+        // trigger
+        // || stmt_type == stmt::T_CREATE_TRIGGER
+        // || stmt_type == stmt::T_DROP_TRIGGER
+        // || stmt_type == stmt::T_ALTER_TRIGGER
+
+        // user define type
+        // || stmt_type == stmt::T_CREATE_TYPE
+        // || stmt_type == stmt::T_DROP_TYPE
+
+        // trigger
+        // || stmt_type == stmt::T_CREATE_TRIGGER
+        // || stmt_type == stmt::T_DROP_TRIGGER
+        // || stmt_type == stmt::T_ALTER_TRIGGER
+
+        // keystore
+        // || stmt_type == stmt::T_CREATE_KEYSTORE
+        // || stmt_type == stmt::T_ALTER_KEYSTORE
+        // tablespace
+        // || stmt_type == stmt::T_CREATE_TABLESPACE
+        // || stmt_type == stmt::T_ALTER_TABLESPACE
+        // || stmt_type == stmt::T_DROP_TABLESPACE
+        // user function
+        // || stmt_type == stmt::T_CREATE_FUNC
+        // || stmt_type == stmt::T_DROP_FUNC
+        // directory
+        // || stmt_type == stmt::T_CREATE_DIRECTORY
+        // || stmt_type == stmt::T_DROP_DIRECTORY
+        // application context
+        // || stmt_type == stmt::T_CREATE_CONTEXT
+        // || stmt_type == stmt::T_DROP_CONTEXT
+        // catalog
+        || stmt_type == stmt::T_CREATE_CATALOG
+        || stmt_type == stmt::T_ALTER_CATALOG
+        || stmt_type == stmt::T_DROP_CATALOG);
+  }
+
+  static inline bool is_catalog_supported_dml_stmt(stmt::StmtType stmt_type)
+  {
+    return stmt_type == stmt::T_SELECT
+           // || stmt_type == stmt::T_INSERT
+           // || stmt_type == stmt::T_REPLACE
+           // || stmt_type == stmt::T_DELETE
+           // || stmt_type == stmt::T_UPDATE
+           || stmt_type == stmt::T_EXPLAIN
+           // show stmt
+           || stmt_type == stmt::T_SHOW_TABLES
+           || stmt_type == stmt::T_SHOW_DATABASES
+           || stmt_type == stmt::T_SHOW_COLUMNS
+           || stmt_type == stmt::T_SHOW_VARIABLES
+           || stmt_type == stmt::T_SHOW_TABLE_STATUS
+           || stmt_type == stmt::T_SHOW_SCHEMA
+           || stmt_type == stmt::T_SHOW_PARAMETERS
+           || stmt_type == stmt::T_SHOW_SERVER_STATUS
+           || stmt_type == stmt::T_SHOW_WARNINGS
+           || stmt_type == stmt::T_SHOW_ERRORS
+           || stmt_type == stmt::T_SHOW_PROCESSLIST
+           || stmt_type == stmt::T_SHOW_CHARSET
+           || stmt_type == stmt::T_SHOW_COLLATION
+           || stmt_type == stmt::T_SHOW_STATUS
+           || stmt_type == stmt::T_SHOW_CREATE_TENANT
+           || stmt_type == stmt::T_SHOW_TRACE
+           || stmt_type == stmt::T_SHOW_ENGINES
+           || stmt_type == stmt::T_SHOW_PRIVILEGES
+           || stmt_type == stmt::T_SHOW_GRANTS
+           || stmt_type == stmt::T_SHOW_CREATE_USER
+           || stmt_type == stmt::T_SHOW_CATALOGS
+           || stmt_type == stmt::T_SHOW_CREATE_CATALOG;
+  }
+
+  static inline bool is_ddl_stmt_allowed_in_dropping_tenant(stmt::StmtType stmt_type, bool has_global_variable)
+  {
+    return (// database
+            stmt_type == stmt::T_ALTER_DATABASE
+            || stmt_type == stmt::T_DROP_DATABASE
+            // tablegroup
+            || stmt_type == stmt::T_ALTER_TABLEGROUP
+            || stmt_type == stmt::T_DROP_TABLEGROUP
+            // table
+            || stmt_type == stmt::T_DROP_TABLE
+            || stmt_type == stmt::T_ALTER_TABLE
+            // view
+            || stmt_type == stmt::T_DROP_VIEW
+            // index
+            || stmt_type == stmt::T_DROP_INDEX
+            // purge
+            || stmt_type == stmt::T_PURGE_RECYCLEBIN
+            || stmt_type == stmt::T_PURGE_DATABASE
+            || stmt_type == stmt::T_PURGE_TABLE
+            || stmt_type == stmt::T_PURGE_INDEX
+            // outline
+            || stmt_type == stmt::T_DROP_OUTLINE
+            // sequence
+            || stmt_type == stmt::T_DROP_SEQUENCE
+            // variable
+            // Currently only set global variable is DDL operation, session level variable change is not DDL
+            || (stmt_type == stmt::T_VARIABLE_SET && has_global_variable)
+            // stored procedure
+            || stmt_type == stmt::T_DROP_ROUTINE
+            // package
+            || stmt_type == stmt::T_DROP_PACKAGE
+            // user define type
+            || stmt_type == stmt::T_DROP_TYPE
+            //tablespace
+            || stmt_type == stmt::T_DROP_TABLESPACE
+            //udf
+            || stmt_type == stmt::T_DROP_FUNC
+            //trigger
+            || stmt_type == stmt::T_DROP_TRIGGER
+            );
+  }
+
+  static inline bool is_ddl_stmt_allowed_in_creating_tenant(stmt::StmtType stmt_type, bool has_global_variable)
+  {
+    return (
+            // variable
+            // Currently only set global variable is DDL operation, session level variable change is not DDL
+            stmt_type == stmt::T_VARIABLE_SET && !has_global_variable);
   }
 
   static bool is_dcl_stmt(stmt::StmtType stmt_type)
@@ -339,6 +586,18 @@ public:
             //
             || stmt_type == stmt::T_SYSTEM_GRANT
             || stmt_type == stmt::T_SYSTEM_REVOKE;
+  }
+
+  static bool check_change_tenant_stmt(stmt::StmtType stmt_type)
+  {
+    return is_dml_stmt(stmt_type)
+           || is_tcl_stmt(stmt_type)
+           || stmt_type == stmt::T_HELP
+           || stmt_type == stmt::T_VARIABLE_SET
+           || stmt_type == stmt::T_USE_DATABASE
+           || stmt_type == stmt::T_EMPTY_QUERY
+           // TODO: When T_LOCK_TABLE is actually implemented, needs to be checked for legitimacy
+           || stmt_type == stmt::T_LOCK_TABLE;
   }
 
   // following stmt don't do retry

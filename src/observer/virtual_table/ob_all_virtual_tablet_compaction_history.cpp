@@ -52,15 +52,15 @@ int ObAllVirtualTabletCompactionHistory::inner_get_next_row(ObNewRow *&row)
   int64_t compression_ratio = 0;
   int n = 0;
   if (!major_merge_info_iter_.is_opened() && !minor_merge_info_iter_.is_opened()) {
-    if (OB_FAIL(share::g_mp->sstable_merge_info_mgr()->open_iter(major_merge_info_iter_, minor_merge_info_iter_))) {
-      STORAGE_LOG(WARN, "fail to open ObSSTableMergeInfoMgr::Iterator", K(ret));
+    if (OB_FAIL(share::g_mp->tenant_ss_table_merge_info_mgr()->open_iter(major_merge_info_iter_, minor_merge_info_iter_))) {
+      STORAGE_LOG(WARN, "fail to open ObTenantSSTableMergeInfoMgr::Iterator", K(ret));
     }
   }
-
+  
   if (OB_SUCC(ret)) {
     if (FALSE_IT(MEMSET(comment_, '\0', sizeof(comment_)))) {
     } else if (FALSE_IT(MEMSET(other_info_, '\0', sizeof(other_info_)))) {
-    } else if (OB_FAIL(ObSSTableMergeInfoMgr::get_next_info(major_merge_info_iter_,
+    } else if (OB_FAIL(ObTenantSSTableMergeInfoMgr::get_next_info(major_merge_info_iter_, 
                 minor_merge_info_iter_,
                 merge_history_, other_info_, sizeof(other_info_)))) {
       if (OB_ITER_END != ret) {
@@ -193,6 +193,14 @@ int ObAllVirtualTabletCompactionHistory::inner_get_next_row(ObNewRow *&row)
     case MERGE_LEVEL:
       if (is_valid_merge_level(static_info.merge_level_)) {
         cells[i].set_varchar(merge_level_to_str(static_info.merge_level_));
+      } else {
+        cells[i].set_varchar("");
+      }
+      cells[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
+      break;
+    case EXEC_MODE:
+      if (is_valid_exec_mode(static_info.exec_mode_)) {
+        cells[i].set_varchar(exec_mode_to_str(static_info.exec_mode_));
       } else {
         cells[i].set_varchar("");
       }

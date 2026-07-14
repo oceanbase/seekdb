@@ -42,6 +42,7 @@ create table t_vec(c1 int, c2 varchar(100), c3 varchar(3), c4 vector(3), c5 varc
 create fulltext index vec_idx2 on t_vec(c3);
 create vector index vec_idx3 on t_vec(c4) with (distance=l2, type=hnsw);
 create index vec_idx4 on t_vec(c1);
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
 show create table t_vec;
 show index from t_vec;
 drop table t_vec;
@@ -94,6 +95,7 @@ create table t_vec(c1 int, c2 varchar(3), c3 vector(3), c4 int, primary key(c1),
 create index vec_idx1 on t_vec(c4);
 # --error 1061
 # create vector index vec_idx1 on t_vec(c3) with (distance=l2, type=hnsw);
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
 show create table t_vec;
 show index from t_vec;
 
@@ -177,57 +179,68 @@ echo "------------------------------------------ show create table -------------
 alter system set ob_vector_memory_limit_percentage = 20;
 drop table if exists t_vec;
 create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c2) with (distance=L2, type=hnsw, model=ob_embed, dim=1024));
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
 show create table t_vec;
 show index from t_vec;
 
 drop table if exists t_vec;
 create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c2) with (distance=inner_product, type=hnsw, model=ob_embed, dim=1024));
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
 show create table t_vec;
 show index from t_vec;
 
 drop table if exists t_vec;
 create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c2) with (distance=cosine, type=hnsw, model=ob_embed, dim=1024));
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
 show create table t_vec;
 show index from t_vec;
 
 drop table if exists t_vec;
 create table t_vec(c1 int, c2 varchar(100), c3 vector(100), primary key(c1), vector index vec_idx1(c2) with (distance=L2, type=hnsw, model=ob_embed, dim=1024), vector index vec_idx2(c3) with (distance=L2, type=hnsw));
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
 show create table t_vec;
 show index from t_vec;
 
 drop table if exists t_vec;
 create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c2) with (distance=L2, type=hnsw, lib=vsag, m=20, model=ob_embed, dim=1024));
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
 show create table t_vec;
 show index from t_vec;
 
 drop table if exists t_vec;
 create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c2) with (distance=L2, type=hnsw, lib=vsag, m=20, ef_construction=200, model=ob_embed, dim=1024));
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
 show create table t_vec;
 show index from t_vec;
 
 drop table if exists t_vec;
 create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c2) with (distance=L2, type=hnsw, lib=vsag, m=20, ef_construction=200, ef_search=200, model=ob_embed, dim=1024));
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
 show create table t_vec;
 show index from t_vec;
 
 drop table if exists t_vec;
 create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c2) with (distance=L2, type=hnsw, lib=vsag, m=20, ef_construction=200, ef_search=200, model=ob_embed, dim=1024, sync_mode=async, sync_interval=20s));
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
 show create table t_vec;
 show index from t_vec;
 
 drop table if exists t_vec;
 create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c2) with (distance=L2, type=hnsw, lib=vsag, m=20, ef_construction=200, ef_search=200, model=ob_embed, dim=1024, sync_mode=immediate));
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
 show create table t_vec;
 show index from t_vec;
 
 drop table if exists t_vec;
 create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c2) with (distance=L2, type=hnsw, lib=vsag, m=20, ef_construction=200, ef_search=200, model=ob_embed, dim=1024, sync_mode=manual));
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
 show create table t_vec;
 show index from t_vec;
 
 # partition table 
 drop table if exists t_vec;
 CREATE TABLE t_vec (id int NOT NULL PRIMARY KEY, c2 varchar(100), vector index vec_idx1(c2) with (distance=L2, type=hnsw, lib=vsag, m=20, ef_construction=200, ef_search=200, model=ob_embed, dim=1024, sync_mode=immediate)) partition by hash(id) partitions 2;
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
 show create table t_vec;
 show index from t_vec;
 
@@ -241,6 +254,7 @@ create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_id
 # rename index
 drop table if exists t_vec;
 create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c2) with (distance=L2, type=hnsw, lib=vsag, model=ob_embed, dim=1024, sync_mode=immediate));
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
 show create table t_vec;
 --replace_regex /__idx_[0-9]*/__vec_idx_vec/g
 select table_name from oceanbase.__all_table where table_name like "%_vec_idx1%";
@@ -260,6 +274,7 @@ create table t_vec(c1 int, c2 varchar(100), c3 varchar(3), c4 vector(3), c5 varc
 create fulltext index vec_idx2 on t_vec(c3);
 create vector index vec_idx3 on t_vec(c4) with (distance=l2, type=hnsw);
 create index vec_idx4 on t_vec(c1);
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
 show create table t_vec;
 show index from t_vec;
 drop table t_vec;
@@ -291,6 +306,7 @@ create table t_vec(c1 int, c2 varchar(3), c3 vector(3), c4 int, primary key(c1),
 create table t_vec(c1 int, c2 varchar(3), c3 vector(3), c4 int, primary key(c1), vector index vec_idx1(c2) with (distance=l2, type=hnsw, model=ob_embed, dim=1024, sync_mode=immediate)) ORGANIZATION HEAP;
 --error 1061
 create index vec_idx1 on t_vec(c4);
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
 show create table t_vec;
 show index from t_vec;
 
@@ -374,57 +390,68 @@ echo "------------------------------------------ show create table -------------
 alter system set ob_vector_memory_limit_percentage = 20;
 drop table if exists t_vec;
 create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c2) with (distance=L2, type=hnsw, model=ob_embed, dim=1024)) ORGANIZATION HEAP;
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
 show create table t_vec;
 show index from t_vec;
 
 drop table if exists t_vec;
 create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c2) with (distance=inner_product, type=hnsw, model=ob_embed, dim=1024)) ORGANIZATION HEAP;
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
 show create table t_vec;
 show index from t_vec;
 
 drop table if exists t_vec;
 create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c2) with (distance=cosine, type=hnsw, model=ob_embed, dim=1024)) ORGANIZATION HEAP;
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
 show create table t_vec;
 show index from t_vec;
 
 drop table if exists t_vec;
 create table t_vec(c1 int, c2 varchar(100), c3 vector(100), primary key(c1), vector index vec_idx1(c2) with (distance=L2, type=hnsw, model=ob_embed, dim=1024), vector index vec_idx2(c3) with (distance=L2, type=hnsw)) ORGANIZATION HEAP;
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
 show create table t_vec;
 show index from t_vec;
 
 drop table if exists t_vec;
 create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c2) with (distance=L2, type=hnsw, lib=vsag, m=20, model=ob_embed, dim=1024)) ORGANIZATION HEAP;
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
 show create table t_vec;
 show index from t_vec;
 
 drop table if exists t_vec;
 create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c2) with (distance=L2, type=hnsw, lib=vsag, m=20, ef_construction=200, model=ob_embed, dim=1024)) ORGANIZATION HEAP;
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
 show create table t_vec;
 show index from t_vec;
 
 drop table if exists t_vec;
 create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c2) with (distance=L2, type=hnsw, lib=vsag, m=20, ef_construction=200, ef_search=200, model=ob_embed, dim=1024)) ORGANIZATION HEAP;
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
 show create table t_vec;
 show index from t_vec;
 
 drop table if exists t_vec;
 create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c2) with (distance=L2, type=hnsw, lib=vsag, m=20, ef_construction=200, ef_search=200, model=ob_embed, dim=1024, sync_mode=async, sync_interval=20s)) ORGANIZATION HEAP;
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
 show create table t_vec;
 show index from t_vec;
 
 drop table if exists t_vec;
 create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c2) with (distance=L2, type=hnsw, lib=vsag, m=20, ef_construction=200, ef_search=200, model=ob_embed, dim=1024, sync_mode=immediate)) ORGANIZATION HEAP;
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
 show create table t_vec;
 show index from t_vec;
 
 drop table if exists t_vec;
 create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c2) with (distance=L2, type=hnsw, lib=vsag, m=20, ef_construction=200, ef_search=200, model=ob_embed, dim=1024, sync_mode=manual)) ORGANIZATION HEAP;
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
 show create table t_vec;
 show index from t_vec;
 
 # partition table 
 drop table if exists t_vec;
 CREATE TABLE t_vec (id int NOT NULL PRIMARY KEY, c2 varchar(100), vector index vec_idx1(c2) with (distance=L2, type=hnsw, lib=vsag, m=20, ef_construction=200, ef_search=200, model=ob_embed, dim=1024, sync_mode=immediate)) ORGANIZATION HEAP partition by hash(id) partitions 2;
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
 show create table t_vec;
 show index from t_vec;
 
@@ -439,6 +466,7 @@ create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_id
 # rename index
 drop table if exists t_vec;
 create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c2) with (distance=L2, type=hnsw, lib=vsag, model=ob_embed, dim=1024, sync_mode=immediate)) ORGANIZATION HEAP;
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
 show create table t_vec;
 --replace_regex /__idx_[0-9]*/__vec_idx_vec/g
 select table_name from oceanbase.__all_table where table_name like "%_vec_idx1%";

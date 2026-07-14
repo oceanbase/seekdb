@@ -18,7 +18,7 @@
 
 #include "ob_i_store.h"
 #include "share/rc/ob_module_provider.h"
-#include "storage/tx/ob_tx_ctx.h"
+#include "storage/tx/ob_trans_part_ctx.h"
 #include "storage/tx_storage/ob_ls_service.h"
 
 namespace oceanbase
@@ -49,6 +49,7 @@ int ObMultiVersionRowkeyHelpper::add_extra_rowkey_cols(ObColDescIArray &store_ou
 
 void ObStoreCtx::reset()
 {
+  ls_id_.reset();
   ls_ = nullptr;
   branch_ = 0;
   tablet_id_.reset();
@@ -65,36 +66,45 @@ void ObStoreCtx::reset()
   check_seq_ = 0;
 }
 
-int ObStoreCtx::init_for_read(const common::ObTabletID tablet_id,
+int ObStoreCtx::init_for_read(const ObLSID &ls_id,
+                              const common::ObTabletID tablet_id,
                               const int64_t timeout,
                               const int64_t tx_lock_timeout,
                               const SCN &snapshot_version)
 {
   int ret = OB_SUCCESS;
   ObLSService *ls_svr = share::g_mp->ls_service();
-  ObLS *tenant_ls = nullptr;
-  if (OB_FAIL(ls_svr->get_ls(tenant_ls))) {
+  ObLSHandle ls_handle;
+  if (OB_FAIL(ls_svr->get_ls(ls_id, ls_handle, ObLSGetMod::STORAGE_MOD))) {
     STORAGE_LOG(WARN, "get_ls from ls service fail.", K(ret), K(*ls_svr));
   } else {
     tablet_id_ = tablet_id;
-    ret = init_for_read(tenant_ls, timeout, tx_lock_timeout, snapshot_version);
+    ret = init_for_read(ls_handle, timeout, tx_lock_timeout, snapshot_version);
   }
   return ret;
 }
 
-int ObStoreCtx::init_for_read(ObLS *tenant_ls,
+int ObStoreCtx::init_for_read(const ObLSHandle &ls_handle,
                               const int64_t timeout,
                               const int64_t tx_lock_timeout,
                               const SCN &snapshot_version)
 {
   int ret = OB_SUCCESS;
-  if (OB_ISNULL(tenant_ls) || timeout < 0 || !snapshot_version.is_valid()) {
+  ObLS *ls = nullptr;
+  ObTxTable *tx_table = nullptr;
+  if (!ls_handle.is_valid() || timeout < 0 || !snapshot_version.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    STORAGE_LOG(WARN, "get invalid arguments", K(ret), K(tenant_ls), K(timeout), K(tx_lock_timeout), K(snapshot_version));
-  } else if (OB_FAIL(mvcc_acc_ctx_.init_read(tenant_ls->get_tx_table(),
-                                             snapshot_version, timeout, tx_lock_timeout))) {
+    STORAGE_LOG(WARN, "get invalid arguments", K(ret), K(ls_handle), K(timeout), K(tx_lock_timeout), K(snapshot_version));
+  } else if (OB_ISNULL(ls = ls_handle.get_ls())) {
+    ret = OB_ERR_UNEXPECTED;
+    STORAGE_LOG(WARN, "ls is null", K(ret), K(ls_id_));
+  } else if (OB_ISNULL(tx_table = ls->get_tx_table())) {
+    ret = OB_ERR_NULL_VALUE;
+    STORAGE_LOG(WARN, "get_tx_table from log stream fail.", K(ret), K(*ls));
+  } else if (OB_FAIL(mvcc_acc_ctx_.init_read(tx_table, snapshot_version, timeout, tx_lock_timeout))) {
     STORAGE_LOG(WARN, "mvcc_acc_ctx init read fail", KR(ret), K(mvcc_acc_ctx_));
   } else {
+    ls_id_ = ls->get_ls_id();
     timeout_ = timeout;
   }
   return ret;

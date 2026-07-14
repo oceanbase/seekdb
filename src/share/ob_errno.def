@@ -226,7 +226,6 @@ DEFINE_ERROR_DEP(OB_ERR_ALREADY_EXISTS, -4181, -1, "42S01", "Already exist");
 DEFINE_ERROR_DEP(OB_SEARCH_NOT_FOUND, -4182, -1, "HY000", "Value not found");
 DEFINE_ERROR(OB_BEYOND_THE_RANGE, -4183, -1, "HY000", "Key out of range");
 DEFINE_ERROR(OB_SERVER_OUTOF_DISK_SPACE, -4184, -1, "53100", "Server out of disk space");
-DEFINE_ERROR(OB_COLUMN_GROUP_NOT_FOUND, -4185, -1, "HY000", "Column group \'%.*s\' not found");
 DEFINE_ERROR(OB_CS_COMPRESS_LIB_ERROR, -4186, -1, "HY000", "Server failed to get compress library");
 DEFINE_ERROR_DEP(OB_ITEM_NOT_MATCH, -4187, -1, "HY000", "Item not match");
 DEFINE_ERROR(OB_SCHEDULER_TASK_CNT_MISMATCH, -4188, -1, "HY000", "Running task cnt and unfinished task cnt not consistent");
@@ -666,7 +665,7 @@ DEFINE_ERROR(OB_NOT_PRIMARY_TENANT, -4782, -1, "HY000", "The tenant is not PRIMA
 DEFINE_ERROR(OB_SERVICE_STOPPED, -4783, -1, "HY000", "The service has stopped");
 DEFINE_ERROR(OB_SERVER_CONNECTION_ERROR, -4784, -1, "HY000", "Server '%s' connection error");
 DEFINE_ERROR_EXT(OB_ERR_ATLER_TABLE_ILLEGAL_FK_DROP_INDEX, -4785, ER_DROP_INDEX_FK, "HY000", "Cannot drop index: needed in a foreign key constraint", "Cannot drop index '%.*s': needed in a foreign key constraint");
-DEFINE_ERROR(OB_ERR_FLASHBACK_QUERY_EXP_NULL, -4786, -1, "HY000", "NULL snapshot expression not allowed here");
+DEFINE_ERROR(OB_ERR_SNAPSHOT_QUERY_EXP_NULL, -4786, -1, "HY000", "NULL snapshot expression not allowed here");
 DEFINE_ERROR(OB_RELEASE_MDS_NODE_ERROR, -4787, -1, "HY000", "Release mds node error");
 
 // 余留位置
@@ -1060,7 +1059,6 @@ DEFINE_ERROR_EXT(OB_ERR_OBJECT_STRING_DOES_NOT_EXIST, -5400, -1, "HY000", "objec
 DEFINE_ERROR(OB_ERR_RESULTANT_DATA_TYPE_OF_VIRTUAL_COLUMN_IS_NOT_SUPPORTED, -5401, -1, "HY000", "resultant data type of virtual column is not supported");
 DEFINE_ERROR(OB_ERR_GET_STACKED_DIAGNOSTICS, -5402, ER_GET_STACKED_DIAGNOSTICS_INACTIVE, "0Z002", "GET STACKED DIAGNOSTICS when handler not active");
 DEFINE_ERROR(OB_DDL_SCHEMA_VERSION_NOT_MATCH, -5403, -1, "HY000", "ddl schema version not match");
-DEFINE_ERROR_EXT(OB_ERR_COLUMN_GROUP_DUPLICATE, -5404, ER_DUP_FIELDNAME, "42S21", "Duplicate column group name", "Duplicate column group name '%.*s'");
 DEFINE_ERROR_EXT(OB_ERR_RESERVED_SYNTAX, -5405, ER_RESERVED_SYNTAX, "HY000", "The \'%.*s\' syntax is reserved for purposes internal to the OceanBase Server", "The \'%.*s\' syntax is reserved for purposes internal to the OceanBase Server");
 DEFINE_ERROR_EXT(OB_ERR_INVALID_PARAM_TO_PROCEDURE, -5406, ER_WRONG_PARAMETERS_TO_PROCEDURE, "HY000", "Incorrect parameters to procedure \'%.*s\'", "Incorrect parameters to procedure \'%.*s\'");
 DEFINE_ERROR_EXT(OB_ERR_WRONG_PARAMETERS_TO_NATIVE_FCT, -5407, ER_WRONG_PARAMETERS_TO_NATIVE_FCT, "42000", "Incorrect parameters in the call to native function", "Incorrect parameters in the call to native function '%.*s'");
@@ -2332,7 +2330,7 @@ DEFINE_ERROR_EXT(OB_FUNCTION_NOT_DEFINED, -9203, ER_FUNCTION_NOT_DEFINED, "HY000
 ////////////////////////////////////////////////////////////////
 DEFINE_ERROR_EXT(OB_SP_RAISE_APPLICATION_ERROR, -20000, -1, "HY000", "The stored procedure 'raise_application_error' was called which causes this error to be generated", "%.*s");
 DEFINE_ERROR_EXT(OB_SP_RAISE_APPLICATION_ERROR_NUM, -21000, -1, "HY000", "error number argument to raise_application_error of stringstring is out of range", "error number argument to raise_application_error of '%d' is out of range");
-DEFINE_ERROR(OB_ERR_FLASHBACK_QUERY_WITH_UPDATE, -32491, -1, "HY000", "snapshot expression not allowed here");
+DEFINE_ERROR(OB_ERR_SNAPSHOT_QUERY_WITH_UPDATE, -32491, -1, "HY000", "snapshot expression not allowed here");
 
 DEFINE_ERROR(OB_ERR_DUPLICATE_HAVING_CLAUSE_IN_TABLE_EXPRESSION, -9501, -1, "HY000", "Duplicate having-clause in table expression");
 DEFINE_ERROR(OB_ERR_INOUT_PARAM_PLACEMENT_NOT_PROPERLY, -9502, -1, "HY000", "OUT and IN/OUT modes cannot be used in this context");

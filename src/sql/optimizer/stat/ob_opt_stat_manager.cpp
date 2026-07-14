@@ -79,21 +79,38 @@ int ObOptStatManager::init(ObMySQLProxy *proxy,
     LOG_WARN("optimizer statistics manager has already been initialized.", K(ret));
   } else if (OB_FAIL(stat_service_.init(proxy, config))) {
     LOG_WARN("failed to init stat service", K(ret));
+  } else if (OB_FAIL(refresh_stat_task_queue_.init(1, "OptRefTask", REFRESH_STAT_TASK_NUM, REFRESH_STAT_TASK_NUM))) {
+    LOG_WARN("initialize timer failed. ", K(ret));
   } else {
     inited_ = true;
   }
   return ret;
 }
 
-int ObOptStatManager::refresh_stat_cache(const obcall::ObUpdateStatCacheArg &arg)
+void ObOptStatManager::stop()
+{
+  refresh_stat_task_queue_.stop();
+}
+
+void ObOptStatManager::wait()
+{
+  refresh_stat_task_queue_.wait();
+}
+
+void ObOptStatManager::destroy()
+{
+  refresh_stat_task_queue_.destroy();
+}
+
+int ObOptStatManager::add_refresh_stat_task(const obcall::ObUpdateStatCacheArg &analyze_arg)
 {
   int ret = OB_SUCCESS;
-  if (arg.update_system_stats_only_) {
-    if (OB_FAIL(refresh_system_stat_cache(arg))) {
+  if (analyze_arg.update_system_stats_only_) {
+    if (OB_FAIL(handle_refresh_system_stat_task(analyze_arg))) {
       LOG_WARN("failed to handle refresh system stat cache", K(ret));
     }
-  } else if (OB_FAIL(refresh_table_stat_cache(arg))) {
-    LOG_WARN("failed to refresh stat cache", K(ret));
+  } else if (OB_FAIL(handle_refresh_stat_task(analyze_arg))) {
+    LOG_WARN("failed to handld refresh stat task", K(ret));
   }
   return ret;
 }
@@ -401,7 +418,7 @@ int ObOptStatManager::batch_write(share::schema::ObSchemaGetterGuard *schema_gua
 }
 
 
-int ObOptStatManager::refresh_table_stat_cache(const obcall::ObUpdateStatCacheArg &arg)
+int ObOptStatManager::handle_refresh_stat_task(const obcall::ObUpdateStatCacheArg &arg)
 {
   int ret = OB_SUCCESS;
   uint64_t table_id = arg.table_id_;
@@ -428,7 +445,7 @@ int ObOptStatManager::refresh_table_stat_cache(const obcall::ObUpdateStatCacheAr
   return ret;
 }
 
-int ObOptStatManager::refresh_system_stat_cache(const obcall::ObUpdateStatCacheArg &arg)
+int ObOptStatManager::handle_refresh_system_stat_task(const obcall::ObUpdateStatCacheArg &arg)
 {
   int ret = OB_SUCCESS;
   ObOptSystemStat::Key key;
@@ -441,7 +458,7 @@ int ObOptStatManager::refresh_system_stat_cache(const obcall::ObUpdateStatCacheA
     }
   }
   if (OB_SUCC(ret)) {
-    SERVER_MODULE_SCOPE {
+    MOD_SCOPE {
       sql::ObPlanCache *pc = share::g_mp->plan_cache();
       if (OB_FAIL(pc->flush_plan_cache())) {
         LOG_WARN("failed to evict plan", K(ret));
@@ -456,7 +473,7 @@ int ObOptStatManager::refresh_system_stat_cache(const obcall::ObUpdateStatCacheA
 int ObOptStatManager::invalidate_plan(const uint64_t table_id)
 {
   int ret = OB_SUCCESS;
-  SERVER_MODULE_SCOPE {
+  MOD_SCOPE {
     sql::ObPlanCache *pc = share::g_mp->plan_cache();
 
     if (OB_FAIL(pc->evict_plan(table_id))) {
@@ -857,9 +874,10 @@ int ObOptStatManager::flush_evals(ObIAllocator *alloc,
 
 int ObOptStatManager::get_table_rowcnt(const uint64_t table_id,
                                        const ObIArray<ObTabletID> &all_tablet_ids,
+                                       const ObIArray<ObLSID> &all_ls_ids,
                                        int64_t &table_rowcnt)
 {
-  return stat_service_.get_table_rowcnt(table_id, all_tablet_ids, table_rowcnt);
+  return stat_service_.get_table_rowcnt(table_id, all_tablet_ids, all_ls_ids, table_rowcnt);
 }
 
 //we need check the stat tables are valid, now we only check the stat table are exist. in some situation,
@@ -930,11 +948,21 @@ int ObOptStatManager::add_ds_stat_cache(const ObOptDSStat::Key &key,
 }
 
 
+int ObOptStatManager::update_opt_stat_gather_stat(const ObOptStatGatherStat &gather_stat)
+{
+  return stat_service_.get_sql_service().update_opt_stat_gather_stat(gather_stat);
+}
+
 int ObOptStatManager::update_table_stat_failed_count(const uint64_t table_id,
                                                      const ObIArray<int64_t> &part_ids,
                                                      int64_t &affected_rows)
 {
   return stat_service_.get_sql_service().update_table_stat_failed_count(table_id, part_ids, affected_rows);
+}
+
+int ObOptStatManager::update_opt_stat_task_stat(const ObOptStatTaskInfo &task_info)
+{
+  return stat_service_.get_sql_service().update_opt_stat_task_stat(task_info);
 }
 
 int ObOptStatManager::get_system_stat(ObOptSystemStat &stat)

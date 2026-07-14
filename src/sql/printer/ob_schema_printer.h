@@ -48,8 +48,9 @@ namespace share
 {
 namespace schema
 {
-class ObServerRuntimeSchema;
+class ObTenantSchema;
 class ObDatabaseSchema;
+class ObTablegroupSchema;
 class ObTableSchema;
 class ObRoutineInfo;
 class ObRoutineParam;
@@ -83,30 +84,40 @@ public:
       const share::schema::ObTableSchema *index_schema,
       const share::schema::ObTableSchema *table_schema,
       char *buf, const int64_t buf_len, int64_t &pos) const;
+  int print_table_definition_fulltext_indexs(
+      const common::ObIArray<common::ObString> &fulltext_indexs,
+      const uint64_t virtual_column_id,
+      char *buf, int64_t buf_len, int64_t &pos) const;
   int print_table_definition_table_options(
       const share::schema::ObTableSchema &table_schema,
       const common::ObIArray<common::ObString> &full_text_columns,
+      const uint64_t virtual_column_id,
       char* buf, const int64_t buf_len, int64_t& pos,
       bool is_for_table_status,
       common::ObMySQLProxy *sql_proxy,
       bool is_agent_mode) const;
   int print_func_index_columns_definition(
       const common::ObString &column_name,
+      uint64_t column_id,
       char *buf,
       int64_t buf_len,
-      int64_t &pos) const;
+      int64_t &pos,
+      bool is_agent_mode) const;
   int print_index_definition_columns(
       const share::schema::ObTableSchema &data_schema,
       const share::schema::ObTableSchema &index_schema,
       common::ObIArray<common::ObString> &full_text_columns,
+      uint64_t &virtual_column_id,
       char* buf,
       const int64_t buf_len,
-      int64_t& pos) const;
+      int64_t& pos,
+      bool is_agent_mode) const;
   int print_full_text_columns_definition(
       const share::schema::ObTableSchema &data_schema,
       const common::ObString &generated_column_name,
       common::ObIArray<common::ObString> &full_text_columns,
-      char* buf, const int64_t buf_len, int64_t& pos, bool &is_first) const;
+      char* buf, const int64_t buf_len, int64_t& pos, bool &is_first,
+      bool is_agent_mode) const;
   int print_index_table_definition(const uint64_t index_table_id,
       char* buf, const int64_t buf_len, int64_t& pos,
       const common::ObTimeZoneInfo *tz_info,
@@ -120,6 +131,14 @@ public:
                            bool agent_mode,
                            ObSQLMode sql_mode) const;
 
+  int print_materialized_view_definition(const uint64_t table_id,
+                                         char *buf,
+                                         const int64_t &buf_len,
+                                         int64_t &pos,
+                                         const ObTimeZoneInfo *tz_info,
+                                         bool agent_mode,
+                                         ObSQLMode sql_mode) const;
+                                         
   int print_database_definiton(const uint64_t database_id,
                                bool if_not_exists,
                                char *buf,
@@ -140,6 +159,11 @@ public:
                                         int64_t buf_len,
                                         const ObTableSchema &table_schema,
                                         int64_t &pos) const;
+  int print_identity_column_definition(const ObColumnSchemaV2 &iden_col,
+                                       char *buf,
+                                       int64_t buf_len,
+                                       const ObTableSchema &table_schema,
+                                       int64_t &pos) const;
   int print_table_definition_indexes(const ObTableSchema &table_schema,
                                      char* buf,
                                      const int64_t& buf_len,
@@ -246,24 +270,34 @@ public:
                                                char* buf,
                                                const int64_t& buf_len,
                                                int64_t& pos,
+                                               bool agent_mode,
                                                const common::ObTimeZoneInfo *tz_info) const;
   int print_list_partition_elements(const ObPartitionSchema *&schema,
                                     char* buf,
                                     const int64_t& buf_len,
                                     int64_t& pos,
                                     bool print_sub_part_element,
-                                    const common::ObTimeZoneInfo *tz_info = NULL) const;
+                                    bool agent_mode = false,
+                                    bool tablegroup_def = false,
+                                    const common::ObTimeZoneInfo *tz_info = NULL,
+                                    bool is_external_table = false) const;
   int print_range_partition_elements(const ObPartitionSchema *&schema,
                                char* buf,
                                const int64_t& buf_len,
                                int64_t& pos,
                                bool print_sub_part_element,
+                               bool agent_mode,
+                               bool tablegroup_def,
                                const common::ObTimeZoneInfo *tz_info) const;
   int print_hash_sub_partition_elements(ObSubPartition **sub_part_array,
                                         const int64_t sub_part_num,
                                         char* buf,
                                         const int64_t& buf_len,
                                         int64_t& pos) const;
+  int print_hash_sub_partition_elements_for_tablegroup(const ObPartitionSchema *&schema,
+                                                       char* buf,
+                                                       const int64_t& buf_len,
+                                                       int64_t& pos) const;
   int print_range_sub_partition_elements(ObSubPartition **sub_part_array,
                                          const int64_t sub_part_num,
                                          char *buf,
@@ -282,13 +316,31 @@ public:
                                             char *buf,
                                             const int64_t &buf_len,
                                             int64_t &pos,
-                                            const common::ObTimeZoneInfo *tz_info) const;
+                                            const common::ObTimeZoneInfo *tz_info,
+                                            bool is_tablegroup) const;
   int print_individual_sub_partition_elements(const ObPartitionSchema *&schema,
                                               const ObPartition *partition,
                                               char *buf,
                                               const int64_t &buf_len,
                                               int64_t &pos,
                                               const common::ObTimeZoneInfo *tz_info) const;
+  int print_tablegroup_definition(const uint64_t tablegroup_id,
+                                  char* buf,
+                                  const int64_t& buf_len,
+                                  int64_t& pos,
+                                  bool agent_mode,
+                                  const common::ObTimeZoneInfo *tz_info);
+  int print_tablegroup_definition_tablegroup_options(
+      const share::schema::ObTablegroupSchema &tablegroup_schema,
+      char* buf,
+      const int64_t& buf_len,
+      int64_t& pos,
+      bool agent_mode = false) const;
+  int print_tenant_definition(common::ObMySQLProxy *sql_proxy,
+                              char* buf,
+                              const int64_t& buf_len,
+                              int64_t& pos,
+                              bool is_agent_mode = false) const;
   int print_routine_definition_v1(const ObRoutineInfo *routine_info,
                                const ObStmtNodeTree *param_list,
                                const ObStmtNodeTree *return_type,
@@ -350,6 +402,11 @@ public:
                                                char* buf,
                                                const int64_t& buf_len,
                                                int64_t& pos) const;
+  int print_sequence_definition(const ObSequenceSchema &sequence_schema,
+                                char *buf,
+                                const int64_t &buf_len,
+                                int64_t &pos,
+                                bool is_from_create_sequence) const;
   // print pk/check/not null constraint definition
   int print_constraint_definition(const ObDatabaseSchema &db_schema,
                                   const ObTableSchema &table_schema,
@@ -370,12 +427,21 @@ public:
                             int64_t &pos,
                             bool is_role,
                             bool print_password_secret = false);
+  int add_create_tenant_variables(common::ObMySQLProxy *const sql_proxy,
+      char *buf, const int64_t buf_len, int64_t &pos) const;
+  
   int print_hash_partition_elements(const ObPartitionSchema *&schema,
                                     char* buf,
                                     const int64_t& buf_len,
                                     int64_t& pos,
                                     bool print_sub_part_element,
+                                    bool agent_mode,
                                     const common::ObTimeZoneInfo *tz_info) const;
+  int print_external_table_file_info(const ObTableSchema &table_schema,
+                                     ObIAllocator& allocator,
+                                     char* buf,
+                                     const int64_t& buf_len,
+                                     int64_t& pos) const;
   int print_identifier(char* buf,
                        const int64_t& buf_len,
                        int64_t& pos,
@@ -402,7 +468,15 @@ public:
                                        char* buf,
                                        const int64_t& buf_len,
                                        int64_t& pos) const;
+  int print_dynamic_partition_policy(const ObTableSchema &table_schema,
+                                     char* buf,
+                                     const int64_t& buf_len,
+                                     int64_t& pos) const;
   void set_sql_schema_guard(sql::ObSqlSchemaGuard *sql_schema_guard);
+  int print_location_definiton(const uint64_t location_id,
+                               char *buf,
+                               const int64_t &buf_len,
+                               int64_t &pos) const;
 private:
   static bool is_subpartition_valid_in_mysql(const ObTableSchema &table_schema)
   {

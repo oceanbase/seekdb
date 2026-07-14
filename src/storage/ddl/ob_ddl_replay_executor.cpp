@@ -317,16 +317,13 @@ int ObDDLStartReplayExecutor::replay_ddl_start(ObTabletHandle &tablet_handle, co
     if (is_lob_meta_tablet) {
       table_key.table_type_ = ObITable::MAJOR_SSTABLE;
       table_key.tablet_id_ = tablet_id;
-      table_key.column_group_idx_ = 0;
       table_key.version_range_.base_version_ = 0;
       table_key.version_range_.snapshot_version_ = snapshot_version;
     } else {
       table_key = log_->get_table_key();
     }
 
-    if (!is_lob_meta_tablet && OB_FAIL(tablet_handle.get_obj()->pre_process_cs_replica(direct_load_param.common_param_.direct_load_type_, table_key))) {
-      LOG_WARN("pre process for cs replica failed", K(ret), K(direct_load_param), K(table_key), K(tablet_id));
-    } else if (OB_FAIL(tenant_direct_load_mgr->replay_create_tablet_direct_load(tablet_handle.get_obj(), log_->get_execution_id(), direct_load_param))) {
+    if (OB_FAIL(tenant_direct_load_mgr->replay_create_tablet_direct_load(tablet_handle.get_obj(), log_->get_execution_id(), direct_load_param))) {
       LOG_WARN("create tablet manager failed", K(ret));
     } else if (OB_FAIL(tenant_direct_load_mgr->get_tablet_mgr_and_check_major(
             ls_->get_ls_id(),
@@ -414,7 +411,6 @@ int ObDDLRedoReplayExecutor::do_replay_(ObTabletHandle &tablet_handle)
     macro_block.scn_ = scn_;
     macro_block.ddl_start_scn_ = redo_info.start_scn_;
     macro_block.table_key_ = redo_info.table_key_;
-    macro_block.end_row_id_ = redo_info.end_row_id_;
     macro_block.trans_id_ = redo_info.trans_id_;
     macro_block.merge_slice_idx_ = redo_info.merge_slice_idx_;
     macro_block.seq_no_ = redo_info.seq_no_;
@@ -514,7 +510,6 @@ int ObDDLRedoReplayExecutor::do_inc_replay_(
       macro_block.scn_ = scn_;
       macro_block.ddl_start_scn_ = redo_info.start_scn_;
       macro_block.table_key_ = redo_info.table_key_;
-      macro_block.end_row_id_ = redo_info.end_row_id_;
       macro_block.trans_id_ = redo_info.trans_id_;
       macro_block.seq_no_ = redo_info.seq_no_;
       ObTabletDirectLoadMgrHandle mock_mgr_handle;
@@ -658,7 +653,6 @@ int ObDDLRedoReplayExecutor::do_full_replay_(
       macro_block.scn_ = scn_;
       macro_block.ddl_start_scn_ = redo_info.start_scn_;
       macro_block.table_key_ = redo_info.table_key_;
-      macro_block.end_row_id_ = redo_info.end_row_id_;
       const int64_t snapshot_version = redo_info.table_key_.get_snapshot_version();
       const ObITable::TableKey &table_key = redo_info.table_key_;
       bool is_major_sstable_exist = false;
@@ -703,51 +697,9 @@ int ObDDLRedoReplayExecutor::filter_redo_log_(
     bool &can_skip)
 {
   int ret = OB_SUCCESS;
-  ObTablet *tablet = nullptr;
-  bool is_cs_replica = ls_->is_cs_replica();
+  UNUSED(redo_info);
+  UNUSED(tablet_handle);
   can_skip = false;
-  if (redo_info.is_not_compat_cs_replica()) {
-    /* 
-     * The redo log is write when cs replica is not visible or no need to process when doing offline ddl. It may be:
-     *   CASE 1: DATA_VERSION < 4.3.3, cs replica is not supported at all.
-     *   CASE 2: Execute offline ddl when the 1st C replica is adding into the cluster.
-     *   CASE 3: It is full direct load.
-     *   CASE 4: The table schema is column store originally.
-     * 
-     * And if redo_info.is_commpat_cs_replica(), tablet will be cs_replica_global_visible_when_ddl
-     */
-  } else if (OB_UNLIKELY(!tablet_handle.is_valid())) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid tablet handle", K(ret), K(tablet_handle));
-  } else if (OB_ISNULL(tablet = tablet_handle.get_obj())) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("tablet is null", K(ret), K(tablet_handle));
-  } else if (is_cs_replica) {
-    const ObTabletMeta &tablet_meta = tablet->get_tablet_meta();
-    if (tablet_meta.is_cs_replica_global_visible_when_ddl()) {
-      if (tablet_meta.is_cs_replica_global_visible_and_replay_row_store()) {
-        // row store redo log is replayed in migration src, so need continue replay row store redo log even local is cs replica 
-        if (redo_info.is_cs_replica_column_store()) {
-          can_skip = true;
-        }
-      } else if (tablet_meta.is_cs_replica_global_visible_and_replay_column_store()) {
-        if (redo_info.is_cs_replica_row_store()) {
-          can_skip = true;
-        }
-      } else {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected ddl replay status when replaying ddl redo", K(ret), KPC(tablet));
-      }
-    } else { 
-      // ddl replay status is not cs replica visible, means that ls leader only write row store redo log.
-      // so redo info is not compat_cs_replica() and has been processed above
-    }
-  } else { // ls is not cs replica, only replay row store redo log (table schema is row store)
-    if (redo_info.is_cs_replica_column_store()) {
-      can_skip = true;
-    }
-  }
-  FLOG_INFO("[CS-Replica] Finish filter redo log", K(ret), K(redo_info), K(is_cs_replica), K(can_skip), KPC(tablet), K(ls_));
 #ifdef ERRSIM
   if (OB_SUCC(ret)) {
     ret = EN_REPLAY_REDO_DDL_LOG_WAIT;

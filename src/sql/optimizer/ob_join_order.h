@@ -451,6 +451,10 @@ class Path
       return (NULL != strong_sharding_ && strong_sharding_->is_local());
     }
     bool is_valid() const;
+    inline bool is_remote() const
+    {
+      return (NULL != strong_sharding_ && strong_sharding_->is_remote());
+    }
     inline bool is_match_all() const
     {
       return (NULL != strong_sharding_ && strong_sharding_->is_match_all());
@@ -462,11 +466,11 @@ class Path
     }
     inline bool is_sharding() const
     {
-      return is_distributed();
+      return is_remote() || is_distributed();
     }
     inline bool is_single() const
     {
-      return is_local() || is_match_all();
+      return is_local() || is_remote() || is_match_all();
     }
     virtual int estimate_cost()=0;
     virtual int re_estimate_cost(EstimateCostInfo &info, double &card, double &cost);
@@ -570,6 +574,19 @@ class Path
   };
 
 
+  enum OptSkipScanState
+  {
+#if defined(__APPLE__) || defined(__ANDROID__)
+    // macOS/Android define SS_DISABLE in signal headers, undefine it first
+    #ifdef SS_DISABLE
+    #undef SS_DISABLE
+    #endif
+#endif
+    SS_DISABLE = 0,
+    SS_UNSET,
+    SS_HINT_ENABLE,
+    SS_NDV_SEL_ENABLE
+  };
   class AccessPath : public Path
   {
   public:
@@ -599,6 +616,7 @@ class Path
         table_opt_info_(),
         domain_idx_info_(),
         for_update_(false),
+        use_skip_scan_(OptSkipScanState::SS_UNSET),
         is_valid_inner_path_(false),
         index_prefix_(-1),
         can_batch_rescan_(false),
@@ -665,6 +683,11 @@ class Path
                                    double &stats_logical_query_range_row_count,
                                    int64_t &opt_stats_cost_percent,
                                    bool &is_valid) const;
+    inline bool can_use_remote_estimate()
+    {
+      return NULL == table_opt_info_ ? false :
+            OptimizationMethod::RULE_BASED != table_opt_info_->optimization_method_;
+    }
     const ObIArray<ObNewRange> &get_query_ranges() const;
     virtual int get_name_internal(char *buf, const int64_t buf_len, int64_t &pos) const
     {
@@ -699,6 +722,9 @@ class Path
       return  can_das_dynamic_part_pruning() && NULL != table_partition_info_
               ? table_partition_info_->get_phy_tbl_location_info().get_partition_cnt() : 1;
     }
+    static int get_candidate_server_cnt(const ObOptimizerContext &opt_ctx,
+                                  const ObIArray<ObAddr> &server_list,
+                                  int64_t &server_cnt);
     virtual bool is_index_merge_path() const { return false; }
     TO_STRING_KV(K_(table_id),
                  K_(ref_table_id),
@@ -716,6 +742,7 @@ class Path
                  K_(domain_idx_info),
                  K_(for_update),
                  K_(use_das),
+                 K_(use_skip_scan),
                  K_(is_valid_inner_path),
                  K_(can_batch_rescan),
                  K_(can_das_dynamic_part_pruning),
@@ -743,6 +770,7 @@ class Path
     DomainIndexAccessInfo domain_idx_info_;
     VecIndexAccessInfo vec_idx_info_;
     bool for_update_;
+    OptSkipScanState use_skip_scan_;
     // mark this access path is inner path and contribute query range
     bool is_valid_inner_path_;
     int64_t index_prefix_;
@@ -757,11 +785,9 @@ class Path
   {
     INDEX_MERGE_INVALID = 0,
     INDEX_MERGE_UNION,
+    INDEX_MERGE_INTERSECT,
     INDEX_MERGE_SCAN,
-    INDEX_MERGE_FTS_INDEX,
-    // Optimizer-only node used to choose one usable branch from a conjunction.
-    // It must be collapsed before an index merge access path is constructed.
-    INDEX_MERGE_ALTERNATIVES
+    INDEX_MERGE_FTS_INDEX
   };
 
   /**
@@ -780,11 +806,7 @@ class Path
 
     int formalize_index_merge_tree();
     int set_scan_direction(const ObOrderDirection &direction);
-    inline bool is_merge_node() const { return INDEX_MERGE_UNION == node_type_; }
-    inline bool is_candidate_merge_node() const
-    {
-      return is_merge_node() || INDEX_MERGE_ALTERNATIVES == node_type_;
-    }
+    inline bool is_merge_node() const {return INDEX_MERGE_UNION == node_type_ || INDEX_MERGE_INTERSECT == node_type_; }
     inline bool is_scan_node() const {return INDEX_MERGE_SCAN == node_type_ || INDEX_MERGE_FTS_INDEX == node_type_; }
     int get_all_index_ids(ObIArray<uint64_t> &index_ids) const;
 
@@ -1748,7 +1770,8 @@ struct NullAwareAntiJoinInfo {
                                const ObIndexInfoCache &index_info_cache,
                                PathHelper &helper,
                                AccessPath *&ap,
-                               bool use_das);
+                               bool use_das,
+                               OptSkipScanState use_skip_scan);
 
     int create_index_merge_access_paths(const uint64_t table_id,
                                         const uint64_t ref_table_id,
@@ -1805,11 +1828,6 @@ struct NullAwareAntiJoinInfo {
                                     ObIArray<ObIndexMergeNode*> &candi_index_trees,
                                     ObIArray<AccessPath*> &access_paths);
 
-    int choose_best_index_merge_branch(ObIndexMergeNode* &candi_node);
-
-    int calc_index_merge_candidate_selectivity(ObIndexMergeNode* node,
-                                                double &selectivity);
-
     int build_access_path_for_scan_node(const uint64_t table_id,
                                         const uint64_t ref_table_id,
                                         const PathHelper &helper,
@@ -1817,6 +1835,11 @@ struct NullAwareAntiJoinInfo {
                                         ObIArray<ObExprConstraint> &range_expr_constraint,
                                         ObIndexMergeNode* node,
                                         int64_t &scan_node_count);
+
+    int choose_best_selectivity_branch(ObIndexMergeNode* &candi_node);
+
+    int calc_selectivity_for_index_merge_node(ObIndexMergeNode* node,
+                                              double &child_selectivity);
 
     int create_one_index_merge_path(const uint64_t table_id,
                                     const uint64_t ref_table_id,
@@ -1856,6 +1879,14 @@ struct NullAwareAntiJoinInfo {
     int check_use_das_by_false_startup_filter(const IndexInfoEntry &index_info_entry,
                                               const ObIArray<ObRawExpr*> &filters,
                                               bool &use_das);
+    int will_use_skip_scan(const uint64_t table_id,
+                           const uint64_t ref_id,
+                           const uint64_t index_id,
+                           const ObIndexInfoCache &index_info_cache,
+                           PathHelper &helper,
+                           ObSQLSessionInfo *session_info,
+                           OptSkipScanState &use_skip_scan);
+
     int get_access_path_ordering(const uint64_t table_id,
                                  const uint64_t ref_table_id,
                                  const uint64_t index_id,
@@ -2499,7 +2530,8 @@ struct NullAwareAntiJoinInfo {
                        const common::ObIArray<ObRawExpr*> &where_conditions);
 
     int fill_query_range_info(const QueryRangeInfo &range_info,
-                              ObCostTableScanInfo &est_cost_info);
+                              ObCostTableScanInfo &est_cost_info,
+                              bool use_skip_scan);
 
     int get_query_range_count(const QueryRangeInfo &range_info,
                               int64_t &range_cnt);
@@ -2656,6 +2688,7 @@ struct NullAwareAntiJoinInfo {
                      const DomainIndexAccessInfo &tr_idx_info,
                      bool &is_nl_with_extended_range,
                      bool is_link,
+                     bool use_skip_scan,
                      const int64_t index_prefix);
 
     int can_extract_unprecise_range(const uint64_t table_id,
@@ -2677,6 +2710,11 @@ struct NullAwareAntiJoinInfo {
                                           const bool is_inner_path,
                                           common::ObIArray<ObRawExpr*> &filter_exprs,
                                           ObBaseTableEstMethod &method);
+
+    inline bool can_use_remote_estimate(OptimizationMethod method)
+    {
+      return OptimizationMethod::RULE_BASED != method;
+    }
 
     int compute_table_rowcount_info();
 

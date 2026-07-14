@@ -49,7 +49,7 @@ class ObPxSubCoord
 {
 public:
   explicit ObPxSubCoord(const observer::ObGlobalContext &gctx,
-                        ObPxInitSqcArgs &arg)
+                        ObPxRpcInitSqcArgs &arg)
       : gctx_(gctx),
         sqc_arg_(arg),
         sqc_ctx_(arg),
@@ -92,7 +92,7 @@ public:
   void set_is_single_tsc_leaf_dfo(bool flag) { is_single_tsc_leaf_dfo_ = flag; }
   int get_participants(ObPxSqcMeta &sqc,
                        const int64_t table_id,
-                       ObIArray<ObTabletID> &tablet_ids) const;
+                       ObIArray<std::pair<share::ObLSID, ObTabletID>> &ls_tablet_ids) const;
   void destroy_shared_rf_msgs();
 private:
   int setup_loop_proc(ObSqcCtx &sqc_ctx) const;
@@ -111,22 +111,22 @@ private:
                                 const common::ObIArray<ObSqcTableLocationKey> &tsc_location_keys,
                                 common::ObIArray<const ObTableScanSpec*> &scan_ops,
                                 common::ObIArray<DASTabletLocArray> &tablets_array);
-  int link_sqc_qc_channel(ObPxInitSqcArgs &sqc_arg);
-  int dispatch_tasks(ObPxInitSqcArgs &sqc_arg,
+  int link_sqc_qc_channel(ObPxRpcInitSqcArgs &sqc_arg);
+  int dispatch_tasks(ObPxRpcInitSqcArgs &sqc_arg,
                      ObSqcCtx &sqc_ctx,
                      int64_t &dispatch_worker_count,
                      bool is_fast_sqc = false);
   int link_sqc_task_channel(ObSqcCtx &sqc_ctx);
   int unlink_sqc_task_channel(ObSqcCtx &sqc_ctx);
-  int unlink_sqc_qc_channel(ObPxInitSqcArgs &sqc_arg);
-  int create_tasks(ObPxInitSqcArgs &sqc_arg, ObSqcCtx &sqc_ctx, bool is_fast_sqc = false);
+  int unlink_sqc_qc_channel(ObPxRpcInitSqcArgs &sqc_arg);
+  int create_tasks(ObPxRpcInitSqcArgs &sqc_arg, ObSqcCtx &sqc_ctx, bool is_fast_sqc = false);
   int try_cleanup_tasks();
 
-  int dispatch_task_to_thread_pool(ObPxInitSqcArgs &sqc_arg,
+  int dispatch_task_to_thread_pool(ObPxRpcInitSqcArgs &sqc_arg,
                                    ObSqcCtx &sqc_ctx,
                                    ObPxSqcMeta &sqc,
                                    int64_t task_idx);
-  int dispatch_task_to_local_thread(ObPxInitSqcArgs &sqc_arg,
+  int dispatch_task_to_local_thread(ObPxRpcInitSqcArgs &sqc_arg,
                                     ObSqcCtx &sqc_ctx,
                                     ObPxSqcMeta &sqc);
 
@@ -134,13 +134,17 @@ private:
   int try_prealloc_transmit_channel(ObSqcCtx &sqc_ctx, ObPxSqcMeta &sqc);
   int try_prealloc_receive_channel(ObSqcCtx &sqc_ctx, ObPxSqcMeta &sqc);
   void try_get_dml_op(ObOpSpec &root, ObTableModifySpec *&dml_op);
+  int construct_p2p_dh_map() {
+    return sqc_ctx_.sqc_proxy_.construct_p2p_dh_map(
+           sqc_arg_.sqc_.get_p2p_dh_map_info());
+  }
 private:
   void ddl_rewrite_ret_code(int &ret_code);
   int sync_table_autoinc_value();
 
 private:
   const observer::ObGlobalContext &gctx_;
-  ObPxInitSqcArgs &sqc_arg_;
+  ObPxRpcInitSqcArgs &sqc_arg_;
   ObSqcCtx sqc_ctx_;
   ObSubTransCtrl trans_ctrl_;
   ObDDLCtrl ddl_ctrl_; // for ddl insert sstable

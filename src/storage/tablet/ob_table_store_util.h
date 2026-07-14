@@ -34,7 +34,7 @@ namespace storage
 {
 class ObTabletTableStore;
 class ObTabletTablesSet;
-class ObStorageMetaMemMgr;
+class ObTenantMetaMemMgr;
 class ObITableArray;
 
 class ObSSTableWrapper

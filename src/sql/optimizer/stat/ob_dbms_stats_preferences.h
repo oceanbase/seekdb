@@ -394,6 +394,15 @@ public:
                                        bool is_reset_prefs = false,
                                        int64_t *expect_affected_rows = NULL);
 
+  static int get_online_estimate_percent_for_upgrade(ObSqlString &sql);
+
+  static int get_extra_stats_perfs_for_upgrade(ObSqlString &sql);
+
+  static int get_extra_stats_perfs_for_upgrade_425(ObSqlString &sql);
+
+  static int get_extra_stats_perfs_for_upgrade_4351(ObSqlString &sql);
+
+
 private:
   static int do_get_prefs(ObMySQLProxy *mysql_proxy,
                           ObIAllocator &allocator,

@@ -62,7 +62,7 @@ int ObMdsSchemaHelper::init()
     } else if (OB_UNLIKELY(!table_schema_.is_valid())) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("invalid table schema", K(ret), K_(table_schema));
-    } else if (OB_FAIL(storage_schema_.init(allocator_, table_schema_))) {
+    } else if (OB_FAIL(storage_schema_.init(allocator_, table_schema_, lib::Worker::CompatMode::MYSQL))) {
       LOG_WARN("fail to init storage schema", K(ret));
     } else if (OB_UNLIKELY(!storage_schema_.is_valid())) {
       ret = OB_ERR_UNEXPECTED;
@@ -219,6 +219,8 @@ int ObMdsSchemaHelper::build_table_schema(const int64_t database_id,
     table_schema.set_row_store_type(ObRowStoreType::FLAT_ROW_STORE);
     table_schema.set_table_name(MDS_TABLE_NAME);
     table_schema.set_schema_version(MDS_SCHEMA_VERSION);
+    // Disable macro block bloom filter for mds table.
+    table_schema.set_enable_macro_block_bloom_filter(false);
   }
 
   if (OB_FAIL(ret)) {
@@ -256,7 +258,8 @@ int ObMdsSchemaHelper::build_rowkey_read_info(
       allocator,
       full_stored_col_cnt,
       storage_schema.get_rowkey_column_num(),
-      cols_desc))) {
+      cols_desc,
+      true/*use_default_compat_version*/))) {
     LOG_WARN("fail to init rowkey read info", K(ret));
   }
 

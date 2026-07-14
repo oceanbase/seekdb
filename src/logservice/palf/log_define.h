@@ -56,7 +56,7 @@ namespace palf
 {
 #define TMP_SUFFIX ".tmp"
 
-#define PALF_EVENT(info_string, args...) FLOG_INFO("[PALF_EVENT] " info_string, args)
+#define PALF_EVENT(info_string, palf_id, args...) FLOG_INFO("[PALF_EVENT] "info_string, "palf_id", palf_id, args)
 
 #define PALF_REPORT_INFO_KV(args...) \
 const int64_t MAX_INFO_LENGTH = 512; \
@@ -67,6 +67,7 @@ int64_t pos = 0; \
 typedef int FileDesc;
 typedef uint64_t block_id_t ;
 typedef uint64_t offset_t;
+constexpr int64_t INVALID_PALF_ID = -1;
 class LSN;
 class LogWriteBuf;
 class ILogBlockPool;
@@ -106,23 +107,58 @@ typedef common::ObFixedArray<LSN, ObIAllocator> LSNArray;
 typedef common::ObFixedArray<LogWriteBuf *, ObIAllocator> LogWriteBufArray;
 // ==================== block and log end ===========================
 
-// ====================== Local log state begin =====================
-constexpr int64_t DEFAULT_GROUP_BUFFER_SIZE = 1 << 22;
+// ====================== Consensus begin ===========================
+// follower's group buffer size is as same as leader's.
+constexpr int64_t LEADER_DEFAULT_GROUP_BUFFER_SIZE = 1 << 22;
+constexpr int64_t FOLLOWER_DEFAULT_GROUP_BUFFER_SIZE = LEADER_DEFAULT_GROUP_BUFFER_SIZE + 0L;
 const int64_t PALF_STAT_PRINT_INTERVAL_US = 1 * 1000 * 1000L;
+// The advance delay threshold for match lsn is 1s.
 const int64_t PALF_IO_STAT_PRINT_INTERVAL_US = 10 * 1000 * 1000L;
 const int64_t MATCH_LSN_ADVANCE_DELAY_THRESHOLD_US = 1 * 1000 * 1000L;
+const int64_t PALF_RECONFIRM_FETCH_MAX_LSN_INTERVAL = 1 * 1000 * 1000;
+const int64_t PALF_FETCH_LOG_INTERVAL_US = 2 * 1000 * 1000L;                 // 2s
+// Control the fetch interval trigger by outer(eg. config change pre check) by 500ms.
+const int64_t PALF_FETCH_LOG_OUTER_TRIGGER_INTERVAL_US = 500 * 1000;           // 500 ms
+const int64_t PALF_FETCH_LOG_RENEW_LEADER_INTERVAL_US = 5 * 1000 * 1000;     // 5s
+const int64_t PALF_LEADER_RECONFIRM_SYNC_TIMEOUT_US = 10 * 1000 * 1000L;     // 10s
+const int64_t PREPARE_LOG_BUFFER_SIZE = 2048;
+const int64_t PALF_LEADER_ACTIVE_SYNC_TIMEOUT_US = 10 * 1000 * 1000L;        // 10s
 const int32_t PALF_MAX_REPLAY_TIMEOUT = 500 * 1000;
 const int32_t DEFAULT_LOG_LOOP_INTERVAL_US = 100 * 1000;                            // 100ms
 const int32_t LOG_LOOP_INTERVAL_FOR_PERIOD_FREEZE_US = 1 * 1000;                       // 1ms
 const int64_t PALF_SLIDING_WINDOW_SIZE = 1 << 11;                                   // must be 2^n(n>0), default 2^11 = 2048
-const int64_t PALF_MAX_SUBMIT_LOG_COUNT = PALF_SLIDING_WINDOW_SIZE / 2;
+const int64_t PALF_MAX_LEADER_SUBMIT_LOG_COUNT = PALF_SLIDING_WINDOW_SIZE / 2;      // max number of concurrent submitting group log in leader
+const int64_t PALF_RESEND_CONFIG_LOG_INTERVAL_US = 500 * 1000L;                   // 500 ms
+const int64_t PALF_RESEND_CONFIG_LOG_FOR_ARB_INTERVAL_US = 10 * 1000L;            // 10 ms
+const int64_t PALF_BROADCAST_LEADER_INFO_INTERVAL_US = 5 * 1000 * 1000L;     // 5s
 const int64_t FIRST_VALID_LOG_ID = 1;  // The first valid log_id is 1.
+const int64_t PALF_PARENT_CHILD_TIMEOUT_US = 4 * 1000 * 1000L;               // 4000ms, 4s
+const int64_t PALF_PARENT_KEEPALIVE_INTERVAL_US = 1 * 1000 * 1000L;          // 1000ms, 1s
+const int64_t PALF_CHILD_RESEND_REGISTER_INTERVAL_US = 4 * 1000 * 1000L;     // 4000ms
+const int64_t PALF_CHECK_PARENT_CHILD_INTERVAL_US = 1 * 1000 * 1000;                // 1000ms
 const int64_t PALF_DUMP_DEBUG_INFO_INTERVAL_US = 10 * 1000 * 1000;                  // 10s
+const int64_t PALF_UPDATE_CACHED_STAT_INTERVAL_US = 500 * 1000;                     // 500 ms
+const int64_t PALF_SYNC_RPC_TIMEOUT_US = 2 * 1000 * 1000;                           // 2 s
+const int64_t PALF_LOG_SYNC_DELAY_THRESHOLD_US = 3 * 1000 * 1000L;                  // 3 s
+constexpr int64_t INVALID_PROPOSAL_ID = INT64_MAX;
+constexpr int64_t PALF_MAX_PROPOSAL_ID = INT64_MAX - 1;
+constexpr int64_t PALF_INITIAL_PROPOSAL_ID = 1;
 constexpr char PADDING_LOG_CONTENT_CHAR = '\0';
 const int64_t MIN_WRITING_THTOTTLING_TRIGGER_PERCENTAGE = 40;
 constexpr int64_t PALF_IO_WAIT_EVENT_TIMEOUT_MS = 100;
 
-// ====================== Local log state end ========================
+inline int64_t max_proposal_id(const int64_t a, const int64_t b)
+{
+  if ((INVALID_PROPOSAL_ID == a && INVALID_PROPOSAL_ID == b) ||
+      (INVALID_PROPOSAL_ID != a && INVALID_PROPOSAL_ID == b)) {
+    return a;
+  } else if (INVALID_PROPOSAL_ID == a && INVALID_PROPOSAL_ID != b) {
+    return b;
+  } else {
+    return MAX(a, b);
+  }
+}
+// ====================== Consensus end ==============================
 
 // =========== LSN begin ==============
 const uint64_t LOG_INVALID_LSN_VAL = UINT64_MAX;
@@ -139,30 +175,41 @@ constexpr mode_t FILE_OPEN_MODE = S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH;
 
 // =========== BatchRPC start ==================
 // NOTE: ORDER AND VALUE ARE VITAL, DO NOT CHANGE
+constexpr int64_t LOG_BATCH_PUSH_LOG_REQ = 1;
+constexpr int64_t LOG_BATCH_PUSH_LOG_RESP = 2;
 // =========== BatchRPC end  ==================
 
 // ========== LogCache start =================
 constexpr offset_t LOG_CACHE_ALIGN_SIZE = 64 * 1024;
 // ========== LogCache end =================
 
-enum LogState {
+const int64_t OB_INVALID_CONFIG_CHANGE_LOCK_OWNER = -1;
+
+enum ObReplicaState {
   INVALID_STATE = 0,
   INIT = 1,
   ACTIVE = 2,
-  RECOVERING = 3,
+  RECONFIRM = 3,
+  PENDING = 4,
 };
-inline const char *log_state_to_string(const LogState state)
+const int64_t SYS_PALF_ID = 1;
+inline bool is_sys_palf_id(int64_t palf_id)
 {
-  #define CHECK_LOG_STATE(x) case(LogState::x): return #x
+  return SYS_PALF_ID == palf_id;
+}
+inline const char *replica_state_to_string(const ObReplicaState &state)
+{
+  #define CHECK_OB_REPLICA_STATE(x) case(ObReplicaState::x): return #x
   switch (state)
   {
-    CHECK_LOG_STATE(INIT);
-    CHECK_LOG_STATE(ACTIVE);
-    CHECK_LOG_STATE(RECOVERING);
+    CHECK_OB_REPLICA_STATE(INIT);
+    CHECK_OB_REPLICA_STATE(ACTIVE);
+    CHECK_OB_REPLICA_STATE(RECONFIRM);
+    CHECK_OB_REPLICA_STATE(PENDING);
     default:
       return "INVALID_STATE";
   }
-  #undef CHECK_LOG_STATE
+  #undef CHECK_OB_REPLICA_STATE
 }
 
 enum LogType
@@ -173,6 +220,40 @@ enum LogType
   // max value of log_type
   LOG_TYPE_MAX  = 1000
 };
+
+enum LogReplicaType
+{
+  INVALID_REPLICA = 0,
+  NORMAL_REPLICA,           // full replica
+  ARBITRATION_REPLICA,      // arbitration replica
+};
+
+inline const char *replica_type_2_str(const LogReplicaType state)
+{
+  #define CHECK_REPLICA_TYPE_STR(x) case(LogReplicaType::x): return #x
+  switch(state)
+  {
+    CHECK_REPLICA_TYPE_STR(NORMAL_REPLICA);
+    CHECK_REPLICA_TYPE_STR(ARBITRATION_REPLICA);
+    default:
+      return "InvalidReplicaType";
+  }
+  #undef CHECK_REPLICA_TYPE_STR
+}
+
+
+inline int log_replica_type_to_string(const LogReplicaType replica_type, char *str_buf_, const int64_t str_len)
+{
+  int ret = OB_SUCCESS;
+  if (LogReplicaType::NORMAL_REPLICA == replica_type) {
+    strncpy(str_buf_, "NORMAL_REPLICA", str_len);
+  } else if (LogReplicaType::ARBITRATION_REPLICA == replica_type) {
+    strncpy(str_buf_, "ARBITRATION_REPLICA", str_len);
+  } else {
+    ret = OB_INVALID_ARGUMENT;
+  }
+  return ret;
+}
 
 inline bool is_valid_log_id(const int64_t log_id)
 {
@@ -246,6 +327,11 @@ inline bool palf_reach_time_interval(const int64_t interval, int64_t &warn_time)
   return bool_ret;
 }
 
+inline bool is_valid_palf_id(const int64_t id)
+{
+  return 0 <= id;
+}
+
 inline bool is_valid_file_desc(const FileDesc &fd)
 {
   return 0 <= fd;
@@ -264,10 +350,61 @@ int convert_sys_errno();
 
 bool is_number(const char *);
 
+struct LSKey {
+  LSKey() : id_(-1) {}
+  explicit LSKey(const int64_t id) : id_(id) {}
+  ~LSKey() {id_ = -1;}
+  LSKey(const LSKey &key) { this->id_ = key.id_; }
+  LSKey &operator=(const LSKey &other)
+  {
+    this->id_ = other.id_;
+    return *this;
+  }
+
+  bool operator==(const LSKey &palf_id) const
+  {
+    return this->compare(palf_id) == 0;
+  }
+  bool operator!=(const LSKey &palf_id) const
+  {
+    return this->compare(palf_id) != 0;
+  }
+  uint64_t hash() const
+  {
+    uint64_t hash_val = 0;
+    hash_val = common::murmurhash(&hash_val, sizeof(id_), id_);
+    return hash_val;
+  }
+  int hash(uint64_t &hash_val) const
+  {
+    hash_val = hash();
+    return OB_SUCCESS;
+  }
+  int compare(const LSKey &palf_id) const
+  {
+    if (palf_id.id_ < id_) {
+      return 1;
+    } else if (palf_id.id_ == id_) {
+      return 0;
+    } else {
+      return -1;
+    }
+  }
+  void reset() {id_ = -1;}
+  bool is_valid() const {return -1 != id_;}
+  int64_t id_;
+  TO_STRING_KV(K_(id));
+};
+
 enum PurgeThrottlingType
 {
   INVALID_PURGE_TYPE = 0,
-  PURGE_BY_CHECK_BARRIER_CONDITION = 1,
+  PURGE_BY_RECONFIRM = 1,
+  PURGE_BY_CHECK_BARRIER_CONDITION = 2,
+  PURGE_BY_PRE_CHECK_FOR_CONFIG = 3,
+  PURGE_BY_CHECK_SERVERS_LSN_AND_VERSION = 4,
+  PURGE_BY_GET_MC_REQ = 5,
+  PURGE_BY_NOTIFY_FETCH_LOG = 6,
   MAX_PURGE_TYPE
 };
 
@@ -277,7 +414,12 @@ inline const char *purge_throttling_type_2_str(const PurgeThrottlingType type)
   switch(type)
   {
     EXTRACT_PURGE_TYPE(INVALID_PURGE_TYPE);
+    EXTRACT_PURGE_TYPE(PURGE_BY_RECONFIRM);
     EXTRACT_PURGE_TYPE(PURGE_BY_CHECK_BARRIER_CONDITION);
+    EXTRACT_PURGE_TYPE(PURGE_BY_PRE_CHECK_FOR_CONFIG);
+    EXTRACT_PURGE_TYPE(PURGE_BY_CHECK_SERVERS_LSN_AND_VERSION);
+    EXTRACT_PURGE_TYPE(PURGE_BY_GET_MC_REQ);
+    EXTRACT_PURGE_TYPE(PURGE_BY_NOTIFY_FETCH_LOG);
 
     default:
       return "Invalid Type";
@@ -285,6 +427,9 @@ inline const char *purge_throttling_type_2_str(const PurgeThrottlingType type)
 #undef EXTRACT_PURGE_TYPE
 }
 
+bool need_force_purge(PurgeThrottlingType type);
+
+const char *get_purge_throttling_type_str(PurgeThrottlingType type);
 } // end namespace palf
 } // end namespace oceanbase
 

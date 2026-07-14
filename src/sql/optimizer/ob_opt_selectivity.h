@@ -217,6 +217,18 @@ class OptSelectivityCtx
     return ObEstCorrelationModel::get_correlation_model(opt_ctx_.get_correlation_type()); 
   }
 
+  uint64_t get_compat_version() const { 
+    return OB_ISNULL(opt_ctx_.get_query_ctx()) ? 0 :
+           opt_ctx_.get_query_ctx()->optimizer_features_enable_version_;
+  }
+
+  template<typename... Args>
+  bool check_opt_compat_version(Args... args) const
+  {
+    return OB_ISNULL(get_opt_ctx().get_query_ctx()) ? false :
+           get_opt_ctx().get_query_ctx()->check_opt_compat_version(args...);
+  }
+
   void set_ambient_card(const ObIArray<double> *ambient_card) { ambient_card_ = ambient_card; }
   const ObIArray<double> *get_ambient_card() const { return ambient_card_; }
   int get_ambient_card(const uint64_t table_id, double &table_ambient_card) const;
@@ -1013,6 +1025,11 @@ public:
   static int extract_column_ids(const ObIArray<ObRawExpr *> &col_exprs,
                                 ObIArray<uint64_t> &col_ids,
                                 uint64_t &table_id);
+
+  static int classify_quals_deprecated(const OptSelectivityCtx &ctx,
+                            const ObIArray<ObRawExpr*> &quals,
+                            ObIArray<ObExprSelPair> &all_predicate_sel,
+                            ObIArray<OptSelInfo> &column_sel_infos);
 
   static int classify_quals(const OptTableMetas &table_metas,
                             const OptSelectivityCtx &ctx,

@@ -153,6 +153,7 @@ int ObTableStatParam::assign(const ObTableStatParam &other)
   force_ = other.force_;
   is_subpart_name_ = other.is_subpart_name_;
   stat_category_ = other.stat_category_;
+  tab_group_ = other.tab_group_;
   stattype_ = other.stattype_;
   need_approx_ndv_ = other.need_approx_ndv_;
   is_index_stat_ = other.is_index_stat_;

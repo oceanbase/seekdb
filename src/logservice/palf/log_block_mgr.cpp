@@ -294,13 +294,41 @@ int LogBlockMgr::load_block_handler(const block_id_t block_id, const offset_t of
   return ret;
 }
 
+int LogBlockMgr::create_tmp_block_handler(const block_id_t block_id)
+{
+  int ret = OB_SUCCESS;
+	char tmp_block_path[OB_MAX_FILE_NAME_LENGTH] = {'\0'};
+	if (OB_FAIL(block_id_to_tmp_string(block_id, tmp_block_path, OB_MAX_FILE_NAME_LENGTH))) {
+		PALF_LOG(ERROR, "block_id_to_tmp_string failed", K(ret), KPC(this), K(block_id));
+	} else if (OB_FAIL(curr_writable_handler_.close())) {
+    PALF_LOG(ERROR, "curr_writable_handler_ close success");
+  } else if (FALSE_IT(curr_writable_handler_.destroy())) {
+  } else if (OB_FAIL(curr_writable_handler_.init(log_block_size_, align_size_, align_buf_size_, io_adapter_))) {
+    PALF_LOG(ERROR, "curr_writable_handler_ init failed", K(ret), KPC(this));
+  } else if (OB_FAIL(log_block_pool_->create_block_at(dir_fd_, tmp_block_path, log_block_size_))) {
+  } else if (OB_FAIL(construct_absolute_tmp_block_path(log_dir_, block_id, OB_MAX_FILE_NAME_LENGTH, tmp_block_path))) {
+    PALF_LOG(ERROR, "failed to construct absolute tmp block path", K(ret), KPC(this), K(block_id));
+  } else if (OB_FAIL(curr_writable_handler_.open(tmp_block_path))) {
+    PALF_LOG(ERROR, "create_tmp_block failed", K(ret), KPC(this), K(block_id));
+  } else {
+		curr_writable_block_id_ = block_id;
+		PALF_LOG(INFO, "create_tmp_block_handler success", K(ret), KPC(this), K(block_id));
+  }
+  return ret;
+}
+
+int LogBlockMgr::delete_block_from_back_to_front_until(const block_id_t block_id)
+{
+  return delete_block_from_back_to_front_until_(block_id);
+}
+
 // step1: firstly, delete each block after lsn.block_id_;
 // step2: secondly, truncate data in curr_lsn_;
 // step3: keep last dio_aligned_buf_.
 // NB: attention to truncate and delete concurrently
 // For block gc, truncate will not concurrent with delete(truncate and delete block will not
 // operate the same range).
-// When advancing the base info, one log IO worker executes suffix and prefix truncation.
+// For migrate(truncate prefix), only one log io worker to execute truncate suffix and prefix.
 // TODO by runlin: Even if the work of truncate_prefix_block is done by the GC thread, there should not be any concurrency
 int LogBlockMgr::do_truncate_(const block_id_t block_id,
                               const offset_t offset)

@@ -753,7 +753,7 @@ int ObVectorIndexUtil::get_vector_from_text_by_embedding(ObIAllocator &allocator
     ObString endpoint_str(param.endpoint_);
     ObAIFuncExprInfo *ai_fun_info = nullptr;
     omt::ObAiServiceGuard ai_service_guard;
-    omt::ObAiService *ai_service = share::g_mp->ai_service();
+    omt::ObTenantAiService *ai_service = share::g_mp->tenant_ai_service();
     const share::ObAiModelEndpointInfo *endpoint_info = nullptr;
     if (OB_FAIL(ObAIFuncUtils::get_ai_func_info(allocator, endpoint_str, ai_fun_info))) {
       LOG_WARN("failed to get ai fun info", K(ret), K(param_str));
@@ -1364,7 +1364,7 @@ int ObVectorIndexUtil::check_distance_algorithm_match(
   is_match = false;
 
   if (index_column_name.empty() ||
-      OB_INVALID_ID == data_table_id || OB_INVALID_ID == database_id) {
+      OB_INVALID_ID == data_table_id || false || OB_INVALID_ID == database_id) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument",
       K(ret), K(index_column_name), K(data_table_id), K(database_id));
@@ -1638,7 +1638,7 @@ int ObVectorIndexUtil::determine_vid_type(const ObTableSchema &table_schema, ObD
   int ret = OB_SUCCESS;
   uint64_t vid_col_id = OB_INVALID_ID;
   static constexpr bool ENABLE_VID_OPT = true;
-  // 1. check runtime data version
+  // 1. check sys tenant data version
   if (!table_schema.is_table_with_hidden_pk_column()) {
     vid_type = ObDocIDType::TABLET_SEQUENCE;
   } else if (OB_FAIL(table_schema.get_vec_index_vid_col_id(vid_col_id, false))) {
@@ -2828,6 +2828,7 @@ int ObVectorIndexUtil::check_vec_index_param(const ParseNode *option_node,
     int64_t vector_dim = 0;
     bool is_sparse_vec_col = false;
     bool is_text_col = false;
+    uint64_t tenant_data_version = 0;
     const ObColumnSchemaV2 *col_schema = nullptr;
     if(OB_ISNULL(col_schema = tbl_schema.get_column_schema(vec_column_name))){
       ret = OB_ERR_UNEXPECTED;
@@ -2835,6 +2836,8 @@ int ObVectorIndexUtil::check_vec_index_param(const ParseNode *option_node,
     } else if (!col_schema->is_valid()) {
       ret = OB_INVALID_ARGUMENT;
       LOG_WARN("invalid argumnet", K(ret), KP(col_schema));
+    } else if (OB_FAIL(GET_MIN_DATA_VERSION(tenant_data_version))) {
+      LOG_WARN("get tenant data version failed", K(ret));
     } else if (FALSE_IT(is_text_col = ob_is_varchar_type(col_schema->get_data_type(), col_schema->get_collation_type()))) {
     } else if (!is_text_col && OB_FAIL(ObVectorIndexUtil::is_sparse_vec_col(col_schema->get_extended_type_info(), is_sparse_vec_col))) {
       LOG_WARN("fail to check is sparse vec col", K(ret));
@@ -3935,6 +3938,7 @@ int ObVectorIndexUtil::get_vector_index_type(
 
 void ObVecIdxSnapshotDataWriteCtx::reset()
 {
+  ls_id_.reset();
   data_tablet_id_.reset();
   lob_meta_tablet_id_.reset();
   lob_piece_tablet_id_.reset();
@@ -4260,7 +4264,7 @@ int ObVectorIndexUtil::update_index_tables_status(
 {
   int ret = OB_SUCCESS;
   const bool is_index = true;
-  if (OB_INVALID_ID == database_id ||
+  if (false || OB_INVALID_ID == database_id ||
       old_table_names.count() <= 0 || new_table_names.count() <= 0 ||
      (old_table_names.count() != new_table_names.count())) {
     ret = OB_INVALID_ARGUMENT;
@@ -4329,7 +4333,7 @@ int ObVectorIndexUtil::update_index_tables_attributes(
 {
   int ret = OB_SUCCESS;
   const bool is_index = true;
-  if (OB_INVALID_ID == database_id || OB_INVALID_ID == data_table_id ||
+  if (false || OB_INVALID_ID == database_id || OB_INVALID_ID == data_table_id ||
       old_table_names.count() <= 0 || new_table_names.count() <= 0 ||
      (table_schemas.count() != old_table_names.count()) ||
      (old_table_names.count() != new_table_names.count())) {
@@ -4649,7 +4653,7 @@ int ObVectorIndexUtil::generate_index_schema_from_exist_table(
   } else if (OB_ISNULL(schema_service = GCTX.schema_service_->get_schema_service())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("schema service is null", K(ret));
-  } else if (old_domain_table_id == OB_INVALID_ID ||
+  } else if (false || old_domain_table_id == OB_INVALID_ID ||
       new_index_name_suffix.empty() || database_name.empty()) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret),
@@ -4822,11 +4826,11 @@ int ObVectorIndexUtil::check_rename_rebuild_confilt(
     LOG_WARN("failed to get index schema by name", K(ret), K(ori_index_name));
   } else if (OB_NOT_NULL(orig_index_schema) && orig_index_schema->is_vec_index()) {
     bool has_rebuild_index_task = false;
-    if (OB_FAIL(rootserver::ObDDLTaskRecordOperator::check_has_index_task(trans,
+    if (OB_FAIL(rootserver::ObDDLTaskRecordOperator::check_has_index_or_mlog_task(trans,
                                                                       *orig_index_schema,
                                                                       origin_table_schema.get_table_id(),
                                                                       has_rebuild_index_task))) {
-      LOG_WARN("fail to check has index task", KR(ret), K(ori_index_name));
+      LOG_WARN("fail to check has index or mlog task", KR(ret), K(ori_index_name));
     } else if (has_rebuild_index_task) {
       ret = OB_NOT_SUPPORTED;
       LOG_WARN("not support to rename vector index while rebuild is in progress", KR(ret), K(ori_index_name));
@@ -4849,7 +4853,7 @@ int ObVectorIndexUtil::check_table_exist(
   ObString index_table_name;
   ObArenaAllocator allocator(ObModIds::OB_SCHEMA);
 
-  if (OB_INVALID_ID == database_id || OB_INVALID_ID == data_table_id ||
+  if (false || OB_INVALID_ID == database_id || OB_INVALID_ID == data_table_id ||
       domain_index_name.empty()) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(database_id), K(data_table_id), K(domain_index_name));
@@ -4885,7 +4889,7 @@ int ObVectorIndexUtil::check_vec_aux_index_deleted(
 
   is_all_deleted = false;
 
-  if (OB_INVALID_ID == data_table_id || OB_INVALID_ID == database_id) {
+  if (OB_INVALID_ID == data_table_id || false || OB_INVALID_ID == database_id) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(data_table_id), K(database_id));
   } else {
@@ -4965,7 +4969,7 @@ int ObVectorIndexUtil::check_vector_index_by_column_name(
   is_valid = false;
 
   if (index_column_name.empty() || OB_INVALID_ID == data_table_id ||
-      OB_INVALID_ID == database_id) {
+      false || OB_INVALID_ID == database_id) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(index_column_name), K(data_table_id), K(database_id));
   } else {
@@ -5208,7 +5212,7 @@ int ObVectorIndexUtil::get_rebuild_drop_index_id_and_name(share::schema::ObSchem
   if (!arg.is_add_to_scheduler_ || !arg.is_vec_inner_drop_) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected arg", K(ret), K(arg));
-  } else if (
+  } else if (false ||
              old_index_id == OB_INVALID_ID || new_index_id == OB_INVALID_ID || old_index_name.empty()) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(old_index_id), K(new_index_id), K(old_index_name));
@@ -5289,6 +5293,7 @@ int ObVectorIndexUtil::get_dropping_vec_index_invisiable_table_schema(
 
   if (OB_UNLIKELY(OB_INVALID_ID == data_table_id
         || OB_INVALID_ID == index_table_id
+        || false
         || index_name.empty())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", K(ret), K(data_table_id), K(index_table_id), K(index_name));
@@ -6057,7 +6062,7 @@ bool ObVectorIndexUtil::check_vector_index_memory(
   int ret = OB_SUCCESS;
   bool is_satisfied = true;
   const static double VEC_MEMORY_HOLD_FACTOR = 1.2;
-  SERVER_MODULE_SCOPE {
+  MOD_SCOPE {
     ObPluginVectorIndexService *service = share::g_mp->plugin_vector_index_service();
     ObSharedMemAllocMgr *shared_mem_mgr = share::g_mp->shared_mem_alloc_mgr();
     if (OB_ISNULL(service) || OB_ISNULL(shared_mem_mgr)) {
@@ -6109,7 +6114,7 @@ bool ObVectorIndexUtil::check_ivf_vector_index_memory(ObSchemaGetterGuard &schem
   } else if (!index_schema.is_vec_ivfpq_pq_centroid_index() && !index_schema.is_vec_ivf_centroid_index()) {
   } else if (OB_NOT_NULL(shared_mem_mgr)) {
     int64_t hold_mem = shared_mem_mgr->vector_allocator().hold();
-    if (data_table_id == OB_INVALID_ID) {
+    if (false || data_table_id == OB_INVALID_ID) {
       ret = OB_INVALID_ARGUMENT;
       LOG_WARN("invalid argument, skip estimated", K(ret), K(data_table_id));
     } else if (OB_FAIL(ObVectorIndexUtil::get_vector_index_column_dim(index_schema, dim))) {
@@ -6162,7 +6167,7 @@ int ObVectorIndexUtil::estimate_vector_memory_used(
     need_estimate = false;
     LOG_INFO("target table is not table 5 or row_count <= 0, skip estimated",
       K(ret), K(index_schema), K(row_count));
-  } else if (data_table_id == OB_INVALID_ID) {
+  } else if (false || data_table_id == OB_INVALID_ID) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument, skip estimated", K(ret), K(data_table_id));
   } else if (OB_FAIL(ObVectorIndexUtil::get_vector_index_column_dim(index_schema, dim))) {

@@ -353,10 +353,6 @@ const char *ObShareUtil::replica_type_to_string(const ObReplicaType type)
       str = ENCRYPTION_LOGONLY_REPLICA_STR;
       break;
     }
-    case ObReplicaType::REPLICA_TYPE_COLUMNSTORE: {
-      str = COLUMNSTORE_REPLICA_STR;
-      break;
-    }
     default: {
       str = "INVALID";
       break;
@@ -381,8 +377,6 @@ ObReplicaType ObShareUtil::string_to_replica_type(const ObString &str)
     replica_type = REPLICA_TYPE_FULL;
   } else if (0 == str.case_compare(READONLY_REPLICA_STR) || 0 == str.case_compare(R_REPLICA_STR)) {
     replica_type = REPLICA_TYPE_READONLY;
-  } else if (0 == str.case_compare(COLUMNSTORE_REPLICA_STR) || 0 == str.case_compare(C_REPLICA_STR)) {
-    replica_type = REPLICA_TYPE_COLUMNSTORE;
   } else if (0 == str.case_compare(LOGONLY_REPLICA_STR) || 0 == str.case_compare(L_REPLICA_STR)) {
     replica_type = REPLICA_TYPE_LOGONLY;
   } else if (0 == str.case_compare(ENCRYPTION_LOGONLY_REPLICA_STR) || 0 == str.case_compare(E_REPLICA_STR)) {

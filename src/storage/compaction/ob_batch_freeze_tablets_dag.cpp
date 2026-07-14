@@ -16,8 +16,8 @@
 #define USING_LOG_PREFIX STORAGE_COMPACTION
 #include "storage/compaction/ob_batch_freeze_tablets_dag.h"
 #include "share/rc/ob_module_provider.h"
-#include "storage/compaction/ob_tablet_scheduler.h"
-#include "storage/tx_storage/ob_memstore_freezer.h"
+#include "storage/compaction/ob_tenant_tablet_scheduler.h"
+#include "storage/tx_storage/ob_tenant_freezer.h"
 #include "storage/tx_storage/ob_ls_service.h"
 namespace oceanbase
 {
@@ -45,7 +45,7 @@ int64_t ObBatchFreezeTabletsParam::to_string(char *buf, const int64_t buf_len) c
 {
   int64_t pos = 0;
   J_OBJ_START();
-  J_KV(K_(param_type), K_(compaction_scn), K_(batch_size), K_(loop_cnt));
+  J_KV(K_(param_type), K_(ls_id), K_(compaction_scn), K_(batch_size), K_(loop_cnt));
   if (tablet_info_array_.count() > 0) {
     J_COMMA();
     J_NAME("tablet_info_array");
@@ -95,7 +95,8 @@ bool ObBatchFreezeTabletsDag::operator == (const ObIDag &other) const
     is_same = false;
   } else {
     const ObBatchFreezeTabletsDag &other_dag = static_cast<const ObBatchFreezeTabletsDag &>(other);
-    if (get_param().compaction_scn_ != other_dag.get_param().compaction_scn_) {
+    if ((get_param().ls_id_ != other_dag.get_param().ls_id_)
+        || (get_param().compaction_scn_ != other_dag.get_param().compaction_scn_)) {
       is_same = false;
     } else {
       // to ensure dag with same loop_cnt is not same
@@ -123,10 +124,14 @@ int ObBatchFreezeTabletsTask::inner_process()
   int64_t cost_ts = ObTimeUtility::fast_current_time();
   const ObBatchFreezeTabletsParam &param = base_dag_->get_param();
 
+  ObLSHandle ls_handle;
   ObLS *ls = nullptr;
   int64_t weak_read_ts = 0;
-  if (OB_FAIL(share::g_mp->ls_service()->get_ls(ls))) {
-    LOG_WARN("failed to get single log stream", K(ret), K(param));
+  if (OB_FAIL(share::g_mp->ls_service()->get_ls(param.ls_id_, ls_handle, ObLSGetMod::STORAGE_MOD))) {
+    LOG_WARN("failed to get log stream", K(ret), K(param));
+  } else if (OB_ISNULL(ls = ls_handle.get_ls())) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("get unexpected null ls", K(ret), K(param));
   } else {
     weak_read_ts = ls->get_ls_wrs_handler()->get_ls_weak_read_ts().get_val_for_tx();
   }
@@ -147,7 +152,8 @@ int ObBatchFreezeTabletsTask::inner_process()
       LOG_WARN_RET(tmp_ret, "get invalid tablet pair", K(cur_pair));
     } else if (cur_pair.schedule_merge_scn_ > weak_read_ts) {
       // no need to force freeze
-    } else if (OB_TMP_FAIL(share::g_mp->memstore_freezer()->tablet_freeze(cur_pair.tablet_id_,
+    } else if (OB_TMP_FAIL(share::g_mp->tenant_freezer()->tablet_freeze(param.ls_id_, 
+                                                                 cur_pair.tablet_id_,
                                                                  true/*is_sync*/,
                                                                  max_retry_time_us,
                                                                  true,/*need_rewrite_meta*/
@@ -183,7 +189,7 @@ int ObBatchFreezeTabletsTask::schedule_tablet_major_after_freeze(
   int ret = OB_SUCCESS;
   ObTabletHandle tablet_handle;
   ObTablet *tablet = NULL;
-  if (!share::g_mp->tablet_scheduler()->could_major_merge_start()) {
+  if (!share::g_mp->tenant_tablet_scheduler()->could_major_merge_start()) {
     // merge is suspended
   } else if (OB_FAIL(ls.get_tablet_svr()->get_tablet(
                  cur_pair.tablet_id_, tablet_handle, 0 /*timeout_us*/,
@@ -194,11 +200,11 @@ int ObBatchFreezeTabletsTask::schedule_tablet_major_after_freeze(
     // do nothing
   } else if (!tablet->is_data_complete()) {
     // no need to schedule merge
-  } else if (OB_FAIL(ObTabletScheduler::schedule_merge_dag(
-                 *tablet, MEDIUM_MERGE,
-                 cur_pair.schedule_merge_scn_))) {
+  } else if (OB_FAIL(ObTenantTabletScheduler::schedule_merge_dag(
+                 ls.get_ls_id(), *tablet, MEDIUM_MERGE,
+                 cur_pair.schedule_merge_scn_, EXEC_MODE_LOCAL))) {
     if (OB_SIZE_OVERFLOW != ret && OB_EAGAIN != ret) {
-      LOG_ERROR("failed to schedule medium merge dag", K(ret), K(cur_pair));
+      LOG_ERROR("failed to schedule medium merge dag", K(ret), "ls_id", ls.get_ls_id(), K(cur_pair));
     }
   }
   return ret;

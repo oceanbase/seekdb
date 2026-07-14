@@ -776,6 +776,68 @@ int ObIncrementalStatEstimator::get_no_regather_subpart_stats(
   return ret;
 }
 
+int ObIncrementalStatEstimator::gen_opt_stat_param_by_direct_load(ObExecContext &ctx,
+                                                                  ObIAllocator &alloc,
+                                                                  const uint64_t table_id,
+                                                                  ObTableStatParam &param)
+{
+  int ret = OB_SUCCESS;
+  const share::schema::ObTableSchema *table_schema = NULL;
+  share::schema::ObSchemaGetterGuard *schema_guard = ctx.get_virtual_table_ctx().schema_guard_;
+  param.table_id_ = table_id;
+  ObSEArray<int64_t, 4> part_ids;
+  ObSEArray<int64_t, 4> subpart_ids;
+  if (OB_ISNULL(schema_guard = ctx.get_virtual_table_ctx().schema_guard_) ||
+       OB_ISNULL(ctx.get_my_session())) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("get unexpected null", K(ret), K(schema_guard), K(ctx.get_my_session()));
+  } else if (OB_FAIL(schema_guard->get_table_schema(
+                                                    table_id,
+                                                    table_schema))) {
+    LOG_WARN("failed to get table schema", K(ret));
+  } else if (OB_ISNULL(table_schema)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("get unexpected error", K(ret));
+  } else if (OB_FAIL(ObDbmsStatsUtils::get_part_infos(*table_schema,
+                                                      alloc,
+                                                      param.part_infos_,
+                                                      param.subpart_infos_,
+                                                      part_ids,
+                                                      subpart_ids))) {
+    LOG_WARN("failed to get partition infos", K(ret));
+  } else if (OB_FAIL(param.all_part_infos_.assign(param.part_infos_)) ||
+             OB_FAIL(param.all_subpart_infos_.assign(param.subpart_infos_))) {
+    LOG_WARN("failed to assign", K(ret));
+  } else if (OB_FAIL(pl::ObDbmsStats::init_column_stat_params(alloc,
+                                                              *schema_guard,
+                                                              *table_schema,
+                                                              param.column_params_))) {
+    LOG_WARN("failed to init column stat params", K(ret));
+  } else {
+    for (int64_t i = 0; i < param.column_params_.count(); ++i) {
+      if (param.column_params_.at(i).is_valid_opt_col()) {
+        param.column_params_.at(i).set_need_basic_stat();
+      }
+    }
+    
+    param.part_level_ = table_schema->get_part_level();
+    param.global_stat_param_.set_gather_stat(true);
+    param.part_stat_param_.set_gather_stat(table_schema->get_part_level() == share::schema::ObPartitionLevel::PARTITION_LEVEL_TWO);
+    param.subpart_stat_param_.set_gather_stat();
+    if (OB_FAIL(pl::ObDbmsStats::set_param_global_part_id(ctx, param))) {
+      LOG_WARN("failed to set param globa part id", K(ret));
+    } else if (table_schema->get_part_level() == share::schema::ObPartitionLevel::PARTITION_LEVEL_TWO) {
+      if (OB_FAIL(param.approx_part_infos_.assign(param.part_infos_))) {
+        LOG_WARN("failed to assign", K(ret));
+      } else {
+        param.part_infos_.reset();
+      }
+    }
+    LOG_TRACE("succeed to gen opt stat param by direct load", K(param));
+  }
+  return ret;
+}
+
 int ObIncrementalStatEstimator::get_all_part_opt_stats(
     const ObTableStatParam param,
     const ObIArray<PartInfo> &partition_infos,

@@ -58,7 +58,7 @@ bool ObMicroBlockEncodingCtx::is_valid() const
   return macro_block_size_ > 0 && micro_block_size_ > 0 && rowkey_column_cnt_ >= 0
       && column_cnt_ >= rowkey_column_cnt_ && NULL != col_descs_
       && encoder_opt_.is_valid()
-      && data_format_version_ >= 0
+      && major_working_cluster_version_ >= 0
       && (FLAT_ROW_STORE != row_store_type_ &&  MAX_ROW_STORE != row_store_type_)
       && compressor_type_ != ObCompressorType::INVALID_COMPRESSOR
       && compressor_type_ != ObCompressorType::MAX_COMPRESSOR;
@@ -181,6 +181,7 @@ ObMacroBlockMarkerStatus::ObMacroBlockMarkerStatus()
     linked_block_count_(0),
     tmp_file_count_(0),
     data_block_count_(0),
+    shared_data_block_count_(0),
     index_block_count_(0),
     ids_block_count_(0),
     disk_block_count_(0),
@@ -188,6 +189,7 @@ ObMacroBlockMarkerStatus::ObMacroBlockMarkerStatus()
     hold_count_(0),
     pending_free_count_(0),
     free_count_(0),
+    shared_meta_block_count_(0),
     mark_cost_time_(0),
     sweep_cost_time_(0),
     start_time_(0),
@@ -226,6 +228,7 @@ void ObMacroBlockMarkerStatus::reuse()
   linked_block_count_ = 0;
   tmp_file_count_ = 0;
   data_block_count_ = 0;
+  shared_data_block_count_ = 0;
   index_block_count_ = 0;
   ids_block_count_ = 0;
   disk_block_count_ = 0;
@@ -233,6 +236,7 @@ void ObMacroBlockMarkerStatus::reuse()
   hold_count_ = 0;
   pending_free_count_ = 0;
   free_count_ = 0;
+  shared_meta_block_count_ = 0;
   mark_cost_time_ = 0;
   sweep_cost_time_ = 0;
   start_time_ = 0;

@@ -131,7 +131,8 @@ int ObRawEncoder::traverse(const bool force_var_store, bool &suitable)
       case ObStringSC:
       case ObTextSC:
       case ObJsonSC:
-      case ObGeometrySC: {
+      case ObGeometrySC:
+      case ObRoaringBitmapSC: {
           if (force_var_store || fix_data_size_ < 0) {
             desc_.is_var_data_ = true;
           } else {
@@ -218,7 +219,8 @@ int ObRawEncoder::get_var_length(const int64_t row_id, int64_t &length)
         case ObStringSC:
         case ObTextSC:
         case ObJsonSC:
-        case ObGeometrySC: {
+        case ObGeometrySC:
+        case ObRoaringBitmapSC: {
           length = datum.len_;
           break;
         }

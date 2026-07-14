@@ -21,15 +21,19 @@
 #define protected public
 #define private public
 
-#include "mtlenv/mock_server_runtime_env.h"
+#include "mtlenv/mock_tenant_module_env.h"
 #include "storage/ls/ob_ls.h"
-#include "storage/tx_storage/ob_ls_service.h"
 
 namespace oceanbase
 {
 using namespace share;
 namespace storage
 {
+
+int ObTenantMetaMemMgr::fetch_tenant_config()
+{
+  return OB_SUCCESS;
+}
 
 int ObTabletPointerMap::load_meta_obj(
     const ObTabletMapKey &key,
@@ -52,8 +56,10 @@ public:
   virtual void TearDown() override;
   static void SetUpTestCase();
   static void TearDownTestCase();
+  void FakeLs(ObLS &ls);
 
 private:
+  static constexpr uint64_t TEST_TENANT_ID = OB_SERVER_TENANT_ID;
   ObTabletPointerMap tablet_map_;
   common::ObArenaAllocator allocator_;
 };
@@ -66,23 +72,12 @@ TestMetaPointerMap::TestMetaPointerMap()
 void TestMetaPointerMap::SetUpTestCase()
 {
   ASSERT_EQ(OB_SUCCESS, ObTimerService::get_instance().start());
-  ASSERT_EQ(OB_SUCCESS, MockServerRuntimeEnv::get_instance().init());
-  ASSERT_NE(nullptr, share::g_mp);
-  ObLSService *ls_service = share::g_mp->ls_service();
-  ASSERT_NE(nullptr, ls_service);
-  ObLS *ls = nullptr;
-  // This suite only needs an initialized LS as the owner of tablet pointers.
-  // Avoid the full create/online path, which also starts unrelated local
-  // schedulers and creates persisted inner tablets.
-  ASSERT_EQ(OB_SUCCESS,
-            ls_service->inner_create_ls_(ObRestoreStatus(ObRestoreStatus::Status::NONE),
-                                         SCN::base_scn(), ls));
-  ASSERT_EQ(OB_SUCCESS, ls_service->publish_ls_(ls));
+  EXPECT_EQ(OB_SUCCESS, MockTenantModuleEnv::get_instance().init());
 }
 
 void TestMetaPointerMap::TearDownTestCase()
 {
-  MockServerRuntimeEnv::get_instance().destroy();
+  MockTenantModuleEnv::get_instance().destroy();
   ObTimerService::get_instance().stop();
   ObTimerService::get_instance().wait();
   ObTimerService::get_instance().destroy();
@@ -99,6 +94,14 @@ void TestMetaPointerMap::SetUp()
 void TestMetaPointerMap::TearDown()
 {
   tablet_map_.destroy();
+}
+
+void TestMetaPointerMap::FakeLs(ObLS &ls)
+{
+  ls.ls_meta_.ls_id_.id_ = 1001;
+  ls.ls_meta_.migration_status_ = ObMigrationStatus::OB_MIGRATION_STATUS_NONE;
+  ls.ls_meta_.restore_status_ = ObRestoreStatus::Status::NONE;
+  ls.ls_meta_.rebuild_seq_ = 0;
 }
 
 class CalculateSize final
@@ -132,31 +135,29 @@ int CalculateSize::operator()(common::hash::HashMapPair<ObTabletMapKey, ObTablet
 
 TEST_F(TestMetaPointerMap, test_meta_pointer_handle)
 {
-  int ret = OB_SUCCESS;
-  ObLS *ls = nullptr;
-  ASSERT_NE(nullptr, share::g_mp);
-  ASSERT_NE(nullptr, share::g_mp->ls_service());
-  ASSERT_EQ(OB_SUCCESS, share::g_mp->ls_service()->get_ls(ls));
-  ASSERT_NE(nullptr, ls);
+  ObLS fake_ls;
+  FakeLs(fake_ls);
+
+  ObLSTabletService *tablet_svr = fake_ls.get_tablet_svr();
+  int ret = tablet_svr->init(&fake_ls);
+  ASSERT_EQ(common::OB_SUCCESS, ret);
 
   ObDDLKvMgrHandle ddl_kv_mgr_hdl;
 
-  ObTabletMemtableMgrPool *memtable_mgr_pool = share::g_mp->tablet_memtable_mgr_pool();
-  ObStorageMetaMemMgr *meta_mem_mgr = share::g_mp->storage_meta_mem_mgr();
-  ASSERT_NE(nullptr, memtable_mgr_pool);
-  ASSERT_NE(nullptr, meta_mem_mgr);
-  ObTabletMemtableMgr *ptr = memtable_mgr_pool->acquire();
+  ObTabletMemtableMgr *ptr = MTL(ObTabletMemtableMgrPool*)->acquire();
   OB_ASSERT(NULL != ptr);
-  ObMemtableMgrHandle memtable_mgr_hdl(ptr, memtable_mgr_pool);
+  ObMemtableMgrHandle memtable_mgr_hdl(ptr, MTL(ObTabletMemtableMgrPool*));
 
-  ret = meta_mem_mgr->acquire_tablet_ddl_kv_mgr(ddl_kv_mgr_hdl);
+  ret = MTL(ObTenantMetaMemMgr*)->acquire_tablet_ddl_kv_mgr(ddl_kv_mgr_hdl);
   ASSERT_EQ(common::OB_SUCCESS, ret);
 
-  ObTabletPointer tablet_ptr(ls, memtable_mgr_hdl);
+  ObLSHandle ls_handle;
+  ls_handle.ls_ = &fake_ls;
+  ObTabletPointer tablet_ptr(ls_handle, memtable_mgr_hdl);
   ObMetaDiskAddr phy_addr;
   phy_addr.set_none_addr();
   tablet_ptr.set_addr_with_reset_obj(phy_addr);
-  const ObTabletMapKey key(ObTabletID(101));
+  const ObTabletMapKey key(ObLSID(1001), ObTabletID(101));
 
   ret = tablet_map_.set(key, tablet_ptr);
   ASSERT_EQ(common::OB_SUCCESS, ret);
@@ -198,31 +199,28 @@ TEST_F(TestMetaPointerMap, test_meta_pointer_handle)
 
 TEST_F(TestMetaPointerMap, test_meta_pointer_map)
 {
-  int ret = OB_SUCCESS;
-  ObLS *ls = nullptr;
-  ASSERT_NE(nullptr, share::g_mp);
-  ASSERT_NE(nullptr, share::g_mp->ls_service());
-  ASSERT_EQ(OB_SUCCESS, share::g_mp->ls_service()->get_ls(ls));
-  ASSERT_NE(nullptr, ls);
+  ObLS fake_ls;
+  FakeLs(fake_ls);
+  ObLSTabletService *tablet_svr = fake_ls.get_tablet_svr();
+  int ret = tablet_svr->init(&fake_ls);
+  ASSERT_EQ(common::OB_SUCCESS, ret);
 
   ObDDLKvMgrHandle ddl_kv_mgr_hdl;
 
-  ObTabletMemtableMgrPool *memtable_mgr_pool = share::g_mp->tablet_memtable_mgr_pool();
-  ObStorageMetaMemMgr *meta_mem_mgr = share::g_mp->storage_meta_mem_mgr();
-  ASSERT_NE(nullptr, memtable_mgr_pool);
-  ASSERT_NE(nullptr, meta_mem_mgr);
-  ObTabletMemtableMgr *ptr = memtable_mgr_pool->acquire();
+  ObTabletMemtableMgr *ptr = MTL(ObTabletMemtableMgrPool*)->acquire();
   OB_ASSERT(NULL != ptr);
-  ObMemtableMgrHandle memtable_mgr_hdl(ptr, memtable_mgr_pool);
+  ObMemtableMgrHandle memtable_mgr_hdl(ptr, MTL(ObTabletMemtableMgrPool*));
 
-  ret = meta_mem_mgr->acquire_tablet_ddl_kv_mgr(ddl_kv_mgr_hdl);
+  ret = MTL(ObTenantMetaMemMgr*)->acquire_tablet_ddl_kv_mgr(ddl_kv_mgr_hdl);
   ASSERT_EQ(common::OB_SUCCESS, ret);
 
-  ObTabletPointer tablet_ptr(ls, memtable_mgr_hdl);
+  ObLSHandle ls_handle;
+  ls_handle.ls_ = &fake_ls;
+  ObTabletPointer tablet_ptr(ls_handle, memtable_mgr_hdl);
   ObMetaDiskAddr phy_addr;
   phy_addr.set_none_addr();
   tablet_ptr.set_addr_with_reset_obj(phy_addr);
-  const ObTabletMapKey key(ObTabletID(101));
+  const ObTabletMapKey key(ObLSID(1001), ObTabletID(101));
 
   ret = tablet_map_.set(key, tablet_ptr);
   ASSERT_EQ(common::OB_SUCCESS, ret);
@@ -241,11 +239,11 @@ TEST_F(TestMetaPointerMap, test_meta_pointer_map)
   handle.reset();
 
   ObMetaObj<ObTablet> old_tablet_obj;
-  ObStorageMetaMemMgr::ObNormalTabletBuffer *tablet_buffer = nullptr;
-  meta_mem_mgr->tablet_buffer_pool_.acquire(tablet_buffer);
+  ObTenantMetaMemMgr::ObNormalTabletBuffer *tablet_buffer = nullptr;
+  MTL(ObTenantMetaMemMgr*)->tablet_buffer_pool_.acquire(tablet_buffer);
   ASSERT_NE(nullptr, tablet_buffer);
   ObMetaObjBufferHelper::new_meta_obj(tablet_buffer, old_tablet_obj.ptr_);
-  old_tablet_obj.pool_ = &meta_mem_mgr->tablet_buffer_pool_;
+  old_tablet_obj.pool_ = &MTL(ObTenantMetaMemMgr*)->tablet_buffer_pool_;
   handle.set_obj(old_tablet_obj);
 
   /**
@@ -269,11 +267,11 @@ TEST_F(TestMetaPointerMap, test_meta_pointer_map)
   ASSERT_EQ(common::OB_SUCCESS, ret);
 
   ObMetaObj<ObTablet> tablet_obj;
-  meta_mem_mgr->tablet_buffer_pool_.acquire(tablet_buffer);
+  MTL(ObTenantMetaMemMgr*)->tablet_buffer_pool_.acquire(tablet_buffer);
   ASSERT_NE(nullptr, tablet_buffer);
   ObMetaObjBufferHelper::new_meta_obj(tablet_buffer, tablet_obj.ptr_);
   tablet_obj.ptr_->tablet_addr_ = phy_addr;
-  tablet_obj.pool_ = &meta_mem_mgr->tablet_buffer_pool_;
+  tablet_obj.pool_ = &MTL(ObTenantMetaMemMgr*)->tablet_buffer_pool_;
   ObTabletHandle tablet_handle;
   tablet_handle.set_obj(tablet_obj);
 
@@ -299,31 +297,29 @@ TEST_F(TestMetaPointerMap, test_meta_pointer_map)
 
 TEST_F(TestMetaPointerMap, test_erase_and_load_concurrency)
 {
-  int ret = OB_SUCCESS;
-  ObLS *ls = nullptr;
-  ASSERT_NE(nullptr, share::g_mp);
-  ASSERT_NE(nullptr, share::g_mp->ls_service());
-  ASSERT_EQ(OB_SUCCESS, share::g_mp->ls_service()->get_ls(ls));
-  ASSERT_NE(nullptr, ls);
+  ObLS fake_ls;
+  FakeLs(fake_ls);
+
+  ObLSTabletService *tablet_svr = fake_ls.get_tablet_svr();
+  int ret = tablet_svr->init(&fake_ls);
+  ASSERT_EQ(common::OB_SUCCESS, ret);
 
   ObDDLKvMgrHandle ddl_kv_mgr_hdl;
 
-  ObTabletMemtableMgrPool *memtable_mgr_pool = share::g_mp->tablet_memtable_mgr_pool();
-  ObStorageMetaMemMgr *meta_mem_mgr = share::g_mp->storage_meta_mem_mgr();
-  ASSERT_NE(nullptr, memtable_mgr_pool);
-  ASSERT_NE(nullptr, meta_mem_mgr);
-  ObTabletMemtableMgr *ptr = memtable_mgr_pool->acquire();
+  ObTabletMemtableMgr *ptr = MTL(ObTabletMemtableMgrPool*)->acquire();
   OB_ASSERT(NULL != ptr);
-  ObMemtableMgrHandle memtable_mgr_hdl(ptr, memtable_mgr_pool);
+  ObMemtableMgrHandle memtable_mgr_hdl(ptr, MTL(ObTabletMemtableMgrPool*));
 
-  ret = meta_mem_mgr->acquire_tablet_ddl_kv_mgr(ddl_kv_mgr_hdl);
+  ret = MTL(ObTenantMetaMemMgr*)->acquire_tablet_ddl_kv_mgr(ddl_kv_mgr_hdl);
   ASSERT_EQ(common::OB_SUCCESS, ret);
 
-  ObTabletPointer tablet_ptr(ls, memtable_mgr_hdl);
+  ObLSHandle ls_handle;
+  ls_handle.ls_ = &fake_ls;
+  ObTabletPointer tablet_ptr(ls_handle, memtable_mgr_hdl);
   ObMetaDiskAddr phy_addr;
   phy_addr.set_none_addr();
   tablet_ptr.set_addr_with_reset_obj(phy_addr);
-  const ObTabletMapKey key(ObTabletID(101));
+  const ObTabletMapKey key(ObLSID(1001), ObTabletID(101));
 
   ret = tablet_map_.set(key, tablet_ptr);
   ASSERT_EQ(common::OB_SUCCESS, ret);
@@ -341,12 +337,12 @@ TEST_F(TestMetaPointerMap, test_erase_and_load_concurrency)
 
   handle.reset();
 
-  ObStorageMetaMemMgr::ObNormalTabletBuffer *tablet_buffer = nullptr;
+  ObTenantMetaMemMgr::ObNormalTabletBuffer *tablet_buffer = nullptr;
   ObMetaObj<ObTablet> old_tablet_obj;
-  meta_mem_mgr->tablet_buffer_pool_.acquire(tablet_buffer);
+  MTL(ObTenantMetaMemMgr*)->tablet_buffer_pool_.acquire(tablet_buffer);
   ASSERT_NE(nullptr, tablet_buffer);
   ObMetaObjBufferHelper::new_meta_obj(tablet_buffer, old_tablet_obj.ptr_);
-  old_tablet_obj.pool_ = &meta_mem_mgr->tablet_buffer_pool_;
+  old_tablet_obj.pool_ = &MTL(ObTenantMetaMemMgr*)->tablet_buffer_pool_;
   handle.set_obj(old_tablet_obj);
 
   /**

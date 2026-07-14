@@ -58,6 +58,9 @@ ObTableSchemaParam::ObTableSchemaParam(ObIAllocator &allocator)
     vec_index_param_(),
     vec_dim_(0),
     vec_vector_col_id_(OB_INVALID_ID),
+    mv_mode_(),
+    is_delete_insert_(false),
+    merge_engine_type_(ObMergeEngineType::OB_MERGE_ENGINE_MAX),
     inc_pk_doc_id_col_id_(OB_INVALID_ID),
     vec_chunk_col_id_(OB_INVALID_ID),
     vec_embedded_col_id_(OB_INVALID_ID),
@@ -100,6 +103,9 @@ void ObTableSchemaParam::reset()
   vec_index_param_.reset();
   vec_dim_ = 0;
   vec_vector_col_id_ = OB_INVALID_ID;
+  mv_mode_.reset();
+  is_delete_insert_ = false;
+  merge_engine_type_ = ObMergeEngineType::OB_MERGE_ENGINE_MAX;
   inc_pk_doc_id_col_id_ = OB_INVALID_ID;
   has_async_index_ = false;
 }
@@ -120,6 +126,7 @@ int ObTableSchemaParam::convert(const ObTableSchema *schema)
     schema_version_ = schema->get_schema_version();
     table_type_ = schema->get_table_type();
     lob_inrow_threshold_ = schema->get_lob_inrow_threshold();
+    is_delete_insert_ = schema->is_delete_insert_merge_engine();
   }
 
   if (OB_SUCC(ret) && schema->is_user_table() && schema->is_table_with_pk()) {
@@ -251,6 +258,19 @@ int ObTableSchemaParam::convert(const ObTableSchema *schema)
     }
   }
 
+  if (OB_SUCC(ret) && schema->is_mlog_table()) {
+    index_type_ = schema->get_index_type();
+    index_status_ = schema->get_index_status();
+    ObString tmp_name;
+    if (OB_FAIL(schema->get_mlog_name(tmp_name))) {
+      LOG_WARN("fail to get materialized view log name", KR(ret));
+    } else if (OB_FAIL(ob_write_string(allocator_, tmp_name, index_name_))) {
+      LOG_WARN("fail to copy materialized view log name", KR(ret), K(tmp_name));
+    }
+  }
+  if (OB_SUCC(ret) && FALSE_IT(mv_mode_.mode_ = schema->get_mv_mode())) {
+  }
+
   bool need_truncate_filter = nullptr != schema && schema->is_global_index_table();
   if (OB_FAIL(ret)) {
   } else if (need_truncate_filter) {
@@ -314,7 +334,8 @@ int ObTableSchemaParam::convert(const ObTableSchema *schema)
                 &tmp_cols_index,
                 &tmp_cols,
                 nullptr/*cols_extend*/,
-                need_truncate_filter))) {
+                need_truncate_filter,
+                is_delete_insert_))) {
       LOG_WARN("Fail to init read info", K(ret));
     } else if (!col_map_.is_inited()) {
       if (OB_FAIL(col_map_.init(tmp_cols))) {
@@ -466,6 +487,19 @@ const ObString &ObTableSchemaParam::get_pk_name() const
   return pk_name_;
 }
 
+bool ObTableSchemaParam::is_depend_column(uint64_t column_id) const
+{
+  bool is_depend = false;
+  int32_t idx = 0;
+  if (is_materialized_view() &&
+      column_id > OB_MIN_MV_COLUMN_ID &&
+      column_id < OB_MIN_SHADOW_COLUMN_ID &&
+      OB_SUCCESS == col_map_.get(column_id, idx)) {
+    is_depend = true;
+  }
+  return is_depend;
+}
+
 int ObTableSchemaParam::get_typed_doc_id_col_id(uint64_t &doc_id_col_id, ObDocIDType &type) const
 {
   int ret = OB_SUCCESS;
@@ -557,6 +591,8 @@ OB_DEF_SERIALIZE(ObTableSchemaParam)
   if (FAILEDx(fts_parser_properties_.serialize(buf, buf_len, pos))) {
     LOG_WARN("fail to serialize fts parser properties", K(ret));
   }
+  OB_UNIS_ENCODE(is_delete_insert_);
+  OB_UNIS_ENCODE(merge_engine_type_);
   OB_UNIS_ENCODE(inc_pk_doc_id_col_id_);
   OB_UNIS_ENCODE(vec_chunk_col_id_);
   OB_UNIS_ENCODE(vec_embedded_col_id_);
@@ -665,6 +701,8 @@ OB_DEF_DESERIALIZE(ObTableSchemaParam)
       LOG_WARN("fail to copy fts parser properties", K(ret), K(tmp_properties));
     }
   }
+  OB_UNIS_DECODE(is_delete_insert_);
+  OB_UNIS_DECODE(merge_engine_type_);
   OB_UNIS_DECODE(inc_pk_doc_id_col_id_);
   OB_UNIS_DECODE(vec_chunk_col_id_);
   OB_UNIS_DECODE(vec_embedded_col_id_);
@@ -714,6 +752,8 @@ OB_DEF_SERIALIZE_SIZE(ObTableSchemaParam)
   OB_UNIS_ADD_LEN(vec_dim_);
   OB_UNIS_ADD_LEN(vec_vector_col_id_);
   len += fts_parser_properties_.get_serialize_size();
+  OB_UNIS_ADD_LEN(is_delete_insert_);
+  OB_UNIS_ADD_LEN(merge_engine_type_);
   OB_UNIS_ADD_LEN(inc_pk_doc_id_col_id_);
   OB_UNIS_ADD_LEN(vec_chunk_col_id_);
   OB_UNIS_ADD_LEN(vec_embedded_col_id_);
@@ -740,7 +780,7 @@ int ObTableSchemaParam::has_udf_column(bool &has_udf) const
 // ------ ObTableDMLParam ------ //
 ObTableDMLParam::ObTableDMLParam(common::ObIAllocator &allocator)
   : allocator_(allocator),
-    runtime_schema_version_(OB_INVALID_VERSION),
+    tenant_schema_version_(OB_INVALID_VERSION),
     data_table_(allocator),
     col_descs_(allocator),
     col_map_(allocator)
@@ -754,25 +794,25 @@ ObTableDMLParam::~ObTableDMLParam()
 
 void ObTableDMLParam::reset()
 {
-  runtime_schema_version_ = OB_INVALID_VERSION;
+  tenant_schema_version_ = OB_INVALID_VERSION;
   data_table_.reset();
 }
 
 int ObTableDMLParam::convert(const ObTableSchema *table_schema,
-                             const int64_t runtime_schema_version,
+                             const int64_t tenant_schema_version,
                              const common::ObIArray<uint64_t> &column_ids)
 {
   int ret = OB_SUCCESS;
   const ObTableSchema *schema = NULL;
-  if (OB_ISNULL(table_schema) || OB_INVALID_VERSION == runtime_schema_version) {
+  if (OB_ISNULL(table_schema) || OB_INVALID_VERSION == tenant_schema_version) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(runtime_schema_version), KP(table_schema));
+    LOG_WARN("invalid argument", K(ret), K(tenant_schema_version), KP(table_schema));
   } else if (OB_FAIL(data_table_.convert(table_schema))) {
     LOG_WARN("convert data table fail", K(ret));
   } else if (OB_FAIL(prepare_storage_param(column_ids))) {
     LOG_WARN("prepare storage param fail", K(ret));
   } else {
-    runtime_schema_version_ = runtime_schema_version;
+    tenant_schema_version_ = tenant_schema_version;
   }
   return ret;
 }
@@ -781,7 +821,7 @@ int64_t ObTableDMLParam::to_string(char *buf, const int64_t buf_len) const
 {
   int64_t pos = 0;
   J_OBJ_START();
-  J_KV(K_(runtime_schema_version),
+  J_KV(K_(tenant_schema_version),
        K_(data_table),
        K_(col_descs),
        K_(col_map)
@@ -798,7 +838,7 @@ OB_DEF_SERIALIZE(ObTableDMLParam)
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", K(ret), KP(buf), K(buf_len), K(pos));
   } else {
-    LST_DO_CODE(OB_UNIS_ENCODE, runtime_schema_version_);
+    LST_DO_CODE(OB_UNIS_ENCODE, tenant_schema_version_);
   }
 
   if (OB_SUCC(ret)) {
@@ -817,7 +857,7 @@ OB_DEF_DESERIALIZE(ObTableDMLParam)
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", K(ret), KP(buf), K(data_len), K(pos));
   } else {
-    LST_DO_CODE(OB_UNIS_DECODE, runtime_schema_version_);
+    LST_DO_CODE(OB_UNIS_DECODE, tenant_schema_version_);
   }
 
   if (OB_SUCC(ret)) {
@@ -839,7 +879,7 @@ OB_DEF_SERIALIZE_SIZE(ObTableDMLParam)
   int ret = OB_SUCCESS;
   int64_t len = 0;
   int64_t size = 0;
-  LST_DO_CODE(OB_UNIS_ADD_LEN, runtime_schema_version_);
+  LST_DO_CODE(OB_UNIS_ADD_LEN, tenant_schema_version_);
   len += data_table_.get_serialize_size();
   OB_UNIS_ADD_LEN(col_descs_);
   return len;

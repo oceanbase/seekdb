@@ -1177,8 +1177,7 @@ int ObBlockManager::mark_sstable_blocks(
   if (OB_UNLIKELY(!handle.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(handle));
-  } else if (OB_FAIL(handle.get_obj()->get_all_sstables(
-                 table_store_iter, true /* unpac cosstable */))) {
+  } else if (OB_FAIL(handle.get_obj()->get_all_sstables(table_store_iter))) {
     LOG_WARN("fail to get all sstables", K(ret));
   } else {
     while (OB_SUCC(ret)) {

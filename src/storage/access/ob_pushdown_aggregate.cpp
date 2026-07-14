@@ -19,7 +19,6 @@
 #include "sql/engine/aggregate/ob_aggregate_util.h"
 #include "sql/engine/expr/ob_datum_cast.h"
 #include "sql/engine/expr/ob_array_expr_utils.h"
-#include "storage/lob/ob_lob_manager.h"
 
 namespace oceanbase
 {

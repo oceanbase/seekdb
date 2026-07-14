@@ -1291,7 +1291,7 @@ int ObDMLStmtPrinter::print_base_table(const TableItem *table_item)
         }
       }
 
-      // flashback query
+      // snapshot query
       if (OB_SUCC(ret)) {
         bool explain_non_extend = false;
         if (OB_NOT_NULL(stmt_->get_query_ctx()) &&
@@ -1300,20 +1300,15 @@ int ObDMLStmtPrinter::print_base_table(const TableItem *table_item)
           explain_non_extend = !static_cast<const ObExplainStmt *>
                                 (stmt_->get_query_ctx()->root_stmt_)->is_explain_extended();
         }
-        if (OB_NOT_NULL(table_item->flashback_query_expr_)) {
-          if (table_item->flashback_query_type_ == TableItem::USING_TIMESTAMP) {
-            DATA_PRINTF(" as of timestamp "); 
-            if (OB_FAIL(expr_printer_.do_print(table_item->flashback_query_expr_, T_NONE_SCOPE))) {
-              LOG_WARN("fail to print where expr", K(ret));
-            }
-          } else if (table_item->flashback_query_type_ == TableItem::USING_SCN) {
+        if (OB_NOT_NULL(table_item->snapshot_query_expr_)) {
+          if (table_item->snapshot_query_type_ == TableItem::USING_SCN) {
             DATA_PRINTF(" as of snapshot "); 
-            if (OB_FAIL(expr_printer_.do_print(table_item->flashback_query_expr_, T_NONE_SCOPE))) {
+            if (OB_FAIL(expr_printer_.do_print(table_item->snapshot_query_expr_, T_NONE_SCOPE))) {
               LOG_WARN("fail to print where expr", K(ret));
             }
           } else {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("get unexpected type", K(ret), K(table_item->flashback_query_type_));
+            LOG_WARN("get unexpected type", K(ret), K(table_item->snapshot_query_type_));
           }
         }
       }
@@ -1867,5 +1862,4 @@ bool ObDMLStmtPrinter::need_print_catalog_name(const ObString& catalog_name)
 
 } //end of namespace sql
 } //end of namespace oceanbase
-
 

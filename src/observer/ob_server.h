@@ -464,7 +464,6 @@ public:
   observer::ObTableLoadService * table_load_service() override { return mods_table_load_service_; }
   observer::ObTableLoadResourceService * table_load_resource_service() override { return mods_table_load_resource_service_; }
   concurrency_control::ObMultiVersionGarbageCollector * multi_version_garbage_collector() override { return mods_multi_version_garbage_collector_; }
-  storage::ObTenantCGReadInfoMgr * tenant_cg_read_info_mgr() override { return mods_tenant_cg_read_info_mgr_; }
   ObTestModule * test_module() override { return mods_test_module_; }
   storage::ObEmptyReadBucket * empty_read_bucket() override { return mods_empty_read_bucket_; }
   rootserver::ObDBMSSchedService * dbms_sched_service() override { return mods_dbms_sched_service_; }
@@ -569,7 +568,6 @@ private:
   observer::ObTableLoadService * mods_table_load_service_ = nullptr;
   observer::ObTableLoadResourceService * mods_table_load_resource_service_ = nullptr;
   concurrency_control::ObMultiVersionGarbageCollector * mods_multi_version_garbage_collector_ = nullptr;
-  storage::ObTenantCGReadInfoMgr * mods_tenant_cg_read_info_mgr_ = nullptr;
   ObTestModule * mods_test_module_ = nullptr;
   storage::ObEmptyReadBucket * mods_empty_read_bucket_ = nullptr;
   rootserver::ObDBMSSchedService * mods_dbms_sched_service_ = nullptr;

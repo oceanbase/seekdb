@@ -48,6 +48,7 @@ ObDASTRMergeIter::ObDASTRMergeIter()
     doc_length_est_param_(),
     doc_length_est_stat_cols_(),
     topk_limit_(0),
+    ls_id_(),
     total_doc_cnt_tablet_id_(),
     inv_idx_tablet_id_(),
     fwd_idx_tablet_id_(),
@@ -125,7 +126,7 @@ int ObDASTRMergeIter::init_das_iter_scan_params()
     }
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(init_das_iter_scan_param(
-        total_doc_cnt_tablet_id_,
+        ls_id_, total_doc_cnt_tablet_id_,
         ir_ctdef_->get_doc_agg_ctdef(),
         ir_rtdef_->get_doc_agg_rtdef(),
         tx_desc_, snapshot_, mem_context_->get_arena_allocator(),
@@ -174,7 +175,7 @@ int ObDASTRMergeIter::init_das_iter_scan_params()
         for (int64_t i = 0; OB_SUCC(ret) && i < dim_iter_cnt; ++i) {
           inv_scan_params_[i] = new (&scan_params[i]) ObTableScanParam();
           if (OB_FAIL(init_das_iter_scan_param(
-              inv_idx_tablet_id_,
+              ls_id_, inv_idx_tablet_id_,
               ir_ctdef_->get_inv_idx_scan_ctdef(), ir_rtdef_->get_inv_idx_scan_rtdef(),
               tx_desc_, snapshot_, mem_context_->get_arena_allocator(),
               *inv_scan_params_[i]))) {
@@ -195,7 +196,7 @@ int ObDASTRMergeIter::init_das_iter_scan_params()
           for (int64_t i = 0; OB_SUCC(ret) && i < dim_iter_cnt; ++i) {
             inv_agg_params_[i] = new (&agg_params[i]) ObTableScanParam();
             if (OB_FAIL(init_das_iter_scan_param(
-                inv_idx_tablet_id_,
+                ls_id_, inv_idx_tablet_id_,
                 ir_ctdef_->get_inv_idx_agg_ctdef(),
                 ir_rtdef_->get_inv_idx_agg_rtdef(),
                 tx_desc_, snapshot_, mem_context_->get_arena_allocator(),
@@ -219,7 +220,7 @@ int ObDASTRMergeIter::init_das_iter_scan_params()
           for (int64_t i = 0; OB_SUCC(ret) && i < dim_iter_cnt; ++i) {
             fwd_scan_params_[i] = new (&fwd_params[i]) ObTableScanParam();
             if (OB_FAIL(init_das_iter_scan_param(
-                fwd_idx_tablet_id_,
+                ls_id_, fwd_idx_tablet_id_,
                 ir_ctdef_->get_fwd_idx_agg_ctdef(),
                 ir_rtdef_->get_fwd_idx_agg_rtdef(),
                 tx_desc_, snapshot_, mem_context_->get_arena_allocator(),
@@ -258,7 +259,7 @@ int ObDASTRMergeIter::init_block_max_iter_param()
     for (int64_t i = 0; OB_SUCC(ret) && i < token_cnt; ++i) {
       block_max_scan_params_[i] = new (&scan_params[i]) ObTableScanParam();
       if (OB_FAIL(init_das_iter_scan_param(
-          inv_idx_tablet_id_,
+          ls_id_, inv_idx_tablet_id_,
           ir_ctdef_->get_block_max_scan_ctdef(),
           ir_rtdef_->get_block_max_scan_rtdef(),
           tx_desc_, snapshot_, mem_context_->get_arena_allocator(),
@@ -297,7 +298,8 @@ int ObDASTRMergeIter::init_doc_length_est_param()
   return ret;
 }
 
-int ObDASTRMergeIter::init_das_iter_scan_param(const ObTabletID &tablet_id,
+int ObDASTRMergeIter::init_das_iter_scan_param(const ObLSID &ls_id,
+                                               const ObTabletID &tablet_id,
                                                const ObDASScanCtDef *ctdef,
                                                ObDASScanRtDef *rtdef,
                                                transaction::ObTxDesc *tx_desc,
@@ -308,11 +310,12 @@ int ObDASTRMergeIter::init_das_iter_scan_param(const ObTabletID &tablet_id,
   int ret = OB_SUCCESS;
   if (OB_ISNULL(ctdef) || OB_ISNULL(rtdef)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), KPC(ctdef), KPC(rtdef), K(tablet_id));
+    LOG_WARN("invalid argument", K(ret), KPC(ctdef), KPC(rtdef), K(ls_id), K(tablet_id));
   } else {
     
     
     scan_param.key_ranges_.set_attr(ObMemAttr("ScanParamKR"));
+    scan_param.ss_key_ranges_.set_attr(ObMemAttr("ScanParamSSKR"));
     scan_param.tx_lock_timeout_ = rtdef->tx_lock_timeout_;
     scan_param.index_id_ = ctdef->ref_table_id_;
     scan_param.is_get_ = false; // scan
@@ -324,6 +327,7 @@ int ObDASTRMergeIter::init_das_iter_scan_param(const ObTabletID &tablet_id,
     scan_param.scan_allocator_ = &allocator;
     scan_param.sql_mode_ = rtdef->sql_mode_;
     scan_param.frozen_version_ = rtdef->frozen_version_;
+    scan_param.force_refresh_lc_ = rtdef->force_refresh_lc_;
     scan_param.output_exprs_ = &(ctdef->pd_expr_spec_.access_exprs_);
     scan_param.calc_exprs_ = &(ctdef->pd_expr_spec_.calc_exprs_);
     scan_param.aggregate_exprs_ = &(ctdef->pd_expr_spec_.pd_storage_aggregate_output_);
@@ -331,11 +335,12 @@ int ObDASTRMergeIter::init_das_iter_scan_param(const ObTabletID &tablet_id,
     scan_param.op_ = rtdef->p_pd_expr_op_;
     scan_param.row2exprs_projector_ = rtdef->p_row2exprs_projector_;
     scan_param.schema_version_ = ctdef->schema_version_;
-    scan_param.runtime_schema_version_ = rtdef->runtime_schema_version_;
+    scan_param.tenant_schema_version_ = rtdef->tenant_schema_version_;
     scan_param.limit_param_ = rtdef->limit_param_;
     scan_param.need_scn_ = rtdef->need_scn_;
     scan_param.pd_storage_flag_ = ctdef->pd_expr_spec_.pd_storage_flag_.pd_flag_;
     scan_param.fb_snapshot_ = rtdef->fb_snapshot_;
+    scan_param.ls_id_ = ls_id;
     scan_param.tablet_id_ = tablet_id;
     if (!ctdef->pd_expr_spec_.pushdown_filters_.empty()) {
       scan_param.op_filters_ = &ctdef->pd_expr_spec_.pushdown_filters_;
@@ -890,7 +895,8 @@ int ObDASTRMergeIter::do_table_scan()
   return ret;
 }
 
-int ObDASTRMergeIter::reuse_das_iter_scan_param(const ObTabletID &tablet_id,
+int ObDASTRMergeIter::reuse_das_iter_scan_param(const ObLSID &ls_id,
+                                                const ObTabletID &tablet_id,
                                                 ObTableScanParam &scan_param)
 {
   int ret = OB_SUCCESS;
@@ -901,6 +907,7 @@ int ObDASTRMergeIter::reuse_das_iter_scan_param(const ObTabletID &tablet_id,
     scan_param.key_ranges_.reuse();
   }
   scan_param.tablet_id_ = tablet_id;
+  scan_param.ls_id_ = ls_id;
   return ret;
 }
 
@@ -915,27 +922,27 @@ int ObDASTRMergeIter::inner_reuse()
     LOG_WARN("sparse retrieval iter is null", K(ret));
   } else if (query_tokens_.count() > 0) {
     if (OB_NOT_NULL(total_doc_cnt_scan_param_)) {
-      if (OB_FAIL(reuse_das_iter_scan_param(total_doc_cnt_tablet_id_, *total_doc_cnt_scan_param_))) {
+      if (OB_FAIL(reuse_das_iter_scan_param(ls_id_, total_doc_cnt_tablet_id_, *total_doc_cnt_scan_param_))) {
         LOG_WARN("failed to reuse total doc cnt scan param", K(ret));
       }
     }
     for (int64_t i = 0; OB_SUCC(ret) && i < inv_scan_params_.count(); ++i) {
-      if (OB_FAIL(reuse_das_iter_scan_param(inv_idx_tablet_id_, *inv_scan_params_[i]))) {
+      if (OB_FAIL(reuse_das_iter_scan_param(ls_id_, inv_idx_tablet_id_, *inv_scan_params_[i]))) {
         LOG_WARN("failed to reuse inv scan param", K(ret), K(i));
       }
     }
     for (int64_t i = 0; OB_SUCC(ret) && i < inv_agg_params_.count(); ++i) {
-      if (OB_FAIL(reuse_das_iter_scan_param(inv_idx_tablet_id_, *inv_agg_params_[i]))) {
+      if (OB_FAIL(reuse_das_iter_scan_param(ls_id_, inv_idx_tablet_id_, *inv_agg_params_[i]))) {
         LOG_WARN("failed to reuse inv agg param", K(ret), K(i));
       }
     }
     for (int64_t i = 0; OB_SUCC(ret) && i < block_max_scan_params_.count(); ++i) {
-      if (OB_FAIL(reuse_das_iter_scan_param(inv_idx_tablet_id_, *block_max_scan_params_[i]))) {
+      if (OB_FAIL(reuse_das_iter_scan_param(ls_id_, inv_idx_tablet_id_, *block_max_scan_params_[i]))) {
         LOG_WARN("failed to reuse block max scan param", K(ret), K(i));
       }
     }
     for (int64_t i = 0; i < OB_SUCC(ret) && fwd_scan_params_.count(); ++i) {
-      if (OB_FAIL(reuse_das_iter_scan_param(fwd_idx_tablet_id_, *fwd_scan_params_[i]))) {
+      if (OB_FAIL(reuse_das_iter_scan_param(ls_id_, fwd_idx_tablet_id_, *fwd_scan_params_[i]))) {
         LOG_WARN("failed to reuse fwd scan param", K(ret), K(i));
       }
     }

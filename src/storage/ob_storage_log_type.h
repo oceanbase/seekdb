@@ -84,7 +84,6 @@ enum ObStorageLogType
   OB_LOG_REMOVE_PARTITION_FROM_PG = 40008,
   OB_PARTITION_SCHEMA_VERSION_CHANGE_LOG = 40009,
 
-  OB_LOG_FLASHBACK_PARTITION = 50001,
   OB_LOG_DDL_REDO_LOG = 60001,
   OB_LOG_DDL_COMMIT_LOG = 60002,
 };
@@ -212,9 +211,6 @@ public:
       case OB_PARTITION_SCHEMA_VERSION_CHANGE_LOG:
         log_type_str = "OB_PARTITION_SCHEMA_VERSION_CHANGE_LOG";
         break;
-      case OB_LOG_FLASHBACK_PARTITION:
-        log_type_str = "FLASHBACK_PARTITION";
-        break;
       case OB_LOG_DDL_REDO_LOG:
         log_type_str = "OB_LOG_DDL_REDO_LOG";
         break;
@@ -319,11 +315,6 @@ public:
     return (OB_LOG_TRANS_CHECKPOINT == log_type);
   }
 
-  static bool is_flashback_log(const int64_t log_type)
-  {
-    return (OB_LOG_FLASHBACK_PARTITION == log_type);
-  }
-
   static bool is_start_membership_log(const int64_t log_type)
   {
     return (OB_LOG_START_MEMBERSHIP_STORAGE == log_type);
@@ -367,16 +358,14 @@ public:
             || is_offline_partition_log(log_type)
             || OB_LOG_SPLIT_SOURCE_PARTITION == log_type
             || is_partition_meta_log(log_type)
-            || is_remove_partition_from_pg_log(log_type)
-            || is_flashback_log(log_type));
+            || is_remove_partition_from_pg_log(log_type));
   }
 
   static bool is_post_barrier_required_log(const int64_t log_type)
   {
     return (is_start_membership_log(log_type)
             || is_partition_meta_log(log_type)
-            || is_add_partition_to_pg_log(log_type)
-            || is_flashback_log(log_type));
+            || is_add_partition_to_pg_log(log_type));
   }
 
   static bool is_valid_log_type(const int64_t log_type)
@@ -390,7 +379,6 @@ public:
            || is_start_membership_log(log_type)
            || is_checkpoint_log(log_type)
            || is_partition_meta_log(log_type)
-           || is_flashback_log(log_type)
            || is_add_partition_to_pg_log(log_type)
            || is_remove_partition_from_pg_log(log_type)
            || is_schema_version_change_log(log_type)

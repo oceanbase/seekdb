@@ -119,6 +119,7 @@ public:
     destroy_ivf_build_helper();
   }
   int init(
+      const ObLSID &ls_id,
       const ObTabletID &tablet_id,
       const ObIndexType &index_type,
       const int64_t snapshot_version,
@@ -126,7 +127,7 @@ public:
 
   int build_extra_column_idxs(const int32_t chunk_col_idx, common::ObSEArray<int32_t, 4> &extra_column_idxs) const;
 
-TO_STRING_KV(K_(tablet_id), K_(snapshot_version), K_(index_type));
+TO_STRING_KV(K_(ls_id), K_(tablet_id), K_(snapshot_version), K_(index_type));
 
 private:
   int init_hnsw_index(const ObDDLTableSchema &ddl_table_schema);
@@ -141,6 +142,8 @@ private:
 public:
   int64_t row_cnt_;
   int64_t vec_dim_;
+  
+  share::ObLSID ls_id_;
   ObTabletID tablet_id_;
   common::ObString vec_idx_param_;
   share::ObVecIdxSnapshotDataWriteCtx ctx_;
@@ -195,7 +198,7 @@ class ObHNSWIndexRowIterator : public ObVectorIndexRowIterator
 public:
   ObHNSWIndexRowIterator()
     : rowkey_cnt_(0), column_cnt_(0), snapshot_version_(0), index_type_(),
-      row_cnt_(0), vec_idx_param_(),
+      row_cnt_(0), ls_id_(),vec_idx_param_(),
       vector_vid_col_idx_(-1), vector_col_idx_(-1), vector_key_col_idx_(-1), vector_data_col_idx_(-1),
       ctx_(nullptr), extra_column_idx_types_()
   {}
@@ -213,6 +216,7 @@ private:
   int64_t snapshot_version_;
   ObVectorIndexAlgorithmType index_type_;
   int64_t row_cnt_;
+  share::ObLSID ls_id_;
   common::ObString vec_idx_param_;
   int32_t vector_vid_col_idx_;
   int32_t vector_col_idx_;

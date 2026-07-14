@@ -40,7 +40,6 @@
 #include "../mockcontainer/mock_ob_iterator.h"
 #include "storage/tablet/ob_tablet_create_sstable_param.h"
 #include "unittest/storage/mock_ob_table_read_info.h"
-#include "storage/column_store/ob_column_oriented_sstable.h"
 #include "storage/compaction/ob_compaction_memory_context.h"
 #include "storage/ob_storage_schema_util.h"
 #include "storage/blocksstable/ob_sstable_private_object_cleaner.h"
@@ -298,7 +297,7 @@ ObITable::TableType ObMultiVersionSSTableTest::get_merged_table_type() const
   } else if (META_MAJOR_MERGE == merge_type_) {
     table_type = ObITable::TableType::META_MAJOR_SSTABLE;
   } else if (DDL_KV_MERGE == merge_type_) {
-    table_type = ObITable::TableType::DDL_MERGE_CO_SSTABLE;
+    table_type = ObITable::TableType::DDL_DUMP_SSTABLE;
   } else { // MINOR_MERGE
     table_type = ObITable::TableType::MINOR_SSTABLE;
   }
@@ -406,7 +405,7 @@ void ObMultiVersionSSTableTest::init_tablet()
   tablet->storage_schema_addr_.get_ptr()->init(allocator_, table_schema_, lib::Worker::CompatMode::MYSQL);
   ASSERT_NE(nullptr, ptr = allocator_.alloc(sizeof(ObRowkeyReadInfo)));
   tablet->rowkey_read_info_ = new (ptr) ObRowkeyReadInfo();
-  tablet->build_read_info(allocator_, nullptr /*tablet*/, false /*is_cs_replica_compat*/);
+  tablet->build_read_info(allocator_, nullptr /*tablet*/);
 }
 
 void ObMultiVersionSSTableTest::reset_writer(
@@ -509,7 +508,6 @@ void ObMultiVersionSSTableTest::prepare_data_end(
   ASSERT_EQ(OB_SUCCESS, root_index_builder_->close(res));
 
   ObTabletCreateSSTableParam param;
-  param.set_init_value_for_column_store_();
   table_key_.table_type_ = table_type;
   ASSERT_EQ(OB_SUCCESS, param.data_block_ids_.assign(res.data_block_ids_));
   ASSERT_EQ(OB_SUCCESS, param.other_block_ids_.assign(res.other_block_ids_));
@@ -557,12 +555,7 @@ void ObMultiVersionSSTableTest::prepare_data_end(
     ASSERT_EQ(OB_SUCCESS, ObSSTableMergeRes::fill_column_checksum_for_empty_major(param.column_cnt_, param.column_checksums_));
   }
 
-  if (table_type == ObITable::COLUMN_ORIENTED_SSTABLE) {
-    param.table_key_.column_group_idx_ = column_idx;
-    OK(ObTabletCreateDeleteHelper::create_sstable<ObCOSSTableV2>(param, allocator_, handle));
-  } else {
-    OK(ObTabletCreateDeleteHelper::create_sstable(param, allocator_, handle));
-  }
+  OK(ObTabletCreateDeleteHelper::create_sstable(param, allocator_, handle));
 }
 
 void ObMultiVersionSSTableTest::prepare_data(

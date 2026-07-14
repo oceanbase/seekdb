@@ -17,9 +17,10 @@
 #ifndef OCEANBASE_STORAGE_DDL_OB_DDL_MACRO_BLOCK_WRITE_TASK_H_
 #define OCEANBASE_STORAGE_DDL_OB_DDL_MACRO_BLOCK_WRITE_TASK_H_
 
-#include "observer/scheduler/ob_dag_scheduler.h"
+#include "observer/scheduler/ob_tenant_dag_scheduler.h"
 #include "storage/ddl/ob_ddl_pipeline.h"
 #include "storage/ddl/ob_tablet_slice_writer.h"
+#include "observer/table_load/dag/ob_table_load_dag_task.h"
 
 namespace oceanbase
 {
@@ -27,6 +28,11 @@ namespace blocksstable
 {
 struct ObDatumRow;
 struct ObMacroDataSeq;
+}
+
+namespace observer
+{
+class ObTableLoadDag;
 }
 
 namespace storage
@@ -161,7 +167,7 @@ protected:
   bool buffer_need_reuse_;
   ObTabletID tablet_id_;
   int64_t slice_idx_;
-  ObDDLBatchRows buffer_;
+  ObDirectLoadBatchRows buffer_;
   blocksstable::ObBatchDatumRows bdrs_;
 };
 

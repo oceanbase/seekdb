@@ -61,10 +61,8 @@ namespace storage
 struct ObColumnSchemaItem;
 class ObTabletHandle;
 class ObLSHandle;
-struct ObStorageColumnGroupSchema;
-class ObCOSSTableV2;
 class ObDDLIndependentDag;
-class ObCgMacroBlockWriter;
+class ObDDLMacroBlockWriter;
 class ObLobMacroBlockWriter;
 class ObDDLTableSchema;
 class ObWriteMacroParam;
@@ -89,7 +87,7 @@ using schema::ObColDesc;
 using schema::ObIndexType;
 using storage::ObTabletHandle;
 using storage::ObWriteMacroParam;
-using storage::ObCgMacroBlockWriter;
+using storage::ObDDLMacroBlockWriter;
 using storage::ObLobMacroBlockWriter;
 using storage::ObColumnSchemaItem;
 using storage::ObStorageSchema;
@@ -168,7 +166,7 @@ enum ObDDLType
   // 1013 was used by removed table restore DDL. Do not reuse.
   DDL_MVIEW_COMPLETE_REFRESH = 1014,
   DDL_CREATE_MVIEW = 1015,
-  DDL_ALTER_COLUMN_GROUP = 1016, // alter table add/drop column group
+  // 1016 is reserved. Do not reuse.
   DDL_MODIFY_AUTO_INCREMENT_WITH_REDEFINITION = 1017,
   DDL_PARTITION_SPLIT_RECOVERY_TABLE_REDEFINITION = 1018,
 
@@ -180,7 +178,7 @@ enum ObDDLType
   DDL_ALTER_PARTITION_AUTO_SPLIT_ATTRIBUTE = 10005, // auto table auto partition // online
   DDL_ADD_COLUMN_INSTANT = 10006, // add after/before column
   DDL_COMPOUND_INSTANT = 10007,
-  DDL_ALTER_COLUMN_GROUP_DELAYED = 10008,
+  // 10008 is reserved. Do not reuse.
   DDL_FORK_TABLE = 10009, // fork table
   ///< @note add new normal ddl type before this line
   DDL_MAX
@@ -681,11 +679,11 @@ struct InsertMonitorNodeInfo final
 {
 public:
   InsertMonitorNodeInfo():
-    task_id_(0), execution_id_(0), thread_id_(0), last_refresh_time_(0), cg_row_inserted_(0), sstable_row_inserted_(0),
+    task_id_(0), execution_id_(0), thread_id_(0), last_refresh_time_(0), curr_row_inserted_(0), sstable_row_inserted_(0),
     vec_task_thread_pool_cnt_(0), vec_task_total_cnt_(0), vec_task_finish_cnt_(0)
   {}
   ~InsertMonitorNodeInfo() = default;
-  TO_STRING_KV(K(task_id_), K(execution_id_), K(thread_id_), K(last_refresh_time_), K(cg_row_inserted_), K(sstable_row_inserted_),
+  TO_STRING_KV(K(task_id_), K(execution_id_), K(thread_id_), K(last_refresh_time_), K(curr_row_inserted_), K(sstable_row_inserted_),
   K(vec_task_thread_pool_cnt_), K(vec_task_total_cnt_), K(vec_task_finish_cnt_));
 
 public:
@@ -694,7 +692,7 @@ public:
   int64_t execution_id_;
   int64_t thread_id_;
   int64_t last_refresh_time_;
-  int64_t cg_row_inserted_;
+  int64_t curr_row_inserted_;
   int64_t sstable_row_inserted_;
   // for vec index
   int64_t vec_task_thread_pool_cnt_;
@@ -840,7 +838,6 @@ public:
     merge_sort_spend_time_ = 0;
     merge_sort_slowest_thread_id_ = 0;
 
-    row_inserted_cg_ = 0;
     row_inserted_file_ = 0;
     insert_thread_num_ = 0;
     finish_thread_num_ = 0;
@@ -902,7 +899,6 @@ public:
     merge_sort_spend_time_ = 0;
     merge_sort_slowest_thread_id_ = 0;
 
-    row_inserted_cg_ = 0;
     row_inserted_file_ = 0;
     insert_thread_num_ = 0;
     insert_progress_ = 1;
@@ -936,7 +932,7 @@ public:
   }
 
   int diagnose(const ObSqlMonitorStats &sql_monitor_stats);
-  int process_sql_monitor_and_generate_longops_message(const ObSqlMonitorStats &sql_monitor_stats, const int64_t target_cg_cnt, ObDDLTaskStatInfo &stat_info, int64_t &pos);
+  int process_sql_monitor_and_generate_longops_message(const ObSqlMonitorStats &sql_monitor_stats, ObDDLTaskStatInfo &stat_info, int64_t &pos);
   const inline char *get_diagnose_info()
   {
     return diagnose_message_;
@@ -946,7 +942,7 @@ public:
   K(inmem_sort_thread_num_), K(row_sorted_), K(inmem_sort_remain_time_), K(inmem_sort_progress_),
   K(merge_sort_thread_num_), K(row_merge_sorted_), K(expected_round_), K(merge_sort_remain_time_), K(merge_sort_progress_),
   K(dump_size_), K(compress_type_),
-  K(row_inserted_cg_), K(row_inserted_file_), K(insert_thread_num_), K(insert_progress_), K(insert_remain_time_),
+  K(row_inserted_file_), K(insert_thread_num_), K(insert_progress_), K(insert_remain_time_),
   K(vec_task_thread_pool_cnt_), K(vec_task_total_cnt_), K(vec_task_finish_cnt_), K(vec_task_trigger_cnt_), K(vec_task_progress_),
   K(state_), K(parallelism_), K(real_parallelism_), K(execution_id_), K(finish_thread_num_),
   K(min_inmem_sort_row_), K(min_merge_sort_row_), K(min_insert_row_));
@@ -974,8 +970,8 @@ private:
   int running_ddl_diagnose();
   int check_diagnose_case();
   int diagnose_stats_analysis();
-  int generate_session_longops_message(const int64_t target_cg_cnt, ObDDLTaskStatInfo &stat_info, int64_t &pos);
-  int generate_session_longops_message_v1(int64_t target_cg_cnt, ObDDLTaskStatInfo &stat_info, int64_t &pos);
+  int generate_session_longops_message(ObDDLTaskStatInfo &stat_info, int64_t &pos);
+  int generate_session_longops_message_v1(ObDDLTaskStatInfo &stat_info, int64_t &pos);
   bool inline is_skip_case() // finish ddl without sql plan monitor node
   {
     return finish_ddl_ && is_empty_;
@@ -1032,7 +1028,6 @@ private:
 
   //insert
   int64_t insert_thread_num_;
-  int64_t row_inserted_cg_;
   int64_t row_inserted_file_;
   double insert_progress_;
   double insert_remain_time_;
@@ -1364,7 +1359,6 @@ public:
       case DDL_DIRECT_LOAD_INSERT:
       case DDL_MVIEW_COMPLETE_REFRESH:
       case DDL_CREATE_MVIEW:
-      case DDL_ALTER_COLUMN_GROUP:
       case DDL_CREATE_INDEX:
       case DDL_CREATE_MLOG:
       case DDL_CREATE_FTS_INDEX:
@@ -1386,8 +1380,6 @@ public:
   }
   static int get_global_index_table_ids(const schema::ObTableSchema &table_schema, ObIArray<uint64_t> &global_index_table_ids, share::schema::ObSchemaGetterGuard &schema_guard);
   static bool use_idempotent_mode();
-  static bool need_fill_column_group(const bool is_row_store, const bool need_process_cs_replica, const int64_t data_format_version);
-  static bool need_rescan_column_store(const int64_t data_format_version); // for compat old logic for fill column store
   static bool is_mview_not_retryable(const share::ObDDLType task_type);
   static int64_t get_real_parallelism(const int64_t parallelism, const bool is_mv_refresh);
   static int get_tablet_ids(
@@ -1488,15 +1480,14 @@ public:
       const int64_t tenant_data_version,
       ObTabletHandle &tablet_handle,
       blocksstable::ObSSTable *first_major_sstable);
-  static int init_cg_macro_block_writers(
+  static int init_macro_block_writer(
       const ObWriteMacroParam &param,
       ObIAllocator &allocator,
-      const ObStorageSchema *&storage_schema,
-      ObIArray<ObCgMacroBlockWriter *> &cg_writers);
+      ObDDLMacroBlockWriter *&macro_block_writer);
   static int init_inc_macro_block_writer(
       const ObWriteMacroParam &param,
       ObIAllocator &allocator,
-      ObCgMacroBlockWriter *&macro_block_writer);
+      ObDDLMacroBlockWriter *&macro_block_writer);
   static int prepare_lob_writer(
       const ObTabletID &tablet_id,
       const int64_t slice_idx,
@@ -1530,7 +1521,6 @@ public:
   static int fill_writer_param(
       const ObTabletID &tablet_id,
       const int64_t slice_idx,
-      const int64_t cg_idx,
       ObDDLIndependentDag *dag,
       const int64_t max_batch_size,
       ObWriteMacroParam &param);
@@ -1598,17 +1588,6 @@ private:
 public:
   const static int64_t MAX_BATCH_COUNT = 128;
 };
-
-class ObCODDLUtil
-{
-public:
-  static int need_column_group_store(const schema::ObTableSchema &table_schema, bool &need_column_group);
-
-
-
-};
-
-
 
 class ObCheckTabletDataComplementOp
 {

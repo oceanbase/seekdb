@@ -53,6 +53,7 @@ ObDASFuncDataIter::ObDASFuncDataIter()
     main_lookup_rtdef_(nullptr),
     main_lookup_iter_(nullptr),
     main_lookup_tablet_id_(0),
+    main_lookup_ls_id_(0),
     main_lookup_param_(),
     merge_memctx_(),
     doc_ids_(),
@@ -75,11 +76,12 @@ int ObDASFuncDataIter::do_table_scan()
     LOG_WARN("fail to build rowkey doc range", K(ret));
   } else {
     if (nullptr != main_lookup_iter_) {
-      if (OB_UNLIKELY(!main_lookup_tablet_id_.is_valid())) {
+      if (OB_UNLIKELY(!main_lookup_tablet_id_.is_valid() || !main_lookup_ls_id_.is_valid())) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected error, main lookup tablet id is invalid", K(ret), K(main_lookup_tablet_id_));
+        LOG_WARN("unexpected error, main lookup tablet id or ls id is invalid", K(ret), K(main_lookup_tablet_id_), K(main_lookup_ls_id_));
       } else {
         main_lookup_param_.tablet_id_ = main_lookup_tablet_id_;
+        main_lookup_param_.ls_id_ = main_lookup_ls_id_;
         if (OB_FAIL(main_lookup_iter_->do_table_scan())) {
           LOG_WARN("fail to do table scan for main lookup table", K(ret), KPC(main_lookup_iter_));
         }
@@ -211,6 +213,7 @@ int ObDASFuncDataIter::inner_reuse()
       main_lookup_param_.need_switch_param_ = main_lookup_param_.need_switch_param_ ||
           ((old_tablet_id.is_valid() && old_tablet_id != main_lookup_tablet_id_) ? true : false);
       main_lookup_param_.tablet_id_ = main_lookup_tablet_id_;
+      main_lookup_param_.ls_id_ = main_lookup_ls_id_;
       if (!main_lookup_param_.key_ranges_.empty()) {
         main_lookup_param_.key_ranges_.reuse();
       }
@@ -397,6 +400,7 @@ int ObDASFuncDataIter::init_main_lookup_scan_param(
   
   
   param.key_ranges_.set_attr(ObMemAttr("SParamKR"));
+  param.ss_key_ranges_.set_attr(ObMemAttr("SParamSSKR"));
   if (OB_ISNULL(ctdef) || OB_ISNULL(rtdef)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected nullptr ctdef or rtdef", K(ret), KPC(ctdef), KPC(rtdef));
@@ -412,6 +416,7 @@ int ObDASFuncDataIter::init_main_lookup_scan_param(
     param.reserved_cell_count_ = ctdef->access_column_ids_.count();
     param.sql_mode_ = rtdef->sql_mode_;
     param.frozen_version_ = rtdef->frozen_version_;
+    param.force_refresh_lc_ = rtdef->force_refresh_lc_;
     param.output_exprs_ = &(ctdef->pd_expr_spec_.access_exprs_);
     param.aggregate_exprs_ = &(ctdef->pd_expr_spec_.pd_storage_aggregate_output_);
     param.calc_exprs_ = &(ctdef->pd_expr_spec_.calc_exprs_);
@@ -419,7 +424,7 @@ int ObDASFuncDataIter::init_main_lookup_scan_param(
     param.op_ = rtdef->p_pd_expr_op_;
     param.row2exprs_projector_ = rtdef->p_row2exprs_projector_;
     param.schema_version_ = ctdef->schema_version_;
-    param.runtime_schema_version_ = rtdef->runtime_schema_version_;
+    param.tenant_schema_version_ = rtdef->tenant_schema_version_;
     param.limit_param_ = rtdef->limit_param_;
     param.need_scn_ = rtdef->need_scn_;
     param.pd_storage_flag_ = ctdef->pd_expr_spec_.pd_storage_flag_.pd_flag_;

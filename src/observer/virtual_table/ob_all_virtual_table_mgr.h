@@ -19,10 +19,10 @@
 
 #include "common/row/ob_row.h"
 #include "lib/guard/ob_shared_guard.h"
-#include "observer/omt/ob_server_runtime_controller.h"
+#include "observer/omt/ob_multi_tenant.h"
 #include "sql/ob_scanner.h"
 #include "observer/virtual_table/ob_virtual_table_scanner_iterator.h"
-#include "share/rc/ob_server_runtime.h"
+#include "share/rc/ob_tenant_base.h"
 #include "storage/meta_mem/ob_tablet_handle.h"
 #include "storage/ob_i_table.h"
 #include "storage/meta_mem/ob_tablet_handle.h"
@@ -31,7 +31,7 @@ namespace oceanbase
 {
 namespace storage
 {
-class ObTabletIterator;
+class ObTenantTabletIterator;
 }
 namespace observer
 {
@@ -64,14 +64,16 @@ public:
 public:
   virtual int inner_get_next_row(common::ObNewRow *&row);
   virtual void reset();
+  inline void set_addr(common::ObAddr &addr) { addr_ = addr; }
 private:
   int get_next_tablet();
   int get_next_table(storage::ObITable *&table);
 private:
   common::ObAddr addr_;
-  storage::ObTabletIterator *tablet_iter_;
+  storage::ObTenantTabletIterator *tablet_iter_;
   common::ObArenaAllocator tablet_allocator_;
   ObTabletHandle tablet_handle_;
+  char ip_buf_[common::OB_IP_STR_BUFF];
   storage::ObTableStoreIterator table_store_iter_;
   void *iter_buf_;
 private:

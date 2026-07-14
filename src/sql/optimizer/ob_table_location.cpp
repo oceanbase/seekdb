@@ -20,7 +20,7 @@
 #include "sql/engine/expr/ob_expr_func_part_hash.h"
 #include "sql/engine/expr/ob_expr_result_type_util.h"
 #include "sql/optimizer/ob_log_plan.h"
-#include "share/ob_timezone_mgr.h"
+#include "share/ob_tenant_timezone_mgr.h"
 #include "sql/rewrite/ob_transform_utils.h"
 
 using namespace oceanbase::transaction;
@@ -679,26 +679,22 @@ int ObTableLocation::get_location_type(const common::ObAddr &server,
 {
   int ret = OB_SUCCESS;
   location_type = OB_TBL_LOCATION_UNINITIALIZED;
+  const TableItem *table_item = NULL;
   if (0 == phy_part_loc_info_list.count()) {
     location_type = OB_TBL_LOCATION_LOCAL;
+  } else if (1 == phy_part_loc_info_list.count()) {
+    share::ObLSReplicaLocation replica_location;
+    if (OB_FAIL(phy_part_loc_info_list.at(0).get_selected_replica(replica_location))) {
+      LOG_WARN("fail to get selected replica", K(phy_part_loc_info_list.at(0)));
+    } else if (!replica_location.is_valid()) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_ERROR("replica location is invalid", K(ret), K(replica_location));
+    } else {
+      location_type = ((server == replica_location.get_server()) ? OB_TBL_LOCATION_LOCAL
+                                                                 : OB_TBL_LOCATION_REMOTE);
+    }
   } else {
-    for (int64_t i = 0; OB_SUCC(ret) && i < phy_part_loc_info_list.count(); ++i) {
-      const ObAddr &tablet_server =
-          phy_part_loc_info_list.at(i).get_partition_location().get_server();
-      if (!tablet_server.is_valid() || tablet_server != server) {
-        ret = OB_LOCATION_NOT_EXIST;
-        LOG_WARN("tablet is not at the local server", K(ret), K(server), K(tablet_server));
-      }
-    }
-    if (OB_SUCC(ret)) {
-      // DISTRIBUTED describes a multi-tablet sharding shape here.  Even when
-      // every tablet is hosted by this standalone server, the optimizer must
-      // retain that shape so local PX can allocate partition iterators and
-      // exchanges.  It does not imply remote replica selection or transport.
-      location_type = 1 == phy_part_loc_info_list.count()
-                          ? OB_TBL_LOCATION_LOCAL
-                          : OB_TBL_LOCATION_DISTRIBUTED;
-    }
+    location_type = OB_TBL_LOCATION_DISTRIBUTED;
   }
   return ret;
 }
@@ -755,6 +751,8 @@ int ObTableLocation::assign(const ObTableLocation &other)
     tablet_id_ = other.tablet_id_;
     object_id_ = other.object_id_;
     check_no_partition_ = other.check_no_partition_;
+    is_broadcast_table_ = other.is_broadcast_table_;
+    is_dynamic_replica_select_table_ = other.is_dynamic_replica_select_table_;
     if (OB_FAIL(loc_meta_.assign(other.loc_meta_))) {
       LOG_WARN("assign loc meta failed", K(ret), K(other.loc_meta_));
     }
@@ -884,6 +882,8 @@ void ObTableLocation::reset()
   tablet_id_.reset();
   object_id_ = OB_INVALID_ID;
   check_no_partition_ = false;
+  is_broadcast_table_ = false;
+  is_dynamic_replica_select_table_ = false;
 }
 int ObTableLocation::init(ObSqlSchemaGuard &schema_guard,
     const ObDMLStmt &stmt,
@@ -1012,18 +1012,25 @@ int ObTableLocation::init_table_location(ObExecContext &exec_ctx,
   }
   if (OB_SUCC(ret)) {
     bool is_weak_read = false;
+    int64_t route_policy = 0;
     if (OB_FAIL(get_is_weak_read(stmt,
                                  exec_ctx.get_my_session(),
                                  exec_ctx.get_sql_ctx(),
                                  is_weak_read))) {
       LOG_WARN("get is weak read failed", K(ret));
+    } else if (OB_FAIL(exec_ctx.get_my_session()->get_sys_variable(SYS_VAR_OB_ROUTE_POLICY, route_policy))) {
+      LOG_WARN("get route policy failed", K(ret));
+    } else if (table_schema->is_duplicate_table()) {
+      loc_meta_.is_dup_table_ = 1;
     }
     if (OB_SUCC(ret)) {
+      loc_meta_.route_policy_ = route_policy;
       if (is_dml_table) {
-        loc_meta_.is_weak_read_ = 0;
+        loc_meta_.select_leader_ = 1;
       } else if (!is_weak_read) {
-        loc_meta_.is_weak_read_ = 0;
+        loc_meta_.select_leader_ = loc_meta_.is_dup_table_ ? 0 : 1;
       } else {
+        loc_meta_.select_leader_ = 0;
         loc_meta_.is_weak_read_ = 1;
       }
     }
@@ -1252,6 +1259,7 @@ int ObTableLocation::init(
   loc_meta_.ref_table_id_ = ref_table_id;
   stmt_type_ = stmt.get_stmt_type();
   is_partitioned_ = true;
+  int64_t route_policy = 0;
   if (OB_UNLIKELY(inited_)) {
     ret = OB_INIT_TWICE;
     LOG_ERROR("table location init twice", K(ret));
@@ -1262,8 +1270,11 @@ int ObTableLocation::init(
              || OB_ISNULL(session_info = exec_ctx->get_my_session())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("Input arguments error", K(table_id), K(ref_table_id), K(session_info), K(ret));
+  } else if (OB_FAIL(session_info->get_sys_variable(SYS_VAR_OB_ROUTE_POLICY, route_policy))) {
+    LOG_WARN("fail to get sys variable", K(ret));
   } else {
     table_type_ = table_schema->get_table_type();
+    loc_meta_.route_policy_ = route_policy;
   }
 
   if (OB_FAIL(ret)) {
@@ -1326,13 +1337,26 @@ int ObTableLocation::init(
     bool is_weak_read = false;
     if (OB_FAIL(get_is_weak_read(stmt, session_info, exec_ctx->get_sql_ctx(), is_weak_read))) {
       LOG_WARN("get is weak read failed", K(ret));
+    } else if (table_schema->is_duplicate_table()) {
+      loc_meta_.is_dup_table_ = 1;
     }
     if (is_dml_table) {
-      loc_meta_.is_weak_read_ = 0;
+      loc_meta_.select_leader_ = 1;
     } else if (!is_weak_read) {
-      loc_meta_.is_weak_read_ = 0;
+      loc_meta_.select_leader_ = loc_meta_.is_dup_table_ ? 0 : 1;
     } else {
+      loc_meta_.select_leader_ = 0;
       loc_meta_.is_weak_read_ = 1;
+    }
+    if (OB_FAIL(ret)) {
+    } else if (!(session_info->is_inner() ||
+          (stmt.get_query_ctx()->is_contain_inner_table_ &&
+           !stmt.get_query_ctx()->has_dml_write_stmt_ &&
+           !stmt.get_query_ctx()->is_contain_select_for_update_)) &&
+        loc_meta_.select_leader_ &&
+        static_cast<ObRoutePolicyType>(loc_meta_.route_policy_) == FORCE_READONLY_ZONE) {
+      ret = OB_NOT_SUPPORTED;
+      LOG_USER_ERROR(OB_NOT_SUPPORTED, "when route policy is FORCE_READONLY_ZONE, strong read request");
     }
   }
   return ret;
@@ -1352,13 +1376,15 @@ int ObTableLocation::get_is_weak_read(const ObDMLStmt &dml_stmt,
              dml_stmt.get_query_ctx()->is_contain_select_for_update_ ||
              (!ERRSIM_WEAK_READ_INNER_TABLE && dml_stmt.get_query_ctx()->is_contain_inner_table_)) {
     is_weak_read = false;
-  } else if (share::server_runtime() == nullptr) {
+  } else if (share::ObTenantEnv::get_tenant() == nullptr) { // table api has no tenant ctx
     is_weak_read = false;
   } else {
     ObConsistencyLevel consistency_level = INVALID_CONSISTENCY;
     ObTxConsistencyType trans_consistency_type = ObTxConsistencyType::INVALID;
     if (stmt::T_SELECT == dml_stmt.get_stmt_type()) {
-      if (OB_UNLIKELY(INVALID_CONSISTENCY
+      if (sql_ctx->is_protocol_weak_read_) {
+        consistency_level = WEAK;
+      } else if (OB_UNLIKELY(INVALID_CONSISTENCY
              != dml_stmt.get_query_ctx()->get_global_hint().read_consistency_)) {
         consistency_level = dml_stmt.get_query_ctx()->get_global_hint().read_consistency_;
       } else {
@@ -3929,7 +3955,7 @@ int ObTableLocation::send_add_interval_partition_rpc(
 
 
     tz_info.set_offset(0);
-    OZ (OTTZ_MGR.get_timezone_map(tz_info.get_tz_map_wrap()));
+    OZ (OTTZ_MGR.get_tenant_tz(tz_info.get_tz_map_wrap()));
 
     SMART_VAR(char[OB_MAX_DEFAULT_VALUE_LENGTH], high_bound_buf) {
       MEMSET(high_bound_buf, 0, OB_MAX_DEFAULT_VALUE_LENGTH);
@@ -3953,7 +3979,7 @@ int ObTableLocation::send_add_interval_partition_rpc(
                               ));
       OX (sql_proxy = GCTX.sql_proxy_);
       CK (OB_NOT_NULL(sql_proxy));
-      OZ (sql_proxy->write(sql.ptr(), affected_rows));
+      OZ (sql_proxy->write(sql.ptr(), affected_rows, MYSQL_MODE));
     }
   }
   return ret;
@@ -4008,7 +4034,7 @@ int ObTableLocation::send_add_interval_partition_rpc_new_engine(
 
 
     tz_info.set_offset(0);
-    OZ (OTTZ_MGR.get_timezone_map(tz_info.get_tz_map_wrap()));
+    OZ (OTTZ_MGR.get_tenant_tz(tz_info.get_tz_map_wrap()));
 
     SMART_VAR(char[OB_MAX_DEFAULT_VALUE_LENGTH], high_bound_buf) {
       MEMSET(high_bound_buf, 0, OB_MAX_DEFAULT_VALUE_LENGTH);
@@ -4034,7 +4060,7 @@ int ObTableLocation::send_add_interval_partition_rpc_new_engine(
                               ));
       OX (sql_proxy = GCTX.sql_proxy_);
       CK (OB_NOT_NULL(sql_proxy));
-      OZ (sql_proxy->write(sql.ptr(), affected_rows));
+      OZ (sql_proxy->write(sql.ptr(), affected_rows, MYSQL_MODE));
     }
   }
   return ret;
@@ -4903,6 +4929,8 @@ OB_DEF_SERIALIZE(ObTableLocation)
   OB_UNIS_ENCODE(related_list_);
   OB_UNIS_ENCODE(table_type_);
   OB_UNIS_ENCODE(check_no_partition_);
+  OB_UNIS_ENCODE(is_broadcast_table_);
+  OB_UNIS_ENCODE(is_dynamic_replica_select_table_);
   OB_UNIS_ENCODE(is_col_part_expr_);
   OB_UNIS_ENCODE(is_col_subpart_expr_);
   OB_UNIS_ENCODE(part_col_type_);
@@ -4989,6 +5017,8 @@ OB_DEF_SERIALIZE_SIZE(ObTableLocation)
   OB_UNIS_ADD_LEN(related_list_);
   OB_UNIS_ADD_LEN(table_type_);
   OB_UNIS_ADD_LEN(check_no_partition_);
+  OB_UNIS_ADD_LEN(is_broadcast_table_);
+  OB_UNIS_ADD_LEN(is_dynamic_replica_select_table_);
   OB_UNIS_ADD_LEN(is_col_part_expr_);
   OB_UNIS_ADD_LEN(is_col_subpart_expr_);
   OB_UNIS_ADD_LEN(part_col_type_);
@@ -5151,6 +5181,8 @@ OB_DEF_DESERIALIZE(ObTableLocation)
   OB_UNIS_DECODE(related_list_);
   OB_UNIS_DECODE(table_type_);
   OB_UNIS_DECODE(check_no_partition_);
+  OB_UNIS_DECODE(is_broadcast_table_);
+  OB_UNIS_DECODE(is_dynamic_replica_select_table_);
   OB_UNIS_DECODE(is_col_part_expr_);
   OB_UNIS_DECODE(is_col_subpart_expr_);
   OB_UNIS_DECODE(part_col_type_);
@@ -5516,11 +5548,11 @@ int ObTableLocation::try_split_integer_range(const common::ObIArray<common::ObNe
   return ret;
 }
 
-int ObTableLocation::get_full_local_table_loc(ObDASLocationRouter &loc_router,
-                                              ObIAllocator &allocator,
-                                              uint64_t table_id,
-                                              uint64_t ref_table_id,
-                                              ObDASTableLoc *&table_loc)
+int ObTableLocation::get_full_leader_table_loc(ObDASLocationRouter &loc_router,
+                                               ObIAllocator &allocator,
+                                               uint64_t table_id,
+                                               uint64_t ref_table_id,
+                                               ObDASTableLoc *&table_loc)
 {
   int ret = OB_SUCCESS;
   const ObTableSchema *table_schema = NULL;
@@ -5528,7 +5560,7 @@ int ObTableLocation::get_full_local_table_loc(ObDASLocationRouter &loc_router,
   ObSEArray<ObObjectID, 4> partition_ids;
   ObSEArray<ObObjectID, 4> first_level_part_ids;
   ObSchemaGetterGuard schema_guard;
-  OZ(GCTX.schema_service_->get_runtime_schema_guard(schema_guard));
+  OZ(GCTX.schema_service_->get_tenant_schema_guard(schema_guard));
   OZ(schema_guard.get_table_schema( ref_table_id, table_schema));
   if (OB_ISNULL(table_schema)) {
     ret = OB_SCHEMA_ERROR;
@@ -5551,6 +5583,7 @@ int ObTableLocation::get_full_local_table_loc(ObDASLocationRouter &loc_router,
       loc_meta = new(table_buf+sizeof(ObDASTableLoc)) ObDASTableLocMeta(allocator);
       loc_meta->table_loc_id_ = table_id;
       loc_meta->ref_table_id_ = ref_table_id;
+      loc_meta->select_leader_ = true;
       table_loc->loc_meta_ = loc_meta;
     }
     for (int64_t i = 0; OB_SUCC(ret) && i < tablet_ids.count(); i++) {
@@ -5564,7 +5597,7 @@ int ObTableLocation::get_full_local_table_loc(ObDASLocationRouter &loc_router,
       OX(tablet_loc->loc_meta_ = loc_meta);
       OX(tablet_loc->partition_id_ = partition_ids.at(i));
       OX(tablet_loc->first_level_part_id_ = first_level_part_ids.at(i));
-      OZ(loc_router.nonblock_get_local(tablet_ids.at(i), *tablet_loc));
+      OZ(loc_router.nonblock_get_leader(tablet_ids.at(i), *tablet_loc));
       OZ(table_loc->add_tablet_loc(tablet_loc));
     }
   }

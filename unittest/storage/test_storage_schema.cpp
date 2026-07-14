@@ -21,7 +21,7 @@
 
 #include "src/share/schema/ob_table_schema.h"
 #include "storage/test_schema_prepare.h"
-#include "mtlenv/mock_server_runtime_env.h"
+#include "mtlenv/mock_tenant_module_env.h"
 #include "storage/ob_storage_schema_util.h"
 
 namespace oceanbase
@@ -34,40 +34,42 @@ namespace unittest
 class TestStorageSchema : public ::testing::Test
 {
 public:
-  TestStorageSchema() : allocator_(ObModIds::TEST), runtime_state_() {}
+  TestStorageSchema() : allocator_(ObModIds::TEST), tenant_base_(tenant_id) {}
   virtual ~TestStorageSchema() {}
   bool judge_storage_schema_equal(ObStorageSchema &schema1, ObStorageSchema &schema2);
   virtual void SetUp() override;
   virtual void TearDown() override;
   static void SetUpTestCase();
   static void TearDownTestCase();
+  static const int64_t tenant_id = 1;
   common::ObArenaAllocator allocator_;
-  ObServerRuntimeState runtime_state_;
+  ObTenantBase tenant_base_;
 };
 
 void TestStorageSchema::SetUp()
 {
-  ASSERT_EQ(OB_SUCCESS, runtime_state_.init());
+  ASSERT_EQ(OB_SUCCESS, tenant_base_.init());
 
 }
 void TestStorageSchema::TearDown()
 {
-  share::g_server_runtime = &share::g_bootstrap_server_runtime;
+  ObTenantEnv::set_tenant(nullptr);
 }
 
 void TestStorageSchema::SetUpTestCase()
 {
-  EXPECT_EQ(OB_SUCCESS, MockServerRuntimeEnv::get_instance().init());
+  EXPECT_EQ(OB_SUCCESS, MockTenantModuleEnv::get_instance().init());
 }
 void TestStorageSchema::TearDownTestCase()
 {
-  MockServerRuntimeEnv::get_instance().destroy();
+  MockTenantModuleEnv::get_instance().destroy();
 }
 
 bool TestStorageSchema::judge_storage_schema_equal(ObStorageSchema &schema1, ObStorageSchema &schema2)
 {
   bool equal = false;
-  equal = schema1.table_type_ == schema2.table_type_
+  equal = schema1.is_use_bloomfilter_ == schema2.is_use_bloomfilter_
+      && schema1.table_type_ == schema2.table_type_
       && schema1.table_mode_ == schema2.table_mode_
       && schema1.row_store_type_ == schema2.row_store_type_
       && schema1.schema_version_ == schema2.schema_version_
@@ -75,7 +77,10 @@ bool TestStorageSchema::judge_storage_schema_equal(ObStorageSchema &schema1, ObS
       && schema1.tablet_size_ == schema2.tablet_size_
       && schema1.pctfree_ == schema2.pctfree_
       && schema1.block_size_ == schema2.block_size_
+      && schema1.master_key_id_ == schema2.master_key_id_
       && schema1.compressor_type_ == schema2.compressor_type_
+      && schema1.encryption_ == schema2.encryption_
+      && schema1.encrypt_key_ == schema2.encrypt_key_
       && schema1.rowkey_array_.count() == schema2.rowkey_array_.count()
       && schema1.column_array_.count() == schema2.column_array_.count();
 
@@ -103,11 +108,11 @@ TEST_F(TestStorageSchema, generate_schema)
   share::schema::ObTableSchema table_schema;
   ObStorageSchema storage_schema;
   TestSchemaPrepare::prepare_schema(table_schema);
-  ASSERT_EQ(OB_SUCCESS, storage_schema.init(allocator_, table_schema));
+  ASSERT_EQ(OB_SUCCESS, storage_schema.init(allocator_, table_schema, lib::Worker::CompatMode::MYSQL));
   COMMON_LOG(INFO, "generate success", K(storage_schema), K(table_schema));
 
   ObStorageSchema storage_schema2;
-  ASSERT_EQ(OB_SUCCESS, storage_schema2.init(allocator_, table_schema));
+  ASSERT_EQ(OB_SUCCESS, storage_schema2.init(allocator_, table_schema, lib::Worker::CompatMode::MYSQL));
   COMMON_LOG(INFO, "generate success", K(storage_schema2), K(table_schema));
 
   ASSERT_EQ(true, judge_storage_schema_equal(storage_schema, storage_schema2));
@@ -118,7 +123,7 @@ TEST_F(TestStorageSchema, serialize_and_deserialize)
   share::schema::ObTableSchema table_schema;
   ObStorageSchema storage_schema;
   TestSchemaPrepare::prepare_schema(table_schema);
-  ASSERT_EQ(OB_SUCCESS, storage_schema.init(allocator_, table_schema));
+  ASSERT_EQ(OB_SUCCESS, storage_schema.init(allocator_, table_schema, lib::Worker::CompatMode::MYSQL));
 
   const int64_t buf_len = 1024 * 1024;
   int64_t ser_pos = 0;
@@ -142,7 +147,7 @@ TEST_F(TestStorageSchema, serialize_and_deserialize2)
   TestSchemaPrepare::prepare_schema(table_schema);
   table_schema.set_compress_func_name("compress_func_1");
   table_schema.add_aux_vp_tid(8989789);
-  ASSERT_EQ(OB_SUCCESS, storage_schema.init(allocator_, table_schema));
+  ASSERT_EQ(OB_SUCCESS, storage_schema.init(allocator_, table_schema, lib::Worker::CompatMode::MYSQL));
 
   const int64_t buf_len = 1024 * 1024;
   int64_t ser_pos = 0;
@@ -187,7 +192,7 @@ TEST_F(TestStorageSchema, serialize_and_deserialize_with_big_schema)
   }
   table_schema.set_max_used_column_id(column_id);
 
-  ASSERT_EQ(OB_SUCCESS, storage_schema.init(allocator_, table_schema));
+  ASSERT_EQ(OB_SUCCESS, storage_schema.init(allocator_, table_schema, lib::Worker::CompatMode::MYSQL));
 
   const int64_t buf_len = 1024 * 1024;
   int64_t ser_pos = 0;
@@ -207,7 +212,7 @@ TEST_F(TestStorageSchema, compat_serialize_and_deserialize)
   share::schema::ObTableSchema table_schema;
   ObStorageSchema storage_schema;
   TestSchemaPrepare::prepare_schema(table_schema);
-  ASSERT_EQ(OB_SUCCESS, storage_schema.init(allocator_, table_schema));
+  ASSERT_EQ(OB_SUCCESS, storage_schema.init(allocator_, table_schema, lib::Worker::CompatMode::MYSQL));
   storage_schema.storage_schema_version_ = ObStorageSchema::STORAGE_SCHEMA_VERSION;
 
   const int64_t buf_len = 1024 * 1024;
@@ -232,8 +237,8 @@ TEST_F(TestStorageSchema, test_update_tablet_store_schema)
   ObStorageSchema storage_schema1;
   ObStorageSchema storage_schema2;
   TestSchemaPrepare::prepare_schema(table_schema);
-  ASSERT_EQ(OB_SUCCESS, storage_schema1.init(allocator_, table_schema));
-  ASSERT_EQ(OB_SUCCESS, storage_schema2.init(allocator_, table_schema));
+  ASSERT_EQ(OB_SUCCESS, storage_schema1.init(allocator_, table_schema, lib::Worker::CompatMode::MYSQL));
+  ASSERT_EQ(OB_SUCCESS, storage_schema2.init(allocator_, table_schema, lib::Worker::CompatMode::MYSQL));
   storage_schema2.column_cnt_ += 1;
   storage_schema2.column_info_simplified_ = true;
   storage_schema2.schema_version_ += 100;
@@ -255,7 +260,7 @@ TEST_F(TestStorageSchema, test_update_tablet_store_schema)
 
   // mock schema with virtual column, same column_cnt & store_column_cnt, simplified = false
   storage_schema2.reset();
-  ASSERT_EQ(OB_SUCCESS, storage_schema2.init(allocator_, table_schema));
+  ASSERT_EQ(OB_SUCCESS, storage_schema2.init(allocator_, table_schema, lib::Worker::CompatMode::MYSQL));
   storage_schema1.store_column_cnt_ -= 1;
   storage_schema2.store_column_cnt_ -= 1;
   ret = ObStorageSchemaUtil::update_tablet_storage_schema(ObTabletID(1), allocator_, storage_schema1, storage_schema2, result_storage_schema);
@@ -276,7 +281,7 @@ TEST_F(TestStorageSchema, test_update_tablet_store_schema)
   ObStorageSchemaUtil::free_storage_schema(allocator_, result_storage_schema);
 }
 
-TEST_F(TestStorageSchema, test_clipped_schema_for_tablet_fork)
+TEST_F(TestStorageSchema, test_clipped_schema_for_tablet_split)
 {
   share::schema::ObTableSchema table_schema;
   ObStorageSchema storage_schema1;
@@ -309,7 +314,7 @@ TEST_F(TestStorageSchema, test_clipped_schema_for_tablet_fork)
   }
   table_schema.set_max_used_column_id(column_id);
   ASSERT_EQ(OB_SUCCESS, table_schema.get_store_column_count(stored_column_cnt));
-  ASSERT_EQ(OB_SUCCESS, storage_schema1.init(allocator_, table_schema));
+  ASSERT_EQ(OB_SUCCESS, storage_schema1.init(allocator_, table_schema, lib::Worker::CompatMode::MYSQL));
 
   const int64_t buf_len = 1024 * 1024;
   char buf[buf_len] = "\0";

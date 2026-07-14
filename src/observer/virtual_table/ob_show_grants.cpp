@@ -73,6 +73,7 @@ int ObShowGrants::add_priv_map_recursively(uint64_t user_id, PRIV_MAP &priv_map,
     ret = OB_ERR_USER_NOT_EXIST;
     SERVER_LOG(WARN, "User not exist", K(ret));
   } else {
+    ObArray<const ObCatalogPriv *> catalog_priv_array;
     ObArray<const ObDBPriv *> db_priv_array;
     ObArray<const ObTablePriv *> table_priv_array;
     ObArray<const ObColumnPriv *> column_priv_array;
@@ -80,6 +81,7 @@ int ObShowGrants::add_priv_map_recursively(uint64_t user_id, PRIV_MAP &priv_map,
     ObArray<const ObObjMysqlPriv *> obj_mysql_priv_array;
 
 
+    OZ (schema_guard_->get_catalog_priv_with_user_id(user_id, catalog_priv_array));
     OZ (schema_guard_->get_db_priv_with_user_id(user_id, db_priv_array));
     OZ (schema_guard_->get_table_priv_with_user_id(user_id, table_priv_array));
     OZ (schema_guard_->get_column_priv_with_user_id(user_id, column_priv_array));
@@ -90,6 +92,13 @@ int ObShowGrants::add_priv_map_recursively(uint64_t user_id, PRIV_MAP &priv_map,
     if (OB_SUCC(ret)) {
       PrivKey priv_key;
       OZ (add_priv_map(priv_map, priv_key, user_info->get_priv_set()));
+    }
+
+    //catalog_level
+    for (int i = 0; OB_SUCC(ret) && i < catalog_priv_array.count(); i++) {
+      PrivKey priv_key;
+      priv_key.catalog_name_ = catalog_priv_array.at(i)->get_catalog_name_str();
+      OZ (add_priv_map(priv_map, priv_key, catalog_priv_array.at(i)->get_priv_set()));
     }
 
     //db_level
@@ -178,6 +187,7 @@ int ObShowGrants::inner_get_next_row(common::ObNewRow *&row)
         cur_row_.cells_ = cells;
         cur_row_.count_ = reserved_column_cnt_;
         const ObUserInfo *user_info = NULL;
+        ObArray<const ObCatalogPriv *> catalog_priv_array;
         ObArray<const ObDBPriv *> db_priv_array;
         ObArray<const ObTablePriv *> table_priv_array;
         ObArray<const ObRoutinePriv *> routine_priv_array;
@@ -196,6 +206,9 @@ int ObShowGrants::inner_get_next_row(common::ObNewRow *&row)
         if (OB_ISNULL(user_info = schema_guard_->get_user_info(show_user_id))) {
           ret = OB_ERR_USER_NOT_EXIST;
           SERVER_LOG(WARN, "User not exist", K(ret));
+        } else if (OB_FAIL(schema_guard_->get_catalog_priv_with_user_id(show_user_id,
+                                                                        catalog_priv_array))) {
+          SERVER_LOG(WARN, "Get catalog priv with user id error", K(ret));
         } else if (OB_FAIL(schema_guard_->get_db_priv_with_user_id(show_user_id,
                                                                    db_priv_array))) {
           SERVER_LOG(WARN, "Get db priv with user id error", K(ret));
@@ -231,11 +244,29 @@ int ObShowGrants::inner_get_next_row(common::ObNewRow *&row)
           for (PRIV_MAP::const_iterator iter = priv_map.begin(); OB_SUCC(ret) && iter != priv_map.end(); ++iter) {
             const PrivKey &priv_key = iter->first;
             const ObPrivSet &privs = iter->second;
-            if (priv_key.db_name_.empty()
+            if (priv_key.catalog_name_.empty() 
+                && priv_key.db_name_.empty()
                 && ObObjectType::INVALID == priv_key.obj_type_) {
               pos = 0;
               have_priv.priv_level_ = OB_PRIV_USER_LEVEL;
               have_priv.priv_set_ = privs;
+
+              OZ (get_grants_string(buf, PRIV_BUF_LENGTH, pos, have_priv, user_name, host_name));
+              OX (result.assign_ptr(buf, static_cast<int32_t>(pos)));
+              OZ (fill_row_cells(show_user_id, result));
+              OZ (scanner_.add_row(cur_row_));
+            }
+          }
+
+          //catalog level
+          for (PRIV_MAP::const_iterator iter = priv_map.begin(); OB_SUCC(ret) && iter != priv_map.end(); ++iter) {
+            const PrivKey &priv_key = iter->first;
+            const ObPrivSet &privs = iter->second;
+            if (!priv_key.catalog_name_.empty() && priv_key.db_name_.empty()) {
+              pos = 0;
+              have_priv.priv_level_ = OB_PRIV_CATALOG_LEVEL;
+              have_priv.priv_set_ = privs;
+              have_priv.catalog_ = priv_key.catalog_name_;
 
               OZ (get_grants_string(buf, PRIV_BUF_LENGTH, pos, have_priv, user_name, host_name));
               OX (result.assign_ptr(buf, static_cast<int32_t>(pos)));
@@ -346,6 +377,24 @@ int ObShowGrants::inner_get_next_row(common::ObNewRow *&row)
             }
           }
 
+          // location
+          for (PRIV_MAP::const_iterator iter = priv_map.begin(); OB_SUCC(ret) && iter != priv_map.end(); ++iter) {
+            const PrivKey &priv_key = iter->first;
+            const ObPrivSet &privs = iter->second;
+            if (!priv_key.table_name_.empty()
+                && priv_key.obj_type_ == ObObjectType::LOCATION) {
+              pos = 0;
+              have_priv.priv_level_ = OB_PRIV_OBJECT_LEVEL;
+              have_priv.priv_set_ = privs;
+              have_priv.table_ = priv_key.table_name_;
+              have_priv.obj_type_ = priv_key.obj_type_;
+
+              OZ (get_grants_string(buf, PRIV_BUF_LENGTH, pos, have_priv, user_name, host_name));
+              OX (result.assign_ptr(buf, static_cast<int32_t>(pos)));
+              OZ (fill_row_cells(show_user_id, result));
+              OZ (scanner_.add_row(cur_row_));
+            }
+          }
         }
       }
       if (OB_SUCC(ret)) {
@@ -499,6 +548,8 @@ int ObShowGrants::print_privs_to_buff(
     SERVER_LOG(WARN, "Buf is NULL", K(ret));
   } else if (OB_PRIV_USER_LEVEL == priv_level) {
     priv_all = OB_PRIV_ALL;
+  } else if (OB_PRIV_CATALOG_LEVEL == priv_level) {
+    priv_all = OB_PRIV_CATALOG_ACC;
   } else if (OB_PRIV_DB_LEVEL == priv_level) {
     priv_all = OB_PRIV_DB_ACC;
   } else if (OB_PRIV_TABLE_LEVEL == priv_level) {
@@ -513,7 +564,7 @@ int ObShowGrants::print_privs_to_buff(
   }
 
   if (OB_SUCC(ret)) {
-    if (0 == (priv_set & priv_all)
+    if (0 == (priv_set & (priv_all | OB_PRIV_ENCRYPT | OB_PRIV_DECRYPT)) 
         && (priv_key_array == NULL || priv_key_array->empty())) {
       ret = databuff_printf(buf, buf_len, pos, " USAGE");
     } else if (priv_all == (priv_set & priv_all)) {
@@ -607,14 +658,29 @@ int ObShowGrants::print_privs_to_buff(
       if ((priv_set & OB_PRIV_FILE) && OB_SUCCESS == ret) {
         ret = BUF_PRINTF(" FILE,");
       }
+      if ((priv_set & OB_PRIV_ALTER_TENANT) && OB_SUCCESS == ret) {
+        ret = BUF_PRINTF(" ALTER TENANT,");
+      }
       if ((priv_set & OB_PRIV_ALTER_SYSTEM) && OB_SUCCESS == ret) {
         ret = BUF_PRINTF(" ALTER SYSTEM,");
+      }
+      if ((priv_set & OB_PRIV_CREATE_RESOURCE_POOL) && OB_SUCCESS == ret) {
+        ret = BUF_PRINTF(" CREATE RESOURCE POOL,");
+      }
+      if ((priv_set & OB_PRIV_CREATE_RESOURCE_UNIT) && OB_SUCCESS == ret) {
+        ret = BUF_PRINTF(" CREATE RESOURCE UNIT,");
       }
       if ((priv_set & OB_PRIV_REPL_SLAVE) && OB_SUCCESS == ret) {
         ret = BUF_PRINTF(" REPLICATION SLAVE,");
       }
       if ((priv_set & OB_PRIV_REPL_CLIENT) && OB_SUCCESS == ret) {
         ret = BUF_PRINTF(" REPLICATION CLIENT,");
+      }
+      if ((priv_set & OB_PRIV_DROP_DATABASE_LINK) && OB_SUCCESS == ret) {
+        ret = BUF_PRINTF(" DROP DATABASE LINK,");
+      }
+      if ((priv_set & OB_PRIV_CREATE_DATABASE_LINK) && OB_SUCCESS == ret) {
+        ret = BUF_PRINTF(" CREATE DATABASE LINK,");
       }
       if ((priv_set & OB_PRIV_EXECUTE) && OB_SUCCESS == ret) {
         ret = BUF_PRINTF(" EXECUTE,");
@@ -645,6 +711,15 @@ int ObShowGrants::print_privs_to_buff(
       }
       if ((priv_set & OB_PRIV_TRIGGER) && OB_SUCCESS == ret) {
         ret = BUF_PRINTF(" TRIGGER,");
+      }
+      if ((priv_set & OB_PRIV_EVENT) && OB_SUCCESS == ret) {
+        ret = BUF_PRINTF(" EVENT,");
+      }
+      if ((priv_set & OB_PRIV_CREATE_CATALOG) && OB_SUCCESS == ret) {
+        ret = BUF_PRINTF(" CREATE CATALOG,");
+      }
+      if ((priv_set & OB_PRIV_USE_CATALOG) && OB_SUCCESS == ret) {
+        ret = BUF_PRINTF(" USE CATALOG,");
       }
       if ((priv_set & OB_PRIV_CREATE_AI_MODEL) && OB_SUCCESS == ret) {
         ret = BUF_PRINTF(" CREATE AI MODEL,");
@@ -683,6 +758,12 @@ int ObShowGrants::priv_level_printf(
     if (OB_SUCCESS != (ret = databuff_printf(buf, buf_len, pos, " ON *.*"))) {
       SERVER_LOG(WARN, "Fill privs to buffer failed", K(ret));
     }
+  } else if (OB_PRIV_CATALOG_LEVEL == have_priv.priv_level_) {
+    if (OB_FAIL(databuff_printf(buf, buf_len, pos,
+                                " ON CATALOG `%.*s`",
+                                have_priv.catalog_.length(), have_priv.catalog_.ptr()))) {
+      SERVER_LOG(WARN, "Fill privs to buffer failed", K(ret));
+    }
   } else if (OB_PRIV_DB_LEVEL == have_priv.priv_level_) {
     if (OB_FAIL(databuff_printf(buf, buf_len, pos,
                                 " ON `%.*s`.*",
@@ -702,6 +783,12 @@ int ObShowGrants::priv_level_printf(
                                 have_priv.db_.length(), have_priv.db_.ptr(),
                                 have_priv.table_.length(), have_priv.table_.ptr()))) {
       SERVER_LOG(WARN, "Fill privs to buffer failed", K(ret));
+    }
+  } else if (OB_PRIV_OBJECT_LEVEL == have_priv.priv_level_) {
+    if (ObObjectType::LOCATION == have_priv.obj_type_) {
+      if (OB_FAIL(databuff_printf(buf, buf_len, pos, " ON LOCATION `%.*s`", have_priv.table_.length(), have_priv.table_.ptr()))) {
+        SERVER_LOG(WARN, "Fill privs to buffer failed", K(ret));
+      }
     }
   }
   return ret;

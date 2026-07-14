@@ -43,6 +43,7 @@ public:
   ObTabletMediumCompactionInfoRecorder();
   ~ObTabletMediumCompactionInfoRecorder();
   int init(
+      const share::ObLSID &ls_id,
       const common::ObTabletID &tablet_id,
       const int64_t max_saved_version,
       logservice::ObLogHandler *log_handler);
@@ -56,15 +57,15 @@ public:
     const common::ObTabletID &tablet_id,
     const ObMediumCompactionInfo &medium_info,
     const logservice::ObLogBaseHeader *log_header);
-  INHERIT_TO_STRING_KV("ObIStorageClogRecorder", ObIStorageClogRecorder, K_(ignore_medium), K_(tablet_id));
+  INHERIT_TO_STRING_KV("ObIStorageClogRecorder", ObIStorageClogRecorder, K_(ignore_medium), K_(ls_id), K_(tablet_id));
 private:
   virtual int inner_replay_clog(
       const int64_t update_version,
       const share::SCN &scn,
       const char *buf,
       const int64_t size,
-      int64_t &pos) override;  virtual int on_sync_clog_success(const int64_t update_version) override;
-  virtual void on_sync_clog_failure() override;
+      int64_t &pos) override;  virtual int sync_clog_succ_for_leader(const int64_t update_version) override;
+  virtual void sync_clog_failed_for_leader() override;
 
   virtual int prepare_struct_in_lock(
       int64_t &update_version,
@@ -85,6 +86,7 @@ private:
 private:
   bool is_inited_;
   bool ignore_medium_;
+  share::ObLSID ls_id_;
   common::ObTabletID tablet_id_;
   storage::ObTabletHandle *tablet_handle_ptr_;
   ObMediumCompactionInfo *medium_info_;
@@ -136,6 +138,7 @@ public:
   int get_next_schedule_info(
     const int64_t last_major_snapshot,
     const int64_t major_frozen_snapshot,
+    const bool is_mv_refresh_tablet,
     ObMediumCompactionInfo::ObCompactionType &compaction_type,
     int64_t &schedule_scn) const;
   OB_INLINE ObMediumCompactionInfo::ObCompactionType get_last_compaction_type() const
@@ -186,7 +189,7 @@ private:
 
   ObExtraMediumInfo extra_info_;
 
-  MediumInfoList medium_info_list_;
+  MediumInfoList medium_info_list_; // need for compat, will not store any MediumCompactionInfo after 4.2
 };
 
 } // namespace compaction

@@ -78,7 +78,7 @@ DEF_PARAM(devname, STR, OB_CLUSTER_PARAMETER, "lo", "name of network adapter",
         ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::READONLY));
 DEF_PARAM(zone, STR, OB_CLUSTER_PARAMETER, "z1", "specifies the zone name",
         ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
-DEF_PARAM(ob_startup_mode, STR, OB_CLUSTER_PARAMETER, "NORMAL", "specifies the observer startup mode. Values: normal, physical_flashback, physical_flashback_verify",
+DEF_PARAM(ob_startup_mode, STR, OB_CLUSTER_PARAMETER, "NORMAL", "specifies the observer startup mode. Values: normal",
         ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::READONLY));
 DEF_PARAM(internal_sql_execute_timeout, TIME, OB_CLUSTER_PARAMETER, "30s", "[1000us, 1h]",
          "the number of microseconds an internal DML request is permitted to "
@@ -167,17 +167,12 @@ DEF_PARAM(default_row_format, STR_WITH_CHECKER, OB_CLUSTER_PARAMETER, "dynamic",
                      ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE),
                      "REDUNDANT, COMPACT, DYNAMIC, COMPRESSED, CONDENSED");
 
-DEF_PARAM(default_table_store_format, STR_WITH_CHECKER, OB_CLUSTER_PARAMETER, "row", common::ObConfigTableStoreFormatChecker,
-                     "Specify the default storage format of creating table: row, column, compound format of row and column"
-                     "values: row, column, compound",
-                     ObParameterAttr(Section::TENANT, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE),
-                     "row, column, compound");
 DEF_PARAM(_no_logging, BOOL, OB_CLUSTER_PARAMETER, "False",
          "set true to skip writing ddl clog when all server using the same oss in shared storage mode",
         ObParameterAttr(Section::TENANT, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 
 DEF_PARAM(storage_rowsets_size, INT, OB_CLUSTER_PARAMETER, "8192", "(0,1048576]",
-        "the row number processed by vectorized storage engine within one batch in column storage. Range: (0,1048576]",
+        "the row number processed by vectorized storage engine within one batch. Range: (0,1048576]",
         ObParameterAttr(Section::TENANT, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 
 DEF_PARAM(weak_read_version_refresh_interval, TIME, OB_CLUSTER_PARAMETER, "1000ms", "[50ms,)",
@@ -1685,10 +1680,6 @@ DEF_PARAM(_ls_migration_wait_completing_timeout, TIME, OB_CLUSTER_PARAMETER, "30
         "the wait timeout in ls complete migration phase",
         ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 
-// column store section
-DEF_PARAM(_enable_column_store, BOOL, OB_CLUSTER_PARAMETER, "True",
-        "enable the column store format in storage engine",
-        ObParameterAttr(Section::TENANT, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 DEF_PARAM(_enable_skip_index, BOOL, OB_CLUSTER_PARAMETER, "True",
         "enable the skip index in storage engine",
         ObParameterAttr(Section::TENANT, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));

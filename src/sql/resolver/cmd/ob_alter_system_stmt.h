@@ -19,52 +19,17 @@
 
 #include "sql/resolver/cmd/ob_system_cmd_stmt.h"
 #include "share/ob_rpc_struct.h"
-#include "share/io/ob_io_calibration.h"
 #include "observer/scheduler/ob_sys_task_stat.h"
+#include "sql/engine/cmd/ob_redis_importer.h"
 
 namespace oceanbase
 {
 namespace sql
 {
-struct ObFlushCacheParam
-{
-  ObFlushCacheParam()
-    : cache_type_(CACHE_TYPE_INVALID),
-      db_ids_(),
-      sql_id_(),
-      is_fine_grained_(false),
-      ns_type_(ObLibCacheNameSpace::NS_INVALID),
-      schema_id_(common::OB_INVALID_ID)
-  {}
-
-  int push_database(const uint64_t db_id) { return db_ids_.push_back(db_id); }
-  TO_STRING_KV(K_(cache_type), K_(db_ids), K_(sql_id), K_(is_fine_grained),
-               K_(ns_type), K_(schema_id));
-
-  ObCacheType cache_type_;
-  common::ObSEArray<uint64_t, 8> db_ids_;
-  common::ObString sql_id_;
-  bool is_fine_grained_;
-  ObLibCacheNameSpace ns_type_;
-  uint64_t schema_id_;
-};
-
-struct ObRefreshIOCalibrationParam
-{
-  ObRefreshIOCalibrationParam()
-    : storage_name_(), only_refresh_(false), calibration_list_()
-  {}
-
-  bool is_valid() const
-  {
-    return !(only_refresh_ && calibration_list_.count() > 0);
-  }
-
-  TO_STRING_KV(K_(storage_name), K_(only_refresh), K_(calibration_list));
-
-  common::ObString storage_name_;
-  bool only_refresh_;
-  common::ObSArray<common::ObIOBenchResult> calibration_list_;
+enum FreezeAllUserOrMeta {
+  FREEZE_ALL = 0x01,
+  FREEZE_ALL_USER = 0x02,
+  FREEZE_ALL_META = 0x04
 };
 
 class ObFreezeStmt : public ObSystemCmdStmt
@@ -73,27 +38,59 @@ public:
   ObFreezeStmt()
     : ObSystemCmdStmt(stmt::T_FREEZE),
       major_freeze_(false),
-      has_runtime_selector_(false),
-      opt_tablet_id_() {}
+      freeze_all_flag_(0),
+      opt_server_list_(),
+      opt_tenant_count_(0),
+      opt_tablet_id_(),
+      opt_ls_id_(share::ObLSID::INVALID_LS_ID) {}
   ObFreezeStmt(common::ObIAllocator *name_pool)
     : ObSystemCmdStmt(name_pool, stmt::T_FREEZE),
       major_freeze_(false),
-      has_runtime_selector_(false),
-      opt_tablet_id_() {}
+      freeze_all_flag_(0),
+      opt_server_list_(),
+      opt_tenant_count_(0),
+      opt_tablet_id_(),
+      opt_ls_id_(share::ObLSID::INVALID_LS_ID) {}
   virtual ~ObFreezeStmt() {}
 
   bool is_major_freeze() const { return major_freeze_; }
   void set_major_freeze(bool major_freeze) { major_freeze_ = major_freeze; }
-  bool has_runtime_selector() const { return has_runtime_selector_; }
-  void set_has_runtime_selector() { has_runtime_selector_ = true; }
+  bool is_freeze_all() const { return 0 != (freeze_all_flag_ & FREEZE_ALL); }
+  void set_freeze_all() { freeze_all_flag_ |= FREEZE_ALL; }
+  bool is_freeze_all_user() const { return 0 != (freeze_all_flag_ & FREEZE_ALL_USER); }
+  void set_freeze_all_user() { freeze_all_flag_ |= FREEZE_ALL_USER; }
+  bool is_freeze_all_meta() const { return 0 != (freeze_all_flag_ & FREEZE_ALL_META); }
+  void set_freeze_all_meta() { freeze_all_flag_ |= FREEZE_ALL_META; }
+  inline obcall::ObServerList &get_ignore_server_list() { return opt_server_list_; }
+  inline obcall::ObServerList &get_server_list() { return opt_server_list_; }
+  inline int64_t get_tenant_count() const { return opt_tenant_count_; }
+  inline int64_t &tenant_count_ref() { return opt_tenant_count_; }
+  inline void inc_tenant_count() { ++opt_tenant_count_; }
+  inline void reset_tenant_count() { opt_tenant_count_ = 0; }
+  inline common::ObZone &get_zone() { return opt_zone_; }
   inline common::ObTabletID &get_tablet_id() { return opt_tablet_id_; }
+  inline int64_t &get_ls_id() { return opt_ls_id_; }
+  inline int push_server(const common::ObAddr& server) {
+    return opt_server_list_.push_back(server);
+  }
 
-  TO_STRING_KV(N_STMT_TYPE, ((int)stmt_type_), K_(major_freeze),
-               K_(has_runtime_selector), K(opt_tablet_id_));
+  TO_STRING_KV(N_STMT_TYPE, ((int)stmt_type_), K_(major_freeze), K(freeze_all_flag_), 
+               K(opt_server_list_), K(opt_tenant_count_), K(opt_tablet_id_), K(opt_ls_id_));
 private:
   bool major_freeze_;
-  bool has_runtime_selector_;
+  // for major_freeze, it is ignore server list
+  // for minor_freeze, it is candidate server list
+  int freeze_all_flag_;
+  // for major_freeze only
+  obcall::ObServerList opt_server_list_;
+  // for minor_freeze only,
+  int64_t opt_tenant_count_;
+  // for minor_freeze only
+  common::ObZone opt_zone_;
+  
+  // for minor_freeze only
   common::ObTabletID opt_tablet_id_;
+  int64_t opt_ls_id_;
 };
 
 class ObFlushCacheStmt : public ObSystemCmdStmt
@@ -101,12 +98,14 @@ class ObFlushCacheStmt : public ObSystemCmdStmt
 public:
   ObFlushCacheStmt() :
     ObSystemCmdStmt(stmt::T_FLUSH_CACHE),
-    flush_cache_arg_()
+    flush_cache_arg_(),
+    is_global_(false)
   {}
   virtual ~ObFlushCacheStmt() {}
   TO_STRING_KV(N_STMT_TYPE, ((int)stmt_type_), K_(flush_cache_arg));
 
-  ObFlushCacheParam flush_cache_arg_;
+  obcall::ObAdminFlushCacheArg flush_cache_arg_;
+  bool is_global_;
 };
 
 class ObFlushKVCacheStmt : public ObSystemCmdStmt
@@ -115,8 +114,9 @@ public:
   ObFlushKVCacheStmt() : ObSystemCmdStmt(stmt::T_FLUSH_KVCACHE) {}
   virtual ~ObFlushKVCacheStmt() {}
 
-  TO_STRING_KV(N_STMT_TYPE, ((int)stmt_type_), K_(cache_name));
-  common::ObFixedLengthString<common::OB_MAX_RUNTIME_NAME_LENGTH + 1> cache_name_;
+  TO_STRING_KV(N_STMT_TYPE, ((int)stmt_type_), K_(tenant_name), K_(cache_name));
+  common::ObFixedLengthString<common::OB_MAX_TENANT_NAME_LENGTH + 1> tenant_name_;
+  common::ObFixedLengthString<common::OB_MAX_TENANT_NAME_LENGTH + 1> cache_name_;
 };
 
 class ObFlushIlogCacheStmt : public ObSystemCmdStmt
@@ -140,24 +140,14 @@ public:
 class ObAdminMergeStmt: public ObSystemCmdStmt
 {
 public:
-  enum class MergeType
-  {
-    INVALID,
-    SUSPEND,
-    RESUME,
-  };
-
-  ObAdminMergeStmt()
-    : ObSystemCmdStmt(stmt::T_ADMIN_MERGE), merge_type_(MergeType::INVALID)
-  {}
+  ObAdminMergeStmt() : ObSystemCmdStmt(stmt::T_ADMIN_MERGE) {}
   virtual ~ObAdminMergeStmt() {}
 
-  MergeType get_merge_type() const { return merge_type_; }
-  void set_merge_type(const MergeType merge_type) { merge_type_ = merge_type; }
+  obcall::ObAdminMergeArg &get_rpc_arg() { return rpc_arg_; }
 
-  TO_STRING_KV(N_STMT_TYPE, ((int)stmt_type_), K_(merge_type));
+  TO_STRING_KV(N_STMT_TYPE, ((int)stmt_type_), K_(rpc_arg));
 private:
-  MergeType merge_type_;
+  obcall::ObAdminMergeArg rpc_arg_;
 };
 
 class ObRefreshMemStatStmt : public ObSystemCmdStmt
@@ -166,7 +156,11 @@ public:
   ObRefreshMemStatStmt() : ObSystemCmdStmt(stmt::T_REFRESH_MEMORY_STAT) {}
   virtual ~ObRefreshMemStatStmt() {}
 
-  TO_STRING_KV(N_STMT_TYPE, ((int)stmt_type_));
+  obcall::ObAdminRefreshMemStatArg &get_rpc_arg() { return rpc_arg_; }
+
+  TO_STRING_KV(N_STMT_TYPE, ((int)stmt_type_), K_(rpc_arg));
+private:
+  obcall::ObAdminRefreshMemStatArg rpc_arg_;
 };
 
 class ObRefreshIOCalibraitonStmt : public ObSystemCmdStmt
@@ -175,11 +169,11 @@ public:
   ObRefreshIOCalibraitonStmt() : ObSystemCmdStmt(stmt::T_REFRESH_IO_CALIBRATION) {}
   virtual ~ObRefreshIOCalibraitonStmt() {}
 
-  ObRefreshIOCalibrationParam &get_param() { return param_; }
+  obcall::ObAdminRefreshIOCalibrationArg &get_rpc_arg() { return rpc_arg_; }
 
-  TO_STRING_KV(N_STMT_TYPE, ((int)stmt_type_), K_(param));
+  TO_STRING_KV(N_STMT_TYPE, ((int)stmt_type_), K_(rpc_arg));
 private:
-  ObRefreshIOCalibrationParam param_;
+  obcall::ObAdminRefreshIOCalibrationArg rpc_arg_;
 };
 
 class ObSetConfigStmt : public ObSystemCmdStmt
@@ -201,11 +195,11 @@ public:
   ObSetTPStmt() : ObSystemCmdStmt(stmt::T_ALTER_SYSTEM_SETTP) {}
   virtual ~ObSetTPStmt() {}
 
-  obcall::ObSetTracepointParam &get_param() { return param_; }
+  obcall::ObAdminSetTPArg &get_rpc_arg() { return rpc_arg_; }
 
-  TO_STRING_KV(N_STMT_TYPE, ((int)stmt_type_), K_(param));
+  TO_STRING_KV(N_STMT_TYPE, ((int)stmt_type_), K_(rpc_arg));
 private:
-  obcall::ObSetTracepointParam param_;
+  obcall::ObAdminSetTPArg rpc_arg_;
 };
 
 class ObClearMergeErrorStmt : public ObSystemCmdStmt
@@ -214,7 +208,18 @@ public:
   ObClearMergeErrorStmt() : ObSystemCmdStmt(stmt::T_CLEAR_MERGE_ERROR) {}
   virtual ~ObClearMergeErrorStmt() {}
 
-  TO_STRING_KV(N_STMT_TYPE, ((int)stmt_type_));
+  obcall::ObAdminMergeArg &get_rpc_arg() { return rpc_arg_; }
+
+  TO_STRING_KV(N_STMT_TYPE, ((int)stmt_type_), K_(rpc_arg));
+private:
+  obcall::ObAdminMergeArg rpc_arg_;
+};
+
+class ObUpgradeVirtualSchemaStmt : public ObSystemCmdStmt
+{
+public:
+  ObUpgradeVirtualSchemaStmt() : ObSystemCmdStmt(stmt::T_UPGRADE_VIRTUAL_SCHEMA) {}
+  virtual ~ObUpgradeVirtualSchemaStmt() {}
 };
 
 class ObCancelTaskStmt : public ObSystemCmdStmt
@@ -222,18 +227,21 @@ class ObCancelTaskStmt : public ObSystemCmdStmt
 public:
   ObCancelTaskStmt()
     : ObSystemCmdStmt(stmt::T_CANCEL_TASK),
+      task_type_(share::MAX_SYS_TASK_TYPE),
       task_id_()
   {
   }
   virtual ~ObCancelTaskStmt() {}
+  const share::ObSysTaskType &get_task_type() { return task_type_; }
   const common::ObString &get_task_id() { return task_id_; }
-  int set_task_id(const common::ObString &task_id)
+  int set_param(const share::ObSysTaskType &task_type, const common::ObString &task_id)
   {
     int ret = common::OB_SUCCESS;
 
-    if (task_id.length() <= 0) {
+    if (task_type < 0 || task_type> share::MAX_SYS_TASK_TYPE || task_id.length() <= 0) {
       ret = common::OB_INVALID_ARGUMENT;
     } else {
+      task_type_ = task_type;
       task_id_ = task_id;
     }
 
@@ -241,7 +249,91 @@ public:
   }
 
 private:
+  share::ObSysTaskType task_type_;
   common::ObString task_id_;
+};
+
+class ObAddDiskStmt : public ObSystemCmdStmt
+{
+public:
+  ObAddDiskStmt():
+    ObSystemCmdStmt(stmt::T_ALTER_DISKGROUP_ADD_DISK)
+  {}
+  virtual ~ObAddDiskStmt() {}
+  TO_STRING_KV(N_STMT_TYPE, ((int)stmt_type_), K_(arg));
+
+  obcall::ObAdminAddDiskArg arg_;
+};
+
+class ObDropDiskStmt : public ObSystemCmdStmt
+{
+public:
+  ObDropDiskStmt():
+    ObSystemCmdStmt(stmt::T_ALTER_DISKGROUP_DROP_DISK)
+  {}
+  virtual ~ObDropDiskStmt() {}
+  TO_STRING_KV(N_STMT_TYPE, ((int)stmt_type_), K_(arg));
+
+  obcall::ObAdminDropDiskArg arg_;
+};
+
+class ObEnableSqlThrottleStmt
+    : public ObSystemCmdStmt
+{
+public:
+  ObEnableSqlThrottleStmt()
+      : ObSystemCmdStmt(stmt::T_ENABLE_SQL_THROTTLE),
+        priority_(99),
+        rt_(-1.),
+        io_(-1),
+        network_(-1.),
+        cpu_(-1.),
+        logical_reads_(-1),
+        queue_time_(-1.)
+  {}
+  void set_priority(int64_t priority) { priority_ = priority; }
+  void set_rt(double rt) { rt_ = rt; }
+  void set_io(int64_t io) { io_ = io; }
+  void set_network(double network) { network_ = network; }
+  void set_cpu(double cpu) { cpu_ = cpu; }
+  void set_logical_reads(int64_t logical_reads) { logical_reads_ = logical_reads; }
+  void set_queue_time(double queue_time) { queue_time_ = queue_time; }
+
+  int64_t get_priority() const { return priority_; }
+  double get_rt() const { return rt_; }
+  int64_t get_io() const { return io_; }
+  double get_network() const { return network_; }
+  double get_cpu() const { return cpu_; }
+  int64_t get_logical_reads() const { return logical_reads_; }
+  double get_queue_time() const { return queue_time_; }
+
+  TO_STRING_KV(
+      N_STMT_TYPE, ((int)stmt_type_),
+      K_(priority),
+      K_(rt),
+      K_(io),
+      K_(network),
+      K_(cpu),
+      K_(logical_reads),
+      K_(queue_time));
+
+private:
+  int64_t priority_;
+  double rt_;
+  int64_t io_;
+  double network_;
+  double cpu_;
+  int64_t logical_reads_;
+  double queue_time_;
+};
+
+class ObDisableSqlThrottleStmt
+  : public ObSystemCmdStmt
+{
+public:
+  ObDisableSqlThrottleStmt()
+    : ObSystemCmdStmt(stmt::T_DISABLE_SQL_THROTTLE)
+    {}
 };
 
 class ObResetConfigStmt : public ObSystemCmdStmt

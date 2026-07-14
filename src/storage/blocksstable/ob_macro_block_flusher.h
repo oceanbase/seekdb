@@ -13,6 +13,8 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+#include "storage/blocksstable/ob_shared_macro_block_manager.h"
+
 #ifndef OB_STORAGE_BLOCKSSTABLE_OB_MACRO_BLOCK_FLUSHER_H_
 #define OB_STORAGE_BLOCKSSTABLE_OB_MACRO_BLOCK_FLUSHER_H_
 

@@ -282,6 +282,7 @@ public:
     Reader,
     Decoder,
     CSDecoder,
+    MemtableReader,
     MaxReaderType
   };
   ObIMicroBlockReader()
@@ -458,6 +459,7 @@ public:
       bool &filtered);
   virtual bool has_lob_out_row() const = 0;
   OB_INLINE ObReaderType get_type() const { return reader_type_; }
+  OB_INLINE bool is_memtable_reader() const { return MemtableReader == reader_type_; }
   int locate_border_row_id(
       const ObDatumRowkey &rowkey,
       const int64_t begin_idx,

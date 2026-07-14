@@ -41,6 +41,8 @@ namespace common {
 
 #define INIT_GLOBAL_PREFS "REPLACE INTO %s(sname, sval1, sval2, spare4) VALUES %s;"
 
+#define UPGRADE_GLOBAL_PREFS "INSERT IGNORE INTO %s(sname, sval1, sval2, spare4) VALUES %s;"
+
 int ObDbmsStatsPreferences::reset_global_pref_defaults(ObExecContext &ctx)
 {
   int ret = OB_SUCCESS;
@@ -227,7 +229,7 @@ int ObDbmsStatsPreferences::do_get_prefs(ObMySQLProxy *mysql_proxy,
   } else {
     SMART_VAR(ObMySQLProxy::MySQLResult, proxy_result) {
       sqlclient::ObMySQLResult *client_result = NULL;
-      auto &sql_client_retry_weak = *mysql_proxy;
+      ObSQLClientRetryWeak sql_client_retry_weak(mysql_proxy);
       if (OB_FAIL(sql_client_retry_weak.read(proxy_result, raw_sql.ptr()))) {
         LOG_WARN("failed to execute sql", K(ret), K(raw_sql));
       } else if (OB_ISNULL(client_result = proxy_result.get_result())) {
@@ -466,7 +468,7 @@ int ObDbmsStatsPreferences::do_get_sys_perfs(ObExecContext &ctx,
     
     SMART_VAR(ObMySQLProxy::MySQLResult, proxy_result) {
       sqlclient::ObMySQLResult *client_result = NULL;
-      auto &sql_client_retry_weak = *mysql_proxy;
+      ObSQLClientRetryWeak sql_client_retry_weak(mysql_proxy);
       if (OB_FAIL(sql_client_retry_weak.read(proxy_result, raw_sql.ptr()))) {
         LOG_WARN("failed to execute sql", K(ret), K(raw_sql));
       } else if (OB_ISNULL(client_result = proxy_result.get_result())) {
@@ -795,7 +797,7 @@ int ObMethodOptPrefs::check_pref_value_validity(ObTableStatParam *param/*default
     ObParser parser(*allocator_,
                     session_info_->get_sql_mode(),
                     session_info_->get_charsets4parser());
-    ParseMode parse_mode = METHOD_OPT_MODE;
+    ParseMode parse_mode = DYNAMIC_SQL_MODE;
     ParseResult parse_result;
     if (OB_FAIL(parser.parse(pvalue_, parse_result, parse_mode))) {
       LOG_WARN("failed to parse result", K(ret), K(pvalue_));
@@ -905,8 +907,13 @@ int ObEstimateBlockPrefs::check_pref_value_validity(ObTableStatParam *param/*def
   int ret = OB_SUCCESS;
   if (pvalue_.empty() ||
       0 == pvalue_.case_compare("TRUE")) {
+    bool no_estimate_block = (OB_E(EventTable::EN_LEADER_STORAGE_ESTIMATION) OB_SUCCESS) != OB_SUCCESS;
     if (param != NULL) {
-      param->need_estimate_block_ = true;
+      if (no_estimate_block) {
+        param->need_estimate_block_ = false;
+      } else {
+        param->need_estimate_block_ = true;
+      }
     }
   } else if (0 == pvalue_.case_compare("FALSE")) {
     if (param != NULL) {
@@ -1231,6 +1238,153 @@ int ObOnlineEstimatePercentPrefs::check_pref_value_validity(ObTableStatParam *pa
       ret = OB_ERR_DBMS_STATS_PL;
       LOG_USER_ERROR(OB_ERR_DBMS_STATS_PL, "Illegal online sample percent: must be in the range [1,100]");
     } 
+  }
+  return ret;
+}
+
+int ObDbmsStatsPreferences::get_extra_stats_perfs_for_upgrade(ObSqlString &raw_sql)
+{
+  int ret = OB_SUCCESS;
+  const char *null_str = "NULL";
+  const char *time_str = "CURRENT_TIMESTAMP";
+  ObSqlString value_str;
+  if (OB_SUCC(ret)) {//init async gather stale ratio
+    ObAsyncGatherStaleRatioPrefs prefs;
+    if (OB_ISNULL(prefs.get_stat_pref_name()) || OB_ISNULL(prefs.get_stat_pref_default_value())) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("get unexpected error", K(ret), K(prefs.get_stat_pref_name()),
+                                       K(prefs.get_stat_pref_default_value()));
+    } else if (OB_FAIL(value_str.append_fmt("('%s', %s, %s, '%s'),",
+                                            prefs.get_stat_pref_name(),
+                                            null_str,
+                                            time_str,
+                                            prefs.get_stat_pref_default_value()))) {
+      LOG_WARN("failed to append", K(ret));
+    }
+  }
+  if (OB_SUCC(ret)) {//init async gather sample size
+    ObAsyncGatherSampleSizePrefs prefs;
+    if (OB_ISNULL(prefs.get_stat_pref_name()) || OB_ISNULL(prefs.get_stat_pref_default_value())) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("get unexpected error", K(ret), K(prefs.get_stat_pref_name()),
+                                       K(prefs.get_stat_pref_default_value()));
+    } else if (OB_FAIL(value_str.append_fmt("('%s', %s, %s, '%s'),",
+                                            prefs.get_stat_pref_name(),
+                                            null_str,
+                                            time_str,
+                                            prefs.get_stat_pref_default_value()))) {
+      LOG_WARN("failed to append", K(ret));
+    }
+  }
+  if (OB_SUCC(ret)) {//init async gather full table size
+    ObAsyncGatherFullTableSizePrefs prefs;
+    if (OB_ISNULL(prefs.get_stat_pref_name()) || OB_ISNULL(prefs.get_stat_pref_default_value())) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("get unexpected error", K(ret), K(prefs.get_stat_pref_name()),
+                                       K(prefs.get_stat_pref_default_value()));
+    } else if (OB_FAIL(value_str.append_fmt("('%s', %s, %s, '%s'), ",
+                                            prefs.get_stat_pref_name(),
+                                            null_str,
+                                            time_str,
+                                            prefs.get_stat_pref_default_value()))) {
+      LOG_WARN("failed to append", K(ret));
+    }
+  }
+  if (OB_SUCC(ret)) {//init async stale max table size
+    ObAsyncStaleMaxTableSizePrefs prefs;
+    if (OB_ISNULL(prefs.get_stat_pref_name()) || OB_ISNULL(prefs.get_stat_pref_default_value())) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("get unexpected error", K(ret), K(prefs.get_stat_pref_name()),
+                                       K(prefs.get_stat_pref_default_value()));
+    } else if (OB_FAIL(value_str.append_fmt("('%s', %s, %s, '%s');",
+                                            prefs.get_stat_pref_name(),
+                                            null_str,
+                                            time_str,
+                                            prefs.get_stat_pref_default_value()))) {
+      LOG_WARN("failed to append", K(ret));
+    }
+  }
+  if (OB_SUCC(ret)) {
+    if (OB_FAIL(raw_sql.append_fmt(UPGRADE_GLOBAL_PREFS,
+                                   share::OB_ALL_OPTSTAT_GLOBAL_PREFS_TNAME,
+                                   value_str.ptr()))) {
+      LOG_WARN("failed to append fmt", K(ret));
+    }
+  }
+  return ret;
+}
+
+int ObDbmsStatsPreferences::get_online_estimate_percent_for_upgrade(ObSqlString &raw_sql)
+{
+  int ret = OB_SUCCESS;
+  const char *null_str = "NULL";
+  const char *time_str = "CURRENT_TIMESTAMP";
+  ObSqlString value_str;
+  ObOnlineEstimatePercentPrefs prefs;
+  if (OB_ISNULL(prefs.get_stat_pref_name()) || OB_ISNULL(prefs.get_stat_pref_for_update())) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("get unexpected error", K(ret), K(prefs.get_stat_pref_name()),
+                                      K(prefs.get_stat_pref_for_update()));
+  } else if (OB_FAIL(value_str.append_fmt("('%s', %s, %s, '%s')",
+                                          prefs.get_stat_pref_name(),
+                                          null_str,
+                                          time_str,
+                                          prefs.get_stat_pref_for_update()))) {
+    LOG_WARN("failed to append", K(ret));
+  } else if (OB_FAIL(raw_sql.append_fmt(UPGRADE_GLOBAL_PREFS,
+                                        share::OB_ALL_OPTSTAT_GLOBAL_PREFS_TNAME,
+                                        value_str.ptr()))) {
+    LOG_WARN("failed to append fmt", K(ret));
+  }
+  return ret;
+}
+
+int ObDbmsStatsPreferences::get_extra_stats_perfs_for_upgrade_425(ObSqlString &raw_sql)
+{
+  int ret = OB_SUCCESS;
+  const char *null_str = "NULL";
+  const char *time_str = "CURRENT_TIMESTAMP";
+  ObSqlString value_str;
+  ObAutoSampleRowCountPrefs prefs;
+  if (OB_ISNULL(prefs.get_stat_pref_name()) || OB_ISNULL(prefs.get_stat_pref_default_value())) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("get unexpected error", K(ret), K(prefs.get_stat_pref_name()),
+                                      K(prefs.get_stat_pref_default_value()));
+  } else if (OB_FAIL(value_str.append_fmt("('%s', %s, %s, '%s');",
+                                          prefs.get_stat_pref_name(),
+                                          null_str,
+                                          time_str,
+                                          "0"))) {
+    LOG_WARN("failed to append", K(ret));
+  } else if (OB_FAIL(raw_sql.append_fmt(INIT_GLOBAL_PREFS,
+                                        share::OB_ALL_OPTSTAT_GLOBAL_PREFS_TNAME,
+                                        value_str.ptr()))) {
+    LOG_WARN("failed to append fmt", K(ret));
+  }
+  return ret;
+}
+
+int ObDbmsStatsPreferences::get_extra_stats_perfs_for_upgrade_4351(ObSqlString &raw_sql)
+{
+  int ret = OB_SUCCESS;
+  const char *null_str = "NULL";
+  const char *time_str = "CURRENT_TIMESTAMP";
+  ObSqlString value_str;
+  ObGatherStatBatchSizePrefs prefs;
+  if (OB_ISNULL(prefs.get_stat_pref_name()) || OB_ISNULL(prefs.get_stat_pref_default_value())) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("get unexpected error", K(ret), K(prefs.get_stat_pref_name()),
+                                      K(prefs.get_stat_pref_default_value()));
+  } else if (OB_FAIL(value_str.append_fmt("('%s', %s, %s, '%s');",
+                                          prefs.get_stat_pref_name(),
+                                          null_str,
+                                          time_str,
+                                          "0"))) {
+    LOG_WARN("failed to append", K(ret));
+  } else if (OB_FAIL(raw_sql.append_fmt(INIT_GLOBAL_PREFS,
+                                        share::OB_ALL_OPTSTAT_GLOBAL_PREFS_TNAME,
+                                        value_str.ptr()))) {
+    LOG_WARN("failed to append fmt", K(ret));
   }
   return ret;
 }

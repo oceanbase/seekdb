@@ -251,8 +251,7 @@ int ObSSTableRebuilder::build_res_with_rewrite_macros(
     if (OB_FAIL(rebuild_macro_block(macro_id_array, iter))) {
       STORAGE_LOG(WARN, "fail to rebuild macro block", K(ret), K(macro_id_array));
     } else if (OB_FAIL(rebuild_index_builder_.close_with_macro_seq(
-        res, macro_start_seq, OB_DEFAULT_MACRO_BLOCK_SIZE, 0,
-        pre_warm_param))) {
+        res, macro_start_seq, OB_DEFAULT_MACRO_BLOCK_SIZE/*nested_size*/, 0/*nested_offset*/, pre_warm_param))) {
       STORAGE_LOG(WARN, "fail to close", K(ret), K(rebuild_index_builder_));
     } else { //update merge info
       block_info.multiplexed_macro_block_count_ = multiplexed_macro_block_count;
@@ -268,8 +267,10 @@ int ObSSTableRebuilder::build_res_with_rewrite_macros(
   }
   if (OB_FAIL(ret) || build_res_with_rebuild) {
   } else if (OB_FAIL(index_builder.close_with_macro_seq(
-    res, macro_start_seq, OB_DEFAULT_MACRO_BLOCK_SIZE, 0, pre_warm_param))) {
+    res, macro_start_seq, OB_DEFAULT_MACRO_BLOCK_SIZE/*nested_size*/, 0/*nested_offset*/, pre_warm_param))) {
     STORAGE_LOG(WARN, "fail to close", K(ret), K(index_builder));
+  } else if (!is_local_exec_mode(merge_param.get_exec_mode())) {
+    STORAGE_LOG(INFO, "success to close index builder", KR(ret), K(macro_start_seq), K(input_macro_seq));
   }
   return ret;
 }
@@ -287,7 +288,7 @@ int ObSSTableRebuilder::open_macro_writer(const share::ObPreWarmerParam &pre_war
 
   if (OB_FAIL(macro_writer_.open(
           data_store_desc_.get_desc(), 0 /*parallel_idx*/, macro_seq_param,
-          pre_warm_param))) {
+          pre_warm_param, rebuild_index_builder_.get_private_object_cleaner()))) {
     STORAGE_LOG(WARN, "failed to open macro writer", K(ret), K(data_store_desc_));
   }
 

@@ -32,6 +32,7 @@ enum ObRowStoreType : uint8_t
   ENCODING_ROW_STORE = 1,
   SELECTIVE_ENCODING_ROW_STORE = 2,
   MAX_ROW_STORE,
+  DUMMY_ROW_STORE = UINT8_MAX, // invalid dummy row store type for compatibility
 };
 
 enum ObStoreFormatType
@@ -44,6 +45,13 @@ enum ObStoreFormatType
   OB_STORE_FORMAT_CONDENSED_MYSQL = 5,
   OB_STORE_FORMAT_MAX_MYSQL,
   OB_STORE_FORMAT_MAX = OB_STORE_FORMAT_MAX_MYSQL
+};
+
+enum class ObMergeEngineType : uint8_t
+{
+  OB_MERGE_ENGINE_PARTIAL_UPDATE = 0,
+  OB_MERGE_ENGINE_DELETE_INSERT = 1,
+  OB_MERGE_ENGINE_MAX
 };
 
 struct ObStoreFormatItem
@@ -116,6 +124,39 @@ public:
 private:
   static const ObStoreFormatItem store_format_items[OB_STORE_FORMAT_MAX];
   static const char *row_store_name[MAX_ROW_STORE];
+};
+
+static const char *MergeEngineTypeStr[] = { "PARTIAL_UPDATE",
+                                            "DELETE_INSERT",
+                                            "MAX" };
+class ObMergeEngineStoreFormat
+{
+public:
+  static inline bool is_merge_engine_valid(const ObMergeEngineType type)
+  {
+    return type >= ObMergeEngineType::OB_MERGE_ENGINE_PARTIAL_UPDATE && type < ObMergeEngineType::OB_MERGE_ENGINE_MAX;
+  }
+  static inline const char *get_merge_engine_type_name(const ObMergeEngineType merge_engine_type)
+  {
+    const int64_t merge_engine_type_idx = static_cast<int64_t>(merge_engine_type);
+    const char *str = "INVALID";
+    switch (merge_engine_type) {
+      case ObMergeEngineType::OB_MERGE_ENGINE_PARTIAL_UPDATE: {
+        str = "PARTIAL_UPDATE";
+        break;
+      }
+      case ObMergeEngineType::OB_MERGE_ENGINE_DELETE_INSERT: {
+        str = "DELETE_INSERT";
+        break;
+      }
+      case ObMergeEngineType::OB_MERGE_ENGINE_MAX:
+      default: {
+        str = "INVALID";
+        break;
+      }
+    }
+    return str;
+  }
 };
 
 }//end namespace common

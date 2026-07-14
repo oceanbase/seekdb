@@ -23,8 +23,6 @@
 #include "storage/compaction/ob_schedule_dag_func.h"
 #include "storage/ddl/ob_ddl_merge_task.h"
 #include "storage/tx_storage/ob_ls_service.h"
-#include "storage/column_store/ob_column_oriented_sstable.h"
-#include "storage/column_store/ob_column_store_replica_util.h"
 #include "storage/direct_load/ob_direct_load_insert_table_row_iterator.h"
 #include "storage/ddl/ob_direct_load_mgr_utils.h"
 
@@ -799,18 +797,14 @@ int ObTenantDirectLoadMgr::check_and_process_finished_tablet(
     } else {
       const int64_t *column_checksums = sst_meta_hdl.get_sstable_meta().get_col_checksum();
       int64_t column_count = sst_meta_hdl.get_sstable_meta().get_col_checksum_cnt();
-      ObArray<int64_t> co_column_checksums;
-      co_column_checksums.set_attr(ObMemAttr("TblDL_Ccc"));
-      if (OB_FAIL(ObDDLStorageUtil::get_co_column_checksums_if_need(tablet_handle, first_major_sstable, co_column_checksums))) {
-        LOG_WARN("get column checksum from co sstable failed", K(ret));
-      } else if (OB_FAIL(ObTabletDDLUtil::report_ddl_checksum(
+      if (OB_FAIL(ObTabletDDLUtil::report_ddl_checksum(
             ls_id,
             tablet_id,
             table_id,
             execution_id,
             task_id,
-            co_column_checksums.empty() ? column_checksums : co_column_checksums.get_data(),
-            co_column_checksums.empty() ? column_count : co_column_checksums.count(),
+            column_checksums,
+            column_count,
             data_format_version))) {
         LOG_WARN("report ddl column checksum failed", K(ret), K(ls_id), K(tablet_id), K(execution_id));
       } else {
@@ -1077,12 +1071,10 @@ private:
 
 ObTabletDirectLoadBuildCtx::ObTabletDirectLoadBuildCtx()
   : allocator_(), slice_writer_allocator_(), build_param_(), slice_mgr_map_(), data_block_desc_(), index_builder_(nullptr),
-    column_stat_array_(), sorted_slice_writers_(), sorted_slices_idx_(), is_task_end_(false), task_finish_count_(0), fill_column_group_finish_count_(0),
+    column_stat_array_(), is_task_end_(false), task_finish_count_(0), task_total_cnt_(0),
     commit_scn_(), schema_allocator_("TDL_schema", OB_MALLOC_NORMAL_BLOCK_SIZE), storage_schema_(nullptr)
 {
   column_stat_array_.set_attr(ObMemAttr("TblDL_CSA"));
-  sorted_slice_writers_.set_attr(ObMemAttr("TblDL_SSR"));
-  sorted_slices_idx_.set_attr(ObMemAttr("TblDL_IDX"));
 }
 
 ObTabletDirectLoadBuildCtx::~ObTabletDirectLoadBuildCtx()
@@ -1104,8 +1096,6 @@ ObTabletDirectLoadBuildCtx::~ObTabletDirectLoadBuildCtx()
     col_stat = nullptr;
   }
   column_stat_array_.reset();
-  sorted_slice_writers_.reset();
-  sorted_slices_idx_.reset();
 
   if (!slice_mgr_map_.empty()) {
     DestroySliceWriterMapFn destroy_map_fn(&slice_writer_allocator_);
@@ -1124,7 +1114,6 @@ bool ObTabletDirectLoadBuildCtx::is_valid() const
 void ObTabletDirectLoadBuildCtx::reset_slice_ctx_on_demand()
 {
   ATOMIC_STORE(&task_finish_count_, 0);
-  ATOMIC_STORE(&fill_column_group_finish_count_, 0);
   ATOMIC_STORE(&task_total_cnt_, build_param_.runtime_only_param_.task_cnt_);
 }
 
@@ -1139,8 +1128,8 @@ void ObTabletDirectLoadBuildCtx::cleanup_slice_writer(const int64_t context_id)
 
 ObTabletDirectLoadMgr::ObTabletDirectLoadMgr()
   : is_inited_(false), is_schema_item_ready_(false),
-    need_process_cs_replica_(false), need_fill_column_group_(false), sqc_build_ctx_(),
-    column_items_(), lob_column_idxs_(), lob_col_types_(), schema_item_(), dir_id_(0), task_cnt_(0), cg_cnt_(0),
+    sqc_build_ctx_(),
+    column_items_(), lob_column_idxs_(), lob_col_types_(), schema_item_(), dir_id_(0), task_cnt_(0),
     micro_index_clustered_(false), is_no_logging_(false)
 {
   column_items_.set_attr(ObMemAttr("DL_schema"));
@@ -1153,8 +1142,6 @@ ObTabletDirectLoadMgr::~ObTabletDirectLoadMgr()
   ObLatchWGuard guard(lock_, ObLatchIds::TABLET_DIRECT_LOAD_MGR_LOCK);
   FLOG_INFO("deconstruct tablet direct load mgr", KP(this), KPC(this), K(lbt()));
   is_inited_ = false;
-  need_process_cs_replica_ = false;
-  need_fill_column_group_ = false;
   column_items_.reset();
   lob_column_idxs_.reset();
   lob_col_types_.reset();
@@ -1249,7 +1236,7 @@ int ObTabletDirectLoadMgr::update(
     } else if (OB_FAIL(sqc_build_ctx_.slice_mgr_map_.create(bucket_num,
                                                       slice_writer_map_attr, slice_writer_map_attr))) {
       LOG_WARN("create slice writer map failed", K(ret));
-    } else if (OB_FAIL(cond_.init(ObWaitEventIds::COLUMN_STORE_DDL_RESCAN_LOCK_WAIT))) {
+    } else if (OB_FAIL(cond_.init(ObWaitEventIds::DIRECT_LOAD_RESCAN_LOCK_WAIT))) {
       LOG_WARN("init condition failed", K(ret));
     } else {
       sqc_build_ctx_.allocator_.set_attr(attr);
@@ -1264,7 +1251,6 @@ int ObTabletDirectLoadMgr::update(
       ls_id_ = build_param.common_param_.ls_id_;
       tablet_id_ = build_param.common_param_.tablet_id_;
       direct_load_type_ = build_param.common_param_.direct_load_type_;
-      is_rescan_data_compl_dag_ = build_param.common_param_.is_rescan_data_compl_dag_;
       tenant_data_version_ = build_param.common_param_.data_format_version_;
       micro_index_clustered_ = tablet_handle.get_obj()->get_tablet_meta().micro_index_clustered_;
       is_inited_ = true;
@@ -1354,8 +1340,6 @@ int ObTabletDirectLoadMgr::prepare_schema_item_on_demand(const uint64_t table_id
         LOG_WARN("table not exist", K(ret), K(table_id));
       } else if (OB_FAIL(prepare_index_builder_if_need(*table_schema))) {
         LOG_WARN("prepare sstable index builder failed", K(ret), K(sqc_build_ctx_));
-      } else if (OB_FAIL(table_schema->get_is_column_store(schema_item_.is_column_store_))) {
-        LOG_WARN("fail to get is column store", K(ret));
       } else if (FALSE_IT(is_vector_data_complement= ObDirectLoadMgrUtil::need_process_vec_index(table_schema->get_index_type()))) {
       } else if (is_vector_data_complement && 
                  OB_FAIL(ObDirectLoadMgrUtil::prepare_schema_item_for_vec_idx_data(schema_guard,
@@ -1725,245 +1709,6 @@ int ObTabletDirectLoadMgr::fill_lob_meta_sstable_slice(
   return ret;
 }
 
-int ObTabletDirectLoadMgr::wait_notify(const ObDirectLoadSliceWriter *slice_writer, const int64_t context_id, const share::SCN &start_scn)
-{
-  int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(!is_inited_)) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
-  } else if (OB_ISNULL(slice_writer) || context_id < 0 || !start_scn.is_valid()) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), KP(slice_writer), K(context_id), K(start_scn));
-  } else {
-    while (OB_SUCC(ret)) {
-      const SCN tablet_start_scn = get_start_scn();
-      if (OB_FAIL(THIS_WORKER.check_status())) {
-        LOG_WARN("check status failed", K(ret));
-      } else if (start_scn != tablet_start_scn) {
-        ret = OB_TASK_EXPIRED;
-        LOG_WARN("task expired", K(ret), K(start_scn), K(tablet_start_scn));
-      } else if (slice_writer->get_row_offset() >= 0) {
-        // row offset already set
-        break;
-      } else {
-        const int64_t wait_interval_ms = 100L;
-        ObThreadCondGuard guard(cond_);
-        if (OB_FAIL(cond_.wait(wait_interval_ms))) {
-          if (OB_TIMEOUT != ret) {
-            LOG_WARN("wait thread condition failed", K(ret));
-          } else {
-            ret = OB_SUCCESS;
-          }
-        }
-        if (OB_SUCC(ret)) {
-	  ObTabletDirectLoadMgrKey data_mgr_key(tablet_id_, direct_load_type_, context_id);
-          ObTabletDirectLoadMgrHandle handle;
-          if (OB_FAIL(share::g_mp->tenant_direct_load_mgr()->get_tablet_mgr(data_mgr_key, handle))) {
-            if (OB_ENTRY_NOT_EXIST == ret && is_full_direct_load(direct_load_type_)) {
-              ret = OB_TASK_EXPIRED; //retry by RS
-              LOG_WARN("task expired", K(ret), "start_scn of current execution", start_scn, "start_scn latest", get_start_scn());
-              break;
-            } else {
-              LOG_WARN("get table mgr failed", K(ret), K(tablet_id_), K(direct_load_type_), K(context_id));
-            }
-          }
-        }
-      }
-    }
-  }
-  return ret;
-}
-
-int ObTabletDirectLoadMgr::notify_all()
-{
-  int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(!is_inited_)) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
-  } else {
-    ObThreadCondGuard guard(cond_);
-    if (OB_FAIL(cond_.broadcast())) {
-      LOG_WARN("broadcast thread condition failed", K(ret));
-    }
-  }
-  return ret;
-}
-
-struct CSSliceEndkeyCompareFunctor
-{
-public:
-  CSSliceEndkeyCompareFunctor(const ObStorageDatumUtils &datum_utils, int &ret_code) : datum_utils_(datum_utils), ret_code_(ret_code) {}
-  bool operator ()(const ObDirectLoadSliceWriter *left, const ObDirectLoadSliceWriter *right)
-  {
-    bool bret = false;
-    int ret = ret_code_;
-    if (OB_FAIL(ret)) {
-    } else if (OB_ISNULL(left) || OB_ISNULL(right)) {
-      ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("invalid argument", K(ret), KPC(left), KPC(right));
-    } else if (!left->is_empty() && !right->is_empty()) {
-      if (!left->need_column_store() || !right->need_column_store() || left->get_writer_type() != right->get_writer_type()) {
-        ret = OB_INVALID_ARGUMENT;
-        LOG_WARN("invalid cs slice writer", K(ret), KPC(left), KPC(right));
-      } else {
-        const ObDatumRowkey left_key = left->get_slice_store()->get_compare_key();
-        const ObDatumRowkey right_key = right->get_slice_store()->get_compare_key();
-        int cmp_ret = 0;
-        if (OB_FAIL(left_key.compare(right_key, datum_utils_, cmp_ret))) {
-          LOG_WARN("endkey compare failed", K(ret));
-        } else {
-          bret = cmp_ret < 0;
-        }
-      }
-    } else if (left->is_empty() && right->is_empty()) {
-      // both empty, compare pointer
-      bret = left < right;
-    } else {
-      // valid formmer, empty latter
-      bret = !left->is_empty();
-    }
-    ret_code_ = OB_SUCCESS == ret_code_ ? ret : ret_code_;
-    return bret;
-  }
-public:
-  const ObStorageDatumUtils &datum_utils_;
-  int &ret_code_; // is not use reference, the ret_code_ will lose when use ob_sort
-};
-
-struct GetSliceWriterFn
-{
-public:
-  GetSliceWriterFn(const int64_t context_id, ObArray<ObDirectLoadSliceWriter *> &slice_writers)
-    : context_id_(context_id), slice_writers_(slice_writers) {}
-  int operator () (hash::HashMapPair<ObTabletDirectLoadBuildCtx::SliceKey, ObDirectLoadSliceWriter *> &entry) {
-    int ret = OB_SUCCESS;
-    if (entry.first.context_id_ == context_id_) {
-      if (OB_ISNULL(entry.second)) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected null", K(ret), KP(entry.second));
-      } else if (OB_FAIL(slice_writers_.push_back(entry.second))) {
-        LOG_WARN("push back slice writer failed", K(ret), KP(entry.second));
-      }
-    }
-    return ret;
-  }
-
-private:
-  int64_t context_id_;
-  ObArray<ObDirectLoadSliceWriter *> &slice_writers_;
-};
-
-int ObTabletDirectLoadMgr::calc_range(const int64_t context_id, const int64_t thread_cnt)
-{
-  int ret = OB_SUCCESS;
-  ObArray<ObDirectLoadSliceWriter *> sorted_slices;
-  sorted_slices.set_attr(ObMemAttr("DL_SortS_tmp"));
-  ObLSService *ls_service = nullptr;
-  ObLSHandle ls_handle;
-  ObTabletHandle tablet_handle;
-  if (OB_UNLIKELY(nullptr == sqc_build_ctx_.storage_schema_)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid argument", K(ret), KP(sqc_build_ctx_.storage_schema_));
-  } else if (OB_ISNULL(ls_service = share::g_mp->ls_service())) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected err", K(ret));
-  } else if (OB_FAIL(ls_service->get_ls(ls_id_, ls_handle, ObLSGetMod::DDL_MOD))) {
-    LOG_WARN("failed to get log stream", K(ret), K(ls_id_));
-  } else if (OB_FAIL(ObDDLUtil::ddl_get_tablet(ls_handle,
-                                               tablet_id_,
-                                               tablet_handle,
-                                               ObMDSGetTabletMode::READ_ALL_COMMITED))) {
-    LOG_WARN("get tablet handle failed", K(ret), K(tablet_id_));
-  } else if (OB_FAIL(sorted_slices.reserve(sqc_build_ctx_.slice_mgr_map_.size()))) {
-    LOG_WARN("reserve slice array failed", K(ret), K(sqc_build_ctx_.slice_mgr_map_.size()));
-  } else {
-    GetSliceWriterFn get_fn(context_id, sorted_slices);
-    if (OB_FAIL(sqc_build_ctx_.slice_mgr_map_.foreach_refactored(get_fn))) {
-      LOG_WARN("get slice writer failed", K(ret));
-    }
-    if (OB_SUCC(ret)) {
-      CSSliceEndkeyCompareFunctor cmp(tablet_handle.get_obj()->get_rowkey_read_info().get_datum_utils(), ret);
-      lib::ob_sort(sorted_slices.begin(), sorted_slices.end(), cmp);
-      if (OB_FAIL(ret)) {
-        LOG_WARN("sort slice failed", K(ret), K(sorted_slices));
-      }
-    }
-    ObThreadCondGuard cond_guard(cond_);
-    if (FAILEDx(cond_guard.get_ret())) {
-      LOG_ERROR("guard condition failed", K(ret));
-    } else {
-      int64_t offset = 0;
-      for (int64_t i = 0; OB_SUCC(ret) && i < sorted_slices.count(); ++i) {
-        if (OB_ISNULL(sorted_slices.at(i))) {
-          ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("null slice writer", K(ret), K(i));
-        } else {
-          sorted_slices.at(i)->set_row_offset(offset);
-          offset += sorted_slices.at(i)->get_row_count();
-        }
-      }
-    }
-  }
-
-  if (OB_SUCC(ret) && (is_data_direct_load(direct_load_type_) || ((is_ddl_direct_load(direct_load_type_) && is_rescan_data_compl_dag_)))) {
-    if (OB_FAIL(calc_cg_range(sorted_slices, thread_cnt))) {
-      LOG_WARN("fail to calc cg range", K(ret), K(sorted_slices), K(thread_cnt));
-    }
-  }
-  return ret;
-}
-
-int ObTabletDirectLoadMgr::calc_cg_range(ObArray<ObDirectLoadSliceWriter *> &sorted_slices, const int64_t thread_cnt)
-{
-  int ret = OB_SUCCESS;
-  sqc_build_ctx_.sorted_slice_writers_.reset();
-  if (thread_cnt <= 0) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invali thread cnt", K(ret), K(thread_cnt));
-  } else if (OB_FAIL(sqc_build_ctx_.sorted_slice_writers_.assign(sorted_slices))) {
-    LOG_WARN("copy slice array failed", K(ret), K(sorted_slices.count()));
-  } else {
-    common::ObArray<ObTabletDirectLoadBuildCtx::AggregatedCGInfo> sorted_slices_idx;
-    int64_t slice_idx = 0;
-    while (OB_SUCC(ret) && slice_idx < sorted_slices.count()) {
-      int64_t tmp_row_cnt = 0;
-      ObTabletDirectLoadBuildCtx::AggregatedCGInfo cur_info;
-      cur_info.start_idx_ = slice_idx;
-      while (OB_SUCC(ret) && slice_idx < sorted_slices.count()) {
-        tmp_row_cnt += sorted_slices.at(slice_idx)->get_row_count();
-        ++slice_idx;
-        cur_info.last_idx_ = slice_idx;
-        if (tmp_row_cnt >= EACH_MACRO_MIN_ROW_CNT) {
-          break;
-        }
-      }
-      if (OB_SUCC(ret)) {
-        if (OB_FAIL(sorted_slices_idx.push_back(cur_info))) {
-          LOG_WARN("fail to push slice info", K(ret));
-        }
-      }
-    }
-
-    sqc_build_ctx_.sorted_slices_idx_.reset();
-    if (OB_FAIL(ret)) {
-    } else if (sorted_slices_idx.count() > thread_cnt) {
-      // thread_cnt cannot handle aggregated group, re_calc by thread_cnt
-      LOG_INFO("[DIRECT_LOAD_FILL_CG] re_calc by thread_cnt", K(sorted_slices_idx.count()), K(thread_cnt), K(sqc_build_ctx_.sorted_slice_writers_.count()));
-      for (int64_t i = 0; OB_SUCC(ret) && i < thread_cnt; ++i) {
-        ObTabletDirectLoadBuildCtx::AggregatedCGInfo cur_info;
-        calc_cg_idx(thread_cnt, i, cur_info.start_idx_, cur_info.last_idx_);
-        if (OB_FAIL(sqc_build_ctx_.sorted_slices_idx_.push_back(cur_info))) {
-          LOG_WARN("fail to push info", K(ret), K(i));
-        }
-      }
-    } else if (OB_FAIL(sqc_build_ctx_.sorted_slices_idx_.assign(sorted_slices_idx))) {
-      LOG_WARN("fail to assign array", K(ret));
-    }
-  }
-  FLOG_INFO("[DIRECT_LOAD_FILL_CG]calc_cg_range", K(ret), K(thread_cnt), K(sqc_build_ctx_.sorted_slice_writers_.count()), K(sqc_build_ctx_.sorted_slices_idx_.count()));
-  return ret;
-}
-
 struct CancelSliceWriterMapFn
 {
 public:
@@ -2013,10 +1758,7 @@ int ObTabletDirectLoadMgr::close_sstable_slice(
       LOG_WARN("close lob sstable slice failed", K(ret), K(slice_info));
     }
   } else {
-    bool already_commited = false;
-    int64_t fill_cg_finish_count = -1;
     ObDirectLoadSliceWriter *slice_writer = nullptr;
-    int64_t last_seq = 0;
 
     ObTabletDirectLoadBuildCtx::SliceKey slice_key(slice_info.context_id_, slice_info.slice_id_);
     if (OB_FAIL(sqc_build_ctx_.slice_mgr_map_.get_refactored(slice_key, slice_writer))) {
@@ -2029,7 +1771,6 @@ int ObTabletDirectLoadMgr::close_sstable_slice(
       LOG_WARN("close failed", K(ret), K(slice_info));
     } else if (FALSE_IT(next_seq = slice_writer->get_next_block_start_seq())) {
     } else if (!slice_info.is_lob_slice_ && is_ddl_direct_load(direct_load_type_)) {
-      // for cs replica, full direct load all take the same way with offline ddl of column store
       int64_t task_finish_count = -1;
       {
         uint32_t lock_tid = 0;
@@ -2038,7 +1779,6 @@ int ObTabletDirectLoadMgr::close_sstable_slice(
         } else if (start_scn == get_start_scn() && slice_info.is_task_finish_) {
           task_finish_count = ATOMIC_AAF(&sqc_build_ctx_.task_finish_count_, 1);
         }
-        already_commited = sqc_build_ctx_.get_commit_scn().is_valid_and_not_min();
         if (0 != lock_tid) {
           unlock(lock_tid);
         }
@@ -2048,7 +1788,7 @@ int ObTabletDirectLoadMgr::close_sstable_slice(
       } else if (OB_ISNULL(sqc_build_ctx_.storage_schema_)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("invalid tablet handle", K(ret), KP(sqc_build_ctx_.storage_schema_));
-      } else if (!need_fill_column_group_) {
+      } else {
         if (task_finish_count >= sqc_build_ctx_.task_total_cnt_) {
           if (ObDirectLoadMgrUtil::need_process_vec_index(sqc_build_ctx_.storage_schema_->get_index_type())) {
             if (OB_FAIL(slice_writer->fill_vector_index_data(sqc_build_ctx_.build_param_.common_param_.read_snapshot_,
@@ -2066,223 +1806,21 @@ int ObTabletDirectLoadMgr::close_sstable_slice(
             LOG_WARN("close sstable slice failed", K(ret), K(sqc_build_ctx_.build_param_));
           }
         }
-      } else if (need_fill_column_group_ && is_rescan_data_compl_dag_) {
-        LOG_INFO("data complement dag rescan path which need skip calc range and fill column group",
-            K(tablet_id_), K(execution_id), K(slice_info));
-      } else {
-        if (!already_commited) {
-          if (task_finish_count < sqc_build_ctx_.task_total_cnt_) {
-            if (OB_FAIL(wait_notify(slice_writer, slice_info.context_id_, start_scn))) {
-              LOG_WARN("wait notify failed", K(ret));
-            } else if (OB_FAIL(slice_writer->fill_column_group(sqc_build_ctx_.storage_schema_, start_scn, insert_monitor))) {
-              LOG_WARN("slice writer fill column group failed", K(ret));
-            }
-          } else {
-            if (OB_FAIL(calc_range(slice_info.context_id_, 0))) {
-              LOG_WARN("calc range failed", K(ret));
-            } else if (OB_FAIL(notify_all())) {
-              LOG_WARN("notify all failed", K(ret));
-            } else if (OB_FAIL(slice_writer->fill_column_group(sqc_build_ctx_.storage_schema_, start_scn, insert_monitor))) {
-              LOG_WARN("slice fill column group failed", K(ret));
-            }
-          }
-          if (OB_SUCC(ret)) {
-            if (start_scn == get_start_scn()) {
-              fill_cg_finish_count = ATOMIC_AAF(&sqc_build_ctx_.fill_column_group_finish_count_, 1);
-            }
-          }
-        }
-        LOG_INFO("inc fill cg finish count", K(ret), K(already_commited), K(tablet_id_), K(execution_id), K(fill_cg_finish_count), K(sqc_build_ctx_.task_total_cnt_));
-        if (OB_SUCC(ret) && (already_commited || fill_cg_finish_count >= sqc_build_ctx_.task_total_cnt_)) {
-          // for ddl, write commit log when all slices ready.
-          if (OB_FAIL(close(execution_id, start_scn))) {
-            LOG_WARN("close sstable slice failed", K(ret));
-          }
-        }
       }
     }
     if (OB_NOT_NULL(slice_writer)) {
-      if (OB_SUCC(ret) && ((is_data_direct_load(direct_load_type_) && slice_writer->need_column_store()) 
-        || (is_ddl_direct_load(direct_load_type_) && is_rescan_data_compl_dag_))) {
-        //ignore, free after rescan
+      int tmp_ret = OB_SUCCESS;
+      ObTabletDirectLoadBuildCtx::SliceKey slice_key(slice_info.context_id_, slice_info.slice_id_);
+      if (OB_TMP_FAIL(sqc_build_ctx_.slice_mgr_map_.erase_refactored(slice_key))) {
+        LOG_ERROR("erase failed", K(ret), K(tmp_ret), K(slice_info));
       } else {
-        // for ddl, delete slice_writer regardless of success or failure
-        int tmp_ret = OB_SUCCESS;
-        ObTabletDirectLoadBuildCtx::SliceKey slice_key(slice_info.context_id_, slice_info.slice_id_);
-        if (OB_TMP_FAIL(sqc_build_ctx_.slice_mgr_map_.erase_refactored(slice_key))) {
-          LOG_ERROR("erase failed", K(ret), K(tmp_ret), K(slice_info));
-        } else {
-          LOG_INFO("erase a slice writer", K(ret), K(slice_key), KP(slice_writer), K(sqc_build_ctx_.slice_mgr_map_.size()));
-          slice_writer->~ObDirectLoadSliceWriter();
-          sqc_build_ctx_.slice_writer_allocator_.free(slice_writer);
-          slice_writer = nullptr;
-        }
-        ret = OB_SUCC(ret) ? tmp_ret : ret;
+        LOG_INFO("erase a slice writer", K(ret), K(slice_key), KP(slice_writer), K(sqc_build_ctx_.slice_mgr_map_.size()));
+        slice_writer->~ObDirectLoadSliceWriter();
+        sqc_build_ctx_.slice_writer_allocator_.free(slice_writer);
+        slice_writer = nullptr;
       }
+      ret = OB_SUCC(ret) ? tmp_ret : ret;
     }
-  }
-  return ret;
-}
-
-void ObTabletDirectLoadMgr::calc_cg_idx(const int64_t thread_cnt, const int64_t thread_id, int64_t &start_idx, int64_t &end_idx)
-{
-  int ret = OB_SUCCESS;
-  const int64_t each_thread_task_cnt = sqc_build_ctx_.sorted_slice_writers_.count() / thread_cnt;
-  const int64_t need_plus_thread_cnt = sqc_build_ctx_.sorted_slice_writers_.count() % thread_cnt; // handle +1 task
-  const int64_t pre_handle_cnt = need_plus_thread_cnt * (each_thread_task_cnt + 1);
-  if (need_plus_thread_cnt != 0) {
-    if (thread_id < need_plus_thread_cnt) {
-      start_idx = (each_thread_task_cnt + 1) * thread_id;
-      end_idx = start_idx + (each_thread_task_cnt + 1);
-    } else {
-      start_idx = pre_handle_cnt + (thread_id - need_plus_thread_cnt) * each_thread_task_cnt;
-      end_idx = start_idx + each_thread_task_cnt;
-    }
-  } else {
-    start_idx = each_thread_task_cnt * thread_id;
-    end_idx = start_idx + each_thread_task_cnt;
-  }
-}
-
-int ObTabletDirectLoadMgr::fill_column_group(const int64_t thread_cnt, const int64_t thread_id)
-{
-  int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(!is_inited_)) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
-  } else if (OB_UNLIKELY(thread_cnt <= 0 || thread_id < 0 || thread_id > thread_cnt - 1)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguement", K(ret), K(thread_cnt), K(thread_id));
-  } else if (sqc_build_ctx_.sorted_slice_writers_.count() == 0 || thread_id > sqc_build_ctx_.sorted_slices_idx_.count() - 1) {
-    //ignore
-    FLOG_INFO("[DIRECT_LOAD_FILL_CG] idle thread", K(sqc_build_ctx_.sorted_slice_writers_.count()), K(thread_id), K(sqc_build_ctx_.sorted_slices_idx_.count()));
-  } else {
-    const int64_t start_idx = sqc_build_ctx_.sorted_slices_idx_.at(thread_id).start_idx_;
-    const int64_t last_idx = sqc_build_ctx_.sorted_slices_idx_.at(thread_id).last_idx_;
-
-    ObArenaAllocator arena_allocator("DIRECT_RESCAN", OB_MALLOC_NORMAL_BLOCK_SIZE);
-    int64_t fill_cg_finish_count = -1;
-    int64_t row_cnt = 0;
-    if (OB_ISNULL(sqc_build_ctx_.storage_schema_)) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("invalid tablet handle", K(ret), KP(sqc_build_ctx_.storage_schema_));
-    } else {
-      const ObIArray<ObStorageColumnGroupSchema> &cg_schemas = sqc_build_ctx_.storage_schema_->get_column_groups();
-      FLOG_INFO("[DIRECT_LOAD_FILL_CG] start fill cg",
-          "tablet_id", tablet_id_,
-          "cg_cnt", cg_schemas.count(),
-          "slice_cnt", sqc_build_ctx_.sorted_slice_writers_.count(),
-          K(thread_cnt), K(thread_id), K(start_idx), K(last_idx));
-      if (OB_FAIL(fill_aggregated_column_group(thread_id, start_idx, last_idx, sqc_build_ctx_.storage_schema_, fill_cg_finish_count, row_cnt, arena_allocator))) {
-        LOG_WARN("fail to fill aggregated cg", K(ret));
-      }
-      arena_allocator.reset();
-
-      // after finish all slice, free slice_writer
-      if (OB_SUCC(ret)) {
-        if (fill_cg_finish_count == sqc_build_ctx_.sorted_slice_writers_.count()) {
-          sqc_build_ctx_.sorted_slice_writers_.reset();
-          FLOG_INFO("tablet_direct_mgr finish fill column group", K(sqc_build_ctx_.slice_mgr_map_.size()), K(this), K(fill_cg_finish_count));
-          if (!sqc_build_ctx_.slice_mgr_map_.empty()) {
-            DestroySliceWriterMapFn destroy_map_fn(&sqc_build_ctx_.slice_writer_allocator_);
-            int tmp_ret = sqc_build_ctx_.slice_mgr_map_.foreach_refactored(destroy_map_fn);
-            if (tmp_ret == OB_SUCCESS) {
-              sqc_build_ctx_.slice_mgr_map_.destroy();
-            } else {
-              ret = tmp_ret;
-            }
-          }
-        }
-      }
-    }
-    if (OB_SUCC(ret)) {
-      FLOG_INFO("[DIRECT_LOAD_FILL_CG] finish fill cg",
-          "tablet_id", tablet_id_,
-          "row_cnt", row_cnt,
-          "slice_cnt", sqc_build_ctx_.sorted_slice_writers_.count(),
-          K(thread_cnt), K(thread_id), K(start_idx), K(last_idx),  K(sqc_build_ctx_.slice_mgr_map_.size()));
-    }
-  }
-  return ret;
-}
-
-int ObTabletDirectLoadMgr::fill_aggregated_column_group(
-    const int64_t parallel_idx,
-    const int64_t start_idx,
-    const int64_t last_idx,
-    const ObStorageSchema *storage_schema,
-    int64_t &fill_cg_finish_count,
-    int64_t &fill_row_cnt,
-    ObIAllocator &allocator,
-    ObInsertMonitor *insert_monitor)
-{
-  int ret = OB_SUCCESS;
-  fill_cg_finish_count = -1;
-  fill_row_cnt = 0;
-  int64_t fill_aggregated_cg_cnt = 0;
-  ObCOSliceWriter *cur_writer = nullptr;
-  if (OB_ISNULL(storage_schema) || OB_UNLIKELY(start_idx < 0 || last_idx < 0)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), KP(storage_schema), K(start_idx), K(last_idx));
-  } else if (OB_ISNULL(cur_writer = OB_NEWx(ObCOSliceWriter, &allocator))) {
-    ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("allocate memory for co writer failed", K(ret));
-  } else {
-    const ObIArray<ObStorageColumnGroupSchema> &cg_schemas = storage_schema->get_column_groups();
-    for (int64_t cg_idx = 0; OB_SUCC(ret) && cg_idx < cg_schemas.count(); ++cg_idx) {
-      cur_writer->reset();
-      if (start_idx == last_idx || start_idx >= sqc_build_ctx_.sorted_slice_writers_.count() || last_idx > sqc_build_ctx_.sorted_slice_writers_.count()) {
-        // skip
-      } else {
-        ObDirectLoadSliceWriter *first_slice_writer = sqc_build_ctx_.sorted_slice_writers_.at(start_idx);
-        if (OB_ISNULL(first_slice_writer)) {
-          ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("null slice writer", K(ret), KP(first_slice_writer));
-        } else if (OB_UNLIKELY(first_slice_writer->get_row_offset() < 0)) {
-          ret = OB_ERR_SYS;
-          LOG_WARN("invalid row offset", K(ret), K(first_slice_writer->get_row_offset()));
-        } else if (OB_FAIL(cur_writer->init(storage_schema, cg_idx, this, first_slice_writer->get_start_seq(),
-                first_slice_writer->get_row_offset(), get_start_scn(), need_process_cs_replica_, parallel_idx))) {
-          LOG_WARN("init co ddl writer failed", K(ret), KPC(cur_writer), K(cg_idx), KPC(this));
-        } else {
-          for (int64_t i = start_idx; OB_SUCC(ret) && i < last_idx; ++i) {
-            ObDirectLoadSliceWriter *slice_writer = sqc_build_ctx_.sorted_slice_writers_.at(i);
-            if (OB_ISNULL(slice_writer)) { /* complement dag path may not exec prepare_slice_store ignore check need_column_store */
-              ret = OB_ERR_UNEXPECTED;
-              LOG_WARN("wrong slice writer",  K(ret));
-            } else if (OB_FAIL(slice_writer->fill_aggregated_column_group(cg_idx, cur_writer))) {
-              LOG_WARN("slice writer rescan failed", K(ret), K(cg_idx), KPC(cur_writer));
-            } else if (cg_idx == cg_schemas.count() - 1) {
-              // after fill last cg, inc finish cnt
-              fill_row_cnt += slice_writer->get_row_count();
-              ++fill_aggregated_cg_cnt;
-
-            }
-          }
-        }
-      }
-
-      if (OB_SUCC(ret)) {
-        if (cur_writer->is_inited() && OB_FAIL(cur_writer->close())) {
-          LOG_WARN("close co ddl writer failed", K(ret));
-        }
-      }
-      // next cg
-    }
-    if (OB_SUCC(ret)) {
-      /*
-      To avoid concurrent release of slice_writer (datum_store) with slice_mgr_map_.destroy()
-       we must reset datum_store first and then increase fill_column_group_finish_count_.
-      */
-      fill_cg_finish_count = ATOMIC_AAF(&sqc_build_ctx_.fill_column_group_finish_count_, fill_aggregated_cg_cnt);
-    }
-  }
-
-  // free writer anyhow
-  if (OB_NOT_NULL(cur_writer)) {
-    cur_writer->~ObCOSliceWriter();
-    allocator.free(cur_writer);
-    cur_writer = nullptr;
   }
   return ret;
 }
@@ -2388,25 +1926,6 @@ int ObTabletDirectLoadMgr::prepare_storage_schema(ObTabletHandle &tablet_handle)
   return ret;
 }
 
-int ObTabletDirectLoadMgr::init_column_store_params(
-    const ObTablet &tablet,
-    const ObStorageSchema &storage_schema,
-    const ObDirectLoadType new_direct_load_type,
-    const int64_t tenant_data_version)
-{
-  int ret = OB_SUCCESS;
-  const ObLS *ls = nullptr;
-  bool need_process = false;
-  if (OB_FAIL(ObCSReplicaUtil::check_need_process_for_cs_replica_for_ddl(tablet, storage_schema, need_process))) {
-    LOG_WARN("failed to check ls replica set", K(ret), K(tablet), K(storage_schema), K(new_direct_load_type));
-  } else {
-    need_process_cs_replica_ = need_process && is_ddl_direct_load(new_direct_load_type);
-    need_fill_column_group_ = ObDDLUtil::need_fill_column_group(storage_schema.is_row_store(), need_process_cs_replica_, tenant_data_version);
-    LOG_INFO("init column store params", K(ret), K(tablet), K(storage_schema), K(new_direct_load_type), K_(need_process_cs_replica), K_(need_fill_column_group));
-  }
-  return ret;
-}
-
 ObTabletFullDirectLoadMgr::ObTabletFullDirectLoadMgr()
   : ObTabletDirectLoadMgr(), start_scn_(share::SCN::min_scn()),
     commit_scn_(share::SCN::min_scn()), execution_id_(-1)
@@ -2423,7 +1942,6 @@ int ObTabletFullDirectLoadMgr::update(
 {
   int ret = OB_SUCCESS;
   uint32_t lock_tid = 0;
-  bool replay_normal_in_cs_replica = false;
   if (OB_UNLIKELY(!build_param.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arg", K(ret), K(build_param));
@@ -2431,25 +1949,12 @@ int ObTabletFullDirectLoadMgr::update(
     LOG_WARN("failed to wrlock", K(ret), K(build_param));
   } else if (OB_FAIL(ObTabletDirectLoadMgr::update(lob_tablet_mgr, build_param))) {
     LOG_WARN("init failed", K(ret), K(build_param));
-  } else if (OB_FAIL(pre_process_cs_replica(build_param.common_param_.tablet_id_, replay_normal_in_cs_replica))) {
-    LOG_WARN("failed to pre process cs replica", K(ret), K(build_param));
   } else {
     table_key_.reset();
     table_key_.tablet_id_ = build_param.common_param_.tablet_id_;
-    bool is_column_group_store = false;
     if (OB_ISNULL(sqc_build_ctx_.storage_schema_)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("null storage schema", K(ret));
-    } else if (OB_FAIL(check_need_replay_column_store(*sqc_build_ctx_.storage_schema_, build_param.common_param_.direct_load_type_, is_column_group_store))) {
-      LOG_WARN("fail to get schema is column group store", K(ret));
-    } else if (is_column_group_store && !replay_normal_in_cs_replica) {
-      table_key_.table_type_ = ObITable::COLUMN_ORIENTED_SSTABLE;
-      int64_t base_cg_idx = -1;
-      if (OB_FAIL(ObDDLStorageUtil::get_base_cg_idx(sqc_build_ctx_.storage_schema_, base_cg_idx))) {
-        LOG_WARN("get base cg idx failed", K(ret));
-      } else {
-        table_key_.column_group_idx_ = static_cast<uint16_t>(base_cg_idx);
-      }
     } else {
       table_key_.table_type_ = ObITable::MAJOR_SSTABLE;
     }
@@ -2515,8 +2020,6 @@ int ObTabletFullDirectLoadMgr::open(const int64_t current_execution_id, share::S
   } else if (OB_ISNULL(sqc_build_ctx_.storage_schema_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("null storage schema", K(ret), K(sqc_build_ctx_));
-  } else if (OB_FAIL(init_column_store_params(*tablet_handle.get_obj(), *sqc_build_ctx_.storage_schema_, direct_load_type_, tenant_data_version_))) {
-    LOG_WARN("failed to refresh cs replica status", K(ret), K(ls_handle), K_(tablet_id));
   } else {
     ObDDLKvMgrHandle ddl_kv_mgr_handle;
     ObDDLKvMgrHandle lob_kv_mgr_handle;
@@ -2667,8 +2170,6 @@ int ObTabletFullDirectLoadMgr::close(const int64_t execution_id, const SCN &star
     } else {
       const int64_t *column_checksums = sst_meta_hdl.get_sstable_meta().get_col_checksum();
       int64_t column_count = sst_meta_hdl.get_sstable_meta().get_col_checksum_cnt();
-      ObArray<int64_t> co_column_checksums;
-      co_column_checksums.set_attr(ObMemAttr("TblDL_Ccc"));
     #ifdef ERRSIM
       if (OB_SUCC(ret)) {
         ret = OB_E(EventTable::EN_DDL_RETRY_WRITE_SLICE_AFTER_SUCC) OB_SUCCESS;
@@ -2676,8 +2177,6 @@ int ObTabletFullDirectLoadMgr::close(const int64_t execution_id, const SCN &star
       }
     #endif
       if (OB_FAIL(ret)) {
-      } else if (OB_FAIL(ObDDLStorageUtil::get_co_column_checksums_if_need(tablet_handle, first_major_sstable, co_column_checksums))) {
-        LOG_WARN("get column checksum from co sstable failed", K(ret));
       } else {
         for (int64_t retry_cnt = 10; retry_cnt > 0; retry_cnt--) { // overwrite ret
           if (OB_FAIL(ObTabletDDLUtil::report_ddl_checksum(
@@ -2686,8 +2185,8 @@ int ObTabletFullDirectLoadMgr::close(const int64_t execution_id, const SCN &star
                   sqc_build_ctx_.build_param_.runtime_only_param_.table_id_,
                   execution_id,
                   sqc_build_ctx_.build_param_.runtime_only_param_.task_id_,
-                  co_column_checksums.empty() ? column_checksums : co_column_checksums.get_data(),
-                  co_column_checksums.empty() ? column_count : co_column_checksums.count(),
+                  column_checksums,
+                  column_count,
                   tenant_data_version_))) {
             LOG_WARN("report ddl column checksum failed", K(ret), K(ls_id_), K(tablet_id_), K(execution_id), K(sqc_build_ctx_));
           } else {
@@ -2875,7 +2374,7 @@ int ObTabletFullDirectLoadMgr::start_nolock(
     ObDDLKvMgrHandle unused_kv_mgr_handle;
     ObITable::TableKey lob_table_key;
     lob_table_key.tablet_id_ = lob_mgr_handle_.get_full_obj()->get_tablet_id();
-    lob_table_key.table_type_ = ObITable::TableType::MAJOR_SSTABLE; // lob tablet not support column group store
+    lob_table_key.table_type_ = ObITable::TableType::MAJOR_SSTABLE;
     lob_table_key.version_range_ = table_key.version_range_;
     if (OB_FAIL(lob_mgr_handle_.get_full_obj()->start_nolock(lob_table_key, start_scn, data_format_version, execution_id, checkpoint_scn,
         lob_kv_mgr_handle, unused_kv_mgr_handle))) {
@@ -3215,9 +2714,6 @@ int ObTabletFullDirectLoadMgr::init_ddl_table_store(
   ObTabletHandle tablet_handle;
   ObArenaAllocator tmp_arena("DDLUpdateTblTmp", OB_MALLOC_NORMAL_BLOCK_SIZE);
   ObStorageSchema *storage_schema = nullptr;
-  ObLS *ls = nullptr;
-  bool is_column_group_store = false;
-  bool replay_normal_in_cs_replica = false;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
@@ -3235,19 +2731,11 @@ int ObTabletFullDirectLoadMgr::init_ddl_table_store(
     LOG_WARN("get tablet handle failed", K(ret), K(ls_id_), K(tablet_id_));
   } else if (OB_FAIL(tablet_handle.get_obj()->load_storage_schema(tmp_arena, storage_schema))) {
     LOG_WARN("failed to load storage schema", K(ret), K(tablet_handle));
-  } else if (OB_FAIL(check_need_replay_column_store(*storage_schema, direct_load_type_, is_column_group_store))) {
-    LOG_WARN("fail to check schema is column group store", K(ret));
-  } else if (OB_ISNULL(ls = ls_handle.get_ls())) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("ls should not be null", K(ret), K_(ls_id));
-  } else if (ls->is_cs_replica() && OB_FAIL(tablet_handle.get_obj()->pre_process_cs_replica(direct_load_type_, replay_normal_in_cs_replica))) { 
-    LOG_WARN("failed to pre process cs replica", K(ret));
   } else {
     ObTableHandleV2 table_handle; // empty
     const int64_t rebuild_seq = ls_handle.get_ls()->get_rebuild_seq();
     ObTableHandleV2 sstable_handle;
     ObTabletHandle new_tablet_handle;
-    ObTablesHandleArray empty_cg_sstable_handles;
     ObArray<ObDDLBlockMeta> empty_meta_array;
     empty_meta_array.set_attr(ObMemAttr("TblFDL_EMA"));
 
@@ -3259,7 +2747,7 @@ int ObTabletFullDirectLoadMgr::init_ddl_table_store(
     ddl_param.commit_scn_ = commit_scn_;
     ddl_param.snapshot_version_ = table_key_.get_snapshot_version();
     ddl_param.data_format_version_ = tenant_data_version_;
-    ddl_param.table_key_.table_type_ = (is_column_group_store && !replay_normal_in_cs_replica) ? ObITable::DDL_MERGE_CO_SSTABLE : ObITable::DDL_DUMP_SSTABLE;
+    ddl_param.table_key_.table_type_ = ObITable::DDL_DUMP_SSTABLE;
     ddl_param.table_key_.scn_range_.start_scn_ = SCN::scn_dec(start_scn);
     ddl_param.table_key_.scn_range_.end_scn_ = start_scn;
 
@@ -3276,35 +2764,6 @@ int ObTabletFullDirectLoadMgr::init_ddl_table_store(
     if (OB_FAIL(ObTabletDDLUtil::create_ddl_sstable(*tablet_handle.get_obj(), ddl_param, empty_meta_array, ObArray<MacroBlockId>(), nullptr/*first_ddl_sstable*/, 
         storage_schema, nullptr /* mutex not need*/, tmp_arena, sstable_handle))) {
       LOG_WARN("create empty ddl sstable failed", K(ret));
-    } else if (ddl_param.table_key_.is_co_sstable()) {
-      // add empty cg sstables
-      ObCOSSTableV2 *co_sstable = static_cast<ObCOSSTableV2 *>(sstable_handle.get_table());
-      const ObIArray<ObStorageColumnGroupSchema> &cg_schemas = storage_schema->get_column_groups();
-      ObTabletDDLParam cg_ddl_param = ddl_param;
-      cg_ddl_param.table_key_.table_type_ = ObITable::TableType::DDL_MERGE_CG_SSTABLE;
-      for (int64_t i = 0; OB_SUCC(ret) && i < cg_schemas.count(); ++i) {
-        ObTableHandleV2 cur_handle;
-        cg_ddl_param.table_key_.column_group_idx_ = static_cast<uint16_t>(i);
-        if (table_key_.get_column_group_id() == i) {
-          // skip base cg idx
-        } else if (OB_FAIL(ObTabletDDLUtil::create_ddl_sstable(*tablet_handle.get_obj(), cg_ddl_param, empty_meta_array, ObArray<MacroBlockId>(),
-                nullptr/*first_ddl_sstable*/, storage_schema, nullptr /* mutext not need */, tmp_arena, cur_handle))) {
-          LOG_WARN("create empty cg sstable failed", K(ret), K(i), K(cg_ddl_param));
-        } else if (OB_FAIL(empty_cg_sstable_handles.add_table(cur_handle))) {
-          LOG_WARN("add table handle failed", K(ret), K(i), K(cur_handle));
-        }
-      }
-      if (OB_SUCC(ret)) {
-        ObArray<ObITable *> cg_sstables;
-        cg_sstables.set_attr(ObMemAttr("TblFDL_CGS"));
-        if (OB_FAIL(empty_cg_sstable_handles.get_tables(cg_sstables))) {
-          LOG_WARN("get cg sstables failed", K(ret));
-        } else if (OB_FAIL(co_sstable->fill_cg_sstables(cg_sstables))) {
-          LOG_WARN("fill empty cg sstables failed", K(ret));
-        } else {
-          LOG_DEBUG("fill co sstable with empty cg sstables success", K(ret), K(ddl_param), KPC(co_sstable));
-        }
-      }
     }
     if (OB_FAIL(ret)) {
     } else if (FALSE_IT(param.sstable_ = static_cast<ObSSTable *>(sstable_handle.get_table()))) {
@@ -3312,12 +2771,7 @@ int ObTabletFullDirectLoadMgr::init_ddl_table_store(
       LOG_WARN("failed to update tablet table store", K(ret), K(ls_id_), K(tablet_id_), K(param));
     } else {
       LOG_INFO("update tablet success", K(ls_id_), K(tablet_id_),
-          "is_column_store", is_column_group_store, K(ddl_param),
-          "need_process_cs_replica", need_process_cs_replica_,
-          "need_fill_column_group", need_fill_column_group_,
-          "replay_normal_in_cs_replica", replay_normal_in_cs_replica,
-          "column_group_schemas", storage_schema->get_column_groups(),
-          "update_table_store_param", param, K(start_scn), K(snapshot_version), K(ddl_checkpoint_scn));
+          K(ddl_param), "update_table_store_param", param, K(start_scn), K(snapshot_version), K(ddl_checkpoint_scn));
     }
   }
   if (0 != lock_tid) {
@@ -3359,54 +2813,6 @@ int ObTabletFullDirectLoadMgr::update_major_sstable()
     }
   }
   ObTabletObjLoadHelper::free(tmp_arena, storage_schema);
-  return ret;
-}
-
-int ObTabletFullDirectLoadMgr::pre_process_cs_replica(
-    const ObTabletID &tablet_id, 
-    bool &replay_normal_in_cs_replica)
-{
-  int ret = OB_SUCCESS;
-  replay_normal_in_cs_replica = false;
-  ObLSHandle ls_handle;
-  ObTabletHandle tablet_handle;
-  ObLS *ls = nullptr;
-  ObTablet *tablet = nullptr;
-  if (OB_ISNULL(share::g_mp->ls_service())) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected err", K(ret));
-  } else if (OB_FAIL(share::g_mp->ls_service()->get_ls(ls_id_, ls_handle, ObLSGetMod::DDL_MOD))) {
-    LOG_WARN("get ls failed", K(ret), K(ls_id_));
-  } else if (OB_UNLIKELY(!ls_handle.is_valid()) || OB_ISNULL(ls = ls_handle.get_ls())) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("ls handle is invalid or nullptr", K(ret), K(ls_handle), KP(ls));
-  } else if (!ls->is_cs_replica()) {
-  } else if (OB_FAIL(ObDDLUtil::ddl_get_tablet(ls_handle, tablet_id, tablet_handle))) {
-    LOG_WARN("get tablet failed", K(ret));
-  } else if (OB_UNLIKELY(!tablet_handle.is_valid()) || OB_ISNULL(tablet = tablet_handle.get_obj())) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("tablet handle is invalid or nullptr", K(ret), K(tablet_handle), KP(tablet));
-  } else if (OB_FAIL(tablet->pre_process_cs_replica(direct_load_type_, replay_normal_in_cs_replica))) {
-    LOG_WARN("failed to pre process cs replica", K(ret), K(ls_id_), K(tablet_id));
-  }
-  return ret;
-}
-
-int ObTabletFullDirectLoadMgr::check_need_replay_column_store(
-    const ObStorageSchema &storage_schema, 
-    const ObDirectLoadType &direct_load_type, 
-    bool &need_replay_column_store)
-{
-  int ret = OB_SUCCESS;
-  need_replay_column_store = false;
-  if (OB_FAIL(ObDDLStorageUtil::need_column_group_store(storage_schema, need_replay_column_store))) {
-    LOG_WARN("failed to check need replay column store", K(ret), K(storage_schema));
-  } else if (!is_ddl_direct_load(direct_load_type) && need_replay_column_store) {
-    // if table is row store in F-replica and local ls is cs replica, storage schema in tablet will be column store.
-    // but full direct load will not write column store redo log. 
-    // so when full direct load, is storage schema is column store and cs replica compat, need replay row store.
-    need_replay_column_store = !storage_schema.is_cs_replica_compat();
-  }
   return ret;
 }
 
@@ -3471,7 +2877,6 @@ int ObTabletIncDirectLoadMgr::update(
   }
   if (OB_SUCC(ret)) {
     task_cnt_ = build_param.runtime_only_param_.task_cnt_;
-    cg_cnt_ = storage_schema->get_column_group_count();
   }
   if (0 != lock_tid) {
     unlock(lock_tid);

@@ -239,7 +239,7 @@ DEF_TO_STRING(ObDMLBaseParam)
        N_SQL_MODE, sql_mode_,
        N_IS_TOTAL_QUANTITY_LOG, is_total_quantity_log_,
        KPC_(table_param),
-       K_(runtime_schema_version),
+       K_(tenant_schema_version),
        K_(is_ignore),
        K_(prelock),
        K_(is_batch_stmt),
@@ -247,8 +247,10 @@ DEF_TO_STRING(ObDMLBaseParam)
        K_(spec_seq_no),
        K_(snapshot),
        K_(branch_id),
+       K_(direct_insert_task_id),
        K_(check_schema_version),
        K_(ddl_task_id),
+       KPC_(data_row_for_lob),
        K_(is_main_table_in_fts_ddl),
        K_(has_async_index));
   J_OBJ_END();
@@ -284,16 +286,18 @@ DEF_TO_STRING(ObTableScanParam)
   int64_t pos = 0;
   J_OBJ_START();
   J_KV(K_(tablet_id),
+       K_(ls_id),
        N_COLUMN_IDS, column_ids_,
        N_INDEX_ID, index_id_,
        N_KEY_RANGES, key_ranges_,
+       K_(ss_key_ranges),
        K_(range_array_pos),
        N_TIMEOUT, timeout_,
        N_SCAN_FLAG, scan_flag_,
        N_SQL_MODE, sql_mode_,
        N_RESERVED_CELL_COUNT, reserved_cell_count_,
        N_SCHEMA_VERSION, schema_version_,
-       N_QUERY_BEGIN_SCHEMA_VERSION, runtime_schema_version_,
+       N_QUERY_BEGIN_SCHEMA_VERSION, tenant_schema_version_,
        N_LIMIT_OFFSET, limit_param_,
        N_FOR_UPDATE, for_update_,
        N_WAIT, for_update_wait_timeout_,
@@ -309,6 +313,8 @@ DEF_TO_STRING(ObTableScanParam)
        K_(need_switch_param),
        K_(is_mds_query),
        K_(tx_seq_base),
+       K_(auto_split_filter_type),
+       K_(is_tablet_spliting),
        K_(need_update_tablet_param),
        KPC_(mds_collector));
   J_OBJ_END();

@@ -18,7 +18,6 @@
 
 #include "ob_partition_merge_fuser.h"
 #include "ob_tablet_merge_ctx.h"
-#include "storage/lob/ob_lob_manager.h"
 
 namespace oceanbase
 {
@@ -175,7 +174,7 @@ int ObMergeFuser::fuse_delete_row(
       result_row_.row_flag_.set_flag(ObDmlFlag::DF_DELETE);
       result_row_.mvcc_row_flag_ = del_row.mvcc_row_flag_;
       result_row_.set_compacted_multi_version_row();
-      STORAGE_LOG(DEBUG, "fuse delete row", K(ret), K(del_row), K(result_row_));
+      STORAGE_LOG(DEBUG, "fuse delete row", K(ret), K_(enable_delete_insert), K(del_row), K(result_row_));
     }
   }
 
@@ -342,6 +341,7 @@ int ObMinorPartitionMergeFuser::inner_init(const ObMergeParameter &merge_param)
   } else {
     column_cnt_ = column_cnt + storage::ObMultiVersionRowkeyHelpper::get_extra_rowkey_col_cnt();
     multi_version_rowkey_column_cnt_ = merge_param.static_param_.multi_version_column_descs_.count();
+    enable_delete_insert_ = merge_param.is_delete_insert_merge();
   }
 
   return ret;
@@ -372,7 +372,7 @@ int ObMinorPartitionMergeFuser::preprocess_fuse_row(const blocksstable::ObDatumR
 
   if (OB_FAIL(ret)) {
   } else if (row.row_flag_.is_delete()) {
-    if (OB_FAIL(fuse_delete_row(row, multi_version_rowkey_column_cnt_))) {
+    if (OB_FAIL(fuse_delete_row(row, enable_delete_insert_ ? column_cnt_ : multi_version_rowkey_column_cnt_))) {
       STORAGE_LOG(WARN, "failed to fuse_delete_row", K(ret), K(row), K(multi_version_rowkey_column_cnt_));
     } else {
       is_need_fuse = false;
@@ -382,7 +382,7 @@ int ObMinorPartitionMergeFuser::preprocess_fuse_row(const blocksstable::ObDatumR
 }
 
 int ObMergeFuserBuilder::build(const ObMergeParameter &merge_param,
-                               const int64_t data_format_version,
+                               const int64_t cluster_version,
                                ObIAllocator &allocator,
                                ObIPartitionMergeFuser *&partition_fuser)
 {
@@ -396,7 +396,7 @@ int ObMergeFuserBuilder::build(const ObMergeParameter &merge_param,
     const ObMergeType merge_type = merge_param.static_param_.get_merge_type();
     if (is_major_or_meta_merge_type(merge_type)) {
       is_fuse_row_flag = false;
-      partition_fuser = alloc_helper<ObMajorPartitionMergeFuser>(allocator, allocator, data_format_version);
+      partition_fuser = alloc_helper<ObMajorPartitionMergeFuser>(allocator, allocator, cluster_version);
     } else {
       partition_fuser = alloc_helper<ObMinorPartitionMergeFuser>(allocator, allocator);
     }

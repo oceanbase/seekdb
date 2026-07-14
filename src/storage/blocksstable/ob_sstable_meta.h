@@ -83,7 +83,7 @@ private:
 
 private:
   static const int64_t MAX_TX_IDS_COUNT = 16;
-  int32_t len_; // serialized object length
+  int32_t len_; // for compat
   int64_t count_; // actual item count
   ObTxDesc *tx_descs_;
   DISALLOW_COPY_AND_ASSIGN(ObTxContext);
@@ -98,7 +98,7 @@ public:
   ObSSTableBasicMeta();
   ~ObSSTableBasicMeta() = default;
   bool operator==(const ObSSTableBasicMeta &other) const;
-  bool check_basic_meta_equality(const ObSSTableBasicMeta &other) const;
+  bool check_basic_meta_equality(const ObSSTableBasicMeta &other) const; // only for small sstable defragmentation
   bool is_valid() const;
   void reset();
 
@@ -123,7 +123,7 @@ public:
   OB_INLINE int16_t get_sstable_seq() const { return sstable_logic_seq_; }
   OB_INLINE common::ObCompressorType get_compressor_type() const { return compressor_type_; }
   OB_INLINE common::ObRowStoreType get_latest_row_store_type() const { return latest_row_store_type_; }
-  int decode_fields(const char *buf, const int64_t data_len, int64_t &pos);
+  int decode_for_compat(const char *buf, const int64_t data_len, int64_t &pos);
 
   void set_upper_trans_version(const int64_t upper_trans_version);
   void set_filled_tx_scn(const share::SCN &filled_tx_scn);
@@ -133,7 +133,11 @@ public:
 private:
   OB_INLINE bool is_latest_row_store_type_valid() const
   {
-    return latest_row_store_type_ < ObRowStoreType::MAX_ROW_STORE;
+    // Before version 4.0, latest_row_store_type was not serialized in sstable meta, but it is
+    // required and added in version 4.1. For compatibility, when deserialize from older version
+    // data, latest_row_store_type_ is filled with DUMMY_ROW_STORE
+    return latest_row_store_type_ < ObRowStoreType::MAX_ROW_STORE
+        || ObRowStoreType::DUMMY_ROW_STORE == latest_row_store_type_;
   }
 public:
   TO_STRING_KV(K_(version), K_(length), K(row_count_), K(occupy_size_), K(original_size_),
@@ -145,8 +149,8 @@ public:
       K(upper_trans_version_), K(max_merged_trans_version_), K_(recycle_version),
       K(ddl_scn_), K(filled_tx_scn_),
       K(contain_uncommitted_row_), K(status_), K_(root_row_store_type), K_(compressor_type),
-      K_(sstable_logic_seq),
-      K_(latest_row_store_type), K_(table_backup_flag), K_(root_macro_seq));
+      K_(encrypt_id), K_(master_key_id), K_(sstable_logic_seq), KPHEX_(encrypt_key, sizeof(encrypt_key_)),
+      K_(latest_row_store_type), K_(table_backup_flag), K_(table_shared_flag), K_(root_macro_seq));
 
 public:
   int32_t version_;
@@ -173,16 +177,21 @@ public:
   // recycle_version only available for minor sstable, recored recycled multi version start
   int64_t recycle_version_;
   share::SCN ddl_scn_; // only used in DDL SSTable, all MB in DDL SSTable should have the same scn(start_scn)
-  share::SCN filled_tx_scn_; // transaction-data fill boundary covered by this SSTable
+  share::SCN filled_tx_scn_; // only for rebuild
   int16_t data_index_tree_height_;
   share::schema::ObTableMode table_mode_;
   uint8_t status_;
   bool contain_uncommitted_row_;
   common::ObRowStoreType root_row_store_type_;
   common::ObCompressorType compressor_type_;
+  int64_t encrypt_id_;
+  int64_t master_key_id_;
   int16_t sstable_logic_seq_;
   common::ObRowStoreType latest_row_store_type_;
-  storage::ObTableBackupFlag table_backup_flag_;  // cannot add backup flag to ObSSTableMetaChecker
+  char encrypt_key_[share::OB_MAX_TABLESPACE_ENCRYPT_KEY_LENGTH];
+  storage::ObTableBackupFlag table_backup_flag_;  //cannot add backup flag to ObSSTableMetaChecker
+                                                  //quick restore with rebuild replace major will has same key sstable
+  storage::ObTableSharedFlag table_shared_flag_;
   int64_t root_macro_seq_;
   share::SCN tx_data_recycle_scn_;
   //Add new variable need consider ObSSTableMetaChecker
@@ -194,7 +203,7 @@ public:
   ObSSTableMeta();
   ~ObSSTableMeta();
   int init(
-      const storage::ObTabletCreateSSTableParam &param,
+      const storage::ObTabletCreateSSTableParam &param, 
       common::ObArenaAllocator &allocator);
   void reset();
   OB_INLINE bool is_valid() const { return is_inited_; }
@@ -274,6 +283,7 @@ public:
   OB_INLINE const ObRootBlockInfo &get_root_info() const { return data_root_info_; }
   OB_INLINE const ObSSTableMacroInfo &get_macro_info() const { return macro_info_; }
   OB_INLINE const ObTableBackupFlag &get_table_backup_flag() const { return basic_meta_.table_backup_flag_; }
+  OB_INLINE const ObTableSharedFlag &get_table_shared_flag() const { return basic_meta_.table_shared_flag_; }
   int load_root_block_data(common::ObArenaAllocator &allocator); //TODO:@jinzhu remove me after using kv cache.
   inline int transform_root_block_extra_buf(common::ObArenaAllocator &allocator)
   {
@@ -297,6 +307,7 @@ public:
       int64_t &pos,
       ObSSTableMeta *&dest) const;
   int get_column_checksums(common::ObIArray<int64_t> &column_checksums) const;
+  bool is_shared_table() const;
   TO_STRING_KV(K_(basic_meta), K_(column_ckm_struct), K_(data_root_info), K_(macro_info), K_(tx_ctx), K_(is_inited));
 private:
   int fsync_block(const ObTabletCreateSSTableParam &param);
@@ -328,45 +339,67 @@ private:
   DISALLOW_COPY_AND_ASSIGN(ObSSTableMeta);
 };
 
-class ObSSTableCloneParam final
+class ObMigrationSSTableParam final
 {
 public:
-  ObSSTableCloneParam();
-  ~ObSSTableCloneParam();
+  ObMigrationSSTableParam();
+  ~ObMigrationSSTableParam();
+  bool is_valid() const;
   void reset();
-  TO_STRING_KV(K_(basic_meta),
-               K(column_checksums_.count()),
+  int assign(const ObMigrationSSTableParam &param);
+  bool is_empty_sstable() const;
+  bool is_shared_sstable() const;
+  bool is_shared_macro_blocks_sstable() const;
+  bool is_only_shared_macro_blocks_sstable() const;
+  int get_merge_res(blocksstable::ObSSTableMergeRes &res) const;
+  TO_STRING_KV(K_(basic_meta), 
+               K(column_checksums_.count()), 
                K_(column_checksums),
-               K_(root_block_addr),
+               K_(table_key),
+               K(column_default_checksums_.count()),
+               K_(column_default_checksums),  
+               K_(is_small_sstable),
+               K_(root_block_addr), 
                KP_(root_block_buf),
-               K_(data_block_macro_meta_addr),
+               K_(data_block_macro_meta_addr), 
                KP_(data_block_macro_meta_buf),
                K_(is_meta_root));
 private:
+  int addr_serialize(const ObMetaDiskAddr &addr, const char *addr_buf, char *buf, const int64_t buf_len, int64_t &pos) const;
+  int addr_deserialize(const char *buf, const int64_t data_len, int64_t &pos, ObMetaDiskAddr &addr, char *&root__buf);
+  int64_t addr_get_serialize_size(const ObMetaDiskAddr &addr) const;
+  static const int64_t MIGRATION_SSTABLE_PARAM_VERSION = 1;
   typedef common::ObSEArray<int64_t, common::OB_ROW_DEFAULT_COLUMNS_COUNT> ColChecksumArray;
 public:
   common::ObArenaAllocator allocator_;
   ObSSTableBasicMeta basic_meta_;
   ColChecksumArray column_checksums_;
+  storage::ObITable::TableKey table_key_;
+  ColChecksumArray column_default_checksums_;
+  bool is_small_sstable_;
+  // for shared data
   ObMetaDiskAddr root_block_addr_;
   char *root_block_buf_;
   ObMetaDiskAddr data_block_macro_meta_addr_;
   char *data_block_macro_meta_buf_;
   bool is_meta_root_;
+  OB_UNIS_VERSION(MIGRATION_SSTABLE_PARAM_VERSION);
 private:
-  DISALLOW_COPY_AND_ASSIGN(ObSSTableCloneParam);
+  DISALLOW_COPY_AND_ASSIGN(ObMigrationSSTableParam);
 };
 
 class ObSSTableMetaChecker
 {
 public:
-  // Rebuilding a small SSTable during defragmentation may only change its
-  // physical nested location; every logical metadata field must stay equal.
+  // only for small sstable defragmentation
   static int check_sstable_meta_strict_equality(
       const ObSSTableMeta &old_sstable_meta,
       const ObSSTableMeta &new_sstable_meta);
   static int check_sstable_meta(
       const ObSSTableMeta &old_sstable_meta,
+      const ObSSTableMeta &new_sstable_meta);
+  static int check_sstable_meta(
+      const ObMigrationSSTableParam &migration_param,
       const ObSSTableMeta &new_sstable_meta);
   static int check_sstable_basic_meta(
       const ObSSTableBasicMeta &old_sstable_basic_meta,

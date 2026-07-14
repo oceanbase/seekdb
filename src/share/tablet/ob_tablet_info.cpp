@@ -26,9 +26,7 @@ namespace share
 
 const static char * ObDataChecksumTypeStr[] = {
   "NORMAL",
-  "COLUMNSTORE",
-  "NORMAL_WITH_NORMAL_COLUMN",
-  "COLUMNSTORE_WITH_NORMAL_COLUMN"
+  "NORMAL_WITH_NORMAL_COLUMN"
 };
 
 

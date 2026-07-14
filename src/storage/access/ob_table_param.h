@@ -100,7 +100,7 @@ class ColumnMap
       SHADOW_COLUMN_ID_OFFSET + MAX_ARRAY_SIZE - 1;
 
   typedef common::ObFixedArray<int32_t, common::ObIAllocator> ColumnArray;
-  #define IS_SHADOW_COLUMN(column_id) (column_id >= OB_MIN_SHADOW_COLUMN_ID)
+  #define IS_SHADOW_COLUMN(column_id) ((column_id >= OB_MIN_SHADOW_COLUMN_ID) && !common::is_mlog_special_column(column_id))
 
 public:
   ColumnMap(common::ObIAllocator &allocator)
@@ -258,6 +258,8 @@ public:
                   const common::ObIArray<uint64_t> &aggregate_column_ids,
                   const common::ObIArray<uint64_t> &group_by_column_ids,
                   const sql::ObStoragePushdownFlag &pd_pushdown_flag);
+  // convert right table scan parameter of join MV scan.
+  // (right table index back not supported)
   inline uint64_t get_table_id() const { return table_id_; }
   inline int64_t is_spatial_index() const { return is_spatial_index_; }
   inline void set_is_spatial_index(bool is_spatial_index) { is_spatial_index_ = is_spatial_index; }
@@ -267,6 +269,8 @@ public:
   inline void set_is_multivalue_index(bool is_multivalue_index) { is_multivalue_index_ = is_multivalue_index; } 
   inline bool is_vec_index() const { return is_vec_index_; }
   inline void set_is_vec_index(const bool is_vec_index) { is_vec_index_ = is_vec_index; }
+  inline bool is_mlog_table() const { return is_mlog_table_; }
+  inline void set_is_mlog_table(const bool is_mlog_table) { is_mlog_table_ = is_mlog_table; }
   inline int64_t is_partition_table() const { return is_partition_table_; }
   inline void set_is_partition_table(bool is_partition_table) { is_partition_table_ = is_partition_table; }
   inline bool use_lob_locator() const { return use_lob_locator_; }
@@ -284,6 +288,7 @@ public:
   inline const storage::ObTableReadInfo &get_read_info() const { return main_read_info_; }
   inline const ObString &get_parser_name() const { return parser_name_; }
   inline const ObString &get_parser_property() const { return parser_properties_; }
+  inline bool is_safe_filter_with_di() const { return is_safe_filter_with_di_; }
   inline int8_t get_access_virtual_col_cnt() const { return access_virtual_col_cnt_; }
   DECLARE_TO_STRING;
 
@@ -295,6 +300,8 @@ public:
   static int deserialize_columns(const char *buf, const int64_t data_len,
                                  int64_t &pos, Columns &columns, common::ObIAllocator &allocator);
   static int alloc_column(common::ObIAllocator &allocator, ObColumnParam *& col_ptr);
+  int check_is_safe_filter_with_di(common::ObIArray<sql::ObRawExpr *> &exprs,
+                                   sql::ObPushdownFilterNode &pushdown_filters);
 private:
   int construct_columns_and_projector(const ObTableSchema &table_schema,
                                       const common::ObIArray<uint64_t> &output_column_ids,
@@ -346,7 +353,7 @@ private:
   bool use_lob_locator_;
   ObString parser_name_;
   ObString parser_properties_;
-  // Select the LOB locator format once when the scan starts.
+  // if min cluster version < 4.1 use lob locator v1, else use lob locator v2.
   // use enable_lob_locator_v2_ to avoid locator type sudden change while table scan is running
   bool enable_lob_locator_v2_;
   bool is_spatial_index_;
@@ -354,7 +361,10 @@ private:
   bool is_multivalue_index_;
   bool is_vec_index_;
   bool is_partition_table_;
+  // for read time query check of mview
+  bool is_mlog_table_;
   bool is_enable_semistruct_encoding_;
+  bool is_safe_filter_with_di_;
   int8_t access_virtual_col_cnt_;
 };
 } //namespace schema

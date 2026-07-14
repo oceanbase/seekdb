@@ -259,7 +259,7 @@ int ObMicroBlockBareIterator::get_next_micro_block_data_and_offset(ObMicroBlockD
     } else if (!need_deserialize_) {
       micro_block.get_buf() = micro_buf;
       micro_block.get_buf_size() = micro_buf_size;
-    } else if (OB_FAIL(macro_reader_.decompress_data(
+    } else if (OB_FAIL(macro_reader_.decrypt_and_decompress_data(
         macro_block_header_,
         micro_buf,
         micro_buf_size,
@@ -267,7 +267,7 @@ int ObMicroBlockBareIterator::get_next_micro_block_data_and_offset(ObMicroBlockD
         micro_block.get_buf(),
         micro_block.get_buf_size(),
         is_compressed))) {
-      LOG_WARN("Fail to decompress micro block data", K(ret), K(macro_block_header_));
+      LOG_WARN("Fail to decrypt and decompress micro block data", K(ret), K(macro_block_header_));
     }
 
     if (OB_SUCC(ret)) {
@@ -377,7 +377,7 @@ int ObMicroBlockBareIterator::get_next_micro_block_desc(
     } else if (FALSE_IT(micro_buf_size = header->header_size_ + header->data_zlength_)) {
     } else if (OB_FAIL(header->check_record(micro_buf, micro_buf_size, MICRO_BLOCK_HEADER_MAGIC))) {
       LOG_WARN("Fail to check record header", K(ret), K(header));
-    } else if (OB_FAIL(macro_reader_.decompress_data(
+    } else if (OB_FAIL(macro_reader_.decrypt_and_decompress_data(
         macro_block_header_,
         micro_buf,
         micro_buf_size,
@@ -385,7 +385,7 @@ int ObMicroBlockBareIterator::get_next_micro_block_desc(
         micro_block.get_buf(),
         micro_block.get_buf_size(),
         is_compressed))) {
-      LOG_WARN("Fail to decompress micro block data", K(ret), K(macro_block_header_));
+      LOG_WARN("Fail to decrypt and decompress micro block data", K(ret), K(macro_block_header_));
     } else if (OB_FAIL(last_row.init(allocator, column_cnt_ + 1))) {
       STORAGE_LOG(WARN, "Fail to init last row", K(ret));
     } else if (OB_UNLIKELY(!micro_block.is_valid())) {
@@ -552,7 +552,7 @@ int ObMicroBlockBareIterator::get_next_micro_block_desc(
     } else if (FALSE_IT(micro_buf_size = header->header_size_ + header->data_zlength_)) {
     } else if (OB_FAIL(header->check_record(micro_buf, micro_buf_size, MICRO_BLOCK_HEADER_MAGIC))) {
       LOG_WARN("Fail to check record header", K(ret), K(header));
-    } else if (OB_FAIL(macro_reader_.decompress_data(
+    } else if (OB_FAIL(macro_reader_.decrypt_and_decompress_data(
         macro_block_header_,
         micro_buf,
         micro_buf_size,
@@ -560,7 +560,7 @@ int ObMicroBlockBareIterator::get_next_micro_block_desc(
         micro_block.get_buf(),
         micro_block.get_buf_size(),
         is_compressed))) {
-      LOG_WARN("Fail to decompress micro block data", K(ret), K(macro_block_header_));
+      LOG_WARN("Fail to decrypt and decompress micro block data", K(ret), K(macro_block_header_));
     } else if (OB_FAIL(last_row.init(allocator, column_cnt_ + 1))) {
       STORAGE_LOG(WARN, "Fail to init last row", K(ret));
     } else if (OB_UNLIKELY(!micro_block.is_valid())) {
@@ -669,7 +669,7 @@ int ObMicroBlockBareIterator::get_index_block(ObMicroBlockData &micro_block,
     } else if (!need_deserialize_ && !force_deserialize) {
       micro_block.get_buf() = micro_buf;
       micro_block.get_buf_size() = micro_buf_size;
-    } else if (OB_FAIL(index_reader_.decompress_data(
+    } else if (OB_FAIL(index_reader_.decrypt_and_decompress_data(
         macro_block_header_,
         micro_buf,
         micro_buf_size,
@@ -677,7 +677,7 @@ int ObMicroBlockBareIterator::get_index_block(ObMicroBlockData &micro_block,
         micro_block.get_buf(),
         micro_block.get_buf_size(),
         is_compressed))) {
-      LOG_WARN("Fail to decompress micro block data", K(ret), K_(macro_block_header));
+      LOG_WARN("Fail to decrypt and decompress micro block data", K(ret), K_(macro_block_header));
     }
   }
   return ret;

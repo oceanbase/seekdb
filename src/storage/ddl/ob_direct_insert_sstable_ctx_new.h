@@ -248,19 +248,8 @@ public:
   void reset_slice_ctx_on_demand(); 
   void cleanup_slice_writer(const int64_t context_id);
   share::SCN get_commit_scn() { return commit_scn_.atomic_load(); }
-  TO_STRING_KV(K_(build_param), K_(is_task_end), K_(task_finish_count), K_(task_total_cnt), K_(sorted_slices_idx), K_(commit_scn), 
+  TO_STRING_KV(K_(build_param), K_(is_task_end), K_(task_finish_count), K_(task_total_cnt), K_(commit_scn),
       KP_(index_builder), KPC(storage_schema_));
-  struct AggregatedCGInfo final {
-  public:
-    AggregatedCGInfo()
-      : start_idx_(0),
-        last_idx_(0) {}
-    ~AggregatedCGInfo() {}
-    TO_STRING_KV(K_(start_idx), K_(last_idx));
-  public:
-    int64_t start_idx_;
-    int64_t last_idx_;
-  };
 public:
   struct SliceKey
   {
@@ -286,12 +275,9 @@ public:
   blocksstable::ObWholeDataStoreDesc data_block_desc_;
   blocksstable::ObSSTableIndexBuilder *index_builder_;
   common::ObArray<ObOptColumnStat*> column_stat_array_; // online column stat result.
-  common::ObArray<ObDirectLoadSliceWriter *> sorted_slice_writers_;
-  common::ObArray<AggregatedCGInfo> sorted_slices_idx_; //for cg_aggregation
   bool is_task_end_; // to avoid write commit log/freeze in memory index sstable again
   int64_t task_finish_count_; // reach the parallel slice cnt, means the tablet data finished.
   int64_t task_total_cnt_; // parallelism of the PX.
-  int64_t fill_column_group_finish_count_;
   share::SCN commit_scn_;
   ObArenaAllocator schema_allocator_;
   ObStorageSchema *storage_schema_;
@@ -349,7 +335,6 @@ public:
   int cancel();
   virtual share::SCN get_start_scn() = 0;
   virtual share::SCN get_commit_scn(const ObTabletMeta &tablet_meta) = 0;
-  bool need_process_cs_replica() const override  { return need_process_cs_replica_; }
   virtual ObTabletDirectLoadBuildCtx &get_sqc_build_ctx() { return sqc_build_ctx_; }
   ObTabletID get_lob_meta_tablet_id() {
     return lob_mgr_handle_.is_valid() ? lob_mgr_handle_.get_obj()->get_tablet_id() : ObTabletID();
@@ -363,50 +348,20 @@ public:
   virtual int rdlock(const int64_t timeout_us, uint32_t &lock_tid);
   virtual void unlock(const uint32_t lock_tid);
   virtual int prepare_index_builder_if_need(const ObTableSchema &table_schema);
-  virtual int wait_notify(const ObDirectLoadSliceWriter *slice_writer, const int64_t context_id, const share::SCN &start_scn);
-  virtual int fill_column_group(const int64_t thread_cnt, const int64_t thread_id);
-  virtual int notify_all();
-  virtual int calc_range(const int64_t context_id, const int64_t thread_cnt);
-  int calc_cg_range(ObArray<ObDirectLoadSliceWriter *> &sorted_slices, const int64_t thread_cnt);
   const ObIArray<ObColumnSchemaItem> &get_column_info() const override { return column_items_; };
   bool is_schema_item_ready() { return is_schema_item_ready_; }
   bool get_micro_index_clustered() { return micro_index_clustered_; }
   int prepare_storage_schema(ObTabletHandle &tablet_handle);
   int64_t get_task_cnt() override { return task_cnt_; }
-  int64_t get_cg_cnt() override {return cg_cnt_; }
-  // init column store related parameters when open in leader
-  int init_column_store_params(
-      const ObTablet &tablet,
-      const ObStorageSchema &storage_schema,
-      const ObDirectLoadType new_direct_load_type,
-      const int64_t tenant_data_version);
-  /*
-   * For full data direct load, row store table and column store table take diffrent way.
-   * 1. row store table: take the same way with offline ddl;
-   * 2. column store table: take PX to accelerate.
-   * 3. for table with cs replica, take the same way with offline ddl, and writing additional column store data.
-   *    so if is data direct load type but need process cs replica, it should skip the originally column store load code.
-   */
-  bool is_originally_column_store_data_direct_load() const { return is_data_direct_load(direct_load_type_) && !need_process_cs_replica_; }
   bool get_is_no_logging() override { return is_no_logging_; }
   VIRTUAL_TO_STRING_KV(K_(is_inited), K_(is_schema_item_ready), K_(ls_id), K_(tablet_id), K_(table_key), K_(ref_cnt), 
-               K_(direct_load_type), K_(need_process_cs_replica), K_(need_fill_column_group),K_(sqc_build_ctx), KPC(lob_mgr_handle_.get_obj()), K_(schema_item), K_(column_items), K_(lob_column_idxs),
-               K_(task_cnt), K_(cg_cnt), K_(micro_index_clustered), K_(is_no_logging));
+               K_(direct_load_type), K_(sqc_build_ctx), KPC(lob_mgr_handle_.get_obj()), K_(schema_item), K_(column_items), K_(lob_column_idxs),
+               K_(task_cnt), K_(micro_index_clustered), K_(is_no_logging));
 
 protected:
   int prepare_schema_item_on_demand(const uint64_t table_id,
                                     const int64_t parallel);
 
-  void calc_cg_idx(const int64_t thread_cnt, const int64_t thread_id, int64_t &strat_idx, int64_t &end_idx);
-  int fill_aggregated_column_group(
-      const int64_t parallel_idx,
-      const int64_t start_idx,
-      const int64_t last_idx,
-      const ObStorageSchema *storage_schema,
-      int64_t &fill_cg_finish_count,
-      int64_t &fill_row_cnt,
-      common::ObIAllocator &allocator,
-      ObInsertMonitor *insert_monitor=nullptr);
 // private:
   /* +++++ online column stat collect +++++ */
   // virtual int init_sql_statistics_if_needed();
@@ -418,12 +373,6 @@ public:
 protected:
   bool is_inited_;
   bool is_schema_item_ready_;
-  // only row store user tablet need process cs replica in leader, column store tablet do not need
-  bool need_process_cs_replica_;
-  // column store table, or need process cs replica
-  bool need_fill_column_group_;
-  // only use for data complement dag rescan path
-  bool is_rescan_data_compl_dag_;
   // sqc_build_ctx_ is just used for the observer node who receives the requests from the SQL Layer 
   // to write the start log and the data redo log. And other observer nodes can not use it.
   ObTabletDirectLoadBuildCtx sqc_build_ctx_;
@@ -436,7 +385,6 @@ protected:
   ObTableSchemaItem schema_item_;
   int64_t dir_id_;
   int64_t task_cnt_;
-  int64_t cg_cnt_;
   bool micro_index_clustered_;
   bool is_no_logging_;
 };
@@ -501,8 +449,6 @@ private:
   int cleanup_unlock();
   int init_ddl_table_store(const share::SCN &start_scn, const int64_t snapshot_version, const share::SCN &ddl_checkpoint_scn);
   int update_major_sstable();
-  int pre_process_cs_replica(const ObTabletID &tablet_id, bool &replay_normal_in_cs_replica);
-  int check_need_replay_column_store(const ObStorageSchema &storage_schema, const ObDirectLoadType &direct_load_type, bool &need_replay_column_store);
 
 private:
   share::SCN start_scn_;

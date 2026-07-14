@@ -42,12 +42,11 @@ int64_t ObStorageObjectOpt::to_string(char *buf, const int64_t buf_len) const
   case ObStorageObjectType::SHARED_MAJOR_DATA_MACRO:
   case ObStorageObjectType::SHARED_MAJOR_META_MACRO: {
     if(OB_FAIL(databuff_printf(buf, buf_len, pos,
-               "object_type=%s (tablet_id=%lu,data_seq=%lu,cg_id=%lu)",
+               "object_type=%s (tablet_id=%lu,data_seq=%lu)",
                get_storage_objet_type_str(object_type_),
-               ss_share_opt_.tablet_id_, ss_share_opt_.data_seq_,
-               ss_share_opt_.column_group_id_))) {
+               ss_share_opt_.tablet_id_, ss_share_opt_.data_seq_))) {
       LOG_WARN("failed to print data into buf", K(ret), K(buf_len), K(pos), K(get_storage_objet_type_str(object_type_)),
-                                                K(ss_share_opt_.tablet_id_), K(ss_share_opt_.data_seq_), K(ss_share_opt_.column_group_id_));
+                                                K(ss_share_opt_.tablet_id_), K(ss_share_opt_.data_seq_));
     }
     break;
   }

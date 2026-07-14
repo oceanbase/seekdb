@@ -364,7 +364,24 @@ insert into xingrui_json (id) values (4);
 insert into xingrui_json (id) values (5);
 alter table xingrui_json force;
 drop table xingrui_json;
-#case array列
+#case bitmap列
+drop table xingrui_bitmap;
+create table xingrui_bitmap(c1 roaringbitmap, c2 roaringbitmap);
+insert into xingrui_bitmap values(x'0100', x'010100000002'), (null, null);
+insert into xingrui_bitmap values(x'0100', x'010100000002');
+alter table xingrui_bitmap drop column c1;
+insert into xingrui_bitmap values(x'010100000002');
+insert into xingrui_bitmap values(x'010100000002');
+select * from xingrui_bitmap;
+c2
+   
+NULL
+   
+   
+   
+alter table xingrui_bitmap force;
+drop table xingrui_bitmap;
+#case bitmap列
 drop table xingrui_array;
 create table xingrui_array(c1 array(int), c2 array(bigint), c3 array(float), c4 array(double));
 insert into xingrui_array values(array(1, 2, 3, 4, 5),
@@ -631,15 +648,14 @@ drop table xingrui_trigger;
 #case xml
 create table xingrui_xml(col1 xmltype, col2 xmltype);
 ERROR 42000: You have an error in your SQL syntax; check the manual that corresponds to your OceanBase version for the right syntax to use near 'xmltype, col2 xmltype)' at line 1
-alter system set _enable_drop_column_instant = true;
+alter system set _enable_drop_column_instant = true tenant = all_user;
 alter system set debug_sync_timeout = '100000s';
 set ob_global_debug_sync = 'reset';
-set ob_global_debug_sync = 'BEFORE_ALTER_TABLE_IN_TRANS signal ddl_type_decided wait_for continue_signal execute 10000';
+set ob_global_debug_sync = 'BEFORE_ALTER_TABLE_IN_TRANS wait_for continue_signal execute 10000';
 drop table xingrui_normal_table;
 create table xingrui_normal_table(col1 blob, col2 int, col3 blob);
 alter table xingrui_normal_table drop column col3;
-set ob_global_debug_sync = 'now wait_for ddl_type_decided';
-alter system set _enable_drop_column_instant = false;
+alter system set _enable_drop_column_instant = false tenant = all_user;
 set ob_global_debug_sync = 'reset';
 set ob_global_debug_sync = 'now signal continue_signal';
-alter system set _enable_drop_column_instant = true;
+alter system set _enable_drop_column_instant = true tenant = all_user;

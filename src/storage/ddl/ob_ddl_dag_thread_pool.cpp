@@ -38,7 +38,7 @@ int ObDDLDagThreadPool::init(const int64_t thread_count, ObDDLIndependentDag *dd
   } else if (OB_FAIL(set_thread_count(thread_count))) {
     LOG_WARN("set thread count failed", K(ret));
   } else {
-    set_run_wrapper(share::server_runtime());
+    set_run_wrapper(MTL_CTX());
     ddl_dag_ = ddl_dag;
     session_info_ = session_info;
     is_inited_ = true;
@@ -58,8 +58,11 @@ void ObDDLDagThreadPool::run1()
     lib::set_thread_name(thread_name);
     ObCurTraceId::set(ddl_dag_->get_dag_id());
     THIS_WORKER.set_session(session_info_);
+    THIS_WORKER.set_compatibility_mode(ddl_dag_->get_compat_mode());
+
     FLOG_INFO("ddl dag thread start", "thread_idx", get_thread_idx(), KPC(ddl_dag_));
     IGNORE_RETURN ddl_dag_->process();
     FLOG_INFO("ddl dag thread stop", "thread_idx", get_thread_idx(), KPC(ddl_dag_));
   }
 }
+

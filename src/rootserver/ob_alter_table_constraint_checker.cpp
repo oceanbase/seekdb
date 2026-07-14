@@ -221,8 +221,8 @@ int ObAlterTableConstraintChecker::need_modify_not_null_constraint_validate(
   } else if (obcall::ObAlterTableArg::ADD_CONSTRAINT != alter_table_arg.alter_constraint_type_
              && obcall::ObAlterTableArg::ALTER_CONSTRAINT_STATE != alter_table_arg.alter_constraint_type_) {
     // skip
-  } else if (OB_FAIL(ddl_service.get_schema_service().get_runtime_schema_guard(schema_guard))) {
-    LOG_WARN("fail to get runtime schema guard", KR(ret));
+  } else if (OB_FAIL(ddl_service.get_schema_service().get_tenant_schema_guard(schema_guard))) {
+    LOG_WARN("fail to get tenant schema guard", KR(ret));
   } else if (OB_FAIL(schema_guard.get_table_schema(
                                                    origin_database_name,
                                                    origin_table_name,

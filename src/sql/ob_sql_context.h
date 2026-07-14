@@ -27,9 +27,10 @@
 #include "lib/hash_func/murmur_hash.h"
 #include "sql/ob_sql_temp_table.h"
 #include "sql/plan_cache/ob_plan_cache_util.h"
-#include "share/config/ob_runtime_config.h"
+#include "share/config/ob_tenant_config_mgr.h"
 #include "sql/monitor/ob_sql_stat_record.h"
 #include "sql/optimizer/stat/ob_opt_ds_stat_cache.h"
+#include "sql/ob_sql_ccl_rule_manager.h"
 
 namespace oceanbase
 {
@@ -40,6 +41,7 @@ class ObPartMgr;
 }
 namespace share
 {
+class ObExternalObject;
 namespace schema
 {
 class ObSchemaGetterGuard;
@@ -76,7 +78,9 @@ struct LocationConstraint
     // Partition pruning results in the base table involving only one first-level partition
     SinglePartition    = 1 << 1,
     // After partition pruning, each level one partition of the base table only involves one level two partition
-    SingleSubPartition = 1 << 2
+    SingleSubPartition = 1 << 2,
+    // is duplicate table not in dml
+    DupTabNotInDML     = 1 << 3
   };
   TableLocationKey key_;
   ObTableLocationType phy_loc_type_;
@@ -95,6 +99,7 @@ struct LocationConstraint
   inline bool is_multi_part_insert() const { return constraint_flags_ & IsMultiPartInsert; }
   inline bool is_partition_single() const { return constraint_flags_ & SinglePartition; }
   inline bool is_subpartition_single() const { return constraint_flags_ & SingleSubPartition; }
+  inline bool is_dup_table_not_in_dml() const {return constraint_flags_ & DupTabNotInDML; }
 
   bool operator==(const LocationConstraint &other) const;
 
@@ -114,7 +119,8 @@ struct ObLocationConstraintContext
   ObLocationConstraintContext()
       : base_table_constraints_(),
         strict_constraints_(),
-        non_strict_constraints_()
+        non_strict_constraints_(),
+        dup_table_replica_cons_()
   {
   }
   ~ObLocationConstraintContext()
@@ -126,7 +132,8 @@ struct ObLocationConstraintContext
 
   TO_STRING_KV(K_(base_table_constraints),
                K_(strict_constraints),
-               K_(non_strict_constraints));
+               K_(non_strict_constraints),
+               K_(dup_table_replica_cons));
   // Base table location constraint, including base tables on TABLE_SCAN operator and base tables on INSERT operator
   ObLocationConstraint base_table_constraints_;
   // Strict partition-wise join constraint, requires that the base table partitions within the same group are logically and physically equal.
@@ -135,6 +142,9 @@ struct ObLocationConstraintContext
   // Strict partition-wise join constraint, requires that the base table partitions within a group are physically equal.
   // Each group is an array, saving the offset of the corresponding base table in base_table_constraints_
   common::ObSEArray<ObPwjConstraint *, 8, common::ModulePageAllocator, true> non_strict_constraints_;
+  // constraints for duplicate table's replica selection
+  // if not found values in this array, just use local server's replica.
+  common::ObSEArray<ObDupTabConstraint, 1, common::ModulePageAllocator, true> dup_table_replica_cons_;
 };
 
 class ObIVtScannerableFactory;
@@ -145,6 +155,8 @@ class ObRawExpr;
 class ObSQLSessionInfo;
 
 class ObSelectStmt;
+class ObCCLRuleConcurrencyValueWrapper;
+
 class ObMultiStmtItem
 {
 public:
@@ -266,6 +278,21 @@ struct ObInsertRewriteOptCtx
   int64_t row_count_;
 };
 
+// Stub: ASH diagnostic subsystem has been removed.
+struct ObQueryRetryAshInfo
+{
+  void reset() {}
+};
+
+// Stub: ObQueryRetryAshGuard was used for ASH retry diagnostics tracking.
+class ObQueryRetryAshGuard
+{
+public:
+  static ObQueryRetryAshInfo *get_info_ptr() { return nullptr; }
+  static void set_info(ObQueryRetryAshInfo *) {}
+  static void reset_info() {}
+};
+
 class ObQueryRetryInfo
 {
 public:
@@ -273,7 +300,9 @@ public:
     : inited_(false),
       is_rpc_timeout_(false),
       last_query_retry_err_(common::OB_SUCCESS),
-      retry_cnt_(0)
+      retry_cnt_(0),
+      query_switch_leader_retry_timeout_ts_(0),
+      query_retry_ash_info_()
   {
   }
   virtual ~ObQueryRetryInfo() {}
@@ -294,11 +323,30 @@ public:
   {
     last_query_retry_err_ = last_query_retry_err;
   }
+  bool should_fast_fail()
+  {
+    bool fast_fail = false;
+    if (0 == query_switch_leader_retry_timeout_ts_) {
+      query_switch_leader_retry_timeout_ts_ = INT64_MAX;
+      // start timing from first retry, not from query start
+
+      int64_t timeout = GCONF.ob_query_switch_leader_retry_timeout;
+      if (timeout > 0) {
+        query_switch_leader_retry_timeout_ts_ = timeout + common::ObTimeUtility::current_time();
+      }
+
+    }
+    if (query_switch_leader_retry_timeout_ts_ < common::ObTimeUtility::current_time()) {
+      fast_fail = true;
+    }
+    return fast_fail;
+  }
   // 1. In the timeout scenario, try to feedback the error code from the last attempt, so that the reason for the error is understandable
-  // 2. In other scenarios, used to obtain the last error code to decide local retry behavior.
+  // 2. In other scenarios, used to obtain the last error code to decide local retry behavior (such as whether remote plan optimization should proceed)
   int get_last_query_retry_err() const { return last_query_retry_err_; }
   void inc_retry_cnt() { retry_cnt_++; }
   int64_t get_retry_cnt() const { return retry_cnt_; }
+  ObQueryRetryAshInfo& get_retry_ash_info() { return query_retry_ash_info_; }
 
   TO_STRING_KV(K_(inited), K_(is_rpc_timeout), K_(last_query_retry_err));
 
@@ -314,6 +362,9 @@ private:
   int last_query_retry_err_;
   // this value include local retry & packet retry
   int64_t retry_cnt_;
+  // for fast fail, 
+  int64_t query_switch_leader_retry_timeout_ts_;
+  ObQueryRetryAshInfo query_retry_ash_info_;
 private:
   DISALLOW_COPY_AND_ASSIGN(ObQueryRetryInfo);
 };
@@ -347,6 +398,25 @@ public:
                        const uint64_t table_id,
                        const share::schema::ObTableSchema *&table_schema,
                        bool is_link = false);
+  int get_catalog_database_schema(const uint64_t catalog_id,
+                                  const ObString &database_name,
+                                  const ObDatabaseSchema *&database_schema);
+  int get_catalog_database_id(const uint64_t catalog_id,
+                              const ObString &database_name,
+                              uint64_t &database_id);
+  int get_catalog_table_schema(const uint64_t catalog_id,
+                               const uint64_t database_id,
+                               const ObString &database_name,
+                               const ObString &tbl_name,
+                               const ObTableSchema *&table_schema);
+  int get_catalog_table_schema(const uint64_t catalog_id,
+                               const uint64_t database_id,
+                               const ObString &tbl_name,
+                               const ObTableSchema *&table_schema);
+  int get_catalog_table_id(const uint64_t catalog_id,
+                           const uint64_t database_id,
+                           const ObString &tbl_name,
+                           uint64_t &table_id);
   int get_column_schema(uint64_t table_id, const common::ObString &column_name,
                         const share::schema::ObColumnSchemaV2 *&column_schema,
                         bool is_link = false) const;
@@ -357,24 +427,48 @@ public:
   int get_can_read_index_array(uint64_t table_id,
                                uint64_t *index_tid_array,
                                int64_t &size,
+                               bool with_mv,
                                bool with_global_index = true,
                                bool with_domain_index = true,
                                bool with_spatial_index = true,
                                bool with_vector_index = true);
+  int get_table_mlog_schema(const uint64_t table_id, const ObTableSchema *&mlog_schema);
+  uint64_t get_next_mocked_schema_id() { return ++mocked_schema_id_counter_; }
+  int get_mocked_table_schema(uint64_t ref_table_id, const share::schema::ObTableSchema *&table_schema) const;
+  int add_mocked_table_schema(const share::schema::ObTableSchema &table_schema);
+  int add_mocked_database_schema(const share::schema::ObDatabaseSchema &database_schema);
+  int recover_schema_from_external_object(const share::ObExternalObject &external_object);
+  int recover_schema_from_external_objects(const ObIArray<share::ObExternalObject> &external_objects);
+  common::ObIArray<const share::schema::ObDatabaseSchema *> &get_mocked_database_schemas();
+  common::ObIArray<const share::schema::ObTableSchema *> &get_mocked_table_schemas();
 public:
 
 private:
   share::schema::ObSchemaGetterGuard *schema_guard_;
+  common::ObArenaAllocator allocator_;
+  common::ObSEArray<const share::schema::ObTableSchema *, 1> table_schemas_;
+  common::ObSEArray<const share::schema::ObDatabaseSchema *, 1> mocked_database_schemas_;
+  uint64_t next_link_table_id_;
+  int64_t mocked_schema_id_counter_;
 };
 
-struct ObSqlPlanKey
+struct ObBaselineKey
 {
-  ObSqlPlanKey()
+  ObBaselineKey()
   : db_id_(common::OB_INVALID_ID),
     constructed_sql_(),
     sql_id_(),
     format_sql_id_(),
     format_sql_() {}
+  ObBaselineKey(uint64_t db_id, const ObString &constructed_sql,
+                const ObString &sql_id, const ObString &format_sql_id,
+                const ObString &format_sql)
+  : db_id_(db_id),
+    constructed_sql_(constructed_sql),
+    sql_id_(sql_id),
+    format_sql_id_(format_sql_id),
+    format_sql_(format_sql) {}
+
   inline void reset()
   {
     db_id_ = common::OB_INVALID_ID;
@@ -480,6 +574,7 @@ public:
   bool is_dynamic_sql_;
   bool is_dbms_sql_;
   bool is_cursor_;
+  bool is_remote_sql_;
   uint64_t statement_id_;
   common::ObString cur_sql_;
   stmt::StmtType stmt_type_;
@@ -495,6 +590,10 @@ public:
   // Strict partition-wise join constraint, requires that the base table partitions within a group are physically equal.
   // Each group is an array, saving the offset of the corresponding base table in base_table_constraints_
   common::ObFixedArray<ObPwjConstraint *, common::ObIAllocator> non_strict_constraints_;
+  // constraints for duplicate table's replica selection
+  // if not found values in this array, just use local server's replica.
+  common::ObFixedArray<ObDupTabConstraint, common::ObIAllocator> dup_table_replica_cons_;
+
   // Constants constraints passed from resolver
   // all_possible_const_param_constraints_ indicates all possible constant constraints in this sql
   // all_plan_const_param_constraints_ indicates all constant constraints existing in this sql
@@ -516,9 +615,10 @@ public:
   const ObPhysicalPlan *cur_plan_;
 
   bool is_sensitive_;    // whether it contains sensitive information, if so, do not record in sql_audit
+  bool is_protocol_weak_read_; // record whether proxy set weak read for this request in protocol flag
   common::ObFixedArray<int64_t, common::ObIAllocator> multi_stmt_rowkey_pos_;
   ObRawExpr *snapshot_query_expr_;
-  ObSqlPlanKey plan_key_;
+  ObBaselineKey bl_key_;
   bool is_execute_call_stmt_;
   bool is_text_ps_mode_;
   uint64_t first_plan_hash_;
@@ -538,7 +638,11 @@ public:
     };
   };
   common::ObString raw_sql_;
+  uint64_t ccl_rule_id_;
+  uint64_t ccl_match_time_;
   common::ObString reconstruct_ps_sql_;
+  common::ObSEArray<ObCCLRuleConcurrencyValueWrapper*, 4> matched_ccl_rule_level_values_;
+  common::ObSEArray<ObCCLRuleConcurrencyValueWrapper*, 4> matched_ccl_format_sqlid_level_values_;
   TO_STRING_KV(K(stmt_type_));
 };
 
@@ -576,6 +680,7 @@ public:
       has_nested_sql_(false),
       tz_info_(NULL),
       root_stmt_(NULL),
+      optimizer_features_enable_version_(0),
       udf_flag_(0),
       injected_random_status_(false),
       ori_question_marks_count_(0),
@@ -620,6 +725,7 @@ public:
     tz_info_ = NULL;
     root_stmt_ = NULL;
     udf_flag_ = 0;
+    optimizer_features_enable_version_ = 0;
     ori_question_marks_count_ = 0;
     filter_ds_stat_cache_.reuse();
     type_demotion_flag_ = 0;
@@ -656,6 +762,13 @@ public:
   bool get_injected_random_status() const { return injected_random_status_; }
   void set_injected_random_status(bool injected_random_status) { injected_random_status_ = injected_random_status; }
   void set_random_plan_seed(uint64_t seed) {rand_gen_.seed(seed);}
+  // check whether optimizer_features_enable_version_ in [v1, v2) or [v3, v4) or ... or [vn, +inf)
+  template<typename... Args>
+  bool check_opt_compat_version(uint64_t v1, uint64_t v2, Args... args) const;
+  bool check_opt_compat_version(uint64_t v1) const { return optimizer_features_enable_version_ >= v1; }
+  bool check_opt_compat_version(uint64_t v1, uint64_t v2) const {
+    return optimizer_features_enable_version_ >= v1 && optimizer_features_enable_version_ < v2;
+  }
   void set_questionmark_count(int64_t count) {
     ori_question_marks_count_ = count;
     question_marks_count_ = count;
@@ -710,6 +823,7 @@ public:
   bool has_nested_sql_;
   const common::ObTimeZoneInfo *tz_info_;
   ObDMLStmt *root_stmt_;
+  uint64_t optimizer_features_enable_version_;
   union {
     int8_t udf_flag_;
     struct {
@@ -735,6 +849,12 @@ public:
   };
   bool has_hybrid_search_;
 };
+
+template<typename... Args>
+bool ObQueryCtx::check_opt_compat_version(uint64_t v1, uint64_t v2, Args... args) const
+{
+  return check_opt_compat_version(v1, v2) || check_opt_compat_version(args...);
+}
 
 } /* ns sql*/
 } /* ns oceanbase */

@@ -24,6 +24,7 @@
 #include "lib/allocator/ob_malloc.h"
 #include "common/ob_tablet_id.h"//ObTabletID
 #include "share/ob_rpc_struct.h"//ObBatchCreateTabletArg
+#include "share/ob_ls_id.h"//share::ObLSID
 #include "share/ob_ddl_common.h" // ObForkTabletInfo
 #include "common/mysqlclient/ob_mysql_transaction.h"
 #include "share/ob_define.h"
@@ -42,35 +43,43 @@ public:
   ObTabletCreatorArg()
    : tablet_ids_(),
      data_tablet_id_(),
+     ls_key_(),
      table_schemas_(),
+     compat_mode_(lib::Worker::CompatMode::INVALID),
      is_create_bind_hidden_tablets_(false),
-     data_format_version_(0),
+     tenant_data_version_(0),
      need_create_empty_majors_(),
      fork_tablet_infos_() {}
   virtual ~ObTabletCreatorArg() {}
   bool is_valid() const;
   int init(const ObIArray<common::ObTabletID> &tablet_ids,
+           const share::ObLSID &ls_key,
            const common::ObTabletID data_tablet_id,
            const ObIArray<const share::schema::ObTableSchema*> &table_schemas,
+           const lib::Worker::CompatMode &mode,
            const bool is_create_bind_hidden_tablets,
-           const uint64_t data_format_version,
+           const uint64_t tenant_data_version,
            const ObIArray<bool> &need_create_empty_majors,
            const ObIArray<int64_t> &create_commit_versions,
            const ObIArray<share::ObForkTabletInfo> &fork_tablet_infos);
   int init(const ObIArray<common::ObTabletID> &tablet_ids,
+           const share::ObLSID &ls_key,
            const common::ObTabletID data_tablet_id,
            const ObIArray<const share::schema::ObTableSchema*> &table_schemas,
+           const lib::Worker::CompatMode &mode,
            const bool is_create_bind_hidden_tablets,
-           const uint64_t data_format_version,
+           const uint64_t tenant_data_version,
            const ObIArray<bool> &need_create_empty_majors,
            const ObIArray<int64_t> &create_commit_versions);
 
   DECLARE_TO_STRING;
   common::ObArray<common::ObTabletID> tablet_ids_;
   common::ObTabletID data_tablet_id_;
+  share::ObLSID ls_key_;
   common::ObArray<const share::schema::ObTableSchema*> table_schemas_;
+  lib::Worker::CompatMode compat_mode_;
   bool is_create_bind_hidden_tablets_;
-  uint64_t data_format_version_;
+  uint64_t tenant_data_version_;
   common::ObArray<bool> need_create_empty_majors_;
   common::ObArray<int64_t> create_commit_versions_;
   common::ObArray<share::ObForkTabletInfo> fork_tablet_infos_;
@@ -84,32 +93,39 @@ public:
   ObBatchCreateTabletHelper()
     : batch_arg_(),
       table_schemas_map_(), 
+      auto_part_size_arr_(),
       result_(common::OB_NOT_MASTER), 
       next_(NULL)
   {}
-  int init(const share::SCN &major_frozen_scn,
+  int init(const share::ObLSID &ls_key,
+           const share::SCN &major_frozen_scn,
            const bool need_check_tablet_cnt);
   int try_add_table_schema(const share::schema::ObTableSchema *table_schema, 
-      const uint64_t data_format_version,
+      const uint64_t tenant_data_version,
       const bool need_create_empty_major_sstable,
-      int64_t &index);
+      int64_t &index,
+      const lib::Worker::CompatMode compat_mode);
   int add_arg_to_batch_arg(const ObTabletCreatorArg &arg);
   void reset()
   {
     batch_arg_.reset();
     table_schemas_map_.clear();
+    auto_part_size_arr_.reset();
     result_ = common::OB_NOT_MASTER;
   }
   DECLARE_TO_STRING;
   obcall::ObBatchCreateTabletArg batch_arg_;
   //table_id : index of table_schems_ in arg
   common::hash::ObHashMap<int64_t, int64_t> table_schemas_map_;
+  // if non-empty, auto_part_size_arr_[i] = auto_part_size of batch_arg_.table_schemas_[i]
+  ObArray<int64_t> auto_part_size_arr_;
   //the result of create tablet
   int result_;
   ObBatchCreateTabletHelper *next_;
 private:
   int add_table_schema_(const share::schema::ObTableSchema &table_schema,
-      const uint64_t data_format_version,
+      const lib::Worker::CompatMode compat_mode,
+      const uint64_t tenant_data_version,
       const bool need_create_empty_major,
       int64_t &index);
   DISALLOW_COPY_AND_ASSIGN(ObBatchCreateTabletHelper);
@@ -127,7 +143,7 @@ const static int64_t BATCH_ARG_SIZE = 1024 * 1024;  // 1M
       ObMySQLTransaction &trans)
                 : major_frozen_scn_(major_frozen_scn),
                   allocator_("TbtCret"),
-                  single_batch_arg_(NULL),
+                  args_map_(),
                   trans_(trans),
                   need_check_tablet_cnt_(false),
                   inited_(false) {}
@@ -135,12 +151,22 @@ const static int64_t BATCH_ARG_SIZE = 1024 * 1024;  // 1M
   virtual ~ObTabletCreator();
   int init(const bool need_check_tablet_cnt);
   int execute();
+  bool need_retry(int ret);
   int add_create_tablet_arg(const ObTabletCreatorArg &arg);
+  int modify_batch_args(const storage::ObTabletMdsUserDataType &create_type,
+                        const share::SCN &clog_checkpoint_scn,
+                        const share::SCN &mds_checkpoint_scn,
+                        const bool clear_auto_part_size);
   void reset();
 private:
+  int find_leader_of_ls(const share::ObLSID &id, ObAddr &addr);
+private:
+  const int64_t MAP_BUCKET_NUM = 1024;
+private:
+  
   const share::SCN major_frozen_scn_;
   ObArenaAllocator allocator_;
-  ObBatchCreateTabletHelper *single_batch_arg_;
+  common::hash::ObHashMap<share::ObLSID, ObBatchCreateTabletHelper*> args_map_;
   ObMySQLTransaction &trans_;
   bool need_check_tablet_cnt_;
   bool inited_;

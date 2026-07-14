@@ -17,7 +17,7 @@
 #ifndef OB_PARTITION_MERGE_POLICY_H_
 #define OB_PARTITION_MERGE_POLICY_H_
 
-#include "storage/compaction/ob_freeze_info_mgr.h"
+#include "storage/compaction/ob_tenant_freeze_info_mgr.h"
 #include "storage/compaction/ob_compaction_util.h"
 #include "share/ob_table_range.h"
 #include "observer/scheduler/ob_diagnose_config.h"
@@ -148,13 +148,14 @@ private:
   static int refine_minor_merge_result(
       const ObMergeType merge_type,
       const int64_t minor_compact_trigger,
+      const bool is_tablet_referenced_by_collect_mv,
       storage::ObGetMergeTablesResult &result);
   static int deal_with_minor_result(
       const compaction::ObMergeType &merge_type,
       storage::ObLS &ls,
       const storage::ObTablet &tablet,
       storage::ObGetMergeTablesResult &result);
-  static int64_t cal_hist_minor_merge_threshold();
+  static int64_t cal_hist_minor_merge_threshold(const bool is_tablet_referenced_by_collect_mv = false);
   static int generate_input_result_array(
       const storage::ObGetMergeTablesResult &input_result,
       ObMinorExecuteRangeMgr &minor_range_mgr,
@@ -173,6 +174,7 @@ private:
   // diagnose part
   static int diagnose_minor_dag(
       compaction::ObMergeType merge_type,
+      const share::ObLSID ls_id,
       const common::ObTabletID tablet_id,
       char *buf,
       const int64_t buf_len);
@@ -209,6 +211,7 @@ struct ObMinorExecuteRangeMgr
   }
 
   int get_merge_ranges(
+      const share::ObLSID &ls_id,
       const common::ObTabletID &tablet_id);
   bool in_execute_range(const storage::ObITable *table) const;
   int sort_ranges();
@@ -226,7 +229,7 @@ public:
     TOMBSTONE_SCENE = 2,
     INEFFICIENT_QUERY = 3,
     FREQUENT_WRITE = 4,
-    DATABASE_MAJOR = 5,
+    TENANT_MAJOR = 5,
     USER_REQUEST = 6,
     CRAZY_MEDIUM_FOR_TEST = 7,
     // no incremental data(MEMTABLE/MINI/MINOR) after last major

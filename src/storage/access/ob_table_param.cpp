@@ -568,7 +568,9 @@ ObTableParam::ObTableParam(ObIAllocator &allocator)
     is_multivalue_index_(false),
     is_vec_index_(false),
     is_partition_table_(false),
+    is_mlog_table_(false),
     is_enable_semistruct_encoding_(false),
+    is_safe_filter_with_di_(true),
     access_virtual_col_cnt_(0)
 {
   reset();
@@ -597,7 +599,9 @@ void ObTableParam::reset()
   is_multivalue_index_ = false;
   is_vec_index_ = false;
   is_partition_table_ = false;
+  is_mlog_table_ = false;
   is_enable_semistruct_encoding_ = false;
+  is_safe_filter_with_di_ = true;
   access_virtual_col_cnt_ = 0;
 }
 
@@ -635,7 +639,9 @@ OB_DEF_SERIALIZE(ObTableParam)
   }
   if (OB_SUCC(ret)) {
     LST_DO_CODE(OB_UNIS_ENCODE,
+                is_mlog_table_,
                 is_enable_semistruct_encoding_,
+                is_safe_filter_with_di_,
                 access_virtual_col_cnt_);
   }
   return ret;
@@ -704,7 +710,9 @@ OB_DEF_DESERIALIZE(ObTableParam)
   }
   if (OB_SUCC(ret)) {
     LST_DO_CODE(OB_UNIS_DECODE,
+                is_mlog_table_,
                 is_enable_semistruct_encoding_,
+                is_safe_filter_with_di_,
                 access_virtual_col_cnt_);
   }
   return ret;
@@ -750,7 +758,9 @@ OB_DEF_SERIALIZE_SIZE(ObTableParam)
   }
   if (OB_SUCC(ret)) {
     LST_DO_CODE(OB_UNIS_ADD_LEN,
+                is_mlog_table_,
                 is_enable_semistruct_encoding_,
+                is_safe_filter_with_di_,
                 access_virtual_col_cnt_);
   }
   return len;
@@ -947,9 +957,15 @@ int ObTableParam::construct_columns_and_projector(
         LOG_WARN("alloc column failed", K(ret), K(i));
       } else if (OB_UNLIKELY(common::OB_HIDDEN_TRANS_VERSION_COLUMN_ID == column_id) ||
                  common::OB_HIDDEN_SQL_SEQUENCE_COLUMN_ID == column_id ||
+                  common::OB_MAJOR_REFRESH_MVIEW_OLD_NEW_COLUMN_ID == column_id ||
                  common::OB_HIDDEN_GROUP_IDX_COLUMN_ID == column_id) {
         ObObjMeta meta_type;
-        meta_type.set_int();
+        if (common::OB_MAJOR_REFRESH_MVIEW_OLD_NEW_COLUMN_ID == column_id) {
+          meta_type.set_varchar();
+          meta_type.set_collation_type(ObCollationType::CS_TYPE_UTF8MB4_GENERAL_CI);
+        } else {
+          meta_type.set_int();
+        }
         column->set_column_id(column_id);
         column->set_meta_type(meta_type);
         col_index = -1;
@@ -1064,7 +1080,8 @@ int ObTableParam::construct_columns_and_projector(
                                      &tmp_access_cols_index,
                                      &tmp_access_cols_param,
                                      &tmp_access_cols_extend,
-                                     need_truncate_filter))) {
+                                     need_truncate_filter,
+                                     table_schema.is_delete_insert_merge_engine()))) {
       LOG_WARN("fail to init main read info", K(ret));
     } else if (OB_FAIL(output_projector_.assign(tmp_output_projector))) {
       LOG_WARN("assign failed", K(ret));
@@ -1247,7 +1264,7 @@ int ObTableParam::construct_lob_locator_param(const ObTableSchema &table_schema,
         }
       }
     }
-    // A virtual table may omit primary-key columns, for example a session-variable view.
+    // Virtual table may not contain primary key columns, i.e. TENANT_VIRTUAL_SESSION_VARIABLE.
     // When access such virtual table, get_column_ids_serialize_to_rowid may return failure because
     // of the null rowkey info. So here skip the lob locator.
     if (use_lob_locator && 0 == rowkey_count) {
@@ -1334,6 +1351,16 @@ int ObTableParam::convert_column_schema_to_param(const ObColumnSchemaV2 &column_
     if (OB_SUCC(ret)) {
       ret = column_param.set_cur_default_value(nop_obj);
     }
+  } else if (column_schema.is_identity_column()) {
+    // Identity colunm's orig_default_value and cur_default_val are used to store sequence id
+    // and desc table, it does not have the same semantics as normal default. so here we set
+    // its default value as null to avoid type mismatch.
+    ObObj null_obj;
+    null_obj.set_null();
+    ret = column_param.set_orig_default_value(null_obj);
+    if (OB_SUCC(ret)) {
+      ret = column_param.set_cur_default_value(null_obj);
+    }
   } else {
     ret = column_param.set_orig_default_value(column_schema.get_orig_default_value());
     if (OB_SUCC(ret)) {
@@ -1355,6 +1382,42 @@ int ObTableParam::convert_fulltext_index_info(const ObTableSchema &table_schema)
   return ret;
 }
 
+int ObTableParam::check_is_safe_filter_with_di(
+    common::ObIArray<sql::ObRawExpr *> &exprs,
+    sql::ObPushdownFilterNode &pushdown_filters)
+{
+  int ret = OB_SUCCESS;
+  bool has_lob_column_out = false;
+  is_safe_filter_with_di_ = true;
+  if (OB_UNLIKELY(!main_read_info_.is_valid())) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("Unexpected not valid read info", K(ret), K_(main_read_info));
+  } else {
+    const ObColDescIArray &out_cols = main_read_info_.get_columns_desc();
+    for (int64_t i = 0; !has_lob_column_out && i < out_cols.count(); i++) {
+      has_lob_column_out = (is_lob_storage(out_cols.at(i).col_type_.get_type()));
+    }
+    if (has_lob_column_out) {
+      for (int64_t i = 0; OB_SUCC(ret) && is_safe_filter_with_di_ && i < exprs.count(); i++) {
+        const sql::ObRawExpr *expr = exprs.at(i);
+        if (OB_ISNULL(expr)) {
+          ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("Unexpected null filter expr", K(ret), K(exprs));
+        } else if (expr->is_topn_filter()) {
+          is_safe_filter_with_di_ = false;
+        }
+      }
+    }
+    if (OB_SUCC(ret) && is_safe_filter_with_di_) {
+      if (OB_FAIL(pushdown_filters.check_filter_info(main_read_info_,
+                                                     is_safe_filter_with_di_))) {
+        LOG_WARN("Fail to check filter info", K(ret));
+      }
+    }
+  }
+  return ret;
+}
+
 int64_t ObTableParam::to_string(char *buf, const int64_t buf_len) const
 {
   int64_t pos = 0;
@@ -1372,7 +1435,9 @@ int64_t ObTableParam::to_string(char *buf, const int64_t buf_len) const
        K_(parser_name),
        K_(parser_properties),
        K_(is_vec_index),
+       K_(is_mlog_table),
        K_(is_enable_semistruct_encoding),
+       K_(is_safe_filter_with_di),
        K_(access_virtual_col_cnt));
   J_OBJ_END();
 

@@ -7,7 +7,7 @@ id	field	type	length	precision	nullable
 19	row_id	5	0	20	0
 20	column_name	22	128	-1	0
 21	column_value	22	65536	-1	1
-table oceanbase.__all_table column_count 97 table_id 3
+table oceanbase.__all_table column_count 95 table_id 3
 select column_id id, column_name field, data_type type, data_length length, data_precision `precision`, nullable from __all_virtual_core_column_table where table_id=3 order by column_id;
 id	field	type	length	precision	nullable
 16	gmt_create	18	0	25	1
@@ -90,23 +90,21 @@ id	field	type	length	precision	nullable
 93	kv_attributes	22	262144	-1	0
 94	name_generated_type	5	0	20	0
 95	lob_inrow_threshold	5	0	20	0
-96	max_used_column_group_id	5	0	20	0
-97	column_store	5	0	20	0
-98	auto_increment_cache_size	5	0	20	0
-99	external_properties	22	1048576	-1	1
-100	local_session_vars	30	536870911	-1	1
-101	duplicate_read_consistency	5	0	20	0
-102	index_params	22	256	-1	0
-103	micro_index_clustered	1	0	4	0
-104	mv_mode	5	0	20	0
-105	parser_properties	30	536870911	-1	0
-106	enable_macro_block_bloom_filter	1	0	4	0
-107	storage_cache_policy	22	1048576	-1	0
-108	merge_engine_type	5	0	20	0
-109	semistruct_encoding_type	5	0	20	0
-110	dynamic_partition_policy	22	4096	-1	0
-111	external_location_id	5	0	20	0
-112	external_sub_path	22	1048576	-1	1
+96	auto_increment_cache_size	5	0	20	0
+97	external_properties	22	1048576	-1	1
+98	local_session_vars	30	536870911	-1	1
+99	duplicate_read_consistency	5	0	20	0
+100	index_params	22	256	-1	0
+101	micro_index_clustered	1	0	4	0
+102	mv_mode	5	0	20	0
+103	parser_properties	30	536870911	-1	0
+104	enable_macro_block_bloom_filter	1	0	4	0
+105	storage_cache_policy	22	1048576	-1	0
+106	merge_engine_type	5	0	20	0
+107	semistruct_encoding_type	5	0	20	0
+108	dynamic_partition_policy	22	4096	-1	0
+109	external_location_id	5	0	20	0
+110	external_sub_path	22	1048576	-1	1
 table oceanbase.__all_column column_count 34 table_id 4
 select column_id id, column_name field, data_type type, data_length length, data_precision `precision`, nullable from __all_virtual_core_column_table where table_id=4 order by column_id;
 id	field	type	length	precision	nullable
@@ -405,7 +403,7 @@ id	field	type	length	precision	nullable
 31	priv_create_view	5	0	20	1
 32	priv_show_view	5	0	20	1
 33	priv_others	5	0	20	1
-table oceanbase.__all_table_history column_count 98 table_id 114
+table oceanbase.__all_table_history column_count 96 table_id 114
 select column_id id, column_name field, data_type type, data_length length, data_precision `precision`, nullable from __all_column where table_id=114 order by column_id;
 id	field	type	length	precision	nullable
 16	gmt_create	18	0	25	1
@@ -489,23 +487,21 @@ id	field	type	length	precision	nullable
 94	kv_attributes	22	262144	-1	1
 95	name_generated_type	5	0	20	1
 96	lob_inrow_threshold	5	0	20	1
-97	max_used_column_group_id	5	0	20	1
-98	column_store	5	0	20	1
-99	auto_increment_cache_size	5	0	20	1
-100	external_properties	22	1048576	-1	1
-101	local_session_vars	30	536870911	-1	1
-102	duplicate_read_consistency	5	0	20	1
-103	index_params	22	256	-1	1
-104	micro_index_clustered	1	0	4	1
-105	mv_mode	5	0	20	1
-106	parser_properties	30	536870911	-1	1
-107	enable_macro_block_bloom_filter	1	0	4	1
-108	storage_cache_policy	22	1048576	-1	1
-109	merge_engine_type	5	0	20	1
-110	semistruct_encoding_type	5	0	20	1
-111	dynamic_partition_policy	22	4096	-1	1
-112	external_location_id	5	0	20	1
-113	external_sub_path	22	1048576	-1	1
+97	auto_increment_cache_size	5	0	20	1
+98	external_properties	22	1048576	-1	1
+99	local_session_vars	30	536870911	-1	1
+100	duplicate_read_consistency	5	0	20	1
+101	index_params	22	256	-1	1
+102	micro_index_clustered	1	0	4	1
+103	mv_mode	5	0	20	1
+104	parser_properties	30	536870911	-1	1
+105	enable_macro_block_bloom_filter	1	0	4	1
+106	storage_cache_policy	22	1048576	-1	1
+107	merge_engine_type	5	0	20	1
+108	semistruct_encoding_type	5	0	20	1
+109	dynamic_partition_policy	22	4096	-1	1
+110	external_location_id	5	0	20	1
+111	external_sub_path	22	1048576	-1	1
 table oceanbase.__all_column_history column_count 35 table_id 115
 select column_id id, column_name field, data_type type, data_length length, data_precision `precision`, nullable from __all_column where table_id=115 order by column_id;
 id	field	type	length	precision	nullable
@@ -1616,7 +1612,7 @@ id	field	type	length	precision	nullable
 38	spare5	22	4096	-1	1
 39	spare6	22	4096	-1	1
 40	index_type	1	0	4	0
-table oceanbase.__all_column_stat column_count 31 table_id 329
+table oceanbase.__all_column_stat column_count 28 table_id 329
 select column_id id, column_name field, data_type type, data_length length, data_precision `precision`, nullable from __all_column where table_id=329 order by column_id;
 id	field	type	length	precision	nullable
 16	gmt_create	18	0	25	1
@@ -1647,9 +1643,6 @@ id	field	type	length	precision	nullable
 41	spare4	22	4096	-1	1
 42	spare5	22	4096	-1	1
 43	spare6	22	4096	-1	1
-44	cg_macro_blk_cnt	5	0	20	0
-45	cg_micro_blk_cnt	5	0	20	0
-46	cg_skip_rate	12	0	-1	1
 table oceanbase.__all_histogram_stat column_count 11 table_id 330
 select column_id id, column_name field, data_type type, data_length length, data_precision `precision`, nullable from __all_column where table_id=330 order by column_id;
 id	field	type	length	precision	nullable
@@ -1705,7 +1698,7 @@ id	field	type	length	precision	nullable
 37	spare6	22	4096	-1	1
 38	index_type	1	0	4	0
 39	stattype_locked	5	0	20	1
-table oceanbase.__all_column_stat_history column_count 31 table_id 333
+table oceanbase.__all_column_stat_history column_count 28 table_id 333
 select column_id id, column_name field, data_type type, data_length length, data_precision `precision`, nullable from __all_column where table_id=333 order by column_id;
 id	field	type	length	precision	nullable
 16	gmt_create	18	0	25	1
@@ -1736,9 +1729,6 @@ id	field	type	length	precision	nullable
 41	spare4	22	4096	-1	1
 42	spare5	22	4096	-1	1
 43	spare6	22	4096	-1	1
-44	cg_macro_blk_cnt	5	0	20	0
-45	cg_micro_blk_cnt	5	0	20	0
-46	cg_skip_rate	12	0	-1	1
 table oceanbase.__all_histogram_stat_history column_count 18 table_id 334
 select column_id id, column_name field, data_type type, data_length length, data_precision `precision`, nullable from __all_column where table_id=334 order by column_id;
 id	field	type	length	precision	nullable
@@ -2015,50 +2005,6 @@ id	field	type	length	precision	nullable
 27	maxY	15	0	38	1
 28	proj4text	22	2048	-1	1
 29	description	22	2048	-1	1
-table oceanbase.__all_column_group column_count 9 table_id 419
-select column_id id, column_name field, data_type type, data_length length, data_precision `precision`, nullable from __all_column where table_id=419 order by column_id;
-id	field	type	length	precision	nullable
-16	gmt_create	18	0	25	1
-17	gmt_modified	18	0	25	1
-18	table_id	5	0	20	0
-19	column_group_id	5	0	20	0
-20	column_group_name	22	389	-1	0
-21	column_group_type	5	0	20	0
-22	block_size	5	0	20	0
-23	compressor_type	5	0	20	0
-24	row_store_type	5	0	20	0
-table oceanbase.__all_column_group_history column_count 11 table_id 420
-select column_id id, column_name field, data_type type, data_length length, data_precision `precision`, nullable from __all_column where table_id=420 order by column_id;
-id	field	type	length	precision	nullable
-16	gmt_create	18	0	25	1
-17	gmt_modified	18	0	25	1
-18	table_id	5	0	20	0
-19	column_group_id	5	0	20	0
-20	schema_version	5	0	20	0
-21	is_deleted	5	0	20	0
-22	column_group_name	22	389	-1	1
-23	column_group_type	5	0	20	1
-24	block_size	5	0	20	1
-25	compressor_type	5	0	20	1
-26	row_store_type	5	0	20	1
-table oceanbase.__all_column_group_mapping column_count 5 table_id 421
-select column_id id, column_name field, data_type type, data_length length, data_precision `precision`, nullable from __all_column where table_id=421 order by column_id;
-id	field	type	length	precision	nullable
-16	gmt_create	18	0	25	1
-17	gmt_modified	18	0	25	1
-18	table_id	5	0	20	0
-19	column_group_id	5	0	20	0
-20	column_id	5	0	20	0
-table oceanbase.__all_column_group_mapping_history column_count 7 table_id 422
-select column_id id, column_name field, data_type type, data_length length, data_precision `precision`, nullable from __all_column where table_id=422 order by column_id;
-id	field	type	length	precision	nullable
-16	gmt_create	18	0	25	1
-17	gmt_modified	18	0	25	1
-18	table_id	5	0	20	0
-19	column_group_id	5	0	20	0
-20	column_id	5	0	20	0
-21	schema_version	5	0	20	0
-22	is_deleted	5	0	20	0
 table oceanbase.__all_data_dictionary_in_log column_count 5 table_id 431
 select column_id id, column_name field, data_type type, data_length length, data_precision `precision`, nullable from __all_column where table_id=431 order by column_id;
 id	field	type	length	precision	nullable
@@ -3173,7 +3119,7 @@ id	field	type	length	precision	nullable
 36	gtrid	22	128	-1	1
 37	bqual	22	128	-1	1
 38	format_id	5	0	20	0
-table oceanbase.__all_virtual_core_all_table column_count 95 table_id 11035
+table oceanbase.__all_virtual_core_all_table column_count 93 table_id 11035
 select column_id id, column_name field, data_type type, data_length length, data_precision `precision`, nullable from __all_column where table_id=11035 order by column_id;
 id	field	type	length	precision	nullable
 16	table_id	5	0	20	0
@@ -3254,23 +3200,21 @@ id	field	type	length	precision	nullable
 91	kv_attributes	22	262144	-1	0
 92	name_generated_type	5	0	20	0
 93	lob_inrow_threshold	5	0	20	0
-94	max_used_column_group_id	5	0	20	0
-95	column_store	5	0	20	0
-96	auto_increment_cache_size	5	0	20	0
-97	external_properties	22	1048576	-1	1
-98	local_session_vars	30	536870911	-1	1
-99	duplicate_read_consistency	5	0	20	0
-100	index_params	22	256	-1	0
-101	micro_index_clustered	1	0	4	0
-102	mv_mode	5	0	20	0
-103	parser_properties	30	536870911	-1	0
-104	enable_macro_block_bloom_filter	1	0	4	0
-105	storage_cache_policy	22	1048576	-1	0
-106	merge_engine_type	5	0	20	0
-107	semistruct_encoding_type	5	0	20	0
-108	dynamic_partition_policy	22	4096	-1	0
-109	external_location_id	5	0	20	0
-110	external_sub_path	22	1048576	-1	1
+94	auto_increment_cache_size	5	0	20	0
+95	external_properties	22	1048576	-1	1
+96	local_session_vars	30	536870911	-1	1
+97	duplicate_read_consistency	5	0	20	0
+98	index_params	22	256	-1	0
+99	micro_index_clustered	1	0	4	0
+100	mv_mode	5	0	20	0
+101	parser_properties	30	536870911	-1	0
+102	enable_macro_block_bloom_filter	1	0	4	0
+103	storage_cache_policy	22	1048576	-1	0
+104	merge_engine_type	5	0	20	0
+105	semistruct_encoding_type	5	0	20	0
+106	dynamic_partition_policy	22	4096	-1	0
+107	external_location_id	5	0	20	0
+108	external_sub_path	22	1048576	-1	1
 table oceanbase.__all_virtual_core_column_table column_count 32 table_id 11036
 select column_id id, column_name field, data_type type, data_length length, data_precision `precision`, nullable from __all_column where table_id=11036 order by column_id;
 id	field	type	length	precision	nullable
@@ -3401,7 +3345,7 @@ id	field	type	length	precision	nullable
 22	sql_text	30	536870911	-1	0
 23	concurrent_num	5	0	20	0
 24	limit_target	30	536870911	-1	0
-table oceanbase.__all_virtual_tablet_sstable_macro_info column_count 19 table_id 11056
+table oceanbase.__all_virtual_tablet_sstable_macro_info column_count 18 table_id 11056
 select column_id id, column_name field, data_type type, data_length length, data_precision `precision`, nullable from __all_column where table_id=11056 order by column_id;
 id	field	type	length	precision	nullable
 16	tablet_id	5	0	20	0
@@ -3422,7 +3366,6 @@ id	field	type	length	precision	nullable
 31	macro_block_type	22	4096	-1	0
 32	compressor_name	22	128	-1	0
 33	row_store_type	22	128	-1	0
-34	cg_idx	5	0	20	0
 table oceanbase.__all_virtual_sys_task_status column_count 5 table_id 11071
 select column_id id, column_name field, data_type type, data_length length, data_precision `precision`, nullable from __all_column where table_id=11071 order by column_id;
 id	field	type	length	precision	nullable
@@ -3626,7 +3569,7 @@ id	field	type	length	precision	nullable
 24	start_time	18	0	25	0
 25	estimated_finish_time	18	0	25	0
 26	comments	22	1024	-1	0
-table oceanbase.__all_virtual_tablet_compaction_progress column_count 13 table_id 11108
+table oceanbase.__all_virtual_tablet_compaction_progress column_count 11 table_id 11108
 select column_id id, column_name field, data_type type, data_length length, data_precision `precision`, nullable from __all_column where table_id=11108 order by column_id;
 id	field	type	length	precision	nullable
 16	type	22	64	-1	0
@@ -3640,8 +3583,6 @@ id	field	type	length	precision	nullable
 24	create_time	18	0	25	0
 25	start_time	18	0	25	0
 26	estimated_finish_time	18	0	25	0
-27	start_cg_id	5	0	20	0
-28	end_cg_id	5	0	20	0
 table oceanbase.__all_virtual_compaction_diagnose_info column_count 5 table_id 11109
 select column_id id, column_name field, data_type type, data_length length, data_precision `precision`, nullable from __all_column where table_id=11109 order by column_id;
 id	field	type	length	precision	nullable
@@ -3683,7 +3624,7 @@ id	field	type	length	precision	nullable
 35	trans_state	22	32	-1	1
 36	user_client_port	5	0	20	0
 37	total_cpu_time	12	0	-1	0
-table oceanbase.__all_virtual_tablet_compaction_history column_count 34 table_id 11112
+table oceanbase.__all_virtual_tablet_compaction_history column_count 31 table_id 11112
 select column_id id, column_name field, data_type type, data_length length, data_precision `precision`, nullable from __all_column where table_id=11112 order by column_id;
 id	field	type	length	precision	nullable
 16	tablet_id	5	0	20	0
@@ -3708,18 +3649,15 @@ id	field	type	length	precision	nullable
 35	participant_table	22	512	-1	0
 36	macro_id_list	22	256	-1	0
 37	comments	22	1024	-1	0
-38	start_cg_id	5	0	20	0
-39	end_cg_id	5	0	20	0
-40	kept_snapshot	22	128	-1	0
-41	merge_level	22	64	-1	0
-42	exec_mode	22	64	-1	0
-43	is_full_merge	1	0	4	0
-44	io_cost_time_percentage	5	0	20	0
-45	merge_reason	22	32	-1	0
-46	base_major_status	22	64	-1	0
-47	co_merge_type	22	64	-1	0
-48	mds_filter_info	22	1024	-1	0
-49	execute_time	5	0	20	0
+38	kept_snapshot	22	128	-1	0
+39	merge_level	22	64	-1	0
+40	exec_mode	22	64	-1	0
+41	is_full_merge	1	0	4	0
+42	io_cost_time_percentage	5	0	20	0
+43	merge_reason	22	32	-1	0
+44	base_major_status	22	64	-1	0
+45	mds_filter_info	22	1024	-1	0
+46	execute_time	5	0	20	0
 table oceanbase.__all_virtual_io_calibration_status column_count 4 table_id 11113
 select column_id id, column_name field, data_type type, data_length length, data_precision `precision`, nullable from __all_column where table_id=11113 order by column_id;
 id	field	type	length	precision	nullable
@@ -3934,7 +3872,7 @@ id	field	type	length	precision	nullable
 21	mt_protection_clock	5	0	20	0
 22	address	22	32	-1	0
 23	ref_count	5	0	20	0
-table oceanbase.__all_virtual_table_mgr column_count 17 table_id 12034
+table oceanbase.__all_virtual_table_mgr column_count 16 table_id 12034
 select column_id id, column_name field, data_type type, data_length length, data_precision `precision`, nullable from __all_column where table_id=12034 order by column_id;
 id	field	type	length	precision	nullable
 16	table_type	5	0	20	0
@@ -3951,9 +3889,8 @@ id	field	type	length	precision	nullable
 27	contain_uncommitted_row	22	3	-1	0
 28	nested_offset	5	0	20	0
 29	nested_size	5	0	20	0
-30	cg_idx	5	0	20	0
-31	data_checksum	5	0	20	0
-32	table_flag	5	0	20	0
+30	data_checksum	5	0	20	0
+31	table_flag	5	0	20	0
 table oceanbase.__all_virtual_bad_block_table column_count 6 table_id 12038
 select column_id id, column_name field, data_type type, data_length length, data_precision `precision`, nullable from __all_column where table_id=12038 order by column_id;
 id	field	type	length	precision	nullable
@@ -4431,7 +4368,7 @@ id	field	type	length	precision	nullable
 30	arbitration_member	22	128	-1	0
 31	degraded_list	22	1024	-1	0
 32	learner_list	30	536870911	-1	0
-table oceanbase.__all_virtual_tablet_replica_checksum column_count 8 table_id 12258
+table oceanbase.__all_virtual_tablet_replica_checksum column_count 7 table_id 12258
 select column_id id, column_name field, data_type type, data_length length, data_precision `precision`, nullable from __all_column where table_id=12258 order by column_id;
 id	field	type	length	precision	nullable
 16	tablet_id	5	0	20	0
@@ -4441,7 +4378,6 @@ id	field	type	length	precision	nullable
 20	column_checksums	22	256	-1	1
 21	b_column_checksums	22	65536	-1	1
 22	data_checksum_type	5	0	20	0
-23	co_base_snapshot_version	10	0	20	0
 table oceanbase.__all_virtual_unit column_count 14 table_id 12274
 select column_id id, column_name field, data_type type, data_length length, data_precision `precision`, nullable from __all_column where table_id=12274 order by column_id;
 id	field	type	length	precision	nullable
@@ -5206,14 +5142,6 @@ id	field	type	length	precision	nullable
 52	aggregate_read_io_cnt	5	0	20	0
 53	total_wbp_page_read_cnt	5	0	20	0
 54	wbp_page_hits	5	0	20	0
-table oceanbase.__all_virtual_cs_replica_tablet_stats column_count 5 table_id 12513
-select column_id id, column_name field, data_type type, data_length length, data_precision `precision`, nullable from __all_column where table_id=12513 order by column_id;
-id	field	type	length	precision	nullable
-16	tablet_id	5	0	20	0
-17	macro_block_cnt	5	0	20	0
-18	is_cs	1	0	4	0
-19	is_cs_replica	1	0	4	0
-20	available	1	0	4	0
 table oceanbase.__all_virtual_ddl_diagnose_info column_count 6 table_id 12514
 select column_id id, column_name field, data_type type, data_length length, data_precision `precision`, nullable from __all_column where table_id=12514 order by column_id;
 id	field	type	length	precision	nullable

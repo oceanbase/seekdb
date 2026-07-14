@@ -30,7 +30,6 @@
 #include "sql/resolver/expr/ob_raw_expr_copier.h"
 #include "sql/resolver/dml/ob_stmt_expr_visitor.h"
 #include "observer/vector_index/ob_vector_index_param.h"
-#include "share/ob_i_tablet_scan.h"
 
 namespace oceanbase
 {
@@ -45,7 +44,8 @@ enum MulModeTableType {
   INVALID_TABLE_TYPE = 0,
   OB_ORA_JSON_TABLE_TYPE, // 1
   OB_ORA_XML_TABLE_TYPE = 2,
-  OB_UNNEST_TABLE_TYPE = 3,
+  OB_RB_ITERATE_TABLE_TYPE = 3,
+  OB_UNNEST_TABLE_TYPE = 4,
 };
 
 typedef struct ObJtColBaseInfo
@@ -144,6 +144,9 @@ struct TableItem
     for_update_ = false;
     for_update_wait_us_ = -1;
     skip_locked_ = false;
+    need_expand_rt_mv_ = false;
+    mview_id_ = common::OB_INVALID_ID;
+    mr_mv_flags_ = 0;
     node_ = NULL;
     view_base_item_ = NULL;
     snapshot_query_expr_ = nullptr;
@@ -155,6 +158,8 @@ struct TableItem
     table_type_ = MAX_TABLE_TYPE;
     values_table_def_ = NULL;
     sample_info_ = nullptr;
+    // assign default value for compatibility
+    catalog_name_ = OB_INTERNAL_CATALOG_NAME;
   }
 
   virtual TO_STRING_KV(N_TID, table_id_,
@@ -176,7 +181,8 @@ struct TableItem
                K_(is_view_table), K_(part_ids), K_(part_names), K_(cte_type),
                KPC_(function_table_expr),
                K_(snapshot_query_type), KPC_(snapshot_query_expr), K_(table_type),
-               K_(exec_params), KPC_(sample_info));
+               K_(exec_params), KPC_(sample_info), K_(mview_id), K_(need_expand_rt_mv),
+               K_(catalog_name));
 
   enum TableType
   {
@@ -291,6 +297,9 @@ struct TableItem
   bool for_update_;
   int64_t for_update_wait_us_;//0 means nowait, -1 means infinite
   bool skip_locked_;
+  bool need_expand_rt_mv_; // for real-time materialized view
+  uint64_t mview_id_; // for materialized view, ref_id_ is mv container table id, mview_id_ is the view id
+  uint64_t mr_mv_flags_; // for major refresh mview
   const ParseNode* node_;
   // base table item for updatable view, can not access after the resolve phase
   const TableItem *view_base_item_;
@@ -307,6 +316,7 @@ struct TableItem
   ObJsonTableDef *json_table_def_;
   // values table
   ObValuesTableDef *values_table_def_;
+  common::ObString catalog_name_;
   // sample scan infos
   SampleInfo *sample_info_;
 };
@@ -889,6 +899,20 @@ public:
   int get_table_items(common::ObIArray<int64_t> &table_ids) const;
   int get_CTE_table_items(ObIArray<TableItem *> &cte_table_items) const;
   int get_all_CTE_table_items_recursive(ObIArray<TableItem *> &cte_table_items) const;
+  const common::ObIArray<uint64_t> &get_nextval_sequence_ids() const { return nextval_sequence_ids_; }
+  common::ObIArray<uint64_t> &get_nextval_sequence_ids() { return nextval_sequence_ids_; }
+  const common::ObIArray<uint64_t> &get_currval_sequence_ids() const { return currval_sequence_ids_; }
+  common::ObIArray<uint64_t> &get_currval_sequence_ids() { return currval_sequence_ids_; }
+  int add_nextval_sequence_id(uint64_t id) { return nextval_sequence_ids_.push_back(id); }
+  int add_currval_sequence_id(uint64_t id) { return currval_sequence_ids_.push_back(id); }
+  bool has_sequence() const { return nextval_sequence_ids_.count() > 0 || currval_sequence_ids_.count() > 0; }
+  void clear_sequence()
+  {
+    nextval_sequence_ids_.reset();
+    currval_sequence_ids_.reset();
+  }
+  bool has_part_key_sequence() const { return has_part_key_sequence_; }
+  void set_has_part_key_sequence(const bool v) { has_part_key_sequence_ = v; }
   int add_condition_expr(ObRawExpr *expr) { return condition_exprs_.push_back(expr); }
   int add_condition_exprs(const common::ObIArray<ObRawExpr*> &exprs) { return append(condition_exprs_, exprs); }
   //move from ObStmt
@@ -984,6 +1008,8 @@ public:
                N_TABLE, table_items_,
                N_PARTITION_EXPR, part_expr_items_,
                N_COLUMN, column_items_,
+               N_COLUMN, nextval_sequence_ids_,
+               N_COLUMN, currval_sequence_ids_,
                N_WHERE, condition_exprs_,
                N_ORDER_BY, order_items_,
                N_LIMIT, limit_count_expr_,
@@ -1000,6 +1026,11 @@ public:
   bool has_for_update() const;
   bool has_ora_rowscn() const;
   int has_special_expr(const ObExprInfoFlag flag, bool &has) const;
+  int get_sequence_expr(ObRawExpr *&expr,
+                        const common::ObString seq_name, // sequence object name
+                        const common::ObString seq_action, // NEXTVAL or CURRVAL
+                        const uint64_t seq_id) const;
+  int get_sequence_exprs(common::ObIArray<ObRawExpr *> &exprs) const;
   int remove_subquery_expr(const ObRawExpr *expr);
   // rebuild query ref exprs
   int adjust_subquery_list();
@@ -1048,6 +1079,7 @@ public:
 
   int check_has_subquery_in_function_table(bool &has_subquery_in_function_table) const;
 
+  int disable_writing_materialized_view() const;
   int formalize_query_ref_exprs();
 
   int formalize_query_ref_exec_params(ObStmtExecParamFormatter &formatter,
@@ -1140,14 +1172,21 @@ protected:
   bool has_top_limit_; // no longer used, should be removed
   //if the stmt  contains user variable assignment
   //such as @a:=123
-  //the assignment map is serialized with the statement when needed
+  //we may need to serialize the map to remote server
   bool is_contains_assignment_;
   bool affected_last_insert_id_;
+  // insert into values (s1.nextval, ...) s1.nextval corresponds to a partition column exactly at that position
+  // Just set this flag to true, hinting to generate multi-dml plan
+  bool has_part_key_sequence_;
+  // sequence object count, used for ObSequence to calculate nextval, duplicates removed
+  common::ObSEArray<uint64_t, 2> nextval_sequence_ids_;
+  // sequence object count, used to record the sequence id of currval, duplicates removed
+  common::ObSEArray<uint64_t, 2> currval_sequence_ids_;
   // `table_items` are generated during resolve_from_clause, in order from left to right of the SQL statement using push_back.
   common::ObSEArray<TableItem *, 4, common::ModulePageAllocator, true> table_items_;
   common::ObSEArray<ColumnItem, 16, common::ModulePageAllocator, true> column_items_;
   common::ObSEArray<ObRawExpr *, 16, common::ModulePageAllocator, true> condition_exprs_;
-  // Store pseudo-column expressions shared by statement processing.
+  // Store shared class pseudo list expressions, we consider that besides the general pseudo list expression ObPseudoColumnRawExpr, sequence also belongs to pseudo column
   common::ObSEArray<ObRawExpr *, 8, common::ModulePageAllocator, true> pseudo_column_like_exprs_;
   ObDMLStmtTableHash tables_hash_;
   common::ObSEArray<ObQueryRefRawExpr*, 4, common::ModulePageAllocator, true> subquery_exprs_;

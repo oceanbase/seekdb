@@ -1391,22 +1391,12 @@ int ObMemtable::check_rows_locked_on_frozen_stores_(
                     K(ctx), K(rows_info), KPC(memtable));
         } else if (stores->at(i)->is_sstable()) {
           ObSSTable *sstable = static_cast<ObSSTable *>(stores->at(i));
-          if (sstable->is_ddl_merge_sstable()) {
-            if (OB_FAIL(check_rows_locked_on_ddl_merge_sstable(sstable,
-                                                               check_exist,
-                                                               param,
-                                                               context,
-                                                               rows_info))) {
-              TRANS_LOG(WARN, "Failed to check rows locked for sstable", K(ret), K(i), K(iter_tables));
-            }
-          } else {
-            if (OB_FAIL(sstable->check_rows_locked(check_exist,
-                                                   context,
-                                                   tmp_max_trans_version,
-                                                   rows_info))) {
-              TRANS_LOG(WARN, "sstable check rows lock fail", K(ret),
-                        K(ctx), K(rows_info), KPC(sstable));
-            }
+          if (OB_FAIL(sstable->check_rows_locked(check_exist,
+                                                 context,
+                                                 tmp_max_trans_version,
+                                                 rows_info))) {
+            TRANS_LOG(WARN, "sstable check rows lock fail", K(ret),
+                      K(ctx), K(rows_info), KPC(sstable));
           }
           TRANS_LOG(DEBUG, "check_rows_locked meet sstable", K(ret),
                     K(ctx), K(rows_info), KPC(sstable));

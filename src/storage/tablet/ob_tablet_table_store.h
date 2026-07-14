@@ -21,6 +21,7 @@
 #include "storage/memtable/ob_memtable.h"
 #include "storage/tablet/ob_table_store_util.h"
 #include "storage/meta_mem/ob_meta_obj_struct.h"
+#include "storage/blocksstable/ob_major_checksum_info.h"
 namespace oceanbase
 {
 namespace storage
@@ -33,7 +34,7 @@ class ObTablet;
 class ObTableStoreIterator;
 class ObCachedTableHandle;
 class ObStorageMetaHandle;
-class ObTabletLocalStatus;
+struct ObTabletHAStatus;
 class ObLS;
 class ObIncMajorDDLAggregateCOSSTable;
 
@@ -92,7 +93,9 @@ public:
   int init(
       ObArenaAllocator &allocator,
       const ObTablet &tablet,
-      const blocksstable::ObSSTable *sstable = nullptr);
+      const blocksstable::ObSSTable *sstable = nullptr,
+      // when first create tablet in migration, will carry ObMajorChecksumInfo from src svr
+      const ObMajorChecksumInfo *ckm_info = nullptr);
   // init for update
   int init(
       ObArenaAllocator &allocator,
@@ -104,7 +107,8 @@ public:
   int init(
       ObArenaAllocator &allocator,
       common::ObIArray<ObITable *> &sstable_array,
-      common::ObIArray<ObMetaDiskAddr> &addr_array);
+      common::ObIArray<ObMetaDiskAddr> &addr_array,
+      const blocksstable::ObMajorChecksumInfo &major_ckm_info);
   // when replace sstable array is null, init new table store with old store directly
   // else, init the new one with replace sstables
   int init(
@@ -182,13 +186,26 @@ public:
   int get_mini_minor_sstables(
       ObTableStoreIterator &iter) const;
   int get_recycle_version(const int64_t multi_version_start, int64_t &recycle_version) const;
+  int get_ha_tables(ObTableStoreIterator &iter) const;
+  int build_ha_new_table_store(
+      common::ObArenaAllocator &allocator,
+      ObTablet &tablet,
+      const ObBatchUpdateTableStoreParam &param,
+      const ObTabletTableStore &old_store);
   int check_ready_for_read(const ObTablet &tablet);
   int64_t to_string(char *buf, const int64_t buf_len) const;
+  // ddl-split
+  int build_split_new_table_store(
+      common::ObArenaAllocator &allocator,
+      ObTablet &tablet,
+      const ObBatchUpdateTableStoreParam &param,
+      const ObTabletTableStore &old_store);
   int build_fork_new_table_store(
       common::ObArenaAllocator &allocator,
       ObTablet &tablet,
       const ObBatchUpdateTableStoreParam &param,
       const ObTabletTableStore &old_store);
+  const blocksstable::ObMajorChecksumInfo &get_major_ckm_info() const { return major_ckm_info_; }
   int get_all_minor_sstables(ObTableStoreIterator &iter) const;
 private:
   int build_memtable_array(const ObTablet &tablet);
@@ -222,7 +239,7 @@ private:
       const ObUpdateTableStoreParam &param,
       const ObSSTableArray &old_minor_tables,
       const int64_t inc_base_snapshot_version,
-      const ObTabletLocalStatus &local_status);
+      const ObTabletHAStatus &ha_status);
   int build_mds_minor_tables(
       common::ObArenaAllocator &allocator,
       const blocksstable::ObSSTable *new_sstable,
@@ -248,12 +265,92 @@ private:
       const ObIArray<ObITable *> &tables_array,
       const bool allow_duplicate_sstable,
       ObIArray<ObITable *> &major_tables) const;
+  int inner_replace_remote_major_sstable_(
+      common::ObArenaAllocator &allocator,
+      const ObTabletTableStore &old_store,
+      ObITable *new_table);
   int check_continuous() const;
   template <class T>
   int check_minor_tables_(T &minor_tables, bool no_remote_table = false) const;
+  // ha
   int check_new_sstable_can_be_accepted_(
       const ObSSTableArray &old_tables,
       ObITable *new_table);
+  int build_ha_new_table_store_(
+      common::ObArenaAllocator &allocator,
+      const ObTablet &tablet,
+      const ObBatchUpdateTableStoreParam &param,
+      const ObTabletTableStore &old_store);
+  int build_ha_major_tables_(
+      common::ObArenaAllocator &allocator,
+      const ObBatchUpdateTableStoreParam &param,
+      const ObTabletTableStore &old_store,
+      const int64_t &multi_version_start,
+      int64_t &inc_base_snapshot_version);
+  int inner_build_major_tables_for_ha_(
+      common::ObArenaAllocator &allocator,
+      const ObUpdateTableStoreParam &param,
+      const ObTabletTableStore &old_store,
+      const ObIArray<ObITable *> &major_tables,
+      int64_t &inc_base_snapshot_version);
+
+  int build_ha_minor_tables_(
+      common::ObArenaAllocator &allocator,
+      const ObTablet &tablet,
+      const ObBatchUpdateTableStoreParam &param,
+      const ObTabletTableStore &old_store,
+      const int64_t inc_base_snapshot_version);
+  int build_ha_ddl_tables_(
+      common::ObArenaAllocator &allocator,
+      const ObTablet &tablet,
+      const ObBatchUpdateTableStoreParam &param,
+      const ObTabletTableStore &old_store);
+  int replace_ha_ddl_tables_(
+      common::ObArenaAllocator &allocator,
+      const ObTablet &tablet,
+      const ObBatchUpdateTableStoreParam &param,
+      const ObTabletTableStore &old_store);
+  int replace_ha_remote_ddl_tables_(
+      common::ObArenaAllocator &allocator,
+      const ObTablet &tablet,
+      const ObBatchUpdateTableStoreParam &param,
+      const ObTabletTableStore &old_store);
+  int build_ha_mds_tables_(
+      common::ObArenaAllocator &allocator,
+      const ObTablet &tablet,
+      const ObBatchUpdateTableStoreParam &param,
+      const ObTabletTableStore &old_store);
+  int replace_ha_mds_tables_(
+      common::ObArenaAllocator &allocator,
+      const ObTablet &tablet,
+      const ObBatchUpdateTableStoreParam &param,
+      const ObTabletTableStore &old_store);
+  int replace_ha_remote_mds_tables_(
+      common::ObArenaAllocator &allocator,
+      const ObTablet &tablet,
+      const ObBatchUpdateTableStoreParam &param,
+      const ObTabletTableStore &old_store);
+  int cut_ha_sstable_scn_range_(
+      common::ObArenaAllocator &allocator,
+      common::ObIArray<ObITable *> &orig_minor_sstables,
+      common::ObIArray<ObITable *> &cut_minor_sstables);
+  int combine_ha_multi_version_sstables_(
+      const share::SCN &scn,
+      common::ObIArray<ObITable *> &old_store_sstables,
+      common::ObIArray<ObITable *> &need_add_sstables,
+      common::ObIArray<ObITable *> &new_sstables);
+  int replace_ha_minor_sstables_(
+      common::ObArenaAllocator &allocator,
+      const ObTablet &tablet,
+      const ObBatchUpdateTableStoreParam &param,
+      const ObTabletTableStore &old_store,
+      const int64_t inc_base_snapshot_version);
+  int replace_ha_remote_minor_tables_(
+      common::ObArenaAllocator &allocator,
+      const ObTablet &tablet,
+      const ObBatchUpdateTableStoreParam &param,
+      const ObTabletTableStore &old_store,
+      const int64_t inc_base_snapshot_version);
 
   // ddl
   int pull_ddl_memtables(common::ObArenaAllocator &allocator, const ObTablet &tablet);
@@ -294,6 +391,16 @@ private:
   OB_INLINE int check_major_sstable_empty(const share::SCN &ddl_commit_scn, const ObTablet &tablet, bool &is_major_sstable_empty) const;
   OB_INLINE int check_ddl_complete(const ObTablet &tablet, bool &is_empty) const;
   int get_ddl_major_sstables(ObIArray<ObITable *> &ddl_major_sstables) const;
+  // ddl-split
+  int check_skip_split_tables_exist_(
+      const ObBatchUpdateTableStoreParam &param,
+      const ObTabletTableStore &old_store,
+      const ObTablet &tablet);
+  int build_split_new_table_store_(
+      common::ObArenaAllocator &allocator,
+      const ObTablet &tablet,
+      const ObBatchUpdateTableStoreParam &param,
+      const ObTabletTableStore &old_store);
   int build_fork_new_table_store_(
       common::ObArenaAllocator &allocator,
       const ObTablet &tablet,
@@ -305,12 +412,33 @@ private:
       const ObBatchUpdateTableStoreParam &param,
       const ObTabletTableStore &dst_store,
       const ObIArray<ObITable *> &tables_array);
+  int build_split_minor_tables_(
+      common::ObArenaAllocator &allocator,
+      const ObTabletTableStore &old_store,
+      const ObIArray<ObITable *> &tables_array,
+      const int64_t inc_base_snapshot_version,
+      const ObTabletHAStatus &ha_status);
+
   int replace_sstables(
       common::ObArenaAllocator &allocator,
       const ObIArray<ObITable *> *replace_sstable_array,
       const ObSSTableArray &old_tables,
       ObSSTableArray &new_tables) const;
+  int build_major_checksum_info(
+    const ObTabletTableStore &old_store,
+    const ObUpdateTableStoreParam *param,
+    ObArenaAllocator &allocator);
+  int replace_ha_remote_sstables_(
+      const common::ObIArray<ObITable *> &old_store_sstables,
+      const ObTablesHandleArray &new_tables_handle,
+      const bool check_continue,
+      common::ObIArray<ObITable *> &out_sstables);
   int get_mini_minor_sstables_(ObTableStoreIterator &iter) const;
+  int only_replace_major_(
+      common::ObArenaAllocator &allocator,
+      const ObTabletTableStore &old_store,
+      const ObIArray<ObITable *> &tables_array,
+      int64_t &inc_base_snapshot_version);
   static int adjust_sstable_start_scn_(
       ObSSTable &sstable,
       ObArenaAllocator &allocator,
@@ -333,6 +461,7 @@ private:
   ObSSTableArray mds_sstables_;
   ObMemtableArray memtables_;
   ObDDLKVArray ddl_mem_sstables_;
+  blocksstable::ObMajorChecksumInfo major_ckm_info_;
   // Attention! if add new member variables, need fix serialize/deserialize & all init func
   mutable common::SpinRWLock memtables_lock_; // protect memtable read and update after inited
   bool is_ready_for_read_;

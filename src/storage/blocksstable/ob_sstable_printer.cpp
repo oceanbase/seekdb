@@ -288,6 +288,27 @@ void ObSSTablePrinter::print_macro_block_header(const ObSSTableMacroBlockHeader 
   print_line("micro_block_data_offset", sstable_header->fixed_header_.micro_block_data_offset_);
   print_line("data_checksum", sstable_header->fixed_header_.data_checksum_);
   print_line("compressor_type", sstable_header->fixed_header_.compressor_type_);
+  print_line("master_key_id", sstable_header->fixed_header_.master_key_id_);
+  print_end_line();
+}
+
+void ObSSTablePrinter::print_macro_block_header(const ObBloomFilterMacroBlockHeader *bf_macro_header)
+{
+  print_title("SSTable Bloomfilter Macro Block Header");
+  print_line("header_size", bf_macro_header->header_size_);
+  print_line("version", bf_macro_header->version_);
+  print_line("magic", bf_macro_header->magic_);
+  print_line("attr", bf_macro_header->attr_);
+  print_line("tablet_id", bf_macro_header->tablet_id_);
+  print_line("data_version", bf_macro_header->snapshot_version_);
+  print_line("rowkey_column_count", bf_macro_header->rowkey_column_count_);
+  print_line("row_count", bf_macro_header->row_count_);
+  print_line("occupy_size", bf_macro_header->occupy_size_);
+  print_line("micro_block_count", bf_macro_header->micro_block_count_);
+  print_line("micro_block_data_offset", bf_macro_header->micro_block_data_offset_);
+  print_line("micro_block_data_size", bf_macro_header->micro_block_data_size_);
+  print_line("data_checksum", bf_macro_header->data_checksum_);
+  print_line("compressor_type", bf_macro_header->compressor_type_);
   print_end_line();
 }
 
@@ -400,10 +421,13 @@ void ObSSTablePrinter::print_macro_meta(const ObDataMacroBlockMeta *macro_meta)
   print_line("row_count", macro_meta->val_.row_count_);
   print_line("row_count_delta", macro_meta->val_.row_count_delta_);
   print_line("max_merged_trans_version", macro_meta->val_.max_merged_trans_version_);
+  print_line("is_encrypted", macro_meta->val_.is_encrypted_);
   print_line("is_deleted", macro_meta->val_.is_deleted_);
   print_line("contain_uncommitted_row", macro_meta->val_.contain_uncommitted_row_);
   print_line("is_last_row_last_flag", macro_meta->val_.is_last_row_last_flag_);
   print_line("compressor_type", macro_meta->val_.compressor_type_);
+  print_line("master_key_id", macro_meta->val_.master_key_id_);
+  print_line("encrypt_id", macro_meta->val_.encrypt_id_);
   print_line("row_store_type", macro_meta->val_.row_store_type_);
   print_line("schema_version", macro_meta->val_.schema_version_);
   print_line("snapshot_version", macro_meta->val_.snapshot_version_);
@@ -448,6 +472,26 @@ void ObSSTablePrinter::print_micro_header(const ObMicroBlockHeader *micro_block_
 }
 
 
+void ObSSTablePrinter::print_bloom_filter_micro_header(const ObBloomFilterMicroBlockHeader *micro_block_header)
+{
+  print_title("Bloom Filter Micro Header");
+  print_line("header_size", micro_block_header->header_size_);
+  print_line("version", micro_block_header->version_);
+  print_line("magic", micro_block_header->magic_);
+  print_line("rowkey_column_count", micro_block_header->rowkey_column_count_);
+  print_line("row_count", micro_block_header->row_count_);
+  print_line("reserved", micro_block_header->reserved_);
+  print_end_line();
+}
+
+void ObSSTablePrinter::print_bloom_filter_micro_block(const char* micro_block_buf, const int64_t micro_block_size)
+{
+  print_title("Bloom Filter Micro Data");
+  print_line("block_size", micro_block_size);
+  P_VALUE_STR_B(micro_block_buf);
+  P_END();
+}
+
 void ObSSTablePrinter::print_store_row(
     const ObDatumRow *row,
     const ObObjMeta *obj_metas,
@@ -469,9 +513,9 @@ void ObSSTablePrinter::print_store_row(
     if (OB_LIKELY(tx_id.get_id() != INT64_MAX)) {
       ObMemAttr mem_attr;
       mem_attr.label_ = "TX_DATA_TABLE";
-      void *p = op_alloc(ObTxDataAllocator);
+      void *p = op_alloc(ObTenantTxDataAllocator);
       if (OB_NOT_NULL(p)) {
-        ObTxDataAllocator *tx_data_allocator = new (p) ObTxDataAllocator();
+        ObTenantTxDataAllocator *tx_data_allocator = new (p) ObTenantTxDataAllocator();
 
         ObTxData tx_data;
         tx_data.tx_id_ = tx_id;

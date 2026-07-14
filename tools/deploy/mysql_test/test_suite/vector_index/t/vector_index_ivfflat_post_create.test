@@ -189,6 +189,7 @@ create vector index idx2 on t1 (iris_data) with (distance=l2, type=ivf_flat, nli
 create vector index idx3 on t1 (data) with (distance=l2, type=hnsw, lib=vsag, m=10, ef_construction=11, ef_search=40);
 
 create view vec_view as select * from t1;
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
 show create table t1;
 
 select count(*) from t1;
@@ -306,7 +307,7 @@ create vector index vector_idx1 on hhst1(c3) with (distance=l2, lib=vsag, type=h
 create vector index vector_idx2 on hhst1(c4) with (distance=l2, type=ivf_flat, nlist=2, sample_per_nlist=3);
 
 
-insert /*+ enable_parallel_dml parallel(2) */ into hhst2 select * from hhst1;
+insert /*+ direct(true,100) enable_parallel_dml parallel(2) */ into hhst2 select * from hhst1;
 select count(*) from hhst2;
 
 insert ignore into hhst1 select * from hhst2;

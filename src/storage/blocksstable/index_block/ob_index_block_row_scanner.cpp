@@ -17,8 +17,8 @@
 #define USING_LOG_PREFIX STORAGE
 #include "ob_index_block_row_scanner.h"
 #include "storage/access/ob_rows_info.h"
-#include "storage/access/ob_advance_scan_helper.h"
-#include "storage/tablet/ob_tablet.h"
+#include "storage/access/ob_index_skip_scanner.h"
+#include "src/storage/tx_storage/ob_ls_map.h"
 
 namespace oceanbase
 {
@@ -98,7 +98,7 @@ int ObIndexBlockDataHeader::deep_copy_transformed_index_block(
 }
 
 ObIndexBlockDataTransformer::ObIndexBlockDataTransformer()
-  : allocator_(lib::ObMemAttr("IdxBlkDataTrans")), micro_reader_helper_() {}
+  : allocator_(SET_USE_500(lib::ObMemAttr("IdxBlkDataTrans"))), micro_reader_helper_() {}
 
 ObIndexBlockDataTransformer::~ObIndexBlockDataTransformer()
 {
@@ -220,6 +220,69 @@ int ObIndexBlockDataTransformer::transform(
   return ret;
 }
 
+int ObIndexBlockDataTransformer::fix_micro_header_and_transform(
+    const ObMicroBlockData &raw_data,
+    ObMicroBlockData &transformed_data,
+    ObIAllocator &allocator,
+    char *&allocated_buf)
+{
+  int ret = OB_SUCCESS;
+  ObArenaAllocator tmp_allocator; // tmp allocator to fix micro header
+  ObDatumRow row;
+  ObIMicroBlockReader *micro_reader = nullptr;
+  const ObMicroBlockHeader *micro_block_header =
+      reinterpret_cast<const ObMicroBlockHeader *>(raw_data.get_buf());
+  if (OB_UNLIKELY(!raw_data.is_valid() || !micro_block_header->is_valid())) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("Invalid argument", K(ret), K(raw_data), KPC(micro_block_header));
+  } else if (OB_FAIL(get_reader(raw_data.get_store_type(), micro_reader))) {
+    LOG_WARN("Fail to set micro block reader", K(ret));
+  } else if (OB_FAIL(micro_reader->init(raw_data, nullptr))) {
+    LOG_WARN("Fail to init micro block reader", K(ret), K(raw_data));
+  } else if (OB_FAIL(row.init(allocator, micro_block_header->column_count_))) {
+    LOG_WARN("Failed to init datum row", K(ret), KPC(micro_block_header));
+  } else {
+    int64_t raw_data_size = 0;
+    for (int64_t row_idx = 0; OB_SUCC(ret) && row_idx < micro_block_header->row_count_; ++row_idx) {
+      row.reuse();
+      if (OB_FAIL(micro_reader->get_row(row_idx, row))) {
+        LOG_WARN("Fail to get row", K(ret), K(row_idx));
+      }
+      for (int64_t col_idx = 0; OB_SUCC(ret) && col_idx < micro_block_header->column_count_; ++col_idx) {
+        if (row.storage_datums_[col_idx].is_null()) {
+          raw_data_size += sizeof(int64_t);
+        } else {
+          raw_data_size += row.storage_datums_[col_idx].len_;
+        }
+      }
+    }
+    ObMicroBlockHeader new_micro_header;
+    char *new_data_buf = nullptr;
+    if (OB_FAIL(ret)) {
+    } else if (OB_ISNULL(new_data_buf = static_cast<char *>(tmp_allocator.alloc(raw_data.get_buf_size())))) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+      LOG_WARN("Failed to allocate memory for new micro block buf", K(ret), K(raw_data));
+    } else {
+      MEMCPY(new_data_buf, raw_data.get_buf(), raw_data.get_buf_size());
+      int64_t copy_pos = 0;
+      ObMicroBlockHeader *copied_header = nullptr;
+      if (OB_FAIL(raw_data.get_micro_header()->deep_copy(new_data_buf, raw_data.get_buf_size(), copy_pos, copied_header))) {
+        LOG_WARN("Failed to deep copy micro header", K(ret), K(raw_data), KPC(raw_data.get_micro_header()));
+      } else {
+        copied_header->data_length_ = raw_data.get_buf_size() - copy_pos;
+        copied_header->data_zlength_ = copied_header->data_length_;
+        copied_header->original_length_ = raw_data_size;
+        ObMicroBlockData copied_micro_data(new_data_buf, raw_data.get_buf_size());
+        if (OB_FAIL(transform(copied_micro_data, transformed_data, allocator, allocated_buf))) {
+          LOG_WARN("Failed to transform with copied micro data", K(ret),
+              KPC(micro_block_header), K(new_micro_header), KPC(copied_header));
+        }
+      }
+    }
+  }
+  return ret;
+}
+
 int ObIndexBlockDataTransformer::get_transformed_upper_mem_size(
     const ObITableReadInfo *table_read_info,
     const char *raw_block_data,
@@ -306,7 +369,7 @@ bool ObIndexBlockIterParam::is_valid() const
 ObIndexBlockRowIterator::ObIndexBlockRowIterator()
   : is_inited_(false),
     is_reverse_scan_(false),
-    advance_scan_state_(),
+    skip_state_(),
     iter_step_(1),
     idx_row_parser_(),
     datum_utils_(nullptr)
@@ -324,14 +387,14 @@ void ObIndexBlockRowIterator::reset()
   iter_step_ = 1;
   datum_utils_ = nullptr;
   is_reverse_scan_ = false;
-  advance_scan_state_.reset();
+  skip_state_.reset();
   idx_row_parser_.reset();
   is_inited_ = false;
 }
 
 void ObIndexBlockRowIterator::reuse()
 {
-  advance_scan_state_.reset();
+  skip_state_.reset();
 }
 
 /******************             ObRAWIndexBlockRowIterator              **********************/
@@ -1444,7 +1507,7 @@ int ObIndexBlockRowScanner::get_next(
     ObMicroIndexInfo &idx_block_row,
     const bool is_multi_check,
     const bool is_sorted_multi_get,
-    storage::ObAdvanceScanHelper *advance_scan_helper)
+    storage::ObAdvanceSkipScanner *skip_scanner)
 {
   int ret = OB_SUCCESS;
   idx_block_row.reset();
@@ -1452,7 +1515,7 @@ int ObIndexBlockRowScanner::get_next(
     ret = OB_NOT_INIT;
     LOG_WARN("Not inited", K(ret));
   } else {
-    const bool has_advance_scan_helper = nullptr != advance_scan_helper;
+    const bool has_skip_scanner = nullptr != skip_scanner;
     do {
       if (end_of_block()) {
         ret = OB_ITER_END;
@@ -1478,14 +1541,13 @@ int ObIndexBlockRowScanner::get_next(
           LOG_WARN("Failed to find rowkeys", K(ret));
         }
       }
-      if (OB_SUCC(ret) && has_advance_scan_helper) {
-        ObAdvanceScanState &advance_scan_state = iter_->get_advance_scan_state();
-        if (OB_FAIL(advance_scan_helper->filter_index_node(
-            idx_block_row, advance_scan_state, idx_block_row.advance_scan_state_))) {
-          LOG_WARN("failed to filter index node for advance scan", K(ret), K(idx_block_row.endkey_));
+      if (OB_SUCC(ret) && has_skip_scanner) {
+        ObIndexSkipState &skip_state = iter_->get_skip_state();
+        if (OB_FAIL(skip_scanner->skip(idx_block_row, skip_state, idx_block_row.skip_state_))) {
+          LOG_WARN("failed to check skip scanner", K(ret), K(idx_block_row.endkey_));
         }
       }
-    } while (OB_SUCC(ret) && has_advance_scan_helper && idx_block_row.advance_scan_state_.is_before_range());
+    } while (OB_SUCC(ret) && has_skip_scanner && idx_block_row.skip_state_.is_skipped());
   }
   return ret;
 }
@@ -1770,8 +1832,9 @@ int ObIndexBlockRowScanner::skip_to_next_valid_position(ObMicroIndexInfo &idx_bl
     idx_block_row.rowkey_begin_idx_ = curr_rowkey_begin_idx_;
     // If a rowkey happens to be the endkey of the microblock, the rowkey idx must also be included in the rowkey idx range of next index row,
     // because there may be multiple versions of one row across the microblock. Otherwise, some multi-version rows may be missed when do check_rows_lock.
-    // Preserve the boundary row because one multi-version row can span adjacent
-    // microblocks.
+    // We must recognize this situation and treat it specifically when checking macro block bloom filters in prefetching phase,
+    // Otherwise, this border row may be filtered out incorrectly.
+    // At present, when we check bf, we just mindlessly skip the first row in the rowkeys idx range.
     if (OB_FAIL(iter_->find_rowkeys_belong_to_same_idx_row(idx_block_row, curr_rowkey_begin_idx_, rowkey_end_idx_, rows_info_))) {
       LOG_WARN("Failed to find rowkeys belong to same index row", K(ret), KPC(iter_));
     }

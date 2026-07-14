@@ -232,7 +232,6 @@ ob_set_subtarget(ob_server table_load
   table_load/ob_table_load_merge_mem_sort_op.cpp
   table_load/ob_table_load_merge_op.cpp
   table_load/ob_table_load_merge_phase_op.cpp
-  table_load/ob_table_load_merge_rescan_op.cpp
   table_load/ob_table_load_merge_table_op.cpp
   table_load/ob_table_load_multiple_heap_table_compactor.cpp
   table_load/ob_table_load_obj_cast.cpp
@@ -434,7 +433,6 @@ ob_set_subtarget(ob_server virtual_table
   virtual_table/ob_all_virtual_tmp_file.cpp
   virtual_table/ob_all_virtual_log_transport_dest_stat.cpp
   virtual_table/ob_all_virtual_plugin_info.cpp
-  virtual_table/ob_all_virtual_cs_replica_tablet_stats.cpp
   virtual_table/ob_all_virtual_change_stream_refresh_stat.cpp
   virtual_table/ob_all_virtual_dynamic_partition_table.cpp
   virtual_table/ob_tenant_show_catalog_databases.cpp

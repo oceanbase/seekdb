@@ -367,7 +367,7 @@ drop table if exists t1;
 --enable_warnings
 CREATE TABLE t1 (c1 int primary key, c2 vector(3),c3 vector(3) ,c4 vector(3));
 insert into t1 values(1,'[1,1,2]','[2,2,3]','[1,3,2]');
-insert /*+ enable_parallel_dml parallel(2) */ into t1 select c1+1, c2, c3, c4 from t1;
+insert /*+ direct(true,100) enable_parallel_dml parallel(2) */ into t1 select c1+1, c2, c3, c4 from t1;
 create VECTOR index vector_idx1 on t1(c3) with (distance=l2, lib=vsag, type=hnsw, m=10, ef_construction=100, ef_search=40);
 drop table t1;
 

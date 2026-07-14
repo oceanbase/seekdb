@@ -16,6 +16,7 @@
 
 #include "ob_compaction_suggestion.h"
 #include "share/rc/ob_module_provider.h"
+#include "src/storage/tx_storage/ob_ls_map.h"
 
 namespace oceanbase
 {
@@ -277,16 +278,17 @@ const char* ObCompactionSuggestionMgr::get_suggestion_reason(const int64_t reaso
   return str;
 }
 
-// Indexed by ObDagPrio::ObDagPrioEnum value.
+// Indexed by ObDagPrio::ObDagPrioEnum value. HA_MID/HA_LOW were removed and are
+// now aliases of HA_HIGH, so the priorities after HA_HIGH shifted down by two.
 const char *ObCompactionSuggestionMgr::ObAddWorkerThreadSuggestion[share::ObDagPrio::DAG_PRIO_MAX] =
 {
   "increase compaction_high_thread_score", // COMPACTION_HIGH
-  "",                                       // STORAGE_HIGH
+  "",                                       // HA_HIGH
   "increase compaction_mid_thread_score",  // COMPACTION_MID
   "increase compaction_low_thread_score",  // COMPACTION_LOW
   "",                                       // DDL
   "",                                       // DDL_HIGH
-  ""                                        // VECTOR_INDEX
+  ""                                        // TTL
 };
 
 const char* ObCompactionSuggestionMgr::get_add_thread_suggestion(const int64_t priority)
@@ -302,7 +304,7 @@ const char* ObCompactionSuggestionMgr::get_add_thread_suggestion(const int64_t p
   return str;
 }
 
-int ObCompactionSuggestionMgr::server_module_init(ObCompactionSuggestionMgr *&compaction_suggestion_mgr)
+int ObCompactionSuggestionMgr::mtl_init(ObCompactionSuggestionMgr *&compaction_suggestion_mgr)
 {
   return compaction_suggestion_mgr->init();
 }
@@ -409,6 +411,7 @@ int ObCompactionSuggestionMgr::analyze_for_suggestion(
       suggestion.merge_type_ = MEDIUM_MERGE;
     }
     
+    suggestion.ls_id_ = UNKNOW_LS_ID.id();
     suggestion.tablet_id_ = UNKNOW_TABLET_ID.id();
     suggestion.merge_start_time_ = common::ObTimeUtility::fast_current_time();
     suggestion.merge_finish_time_ = suggestion.merge_start_time_;
@@ -552,6 +555,7 @@ int ObCompactionSuggestionMgr::analyze_merge_info(
 
     if (strlen(buf) > 0) {
       suggestion.merge_type_ = static_info.merge_type_;
+      suggestion.ls_id_ = static_info.ls_id_.id();
       suggestion.tablet_id_ = static_info.tablet_id_.id();
       suggestion.merge_start_time_ = running_info.merge_start_time_;
       suggestion.merge_finish_time_ = running_info.merge_finish_time_;
@@ -569,16 +573,19 @@ int ObCompactionSuggestionIterator::open()
   if (is_opened_) {
     ret = OB_INIT_TWICE;
     STORAGE_LOG(WARN, "The ObCompactionSuggestionIterator has been opened", K(ret));
+  } else if (!true) {
+    ret = OB_INVALID_ARGUMENT;
+    STORAGE_LOG(WARN, "invalid argument", K(ret));
   }
   if (OB_SUCC(ret)) {
-    {
-      SERVER_MODULE_SCOPE {
+    { // skip virtual tenant
+      MOD_SCOPE {
         if (OB_FAIL(share::g_mp->compaction_suggestion_mgr()->get_suggestion_list(suggestion_array_))) {
           STORAGE_LOG(WARN, "failed to get suggestion list", K(ret));
         }
       } else {
-        if (OB_SERVER_RUNTIME_NOT_READY != ret) {
-          STORAGE_LOG(WARN, "enter server module scope failed", K(ret));
+        if (OB_TENANT_NOT_IN_SERVER != ret) {
+          STORAGE_LOG(WARN, "switch tenant failed", K(ret));
         } else {
           ret = OB_SUCCESS;
         }

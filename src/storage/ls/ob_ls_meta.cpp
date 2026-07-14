@@ -54,8 +54,7 @@ ObLSMeta::ObLSMeta()
     saved_info_(),
     reserved_scn_(SCN::min_scn()),
     rebuild_info_(),
-    major_mv_merge_info_(),
-    store_format_()
+    major_mv_merge_info_()
 {
 }
 
@@ -76,8 +75,7 @@ ObLSMeta::ObLSMeta(const ObLSMeta &ls_meta)
     saved_info_(ls_meta.saved_info_),
     reserved_scn_(ls_meta.reserved_scn_),
     rebuild_info_(ls_meta.rebuild_info_),
-    major_mv_merge_info_(ls_meta.major_mv_merge_info_),
-    store_format_(ls_meta.store_format_)
+    major_mv_merge_info_(ls_meta.major_mv_merge_info_)
 {
   int ret = OB_SUCCESS;
   all_id_meta_.update_all_id_meta(ls_meta.all_id_meta_);
@@ -139,7 +137,6 @@ ObLSMeta &ObLSMeta::operator=(const ObLSMeta &other)
     reserved_scn_ = other.reserved_scn_;
     rebuild_info_ = other.rebuild_info_;
     major_mv_merge_info_ = other.major_mv_merge_info_;
-    store_format_ = other.store_format_;
   }
   return *this;
 }
@@ -163,7 +160,6 @@ void ObLSMeta::reset()
   reserved_scn_ = SCN::min_scn();
   rebuild_info_.reset();
   major_mv_merge_info_.reset();
-  store_format_.reset();
 }
 
 LSN ObLSMeta::get_clog_base_lsn() const
@@ -357,8 +353,7 @@ bool ObLSMeta::is_valid() const
       && ls_id_.is_valid()
       && OB_MIGRATION_STATUS_MAX != migration_status_
       && restore_status_.is_valid()
-      && rebuild_seq_ >= 0
-      && store_format_.is_valid();
+      && rebuild_seq_ >= 0;
 }
 
 int64_t ObLSMeta::get_rebuild_seq() const
@@ -716,8 +711,7 @@ int ObLSMeta::init(
     const ObMigrationStatus &migration_status,
     const ObRestoreStatus &restore_status,
     const SCN &create_scn,
-    const ObMajorMVMergeInfo &major_mv_merge_info,
-    const ObLSStoreFormat &store_format)
+    const ObMajorMVMergeInfo &major_mv_merge_info)
 {
   int ret = OB_SUCCESS;
   if (!ls_id.is_valid()
@@ -738,7 +732,6 @@ int ObLSMeta::init(
     restore_status_ = restore_status;
     reserved_scn_ = SCN::min_scn();
     major_mv_merge_info_ = major_mv_merge_info;
-    store_format_ = store_format;
   }
   return ret;
 }
@@ -896,11 +889,6 @@ int ObLSMeta::check_ls_need_online(bool &need_online) const
   return ret;
 }
 
-ObLSStoreFormat ObLSMeta::get_store_format() const
-{
-  return store_format_;
-}
-
 ObLSMeta::ObReentrantWLockGuard::ObReentrantWLockGuard(ObLatch &lock,
                                                        const bool try_lock,
                                                        const int64_t warn_threshold)
@@ -999,8 +987,7 @@ OB_SERIALIZE_MEMBER(ObLSMeta,
                     saved_info_,
                     reserved_scn_,
                     rebuild_info_,
-                    major_mv_merge_info_,
-                    store_format_);
+                    major_mv_merge_info_);
 
 }
 }

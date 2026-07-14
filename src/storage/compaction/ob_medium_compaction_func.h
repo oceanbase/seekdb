@@ -18,11 +18,12 @@
 
 #include "storage/ls/ob_ls.h"
 #include "storage/compaction/ob_partition_merge_policy.h"
+#include "share/tablet/ob_tablet_filter.h"
 #include "share/ob_tablet_meta_table_compaction_operator.h"
-#include "share/ob_tablet_local_checksum_operator.h"
+#include "share/ob_tablet_replica_checksum_operator.h"
 #include "storage/tablet/ob_tablet.h"
-#include "storage/compaction/ob_tablet_scheduler.h"
-#include "storage/compaction/ob_medium_checker.h"
+#include "storage/compaction/ob_tenant_tablet_scheduler.h"
+#include "storage/compaction/ob_tenant_medium_checker.h"
 #include "storage/compaction/ob_tablet_merge_ctx.h"
 #include "storage/compaction/ob_ckm_error_tablet_info.h"
 
@@ -55,6 +56,7 @@ public:
   ~ObMediumCompactionScheduleFunc() {}
 
 
+  static int is_election_leader(const share::ObLSID &ls_id, bool &ls_election_leader);
   static int get_max_sync_medium_scn(
     const ObTablet &tablet,
     const ObMediumCompactionInfoList &medium_list,
@@ -68,11 +70,12 @@ public:
     storage::ObStorageSchema &storage_schema,
     bool &is_skip_merge_index);
   static int batch_check_medium_finish(
-    ObIArray<ObTabletCheckInfo> &finish_tablet_infos,
-    const ObIArray<ObTabletCheckInfo> &tablet_check_infos,
+    ObIArray<ObTabletCheckInfo> &finish_tablet_ls_infos,
+    const ObIArray<ObTabletCheckInfo> &tablet_ls_infos,
     ObCompactionTimeGuard &time_guard);
-  static int process_local_checksum_items(
-      const ObLocalTabletChecksumArray &checksum_items);
+  static int check_replica_checksum_items(
+      const ObReplicaCkmArray &checksum_items,
+      const bool is_medium_checker);
   int schedule_next_medium_for_leader(
     const int64_t major_snapshot,
     bool &medium_clog_submitted);
@@ -90,6 +93,7 @@ public:
 protected:
   int decide_medium_snapshot(bool &medium_clog_submitted);
   static int get_status_from_inner_table(
+      const ObLSID &ls_id,
       const ObTabletID &tablet_id,
       share::ObTabletCompactionScnInfo &ret_info);
   int prepare_medium_info(
@@ -106,13 +110,22 @@ protected:
       ObTableStoreIterator &table_iter);
   int submit_medium_clog(ObMediumCompactionInfo &medium_info);
   static int batch_check_medium_meta_table(
-      const ObIArray<ObTabletCheckInfo> &tablet_check_infos,
-      ObIArray<ObTabletCheckInfo> &finish_tablet_infos,
+      const ObIArray<ObTabletCheckInfo> &tablet_ls_infos,
+      ObIArray<ObTabletCheckInfo> &finish_tablet_ls,
       ObCompactionTimeGuard &time_guard);
   static int check_medium_meta_table(
       const int64_t medium_snapshot,
-      const ObTabletRuntimeInfo &tablet_info,
+      const ObTabletInfo &tablet_info,
+      const share::ObTabletReplicaFilterHolder &filters,
       bool &merge_finish);
+  static int check_tablet_checksum(
+      const share::ObReplicaCkmArray &checksum_items,
+      const int64_t start_idx,
+      const int64_t end_idx,
+      const bool is_medium_checker,
+      ObTabletDataChecksumChecker &data_checksum_checker,
+      ObIArray<ObCkmErrorTabletLSInfo> &error_pairs,
+      int &check_ret);
   int choose_medium_snapshot(
       const int64_t max_sync_medium_scn,
       ObMediumCompactionInfo &medium_info,

@@ -18,6 +18,7 @@
 #define OCEANBASE_SQL_RESOLVER_DML_OB_DML_RESOLVER_H_
 #include "sql/resolver/dml/ob_dml_stmt.h"
 #include "sql/resolver/dml/ob_column_namespace_checker.h"
+#include "sql/resolver/dml/ob_sequence_namespace_checker.h"
 #include "sql/resolver/ob_stmt_resolver.h"
 #include "sql/resolver/expr/ob_raw_expr_resolver_impl.h"
 #include "sql/resolver/expr/ob_raw_expr_util.h"
@@ -208,8 +209,12 @@ public:
                                   TableItem *&table_item);
   int resolve_json_table_item(const ParseNode &table_node,
                               TableItem *&table_item);
+  int resolve_rb_iterate_item(const ParseNode &table_node,
+                              TableItem *&table_item);
   int resolve_unnest_item(const ParseNode &table_node, TableItem *&table_item);
-  int create_unnest_table_item(TableItem *&table_item, ObString table_name);
+  int create_rb_iterate_table_item(TableItem *&table_item, ObString alias_name = NULL);
+  int create_unnest_table_item(TableItem *&table_item, ObItemType item_type, ObString table_name);
+  int rb_iterate_table_add_column(TableItem *&table_item, ColumnItem *&col_item, int64_t col_id = 1);
   int unnest_table_add_column(TableItem *&table_item, ColumnItem *&col_item, ObString col_name);
   int resolve_hybrid_search_item(const ParseNode &parse_tree, TableItem *&table_item);
 
@@ -323,6 +328,7 @@ public:
                               ObRawExpr *&new_expr);
 
 
+  int add_sequence_id_to_stmt(uint64_t sequence_id, bool is_currval = false);
   int add_object_version_to_dependency(share::schema::ObDependencyTableType table_type,
                                        share::schema::ObSchemaType schema_type,
                                        uint64_t object_id,
@@ -391,7 +397,9 @@ protected:
   int resolve_snapshot_query_node(const ParseNode *time_node, TableItem *table_item);
   int check_snapshot_expr_validity(ObRawExpr *expr, bool &has_column);
   int set_snapshot_info_for_view(ObSelectStmt *select_stmt, TableItem *table_item);
-  int resolve_base_or_alias_table_item_normal(const uint64_t database_id,
+  int resolve_base_or_alias_table_item_normal(const uint64_t catalog_id,
+                                              const uint64_t database_id,
+                                              const common::ObString &catalog_name,
                                               const common::ObString &db_name,
                                               const bool &is_db_explicit,
                                               const common::ObString &tbl_name,
@@ -517,34 +525,51 @@ protected:
   virtual int check_in_sysview(bool &in_sysview) const;
 public:
   int resolve_table_relation_factor_wrapper(const ParseNode *table_node,
+                                            uint64_t &catalog_id,
                                             uint64_t &database_id,
                                             common::ObString &table_name,
                                             common::ObString &synonym_name,
-                                            common::ObString &synonym_db_name,
+                                            common::ObString &catalog_name,
                                             common::ObString &db_name,
+                                            common::ObString &synonym_db_name,
                                             bool &is_db_explicit,
                                             common::ObIArray<uint64_t> &ref_obj_ids);
 
 protected:
+  int inner_resolve_sys_view(const ParseNode *table_node,
+                             uint64_t &database_id,
+                             ObString &tbl_name,
+                             ObString &db_name,
+                             bool &is_db_explicit);
+  int inner_resolve_sys_view(const ParseNode *table_node,
+                             uint64_t &database_id,
+                             ObString &tbl_name,
+                             ObString &db_name);
   int resolve_table_relation_factor(const ParseNode *node,
+                                    uint64_t &catalog_id,
                                     uint64_t &database_id,
                                     common::ObString &table_name,
                                     common::ObString &synonym_name,
                                     common::ObString &synonym_db_name,
+                                    common::ObString &catalog_name,
                                     common::ObString &db_name,
                                     bool &is_db_explicit,
                                     common::ObIArray<uint64_t> &ref_obj_ids);
   int resolve_table_relation_factor_normal(const ParseNode *node,
+                                           uint64_t &catalog_id,
                                            uint64_t &database_id,
                                            common::ObString &table_name,
                                            common::ObString &synonym_name,
                                            common::ObString &synonym_db_name,
+                                           common::ObString &catalog_name,
                                            common::ObString &db_name);
   int resolve_table_relation_factor_normal(const ParseNode *node,
+                                           uint64_t &catalog_id,
                                            uint64_t &database_id,
                                            common::ObString &table_name,
                                            common::ObString &synonym_name,
                                            common::ObString &synonym_db_name,
+                                           common::ObString &catalog_name,
                                            common::ObString &db_name,
                                            bool &is_db_expilicit);
 
@@ -660,6 +685,8 @@ protected:
   int add_fake_schema(ObSelectStmt* left_stmt);
   int resolve_basic_table_without_cte(const ParseNode &parse_tree, TableItem *&table_item);
   int resolve_basic_table_with_cte(const ParseNode &parse_tree, TableItem *&table_item);
+  int check_is_table_supported_for_mview(const TableItem &table_item, const ObTableSchema &table_schema);
+  int check_is_table_supported_for_mview(const ObItemType table_node_type);
   int resolve_cte_table(const ParseNode &parse_tree, const TableItem *CTE_table_item, TableItem *&table_item);
   int resolve_recursive_cte_table(const ParseNode &parse_tree, TableItem *&table_item);
   int resolve_with_clause_opt_alias_colnames(const ParseNode *parse_tree, TableItem *&table_item);
@@ -692,10 +719,12 @@ private:
                                              common::ObIArray<ColumnItem> &col_items);
   int resolve_function_table_column_item_sys_func(const TableItem &table_item,
                                                   common::ObIArray<ColumnItem> &col_items);
-  int check_table_exist_or_not(uint64_t &database_id,
+  int check_table_exist_or_not(uint64_t catalog_id,
+                               uint64_t &database_id,
                                common::ObString &table_name,
                                common::ObString &db_name);
-  int resolve_table_relation_recursively(uint64_t &database_id,
+  int resolve_table_relation_recursively(uint64_t catalog_id,
+                                         uint64_t &database_id,
                                          common::ObString &table_name,
                                          common::ObString &db_name,
                                          bool is_db_explicit,
@@ -707,9 +736,11 @@ private:
   int check_stmt_order_by(const ObSelectStmt *stmt);
 
   int resolve_ora_rowscn_pseudo_column(const ObQualifiedName &q_name, ObRawExpr *&real_ref_expr);
+  int resolve_part_id_ref_column(const ObQualifiedName &q_name, ObRawExpr *&real_ref_expr);
   int resolve_old_new_pseudo_column(const ObQualifiedName &q_name, ObRawExpr *&real_ref_expr);
   int resolve_pseudo_column(const ObQualifiedName &q_name, ObRawExpr *&real_ref_expr);
   int resolve_current_of(const ParseNode &node, ObDMLStmt &stmt, ObIArray<ObRawExpr*> &and_exprs);
+  int update_errno_if_sequence_object(const ObQualifiedName &q_name, int old_ret);
   int get_all_column_ref(ObRawExpr *expr, common::ObIArray<ObColumnRefRawExpr*> &arr);
 
   int convert_udf_to_agg_expr(ObRawExpr *&expr,
@@ -721,6 +752,11 @@ private:
   int check_index_table_has_partition_keys(const ObTableSchema *index_schema,
                                            const ObPartitionKeyInfo &partition_keys,
                                            bool &has_part_key);
+
+  //This funcion used to optimize Bypass Import scenario so far
+  int check_insert_into_select_use_fast_column_convert(const ObColumnRefRawExpr *target_expr,
+                                                       const ObRawExpr *source_expr,
+                                                       bool &fast_calc);
 
   ///////////functions for sql hint/////////////
   int resolve_global_hint(const ParseNode &hint_node,
@@ -761,6 +797,7 @@ private:
   int resolve_win_magic_hint(const ParseNode &hint_node, ObTransHint *&hint);
   int resolve_place_group_by_hint(const ParseNode &hint_node, ObTransHint *&hint);
   int resolve_coalesce_aggr_hint(const ParseNode &hint_node, ObTransHint *&hint);
+  int resolve_mv_rewrite_hint(const ParseNode &hint_node, ObTransHint *&hint);
   int resolve_tb_name_list(const ParseNode *tb_name_list_node, ObIArray<ObHint::TablesInHint> &tb_name_list);
   int resolve_alloc_ops(const ParseNode &alloc_op_node, ObIArray<ObAllocOpHint> &alloc_op_hints);
   int resolve_tables_in_leading_hint(const ParseNode *tables_node, ObLeadingTable &leading_table);
@@ -782,6 +819,7 @@ private:
   int resolve_table_dynamic_sampling_hint(const ParseNode &hint_node, ObOptHint *&opt_hint);
   int get_ddl_schema_in_insert_into_select_clause(const ObTableSchema *&ddl_table_schema);
 public:
+  static int resolve_direct_load_hint(const ParseNode &hint_node, ObDirectLoadHint &hint);
   //////////end of functions for sql hint/////////////
 
 private:
@@ -833,6 +871,7 @@ private:
   int add_obj_to_llc_bitmap(const ObObj &obj, char *llc_bitmap, double &num_null);
   int compute_values_table_row_count(ObValuesTableDef &table_def);
   bool is_update_for_mv_fast_refresh(const ObDMLStmt &stmt);
+  int resolve_px_node_addrs(const ParseNode &hint_node, ObIArray<ObAddr> &addrs);
 protected:
   struct GenColumnExprInfo {
     GenColumnExprInfo():
@@ -877,6 +916,7 @@ protected:
   bool field_list_first_;
   ObDMLResolver *parent_namespace_resolver_;
   ObColumnNamespaceChecker column_namespace_checker_;
+  ObSequenceNamespaceChecker sequence_namespace_checker_;
   //these generated column exprs are not the reference by query expression,
   //just some expr template in schema,
   //only the generated column expr referenced by query can be deposited to stmt
@@ -915,6 +955,7 @@ protected:
 
   //for values table used to insert stmt:insert into table values row()....
   ObInsertResolver *upper_insert_resolver_;
+  bool can_resolve_pseudo_column_ref_with_empty_tablename_ = false;
 protected:
   DISALLOW_COPY_AND_ASSIGN(ObDMLResolver);
 };

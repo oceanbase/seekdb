@@ -1,0 +1,119 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#pragma once
+
+#include "storage/blocksstable/ob_batch_datum_rows.h"
+#include "storage/direct_load/ob_direct_load_batch_rows.h"
+#include "storage/direct_load/ob_direct_load_insert_table_ctx.h"
+#include "storage/direct_load/ob_direct_load_insert_table_row_handler.h"
+
+namespace oceanbase
+{
+namespace sql
+{
+class ObLoadDataStat;
+} // namespace sql
+namespace storage
+{
+class ObDirectLoadDatumRow;
+class ObDirectLoadDMLRowHandler;
+
+class ObDirectLoadInsertTableBatchRowBufferWriter
+{
+public:
+  ObDirectLoadInsertTableBatchRowBufferWriter();
+  virtual ~ObDirectLoadInsertTableBatchRowBufferWriter();
+  virtual int close();
+  void cancel() { is_canceled_ = true; }
+  int64_t get_row_count() const { return row_count_; }
+  VIRTUAL_TO_STRING_KV(KP_(insert_tablet_ctx), K_(slice_id), K_(row_count), K_(is_canceled),
+                       K_(is_inited));
+
+protected:
+  int inner_init(ObDirectLoadInsertTabletContext *insert_tablet_ctx,
+                 const ObDirectLoadInsertTableRowInfo &row_info,
+                 const ObDirectLoadRowFlag &row_flag,
+                 const int64_t max_bytes_size,
+                 common::ObIAllocator *lob_allocator = nullptr);
+  bool is_full() const;
+  int flush_buffer_if_need();
+  int flush_buffer();
+  int flush_batch(blocksstable::ObBatchDatumRows &datum_rows);
+  virtual int before_flush_batch(blocksstable::ObBatchDatumRows &datum_rows) { return OB_SUCCESS; }
+  virtual int after_flush_batch(blocksstable::ObBatchDatumRows &datum_rows) { return OB_SUCCESS; }
+
+protected:
+  ObArenaAllocator allocator_;
+  ObDirectLoadInsertTabletContext *insert_tablet_ctx_;
+  ObDirectLoadInsertTableRowHandler row_handler_;
+  ObDirectLoadBatchRows batch_rows_;
+  blocksstable::ObBatchDatumRows datum_rows_;
+  ObTabletID tablet_id_;
+  ObDirectLoadMgrAgent ddl_agent_;
+  int64_t slice_id_;
+  int64_t max_bytes_size_;
+  int64_t row_count_;
+  bool is_canceled_;
+  bool is_inited_;
+};
+
+// only for hidden table
+class ObDirectLoadInsertTableBatchRowDirectWriter
+  : public ObDirectLoadInsertTableBatchRowBufferWriter
+{
+  static const int64_t DEFAULT_MAX_BYTES_SIZE = 64LL << 10; // 64K
+public:
+  ObDirectLoadInsertTableBatchRowDirectWriter()
+    : ObDirectLoadInsertTableBatchRowBufferWriter(),
+      dml_row_handler_(nullptr),
+      job_stat_(nullptr),
+      write_ctx_(),
+      direct_datum_rows_(),
+      expect_column_count_(0)
+  {
+  }
+  virtual ~ObDirectLoadInsertTableBatchRowDirectWriter() = default;
+  int init(ObDirectLoadInsertTabletContext *insert_tablet_ctx,
+           const ObDirectLoadInsertTableRowInfo &row_info,
+           ObDirectLoadDMLRowHandler *dml_row_handler,
+           common::ObIAllocator *lob_allocator,
+           sql::ObLoadDataStat *job_stat = nullptr);
+  int append_batch(const ObDirectLoadBatchRows &batch_rows);
+  int append_selective(const ObDirectLoadBatchRows &batch_rows,
+                       const uint16_t *selector,
+                       const int64_t size);
+  int append_row(const ObDirectLoadDatumRow &datum_row,
+                 const ObDirectLoadRowFlag &row_flag);
+  int close() override;
+
+private:
+  int init_sstable_slice();
+  int close_sstable_slice();
+  int switch_sstable_slice();
+  int before_flush_batch(blocksstable::ObBatchDatumRows &datum_rows) override;
+  int after_flush_batch(blocksstable::ObBatchDatumRows &datum_rows) override;
+
+private:
+  ObDirectLoadDMLRowHandler *dml_row_handler_;
+  sql::ObLoadDataStat *job_stat_;
+  ObDirectLoadInsertTabletWriteCtx write_ctx_;
+  blocksstable::ObBatchDatumRows direct_datum_rows_;
+  int64_t expect_column_count_;
+};
+
+} // namespace storage
+} // namespace oceanbase

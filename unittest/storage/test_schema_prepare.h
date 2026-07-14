@@ -39,6 +39,7 @@ public:
     const int64_t column_cnt = TEST_COLUMN_CNT,
     const int64_t micro_block_size = DEFAULT_MICRO_BLOCK_SIZE);
   
+  static const int64_t TENANT_ID = 1;
   static const int64_t TABLE_ID = 7777;
   static const int64_t TEST_ROWKEY_COLUMN_CNT = 3;
   static const int64_t TEST_COLUMN_CNT = 6;
@@ -61,6 +62,7 @@ void TestSchemaPrepare::prepare_schema(
   table_schema.reset();
   ret = table_schema.set_table_name("test_merge_multi_version");
   ASSERT_EQ(OB_SUCCESS, ret);
+  table_schema.set_tablegroup_id(1);
   table_schema.set_database_id(1);
   table_schema.set_table_id(table_id);
   table_schema.set_rowkey_column_num(rowkey_column_cnt);

@@ -485,8 +485,8 @@ int ObSplitPartitionHelper::prepare_dst_tablet_creator_(const uint64_t tenant_da
                                     false/*is_create_bind_hidden_tablets*/,
                                     tenant_data_version,
                                     need_create_empty_majors,
-                                    create_commit_versions,
-                                    false/*has_cs_replica*/))) {
+                                    create_commit_versions
+                                    ))) {
           LOG_WARN("failed to init", K(ret));
         } else if (OB_FAIL(tablet_creator->add_create_tablet_arg(arg))) {
           LOG_WARN("failed to add create tablet arg", K(ret));

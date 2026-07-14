@@ -57,7 +57,7 @@ int MockObTableReadInfo::init(common::ObIAllocator &allocator,
 
   const int64_t extra_rowkey_col_cnt = storage::ObMultiVersionRowkeyHelpper::get_extra_rowkey_col_cnt();
   init_basic_info(schema_column_count, schema_rowkey_cnt,
-    false/*is_global_index_table*/); // init basic info
+    false /*is_delete_insert_table*/, false/*is_global_index_table*/); // init basic info
   if (OB_FAIL(prepare_arrays(allocator, cols_desc, out_cols_cnt))) {
     STORAGE_LOG(WARN, "failed to prepare arrays", K(ret), K(out_cols_cnt));
   } else if (nullptr != cols_param && OB_FAIL(cols_param_.init_and_assign(*cols_param, allocator))) {

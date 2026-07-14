@@ -287,7 +287,7 @@ int ObBaseIndexBlockDumper::new_macro_writer()
   // in sn: callback only be used for data macro blocks, dumper build macro meta block which not use callback.
   // in ss: dumper shouldn't new macro writer for dump disk.
   } else if (OB_FAIL(meta_macro_writer_->open(*container_store_desc_, 0 /*parallel_idx*/,
-      macro_seq_param, pre_warm_param, nullptr, nullptr, device_handle_))) {
+      macro_seq_param, pre_warm_param, sstable_index_builder_->get_private_object_cleaner(), nullptr, nullptr, device_handle_))) {
     STORAGE_LOG(WARN, "fail to open index macro writer", K(ret),
         KPC(container_store_desc_), K(macro_seq_param), KP(device_handle_));
   }
@@ -657,7 +657,7 @@ int ObIndexBlockLoader::init(common::ObIAllocator &allocator, const uint64_t dat
     STORAGE_LOG(WARN, "Init twice", K(ret));
   } else if (OB_UNLIKELY(data_version <= 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("fail to init index block loader, invalid data format version",
+    LOG_WARN("fail to init index block loader, invalid major working cluster version",
              K(ret), K(data_version));
   } else if (OB_FAIL(micro_reader_helper_.init(allocator))) {
     STORAGE_LOG(WARN, "Fail to init micro reader helper");

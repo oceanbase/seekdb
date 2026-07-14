@@ -18,23 +18,23 @@
 #define OB_ALL_VIRTUAL_TABLET_SSTABLE_MACRO_INFO_H_
 #include "common/row/ob_row.h"
 #include "lib/guard/ob_shared_guard.h"
-#include "observer/omt/ob_server_runtime_controller.h"
+#include "observer/omt/ob_multi_tenant.h"
 #include "sql/ob_scanner.h"
 #include "observer/virtual_table/ob_virtual_table_scanner_iterator.h"
-#include "share/rc/ob_server_runtime.h"
+#include "share/rc/ob_tenant_base.h"
 #include "storage/blocksstable/index_block/ob_index_block_macro_iterator.h"
 #include "storage/blocksstable/index_block/ob_index_block_dual_meta_iterator.h"
 #include "storage/blocksstable/ob_sstable_meta.h"
 #include "storage/ob_i_table.h"
 #include "storage/meta_mem/ob_tablet_handle.h"
-#include "observer/omt/ob_server_runtime_controller.h"
+#include "observer/omt/ob_multi_tenant.h"
 #include "storage/meta_mem/ob_tablet_handle.h"
 
 namespace oceanbase
 {
 namespace storage
 {
-class ObTabletIterator;
+class ObTenantTabletIterator;
 class ObTabletMeta;
 }
 namespace observer
@@ -66,7 +66,7 @@ class ObAllVirtualTabletSSTableMacroInfo : public common::ObVirtualTableScannerI
 public:
   ObAllVirtualTabletSSTableMacroInfo();
   virtual ~ObAllVirtualTabletSSTableMacroInfo();
-  int init(common::ObIAllocator *allocator);
+  int init(common::ObIAllocator *allocator, common::ObAddr &addr);
   virtual int inner_get_next_row(common::ObNewRow *&row);
   virtual void reset();
 private:
@@ -108,20 +108,24 @@ private:
 private:
   int set_key_ranges(const common::ObIArray<common::ObNewRange> &key_ranges);
   int gen_row(const MacroInfo &macro_info, common::ObNewRow *&row);
+  int next_tenant();
   int get_next_macro_info(MacroInfo &info);
   int get_next_tablet();
   int get_next_sstable();
   void clean_cur_sstable();
+  bool check_tenant_need_ignore();
   bool check_tablet_need_ignore(const ObTabletMeta &tablet_meta);
   bool check_sstable_need_ignore(const ObITable::TableKey &table_key);
   int gen_sstable_range(common::ObNewRange &range);
   int get_macro_info(const blocksstable::MacroBlockId &macro_id, MacroInfo &info);
   int get_macro_info(const blocksstable::ObMacroBlockDesc &macro_desc, MacroInfo &info);
 private:
-  ObTabletIterator *tablet_iter_;
+  common::ObAddr addr_;
+  ObTenantTabletIterator *tablet_iter_;
   common::ObArenaAllocator tablet_allocator_;
   ObTabletHandle tablet_handle_;
   common::ObSEArray<ObColDesc, 16> cols_desc_;
+  char ip_buf_[common::OB_IP_STR_BUFF];
   char start_key_buf_[common::OB_MAX_ROW_KEY_LENGTH + 1]; // extra byte for '\0'
   char end_key_buf_[common::OB_MAX_ROW_KEY_LENGTH + 1]; // extra byte for '\0'
   storage::ObTableStoreIterator table_store_iter_;

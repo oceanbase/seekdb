@@ -77,8 +77,7 @@ struct ObQueryHint {
 
   int set_outline_data_hints(const ObGlobalHint &global_hint,
                              const int64_t stmt_id,
-                             const ObIArray<ObHint*> &hints,
-                             const bool is_user_defined);
+                             const ObIArray<ObHint*> &hints);
   static int get_qb_name_source_hash_value(const ObString &src_qb_name,
                                            const ObIArray<uint32_t> &src_hash_val,
                                            uint32_t &hash_val);
@@ -90,9 +89,8 @@ struct ObQueryHint {
   int init_query_hint(ObIAllocator *allocator, ObSQLSessionInfo *session_info, ObDMLStmt *stmt);
   int check_and_set_params_from_hint(const ObResolverParams &params, const ObDMLStmt &stmt) const;
   int check_ddl_schema_version_from_hint(const ObDMLStmt &stmt) const;
-  int check_ddl_schema_version_from_hint(
-      const ObDMLStmt &stmt,
-      const ObDDLSchemaVersionHint &ddl_schema_version_hint) const;
+  int check_ddl_schema_version_from_hint(const ObDMLStmt &stmt,
+                                         const ObDDLSchemaVersionHint& ddlSchemaVersionHint) const;
   int distribute_hint_to_orig_stmt(ObDMLStmt *stmt);
   int adjust_qb_name_for_stmt(ObIAllocator &allocator,
                               ObDMLStmt &stmt,
@@ -148,11 +146,9 @@ struct ObQueryHint {
   int get_basic_table_without_index_by_hint_table(const ObDMLStmt &stmt,
                                                   const ObTableInHint &table,
                                                   TableItem *&table_item) const;
-  bool has_hint_exclude_concurrent() const
-  {
-    return !qb_hints_.empty() || !stmt_id_hints_.empty()
-           || global_hint_.has_hint_exclude_concurrent();
-  }
+  bool has_hint_exclude_concurrent() const {  return !qb_hints_.empty() || !stmt_id_hints_.empty()
+                                                     || global_hint_.has_hint_exclude_concurrent(); }
+
   // print hint
   int print_stmt_hint(PlanText &plan_text, const ObDMLStmt &stmt, const bool is_first_stmt_for_hint) const;
   int print_outline_data(PlanText &plan_text) const;
@@ -389,6 +385,7 @@ struct LogLeadingHint
                                    ObIArray<LeadingInfo> &leading_infos,
                                    TableItem *table,
                                    ObRelIds &table_set);
+  int try_init_leading_info_for_major_refresh_real_time_mview(const ObDMLStmt &stmt);
 
   TO_STRING_KV(K_(leading_tables),
                K_(leading_infos),
@@ -451,6 +448,9 @@ struct ObLogPlanHint
                                      bool config_disable,
                                      JoinFilterPushdownHintInfo& info) const;
   int check_use_das(uint64_t table_id, bool &force_das, bool &force_no_das) const;
+  int check_use_skip_scan(uint64_t table_id,  uint64_t index_id,
+                          bool &force_skip_scan,
+                          bool &force_no_skip_scan) const;
   int check_scan_direction(const ObQueryCtx &ctx,
                            uint64_t table_id,
                            uint64_t index_id,
@@ -505,13 +505,14 @@ struct ObLogPlanHint
 
   TO_STRING_KV(K_(is_outline_data), K_(join_order),
                K_(table_hints), K_(join_hints),
-               K_(normal_hints));
+               K_(normal_hints), K_(optimizer_features_enable_version));
 
   bool is_outline_data_;
   LogLeadingHint join_order_;
   common::ObSEArray<LogTableHint, 4, common::ModulePageAllocator, true> table_hints_;
   common::ObSEArray<LogJoinHint, 8, common::ModulePageAllocator, true> join_hints_;
   common::ObSEArray<const ObHint*, 8, common::ModulePageAllocator, true> normal_hints_;
+  uint64_t optimizer_features_enable_version_;
 };
 
 }

@@ -2434,21 +2434,6 @@ int ObRootService::clean_splitted_tablet(const obcall::ObCleanSplittedTabletArg 
   return ret;
 }
 
-int ObRootService::flashback_index(const ObFlashBackIndexArg &arg) {
-  int ret = OB_SUCCESS;
-  if (!inited_) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
-  } else if (!arg.is_valid()) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(arg), K(ret));
-  } else if (OB_FAIL(ddl_service_.flashback_index(arg))) {
-    LOG_WARN("failed to flashback index", K(ret));
-  }
-
-  return ret;
-}
-
 int ObRootService::purge_index(const ObPurgeIndexArg &arg)
 {
   int ret = OB_SUCCESS;
@@ -2586,7 +2571,7 @@ int ObRootService::truncate_table_v2(const obcall::ObTruncateTableArg &arg, obca
 /**
  * recyclebin related
  */
-int ObRootService::flashback_table_from_recyclebin(const ObFlashBackTableFromRecyclebinArg &arg)
+int ObRootService::restore_table_from_recyclebin(const ObRecyclebinRestoreTableArg &arg)
 {
   int ret = OB_SUCCESS;
   if (!inited_) {
@@ -2595,24 +2580,7 @@ int ObRootService::flashback_table_from_recyclebin(const ObFlashBackTableFromRec
   } else if (!arg.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(arg), K(ret));
-  } else if (OB_FAIL(ddl_service_.flashback_table_from_recyclebin(arg))) {
-    LOG_WARN("failed to flash back table", K(ret));
-  }
-  return ret;
-}
-
-int ObRootService::flashback_table_to_time_point(const obcall::ObFlashBackTableToScnArg &arg)
-{
-  int ret = OB_SUCCESS;
-  LOG_INFO("receive flashback table arg", K(arg));
-
-  if (!inited_) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
-  } else if (!arg.is_valid()) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(arg));
-  } else if (OB_FAIL(ddl_service_.flashback_table_to_time_point(arg))) {
+  } else if (OB_FAIL(ddl_service_.restore_table_from_recyclebin(arg))) {
     LOG_WARN("failed to flash back table", K(ret));
   }
   return ret;
@@ -2633,7 +2601,7 @@ int ObRootService::purge_table(const ObPurgeTableArg &arg)
   return ret;
 }
 
-int ObRootService::flashback_database(const ObFlashBackDatabaseArg &arg)
+int ObRootService::restore_database(const ObRecyclebinRestoreDatabaseArg &arg)
 {
   int ret = OB_SUCCESS;
   if (!inited_) {
@@ -2642,7 +2610,7 @@ int ObRootService::flashback_database(const ObFlashBackDatabaseArg &arg)
   } else if (!arg.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(arg), K(ret));
-  } else if (OB_FAIL(ddl_service_.flashback_database(arg))) {
+  } else if (OB_FAIL(ddl_service_.restore_database(arg))) {
     LOG_WARN("failed to flash back database", K(ret));
   }
   return ret;

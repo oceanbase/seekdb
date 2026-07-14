@@ -31,8 +31,6 @@
 #include "storage/access/ob_rows_info.h"
 #include "storage/access/ob_table_estimator.h"
 #include "storage/access/ob_index_sstable_estimator.h"
-#include "storage/access/ob_skip_index_sortedness.h"
-#include "storage/column_store/ob_column_oriented_sstable.h"
 #include "storage/blocksstable/ob_sstable.h"
 #include "storage/ddl/ob_direct_insert_sstable_ctx_new.h"
 #include "storage/retrieval/ob_block_stat_iter.h"
@@ -1463,9 +1461,7 @@ int ObLSTabletService::update_tablet_ddl_commit_scn(
   return ret;
 }
 
-int ObLSTabletService::update_tablet_report_status(
-    const common::ObTabletID &tablet_id,
-    const bool found_column_group_checksum_error)
+int ObLSTabletService::update_tablet_report_status(const common::ObTabletID &tablet_id)
 {
   int ret = OB_SUCCESS;
   ObTabletHandle tablet_handle;
@@ -1491,9 +1487,7 @@ int ObLSTabletService::update_tablet_report_status(
     ObTabletHandle new_tablet_handle;
     bool need_report = true;
 
-    if (OB_UNLIKELY(found_column_group_checksum_error)) {
-      tablet->tablet_meta_.report_status_.found_cg_checksum_error_ = true;
-    } else if (tablet->tablet_meta_.report_status_.need_report()) {
+    if (tablet->tablet_meta_.report_status_.need_report()) {
       tablet->tablet_meta_.report_status_.cur_report_version_ = tablet->tablet_meta_.report_status_.merge_snapshot_version_;
     } else {
       need_report = false;
@@ -1682,7 +1676,6 @@ int ObLSTabletService::update_tablet_ha_data_status(
     ObTabletHandle new_tablet_handle;
     ObTabletHandle tmp_tablet_handle;
     const ObTabletPersisterParam param(ls_->get_ls_id(), ls_->get_ls_epoch(), tablet_id);
-    bool is_row_store_with_co_major = false;
 
     if (OB_FAIL(old_tablet->tablet_meta_.ha_status_.get_data_status(current_status))) {
       LOG_WARN("failed to get data status", K(ret), KPC(old_tablet));
@@ -1693,9 +1686,6 @@ int ObLSTabletService::update_tablet_ha_data_status(
       LOG_WARN("can not change data status", K(ret), K(current_status), K(data_status), KPC(old_tablet));
     } else if (current_status == data_status) {
       LOG_INFO("data status is same, skip update", K(tablet_id), K(current_status), K(data_status));
-    } else if (ObTabletDataStatus::is_complete(data_status) // may reuse exist co major in cs replica when rebuild, but tablet is row store like src
-               && OB_FAIL(old_tablet->check_row_store_with_co_major(is_row_store_with_co_major))) {
-      LOG_WARN("failed to check row store with co major", K(ret), KPC(old_tablet));
     } else if (OB_FAIL(ObTabletCreateDeleteHelper::acquire_tmp_tablet(key, allocator, tmp_tablet_handle))) {
       if (OB_ENTRY_NOT_EXIST == ret) {
         ret = OB_TABLET_NOT_EXIST;
@@ -1703,8 +1693,7 @@ int ObLSTabletService::update_tablet_ha_data_status(
         LOG_WARN("failed to acquire tablet", K(ret), K(key));
       }
     } else if (FALSE_IT(tmp_tablet = tmp_tablet_handle.get_obj())) {
-    // need update tablet to column store with column store storage schema when rebuild reuse old co major in cs replica
-    } else if (OB_FAIL(tmp_tablet->init_with_replace_members(allocator, *old_tablet, old_tablet->tablet_meta_.snapshot_version_, data_status, is_row_store_with_co_major))) {
+    } else if (OB_FAIL(tmp_tablet->init_with_replace_members(allocator, *old_tablet, old_tablet->tablet_meta_.snapshot_version_, data_status))) {
       LOG_WARN("failed to init tablet", K(ret), KPC(old_tablet));
     } else if (FALSE_IT(time_guard.click("InitNew"))) {
     } else if (OB_FAIL(tmp_tablet->check_valid())) {
@@ -1716,7 +1705,7 @@ int ObLSTabletService::update_tablet_ha_data_status(
     } else if (OB_FAIL(safe_update_cas_tablet(key, disk_addr, tablet_handle, new_tablet_handle, time_guard))) {
       LOG_WARN("fail to update tablet", K(ret), K(key), K(disk_addr));
     } else {
-      LOG_INFO("succeeded to update tablet ha data status", K(ret), K(key), K(disk_addr), K(data_status), K(tablet_handle), K(tmp_tablet_handle), K(is_row_store_with_co_major), K(time_guard));
+      LOG_INFO("succeeded to update tablet ha data status", K(ret), K(key), K(disk_addr), K(data_status), K(tablet_handle), K(tmp_tablet_handle), K(time_guard));
     }
   }
   return ret;
@@ -2093,7 +2082,6 @@ int ObLSTabletService::create_tablet(
     const share::SCN &mds_checkpoint_scn,
     const storage::ObTabletMdsUserDataType &create_type,
     const bool micro_index_clustered,
-    const bool has_cs_replica,
     const ObTabletID &split_src_tablet_id,
     const uint64_t data_format_version,
     ObTabletHandle &tablet_handle,
@@ -2106,9 +2094,6 @@ int ObLSTabletService::create_tablet(
   ObTenantMetaMemMgr *t3m = share::g_mp->tenant_meta_mem_mgr();
   ObTransService *tx_svr = share::g_mp->trans_service();
   const ObTabletMapKey key(ls_id, tablet_id);
-  const bool need_generate_cs_replica_cg_array = ls_->is_cs_replica()
-                                          && create_tablet_schema.is_row_store()
-                                          && create_tablet_schema.is_user_data_table();
   ObTablet *tablet = nullptr;
   ObFreezer *freezer = ls_->get_freezer();
   tablet_handle.reset();
@@ -2127,7 +2112,7 @@ int ObLSTabletService::create_tablet(
       LOG_ERROR("new tablet is null", K(ret), KP(tablet), KP(allocator), K(tablet_handle));
     } else if (OB_FAIL(tablet->init_for_first_time_creation(*allocator, ls_id, tablet_id, data_tablet_id,
         create_scn, snapshot_version, create_tablet_schema, need_create_empty_major_sstable, clog_checkpoint_scn, mds_checkpoint_scn,
-        is_split_dest_tablet, split_src_tablet_id, micro_index_clustered, need_generate_cs_replica_cg_array, has_cs_replica, freezer, fork_info))) {
+        is_split_dest_tablet, split_src_tablet_id, micro_index_clustered, freezer, fork_info))) {
       LOG_WARN("failed to init tablet", K(ret), K(ls_id), K(tablet_id), K(data_tablet_id),
           K(create_scn), K(snapshot_version), K(create_tablet_schema));
     } else if (OB_FAIL(tablet->get_updating_tablet_pointer_param(param))) {
@@ -2190,7 +2175,7 @@ int ObLSTabletService::create_inner_tablet(
   } else if (FALSE_IT(time_guard.click("CreateTablet"))) {
   } else if (OB_FAIL(tmp_tablet->init_for_first_time_creation(allocator, ls_id, tablet_id, data_tablet_id,
       create_scn, snapshot_version, create_tablet_schema, true/*need_create_empty_major_sstable*/, clog_checkpoint_scn, mds_checkpoint_scn,
-      false/*is_split_dest_tablet*/, ObTabletID()/*split_src_tablet_id*/, false/*micro_index_clustered*/, false/*need_generate_cs_replica_cg_array*/, false/*has_cs_replica*/, freezer))) {
+      false/*is_split_dest_tablet*/, ObTabletID()/*split_src_tablet_id*/, false/*micro_index_clustered*/, freezer))) {
     LOG_WARN("failed to init tablet", K(ret), K(ls_id), K(tablet_id), K(data_tablet_id),
         K(create_scn), K(snapshot_version), K(create_tablet_schema));
   } else if (FALSE_IT(time_guard.click("InitTablet"))) {
@@ -5991,7 +5976,6 @@ void ObLSTabletService::dump_diag_info_for_old_row_loss(
       access_param.iter_param_.ls_id_ = data_table.tablet_iter_.get_tablet()->get_tablet_meta().ls_id_;
     }
     access_param.iter_param_.read_info_ = read_info;
-    access_param.iter_param_.cg_read_infos_ = schema_param->get_cg_read_infos();
     access_param.iter_param_.out_cols_project_ = &out_col_pros;
     access_param.iter_param_.set_tablet_handle(data_table.get_tablet_handle());
     access_param.iter_param_.need_trans_info_ = true;
@@ -6344,9 +6328,7 @@ int ObLSTabletService::inner_estimate_block_count_and_row_count(
     int64_t &macro_block_count,
     int64_t &micro_block_count,
     int64_t &sstable_row_count,
-    int64_t &memtable_row_count,
-    common::ObIArray<int64_t> &cg_macro_cnt_arr,
-    common::ObIArray<int64_t> &cg_micro_cnt_arr)
+    int64_t &memtable_row_count)
 {
   int ret = OB_SUCCESS;
   ObITable *table = nullptr;
@@ -6355,8 +6337,6 @@ int ObLSTabletService::inner_estimate_block_count_and_row_count(
   micro_block_count = 0;
   sstable_row_count = 0;
   memtable_row_count = 0;
-  cg_macro_cnt_arr.reset();
-  cg_micro_cnt_arr.reset();
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     LOG_WARN("not inited", K(ret), K_(is_inited));
@@ -6401,29 +6381,6 @@ int ObLSTabletService::inner_estimate_block_count_and_row_count(
         sstable_row_count += sst_meta_hdl.get_sstable_meta().get_row_count();
       }
     }
-    if (OB_SUCC(ret) && table->is_co_sstable()) {
-      ObCOSSTableV2 *co_sstable = static_cast<ObCOSSTableV2 *>(table);
-      common::ObArray<ObSSTableWrapper> table_wrappers;
-      if (OB_FAIL(co_sstable->get_all_tables(table_wrappers))) {
-        LOG_WARN("fail to get all tables", K(ret), KPC(co_sstable));
-      } else {
-        for (int64_t i = 0; OB_SUCC(ret) && i < table_wrappers.count(); i++) {
-          ObITable *cg_table = table_wrappers.at(i).get_sstable();
-          ObSSTableMetaHandle co_sst_meta_hdl;
-          if (OB_UNLIKELY(cg_table == nullptr || !cg_table->is_sstable())) {
-            ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("unexpected cg table", K(ret), KPC(cg_table));
-          } else if (FALSE_IT(sstable = static_cast<ObSSTable *>(cg_table))) {
-          } else if (OB_FAIL(sstable->get_meta(co_sst_meta_hdl))) {
-            LOG_WARN("fail to get sstable meta handle", K(ret));
-          } else if (OB_FAIL(cg_macro_cnt_arr.push_back(sstable->get_data_macro_block_count()))) {
-            LOG_WARN("fail to push macro count", K(ret));
-          } else if (OB_FAIL(cg_micro_cnt_arr.push_back(co_sst_meta_hdl.get_sstable_meta().get_data_micro_block_count()))) {
-            LOG_WARN("fail to push micro count", K(ret));
-          }
-        }
-      }
-    }
   }
   return ret;
 }
@@ -6436,9 +6393,7 @@ int ObLSTabletService::estimate_block_count_and_row_count_for_split_extra(
     int64_t &macro_block_count,
     int64_t &micro_block_count,
     int64_t &sstable_row_count,
-    int64_t &memtable_row_count,
-    common::ObIArray<int64_t> &cg_macro_cnt_arr,
-    common::ObIArray<int64_t> &cg_micro_cnt_arr)
+    int64_t &memtable_row_count)
 {
   int ret = OB_SUCCESS;
   /* To calculate tables block count for sample in tablet spliting, we should multiple a split ratio
@@ -6449,8 +6404,6 @@ int ObLSTabletService::estimate_block_count_and_row_count_for_split_extra(
   int64_t tmp_tablet_micro_block_cnt = 0;
   int64_t tmp_tablet_sstable_row_cnt = 0;
   int64_t tmp_tablet_memtable_row_cnt = 0;
-  ObArray<int64_t> tmp_tablet_cg_macro_cnt_arr;
-  ObArray<int64_t> tmp_tablet_cg_micro_cnt_arr;
   if (OB_FAIL(inner_get_read_tables(
       tablet_id,
       timeout_us,
@@ -6467,9 +6420,7 @@ int ObLSTabletService::estimate_block_count_and_row_count_for_split_extra(
       tmp_tablet_macro_block_cnt,
       tmp_tablet_micro_block_cnt,
       tmp_tablet_sstable_row_cnt,
-      tmp_tablet_memtable_row_cnt,
-      tmp_tablet_cg_macro_cnt_arr,
-      tmp_tablet_cg_micro_cnt_arr))) {
+      tmp_tablet_memtable_row_cnt))) {
     LOG_WARN("fail to inner estimate block count", K(ret));
   } else {
     /* estimate block count is using total range of tablet, so here no need to cut range.
@@ -6479,48 +6430,10 @@ int ObLSTabletService::estimate_block_count_and_row_count_for_split_extra(
     tmp_tablet_micro_block_cnt = tmp_tablet_micro_block_cnt / split_cnt;
     tmp_tablet_sstable_row_cnt = tmp_tablet_sstable_row_cnt / split_cnt;
     tmp_tablet_memtable_row_cnt = tmp_tablet_memtable_row_cnt / split_cnt;
-    for (int64_t i = 0; i < tmp_tablet_cg_macro_cnt_arr.count(); i++) {
-      tmp_tablet_cg_macro_cnt_arr.at(i) = tmp_tablet_cg_macro_cnt_arr.at(i) / split_cnt;
-    }
-    for (int64_t i = 0; i < tmp_tablet_cg_micro_cnt_arr.count(); i++) {
-      tmp_tablet_cg_micro_cnt_arr.at(i) = tmp_tablet_cg_micro_cnt_arr.at(i) / split_cnt;
-    }
     macro_block_count += tmp_tablet_macro_block_cnt;
     micro_block_count += tmp_tablet_micro_block_cnt;
     sstable_row_count += tmp_tablet_sstable_row_cnt;
     memtable_row_count += tmp_tablet_memtable_row_cnt;
-    if (OB_SUCC(ret)) {
-      ObIArray<int64_t> &arr = cg_macro_cnt_arr;
-      ObIArray<int64_t> &inc_arr = tmp_tablet_cg_macro_cnt_arr;
-      if (!inc_arr.empty()) {
-        if (arr.empty()) {
-          if (OB_FAIL(append(arr, inc_arr))) {
-            LOG_WARN("failed to append", K(ret));
-          }
-        } else {
-          int64_t cnt = std::min(arr.count(), inc_arr.count());
-          for (int64_t i = 0; i < cnt; i++) {
-            arr.at(i) += inc_arr.at(i);
-          }
-        }
-      }
-    }
-    if (OB_SUCC(ret)) {
-      ObIArray<int64_t> &arr = cg_micro_cnt_arr;
-      ObIArray<int64_t> &inc_arr = tmp_tablet_cg_micro_cnt_arr;
-      if (!inc_arr.empty()) {
-        if (arr.empty()) {
-          if (OB_FAIL(append(arr, inc_arr))) {
-            LOG_WARN("failed to append", K(ret));
-          }
-        } else {
-          int64_t cnt = std::min(arr.count(), inc_arr.count());
-          for (int64_t i = 0; i < cnt; i++) {
-            arr.at(i) += inc_arr.at(i);
-          }
-        }
-      }
-    }
   }
   return ret;
 }
@@ -6531,9 +6444,7 @@ int ObLSTabletService::estimate_block_count_and_row_count(
     int64_t &macro_block_count,
     int64_t &micro_block_count,
     int64_t &sstable_row_count,
-    int64_t &memtable_row_count,
-    common::ObIArray<int64_t> &cg_macro_cnt_arr,
-    common::ObIArray<int64_t> &cg_micro_cnt_arr)
+    int64_t &memtable_row_count)
 {
   int ret = OB_SUCCESS;
   ObTabletHandle tablet_handle;
@@ -6565,9 +6476,7 @@ int ObLSTabletService::estimate_block_count_and_row_count(
           macro_block_count,
           micro_block_count,
           sstable_row_count,
-          memtable_row_count,
-          cg_macro_cnt_arr,
-          cg_micro_cnt_arr))) {
+          memtable_row_count))) {
     LOG_WARN("fail to inner estimate block count", K(ret));
   }
 
@@ -6589,9 +6498,7 @@ int ObLSTabletService::estimate_block_count_and_row_count(
             macro_block_count,
             micro_block_count,
             sstable_row_count,
-            memtable_row_count,
-            cg_macro_cnt_arr,
-            cg_micro_cnt_arr))) {
+            memtable_row_count))) {
       LOG_WARN("fail to inner estimate block count", K(ret));
     }
   } else if (OB_REPLICA_NOT_READABLE == ret) {
@@ -6626,9 +6533,7 @@ int ObLSTabletService::estimate_block_count_and_row_count(
               macro_block_count,
               micro_block_count,
               sstable_row_count,
-              memtable_row_count,
-              cg_macro_cnt_arr,
-              cg_micro_cnt_arr))) {
+              memtable_row_count))) {
       LOG_WARN("fail to inner estimate block count", K(ret));
     } else if (OB_UNLIKELY(0 == tablet_iter.tablet_handle_.get_obj()->get_major_table_count())) {
       if (OB_FAIL(split_data.get_split_src_tablet_id(src_tablet_id))) {
@@ -6647,9 +6552,7 @@ int ObLSTabletService::estimate_block_count_and_row_count(
                 macro_block_count,
                 micro_block_count,
                 sstable_row_count,
-                memtable_row_count,
-                cg_macro_cnt_arr,
-                cg_micro_cnt_arr))) {
+                memtable_row_count))) {
         LOG_WARN("failed to estimate block count and row count for split extra tablets", K(ret));
       }
     }
@@ -8242,204 +8145,6 @@ int ObLSTabletService::process_lob_after_update(
   if (OB_SUCC(ret)) {
     run_ctx.lob_dml_ctx_.reuse();
   }
-  return ret;
-}
-
-int ObLSTabletService::estimate_skip_index_sortedness(
-    const uint64_t &table_id,
-    const common::ObTabletID &tablet_id,
-    const int64_t timeout_us,
-    const common::ObIArray<uint64_t> &column_ids,
-    const common::ObIArray<uint64_t> &sample_counts,
-    common::ObIArray<double> &sortedness,
-    common::ObIArray<uint64_t> &res_sample_counts)
-{
-  int ret = OB_SUCCESS;
-
-  
-  ObTabletHandle tablet_handle;
-  ObTabletMemberWrapper<ObTabletTableStore> table_store_wrapper;
-  ObSSTable *latest_major_sstable = nullptr;
-
-  ObMultiVersionSchemaService *schema_service = share::g_mp->tenant_schema_service()->get_schema_service();
-  ObSchemaGetterGuard schema_guard;
-  const ObTableSchema *table_schema = nullptr;
-
-  ObSkipIndexSortedness calcer;
-
-  // when co_sstable does't have cg_sstable, we consider it as a row store table to calc
-  bool use_row_store_table_to_calc = false;
-  if (IS_NOT_INIT) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("Not init", KR(ret), K_(is_inited));
-  } else if (OB_UNLIKELY(column_ids.count() != sample_counts.count())) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("The length of column_ids is not match sample_counts", K(column_ids.count()), K(sample_counts.count()), KR(ret));
-  } else if (OB_FAIL(sortedness.reserve(column_ids.count()))) {
-    LOG_WARN("Fail to reserve sortedness array", KR(ret));
-  } else if (OB_FAIL(res_sample_counts.reserve(column_ids.count()))) {
-    LOG_WARN("Fail to reserve sortedness array", KR(ret));
-  } else if (OB_FAIL(get_tablet(tablet_id, tablet_handle))) {
-    LOG_WARN("Fail to get tablet", KR(ret), K(tablet_id));
-  } else if (OB_FAIL(tablet_handle.get_obj()->fetch_table_store(table_store_wrapper))) {
-    LOG_WARN("Fail to fetch table store", KR(ret));
-  } else if (FALSE_IT(latest_major_sstable = static_cast<ObSSTable *>(
-                          table_store_wrapper.get_member()->get_major_sstables().get_boundary_table(
-                              true)))) {
-  } else if (OB_ISNULL(latest_major_sstable) || latest_major_sstable->is_empty()) {
-    // there is no major sstable, we default return the sortedness as 0
-    LOG_DEBUG("No major sstable, sortedness will be set to 0",
-             K(table_id),
-             K(tablet_id),
-             K(column_ids));
-    for (int i = 0; OB_SUCC(ret) && i < column_ids.count(); i++) {
-      if (OB_FAIL(sortedness.push_back(0))) {
-        LOG_WARN("Fail to push back to sortedness when no major sstable", KR(ret));
-      } else if (OB_FAIL(res_sample_counts.push_back(0))) {
-        LOG_WARN("Fail to push back to res_sample_counts when no major sstable", KR(ret));
-      }
-    }
-  } else if (OB_ISNULL(schema_service)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("Fail to get schema service", KR(ret));
-  } else if (OB_FAIL(schema_service->get_tenant_schema_guard(schema_guard))) {
-    LOG_WARN("Fail to get schema guard", KR(ret));
-  } else if (OB_FAIL(schema_guard.get_table_schema( table_id, table_schema))) {
-    LOG_WARN("Fail to get table schema", KR(ret), K(tablet_id));
-  } else if (latest_major_sstable->is_co_sstable()) {
-    // for column store table, there are a few points to note:
-    //   1. Firstly use cg_sstable to calculate skip index sortedness
-    //   2. It may not have cg_sstable here
-    //   3. notice that transform column_id to cg_idx
-    ObCOSSTableV2 *cosstable = static_cast<ObCOSSTableV2 *>(latest_major_sstable);
-    const ObITableReadInfo *index_read_info = nullptr;
-
-    // the column_param is used to transform column_id to cg_idx
-    common::ObArenaAllocator allocator(common::ObMemAttr("SkipIndexEsti"));
-    ObColumnParam *column_param = nullptr;
-
-    if (cosstable->is_cgs_empty_co_table()) {
-      // there are not cg_sstable here
-      // we consider this sstable as a row store table
-      use_row_store_table_to_calc = true;
-    } else if (OB_FAIL(ObTableParam::alloc_column(allocator, column_param))) {
-      LOG_WARN("Fail to alloc column param", KR(ret));
-    } else if (OB_FAIL(share::g_mp->tenant_cg_read_info_mgr()->get_index_read_info(index_read_info))) {
-      LOG_WARN("Fail to get cg index read info", KR(ret));
-    } else {
-      // the table contains cg_sstable, we need do as follows:
-      //   1. transform the column_id to cg_idx
-      //   2. get the cg sstable and calc skip index sortedness
-      for (int i = 0; OB_SUCC(ret) && i < column_ids.count(); i++) {
-        ObSSTableWrapper cg_wrapper;
-        ObSSTable *cg_sstable = nullptr;
-        double tmp_sortedness = 0.0;
-
-        const ObColumnSchemaV2 *column_schema = nullptr;
-        int32_t cg_idx = 0;
-
-        if (OB_ISNULL(column_schema = table_schema->get_column_schema(column_ids.at(i)))) {
-          ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("Fail to get column schema", KR(ret), K(table_schema), K(column_ids), K(i));
-        } else if (column_schema->is_virtual_generated_column()) {
-          // for virtual column, the sortedness is 0
-          if (OB_FAIL(sortedness.push_back(0))) {
-            LOG_WARN("Fail to push back sortedness", KR(ret));
-          } else if (OB_FAIL(res_sample_counts.push_back(0))) {
-            LOG_WARN("Fail to push back to res_sample_counts when no major sstable", KR(ret));
-          }
-        } else if (OB_FAIL(ObTableParam::convert_column_schema_to_param(*column_schema,
-                                                                        *column_param))) {
-          LOG_WARN("Fail to convert column schema to param", KR(ret));
-        } else if (OB_FAIL(table_schema->get_column_group_index(*column_param, true, cg_idx))) {
-          LOG_WARN("Fail to get column group idx", KR(ret), KPC(column_param));
-        } else if (cg_idx >= cosstable->get_cs_meta().get_column_group_count() || cg_idx < 0) {
-          // no cg sstable for this column, the sortedness is 0
-          if (OB_FAIL(sortedness.push_back(0))) {
-            LOG_WARN("Fail to push back sortedness", KR(ret));
-          } else if (OB_FAIL(res_sample_counts.push_back(0))) {
-            LOG_WARN("Fail to push back to res_sample_counts when no major sstable", KR(ret));
-          }
-        } else if (OB_FAIL(cosstable->fetch_cg_sstable(cg_idx, cg_wrapper))) {
-          LOG_WARN("Fail to get cg sstable", KR(ret), K(cg_idx), K(i));
-        } else if (OB_FAIL(cg_wrapper.get_loaded_column_store_sstable(cg_sstable))) {
-          LOG_WARN("Fail to get sstable from wrapper", K(ret), K(cg_wrapper));
-        } else if (cg_sstable->is_empty()) {
-          // fast path for empty sstable
-          if (OB_FAIL(sortedness.push_back(0))) {
-            LOG_WARN("Fail to push back sortedness", KR(ret));
-          } else if (OB_FAIL(res_sample_counts.push_back(0))) {
-            LOG_WARN("Fail to push back to res_sample_counts when no major sstable", KR(ret));
-          }
-        } else if (FALSE_IT(calcer.reset())) {
-        } else if (OB_FAIL(calcer.init(*cg_sstable,
-                                       *table_schema,
-                                       index_read_info,
-                                       sample_counts.at(i),
-                                       column_ids.at(i),
-                                       res_sample_counts))) {
-          LOG_WARN("Fail to init skip index sortedness",
-                   KR(ret),
-                   KPC(cg_sstable),
-                   KPC(table_schema),
-                   K(column_ids),
-                   K(sample_counts),
-                   K(cg_idx),
-                   K(i));
-        } else if (OB_FAIL(calcer.sample_and_calc(tmp_sortedness))) {
-          LOG_WARN("Fail to sample and calc sortedness", KR(ret));
-        } else if (OB_FAIL(sortedness.push_back(tmp_sortedness))) {
-          LOG_WARN("Fail to push back sortedness", KR(ret));
-        }
-      }
-    }
-  } else {
-    use_row_store_table_to_calc = true;
-  }
-
-  if (OB_SUCC(ret) && use_row_store_table_to_calc) {
-    // for row store table, there are a few points to note:
-    //   1. column in row store table may not have skip index, we should check it
-    //   2. the read_info is not same as column store table
-    const ObITableReadInfo &read_info = tablet_handle.get_obj()->get_rowkey_read_info();
-
-    for (int i = 0; OB_SUCC(ret) && i < column_ids.count(); i++) {
-      const ObColumnSchemaV2 *column_schema = nullptr;
-      double tmp_sortedness = 0;
-      if (OB_ISNULL(column_schema = table_schema->get_column_schema(column_ids.at(i)))) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("Fail to get column schema", KR(ret), KPC(table_schema), K(column_ids), K(i));
-      } else if (!column_schema->get_skip_index_attr().has_min_max()
-                 || column_schema->is_virtual_generated_column()) {
-        // when there's not skip index, we consider the sortedness as 0
-        LOG_WARN("No skip index in column", K(table_id), KPC(column_schema));
-        if (OB_FAIL(sortedness.push_back(0))) {
-          LOG_WARN("Fail to push back sortedness", KR(ret));
-        } else if (OB_FAIL(res_sample_counts.push_back(0))) {
-          LOG_WARN("Fail to push back to res_sample_counts when no major sstable", KR(ret));
-        }
-      } else if (FALSE_IT(calcer.reset())) {
-      } else if (OB_FAIL(calcer.init(*latest_major_sstable,
-                                     *table_schema,
-                                     &read_info,
-                                     sample_counts.at(i),
-                                     column_ids.at(i),
-                                     res_sample_counts))) {
-        LOG_WARN("Fail to init skip index sortedness",
-                 KR(ret),
-                 KPC(latest_major_sstable),
-                 KPC(table_schema),
-                 K(column_ids),
-                 K(sample_counts),
-                 K(i));
-      } else if (OB_FAIL(calcer.sample_and_calc(tmp_sortedness))) {
-        LOG_WARN("Fail to sample and calc sortedness", KR(ret));
-      } else if (OB_FAIL(sortedness.push_back(tmp_sortedness))) {
-        LOG_WARN("Fail to push back sortedness", KR(ret));
-      }
-    }
-  }
-
   return ret;
 }
 

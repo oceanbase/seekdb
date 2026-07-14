@@ -110,7 +110,7 @@ t1	CREATE TABLE `t1` (
   VECTOR KEY `idx1` (`wine_data`) WITH (DISTANCE=L2, TYPE=IVF_FLAT, NLIST=3, SAMPLE_PER_NLIST=50, LIB=OB) BLOCK_SIZE 16384,
   VECTOR KEY `idx2` (`iris_data`) WITH (DISTANCE=L2, TYPE=IVF_FLAT, NLIST=3, SAMPLE_PER_NLIST=50, LIB=OB) BLOCK_SIZE 16384,
   VECTOR KEY `idx3` (`data`) WITH (DISTANCE=L2, TYPE=HNSW, LIB=VSAG, M=10, EF_CONSTRUCTION=11, EF_SEARCH=40) BLOCK_SIZE 16384
-) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' BLOCK_SIZE = 16384 TABLET_SIZE = 134217728 PCTFREE = 0
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = replica_num BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
 select count(*) from t1;
 count(*)
 628
@@ -192,7 +192,7 @@ insert into hhst2(c1,c2,c3,c4) values(19,'[4,1,2]','[5,2,3]','[9,9,4]');
 insert into hhst2(c1,c2,c3,c4) values(20,'[5,1,2]','[5,2,3]','[10,10,10]');
 create vector index vector_idx1 on hhst1(c3) with (distance=l2, lib=vsag, type=hnsw, m=10, ef_construction=100, ef_search=40);
 create vector index vector_idx2 on hhst1(c4) with (distance=l2, type=ivf_flat, nlist=2, sample_per_nlist=3);
-insert /*+ enable_parallel_dml parallel(2) */ into hhst2 select * from hhst1;
+insert /*+ direct(true,100) enable_parallel_dml parallel(2) */ into hhst2 select * from hhst1;
 select count(*) from hhst2;
 count(*)
 20

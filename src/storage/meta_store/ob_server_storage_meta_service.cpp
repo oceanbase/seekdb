@@ -15,16 +15,9 @@
  */
 #define USING_LOG_PREFIX STORAGE
 
-#ifndef _WIN32
-#include <sys/statvfs.h>
-#endif
-#include "observer/omt/ob_server_runtime_controller.h"
-#include "share/rc/ob_module_provider.h"
 #include "storage/meta_store/ob_server_storage_meta_service.h"
 #include "storage/ob_file_system_router.h"
 #include "share/ob_local_device.h"  // relocated-definition owner
-#include "storage/meta_store/ob_local_storage_meta_service.h"
-
 namespace oceanbase
 {
 namespace storage
@@ -40,9 +33,9 @@ ObServerStorageMetaService::ObServerStorageMetaService()
     is_started_(false),
     persister_(),
     replayer_(),
-    server_slogger_(),
-    ckpt_slog_handler_(),
-    need_reserved_(false) {}
+    slogger_mgr_(),
+    server_slogger_(nullptr),
+    ckpt_slog_handler_() {}
 
 int ObServerStorageMetaService::init()
 {
@@ -50,19 +43,17 @@ int ObServerStorageMetaService::init()
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
     LOG_WARN("has inited", K(ret));
-  } else if (OB_FAIL(check_log_disk(
-        OB_FILE_SYSTEM_ROUTER.get_sstable_dir(),
-        OB_FILE_SYSTEM_ROUTER.get_slog_dir()))) {
-    LOG_WARN("fail to set need reserved", K(ret));
-  } else if (OB_FAIL(server_slogger_.init(
+  } else if (OB_FAIL(slogger_mgr_.init(
         OB_FILE_SYSTEM_ROUTER.get_slog_dir(),
-        ObLogConstants::MAX_LOG_FILE_SIZE,
-        OB_FILE_SYSTEM_ROUTER.get_slog_file_spec(),
-        true /*is_server*/))) {
-    LOG_WARN("fail to init server slogger", K(ret));
-  } else if (OB_FAIL(ckpt_slog_handler_.init(&server_slogger_))) {
+	      OB_FILE_SYSTEM_ROUTER.get_sstable_dir(),
+	      ObLogConstants::MAX_LOG_FILE_SIZE,
+        OB_FILE_SYSTEM_ROUTER.get_slog_file_spec()))) {
+    LOG_WARN("fail to init slogger manager", K(ret));
+  } else if (OB_FAIL(slogger_mgr_.get_server_slogger(server_slogger_))) {
+    LOG_WARN("fail to get server slogger", K(ret));
+  } else if (OB_FAIL(ckpt_slog_handler_.init(server_slogger_))) {
     LOG_WARN("fail to init server checkpoint slog hander", K(ret));
-  } else if (OB_FAIL(persister_.init(&server_slogger_))) {
+  } else if (OB_FAIL(persister_.init(server_slogger_))) {
     LOG_WARN("fail to init persister", K(ret));
   } else if (OB_FAIL(replayer_.init(persister_, ckpt_slog_handler_))) {
     LOG_WARN("fail to init replayer", K(ret));
@@ -79,8 +70,8 @@ int ObServerStorageMetaService::start()
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
-  } else if (OB_FAIL(server_slogger_.start())) {
-    LOG_WARN("fail to start server slogger", K(ret));
+  } else if (OB_FAIL(slogger_mgr_.start())) {
+    LOG_WARN("fail to start slogger mgr", K(ret));
   } else if (OB_FAIL(replayer_.start_replay()))  {
     LOG_WARN("fail to start replayer", K(ret));
   } else if (OB_FAIL(ckpt_slog_handler_.start())) {
@@ -96,24 +87,24 @@ int ObServerStorageMetaService::start()
 void ObServerStorageMetaService::stop()
 {
   if (IS_INIT) {
-    server_slogger_.stop();
+    slogger_mgr_.stop();
     ckpt_slog_handler_.stop();
   }
 }
 void ObServerStorageMetaService::wait()
 {
   if (IS_INIT) {
-    server_slogger_.wait();
+    slogger_mgr_.wait();
     ckpt_slog_handler_.wait();
   }
 }
 void ObServerStorageMetaService::destroy()
 {
-  server_slogger_.destroy();
+  slogger_mgr_.destroy();
+  server_slogger_ = nullptr;
   ckpt_slog_handler_.destroy();
   persister_.destroy();
   replayer_.destroy();
-  need_reserved_ = false;
   is_inited_ = false;
 }
 
@@ -133,17 +124,11 @@ int ObServerStorageMetaService::get_meta_block_list(
 int ObServerStorageMetaService::get_reserved_size(int64_t &reserved_size) const
 {
   int ret = OB_SUCCESS;
-  reserved_size = 0;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
-  } else if (need_reserved_) {
-    int64_t used_size = 0;
-    if (OB_FAIL(get_using_disk_space(used_size))) {
-      LOG_WARN("fail to get using size for slog", K(ret));
-    } else {
-      reserved_size = std::max(static_cast<int64_t>(0), SLOG_RESERVED_DISK_SIZE - used_size);
-    }
+  } else if (OB_FAIL(slogger_mgr_.get_reserved_size(reserved_size))) {
+    LOG_WARN("fail to get reserved size", K(ret));
   }
   return ret;
 }
@@ -155,15 +140,8 @@ int ObServerStorageMetaService::get_server_slogger(ObStorageLogger *&slogger) co
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
   } else {
-    slogger = const_cast<ObStorageLogger *>(&server_slogger_);
+    slogger = server_slogger_;
   }
-  return ret;
-}
-
-int ObServerStorageMetaService::set_need_reserved_for_test(const bool need_reserved)
-{
-  int ret = OB_SUCCESS;
-  need_reserved_ = need_reserved;
   return ret;
 }
 
@@ -175,68 +153,6 @@ int ObServerStorageMetaService::write_checkpoint(bool is_force)
     LOG_WARN("not init", K(ret));
   } else if (OB_FAIL(ckpt_slog_handler_.write_checkpoint(is_force))) {
     LOG_WARN("fail to write checkpoint", K(ret));
-  }
-  return ret;
-}
-
-int ObServerStorageMetaService::check_log_disk(
-    const char *data_dir,
-    const char *log_dir)
-{
-  int ret = OB_SUCCESS;
-  need_reserved_ = false;
-  if (OB_ISNULL(data_dir) || OB_ISNULL(log_dir)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Invalid argument", K(ret), KP(data_dir), KP(log_dir));
-#ifdef _WIN32
-  } else {
-    UNUSEDx(data_dir, log_dir);
-  }
-#else
-  } else {
-    struct statvfs data_svfs;
-    struct statvfs log_svfs;
-    if (OB_UNLIKELY(0 != statvfs(data_dir, &data_svfs))) {
-      ret = OB_IO_ERROR;
-      LOG_WARN("fail to get sstable directory vfs", K(ret), K(data_dir));
-    } else if (OB_UNLIKELY(0 != statvfs(log_dir, &log_svfs))) {
-      ret = OB_IO_ERROR;
-      LOG_WARN("fail to get slog directory vfs", K(ret), K(log_dir));
-    } else if (OB_UNLIKELY(0 >= log_svfs.f_bavail)) {
-      ret = OB_DISK_ERROR;
-      LOG_ERROR("slog disk is full, please check", K(ret), K(log_dir), K(log_svfs.f_bavail));
-    } else {
-      need_reserved_ = (data_svfs.f_fsid == log_svfs.f_fsid);
-    }
-  }
-#endif
-  return ret;
-}
-
-int ObServerStorageMetaService::get_using_disk_space(int64_t &using_space) const
-{
-  int ret = OB_SUCCESS;
-  omt::ObServerRuntimeController *omt = GCTX.server_runtime_controller_;
-  using_space = 0;
-  if (OB_FAIL(server_slogger_.get_using_disk_space(using_space))) {
-    LOG_WARN("fail to get using disk space", K(ret), K(using_space));
-  } else if (OB_ISNULL(omt)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected error, omt is nullptr", K(ret), KP(omt));
-  } else {
-    if (OB_FAIL(share::check_server_runtime_ready())) {
-      LOG_WARN("server runtime is not ready", K(ret));
-    } else {
-      int64_t local_storage_using_size = 0;
-      if (OB_FAIL(share::g_mp->local_storage_meta_service()->get_slogger().get_using_disk_space(local_storage_using_size))) {
-        LOG_WARN("fail to get the disk space that slog used", K(ret));
-      } else {
-        using_space += local_storage_using_size;
-      }
-    }
-    if (OB_SERVER_RUNTIME_NOT_READY == ret) {
-      ret = OB_SUCCESS;
-    }
   }
   return ret;
 }
@@ -255,7 +171,7 @@ int ObLocalDevice::get_data_disk_used_percentage_(
     int64_t &percent) const
 {
   int ret = OB_SUCCESS;
-  int64_t reserved_size = storage::ObServerStorageMetaService::SLOG_RESERVED_DISK_SIZE;
+  int64_t reserved_size = storage::ObStorageLoggerManager::RESERVED_DISK_SIZE;
 
   if (OB_UNLIKELY(!is_marked_)) {
     ret = OB_NOT_INIT;

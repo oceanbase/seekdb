@@ -54,8 +54,6 @@ ob_set_subtarget(ob_storage blocksstable
   blocksstable/ob_macro_block_reader.cpp
   blocksstable/ob_macro_block_struct.cpp
   blocksstable/ob_macro_block_writer.cpp
-  blocksstable/ob_dag_macro_block_writer.cpp
-  blocksstable/ob_dag_micro_block_iterator.cpp
   blocksstable/ob_block_writer_concurrent_guard.cpp
   blocksstable/ob_data_macro_block_merge_writer.cpp
   blocksstable/ob_micro_block_cache.cpp
@@ -99,6 +97,7 @@ ob_set_subtarget(ob_storage blocksstable_encoding1
   blocksstable/encoding/ob_bit_stream.cpp
   blocksstable/encoding/ob_column_equal_decoder.cpp
   blocksstable/encoding/ob_column_equal_encoder.cpp
+  blocksstable/encoding/ob_column_datum_iter.cpp
   blocksstable/encoding/ob_const_decoder.cpp
   blocksstable/encoding/ob_const_encoder.cpp
   blocksstable/encoding/ob_dict_decoder.cpp
@@ -143,52 +142,6 @@ ob_set_subtarget(ob_storage blocksstable_encoding2
   blocksstable/encoding/neon/ob_raw_decoder_neon.cpp
 )
 
-ob_set_subtarget(ob_storage blocksstable_cs_encoding
-  blocksstable/cs_encoding/ob_column_encoding_struct.cpp
-  blocksstable/cs_encoding/ob_stream_encoding_struct.cpp
-  blocksstable/cs_encoding/ob_cs_encoding_allocator.cpp
-  blocksstable/cs_encoding/ob_cs_decoding_util.cpp
-  blocksstable/cs_encoding/ob_cs_encoding_util.cpp
-  blocksstable/cs_encoding/ob_icolumn_cs_encoder.cpp
-  blocksstable/cs_encoding/ob_dict_encoding_hash_table.cpp
-  blocksstable/cs_encoding/ob_dict_column_encoder.cpp
-  blocksstable/cs_encoding/ob_int_dict_column_encoder.cpp
-  blocksstable/cs_encoding/ob_str_dict_column_encoder.cpp
-  blocksstable/cs_encoding/ob_integer_column_encoder.cpp
-  blocksstable/cs_encoding/ob_string_column_encoder.cpp
-  blocksstable/cs_encoding/ob_micro_block_cs_encoder.cpp
-  blocksstable/cs_encoding/ob_column_datum_iter.cpp
-  blocksstable/cs_encoding/ob_string_stream_encoder.cpp
-  blocksstable/cs_encoding/ob_integer_stream_encoder.cpp
-  blocksstable/cs_encoding/ob_cs_micro_block_transformer.cpp
-  blocksstable/cs_encoding/ob_icolumn_cs_decoder.cpp
-  blocksstable/cs_encoding/ob_new_column_cs_decoder.cpp
-  blocksstable/cs_encoding/ob_integer_column_decoder.cpp
-  blocksstable/cs_encoding/ob_string_column_decoder.cpp
-  blocksstable/cs_encoding/ob_dict_column_decoder.cpp
-  blocksstable/cs_encoding/ob_int_dict_column_decoder.cpp
-  blocksstable/cs_encoding/ob_str_dict_column_decoder.cpp
-  blocksstable/cs_encoding/ob_dict_column_decoder_neon.cpp
-  blocksstable/cs_encoding/ob_micro_block_cs_decoder.cpp
-  blocksstable/cs_encoding/ob_integer_stream_encoder.cpp
-  blocksstable/cs_encoding/ob_integer_stream_decoder.cpp
-  blocksstable/cs_encoding/ob_string_stream_encoder.cpp
-  blocksstable/cs_encoding/ob_string_stream_decoder.cpp
-  blocksstable/cs_encoding/ob_cs_vector_decoding_util.cpp
-  blocksstable/cs_encoding/semistruct_encoding/ob_semistruct_column_encoder.cpp
-  blocksstable/cs_encoding/semistruct_encoding/ob_semistruct_column_decoder.cpp
-  blocksstable/cs_encoding/semistruct_encoding/ob_semistruct_json.cpp
-  blocksstable/cs_encoding/semistruct_encoding/ob_semistruct_encoding_util.cpp
-  blocksstable/cs_encoding/semistruct_encoding/ob_semistruct_encoding_struct.cpp
-)
-
-# These two carry the cs vector-decode template matrix (ConvertStringToVec / ObIntStreamVecDecode);
-# each is ~190s/~87s alone and dominates the cs_encoding unity. ALONE makes them their own TUs so
-# they compile in parallel instead of serializing inside one unity straggler (no source/runtime change).
-ob_set_subtarget(ob_storage ALONE
-  blocksstable/cs_encoding/ob_string_stream_vector_decoder.cpp
-  blocksstable/cs_encoding/ob_integer_stream_vector_decoder.cpp
-)
 
 ob_set_subtarget(ob_storage blocksstable_index_block
   blocksstable/index_block/ob_agg_row_struct.cpp
@@ -523,31 +476,6 @@ ob_set_subtarget(ob_storage ls
   ls/ob_ls_storage_clog_handler.cpp
 )
 
-ob_set_subtarget(ob_storage column_store
-  column_store/ob_column_oriented_sstable.cpp
-  column_store/ob_co_merge_dag.cpp
-  column_store/ob_co_merge_ctx.cpp
-  column_store/ob_co_prefetcher.cpp
-  column_store/ob_co_sstable_row_getter.cpp
-  column_store/ob_co_sstable_row_multi_getter.cpp
-  column_store/ob_co_sstable_row_scanner.cpp
-  column_store/ob_co_sstable_row_multi_scanner.cpp
-  column_store/ob_co_sstable_rows_filter.cpp
-  column_store/ob_cg_bitmap.cpp
-  column_store/ob_cg_iter_param_pool.cpp
-  column_store/ob_cg_sstable_row_getter.cpp
-  column_store/ob_cg_scanner.cpp
-  column_store/ob_cg_tile_scanner.cpp
-  column_store/ob_cg_aggregated_scanner.cpp
-  column_store/ob_cg_prefetcher.cpp
-  column_store/ob_column_oriented_merger.cpp
-  column_store/ob_co_merge_writer.cpp
-  column_store/ob_virtual_cg_scanner.cpp
-  column_store/ob_column_store_util.cpp
-  column_store/ob_cg_group_by_scanner.cpp
-  column_store/ob_column_store_replica_util.cpp
-)
-
 ob_set_subtarget(ob_storage access
   access/ob_table_estimator.cpp
   access/ob_index_sstable_estimator.cpp
@@ -596,7 +524,6 @@ ob_set_subtarget(ob_storage access
   access/ob_empty_read_bucket.cpp
   access/ob_global_iterator_pool.cpp
   access/ob_where_optimizer.cpp
-  access/ob_skip_index_sortedness.cpp
 )
 
 ob_set_subtarget(ob_storage ddl
@@ -637,27 +564,20 @@ ob_set_subtarget(ob_storage ddl
   ddl/ob_direct_load_mgr_utils.cpp
   ddl/ob_tablet_slice_row_iterator.cpp
   ddl/ob_ddl_independent_dag.cpp
-  ddl/ob_column_clustered_dag.cpp
-  ddl/ob_cg_macro_block_writer.cpp
-  ddl/ob_cg_macro_block_write_task.cpp
+  ddl/ob_ddl_insert_dag.cpp
+  ddl/ob_ddl_macro_block_writer.cpp
+  ddl/ob_ddl_macro_block_write_task.cpp
   ddl/ob_lob_macro_block_writer.cpp
   ddl/ob_ddl_dag_thread_pool.cpp
-  ddl/ob_cg_block_tmp_file.cpp
-  ddl/ob_cg_block_tmp_files_iterator.cpp
   ddl/ob_tablet_slice_writer.cpp
   ddl/ob_ddl_tablet_context.cpp
   ddl/ob_pipeline.cpp
-  ddl/ob_macro_meta_store_manager.cpp
   ddl/ob_ddl_pipeline.cpp
-  ddl/ob_cg_micro_block_write_op.cpp
-  ddl/ob_cg_macro_block_write_op.cpp
-  ddl/ob_cg_row_tmp_file.cpp
-  ddl/ob_writer_args_struct.cpp
+  ddl/ob_ddl_row_tmp_file.cpp
   ddl/ob_ddl_merge_task_utils.cpp
   ddl/ob_ddl_merge_task_v2.cpp
   ddl/ob_ddl_merge_helper.cpp
   ddl/ob_inc_ddl_merge_helper.cpp
-  ddl/ob_group_write_macro_block_task.cpp
   ddl/ob_ddl_merge_schedule.cpp
   ddl/ob_hnsw_embedmgr.cpp
 )
@@ -668,6 +588,7 @@ ob_set_subtarget(ob_storage common
   ob_table_dml_param.cpp
   ob_i_pre_warmer.cpp
   ob_tablet_autoincrement_service.cpp
+  ob_row_bitmap.cpp
   ob_partition_split_query.cpp
   ob_all_micro_block_range_iterator.cpp
   ob_bloom_filter_task.cpp
@@ -943,7 +864,6 @@ ob_set_subtarget(ob_storage direct_load_part
   direct_load/ob_direct_load_origin_table.cpp
   direct_load/ob_direct_load_partition_del_lob_task.cpp
   direct_load/ob_direct_load_partition_merge_task.cpp
-  direct_load/ob_direct_load_partition_rescan_task.cpp
   direct_load/ob_direct_load_range_splitter.cpp
   direct_load/ob_direct_load_rowkey_iterator.cpp
   direct_load/ob_direct_load_sstable_builder.cpp
@@ -1067,7 +987,6 @@ target_link_libraries(ob_storage_static
 ob_set_subtarget(ob_storage_simd common
   blocksstable/encoding/ob_raw_decoder_simd.cpp
   blocksstable/encoding/ob_dict_decoder_simd.cpp
-  blocksstable/cs_encoding/ob_dict_column_decoder_simd.cpp
 )
 
 ob_server_add_target(ob_storage_simd)

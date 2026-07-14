@@ -2187,74 +2187,6 @@ int ObDDLOperator::drop_table_constraints(const ObTableSchema &orig_table_schema
 }
 
 
-int ObDDLOperator::insert_column_groups(ObMySQLTransaction &trans, const ObTableSchema &new_table_schema)
-{
-  int ret = OB_SUCCESS;
-  int64_t new_schema_version = OB_INVALID_VERSION;
-
-  ObSchemaService *schema_service = schema_service_.get_schema_service();
-  if (OB_ISNULL(schema_service)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("schema_service is NULL", K(ret));
-  } else if (OB_FAIL(schema_service_.gen_new_schema_version(new_schema_version))) {
-    LOG_WARN("fail to gen new schema_version", K(ret));
-  } else if (OB_FAIL(schema_service->get_table_sql_service().add_column_groups(trans, new_table_schema, new_schema_version))) {
-    LOG_WARN("insert alter column group failed", K(ret), K(new_table_schema));
-  }
-  return ret;
-}
-
-int ObDDLOperator::insert_column_ids_into_column_group(ObMySQLTransaction &trans,
-                                                      const ObTableSchema &new_table_schema,
-                                                      const ObIArray<uint64_t> &column_ids,
-                                                      const ObColumnGroupSchema &column_group)
-{
-  int ret = OB_SUCCESS;
-  int64_t new_schema_version = OB_INVALID_VERSION;
-
-  ObSchemaService *schema_service = schema_service_.get_schema_service();
-  if (OB_ISNULL(schema_service)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("schema_service is NULL", K(ret));
-  } else if (OB_FAIL(schema_service_.gen_new_schema_version(new_schema_version))) {
-    LOG_WARN("fail to gen new schema_version", K(ret));
-  } else if (OB_FAIL(schema_service->get_table_sql_service().insert_column_ids_into_column_group(trans, new_table_schema, new_schema_version, column_ids, column_group))) {
-    LOG_WARN("insert alter column group failed", K(ret), K(new_table_schema), K(column_group));
-  }
-  return ret;
-}
-
-int ObDDLOperator::update_origin_column_group_with_new_schema(ObMySQLTransaction &trans,
-                                                              const ObTableSchema &origin_table_schema,
-                                                              const ObTableSchema &new_table_schema)
-{
-  int ret = OB_SUCCESS;
-  int64_t new_delete_version = OB_INVALID_VERSION;
-  int64_t new_insert_version = OB_INVALID_VERSION;
-
-
-  ObSchemaService *schema_service = schema_service_.get_schema_service();
-  if (OB_ISNULL(schema_service)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("schema_service is NULL", K(ret));
-  } else if (OB_FAIL(schema_service_.gen_new_schema_version(new_delete_version))) {
-    LOG_WARN("fail to generate new schema version for delete operation", K(ret), K(new_delete_version));
-  } else if (OB_FAIL(schema_service_.gen_new_schema_version(new_insert_version))) {
-    LOG_WARN("fail to generate new schema version for create operation", K(ret), K(new_insert_version));
-  } else if (OB_FAIL(schema_service->get_table_sql_service().update_origin_column_group_with_new_schema(trans,
-                                                                                                        new_delete_version,
-                                                                                                        new_insert_version,
-                                                                                                        origin_table_schema,
-                                                                                                        new_table_schema))) {
-    LOG_WARN("fail to update origin column group with new schema", K(ret),
-                                                                   K(new_delete_version),
-                                                                   K(new_insert_version),
-                                                                   K(origin_table_schema),
-                                                                   K(new_table_schema));
-  }
-  return ret;
-}
-
 int ObDDLOperator::insert_single_column(ObMySQLTransaction &trans,
                                         const ObTableSchema &new_table_schema,
                                         ObColumnSchemaV2 &new_column)
@@ -2685,7 +2617,7 @@ int ObDDLOperator::deal_with_mock_fk_parent_table(
     // 2. create table like
     // 3. rename table
     // 4. alter table rename to
-    // 5. flashback table to before drop
+    // 5. restore table from recyclebin
     if (OB_FAIL(replace_mock_fk_parent_table(trans, schema_guard, mock_fk_parent_table_schema))) {
       LOG_WARN("replace mock_fk_parent_table failed", K(ret), K(mock_fk_parent_table_schema.get_operation_type()), K(mock_fk_parent_table_schema));
     }
@@ -3892,81 +3824,6 @@ int ObDDLOperator::update_single_column(common::ObMySQLTransaction &trans,
   return ret;
 }
 
-int ObDDLOperator::update_single_column_group(common::ObMySQLTransaction &trans,
-                                              const ObTableSchema &origin_table_schema,
-                                              const ObColumnSchemaV2 &column_schema)
-{
-  int ret = OB_SUCCESS;
-  bool is_each_cg_exist = false;
-  const ObColumnSchemaV2 *orig_column_schema = nullptr;
-  char cg_name[OB_MAX_COLUMN_GROUP_NAME_LENGTH] = {'\0'};
-  ObString cg_name_str(OB_MAX_COLUMN_GROUP_NAME_LENGTH, 0, cg_name);
-
-  ObColumnGroupSchema *ori_cg = nullptr;
-  ObSchemaService *schema_service_impl = schema_service_.get_schema_service();
-  orig_column_schema = origin_table_schema.get_column_schema(column_schema.get_column_id());
-  if (!origin_table_schema.is_valid() || !column_schema.is_valid()) {
-    ret = OB_INVALID_ARGUMENT;
-    RS_LOG(WARN, "Invalid arguemnt", K(ret), K(origin_table_schema), K(column_schema));
-  } else if (OB_ISNULL(orig_column_schema)) {
-    ret = OB_ERR_UNEXPECTED;
-    RS_LOG(WARN, "column should not be null", K(ret), K(column_schema), K(origin_table_schema));
-  } else if (orig_column_schema->get_column_name_str() == column_schema.get_column_name_str()) {
-    /* now only rename column will use this func, other skip*/
-  } else if (!origin_table_schema.is_column_store_supported()) {
-    /* only support table need column group*/
-  } else if (OB_FAIL(origin_table_schema.is_column_group_exist(OB_EACH_COLUMN_GROUP_NAME, is_each_cg_exist))) {
-    RS_LOG(WARN, "fail check whether each cg exist", K(ret));
-  } else if (!is_each_cg_exist) {
-    /* if each cg not exist skip*/
-  } else if (column_schema.is_virtual_generated_column()) {
-    /* skip virtual generated_column*/
-  } else if (OB_FAIL(orig_column_schema->get_each_column_group_name(cg_name_str))) {
-    RS_LOG(WARN, "fail to get each column group name", K(ret));
-  } else if (OB_FAIL(origin_table_schema.get_column_group_by_name(cg_name_str, ori_cg))) {
-    RS_LOG(WARN, "column group cannot get", K(cg_name_str), K(origin_table_schema));
-  } else if (OB_ISNULL(ori_cg)) {
-    ret = OB_ERR_UNEXPECTED;
-    RS_LOG(WARN, "column group should not be null", K(ret), K(cg_name_str),
-           KPC(orig_column_schema), K(origin_table_schema));
-  } else {
-    ObColumnGroupSchema new_cg;
-    if (OB_FAIL(new_cg.assign(*ori_cg))) {
-      RS_LOG(WARN, "fail to assign column group", K(ret), K(ori_cg));
-    } else {
-      new_cg.set_schema_version(column_schema.get_schema_version());
-      cg_name_str.set_length(0);
-      if (OB_FAIL(column_schema.get_each_column_group_name(cg_name_str))) {
-        RS_LOG(WARN, "fail to gen column group related column group name", K(ret), K(column_schema));
-      } else if (OB_FAIL(new_cg.set_column_group_name(cg_name_str))) {
-        RS_LOG(WARN, "fail to set column group name", K(ret), K(new_cg), K(cg_name_str));
-      } else if (OB_FAIL(schema_service_impl->get_table_sql_service().update_single_column_group(trans,
-                                                                                origin_table_schema,
-                                                                                *ori_cg,
-                                                                                new_cg))) {
-        RS_LOG(WARN,"fail to update single column_group", K(ret));
-      }
-    }
-  }
-  return ret;
-}
-
-int ObDDLOperator::update_column_and_column_group(common::ObMySQLTransaction &trans,
-                                                  const ObTableSchema &origin_table_schema,
-                                                  const ObTableSchema &new_table_schema,
-                                                  ObColumnSchemaV2 &column_schema,
-                                                  const bool need_del_stats)
-{
-  int ret = OB_SUCCESS;
-  if (OB_FAIL(update_single_column(trans, origin_table_schema, new_table_schema,
-                                   column_schema, need_del_stats))) {
-    LOG_WARN("fail to update single column", KR(ret), K(column_schema), K(origin_table_schema), K(new_table_schema));
-  } else if (OB_FAIL(update_single_column_group(trans, origin_table_schema, column_schema))) {
-    LOG_WARN("fail to update single column group", KR(ret), K(column_schema), K(origin_table_schema));
-  }
-  return ret;
-}
-
 int ObDDLOperator::batch_update_system_table_columns(
     common::ObMySQLTransaction &trans,
     const share::schema::ObTableSchema &orig_table_schema,
@@ -4506,7 +4363,7 @@ int ObDDLOperator::drop_table_to_recyclebin(const ObTableSchema &table_schema,
   return ret;
 }
 
-int ObDDLOperator::flashback_table_from_recyclebin(const ObTableSchema &table_schema,
+int ObDDLOperator::restore_table_from_recyclebin(const ObTableSchema &table_schema,
                                                    ObTableSchema &new_table_schema,
                                                    ObMySQLTransaction &trans,
                                                    const uint64_t new_db_id,
@@ -4538,11 +4395,11 @@ int ObDDLOperator::flashback_table_from_recyclebin(const ObTableSchema &table_sc
     const ObRecycleObject &recycle_obj = recycle_objs.at(0);
     if (OB_FAIL(new_table_schema.assign(table_schema))) {
       LOG_WARN("fail to assign schema", K(ret));
-    } else if (new_db_id != OB_INVALID_ID) {//flashback to new db
+    } else if (new_db_id != OB_INVALID_ID) { // restore to new db
       new_table_schema.set_database_id(new_db_id);
       if (new_table_schema.is_aux_table()) {
         // should set the old name
-        // When flashback table to new db, distinguish between empty index name and renaming flashback index
+        // When recovering a table to a new db, distinguish empty index name from renamed indexes.
         if (!new_table_name.empty() && OB_FAIL(new_table_schema.set_table_name(new_table_name))) {
           LOG_WARN("set new table name failed", K(ret));
         } else if (new_table_name.empty() && OB_FAIL(new_table_schema.set_table_name(recycle_obj.get_original_name()))) {
@@ -4579,7 +4436,7 @@ int ObDDLOperator::flashback_table_from_recyclebin(const ObTableSchema &table_sc
         LOG_WARN("database not exist", K(recycle_obj), K(ret));
       } else if (db_schema->is_in_recyclebin()) {
         ret = OB_OP_NOT_ALLOW;
-        LOG_WARN("flashback table to __recyclebin database is not allowed",
+        LOG_WARN("restore table to __recyclebin database is not allowed",
                  K(recycle_obj), K(*db_schema), K(ret));
       } else if (OB_FAIL(new_table_schema.set_table_name(recycle_obj.get_original_name()))) {
         LOG_WARN("set table name failed", K(ret), K(recycle_obj));
@@ -4601,9 +4458,9 @@ int ObDDLOperator::flashback_table_from_recyclebin(const ObTableSchema &table_sc
       bool is_table_exist = true;
       const int64_t table_schema_version = OB_INVALID_VERSION; // Take the latest local schema_guard
       ObSchemaOperationType op_type = new_table_schema.is_view_table()
-          ? OB_DDL_FLASHBACK_VIEW : OB_DDL_FLASHBACK_TABLE;
+          ? OB_DDL_RESTORE_VIEW_FROM_RECYCLEBIN : OB_DDL_RESTORE_TABLE_FROM_RECYCLEBIN;
       if (new_table_schema.is_index_table()) {
-        op_type = OB_DDL_FLASHBACK_INDEX;
+        op_type = OB_DDL_RECOVER_INDEX_FROM_RECYCLEBIN;
       }
       if (OB_FAIL(schema_service_.check_table_exist(new_table_schema.get_database_id(),
                                                            new_table_schema.get_table_name_str(),
@@ -4869,7 +4726,7 @@ int ObDDLOperator::update_tablegroup_id_of_tables(const ObDatabaseSchema &databa
             } else if (FALSE_IT(new_index_schema.set_schema_version(new_schema_version))) {
             } else if (OB_FAIL(schema_service->get_table_sql_service().update_table_options(
                 trans, *index_table_schema, new_index_schema,
-                OB_DDL_FLASHBACK_TABLE, NULL))) {
+                OB_DDL_RESTORE_TABLE_FROM_RECYCLEBIN, NULL))) {
               LOG_WARN("update_table_option failed", K(ret));
             }
           }
@@ -4884,7 +4741,7 @@ int ObDDLOperator::update_tablegroup_id_of_tables(const ObDatabaseSchema &databa
               new_ts.set_tablegroup_id(OB_INVALID_ID);
             }
             const ObSchemaOperationType op_type = new_ts.is_view_table()
-                ? OB_DDL_FLASHBACK_VIEW : OB_DDL_FLASHBACK_TABLE;
+                ? OB_DDL_RESTORE_VIEW_FROM_RECYCLEBIN : OB_DDL_RESTORE_TABLE_FROM_RECYCLEBIN;
             if (OB_FAIL(schema_service_.gen_new_schema_version(new_schema_version))) {
                 LOG_WARN("fail to gen new schema_version", K(ret));
             } else if (FALSE_IT(new_ts.set_schema_version(new_schema_version))) {
@@ -4900,7 +4757,7 @@ int ObDDLOperator::update_tablegroup_id_of_tables(const ObDatabaseSchema &databa
   return ret;
 }
 
-int ObDDLOperator::flashback_database_from_recyclebin(const ObDatabaseSchema &database_schema,
+int ObDDLOperator::restore_database_from_recyclebin(const ObDatabaseSchema &database_schema,
                                                       ObMySQLTransaction &trans,
                                                       const ObString &new_db_name,
                                                       ObSchemaGetterGuard &schema_guard,
@@ -4963,7 +4820,7 @@ int ObDDLOperator::flashback_database_from_recyclebin(const ObDatabaseSchema &da
         } else if (OB_FAIL(schema_service->get_database_sql_service().update_database(
             new_db_schema,
             trans,
-            OB_DDL_FLASHBACK_DATABASE,
+            OB_DDL_RESTORE_DATABASE_FROM_RECYCLEBIN,
             &ddl_stmt_str))) {
           LOG_WARN("update_database failed", K(ret), K(new_db_schema));
         } else if (OB_FAIL(schema_service->delete_recycle_object(recycle_obj,

@@ -42,6 +42,8 @@ const static double NORMAL_NETWORK_DESER_PER_BYTE_COST = 0.0094539370039375 * DE
 const static double NORMAL_NETWORK_TRANS_PER_BYTE_COST = 0.011832508338 * DEFAULT_NETWORK_SPEED;
 const static double NORMAL_PX_RESCAN_PER_ROW_COST = 398.267410467 * DEFAULT_CPU_SPEED;
 const static double NORMAL_PX_BATCH_RESCAN_PER_ROW_COST = 49.5841472833 * DEFAULT_CPU_SPEED;
+const static double NORMAL_DAS_RESCAN_PER_ROW_RPC_COST = 258.3167 * DEFAULT_NETWORK_SPEED;
+const static double NORMAL_DAS_BATCH_RESCAN_PER_ROW_RPC_COST = 2.1243 * DEFAULT_NETWORK_SPEED;
 const static double NORMAL_NL_SCAN_COST = 19.2 * DEFAULT_CPU_SPEED;
 const static double NORMAL_BATCH_NL_SCAN_COST = 16.11 * DEFAULT_CPU_SPEED;
 const static double NORMAL_NL_GET_COST = 8.24 * DEFAULT_CPU_SPEED;
@@ -126,6 +128,7 @@ const static double comparison_params_normal[ObMaxTC+1] = {
   NORMAL_CMP_LOB_COST,           // collection sql type
   NORMAL_CMP_INT_COST,            // mysql date
   NORMAL_CMP_INT_COST,            // mysql datetime
+  NORMAL_CMP_CHAR_COST,           // roaringbitmap
 };
 
 const static double hash_params_normal[ObMaxTC+1] = {
@@ -158,10 +161,11 @@ const static double hash_params_normal[ObMaxTC+1] = {
   NORMAL_HASH_CHAR_COST,           // collection sql type
   NORMAL_HASH_INT_COST,            // mysql date
   NORMAL_HASH_INT_COST,            // mysql datetime
+  NORMAL_HASH_CHAR_COST,           // roaringbitmap
 };
 
 const static double project_params_normal[2][ObMaxTC+1] = {
-    {// sequential access
+    {// sequence access
       NORMAL_ROW_STORE_PROJECT_COLUMN_SEQ_INT_COST,            // null
       NORMAL_ROW_STORE_PROJECT_COLUMN_SEQ_INT_COST,            // int8, int16, int24, int32, int64.
       NORMAL_ROW_STORE_PROJECT_COLUMN_SEQ_INT_COST,            // uint8, uint16, uint24, uint32, uint64.
@@ -242,6 +246,8 @@ const static ObOptCostModelParameter cost_params_normal(
     NORMAL_NETWORK_TRANS_PER_BYTE_COST,
     NORMAL_PX_RESCAN_PER_ROW_COST,
     NORMAL_PX_BATCH_RESCAN_PER_ROW_COST,
+    NORMAL_DAS_RESCAN_PER_ROW_RPC_COST,
+    NORMAL_DAS_BATCH_RESCAN_PER_ROW_RPC_COST,
     NORMAL_NL_SCAN_COST,
     NORMAL_BATCH_NL_SCAN_COST,
     NORMAL_NL_GET_COST,

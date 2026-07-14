@@ -108,8 +108,9 @@ public:
   int init(
       common::ObIAllocator &allocator,
       const share::schema::ObTableSchema &input_schema,
+      const lib::Worker::CompatMode compat_mode,
       const bool skip_column_info = false,
-      const uint64_t data_format_version = DATA_CURRENT_VERSION);
+      const uint64_t tenant_data_version = DATA_CURRENT_VERSION);
   int init(
       common::ObIAllocator &allocator,
       const ObStorageSchema &old_schema,
@@ -134,6 +135,8 @@ public:
   // for new mds
   int assign(common::ObIAllocator &allocator, const ObStorageSchema &other);
 
+  //TODO @lixia use compact mode in storage schema to compaction
+  inline lib::Worker::CompatMode get_compat_mode() const { return static_cast<lib::Worker::CompatMode>(compat_mode_);}
   /* merge related function*/
   virtual inline int64_t get_tablet_size() const override { return tablet_size_; }
   virtual inline int64_t get_rowkey_column_num() const override { return rowkey_array_.count(); }
@@ -142,11 +145,31 @@ public:
   virtual inline int64_t get_pctfree() const override { return pctfree_; }
   virtual inline int64_t get_progressive_merge_round() const override { return progressive_merge_round_; }
   virtual inline int64_t get_progressive_merge_num() const override { return progressive_merge_num_; }
+  virtual inline uint64_t get_master_key_id() const { return master_key_id_; }
+  virtual inline bool is_use_bloomfilter() const override { return is_use_bloomfilter_; }
   virtual inline bool is_index_table() const override { return share::schema::is_index_table(table_type_); }
   virtual inline bool is_storage_index_table() const override
   {
     return share::schema::is_index_table(table_type_);
   }
+  inline bool is_materialized_view() const { return share::schema::ObTableSchema::is_materialized_view(table_type_); }
+  inline bool is_mv_container_table() const
+  {
+    return share::schema::IS_MV_CONTAINER_TABLE == (enum share::schema::ObMVContainerTableFlag)table_mode_.mv_container_table_flag_;
+  }
+  inline bool is_mv_major_refresh() const
+  {
+    return share::schema::IS_MV_MAJOR_REFRESH == (enum share::schema::ObMVMajorRefreshFlag)mv_mode_.mv_major_refresh_flag_;
+  }
+  inline bool is_tablet_referenced_by_collect_mv() const 
+  {
+    return share::schema::IS_REFERENCED_BY_FAST_LSM_MV == (enum share::schema::ObTableReferencedByFastLSMMVFlag)mv_mode_.table_referenced_by_fast_lsm_mv_flag_;
+  }
+  inline bool is_mv_major_refresh_table() const
+  {
+    return is_mv_container_table() && is_mv_major_refresh();
+  }
+  inline bool is_mlog_table() const { return share::schema::ObTableSchema::is_mlog_table(table_type_); }
   inline bool is_fts_index() const { return share::schema::is_fts_index(index_type_); }
   inline bool is_vec_index() const { return share::schema::is_vec_index(index_type_); }
   inline bool is_user_data_table() const { return share::schema::ObTableSchema::is_user_data_table(table_type_); }
@@ -158,9 +181,20 @@ public:
   virtual int get_multi_version_column_descs(common::ObIArray<share::schema::ObColDesc> &column_descs) const override;
   virtual int get_rowkey_column_ids(common::ObIArray<share::schema::ObColDesc> &column_ids) const override;
   virtual int get_skip_index_col_attr(common::ObIArray<share::schema::ObSkipIndexColumnAttr> &skip_idx_metas) const override;
+  virtual int get_encryption_id(int64_t &encrypt_id) const;
+  virtual const common::ObString &get_encryption_str() const { return encryption_; }
+  virtual bool need_encrypt() const;
+  virtual inline const common::ObString &get_encrypt_key() const { return encrypt_key_; }
+  virtual inline const char *get_encrypt_key_str() const { return encrypt_key_.empty() ? "" : encrypt_key_.ptr(); }
+  virtual inline int64_t get_encrypt_key_len() const { return encrypt_key_.length(); }
   virtual inline share::schema::ObTableModeFlag get_table_mode_flag() const override
   { return (share::schema::ObTableModeFlag)table_mode_.mode_flag_; }
   virtual inline share::schema::ObTableMode get_table_mode_struct() const override { return table_mode_; }
+  virtual inline int get_mv_mode_struct(share::schema::ObMvMode &mv_mode) const override
+  { 
+    mv_mode = mv_mode_;
+    return OB_SUCCESS;
+  }
   const share::schema::ObSemiStructEncodingType& get_semistruct_encoding_type() const { return semistruct_encoding_type_; }
   virtual int get_semistruct_encoding_type(share::schema::ObSemiStructEncodingType& type) const
   {
@@ -173,6 +207,8 @@ public:
   virtual inline common::ObRowStoreType get_row_store_type() const override { return row_store_type_; }
   virtual inline const char *get_compress_func_name() const override {  return all_compressor_name[compressor_type_]; }
   virtual inline common::ObCompressorType get_compressor_type() const override { return compressor_type_; }
+  virtual inline ObMergeEngineType get_merge_engine_type() const override { return merge_engine_type_; }
+  virtual inline bool is_delete_insert_merge_engine() const override { return ObMergeEngineType::OB_MERGE_ENGINE_DELETE_INSERT == merge_engine_type_; }
   virtual inline bool is_column_info_simplified() const override { return column_info_simplified_; }
 
   virtual int init_column_meta_array(
@@ -192,26 +228,31 @@ public:
   inline bool is_aux_lob_meta_table() const { return share::schema::is_aux_lob_meta_table(table_type_); }
   inline bool is_aux_lob_piece_table() const { return share::schema::is_aux_lob_piece_table(table_type_); }
   OB_INLINE bool is_user_hidden_table() const { return share::schema::TABLE_STATE_IS_HIDDEN_MASK & table_mode_.state_flag_; }
-  int set_storage_schema_version(const uint64_t data_format_version);
+  OB_INLINE bool get_enable_macro_block_bloom_filter() const override { return enable_macro_block_bloom_filter_; }
+  int set_storage_schema_version(const uint64_t tenant_data_version);
 
   VIRTUAL_TO_STRING_KV(KP(this), K_(storage_schema_version), K_(version),
-      K_(column_info_simplified), K_(compat_mode), K_(table_type), K_(index_type),
-      K_(row_store_type), K_(schema_version),
+      K_(is_use_bloomfilter), K_(column_info_simplified), K_(compat_mode), K_(table_type), K_(index_type),
+      K_(row_store_type), K_(schema_version), K_(enable_macro_block_bloom_filter),
       K_(column_cnt), K_(store_column_cnt), K_(tablet_size), K_(pctfree), K_(block_size), K_(progressive_merge_round),
-      K_(compressor_type),
+      K_(master_key_id), K_(compressor_type), K_(encryption), K_(encrypt_key),
       "rowkey_cnt", rowkey_array_.count(), K_(rowkey_array), "column_cnt", column_array_.count(), K_(column_array),
-      "skip_index_cnt", skip_idx_attr_array_.count(), K_(skip_idx_attr_array));
+      "skip_index_cnt", skip_idx_attr_array_.count(), K_(skip_idx_attr_array),
+      K_(merge_engine_type));
 public:
   static int trim(const ObCollationType type, blocksstable::ObStorageDatum &storage_datum);
 private:
   int copy_from(const share::schema::ObMergeSchema &input_schema);
+  int deep_copy_str(const ObString &src, ObString &dest);
   int truncate_column_array(const int64_t stored_column_count);
-  inline bool is_view_table() const { return share::schema::ObTableType::USER_VIEW == table_type_ || share::schema::ObTableType::SYSTEM_VIEW == table_type_; }
+  inline bool is_view_table() const { return share::schema::ObTableType::USER_VIEW == table_type_ || share::schema::ObTableType::SYSTEM_VIEW == table_type_ || share::schema::ObTableType::MATERIALIZED_VIEW == table_type_; }
 
+  int generate_str(const share::schema::ObTableSchema &input_schema);
   int generate_column_array(const share::schema::ObTableSchema &input_schema);
   int get_column_ids_without_rowkey(
       common::ObIArray<share::schema::ObColDesc> &column_ids,
       bool no_virtual) const;
+  void reset_string(ObString &str);
   /* serialize related function */
   template <typename T>
   int serialize_schema_array(
@@ -232,7 +273,7 @@ public:
   static const int32_t SS_ONE_BIT = 1;
   static const int32_t SS_HALF_BYTE = 4;
   static const int32_t SS_ONE_BYTE = 8;
-  static const int32_t SS_RESERVED_BITS = 19;
+  static const int32_t SS_RESERVED_BITS = 17;
 
   // Storage schema uses a custom serializer because deserialization needs an allocator.
   static const int64_t STORAGE_SCHEMA_VERSION = 1;
@@ -246,7 +287,9 @@ public:
     {
       uint32_t version_                          : SS_ONE_BYTE;
       uint32_t compat_mode_                      : SS_HALF_BYTE;
+      uint32_t is_use_bloomfilter_               : SS_ONE_BIT;
       uint32_t column_info_simplified_           : SS_ONE_BIT;
+      uint32_t enable_macro_block_bloom_filter_  : SS_ONE_BIT;
       uint32_t reserved_                         : SS_RESERVED_BITS;
     };
   };
@@ -261,11 +304,16 @@ public:
   int64_t block_size_; //KB
   int64_t progressive_merge_round_;
   int64_t progressive_merge_num_;
+  uint64_t master_key_id_; // for encryption
   ObCompressorType compressor_type_;
+  ObString encryption_; // for encryption
+  ObString encrypt_key_; // for encryption
   common::ObFixedArray<ObStorageRowkeyColumnSchema, common::ObIAllocator> rowkey_array_; // rowkey column
   common::ObFixedArray<ObStorageColumnSchema, common::ObIAllocator> column_array_; // column schema, including virtual column
   common::ObFixedArray<share::schema::ObSkipIndexAttrWithId, common::ObIAllocator> skip_idx_attr_array_;
   int64_t store_column_cnt_; // NOT include virtual generated column
+  share::schema::ObMvMode mv_mode_;
+  ObMergeEngineType merge_engine_type_;
   share::schema::ObSemiStructEncodingType semistruct_encoding_type_;
   bool is_inited_;
 private:
@@ -298,13 +346,14 @@ public:
   }
   int init(common::ObIAllocator &allocator,
       const share::schema::ObTableSchema &input_schema,
+      const lib::Worker::CompatMode compat_mode,
       const bool skip_column_info,
-      const uint64_t data_format_version);
+      const uint64_t tenant_data_version);
   int init(common::ObIAllocator &allocator,
       const ObCreateTabletSchema &old_schema);
   INHERIT_TO_STRING_KV("ObStorageSchema", ObStorageSchema, K_(table_id), K_(index_status), K_(truncate_version));
 private:
-  // Persisted table identity for tablet creation.
+  // for cdc
   uint64_t table_id_;
   // for create index
   share::schema::ObIndexStatus index_status_;

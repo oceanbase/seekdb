@@ -42,6 +42,8 @@ const static double VECTOR_NETWORK_DESER_PER_BYTE_COST = 0.0094539370039375 * DE
 const static double VECTOR_NETWORK_TRANS_PER_BYTE_COST = 0.011832508338 * DEFAULT_NETWORK_SPEED;
 const static double VECTOR_PX_RESCAN_PER_ROW_COST = 398.267410467 * DEFAULT_CPU_SPEED;
 const static double VECTOR_PX_BATCH_RESCAN_PER_ROW_COST = 49.5841472833 * DEFAULT_CPU_SPEED;
+const static double VECTOR_DAS_RESCAN_PER_ROW_RPC_COST = 258.3167 * DEFAULT_NETWORK_SPEED;
+const static double VECTOR_DAS_BATCH_RESCAN_PER_ROW_RPC_COST = 2.1243 * DEFAULT_NETWORK_SPEED;
 const static double VECTOR_NL_SCAN_COST = 17.92 * DEFAULT_CPU_SPEED;
 const static double VECTOR_BATCH_NL_SCAN_COST = 15.32 * DEFAULT_CPU_SPEED;
 const static double VECTOR_NL_GET_COST = 6.4 * DEFAULT_CPU_SPEED;
@@ -124,6 +126,7 @@ const static double comparison_params_vector[ObMaxTC+1] = {
   VECTOR_CMP_LOB_COST,           // collection sql type
   VECTOR_CMP_INT_COST,            // mysql date
   VECTOR_CMP_INT_COST,            // mysql datetime
+  VECTOR_CMP_CHAR_COST,           // roaringbitmap
 };
 
 const static double hash_params_vector[ObMaxTC+1] = {
@@ -156,10 +159,11 @@ const static double hash_params_vector[ObMaxTC+1] = {
   VECTOR_HASH_CHAR_COST,           // collection sql type
   VECTOR_HASH_INT_COST,            // mysql date
   VECTOR_HASH_INT_COST,            // mysql datetime
+  VECTOR_HASH_CHAR_COST,           // roaringbitmap
 };
 
 const static double project_params_vector[2][ObMaxTC+1] = {
-    {// sequential access
+    {// sequence access
       VECTOR_ROW_STORE_PROJECT_COLUMN_SEQ_INT_COST,            // null
       VECTOR_ROW_STORE_PROJECT_COLUMN_SEQ_INT_COST,            // int8, int16, int24, int32, int64.
       VECTOR_ROW_STORE_PROJECT_COLUMN_SEQ_INT_COST,            // uint8, uint16, uint24, uint32, uint64.
@@ -240,6 +244,8 @@ const static ObOptCostModelParameter cost_params_vector(
    VECTOR_NETWORK_TRANS_PER_BYTE_COST,
    VECTOR_PX_RESCAN_PER_ROW_COST,
    VECTOR_PX_BATCH_RESCAN_PER_ROW_COST,
+   VECTOR_DAS_RESCAN_PER_ROW_RPC_COST,
+   VECTOR_DAS_BATCH_RESCAN_PER_ROW_RPC_COST,
    VECTOR_NL_SCAN_COST,
    VECTOR_BATCH_NL_SCAN_COST,
    VECTOR_NL_GET_COST,

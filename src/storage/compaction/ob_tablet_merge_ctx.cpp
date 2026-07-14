@@ -167,14 +167,16 @@ void ObTabletMiniMergeCtx::try_schedule_compaction_after_mini(ObTabletHandle &ta
   bool create_dag = false;
   bool during_restore = false;
   // when restoring, some log stream may be not ready,
-  // thus the inner sql in ObFreezeInfoMgr::try_update_info may timeout
+  // thus the inner sql in ObTenantFreezeInfoMgr::try_update_info may timeout
   if (OB_SUCCESS == ObBasicMergeScheduler::get_merge_scheduler()->during_restore(during_restore) && !during_restore) {
     if (get_tablet_id().is_ls_inner_tablet() ||
         0 == get_merge_info().get_merge_history().get_macro_block_count()) {
       // do nothing
+    } else if (nullptr != static_param_.schema_ && static_param_.schema_->is_mv_major_refresh_table()) {
+      // do nothing
     } else if (FALSE_IT(try_report_tablet_stat_after_mini())) { // try report after mini every time for updating table mode for tablet.
-    } else if (OB_TMP_FAIL(ObTabletScheduler::try_schedule_adaptive_merge(
-                              static_param_.ls_,
+    } else if (OB_TMP_FAIL(ObTenantTabletScheduler::try_schedule_adaptive_merge(
+                              static_param_.ls_handle_,
                               tablet_handle,
                               ObAdaptiveMergePolicy::SCHEDULE_AFTER_MINI,
                               info_collector_.tnode_stat_.update_row_count_,
@@ -185,11 +187,11 @@ void ObTabletMiniMergeCtx::try_schedule_compaction_after_mini(ObTabletHandle &ta
 
     if (create_dag || 0 == get_merge_info().get_merge_history().get_macro_block_count()) {
       // no need to schedule minor merge
-    } else if (OB_TMP_FAIL(ObTabletScheduler::schedule_tablet_minor_merge<ObTabletMergeExecuteDag>(
-        static_param_.ls_, tablet_handle))) {
+    } else if (OB_TMP_FAIL(ObTenantTabletScheduler::schedule_tablet_minor_merge<ObTabletMergeExecuteDag>(
+        static_param_.ls_handle_, tablet_handle))) {
       if (OB_SIZE_OVERFLOW != tmp_ret) {
         LOG_ERROR_RET(tmp_ret, "failed to schedule special tablet minor merge",
-                      "tablet_id", get_tablet_id());
+                     "ls_id", get_ls_id(), "tablet_id", get_tablet_id());
       }
     }
   }
@@ -199,6 +201,7 @@ void ObTabletMiniMergeCtx::try_schedule_compaction_after_mini(ObTabletHandle &ta
 int ObTabletMiniMergeCtx::try_report_tablet_stat_after_mini()
 {
   int ret = OB_SUCCESS;
+  const share::ObLSID &ls_id = get_ls_id();
   const ObTabletID &tablet_id = get_tablet_id();
   const ObTransNodeDMLStat &tnode_stat = info_collector_.tnode_stat_;
   bool report_succ = false;
@@ -209,16 +212,17 @@ int ObTabletMiniMergeCtx::try_report_tablet_stat_after_mini()
     // insufficient data, skip to report
   } else {
     ObTabletStat report_stat;
+    report_stat.ls_id_ = get_ls_id().id();
     report_stat.tablet_id_ = get_tablet_id().id();
     report_stat.merge_cnt_ = 1;
     report_stat.insert_row_cnt_ = tnode_stat.insert_row_count_;
     report_stat.update_row_cnt_ = tnode_stat.update_row_count_;
     report_stat.delete_row_cnt_ = tnode_stat.delete_row_count_;
-    if (OB_FAIL(share::g_mp->tablet_stat_mgr()->report_stat(report_stat, report_succ))) {
+    if (OB_FAIL(share::g_mp->tenant_tablet_stat_mgr()->report_stat(report_stat, report_succ))) {
       LOG_WARN("failed to report tablet stat", KR(ret));
     }
   }
-  FLOG_INFO("try report tablet stat", KR(ret), K(tablet_id), K(tnode_stat), K(report_succ));
+  FLOG_INFO("try report tablet stat", KR(ret), K(ls_id), K(tablet_id), K(tnode_stat), K(report_succ));
   return ret;
 }
 

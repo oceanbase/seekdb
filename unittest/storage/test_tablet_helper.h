@@ -69,7 +69,6 @@ inline void TestTabletHelper::prepare_sstable_param(
     const share::schema::ObTableSchema &table_schema,
     ObTabletCreateSSTableParam &param)
 {
-  param.set_init_value_for_column_store_();
   const int64_t multi_version_col_cnt = ObMultiVersionRowkeyHelpper::get_extra_rowkey_col_cnt();
   param.table_key_.table_type_ = ObITable::TableType::MAJOR_SSTABLE;
   param.table_key_.tablet_id_ = tablet_id;
@@ -144,8 +143,6 @@ inline int TestTabletHelper::create_tablet(
     const ObTabletMapKey key(ls_id, tablet_id);
     const bool need_create_empty_major_sstable =
       !(create_tablet_schema.is_user_hidden_table() || (create_tablet_schema.is_index_table() && !create_tablet_schema.can_read_index()));
-    const bool need_generate_cs_replica_cg_array = 
-      ls_handle.get_ls()->is_cs_replica() && create_tablet_schema.is_row_store() && create_tablet_schema.is_user_data_table();
     if (OB_FAIL(t3m->create_msd_tablet(WashTabletPriority::WTP_HIGH, key, ls_handle, tablet_handle))) {
       STORAGE_LOG(WARN, "t3m acquire tablet failed", K(ret), K(ls_id), K(tablet_id));
     } else if (OB_FAIL(tablet_handle.get_obj()->init_for_first_time_creation(
@@ -153,7 +150,7 @@ inline int TestTabletHelper::create_tablet(
         ls_id, tablet_id, tablet_id, share::SCN::base_scn(),
         snapshot_version, create_tablet_schema, need_create_empty_major_sstable, share::SCN::invalid_scn()/*clog_checkpoint_scn*/,
         share::SCN::invalid_scn()/*mds_checkpoint_scn*/, false/*is_split_dest_tablet*/, ObTabletID()/*split_src_tablet_id*/,
-        false/*micro_index_clustered*/, need_generate_cs_replica_cg_array, false/*has_cs_replica*/, freezer))){
+        false/*micro_index_clustered*/, freezer))){
       STORAGE_LOG(WARN, "failed to init tablet", K(ret), K(ls_id), K(tablet_id));
     } else if (ObTabletStatus::Status::MAX != tablet_status) {
       ObTabletCreateDeleteMdsUserData data;

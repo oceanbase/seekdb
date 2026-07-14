@@ -109,6 +109,7 @@ public:
   ObDDLTabletContext();
   ~ObDDLTabletContext();
   int init(
+      const share::ObLSID &ls_id,
       const ObTabletID &tablet_id,
       const int64_t ddl_thread_count,
       const int64_t snapshot_version,
@@ -122,7 +123,7 @@ public:
   int get_or_create_slice(const int64_t slice_idx, ObDDLSlice *&ddl_slice, bool &is_new_slice);
   int remove_slice(const int64_t slice_idx);
   int get_all_slices(ObIArray<ObDDLSlice *> &ddl_slices);
-  TO_STRING_KV(K_(is_inited), K_(tablet_id), K_(tablet_param), K_(lob_meta_tablet_id), K_(lob_meta_tablet_param),
+  TO_STRING_KV(K_(is_inited), K_(ls_id), K_(tablet_id), K_(tablet_param), K_(lob_meta_tablet_id), K_(lob_meta_tablet_param),
       K_(slice_count), K_(table_slice_offset), K_(last_lob_id), K_(last_autoinc_val), K(bucket_count_), K(slice_map_.size()));
 private:
   int init_vector_index_context(
@@ -137,6 +138,7 @@ public:
   MergeCtx lob_merge_ctx_;
 
   // const param
+  share::ObLSID ls_id_;
   ObTabletID tablet_id_;
   ObWriteTabletParam tablet_param_;
   ObTabletID lob_meta_tablet_id_;

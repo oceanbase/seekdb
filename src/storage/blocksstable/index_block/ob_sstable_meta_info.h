@@ -91,12 +91,6 @@ private:
       const int64_t data_len,
       int64_t &pos);
   int64_t get_serialize_size_() const;
-  int transform_cs_encoding_data_buf_(
-      common::ObIAllocator *allocator,
-      const char *buf, 
-      const int64_t buf_size,
-      const char *&dst_buf,
-      int64_t &dst_buf_size);
   int deep_copy_micro_buf(
       const char *src_buf,
       const int64_t src_buf_len,

@@ -261,7 +261,7 @@ int ObDbmsStatsHistoryManager::calssify_table_stat_part_ids(ObExecContext &ctx,
   } else {
     SMART_VAR(ObMySQLProxy::MySQLResult, proxy_result) {
       sqlclient::ObMySQLResult *client_result = NULL;
-      auto &sql_client_retry_weak = *mysql_proxy;
+      ObSQLClientRetryWeak sql_client_retry_weak(mysql_proxy);
       if (OB_FAIL(sql_client_retry_weak.read(proxy_result, raw_sql.ptr()))) {
         LOG_WARN("failed to execute sql", K(ret), K(raw_sql));
       } else if (OB_ISNULL(client_result = proxy_result.get_result())) {
@@ -496,7 +496,7 @@ int ObDbmsStatsHistoryManager::generate_having_stat_part_col_map(ObExecContext &
   } else {
     SMART_VAR(ObMySQLProxy::MySQLResult, proxy_result) {
       sqlclient::ObMySQLResult *client_result = NULL;
-      auto &sql_client_retry_weak = *mysql_proxy;
+      ObSQLClientRetryWeak sql_client_retry_weak(mysql_proxy);
       if (OB_FAIL(sql_client_retry_weak.read(proxy_result, raw_sql.ptr()))) {
         LOG_WARN("failed to execute sql", K(ret), K(raw_sql));
       } else if (OB_ISNULL(client_result = proxy_result.get_result())) {
@@ -578,7 +578,7 @@ int ObDbmsStatsHistoryManager::backup_having_column_stats(ObMySQLTransaction &tr
         }
       }
     } else {
-      // table_id = xx and ((partition_id in xx and column_id in xx) or ((partition_id, column_id) in ((xx))))
+      // tenant = xx and table_id = xx and ((partition_id in xx and column_id in xx) or ((partition_id, column_id) in ((xx))))
       ObSqlString partition_list;
       ObSqlString part_col_list;
       bool is_first_part_list = true;
@@ -829,6 +829,7 @@ int ObDbmsStatsHistoryManager::purge_stats(ObExecContext &ctx, const int64_t spe
   ObObj retention;
   ObSQLSessionInfo *session = ctx.get_my_session();
   ObSqlString time_str;
+  ObSqlString gather_time_str;
   bool only_delete_one_batch = false;
   if (OB_ISNULL(session)) {
     ret = OB_ERR_UNEXPECTED;
@@ -846,6 +847,10 @@ int ObDbmsStatsHistoryManager::purge_stats(ObExecContext &ctx, const int64_t spe
                                            "date_sub(CURRENT_TIMESTAMP, interval %ld day)",
                                            retention_val))) {
       LOG_WARN("failed to append fmt", K(ret));
+    } else if (OB_FAIL(gather_time_str.append_fmt("WHERE start_time < "\
+                                                  "date_sub(CURRENT_TIMESTAMP, interval %ld day)",
+                                                   retention_val))) {
+      LOG_WARN("failed to append fmt", K(ret));
     } else {/*do nothing*/}
   //Attempt to delete all opt stats at once. Since this is a synchronous operation,
   //to avoid impacting user feedback, a batch of data will be synchronously deleted first,
@@ -853,10 +858,14 @@ int ObDbmsStatsHistoryManager::purge_stats(ObExecContext &ctx, const int64_t spe
   } else if (specify_time == 0) {//try delete all statistics history
     if (OB_FAIL(time_str.append(" "))) {
       LOG_WARN("failed to append", K(ret));
+    } else if (OB_FAIL(gather_time_str.append(" "))) {
+      LOG_WARN("failed to append", K(ret));
     } else {
       only_delete_one_batch = true;
     }
   } else if (OB_FAIL(time_str.append_fmt("WHERE savtime < usec_to_time(%ld)", specify_time))) {
+    LOG_WARN("failed to append fmt", K(ret));
+  } else if (OB_FAIL(gather_time_str.append_fmt("WHERE start_time < usec_to_time(%ld)", specify_time))) {
     LOG_WARN("failed to append fmt", K(ret));
   } else {/*do nothing*/}
   if (OB_SUCC(ret)) {
@@ -869,9 +878,12 @@ int ObDbmsStatsHistoryManager::purge_stats(ObExecContext &ctx, const int64_t spe
     int64_t delete_flags = ObOptStatsDeleteFlags::DELETE_ALL;
     do {
       ObMySQLTransaction trans;
+      ObMySQLTransaction trans1;
       if (OB_FAIL(THIS_WORKER.check_status())) {
         LOG_WARN("check status failed", KR(ret));
       } else if (OB_FAIL(trans.start(ctx.get_sql_proxy()))) {
+        LOG_WARN("fail to start transaction", K(ret));
+      } else if (OB_FAIL(trans1.start(ctx.get_sql_proxy()))) {
         LOG_WARN("fail to start transaction", K(ret));
       } else if ((delete_flags & ObOptStatsDeleteFlags::DELETE_TAB_STAT_HISTORY) &&
                  OB_FAIL(do_delete_expired_stat_history(trans, start_time,
@@ -894,20 +906,41 @@ int ObDbmsStatsHistoryManager::purge_stats(ObExecContext &ctx, const int64_t spe
                                                         ObOptStatsDeleteFlags::DELETE_HIST_STAT_HISTORY,
                                                         delete_flags))) {
         LOG_WARN("failed to do delete expired stat history", K(ret));
+      } else if ((delete_flags & ObOptStatsDeleteFlags::DELETE_TASK_GATHER_HISTORY) &&
+                 OB_FAIL(do_delete_expired_stat_history(trans1, start_time,
+                                                        max_duration_time, gather_time_str.ptr(),
+                                                        share::OB_ALL_TASK_OPT_STAT_GATHER_HISTORY_TNAME,
+                                                        ObOptStatsDeleteFlags::DELETE_TASK_GATHER_HISTORY,
+                                                        delete_flags))) {
+        LOG_WARN("failed to do delete expired stat history", K(ret));
+      } else if ((delete_flags & ObOptStatsDeleteFlags::DELETE_TAB_GATHER_HISTORY) &&
+                 OB_FAIL(do_delete_expired_stat_history(trans1, start_time,
+                                                        max_duration_time, gather_time_str.ptr(),
+                                                        share::OB_ALL_TABLE_OPT_STAT_GATHER_HISTORY_TNAME,
+                                                        ObOptStatsDeleteFlags::DELETE_TAB_GATHER_HISTORY,
+                                                        delete_flags))) {
+        LOG_WARN("failed to do delete expired stat history", K(ret));
       } else if ((delete_flags & ObOptStatsDeleteFlags::DELETE_USELESS_COL_STAT ||
                   delete_flags & ObOptStatsDeleteFlags::DELETE_USELESS_HIST_STAT) &&
                  OB_FAIL(remove_useless_column_stats(trans, start_time, max_duration_time, delete_flags))) {
         LOG_WARN("failed to remove useless column stats", K(ret));
       }
       if (OB_SUCC(ret)) {
-        int tmp_ret = OB_SUCCESS;
-        if (OB_SUCCESS != (tmp_ret = trans.end(true))) {
-          LOG_WARN("fail to commit transaction", K(tmp_ret));
+        int tmp_ret1 = OB_SUCCESS;
+        int tmp_ret2 = OB_SUCCESS;
+        if (OB_SUCCESS != (tmp_ret1 = trans.end(true))) {
+          LOG_WARN("fail to commit transaction", K(tmp_ret1));
         }
-        ret = tmp_ret;
+        if (OB_SUCCESS != (tmp_ret2 = trans1.end(true))) {
+          LOG_WARN("fail to commit transaction", K(tmp_ret2));
+        }
+        ret = tmp_ret1 != OB_SUCCESS ? tmp_ret1 : tmp_ret2;
       } else {
         int tmp_ret = OB_SUCCESS;
         if (OB_SUCCESS != (tmp_ret = trans.end(false))) {
+          LOG_WARN("fail to roll back transaction", K(tmp_ret));
+        }
+        if (OB_SUCCESS != (tmp_ret = trans1.end(false))) {
           LOG_WARN("fail to roll back transaction", K(tmp_ret));
         }
       }
@@ -970,7 +1003,7 @@ int ObDbmsStatsHistoryManager::get_stats_history_retention_and_availability(ObEx
     
     SMART_VAR(ObMySQLProxy::MySQLResult, proxy_result) {
       sqlclient::ObMySQLResult *client_result = NULL;
-      auto &sql_client_retry_weak = *mysql_proxy;
+      ObSQLClientRetryWeak sql_client_retry_weak(mysql_proxy);
       if (OB_FAIL(sql_client_retry_weak.read(proxy_result, raw_sql.ptr()))) {
         LOG_WARN("failed to execute sql", K(ret), K(raw_sql));
       } else if (OB_ISNULL(client_result = proxy_result.get_result())) {
@@ -1076,7 +1109,7 @@ int ObDbmsStatsHistoryManager::fetch_table_stat_histrory(ObExecContext &ctx,
   } else {
     SMART_VAR(ObMySQLProxy::MySQLResult, proxy_result) {
       sqlclient::ObMySQLResult *client_result = NULL;
-      auto &sql_client_retry_weak = *mysql_proxy;
+      ObSQLClientRetryWeak sql_client_retry_weak(mysql_proxy);
       if (OB_FAIL(sql_client_retry_weak.read(proxy_result, raw_sql.ptr()))) {
         LOG_WARN("failed to execute sql", K(ret), K(raw_sql));
       } else if (OB_ISNULL(client_result = proxy_result.get_result())) {
@@ -1178,7 +1211,7 @@ int ObDbmsStatsHistoryManager::fetch_column_stat_history(ObExecContext &ctx,
   } else {
     SMART_VAR(ObMySQLProxy::MySQLResult, proxy_result) {
       sqlclient::ObMySQLResult *client_result = NULL;
-      auto &sql_client_retry_weak = *mysql_proxy;
+      ObSQLClientRetryWeak sql_client_retry_weak(mysql_proxy);
       if (OB_FAIL(sql_client_retry_weak.read(proxy_result, raw_sql.ptr()))) {
         LOG_WARN("failed to execute sql", K(ret), K(raw_sql));
       } else if (OB_ISNULL(client_result = proxy_result.get_result())) {
@@ -1365,7 +1398,8 @@ int ObDbmsStatsHistoryManager::fetch_histogram_stat_histroy(ObExecContext &ctx,
     } else {
       SMART_VAR(ObMySQLProxy::MySQLResult, proxy_result) {
         sqlclient::ObMySQLResult *client_result = NULL;
-        auto &sql_client_retry_weak = *mysql_proxy;
+        const bool did_retry_weak = false;
+        ObSQLClientRetryWeak sql_client_retry_weak(mysql_proxy, did_retry_weak);
         if (OB_FAIL(sql_client_retry_weak.read(proxy_result, raw_sql.ptr()))) {
           LOG_WARN("failed to execute sql", K(ret), K(raw_sql));
         } else if (OB_ISNULL(client_result = proxy_result.get_result())) {

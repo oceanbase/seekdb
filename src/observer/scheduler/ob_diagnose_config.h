@@ -42,14 +42,18 @@ SUSPECT_INFO_TYPE_DEF(SUSPECT_SUSPEND_MERGE, ObDiagnoseInfoPrio::DIAGNOSE_PRIORI
     1, {"schedule_scn"})
 SUSPECT_INFO_TYPE_DEF(SUSPECT_INVALID_DATA_VERSION, ObDiagnoseInfoPrio::DIAGNOSE_PRIORITY_LOW, false, "invalid data version to schedule medium merge",
     2, {"curr_data_version", "target_data_version"})
+SUSPECT_INFO_TYPE_DEF(SUSPECT_FAILED_TO_REFRESH_LS_LOCALITY, ObDiagnoseInfoPrio::DIAGNOSE_PRIORITY_LOW, false, "refresh ls locality cache failed",
+    1, {"errno"})
 SUSPECT_INFO_TYPE_DEF(SUSPECT_RS_SCHEDULE_ERROR, ObDiagnoseInfoPrio::DIAGNOSE_PRIORITY_MID, false, "rs check progress failed",
     3, {"compaction_scn", "errno", "unfinish_table_cnt"})
-SUSPECT_INFO_TYPE_DEF(SUSPECT_RUNTIME_META_UPDATE_ADD_FAILED, ObDiagnoseInfoPrio::DIAGNOSE_PRIORITY_HIGH, false, "tablet runtime metadata update task add failed",
+SUSPECT_INFO_TYPE_DEF(SUSPECT_COMPACTION_REPORT_ADD_FAILED, ObDiagnoseInfoPrio::DIAGNOSE_PRIORITY_HIGH, false, "compaction report task add failed",
     1, {"errno"})
-SUSPECT_INFO_TYPE_DEF(SUSPECT_RUNTIME_META_UPDATE_PROGRESS_FAILED, ObDiagnoseInfoPrio::DIAGNOSE_PRIORITY_HIGH, false, "tablet runtime metadata update task process failed",
+SUSPECT_INFO_TYPE_DEF(SUSPECT_COMPACTION_REPORT_PROGRESS_FAILED, ObDiagnoseInfoPrio::DIAGNOSE_PRIORITY_HIGH, false, "compaction report task process failed",
     1, {"errno"})
 SUSPECT_INFO_TYPE_DEF(SUSPECT_LS_CANT_MERGE, ObDiagnoseInfoPrio::DIAGNOSE_PRIORITY_LOW, true, "ls can't schedule merge",
     1, {"weak_read_ts"})
+SUSPECT_INFO_TYPE_DEF(SUSPECT_MV_IN_CREATION, ObDiagnoseInfoPrio::DIAGNOSE_PRIORITY_LOW, false,
+                      "materialized view creation has not finished", 1, {"schedule_scn"})
 SUSPECT_INFO_TYPE_DEF(SUSPECT_INFO_TYPE_MAX, ObDiagnoseInfoPrio::DIAGNOSE_PRIORITY_LOW, false, "", 0, {})
 #endif
 
@@ -83,11 +87,12 @@ enum ObDiagnoseTabletType {
   TYPE_MINI_MERGE,
   TYPE_MINOR_MERGE,
   TYPE_MEDIUM_MERGE,   // for medium & major in storage
-  TYPE_RUNTIME_META_UPDATE,
-  TYPE_RS_MAJOR_MERGE, // for runtime major merge in RS
+  TYPE_REPORT,
+  TYPE_RS_MAJOR_MERGE, // for tenant major in RS
   TYPE_TX_TABLE_MERGE,
   TYPE_MDS_MINI_MERGE,
   TYPE_BATCH_EXECUTE, // for batch execute dag
+  TYPE_S2_REFRESH, // for shared storage
   TYPE_MICRO_MINI_MERGE,
   TYPE_DIAGNOSE_TABLET_MAX
 };

@@ -61,6 +61,7 @@ int ObTxDataMemtable::init(const ObITable::TableKey &table_key,
       occupied_size_[i] = 0;
       total_undo_node_cnt_[i] = 0;
     }
+    ls_id_ = freezer_->get_ls_id();
     construct_list_done_ = false;
     pre_process_done_ = false;
     do_recycle_ = false;
@@ -184,6 +185,7 @@ int ObTxDataMemtable::insert(ObTxData *tx_data)
       if (tx_data->op_guard_->get_undo_status_list().undo_node_cnt_ == 10 || tx_data->op_guard_->get_undo_status_list().undo_node_cnt_ % 100 == 0) {
         STORAGE_LOG(INFO,
                     "attention! this tx write too many rollback to savepoint log",
+                    "ls_id", get_ls_id(),
                     "tx_id", tx_data->tx_id_,
                     "state", ObTxData::get_state_string(tx_data->state_),
                     "undo_node_cnt", tx_data->op_guard_->get_undo_status_list().undo_node_cnt_,
@@ -269,6 +271,7 @@ int ObTxDataMemtable::pre_process_for_merge()
   STORAGE_LOG(INFO,
               "[TX DATA MERGE]pre process for merge done",
               KR(ret),
+              K(get_ls_id()),
               KP(this),
               K(tg),
               K(fake_tx_data_guard),
@@ -346,7 +349,8 @@ int ObTxDataMemtable::pre_process_commit_version_row_(ObTxData *fake_tx_data)
   } else {
     do_recycle_ = true;
   }
-  STORAGE_LOG(INFO, "pre-process commit versions row", K(do_recycle_), K(current_time), K(prev_recycle_time));
+  STORAGE_LOG(
+      INFO, "pre-process commit versions row", K(get_ls_id()), K(do_recycle_), K(current_time), K(prev_recycle_time));
 
   if (OB_FAIL(fill_in_cur_commit_versions_(cur_commit_versions)/*step 1*/)) {
     STORAGE_LOG(WARN, "periodical select commit version failed.", KR(ret));
@@ -915,10 +919,10 @@ bool ObTxDataMemtable::ready_for_flush()
     bool_ret = true;
     STORAGE_LOG(INFO, "memtable is frozen yet.", KP(this));
   } else if (OB_FAIL(freezer_->get_max_consequent_callbacked_scn(max_consequent_callbacked_scn))) {
-    STORAGE_LOG(WARN, "get_max_consequent_callbacked_scn failed", K(ret));
+    STORAGE_LOG(WARN, "get_max_consequent_callbacked_scn failed", K(ret), K(get_ls_id()));
   } else if (max_consequent_callbacked_scn >= key_.scn_range_.end_scn_) {
     state_ = ObTxDataMemtable::State::FROZEN;
-    STORAGE_LOG(INFO, "[TX DATA MERGE]tx data memtable is frozen", KP(this));
+    STORAGE_LOG(INFO, "[TX DATA MERGE]tx data memtable is frozen", K(get_ls_id()), KP(this));
     set_snapshot_version(get_min_tx_scn());
     bool_ret = true;
     stat_change_ts_.ready_for_flush_time_ = ObTimeUtil::fast_current_time();
@@ -946,6 +950,7 @@ int ObTxDataMemtable::flush()
 {
   int ret = OB_SUCCESS;
   compaction::ObTabletMergeDagParam param;
+  param.ls_id_ = freezer_->get_ls_id();
   param.tablet_id_ = key_.tablet_id_;
   param.merge_type_ = compaction::MINI_MERGE;
   param.merge_version_ = ObVersionRange::MIN_VERSION;
@@ -958,6 +963,7 @@ int ObTxDataMemtable::flush()
     STORAGE_LOG(INFO,
                 "[TX DATA MERGE]schedule flush tx data memtable task done",
                 KR(ret),
+                K(get_ls_id()),
                 KP(this),
                 K(param),
                 KPC(this));
@@ -1082,6 +1088,11 @@ int ObTxDataMemtable::cmp_key_(const int64_t &lhs, const int64_t &rhs)
   return int_ret;
 }
 
+share::ObLSID ObTxDataMemtable::get_ls_id() const
+{
+  return OB_ISNULL(freezer_) ? share::ObLSID(ObLSID::INVALID_LS_ID) : freezer_->get_ls_id();
+}
+
 int ObTxDataMemtable::dump2text(const char *fname)
 {
   int ret = OB_SUCCESS;
@@ -1101,6 +1112,9 @@ int ObTxDataMemtable::dump2text(const char *fname)
     ret = OB_IO_ERROR;
     STORAGE_LOG(WARN, "open file fail:", K(fname));
   } else {
+    int64_t ls_id = freezer_->get_ls_id().id();
+    
+    fprintf(fd, "ls_id=%ld\n", ls_id);
     ObCStringHelper helper;
     const char *key_ptr = NULL;
     const char *min_tx_scn_ptr = NULL;

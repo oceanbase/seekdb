@@ -70,13 +70,12 @@ void MacroBlockId::first_id_to_string(char *buf, const int64_t buf_len, int64_t 
     break;
   case ObMacroBlockIdMode::ID_MODE_SHARE:
     databuff_printf(buf, buf_len, pos,
-        "{[ver=%lu,mode=%lu,obj_type=%lu,obj_type_str=%s,incar_id=%lu,cg_id=%lu]",
+        "{[ver=%lu,mode=%lu,obj_type=%lu,obj_type_str=%s,incar_id=%lu]",
         (uint64_t) ss_version_,
         (uint64_t) ss_id_mode_,
         (uint64_t) storage_object_type_,
         get_storage_objet_type_str(static_cast<ObStorageObjectType>(storage_object_type_)),
-        (uint64_t) incarnation_id_,
-        (uint64_t) column_group_id_);
+        (uint64_t) incarnation_id_);
     break;
   default:
     databuff_printf(buf, buf_len, pos,

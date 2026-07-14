@@ -78,7 +78,7 @@ create_index_with_parser_properties	CREATE TABLE `create_index_with_parser_prope
   FULLTEXT KEY `fidx1` (`a`) WITH PARSER space PARSER_PROPERTIES=(min_token_size=2,max_token_size=84) BLOCK_SIZE 16384,
   FULLTEXT KEY `fidx2` (`b`) WITH PARSER ngram PARSER_PROPERTIES=(ngram_token_size=4) BLOCK_SIZE 16384,
   FULLTEXT KEY `fidx3` (`a`, `b`) WITH PARSER space PARSER_PROPERTIES=(min_token_size=4,max_token_size=84) BLOCK_SIZE 16384
-) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_bin ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' BLOCK_SIZE = 16384 TABLET_SIZE = 134217728 PCTFREE = 0
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_bin ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = replica_num BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
 show index from create_index_with_parser_properties;
 Table	Non_unique	Key_name	Seq_in_index	Column_name	Collation	Cardinality	Sub_part	Packed	Null	Index_type	Comment	Index_comment	Visible	Expression
 create_index_with_parser_properties	1	fidx1	1	a	A	NULL	NULL	NULL	YES	FULLTEXT	available		YES	NULL
@@ -126,7 +126,7 @@ fts_basic_article	CREATE TABLE `fts_basic_article` (
   `content` text COLLATE utf8mb4_bin DEFAULT NULL,
   PRIMARY KEY (`id`),
   FULLTEXT KEY `ctx` (`title`, `content`) WITH PARSER space PARSER_PROPERTIES=(min_token_size=9,max_token_size=84) BLOCK_SIZE 16384
-) ORGANIZATION INDEX AUTO_INCREMENT = auto_increment DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_bin ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' BLOCK_SIZE = 16384 TABLET_SIZE = 134217728 PCTFREE = 0
+) ORGANIZATION INDEX AUTO_INCREMENT = auto_increment AUTO_INCREMENT_MODE = 'ORDER' DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_bin ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = replica_num BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
 SHOW INDEX FROM fts_basic_article;
 Table	Non_unique	Key_name	Seq_in_index	Column_name	Collation	Cardinality	Sub_part	Packed	Null	Index_type	Comment	Index_comment	Visible	Expression
 fts_basic_article	0	PRIMARY	1	id	A	NULL	NULL	NULL		BTREE	available		YES	NULL
@@ -145,7 +145,7 @@ Table	Create Table
 table_create_with_ngram2	CREATE TABLE `table_create_with_ngram2` (
   `text` char(255) COLLATE utf8mb4_bin DEFAULT NULL,
   FULLTEXT KEY `text` (`text`) WITH PARSER ngram2 PARSER_PROPERTIES=(min_ngram_size=2,max_ngram_size=4) BLOCK_SIZE 16384
-) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_bin ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' BLOCK_SIZE = 16384 TABLET_SIZE = 134217728 PCTFREE = 0
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_bin ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = replica_num BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
 INSERT INTO table_create_with_ngram2 VALUES ('hello world');
 SELECT * FROM table_create_with_ngram2 WHERE MATCH(text) AGAINST('world' IN BOOLEAN MODE);
 +------+

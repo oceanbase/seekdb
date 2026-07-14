@@ -84,8 +84,7 @@ int ObLS::init(const share::ObLSID &ls_id,
                const ObMigrationStatus &migration_status,
                const ObRestoreStatus &restore_status,
                const SCN &create_scn,
-               const ObMajorMVMergeInfo &major_mv_merge_info,
-               const ObLSStoreFormat &store_format)
+               const ObMajorMVMergeInfo &major_mv_merge_info)
 {
   int ret = OB_SUCCESS;
   int tmp_ret = OB_SUCCESS;
@@ -105,8 +104,7 @@ int ObLS::init(const share::ObLSID &ls_id,
                                    migration_status,
                                    restore_status,
                                    create_scn,
-                                   major_mv_merge_info,
-                                   store_format))) {
+                                   major_mv_merge_info))) {
     LOG_WARN("failed to init ls meta", K(ret), K(ls_id), K(major_mv_merge_info));
   } else if (OB_FAIL(ls_freezer_.init(this))) {
     LOG_WARN("init freezer failed", K(ret), K(ls_id));
@@ -337,43 +335,6 @@ int ObLS::finish_create_ls()
     LOG_WARN("finish create ls failed", KR(ret), K(ls_meta_));
   } else {
     update_state_seq_();
-  }
-  return ret;
-}
-
-bool ObLS::is_cs_replica() const
-{
-  return ls_meta_.get_store_format().is_columnstore();
-}
-
-int ObLS::check_has_cs_replica(bool &has_cs_replica) const
-{
-  int ret = OB_SUCCESS;
-  has_cs_replica = false;
-  ObRole role = INVALID_ROLE;
-  ObMemberList member_list;
-  GlobalLearnerList learner_list;
-  int64_t proposal_id = 0;
-  int64_t paxos_replica_number = 0;
-
-  if (IS_NOT_INIT) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("ls is not inited", K(ret));
-  } else if (OB_FAIL(log_handler_.get_role(role, proposal_id))) {
-    LOG_WARN("fail to get role", K(ret), KPC(this));
-  } else if (LEADER != role) {
-    ret = OB_NOT_MASTER;
-    LOG_WARN("local ls is not leader", K(ret), K_(ls_meta));
-  } else if (OB_FAIL(get_paxos_member_list_and_learner_list(member_list, paxos_replica_number, learner_list))) {
-    LOG_WARN("fail to get member list and learner list", K(ret), K_(ls_meta));
-  } else {
-    for (int64_t i = 0; i < learner_list.get_member_number(); i++) {
-      const ObMember &learner = learner_list.get_learner(i);
-      if (learner.is_columnstore()) {
-        has_cs_replica = true;
-        break;
-      }
-    }
   }
   return ret;
 }

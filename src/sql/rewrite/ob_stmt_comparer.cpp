@@ -407,6 +407,7 @@ bool ObStmtCompareContext::compare_query(const ObQueryRefRawExpr &first,
                                                             stmt_map_info,
                                                             relation,
                                                             true,
+                                                            true,
                                                             is_in_same_stmt_))) {
     LOG_WARN("failed to compute stmt relationship", K(ret));
     err_code_ = ret;
@@ -542,6 +543,7 @@ int ObStmtComparer::check_stmt_containment(const ObDMLStmt *first,
                                            ObStmtMapInfo &map_info,
                                            QueryRelation &relation,
                                            bool is_strict_select_list,
+                                           bool need_check_select_items,
                                            bool is_in_same_stmt)
 {
   int ret = OB_SUCCESS;
@@ -569,7 +571,7 @@ int ObStmtComparer::check_stmt_containment(const ObDMLStmt *first,
     }
   } else if (first_sel->is_set_stmt() || second_sel->is_set_stmt()) {
     /*do nothing*/
-  } else if (first_sel->get_from_item_size() != second_sel->get_from_item_size()) {
+  } else if (first_sel->get_from_item_size() != second_sel->get_from_item_size()) { // TODO for the further mv rewrite, from item size may be different
     LOG_TRACE("failed to compare, from item size not match", K(first_sel->get_from_item_size()), K(second_sel->get_from_item_size()));
   } else {
     // check from items
@@ -655,7 +657,13 @@ int ObStmtComparer::check_stmt_containment(const ObDMLStmt *first,
       int64_t first_rollup_count = first_sel->get_rollup_exprs().count();
       int64_t second_rollup_count = second_sel->get_rollup_exprs().count();
       QueryRelation this_relation;
-      if ((first_sel->get_aggr_item_size() > 0 ||
+      if (second_count == 0 && first_rollup_count == 0 && second_rollup_count == 0
+            && (relation == QueryRelation::QUERY_LEFT_SUBSET || relation == QueryRelation::QUERY_EQUAL)
+            && !need_check_select_items) {
+        // for mv rewrite
+        relation = QueryRelation::QUERY_LEFT_SUBSET;
+        LOG_TRACE("succeed to check group by map", K(relation), K(map_info));
+      } else if ((first_sel->get_aggr_item_size() > 0 ||
            second_sel->get_aggr_item_size() > 0)
            && relation != QueryRelation::QUERY_EQUAL) {
         relation = QueryRelation::QUERY_UNCOMPARABLE;
@@ -844,7 +852,8 @@ int ObStmtComparer::check_stmt_containment(const ObDMLStmt *first,
     }
 
     // compute map for select items output
-    if (OB_SUCC(ret) && QueryRelation::QUERY_UNCOMPARABLE != relation) {
+    if (OB_SUCC(ret) && need_check_select_items
+        && QueryRelation::QUERY_UNCOMPARABLE != relation) {
       ObSEArray<ObRawExpr*, 16> first_exprs;
       ObSEArray<ObRawExpr*, 16> second_exprs;
       QueryRelation this_relation;
@@ -1578,6 +1587,7 @@ int ObStmtComparer::compare_table_item(const ObDMLStmt *first,
                                                          ref_query_map_info,
                                                          relation,
                                                          false,
+                                                         true,
                                                          is_in_same_stmt)))) {
       LOG_WARN("check stmt containment failed", K(ret));
     } else if (OB_FAIL(map_info.view_select_item_map_.at(first_table_index - 1).assign(ref_query_map_info.select_item_map_))) {
@@ -1653,6 +1663,7 @@ int ObStmtComparer::compare_set_stmt(const ObSelectStmt *first,
                                                     ref_query_map_info,
                                                     set_query_relation,
                                                     false,
+                                                    true,
                                                     is_in_same_stmt)))) {
         LOG_WARN("check stmt containment failed", K(ret));
       } else if (QueryRelation::QUERY_EQUAL == set_query_relation && ref_query_map_info.is_select_item_equal_) {

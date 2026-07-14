@@ -72,6 +72,7 @@ int ObLobMacroBlockWriter::init(const ObWriteMacroParam &param,
     lob_column_count_ = param.ddl_table_schema_.lob_column_idxs_.count();
     lob_id_cache_.tablet_id_ = lob_meta_tablet_id_;
     lob_inrow_threshold_ = param.ddl_table_schema_.table_item_.lob_inrow_threshold_;
+    ls_id_ = param.ls_id_;
     tablet_id_ = param.tablet_id_;
     param_ = param;
 
@@ -93,12 +94,14 @@ int ObLobMacroBlockWriter::init(const ObWriteMacroParam &param,
         LOG_WARN("init lob meta row failed", K(ret));
       } else {
         lob_meta_row_.storage_datums_[ObLobMetaUtil::SEQ_ID_COL_ID + 1].set_int(-param.snapshot_version_);
-        lob_meta_row_.storage_datums_[ObLobMetaUtil::SEQ_ID_COL_ID + 2].set_int(0);
+        lob_meta_row_.storage_datums_[ObLobMetaUtil::SEQ_ID_COL_ID + 2].set_int(-param_.tx_info_.seq_no_);
+        lob_meta_row_.set_trans_id(param_.tx_info_.trans_id_);
         lob_meta_row_.row_flag_.set_flag(ObDmlFlag::DF_INSERT);
         lob_meta_row_.mvcc_row_flag_.set_compacted_multi_version_row(true);
         lob_meta_row_.mvcc_row_flag_.set_first_multi_version_row(true);
         lob_meta_row_.mvcc_row_flag_.set_last_multi_version_row(true);
-        lob_meta_row_.mvcc_row_flag_.set_uncommitted_row(false);
+        lob_meta_row_.mvcc_row_flag_.set_uncommitted_row(
+            param_.tx_info_.trans_id_.is_valid() && is_incremental_minor_direct_load(param_.direct_load_type_));
       }
     }
 
@@ -127,8 +130,9 @@ int ObLobMacroBlockWriter::write(const ObColumnSchemaItem &column_schema, ObIAll
       LOG_WARN("switch lob id cache failed", K(ret), K(lob_id_cache_), K(lob_column_count_), K(lob_id_generator_));
     } else if (OB_FAIL(ObInsertLobColumnHelper::insert_lob_column(row_allocator,
                                                                   lob_arena_/*lob_allocator*/,
-                                                                  nullptr,
+                                                                  param_.tx_info_.tx_desc_,
                                                                   lob_id_cache_,
+                                                                  ls_id_,
                                                                   tablet_id_,
                                                                   lob_meta_tablet_id_,
                                                                   column_schema.col_type_.get_type(),
@@ -185,6 +189,8 @@ int ObLobMacroBlockWriter::transform_lob_meta_row(ObLobMetaWriteResult &lob_meta
     LOG_WARN("not init", K(ret));
   } else if (OB_FAIL(ObLobMetaUtil::transform_from_info_to_row(lob_meta_write_result.info_, &lob_meta_row_, true/*with_extra_rowkey*/))) {
     LOG_WARN("transform lob meta row failed", K(ret), K(lob_meta_write_result.info_));
+  } else if (is_incremental_direct_load(param_.direct_load_type_)) {
+    lob_meta_row_.storage_datums_[ObLobMetaUtil::SEQ_ID_COL_ID + 2].set_int(-lob_meta_write_result.seq_no_);
   }
   if (OB_SUCC(ret)) {
     if (OB_UNLIKELY(!lob_meta_row_.is_valid())) {
@@ -216,11 +222,23 @@ int ObLobMacroBlockWriter::prepare_macro_block_writer()
   if (OB_SUCC(ret) && OB_UNLIKELY(!macro_block_writer_->is_inited())) {
     ObITable::TableKey lob_table_key;
     lob_table_key.tablet_id_ = lob_meta_tablet_id_;
-    lob_table_key.table_type_ = ObITable::MAJOR_SSTABLE;
-    // slice idx is not the same order with the rowkey of lob. set slice idx 0 here to compare rowkey when merge major sstable
-    lob_table_key.slice_range_.start_slice_idx_ = 0;
-    lob_table_key.slice_range_.end_slice_idx_ = 0;
-    lob_table_key.version_range_.snapshot_version_ = param_.snapshot_version_;
+    if (is_incremental_minor_direct_load(param_.direct_load_type_)) { // incremental
+      lob_table_key.table_type_ = ObITable::MINI_SSTABLE;
+      lob_table_key.scn_range_.start_scn_.convert_for_tx(1);
+      lob_table_key.scn_range_.end_scn_.convert_for_tx(param_.snapshot_version_); // for logic version
+    } else if (is_incremental_major_direct_load(param_.direct_load_type_)) { // incremental
+      lob_table_key.table_type_ = ObITable::INC_MAJOR_SSTABLE;
+      // slice idx is not the same order with the rowkey of lob. set slice idx 0 here to compare rowkey when merge major sstable
+      lob_table_key.slice_range_.start_slice_idx_ = 0;
+      lob_table_key.slice_range_.end_slice_idx_ = 0;
+      lob_table_key.version_range_.snapshot_version_ = param_.snapshot_version_;
+    } else { // full
+      lob_table_key.table_type_ = ObITable::MAJOR_SSTABLE;
+      // slice idx is not the same order with the rowkey of lob. set slice idx 0 here to compare rowkey when merge major sstable
+      lob_table_key.slice_range_.start_slice_idx_ = 0;
+      lob_table_key.slice_range_.end_slice_idx_ = 0;
+      lob_table_key.version_range_.snapshot_version_ = param_.snapshot_version_;
+    }
     uint64_t lob_start_seq = 0;
     if (OB_FAIL(lob_id_cache_.get_value(lob_start_seq))) {
       LOG_WARN("get lob start seq failed", K(ret), K(lob_id_cache_));
@@ -278,7 +296,7 @@ int ObLobMacroBlockWriter::close()
     uint64_t last_lob_id = 0;
     if (OB_FAIL(lob_id_cache_.get_value(last_lob_id))) {
       LOG_WARN("get last lob id failed", K(ret));
-    } else if (OB_FAIL(ObDDLUtil::set_tablet_autoinc_seq(lob_meta_tablet_id_, last_lob_id))) {
+    } else if (OB_FAIL(ObDDLUtil::set_tablet_autoinc_seq(ls_id_, lob_meta_tablet_id_, last_lob_id))) {
       LOG_WARN("update max lob id failed", K(ret), K(last_lob_id));
     }
   }

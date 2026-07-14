@@ -22,7 +22,7 @@
 #include "share/rc/ob_module_provider.h"
 #include "storage/blocksstable/ob_storage_cache_suite.h"
 #include "storage/blocksstable/ob_storage_cache_suite.h"
-#include "storage/meta_mem/ob_storage_meta_mem_mgr.h"
+#include "storage/meta_mem/ob_tenant_meta_mem_mgr.h"
 
 namespace oceanbase
 {
@@ -47,7 +47,7 @@ bool ObStorageMetaKey::operator ==(const ObIKVCacheKey &other) const
 {
   const ObStorageMetaKey &other_key = reinterpret_cast<const ObStorageMetaKey &> (other);
   return phy_addr_ == other_key.phy_addr_
-      ;
+      && true;
 }
 
 
@@ -434,7 +434,7 @@ ObStorageMetaCache::ObStorageMetaIOCallback::ObStorageMetaIOCallback(
     ObStorageMetaValueHandle &handle,
     const ObTablet *tablet,
     common::ObSafeArenaAllocator *arena_allocator)
-  : ObObjectIOCallback(io_allocator, key.get_meta_addr(), common::ObIOCallbackType::STORAGE_META_CALLBACK),
+  : ObSharedObjectIOCallback(io_allocator, key.get_meta_addr(), common::ObIOCallbackType::STORAGE_META_CALLBACK),
     meta_type_(type),
     key_(key),
     handle_(handle),
@@ -481,7 +481,7 @@ int64_t ObStorageMetaCache::ObStorageMetaIOCallback::size() const
 
 bool ObStorageMetaCache::ObStorageMetaIOCallback::is_valid() const
 {
-  return ObObjectIOCallback::is_valid() && key_.is_valid() && handle_.is_valid();
+  return ObSharedObjectIOCallback::is_valid() && key_.is_valid() && handle_.is_valid();
 }
 
 int ObStorageMetaCache::get_meta(
@@ -494,7 +494,7 @@ int ObStorageMetaCache::get_meta(
   if (OB_UNLIKELY(!key.is_valid() || type >= ObStorageMetaValue::MAX)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", K(ret), K(key), K(type));
-  } else if (OB_FAIL(meta_handle.cache_handle_.new_value(share::g_mp->storage_meta_mem_mgr()->get_meta_cache_io_allocator()))) {
+  } else if (OB_FAIL(meta_handle.cache_handle_.new_value(share::g_mp->tenant_meta_mem_mgr()->get_meta_cache_io_allocator()))) {
     LOG_WARN("fail to new cache handle value", K(ret));
   } else if (OB_FAIL(get(key, meta_handle.cache_handle_.get_cache_value()->value_,
       meta_handle.cache_handle_.get_cache_value()->cache_handle_))) {
@@ -503,11 +503,11 @@ int ObStorageMetaCache::get_meta(
     } else if (OB_FAIL(prefetch(type, key, meta_handle, tablet))) {
       LOG_WARN("fail to prefetch", K(ret), K(type), K(key));
     } else {
-      EVENT_INC(STORAGE_META_CACHE_MISS);
+      EVENT_INC(ObStatEventIds::STORAGE_META_CACHE_MISS);
     }
   } else {
     meta_handle.phy_addr_ = key.get_meta_addr();
-    EVENT_INC(STORAGE_META_CACHE_HIT);
+    EVENT_INC(ObStatEventIds::STORAGE_META_CACHE_HIT);
   }
   return ret;
 }
@@ -579,7 +579,7 @@ int ObStorageMetaCache::prefetch(
     LOG_WARN("invalid arguments", K(ret), K(key), K(type));
   } else {
     void *buf = nullptr;
-    common::ObIAllocator &io_allocator = share::g_mp->storage_meta_mem_mgr()->get_meta_cache_io_allocator();
+    common::ObIAllocator &io_allocator = share::g_mp->tenant_meta_mem_mgr()->get_meta_cache_io_allocator();
     ObStorageMetaIOCallback *callback = nullptr;
     if (OB_ISNULL(buf = io_allocator.alloc(sizeof(ObStorageMetaIOCallback)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
@@ -613,11 +613,11 @@ int ObStorageMetaCache::get_meta_and_bypass_cache(
   if (OB_UNLIKELY(!key.is_valid() || type >= ObStorageMetaValue::MAX)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", K(ret), K(key), K(type));
-  } else if (OB_FAIL(handle.cache_handle_.new_value(share::g_mp->storage_meta_mem_mgr()->get_meta_cache_io_allocator()))) {
+  } else if (OB_FAIL(handle.cache_handle_.new_value(share::g_mp->tenant_meta_mem_mgr()->get_meta_cache_io_allocator()))) {
     LOG_WARN("fail to new cache handle value", K(ret));
   } else {
     void *buf = nullptr;
-    common::ObIAllocator &io_allocator = share::g_mp->storage_meta_mem_mgr()->get_meta_cache_io_allocator();
+    common::ObIAllocator &io_allocator = share::g_mp->tenant_meta_mem_mgr()->get_meta_cache_io_allocator();
     ObStorageMetaIOCallback *callback = nullptr;
     if (OB_ISNULL(buf = io_allocator.alloc(sizeof(ObStorageMetaIOCallback)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
@@ -654,14 +654,15 @@ int ObStorageMetaCache::read_io(
     ret = OB_NOT_SUPPORTED;
     LOG_WARN("the meta disk address type hasn't be supported", K(ret), K(meta_addr), K(callback));
   } else {
-    ObObjectReadInfo read_info;
+    ObSharedObjectReadInfo read_info;
     read_info.addr_ = meta_addr;
     read_info.io_callback_ = &callback;
     read_info.io_desc_.set_mode(ObIOMode::READ);
     read_info.io_desc_.set_wait_event(ObWaitEventIds::DB_FILE_DATA_READ);
     read_info.io_timeout_ms_ = GCONF._data_storage_io_timeout / 1000L;
+    read_info.ls_epoch_ = 0; /* ls_epoch for share storage */
     handle.phy_addr_ = meta_addr;
-    if (OB_FAIL(ObObjectReaderWriter::async_read(read_info, handle.io_handle_))) {
+    if (OB_FAIL(ObSharedObjectReaderWriter::async_read(read_info, handle.io_handle_))) {
       LOG_WARN("fail to async read", K(ret), K(read_info));
     }
   }

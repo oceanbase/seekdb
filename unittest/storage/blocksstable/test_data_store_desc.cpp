@@ -141,12 +141,10 @@ TEST_F(TestObDataStoreDesc, test_col_desc)
   TestSchemaPrepare::prepare_schema(table_schema, rowkey_cnt, col_cnt);
 
   ASSERT_FALSE(col_desc.is_valid());
-  ASSERT_EQ(OB_SUCCESS, col_desc.init(true/*is_major*/, table_schema, 0/*table_cg_idx*/, DATA_VERSION_1_0_0_0));
+  ASSERT_EQ(OB_SUCCESS, col_desc.init(true/*is_major*/, table_schema, DATA_VERSION_1_0_0_0));
   ASSERT_TRUE(col_desc.is_valid());
 
-  ASSERT_EQ(true, col_desc.is_row_store_);
   ASSERT_EQ(true, col_desc.default_col_checksum_array_valid_);
-  ASSERT_EQ(0, col_desc.table_cg_idx_);
   ASSERT_EQ(rowkey_cnt, col_desc.schema_rowkey_col_cnt_);
   ASSERT_EQ(rowkey_cnt + mv_rowkey_cnt, col_desc.rowkey_column_count_);
   ASSERT_EQ(col_cnt + mv_rowkey_cnt, col_desc.row_column_count_);
@@ -205,65 +203,6 @@ TEST_F(TestObDataStoreDesc, gen_index_desc)
   const ObDataStoreDesc &index_data_desc = index_desc.get_desc();
   ASSERT_EQ(index_data_desc.get_row_column_count(), data_store_desc.get_rowkey_column_count() + 1);
   ASSERT_EQ(index_data_desc.get_col_desc_array().count(), data_store_desc.get_rowkey_column_count() + 1);
-}
-
-TEST_F(TestObDataStoreDesc, test_cg)
-{
-  ObArenaAllocator tmp_allocator;
-  ObStaticDataStoreDesc static_desc;
-  const int64_t rowkey_cnt = 1;
-  const int64_t column_cnt = 5;
-  const int64_t cg_cnt = column_cnt + 1;
-  const int64_t mv_rowkey_cnt = ObMultiVersionRowkeyHelpper::get_extra_rowkey_col_cnt();
-  ObWholeDataStoreDesc data_desc[cg_cnt];
-  ObWholeDataStoreDesc index_desc[cg_cnt];
-  ObTableSchema table_schema;
-  ObStorageSchema storage_schema;
-  TestSchemaPrepare::prepare_schema(table_schema, rowkey_cnt, column_cnt);
-  TestSchemaPrepare::add_all_and_each_column_group(tmp_allocator, table_schema);
-  ASSERT_EQ(OB_SUCCESS, storage_schema.init(tmp_allocator, table_schema, Worker::CompatMode::MYSQL));
-
-  const int64_t snapshot = 10000;
-  share::SCN scn;
-  scn.convert_for_tx(100);
-  ASSERT_EQ(OB_SUCCESS,
-            static_desc.init(false/*is_ddl*/, table_schema, mock_ls_id_, mock_tablet_id_,
-                             MAJOR_MERGE, snapshot, share::SCN::invalid_scn(),
-                             DATA_VERSION_1_0_0_0/*cluster_version*/, EXEC_MODE_LOCAL, false /* micro_index_clustered */, 0 /*concurrent_cnt*/));
-  ASSERT_TRUE(static_desc.is_valid());
-
-  const ObIArray<ObStorageColumnGroupSchema> &column_groups = storage_schema.get_column_groups();
-  for (int64_t i = 0 ; i < column_groups.count(); ++i) {
-    const ObStorageColumnGroupSchema &column_group = column_groups.at(i);
-    const ObDataStoreDesc &data_store_desc = data_desc[i].get_desc();
-    if (column_group.is_all_column_group()) {
-      continue;
-    }
-    ASSERT_EQ(OB_SUCCESS, data_desc[i].init(static_desc, storage_schema, &column_group, i));
-
-    // check single cg default skip index
-    ASSERT_EQ(3, data_desc[i].col_desc_.agg_meta_array_.count());
-    ASSERT_EQ(ObSkipIndexColType::SK_IDX_MIN, data_desc[i].col_desc_.agg_meta_array_.at(0).col_type_);
-    ASSERT_EQ(ObSkipIndexColType::SK_IDX_MAX, data_desc[i].col_desc_.agg_meta_array_.at(1).col_type_);
-    ASSERT_EQ(ObSkipIndexColType::SK_IDX_NULL_COUNT, data_desc[i].col_desc_.agg_meta_array_.at(2).col_type_);
-
-    ASSERT_EQ(data_store_desc.get_row_column_count(), column_group.column_cnt_);
-    ASSERT_EQ(data_store_desc.get_full_stored_col_cnt(), column_group.column_cnt_);
-    ASSERT_EQ(data_store_desc.get_schema_rowkey_col_cnt(), column_group.schema_rowkey_column_cnt_);
-    ASSERT_EQ(data_store_desc.get_rowkey_column_count(), column_group.rowkey_column_cnt_);
-
-    COMMON_LOG(INFO, "prepare desc", K(i), K(column_group), K(data_store_desc));
-    ASSERT_EQ(data_store_desc.get_table_cg_idx(), i);
-    ASSERT_EQ(data_store_desc.get_is_row_store(), column_group.is_all_column_group() || column_group.is_rowkey_column_group());
-    ASSERT_EQ(data_store_desc.get_col_desc_array().count(), data_store_desc.get_row_column_count());
-
-    ASSERT_EQ(OB_SUCCESS, index_desc[i].gen_index_store_desc(data_store_desc));
-    const ObDataStoreDesc &index_store_desc = index_desc[i].get_desc();
-    ASSERT_EQ(index_store_desc.get_schema_rowkey_col_cnt(), 0);
-    ASSERT_EQ(index_store_desc.get_rowkey_column_count(), 1);
-    ASSERT_EQ(index_store_desc.get_row_column_count(), data_store_desc.get_row_column_count() + 1);
-    ASSERT_EQ(index_store_desc.get_col_desc_array().count(), index_store_desc.get_row_column_count());
-  } // end of for
 }
 
 } // namespace unittest

@@ -18,6 +18,7 @@
 
 #include "storage/compaction/ob_partition_rows_merger.h"
 #include "storage/compaction/ob_tablet_merge_ctx.h"
+#include "storage/compaction/ob_mview_compaction_util.h"
 
 namespace oceanbase
 {
@@ -585,6 +586,9 @@ int ObPartitionMergeHelper::init_merge_iters(const ObMergeParameter &merge_param
     ObSSTable *sstable = nullptr;
     ObPartitionMergeIter *merge_iter = nullptr;
 
+    if (merge_param.is_mv_merge() && OB_FAIL(init_mv_merge_iters(merge_param))) {
+      STORAGE_LOG(WARN, "Failed to init mv merge iters", K(ret), K(merge_param));
+    }
     for (int64_t i = table_cnt - 1; OB_SUCC(ret) && i >= 0; i--) {
       if (OB_ISNULL(table = tables_handle.get_table(i))) {
         ret = OB_ERR_UNEXPECTED;
@@ -621,6 +625,35 @@ int ObPartitionMergeHelper::init_merge_iters(const ObMergeParameter &merge_param
     }
 
     return ret;
+}
+
+int ObPartitionMergeHelper::init_mv_merge_iters(const ObMergeParameter &merge_param)
+{
+  int ret = OB_SUCCESS;
+  if (OB_UNLIKELY(0 != merge_iters_.count())) {
+    ret = OB_ERR_UNEXPECTED;
+    STORAGE_LOG(WARN, "Unexpected iters count in mv merge", K(ret));
+  } else {
+    ObPartitionMergeIter *merge_iter = nullptr;
+    for (int64_t i = merge_param.mview_merge_param_->refresh_sql_count_ - 1; OB_SUCC(ret) && i >= 0 ; i--) {
+      if (OB_ISNULL(merge_iter = alloc_helper<ObPartitionMVRowMergeIter>(allocator_, allocator_))) {
+        ret = OB_ALLOCATE_MEMORY_FAILED;
+        STORAGE_LOG(WARN, "Failed to alloc memory for mv merge iter", K(ret));
+      } else if (OB_FAIL(merge_iter->init(merge_param, i, &read_info_))) {
+        STORAGE_LOG(WARN, "Failed to init mv merge iter", K(ret), K(i));
+      } else if (OB_FAIL(merge_iters_.push_back(merge_iter))) {
+        STORAGE_LOG(WARN, "Failed to push back mv merge iter", K(ret), KPC(merge_iter));
+      } else {
+        STORAGE_LOG(INFO, "Succ to init mv merge iter", K(ret), K(i), KPC(merge_iter));
+        merge_iter = nullptr;
+      }
+      if (OB_FAIL(ret) && nullptr != merge_iter) {
+        merge_iter->~ObPartitionMergeIter();
+        allocator_.free(merge_iter);
+      }
+    }
+  }
+  return ret;
 }
 
 int ObPartitionMergeHelper::prepare_rows_merger()
@@ -684,7 +717,7 @@ int ObPartitionMergeHelper::has_incremental_data(bool &has_incremental_data) con
     } else if (OB_UNLIKELY(nullptr == top_item || !top_item->is_valid())) {
       ret = OB_ERR_UNEXPECTED;
       STORAGE_LOG(WARN, "unexpected top item", K(ret), KPC(top_item));
-    } else if (!top_item->iter_->is_base_iter() || !top_item->iter_->is_macro_merge_iter()) {
+    } else if (!top_item->iter_->is_base_iter() || !top_item->iter_->is_macro_merge_iter() /* for small sstable */) {
       has_incremental_data = true;
     }
   }
@@ -930,6 +963,7 @@ ObPartitionMergeIter *ObPartitionMajorMergeHelper::alloc_merge_iter(const ObMerg
   } else if (!table->is_major_sstable() || merge_param.is_full_merge()) {
     merge_iter = alloc_helper<ObPartitionRowMergeIter>(allocator_, allocator_);
   } else if (static_cast<const ObSSTable *>(table)->is_small_sstable()) {
+    const uint64_t compat_version = merge_param.static_param_.data_version_;
     if (MICRO_BLOCK_MERGE_LEVEL == merge_param.static_param_.merge_level_) {
       merge_iter = alloc_helper<ObPartitionMicroMergeIter>(allocator_, allocator_);
     } else {
@@ -980,8 +1014,7 @@ ObPartitionMergeIter *ObPartitionMinorMergeHelper::alloc_merge_iter(const ObMerg
   ObPartitionMergeIter *merge_iter = nullptr;
   if (OB_ISNULL(table)) {
     // do nothing
-  } else if (!(table->is_sstable()
-               && static_cast<const ObSSTable *>(table)->is_small_sstable())
+  } else if (!(table->is_sstable() && static_cast<const ObSSTable*>(table)->is_small_sstable())
       && !is_mini_merge(static_param.get_merge_type())
       && !static_param.is_full_merge_
       && static_param.sstable_logic_seq_ < ObMacroDataSeq::MAX_SSTABLE_SEQ) {

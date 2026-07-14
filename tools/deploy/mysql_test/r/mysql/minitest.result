@@ -230,29 +230,44 @@ Tables_in_test (t1)
 t1
 show tables like '%c%';
 Tables_in_test (%c%)
-show variables where Variable_name like 'ob%';
+show variables where Variable_name like 'ob%' and Variable_name != 'ob_proxy_partition_hit' and Variable_name != 'ob_last_schema_version' and Variable_name != 'ob_compatibility_version'  and Variable_name != 'ob_security_version';
 Variable_name	Value
+ob_bnl_join_cache_size	10485760
+ob_check_sys_variable	ON
+ob_compatibility_control	MYSQL5.7
+ob_compatibility_mode	MYSQL
 ob_default_lob_inrow_threshold	8192
+ob_early_lock_release	OFF
 ob_enable_aggregation_pushdown	ON
 ob_enable_index_direct_select	OFF
+ob_enable_parameter_anonymous_block	ON
 ob_enable_plan_cache	ON
 ob_enable_pl_cache	ON
+ob_enable_ps_parameter_anonymous_block	ON
+ob_enable_rich_error_msg	OFF
 ob_enable_show_trace	OFF
 ob_enable_transformation	ON
+ob_enable_transmission_checksum	ON
 ob_hnsw_ef_search	64
 ob_hnsw_extra_info_max_size	1024
+ob_interm_result_mem_limit	2147483648
 ob_ivf_nprobes	8
 ob_log_level	disabled
 ob_max_read_stale_time	-1
+ob_org_cluster_id	0
 ob_plan_cache_evict_high_percentage	90
 ob_plan_cache_evict_low_percentage	50
 ob_plan_cache_percentage	2
 ob_pl_block_timeout	3216672000000000
 ob_query_timeout	10000000
 ob_read_consistency	STRONG
+ob_reserved_meta_memory_percentage	10
+ob_route_policy	READONLY_ZONE_FIRST
 ob_sparse_drop_ratio_search	0
 ob_sql_work_area_percentage	5
 ob_tcp_invited_nodes	%
+ob_temp_tablespace_size_percentage	0
+ob_trace_info	
 ob_trx_idle_timeout	86400000000
 ob_trx_lock_timeout	-1
 ob_trx_timeout	86400000000
@@ -263,15 +278,25 @@ set ob_trx_timeout = 200000000;
 show variables like 'ob_trx_timeout';
 Variable_name	Value
 ob_trx_timeout	200000000
-show global variables where Variable_name like 'ob%';
+show global variables where Variable_name like 'ob%' and Variable_name != 'ob_compatibility_version'  and Variable_name != 'ob_security_version';
 Variable_name	Value
+ob_bnl_join_cache_size	10485760
+ob_check_sys_variable	ON
+ob_compatibility_control	MYSQL5.7
+ob_compatibility_mode	MYSQL
 ob_default_lob_inrow_threshold	8192
+ob_early_lock_release	OFF
 ob_enable_aggregation_pushdown	ON
 ob_enable_index_direct_select	OFF
+ob_enable_parameter_anonymous_block	ON
 ob_enable_plan_cache	ON
 ob_enable_pl_cache	ON
+ob_enable_ps_parameter_anonymous_block	ON
+ob_enable_rich_error_msg	OFF
 ob_enable_transformation	ON
+ob_enable_transmission_checksum	ON
 ob_hnsw_extra_info_max_size	1024
+ob_interm_result_mem_limit	2147483648
 ob_log_level	disabled
 ob_max_read_stale_time	-1
 ob_plan_cache_evict_high_percentage	90
@@ -280,8 +305,11 @@ ob_plan_cache_percentage	2
 ob_pl_block_timeout	3216672000000000
 ob_query_timeout	10000000
 ob_read_consistency	STRONG
+ob_reserved_meta_memory_percentage	10
+ob_route_policy	READONLY_ZONE_FIRST
 ob_sql_work_area_percentage	5
 ob_tcp_invited_nodes	%
+ob_temp_tablespace_size_percentage	0
 ob_trx_idle_timeout	86400000000
 ob_trx_lock_timeout	-1
 ob_trx_timeout	86400000000

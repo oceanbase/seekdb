@@ -144,7 +144,8 @@ public:
                                 ObTableStatParam &param,
                                 share::schema::ObSchemaGetterGuard *schema_guard,
                                 const TabStatIndMap &online_table_stats,
-                                const ColStatIndMap &online_column_stats);
+                                const ColStatIndMap &online_column_stats,
+                                const ObIArray<ObOptDmlStat *> *dml_stats = nullptr /*for_direct_load*/);
 
   static int cancel_gather_stats(ObExecContext &ctx, ObString &task_id);
 
@@ -217,6 +218,12 @@ private:
 
   static int fetch_gather_table_snapshot_read(common::sqlclient::ObISQLConnection *conn,
                                               uint64_t &current_scn);
+
+ static int fetch_gather_task_addr(ObCommonSqlProxy *sql_proxy,
+                                    ObIAllocator &allcoator,
+                                    const ObString &task_id,
+                                    char *&svr_ip,
+                                    int32_t &svr_port);
 
   static int determine_auto_sample_table(ObExecContext &ctx, ObTableStatParam &param);
   
