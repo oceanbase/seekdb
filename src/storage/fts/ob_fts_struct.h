@@ -10,6 +10,7 @@
 #include "lib/hash/ob_hashmap.h"
 #include "object/ob_object.h"
 #include "share/datum/ob_datum_funcs.h"
+#include "sql/engine/expr/ob_expr_basic_funcs.h"
 #include "storage/fts/ob_fts_literal.h"
 
 namespace oceanbase
