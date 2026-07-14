@@ -458,9 +458,17 @@ int ObFTParserJsonProps::config_get_quantifier_table(ObString &str) const
     if (OB_FAIL(
             root_->get_object_value(ObString(ObFTSLiteral::CONFIG_NAME_QUANTIFIER_TABLE), value))) {
       if (OB_SEARCH_NOT_FOUND == ret) {
+        if (OB_FAIL(root_->get_object_value(ObString(ObFTSLiteral::CONFIG_NAME_QUANTIFIER_TABLE_LEGACY), value))) {
+          if (OB_SEARCH_NOT_FOUND == ret) {
+          } else {
+            LOG_WARN("Fail to get legacy quantifier_table", K(ret));
+          }
+        }
       } else {
         LOG_WARN("Fail to get quantifier_table", K(ret));
       }
+    }
+    if (OB_FAIL(ret)) {
     } else if (OB_ISNULL(value)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("value is null", K(ret));
@@ -629,6 +637,7 @@ int ObFTParserJsonProps::ik_rebuild_props_for_ddl(const bool log_to_user)
   static const char *supported[] = {
       ObFTSLiteral::CONFIG_NAME_DICT_TABLE,
       ObFTSLiteral::CONFIG_NAME_QUANTIFIER_TABLE,
+      ObFTSLiteral::CONFIG_NAME_QUANTIFIER_TABLE_LEGACY,
       ObFTSLiteral::CONFIG_NAME_STOPWORD_TABLE,
       ObFTSLiteral::CONFIG_NAME_IK_MODE,
   };
@@ -660,15 +669,14 @@ int ObFTParserJsonProps::ik_rebuild_props_for_ddl(const bool log_to_user)
 
     if (OB_FAIL(ret)) {
       // do nothing
-    } else if (OB_FAIL(config_get_quantifier_table(table_name))) {
+    } else if (OB_FAIL(config_get_stopword_table(table_name))) {
       if (OB_SEARCH_NOT_FOUND == ret) {
-        if (OB_FAIL(
-                config_set_quantifier_table(ObFTSLiteral::FT_DEFAULT_IK_QUANTIFIER_UTF8_TABLE))) {
-          LOG_WARN("Failed to set default quantifier table", K(ret));
+        if (OB_FAIL(config_set_stopword_table(ObFTSLiteral::FT_DEFAULT_IK_STOPWORD_UTF8_TABLE))) {
+          LOG_WARN("Failed to set default stopword table", K(ret));
         }
       }
     } else {
-      // check quantifier table valid
+      // check stopword table valid
     }
 
     if (OB_FAIL(ret)) {
@@ -1158,12 +1166,43 @@ int ObFTParserProperty::parse_for_parser_helper(const ObFTParser &parser, const 
     LOG_WARN("fail to parse from json str", K(ret), K(json_str));
   } else {
     if (parser.is_ik()) {
-      // set dict tables and copy dict name
-      dict_table_ = ObString(ObFTSLiteral::CONFIG_NAME_DICT_TABLE);
-      stopword_table_ = ObString(ObFTSLiteral::CONFIG_NAME_STOPWORD_TABLE);
-      quantifier_table_ = ObString(ObFTSLiteral::CONFIG_NAME_QUANTIFIER_TABLE);
+      ObString table_name;
+      if (OB_FAIL(props.config_get_dict_table(table_name))) {
+        if (OB_SEARCH_NOT_FOUND == ret) {
+          ret = set_dict_table(ObString(ObFTSLiteral::FT_DEFAULT_IK_DICT_UTF8_TABLE));
+        } else {
+          LOG_WARN("fail to get dict table", K(ret));
+        }
+      } else if (OB_FAIL(set_dict_table(table_name))) {
+        LOG_WARN("fail to set dict table", K(ret), K(table_name));
+      }
+      if (OB_SUCC(ret)) {
+        table_name.reset();
+        if (OB_FAIL(props.config_get_stopword_table(table_name))) {
+          if (OB_SEARCH_NOT_FOUND == ret) {
+            ret = set_stopword_table(ObString(ObFTSLiteral::FT_DEFAULT_IK_STOPWORD_UTF8_TABLE));
+          } else {
+            LOG_WARN("fail to get stopword table", K(ret));
+          }
+        } else if (OB_FAIL(set_stopword_table(table_name))) {
+          LOG_WARN("fail to set stopword table", K(ret), K(table_name));
+        }
+      }
+      if (OB_SUCC(ret)) {
+        table_name.reset();
+        if (OB_FAIL(props.config_get_quantifier_table(table_name))) {
+          if (OB_SEARCH_NOT_FOUND == ret) {
+            ret = set_quantifier_table(ObString(ObFTSLiteral::FT_DEFAULT_IK_QUANTIFIER_UTF8_TABLE));
+          } else {
+            LOG_WARN("fail to get quantifier table", K(ret));
+          }
+        } else if (OB_FAIL(set_quantifier_table(table_name))) {
+          LOG_WARN("fail to set quantifier table", K(ret), K(table_name));
+        }
+      }
       ObString ik_smart;
-      if (OB_FAIL(props.config_get_ik_mode(ik_smart))) {
+      if (OB_FAIL(ret)) {
+      } else if (OB_FAIL(props.config_get_ik_mode(ik_smart))) {
         if (OB_SEARCH_NOT_FOUND == ret) {
           // from old version, ik_mode is not set, so use default value
           ik_mode_smart_ = true;
@@ -1228,8 +1267,40 @@ ObFTParserProperty::ObFTParserProperty()
       dict_table_(),
       quantifier_table_(),
       min_ngram_token_size_(ObFTSLiteral::FT_DEFAULT_MIN_NGRAM_SIZE),
-      max_ngram_token_size_(ObFTSLiteral::FT_DEFAULT_MAX_NGRAM_SIZE)
+      max_ngram_token_size_(ObFTSLiteral::FT_DEFAULT_MAX_NGRAM_SIZE),
+      stopword_table_buf_(),
+      dict_table_buf_(),
+      quantifier_table_buf_()
 {
+}
+
+int ObFTParserProperty::copy_dict_table_name(const ObString &src, char *buf, ObString &dst)
+{
+  int ret = OB_SUCCESS;
+  if (OB_ISNULL(buf) || src.length() <= 0 || src.length() >= MAX_DICT_TABLE_NAME_LENGTH) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid dict table name", K(ret), K(src), KP(buf));
+  } else {
+    MEMCPY(buf, src.ptr(), src.length());
+    buf[src.length()] = '\0';
+    dst.assign_ptr(buf, src.length());
+  }
+  return ret;
+}
+
+int ObFTParserProperty::set_dict_table(const ObString &str)
+{
+  return copy_dict_table_name(str, dict_table_buf_, dict_table_);
+}
+
+int ObFTParserProperty::set_stopword_table(const ObString &str)
+{
+  return copy_dict_table_name(str, stopword_table_buf_, stopword_table_);
+}
+
+int ObFTParserProperty::set_quantifier_table(const ObString &str)
+{
+  return copy_dict_table_name(str, quantifier_table_buf_, quantifier_table_);
 }
 
 int ObFTParserJsonProps::tokenize_array_to_props_json(ObIAllocator &allocator,

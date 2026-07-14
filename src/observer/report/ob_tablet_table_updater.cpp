@@ -765,7 +765,7 @@ int ObTabletTableUpdater::do_batch_remove_(
       } else {
         int commit_ret = guard->commit();
         if (OB_SUCCESS != commit_ret) {
-          LOG_WARN("fail to commit transaction", KR(commit_ret));
+          LOG_ERROR("fail to commit transaction", KR(commit_ret));
           ret = commit_ret;
         }
       }
@@ -847,7 +847,7 @@ int ObTabletTableUpdater::do_batch_update_(
         } else {
           int commit_ret = guard->commit();
           if (OB_SUCCESS != commit_ret) {
-            LOG_WARN("fail to commit transaction", KR(commit_ret));
+            LOG_ERROR("fail to commit transaction", KR(commit_ret));
             ret = commit_ret;
           }
         }

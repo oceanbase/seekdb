@@ -480,7 +480,7 @@ int ObSharedMacroBlockMgr::defragment()
           *sstable_index_builder,
           *index_block_rebuilder))) {
         if (OB_UNLIKELY(OB_EAGAIN != ret)) {
-          LOG_WARN("fail to update tablet", K(ret), K(tablet_handle), K(macro_ids));
+          LOG_ERROR("fail to update tablet", K(ret), K(tablet_handle), K(macro_ids));
         } else {
           ret = OB_SUCCESS;
         }

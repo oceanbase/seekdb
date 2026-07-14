@@ -242,7 +242,7 @@ int ObMViewTransaction::ObSessionSavedForInner::restore()
     // restore session
     if (nullptr != session_saved_value_) {
       if (OB_TMP_FAIL(session_info_->restore_session(*session_saved_value_))) {
-        LOG_WARN("failed to restore session", KR(tmp_ret));
+        LOG_ERROR("failed to restore session", KR(tmp_ret));
         ret = COVER_SUCC(tmp_ret);
       } else {
         session_saved_value_->ObSQLSessionInfo::StmtSavedValue::~StmtSavedValue();
@@ -425,7 +425,7 @@ int ObMViewTransaction::end(const bool commit)
   }
   close();
   if (OB_TMP_FAIL(session_param_saved_.restore())) {
-    LOG_WARN("fail to restore session param", KR(tmp_ret));
+    LOG_ERROR("fail to restore session param", KR(tmp_ret));
     ret = COVER_SUCC(tmp_ret);
   }
   return ret;
@@ -509,7 +509,7 @@ ObMViewTransactionInnerMySQLGuard::~ObMViewTransactionInnerMySQLGuard()
     // do nothing
   } else {
     if (OB_TMP_FAIL(trans_.restore_session_for_inner())) {
-      LOG_WARN("fail to restore session for inner", KR(tmp_ret));
+      LOG_ERROR("fail to restore session for inner", KR(tmp_ret));
       ret = COVER_SUCC(tmp_ret);
     }
     if (OB_TMP_FAIL(trans_.set_compact_mode(old_compact_mode_))) {

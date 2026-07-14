@@ -775,7 +775,7 @@ int ObTabletReplicaChecksumItem::verify_column_checksum_between_diffrent_replica
     }
   } else if (boundary_freeze_info.is_valid()) {
     ret = OB_CHECKSUM_ERROR; // it is compacted in lob column checksum fixed version
-    LOG_WARN("failed to check column checksum", K(ret), K(boundary_freeze_info));
+    LOG_ERROR("failed to check column checksum", K(ret), K(boundary_freeze_info));
   }
 
   if (OB_FAIL(ret)) {
@@ -788,7 +788,7 @@ int ObTabletReplicaChecksumItem::verify_column_checksum_between_diffrent_replica
   } else if (!to_check_freeze_info.is_valid()) {
   } else {
     ret = OB_CHECKSUM_ERROR; // it is compacted in lob column checksum fixed version
-    LOG_WARN("failed to check column checksum", K(ret), K(to_check_freeze_info));
+    LOG_ERROR("failed to check column checksum", K(ret), K(to_check_freeze_info));
   }
   return ret;
 }

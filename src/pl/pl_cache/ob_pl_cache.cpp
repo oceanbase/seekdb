@@ -548,7 +548,7 @@ int ObPLObjectValue::check_value_version(share::schema::ObSchemaGetterGuard *sch
         }
         if (OB_SUCC(ret) && is_old_version) {
           copy_obj_schema_version(pl_routine_obj_->get_stat_for_update().out_of_date_dependcy_version_, schema_obj1);
-          LOG_WARN("mismatched schema objs", K(ret) ,K(*schema_obj1), K(schema_obj2), K(i));
+          LOG_ERROR("mismatched schema objs", K(ret) ,K(*schema_obj1), K(schema_obj2), K(i));
         }
       }
     }

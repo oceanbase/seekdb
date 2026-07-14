@@ -410,7 +410,7 @@ int ObMViewRefreshStats::insert_refresh_stats(const ObMViewRefreshStats &refresh
   if (trans.is_started()) {
     int tmp_ret = OB_SUCCESS;
     if (OB_SUCCESS != (tmp_ret = trans.end(OB_SUCC(ret)))) {
-      LOG_WARN("failed to commit trans", K(ret));
+      LOG_ERROR("failed to commit trans", K(ret));
       ret = COVER_SUCC(tmp_ret);
     }
   }

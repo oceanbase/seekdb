@@ -497,7 +497,7 @@ int ObMicroBlockCSEncoder::append_row(const ObDatumRow &row)
       }
     } else if (get_header(data_buffer_)->has_column_checksum_ && OB_FAIL(checksum_helper_.cal_column_checksum(
         row, get_header(data_buffer_)->column_checksums_))) {
-      LOG_WARN("cal column checksum failed", K(ret), K(row));
+      LOG_ERROR("cal column checksum failed", K(ret), K(row));
     } else {
       if (need_cal_row_checksum()
           && OB_FAIL(checksum_helper_.cal_row_checksum(row.storage_datums_, row.get_column_count()))) {
@@ -555,7 +555,7 @@ int ObMicroBlockCSEncoder::append_batch(const ObBatchDatumRows &vec_batch,
       }
     } else if (get_header(data_buffer_)->has_column_checksum_ && OB_FAIL(checksum_helper_.cal_column_checksum(
           vec_batch.vectors_, start, row_count, get_header(data_buffer_)->column_checksums_))) {
-      LOG_WARN("cal column checksum failed", K(ret));
+      LOG_ERROR("cal column checksum failed", K(ret));
     } else {
       // The statistics here are only meaningful for the mini/minor sstable,
       // and cs-encoding is only used for major sstable, so there is no need to call this func.

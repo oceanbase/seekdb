@@ -60,7 +60,7 @@ int ObSSTableMacroBlockChecker::check(
       //no need logic check
     } else if (need_logic_check && OB_FAIL(check_logical_checksum(common_header, macro_block_buf,
       macro_block_buf_size))) {
-      STORAGE_LOG(WARN, "fail to check logical checksum", K(ret), K(common_header),
+      STORAGE_LOG(ERROR, "fail to check logical checksum", K(ret), K(common_header),
           KP(macro_block_buf), K(macro_block_buf_size));
     }
   } else if (ObSharedObjectHeader::OB_SHARED_BLOCK_HEADER_MAGIC == 

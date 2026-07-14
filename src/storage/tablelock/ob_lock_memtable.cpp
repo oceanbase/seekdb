@@ -1427,7 +1427,7 @@ int ObLockMemtable::register_into_deadlock_detector_(
     if (OB_SUCCESS != (tmp_ret = ObTableLockDeadlockDetectorHelper::
                        unregister_trans_lock_part(tx_lock_part_id))) {
       if (tmp_ret != OB_ENTRY_NOT_EXIST) {
-        LOG_WARN("unregister from deadlock detector failed", K(ret),
+        LOG_ERROR("unregister from deadlock detector failed", K(ret),
                  K(tx_lock_part_id));
       }
     }

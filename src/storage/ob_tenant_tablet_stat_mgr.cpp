@@ -987,7 +987,7 @@ void ObTenantTabletStatMgr::process_stats()
       if (OB_UNLIKELY(!cur_stat.is_valid())) {
         // allow dirty read
       } else if (OB_FAIL(update_tablet_stream(cur_stat))) {
-        LOG_WARN_RET(ret, "failed to update tablet stat", K(ret), K(cur_stat));
+        LOG_ERROR_RET(ret, "failed to update tablet stat", K(ret), K(cur_stat));
       }
     }
     report_cursor_ = pending_cur; // only TabletStatUpdater update this value.

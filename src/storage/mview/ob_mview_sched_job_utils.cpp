@@ -555,7 +555,7 @@ int ObMViewSchedJobUtils::acquire_major_refresh_mv_merge_scn_(common::ObISQLClie
   if (tmp_trans.is_started()) {
     int tmp_ret = OB_SUCCESS;
     if (OB_SUCCESS != (tmp_ret = tmp_trans.end(OB_SUCC(ret)))) {
-      LOG_WARN("failed to commit trans", KR(ret), KR(tmp_ret));
+      LOG_ERROR("failed to commit trans", KR(ret), KR(tmp_ret));
       ret = OB_SUCC(ret) ? tmp_ret : ret;
     }
   }

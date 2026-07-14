@@ -1604,7 +1604,7 @@ int ObTableLoadCoordinator::start_trans(const ObTableLoadSegmentID &segment_id,
           ObTableLoadCoordinatorTrans *trans = nullptr;
           if (OB_FAIL(coordinator_ctx_->start_trans(segment_id, trans))) {
             if (OB_UNLIKELY(OB_ENTRY_EXIST != ret)) {
-              LOG_WARN("fail to create trans", KR(ret));
+              LOG_ERROR("fail to create trans", KR(ret));
             } else {
               ret = OB_SUCCESS;
             }

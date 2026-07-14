@@ -136,7 +136,7 @@ static int cast_inconsistent_types(const ObObjType expect_type,
   UNUSED(params);
   UNUSED(out);
   UNUSED(cast_mode);
-  LOG_WARN_RET(OB_ERR_INVALID_TYPE_FOR_OP, "inconsistent datatypes", "expected", expect_type, "got", in.get_type());
+  LOG_ERROR_RET(OB_ERR_INVALID_TYPE_FOR_OP, "inconsistent datatypes", "expected", expect_type, "got", in.get_type());
   return OB_ERR_INVALID_TYPE_FOR_OP;
 }
 
@@ -167,7 +167,7 @@ static int cast_inconsistent_types_json(const ObObjType expect_type,
     ret = OB_ERR_INVALID_INPUT;
     LOG_WARN("invalid input in implicit cast", K(ret));
   } else {
-    LOG_WARN("inconsistent datatypes", "expected", expect_type, "got", in.get_type());
+    LOG_ERROR("inconsistent datatypes", "expected", expect_type, "got", in.get_type());
     ret = OB_ERR_INVALID_TYPE_FOR_OP;
   }
   return ret;
@@ -182,7 +182,7 @@ static int cast_inconsistent_type_json_explicit(const ObObjType expect_type,
   UNUSED(params);
   UNUSED(out);
   int ret = OB_ERR_INVALID_TYPE_FOR_OP;
-  LOG_WARN("inconsistent datatypes", "expected", expect_type, "got", in.get_type());
+  LOG_ERROR("inconsistent datatypes", "expected", expect_type, "got", in.get_type());
   return ret;
 }
 

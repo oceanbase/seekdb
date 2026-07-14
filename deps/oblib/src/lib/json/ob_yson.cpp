@@ -156,7 +156,7 @@ int databuff_print_elements(char *buf, const int64_t buf_len, int64_t &pos,
           if (OB_UNLIKELY(i32 < 0) || OB_UNLIKELY(yson_buf_len - yson_pos < i32)) {
             ret = OB_INVALID_DATA;
             int32_t v = i32;
-            LOG_WARN("YSON object data corrupted", K(ret), "i32", v, "remain", yson_buf_len-yson_pos);
+            LOG_ERROR("YSON object data corrupted", K(ret), "i32", v, "remain", yson_buf_len-yson_pos);
           } else {
             if(OB_FAIL(databuff_printf(buf, buf_len, pos, "{"))) {
             } else if (OB_FAIL(databuff_print_elements(buf, buf_len, pos, yson_buf+yson_pos, i32, false))) {
@@ -197,7 +197,7 @@ int databuff_print_elements(char *buf, const int64_t buf_len, int64_t &pos,
           if (OB_UNLIKELY(i32 < 0) || OB_UNLIKELY(yson_buf_len - yson_pos < i32)) {
             ret = OB_INVALID_DATA;
             int32_t v = i32;
-            LOG_WARN("YSON object data corrupted", K(ret), "i32", v, "remain", yson_buf_len-yson_pos);
+            LOG_ERROR("YSON object data corrupted", K(ret), "i32", v, "remain", yson_buf_len-yson_pos);
           } else {
             if(OB_FAIL(databuff_printf(buf, buf_len, pos, "["))) {
             } else if (OB_FAIL(databuff_print_elements(buf, buf_len, pos, yson_buf+yson_pos, i32, true))) {

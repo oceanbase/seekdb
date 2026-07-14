@@ -168,7 +168,7 @@ int ObVecIndexAsyncTaskUtil::insert_new_task(ObVecIndexTaskCtxArray &task_ctx_ar
     if (trans.is_started()) {
       int tmp_ret = OB_SUCCESS;
       if (OB_SUCCESS != (tmp_ret = trans.end(OB_SUCC(ret)))) {
-        LOG_WARN("fail to commit trans", KR(ret), K(tmp_ret));
+        LOG_ERROR("fail to commit trans", KR(ret), K(tmp_ret));
         ret = OB_SUCC(ret) ? tmp_ret : ret;
       }
     }
@@ -1400,7 +1400,7 @@ int ObVecIndexAsyncTask::process_data_for_index(ObPluginVectorIndexAdaptor &adap
             LOG_WARN("get next row failed.", K(ret));
           } else {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("data table row count mismatched", K(ret));
+            LOG_ERROR("data table row count mismatched", K(ret));
           }
         } else if (OB_ISNULL(datum_vid) || !datum_vid->is_valid()) {
           ret = OB_ERR_UNEXPECTED;

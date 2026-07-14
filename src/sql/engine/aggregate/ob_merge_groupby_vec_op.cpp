@@ -863,7 +863,7 @@ int ObMergeGroupByVecOp::before_process_next_batch(const int64_t max_row_cnt)
   int ret = OB_SUCCESS;
   set_output_queue_cnt(0);
   if (cur_group_rowid_ > common::OB_INVALID_INDEX && OB_FAIL(brs_holder_.restore())) {
-    LOG_WARN("failed to restore previous exprs", K(ret));
+    LOG_ERROR("failed to restore previous exprs", K(ret));
   } else if (ObRollupStatus::ROLLUP_DISTRIBUTOR == MY_SPEC.rollup_status_
              && OB_FAIL(batch_process_rollup_distributor(max_row_cnt))) {
     LOG_WARN("failed to process rollup distributor", K(ret));

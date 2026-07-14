@@ -276,7 +276,7 @@ int ObTabletDDLCompleteMdsHelper::process_ddl(
       if (OB_ERR_EXCLUSIVE_LOCK_CONFLICT == ret) {
         ret = OB_EAGAIN;
       } else {
-        LOG_WARN("failed to set ddl complete info", K(ret), K(tablet_id), K(data));
+        LOG_ERROR("failed to set ddl complete info", K(ret), K(tablet_id), K(data));
       }
     } else {
       int tmp_ret = OB_SUCCESS;
@@ -287,9 +287,9 @@ int ObTabletDDLCompleteMdsHelper::process_ddl(
   } else {
     ObTabletDDLCompleteReplayExecutor replay_executor;
     if (CLICK_FAIL(replay_executor.init(ctx, scn, false /* for old mds */, data))) {
-      LOG_WARN("failed to inti replay executor", K(ret));
+      LOG_ERROR("failed to inti replay executor", K(ret));
     } else if (CLICK_FAIL(replay_executor.execute(scn, ls->get_ls_id(), tablet_id))) {
-      LOG_WARN("failed to execute replay ddl complete mds data", K(ret));
+      LOG_ERROR("failed to execute replay ddl complete mds data", K(ret));
     }
   }
   return ret;

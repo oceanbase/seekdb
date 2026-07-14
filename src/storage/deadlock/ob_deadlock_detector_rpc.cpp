@@ -53,7 +53,7 @@ void ObDeadLockDetectorRpc::destroy()
   if (is_inited_) {
     is_inited_ = false;
   } else {
-    DETECT_LOG_RET(WARN, common::OB_ERR_UNEXPECTED, "ObDeadLockDetectorRpc has been destroyed", K(lbt()));
+    DETECT_LOG_RET(ERROR, common::OB_ERR_UNEXPECTED, "ObDeadLockDetectorRpc has been destroyed", K(lbt()));
   }
 }
 

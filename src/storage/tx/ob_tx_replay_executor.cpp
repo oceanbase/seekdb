@@ -92,7 +92,7 @@ int ObTxReplayExecutor::do_replay_(const char *buf, const int64_t size, const in
             ret = OB_SUCCESS;
             break;
           } else {
-            TRANS_LOG(WARN, "[Replay Tx] get_next_log error in replay_buf", KPC(this));
+            TRANS_LOG(ERROR, "[Replay Tx] get_next_log error in replay_buf", KPC(this));
           }
         }
       } else if (OB_FAIL(iter_next_log_for_replay_(header))) {
@@ -100,7 +100,7 @@ int ObTxReplayExecutor::do_replay_(const char *buf, const int64_t size, const in
           ret = OB_SUCCESS;
           break;
         }
-        TRANS_LOG(WARN, "[Replay Tx] get_next_log error in replay_buf", KPC(this));
+        TRANS_LOG(ERROR, "[Replay Tx] get_next_log error in replay_buf", KPC(this));
       }
       if (OB_SUCC(ret)) {
         log_type = header.get_tx_log_type();
@@ -338,7 +338,7 @@ void ObTxReplayExecutor::finish_replay_(const int retcode)
       mt_ctx_->replay_end(false, /*is_replay_succ*/
                           callback_list_idx,
                           log_ts_ns_);
-      TRANS_LOG_RET(WARN, OB_EAGAIN, "[Replay Tx]Tx Redo replay error, rollback to start",
+      TRANS_LOG_RET(ERROR, OB_EAGAIN, "[Replay Tx]Tx Redo replay error, rollback to start",
                     K(callback_list_idx), KPC(this));
     } else {
       mt_ctx_->replay_end(true, /*is_replay_succ*/
@@ -629,7 +629,7 @@ int ObTxReplayExecutor::replay_redo_in_memtable_(ObTxRedoLog &redo, const bool s
       } else if (OB_FAIL(replay_one_row_in_memtable_(row_head, mmi_ptr_))) {
         if (OB_MINOR_FREEZE_NOT_ALLOW == ret) {
           if (TC_REACH_TIME_INTERVAL(1000 * 1000)) {
-            TRANS_LOG(WARN, "[Replay Tx] cannot create more memtable", K(ret),
+            TRANS_LOG(ERROR, "[Replay Tx] cannot create more memtable", K(ret),
                       K(row_head.tablet_id_), KP(ls_), K(log_ts_ns_), K(tx_part_log_no_),
                       KPC(ctx_));
           }

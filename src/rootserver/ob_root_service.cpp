@@ -1020,7 +1020,7 @@ int ObRootService::update_baseline_schema_version()
   int temp_ret = OB_SUCCESS;
   if (!trans.is_started()) {
   } else if (OB_SUCCESS != (temp_ret = trans.end(OB_SUCCESS == ret))) {
-    LOG_WARN("trans end failed", "commit", OB_SUCCESS == ret, K(temp_ret));
+    LOG_ERROR("trans end failed", "commit", OB_SUCCESS == ret, K(temp_ret));
     ret = (OB_SUCCESS == ret) ? temp_ret : ret;
   }
     LOG_DEBUG("update_baseline_schema_version finish", K(ret), K(temp_ret),
@@ -3147,7 +3147,7 @@ int ObRootService::increase_rs_epoch_and_get_proposal_id_(
     // 4. commit transation
     int temp_ret = OB_SUCCESS;
     if (OB_SUCCESS != (temp_ret = trans.end(OB_SUCCESS == ret))) {
-      LOG_WARN("trans end failed", "commit", OB_SUCCESS == ret, K(temp_ret));
+      LOG_ERROR("trans end failed", "commit", OB_SUCCESS == ret, K(temp_ret));
       ret = (OB_SUCCESS == ret) ? temp_ret : ret;
     }
   }

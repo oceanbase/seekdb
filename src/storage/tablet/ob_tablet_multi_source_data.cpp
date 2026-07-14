@@ -194,7 +194,7 @@ int ObTabletTxMultiSourceDataUnit::deserialize(
     } else if (new_pos - pos < length_ && OB_FAIL(serialization::decode_i64(buf, len, new_pos, &transfer_seq_))) {
       LOG_WARN("failed to deserialize tx log ts", K(ret), K(len), K(new_pos));
     } else if (new_pos - pos < length_ && OB_FAIL(transfer_ls_id_.deserialize(buf, len, new_pos))) {
-      LOG_WARN("failed to deserialize transfer ls id", K(ret), K(len), K(new_pos));
+      LOG_ERROR("failed to deserialize transfer ls id", K(ret), K(len), K(new_pos));
     } else if (new_pos - pos < length_ && OB_FAIL(transfer_scn_.fixed_deserialize(buf, len, new_pos))) {
       LOG_WARN("failed to deserialize transfer scn", K(ret), K(len), K(new_pos));
     }

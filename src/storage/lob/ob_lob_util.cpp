@@ -91,7 +91,7 @@ int ObInsertLobColumnHelper::end_trans(transaction::ObTxDesc *tx_desc,
       ACTIVE_SESSION_FLAG_SETTER_GUARD(in_committing);
       if (OB_SUCCESS != (tmp_ret = txs->commit_tx(*tx_desc, timeout_ts))) {
         ret = tmp_ret;
-        LOG_WARN("fail commit trans", K(ret), KPC(tx_desc), K(timeout_ts));
+        LOG_ERROR("fail commit trans", K(ret), KPC(tx_desc), K(timeout_ts));
       }
     }
     if (OB_SUCCESS != (tmp_ret = txs->release_tx(*tx_desc))) {

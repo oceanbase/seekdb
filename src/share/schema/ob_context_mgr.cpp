@@ -271,7 +271,7 @@ int ObContextMgr::del_context(const ObContextKey &context)
       ret = OB_SUCCESS;
       LOG_INFO("failed to remove context schema, item may not exist", K(ret));
     } else {
-      LOG_WARN("failed to remove context schema, ",
+      LOG_ERROR("failed to remove context schema, ",
               K(context.context_id_),
               K(ret));
     }

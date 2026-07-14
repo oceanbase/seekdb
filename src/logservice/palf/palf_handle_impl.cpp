@@ -2869,7 +2869,7 @@ int PalfHandleImpl::receive_log_(const common::ObAddr &server,
     } else if (TRUNCATE_LOG == truncate_log_info.truncate_type_) {
       if (!state_mgr_.can_truncate_log()) {
         ret = OB_STATE_NOT_MATCH;
-        PALF_LOG(WARN, "can not truncate log", K(ret), KPC(this), K(server), K(msg_proposal_id), K(lsn),
+        PALF_LOG(ERROR, "can not truncate log", K(ret), KPC(this), K(server), K(msg_proposal_id), K(lsn),
             "role", state_mgr_.get_role(), "state", state_mgr_.get_state());
       } else if (OB_FAIL(sw_.truncate(truncate_log_info, prev_lsn, prev_log_proposal_id))) {
         PALF_LOG(WARN, "sw_ truncate failed", K(ret), KPC(this), K(server), K(msg_proposal_id), K(lsn));

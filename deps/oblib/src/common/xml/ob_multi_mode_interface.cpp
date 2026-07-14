@@ -834,7 +834,7 @@ int ObIMulModeBase::print_element(ObStringBuffer& x_buf, uint64_t depth, uint32_
 
   if (deleted_ns_vec.size() > 0 && OB_NOT_NULL(ns_vec) 
       && OB_FAIL(ObXmlUtil::restore_ns_vec(ns_vec, deleted_ns_vec))) {
-    LOG_WARN("fail to restore ns vec", K(ret));
+    LOG_ERROR("fail to restore ns vec", K(ret));
   }
   deleted_ns_vec.clear();
   return ret;

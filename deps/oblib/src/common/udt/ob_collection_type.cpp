@@ -660,7 +660,7 @@ int ObSqlCollectionInfo::parse_vec_element_info(std::string type_info, ObCollect
   ObCollectionBasicType *basic_meta_info = NULL;
   if (OB_ISNULL(basic_meta_info = OB_NEWx(ObCollectionBasicType, &allocator_))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("fail to create basic element type meta", K(ret));
+    LOG_ERROR("fail to create basic element type meta", K(ret));
   } else {
     meta_info = basic_meta_info;
     meta_info->type_id_ = ObNestedType::OB_BASIC_TYPE;
@@ -704,7 +704,7 @@ int ObSqlCollectionInfo::parse_element_info(std::string type_info, ObCollectionT
   ObCollectionBasicType *basic_meta_info = NULL;
   if (OB_ISNULL(basic_meta_info = OB_NEWx(ObCollectionBasicType, &allocator_))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("fail to create basic element type meta", K(ret));
+    LOG_ERROR("fail to create basic element type meta", K(ret));
   } else {
     meta_info = basic_meta_info;
     meta_info->type_id_ = ObNestedType::OB_BASIC_TYPE;
@@ -807,7 +807,7 @@ int ObSqlCollectionInfo::parse_sparse_vector_element_info(ObCollectionTypeBase *
   ObCollectionBasicType *value_basic_meta_info = NULL;
   if (OB_ISNULL(key_basic_meta_info = OB_NEWx(ObCollectionBasicType, &allocator_))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("fail to create key basic element type meta", K(ret));
+    LOG_ERROR("fail to create key basic element type meta", K(ret));
   } else if (OB_ISNULL(value_basic_meta_info = OB_NEWx(ObCollectionBasicType, &allocator_))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("fail to create value basic element type meta", K(ret));

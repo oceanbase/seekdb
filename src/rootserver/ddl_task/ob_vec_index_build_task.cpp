@@ -1987,7 +1987,7 @@ int ObVecIndexBuildTask::validate_checksum()
   if (OB_SUCC(ret)) {
     ret = OB_E(common::EventTable::EN_POST_VEC_INDEX_CHECKSUM_ERR) OB_SUCCESS;
     if (OB_FAIL(ret)) {
-      LOG_WARN("[ERRSIM] build vec index fail to checksum", K(ret));
+      LOG_ERROR("[ERRSIM] build vec index fail to checksum", K(ret));
     }
   }
   #endif
@@ -2057,7 +2057,7 @@ int ObVecIndexBuildTask::cleanup_impl()
     if (trans.is_started()) {
       int tmp_ret = trans.end(true/*commit*/);
       if (OB_SUCCESS != tmp_ret) {
-        LOG_WARN("trans end failed", "is_commit", OB_SUCCESS == ret, K(tmp_ret));
+        LOG_ERROR("trans end failed", "is_commit", OB_SUCCESS == ret, K(tmp_ret));
         ret = (OB_SUCCESS == ret) ? tmp_ret : ret;
       }
     }

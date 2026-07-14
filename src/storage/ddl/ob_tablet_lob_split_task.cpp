@@ -1102,7 +1102,7 @@ int ObTabletLobWriteDataTask::process()
     OB_SUCCESS != (tmp_ret = dag->report_lob_split_status())) {
     // do not override ret if it has already failed.
     ret = OB_SUCCESS == ret ? tmp_ret : ret;
-    LOG_WARN("fail to report lob tablet split status", K(ret), K(tmp_ret));
+    LOG_ERROR("fail to report lob tablet split status", K(ret), K(tmp_ret));
   }
   return ret;
 }
