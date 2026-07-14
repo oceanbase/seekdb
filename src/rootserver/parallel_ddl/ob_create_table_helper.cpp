@@ -1142,6 +1142,15 @@ int ObCreateTableHelper::operate_schemas_() {
   } else if (OB_FAIL(inner_create_table_(&arg_.ddl_stmt_str_,
                                          replace_mock_fk_parent_table_id_))) {
     LOG_WARN("fail create table", KR(ret));
+  } else {
+    for (int64_t i = 0; OB_SUCC(ret) && i < new_tables_.count(); ++i) {
+      const ObTableSchema &table_schema = new_tables_.at(i);
+      if (table_schema.is_fts_index_aux()
+          && OB_FAIL(ObFtsIndexBuilderUtil::record_fts_dict_table_dependencies(
+                 table_schema, get_trans_()))) {
+        LOG_WARN("fail to record fulltext dictionary dependencies", KR(ret), K(table_schema));
+      }
+    }
   }
   return ret;
 }

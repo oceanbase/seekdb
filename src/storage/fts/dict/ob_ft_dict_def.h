@@ -64,15 +64,52 @@ public:
                const ObFTDictType type,
                const ObCharsetType charset,
                const ObCollationType coll_type)
-      : name_(name), type_(type), charset_(charset), coll_type_(coll_type)
+      : tenant_id_(1),
+        table_id_(static_cast<uint64_t>(type)),
+        table_name_(name),
+        type_(type),
+        charset_(charset),
+        coll_type_(coll_type),
+        generation_(0),
+        is_builtin_(true),
+        need_casedown_(false)
   {
   }
 
+  ObFTDictDesc(const uint64_t tenant_id,
+               const uint64_t table_id,
+               const ObString &table_name,
+               const ObFTDictType type,
+               const ObCharsetType charset,
+               const ObCollationType coll_type,
+               const bool is_builtin,
+               const bool need_casedown)
+      : tenant_id_(tenant_id),
+        table_id_(table_id),
+        table_name_(table_name),
+        type_(type),
+        charset_(charset),
+        coll_type_(coll_type),
+        generation_(0),
+        is_builtin_(is_builtin),
+        need_casedown_(need_casedown)
+  {
+  }
+
+  TO_STRING_KV(K_(tenant_id), K_(table_id), K_(table_name), K_(type),
+               K_(charset), K_(coll_type), K_(generation), K_(is_builtin),
+               K_(need_casedown));
+
 public:
-  ObString name_;
+  uint64_t tenant_id_;
+  uint64_t table_id_;
+  ObString table_name_;
   ObFTDictType type_;
   ObCharsetType charset_;
   ObCollationType coll_type_;
+  uint64_t generation_;
+  bool is_builtin_;
+  bool need_casedown_;
 };
 
 } //  namespace storage

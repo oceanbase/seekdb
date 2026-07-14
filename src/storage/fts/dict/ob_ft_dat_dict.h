@@ -33,10 +33,10 @@ namespace oceanbase
 {
 namespace storage
 {
-/* @class ObArrayHashMap
+/* @class ObFTArrayHashMap
  * @description: a fixed size hash map, used to store words and their code.
  */
-class ObArrayHashMap final
+class ObFTArrayHashMap final
 {
 public:
   struct Entry
@@ -105,7 +105,7 @@ public:
   char buff[1] = {0};
 
 public:
-  ObArrayHashMap *get_map();
+  ObFTArrayHashMap *get_map();
 } __attribute__((packed));
 
 template <typename DataType>
@@ -150,7 +150,7 @@ private:
 private:
   common::ObIAllocator &alloc_;
   ObFTDAT *dat_;
-  ObArrayHashMap *map_;
+  ObFTArrayHashMap *map_;
 
   bool is_inited_;
   int32_t next_code_;

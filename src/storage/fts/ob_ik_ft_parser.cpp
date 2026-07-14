@@ -29,6 +29,7 @@
 #include "storage/fts/dict/ob_ft_dict_def.h"
 #include "storage/fts/dict/ob_ft_dict_hub.h"
 #include "storage/fts/dict/ob_ft_range_dict.h"
+#include "share/inner_table/ob_inner_table_schema_constants.h"
 #include "storage/fts/ik/ob_ik_arbitrator.h"
 #include "storage/fts/ik/ob_ik_cjk_processor.h"
 #include "storage/fts/ik/ob_ik_letter_processor.h"
@@ -103,11 +104,10 @@ int ObIKFTParser::get_next_token(const char *&word,
         }
       } else {
         bool is_stop = false;
-        // if (!OB_ISNULL(dict_stop_)
-        //     && OB_FAIL(dict_stop_->match(ObString(len, output_word + offset), is_stop))) {
-        //   LOG_WARN("Failed to match stopwords", K(ret));
-        // } else
-        if (!is_stop) {
+        if (!OB_ISNULL(dict_stop_)
+            && OB_FAIL(dict_stop_->match(ObString(len, output_word + offset), is_stop))) {
+          LOG_WARN("Failed to match stopwords", K(ret));
+        } else if (!is_stop) {
           word = output_word + offset;
           word_len = len;
           char_cnt = cnt;
@@ -277,21 +277,56 @@ int ObIKFTParser::init_dict(const plugin::ObFTParserParam &param)
     LOG_WARN("Dict hub is not inited", K(ret));
   }
 
-  ObFTRangeDict *dict = nullptr;
-  ObFTDictDesc main_dict_desc("main_dict",
+  const ObCharsetType charset = ObCharsetType::CHARSET_UTF8MB4;
+  const ObCollationType collation = ObCollationType::CS_TYPE_UTF8MB4_BIN;
+  const bool need_casedown = true;
+  const uint64_t tenant_id = OB_INVALID_TENANT_ID == param.tenant_id_
+                                 ? common::OB_SERVER_TENANT_ID
+                                 : param.tenant_id_;
+  const uint64_t main_dict_id = OB_INVALID_ID == param.ik_param_.main_dict_id_
+                                    ? share::OB_FT_DICT_IK_UTF8_TID
+                                    : param.ik_param_.main_dict_id_;
+  const uint64_t quan_dict_id = OB_INVALID_ID == param.ik_param_.quan_dict_id_
+                                    ? share::OB_FT_QUANTIFIER_IK_UTF8_TID
+                                    : param.ik_param_.quan_dict_id_;
+  const uint64_t stopword_dict_id = OB_INVALID_ID == param.ik_param_.stopword_dict_id_
+                                        ? share::OB_FT_STOPWORD_IK_UTF8_TID
+                                        : param.ik_param_.stopword_dict_id_;
+  const ObString main_dict_name = param.ik_param_.main_dict_.empty()
+                                      ? ObString(share::OB_FT_DICT_IK_UTF8_TNAME)
+                                      : param.ik_param_.main_dict_;
+  const ObString quan_dict_name = param.ik_param_.quan_dict_.empty()
+                                      ? ObString(share::OB_FT_QUANTIFIER_IK_UTF8_TNAME)
+                                      : param.ik_param_.quan_dict_;
+  const ObString stopword_dict_name = param.ik_param_.stopword_dict_.empty()
+                                          ? ObString(share::OB_FT_STOPWORD_IK_UTF8_TNAME)
+                                          : param.ik_param_.stopword_dict_;
+  ObFTDictDesc main_dict_desc(tenant_id,
+                              main_dict_id,
+                              main_dict_name,
                               ObFTDictType::DICT_IK_MAIN,
-                              ObCharsetType::CHARSET_UTF8MB4,
-                              ObCollationType::CS_TYPE_UTF8MB4_BIN);
+                              charset,
+                              collation,
+                              main_dict_id < common::OB_MAX_INNER_TABLE_ID,
+                              need_casedown);
 
-  ObFTDictDesc quan_dict_desc("quan_dict",
+  ObFTDictDesc quan_dict_desc(tenant_id,
+                              quan_dict_id,
+                              quan_dict_name,
                               ObFTDictType::DICT_IK_QUAN,
-                              ObCharsetType::CHARSET_UTF8MB4,
-                              ObCollationType::CS_TYPE_UTF8MB4_BIN);
+                              charset,
+                              collation,
+                              quan_dict_id < common::OB_MAX_INNER_TABLE_ID,
+                              need_casedown);
 
-  ObFTDictDesc stopword_dict_desc("stopword",
+  ObFTDictDesc stopword_dict_desc(tenant_id,
+                                  stopword_dict_id,
+                                  stopword_dict_name,
                                   ObFTDictType::DICT_IK_STOP,
-                                  ObCharsetType::CHARSET_UTF8MB4,
-                                  ObCollationType::CS_TYPE_UTF8MB4_BIN);
+                                  charset,
+                                  collation,
+                                  stopword_dict_id < common::OB_MAX_INNER_TABLE_ID,
+                                  need_casedown);
 
   if (should_read_newest_table()) {
     // clear dict cache, always false now
