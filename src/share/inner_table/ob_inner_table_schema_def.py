@@ -8800,7 +8800,7 @@ def_table_schema(
                          when a.table_type = 4 then 'VIEW'
                          when a.table_type = 14 then 'EXTERNAL TABLE'
                          else 'BASE TABLE' end as char(64)) as TABLE_TYPE,
-                    cast(case when a.table_type in (0,3,5,6,7,11,12,13,15) then 'InnoDB'
+                    cast(case when a.table_type in (0,3,5,6,11,12,13) then 'InnoDB'
                         else 'MEMORY' end as char(64)) as ENGINE,
                     cast(NULL as unsigned) as VERSION,
                     cast(a.store_format as char(10)) as ROW_FORMAT,
@@ -8880,7 +8880,7 @@ def_table_schema(
                       WHERE e.index_type in (1, 2, 3, 4, 5, 6, 7, 8, 10, 11, 12, 41) and e.table_type = 5
                             group by data_table_id
                     ) idx_stat on idx_stat.data_table_id = a.table_id
-                    where a.table_type in (0, 1, 2, 3, 4, 14, 15)
+                    where a.table_type in (0, 1, 2, 3, 4, 14)
                     and b.database_name != '__recyclebin'
                     and b.in_recyclebin = 0
                     and 0 = sys_privilege_check('table_acc', 1, b.database_name, a.table_name)
@@ -12390,7 +12390,7 @@ def_table_schema(
               'TABLE' AS OBJECT_TYPE
           FROM
             OCEANBASE.__ALL_VIRTUAL_CORE_ALL_TABLE
-          WHERE TABLE_TYPE IN (0,2,3,6,14,15)
+          WHERE TABLE_TYPE IN (0,2,3,6,14)
         UNION ALL
         SELECT DATABASE_ID,
                TABLE_ID,
@@ -12403,7 +12403,7 @@ def_table_schema(
                'TABLE' AS OBJECT_TYPE
         FROM
             oceanbase.__all_table T
-        WHERE T.TABLE_TYPE IN (0,2,3,6,14,15)
+        WHERE T.TABLE_TYPE IN (0,2,3,6,14)
         AND T.TABLE_MODE >> 12 & 15 in (0,1)
         AND T.INDEX_ATTRIBUTES_SET & 16 = 0)
     UNION ALL
@@ -12421,7 +12421,7 @@ def_table_schema(
           JOIN
             oceanbase.__all_part P
             ON T.TABLE_ID = P.TABLE_ID
-        WHERE T.TABLE_TYPE IN (0,2,3,6,14,15)
+        WHERE T.TABLE_TYPE IN (0,2,3,6,14)
               AND T.TABLE_MODE >> 12 & 15 in (0,1)
               AND (P.PARTITION_TYPE = 0 OR P.PARTITION_TYPE IS NULL)
               AND T.INDEX_ATTRIBUTES_SET & 16 = 0
@@ -12444,7 +12444,7 @@ def_table_schema(
             oceanbase.__all_sub_part SP
             ON T.TABLE_ID = SP.TABLE_ID
             AND P.PART_ID = SP.PART_ID
-        WHERE T.TABLE_TYPE IN (0,2,3,6,14,15)
+        WHERE T.TABLE_TYPE IN (0,2,3,6,14)
               AND T.TABLE_MODE >> 12 & 15 in (0,1)
               AND (P.PARTITION_TYPE = 0 OR P.PARTITION_TYPE IS NULL)
               AND (SP.PARTITION_TYPE = 0 OR SP.PARTITION_TYPE IS NULL)
@@ -14950,7 +14950,7 @@ FROM
     FROM OCEANBASE.__ALL_SUB_PART
   ) SP ON T.TABLE_ID = SP.TABLE_ID AND P.PART_ID = SP.PART_ID
   LEFT JOIN OCEANBASE.__ALL_TABLE_STAT TS ON TS.TABLE_ID = T.TABLE_ID AND TS.PARTITION_ID = CASE T.PART_LEVEL WHEN 0 THEN T.TABLE_ID WHEN 1 THEN P.PART_ID WHEN 2 THEN SP.SUB_PART_ID END
-WHERE T.TABLE_TYPE IN (3,6,8,9,14,15)
+WHERE T.TABLE_TYPE IN (3,6,8,9,14)
       AND (P.PARTITION_TYPE = 0 OR P.PARTITION_TYPE is NULL)
       AND (SP.PARTITION_TYPE = 0 OR SP.PARTITION_TYPE is NULL)
       AND (0 = sys_privilege_check('table_acc', 1)
