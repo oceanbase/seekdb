@@ -33,8 +33,10 @@ public:
   static const int64_t FT_MIN_WORD_LEN = 3;
   static const int64_t FT_MAX_WORD_LEN = 84;
 public:
-  explicit ObBEngFTParser(common::ObIAllocator &allocator)
-    : allocator_(allocator),
+  ObBEngFTParser(common::ObIAllocator &metadata_allocator,
+                 common::ObIAllocator &scratch_allocator)
+    : metadata_allocator_(metadata_allocator),
+      scratch_allocator_(scratch_allocator),
       analysis_ctx_(),
       english_analyzer_(),
       doc_(),
@@ -50,6 +52,7 @@ public:
       int64_t &word_len,
       int64_t &char_len,
       int64_t &word_freq) override;
+  int reuse_parser(const char *fulltext, const int64_t fulltext_len) override;
 
   VIRTUAL_TO_STRING_KV(K_(analysis_ctx), K_(english_analyzer), KP_(token_stream), K_(is_inited));
 private:
@@ -57,7 +60,8 @@ private:
       const common::ObDatum &doc,
       share::ObITokenStream *&token_stream);
 private:
-  common::ObIAllocator &allocator_;
+  common::ObIAllocator &metadata_allocator_;
+  common::ObIAllocator &scratch_allocator_;
   share::ObTextAnalysisCtx analysis_ctx_;
   share::ObEnglishTextAnalyzer english_analyzer_;
   common::ObDatum doc_;

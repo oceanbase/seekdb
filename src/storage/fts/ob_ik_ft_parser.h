@@ -22,6 +22,7 @@
 #include "storage/fts/dict/ob_ft_dict.h"
 #include "storage/fts/dict/ob_ft_dict_def.h"
 #include "storage/fts/dict/ob_ft_user_dict.h"
+#include "storage/fts/ik/ob_ik_arbitrator.h"
 #include "storage/fts/ik/ob_ik_processor.h"
 #include "plugin/interface/ob_plugin_ftparser_intf.h"
 
@@ -50,7 +51,8 @@ public:
         dict_stop_(nullptr),
         user_main_(),
         user_quan_(),
-        user_stop_()
+        user_stop_(),
+        arb_()
   {
   }
 
@@ -62,6 +64,8 @@ public:
                      int64_t &word_len,
                      int64_t &char_cnt,
                      int64_t &word_freq) override;
+
+  int reuse_parser(const char *fulltext, int64_t fulltext_len) override;
 
   VIRTUAL_TO_STRING_KV(K(is_inited_));
 
@@ -119,6 +123,8 @@ private:
   ObFTUserDictHandle user_main_;
   ObFTUserDictHandle user_quan_;
   ObFTUserDictHandle user_stop_;
+  ObIKArbitrator arb_;
+  ObArenaAllocator scratch_alloc_;
 
   DISABLE_COPY_ASSIGN(ObIKFTParser);
 };

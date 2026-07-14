@@ -84,8 +84,10 @@ private:
   static const int64_t DEFAULT_STOPWORD_BUCKET_NUM = 37L;
   typedef common::hash::ObHashSet<storage::ObFTWord> StopWordSet;
 
-  StopWordSet stopword_set_;
-  ObObjMeta stopword_type_;
+  StopWordSet general_ci_stopword_set_;
+  StopWordSet binary_stopword_set_;
+  ObObjMeta general_ci_stopword_type_;
+  ObObjMeta binary_stopword_type_;
 
   bool inited_ = false;
 
@@ -119,6 +121,20 @@ public:
       K(word_map_.size()));
 
 private:
+  class UpdateWordCount final
+  {
+  public:
+    explicit UpdateWordCount(const int64_t word_freq) : word_freq_(word_freq) {}
+    int operator()(common::hash::HashMapPair<ObFTWord, int64_t> &pair)
+    {
+      pair.second += word_freq_;
+      return OB_SUCCESS;
+    }
+
+  private:
+    int64_t word_freq_;
+  };
+
   bool is_min_max_word(const int64_t c_len) const;
   int casedown_word(const ObFTWord &src, ObFTWord &dst);
   int check_stopword(const ObFTWord &word, bool &is_stopword);
