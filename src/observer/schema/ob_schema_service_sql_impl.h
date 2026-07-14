@@ -140,6 +140,11 @@ public:
   int get_core_table_schemas(common::ObISQLClient &sql_client,
                              const ObRefreshSchemaStatus &schema_status,
                              common::ObArray<ObTableSchema> &core_schemas);
+  int get_core_table_schema(const ObRefreshSchemaStatus &schema_status,
+                            const uint64_t table_id,
+                            common::ObISQLClient &sql_client,
+                            common::ObIAllocator &allocator,
+                            ObTableSchema *&table_schema);
 
   int get_sys_table_schemas(common::ObISQLClient &sql_client,
                             const ObRefreshSchemaStatus &schema_status,

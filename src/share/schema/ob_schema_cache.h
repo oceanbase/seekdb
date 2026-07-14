@@ -147,7 +147,7 @@ private:
 
 class ObSchemaCache
 {
-  static const int64_t OB_SCHEMA_CACHE_SYS_CACHE_MAP_BUCKET_NUM = 512;
+  static const int64_t OB_SCHEMA_CACHE_BOOTSTRAP_CACHE_MAP_BUCKET_NUM = 512;
 public:
   ObSchemaCache();
   virtual ~ObSchemaCache();
@@ -206,24 +206,17 @@ private:
   bool is_valid_key(const ObSchemaType schema_type,
                     const uint64_t schema_id,
                     const int64_t schema_version) const;
-  bool need_use_sys_cache(const ObSchemaCacheKey &cache_key) const;
   int init_all_core_table();
-  bool is_necessary_schema(const ObSchemaCacheKey &cache_key) const;
-  bool is_necessary_table(const uint64_t table_id) const;
   int put_schema_to_cache(
       const ObSchemaCacheKey &cache_key,
       const ObSchema &schema,
       NoSwapCache &target_cache,
       const char *cache_name);
-  int put_sys_schema(
-      const ObSchemaCacheKey &cache_key,
-      const ObSchema &schema);
   int put_bootstrap_schema(
       const ObSchemaCacheKey &cache_key,
       const ObSchema &schema);
 private:
   lib::MemoryContext mem_context_;
-  NoSwapCache sys_cache_;
   KVCache cache_;
   HistoryCache history_cache_;
   bool is_inited_;

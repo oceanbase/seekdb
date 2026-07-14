@@ -278,6 +278,62 @@ int ObSchemaServiceSQLImpl::get_all_core_table_schema(ObTableSchema &table_schem
   return ret;
 }
 
+int ObSchemaServiceSQLImpl::get_core_table_schema(
+    const ObRefreshSchemaStatus &schema_status,
+    const uint64_t table_id,
+    ObISQLClient &sql_client,
+    ObIAllocator &allocator,
+    ObTableSchema *&table_schema)
+{
+  int ret = OB_SUCCESS;
+  table_schema = NULL;
+  ObTableSchema core_table_schema;
+  if (!check_inner_stat()) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("check inner stat fail", KR(ret), K(schema_status), K(table_id));
+  } else if (!is_core_table(table_id)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("not core table", KR(ret), K(table_id), K(schema_status));
+  } else if (OB_ALL_CORE_TABLE_TID == table_id) {
+    if (OB_FAIL(get_all_core_table_schema(core_table_schema))) {
+      LOG_WARN("get all core table schema failed", KR(ret), K(table_id), K(schema_status));
+    }
+  } else {
+    ObArray<ObTableSchema> core_schemas;
+    const ObTableSchema *target_schema = NULL;
+    if (OB_FAIL(get_core_table_schemas(sql_client, schema_status, core_schemas))) {
+      LOG_WARN("get core table schemas failed", KR(ret), K(table_id), K(schema_status));
+    } else {
+      FOREACH_CNT_X(core_schema, core_schemas, OB_SUCC(ret)) {
+        if (OB_ISNULL(core_schema)) {
+          ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("core schema is null", KR(ret), K(table_id), K(schema_status));
+        } else if (table_id == core_schema->get_table_id()) {
+          target_schema = core_schema;
+          break;
+        }
+      }
+      if (OB_SUCC(ret)) {
+        if (OB_ISNULL(target_schema)) {
+          ret = OB_TABLE_NOT_EXIST;
+          LOG_WARN("core table schema not found", KR(ret), K(table_id), K(schema_status));
+        } else if (OB_FAIL(core_table_schema.assign(*target_schema))) {
+          LOG_WARN("assign core table schema failed", KR(ret), K(table_id), K(schema_status));
+        }
+      }
+    }
+  }
+
+  if (OB_SUCC(ret)) {
+    if (OB_FAIL(alloc_table_schema(core_table_schema, allocator, table_schema))) {
+      LOG_WARN("alloc core table schema failed", KR(ret), K(table_id), K(schema_status));
+    } else {
+      LOG_INFO("get core table schema succeed", K(table_id), K(table_schema->get_table_name_str()));
+    }
+  }
+  return ret;
+}
+
 int ObSchemaServiceSQLImpl::get_core_table_schemas(
     ObISQLClient &sql_client,
     const ObRefreshSchemaStatus &schema_status,
@@ -648,22 +704,36 @@ int ObSchemaServiceSQLImpl::get_not_core_table_schemas(
     int64_t begin = 0;
     int64_t end = 0;
     while (OB_SUCCESS == ret && end < table_ids.count()) {
+      ObSEArray<uint64_t, MAX_IN_QUERY_PER_TIME> non_dependency_table_ids;
       while (OB_SUCCESS == ret && end < table_ids.count()
              && end - begin < MAX_IN_QUERY_PER_TIME) {
+        if (!is_schema_fetch_dependency_table(table_ids.at(end))
+            && OB_FAIL(non_dependency_table_ids.push_back(table_ids.at(end)))) {
+          LOG_WARN("failed to push back non-dependency table id", KR(ret), "table_id", table_ids.at(end));
+        }
         end++;
       }
-      if (!GCTX.in_bootstrap_ && OB_FAIL(fetch_all_table_info(schema_status, schema_version, sql_client, allocator,
-                                         not_core_schemas, &table_ids.at(begin), end - begin))) {
-        LOG_WARN("fetch all table info failed", K(schema_version), K(schema_status), K(ret));
-      } else if (!GCTX.in_bootstrap_ && OB_FAIL(fetch_all_column_info(schema_status, schema_version, sql_client,
-                                                not_core_schemas, &table_ids.at(begin), end - begin))) {
-        LOG_WARN("fetch all column info failed", K(schema_version), K(schema_status), K(ret));
-      } else if (OB_FAIL(fetch_all_partition_info(schema_status, schema_version, sql_client,
-                                                  not_core_schemas, &table_ids.at(begin), end - begin))) {
-        LOG_WARN("Failed to fetch all partition info", K(ret), K(schema_version), K(schema_status));
-      } else if (OB_FAIL(fetch_all_constraint_info_ignore_inner_table(schema_status, schema_version,
-                 sql_client, not_core_schemas, &table_ids.at(begin), end - begin))) {
-        LOG_WARN("fetch all constraints info failed", K(schema_version), K(schema_status), K(ret));
+      if (OB_SUCC(ret)) {
+        if (!GCTX.in_bootstrap_
+            && OB_FAIL(fetch_all_table_info(schema_status, schema_version, sql_client, allocator,
+                                            not_core_schemas, &table_ids.at(begin), end - begin))) {
+          LOG_WARN("fetch all table info failed", K(schema_version), K(schema_status), K(ret));
+        } else if (!GCTX.in_bootstrap_
+                   && OB_FAIL(fetch_all_column_info(schema_status, schema_version, sql_client,
+                                                    not_core_schemas, &table_ids.at(begin), end - begin))) {
+          LOG_WARN("fetch all column info failed", K(schema_version), K(schema_status), K(ret));
+        } else if (non_dependency_table_ids.count() > 0
+                   && OB_FAIL(fetch_all_partition_info(schema_status, schema_version, sql_client,
+                                                       not_core_schemas, &non_dependency_table_ids.at(0),
+                                                       non_dependency_table_ids.count()))) {
+          LOG_WARN("Failed to fetch all partition info", K(ret), K(schema_version), K(schema_status));
+        } else if (non_dependency_table_ids.count() > 0
+                   && OB_FAIL(fetch_all_constraint_info_ignore_inner_table(schema_status, schema_version,
+                                                                           sql_client, not_core_schemas,
+                                                                           &non_dependency_table_ids.at(0),
+                                                                           non_dependency_table_ids.count()))) {
+          LOG_WARN("fetch all constraints info failed", K(schema_version), K(schema_status), K(ret));
+        }
       }
       begin = end;
     }
@@ -4799,19 +4869,12 @@ int ObSchemaServiceSQLImpl::get_table_schema(
 {
   int ret = OB_SUCCESS;
 
-  // __all_core_table
-  if (OB_ALL_CORE_TABLE_TID == table_id) {
-    ObTableSchema all_core_table_schema;
-    if (OB_FAIL(get_all_core_table_schema(all_core_table_schema))) {
-      LOG_WARN("get all core table schema failed", K(ret));
-    } else if (OB_FAIL(alloc_table_schema(all_core_table_schema, allocator,
-                                          table_schema))) {
-      LOG_WARN("alloc table schema failed", K(ret));
-    } else {
-      LOG_INFO("get all core table schema succeed", K(table_schema->get_table_name_str()));
+  if (is_core_table(table_id)) {
+    if (OB_FAIL(get_core_table_schema(schema_status, table_id, sql_client, allocator, table_schema))) {
+      LOG_WARN("get core table schema failed", K(ret), K(table_id));
     }
   } else {
-    // normal_table(contain core table)
+    // normal_table
     if (OB_FAIL(get_not_core_table_schema(schema_status, table_id, schema_version,
                                           sql_client, allocator, table_schema))) {
       LOG_WARN("get not core table schema failed", K(ret), K(table_id));
@@ -4833,6 +4896,7 @@ int ObSchemaServiceSQLImpl::get_not_core_table_schema(
     ObTableSchema *&table_schema)
 {
   int ret = OB_SUCCESS;
+  const bool is_schema_fetch_dependency = is_schema_fetch_dependency_table(table_id);
 
   
   if (!check_inner_stat()) {
@@ -4845,30 +4909,28 @@ int ObSchemaServiceSQLImpl::get_not_core_table_schema(
                                       sql_client, allocator, table_schema))) {
     LOG_WARN("fetch all table info failed", K(table_id),
              K(schema_version), K(ret));
-  } else if ((OB_FAIL(fetch_column_info(schema_status, table_id, schema_version,
-                                          sql_client, table_schema)))) {
+  } else if (OB_FAIL(fetch_column_info(schema_status, table_id, schema_version,
+                                       sql_client, table_schema))) {
     LOG_WARN("Failed to fetch column info", K(ret));
-  } else if (OB_FAIL(fetch_partition_info(schema_status, table_id, schema_version,
-                                         sql_client, table_schema))) {
+  } else if (!is_schema_fetch_dependency
+             && OB_FAIL(fetch_partition_info(schema_status, table_id, schema_version,
+                                             sql_client, table_schema))) {
     LOG_WARN("Failed to fetch part info", K(ret));
   }
-  if (OB_SUCCESS == ret) {
-    if (OB_FAIL(fetch_foreign_key_info(schema_status, table_id,
-                                       schema_version, sql_client, *table_schema))) {
-      LOG_WARN("Failed to fetch foreign key info", K(ret));
-    }
+  if (OB_SUCC(ret) && !is_schema_fetch_dependency
+      && OB_FAIL(fetch_foreign_key_info(schema_status, table_id, schema_version,
+                                        sql_client, *table_schema))) {
+    LOG_WARN("Failed to fetch foreign key info", K(ret));
   }
-  if (OB_SUCCESS == ret) {
-    if (OB_FAIL(fetch_constraint_info(schema_status, table_id,
-                                      schema_version, sql_client, table_schema))) {
-      LOG_WARN("Failed to fetch constraints info", K(ret));
-    }
+  if (OB_SUCC(ret) && !is_schema_fetch_dependency
+      && OB_FAIL(fetch_constraint_info(schema_status, table_id, schema_version,
+                                       sql_client, table_schema))) {
+    LOG_WARN("Failed to fetch constraints info", K(ret));
   }
-  if (OB_SUCCESS == ret) {
-    if (OB_FAIL(fetch_trigger_list(schema_status, table_id,
-                                          schema_version, sql_client, *table_schema))) {
-      LOG_WARN("Failed to fetch trigger list", K(ret));
-    }
+  if (OB_SUCC(ret) && !is_schema_fetch_dependency
+      && OB_FAIL(fetch_trigger_list(schema_status, table_id, schema_version,
+                                    sql_client, *table_schema))) {
+    LOG_WARN("Failed to fetch trigger list", K(ret));
   }
   return ret;
 }

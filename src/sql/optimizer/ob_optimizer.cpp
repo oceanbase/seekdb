@@ -1336,6 +1336,11 @@ int ObOptimizer::init_system_stat()
   if (OB_ISNULL(opt_stat_manager) || OB_ISNULL(session)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected null param", K(ret));
+  } else if (!session->get_check_sys_variable()) {
+    // Avoid cyclic dependency for schema/bootstrap inner SQL:
+    // checking system statistics requires the __all_aux_stat schema, which may need
+    // __all_global_stat to check core schema version.
+    ctx_.set_use_default_stat();
   } else if (OB_FAIL(opt_stat_manager->check_system_stat_validity(ctx_.get_exec_ctx(),
                                                                   is_valid))) {
     LOG_WARN("failed to check system stat is valid", K(ret));
