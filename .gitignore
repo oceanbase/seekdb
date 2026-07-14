@@ -404,3 +404,7 @@ test/var
 .worktrees/
 .claude/
 CLAUDE.md
+
+docs/ai_functions_implementation_zh.md
+task.md
+tools/deploy/mysql_test/run_ai_funcs_pymysql.py

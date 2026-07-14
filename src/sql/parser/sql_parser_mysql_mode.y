@@ -274,7 +274,7 @@ END_P SET_VAR DELIMITER
 //-----------------------------reserved keyword end-------------------------------------------------
 %token <non_reserved_keyword>
 //-----------------------------non_reserved keyword begin-------------------------------------------
-        ACCESS ACCESS_INFO ACCESSID ACCESSKEY ACCESSTYPE ACCOUNT ACTION ACTIVE ADDDATE AFTER AGAINST AGGREGATE AI ALGORITHM ALL_META ALL_USER ALWAYS ALLOW ANALYSE ANY
+        ACCESS ACCESS_INFO ACCESSID ACCESSKEY ACCESSTYPE ACCOUNT ACTION ACTIVE ADDDATE AFTER AGAINST AGGREGATE AI AI_SPLIT_DOCUMENT ALGORITHM ALL_META ALL_USER ALWAYS ALLOW ANALYSE ANY
         APPID APPROX_COUNT_DISTINCT APPROX_COUNT_DISTINCT_SYNOPSIS APPROX_COUNT_DISTINCT_SYNOPSIS_MERGE
         ARRAY ASCII ASIS AT ATTRIBUTE AUTHORS AUTO AUTOEXTEND_SIZE AUTO_INCREMENT AUTO_INCREMENT_MODE AUTO_INCREMENT_CACHE_SIZE
         AVG AVG_ROW_LENGTH ACTIVATE AVAILABILITY ARCHIVELOG ASYNCHRONOUS AUDIT ADMIN AUTO_REFRESH API_MODE APPROX APPROXIMATE ARRAY_AGG ARRAY_FILTER ARRAY_FIRST ARRAY_MAP ARRAY_SORTBY 
@@ -559,6 +559,7 @@ END_P SET_VAR DELIMITER
 %type <node> es_sql_opt
 %type <node> operator_list
 %type <node> hybrid_search_expr hybrid_search_param
+%type <node> ai_split_document_expr ai_split_document_args
 %type <node> create_location_stmt alter_location_stmt drop_location_stmt location_name location_url credential_option_list credential_option opt_credential
 
 %type <node> vector_similarity_expr vector_similarity_metric
@@ -12991,6 +12992,10 @@ tbl_name
 {
   $$ = $1;
 }
+| ai_split_document_expr
+{
+  $$ = $1;
+}
 ;
 
 tbl_name:
@@ -21872,6 +21877,45 @@ literal
 }
 ;
 
+ai_split_document_expr:
+AI_SPLIT_DOCUMENT '(' ai_split_document_args ')'
+{
+  ParseNode *name_node = NULL;
+  ParseNode *func_node = NULL;
+  ParseNode *alias_node = NULL;
+  make_name_node(name_node, result->malloc_pool_, "ai_split_document");
+  make_name_node(alias_node, result->malloc_pool_, "");
+  malloc_non_terminal_node(func_node, result->malloc_pool_, T_FUN_SYS, 2, name_node, $3);
+  malloc_non_terminal_node($$, result->malloc_pool_, T_AI_SPLIT_DOCUMENT_EXPRESSION, 2, func_node, alias_node);
+}
+| AI_SPLIT_DOCUMENT '(' ai_split_document_args ')' relation_name
+{
+  ParseNode *name_node = NULL;
+  ParseNode *func_node = NULL;
+  make_name_node(name_node, result->malloc_pool_, "ai_split_document");
+  malloc_non_terminal_node(func_node, result->malloc_pool_, T_FUN_SYS, 2, name_node, $3);
+  malloc_non_terminal_node($$, result->malloc_pool_, T_AI_SPLIT_DOCUMENT_EXPRESSION, 2, func_node, $5);
+}
+| AI_SPLIT_DOCUMENT '(' ai_split_document_args ')' AS relation_name
+{
+  ParseNode *name_node = NULL;
+  ParseNode *func_node = NULL;
+  make_name_node(name_node, result->malloc_pool_, "ai_split_document");
+  malloc_non_terminal_node(func_node, result->malloc_pool_, T_FUN_SYS, 2, name_node, $3);
+  malloc_non_terminal_node($$, result->malloc_pool_, T_AI_SPLIT_DOCUMENT_EXPRESSION, 2, func_node, $6);
+}
+;
+ai_split_document_args:
+expr
+{
+  malloc_non_terminal_node($$, result->malloc_pool_, T_EXPR_LIST, 1, $1);
+}
+| expr ',' expr
+{
+  malloc_non_terminal_node($$, result->malloc_pool_, T_EXPR_LIST, 2, $1, $3);
+}
+;
+
 create_ccl_rule_stmt:
 CREATE CONCURRENT_LIMITING_RULE opt_if_not_exists relation_name 
 ON ccl_database_table_optition
@@ -22881,6 +22925,7 @@ ACCESS_INFO
 |       INCONSISTENT 
 |       INDIVIDUAL
 |       HYBRID_SEARCH
+|       AI_SPLIT_DOCUMENT
 ;
 
 unreserved_keyword_special:
