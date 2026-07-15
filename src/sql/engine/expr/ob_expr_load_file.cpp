@@ -22,6 +22,7 @@
 #include "share/schema/ob_location_schema_struct.h"
 #include "share/schema/ob_schema_getter_guard.h"
 #include "sql/engine/ob_exec_context.h"
+#include "sql/engine/expr/ob_expr_lob_utils.h"
 
 using namespace oceanbase::common;
 using namespace oceanbase::share::schema;
@@ -121,15 +122,13 @@ int ObExprLoadFile::eval_load_file(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &
                                                file_content))) {
           LOG_WARN("failed to load file", K(ret), K(full_path));
         } else {
-          char *result_buf = expr.get_str_res_mem(ctx, file_content.length());
-          if (OB_ISNULL(result_buf) && file_content.length() > 0) {
-            ret = OB_ALLOCATE_MEMORY_FAILED;
-            LOG_WARN("failed to allocate result buffer", K(ret), K(file_content.length()));
+          ObTextStringDatumResult result(expr.datum_meta_.type_, &expr, &ctx, &res);
+          if (OB_FAIL(result.init(file_content.length()))) {
+            LOG_WARN("failed to initialize load file result", K(ret), K(file_content.length()));
+          } else if (OB_FAIL(result.append(file_content))) {
+            LOG_WARN("failed to append load file result", K(ret), K(file_content.length()));
           } else {
-            if (file_content.length() > 0) {
-              MEMCPY(result_buf, file_content.ptr(), file_content.length());
-            }
-            res.set_string(result_buf, file_content.length());
+            result.set_result();
           }
         }
       }
