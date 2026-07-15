@@ -95,9 +95,6 @@ int ObExprBM25::eval_bm25_relevance_expr(const ObExpr &expr, ObEvalCtx &ctx, ObD
       const double doc_weight = doc_token_weight(related_token_cnt, norm_len);
       const double relevance = token_weight * doc_weight;
       res_datum.set_double(relevance);
-      LOG_DEBUG("show bm25 parameters for current document",
-          K(token_doc_cnt), K(total_doc_cnt), K(related_token_cnt), K(doc_token_cnt), K(avg_doc_token_cnt),
-          K(norm_len), K(token_weight), K(doc_weight), K(relevance));
     }
   } else {
     ObDatum *token_doc_cnt_datum = nullptr;
@@ -122,8 +119,6 @@ int ObExprBM25::eval_bm25_relevance_expr(const ObExpr &expr, ObEvalCtx &ctx, ObD
       LOG_WARN("unexpected null datum", K(ret),  KPC(token_doc_cnt_datum), KPC(total_doc_cnt_datum), KPC(doc_length_datum),
           KPC(token_weight_datum), KPC(avg_doc_token_cnt_datum), KPC(related_token_cnt_datum));
     } else {
-      const int64_t token_doc_cnt = token_doc_cnt_datum->get_int();
-      const int64_t total_doc_cnt = total_doc_cnt_datum->get_int();
       const int64_t related_token_cnt = related_token_cnt_datum->get_uint();
       const int64_t doc_token_cnt = doc_length_datum->get_uint();
       const double avg_doc_token_cnt = avg_doc_token_cnt_datum->get_double();
@@ -132,9 +127,6 @@ int ObExprBM25::eval_bm25_relevance_expr(const ObExpr &expr, ObEvalCtx &ctx, ObD
       const double doc_weight = doc_token_weight(related_token_cnt, norm_len);
       const double relevance = token_weight * doc_weight;
       res_datum.set_double(relevance);
-      LOG_DEBUG("show bm25 parameters for current document",
-          K(token_doc_cnt), K(total_doc_cnt), K(related_token_cnt), K(doc_token_cnt), K(avg_doc_token_cnt),
-          K(norm_len), K(token_weight), K(doc_weight), K(relevance));
     }
   }
   return ret;
@@ -191,9 +183,6 @@ int ObExprBM25::eval_batch_bm25_relevance_expr(const ObExpr &expr, ObEvalCtx &ct
             const double relevance = token_weight * doc_weight;
             res_datum[i].set_double(relevance);
             eval_words[word_idx] |= bit_mask;
-            LOG_DEBUG("show bm25 parameters for current document",
-                K(token_doc_cnt), K(total_doc_cnt), K(related_token_cnt), K(doc_token_cnt_value), K(avg_doc_token_cnt),
-                K(norm_len), K(token_weight), K(doc_weight), K(relevance));
           }
         }
       }
@@ -221,8 +210,6 @@ int ObExprBM25::eval_batch_bm25_relevance_expr(const ObExpr &expr, ObEvalCtx &ct
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("unexpected null datum", K(ret), K(token_weight_datum.datums_[0]), K(avg_doc_token_cnt_datum.datums_[0]));
     } else {
-        const int64_t token_doc_cnt = token_doc_cnt_datum.datums_[0].get_int();
-        const int64_t total_doc_cnt = total_doc_cnt_datum.datums_[0].get_int();
         const double token_weight = token_weight_datum.datums_[0].get_double();
         const double avg_doc_token_cnt = avg_doc_token_cnt_datum.datums_[0].get_double();
         ObDatum *res_datum = expr.locate_batch_datums(ctx);
@@ -247,9 +234,6 @@ int ObExprBM25::eval_batch_bm25_relevance_expr(const ObExpr &expr, ObEvalCtx &ct
               const double relevance = token_weight * doc_weight;
               res_datum[i].set_double(relevance);
               eval_words[word_idx] |= bit_mask;
-              LOG_DEBUG("show bm25 parameters for current document",
-                  K(token_doc_cnt), K(total_doc_cnt), K(related_token_cnt), K(doc_token_cnt), K(avg_doc_token_cnt),
-                  K(norm_len), K(token_weight), K(doc_weight), K(relevance));
             }
           }
         }

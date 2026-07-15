@@ -142,7 +142,6 @@ int ObSRBMWIterImpl::top_k_search()
 
   int64_t pivot_iter_idx = 0;
   while (OB_SUCC(ret) && BMWStatus::FINISHED != status_) {
-    LOG_DEBUG("[Sparse Retrieval] top k search status", K_(status));
     switch (status_) {
     case BMWStatus::FIND_NEXT_PIVOT: {
       if (OB_FAIL(next_pivot(pivot_iter_idx))) {
@@ -381,8 +380,6 @@ int ObSRBMWIterImpl::next_pivot_range(int64_t &skip_range_cnt)
   // try to generate next candidate range
   bool is_candidate_range = false;
   while (OB_SUCC(ret) && !is_candidate_range) {
-    LOG_DEBUG("[Sparse Retrieval] BMW next pivot range", K(ret), K(is_candidate_range),
-        KPC(max_evaluated_id), KPC(min_unevaluated_id));
     if (OB_FAIL(fill_merge_heap_with_shallow_dims(max_evaluated_id, last_border_inclusive))) {
       if (OB_UNLIKELY(OB_ITER_END != ret)) {
         LOG_WARN("failed to fill merge heap with shallow dims", K(ret));
@@ -481,9 +478,6 @@ int ObSRBMWIterImpl::evaluate_pivot_range(const int64_t pivot_iter_idx, bool &is
   if (OB_SUCC(ret)) {
     is_candidate = block_max_score > get_top_k_threshold();
   }
-
-  LOG_DEBUG("[Sparse Retrieval] BMW evaluate pivot range", K(ret),
-      K(pivot_iter_idx), KPC(pivot_id), K(block_max_score), K(is_candidate), K(get_top_k_threshold()));
 
   return ret;
 }
