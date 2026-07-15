@@ -36,6 +36,7 @@ int ObBEngFTParser::get_next_token(
   int ret = OB_SUCCESS;
   ObDatum token;
   int64_t token_freq = 0;
+  char *buf = nullptr;
   word = nullptr;
   word_len = 0;
   char_len = 0;
@@ -43,9 +44,9 @@ int ObBEngFTParser::get_next_token(
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("beng ft parser isn't initialized", K(ret), K(is_inited_));
-  } else if (OB_ISNULL(token_stream_)) {
+  } else if (OB_ISNULL(token_stream_) || OB_ISNULL(document_allocator_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("token stream is nullptr", K(ret), KP(token_stream_));
+    LOG_WARN("parser state is invalid", K(ret), KP(token_stream_), KP(document_allocator_));
   } else if (OB_FAIL(token_stream_->get_next(token, token_freq))) {
     if (OB_ITER_END != ret) {
       LOG_WARN("fail to get next token", K(ret), KPC(token_stream_));
@@ -53,8 +54,12 @@ int ObBEngFTParser::get_next_token(
   } else if (OB_ISNULL(token.ptr_) || OB_UNLIKELY(0 >= token.len_ || 0 >= token_freq)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", K(ret), KP(token.ptr_), K(token.len_), K(token_freq));
+  } else if (OB_ISNULL(buf = static_cast<char *>(document_allocator_->alloc(token.len_)))) {
+    ret = OB_ALLOCATE_MEMORY_FAILED;
+    LOG_WARN("fail to allocate word memory", K(ret), K(token.len_));
   } else {
-    word = token.ptr_;
+    MEMCPY(buf, token.ptr_, token.len_);
+    word = buf;
     word_len = token.len_;
     char_len = token.len_;
     word_freq = token_freq;
@@ -69,7 +74,8 @@ int ObBEngFTParser::init(ObFTParserParam *param)
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
     LOG_WARN("init twice", K(ret), K(is_inited_));
-  } else if (OB_ISNULL(param) || OB_UNLIKELY(!param->is_valid())) {
+  } else if (OB_ISNULL(param) || OB_ISNULL(param->allocator_)
+             || OB_UNLIKELY(!param->is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("param is nullptr", K(ret), KPC(param));
   } else if (OB_UNLIKELY(UINT32_MAX < param->ft_length_)) {
@@ -77,9 +83,10 @@ int ObBEngFTParser::init(ObFTParserParam *param)
     LOG_WARN("too large document, english analyzer hasn't be supported", K(ret), K(param->ft_length_));
   } else {
     doc_.set_string(param->fulltext_, param->ft_length_);
+    document_allocator_ = param->allocator_;
     analysis_ctx_.cs_ = param->cs_;
     analysis_ctx_.filter_stopword_ = false;
-    analysis_ctx_.need_grouping_ = true;
+    analysis_ctx_.need_grouping_ = false;
     if (OB_FAIL(english_analyzer_.init(analysis_ctx_, allocator_))) {
       LOG_WARN("fail to init english analyzer", K(ret), KPC(param), K(analysis_ctx_));
     } else if (OB_FAIL(segment(doc_, token_stream_))) {
@@ -104,7 +111,8 @@ int ObBEngFTParser::reuse(ObFTParserParam *param)
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("beng ft parser isn't initialized", K(ret), K(is_inited_));
-  } else if (OB_ISNULL(param) || OB_UNLIKELY(!param->is_valid())) {
+  } else if (OB_ISNULL(param) || OB_ISNULL(param->allocator_)
+             || OB_UNLIKELY(!param->is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid parser param", K(ret), KPC(param));
   } else if (analysis_ctx_.cs_ != param->cs_) {
@@ -115,6 +123,7 @@ int ObBEngFTParser::reuse(ObFTParserParam *param)
     LOG_WARN("too large document, english analyzer hasn't be supported", K(ret), K(param->ft_length_));
   } else {
     doc_.set_string(param->fulltext_, param->ft_length_);
+    document_allocator_ = param->allocator_;
     token_stream_ = nullptr;
     if (OB_FAIL(segment(doc_, token_stream_))) {
       LOG_WARN("fail to segment fulltext by parser", K(ret), KP(param->fulltext_), K(param->ft_length_));
@@ -148,6 +157,7 @@ void ObBEngFTParser::reset()
   analysis_ctx_.reset();
   english_analyzer_.reset();
   doc_.reset();
+  document_allocator_ = nullptr;
   token_stream_ = nullptr;
   is_inited_ = false;
 }
@@ -179,6 +189,7 @@ int ObBasicEnglishFTParserDesc::create_token_iter(
     ret = OB_NOT_INIT;
     LOG_WARN("default ft parser desc hasn't be initialized", K(ret), K(is_inited_));
   } else if (OB_ISNULL(param) || OB_ISNULL(param->parser_allocator_)
+             || OB_ISNULL(param->allocator_)
              || OB_ISNULL(param->fulltext_) || OB_UNLIKELY(!param->is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), KPC(param));

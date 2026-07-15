@@ -50,10 +50,13 @@ public:
   void reuse();
   TO_STRING_KV(K_(row_idx), K_(is_fts_index_aux), K_(helper), K_(is_inited), K_(rows));
 private:
+  int prepare_word_map(const int64_t fulltext_length);
+
   lib::MemoryContext parser_memctx_;
   lib::MemoryContext document_memctx_;
   ObDomainIndexRow rows_;
   storage::ObFTWordMap word_map_;
+  int64_t word_map_bucket_count_;
   uint64_t row_idx_;
   bool is_fts_index_aux_;
   storage::ObFTParseHelper helper_;

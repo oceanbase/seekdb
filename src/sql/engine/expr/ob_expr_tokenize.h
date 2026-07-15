@@ -27,7 +27,6 @@ namespace oceanbase
 {
 namespace sql
 {
-class MultimodeAlloctor;
 class ObExprTokenize : public ObStringExprOperator
 {
 public:
@@ -91,7 +90,6 @@ private:
   static int parse_parser_name(const ObExpr &expr, ObEvalCtx &ctx, TokenizeParam &param);
   static int parse_parser_properties(const ObExpr &expr,
                                      ObEvalCtx &ctx,
-                                     MultimodeAlloctor &mm_alloc,
                                      TokenizeParam &param);
 
   static int tokenize_fulltext(const TokenizeParam &param,

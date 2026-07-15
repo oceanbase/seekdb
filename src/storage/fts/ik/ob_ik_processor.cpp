@@ -47,12 +47,11 @@ int ObIIKProcessor::process(TokenizeContext &ctx,
 }
 
 TokenizeContext::TokenizeContext(ObCollationType coll_type,
-                                 ObIAllocator &allocator,
                                  const char *fulltext,
                                  int64_t fulltext_len,
                                  bool is_smart)
-    : allocator_(allocator), coll_type_(coll_type), fulltext_(fulltext), normalized_fulltext_(nullptr),
-      fulltext_len_(fulltext_len), normalized_capacity_(0), cursor_(0), next_char_len_(0), handle_size_(0),
+    : coll_type_(coll_type), fulltext_(fulltext), fulltext_len_(fulltext_len), normalized_char_('\0'),
+      cursor_(0), next_char_len_(0), handle_size_(0),
       is_smart_(is_smart), token_allocator_(lib::ObMemAttr("IKTokenCtx")),
       token_list_(token_allocator_), result_list_(token_allocator_)
 {
@@ -64,17 +63,6 @@ int TokenizeContext::init()
 
   if (OB_ISNULL(fulltext_) || fulltext_len_ <= 0) {
     ret = OB_INVALID_ARGUMENT;
-  } else if (OB_ISNULL(normalized_fulltext_ = static_cast<char *>(allocator_.alloc(fulltext_len_)))) {
-    ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("failed to allocate normalized fulltext", K(ret), K(fulltext_len_));
-  } else {
-    normalized_capacity_ = fulltext_len_;
-    for (int64_t index = 0; index < fulltext_len_; ++index) {
-      const char ch = fulltext_[index];
-      normalized_fulltext_[index] = ch >= 'A' && ch <= 'Z'
-          ? static_cast<char>(ch + ('a' - 'A'))
-          : ch;
-    }
   }
   if (OB_SUCC(ret) && OB_FAIL(prepare_next_char())) {
     LOG_WARN("Failed to prepare next char", K(ret));
@@ -95,37 +83,17 @@ int TokenizeContext::reuse(ObCollationType coll_type,
     result_list_.reset();
     token_list_.reset();
     token_allocator_.reuse();
-    if (fulltext_len > normalized_capacity_) {
-      char *new_buffer = static_cast<char *>(allocator_.alloc(fulltext_len));
-      if (OB_ISNULL(new_buffer)) {
-        ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("failed to grow normalized fulltext buffer", K(ret), K(fulltext_len), K(normalized_capacity_));
-      } else {
-        if (OB_NOT_NULL(normalized_fulltext_)) {
-          allocator_.free(normalized_fulltext_);
-        }
-        normalized_fulltext_ = new_buffer;
-        normalized_capacity_ = fulltext_len;
-      }
-    }
-    if (OB_SUCC(ret)) {
-      coll_type_ = coll_type;
-      fulltext_ = fulltext;
-      fulltext_len_ = fulltext_len;
-      cursor_ = 0;
-      next_char_len_ = 0;
-      next_char_type_ = ObFTCharUtil::CharType::USELESS;
-      handle_size_ = 0;
-      is_smart_ = is_smart;
-      for (int64_t index = 0; index < fulltext_len_; ++index) {
-        const char ch = fulltext_[index];
-        normalized_fulltext_[index] = ch >= 'A' && ch <= 'Z'
-            ? static_cast<char>(ch + ('a' - 'A'))
-            : ch;
-      }
-      if (OB_FAIL(prepare_next_char())) {
-        LOG_WARN("failed to prepare first character", K(ret));
-      }
+    coll_type_ = coll_type;
+    fulltext_ = fulltext;
+    fulltext_len_ = fulltext_len;
+    normalized_char_ = '\0';
+    cursor_ = 0;
+    next_char_len_ = 0;
+    next_char_type_ = ObFTCharUtil::CharType::USELESS;
+    handle_size_ = 0;
+    is_smart_ = is_smart;
+    if (OB_FAIL(prepare_next_char())) {
+      LOG_WARN("failed to prepare first character", K(ret));
     }
   }
   return ret;
@@ -146,7 +114,7 @@ int TokenizeContext::current_char(const char *&ch, uint8_t &char_len)
   if (cursor_ >= fulltext_len_) {
     ret = OB_ITER_END;
   } else {
-    ch = normalized_fulltext_ + cursor_;
+    ch = normalized_current_char();
     char_len = next_char_len_;
   }
   return ret;
@@ -165,17 +133,27 @@ int TokenizeContext::current_char_type(ObFTCharUtil::CharType &type)
 
 int TokenizeContext::current_char_and_type(const char *&ch,
                                            uint8_t &char_len,
-                                           ObFTCharUtil::CharType &type) const
+                                           ObFTCharUtil::CharType &type)
 {
   int ret = OB_SUCCESS;
   if (cursor_ >= fulltext_len_) {
     ret = OB_ITER_END;
   } else {
-    ch = normalized_fulltext_ + cursor_;
+    ch = normalized_current_char();
     char_len = next_char_len_;
     type = next_char_type_;
   }
   return ret;
+}
+
+const char *TokenizeContext::normalized_current_char()
+{
+  const char *current = fulltext_ + cursor_;
+  if (1 == next_char_len_ && current[0] >= 'A' && current[0] <= 'Z') {
+    normalized_char_ = static_cast<char>(current[0] + ('a' - 'A'));
+    current = &normalized_char_;
+  }
+  return current;
 }
 
 int TokenizeContext::prepare_next_char()
@@ -225,8 +203,6 @@ int64_t TokenizeContext::get_end_cursor() const { return cursor_ + next_char_len
 
 const char *TokenizeContext::fulltext() const { return fulltext_; }
 
-const char *TokenizeContext::normalized_fulltext() const { return normalized_fulltext_; }
-
 int64_t TokenizeContext::fulltext_len() const { return fulltext_len_; }
 
 int64_t TokenizeContext::get_cursor() const { return cursor_; }
@@ -261,11 +237,6 @@ TokenizeContext::~TokenizeContext()
   token_list_.reset();
   result_list_.reset();
   token_allocator_.reset();
-  if (!OB_ISNULL(normalized_fulltext_)) {
-    allocator_.free(normalized_fulltext_);
-    normalized_fulltext_ = nullptr;
-  }
-  normalized_capacity_ = 0;
 }
 
 int TokenizeContext::get_next_token(const char *&word,

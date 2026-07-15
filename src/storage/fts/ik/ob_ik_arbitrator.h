@@ -18,6 +18,7 @@
 #define _OCEANBASE_STORAGE_FTS_IK_OB_IK_ARBITRATOR_H_
 
 #include "lib/allocator/page_arena.h"
+#include "lib/container/ob_se_array.h"
 #include "lib/hash/ob_hashmap.h"
 #include "lib/utility/ob_macro_utils.h"
 #include "storage/fts/ik/ob_ik_token.h"
@@ -45,17 +46,15 @@ private:
 
   int add_chain(ObIKTokenChain *chain);
 
-  int optimize(TokenizeContext &ctx,
-               ObIKTokenChain *option,
+  int optimize(ObIKTokenChain *option,
                ObFTSortList::CellIter iter,
-               int64_t fulltext_len,
                ObIKTokenChain *&best);
 
   int try_add_next_words(ObIKTokenChain *chain,
                          ObFTSortList::CellIter iter,
                          ObIKTokenChain *option,
                          bool need_conflict,
-                         ObList<ObFTSortList::CellIter, ObIAllocator> &conflict_stack);
+                         common::ObSEArray<ObFTSortList::CellIter, 16> &conflict_stack);
 
   int remove_conflict(const ObIKToken &token, ObIKTokenChain *option);
 
@@ -64,6 +63,7 @@ private:
 private:
   ObArenaAllocator alloc_;
   hash::ObHashMap<int64_t, ObIKTokenChain *> chains_;
+  int64_t chain_bucket_count_;
 
 private:
   DISALLOW_COPY_AND_ASSIGN(ObIKArbitrator);

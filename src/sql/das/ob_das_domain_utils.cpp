@@ -46,6 +46,7 @@ ObFTIndexRowCache::ObFTIndexRowCache()
     document_memctx_(nullptr),
     rows_(),
     word_map_(),
+    word_map_bucket_count_(0),
     row_idx_(0),
     is_fts_index_aux_(true),
     helper_(),
@@ -75,8 +76,6 @@ int ObFTIndexRowCache::init(
     LOG_WARN("failed to create parser memory context", K(ret));
   } else if (OB_FAIL(CURRENT_CONTEXT->CREATE_CONTEXT(document_memctx_, document_param))) {
     LOG_WARN("failed to create document memory context", K(ret));
-  } else if (OB_FAIL(word_map_.create(997, common::ObMemAttr("FTWordMap")))) {
-    LOG_WARN("failed to create reusable fulltext word map", K(ret));
   } else if (OB_FAIL(helper_.init(&(parser_memctx_->get_arena_allocator()), parser_name, parser_properties))) {
     LOG_WARN("fail to init full-text parser helper", K(ret));
   } else {
@@ -99,6 +98,8 @@ int ObFTIndexRowCache::segment(const common::ObObjMeta &ft_obj_meta,
     ret = OB_NOT_INIT;
     LOG_WARN("ObFTIndexRowCache hasn't be initialized", K(ret), K(is_inited_));
   } else if (FALSE_IT(reuse())) {
+  } else if (OB_FAIL(prepare_word_map(fulltext.length()))) {
+    LOG_WARN("fail to prepare reusable fulltext word map", K(ret), K(fulltext.length()));
   } else if (OB_FAIL(ObDASDomainUtils::generate_fulltext_word_rows(document_memctx_->get_arena_allocator(),
                                                                    &helper_,
                                                                    ft_obj_meta,
@@ -135,6 +136,7 @@ void ObFTIndexRowCache::reset()
 {
   rows_.reset();
   word_map_.destroy();
+  word_map_bucket_count_ = 0;
   row_idx_ = 0;
   is_fts_index_aux_ = true;
   helper_.reset();
@@ -152,11 +154,49 @@ void ObFTIndexRowCache::reset()
 void ObFTIndexRowCache::reuse()
 {
   rows_.reuse();
-  word_map_.reuse();
+  if (word_map_.created()) {
+    word_map_.reuse();
+  }
   row_idx_ = 0;
   if (OB_NOT_NULL(document_memctx_)) {
     document_memctx_->reset_remain_one_page();
   }
+}
+
+int ObFTIndexRowCache::prepare_word_map(const int64_t fulltext_length)
+{
+  int ret = OB_SUCCESS;
+  static constexpr int64_t FT_MAX_WORD_BUCKET = 997;
+  static constexpr int64_t FT_MIN_WORD_BUCKET = 2;
+  int64_t target_bucket_count = 0;
+  if (OB_UNLIKELY(fulltext_length < 0)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid fulltext length", K(ret), K(fulltext_length));
+  } else if (0 == fulltext_length) {
+    // Empty documents do not need a word map.
+  } else {
+    const int64_t desired_bucket_count =
+        MIN(MAX(fulltext_length / 10, FT_MIN_WORD_BUCKET), FT_MAX_WORD_BUCKET);
+    if (word_map_.created()) {
+      word_map_bucket_count_ = word_map_.bucket_count();
+    }
+    if (!word_map_.created()) {
+      target_bucket_count = desired_bucket_count;
+    } else if (desired_bucket_count > word_map_bucket_count_) {
+      target_bucket_count = MIN(MAX(desired_bucket_count, word_map_bucket_count_ * 2),
+                                FT_MAX_WORD_BUCKET);
+      word_map_.destroy();
+      word_map_bucket_count_ = 0;
+    }
+    if (target_bucket_count > 0
+        && OB_FAIL(word_map_.create(target_bucket_count, common::ObMemAttr("FTWordMap")))) {
+      LOG_WARN("fail to create reusable fulltext word map", K(ret), K(target_bucket_count),
+          K(fulltext_length));
+    } else if (target_bucket_count > 0) {
+      word_map_bucket_count_ = target_bucket_count;
+    }
+  }
+  return ret;
 }
 
 int ObDASDomainUtils::generate_spatial_index_rows(

@@ -148,9 +148,7 @@ int ObIKFTParser::get_next_token(const char *&word,
         }
       } else {
         bool is_stop = false;
-        if (!OB_ISNULL(dict_stop_)
-            && OB_FAIL(dict_stop_->match(ObString(len, ctx_->normalized_fulltext() + offset),
-                                         is_stop))) {
+        if (OB_FAIL(match_stopword(output_word + offset, len, is_stop))) {
           LOG_WARN("Failed to match stopwords", K(ret));
         } else if (!is_stop) {
           word = output_word + offset;
@@ -164,6 +162,57 @@ int ObIKFTParser::get_next_token(const char *&word,
     }
   }
 
+  return ret;
+}
+
+int ObIKFTParser::match_stopword(const char *word,
+                                 const int64_t word_len,
+                                 bool &is_stopword)
+{
+  int ret = OB_SUCCESS;
+  const char *lookup_word = word;
+  int64_t uppercase_pos = 0;
+  is_stopword = false;
+  if (OB_ISNULL(word) || OB_UNLIKELY(word_len <= 0)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid stopword", K(ret), KP(word), K(word_len));
+  } else if (OB_ISNULL(dict_stop_)) {
+    // No stopword dictionary is configured.
+  } else {
+    while (uppercase_pos < word_len
+           && (word[uppercase_pos] < 'A' || word[uppercase_pos] > 'Z')) {
+      ++uppercase_pos;
+    }
+    if (uppercase_pos < word_len) {
+      if (word_len > normalized_token_capacity_) {
+        char *new_buffer = static_cast<char *>(allocator_.alloc(word_len));
+        if (OB_ISNULL(new_buffer)) {
+          ret = OB_ALLOCATE_MEMORY_FAILED;
+          LOG_WARN("failed to grow normalized token buffer", K(ret), K(word_len),
+              K(normalized_token_capacity_));
+        } else {
+          if (OB_NOT_NULL(normalized_token_)) {
+            allocator_.free(normalized_token_);
+          }
+          normalized_token_ = new_buffer;
+          normalized_token_capacity_ = word_len;
+        }
+      }
+      if (OB_SUCC(ret)) {
+        MEMCPY(normalized_token_, word, word_len);
+        for (int64_t index = uppercase_pos; index < word_len; ++index) {
+          if (normalized_token_[index] >= 'A' && normalized_token_[index] <= 'Z') {
+            normalized_token_[index] =
+                static_cast<char>(normalized_token_[index] + ('a' - 'A'));
+          }
+        }
+        lookup_word = normalized_token_;
+      }
+    }
+    if (OB_SUCC(ret) && OB_FAIL(dict_stop_->match(ObString(word_len, lookup_word), is_stopword))) {
+      LOG_WARN("failed to match stopword dictionary", K(ret), K(word_len));
+    }
+  }
   return ret;
 }
 
@@ -407,7 +456,6 @@ int ObIKFTParser::init_ctx(const ObFTParserParam &param)
   } else if (OB_ISNULL(ctx_ = OB_NEWx(TokenizeContext,
                                       &allocator_,
                                       coll_type_,
-                                      allocator_,
                                       param.fulltext_,
                                       param.ft_length_,
                                       param.ik_param_.mode_ == ObFTIKParam::Mode::SMART))) {
@@ -497,6 +545,12 @@ void ObIKFTParser::reset()
   cache_main_.reset();
   cache_quan_.reset();
   cache_stop_.reset();
+
+  if (OB_NOT_NULL(normalized_token_)) {
+    allocator_.free(normalized_token_);
+    normalized_token_ = nullptr;
+  }
+  normalized_token_capacity_ = 0;
 
   if (!OB_ISNULL(dict_main_)) {
     dict_main_->~ObIFTDict();

@@ -32,7 +32,6 @@ class TokenizeContext
 {
 public:
   TokenizeContext(ObCollationType coll_type,
-                  ObIAllocator &allocator,
                   const char *fulltext,
                   int64_t fulltext_len,
                   bool is_smart);
@@ -54,14 +53,13 @@ public:
   int current_char_type(ObFTCharUtil::CharType &type);
   int current_char_and_type(const char *&ch,
                             uint8_t &char_len,
-                            ObFTCharUtil::CharType &type) const;
+                            ObFTCharUtil::CharType &type);
 
   int step_next();
 
   ObCollationType collation() const;
   int64_t get_end_cursor() const;
   const char *fulltext() const;
-  const char *normalized_fulltext() const;
   int64_t fulltext_len() const;
   int64_t get_cursor() const;
 
@@ -84,13 +82,12 @@ public:
 
 private:
   int prepare_next_char();
+  const char *normalized_current_char();
 
-  ObIAllocator &allocator_;
   ObCollationType coll_type_;
   const char *fulltext_;
-  char *normalized_fulltext_;
   int64_t fulltext_len_;
-  int64_t normalized_capacity_;
+  char normalized_char_;
 
   int64_t cursor_;
   int64_t next_char_len_;

@@ -162,9 +162,7 @@ int ObIKTokenChain::copy(ObIKTokenChain *other)
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("other is null", K(ret));
   } else {
-    min_offset_ = other->min_offset_;
-    max_offset_ = other->max_offset_;
-    payload_ = other->payload_;
+    reset();
     ObFTSortList::CellIter iter = other->list().tokens().begin();
 
     for (; OB_SUCC(ret) && iter != other->list().tokens().end(); ++iter) {

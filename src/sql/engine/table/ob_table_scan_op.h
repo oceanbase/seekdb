@@ -722,8 +722,13 @@ private:
   int inner_rescan_for_tsc();
 
   int inner_get_next_fts_index_row();
+  int inner_get_next_fts_index_batch(const int64_t max_row_cnt);
   int fetch_next_fts_index_rows();
   int fill_generated_fts_cols(ObDatumRow *row);
+  int fill_generated_fts_cols(const ObStorageDatum *datums);
+  int fill_generated_fts_col_vectors();
+  int init_generated_fts_col_vectors(const int64_t batch_size);
+  int mark_generated_fts_cols_evaluated(const int64_t batch_size);
   int get_output_fts_col_expr_by_type(const ObExprOperatorType &type, ObExpr *&expr);
   bool is_resume_point_saved();
 protected:

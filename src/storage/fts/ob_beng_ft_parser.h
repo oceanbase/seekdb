@@ -35,6 +35,7 @@ public:
 public:
   explicit ObBEngFTParser(common::ObIAllocator &allocator)
       : allocator_(allocator),
+      document_allocator_(nullptr),
       analysis_ctx_(),
       english_analyzer_(),
       doc_(),
@@ -59,6 +60,7 @@ private:
       share::ObITokenStream *&token_stream);
 private:
   common::ObIAllocator &allocator_;
+  common::ObIAllocator *document_allocator_;
   share::ObTextAnalysisCtx analysis_ctx_;
   share::ObEnglishTextAnalyzer english_analyzer_;
   common::ObDatum doc_;
