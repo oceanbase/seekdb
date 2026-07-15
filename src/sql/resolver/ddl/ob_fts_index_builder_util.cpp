@@ -2334,6 +2334,12 @@ int ObFtsIndexBuilderUtil::check_supportability_for_loader_key(const ObString &p
         case ObCharsetType::CHARSET_UTF8MB4: {
           break;
         }
+        case ObCharsetType::CHARSET_UTF16: {
+          break;
+        }
+        case ObCharsetType::CHARSET_UTF16LE: {
+          break;
+        }
         default: {
           ret = OB_NOT_SUPPORTED;
           LOG_USER_ERROR(OB_NOT_SUPPORTED, "the charset is");

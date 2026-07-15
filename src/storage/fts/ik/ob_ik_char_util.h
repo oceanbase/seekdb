@@ -381,6 +381,14 @@ inline int ObFTCharUtil::check_cn_number(ObCollationType coll_type,
     ret = ObFTCharUtil::is_cn_number<CHARSET_UTF8MB4>(input, char_len, is_cn_number);
     break;
   }
+  case CHARSET_UTF16: {
+    ret = ObFTCharUtil::is_cn_number<CHARSET_UTF16>(input, char_len, is_cn_number);
+    break;
+  }
+  case CHARSET_UTF16LE: {
+    ret = ObFTCharUtil::is_cn_number<CHARSET_UTF16LE>(input, char_len, is_cn_number);
+    break;
+  }
   default:
     ret = OB_NOT_SUPPORTED;
     STORAGE_FTS_LOG(WARN, "Not supported charset type", K(ret), K(cs_type));
@@ -399,6 +407,14 @@ inline int ObFTCharUtil::check_num_connector(ObCollationType coll_type,
   switch (cs_type) {
   case CHARSET_UTF8MB4: {
     ret = ObFTCharUtil::is_num_connector<CHARSET_UTF8MB4>(input, char_len, is_connector);
+    break;
+  }
+  case CHARSET_UTF16: {
+    ret = ObFTCharUtil::is_num_connector<CHARSET_UTF16>(input, char_len, is_connector);
+    break;
+  }
+  case CHARSET_UTF16LE: {
+    ret = ObFTCharUtil::is_num_connector<CHARSET_UTF16LE>(input, char_len, is_connector);
     break;
   }
   default:
@@ -423,6 +439,14 @@ inline int ObFTCharUtil::check_letter_connector(ObCollationType coll_type,
     ret = ObFTCharUtil::is_letter_connector<CHARSET_UTF8MB4>(input, char_len, is_connector);
     break;
   }
+  case CHARSET_UTF16: {
+    ret = ObFTCharUtil::is_letter_connector<CHARSET_UTF16>(input, char_len, is_connector);
+    break;
+  }
+  case CHARSET_UTF16LE: {
+    ret = ObFTCharUtil::is_letter_connector<CHARSET_UTF16LE>(input, char_len, is_connector);
+    break;
+  }
   default:
     ret = OB_NOT_SUPPORTED;
     STORAGE_FTS_LOG(WARN, "Not supported charset type", K(ret), K(cs_type));
@@ -441,6 +465,14 @@ inline int ObFTCharUtil::is_ignore_single_cjk(ObCollationType coll_type,
   switch (cs_type) {
   case CHARSET_UTF8MB4: {
     ret = ObFTCharUtil::is_ignore<CHARSET_UTF8MB4>(input, char_len, ignore);
+    break;
+  }
+  case CHARSET_UTF16: {
+    ret = ObFTCharUtil::is_ignore<CHARSET_UTF16>(input, char_len, ignore);
+    break;
+  }
+  case CHARSET_UTF16LE: {
+    ret = ObFTCharUtil::is_ignore<CHARSET_UTF16LE>(input, char_len, ignore);
     break;
   }
   default:
