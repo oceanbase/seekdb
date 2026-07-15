@@ -26,6 +26,8 @@ namespace storage
 ObSRMergeCmp::ObSRMergeCmp()
   : cmp_func_(nullptr),
     iter_ids_(nullptr),
+    iter_id_data_(nullptr),
+    use_binary_string_cmp_(false),
     is_inited_(false)
 {
 }
@@ -36,8 +38,14 @@ int ObSRMergeCmp::init(ObDatumMeta id_meta, const ObFixedArray<const ObDatum *, 
   if (OB_ISNULL(iter_ids)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected nullptr", K(ret), KP(iter_ids));
+  } else if (OB_UNLIKELY(iter_ids->empty())) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("unexpected empty iter ids", K(ret));
   } else {
     iter_ids_ = iter_ids;
+    iter_id_data_ = &iter_ids_->at(0);
+    use_binary_string_cmp_ = ObDatumFuncs::is_string_type(id_meta.type_)
+        && CS_TYPE_BINARY == id_meta.cs_type_;
     sql::ObExprBasicFuncs *basic_funcs = ObDatumFuncs::get_basic_func(id_meta.type_, id_meta.cs_type_);
     cmp_func_ = basic_funcs->null_first_cmp_;
     if (OB_ISNULL(cmp_func_)) {
@@ -60,11 +68,20 @@ int ObSRMergeCmp::cmp(
     ret = OB_NOT_INIT;
     LOG_WARN("not inited", K(ret));
   } else {
-    int tmp_ret = 0;
-    if (OB_FAIL(cmp_func_(get_id_datum(l.iter_idx_), get_id_datum(r.iter_idx_), tmp_ret))) {
-      LOG_WARN("failed to compare doc id by datum", K(ret));
+    const ObDatum &l_id = get_id_datum(l.iter_idx_);
+    const ObDatum &r_id = get_id_datum(r.iter_idx_);
+    if (use_binary_string_cmp_ && 0 == l_id.null_ && 0 == r_id.null_) {
+      const int64_t min_len = MIN(l_id.len_, r_id.len_);
+      const int byte_cmp = min_len > 0 ? MEMCMP(l_id.ptr_, r_id.ptr_, min_len) : 0;
+      cmp_ret = byte_cmp > 0 ? 1 : (byte_cmp < 0 ? -1
+          : (l_id.len_ > r_id.len_ ? 1 : (l_id.len_ < r_id.len_ ? -1 : 0)));
     } else {
-      cmp_ret = tmp_ret;
+      int tmp_ret = 0;
+      if (OB_FAIL(cmp_func_(l_id, r_id, tmp_ret))) {
+        LOG_WARN("failed to compare doc id by datum", K(ret));
+      } else {
+        cmp_ret = tmp_ret;
+      }
     }
   }
   return ret;
