@@ -17,6 +17,7 @@
 #ifndef OCEANBASE_SQL_ENGINE_SORT_OB_SQL_SORT_RESOURCE_MANAGER_H_
 #define OCEANBASE_SQL_ENGINE_SORT_OB_SQL_SORT_RESOURCE_MANAGER_H_
 
+#include "sql/engine/sort/ob_ddl_sort_provider.h"
 #include "sql/engine/sort/ob_sort_resource_manager.h"
 
 namespace oceanbase
@@ -49,9 +50,15 @@ public:
                                  const bool is_ddl,
                                  int64_t &merge_ways)
   {
-    const int64_t min_merge_buffer_size = is_ddl ? get_ddl_merge_buffer_size() : 0;
-    return calc_merge_ways(sql_mem_processor, mem_context, max_ways,
-                           min_merge_buffer_size, merge_ways);
+    return is_ddl ? ObDDLSortProvider::calc_merge_ways(sql_mem_processor,
+                                                       mem_context,
+                                                       max_ways,
+                                                       merge_ways)
+                  : calc_merge_ways(sql_mem_processor,
+                                    mem_context,
+                                    max_ways,
+                                    0/*min_merge_buffer_size*/,
+                                    merge_ways);
   }
 };
 

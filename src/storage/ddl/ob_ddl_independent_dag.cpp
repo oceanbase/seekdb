@@ -322,6 +322,12 @@ int ObDDLIndependentDag::add_pipeline(
     if (OB_FAIL(add_vector_index_append_pipeline(index_type, tablet_context, ddl_slice))) {
       LOG_WARN("add vector index pipeline failed", K(ret));
     }
+  } else if (share::schema::is_fts_index_aux(index_type) ||
+             share::schema::is_fts_doc_word_aux(index_type)) {
+    ObFullTextIndexWritePipeline *pipeline = nullptr;
+    if (OB_FAIL(add_pipeline(tablet_context, ddl_slice, pipeline))) {
+      LOG_WARN("fail to add fulltext index write pipeline", K(ret), KPC(ddl_slice), K(index_type));
+    }
   } else {
     ObDDLMemoryFriendWriteMacroBlockPipeline *pipeline = nullptr;
     if (OB_FAIL(add_pipeline(tablet_context, ddl_slice, pipeline))) {

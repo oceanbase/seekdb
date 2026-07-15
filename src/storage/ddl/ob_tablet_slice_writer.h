@@ -347,4 +347,3 @@ private:
 }// namespace oceanbase
 
 #endif//_STORAGE_DDL_OB_TABLET_SLICE_WRITER_
-

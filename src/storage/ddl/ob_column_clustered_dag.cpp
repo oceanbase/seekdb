@@ -59,8 +59,14 @@ int ObColumnClusteredDag::init_by_param(const share::ObIDagInitParam *param)
     is_inited_ = true;
 
     ObArray<ObITask *> write_macro_block_tasks;
-    if (OB_FAIL(generate_write_macro_block_tasks(write_macro_block_tasks))) {
+    if (is_fts_aux_build()) {
+      if (OB_FAIL(generate_partition_local_fixed_tasks(write_macro_block_tasks))) {
+        LOG_WARN("fail to generate fts partition local fixed tasks", KR(ret));
+      }
+    } else if (OB_FAIL(generate_write_macro_block_tasks(write_macro_block_tasks))) {
       LOG_WARN("fail to generate write macro block tasks", KR(ret));
+    }
+    if (OB_FAIL(ret)) {
     } else if (OB_FAIL(batch_add_task(write_macro_block_tasks))) {
       LOG_WARN("batch add task failed", K(ret), K(write_macro_block_tasks.count()));
     }
@@ -82,6 +88,73 @@ int ObColumnClusteredDag::set_px_finished()
     }
   }
   FLOG_INFO("set px finished", K(px_finished_count_), K(px_thread_count_));
+  return ret;
+}
+
+bool ObColumnClusteredDag::is_fts_aux_build() const
+{
+  const ObIndexType index_type = ddl_table_schema_.table_item_.index_type_;
+  return share::schema::is_fts_index_aux(index_type)
+      || share::schema::is_fts_doc_word_aux(index_type);
+}
+
+int ObColumnClusteredDag::generate_partition_local_fixed_tasks(
+    ObIArray<ObITask *> &tasks,
+    ObITask *next_task)
+{
+  int ret = OB_SUCCESS;
+  tasks.reset();
+  ObDDLScanTask *scan_task = nullptr;
+  if (IS_NOT_INIT) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("ObColumnClusteredDag not init", KR(ret), KP(this));
+  } else if (is_incremental_direct_load(direct_load_type_)) {
+    ret = OB_NOT_SUPPORTED;
+    LOG_WARN("fts partition local fixed tasks only support full direct load", KR(ret), K_(direct_load_type));
+  } else if (OB_FAIL(alloc_task(scan_task))) {
+    LOG_WARN("fail to alloc scan task", KR(ret));
+  } else if (OB_FAIL(scan_task->init(this))) {
+    LOG_WARN("fail to init scan task", KR(ret));
+  } else if (OB_FAIL(tasks.push_back(scan_task))) {
+    LOG_WARN("fail to push scan task", KR(ret));
+  }
+
+  for (int64_t i = 0; OB_SUCC(ret) && i < ls_tablet_ids_.count(); ++i) {
+    const ObTabletID &tablet_id = ls_tablet_ids_.at(i).second;
+    ObGroupWriteMacroBlockTask *group_write_task = nullptr;
+    ObITask *data_merge_task = nullptr;
+    ObITask *lob_merge_task = nullptr;
+    if (OB_FAIL(alloc_task(group_write_task))) {
+      LOG_WARN("fail to alloc fts group write task", KR(ret), K(tablet_id));
+    } else if (OB_FAIL(group_write_task->init(this, tablet_id))) {
+      LOG_WARN("fail to init fts group write task", KR(ret), K(tablet_id));
+    } else if (OB_FAIL(init_tablet_merge_task(tablet_id, true/*for_major*/, data_merge_task, lob_merge_task))) {
+      LOG_WARN("fail to init fts tablet merge task", KR(ret), K(tablet_id));
+    } else if (OB_ISNULL(data_merge_task)) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("unexpected null fts data merge task", KR(ret), K(tablet_id));
+    } else if (OB_FAIL(tasks.push_back(group_write_task))) {
+      LOG_WARN("fail to push fts group write task", KR(ret), K(tablet_id));
+    } else if (OB_FAIL(tasks.push_back(data_merge_task))) {
+      LOG_WARN("fail to push fts data merge task", KR(ret), K(tablet_id));
+    } else if (nullptr != lob_merge_task && OB_FAIL(tasks.push_back(lob_merge_task))) {
+      LOG_WARN("fail to push fts lob merge task", KR(ret), K(tablet_id));
+    } else if (OB_FAIL(scan_task->add_child(*group_write_task))) {
+      LOG_WARN("fail to link scan to fts group write task", KR(ret), K(tablet_id));
+    } else if (OB_FAIL(group_write_task->add_child(*data_merge_task))) {
+      LOG_WARN("fail to link fts group write to data merge task", KR(ret), K(tablet_id));
+    } else if (nullptr != lob_merge_task && OB_FAIL(group_write_task->add_child(*lob_merge_task))) {
+      LOG_WARN("fail to link fts group write to lob merge task", KR(ret), K(tablet_id));
+    } else if (nullptr != next_task) {
+      if (OB_FAIL(data_merge_task->add_child(*next_task))) {
+        LOG_WARN("fail to link fts data merge to next task", KR(ret), K(tablet_id));
+      } else if (nullptr != lob_merge_task && OB_FAIL(lob_merge_task->add_child(*next_task))) {
+        LOG_WARN("fail to link fts lob merge to next task", KR(ret), K(tablet_id));
+      }
+    }
+  }
+  LOG_INFO("generate fts partition local fixed tasks", KR(ret), K(tasks.count()), K(ls_tablet_ids_.count()),
+           K(ddl_table_schema_.table_item_.index_type_));
   return ret;
 }
 
@@ -160,4 +233,3 @@ int ObColumnClusteredDag::update_tablet_range_count()
   }
   return ret;
 }
-

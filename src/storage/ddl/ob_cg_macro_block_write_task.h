@@ -187,6 +187,15 @@ protected:
   ObDAGCGMacroBlockWriteOp macro_write_op_;
 };
 
+class ObFullTextIndexWritePipeline final : public ObDDLMemoryFriendWriteMacroBlockPipeline
+{
+public:
+  ObFullTextIndexWritePipeline()
+    : ObDDLMemoryFriendWriteMacroBlockPipeline(TASK_TYPE_DDL_WRITE_USING_TMP_FILE_PIPELINE)
+  {}
+  virtual ~ObFullTextIndexWritePipeline() = default;
+};
+
 
 class ObBatchDatumRowsWriteOp : public ObPipelineOperator
 {
@@ -229,4 +238,3 @@ protected:
 } // end namespace oceanbase
 
 #endif//OCEANBASE_STORAGE_DDL_OB_CG_MACRO_BLOCK_WRITE_TASK_H_
-

@@ -47,12 +47,16 @@ public:
 
   int set_px_finished();
   int update_tablet_range_count();
+  int generate_partition_local_fixed_tasks(common::ObIArray<share::ObITask *> &tasks,
+                                           share::ObITask *next_task = nullptr);
   int64_t get_total_slice_count() const { return total_slice_count_; }
   virtual bool is_scan_finished() override { return px_thread_count_ > 0 && px_finished_count_ >= px_thread_count_; }
 
   INHERIT_TO_STRING_KV("DDLDag", ObDDLIndependentDag, K_(px_thread_count), K_(px_finished_count), K_(is_range_count_ready), K_(total_slice_count), K_(use_static_plan));
 
 protected:
+  bool is_fts_aux_build() const;
+
   int64_t px_thread_count_;
   int64_t px_finished_count_;
   lib::ObMutex mutex_;

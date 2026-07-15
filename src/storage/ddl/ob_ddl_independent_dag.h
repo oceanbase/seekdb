@@ -99,6 +99,7 @@ protected:
       const ObIndexType &index_type,
       const ObIArray<std::pair<share::ObLSID, ObTabletID>> &ls_tablet_ids,
       ObIArray<share::ObITask *> &vector_index_task_array);
+  int init_tablet_merge_task(const ObTabletID &tablet_id, const bool for_major, share::ObITask *&data_merge_task, share::ObITask *&lob_merge_task);
 private:
   int init_ddl_table_schema();
   int init_tablet_context_map();
@@ -109,9 +110,6 @@ private:
   template<typename T>
   int add_pipeline(ObDDLTabletContext *tablet_context, ObDDLSlice *ddl_slice, T *&pipeline);
 
-  // for_major: true means full direct load, false means inc major
-  //          : In ss mode, for inc major direct load, 'for_major' is also true.
-  int init_tablet_merge_task(const ObTabletID &tablet_id, const bool for_major, share::ObITask *&data_merge_task, share::ObITask *&lob_merge_task);
   int init_merge_tasks(bool for_major, ObArray<share::ObITask*> &data_merge_tasks, ObArray<share::ObITask*> &lob_merge_tasks);
   int check_is_first_ddl_kv(bool &is_first);
   int check_is_first_ddl_kv(ObTabletDDLKvMgr &ddl_kv_mgr, bool &is_first);
