@@ -36,6 +36,7 @@
 #include "storage/fts/ik/ob_ik_quantifier_processor.h"
 #include "storage/fts/ik/ob_ik_surrogate_processor.h"
 #include "plugin/sys/ob_plugin_mgr.h"
+#include "share/inner_table/ob_inner_table_schema_constants.h"
 
 using namespace oceanbase::plugin;
 
@@ -43,6 +44,15 @@ namespace oceanbase
 {
 namespace storage
 {
+
+static bool is_builtin_ik_dict_name(const common::ObString &name)
+{
+  return (name.empty() ||
+          0 == name.case_compare("oceanbase.__ft_dict_ik_utf8") ||
+          0 == name.case_compare("oceanbase.__ft_quantifier_ik_utf8") ||
+          0 == name.case_compare("oceanbase.__ft_stopword_ik_utf8"));
+}
+
 int ObIKFTParser::init(const ObFTParserParam &param)
 {
   int ret = OB_SUCCESS;
@@ -278,17 +288,26 @@ int ObIKFTParser::init_dict(const plugin::ObFTParserParam &param)
   }
 
   ObFTRangeDict *dict = nullptr;
-  ObFTDictDesc main_dict_desc(param.ik_param_.main_dict_,
+  common::ObString main_dict_name = param.ik_param_.main_dict_;
+  common::ObString quan_dict_name = param.ik_param_.quan_dict_;
+  common::ObString stopword_dict_name = param.ik_param_.stopword_dict_;
+  // built-in dicts delivered as "oceanbase.__ft_*": reset to empty so
+  // build_cache_from_ik_dict takes the in-code dict_text() path.
+  if (is_builtin_ik_dict_name(main_dict_name)) { main_dict_name.reset(); }
+  if (is_builtin_ik_dict_name(quan_dict_name)) { quan_dict_name.reset(); }
+  if (is_builtin_ik_dict_name(stopword_dict_name)) { stopword_dict_name.reset(); }
+
+  ObFTDictDesc main_dict_desc(main_dict_name,
                               ObFTDictType::DICT_IK_MAIN,
                               ObCharsetType::CHARSET_UTF8MB4,
                               ObCollationType::CS_TYPE_UTF8MB4_BIN);
 
-  ObFTDictDesc quan_dict_desc(param.ik_param_.quan_dict_,
+  ObFTDictDesc quan_dict_desc(quan_dict_name,
                               ObFTDictType::DICT_IK_QUAN,
                               ObCharsetType::CHARSET_UTF8MB4,
                               ObCollationType::CS_TYPE_UTF8MB4_BIN);
 
-  ObFTDictDesc stopword_dict_desc(param.ik_param_.stopword_dict_,
+  ObFTDictDesc stopword_dict_desc(stopword_dict_name,
                                   ObFTDictType::DICT_IK_STOP,
                                   ObCharsetType::CHARSET_UTF8MB4,
                                   ObCollationType::CS_TYPE_UTF8MB4_BIN);
@@ -298,10 +317,19 @@ int ObIKFTParser::init_dict(const plugin::ObFTParserParam &param)
   } else {
     if (OB_FAIL(init_single_dict(main_dict_desc, cache_main_))) {
       LOG_WARN("Failed to init main dict", K(ret));
-    } else if (OB_FAIL(init_single_dict(quan_dict_desc, cache_quan_))) {
-      LOG_WARN("Failed to init quantifier dict", K(ret));
-    } else if (OB_FAIL(init_single_dict(stopword_dict_desc, cache_stop_))) {
-      LOG_WARN("Failed to init stopword dict", K(ret));
+    }
+    // quan / stopword dicts are optional — IK works with main dict alone.
+    if (OB_SUCC(ret) && !quan_dict_name.empty()) {
+      if (OB_FAIL(init_single_dict(quan_dict_desc, cache_quan_))) {
+        LOG_WARN("Failed to init quantifier dict, ignored", K(ret));
+        ret = OB_SUCCESS;
+      }
+    }
+    if (OB_SUCC(ret) && !stopword_dict_name.empty()) {
+      if (OB_FAIL(init_single_dict(stopword_dict_desc, cache_stop_))) {
+        LOG_WARN("Failed to init stopword dict, ignored", K(ret));
+        ret = OB_SUCCESS;
+      }
     }
   }
 
@@ -309,10 +337,16 @@ int ObIKFTParser::init_dict(const plugin::ObFTParserParam &param)
     // already logged.
   } else if (OB_FAIL(build_dict_from_cache(main_dict_desc, cache_main_, dict_main_))) {
     LOG_WARN("Failed to build dict main", K(ret));
-  } else if (OB_FAIL(build_dict_from_cache(quan_dict_desc, cache_quan_, dict_quan_))) {
-    LOG_WARN("Failed to build dict quantifier", K(ret));
-  } else if (OB_FAIL(build_dict_from_cache(stopword_dict_desc, cache_stop_, dict_stop_))) {
-    LOG_WARN("Failed to build dict stopword", K(ret));
+  } else if (FALSE_IT(dict_quan_ = nullptr)) {
+  } else if (!quan_dict_desc.name_.empty()
+             && OB_FAIL(build_dict_from_cache(quan_dict_desc, cache_quan_, dict_quan_))) {
+    LOG_WARN("Failed to build dict quantifier, ignored", K(ret));
+    ret = OB_SUCCESS;
+  } else if (FALSE_IT(dict_stop_ = nullptr)) {
+  } else if (!stopword_dict_desc.name_.empty()
+             && OB_FAIL(build_dict_from_cache(stopword_dict_desc, cache_stop_, dict_stop_))) {
+    LOG_WARN("Failed to build dict stopword, ignored", K(ret));
+    ret = OB_SUCCESS;
   }
 
   return ret;
@@ -369,33 +403,37 @@ int ObIKFTParser::init_segmenter(const ObFTParserParam &param)
   if (OB_ISNULL(letter_seg = OB_NEWx(ObIKLetterProcessor, &allocator_))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("Failed to alloc letter segmenter", K(ret));
-  } else if (OB_ISNULL(dict_quan_)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("Dict quan is null.", K(ret));
-  } else if (OB_ISNULL(cnqsg = OB_NEWx(ObIKQuantifierProcessor, &allocator_, *dict_quan_, allocator_))) {
-    ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("Failed to alloc cn quantifier segmenter", K(ret));
-  } else if (OB_ISNULL(dict_main_)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("Dict main is null.", K(ret));
-  } else if (OB_ISNULL(cjksg = OB_NEWx(ObIKCJKProcessor, &allocator_, *dict_main_, allocator_))) {
-    ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("Failed to alloc cjk segmenter", K(ret));
-  } else if (OB_ISNULL(surrogate_seg = OB_NEWx(ObIKSurrogateProcessor, &allocator_))) {
-    ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("Failed to alloc surrogate segmenter", K(ret));
-  } else if (OB_FAIL(segmenters_.push_back(letter_seg))) {
-    LOG_WARN("Failed to push back letter segmenter", K(ret));
-  } else if (FALSE_IT(letter_seg = nullptr)) {
-  } else if (OB_FAIL(segmenters_.push_back(cnqsg))) {
-    LOG_WARN("Failed to push back cn quantifier segmenter", K(ret));
-  } else if (FALSE_IT(cnqsg = nullptr)) {
-  } else if (OB_FAIL(segmenters_.push_back(cjksg))) {
-    LOG_WARN("Failed to push back cjk segmenter", K(ret));
-  } else if (FALSE_IT(cjksg = nullptr)) {
-  } else if (OB_FAIL(segmenters_.push_back(surrogate_seg))) {
-    LOG_WARN("Failed to push back surrogate segmenter");
-  } else if (OB_FALSE_IT(surrogate_seg = nullptr)) {
+  }
+  // quantifier segmenter is optional — skip it safely when dict_quan_ is null
+  if (OB_SUCC(ret) && OB_NOT_NULL(dict_quan_)) {
+    if (OB_ISNULL(cnqsg = OB_NEWx(ObIKQuantifierProcessor, &allocator_, *dict_quan_, allocator_))) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+      LOG_WARN("Failed to alloc cn quantifier segmenter", K(ret));
+    } else if (OB_FAIL(segmenters_.push_back(cnqsg))) {
+      LOG_WARN("Failed to push back cn quantifier segmenter", K(ret));
+    } else if (OB_FALSE_IT(cnqsg = nullptr)) {
+    }
+  }
+  if (OB_SUCC(ret)) {
+    if (OB_ISNULL(dict_main_)) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("Dict main is null.", K(ret));
+    } else if (OB_ISNULL(cjksg = OB_NEWx(ObIKCJKProcessor, &allocator_, *dict_main_, allocator_))) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+      LOG_WARN("Failed to alloc cjk segmenter", K(ret));
+    } else if (OB_ISNULL(surrogate_seg = OB_NEWx(ObIKSurrogateProcessor, &allocator_))) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+      LOG_WARN("Failed to alloc surrogate segmenter", K(ret));
+    } else if (OB_FAIL(segmenters_.push_back(letter_seg))) {
+      LOG_WARN("Failed to push back letter segmenter", K(ret));
+    } else if (FALSE_IT(letter_seg = nullptr)) {
+    } else if (OB_FAIL(segmenters_.push_back(cjksg))) {
+      LOG_WARN("Failed to push back cjk segmenter", K(ret));
+    } else if (FALSE_IT(cjksg = nullptr)) {
+    } else if (OB_FAIL(segmenters_.push_back(surrogate_seg))) {
+      LOG_WARN("Failed to push back surrogate segmenter");
+    } else if (OB_FALSE_IT(surrogate_seg = nullptr)) {
+    }
   }
   // push back by order, quantifier is before cjk
 
