@@ -50,6 +50,7 @@ enum table_type : int8_t {
   OB_XML_TABLE = 2,
   OB_RB_ITERATE_TABLE = 3,
   OB_UNNEST_TABLE = 4,
+  OB_AI_SPLIT_DOCUMENT_TABLE = 5,
 };
 
 typedef enum JtNodeType {
@@ -166,6 +167,10 @@ struct JtScanCtx {
 
   bool is_unnest_table_func() {
     return spec_ptr_->table_type_ == OB_UNNEST_TABLE_TYPE;
+  }
+
+  bool is_ai_split_document_table_func() {
+    return spec_ptr_->table_type_ == OB_AI_SPLIT_DOCUMENT_TABLE_TYPE;
   }
 
   ObJsonTableSpec* spec_ptr_;
@@ -330,6 +335,32 @@ public:
   int reset_path_iter(ObRegCol &scan_node, void* in, JtScanCtx*& ctx, ScanType init_flag, bool &is_null_value);
   int get_iter_value(ObRegCol &col_node, JtScanCtx* ctx, bool &is_null_value);
   int reset_ctx(ObRegCol &scan_node, JtScanCtx*& ctx);
+};
+
+class AiSplitDocumentTableFunc : public MulModeTableFunc {
+public:
+  struct Chunk {
+    int64_t id_;
+    int64_t offset_;
+    int64_t length_;
+    ObString text_;
+  };
+
+  AiSplitDocumentTableFunc()
+      : MulModeTableFunc(), chunks_(), current_chunk_(0) {}
+  ~AiSplitDocumentTableFunc() {}
+
+  int init_ctx(ObRegCol &scan_node, JtScanCtx*& ctx);
+  int eval_input(ObJsonTableOp &jt, JtScanCtx& ctx, ObEvalCtx &eval_ctx);
+  int reset_path_iter(ObRegCol &scan_node, void* in, JtScanCtx*& ctx,
+                      ScanType init_flag, bool &is_null_value);
+  int get_iter_value(ObRegCol &col_node, JtScanCtx* ctx, bool &is_null_value);
+  int reset_ctx(ObRegCol &scan_node, JtScanCtx*& ctx);
+  int eval_column(ObRegCol &col_node, JtScanCtx *ctx, ObExpr *col_expr);
+
+private:
+  common::ObSEArray<Chunk, 8> chunks_;
+  int64_t current_chunk_;
 };
 
 class ObMultiModeTableNode {

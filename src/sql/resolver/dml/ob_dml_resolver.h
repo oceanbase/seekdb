@@ -212,6 +212,10 @@ public:
   int resolve_rb_iterate_item(const ParseNode &table_node,
                               TableItem *&table_item);
   int resolve_unnest_item(const ParseNode &table_node, TableItem *&table_item);
+  int resolve_ai_split_document_item(const ParseNode &table_node, TableItem *&table_item);
+  int create_ai_split_document_table_item(TableItem *&table_item, ObString table_name);
+  int ai_split_document_table_add_column(TableItem *&table_item, ColumnItem *&col_item,
+                                         ObString col_name, ObObjType data_type);
   int create_rb_iterate_table_item(TableItem *&table_item, ObString alias_name = NULL);
   int create_unnest_table_item(TableItem *&table_item, ObItemType item_type, ObString table_name);
   int rb_iterate_table_add_column(TableItem *&table_item, ColumnItem *&col_item, int64_t col_id = 1);
