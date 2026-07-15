@@ -34,17 +34,26 @@ namespace storage
 int ObIIKProcessor::process(TokenizeContext &ctx)
 {
   int ret = OB_SUCCESS;
-
-  ObFTCharUtil::CharType type;
   const char *ch = nullptr;
   uint8_t char_len = 0;
+  ObFTCharUtil::CharType type = ObFTCharUtil::CharType::USELESS;
 
-  if (OB_FAIL(ctx.current_char_type(type))) {
-    LOG_WARN("fail to get current char type", K(ret));
-  } else if (OB_FAIL(ctx.current_char(ch, char_len))) {
-    LOG_WARN("Fail to get current char", K(ret));
-  } else if (OB_FAIL(do_process(ctx, ch, char_len, type))) {
-    LOG_WARN("Failed to do process char", K(ret));
+  if (OB_FAIL(ctx.current_char_and_type(ch, char_len, type))) {
+    LOG_WARN("fail to get current char and type", K(ret));
+  } else if (OB_FAIL(process(ctx, ch, char_len, type))) {
+    LOG_WARN("failed to process current char", K(ret));
+  }
+  return ret;
+}
+
+int ObIIKProcessor::process(TokenizeContext &ctx,
+                            const char *ch,
+                            const uint8_t char_len,
+                            const ObFTCharUtil::CharType type)
+{
+  int ret = OB_SUCCESS;
+  if (OB_FAIL(do_process(ctx, ch, char_len, type))) {
+    LOG_WARN("failed to do process char", K(ret));
   }
   return ret;
 }
@@ -103,19 +112,33 @@ int TokenizeContext::current_char_type(ObFTCharUtil::CharType &type)
   return ret;
 }
 
+int TokenizeContext::current_char_and_type(const char *&ch,
+                                           uint8_t &char_len,
+                                           ObFTCharUtil::CharType &type)
+{
+  int ret = OB_SUCCESS;
+  if (cursor_ >= fulltext_len_) {
+    ret = OB_ITER_END;
+  } else {
+    ch = fulltext_ + cursor_;
+    char_len = next_char_len_;
+    type = next_char_type_;
+  }
+  return ret;
+}
+
 int TokenizeContext::prepare_next_char()
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(ObCharset::first_valid_char(coll_type_,
-                                          fulltext_ + cursor_,
-                                          fulltext_len_ - cursor_,
-                                          next_char_len_))) {
-    LOG_WARN("Failed to get first valid char, ", K(ret));
-  } else if (OB_FAIL(ObFTCharUtil::classify_first_char(coll_type_,
-                                                       fulltext_ + cursor_,
-                                                       next_char_len_,
-                                                       next_char_type_))) {
-    LOG_WARN("Failed to classify first char", K(ret));
+  int64_t char_len = 0;
+  if (OB_FAIL(ObFTCharUtil::classify_first_valid_char(coll_type_,
+                                                      fulltext_ + cursor_,
+                                                      fulltext_len_ - cursor_,
+                                                      char_len,
+                                                      next_char_type_))) {
+    LOG_WARN("failed to classify first valid char", K(ret));
+  } else {
+    next_char_len_ = static_cast<uint8_t>(char_len);
   }
   return ret;
 }

@@ -1,0 +1,6 @@
+#ifndef OCEANBASE_SHARE_TABLE_OB_TABLE_LOAD_ROW_ARRAY_WRAPPER_H_
+#define OCEANBASE_SHARE_TABLE_OB_TABLE_LOAD_ROW_ARRAY_WRAPPER_H_
+
+#include "observer/table_load/ob_table_load_row_array.h"
+
+#endif

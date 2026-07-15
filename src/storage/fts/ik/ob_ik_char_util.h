@@ -52,6 +52,12 @@ public:
                                  const uint8_t char_len,
                                  CharType &type);
 
+  static int classify_first_valid_char(ObCollationType coll_type,
+                                       const char *input,
+                                       const int64_t input_len,
+                                       int64_t &char_len,
+                                       CharType &type);
+
   static int check_cn_number(ObCollationType coll_type,
                              const char *input,
                              const uint8_t char_len,
@@ -510,6 +516,28 @@ inline int ObFTCharUtil::classify_first_char(ObCollationType coll_type,
     ret = OB_NOT_SUPPORTED;
     STORAGE_FTS_LOG(WARN, "Not supported charset type", K(ret), K(cs_type));
     break;
+  }
+  return ret;
+}
+
+inline int ObFTCharUtil::classify_first_valid_char(ObCollationType coll_type,
+                                                   const char *input,
+                                                   const int64_t input_len,
+                                                   int64_t &char_len,
+                                                   CharType &type)
+{
+  int ret = OB_SUCCESS;
+  char_len = 0;
+  if (OB_ISNULL(input) || OB_UNLIKELY(input_len <= 0)) {
+    ret = OB_INVALID_ARGUMENT;
+    STORAGE_FTS_LOG(WARN, "invalid argument", K(ret), KP(input), K(input_len));
+  } else if (OB_FAIL(ObCharset::first_valid_char(coll_type, input, input_len, char_len))) {
+    STORAGE_FTS_LOG(WARN, "failed to get first valid char", K(ret), KP(input), K(input_len));
+  } else if (OB_UNLIKELY(char_len <= 0 || char_len > UINT8_MAX)) {
+    ret = OB_ERR_UNEXPECTED;
+    STORAGE_FTS_LOG(WARN, "unexpected valid char length", K(ret), K(char_len));
+  } else if (OB_FAIL(classify_first_char(coll_type, input, static_cast<uint8_t>(char_len), type))) {
+    STORAGE_FTS_LOG(WARN, "failed to classify first char", K(ret), K(char_len));
   }
   return ret;
 }
