@@ -80,12 +80,13 @@ int ObTextRetrievalTokenIter::init(const ObTextRetrievalScanIterParam &iter_para
       OB_ISNULL(inv_scan_domain_id_col_) || OB_ISNULL(allocator_) || OB_ISNULL(mem_context_.ref_context())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("inv_idx_scan_iter or eval_ctx is NULL", K(ret), K_(inv_idx_scan_iter), KPC_(eval_ctx), KPC_(inv_idx_scan_param), KP(allocator_), KP(mem_context_.ref_context()));
-  } else if (!need_calc_relevance()) {
-  } else if (OB_ISNULL(relevance_expr_) || OB_ISNULL(inv_idx_agg_expr_) || OB_ISNULL(inv_idx_agg_iter_)) {
+  } else if (need_calc_relevance()
+      && (OB_ISNULL(relevance_expr_) || OB_ISNULL(inv_idx_agg_expr_) || OB_ISNULL(inv_idx_agg_iter_))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected null relevance expr", K(ret), KPC_(relevance_expr), KPC_(inv_idx_agg_expr), KPC_(inv_idx_agg_iter));
-  } else if (!need_fwd_idx_agg() && (OB_ISNULL(inv_scan_doc_length_col_))) {
-  } else if (need_fwd_idx_agg() && (OB_ISNULL(fwd_idx_agg_iter_) || OB_ISNULL(fwd_idx_agg_expr_) || OB_ISNULL(fwd_idx_scan_param_))) {
+  } else if (need_calc_relevance() && !need_fwd_idx_agg() && OB_ISNULL(inv_scan_doc_length_col_)) {
+  } else if (need_calc_relevance() && need_fwd_idx_agg()
+      && (OB_ISNULL(fwd_idx_agg_iter_) || OB_ISNULL(fwd_idx_agg_expr_) || OB_ISNULL(fwd_idx_scan_param_))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("fwd_idx_agg_iter or fwd_idx_agg_expr is NULL", K(ret), K_(fwd_idx_agg_iter), KPC_(fwd_idx_agg_expr), KPC_(fwd_idx_scan_param));
   } else if (OB_FAIL(init_calc_exprs_in_relevance_expr())) {
@@ -370,7 +371,9 @@ int ObTextRetrievalTokenIter::get_next_row()
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     LOG_WARN("retrieval token iterator not inited", K(ret));
-  } else if (!token_doc_cnt_calculated_ && OB_FAIL(estimate_token_doc_cnt())) {
+  } else if (need_calc_relevance()
+      && !token_doc_cnt_calculated_
+      && OB_FAIL(estimate_token_doc_cnt())) {
     LOG_WARN("failed to estimate token doc cnt", K(ret));
   } else if (OB_FAIL(inv_idx_scan_iter_->get_next_row())) {
     if (OB_UNLIKELY(OB_ITER_END != ret)) {
@@ -455,7 +458,9 @@ int ObTextRetrievalTokenIter::get_next_batch(const int64_t capacity, int64_t &co
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     LOG_WARN("retrieval token iterator not inited", K(ret));
-  } else if (!token_doc_cnt_calculated_ && OB_FAIL(estimate_token_doc_cnt())) {
+  } else if (need_calc_relevance()
+      && !token_doc_cnt_calculated_
+      && OB_FAIL(estimate_token_doc_cnt())) {
     LOG_WARN("failed to estimate token doc cnt", K(ret));
   } else if (OB_FAIL(inv_idx_scan_iter_->get_next_rows(count, OB_MIN(max_batch_size_, capacity)))) {
     if (OB_UNLIKELY(OB_ITER_END != ret)) {
@@ -882,6 +887,10 @@ int ObTextRetrievalDaaTTokenIter::get_curr_score(double &score) const
     LOG_WARN("array index out of bounds", K(ret), K_(cur_idx), K_(count));
   } else if (relevance_expr_) {
     score = relevance_[cur_idx_];
+  } else {
+    // The merge iterator still needs a positive presence marker for natural
+    // language and boolean matching when BM25 scoring is not requested.
+    score = 1.0;
   }
   return ret;
 }

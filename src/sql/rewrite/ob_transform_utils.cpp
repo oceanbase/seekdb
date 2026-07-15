@@ -14829,6 +14829,47 @@ int ObTransformUtils::inner_check_need_calc_match_score(ObExecContext *exec_ctx,
   return ret;
 }
 
+int ObTransformUtils::check_need_calc_match_score(ObExecContext *exec_ctx,
+                                                  const ObDMLStmt *stmt,
+                                                  ObRawExpr *match_expr,
+                                                  bool &need_calc,
+                                                  ObIArray<ObExprConstraint> &constraints)
+{
+  int ret = OB_SUCCESS;
+  ObSEArray<ObRawExpr *, 16> relation_exprs;
+  need_calc = true;
+  if (OB_ISNULL(exec_ctx) || OB_ISNULL(stmt) || OB_ISNULL(match_expr)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument", K(ret), KP(exec_ctx), KP(stmt), KP(match_expr));
+  } else if (stmt->has_limit()) {
+    // Natural-language MATCH with LIMIT may use relevance-ordered Top-K even
+    // when the score is not part of the select list.
+  } else if (OB_FAIL(stmt->get_relation_exprs(relation_exprs))) {
+    LOG_WARN("failed to get statement relation expressions", K(ret));
+  } else {
+    need_calc = false;
+    for (int64_t i = 0; OB_SUCC(ret) && !need_calc && i < relation_exprs.count(); ++i) {
+      ObRawExpr *expr = relation_exprs.at(i);
+      bool expr_need_calc = false;
+      if (OB_ISNULL(expr)) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("unexpected null relation expression", K(ret), K(i));
+      } else if (!expr->has_flag(CNT_MATCH_EXPR) && expr != match_expr) {
+        // This expression tree cannot reference MATCH.
+      } else if (OB_FAIL(inner_check_need_calc_match_score(exec_ctx,
+                                                          expr,
+                                                          match_expr,
+                                                          expr_need_calc,
+                                                          constraints))) {
+        LOG_WARN("failed to check whether MATCH score is required", K(ret), KPC(expr));
+      } else if (expr_need_calc) {
+        need_calc = true;
+      }
+    }
+  }
+  return ret;
+}
+
 int ObTransformUtils::check_expr_eq_zero(ObExecContext *ctx,
                                          ObRawExpr *expr, 
                                          bool &eq_zero, 
