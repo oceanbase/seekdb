@@ -9233,6 +9233,37 @@ int ObDMLResolver::resolve_function_table_column_item_sys_func(const TableItem &
   CK (OB_NOT_NULL(table_expr = table_item.function_table_expr_));
   OZ (table_expr->deduce_type(session_info_));
   if (OB_FAIL(ret)) { // do nothing ...
+  } else if (T_FUN_SYS_AI_SPLIT_DOCUMENT == table_expr->get_expr_type()) {
+    common::ObObjMeta int_meta;
+    common::ObObjMeta text_meta;
+    common::ObAccuracy int_accuracy = common::ObAccuracy::DDL_DEFAULT_ACCURACY[common::ObIntType];
+    common::ObAccuracy text_accuracy = common::ObAccuracy::DDL_DEFAULT_ACCURACY[common::ObVarcharType];
+    int_meta.set_int();
+    text_meta.set_varchar();
+    text_meta.set_collation_type(CS_TYPE_UTF8MB4_BIN);
+    const ObString col_names[] = {
+      ObString::make_string("chunk_id"),
+      ObString::make_string("chunk_offset"),
+      ObString::make_string("chunk_length"),
+      ObString::make_string("chunk_text")
+    };
+    const common::ObObjMeta metas[] = {int_meta, int_meta, int_meta, text_meta};
+    const common::ObAccuracy accuracies[] = {int_accuracy, int_accuracy, int_accuracy, text_accuracy};
+    for (int64_t i = 0; OB_SUCC(ret) && i < 4; ++i) {
+      col_item = NULL;
+      if (NULL != (col_item = stmt->get_column_item(table_item.table_id_, col_names[i]))) {
+        // exist, ignore resolve
+      } else {
+        OZ(resolve_function_table_column_item(table_item,
+                                              metas[i],
+                                              accuracies[i],
+                                              col_names[i],
+                                              OB_APP_MIN_COLUMN_ID + i,
+                                              col_item));
+      }
+      CK(OB_NOT_NULL(col_item));
+      OZ(col_items.push_back(*col_item));
+    }
   } else if (!ObResolverUtils::is_expr_can_be_used_in_table_function(*table_expr)) {
     ret = OB_NOT_SUPPORTED;
     LOG_USER_ERROR(OB_NOT_SUPPORTED, "access rows from a non-nested table item");

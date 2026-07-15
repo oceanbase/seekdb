@@ -460,6 +460,7 @@ static const NonReservedKeyword Mysql_none_reserved_keywords[] =
   {"json_query", JSON_QUERY},
   {"json_value", JSON_VALUE},
   {"json_table", JSON_TABLE},
+  {"ai_split_document", AI_SPLIT_DOCUMENT},
   {"key", KEY},
   {"keys", KEYS},
   {"keytab", KEYTAB},
