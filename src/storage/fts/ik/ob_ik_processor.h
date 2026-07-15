@@ -20,6 +20,7 @@
 #include "lib/allocator/ob_allocator.h"
 #include "lib/charset/ob_charset.h"
 #include "lib/utility/ob_macro_utils.h"
+#include "storage/fts/ik/ob_fast_segment_array.h"
 #include "storage/fts/ik/ob_ik_char_util.h"
 #include "storage/fts/ik/ob_ik_token.h"
 
@@ -69,6 +70,7 @@ public:
   bool is_last() const;
   bool iter_end() const;
   bool is_smart() const;
+  bool is_results_exhausted() const;
 
   int add_chain(ObIKTokenChain *chain);
   int add_token(const char *fulltext,
@@ -77,9 +79,9 @@ public:
                 int64_t char_cnt,
                 ObIKTokenType type);
 
-  ObFTSortList &token_list() { return token_list_; }
+  ObFTFastSortList &token_list() { return token_list_; }
 
-  ObList<ObIKToken, ObIAllocator> &result_list() { return result_list_; }
+  ObFastSegmentArray<ObIKToken, IK_TOKEN_BLOCK_CAPACITY> &get_results() { return results_; }
 
   int32_t handle_size() const { return handle_size_; }
 
@@ -100,8 +102,9 @@ private:
   uint32_t handle_size_;
   bool is_smart_;
 
-  ObFTSortList token_list_;
-  ObList<ObIKToken, ObIAllocator> result_list_;
+  ObFTFastSortList token_list_;
+  ObFastSegmentArray<ObIKToken, IK_TOKEN_BLOCK_CAPACITY> results_;
+  int64_t result_idx_;
 
 private:
   DISALLOW_COPY_AND_ASSIGN(TokenizeContext);

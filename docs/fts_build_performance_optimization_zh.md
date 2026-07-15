@@ -1,15 +1,17 @@
-# 全文索引构建性能优化：第一阶段实现与验证
+# 全文索引构建性能优化：Parser 热路径实现与验证
 
-本文对应当前 `task.md` 的全文索引构建性能优化任务，记录本轮已经落地的 parser 热路径优化、实现原因、调用链、构建与测试方法、性能结果，以及尚未移植的上游架构改造。
+本文对应当前 `task.md` 的全文索引构建性能优化任务，记录已经落地的 parser 热路径和 IK token 容器优化、实现原因、调用链、构建与测试方法、性能结果，以及尚未移植的上游架构改造。
 
 ## 1. 当前结论
 
-本轮完成的是任务六大方向中的第一阶段：
+当前完成的是任务六大方向中“分词器/解析器热路径优化”的前两批：
 
 - 合并 IK 逐字符读取与字符分类，缓存字符集信息和 `well_formed_len` 函数指针。
 - 让内置 `space`、`ngram`、`ngram2`、`beng`、`ik` parser iterator 在同一个 `ObFTParseHelper` 中跨文档复用。
 - 为 parser 元数据和逐行 DML 临时内存建立独立生命周期，避免 parser 被逐行 allocator 回收。
 - IK parser 复用字典、processor、context 和 `ObIKArbitrator`；IK 和 BEng 使用逐文档 scratch arena。
+- 新增 `ObFastSegmentArray` 和 `ObFastList`，分别承载 IK 顺序结果和需要排序插入的候选 token 链。
+- batch/文档切换使用 `reuse()` 保留已分配 block，仅在 parser 析构时执行 `reset()`。
 - 完整 `seekdb` 目标通过 `/Werror` 编译和链接，模块向上依赖为 0。
 - IK、space、ngram、ngram2、BEng 连续多行构建回归通过，自定义 IK 词典和动态刷新回归通过。
 
@@ -94,9 +96,10 @@ allocator_.reuse();
 
 ### 4.3 scratch 内存
 
-只增加长期 allocator 会让临时 token 节点随文档数量增长，因此还需要逐文档 scratch：
+只增加长期 allocator 会让普通临时节点随文档数量增长，因此还需要逐文档 scratch：
 
-- IK 的 token/result list、CJK 命中链和量词命中链使用 `IKScratch`。
+- IK 的 CJK 命中链和量词命中链使用 `IKScratch`。
+- IK 的 Fast token/result block 使用 parser 长期 allocator，并在 batch 间复用；不能放进会逐文档 `reuse()` 的 scratch arena，否则保留的 block 指针会失效。
 - BEng analyzer 和 token 缓冲使用 `BEngScratch`。
 - 复用前先清空持有 scratch 指针的容器，再执行 `scratch_allocator_.reuse()`。
 
@@ -110,13 +113,27 @@ allocator_.reuse();
 - 清空映射后再 `alloc_.reuse()`，回收本批次 token chain。
 - 下一批继续使用同一仲裁器。
 
-## 5. 为什么没有保留自定义 FastList
+## 5. IK token 容器优化
 
-本轮曾实现分块数组和索引式双向链表，并替换 IK token/result list。正确性测试通过，但实测 `TOKENIZE(ik)` 从约 `1.02 ms` 退化到约 `1.30 ms`。
+### 5.1 早期失败实现为什么被撤销
 
-原因是当前 IK token 链通常很短，索引式链表每次迭代需要额外的 block/index 间接访问；早期版本还在 batch 边界调用了 `reset()`，没有真正保留 block。该实现已撤销，不把“类名符合任务描述”当成性能优化成功。
+早期曾使用“数组索引代替指针”的自定义双向链表，同时把所有结果和 token 链都替换成该结构。正确性测试通过，但 `TOKENIZE(ik)` 从约 `1.02 ms` 退化到约 `1.30 ms`。原因包括短链迭代增加 block/index 间接访问、结果集不适合链表，以及 batch 边界调用 `reset()` 没有保留 block。该版本已撤销。
 
-上游 OceanBase 的正式实现将 result 改为 `ObFastSegmentArray`，排序链使用独立的 `ObFastList`，并配套调整 reset/reuse 语义。若继续移植，应以对应上游提交为准，而不是恢复本轮被否决的版本。
+### 5.2 当前实现
+
+当前实现按上游设计区分两种访问模式：
+
+```text
+分词 processor 产生候选 token
+  -> ObFastList：支持按 offset 排序插入和头部弹出
+  -> ObIKArbitrator：歧义裁决短链继续使用原 ObList
+  -> ObFastSegmentArray：按输出顺序连续追加结果
+  -> result_idx_：通过下标消费结果，不再逐项 pop_front
+```
+
+`ObFastSegmentArray` 使用 2 的幂块容量，通过位移和掩码完成 O(1) 定位；`reuse()` 只把元素数归零。`ObFastList` 的节点来自该分块数组，链表仍用指针保持双向迭代语义，但不再为每个节点单独向 allocator 申请内存。
+
+当前 seekdb 的常见短文本明显短于上游默认批次，因此 IK 专用 block 取 64 个 token，block 指针数组初始容量取 4；超过容量时仍自动按倍数扩容。这个本分支适配避免一次性 `TOKENIZE()` 为短文本预分配过大的首块，同时不影响 FTS 构建时跨文档复用。
 
 ## 6. 性能结果
 
@@ -132,6 +149,20 @@ allocator_.reuse();
 
 `TOKENIZE(ik)` 最终热测约 `1.0232 ms`，与基线一致。原因是 `TOKENIZE()` 表达式每次求值会创建局部 helper，不能体现跨文档 parser 复用；它主要用于验证字符热路径没有稳定退化。
 
+第二批容器优化使用相同的 5000 行数据再次测试：
+
+| 指标 | 第一批样本均值 | 容器样本 1 | 容器样本 2 | 容器样本均值 |
+| --- | ---: | ---: | ---: | ---: |
+| raw load | 0.3806s | 0.3865s | 0.3211s | 0.3538s |
+| IK 双列索引 | 8.2395s | 8.3104s | 7.5559s | 7.9332s |
+| IK 单列索引 | 5.9864s | 5.7640s | 4.8893s | 5.3267s |
+| BEng 双列索引 | 3.8134s | 3.9307s | 3.3169s | 3.6238s |
+| 三个索引合计 | 18.0393s | 18.0051s | 15.7621s | 16.8836s |
+
+两个容器样本都没有相对第一批回退，样本均值约改善 6.4%。Windows 本机后台状态会显著影响绝对值，因此这里主要用于拒绝负优化，不把单机样本当作跨环境性能承诺。
+
+`TOKENIZE(ik)` 经过充分预热后的五组测试中，后四组为 `0.79-0.85 ms`，中位数约 `0.84 ms`，没有复现早期自定义链表的稳定退化。
+
 ## 7. 已执行的正确性验证
 
 - 完整 `seekdb.exe` 编译和链接成功。
@@ -143,6 +174,7 @@ allocator_.reuse();
 - space、ngram、ngram2、BEng 各连续写入 100 行通过。
 - 5000 行 IK/BEng 三索引构建重复两次通过。
 - MATCH 命中数与基线一致：中文 2001，BEng 2750。
+- `ObFastSegmentArray`/`ObFastList` 的 64 token 边界和自动扩容路径由 100 行多 parser 写入及 5000 行索引构建覆盖。
 
 ## 8. 本地构建和运行
 
@@ -190,7 +222,7 @@ ROWS=5000 BATCH=500 ROUNDS=1000 QUERY_ROUNDS=100 SAMPLES=3 \
 
 后续应按依赖顺序分批移植：
 
-1. 上游 parser 容器、`ObFTTokenProcessor` 和 stop-token checker，并重新做 A/B。
+1. `ObFTTokenProcessor` 和 stop-token checker，并重新做 A/B。
 2. SQL/storage 共享排序组件和 resource manager。
 3. DDL sort provider、merge sort task 和 FTS sample/write pipeline。
 4. position list codec、SQL 表达式和五列辅助表布局。
