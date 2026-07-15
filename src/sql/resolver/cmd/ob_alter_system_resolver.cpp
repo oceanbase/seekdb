@@ -1145,6 +1145,54 @@ int ObRefreshMemStatResolver::resolve(const ParseNode &parse_tree)
   return ret;
 }
 
+int ObRefreshFulltextDictResolver::resolve(const ParseNode &parse_tree)
+{
+  int ret = OB_SUCCESS;
+  ObRefreshFulltextDictStmt *stmt = nullptr;
+  const ObTableSchema *table_schema = nullptr;
+  ObString database_name;
+  ObString table_name;
+  if (OB_ISNULL(session_info_) || OB_ISNULL(schema_checker_)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("session info or schema checker is null", K(ret),
+             KP(session_info_), KP(schema_checker_));
+  } else if (OB_UNLIKELY(T_REFRESH_FULLTEXT_DICT != parse_tree.type_
+                         || 1 != parse_tree.num_child_
+                         || OB_ISNULL(parse_tree.children_)
+                         || OB_ISNULL(parse_tree.children_[0]))) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("invalid refresh fulltext dict parse tree", K(ret),
+             K(parse_tree.type_), K(parse_tree.num_child_));
+  } else if (OB_ISNULL(stmt = create_stmt<ObRefreshFulltextDictStmt>())) {
+    ret = OB_ALLOCATE_MEMORY_FAILED;
+    LOG_ERROR("create ObRefreshFulltextDictStmt failed", K(ret));
+  } else if (FALSE_IT(stmt_ = stmt)) {
+  } else if (OB_FAIL(resolve_table_relation_node(parse_tree.children_[0],
+                                                 table_name,
+                                                 database_name))) {
+    LOG_WARN("failed to resolve fulltext dictionary table name", K(ret));
+  } else if (OB_FAIL(schema_checker_->get_table_schema(database_name,
+                                                       table_name,
+                                                       false,
+                                                       table_schema))) {
+    LOG_WARN("failed to get fulltext dictionary table schema", K(ret),
+             K(database_name), K(table_name));
+  } else if (OB_ISNULL(table_schema)) {
+    ret = OB_TABLE_NOT_EXIST;
+    LOG_WARN("fulltext dictionary table does not exist", K(ret),
+             K(database_name), K(table_name));
+  } else if (!table_schema->is_fulltext_dict()) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("target table is not a fulltext dictionary table", K(ret),
+             K(database_name), K(table_name));
+    LOG_USER_ERROR(OB_INVALID_ARGUMENT, "FULLTEXT DICT table");
+  } else {
+    stmt->set_database_id(table_schema->get_database_id());
+    stmt->set_table_id(table_schema->get_table_id());
+  }
+  return ret;
+}
+
 int ObWashMemFragmentationResolver::resolve(const ParseNode &parse_tree)
 {
   int ret = OB_SUCCESS;

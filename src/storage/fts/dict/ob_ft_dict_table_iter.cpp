@@ -107,6 +107,60 @@ int ObFTDictTableIter::init(const ObString &table_name)
   return ret;
 }
 
+int ObFTDictTableIter::init(ObISQLClient &sql_client,
+                            const ObString &database_name,
+                            const ObString &table_name)
+{
+  int ret = OB_SUCCESS;
+  if (IS_INIT) {
+    ret = OB_INIT_TWICE;
+    LOG_WARN("Inited twice.", K(ret));
+  } else if (database_name.empty() || table_name.empty()) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("Invalid dictionary table name", K(ret), K(database_name), K(table_name));
+  } else {
+    // The names have already passed SQL name resolution.  Reject backticks
+    // here so that quoting them below cannot change the statement structure.
+    for (int64_t i = 0; OB_SUCC(ret) && i < database_name.length(); ++i) {
+      if ('`' == database_name.ptr()[i]) {
+        ret = OB_INVALID_ARGUMENT;
+      }
+    }
+    for (int64_t i = 0; OB_SUCC(ret) && i < table_name.length(); ++i) {
+      if ('`' == table_name.ptr()[i]) {
+        ret = OB_INVALID_ARGUMENT;
+      }
+    }
+    SMART_VAR(ObSqlString, sql_string)
+    {
+      if (OB_FAIL(ret)) {
+      } else if (OB_FAIL(sql_string.append_fmt("SELECT word FROM `%.*s`.`%.*s` ORDER BY word",
+                                               database_name.length(), database_name.ptr(),
+                                               table_name.length(), table_name.ptr()))) {
+        LOG_WARN("Failed to build dictionary query", K(ret));
+      } else if (OB_FAIL(sql_client.read(res_, sql_string.ptr()))) {
+        LOG_WARN("Failed to execute dictionary query", K(ret), K(database_name), K(table_name));
+      }
+    }
+
+    if (OB_FAIL(ret)) {
+      // already logged
+    } else if (OB_ISNULL(res_.get_result())) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("Failed to get result", K(ret));
+    } else if (OB_FAIL(res_.get_result()->next())) {
+      if (OB_ITER_END != ret) {
+        LOG_WARN("Failed to get next row", K(ret));
+      } else {
+        is_inited_ = true;
+      }
+    } else {
+      is_inited_ = true;
+    }
+  }
+  return ret;
+}
+
 void ObFTDictTableIter::reset()
 {
   res_.close();

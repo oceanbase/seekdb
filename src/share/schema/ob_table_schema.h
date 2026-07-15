@@ -343,7 +343,7 @@ private:
   static const int32_t TM_DDL_IGNORE_SYNC_CDC_BITS = 1;
   static const int32_t TM_TABLE_ORGANIZATION_MODE_OFFSET = 30;
   static const int32_t TM_TABLE_ORGANIZATION_MODE_BITS = 1;
-  static const int32_t TM_RESERVED = 1;
+  static const int32_t TM_FULLTEXT_DICT_BITS = 1;
 
   static const uint32_t MODE_FLAG_MASK = (1U << TM_MODE_FLAG_BITS) - 1;
   static const uint32_t PK_MODE_MASK = (1U << TM_PK_MODE_BITS) - 1;
@@ -428,6 +428,10 @@ public:
   {
       return (ObMVOnQueryComputationFlag)((table_mode >> TM_MV_ON_QUERY_COMPUTATION_OFFSET) & MV_ON_QUERY_COMPUTATION_MASK);
   }
+  inline void set_fulltext_dict(const bool is_fulltext_dict)
+  { fulltext_dict_ = is_fulltext_dict ? 1 : 0; }
+  inline bool is_fulltext_dict() const
+  { return 1 == fulltext_dict_; }
   inline bool is_user_hidden_table() const
   { return TABLE_STATE_IS_HIDDEN_MASK & state_flag_; }
   TO_STRING_KV("table_mode_flag", mode_flag_,
@@ -444,7 +448,8 @@ public:
                "mv_enable_query_rewrite_flag", mv_enable_query_rewrite_flag_,
                "mv_on_query_computation_flag", mv_on_query_computation_flag_,
                "ddl_table_ignore_sync_cdc_flag", ddl_table_ignore_sync_cdc_flag_,
-               "table_organization_mode", table_organization_mode_);
+               "table_organization_mode", table_organization_mode_,
+               "fulltext_dict", fulltext_dict_);
   union {
     int32_t mode_;
     struct {
@@ -465,7 +470,7 @@ public:
       uint32_t ddl_table_ignore_sync_cdc_flag_ : TM_DDL_IGNORE_SYNC_CDC_BITS;
       // heap_organization_mode_ will indicate whether the table is index organized(0) or heap organized(1)
       uint32_t table_organization_mode_: TM_TABLE_ORGANIZATION_MODE_BITS;
-      uint32_t reserved_ : TM_RESERVED;
+      uint32_t fulltext_dict_ : TM_FULLTEXT_DICT_BITS;
     };
   };
 };
@@ -830,6 +835,10 @@ public:
   inline int32_t get_table_mode() const { return table_mode_.mode_; }
   inline void set_table_mode_struct(const ObTableMode table_mode) { table_mode_ = table_mode; }
   virtual inline ObTableMode get_table_mode_struct() const override { return table_mode_; }
+  inline void set_fulltext_dict(const bool is_fulltext_dict)
+  { table_mode_.set_fulltext_dict(is_fulltext_dict); }
+  inline bool is_fulltext_dict() const
+  { return table_mode_.is_fulltext_dict(); }
   inline ObTableModeFlag get_table_mode_flag() const
   { return (ObTableModeFlag)table_mode_.mode_flag_; }
   inline ObTablePKMode get_table_pk_mode() const

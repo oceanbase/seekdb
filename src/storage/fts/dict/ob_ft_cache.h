@@ -36,10 +36,11 @@ namespace storage
 class ObDictCacheKey : public common::ObIKVCacheKey
 {
 public:
-  ObDictCacheKey(const uint64_t name,
+  ObDictCacheKey(const uint64_t cache_id,
                  const ObFTDictType dict_type,
+                 const int64_t version,
                  int32_t range_id)
-      : name_(name), dict_type_(dict_type), range_id_(range_id)
+      : cache_id_(cache_id), dict_type_(dict_type), version_(version), range_id_(range_id)
   {
   }
   ~ObDictCacheKey() override {}
@@ -48,14 +49,18 @@ public:
   {
     const ObDictCacheKey &other_key = reinterpret_cast<const ObDictCacheKey &>(other);
     return (&other == this)
-           || ((other_key.name_ == name_) && (other_key.dict_type_ == dict_type_));
+           || (other_key.cache_id_ == cache_id_
+               && other_key.dict_type_ == dict_type_
+               && other_key.version_ == version_
+               && other_key.range_id_ == range_id_);
   }
 
   uint64_t hash() const override
   {
     uint64_t hash_val = 0;
-    hash_val = murmurhash(&name_, sizeof(name_), hash_val);
+    hash_val = murmurhash(&cache_id_, sizeof(cache_id_), hash_val);
     hash_val = murmurhash(&dict_type_, sizeof(dict_type_), hash_val);
+    hash_val = murmurhash(&version_, sizeof(version_), hash_val);
     hash_val = murmurhash(&range_id_, sizeof(range_id_), hash_val);
     return hash_val;
   }
@@ -80,17 +85,17 @@ public:
       ret = OB_INVALID_ARGUMENT;
       CLOG_LOG(WARN, "invalid argument for ob dict cache", K(ret), K(buf_len), K(size()));
     } else {
-      ObDictCacheKey *new_key = new (buf) ObDictCacheKey(name_, dict_type_, range_id_);
+      ObDictCacheKey *new_key = new (buf) ObDictCacheKey(cache_id_, dict_type_, version_, range_id_);
       key = new_key;
     }
     return ret;
   }
 
-  TO_STRING_KV(K_(name), K_(dict_type), K_(range_id));
+  TO_STRING_KV(K_(cache_id), K_(dict_type), K_(version), K_(range_id));
 private:
-  // to change to name
-  uint64_t name_; // when build dict
+  uint64_t cache_id_;
   ObFTDictType dict_type_;
+  int64_t version_;
   int32_t range_id_;
 };
 

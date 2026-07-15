@@ -2453,6 +2453,40 @@ int ObDDLResolver::resolve_table_option(const ParseNode *option_node, const bool
         }
         break;
       }
+      case T_FULLTEXT_DICT: {
+        if (is_index_option) {
+          ret = OB_NOT_SUPPORTED;
+          SQL_RESV_LOG(WARN, "FULLTEXT_DICT cannot be specified as an index option", KR(ret));
+          LOG_USER_ERROR(OB_NOT_SUPPORTED, "FULLTEXT_DICT as an index option");
+        } else if (stmt::T_CREATE_TABLE != stmt_->get_stmt_type()) {
+          ret = OB_NOT_SUPPORTED;
+          SQL_RESV_LOG(WARN, "FULLTEXT_DICT is only supported in CREATE TABLE", KR(ret));
+          LOG_USER_ERROR(OB_NOT_SUPPORTED, "FULLTEXT_DICT outside CREATE TABLE");
+        } else if (OB_ISNULL(option_node->children_)
+                   || 1 != option_node->num_child_
+                   || OB_ISNULL(option_node->children_[0])
+                   || OB_ISNULL(option_node->children_[0]->str_value_)) {
+          ret = OB_ERR_UNEXPECTED;
+          SQL_RESV_LOG(WARN, "invalid FULLTEXT_DICT parse node", KR(ret),
+                       K(option_node->num_child_));
+        } else {
+          ObString fulltext_dict_value(
+              static_cast<int32_t>(option_node->children_[0]->str_len_),
+              option_node->children_[0]->str_value_);
+          fulltext_dict_value = fulltext_dict_value.trim_space_only();
+          if (0 == fulltext_dict_value.case_compare("Y")) {
+            table_mode_.set_fulltext_dict(true);
+          } else if (0 == fulltext_dict_value.case_compare("N")) {
+            table_mode_.set_fulltext_dict(false);
+          } else {
+            ret = OB_INVALID_ARGUMENT;
+            SQL_RESV_LOG(WARN, "FULLTEXT_DICT only accepts Y or N", KR(ret),
+                         K(fulltext_dict_value));
+            LOG_USER_ERROR(OB_INVALID_ARGUMENT, "FULLTEXT_DICT");
+          }
+        }
+        break;
+      }
       default: {
         /* won't be here */
         ret = OB_ERR_UNEXPECTED;

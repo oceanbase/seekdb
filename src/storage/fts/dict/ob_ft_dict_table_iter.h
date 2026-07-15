@@ -38,6 +38,9 @@ public:
 
 public:
   int init(const ObString &table_name);
+  int init(common::ObISQLClient &sql_client,
+           const ObString &database_name,
+           const ObString &table_name);
 
 private:
   void reset();
