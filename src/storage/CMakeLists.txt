@@ -654,6 +654,14 @@ ob_set_subtarget(ob_storage ddl
   ddl/ob_cg_macro_block_write_op.cpp
   ddl/ob_cg_row_tmp_file.cpp
   ddl/ob_writer_args_struct.cpp
+  ddl/ob_ddl_encode_sortkey_utils.cpp
+  ddl/ob_ddl_sort_provider.cpp
+  ddl/ob_ddl_merge_sort_task.cpp
+  ddl/ob_fts_sample_pipeline.cpp
+  ddl/ob_merge_sort_prepare_task.cpp
+  ddl/ob_full_text_index_write_task.cpp
+  ddl/ob_fts_macro_block_write_op.cpp
+  ddl/ob_final_merge_sort_write_task.cpp
   ddl/ob_ddl_merge_task_utils.cpp
   ddl/ob_ddl_merge_task_v2.cpp
   ddl/ob_ddl_merge_helper.cpp

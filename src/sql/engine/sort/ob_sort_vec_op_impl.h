@@ -31,7 +31,7 @@
 #include "sql/engine/sort/ob_sort_vec_op_store_row_factory.h"
 #include "sql/engine/sort/ob_sort_vec_strategy.h"
 #include "sql/engine/sort/ob_sort_vec_dump_strategy.h"
-#include "sql/engine/sort/ob_sql_sort_resource_manager.h"
+#include "sql/engine/sort/ob_ddl_sort_provider.h"
 #include "sql/engine/sort/ob_external_merge_sorter.h"
 #include "sql/engine/expr/ob_array_expr_utils.h"
 #include "share/config/ob_tenant_config_mgr.h"
@@ -307,18 +307,20 @@ protected:
     if (!is_inited()) {
       ret = OB_NOT_INIT;
       SQL_ENG_LOG(WARN, "not init", K(ret));
-    } else if (OB_ISNULL(
-                 chunk = OB_NEWx(SortVecOpChunk, (&mem_context_->get_malloc_allocator()), level))) {
+    } else if (OB_ISNULL(chunk = OB_NEWx(SortVecOpChunk,
+                                         (&mem_context_->get_malloc_allocator()),
+                                         level,
+                                         *(&mem_context_->get_malloc_allocator())))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
       SQL_ENG_LOG(WARN, "allocate memory failed", K(ret));
     } else if (OB_FAIL(init_temp_row_store(*sk_exprs_, 1, eval_ctx_->max_batch_size_, true,
                                            true /*enable dump*/, Store_Row::get_extra_size(true), compress_type_,
-                                           chunk->sk_store_))) {
+                                           chunk->get_sk_store()))) {
       SQL_ENG_LOG(WARN, "failed to init temp row store", K(ret));
     } else if (has_addon
                && OB_FAIL(init_temp_row_store(
                     *addon_exprs_, 1, eval_ctx_->max_batch_size_, true, true /*enable dump*/,
-                    Store_Row::get_extra_size(false), compress_type_, chunk->addon_store_))) {
+                    Store_Row::get_extra_size(false), compress_type_, chunk->get_addon_store()))) {
       SQL_ENG_LOG(WARN, "failed to init temp row store", K(ret));
     } else {
       while (OB_SUCC(ret)) {
@@ -331,11 +333,11 @@ protected:
             ret = OB_SUCCESS;
           }
           break;
-        } else if (OB_FAIL(chunk->sk_store_.add_row(SK_CONST_UPCAST_P(sort_key_row), dst_sk_row))) {
+        } else if (OB_FAIL(chunk->get_sk_store().add_row(SK_CONST_UPCAST_P(sort_key_row), dst_sk_row))) {
           SQL_ENG_LOG(WARN, "copy row to row store failed");
         } else if (has_addon
-                   && OB_FAIL(chunk->addon_store_.add_row(SK_CONST_UPCAST_P(addon_field_row),
-                                                          dst_addon_row))) {
+                   && OB_FAIL(chunk->get_addon_store().add_row(SK_CONST_UPCAST_P(addon_field_row),
+                                                               dst_addon_row))) {
           SQL_ENG_LOG(WARN, "copy row to row store failed");
         } else {
           stored_row_cnt++;
@@ -348,29 +350,25 @@ protected:
       // Must force dump first, then finish dump is effective
       if (OB_FAIL(ret)) {
       } else if (has_addon
-                 && (chunk->sk_store_.get_row_cnt() != chunk->addon_store_.get_row_cnt())) {
+                 && (chunk->get_sk_store().get_row_cnt() != chunk->get_addon_store().get_row_cnt())) {
         ret = OB_ERR_UNEXPECTED;
         SQL_ENG_LOG(WARN, "the number of rows in sort key store and addon store is expected to be equal",
-          K(chunk->sk_store_.get_row_cnt()), K(chunk->addon_store_.get_row_cnt()), K(ret));
-      } else if (OB_FAIL(chunk->sk_store_.dump(true))) {
+          K(chunk->get_sk_store().get_row_cnt()), K(chunk->get_addon_store().get_row_cnt()), K(ret));
+      } else if (OB_FAIL(chunk->get_sk_store().dump(true))) {
         SQL_ENG_LOG(WARN, "failed to dump row store", K(ret));
-      } else if (OB_FAIL(chunk->sk_store_.finish_add_row(true /*+ need dump */))) {
+      } else if (OB_FAIL(chunk->get_sk_store().finish_add_row(true /*+ need dump */))) {
         SQL_ENG_LOG(WARN, "finish add row failed", K(ret));
-      } else if (has_addon && OB_FAIL(chunk->addon_store_.dump(true))) {
+      } else if (has_addon && OB_FAIL(chunk->get_addon_store().dump(true))) {
         SQL_ENG_LOG(WARN, "failed to dump row store", K(ret));
-      } else if (has_addon && OB_FAIL(chunk->addon_store_.finish_add_row(true /*+ need dump */))) {
+      } else if (has_addon && OB_FAIL(chunk->get_addon_store().finish_add_row(true /*+ need dump */))) {
         SQL_ENG_LOG(WARN, "finish add row failed", K(ret));
       } else {
         const int64_t sort_io_time = ObTimeUtility::fast_current_time() - curr_time;
-        const int64_t file_size =
-          has_addon ? (chunk->sk_store_.get_file_size() + chunk->addon_store_.get_file_size()) :
-                      chunk->sk_store_.get_file_size();
-        const int64_t mem_hold =
-          has_addon ? (chunk->sk_store_.get_mem_hold() + chunk->addon_store_.get_mem_hold()) :
-                      chunk->sk_store_.get_mem_hold();
+        const int64_t file_size = chunk->get_file_size();
+        const int64_t mem_hold = chunk->get_mem_hold();
         op_monitor_info_.otherstat_4_id_ = ObSqlMonitorStatIds::SORT_DUMP_DATA_TIME;
         op_monitor_info_.otherstat_4_value_ += sort_io_time;
-        LOG_TRACE("dump sort file", "level", level, "rows", chunk->sk_store_.get_row_cnt(),
+        LOG_TRACE("dump sort file", "level", level, "rows", chunk->get_row_cnt(),
                   "file_size", file_size, "memory_hold", mem_hold, "mem_used",
                   mem_context_->used());
       }

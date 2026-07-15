@@ -1,24 +1,20 @@
-/*
- * Copyright (c) 2025 OceanBase.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+/**
+ * Copyright (c) 2021 OceanBase
+ * OceanBase CE is licensed under Mulan PubL v2.
+ * You can use this software according to the terms and conditions of the Mulan PubL v2.
+ * You may obtain a copy of Mulan PubL v2 at:
+ *          http://license.coscl.org.cn/MulanPubL-2.0
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
+ * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
+ * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+ * See the Mulan PubL v2 for more details.
  */
 #include "storage/ddl/ob_group_write_macro_block_task.h"
-#include "storage/ddl/ob_ddl_storage_util.h"
 #include "storage/ddl/ob_ddl_independent_dag.h"
 #include "storage/ddl/ob_ddl_tablet_context.h"
 #include "storage/ddl/ob_cg_macro_block_writer.h"
 #include "storage/ddl/ob_cg_macro_block_write_op.h"
+#include "storage/ddl/ob_ddl_storage_util.h"
 #include "storage/ddl/ob_tablet_ddl_kv_mgr.h"
 
 #define USING_LOG_PREFIX STORAGE
@@ -31,7 +27,7 @@ using namespace oceanbase::blocksstable;
 using namespace oceanbase::sql;
 
 ObGroupWriteMacroBlockTask::ObGroupWriteMacroBlockTask()
-  : ObITask(TASK_TYPE_DDL_GROUP_WRITE_TASK), ddl_dag_(nullptr)
+  : ObITaskWithMonitor(TASK_TYPE_DDL_GROUP_WRITE_TASK), ddl_dag_(nullptr), tablet_ids_()
 {
 
 }
@@ -49,21 +45,36 @@ int ObGroupWriteMacroBlockTask::init(ObDDLIndependentDag *ddl_dag)
     LOG_WARN("invalid argument", K(ret));
   } else {
     ddl_dag_ = ddl_dag;
+    tablet_ids_.reset();
   }
   return ret;
 }
 
-int ObGroupWriteMacroBlockTask::init(ObDDLIndependentDag *ddl_dag, const ObTabletID &tablet_id)
+int ObGroupWriteMacroBlockTask::init(ObDDLIndependentDag *ddl_dag, const ObIArray<ObTabletID> &tablet_ids)
 {
   int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(nullptr == ddl_dag || !tablet_id.is_valid())) {
+  if (OB_UNLIKELY(nullptr == ddl_dag || tablet_ids.empty())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), KP(ddl_dag), K(tablet_id));
+    LOG_WARN("invalid argument", K(ret), KP(ddl_dag), K(tablet_ids));
+  } else if (OB_FAIL(tablet_ids_.assign(tablet_ids))) {
+    LOG_WARN("failed to assign", K(ret));
   } else {
     ddl_dag_ = ddl_dag;
-    tablet_id_ = tablet_id;
   }
   return ret;
+}
+
+ObITask::ObITaskPriority ObGroupWriteMacroBlockTask::get_priority()
+{
+  int ret = OB_SUCCESS;
+  ObITask::ObITaskPriority priority = ObITask::get_priority();
+  if (OB_ISNULL(ddl_dag_)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("ddl dag is null", K(ret), KP(ddl_dag_));
+  } else {
+    priority = ddl_dag_->is_scan_finished() && 0 == ddl_dag_->get_pipeline_count() ? ObITask::TASK_PRIO_2 : ObITask::TASK_PRIO_0;
+  }
+  return priority;
 }
 
 int ObGroupWriteMacroBlockTask::process()
@@ -72,9 +83,11 @@ int ObGroupWriteMacroBlockTask::process()
   if (OB_ISNULL(ddl_dag_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("ddl dag is null", K(ret), KP(ddl_dag_));
-  } else if (tablet_id_.is_valid()) {
-    if (OB_FAIL(group_write_macro_block(tablet_id_))) {
-      LOG_WARN("group write macro block failed", K(ret));
+  } else if (!tablet_ids_.empty()) {
+    for (int64_t i = 0; OB_SUCC(ret) && i < tablet_ids_.count(); ++i) {
+      if (OB_FAIL(group_write_macro_block(tablet_ids_.at(i)))) {
+        LOG_WARN("group write macro block failed", K(ret), K(i), K(tablet_ids_.at(i)));
+      }
     }
   } else {
     const ObIArray<std::pair<ObLSID, ObTabletID>> &ls_tablet_ids = ddl_dag_->get_ls_tablet_ids();
@@ -226,9 +239,9 @@ void ObGroupWriteMacroBlockTask::task_debug_info_to_string(char *buf, const int6
 }
 
 ObGroupCGBlockFileWriteTask::ObGroupCGBlockFileWriteTask()
-  : ObITask(TASK_TYPE_DDL_CG_GROUP_WRITE_TASK), is_inited_(false), ddl_dag_(nullptr), slice_idx_(-1), cg_idx_(-1), block_files_()
+  : ObITaskWithMonitor(TASK_TYPE_DDL_CG_GROUP_WRITE_TASK), is_inited_(false), ddl_dag_(nullptr), slice_idx_(-1), cg_idx_(-1), block_files_()
 {
-  block_files_.set_attr(ObMemAttr("GCGBlockFileArr"));
+  block_files_.set_attr(ObMemAttr(MTL_ID(), "GCGBlockFileArr"));
 }
 
 ObGroupCGBlockFileWriteTask::~ObGroupCGBlockFileWriteTask()
@@ -289,13 +302,11 @@ int ObGroupCGBlockFileWriteTask::process()
     int64_t row_offset = 0;
     ObWriteMacroParam write_param;
     HEAP_VAR(ObDAGCGMacroBlockWriter, cg_writer) {
-    if (OB_FAIL(ObDDLUtil::fill_writer_param(tablet_id_, slice_idx_, cg_idx_, ddl_dag_, 0/*max_batch_size*/, write_param))) {
+    if (OB_FAIL(ObDDLUtil::fill_writer_param(
+            tablet_id_, slice_idx_, cg_idx_, ddl_dag_, 0 /* max_batch_size */, write_param))) {
       LOG_WARN("fill write param failed", K(ret));
-    } else if (OB_FAIL(ObDDLStorageUtil::init_macro_block_seq(slice_idx_,
-                                                       write_param.start_sequence_))) {
-      LOG_WARN("fail to initialize macro block seq", K(ret), K(write_param.direct_load_type_),
-                                                     K(write_param.tablet_id_),
-                                                     K(write_param.start_sequence_));
+    } else if (OB_FAIL(ObDDLStorageUtil::init_macro_block_seq(slice_idx_, write_param.start_sequence_))) {
+      LOG_WARN("fail to initialize macro block seq", K(ret), K(slice_idx_), K(write_param.start_sequence_));
     } else if (OB_FAIL(cg_writer.open(write_param))) {
       LOG_WARN("dag cg writer open failed", K(ret), K(write_param));
     }
@@ -328,7 +339,7 @@ int ObGroupCGBlockFileWriteTask::process()
                 write_param.row_offset_ = row_offset;
                 write_param.start_sequence_ = cg_writer.get_last_macro_seq();
                 cg_writer.reset();
-              } 
+              }
             }
             if (FAILEDx(cg_writer.open(write_param))) {
               LOG_WARN("dag cg writer open failed", K(ret), K(write_param));

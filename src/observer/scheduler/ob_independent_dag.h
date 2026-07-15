@@ -21,6 +21,10 @@
 
 namespace oceanbase
 {
+namespace storage
+{
+class ObDDLDagMonitorNode;
+}
 namespace share
 {
 
@@ -59,6 +63,7 @@ protected:
   virtual void clear_task_list() override final;
   virtual void reset() override final;
   virtual int check_cycle() override final;
+  virtual int init_monitor_node() { return OB_SUCCESS; }
 private:
   int update_ready_task_list();
   int try_get_next_ready_task(ObITask *&task);
@@ -76,6 +81,8 @@ private:
   lib::Worker::CompatMode compat_mode_;
   common::ObThreadCond cond_;
   TaskList waiting_task_list_; // for independent dag, task added into waiting task list firstly
+protected:
+  storage::ObDDLDagMonitorNode *monitor_node_;
 };
 
 class ObDagExecutor

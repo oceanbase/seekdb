@@ -297,6 +297,18 @@ int ObCgMacroBlockWriter::close()
   return ret;
 }
 
+int ObCgMacroBlockWriter::close(blocksstable::ObDagSliceMacroFlusher *macro_block_flusher)
+{
+  int ret = OB_SUCCESS;
+  if (OB_UNLIKELY(!is_inited_)) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("not initialized", K(ret), K(is_inited_));
+  } else if (OB_FAIL(macro_block_writer_.close(macro_block_flusher))) {
+    LOG_WARN("fail to close macro block writer", K(ret));
+  }
+  return ret;
+}
+
 void ObCgMacroBlockWriter::reset()
 {
   is_inited_ = false;

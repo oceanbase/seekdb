@@ -1,23 +1,18 @@
-/*
- * Copyright (c) 2025 OceanBase.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+/**
+ * Copyright (c) 2021 OceanBase
+ * OceanBase CE is licensed under Mulan PubL v2.
+ * You can use this software according to the terms and conditions of the Mulan PubL v2.
+ * You may obtain a copy of Mulan PubL v2 at:
+ *          http://license.coscl.org.cn/MulanPubL-2.0
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
+ * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
+ * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+ * See the Mulan PubL v2 for more details.
  */
 
 #define USING_LOG_PREFIX STORAGE
 
 #include "storage/ddl/ob_cg_macro_block_write_op.h"
-#include "storage/ddl/ob_ddl_storage_util.h"
 #include "storage/ddl/ob_ddl_tablet_context.h"
 #include "storage/ddl/ob_cg_micro_block_write_op.h"
 #include "storage/ddl/ob_macro_meta_store_manager.h"
@@ -45,6 +40,16 @@ int ObDAGCGMacroBlockWriter::open(const ObWriteMacroParam &param)
   } else if (OB_UNLIKELY(nullptr == writer_args_.object_cleaner_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("object cleaner is null", K(ret));
+#ifdef OB_BUILD_SHARED_STORAGE
+  } else if (GCTX.is_shared_storage_mode()) {
+    if (OB_FAIL(cg_macro_block_writer_.open_for_ss_ddl(writer_args_.data_desc_.get_desc(),
+                                                       writer_args_.parallel_idx_,
+                                                       writer_args_.macro_seq_param_,
+                                                       *writer_args_.object_cleaner_,
+                                                       writer_args_.ddl_redo_callback_))) {
+      LOG_WARN("fail to open macro block writer in ss mode", K(ret), K(writer_args_));
+    }
+#endif
   } else if (OB_FAIL(cg_macro_block_writer_.open(writer_args_.data_desc_.get_desc(),
                                                   writer_args_.parallel_idx_,
                                                   writer_args_.macro_seq_param_,
@@ -146,10 +151,8 @@ int ObDAGCGMacroBlockWriteOp::init(const ObTabletID &tablet_id, const int64_t sl
               cg_block_files_iter_arr_.at(cg_idx) = cg_block_files_iter;
               row_offsets_.at(cg_idx) = 0;
             }
-            if (FAILEDx(ObDDLStorageUtil::init_macro_block_seq(slice_idx_,
-                                                        start_seqences_.at(cg_idx)))) {
-              LOG_WARN("fail to initialize start seqence", K(ret), K(ddl_dag->get_direct_load_type()),
-                                                           K(tablet_id), K(slice_idx_));
+            if (FAILEDx(ObDDLStorageUtil::init_macro_block_seq(slice_idx_, start_seqences_.at(cg_idx)))) {
+              LOG_WARN("fail to initialize start seqence", K(ret), K(tablet_id), K(slice_idx_));
             }
           }
           if (OB_SUCC(ret)) {
@@ -238,7 +241,7 @@ int ObDAGCGMacroBlockWriteOp::execute(const ObChunk &input_chunk,
                                                  slice_idx_,
                                                  cg_idx,
                                                  ddl_dag,
-                                                 0/*max_batch_size*/,
+                                                 0 /* max_batch_size */,
                                                  write_macro_param))) {
           LOG_WARN("fail to fill write macro param",
               K(ret), KPC(ddl_dag), K(tablet_id_), K(slice_idx_), K(cg_idx));

@@ -1,17 +1,13 @@
-/*
- * Copyright (c) 2025 OceanBase.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+/**
+ * Copyright (c) 2021 OceanBase
+ * OceanBase CE is licensed under Mulan PubL v2.
+ * You can use this software according to the terms and conditions of the Mulan PubL v2.
+ * You may obtain a copy of Mulan PubL v2 at:
+ *          http://license.coscl.org.cn/MulanPubL-2.0
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
+ * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
+ * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+ * See the Mulan PubL v2 for more details.
  */
 
 #define USING_LOG_PREFIX STORAGE
@@ -250,7 +246,7 @@ int ObCGMicroBlockWriteOp::execute(const ObChunk &input_chunk,
         } else {
           cg_block_file = cg_block_file_arr_.at(cg_idx);
           if (nullptr == cg_block_file) {
-            cg_block_file = OB_NEW(ObCGBlockFile, ObMemAttr("CGBlockFile"));
+            cg_block_file = OB_NEW(ObCGBlockFile, ObMemAttr(MTL_ID(), "CGBlockFile"));
             if (OB_UNLIKELY(nullptr == cg_block_file)) {
               ret = OB_ALLOCATE_MEMORY_FAILED;
               LOG_WARN("fail to new cg block file", K(ret));
@@ -269,7 +265,7 @@ int ObCGMicroBlockWriteOp::execute(const ObChunk &input_chunk,
                                                    slice_idx_,
                                                    cg_idx,
                                                    ddl_dag,
-                                                   0/*max_batch_size*/,
+                                                   0 /* max_batch_size */,
                                                    write_macro_param))) {
             LOG_WARN("fail to fill write macro param",
                 K(ret), KPC(ddl_dag), K(tablet_id_), K(slice_idx_), K(cg_idx));
@@ -374,4 +370,3 @@ int ObCGMicroBlockWriteOp::try_generate_output_chunk(
 
 } //end storage
 } // end oceanbase
-

@@ -44,6 +44,11 @@ class ObTabletMergeDag;
 struct ObIBasicInfoParam;
 class ObCompactionMemoryContext;
 }
+namespace storage
+{
+class ObDDLDagMonitorInfo;
+class ObDDLDagMonitorNode;
+}
 namespace share
 {
 
@@ -335,6 +340,10 @@ public:
     TASK_TYPE_RESTORE_COMPLETE_INITIAL = 175,
     TASK_TYPE_RESTORE_COMPLETE_WAIT_DATA_READY = 176,
     TASK_TYPE_RESTORE_COMPLETE_FINISH = 177,
+    TASK_TYPE_DDL_FTS_SAMPLE_TASK = 178,
+    TASK_TYPE_DDL_MERGE_SORT_PREPARE_TASK = 179,
+    TASK_TYPE_DDL_MERGE_SORT_TASK = 180,
+    TASK_TYPE_DDL_MERGE_SORT_WRITE_TASK = 181,
     TASK_TYPE_MAX,
   };
 
@@ -429,6 +438,27 @@ public:
   ObFakeTask(): ObITask(TASK_TYPE_FAKE) {}
   virtual ~ObFakeTask() {}
   virtual int process() override;
+};
+
+class ObITaskWithMonitor : public ObITask
+{
+public:
+  explicit ObITaskWithMonitor(const ObITaskType type)
+    : ObITask(type),
+      monitor_info_(nullptr)
+  {}
+  virtual ~ObITaskWithMonitor() = default;
+  storage::ObDDLDagMonitorInfo *get_monitor_info() const { return monitor_info_; }
+
+protected:
+  virtual int inner_add_monitor_info(storage::ObDDLDagMonitorNode &node)
+  {
+    UNUSED(node);
+    return OB_SUCCESS;
+  }
+
+protected:
+  storage::ObDDLDagMonitorInfo *monitor_info_;
 };
 
 enum ObDagListIndex

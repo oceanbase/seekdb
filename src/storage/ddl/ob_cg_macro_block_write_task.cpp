@@ -1,17 +1,13 @@
-/*
- * Copyright (c) 2025 OceanBase.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+/**
+ * Copyright (c) 2021 OceanBase
+ * OceanBase CE is licensed under Mulan PubL v2.
+ * You can use this software according to the terms and conditions of the Mulan PubL v2.
+ * You may obtain a copy of Mulan PubL v2 at:
+ *          http://license.coscl.org.cn/MulanPubL-2.0
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
+ * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
+ * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+ * See the Mulan PubL v2 for more details.
  */
 #include "storage/ddl/ob_cg_macro_block_write_task.h"
 #include "storage/ddl/ob_ddl_tablet_context.h"
@@ -36,9 +32,9 @@ using namespace oceanbase::sql;
 */
 
 ObCgMacroBlockWriteTask::ObCgMacroBlockWriteTask(const ObITaskType type) :
-    ObITask(type),
+    ObITaskWithMonitor(type),
     is_inited_(false),
-    allocator_(ObMemAttr("CGMBWriteTask")),
+    allocator_(ObMemAttr(MTL_ID(), "CGMBWriteTask")),
     storage_schema_(nullptr),
     row_iter_(nullptr)
 {
@@ -79,7 +75,8 @@ int ObCgMacroBlockWriteTask::init(
     row_iter_ = row_iter;
     const int64_t slice_idx = row_iter_->get_slice_idx();
     ObWriteMacroParam param;
-    if (OB_FAIL(ObDDLUtil::fill_writer_param(tablet_id, slice_idx, -1/*cg_idx*/, ddl_dag, 0/*max_batch_size*/, param))) {
+    if (OB_FAIL(ObDDLUtil::fill_writer_param(
+            tablet_id, slice_idx, -1/*cg_idx*/, ddl_dag, 0 /* max_batch_size */, param))) {
       LOG_WARN("fill writer param common failed", K(ret), K(tablet_id), K(param));
     } else if (OB_FAIL(ObDDLUtil::init_cg_macro_block_writers(param, allocator_, storage_schema_, cg_macro_block_writers_))) {
       LOG_WARN("init cg macro block writer failed", K(ret), K(tablet_id_), K(slice_idx), KPC(ddl_dag));
@@ -155,7 +152,7 @@ int ObCgMacroBlockWriteTask::project_cg_row(
 }
 
 ObDDLScanTask::ObDDLScanTask(const ObITaskType type)
-  : ObITask(type),
+  : ObITaskWithMonitor(type),
     ddl_dag_(nullptr)
 {
 }
@@ -203,7 +200,7 @@ int ObDDLScanTask::process()
 }
 
 ObDDLTabletScanTask::ObDDLTabletScanTask()
-  : ObITask(TASK_TYPE_DDL_PREPARE_SCAN)
+  : ObITaskWithMonitor(TASK_TYPE_DDL_PREPARE_SCAN)
 {
 }
 
@@ -358,7 +355,7 @@ int ObDDLWriteMacroBlockBasePipeline::get_next_chunk(ObChunk *&next_chunk)
   }
   return ret;
 }
-  
+
 ObITask::ObITaskPriority ObDDLWriteMacroBlockBasePipeline::get_priority()
 {
   ObITask::ObITaskPriority priority = ObITask::get_priority();
@@ -394,7 +391,7 @@ int ObDDLWriteMacroBlockBasePipeline::fill_writer_param(ObWriteMacroParam &param
                                                   ddl_slice_->get_slice_idx(),
                                                   -1/*cg_idx*/,
                                                   dag,
-                                                  0/*max_batch_size*/,
+                                                  0 /* max_batch_size */,
                                                   param))) {
     LOG_WARN("fill writer param common failed", K(ret));
   }

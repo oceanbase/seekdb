@@ -1148,8 +1148,15 @@ int ObSortVecOpImpl<Compare, Store_Row, has_addon>::update_max_available_mem_siz
     const bool is_ddl_sort = OB_NOT_NULL(eval_ctx_)
                              && OB_NOT_NULL(eval_ctx_->exec_ctx_.get_my_session())
                              && eval_ctx_->exec_ctx_.get_my_session()->get_ddl_info().is_ddl();
-    const int64_t size = ObSQLSortResourceManager::calc_sql_initial_cache_size(
-      input_rows_, heap_input_width, is_ddl_sort, is_topn_sort(), topn_cnt_);
+    int64_t size = (OB_INVALID_ID == input_rows_ || OB_INVALID_ID == heap_input_width)
+                     ? 0
+                     : input_rows_ * heap_input_width;
+    if (is_topn_sort() && topn_cnt_ > 0 && topn_cnt_ != INT64_MAX && heap_input_width > 0) {
+      size = std::min(size, topn_cnt_ * heap_input_width * 2);
+    }
+    if (is_ddl_sort) {
+      size = std::max(size, 256L * 1024L * 1024L);
+    }
     if (OB_FAIL(sql_mem_processor_.init(&mem_context_->get_malloc_allocator(), size,
                                         op_monitor_info_.op_type_, op_monitor_info_.op_id_,
                                         &eval_ctx_->exec_ctx_))) {
@@ -1157,8 +1164,9 @@ int ObSortVecOpImpl<Compare, Store_Row, has_addon>::update_max_available_mem_siz
     }
   } else {
     bool updated = false;
-    if (OB_FAIL(ObSortResourceManager::update_max_available_mem_size_periodically(
-          sql_mem_processor_, mem_context_, topn_heap_->count(), updated))) {
+    if (OB_FAIL(sql_mem_processor_.update_max_available_mem_size_periodically(
+          &mem_context_->get_malloc_allocator(),
+          [&](int64_t cur_cnt) { return topn_heap_->count() > cur_cnt; }, updated))) {
       SQL_ENG_LOG(WARN, "failed to get max available memory size", K(ret));
     } else if (updated && OB_FAIL(sql_mem_processor_.update_used_mem_size(get_total_used_size()))) {
       SQL_ENG_LOG(WARN, "failed to update used memory size", K(ret));
@@ -1222,11 +1230,36 @@ int ObSortVecOpImpl<Compare, Store_Row, has_addon>::preprocess_dump(bool &dumped
 {
   int ret = OB_SUCCESS;
   dumped = false;
-  if (OB_FAIL(ObSortResourceManager::preprocess_dump(
-        sql_mem_processor_, profile_, mem_context_, get_total_used_size(),
-        sk_store_.get_mem_hold() + sk_store_.get_file_size()
-          + addon_store_.get_mem_hold() + addon_store_.get_file_size(),
-        [this]() { return this->need_dump(); }, dumped))) {
+  const int64_t data_size = sk_store_.get_mem_hold() + sk_store_.get_file_size()
+                            + addon_store_.get_mem_hold() + addon_store_.get_file_size();
+  if (OB_FAIL(sql_mem_processor_.get_max_available_mem_size(&mem_context_->get_malloc_allocator()))) {
+    SQL_ENG_LOG(WARN, "failed to get max available memory size", K(ret));
+  } else if (OB_FAIL(sql_mem_processor_.update_used_mem_size(get_total_used_size()))) {
+    SQL_ENG_LOG(WARN, "failed to update used memory size", K(ret));
+  } else {
+    dumped = need_dump();
+    if (dumped) {
+      if (!sql_mem_processor_.is_auto_mgr() || profile_.get_cache_size() < profile_.get_global_bound_size()) {
+        if (OB_FAIL(sql_mem_processor_.extend_max_memory_size(
+                &mem_context_->get_malloc_allocator(),
+                [&](int64_t max_memory_size) {
+                  UNUSED(max_memory_size);
+                  return need_dump();
+                },
+                dumped, get_total_used_size()))) {
+          SQL_ENG_LOG(WARN, "failed to extend sort memory", K(ret));
+        }
+      } else if (profile_.get_cache_size() <= data_size) {
+        if (OB_FAIL(sql_mem_processor_.update_cache_size(
+                &mem_context_->get_malloc_allocator(), profile_.get_cache_size() * 2))) {
+          SQL_ENG_LOG(WARN, "failed to update sort cache size", K(ret), K(profile_.get_cache_size()));
+        } else {
+          dumped = need_dump();
+        }
+      }
+    }
+  }
+  if (OB_FAIL(ret)) {
     SQL_ENG_LOG(WARN, "failed to preprocess sort dump", K(ret));
   }
   if (OB_SUCC(ret) && dumped && OB_NOT_NULL(rows_) && rows_->empty()) {
@@ -1721,8 +1754,15 @@ int ObSortVecOpImpl<Compare, Store_Row, has_addon>::before_add_row()
       const bool is_ddl_sort = OB_NOT_NULL(exec_ctx_)
                                && OB_NOT_NULL(exec_ctx_->get_my_session())
                                && exec_ctx_->get_my_session()->get_ddl_info().is_ddl();
-      const int64_t size = ObSQLSortResourceManager::calc_sql_initial_cache_size(
-        input_rows_, input_width_, is_ddl_sort, is_topn_sort(), topn_cnt_);
+      int64_t size = (OB_INVALID_ID == input_rows_ || OB_INVALID_ID == input_width_)
+                       ? 0
+                       : input_rows_ * input_width_;
+      if (is_topn_sort() && topn_cnt_ > 0 && topn_cnt_ != INT64_MAX && input_width_ > 0) {
+        size = std::min(size, topn_cnt_ * input_width_ * 2);
+      }
+      if (is_ddl_sort) {
+        size = std::max(size, 256L * 1024L * 1024L);
+      }
       if (OB_FAIL(sql_mem_processor_.init(&mem_context_->get_malloc_allocator(), size,
                                           op_monitor_info_.op_type_, op_monitor_info_.op_id_,
                                           exec_ctx_))) {
@@ -1746,8 +1786,9 @@ int ObSortVecOpImpl<Compare, Store_Row, has_addon>::before_add_row()
     }
   } else if (!rows_->empty()) {
     bool updated = false;
-    if (OB_FAIL(ObSortResourceManager::update_max_available_mem_size_periodically(
-          sql_mem_processor_, mem_context_, rows_->count(), updated))) {
+    if (OB_FAIL(sql_mem_processor_.update_max_available_mem_size_periodically(
+          &mem_context_->get_malloc_allocator(),
+          [&](int64_t cur_cnt) { return rows_->count() > cur_cnt; }, updated))) {
       SQL_ENG_LOG(WARN, "failed to update max available mem size periodically", K(ret));
     } else if (updated && OB_FAIL(sql_mem_processor_.update_used_mem_size(mem_context_->used()))) {
       SQL_ENG_LOG(WARN, "failed to update used memory size", K(ret));
@@ -1813,8 +1854,33 @@ int ObSortVecOpImpl<Compare, Store_Row, has_addon>::build_ems_heap(int64_t &merg
     const bool is_ddl_sort = OB_NOT_NULL(exec_ctx_)
                              && OB_NOT_NULL(exec_ctx_->get_my_session())
                              && exec_ctx_->get_my_session()->get_ddl_info().is_ddl();
-    if (OB_FAIL(ObSQLSortResourceManager::calc_sql_merge_ways(sql_mem_processor_, mem_context_,
-                                                              max_ways, is_ddl_sort, merge_ways))) {
+    if (is_ddl_sort) {
+      if (OB_FAIL(ObDDLSortProvider::calc_merge_ways(sql_mem_processor_, mem_context_,
+                                                     max_ways, merge_ways))) {
+        SQL_ENG_LOG(WARN, "failed to calc ddl merge ways", K(ret), K(max_ways));
+      }
+    } else if (OB_FAIL(sql_mem_processor_.get_max_available_mem_size(
+                   &mem_context_->get_malloc_allocator()))) {
+      SQL_ENG_LOG(WARN, "failed to get max available memory size", K(ret));
+    } else {
+      const int64_t block_size = ObTempBlockStore::BLOCK_SIZE;
+      merge_ways = std::max(static_cast<int64_t>(2),
+                            sql_mem_processor_.get_mem_bound() / block_size);
+      if (merge_ways < max_ways) {
+        bool dumped = false;
+        const int64_t need_size = max_ways * block_size;
+        if (OB_FAIL(sql_mem_processor_.extend_max_memory_size(
+                &mem_context_->get_malloc_allocator(),
+                [&](int64_t max_memory_size) { return max_memory_size < need_size; },
+                dumped, mem_context_->used()))) {
+          SQL_ENG_LOG(WARN, "failed to extend merge memory", K(ret));
+        } else {
+          merge_ways = std::max(merge_ways, sql_mem_processor_.get_mem_bound() / block_size);
+        }
+      }
+      merge_ways = std::min(merge_ways, max_ways);
+    }
+    if (OB_FAIL(ret)) {
       SQL_ENG_LOG(WARN, "failed to calc merge ways", K(ret), K(max_ways));
     } else {
       LOG_TRACE("do merge sort ", K(first->level_), K(merge_ways), K(sort_chunks_.get_size()),

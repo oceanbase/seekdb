@@ -218,7 +218,8 @@ int ObComplementDataParam::init(const ObDDLBuildSingleReplicaRequestArg &arg)
     user_parallelism_ = arg.parallelism_;
     is_no_logging_ = arg.is_no_logging_;
     direct_load_type_ = ObDirectLoadMgrUtil::ddl_get_direct_load_type(data_format_version_);
-    if (OB_FAIL(ObDDLTableSchema::fill_ddl_table_schema(dest_table_id_, allocator_, ddl_table_schema_))) {
+    if (OB_FAIL(ObDDLTableSchema::fill_ddl_table_schema(
+            dst_tenant_schema_guard, MTL_ID(), dest_table_id_, data_format_version_, allocator_, ddl_table_schema_))) {
       LOG_WARN("fill ddl table schema failed", K(ret));
     } else if (OB_FAIL(fill_tablet_param())) {
       LOG_WARN("fill tablet param failed", K(ret));

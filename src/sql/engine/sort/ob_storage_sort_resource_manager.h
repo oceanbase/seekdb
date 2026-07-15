@@ -1,17 +1,13 @@
-/*
- * Copyright (c) 2025 OceanBase.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+/**
+ * Copyright (c) 2021 OceanBase
+ * OceanBase CE is licensed under Mulan PubL v2.
+ * You can use this software according to the terms and conditions of the Mulan PubL v2.
+ * You may obtain a copy of Mulan PubL v2 at:
+ *          http://license.coscl.org.cn/MulanPubL-2.0
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
+ * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
+ * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+ * See the Mulan PubL v2 for more details.
  */
 
 #ifndef OCEANBASE_SQL_ENGINE_SORT_OB_STORAGE_SORT_RESOURCE_MANAGER_H_
@@ -24,14 +20,59 @@ namespace oceanbase
 namespace sql
 {
 
-class ObStorageSortResourceManager : public ObSortResourceManager
+template<typename Compare, typename Store_Row, bool has_addon>
+class ObStorageSortResourceManager : public ObSortResourceManager<Compare, Store_Row, has_addon>
 {
 public:
-  static int64_t calc_storage_initial_cache_size(const int64_t input_rows,
-                                                 const int64_t input_width)
+  ObStorageSortResourceManager(ObMonitorNode &op_monitor_info,
+      lib::MemoryContext *mem_context,
+      ObSortRowStoreMgr<Store_Row, has_addon> &store_mgr)
+  : ObSortResourceManager<Compare, Store_Row, has_addon>(op_monitor_info, mem_context, ObSqlWorkAreaType::SORT_WORK_AREA),
+    store_mgr_(store_mgr)
+  {}
+  virtual ~ObStorageSortResourceManager() {}
+
+
+  int init(const uint64_t tenant_id, const int64_t cache_size, ObSqlProfileExecInfo exec_info)
   {
-    return calc_initial_cache_size(input_rows, input_width, false);
+    int ret = OB_SUCCESS;
+    UNUSED(tenant_id);
+    if (OB_FAIL(this->sql_mem_processor_.init(&this->mem_context_->ref_context()->get_malloc_allocator(),
+        cache_size,
+        this->op_monitor_info_.op_type_,
+        this->op_monitor_info_.op_id_,
+        exec_info))) {
+      SQL_ENG_LOG(WARN, "init sql memory processor failed", K(ret));
+    }
+    return ret;
   }
+
+  int64_t get_total_used_size() const override {
+    return this->mem_context_->ref_context()->used();
+  }
+
+  bool need_dump() const override {
+    return this->get_data_size() > this->get_memory_bound()
+        || this->get_total_used_size() >= this->get_profile().get_global_bound_size();
+  }
+
+  int64_t get_cache_size() const
+  {
+    return this->get_profile().get_cache_size();
+  }
+
+  int64_t get_expect_size() const
+  {
+    return this->get_profile().get_expect_size();
+  }
+
+  void reset_sql_mem_processor()
+  {
+    this->sql_mem_processor_.reset();
+  }
+
+private:
+  ObSortRowStoreMgr<Store_Row, has_addon> &store_mgr_;
 };
 
 } // namespace sql

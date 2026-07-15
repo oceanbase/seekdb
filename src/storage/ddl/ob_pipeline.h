@@ -1,17 +1,13 @@
-/*
- * Copyright (c) 2025 OceanBase.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+/**
+ * Copyright (c) 2021 OceanBase
+ * OceanBase CE is licensed under Mulan PubL v2.
+ * You can use this software according to the terms and conditions of the Mulan PubL v2.
+ * You may obtain a copy of Mulan PubL v2 at:
+ *          http://license.coscl.org.cn/MulanPubL-2.0
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
+ * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
+ * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+ * See the Mulan PubL v2 for more details.
  */
 
 #ifndef _OCEANBASE_STORAGE_DDL_OB_PIPELINE_H_
@@ -19,8 +15,9 @@
 
 #include "lib/utility/ob_print_utils.h"
 #include "lib/container/ob_array.h"
-#include "observer/scheduler/ob_tenant_dag_scheduler.h"
-#include "observer/table_load/ob_table_load_row_array.h"
+#include "share/scheduler/ob_independent_dag.h" // for ObITaskWithMonitor
+#include "share/scheduler/ob_tenant_dag_scheduler.h" // for task types
+#include "share/table/ob_table_load_row_array.h"
 #include "storage/direct_load/ob_direct_load_batch_datum_rows.h"
 #include "storage/ddl/ob_cg_block_tmp_file.h"
 #include "storage/ddl/ob_cg_row_tmp_file.h"
@@ -33,7 +30,7 @@ class ObBatchDatumRows;
 struct ObDatumRow;
 }
 
-namespace common 
+namespace common
 {
 class ObIVector;
 }
@@ -44,6 +41,7 @@ class ObTaskBatchInfo;
 class ObDDLTabletContext;
 class ObDDLSlice;
 class ObPipeline;
+class ObDDLSortChunk;
 
 struct ObChunk
 {
@@ -60,6 +58,7 @@ public:
     BATCH_DATUM_ROWS,
     DIRECT_LOAD_ROW_ARRAY,
     TASK_BATCH_INFO,
+    DDL_SORT_CHUNK_ARRAY,
     MAX_TYPE
   };
 public:
@@ -77,6 +76,7 @@ public:
   OB_INLINE bool is_datum_row_type() const { return ChunkType::DATUM_ROW == type_; }
   OB_INLINE bool is_direct_load_row_array_type() const { return ChunkType::DIRECT_LOAD_ROW_ARRAY == type_; }
   OB_INLINE bool is_task_batch_info_type() const { return ChunkType::TASK_BATCH_INFO == type_; }
+  OB_INLINE bool is_ddl_sort_chunk_array_type() const { return ChunkType::DDL_SORT_CHUNK_ARRAY == type_; }
   TO_STRING_KV(K_(type), KP_(data_ptr));
 public:
   ChunkType type_;
@@ -89,6 +89,8 @@ public:
     blocksstable::ObBatchDatumRows *bdrs_;
     table::ObTableLoadTabletObjRowArray *row_array_;
     storage::ObTaskBatchInfo *batch_info_;
+    common::ObArray<ObDDLSortChunk> *ddl_sort_chunk_array_;
+    common::ObIArray<common::ObIVector *> *sql_vector_array_;
   };
 };
 
@@ -126,11 +128,11 @@ protected:
   ObPipeline *pipeline_;
 };
 
-class ObPipeline: public share::ObITask
+class ObPipeline: public share::ObITaskWithMonitor
 {
 public:
   explicit ObPipeline(const share::ObITask::ObITaskType &task_type)
-    : ObITask(task_type)
+    : ObITaskWithMonitor(task_type)
   {}
   ~ObPipeline() {}
   int add_op(ObPipelineOperator *op);
@@ -147,4 +149,3 @@ protected:
 }  // end namespace storage
 }  // end namespace oceanbase
 #endif//_OCEANBASE_STORAGE_DDL_OB_PIPELINE_H_
-
