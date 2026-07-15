@@ -169,6 +169,27 @@ private:
   obcall::ObAdminRefreshMemStatArg rpc_arg_;
 };
 
+class ObRefreshFulltextDictStmt : public ObSystemCmdStmt
+{
+public:
+  ObRefreshFulltextDictStmt()
+    : ObSystemCmdStmt(stmt::T_REFRESH_FULLTEXT_DICT),
+      database_id_(OB_INVALID_ID),
+      table_id_(OB_INVALID_ID)
+  {}
+  virtual ~ObRefreshFulltextDictStmt() {}
+
+  void set_database_id(const uint64_t database_id) { database_id_ = database_id; }
+  void set_table_id(const uint64_t table_id) { table_id_ = table_id; }
+  uint64_t get_database_id() const { return database_id_; }
+  uint64_t get_table_id() const { return table_id_; }
+
+  TO_STRING_KV(N_STMT_TYPE, ((int)stmt_type_), K_(database_id), K_(table_id));
+private:
+  uint64_t database_id_;
+  uint64_t table_id_;
+};
+
 class ObWashMemFragmentationStmt : public ObSystemCmdStmt
 {
 public:

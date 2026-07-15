@@ -25,6 +25,7 @@
 #include "lib/utility/utility.h"
 #include "storage/fts/ob_fts_struct.h"
 #include "storage/fts/ob_fts_plugin_helper.h"
+#include "storage/fts/ob_fts_literal.h"
 #include "storage/fts/dict/ob_ft_dict.h"
 #include "storage/fts/dict/ob_ft_dict_def.h"
 #include "storage/fts/dict/ob_ft_dict_hub.h"
@@ -278,7 +279,13 @@ int ObIKFTParser::init_dict(const plugin::ObFTParserParam &param)
   }
 
   ObFTRangeDict *dict = nullptr;
-  ObFTDictDesc main_dict_desc("main_dict",
+  const bool use_custom_main_dict = !param.ik_param_.main_dict_.empty()
+                                    && 0 != param.ik_param_.main_dict_.case_compare(
+                                        ObFTSLiteral::FT_DEFAULT_IK_DICT_UTF8_TABLE);
+  const ObString main_dict_name = use_custom_main_dict
+                                      ? param.ik_param_.main_dict_
+                                      : ObString("main_dict");
+  ObFTDictDesc main_dict_desc(main_dict_name,
                               ObFTDictType::DICT_IK_MAIN,
                               ObCharsetType::CHARSET_UTF8MB4,
                               ObCollationType::CS_TYPE_UTF8MB4_BIN);
@@ -296,7 +303,7 @@ int ObIKFTParser::init_dict(const plugin::ObFTParserParam &param)
   if (should_read_newest_table()) {
     // clear dict cache, always false now
   } else {
-    if (OB_FAIL(init_single_dict(main_dict_desc, cache_main_))) {
+    if (OB_FAIL(init_single_dict(main_dict_desc, cache_main_, !use_custom_main_dict))) {
       LOG_WARN("Failed to init main dict", K(ret));
     } else if (OB_FAIL(init_single_dict(quan_dict_desc, cache_quan_))) {
       LOG_WARN("Failed to init quantifier dict", K(ret));
@@ -318,11 +325,13 @@ int ObIKFTParser::init_dict(const plugin::ObFTParserParam &param)
   return ret;
 }
 
-int ObIKFTParser::init_single_dict(ObFTDictDesc desc, ObFTCacheRangeContainer &container)
+int ObIKFTParser::init_single_dict(const ObFTDictDesc &desc,
+                                   ObFTCacheRangeContainer &container,
+                                   const bool build_if_missing)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(hub_->load_cache(desc, container))) {
-    if (OB_ENTRY_NOT_EXIST == ret) {
+    if (OB_ENTRY_NOT_EXIST == ret && build_if_missing) {
       if (OB_FAIL(hub_->build_cache(desc, container))) {
         LOG_WARN("Failed to read newest main table", K(ret));
       }
