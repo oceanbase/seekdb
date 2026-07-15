@@ -47,6 +47,12 @@ public:
 
   int current_char(const char *&ch, uint8_t &char_len);
   int current_char_type(ObFTCharUtil::CharType &type);
+  // Both values are prepared together by prepare_next_char().  Keep the pair
+  // together at call sites so the per-character hot path does not make two
+  // context calls just to read the cached state.
+  int current_char_and_type(const char *&ch,
+                            uint8_t &char_len,
+                            ObFTCharUtil::CharType &type);
 
   int step_next();
 
@@ -101,7 +107,10 @@ public:
 
   virtual ~ObIIKProcessor() {}
 
-  int process(TokenizeContext &ctx);
+  int process(TokenizeContext &ctx,
+              const char *ch,
+              const uint8_t char_len,
+              const ObFTCharUtil::CharType type);
 
   virtual int do_process(TokenizeContext &ctx,
                          const char *ch,

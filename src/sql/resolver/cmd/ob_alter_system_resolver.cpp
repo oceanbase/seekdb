@@ -1145,6 +1145,77 @@ int ObRefreshMemStatResolver::resolve(const ParseNode &parse_tree)
   return ret;
 }
 
+int ObRefreshFulltextDictResolver::resolve(const ParseNode &parse_tree)
+{
+  int ret = OB_SUCCESS;
+  if (OB_UNLIKELY(T_REFRESH_FULLTEXT_DICT != parse_tree.type_)
+      || OB_ISNULL(parse_tree.children_) || parse_tree.num_child_ < 1
+      || OB_ISNULL(parse_tree.children_[0])) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("invalid REFRESH FULLTEXT DICT parse tree", K(ret));
+  } else {
+    ObRefreshFulltextDictStmt *stmt = create_stmt<ObRefreshFulltextDictStmt>();
+    if (OB_ISNULL(stmt)) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+    } else {
+      stmt_ = stmt;
+      const ParseNode *node = parse_tree.children_[0];
+      ObString database_name;
+      ObString table_name;
+      if (T_RELATION_FACTOR == node->type_) {
+        if (node->num_child_ < 2 || OB_ISNULL(node->children_[node->num_child_ - 1])) {
+          ret = OB_ERR_UNEXPECTED;
+        } else {
+          if (OB_NOT_NULL(node->children_[0])) {
+            database_name.assign_ptr(node->children_[0]->str_value_,
+                                     static_cast<int32_t>(node->children_[0]->str_len_));
+          }
+          const ParseNode *table_node = node->children_[node->num_child_ - 1];
+          table_name.assign_ptr(table_node->str_value_,
+                                static_cast<int32_t>(table_node->str_len_));
+        }
+      } else if (T_VARCHAR == node->type_ || T_CHAR == node->type_ || T_IDENT == node->type_) {
+        ObString full_name;
+        if (T_IDENT == node->type_) {
+          if (OB_FAIL(Util::resolve_relation_name(node, full_name))) {
+            LOG_WARN("failed to resolve dictionary table identifier", K(ret));
+          }
+        } else if (OB_FAIL(Util::resolve_string(node, full_name))) {
+          LOG_WARN("failed to resolve dictionary table string", K(ret));
+        }
+        if (OB_SUCC(ret)) {
+          const char *dot = full_name.find('.');
+          if (OB_ISNULL(dot)) {
+            table_name = full_name;
+          } else {
+            database_name = full_name.split_on(dot);
+            table_name = full_name;
+          }
+        }
+      } else {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("unexpected dictionary table node", K(ret), K(node->type_));
+      }
+      if (OB_SUCC(ret) && database_name.empty()) {
+        if (OB_ISNULL(session_info_)) {
+          ret = OB_ERR_UNEXPECTED;
+        } else if ((database_name = session_info_->get_database_name()).empty()) {
+          ret = OB_ERR_NO_DB_SELECTED;
+          LOG_USER_ERROR(OB_ERR_NO_DB_SELECTED);
+        }
+      }
+      if (OB_SUCC(ret) && table_name.empty()) {
+        ret = OB_INVALID_ARGUMENT;
+        LOG_USER_ERROR(OB_INVALID_ARGUMENT, "dictionary table name is empty");
+      } else if (OB_SUCC(ret)) {
+        stmt->set_database_name(database_name);
+        stmt->set_table_name(table_name);
+      }
+    }
+  }
+  return ret;
+}
+
 int ObWashMemFragmentationResolver::resolve(const ParseNode &parse_tree)
 {
   int ret = OB_SUCCESS;

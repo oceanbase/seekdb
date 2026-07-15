@@ -103,11 +103,10 @@ int ObIKFTParser::get_next_token(const char *&word,
         }
       } else {
         bool is_stop = false;
-        // if (!OB_ISNULL(dict_stop_)
-        //     && OB_FAIL(dict_stop_->match(ObString(len, output_word + offset), is_stop))) {
-        //   LOG_WARN("Failed to match stopwords", K(ret));
-        // } else
-        if (!is_stop) {
+        if (!OB_ISNULL(dict_stop_)
+            && OB_FAIL(dict_stop_->match(ObString(len, output_word + offset), is_stop))) {
+          LOG_WARN("Failed to match stopwords", K(ret));
+        } else if (!is_stop) {
           word = output_word + offset;
           word_len = len;
           char_cnt = cnt;
@@ -151,7 +150,7 @@ int ObIKFTParser::process_one_char(TokenizeContext &ctx,
   for (ObList<ObIIKProcessor *, ObIAllocator>::iterator iter = segmenters_.begin();
        OB_SUCC(ret) && iter != segmenters_.end();
        iter++) {
-    if (OB_FAIL((*iter)->process(ctx))) {
+    if (OB_FAIL((*iter)->process(ctx, ch, char_len, type))) {
       LOG_WARN("Failed to process segmenter", K(ret));
     }
   }
@@ -173,10 +172,8 @@ int ObIKFTParser::process_next_batch()
       const char *ch;
       uint8_t char_len = 0;
       ObFTCharUtil::CharType type = ObFTCharUtil::CharType::USELESS;
-      if (OB_FAIL(ctx_->current_char(ch, char_len))) {
-        LOG_WARN("Failed to get current char", K(ret));
-      } else if (OB_FAIL(ctx_->current_char_type(type))) {
-        LOG_WARN("Failed to get current char type", K(ret));
+      if (OB_FAIL(ctx_->current_char_and_type(ch, char_len, type))) {
+        LOG_WARN("Failed to get current char state", K(ret));
       } else if (OB_FAIL(process_one_char(*ctx_, ch, char_len, type))) {
         LOG_WARN("Failed to process one char", K(ret));
       } else {
@@ -196,10 +193,10 @@ int ObIKFTParser::process_next_batch()
     }
 
     if (OB_SUCC(ret) || OB_ITER_END == ret) {
-      ObIKArbitrator arb;
-      if (OB_FAIL(arb.process(*ctx_))) {
+      arbitrator_.reuse();
+      if (OB_FAIL(arbitrator_.process(*ctx_))) {
         LOG_WARN("Failed to process arbitrator", K(ret));
-      } else if (OB_FAIL(arb.output_result(*ctx_))) {
+      } else if (OB_FAIL(arbitrator_.output_result(*ctx_))) {
         LOG_WARN("Failed to make result list");
       }
     } else {
@@ -278,17 +275,27 @@ int ObIKFTParser::init_dict(const plugin::ObFTParserParam &param)
   }
 
   ObFTRangeDict *dict = nullptr;
-  ObFTDictDesc main_dict_desc("main_dict",
+  const ObString main_name = param.ik_param_.main_dict_.empty()
+      ? ObString(ObFTSLiteral::FT_DEFAULT_IK_DICT_UTF8_TABLE)
+      : param.ik_param_.main_dict_;
+  const ObString quantifier_name = param.ik_param_.quan_dict_.empty()
+      ? ObString(ObFTSLiteral::FT_DEFAULT_IK_QUANTIFIER_UTF8_TABLE)
+      : param.ik_param_.quan_dict_;
+  const ObString stopword_name = param.ik_param_.stopword_dict_.empty()
+      ? ObString(ObFTSLiteral::FT_DEFAULT_IK_STOPWORD_UTF8_TABLE)
+      : param.ik_param_.stopword_dict_;
+
+  ObFTDictDesc main_dict_desc(main_name,
                               ObFTDictType::DICT_IK_MAIN,
                               ObCharsetType::CHARSET_UTF8MB4,
                               ObCollationType::CS_TYPE_UTF8MB4_BIN);
 
-  ObFTDictDesc quan_dict_desc("quan_dict",
+  ObFTDictDesc quan_dict_desc(quantifier_name,
                               ObFTDictType::DICT_IK_QUAN,
                               ObCharsetType::CHARSET_UTF8MB4,
                               ObCollationType::CS_TYPE_UTF8MB4_BIN);
 
-  ObFTDictDesc stopword_dict_desc("stopword",
+  ObFTDictDesc stopword_dict_desc(stopword_name,
                                   ObFTDictType::DICT_IK_STOP,
                                   ObCharsetType::CHARSET_UTF8MB4,
                                   ObCollationType::CS_TYPE_UTF8MB4_BIN);

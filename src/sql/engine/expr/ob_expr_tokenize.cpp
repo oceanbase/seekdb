@@ -195,7 +195,8 @@ int ObExprTokenize::TokenizeParam::parse_json_param(const ObIJsonBase *obj)
       LOG_USER_ERROR(OB_INVALID_ARGUMENT, "parser arguments");
     } else {
       ObString json_str;
-      if (OB_FAIL(ObFTParserJsonProps::tokenize_array_to_props_json(allocator_, val, json_str))) {
+      if (OB_FAIL(ObFTParserJsonProps::tokenize_array_to_props_json(
+              allocator_, val, json_str, database_name_))) {
         LOG_WARN("Fail to tokenize array to props json", K(ret));
         ObSqlString message;
         message.append_fmt("format in %s form", ADDITIONAL_ARGS_STR);
@@ -227,6 +228,10 @@ int ObExprTokenize::parse_param(const ObExpr &expr,
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
   
   MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator(), expr.type_, ret);
+
+  if (OB_NOT_NULL(ctx.exec_ctx_.get_my_session())) {
+    param.database_name_ = ctx.exec_ctx_.get_my_session()->get_database_name();
+  }
 
   if (OB_UNLIKELY(expr.arg_cnt_ < 1 || expr.arg_cnt_ > 3)) {
     ret = OB_INVALID_ARGUMENT;

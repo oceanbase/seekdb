@@ -1602,9 +1602,11 @@ int ObDDLResolver::resolve_table_option(const ParseNode *option_node, const bool
         break;
       }
       case T_PARSER_PROPERTIES: {
-        if (OB_FAIL(ObFTParserResolverHelper::resolve_parser_properties(*option_node,
-                                                                               *allocator_,
-                                                                               parser_properties_))) {
+        if (OB_FAIL(ObFTParserResolverHelper::resolve_parser_properties(database_name_,
+                                                                        *option_node,
+                                                                        *allocator_,
+                                                                        schema_checker_,
+                                                                        parser_properties_))) {
           LOG_WARN("fail to resolve parser properties", K(ret));
         }
         break;
@@ -2391,6 +2393,29 @@ int ObDDLResolver::resolve_table_option(const ParseNode *option_node, const bool
           LOG_USER_ERROR(OB_NOT_SUPPORTED, "organization in the alter table statement");
         } else {
           // do nothing
+        }
+        break;
+      }
+      case T_FULLTEXT_DICT: {
+        if (OB_ISNULL(option_node->children_[0])) {
+          ret = OB_ERR_UNEXPECTED;
+          SQL_RESV_LOG(WARN, "fulltext dictionary option is missing its value", K(ret));
+        } else if (stmt_->get_stmt_type() == stmt::T_ALTER_TABLE) {
+          ret = OB_NOT_SUPPORTED;
+          LOG_USER_ERROR(OB_NOT_SUPPORTED, "FULLTEXT_DICT in ALTER TABLE");
+        } else if (stmt_->get_stmt_type() == stmt::T_CREATE_TABLE) {
+          ObString value(static_cast<int32_t>(option_node->children_[0]->str_len_),
+                         option_node->children_[0]->str_value_);
+          if (0 != value.case_compare("Y")) {
+            ret = OB_ERR_PARSER_SYNTAX;
+            SQL_RESV_LOG(WARN, "FULLTEXT_DICT only accepts 'Y'", K(ret), K(value));
+          } else {
+            ObCreateTableArg &arg = static_cast<ObCreateTableStmt *>(stmt_)->get_create_table_arg();
+            arg.schema_.set_fulltext_dict();
+          }
+        } else {
+          ret = OB_ERR_UNEXPECTED;
+          SQL_RESV_LOG(WARN, "unexpected statement for FULLTEXT_DICT", K(ret), K(stmt_->get_stmt_type()));
         }
         break;
       }

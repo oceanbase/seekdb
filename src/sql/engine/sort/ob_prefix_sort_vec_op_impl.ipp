@@ -1,18 +1,23 @@
-/*
- * Copyright (c) 2025 OceanBase.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+/**
+ * Copyright (c) 2021 OceanBase
+ * OceanBase CE is licensed under Mulan PubL v2.
+ * You can use this software according to the terms and conditions of the Mulan PubL v2.
+ * You may obtain a copy of Mulan PubL v2 at:
+ *          http://license.coscl.org.cn/MulanPubL-2.0
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
+ * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
+ * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+ * See the Mulan PubL v2 for more details.
  */
+
+#include "lib/ob_define.h"
+#include "lib/ob_errno.h"
+#include "lib/utility/ob_unify_serialize.h"
+#include "lib/utility/ob_print_utils.h"
+#include "lib/oblog/ob_log.h"
+#include "sql/engine/ob_operator.h"
+#include "lib/container/ob_array.h"
+#include "sql/engine/basic/ob_compact_row.h"
 
 namespace oceanbase
 {
@@ -60,11 +65,11 @@ int ObPrefixSortVecImpl<Compare, Store_Row, has_addon>::init(ObSortVecOpContext 
   if (is_inited()) {
     ret = OB_INIT_TWICE;
     SQL_ENG_LOG(WARN, "init twice", K(ret));
-  } else if (OB_ISNULL(ctx.sk_collations_)
+  } else if (OB_INVALID_ID == ctx.tenant_id_ || OB_ISNULL(ctx.sk_collations_)
              || OB_ISNULL(ctx.eval_ctx_) || OB_ISNULL(ctx.op_) || ctx.prefix_pos_ <= 0
              || ctx.prefix_pos_ > ctx.sk_collations_->count()) {
     ret = OB_INVALID_ARGUMENT;
-    SQL_ENG_LOG(WARN, "invalid argument", K(ret), K(ctx.prefix_pos_));
+    SQL_ENG_LOG(WARN, "invalid argument", K(ret), K(ctx.tenant_id_), K(ctx.prefix_pos_));
   } else {
     int64_t batch_size = ctx.eval_ctx_->max_batch_size_;
     full_sk_collations_ = ctx.sk_collations_;
@@ -201,7 +206,7 @@ int ObPrefixSortVecImpl<Compare, Store_Row, has_addon>::add_immediate_prefix(
   if (OB_FAIL(add_immediate_prefix_store(pos, selector, row_size))) {
     SQL_ENG_LOG(WARN, "failed to add immediate prefix store", K(ret));
   } else if (!comp_.is_inited()
-             && OB_FAIL(comp_.init(cmp_sk_exprs_, sk_row_meta_, addon_row_meta_,
+             && OB_FAIL(comp_.init(cmp_sk_exprs_, store_mgr_.get_sk_row_meta(), store_mgr_.get_addon_row_meta(),
                                    cmp_sort_collations_, exec_ctx_,
                                    enable_encode_sortkey_ && !(part_cnt_ > 0)))) {
     SQL_ENG_LOG(WARN, "init compare failed", K(ret));
@@ -329,7 +334,7 @@ int ObPrefixSortVecImpl<Compare, Store_Row, has_addon>::fetch_rows_batch()
         if (new_prefix < 0) {
           bool is_same = false;
           if (nullptr != prev_row_
-              && OB_FAIL(is_same_prefix(prev_row_, *sk_row_meta_, *sk_exprs_, i, is_same))) {
+              && OB_FAIL(is_same_prefix(prev_row_, *store_mgr_.get_sk_row_meta(), *sk_exprs_, i, is_same))) {
             SQL_ENG_LOG(WARN, "check same prefix failed", K(ret));
           } else if (nullptr == prev_row_ && OB_FAIL(is_same_prefix(*sk_exprs_, 0, i, is_same))) {
             SQL_ENG_LOG(WARN, "check same prefix failed", K(ret));

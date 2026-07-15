@@ -35,6 +35,8 @@
 #include "sql/engine/cmd/ob_timezone_importer.h"
 #include "sql/engine/cmd/ob_srs_importer.h"
 #include "share/ob_internal_table_change_notifier.h"
+#include "storage/fts/ob_fts_plugin_helper.h"
+#include "storage/fts/dict/ob_ft_dict_hub.h"
 
 namespace oceanbase
 {
@@ -471,6 +473,44 @@ int ObRefreshMemStatExecutor::execute(ObExecContext &ctx, ObRefreshMemStatStmt &
   } else if (OB_FAIL(GCTX.root_service_->admin_refresh_memory_stat(
                          stmt.get_rpc_arg()))) {
     LOG_WARN("refresh memory stat failed", K(ret), "rpc_arg", stmt.get_rpc_arg());
+  }
+  return ret;
+}
+
+int ObRefreshFulltextDictExecutor::execute(ObExecContext &ctx, ObRefreshFulltextDictStmt &stmt)
+{
+  int ret = OB_SUCCESS;
+  share::schema::ObSchemaGetterGuard schema_guard;
+  const share::schema::ObTableSchema *table_schema = nullptr;
+  storage::ObFTDictHub *dict_hub = nullptr;
+  char full_name_buf[OB_MAX_DATABASE_NAME_LENGTH + OB_MAX_TABLE_NAME_LENGTH + 2];
+  int64_t pos = 0;
+  ObString full_name;
+  if (OB_ISNULL(GCTX.schema_service_)) {
+    ret = OB_ERR_UNEXPECTED;
+  } else if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(schema_guard))) {
+    LOG_WARN("failed to get schema guard", K(ret));
+  } else if (OB_FAIL(schema_guard.get_table_schema(stmt.get_database_name(),
+                                                    stmt.get_table_name(),
+                                                    false, table_schema))) {
+    LOG_WARN("failed to get dictionary table schema", K(ret));
+  } else if (OB_ISNULL(table_schema)) {
+    ret = OB_TABLE_NOT_EXIST;
+  } else if (!table_schema->is_fulltext_dict()) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_USER_ERROR(OB_INVALID_ARGUMENT, "table is not a fulltext dictionary table");
+  } else if (OB_FAIL(databuff_printf(full_name_buf, sizeof(full_name_buf), pos,
+                                    "%.*s.%.*s",
+                                    stmt.get_database_name().length(), stmt.get_database_name().ptr(),
+                                    stmt.get_table_name().length(), stmt.get_table_name().ptr()))) {
+    LOG_WARN("failed to format dictionary table name", K(ret));
+  } else if (FALSE_IT(full_name.assign_ptr(full_name_buf, static_cast<int32_t>(pos)))) {
+  } else if (OB_FAIL(storage::ObFTParsePluginData::instance().get_dict_hub(dict_hub))) {
+    LOG_WARN("failed to get fulltext dictionary hub", K(ret));
+  } else if (OB_ISNULL(dict_hub)) {
+    ret = OB_ERR_UNEXPECTED;
+  } else if (OB_FAIL(dict_hub->refresh_cache(full_name))) {
+    LOG_WARN("failed to refresh fulltext dictionary", K(ret), K(full_name));
   }
   return ret;
 }
