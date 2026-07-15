@@ -70,7 +70,9 @@ TokenizeContext::TokenizeContext(ObCollationType coll_type,
       fulltext_(fulltext), fulltext_len_(fulltext_len), cursor_(0),
       next_char_len_(0), handle_size_(0), is_smart_(is_smart), token_list_(allocator),
       // Task4 Op1：结果数组与消费下标在上下文生命周期内复用。
-      results_(allocator), result_idx_(0)
+      results_(allocator), result_idx_(0),
+      // Task4 Op3：首批次从文档起点开始。
+      batch_start_cursor_(0)
 {
 }
 
@@ -98,6 +100,8 @@ int TokenizeContext::reuse_context(const char *fulltext, int64_t fulltext_len)
     fulltext_ = fulltext;
     fulltext_len_ = fulltext_len;
     cursor_ = 0;
+    // Task4 Op3：复用解析器处理新文档时同步重置批次边界。
+    batch_start_cursor_ = 0;
     if (OB_FAIL(reset_resource())) {
       LOG_WARN("Failed to reset tokenize context", K(ret));
     } else if (OB_FAIL(prepare_next_char())) {

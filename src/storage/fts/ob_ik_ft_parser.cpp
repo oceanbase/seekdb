@@ -194,6 +194,8 @@ int ObIKFTParser::process_next_batch()
   if (ctx_->iter_end()) {
     ret = OB_ITER_END;
   } else {
+    // Task4 Op3：保存本批次起点，输出时只遍历本批次覆盖的原文区间。
+    ctx_->mark_batch_start();
     while (OB_SUCC(ret) && !do_seg && !ctx_->iter_end()) {
       const char *ch;
       uint8_t char_len = 0;

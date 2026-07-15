@@ -122,12 +122,15 @@ int ObIKArbitrator::output_result(TokenizeContext &ctx)
 
   int64_t char_len = 0;
   ObIKTokenChain *chain = nullptr;
-  for (int64_t current = 0; OB_SUCC(ret) && current < ctx.fulltext_len();) {
+  // Task4 Op3：只扫描当前批次，避免长文档的后续批次从 offset 0 重复遍历。
+  const int64_t batch_start = ctx.batch_start_cursor();
+  const int64_t batch_end = ctx.batch_end_cursor();
+  for (int64_t current = batch_start; OB_SUCC(ret) && current < batch_end;) {
     ObFTCharUtil::CharType type;
     // maybe not so good to keep single, check it later
     if (OB_FAIL(ObCharset::first_valid_char(ctx.collation(),
                                             ctx.fulltext() + current,
-                                            ctx.fulltext_len() - current,
+                                            batch_end - current,
                                             char_len))) {
       LOG_WARN("Failed to get next valid char", K(ret));
     } else if (OB_FAIL(ObFTCharUtil::classify_first_char(ctx.collation(),
@@ -183,7 +186,7 @@ int ObIKArbitrator::output_result(TokenizeContext &ctx)
           while (OB_SUCC(ret) && current < token.offset_) {
             if (OB_FAIL(ObCharset::first_valid_char(ctx.collation(),
                                                     ctx.fulltext() + current,
-                                                    ctx.fulltext_len() - current,
+                                                    batch_end - current,
                                                     char_len))) {
               LOG_WARN("Failed to get next valid char, ", K(ret));
               break;

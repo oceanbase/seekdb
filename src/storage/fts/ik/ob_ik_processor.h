@@ -77,6 +77,11 @@ public:
   // Task4 Op1：通过索引判断分块结果是否消费完，避免链表逐节点弹出。
   bool is_results_exhaust() const;
 
+  // Task4 Op3：记录当前分词批次边界，避免输出阶段反复扫描整篇文档。
+  void mark_batch_start() { batch_start_cursor_ = cursor_; }
+  int64_t batch_start_cursor() const { return batch_start_cursor_; }
+  int64_t batch_end_cursor() const { return cursor_; }
+
   int add_chain(ObIKTokenChain *chain);
   int add_token(const char *fulltext,
                 int64_t offset,
@@ -112,6 +117,8 @@ private:
   ObFTFastSortList token_list_;
   ObFastSegmentArray<ObIKToken> results_;
   int64_t result_idx_;
+  // Task4 Op3：当前批次在原文中的起始字节偏移。
+  int64_t batch_start_cursor_;
 
 private:
   DISALLOW_COPY_AND_ASSIGN(TokenizeContext);
