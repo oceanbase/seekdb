@@ -877,6 +877,8 @@ ob_set_subtarget(ob_sql engine_expr
   engine/expr/ob_expr_random.cpp
   engine/expr/ob_expr_randstr.cpp
   engine/expr/ob_expr_random_bytes.cpp
+  engine/expr/ob_expr_load_file.cpp
+  engine/expr/ob_expr_ai_split_document.cpp
   engine/expr/ob_expr_regexp.cpp
   engine/expr/ob_expr_regexp_context.cpp
   engine/expr/ob_expr_regexp_instr.cpp
