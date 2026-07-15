@@ -1382,6 +1382,21 @@ int ObDropTableHelper::drop_table_(const ObTableSchema &table_schema, const ObSt
   int64_t new_schema_version = OB_INVALID_VERSION;
   if (OB_FAIL(check_inner_stat_())) {
     LOG_WARN("fail to check inner stat", KR(ret));
+  } else if (table_schema.is_fulltext_dict()) {
+    ObArray<ObDependencyInfo> dependencies;
+    if (OB_FAIL(ObDependencyInfo::collect_dep_infos(
+                    table_schema.get_table_id(), *sql_proxy_, dependencies))) {
+      LOG_WARN("fail to collect dictionary dependencies", K(ret), K(table_schema));
+    } else {
+      for (int64_t i = 0; OB_SUCC(ret) && i < dependencies.count(); ++i) {
+        if (ObObjectType::INDEX == dependencies.at(i).get_dep_obj_type()) {
+          ret = OB_OP_NOT_ALLOW;
+          LOG_USER_ERROR(OB_OP_NOT_ALLOW, "dropping a referenced FULLTEXT_DICT table is");
+        }
+      }
+    }
+  }
+  if (OB_FAIL(ret)) {
   } else if (OB_ISNULL(schema_service_impl = schema_service_->get_schema_service())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("schema service impl is null", KR(ret));

@@ -2756,6 +2756,42 @@ int ObTableSchema::set_view_definition(const common::ObString &view_definition)
   return view_schema_.set_view_definition(view_definition);
 }
 
+int ObTableSchema::check_fulltext_dict_structure() const
+{
+  int ret = OB_SUCCESS;
+  const ObColumnSchemaV2 *word_column = nullptr;
+  if (!is_fulltext_dict()) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (!is_index_organized_table()) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_USER_ERROR(OB_INVALID_ARGUMENT, "FULLTEXT_DICT table must use ORGANIZATION INDEX");
+  } else if (CHARSET_UTF8MB4 != get_charset_type()) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_USER_ERROR(OB_INVALID_ARGUMENT, "FULLTEXT_DICT table charset must be utf8mb4");
+  } else if (1 != get_column_count()
+             || OB_ISNULL(word_column = get_column_schema_by_idx(0))) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_USER_ERROR(OB_INVALID_ARGUMENT, "FULLTEXT_DICT table must contain only the word column");
+  } else if (0 != word_column->get_column_name_str().case_compare("word")) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_USER_ERROR(OB_INVALID_ARGUMENT, "FULLTEXT_DICT table column must be named word");
+  } else if (ObVarcharType != word_column->get_data_type()) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_USER_ERROR(OB_INVALID_ARGUMENT, "FULLTEXT_DICT word column must be VARCHAR");
+  } else if (word_column->get_data_length() < 1 || word_column->get_data_length() > 500) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_USER_ERROR(OB_INVALID_ARGUMENT, "FULLTEXT_DICT word column length must be between 1 and 500");
+  } else if (CHARSET_UTF8MB4 != word_column->get_charset_type()) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_USER_ERROR(OB_INVALID_ARGUMENT, "FULLTEXT_DICT word column charset must be utf8mb4");
+  } else if (!word_column->is_rowkey_column() || 1 != word_column->get_rowkey_position()
+             || 1 != get_rowkey_column_num()) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_USER_ERROR(OB_INVALID_ARGUMENT, "FULLTEXT_DICT word column must be the primary key");
+  }
+  return ret;
+}
+
 int ObTableSchema::set_parser_name_and_properties(
     const common::ObString &parser_name,
     const common::ObString &parser_properties)

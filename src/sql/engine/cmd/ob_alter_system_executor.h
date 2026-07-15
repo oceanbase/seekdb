@@ -64,6 +64,8 @@ DEF_SIMPLE_EXECUTOR(ObSetConfig);
 
 DEF_SIMPLE_EXECUTOR(ObClearMergeError);
 
+DEF_SIMPLE_EXECUTOR(ObRefreshFulltextDict);
+
 DEF_SIMPLE_EXECUTOR(ObUpgradeVirtualSchema);
 
 

@@ -40,6 +40,7 @@ public:
       int64_t &word_len,
       int64_t &char_len,
       int64_t &word_freq) override;
+  int reuse_parser(const char *fulltext, const int64_t fulltext_len) override;
 
   VIRTUAL_TO_STRING_KV(K_(is_inited));
 

@@ -5,33 +5,133 @@ DROP DATABASE IF EXISTS ai_ik_test;
 CREATE DATABASE ai_ik_test;
 USE ai_ik_test;
 
---echo # dictionary table (FULLTEXT_DICT='Y') loaded with custom words, then refreshed into memory
+--echo # invalid dictionary table definitions are rejected
+--error 1210
+CREATE TABLE invalid_no_iot (word varchar(100) primary key)
+  DEFAULT CHARSET=utf8mb4 FULLTEXT_DICT='Y';
+--error 1210
+CREATE TABLE invalid_column_name (term varchar(100) primary key)
+  ORGANIZATION INDEX DEFAULT CHARSET=utf8mb4 FULLTEXT_DICT='Y';
+--error 1210
+CREATE TABLE invalid_without_pk (word varchar(100))
+  ORGANIZATION INDEX DEFAULT CHARSET=utf8mb4 FULLTEXT_DICT='Y';
+--error 1210
+CREATE TABLE invalid_type (word int primary key)
+  ORGANIZATION INDEX DEFAULT CHARSET=utf8mb4 FULLTEXT_DICT='Y';
+--error 1210
+CREATE TABLE invalid_extra_column (word varchar(100) primary key, extra int)
+  ORGANIZATION INDEX DEFAULT CHARSET=utf8mb4 FULLTEXT_DICT='Y';
+--error 1210
+CREATE TABLE invalid_length (word varchar(501) primary key)
+  ORGANIZATION INDEX DEFAULT CHARSET=utf8mb4 FULLTEXT_DICT='Y';
+--error 1210
+CREATE TABLE invalid_flag (word varchar(100) primary key)
+  ORGANIZATION INDEX DEFAULT CHARSET=utf8mb4 FULLTEXT_DICT='N';
+
+--echo # create main, stopword, and quantifier dictionary tables
 CREATE TABLE my_dict (word varchar(100) primary key)
   ORGANIZATION INDEX DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci FULLTEXT_DICT='Y';
+CREATE TABLE my_stopwords (word varchar(100) primary key)
+  ORGANIZATION INDEX DEFAULT CHARSET=utf8mb4 FULLTEXT_DICT='Y';
+CREATE TABLE my_quantifiers (word varchar(100) primary key)
+  ORGANIZATION INDEX DEFAULT CHARSET=utf8mb4 FULLTEXT_DICT='Y';
 INSERT INTO my_dict (word) VALUES ('OceanBase'),('分布式数据库'),('全文索引');
-ALTER SYSTEM REFRESH FULLTEXT DICT ai_ik_test.my_dict;
+INSERT INTO my_stopwords (word) VALUES ('全文索引');
+INSERT INTO my_quantifiers (word) VALUES ('盒');
 
---echo # business table + fulltext index that uses the custom dictionary
+--echo # SHOW CREATE persists the dictionary flag
+--replace_regex / ROW_FORMAT = .*$/<TABLE_OPTIONS>/
+SHOW CREATE TABLE my_dict;
+
+--echo # REFRESH accepts qualified and current-database table names
+ALTER SYSTEM REFRESH FULLTEXT DICT my_dict;
+ALTER SYSTEM REFRESH FULLTEXT DICT ai_ik_test.my_stopwords;
+ALTER SYSTEM REFRESH FULLTEXT DICT my_quantifiers;
+CREATE TABLE ordinary (word varchar(100) primary key) DEFAULT CHARSET=utf8mb4;
+--error 1210
+ALTER SYSTEM REFRESH FULLTEXT DICT ordinary;
+--error 1146
+ALTER SYSTEM REFRESH FULLTEXT DICT missing_dict;
+
+--echo # non-qualified parser properties are persisted as database-qualified names
 CREATE TABLE articles (
   id int unsigned NOT NULL AUTO_INCREMENT,
   title varchar(200) NOT NULL,
   PRIMARY KEY (id)
 ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin;
 ALTER TABLE articles ADD FULLTEXT INDEX ft_title(title)
-  WITH PARSER ik PARSER_PROPERTIES=(dict_table='ai_ik_test.my_dict');
+  WITH PARSER ik PARSER_PROPERTIES=(dict_table='my_dict',
+                                    stopword_table='my_stopwords',
+                                    quantifier_table='my_quantifiers',
+                                    ik_mode='max_word');
+--replace_regex / ROW_FORMAT = .*$/<TABLE_OPTIONS>/
+SHOW CREATE TABLE articles;
 INSERT INTO articles (title) VALUES ('OceanBase数据库介绍'),('全文索引使用指南');
 
---echo # custom-dictionary words match their rows
+--echo # custom main dictionary matches, custom stopword filters
 SELECT id, title FROM articles WHERE MATCH(title) AGAINST('OceanBase' IN BOOLEAN MODE) ORDER BY id;
 SELECT id, title FROM articles WHERE MATCH(title) AGAINST('全文索引' IN BOOLEAN MODE) ORDER BY id;
 --echo # a custom dict_table REPLACES the built-in main dict: 数据库 is not listed, so it breaks
 --echo # into single characters and matches nothing
 SELECT id, title FROM articles WHERE MATCH(title) AGAINST('数据库' IN BOOLEAN MODE) ORDER BY id;
 
---echo # dynamic update: add a word -> REFRESH -> index a new row -> it matches
+--echo # TOKENIZE supports all three custom tables and max_word mode
+SELECT TOKENIZE('这是全文索引的介绍', 'ik',
+  '[{"output":"all"},{"additional_args":[{"dict_table":"my_dict"},{"stopword_table":"my_stopwords"},{"quantifier_table":"my_quantifiers"},{"ik_mode":"max_word"}]}]') AS tokens;
+SELECT TOKENIZE('3盒', 'ik',
+  '[{"output":"all"},{"additional_args":[{"dict_table":"my_dict"},{"stopword_table":"my_stopwords"},{"quantifier_table":"my_quantifiers"},{"ik_mode":"smart"}]}]') AS quantity_tokens;
+
+--echo # dynamic update affects only rows indexed after REFRESH
 INSERT INTO my_dict (word) VALUES ('新词汇');
-ALTER SYSTEM REFRESH FULLTEXT DICT ai_ik_test.my_dict;
+INSERT INTO articles (title) VALUES ('刷新前新词汇');
+SELECT id, title FROM articles WHERE MATCH(title) AGAINST('新词汇' IN BOOLEAN MODE) ORDER BY id;
+ALTER SYSTEM REFRESH FULLTEXT DICT my_dict;
 INSERT INTO articles (title) VALUES ('包含新词汇的标题');
 SELECT id, title FROM articles WHERE MATCH(title) AGAINST('新词汇' IN BOOLEAN MODE) ORDER BY id;
+
+--echo # referenced dictionaries reject structural DDL and DROP
+--error 1235
+ALTER TABLE my_dict ADD COLUMN extra int;
+--error 1235
+ALTER TABLE my_dict MODIFY COLUMN word varchar(101);
+--error 1235
+ALTER TABLE my_dict RENAME COLUMN word TO term;
+--error 1235
+ALTER TABLE my_dict RENAME TO my_dict_renamed;
+--error 1235
+RENAME TABLE my_stopwords TO my_stopwords_renamed;
+--error 4179
+DROP TABLE my_quantifiers;
+
+--echo # non-structural ALTER preserves FULLTEXT_DICT and dependencies are released with the index
+ALTER TABLE my_dict COMMENT='still a dictionary';
+--replace_regex / ROW_FORMAT = .*$/<TABLE_OPTIONS>/
+SHOW CREATE TABLE my_dict;
+ALTER TABLE articles DROP INDEX ft_title;
+DROP TABLE my_dict, my_stopwords, my_quantifiers;
+
+--echo # an unreferenced dictionary table can be dropped directly
+CREATE TABLE unused_dict (word varchar(100) primary key)
+  ORGANIZATION INDEX DEFAULT CHARSET=utf8mb4 FULLTEXT_DICT='Y';
+DROP TABLE unused_dict;
+
+--echo # an unreferenced dictionary may be altered, but an invalid structure cannot be loaded
+CREATE TABLE invalidated_dict (word varchar(100) primary key)
+  ORGANIZATION INDEX DEFAULT CHARSET=utf8mb4 FULLTEXT_DICT='Y';
+INSERT INTO invalidated_dict VALUES ('domain_term');
+ALTER TABLE invalidated_dict ADD COLUMN extra int;
+--error 1210
+ALTER SYSTEM REFRESH FULLTEXT DICT invalidated_dict;
+--error 1210
+SELECT TOKENIZE('domain_term', 'ik',
+  '[{"output":"all"},{"additional_args":[{"dict_table":"invalidated_dict"}]}]');
+CREATE TABLE invalid_articles (
+  id int primary key,
+  title varchar(200) NOT NULL
+) DEFAULT CHARSET=utf8mb4;
+--error 1210
+ALTER TABLE invalid_articles ADD FULLTEXT INDEX ft_invalid(title)
+  WITH PARSER ik PARSER_PROPERTIES=(dict_table='invalidated_dict');
+DROP TABLE invalid_articles, invalidated_dict;
 
 DROP DATABASE ai_ik_test;

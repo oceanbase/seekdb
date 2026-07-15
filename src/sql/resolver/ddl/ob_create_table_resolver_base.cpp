@@ -362,6 +362,7 @@ int ObCreateTableResolverBase::resolve_column_group(const ParseNode *cg_node)
 int ObCreateTableResolverBase::resolve_table_organization(common::ObServerConfig *tenant_config, ParseNode *node)
 {
   int ret = OB_SUCCESS;
+  has_explicit_organization_index_ = false;
   // get the table organization from the tenant config
   {
     const char *ptr = NULL;
@@ -401,6 +402,7 @@ int ObCreateTableResolverBase::resolve_table_organization(common::ObServerConfig
               table_organization_ = ObTableOrganizationType::OB_HEAP_ORGANIZATION;
             } else if (T_ORGANIZATION_INDEX == option_node->children_[0]->type_) {
               table_organization_ = ObTableOrganizationType::OB_INDEX_ORGANIZATION;
+              has_explicit_organization_index_ = true;
             }
           }
         } else if (stmt_->get_stmt_type() == stmt::T_ALTER_TABLE) {

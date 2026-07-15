@@ -91,6 +91,18 @@ int ObNgramFTParser::get_next_token(
   return ret;
 }
 
+int ObNgramFTParser::reuse_parser(const char *fulltext, const int64_t fulltext_len)
+{
+  int ret = OB_SUCCESS;
+  if (OB_UNLIKELY(!is_inited_)) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("ngram parser has not been initialized", K(ret));
+  } else if (OB_FAIL(ngram_impl_.reuse_parser(fulltext, fulltext_len))) {
+    LOG_WARN("failed to reuse ngram implementation", K(ret));
+  }
+  return ret;
+}
+
 ObNgramFTParserDesc::ObNgramFTParserDesc()
   : is_inited_(false)
 {

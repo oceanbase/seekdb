@@ -44,19 +44,27 @@ int ObStopWordChecker::init()
 
   if (inited_) {
     ret = OB_INIT_TWICE;
-  } else if (OB_FAIL(stopword_set_.create(DEFAULT_STOPWORD_BUCKET_NUM, "StopWordSet", "StopWordSet"))) {
+  } else if (OB_FAIL(general_ci_stopword_set_.create(
+                 DEFAULT_STOPWORD_BUCKET_NUM, "StopWordSet", "StopWordSet"))) {
     LOG_WARN("fail to create stop word set", K(ret));
+  } else if (OB_FAIL(binary_stopword_set_.create(
+                 DEFAULT_STOPWORD_BUCKET_NUM, "StopWordBin", "StopWordBin"))) {
+    LOG_WARN("fail to create binary stop word set", K(ret));
   } else {
-    ObObjMeta stop_meta;
-    stop_meta.set_varchar();
-    stop_meta.set_collation_type(ObCollationType::CS_TYPE_UTF8MB4_GENERAL_CI);
-
-    stopword_type_.set_meta(stop_meta);
+    general_ci_stopword_type_.set_varchar();
+    general_ci_stopword_type_.set_collation_type(ObCollationType::CS_TYPE_UTF8MB4_GENERAL_CI);
+    binary_stopword_type_.set_varchar();
+    binary_stopword_type_.set_collation_type(ObCollationType::CS_TYPE_UTF8MB4_BIN);
     const int64_t stopword_count = sizeof(ob_stop_word_list) / sizeof(ob_stop_word_list[0]);
     for (int64_t i = 0; OB_SUCC(ret) && i < stopword_count; ++i) {
-      ObFTWord stopword(STRLEN(ob_stop_word_list[i]), ob_stop_word_list[i], stopword_type_);
-      if (OB_FAIL(stopword_set_.set_refactored(stopword))) {
-        LOG_WARN("fail to set stop word", K(ret), K(stopword));
+      ObFTWord general_ci_stopword(
+          STRLEN(ob_stop_word_list[i]), ob_stop_word_list[i], general_ci_stopword_type_);
+      ObFTWord binary_stopword(
+          STRLEN(ob_stop_word_list[i]), ob_stop_word_list[i], binary_stopword_type_);
+      if (OB_FAIL(general_ci_stopword_set_.set_refactored(general_ci_stopword))) {
+        LOG_WARN("fail to set general-ci stop word", K(ret), K(general_ci_stopword));
+      } else if (OB_FAIL(binary_stopword_set_.set_refactored(binary_stopword))) {
+        LOG_WARN("fail to set binary stop word", K(ret), K(binary_stopword));
       }
     }
 
@@ -70,7 +78,8 @@ int ObStopWordChecker::init()
 void ObStopWordChecker::destroy()
 {
   if (inited_) {
-    stopword_set_.destroy();
+    general_ci_stopword_set_.destroy();
+    binary_stopword_set_.destroy();
     inited_ = false;
   }
 }
@@ -80,7 +89,6 @@ int ObStopWordChecker::check_stopword(const ObFTWord &word, bool &is_stopword)
   int ret = OB_SUCCESS;
   
   
-  common::ObArenaAllocator allocator(lib::ObMemAttr("ChkStopWord"));
   if (OB_UNLIKELY(!inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("ObStopWordChecker hasn't been initialized", K(ret), K(inited_));
@@ -88,30 +96,43 @@ int ObStopWordChecker::check_stopword(const ObFTWord &word, bool &is_stopword)
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("word is empty", K(ret), K(word));
   } else {
-    common::ObString cmp_str;
-    // do nothing set out with in if type is the same.
-    if (OB_FAIL(common::ObCharset::charset_convert(
-                                       allocator,
-                                       word.get_word().get_string(),
-                                       word.get_collation_type(),
-                                       stopword_type_.get_collation_type(),
-                                       cmp_str))) {
-      LOG_WARN("fail to convert charset", K(ret), K(word), K(stopword_type_));
+    const ObCollationType coll = word.get_collation_type();
+    if (CS_TYPE_UTF8MB4_GENERAL_CI == coll || CS_TYPE_UTF8MB4_BIN == coll) {
+      const ObObjMeta &stopword_meta = CS_TYPE_UTF8MB4_BIN == coll
+                                          ? binary_stopword_type_
+                                          : general_ci_stopword_type_;
+      StopWordSet &stopword_set = CS_TYPE_UTF8MB4_BIN == coll
+                                      ? binary_stopword_set_
+                                      : general_ci_stopword_set_;
+      ObFTWord lookup(word.get_word().get_string().length(),
+                      word.get_word().get_string().ptr(),
+                      stopword_meta);
+      ret = stopword_set.exist_refactored(lookup);
     } else {
-      ObFTWord converted(cmp_str.length(), cmp_str.ptr(), stopword_type_);
-      ret = stopword_set_.exist_refactored(converted);
-      if (OB_HASH_NOT_EXIST == ret) {
-        is_stopword = false;
-        ret = OB_SUCCESS;
-      } else if (OB_HASH_EXIST == ret) {
-        is_stopword = true;
-        ret = OB_SUCCESS;
-      } else if (OB_SUCC(ret)) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("the exist of hastset shouldn't return success", K(ret), K(word), K(converted));
+      common::ObArenaAllocator allocator(lib::ObMemAttr("ChkStopWord"));
+      common::ObString cmp_str;
+      if (OB_FAIL(common::ObCharset::charset_convert(allocator,
+                                                     word.get_word().get_string(),
+                                                     coll,
+                                                     general_ci_stopword_type_.get_collation_type(),
+                                                     cmp_str))) {
+        LOG_WARN("fail to convert charset", K(ret), K(word), K(general_ci_stopword_type_));
       } else {
-        LOG_WARN("fail to do exist", K(ret), K(word), K(converted));
+        ObFTWord converted(cmp_str.length(), cmp_str.ptr(), general_ci_stopword_type_);
+        ret = general_ci_stopword_set_.exist_refactored(converted);
       }
+    }
+    if (OB_HASH_NOT_EXIST == ret) {
+      is_stopword = false;
+      ret = OB_SUCCESS;
+    } else if (OB_HASH_EXIST == ret) {
+      is_stopword = true;
+      ret = OB_SUCCESS;
+    } else if (OB_SUCC(ret)) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("stop word hash set returned unexpected success", K(ret), K(word));
+    } else {
+      LOG_WARN("fail to check stop word", K(ret), K(word));
     }
   }
   return ret;
@@ -219,7 +240,6 @@ int ObAddWord::check_stopword(const ObFTWord &ft_word, bool &is_stopword)
 int ObAddWord::groupby_word(const ObFTWord &word, const int64_t word_freq)
 {
   int ret = OB_SUCCESS;
-  int64_t word_count = 0;
   if (OB_UNLIKELY(word.empty() || word_freq <= 0)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", K(ret), K(word), K(word_freq));
@@ -227,16 +247,10 @@ int ObAddWord::groupby_word(const ObFTWord &word, const int64_t word_freq)
     if (OB_FAIL(word_map_.set_refactored(word, 1/*word count*/))) {
       LOG_WARN("fail to set fulltext word and count", K(ret), K(word));
     }
-  } else if (OB_FAIL(word_map_.get_refactored(word, word_count)) && OB_HASH_NOT_EXIST != ret) {
-    LOG_WARN("fail to get fulltext word", K(ret), K(word));
   } else {
-    if (OB_HASH_NOT_EXIST == ret) {
-      word_count = 1;
-    } else {
-      word_count += word_freq;
-    }
-    if (OB_FAIL(word_map_.set_refactored(word, word_count, 1/*overwrite*/))) {
-      LOG_WARN("fail to set fulltext word and count", K(ret), K(word), K(word_count));
+    UpdateWordCount update_word_count(word_freq);
+    if (OB_FAIL(word_map_.set_or_update(word, word_freq, update_word_count))) {
+      LOG_WARN("fail to aggregate fulltext word count", K(ret), K(word), K(word_freq));
     }
   }
   return ret;
