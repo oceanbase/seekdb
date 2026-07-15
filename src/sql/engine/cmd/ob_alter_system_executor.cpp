@@ -29,6 +29,9 @@
 #include "rootserver/freeze/ob_major_freeze_helper.h" //ObMajorFreezeHelper
 #include "pl/pl_cache/ob_pl_cache_mgr.h"
 #include "sql/plan_cache/ob_ps_cache.h"
+#include "share/schema/ob_schema_getter_guard.h"
+#include "storage/fts/dict/ob_ft_dict_cache_loader.h"
+#include "storage/fts/dict/ob_ft_dict_def.h"
 
 #include "rootserver/ob_tenant_event_def.h"
 #include "sql/engine/cmd/ob_redis_importer.h"
@@ -471,6 +474,63 @@ int ObRefreshMemStatExecutor::execute(ObExecContext &ctx, ObRefreshMemStatStmt &
   } else if (OB_FAIL(GCTX.root_service_->admin_refresh_memory_stat(
                          stmt.get_rpc_arg()))) {
     LOG_WARN("refresh memory stat failed", K(ret), "rpc_arg", stmt.get_rpc_arg());
+  }
+  return ret;
+}
+
+int ObRefreshFulltextDictExecutor::execute(ObExecContext &ctx,
+                                           ObRefreshFulltextDictStmt &stmt)
+{
+  int ret = OB_SUCCESS;
+  ObSQLSessionInfo *session = ctx.get_my_session();
+  share::schema::ObSchemaGetterGuard schema_guard;
+  const share::schema::ObTableSchema *table_schema = nullptr;
+
+  if (OB_ISNULL(session)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("session is null", K(ret));
+  } else if (OB_ISNULL(GCTX.schema_service_)) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("schema service is not initialized", K(ret));
+  } else if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(schema_guard))) {
+    LOG_WARN("get tenant schema guard failed", K(ret));
+  } else if (OB_FAIL(schema_guard.get_table_schema(stmt.get_database_name(),
+                                                    stmt.get_table_name(),
+                                                    false,
+                                                    table_schema))) {
+    LOG_WARN("get fulltext dictionary table schema failed", K(ret),
+             K(stmt.get_database_name()), K(stmt.get_table_name()));
+  } else if (OB_ISNULL(table_schema)) {
+    ret = OB_TABLE_NOT_EXIST;
+    LOG_WARN("fulltext dictionary table does not exist", K(ret),
+             K(stmt.get_database_name()), K(stmt.get_table_name()));
+  } else if (OB_UNLIKELY(!table_schema->is_fulltext_dict())) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("table is not a fulltext dictionary table", K(ret),
+             K(stmt.get_database_name()), K(stmt.get_table_name()));
+    LOG_USER_ERROR(OB_INVALID_ARGUMENT, "table is not a fulltext dictionary table");
+  } else {
+    ObSqlString full_table_name;
+    if (OB_FAIL(full_table_name.append_fmt("%.*s.%.*s",
+                                           stmt.get_database_name().length(),
+                                           stmt.get_database_name().ptr(),
+                                           stmt.get_table_name().length(),
+                                           stmt.get_table_name().ptr()))) {
+      LOG_WARN("build fulltext dictionary table name failed", K(ret));
+    } else {
+      storage::ObFTDictDesc dict_desc(table_schema->get_charset_type(),
+                                      table_schema->get_collation_type(),
+                                      table_schema->get_table_id(),
+                                      full_table_name.string());
+      storage::ObFTDictCacheLoaderRefresh loader;
+      if (OB_FAIL(loader.load_cache(dict_desc))) {
+        LOG_WARN("refresh fulltext dictionary cache failed", K(ret),
+                 K(dict_desc), K(table_schema->get_table_id()));
+      } else {
+        LOG_INFO("refresh fulltext dictionary cache succeeded",
+                 K(dict_desc), K(table_schema->get_table_id()));
+      }
+    }
   }
   return ret;
 }
