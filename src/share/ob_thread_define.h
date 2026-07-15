@@ -47,7 +47,9 @@ TG_DEF(LeaseQueueTh, LeaseQueueTh, THREAD_POOL, ThreadCountPair(observer::ObSrvD
 TG_DEF(DDLQueueTh, DDLQueueTh, THREAD_POOL, ThreadCountPair(observer::ObSrvDeliver::DDL_TASK_THREAD_CNT, observer::ObSrvDeliver::DDL_TASK_THREAD_CNT))
 TG_DEF(DDLPQueueTh, DDLPQueueTh, THREAD_POOL, ThreadCountPair(GET_THREAD_NUM_BY_NPROCESSORS_WITH_LIMIT(2, 24), 1))
 TG_DEF(DiagnoseQueueTh, DiagnoseQueueTh, THREAD_POOL, ThreadCountPair(observer::ObSrvDeliver::MYSQL_DIAG_TASK_THREAD_CNT, observer::ObSrvDeliver::MINI_MODE_MYSQL_DIAG_TASK_THREAD_CNT))
-TG_DEF(DdlBuild, DdlBuild, ASYNC_TASK_QUEUE, ThreadCountPair(16, 1), 4 << 10)
+// FTS builds submit the inverted and doc-word auxiliary tables independently.
+// Keep two workers in mini mode so those pipelines do not serialize.
+TG_DEF(DdlBuild, DdlBuild, ASYNC_TASK_QUEUE, ThreadCountPair(16, 2), 4 << 10)
 TG_DEF(LSService, LSService, REENTRANT_THREAD_POOL, 1)
 TG_DEF(SimpleLSService, SimpleLSService, REENTRANT_THREAD_POOL, 1)
 // TG_DEF(IntermResGC, IntermResGC, TIMER)
