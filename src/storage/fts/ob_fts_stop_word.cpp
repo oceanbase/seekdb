@@ -78,9 +78,7 @@ void ObStopWordChecker::destroy()
 int ObStopWordChecker::check_stopword(const ObFTWord &word, bool &is_stopword)
 {
   int ret = OB_SUCCESS;
-  
-  
-  common::ObArenaAllocator allocator(lib::ObMemAttr("ChkStopWord"));
+  bool lookup_finished = false;
   if (OB_UNLIKELY(!inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("ObStopWordChecker hasn't been initialized", K(ret), K(inited_));
@@ -88,30 +86,43 @@ int ObStopWordChecker::check_stopword(const ObFTWord &word, bool &is_stopword)
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("word is empty", K(ret), K(word));
   } else {
-    common::ObString cmp_str;
-    // do nothing set out with in if type is the same.
-    if (OB_FAIL(common::ObCharset::charset_convert(
-                                       allocator,
-                                       word.get_word().get_string(),
-                                       word.get_collation_type(),
-                                       stopword_type_.get_collation_type(),
-                                       cmp_str))) {
-      LOG_WARN("fail to convert charset", K(ret), K(word), K(stopword_type_));
+    // Task4 Op7：相同 collation 可直接查表，跳过逐 token 的临时 allocator 和字符集转换。
+    if (OB_LIKELY(word.get_collation_type() == stopword_type_.get_collation_type())) {
+      // 使用停用词表的 varchar meta 构造零拷贝视图，确保哈希函数与表内 key 完全一致。
+      ObFTWord normalized(word.get_word().get_string().length(),
+                          word.get_word().get_string().ptr(),
+                          stopword_type_);
+      ret = stopword_set_.exist_refactored(normalized);
+      lookup_finished = true;
     } else {
-      ObFTWord converted(cmp_str.length(), cmp_str.ptr(), stopword_type_);
-      ret = stopword_set_.exist_refactored(converted);
-      if (OB_HASH_NOT_EXIST == ret) {
-        is_stopword = false;
-        ret = OB_SUCCESS;
-      } else if (OB_HASH_EXIST == ret) {
-        is_stopword = true;
-        ret = OB_SUCCESS;
-      } else if (OB_SUCC(ret)) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("the exist of hastset shouldn't return success", K(ret), K(word), K(converted));
+      // Task4 Op7：不同 collation 继续使用原转换路径，保持跨字符集停用词判断语义。
+      common::ObArenaAllocator allocator(lib::ObMemAttr("ChkStopWord"));
+      common::ObString cmp_str;
+      if (OB_FAIL(common::ObCharset::charset_convert(
+                                         allocator,
+                                         word.get_word().get_string(),
+                                         word.get_collation_type(),
+                                         stopword_type_.get_collation_type(),
+                                         cmp_str))) {
+        LOG_WARN("fail to convert charset", K(ret), K(word), K(stopword_type_));
       } else {
-        LOG_WARN("fail to do exist", K(ret), K(word), K(converted));
+        ObFTWord converted(cmp_str.length(), cmp_str.ptr(), stopword_type_);
+        ret = stopword_set_.exist_refactored(converted);
+        lookup_finished = true;
       }
+    }
+
+    if (lookup_finished && OB_HASH_NOT_EXIST == ret) {
+      is_stopword = false;
+      ret = OB_SUCCESS;
+    } else if (lookup_finished && OB_HASH_EXIST == ret) {
+      is_stopword = true;
+      ret = OB_SUCCESS;
+    } else if (lookup_finished && OB_SUCC(ret)) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("the exist of hashset shouldn't return success", K(ret), K(word));
+    } else if (lookup_finished) {
+      LOG_WARN("fail to check stop word hashset", K(ret), K(word));
     }
   }
   return ret;
