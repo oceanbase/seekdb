@@ -48,10 +48,16 @@ public:
   int get_next_row(blocksstable::ObDatumRow *&row);
   void reset();
   void reuse();
-  TO_STRING_KV(K_(row_idx), K_(is_fts_index_aux), K_(helper), K_(is_inited), K_(rows));
+  TO_STRING_KV(K_(row_idx), K_(is_fts_index_aux), K_(helper), K_(is_inited),
+      K_(doc_length), "word_count", words_.size());
 private:
   lib::MemoryContext merge_memctx_;
-  ObDomainIndexRow rows_;
+  storage::ObFTWordMap words_;
+  storage::ObFTWordMap::const_iterator word_iter_;
+  storage::ObFTWordMap::const_iterator word_end_iter_;
+  blocksstable::ObDatumRow row_;
+  common::ObDatum doc_id_datum_;
+  int64_t doc_length_;
   uint64_t row_idx_;
   bool is_fts_index_aux_;
   storage::ObFTParseHelper helper_;
