@@ -1810,8 +1810,11 @@ int ObSortVecOpImpl<Compare, Store_Row, has_addon>::build_ems_heap(int64_t &merg
       c = c->get_next();
     }
 
-    if (OB_FAIL(ObSortResourceManager::calc_merge_ways(sql_mem_processor_, mem_context_,
-                                                       max_ways, merge_ways))) {
+    const bool is_ddl_sort = OB_NOT_NULL(exec_ctx_)
+                             && OB_NOT_NULL(exec_ctx_->get_my_session())
+                             && exec_ctx_->get_my_session()->get_ddl_info().is_ddl();
+    if (OB_FAIL(ObSQLSortResourceManager::calc_sql_merge_ways(sql_mem_processor_, mem_context_,
+                                                              max_ways, is_ddl_sort, merge_ways))) {
       SQL_ENG_LOG(WARN, "failed to calc merge ways", K(ret), K(max_ways));
     } else {
       LOG_TRACE("do merge sort ", K(first->level_), K(merge_ways), K(sort_chunks_.get_size()),

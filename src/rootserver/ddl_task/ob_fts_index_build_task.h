@@ -140,6 +140,10 @@ private:
   int construct_doc_rowkey_arg(obcall::ObCreateIndexArg &arg);
   int construct_domain_index_aux_arg(obcall::ObCreateIndexArg &arg);
   int construct_fts_doc_word_arg(obcall::ObCreateIndexArg &arg);
+  int calculate_aux_table_parallelism(
+      const ObIndexType index_type,
+      const int64_t total_parallelism,
+      int64_t &aux_table_parallelism);
   int get_index_table_id(
       const obcall::ObCreateIndexArg *create_index_arg,
       uint64_t &index_table_id);

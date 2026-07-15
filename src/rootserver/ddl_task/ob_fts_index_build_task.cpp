@@ -130,10 +130,10 @@ int ObFtsIndexBuildTask::init(
                                          create_index_arg,
                                          create_index_arg_))) {
     LOG_WARN("fail to copy create index arg", K(ret), K(create_index_arg));
-  } else if (OB_FAIL(ObFtsIndexBuilderUtil::decide_parallelism(create_index_arg.index_type_, parallelism, parallelism_))) {
-    // TODO (youchuan.yc): after change aux build task sequentially, remove decide_parallelism and use original value instead
-    LOG_WARN("fail to decide parallelism", K(ret), K(create_index_arg.index_type_), K(parallelism));
   } else {
+    // Keep the parent task parallelism as the total budget. Each aux child task
+    // derives its own share when it is submitted so we only split once.
+    parallelism_ = parallelism;
     LOG_INFO("create_index_arg.index_type_x", K(create_index_arg.index_type_), K(create_index_arg.index_key_));
 
     if (INDEX_TYPE_NORMAL_MULTIVALUE_LOCAL == create_index_arg.index_type_ ||
@@ -763,6 +763,12 @@ int ObFtsIndexBuildTask::construct_create_index_arg(
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("undexpected index type", K(ret), K(index_type));
   }
+  if (OB_SUCC(ret) && OB_FAIL(calculate_aux_table_parallelism(index_type,
+                                                              parallelism_,
+                                                              arg.parallelism_))) {
+    LOG_WARN("failed to calculate aux table parallelism",
+        K(ret), K(index_type), K(parallelism_), K(use_doc_id_));
+  }
   return ret;
 }
 
@@ -816,6 +822,48 @@ int ObFtsIndexBuildTask::construct_fts_doc_word_arg(obcall::ObCreateIndexArg &ar
   } else if (OB_FAIL(ObFtsIndexBuilderUtil::generate_fts_aux_index_name(arg,
                                                                         &allocator_))) {
     LOG_WARN("failed to generate index name", K(ret));
+  }
+  return ret;
+}
+
+int ObFtsIndexBuildTask::calculate_aux_table_parallelism(
+    const ObIndexType index_type,
+    const int64_t total_parallelism,
+    int64_t &aux_table_parallelism)
+{
+  int ret = OB_SUCCESS;
+  if (OB_UNLIKELY(total_parallelism <= 0)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid total parallelism", K(ret), K(total_parallelism));
+  } else {
+    switch (index_type) {
+      case ObIndexType::INDEX_TYPE_ROWKEY_DOC_ID_LOCAL: {
+        aux_table_parallelism = MAX(total_parallelism, 1L);
+        break;
+      }
+      case ObIndexType::INDEX_TYPE_DOC_ID_ROWKEY_LOCAL:
+      case ObIndexType::INDEX_TYPE_FTS_INDEX_LOCAL:
+      case ObIndexType::INDEX_TYPE_FTS_DOC_WORD_LOCAL: {
+        aux_table_parallelism = use_doc_id_ ? MAX(total_parallelism / 3, 1L)
+                                            : MAX(total_parallelism / 2, 1L);
+        break;
+      }
+      case ObIndexType::INDEX_TYPE_NORMAL_MULTIVALUE_LOCAL:
+      case ObIndexType::INDEX_TYPE_UNIQUE_MULTIVALUE_LOCAL: {
+        aux_table_parallelism = use_doc_id_ ? MAX(total_parallelism / 2, 1L)
+                                            : MAX(total_parallelism, 1L);
+        break;
+      }
+      case ObIndexType::INDEX_TYPE_VEC_SPIV_DIM_DOCID_VALUE_LOCAL: {
+        aux_table_parallelism = MAX(total_parallelism / 2, 1L);
+        break;
+      }
+      default: {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("index type is unexpected", K(ret), K(index_type), K(total_parallelism));
+        break;
+      }
+    }
   }
   return ret;
 }

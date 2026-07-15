@@ -31,7 +31,7 @@ class ObSortResourceManager
 {
 public:
   static int64_t get_max_merge_ways() { return 256; }
-  static int64_t get_min_merge_buffer_size() { return 16L * 1024L * 1024L; }
+  static int64_t get_ddl_merge_buffer_size() { return 16L * 1024L * 1024L; }
   static int64_t get_ddl_sort_min_cache_size() { return 256L * 1024L * 1024L; }
 
   static int64_t calc_initial_cache_size(const int64_t input_rows,
@@ -101,19 +101,20 @@ public:
   static int calc_merge_ways(ObSqlMemMgrProcessor &sql_mem_processor,
                              lib::MemoryContext mem_context,
                              const int64_t max_ways,
+                             const int64_t min_merge_buffer_size,
                              int64_t &merge_ways)
   {
     int ret = OB_SUCCESS;
     merge_ways = 0;
-    if (OB_UNLIKELY(max_ways < 2)) {
+    if (OB_UNLIKELY(max_ways < 2 || min_merge_buffer_size < 0)) {
       ret = OB_INVALID_ARGUMENT;
-      SQL_ENG_LOG(WARN, "invalid max merge ways", K(ret), K(max_ways));
+      SQL_ENG_LOG(WARN, "invalid max merge ways", K(ret), K(max_ways), K(min_merge_buffer_size));
     } else if (OB_FAIL(sql_mem_processor.get_max_available_mem_size(
                  &mem_context->get_malloc_allocator()))) {
       SQL_ENG_LOG(WARN, "failed to get max available memory size", K(ret));
     } else {
       const int64_t min_ways = std::max(static_cast<int64_t>(2),
-                                        get_min_merge_buffer_size() / ObTempBlockStore::BLOCK_SIZE);
+                                        min_merge_buffer_size / ObTempBlockStore::BLOCK_SIZE);
       merge_ways = std::max(min_ways, sql_mem_processor.get_mem_bound() / ObTempBlockStore::BLOCK_SIZE);
       if (merge_ways < max_ways) {
         bool dumped = false;

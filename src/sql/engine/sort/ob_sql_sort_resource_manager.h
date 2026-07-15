@@ -42,6 +42,17 @@ public:
     }
     return cache_size;
   }
+
+  static int calc_sql_merge_ways(ObSqlMemMgrProcessor &sql_mem_processor,
+                                 lib::MemoryContext mem_context,
+                                 const int64_t max_ways,
+                                 const bool is_ddl,
+                                 int64_t &merge_ways)
+  {
+    const int64_t min_merge_buffer_size = is_ddl ? get_ddl_merge_buffer_size() : 0;
+    return calc_merge_ways(sql_mem_processor, mem_context, max_ways,
+                           min_merge_buffer_size, merge_ways);
+  }
 };
 
 } // namespace sql
