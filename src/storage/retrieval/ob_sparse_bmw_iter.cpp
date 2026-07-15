@@ -32,6 +32,7 @@ ObSRBMWIterImpl::ObSRBMWIterImpl()
     top_k_count_(0),
     domain_id_cmp_(),
     id_cache_(),
+    id_cache_data_(nullptr),
     status_(BMWStatus::MAX_STATUS)
 {}
 
@@ -62,6 +63,7 @@ int ObSRBMWIterImpl::init(
     } else if (OB_FAIL(id_cache_.prepare_allocate(top_k_count_))) {
       LOG_WARN("failed to prepare allocate id cache", K(ret));
     } else {
+      id_cache_data_ = &id_cache_[0];
       is_inited_ = true;
     }
   }
@@ -85,6 +87,7 @@ void ObSRBMWIterImpl::reset()
   status_ = BMWStatus::MAX_STATUS;
   domain_id_cmp_.reset();
   id_cache_.reset();
+  id_cache_data_ = nullptr;
   allocator_.reset();
 }
 
@@ -244,7 +247,7 @@ int ObSRBMWIterImpl::process_collected_row(const ObDatum &id_datum, const double
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected top k heap count", K(ret), K(top_k_heap_.count()), K_(top_k_count));
   } else if (top_k_heap_.count() < top_k_count_) {
-    if (OB_FAIL(id_cache_.at(top_k_heap_.count()).from_datum(id_datum))) {
+    if (OB_FAIL(id_cache_data_[top_k_heap_.count()].from_datum_fast(id_datum))) {
       LOG_WARN("failed to from datum", K(ret));
     } else if (OB_FAIL(top_k_heap_.push(TopKItem(relevance, top_k_heap_.count())))) {
       LOG_WARN("failed to push top k item", K(ret));
@@ -254,7 +257,7 @@ int ObSRBMWIterImpl::process_collected_row(const ObDatum &id_datum, const double
     const double top_k_threshold = get_top_k_threshold();
     if (relevance <= top_k_threshold) {
       // not a new top k candidate
-    } else if (OB_FAIL(id_cache_.at(cache_idx).from_datum(id_datum))) {
+    } else if (OB_FAIL(id_cache_data_[cache_idx].from_datum_fast(id_datum))) {
       LOG_WARN("failed to from datum", K(ret));
     } else if (OB_FAIL(top_k_heap_.pop())) {
       LOG_WARN("failed to pop top k heap", K(ret));
@@ -275,21 +278,21 @@ int ObSRBMWIterImpl::next_pivot(int64_t &pivot_iter_idx)
   double max_score = 0.0;
   bool curr_id_end = false;
   bool found_pivot = false;
-  while (OB_SUCC(ret) && !merge_heap_->empty() && !found_pivot) {
+  while (OB_SUCC(ret) && !merge_empty() && !found_pivot) {
     const ObSRMergeItem *top_item = nullptr;
     double iter_score = 0.0;
     // make sure all dimensions containing pivot candidate are included in this iteration round
-    curr_id_end = merge_heap_->is_unique_champion();
-    if (OB_FAIL(merge_heap_->top(top_item))) {
+    curr_id_end = merge_is_unique_champion();
+    if (OB_FAIL(merge_top(top_item))) {
       LOG_WARN("failed to get top item from merge heap", K(ret));
     } else if (FALSE_IT(iter_idx = top_item->iter_idx_)) {
     } else if (OB_FAIL(get_iter(iter_idx)->get_dim_max_score(iter_score))) {
       LOG_WARN("failed to get current score", K(ret));
     } else if (FALSE_IT(max_score += iter_score)) {
-    } else if (OB_FAIL(merge_heap_->pop())) {
+    } else if (OB_FAIL(merge_pop())) {
       LOG_WARN("failed to pop top item from merge heap", K(ret));
     } else {
-      next_round_iter_idxes_[next_round_cnt_++] = iter_idx;
+      next_round_iter_idx_data_[next_round_cnt_++] = iter_idx;
       found_pivot = max_score > top_k_threshold && curr_id_end;
     }
   }
@@ -322,7 +325,7 @@ int ObSRBMWIterImpl::next_pivot_range(int64_t &skip_range_cnt)
   const ObDatum *minimum_max_domain_id = nullptr;
   int64_t next_round_iter_end_cnt = 0;
   for (int64_t i = 0; OB_SUCC(ret) && i < next_round_cnt_; ++i) {
-    const int64_t iter_idx = next_round_iter_idxes_[i];
+    const int64_t iter_idx = next_round_iter_idx_data_[i];
     const ObMaxScoreTuple *max_score_tuple = nullptr;
     int cmp_ret = 0;
     ObISRDimBlockMaxIter *iter = nullptr;
@@ -347,15 +350,15 @@ int ObSRBMWIterImpl::next_pivot_range(int64_t &skip_range_cnt)
 
   // check if minimum max domain id might be included in other non-pivot dimensions
   if (OB_FAIL(ret)) {
-  } else if (next_round_cnt_ == next_round_iter_end_cnt && merge_heap_->empty()) {
+  } else if (next_round_cnt_ == next_round_iter_end_cnt && merge_empty()) {
     ret = OB_ITER_END;
     next_round_cnt_ = 0;
-  } else if (!merge_heap_->empty()) {
+  } else if (!merge_empty()) {
     const ObSRMergeItem *top_item = nullptr;
     int64_t iter_idx = 0;
     const ObDatum *next_domain_id = nullptr;
     int cmp_ret = 0;
-    if (OB_FAIL(merge_heap_->top(top_item))) {
+    if (OB_FAIL(merge_top(top_item))) {
       LOG_WARN("failed to get top item from merge heap", K(ret));
     } else if (FALSE_IT(iter_idx = top_item->iter_idx_)) {
     } else if (OB_FAIL(get_iter(iter_idx)->get_curr_id(next_domain_id))) {
@@ -456,7 +459,7 @@ int ObSRBMWIterImpl::evaluate_pivot_range(const int64_t pivot_iter_idx, bool &is
   double block_max_score = 0.0;
   const ObMaxScoreTuple *max_score_tuple = nullptr;
   for (int64_t i = 0; OB_SUCC(ret) && i < next_round_cnt_; ++i) {
-    const int64_t iter_idx = next_round_iter_idxes_[i];
+    const int64_t iter_idx = next_round_iter_idx_data_[i];
     ObISRDimBlockMaxIter *iter = get_iter(iter_idx);
     if (OB_ISNULL(iter) || OB_UNLIKELY(is_next_round_iter_end(i))) {
       ret = OB_ERR_UNEXPECTED;
@@ -494,7 +497,7 @@ int ObSRBMWIterImpl::fill_merge_heap_with_shallow_dims(const ObDatum *last_range
 
   ObSRMergeItem item;
   for (int64_t i = 0; OB_SUCC(ret) && i < next_round_cnt_; ++i) {
-    const int64_t iter_idx = next_round_iter_idxes_[i];
+    const int64_t iter_idx = next_round_iter_idx_data_[i];
     ObISRDimBlockMaxIter *iter = nullptr;
     if (is_next_round_iter_end(i)) {
       // skip
@@ -507,12 +510,12 @@ int ObSRBMWIterImpl::fill_merge_heap_with_shallow_dims(const ObDatum *last_range
       } else {
         ret = OB_SUCCESS;
       }
-    } else if (OB_FAIL(iter->get_curr_id(iter_domain_ids_[iter_idx]))) {
+    } else if (OB_FAIL(iter->get_curr_id(iter_domain_id_data_[iter_idx]))) {
       LOG_WARN("failed to get current id", K(ret), K(iter_idx));
     } else {
       item.iter_idx_ = iter_idx;
       item.relevance_ = 0.0;
-      if (OB_FAIL(merge_heap_->push(item))) {
+      if (OB_FAIL(merge_push(item))) {
         LOG_WARN("failed to push iter item to merge heap", K(ret), K(item));
       }
     }
@@ -520,9 +523,9 @@ int ObSRBMWIterImpl::fill_merge_heap_with_shallow_dims(const ObDatum *last_range
 
   // rebuild merge heap
   if (OB_FAIL(ret)) {
-  } else if (merge_heap_->empty()) {
+  } else if (merge_empty()) {
     ret = OB_ITER_END;
-  } else if (0 != next_round_cnt_ && OB_FAIL(merge_heap_->rebuild())) {
+  } else if (0 != next_round_cnt_ && OB_FAIL(merge_rebuild())) {
     LOG_WARN("failed to rebuild merge heap", K(ret));
   } else {
     next_round_cnt_ = 0;
@@ -547,11 +550,11 @@ int ObSRBMWIterImpl::try_generate_next_range_from_merge_heap(
   const double top_k_threshold = get_top_k_threshold();
   int64_t iter_idx = 0;
   double max_score = 0.0;
-  while (OB_SUCC(ret) && max_score <= top_k_threshold && !curr_range_reach_end && !merge_heap_->empty()) {
+  while (OB_SUCC(ret) && max_score <= top_k_threshold && !curr_range_reach_end && !merge_empty()) {
     const ObSRMergeItem *top_item = nullptr;
     ObISRDimBlockMaxIter *iter = nullptr;
     const ObDatum *curr_domain_id = nullptr;
-    if (OB_FAIL(merge_heap_->top(top_item))) {
+    if (OB_FAIL(merge_top(top_item))) {
       LOG_WARN("failed to get top item from merge heap", K(ret));
     } else if (FALSE_IT(iter_idx = top_item->iter_idx_)) {
     } else if (OB_ISNULL(iter = get_iter(iter_idx))) {
@@ -588,10 +591,10 @@ int ObSRBMWIterImpl::try_generate_next_range_from_merge_heap(
       }
 
       if (OB_FAIL(ret) || curr_range_reach_end) {
-      } else if (OB_FAIL(merge_heap_->pop())) {
+      } else if (OB_FAIL(merge_pop())) {
         LOG_WARN("failed to pop top item from merge heap", K(ret));
       } else {
-        next_round_iter_idxes_[next_round_cnt_++] = iter_idx;
+        next_round_iter_idx_data_[next_round_cnt_++] = iter_idx;
         max_score += max_score_tuple->max_score_;
         if (max_score > top_k_threshold) {
           // found a new top k candidate range
@@ -638,7 +641,7 @@ int ObSRBMWIterImpl::project_rows_from_top_k_heap(const int64_t capacity, int64_
     for (int64_t i = 0; OB_SUCC(ret) && i < capacity && !top_k_heap_.empty(); ++i) {
       guard.set_batch_idx(i);
       const TopKItem &top_k_item = top_k_heap_.top();
-      const ObDocIdExt &id = id_cache_.at(top_k_item.cache_idx_);
+      const ObDocIdExt &id = id_cache_data_[top_k_item.cache_idx_];
       set_datum_func_(id_datums[i], id);
       id_evaluated_flags.set(i);
       id_proj_expr->set_evaluated_projected(*eval_ctx);
@@ -663,7 +666,7 @@ int ObSRBMWIterImpl::unify_dim_iters_for_next_round()
 
   ObDatum *curr_domain_id = nullptr;
   for (int64_t i = 0; OB_SUCC(ret) && i < next_round_cnt_; ++i) {
-    const int64_t iter_idx = next_round_iter_idxes_[i];
+    const int64_t iter_idx = next_round_iter_idx_data_[i];
     ObISRDimBlockMaxIter *iter = get_iter(iter_idx);
     const ObDatum *curr_domain_id = nullptr;
     if (OB_ISNULL(iter)) {
@@ -688,7 +691,7 @@ int ObSRBMWIterImpl::advance_dim_iters_for_next_round(
   int ret = OB_SUCCESS;
   ObSRMergeItem item;
   for (int64_t i = 0; OB_SUCC(ret) && i < next_round_cnt_; ++i) {
-    const int64_t iter_idx = next_round_iter_idxes_[i];
+    const int64_t iter_idx = next_round_iter_idx_data_[i];
     ObISRDimBlockMaxIter *iter = nullptr;
     if (is_next_round_iter_end(i)) {
       if (!iter_end_available) {
@@ -704,24 +707,24 @@ int ObSRBMWIterImpl::advance_dim_iters_for_next_round(
       } else {
         ret = OB_SUCCESS;
       }
-    } else if (OB_FAIL(iter->get_curr_id(iter_domain_ids_[iter_idx]))) {
+    } else if (OB_FAIL(iter->get_curr_id(iter_domain_id_data_[iter_idx]))) {
       LOG_WARN("failed to get current id", K(ret), K(iter_idx));
     } else if (OB_FAIL(iter->get_curr_score(item.relevance_))) {
       LOG_WARN("failed to get current score", K(ret), K(iter_idx));
     } else if (FALSE_IT(item.iter_idx_ = iter_idx)) {
-    } else if (OB_FAIL(merge_heap_->push(item))) {
+    } else if (OB_FAIL(merge_push(item))) {
       LOG_WARN("failed to push item to top k heap", K(ret), K(item));
     }
   }
 
   if (OB_FAIL(ret)) {
-  } else if (merge_heap_->empty()) {
+  } else if (merge_empty()) {
     if (iter_end_available) {
       ret = OB_ITER_END;
     } else {
       ret = OB_ERR_UNEXPECTED;
     }
-  } else if (0 != next_round_cnt_ && OB_FAIL(merge_heap_->rebuild())) {
+  } else if (0 != next_round_cnt_ && OB_FAIL(merge_rebuild())) {
     LOG_WARN("failed to rebuild merge heap", K(ret));
   } else {
     next_round_cnt_ = 0;

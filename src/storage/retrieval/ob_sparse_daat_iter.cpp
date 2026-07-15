@@ -96,12 +96,18 @@ ObSRDaaTIterImpl::ObSRDaaTIterImpl()
     dim_iter_data_(nullptr),
     dim_iter_cnt_(0),
     merge_cmp_(),
+    fast_merge_(),
     merge_heap_(nullptr),
+    use_fast_merge_(false),
     relevance_collector_(nullptr),
     iter_domain_ids_(),
     buffered_domain_ids_(),
     buffered_relevances_(),
     next_round_iter_idxes_(),
+    iter_domain_id_data_(nullptr),
+    buffered_domain_id_data_(nullptr),
+    buffered_relevance_data_(nullptr),
+    next_round_iter_idx_data_(nullptr),
     next_round_cnt_(0),
     set_datum_func_(nullptr),
     use_fast_bool_filter_(false)
@@ -173,11 +179,15 @@ int ObSRDaaTIterImpl::init(
     } else if (OB_FAIL(init_merge_heap(dim_iter_cnt_))) {
       LOG_WARN("failed to init merge heap", K(ret));
     } else {
-      for (int64_t i = 0; i < dim_iter_cnt_; ++i) {
-        dim_iter_cache_[i] = dim_iters.at(i);
-        next_round_iter_idxes_[i] = i;
-      }
       dim_iter_data_ = &dim_iter_cache_[0];
+      iter_domain_id_data_ = &iter_domain_ids_[0];
+      buffered_domain_id_data_ = &buffered_domain_ids_[0];
+      buffered_relevance_data_ = &buffered_relevances_[0];
+      next_round_iter_idx_data_ = &next_round_iter_idxes_[0];
+      for (int64_t i = 0; i < dim_iter_cnt_; ++i) {
+        dim_iter_data_[i] = dim_iters.at(i);
+        next_round_iter_idx_data_[i] = i;
+      }
     }
 
     if (OB_SUCC(ret)) {
@@ -192,10 +202,13 @@ int ObSRDaaTIterImpl::init(
 
 void ObSRDaaTIterImpl::reset()
 {
-  if (OB_NOT_NULL(merge_heap_)) {
+  if (use_fast_merge_) {
+    fast_merge_.reset();
+  } else if (OB_NOT_NULL(merge_heap_)) {
     merge_heap_->~ObSRMergeHeap();
     merge_heap_ = nullptr;
   }
+  use_fast_merge_ = false;
   if (OB_NOT_NULL(relevance_collector_)) {
     relevance_collector_->reset();
     relevance_collector_ = nullptr;
@@ -207,6 +220,10 @@ void ObSRDaaTIterImpl::reset()
   buffered_domain_ids_.reset();
   buffered_relevances_.reset();
   next_round_iter_idxes_.reset();
+  iter_domain_id_data_ = nullptr;
+  buffered_domain_id_data_ = nullptr;
+  buffered_relevance_data_ = nullptr;
+  next_round_iter_idx_data_ = nullptr;
   next_round_cnt_ = 0;
   use_fast_bool_filter_ = false;
   input_row_cnt_ = 0;
@@ -217,13 +234,15 @@ void ObSRDaaTIterImpl::reset()
 void ObSRDaaTIterImpl::reuse(const bool switch_tablet)
 {
   if (OB_NOT_NULL(dim_iters_)) {
-    if (OB_NOT_NULL(merge_heap_)) {
+    if (use_fast_merge_) {
+      fast_merge_.reuse(dim_iter_cnt_);
+    } else if (OB_NOT_NULL(merge_heap_)) {
       merge_heap_->reuse();
       merge_heap_->open(dim_iter_cnt_);
     }
     next_round_cnt_ = dim_iter_cnt_;
     for (int64_t i = 0; i < next_round_cnt_; ++i) {
-      next_round_iter_idxes_[i] = i;
+      next_round_iter_idx_data_[i] = i;
     }
   }
   if (OB_NOT_NULL(relevance_collector_)) {
@@ -342,7 +361,7 @@ int ObSRDaaTIterImpl::fill_merge_heap()
   int ret = OB_SUCCESS;
   ObSRMergeItem item;
   for (int64_t i = 0; OB_SUCC(ret) && i < next_round_cnt_; ++i) {
-    const int64_t iter_idx = next_round_iter_idxes_[i];
+    const int64_t iter_idx = next_round_iter_idx_data_[i];
     ObISRDaaTDimIter *dim_iter = nullptr;
     if (OB_ISNULL(dim_iter = dim_iter_data_[iter_idx])) {
       ret = OB_ERR_UNEXPECTED;
@@ -356,18 +375,18 @@ int ObSRDaaTIterImpl::fill_merge_heap()
     } else if (OB_FAIL(dim_iter->get_curr_score(item.relevance_))) {
       LOG_WARN("fail to get current score", K(ret));
     } else if (OB_NOT_NULL(iter_param_->dim_weights_) && FALSE_IT(item.relevance_ = item.relevance_ * iter_param_->field_boost_ * iter_param_->dim_weights_->at(iter_idx))) {
-    } else if (OB_FAIL(dim_iter->get_curr_id(iter_domain_ids_[iter_idx]))) {
+    } else if (OB_FAIL(dim_iter->get_curr_id(iter_domain_id_data_[iter_idx]))) {
       LOG_WARN("fail to get current doc id", K(ret));
     } else if (FALSE_IT(item.iter_idx_ = iter_idx)) {
-    } else if (OB_FAIL(merge_heap_->push(item))) {
+    } else if (OB_FAIL(merge_push(item))) {
       LOG_WARN("fail to push item to merge heap", K(ret), K(item));
     }
   }
 
   if (OB_FAIL(ret)) {
-  } else if (merge_heap_->empty()) {
+  } else if (merge_empty()) {
     ret = OB_ITER_END;
-  } else if (0 != next_round_cnt_ && OB_FAIL(merge_heap_->rebuild())) {
+  } else if (0 != next_round_cnt_ && OB_FAIL(merge_rebuild())) {
     LOG_WARN("fail to rebuild merge heap", K(ret));
   } else {
     next_round_cnt_ = 0;
@@ -385,24 +404,24 @@ int ObSRDaaTIterImpl::collect_dims_by_id(const ObDatum *&id_datum, double &relev
   relevance = 0.0;
   got_valid_id = false;
 
-  while (OB_SUCC(ret) && !merge_heap_->empty() && !curr_doc_end) {
-    if (merge_heap_->is_unique_champion()) {
+  while (OB_SUCC(ret) && !merge_empty() && !curr_doc_end) {
+    if (merge_is_unique_champion()) {
       curr_doc_end = true;
     }
-    if (OB_FAIL(merge_heap_->top(top_item))) {
+    if (OB_FAIL(merge_top(top_item))) {
       LOG_WARN("failed to get top item from merge heap", K(ret));
     } else if (OB_FAIL(relevance_collector_->collect_one_dim(top_item->iter_idx_, top_item->relevance_))) {
       LOG_WARN("failed to collect one dimension", K(ret));
     } else if (FALSE_IT(iter_idx = top_item->iter_idx_)) {
-    } else if (OB_FAIL(merge_heap_->pop())) {
+    } else if (OB_FAIL(merge_pop())) {
       LOG_WARN("failed to pop top item in heap", K(ret));
     } else {
-      next_round_iter_idxes_[next_round_cnt_++] = iter_idx;
+      next_round_iter_idx_data_[next_round_cnt_++] = iter_idx;
     }
   }
 
   if (OB_SUCC(ret)) {
-    id_datum = iter_domain_ids_[iter_idx];
+    id_datum = iter_domain_id_data_[iter_idx];
     if (OB_ISNULL(id_datum)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected null id datum", K(ret));
@@ -481,8 +500,8 @@ int ObSRDaaTIterImpl::cache_result(int64_t &count, const ObDatum &id_datum, cons
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid buffered idx", K(ret), K(count), K(buffered_domain_ids_.count()), K(buffered_relevances_.count()));
   } else {
-    buffered_domain_ids_[count].from_datum(id_datum);
-    buffered_relevances_[count] = relevance;
+    buffered_domain_id_data_[count].from_datum_fast(id_datum);
+    buffered_relevance_data_[count] = relevance;
     ++count;
     ++output_row_cnt_;
     if (limit_param->is_valid() && output_row_cnt_ >= limit) {
@@ -505,7 +524,7 @@ int ObSRDaaTIterImpl::project_results(const int64_t count)
     for (int64_t i = 0; i < count; ++i) {
       guard.set_batch_idx(i);
       ObDatum &id_proj_datum = id_proj_expr->locate_datum_for_write(*eval_ctx);
-      set_datum_func_(id_proj_datum, buffered_domain_ids_[i]);
+      set_datum_func_(id_proj_datum, buffered_domain_id_data_[i]);
       id_evaluated_flags.set(i);
       id_proj_expr->set_evaluated_projected(*eval_ctx);
     }
@@ -514,7 +533,7 @@ int ObSRDaaTIterImpl::project_results(const int64_t count)
       for (int64_t i = 0; i < count; ++i) {
         guard.set_batch_idx(i);
         ObDatum &relevance_proj_datum = relevance_proj_expr->locate_datum_for_write(*eval_ctx);
-        relevance_proj_datum.set_double(buffered_relevances_[i]);
+        relevance_proj_datum.set_double(buffered_relevance_data_[i]);
         relevance_evaluated_flags.set(i);
         relevance_proj_expr->set_evaluated_projected(*eval_ctx);
       }
@@ -525,10 +544,10 @@ int ObSRDaaTIterImpl::project_results(const int64_t count)
   } else {
     guard.set_batch_idx(0);
     ObDatum &id_proj_datum = id_proj_expr->locate_datum_for_write(*eval_ctx);
-    set_datum_func_(id_proj_datum, buffered_domain_ids_[0]);
+    set_datum_func_(id_proj_datum, buffered_domain_id_data_[0]);
     id_proj_expr->set_evaluated_projected(*eval_ctx);
     ObDatum &relevance_proj_datum = relevance_proj_expr->locate_datum_for_write(*eval_ctx);
-    relevance_proj_datum.set_double(buffered_relevances_[0]);
+    relevance_proj_datum.set_double(buffered_relevance_data_[0]);
     relevance_proj_expr->set_evaluated_projected(*eval_ctx);
   }
   return ret;
@@ -537,22 +556,17 @@ int ObSRDaaTIterImpl::project_results(const int64_t count)
 int ObSRDaaTIterImpl::init_merge_heap(const int64_t count)
 {
   int ret = OB_SUCCESS;
-  ObSRSimpleMerger *simple_merge = nullptr;
   ObSRMergeHeap *loser_tree = nullptr;
-  if (count <= ObSRSimpleMerger::USE_SIMPLE_MERGER_MAX_TABLE_CNT) {
-    if (OB_ISNULL(simple_merge = OB_NEWx(ObSRSimpleMerger, iter_allocator_, merge_cmp_))) {
-      ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("failed to allocate simple merger", K(ret), K(count));
-    } else {
-      merge_heap_ = simple_merge;
-    }
+  if (count <= ObSRFastMerger::MAX_ITEM_COUNT) {
+    fast_merge_.init(merge_cmp_, count);
+    use_fast_merge_ = true;
   } else if (OB_ISNULL(loser_tree = OB_NEWx(ObSRLoserTree, iter_allocator_, merge_cmp_))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("failed to allocate loser tree", K(ret));
   } else {
     merge_heap_ = loser_tree;
   }
-  if (OB_FAIL(ret)) {
+  if (OB_FAIL(ret) || use_fast_merge_) {
   } else if (OB_FAIL(merge_heap_->init(count, count, *iter_allocator_))) {
     LOG_WARN("failed to init iter loser tree", K(ret));
   } else if (OB_FAIL(merge_heap_->open(count))) {

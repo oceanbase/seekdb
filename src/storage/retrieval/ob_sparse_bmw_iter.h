@@ -67,8 +67,8 @@ private:
   int project_rows_from_top_k_heap(const int64_t capacity, int64_t &count);
   int unify_dim_iters_for_next_round();
   int advance_dim_iters_for_next_round(const ObDatum &target_id, const bool iter_end_available);
-  void set_next_round_iter_end(const int64_t idx) { next_round_iter_idxes_[idx] = -1; }
-  bool is_next_round_iter_end(const int64_t idx) const { return next_round_iter_idxes_[idx] == -1; }
+  void set_next_round_iter_end(const int64_t idx) { next_round_iter_idx_data_[idx] = -1; }
+  bool is_next_round_iter_end(const int64_t idx) const { return next_round_iter_idx_data_[idx] == -1; }
 
 protected:
   enum BMWStatus{
@@ -104,6 +104,7 @@ protected:
   int64_t top_k_count_;
   ObDomainIdCmp domain_id_cmp_;
   ObFixedArray<ObDocIdExt, ObIAllocator> id_cache_;
+  ObDocIdExt *id_cache_data_;
   BMWStatus status_;
 };
 
