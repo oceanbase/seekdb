@@ -18,6 +18,7 @@
 
 #include "storage/fts/dict/ob_ft_dict_hub.h"
 
+#include "lib/container/ob_array.h"
 #include "lib/ob_errno.h"
 #include "lib/oblog/ob_log_module.h"
 #include "lib/utility/ob_macro_utils.h"
@@ -81,6 +82,10 @@ int ObFTDictHub::build_cache(const ObFTDictDesc &desc, ObFTCacheRangeContainer &
         if (OB_FAIL(ObFTRangeDict::build_cache_from_ik_dict(desc, container))) {
           LOG_WARN("Failed to build cache", K(ret));
         } else if (FALSE_IT(info.range_count_ = container.get_handles().size())) {
+        } else if (FALSE_IT(MEMSET(info.name_, 0, sizeof(info.name_)))) {
+        } else if (!desc.name_.empty()
+                   && FALSE_IT(MEMCPY(info.name_, desc.name_.ptr(),
+                                      MIN(desc.name_.length(), sizeof(info.name_) - 1)))) {
         } else if (OB_FAIL(put_dict_info(key, info))) {
           LOG_WARN("Failed to put dict info", K(ret));
         }
@@ -146,6 +151,42 @@ int ObFTDictHub::put_dict_info(const ObFTDictInfoKey &key, const ObFTDictInfo &i
     LOG_WARN("put dict info failed", K(ret));
   }
 
+  return ret;
+}
+
+int ObFTDictHub::reload_by_name(const common::ObString &full_name)
+{
+  int ret = OB_SUCCESS;
+  if (!is_inited_) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("dict hub not init", K(ret));
+  } else if (full_name.empty()) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("empty full_name", K(ret));
+  } else {
+    // Collect keys to erase first to avoid iterator invalidation while erasing.
+    common::ObSEArray<ObFTDictInfoKey, 4> keys_to_erase;
+    for (hash::ObHashMap<ObFTDictInfoKey, ObFTDictInfo>::const_iterator it = dict_map_.begin();
+         OB_SUCC(ret) && it != dict_map_.end(); ++it) {
+      const ObFTDictInfo &info = it->second;
+      common::ObString info_name(info.name_);
+      if (0 == info_name.compare(full_name)) {
+        if (OB_FAIL(keys_to_erase.push_back(it->first))) {
+          LOG_WARN("failed to record key for erase", K(ret));
+        }
+      }
+    }
+    for (int64_t i = 0; OB_SUCC(ret) && i < keys_to_erase.count(); ++i) {
+      if (OB_FAIL(dict_map_.erase_refactored(keys_to_erase.at(i)))) {
+        if (OB_HASH_NOT_EXIST != ret) {
+          LOG_WARN("failed to erase dict info", K(ret));
+        } else {
+          ret = OB_SUCCESS;
+        }
+      }
+    }
+    LOG_INFO("reload fulltext dict cache", K(ret), K(full_name), K(keys_to_erase.count()));
+  }
   return ret;
 }
 } //  namespace storage
