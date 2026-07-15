@@ -23,6 +23,7 @@
 #include "storage/fts/dict/ob_dic_lock.h"
 #include "share/ob_server_struct.h"
 #include "rootserver/ob_root_service.h"
+#include "plugin/interface/ob_plugin_ftparser_intf.h"
 #include "plugin/sys/ob_plugin_helper.h"
 #include "share/schema/ob_dependency_info.h"
 #include "share/schema/ob_schema_utils.h"  // relocated-definition owner

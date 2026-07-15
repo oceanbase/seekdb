@@ -42,6 +42,8 @@ namespace storage
 {
 
 class ObStopWordChecker;
+class ObStopTokenChecker;
+class ObStopTokenCheckerGen;
 class ObFTDictHub;
 class ObAddWord;
 
@@ -82,6 +84,10 @@ public:
   OB_INLINE int64_t get_parser_version() const { return parser_version_; }
   OB_INLINE bool is_valid() const { return parser_name_.is_valid() && parser_version_ >= 0; }
   OB_INLINE bool is_type_before_4_3_5_1() const { return is_space() || is_beng() || is_ngram(); }
+  OB_INLINE bool is_builtin_parser() const
+  {
+    return is_space() || is_ngram() || is_beng() || is_ik() || is_ngram2();
+  }
   OB_INLINE void set_name_and_version(const share::ObPluginName &name, const int64_t version)
   {
     parser_name_ = name;
@@ -120,14 +126,18 @@ public:
 
 public:
   ObStopWordChecker *stop_word_checker() const { return stop_word_checker_; }
+  int get_stop_token_checker(const ObCollationType coll,
+                             ObStopTokenChecker &stop_token_checker);
   int get_dict_hub(ObFTDictHub *&hub);
 
 private:
   int init_and_set_stopword_list();
+  int init_stop_token_checker_gen();
   int init_dict_hub();
 
 private:
   ObStopWordChecker *     stop_word_checker_ = nullptr;
+  ObStopTokenCheckerGen * stop_token_checker_gen_ = nullptr;
   ObFTDictHub *           dict_hub_          = nullptr;
   common::ObFIFOAllocator handler_allocator_;
   bool                    is_inited_         = false;
@@ -178,6 +188,19 @@ public:
       const int64_t fulltext_len,
       int64_t &doc_length,
       ObFTWordMap &words) const;
+  int segment(
+      const common::ObObjMeta &meta,
+      const char *fulltext,
+      const int64_t fulltext_len,
+      int64_t &doc_length,
+      ObFTTokenMap &tokens) const;
+  int segment(
+      const common::ObObjMeta &meta,
+      const char *fulltext,
+      const int64_t fulltext_len,
+      int64_t &doc_length,
+      ObFTTokenMap &tokens,
+      common::ObIAllocator &scratch_allocator) const;
   int check_is_the_same(
       const common::ObString &plugin_name,
       const common::ObString &plugin_properties,
@@ -193,6 +216,10 @@ public:
       const ObFTWordMap &words,
       const int64_t doc_length,
       common::ObIJsonBase *&json_root);
+  int make_detail_json(
+      const ObFTTokenMap &tokens,
+      const int64_t doc_length,
+      common::ObIJsonBase *&json_root);
 
   /**
    * Make json document for fulltext search
@@ -203,8 +230,18 @@ public:
   int make_token_array_json(
       const ObFTWordMap &words,
       common::ObIJsonBase *&json_root);
+  int make_token_array_json(
+      const ObFTTokenMap &tokens,
+      common::ObIJsonBase *&json_root);
 
   void reset();
+
+  OB_INLINE const ObFTParser &get_parser_name() const { return parser_name_; }
+  OB_INLINE plugin::ObPluginParam *get_plugin_param() const { return plugin_param_; }
+  OB_INLINE const ObFTParserProperty &get_parser_property() const { return parser_property_; }
+  OB_INLINE const plugin::ObIFTParserDesc *get_parser_desc() const { return parser_desc_; }
+  OB_INLINE const ObAddWordFlag &get_process_token_flags() const { return add_word_flag_; }
+  OB_INLINE bool is_builtin_parser() const { return parser_name_.is_builtin_parser(); }
 
   TO_STRING_KV(KP_(allocator), K_(parser_name), KP_(parser_desc), K_(is_inited));
 

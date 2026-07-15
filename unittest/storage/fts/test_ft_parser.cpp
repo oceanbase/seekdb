@@ -29,6 +29,8 @@
 #include "storage/fts/dict/ob_ft_range_dict.h"
 #include "storage/fts/dict/ob_ft_trie.h"
 #include "storage/fts/dict/ob_ik_dic.h"
+#include "storage/fts/ik/ob_fast_list.h"
+#include "storage/fts/ik/ob_fast_segment_array.h"
 #include "storage/fts/ik/ob_ik_char_util.h"
 #include "storage/fts/ik/ob_ik_token.h"
 #include "storage/fts/ob_ik_ft_parser.h"
@@ -184,6 +186,87 @@ TEST(FTWordTest, test_hash)
     ASSERT_EQ(OB_SUCCESS, ret);
     ASSERT_NE(hash_val2, hash_val);
   }
+}
+
+TEST(FTTokenTest, cached_hash_and_collation_compare)
+{
+  ObObjMeta meta;
+  meta.set_varchar();
+  meta.set_collation_type(CS_TYPE_UTF8MB4_GENERAL_CI);
+  sql::ObExprBasicFuncs *basic_funcs =
+      ObDatumFuncs::get_basic_func(meta.get_type(), meta.get_collation_type());
+  ObDatumCmpFuncType cmp_func = get_datum_cmp_func(meta, meta);
+  ASSERT_NE(nullptr, basic_funcs);
+  ASSERT_NE(nullptr, basic_funcs->default_hash_);
+  ASSERT_NE(nullptr, cmp_func);
+
+  ObFTToken lower;
+  ObFTToken upper;
+  ObFTToken different;
+  ASSERT_EQ(OB_SUCCESS,
+            lower.init("oceanbase", 9, meta, basic_funcs->default_hash_, cmp_func));
+  ASSERT_EQ(OB_SUCCESS,
+            upper.init("OceanBase", 9, meta, basic_funcs->default_hash_, cmp_func));
+  ASSERT_EQ(OB_SUCCESS,
+            different.init("seekdb", 6, meta, basic_funcs->default_hash_, cmp_func));
+
+  uint64_t first_hash = 0;
+  uint64_t cached_hash = 0;
+  uint64_t upper_hash = 0;
+  ASSERT_EQ(OB_SUCCESS, lower.hash(first_hash));
+  ASSERT_EQ(OB_SUCCESS, lower.hash(cached_hash));
+  ASSERT_EQ(OB_SUCCESS, upper.hash(upper_hash));
+  ASSERT_EQ(first_hash, cached_hash);
+  ASSERT_EQ(first_hash, upper_hash);
+  ASSERT_TRUE(lower == upper);
+  ASSERT_FALSE(lower == different);
+}
+
+TEST(FTFastContainerTest, cross_block_and_reuse)
+{
+  ObArenaAllocator allocator(ObModIds::TEST);
+  ObFastSegmentArray<int64_t, 4> array(allocator);
+  for (int64_t i = 0; i < 11; ++i) {
+    ASSERT_EQ(OB_SUCCESS, array.push_back(i * 3));
+  }
+  ASSERT_EQ(11, array.count());
+  ASSERT_EQ(0, array.at(0));
+  ASSERT_EQ(30, array.at(10));
+
+  array.reuse();
+  ASSERT_TRUE(array.empty());
+  for (int64_t i = 0; i < 6; ++i) {
+    ASSERT_EQ(OB_SUCCESS, array.push_back(100 + i));
+  }
+  ASSERT_EQ(6, array.count());
+  ASSERT_EQ(100, array.at(0));
+  ASSERT_EQ(105, array.at(5));
+
+  ObFastList<int64_t, 4> list(allocator);
+  ASSERT_EQ(OB_SUCCESS, list.push_back(2));
+  ASSERT_EQ(OB_SUCCESS, list.push_front(1));
+  ASSERT_EQ(OB_SUCCESS, list.push_back(4));
+  ObFastList<int64_t, 4>::iterator pos = list.begin();
+  ++pos;
+  ++pos;
+  ASSERT_EQ(OB_SUCCESS, list.insert(pos, 3));
+  ASSERT_EQ(4, list.size());
+  int64_t expected = 1;
+  for (const int64_t value : list) {
+    ASSERT_EQ(expected++, value);
+  }
+  ASSERT_EQ(OB_SUCCESS, list.pop_front());
+  ASSERT_EQ(OB_SUCCESS, list.pop_back());
+  ASSERT_EQ(2, list.size());
+  ASSERT_EQ(2, list.get_first());
+  ASSERT_EQ(3, list.get_last());
+
+  list.reuse();
+  ASSERT_TRUE(list.empty());
+  ASSERT_EQ(OB_SUCCESS, list.push_back(7));
+  ASSERT_EQ(7, list.get_first());
+  list.reset();
+  ASSERT_TRUE(list.empty());
 }
 
 TEST_F(FTParserTest, test_cache)

@@ -87,6 +87,18 @@ int ObNgram2FTParser::get_next_token(const char *&word,
   return ret;
 }
 
+int ObNgram2FTParser::reuse_parser(const char *fulltext, const int64_t fulltext_len)
+{
+  int ret = OB_SUCCESS;
+  if (OB_UNLIKELY(!is_inited_)) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("ngram2 ft parser has not been initialized", K(ret));
+  } else if (OB_FAIL(ngram_impl_.reuse_parser(fulltext, fulltext_len))) {
+    LOG_WARN("fail to reuse ngram2 parser", K(ret));
+  }
+  return ret;
+}
+
 ObNgram2FTParserDesc::ObNgram2FTParserDesc() : is_inited_(false) {}
 
 int ObNgram2FTParserDesc::init(ObPluginParam *param)
@@ -105,26 +117,31 @@ int ObNgram2FTParserDesc::segment(ObFTParserParam *param, ObITokenIterator *&ite
 {
   int ret = OB_SUCCESS;
   ObNgram2FTParser *parser = nullptr;
+  ObIAllocator *metadata_allocator = nullptr;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("ngram ft parser desc hasn't be initialized", K(ret), K(is_inited_));
   } else if (OB_ISNULL(param) || OB_ISNULL(param->fulltext_) || OB_UNLIKELY(!param->is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), KPC(param));
-  } else if (OB_ISNULL(parser = OB_NEWx(ObNgram2FTParser, param->allocator_))) {
+  } else if (FALSE_IT(metadata_allocator = OB_NOT_NULL(param->metadata_alloc_)
+          ? param->metadata_alloc_ : param->allocator_)) {
+  } else if (OB_ISNULL(metadata_allocator)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("ngram2 parser metadata allocator is null", K(ret), KPC(param));
+  } else if (OB_ISNULL(parser = OB_NEWx(ObNgram2FTParser, metadata_allocator))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("fail to allocate ngram ft parser", K(ret));
   } else {
     if (OB_FAIL(parser->init(param))) {
       LOG_WARN("fail to init ngram fulltext parser", K(ret), KPC(param));
-      param->allocator_->free(parser);
     } else {
       iter = parser;
     }
   }
 
-  if (OB_FAIL(ret)) {
-    OB_DELETEx(ObNgram2FTParser, param->allocator_, parser);
+  if (OB_FAIL(ret) && OB_NOT_NULL(metadata_allocator)) {
+    OB_DELETEx(ObNgram2FTParser, metadata_allocator, parser);
   }
 
   return ret;
@@ -134,9 +151,12 @@ void ObNgram2FTParserDesc::free_token_iter(ObFTParserParam *param, ObITokenItera
 {
   if (OB_NOT_NULL(iter)) {
     abort_unless(nullptr != param);
-    abort_unless(nullptr != param->allocator_);
+    ObIAllocator *metadata_allocator = OB_NOT_NULL(param->metadata_alloc_)
+        ? param->metadata_alloc_ : param->allocator_;
+    abort_unless(nullptr != metadata_allocator);
     iter->~ObITokenIterator();
-    param->allocator_->free(iter);
+    metadata_allocator->free(iter);
+    iter = nullptr;
   }
 }
 

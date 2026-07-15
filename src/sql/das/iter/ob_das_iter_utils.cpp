@@ -1661,15 +1661,21 @@ int ObDASIterUtils::create_text_retrieval_sub_tree(
     if (ir_scan_ctdef->has_pushdown_topk() && !has_duplicate_boolean_tokens) {
       merge_iter_param.topk_mode_ = 1;
       merge_iter_param.daat_mode_ = 1;
-    } else if (merge_iter_param.query_tokens_.count() > OB_MAX_TEXT_RETRIEVAL_TOKEN_CNT
-        || (!is_func_lookup && !ir_scan_ctdef->need_proj_relevance_score())) {
+    } else if (merge_iter_param.query_tokens_.count() > OB_MAX_TEXT_RETRIEVAL_TOKEN_CNT) {
       if (BOOLEAN_MODE == ir_scan_ctdef->mode_flag_) {
         ret = OB_NOT_SUPPORTED;
         LOG_WARN("boolean mode with too many tokens not supported", K(ret), K(merge_iter_param.query_tokens_.count()));
         LOG_USER_ERROR(OB_NOT_SUPPORTED, "Boolean mode with more than 256 tokens is");
       }
       merge_iter_param.taat_mode_ = 1;
+    } else if (!is_func_lookup && !ir_scan_ctdef->need_proj_relevance_score()
+        && BOOLEAN_MODE == ir_scan_ctdef->mode_flag_) {
+      // Boolean evaluation depends on the per-token match state maintained by TaaT.
+      merge_iter_param.taat_mode_ = 1;
     } else {
+      // DaaT can stream and deduplicate naturally ordered posting lists without
+      // materializing all candidates. This is especially important for COUNT(*)
+      // and LIMIT queries which do not project relevance scores.
       merge_iter_param.daat_mode_ = 1;
     }
     if (OB_SUCC(ret) && ir_scan_ctdef->has_pushdown_topk() && has_duplicate_boolean_tokens) {
@@ -4426,4 +4432,3 @@ int ObDASIterUtils::create_vec_ivf_lookup_tree(ObTableScanParam &scan_param,
 
 } // namespace sql
 } // namespace oceanbase
-

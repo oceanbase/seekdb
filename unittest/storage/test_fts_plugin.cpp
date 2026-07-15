@@ -260,6 +260,35 @@ TEST_F(TestDefaultFTParser, test_space_ft_parser_segment)
   LOG_INFO("after space segment", KCSTRING(fulltext), K(ft_len), K(ft_parser_param_));
 }
 
+TEST_F(TestDefaultFTParser, test_space_ft_parser_reuse)
+{
+  ObSpaceFTParser parser;
+  const char *first_doc = "alpha beta";
+  ft_parser_param_.fulltext_ = first_doc;
+  ft_parser_param_.ft_length_ = strlen(first_doc);
+  ASSERT_EQ(OB_SUCCESS, parser.init(&ft_parser_param_));
+
+  const char *word = nullptr;
+  int64_t word_len = 0;
+  int64_t char_len = 0;
+  int64_t word_freq = 0;
+  std::vector<std::string> tokens;
+  while (OB_SUCCESS == parser.get_next_token(
+             word, word_len, char_len, word_freq)) {
+    tokens.push_back(std::string(word, word_len));
+  }
+  ASSERT_EQ((std::vector<std::string>{"alpha", "beta"}), tokens);
+
+  const char *second_doc = "gamma delta epsilon";
+  ASSERT_EQ(OB_SUCCESS, parser.reuse_parser(second_doc, strlen(second_doc)));
+  tokens.clear();
+  while (OB_SUCCESS == parser.get_next_token(
+             word, word_len, char_len, word_freq)) {
+    tokens.push_back(std::string(word, word_len));
+  }
+  ASSERT_EQ((std::vector<std::string>{"gamma", "delta", "epsilon"}), tokens);
+}
+
 TEST_F(TestDefaultFTParser, test_space_ft_parser_segment_bug_56324268)
 {
   ObSpaceFTParser parser;
@@ -883,6 +912,15 @@ TEST(ObTestNgramImpl, test_ngram_impl)
     iter_words.push_back(std::string(word, word_len));
   }
   ASSERT_EQ(expected_words, iter_words);
+
+  ObString reused_fulltext = ObString::make_string("ab cde");
+  ASSERT_EQ(OB_SUCCESS,
+            ngram_impl.reuse_parser(reused_fulltext.ptr(), reused_fulltext.length()));
+  iter_words.clear();
+  while (ngram_impl.get_next_token(word, word_len, char_cnt, word_freq) != OB_ITER_END) {
+    iter_words.push_back(std::string(word, word_len));
+  }
+  ASSERT_EQ((std::vector<std::string>{"ab", "cd", "cde", "de"}), iter_words);
 }
 
 } // end namespace storage

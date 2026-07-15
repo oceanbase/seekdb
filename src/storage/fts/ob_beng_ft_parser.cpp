@@ -54,7 +54,7 @@ int ObBEngFTParser::get_next_token(
   } else if (OB_ISNULL(token.ptr_) || OB_UNLIKELY(0 >= token.len_ || 0 >= token_freq)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", K(ret), KP(token.ptr_), K(token.len_), K(token_freq));
-  } else if (OB_ISNULL(buf = static_cast<char *>(allocator_.alloc(token.len_)))) {
+  } else if (OB_ISNULL(buf = static_cast<char *>(scratch_allocator_.alloc(token.len_)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("fail to allocate word memory", K(ret), K(token.len_));
   } else {
@@ -64,6 +64,30 @@ int ObBEngFTParser::get_next_token(
     char_len = token.len_;
     word_freq = token_freq;
     LOG_DEBUG("succeed to add word", K(ObString(word_len, word)), K(word_freq));
+  }
+  return ret;
+}
+
+int ObBEngFTParser::reuse_parser(const char *fulltext, const int64_t fulltext_len)
+{
+  int ret = OB_SUCCESS;
+  if (OB_UNLIKELY(!is_inited_)) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("basic english ft parser has not been initialized", K(ret));
+  } else if (OB_ISNULL(fulltext) || OB_UNLIKELY(fulltext_len <= 0)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid fulltext for parser reuse", K(ret), KP(fulltext), K(fulltext_len));
+  } else if (OB_UNLIKELY(UINT32_MAX < fulltext_len)) {
+    ret = OB_NOT_SUPPORTED;
+    LOG_WARN("document is too large for english analyzer", K(ret), K(fulltext_len));
+  } else {
+    doc_.set_string(fulltext, fulltext_len);
+    if (OB_FAIL(segment(doc_, token_stream_))) {
+      LOG_WARN("fail to segment fulltext", K(ret));
+    } else if (OB_ISNULL(token_stream_)) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("token stream is null", K(ret));
+    }
   }
   return ret;
 }
@@ -85,7 +109,7 @@ int ObBEngFTParser::init(ObFTParserParam *param)
     analysis_ctx_.cs_ = param->cs_;
     analysis_ctx_.filter_stopword_ = false;
     analysis_ctx_.need_grouping_ = false;
-    if (OB_FAIL(english_analyzer_.init(analysis_ctx_, *param->allocator_))) {
+    if (OB_FAIL(english_analyzer_.init(analysis_ctx_, metadata_allocator_))) {
       LOG_WARN("fail to init english analyzer", K(ret), KPC(param), K(analysis_ctx_));
     } else if (OB_FAIL(segment(doc_, token_stream_))) {
       LOG_WARN("fail to segment fulltext by parser", K(ret), KP(param->fulltext_), K(param->ft_length_));
@@ -152,13 +176,25 @@ int ObBasicEnglishFTParserDesc::segment(
 {
   int ret = OB_SUCCESS;
   ObBEngFTParser *parser = nullptr;
+  ObIAllocator *metadata_allocator = nullptr;
+  ObIAllocator *scratch_allocator = nullptr;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("default ft parser desc hasn't be initialized", K(ret), K(is_inited_));
   } else if (OB_ISNULL(param) || OB_ISNULL(param->fulltext_) || OB_UNLIKELY(!param->is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), KPC(param));
-  } else if (OB_ISNULL(parser = OB_NEWx(ObBEngFTParser, param->allocator_, *(param->allocator_)))) {
+  } else if (FALSE_IT(metadata_allocator = OB_NOT_NULL(param->metadata_alloc_)
+          ? param->metadata_alloc_ : param->allocator_)) {
+  } else if (FALSE_IT(scratch_allocator = OB_NOT_NULL(param->scratch_alloc_)
+          ? param->scratch_alloc_ : param->allocator_)) {
+  } else if (OB_ISNULL(metadata_allocator) || OB_ISNULL(scratch_allocator)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("fulltext parser allocator is null", K(ret), KPC(param));
+  } else if (OB_ISNULL(parser = OB_NEWx(ObBEngFTParser,
+                                         metadata_allocator,
+                                         *metadata_allocator,
+                                         *scratch_allocator))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("fail to allocate basic english ft parser", K(ret));
   } else if (OB_FAIL(parser->init(param))) {
@@ -167,8 +203,8 @@ int ObBasicEnglishFTParserDesc::segment(
     iter = parser;
   }
 
-  if (OB_FAIL(ret)) {
-    OB_DELETEx(ObBEngFTParser, param->allocator_, parser);
+  if (OB_FAIL(ret) && OB_NOT_NULL(metadata_allocator)) {
+    OB_DELETEx(ObBEngFTParser, metadata_allocator, parser);
   }
 
   return ret;
@@ -180,9 +216,12 @@ void ObBasicEnglishFTParserDesc::free_token_iter(
 {
   if (OB_NOT_NULL(iter)) {
     abort_unless(nullptr != param);
-    abort_unless(nullptr != param->allocator_);
+    ObIAllocator *metadata_allocator = OB_NOT_NULL(param->metadata_alloc_)
+        ? param->metadata_alloc_ : param->allocator_;
+    abort_unless(nullptr != metadata_allocator);
     iter->~ObITokenIterator();
-    param->allocator_->free(iter);
+    metadata_allocator->free(iter);
+    iter = nullptr;
   }
 }
 

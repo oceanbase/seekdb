@@ -21,8 +21,10 @@
 #include "storage/fts/dict/ob_ft_cache_container.h"
 #include "storage/fts/dict/ob_ft_dict.h"
 #include "storage/fts/dict/ob_ft_dict_def.h"
+#include "storage/fts/ik/ob_ik_arbitrator.h"
 #include "storage/fts/ik/ob_ik_processor.h"
-#include "plugin/interface/ob_plugin_ftparser_intf.h"
+#include "storage/fts/ob_i_ft_parser.h"
+#include "lib/allocator/page_arena.h"
 
 #include <cstdint>
 namespace oceanbase
@@ -31,22 +33,24 @@ namespace storage
 {
 class ObFTDictHub;
 
-class ObIKFTParser final : public plugin::ObITokenIterator
+class ObIKFTParser final : public ObIFTParser
 {
 public:
-  ObIKFTParser(ObIAllocator &allocator, ObFTDictHub *hub)
-      : allocator_(allocator),
-        is_inited_(false),
+  ObIKFTParser(ObIAllocator &metadata_allocator, ObFTDictHub *hub)
+      : is_inited_(false),
+        metadata_allocator_(metadata_allocator),
         coll_type_(ObCollationType::CS_TYPE_INVALID),
         ctx_(nullptr),
         hub_(hub),
-        segmenters_(allocator_),
-        cache_main_(allocator),
-        cache_quan_(allocator),
-        cache_stop_(allocator),
+        segmenters_(metadata_allocator),
+        cache_main_(metadata_allocator),
+        cache_quan_(metadata_allocator),
+        cache_stop_(metadata_allocator),
         dict_main_(nullptr),
         dict_quan_(nullptr),
-        dict_stop_(nullptr)
+        dict_stop_(nullptr),
+        arb_(),
+        scratch_allocator_("FTIKScratch")
   {
   }
 
@@ -58,6 +62,7 @@ public:
                      int64_t &word_len,
                      int64_t &char_cnt,
                      int64_t &word_freq) override;
+  virtual int reuse_parser(const char *fulltext, const int64_t fulltext_len) override;
 
   VIRTUAL_TO_STRING_KV(K(is_inited_));
 
@@ -89,9 +94,9 @@ private:
                             ObIFTDict *&dict);
 
 private:
-  static constexpr int SEGMENT_LIMIT = 1000;
-  ObIAllocator &allocator_;
+  static constexpr int SEGMENT_LIMIT = IK_HANDLE_SIZE_LIMIT;
   bool is_inited_;
+  ObIAllocator &metadata_allocator_;
 
   ObCollationType coll_type_;
   TokenizeContext *ctx_;
@@ -106,6 +111,8 @@ private:
   ObIFTDict *dict_main_;
   ObIFTDict *dict_quan_;
   ObIFTDict *dict_stop_;
+  ObIKArbitrator arb_;
+  ObArenaAllocator scratch_allocator_;
 
   DISABLE_COPY_ASSIGN(ObIKFTParser);
 };

@@ -122,6 +122,8 @@ public:
   {
     ObFTParserParamExport::reset();
     allocator_ = nullptr;
+    metadata_alloc_ = nullptr;
+    scratch_alloc_ = nullptr;
     ik_param_ = ObFTIKParam();
     ngram_token_size_ = NGRAM_TOKEN_SIZE;
     min_ngram_size_ = NGRAM_TOKEN_SIZE;
@@ -132,7 +134,11 @@ public:
   INHERIT_TO_STRING_KV("base", ObFTParserParamExport, KP_(allocator), K_(ngram_token_size));
 
 public:
+  // allocator_ remains for external parser ABI compatibility. Built-in parsers
+  // use the split allocators so immutable metadata survives per-document reuse.
   common::ObIAllocator *allocator_ = nullptr;
+  common::ObIAllocator *metadata_alloc_ = nullptr;
+  common::ObIAllocator *scratch_alloc_ = nullptr;
 
   // ik parser params
   ObFTIKParam ik_param_;

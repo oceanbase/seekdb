@@ -20,21 +20,23 @@
 #include "lib/utility/ob_macro_utils.h"
 #include "lib/utility/ob_print_utils.h"
 #include "share/text_analysis/ob_text_analyzer.h"
-#include "plugin/interface/ob_plugin_ftparser_intf.h"
+#include "storage/fts/ob_i_ft_parser.h"
 
 namespace oceanbase
 {
 namespace storage
 {
 
-class ObBEngFTParser final : public plugin::ObITokenIterator
+class ObBEngFTParser final : public ObIFTParser
 {
 public:
   static const int64_t FT_MIN_WORD_LEN = 3;
   static const int64_t FT_MAX_WORD_LEN = 84;
 public:
-  explicit ObBEngFTParser(common::ObIAllocator &allocator)
-    : allocator_(allocator),
+  ObBEngFTParser(common::ObIAllocator &metadata_allocator,
+                 common::ObIAllocator &scratch_allocator)
+    : metadata_allocator_(metadata_allocator),
+      scratch_allocator_(scratch_allocator),
       analysis_ctx_(),
       english_analyzer_(),
       doc_(),
@@ -45,6 +47,7 @@ public:
 
   int init(plugin::ObFTParserParam *param);
   void reset();
+  virtual int reuse_parser(const char *fulltext, const int64_t fulltext_len) override;
   virtual int get_next_token(
       const char *&word,
       int64_t &word_len,
@@ -57,7 +60,8 @@ private:
       const common::ObDatum &doc,
       share::ObITokenStream *&token_stream);
 private:
-  common::ObIAllocator &allocator_;
+  common::ObIAllocator &metadata_allocator_;
+  common::ObIAllocator &scratch_allocator_;
   share::ObTextAnalysisCtx analysis_ctx_;
   share::ObEnglishTextAnalyzer english_analyzer_;
   common::ObDatum doc_;

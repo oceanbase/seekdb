@@ -27,6 +27,7 @@
 #include "lib/utility/ob_macro_utils.h"
 #include "object/ob_object.h"
 #include "plugin/sys/ob_plugin_helper.h"
+#include "sql/engine/expr/ob_expr_lob_utils.h"
 #include "sql/resolver/ddl/ob_fts_index_builder_util.h"
 #include "sql/session/ob_sql_session_info.h"
 #include "share/ob_json_access_utils.h"
@@ -90,16 +91,14 @@ int ObExprTokenize::tokenize_fulltext(const TokenizeParam &param,
   storage::ObFTParseHelper tokenize_helper;
   const int64_t ft_word_bkt_cnt = MIN(MAX(param.fulltext_.length() / 2, 2), 997);
   int64_t doc_len = 0;
-  ObFTWordMap token_map;
-
-  ObArenaAllocator tmp_parse_alloc(ObMemAttr("Tmp buffer"));
+  storage::ObFTTokenMap token_map;
 
   if (TokenizeParam::OUTPUT_MODE::DEFAULT != mode && TokenizeParam::OUTPUT_MODE::ALL != mode) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("Invalid output mode", K(ret), K(mode));
   } else if (OB_FAIL(tokenize_helper.init(&allocator, param.parser_name_, param.properties_))) {
     LOG_WARN("Fail to init tokenize helper", K(ret));
-  } else if (OB_FAIL(token_map.create(ft_word_bkt_cnt, common::ObMemAttr("FTWordMap")))) {
+  } else if (OB_FAIL(token_map.create(ft_word_bkt_cnt, common::ObMemAttr("FTTokenMap")))) {
     LOG_WARN("Fail to create token map", K(ret));
   } else if (
       (0 != param.fulltext_.length())
@@ -349,11 +348,20 @@ int ObExprTokenize::parse_fulltext(const ObExpr &expr, ObEvalCtx &ctx, TokenizeP
     if (fulltext_datum->is_null()) {
       // do nothing, return empty result
       param.fulltext_ = ObString::make_empty_string();
-    } else {
-      param.fulltext_ = fulltext_datum->get_string();
+    } else if (OB_FAIL(ObTextStringHelper::read_real_string_data(
+        param.allocator_,
+        *fulltext_datum,
+        expr.args_[0]->datum_meta_,
+        expr.args_[0]->obj_meta_.has_lob_header(),
+        param.fulltext_,
+        &ctx.exec_ctx_))) {
+      LOG_WARN("Fail to read fulltext datum.", K(ret),
+          K(expr.args_[0]->datum_meta_), K(expr.args_[0]->obj_meta_));
     }
-    param.meta_.set_varchar(); // as we hardcoded in fts_index
-    param.meta_.set_collation_type(expr.args_[0]->obj_meta_.get_collation_type());
+    if (OB_SUCC(ret)) {
+      param.meta_.set_varchar(); // as we hardcoded in fts_index
+      param.meta_.set_collation_type(expr.args_[0]->obj_meta_.get_collation_type());
+    }
   }
   return ret;
 }

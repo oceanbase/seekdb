@@ -38,9 +38,11 @@ public:
 
   int output_result(TokenizeContext &ctx);
 
-private:
-  int prepare(TokenizeContext &ctx);
+  int prepare();
 
+  void reuse();
+
+private:
   int add_chain(ObIKTokenChain *chain);
 
   int optimize(TokenizeContext &ctx,
@@ -61,7 +63,17 @@ private:
 
 private:
   ObArenaAllocator alloc_;
-  hash::ObHashMap<int64_t, ObIKTokenChain *> chains_;
+  hash::ObHashMap<
+      int64_t,
+      ObIKTokenChain *,
+      common::hash::NoPthreadDefendMode,
+      common::hash::hash_func<int64_t>,
+      common::hash::equal_to<int64_t>,
+      common::hash::SimpleAllocer<
+          typename common::hash::HashMapTypes<int64_t, ObIKTokenChain *>::AllocType,
+          common::hash::NodeNumTraits<
+              typename common::hash::HashMapTypes<int64_t, ObIKTokenChain *>::AllocType>::NODE_NUM,
+          common::hash::NoPthreadDefendMode>> chains_;
 
 private:
   DISALLOW_COPY_AND_ASSIGN(ObIKArbitrator);
