@@ -52,8 +52,9 @@ ObFTIndexRowCache::ObFTIndexRowCache()
     token_processor_(scratch_allocator_),
     datum_row_(),
     token_map_(),
+    token_iter_(),
+    token_end_iter_(),
     token_map_bucket_count_(0),
-    token_arr_(),
     row_idx_(0),
     is_fts_index_aux_(true),
     is_builtin_parser_(false),
@@ -133,15 +134,10 @@ int ObFTIndexRowCache::segment(const common::ObObjMeta &ft_obj_meta,
     const int64_t doc_id_idx = is_fts_index_aux_ ? 1 : 0;
     datum_row_.storage_datums_[doc_id_idx].shallow_copy_from_datum(doc_id_datum);
     datum_row_.storage_datums_[3].set_uint(doc_length);
-    for (storage::ObFTTokenMap::const_iterator iter = token_map_.begin();
-         OB_SUCC(ret) && iter != token_map_.end();
-         ++iter) {
-      if (OB_FAIL(token_arr_.push_back(iter.operator->()))) {
-        LOG_WARN("fail to cache full-text token", K(ret), K(iter->first));
-      }
-    }
+    token_iter_ = token_map_.begin();
+    token_end_iter_ = token_map_.end();
   }
-  LOG_TRACE("word segment", K(ret), K(row_idx_), K(token_arr_.count()), K(doc_id_datum));
+  LOG_TRACE("word segment", K(ret), K(row_idx_), K(token_map_.size()), K(doc_id_datum));
   return ret;
 }
 
@@ -294,17 +290,17 @@ int ObFTIndexRowCache::get_next_row(blocksstable::ObDatumRow *&row)
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("ObFTIndexRowCache hasn't be initialized", K(ret), K(is_inited_));
-  } else if (row_idx_ >= token_arr_.count()) {
+  } else if (token_iter_ == token_end_iter_) {
     ret = OB_ITER_END;
   } else {
-    const storage::ObFTTokenPair *token_pair = token_arr_.at(row_idx_);
     const int64_t word_idx = is_fts_index_aux_ ? 0 : 1;
-    datum_row_.storage_datums_[word_idx].set_datum(token_pair->first.get_token());
-    datum_row_.storage_datums_[2].set_uint(token_pair->second.count_);
+    datum_row_.storage_datums_[word_idx].set_datum(token_iter_->first.get_token());
+    datum_row_.storage_datums_[2].set_uint(token_iter_->second.count_);
     row = &datum_row_;
+    ++token_iter_;
     ++row_idx_;
   }
-  LOG_TRACE("get next row", K(ret), KPC(row), K(row_idx_), K(token_arr_.count()));
+  LOG_TRACE("get next row", K(ret), KPC(row), K(row_idx_), K(token_map_.size()));
   return ret;
 }
 
@@ -315,7 +311,6 @@ void ObFTIndexRowCache::reset()
     helper_.get_parser_desc()->free_token_iter(&parser_param_, token_iterator_);
   }
   token_iterator_ = nullptr;
-  token_arr_.reset();
   token_map_.destroy();
   token_map_bucket_count_ = 0;
   datum_row_.reset();
@@ -332,7 +327,6 @@ void ObFTIndexRowCache::reset()
 
 void ObFTIndexRowCache::reuse()
 {
-  token_arr_.reuse();
   if (token_processor_inited_) {
     token_processor_.reuse();
   }

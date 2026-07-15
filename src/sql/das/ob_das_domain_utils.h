@@ -52,7 +52,7 @@ public:
   void reset();
   void reuse();
   TO_STRING_KV(K_(row_idx), K_(is_fts_index_aux), K_(helper), K_(is_inited),
-      K(token_map_.size()), K(token_arr_.count()));
+      K(token_map_.size()));
 private:
   int segment_with_builtin_parser(
       const common::ObObjMeta &ft_obj_meta,
@@ -74,8 +74,9 @@ private:
   storage::ObFTTokenProcessor token_processor_;
   blocksstable::ObDatumRow datum_row_;
   storage::ObFTTokenMap token_map_;
+  storage::ObFTTokenMap::const_iterator token_iter_;
+  storage::ObFTTokenMap::const_iterator token_end_iter_;
   int64_t token_map_bucket_count_;
-  common::ObSEArray<const storage::ObFTTokenPair *, 16> token_arr_;
   uint64_t row_idx_;
   bool is_fts_index_aux_;
   bool is_builtin_parser_;
