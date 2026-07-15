@@ -1164,6 +1164,7 @@ static const NonReservedKeyword Mysql_none_reserved_keywords[] =
   {"INDIVIDUAL", INDIVIDUAL},
   {"hybrid_search", HYBRID_SEARCH},
   {"fulltext_dict", FULLTEXT_DICT},
+  {"ai_split_document", AI_SPLIT_DOCUMENT},
 };
 
 /** https://dev.mysql.com/doc/refman/5.7/en/sql-syntax-prepared-statements.html
