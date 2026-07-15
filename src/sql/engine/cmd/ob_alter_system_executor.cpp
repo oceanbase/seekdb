@@ -35,6 +35,11 @@
 #include "sql/engine/cmd/ob_timezone_importer.h"
 #include "sql/engine/cmd/ob_srs_importer.h"
 #include "share/ob_internal_table_change_notifier.h"
+#include "share/schema/ob_schema_struct.h"
+#include "share/schema/ob_table_schema.h"
+#include "storage/fts/ob_fts_plugin_helper.h"
+#include "storage/fts/dict/ob_ft_dict_def.h"
+#include "storage/fts/dict/ob_ft_dict_hub.h"
 
 namespace oceanbase
 {
@@ -471,6 +476,69 @@ int ObRefreshMemStatExecutor::execute(ObExecContext &ctx, ObRefreshMemStatStmt &
   } else if (OB_FAIL(GCTX.root_service_->admin_refresh_memory_stat(
                          stmt.get_rpc_arg()))) {
     LOG_WARN("refresh memory stat failed", K(ret), "rpc_arg", stmt.get_rpc_arg());
+  }
+  return ret;
+}
+
+int ObRefreshFulltextDictExecutor::execute(ObExecContext &ctx,
+                                           ObRefreshFulltextDictStmt &stmt)
+{
+  int ret = OB_SUCCESS;
+  ObSqlCtx *sql_ctx = ctx.get_sql_ctx();
+  const share::schema::ObTableSchema *table_schema = nullptr;
+  const share::schema::ObDatabaseSchema *database_schema = nullptr;
+  storage::ObFTDictHub *hub = nullptr;
+  common::ObMySQLProxy *sql_proxy = GCTX.sql_proxy_;
+
+  if (OB_ISNULL(sql_ctx) || OB_ISNULL(sql_ctx->schema_guard_)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("sql context or schema guard is null", K(ret), KP(sql_ctx));
+  } else if (OB_FAIL(sql_ctx->schema_guard_->get_table_schema(stmt.get_table_id(),
+                                                               table_schema))) {
+    LOG_WARN("failed to get fulltext dictionary table schema", K(ret), K(stmt));
+  } else if (OB_ISNULL(table_schema)) {
+    ret = OB_TABLE_NOT_EXIST;
+    LOG_WARN("fulltext dictionary table does not exist", K(ret), K(stmt));
+  } else if (OB_UNLIKELY(table_schema->get_database_id() != stmt.get_database_id())) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("fulltext dictionary table belongs to an unexpected database",
+             K(ret), K(stmt), K(table_schema->get_database_id()));
+  } else if (OB_FAIL(sql_ctx->schema_guard_->get_database_schema(stmt.get_database_id(),
+                                                                 database_schema))) {
+    LOG_WARN("failed to get fulltext dictionary database schema", K(ret), K(stmt));
+  } else if (OB_ISNULL(database_schema)) {
+    ret = OB_ERR_BAD_DATABASE;
+    LOG_WARN("fulltext dictionary database does not exist", K(ret), K(stmt));
+  } else if (OB_UNLIKELY(!table_schema->is_fulltext_dict())) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("table is not marked as a fulltext dictionary", K(ret), K(stmt));
+  } else if (OB_ISNULL(sql_proxy)) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("sql proxy is null", K(ret));
+  } else if (OB_FAIL(storage::ObFTParsePluginData::instance().get_dict_hub(hub))) {
+    LOG_WARN("failed to get fulltext dictionary hub", K(ret));
+  } else if (OB_ISNULL(hub)) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("fulltext dictionary hub is null", K(ret));
+  } else {
+    const ObString &database_name = database_schema->get_database_name();
+    const ObString &table_name = table_schema->get_table_name();
+    ObSqlString canonical_name;
+    if (OB_FAIL(canonical_name.append_fmt("%.*s.%.*s",
+                                          database_name.length(), database_name.ptr(),
+                                          table_name.length(), table_name.ptr()))) {
+      LOG_WARN("failed to build canonical fulltext dictionary name", K(ret),
+               K(database_name), K(table_name));
+    } else {
+      const storage::ObFTDictDesc desc(canonical_name.string(),
+                                       storage::ObFTDictType::DICT_IK_MAIN,
+                                       ObCharsetType::CHARSET_UTF8MB4,
+                                       ObCollationType::CS_TYPE_UTF8MB4_BIN);
+      if (OB_FAIL(hub->refresh_user_dict(desc, *sql_proxy, database_name, table_name))) {
+        LOG_WARN("failed to refresh user fulltext dictionary", K(ret),
+                 K(database_name), K(table_name), K(stmt));
+      }
+    }
   }
   return ret;
 }

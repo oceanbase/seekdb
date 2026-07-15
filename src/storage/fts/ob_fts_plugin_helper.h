@@ -18,6 +18,7 @@
 #define OB_FTS_PLUGIN_HELPER_H_
 
 #include "lib/allocator/ob_fifo_allocator.h"
+#include "lib/allocator/page_arena.h"
 #include "lib/charset/ob_charset.h"
 #include "lib/string/ob_string.h"
 #include "object/ob_object.h"
@@ -226,6 +227,8 @@ private:
   plugin::ObPluginParam *plugin_param_;
   ObFTParser parser_name_;
   ObAddWordFlag add_word_flag_;
+  // Parser properties must outlive the caller's transient DML buffers.
+  common::ObArenaAllocator property_allocator_;
   ObFTParserProperty parser_property_;
   bool is_inited_;
 

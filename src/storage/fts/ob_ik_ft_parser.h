@@ -74,7 +74,9 @@ private:
 private:
   int init_dict(const plugin::ObFTParserParam &param);
 
-  int init_single_dict(ObFTDictDesc desc, ObFTCacheRangeContainer &container);
+  int init_single_dict(const ObFTDictDesc &desc,
+                       ObFTCacheRangeContainer &container,
+                       const bool build_if_missing = true);
 
   int init_segmenter(const plugin::ObFTParserParam &param);
 

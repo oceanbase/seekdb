@@ -497,15 +497,20 @@ int ObFTRangeDict::build_cache(const ObFTDictDesc &desc, ObFTCacheRangeContainer
   return ret;
 }
 
+int ObFTRangeDict::build_cache(const ObFTDictDesc &desc,
+                               ObIFTDictIterator &iter,
+                               ObFTCacheRangeContainer &range_container)
+{
+  return build_ranges(desc, iter, range_container);
+}
+
 int ObFTRangeDict::try_load_cache(const ObFTDictDesc &desc,
                                   const uint32_t range_count,
                                   ObFTCacheRangeContainer &range_container)
 {
   int ret = OB_SUCCESS;
-  uint64_t name = static_cast<uint64_t>(desc.type_);
-
   for (int64_t i = 0; OB_SUCC(ret) && i < range_count; ++i) {
-    ObDictCacheKey key(name, desc.type_, i);
+    ObDictCacheKey key(desc.cache_id_, desc.type_, desc.version_, i);
     ObFTCacheRangeHandle *info = nullptr;
     if (OB_FAIL(range_container.fetch_info_for_dict(info))) {
       LOG_WARN("Failed to fetch info for dict.", K(ret));

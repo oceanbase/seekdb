@@ -21,8 +21,14 @@
 #include "lib/lock/ob_bucket_lock.h"
 #include "storage/fts/dict/ob_ft_dict_def.h"
 
+#include <atomic>
+
 namespace oceanbase
 {
+namespace common
+{
+class ObISQLClient;
+}
 namespace storage
 {
 // typedef uint64_t ObFTTableID;
@@ -35,6 +41,7 @@ public:
       : name_(""),
         type_(ObFTDictType::DICT_TYPE_INVALID),
         charset_(CHARSET_INVALID),
+        cache_id_(0),
         version_(0),
         range_count_(0)
   {
@@ -44,6 +51,7 @@ public:
   char name_[2048]; // for now
   ObFTDictType type_;
   ObCharsetType charset_;
+  uint64_t cache_id_;
   int64_t version_; // in memory
   int32_t range_count_;
 };
@@ -51,14 +59,12 @@ public:
 struct ObFTDictInfoKey
 {
 public:
+  static const int64_t MAX_DICT_NAME_LENGTH = 2048;
   ObFTDictInfoKey()
-      : type_(static_cast<uint64_t>(ObFTDictType::DICT_TYPE_INVALID))
+      : type_(static_cast<uint64_t>(ObFTDictType::DICT_TYPE_INVALID)), name_len_(0), name_()
   {
   } // default constructor
-  ObFTDictInfoKey(const uint64_t type)
-      : type_(type)
-  {
-  }
+  int set(const ObFTDictType type, const ObString &name);
   int hash(uint64_t &hash_value) const
   {
     int ret = OB_SUCCESS;
@@ -69,34 +75,48 @@ public:
   uint64_t hash() const
   {
     uint64_t hash = 0;
-    hash = common::murmurhash(&type_, sizeof(int64_t), hash);
+    hash = common::murmurhash(&type_, sizeof(type_), hash);
+    hash = common::murmurhash(name_, name_len_, hash);
     return hash;
   }
 
   bool operator==(const ObFTDictInfoKey &other) const
   {
-    return type_ == other.type_ && true;
+    return type_ == other.type_
+           && name_len_ == other.name_len_
+           && 0 == MEMCMP(name_, other.name_, name_len_);
   }
 
   int compare(const ObFTDictInfoKey &other) const
   {
     int ret = 0;
-    if (0 == ret) {
-      ret = type_ - other.type_;
+    if (type_ < other.type_) {
+      ret = -1;
+    } else if (type_ > other.type_) {
+      ret = 1;
+    } else {
+      const int32_t cmp_len = MIN(name_len_, other.name_len_);
+      ret = MEMCMP(name_, other.name_, cmp_len);
+      if (0 == ret) {
+        ret = name_len_ < other.name_len_ ? -1 : (name_len_ > other.name_len_ ? 1 : 0);
+      }
     }
     return ret;
   }
 
 private:
   uint64_t type_;
-  // name
+  int32_t name_len_;
+  char name_[MAX_DICT_NAME_LENGTH];
 };
 
 class ObFTCacheRangeContainer;
 class ObFTDictHub
 {
 public:
-  ObFTDictHub() : is_inited_(false), dict_map_(), rw_dict_lock_() {}
+  ObFTDictHub()
+      : is_inited_(false), dict_map_(), rw_dict_lock_(), next_cache_id_(1024), next_version_(1)
+  {}
   ~ObFTDictHub() {}
 
   int init();
@@ -106,6 +126,11 @@ public:
   int build_cache(const ObFTDictDesc &desc, ObFTCacheRangeContainer &container);
 
   int load_cache(const ObFTDictDesc &desc, ObFTCacheRangeContainer &container);
+
+  int refresh_user_dict(const ObFTDictDesc &desc,
+                        common::ObISQLClient &sql_client,
+                        const ObString &database_name,
+                        const ObString &table_name);
 
 private:
   int get_dict_info(const ObFTDictInfoKey &key, ObFTDictInfo &info);
@@ -118,6 +143,8 @@ private:
   // holds info of dict
   hash::ObHashMap<ObFTDictInfoKey, ObFTDictInfo> dict_map_;
   ObBucketLock rw_dict_lock_;
+  std::atomic<uint64_t> next_cache_id_;
+  std::atomic<int64_t> next_version_;
 };
 
 } //  namespace storage

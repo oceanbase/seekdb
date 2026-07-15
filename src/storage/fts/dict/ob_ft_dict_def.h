@@ -64,7 +64,8 @@ public:
                const ObFTDictType type,
                const ObCharsetType charset,
                const ObCollationType coll_type)
-      : name_(name), type_(type), charset_(charset), coll_type_(coll_type)
+      : name_(name), type_(type), charset_(charset), coll_type_(coll_type),
+        cache_id_(static_cast<uint64_t>(type)), version_(0)
   {
   }
 
@@ -73,6 +74,11 @@ public:
   ObFTDictType type_;
   ObCharsetType charset_;
   ObCollationType coll_type_;
+  // A process-local id assigned by ObFTDictHub.  Built-in dictionaries keep
+  // their historical type-based ids, while user dictionaries receive a
+  // unique id from the hub.
+  uint64_t cache_id_;
+  int64_t version_;
 };
 
 } //  namespace storage
