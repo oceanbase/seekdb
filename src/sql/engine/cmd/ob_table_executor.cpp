@@ -29,7 +29,7 @@
 #include "sql/resolver/ddl/ob_truncate_table_stmt.h"
 #include "sql/resolver/ddl/ob_create_table_like_stmt.h"
 #include "sql/resolver/ddl/ob_fork_table_stmt.h"
-#include "sql/resolver/ddl/ob_flashback_stmt.h"
+#include "sql/resolver/ddl/ob_recyclebin_restore_stmt.h"
 #include "sql/resolver/ddl/ob_purge_stmt.h"
 #include "sql/resolver/ddl/ob_optimize_stmt.h"
 #include "sql/resolver/dml/ob_delete_resolver.h"
@@ -2127,11 +2127,11 @@ int ObForkTableExecutor::execute(ObExecContext &ctx, ObForkTableStmt &stmt)
   return ret;
 }
 
-int ObFlashBackTableFromRecyclebinExecutor::execute(ObExecContext &ctx, ObFlashBackTableFromRecyclebinStmt &stmt)
+int ObRecyclebinRestoreTableExecutor::execute(ObExecContext &ctx, ObRecyclebinRestoreTableStmt &stmt)
 {
   int ret = OB_SUCCESS;
-  const obcall::ObFlashBackTableFromRecyclebinArg &flashback_table_arg = stmt.get_flashback_table_arg();
-  obcall::ObFlashBackTableFromRecyclebinArg &tmp_arg = const_cast<obcall::ObFlashBackTableFromRecyclebinArg&>(flashback_table_arg);
+  const obcall::ObRecyclebinRestoreTableArg &restore_table_arg = stmt.get_restore_table_arg();
+  obcall::ObRecyclebinRestoreTableArg &tmp_arg = const_cast<obcall::ObRecyclebinRestoreTableArg&>(restore_table_arg);
   ObString first_stmt;
   if (OB_FAIL(stmt.get_first_stmt(first_stmt))) {
     LOG_WARN("get first statement failed", K(ret));
@@ -2141,66 +2141,10 @@ int ObFlashBackTableFromRecyclebinExecutor::execute(ObExecContext &ctx, ObFlashB
     if (OB_ISNULL(task_exec_ctx = GET_TASK_EXECUTOR_CTX(ctx))) {
       ret = OB_NOT_INIT;
       LOG_WARN("get task executor context failed");
-    } else if (OB_FAIL(rootserver::serial_call([&]{ return GCTX.root_service_->flashback_table_from_recyclebin(flashback_table_arg); }))) {
-      LOG_WARN("rpc proxy flashback table failed", K(ret));
+    } else if (OB_FAIL(rootserver::serial_call([&]{ return GCTX.root_service_->restore_table_from_recyclebin(restore_table_arg); }))) {
+      LOG_WARN("rpc proxy restore table failed", K(ret));
     }
   }
-  return ret;
-}
-
-int ObFlashBackTableToScnExecutor::execute(ObExecContext &ctx, ObFlashBackTableToScnStmt &stmt) {
-  int ret = OB_SUCCESS;
-  obcall::ObFlashBackTableToScnArg &arg = stmt.flashback_table_to_scn_arg_;
-  RowDesc row_desc;
-  ObTempExpr *temp_expr = NULL;
-  CK(OB_NOT_NULL(ctx.get_sql_ctx()));
-  OZ(ObStaticEngineExprCG::gen_expr_with_row_desc(stmt.get_time_expr(),
-     row_desc, ctx.get_allocator(), ctx.get_my_session(),
-     ctx.get_sql_ctx()->schema_guard_, temp_expr));
-  CK(OB_NOT_NULL(temp_expr));
-  if (OB_SUCC(ret)) {
-    ObNewRow empty_row;
-    ObObj tmp_obj;
-    ObExprCtx expr_ctx;
-    expr_ctx.calc_buf_ = &ctx.get_allocator();
-    expr_ctx.phy_plan_ctx_ = ctx.get_physical_plan_ctx();
-    expr_ctx.my_session_ = ctx.get_my_session();
-    expr_ctx.exec_ctx_ = &ctx;
-    const int64_t cur_time = expr_ctx.phy_plan_ctx_->has_cur_time() ?
-        expr_ctx.phy_plan_ctx_->get_cur_time().get_timestamp() : ObTimeUtility::current_time();
-    expr_ctx.phy_plan_ctx_->set_cur_time(cur_time, *expr_ctx.my_session_);
-    ObObj result_obj;
-    if (OB_FAIL(temp_expr->eval(ctx, empty_row, result_obj))) {
-      LOG_WARN("failed to calculate", K(ret));
-    } else if (ObFlashBackTableToScnStmt::TIME_TIMESTAMP == stmt.get_time_type()) {
-      EXPR_DEFINE_CAST_CTX(expr_ctx, CM_NONE);
-      if (OB_FAIL(ObObjCaster::to_type(ObDateTimeType, cast_ctx, tmp_obj, result_obj))) {
-        LOG_WARN("failed to cast object", K(ret), K(tmp_obj));
-      } else {
-        arg.time_point_ = result_obj.get_datetime();
-        LOG_DEBUG("timestamp_val result", K(tmp_obj), K(result_obj), K(arg.time_point_));
-      }
-    } else if (ObFlashBackTableToScnStmt::TIME_SCN == stmt.get_time_type()) {
-      EXPR_DEFINE_CAST_CTX(expr_ctx, CM_NONE);
-      if (OB_FAIL(ObObjCaster::to_type(ObUInt64Type, cast_ctx, tmp_obj, result_obj))) {
-        LOG_WARN("failed to cast object", K(ret), K(tmp_obj));
-      } else {
-        arg.time_point_ = result_obj.v_.uint64_;
-        LOG_DEBUG("timestamp_val result", K(tmp_obj), K(result_obj), K(arg.time_point_));
-      }
-    }
-  }
-
-  if (OB_SUCC(ret)) {
-    ObTaskExecutorCtx *task_exec_ctx = nullptr;
-    if (OB_ISNULL(task_exec_ctx = GET_TASK_EXECUTOR_CTX(ctx))) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get task executor context failed", K(ret));
-    } else if (OB_FAIL(rootserver::serial_call([&]{ return GCTX.root_service_->flashback_table_to_time_point(arg); }))) {
-      LOG_WARN("rpc proxy flashback table failed", K(ret));
-    }
-  }
-
   return ret;
 }
 

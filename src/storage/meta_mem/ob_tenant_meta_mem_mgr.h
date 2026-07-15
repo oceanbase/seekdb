@@ -272,10 +272,9 @@ public:
   int get_current_version_for_tablet(
       const share::ObLSID &ls_id, 
       const ObTabletID &tablet_id, 
-      int64_t &tablet_version, 
-      int64_t &tablet_transfer_seq,
+      int64_t &tablet_version,
       bool &allow_tablet_version_gc);
-  int check_allow_tablet_gc(const ObTabletID &tablet_id, const int64_t transfer_seq, bool &allow);
+  int check_allow_tablet_gc(const ObTabletID &tablet_id, bool &allow);
   int get_tablet_buffer_infos(ObIArray<ObTabletBufferInfo> &buffer_infos);
   int get_tablet_addr(const ObTabletMapKey &key, ObMetaDiskAddr &addr);
   int has_tablet(const ObTabletMapKey &key, bool &is_exist);
@@ -315,8 +314,8 @@ public:
 
   int inc_ref_in_leak_checker(const int32_t index);
   int dec_ref_in_leak_checker(const int32_t index);
-  int inc_external_tablet_cnt(const uint64_t tablet_id, const int64_t tablet_transfer_seq);
-  int dec_external_tablet_cnt(const uint64_t tablet_id, const int64_t tablet_transfer_seq);
+  int inc_external_tablet_cnt(const uint64_t tablet_id);
+  int dec_external_tablet_cnt(const uint64_t tablet_id);
   int schedule_load_bloomfilter(const storage::ObITable::TableKey &sstable_key,
                                 const share::ObLSID &ls_id,
                                 const MacroBlockId &macro_id,

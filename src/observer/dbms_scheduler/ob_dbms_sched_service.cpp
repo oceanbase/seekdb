@@ -34,9 +34,7 @@ int ObDBMSSchedService::mtl_init(ObDBMSSchedService *&dbms_sched_service)
 int ObDBMSSchedService::init()
 {
   int ret = OB_SUCCESS;
-  if (false) {
-    // do nothing
-  } else if (job_master_.is_inited()) {
+  if (job_master_.is_inited()) {
     ret = OB_INIT_TWICE;
     LOG_WARN("has inited", KR(ret));
   } else if (OB_FAIL(job_master_.init(GCTX.sql_proxy_, GCTX.schema_service_))) {
@@ -55,9 +53,7 @@ int ObDBMSSchedService::init()
 int ObDBMSSchedService::start()
 {
   int ret = OB_SUCCESS;
-  if (false) {
-    // do nothing
-  } else if (!job_master_.is_inited()) {
+  if (!job_master_.is_inited()) {
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret), K(job_master_.is_inited()));
   } else if (OB_FAIL(job_master_.start())) {
@@ -73,9 +69,7 @@ int ObDBMSSchedService::start()
 void ObDBMSSchedService::do_work()
 {
   int ret = OB_SUCCESS;
-  if (false) {
-    // do nothing
-  } else if (!job_master_.is_inited()) {
+  if (!job_master_.is_inited()) {
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret), K(job_master_.is_inited()));
   } else if (OB_FAIL(job_master_.scheduler())) {
@@ -86,9 +80,7 @@ void ObDBMSSchedService::do_work()
 void ObDBMSSchedService::stop()
 {
   int ret = OB_SUCCESS;
-  if (false) {
-    // do nothing
-  } else if (!job_master_.is_inited()) {
+  if (!job_master_.is_inited()) {
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret), K(job_master_.is_inited()));
   } else if (OB_FAIL(job_master_.stop())) {
@@ -102,9 +94,7 @@ void ObDBMSSchedService::stop()
 void ObDBMSSchedService::wait()
 {
   int ret = OB_SUCCESS;
-  if (false) {
-    // do nothing
-  } else if (!job_master_.is_inited()) {
+  if (!job_master_.is_inited()) {
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret), K(job_master_.is_inited()));
   } else {
@@ -116,9 +106,7 @@ void ObDBMSSchedService::wait()
 void ObDBMSSchedService::destroy()
 {
   int ret = OB_SUCCESS;
-  if (false) {
-    // do nothing
-  } else if (job_master_.is_inited()) {
+  if (job_master_.is_inited()) {
     if (OB_FAIL(job_master_.destroy())) {
       LOG_WARN("[DBMS_SCHED_SERVICE] job master destroy failed", K(ret));
     } else {
@@ -136,9 +124,7 @@ void ObDBMSSchedService::switch_to_follower_forcedly()
 int ObDBMSSchedService::switch_to_leader()
 {
   int ret = OB_SUCCESS;
-  if (false) {
-    // do nothing
-  } else if (job_master_.is_inited()) {
+  if (job_master_.is_inited()) {
     job_master_.switch_to_leader();
     ObTenantThreadHelper::switch_to_leader();
     LOG_INFO("[DBMS_SCHED_SERVICE] ObDBMSSchedService switch leader");
@@ -148,9 +134,7 @@ int ObDBMSSchedService::switch_to_leader()
 int ObDBMSSchedService::switch_to_follower_gracefully()
 {
   int ret = OB_SUCCESS;
-  if (false) {
-    // do nothing
-  } else if (job_master_.is_inited()) {
+  if (job_master_.is_inited()) {
     job_master_.switch_to_follower();
     ObTenantThreadHelper::switch_to_follower_gracefully();
     LOG_INFO("[DBMS_SCHED_SERVICE] ObDBMSSchedService switch follower");

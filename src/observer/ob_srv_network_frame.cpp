@@ -422,10 +422,7 @@ int ObSrvNetworkFrame::net_endpoint_register(const ObNetEndpointKey &endpoint_ke
 {
   int ret = OB_SUCCESS;
   
-  if (false) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("endpoint register is only valid in sys tenant", K(ret), K(endpoint_key));
-  } else if (ingress_service_.is_leader() && OB_FAIL(ingress_service_.register_endpoint(endpoint_key, expire_time))) {
+  if (ingress_service_.is_leader() && OB_FAIL(ingress_service_.register_endpoint(endpoint_key, expire_time))) {
     LOG_WARN("net endpoint register failed", K(ret), K(endpoint_key));
   }
   return ret;

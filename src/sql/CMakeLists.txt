@@ -93,7 +93,6 @@ ob_set_subtarget(ob_sql engine_vector_fixed
 
 ob_set_subtarget(ob_sql optimizer_stat
   optimizer/stat/ob_basic_stats_estimator.cpp
-  optimizer/stat/ob_column_store_refine_estimator.cpp
   optimizer/stat/ob_dbms_stats_copy_table_stats.cpp
   optimizer/stat/ob_dbms_stats_executor.cpp
   optimizer/stat/ob_dbms_stats_export_import.cpp
@@ -1437,7 +1436,7 @@ ob_set_subtarget(ob_sql resolver_ddl
   resolver/ddl/ob_drop_tablegroup_resolver.cpp
   resolver/ddl/ob_explain_resolver.cpp
   resolver/ddl/ob_explain_stmt.cpp
-  resolver/ddl/ob_flashback_resolver.cpp
+  resolver/ddl/ob_recyclebin_restore_resolver.cpp
   resolver/ddl/ob_fork_table_resolver.cpp
   resolver/ddl/ob_fork_table_stmt.cpp
   resolver/ddl/ob_fork_database_resolver.cpp

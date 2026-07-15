@@ -627,7 +627,6 @@ desc oceanbase.V$OB_SSTABLES;
 Field	Type	Null	Key	Default	Extra
 TABLE_TYPE	varchar(20)	NO		NULL	
 TABLET_ID	bigint(20)	NO		NULL	
-CG_IDX	bigint(20)	NO		NULL	
 START_LOG_SCN	bigint(20) unsigned	NO		NULL	
 END_LOG_SCN	bigint(20) unsigned	NO		NULL	
 DATA_CHECKSUM	bigint(20)	NO		NULL	
@@ -1387,8 +1386,6 @@ PARALLEL_INFO	varchar(512)	NO		NULL
 PARTICIPANT_TABLE	varchar(512)	NO		NULL	
 MACRO_ID_LIST	varchar(256)	NO		NULL	
 COMMENTS	varchar(1024)	NO		NULL	
-START_CG_ID	bigint(20)	NO		NULL	
-END_CG_ID	bigint(20)	NO		NULL	
 KEPT_SNAPSHOT	varchar(128)	NO		NULL	
 MERGE_LEVEL	varchar(64)	NO		NULL	
 EXEC_MODE	varchar(64)	NO		NULL	
@@ -1396,7 +1393,6 @@ IS_FULL_MERGE	varchar(5)	NO		NULL
 IO_COST_TIME_PERCENTAGE	bigint(20)	NO		NULL	
 MERGE_REASON	varchar(32)	NO		NULL	
 BASE_MAJOR_STATUS	varchar(64)	NO		NULL	
-CO_MERGE_TYPE	varchar(64)	NO		NULL	
 MDS_FILTER_INFO	varchar(1024)	NO		NULL	
 EXECUTE_TIME	bigint(20)	NO		NULL	
 select /*+QUERY_TIMEOUT(60000000)*/ count(*) as cnt from (select * from oceanbase.V$OB_TABLET_COMPACTION_HISTORY limit 1);
@@ -3239,16 +3235,6 @@ COLLATION_CONNECTION	varchar(128)	NO
 DB_COLLATION	varchar(128)	NO			
 BODY_UTF8	longblob	NO			
 select /*+QUERY_TIMEOUT(60000000)*/ count(*) as cnt from (select * from mysql.proc limit 1);
-cnt
-1
-desc oceanbase.DBA_OB_CS_REPLICA_STATS;
-Field	Type	Null	Key	Default	Extra
-TOTAL_TABLET_CNT	bigint(20)	NO			
-AVAILABLE_TABLET_CNT	decimal(42,0)	NO			
-TOTAL_MACRO_BLOCK_CNT	decimal(42,0)	NO		NULL	
-AVAILABLE_MACRO_BLOCK_CNT	decimal(42,0)	NO			
-AVAILABLE	varchar(5)	NO			
-select /*+QUERY_TIMEOUT(60000000)*/ count(*) as cnt from (select * from oceanbase.DBA_OB_CS_REPLICA_STATS limit 1);
 cnt
 1
 desc oceanbase.DBA_OB_VECTOR_INDEX_TASKS;

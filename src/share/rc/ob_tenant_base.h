@@ -89,7 +89,6 @@ class ObTenantMdsService;
   }
   class ObLobManager;
   class ObTableScanIterator;
-  class ObTenantCGReadInfoMgr;
   struct ObDDLMergeBucketLock;
   class ObTenantDirectLoadMgr;
   class ObEmptyReadBucket;
@@ -305,7 +304,6 @@ using ObTableScanIteratorObjPool = common::ObServerObjectPool<oceanbase::storage
       observer::ObTableLoadService*,                 \
       observer::ObTableLoadResourceService*,         \
       concurrency_control::ObMultiVersionGarbageCollector*, \
-      storage::ObTenantCGReadInfoMgr*,               \
       ObTestModule*,                                 \
       storage::ObEmptyReadBucket*,                  \
       rootserver::ObDBMSSchedService*,              \

@@ -45,7 +45,7 @@ public:
   int compare(const ObTenantUserKey& r) const
   {
     int cmp = 0;
-    if (true) {
+    {
       if (user_id_ < r.user_id_) {
         cmp = -1;
       } else if (user_id_ == r.user_id_) {
@@ -53,8 +53,6 @@ public:
       } else {
         cmp = 1;
       }
-    } else {
-      cmp = 1;
     }
     return cmp;
   }

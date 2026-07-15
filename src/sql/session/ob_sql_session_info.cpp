@@ -2353,7 +2353,6 @@ void ObSQLSessionInfo::ObCachedTenantConfigInfo::refresh()
       enable_sql_extension_ = GCONF.enable_sql_extension;
       px_join_skew_handling_ = GCONF._px_join_skew_handling;
       px_join_skew_minfreq_ = GCONF._px_join_skew_minfreq;
-      enable_column_store_ = GCONF._enable_column_store;
       enable_decimal_int_type_ = GCONF._enable_decimal_int_type;
       enable_mysql_compatible_dates_ = GCONF._enable_mysql_compatible_dates;
       enable_enum_set_subschema_ = GCONF._enable_enum_set_subschema;

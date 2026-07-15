@@ -5516,11 +5516,6 @@ int ObLogicalOperator::allocate_normal_join_filter(const ObIArray<JoinFilterInfo
                                                            node, info))) {
           LOG_WARN("failed to prepare_rf_query_range_info");
         }
-        if (OB_SUCC(ret) && LOG_TABLE_SCAN == node->get_type()) {
-          ObLogTableScan *scan = static_cast<ObLogTableScan*>(node);
-          scan->set_use_column_store(info.use_column_store_);
-        }
-
         if (OB_SUCC(ret) && can_join_filter_material) {
           valied_join_filter_count++;
           last_valid_join_filter_info_idx = i;

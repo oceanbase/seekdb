@@ -73,7 +73,7 @@ public:
   INHERIT_TO_STRING_KV("ObDDLRedefinitionTask", ObDDLRedefinitionTask,
       K(has_rebuild_index_), K(has_rebuild_constraint_), K(has_rebuild_foreign_key_),
       K(is_copy_indexes_), K(is_copy_triggers_), K(is_copy_constraints_),
-      K(is_copy_foreign_keys_), K(is_ignore_errors_), K(is_do_finish_), K(target_cg_cnt_));
+      K(is_copy_foreign_keys_), K(is_ignore_errors_), K(is_do_finish_));
 protected:
   int table_redefinition(const share::ObDDLTaskStatus next_task_status);
   int copy_table_dependent_objects(const share::ObDDLTaskStatus next_task_status);
@@ -102,7 +102,6 @@ private:
   int check_modify_autoinc(bool &modify_autoinc);
   int check_use_heap_table_ddl_plan(const share::schema::ObTableSchema *target_table_schema);
   int get_direct_load_job_stat(common::ObArenaAllocator &allocator, sql::ObLoadDataStat &job_stat);
-  int check_target_cg_cnt();
   int check_ddl_can_retry(const bool ddl_need_retry_at_executor, const share::schema::ObTableSchema *table_schema);
   int check_take_effect_succ(bool &has_took_effect_succ);
   virtual bool is_error_need_retry(const int ret_code) override
@@ -123,7 +122,6 @@ private:
   bool is_copy_foreign_keys_;
   bool is_ignore_errors_;
   bool is_do_finish_;
-  int64_t target_cg_cnt_; 
   bool use_heap_table_ddl_plan_;
   bool is_ddl_retryable_;
   bool has_rebuild_domain_indexes_;

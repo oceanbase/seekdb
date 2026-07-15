@@ -38,7 +38,6 @@ enum class LogIOTaskType
   FLUSH_META_TYPE = 2,
   TRUNCATE_PREFIX_TYPE = 3,
   TRUNCATE_LOG_TYPE = 4,
-	FLASHBACK_LOG_TYPE = 5,
   PURGE_THROTTLING_TYPE = 6,
 };
 
@@ -51,7 +50,6 @@ OB_INLINE const char *log_io_task_type_str(const LogIOTaskType type)
     IO_TASK_TYPE_NAME(FLUSH_META_TYPE);
     IO_TASK_TYPE_NAME(TRUNCATE_PREFIX_TYPE);
     IO_TASK_TYPE_NAME(TRUNCATE_LOG_TYPE);
-    IO_TASK_TYPE_NAME(FLASHBACK_LOG_TYPE);
     IO_TASK_TYPE_NAME(PURGE_THROTTLING_TYPE);
     default: str = "UNKNOWN_TYPE";
   }
@@ -240,35 +238,13 @@ private:
   bool is_inited_;
 };
 
-class LogIOFlashbackTask : public LogIOTask
-{
-public:
-  LogIOFlashbackTask(const int64_t palf_id,const int64_t palf_epoch);
-  ~LogIOFlashbackTask();
-public:
-  int init(const FlashbackCbCtx & flashback_ctx,
-           const int64_t palf_id);
-  void destroy();
-  TO_STRING_KV(K_(palf_id), K_(flashback_ctx), K_(is_inited));
-private:
-  int do_task_(LogIOTaskCbThreadPool *cb_thread_pool, IPalfHandleImplGuard &guard) override final;
-  int after_consume_(IPalfHandleImplGuard &guard) override final;
-  LogIOTaskType get_io_task_type_() const override final { return LogIOTaskType::FLASHBACK_LOG_TYPE; }
-  void free_this_(IPalfEnvImpl *palf_env_impl) override final;
-  int64_t get_io_size_() const override final {return 0;}
-  bool need_purge_throttling_() const override final {return true;}
-private:
-  FlashbackCbCtx flashback_ctx_;
-  bool is_inited_;
-};
-
 class LogIOPurgeThrottlingTask : public LogIOTask {
 public:
   LogIOPurgeThrottlingTask(const int64_t palf_id, const int64_t palf_epoch);
   ~LogIOPurgeThrottlingTask();
   void reset();
 public:
-  int init(const PurgeThrottlingCbCtx & flashback_ctx);
+  int init(const PurgeThrottlingCbCtx & purge_ctx);
   void destroy();
   INHERIT_TO_STRING_KV("LogIOTask", LogIOTask, K_(purge_ctx), K_(is_inited));
 private:

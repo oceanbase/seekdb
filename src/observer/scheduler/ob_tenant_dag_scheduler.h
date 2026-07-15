@@ -209,8 +209,8 @@ public:
     TASK_TYPE_BACKUP_CLEAN = 48,
     TASK_TYPE_DDL_KV_DUMP = 49,
     TASK_TYPE_DDL_KV_MERGE = 50,
-    TASK_TYPE_TRANSFER_BACKFILL_TX = 51,
-    TASK_TYPE_TRANSFER_REPLACE_TABLE = 52,
+    TASK_TYPE_RESERVED_51 = 51,
+    TASK_TYPE_RESERVED_52 = 52,
     TASK_TYPE_MDS_MINI_MERGE = 53,
     TASK_TYPE_TTL_DELETE = 54,
     TASK_TYPE_TENANT_SNAPSHOT_CREATE = 55,
@@ -240,7 +240,7 @@ public:
     TASK_TYPE_CHECK_CONVERT_TABLET = 79,
     TASK_TYPE_VECTOR_INDEX_MEMDATA_SYNC = 80,
     TASK_TYPE_DELETE_LOB_META_ROW = 81,
-    TASK_TYPE_TRANSFER_BUILD_TABLET_INFO = 82,
+    TASK_TYPE_RESERVED_82 = 82,
     TASK_TYPE_BACKUP_LS_LOG_GROUP = 83,
     TASK_TYPE_BACKUP_LS_LOG = 84,
     TASK_TYPE_BACKUP_LS_LOG_FILE = 85,
@@ -259,20 +259,16 @@ public:
     TASK_TYPE_SS_MIGRATE_START = 98,
     TASK_TYPE_SS_MIGRATE_START_FINISH = 99,
     TASK_TYPE_SS_MIGRATE_FINISH = 100,
-    TASK_TYPE_SS_TRANSFER_BACKFILL = 101,
-    TASK_TYPE_SS_TRANSFER_BACKFILL_SCHEDULE = 102,
-    TASK_TYPE_SS_TRANSFER_BACKFILL_UPLOAD = 103,
-    TASK_TYPE_SS_TRANSFER_BACKFILL_TX = 104,
-    TASK_TYPE_SS_TRANSFER_REPLACE_TABLE = 105,
-    TASK_TYPE_SS_TRANSFER_REFRESH_TABLE = 106,
-    TASK_TYPE_SS_TRANSFER_UPDATE_INFO = 107,
+    TASK_TYPE_RESERVED_101 = 101,
+    TASK_TYPE_RESERVED_102 = 102,
+    TASK_TYPE_RESERVED_103 = 103,
+    TASK_TYPE_RESERVED_104 = 104,
+    TASK_TYPE_RESERVED_105 = 105,
+    TASK_TYPE_RESERVED_106 = 106,
+    TASK_TYPE_RESERVED_107 = 107,
     TASK_TYPE_MIGRATE_START_PHYSICAL = 108,
     TASK_TYPE_SS_PHYSICAL_CREATE_TABLETS_CONSUMER = 109,
-    TASK_TYPE_CO_MERGE_PERSIST = 110,
-    TASK_TYPE_CO_MERGE_REPLAY = 111,
-    TASK_TYPE_CO_MERGE_FINISH = 112,
     TASK_TYPE_DDL_PREPARE_SCAN = 113,
-    TASK_TYPE_DDL_WRITE_CG_MACRO_BLOCK = 114,
     TASK_TYPE_DDL_BUILD_MAJOR_SSTABLE = 115,
     TASK_TYPE_DIRECT_LOAD_WRITE_CHUNK_PIPELINE = 116, // unused
     TASK_TYPE_DIRECT_LOAD_WRITE_CHANNEL_FLUSH = 117,
@@ -284,12 +280,10 @@ public:
     TASK_TYPE_DDL_VECTOR_INDEX_BUILD_AND_WRITE_PIPELINE = 123,
     TASK_TYPE_DIRECT_LOAD_START_MERGE = 124,
     TASK_TYPE_DDL_MERGE_PREPARE = 125,
-    TASK_TYPE_DDL_MERGE_CG_SLICE = 126,
+    TASK_TYPE_DDL_MERGE_SLICE = 126,
     TASK_TYPE_DDL_MERGE_ASSEMBLE = 127,
     TASK_TYPE_DDL_MERGE_GUARD = 128,
     TASK_TYPE_DIRECT_LOAD_WRITE_MACRO_BLOCK_PIPELINE = 129,
-    TASK_TYPE_DDL_GROUP_WRITE_TASK= 130,
-    TASK_TYPE_DDL_CG_GROUP_WRITE_TASK= 131,
     TASK_TYPE_DIRECT_LOAD_FINISH_OP = 132,
     TASK_TYPE_DIRECT_LOAD_TABLE_OP_OPEN_OP = 133,
     TASK_TYPE_DIRECT_LOAD_TABLE_OP_CLOSE_OP = 134,
@@ -328,7 +322,7 @@ public:
     TASK_TYPE_DIRECT_LOAD_INSERT_SSTABLE_CLEAR = 167,
     TASK_TYPE_DIRECT_LOAD_COMPACT_SSTABLE_CLEAR = 168,
     TASK_TYPE_DIRECT_LOAD_UPDATE_SS_INC_MAJOR = 169,
-    TASK_TYPE_SS_INC_MAJOR_TRANSFER_BACKFILL_TX = 170,
+    TASK_TYPE_RESERVED_170 = 170,
     TASK_TYPE_DDL_FORK_PREPARE = 171,
     TASK_TYPE_DDL_FORK_REUSE = 172,
     TASK_TYPE_DDL_FORK_REWRITE = 173,
@@ -495,7 +489,7 @@ public:
 
   static const int64_t MergeDagPrioCnt = 3;
   static const ObDagPrio::ObDagPrioEnum MergeDagPrio[];
-  static const int64_t MergeDagTypeCnt = 7;
+  static const int64_t MergeDagTypeCnt = 4;
   static const ObDagType::ObDagTypeEnum MergeDagType[];
 
   explicit ObIDag(const ObDagType::ObDagTypeEnum type);
@@ -541,8 +535,7 @@ public:
       diagnose_type = ObDiagnoseTabletType::TYPE_MINOR_MERGE;
     } else if (ObDagType::ObDagTypeEnum::DAG_TYPE_REFRESH_SSTABLES == type) {
       diagnose_type = ObDiagnoseTabletType::TYPE_S2_REFRESH;
-    } else if (ObDagType::ObDagTypeEnum::DAG_TYPE_MAJOR_MERGE <= type
-            && ObDagType::ObDagTypeEnum::DAG_TYPE_CO_MERGE_FINISH >= type) {
+    } else if (ObDagType::ObDagTypeEnum::DAG_TYPE_MAJOR_MERGE == type) {
       diagnose_type = ObDiagnoseTabletType::TYPE_MEDIUM_MERGE;
     } else if (ObDagType::ObDagTypeEnum::DAG_TYPE_TX_TABLE_MERGE == type) {
       diagnose_type = ObDiagnoseTabletType::TYPE_TX_TABLE_MERGE;
@@ -823,7 +816,6 @@ public:
   {
     return OB_SUCCESS;
   }
-  OB_INLINE bool is_co_dag_net() const { return ObDagNetType::DAG_NET_TYPE_CO_MAJOR == type_; }
   virtual bool is_ha_dag_net() const { return false; }
   void diagnose_dag(common::ObIArray<compaction::ObDiagnoseTabletCompProgress> &progress_list);
 public:
@@ -1201,8 +1193,7 @@ private:
   OB_INLINE bool is_rank_dag_type(ObDagType::ObDagTypeEnum dag_type) const
   {
     return is_mini_compaction_dag(dag_type) ||
-           is_minor_compaction_dag(dag_type) ||
-           ObDagType::DAG_TYPE_CO_MERGE_PREPARE == dag_type; // add co prepare dag to rank list first
+           is_minor_compaction_dag(dag_type);
   }
   OB_INLINE bool is_compaction_dag_prio() const
   {

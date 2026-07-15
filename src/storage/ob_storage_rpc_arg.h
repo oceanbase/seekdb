@@ -183,7 +183,7 @@ public:
   bool is_valid() const { return binding_datas_.count() > 0; }
   TO_STRING_KV(K_(binding_datas));
 public:
-  common::ObSArray<ObTabletBindingMdsUserData> binding_datas_;
+  common::ObSArray<storage::ObTabletBindingMdsUserData> binding_datas_;
 };
 
 struct ObBatchGetTabletSplitRes final
@@ -196,7 +196,7 @@ public:
   bool is_valid() const { return split_datas_.count() > 0; }
   TO_STRING_KV(K_(split_datas));
 public:
-  common::ObSArray<ObTabletSplitMdsUserData> split_datas_;
+  common::ObSArray<storage::ObTabletSplitMdsUserData> split_datas_;
 };
 #ifdef OB_BUILD_SHARED_STORAGE
 

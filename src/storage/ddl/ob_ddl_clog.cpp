@@ -157,7 +157,7 @@ void ObDDLStartClogCb::try_release()
 ObDDLMacroBlockClogCb::ObDDLMacroBlockClogCb()
   : is_inited_(false), status_(), ls_id_(), macro_block_id_(),
     data_buffer_lock_(), is_data_buffer_freed_(false), ddl_macro_block_(), snapshot_version_(0),
-    data_format_version_(0), with_cs_replica_(false), direct_load_type_(ObDirectLoadType::DIRECT_LOAD_INVALID),
+    data_format_version_(0), direct_load_type_(ObDirectLoadType::DIRECT_LOAD_INVALID),
     block_checksum_(0), is_macro_block_exist_(false)
 {}
 
@@ -192,7 +192,6 @@ int ObDDLMacroBlockClogCb::init(const share::ObLSID &ls_id,
     tablet_handle_ = tablet_handle;
     snapshot_version_ = redo_info.table_key_.get_snapshot_version();
     data_format_version_ = redo_info.data_format_version_;
-    with_cs_replica_ = redo_info.with_cs_replica_;
     direct_load_type_ = direct_load_type;
     if (OB_FAIL(ddl_macro_block_.block_handle_.set_block_id(macro_block_id_))) {
       LOG_WARN("set macro block id failed", K(ret), K(macro_block_id_));
@@ -206,7 +205,6 @@ int ObDDLMacroBlockClogCb::init(const share::ObLSID &ls_id,
       ddl_macro_block_.logic_id_ = redo_info.logic_id_;
       ddl_macro_block_.ddl_start_scn_ = redo_info.start_scn_;
       ddl_macro_block_.table_key_ = redo_info.table_key_;
-      ddl_macro_block_.end_row_id_ = redo_info.end_row_id_;
       ddl_macro_block_.merge_slice_idx_ = redo_info.merge_slice_idx_;
     }
   }
@@ -286,8 +284,6 @@ int ObDDLMacroBlockClogCb::on_success()
   if (OB_FAIL(ret)) {
   } else if (is_macro_block_exist_) {
     /* do nothing skip relay it*/
-  } else if (with_cs_replica_ && ddl_macro_block_.table_key_ .is_column_store_sstable()) {
-    LOG_INFO("[CS-Replica] skip replay cs replica redo clog in leader", K(ret), K_(with_cs_replica), K_(ddl_macro_block));
   } else if (FALSE_IT(ddl_macro_block_.scn_ = __get_scn())) {
   } else if (OB_FAIL(ObDDLKVPendingGuard::set_macro_block(
       tablet, ddl_macro_block_, snapshot_version_, 

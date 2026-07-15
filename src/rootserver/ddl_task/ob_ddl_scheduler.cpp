@@ -1394,7 +1394,6 @@ int ObDDLScheduler::create_ddl_task(const ObCreateDDLTaskParam &param,
       case DDL_TABLE_REDEFINITION:
       case DDL_DIRECT_LOAD:
       case DDL_DIRECT_LOAD_INSERT:
-      case DDL_ALTER_COLUMN_GROUP:
       case DDL_MVIEW_COMPLETE_REFRESH:
       case DDL_MODIFY_AUTO_INCREMENT_WITH_REDEFINITION:
       case DDL_PARTITION_SPLIT_RECOVERY_TABLE_REDEFINITION:
@@ -2669,7 +2668,6 @@ int ObDDLScheduler::create_table_redefinition_task(
     ObDDLTaskRecord &task_record)
 {
   int ret = OB_SUCCESS;
-  int64_t target_cg_cnt = 0;
   SMART_VAR(ObTableRedefinitionTask, redefinition_task) {
     if (OB_UNLIKELY(!is_inited_)) {
       ret = OB_NOT_INIT;
@@ -2677,8 +2675,6 @@ int ObDDLScheduler::create_table_redefinition_task(
     } else if (OB_UNLIKELY(0 == task_id || tenant_data_version <= 0) || OB_ISNULL(alter_table_arg) || OB_ISNULL(src_schema) || OB_ISNULL(dest_schema)) {
       ret = OB_INVALID_ARGUMENT;
       LOG_WARN("invalid arguments", K(ret), K(task_id), KP(alter_table_arg), KP(src_schema), KP(dest_schema),  K(tenant_data_version));
-    } else if (OB_FAIL(dest_schema->get_store_column_group_count(target_cg_cnt))) {
-      LOG_WARN("fail to get target_cg_cnt", K(ret), K(dest_schema));
     } else if (OB_FAIL(redefinition_task.init(src_schema,
                                               dest_schema,
                                               parent_task_id,
@@ -2714,7 +2710,6 @@ int ObDDLScheduler::create_drop_primary_key_task(
     ObDDLTaskRecord &task_record)
 {
   int ret = OB_SUCCESS;
-  int64_t target_cg_cnt = 0;
   SMART_VAR(ObDropPrimaryKeyTask, drop_pk_task) {
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
@@ -2722,8 +2717,6 @@ int ObDDLScheduler::create_drop_primary_key_task(
   } else if (OB_UNLIKELY(0 == task_id || tenant_data_version <= 0) || OB_ISNULL(alter_table_arg) || OB_ISNULL(src_schema) || OB_ISNULL(dest_schema)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", K(ret), K(task_id), KP(alter_table_arg), KP(src_schema), KP(dest_schema), K(tenant_data_version));
-  } else if (OB_FAIL(dest_schema->get_store_column_group_count(target_cg_cnt))) {
-    LOG_WARN("fail to get target_store_cg_cnt", K(ret), KPC(dest_schema));
   } else if (OB_FAIL(drop_pk_task.init(src_schema,
                                        dest_schema,
                                        task_id,
@@ -2757,7 +2750,6 @@ int ObDDLScheduler::create_column_redefinition_task(
     ObDDLTaskRecord &task_record)
 {
   int ret = OB_SUCCESS;
-  int64_t target_cg_cnt = 0;
   SMART_VAR(ObColumnRedefinitionTask, redefinition_task) {
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
@@ -3118,7 +3110,6 @@ int ObDDLScheduler::schedule_ddl_task(const ObDDLTaskRecord &record)
       case DDL_TABLE_REDEFINITION:
       case DDL_DIRECT_LOAD:
       case DDL_DIRECT_LOAD_INSERT:
-      case DDL_ALTER_COLUMN_GROUP:
       case DDL_MVIEW_COMPLETE_REFRESH:
       case DDL_MODIFY_AUTO_INCREMENT_WITH_REDEFINITION:
       case DDL_PARTITION_SPLIT_RECOVERY_TABLE_REDEFINITION:
@@ -4012,7 +4003,6 @@ int ObDDLScheduler::on_sstable_complement_job_reply(
           case ObDDLType::DDL_MODIFY_COLUMN:
           case ObDDLType::DDL_CONVERT_TO_CHARACTER:
           case ObDDLType::DDL_TABLE_REDEFINITION:
-          case ObDDLType::DDL_ALTER_COLUMN_GROUP:
           case ObDDLType::DDL_MVIEW_COMPLETE_REFRESH:
           case ObDDLType::DDL_MODIFY_AUTO_INCREMENT_WITH_REDEFINITION:
           case ObDDLType::DDL_PARTITION_SPLIT_RECOVERY_TABLE_REDEFINITION:
@@ -4158,7 +4148,6 @@ int ObDDLScheduler::notify_update_autoinc_end(const ObDDLTaskKey &task_key,
           case ObDDLType::DDL_TABLE_REDEFINITION:
           case ObDDLType::DDL_DIRECT_LOAD:
           case ObDDLType::DDL_DIRECT_LOAD_INSERT:
-          case ObDDLType::DDL_ALTER_COLUMN_GROUP:
           case ObDDLType::DDL_MVIEW_COMPLETE_REFRESH:
           case ObDDLType::DDL_MODIFY_AUTO_INCREMENT_WITH_REDEFINITION:
             if (OB_FAIL(static_cast<ObTableRedefinitionTask *>(&task)->notify_update_autoinc_finish(autoinc_val, ret_code))) {

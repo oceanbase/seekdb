@@ -156,7 +156,6 @@ struct ObGlobalContext
 
   bool inited_;
   share::ObSchemaStatusProxy *schema_status_proxy_;
-  int64_t flashback_scn_;
   int64_t ssl_key_expired_time_;
   sql::ObConnectResourceMgr* conn_res_mgr_;
 

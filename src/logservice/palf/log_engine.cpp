@@ -539,29 +539,6 @@ int LogEngine::submit_truncate_prefix_blocks_task(
   return ret;
 }
 
-int LogEngine::submit_flashback_task(const FlashbackCbCtx &flashback_cb_ctx)
-{
-  int ret = OB_SUCCESS;
-  LogIOFlashbackTask *flashback_task = NULL;
-  if (IS_NOT_INIT) {
-    ret = OB_NOT_INIT;
-    PALF_LOG(ERROR, "LogEngine not inited!!!", K(ret));
-  } else if (false == flashback_cb_ctx.is_valid()) {
-    ret = OB_INVALID_ARGUMENT;
-    PALF_LOG(ERROR, "Invalid argument!!!", K(ret), K(flashback_cb_ctx));
-  } else if (OB_FAIL(generate_flashback_task_(flashback_cb_ctx, flashback_task))) {
-    PALF_LOG(ERROR, "generate_flashback_task_ failed", K(ret), K(flashback_cb_ctx));
-  } else if (OB_FAIL(log_io_worker_->submit_io_task(flashback_task))) {
-    PALF_LOG(WARN, "submit_io_task failed", K(ret));
-  } else {
-    PALF_LOG(INFO, "submit_flashback_task success", K(ret), K(flashback_cb_ctx));
-  }
-  if (OB_FAIL(ret) && OB_NOT_NULL(flashback_task)) {
-    alloc_mgr_->free_log_io_flashback_task(flashback_task);
-    flashback_task = NULL;
-  }
-  return ret;
-}
 int LogEngine::submit_purge_throttling_task(const PurgeThrottlingType purge_type)
 {
   int ret = OB_SUCCESS;
@@ -726,29 +703,6 @@ int LogEngine::truncate_prefix_blocks(const LSN &lsn)
   return ret;
 }
 
-int LogEngine::begin_flashback(const LSN &start_lsn_of_block)
-{
-  int ret = OB_SUCCESS;
-  if (OB_FAIL(log_storage_.begin_flashback(start_lsn_of_block))) {
-    PALF_LOG(ERROR, "LogStorage begin_flashback failed", K(ret), KPC(this), K(start_lsn_of_block));
-  } else {
-    PALF_LOG(INFO, "LogEngine begin_flashback success", KPC(this), K(start_lsn_of_block));
-  }
-  return ret;
-}
-
-int LogEngine::end_flashback(const LSN &start_lsn_of_block)
-{
-  int ret = OB_SUCCESS;
-  if (OB_FAIL(log_storage_.end_flashback(start_lsn_of_block))) {
-    PALF_LOG(ERROR, "LogStorege end_flashback failed", K(ret), KPC(this), K(start_lsn_of_block));
-  } else {
-    (void)reset_min_block_info_();
-    PALF_LOG(INFO, "LogEngine end_flashback success", KPC(this), K(start_lsn_of_block));
-  }
-  return ret;
-}
-
 // NB: delete_block only called by GC
 //
 // Nowdays, may be concurrently executed with 'truncate_prefix_blocks', need handle follow cases:
@@ -791,11 +745,11 @@ int LogEngine::delete_block(const block_id_t &block_id)
       // is greater than or equal to 12, we can delete blocks whose names is smaller than or equal to 10.
       //
       // assume the block to be deleted is 10(i.e. min_block_id is 10), next_block_id is 11, next_block_id + 1 is 12.
-      // because the block whose names with 'next_block_id + 1' may be truncated or flashback, double check
+      // because the block whose names with 'next_block_id + 1' may be truncated, double check
       // min_block_info_cache_version is important, otherwise, the cache of min block info
       // (i.e. min_block_min_scn_, min_block_max_scn_) is incorrect, consider following case:
       // T1 timestamp, thread A call delete_block, and get_block_min_scn successfully(e.g. next_block_id + 1 is 12);
-      // T2 timestamp, thread B call truncate or flashback, the content of block whose names with 12 is overwriten;
+      // T2 timestamp, thread B calls truncate, the content of block whose names with 12 is overwritten;
       // T3 timestamp, thread A call set_min_block_info_for_gc_, and the min_block_info(i.e. min_block_max_scn_, min_block_min_scn_)
       // will reset to incorrect scn.
       set_min_block_info_for_gc_(min_block_info_cache_version, next_block_id, next_block_max_scn);
@@ -845,11 +799,11 @@ int LogEngine::get_min_block_info_for_gc(block_id_t &block_id, SCN &max_scn)
   } else if (OB_FAIL(get_block_min_scn(min_block_id+1, min_block_max_scn))) {
     PALF_LOG(TRACE, "get_block_min_scn failed", K(ret));
   } else {
-    // after the first call, 'min_block_max_scn_' is always valid.(except after rebuild, flashback or truncate)
+    // after the first call, 'min_block_max_scn_' is always valid.(except after rebuild or truncate)
     // it's important to get 'min_block_info_cache_version' before 'get_block_min_scn', otherwise, the cache of
     // min block info(i.e. min_block_max_scn_, min_block_min_scn_) is incorrect, consider following case:
     // T1 timestamp, thread A call get_min_block_info_for_gc, and get_block_min_scn successfully(e.g. min_block_id is 10);
-    // T2 timestamp, thread B call truncate or flashback, the content of block whose names with 11 is overwriten;
+    // T2 timestamp, thread B calls truncate, the content of block whose names with 11 is overwritten;
     // T3 timestamp, thread A call set_min_block_info_for_gc_, and the min_block_info(i.e. min_block_max_scn_, min_block_min_scn_)
     // will reset to incorrect scn.
     set_min_block_info_for_gc_(min_block_info_cache_version, min_block_id, min_block_max_scn);
@@ -887,12 +841,12 @@ int LogEngine::get_min_block_info(block_id_t &block_id, SCN &min_scn)
   } else if (OB_FAIL(get_block_min_scn(min_block_id, min_block_min_scn))) {
     PALF_LOG(TRACE, "get_block_min_scn failed", K(ret));
   } else {
-    // after the first call, 'min_block_min_scn_' is always valid.(except after rebuild, flashback or truncate)
+    // after the first call, 'min_block_min_scn_' is always valid.(except after rebuild or truncate)
     // it's important to get 'min_block_info_cache_version' before 'get_block_min_scn', otherwise, the cache of
     // min block info(i.e. min_block_min_scn_) is incorrect, consider following case:
     //
     // T1 timestamp, thread A call get_min_block_info, and get_block_min_scn successfully(e.g. min_block_id is 10);
-    // T2 timestamp, thread B call truncate for flashback, the content of block whose names with 10 is overwriten;
+    // T2 timestamp, thread B calls truncate, the content of block whose names with 10 is overwritten;
     // T3 timestamp, thread A call set_min_block_info_, and the min_block_info(i.e. min_block_min_scn_) will reset
     // to incorrect scn.
     set_min_block_info_(min_block_info_cache_version, min_block_id, min_block_min_scn);
@@ -1020,24 +974,6 @@ int LogEngine::append_meta(const char *buf, const int64_t buf_len)
     PALF_LOG(ERROR, "LogMetaStorage pwrite failed", K(ret), K(buf), K(buf_len));
   } else {
     PALF_LOG(TRACE, "LogEngine append_meta success", K(ret), K(buf), K(buf_len));
-  }
-  return ret;
-}
-
-int LogEngine::update_log_snapshot_meta_for_flashback(const LogInfo &log_info,
-                                                      const LSN &log_info_tail_lsn)
-{
-  int ret = OB_SUCCESS;
-  LogSnapshotMeta snapshot_meta = log_meta_.get_log_snapshot_meta();
-  snapshot_meta.prev_log_info_ = log_info;
-  snapshot_meta.prev_log_tail_lsn_ = log_info_tail_lsn;
-  if (OB_FAIL(log_meta_.update_log_snapshot_meta(snapshot_meta))) {
-    PALF_LOG(WARN, "update_log_snapshot_meta failed", K(ret), KPC(this), K(log_info), K(snapshot_meta));
-  } else if (OB_FAIL(append_log_meta_(log_meta_))) {
-    PALF_LOG(WARN, "append_log_meta failed", K(ret), KPC(this), K(log_info), K(snapshot_meta));
-  } else {
-    PALF_LOG(INFO, "update_log_snapshot_meta_for_flashback success", K(ret), KPC(this), K(log_info),
-        K(snapshot_meta));
   }
   return ret;
 }
@@ -1524,30 +1460,6 @@ int LogEngine::generate_flush_meta_task_(const FlushMetaCbCtx &flush_meta_cb_ctx
   return ret;
 }
 
-int LogEngine::generate_flashback_task_(const FlashbackCbCtx &flashback_cb_ctx,
-                                        LogIOFlashbackTask *&flashback_task)
-{
-
-  int ret = OB_SUCCESS;
-  flashback_task = NULL;
-  if (false == flashback_cb_ctx.is_valid()) {
-    ret = OB_INVALID_ARGUMENT;
-  } else if (NULL == (flashback_task = alloc_mgr_->alloc_log_io_flashback_task(palf_id_, palf_epoch_))) {
-    ret = OB_ALLOCATE_MEMORY_FAILED;
-    PALF_LOG(ERROR, "alloc_log_io_flush_log_task failed", K(ret));
-  } else if (OB_FAIL(flashback_task->init(flashback_cb_ctx,
-                                          palf_id_))) {
-    PALF_LOG(ERROR, "init LogIOFlashbackTask failed", K(ret));
-  } else {
-    PALF_LOG(TRACE, "generate_flashback_task_ hsuccess", K(ret), KPC(this));
-  }
-  if (OB_FAIL(ret) && NULL != flashback_task) {
-    alloc_mgr_->free_log_io_flashback_task(flashback_task);
-    flashback_task = NULL;
-  }
-  return ret;
-}
-
 int LogEngine::generate_purge_throttling_task_(const PurgeThrottlingCbCtx &purge_cb_ctx,
     LogIOPurgeThrottlingTask *&purge_task) {
 
@@ -1737,7 +1649,7 @@ bool LogEngine::check_last_block_whether_is_integrity_(const block_id_t expected
   // NB:
   // 1. 'expected_next_block_id' == 'max_block_id' + 1, normal case
   // 2. 'expected_next_block_id' <= 'max_block_id', means:
-  //    1. a 'truncate' or 'flashback' opt before stop palf, we need update manifest first,
+  //    1. a 'truncate' opt before stop palf, we need update manifest first,
   //       and stop palf before delete blocks on disk, 'expected_next_block_id' is smaller
   //       than or equal to 'max_block_id'.
   //    2. a switch block opt before stop palf, and just create new block on disk success,

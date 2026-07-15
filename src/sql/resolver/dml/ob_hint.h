@@ -207,7 +207,6 @@ struct ObOptParamHint
     DEF(_PUSH_JOIN_PREDICATE,)                      \
     DEF(RANGE_INDEX_DIVE_LIMIT,)                    \
     DEF(PARTITION_INDEX_DIVE_LIMIT,)                \
-    DEF(OB_TABLE_ACCESS_POLICY,)                    \
     DEF(PARTITION_WISE_PLAN_ENABLED,)               \
     DEF(USE_HASH_ROLLUP,)                           \
     DEF(ENABLE_PX_ORDERED_COORD,)                   \
@@ -413,8 +412,6 @@ struct ObGlobalHint {
   bool disable_cost_based_transform() const { return disable_cost_based_transform_; }
   inline bool has_dbms_stats_hint() const { return has_dbms_stats_hint_; }
   inline void set_dbms_stats() { has_dbms_stats_hint_ = true; }
-  bool get_flashback_read_tx_uncommitted() const { return flashback_read_tx_uncommitted_; }
-  void set_flashback_read_tx_uncommitted(bool v) { flashback_read_tx_uncommitted_ = v; }
   ObParallelDASOption get_parallel_das_dml_option() const { return parallel_das_dml_option_; }
   bool has_append() const {
     return (osg_hint_.flags_ & ObOptimizerStatisticsGatheringHint::OB_APPEND_HINT) ? true : false;
@@ -504,7 +501,6 @@ struct ObGlobalHint {
   common::ObSArray<ObDDLSchemaVersionHint> ob_ddl_schema_versions_;
   ObOptimizerStatisticsGatheringHint osg_hint_;
   bool has_dbms_stats_hint_;
-  bool flashback_read_tx_uncommitted_;
   ObParallelDASOption parallel_das_dml_option_;
   int64_t dynamic_sampling_;
   common::ObSArray<ObAllocOpHint> alloc_op_hints_;

@@ -114,9 +114,7 @@ PalfTransportCompressOptions &PalfTransportCompressOptions::operator=(const Palf
 static const char *access_mode_strs[] = {
   "INVALID_ACCESS_MODE",
   "APPEND",
-  "RAW_WRITE",
-  "FLASHBACK",
-  "PREPARE_FLASHBACK"
+  "RAW_WRITE"
 };
 
 int get_access_mode(const common::ObString &str, AccessMode &mode)

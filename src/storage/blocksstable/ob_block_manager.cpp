@@ -1177,8 +1177,7 @@ int ObBlockManager::mark_sstable_blocks(
   if (OB_UNLIKELY(!handle.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(handle));
-  } else if (OB_FAIL(handle.get_obj()->get_all_sstables(
-                 table_store_iter, true /* unpac cosstable */))) {
+  } else if (OB_FAIL(handle.get_obj()->get_all_sstables(table_store_iter))) {
     LOG_WARN("fail to get all sstables", K(ret));
   } else {
     while (OB_SUCC(ret)) {
@@ -1950,11 +1949,7 @@ void ObIOBenchRunner::run1()
       io_info.offset_ = ObRandom::rand(0, OB_DEFAULT_MACRO_BLOCK_SIZE - load_.size_);
       io_info.timeout_us_ = MAX_IO_WAIT_TIME_MS * 1000;
 #ifdef OB_BUILD_SHARED_STORAGE
-      if (false) {
-        io_info.fd_.first_id_ = ObIOFd::NORMAL_FILE_ID; // first_id is not used in shared storage mode;
-        io_info.fd_.second_id_ = OB_SERVER_FILE_MGR.get_io_calibration_fd();
-        io_info.offset_ += block_idx * OB_DEFAULT_MACRO_BLOCK_SIZE;
-      } else {
+      {
         io_info.fd_.first_id_ = block_handles_[block_idx].get_macro_id().first_id();
         io_info.fd_.second_id_ = block_handles_[block_idx].get_macro_id().second_id();
       }
@@ -2002,11 +1997,7 @@ void ObIOBenchController::run1()
   int64_t free_block_count = OB_STORAGE_OBJECT_MGR.get_free_macro_block_count();
   int64_t total_block_count = OB_STORAGE_OBJECT_MGR.get_total_macro_block_count();
 #ifdef OB_BUILD_SHARED_STORAGE
-  if (false) {
-    const int64_t free_disk_size = OB_SERVER_DISK_SPACE_MGR.get_free_disk_size();
-    free_block_count = free_disk_size / OB_DEFAULT_MACRO_BLOCK_SIZE;
-    total_block_count = free_block_count;
-  }
+  ;
 #endif
 
   if (free_block_count <= MIN_CALIBRATION_BLOCK_COUNT

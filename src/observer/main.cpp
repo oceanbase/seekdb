@@ -395,11 +395,6 @@ static void disable_hugepage_for_self_text()
   fclose(maps);
 }
 
-__attribute__((constructor(101)))
-static void early_disable_hugepage_for_observer()
-{
-  disable_hugepage_for_self_text();
-}
 #endif
 
 using namespace oceanbase::obsys;
@@ -859,6 +854,9 @@ static const char *get_arg_value(int argc, char *argv[], const char *name)
 
 int main(int argc, char *argv[])
 {
+#if defined(__linux__)
+  disable_hugepage_for_self_text();
+#endif
 #ifdef _WIN32
   ::oceanbase::common::g_ob_log_main_entered = true;
 #endif

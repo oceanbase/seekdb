@@ -1005,14 +1005,14 @@ int ObSelectResolver::resolve_normal_query(const ParseNode &parse_tree)
   OZ( resolve_for_update_clause(parse_tree.children_[PARSE_SELECT_FOR_UPD]) );
 
   if (OB_SUCC(ret)) {
-    bool has_flashback_query = false;
-    //select for update requires that no flashback query related attributes appear anywhere in stmt
+    bool has_snapshot_query = false;
+    //select for update requires that no snapshot query related attributes appear anywhere in stmt
     if (select_stmt->has_for_update() &&
-        OB_FAIL(check_stmt_has_flashback_query(select_stmt, true, has_flashback_query))) {
-      LOG_WARN("failed to check stmt has flashback query", K(ret));
-    } else if (has_flashback_query) {
-      ret = OB_ERR_FLASHBACK_QUERY_WITH_UPDATE;
-      LOG_WARN("select for update and flashback query exists", K(ret));
+        OB_FAIL(check_stmt_has_snapshot_query(select_stmt, true, has_snapshot_query))) {
+      LOG_WARN("failed to check stmt has snapshot query", K(ret));
+    } else if (has_snapshot_query) {
+      ret = OB_ERR_SNAPSHOT_QUERY_WITH_UPDATE;
+      LOG_WARN("select for update and snapshot query exists", K(ret));
     }
   }
 
@@ -1090,7 +1090,7 @@ int ObSelectResolver::resolve_normal_query(const ParseNode &parse_tree)
       }
     }
   }
-  // rowscn pseudo-column cannot be used in flashback query and view
+  // rowscn pseudo-column cannot be used in snapshot query and view
   if (OB_SUCC(ret)) {
     bool has_ora_rowscn = false;
     const common::ObIArray<SelectItem> &items = select_stmt->get_select_items();
@@ -1104,13 +1104,13 @@ int ObSelectResolver::resolve_normal_query(const ParseNode &parse_tree)
     }
 
     if (has_ora_rowscn) {
-      bool has_flashback_query = false;
-      if (OB_FAIL(check_stmt_has_flashback_query(select_stmt, false, has_flashback_query))) {
-        LOG_WARN("failed to check stmt has flashback query", K(ret));
-      } else if (has_flashback_query) {
+      bool has_snapshot_query = false;
+      if (OB_FAIL(check_stmt_has_snapshot_query(select_stmt, false, has_snapshot_query))) {
+        LOG_WARN("failed to check stmt has snapshot query", K(ret));
+      } else if (has_snapshot_query) {
         ret = OB_NOT_SUPPORTED;
-        LOG_USER_ERROR(OB_NOT_SUPPORTED, "rowscn used with flashback query");
-        LOG_WARN("rowscn can't use with flashback query", K(ret));
+        LOG_USER_ERROR(OB_NOT_SUPPORTED, "rowscn used with snapshot query");
+        LOG_WARN("rowscn can't use with snapshot query", K(ret));
       }
     }
   }

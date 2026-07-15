@@ -71,9 +71,7 @@ PalfHandleImpl::PalfHandleImpl()
     rebuilding_lock_(),
     config_change_lock_(),
     mode_change_lock_(),
-    flashback_lock_(),
     last_dump_info_time_us_(OB_INVALID_TIMESTAMP),
-    flashback_state_(LogFlashbackState::FLASHBACK_INIT),
     last_check_sync_time_us_(OB_INVALID_TIMESTAMP),
     last_renew_loc_time_us_(OB_INVALID_TIMESTAMP),
     last_print_in_sync_time_us_(OB_INVALID_TIMESTAMP),
@@ -1781,36 +1779,6 @@ int PalfHandleImpl::get_block_id_by_scn_(const SCN &scn, block_id_t &result_bloc
   return ret;
 }
 
-// @return value
-//   OB_SUCCESS
-//   OB_ENTRY_NOT_EXIST, when there is no log on disk, return OB_ENTRY_NOT_EXIST
-//   others, unexpected error.
-int PalfHandleImpl::get_block_id_by_scn_for_flashback_(const SCN &scn, block_id_t &result_block_id)
-{
-  int ret = OB_SUCCESS;
-
-  if (OB_FAIL(get_block_id_by_scn_(scn, result_block_id)) && OB_ERR_OUT_OF_LOWER_BOUND != ret) {
-    PALF_LOG(ERROR, "get_block_id_by_scn_ failed", K(ret), KPC(this), K(scn));
-  } else if (OB_ERR_OUT_OF_LOWER_BOUND == ret) {
-    block_id_t min_block_id;
-    share::SCN min_scn;
-    if (OB_FAIL(log_engine_.get_min_block_info(min_block_id, min_scn))
-        && OB_ENTRY_NOT_EXIST != ret) {
-      PALF_LOG(ERROR, "get_min_block_info failed", K(ret), KPC(this), K(scn));
-    } else if (OB_ENTRY_NOT_EXIST == ret) {
-      PALF_LOG(WARN, "there is no block on disk, set result block id to base block id",
-          K(ret), KPC(this), K(scn), K(result_block_id));
-    } else {
-      ret = OB_SUCCESS;
-      result_block_id = min_block_id;
-      PALF_LOG(WARN, "scn is smaller than min scn of palf, set result block id to base block id",
-          K(ret),  KPC(this), K(scn), K(result_block_id), K(min_block_id), K(min_scn));
-    }
-  } else {
-  }
-  return ret;
-}
-
 void PalfHandleImpl::set_deleted()
 {
   ATOMIC_STORE(&has_set_deleted_, true);
@@ -3361,8 +3329,7 @@ int PalfHandleImpl::fetch_log_from_storage_(const common::ObAddr &server,
   // case when it try to read some log which is being truncated.
   auto get_file_end_lsn = [&]() { return max_flushed_end_lsn; };
   LogInfo prev_log_info;
-  const bool no_need_fetch_log = (prev_lsn >= max_flushed_end_lsn) ||
-      (AccessMode::FLASHBACK == access_mode);
+  const bool no_need_fetch_log = prev_lsn >= max_flushed_end_lsn;
   const bool is_dest_in_memberlist = (member_list.contains(server) || learner_list.contains(server));
   // Rpc delay increases enormously when it's size exceeds 2M.
   const int64_t MAX_BATCH_LOG_SIZE_EACH_ROUND = 2 * 1024 * 1024 - 1024;
@@ -3823,8 +3790,6 @@ int PalfHandleImpl::receive_config_log(const common::ObAddr &server,
     TruncateLogInfo truncate_log_info;
     // need wlock in case of truncating log and writing log_ms_meta in LogConfigMgr
     WLockGuard guard(lock_);
-    // max_scn of multiple replicas may be different in FLASHBACK mode,
-    // therefore, skip log barrier for config logs
     const bool skip_log_barrier = mode_mgr_.need_skip_log_barrier();
     if (false == state_mgr_.can_receive_config_log(msg_proposal_id) ||
         false == config_mgr_.can_receive_config_log(server, meta)) {
@@ -4012,13 +3977,6 @@ int PalfHandleImpl::inner_after_truncate_prefix_blocks(const TruncatePrefixBlock
   if (OB_FAIL(sw_.after_rebuild(truncate_prefix_cb_ctx.lsn_))) {
     PALF_LOG(WARN, "update_truncate_prefix_blocks_base_lsn failed", K(ret), K(truncate_prefix_cb_ctx));
   }
-  return ret;
-}
-
-int PalfHandleImpl::inner_after_flashback(const FlashbackCbCtx &flashback_ctx)
-{
-  int ret = OB_SUCCESS;
-  // do nothing
   return ret;
 }
 
@@ -4295,52 +4253,6 @@ int PalfHandleImpl::construct_palf_base_info_(const LSN &max_committed_lsn,
   return ret;
 }
 
-int PalfHandleImpl::construct_palf_base_info_for_flashback_(const LSN &start_lsn,
-                                                            const SCN &flashback_scn,
-                                                            const LSN &prev_entry_lsn,
-                                                            const LogGroupEntryHeader &prev_entry_header,
-                                                            PalfBaseInfo &palf_base_info)
-{
-  int ret = OB_SUCCESS;
-  LogInfo &prev_log_info = palf_base_info.prev_log_info_;
-  const LSN base_lsn = log_engine_.get_log_meta().get_log_snapshot_meta().base_lsn_;
-  if (false == start_lsn.is_valid()) {
-    ret = OB_INVALID_ARGUMENT;
-    PALF_LOG(WARN, "invalid argument", K(ret), K_(palf_id), K(start_lsn), K(base_lsn));
-  } else if (prev_entry_header.is_valid()) {
-    prev_log_info.log_id_ = prev_entry_header.get_log_id();
-    prev_log_info.scn_ = prev_entry_header.get_max_scn();
-    prev_log_info.accum_checksum_ = prev_entry_header.get_accum_checksum();
-    prev_log_info.log_proposal_id_ = prev_entry_header.get_log_proposal_id();
-    prev_log_info.lsn_ = prev_entry_lsn;
-    palf_base_info.curr_lsn_ = prev_entry_lsn + prev_entry_header.get_serialize_size() + prev_entry_header.get_data_len();
-    PALF_LOG(INFO, "prev_entry is valid, construct PalfBaseInfo via prev_entry_header", K(prev_entry_header),
-        K(palf_base_info));
-  } else if (OB_FAIL(get_prev_log_info_(start_lsn, prev_log_info))
-             && OB_ERR_OUT_OF_LOWER_BOUND != ret) {
-    PALF_LOG(WARN, "get_prev_entry_header_before_ failed", K(ret), K(start_lsn), K(prev_log_info));
-  // NB: if flashback_scn is smaller than min scn of palf, we need generate PalfBaseInfo by default
-  //     and set the scn of prev_log_info with flashback_scn.
-  } else if (prev_log_info.scn_ != flashback_scn) {
-    PALF_LOG(WARN, "there is no log before flashback_scn, need generate new PalfBaseInfo via flashback_scn",
-        K(ret), K(start_lsn), K(palf_base_info), K(prev_log_info));
-    prev_log_info.scn_ = flashback_scn;
-    palf_base_info.curr_lsn_ = start_lsn;
-    if (OB_FAIL(log_engine_.update_log_snapshot_meta_for_flashback(palf_base_info.prev_log_info_, start_lsn))) {
-      PALF_LOG(ERROR, "update_log_snapshot_meta_for_flashback failed", K(ret), K(flashback_scn),
-          K(palf_base_info));
-    }
-  } else {
-    palf_base_info.prev_log_info_ = prev_log_info;
-    palf_base_info.curr_lsn_ = start_lsn;
-  }
-
-  PALF_LOG(INFO, "construct_palf_base_info_for_flashback_ finish", K(ret), K(start_lsn),
-      K(palf_base_info), K(prev_log_info));
-
-  return ret;
-}
-
 int PalfHandleImpl::append_disk_log_to_sw_(const LSN &start_lsn)
 {
   int ret = OB_SUCCESS;
@@ -4424,164 +4336,6 @@ int PalfHandleImpl::diagnose(PalfDiagnoseInfo &diagnose_info) const
   return ret;
 }
 
-int PalfHandleImpl::flashback(const int64_t mode_version,
-                              const share::SCN &flashback_scn,
-                              const int64_t timeout_us)
-{
-  int ret = OB_SUCCESS;
-  int lock_ret = OB_EAGAIN;
-  bool is_already_done = false;
-  common::ObTimeGuard time_guard("single_replica_flashback", 1 * 1000 * 1000);
-
-  if (IS_NOT_INIT) {
-    ret = OB_NOT_INIT;
-    PALF_LOG(ERROR, "PalfHandleImpl not inited", KPC(this));
-  } else if (!flashback_scn.is_valid() || OB_INVALID_TIMESTAMP == timeout_us) {
-    ret = OB_INVALID_ARGUMENT;
-    PALF_LOG(ERROR, "invalid argument", K(ret), KPC(this), K(flashback_scn), K(timeout_us));
-  } else if (OB_SUCCESS != (lock_ret = flashback_lock_.trylock())) {
-    ret = OB_EAGAIN;
-    PALF_LOG(WARN, "another flashback operation is doing, try again",
-        KPC(this), K(flashback_scn));
-  } else if (OB_FAIL(can_do_flashback_(mode_version, flashback_scn, is_already_done))) {
-    PALF_LOG(WARN, "can_do_flashback_ failed", K(ret), KPC(this), K(mode_version), K(flashback_scn));
-  } else if (true == is_already_done) {
-  } else {
-    FlashbackCbCtx flashback_cb_ctx(flashback_scn);
-    const LSN max_lsn = get_max_lsn();
-    const LSN end_lsn = get_end_lsn();
-    flashback_state_ = LogFlashbackState::FLASHBACK_INIT;
-    PALF_EVENT("[BEGIN FLASHBACK]", palf_id_, KPC(this), K(mode_version), K(flashback_scn), K(timeout_us),
-        K(end_lsn), K(max_lsn));
-    do {
-      RLockGuard guard(lock_);
-      if (OB_FAIL(log_engine_.submit_flashback_task(flashback_cb_ctx))) {
-        PALF_LOG(WARN, "submit_flashback_task failed", K(ret), KPC(this), K(flashback_scn));
-      }
-    } while (0);
-    TimeoutChecker not_timeout(timeout_us);
-    while (OB_SUCC(ret) && OB_SUCC(not_timeout())) {
-      RLockGuard guard(lock_);
-      if (LogFlashbackState::FLASHBACK_FAILED == flashback_state_) {
-        ret = OB_EAGAIN;
-        PALF_LOG(WARN, "flashback failed", K(ret), KPC(this), K(mode_version), K(flashback_scn));
-      } else if (LogFlashbackState::FLASHBACK_RECONFIRM == flashback_state_) {
-        ret = OB_EAGAIN;
-        PALF_LOG(WARN, "can not flashback a reconfirming leader", K(ret), KPC(this),
-            K(mode_version), K(flashback_scn));
-      } else if (LogFlashbackState::FLASHBACK_SUCCESS == flashback_state_) {
-        const SCN &curr_end_scn = get_end_scn();
-        const SCN &curr_max_scn = get_max_scn();
-        if (flashback_scn >= curr_max_scn) {
-          time_guard.click("flashback_done");
-        } else {
-          ret = OB_ERR_UNEXPECTED;
-          PALF_LOG(ERROR, "flashback finished, but logs haven't been flashed back",
-              K(ret), KPC(this), K(mode_version), K(flashback_scn), K(curr_max_scn));
-        }
-        PALF_EVENT("[END FLASHBACK]", palf_id_, K(ret), KPC(this), K(mode_version),
-            K(flashback_scn), K(timeout_us), K(curr_end_scn), K(curr_max_scn), K(time_guard));
-        plugins_.record_flashback_event(palf_id_, mode_version, flashback_scn, curr_end_scn, curr_max_scn);
-        break;
-      } else {
-        ob_usleep(100*1000);
-        PALF_LOG(INFO, "flashback not finished", K(ret), KPC(this), K(flashback_scn), K(log_engine_));
-      }
-    }
-    FLOG_INFO("[END FLASHBACK PALF_DUMP]", K(ret), K_(palf_id), K_(self), "[SlidingWindow]", sw_,
-        "[StateMgr]", state_mgr_, "[ConfigMgr]", config_mgr_, "[ModeMgr]", mode_mgr_,
-        "[LogEngine]", log_engine_, "[Reconfirm]", reconfirm_);
-  }
-  if (OB_SUCCESS == lock_ret) {
-    flashback_lock_.unlock();
-  }
-  return ret;
-}
-
-int PalfHandleImpl::can_do_flashback_(const int64_t mode_version,
-                                      const share::SCN &flashback_scn,
-                                      bool &is_already_done)
-{
-  int ret = OB_SUCCESS;
-  int64_t curr_mode_version = -1;
-  AccessMode curr_access_mode = AccessMode::INVALID_ACCESS_MODE;
-  block_id_t start_block;
-  LSN start_lsn_of_block;
-  is_already_done = false;
-
-  RLockGuard guard(lock_);
-  (void) mode_mgr_.get_access_mode(curr_mode_version, curr_access_mode);
-  const SCN &curr_max_scn = get_max_scn();
-  const SCN &curr_end_scn = get_end_scn();
-  if (AccessMode::FLASHBACK != curr_access_mode || mode_version != curr_mode_version) {
-    (void) sw_.try_fetch_log(FetchTriggerType::MODE_META_BARRIER);
-    ret = OB_STATE_NOT_MATCH;
-    PALF_LOG(WARN, "access_mode don't match, can't do flashback", K(ret), KPC(this), K(curr_access_mode),
-        K(curr_mode_version), K(mode_version), K(flashback_scn));
-  } else if (flashback_scn >= curr_max_scn) {
-    ret = OB_SUCCESS;
-    is_already_done = true;
-    PALF_LOG(INFO, "[FLASHBACK] do not need to flashback", K(ret), KPC(this), K(mode_version),
-        K(flashback_scn), K(curr_max_scn), K(curr_end_scn));
-    // NB: because we have checked whether flashback_scn is greater than or equal to curr_max_scn,
-    //     there is no possibility that no log on disk.
-  } else if (OB_FAIL(get_block_id_by_scn_for_flashback_(flashback_scn, start_block))) {
-    PALF_LOG(ERROR, "get_block_id_by_scn_for_flashback_ failed", K(ret), KPC(this), K(flashback_scn));
-  } else if (FALSE_IT(start_lsn_of_block.val_ = start_block * PALF_BLOCK_SIZE)) {
-  } else if (start_lsn_of_block < get_base_lsn_used_for_block_gc()) {
-    ret = OB_NOT_SUPPORTED;
-    PALF_LOG(ERROR, "flashpoint point is smaller than base_lsn, not support",
-        K(ret), KPC(this), K(sw_), K(start_lsn_of_block), "base_lsn:", get_base_lsn_used_for_block_gc());
-  }
-  return ret;
-}
-
-// step1. create tmp block and delete each block after 'flashback_scn';
-// step2. execute flashback;
-// step3. rename tmp block to normal.
-//
-// Constraint:
-// 1. in process of flashback, prohibit modify 'base_lsn';
-// 2. in process of flashback, need keep sw_ is empty;
-// 3. in process of flashback, if flashback point is smaller than 'base_lsn', not support.
-int PalfHandleImpl::inner_flashback(const share::SCN &flashback_scn)
-{
-  int ret = OB_SUCCESS;
-  block_id_t start_block;
-  LSN start_lsn_of_block;
-  WLockGuard guard(lock_);
-  // In process of flashback, stop submit_log.
-  // TODO by runlin: if we care about hold wlock too much time, can optimize.
-  const SCN &end_scn = get_end_scn();
-  if (IS_NOT_INIT) {
-    ret = OB_NOT_INIT;
-    PALF_LOG(ERROR, "PalfHandleImpl not inited", KPC(this));
-  } else if (state_mgr_.is_leader_reconfirm()) {
-    PALF_LOG(INFO, "can not do flashback in leader reconfirm state", KPC(this), K(flashback_scn));
-    flashback_state_ = LogFlashbackState::FLASHBACK_RECONFIRM;
-  } else if (OB_FAIL(get_block_id_by_scn_for_flashback_(flashback_scn, start_block))
-             && OB_ENTRY_NOT_EXIST != ret) {
-    PALF_LOG(ERROR, "get_block_id_by_scn_for_flashback_ failed", K(ret), KPC(this), K(flashback_scn));
-  } else if (OB_ENTRY_NOT_EXIST == ret) {
-    ret = OB_SUCCESS;
-    PALF_LOG(WARN, "there is no log on disk, flashback successfully", K(ret), KPC(this), K(flashback_scn));
-    flashback_state_ = LogFlashbackState::FLASHBACK_SUCCESS;
-  } else if (FALSE_IT(start_lsn_of_block.val_ = start_block * PALF_BLOCK_SIZE)) {
-  } else if (OB_FAIL(log_engine_.begin_flashback(start_lsn_of_block))) {
-    PALF_LOG(ERROR, "LogEngine begin_flashback failed", K(ret), K(start_lsn_of_block));
-  } else if (OB_FAIL(do_flashback_(start_lsn_of_block, flashback_scn))) {
-    PALF_LOG(ERROR, "do_flashback_ failed", K(ret), K(start_lsn_of_block), K(flashback_scn),
-				"end_scn", get_end_scn());
-  } else if (OB_FAIL(log_engine_.end_flashback(start_lsn_of_block))) {
-    PALF_LOG(ERROR, "LogEngine end_flashback failed", K(ret), K(start_lsn_of_block), K(flashback_scn));
-  } else {
-    flashback_state_ = LogFlashbackState::FLASHBACK_SUCCESS;
-    PALF_LOG(INFO, "inner_flashback success", K(ret), KPC(this), K(flashback_scn));
-  }
-  flashback_state_ = (OB_FAIL(ret))? LogFlashbackState::FLASHBACK_FAILED: flashback_state_;
-  return ret;
-}
-
 // TODO by yunlong: this function needs refactoring in 4.2.0.0
 int PalfHandleImpl::get_ack_info_array(LogMemberAckInfoList &ack_info_array,
                                        common::GlobalLearnerList &degraded_list) const
@@ -4603,221 +4357,6 @@ int PalfHandleImpl::get_ack_info_array(LogMemberAckInfoList &ack_info_array,
     PALF_LOG(WARN, "get_ack_info_array failed", K(ret), KPC(this));
   } else if (OB_FAIL(config_mgr_.get_degraded_learner_list(degraded_list))) {
     PALF_LOG(WARN, "get_degraded_learner_list failed", K(ret), KPC(this));
-  }
-  return ret;
-}
-
-// NB: the timestamp of LogGroupEntry is max timestamp, therefore, if the timestamp of
-// LogGroupEntry is greater than 'flashback_scn', we can not ignore it.
-//
-// step1: read each LogGroupEntry before  'flashback_scn' and append it to tmp_block;
-// step2: cut first LogGroupEntry whose timestamp is greater than 'flashback_scn'.
-// step3: modify sw_ with new PalfBaseInfo.
-int PalfHandleImpl::do_flashback_(const LSN &start_lsn, const share::SCN &flashback_scn)
-{
-  int ret = OB_SUCCESS;
-  PalfBaseInfo palf_base_info;
-  char *last_log_buf = NULL;
-  int64_t last_log_buf_len = 0;
-  LSN last_log_start_lsn;
-  if (OB_FAIL(read_and_append_log_group_entry_before_ts_(start_lsn, flashback_scn, last_log_buf,
-          last_log_buf_len, last_log_start_lsn, palf_base_info))) {
-    PALF_LOG(ERROR, "read_and_append_log_group_entry_before_ts_ failed", K(ret),
-        KPC(this), K(start_lsn));
-    // when there is no log need be cut, last_log_buf is NULL.
-  } else if (NULL != last_log_buf &&
-      OB_FAIL(cut_last_log_and_append_it_(last_log_buf, last_log_buf_len, last_log_start_lsn,
-          flashback_scn, palf_base_info))) {
-    PALF_LOG(ERROR, "cut_last_log_and_append_it_ failed", K(ret), KPC(this), KP(last_log_buf),
-        K(last_log_buf_len), K(last_log_start_lsn), K(flashback_scn), K(palf_base_info));
-  } else if (OB_FAIL(sw_.flashback(palf_base_info, palf_id_, allocator_))) {
-    PALF_LOG(ERROR, "do_flashback_ failed", K(ret), K(start_lsn), K(palf_base_info));
-  } else {
-    PALF_LOG(INFO, "do_flashback_ success", K(ret), KPC(this), K(start_lsn), K(flashback_scn),
-    K(palf_base_info));
-  }
-  if (NULL != last_log_buf) {
-    ob_free(last_log_buf);
-  }
-  return ret;
-}
-
-// NB: if 'flashback_scn' is 10, means that the LogGroupEntry whose timestamp is smaller than
-// or equal to 10 need be saved, and the first LogGroupEntry whose timestame is greatet than 10
-// need to be cut.
-int PalfHandleImpl::read_and_append_log_group_entry_before_ts_(
-    const LSN &start_lsn,
-    const share::SCN &flashback_scn,
-    char*& last_log_buf,
-    int64_t &last_log_buf_len,
-    LSN &last_log_start_lsn,
-    PalfBaseInfo &palf_base_info)
-{
-  // Each LogGroupEntry can contain many LogEntrys, and each LogEntry has its' own timestamp.
-  // Assume the timestamp of one LogEntry is flashback_scn, and it belongs to 'curr_group_entry',
-  // if the LogEntry is last LogEntry of 'curr_group_entry', the 'prev_entry_header' is the LogGroupEntryHeader
-  // of 'curr_group_entry', and we don't need cut 'curr_group_entry'. otherwise, the 'prev_entry_header'
-  // is the prev LogGroupEntryHeader  of 'curr_group_entry', 'curr_group_entry' need be cut.
-  int ret = OB_SUCCESS;
-  LogGroupEntryHeader prev_entry_header;
-  LogGroupEntry curr_group_entry;
-  LSN prev_log_lsn, curr_log_lsn;
-  PalfGroupBufferIterator iterator;
-  auto get_file_end_lsn = [&](){
-    LSN max_flushed_end_lsn;
-    (void)sw_.get_max_flushed_end_lsn(max_flushed_end_lsn);
-    return max_flushed_end_lsn;
-  };
-
-  last_log_buf = NULL;
-  ReadBufGuard read_buf_guard("Palf", MAX_LOG_BUFFER_SIZE);
-  if (!read_buf_guard.read_buf_.is_valid()) {
-    ret = OB_ALLOCATE_MEMORY_FAILED;
-    PALF_LOG(WARN, "allocate memory failed", KPC(this));
-  } else if (OB_FAIL(iterator.init(start_lsn, get_file_end_lsn, log_engine_.get_log_storage()))) {
-    PALF_LOG(WARN, "iterator init failed", K(ret), KPC(this), K(start_lsn), K(flashback_scn));
-  } else if (OB_FAIL(iterator.set_io_context(palf::LogIOContext(palf_id_, LogIOUser::RESTART)))) {
-    PALF_LOG(WARN, "set_io_context failed", K(ret), KPC(this), K(start_lsn), K(flashback_scn));
-  } else {
-    const int64_t read_buf_len = read_buf_guard.read_buf_.buf_len_;
-    char *&read_buf = read_buf_guard.read_buf_.buf_;
-    const char *buffer = NULL;
-    bool last_log_need_be_cut = false;
-    bool need_next = true;
-    common::ObTimeGuard time_guard("single_flashback", 1 * 1000 * 1000);
-
-    int64_t total_log_num = 0;
-    // step1. iterate the block and append log which the scn is smaller than or equal to flashback_scn
-    //        to new block.
-    while (OB_SUCC(ret)) {
-      int64_t log_num = 0;
-      int64_t read_buf_pos = 0;
-      SCN log_scn;
-      LSN lsn;
-      // batch append log to storage
-      while (OB_SUCC(ret)) {
-        if (need_next && OB_FAIL(iterator.next())) {
-          PALF_LOG(WARN, "iterator next failed", K(ret), KPC(this), K(iterator));
-        } else if (OB_FAIL(iterator.get_entry(buffer, curr_group_entry, curr_log_lsn))) {
-          PALF_LOG(ERROR, "get_entry failed", K(ret), KPC(this), K(iterator));
-        } else if (flashback_scn < curr_group_entry.get_scn()) {
-          last_log_need_be_cut = true;
-          ret = OB_ITER_END;
-          CLOG_LOG(INFO, "last log need be cut", K(flashback_scn), K(curr_group_entry), K(iterator));
-        } else if (FALSE_IT(prev_entry_header = curr_group_entry.get_header())
-                   || FALSE_IT(prev_log_lsn = curr_log_lsn)) {
-        } else if (curr_group_entry.get_serialize_size() + read_buf_pos > read_buf_len) {
-          need_next = false;
-          PALF_LOG(WARN, "can batch log because of buffer length", K(ret), KPC(this), K(read_buf_pos), K(read_buf_len), K(curr_group_entry));
-          break;
-        } else if (FALSE_IT(MEMCPY(read_buf+read_buf_pos, buffer, curr_group_entry.get_serialize_size()))) {
-        } else {
-          // NB: In first round of while, need init scn and lsn to curr_group_entry
-          if (0 == read_buf_pos) {
-            if (OB_FAIL(curr_group_entry.get_log_min_scn(log_scn))) {
-              PALF_LOG(ERROR, "get_log_min_ts failed", K(ret), KPC(this), K(iterator), K(prev_entry_header));
-            } else {
-              lsn = curr_log_lsn;
-              PALF_LOG(INFO, "this is the first round of while", K(ret), KPC(this), K(iterator), K(prev_entry_header));
-            }
-          }
-          read_buf_pos += curr_group_entry.get_serialize_size();
-          need_next = true;
-          log_num++;
-        }
-      }
-      total_log_num += log_num;
-      LogWriteBuf write_buf;
-      int tmp_ret = OB_SUCCESS;
-      if (OB_FAIL(ret) && OB_ITER_END != ret) {
-        PALF_LOG(ERROR, "unexpected error", K(ret), KPC(this), K(log_num), K(total_log_num), K(iterator));
-      } else if (read_buf_pos == 0) {
-        PALF_LOG(INFO, "no need append log because read_buf_pos is zero", K(ret), KPC(this), K(iterator));
-      } else if (OB_TMP_FAIL(write_buf.push_back(read_buf, read_buf_pos))) {
-        PALF_LOG(ERROR, "push_back into write_buf failed", K(ret), KPC(this), K(write_buf), K(iterator), K(read_buf_pos));
-      } else if (OB_TMP_FAIL(log_engine_.append_log(lsn, write_buf, log_scn))) {
-        PALF_LOG(ERROR, "append_log failed", K(ret), KPC(this), K(write_buf), K(iterator), K(read_buf_pos));
-      } else {
-        read_buf_pos = 0;
-        PALF_LOG(INFO, "append_log success", K(ret), K(curr_log_lsn), K(curr_group_entry), K(write_buf), K(flashback_scn),
-            K(log_num));
-      }
-    }
-    time_guard.click("while");
-    auto alloc_memory_until_success = [&last_log_buf, &last_log_buf_len]() {
-      while (NULL ==
-          (last_log_buf = static_cast<char*>(mtl_malloc(last_log_buf_len, "PalfHandleImpl")))) {
-        PALF_LOG_RET(ERROR, OB_ALLOCATE_MEMORY_FAILED, "alloc memory for last_log_buf in flashback failed", K(last_log_buf_len));
-        ob_usleep(1000);
-      };
-    };
-    // step2. construct new palf base info.
-    if (OB_ITER_END == ret) {
-      int tmp_ret = OB_SUCCESS;
-      int64_t pos = 0;
-      if (OB_TMP_FAIL(construct_palf_base_info_for_flashback_(
-        start_lsn, flashback_scn, prev_log_lsn, prev_entry_header, palf_base_info))) {
-				PALF_LOG(ERROR, "construct_palf_base_info_for_flashback_ failed", K(ret), KPC(this), K(curr_group_entry),
-           K(curr_log_lsn));
-      } else if (false == last_log_need_be_cut) {
-        PALF_LOG(INFO, "last log no need be cut", K(ret), KPC(this), K(iterator), K(curr_group_entry),
-            K(prev_entry_header));
-      } else if (FALSE_IT(last_log_buf_len = curr_group_entry.get_group_entry_size())
-                 || FALSE_IT(last_log_start_lsn = curr_log_lsn)) {
-      } else if (FALSE_IT(alloc_memory_until_success())){
-      } else if (OB_TMP_FAIL(curr_group_entry.serialize(last_log_buf, last_log_buf_len, pos))) {
-        PALF_LOG(ERROR, "curr_group_entry serialize failed", K(ret));
-      } else {
-        PALF_LOG(INFO, "read_and_append_log_group_entry_before_ts_ success", K(ret), KPC(this),
-            K(palf_base_info), K(curr_group_entry), K(curr_log_lsn), K(flashback_scn),
-            K(total_log_num), K(time_guard));
-      }
-      time_guard.click("after while");
-      ret = tmp_ret;
-    }
-  }
-  return ret;
-}
-
-int PalfHandleImpl::cut_last_log_and_append_it_(char *last_log_buf,
-                                                const int64_t last_log_buf_len,
-                                                const LSN &last_log_start_lsn,
-                                                const share::SCN &flashback_scn,
-                                                PalfBaseInfo &in_out_palf_base_info)
-{
-  int ret = OB_SUCCESS;
-  LogGroupEntry new_last_log;
-  LogWriteBuf write_buf;
-  int64_t pos = 0;
-  SCN new_last_scn;
-  if (OB_FAIL(new_last_log.deserialize(last_log_buf, last_log_buf_len, pos))) {
-    PALF_LOG(ERROR, "new_last_log deserialize failed", K(ret), KPC(this), K(pos));
-  } else if (false == new_last_log.check_integrity()) {
-    ret = OB_INVALID_DATA;
-    PALF_LOG(ERROR, "invalid data", K(ret), K(new_last_log));
-  } else if (OB_FAIL(new_last_log.truncate(flashback_scn, in_out_palf_base_info.prev_log_info_.accum_checksum_))) {
-    PALF_LOG(ERROR, "new_last_log truncate failed", K(ret), K(flashback_scn), K(in_out_palf_base_info));
-  } else if (0 == new_last_log.get_data_len()) {
-    PALF_LOG(INFO, "last log no need be cut", K(new_last_log));
-  } else if (FALSE_IT(pos = 0)
-             || OB_FAIL(new_last_log.serialize(last_log_buf, last_log_buf_len, pos))) {
-    PALF_LOG(ERROR, "new_last_log serialize failed", K(ret), KPC(this), K(new_last_log), K(pos));
-  } else if (OB_FAIL(write_buf.push_back(last_log_buf, new_last_log.get_group_entry_size()))) {
-    PALF_LOG(ERROR, "wite_buf push back failed", K(ret), KPC(this), K(new_last_log));
-  } else if (OB_FAIL(new_last_log.get_log_min_scn(new_last_scn))) {
-    PALF_LOG(ERROR, "get_log_min_ts failed", K(ret), KPC(this), K(new_last_log));
-  } else if (OB_FAIL(log_engine_.append_log(last_log_start_lsn, write_buf, new_last_scn))) {
-    PALF_LOG(ERROR, "append_log failed", K(ret), KPC(this), K(last_log_start_lsn));
-  } else {
-    LogInfo &prev_log_info = in_out_palf_base_info.prev_log_info_;
-    const LogGroupEntryHeader &last_log_header = new_last_log.get_header();
-    prev_log_info.log_id_ = last_log_header.get_log_id();
-    prev_log_info.scn_ = last_log_header.get_max_scn();
-    prev_log_info.accum_checksum_ = last_log_header.get_accum_checksum();
-    prev_log_info.log_proposal_id_ = last_log_header.get_log_proposal_id();
-    prev_log_info.lsn_ = last_log_start_lsn;
-    in_out_palf_base_info.curr_lsn_ = last_log_start_lsn + new_last_log.get_group_entry_size();
-    PALF_LOG(INFO, "cut_last_log_and_append_it_ success", K(ret), K(in_out_palf_base_info), K(new_last_log), K(write_buf));
   }
   return ret;
 }

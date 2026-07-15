@@ -1804,58 +1804,6 @@ TEST_F(TestDagScheduler, test_destroy_when_running) //TODO(renju.rj): fix it
 //  }
 //  #endif
 }
-/*
-do not add compaction dag in unittest, some module is not inited like LSService
-TEST_F(TestDagScheduler, test_add_multi_co_merge_dag_net)
-{
-  int ret = OB_SUCCESS;
-  ObTenantDagScheduler *scheduler = MTL(ObTenantDagScheduler*);
-  ASSERT_TRUE(nullptr != scheduler);
-
-  ObLSID ls_id(1001);
-  ObTabletID tablet_id(200001);
-  {
-    compaction::ObCOMergeDagParam param;
-    param.ls_id_ = ls_id;
-    param.tablet_id_ = tablet_id;
-    param.merge_type_ = compaction::ObMergeType::CONVERT_CO_MAJOR_MERGE;
-    param.compat_mode_ = lib::Worker::CompatMode::MYSQL;
-    ret = scheduler->create_and_add_dag_net<compaction::ObCOMergeDagNet>(&param);
-    EXPECT_EQ(OB_SUCCESS, ret);
-    COMMON_LOG(INFO, "Success to create and add co convert dag net", K(ret));
-  }
-  {
-    compaction::ObCOMergeDagParam param;
-    param.ls_id_ = ls_id;
-    param.tablet_id_ = tablet_id;
-    param.merge_type_ = compaction::ObMergeType::CONVERT_CO_MAJOR_MERGE;
-    param.compat_mode_ = lib::Worker::CompatMode::MYSQL;
-    ret = scheduler->create_and_add_dag_net<compaction::ObCOMergeDagNet>(&param);
-    EXPECT_EQ(OB_TASK_EXIST, ret);
-    COMMON_LOG(INFO, "Success to create and add co convert dag net", K(ret));
-  }
-  {
-    compaction::ObCOMergeDagParam param;
-    param.ls_id_ = ls_id;
-    param.tablet_id_ = tablet_id;
-    param.merge_type_ = compaction::ObMergeType::MAJOR_MERGE;
-    param.compat_mode_ = lib::Worker::CompatMode::MYSQL;
-    ret = scheduler->create_and_add_dag_net<compaction::ObCOMergeDagNet>(&param);
-    EXPECT_EQ(OB_SUCCESS, ret);
-    COMMON_LOG(INFO, "Success to create and add co major dag net", K(ret));
-  }  {
-    compaction::ObCOMergeDagParam param;
-    param.ls_id_ = ls_id;
-    param.tablet_id_ = tablet_id;
-    param.merge_type_ = compaction::ObMergeType::MEDIUM_MERGE;
-    param.compat_mode_ = lib::Worker::CompatMode::MYSQL;
-    ret = scheduler->create_and_add_dag_net<compaction::ObCOMergeDagNet>(&param);
-    EXPECT_EQ(OB_SUCCESS, ret);
-    COMMON_LOG(INFO, "Success to create and add co medium dag net", K(ret));
-  }
-}
-*/
-
 class ObLoopDagNet : public ObIDagNet
 {
 public:

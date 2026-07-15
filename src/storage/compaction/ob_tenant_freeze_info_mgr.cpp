@@ -564,19 +564,8 @@ int ObTenantFreezeInfoMgr::ReloadTask::refresh_merge_info()
       LOG_INFO("schedule zone to stop major merge", K(global_merge_info));
     } else {
       if (check_tenant_status_) {
-        if (true) {
+        {
           check_tenant_status_ = false;
-        } else if (false) { // skip virtual tenant
-          ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("tenant is unexpected virtual tenant", KR(ret));
-        } else {
-          const ObTenantRole::Role &role = MTL_GET_TENANT_ROLE_CACHE();
-          if (is_primary_tenant(role) || is_standby_tenant(role)) {
-            check_tenant_status_ = false;
-            LOG_INFO("finish check tenant restore", K(role));
-          } else if (REACH_THREAD_TIME_INTERVAL(10L * 1000L * 1000L)) {
-            LOG_INFO("skip restoring tenant to schedule major merge", K(role));
-          }
         }
       }
       if (!check_tenant_status_) {
@@ -749,46 +738,5 @@ int ObTenantFreezeInfoMgr::try_update_reserved_snapshot()
   STORAGE_LOG(INFO, "update reserved snapshot finished", K(cost_ts), K(reserved_snapshot));
   return ret;
 }
-
 } // storage
 } // oceanbase
-
-// ===== verify_column_checksum_between_diffrent_replica definition moved from share/ob_tablet_replica_checksum_operator.cpp(real user MTL FreezeInfoMgr) =====
-namespace oceanbase
-{
-namespace share
-{
-
-int ObTabletReplicaChecksumItem::verify_column_checksum_between_diffrent_replica(const ObTabletReplicaChecksumItem &other) const
-{
-  int ret = OB_SUCCESS;
-  ObFreezeInfo boundary_freeze_info;
-  ObFreezeInfo to_check_freeze_info;
-  if (OB_FAIL(share::g_mp->tenant_freeze_info_mgr()->get_lower_bound_freeze_info_before_snapshot_version(compaction_scn_.get_val_for_tx(), boundary_freeze_info))) {
-    if (OB_ENTRY_NOT_EXIST == ret) {
-      ret = OB_SUCCESS;
-    } else {
-      LOG_WARN("failed to get boundary freeze info", K(ret), K_(compaction_scn));
-    }
-  } else if (boundary_freeze_info.is_valid()) {
-    ret = OB_CHECKSUM_ERROR; // it is compacted in lob column checksum fixed version
-    LOG_ERROR("failed to check column checksum", K(ret), K(boundary_freeze_info));
-  }
-
-  if (OB_FAIL(ret)) {
-  } else if (OB_FAIL(share::g_mp->tenant_freeze_info_mgr()->get_freeze_info_by_snapshot_version(compaction_scn_.get_val_for_tx(), to_check_freeze_info))) {
-    if (OB_ENTRY_NOT_EXIST == ret) {
-      ret = OB_SUCCESS;
-    } else {
-      LOG_WARN("failed to get freeze info", K(ret), K_(compaction_scn));
-    }
-  } else if (!to_check_freeze_info.is_valid()) {
-  } else {
-    ret = OB_CHECKSUM_ERROR; // it is compacted in lob column checksum fixed version
-    LOG_ERROR("failed to check column checksum", K(ret), K(to_check_freeze_info));
-  }
-  return ret;
-}
-
-}  // namespace share
-}  // namespace oceanbase

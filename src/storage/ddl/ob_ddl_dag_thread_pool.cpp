@@ -15,7 +15,7 @@
  */
 
 #include "storage/ddl/ob_ddl_dag_thread_pool.h"
-#include "storage/ddl/ob_column_clustered_dag.h"
+#include "storage/ddl/ob_ddl_insert_dag.h"
 #include "sql/session/ob_sql_session_info.h"
 
 #define USING_LOG_PREFIX STORAGE

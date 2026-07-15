@@ -321,7 +321,6 @@ bool ObGlobalHint::has_hint_exclude_concurrent() const
          || has_gather_opt_stat_hint()
          || false != has_dbms_stats_hint_
          || -1 != dynamic_sampling_
-         || flashback_read_tx_uncommitted_
          || has_direct_load()
          || ObParallelDASOption::NOT_SPECIFIED != parallel_das_dml_option_
          || !px_node_hint_.empty();
@@ -353,7 +352,6 @@ void ObGlobalHint::reset()
   ob_ddl_schema_versions_.reuse();
   osg_hint_.flags_ = 0;
   has_dbms_stats_hint_ = false;
-  flashback_read_tx_uncommitted_ = false;
   dynamic_sampling_ = ObGlobalHint::UNSET_DYNAMIC_SAMPLING;
   alloc_op_hints_.reuse();
   direct_load_hint_.reset();
@@ -384,7 +382,6 @@ int ObGlobalHint::merge_global_hint(const ObGlobalHint &other)
   disable_cost_based_transform_ |= other.disable_cost_based_transform_;
   osg_hint_.flags_ |= other.osg_hint_.flags_;
   has_dbms_stats_hint_ |= other.has_dbms_stats_hint_;
-  flashback_read_tx_uncommitted_ |= other.flashback_read_tx_uncommitted_;
   merge_parallel_das_dml_hint(other.parallel_das_dml_option_);
   merge_dynamic_sampling_hint(other.dynamic_sampling_);
   merge_direct_load_hint(other.direct_load_hint_);
@@ -573,9 +570,6 @@ int ObGlobalHint::print_global_hint(PlanText &plan_text) const
   }
   if (OB_SUCC(ret) && has_dbms_stats_hint()) {
     PRINT_GLOBAL_HINT_STR("DBMS_STATS");
-  }
-  if (OB_SUCC(ret) && get_flashback_read_tx_uncommitted()) {
-    PRINT_GLOBAL_HINT_STR("FLASHBACK_READ_TX_UNCOMMITTED");
   }
   if (OB_SUCC(ret) && OB_FAIL(direct_load_hint_.print_direct_load_hint(plan_text))) {
     LOG_WARN("failed to print direct load hint", KR(ret));
@@ -883,16 +877,6 @@ bool ObOptParamHint::is_param_val_valid(const OptParamType param_type, const ObO
     case PARTITION_INDEX_DIVE_LIMIT:
       is_valid = val.is_int();
       break;
-    case OB_TABLE_ACCESS_POLICY: {
-      if (val.is_int()) {
-        is_valid = 0 <= val.get_int() && val.get_int() < static_cast<int64_t>(ObTableAccessPolicy::MAX);
-      } else if (val.is_varchar()) {
-        int64_t type = OB_INVALID_ID;
-        ObSysVarObTableAccessPolicy sv;
-        is_valid = (OB_SUCCESS == sv.find_type(val.get_varchar(), type));
-      }
-      break;
-    }
     case PARTITION_WISE_PLAN_ENABLED: {
       is_valid = val.is_varchar() && (0 == val.get_varchar().case_compare("true")
                                       || 0 == val.get_varchar().case_compare("false"));
@@ -1086,13 +1070,6 @@ int ObOptParamHint::get_enum_opt_param(const OptParamType param_type, int64_t &v
         }
         break;
       }
-      case OB_TABLE_ACCESS_POLICY: {
-        ObSysVarObTableAccessPolicy sv;
-        if (OB_FAIL(sv.find_type(obj.get_varchar(), val))) {
-          LOG_WARN("param obj is invalid", K(ret), K(obj));
-        }
-        break;
-      }
       case ENABLE_OPTIMIZER_ROWGOAL: {
         ObSysVarEnableOptimizerRowgoal sv;
         if (OB_FAIL(sv.find_type(obj.get_varchar(), val))) {
@@ -1226,7 +1203,6 @@ ObItemType ObHint::get_hint_type(ObItemType type)
 
     // optimize hint
     case T_NO_USE_DAS_HINT:     return T_USE_DAS_HINT;
-    case T_NO_USE_COLUMN_STORE_HINT:  return T_USE_COLUMN_STORE_HINT;
     case T_ORDERED:             return T_LEADING;
     case T_NO_USE_MERGE:        return T_USE_MERGE;
     case T_NO_USE_HASH:         return T_USE_HASH;
@@ -1292,7 +1268,6 @@ const char* ObHint::get_hint_name(ObItemType type, bool is_enable_hint /* defaul
     case T_NO_INDEX_HINT:       return "NO_INDEX";
     case T_USE_DAS_HINT:        return is_enable_hint ? "USE_DAS" : "NO_USE_DAS";
     case T_UNION_MERGE_HINT:    return "UNION_MERGE";
-    case T_USE_COLUMN_STORE_HINT: return is_enable_hint ? "USE_COLUMN_TABLE" : "NO_USE_COLUMN_TABLE";
     case T_INDEX_SS_HINT:       return "INDEX_SS";
     case T_INDEX_SS_ASC_HINT:   return "INDEX_SS_ASC";
     case T_INDEX_SS_DESC_HINT:  return "INDEX_SS_DESC";
@@ -2228,8 +2203,7 @@ int ObIndexHint::print_hint_desc(PlanText &plan_text) const
   if (OB_FAIL(table_.print_table_in_hint(plan_text))) {
     LOG_WARN("fail to print table in hint", K(ret));
   } else if (T_FULL_HINT == hint_type_ || 
-             T_USE_DAS_HINT == hint_type_ ||
-             T_USE_COLUMN_STORE_HINT == hint_type_) {
+             T_USE_DAS_HINT == hint_type_) {
     /* do nothing */
   } else if (OB_FAIL(BUF_PRINTF(" \"%.*s\"", index_name_.length(), index_name_.ptr()))) {
     LOG_WARN("fail to print index name", K(ret));
