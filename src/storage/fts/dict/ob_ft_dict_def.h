@@ -18,6 +18,7 @@
 #define _OCEANBASE_STORAGE_FTS_DICT_OB_FT_DICT_DEF_H_
 
 #include "lib/charset/ob_charset.h"
+#include "lib/hash_func/murmur_hash.h"
 
 #include <cstdint>
 
@@ -66,6 +67,13 @@ public:
                const ObCollationType coll_type)
       : name_(name), type_(type), charset_(charset), coll_type_(coll_type)
   {
+  }
+
+  uint64_t get_cache_key() const
+  {
+    const uint64_t hash_value = common::ObCharset::hash(
+        common::CS_TYPE_UTF8MB4_GENERAL_CI, name_, 0);
+    return common::murmurhash(&type_, sizeof(type_), hash_value);
   }
 
 public:

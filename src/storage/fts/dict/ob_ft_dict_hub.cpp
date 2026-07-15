@@ -21,9 +21,11 @@
 #include "lib/ob_errno.h"
 #include "lib/oblog/ob_log_module.h"
 #include "lib/utility/ob_macro_utils.h"
+#include "storage/fts/dict/ob_ft_cache.h"
 #include "storage/fts/dict/ob_ft_cache_container.h"
 #include "storage/fts/dict/ob_ft_dict_def.h"
 #include "storage/fts/dict/ob_ft_range_dict.h"
+#include "storage/fts/ob_fts_literal.h"
 namespace oceanbase
 {
 namespace storage
@@ -51,7 +53,7 @@ int ObFTDictHub::destroy()
 int ObFTDictHub::build_cache(const ObFTDictDesc &desc, ObFTCacheRangeContainer &container)
 {
   int ret = OB_SUCCESS;
-  ObFTDictInfoKey key(static_cast<uint64_t>(desc.type_));
+  ObFTDictInfoKey key(desc.get_cache_key());
   ObFTDictInfo info;
   container.reset();
 
@@ -78,8 +80,13 @@ int ObFTDictHub::build_cache(const ObFTDictDesc &desc, ObFTCacheRangeContainer &
 
     if (OB_FAIL(ret)) {
       if (OB_ENTRY_NOT_EXIST == ret) {
-        if (OB_FAIL(ObFTRangeDict::build_cache_from_ik_dict(desc, container))) {
-          LOG_WARN("Failed to build cache", K(ret));
+        const bool is_builtin = 0 == desc.name_.case_compare(ObFTSLiteral::FT_DEFAULT_IK_DICT_UTF8_TABLE)
+                                || 0 == desc.name_.case_compare(ObFTSLiteral::FT_DEFAULT_IK_QUANTIFIER_UTF8_TABLE)
+                                || 0 == desc.name_.case_compare(ObFTSLiteral::FT_DEFAULT_IK_STOPWORD_UTF8_TABLE);
+        if (is_builtin && OB_FAIL(ObFTRangeDict::build_cache_from_ik_dict(desc, container))) {
+          LOG_WARN("failed to build builtin dictionary cache", K(ret), K(desc.name_));
+        } else if (!is_builtin && OB_FAIL(ObFTRangeDict::build_cache(desc, container))) {
+          LOG_WARN("failed to build custom dictionary cache", K(ret), K(desc.name_));
         } else if (FALSE_IT(info.range_count_ = container.get_handles().size())) {
         } else if (OB_FAIL(put_dict_info(key, info))) {
           LOG_WARN("Failed to put dict info", K(ret));
@@ -95,7 +102,7 @@ int ObFTDictHub::load_cache(const ObFTDictDesc &desc, ObFTCacheRangeContainer &c
   int ret = OB_SUCCESS;
   ObFTDictInfo info;
   container.reset();
-  ObFTDictInfoKey key(static_cast<uint64_t>(desc.type_));
+  ObFTDictInfoKey key(desc.get_cache_key());
   if (!is_inited_) {
     ret = OB_NOT_INIT;
     LOG_WARN("dict hub not init", K(ret));
@@ -121,6 +128,52 @@ int ObFTDictHub::load_cache(const ObFTDictDesc &desc, ObFTCacheRangeContainer &c
     }
   }
 
+  return ret;
+}
+
+int ObFTDictHub::refresh_cache(const ObString &table_name)
+{
+  int ret = OB_SUCCESS;
+  if (!is_inited_) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("dict hub not init", K(ret));
+  } else if (table_name.empty()) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("dictionary table name is empty", K(ret));
+  } else {
+    const ObFTDictType dict_types[] = {
+        ObFTDictType::DICT_IK_MAIN,
+        ObFTDictType::DICT_IK_QUAN,
+        ObFTDictType::DICT_IK_STOP};
+    for (int64_t index = 0; OB_SUCC(ret) && index < ARRAYSIZEOF(dict_types); ++index) {
+      const ObFTDictDesc desc(table_name,
+                              dict_types[index],
+                              ObCharsetType::CHARSET_UTF8MB4,
+                              ObCollationType::CS_TYPE_UTF8MB4_BIN);
+      const ObFTDictInfoKey key(desc.get_cache_key());
+      ObBucketHashWLockGuard guard(rw_dict_lock_, key.hash());
+      ObFTDictInfo info;
+      const int get_ret = dict_map_.get_refactored(key, info);
+      if (OB_SUCCESS == get_ret) {
+        for (int32_t range_id = 0; OB_SUCC(ret) && range_id < info.range_count_; ++range_id) {
+          const ObDictCacheKey cache_key(desc.get_cache_key(), dict_types[index], range_id);
+          const int erase_cache_ret = ObDictCache::get_instance().erase(cache_key);
+          if (OB_SUCCESS != erase_cache_ret && OB_ENTRY_NOT_EXIST != erase_cache_ret) {
+            ret = erase_cache_ret;
+            LOG_WARN("failed to erase dictionary range cache", K(ret), K(table_name), K(range_id));
+          }
+        }
+      } else if (OB_HASH_NOT_EXIST != get_ret) {
+        ret = get_ret;
+        LOG_WARN("failed to get dictionary cache metadata", K(ret), K(table_name), K(dict_types[index]));
+      }
+      const int erase_ret = dict_map_.erase_refactored(key);
+      if (OB_SUCC(ret) && OB_SUCCESS != erase_ret && OB_HASH_NOT_EXIST != erase_ret) {
+        ret = erase_ret;
+        LOG_WARN("failed to invalidate dictionary cache", K(ret), K(table_name), K(dict_types[index]));
+      }
+    }
+  }
   return ret;
 }
 

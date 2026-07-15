@@ -50,8 +50,10 @@ public:
   void reuse();
   TO_STRING_KV(K_(row_idx), K_(is_fts_index_aux), K_(helper), K_(is_inited), K_(rows));
 private:
-  lib::MemoryContext merge_memctx_;
+  lib::MemoryContext parser_memctx_;
+  lib::MemoryContext document_memctx_;
   ObDomainIndexRow rows_;
+  storage::ObFTWordMap word_map_;
   uint64_t row_idx_;
   bool is_fts_index_aux_;
   storage::ObFTParseHelper helper_;
@@ -182,6 +184,14 @@ public:
                                          const ObDatum &doc_id_datum,
                                          const ObString &fulltext,
                                          const bool is_fts_index_aux,
+                                         ObDomainIndexRow &word_rows);
+  static int generate_fulltext_word_rows(common::ObIAllocator &allocator,
+                                         storage::ObFTParseHelper *helper,
+                                         const common::ObObjMeta &ft_obj_meta,
+                                         const ObDatum &doc_id_datum,
+                                         const ObString &fulltext,
+                                         const bool is_fts_index_aux,
+                                         storage::ObFTWordMap &word_map,
                                          ObDomainIndexRow &word_rows);
   static int generate_multivalue_index_rows(
       ObIAllocator &allocator,
@@ -339,6 +349,7 @@ public:
   : ObDomainDMLIterator(allocator, row_projector, write_iter, das_ctdef, main_ctdef),
     doc_word_info_(ft_doc_word_info),
     ft_doc_word_iter_(),
+    parser_allocator_(lib::ObMemAttr("FTDMLParser")),
     ft_parse_helper_(),
     is_inited_(false)
   {
@@ -371,6 +382,7 @@ protected:
 private:
   const ObFTDocWordInfo *doc_word_info_;
   storage::ObFTDocWordScanIterator ft_doc_word_iter_;
+  common::ObArenaAllocator parser_allocator_;
   storage::ObFTParseHelper ft_parse_helper_;
   bool is_inited_;
 };

@@ -220,6 +220,7 @@ int ObExprTokenize::parse_param(const ObExpr &expr,
                                 TokenizeParam &param)
 {
   int ret = OB_SUCCESS;
+  ObSQLSessionInfo *session = ctx.exec_ctx_.get_my_session();
 
   ObDatum *parser_params_datum;
   ObString raw_parser_name = ObString::make_string(OB_DEFAULT_FULLTEXT_PARSER_NAME);
@@ -237,7 +238,11 @@ int ObExprTokenize::parse_param(const ObExpr &expr,
     LOG_WARN("Fail to parse parser params.", K(ret));
   } else if (OB_FAIL(parse_parser_properties(expr, ctx, temp_allocator, param))) {
     LOG_WARN("Fail to parse parser params.", K(ret));
-  } else if (OB_FAIL(param.reform_parser_properties(param.properties_))) {
+  } else if (OB_ISNULL(session)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("session info is null", K(ret));
+  } else if (OB_FAIL(param.reform_parser_properties(param.properties_,
+                                                    session->get_database_name()))) {
     LOG_WARN("Fail to reform parser params.", K(ret));
   } else if (OB_FAIL(param.try_load_dictionary_for_ik())) {
     LOG_WARN("fail to try load dictionary for ik", K(ret));
@@ -415,7 +420,8 @@ int ObExprTokenize::parse_parser_properties(const ObExpr &expr,
   return ret;
 }
 
-int ObExprTokenize::TokenizeParam::reform_parser_properties(const ObString &properties)
+int ObExprTokenize::TokenizeParam::reform_parser_properties(const ObString &properties,
+                                                            const ObString &database_name)
 {
   int ret = OB_SUCCESS;
   storage::ObFTParserJsonProps parser_properties;
@@ -429,8 +435,19 @@ int ObExprTokenize::TokenizeParam::reform_parser_properties(const ObString &prop
                                                              ObCollationType::CS_TYPE_UTF8MB4_BIN,
                                                              true))) {
     LOG_WARN("fail to serialize to string", K(ret), K(parser_properties));
-  } else if (OB_FAIL(parser_properties.to_format_json(allocator_, properties_))) {
-    LOG_WARN("fail to serialize to string", K(ret), K(parser_properties));
+  } else {
+    storage::ObFTParser parser;
+    if (OB_FAIL(parser.parse_from_str(parser_name_.ptr(), parser_name_.length()))) {
+      LOG_WARN("fail to parse parser name", K(ret), K(parser_name_));
+    } else if (parser.is_ik()
+               && OB_FAIL(parser_properties.qualify_ik_dict_tables(database_name))) {
+      LOG_WARN("fail to qualify IK dictionary table names", K(ret), K(database_name));
+    }
+  }
+  if (OB_SUCC(ret)) {
+    if (OB_FAIL(parser_properties.to_format_json(allocator_, properties_))) {
+      LOG_WARN("fail to serialize to string", K(ret), K(parser_properties));
+    }
   }
 
   return ret;

@@ -328,6 +328,8 @@ int ObIKArbitrator::prepare(TokenizeContext &ctx)
 {
   int ret = OB_SUCCESS;
 
+  chains_.destroy();
+  alloc_.reuse();
   int cal_bucket_num = MAX(ctx.fulltext_len() / 100, 10);
   cal_bucket_num = MIN(cal_bucket_num, 100);
   if (OB_FAIL(chains_.create(cal_bucket_num, ObMemAttr("IK ARBITRATE")))) {
@@ -337,6 +339,12 @@ int ObIKArbitrator::prepare(TokenizeContext &ctx)
 }
 
 ObIKArbitrator::ObIKArbitrator() : alloc_(lib::ObMemAttr("IK Arbitrator")) {}
+
+void ObIKArbitrator::reset()
+{
+  chains_.destroy();
+  alloc_.reset();
+}
 
 int ObIKArbitrator::add_chain(ObIKTokenChain *chain)
 {
@@ -354,8 +362,7 @@ int ObIKArbitrator::add_chain(ObIKTokenChain *chain)
 
 ObIKArbitrator::~ObIKArbitrator()
 {
-  chains_.destroy();
-  alloc_.reset();
+  reset();
 }
 } // namespace storage
 } // namespace oceanbase

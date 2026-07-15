@@ -34,11 +34,15 @@ int ObFunctionTableOp::inner_open()
   int ret = OB_SUCCESS;
   node_idx_ = 0;
   already_calc_ = false;
+  split_chunks_.reuse();
+  split_initialized_ = false;
   if (OB_ISNULL(MY_SPEC.value_expr_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("value expr is not init", K(ret));
   } else if (ObExtendType == MY_SPEC.value_expr_->datum_meta_.type_) {
     next_row_func_ = &ObFunctionTableOp::inner_get_next_row_udf;
+  } else if (T_FUN_SYS_AI_SPLIT_DOCUMENT == MY_SPEC.value_expr_->type_) {
+    next_row_func_ = &ObFunctionTableOp::inner_get_next_row_ai_split_document;
   } else {
     next_row_func_ = &ObFunctionTableOp::inner_get_next_row_sys_func;
   }
@@ -57,6 +61,8 @@ int ObFunctionTableOp::inner_rescan()
       col_count_ = 0;
       value_table_ = NULL;
       already_calc_ = false;
+      split_chunks_.reuse();
+      split_initialized_ = false;
     }
   }
   return ret;
@@ -69,6 +75,8 @@ int ObFunctionTableOp::inner_close()
   row_count_ = 0;
   col_count_ = 0;
   value_table_ = NULL;
+  split_chunks_.reuse();
+  split_initialized_ = false;
   return ret;
 }
 
@@ -244,6 +252,88 @@ int ObFunctionTableOp::inner_get_next_row_sys_func()
   } else {
     MY_SPEC.column_exprs_.at(0)->locate_datum_for_write(eval_ctx_).set_datum(*value);
     MY_SPEC.column_exprs_.at(0)->set_evaluated_projected(eval_ctx_);
+  }
+  return ret;
+}
+
+int ObFunctionTableOp::prepare_ai_split_document()
+{
+  int ret = OB_SUCCESS;
+  ObExpr *value_expr = MY_SPEC.value_expr_;
+  ObDatum *content_datum = nullptr;
+  ObDatum *parameters_datum = nullptr;
+  ObEvalCtx::TempAllocGuard temp_alloc_guard(eval_ctx_);
+  ObIAllocator &temp_allocator = temp_alloc_guard.get_allocator();
+  ObString content;
+  ObString parameters;
+  const ObString *parameters_ptr = nullptr;
+  split_chunks_.reuse();
+  node_idx_ = 0;
+
+  if (OB_ISNULL(value_expr) || T_FUN_SYS_AI_SPLIT_DOCUMENT != value_expr->type_
+      || OB_UNLIKELY(value_expr->arg_cnt_ < 1 || value_expr->arg_cnt_ > 2)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("invalid AI_SPLIT_DOCUMENT runtime expression", K(ret), KP(value_expr));
+  } else if (OB_FAIL(value_expr->args_[0]->eval(eval_ctx_, content_datum))) {
+    LOG_WARN("failed to evaluate AI_SPLIT_DOCUMENT content", K(ret));
+  } else if (2 == value_expr->arg_cnt_
+             && OB_FAIL(value_expr->args_[1]->eval(eval_ctx_, parameters_datum))) {
+    LOG_WARN("failed to evaluate AI_SPLIT_DOCUMENT parameters", K(ret));
+  } else if (content_datum->is_null()) {
+  } else if (OB_FAIL(ObTextStringHelper::read_real_string_data(temp_allocator,
+                                                               *content_datum,
+                                                               value_expr->args_[0]->datum_meta_,
+                                                               value_expr->args_[0]->obj_meta_.has_lob_header(),
+                                                               content))) {
+    LOG_WARN("failed to read AI_SPLIT_DOCUMENT content", K(ret));
+  } else if (OB_NOT_NULL(parameters_datum) && !parameters_datum->is_null()
+             && OB_FAIL(ObTextStringHelper::read_real_string_data(temp_allocator,
+                                                                  *parameters_datum,
+                                                                  value_expr->args_[1]->datum_meta_,
+                                                                  value_expr->args_[1]->obj_meta_.has_lob_header(),
+                                                                  parameters))) {
+    LOG_WARN("failed to read AI_SPLIT_DOCUMENT parameters", K(ret));
+  } else {
+    if (OB_NOT_NULL(parameters_datum) && !parameters_datum->is_null()) {
+      parameters_ptr = &parameters;
+    }
+    if (OB_FAIL(ObExprAISplitDocument::split_document(ctx_.get_allocator(),
+                                                      content,
+                                                      parameters_ptr,
+                                                      split_chunks_))) {
+      LOG_WARN("failed to split document", K(ret));
+    }
+  }
+  if (OB_SUCC(ret)) {
+    split_initialized_ = true;
+  }
+  return ret;
+}
+
+int ObFunctionTableOp::inner_get_next_row_ai_split_document()
+{
+  int ret = OB_SUCCESS;
+  clear_evaluated_flag();
+  if (OB_FAIL(ctx_.check_status())) {
+    LOG_WARN("failed to check execution status", K(ret));
+  } else if (!split_initialized_ && OB_FAIL(prepare_ai_split_document())) {
+    LOG_WARN("failed to prepare AI_SPLIT_DOCUMENT", K(ret));
+  } else if (node_idx_ >= split_chunks_.count()) {
+    ret = OB_ITER_END;
+  } else if (OB_UNLIKELY(4 != MY_SPEC.column_exprs_.count())) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("invalid AI_SPLIT_DOCUMENT output column count", K(ret),
+             "column_count", MY_SPEC.column_exprs_.count());
+  } else {
+    const ObAISplitDocumentChunk &chunk = split_chunks_.at(node_idx_);
+    MY_SPEC.column_exprs_.at(0)->locate_datum_for_write(eval_ctx_).set_int(node_idx_);
+    MY_SPEC.column_exprs_.at(1)->locate_datum_for_write(eval_ctx_).set_int(chunk.offset_);
+    MY_SPEC.column_exprs_.at(2)->locate_datum_for_write(eval_ctx_).set_int(chunk.length_);
+    MY_SPEC.column_exprs_.at(3)->locate_datum_for_write(eval_ctx_).set_string(chunk.text_);
+    for (int64_t index = 0; index < MY_SPEC.column_exprs_.count(); ++index) {
+      MY_SPEC.column_exprs_.at(index)->set_evaluated_projected(eval_ctx_);
+    }
+    ++node_idx_;
   }
   return ret;
 }

@@ -38,12 +38,14 @@ public:
 
 public:
   int init(const ObString &table_name);
+  bool is_empty() const { return is_empty_; }
 
 private:
   void reset();
 
 private:
   bool is_inited_;
+  bool is_empty_;
   ObISQLClient::ReadResult &res_;
 };
 

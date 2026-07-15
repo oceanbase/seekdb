@@ -8251,6 +8251,9 @@ int ObDMLResolver::resolve_function_table_column_item(const TableItem &table_ite
   OX (col_expr->set_ref_id(table_item.table_id_, column_id));
   OX (result_type.set_meta(meta_type));
   OX (result_type.set_accuracy(accuracy));
+  if (result_type.is_string_type()) {
+    OX (result_type.set_collation_level(CS_LEVEL_IMPLICIT));
+  }
   OX (col_expr->set_result_type(result_type));
   if (table_item.get_object_name().empty()) {
     OX (col_expr->set_column_name(column_name));
@@ -9236,6 +9239,32 @@ int ObDMLResolver::resolve_function_table_column_item_sys_func(const TableItem &
   } else if (!ObResolverUtils::is_expr_can_be_used_in_table_function(*table_expr)) {
     ret = OB_NOT_SUPPORTED;
     LOG_USER_ERROR(OB_NOT_SUPPORTED, "access rows from a non-nested table item");
+  } else if (T_FUN_SYS_AI_SPLIT_DOCUMENT == table_expr->get_expr_type()) {
+    static const char *COLUMN_NAMES[] = {"CHUNK_ID", "CHUNK_OFFSET", "CHUNK_LENGTH", "CHUNK_TEXT"};
+    for (int64_t index = 0; OB_SUCC(ret) && index < ARRAYSIZEOF(COLUMN_NAMES); ++index) {
+      const ObString column_name(COLUMN_NAMES[index]);
+      if (NULL != (col_item = stmt->get_column_item(table_item.table_id_, column_name))) {
+      } else {
+        ObObjMeta meta;
+        ObAccuracy accuracy;
+        if (index < 3) {
+          meta.set_int();
+          accuracy = ObAccuracy::DDL_DEFAULT_ACCURACY[ObIntType];
+        } else {
+          meta.set_varchar();
+          meta.set_collation_type(CS_TYPE_UTF8MB4_BIN);
+          accuracy = ObAccuracy(OB_MAX_VARCHAR_LENGTH);
+        }
+        OZ (resolve_function_table_column_item(table_item,
+                                               meta,
+                                               accuracy,
+                                               column_name,
+                                               OB_APP_MIN_COLUMN_ID + index,
+                                               col_item));
+      }
+      CK (OB_NOT_NULL(col_item));
+      OZ (col_items.push_back(*col_item));
+    }
   } else if (NULL != (col_item = stmt->get_column_item(table_item.table_id_, ObString("COLUMN_VALUE")))) {
     //exist, ignore resolve...
   } else {
@@ -9246,8 +9275,10 @@ int ObDMLResolver::resolve_function_table_column_item_sys_func(const TableItem &
                                            OB_APP_MIN_COLUMN_ID,
                                            col_item));
   }
-  CK (OB_NOT_NULL(col_item));
-  OZ (col_items.push_back(*col_item));
+  if (OB_SUCC(ret) && T_FUN_SYS_AI_SPLIT_DOCUMENT != table_expr->get_expr_type()) {
+    CK (OB_NOT_NULL(col_item));
+    OZ (col_items.push_back(*col_item));
+  }
   return ret;
 }
 

@@ -65,6 +65,9 @@ ObDDLResolver::ObDDLResolver(ObResolverParams &params)
     use_bloom_filter_(false),
     expire_info_(),
     compress_method_(),
+    parser_name_(),
+    parser_properties_(),
+    is_fulltext_dict_(false),
     comment_(),
     tablegroup_name_(),
     primary_zone_(),
@@ -113,6 +116,7 @@ ObDDLResolver::ObDDLResolver(ObResolverParams &params)
     mocked_external_table_column_ids_(),
     index_params_(),
     table_organization_(ObTableOrganizationType::OB_ORGANIZATION_INVALID),
+    is_table_organization_explicit_(false),
     mv_refresh_dop_(0),
     vec_column_name_(),
     vec_index_type_(INDEX_TYPE_MAX),
@@ -1732,6 +1736,28 @@ int ObDDLResolver::resolve_table_option(const ParseNode *option_node, const bool
               table_mode_.pk_exists_ = tbl_schema->get_table_mode_struct().pk_exists_;
               table_mode_.table_organization_mode_ = tbl_schema->get_table_mode_struct().table_organization_mode_;
             }
+          }
+        }
+        break;
+      }
+      case T_FULLTEXT_DICT: {
+        if (is_index_option) {
+          ret = OB_NOT_SUPPORTED;
+          LOG_USER_ERROR(OB_NOT_SUPPORTED, "FULLTEXT_DICT in index options");
+          SQL_RESV_LOG(WARN, "FULLTEXT_DICT is not an index option", K(ret));
+        } else if (OB_ISNULL(option_node->children_[0])) {
+          ret = OB_ERR_UNEXPECTED;
+          SQL_RESV_LOG(WARN, "FULLTEXT_DICT value is null", K(ret));
+        } else {
+          const ObString option_value(
+              static_cast<int32_t>(option_node->children_[0]->str_len_),
+              option_node->children_[0]->str_value_);
+          if (0 != option_value.case_compare("Y")) {
+            ret = OB_INVALID_ARGUMENT;
+            LOG_USER_ERROR(OB_INVALID_ARGUMENT, "FULLTEXT_DICT must be 'Y'");
+            SQL_RESV_LOG(WARN, "invalid FULLTEXT_DICT value", K(ret), K(option_value));
+          } else {
+            is_fulltext_dict_ = true;
           }
         }
         break;
@@ -4245,6 +4271,7 @@ void ObDDLResolver::reset() {
   compress_method_.reset();
   parser_name_.reset();
   parser_properties_.reset();
+  is_fulltext_dict_ = false;
   comment_.reset();
   tablegroup_name_.reset();
   primary_zone_.reset();

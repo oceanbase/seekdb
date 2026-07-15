@@ -21,6 +21,7 @@
 #include "lib/charset/ob_charset.h"
 #include "lib/string/ob_string.h"
 #include "object/ob_object.h"
+#include "plugin/interface/ob_plugin_ftparser_intf.h"
 #include "share/ob_plugin_helper.h"
 #include "storage/fts/ob_fts_parser_property.h"
 #include "storage/fts/ob_fts_struct.h"
@@ -154,7 +155,7 @@ public:
    *                                 "ngram_token_size":2,
    *                                 "stopword_table":"default",
    *                                 "dict_table":"none",
-   *                                 "quanitfier_table":"none"
+   *                                 "quantifier_table":"none"
    *                               }
    *
    * @return error code
@@ -177,7 +178,14 @@ public:
       const char *fulltext,
       const int64_t fulltext_len,
       int64_t &doc_length,
-      ObFTWordMap &words) const;
+      ObFTWordMap &words);
+  int segment(
+      const common::ObObjMeta &meta,
+      const char *fulltext,
+      const int64_t fulltext_len,
+      common::ObIAllocator &scratch_allocator,
+      int64_t &doc_length,
+      ObFTWordMap &words);
   int check_is_the_same(
       const common::ObString &plugin_name,
       const common::ObString &plugin_properties,
@@ -209,16 +217,12 @@ public:
   TO_STRING_KV(KP_(allocator), K_(parser_name), KP_(parser_desc), K_(is_inited));
 
 private:
-  static int segment(
-      const ObFTParserProperty &property,
-      const int64_t parser_version,
-      const plugin::ObIFTParserDesc *parser_desc,
-      plugin::ObPluginParam *plugin_param,
+  int prepare_parser_param(
       const ObCharsetInfo *cs,
       const char *fulltext,
       const int64_t fulltext_len,
-      common::ObIAllocator &allocator,
-      ObAddWord &add_word);
+      common::ObIAllocator &scratch_allocator);
+  int segment_with_iter(ObAddWord &add_word);
   int set_add_word_flag(const plugin::ObIFTParserDesc &ftparser_desc);
 private:
   common::ObIAllocator *allocator_;
@@ -227,6 +231,8 @@ private:
   ObFTParser parser_name_;
   ObAddWordFlag add_word_flag_;
   ObFTParserProperty parser_property_;
+  plugin::ObFTParserParam parser_param_;
+  plugin::ObITokenIterator *parser_iter_;
   bool is_inited_;
 
 private:

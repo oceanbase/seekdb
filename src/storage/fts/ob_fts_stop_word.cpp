@@ -78,9 +78,7 @@ void ObStopWordChecker::destroy()
 int ObStopWordChecker::check_stopword(const ObFTWord &word, bool &is_stopword)
 {
   int ret = OB_SUCCESS;
-  
-  
-  common::ObArenaAllocator allocator(lib::ObMemAttr("ChkStopWord"));
+  is_stopword = false;
   if (OB_UNLIKELY(!inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("ObStopWordChecker hasn't been initialized", K(ret), K(inited_));
@@ -88,31 +86,47 @@ int ObStopWordChecker::check_stopword(const ObFTWord &word, bool &is_stopword)
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("word is empty", K(ret), K(word));
   } else {
-    common::ObString cmp_str;
-    // do nothing set out with in if type is the same.
-    if (OB_FAIL(common::ObCharset::charset_convert(
-                                       allocator,
-                                       word.get_word().get_string(),
-                                       word.get_collation_type(),
-                                       stopword_type_.get_collation_type(),
-                                       cmp_str))) {
-      LOG_WARN("fail to convert charset", K(ret), K(word), K(stopword_type_));
+    const ObCollationType word_collation = word.get_collation_type();
+    const ObCollationType stopword_collation = stopword_type_.get_collation_type();
+    if (common::ObCharset::charset_type_by_coll(word_collation)
+        == common::ObCharset::charset_type_by_coll(stopword_collation)) {
+      if (OB_FAIL(exist_stopword(word.get_word().get_string(), is_stopword))) {
+        LOG_WARN("failed to check stopword", K(ret), K(word));
+      }
     } else {
-      ObFTWord converted(cmp_str.length(), cmp_str.ptr(), stopword_type_);
-      ret = stopword_set_.exist_refactored(converted);
-      if (OB_HASH_NOT_EXIST == ret) {
-        is_stopword = false;
-        ret = OB_SUCCESS;
-      } else if (OB_HASH_EXIST == ret) {
-        is_stopword = true;
-        ret = OB_SUCCESS;
-      } else if (OB_SUCC(ret)) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("the exist of hastset shouldn't return success", K(ret), K(word), K(converted));
-      } else {
-        LOG_WARN("fail to do exist", K(ret), K(word), K(converted));
+      common::ObArenaAllocator allocator(lib::ObMemAttr("ChkStopWord"));
+      common::ObString cmp_str;
+      if (OB_FAIL(common::ObCharset::charset_convert(
+          allocator,
+          word.get_word().get_string(),
+          word_collation,
+          stopword_collation,
+          cmp_str))) {
+        LOG_WARN("fail to convert charset", K(ret), K(word), K(stopword_type_));
+      } else if (OB_FAIL(exist_stopword(cmp_str, is_stopword))) {
+        LOG_WARN("failed to check converted stopword", K(ret), K(word), K(stopword_type_));
       }
     }
+  }
+  return ret;
+}
+
+int ObStopWordChecker::exist_stopword(const common::ObString &word, bool &is_stopword)
+{
+  int ret = OB_SUCCESS;
+  ObFTWord converted(word.length(), word.ptr(), stopword_type_);
+  ret = stopword_set_.exist_refactored(converted);
+  if (OB_HASH_NOT_EXIST == ret) {
+    is_stopword = false;
+    ret = OB_SUCCESS;
+  } else if (OB_HASH_EXIST == ret) {
+    is_stopword = true;
+    ret = OB_SUCCESS;
+  } else if (OB_SUCC(ret)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected hash set result", K(ret), K(converted));
+  } else {
+    LOG_WARN("failed to check stopword set", K(ret), K(converted));
   }
   return ret;
 }
@@ -151,14 +165,14 @@ int ObAddWord::process_word(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", K(ret), KP(word), K(word_len), K(char_cnt), K(word_freq));
   } else if (is_min_max_word(char_cnt)) {
-    ++min_max_word_cnt_;
+    min_max_word_cnt_ += word_freq;
     LOG_DEBUG("skip too small or large word", K(ret), K(src_word), K(char_cnt));
   } else if (OB_FAIL(casedown_word(src_word, dst_word))) {
     LOG_WARN("fail to casedown word", K(ret), K(src_word));
   } else if (OB_FAIL(check_stopword(dst_word, is_stopword))) {
     LOG_WARN("fail to check stopword", K(ret), K(dst_word));
   } else if (OB_UNLIKELY(is_stopword)) {
-    ++stopword_cnt_;
+    stopword_cnt_ += word_freq;
     LOG_DEBUG("skip stopword", K(ret), K(dst_word));
   } else if (OB_FAIL(groupby_word(dst_word, word_freq))) {
     LOG_WARN("fail to groupby word into word map", K(ret), K(dst_word), K(word_freq));

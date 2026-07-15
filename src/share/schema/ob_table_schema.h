@@ -24,6 +24,7 @@
 #include <assert.h>
 #include <algorithm>
 #include "lib/utility/utility.h"
+#include "lib/ob_name_def.h"
 #include "lib/charset/ob_charset.h"
 #include "lib/hash/ob_pointer_hashmap.h"
 #include "lib/hash/ob_hashmap.h"
@@ -1558,6 +1559,11 @@ public:
   inline bool is_read_only() const { return read_only_; }
   inline const char *get_parser_name() const { return extract_str(parser_name_); }
   inline const common::ObString &get_parser_name_str() const { return parser_name_; }
+  inline bool is_fulltext_dict_table() const
+  {
+    return 0 == parser_name_.case_compare(OB_FULLTEXT_DICT_TABLE_MARKER);
+  }
+  bool is_valid_fulltext_dict_table_schema(const bool require_marker = true) const;
   inline const common::ObString &get_parser_property_str() const { return parser_properties_; }
 
   inline uint64_t get_index_attributes_set() const { return index_attributes_set_; }

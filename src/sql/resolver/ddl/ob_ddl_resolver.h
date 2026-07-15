@@ -1002,6 +1002,7 @@ protected:
   common::ObString compress_method_;
   common::ObString parser_name_;
   common::ObString parser_properties_;
+  bool is_fulltext_dict_;
   common::ObString comment_;
   common::ObString tablegroup_name_;
   common::ObString primary_zone_;
@@ -1056,6 +1057,7 @@ protected:
   common::ObBitSet<> mocked_external_table_column_ids_;
   common::ObString index_params_;
   ObTableOrganizationType table_organization_;
+  bool is_table_organization_explicit_;
   int64_t mv_refresh_dop_;
   common::ObString vec_column_name_;
   ObIndexType vec_index_type_;

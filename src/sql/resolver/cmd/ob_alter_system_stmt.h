@@ -21,6 +21,7 @@
 #include "share/ob_rpc_struct.h"
 #include "observer/scheduler/ob_sys_task_stat.h"
 #include "sql/engine/cmd/ob_redis_importer.h"
+#include "lib/string/ob_fixed_length_string.h"
 
 namespace oceanbase
 {
@@ -167,6 +168,29 @@ public:
   TO_STRING_KV(N_STMT_TYPE, ((int)stmt_type_), K_(rpc_arg));
 private:
   obcall::ObAdminRefreshMemStatArg rpc_arg_;
+};
+
+class ObRefreshFulltextDictStmt : public ObSystemCmdStmt
+{
+public:
+  ObRefreshFulltextDictStmt() : ObSystemCmdStmt(stmt::T_REFRESH_FULLTEXT_DICT) {}
+  virtual ~ObRefreshFulltextDictStmt() {}
+
+  int set_database_name(const common::ObString &database_name)
+  {
+    return database_name_.assign(database_name);
+  }
+  int set_table_name(const common::ObString &table_name)
+  {
+    return table_name_.assign(table_name);
+  }
+  const common::ObString get_database_name() const { return database_name_.str(); }
+  const common::ObString get_table_name() const { return table_name_.str(); }
+
+  TO_STRING_KV(N_STMT_TYPE, ((int)stmt_type_), K_(database_name), K_(table_name));
+private:
+  common::ObFixedLengthString<common::OB_MAX_DATABASE_NAME_LENGTH + 1> database_name_;
+  common::ObFixedLengthString<common::OB_MAX_TABLE_NAME_LENGTH + 1> table_name_;
 };
 
 class ObWashMemFragmentationStmt : public ObSystemCmdStmt

@@ -19,6 +19,7 @@
 #include "sql/resolver/cmd/ob_alter_system_resolver.h"
 #include "sql/resolver/cmd/ob_alter_system_stmt.h"
 #include "sql/resolver/ddl/ob_create_table_resolver.h"
+#include "sql/resolver/ddl/ob_fts_index_builder_util.h"
 #include "sql/resolver/ddl/ob_drop_table_stmt.h"
 #include "sql/resolver/cmd/ob_variable_set_stmt.h"
 #include "observer/ob_server.h"
@@ -34,6 +35,39 @@ using namespace observer;
 namespace sql
 {
 typedef ObAlterSystemResolverUtil Util;
+
+namespace
+{
+int split_fulltext_dict_name(const ObString &qualified_name,
+                             ObString &database_name,
+                             ObString &table_name)
+{
+  int ret = OB_SUCCESS;
+  database_name.reset();
+  table_name.reset();
+  const char *separator = qualified_name.find('.');
+  if (qualified_name.empty()) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("fulltext dictionary table name is empty", K(ret));
+  } else if (OB_ISNULL(separator)) {
+    table_name = qualified_name;
+  } else {
+    const int64_t separator_pos = separator - qualified_name.ptr();
+    const int64_t remaining_length = qualified_name.length() - separator_pos - 1;
+    const char *additional_separator = remaining_length > 0
+        ? static_cast<const char *>(memchr(separator + 1, '.', remaining_length))
+        : nullptr;
+    if (0 == separator_pos || 0 == remaining_length || OB_NOT_NULL(additional_separator)) {
+      ret = OB_INVALID_ARGUMENT;
+      LOG_WARN("invalid qualified fulltext dictionary table name", K(ret), K(qualified_name));
+    } else {
+      database_name.assign_ptr(qualified_name.ptr(), static_cast<int32_t>(separator_pos));
+      table_name.assign_ptr(separator + 1, static_cast<int32_t>(remaining_length));
+    }
+  }
+  return ret;
+}
+}
 
 int ObAlterSystemResolverUtil::sanity_check(const ParseNode *parse_tree, ObItemType item_type)
 {
@@ -1140,6 +1174,85 @@ int ObRefreshMemStatResolver::resolve(const ParseNode &parse_tree)
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("children should not be null");
       }
+    }
+  }
+  return ret;
+}
+
+int ObRefreshFulltextDictResolver::resolve(const ParseNode &parse_tree)
+{
+  int ret = OB_SUCCESS;
+  ObString database_name;
+  ObString table_name;
+  const ObTableSchema *table_schema = nullptr;
+  ObRefreshFulltextDictStmt *stmt = nullptr;
+  if (OB_UNLIKELY(T_REFRESH_FULLTEXT_DICT != parse_tree.type_)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("type is not T_REFRESH_FULLTEXT_DICT", K(ret),
+             "type", get_type_name(parse_tree.type_));
+  } else if (1 != parse_tree.num_child_ || OB_ISNULL(parse_tree.children_)
+             || OB_ISNULL(parse_tree.children_[0])) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("invalid refresh fulltext dictionary parse tree", K(ret), K(parse_tree.num_child_));
+  } else if (T_RELATION_FACTOR == parse_tree.children_[0]->type_) {
+    ObString catalog_name;
+    if (OB_FAIL(resolve_table_relation_node(parse_tree.children_[0],
+                                            table_name,
+                                            database_name,
+                                            catalog_name))) {
+      LOG_WARN("resolve fulltext dictionary table name failed", K(ret));
+    }
+  } else if (T_VARCHAR == parse_tree.children_[0]->type_) {
+    const ObString qualified_name(
+        static_cast<int32_t>(parse_tree.children_[0]->str_len_),
+        parse_tree.children_[0]->str_value_);
+    if (OB_FAIL(split_fulltext_dict_name(qualified_name, database_name, table_name))) {
+      LOG_WARN("split fulltext dictionary table name failed", K(ret), K(qualified_name));
+    } else if (database_name.empty()) {
+      if (OB_ISNULL(session_info_)) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("session info is null", K(ret));
+      } else if (session_info_->get_database_name().empty()) {
+        ret = OB_ERR_NO_DB_SELECTED;
+        LOG_WARN("no database selected", K(ret));
+      } else {
+        database_name = session_info_->get_database_name();
+      }
+    }
+  } else {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected refresh fulltext dictionary name node", K(ret),
+             "type", get_type_name(parse_tree.children_[0]->type_));
+  }
+
+  if (OB_SUCC(ret)) {
+    if (OB_ISNULL(schema_checker_)) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("schema checker is null", K(ret));
+    } else if (OB_FAIL(schema_checker_->get_table_schema(
+                   database_name, table_name, false, table_schema))) {
+      LOG_WARN("get fulltext dictionary table schema failed", K(ret),
+               K(database_name), K(table_name));
+    } else if (OB_ISNULL(table_schema)) {
+      ret = OB_TABLE_NOT_EXIST;
+      ObCStringHelper helper;
+      LOG_USER_ERROR(OB_TABLE_NOT_EXIST,
+                     helper.convert(database_name), helper.convert(table_name));
+      LOG_WARN("fulltext dictionary table does not exist", K(ret),
+               K(database_name), K(table_name));
+    } else if (OB_FAIL(share::ObFtsIndexBuilderUtil::validate_fulltext_dict_table_schema(
+                   *table_schema, true))) {
+      LOG_WARN("invalid fulltext dictionary table schema", K(ret),
+               K(database_name), K(table_name));
+    } else if (OB_ISNULL(stmt = create_stmt<ObRefreshFulltextDictStmt>())) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+      LOG_ERROR("create ObRefreshFulltextDictStmt failed", K(ret));
+    } else if (OB_FAIL(stmt->set_database_name(database_name))) {
+      LOG_WARN("set fulltext dictionary database name failed", K(ret), K(database_name));
+    } else if (OB_FAIL(stmt->set_table_name(table_name))) {
+      LOG_WARN("set fulltext dictionary table name failed", K(ret), K(table_name));
+    } else {
+      stmt_ = stmt;
     }
   }
   return ret;

@@ -15,6 +15,7 @@
  */
 
 #include "sql/resolver/ddl/ob_drop_table_resolver.h"
+#include "sql/resolver/ddl/ob_fts_index_builder_util.h"
 namespace oceanbase
 {
 using namespace common;
@@ -127,7 +128,33 @@ int ObDropTableResolver::resolve(const ParseNode &parse_tree)
                 LOG_USER_ERROR(OB_ERR_NONUNIQ_TABLE, table_item.table_name_.length(), table_item.table_name_.ptr());
               } else if (OB_FAIL(table_item_set->set_refactored(table_item))) {
                 SQL_RESV_LOG(WARN, "failed to add table item!", K(table_item), K(ret));
-              } else if (OB_FAIL(drop_table_stmt->add_table_item(table_item))) {
+              } else if (T_DROP_TABLE == parse_tree.type_) {
+                const share::schema::ObTableSchema *table_schema = nullptr;
+                const int schema_ret = schema_checker_->get_table_schema(
+                    db_name, table_name, false, table_schema);
+                if (OB_SUCCESS == schema_ret && OB_NOT_NULL(table_schema)
+                    && table_schema->is_fulltext_dict_table()) {
+                  bool is_referenced = false;
+                  share::schema::ObSchemaGetterGuard *schema_guard =
+                      schema_checker_->get_schema_guard();
+                  if (OB_ISNULL(schema_guard)) {
+                    ret = OB_ERR_UNEXPECTED;
+                    SQL_RESV_LOG(WARN, "schema guard is null", K(ret));
+                  } else if (OB_FAIL(share::ObFtsIndexBuilderUtil::is_fulltext_dict_referenced(
+                                 *schema_guard, *table_schema, is_referenced))) {
+                    SQL_RESV_LOG(WARN, "check fulltext dictionary reference failed", K(ret),
+                                 K(db_name), K(table_name));
+                  } else if (is_referenced) {
+                    ret = OB_OP_NOT_ALLOW;
+                    LOG_USER_ERROR(OB_OP_NOT_ALLOW,
+                                   "drop a fulltext dictionary table referenced by an index");
+                  }
+                } else if (OB_SUCCESS != schema_ret && OB_TABLE_NOT_EXIST != schema_ret) {
+                  ret = schema_ret;
+                  SQL_RESV_LOG(WARN, "get table schema failed", K(ret), K(db_name), K(table_name));
+                }
+              }
+              if (OB_SUCC(ret) && OB_FAIL(drop_table_stmt->add_table_item(table_item))) {
                 SQL_RESV_LOG(WARN, "failed to add table item!", K(table_item), K(ret));
               }
             }

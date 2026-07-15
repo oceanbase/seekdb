@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_RESV
 #include "sql/resolver/ddl/ob_rename_table_resolver.h"
+#include "sql/resolver/ddl/ob_fts_index_builder_util.h"
 
 namespace oceanbase
 {
@@ -123,7 +124,23 @@ int ObRenameTableResolver::resolve_rename_action(const ParseNode &rename_action_
       rename_table_item.new_db_name_ = new_db_name;
       rename_table_item.new_table_name_ = new_table_name;
       rename_table_item.origin_table_id_ = NULL != table_schema ? table_schema->get_table_id() : common::OB_INVALID_ID;
-      if (OB_FAIL(rename_table_stmt->add_rename_table_item(rename_table_item))) {
+      if (OB_NOT_NULL(table_schema) && table_schema->is_fulltext_dict_table()) {
+        bool is_referenced = false;
+        ObSchemaGetterGuard *schema_guard = schema_checker_->get_schema_guard();
+        if (OB_ISNULL(schema_guard)) {
+          ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("schema guard is null", K(ret));
+        } else if (OB_FAIL(share::ObFtsIndexBuilderUtil::is_fulltext_dict_referenced(
+                       *schema_guard, *table_schema, is_referenced))) {
+          LOG_WARN("check fulltext dictionary reference failed", K(ret), KPC(table_schema));
+        } else if (is_referenced) {
+          ret = OB_NOT_SUPPORTED;
+          LOG_USER_ERROR(OB_NOT_SUPPORTED,
+                         "rename a fulltext dictionary table referenced by an index");
+        }
+      }
+      if (OB_FAIL(ret)) {
+      } else if (OB_FAIL(rename_table_stmt->add_rename_table_item(rename_table_item))) {
         LOG_WARN("failed to add rename table item", K(rename_table_item), K(ret));
       } else if (OB_NOT_NULL(table_schema)) {
         if (table_schema->is_mlog_table()) {
