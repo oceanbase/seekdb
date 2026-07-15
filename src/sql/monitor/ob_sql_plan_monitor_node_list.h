@@ -246,28 +246,35 @@ public:
   static int mtl_init(ObPlanMonitorNodeList* &node_list);
   static void mtl_destroy(ObPlanMonitorNodeList* &node_list);
   int submit_node(ObMonitorNode &node);
-  int64_t get_start_idx() const { return (int64_t)queue_.get_pop_idx(); }
-  int64_t get_end_idx() const { return (int64_t)queue_.get_push_idx(); }
-  int64_t get_size_used() { return (int64_t)(queue_.get_push_idx() - queue_.get_pop_idx()); }
-  int64_t get_size() { return (int64_t)queue_.get_size(); }
+  int64_t get_start_idx() const { return inited_ ? (int64_t)queue_.get_pop_idx() : 0; }
+  int64_t get_end_idx() const { return inited_ ? (int64_t)queue_.get_push_idx() : 0; }
+  int64_t get_size_used() { return inited_ ? (int64_t)(queue_.get_push_idx() - queue_.get_pop_idx()) : 0; }
+  int64_t get_size() { return inited_ ? (int64_t)queue_.get_size() : 0; }
   int get(const int64_t idx, void *&record, Ref* ref)
   {
     int ret = common::OB_SUCCESS;
-    if (NULL == (record = queue_.get(idx, ref))) {
+    if (!inited_) {
+      record = NULL;
+      ret = common::OB_ENTRY_NOT_EXIST;
+    } else if (NULL == (record = queue_.get(idx, ref))) {
       ret = common::OB_ENTRY_NOT_EXIST;
     }
     return ret;
   }
   int revert(Ref* ref)
   {
-    queue_.revert(ref);
+    if (inited_) {
+      queue_.revert(ref);
+    } else if (OB_NOT_NULL(ref)) {
+      ref->reset();
+    }
     return common::OB_SUCCESS;
   }
   int recycle_old(int64_t limit)
   {
     void* req = NULL;
     int64_t count = 0;
-    while(count++ < limit && NULL != (req = queue_.pop())) {
+    while (inited_ && count++ < limit && NULL != (req = queue_.pop())) {
       free_mem(req);
     }
     return common::OB_SUCCESS;
@@ -275,33 +282,39 @@ public:
   int64_t get_recycle_count()
   {
     int64_t cnt = 0;
-    if (get_size_used() > recycle_threshold_) {
+    if (inited_ && get_size_used() > recycle_threshold_) {
       cnt = batch_release_;
     }
     return cnt;
   }
   void clear_queue()
   {
-    (void)recycle_old(INT64_MAX);
+    if (inited_) {
+      (void)recycle_old(INT64_MAX);
+    }
   }
   void* alloc_mem(const int64_t size)
   {
-    void * ret = allocator_.alloc(size);
+    void * ret = inited_ ? allocator_.alloc(size) : NULL;
     return ret;
   }
   void free_mem(void *ptr)
   {
-    allocator_.free(ptr);
-    ptr = NULL;
+    if (OB_NOT_NULL(ptr) && inited_) {
+      allocator_.free(ptr);
+      ptr = NULL;
+    }
   }
   int register_monitor_node(ObMonitorNode &node);
   int revert_monitor_node(ObMonitorNode &node);
   int convert_node_map_2_array(common::ObIArray<ObMonitorNode> &array);
 private:
   int init();
+  int init_if_needed_();
   void destroy();
   int release_record(int64_t release_cnt, bool is_destroyed = false);
 private:
+  common::ObSpinLock init_lock_;
   common::ObConcurrentFIFOAllocator allocator_;//alloc mem for string buf
   common::ObRaQueue queue_;
   MonitorNodeMap node_map_; // for real time sql plan monitor

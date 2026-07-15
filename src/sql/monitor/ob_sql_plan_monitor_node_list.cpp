@@ -28,10 +28,18 @@ using namespace oceanbase::lib;
 
 const char *ObPlanMonitorNodeList::MOD_LABEL = "SqlPlanMon";
 ObPlanMonitorNodeList::ObPlanMonitorNodeList() :
+  init_lock_(),
+  allocator_(),
+  queue_(),
+  node_map_(),
+  task_(),
   inited_(false),
   destroyed_(false),
+  request_id_(0),
   recycle_threshold_(0),
-  batch_release_(0)
+  batch_release_(0),
+  evict_timer_(),
+  rt_node_id_(-1)
 {
 }
 
@@ -51,30 +59,33 @@ int ObPlanMonitorNodeList::init()
   const int64_t MIN_QUEUE_SIZE = 10000; //1w
   int64_t queue_size = calculate_scaled_value_by_memory(MIN_QUEUE_SIZE, MAX_QUEUE_SIZE);
   if (inited_) {
-    ret = OB_INIT_TWICE;
-  } else if (OB_FAIL(queue_.init(MOD_LABEL, queue_size))) {
-    SERVER_LOG(WARN, "Failed to init ObMySQLRequestQueue", K(ret));
-  } else if (OB_FAIL(node_map_.create(queue_size, attr, attr))) {
-    LOG_WARN("failed to create hash map", K(ret));
-  } else if (OB_FAIL(evict_timer_.init("ReqMemEvict", ObMemAttr("ReqMemEvict")))) {
-    SERVER_LOG(WARN, "init timer fail", K(ret));
-  } else if (OB_FAIL(allocator_.init(MONITOR_NODE_PAGE_SIZE,
-                                     MOD_LABEL,
-                                     INT64_MAX))) {
-    SERVER_LOG(WARN, "failed to init allocator", K(ret));
+    // The real initialization is lazy and may be requested concurrently.
   } else {
-    //check FIFO mem used and sql audit records every 1 seconds
-    if (OB_FAIL(task_.init(this))) {
-      SERVER_LOG(WARN, "fail to init sql audit time tast", K(ret));
-    } else if (OB_FAIL(evict_timer_.schedule(task_, EVICT_INTERVAL, true))) {
-      SERVER_LOG(WARN, "start eliminate task failed", K(ret));
+    destroyed_ = false;
+    if (OB_FAIL(queue_.init(MOD_LABEL, queue_size))) {
+      SERVER_LOG(WARN, "Failed to init ObMySQLRequestQueue", K(ret));
+    } else if (OB_FAIL(node_map_.create(queue_size, attr, attr))) {
+      LOG_WARN("failed to create hash map", K(ret));
+    } else if (OB_FAIL(evict_timer_.init("ReqMemEvict", ObMemAttr("ReqMemEvict")))) {
+      SERVER_LOG(WARN, "init timer fail", K(ret));
+    } else if (OB_FAIL(allocator_.init(MONITOR_NODE_PAGE_SIZE,
+                                       MOD_LABEL,
+                                       INT64_MAX))) {
+      SERVER_LOG(WARN, "failed to init allocator", K(ret));
     } else {
-      rt_node_id_ = -1;
-      recycle_threshold_ = queue_size * 0.9; // when reach 90% usage, begin to recycle
-      batch_release_ = queue_size * 0.05; // recycle 5% nodes per round
-      
-      inited_ = true;
-      destroyed_ = false;
+      //check FIFO mem used and sql audit records every 1 seconds
+      if (OB_FAIL(task_.init(this))) {
+        SERVER_LOG(WARN, "fail to init sql audit time tast", K(ret));
+      } else if (OB_FAIL(evict_timer_.schedule(task_, EVICT_INTERVAL, true))) {
+        SERVER_LOG(WARN, "start eliminate task failed", K(ret));
+      } else {
+        rt_node_id_ = -1;
+        recycle_threshold_ = queue_size * 0.9; // when reach 90% usage, begin to recycle
+        batch_release_ = queue_size * 0.05; // recycle 5% nodes per round
+
+        inited_ = true;
+        destroyed_ = false;
+      }
     }
   }
   if ((OB_FAIL(ret)) && (!inited_)) {
@@ -88,6 +99,7 @@ void ObPlanMonitorNodeList::destroy()
   if (!destroyed_) {
     evict_timer_.destroy();
     clear_queue();
+    node_map_.destroy();
     queue_.destroy();
     allocator_.destroy();
     inited_ = false;
@@ -98,9 +110,9 @@ void ObPlanMonitorNodeList::destroy()
 int ObPlanMonitorNodeList::mtl_init(ObPlanMonitorNodeList* &node_list)
 {
   int ret = OB_SUCCESS;
-  
-  if (OB_FAIL(node_list->init())) {
-    LOG_WARN("failed to init event list", K(ret));
+  if (OB_ISNULL(node_list)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument", K(ret), K(node_list));
   }
   return ret;
 }
@@ -118,7 +130,9 @@ int ObPlanMonitorNodeList::submit_node(ObMonitorNode &node)
   char *buf = nullptr;
   // todo: add extra string memory for string field
   int64_t mem_size = sizeof(ObMonitorNode);
-  if (nullptr == (buf = (char*)alloc_mem(mem_size))) {
+  if (OB_FAIL(init_if_needed_())) {
+    LOG_WARN("failed to init sql plan monitor node list", K(ret));
+  } else if (nullptr == (buf = (char*)alloc_mem(mem_size))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("fail alloc mem", K(mem_size), K(ret));
   } else {
@@ -141,11 +155,15 @@ int ObPlanMonitorNodeList::register_monitor_node(ObMonitorNode &node)
 {
   int ret = OB_SUCCESS;
   ObMonitorNodeKey key;
-  key.node_id_ = ATOMIC_AAF(&rt_node_id_, 1);
-  LOG_TRACE("register monitor node", K(key.node_id_), K(&node), K(lbt()));
-  node.set_rt_node_id(key.node_id_);
-  if (OB_FAIL(node_map_.set_refactored(key, &node))) {
-    LOG_WARN("fail to set moniotr node", K(ret), K(key));
+  if (OB_FAIL(init_if_needed_())) {
+    LOG_WARN("failed to init sql plan monitor node list", K(ret));
+  } else {
+    key.node_id_ = ATOMIC_AAF(&rt_node_id_, 1);
+    LOG_TRACE("register monitor node", K(key.node_id_), K(&node), K(lbt()));
+    node.set_rt_node_id(key.node_id_);
+    if (OB_FAIL(node_map_.set_refactored(key, &node))) {
+      LOG_WARN("fail to set moniotr node", K(ret), K(key));
+    }
   }
   return ret;
 }
@@ -157,7 +175,9 @@ int ObPlanMonitorNodeList::revert_monitor_node(ObMonitorNode &node)
   key.node_id_ = node.get_rt_node_id();
   ObMonitorNode *node_ptr = NULL;
   LOG_TRACE("revert monitor node", K(key.node_id_), K(&node));
-  if (OB_FAIL(node_map_.erase_refactored(key, &node_ptr))) {
+  if (!inited_) {
+    // SQL plan monitor was never used or has already been destroyed.
+  } else if (OB_FAIL(node_map_.erase_refactored(key, &node_ptr))) {
     LOG_WARN("fail to erase moniotr node", K(ret), K(key));
   }
   return ret;
@@ -168,8 +188,22 @@ int ObPlanMonitorNodeList::convert_node_map_2_array(common::ObIArray<ObMonitorNo
 {
   int ret = OB_SUCCESS;
   ObPlanMonitorNodeList::ObMonitorNodeTraverseCall call(array);
-  if (OB_FAIL(node_map_.foreach_refactored(call))) {
+  if (!inited_) {
+    // An uninitialized list means no sql plan monitor records have been produced.
+  } else if (OB_FAIL(node_map_.foreach_refactored(call))) {
     LOG_WARN("fail to traverse node map", K(ret));
+  }
+  return ret;
+}
+
+int ObPlanMonitorNodeList::init_if_needed_()
+{
+  int ret = OB_SUCCESS;
+  if (!inited_) {
+    common::ObSpinLockGuard guard(init_lock_);
+    if (!inited_ && OB_FAIL(init())) {
+      LOG_WARN("failed to lazy init sql plan monitor node list", K(ret));
+    }
   }
   return ret;
 }
