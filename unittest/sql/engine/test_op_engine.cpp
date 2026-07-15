@@ -57,6 +57,7 @@ void TestOpEngine::SetUp()
   ASSERT_EQ(prepare_io(ObTestOpConfig::get_instance().test_filename_prefix_), OB_SUCCESS);
 
   // init mock location service, used in optimizer compute table property
+  GCTX.location_service_ = &mock_location_service_;
   // Single-tenant seekdb: low-layer modules are reached through share::g_mp
   // (ObIModuleProvider). Publish a test provider exposing the ObDataAccessService
   // (used in ObTableScanOp ctor) and the ObTenantIOManager.

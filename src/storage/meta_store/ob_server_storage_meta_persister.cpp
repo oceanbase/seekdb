@@ -178,8 +178,10 @@ int ObServerStorageMetaPersister::clear_tenant_log_dir()
   }
 
   if (OB_SUCC(ret) && !is_shared_storage_) {
-    if (OB_FAIL(SERVER_STORAGE_META_SERVICE.get_slogger_manager().get_tenant_slog_dir(tenant_slog_dir))) {
-      LOG_WARN("fail to get tenant slog dir", K(ret));
+    const int pret = snprintf(tenant_slog_dir, MAX_PATH_SIZE, "%s/sys", OB_FILE_SYSTEM_ROUTER.get_slog_dir());
+    if (pret < 0 || pret >= MAX_PATH_SIZE) {
+      ret = OB_BUF_NOT_ENOUGH;
+      LOG_WARN("construct tenant slog path fail", K(ret));
     } else if (OB_FAIL(FileDirectoryUtils::is_exists(tenant_slog_dir, exist))) {
       LOG_WARN("fail to check exist", K(ret));
     } else if (exist) {

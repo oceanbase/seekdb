@@ -73,7 +73,7 @@
 #include "storage/tx/ob_timestamp_service.h"
 #include "storage/tx/ob_trans_id_service.h"
 #include "storage/ob_tenant_tablet_stat_mgr.h"
-#include "storage/tx/ob_tx_ctx.h"
+#include "storage/tx/ob_trans_part_ctx.h"
 #include "storage/ob_file_system_router.h"
 #include "storage/access/ob_table_scan_iterator.h"
 #include "mtlenv/ob_mittest_utils.h"
@@ -242,6 +242,7 @@ private:
   observer::ObSrvNetworkFrame net_frame_;
   omt::ObMultiTenant multi_tenant_;
   MockObService ob_service_;
+  share::ObLocationService location_service_;
   share::schema::ObMultiVersionSchemaService &schema_service_;
   sql::ObSql sql_engine_;
   ObSQLSessionMgr session_mgr_;
@@ -457,6 +458,7 @@ void MockTenantModuleEnv::init_gctx_gconf()
   GCONF.observer_id = 1;
   GCONF.cluster_id = 1;
   GCTX.self_addr_seq_.set_addr(self_addr_);
+  GCTX.location_service_ = &location_service_;
   GCTX.schema_service_ = &schema_service_;
   GCTX.net_frame_ = &net_frame_;
   GCTX.ob_service_ = &ob_service_;
@@ -509,6 +511,11 @@ int MockTenantModuleEnv::init_before_start_mtl()
   } else if (OB_FAIL(SERVER_STORAGE_META_SERVICE.init())) {
     STORAGE_LOG(ERROR, "init server checkpoint slog handler fail", K(ret));
   } else if (OB_FAIL(multi_tenant_.init(self_addr_, &sql_proxy_, false))) {
+    STORAGE_LOG(WARN, "fail to init env", K(ret));
+  } else if (OB_FAIL(ObTsMgr::get_instance().init(self_addr_,
+                         schema_service_, location_service_))) {
+    STORAGE_LOG(WARN, "fail to init env", K(ret));
+  } else if (OB_FAIL(ObTsMgr::get_instance().start())) {
     STORAGE_LOG(WARN, "fail to init env", K(ret));
   } else if (OB_FAIL(tmp_file::ObTmpBlockCache::get_instance().init("tmp_block_cache"))) {
     STORAGE_LOG(WARN, "init tmp block cache failed", KR(ret));
@@ -597,6 +604,28 @@ int MockTenantModuleEnv::start_()
   } else if (OB_FAIL(tenant->acquire_more_worker(TENANT_WORKER_COUNT, succ_num))) {
   } else if (OB_FAIL(guard_.switch_to(tenant))) { // make module set ready in this thread
     STORAGE_LOG(ERROR, "fail to switch to sys tenant", K(ret));
+  } else {
+    ObLogService *log_service = share::g_mp->log_service();
+    if (OB_ISNULL(log_service) || OB_ISNULL(log_service->palf_env_)) {
+      ret = OB_ERR_UNEXPECTED;
+      STORAGE_LOG(ERROR, "fail to switch to sys tenant", KP(log_service));
+    } else {
+      palf::PalfEnvImpl *palf_env_impl = &log_service->palf_env_->palf_env_impl_;
+      palf::LogIOWorkerWrapper &log_iow_wrapper = palf_env_impl->log_io_worker_wrapper_;
+      palf::LogIOWorkerConfig new_config;
+      palf_env_impl->init_log_io_worker_config_(1, new_config);
+      new_config.io_worker_num_ = 4;
+      log_iow_wrapper.destory_and_free_log_io_workers_();
+      if (OB_FAIL(log_iow_wrapper.create_and_init_log_io_workers_(
+        new_config, &palf_env_impl->cb_thread_pool_, palf_env_impl->log_alloc_mgr_, palf_env_impl))) {
+        STORAGE_LOG(WARN, "failed to create_and_init_log_io_workers_", K(new_config));
+      } else if (FALSE_IT(log_iow_wrapper.log_writer_parallelism_ = new_config.io_worker_num_)) {
+      } else if (FALSE_IT(log_iow_wrapper.is_user_tenant_ = true)) {
+      } else if (OB_FAIL(log_iow_wrapper.start_()))  {
+        STORAGE_LOG(WARN, "failed to start_ log_iow_wrapper", K(new_config));
+      } else {
+      }
+    }
   }
   return ret;
 }
@@ -625,6 +654,10 @@ void MockTenantModuleEnv::destroy()
   OB_STORAGE_OBJECT_MGR.stop();
   OB_STORAGE_OBJECT_MGR.wait();
   OB_STORAGE_OBJECT_MGR.destroy();
+
+  ObTsMgr::get_instance().stop();
+  ObTsMgr::get_instance().wait();
+  ObTsMgr::get_instance().destroy();
 
   net_frame_.sql_nio_stop();
   net_frame_.stop();

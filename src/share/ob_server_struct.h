@@ -108,6 +108,7 @@ namespace share
 class ObTabletTableOperator;
 class ObSQLiteConnectionPool;
 class ObRsMgr;
+class ObLocationService;
 class ObSchemaStatusProxy;
 class ObKVStorage;
 
@@ -139,6 +140,7 @@ struct ObGlobalContext
   pl::ObPL *pl_engine_;
   omt::ObMultiTenant *omt_;
   observer::ObVTIterCreator *vt_iter_creator_;
+  share::ObLocationService *location_service_;
   int64_t start_time_;
   int64_t *warm_up_start_time_;
   ObServiceStatus status_;

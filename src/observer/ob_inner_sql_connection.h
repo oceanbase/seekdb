@@ -28,6 +28,7 @@
 #include "observer/mysql/ob_query_retry_ctrl.h"
 #include "observer/ob_inner_sql_transmit_struct.h"
 #include "common/mysqlclient/ob_isql_client.h"
+#include "share/location_cache/ob_location_service.h"
 #include "storage/tablelock/ob_table_lock_common.h"   //ObTableLockMode
 #include "sql/session/ob_sql_session_mgr.h"
 
@@ -270,6 +271,7 @@ public:
 
 public:// for mds
   int register_multi_data_source(
+                                 const share::ObLSID ls_id,
                                  const transaction::ObTxDataSourceType type,
                                  const char *buf,
                                  const int64_t buf_len,
@@ -349,6 +351,11 @@ private:
   int set_timeout(int64_t &abs_timeout_us);
 
   lib::Worker::CompatMode get_compat_mode() const;
+
+  int nonblock_get_leader(
+      const int64_t cluster_id,
+      const share::ObLSID ls_id,
+      common::ObAddr &leader);
 
   int execute_read_inner(const int64_t cluster_id, const ObString &sql,
                          common::ObISQLClient::ReadResult &res, bool is_user_sql = false,

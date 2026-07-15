@@ -18,6 +18,7 @@
 #include "ob_tenant.h"
 #include "observer/ob_server.h"   // T3d
 #include "share/rc/ob_module_provider.h"
+#include "share/ob_server_struct.h"
 
 #ifdef _WIN32
 #include <windows.h>
@@ -428,7 +429,14 @@ int ObTenant::construct_mtl_init_ctx(const ObTenantMeta &meta, share::ObTenantMo
     mtl_init_ctx_->palf_options_.disk_options_.log_disk_utilization_limit_threshold_ = 95;
     mtl_init_ctx_->palf_options_.disk_options_.log_disk_throttling_percentage_ = 100;
     mtl_init_ctx_->palf_options_.disk_options_.log_disk_throttling_maximum_duration_ = 2LL * 60 * 60 * 1000 * 1000;//2h
-    mtl_init_ctx_->palf_options_.enable_log_cache_ = GCONF._enable_log_cache;
+    mtl_init_ctx_->palf_options_.disk_options_.log_writer_parallelism_ = 3;
+    mtl_init_ctx_->palf_options_.enable_fetch_log_engine_ = !GCTX.is_embedded_mode();
+    if (OB_UNLIKELY(!true)) {
+      ret = false ? OB_SUCCESS : OB_ENTRY_NOT_EXIST;
+    } else {
+      mtl_init_ctx_->palf_options_.disk_options_.log_writer_parallelism_ = GCONF._log_writer_parallelism;
+      mtl_init_ctx_->palf_options_.enable_log_cache_ = GCONF._enable_log_cache;
+    }
     LOG_INFO("construct_mtl_init_ctx success", "palf_options", mtl_init_ctx_->palf_options_.disk_options_
              );
   }
@@ -759,7 +767,7 @@ int ObTenant::recv_request(ObRequest &req)
         break;
       }
       case ObRequest::OB_TASK:
-      {
+      case ObRequest::OB_TS_TASK: {
         ATOMIC_INC(&recv_task_cnt_);
         if (OB_FAIL(req_queue_.push(&req, RQ_HIGH, true))) {
           LOG_WARN("push request to queue fail", K(ret), K(this));

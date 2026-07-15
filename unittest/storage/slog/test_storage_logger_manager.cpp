@@ -17,6 +17,7 @@
 #include "storage/blocksstable/ob_data_file_prepare.h"
 #include "storage/slog/simple_ob_storage_log.h"
 #include "storage/slog/ob_storage_log_batch_header.h"
+#include "storage/slog/ob_storage_log_item.h"
 
 #define private public
 #undef private
@@ -55,7 +56,6 @@ public:
 
 public:
   static const int64_t MAX_FILE_SIZE = 256 * 1024 * 1024;
-  const int64_t MAX_CONCURRENT_ITEM_CNT = 128;
 
 public:
   ObLogCursor start_cursor_;
@@ -84,44 +84,13 @@ TEST_F(TestStorageLoggerManager, test_manager_basic)
   int ret = OB_SUCCESS;
 
   // test invalid init
-  ObStorageLoggerManager &slogger_mgr = SERVER_STORAGE_META_SERVICE.get_slogger_manager();
-  slogger_mgr.destroy();
-  ret = slogger_mgr.init(nullptr, nullptr, MAX_FILE_SIZE, log_file_spec_);
+  ObStorageLogger slogger;
+  ret = slogger.init(nullptr, MAX_FILE_SIZE, log_file_spec_, true);
   ASSERT_NE(OB_SUCCESS, ret);
   // test normal init
-  ret = slogger_mgr.init(OB_FILE_SYSTEM_ROUTER.get_slog_dir(), OB_FILE_SYSTEM_ROUTER.get_slog_dir(),  MAX_FILE_SIZE, log_file_spec_);
+  ret = slogger.init(OB_FILE_SYSTEM_ROUTER.get_slog_dir(), MAX_FILE_SIZE, log_file_spec_, true);
   ASSERT_EQ(OB_SUCCESS, ret);
-  ASSERT_TRUE(slogger_mgr.need_reserved_);
-  ASSERT_EQ(MAX_CONCURRENT_ITEM_CNT, slogger_mgr.log_buffers_.capacity());
-  ASSERT_EQ(MAX_CONCURRENT_ITEM_CNT, slogger_mgr.slog_items_.capacity());
-
-  ObStorageLogItem *log_item = nullptr;
-  ObStorageLogItem *log_item_local = nullptr;
-  // test invalid item allocation
-  ret = slogger_mgr.alloc_item(ObLogConstants::LOG_ITEM_MAX_LENGTH+100,
-      log_item, 1);
-  ASSERT_NE(OB_SUCCESS, ret);
-  // test normal item allocation (not local)
-  ret = slogger_mgr.alloc_item(3 * 1024, log_item, 15);
-  ASSERT_EQ(OB_SUCCESS, ret);
-  ASSERT_TRUE(log_item->is_inited_);
-  ASSERT_FALSE(log_item->is_local_);
-  // test normal item allocation (local)
-  ret = slogger_mgr.alloc_item(513 * 1024, log_item_local, 1);
-  ASSERT_EQ(OB_SUCCESS, ret);
-  ASSERT_TRUE(log_item_local->is_inited_);
-  ASSERT_TRUE(log_item_local->is_local_);
-
-  // test invalid item free
-  ret = slogger_mgr.free_item(nullptr);
-  ASSERT_NE(OB_SUCCESS, ret);
-  // test normal item free
-  ret = slogger_mgr.free_item(log_item);
-  ASSERT_EQ(OB_SUCCESS, ret);
-  ret = slogger_mgr.free_item(log_item_local);
-  ASSERT_EQ(OB_SUCCESS, ret);
-
-  slogger_mgr.destroy();
+  slogger.destroy();
 }
 
 TEST_F(TestStorageLoggerManager, test_slogger_basic)
@@ -131,10 +100,9 @@ TEST_F(TestStorageLoggerManager, test_slogger_basic)
   cursor.file_id_ = 3;
   cursor.log_id_ = 5;
   cursor.offset_ = 500;
-  ObStorageLoggerManager &slogger_mgr = SERVER_STORAGE_META_SERVICE.get_slogger_manager();
 
   ObStorageLogger *slogger = OB_NEW(ObStorageLogger, ObModIds::TEST);
-  ASSERT_EQ(OB_SUCCESS, slogger->init(slogger_mgr, 1));
+  ASSERT_EQ(OB_SUCCESS, slogger->init(OB_FILE_SYSTEM_ROUTER.get_slog_dir(), MAX_FILE_SIZE, log_file_spec_, true));
   ASSERT_EQ(OB_SUCCESS, slogger->start());
 
   slogger->start_log(cursor);
@@ -159,6 +127,32 @@ TEST_F(TestStorageLoggerManager, test_slogger_basic)
   ASSERT_EQ(OB_SUCCESS, ret);
   ASSERT_EQ(cursor.file_id_, start_id);
 
+  ObStorageLogItem *log_item = nullptr;
+  ObStorageLogItem *log_item_local = nullptr;
+  // test invalid item allocation
+  ret = slogger->alloc_item(ObLogConstants::LOG_ITEM_MAX_LENGTH+100,
+      log_item, 1);
+  ASSERT_NE(OB_SUCCESS, ret);
+  // test normal item allocation (not local)
+  ret = slogger->alloc_item(3 * 1024, log_item, 15);
+  ASSERT_EQ(OB_SUCCESS, ret);
+  ASSERT_TRUE(log_item->is_inited_);
+  ASSERT_FALSE(log_item->is_local_);
+  // test normal item allocation (local)
+  ret = slogger->alloc_item(513 * 1024, log_item_local, 1);
+  ASSERT_EQ(OB_SUCCESS, ret);
+  ASSERT_TRUE(log_item_local->is_inited_);
+  ASSERT_TRUE(log_item_local->is_local_);
+
+  // test invalid item free
+  ret = slogger->free_item(nullptr);
+  ASSERT_NE(OB_SUCCESS, ret);
+  // test normal item free
+  ret = slogger->free_item(log_item);
+  ASSERT_EQ(OB_SUCCESS, ret);
+  ret = slogger->free_item(log_item_local);
+  ASSERT_EQ(OB_SUCCESS, ret);
+
   // test normal file remove
   ret = slogger->remove_useless_log_file(cursor.file_id_+1);
   ASSERT_EQ(OB_SUCCESS, ret);
@@ -166,16 +160,14 @@ TEST_F(TestStorageLoggerManager, test_slogger_basic)
   ASSERT_EQ(1, start_id);
 
   slogger->destroy();
-  slogger_mgr.destroy();
 }
 
 TEST_F (TestStorageLoggerManager, test_build_item)
 {
   int ret = OB_SUCCESS;
 
-  ObStorageLoggerManager &slogger_mgr = SERVER_STORAGE_META_SERVICE.get_slogger_manager();
   ObStorageLogger *slogger = OB_NEW(ObStorageLogger, ObModIds::TEST);
-  ASSERT_EQ(OB_SUCCESS, slogger->init(slogger_mgr, 1));
+  ASSERT_EQ(OB_SUCCESS, slogger->init(OB_FILE_SYSTEM_ROUTER.get_slog_dir(), MAX_FILE_SIZE, log_file_spec_, true));
   ASSERT_EQ(OB_SUCCESS, slogger->start());
 
   slogger->start_log(start_cursor_);
@@ -195,8 +187,6 @@ TEST_F (TestStorageLoggerManager, test_build_item)
   slog_param.data_ = &simple_slog1;
   ret = slogger->build_log_item(slog_param, log_item);
   ASSERT_EQ(OB_SUCCESS, ret);
-  ASSERT_EQ(MAX_CONCURRENT_ITEM_CNT - 1, slogger_mgr.slog_items_.get_curr_total());
-  ASSERT_EQ(MAX_CONCURRENT_ITEM_CNT - 1, slogger_mgr.log_buffers_.get_curr_total());
   data_len = dummy_header.get_serialize_size() +
             dummy_entry.get_serialize_size() +
             12;
@@ -206,18 +196,14 @@ TEST_F (TestStorageLoggerManager, test_build_item)
   ASSERT_EQ(buf_size, log_item->get_buf_size());
 
   // free item
-  ret = slogger_mgr.free_item(log_item);
+  ret = slogger->free_item(log_item);
   ASSERT_EQ(OB_SUCCESS, ret);
-  ASSERT_EQ(MAX_CONCURRENT_ITEM_CNT, slogger_mgr.slog_items_.get_curr_total());
-  ASSERT_EQ(MAX_CONCURRENT_ITEM_CNT, slogger_mgr.log_buffers_.get_curr_total());
 
   // test build single-param large-size item
   SimpleObSlog simple_slog2(512<<10, 't');
   slog_param.data_ = &simple_slog2;
   ret = slogger->build_log_item(slog_param, log_item);
   ASSERT_EQ(OB_SUCCESS, ret);
-  ASSERT_EQ(MAX_CONCURRENT_ITEM_CNT - 1, slogger_mgr.slog_items_.get_curr_total());
-  ASSERT_EQ(MAX_CONCURRENT_ITEM_CNT, slogger_mgr.log_buffers_.get_curr_total());
   data_len = dummy_header.get_serialize_size() +
              dummy_entry.get_serialize_size() +
              (512<<10);
@@ -231,10 +217,8 @@ TEST_F (TestStorageLoggerManager, test_build_item)
   ASSERT_EQ(buf_size, log_item->get_buf_size());
 
   // free item
-  ret = slogger_mgr.free_item(log_item);
+  ret = slogger->free_item(log_item);
   ASSERT_EQ(OB_SUCCESS, ret);
-  ASSERT_EQ(MAX_CONCURRENT_ITEM_CNT, slogger_mgr.slog_items_.get_curr_total());
-  ASSERT_EQ(MAX_CONCURRENT_ITEM_CNT, slogger_mgr.log_buffers_.get_curr_total());
 
   ObStorageLogParam slog_param_batch1;
   slog_param_batch1.cmd_ = 39;
@@ -255,8 +239,6 @@ TEST_F (TestStorageLoggerManager, test_build_item)
   param_arr.push_back(slog_param_batch3);
   ret = slogger->build_log_item(param_arr, log_item);
   ASSERT_EQ(OB_SUCCESS, ret);
-  ASSERT_EQ(MAX_CONCURRENT_ITEM_CNT - 1, slogger_mgr.slog_items_.get_curr_total());
-  ASSERT_EQ(MAX_CONCURRENT_ITEM_CNT - 1, slogger_mgr.log_buffers_.get_curr_total());
   data_len = dummy_header.get_serialize_size() +
              3 * dummy_entry.get_serialize_size() +
              111;
@@ -266,13 +248,10 @@ TEST_F (TestStorageLoggerManager, test_build_item)
   ASSERT_EQ(buf_size, log_item->get_buf_size());
 
   // free item
-  ret = slogger_mgr.free_item(log_item);
+  ret = slogger->free_item(log_item);
   ASSERT_EQ(OB_SUCCESS, ret);
-  ASSERT_EQ(MAX_CONCURRENT_ITEM_CNT, slogger_mgr.slog_items_.get_curr_total());
-  ASSERT_EQ(MAX_CONCURRENT_ITEM_CNT, slogger_mgr.log_buffers_.get_curr_total());
 
   slogger->destroy();
-  slogger_mgr.destroy();
 }
 
 }

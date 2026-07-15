@@ -766,6 +766,7 @@ DEF_PARAM(resource_hard_limit, INT, OB_CLUSTER_PARAMETER, "100", "[100, 10000]",
         "system utilization should not be large than resource_hard_limit",
         ObParameterAttr(Section::LOAD_BALANCE, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 // abandoned in 4.x
+//DEF_PARAM(__balance_controller, OB_CLUSTER_PARAMETER, "",
 //        "specifies whether the balance events are turned on or turned off.",
 //        ObParameterAttr(Section::LOAD_BALANCE, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 DEF_PARAM(__min_full_resource_pool_memory, INT, OB_CLUSTER_PARAMETER, "1073741824", "[1073741824,)",
@@ -823,9 +824,9 @@ DEF_PARAM(merger_check_interval, TIME, OB_CLUSTER_PARAMETER, "10m", "[10s, 60m]"
          "that checks on the progress of MERGE for each zone. Range: [10s, 60m]",
          ObParameterAttr(Section::DAILY_MERGE, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 //// transaction config
-DEF_PARAM(trx_commit_retry_interval, TIME, OB_CLUSTER_PARAMETER, "100ms", "[1ms, 5000ms]",
+DEF_PARAM(trx_2pc_retry_interval, TIME, OB_CLUSTER_PARAMETER, "100ms", "[1ms, 5000ms]",
          "the time interval between the retries in case of failure "
-         "during a transaction commit. Range: [1ms,5000ms]",
+         "during a transaction\\'s two-phase commit phase. Range: [1ms,5000ms]",
          ObParameterAttr(Section::TRANS, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 DEF_PARAM(clog_sync_time_warn_threshold, TIME, OB_CLUSTER_PARAMETER, "100ms", "[1ms, 10000ms]",
          "the time given to the commit log synchronization between a leader and its followers "
@@ -846,6 +847,9 @@ DEF_PARAM(_rpc_checksum, STR_WITH_CHECKER, OB_CLUSTER_PARAMETER, "Force", common
                      ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE),
                      "Force, Optional, Disable");
 
+DEF_PARAM(_ob_trans_rpc_timeout, TIME, OB_CLUSTER_PARAMETER, "3s", "[0s, 3600s]",
+         "transaction rpc timeout(s). Range: [0s, 3600s]",
+         ObParameterAttr(Section::TRANS, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 DEF_PARAM(enable_early_lock_release, BOOL, OB_CLUSTER_PARAMETER, "True",
          "enable early lock release",
          ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
@@ -930,6 +934,8 @@ DEF_PARAM(_auto_broadcast_tablet_location_rate_limit, INT, OB_CLUSTER_PARAMETER,
         ObParameterAttr(Section::LOCATION_CACHE, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 
 //// cache config
+DEF_PARAM(tablet_ls_cache_priority, INT, OB_CLUSTER_PARAMETER, "1000", "[1,)", "tablet ls cache priority. Range:[1, )",
+        ObParameterAttr(Section::CACHE, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 DEF_PARAM(opt_tab_stat_cache_priority, INT, OB_CLUSTER_PARAMETER, "1", "[1,)", "tab stat cache priority. Range:[1, )",
         ObParameterAttr(Section::CACHE, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 DEF_PARAM(index_block_cache_priority, INT, OB_CLUSTER_PARAMETER, "10", "[1,)", "index cache priority. Range:[1, )",
@@ -1115,6 +1121,12 @@ DEF_PARAM(_migrate_block_verify_level, INT, OB_CLUSTER_PARAMETER, "1", "[0,2]",
 
 DEF_PARAM(_cache_wash_interval, TIME, OB_CLUSTER_PARAMETER, "200ms", "[1ms, 3s]",
         "specify interval of cache background wash",
+        ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
+
+DEF_PARAM(_max_ls_cnt_per_server, INT, OB_CLUSTER_PARAMETER, "0", "[0, 1024]",
+        "specify max ls count of one tenant on one observer."
+        "WARNING: Modifying this can potentially destabilize the cluster. It is strongly advised to avoid making such changes as they are unlikely to be necessary."
+        "0: the cluster will adapt the max ls number according to the memory size of tenant itself",
         ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 
 DEF_PARAM(_io_read_batch_size, CAP, OB_CLUSTER_PARAMETER, "0K", "[0K,16M]", "Maximum batch size in one read io request. Range:[0K,16M]",
@@ -1462,6 +1474,9 @@ DEF_PARAM(_ob_immediate_row_conflict_check, BOOL, OB_CLUSTER_PARAMETER, "False",
          "When the switch is turned off, "
          "it will only check whether the final state of a batch of data after the update satisfies the unique constraint.",
          ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
+DEF_PARAM(_enable_insertup_replace_gts_opt, BOOL, OB_CLUSTER_PARAMETER, "True",
+         "By default, insert/replace ... values statement can use gts optimization",
+         ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 // Add a config to enable use das if the sql statement has variable assignment
 DEF_PARAM(_enable_var_assign_use_das, BOOL, OB_CLUSTER_PARAMETER, "False",
          "enable use das if the sql statement has variable assignment",
@@ -1525,7 +1540,7 @@ DEF_PARAM(_display_non_session_cursor, BOOL, OB_CLUSTER_PARAMETER, "True",
          ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 
 DEF_PARAM(dump_data_dictionary_to_log_interval, TIME, OB_CLUSTER_PARAMETER, "24h", "(0s,]",
-         "data dictionary dump to log interval"
+         "data dictionary dump to log(SYS LS) interval"
         "Range: (0s,+∞)",
          ObParameterAttr(Section::TENANT, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 
@@ -1773,6 +1788,12 @@ DEF_PARAM(sql_protocol_min_tls_version, STR_WITH_CHECKER, OB_CLUSTER_PARAMETER, 
 DEF_PARAM(shared_log_retention, TIME, OB_CLUSTER_PARAMETER, "1d", "[0s,7d]",
         "Retention time of log files on shared storage",
         ObParameterAttr(Section::TRANS, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
+DEF_PARAM(_standby_max_replay_gap_time, TIME, OB_CLUSTER_PARAMETER, "900s", "[10s,)",
+        "The difference in replayable_scn between log streams on standby tenants is not greater than "
+        "_standby_max_replay_gap_time, and the gap between sync_scn and replayable_scn of each log stream "
+        "is kept reasonably small. Range: [10s, )",
+        ObParameterAttr(Section::TENANT, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
+
 DEF_PARAM(_enable_optimizer_qualify_filter, BOOL, OB_CLUSTER_PARAMETER, "True",
         "Enable extracting qualify filters for window function",
         ObParameterAttr(Section::TENANT, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));

@@ -1461,11 +1461,6 @@ int ObMultiTenant::refresh_sys_tenant_config_()
   return ret;
 }
 
-int ObMultiTenant::refresh_sys_tenant()
-{
-  return refresh_sys_tenant_config_();
-}
-
 // Per-tick upkeep on the single sys tenant (collapsed from
 // ObTenantNodeBalancer::periodically_check_tenant): PX/DTL/parallel-servers-target
 // via tenant->periodically_check(). Independent of unit-diff.

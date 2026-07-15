@@ -119,6 +119,7 @@ void ObStorageLogItem::destroy()
   if (nullptr != local_offset_arr_ && local_offset_arr_ != offset_arr_) {
     ob_free(local_offset_arr_);
   }
+  local_offset_arr_ = nullptr;
 }
 
 int ObStorageLogItem::wait_flush_log(const uint64_t max_wait_time)

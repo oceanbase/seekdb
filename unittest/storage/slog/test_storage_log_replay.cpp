@@ -155,7 +155,7 @@ TEST_F(TestStorageLogReplay, test_basic)
 
   ObStorageLogParam log_param;
   log_param.cmd_ = ObIRedoModule::gen_cmd(ObRedoLogMainType::OB_REDO_LOG_TENANT_STORAGE,
-      ObRedoLogSubType::OB_REDO_LOG_UPDATE_TABLET);
+      ObRedoLogSubType::OB_REDO_LOG_CREATE_LS);
   for (int i = 0; i < tenant_storage_.slog_cnt_; i++) {
     log_param.data_ = &tenant_storage_.slogs_[i];
     ret = slogger->write_log(log_param);
@@ -196,7 +196,7 @@ TEST_F(TestStorageLogReplay, test_basic)
 
   ObSEArray<ObStorageLogParam, 10> param_arr;
   log_param.cmd_ = ObIRedoModule::gen_cmd(ObRedoLogMainType::OB_REDO_LOG_TENANT_STORAGE,
-      ObRedoLogSubType::OB_REDO_LOG_UPDATE_TABLET);
+      ObRedoLogSubType::OB_REDO_LOG_CREATE_LS);
   for (int i = 0; i < tenant_storage_.slog_cnt_; i++) {
     log_param.data_ = &(tenant_storage_.slogs_[i]);
     param_arr.push_back(log_param);
@@ -235,7 +235,7 @@ TEST_F(TestStorageLogReplay, test_basic)
   tenant_storage_.slogs_[tmp_cnt].block_cnt_ = 1;
   log_param.data_ = &(tenant_storage_.slogs_[tmp_cnt]);
   log_param.cmd_ = ObIRedoModule::gen_cmd(ObRedoLogMainType::OB_REDO_LOG_TENANT_STORAGE,
-      ObRedoLogSubType::OB_REDO_LOG_DELETE_TABLET);
+      ObRedoLogSubType::OB_REDO_LOG_DELETE_LS);
   ret = slogger->write_log(log_param);
   ASSERT_EQ(OB_SUCCESS, ret);
 
@@ -276,7 +276,7 @@ TEST_F(TestStorageLogReplay, test_switch_file_replay)
 
   ObStorageLogParam log_param;
   log_param.cmd_ = ObIRedoModule::gen_cmd(ObRedoLogMainType::OB_REDO_LOG_TENANT_STORAGE,
-      ObRedoLogSubType::OB_REDO_LOG_UPDATE_TABLET);
+      ObRedoLogSubType::OB_REDO_LOG_CREATE_LS);
 
   build_storage(ObRandom::rand(1, 127));
   for (int i = 0; i < tenant_storage_.slog_cnt_; i++) {
@@ -342,7 +342,7 @@ TEST_F(TestStorageLogReplay, test_mock_restart)
 
   ObStorageLogParam log_param;
   log_param.cmd_ = ObIRedoModule::gen_cmd(ObRedoLogMainType::OB_REDO_LOG_TENANT_STORAGE,
-      ObRedoLogSubType::OB_REDO_LOG_UPDATE_TABLET);
+      ObRedoLogSubType::OB_REDO_LOG_CREATE_LS);
 
   build_storage(40);
   // first time to write slog

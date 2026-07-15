@@ -17,6 +17,8 @@
 #ifndef OCEANBASE_LOGSERVICE_LOG_MGR_
 #define OCEANBASE_LOGSERVICE_LOG_MGR_
 #include <sys/types.h>
+#include "common/ob_member_list.h"
+
 #include "lib/lock/ob_mutex.h"
 #include "lib/lock/ob_spin_lock.h"
 #include "lib/ob_define.h"
@@ -25,14 +27,17 @@
 #include "lib/utility/utility.h"
 #include "share/ob_occam_timer.h"
 #include "share/scn.h"
+#include "fetch_log_engine.h"
 #include "log_define.h"
 #include "log_shared_queue_thread.h"
 #include "log_io_task_cb_thread_pool.h"
 #include "log_loop_thread.h"
+#include "log_rpc.h"
 #include "palf_options.h"
 #include "palf_handle_impl.h"
 #include "log_io_worker_wrapper.h"
 #include "block_gc_timer_task.h"
+#include "log_updater.h"
 #include "log_io_utils.h"
 #include "log_io_adapter.h"
 namespace oceanbase
@@ -169,20 +174,26 @@ public:
   IPalfEnvImpl() {}
   virtual ~IPalfEnvImpl() {}
 public:
-  virtual int get_palf_handle_impl(IPalfHandleImplGuard &palf_handle_impl) = 0;
-  virtual int get_palf_handle_impl(IPalfHandleImpl *&palf_handle_impl) = 0;
-  virtual int create_palf_handle_impl(const AccessMode &access_mode,
+  virtual int get_palf_handle_impl(const int64_t palf_id,
+                                   IPalfHandleImplGuard &palf_handle_impl) = 0;
+  virtual int get_palf_handle_impl(const int64_t palf_id,
+                                   IPalfHandleImpl *&palf_handle_impl) = 0;
+  virtual int create_palf_handle_impl(const int64_t palf_id,
+                                      const AccessMode &access_mode,
                                       const PalfBaseInfo &base_info,
                                       IPalfHandleImpl *&palf_handle_impl) = 0;
-  virtual int remove_palf_handle_impl() = 0;
+  virtual int remove_palf_handle_impl(const int64_t palf_id) = 0;
   virtual void revert_palf_handle_impl(IPalfHandleImpl *palf_handle_impl) = 0;
   virtual common::ObILogAllocator *get_log_allocator() = 0;
+  virtual int for_each(const common::ObFunction<int(IPalfHandleImpl *ipalf_handle_impl)> &func) = 0;
   virtual int create_directory(const char *base_dir) = 0;
   virtual int remove_directory(const char *base_dir) = 0;
   virtual bool check_disk_space_enough() = 0;
+  virtual int64_t get_rebuild_replica_log_lag_threshold() const = 0;
   virtual int get_io_start_time(int64_t &last_working_time) = 0;
   
   // should be removed in version 4.2.0.0
+  virtual int update_replayable_point(const SCN &replayable_scn) = 0;
   virtual int get_throttling_options(PalfThrottleOptions &option) = 0;
   virtual void period_calc_disk_usage() = 0;
   virtual LogSharedQueueTh *get_log_shared_queue_thread() = 0;
@@ -200,6 +211,7 @@ public:
   int init(const PalfOptions &options,
            const char *base_dir,
            const common::ObAddr &self,
+           const int64_t cluster_id,
            common::ObILogAllocator *alloc_mgr,
            ILogBlockPool *log_block_pool,
            PalfMonitorCb *monitor,
@@ -208,7 +220,7 @@ public:
   // start function contains two meanings:
   //
   // 1. Start all the worker threads contained in PalfEnvImpl
-  // 2. According to the log_storage and meta_storage files included in base_dir, load the required metadata and logs for the log stream, and perform fault recovery
+  // 2. According to the log_storage and meta_storage files included in base_dir, load all the required metadata and logs for the log streams, and perform fault recovery
   //
   // @return :TODO
   int start();
@@ -217,17 +229,24 @@ public:
   void destroy();
 public:
   // Create log stream interface
+  // @param [in] palf_id, identifier of the log stream to be created
   // @param [in] palf_base_info, palf's log start information
   // @param [out] palf_handle_impl, the generated palf_handle_impl object after successful creation
   //                           When the palf_handle_impl object is no longer in use, the caller needs to execute revert_palf_handle_impl
-  int create_palf_handle_impl(const AccessMode &access_mode,
+  int create_palf_handle_impl(const int64_t palf_id,
+                              const AccessMode &access_mode,
                               const PalfBaseInfo &palf_base_info,
                               IPalfHandleImpl *&palf_handle_impl) override final;
   // Delete log stream, called by Garbage Collector
+  //
+  // @param [in] palf_id, the identifier of the log stream to be deleted
+  //
   // @return :TODO
-  int remove_palf_handle_impl() override final;
-  int get_palf_handle_impl(IPalfHandleImpl *&palf_handle_impl) override final;
-  int get_palf_handle_impl(IPalfHandleImplGuard &guard) override final;
+  int remove_palf_handle_impl(const int64_t palf_id) override final;
+  int get_palf_handle_impl(const int64_t palf_id,
+                           IPalfHandleImpl *&palf_handle_impl) override final;
+  int get_palf_handle_impl(const int64_t palf_id,
+                           IPalfHandleImplGuard &guard) override final;
   void revert_palf_handle_impl(IPalfHandleImpl *palf_handle_impl) override final;
 
   // =================== disk space management ==================
@@ -237,9 +256,14 @@ public:
   int get_stable_disk_usage(int64_t &used_size_byte, int64_t &total_usable_size_byte);
   int update_options(const PalfOptions &options);
   int get_options(PalfOptions &options);
+  int64_t get_rebuild_replica_log_lag_threshold() const
+  {return rebuild_replica_log_lag_threshold_;}
+  int for_each(const common::ObFunction<int(const PalfHandle&)> &func);
+  int for_each(const common::ObFunction<int(IPalfHandleImpl *ipalf_handle_impl)> &func) override final;
   common::ObILogAllocator* get_log_allocator() override final;
   int get_io_start_time(int64_t &last_working_time) override final;
   
+  int update_replayable_point(const SCN &replayable_scn) override final;
   int get_throttling_options(PalfThrottleOptions &option);
   void period_calc_disk_usage() override final;
   LogSharedQueueTh *get_log_shared_queue_thread() override final;
@@ -251,7 +275,15 @@ public:
   int remove_directory(const char *base_dir) override final;
 
 private:
-  int reload_palf_handle_impl_();
+  class ReloadPalfHandleImplFunctor : public ObBaseDirFunctor
+  {
+  public:
+    ReloadPalfHandleImplFunctor(PalfEnvImpl *palf_env_impl);
+    int func(const struct dirent *entry) override;
+  private:
+    PalfEnvImpl *palf_env_impl_;
+  };
+  int reload_palf_handle_impl_(const int64_t palf_id);
 
   struct RemoveStaleIncompletePalfFunctor : public ObBaseDirFunctor {
     RemoveStaleIncompletePalfFunctor(PalfEnvImpl *palf_env_impl);
@@ -261,23 +293,33 @@ private:
   };
 
 private:
-  int create_palf_handle_impl_(const AccessMode &access_mode,
+  int create_palf_handle_impl_(const int64_t palf_id,
+                               const AccessMode &access_mode,
                                const PalfBaseInfo &palf_base_info,
+                               const LogReplicaType replica_type,
                                IPalfHandleImpl *&palf_handle_impl);
+  int scan_all_palf_handle_impl_director_();
   const PalfDiskOptions &get_disk_options_guarded_by_lock_() const;
   int get_total_used_disk_space_(int64_t &total_used_disk_space,
-                                 int64_t &total_unrecyclable_disk_space);
+                                 int64_t &total_unrecyclable_disk_space,
+                                 int64_t &palf_id,
+                                 int64_t &maximum_used_size);
   int get_disk_usage_(int64_t &used_size_byte);
   int get_disk_usage_(int64_t &used_size_byte,
-                      int64_t &unrecyclable_disk_space);
+                      int64_t &unrecyclable_disk_space,
+                      int64_t &palf_id,
+                      int64_t &maximum_used_size);
   int recycle_blocks_(bool &has_recycled);
-  bool has_minimum_log_disk_capacity_() const;
-  int remove_palf_handle_impl_();
-  int move_incomplete_palf_into_tmp_dir_();
+  int wait_until_reference_count_to_zero_(const int64_t palf_id);
+  // check the diskspace whether is enough to hold a new palf instance.
+  bool check_can_create_palf_handle_impl_() const;
+  int remove_palf_handle_impl_from_map_not_guarded_by_lock_(const int64_t palf_id);
+  int move_incomplete_palf_into_tmp_dir_(const int64_t palf_id);
   int check_tmp_log_dir_exist_(bool &exist) const;
   int remove_stale_incomplete_palf_();
 
-  int init_log_io_worker_config_(LogIOWorkerConfig &config);
+  int init_log_io_worker_config_(const int log_writer_parallelism,
+                                 LogIOWorkerConfig &config);
 
   int check_can_update_log_disk_options_(const PalfDiskOptions &disk_options);
   int remove_directory_while_exist_(const char *log_dir);
@@ -288,10 +330,13 @@ private:
   RWLock palf_meta_lock_;
   common::ObILogAllocator *log_alloc_mgr_;
   ILogBlockPool *log_block_pool_;
+  FetchLogEngine fetch_log_engine_;
+  LogRpc log_rpc_;
   LogIOTaskCbThreadPool cb_thread_pool_;
   LogIOWorkerWrapper log_io_worker_wrapper_;
   LogSharedQueueTh log_shared_queue_th_;
   BlockGCTimerTask block_gc_timer_task_;
+  LogUpdater log_updater_;
   PalfMonitorCb *monitor_;
 
   PalfDiskOptionsWrapper disk_options_wrapper_;
@@ -302,12 +347,14 @@ private:
   char tmp_log_dir_[common::MAX_PATH_SIZE];
   common::ObAddr self_;
 
-  IPalfHandleImpl *palf_handle_;
+  IPalfHandleImpl *single_palf_handle_;
   LogLoopThread log_loop_thread_;
 
-  // The epoch changes whenever the unique log stream is recreated.
+  // last_palf_epoch_ is used to assign increasing epoch for each palf instance.
   int64_t last_palf_epoch_;
+  int64_t rebuild_replica_log_lag_threshold_;//for rebuild test
   bool enable_log_cache_;
+  bool enable_fetch_log_engine_;
 
   LogIOWorkerConfig log_io_worker_config_;
   bool diskspace_enough_;

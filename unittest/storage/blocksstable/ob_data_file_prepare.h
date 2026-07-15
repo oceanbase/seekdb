@@ -36,7 +36,6 @@
 #include "storage/compaction/ob_tenant_freeze_info_mgr.h"
 #include "share/ob_simple_mem_limit_getter.h"
 #include "storage/blocksstable/ob_storage_cache_suite.h"
-#include "storage/slog/ob_storage_logger_manager.h"
 #include "storage/meta_store/ob_server_storage_meta_service.h"
 #include "share/rc/ob_module_provider.h"
 
@@ -300,7 +299,8 @@ int TestDataFilePrepareUtil::open()
     } else {
       if (OB_FAIL(SERVER_STORAGE_META_SERVICE.init())) {
         STORAGE_LOG(WARN, "fail to init storage meta service", K(ret));
-      } else if (FALSE_IT(SERVER_STORAGE_META_SERVICE.get_slogger_manager().need_reserved_ = false)) {
+      } else if (OB_FAIL(SERVER_STORAGE_META_SERVICE.set_need_reserved_for_test(false))) {
+        STORAGE_LOG(WARN, "fail to set need reserved for test", K(ret));
       } else if (OB_FAIL(OB_STORAGE_OBJECT_MGR.init(storage_env_.default_block_size_))) {
         STORAGE_LOG(WARN, "init block manager fail", K(ret));
       } else if (OB_FAIL(OB_STORE_CACHE.init(storage_env_.bf_cache_miss_count_threshold_))) {
@@ -311,8 +311,15 @@ int TestDataFilePrepareUtil::open()
         STORAGE_LOG(WARN, "Fail to start server block mgr", K(ret));
       } else if (OB_FAIL(OB_SERVER_BLOCK_MGR.first_mark_device())) {
         STORAGE_LOG(WARN, "Fail to start first mark device", K(ret));
-      } else if (OB_FAIL(SERVER_STORAGE_META_SERVICE.get_slogger_manager().start())) {
-        STORAGE_LOG(WARN, "fail to start slogger manager", K(ret));
+      } else {
+        ObStorageLogger *server_slogger = nullptr;
+        if (OB_FAIL(SERVER_STORAGE_META_SERVICE.get_server_slogger(server_slogger))) {
+          STORAGE_LOG(WARN, "fail to get server slogger", K(ret));
+        } else if (OB_FAIL(server_slogger->start())) {
+          STORAGE_LOG(WARN, "fail to start server slogger", K(ret));
+        }
+      }
+      if (OB_FAIL(ret)) {
       } else if (OB_FAIL(ObClusterVersion::get_instance().init(CLUSTER_VERSION_1_0_0_0))) {
         STORAGE_LOG(WARN, "Fail to init cluster version", K(ret));
       } else if (OB_FAIL(clog_file_handler_.init(storage_env_.clog_dir_, storage_env_.log_spec_.max_log_file_size_))) {

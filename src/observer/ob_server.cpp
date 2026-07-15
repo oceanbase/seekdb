@@ -156,6 +156,7 @@ ObServer::ObServer()
     tenant_timezone_mgr_(omt::ObTenantTimezoneMgr::get_instance()),
     schema_service_(share::schema::ObMultiVersionSchemaService::get_instance()),
     tablet_operator_(),
+    location_service_(),
     bandwidth_throttle_(),
     sys_bkgd_net_percentage_(0),
     ethernet_speed_(0),
@@ -370,6 +371,10 @@ int ObServer::init(const ObServerOptions &opts, const ObPLogWriterCfg &log_cfg)
       LOG_ERROR("init pl failed", K(ret));
     } else if (OB_FAIL(tablet_operator_.init(&meta_db_pool_))) {
       LOG_ERROR("tablet table operator init failed", KR(ret));
+    } else if (OB_FAIL(location_service_.init(
+                                              schema_service_,
+                                              sql_proxy_))) {
+      LOG_ERROR("init location service failed", KR(ret));
     }
     if (OB_SUCC(ret) && OB_FAIL(init_autoincrement_service())) {
       LOG_ERROR("init auto-increment service failed", KR(ret));
@@ -398,6 +403,8 @@ int ObServer::init(const ObServerOptions &opts, const ObPLogWriterCfg &log_cfg)
       LOG_ERROR("init tmp block cache failed", KR(ret));
     } else if (OB_FAIL(tmp_file::ObTmpPageCache::get_instance().init("tmp_page_cache"))) {
       LOG_ERROR("init tmp page cache failed", KR(ret));
+    } else if (OB_FAIL(init_ts_mgr())) {
+      LOG_ERROR("init ts mgr failed", KR(ret));
     } else if (OB_FAIL(ObTenantMutilAllocatorMgr::get_instance().init())) {
       LOG_ERROR("init ObTenantMutilAllocatorMgr failed", KR(ret));
     } else if (OB_FAIL(ObCachedCatalogSchemaMgr::get_instance().init())) {
@@ -584,6 +591,14 @@ void ObServer::destroy()
     tmp_file::ObTmpPageCache::get_instance().destroy();
     FLOG_INFO("tmp page cache destroyed");
 
+    FLOG_INFO("begin to destroy location service");
+    location_service_.destroy();
+    FLOG_INFO("location service destroyed");
+
+    FLOG_INFO("begin to destroy ts mgr");
+    OB_TS_MGR.destroy();
+    FLOG_INFO("ts mgr destroyed");
+
     FLOG_INFO("begin to destroy net frame");
     net_frame_.destroy();
     FLOG_INFO("net frame destroyed");
@@ -701,6 +716,12 @@ int ObServer::start()
     } else {
       FLOG_INFO("success to start server startup task handler");
     }
+    if (FAILEDx(OB_TS_MGR.start())) {
+      LOG_ERROR("fail to start ts mgr", KR(ret));
+    } else {
+      FLOG_INFO("success to start ts mgr");
+    }
+
     // Services are registered once; start() is triggered by reload_config().
 
     if (FAILEDx(ObMdsSchemaHelper::get_instance().init())) {
@@ -781,6 +802,12 @@ int ObServer::start()
       FLOG_INFO("success to start imc tasks");
     }
 #endif
+
+    if (FAILEDx(location_service_.start())) {
+      LOG_ERROR("fail to start location service", KR(ret));
+    } else {
+      FLOG_INFO("success to start location service");
+    }
 
     if (OB_SUCC(ret)) {
       FLOG_INFO("[OBSERVER_NOTICE] server instance start succeed");
@@ -1096,6 +1123,10 @@ int ObServer::stop()
     OB_STORAGE_OBJECT_MGR.stop();
     FLOG_INFO("storage object mgr stopped");
 
+    FLOG_INFO("begin to stop location service");
+    location_service_.stop();
+    FLOG_INFO("location service stopped");
+
     FLOG_INFO("begin to stop timer monitor");
     ObTimerMonitor::get_instance().stop();
     FLOG_INFO("timer monitor stopped");
@@ -1135,6 +1166,10 @@ int ObServer::stop()
     } else {
       FLOG_INFO("root service stopped");
     }
+
+    FLOG_INFO("begin to stop ts mgr");
+    OB_TS_MGR.stop();
+    FLOG_INFO("ts mgr stopped");
 
     FLOG_INFO("begin to stop memory dump");
     ObMemoryDump::get_instance().stop();
@@ -1851,7 +1886,8 @@ int ObServer::init_schema()
 int ObServer::init_autoincrement_service()
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(ObAutoincrementService::get_instance().init(&sql_proxy_,
+  if (OB_FAIL(ObAutoincrementService::get_instance().init(self_addr_,
+                                                         &sql_proxy_,
                                                          &schema_service_))) {
     LOG_ERROR("init autoincrement_service_ fail", KR(ret));
   }
@@ -2046,6 +2082,7 @@ int ObServer::init_global_context()
   gctx_.conn_res_mgr_ = &conn_res_mgr_;
   gctx_.omt_ = &multi_tenant_;
   gctx_.vt_iter_creator_ = &vt_data_service_.get_vt_iter_factory().get_vt_iter_creator();
+  gctx_.location_service_ = &location_service_;
   gctx_.start_time_ = start_time_;
   gctx_.warm_up_start_time_ = &warm_up_start_time_;
   gctx_.status_ = SS_INIT;
@@ -2107,6 +2144,20 @@ int ObServer::parse_role_and_restore_source(const ObServerOptions &opts)
 int ObServer::init_version()
 {
   return ObClusterVersion::get_instance().init(&config_);
+}
+
+int ObServer::init_ts_mgr()
+{
+  int ret = OB_SUCCESS;
+  if (OB_FAIL(OB_TS_MGR.init(self_addr_,
+                             schema_service_,
+                             location_service_))) {
+    LOG_ERROR("gts cache mgr init failed", K_(self_addr), KR(ret));
+  } else {
+    LOG_INFO("gts cache mgr init success");
+  }
+
+  return ret;
 }
 
 int ObServer::init_px_target_mgr()

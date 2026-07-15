@@ -281,5 +281,46 @@ int ObTenantStorageMetaService::read_from_share_blk(
   return ret;
 }
 
+int ObTenantStorageMetaService::ObLSItemIterator::get_next_ls_item(
+      storage::ObLSItem &item)
+{
+  int ret = OB_SUCCESS;
+  if (idx_ == tenant_super_block_.ls_cnt_) {
+    ret = OB_ITER_END;
+  } else {
+    item = tenant_super_block_.ls_item_arr_[idx_++];
+  }
+  return ret;
+}
+
+int ObTenantStorageMetaService::get_ls_items_by_status(
+    const storage::ObLSItemStatus status,
+    ObIArray<storage::ObLSItem> &ls_items)
+{
+  int ret = OB_SUCCESS;
+  if (IS_NOT_INIT) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("not init", K(ret));
+  } else {
+    ls_items.reuse();
+    omt::ObTenant *tenant = static_cast<omt::ObTenant*>(MTL_CTX());
+    HEAP_VAR(ObLSItemIterator, ls_item_iter, tenant->get_super_block()) {
+      ObLSItem ls_item;
+      while (OB_SUCC(ls_item_iter.get_next_ls_item(ls_item))) {
+        if (status == ls_item.status_ &&
+            OB_FAIL(ls_items.push_back(ls_item))) {
+          LOG_WARN("failed to push back tenant_item", K(ret), K(ls_item), K(ls_items), K(ls_item_iter));
+        }
+      }
+      if (OB_ITER_END == ret) {
+        ret = OB_SUCCESS;
+      } else {
+        LOG_WARN("failed to get tenant items by status", K(ret), K(ls_item), K(ls_items), K(ls_item_iter));
+      }
+    }
+  }
+  return ret;
+}
+
 } // namespace storage
 } // namespace oceanbase

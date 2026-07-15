@@ -624,5 +624,3 @@ else()
 endif()
 
 configure_file(../share/ob_version.cpp.in ob_version.cpp)
-
-add_subdirectory(embed)

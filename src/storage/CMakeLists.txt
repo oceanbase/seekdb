@@ -214,7 +214,6 @@ ob_set_subtarget(ob_storage slog
   slog/ob_storage_log.cpp
   slog/ob_storage_log_write_buffer.cpp
   slog/ob_storage_log_writer.cpp
-  slog/ob_storage_logger_manager.cpp
   slog/ob_storage_logger.cpp
 )
 

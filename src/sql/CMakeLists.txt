@@ -350,7 +350,6 @@ ob_set_subtarget(ob_sql engine_aggregate_scalar
 )
 
 ob_set_subtarget(ob_sql engine_basic
-  engine/basic/ob_arrow_basic.cpp
   engine/basic/ob_batch_result_holder.cpp
   engine/basic/ob_compact_row.cpp
   engine/basic/ob_temp_block_store.cpp

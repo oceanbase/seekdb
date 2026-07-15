@@ -1694,7 +1694,7 @@ int ObBlockManager::InspectBadBlockTask::check_block(
 
 int ObBlockManager::extend_file_size_if_need() {
   int ret = OB_SUCCESS;
-  int64_t reserved_size = ObStorageLoggerManager::RESERVED_DISK_SIZE;
+  int64_t reserved_size = ObServerStorageMetaService::SLOG_RESERVED_DISK_SIZE;
 
   if (OB_ISNULL(io_device_)) {
     ret = OB_NOT_INIT;

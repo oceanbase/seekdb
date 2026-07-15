@@ -87,8 +87,11 @@ void TestStorageLogRW::SetUp()
 
   TestDataFilePrepare::SetUp();
   slogger_ = OB_NEW(ObStorageLogger, ObModIds::TEST);
-  ObStorageLoggerManager &slogger_mgr = SERVER_STORAGE_META_SERVICE.get_slogger_manager();
-  ASSERT_EQ(OB_SUCCESS, slogger_->init(slogger_mgr, OB_SERVER_TENANT_ID));
+  ASSERT_EQ(OB_SUCCESS, slogger_->init(
+      OB_FILE_SYSTEM_ROUTER.get_slog_dir(),
+      ObLogConstants::MAX_LOG_FILE_SIZE,
+      OB_FILE_SYSTEM_ROUTER.get_slog_file_spec(),
+      true));
   ASSERT_EQ(OB_SUCCESS, slogger_->start());
 
   slogger_->start_log(start_cursor_);
@@ -221,8 +224,7 @@ TEST_F(TestStorageLogRW, test_basic)
   // test write multi-param large-size log
   SimpleObSlog slog_arr2[10];
   ObStorageLogger *slogger2 = nullptr;
-  ObStorageLoggerManager &slogger_mgr = SERVER_STORAGE_META_SERVICE.get_slogger_manager();
-  ASSERT_EQ(OB_SUCCESS, slogger_mgr.get_server_slogger(slogger2));
+  ASSERT_EQ(OB_SUCCESS, SERVER_STORAGE_META_SERVICE.get_server_slogger(slogger2));
 
   ASSERT_EQ(OB_SUCCESS, slogger2->start_log(start_cursor_));
   offset[0] = dummy_header_.get_serialize_size();

@@ -494,11 +494,6 @@ int ObRootService::start_service()
   } else {
     sql_proxy_.set_active();
     tenant_ddl_service_.restart();
-#ifndef OB_BUILD_LITE
-    if (OB_FAIL(hb_checker_.start())) {
-      FLOG_WARN("hb checker start failed", KR(ret));
-      } else
-#endif
     if (OB_FAIL(restart_task_timer_.start())) {
       FLOG_WARN("restart task timer start failed", KR(ret));
     } else if (OB_FAIL(load_ddl_task_timer_.start())) {

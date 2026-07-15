@@ -3495,7 +3495,6 @@ int ObSelectResolver::resolve_into_outfile_with_format(const ParseNode *node, Ob
     }
   }
   if (OB_SUCC(ret) && node->num_child_ > 2 && NULL != (format_node = node->children_[2])) { // format
-    // TODO(bitao): handle other parquet property
     ObResolverUtils::FileFormatContext ff_ctx;
     for (int i = 0; OB_SUCC(ret) && i < format_node->num_child_; ++i) {
       if (OB_ISNULL(option_node = format_node->children_[i])) {
@@ -3515,11 +3514,9 @@ int ObSelectResolver::resolve_into_outfile_with_format(const ParseNode *node, Ob
       ret = OB_NOT_SUPPORTED;
       LOG_WARN("should set file format type", K(ret));
       LOG_USER_ERROR(OB_NOT_SUPPORTED, "format without type");
-    } else if (ObExternalFileFormat::PARQUET_FORMAT != external_format.format_type_
-               && ObExternalFileFormat::CSV_FORMAT != external_format.format_type_) {
+    } else if (ObExternalFileFormat::CSV_FORMAT != external_format.format_type_) {
       ret = OB_NOT_SUPPORTED;
-      LOG_WARN("select into only support parquet/orc/csv format type now", K(ret),
-               K(external_format.format_type_));
+      LOG_WARN("select into only supports csv format type", K(ret), K(external_format.format_type_));
       LOG_USER_ERROR(OB_NOT_SUPPORTED, "this format type");
     } else if (ObExternalFileFormat::CSV_FORMAT == external_format.format_type_) {
       ObCollationType file_cs_type = has_cs_type

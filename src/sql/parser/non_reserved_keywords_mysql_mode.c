@@ -715,7 +715,6 @@ static const NonReservedKeyword Mysql_none_reserved_keywords[] =
   {"percent_rank", PERCENT_RANK},
   {"percentile_cont", PERCENTILE_CONT},
   {"performance", PERFORMANCE},
-  {"row_group_size", ROW_GROUP_SIZE},
   {"phase", PHASE},
   {"phrase", PHRASE},
   {"physical", PHYSICAL},

@@ -16,9 +16,6 @@
 
 #define USING_LOG_PREFIX SQL_RESV
 
-#ifndef OB_BUILD_EMBED_MODE
-#include <parquet/arrow/schema.h>
-#endif
 #include "sql/resolver/cmd/ob_load_data_stmt.h"
 
 #include "sql/engine/cmd/ob_load_data_parser.h"
@@ -7335,9 +7332,7 @@ int ObResolverUtils::resolve_varchar_file_size(const ParseNode *child, int64_t &
 int ObResolverUtils::resolve_file_compression_format(const ParseNode *node, ObExternalFileFormat &format, ObResolverParams &params)
 {
   int ret = OB_SUCCESS;
-  bool find = false;
   ObString string_v = ObString(node->children_[0]->str_len_, node->children_[0]->str_value_).trim();
-  ObSqlString err_msg;
   if (OB_ISNULL(node) || node->num_child_ != 1 || OB_ISNULL(node->children_[0])
       || OB_ISNULL(params.session_info_) || OB_ISNULL(params.expr_factory_)
       || T_COMPRESSION != node->type_) {
@@ -7345,27 +7340,6 @@ int ObResolverUtils::resolve_file_compression_format(const ParseNode *node, ObEx
     LOG_WARN("invalid parse node", K(ret));
   } else {
     switch (format.format_type_) {
-      case ObExternalFileFormat::PARQUET_FORMAT: {
-#ifndef OB_BUILD_EMBED_MODE
-        for (int32_t compress_idx = 0; !find && compress_idx <= parquet::Compression::LZ4_HADOOP; compress_idx++) {
-          if (0 == string_v.case_compare(ObParquetGeneralFormat::COMPRESSION_ALGORITHMS[compress_idx])) {
-            format.parquet_format_.compress_type_index_ = compress_idx;
-            find = true;
-          }
-        }
-        if (!find || format.parquet_format_.compress_type_index_ == parquet::Compression::LZ4_FRAME
-            || format.parquet_format_.compress_type_index_ == parquet::Compression::LZO
-            || format.parquet_format_.compress_type_index_ == parquet::Compression::BZ2) {
-          err_msg.append_fmt("compression algorithm '%.*s'", string_v.length(), string_v.ptr());
-          ret = OB_NOT_SUPPORTED;
-          LOG_USER_ERROR(OB_NOT_SUPPORTED, err_msg.ptr());
-          LOG_WARN("failed. compress type for parquet file is not supported yet", K(ret), K(string_v));
-        }
-#else
-        ret = OB_NOT_SUPPORTED;
-#endif
-        break;
-      }
       case ObExternalFileFormat::ORC_FORMAT: {
         ret = OB_NOT_SUPPORTED;
         break;
@@ -7459,22 +7433,6 @@ int ObResolverUtils::resolve_column_index_type(const ParseNode* node, ObExternal
     const ObString string_v = ObString(node->children_[0]->str_len_, node->children_[0]->str_value_).trim();
 
     switch (format.format_type_) {
-      case ObExternalFileFormat::PARQUET_FORMAT: {
-        if (0 == string_v.case_compare("NAME")) {
-          format.parquet_format_.column_index_type_ = sql::ColumnIndexType::NAME;
-        } else if (0 == string_v.case_compare("POSITION")) {
-          format.parquet_format_.column_index_type_ = sql::ColumnIndexType::POSITION;
-        } else if (0 == string_v.case_compare("ID")) {
-          format.parquet_format_.column_index_type_ = sql::ColumnIndexType::ID;
-        } else {
-          ret = OB_NOT_SUPPORTED;
-          ObSqlString err_msg;
-          err_msg.append_fmt("%s -> column_index_type", string_v.ptr());
-          LOG_USER_ERROR(OB_NOT_SUPPORTED, err_msg.ptr());
-          LOG_WARN("not support this format type", K(format.format_type_));
-        }
-        break;
-      }
       case ObExternalFileFormat::ORC_FORMAT: {
         ret = OB_NOT_SUPPORTED;
         break;
@@ -7501,7 +7459,8 @@ int ObResolverUtils::resolve_file_format(const ParseNode *node, ObExternalFileFo
       case T_EXTERNAL_FILE_FORMAT_TYPE: {
         ObString string_v = ObString(node->children_[0]->str_len_, node->children_[0]->str_value_).trim_space_only();
         for (int i = 0; i < ObExternalFileFormat::MAX_FORMAT; i++) {
-          if (0 == string_v.case_compare(ObExternalFileFormat::FORMAT_TYPE_STR[i])) {
+          if (OB_NOT_NULL(ObExternalFileFormat::FORMAT_TYPE_STR[i])
+              && 0 == string_v.case_compare(ObExternalFileFormat::FORMAT_TYPE_STR[i])) {
             format.format_type_ = static_cast<ObExternalFileFormat::FormatType>(i);
             break;
           }
@@ -7777,12 +7736,6 @@ int ObResolverUtils::resolve_file_format(const ParseNode *node, ObExternalFileFo
       case T_COMPRESSION: {
         if (OB_FAIL(ObResolverUtils::resolve_file_compression_format(node, format, params))) {
           LOG_WARN("failed to resolve file compression", K(ret));
-        }
-        break;
-      }
-      case T_ROW_GROUP_SIZE: {
-        if (OB_FAIL(resolve_file_size_node(node, format.parquet_format_.row_group_size_))) {
-          LOG_WARN("failed to resolve file size node", K(ret));
         }
         break;
       }

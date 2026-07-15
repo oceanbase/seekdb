@@ -248,6 +248,7 @@ system_memory
 sys_bkgd_migration_change_member_list_timeout
 sys_bkgd_migration_retry_num
 sys_bkgd_net_percentage
+tablet_ls_cache_priority
 tablet_meta_table_check_interval
 tablet_meta_table_scan_batch_count
 tablet_size
@@ -259,7 +260,7 @@ tenant_sql_login_thread_count
 tenant_sql_net_thread_count
 tenant_task_queue_size
 trace_log_slow_query_watermark
-trx_commit_retry_interval
+trx_2pc_retry_interval
 ttl_thread_score
 undo_retention
 unit_gc_wait_time
@@ -337,6 +338,7 @@ _enable_hgby_llc_ndv_adaptive
 _enable_hgby_skew_detection
 _enable_index_merge
 _enable_inner_session_mgr
+_enable_insertup_replace_gts_opt
 _enable_in_range_optimization
 _enable_kvcache_hazard_pointer
 _enable_log_cache
@@ -421,6 +423,7 @@ _log_writer_parallelism
 _ls_gc_wait_readonly_tx_time
 _ls_migration_wait_completing_timeout
 _max_elr_dependent_trx_count
+_max_ls_cnt_per_server
 _max_malloc_sample_interval
 _max_partition_count_to_collect_statistic
 _max_px_workers_per_cpu
@@ -463,6 +466,7 @@ _ob_pl_compile_max_concurrency
 _ob_query_rate_limit
 _ob_sqlstat_enable
 _ob_ssl_invited_nodes
+_ob_trans_rpc_timeout
 _optimizer_ads_time_limit
 _optimizer_better_inlist_costing
 _optimizer_group_by_placement
@@ -523,6 +527,7 @@ _ss_micro_cache_memory_percentage
 _ss_new_leader_overwrite_delay
 _ss_old_ver_retention_time
 _stall_threshold_for_dynamic_worker
+_standby_max_replay_gap_time
 _storage_meta_memory_limit_percentage
 _storage_stream_rpc_buffer_size
 _stream_rpc_max_wait_timeout

@@ -104,7 +104,7 @@ public:
 
   // Start OceanBase server, this function is blocked after invoking
   // until the server itself stops it.
-  int start(bool embed_mode);
+  int start();
   int wait();
   void prepare_stop();
   bool is_prepare_stopped();
@@ -275,7 +275,6 @@ private:
 
 public:
   static int get_network_speed_from_config_file(int64_t &network_speed);
-  ObInnerSQLConnectionPool &get_inner_sql_conn_pool() { return sql_conn_pool_; }
 public:
   volatile bool need_ctas_cleanup_; //true: ObCTASCleanUpTask should traverse all table schemas to find the one need be dropped
 private:
@@ -293,7 +292,6 @@ private:
   bool stop_;
   volatile bool has_stopped_;
   bool has_destroy_;
-  bool embedded_ = false;
   int clients_fd_ = -1;
 #ifdef _WIN32
   HANDLE clients_h_ = INVALID_HANDLE_VALUE;
@@ -364,7 +362,6 @@ private:
   // virtual table related
   ObVirtualDataAccessService vt_data_service_;
   // Weakly Consistent Read Service
-  // blacklist service
   //observer start time
   int64_t start_time_;
   int64_t warm_up_start_time_;
