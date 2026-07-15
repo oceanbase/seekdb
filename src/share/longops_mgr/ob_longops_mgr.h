@@ -17,9 +17,9 @@
 #ifndef OCEANBASE_SHARE_LONGOPS_MGR_LONGOPS_MGR_H_
 #define OCEANBASE_SHARE_LONGOPS_MGR_LONGOPS_MGR_H_
 
-#include "lib/allocator/ob_concurrent_fifo_allocator.h"
+#include "lib/allocator/ob_malloc.h"
 #include "lib/container/ob_array.h"
-#include "lib/lock/ob_bucket_lock.h"
+#include "lib/lock/ob_spin_lock.h"
 #include "share/longops_mgr/ob_i_longops.h"
 
 namespace oceanbase
@@ -31,7 +31,6 @@ class ObLongopsMgr final
 {
 public:
   static ObLongopsMgr &get_instance();
-  int init();
   void destroy();
   template<typename T>
   int alloc_longops(T *&longops);
@@ -42,18 +41,16 @@ public:
   int begin_iter(ObLongopsIterator &iter);
   template <typename Callback>
   int foreach(Callback &callback);
-  TO_STRING_KV(K_(is_inited), K(map_.size()));
+  TO_STRING_KV(K(longops_stats_.count()));
 private:
   ObLongopsMgr();
   ~ObLongopsMgr() { destroy(); }
 private:
-  typedef common::hash::ObHashMap<ObILongopsKey, ObILongopsStat*, common::hash::SpinReadWriteDefendMode> LongopsMap;
-  static const int64_t DEFAULT_BUCKET_NUM = 1543L;
-  static const int64_t DEFAULT_ALLOCATOR_PAGE_SIZE = common::OB_MALLOC_NORMAL_BLOCK_SIZE;
-  bool is_inited_;
-  common::ObConcurrentFIFOAllocator allocator_;
-  common::ObBucketLock bucket_lock_;
-  LongopsMap map_;
+  int find_longops_idx_(const ObILongopsKey &key, int64_t &idx) const;
+  void free_longops_without_lock_(ObILongopsStat *stat);
+private:
+  common::ObSpinLock lock_;
+  common::ObArray<ObILongopsStat *> longops_stats_;
 };
 
 template<typename T>
@@ -62,7 +59,7 @@ int ObLongopsMgr::alloc_longops(T *&longops)
   int ret = OB_SUCCESS;
   longops = nullptr;
   void *tmp_buf = nullptr;
-  if (OB_ISNULL(tmp_buf = allocator_.alloc(sizeof(T)))) {
+  if (OB_ISNULL(tmp_buf = common::ob_malloc(sizeof(T), lib::ObLabel("LongopsMgr")))) {
     ret = common::OB_ALLOCATE_MEMORY_FAILED;
     RS_LOG(WARN, "alloc longops failed", K(ret));
   } else {
@@ -71,7 +68,6 @@ int ObLongopsMgr::alloc_longops(T *&longops)
   return ret;
 }
 
-using PAIR = common::hash::HashMapPair<ObILongopsKey, ObILongopsStat*>;
 class ObLongopsIterator
 {
 public:
@@ -80,7 +76,7 @@ public:
   public:
     explicit ObKeySnapshotCallback(common::ObIArray<ObILongopsKey> &key_snapshot);
     virtual ~ObKeySnapshotCallback() = default;
-    int operator()(PAIR &pair);
+    int operator()(const ObILongopsKey &key);
   private:
     common::ObIArray<ObILongopsKey> &key_snapshot_;
   };

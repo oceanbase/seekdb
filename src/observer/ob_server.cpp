@@ -62,7 +62,6 @@ int ObServer::get_lower_bound_freeze_info(const int64_t snapshot_version, share:
 #include "share/catalog/ob_cached_catalog_meta_getter.h"
 #include "sql/optimizer/stat/ob_opt_stat_manager.h" // for ObOptStatManager
 #include "observer/scheduler/ob_partition_auto_split_helper.h"
-#include "share/longops_mgr/ob_longops_mgr.h"
 #include "share/ob_ddl_sim_point.h"
 #include "storage/ddl/ob_ddl_redo_log_writer.h"
 #include "observer/ob_server_utils.h"
@@ -449,8 +448,6 @@ int ObServer::init(const ObServerOptions &opts, const ObPLogWriterCfg &log_cfg)
     } else if (OB_FAIL(ObServerBlacklist::get_instance().init(self_addr_))) {
       LOG_ERROR("init server blacklist failed", KR(ret));
 #endif
-    } else if (OB_FAIL(ObLongopsMgr::get_instance().init())) {
-      LOG_WARN("init longops mgr fail", KR(ret));
     } else if (OB_FAIL(ObGenDicLoader::get_instance().init())) {
       LOG_WARN("init dictionary loader failed", K(ret));
     } else if (OB_FAIL(ObDDLRedoLock::get_instance().init())) {
