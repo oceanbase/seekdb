@@ -100,23 +100,36 @@ int ObBEngFTParser::get_next_ascii_token(const char *&word,
     ret = OB_ITER_END;
   } else {
     const char *start = ascii_cur_;
+    bool needs_casedown = false;
     while (ascii_cur_ < ascii_end_ && !is_ascii_delimiter(*ascii_cur_)) {
+      const unsigned char ch = static_cast<unsigned char>(*ascii_cur_);
+      needs_casedown = needs_casedown || (ch >= 'A' && ch <= 'Z');
       ++ascii_cur_;
     }
     const int64_t len = ascii_cur_ - start;
-    char *buf = static_cast<char *>(scratch_allocator_.alloc(len));
-    if (OB_ISNULL(buf)) {
-      ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("failed to allocate ascii token", K(ret), K(len));
-    } else {
-      for (int64_t i = 0; i < len; ++i) {
-        const unsigned char ch = static_cast<unsigned char>(start[i]);
-        buf[i] = ch >= 'A' && ch <= 'Z' ? static_cast<char>(ch + ('a' - 'A')) : start[i];
-      }
-      word = buf;
+    if (!needs_casedown) {
+      // The source document outlives word-map materialization.  Returning its
+      // slice directly avoids an allocation and a byte-for-byte copy for the
+      // overwhelmingly common already-lowercase token.
+      word = start;
       word_len = len;
       char_len = len;
       word_freq = 1;
+    } else {
+      char *buf = static_cast<char *>(scratch_allocator_.alloc(len));
+      if (OB_ISNULL(buf)) {
+        ret = OB_ALLOCATE_MEMORY_FAILED;
+        LOG_WARN("failed to allocate ascii token", K(ret), K(len));
+      } else {
+        for (int64_t i = 0; i < len; ++i) {
+          const unsigned char ch = static_cast<unsigned char>(start[i]);
+          buf[i] = ch >= 'A' && ch <= 'Z' ? static_cast<char>(ch + ('a' - 'A')) : start[i];
+        }
+        word = buf;
+        word_len = len;
+        char_len = len;
+        word_freq = 1;
+      }
     }
   }
   return ret;
