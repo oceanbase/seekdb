@@ -44,6 +44,8 @@ int ObBEngFTParser::get_next_token(
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("beng ft parser isn't initialized", K(ret), K(is_inited_));
+  } else if (ascii_fast_path_) {
+    ret = get_next_ascii_token(word, word_len, char_len, word_freq);
   } else if (OB_ISNULL(token_stream_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("token stream is nullptr", K(ret), KP(token_stream_));
@@ -68,6 +70,51 @@ int ObBEngFTParser::get_next_token(
   return ret;
 }
 
+bool ObBEngFTParser::is_ascii_alnum(const unsigned char ch)
+{
+  return (ch >= '0' && ch <= '9')
+      || (ch >= 'A' && ch <= 'Z')
+      || (ch >= 'a' && ch <= 'z');
+}
+
+bool ObBEngFTParser::is_ascii_document(const char *text, const int64_t text_len)
+{
+  bool is_ascii = nullptr != text && text_len > 0;
+  for (int64_t i = 0; is_ascii && i < text_len; ++i) {
+    is_ascii = 0 == (static_cast<unsigned char>(text[i]) & 0x80);
+  }
+  return is_ascii;
+}
+
+int ObBEngFTParser::get_next_ascii_token(
+    const char *&word,
+    int64_t &word_len,
+    int64_t &char_len,
+    int64_t &word_freq)
+{
+  int ret = OB_SUCCESS;
+  const char *text = doc_.ptr_;
+  const int64_t text_len = doc_.len_;
+  while (ascii_pos_ < text_len
+         && !is_ascii_alnum(static_cast<unsigned char>(text[ascii_pos_]))) {
+    ++ascii_pos_;
+  }
+  if (ascii_pos_ >= text_len) {
+    ret = OB_ITER_END;
+  } else {
+    const int64_t token_start = ascii_pos_;
+    while (ascii_pos_ < text_len
+           && is_ascii_alnum(static_cast<unsigned char>(text[ascii_pos_]))) {
+      ++ascii_pos_;
+    }
+    word = text + token_start;
+    word_len = ascii_pos_ - token_start;
+    char_len = word_len;
+    word_freq = 1;
+  }
+  return ret;
+}
+
 int ObBEngFTParser::init(ObFTParserParam *param)
 {
   int ret = OB_SUCCESS;
@@ -81,11 +128,16 @@ int ObBEngFTParser::init(ObFTParserParam *param)
     ret = OB_NOT_SUPPORTED;
     LOG_WARN("too large document, english analyzer hasn't be supported", K(ret), K(param->ft_length_));
   } else {
+    is_inited_ = false;
     doc_.set_string(param->fulltext_, param->ft_length_);
     analysis_ctx_.cs_ = param->cs_;
     analysis_ctx_.filter_stopword_ = false;
     analysis_ctx_.need_grouping_ = false;
-    if (OB_FAIL(english_analyzer_.init(analysis_ctx_, *param->allocator_))) {
+    ascii_pos_ = 0;
+    ascii_fast_path_ = is_ascii_document(param->fulltext_, param->ft_length_);
+    if (ascii_fast_path_) {
+      is_inited_ = true;
+    } else if (OB_FAIL(english_analyzer_.init(analysis_ctx_, *param->allocator_))) {
       LOG_WARN("fail to init english analyzer", K(ret), KPC(param), K(analysis_ctx_));
     } else if (OB_FAIL(segment(doc_, token_stream_))) {
       LOG_WARN("fail to segment fulltext by parser", K(ret), KP(param->fulltext_), K(param->ft_length_));
@@ -126,6 +178,8 @@ void ObBEngFTParser::reset()
   english_analyzer_.reset();
   doc_.reset();
   token_stream_ = nullptr;
+  ascii_pos_ = 0;
+  ascii_fast_path_ = false;
   is_inited_ = false;
 }
 
@@ -190,6 +244,7 @@ int ObBasicEnglishFTParserDesc::get_add_word_flag(ObAddWordFlag &flag) const
 {
   int ret = OB_SUCCESS;
   flag.set_min_max_word();
+  flag.set_casedown();
   flag.set_stop_word();
   flag.set_groupby_word();
   return ret;

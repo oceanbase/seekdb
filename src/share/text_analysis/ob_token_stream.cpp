@@ -310,7 +310,14 @@ int ObBasicEnglishNormalizer::get_next(ObDatum &next_token, int64_t &token_freq)
     } else {
       ObString norm_alnum_token(norm_token_len, norm_token_ptr);
       ObString norm_lower_token;
-      if (OB_FAIL(ObCharset::tolower(cs_, norm_alnum_token, norm_lower_token, norm_allocator_))) {
+      bool is_lower_ascii = true;
+      for (int64_t i = 0; is_lower_ascii && i < norm_alnum_token.length(); ++i) {
+        const unsigned char c = static_cast<unsigned char>(norm_alnum_token.ptr()[i]);
+        is_lower_ascii = c < 0x80 && !(c >= 'A' && c <= 'Z');
+      }
+      if (is_lower_ascii) {
+        next_token.set_string(norm_alnum_token);
+      } else if (OB_FAIL(ObCharset::tolower(cs_, norm_alnum_token, norm_lower_token, norm_allocator_))) {
         LOG_WARN("norm token to lower case failed", K(ret), K_(cs), K(norm_alnum_token));
       } else {
         next_token.set_string(norm_lower_token);

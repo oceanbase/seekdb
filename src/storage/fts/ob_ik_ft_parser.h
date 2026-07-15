@@ -18,6 +18,7 @@
 #define _OCEANBASE_STORAGE_FTS_OB_IK_FT_PARSER_H_
 
 #include "lib/allocator/ob_allocator.h"
+#include "lib/allocator/page_arena.h"
 #include "storage/fts/dict/ob_ft_cache_container.h"
 #include "storage/fts/dict/ob_ft_dict.h"
 #include "storage/fts/dict/ob_ft_dict_def.h"
@@ -36,6 +37,7 @@ class ObIKFTParser final : public plugin::ObITokenIterator
 public:
   ObIKFTParser(ObIAllocator &allocator, ObFTDictHub *hub)
       : allocator_(allocator),
+        scratch_allocator_(lib::ObMemAttr("IKDocScratch")),
         is_inited_(false),
         coll_type_(ObCollationType::CS_TYPE_INVALID),
         ctx_(nullptr),
@@ -53,6 +55,7 @@ public:
   virtual ~ObIKFTParser() { reset(); }
 
   int init(const plugin::ObFTParserParam &param);
+  int reuse_document(const char *fulltext, int64_t fulltext_len);
 
   int get_next_token(const char *&word,
                      int64_t &word_len,
@@ -91,6 +94,7 @@ private:
 private:
   static constexpr int SEGMENT_LIMIT = 1000;
   ObIAllocator &allocator_;
+  ObArenaAllocator scratch_allocator_;
   bool is_inited_;
 
   ObCollationType coll_type_;

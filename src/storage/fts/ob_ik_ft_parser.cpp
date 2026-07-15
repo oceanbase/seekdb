@@ -76,6 +76,31 @@ int ObIKFTParser::init(const ObFTParserParam &param)
   return ret;
 }
 
+int ObIKFTParser::reuse_document(const char *fulltext, int64_t fulltext_len)
+{
+  int ret = OB_SUCCESS;
+  if (OB_UNLIKELY(!IS_INIT)) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("cannot reuse an uninitialized IK parser", K(ret));
+  } else if (OB_ISNULL(fulltext) || fulltext_len <= 0) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid document for IK parser reuse", K(ret), KP(fulltext), K(fulltext_len));
+  } else if (OB_FAIL(ctx_->reset_resource())) {
+    LOG_WARN("failed to clear IK tokenize context", K(ret));
+  } else {
+    for (ObIIKProcessor *processor : segmenters_) {
+      processor->reset_document();
+    }
+    // All containers backed by scratch_allocator_ are empty at this point.
+    // Retain one page to avoid allocator churn between adjacent documents.
+    scratch_allocator_.reset_remain_one_page();
+    if (OB_FAIL(ctx_->reuse_document(fulltext, fulltext_len))) {
+      LOG_WARN("failed to attach reused IK parser to document", K(ret));
+    }
+  }
+  return ret;
+}
+
 int ObIKFTParser::get_next_token(const char *&word,
                                  int64_t &word_len,
                                  int64_t &char_cnt,
@@ -151,7 +176,7 @@ int ObIKFTParser::process_one_char(TokenizeContext &ctx,
   for (ObList<ObIIKProcessor *, ObIAllocator>::iterator iter = segmenters_.begin();
        OB_SUCC(ret) && iter != segmenters_.end();
        iter++) {
-    if (OB_FAIL((*iter)->process(ctx))) {
+    if (OB_FAIL((*iter)->do_process(ctx, ch, char_len, type))) {
       LOG_WARN("Failed to process segmenter", K(ret));
     }
   }
@@ -343,7 +368,7 @@ int ObIKFTParser::init_ctx(const ObFTParserParam &param)
   } else if (OB_ISNULL(ctx_ = OB_NEWx(TokenizeContext,
                                       &allocator_,
                                       coll_type_,
-                                      allocator_,
+                                      scratch_allocator_,
                                       param.fulltext_,
                                       param.ft_length_,
                                       param.ik_param_.mode_ == ObFTIKParam::Mode::SMART))) {
@@ -372,13 +397,13 @@ int ObIKFTParser::init_segmenter(const ObFTParserParam &param)
   } else if (OB_ISNULL(dict_quan_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("Dict quan is null.", K(ret));
-  } else if (OB_ISNULL(cnqsg = OB_NEWx(ObIKQuantifierProcessor, &allocator_, *dict_quan_, allocator_))) {
+  } else if (OB_ISNULL(cnqsg = OB_NEWx(ObIKQuantifierProcessor, &allocator_, *dict_quan_, scratch_allocator_))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("Failed to alloc cn quantifier segmenter", K(ret));
   } else if (OB_ISNULL(dict_main_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("Dict main is null.", K(ret));
-  } else if (OB_ISNULL(cjksg = OB_NEWx(ObIKCJKProcessor, &allocator_, *dict_main_, allocator_))) {
+  } else if (OB_ISNULL(cjksg = OB_NEWx(ObIKCJKProcessor, &allocator_, *dict_main_, scratch_allocator_))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("Failed to alloc cjk segmenter", K(ret));
   } else if (OB_ISNULL(surrogate_seg = OB_NEWx(ObIKSurrogateProcessor, &allocator_))) {
@@ -439,6 +464,8 @@ void ObIKFTParser::reset()
     dict_stop_->~ObIFTDict();
     allocator_.free(dict_stop_);
   }
+
+  scratch_allocator_.reset();
 
   is_inited_ = false;
 }

@@ -41,6 +41,13 @@ public:
                  const uint8_t char_len,
                  const ObFTCharUtil::CharType type) override;
 
+  void reset_document() override
+  {
+    hits_.reset();
+    cjk_start_ = -1;
+    cjk_end_ = -1;
+  }
+
 private:
   ObList<ObDATrieHit, ObIAllocator> hits_;
   const ObIFTDict &dict_main_;

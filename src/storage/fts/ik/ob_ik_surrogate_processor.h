@@ -35,6 +35,8 @@ public:
                  const uint8_t char_len,
                  const ObFTCharUtil::CharType type) override;
 
+  void reset_document() override { reset(); }
+
 private:
   void reset()
   {
