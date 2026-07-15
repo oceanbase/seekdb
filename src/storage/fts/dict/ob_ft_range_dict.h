@@ -68,6 +68,12 @@ public:
                             ObFTCacheRangeContainer &range_container);
   static int build_cache(const ObFTDictDesc &desc, ObFTCacheRangeContainer &range_container);
 
+  static int build_cache_from_table(
+      const ObFTDictDesc &desc,
+      const ObString &database_name,
+      const ObString &table_name,
+      ObFTCacheRangeContainer &range_container);
+
   static int build_cache_from_ik_dict(const ObFTDictDesc &desc, ObFTCacheRangeContainer &range_container);
 
 private:

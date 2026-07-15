@@ -78,6 +78,7 @@ ObDDLResolver::ObDDLResolver(ObResolverParams &params)
     virtual_column_id_(OB_INVALID_ID),
     read_only_(false),
     with_rowid_(false),
+    fulltext_dict_(false),
     table_name_(),
     database_name_(),
     partition_func_type_(PARTITION_FUNC_TYPE_HASH),
@@ -2161,6 +2162,30 @@ int ObDDLResolver::resolve_table_option(const ParseNode *option_node, const bool
         index_attributes_set_ &= ~((uint64_t)1 << ObTableSchema::INDEX_VISIBILITY);
         break;
       }
+      case T_TABLE_OPTION_FULLTEXT_DICT: {
+        if (OB_UNLIKELY(option_node->num_child_ != 1)
+            || OB_ISNULL(option_node->children_)
+            || OB_ISNULL(option_node->children_[0])) {
+          ret = OB_INVALID_ARGUMENT;
+          LOG_WARN("invalid FULLTEXT_DICT table option", K(ret));
+        } else {
+          const ParseNode *value_node = option_node->children_[0];
+          const ObString value(
+              static_cast<int32_t>(value_node->str_len_),
+              value_node->str_value_);
+
+          if (0 == value.case_compare("Y")) {
+            fulltext_dict_ = true;
+          } else {
+            ret = OB_INVALID_ARGUMENT;
+            LOG_USER_ERROR(
+                OB_INVALID_ARGUMENT,
+                "FULLTEXT_DICT only supports 'Y'");
+            LOG_WARN("invalid FULLTEXT_DICT value", K(ret), K(value));
+          }
+        }
+        break;
+      }
       case T_DUPLICATE_SCOPE: {
         ObString duplicate_scope_str;
         share::ObDuplicateScope my_duplicate_scope = share::ObDuplicateScope::DUPLICATE_SCOPE_MAX;
@@ -4241,6 +4266,7 @@ void ObDDLResolver::reset() {
   charset_type_ = CHARSET_INVALID;
   collation_type_ = CS_TYPE_INVALID;
   use_bloom_filter_ = false;
+  fulltext_dict_ = false;
   expire_info_.reset();
   compress_method_.reset();
   parser_name_.reset();

@@ -1159,11 +1159,43 @@ int ObFTParserProperty::parse_for_parser_helper(const ObFTParser &parser, const 
   } else {
     if (parser.is_ik()) {
       // set dict tables and copy dict name
-      dict_table_ = ObString(ObFTSLiteral::CONFIG_NAME_DICT_TABLE);
-      stopword_table_ = ObString(ObFTSLiteral::CONFIG_NAME_STOPWORD_TABLE);
-      quantifier_table_ = ObString(ObFTSLiteral::CONFIG_NAME_QUANTIFIER_TABLE);
+      ObString dict_table;
+      ObString stopword_table;
+      ObString quantifier_table;
+      if (OB_FAIL(props.config_get_dict_table(dict_table))) {
+        if (OB_SEARCH_NOT_FOUND == ret) {
+          dict_table = ObString(ObFTSLiteral::FT_DEFAULT_IK_DICT_UTF8_TABLE);
+          ret = OB_SUCCESS;
+        } else {
+          LOG_WARN("fail to get dict table", K(ret));
+        }
+      }
+      if (OB_SUCC(ret) && OB_FAIL(ob_write_string(allocator_, dict_table, dict_table_))) {
+        LOG_WARN("fail to copy dict table", K(ret), K(dict_table));
+      } else if (OB_SUCC(ret) && OB_FAIL(props.config_get_stopword_table(stopword_table))) {
+        if (OB_SEARCH_NOT_FOUND == ret) {
+          stopword_table = ObString(ObFTSLiteral::FT_DEFAULT_IK_STOPWORD_UTF8_TABLE);
+          ret = OB_SUCCESS;
+        } else {
+          LOG_WARN("fail to get stopword table", K(ret));
+        }
+      }
+      if (OB_SUCC(ret) && OB_FAIL(ob_write_string(allocator_, stopword_table, stopword_table_))) {
+        LOG_WARN("fail to copy stopword table", K(ret), K(stopword_table));
+      } else if (OB_SUCC(ret) && OB_FAIL(props.config_get_quantifier_table(quantifier_table))) {
+        if (OB_SEARCH_NOT_FOUND == ret) {
+          quantifier_table = ObString(ObFTSLiteral::FT_DEFAULT_IK_QUANTIFIER_UTF8_TABLE);
+          ret = OB_SUCCESS;
+        } else {
+          LOG_WARN("fail to get quantifier table", K(ret));
+        }
+      }
+      if (OB_SUCC(ret) && OB_FAIL(ob_write_string(allocator_, quantifier_table, quantifier_table_))) {
+        LOG_WARN("fail to copy quantifier table", K(ret), K(quantifier_table));
+      }
       ObString ik_smart;
-      if (OB_FAIL(props.config_get_ik_mode(ik_smart))) {
+      if (OB_FAIL(ret)) {
+      } else if (OB_FAIL(props.config_get_ik_mode(ik_smart))) {
         if (OB_SEARCH_NOT_FOUND == ret) {
           // from old version, ik_mode is not set, so use default value
           ik_mode_smart_ = true;
@@ -1220,7 +1252,8 @@ int ObFTParserProperty::parse_for_parser_helper(const ObFTParser &parser, const 
 }
 
 ObFTParserProperty::ObFTParserProperty()
-    : min_token_size_(ObFTSLiteral::FT_DEFAULT_MIN_TOKEN_SIZE),
+    : allocator_(),
+      min_token_size_(ObFTSLiteral::FT_DEFAULT_MIN_TOKEN_SIZE),
       max_token_size_(ObFTSLiteral::FT_DEFAULT_MAX_TOKEN_SIZE),
       ngram_token_size_(ObFTSLiteral::FT_DEFAULT_NGRAM_TOKEN_SIZE),
       ik_mode_smart_(true),

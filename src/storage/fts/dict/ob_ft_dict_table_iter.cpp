@@ -30,7 +30,7 @@ namespace oceanbase
 namespace storage
 {
 ObFTDictTableIter::ObFTDictTableIter(ObISQLClient::ReadResult &result)
-    : ObIFTDictIterator(), is_inited_(false), res_(result)
+    : ObIFTDictIterator(), is_inited_(false), has_current_row_(false), res_(result)
 {
 }
 
@@ -40,6 +40,8 @@ int ObFTDictTableIter::get_key(ObString &str)
   if (!IS_INIT) {
     ret = OB_NOT_INIT;
     LOG_WARN("Not inited.", K(ret));
+  } else if (!has_current_row_) {
+    ret = OB_ITER_END;
   } else if (OB_FAIL(res_.get_result()->get_varchar("word", str))) {
     LOG_WARN("Failed to get varchar", K(ret));
   }
@@ -59,48 +61,93 @@ int ObFTDictTableIter::next()
     ret = OB_NOT_INIT;
     LOG_WARN("Not inited.", K(ret));
   } else if (OB_FAIL(res_.get_result()->next())) {
-    if (OB_ITER_END != ret) {
+    if (OB_ITER_END == ret) {
+      has_current_row_ = false;
+    } else {
       LOG_WARN("Failed to get next row", K(ret));
     }
+  } else {
+    has_current_row_ = true;
   }
   return ret;
 }
 
 int ObFTDictTableIter::init(const ObString &table_name)
 {
+  return init(
+      ObString::make_string("oceanbase"),
+      table_name);
+}
+
+int ObFTDictTableIter::init(
+    const ObString &database_name,
+    const ObString &table_name)
+{
   int ret = OB_SUCCESS;
   common::ObMySQLProxy *sql_proxy = GCTX.sql_proxy_;
 
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("Inited twice.", K(ret));
+    LOG_WARN("dictionary table iterator initialized twice",
+             K(ret));
+  } else if (OB_ISNULL(sql_proxy)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("sql proxy is null", K(ret));
+  } else if (database_name.empty()
+             || table_name.empty()) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("database name or table name is empty",
+             K(ret),
+             K(database_name),
+             K(table_name));
   } else {
     SMART_VAR(ObSqlString, sql_string)
     {
-      if (OB_FAIL(sql_string.append("SELECT word FROM oceanbase."))) {
-        LOG_WARN("Failed to append sql", K(ret));
-      } else if (OB_FAIL(sql_string.append(table_name))) {
-        LOG_WARN("Failed to append sql", K(ret));
-      } else if (OB_FAIL(sql_string.append(" ORDER BY word"))) {
-        LOG_WARN("Failed to append sql", K(ret));
-      } else if (OB_FAIL(sql_proxy->read(res_, sql_string.ptr()))) {
-        LOG_WARN("Failed to execute sql", K(ret));
+      if (OB_FAIL(sql_string.append_fmt(
+              "SELECT word FROM `%.*s`.`%.*s` ORDER BY word",
+              database_name.length(),
+              database_name.ptr(),
+              table_name.length(),
+              table_name.ptr()))) {
+        LOG_WARN("failed to build dictionary query",
+                 K(ret),
+                 K(database_name),
+                 K(table_name));
+      } else if (OB_FAIL(
+                     sql_proxy->read(
+                         res_,
+                         sql_string.ptr()))) {
+        LOG_WARN("failed to query dictionary table",
+                 K(ret),
+                 K(database_name),
+                 K(table_name),
+                 K(sql_string));
       }
     }
 
     if (OB_FAIL(ret)) {
-      // already logged
+      // Error has already been logged.
     } else if (OB_ISNULL(res_.get_result())) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("Failed to get result", K(ret));
-    } else if (OB_FAIL(res_.get_result()->next())) {
-      if (OB_ITER_END != ret) {
-        LOG_WARN("Failed to get next row", K(ret));
+      LOG_WARN("dictionary query result is null",
+               K(ret));
+    } else {
+      ret = res_.get_result()->next();
+
+      if (OB_ITER_END == ret) {
+        // An empty dictionary table is valid and contains no words.
+        ret = OB_SUCCESS;
+        is_inited_ = true;
+        has_current_row_ = false;
+      } else if (OB_FAIL(ret)) {
+        LOG_WARN("failed to read first dictionary word",
+                 K(ret),
+                 K(database_name),
+                 K(table_name));
       } else {
         is_inited_ = true;
+        has_current_row_ = true;
       }
-    } else {
-      is_inited_ = true;
     }
   }
 
@@ -111,6 +158,7 @@ void ObFTDictTableIter::reset()
 {
   res_.close();
   is_inited_ = false;
+  has_current_row_ = false;
 }
 
 } //  namespace storage

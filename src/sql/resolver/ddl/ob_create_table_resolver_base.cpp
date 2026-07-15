@@ -100,6 +100,7 @@ int ObCreateTableResolverBase::set_table_option_to_schema(ObTableSchema &table_s
     table_schema.set_duplicate_attribute(duplicate_scope_, duplicate_read_consistency_);
     table_schema.set_enable_row_movement(enable_row_movement_);
     table_schema.set_table_mode_struct(table_mode_);
+    table_schema.set_fulltext_dict(fulltext_dict_);
     table_schema.set_dop(table_dop_);
     if (0 == progressive_merge_num_) {
       table_schema.set_progressive_merge_num(GCONF.default_progressive_merge_num);
