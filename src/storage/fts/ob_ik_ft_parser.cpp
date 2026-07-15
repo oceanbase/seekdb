@@ -23,6 +23,13 @@
 #include "lib/oblog/ob_log_module.h"
 #include "lib/utility/ob_macro_utils.h"
 #include "lib/utility/utility.h"
+#include "common/mysqlclient/ob_mysql_proxy.h"
+#include "common/mysqlclient/ob_mysql_result.h"
+#include "share/ob_server_struct.h"
+#include "storage/fts/dict/ob_ft_cache_dict.h"
+#include "storage/fts/dict/ob_ft_dat_dict.h"
+#include "storage/fts/dict/ob_ft_trie.h"
+#include "storage/fts/ob_fts_literal.h"
 #include "storage/fts/ob_fts_struct.h"
 #include "storage/fts/ob_fts_plugin_helper.h"
 #include "storage/fts/dict/ob_ft_dict.h"
@@ -296,23 +303,56 @@ int ObIKFTParser::init_dict(const plugin::ObFTParserParam &param)
   if (should_read_newest_table()) {
     // clear dict cache, always false now
   } else {
-    if (OB_FAIL(init_single_dict(main_dict_desc, cache_main_))) {
+    // Main dict: a user-specified custom dict_table REPLACES the built-in one.
+    if (is_custom_dict_table(param.ik_param_.main_dict_)) {
+      if (OB_FAIL(build_custom_dict_from_table(param.ik_param_.main_dict_, dict_main_))) {
+        LOG_WARN("Failed to build custom main dict from table", K(ret), K(param.ik_param_.main_dict_));
+      }
+    } else if (OB_FAIL(init_single_dict(main_dict_desc, cache_main_))) {
       LOG_WARN("Failed to init main dict", K(ret));
-    } else if (OB_FAIL(init_single_dict(quan_dict_desc, cache_quan_))) {
-      LOG_WARN("Failed to init quantifier dict", K(ret));
-    } else if (OB_FAIL(init_single_dict(stopword_dict_desc, cache_stop_))) {
-      LOG_WARN("Failed to init stopword dict", K(ret));
+    }
+    // Quantifier dict
+    if (OB_SUCC(ret)) {
+      if (is_custom_dict_table(param.ik_param_.quan_dict_)) {
+        if (OB_FAIL(build_custom_dict_from_table(param.ik_param_.quan_dict_, dict_quan_))) {
+          LOG_WARN("Failed to build custom quan dict from table", K(ret), K(param.ik_param_.quan_dict_));
+        }
+      } else if (OB_FAIL(init_single_dict(quan_dict_desc, cache_quan_))) {
+        LOG_WARN("Failed to init quantifier dict", K(ret));
+      }
+    }
+    // Stopword dict
+    if (OB_SUCC(ret)) {
+      if (is_custom_dict_table(param.ik_param_.stopword_dict_)) {
+        if (OB_FAIL(build_custom_dict_from_table(param.ik_param_.stopword_dict_, dict_stop_))) {
+          LOG_WARN("Failed to build custom stopword dict from table", K(ret), K(param.ik_param_.stopword_dict_));
+        }
+      } else if (OB_FAIL(init_single_dict(stopword_dict_desc, cache_stop_))) {
+        LOG_WARN("Failed to init stopword dict", K(ret));
+      }
     }
   }
 
   if (OB_FAIL(ret)) {
     // already logged.
-  } else if (OB_FAIL(build_dict_from_cache(main_dict_desc, cache_main_, dict_main_))) {
-    LOG_WARN("Failed to build dict main", K(ret));
-  } else if (OB_FAIL(build_dict_from_cache(quan_dict_desc, cache_quan_, dict_quan_))) {
-    LOG_WARN("Failed to build dict quantifier", K(ret));
-  } else if (OB_FAIL(build_dict_from_cache(stopword_dict_desc, cache_stop_, dict_stop_))) {
-    LOG_WARN("Failed to build dict stopword", K(ret));
+  } else {
+    // For the built-in path, dict_*_ is still null and needs to be wrapped from
+    // the cache container. For the custom path, dict_*_ is already set above.
+    if (OB_ISNULL(dict_main_)) {
+      if (OB_FAIL(build_dict_from_cache(main_dict_desc, cache_main_, dict_main_))) {
+        LOG_WARN("Failed to build dict main", K(ret));
+      }
+    }
+    if (OB_SUCC(ret) && OB_ISNULL(dict_quan_)) {
+      if (OB_FAIL(build_dict_from_cache(quan_dict_desc, cache_quan_, dict_quan_))) {
+        LOG_WARN("Failed to build dict quantifier", K(ret));
+      }
+    }
+    if (OB_SUCC(ret) && OB_ISNULL(dict_stop_)) {
+      if (OB_FAIL(build_dict_from_cache(stopword_dict_desc, cache_stop_, dict_stop_))) {
+        LOG_WARN("Failed to build dict stopword", K(ret));
+      }
+    }
   }
 
   return ret;
@@ -444,6 +484,110 @@ void ObIKFTParser::reset()
 }
 
 bool ObIKFTParser::should_read_newest_table() const { return false; }
+
+bool ObIKFTParser::is_custom_dict_table(const common::ObString &table_name)
+{
+  bool is_custom = false;
+  if (!table_name.empty()) {
+    // The built-in defaults point at the oceanbase.__ft_* system tables; any
+    // other non-empty name is a user-owned custom dictionary table.
+    if (0 == table_name.case_compare(ObString(ObFTSLiteral::FT_DEFAULT_IK_DICT_UTF8_TABLE))
+        || 0 == table_name.case_compare(ObString(ObFTSLiteral::FT_DEFAULT_IK_STOPWORD_UTF8_TABLE))
+        || 0 == table_name.case_compare(ObString(ObFTSLiteral::FT_DEFAULT_IK_QUANTIFIER_UTF8_TABLE))) {
+      is_custom = false;
+    } else {
+      is_custom = true;
+    }
+  }
+  return is_custom;
+}
+
+int ObIKFTParser::build_custom_dict_from_table(const common::ObString &table_name,
+                                               ObIFTDict *&dict)
+{
+  int ret = OB_SUCCESS;
+  dict = nullptr;
+  if (OB_UNLIKELY(table_name.empty())) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("custom dict table name is empty", K(ret));
+  } else if (OB_ISNULL(GCTX.sql_proxy_)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("sql proxy is null", K(ret));
+  } else {
+    SMART_VAR(ObISQLClient::ReadResult, result)
+    {
+      ObSqlString sql;
+      if (OB_FAIL(sql.append_fmt("SELECT word FROM %.*s ORDER BY word",
+                                 table_name.length(), table_name.ptr()))) {
+        LOG_WARN("fail to format sql", K(ret), K(table_name));
+      } else if (OB_FAIL(GCTX.sql_proxy_->read(result, sql.ptr()))) {
+        LOG_WARN("fail to read custom dict table", K(ret), K(sql));
+      } else if (OB_ISNULL(result.get_result())) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("custom dict read result is null", K(ret));
+      } else {
+        // Build a trie from the words, then a DAT, then wrap as ObFTCacheDict.
+        ObFTTrie<void> trie(allocator_, ObCollationType::CS_TYPE_UTF8MB4_BIN);
+        int64_t word_cnt = 0;
+        while (OB_SUCC(ret)) {
+          if (OB_FAIL(result.get_result()->next())) {
+            if (OB_ITER_END != ret) {
+              LOG_WARN("fail to iterate dict rows", K(ret));
+            }
+          } else {
+            ObString word;
+            if (OB_FAIL(result.get_result()->get_varchar("word", word))) {
+              LOG_WARN("fail to get word column", K(ret));
+            } else if (word.empty()) {
+              // skip empty words
+            } else if (OB_FAIL(trie.insert(word, {}))) {
+              LOG_WARN("fail to insert word into trie", K(ret), K(word));
+            } else {
+              ++word_cnt;
+            }
+          }
+        }
+        if (OB_ITER_END == ret) {
+          ret = OB_SUCCESS;
+        }
+        if (OB_FAIL(ret)) {
+          // already logged
+        } else if (0 == word_cnt) {
+          // Empty custom dict: leave dict null so init_dict builds an empty
+          // range dict (matches nothing). Avoids builder crash on empty trie.
+          LOG_INFO("custom ik dict table is empty", K(table_name));
+        } else {
+          ObFTDATBuilder<void> builder(allocator_);
+          ObFTDAT *dat_buff = nullptr;
+          size_t buffer_size = 0;
+          if (OB_FAIL(builder.init(trie))) {
+            LOG_WARN("fail to init dat builder", K(ret));
+          } else if (OB_FAIL(builder.build_from_trie(trie))) {
+            LOG_WARN("fail to build dat from trie", K(ret));
+          } else if (OB_FAIL(builder.get_mem_block(dat_buff, buffer_size))) {
+            LOG_WARN("fail to get dat mem block", K(ret));
+          } else if (OB_ISNULL(dat_buff)) {
+            ret = OB_ERR_UNEXPECTED;
+            LOG_WARN("dat mem block is null", K(ret));
+          } else if (OB_ISNULL(dict = OB_NEWx(ObFTCacheDict, &allocator_,
+                                              ObCollationType::CS_TYPE_UTF8MB4_BIN, dat_buff))) {
+            ret = OB_ALLOCATE_MEMORY_FAILED;
+            LOG_WARN("fail to alloc ObFTCacheDict", K(ret));
+          } else if (OB_FAIL(dict->init())) {
+            LOG_WARN("fail to init cache dict", K(ret));
+          } else {
+            LOG_INFO("succeed to build custom ik dict from table", K(table_name), K(word_cnt));
+          }
+          if (OB_FAIL(ret) && OB_NOT_NULL(dict)) {
+            OB_DELETEx(ObIFTDict, &allocator_, dict);
+          }
+        }
+      }
+    }
+  }
+  return ret;
+}
+
 int ObIKFTParser::build_dict_from_cache(const ObFTDictDesc &desc,
                                         ObFTCacheRangeContainer &container,
                                         ObIFTDict *&dict)

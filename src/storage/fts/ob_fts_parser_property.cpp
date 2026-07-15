@@ -1158,12 +1158,49 @@ int ObFTParserProperty::parse_for_parser_helper(const ObFTParser &parser, const 
     LOG_WARN("fail to parse from json str", K(ret), K(json_str));
   } else {
     if (parser.is_ik()) {
-      // set dict tables and copy dict name
-      dict_table_ = ObString(ObFTSLiteral::CONFIG_NAME_DICT_TABLE);
-      stopword_table_ = ObString(ObFTSLiteral::CONFIG_NAME_STOPWORD_TABLE);
-      quantifier_table_ = ObString(ObFTSLiteral::CONFIG_NAME_QUANTIFIER_TABLE);
+      // Resolve the actual dict/stopword/quantifier table names from the JSON
+      // properties (they are filled in with defaults by rebuild_props_for_ddl).
+      // Deep-copy into internal buffers because the JSON tree (local props) is
+      // destroyed when this function returns.
+      ObString dict_tbl;
+      if (OB_FAIL(props.config_get_dict_table(dict_tbl))) {
+        if (OB_SEARCH_NOT_FOUND == ret) {
+          dict_table_.reset();
+          ret = OB_SUCCESS;
+        } else {
+          LOG_WARN("fail to get dict_table", K(ret));
+        }
+      } else if (OB_FAIL(deep_copy_str_(dict_tbl, dict_table_, dict_table_buf_))) {
+        LOG_WARN("fail to deep copy dict_table", K(ret), K(dict_tbl));
+      }
+      if (OB_SUCC(ret)) {
+        ObString stopword_tbl;
+        if (OB_FAIL(props.config_get_stopword_table(stopword_tbl))) {
+          if (OB_SEARCH_NOT_FOUND == ret) {
+            stopword_table_.reset();
+            ret = OB_SUCCESS;
+          } else {
+            LOG_WARN("fail to get stopword_table", K(ret));
+          }
+        } else if (OB_FAIL(deep_copy_str_(stopword_tbl, stopword_table_, stopword_table_buf_))) {
+          LOG_WARN("fail to deep copy stopword_table", K(ret), K(stopword_tbl));
+        }
+      }
+      if (OB_SUCC(ret)) {
+        ObString quantifier_tbl;
+        if (OB_FAIL(props.config_get_quantifier_table(quantifier_tbl))) {
+          if (OB_SEARCH_NOT_FOUND == ret) {
+            quantifier_table_.reset();
+            ret = OB_SUCCESS;
+          } else {
+            LOG_WARN("fail to get quantifier_table", K(ret));
+          }
+        } else if (OB_FAIL(deep_copy_str_(quantifier_tbl, quantifier_table_, quantifier_table_buf_))) {
+          LOG_WARN("fail to deep copy quantifier_table", K(ret), K(quantifier_tbl));
+        }
+      }
       ObString ik_smart;
-      if (OB_FAIL(props.config_get_ik_mode(ik_smart))) {
+      if (OB_SUCC(ret) && OB_FAIL(props.config_get_ik_mode(ik_smart))) {
         if (OB_SEARCH_NOT_FOUND == ret) {
           // from old version, ik_mode is not set, so use default value
           ik_mode_smart_ = true;
@@ -1171,7 +1208,7 @@ int ObFTParserProperty::parse_for_parser_helper(const ObFTParser &parser, const 
         } else {
           LOG_WARN("fail to get ik mode", K(ret));
         }
-      } else {
+      } else if (OB_SUCC(ret)) {
         if (0 == ik_smart.case_compare(ObString(ObFTSLiteral::FT_IK_MODE_SMART))) {
           ik_mode_smart_ = true;
         } else if (0 == ik_smart.case_compare(ObString(ObFTSLiteral::FT_IK_MODE_MAX_WORD))) {
@@ -1230,6 +1267,25 @@ ObFTParserProperty::ObFTParserProperty()
       min_ngram_token_size_(ObFTSLiteral::FT_DEFAULT_MIN_NGRAM_SIZE),
       max_ngram_token_size_(ObFTSLiteral::FT_DEFAULT_MAX_NGRAM_SIZE)
 {
+  MEMSET(dict_table_buf_, 0, sizeof(dict_table_buf_));
+  MEMSET(stopword_table_buf_, 0, sizeof(stopword_table_buf_));
+  MEMSET(quantifier_table_buf_, 0, sizeof(quantifier_table_buf_));
+}
+
+int ObFTParserProperty::deep_copy_str_(const common::ObString &src, common::ObString &dst, char *buf)
+{
+  int ret = OB_SUCCESS;
+  if (src.empty()) {
+    dst.reset();
+  } else if (OB_UNLIKELY(src.length() >= DICT_TABLE_BUF_LEN)) {
+    ret = OB_SIZE_OVERFLOW;
+    LOG_WARN("dict table name too long", K(ret), K(src), K(DICT_TABLE_BUF_LEN));
+  } else {
+    MEMCPY(buf, src.ptr(), src.length());
+    buf[src.length()] = '\0';
+    dst.assign_ptr(buf, src.length());
+  }
+  return ret;
 }
 
 int ObFTParserJsonProps::tokenize_array_to_props_json(ObIAllocator &allocator,

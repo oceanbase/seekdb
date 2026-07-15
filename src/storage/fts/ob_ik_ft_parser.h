@@ -88,6 +88,17 @@ private:
                             ObFTCacheRangeContainer &container,
                             ObIFTDict *&dict);
 
+  // Build a dictionary from a user-owned dict table (custom IK dictionary).
+  // Reads `SELECT word FROM <table_name> ORDER BY word` and constructs an
+  // in-memory DAT trie used as the IK main/quantifier/stopword dict.
+  // A custom dict_table REPLACES the built-in embedded dictionary.
+  int build_custom_dict_from_table(const common::ObString &table_name,
+                                   ObIFTDict *&dict);
+
+  // Returns true when the given table name refers to a user custom dict table
+  // (i.e. not the built-in oceanbase.__ft_* system table and not empty).
+  static bool is_custom_dict_table(const common::ObString &table_name);
+
 private:
   static constexpr int SEGMENT_LIMIT = 1000;
   ObIAllocator &allocator_;

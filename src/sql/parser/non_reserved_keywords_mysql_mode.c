@@ -360,6 +360,8 @@ static const NonReservedKeyword Mysql_none_reserved_keywords[] =
   {"frozen", FROZEN},
   {"full", FULL},
   {"fulltext", FULLTEXT},
+  {"fulltext_dict", FULLTEXT_DICT},
+  {"dict", DICT},
   {"function", FUNCTION},
   {"following", FOLLOWING},
   {"general", GENERAL},
