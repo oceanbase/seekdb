@@ -29,32 +29,32 @@ desc information_schema.columns;
 | SRS_ID                   | bigint(20) unsigned | YES  |     | NULL    |       |
 +--------------------------+---------------------+------+-----+---------+-------+
 desc information_schema.tables;
-+------------------------+---------------------+------+-----+---------+-------+
-| Field                  | Type                | Null | Key | Default | Extra |
-+------------------------+---------------------+------+-----+---------+-------+
-| TABLE_CATALOG          | varchar(512)        | NO   |     |         |       |
-| TABLE_SCHEMA           | char(64)            | NO   |     |         |       |
-| TABLE_NAME             | char(64)            | NO   |     |         |       |
-| TABLE_TYPE             | varchar(64)         | NO   |     |         |       |
-| ENGINE                 | varchar(64)         | NO   |     |         |       |
-| VERSION                | bigint(0) unsigned  | NO   |     |         |       |
-| ROW_FORMAT             | varchar(10)         | NO   |     |         |       |
-| TABLE_ROWS             | bigint(20) unsigned | NO   |     |         |       |
-| AVG_ROW_LENGTH         | bigint(21) unsigned | NO   |     |         |       |
-| DATA_LENGTH            | bigint(20) unsigned | NO   |     |         |       |
-| MAX_DATA_LENGTH        | bigint(0) unsigned  | NO   |     |         |       |
-| INDEX_LENGTH           | bigint(21) unsigned | NO   |     |         |       |
-| DATA_FREE              | bigint(0) unsigned  | NO   |     |         |       |
-| AUTO_INCREMENT         | bigint(0) unsigned  | NO   |     |         |       |
-| CREATE_TIME            | datetime            | NO   |     |         |       |
-| UPDATE_TIME            | datetime            | NO   |     |         |       |
-| CHECK_TIME             | datetime            | NO   |     |         |       |
-| TABLE_COLLATION        | varchar(32)         | NO   |     |         |       |
-| CHECKSUM               | bigint(0) unsigned  | NO   |     |         |       |
-| CREATE_OPTIONS         | varchar(255)        | NO   |     |         |       |
-| TABLE_COMMENT          | text                | NO   |     |         |       |
-| ORGANIZATION           | varchar(12)         | NO   |     |         |       |
-+------------------------+---------------------+------+-----+---------+-------+
++-----------------+---------------------+------+-----+---------+-------+
+| Field           | Type                | Null | Key | Default | Extra |
++-----------------+---------------------+------+-----+---------+-------+
+| TABLE_CATALOG   | varchar(512)        | NO   |     |         |       |
+| TABLE_SCHEMA    | char(64)            | NO   |     |         |       |
+| TABLE_NAME      | char(64)            | NO   |     |         |       |
+| TABLE_TYPE      | varchar(64)         | NO   |     |         |       |
+| ENGINE          | varchar(64)         | NO   |     |         |       |
+| VERSION         | bigint(0) unsigned  | NO   |     |         |       |
+| ROW_FORMAT      | varchar(10)         | NO   |     |         |       |
+| TABLE_ROWS      | bigint(20) unsigned | NO   |     |         |       |
+| AVG_ROW_LENGTH  | bigint(21) unsigned | NO   |     |         |       |
+| DATA_LENGTH     | bigint(20) unsigned | NO   |     |         |       |
+| MAX_DATA_LENGTH | bigint(0) unsigned  | NO   |     |         |       |
+| INDEX_LENGTH    | bigint(21) unsigned | NO   |     |         |       |
+| DATA_FREE       | bigint(0) unsigned  | NO   |     |         |       |
+| AUTO_INCREMENT  | bigint(0) unsigned  | NO   |     |         |       |
+| CREATE_TIME     | datetime            | NO   |     |         |       |
+| UPDATE_TIME     | datetime            | NO   |     |         |       |
+| CHECK_TIME      | datetime            | NO   |     |         |       |
+| TABLE_COLLATION | varchar(32)         | NO   |     |         |       |
+| CHECKSUM        | bigint(0) unsigned  | NO   |     |         |       |
+| CREATE_OPTIONS  | varchar(255)        | NO   |     |         |       |
+| TABLE_COMMENT   | text                | NO   |     |         |       |
+| ORGANIZATION    | varchar(12)         | NO   |     |         |       |
++-----------------+---------------------+------+-----+---------+-------+
 desc information_schema.session_variables;
 +----------------+---------------+------+-----+---------+-------+
 | Field          | Type          | Null | Key | Default | Extra |
@@ -184,9 +184,9 @@ desc information_schema.files;
 +----------------------+---------------------+------+-----+---------+-------+
 
 select * from information_schema.tables where table_schema in ('oceanbase', 'mysql', 'information_schema') order by TABLE_CATALOG, TABLE_SCHEMA, TABLE_NAME;
-+---------------+--------------------+-----------------------------------------------+--------------+--------+---------+------------+------------+----------------+-------------+-----------------+--------------+-----------+----------------+---------------------+---------------------+------------+--------------------+----------+----------------+-----------------------------+
++---------------+--------------------+-----------------------------------------------+--------------+--------+---------+------------+------------+----------------+-------------+-----------------+--------------+-----------+----------------+---------------------+---------------------+------------+--------------------+----------+----------------+---------------+--------------+
 | TABLE_CATALOG | TABLE_SCHEMA       | TABLE_NAME                                    | TABLE_TYPE   | ENGINE | VERSION | ROW_FORMAT | TABLE_ROWS | AVG_ROW_LENGTH | DATA_LENGTH | MAX_DATA_LENGTH | INDEX_LENGTH | DATA_FREE | AUTO_INCREMENT | CREATE_TIME         | UPDATE_TIME         | CHECK_TIME | TABLE_COLLATION    | CHECKSUM | CREATE_OPTIONS | TABLE_COMMENT | ORGANIZATION |
-+---------------+--------------------+-----------------------------------------------+--------------+--------+---------+------------+------------+----------------+-------------+-----------------+--------------+-----------+----------------+---------------------+---------------------+------------+--------------------+----------+----------------+-----------------------------+
++---------------+--------------------+-----------------------------------------------+--------------+--------+---------+------------+------------+----------------+-------------+-----------------+--------------+-----------+----------------+---------------------+---------------------+------------+--------------------+----------+----------------+---------------+--------------+
 | def           | information_schema | CHARACTER_SETS                                | SYSTEM VIEW  | MEMORY |    NULL | DYNAMIC    |       NULL |           NULL |        NULL |            NULL |            0 |      NULL |           NULL | NULL                | NULL                | NULL       | utf8mb4_general_ci |     NULL | NULL           |               | INDEX        |
 | def           | information_schema | CHECK_CONSTRAINTS                             | SYSTEM VIEW  | MEMORY |    NULL | DYNAMIC    |       NULL |           NULL |        NULL |            NULL |            0 |      NULL |           NULL | NULL                | NULL                | NULL       | utf8mb4_general_ci |     NULL | NULL           |               | INDEX        |
 | def           | information_schema | COLLATIONS                                    | SYSTEM VIEW  | MEMORY |    NULL | DYNAMIC    |       NULL |           NULL |        NULL |            NULL |            0 |      NULL |           NULL | NULL                | NULL                | NULL       | utf8mb4_general_ci |     NULL | NULL           |               | INDEX        |
@@ -497,7 +497,6 @@ select * from information_schema.tables where table_schema in ('oceanbase', 'mys
 | def           | oceanbase          | __all_tablegroup                              | SYSTEM TABLE | InnoDB |    NULL | DYNAMIC    |       NULL |           NULL |        NULL |            NULL |            0 |      NULL |           NULL | NULL                | NULL                | NULL       | utf8mb4_general_ci |     NULL | NULL           |               | INDEX        |
 | def           | oceanbase          | __all_tablegroup_history                      | SYSTEM TABLE | InnoDB |    NULL | DYNAMIC    |       NULL |           NULL |        NULL |            NULL |            0 |      NULL |           NULL | NULL                | NULL                | NULL       | utf8mb4_general_ci |     NULL | NULL           |               | INDEX        |
 | def           | oceanbase          | __all_tablet_checksum                         | SYSTEM TABLE | InnoDB |    NULL | DYNAMIC    |       NULL |           NULL |        NULL |            NULL |            0 |      NULL |           NULL | NULL                | NULL                | NULL       | utf8mb4_general_ci |     NULL | NULL           |               | INDEX        |
-| def           | oceanbase          | __all_tablet_reorganize_history               | SYSTEM TABLE | InnoDB |    NULL | DYNAMIC    |       NULL |           NULL |        NULL |            NULL |            0 |      NULL |           NULL | NULL                | NULL                | NULL       | utf8mb4_general_ci |     NULL | NULL           |               | INDEX        |
 | def           | oceanbase          | __all_tablet_to_table                         | SYSTEM TABLE | InnoDB |    NULL | DYNAMIC    |       NULL |           NULL |        NULL |            NULL |            0 |      NULL |           NULL | NULL                | NULL                | NULL       | utf8mb4_general_ci |     NULL | NULL           |               | INDEX        |
 | def           | oceanbase          | __all_tablet_to_table_history                 | SYSTEM TABLE | InnoDB |    NULL | DYNAMIC    |       NULL |           NULL |        NULL |            NULL |            0 |      NULL |           NULL | NULL                | NULL                | NULL       | utf8mb4_general_ci |     NULL | NULL           |               | INDEX        |
 | def           | oceanbase          | __all_task_opt_stat_gather_history            | SYSTEM TABLE | InnoDB |    NULL | DYNAMIC    |       NULL |           NULL |        NULL |            NULL |            0 |      NULL |           NULL | NULL                | NULL                | NULL       | utf8mb4_general_ci |     NULL | NULL           |               | INDEX        |
@@ -676,7 +675,7 @@ select * from information_schema.tables where table_schema in ('oceanbase', 'mys
 | def           | oceanbase          | __ft_dict_ik_utf8                             | SYSTEM TABLE | InnoDB |    NULL | DYNAMIC    |       NULL |           NULL |        NULL |            NULL |            0 |      NULL |           NULL | NULL                | NULL                | NULL       | utf8mb4_general_ci |     NULL | NULL           |               | INDEX        |
 | def           | oceanbase          | __ft_quantifier_ik_utf8                       | SYSTEM TABLE | InnoDB |    NULL | DYNAMIC    |       NULL |           NULL |        NULL |            NULL |            0 |      NULL |           NULL | NULL                | NULL                | NULL       | utf8mb4_general_ci |     NULL | NULL           |               | INDEX        |
 | def           | oceanbase          | __ft_stopword_ik_utf8                         | SYSTEM TABLE | InnoDB |    NULL | DYNAMIC    |       NULL |           NULL |        NULL |            NULL |            0 |      NULL |           NULL | NULL                | NULL                | NULL       | utf8mb4_general_ci |     NULL | NULL           |               | INDEX        |
-+---------------+--------------------+-----------------------------------------------+--------------+--------+---------+------------+------------+----------------+-------------+-----------------+--------------+-----------+----------------+---------------------+---------------------+------------+--------------------+----------+----------------+-----------------------------+
++---------------+--------------------+-----------------------------------------------+--------------+--------+---------+------------+------------+----------------+-------------+-----------------+--------------+-----------+----------------+---------------------+---------------------+------------+--------------------+----------+----------------+---------------+--------------+
 test
 select * from information_schema.table_constraints where table_schema in ('oceanbase', 'mysql', 'information_schema') order by CONSTRAINT_CATALOG, CONSTRAINT_SCHEMA, CONSTRAINT_NAME;
 +--------------------+-------------------+-----------------+--------------+------------+-----------------+----------+
@@ -1141,9 +1140,9 @@ create database test1;
 use test1;
 create table t1tenant1(c1 bigint primary key, c2 bigint);
 select * from information_schema.tables where table_schema in ('oceanbase', 'mysql', 'information_schema', 'test1') order by TABLE_CATALOG, TABLE_SCHEMA, TABLE_NAME;
-+---------------+--------------------+-----------------------------------------------+--------------+--------+---------+------------+------------+----------------+-------------+-----------------+--------------+-----------+----------------+---------------------+---------------------+------------+--------------------+----------+----------------+-----------------------------+
++---------------+--------------------+-----------------------------------------------+--------------+--------+---------+------------+------------+----------------+-------------+-----------------+--------------+-----------+----------------+---------------------+---------------------+------------+--------------------+----------+----------------+---------------+--------------+
 | TABLE_CATALOG | TABLE_SCHEMA       | TABLE_NAME                                    | TABLE_TYPE   | ENGINE | VERSION | ROW_FORMAT | TABLE_ROWS | AVG_ROW_LENGTH | DATA_LENGTH | MAX_DATA_LENGTH | INDEX_LENGTH | DATA_FREE | AUTO_INCREMENT | CREATE_TIME         | UPDATE_TIME         | CHECK_TIME | TABLE_COLLATION    | CHECKSUM | CREATE_OPTIONS | TABLE_COMMENT | ORGANIZATION |
-+---------------+--------------------+-----------------------------------------------+--------------+--------+---------+------------+------------+----------------+-------------+-----------------+--------------+-----------+----------------+---------------------+---------------------+------------+--------------------+----------+----------------+-----------------------------+
++---------------+--------------------+-----------------------------------------------+--------------+--------+---------+------------+------------+----------------+-------------+-----------------+--------------+-----------+----------------+---------------------+---------------------+------------+--------------------+----------+----------------+---------------+--------------+
 | def           | information_schema | CHARACTER_SETS                                | SYSTEM VIEW  | MEMORY |    NULL | DYNAMIC    |       NULL |           NULL |        NULL |            NULL |            0 |      NULL |           NULL | NULL                | NULL                | NULL       | utf8mb4_general_ci |     NULL | NULL           |               | INDEX        |
 | def           | information_schema | CHECK_CONSTRAINTS                             | SYSTEM VIEW  | MEMORY |    NULL | DYNAMIC    |       NULL |           NULL |        NULL |            NULL |            0 |      NULL |           NULL | NULL                | NULL                | NULL       | utf8mb4_general_ci |     NULL | NULL           |               | INDEX        |
 | def           | information_schema | COLLATIONS                                    | SYSTEM VIEW  | MEMORY |    NULL | DYNAMIC    |       NULL |           NULL |        NULL |            NULL |            0 |      NULL |           NULL | NULL                | NULL                | NULL       | utf8mb4_general_ci |     NULL | NULL           |               | INDEX        |
@@ -1447,7 +1446,6 @@ select * from information_schema.tables where table_schema in ('oceanbase', 'mys
 | def           | oceanbase          | __all_tablegroup                              | SYSTEM TABLE | InnoDB |    NULL | DYNAMIC    |       NULL |           NULL |        NULL |            NULL |            0 |      NULL |           NULL | NULL                | NULL                | NULL       | utf8mb4_general_ci |     NULL | NULL           |               | INDEX        |
 | def           | oceanbase          | __all_tablegroup_history                      | SYSTEM TABLE | InnoDB |    NULL | DYNAMIC    |       NULL |           NULL |        NULL |            NULL |            0 |      NULL |           NULL | NULL                | NULL                | NULL       | utf8mb4_general_ci |     NULL | NULL           |               | INDEX        |
 | def           | oceanbase          | __all_tablet_checksum                         | SYSTEM TABLE | InnoDB |    NULL | DYNAMIC    |       NULL |           NULL |        NULL |            NULL |            0 |      NULL |           NULL | NULL                | NULL                | NULL       | utf8mb4_general_ci |     NULL | NULL           |               | INDEX        |
-| def           | oceanbase          | __all_tablet_reorganize_history               | SYSTEM TABLE | InnoDB |    NULL | DYNAMIC    |       NULL |           NULL |        NULL |            NULL |            0 |      NULL |           NULL | NULL                | NULL                | NULL       | utf8mb4_general_ci |     NULL | NULL           |               | INDEX        |
 | def           | oceanbase          | __all_tablet_to_table                         | SYSTEM TABLE | InnoDB |    NULL | DYNAMIC    |       NULL |           NULL |        NULL |            NULL |            0 |      NULL |           NULL | NULL                | NULL                | NULL       | utf8mb4_general_ci |     NULL | NULL           |               | INDEX        |
 | def           | oceanbase          | __all_tablet_to_table_history                 | SYSTEM TABLE | InnoDB |    NULL | DYNAMIC    |       NULL |           NULL |        NULL |            NULL |            0 |      NULL |           NULL | NULL                | NULL                | NULL       | utf8mb4_general_ci |     NULL | NULL           |               | INDEX        |
 | def           | oceanbase          | __all_table_history                           | SYSTEM TABLE | InnoDB |    NULL | DYNAMIC    |       NULL |           NULL |        NULL |            NULL |            0 |      NULL |           NULL | NULL                | NULL                | NULL       | utf8mb4_general_ci |     NULL | NULL           |               | INDEX        |
@@ -1634,7 +1632,7 @@ select * from information_schema.tables where table_schema in ('oceanbase', 'mys
 | def           | oceanbase          | __ft_quantifier_ik_utf8                       | SYSTEM TABLE | InnoDB |    NULL | DYNAMIC    |       NULL |           NULL |        NULL |            NULL |            0 |      NULL |           NULL | NULL                | NULL                | NULL       | utf8mb4_general_ci |     NULL | NULL           |               | INDEX        |
 | def           | oceanbase          | __ft_stopword_ik_utf8                         | SYSTEM TABLE | InnoDB |    NULL | DYNAMIC    |       NULL |           NULL |        NULL |            NULL |            0 |      NULL |           NULL | NULL                | NULL                | NULL       | utf8mb4_general_ci |     NULL | NULL           |               | INDEX        |
 | def           | test1              | t1tenant1                                     | BASE TABLE   | InnoDB |    NULL | DYNAMIC    |       NULL |           NULL |        NULL |            NULL |            0 |      NULL |           NULL | NULL                | NULL                | NULL       | utf8mb4_general_ci |     NULL | NULL           |               | INDEX        |
-+---------------+--------------------+-----------------------------------------------+--------------+--------+---------+------------+------------+----------------+-------------+-----------------+--------------+-----------+----------------+---------------------+---------------------+------------+--------------------+----------+----------------+-----------------------------+
++---------------+--------------------+-----------------------------------------------+--------------+--------+---------+------------+------------+----------------+-------------+-----------------+--------------+-----------+----------------+---------------------+---------------------+------------+--------------------+----------+----------------+---------------+--------------+
 
 create index t1tenant1_idx1 on t1tenant1(c2, c1);
 create unique index t1tenant1_uidx on t1tenant1(c2);

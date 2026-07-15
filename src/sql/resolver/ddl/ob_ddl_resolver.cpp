@@ -8729,7 +8729,7 @@ int ObDDLResolver::resolve_partition_range(ObPartitionedStmt *stmt,
     ret = OB_ERR_UNEXPECTED;
     SQL_RESV_LOG(WARN, "get invalid num_child", KR(ret), K(is_subpartition), K(node->num_child_));
   } else if (nullptr == node->children_[RANGE_ELEMENTS_NODE]) {
-    ret = OB_ERR_UNEXPECTED;
+    ret = OB_ERR_PARSE_PARTITION_RANGE;
     LOG_WARN("range partition without partition definition", KR(ret));
   } else {
     if (is_subpartition) {

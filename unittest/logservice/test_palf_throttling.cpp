@@ -15,6 +15,7 @@
  */
 
 #include <gtest/gtest.h>
+#include "lib/checksum/ob_crc64.h"
 
 #define private public
 #include "logservice/palf/palf_env_impl.h"

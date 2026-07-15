@@ -7,7 +7,7 @@ id	field	type	length	precision	nullable
 19	row_id	5	0	20	0
 20	column_name	22	128	-1	0
 21	column_value	22	65536	-1	1
-table oceanbase.__all_table column_count 93 table_id 3
+table oceanbase.__all_table column_count 90 table_id 3
 select column_id id, column_name field, data_type type, data_length length, data_precision `precision`, nullable from __all_virtual_core_column_table where table_id=3 order by column_id;
 id	field	type	length	precision	nullable
 16	gmt_create	18	0	25	1
@@ -398,7 +398,7 @@ id	field	type	length	precision	nullable
 31	priv_create_view	5	0	20	1
 32	priv_show_view	5	0	20	1
 33	priv_others	5	0	20	1
-table oceanbase.__all_table_history column_count 94 table_id 114
+table oceanbase.__all_table_history column_count 91 table_id 114
 select column_id id, column_name field, data_type type, data_length length, data_precision `precision`, nullable from __all_column where table_id=114 order by column_id;
 id	field	type	length	precision	nullable
 16	gmt_create	18	0	25	1
@@ -2071,14 +2071,6 @@ id	field	type	length	precision	nullable
 20	logging_level	22	11	-1	1
 21	log_history	15	0	38	1
 22	comments	22	240	-1	1
-table oceanbase.__all_tablet_reorganize_history column_count 5 table_id 482
-select column_id id, column_name field, data_type type, data_length length, data_precision `precision`, nullable from __all_column where table_id=482 order by column_id;
-id	field	type	length	precision	nullable
-16	src_tablet_id	5	0	20	0
-17	dest_tablet_id	5	0	20	0
-18	type	5	0	20	0
-19	create_time	18	0	25	0
-20	finish_time	18	0	25	0
 table oceanbase.__all_routine_privilege column_count 9 table_id 490
 select column_id id, column_name field, data_type type, data_length length, data_precision `precision`, nullable from __all_column where table_id=490 order by column_id;
 id	field	type	length	precision	nullable
@@ -2965,7 +2957,7 @@ id	field	type	length	precision	nullable
 35	gtrid	22	128	-1	1
 36	bqual	22	128	-1	1
 37	format_id	5	0	20	0
-table oceanbase.__all_virtual_core_all_table column_count 91 table_id 11035
+table oceanbase.__all_virtual_core_all_table column_count 88 table_id 11035
 select column_id id, column_name field, data_type type, data_length length, data_precision `precision`, nullable from __all_column where table_id=11035 order by column_id;
 id	field	type	length	precision	nullable
 16	table_id	5	0	20	0
