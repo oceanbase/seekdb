@@ -47,6 +47,9 @@ public:
 
   int current_char(const char *&ch, uint8_t &char_len);
   int current_char_type(ObFTCharUtil::CharType &type);
+  // fetch the char, its length and its type in one call to keep the
+  // per-character hot loop free of repeated bound checks
+  int current_char_and_type(const char *&ch, uint8_t &char_len, ObFTCharUtil::CharType &type);
 
   int step_next();
 

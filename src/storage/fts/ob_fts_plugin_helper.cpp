@@ -24,7 +24,10 @@
 #include "plugin/interface/ob_plugin_ftparser_intf.h"
 #include "plugin/sys/ob_plugin_helper.h"
 #include "share/ob_force_print_log.h"
+#include "storage/fts/dict/ob_ft_cache_container.h"
+#include "storage/fts/dict/ob_ft_dict_def.h"
 #include "storage/fts/dict/ob_ft_dict_hub.h"
+#include "storage/fts/dict/ob_ft_range_dict.h"
 #include "storage/fts/ob_fts_parser_property.h"
 #include "storage/fts/ob_fts_stop_word.h"
 
@@ -197,6 +200,8 @@ int ObFTParsePluginData::init_dict_hub()
 
 void ObFTParsePluginData::destroy()
 {
+  destroy_builtin_ik_dicts();
+
   if (OB_NOT_NULL(stop_word_checker_)) {
     stop_word_checker_->destroy();
     OB_DELETEx(ObStopWordChecker, &handler_allocator_, stop_word_checker_);
@@ -212,6 +217,119 @@ void ObFTParsePluginData::destroy()
 
   handler_allocator_.reset();
   is_inited_ = false;
+}
+
+void ObFTParsePluginData::destroy_builtin_ik_dicts()
+{
+  for (int64_t i = 0; i < IK_DICT_CNT; ++i) {
+    if (OB_NOT_NULL(builtin_ik_dicts_[i])) {
+      builtin_ik_dicts_[i]->~ObIFTDict();
+      handler_allocator_.free(builtin_ik_dicts_[i]);
+      builtin_ik_dicts_[i] = nullptr;
+    }
+    if (OB_NOT_NULL(builtin_ik_containers_[i])) {
+      builtin_ik_containers_[i]->~ObFTCacheRangeContainer();
+      handler_allocator_.free(builtin_ik_containers_[i]);
+      builtin_ik_containers_[i] = nullptr;
+    }
+  }
+  builtin_ik_ready_.store(false);
+}
+
+int ObFTParsePluginData::build_builtin_ik_dicts()
+{
+  int ret = OB_SUCCESS;
+  // Build the three built-in IK dictionaries once from the KV cache and keep
+  // them for the whole process. Each ObFTRangeDict pins its cache ranges, so
+  // a single shared instance replaces the per-tokenization load/build path.
+  const ObFTDictDesc descs[IK_DICT_CNT] = {
+      ObFTDictDesc("main_dict", ObFTDictType::DICT_IK_MAIN,
+                   ObCharsetType::CHARSET_UTF8MB4, ObCollationType::CS_TYPE_UTF8MB4_BIN),
+      ObFTDictDesc("quan_dict", ObFTDictType::DICT_IK_QUAN,
+                   ObCharsetType::CHARSET_UTF8MB4, ObCollationType::CS_TYPE_UTF8MB4_BIN),
+      ObFTDictDesc("stopword", ObFTDictType::DICT_IK_STOP,
+                   ObCharsetType::CHARSET_UTF8MB4, ObCollationType::CS_TYPE_UTF8MB4_BIN),
+  };
+
+  if (OB_ISNULL(dict_hub_)) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("dict hub is null", K(ret));
+  }
+  for (int64_t i = 0; OB_SUCC(ret) && i < IK_DICT_CNT; ++i) {
+    ObFTCacheRangeContainer *container = nullptr;
+    ObFTRangeDict *dict = nullptr;
+    void *cont_buf = nullptr;
+    if (OB_ISNULL(cont_buf = handler_allocator_.alloc(sizeof(ObFTCacheRangeContainer)))) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+      LOG_WARN("failed to alloc range container", K(ret), K(i));
+    } else if (FALSE_IT(container = new (cont_buf) ObFTCacheRangeContainer(handler_allocator_))) {
+    } else if (OB_FAIL(dict_hub_->load_cache(descs[i], *container))) {
+      if (OB_ENTRY_NOT_EXIST == ret) {
+        if (OB_FAIL(dict_hub_->build_cache(descs[i], *container))) {
+          LOG_WARN("failed to build builtin ik dict cache", K(ret), K(i));
+        }
+      } else {
+        LOG_WARN("failed to load builtin ik dict cache", K(ret), K(i));
+      }
+    }
+    if (OB_SUCC(ret)) {
+      if (OB_ISNULL(dict = OB_NEWx(ObFTRangeDict, &handler_allocator_,
+                                   handler_allocator_, container, descs[i]))) {
+        ret = OB_ALLOCATE_MEMORY_FAILED;
+        LOG_WARN("failed to alloc range dict", K(ret), K(i));
+      } else if (OB_FAIL(dict->init())) {
+        LOG_WARN("failed to init builtin ik dict", K(ret), K(i));
+      } else {
+        builtin_ik_containers_[i] = container;
+        builtin_ik_dicts_[i] = dict;
+      }
+    }
+    if (OB_FAIL(ret)) {
+      if (OB_NOT_NULL(dict)) {
+        dict->~ObFTRangeDict();
+        handler_allocator_.free(dict);
+      }
+      if (OB_NOT_NULL(container)) {
+        container->~ObFTCacheRangeContainer();
+        handler_allocator_.free(container);
+      }
+    }
+  }
+  return ret;
+}
+
+int ObFTParsePluginData::get_builtin_ik_dicts(ObIFTDict *&main_dict,
+                                              ObIFTDict *&quan_dict,
+                                              ObIFTDict *&stop_dict)
+{
+  int ret = OB_SUCCESS;
+  if (OB_UNLIKELY(!builtin_ik_ready_.load())) {
+    lib::ObMutexGuard guard(builtin_ik_lock_);
+    if (!builtin_ik_ready_.load()) {
+      if (OB_NOT_NULL(builtin_ik_dicts_[0])) {
+        // a previous attempt half-built; clean before retry
+        destroy_builtin_ik_dicts();
+      }
+      if (OB_FAIL(build_builtin_ik_dicts())) {
+        LOG_WARN("failed to build builtin ik dicts", K(ret));
+        destroy_builtin_ik_dicts();
+      } else {
+        builtin_ik_ready_.store(true);
+      }
+    }
+  }
+  if (OB_SUCC(ret)) {
+    if (OB_ISNULL(builtin_ik_dicts_[0]) || OB_ISNULL(builtin_ik_dicts_[1])
+        || OB_ISNULL(builtin_ik_dicts_[2])) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("builtin ik dicts are null", K(ret));
+    } else {
+      main_dict = builtin_ik_dicts_[0];
+      quan_dict = builtin_ik_dicts_[1];
+      stop_dict = builtin_ik_dicts_[2];
+    }
+  }
+  return ret;
 }
 
 int ObFTParsePluginData::get_dict_hub(ObFTDictHub *&hub)

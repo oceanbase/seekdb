@@ -40,15 +40,21 @@ public:
         coll_type_(ObCollationType::CS_TYPE_INVALID),
         ctx_(nullptr),
         hub_(hub),
-        segmenters_(allocator_),
+        segmenter_cnt_(0),
         cache_main_(allocator),
         cache_quan_(allocator),
         cache_stop_(allocator),
         dict_main_(nullptr),
         dict_quan_(nullptr),
         dict_stop_(nullptr),
+        own_dict_main_(false),
+        own_dict_quan_(false),
+        own_dict_stop_(false),
         table_dict_block_cnt_(0)
   {
+    for (int64_t i = 0; i < MAX_SEGMENTER_CNT; ++i) {
+      segmenters_[i] = nullptr;
+    }
     for (int64_t i = 0; i < MAX_TABLE_DICT_BLOCK; ++i) {
       table_dict_blocks_[i] = nullptr;
     }
@@ -104,13 +110,17 @@ private:
 
 private:
   static constexpr int SEGMENT_LIMIT = 1000;
+  static constexpr int64_t MAX_SEGMENTER_CNT = 4;
   ObIAllocator &allocator_;
   bool is_inited_;
 
   ObCollationType coll_type_;
   TokenizeContext *ctx_;
   ObFTDictHub *hub_;
-  ObList<ObIIKProcessor *, ObIAllocator> segmenters_;
+  // fixed-size segmenter array (letter/quantifier/cjk/surrogate) instead of a
+  // heap-allocating list, avoiding per-document list-node allocations
+  ObIIKProcessor *segmenters_[MAX_SEGMENTER_CNT];
+  int64_t segmenter_cnt_;
 
   // For now there's no change of dict in one query, so we can pin dict this level.
   ObFTCacheRangeContainer cache_main_;
@@ -120,6 +130,11 @@ private:
   ObIFTDict *dict_main_;
   ObIFTDict *dict_quan_;
   ObIFTDict *dict_stop_;
+  // whether the dict above is owned by this parser (custom table dict) or
+  // borrowed from the process-wide shared built-in dictionaries
+  bool own_dict_main_;
+  bool own_dict_quan_;
+  bool own_dict_stop_;
 
   // DAT memory blocks built for custom dictionary tables, freed in reset()
   static constexpr int64_t MAX_TABLE_DICT_BLOCK = 3;

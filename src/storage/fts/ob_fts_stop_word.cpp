@@ -78,8 +78,6 @@ void ObStopWordChecker::destroy()
 int ObStopWordChecker::check_stopword(const ObFTWord &word, bool &is_stopword)
 {
   int ret = OB_SUCCESS;
-  
-  
   common::ObArenaAllocator allocator(lib::ObMemAttr("ChkStopWord"));
   if (OB_UNLIKELY(!inited_)) {
     ret = OB_NOT_INIT;
@@ -89,15 +87,20 @@ int ObStopWordChecker::check_stopword(const ObFTWord &word, bool &is_stopword)
     LOG_WARN("word is empty", K(ret), K(word));
   } else {
     common::ObString cmp_str;
-    // do nothing set out with in if type is the same.
-    if (OB_FAIL(common::ObCharset::charset_convert(
+    if (common::ObCharset::charset_type_by_coll(word.get_collation_type())
+        == common::ObCharset::charset_type_by_coll(stopword_type_.get_collation_type())) {
+      // same charset: the bytes are directly comparable under the stopword
+      // collation, so skip the per-token conversion (and its allocation)
+      cmp_str = word.get_word().get_string();
+    } else if (OB_FAIL(common::ObCharset::charset_convert(
                                        allocator,
                                        word.get_word().get_string(),
                                        word.get_collation_type(),
                                        stopword_type_.get_collation_type(),
                                        cmp_str))) {
       LOG_WARN("fail to convert charset", K(ret), K(word), K(stopword_type_));
-    } else {
+    }
+    if (OB_SUCC(ret)) {
       ObFTWord converted(cmp_str.length(), cmp_str.ptr(), stopword_type_);
       ret = stopword_set_.exist_refactored(converted);
       if (OB_HASH_NOT_EXIST == ret) {

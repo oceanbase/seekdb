@@ -158,11 +158,9 @@ int ObIKFTParser::process_one_char(TokenizeContext &ctx,
                                    const ObFTCharUtil::CharType type)
 {
   int ret = OB_SUCCESS;
-  // proces by char with all segmenters
-  for (ObList<ObIIKProcessor *, ObIAllocator>::iterator iter = segmenters_.begin();
-       OB_SUCC(ret) && iter != segmenters_.end();
-       iter++) {
-    if (OB_FAIL((*iter)->process(ctx))) {
+  // process by char with all segmenters
+  for (int64_t i = 0; OB_SUCC(ret) && i < segmenter_cnt_; ++i) {
+    if (OB_FAIL(segmenters_[i]->process(ctx))) {
       LOG_WARN("Failed to process segmenter", K(ret));
     }
   }
@@ -184,10 +182,8 @@ int ObIKFTParser::process_next_batch()
       const char *ch;
       uint8_t char_len = 0;
       ObFTCharUtil::CharType type = ObFTCharUtil::CharType::USELESS;
-      if (OB_FAIL(ctx_->current_char(ch, char_len))) {
-        LOG_WARN("Failed to get current char", K(ret));
-      } else if (OB_FAIL(ctx_->current_char_type(type))) {
-        LOG_WARN("Failed to get current char type", K(ret));
+      if (OB_FAIL(ctx_->current_char_and_type(ch, char_len, type))) {
+        LOG_WARN("Failed to get current char and type", K(ret));
       } else if (OB_FAIL(process_one_char(*ctx_, ch, char_len, type))) {
         LOG_WARN("Failed to process one char", K(ret));
       } else {
@@ -295,21 +291,6 @@ int ObIKFTParser::init_dict(const plugin::ObFTParserParam &param)
     LOG_WARN("Dict hub is not inited", K(ret));
   }
 
-  ObFTDictDesc main_dict_desc("main_dict",
-                              ObFTDictType::DICT_IK_MAIN,
-                              ObCharsetType::CHARSET_UTF8MB4,
-                              ObCollationType::CS_TYPE_UTF8MB4_BIN);
-
-  ObFTDictDesc quan_dict_desc("quan_dict",
-                              ObFTDictType::DICT_IK_QUAN,
-                              ObCharsetType::CHARSET_UTF8MB4,
-                              ObCollationType::CS_TYPE_UTF8MB4_BIN);
-
-  ObFTDictDesc stopword_dict_desc("stopword",
-                                  ObFTDictType::DICT_IK_STOP,
-                                  ObCharsetType::CHARSET_UTF8MB4,
-                                  ObCollationType::CS_TYPE_UTF8MB4_BIN);
-
   const bool custom_main = is_custom_dict_table(param.ik_param_.main_dict_,
                                                 ObFTSLiteral::FT_DEFAULT_IK_DICT_UTF8_TABLE);
   const bool custom_quan = is_custom_dict_table(param.ik_param_.quan_dict_,
@@ -317,20 +298,50 @@ int ObIKFTParser::init_dict(const plugin::ObFTParserParam &param)
   const bool custom_stop = is_custom_dict_table(param.ik_param_.stopword_dict_,
                                                 ObFTSLiteral::FT_DEFAULT_IK_STOPWORD_UTF8_TABLE);
 
+  // When no custom dictionary is configured (the common case), borrow the
+  // process-wide shared built-in dictionaries instead of rebuilding a private
+  // copy for every tokenization. Only custom-table dictionaries are built and
+  // owned locally.
+  ObIFTDict *shared_main = nullptr;
+  ObIFTDict *shared_quan = nullptr;
+  ObIFTDict *shared_stop = nullptr;
   if (OB_FAIL(ret)) {
     // already logged.
-  } else if (custom_main
-                 ? OB_FAIL(build_table_dict(param.ik_param_.main_dict_, dict_main_))
-                 : OB_FAIL(init_builtin_dict(main_dict_desc, cache_main_, dict_main_))) {
-    LOG_WARN("Failed to init main dict", K(ret), K(param.ik_param_.main_dict_));
-  } else if (custom_quan
-                 ? OB_FAIL(build_table_dict(param.ik_param_.quan_dict_, dict_quan_))
-                 : OB_FAIL(init_builtin_dict(quan_dict_desc, cache_quan_, dict_quan_))) {
-    LOG_WARN("Failed to init quantifier dict", K(ret), K(param.ik_param_.quan_dict_));
-  } else if (custom_stop
-                 ? OB_FAIL(build_table_dict(param.ik_param_.stopword_dict_, dict_stop_))
-                 : OB_FAIL(init_builtin_dict(stopword_dict_desc, cache_stop_, dict_stop_))) {
-    LOG_WARN("Failed to init stopword dict", K(ret), K(param.ik_param_.stopword_dict_));
+  } else if ((!custom_main || !custom_quan || !custom_stop)
+             && OB_FAIL(ObFTParsePluginData::instance().get_builtin_ik_dicts(
+                    shared_main, shared_quan, shared_stop))) {
+    LOG_WARN("Failed to get shared builtin ik dicts", K(ret));
+  }
+
+  if (OB_SUCC(ret)) {
+    if (custom_main) {
+      own_dict_main_ = true;
+      if (OB_FAIL(build_table_dict(param.ik_param_.main_dict_, dict_main_))) {
+        LOG_WARN("Failed to init main dict", K(ret), K(param.ik_param_.main_dict_));
+      }
+    } else {
+      dict_main_ = shared_main;
+    }
+  }
+  if (OB_SUCC(ret)) {
+    if (custom_quan) {
+      own_dict_quan_ = true;
+      if (OB_FAIL(build_table_dict(param.ik_param_.quan_dict_, dict_quan_))) {
+        LOG_WARN("Failed to init quantifier dict", K(ret), K(param.ik_param_.quan_dict_));
+      }
+    } else {
+      dict_quan_ = shared_quan;
+    }
+  }
+  if (OB_SUCC(ret)) {
+    if (custom_stop) {
+      own_dict_stop_ = true;
+      if (OB_FAIL(build_table_dict(param.ik_param_.stopword_dict_, dict_stop_))) {
+        LOG_WARN("Failed to init stopword dict", K(ret), K(param.ik_param_.stopword_dict_));
+      }
+    } else {
+      dict_stop_ = shared_stop;
+    }
   }
 
   return ret;
@@ -529,20 +540,14 @@ int ObIKFTParser::init_segmenter(const ObFTParserParam &param)
   } else if (OB_ISNULL(surrogate_seg = OB_NEWx(ObIKSurrogateProcessor, &allocator_))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("Failed to alloc surrogate segmenter", K(ret));
-  } else if (OB_FAIL(segmenters_.push_back(letter_seg))) {
-    LOG_WARN("Failed to push back letter segmenter", K(ret));
-  } else if (FALSE_IT(letter_seg = nullptr)) {
-  } else if (OB_FAIL(segmenters_.push_back(cnqsg))) {
-    LOG_WARN("Failed to push back cn quantifier segmenter", K(ret));
-  } else if (FALSE_IT(cnqsg = nullptr)) {
-  } else if (OB_FAIL(segmenters_.push_back(cjksg))) {
-    LOG_WARN("Failed to push back cjk segmenter", K(ret));
-  } else if (FALSE_IT(cjksg = nullptr)) {
-  } else if (OB_FAIL(segmenters_.push_back(surrogate_seg))) {
-    LOG_WARN("Failed to push back surrogate segmenter");
-  } else if (OB_FALSE_IT(surrogate_seg = nullptr)) {
+  } else {
+    // fill by order, quantifier is before cjk
+    segmenter_cnt_ = 0;
+    segmenters_[segmenter_cnt_++] = letter_seg;
+    segmenters_[segmenter_cnt_++] = cnqsg;
+    segmenters_[segmenter_cnt_++] = cjksg;
+    segmenters_[segmenter_cnt_++] = surrogate_seg;
   }
-  // push back by order, quantifier is before cjk
 
   if (OB_FAIL(ret)) {
     OB_DELETEx(ObIKLetterProcessor, &allocator_, letter_seg);
@@ -558,32 +563,42 @@ void ObIKFTParser::reset()
   if (!OB_ISNULL(ctx_)) {
     ctx_->~TokenizeContext();
     allocator_.free(ctx_);
+    ctx_ = nullptr;
   }
 
-  for (ObIIKProcessor *segmenter : segmenters_) {
-    if (!OB_ISNULL(segmenter)) {
-      segmenter->~ObIIKProcessor();
-      allocator_.free(segmenter);
+  for (int64_t i = 0; i < segmenter_cnt_; ++i) {
+    if (!OB_ISNULL(segmenters_[i])) {
+      segmenters_[i]->~ObIIKProcessor();
+      allocator_.free(segmenters_[i]);
+      segmenters_[i] = nullptr;
     }
   }
-  segmenters_.clear();
+  segmenter_cnt_ = 0;
 
   cache_main_.reset();
   cache_quan_.reset();
   cache_stop_.reset();
 
-  if (!OB_ISNULL(dict_main_)) {
+  // Only free dictionaries this parser owns (custom-table dictionaries). The
+  // built-in dictionaries are shared process-wide and must not be freed here.
+  if (own_dict_main_ && !OB_ISNULL(dict_main_)) {
     dict_main_->~ObIFTDict();
     allocator_.free(dict_main_);
   }
-  if (!OB_ISNULL(dict_quan_)) {
+  dict_main_ = nullptr;
+  own_dict_main_ = false;
+  if (own_dict_quan_ && !OB_ISNULL(dict_quan_)) {
     dict_quan_->~ObIFTDict();
     allocator_.free(dict_quan_);
   }
-  if (!OB_ISNULL(dict_stop_)) {
+  dict_quan_ = nullptr;
+  own_dict_quan_ = false;
+  if (own_dict_stop_ && !OB_ISNULL(dict_stop_)) {
     dict_stop_->~ObIFTDict();
     allocator_.free(dict_stop_);
   }
+  dict_stop_ = nullptr;
+  own_dict_stop_ = false;
 
   for (int64_t i = 0; i < table_dict_block_cnt_; ++i) {
     if (!OB_ISNULL(table_dict_blocks_[i])) {
