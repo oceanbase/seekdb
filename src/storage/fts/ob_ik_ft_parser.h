@@ -46,8 +46,12 @@ public:
         cache_stop_(allocator),
         dict_main_(nullptr),
         dict_quan_(nullptr),
-        dict_stop_(nullptr)
+        dict_stop_(nullptr),
+        table_dict_block_cnt_(0)
   {
+    for (int64_t i = 0; i < MAX_TABLE_DICT_BLOCK; ++i) {
+      table_dict_blocks_[i] = nullptr;
+    }
   }
 
   virtual ~ObIKFTParser() { reset(); }
@@ -75,6 +79,16 @@ private:
   int init_dict(const plugin::ObFTParserParam &param);
 
   int init_single_dict(ObFTDictDesc desc, ObFTCacheRangeContainer &container);
+
+  int init_builtin_dict(const ObFTDictDesc &desc,
+                        ObFTCacheRangeContainer &container,
+                        ObIFTDict *&dict);
+
+  // Build a dictionary from a user table (a table created with
+  // FULLTEXT_DICT='Y'), replacing the corresponding built-in dictionary.
+  // The newest table content is read on every parser instantiation so that
+  // ALTER SYSTEM REFRESH FULLTEXT DICT semantics hold trivially.
+  int build_table_dict(const common::ObString &table_name, ObIFTDict *&dict);
 
   int init_segmenter(const plugin::ObFTParserParam &param);
 
@@ -106,6 +120,11 @@ private:
   ObIFTDict *dict_main_;
   ObIFTDict *dict_quan_;
   ObIFTDict *dict_stop_;
+
+  // DAT memory blocks built for custom dictionary tables, freed in reset()
+  static constexpr int64_t MAX_TABLE_DICT_BLOCK = 3;
+  void *table_dict_blocks_[MAX_TABLE_DICT_BLOCK];
+  int64_t table_dict_block_cnt_;
 
   DISABLE_COPY_ASSIGN(ObIKFTParser);
 };
