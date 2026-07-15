@@ -1,0 +1,6 @@
+#ifndef OCEANBASE_SHARE_SCHEDULER_OB_INDEPENDENT_DAG_WRAPPER_H_
+#define OCEANBASE_SHARE_SCHEDULER_OB_INDEPENDENT_DAG_WRAPPER_H_
+
+#include "observer/scheduler/ob_independent_dag.h"
+
+#endif
