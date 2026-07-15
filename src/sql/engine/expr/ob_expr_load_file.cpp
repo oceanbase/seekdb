@@ -67,8 +67,10 @@ int read_local_file(const char *path, ObIAllocator &allocator, ObString &content
     } else {
       fd = ::open(path, O_RDONLY | O_BINARY);
       if (OB_UNLIKELY(fd < 0)) {
-        ret = OB_FILE_NOT_EXIST;
-        LOG_WARN("failed to open file", K(ret), K(path));
+        // stat() confirmed the file exists, so open() failing indicates a permission
+        // or IO issue rather than "file not found"
+        ret = OB_IO_ERROR;
+        LOG_WARN("failed to open file", K(ret), K(path), K(errno));
       } else {
         int64_t total_read = 0;
         while (total_read < file_size) {
@@ -172,16 +174,17 @@ int ObExprLoadFile::eval_load_file(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &
       LOG_WARN("failed to get schema guard", K(ret));
     } else if (OB_FAIL(session_info->get_session_priv_info(session_priv))) {
       LOG_WARN("failed to get session privilege info", K(ret));
-    } else if (OB_FAIL(schema_guard.check_location_access(session_priv,
-                                                           session_info->get_enable_role_array(),
-                                                           location_name,
-                                                           false /* is_write */))) {
-      LOG_WARN("failed to check location read privilege", K(ret), K(location_name));
     } else if (OB_FAIL(schema_guard.get_location_schema_by_name(location_name, location_schema))) {
       LOG_WARN("failed to get location schema", K(ret), K(location_name));
     } else if (OB_ISNULL(location_schema)) {
       ret = OB_LOCATION_OBJ_NOT_EXIST;
       LOG_WARN("location does not exist", K(ret), K(location_name));
+      LOG_USER_ERROR(OB_LOCATION_OBJ_NOT_EXIST, location_name.length(), location_name.ptr());
+    } else if (OB_FAIL(schema_guard.check_location_access(session_priv,
+                                                           session_info->get_enable_role_array(),
+                                                           location_name,
+                                                           false /* is_write */))) {
+      LOG_WARN("failed to check location read privilege", K(ret), K(location_name));
     } else {
       location_url = location_schema->get_location_url_str();
       if (!location_url.prefix_match(OB_FILE_PREFIX)) {
@@ -189,16 +192,26 @@ int ObExprLoadFile::eval_load_file(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &
         LOG_USER_ERROR(OB_NOT_SUPPORTED, "load_file with a non-file LOCATION");
       } else {
         const int64_t directory_len = location_url.length() - STRLEN(OB_FILE_PREFIX);
-        const int64_t file_path_len = directory_len + file_name.length();
+        // Ensure trailing slash between directory path and file name
+        bool has_trailing_slash = (directory_len > 0
+            && (location_url.ptr()[location_url.length() - 1] == '/'
+                || location_url.ptr()[location_url.length() - 1] == '\\'));
+        const int64_t file_path_len = directory_len + (has_trailing_slash ? 0 : 1) + file_name.length();
         char *file_path_buf = static_cast<char *>(allocator.alloc(file_path_len + 1));
         if (OB_ISNULL(file_path_buf)) {
           ret = OB_ALLOCATE_MEMORY_FAILED;
           LOG_WARN("failed to allocate file path", K(ret));
         } else {
+          int64_t pos = 0;
           MEMCPY(file_path_buf, location_url.ptr() + STRLEN(OB_FILE_PREFIX), directory_len);
-          MEMCPY(file_path_buf + directory_len, file_name.ptr(), file_name.length());
-          file_path_buf[file_path_len] = '\0';
-          file_path.assign_ptr(file_path_buf, file_path_len);
+          pos += directory_len;
+          if (!has_trailing_slash) {
+            file_path_buf[pos++] = '/';
+          }
+          MEMCPY(file_path_buf + pos, file_name.ptr(), file_name.length());
+          pos += file_name.length();
+          file_path_buf[pos] = '\0';
+          file_path.assign_ptr(file_path_buf, pos);
         }
       }
       if (OB_SUCC(ret) && OB_FAIL(read_local_file(file_path.ptr(), allocator, file_content))) {

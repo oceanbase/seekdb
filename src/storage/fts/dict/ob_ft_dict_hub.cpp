@@ -78,11 +78,22 @@ int ObFTDictHub::build_cache(const ObFTDictDesc &desc, ObFTCacheRangeContainer &
 
     if (OB_FAIL(ret)) {
       if (OB_ENTRY_NOT_EXIST == ret) {
-        if (OB_FAIL(ObFTRangeDict::build_cache_from_ik_dict(desc, container))) {
-          LOG_WARN("Failed to build cache", K(ret));
-        } else if (FALSE_IT(info.range_count_ = container.get_handles().size())) {
-        } else if (OB_FAIL(put_dict_info(key, info))) {
-          LOG_WARN("Failed to put dict info", K(ret));
+        if (desc.type_ == ObFTDictType::DICT_IK_CUSTOM) {
+          // Custom dict: load from user table via ObFTDictTableIter
+          if (OB_FAIL(ObFTRangeDict::build_cache(desc, container))) {
+            LOG_WARN("Failed to build cache from dict table", K(ret));
+          } else if (FALSE_IT(info.range_count_ = container.get_handles().size())) {
+          } else if (OB_FAIL(put_dict_info(key, info))) {
+            LOG_WARN("Failed to put dict info", K(ret));
+          }
+        } else {
+          // Built-in dict: load from compiled-in IK dictionary data
+          if (OB_FAIL(ObFTRangeDict::build_cache_from_ik_dict(desc, container))) {
+            LOG_WARN("Failed to build cache from ik dict", K(ret));
+          } else if (FALSE_IT(info.range_count_ = container.get_handles().size())) {
+          } else if (OB_FAIL(put_dict_info(key, info))) {
+            LOG_WARN("Failed to put dict info", K(ret));
+          }
         }
       }
     }
@@ -148,5 +159,24 @@ int ObFTDictHub::put_dict_info(const ObFTDictInfoKey &key, const ObFTDictInfo &i
 
   return ret;
 }
+int ObFTDictHub::invalidate(const ObFTDictInfoKey &key)
+{
+  int ret = OB_SUCCESS;
+  if (!is_inited_) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("dict hub not init", K(ret));
+  } else {
+    ObBucketHashWLockGuard guard(rw_dict_lock_, key.hash());
+    if (OB_FAIL(dict_map_.erase_refactored(key))) {
+      if (OB_HASH_NOT_EXIST == ret) {
+        ret = OB_SUCCESS;  // already gone, that's fine
+      } else {
+        LOG_WARN("failed to erase dict info", K(ret));
+      }
+    }
+  }
+  return ret;
+}
+
 } //  namespace storage
 } //  namespace oceanbase

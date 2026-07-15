@@ -1230,6 +1230,33 @@ int ObRefreshIOCalibrationResolver::resolve(const ParseNode &parse_tree)
   return ret;
 }
 
+int ObRefreshFulltextDictResolver::resolve(const ParseNode &parse_tree)
+{
+  int ret = OB_SUCCESS;
+  ObRefreshFulltextDictStmt *stmt = nullptr;
+  if (OB_UNLIKELY(T_REFRESH_FULLTEXT_DICT != parse_tree.type_)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("type is not T_REFRESH_FULLTEXT_DICT", "type", get_type_name(parse_tree.type_));
+  } else if (OB_ISNULL(stmt = create_stmt<ObRefreshFulltextDictStmt>())) {
+    ret = OB_ALLOCATE_MEMORY_FAILED;
+    LOG_ERROR("create ObRefreshFulltextDictStmt failed");
+  } else if (FALSE_IT(stmt_ = stmt)) {
+  } else if (OB_UNLIKELY(NULL == parse_tree.children_ || 1 != parse_tree.num_child_)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("parse tree children is invalid", K(ret), K(parse_tree.num_child_));
+  } else {
+    const ParseNode *name_node = parse_tree.children_[0];
+    if (OB_ISNULL(name_node)) {
+      ret = OB_INVALID_ARGUMENT;
+      LOG_WARN("table name is null", K(ret));
+    } else {
+      ObString table_name(name_node->str_len_, name_node->str_value_);
+      stmt->set_table_name(table_name);
+    }
+  }
+  return ret;
+}
+
 static int alter_system_set_reset_constraint_check_and_add_item_mysql_mode(obcall::ObAdminSetConfigArg &rpc_arg, ObAdminSetConfigItem &item, ObSQLSessionInfo *& session_info)
 {
   int ret = OB_SUCCESS;

@@ -1243,12 +1243,17 @@ int AiSplitDocumentTableFunc::eval_input(ObJsonTableOp &jt, JtScanCtx &ctx, ObEv
   bool by_word = false;
   bool markdown = true;  // spec: default assumes markdown input
 
+  // Simple JSON helper: find key "xxx" and read its string value.
+  // Searches for pattern: "key": then reads the "value".
+  // Note: this is a simplified parser for well-formed JSON only.
   auto json_string = [&params](const char *key, ObString &value) -> bool {
     const int64_t key_len = STRLEN(key);
     int64_t pos = -1;
-    for (int64_t i = 0; i + key_len <= params.length(); ++i) {
-      if (0 == MEMCMP(params.ptr() + i, key, key_len)) {
-        pos = i;
+    // Search for '"key":"' pattern to avoid matching key names inside string values
+    for (int64_t i = 0; i + key_len + 2 <= params.length(); ++i) {
+      if (params.ptr()[i] == '\"' && 0 == MEMCMP(params.ptr() + i + 1, key, key_len)
+          && i + 1 + key_len < params.length() && params.ptr()[i + 1 + key_len] == '\"') {
+        pos = i + 1 + key_len + 1; // position after closing quote of key
         break;
       }
     }
@@ -1276,9 +1281,11 @@ int AiSplitDocumentTableFunc::eval_input(ObJsonTableOp &jt, JtScanCtx &ctx, ObEv
   auto json_int = [&params](const char *key, int64_t &value) -> bool {
     const int64_t key_len = STRLEN(key);
     int64_t pos = -1;
-    for (int64_t i = 0; i + key_len <= params.length(); ++i) {
-      if (0 == MEMCMP(params.ptr() + i, key, key_len)) {
-        pos = i;
+    // Search for '"key":' pattern
+    for (int64_t i = 0; i + key_len + 2 <= params.length(); ++i) {
+      if (params.ptr()[i] == '\"' && 0 == MEMCMP(params.ptr() + i + 1, key, key_len)
+          && i + 1 + key_len < params.length() && params.ptr()[i + 1 + key_len] == '\"') {
+        pos = i + 1 + key_len + 1;
         break;
       }
     }
@@ -1437,8 +1444,7 @@ int AiSplitDocumentTableFunc::eval_input(ObJsonTableOp &jt, JtScanCtx &ctx, ObEv
         }
       }
       if (OB_SUCC(ret) && chunk_start >= 0) {
-        int64_t end = content.length();
-        while (end > chunk_start && std::isspace(static_cast<unsigned char>(content.ptr()[end - 1]))) { --end; }
+        const int64_t end = content.length();
         ObString prefix;
         if (markdown && !heading.empty()) {
           const int64_t prefix_len = heading.length() + 1;

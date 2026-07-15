@@ -1151,6 +1151,7 @@ static const NonReservedKeyword Mysql_none_reserved_keywords[] =
   {"rb_and_agg", RB_AND_AGG},
   {"rb_iterate", RB_ITERATE},
   {"ai_split_document", AI_SPLIT_DOCUMENT},
+  {"fulltext_dict", FULLTEXT_DICT},
   {"optimizer_costs", OPTIMIZER_COSTS},
   {"micro_index_clustered", MICRO_INDEX_CLUSTERED},
   {"unnest", UNNEST},

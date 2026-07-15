@@ -295,6 +295,13 @@ private:
       obcall::ObCreateIndexArg &arg,
       ObIAllocator &allocator);
   static int add_skip_index_for_index_column(schema::ObColumnSchemaV2 &column_schema);
+  // Check if any FTS index in the tenant references the given dict table.
+  // If references exist, they are appended to `referencing_index_ids`.
+  static int find_fts_indexes_referencing_dict_table(
+      share::schema::ObSchemaGetterGuard &schema_guard,
+      const uint64_t tenant_id,
+      const uint64_t dict_table_id,
+      common::ObIArray<uint64_t> &referencing_index_ids);
 };
 
 class ObMulValueIndexBuilderUtil

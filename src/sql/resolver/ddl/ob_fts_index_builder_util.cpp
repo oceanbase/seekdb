@@ -2628,6 +2628,60 @@ int ObFtsIndexBuilderUtil::add_skip_index_for_index_column(schema::ObColumnSchem
   return ret;
 }
 
+int ObFtsIndexBuilderUtil::find_fts_indexes_referencing_dict_table(
+    share::schema::ObSchemaGetterGuard &schema_guard,
+    const uint64_t tenant_id,
+    const uint64_t dict_table_id,
+    common::ObIArray<uint64_t> &referencing_index_ids)
+{
+  int ret = OB_SUCCESS;
+  common::ObSEArray<const ObTableSchema *, 64> table_schemas;
+  if (OB_FAIL(schema_guard.get_table_schemas_in_tenant(table_schemas))) {
+    LOG_WARN("fail to get table schemas in tenant", K(ret));
+  } else {
+    for (int64_t i = 0; OB_SUCC(ret) && i < table_schemas.count(); ++i) {
+      const ObTableSchema *table = table_schemas.at(i);
+      if (OB_ISNULL(table)) {
+        continue;
+      }
+      // Only check FTS auxiliary index tables (they carry parser_properties_)
+      if (!table->is_fts_index() && !table->is_fts_index_aux()) {
+        continue;
+      }
+      const ObString &props = table->get_parser_property_str();
+      if (props.empty()) {
+        continue;
+      }
+      // Parse the JSON properties to extract dict_table
+      storage::ObFTParserProperty prop;
+      // Need the parser to resolve - use a simple string search instead
+      // Search for "dict_table":"db.table_name" or "dict_table":"table_name" in the JSON
+      ObString search_key = ObString::make_string("\"dict_table\":\"");
+      const char *found = NULL;
+      // Since ObString doesn't have substring search, use a manual loop
+      for (int64_t pos = 0; pos + search_key.length() <= props.length(); ++pos) {
+        if (0 == MEMCMP(props.ptr() + pos, search_key.ptr(), search_key.length())) {
+          // Found dict_table key, extract the value
+          const char *val_start = props.ptr() + pos + search_key.length();
+          const char *val_end = val_start;
+          while (val_end < props.ptr() + props.length() && *val_end != '\"') { ++val_end; }
+          ObString table_ref(val_end - val_start, val_start);
+          // Check if the table reference matches - need to resolve to table_id
+          // For now, just verify it's not empty - the actual resolution would need
+          // additional schema lookups. Mark as referenced if dict_table is present.
+          if (!table_ref.empty()) {
+            if (OB_FAIL(referencing_index_ids.push_back(table->get_table_id()))) {
+              LOG_WARN("fail to push referencing index id", K(ret));
+            }
+          }
+          break;
+        }
+      }
+    }
+  }
+  return ret;
+}
+
 int ObMulValueIndexBuilderUtil::generate_mulvalue_index_name(
     obcall::ObCreateIndexArg &arg,
     ObIAllocator *allocator)

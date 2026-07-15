@@ -15,6 +15,7 @@
  */
 
 #include "sql/resolver/ddl/ob_drop_table_resolver.h"
+#include "sql/resolver/ddl/ob_fts_index_builder_util.h"
 namespace oceanbase
 {
 using namespace common;
@@ -129,6 +130,23 @@ int ObDropTableResolver::resolve(const ParseNode &parse_tree)
                 SQL_RESV_LOG(WARN, "failed to add table item!", K(table_item), K(ret));
               } else if (OB_FAIL(drop_table_stmt->add_table_item(table_item))) {
                 SQL_RESV_LOG(WARN, "failed to add table item!", K(table_item), K(ret));
+              } else {
+                // Check if dropping a fulltext dict table referenced by FTS indexes
+                ObSchemaGetterGuard *sg = schema_checker_->get_schema_guard();
+                const ObTableSchema *tbl_schema = nullptr;
+                if (OB_NOT_NULL(sg) && OB_SUCC(sg->get_table_schema(db_name, table_name, false, tbl_schema))
+                    && OB_NOT_NULL(tbl_schema) && tbl_schema->get_is_fulltext_dict_table()) {
+                  common::ObSEArray<uint64_t, 16> ref_index_ids;
+                  if (OB_FAIL(ObFtsIndexBuilderUtil::find_fts_indexes_referencing_dict_table(
+                      *sg, session_info_->get_effective_tenant_id(),
+                      tbl_schema->get_table_id(), ref_index_ids))) {
+                    SQL_RESV_LOG(WARN, "fail to check dict table references", K(ret));
+                  } else if (!ref_index_ids.empty()) {
+                    ret = OB_OP_NOT_ALLOW;
+                    LOG_USER_ERROR(OB_OP_NOT_ALLOW, "drop a fulltext dict table referenced by FULLTEXT INDEX");
+                    SQL_RESV_LOG(WARN, "cannot drop dict table referenced by FTS indexes", K(ret), K(db_name), K(table_name));
+                  }
+                }
               }
             }
           }

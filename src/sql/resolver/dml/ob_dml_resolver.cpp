@@ -4364,7 +4364,7 @@ int ObDMLResolver::resolve_ai_split_document_item(const ParseNode &parse_tree, T
   } else if (OB_FAIL(ai_split_document_table_add_column(item, chunk_id_col, CHUNK_ID, ObIntType))
              || OB_FAIL(ai_split_document_table_add_column(item, chunk_offset_col, CHUNK_OFFSET, ObIntType))
              || OB_FAIL(ai_split_document_table_add_column(item, chunk_length_col, CHUNK_LENGTH, ObIntType))
-             || OB_FAIL(ai_split_document_table_add_column(item, chunk_text_col, CHUNK_TEXT, ObLongTextType))) {
+             || OB_FAIL(ai_split_document_table_add_column(item, chunk_text_col, CHUNK_TEXT, ObVarcharType))) {
     LOG_WARN("failed to add ai split document output column", K(ret));
   } else {
     tbl_item = item;
