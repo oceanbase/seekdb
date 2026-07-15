@@ -119,6 +119,18 @@ int ObStopWordChecker::check_stopword(const ObFTWord &word, bool &is_stopword)
 
 ////////////////////////////////////////////////////////////////////////////////
 // class ObAddWord
+
+// Task4 Op6：set_or_update 命中已有 token 时，在同一次桶探测内完成词频累加。
+struct ObUpdateFTWordCountOp
+{
+  explicit ObUpdateFTWordCountOp(const int64_t word_freq) : word_freq_(word_freq) {}
+  void operator()(common::hash::HashMapPair<ObFTWord, int64_t> &word_entry)
+  {
+    word_entry.second += word_freq_;
+  }
+  int64_t word_freq_;
+};
+
 ObAddWord::ObAddWord(
     const ObFTParserProperty &property,
     const ObObjMeta &meta,
@@ -219,7 +231,6 @@ int ObAddWord::check_stopword(const ObFTWord &ft_word, bool &is_stopword)
 int ObAddWord::groupby_word(const ObFTWord &word, const int64_t word_freq)
 {
   int ret = OB_SUCCESS;
-  int64_t word_count = 0;
   if (OB_UNLIKELY(word.empty() || word_freq <= 0)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", K(ret), K(word), K(word_freq));
@@ -227,16 +238,11 @@ int ObAddWord::groupby_word(const ObFTWord &word, const int64_t word_freq)
     if (OB_FAIL(word_map_.set_refactored(word, 1/*word count*/))) {
       LOG_WARN("fail to set fulltext word and count", K(ret), K(word));
     }
-  } else if (OB_FAIL(word_map_.get_refactored(word, word_count)) && OB_HASH_NOT_EXIST != ret) {
-    LOG_WARN("fail to get fulltext word", K(ret), K(word));
   } else {
-    if (OB_HASH_NOT_EXIST == ret) {
-      word_count = 1;
-    } else {
-      word_count += word_freq;
-    }
-    if (OB_FAIL(word_map_.set_refactored(word, word_count, 1/*overwrite*/))) {
-      LOG_WARN("fail to set fulltext word and count", K(ret), K(word), K(word_count));
+    // Task4 Op6：新 token 插入 1，已有 token 原地累加，查询和更新只遍历一次桶。
+    ObUpdateFTWordCountOp update_op(word_freq);
+    if (OB_FAIL(word_map_.set_or_update(word, 1/*initial word count*/, update_op))) {
+      LOG_WARN("fail to set or update fulltext word count", K(ret), K(word), K(word_freq));
     }
   }
   return ret;
