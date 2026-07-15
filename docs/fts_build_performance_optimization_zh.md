@@ -1,0 +1,200 @@
+# 全文索引构建性能优化：第一阶段实现与验证
+
+本文对应当前 `task.md` 的全文索引构建性能优化任务，记录本轮已经落地的 parser 热路径优化、实现原因、调用链、构建与测试方法、性能结果，以及尚未移植的上游架构改造。
+
+## 1. 当前结论
+
+本轮完成的是任务六大方向中的第一阶段：
+
+- 合并 IK 逐字符读取与字符分类，缓存字符集信息和 `well_formed_len` 函数指针。
+- 让内置 `space`、`ngram`、`ngram2`、`beng`、`ik` parser iterator 在同一个 `ObFTParseHelper` 中跨文档复用。
+- 为 parser 元数据和逐行 DML 临时内存建立独立生命周期，避免 parser 被逐行 allocator 回收。
+- IK parser 复用字典、processor、context 和 `ObIKArbitrator`；IK 和 BEng 使用逐文档 scratch arena。
+- 完整 `seekdb` 目标通过 `/Werror` 编译和链接，模块向上依赖为 0。
+- IK、space、ngram、ngram2、BEng 连续多行构建回归通过，自定义 IK 词典和动态刷新回归通过。
+
+这不代表 `task.md` 中六大方向已经全部完成。排序框架重构、FTS 多阶段 DAG、DDL 专用 encoded sort key、position list、Granule Iterator 和 DDL DAG 监控仍需继续移植。
+
+## 2. 为什么先优化 parser
+
+全文索引构建对每篇文档都要执行分词。原调用链是：
+
+```text
+ObFTDMLIterator
+  -> ObFTParseHelper::segment()
+  -> parser descriptor::segment()
+  -> 每篇文档创建 parser iterator
+  -> 逐字符分类和多个 processor 处理
+  -> 释放 parser iterator
+```
+
+这里有两个直接位于热路径的问题：
+
+1. IK 的多个 processor 对同一个字符重复获取字符内容和字符类型。
+2. 每篇文档重新创建 parser，IK 字典、processor、context 和仲裁器无法复用。
+
+这些问题可以在不改变索引格式、SQL 语义或 DDL 架构的前提下独立优化，因此适合作为第一阶段。
+
+## 3. 字符热路径优化
+
+`TokenizeContext` 现在在初始化时缓存：
+
+- `ObCharsetInfo *`
+- `ObCharsetType`
+- `well_formed_len` 函数指针
+- 当前字符长度和分类结果
+
+parser 主循环通过 `current_char_and_type()` 一次取得字符和类型，再把结果传给所有 IK processor。这样避免每个 processor 重复调用 `current_char()` 和 `current_char_type()`。
+
+`ObFTCharUtil::classify_first_valid_char()` 将“取得首个合法字符长度”和“字符分类”合并为一个入口。仲裁器输出阶段也复用 `TokenizeContext` 中缓存的字符集函数。
+
+涉及文件：
+
+- `src/storage/fts/ik/ob_ik_char_util.h`
+- `src/storage/fts/ik/ob_ik_processor.h`
+- `src/storage/fts/ik/ob_ik_processor.cpp`
+- `src/storage/fts/ob_ik_ft_parser.cpp`
+- `src/storage/fts/ik/ob_ik_arbitrator.cpp`
+
+## 4. parser 实例复用
+
+### 4.1 helper 层
+
+`ObFTParseHelper` 增加长期存活的 `parser_allocator_` 和 `parser_iter_`。
+
+只有仓库内置 parser 会被缓存；外部插件仍按原逻辑逐次创建和释放，避免改变插件 ABI 和未知插件的生命周期假设。
+
+```text
+第一次文档
+  -> descriptor 创建 parser_iter_
+  -> 解析并保留 iterator
+
+后续文档
+  -> descriptor 识别已有 iterator
+  -> 调用具体 parser::reuse()
+  -> 重置逐文档状态，保留长期元数据
+
+helper reset
+  -> 统一析构 parser_iter_
+  -> reset parser_allocator_
+```
+
+### 4.2 为什么不能直接复用原 allocator
+
+`ObDomainDMLIterator::get_next_domain_row(s)` 在每一行结束后会执行：
+
+```cpp
+rows_.reuse();
+allocator_.reuse();
+```
+
+如果 parser 对象仍分配在这个 allocator 上，下一行复用的就是失效地址。早期实现确实在连续插入时触发了 Windows access violation。
+
+最终实现把 parser 对象、字典和 processor 放到 `ObFTParseHelper::parser_allocator_`，其生命周期与 helper 一致，不再受逐行 allocator 影响。
+
+### 4.3 scratch 内存
+
+只增加长期 allocator 会让临时 token 节点随文档数量增长，因此还需要逐文档 scratch：
+
+- IK 的 token/result list、CJK 命中链和量词命中链使用 `IKScratch`。
+- BEng analyzer 和 token 缓冲使用 `BEngScratch`。
+- 复用前先清空持有 scratch 指针的容器，再执行 `scratch_allocator_.reuse()`。
+
+该顺序很重要：先 reset arena 再清容器会访问已经失效的节点。
+
+### 4.4 IK 仲裁器复用
+
+原实现每个 batch 都在栈上创建 `ObIKArbitrator`，反复创建 hash map。现在它由 `ObIKFTParser` 持有：
+
+- `chains_.reuse()` 清空映射但保留 bucket。
+- 清空映射后再 `alloc_.reuse()`，回收本批次 token chain。
+- 下一批继续使用同一仲裁器。
+
+## 5. 为什么没有保留自定义 FastList
+
+本轮曾实现分块数组和索引式双向链表，并替换 IK token/result list。正确性测试通过，但实测 `TOKENIZE(ik)` 从约 `1.02 ms` 退化到约 `1.30 ms`。
+
+原因是当前 IK token 链通常很短，索引式链表每次迭代需要额外的 block/index 间接访问；早期版本还在 batch 边界调用了 `reset()`，没有真正保留 block。该实现已撤销，不把“类名符合任务描述”当成性能优化成功。
+
+上游 OceanBase 的正式实现将 result 改为 `ObFastSegmentArray`，排序链使用独立的 `ObFastList`，并配套调整 reset/reuse 语义。若继续移植，应以对应上游提交为准，而不是恢复本轮被否决的版本。
+
+## 6. 性能结果
+
+环境：Windows 11、RelWithDebInfo、5000 行、batch 500、同一 seekdb 实例。基线来自修改前的同机 PyMySQL 等价测试。
+
+| 指标 | 基线 | 优化样本 1 | 优化样本 2 | 结论 |
+| --- | ---: | ---: | ---: | --- |
+| raw load | 0.3676s | 0.3909s | 0.3703s | 基本一致 |
+| IK 双列索引 | 8.7680s | 8.1111s | 8.3679s | 平均约提升 6.0% |
+| IK 单列索引 | 5.9986s | 6.0780s | 5.8947s | 基本一致 |
+| BEng 双列索引 | 4.3655s | 3.9157s | 3.7111s | 平均约提升 12.6% |
+| 三个索引合计 | 19.1321s | 18.1048s | 17.9737s | 平均约提升 5.7% |
+
+`TOKENIZE(ik)` 最终热测约 `1.0232 ms`，与基线一致。原因是 `TOKENIZE()` 表达式每次求值会创建局部 helper，不能体现跨文档 parser 复用；它主要用于验证字符热路径没有稳定退化。
+
+## 7. 已执行的正确性验证
+
+- 完整 `seekdb.exe` 编译和链接成功。
+- 模块层依赖检查：向上依赖 0。
+- IK 中文、英文、数字、量词结果稳定。
+- 自定义 IK 主词典替换内置词典行为正确。
+- `ALTER SYSTEM REFRESH FULLTEXT DICT` 后新增词汇只影响后续写入，行为正确。
+- 同一 IK helper 连续处理 200 行通过。
+- space、ngram、ngram2、BEng 各连续写入 100 行通过。
+- 5000 行 IK/BEng 三索引构建重复两次通过。
+- MATCH 命中数与基线一致：中文 2001，BEng 2750。
+
+## 8. 本地构建和运行
+
+Windows 构建沿用 `docs/ai_functions_implementation_zh.md` 中的兼容环境。标准入口为：
+
+```powershell
+.\build.ps1 init
+$env:PATH = "$PWD\deps\3rd\tools\win_flex_bison;$env:PATH"
+powershell -File src\sql\parser\gen_parser_win.ps1
+.\build.ps1 release --ninja
+```
+
+启动示例：
+
+```powershell
+$exe = (Resolve-Path build_relwithdebinfo\src\observer\seekdb.exe).Path
+$base = "$PWD\build_relwithdebinfo\run_fts_perf"
+
+& $exe --nodaemon --port 2881 --base-dir $base `
+  --parameter memory_limit=4G `
+  --parameter cpu_count=2 `
+  --parameter datafile_size=4G `
+  --parameter datafile_maxsize=4G `
+  --parameter log_disk_size=4G `
+  --log-level INFO
+```
+
+Linux/WSL 且已安装 MySQL 客户端时，运行仓库基准：
+
+```bash
+cd tools/benchmark
+ROWS=5000 BATCH=500 ROUNDS=1000 QUERY_ROUNDS=100 SAMPLES=3 \
+  bash fts_large_bench.sh
+```
+
+## 9. 上游实现与剩余工作
+
+完整任务对应 OceanBase 上游核心提交：
+
+```text
+81c822ca5cb2 [FEAT MERGE] optimize fulltext index building performance
+```
+
+该提交涉及 283 个文件、约 27410 行变更。直接对当前 seekdb 分支执行 patch check 会出现大量缺失文件和上下文冲突，说明两个代码基线已经明显分叉，不能直接 cherry-pick。
+
+后续应按依赖顺序分批移植：
+
+1. 上游 parser 容器、`ObFTTokenProcessor` 和 stop-token checker，并重新做 A/B。
+2. SQL/storage 共享排序组件和 resource manager。
+3. DDL sort provider、merge sort task 和 FTS sample/write pipeline。
+4. position list codec、SQL 表达式和五列辅助表布局。
+5. Granule Iterator、并行 DDL 计划和 StatCollector 适配。
+6. DDL DAG monitor manager、节点、虚拟表和租户生命周期接入。
+
+每一批都需要独立编译、mysqltest、故障恢复和性能验证。只有这些阶段全部完成后，才能声明 `task.md` 的六大方向全部实现。

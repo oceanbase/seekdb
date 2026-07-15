@@ -19,6 +19,7 @@
 
 #include "lib/utility/ob_macro_utils.h"
 #include "lib/utility/ob_print_utils.h"
+#include "lib/allocator/page_arena.h"
 #include "share/text_analysis/ob_text_analyzer.h"
 #include "plugin/interface/ob_plugin_ftparser_intf.h"
 
@@ -33,8 +34,8 @@ public:
   static const int64_t FT_MIN_WORD_LEN = 3;
   static const int64_t FT_MAX_WORD_LEN = 84;
 public:
-  explicit ObBEngFTParser(common::ObIAllocator &allocator)
-    : allocator_(allocator),
+  ObBEngFTParser()
+    : scratch_allocator_(lib::ObMemAttr("BEngScratch")),
       analysis_ctx_(),
       english_analyzer_(),
       doc_(),
@@ -44,6 +45,7 @@ public:
   ~ObBEngFTParser() { reset(); }
 
   int init(plugin::ObFTParserParam *param);
+  int reuse(plugin::ObFTParserParam *param);
   void reset();
   virtual int get_next_token(
       const char *&word,
@@ -57,7 +59,7 @@ private:
       const common::ObDatum &doc,
       share::ObITokenStream *&token_stream);
 private:
-  common::ObIAllocator &allocator_;
+  common::ObArenaAllocator scratch_allocator_;
   share::ObTextAnalysisCtx analysis_ctx_;
   share::ObEnglishTextAnalyzer english_analyzer_;
   common::ObDatum doc_;

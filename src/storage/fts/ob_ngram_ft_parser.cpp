@@ -68,6 +68,12 @@ int ObNgramFTParser::init(ObFTParserParam *param)
   return ret;
 }
 
+int ObNgramFTParser::reuse(ObFTParserParam *param)
+{
+  reset();
+  return init(param);
+}
+
 int ObNgramFTParser::get_next_token(
     const char *&word,
     int64_t &word_len,
@@ -114,12 +120,18 @@ int ObNgramFTParserDesc::segment(
 {
   int ret = OB_SUCCESS;
   ObNgramFTParser *parser = nullptr;
+  const bool need_alloc = OB_ISNULL(iter);
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("ngram ft parser desc hasn't be initialized", K(ret), K(is_inited_));
   } else if (OB_ISNULL(param) || OB_ISNULL(param->fulltext_) || OB_UNLIKELY(!param->is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), KPC(param));
+  } else if (!need_alloc) {
+    parser = static_cast<ObNgramFTParser *>(iter);
+    if (OB_FAIL(parser->reuse(param))) {
+      LOG_WARN("fail to reuse ngram fulltext parser", K(ret), KPC(param));
+    }
   } else if (OB_ISNULL(parser = OB_NEWx(ObNgramFTParser, param->allocator_))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("fail to allocate ngram ft parser", K(ret));
@@ -130,7 +142,7 @@ int ObNgramFTParserDesc::segment(
       iter = parser;
     }
   }
-  if (OB_FAIL(ret)) {
+  if (OB_FAIL(ret) && need_alloc) {
     OB_DELETEx(ObNgramFTParser, param->allocator_, parser);
   }
   return ret;

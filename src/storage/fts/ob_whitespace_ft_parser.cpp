@@ -79,6 +79,12 @@ int ObSpaceFTParser::init(ObFTParserParam *param)
   return ret;
 }
 
+int ObSpaceFTParser::reuse(ObFTParserParam *param)
+{
+  reset();
+  return init(param);
+}
+
 int ObSpaceFTParser::get_next_token(const char *&word,
                                     int64_t &word_len,
                                     int64_t &char_len,
@@ -166,12 +172,18 @@ int ObWhiteSpaceFTParserDesc::segment(
 {
   int ret = OB_SUCCESS;
   ObSpaceFTParser *parser = nullptr;
+  const bool need_alloc = OB_ISNULL(iter);
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("default ft parser desc hasn't be initialized", K(ret), K(is_inited_));
   } else if (OB_ISNULL(param) || OB_ISNULL(param->fulltext_) || OB_UNLIKELY(!param->is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), KPC(param));
+  } else if (!need_alloc) {
+    parser = static_cast<ObSpaceFTParser *>(iter);
+    if (OB_FAIL(parser->reuse(param))) {
+      LOG_WARN("fail to reuse whitespace fulltext parser", K(ret), KPC(param));
+    }
   } else if (OB_ISNULL(parser = OB_NEWx(ObSpaceFTParser, param->allocator_))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("fail to allocate space ft parser", K(ret));
@@ -183,7 +195,7 @@ int ObWhiteSpaceFTParserDesc::segment(
     }
   }
 
-  if (OB_FAIL(ret)) {
+  if (OB_FAIL(ret) && need_alloc) {
     OB_DELETEx(ObSpaceFTParser, param->allocator_, parser);
   }
 

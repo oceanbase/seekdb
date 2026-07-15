@@ -54,7 +54,7 @@ int ObBEngFTParser::get_next_token(
   } else if (OB_ISNULL(token.ptr_) || OB_UNLIKELY(0 >= token.len_ || 0 >= token_freq)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", K(ret), KP(token.ptr_), K(token.len_), K(token_freq));
-  } else if (OB_ISNULL(buf = static_cast<char *>(allocator_.alloc(token.len_)))) {
+  } else if (OB_ISNULL(buf = static_cast<char *>(scratch_allocator_.alloc(token.len_)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("fail to allocate word memory", K(ret), K(token.len_));
   } else {
@@ -85,7 +85,7 @@ int ObBEngFTParser::init(ObFTParserParam *param)
     analysis_ctx_.cs_ = param->cs_;
     analysis_ctx_.filter_stopword_ = false;
     analysis_ctx_.need_grouping_ = false;
-    if (OB_FAIL(english_analyzer_.init(analysis_ctx_, *param->allocator_))) {
+    if (OB_FAIL(english_analyzer_.init(analysis_ctx_, scratch_allocator_))) {
       LOG_WARN("fail to init english analyzer", K(ret), KPC(param), K(analysis_ctx_));
     } else if (OB_FAIL(segment(doc_, token_stream_))) {
       LOG_WARN("fail to segment fulltext by parser", K(ret), KP(param->fulltext_), K(param->ft_length_));
@@ -101,6 +101,13 @@ int ObBEngFTParser::init(ObFTParserParam *param)
     reset();
   }
   return ret;
+}
+
+int ObBEngFTParser::reuse(ObFTParserParam *param)
+{
+  reset();
+  scratch_allocator_.reuse();
+  return init(param);
 }
 
 int ObBEngFTParser::segment(
@@ -152,13 +159,19 @@ int ObBasicEnglishFTParserDesc::segment(
 {
   int ret = OB_SUCCESS;
   ObBEngFTParser *parser = nullptr;
+  const bool need_alloc = OB_ISNULL(iter);
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("default ft parser desc hasn't be initialized", K(ret), K(is_inited_));
   } else if (OB_ISNULL(param) || OB_ISNULL(param->fulltext_) || OB_UNLIKELY(!param->is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), KPC(param));
-  } else if (OB_ISNULL(parser = OB_NEWx(ObBEngFTParser, param->allocator_, *(param->allocator_)))) {
+  } else if (!need_alloc) {
+    parser = static_cast<ObBEngFTParser *>(iter);
+    if (OB_FAIL(parser->reuse(param))) {
+      LOG_WARN("fail to reuse basic english parser", K(ret), KPC(param));
+    }
+  } else if (OB_ISNULL(parser = OB_NEWx(ObBEngFTParser, param->allocator_))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("fail to allocate basic english ft parser", K(ret));
   } else if (OB_FAIL(parser->init(param))) {
@@ -167,7 +180,7 @@ int ObBasicEnglishFTParserDesc::segment(
     iter = parser;
   }
 
-  if (OB_FAIL(ret)) {
+  if (OB_FAIL(ret) && need_alloc) {
     OB_DELETEx(ObBEngFTParser, param->allocator_, parser);
   }
 

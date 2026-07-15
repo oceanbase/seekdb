@@ -34,6 +34,7 @@ public:
   virtual ~ObSpaceFTParser();
 
   int init(plugin::ObFTParserParam *param);
+  int reuse(plugin::ObFTParserParam *param);
   void reset();
   virtual int get_next_token(
       const char *&word,
