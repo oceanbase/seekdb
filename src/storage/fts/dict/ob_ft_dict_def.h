@@ -18,6 +18,7 @@
 #define _OCEANBASE_STORAGE_FTS_DICT_OB_FT_DICT_DEF_H_
 
 #include "lib/charset/ob_charset.h"
+#include "lib/hash_func/murmur_hash.h"
 
 #include <cstdint>
 
@@ -63,9 +64,33 @@ public:
   ObFTDictDesc(const ObString &name,
                const ObFTDictType type,
                const ObCharsetType charset,
-               const ObCollationType coll_type)
-      : name_(name), type_(type), charset_(charset), coll_type_(coll_type)
+               const ObCollationType coll_type,
+               const uint64_t tenant_id = 0,
+               const uint64_t table_id = 0,
+               const int64_t version = 0,
+               const bool is_builtin = true)
+      : name_(name), type_(type), charset_(charset), coll_type_(coll_type),
+        tenant_id_(tenant_id), table_id_(table_id), version_(version), is_builtin_(is_builtin)
   {
+  }
+
+  // 内置词典保持原有按类型共享的缓存身份；用户词典优先按稳定 schema 身份隔离。
+  bool is_builtin() const { return is_builtin_; }
+  uint64_t get_cache_identity() const
+  {
+    uint64_t hash = 0;
+    hash = common::murmurhash(&type_, sizeof(type_), hash);
+    if (!is_builtin_) {
+      if (0 == table_id_) {
+        // 旧属性链路暂未携带 table ID 时，以全限定表名兜底，避免不同用户词典共享缓存。
+        hash = common::murmurhash(name_.ptr(), name_.length(), hash);
+      } else {
+        hash = common::murmurhash(&tenant_id_, sizeof(tenant_id_), hash);
+        hash = common::murmurhash(&table_id_, sizeof(table_id_), hash);
+        hash = common::murmurhash(&version_, sizeof(version_), hash);
+      }
+    }
+    return hash;
   }
 
 public:
@@ -73,6 +98,10 @@ public:
   ObFTDictType type_;
   ObCharsetType charset_;
   ObCollationType coll_type_;
+  uint64_t tenant_id_;
+  uint64_t table_id_;
+  int64_t version_;
+  bool is_builtin_;
 };
 
 } //  namespace storage

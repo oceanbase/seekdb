@@ -21,6 +21,7 @@
 #include "sql/resolver/ddl/ob_create_table_resolver.h"
 #include "sql/resolver/ddl/ob_drop_table_stmt.h"
 #include "sql/resolver/cmd/ob_variable_set_stmt.h"
+#include "pl/ob_pl_object_id_util.h"
 #include "observer/ob_server.h"
 #include "observer/mysql/ob_query_response_time.h"
 
@@ -1140,6 +1141,49 @@ int ObRefreshMemStatResolver::resolve(const ParseNode &parse_tree)
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("children should not be null");
       }
+    }
+  }
+  return ret;
+}
+
+int ObRefreshFulltextDictResolver::resolve(const ParseNode &parse_tree)
+{
+  int ret = OB_SUCCESS;
+  if (OB_UNLIKELY(T_REFRESH_FULLTEXT_DICT != parse_tree.type_)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("refresh fulltext dict parse node type is unexpected", K(ret), K(parse_tree.type_));
+  } else if (OB_ISNULL(parse_tree.children_) || OB_UNLIKELY(parse_tree.num_child_ != 1)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("refresh fulltext dict requires one dictionary table target", K(ret), K(parse_tree.num_child_));
+  } else {
+    ObRefreshFulltextDictStmt *stmt = create_stmt<ObRefreshFulltextDictStmt>();
+    ObString table_name;
+    ObString database_name;
+    const ObTableSchema *table_schema = nullptr;
+    if (OB_ISNULL(stmt)) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+      LOG_ERROR("failed to allocate refresh fulltext dictionary statement", K(ret));
+    } else if (OB_ISNULL(schema_checker_)) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("schema checker is null when resolving refresh fulltext dictionary", K(ret));
+    } else if (OB_FAIL(resolve_table_relation_node(parse_tree.children_[0], table_name, database_name))) {
+      // 复用通用 relation 解析，统一处理 db.table、未限定表名和标识符大小写。
+      LOG_WARN("failed to resolve refresh fulltext dictionary table relation", K(ret));
+    } else if (OB_FAIL(schema_checker_->get_table_schema(database_name, table_name, false, table_schema))) {
+      LOG_WARN("failed to get refresh fulltext dictionary table schema", K(ret), K(database_name), K(table_name));
+    } else if (OB_ISNULL(table_schema)) {
+      ret = OB_TABLE_NOT_EXIST;
+      LOG_WARN("refresh fulltext dictionary table does not exist", K(ret), K(database_name), K(table_name));
+    } else if (!table_schema->is_fulltext_dict_table()) {
+      ret = OB_NOT_SUPPORTED;
+      LOG_USER_ERROR(OB_NOT_SUPPORTED, "refresh target is not a FULLTEXT_DICT table");
+    } else if (OB_FAIL(stmt->set_dict_table_name(table_name))) {
+      LOG_WARN("failed to save refresh fulltext dictionary table name", K(ret), K(table_name));
+    } else {
+      // 只把稳定 schema 身份交给执行层，避免表重命名导致刷新到错误对象。
+      stmt->set_tenant_id(pl::get_tenant_id_by_object_id(table_schema->get_table_id()));
+      stmt->set_dict_table_id(table_schema->get_table_id());
+      stmt_ = stmt;
     }
   }
   return ret;

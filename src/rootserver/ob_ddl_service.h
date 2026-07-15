@@ -1017,6 +1017,25 @@ static int get_tenant_schema_guard_with_version_in_inner_table(share::schema::Ob
     const bool need_redistribute_column_id,
     share::schema::ObTableSchema &new_table_schema);
 private:
+  enum class ObFulltextDictDdlOperation
+  {
+    DROP_TABLE,
+    RENAME_TABLE,
+    ALTER_COLUMN,
+  };
+
+  // 扫描当前租户的全文索引，找出属性 JSON 引用指定词典表的索引。
+  int get_fulltext_indexes_referencing_dict_(
+      share::schema::ObSchemaGetterGuard &schema_guard,
+      const uint64_t dict_table_id,
+      common::ObIArray<uint64_t> &index_table_ids) const;
+
+  // 在提交前限制已被全文索引引用的词典表结构变更。
+  int check_fulltext_dict_ddl_allowed_(
+      const share::schema::ObTableSchema &dict_table_schema,
+      share::schema::ObSchemaGetterGuard &schema_guard,
+      const ObFulltextDictDdlOperation operation) const;
+
   enum PartitionBornMethod : int64_t
   {
     PBM_INVALID = 0,

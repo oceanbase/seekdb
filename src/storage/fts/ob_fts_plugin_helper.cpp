@@ -255,6 +255,14 @@ int ObFTParseHelper::segment(
     param.ngram_token_size_ = property.ngram_token_size_;
     param.ik_param_.mode_
         = (property.ik_mode_smart_ ? ObFTIKParam::Mode::SMART : ObFTIKParam::Mode::MAX_WORD);
+    // 将 DDL 属性中的三类词典表名传递给 IK 分词器，避免运行时退化为固定内置词典。
+    param.ik_param_.main_dict_ = property.dict_table_;
+    param.ik_param_.quan_dict_ = property.quantifier_table_;
+    param.ik_param_.stopword_dict_ = property.stopword_table_;
+    // 表名用于读取词典内容，稳定 ID 用于按 refresh generation 隔离缓存。
+    param.ik_param_.main_dict_table_id_ = property.dict_table_id_;
+    param.ik_param_.quantifier_dict_table_id_ = property.quantifier_table_id_;
+    param.ik_param_.stopword_dict_table_id_ = property.stopword_table_id_;
     param.min_ngram_size_ = property.min_ngram_token_size_;
     param.max_ngram_size_ = property.max_ngram_token_size_;
 

@@ -25,6 +25,7 @@
 #include "lib/utility/utility.h"
 #include "storage/fts/ob_fts_struct.h"
 #include "storage/fts/ob_fts_plugin_helper.h"
+#include "storage/fts/ob_fts_parser_property.h"
 #include "storage/fts/dict/ob_ft_dict.h"
 #include "storage/fts/dict/ob_ft_dict_def.h"
 #include "storage/fts/dict/ob_ft_dict_hub.h"
@@ -271,6 +272,7 @@ int ObIKFTParser::init_dict(const plugin::ObFTParserParam &param)
 {
   int ret = OB_SUCCESS;
   ObIFTDict *tmp_dict = nullptr;
+  ObFTParserProperty property;
 
   if (OB_ISNULL(hub_)) {
     ret = OB_ERR_UNEXPECTED;
@@ -278,22 +280,30 @@ int ObIKFTParser::init_dict(const plugin::ObFTParserParam &param)
   }
 
   ObFTRangeDict *dict = nullptr;
-  ObFTDictDesc main_dict_desc("main_dict",
-                              ObFTDictType::DICT_IK_MAIN,
-                              ObCharsetType::CHARSET_UTF8MB4,
-                              ObCollationType::CS_TYPE_UTF8MB4_BIN);
+  ObFTDictDesc main_dict_desc("", ObFTDictType::DICT_TYPE_INVALID,
+                              ObCharsetType::CHARSET_INVALID, ObCollationType::CS_TYPE_INVALID);
+  ObFTDictDesc quan_dict_desc("", ObFTDictType::DICT_TYPE_INVALID,
+                              ObCharsetType::CHARSET_INVALID, ObCollationType::CS_TYPE_INVALID);
+  ObFTDictDesc stopword_dict_desc("", ObFTDictType::DICT_TYPE_INVALID,
+                                  ObCharsetType::CHARSET_INVALID, ObCollationType::CS_TYPE_INVALID);
 
-  ObFTDictDesc quan_dict_desc("quan_dict",
-                              ObFTDictType::DICT_IK_QUAN,
-                              ObCharsetType::CHARSET_UTF8MB4,
-                              ObCollationType::CS_TYPE_UTF8MB4_BIN);
+  // 插件参数是 SQL 层到 IK 分词器的边界，在此恢复三类用户词典配置。
+  property.dict_table_ = param.ik_param_.main_dict_;
+  property.quantifier_table_ = param.ik_param_.quan_dict_;
+  property.stopword_table_ = param.ik_param_.stopword_dict_;
+  // 恢复 SQL 层解析出的稳定 ID，避免 IK 初始化时丢失刷新代次的查询依据。
+  property.dict_table_id_ = param.ik_param_.main_dict_table_id_;
+  property.quantifier_table_id_ = param.ik_param_.quantifier_dict_table_id_;
+  property.stopword_table_id_ = param.ik_param_.stopword_dict_table_id_;
+  if (OB_SUCC(ret) && OB_FAIL(build_dict_descs_(property,
+                                                main_dict_desc,
+                                                quan_dict_desc,
+                                                stopword_dict_desc))) {
+    LOG_WARN("Failed to build dictionary descriptors", K(ret));
+  }
 
-  ObFTDictDesc stopword_dict_desc("stopword",
-                                  ObFTDictType::DICT_IK_STOP,
-                                  ObCharsetType::CHARSET_UTF8MB4,
-                                  ObCollationType::CS_TYPE_UTF8MB4_BIN);
-
-  if (should_read_newest_table()) {
+  if (OB_FAIL(ret)) {
+  } else if (should_read_newest_table()) {
     // clear dict cache, always false now
   } else {
     if (OB_FAIL(init_single_dict(main_dict_desc, cache_main_))) {
@@ -318,7 +328,67 @@ int ObIKFTParser::init_dict(const plugin::ObFTParserParam &param)
   return ret;
 }
 
-int ObIKFTParser::init_single_dict(ObFTDictDesc desc, ObFTCacheRangeContainer &container)
+int ObIKFTParser::build_dict_descs_(const ObFTParserProperty &property,
+                                    ObFTDictDesc &main_dict_desc,
+                                    ObFTDictDesc &quantifier_dict_desc,
+                                    ObFTDictDesc &stopword_dict_desc)
+{
+  int ret = OB_SUCCESS;
+  // 空属性使用内置词典；属性重建补齐的默认内置表名也必须保持内置语义。
+  const bool main_is_builtin = property.dict_table_.empty()
+      || (OB_INVALID_ID == property.dict_table_id_
+          && 0 == property.dict_table_.case_compare(ObFTSLiteral::FT_DEFAULT_IK_DICT_UTF8_TABLE));
+  const bool quantifier_is_builtin = property.quantifier_table_.empty()
+      || (OB_INVALID_ID == property.quantifier_table_id_
+          && 0 == property.quantifier_table_.case_compare(ObFTSLiteral::FT_DEFAULT_IK_QUANTIFIER_UTF8_TABLE));
+  const bool stopword_is_builtin = property.stopword_table_.empty()
+      || (OB_INVALID_ID == property.stopword_table_id_
+          && 0 == property.stopword_table_.case_compare(ObFTSLiteral::FT_DEFAULT_IK_STOPWORD_UTF8_TABLE));
+  int64_t main_version = 0;
+  int64_t quantifier_version = 0;
+  int64_t stopword_version = 0;
+  // 只有新属性携带有效 table ID 时才查询刷新代次；旧属性继续按表名隔离缓存。
+  if (!main_is_builtin && OB_INVALID_ID != property.dict_table_id_ && OB_NOT_NULL(hub_)
+      && OB_FAIL(hub_->get_refresh_version(property.dict_table_id_, main_version))) {
+    LOG_WARN("failed to get main dictionary refresh version", K(ret), K(property.dict_table_id_));
+  } else if (OB_SUCC(ret) && !quantifier_is_builtin
+             && OB_INVALID_ID != property.quantifier_table_id_ && OB_NOT_NULL(hub_)
+             && OB_FAIL(hub_->get_refresh_version(property.quantifier_table_id_, quantifier_version))) {
+    LOG_WARN("failed to get quantifier dictionary refresh version", K(ret), K(property.quantifier_table_id_));
+  } else if (OB_SUCC(ret) && !stopword_is_builtin
+             && OB_INVALID_ID != property.stopword_table_id_ && OB_NOT_NULL(hub_)
+             && OB_FAIL(hub_->get_refresh_version(property.stopword_table_id_, stopword_version))) {
+    LOG_WARN("failed to get stopword dictionary refresh version", K(ret), K(property.stopword_table_id_));
+  }
+  if (OB_FAIL(ret)) {
+    return ret;
+  }
+  main_dict_desc = ObFTDictDesc(main_is_builtin ? ObString("main_dict") : property.dict_table_,
+                                ObFTDictType::DICT_IK_MAIN,
+                                ObCharsetType::CHARSET_UTF8MB4,
+                                ObCollationType::CS_TYPE_UTF8MB4_BIN,
+                                0, OB_INVALID_ID == property.dict_table_id_ ? 0 : property.dict_table_id_,
+                                main_version, main_is_builtin);
+  quantifier_dict_desc = ObFTDictDesc(quantifier_is_builtin ? ObString("quan_dict")
+                                                              : property.quantifier_table_,
+                                      ObFTDictType::DICT_IK_QUAN,
+                                      ObCharsetType::CHARSET_UTF8MB4,
+                                      ObCollationType::CS_TYPE_UTF8MB4_BIN,
+                                      0, OB_INVALID_ID == property.quantifier_table_id_ ? 0
+                                                                            : property.quantifier_table_id_,
+                                      quantifier_version, quantifier_is_builtin);
+  stopword_dict_desc = ObFTDictDesc(stopword_is_builtin ? ObString("stopword")
+                                                          : property.stopword_table_,
+                                    ObFTDictType::DICT_IK_STOP,
+                                    ObCharsetType::CHARSET_UTF8MB4,
+                                    ObCollationType::CS_TYPE_UTF8MB4_BIN,
+                                    0, OB_INVALID_ID == property.stopword_table_id_ ? 0
+                                                                        : property.stopword_table_id_,
+                                    stopword_version, stopword_is_builtin);
+  return ret;
+}
+
+int ObIKFTParser::init_single_dict(const ObFTDictDesc &desc, ObFTCacheRangeContainer &container)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(hub_->load_cache(desc, container))) {

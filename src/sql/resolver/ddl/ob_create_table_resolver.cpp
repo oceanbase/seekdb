@@ -404,6 +404,10 @@ int ObCreateTableResolver::resolve(const ParseNode &parse_tree)
             } else {
               table_schema.set_collation_type(collation_type_);
               table_schema.set_charset_type(charset_type_);
+              // 表级字符集确定后再检查词典表约束，避免使用尚未填充的 schema 属性。
+              if (OB_FAIL(check_fulltext_dict_table_(table_schema))) {
+                SQL_RESV_LOG(WARN, "check fulltext dictionary table failed", K(ret));
+              }
               // No longer need this step. At the beginning of resolve, directly parse out the collation/charset information of the table, by the time column information is resolved, it can already be obtained
               // Table's collation/charset information
               //if (OB_FAIL(table_schema.fill_column_collation_info())) {
@@ -2414,6 +2418,37 @@ int ObCreateTableResolver::resolve_table_charset_info(const ParseNode *node) {
     }
   }
 
+  return ret;
+}
+
+int ObCreateTableResolver::check_fulltext_dict_table_(const ObTableSchema &table_schema) const
+{
+  // 词典表只允许固定的单列 IOT 结构，保证运行时可按 word 列稳定读取词典内容。
+  int ret = OB_SUCCESS;
+  if (!table_schema.is_fulltext_dict_table()) {
+    // 普通表不应用词典表的额外约束。
+  } else if (1 != table_schema.get_column_count()
+             || 1 != table_schema.get_rowkey_column_num()
+             || !table_schema.is_index_organized_table()) {
+    ret = OB_NOT_SUPPORTED;
+    LOG_USER_ERROR(OB_NOT_SUPPORTED,
+                   "FULLTEXT_DICT table must contain exactly one primary-key column and use ORGANIZATION INDEX");
+  } else {
+    const ObColumnSchemaV2 *column = table_schema.get_column_schema_by_idx(0);
+    if (OB_ISNULL(column)) {
+      ret = OB_ERR_UNEXPECTED;
+      SQL_RESV_LOG(WARN, "dictionary table column is null", K(ret));
+    } else if (0 != column->get_column_name_str().case_compare("word")
+               || !column->is_rowkey_column()
+               || ObVarcharType != column->get_data_type()
+               || column->get_data_length() < 1
+               || column->get_data_length() > 500
+               || ObCharsetType::CHARSET_UTF8MB4 != table_schema.get_charset_type()) {
+      ret = OB_NOT_SUPPORTED;
+      LOG_USER_ERROR(OB_NOT_SUPPORTED,
+                     "FULLTEXT_DICT table requires word VARCHAR(1..500) PRIMARY KEY with utf8mb4 charset");
+    }
+  }
   return ret;
 }
 

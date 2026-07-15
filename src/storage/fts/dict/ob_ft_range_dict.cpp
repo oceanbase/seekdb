@@ -464,33 +464,23 @@ int ObFTRangeDict::build_dict_from_cache(const ObFTCacheRangeContainer &range_co
 
 int ObFTRangeDict::build_cache(const ObFTDictDesc &desc, ObFTCacheRangeContainer &range_container)
 {
+  // 保留原接口兼容已有调用，实际表读取统一收敛到专用入口。
+  return build_cache_from_table(desc, range_container);
+}
+
+int ObFTRangeDict::build_cache_from_table(const ObFTDictDesc &desc,
+                                          ObFTCacheRangeContainer &range_container)
+{
   int ret = OB_SUCCESS;
 
-  ObString table_name;
-  switch (desc.type_) {
-  case ObFTDictType::DICT_IK_MAIN: {
-    table_name = ObString(share::OB_FT_DICT_IK_UTF8_TNAME);
-  } break;
-  case ObFTDictType::DICT_IK_QUAN: {
-    table_name = ObString(share::OB_FT_QUANTIFIER_IK_UTF8_TNAME);
-  } break;
-  case ObFTDictType::DICT_IK_STOP: {
-    table_name = ObString(share::OB_FT_STOPWORD_IK_UTF8_TNAME);
-  } break;
-  default:
-    ret = OB_NOT_SUPPORTED;
-    LOG_WARN("Not supported dict type.", K(ret));
-  }
-
-  if (OB_SUCC(ret)) {
-    SMART_VAR(ObISQLClient::ReadResult, result)
-    {
-      ObFTDictTableIter iter_table(result);
-      if (OB_FAIL(iter_table.init(table_name))) {
-        LOG_WARN("Failed to init iterator.", K(ret));
-      } else if (OB_FAIL(ObFTRangeDict::build_ranges(desc, iter_table, range_container))) {
-        LOG_WARN("Failed to build ranges.", K(ret));
-      }
+  // descriptor 已由上游区分内置/用户词典；本入口负责将表的 word 列转换为 DAT range。
+  SMART_VAR(ObISQLClient::ReadResult, result)
+  {
+    ObFTDictTableIter iter_table(result);
+    if (OB_FAIL(iter_table.init(desc))) {
+      LOG_WARN("Failed to init iterator.", K(ret));
+    } else if (OB_FAIL(ObFTRangeDict::build_ranges(desc, iter_table, range_container))) {
+      LOG_WARN("Failed to build ranges.", K(ret));
     }
   }
 
@@ -502,7 +492,8 @@ int ObFTRangeDict::try_load_cache(const ObFTDictDesc &desc,
                                   ObFTCacheRangeContainer &range_container)
 {
   int ret = OB_SUCCESS;
-  uint64_t name = static_cast<uint64_t>(desc.type_);
+  // 与写入路径使用相同的词典身份，确保只读取自己的 DAT range。
+  uint64_t name = desc.get_cache_identity();
 
   for (int64_t i = 0; OB_SUCC(ret) && i < range_count; ++i) {
     ObDictCacheKey key(name, desc.type_, i);

@@ -1579,6 +1579,7 @@ class SqlKeywords:
          DES_KEY_FILE
          DESTINATION
          DIAGNOSTICS
+         DICT
          DIRECTORY
          DISABLE
          DISCARD
@@ -1632,6 +1633,7 @@ class SqlKeywords:
          FRAGMENTATION
          FREEZE
          FUNCTION
+         FULLTEXT_DICT
          GENERAL
          GEOMETRY
          GEOMETRYCOLLECTION

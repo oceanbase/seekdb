@@ -23,6 +23,8 @@
 #include "share/io/ob_io_manager.h"
 #include "storage/meta_store/ob_server_storage_meta_service.h"
 #include "storage/meta_store/ob_tenant_storage_meta_service.h"
+#include "storage/fts/ob_fts_plugin_helper.h"
+#include "storage/fts/dict/ob_ft_dict_hub.h"
 #include "observer/ob_server.h"
 #include "observer/scheduler/ob_dag_warning_history_mgr.h"
 #include "observer/omt/ob_tenant.h" //ObTenant
@@ -471,6 +473,26 @@ int ObRefreshMemStatExecutor::execute(ObExecContext &ctx, ObRefreshMemStatStmt &
   } else if (OB_FAIL(GCTX.root_service_->admin_refresh_memory_stat(
                          stmt.get_rpc_arg()))) {
     LOG_WARN("refresh memory stat failed", K(ret), "rpc_arg", stmt.get_rpc_arg());
+  }
+  return ret;
+}
+
+int ObRefreshFulltextDictExecutor::execute(ObExecContext &ctx, ObRefreshFulltextDictStmt &stmt)
+{
+  int ret = OB_SUCCESS;
+  UNUSED(ctx);
+  storage::ObFTDictHub *dict_hub = nullptr;
+  int64_t refresh_version = 0;
+  if (OB_UNLIKELY(!stmt.is_valid())) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid refresh fulltext dictionary statement", K(ret), K(stmt));
+  } else if (OB_FAIL(storage::ObFTParsePluginData::instance().get_dict_hub(dict_hub))) {
+    LOG_WARN("failed to get local fulltext dictionary hub", K(ret));
+  } else if (OB_FAIL(dict_hub->advance_refresh_version(stmt.get_dict_table_id(), refresh_version))) {
+    LOG_WARN("failed to advance local fulltext dictionary refresh version", K(ret), K(stmt), K(refresh_version));
+  } else {
+    // 单机刷新只影响后续分词：新 generation 使用新 cache key，旧索引不回填。
+    LOG_INFO("refreshed local fulltext dictionary", K(stmt), K(refresh_version));
   }
   return ret;
 }

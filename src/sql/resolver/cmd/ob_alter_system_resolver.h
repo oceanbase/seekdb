@@ -96,6 +96,9 @@ DEF_SIMPLE_CMD_RESOLVER(ObAdminMergeResolver);
 
 DEF_SIMPLE_CMD_RESOLVER(ObRefreshMemStatResolver);
 
+// 解析 ALTER SYSTEM REFRESH FULLTEXT DICT 的词典表目标。
+DEF_SIMPLE_CMD_RESOLVER(ObRefreshFulltextDictResolver);
+
 DEF_SIMPLE_CMD_RESOLVER(ObWashMemFragmentationResolver);
 
 DEF_SIMPLE_CMD_RESOLVER(ObRefreshIOCalibrationResolver);

@@ -70,6 +70,10 @@ public:
 
   static int build_cache_from_ik_dict(const ObFTDictDesc &desc, ObFTCacheRangeContainer &range_container);
 
+  // 从用户词典表读取 word 列并构建 DAT range 缓存。
+  static int build_cache_from_table(const ObFTDictDesc &desc,
+                                    ObFTCacheRangeContainer &range_container);
+
 private:
   // build cache
   static int build_ranges(const ObFTDictDesc &desc,

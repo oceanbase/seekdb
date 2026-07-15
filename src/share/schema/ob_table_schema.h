@@ -1413,6 +1413,12 @@ public:
   int set_external_properties(const common::ObString &format) { return deep_copy_str(format, external_properties_); }
   void set_external_table_auto_refresh(const int64_t flag) { table_flags_ |= (flag << EXTERNAL_TABLE_AUTO_REFRESH_FLAG_OFFSET); }
   inline void set_user_specified_partition_for_external_table() { table_flags_ |= EXTERNAL_TABLE_USER_SPECIFIED_PARTITION_FLAG; }
+  // 设置或清除全文词典表标记，供全文索引属性校验与刷新命令复用。
+  inline void set_fulltext_dict_table(const bool is_dict)
+  { add_or_del_table_flag(FULLTEXT_DICT_TABLE_FLAG, is_dict); }
+  // 判断当前表是否允许被 FULLTEXT 的词典属性引用。
+  inline bool is_fulltext_dict_table() const
+  { return has_table_flag(FULLTEXT_DICT_TABLE_FLAG); }
   template<typename ColumnType>
   int add_column(const ColumnType &column);
   int delete_column(const common::ObString &column_name);

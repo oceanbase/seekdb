@@ -25,20 +25,33 @@ namespace oceanbase
 {
 namespace sql
 {
+class ObSchemaChecker;
+
 class ObFTParserResolverHelper final
 {
 public:
+
   ObFTParserResolverHelper() = default;
   ~ObFTParserResolverHelper() = default;
 
+  // 解析全文索引属性，并在属性写入 schema 前校验其中引用的词典表。
   static int resolve_parser_properties(
       const ParseNode &parse_tree,
       common::ObIAllocator &allocator,
+      ObSchemaChecker &schema_checker,
+      const common::ObString &current_database_name,
       common::ObString &parser_property);
 
 private:
   static int resolve_fts_index_parser_properties(const ParseNode *node,
-                                                 storage::ObFTParserJsonProps &property);
+                                                 storage::ObFTParserJsonProps &property,
+                                                 ObSchemaChecker &schema_checker,
+                                                 const common::ObString &current_database_name);
+  // 解析 db.table 或 table，并确认目标是合法的全文词典表。
+  static int resolve_and_validate_dict_table_(ObSchemaChecker &schema_checker,
+                                              const common::ObString &current_database_name,
+                                              const common::ObString &raw_table_name,
+                                              uint64_t &dict_table_id);
 };
 
 } // end namespace sql

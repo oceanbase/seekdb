@@ -577,6 +577,9 @@ protected:
   int resolve_table_option(
       const ParseNode *node,
       const bool is_index_option);
+  // 解析 FULLTEXT_DICT='Y'，只接受任务定义的启用值。
+  int resolve_fulltext_dict_option_(const ParseNode &option_node,
+                                    bool &is_fulltext_dict);
   int resolve_column_definition_ref(
       share::schema::ObColumnSchemaV2 &column,
       ParseNode *node,
@@ -1043,6 +1046,8 @@ protected:
   int64_t table_dop_; // default value is 1
   int64_t hash_subpart_num_;
   bool is_external_table_;
+  // 保存本次 CREATE TABLE 是否指定 FULLTEXT_DICT='Y'，稍后写入 table schema。
+  bool is_fulltext_dict_table_;
   common::ObString ttl_definition_;
   common::ObString storage_cache_policy_;
   ObNameGeneratedType name_generated_type_;

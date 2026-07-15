@@ -19,6 +19,7 @@
 #define USING_LOG_PREFIX STORAGE_FTS
 
 #include "sql/resolver/ddl/ob_fts_parser_resolver.h"
+#include "sql/resolver/ob_schema_checker.h"
 
 namespace oceanbase
 {
@@ -28,8 +29,11 @@ namespace sql
 int ObFTParserResolverHelper::resolve_parser_properties(
     const ParseNode &parse_tree,
     common::ObIAllocator &allocator,
+    ObSchemaChecker &schema_checker,
+    const common::ObString &current_database_name,
     common::ObString &parser_property)
 {
+  // 统一处理三个词典属性，防止 CREATE/ALTER 全文索引走出不同的校验语义。
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(parse_tree.num_child_ <= 0)) {
     ret = OB_INVALID_ARGUMENT;
@@ -44,7 +48,8 @@ int ObFTParserResolverHelper::resolve_parser_properties(
       if (OB_ISNULL(parse_tree.children_[i])) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("option_node child is nullptr", K(ret));
-      } else if (OB_FAIL(resolve_fts_index_parser_properties(parse_tree.children_[i], property))) {
+      } else if (OB_FAIL(resolve_fts_index_parser_properties(parse_tree.children_[i], property,
+                                                              schema_checker, current_database_name))) {
         LOG_WARN("fail to resolve fts index parser properties", K(ret));
       }
     }
@@ -58,7 +63,9 @@ int ObFTParserResolverHelper::resolve_parser_properties(
 
 int ObFTParserResolverHelper::resolve_fts_index_parser_properties(
     const ParseNode *node,
-    storage::ObFTParserJsonProps &property)
+    storage::ObFTParserJsonProps &property,
+    ObSchemaChecker &schema_checker,
+    const common::ObString &current_database_name)
 {
   int ret = OB_SUCCESS;
   if (OB_ISNULL(node) || node->num_child_ != 1 || OB_ISNULL(node->children_[0])){
@@ -124,9 +131,17 @@ int ObFTParserResolverHelper::resolve_fts_index_parser_properties(
           LOG_USER_ERROR(OB_INVALID_ARGUMENT, "the stopword table is empty");
         } else {
           int32_t str_len = static_cast<int32_t>(node->children_[0]->str_len_);
-          if (OB_FAIL(property.config_set_stopword_table(
+          const ObString table_name(str_len, node->children_[0]->str_value_);
+          uint64_t dict_table_id = OB_INVALID_ID;
+          // 停用词表必须先通过词典表 schema 校验，才能写入索引属性 JSON。
+          if (OB_FAIL(resolve_and_validate_dict_table_(schema_checker, current_database_name, table_name, dict_table_id))) {
+            LOG_WARN("invalid stopword dictionary table", K(ret), K(table_name));
+          } else if (OB_FAIL(property.config_set_stopword_table(
                   common::ObString(str_len, node->children_[0]->str_value_)))) {
             LOG_WARN("fail to set stopword table", K(ret));
+          } else if (OB_FAIL(property.config_set_stopword_table_id(dict_table_id))) {
+            // 停用词也必须持久化稳定 schema ID，refresh 才能只失效其对应缓存。
+            LOG_WARN("failed to set internal stopword dictionary table id", K(ret), K(dict_table_id));
           }
         }
         break;
@@ -141,9 +156,17 @@ int ObFTParserResolverHelper::resolve_fts_index_parser_properties(
           LOG_USER_ERROR(OB_INVALID_ARGUMENT, "the dict table is empty");
         } else {
           int32_t str_len = static_cast<int32_t>(node->children_[0]->str_len_);
-          if (OB_FAIL(property.config_set_dict_table(
+          const ObString table_name(str_len, node->children_[0]->str_value_);
+          uint64_t dict_table_id = OB_INVALID_ID;
+          // 主词典表必须先通过词典表 schema 校验，才能写入索引属性 JSON。
+          if (OB_FAIL(resolve_and_validate_dict_table_(schema_checker, current_database_name, table_name, dict_table_id))) {
+            LOG_WARN("invalid main dictionary table", K(ret), K(table_name));
+          } else if (OB_FAIL(property.config_set_dict_table(
                   common::ObString(str_len, node->children_[0]->str_value_)))) {
             LOG_WARN("fail to set dict table", K(ret));
+          } else if (OB_FAIL(property.config_set_dict_table_id(dict_table_id))) {
+            // 将 schema ID 随属性持久化，运行时才能按稳定身份获取 refresh generation。
+            LOG_WARN("failed to set internal main dictionary table id", K(ret), K(dict_table_id));
           }
         }
         break;
@@ -158,9 +181,17 @@ int ObFTParserResolverHelper::resolve_fts_index_parser_properties(
           LOG_USER_ERROR(OB_INVALID_ARGUMENT, "the quanitfier table is empty");
         } else {
           int32_t str_len = static_cast<int32_t>(node->children_[0]->str_len_);
-          if (OB_FAIL(property.config_set_quantifier_table(
+          const ObString table_name(str_len, node->children_[0]->str_value_);
+          uint64_t dict_table_id = OB_INVALID_ID;
+          // 量词词典表必须先通过词典表 schema 校验，才能写入索引属性 JSON。
+          if (OB_FAIL(resolve_and_validate_dict_table_(schema_checker, current_database_name, table_name, dict_table_id))) {
+            LOG_WARN("invalid quantifier dictionary table", K(ret), K(table_name));
+          } else if (OB_FAIL(property.config_set_quantifier_table(
                   common::ObString(str_len, node->children_[0]->str_value_)))) {
             LOG_WARN("fail to set quantifier table", K(ret));
+          } else if (OB_FAIL(property.config_set_quantifier_table_id(dict_table_id))) {
+            // 量词词典使用独立 schema ID，避免与主词典/停用词共享刷新代次。
+            LOG_WARN("failed to set internal quantifier dictionary table id", K(ret), K(dict_table_id));
           }
         }
         break;
@@ -231,6 +262,47 @@ int ObFTParserResolverHelper::resolve_fts_index_parser_properties(
         LOG_WARN("invalid fts index parser properties option", K(ret), K(node->type_));
       }
     }
+  }
+  return ret;
+}
+
+int ObFTParserResolverHelper::resolve_and_validate_dict_table_(
+    ObSchemaChecker &schema_checker,
+    const ObString &current_database_name,
+    const ObString &raw_table_name,
+    uint64_t &dict_table_id)
+{
+  // 引用校验在 DDL 阶段完成，避免首次写入全文索引时才因错误词典表失败。
+  int ret = OB_SUCCESS;
+  dict_table_id = OB_INVALID_ID;
+  ObString database_name = current_database_name;
+  ObString table_name = raw_table_name;
+  const share::schema::ObTableSchema *table_schema = nullptr;
+  const char *dot = raw_table_name.find('.');
+  if (OB_UNLIKELY(raw_table_name.empty())) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_USER_ERROR(OB_INVALID_ARGUMENT, "dictionary table name is empty");
+  } else if (nullptr != dot) {
+    // 带库名时拆分 db.table；未带库名则沿用当前 database。
+    const int32_t database_length = static_cast<int32_t>(dot - raw_table_name.ptr());
+    database_name.assign_ptr(raw_table_name.ptr(), database_length);
+    table_name.assign_ptr(const_cast<char *>(dot + 1), raw_table_name.length() - database_length - 1);
+  }
+  if (OB_FAIL(ret)) {
+  } else if (OB_UNLIKELY(database_name.empty() || table_name.empty())) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_USER_ERROR(OB_INVALID_ARGUMENT, "invalid dictionary table name");
+  } else if (OB_FAIL(schema_checker.get_table_schema(database_name, table_name, false, table_schema))) {
+    LOG_WARN("dictionary table does not exist", K(ret), K(database_name), K(table_name));
+  } else if (OB_ISNULL(table_schema)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("dictionary table schema is null", K(ret));
+  } else if (!table_schema->is_fulltext_dict_table()) {
+    // 只有显式标记的表才能作为分词词典，普通表不能延迟到运行时才报错。
+    ret = OB_NOT_SUPPORTED;
+    LOG_USER_ERROR(OB_NOT_SUPPORTED, "referenced table is not a FULLTEXT_DICT table");
+  } else {
+    dict_table_id = table_schema->get_table_id();
   }
   return ret;
 }

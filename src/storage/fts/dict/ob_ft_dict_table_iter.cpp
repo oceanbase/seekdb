@@ -22,6 +22,7 @@
 #include "lib/oblog/ob_log_module.h"
 #include "lib/utility/ob_macro_utils.h"
 #include "share/ob_server_struct.h"
+#include "share/inner_table/ob_inner_table_schema_constants.h"
 
 #define USING_LOG_PREFIX STORAGE_FTS
 
@@ -66,19 +67,41 @@ int ObFTDictTableIter::next()
   return ret;
 }
 
-int ObFTDictTableIter::init(const ObString &table_name)
+int ObFTDictTableIter::init(const ObFTDictDesc &dict_desc)
 {
   int ret = OB_SUCCESS;
   common::ObMySQLProxy *sql_proxy = GCTX.sql_proxy_;
+  ObString table_name = dict_desc.name_;
 
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
     LOG_WARN("Inited twice.", K(ret));
   } else {
+    if (dict_desc.is_builtin()) {
+      // 内置词典名称是逻辑名称，需映射到对应的 oceanbase inner table。
+      switch (dict_desc.type_) {
+        case ObFTDictType::DICT_IK_MAIN:
+          table_name = ObString(share::OB_FT_DICT_IK_UTF8_TNAME);
+          break;
+        case ObFTDictType::DICT_IK_QUAN:
+          table_name = ObString(share::OB_FT_QUANTIFIER_IK_UTF8_TNAME);
+          break;
+        case ObFTDictType::DICT_IK_STOP:
+          table_name = ObString(share::OB_FT_STOPWORD_IK_UTF8_TNAME);
+          break;
+        default:
+          ret = OB_NOT_SUPPORTED;
+          LOG_WARN("unsupported builtin dictionary type", K(ret), K(dict_desc.type_));
+          break;
+      }
+    }
     SMART_VAR(ObSqlString, sql_string)
     {
-      if (OB_FAIL(sql_string.append("SELECT word FROM oceanbase."))) {
+      if (OB_FAIL(ret)) {
+      } else if (OB_FAIL(sql_string.append("SELECT word FROM "))) {
         LOG_WARN("Failed to append sql", K(ret));
+      } else if (dict_desc.is_builtin() && OB_FAIL(sql_string.append("oceanbase."))) {
+        LOG_WARN("Failed to append builtin dictionary database", K(ret));
       } else if (OB_FAIL(sql_string.append(table_name))) {
         LOG_WARN("Failed to append sql", K(ret));
       } else if (OB_FAIL(sql_string.append(" ORDER BY word"))) {

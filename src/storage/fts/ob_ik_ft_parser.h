@@ -30,6 +30,7 @@ namespace oceanbase
 namespace storage
 {
 class ObFTDictHub;
+struct ObFTParserProperty;
 
 class ObIKFTParser final : public plugin::ObITokenIterator
 {
@@ -74,7 +75,14 @@ private:
 private:
   int init_dict(const plugin::ObFTParserParam &param);
 
-  int init_single_dict(ObFTDictDesc desc, ObFTCacheRangeContainer &container);
+  // 根据解析后的属性构造三类词典描述；未配置时回退到对应的内置词典。
+  int build_dict_descs_(const ObFTParserProperty &property,
+                        ObFTDictDesc &main_dict_desc,
+                        ObFTDictDesc &quantifier_dict_desc,
+                        ObFTDictDesc &stopword_dict_desc);
+
+  // 使用完整的词典描述加载或构建对应缓存，避免调用方复制描述后丢失身份信息。
+  int init_single_dict(const ObFTDictDesc &desc, ObFTCacheRangeContainer &container);
 
   int init_segmenter(const plugin::ObFTParserParam &param);
 

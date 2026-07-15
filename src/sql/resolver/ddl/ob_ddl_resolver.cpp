@@ -100,6 +100,7 @@ ObDDLResolver::ObDDLResolver(ObResolverParams &params)
     table_dop_(DEFAULT_TABLE_DOP),
     hash_subpart_num_(-1),
     is_external_table_(false),
+    is_fulltext_dict_table_(false),
     ttl_definition_(),
     storage_cache_policy_(),
     name_generated_type_(GENERATED_TYPE_UNKNOWN),
@@ -1123,6 +1124,16 @@ int ObDDLResolver::resolve_table_option(const ParseNode *option_node, const bool
   }
   if (OB_SUCCESS == ret && NULL != option_node) {
     switch (option_node->type_) {
+    case T_FULLTEXT_DICT: {
+      // FULLTEXT_DICT 是建表专用选项，解析成功后由基类写入 table schema。
+      if (is_index_option) {
+        ret = OB_ERR_PARSE_SQL;
+        LOG_USER_ERROR(OB_ERR_PARSE_SQL, "FULLTEXT_DICT is only supported for CREATE TABLE");
+      } else if (OB_FAIL(resolve_fulltext_dict_option_(*option_node, is_fulltext_dict_table_))) {
+        SQL_RESV_LOG(WARN, "resolve fulltext dictionary table option failed", K(ret));
+      }
+      break;
+    }
     case T_EXPIRE_INFO: {
 //        //not supported in version(1.0)
 //        ret = OB_NOT_SUPPORTED;
@@ -1602,8 +1613,11 @@ int ObDDLResolver::resolve_table_option(const ParseNode *option_node, const bool
         break;
       }
       case T_PARSER_PROPERTIES: {
+        // 三类词典表属性在 JSON 序列化前必须完成 schema 校验。
         if (OB_FAIL(ObFTParserResolverHelper::resolve_parser_properties(*option_node,
                                                                                *allocator_,
+                                                                               *schema_checker_,
+                                                                               database_name_,
                                                                                parser_properties_))) {
           LOG_WARN("fail to resolve parser properties", K(ret));
         }
@@ -2462,6 +2476,32 @@ int ObDDLResolver::resolve_table_option(const ParseNode *option_node, const bool
     }
   }
 
+  return ret;
+}
+
+int ObDDLResolver::resolve_fulltext_dict_option_(const ParseNode &option_node,
+                                                  bool &is_fulltext_dict)
+{
+  // 将语法节点中的 FULLTEXT_DICT 选项转换为建表阶段使用的布尔标记。
+  int ret = OB_SUCCESS;
+  is_fulltext_dict = false;
+  if (OB_UNLIKELY(T_FULLTEXT_DICT != option_node.type_)
+      || OB_ISNULL(option_node.children_)
+      || OB_ISNULL(option_node.children_[0])) {
+    ret = OB_ERR_UNEXPECTED;
+    SQL_RESV_LOG(WARN, "invalid FULLTEXT_DICT parse node", K(ret), K(option_node.type_));
+  } else {
+    const ParseNode &value_node = *option_node.children_[0];
+    const ObString value(static_cast<int32_t>(value_node.str_len_), value_node.str_value_);
+    // 需求仅允许显式启用值 Y，避免普通表被误标为词典表。
+    if (0 != value.case_compare("Y")) {
+      ret = OB_ERR_PARSE_SQL;
+      LOG_USER_ERROR(OB_ERR_PARSE_SQL, "FULLTEXT_DICT only accepts 'Y'");
+    } else {
+      // 标记仅在 CREATE TABLE resolver 生命周期内保存，随后写入 table schema。
+      is_fulltext_dict = true;
+    }
+  }
   return ret;
 }
 
@@ -4270,6 +4310,7 @@ void ObDDLResolver::reset() {
   table_mode_.reset();
   table_dop_ = DEFAULT_TABLE_DOP;
   hash_subpart_num_ = -1;
+  is_fulltext_dict_table_ = false;
   ttl_definition_.reset();
   storage_cache_policy_.reset();
   is_set_lob_inrow_threshold_ = false;

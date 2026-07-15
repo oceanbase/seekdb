@@ -250,6 +250,8 @@ static const NonReservedKeyword Mysql_none_reserved_keywords[] =
   {"deterministic", DETERMINISTIC},
   {"dense_rank", DENSE_RANK},
   {"diagnostics", DIAGNOSTICS},
+  /* 刷新全文词典命令使用的非保留关键字。 */
+  {"dict", DICT},
   {"dict_table", DICT_TABLE},
   {"diff", DIFF},
   {"disallow", DISALLOW},
@@ -359,6 +361,8 @@ static const NonReservedKeyword Mysql_none_reserved_keywords[] =
   {"from", FROM},
   {"frozen", FROZEN},
   {"full", FULL},
+  /* 使 lexer 将全文词典表选项识别为对应的语法 token。 */
+  {"fulltext_dict", FULLTEXT_DICT},
   {"fulltext", FULLTEXT},
   {"function", FUNCTION},
   {"following", FOLLOWING},

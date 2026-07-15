@@ -77,7 +77,13 @@ public:
   };
 
   ObFTIKParam(Mode mode = Mode::SMART)
-      : mode_(mode), main_dict_(""), quan_dict_(""), stopword_dict_("")
+      : mode_(mode),
+        main_dict_(""),
+        quan_dict_(""),
+        stopword_dict_(""),
+        main_dict_table_id_(common::OB_INVALID_ID),
+        quantifier_dict_table_id_(common::OB_INVALID_ID),
+        stopword_dict_table_id_(common::OB_INVALID_ID)
   {
   }
 
@@ -86,6 +92,10 @@ public:
   common::ObString main_dict_;
   common::ObString quan_dict_;
   common::ObString stopword_dict_;
+  // 词典表 ID 由 SQL 属性解析后写入，IK 运行时据此读取 refresh generation。
+  uint64_t main_dict_table_id_;
+  uint64_t quantifier_dict_table_id_;
+  uint64_t stopword_dict_table_id_;
 };
 
 /**
