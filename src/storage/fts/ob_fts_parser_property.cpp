@@ -1158,19 +1158,27 @@ int ObFTParserProperty::parse_for_parser_helper(const ObFTParser &parser, const 
     LOG_WARN("fail to parse from json str", K(ret), K(json_str));
   } else {
     if (parser.is_ik()) {
-      // extract user-provided dict table names from JSON; the resulting ObString
-      // points into the json_str buffer which must outlive this property.
+      // Extract user-provided dict table names from JSON. The ObString returned by
+      // config_get_* points into props's internal JSON tree, which is freed when
+      // props goes out of scope at the end of this function. Deep-copy into our
+      // own arena so the strings stay valid for the lifetime of this property.
       ObString tmp_str;
       if (OB_SUCC(props.config_get_dict_table(tmp_str))) {
-        dict_table_ = tmp_str;
+        if (OB_FAIL(ob_write_string(owned_alloc_, tmp_str, dict_table_))) {
+          LOG_WARN("failed to copy dict_table", K(ret));
+        }
       }
       tmp_str.reset();
       if (OB_SUCC(props.config_get_stopword_table(tmp_str))) {
-        stopword_table_ = tmp_str;
+        if (OB_FAIL(ob_write_string(owned_alloc_, tmp_str, stopword_table_))) {
+          LOG_WARN("failed to copy stopword_table", K(ret));
+        }
       }
       tmp_str.reset();
       if (OB_SUCC(props.config_get_quantifier_table(tmp_str))) {
-        quantifier_table_ = tmp_str;
+        if (OB_FAIL(ob_write_string(owned_alloc_, tmp_str, quantifier_table_))) {
+          LOG_WARN("failed to copy quantifier_table", K(ret));
+        }
       }
       ObString ik_smart;
       if (OB_FAIL(props.config_get_ik_mode(ik_smart))) {
