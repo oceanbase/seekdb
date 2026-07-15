@@ -25,6 +25,7 @@ namespace storage
 
 ObSRMergeCmp::ObSRMergeCmp()
   : cmp_func_(nullptr),
+    fast_cmp_type_(GENERIC_CMP),
     iter_ids_(nullptr),
     is_inited_(false)
 {
@@ -39,11 +40,21 @@ int ObSRMergeCmp::init(ObDatumMeta id_meta, const ObFixedArray<const ObDatum *, 
   } else {
     iter_ids_ = iter_ids;
     sql::ObExprBasicFuncs *basic_funcs = ObDatumFuncs::get_basic_func(id_meta.type_, id_meta.cs_type_);
-    cmp_func_ = basic_funcs->null_first_cmp_;
-    if (OB_ISNULL(cmp_func_)) {
+    if (OB_ISNULL(basic_funcs)) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("failed to get basic datum functions", K(ret), K(id_meta));
+    } else if (FALSE_IT(cmp_func_ = basic_funcs->null_first_cmp_)) {
+    } else if (OB_ISNULL(cmp_func_)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("failed to init IRIterLoserTreeCmp", K(ret));
     } else {
+      if (common::ObIntType == id_meta.type_) {
+        fast_cmp_type_ = INT_CMP;
+      } else if (common::ObUInt64Type == id_meta.type_) {
+        fast_cmp_type_ = UINT64_CMP;
+      } else if (CS_TYPE_BINARY == id_meta.cs_type_ && ob_is_string_type(id_meta.type_)) {
+        fast_cmp_type_ = BINARY_STRING_CMP;
+      }
       is_inited_ = true;
     }
   }
@@ -61,7 +72,21 @@ int ObSRMergeCmp::cmp(
     LOG_WARN("not inited", K(ret));
   } else {
     int tmp_ret = 0;
-    if (OB_FAIL(cmp_func_(get_id_datum(l.iter_idx_), get_id_datum(r.iter_idx_), tmp_ret))) {
+    const ObDatum &left = get_id_datum(l.iter_idx_);
+    const ObDatum &right = get_id_datum(r.iter_idx_);
+    if (OB_UNLIKELY(left.is_null() || right.is_null())) {
+      ret = cmp_func_(left, right, tmp_ret);
+    } else if (INT_CMP == fast_cmp_type_) {
+      tmp_ret = left.get_int() < right.get_int() ? -1 : left.get_int() > right.get_int() ? 1 : 0;
+    } else if (UINT64_CMP == fast_cmp_type_) {
+      tmp_ret = left.get_uint64() < right.get_uint64()
+          ? -1 : left.get_uint64() > right.get_uint64() ? 1 : 0;
+    } else if (BINARY_STRING_CMP == fast_cmp_type_) {
+      tmp_ret = left.get_string().compare(right.get_string());
+    } else {
+      ret = cmp_func_(left, right, tmp_ret);
+    }
+    if (OB_FAIL(ret)) {
       LOG_WARN("failed to compare doc id by datum", K(ret));
     } else {
       cmp_ret = tmp_ret;
@@ -360,7 +385,8 @@ int ObSRDaaTIterImpl::collect_dims_by_id(const ObDatum *&id_datum, double &relev
     }
     if (OB_FAIL(merge_heap_->top(top_item))) {
       LOG_WARN("failed to get top item from merge heap", K(ret));
-    } else if (OB_FAIL(relevance_collector_->collect_one_dim(top_item->iter_idx_, top_item->relevance_))) {
+    } else if (iter_param_->need_collect_dims_
+        && OB_FAIL(relevance_collector_->collect_one_dim(top_item->iter_idx_, top_item->relevance_))) {
       LOG_WARN("failed to collect one dimension", K(ret));
     } else if (FALSE_IT(iter_idx = top_item->iter_idx_)) {
     } else if (OB_FAIL(merge_heap_->pop())) {
@@ -376,7 +402,10 @@ int ObSRDaaTIterImpl::collect_dims_by_id(const ObDatum *&id_datum, double &relev
     if (OB_ISNULL(id_datum)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected null id datum", K(ret));
-    } else if (OB_FAIL(relevance_collector_->get_result(relevance, got_valid_id))) {
+    } else if (!iter_param_->need_collect_dims_
+        && FALSE_IT(got_valid_id = true)) {
+    } else if (iter_param_->need_collect_dims_
+        && OB_FAIL(relevance_collector_->get_result(relevance, got_valid_id))) {
       LOG_WARN("failed to get result", K(ret));
     } else if (got_valid_id && OB_FAIL(process_collected_row(*id_datum, relevance))) {
       LOG_WARN("failed to process collected row", K(ret));
