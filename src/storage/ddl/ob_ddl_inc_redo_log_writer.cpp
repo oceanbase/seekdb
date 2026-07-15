@@ -23,6 +23,7 @@
 #include "storage/ob_storage_rpc_arg.h"
 #include "storage/tx/ob_trans_part_ctx.h"
 #include "storage/tx/ob_trans_service.h"
+#include "storage/tx/ob_ts_mgr.h"
 #include "storage/tx_storage/ob_ls_service.h"
 
 using namespace oceanbase::common;

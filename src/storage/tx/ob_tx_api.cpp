@@ -17,6 +17,7 @@
 #include "ob_trans_service.h"
 #include "share/rc/ob_module_provider.h"
 #include "ob_trans_part_ctx.h"
+#include "storage/tx/ob_ts_mgr.h"
 #include "storage/tx/ob_weak_read_util.h"
 #include "storage/tx_storage/ob_ls_service.h"
 #include "storage/ls/ob_ls.h"

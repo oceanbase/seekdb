@@ -15,17 +15,17 @@
  */
 
 #include "ob_weak_read_util.h"
-#include "share/ob_server_struct.h"
 #include "storage/tx/ob_timestamp_service.h"
+#include "storage/tx/ob_ts_mgr.h"
 namespace oceanbase
 {
 using namespace common;
 using namespace share;
 namespace transaction
 {
-// 1. follower readability depends on its readable snapshot and weak-read freshness
+// 1. follower if readable depend on follower readable snapshot version and weak read cluster version
 //    and correspond to clog keepalive msg interval and weak read version refresh interval respectively
-// 2. weak-read freshness depends on the readable snapshot and max stable time
+// 2. meanwhile weak read cluster version depond on follower readable snapshot version and max stable time
 // 3. so keepalive msg interval should bigger than weak read version refresh interval
 // 4. keepalive msg interval set DEAULT  if weak read version refresh interval
 int64_t ObWeakReadUtil::replica_keepalive_interval()
@@ -46,6 +46,7 @@ int64_t ObWeakReadUtil::replica_keepalive_interval()
 // 1. no partitions in server
 // 2. all partitions offline
 // 3. all partitions delay too much or in invalid status
+// 4. all partitions in migrating and readable snapshot version delay more than 500ms
 int ObWeakReadUtil::generate_min_weak_read_version(SCN &scn)
 {
   int ret = OB_SUCCESS;
@@ -59,18 +60,16 @@ int ObWeakReadUtil::generate_min_weak_read_version(SCN &scn)
                    static_cast<int64_t>(DEFAULT_REPLICA_KEEPALIVE_INTERVAL)),
           static_cast<int64_t>(DEFAULT_MAX_STALE_BUFFER_TIME));
 
-  if (share::server_is_primary()) {
+  if (MTL_TENANT_ROLE_CACHE_IS_PRIMARY()) {
     max_stale_time = GCONF.max_stale_time_for_weak_consistency - buffer_time;
   } else {
   //standby, restore, invalid
-    max_stale_time = GCONF.max_stale_time_for_weak_consistency
-                     + transaction::ObTimestampService::TIMESTAMP_RECOVERY_SAFETY_RANGE
-                     - buffer_time;
+    max_stale_time = GCONF.max_stale_time_for_weak_consistency + transaction::ObTimestampService::PREALLOCATE_RANGE_FOR_SWITHOVER - buffer_time;
   }
 
   max_stale_time = std::max(max_stale_time, static_cast<int64_t>(DEFAULT_REPLICA_KEEPALIVE_INTERVAL));
   SCN tmp_scn;
-  if (OB_FAIL(OB_TS_MGR.get_gts(tmp_scn))) {
+  if (OB_FAIL(OB_TS_MGR.get_gts(NULL, tmp_scn))) {
     TRANS_LOG(WARN, "get gts cache error", K(ret));
   } else {
     // the unit of max_stale_time is us, we should change to ns
@@ -85,7 +84,7 @@ bool ObWeakReadUtil::enable_monotonic_weak_read()
   return GCONF.enable_monotonic_weak_read;
 }
 
-int64_t ObWeakReadUtil::max_stale_time_for_weak_consistency()
+int64_t ObWeakReadUtil::max_stale_time_for_weak_consistency(int64_t ignore_warn)
 {
   return GCONF.max_stale_time_for_weak_consistency;
 }

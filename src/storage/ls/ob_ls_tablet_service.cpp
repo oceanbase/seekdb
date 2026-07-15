@@ -32,6 +32,7 @@
 #include "storage/access/ob_table_estimator.h"
 #include "storage/access/ob_index_sstable_estimator.h"
 #include "storage/blocksstable/ob_sstable.h"
+#include "storage/tx/ob_ts_mgr.h"
 #include "storage/ddl/ob_direct_insert_sstable_ctx_new.h"
 #include "storage/retrieval/ob_block_stat_iter.h"
 #include "storage/tablet/ob_mds_schema_helper.h"

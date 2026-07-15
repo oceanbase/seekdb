@@ -27,6 +27,7 @@
 #include "storage/tablet/ob_tablet_medium_info_reader.h"
 #include "storage/tablet/ob_tablet_mds_node_dump_operator.h"
 #include "storage/tx_storage/ob_ls_service.h"
+#include "storage/tx/ob_ts_mgr.h"
 #include "storage/truncate_info/ob_tablet_truncate_info_reader.h"
 #include "storage/truncate_info/ob_truncate_info_array.h"
 #include "storage/tablet/ob_tablet_medium_info_reader.h"

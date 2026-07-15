@@ -1,0 +1,120 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef OCEANBASE_TRANSACTION_OB_GTS_SOURCE_
+#define OCEANBASE_TRANSACTION_OB_GTS_SOURCE_
+
+#include "lib/net/ob_addr.h"
+#include "lib/utility/utility.h"
+#include "ob_gts_msg.h"
+#include "ob_gts_local_cache.h"
+#include "ob_gts_task_queue.h"
+//#include "ob_ts_worker.h"
+#include "ob_i_ts_source.h"
+
+namespace oceanbase
+{
+namespace obcall
+{
+class ObGtsRpcResult;
+}
+namespace transaction
+{
+class ObTsCbTask;
+}
+namespace transaction
+{
+
+class ObGtsStatistics
+{
+  static const int64_t STAT_INTERVAL = 5 * 1000 * 1000;
+public:
+  ObGtsStatistics() { reset(); }
+  ~ObGtsStatistics() {}
+  int init();
+  void reset();
+  void inc_gts_rpc_cnt() { ATOMIC_INC(&gts_rpc_cnt_); }
+  void inc_get_gts_cache_cnt() { ATOMIC_INC(&get_gts_cache_cnt_); }
+  void inc_get_gts_with_stc_cnt() { ATOMIC_INC(&get_gts_with_stc_cnt_); }
+  void inc_try_get_gts_cache_cnt() { ATOMIC_INC(&try_get_gts_cache_cnt_); }
+  void inc_try_get_gts_with_stc_cnt() { ATOMIC_INC(&try_get_gts_with_stc_cnt_); }
+  void inc_wait_gts_elapse_cnt() { ATOMIC_INC(&wait_gts_elapse_cnt_); }
+  void inc_try_wait_gts_elapse_cnt() { ATOMIC_INC(&try_wait_gts_elapse_cnt_); }
+  void statistics();
+private:
+  int64_t last_stat_ts_;
+  int64_t gts_rpc_cnt_;
+
+  int64_t get_gts_cache_cnt_;
+  int64_t get_gts_with_stc_cnt_;
+  int64_t try_get_gts_cache_cnt_;
+  int64_t try_get_gts_with_stc_cnt_;
+
+  int64_t wait_gts_elapse_cnt_;
+  int64_t try_wait_gts_elapse_cnt_;
+};
+
+class ObGtsSource
+{
+public:
+  ObGtsSource() : log_interval_(3 * 1000 * 1000), refresh_location_interval_(100 * 1000) { reset(); }
+  ~ObGtsSource() { destroy(); }
+  int init(const common::ObAddr &server);
+  void destroy();
+  void reset();
+  
+  int handle_gts_err_response(const ObGtsErrResponse &msg);
+  int handle_gts_result(const int64_t queue_index);
+  int update_gts(const MonotonicTs srr, const int64_t gts, const MonotonicTs receive_gts_ts, bool &update);
+  int64_t get_task_count() const;
+  int gts_callback_interrupted(const int errcode, const share::ObLSID ls_id);
+public:
+  int update_gts(const int64_t gts, bool &update);
+  int get_gts(const MonotonicTs stc, ObTsCbTask *task, int64_t &gts, MonotonicTs &receive_gts_ts);
+  int get_gts(ObTsCbTask *task, int64_t &gts);
+  int wait_gts_elapse(const int64_t ts, ObTsCbTask *task, bool &need_wait);
+  int wait_gts_elapse(const int64_t ts);
+  int refresh_gts(const bool need_refresh);
+  bool is_external_consistent() { return true; }
+  int refresh_gts_location() { return OB_SUCCESS; }
+  TO_STRING_KV(K_(gts_local_cache), K_(server), K_(gts_cache_leader));
+private:
+  int refresh_gts_(const bool need_refresh);
+  int query_gts_(const common::ObAddr &leader);
+  void statistics_();
+  int get_gts_from_local_timestamp_service_(common::ObAddr &leader,
+                                            int64_t &gts,
+                                            MonotonicTs &receive_gts_ts);
+  int get_gts_from_local_timestamp_service_(common::ObAddr &leader,
+                                            int64_t &gts);
+private:
+  bool is_inited_;
+  
+  ObGTSLocalCache gts_local_cache_;
+  ObGTSTaskQueue get_gts_queue_;
+  ObGTSTaskQueue wait_gts_queue_;
+  common::ObAddr server_;
+  // statistics
+  ObGtsStatistics gts_statistics_;
+  common::ObTimeInterval log_interval_;
+  common::ObAddr gts_cache_leader_;
+  common::ObTimeInterval refresh_location_interval_;
+};
+
+} // transaction
+} // oceanbase
+
+#endif // OCEANBASE_RANSACTION_OB_GTS_SOURCE_

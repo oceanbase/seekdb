@@ -18,6 +18,7 @@
 #include "share/rc/ob_module_provider.h"
 #include "storage/tx_storage/ob_ls_service.h"
 #include "storage/tx/ob_trans_service.h"
+#include "storage/tx/ob_ts_mgr.h"
 #include "storage/tx/ob_weak_read_util.h"
 #include "rootserver/mview/ob_mview_maintenance_service.h"
 #include "share/ob_server_struct.h"
