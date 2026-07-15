@@ -38,9 +38,11 @@ public:
 
   int output_result(TokenizeContext &ctx);
 
-private:
-  int prepare(TokenizeContext &ctx);
+  int prepare(const int64_t fulltext_len);
 
+  void reuse();
+
+private:
   int add_chain(ObIKTokenChain *chain);
 
   int optimize(TokenizeContext &ctx,
