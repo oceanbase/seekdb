@@ -40,6 +40,14 @@ struct ObSRMergeItem
 
 struct ObSRMergeCmp
 {
+  enum FastCmpType : int8_t
+  {
+    GENERIC_CMP = 0,
+    INT_CMP,
+    UINT64_CMP,
+    BINARY_STRING_CMP
+  };
+
   ObSRMergeCmp();
   virtual ~ObSRMergeCmp() {}
 
@@ -54,6 +62,7 @@ private:
   }
 private:
   common::ObDatumCmpFuncType cmp_func_;
+  FastCmpType fast_cmp_type_;
   // TODO: if memory lifetime of docid datum is guaranteed by dim_iters, we can use pointer to datum directly
   //       and avoid deep copy into merge heap here
   const ObFixedArray<const ObDatum *, ObIAllocator> *iter_ids_;

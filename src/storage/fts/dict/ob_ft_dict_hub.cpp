@@ -47,6 +47,7 @@ int ObFTDictHub::destroy()
   int ret = OB_SUCCESS;
   dict_map_.destroy();
   rw_dict_lock_.destroy();
+  ATOMIC_STORE(&generation_epoch_, 0);
   is_inited_ = false;
   return ret;
 }
@@ -113,6 +114,8 @@ int ObFTDictHub::build_cache_internal(const ObFTDictDesc &desc,
         info.range_count_ = static_cast<int32_t>(container.get_handles().size());
         if (OB_FAIL(put_dict_info(key, info))) {
           LOG_WARN("Failed to publish dictionary cache generation", K(ret), K(build_desc));
+        } else {
+          ATOMIC_INC(&generation_epoch_);
         }
       }
     }

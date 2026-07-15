@@ -63,14 +63,18 @@ private:
       const common::ObObjMeta &ft_obj_meta,
       const char *fulltext,
       const int64_t fulltext_len);
+  int prepare_token_map(const int64_t fulltext_len);
 
   static const int64_t FT_WORD_DOC_COL_CNT = 4;
-  static const int64_t FT_TOKEN_BUCKET_COUNT = 997;
+  static const int64_t FT_CHARS_PER_TOKEN = 4;
+  static const int64_t FT_TOKEN_MIN_BUCKET_COUNT = 2;
+  static const int64_t FT_TOKEN_MAX_BUCKET_COUNT = 997;
   common::ObArenaAllocator metadata_allocator_;
   common::ObArenaAllocator scratch_allocator_;
   storage::ObFTTokenProcessor token_processor_;
   blocksstable::ObDatumRow datum_row_;
   storage::ObFTTokenMap token_map_;
+  int64_t token_map_bucket_count_;
   common::ObSEArray<const storage::ObFTTokenPair *, 16> token_arr_;
   uint64_t row_idx_;
   bool is_fts_index_aux_;

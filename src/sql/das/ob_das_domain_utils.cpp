@@ -42,7 +42,9 @@ ObObjDatumMapType ObFTIndexRowCache::FTS_DOC_WORD_TYPES[] = {OBJ_DATUM_STRING, O
 ObExprOperatorType ObFTIndexRowCache::FTS_INDEX_EXPR_TYPE[] = {T_FUN_SYS_WORD_SEGMENT, T_FUN_SYS_DOC_ID, T_FUN_SYS_WORD_COUNT, T_FUN_SYS_DOC_LENGTH};
 ObExprOperatorType ObFTIndexRowCache::FTS_DOC_WORD_EXPR_TYPE[] = {T_FUN_SYS_DOC_ID, T_FUN_SYS_WORD_SEGMENT, T_FUN_SYS_WORD_COUNT, T_FUN_SYS_DOC_LENGTH};
 const int64_t ObFTIndexRowCache::FT_WORD_DOC_COL_CNT;
-const int64_t ObFTIndexRowCache::FT_TOKEN_BUCKET_COUNT;
+const int64_t ObFTIndexRowCache::FT_CHARS_PER_TOKEN;
+const int64_t ObFTIndexRowCache::FT_TOKEN_MIN_BUCKET_COUNT;
+const int64_t ObFTIndexRowCache::FT_TOKEN_MAX_BUCKET_COUNT;
 
 ObFTIndexRowCache::ObFTIndexRowCache()
   : metadata_allocator_("FTIndexMeta"),
@@ -50,6 +52,7 @@ ObFTIndexRowCache::ObFTIndexRowCache()
     token_processor_(scratch_allocator_),
     datum_row_(),
     token_map_(),
+    token_map_bucket_count_(0),
     token_arr_(),
     row_idx_(0),
     is_fts_index_aux_(true),
@@ -79,14 +82,15 @@ int ObFTIndexRowCache::init(
   } else if (OB_FAIL(helper_.init(&metadata_allocator_, parser_name, parser_properties))) {
     LOG_WARN("fail to init full-text parser helper", K(ret));
   } else if (OB_FAIL(token_map_.create(
-                         FT_TOKEN_BUCKET_COUNT, common::ObMemAttr("FTIndexTokenMap")))) {
-    LOG_WARN("fail to create full-text token map", K(ret), K(FT_TOKEN_BUCKET_COUNT));
+                         FT_TOKEN_MIN_BUCKET_COUNT, common::ObMemAttr("FTIndexTokenMap")))) {
+    LOG_WARN("fail to create full-text token map", K(ret), K(FT_TOKEN_MIN_BUCKET_COUNT));
   } else if (OB_FAIL(datum_row_.init(metadata_allocator_, FT_WORD_DOC_COL_CNT))) {
     LOG_WARN("fail to initialize reusable full-text datum row", K(ret), K(FT_WORD_DOC_COL_CNT));
   } else {
     row_idx_ = 0;
     is_fts_index_aux_ = is_fts_index_aux;
     is_builtin_parser_ = helper_.is_builtin_parser();
+    token_map_bucket_count_ = FT_TOKEN_MIN_BUCKET_COUNT;
     is_inited_ = true;
   }
   if (OB_UNLIKELY(!is_inited_)) {
@@ -107,6 +111,8 @@ int ObFTIndexRowCache::segment(const common::ObObjMeta &ft_obj_meta,
     LOG_WARN("ObFTIndexRowCache hasn't be initialized", K(ret), K(is_inited_));
   } else if (OB_UNLIKELY(fulltext.empty())) {
     ret = OB_ITER_END;
+  } else if (OB_FAIL(prepare_token_map(fulltext.length()))) {
+    LOG_WARN("fail to prepare full-text token map", K(ret), K(fulltext.length()));
   } else if (is_builtin_parser_
       && OB_FAIL(segment_with_builtin_parser(ft_obj_meta,
                                              fulltext.ptr(),
@@ -136,6 +142,29 @@ int ObFTIndexRowCache::segment(const common::ObObjMeta &ft_obj_meta,
     }
   }
   LOG_TRACE("word segment", K(ret), K(row_idx_), K(token_arr_.count()), K(doc_id_datum));
+  return ret;
+}
+
+int ObFTIndexRowCache::prepare_token_map(const int64_t fulltext_len)
+{
+  int ret = OB_SUCCESS;
+  const int64_t bucket_count = MIN(
+      MAX(fulltext_len / FT_CHARS_PER_TOKEN, FT_TOKEN_MIN_BUCKET_COUNT),
+      FT_TOKEN_MAX_BUCKET_COUNT);
+  if (OB_UNLIKELY(fulltext_len <= 0)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid full-text length", K(ret), K(fulltext_len));
+  } else if (bucket_count <= token_map_bucket_count_) {
+    token_map_.reuse();
+  } else {
+    token_map_.destroy();
+    token_map_bucket_count_ = 0;
+    if (OB_FAIL(token_map_.create(bucket_count, common::ObMemAttr("FTIndexTokenMap")))) {
+      LOG_WARN("fail to resize full-text token map", K(ret), K(bucket_count), K(fulltext_len));
+    } else {
+      token_map_bucket_count_ = bucket_count;
+    }
+  }
   return ret;
 }
 
@@ -288,6 +317,7 @@ void ObFTIndexRowCache::reset()
   token_iterator_ = nullptr;
   token_arr_.reset();
   token_map_.destroy();
+  token_map_bucket_count_ = 0;
   datum_row_.reset();
   token_processor_.reset();
   token_processor_inited_ = false;
@@ -303,9 +333,6 @@ void ObFTIndexRowCache::reset()
 void ObFTIndexRowCache::reuse()
 {
   token_arr_.reuse();
-  if (token_map_.created()) {
-    token_map_.reuse();
-  }
   if (token_processor_inited_) {
     token_processor_.reuse();
   }
