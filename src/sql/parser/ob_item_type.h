@@ -1058,6 +1058,7 @@ typedef enum ObItemType
   T_FUN_MD5_CNN_WS = 2085,
   T_FUN_SYS_BUCKET = 2086,
   T_FUN_SYS_LOAD_FILE = 2087,
+  T_FUN_SYS_AI_SPLIT_DOCUMENT = 2088,
   T_MAX_OP = 3000,
 
   //pseudo column, to mark the group iterator id
