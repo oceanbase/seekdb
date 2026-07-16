@@ -188,6 +188,9 @@ int ObAddWord::process_word(
     non_stopword_cnt_ += word_freq;
     LOG_DEBUG("add word", K(ret), KP(word), K(word_len), K(char_cnt), K(word_freq), K(src_word), K(dst_word));
   }
+  if (OB_SUCC(ret) && OB_NOT_NULL(word_pos_map_)) {
+    position_seq_ += word_freq;
+  }
   return ret;
 }
 
@@ -262,8 +265,6 @@ int ObAddWord::groupby_word(const ObFTWord &word, const int64_t word_freq)
         word_info.word_count_ += word_freq;
         if (OB_FAIL(word_pos_map_->set_refactored(word, word_info, 1/*overwrite*/))) {
           LOG_WARN("fail to set word position info", K(ret), K(word), K(word_info));
-        } else {
-          position_seq_ += word_freq;
         }
       }
     }

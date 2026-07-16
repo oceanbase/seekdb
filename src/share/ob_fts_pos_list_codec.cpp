@@ -107,6 +107,7 @@ int ObFTSPositionListStore::decode(
   int64_t payload_len = 0;
   int64_t checksum = 0;
   int64_t pos_cnt = 0;
+  int64_t payload_pos = 0;
   if (encoded_pos_list.empty()) {
   } else if (OB_FAIL(serialization::decode_i16(encoded_pos_list.ptr(), encoded_pos_list.length(), pos, &magic))
           || OB_FAIL(serialization::decode_i16(encoded_pos_list.ptr(), encoded_pos_list.length(), pos, &version))
@@ -124,6 +125,7 @@ int ObFTSPositionListStore::decode(
   } else {
     const common::ObString payload(static_cast<int32_t>(payload_len), encoded_pos_list.ptr() + pos);
     const int64_t calc_checksum = payload.empty() ? 0 : static_cast<int64_t>(common::ob_crc64(payload.ptr(), payload.length()));
+    payload_pos = pos + payload_len;
     if (OB_UNLIKELY(calc_checksum != checksum)) {
       ret = OB_CHECKSUM_ERROR;
       LOG_WARN("pos list checksum mismatch", K(ret), K(calc_checksum), K(checksum), K(payload_len));
@@ -136,6 +138,9 @@ int ObFTSPositionListStore::decode(
     } else if (OB_UNLIKELY(pos_list.count() != pos_cnt)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("pos list count mismatch", K(ret), K(pos_list.count()), K(pos_cnt));
+    } else if (OB_UNLIKELY(payload_pos != encoded_pos_list.length())) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("unexpected trailing bytes in pos list", K(ret), K(payload_pos), K(encoded_pos_list.length()));
     }
   }
   return ret;

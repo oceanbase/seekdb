@@ -1254,12 +1254,15 @@ int ObFTDMLIterator::change_domain_dml_mode(const ObDomainDMLMode &mode)
         bool is_same = false;
         if (OB_FAIL(ft_parse_helper_.check_is_the_same(parser_str, parser_property_str, is_same))) {
           LOG_WARN("fail to check is the same", K(ret), K(parser_str), K(parser_property_str));
-        } else if (is_same) {
+        } else if (is_same && ObDomainDMLMode::DOMAIN_DML_MODE_DEFAULT == old_mode) {
           // This is the same as the parser name of the previous index.
           // nothing to do, just skip.
         } else if (FALSE_IT(ft_parse_helper_.reset())) {
+        } else if (FALSE_IT(pos_list_parser_.reset())) {
         } else if (OB_FAIL(ft_parse_helper_.init(&allocator_, parser_str, parser_property_str))) {
           LOG_WARN("fail to init fulltext parse helper", K(ret), K(parser_str), K(parser_property_str));
+        } else if (OB_FAIL(pos_list_parser_.init(&allocator_, parser_str, parser_property_str))) {
+          LOG_WARN("fail to init pos list parser", K(ret), K(parser_str), K(parser_property_str));
         }
         break;
       }
@@ -1509,6 +1512,7 @@ int ObFTDMLIterator::build_ft_word_row(
     blocksstable::ObDatumRow *&dest_row)
 {
   int ret = OB_SUCCESS;
+  static const int64_t LEGACY_FTS_DOC_WORD_TABLE_COL_CNT = 4;
   const int64_t DOC_ID_IDX = das_ctdef_->table_param_.get_data_table().is_fts_index_aux() ? 1 : 0;
   const int64_t WORD_SEGMENT_IDX = das_ctdef_->table_param_.get_data_table().is_fts_index_aux() ? 0 : 1;
   static int64_t WORD_COUNT_IDX = 2;
@@ -1519,16 +1523,18 @@ int ObFTDMLIterator::build_ft_word_row(
   if (OB_ISNULL(src_row)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", K(ret), KPC(src_row));
-  } else if (OB_UNLIKELY(share::ObFtsIndexBuilderUtil::OB_FTS_INDEX_OR_DOC_WORD_TABLE_COL_CNT != src_row->count_)) {
+  } else if (OB_UNLIKELY(share::ObFtsIndexBuilderUtil::OB_FTS_INDEX_OR_DOC_WORD_TABLE_COL_CNT != src_row->count_
+                         && LEGACY_FTS_DOC_WORD_TABLE_COL_CNT != src_row->count_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected error, count of src row isn't expected", K(ret), K(src_row->count_), KPC(src_row));
   } else if (OB_ISNULL(buf = allocator_.alloc(sizeof(blocksstable::ObDatumRow)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("fail to allocate datum row", K(ret));
   } else if (FALSE_IT(tmp_row = new (buf) blocksstable::ObDatumRow())) {
-  } else if (OB_FAIL(tmp_row->init(src_row->count_))) {
+  } else if (OB_FAIL(tmp_row->init(share::ObFtsIndexBuilderUtil::OB_FTS_INDEX_OR_DOC_WORD_TABLE_COL_CNT))) {
   } else if (OB_FAIL(tmp_row->copy_attributes_except_datums(*src_row))) {
     LOG_WARN("fail to copy attributes expcept datums", K(ret), KPC(src_row));
+  } else if (FALSE_IT(tmp_row->count_ = share::ObFtsIndexBuilderUtil::OB_FTS_INDEX_OR_DOC_WORD_TABLE_COL_CNT)) {
   } else if (OB_FAIL(tmp_row->storage_datums_[DOC_ID_IDX].deep_copy(src_row->storage_datums_[0], allocator_))) {
     LOG_WARN("fail to deep copy doc id datum", K(ret), K(DOC_ID_IDX));
   } else if (OB_FAIL(tmp_row->storage_datums_[WORD_SEGMENT_IDX].deep_copy(src_row->storage_datums_[1], allocator_))) {
@@ -1537,8 +1543,11 @@ int ObFTDMLIterator::build_ft_word_row(
     LOG_WARN("fail to deep copy word count datum", K(ret), K(WORD_COUNT_IDX));
   } else if (OB_FAIL(tmp_row->storage_datums_[DOC_LENGTH_IDX].deep_copy(src_row->storage_datums_[3], allocator_))) {
     LOG_WARN("fail to deep copy doc lenght datum", K(ret), K(DOC_LENGTH_IDX));
-  } else if (OB_FAIL(tmp_row->storage_datums_[POS_LIST_IDX].deep_copy(src_row->storage_datums_[4], allocator_))) {
+  } else if (src_row->count_ > POS_LIST_IDX
+             && OB_FAIL(tmp_row->storage_datums_[POS_LIST_IDX].deep_copy(src_row->storage_datums_[POS_LIST_IDX], allocator_))) {
     LOG_WARN("fail to deep copy pos list datum", K(ret), K(POS_LIST_IDX));
+  } else if (src_row->count_ <= POS_LIST_IDX) {
+    tmp_row->storage_datums_[POS_LIST_IDX].set_string(ObString());
   } else {
     dest_row = tmp_row;
   }
