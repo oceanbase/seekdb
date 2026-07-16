@@ -127,13 +127,35 @@ ObAddWord::ObAddWord(
     ObFTWordMap &word_map)
   : word_meta_(meta),
     allocator_(allocator),
-    word_map_(word_map),
+    word_map_(&word_map),
+    word_pos_map_(nullptr),
     min_max_word_cnt_(0),
     non_stopword_cnt_(0),
     stopword_cnt_(0),
     min_token_size_(property.min_token_size_),
     max_token_size_(property.max_token_size_),
-    flag_(flag)
+    flag_(flag),
+    position_seq_(0)
+{
+}
+
+ObAddWord::ObAddWord(
+    const ObFTParserProperty &property,
+    const ObObjMeta &meta,
+    const ObAddWordFlag &flag,
+    common::ObIAllocator &allocator,
+    ObFTWordPositionMap &word_pos_map)
+  : word_meta_(meta),
+    allocator_(allocator),
+    word_map_(nullptr),
+    word_pos_map_(&word_pos_map),
+    min_max_word_cnt_(0),
+    non_stopword_cnt_(0),
+    stopword_cnt_(0),
+    min_token_size_(property.min_token_size_),
+    max_token_size_(property.max_token_size_),
+    flag_(flag),
+    position_seq_(0)
 {
 }
 
@@ -223,20 +245,78 @@ int ObAddWord::groupby_word(const ObFTWord &word, const int64_t word_freq)
   if (OB_UNLIKELY(word.empty() || word_freq <= 0)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", K(ret), K(word), K(word_freq));
+  } else if (OB_NOT_NULL(word_pos_map_)) {
+    ObFTWordPositionInfo word_info;
+    if (OB_FAIL(word_pos_map_->get_refactored(word, word_info)) && OB_HASH_NOT_EXIST != ret) {
+      LOG_WARN("fail to get word position info", K(ret), K(word));
+    } else {
+      if (OB_HASH_NOT_EXIST == ret) {
+        ret = OB_SUCCESS;
+        word_info.word_count_ = 0;
+        word_info.positions_ = nullptr;
+      }
+      if (OB_FAIL(ret)) {
+      } else if (OB_FAIL(append_positions(word_info, word_freq))) {
+        LOG_WARN("fail to append positions", K(ret), K(word), K(word_freq), K(word_info));
+      } else {
+        word_info.word_count_ += word_freq;
+        if (OB_FAIL(word_pos_map_->set_refactored(word, word_info, 1/*overwrite*/))) {
+          LOG_WARN("fail to set word position info", K(ret), K(word), K(word_info));
+        } else {
+          position_seq_ += word_freq;
+        }
+      }
+    }
+  } else if (OB_ISNULL(word_map_)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("word map and word pos map are both null", K(ret));
   } else if (!flag_.groupby_word()) {
-    if (OB_FAIL(word_map_.set_refactored(word, 1/*word count*/))) {
+    if (OB_FAIL(word_map_->set_refactored(word, word_freq))) {
       LOG_WARN("fail to set fulltext word and count", K(ret), K(word));
     }
-  } else if (OB_FAIL(word_map_.get_refactored(word, word_count)) && OB_HASH_NOT_EXIST != ret) {
+  } else if (OB_FAIL(word_map_->get_refactored(word, word_count)) && OB_HASH_NOT_EXIST != ret) {
     LOG_WARN("fail to get fulltext word", K(ret), K(word));
   } else {
     if (OB_HASH_NOT_EXIST == ret) {
-      word_count = 1;
+      ret = OB_SUCCESS;
+      word_count = word_freq;
     } else {
       word_count += word_freq;
     }
-    if (OB_FAIL(word_map_.set_refactored(word, word_count, 1/*overwrite*/))) {
+    if (OB_FAIL(word_map_->set_refactored(word, word_count, 1/*overwrite*/))) {
       LOG_WARN("fail to set fulltext word and count", K(ret), K(word), K(word_count));
+    }
+  }
+  return ret;
+}
+
+int ObAddWord::alloc_position_array(ObFTPositionArray *&positions)
+{
+  int ret = OB_SUCCESS;
+  static const int64_t FTS_POS_ARRAY_BLOCK_SIZE = sizeof(int64_t) * 16;
+  void *buf = allocator_.alloc(sizeof(ObFTPositionArray));
+  if (OB_ISNULL(buf)) {
+    ret = OB_ALLOCATE_MEMORY_FAILED;
+    LOG_WARN("failed to allocate position array", K(ret));
+  } else {
+    positions = new (buf) ObFTPositionArray(FTS_POS_ARRAY_BLOCK_SIZE, allocator_);
+  }
+  return ret;
+}
+
+int ObAddWord::append_positions(ObFTWordPositionInfo &word_info, const int64_t word_freq)
+{
+  int ret = OB_SUCCESS;
+  if (OB_UNLIKELY(word_freq <= 0)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid word frequency", K(ret), K(word_freq));
+  } else if (OB_ISNULL(word_info.positions_) && OB_FAIL(alloc_position_array(word_info.positions_))) {
+    LOG_WARN("failed to allocate positions", K(ret), K(word_info));
+  } else {
+    for (int64_t i = 0; OB_SUCC(ret) && i < word_freq; ++i) {
+      if (OB_FAIL(word_info.positions_->push_back(position_seq_ + i + 1))) {
+        LOG_WARN("failed to push back position", K(ret), K(i), K(position_seq_), K(word_freq));
+      }
     }
   }
   return ret;

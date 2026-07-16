@@ -14,13 +14,68 @@
 
 #include "storage/ddl/ob_ddl_encode_sortkey_utils.h"
 #include "storage/ob_order_perserving_encoder.h"
-#include "sql/engine/sort/ob_sort_vec_strategy.h"
 
 namespace oceanbase
 {
 using namespace blocksstable;
 namespace storage
 {
+namespace
+{
+int compare_encoded_sortkey(const ObDatum &l, const ObDatum &r)
+{
+  const int64_t min_len = MIN(l.len_, r.len_);
+  int cmp_ret = MEMCMP(l.ptr_, r.ptr_, min_len);
+  if (0 == cmp_ret) {
+    cmp_ret = (l.len_ < r.len_) ? -1 : ((l.len_ > r.len_) ? 1 : 0);
+  }
+  return cmp_ret;
+}
+
+int radix_sort_fixed_key_rows(
+    common::ObFixedArray<ObFtsSegmentSortRow *, ObIAllocator> &row_ptrs,
+    common::ObIAllocator &allocator,
+    const int64_t key_len)
+{
+  int ret = OB_SUCCESS;
+  static constexpr int64_t BUCKET_CNT = 256;
+  const int64_t row_cnt = row_ptrs.count();
+  if (row_cnt <= 1) {
+  } else {
+    ObFtsSegmentSortRow **src = &row_ptrs.at(0);
+    ObFtsSegmentSortRow **tmp = static_cast<ObFtsSegmentSortRow **>(
+        allocator.alloc(sizeof(ObFtsSegmentSortRow *) * row_cnt));
+    if (OB_ISNULL(tmp)) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+      LOG_WARN("failed to alloc radix sort temp buffer", K(ret), K(row_cnt), K(key_len));
+    } else {
+      ObFtsSegmentSortRow **dst = tmp;
+      for (int64_t offset = key_len - 1; OB_SUCC(ret) && offset >= 0; --offset) {
+        int64_t counts[BUCKET_CNT] = {0};
+        int64_t positions[BUCKET_CNT] = {0};
+        for (int64_t i = 0; i < row_cnt; ++i) {
+          const unsigned char byte_val = static_cast<unsigned char>(src[i]->encode_datum_.ptr_[offset]);
+          ++counts[byte_val];
+        }
+        for (int64_t i = 1; i < BUCKET_CNT; ++i) {
+          positions[i] = positions[i - 1] + counts[i - 1];
+        }
+        for (int64_t i = 0; i < row_cnt; ++i) {
+          const unsigned char byte_val = static_cast<unsigned char>(src[i]->encode_datum_.ptr_[offset]);
+          dst[positions[byte_val]++] = src[i];
+        }
+        std::swap(src, dst);
+      }
+      if (OB_SUCC(ret) && src != &row_ptrs.at(0)) {
+        MEMCPY(&row_ptrs.at(0), src, sizeof(ObFtsSegmentSortRow *) * row_cnt);
+      }
+      allocator.free(tmp);
+    }
+  }
+  return ret;
+}
+} // namespace
+
 int ObDDLEncodeSortkeyUtils::fill_encode_sortkey_column_item(const bool is_oracle_mode, ObColumnSchemaItem &item)
 {
   int ret = OB_SUCCESS;
@@ -97,8 +152,6 @@ int ObDDLEncodeSortkeyUtils::encode_row(
       bool has_invalid_uni = false;
       for (int64_t i = 0; OB_SUCC(ret) && i < sortkey_idxs.count(); i++) {
         int64_t col_idx = sortkey_idxs.at(i);
-        bool is_null = false;
-        ObLength length = 0;
         if (OB_UNLIKELY(col_idx >= datum_cnt)) {
           ret = OB_INVALID_ARGUMENT;
           LOG_WARN("invalid col idx", K(ret), K(col_idx), K(datum_cnt));
@@ -125,7 +178,7 @@ int ObDDLEncodeSortkeyUtils::encode_row(
         if (has_invalid_uni) {
           res_datum.set_null(); // sort impl should fallback to original sortkey
         } else {
-          res_datum.set_string(ObString(data_len, (char *)buf));
+          res_datum.set_string(ObString(data_len, reinterpret_cast<char *>(buf)));
         }
       } else if (ret == OB_BUF_NOT_ENOUGH) {
         max_len = max_len * 2;
@@ -225,12 +278,14 @@ bool ObFtsSegmentSortRow::is_null(const int64_t col_idx) const
 
 const char *ObFtsSegmentSortRow::get_cell_payload(const sql::RowMeta &row_meta, const int64_t col_idx) const
 {
+  UNUSED(row_meta);
   OB_ASSERT(col_idx == 0);
   return encode_datum_.ptr_;
 }
 
 uint32_t ObFtsSegmentSortRow::get_length(const sql::RowMeta &row_meta, const int64_t col_idx) const
 {
+  UNUSED(row_meta);
   OB_ASSERT(col_idx == 0);
   return encode_datum_.len_;
 }
@@ -239,14 +294,29 @@ bool ObFtsSegmentSortCompare::compare(const ObFtsSegmentSortRow *l, const ObFtsS
 {
   int cmp_ret = 0;
   if (OB_SUCCESS == ret_) {
-    if (OB_SUCCESS != (ret_ = cmp_func_(l->token_pair_->first.get_word(), r->token_pair_->first.get_word(), cmp_ret))) {
+    if (encode_sortkey_
+        && OB_NOT_NULL(l)
+        && OB_NOT_NULL(r)
+        && !l->encode_datum_.is_null()
+        && !r->encode_datum_.is_null()) {
+      cmp_ret = compare_encoded_sortkey(l->encode_datum_, r->encode_datum_);
+    } else if (OB_SUCCESS != (ret_ = cmp_func_(l->token_pair_->first.get_word(), r->token_pair_->first.get_word(), cmp_ret))) {
       cmp_ret = 0;
     }
   }
   return cmp_ret < 0;
 }
 
-ObFtsSegmentSort::ObFtsSegmentSort() : is_inited_(false), word_meta_(), can_encode_sortkey_(false), mem_context_(nullptr), params_(), rows_(), row_ptrs_()
+ObFtsSegmentSort::ObFtsSegmentSort()
+  : is_inited_(false),
+    word_meta_(),
+    can_encode_sortkey_(false),
+    can_fixed_key_sort_(false),
+    fixed_key_len_(0),
+    mem_context_(nullptr),
+    params_(),
+    rows_(),
+    row_ptrs_()
 {
 }
 
@@ -262,9 +332,12 @@ int ObFtsSegmentSort::init(
   rows_.set_allocator(&mem_context->ref_context()->get_malloc_allocator());
   row_ptrs_.set_allocator(&mem_context->ref_context()->get_malloc_allocator());
   can_encode_sortkey_ = false;
+  can_fixed_key_sort_ = false;
+  fixed_key_len_ = 0;
   if (ObOrderPerservingEncoder::can_encode_sortkey(word_meta.get_type(), word_meta.get_collation_type())) {
     ObSEArray<ObObjMeta, 1> column_descs;
     can_encode_sortkey_ = true;
+    can_fixed_key_sort_ = true;
     if (OB_FAIL(column_descs.push_back(word_meta))) {
       LOG_WARN("failed to push back", K(ret));
     } else if (OB_FAIL(ObDDLEncodeSortkeyUtils::prepare_encode_param(column_descs, is_oracle_mode, params_))) {
@@ -297,11 +370,35 @@ int ObFtsSegmentSort::add_row(const hash::HashMapPair<ObFTWord, int64_t> &token_
     } else if (OB_FAIL(ObDDLEncodeSortkeyUtils::encode_row(&token_pair.first.get_word(), 1, sortkey_idxs,
             INIT_ENCODE_ROW_BUF_LEN, params_, mem_context_->ref_context()->get_arena_allocator(), row.encode_datum_))) {
       LOG_WARN("failed to encode row", K(ret));
+    } else if (row.encode_datum_.is_null()) {
+      can_encode_sortkey_ = false;
+      can_fixed_key_sort_ = false;
+    } else if (row.encode_datum_.len_ < MIN_FIXED_ENCODE_KEY_LEN || row.encode_datum_.len_ > MAX_FIXED_ENCODE_KEY_LEN) {
+      can_fixed_key_sort_ = false;
+    } else if (0 == fixed_key_len_) {
+      fixed_key_len_ = row.encode_datum_.len_;
+    } else if (fixed_key_len_ != row.encode_datum_.len_) {
+      can_fixed_key_sort_ = false;
     }
   }
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(rows_.push_back(row))) {
     LOG_WARN("failed to push back", K(ret));
+  }
+  return ret;
+}
+
+int ObFtsSegmentSort::sort_fixed_key_inmem_data()
+{
+  int ret = OB_SUCCESS;
+  if (rows_.count() > 1) {
+    ret = radix_sort_fixed_key_rows(
+        row_ptrs_,
+        mem_context_->ref_context()->get_malloc_allocator(),
+        fixed_key_len_);
+    if (OB_FAIL(ret)) {
+      LOG_WARN("failed to radix sort fixed key rows", K(ret), K(fixed_key_len_), K(row_ptrs_.count()));
+    }
   }
   return ret;
 }
@@ -312,18 +409,27 @@ int ObFtsSegmentSort::sort_inmem_data()
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
-  }
-  for (int64_t i = 0; OB_SUCC(ret) && i < rows_.count(); i++) {
-    if (OB_FAIL(row_ptrs_.push_back(&rows_.at(i)))) {
-      LOG_WARN("failed to push back", K(ret));
+  } else {
+    row_ptrs_.reuse();
+    for (int64_t i = 0; OB_SUCC(ret) && i < rows_.count(); i++) {
+      if (OB_FAIL(row_ptrs_.push_back(&rows_.at(i)))) {
+        LOG_WARN("failed to push back", K(ret));
+      }
     }
   }
   if (OB_SUCC(ret)) {
-    ObDatumCmpFuncType cmp_func = get_datum_cmp_func(word_meta_, word_meta_);
-    ObFtsSegmentSortCompare cmp(ret, cmp_func);
-    lib::ob_sort(row_ptrs_.begin(), row_ptrs_.end(), cmp);
-    if (OB_FAIL(ret)) {
-      LOG_WARN("failed to compare", K(ret));
+    if (can_fixed_key_sort_ && fixed_key_len_ >= MIN_FIXED_ENCODE_KEY_LEN && fixed_key_len_ <= MAX_FIXED_ENCODE_KEY_LEN) {
+      if (OB_FAIL(sort_fixed_key_inmem_data())) {
+        LOG_WARN("failed to sort fixed-key rows", K(ret), K(fixed_key_len_), K(rows_.count()));
+      }
+    } else {
+      ObDatumCmpFuncType cmp_func = get_datum_cmp_func(word_meta_, word_meta_);
+      ObFtsSegmentSortCompare cmp(ret, cmp_func);
+      cmp.encode_sortkey_ = can_encode_sortkey_;
+      lib::ob_sort(row_ptrs_.begin(), row_ptrs_.end(), cmp);
+      if (OB_FAIL(ret)) {
+        LOG_WARN("failed to compare", K(ret));
+      }
     }
   }
   return ret;

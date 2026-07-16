@@ -546,7 +546,7 @@ int ObTxDataSingleRowGetter::get_row_from_sstables_(blocksstable::ObDatumRowkey 
       }
     } else if (row->row_flag_.is_not_exist()) {
       // this tx data not exsit in this sstable, try next one
-    } else if (row->storage_datums_[TX_DATA_ID_COLUMN].get_int() != tx_id_) {
+    } else if (row->storage_datums_[TX_DATA_ID_COLUMN].get_int() != tx_id_.get_id()) {
       ret = OB_ERR_UNEXPECTED;
       STORAGE_LOG(ERROR, "read wrong tx data from sstable",
                          KR(ret), KPC(table),

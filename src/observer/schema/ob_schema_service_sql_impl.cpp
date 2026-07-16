@@ -15,6 +15,7 @@
  */
 
 #define USING_LOG_PREFIX SHARE_SCHEMA
+#include "objit/common/ob_item_type.h"
 #include "ob_schema_service_sql_impl.h"
 #include "share/ob_global_stat_proxy.h"
 // TODO, move basic structs to ob_schema_struct.h
@@ -8715,6 +8716,8 @@ int ObSchemaRetrieveUtils::cascaded_generated_column(ObTableSchema &table_schema
         column.add_column_flag(GENERATED_FTS_WORD_COUNT_COLUMN_FLAG);
       } else if (T_FUN_SYS_DOC_LENGTH == root_expr_type) {
         column.add_column_flag(GENERATED_FTS_DOC_LENGTH_COLUMN_FLAG);
+      } else if (T_FUN_SYS_POS_LIST == root_expr_type) {
+        column.add_column_flag(GENERATED_FTS_POSITION_LIST_COLUMN_FLAG);
       } else if (T_FUN_SYS_HYBRID_VEC_CHUNK == root_expr_type) {
         column.add_column_flag(GENERATED_HYBRID_VEC_CHUNK_COLUMN_FLAG);
       } else if (T_FUN_SYS_SPATIAL_CELLID == root_expr_type || T_FUN_SYS_SPATIAL_MBR == root_expr_type) {

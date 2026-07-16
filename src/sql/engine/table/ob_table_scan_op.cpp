@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SQL_ENG
 
 
+#include "objit/common/ob_item_type.h"
 #include "ob_table_scan_op.h"
 #include "share/rc/ob_module_provider.h"
 #include "sql/das/ob_das_attach_define.h"
@@ -4123,7 +4124,8 @@ int ObTableScanOp::get_output_fts_col_expr_by_type(
   if (OB_UNLIKELY(T_FUN_SYS_WORD_SEGMENT != type
                && T_FUN_SYS_DOC_ID != type
                && T_FUN_SYS_WORD_COUNT != type
-               && T_FUN_SYS_DOC_LENGTH != type)) {
+               && T_FUN_SYS_DOC_LENGTH != type
+               && T_FUN_SYS_POS_LIST != type)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid fts column expr type", K(ret), "type", get_type_name(type));
   } else if (T_FUN_SYS_DOC_ID == type) {

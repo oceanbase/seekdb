@@ -25,6 +25,11 @@
 #include "sql/das/ob_das_dml_vec_iter.h"
 #include "sql/engine/expr/ob_expr_lob_utils.h"
 #include "observer/omt/ob_tenant_srs.h"
+#include "plugin/interface/ob_plugin_ftparser_intf.h"
+#include "plugin/sys/ob_plugin_helper.h"
+#include "share/ob_fts_pos_list_codec.h"
+#include "storage/fts/ob_fts_parser_property.h"
+#include "storage/fts/ob_fts_stop_word.h"
 #include "storage/tx/ob_trans_service.h"
 
 using namespace oceanbase::common;
@@ -34,18 +39,180 @@ namespace oceanbase
 namespace sql
 {
 
+ObFTPosListParser::ObFTPosListParser()
+  : allocator_(nullptr),
+    parser_desc_(nullptr),
+    plugin_param_(nullptr),
+    parser_name_(),
+    add_word_flag_(),
+    property_allocator_(lib::ObMemAttr("FTPosProp")),
+    parser_property_(),
+    is_inited_(false)
+{
+}
 
-ObObjDatumMapType ObFTIndexRowCache::FTS_INDEX_TYPES[] = {OBJ_DATUM_STRING, OBJ_DATUM_STRING, OBJ_DATUM_8BYTE_DATA, OBJ_DATUM_8BYTE_DATA};
-ObObjDatumMapType ObFTIndexRowCache::FTS_DOC_WORD_TYPES[] = {OBJ_DATUM_STRING, OBJ_DATUM_STRING, OBJ_DATUM_8BYTE_DATA, OBJ_DATUM_8BYTE_DATA};
+ObFTPosListParser::~ObFTPosListParser()
+{
+  reset();
+}
 
-ObExprOperatorType ObFTIndexRowCache::FTS_INDEX_EXPR_TYPE[] = {T_FUN_SYS_WORD_SEGMENT, T_FUN_SYS_DOC_ID, T_FUN_SYS_WORD_COUNT, T_FUN_SYS_DOC_LENGTH};
-ObExprOperatorType ObFTIndexRowCache::FTS_DOC_WORD_EXPR_TYPE[] = {T_FUN_SYS_DOC_ID, T_FUN_SYS_WORD_SEGMENT, T_FUN_SYS_WORD_COUNT, T_FUN_SYS_DOC_LENGTH};
+int ObFTPosListParser::init(
+    common::ObIAllocator *allocator,
+    const common::ObString &parser_name,
+    const common::ObString &parser_properties)
+{
+  int ret = OB_SUCCESS;
+  if (OB_UNLIKELY(is_inited_)) {
+    ret = OB_INIT_TWICE;
+    LOG_WARN("pos list parser init twice", K(ret));
+  } else if (OB_ISNULL(allocator) || OB_UNLIKELY(parser_name.empty())) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid arguments", K(ret), KP(allocator), K(parser_name));
+  } else if (OB_FAIL(parser_name_.parse_from_str(parser_name.ptr(), parser_name.length()))) {
+    LOG_WARN("fail to parse parser name", K(ret), K(parser_name));
+  } else if (OB_FAIL(parser_property_.parse_for_parser_helper(parser_name_, parser_properties, property_allocator_))) {
+    LOG_WARN("fail to parse parser properties", K(ret), K(parser_name), K(parser_properties));
+  } else if (OB_FAIL(plugin::ObPluginHelper::find_ftparser(parser_name_.get_parser_name().str(), parser_desc_, plugin_param_))) {
+    LOG_WARN("fail to find parser descriptor", K(ret), K(parser_name));
+  } else if (OB_ISNULL(parser_desc_)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected null parser descriptor", K(ret));
+  } else if (OB_FAIL(parser_desc_->get_add_word_flag(add_word_flag_))) {
+    LOG_WARN("fail to get add word flag", K(ret), K(parser_name));
+  } else {
+    allocator_ = allocator;
+    is_inited_ = true;
+  }
+  if (OB_FAIL(ret)) {
+    reset();
+  }
+  return ret;
+}
+
+int ObFTPosListParser::segment(
+    const common::ObObjMeta &meta,
+    const char *fulltext,
+    const int64_t fulltext_len,
+    int64_t &doc_length,
+    storage::ObFTWordPositionMap &word_infos) const
+{
+  int ret = OB_SUCCESS;
+  const ObCharsetInfo *cs = nullptr;
+  plugin::ObFTParserParam param;
+  plugin::ObITokenIterator *iter = nullptr;
+  if (OB_UNLIKELY(!is_inited_)) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("pos list parser is not initialized", K(ret));
+  } else if (OB_ISNULL(allocator_) || OB_ISNULL(parser_desc_) || OB_UNLIKELY(!word_infos.created())
+             || OB_ISNULL(fulltext) || fulltext_len <= 0) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid arguments", K(ret), KP_(allocator), KP_(parser_desc), K(word_infos.created()), KP(fulltext), K(fulltext_len));
+  } else if (OB_ISNULL(cs = common::ObCharset::get_charset(meta.get_collation_type()))) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected error, charset info is nullptr", K(ret), K(meta));
+  } else {
+    word_infos.reuse();
+    storage::ObAddWord add_word(parser_property_, meta, add_word_flag_, *allocator_, word_infos);
+    param.allocator_ = allocator_;
+    param.cs_ = cs;
+    param.fulltext_ = fulltext;
+    param.ft_length_ = fulltext_len;
+    param.parser_version_ = parser_name_.get_parser_version();
+    param.plugin_param_ = plugin_param_;
+    param.ngram_token_size_ = parser_property_.ngram_token_size_;
+    param.ik_param_.mode_ = parser_property_.ik_mode_smart_
+        ? plugin::ObFTIKParam::Mode::SMART
+        : plugin::ObFTIKParam::Mode::MAX_WORD;
+    param.ik_param_.main_dict_ = parser_property_.dict_table_;
+    param.ik_param_.quan_dict_ = parser_property_.quantifier_table_;
+    param.ik_param_.stopword_dict_ = parser_property_.stopword_table_;
+    param.min_ngram_size_ = parser_property_.min_ngram_token_size_;
+    param.max_ngram_size_ = parser_property_.max_ngram_token_size_;
+    if (OB_FAIL(parser_desc_->segment(&param, iter))) {
+      LOG_WARN("fail to segment fulltext", K(ret), K(meta), K(fulltext_len));
+    } else if (OB_ISNULL(iter)) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("unexpected null token iterator", K(ret));
+    } else {
+      const char *word = nullptr;
+      int64_t word_len = 0;
+      int64_t char_cnt = 0;
+      int64_t word_freq = 0;
+      while (OB_SUCC(ret)) {
+        if (OB_FAIL(iter->get_next_token(word, word_len, char_cnt, word_freq))) {
+          if (OB_ITER_END != ret) {
+            LOG_WARN("fail to get next token", K(ret));
+          }
+        } else if (OB_FAIL(add_word.process_word(word, word_len, char_cnt, word_freq))) {
+          LOG_WARN("fail to process token", K(ret), KP(word), K(word_len), K(char_cnt), K(word_freq));
+        }
+      }
+      if (OB_ITER_END == ret) {
+        ret = OB_SUCCESS;
+        doc_length = add_word.get_add_word_count();
+      }
+    }
+    if (OB_NOT_NULL(iter)) {
+      parser_desc_->free_token_iter(&param, iter);
+      iter = nullptr;
+    }
+  }
+  return ret;
+}
+
+void ObFTPosListParser::reset()
+{
+  allocator_ = nullptr;
+  parser_desc_ = nullptr;
+  plugin_param_ = nullptr;
+  parser_name_ = storage::ObFTParser();
+  property_allocator_.reset();
+  parser_property_ = storage::ObFTParserProperty();
+  add_word_flag_.clear();
+  is_inited_ = false;
+}
+
+namespace
+{
+int segment_with_pos_list(
+    common::ObIAllocator &allocator,
+    const common::ObString &parser_name,
+    const common::ObString &parser_properties,
+    const common::ObObjMeta &meta,
+    const char *fulltext,
+    const int64_t fulltext_len,
+    int64_t &doc_length,
+    storage::ObFTWordPositionMap &word_infos)
+{
+  int ret = OB_SUCCESS;
+  ObFTPosListParser pos_list_parser;
+  if (OB_UNLIKELY(parser_name.empty() || fulltext_len <= 0 || OB_ISNULL(fulltext) || !word_infos.created())) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid arguments", K(ret), K(parser_name), K(fulltext_len), KP(fulltext), K(word_infos.created()));
+  } else if (OB_FAIL(pos_list_parser.init(&allocator, parser_name, parser_properties))) {
+    LOG_WARN("fail to init pos list parser", K(ret), K(parser_name), K(parser_properties));
+  } else if (OB_FAIL(pos_list_parser.segment(meta, fulltext, fulltext_len, doc_length, word_infos))) {
+    LOG_WARN("fail to segment with pos list parser", K(ret), K(parser_name), K(fulltext_len));
+  }
+  return ret;
+}
+} // namespace
+
+
+ObObjDatumMapType ObFTIndexRowCache::FTS_INDEX_TYPES[] = {OBJ_DATUM_STRING, OBJ_DATUM_STRING, OBJ_DATUM_8BYTE_DATA, OBJ_DATUM_8BYTE_DATA, OBJ_DATUM_STRING};
+ObObjDatumMapType ObFTIndexRowCache::FTS_DOC_WORD_TYPES[] = {OBJ_DATUM_STRING, OBJ_DATUM_STRING, OBJ_DATUM_8BYTE_DATA, OBJ_DATUM_8BYTE_DATA, OBJ_DATUM_STRING};
+
+ObExprOperatorType ObFTIndexRowCache::FTS_INDEX_EXPR_TYPE[] = {T_FUN_SYS_WORD_SEGMENT, T_FUN_SYS_DOC_ID, T_FUN_SYS_WORD_COUNT, T_FUN_SYS_DOC_LENGTH, T_FUN_SYS_POS_LIST};
+ObExprOperatorType ObFTIndexRowCache::FTS_DOC_WORD_EXPR_TYPE[] = {T_FUN_SYS_DOC_ID, T_FUN_SYS_WORD_SEGMENT, T_FUN_SYS_WORD_COUNT, T_FUN_SYS_DOC_LENGTH, T_FUN_SYS_POS_LIST};
 
 ObFTIndexRowCache::ObFTIndexRowCache()
   : rows_(),
     row_idx_(0),
     is_fts_index_aux_(true),
     helper_(),
+    pos_list_parser_(),
+    parser_name_(),
+    parser_properties_(),
     is_inited_(false)
 {
 }
@@ -70,6 +237,8 @@ int ObFTIndexRowCache::init(
     LOG_WARN("failed to create merge memctx", K(ret));
   } else if (OB_FAIL(helper_.init(&(merge_memctx_->get_arena_allocator()), parser_name, parser_properties))) {
     LOG_WARN("fail to init full-text parser helper", K(ret));
+  } else if (OB_FAIL(pos_list_parser_.init(&(merge_memctx_->get_arena_allocator()), parser_name, parser_properties))) {
+    LOG_WARN("fail to init pos list parser", K(ret), K(parser_name), K(parser_properties));
   } else {
     row_idx_ = 0;
     is_fts_index_aux_ = is_fts_index_aux;
@@ -92,6 +261,9 @@ int ObFTIndexRowCache::segment(const common::ObObjMeta &ft_obj_meta,
   } else if (FALSE_IT(reuse())) {
   } else if (OB_FAIL(ObDASDomainUtils::generate_fulltext_word_rows(merge_memctx_->get_arena_allocator(),
                                                                    &helper_,
+                                                                   &pos_list_parser_,
+                                                                   parser_name_,
+                                                                   parser_properties_,
                                                                    ft_obj_meta,
                                                                    doc_id_datum,
                                                                    fulltext,
@@ -127,6 +299,9 @@ void ObFTIndexRowCache::reset()
   row_idx_ = 0;
   is_fts_index_aux_ = true;
   helper_.reset();
+  pos_list_parser_.reset();
+  parser_name_.reset();
+  parser_properties_.reset();
   if (OB_NOT_NULL(merge_memctx_)) {
     DESTROY_CONTEXT(merge_memctx_);
     merge_memctx_ = nullptr;
@@ -307,6 +482,9 @@ int ObDASDomainUtils::build_ft_doc_word_infos(
 
 /*static*/ int ObDASDomainUtils::generate_fulltext_word_rows(common::ObIAllocator &allocator,
                                                              storage::ObFTParseHelper *helper,
+                                                             ObFTPosListParser *pos_list_parser,
+                                                             const common::ObString &parser_name,
+                                                             const common::ObString &parser_properties,
                                                              const common::ObObjMeta &ft_obj_meta,
                                                              const ObDatum &doc_id_datum,
                                                              const ObString &fulltext,
@@ -314,11 +492,10 @@ int ObDASDomainUtils::build_ft_doc_word_infos(
                                                              ObDomainIndexRow &word_rows)
 {
   int ret = OB_SUCCESS;
-  static int64_t FT_WORD_DOC_COL_CNT = 4;
   static constexpr int64_t FT_MAX_WORD_BUCKET = 997;
   const int64_t ft_word_bkt_cnt = MIN(MAX(fulltext.length() / 10, 2), FT_MAX_WORD_BUCKET);
   int64_t doc_length = 0;
-  ObFTWordMap ft_word_map;
+  storage::ObFTWordPositionMap ft_word_map;
   void *rows_buf = nullptr;
   blocksstable::ObDatumRow *rows = nullptr;
   if (OB_ISNULL(helper) || OB_UNLIKELY(!ft_obj_meta.is_valid())) {
@@ -326,10 +503,13 @@ int ObDASDomainUtils::build_ft_doc_word_infos(
     LOG_WARN("invalid arguments", K(ret), KPC(helper), K(ft_obj_meta), K(doc_id_datum));
   } else if (0 == fulltext.length()) {
     ret = OB_ITER_END;
-  } else if (OB_FAIL(ft_word_map.create(ft_word_bkt_cnt, common::ObMemAttr("FTWordMap")))) {
-    LOG_WARN("fail to create ft word map", K(ret), K(ft_word_bkt_cnt));
+  } else if (OB_FAIL(ft_word_map.create(ft_word_bkt_cnt, common::ObMemAttr("FTWordPosMap")))) {
+    LOG_WARN("fail to create ft word pos map", K(ret), K(ft_word_bkt_cnt));
   } else if (OB_FAIL(segment_and_calc_word_count(allocator,
                                                  helper,
+                                                 pos_list_parser,
+                                                 parser_name,
+                                                 parser_properties,
                                                  ft_obj_meta,
                                                  fulltext,
                                                  doc_length,
@@ -345,29 +525,40 @@ int ObDASDomainUtils::build_ft_doc_word_infos(
   } else {
     int64_t i = 0;
     rows = new (rows_buf) blocksstable::ObDatumRow[ft_word_map.size()];
-    for (ObFTWordMap::const_iterator iter = ft_word_map.begin();
+    for (storage::ObFTWordPositionMap::const_iterator iter = ft_word_map.begin();
          OB_SUCC(ret) && iter != ft_word_map.end();
          ++iter) {
-      if (OB_FAIL(rows[i].init(allocator, FT_WORD_DOC_COL_CNT))) {
-        LOG_WARN("init datum row failed", K(ret), K(FT_WORD_DOC_COL_CNT));
+      if (OB_FAIL(rows[i].init(allocator, share::ObFtsIndexBuilderUtil::OB_FTS_INDEX_OR_DOC_WORD_TABLE_COL_CNT))) {
+        LOG_WARN("init datum row failed", K(ret), K(share::ObFtsIndexBuilderUtil::OB_FTS_INDEX_OR_DOC_WORD_TABLE_COL_CNT));
       } else {
         const ObFTWord &ft_word = iter->first;
-        const int64_t word_cnt = iter->second;
+        const storage::ObFTWordPositionInfo &word_info = iter->second;
+        common::ObString pos_list;
         // index row format
-        //  -    FTS_INDEX: [WORD], [DOC_ID], [WORD_COUNT], [DOC_LENGTH]
-        //  - FTS_DOC_WORD: [DOC_ID], [WORD], [WORD_COUNT], [DOC_LENGTH]
+        //  -    FTS_INDEX: [WORD], [DOC_ID], [WORD_COUNT], [DOC_LENGTH], [POS_LIST]
+        //  - FTS_DOC_WORD: [DOC_ID], [WORD], [WORD_COUNT], [DOC_LENGTH], [POS_LIST]
         const int64_t word_idx = is_fts_index_aux ? 0 : 1;
         const int64_t doc_id_idx = is_fts_index_aux ? 1 : 0;
         const int64_t word_cnt_idx = 2;
         const int64_t doc_len_idx = 3;
-        rows[i].storage_datums_[word_idx].set_datum(ft_word.get_word());
-        rows[i].storage_datums_[doc_id_idx].shallow_copy_from_datum(doc_id_datum);
-        rows[i].storage_datums_[word_cnt_idx].set_uint(word_cnt);
-        rows[i].storage_datums_[doc_len_idx].set_uint(doc_length);
-        if (OB_FAIL(word_rows.push_back(&rows[i]))) {
+        const int64_t pos_list_idx = 4;
+        if (OB_ISNULL(word_info.positions_)) {
+          ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("unexpected null word positions", K(ret), K(ft_word), K(word_info));
+        } else if (OB_FAIL(share::ObFTSPositionListStore::encode(*word_info.positions_, allocator, pos_list))) {
+          LOG_WARN("failed to encode position list", K(ret), K(ft_word), K(word_info));
+        } else {
+          rows[i].storage_datums_[word_idx].set_datum(ft_word.get_word());
+          rows[i].storage_datums_[doc_id_idx].shallow_copy_from_datum(doc_id_datum);
+          rows[i].storage_datums_[word_cnt_idx].set_uint(word_info.word_count_);
+          rows[i].storage_datums_[doc_len_idx].set_uint(doc_length);
+          rows[i].storage_datums_[pos_list_idx].set_string(pos_list);
+        }
+        if (OB_FAIL(ret)) {
+        } else if (OB_FAIL(word_rows.push_back(&rows[i]))) {
           LOG_WARN("fail to push back row", K(ret), K(rows[i]));
         } else {
-          LOG_DEBUG("succeed to add word row", K(ret), K(is_fts_index_aux), K(ft_word), K(word_cnt), K(i), K(rows[i]));
+          LOG_DEBUG("succeed to add word row", K(ret), K(is_fts_index_aux), K(ft_word), K(word_info), K(i), K(rows[i]));
           ++i;
         }
       }
@@ -379,10 +570,13 @@ int ObDASDomainUtils::build_ft_doc_word_infos(
 /*static*/ int ObDASDomainUtils::segment_and_calc_word_count(
     common::ObIAllocator &allocator,
     storage::ObFTParseHelper *helper,
+    ObFTPosListParser *pos_list_parser,
+    const common::ObString &parser_name,
+    const common::ObString &parser_properties,
     const common::ObObjMeta &meta,
     const ObString &fulltext,
     int64_t &doc_length,
-    ObFTWordMap &words_count)
+    storage::ObFTWordPositionMap &words_count)
 {
   int ret = OB_SUCCESS;
   ObCollationType type = meta.get_collation_type();
@@ -392,8 +586,23 @@ int ObDASDomainUtils::build_ft_doc_word_infos(
       || OB_UNLIKELY(!words_count.created())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", K(ret), KPC(helper), K(type), K(words_count.created()));
-  } else if (OB_FAIL(helper->segment(meta, fulltext.ptr(), fulltext.length(), doc_length, words_count))) {
-    LOG_WARN("fail to segment", K(ret), KPC(helper), K(type), K(fulltext));
+  } else if (OB_NOT_NULL(pos_list_parser)) {
+    if (OB_FAIL(pos_list_parser->segment(meta,
+                                         fulltext.ptr(),
+                                         fulltext.length(),
+                                         doc_length,
+                                         words_count))) {
+      LOG_WARN("fail to segment with cached pos list parser", K(ret), K(type), K(fulltext), K(parser_name));
+    }
+  } else if (OB_FAIL(segment_with_pos_list(allocator,
+                                           parser_name,
+                                           parser_properties,
+                                           meta,
+                                           fulltext.ptr(),
+                                           fulltext.length(),
+                                           doc_length,
+                                           words_count))) {
+    LOG_WARN("fail to segment with pos list", K(ret), K(type), K(fulltext), K(parser_name));
   }
 
   STORAGE_FTS_LOG(TRACE, "segment and calc word count", K(ret), K(words_count.size()), K(type));
@@ -924,6 +1133,7 @@ void ObFTDMLIterator::reset()
   is_inited_ = false;
   ft_doc_word_iter_.reset();
   ft_parse_helper_.reset();
+  pos_list_parser_.reset();
   ObDomainDMLIterator::reset();
 }
 
@@ -947,8 +1157,11 @@ int ObFTDMLIterator::rewind()
         // This is the same as the parser name of the previous index.
         // nothing to do, just skip.
       } else if (FALSE_IT(ft_parse_helper_.reset())) {
+      } else if (FALSE_IT(pos_list_parser_.reset())) {
       } else if (OB_FAIL(ft_parse_helper_.init(&allocator_, parser_str, parser_property_str))) {
         LOG_WARN("fail to init fulltext parse helper", K(ret), K(parser_str), K(parser_property_str));
+      } else if (OB_FAIL(pos_list_parser_.init(&allocator_, parser_str, parser_property_str))) {
+        LOG_WARN("fail to init pos list parser", K(ret), K(parser_str), K(parser_property_str));
       }
     } else if (ObDomainDMLMode::DOMAIN_DML_MODE_FT_SCAN == mode_) {
       if (OB_ISNULL(doc_word_info_)) {
@@ -983,6 +1196,8 @@ int ObFTDMLIterator::init(
       case ObDomainDMLMode::DOMAIN_DML_MODE_DEFAULT: {
         if (OB_FAIL(ft_parse_helper_.init(&allocator_, parser_name, parser_properties))) {
           LOG_WARN("fail to init fulltext parse helper", K(ret), K(parser_name), K(parser_properties));
+        } else if (OB_FAIL(pos_list_parser_.init(&allocator_, parser_name, parser_properties))) {
+          LOG_WARN("fail to init pos list parser", K(ret), K(parser_name), K(parser_properties));
         }
         break;
       }
@@ -1115,6 +1330,8 @@ int ObFTDMLIterator::generate_ft_word_rows(const ObChunkDatumStore::StoredRow *s
   ObString ft;
   ObDatum doc_id_datum;
   const bool is_fts_index_aux = das_ctdef_->table_param_.get_data_table().is_fts_index_aux();
+  const common::ObString &parser_name = das_ctdef_->table_param_.get_data_table().get_fts_parser_name();
+  const common::ObString &parser_property = das_ctdef_->table_param_.get_data_table().get_fts_parser_property();
 
   if (!is_update_ && OB_FAIL(get_ft_and_doc_id(store_row, doc_id_datum, ft, ft_meta))) {
     LOG_WARN("fail to get fulltext and doc id", K(ret), KPC(store_row));
@@ -1122,6 +1339,9 @@ int ObFTDMLIterator::generate_ft_word_rows(const ObChunkDatumStore::StoredRow *s
     LOG_WARN("fail to get fulltext and doc id for update", K(ret), KPC(store_row));
   } else if (OB_FAIL(ObDASDomainUtils::generate_fulltext_word_rows(allocator_,
                                                                    &ft_parse_helper_,
+                                                                   &pos_list_parser_,
+                                                                   parser_name,
+                                                                   parser_property,
                                                                    ft_meta,
                                                                    doc_id_datum,
                                                                    ft,
@@ -1214,6 +1434,7 @@ int ObFTDMLIterator::scan_ft_word_rows(const ObChunkDatumStore::StoredRow *store
     const common::ObString &parser_str = das_ctdef_->table_param_.get_data_table().get_fts_parser_name();
     const common::ObString &parser_property_str = das_ctdef_->table_param_.get_data_table().get_fts_parser_property();
     storage::ObFTParseHelper ft_parse_helper;
+    ObFTPosListParser pos_list_parser;
     ObDatum check_id_datum;
     ObString doc_id;
     ObString ft;
@@ -1222,12 +1443,17 @@ int ObFTDMLIterator::scan_ft_word_rows(const ObChunkDatumStore::StoredRow *store
     const bool is_fts_index_aux = das_ctdef_->table_param_.get_data_table().is_fts_index_aux();
     if (OB_FAIL(ft_parse_helper.init(&allocator, parser_str, parser_property_str))) {
       LOG_WARN("fail to init fulltext parse helper", K(ret), K(parser_str), K(parser_property_str));
+    } else if (OB_FAIL(pos_list_parser.init(&allocator, parser_str, parser_property_str))) {
+      LOG_WARN("fail to init pos list parser", K(ret), K(parser_str), K(parser_property_str));
     } else if (!is_update_ && OB_FAIL(get_ft_and_doc_id(store_row, check_id_datum, ft, ft_meta))) {
       LOG_WARN("fail to get fulltext and doc id", K(ret), KPC(store_row));
     } else if (is_update_ && OB_FAIL(get_ft_and_doc_id_for_update(store_row, check_id_datum, ft, ft_meta))) {
       LOG_WARN("fail to get fulltext and doc id for update", K(ret), KPC(store_row));
     } else if (OB_FAIL(ObDASDomainUtils::generate_fulltext_word_rows(allocator,
                                                                      &ft_parse_helper,
+                                                                     &pos_list_parser,
+                                                                     parser_str,
+                                                                     parser_property_str,
                                                                      ft_meta,
                                                                      check_id_datum,
                                                                      ft,
@@ -1287,14 +1513,15 @@ int ObFTDMLIterator::build_ft_word_row(
   const int64_t WORD_SEGMENT_IDX = das_ctdef_->table_param_.get_data_table().is_fts_index_aux() ? 0 : 1;
   static int64_t WORD_COUNT_IDX = 2;
   static int64_t DOC_LENGTH_IDX = 3;
+  static int64_t POS_LIST_IDX = 4;
   void *buf = nullptr;
   blocksstable::ObDatumRow *tmp_row = nullptr;
   if (OB_ISNULL(src_row)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", K(ret), KPC(src_row));
-  } else if (OB_UNLIKELY(4 != src_row->count_)) {
+  } else if (OB_UNLIKELY(share::ObFtsIndexBuilderUtil::OB_FTS_INDEX_OR_DOC_WORD_TABLE_COL_CNT != src_row->count_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected error, count of src row isn't 4", K(ret), K(src_row->count_), KPC(src_row));
+    LOG_WARN("unexpected error, count of src row isn't expected", K(ret), K(src_row->count_), KPC(src_row));
   } else if (OB_ISNULL(buf = allocator_.alloc(sizeof(blocksstable::ObDatumRow)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("fail to allocate datum row", K(ret));
@@ -1310,6 +1537,8 @@ int ObFTDMLIterator::build_ft_word_row(
     LOG_WARN("fail to deep copy word count datum", K(ret), K(WORD_COUNT_IDX));
   } else if (OB_FAIL(tmp_row->storage_datums_[DOC_LENGTH_IDX].deep_copy(src_row->storage_datums_[3], allocator_))) {
     LOG_WARN("fail to deep copy doc lenght datum", K(ret), K(DOC_LENGTH_IDX));
+  } else if (OB_FAIL(tmp_row->storage_datums_[POS_LIST_IDX].deep_copy(src_row->storage_datums_[4], allocator_))) {
+    LOG_WARN("fail to deep copy pos list datum", K(ret), K(POS_LIST_IDX));
   } else {
     dest_row = tmp_row;
   }

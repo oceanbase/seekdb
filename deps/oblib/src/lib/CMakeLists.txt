@@ -340,7 +340,11 @@ if(BUILD_EMBED_MODE)
 else()
     set(GOMP_LIB libgomp_static.a)
 endif()
-if(CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+string(REGEX MATCH "(x86_64|aarch64|arm64|AMD64)" OBLIB_TARGET_PROCESSOR "${CMAKE_SYSTEM_PROCESSOR}")
+if(OBLIB_TARGET_PROCESSOR STREQUAL "")
+  set(OBLIB_TARGET_PROCESSOR "${CMAKE_SYSTEM_PROCESSOR}")
+endif()
+if(OBLIB_TARGET_PROCESSOR STREQUAL "x86_64")
   target_link_libraries(oblib_lib
     PUBLIC
     libcpuinfo.a
@@ -356,7 +360,7 @@ if(CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
     libantlr4-autogen.a
     libfmt.a
   )
-elseif(CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64")
+elseif(OBLIB_TARGET_PROCESSOR STREQUAL "aarch64")
   target_link_libraries(oblib_lib
     PUBLIC
     libcpuinfo.a
@@ -371,7 +375,7 @@ elseif(CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64")
     libantlr4-autogen.a
     libfmt.a
   )
-elseif(CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+elseif(OBLIB_TARGET_PROCESSOR STREQUAL "arm64")
   target_link_libraries(oblib_lib
     PUBLIC
     libcpuinfo.a
@@ -390,7 +394,7 @@ elseif(CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
     libantlr4-autogen.a
     libfmt.a
   )
-elseif(CMAKE_SYSTEM_PROCESSOR STREQUAL "AMD64")
+elseif(OBLIB_TARGET_PROCESSOR STREQUAL "AMD64")
   target_link_directories(oblib_lib PUBLIC ${OB_VSAG_DIR}/lib)
   target_include_directories(oblib_lib PUBLIC ${OB_VSAG_DIR}/include)
   target_link_libraries(oblib_lib

@@ -82,9 +82,13 @@ public:
 class ObFtsSegmentSort
 {
 public:
+  static constexpr int64_t INIT_ENCODE_ROW_BUF_LEN = 16;
+  static constexpr int64_t MIN_FIXED_ENCODE_KEY_LEN = 2;
+  static constexpr int64_t MAX_FIXED_ENCODE_KEY_LEN = 18;
+
+public:
   ObFtsSegmentSort();
   ~ObFtsSegmentSort() = default;
-  static constexpr int64_t INIT_ENCODE_ROW_BUF_LEN = 16;
   int init(
     const ObObjMeta &word_meta,
     const bool is_oracle_mode,
@@ -92,11 +96,15 @@ public:
     lib::MemoryContext *mem_context);
   int add_row(const hash::HashMapPair<ObFTWord, int64_t> &token_pair);
   int sort_inmem_data();
-  TO_STRING_KV(K_(word_meta), K_(can_encode_sortkey), K(rows_.count()));
+  TO_STRING_KV(K_(word_meta), K_(can_encode_sortkey), K_(can_fixed_key_sort), K_(fixed_key_len), K(rows_.count()));
+private:
+  int sort_fixed_key_inmem_data();
 public:
   bool is_inited_;
   ObObjMeta word_meta_;
   bool can_encode_sortkey_;
+  bool can_fixed_key_sort_;
+  int64_t fixed_key_len_;
   lib::MemoryContext *mem_context_;
   ObSEArray<share::ObEncParam, 1> params_;
   ObFixedArray<ObFtsSegmentSortRow, ObIAllocator> rows_;

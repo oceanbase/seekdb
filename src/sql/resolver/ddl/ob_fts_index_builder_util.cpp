@@ -24,6 +24,7 @@
 #include "share/ob_server_struct.h"
 #include "rootserver/ob_root_service.h"
 #include "plugin/sys/ob_plugin_helper.h"
+#include "share/ob_fts_pos_list_codec.h"
 #include "share/schema/ob_schema_utils.h"  // relocated-definition owner
 
 namespace oceanbase
@@ -34,6 +35,9 @@ using namespace share::schema;
 
 namespace share
 {
+
+const int64_t ObFtsIndexBuilderUtil::OB_FTS_INDEX_OR_DOC_WORD_TABLE_COL_CNT;
+
 namespace
 {
 bool get_function_args(const ObString &expr_string,
@@ -479,12 +483,14 @@ int ObFtsIndexBuilderUtil::adjust_fts_args(
   uint64_t word_col_id = OB_INVALID_ID;
   uint64_t word_count_col_id = OB_INVALID_ID;
   uint64_t doc_len_col_id = OB_INVALID_ID;
+  uint64_t pos_list_col_id = OB_INVALID_ID;
 
   const ObColumnSchemaV2 *existing_doc_id_col = nullptr;
   const ObColumnSchemaV2 *existing_rowkey_col = nullptr;
   const ObColumnSchemaV2 *existing_word_col = nullptr;
   const ObColumnSchemaV2 *existing_word_count_col = nullptr;
   const ObColumnSchemaV2 *existing_doc_length_col = nullptr;
+  const ObColumnSchemaV2 *existing_pos_list_col = nullptr;
 
   uint64_t available_col_id = data_schema.get_max_used_column_id() + 1;
 
@@ -492,6 +498,7 @@ int ObFtsIndexBuilderUtil::adjust_fts_args(
   ObColumnSchemaV2 *generated_word_col = nullptr;
   ObColumnSchemaV2 *generated_doc_len_col = nullptr;
   ObColumnSchemaV2 *generated_word_count_col = nullptr;
+  ObColumnSchemaV2 *generated_pos_list_col = nullptr;
 
   ObArray<const ObColumnSchemaV2 *> tmp_cols;
 
@@ -530,6 +537,9 @@ int ObFtsIndexBuilderUtil::adjust_fts_args(
     } else if ((is_fts_index || is_doc_word)
                && OB_FAIL(get_word_cnt_col(data_schema, &index_arg, existing_word_count_col))) {
       LOG_WARN("failed to get word cnt col", K(ret));
+    } else if ((is_fts_index || is_doc_word)
+               && OB_FAIL(get_pos_list_col(data_schema, &index_arg, existing_pos_list_col))) {
+      LOG_WARN("failed to get pos list col", K(ret));
     } else if (existing_word_col && is_fts_index) {
       // Add warnings but still make it pass
       LOG_USER_WARN(OB_ERR_DUPLICATE_INDEX,
@@ -594,6 +604,19 @@ int ObFtsIndexBuilderUtil::adjust_fts_args(
           LOG_WARN("fail to push back generated document length", K(ret));
         }
       }
+
+      // Gen col: pos list
+      if (OB_SUCC(ret) && OB_ISNULL(existing_pos_list_col)) {
+        pos_list_col_id = available_col_id++;
+        if (OB_FAIL(generate_pos_list_column(&index_arg,
+                                             pos_list_col_id,
+                                             data_schema,
+                                             generated_pos_list_col))) {
+          LOG_WARN("fail to generate position list column", K(ret));
+        } else if (OB_FAIL(gen_columns.push_back(generated_pos_list_col))) {
+          LOG_WARN("fail to push back position list column", K(ret));
+        }
+      }
     }
   }
 
@@ -613,6 +636,8 @@ int ObFtsIndexBuilderUtil::adjust_fts_args(
         LOG_WARN("failed to push back word count col", K(ret));
       } else if (OB_FAIL(push_back_gen_col(tmp_cols, existing_doc_length_col, generated_doc_len_col))) {
         LOG_WARN("fail to push back document length column", K(ret));
+      } else if (OB_FAIL(push_back_gen_col(tmp_cols, existing_pos_list_col, generated_pos_list_col))) {
+        LOG_WARN("fail to push back position list column", K(ret));
       } else if (OB_FAIL(adjust_fts_arg(&index_arg, data_schema, allocator, tmp_cols))) {
         LOG_WARN("failed to append fts_index arg", K(ret));
       }
@@ -625,6 +650,8 @@ int ObFtsIndexBuilderUtil::adjust_fts_args(
         LOG_WARN("failed to push back word count col", K(ret));
       } else if (OB_FAIL(push_back_gen_col(tmp_cols, existing_doc_length_col, generated_doc_len_col))) {
         LOG_WARN("fail to push back document length column", K(ret));
+      } else if (OB_FAIL(push_back_gen_col(tmp_cols, existing_pos_list_col, generated_pos_list_col))) {
+        LOG_WARN("fail to push back position list column", K(ret));
       } else if (OB_FAIL(adjust_fts_arg(&index_arg, data_schema, allocator, tmp_cols))) {
         LOG_WARN("failed to append fts_index arg", K(ret));
       }
@@ -661,6 +688,8 @@ int ObFtsIndexBuilderUtil::adjust_fts_args(
         LOG_WARN("failed to push back word count col", K(ret));
       } else if (OB_FAIL(push_back_gen_col(tmp_cols, existing_doc_length_col, generated_doc_len_col))) {
         LOG_WARN("fail to push back document length column", K(ret));
+      } else if (OB_FAIL(push_back_gen_col(tmp_cols, existing_pos_list_col, generated_pos_list_col))) {
+        LOG_WARN("fail to push back position list column", K(ret));
       } else if (OB_FAIL(adjust_fts_arg(&index_arg, data_schema, allocator, tmp_cols))) {
         LOG_WARN("failed to append fts_index arg", K(ret));
       }
@@ -673,6 +702,8 @@ int ObFtsIndexBuilderUtil::adjust_fts_args(
         LOG_WARN("failed to push back word count col", K(ret));
       } else if (OB_FAIL(push_back_gen_col(tmp_cols, existing_doc_length_col, generated_doc_len_col))) {
         LOG_WARN("fail to push back document length column", K(ret));
+      } else if (OB_FAIL(push_back_gen_col(tmp_cols, existing_pos_list_col, generated_pos_list_col))) {
+        LOG_WARN("fail to push back position list column", K(ret));
       } else if (OB_FAIL(adjust_fts_arg(&index_arg, data_schema, allocator, tmp_cols))) {
         LOG_WARN("failed to append fts_index arg", K(ret));
       }
@@ -875,9 +906,9 @@ int ObFtsIndexBuilderUtil::set_fts_index_table_columns(
       (!share::schema::is_fts_index_aux(arg.index_type_) &&
       !share::schema::is_fts_doc_word_aux(arg.index_type_)) ||
       arg.index_columns_.count() != 2 ||
-      arg.store_columns_.count() != 2) {
+      arg.store_columns_.count() != 3) {
     // expect word col, doc id col in index_columns,
-    // expect worc count, doc length col in store_columns.
+    // expect word count, doc length, pos list col in store_columns.
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(data_schema), K(arg.index_type_),
         K(arg.index_columns_.count()), K(arg.store_columns_.count()),
@@ -1016,8 +1047,8 @@ int ObFtsIndexBuilderUtil::adjust_fts_arg(
     const bool is_doc_word = share::schema::is_fts_doc_word_aux(index_arg->index_type_);
     if ((is_rowkey_doc && fts_cols.count() != 1) ||
         (is_doc_rowkey && fts_cols.count() != 1) ||
-        (is_fts_index && fts_cols.count() != 4) ||
-        (is_doc_word && fts_cols.count() != 4) ) {
+        (is_fts_index && fts_cols.count() != 5) ||
+        (is_doc_word && fts_cols.count() != 5) ) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("fts cols count not expected", K(ret), K(index_type), K(fts_cols));
     } else {
@@ -1103,7 +1134,7 @@ int ObFtsIndexBuilderUtil::inner_adjust_fts_arg(
   if (OB_ISNULL(fts_arg) ||
       (!share::schema::is_fts_index_aux(fts_arg->index_type_) &&
        !share::schema::is_fts_doc_word_aux(fts_arg->index_type_)) ||
-      fts_cols.count() != index_column_cnt + 2) {
+      fts_cols.count() != index_column_cnt + 3) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid argument", K(ret), KPC(fts_arg), K(fts_cols.count()),
         K(index_column_cnt));
@@ -1140,6 +1171,14 @@ int ObFtsIndexBuilderUtil::inner_adjust_fts_arg(
     } else if (OB_FAIL(fts_arg->store_columns_.push_back(doc_length_col_name))) {
       LOG_WARN("fail to push document length column", K(ret));
     }
+    // 4. add position list column to arg->store_columns
+    const ObColumnSchemaV2 *pos_list_col = fts_cols.at(index_column_cnt + 2);
+    ObString pos_list_col_name;
+    if (FAILEDx(ob_write_string(allocator, pos_list_col->get_column_name_str(), pos_list_col_name))) {
+      LOG_WARN("fail to deep copy pos list column", K(ret));
+    } else if (OB_FAIL(fts_arg->store_columns_.push_back(pos_list_col_name))) {
+      LOG_WARN("fail to push pos list column", K(ret));
+    }
   }
   return ret;
 }
@@ -1171,6 +1210,7 @@ int ObFtsIndexBuilderUtil::generate_doc_id_column(
                                        col_id,
                                        col_name_buf,
                                        name_pos,
+                                       GENERATED_DOC_ID_COLUMN_FLAG,
                                        col_exists))) {
     LOG_WARN("check doc id col failed", K(ret));
   } else if (!col_exists) {
@@ -1288,6 +1328,7 @@ int ObFtsIndexBuilderUtil::generate_word_segment_column(
                                        col_id,
                                        col_name_buf,
                                        name_pos,
+                                       GENERATED_FTS_WORD_SEGMENT_COLUMN_FLAG,
                                        col_exists))) {
     LOG_WARN("check word segment col failed", K(ret));
   } else if (!col_exists) {
@@ -1417,6 +1458,7 @@ int ObFtsIndexBuilderUtil::generate_word_count_column(
                                        col_id,
                                        col_name_buf,
                                        name_pos,
+                                       GENERATED_FTS_WORD_COUNT_COLUMN_FLAG,
           col_exists))) {
     LOG_WARN("check word count col failed", K(ret));
   } else if (!col_exists) {
@@ -1530,7 +1572,12 @@ int ObFtsIndexBuilderUtil::generate_doc_length_column(
                                                    name_pos,
                                                    col_id))) {
     LOG_WARN("fail to construct document length column name", K(ret));
-  } else if (OB_FAIL(check_fts_gen_col(data_schema, col_id, col_name_buf, name_pos, col_exists))) {
+  } else if (OB_FAIL(check_fts_gen_col(data_schema,
+                                       col_id,
+                                       col_name_buf,
+                                       name_pos,
+                                       GENERATED_FTS_DOC_LENGTH_COLUMN_FLAG,
+                                       col_exists))) {
     LOG_WARN("fail to check document count", K(ret), K(col_id));
   } else if (!col_exists) {
     ObColumnSchemaV2 column_schema;
@@ -1610,6 +1657,117 @@ int ObFtsIndexBuilderUtil::generate_doc_length_column(
               LOG_WARN("generate word count col failed", K(ret), KP(doc_length_col));
             } else {
               LOG_INFO("succeed to generate document length column", K(col_id), K(data_schema));
+            }
+          }
+        }
+      }
+    }
+  }
+  return ret;
+}
+
+int ObFtsIndexBuilderUtil::generate_pos_list_column(
+    const obcall::ObCreateIndexArg *index_arg,
+    const uint64_t col_id,
+    ObTableSchema &data_schema,
+    ObColumnSchemaV2 *&pos_list_col)
+{
+  int ret = OB_SUCCESS;
+  pos_list_col = nullptr;
+  char col_name_buf[OB_MAX_COLUMN_NAME_LENGTH] = {'\0'};
+  int64_t name_pos = 0;
+  bool col_exists = false;
+  if (OB_ISNULL(index_arg)
+      || OB_UNLIKELY(!share::schema::is_fts_index(index_arg->index_type_))
+      || OB_UNLIKELY(!data_schema.is_valid())
+      || OB_UNLIKELY(col_id == OB_INVALID_ID)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid arguments", K(ret), KPC(index_arg), K(data_schema), K(col_id));
+  } else if (OB_FAIL(construct_pos_list_col_name(index_arg,
+                                                 data_schema,
+                                                 col_name_buf,
+                                                 OB_MAX_COLUMN_NAME_LENGTH,
+                                                 name_pos,
+                                                 col_id))) {
+    LOG_WARN("fail to construct pos list column name", K(ret));
+  } else if (OB_FAIL(check_fts_gen_col(data_schema,
+                                       col_id,
+                                       col_name_buf,
+                                       name_pos,
+                                       GENERATED_FTS_POSITION_LIST_COLUMN_FLAG,
+                                       col_exists))) {
+    LOG_WARN("fail to check pos list column", K(ret), K(col_id));
+  } else if (!col_exists) {
+    ObColumnSchemaV2 column_schema;
+    SMART_VAR(char[OB_MAX_DEFAULT_VALUE_LENGTH], ft_expr_def) {
+      MEMSET(ft_expr_def, 0, sizeof(ft_expr_def));
+      int64_t def_pos = 0;
+      if (OB_FAIL(ret)) {
+      } else if (OB_FAIL(databuff_printf(ft_expr_def,
+                                         OB_MAX_DEFAULT_VALUE_LENGTH,
+                                         def_pos,
+                                         "POS_LIST("))) {
+        LOG_WARN("print generate expr definition prefix failed", K(ret));
+      }
+      for (int64_t i = 0; OB_SUCC(ret) && i < index_arg->index_columns_.count(); ++i) {
+        const ObString &column_name = index_arg->index_columns_.at(i).column_name_;
+        const ObColumnSchemaV2 *col_schema = nullptr;
+        if (column_name.empty()) {
+          ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("column name is empty", K(ret), K(column_name));
+        } else if (OB_ISNULL(col_schema = data_schema.get_column_schema(column_name))) {
+          ret = OB_ERR_KEY_COLUMN_DOES_NOT_EXITS;
+          LOG_USER_ERROR(OB_ERR_KEY_COLUMN_DOES_NOT_EXITS, column_name.length(), column_name.ptr());
+        } else if (OB_FAIL(column_schema.add_cascaded_column_id(col_schema->get_column_id()))) {
+          LOG_WARN("add cascaded column to generated column failed", K(ret));
+        } else if (OB_FAIL(databuff_printf(ft_expr_def,
+                                           OB_MAX_DEFAULT_VALUE_LENGTH,
+                                           def_pos,
+                                           "`%s`, ",
+                                           col_schema->get_column_name()))) {
+          LOG_WARN("print column name to buffer failed", K(ret));
+        }
+      }
+      if (OB_SUCC(ret)) {
+        def_pos -= 2;
+        if (OB_FAIL(databuff_printf(ft_expr_def,
+                                    OB_MAX_DEFAULT_VALUE_LENGTH,
+                                    def_pos,
+                                    ")"))) {
+          LOG_WARN("print generate expr definition suffix failed", K(ret));
+        } else {
+          ObObj default_value;
+          default_value.set_varchar(ft_expr_def, static_cast<int32_t>(def_pos));
+          column_schema.set_rowkey_position(0);
+          column_schema.set_index_position(0);
+          column_schema.set_tbl_part_key_pos(0);
+          column_schema.set_table_id(data_schema.get_table_id());
+          column_schema.set_column_id(col_id);
+          column_schema.add_column_flag(GENERATED_FTS_POSITION_LIST_COLUMN_FLAG);
+          column_schema.add_column_flag(VIRTUAL_GENERATED_COLUMN_FLAG);
+          column_schema.set_is_hidden(true);
+          column_schema.set_data_type(ObVarcharType);
+          column_schema.set_data_length(share::ObFTSPositionListStore::MAX_INLINE_ENCODED_LENGTH);
+          column_schema.set_collation_type(CS_TYPE_BINARY);
+          column_schema.set_charset_type(ObCharset::charset_type_by_coll(CS_TYPE_BINARY));
+          column_schema.set_prev_column_id(UINT64_MAX);
+          column_schema.set_next_column_id(UINT64_MAX);
+          if (OB_FAIL(column_schema.set_column_name(col_name_buf))) {
+            LOG_WARN("set column name failed", K(ret));
+          } else if (OB_FAIL(column_schema.set_orig_default_value(default_value))) {
+            LOG_WARN("set orig default value failed", K(ret));
+          } else if (OB_FAIL(column_schema.set_cur_default_value(default_value,
+                    column_schema.is_default_expr_v2_column()))) {
+            LOG_WARN("set current default value failed", K(ret));
+          } else if (OB_FAIL(data_schema.add_column(column_schema))) {
+            LOG_WARN("add pos list column schema to data table failed", K(ret));
+          } else {
+            pos_list_col = data_schema.get_column_schema(column_schema.get_column_id());
+            if (OB_ISNULL(pos_list_col)) {
+              ret = OB_ERR_UNEXPECTED;
+              LOG_WARN("generate pos list col failed", K(ret), KP(pos_list_col));
+            } else {
+              LOG_INFO("succeed to generate pos list column", K(col_id), K(data_schema));
             }
           }
         }
@@ -1738,11 +1896,43 @@ int ObFtsIndexBuilderUtil::construct_doc_length_col_name(
   return ret;
 }
 
+int ObFtsIndexBuilderUtil::construct_pos_list_col_name(
+    const obcall::ObCreateIndexArg *index_arg,
+    const ObTableSchema &data_schema,
+    char *col_name_buf,
+    const int64_t buf_len,
+    int64_t &name_pos,
+    const uint64_t col_id)
+{
+  int ret = OB_SUCCESS;
+  name_pos = 0;
+  if (OB_ISNULL(index_arg)
+      || OB_UNLIKELY(!share::schema::is_fts_index(index_arg->index_type_))
+      || OB_UNLIKELY(!data_schema.is_valid())
+      || OB_ISNULL(col_name_buf)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid arguments", K(ret), KPC(index_arg), K(data_schema), K(col_name_buf));
+  } else {
+    MEMSET(col_name_buf, 0, buf_len);
+    if (OB_FAIL(databuff_printf(col_name_buf,
+                                buf_len,
+                                name_pos,
+                                OB_POS_LIST_COLUMN_NAME_PREFIX))) {
+      LOG_WARN("fail to printf position list column", K(ret));
+    }
+    if (FAILEDx(databuff_printf(col_name_buf, buf_len, name_pos, "_%lu_%ld", col_id, ObTimeUtility::current_time()))) {
+      LOG_WARN("fail to printf current time", K(ret));
+    }
+  }
+  return ret;
+}
+
 int ObFtsIndexBuilderUtil::check_fts_gen_col(
     const ObTableSchema &data_schema,
     const uint64_t col_id,
     const char *col_name_buf,
     const int64_t name_pos,
+    const uint64_t expected_flag,
     bool &col_exists)
 {
   int ret = OB_SUCCESS;
@@ -1750,10 +1940,11 @@ int ObFtsIndexBuilderUtil::check_fts_gen_col(
   if (!data_schema.is_valid() ||
       OB_INVALID_ID == col_id ||
       OB_ISNULL(col_name_buf) ||
-      name_pos < 0) {
+      name_pos < 0 ||
+      0 == expected_flag) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(data_schema), K(col_id),
-        KP(col_name_buf), K(name_pos));
+        KP(col_name_buf), K(name_pos), K(expected_flag));
   } else {
     // another fulltext index could have created the generated column
     const ObColumnSchemaV2 *ft_col = data_schema.get_column_schema(col_name_buf);
@@ -1777,11 +1968,11 @@ int ObFtsIndexBuilderUtil::check_fts_gen_col(
     } else if (OB_NOT_NULL(ft_col)) {
       // the generated colum is created
       col_exists = true;
-      if (OB_UNLIKELY(!ft_col->has_column_flag(GENERATED_FTS_WORD_SEGMENT_COLUMN_FLAG))) {
+      if (OB_UNLIKELY(!ft_col->has_column_flag(expected_flag))) {
         ret = OB_ERR_COLUMN_DUPLICATE;
         LOG_USER_ERROR(OB_ERR_COLUMN_DUPLICATE, static_cast<int>(name_pos),
             col_name_buf);
-        LOG_WARN("Generate column name has been used", K(ret), K(*ft_col));
+        LOG_WARN("generate column name has been used", K(ret), K(expected_flag), K(*ft_col));
       }
     } else {
       col_exists = false;
@@ -1959,6 +2150,43 @@ int ObFtsIndexBuilderUtil::get_doc_length_col(
           LOG_WARN("fail to check index match", K(ret), KPC(column_schema), K(index_cols));
         } else if (is_match) {
           doc_len_col = column_schema;
+        }
+      }
+    }
+  }
+  return ret;
+}
+
+int ObFtsIndexBuilderUtil::get_pos_list_col(
+    const ObTableSchema &data_schema,
+    const obcall::ObCreateIndexArg *index_arg,
+    const ObColumnSchemaV2 *&pos_list_col)
+{
+  int ret = OB_SUCCESS;
+  ObSEArray<uint64_t, 8> index_cols;
+  index_cols.set_attr(ObMemAttr("FtsUPLC"));
+  pos_list_col = nullptr;
+  if (OB_UNLIKELY(!data_schema.is_valid())
+      || OB_ISNULL(index_arg)
+      || OB_UNLIKELY(!share::schema::is_fts_index(index_arg->index_type_))) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid arguments", K(ret), K(data_schema), KPC(index_arg));
+  } else if (OB_FAIL(get_index_column_ids(data_schema, *index_arg, index_cols))) {
+    LOG_WARN("fail to get index column ids", K(ret), K(data_schema), KPC(index_arg));
+  } else {
+    for (ObTableSchema::const_column_iterator iter = data_schema.column_begin();
+         OB_SUCC(ret) && OB_ISNULL(pos_list_col) && iter != data_schema.column_end();
+         iter++) {
+      const ObColumnSchemaV2 *column_schema = *iter;
+      if (OB_ISNULL(column_schema)) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("unexpected error, column schema is nullptr", K(ret), K(data_schema));
+      } else if (column_schema->is_pos_list_column()) {
+        bool is_match = false;
+        if (OB_FAIL(check_index_match(data_schema, *column_schema, index_cols, is_match))) {
+          LOG_WARN("fail to check index match", K(ret), KPC(column_schema), K(index_cols));
+        } else if (is_match) {
+          pos_list_col = column_schema;
         }
       }
     }
@@ -2610,6 +2838,8 @@ int ObFtsIndexBuilderUtil::add_skip_index_for_index_column(schema::ObColumnSchem
     skip_index_attr.set_sum();
   } else if (column_schema.is_doc_length_column()) {
     skip_index_attr.set_bm25_doc_len_param();
+  } else if (column_schema.is_pos_list_column()) {
+    // keep default skip-index behavior for compressed binary payload.
   } else if (column_schema.is_doc_id_column()) {
     skip_index_attr.set_loose_min_max();
   } else if (column_schema.is_word_segment_column()) {

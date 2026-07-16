@@ -69,7 +69,7 @@ public:
   static constexpr const char *ROWKEY_DOC_NAME = "fts_rowkey_doc";
   static const int64_t OB_FTS_INDEX_TABLE_INDEX_COL_CNT = 2;
   static const int64_t OB_FTS_DOC_WORD_TABLE_INDEX_COL_CNT = 2;
-  static const int64_t OB_FTS_INDEX_OR_DOC_WORD_TABLE_COL_CNT = 4;
+  static const int64_t OB_FTS_INDEX_OR_DOC_WORD_TABLE_COL_CNT = 5;
 public:
   // Check if we can use rowkey instead of doc id.
   // if we want to add more types, make this one condition of them.
@@ -224,6 +224,11 @@ private:
       const uint64_t col_id,
       ObTableSchema &data_schema, // not const since will add column to data schema
       schema::ObColumnSchemaV2 *&doc_length_col);
+  static int generate_pos_list_column(
+      const obcall::ObCreateIndexArg *index_arg,
+      const uint64_t col_id,
+      ObTableSchema &data_schema, // not const since will add column to data schema
+      schema::ObColumnSchemaV2 *&pos_list_col);
   static int construct_doc_id_col_name(
       char *col_name_buf,
       const int64_t buf_len,
@@ -249,11 +254,19 @@ private:
       const int64_t buf_len,
       int64_t &name_pos,
       const uint64_t col_id);
+  static int construct_pos_list_col_name(
+      const obcall::ObCreateIndexArg *index_arg,
+      const ObTableSchema &data_schema,
+      char *col_name_buf,
+      const int64_t buf_len,
+      int64_t &name_pos,
+      const uint64_t col_id);
   static int check_fts_gen_col(
       const ObTableSchema &data_schema,
       const uint64_t col_id,
       const char *col_name_buf,
       const int64_t name_pos,
+      const uint64_t expected_flag,
       bool &col_exists);
   static int get_word_segment_col(
       const ObTableSchema &data_schema,
@@ -267,6 +280,10 @@ private:
       const ObTableSchema &data_schema,
       const obcall::ObCreateIndexArg *index_arg,
       const share::schema::ObColumnSchemaV2 *&doc_len_col);
+  static int get_pos_list_col(
+      const ObTableSchema &data_schema,
+      const obcall::ObCreateIndexArg *index_arg,
+      const share::schema::ObColumnSchemaV2 *&pos_list_col);
   static int push_back_gen_col(
       ObIArray<const schema::ObColumnSchemaV2 *> &cols,
       const schema::ObColumnSchemaV2 *existing_col,

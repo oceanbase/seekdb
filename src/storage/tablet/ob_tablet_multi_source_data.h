@@ -69,7 +69,7 @@ inline memtable::MultiSourceDataUnitType ObTabletTxMultiSourceDataUnit::type() c
 
 inline bool ObTabletTxMultiSourceDataUnit::is_in_tx() const
 {
-  return ObTabletCommon::FINAL_TX_ID != tx_id_;
+  return ObTabletCommon::FINAL_TX_ID != tx_id_.get_id();
 }
 } // namespace storage
 } // namespace oceanbase

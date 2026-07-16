@@ -946,6 +946,7 @@ typedef enum ObItemType
   T_FUN_SYS_INNER_DECIMAL_TO_YEAR = 1820,
   T_FUN_SYS_SPLIT_PART = 1821,
   T_FUN_SYS_KEYVALUE = 1822,
+  T_FUN_SYS_POS_LIST = 1938,
   T_FUN_SYS_VEC_VID = 1900,   // vector index
   T_FUN_SYS_VEC_TYPE = 1901,
   T_FUN_SYS_VEC_VECTOR = 1902,
@@ -1700,6 +1701,7 @@ typedef enum ObItemType
   T_SP_ACCESS_NAME = 3864,
   T_SP_CREATE = 3865,
   T_SP_ALTER = 3866,
+  T_SP_COMPILE_CLAUSE = 3867,
   T_SP_EDITIONABLE_CLAUSE = 3868,
   T_SP_DROP = 3869,
   T_SP_SOURCE = 3870,
@@ -2235,7 +2237,7 @@ typedef enum ObItemType
   // 4368: T_BACKUP_CLEAN abandoned, id reserved
   // 4369: T_DELETE_POLICY abandoned, id reserved
   // 4370: T_BACKUP_KEY abandoned, id reserved
-  // 4371: T_RESTORE_TENANT_2 abandoned, id reserved
+  T_RESTORE_TENANT_2 = 4371,
   // 4372: T_CANCEL_RESTORE abandoned, id reserved
   // 4373: T_CANCEL_RECOVER_TABLE abandoned, id reserved
   T_GEN_ROWS = 4374,
@@ -2243,7 +2245,7 @@ typedef enum ObItemType
   T_DIRECT = 4376, // direct load data
   T_REMOTE_OSS = 4377,
   T_RECOVER_TABLE_REMAP = 4379,
-  // 4380: T_PHYSICAL_RESTORE_UNTIL abandoned, id reserved
+  T_PHYSICAL_RESTORE_UNTIL = 4380,
   T_REVOKE_SYSAUTH = 4381,
 
   // hint, for slave mapping

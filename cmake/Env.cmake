@@ -198,7 +198,9 @@ add_definitions(-D_GLIBCXX_USE_CXX11_ABI=1)
 
 set(OB_OBJCOPY_BIN "${DEVTOOLS_DIR}/bin/objcopy")
 set(CMAKE_TOOLCHAIN_PATH "${DEVTOOLS_DIR}")
-set(GCC_DEVTOOL_PATH "${CMAKE_SOURCE_DIR}/deps/3rd/usr/local/oceanbase")
+if(NOT DEFINED GCC_DEVTOOL_PATH)
+  get_filename_component(GCC_DEVTOOL_PATH "${DEVTOOLS_DIR}" DIRECTORY)
+endif()
 set(COMPACT_UNWIND_FLAG "")
 if(OB_ANDROID)
   # Android NDK: compilers set by toolchain file, no RELRO, no devtools.
@@ -411,8 +413,41 @@ if (OB_USE_CLANG)
     set(CMAKE_EXE_LINKER_FLAGS "${LD_OPT} -Wl,-z,noexecstack ${PIE_OPT} ${THIN_LTO_CONCURRENCY_LINK} ${REORDER_LINK_OPT} ${CMAKE_COVERAGE_EXE_LINKER_OPTIONS}")
   endif()
 
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-unknown-warning-option")
+  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wno-unknown-warning-option")
+
 else() # not clang, use gcc
-  message("gcc9 not support currently, please set OB_USE_CLANG ON and we will finish it as soon as possible")
+  if (OB_CC)
+    message(STATUS "Using OB_CC compiler: ${OB_CC}")
+  else()
+    find_program(OB_CC NAMES gcc
+      PATHS /opt/rh/devtoolset-11/root/usr/bin /usr/local/bin /usr/bin)
+  endif()
+
+  if (OB_CXX)
+    message(STATUS "Using OB_CXX compiler: ${OB_CXX}")
+  else()
+    find_program(OB_CXX NAMES g++
+      PATHS /opt/rh/devtoolset-11/root/usr/bin /usr/local/bin /usr/bin)
+  endif()
+
+  set(OB_OBJCOPY_BIN "objcopy")
+  set(REORDER_COMP_OPT "-ffunction-sections -fdata-sections")
+  set(REORDER_LINK_OPT "-Wl,--build-id=sha1,--gc-sections")
+
+  if (OB_USE_ASAN)
+    if (ASAN_DISABLE_STACK)
+      ob_define(CMAKE_ASAN_FLAG "-fsanitize=address -fno-optimize-sibling-calls")
+    else()
+      ob_define(CMAKE_ASAN_FLAG "-fstack-protector-strong -fsanitize=address -fno-optimize-sibling-calls")
+    endif()
+  endif()
+
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -gdwarf-4 ${DEBUG_PREFIX} ${FILE_PREFIX} ${AUTO_FDO_OPT} ${THIN_LTO_OPT} ${REORDER_COMP_OPT} ${CMAKE_ASAN_FLAG}")
+  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -gdwarf-4 ${DEBUG_PREFIX} ${FILE_PREFIX} ${AUTO_FDO_OPT} ${THIN_LTO_OPT} ${REORDER_COMP_OPT} ${CMAKE_ASAN_FLAG}")
+  set(CMAKE_CXX_LINK_FLAGS "${CMAKE_CXX_LINK_FLAGS} ${DEBUG_PREFIX} ${FILE_PREFIX} ${AUTO_FDO_OPT}")
+  set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -Wl,-z,noexecstack ${THIN_LTO_CONCURRENCY_LINK} ${REORDER_LINK_OPT}")
+  set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -Wl,-z,noexecstack ${PIE_OPT} ${THIN_LTO_CONCURRENCY_LINK} ${REORDER_LINK_OPT} ${CMAKE_COVERAGE_EXE_LINKER_OPTIONS}")
 endif()
 
 if (OB_BUILD_CCLS)

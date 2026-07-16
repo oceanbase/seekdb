@@ -17,6 +17,7 @@
 #ifndef OB_FTS_STRUCT_H_
 #define OB_FTS_STRUCT_H_
 
+#include "lib/container/ob_array.h"
 #include "lib/charset/ob_charset.h"
 #include "lib/hash/ob_hashmap.h"
 #include "object/ob_object.h"
@@ -53,6 +54,20 @@ private:
 };
 
 typedef common::hash::ObHashMap<ObFTWord, int64_t> ObFTWordMap;
+typedef common::ObArray<int64_t, common::ObIAllocator &> ObFTPositionArray;
+
+class ObFTWordPositionInfo final
+{
+public:
+  ObFTWordPositionInfo() : word_count_(0), positions_(nullptr) {}
+  ~ObFTWordPositionInfo() = default;
+  TO_STRING_KV(K_(word_count), KP_(positions));
+
+  int64_t word_count_;
+  ObFTPositionArray *positions_;
+};
+
+typedef common::hash::ObHashMap<ObFTWord, ObFTWordPositionInfo> ObFTWordPositionMap;
 
 class ObAddWordFlag final
 {
