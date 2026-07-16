@@ -584,7 +584,8 @@ ObSortOpImpl::ObSortOpImpl() :
   is_fetch_with_ties_(false), topn_heap_(NULL), ties_array_pos_(0), last_ties_row_(NULL),
   pt_buckets_(NULL), use_partition_topn_sort_(false), heap_nodes_(), cur_heap_idx_(0), rows_(NULL),
   sort_exprs_(nullptr), compress_type_(NONE_COMPRESSOR), use_compact_format_(false),
-  is_task4_op9_fts_ddl_sort_(false)
+  is_task4_op9_fts_ddl_sort_(false), task4_op9_dump_count_(0),
+  task4_op9_merge_pass_count_(0), task4_op9_max_merge_ways_(0)
 {}
 
 ObSortOpImpl::ObSortOpImpl(ObMonitorNode &op_monitor_info)
@@ -604,7 +605,8 @@ ObSortOpImpl::ObSortOpImpl(ObMonitorNode &op_monitor_info)
     is_fetch_with_ties_(false), topn_heap_(NULL), ties_array_pos_(0),
     last_ties_row_(NULL), pt_buckets_(NULL), use_partition_topn_sort_(false), heap_nodes_(), cur_heap_idx_(0), part_group_cnt_(0),
     rows_(NULL), sort_exprs_(nullptr),
-    compress_type_(NONE_COMPRESSOR), use_compact_format_(false), is_task4_op9_fts_ddl_sort_(false)
+    compress_type_(NONE_COMPRESSOR), use_compact_format_(false), is_task4_op9_fts_ddl_sort_(false),
+    task4_op9_dump_count_(0), task4_op9_merge_pass_count_(0), task4_op9_max_merge_ways_(0)
 {
 }
 
@@ -880,6 +882,8 @@ void ObSortOpImpl::unregister_profile_if_necessary()
 
 void ObSortOpImpl::reset()
 {
+  // Task4 Op9：必须在注销 profile 前保存指标，否则峰值与外排信息会丢失。
+  record_task4_op9_sort_monitor();
   sql_mem_processor_.unregister_profile();
   iter_.reset();
   reuse();
@@ -901,6 +905,10 @@ void ObSortOpImpl::reset()
   ties_array_pos_ = 0;
   compress_type_ = NONE_COMPRESSOR;
   use_compact_format_ = false;
+  is_task4_op9_fts_ddl_sort_ = false;
+  task4_op9_dump_count_ = 0;
+  task4_op9_merge_pass_count_ = 0;
+  task4_op9_max_merge_ways_ = 0;
   sort_exprs_ = nullptr;
   // for partition topn sort
   cur_heap_idx_ = 0;
@@ -952,6 +960,24 @@ void ObSortOpImpl::reset()
   io_event_observer_ = nullptr;
   if (pd_topn_filter_.enabled()) {
     pd_topn_filter_.destroy();
+  }
+}
+
+void ObSortOpImpl::record_task4_op9_sort_monitor()
+{
+  if (is_task4_op9_fts_ddl_sort_) {
+    // Task4 Op9：结构化日志可直接由 CI 收集并比较外排、归并和内存指标。
+    const ObSqlWorkAreaProfile &profile = sql_mem_processor_.get_profile();
+    const int64_t ddl_task_id = nullptr == op_monitor_info_ ? 0 : op_monitor_info_->otherstat_5_value_;
+    const int64_t temp_write_bytes = nullptr == op_monitor_info_ ? 0 : op_monitor_info_->otherstat_6_value_;
+    LOG_INFO("Task4 Op9 FTS DDL sort monitor", K(ddl_task_id), K(op_id_),
+             K(task4_op9_dump_count_), K(temp_write_bytes),
+             "dumped_bytes", profile.get_dumped_size(),
+             "max_dumped_bytes", profile.get_max_dumped_size(),
+             K(task4_op9_merge_pass_count_), K(task4_op9_max_merge_ways_),
+             "workarea_pass_count", profile.get_number_pass(),
+             "peak_memory_bytes", profile.get_max_mem_used(),
+             "approved_memory_bytes", sql_mem_processor_.get_mem_bound());
   }
 }
 
@@ -1711,6 +1737,10 @@ int ObSortOpImpl::do_dump()
     }
 
     if (OB_SUCC(ret)) {
+      if (is_task4_op9_fts_ddl_sort_) {
+        // Task4 Op9：仅统计成功完成的外排分片。
+        ++task4_op9_dump_count_;
+      }
       heap_iter_begin_ = false;
       row_idx_ = 0;
       quick_sort_array_.reset();
@@ -1817,6 +1847,11 @@ int ObSortOpImpl::build_ems_heap(int64_t &merge_ways)
         merge_ways = std::max(merge_ways, get_memory_limit() / ObChunkDatumStore::BLOCK_SIZE);
       }
       merge_ways = std::min(merge_ways, max_ways);
+      if (is_task4_op9_fts_ddl_sort_) {
+        // Task4 Op9：记录实际发生的归并轮次及最大归并路数。
+        ++task4_op9_merge_pass_count_;
+        task4_op9_max_merge_ways_ = std::max(task4_op9_max_merge_ways_, merge_ways);
+      }
       LOG_TRACE("do merge sort ", K(first->level_), K(merge_ways), K(sort_chunks_.get_size()), K(get_memory_limit()), K(sql_mem_processor_.get_profile()));
     }
 

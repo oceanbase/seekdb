@@ -22,6 +22,8 @@ namespace sql
 template <typename Compare, typename Store_Row, bool has_addon>
 void ObSortVecOpImpl<Compare, Store_Row, has_addon>::reset()
 {
+  // Task4 Op9：必须在注销 profile 前保存指标，否则峰值与外排信息会丢失。
+  record_task4_op9_sort_monitor();
   sql_mem_processor_.unregister_profile();
   reuse();
   all_exprs_.reset();
@@ -40,6 +42,9 @@ void ObSortVecOpImpl<Compare, Store_Row, has_addon>::reset()
   outputted_rows_cnt_ = 0;
   is_fetch_with_ties_ = false;
   is_task4_op9_fts_ddl_sort_ = false;
+  task4_op9_dump_count_ = 0;
+  task4_op9_merge_pass_count_ = 0;
+  task4_op9_max_merge_ways_ = 0;
   rows_ = nullptr;
   ties_array_pos_ = 0;
   sort_exprs_getter_.reset();
@@ -115,6 +120,25 @@ void ObSortVecOpImpl<Compare, Store_Row, has_addon>::reset()
   io_event_observer_ = nullptr;
   is_fixed_key_sort_enabled_ = false;
   fixed_sort_key_len_ = 0;
+}
+
+template <typename Compare, typename Store_Row, bool has_addon>
+void ObSortVecOpImpl<Compare, Store_Row, has_addon>::record_task4_op9_sort_monitor()
+{
+  if (is_task4_op9_fts_ddl_sort_) {
+    // Task4 Op9：结构化日志可直接由 CI 收集并比较外排、归并和内存指标。
+    const ObSqlWorkAreaProfile &profile = sql_mem_processor_.get_profile();
+    const int64_t ddl_task_id = op_monitor_info_.otherstat_5_value_;
+    const int64_t temp_write_bytes = op_monitor_info_.otherstat_6_value_;
+    SQL_ENG_LOG(INFO, "Task4 Op9 vector FTS DDL sort monitor", K(ddl_task_id),
+                "op_id", op_monitor_info_.op_id_, K(task4_op9_dump_count_), K(temp_write_bytes),
+                "dumped_bytes", profile.get_dumped_size(),
+                "max_dumped_bytes", profile.get_max_dumped_size(),
+                K(task4_op9_merge_pass_count_), K(task4_op9_max_merge_ways_),
+                "workarea_pass_count", profile.get_number_pass(),
+                "peak_memory_bytes", profile.get_max_mem_used(),
+                "approved_memory_bytes", sql_mem_processor_.get_mem_bound());
+  }
 }
 
 template <typename Compare, typename Store_Row, bool has_addon>
@@ -1738,6 +1762,10 @@ int ObSortVecOpImpl<Compare, Store_Row, has_addon>::do_dump()
     }
 
     if (OB_SUCC(ret)) {
+      if (is_task4_op9_fts_ddl_sort_) {
+        // Task4 Op9：仅统计成功完成的外排分片。
+        ++task4_op9_dump_count_;
+      }
       heap_iter_begin_ = false;
       row_idx_ = 0;
       quick_sort_array_.reset();
@@ -1892,6 +1920,11 @@ int ObSortVecOpImpl<Compare, Store_Row, has_addon>::build_ems_heap(int64_t &merg
         merge_ways = std::max(merge_ways, get_memory_limit() / ObTempBlockStore::BLOCK_SIZE);
       }
       merge_ways = std::min(merge_ways, max_ways);
+      if (is_task4_op9_fts_ddl_sort_) {
+        // Task4 Op9：记录实际发生的归并轮次及最大归并路数。
+        ++task4_op9_merge_pass_count_;
+        task4_op9_max_merge_ways_ = std::max(task4_op9_max_merge_ways_, merge_ways);
+      }
       LOG_TRACE("do merge sort ", K(first->level_), K(merge_ways), K(sort_chunks_.get_size()),
                 K(get_memory_limit()), K(sql_mem_processor_.get_profile()));
     }
