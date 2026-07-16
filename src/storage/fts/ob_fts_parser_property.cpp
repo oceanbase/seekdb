@@ -650,9 +650,9 @@ int ObFTParserJsonProps::ik_rebuild_props_for_ddl(const bool log_to_user)
     ObString table_name = "";
     if (OB_FAIL(config_get_dict_table(table_name))) {
       if (OB_SEARCH_NOT_FOUND == ret) {
-        if (OB_FAIL(config_set_dict_table(ObFTSLiteral::FT_DEFAULT_IK_DICT_UTF8_TABLE))) {
-          LOG_WARN("Failed to set default dict table", K(ret));
-        }
+        ret = OB_SUCCESS;
+      } else {
+        LOG_WARN("Failed to get dict table", K(ret));
       }
     } else {
       // check dict table valid
@@ -660,25 +660,23 @@ int ObFTParserJsonProps::ik_rebuild_props_for_ddl(const bool log_to_user)
 
     if (OB_FAIL(ret)) {
       // do nothing
-    } else if (OB_FAIL(config_get_quantifier_table(table_name))) {
+    } else if (OB_FAIL(config_get_stopword_table(table_name))) {
       if (OB_SEARCH_NOT_FOUND == ret) {
-        if (OB_FAIL(
-                config_set_quantifier_table(ObFTSLiteral::FT_DEFAULT_IK_QUANTIFIER_UTF8_TABLE))) {
-          LOG_WARN("Failed to set default quantifier table", K(ret));
-        }
+        ret = OB_SUCCESS;
+      } else {
+        LOG_WARN("Failed to get stopword table", K(ret));
       }
     } else {
-      // check quantifier table valid
+      // check stopword table valid
     }
 
     if (OB_FAIL(ret)) {
       // do nothing
     } else if (OB_FAIL(config_get_quantifier_table(table_name))) {
       if (OB_SEARCH_NOT_FOUND == ret) {
-        if (OB_FAIL(
-                config_set_quantifier_table(ObFTSLiteral::FT_DEFAULT_IK_QUANTIFIER_UTF8_TABLE))) {
-          LOG_WARN("Failed to set default quantifier table", K(ret));
-        }
+        ret = OB_SUCCESS;
+      } else {
+        LOG_WARN("Failed to get quantifier table", K(ret));
       }
     } else {
       // check quantifier table valid
@@ -1159,38 +1157,39 @@ int ObFTParserProperty::parse_for_parser_helper(const ObFTParser &parser, const 
   } else {
     if (parser.is_ik()) {
       // set dict tables and copy dict name
+      dict_table_.reset();
+      stopword_table_.reset();
+      quantifier_table_.reset();
       ObString dict_table;
       ObString stopword_table;
       ObString quantifier_table;
       if (OB_FAIL(props.config_get_dict_table(dict_table))) {
         if (OB_SEARCH_NOT_FOUND == ret) {
-          dict_table = ObString(ObFTSLiteral::FT_DEFAULT_IK_DICT_UTF8_TABLE);
           ret = OB_SUCCESS;
         } else {
           LOG_WARN("fail to get dict table", K(ret));
         }
-      }
-      if (OB_SUCC(ret) && OB_FAIL(ob_write_string(allocator_, dict_table, dict_table_))) {
+      } else if (OB_FAIL(ob_write_string(allocator_, dict_table, dict_table_))) {
         LOG_WARN("fail to copy dict table", K(ret), K(dict_table));
-      } else if (OB_SUCC(ret) && OB_FAIL(props.config_get_stopword_table(stopword_table))) {
+      }
+      if (OB_FAIL(ret)) {
+      } else if (OB_FAIL(props.config_get_stopword_table(stopword_table))) {
         if (OB_SEARCH_NOT_FOUND == ret) {
-          stopword_table = ObString(ObFTSLiteral::FT_DEFAULT_IK_STOPWORD_UTF8_TABLE);
           ret = OB_SUCCESS;
         } else {
           LOG_WARN("fail to get stopword table", K(ret));
         }
-      }
-      if (OB_SUCC(ret) && OB_FAIL(ob_write_string(allocator_, stopword_table, stopword_table_))) {
+      } else if (OB_FAIL(ob_write_string(allocator_, stopword_table, stopword_table_))) {
         LOG_WARN("fail to copy stopword table", K(ret), K(stopword_table));
-      } else if (OB_SUCC(ret) && OB_FAIL(props.config_get_quantifier_table(quantifier_table))) {
+      }
+      if (OB_FAIL(ret)) {
+      } else if (OB_FAIL(props.config_get_quantifier_table(quantifier_table))) {
         if (OB_SEARCH_NOT_FOUND == ret) {
-          quantifier_table = ObString(ObFTSLiteral::FT_DEFAULT_IK_QUANTIFIER_UTF8_TABLE);
           ret = OB_SUCCESS;
         } else {
           LOG_WARN("fail to get quantifier table", K(ret));
         }
-      }
-      if (OB_SUCC(ret) && OB_FAIL(ob_write_string(allocator_, quantifier_table, quantifier_table_))) {
+      } else if (OB_FAIL(ob_write_string(allocator_, quantifier_table, quantifier_table_))) {
         LOG_WARN("fail to copy quantifier table", K(ret), K(quantifier_table));
       }
       ObString ik_smart;
