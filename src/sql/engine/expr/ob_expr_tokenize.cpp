@@ -91,6 +91,8 @@ int ObExprTokenize::tokenize_fulltext(const TokenizeParam &param,
   int64_t doc_len = 0;
   ObFTTokenMap token_map;
 
+  ObArenaAllocator tmp_parse_alloc(ObMemAttr("Tmp buffer"));
+
   if (TokenizeParam::OUTPUT_MODE::DEFAULT != mode && TokenizeParam::OUTPUT_MODE::ALL != mode) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("Invalid output mode", K(ret), K(mode));
@@ -235,7 +237,7 @@ int ObExprTokenize::parse_param(const ObExpr &expr,
     LOG_WARN("Fail to parse parser params.", K(ret));
   } else if (OB_FAIL(parse_parser_properties(expr, ctx, temp_allocator, param))) {
     LOG_WARN("Fail to parse parser params.", K(ret));
-  } else if (expr.arg_cnt_ >= 3 && OB_FAIL(param.reform_parser_properties(param.properties_))) {
+  } else if (OB_FAIL(param.reform_parser_properties(param.properties_))) {
     LOG_WARN("Fail to reform parser params.", K(ret));
   } else if (OB_FAIL(param.try_load_dictionary_for_ik())) {
     LOG_WARN("fail to try load dictionary for ik", K(ret));
