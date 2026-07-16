@@ -1629,6 +1629,9 @@ int ObDDLResolver::resolve_table_option(const ParseNode *option_node, const bool
           ObString table_names[3];
           if (OB_FAIL(props.init())
               || OB_FAIL(props.parse_from_valid_str(parser_properties_))
+              || OB_FAIL(props.rebuild_props_for_ddl(parser_name_,
+                                                     ObCollationType::CS_TYPE_UTF8MB4_BIN,
+                                                     true))
               || OB_FAIL(props.config_get_dict_table(table_names[0]))
               || OB_FAIL(props.config_get_stopword_table(table_names[1]))
               || OB_FAIL(props.config_get_quantifier_table(table_names[2]))) {
