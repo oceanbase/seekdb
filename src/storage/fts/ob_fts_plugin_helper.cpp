@@ -27,6 +27,7 @@
 #include "storage/fts/dict/ob_ft_dict_hub.h"
 #include "storage/fts/ob_fts_parser_property.h"
 #include "storage/fts/ob_fts_stop_word.h"
+#include "storage/fts/ob_ik_ft_parser.h"
 
 using namespace oceanbase::plugin;
 
@@ -237,7 +238,9 @@ int ObFTParseHelper::segment(
     const char *ft,
     const int64_t ft_len,
     common::ObIAllocator &allocator,
-    ObAddWord &add_word)
+    ObAddWord &add_word,
+    ObITokenIterator *&iter,
+    const bool keep_iter)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(parser_version < 0 || nullptr == parser_desc || nullptr == cs || nullptr == ft || 0 >= ft_len)) {
@@ -245,7 +248,6 @@ int ObFTParseHelper::segment(
     LOG_WARN("invalid arguments", K(ret), K(parser_version), KP(parser_desc), KP(cs), K(ft), K(ft_len));
   } else {
     ObFTParserParam param;
-    ObITokenIterator *iter = nullptr;
     param.allocator_ = &allocator;
     param.cs_ = cs;
     param.fulltext_ = ft;
@@ -261,12 +263,21 @@ int ObFTParseHelper::segment(
     param.min_ngram_size_ = property.min_ngram_token_size_;
     param.max_ngram_size_ = property.max_ngram_token_size_;
 
-    if (OB_FAIL(parser_desc->segment(&param, iter))) {
-      LOG_WARN("fail to segment", K(ret), K(param));
-    } else if (OB_ISNULL(iter)) {
+    if (keep_iter && OB_NOT_NULL(iter)) {
+      ObIKFTParser *ik_parser = static_cast<ObIKFTParser *>(iter);
+      if (OB_FAIL(ik_parser->start_document(param))) {
+        LOG_WARN("failed to start new document with cached ik parser", K(ret), K(param));
+      }
+    } else if (OB_FAIL(parser_desc->segment(&param, iter))) {
+      LOG_WARN("failed to create token iterator", K(ret), K(param));
+    }
+
+    if (OB_SUCC(ret) && OB_ISNULL(iter)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected error, token iterator is nullptr", K(ret), KP(iter));
-    } else {
+      LOG_WARN("unexpected null token iterator", K(ret));
+    }
+
+    if (OB_SUCC(ret)) {
       const char *word = nullptr;
       int64_t word_len = 0;
       int64_t char_cnt = 0;
@@ -274,17 +285,18 @@ int ObFTParseHelper::segment(
       while (OB_SUCC(ret)) {
         if (OB_FAIL(iter->get_next_token(word, word_len, char_cnt, word_freq))) {
           if (OB_ITER_END != ret) {
-            LOG_WARN("fail to get next token", K(ret), KPC(iter));
+            LOG_WARN("failed to get next token", K(ret), KPC(iter));
           }
         } else if (OB_FAIL(add_word.process_word(word, word_len, char_cnt, word_freq))) {
-          LOG_WARN("fail to process one word", K(ret), KP(word), K(word_len), K(char_cnt), K(word_freq));
+          LOG_WARN("failed to process word", K(ret), KP(word), K(word_len), K(char_cnt), K(word_freq));
         }
       }
       if (OB_ITER_END == ret) {
         ret = OB_SUCCESS;
       }
     }
-    if (OB_NOT_NULL(iter)) {
+
+    if (!keep_iter && OB_NOT_NULL(iter)) {
       parser_desc->free_token_iter(&param, iter);
       iter = nullptr;
     }
@@ -294,6 +306,8 @@ int ObFTParseHelper::segment(
 
 ObFTParseHelper::ObFTParseHelper()
     : allocator_(nullptr),
+    parser_allocator_(lib::ObMemAttr("FTParserCache")),
+    cached_ik_iter_(nullptr),
     parser_desc_(nullptr),
     plugin_param_(nullptr),
     parser_name_(),
@@ -349,6 +363,17 @@ int ObFTParseHelper::init(
 
 void ObFTParseHelper::reset()
 {
+  if (OB_NOT_NULL(cached_ik_iter_) && OB_NOT_NULL(parser_desc_)) {
+    ObFTParserParam param;
+    param.allocator_ = &parser_allocator_;
+    param.plugin_param_ = plugin_param_;
+
+    parser_desc_->free_token_iter(&param, cached_ik_iter_);
+    cached_ik_iter_ = nullptr;
+  }
+
+  parser_allocator_.reset();
+
   parser_desc_ = nullptr;
   plugin_param_ = nullptr;
   allocator_ = nullptr;
@@ -381,6 +406,11 @@ int ObFTParseHelper::segment(
   } else {
     words.reuse();
     ObAddWord add_word(parser_property_, meta, add_word_flag_, *allocator_, words);
+    const bool keep_iter = parser_name_.is_ik();
+    ObITokenIterator *local_iter = nullptr;
+    ObITokenIterator *&iter = keep_iter ? cached_ik_iter_ : local_iter;
+    common::ObIAllocator &parser_allocator
+        = keep_iter ? static_cast<common::ObIAllocator &>(parser_allocator_) : *allocator_;
     if (OB_FAIL(segment(
                     parser_property_,
                     parser_name_.get_parser_version(),
@@ -389,8 +419,10 @@ int ObFTParseHelper::segment(
                     cs,
                     fulltext,
                     fulltext_len,
-                    *allocator_,
-                    add_word))) {
+                    parser_allocator,
+                    add_word,
+                    iter,
+                    keep_iter))) {
       LOG_WARN("fail to segment fulltext", K(ret), K(parser_name_), KP(parser_desc_), KP(cs), KP(fulltext),
           K(fulltext_len), KP(allocator_), K(parser_property_));
     } else {

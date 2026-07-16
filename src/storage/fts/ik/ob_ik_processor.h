@@ -108,6 +108,8 @@ public:
                          const uint8_t char_len,
                          const ObFTCharUtil::CharType type)
       = 0;
+
+  virtual void reset_document() = 0;
 };
 
 } // namespace storage
