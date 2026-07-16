@@ -34,7 +34,8 @@ using namespace oceanbase::share;
 using namespace oceanbase::share::schema;
 
 ObColumnClusteredDag::ObColumnClusteredDag()
-  : px_thread_count_(0), px_finished_count_(0), is_range_count_ready_(false), total_slice_count_(0), use_static_plan_(true)
+  : px_thread_count_(0), px_finished_count_(0), is_range_count_ready_(false), total_slice_count_(0),
+    use_static_plan_(true), use_partition_local_build_(false), has_fts_index_(false)
 {
 
 }
@@ -158,6 +159,12 @@ int ObColumnClusteredDag::update_tablet_range_count()
       }
     }
   }
+  return ret;
+}
+
+int ObColumnClusteredDag::generate_partition_local_fixed_tasks()
+{
+  int ret = OB_SUCCESS;
   return ret;
 }
 

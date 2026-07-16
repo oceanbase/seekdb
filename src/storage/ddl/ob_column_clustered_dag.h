@@ -50,15 +50,19 @@ public:
   int64_t get_total_slice_count() const { return total_slice_count_; }
   virtual bool is_scan_finished() override { return px_thread_count_ > 0 && px_finished_count_ >= px_thread_count_; }
 
-  INHERIT_TO_STRING_KV("DDLDag", ObDDLIndependentDag, K_(px_thread_count), K_(px_finished_count), K_(is_range_count_ready), K_(total_slice_count), K_(use_static_plan));
+  int generate_partition_local_fixed_tasks();
+
+  INHERIT_TO_STRING_KV("DDLDag", ObDDLIndependentDag, K_(px_thread_count), K_(px_finished_count), K_(is_range_count_ready), K_(total_slice_count), K_(use_static_plan), K_(use_partition_local_build), K_(has_fts_index));
 
 protected:
   int64_t px_thread_count_;
   int64_t px_finished_count_;
   lib::ObMutex mutex_;
-  bool is_range_count_ready_; // update table total slice count and each tablet slice count
-  int64_t total_slice_count_; // for idempotence of user autoinc column
+  bool is_range_count_ready_;
+  int64_t total_slice_count_;
   bool use_static_plan_;
+  bool use_partition_local_build_;
+  bool has_fts_index_;
 };
 
 
