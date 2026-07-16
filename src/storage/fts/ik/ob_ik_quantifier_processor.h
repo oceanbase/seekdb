@@ -26,7 +26,6 @@ namespace oceanbase
 {
 namespace storage
 {
-class ObFTDictHub;
 class ObIKQuantifierProcessor : public ObIIKProcessor
 {
 public:
@@ -40,6 +39,14 @@ public:
                  const char *ch,
                  const uint8_t char_len,
                  const ObFTCharUtil::CharType type);
+
+  void reuse() override
+  {
+    count_hits_.clear();
+    start_ = -1;
+    end_ = -1;
+    quan_char_cnt_ = 0;
+  }
 
 private:
   int process_CN_number(TokenizeContext &ctx,

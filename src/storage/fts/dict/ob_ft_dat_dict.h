@@ -41,8 +41,8 @@ class ObArrayHashMap final
 public:
   struct Entry
   {
-    ObFTSingleWord word;
-    ObFTWordCode code;
+    ObFTSingleToken token;
+    ObFTTokenCode code;
     bool used = false;
   } __attribute__((packed));
 
@@ -51,21 +51,19 @@ public:
     uint32_t buffer_size_;
     uint32_t capacity_;
     uint32_t count_;
+    uint32_t locator_;
     Entry data[1];
   } __attribute__((packed));
 
-  static size_t estimate_capacity(size_t word_num);
+  static size_t calc_capacity(size_t token_cnt);
 
-  static size_t estimate_size(size_t word_num);
+  static size_t calc_memory_size(size_t token_cnt);
 
-  size_t capacity() const { return header_.capacity_; }
+  int init(size_t token_cnt);
 
-  int init(size_t word_num);
+  int insert(const ObString &token, ObFTTokenCode code);
 
-  // no duplicate should be inserted
-  int insert(const ObString &key, ObFTWordCode code);
-
-  int find(const ObFTSingleWord &word, ObFTWordCode &code) const;
+  int find(const ObString &token, ObFTTokenCode &code) const;
 
 private:
   struct Header header_;
@@ -100,12 +98,13 @@ public:
   // use if offset is not 0
   size_t data_offset_ = 0;
   // a buffer to store dat
-  ObFTSingleWord start_word_;
-  ObFTSingleWord end_word_;
+  ObFTSingleToken start_token_;
+  ObFTSingleToken end_token_;
   char buff[1] = {0};
 
 public:
   ObArrayHashMap *get_map();
+  const ObArrayHashMap *get_map() const;
 } __attribute__((packed));
 
 template <typename DataType>
@@ -119,8 +118,16 @@ template <typename DATA_TYPE = void>
 class ObFTDATBuilder
 {
 public:
+  // Cap try_base probe step growth to avoid geometric explosion on frequent conflicts.
+  static constexpr size_t MAX_TRY_STEP = 4096;
+  // Max base/check slot increment per expand (~2MB for both arrays).
+  static constexpr size_t MAX_EXPAND_SLOT_INCREMENT = 256 * 1024;
+  // Shrink only when trailing waste exceeds this ratio (array_size / compact_size).
+  static constexpr size_t SHRINK_WASTE_RATIO = 2;
+
   ObFTDATBuilder(ObIAllocator &alloc)
-      : alloc_(alloc), dat_(nullptr), map_(nullptr), is_inited_(false), next_code_(1)
+      : alloc_(alloc), dat_(nullptr), map_(nullptr), is_inited_(false), next_code_(1),
+        max_used_index_(0)
   {
   }
 
@@ -130,22 +137,21 @@ public:
 
   int build_from_trie(ObFTTrie<DATA_TYPE> &trie);
 
-  // get and put to kv_cache
-  int get_mem_block(ObFTDAT *&mem, size_t &mem_len)
+  void get_mem_block(ObFTDAT *&mem)
   {
     mem = dat_;
-    if (nullptr == dat_) {
-      mem_len = 0;
-    } else {
-      mem_len = dat_->mem_block_size_;
-    }
-    return OB_SUCCESS;
   }
 
 private:
-  int expand();
+  // Grow base/check arrays. If min_array_size > array_size_, grow to at least min_array_size.
+  int expand(const size_t min_array_size = 0);
 
-  int encode(const ObString &word, ObFTWordCode &code, bool add);
+  // Compact base/check to [0, max_used_index_] before putting into cache.
+  int shrink();
+
+  int encode(const ObString &single_token, ObFTTokenCode &code);
+
+  void update_max_used_index(const size_t idx);
 
 private:
   common::ObIAllocator &alloc_;
@@ -154,6 +160,7 @@ private:
 
   bool is_inited_;
   int32_t next_code_;
+  size_t max_used_index_;
 
 private:
   DISALLOW_COPY_AND_ASSIGN(ObFTDATBuilder);
@@ -167,15 +174,16 @@ template <typename DataType = void>
 class ObFTDATReader
 {
 public:
-  ObFTDATReader(ObFTDAT *dat) : dat_(dat) {}
+  ObFTDATReader(const ObFTDAT *dat) : dat_(dat), map_(dat->get_map()) { }
 
-  // Match single word with hit.
-  int match_with_hit(const ObString &single_word,
+  // Match single token with hit.
+  int match_with_hit(const ObString &single_token,
                      const ObDATrieHit &last_hit,
                      ObDATrieHit &hit) const;
 
 private:
-  ObFTDAT *dat_;
+  const ObFTDAT *dat_;
+  const ObArrayHashMap *map_;
 
 private:
   DISALLOW_COPY_AND_ASSIGN(ObFTDATReader);

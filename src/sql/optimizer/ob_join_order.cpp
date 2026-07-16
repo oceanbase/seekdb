@@ -27,6 +27,7 @@
 #include "sql/engine/expr/ob_expr_result_type_util.h"
 #include "sql/engine/px/ob_px_util.h"
 #include "sql/das/iter/ob_das_text_retrieval_eval_node.h"
+#include "storage/fts/ob_fts_plugin_helper.h"
 using namespace oceanbase;
 using namespace sql;
 using namespace oceanbase::common;
@@ -19641,15 +19642,15 @@ int ObJoinOrder::get_query_tokens(ObMatchFunRawExpr *match_expr,
     const ObString &parser_properties = index_schema->get_parser_property_str();
     const ObObjMeta &key_meta = match_expr->get_search_key()->get_result_meta();
     storage::ObFTParseHelper tokenize_helper;
-    common::ObSEArray<ObFTWord, 16> tokens;
-    hash::ObHashMap<ObFTWord, int64_t> token_map;
+    common::ObSEArray<ObFTToken, 16> tokens;
+    ObFTTokenMap token_map;
     int64_t doc_length = 0;
     const int64_t ft_word_bkt_cnt = MAX(search_text_string.length() / 10, 2);
     if (search_text_string.length() == 0) {
       // do nothing
-    } else if (OB_FAIL(tokenize_helper.init(allocator_, parser_name, parser_properties))) {
+    } else if (OB_FAIL(tokenize_helper.init(allocator_, parser_name, parser_properties, share::schema::OB_FTS_INDEX_TYPE_MATCH))) {
       LOG_WARN("failed to init tokenize helper", K(ret));
-    } else if (OB_FAIL(token_map.create(ft_word_bkt_cnt, common::ObMemAttr("FTWordMap")))) {
+    } else if (OB_FAIL(token_map.create(ft_word_bkt_cnt, common::ObMemAttr("ft_token_map")))) {
       LOG_WARN("failed to create token map", K(ret));
     } else if (OB_FAIL(tokenize_helper.segment(
                            key_meta,
@@ -19659,13 +19660,13 @@ int ObJoinOrder::get_query_tokens(ObMatchFunRawExpr *match_expr,
                            token_map))) {
       LOG_WARN("failed to segment");
     } else {
-      for (hash::ObHashMap<ObFTWord, int64_t>::const_iterator iter = token_map.begin();
+      for (ObFTTokenMap::const_iterator iter = token_map.begin();
           OB_SUCC(ret) && iter != token_map.end();
           ++iter) {
-        const ObFTWord &token = iter->first;
+        const ObFTToken &token = iter->first;
         ObString token_string;
         ObConstRawExpr *token_expr = NULL;
-        if (OB_FAIL(ob_write_string(*allocator_, token.get_word().get_string(), token_string))) {
+        if (OB_FAIL(ob_write_string(*allocator_, token.get_token().get_string(), token_string))) {
           LOG_WARN("failed to deep copy query token", K(ret));
         } else if (OB_FAIL(ObRawExprUtils::build_const_string_expr(
                                *OPT_CTX.get_exec_ctx()->get_expr_factory(),
