@@ -43,7 +43,7 @@ public:
   virtual oceanbase::sql::ObTenantSQLSessionMgr * tenant_sql_session_mgr() { return nullptr; }
   virtual storage::ObTenantMetaMemMgr * tenant_meta_mem_mgr() { return nullptr; }
   virtual storage::ObTenantFTPluginMgr * tenant_ft_plugin_mgr() { return nullptr; }
-  virtual ObTxCtxObjPool * part_trans_ctx_obj_pool() { return nullptr; }
+  virtual ObPartTransCtxObjPool * part_trans_ctx_obj_pool() { return nullptr; }
   virtual ObTableScanIteratorObjPool * table_scan_iterator_obj_pool() { return nullptr; }
   virtual common::ObTenantIOManager * tenant_io_manager() { return nullptr; }
   virtual storage::mds::ObTenantMdsService * tenant_mds_service() { return nullptr; }
@@ -86,7 +86,9 @@ public:
   virtual lib::Worker::CompatMode compat_mode() { return lib::Worker::CompatMode::MYSQL; }
   virtual sql::ObTenantSqlMemoryManager * tenant_sql_memory_manager() { return nullptr; }
   virtual sql::dtl::ObDTLIntermResultManager * dtl_interm_result_manager() { return nullptr; }
+  virtual sql::ObPlanMonitorNodeList * plan_monitor_node_list() { return nullptr; }
   virtual sql::ObDataAccessService * data_access_service() { return nullptr; }
+  virtual sql::ObDASIDService * dasid_service() { return nullptr; }
   virtual share::schema::ObTenantSchemaService * tenant_schema_service() { return nullptr; }
   virtual storage::ObTenantFreezer * tenant_freezer() { return nullptr; }
   virtual storage::checkpoint::ObCheckPointService * check_point_service() { return nullptr; }
@@ -117,6 +119,7 @@ public:
   virtual storage::ObGlobalIteratorPool * global_iterator_pool() { return nullptr; }
   virtual common::ObRbMemMgr * rb_mem_mgr() { return nullptr; }
   virtual share::ObPluginVectorIndexService * plugin_vector_index_service() { return nullptr; }
+  virtual share::ObAutoSplitTaskCache * auto_split_task_cache() { return nullptr; }
   virtual observer::ObTenantQueryRespTimeCollector * tenant_query_resp_time_collector() { return nullptr; }
   virtual table::ObTableGroupCommitMgr * table_group_commit_mgr() { return nullptr; }
   virtual observer::ObTableQueryASyncMgr * table_query_a_sync_mgr() { return nullptr; }
@@ -147,7 +150,7 @@ template <> inline transaction::tablelock::ObTableLockService *mtl_checked<trans
 { return g_mp->table_lock_service(); }
 
 template <class T> common::ObServerObjectPool<T> *mtl_obj_pool();
-template <> inline common::ObServerObjectPool<transaction::ObTxCtx> *mtl_obj_pool<transaction::ObTxCtx>()
+template <> inline common::ObServerObjectPool<transaction::ObPartTransCtx> *mtl_obj_pool<transaction::ObPartTransCtx>()
 { return g_mp->part_trans_ctx_obj_pool(); }
 template <> inline common::ObServerObjectPool<oceanbase::storage::ObTableScanIterator> *mtl_obj_pool<oceanbase::storage::ObTableScanIterator>()
 { return g_mp->table_scan_iterator_obj_pool(); }

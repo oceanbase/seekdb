@@ -23,6 +23,7 @@ namespace observer
 
 ObAllVirtualLoadDataStat::ObAllVirtualLoadDataStat()
     : ObVirtualTableScannerIterator(),
+      addr_(),
       all_job_status_op_()
 {
 }
@@ -34,6 +35,7 @@ ObAllVirtualLoadDataStat::~ObAllVirtualLoadDataStat()
 
 void ObAllVirtualLoadDataStat::reset()
 {
+  addr_.reset();
   all_job_status_op_.reset();
 
   ObVirtualTableScannerIterator::reset();

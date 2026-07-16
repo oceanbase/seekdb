@@ -91,6 +91,7 @@ protected:
                             blocksstable::ObWholeDataStoreDesc &data_block_desc);
   virtual int inner_close() = 0;
   static int get_storage_schema(const ObTabletDirectLoadInsertParam &build_param, ObStorageSchema &storage_schema);
+  static int get_tablet_handle(const ObLSID &ls_id, const ObTabletID &tablet_id, ObTabletHandle &tablet_handle);
   static int get_target_table_type(const ObStorageSchema &storage_schema,
                                    const ObDirectLoadType &direct_load_type,
                                   ObITable::TableType &table_type_);

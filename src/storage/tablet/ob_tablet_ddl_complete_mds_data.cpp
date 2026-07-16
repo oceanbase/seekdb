@@ -18,6 +18,7 @@
 #include "lib/utility/ob_unify_serialize.h"
 #include "share/ob_errno.h"
 #include "storage/tx/ob_trans_define.h"
+#include "storage/tx_storage/ob_ls_handle.h"
 #include "storage/tx_storage/ob_ls_service.h"
 #include "storage/ddl/ob_direct_load_struct.h"
 

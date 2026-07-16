@@ -125,6 +125,8 @@ ob_set_subtarget(ob_server change_stream
 ob_set_subtarget(ob_server scheduler
   scheduler/ob_dag_warning_history_mgr.cpp
   scheduler/ob_independent_dag.cpp
+  scheduler/ob_partition_auto_split_helper.cpp
+  scheduler/ob_scheduled_manage_dynamic_partition.cpp
   scheduler/ob_sys_task_stat.cpp
   scheduler/ob_tenant_dag_scheduler.cpp
   scheduler/ob_tenant_ddl_count_guard.cpp
@@ -224,6 +226,7 @@ ob_set_subtarget(ob_server virtual_table
   virtual_table/ob_all_virtual_table_mgr.cpp
   virtual_table/ob_all_virtual_unit.cpp
   virtual_table/ob_all_virtual_tablet_ddl_kv_info.cpp
+  virtual_table/ob_all_virtual_ddl_diagnose_info.cpp
   virtual_table/ob_all_virtual_ddl_sim_point_stat.cpp
   virtual_table/ob_all_virtual_tablet_info.cpp
   virtual_table/ob_all_virtual_server.cpp
@@ -294,6 +297,9 @@ ob_set_subtarget(ob_server virtual_table
   virtual_table/ob_tenant_virtual_warning.cpp
   virtual_table/ob_virtual_data_access_service.cpp
   virtual_table/ob_virtual_open_cursor_table.cpp
+  virtual_table/ob_virtual_sql_monitor.cpp
+  virtual_table/ob_virtual_sql_monitor_statname.cpp
+  virtual_table/ob_virtual_sql_plan_monitor.cpp
   virtual_table/ob_virtual_sql_plan_statistics.cpp
   virtual_table/ob_virtual_table_iterator.cpp
   virtual_table/ob_virtual_table_iterator_factory.cpp
@@ -315,8 +321,10 @@ ob_set_subtarget(ob_server virtual_table
   virtual_table/ob_all_virtual_session_ps_info.cpp
   virtual_table/ob_all_virtual_sql_stat.cpp
   virtual_table/ob_all_virtual_tmp_file.cpp
+  virtual_table/ob_all_virtual_log_transport_dest_stat.cpp
   virtual_table/ob_all_virtual_plugin_info.cpp
   virtual_table/ob_all_virtual_change_stream_refresh_stat.cpp
+  virtual_table/ob_all_virtual_dynamic_partition_table.cpp
   virtual_table/ob_tenant_show_catalog_databases.cpp
   virtual_table/ob_all_virtual_tenant_vector_mem_info.cpp
   virtual_table/ob_all_virtual_ccl_status.cpp
@@ -332,6 +340,11 @@ add_library(oceanbase_static
 
 target_link_libraries(oceanbase_static
   PUBLIC ob_base "${ob_objects}" ob_sql_static ob_storage_static ob_share_static oblib ob_plugin)
+
+if (OB_GPERF_MODE)
+  target_link_libraries(oceanbase_static
+  PRIVATE libprofiler.a)
+endif()
 
 if (OB_SO_CACHE)
   add_library(oceanbase SHARED IMPORTED GLOBAL)
@@ -367,14 +380,16 @@ if(STDC_SHARED_LIB)
   target_link_options(oceanbase INTERFACE "-Wl,-rpath=${STDC_SHARED_LIB_DIR}")
 endif()
 
-# On macOS, malloc_hook conflicts with linked LLVM
-# LLVM's global constructors run before main() and use hooked malloc,
-# but free with system free, causing crashes
-if (NOT APPLE AND NOT WIN32 AND NOT ANDROID)
-  set(link_malloc_hook malloc_hook)
-else()
-  message(STATUS "Disabling malloc_hook on macOS/Windows/Android")
-  set(link_malloc_hook "")
+if (NOT OB_USE_ASAN)
+  # On macOS, malloc_hook conflicts with linked LLVM
+  # LLVM's global constructors run before main() and use hooked malloc,
+  # but free with system free, causing crashes
+  if (NOT APPLE AND NOT WIN32 AND NOT ANDROID)
+    set(link_malloc_hook malloc_hook)
+  else()
+    message(STATUS "Disabling malloc_hook on macOS/Windows/Android")
+    set(link_malloc_hook "")
+  endif()
 endif()
 
 if(WIN32)

@@ -452,6 +452,12 @@ int ObFreezer::init(ObLS *ls)
   return ret;
 }
 
+/* ls info */
+share::ObLSID ObFreezer::get_ls_id()
+{
+  return OB_ISNULL(ls_) ? INVALID_LS : ls_->get_ls_id();
+}
+
 checkpoint::ObDataCheckpoint* ObFreezer::get_ls_data_checkpoint()
 {
   return OB_ISNULL(ls_) ? nullptr : ls_->get_data_checkpoint();
@@ -483,30 +489,31 @@ int ObFreezer::logstream_freeze()
   int ret = OB_SUCCESS;
   SCN freeze_snapshot_version;
   SCN max_decided_scn;
-  FLOG_INFO("[Freezer] logstream_freeze start", K(ret));
+  share::ObLSID ls_id = get_ls_id();
+  FLOG_INFO("[Freezer] logstream_freeze start", K(ret), K(ls_id));
   int64_t start_time = ObClockGenerator::getClock();
 
   ObLSFreezeGuard guard(*this);
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    STORAGE_LOG(WARN, "[Freezer] not inited", K(ret));
+    STORAGE_LOG(WARN, "[Freezer] not inited", K(ret), K(ls_id));
   } else if (OB_UNLIKELY(!enable_)) {
     ret = OB_NOT_RUNNING;
-    STORAGE_LOG(ERROR, "freezer is offline, can not freeze now", K(ret));
+    STORAGE_LOG(ERROR, "freezer is offline, can not freeze now", K(ret), K(ls_id));
   } else if (OB_FAIL(decide_max_decided_scn(max_decided_scn))) {
-    STORAGE_LOG(WARN, "[Freezer] decide max decided log ts failure", K(ret));
+    STORAGE_LOG(WARN, "[Freezer] decide max decided log ts failure", K(ret), K(ls_id));
   } else if (OB_FAIL(get_ls_weak_read_scn(freeze_snapshot_version))) {
-    STORAGE_LOG(WARN, "[Freezer] get ls weak read ts failure", K(ret));
+    STORAGE_LOG(WARN, "[Freezer] get ls weak read ts failure", K(ret), K(ls_id));
   } else if (freeze_snapshot_version.is_max()
              || ObScnRange::MIN_SCN >= freeze_snapshot_version) {
     ret = OB_MINOR_FREEZE_NOT_ALLOW;
-    STORAGE_LOG(WARN, "[Freezer] invalid weak read scn", K(ret), K(freeze_snapshot_version));
+    STORAGE_LOG(WARN, "[Freezer] invalid weak read scn", K(ret), K(ls_id), K(freeze_snapshot_version));
 #ifdef ERRSIM
   } else if (OB_FAIL(ret = ERRSIM_FREEZER_FREEZE_FAILURE)) {
     LOG_ERROR("[Freezer] errsim failure during freezer freeze", K(ret));
 #endif
   } else if (OB_FAIL(set_freeze_flag())) {
-    FLOG_INFO("[Freezer] freeze is running", K(ret));
+    FLOG_INFO("[Freezer] freeze is running", K(ret), K(ls_id));
   } else {
     // ATTENTION! : once freeze_flag is set, ret code must be OB_SUCCESS
     max_decided_scn_ = max_decided_scn;
@@ -545,7 +552,7 @@ void ObFreezer::submit_checkpoint_task()
     if (OB_FAIL(get_ls_data_checkpoint()->ls_freeze(SCN::max_scn()))) {
       TRANS_LOG(WARN, "[Freezer] data_checkpoint freeze failed", K(ret));
       stat_.add_diagnose_info("data_checkpoint freeze failed");
-      ob_throttle_usleep(100, 0);
+      ob_throttle_usleep(100, 0, get_ls_id().id());
     }
   } while (OB_FAIL(ret));
 }
@@ -553,29 +560,46 @@ void ObFreezer::submit_checkpoint_task()
 int ObFreezer::wait_ls_freeze_finish()
 {
   int ret = OB_SUCCESS;
+  const share::ObLSID ls_id = get_ls_id();
   const int64_t start_time = ObClockGenerator::getClock();
   uint32_t freeze_clock = get_freeze_clock();
-  TRANS_LOG(INFO, "[Freezer] wait freeze : Logstream ", K(freeze_clock));
+  {
+    PendTenantReplayHelper pend_replay_helper(*this, ls_);
+    (void)pend_replay_helper.set_skip_throttle_flag();
 
-  // wait till all memtables are moved from frozen_list to prepare_list
-  // this means that all memtables can be dumped
-  int64_t time_counter = 0;
-  while (!get_ls_data_checkpoint()->ls_freeze_finished()) {
-    if (TC_REACH_TIME_INTERVAL(1LL * 1000LL * 1000LL /* 1 second */)) {
-      ++time_counter;
-      if (time_counter >= 5 && time_counter % 5 == 0) {
-        (void)resubmit_log_if_needed_(start_time, false /* is_tablet_freeze */, false /* is_try */);
+    TRANS_LOG(INFO,
+              "[Freezer] wait freeze : Logstream ",
+              K(ls_id),
+              K(freeze_clock),
+              K(throttle_is_skipping_),
+              K(tenant_replay_is_pending_));
+
+    // wait till all memtables are moved from frozen_list to prepare_list
+    // this means that all memtables can be dumped
+    int64_t time_counter = 0;
+    while (!get_ls_data_checkpoint()->ls_freeze_finished()) {
+      if (TC_REACH_TIME_INTERVAL(1LL * 1000LL * 1000LL /* 1 second */)) {
+        ++time_counter;
+
+        // check pend condition every second
+        (void)pend_replay_helper.check_pend_condition_once();
+
+        // check resubmit log condition and report some debug info every 5 seconds
+        if (time_counter >= 5 && time_counter % 5 == 0) {
+          (void)resubmit_log_if_needed_(start_time, false /* is_tablet_freeze */, false /* is_try */);
+        }
       }
+      ob_throttle_usleep(100, ret, get_ls_id().id());
     }
-    ob_throttle_usleep(100, ret);
+
+    stat_.add_diagnose_info("logstream_freeze success");
+    stat_.end_set_freeze_stat(ObFreezeState::FINISH, ObClockGenerator::getClock(), ret);
+    unset_freeze_();
+    const int64_t wait_freeze_finish_spend_time = ObClockGenerator::getClock() - start_time;
+    FLOG_INFO("[Freezer] logstream_freeze success", K(ls_id), K(freeze_clock), K(wait_freeze_finish_spend_time));
   }
 
-  stat_.add_diagnose_info("logstream_freeze success");
-  stat_.end_set_freeze_stat(ObFreezeState::FINISH, ObClockGenerator::getClock(), ret);
-  unset_freeze_();
-  const int64_t wait_freeze_finish_spend_time = ObClockGenerator::getClock() - start_time;
-  FLOG_INFO("[Freezer] logstream_freeze success", K(freeze_clock), K(wait_freeze_finish_spend_time));
-
+  // freeze tx data out of PendTenantReplayGuard
   (void)try_freeze_tx_data_();
   return ret;
 }
@@ -585,6 +609,7 @@ void ObFreezer::resubmit_log_if_needed_(const int64_t start_time,
                                         const bool is_try,
                                         const ObITabletMemtable *memtable)
 {
+  const share::ObLSID ls_id = get_ls_id();
   int64_t last_submit_log_time = start_time;
   if (need_resubmit_log() ||
       // In order to prevent the txn has already passed the try_submit test
@@ -601,6 +626,7 @@ void ObFreezer::resubmit_log_if_needed_(const int64_t start_time,
   TRANS_LOG_RET(WARN,
                 OB_ERR_TOO_MUCH_TIME,
                 "[Freezer] wait freeze finish costs too much time",
+                K(ls_id),
                 K(is_tablet_freeze),
                 K(is_try),
                 K(cost_time),
@@ -613,22 +639,31 @@ void ObFreezer::resubmit_log_if_needed_(const int64_t start_time,
 // Define a functor to avoid using lambda
 struct AsyncFreezeFunctor {
   const bool is_ls_freeze_;
+  const ObLSID ls_id_;
   ObFreezer *freezer_;
-  AsyncFreezeFunctor(const bool is_ls_freeze, ObFreezer *freezer)
+  // hold ls handle to avoid logstream being destroyed
+  AsyncFreezeFunctor(const bool is_ls_freeze, ObFreezer *freezer, ObLSHandle &ls_handle)
       : is_ls_freeze_(is_ls_freeze),
+        ls_id_(freezer->get_ls_id()),
         freezer_(freezer) {}
   int operator()()
   {
     int ret = OB_SUCCESS;
     common::ObDIActionGuard ag1("OccamThreadPool", "AsyncFreezer", "detect task");
-    // freezer_ belongs to the tenant LS, which outlives the tenant freezer task pool.
-    STORAGE_LOG(INFO, "[Freezer] An Async Freeze Task Start", K(is_ls_freeze_), KP(freezer_));
-    if (is_ls_freeze_) {
-      common::ObDIActionGuard(common::ObDIActionGuard::NS_ACTION, "LSFreeze");
-      (void)freezer_->async_ls_freeze_consumer();
+    ObLSHandle ls_handle;
+    if (OB_FAIL(share::g_mp->ls_service()->get_ls(ls_id_, ls_handle, ObLSGetMod::STORAGE_MOD))) {
+      STORAGE_LOG(WARN, "get ls handle failed. stop async freeze task", KR(ret), K(ls_id_));
     } else {
-      common::ObDIActionGuard(common::ObDIActionGuard::NS_ACTION, "TabletFreeze");
-      (void)freezer_->async_tablet_freeze_consumer();
+      // freezer_ cannot be nullptr because AsyncFreezeFunctor is constructed by ObFreezer::this pointer
+      STORAGE_LOG(
+          INFO, "[Freezer] An Async Freeze Task Start", K(ls_id_), K(is_ls_freeze_), KP(freezer_));
+      if (is_ls_freeze_) {
+        common::ObDIActionGuard(common::ObDIActionGuard::NS_ACTION, "LSFreeze:%ld", ls_id_.id());
+        (void)freezer_->async_ls_freeze_consumer();
+      } else {
+        common::ObDIActionGuard(common::ObDIActionGuard::NS_ACTION, "TabletFreeze:%ld", ls_id_.id());
+        (void)freezer_->async_tablet_freeze_consumer();
+      }
     }
     return ret;
   }
@@ -649,35 +684,41 @@ void ObFreezer::submit_an_async_freeze_task(const bool is_ls_freeze)
 {
   int ret = OB_SUCCESS;
   ObTenantFreezer *tenant_freezer = nullptr;
+  share::ObLSID ls_id = get_ls_id();
+  const int64_t start_time = ObClockGenerator::getClock();
   bool submit_succ = false;
 
   if (OB_UNLIKELY(!enable_) || OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_RUNNING;
-    LOG_ERROR("freezer is offline, can not freeze now", K(ret));
+    LOG_ERROR("freezer is offline, can not freeze now", K(ret), K(ls_id));
   } else if (OB_ISNULL(tenant_freezer = share::g_mp->tenant_freezer())) {
     ret = OB_ERR_UNEXPECTED;
-    TRANS_LOG(WARN, "ObTenantFreezer is null", K(ret));
+    TRANS_LOG(WARN, "ObTenantFreezer is null", K(ret), K(ls_id));
   } else if (async_freeze_task_already_exists_(is_ls_freeze)) {
     submit_succ = false;
   } else {
     ObSpinLockGuard freeze_thread_pool(tenant_freezer->freeze_thread_pool_lock_);
 
-    if (acquired_exec_async_task_permission_(is_ls_freeze)) {
-      AsyncFreezeFunctor async_freeze_functor(is_ls_freeze, this);
+    ObLSHandle ls_handle;
+    if (OB_FAIL(share::g_mp->ls_service()->get_ls(ls_id, ls_handle, ObLSGetMod::STORAGE_MOD))) {
+      STORAGE_LOG(WARN, "get ls handle failed. stop async freeze task", KR(ret), K(ls_id));
+    } else if (acquired_exec_async_task_permission_(is_ls_freeze)) {
+      AsyncFreezeFunctor async_freeze_functor(is_ls_freeze, this, ls_handle);
       do {
         ret = tenant_freezer->freeze_thread_pool_.commit_task_ignore_ret(async_freeze_functor);
         if (OB_FAIL(ret) && REACH_TIME_INTERVAL(5LL * 1000LL * 1000LL)) {
-          STORAGE_LOG(WARN, "commit task to freeze thread pool failed", KR(ret));
+          STORAGE_LOG(WARN, "commit task to freeze thread pool failed", KR(ret), K(ls_id));
         }
       } while (OB_FAIL(ret));
       submit_succ = true;
-      STORAGE_LOG(INFO, "finish submit async freeze task", KR(ret), K(is_ls_freeze), K(submit_succ));
+      STORAGE_LOG(INFO, "finish submit async freeze task", KR(ret), K(ls_id), K(is_ls_freeze), K(submit_succ));
     }
   }
 
   if (!submit_succ && REACH_TIME_INTERVAL(1LL * 1000LL * 1000LL /* 1 second */)) {
     TRANS_LOG(INFO,
               "async freeze task already exists, skip submitting one task",
+              K(ls_id),
               K(is_ls_freeze),
               K(is_async_tablet_freeze_task_existing_),
               K(is_async_ls_freeze_task_existing_));
@@ -710,7 +751,7 @@ void ObFreezer::async_ls_freeze_consumer()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ls_->logstream_freeze_task(INT64_MAX))) {
-    STORAGE_LOG(WARN, "async ls freeze failed", KR(ret));
+    STORAGE_LOG(WARN, "async ls freeze failed", KR(ret), K(get_ls_id()));
   }
 
   // reset task existing flag
@@ -720,7 +761,7 @@ void ObFreezer::async_ls_freeze_consumer()
 void ObFreezer::async_tablet_freeze_consumer()
 {
   const int64_t start_time = ObClockGenerator::getClock();
-  STORAGE_LOG(INFO, "Async Tablet Freeze Task Start");
+  STORAGE_LOG(INFO, "Async Tablet Freeze Task Start", K(get_ls_id()));
 
   ObSEArray<ObTabletID, 128> tablet_ids;
   tablet_ids.reuse();
@@ -744,7 +785,7 @@ void ObFreezer::async_tablet_freeze_consumer()
   // print some debug info
   const int64_t end_time = ObClockGenerator::getClock();
   const int64_t spend_time_ms = (end_time - start_time) / 1000;
-  STORAGE_LOG(INFO, "Async Tablet Freeze Task finish", K(spend_time_ms));
+  STORAGE_LOG(INFO, "Async Tablet Freeze Task finish", K(get_ls_id()), K(spend_time_ms));
 
   // NOTE : reset task existing flag before submit another task
   ATOMIC_STORE(&is_async_tablet_freeze_task_existing_, false);
@@ -765,9 +806,9 @@ void ObFreezer::try_freeze_tx_data_()
       if (OB_EAGAIN == ret) {
         // sleep 100ms and retry
         retry_times++;
-        ob_throttle_usleep(100LL * 1000LL, ret);
+        ob_throttle_usleep(100LL * 1000LL, ret, ls_->get_ls_id().id());
       } else {
-        STORAGE_LOG(WARN, "freeze tx data table failed", KR(ret));
+        STORAGE_LOG(WARN, "freeze tx data table failed", KR(ret), K(get_ls_id()));
       }
     }
   } while (OB_EAGAIN == ret && ObClockGenerator::getClock() - start_freeze_ts < MAX_RETRY_DURATION);
@@ -795,9 +836,9 @@ int ObFreezer::ls_inner_tablet_freeze(const ObTabletID &tablet_id)
   int ret = OB_SUCCESS;
   if (OB_ISNULL(get_ls_tx_svr())) {
     ret = OB_ERR_UNEXPECTED;
-    TRANS_LOG(WARN, "[Freezer] ls_tx_svr is unexpected nullptr", KR(ret), K(tablet_id));
+    TRANS_LOG(WARN, "[Freezer] ls_tx_svr is unexpected nullptr", KR(ret), K(get_ls_id()), K(tablet_id));
   } else if (OB_FAIL(get_ls_tx_svr()->flush_ls_inner_tablet(tablet_id))) {
-    TRANS_LOG(WARN, "[Freezer] freeze ls inner tablet failed", KR(ret), K(tablet_id));
+    TRANS_LOG(WARN, "[Freezer] freeze ls inner tablet failed", KR(ret), K(get_ls_id()), K(tablet_id));
   }
   return ret;
 }
@@ -808,6 +849,7 @@ int ObFreezer::tablet_freeze(const ObIArray<ObTabletID> &tablet_ids,
                              ObIArray<ObTabletID> &freeze_failed_tablets)
 {
   int ret = OB_SUCCESS;
+  share::ObLSID ls_id = get_ls_id();
   const int64_t start_time = ObClockGenerator::getClock();
   int64_t max_loop_time = 0;
   ObTabletID record_tablet_id;
@@ -817,27 +859,27 @@ int ObFreezer::tablet_freeze(const ObIArray<ObTabletID> &tablet_ids,
 
   frozen_memtable_handles.reuse();
   freeze_failed_tablets.reuse();
-  FLOG_INFO("[Freezer] tablet freeze start", K(tablet_ids));
+  FLOG_INFO("[Freezer] tablet freeze start", K(ls_id), K(tablet_ids));
 
   ObTabletFreezeGuard guard(*this, try_guard);
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    STORAGE_LOG(WARN, "[Freezer] not inited", K(ret), K(tablet_ids));
+    STORAGE_LOG(WARN, "[Freezer] not inited", K(ret), K(ls_id), K(tablet_ids));
   } else if (OB_UNLIKELY(!enable_)) {
-    STORAGE_LOG(ERROR, "[Freezer] freezer is offline, can not freeze now", K(ret));
+    STORAGE_LOG(ERROR, "[Freezer] freezer is offline, can not freeze now", K(ret), K(ls_id));
   } else if (OB_FAIL(frozen_memtable_handles.reserve(tablet_ids.count()))) {
     TRANS_LOG(WARN, "fail to reserve memtable handles", K(ret), K(tablet_ids));
   } else if (OB_FAIL(freeze_failed_tablets.reserve(tablet_ids.count()))) {
     TRANS_LOG(WARN, "fail to reserve tablet ids", K(ret), K(tablet_ids));
   } else if (OB_FAIL(get_ls_weak_read_scn(freeze_snapshot_version))) {
-    TRANS_LOG(WARN, "[Freezer] get ls weak read scn failure", K(ret));
+    TRANS_LOG(WARN, "[Freezer] get ls weak read scn failure", K(ret), K(ls_id));
   } else if (ObScnRange::MAX_SCN == freeze_snapshot_version || ObScnRange::MIN_SCN >= freeze_snapshot_version) {
     ret = OB_MINOR_FREEZE_NOT_ALLOW;
-    LOG_WARN("[Freezer] invalid weak read scn", K(ret));
+    LOG_WARN("[Freezer] invalid weak read scn", K(ret), K(ls_id));
   } else if (try_guard && OB_FAIL(guard.try_set_tablet_freeze_begin())) {
-    STORAGE_LOG(WARN, "[Freezer] ls freeze is running", KR(ret), K(tablet_ids));
+    STORAGE_LOG(WARN, "[Freezer] ls freeze is running", KR(ret), K(ls_id), K(tablet_ids));
   } else if (OB_FAIL(loop_set_freeze_flag(max_loop_time))) {
-    STORAGE_LOG(WARN, "[Freezer] another freeze function is running", KR(ret), K(tablet_ids));
+    STORAGE_LOG(WARN, "[Freezer] another freeze function is running", KR(ret), K(ls_id), K(tablet_ids));
   } else {
     // freeze flag has been set
     freeze_snapshot_version_ = freeze_snapshot_version;
@@ -855,7 +897,7 @@ int ObFreezer::tablet_freeze(const ObIArray<ObTabletID> &tablet_ids,
                                freeze_snapshot_version,
                                frozen_memtable_handles,
                                freeze_failed_tablets))) {
-      STORAGE_LOG(WARN, "[Freezer] batch_tablet_freeze failed", K(tablet_ids));
+      STORAGE_LOG(WARN, "[Freezer] batch_tablet_freeze failed", K(ls_id), K(tablet_ids));
     }
 
     if (frozen_memtable_handles.empty()) {
@@ -943,6 +985,7 @@ int ObFreezer::tablet_freeze_(const ObIArray<ObTabletID> &tablet_ids,
   STORAGE_LOG(INFO,
               "[Freezer] TABLET FREEZE STEP 1 : set is_tablet_freeze flag done",
               KR(ret),
+              K(get_ls_id()),
               K(need_rewrite_meta),
               K(tablet_ids),
               K(freeze_failed_tablets));
@@ -957,6 +1000,7 @@ int ObFreezer::set_tablet_freeze_flag_(const ObTabletID tablet_id,
   int ret = OB_SUCCESS;
   ObTablet *tablet = nullptr;
   ObProtectedMemtableMgrHandle *protected_handle = nullptr;
+  ObLSID ls_id = get_ls_id();
   ObTabletHandle tablet_handle;
   ObTableHandleV2 frozen_memtable_handle;
 
@@ -974,7 +1018,7 @@ int ObFreezer::set_tablet_freeze_flag_(const ObTabletID tablet_id,
     LOG_ERROR("[Freezer] errsim failure during freezer freeze", K(ret));
 #endif
   } else if (OB_FAIL(protected_handle->set_is_tablet_freeze_for_active_memtable(frozen_memtable_handle))) {
-    (void)handle_set_tablet_freeze_failed(need_rewrite_meta, tablet_id, tablet, freeze_snapshot_version, ret);
+    (void)handle_set_tablet_freeze_failed(need_rewrite_meta, tablet_id, ls_id, tablet, freeze_snapshot_version, ret);
   } else if (!frozen_memtable_handle.is_valid()) {
     ret = OB_ERR_UNEXPECTED;
     TRANS_LOG(ERROR, "[Freezer] frozen_memtable_handle is invalid", K(ret), K(tablet_id));
@@ -993,6 +1037,7 @@ int ObFreezer::set_tablet_freeze_flag_(const ObTabletID tablet_id,
 
 void ObFreezer::handle_set_tablet_freeze_failed(const bool need_rewrite_meta,
                                                 const ObTabletID &tablet_id,
+                                                const ObLSID &ls_id,
                                                 const ObTablet *tablet,
                                                 const share::SCN freeze_snapshot_version,
                                                 int &ret)
@@ -1002,11 +1047,11 @@ void ObFreezer::handle_set_tablet_freeze_failed(const bool need_rewrite_meta,
       ret = handle_no_active_memtable_(tablet_id, tablet, freeze_snapshot_version);
     } else {
       ret = OB_SUCCESS;
-      TRANS_LOG(INFO, "[Freezer] no need to freeze", K(ret), K(tablet_id));
+      TRANS_LOG(INFO, "[Freezer] no need to freeze", K(ret), K(ls_id), K(tablet_id));
       stat_.add_diagnose_info("no need to freeze");
     }
   } else {
-    TRANS_LOG(ERROR, "[Freezer] fail to set is_tablet_freeze", K(ret), K(tablet_id));
+    TRANS_LOG(ERROR, "[Freezer] fail to set is_tablet_freeze", K(ret), K(ls_id), K(tablet_id));
     stat_.add_diagnose_info("fail to set is_tablet_freeze");
   }
 }
@@ -1017,9 +1062,35 @@ int ObFreezer::decide_real_snapshot_version_(const ObTabletID &tablet_id,
                                              SCN &real_snapshot_version)
 {
   int ret = OB_SUCCESS;
-  UNUSED(tablet_id);
-  UNUSED(tablet);
-  real_snapshot_version = freeze_snapshot_version;
+  ObTabletCreateDeleteMdsUserData user_data;
+  bool is_committed = false;
+  share::SCN reserved_scn = share::SCN::max_scn();
+  mds::MdsWriter writer;
+  mds::TwoPhaseCommitState trans_stat;
+  share::SCN trans_version;
+
+  if (tablet_id.is_ls_inner_tablet()) {
+    //do nothing
+  } else if (OB_FAIL(tablet->ObITabletMdsInterface::get_latest_tablet_status(user_data,
+                                                                             writer,
+                                                                             trans_stat,
+                                                                             trans_version))) {
+    LOG_WARN("fail to get latest tablet status", K(ret), KPC(tablet));
+  } else if (ObTabletStatus::RESERVED_4 != user_data.tablet_status_
+             && ObTabletStatus::RESERVED_6 != user_data.tablet_status_) {
+    //do nothing
+  } else if (user_data.reserved_scn_.is_valid()
+             && share::SCN::min_scn() != user_data.reserved_scn_) {
+    reserved_scn = user_data.reserved_scn_;
+  }
+
+  if (OB_SUCC(ret)) {
+    real_snapshot_version = MIN(freeze_snapshot_version, reserved_scn);
+    if (real_snapshot_version != freeze_snapshot_version) {
+      FLOG_INFO("update tablet snapshot version changed snapshot version",
+                K(real_snapshot_version), K(freeze_snapshot_version), K(reserved_scn), K(user_data));
+    }
+  }
 
   return ret;
 }
@@ -1029,6 +1100,7 @@ int ObFreezer::handle_no_active_memtable_(const ObTabletID &tablet_id,
                                           SCN freeze_snapshot_version)
 {
   int ret = OB_SUCCESS;
+  share::ObLSID ls_id = get_ls_id();
   ObProtectedMemtableMgrHandle *protected_handle = NULL;
   if (OB_FAIL(tablet->get_protected_memtable_mgr_handle(protected_handle))) {
     LOG_WARN("failed to get_protected_memtable_mgr_handle", K(ret), KPC(tablet));
@@ -1053,6 +1125,7 @@ int ObFreezer::handle_no_active_memtable_(const ObTabletID &tablet_id,
     ObTabletMergeDagParam param;
     param.merge_type_ = ObMergeType::MINI_MERGE;
     param.merge_version_ = ObVersionRange::MIN_VERSION;
+    param.ls_id_ = ls_id;
     param.tablet_id_ = tablet_id;
     param.skip_get_tablet_ = true;
 
@@ -1062,33 +1135,34 @@ int ObFreezer::handle_no_active_memtable_(const ObTabletID &tablet_id,
     if (OB_FAIL(tmp_mini_dag.init_by_param(&param))) {
       LOG_WARN("failed to init mini dag", K(ret), K(param));
     } else if (OB_FAIL(share::g_mp->tenant_dag_scheduler()->check_dag_exist(&tmp_mini_dag, is_exist))) {
-      LOG_WARN("failed to check dag exists", K(ret), K(tablet_id));
+      LOG_WARN("failed to check dag exists", K(ret), K(ls_id), K(tablet_id));
     } else if (is_exist) {
       // we need to wait the current mini compaction dag to complete
       ret = OB_EAGAIN;
-      LOG_WARN("exist running mini compaction dag, try later", K(ret), K(tablet_id));
+      LOG_WARN("exist running mini compaction dag, try later", K(ret), K(ls_id), K(tablet_id));
     } else if (OB_FAIL(get_ls_tablet_svr()->update_tablet_snapshot_version(tablet_id,
                                                                            freeze_snapshot_version.get_val_for_tx()))) {
-      LOG_WARN("failed to update tablet snapshot version", K(ret), K(tablet_id), K(freeze_snapshot_version));
+      LOG_WARN("failed to update tablet snapshot version", K(ret), K(ls_id), K(tablet_id), K(freeze_snapshot_version));
     } else if (OB_FAIL(tablet->get_protected_memtable_mgr_handle(protected_handle))) {
       LOG_WARN("failed to get_protected_memtable_mgr_handle", K(ret), KPC(tablet));
     } else if (protected_handle->get_max_saved_version_from_medium_info_recorder() >=
                freeze_snapshot_version.get_val_for_tx()) {
       int tmp_ret = OB_SUCCESS;
-      if (OB_TMP_FAIL(compaction::ObTenantTabletScheduler::schedule_merge_dag(*tablet,
+      if (OB_TMP_FAIL(compaction::ObTenantTabletScheduler::schedule_merge_dag(ls_id,
+                                                                              *tablet,
                                                                               MEDIUM_MERGE,
                                                                               freeze_snapshot_version.get_val_for_tx(),
                                                                               EXEC_MODE_LOCAL))) {
         if (OB_SIZE_OVERFLOW != tmp_ret && OB_EAGAIN != tmp_ret) {
           ret = tmp_ret;
-          LOG_ERROR("failed to schedule medium merge dag", K(ret), K(tablet_id));
+          LOG_ERROR("failed to schedule medium merge dag", K(ret), K(ls_id), K(tablet_id));
         }
       } else {
-        TRANS_LOG(INFO, "[Freezer] memtable_mgr doesn't have memtable", K(ret), K(tablet_id));
+        TRANS_LOG(INFO, "[Freezer] memtable_mgr doesn't have memtable", K(ret), K(ls_id), K(tablet_id));
       }
     }
   } else {
-    TRANS_LOG(INFO, "[Freezer] memtable_mgr has memtable", K(ret), K(tablet_id));
+    TRANS_LOG(INFO, "[Freezer] memtable_mgr has memtable", K(ret), K(ls_id), K(tablet_id));
   }
   return ret;
 }
@@ -1116,6 +1190,7 @@ int ObFreezer::wait_tablet_freeze_finish(ObIArray<ObTableHandleV2> &memtable_han
                                          ObIArray<ObTabletID> &freeze_failed_tablets)
 {
   int ret = OB_SUCCESS;
+  share::ObLSID ls_id = get_ls_id();
   const int64_t start_time = ObClockGenerator::getClock();
 
   for (int i = 0; i < memtable_handles.count(); ++i) {
@@ -1139,6 +1214,7 @@ int ObFreezer::wait_tablet_freeze_finish(ObIArray<ObTableHandleV2> &memtable_han
   STORAGE_LOG(INFO,
               "[Freezer] TABLET FREEZE STEP 2 : wait tablet freeze finish done",
               KR(ret),
+              K(get_ls_id()),
               K(wait_freeze_finish_spend_time),
               K(freeze_failed_tablets));
 
@@ -1155,7 +1231,7 @@ int ObFreezer::inner_wait_memtable_freeze_finish_(ObTableHandleV2 &memtable_hand
 
   if (!memtable_handle.is_valid()) {
     ret = OB_ERR_UNEXPECTED;
-    STORAGE_LOG(WARN, "memtable cannot be null", K(ret));
+    STORAGE_LOG(WARN, "memtable cannot be null", K(ret), K(get_ls_id()));
   } else if (OB_FAIL(memtable_handle.get_tablet_memtable(tablet_memtable))) {
     STORAGE_LOG(WARN, "fail to get memtable", K(ret), K(memtable_handle));
   } else if (OB_ISNULL(tablet_memtable)) {
@@ -1178,9 +1254,10 @@ int ObFreezer::inner_wait_memtable_freeze_finish_(ObTableHandleV2 &memtable_hand
 int ObFreezer::wait_data_memtable_freeze_finish_(ObITabletMemtable *tablet_memtable)
 {
   int ret = OB_SUCCESS;
+  share::ObLSID ls_id = get_ls_id();
   ObMemtable *memtable = static_cast<ObMemtable*>(tablet_memtable);
   if (OB_FAIL(wait_memtable_ready_for_flush_(memtable))) {
-    TRANS_LOG(WARN, "[Freezer] fail to wait memtable ready_for_flush", K(ret));
+    TRANS_LOG(WARN, "[Freezer] fail to wait memtable ready_for_flush", K(ret), K(ls_id));
   } else {
     int64_t read_lock = LSLOCKALL;
     int64_t write_lock = 0;
@@ -1188,11 +1265,11 @@ int ObFreezer::wait_data_memtable_freeze_finish_(ObITabletMemtable *tablet_memta
     if (OB_FAIL(check_ls_state())) {
       TRANS_LOG(WARN, "ls state invalid", KR(ret));
     } else if (OB_FAIL(memtable->finish_freeze())) {
-      TRANS_LOG(ERROR, "[Freezer] memtable cannot be flushed", K(ret), KPC(memtable));
+      TRANS_LOG(ERROR, "[Freezer] memtable cannot be flushed", K(ret), K(ls_id), KPC(memtable));
       stat_.add_diagnose_info("memtable cannot be flushed");
     } else {
       stat_.add_diagnose_info("tablet_freeze success");
-      FLOG_INFO("[Freezer] tablet_freeze_task success(DataMemtable)", K(ret), KPC(memtable));
+      FLOG_INFO("[Freezer] tablet_freeze_task success(DataMemtable)", K(ret), K(ls_id), KPC(memtable));
     }
   }
   return ret;
@@ -1201,31 +1278,47 @@ int ObFreezer::wait_data_memtable_freeze_finish_(ObITabletMemtable *tablet_memta
 int ObFreezer::wait_memtable_ready_for_flush_(ObITabletMemtable *tablet_memtable)
 {
   int ret = OB_SUCCESS;
+  share::ObLSID ls_id = get_ls_id();
   const int64_t start_time = ObClockGenerator::getClock();
   bool ready_for_flush = false;
   bool is_force_released = false;
 
-  TRANS_LOG(INFO, "[Freezer] wait freeze : Tablet", KP(tablet_memtable));
+  {
+    PendTenantReplayHelper pend_replay_helper(*this, ls_);
+    (void)pend_replay_helper.set_skip_throttle_flag();
 
-  int64_t time_counter = 0;
-  do {
-    if (OB_FAIL(check_ls_state())) {
-      TRANS_LOG(WARN, "ls state invalid", KR(ret));
-    } else if (OB_ISNULL(tablet_memtable)) {
-      ret = OB_ERR_UNEXPECTED;
-      TRANS_LOG(WARN, "[Freezer] memtable cannot be null", K(ret));
-    } else if (FALSE_IT(ready_for_flush = tablet_memtable->ready_for_flush())) {
-    } else if (FALSE_IT(is_force_released = tablet_memtable->is_force_released())) {
-    } else if (!ready_for_flush && !is_force_released) {
-      if (TC_REACH_TIME_INTERVAL(1LL * 1000LL * 1000LL /* 1 second */)) {
-        ++time_counter;
-        if (time_counter >= 5 && time_counter % 5 == 0) {
-          (void)resubmit_log_if_needed_(start_time, true /* is_tablet_freeze */, false /* is_try */, tablet_memtable);
+    TRANS_LOG(INFO,
+              "[Freezer] wait freeze : Tablet",
+              K(ls_id),
+              KP(tablet_memtable),
+              K(throttle_is_skipping_),
+              K(tenant_replay_is_pending_));
+
+    int64_t time_counter = 0;
+    do {
+      if (OB_FAIL(check_ls_state())) {
+        TRANS_LOG(WARN, "ls state invalid", KR(ret));
+      } else if (OB_ISNULL(tablet_memtable)) {
+        ret = OB_ERR_UNEXPECTED;
+        TRANS_LOG(WARN, "[Freezer] memtable cannot be null", K(ret));
+      } else if (FALSE_IT(ready_for_flush = tablet_memtable->ready_for_flush())) {
+      } else if (FALSE_IT(is_force_released = tablet_memtable->is_force_released())) {
+      } else if (!ready_for_flush && !is_force_released) {
+        if (TC_REACH_TIME_INTERVAL(1LL * 1000LL * 1000LL /* 1 second */)) {
+          ++time_counter;
+
+          // check pend condition every second
+          (void)pend_replay_helper.check_pend_condition_once();
+
+          // check resubmit log condition and report some debug info every 5 seconds
+          if (time_counter >= 5 && time_counter % 5 == 0) {
+            (void)resubmit_log_if_needed_(start_time, true /* is_tablet_freeze */, false /* is_try */, tablet_memtable);
+          }
         }
+        ob_throttle_usleep(100, 0, get_ls_id().id());
       }
-      ob_throttle_usleep(100, 0);
-    }
-  } while (OB_SUCC(ret) && !ready_for_flush && !is_force_released);
+    } while (OB_SUCC(ret) && !ready_for_flush && !is_force_released);
+  }
 
   return ret;
 }
@@ -1249,6 +1342,7 @@ int ObFreezer::submit_log_for_freeze(const bool is_tablet_freeze, const bool is_
 {
   int ret = OB_SUCCESS;
   int tmp_ret = OB_SUCCESS;
+  share::ObLSID ls_id = get_ls_id();
   const int64_t start = ObClockGenerator::getClock();
   ObTabletID tablet_id(INT64_MAX); // used for diagnose
   bool trace_id_need_reset = false;
@@ -1266,7 +1360,7 @@ int ObFreezer::submit_log_for_freeze(const bool is_tablet_freeze, const bool is_
       ObLSLockGuard lock_ls(ls_, ls_->lock_, read_lock, write_lock);
       if (OB_FAIL(check_ls_state())) {
         // ls has died, we need break the loop for submitting log
-        TRANS_LOG(WARN, "ls state has die");
+        TRANS_LOG(WARN, "ls state has die", K(ls_id));
         break;
       }
     }
@@ -1278,12 +1372,12 @@ int ObFreezer::submit_log_for_freeze(const bool is_tablet_freeze, const bool is_
       if (cost_time > 1000 * 1000) {
         if (TC_REACH_TIME_INTERVAL(5 * 1000 * 1000)) {
           TRANS_LOG(WARN, "[Freezer] traverse_trans_to_submit_redo_log failed", K(ret),
-                    K(cost_time), K(fail_tx_id));
+                    K(ls_id), K(cost_time), K(fail_tx_id));
           FreezeDiagnoseInfo diagnose("traverse_trans_to_submit_redo_log failed, traceId:%s, errorCode:%d", ret);
           ObCStringHelper helper;
           stat_.add_diagnose_info(helper.convert(diagnose));
           if (OB_TMP_FAIL(ADD_SUSPECT_INFO(MINI_MERGE, ObDiagnoseTabletType::TYPE_MINI_MERGE,
-                          tablet_id, ObSuspectInfoType::SUSPECT_SUBMIT_LOG_FOR_FREEZE,
+                          ls_id, tablet_id, ObSuspectInfoType::SUSPECT_SUBMIT_LOG_FOR_FREEZE,
                           static_cast<int64_t>(ret), fail_tx_id.get_id()))) {
             TRANS_LOG(WARN, "failed to add suspect info", K(tmp_ret));
           }
@@ -1291,14 +1385,14 @@ int ObFreezer::submit_log_for_freeze(const bool is_tablet_freeze, const bool is_
       }
     }
     if (OB_LOG_OUTOF_DISK_SPACE == ret) {
-      ob_throttle_usleep(100 * 1000, ret);
+      ob_throttle_usleep(100 * 1000, ret, ls_id.id());
     }
   } while (!(is_try && (ObClockGenerator::getClock() - start > 10 * 1_s))
            // we break the loop if we retry with a long time with the try semantic
            && OB_FAIL(ret));
 
   if (OB_SUCC(ret)) {
-    DEL_SUSPECT_INFO(MINI_MERGE, tablet_id, ObDiagnoseTabletType::TYPE_MINI_MERGE);
+    DEL_SUSPECT_INFO(MINI_MERGE, ls_id, tablet_id, ObDiagnoseTabletType::TYPE_MINI_MERGE);
 
     if (OB_FAIL(get_ls_tx_svr()->traverse_trans_to_submit_next_log())) {
       TRANS_LOG(WARN, "traverse trans ctx to submit next log failed", K(ret));
@@ -1316,6 +1410,7 @@ int ObFreezer::submit_log_for_freeze(const bool is_tablet_freeze, const bool is_
 int ObFreezer::loop_set_freeze_flag(const int64_t max_loop_time)
 {
   int ret = OB_SUCCESS;
+  share::ObLSID ls_id = get_ls_id();
   const int64_t start = ObClockGenerator::getClock();
   int64_t cost_time = 0;
   do {
@@ -1325,13 +1420,13 @@ int ObFreezer::loop_set_freeze_flag(const int64_t max_loop_time)
       if (cost_time > max_loop_time) {
         break;
       }
-      ob_throttle_usleep(100, ret);
+      ob_throttle_usleep(100, ret, ls_id.id());
     }
   } while (OB_FAIL(ret));
 
   const int64_t LOG_WARN_TIME = 10LL * 1000LL * 1000LL;  // 10 seconds
   if (cost_time > LOG_WARN_TIME) {
-    TRANS_LOG(WARN, "[Freezer] wait the running freeze too long time", K(cost_time));
+    TRANS_LOG(WARN, "[Freezer] wait the running freeze too long time", K(ls_id), K(cost_time));
   }
   return ret;
 }
@@ -1339,6 +1434,7 @@ int ObFreezer::loop_set_freeze_flag(const int64_t max_loop_time)
 int ObFreezer::set_freeze_flag_without_inc_freeze_clock()
 {
   int ret = OB_SUCCESS;
+  share::ObLSID ls_id = get_ls_id();
   uint32_t old_v = 0;
   uint32_t new_v = 0;
 
@@ -1357,6 +1453,7 @@ int ObFreezer::set_freeze_flag_without_inc_freeze_clock()
 int ObFreezer::set_freeze_flag()
 {
   int ret = OB_SUCCESS;
+  share::ObLSID ls_id = get_ls_id();
   uint32_t old_v = 0;
   uint32_t new_v = 0;
 
@@ -1367,7 +1464,7 @@ int ObFreezer::set_freeze_flag()
     old_v = ATOMIC_LOAD(&freeze_flag_);
     if (is_freeze(old_v)) {
       ret = OB_EAGAIN;
-      TRANS_LOG(WARN, "[Freezer] freeze is running!", K(ret));
+      TRANS_LOG(WARN, "[Freezer] freeze is running!", K(ret), K(ls_id));
       break;
     }
     new_v = (old_v + 1) | (1 << 31);
@@ -1408,20 +1505,23 @@ bool ObFreezer::is_freeze(uint32_t freeze_flag) const
 int ObFreezer::decide_max_decided_scn(SCN &max_decided_scn)
 {
   int ret = OB_SUCCESS;
+  share::ObLSID ls_id = get_ls_id();
+
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("[Freezer] not inited", K(ret));
+    LOG_WARN("[Freezer] not inited", K(ret), K(ls_id));
   } else if (OB_FAIL(get_ls_log_handler()->get_max_decided_scn(max_decided_scn))) {
     if (OB_STATE_NOT_MATCH == ret) {
       max_decided_scn.reset();
       ret = OB_SUCCESS;
     } else {
-      TRANS_LOG(WARN, "[Freezer] fail to get max_decided_scn", K(ret), K(max_decided_scn));
+      TRANS_LOG(WARN, "[Freezer] fail to get max_decided_scn", K(ret), K(ls_id),
+                K(max_decided_scn));
     }
   }
 
   if (OB_SUCC(ret)) {
-    TRANS_LOG(TRACE, "[Freezer] decide max decided log ts", K(ret), K(max_decided_scn));
+    TRANS_LOG(TRACE, "[Freezer] decide max decided log ts", K(ret), K(ls_id), K(max_decided_scn));
   }
 
   return ret;
@@ -1430,18 +1530,19 @@ int ObFreezer::decide_max_decided_scn(SCN &max_decided_scn)
 int ObFreezer::get_max_consequent_callbacked_scn(SCN &max_consequent_callbacked_scn)
 {
   int ret = OB_SUCCESS;
+  share::ObLSID ls_id = get_ls_id();
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("[Freezer] not inited", K(ret));
+    LOG_WARN("[Freezer] not inited", K(ret), K(ls_id));
   } else if (OB_FAIL(get_ls_log_handler()->get_max_decided_scn(max_consequent_callbacked_scn))) {
     if (OB_STATE_NOT_MATCH == ret) {
       max_consequent_callbacked_scn.set_min();
       ret = OB_SUCCESS;
     } else {
-      TRANS_LOG(ERROR, "[Freezer] fail to get min_unreplay_scn", K(ret), K(max_consequent_callbacked_scn));
+      TRANS_LOG(ERROR, "[Freezer] fail to get min_unreplay_scn", K(ret), K(ls_id), K(max_consequent_callbacked_scn));
     }
   } else {
-    TRANS_LOG(TRACE, "[Freezer] get_max_decided_scn", K(ret), K(max_consequent_callbacked_scn));
+    TRANS_LOG(TRACE, "[Freezer] get_max_decided_scn", K(ret), K(ls_id), K(max_consequent_callbacked_scn));
   }
   return ret;
 }
@@ -1449,6 +1550,7 @@ int ObFreezer::get_max_consequent_callbacked_scn(SCN &max_consequent_callbacked_
 int ObFreezer::get_ls_weak_read_scn(SCN &weak_read_scn)
 {
   int ret = OB_SUCCESS;
+  share::ObLSID ls_id = get_ls_id();
   weak_read_scn.reset();
 
   if (IS_NOT_INIT) {
@@ -1456,7 +1558,7 @@ int ObFreezer::get_ls_weak_read_scn(SCN &weak_read_scn)
     TRANS_LOG(WARN, "[Freezer] not inited", K(ret));
   } else {
     weak_read_scn = get_ls_wrs_handler()->get_ls_weak_read_ts();
-    TRANS_LOG(TRACE, "[Freezer] get_ls_weak_read_scn", K(ret), K(weak_read_scn));
+    TRANS_LOG(TRACE, "[Freezer] get_ls_weak_read_scn", K(ret), K(ls_id), K(weak_read_scn));
   }
 
   return ret;
@@ -1466,6 +1568,7 @@ int ObFreezer::get_newest_clog_checkpoint_scn(const ObTabletID &tablet_id,
                                               SCN &clog_checkpoint_scn)
 {
   int ret = OB_SUCCESS;
+  share::ObLSID ls_id = get_ls_id();
   ObTabletHandle handle;
   clog_checkpoint_scn.reset();
 
@@ -1474,10 +1577,10 @@ int ObFreezer::get_newest_clog_checkpoint_scn(const ObTabletID &tablet_id,
     TRANS_LOG(WARN, "[Freezer] not inited", K(ret));
   } else if (OB_FAIL(get_ls_tablet_svr()->get_tablet(tablet_id,
       handle, 0, ObMDSGetTabletMode::READ_WITHOUT_CHECK))) {
-    TRANS_LOG(WARN, "[Freezer] fail to get tablet", K(ret), K(tablet_id));
+    TRANS_LOG(WARN, "[Freezer] fail to get tablet", K(ret), K(ls_id), K(tablet_id));
   } else {
     clog_checkpoint_scn = handle.get_obj()->get_tablet_meta().clog_checkpoint_scn_;
-    TRANS_LOG(TRACE, "[Freezer] get_newest_clog_checkpoint_scn", K(ret), K(tablet_id),
+    TRANS_LOG(TRACE, "[Freezer] get_newest_clog_checkpoint_scn", K(ret), K(ls_id), K(tablet_id),
               K(clog_checkpoint_scn));
   }
 
@@ -1488,6 +1591,7 @@ int ObFreezer::get_newest_snapshot_version(const ObTabletID &tablet_id,
                                            SCN &snapshot_version)
 {
   int ret = OB_SUCCESS;
+  share::ObLSID ls_id = get_ls_id();
   ObTabletHandle handle;
   snapshot_version.reset();
 
@@ -1496,11 +1600,11 @@ int ObFreezer::get_newest_snapshot_version(const ObTabletID &tablet_id,
     TRANS_LOG(WARN, "[Freezer] not inited", K(ret));
   } else if (OB_FAIL(get_ls_tablet_svr()->get_tablet(tablet_id,
       handle, 0, ObMDSGetTabletMode::READ_WITHOUT_CHECK))) {
-    TRANS_LOG(WARN, "[Freezer] fail to get tablet", K(ret), K(tablet_id));
+    TRANS_LOG(WARN, "[Freezer] fail to get tablet", K(ret), K(ls_id), K(tablet_id));
   } else if (OB_FAIL(snapshot_version.convert_for_tx(handle.get_obj()->get_snapshot_version()))) {
-    TRANS_LOG(WARN, "[Freezer] fail to convert from ts", K(ret), K(tablet_id));
+    TRANS_LOG(WARN, "[Freezer] fail to convert from ts", K(ret), K(ls_id), K(tablet_id));
   } else {
-    TRANS_LOG(TRACE, "[Freezer] get_snapshot_version", K(ret), K(tablet_id), K(snapshot_version));
+    TRANS_LOG(TRACE, "[Freezer] get_snapshot_version", K(ret), K(ls_id), K(tablet_id), K(snapshot_version));
   }
 
   return ret;
@@ -1525,7 +1629,7 @@ void ObFreezer::print_freezer_statistics()
 {
   // print every 10s
   if (REACH_TIME_INTERVAL(10 * 1000 * 1000)) {
-    TRANS_LOG(INFO, "[Freezer] empty table statistics: ", K(get_empty_memtable_cnt()));
+    TRANS_LOG(INFO, "[Freezer] empty table statistics: ", K(get_ls_id()), K(get_empty_memtable_cnt()));
     clear_empty_memtable_cnt();
   }
 }
@@ -1583,14 +1687,14 @@ int ObFreezer::pend_ls_replay()
   common::ObByteLockGuard guard(byte_lock_, ObWaitEventIds::LS_REPLAY_CTRL_LOCK);
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    TRANS_LOG(WARN, "[Freezer] not inited", KR(ret), KP(this));
+    TRANS_LOG(WARN, "[Freezer] not inited", KR(ret), K(get_ls_id()), KP(this));
   } else if (pend_replay_cnt_ < 0) {
-    TRANS_LOG(ERROR, "[Freezer] invalid pend_replay_cnt", KR(ret), KP(this), K(pend_replay_cnt_));
+    TRANS_LOG(ERROR, "[Freezer] invalid pend_replay_cnt", KR(ret), K(get_ls_id()), KP(this), K(pend_replay_cnt_));
   } else if (FALSE_IT(pend_replay_cnt_++)) {
   } else if (1 == pend_replay_cnt_) {
     if (OB_FAIL(get_ls_log_handler()->pend_submit_replay_log())) {
       pend_replay_cnt_--;
-      TRANS_LOG(WARN, "[Freezer] pend ls replay failed", KR(ret), KP(this));
+      TRANS_LOG(WARN, "[Freezer] pend ls replay failed", KR(ret), K(get_ls_id()), KP(this));
     }
   }
   return ret;
@@ -1602,20 +1706,21 @@ int ObFreezer::restore_ls_replay()
   common::ObByteLockGuard guard(byte_lock_, ObWaitEventIds::LS_REPLAY_CTRL_LOCK);
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    TRANS_LOG(WARN, "[Freezer] not inited", KR(ret), KP(this));
+    TRANS_LOG(WARN, "[Freezer] not inited", KR(ret), K(get_ls_id()), KP(this));
   } else if (0 >= pend_replay_cnt_) {
     TRANS_LOG(INFO,
               "[Freezer] no need restore replay cause pend replay may failed",
               KR(ret),
+              K(get_ls_id()),
               KP(this),
               K(pend_replay_cnt_));
   } else if (FALSE_IT(pend_replay_cnt_--)) {
   } else if (0 == pend_replay_cnt_) {
     if (OB_FAIL(get_ls_log_handler()->restore_submit_replay_log())) {
       if (get_ls_log_handler()->is_valid()) {
-        TRANS_LOG(ERROR, "restore replay failed. please check if logstream is removed", KR(ret));
+        TRANS_LOG(ERROR, "restore replay failed. please check if logstream is removed", KR(ret), K(get_ls_id()));
       } else {
-        TRANS_LOG(WARN, "restore replay failed. ls log handler is invalid", KR(ret));
+        TRANS_LOG(WARN, "restore replay failed. ls log handler is invalid", KR(ret), K(get_ls_id()));
       }
     }
   }
@@ -1746,6 +1851,136 @@ int ObFreezer::ObTabletFreezeGuard::try_set_tablet_freeze_begin()
   return ret;
 }
 
+
+void ObFreezer::PendTenantReplayHelper::set_skip_throttle_flag()
+{
+  int ret = OB_SUCCESS;
+  if (OB_ISNULL(current_freeze_ls_)) {
+    ret = OB_ERR_UNEXPECTED;
+    STORAGE_LOG(ERROR, "invalid ls pointer", KP(current_freeze_ls_));
+  } else if (current_ls_is_leader_()){
+    // leader do not need skip throttle
+  } else {
+    // pend replay before set_throttle_is_skipping to avoid skipping too much replay
+    if (remain_memory_is_exhausting_()) {
+      (void)pend_tenant_replay_();
+    }
+    host_.set_throttle_is_skipping();
+  }
+}
+
+bool ObFreezer::PendTenantReplayHelper::current_ls_is_leader_()
+{
+  int ret = OB_SUCCESS;
+  // set default value as leader because leader do not skip throttle
+  bool is_leader = true;
+  ObRole role;
+  int64_t proposal_id = 0;
+  if (OB_FAIL(current_freeze_ls_->get_log_handler()->get_role(role, proposal_id))) {
+    LOG_WARN("get ls role failed", KR(ret), K(current_freeze_ls_->get_ls_id()));
+  } else if (common::is_strong_leader(role)) {
+    is_leader = true;
+  } else {
+    is_leader = false;
+  }
+  return is_leader;
+}
+
+void ObFreezer::PendTenantReplayHelper::check_pend_condition_once()
+{
+  // only check pend condition when throttle is skipping
+  if (host_.throttle_is_skipping()) {
+    if (host_.tenant_replay_is_pending()) {
+      if (!remain_memory_is_exhausting_()) {
+        (void)restore_tenant_replay_();
+      } else {
+        // keep pending replay
+      }
+    } else {
+      // tenant replay is not pending
+      if (remain_memory_is_exhausting_()) {
+        (void)pend_tenant_replay_();
+      } else {
+        // keep not pending replay
+      }
+    }
+  }
+}
+
+bool ObFreezer::PendTenantReplayHelper::remain_memory_is_exhausting_() {
+  TxShareThrottleTool &throttle_tool = (share::g_mp->shared_mem_alloc_mgr()->share_resource_throttle_tool());
+  const bool has_triggered_throttle = throttle_tool.has_triggered_throttle<ObMemstoreAllocator>();
+  const bool remain_memory_is_exhausting =
+      has_triggered_throttle || share::g_mp->tenant_freezer()->memstore_remain_memory_is_exhausting();
+  STORAGE_LOG(INFO, "finish check remain memory", K(has_triggered_throttle), K(remain_memory_is_exhausting));
+
+  return remain_memory_is_exhausting;
+}
+
+void ObFreezer::PendTenantReplayHelper::pend_tenant_replay_()
+{
+  int ret = OB_SUCCESS;
+  ObLSService *ls_srv = share::g_mp->ls_service();
+  common::ObSharedGuard<ObLSIterator> iter;
+  if (OB_FAIL(ls_srv->get_ls_iter(iter, ObLSGetMod::STORAGE_MOD))) {
+    STORAGE_LOG(WARN, "[ObFreezer] fail to get ls iterator", KR(ret));
+  } else {
+    ObLS *ls = nullptr;
+    ls_handle_array_.reuse();
+    int64_t iterate_ls_count = 0;
+    int64_t pend_ls_replay_count = 0;
+
+    // Here we need to perform a pend_ls_replay on all ls, because if a switch_leader occurs for any ls during the
+    // freezing process, the absence of pend_ls_replay might result in an unthrottled memory usage
+    while (OB_SUCC(iter->get_next(ls))) {
+      ObLSHandle ls_handle;
+      iterate_ls_count++;
+      if (OB_FAIL(ls_srv->get_ls(ls->get_ls_id(), ls_handle, ObLSGetMod::STORAGE_MOD))) {
+        STORAGE_LOG(WARN, "[ObFreezer] get ls handle failed", KR(ret), KP(ls));
+      } else if (OB_FAIL(ls_handle_array_.push_back(ls_handle))) {
+        STORAGE_LOG(WARN, "[ObFreezer] push back ls handle failed", KR(ret), KP(ls));
+      } else if (OB_FAIL(ls->get_freezer()->pend_ls_replay())) {
+        STORAGE_LOG(WARN, "[ObFreezer] pend replay failed", KR(ret), KPC(ls));
+        (void)ls_handle_array_.pop_back();
+      } else {
+        pend_ls_replay_count++;
+      }
+    }
+
+    // only skip throttle when pend all ls replay successfully, or reset this guard to restore replay
+    if (iterate_ls_count == pend_ls_replay_count) {
+      (void)host_.set_tenant_replay_is_pending();
+      STORAGE_LOG(INFO,
+                  "pend replay finish",
+                  K(pend_ls_replay_count),
+                  K(host_.throttle_is_skipping()),
+                  K(host_.tenant_replay_is_pending()));
+    } else {
+      (void)restore_tenant_replay_();
+    }
+  }
+}
+
+void ObFreezer::PendTenantReplayHelper::restore_tenant_replay_()
+{
+  for (int64_t i = 0; i < ls_handle_array_.count(); i++) {
+    int ret = OB_SUCCESS;
+    ObLS *ls = nullptr;
+    if (OB_ISNULL(ls = ls_handle_array_.at(i).get_ls())) {
+      ret = OB_ERR_UNEXPECTED;
+      STORAGE_LOG(ERROR, "[ObFreezer] invalid ls handle", KR(ret), KPC(ls));
+    } else if (OB_FAIL(ls->get_freezer()->restore_ls_replay())) {
+      STORAGE_LOG(WARN, "[ObFreezer] restore replay failed", KR(ret), KPC(ls));
+    }
+  }
+  host_.unset_tenant_replay_is_pending();
+  STORAGE_LOG(INFO,
+              "restore tenant replay",
+              K(ls_handle_array_.count()),
+              K(host_.tenant_replay_is_pending()),
+              K(host_.throttle_is_skipping()));
+  ls_handle_array_.reuse();
+}
 
 } // namespace storage
 } // namespace oceanbase

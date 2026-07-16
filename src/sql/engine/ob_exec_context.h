@@ -520,6 +520,9 @@ public:
     extra_status_check_.remove(&extra_check);
     return common::OB_SUCCESS;
   }
+  int64_t get_register_op_id() { return register_op_id_; }
+  void set_register_op_id(int64_t id) { register_op_id_ = id; }
+  bool is_rt_monitor_node_registered() { return OB_INVALID_ID != register_op_id_; }
   void set_mem_attr(const common::ObMemAttr& attr)
   {
     sche_allocator_.set_attr(attr);
@@ -760,6 +763,8 @@ protected:
   ObExecContext *parent_ctx_;
   int64_t nested_level_; //the number of recursive SQL levels
   bool is_ps_prepare_stage_;
+  // for sql plan monitor
+  int64_t register_op_id_;
   // indicate if eval_tmp_allocator_ is used
   bool tmp_alloc_used_;
   // -------------------

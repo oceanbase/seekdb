@@ -55,12 +55,15 @@ int ObIndexSSTableBuildTask::set_nls_format(const ObString &nls_date_format,
   return ret;
 }
 
-int ObIndexSSTableBuildTask::set_addition_info(const ObIArray<ObTabletID> &index_partition_ids)
+int ObIndexSSTableBuildTask::set_addition_info(const share::ObLSID &ls_id, const common::ObAddr &ls_leader_addr, const ObIArray<ObTabletID> &index_partition_ids)
 {
   int ret = OB_SUCCESS;
   if (index_partition_ids.count() > 0) {
     if (OB_FAIL(addition_info_.partition_ids_.assign(index_partition_ids))) {
       LOG_WARN("ObArray assign failed", K(ret), K(index_partition_ids));
+    } else {
+      addition_info_.ls_id_ = ls_id;
+      addition_info_.ls_leader_addr_ = ls_leader_addr;
     }
   }
   return ret;
@@ -174,6 +177,11 @@ int ObIndexSSTableBuildTask::process()
         session_param.nls_formats_[ObNLSFormatEnum::NLS_TIMESTAMP_TZ] = nls_timestamp_tz_format_;
         session_param.use_external_session_ = true;  // means session id dispatched by session mgr
 
+        common::ObAddr *sql_exec_addr = nullptr;
+        if (inner_sql_exec_addr_.is_valid()) {
+          sql_exec_addr = &inner_sql_exec_addr_;
+          LOG_INFO("inner sql execute addr" , K(*sql_exec_addr));
+        }
         int tmp_ret = OB_SUCCESS;
         user_sql_proxy = GCTX.ddl_sql_proxy_;
         DEBUG_SYNC(BEFORE_INDEX_SSTABLE_BUILD_TASK_SEND_SQL);
@@ -189,7 +197,7 @@ int ObIndexSSTableBuildTask::process()
         } else if (OB_FAIL(DDL_SIM(task_id_, CREATE_INDEX_BUILD_SSTABLE_FAILED))) {
           LOG_WARN("ddl sim failure: create index build sstable failed", K(ret), K(task_id_));
         } else if (OB_FAIL(user_sql_proxy->write(sql_string.ptr(), affected_rows,
-                    ObCompatibilityMode::MYSQL_MODE, &session_param, nullptr))) {
+                    ObCompatibilityMode::MYSQL_MODE, &session_param, sql_exec_addr))) {
           LOG_WARN("fail to execute build replica sql", K(ret));
         }
 
@@ -232,7 +240,8 @@ void ObIndexSSTableBuildTask::add_event_info(const int ret, const ObString &ddl_
     "ret", ret,
     K_(trace_id),
     K_(task_id),
-    "table_id", table_id_buffer);
+    "table_id", table_id_buffer,
+    "sql_exec_addr", inner_sql_exec_addr_);
 }
 
 ObAsyncTask *ObIndexSSTableBuildTask::deep_copy(char *buf, const int64_t buf_size) const
@@ -252,12 +261,13 @@ ObAsyncTask *ObIndexSSTableBuildTask::deep_copy(char *buf, const int64_t buf_siz
         parallelism_,
         is_partitioned_local_index_task_,
         root_service_,
+        inner_sql_exec_addr_,
         is_retryable_ddl_);
     if (OB_SUCCESS != (task->set_nls_format(nls_date_format_, nls_timestamp_format_, nls_timestamp_tz_format_))) {
       task->~ObIndexSSTableBuildTask();
       task = nullptr;
       LOG_WARN_RET(OB_ALLOCATE_MEMORY_FAILED, "failed to set nls format");
-    } else if (OB_SUCCESS != (task->set_addition_info(addition_info_.partition_ids_))) {
+    } else if (OB_SUCCESS != (task->set_addition_info(addition_info_.ls_id_, addition_info_.ls_leader_addr_, addition_info_.partition_ids_))) {
       task->~ObIndexSSTableBuildTask();
       task = nullptr;
       LOG_WARN_RET(OB_ALLOCATE_MEMORY_FAILED, "failed to set index partition ids");
@@ -851,13 +861,11 @@ int ObIndexBuildTask::reap_old_replica_build_task(bool &need_exec_new_inner_sql)
 }
 
 // construct ObIndexSSTableBuildTask build task
-int ObIndexBuildTask::send_build_single_replica_request(const bool &is_partitioned_local_index_task,
-                                                        const int64_t &parallelism,
-                                                        const int64_t &task_execution_id,
-                                                        const ObIArray<ObTabletID> &index_partition_ids)
+int ObIndexBuildTask::send_build_single_replica_request(const bool &is_partitioned_local_index_task, const int64_t &parallelism, const int64_t &task_execution_id, const share::ObLSID &ls_id, const common::ObAddr &leader_addr, const ObIArray<ObTabletID> &index_partition_ids)
 {
   int ret = OB_SUCCESS;
   int64_t new_task_execution_id = task_execution_id;
+  common::ObAddr ls_leader_addr = leader_addr;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("ObIndexBuildTask has not been inited", K(ret));
@@ -867,9 +875,15 @@ int ObIndexBuildTask::send_build_single_replica_request(const bool &is_partition
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", KR(ret), KP(root_service_));
   } else {
+    if (OB_FAIL(ObDDLUtil::get_sys_ls_leader_addr(GCONF.cluster_id, create_index_arg_.inner_sql_exec_addr_))) {
+      LOG_WARN("get sys ls leader addr fail", K(ret));
+      ret = OB_SUCCESS; // ingore ret
+    }
     if (!is_partitioned_local_index_task) {
       if (OB_FAIL(ObDDLTask::push_task_execution_id(task_id_, task_type_, is_retryable_ddl_, new_task_execution_id))) {
         LOG_WARN("failed to fetch new execution id", K(ret), K(task_id_), K(task_type_), K(new_task_execution_id));
+      } else {
+        ls_leader_addr = create_index_arg_.inner_sql_exec_addr_;
       }
     } else if (OB_UNLIKELY(index_partition_ids.count() < 1)) {
       ret = OB_INVALID_ARGUMENT;
@@ -888,12 +902,15 @@ int ObIndexBuildTask::send_build_single_replica_request(const bool &is_partition
           parallelism,
           is_partitioned_local_index_task,
           root_service_,
+          ls_leader_addr,
           is_retryable_ddl_);
-      if (OB_FAIL(task.set_nls_format(create_index_arg_.nls_date_format_,
+      if (OB_FAIL(set_sql_exec_addr(ls_leader_addr))) {
+        LOG_WARN("failed to set sql execute addr", K(ret), K(ls_leader_addr));
+      } else if (OB_FAIL(task.set_nls_format(create_index_arg_.nls_date_format_,
                                       create_index_arg_.nls_timestamp_format_,
                                       create_index_arg_.nls_timestamp_tz_format_))) {
         LOG_WARN("failed to set nls format", K(ret), K(create_index_arg_));
-      } else if (OB_FAIL(task.set_addition_info(index_partition_ids))) {
+      } else if (OB_FAIL(task.set_addition_info(ls_id, ls_leader_addr, index_partition_ids))) {
         LOG_WARN("failed to set partition ids", K(ret), K(index_partition_ids));
       } else if (OB_FAIL(root_service_->submit_ddl_single_replica_build_task(task))) {
         LOG_WARN("fail to submit task", K(ret), KPC(this));
@@ -911,6 +928,8 @@ int ObIndexBuildTask::wait_and_send_single_partition_replica_task(bool &state_fi
   int ret = OB_SUCCESS;
   int64_t parallelism = 0;
   int64_t execution_id = 0;
+  share::ObLSID ls_id;
+  common::ObAddr leader_addr;
   ObArray<ObTabletID> tablets;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
@@ -918,7 +937,7 @@ int ObIndexBuildTask::wait_and_send_single_partition_replica_task(bool &state_fi
   } else if (ObDDLTaskStatus::REDEFINITION != task_status_) {
     ret = OB_STATE_NOT_MATCH;
     LOG_WARN("task status not match", K(ret), K(task_status_));
-  } else if (OB_FAIL(tablet_scheduler_.get_next_batch_tablets(is_retryable_ddl_, parallelism, execution_id, tablets))) {
+  } else if (OB_FAIL(tablet_scheduler_.get_next_batch_tablets(is_retryable_ddl_, parallelism, execution_id, ls_id, leader_addr, tablets))) {
     if (OB_UNLIKELY(ret == OB_EAGAIN)) {
       ret = OB_SUCCESS;
     } else if (OB_UNLIKELY(ret == OB_ITER_END)) {
@@ -932,7 +951,7 @@ int ObIndexBuildTask::wait_and_send_single_partition_replica_task(bool &state_fi
     }
   } else if (OB_FAIL(serialize_and_update_message())) {
     LOG_WARN("fail to serialize and update message", K(ret));
-  } else if (OB_FAIL(send_build_single_replica_request(true, parallelism, execution_id, tablets))) {
+  } else if (OB_FAIL(send_build_single_replica_request(true, parallelism, execution_id, ls_id, leader_addr, tablets))) {
     LOG_WARN("fail to send build single partition replica request", K(ret), K(parallelism), K(execution_id), K(tablets));
   }
   return ret;
@@ -1010,6 +1029,8 @@ int ObIndexBuildTask::wait_data_complement()
   int ret = OB_SUCCESS;
   bool state_finished = false;
   bool is_request_end = false;
+  share::ObLSID ls_id;
+  common::ObAddr leader_addr;
   ObArray<ObTabletID> index_partition_ids;
   if (OB_UNLIKELY(!is_inited_) || OB_ISNULL(GCTX.schema_service_) || OB_ISNULL(GCTX.sql_proxy_)) {
     ret = OB_NOT_INIT;
@@ -1032,7 +1053,7 @@ int ObIndexBuildTask::wait_data_complement()
       }
     } else if (!need_exec_new_inner_sql) {
       state_finished = true;
-    } else if (OB_FAIL(send_build_single_replica_request(false, parallelism_, 0, index_partition_ids))) {
+    } else if (OB_FAIL(send_build_single_replica_request(false, parallelism_, 0, ls_id, leader_addr, index_partition_ids))) {
       LOG_WARN("fail to send build single replica request", K(ret), K(parallelism_), K(index_partition_ids));
     }
   }
@@ -1409,11 +1430,13 @@ int ObIndexBuildTask::update_complete_sstable_job_status(
     LOG_WARN("snapshot version not match", K(ret), K(addr), K(snapshot_version), K(snapshot_version_));
   } else {
     if (is_create_partitioned_local_index()) {
-      if (OB_UNLIKELY(addition_info.partition_ids_.count() < 1)) {
+      if (OB_UNLIKELY(addition_info.partition_ids_.count() < 1 || !addition_info.ls_id_.is_valid() || !addition_info.ls_leader_addr_.is_valid())) {
         ret = OB_INVALID_ARGUMENT;
         LOG_WARN("invalid argument", K(ret), K(addition_info), K(ret_code));
-      } else if (OB_FAIL(tablet_scheduler_.confirm_batch_tablets_status(execution_id, OB_SUCCESS == ret_code, addition_info.partition_ids_))) {
+      } else if (OB_FAIL(tablet_scheduler_.confirm_batch_tablets_status(execution_id, OB_SUCCESS == ret_code, addition_info.ls_id_, addition_info.partition_ids_))) {
         LOG_WARN("fail to confirm batch tablets status", K(ret), K(execution_id), K(ret_code), K(addition_info));
+      } else if (OB_FAIL(remove_sql_exec_addr(addition_info.ls_leader_addr_))) {
+        LOG_WARN("failed to remove sql execute addr", K(ret), K(addition_info));
       }
     } else if (OB_UNLIKELY(execution_id < execution_id_)) {
       ret = OB_TASK_EXPIRED;
@@ -1628,7 +1651,7 @@ int ObIndexBuildTask::clean_on_failed()
       } else if (!wait_trans_ctx_.is_inited() && OB_FAIL(wait_trans_ctx_.init(
               task_id_, task_status_, object_id_, ObDDLWaitTransEndCtx::WaitTransType::WAIT_SCHEMA_TRANS_WITHOUT_WRITE_DEFENSIVE, index_schema->get_schema_version()))) {
         // Reasons for no need write densive:
-        // 1. setting write defensive mds may be concurrent with tablet state changes
+        // 1. setting write defensive mds may race with concurrent tablet status changes
         // 2. writes to index still concurrent with dropping index, because the write defensive is done on data tablets
         LOG_WARN("init wait_trans_ctx failed", K(ret), K(object_id_), K(index_table_id_));
       } else if (OB_FAIL(wait_trans_ctx_.try_wait(is_trans_end, tmp_snapshot_version))) {
@@ -1786,11 +1809,22 @@ int ObIndexBuildTask::collect_longops_stat(ObLongopsValue &value)
       break;
     }
     case ObDDLTaskStatus::REDEFINITION: {
-      if (OB_FAIL(databuff_printf(stat_info_.message_,
-                                  MAX_LONG_OPS_MESSAGE_LENGTH,
-                                  pos,
-                                  "STATUS: REDEFINITION"))) {
-        LOG_WARN("failed to print", K(ret));
+      SMART_VARS_3((share::ObSqlMonitorStatsCollector, sql_monitor_stats_collector),
+                   (share::ObDDLDiagnoseInfo, diagnose_info),
+                   (share::ObSqlMonitorStats, sql_monitor_stats)) {
+        if (OB_FAIL(sql_monitor_stats_collector.scan_task_id_.push_back(task_id_))) {
+          LOG_WARN("failed to push back", K(ret));
+        } else if (OB_FAIL(sql_monitor_stats_collector.init(GCTX.sql_proxy_))) {
+          LOG_WARN("failed to init ObSqlMonitorStatsCollector", K(ret));
+        } else if (OB_FAIL(diagnose_info.init(task_id_, task_type_, execution_id_))) {
+          LOG_WARN("failed to init ObDDLDiagnoseInfo", K(ret), K(task_id_), K(task_type_));
+        } else if (OB_FAIL(sql_monitor_stats.init(task_id_, task_type_))) {
+          LOG_WARN("failed to init ObSqlMonitorStats", K(ret), K(task_id_), K(task_type_));
+        } else if (OB_FAIL(sql_monitor_stats_collector.get_next_sql_plan_monitor_stat(sql_monitor_stats))) {
+          LOG_WARN("failed to get next sql plan monitor stats", K(ret));
+        } else if (OB_FAIL(diagnose_info.process_sql_monitor_and_generate_longops_message(sql_monitor_stats, stat_info_, pos))) {
+          LOG_WARN("failed to process sql monitor and generate longops message", K(ret), K(sql_monitor_stats), K(stat_info_), K(pos));
+        }
       }
       break;
     }

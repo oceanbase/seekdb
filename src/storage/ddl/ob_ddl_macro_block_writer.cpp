@@ -74,6 +74,7 @@ int ObDDLMacroBlockWriter::init(
   } else {
     share::SCN mock_start_scn;
     IGNORE_RETURN mock_start_scn.convert_for_tx(SS_DDL_START_SCN_VAL);
+    const ObLSID ls_id = param.ls_id_;
     const uint64_t tenant_data_version = param.tenant_data_version_;
     const ObDDLMacroBlockType block_type = param.is_no_logging_ ? DDL_MB_SS_EMPTY_DATA_TYPE : DDL_MB_DATA_TYPE;
     const bool need_submit_io = true;
@@ -90,10 +91,11 @@ int ObDDLMacroBlockWriter::init(
     macro_seq_param.seq_type_ = ObMacroSeqParam::SEQ_TYPE_INC;
     macro_seq_param.start_ = start_sequence.macro_data_seq_;
 
-    if (OB_FAIL(pre_warm_param.init(table_key.tablet_id_))) {
-      LOG_WARN("fail to initialize pre warm param", K(ret), K(table_key.tablet_id_));
+    if (OB_FAIL(pre_warm_param.init(ls_id, table_key.tablet_id_))) {
+      LOG_WARN("fail to initialize pre warm param", K(ret), K(ls_id), K(table_key.tablet_id_));
     } else if (OB_FAIL(data_desc_.init(true/*is ddl*/,
                                        *tablet_param.storage_schema_,
+                                       ls_id,
                                        table_key.get_tablet_id(),
                                        compaction::ObMergeType::MAJOR_MERGE,
                                        table_key.get_snapshot_version(),
@@ -105,7 +107,7 @@ int ObDDLMacroBlockWriter::init(
                                        need_submit_io))) {
       LOG_WARN("fail to initialize data store desc", K(ret));
     } else if (OB_FAIL(index_builder_.init(data_desc_.get_desc(), space_opt_mode/*small sstable op*/))) {
-      LOG_WARN("fail to initialize sstable index builder", K(ret), K(table_key), K(data_desc_));
+      LOG_WARN("fail to initialize sstable index builder", K(ret), K(ls_id), K(table_key), K(data_desc_));
     } else {
       // for build the tail index block in macro block
       data_desc_.get_desc().sstable_index_builder_ = &index_builder_;
@@ -120,6 +122,7 @@ int ObDDLMacroBlockWriter::init(
       LOG_WARN("fail to new ObDDLRedoLogWriterCallback", KR(ret));
     } else {
       ObDDLRedoLogWriterCallbackInitParam init_param;
+      init_param.ls_id_ = ls_id;
       init_param.tablet_id_ = table_key.tablet_id_;
       init_param.direct_load_type_ = param.direct_load_type_;
       init_param.block_type_ = block_type;
@@ -148,7 +151,7 @@ int ObDDLMacroBlockWriter::init(
                                            *object_cleaner,
                                            ddl_redo_callback_))) {
         LOG_WARN("fail to open macro block writer",
-            K(ret), K(table_key), K(data_desc_), K(start_sequence), KPC(object_cleaner));
+            K(ret), K(ls_id), K(table_key), K(data_desc_), K(start_sequence), KPC(object_cleaner));
       }
     }
   }

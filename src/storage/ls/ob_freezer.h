@@ -21,6 +21,7 @@
 #include "lib/utility/ob_print_utils.h"
 #include "lib/string/ob_string_holder.h"
 #include "lib/container/ob_array.h"
+#include "share/ob_ls_id.h"
 #include "storage/ls/ob_ls_wrs_handler.h"
 #include "storage/checkpoint/ob_freeze_checkpoint.h"
 #include "logservice/ob_log_handler.h"
@@ -226,12 +227,12 @@ public:
   uint32_t get_freeze_clock() { return ATOMIC_LOAD(&freeze_flag_) & (~(1 << 31)); }
 
   /* ls info */
+  share::ObLSID get_ls_id();
   checkpoint::ObDataCheckpoint *get_ls_data_checkpoint();
   ObLSTxService *get_ls_tx_svr();
   ObLSTabletService *get_ls_tablet_svr();
   logservice::ObILogHandler *get_ls_log_handler();
   ObLSWRSHandler *get_ls_wrs_handler();
-  ObLS *get_ls() { return ls_; }
 
   /* freeze_snapshot_version */
   share::SCN get_freeze_snapshot_version() { return freeze_snapshot_version_; }
@@ -287,6 +288,29 @@ private:
     bool need_release_;
     ObFreezer &parent_;
   };
+  class PendTenantReplayHelper {
+  public:
+    PendTenantReplayHelper(ObFreezer &host, ObLS *current_freeze_ls)
+        : host_(host), current_freeze_ls_(current_freeze_ls) {}
+    ~PendTenantReplayHelper() { reset_pend_status_(); }
+    void set_skip_throttle_flag();
+    void check_pend_condition_once();
+  private:
+    bool current_ls_is_leader_();
+    bool remain_memory_is_exhausting_();
+    void pend_tenant_replay_();
+    void restore_tenant_replay_();
+    void reset_pend_status_()
+    {
+      (void)host_.unset_throttle_is_skipping();
+      (void)restore_tenant_replay_();
+    }
+  private:
+    ObFreezer &host_;
+    ObLS *current_freeze_ls_;
+    ObSEArray<ObLSHandle, 16> ls_handle_array_;
+  };
+
 private:
   /* freeze_flag */
   int set_freeze_flag();
@@ -317,6 +341,7 @@ private:
                                     SCN &real_snapshot_version);
   void handle_set_tablet_freeze_failed(const bool need_rewrite_meta,
                                        const ObTabletID &tablet_id,
+                                       const ObLSID &ls_id,
                                        const ObTablet *tablet,
                                        const share::SCN freeze_snapshot_version,
                                        int &ret);

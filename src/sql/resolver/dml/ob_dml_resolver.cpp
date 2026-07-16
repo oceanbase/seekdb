@@ -10714,6 +10714,10 @@ int ObDMLResolver::resolve_global_hint(const ParseNode &hint_node,
       }
       break;
     }
+    case T_MONITOR: {
+      global_hint.monitor_ = true;
+      break;
+    }
     case T_TRACING:
     case T_STAT:
     case T_BLOCKING: {

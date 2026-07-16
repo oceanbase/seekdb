@@ -22,6 +22,7 @@
 #include "lib/lock/ob_tc_rwlock.h"
 #include "lib/ob_define.h"
 #include "share/scn.h"
+#include "share/ob_ls_id.h"
 #include "storage/ob_i_table.h"
 #include "storage/meta_mem/ob_tablet_pointer.h"
 
@@ -29,7 +30,6 @@ namespace oceanbase
 {
 namespace storage
 {
-class ObLS;
 class ObTablet;
 class ObDDLKV;
 
@@ -113,7 +113,7 @@ public:
   ObTabletDDLKvMgr();
   ~ObTabletDDLKvMgr();
   int register_to_tablet(ObDDLKvMgrHandle &kv_mgr_handle);
-  int init(const common::ObTabletID &tablet_id); // init before memtable mgr
+  int init(const share::ObLSID &ls_id, const common::ObTabletID &tablet_id); // init before memtable mgr
   int set_max_freeze_scn(const share::SCN &checkpoint_scn);
   int get_or_create_shared_nothing_ddl_kv(
       const share::SCN &macro_redo_scn,
@@ -140,7 +140,7 @@ public:
   int release_ddl_kvs(const ObDDLKVType ddl_kv_type, const share::SCN &rec_scn); // release persistent ddl kv, used in ddl merge task for free ddl kv
   int check_has_effective_ddl_kv(bool &has_ddl_kv); // used in ddl log handler for checkpoint
   int try_flush_ddl_commit_scn(
-      ObLS *ls,
+      ObLSHandle &ls_handle,
       const ObTabletHandle &tablet_handle,
       const ObTabletDirectLoadMgrHandle &direct_load_mgr_handle,
       const share::SCN &commit_scn);
@@ -175,7 +175,7 @@ public:
                               const ObITable::TableType table_type);
   int remove_idempotence_checker();
   share::SCN get_max_freeze_scn() const { return max_freeze_scn_;}
-  TO_STRING_KV(K_(is_inited), K_(tablet_id),
+  TO_STRING_KV(K_(is_inited), K_(ls_id), K_(tablet_id), 
       K_(max_freeze_scn),
       K_(head), K_(tail), K_(ref_cnt));
 
@@ -209,6 +209,7 @@ public:
   static const int64_t TRY_LOCK_TIMEOUT = 10 * 1000000; // 10s
 private:
   bool is_inited_;
+  share::ObLSID ls_id_;
   common::ObTabletID tablet_id_;
   share::SCN max_freeze_scn_;
   ObDDLKVHandle ddl_kv_handles_[MAX_DDL_KV_CNT_IN_STORAGE];

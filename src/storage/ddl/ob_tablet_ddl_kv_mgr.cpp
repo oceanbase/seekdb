@@ -39,7 +39,7 @@ bool ObDDLKVQueryParam::match_ddl_kv(const ObDDLKV &ddl_kv) const
 
 ObTabletDDLKvMgr::ObTabletDDLKvMgr()
   : is_inited_(false), 
-    tablet_id_(),
+    ls_id_(), tablet_id_(),
     max_freeze_scn_(SCN::min_scn()),
     head_(0), tail_(0), lock_(), idem_checker_(), ref_cnt_(0)
 {
@@ -63,30 +63,31 @@ void ObTabletDDLKvMgr::destroy()
   for (int64_t i = 0; i < MAX_DDL_KV_CNT_IN_STORAGE; ++i) {
     ddl_kv_handles_[i].reset();
   }
+  ls_id_.reset();
   tablet_id_.reset();
   max_freeze_scn_.set_min();
   idem_checker_.destroy();
   is_inited_ = false;
 }
 
-int ObTabletDDLKvMgr::init(const common::ObTabletID &tablet_id)
+int ObTabletDDLKvMgr::init(const share::ObLSID &ls_id, const common::ObTabletID &tablet_id)
 {
   int ret = OB_SUCCESS;
-  ObLS *ls = nullptr;
+  ObLSHandle ls_handle;
   ObLSService *ls_service = share::g_mp->ls_service();
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
     LOG_WARN("ObTabletDDLKvMgr is already inited", K(ret));
-  } else if (OB_UNLIKELY(!tablet_id.is_valid())) {
+  } else if (OB_UNLIKELY(!ls_id.is_valid() || !tablet_id.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(tablet_id));
+    LOG_WARN("invalid argument", K(ret), K(ls_id), K(tablet_id));
   } else if (OB_ISNULL(ls_service)) {
     ret = OB_ERR_SYS;
     LOG_WARN("ls service should not be null", K(ret));
-  } else if (OB_FAIL(ls_service->get_ls(ls))) {
-    LOG_WARN("failed to get ls", K(ret));
-  } else if (OB_FAIL(ls->get_ddl_log_handler()->add_tablet(tablet_id))) {
-    LOG_WARN("failed to add tablet", K(ret), K(tablet_id));
+  } else if (OB_FAIL(ls_service->get_ls(ls_id, ls_handle, ObLSGetMod::DDL_MOD))) {
+    LOG_WARN("failed to get ls", K(ret), K(ls_id));
+  } else if (OB_FAIL(ls_handle.get_ls()->get_ddl_log_handler()->add_tablet(tablet_id))) {
+    LOG_WARN("failed to add tablet", K(ret), K(ls_id), K(tablet_id));
   }
 
   if (OB_FAIL(ret)) {
@@ -95,6 +96,7 @@ int ObTabletDDLKvMgr::init(const common::ObTabletID &tablet_id)
     if (OB_FAIL(add_idempotence_checker_nolock())) {
       LOG_WARN("failed to init idem checker", K(ret));
     } else {
+      ls_id_ = ls_id;
       tablet_id_ = tablet_id;
       is_inited_ = true;
     }
@@ -119,7 +121,7 @@ int ObTabletDDLKvMgr::set_max_freeze_scn(const share::SCN &checkpoint_scn)
 int ObTabletDDLKvMgr::get_rec_scn(SCN &rec_scn)
 {
   int ret = OB_SUCCESS;
-  ObLS *ls = nullptr;
+  ObLSHandle ls_handle;
   ObTabletHandle tablet_handle;
   ObTabletFullDirectLoadMgr *tablet_mgr = nullptr;
   ObTabletDirectLoadMgrHandle direct_load_mgr_hdl;
@@ -132,6 +134,7 @@ int ObTabletDDLKvMgr::get_rec_scn(SCN &rec_scn)
     ret = OB_ERR_SYS;
     LOG_WARN("error sys", K(ret));
   } else if (OB_FAIL(tenant_direct_load_mgr->get_tablet_mgr_and_check_major(
+          ls_id_,
           tablet_id_,
           true/* is_full_direct_load */,
           direct_load_mgr_hdl,
@@ -145,16 +148,16 @@ int ObTabletDDLKvMgr::get_rec_scn(SCN &rec_scn)
     }
   } else if (OB_ISNULL(tablet_mgr = direct_load_mgr_hdl.get_full_obj())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected err", K(ret), K(tablet_id_));
+    LOG_WARN("unexpected err", K(ret), K(ls_id_), K(tablet_id_));
   }
   if (OB_SUCC(ret) && nullptr != tablet_mgr) {
-    if (OB_FAIL(share::g_mp->ls_service()->get_ls(ls))) {
-      LOG_WARN("failed to get log stream", K(ret));
-    } else if (OB_FAIL(ls->get_tablet(tablet_id_,
+    if (OB_FAIL(share::g_mp->ls_service()->get_ls(ls_id_, ls_handle, ObLSGetMod::DDL_MOD))) {
+      LOG_WARN("failed to get log stream", K(ret), K(ls_id_));
+    } else if (OB_FAIL(ls_handle.get_ls()->get_tablet(tablet_id_,
                                                       tablet_handle,
                                                       ObTabletCommon::DEFAULT_GET_TABLET_NO_WAIT,
                                                       ObMDSGetTabletMode::READ_WITHOUT_CHECK))) {
-      LOG_WARN("get tablet handle failed", K(ret), K(tablet_id_));
+      LOG_WARN("get tablet handle failed", K(ret), K(ls_id_), K(tablet_id_));
     }
 
     // rec scn of ddl start log
@@ -498,7 +501,7 @@ void ObTabletDDLKvMgr::try_get_ddl_kv_unlock(const SCN &scn, ObDDLKVHandle &kv_h
       ObDDLKV *tmp_kv = tmp_kv_handle.get_obj();
       if (OB_ISNULL(tmp_kv)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("ddl kv is null", K(ret), K(tablet_id_), KP(tmp_kv), K(i), K(head_), K(tail_));
+        LOG_WARN("ddl kv is null", K(ret), K(ls_id_), K(tablet_id_), KP(tmp_kv), K(i), K(head_), K(tail_));
       } else if (scn > tmp_kv->get_start_scn() && scn <= tmp_kv->get_freeze_scn()) {
         kv_handle = tmp_kv_handle;
         break;
@@ -577,12 +580,12 @@ int ObTabletDDLKvMgr::release_ddl_kvs(const ObDDLKVType ddl_kv_type, const SCN &
       if (OB_FAIL(ret)) {
       } else if (OB_ISNULL(kv)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("ddl kv is null", K(ret), K(tablet_id_), KP(kv), K(i), K(head_), K(tail_));
+        LOG_WARN("ddl kv is null", K(ret), K(ls_id_), K(tablet_id_), KP(kv), K(i), K(head_), K(tail_));
       } else if (kv->is_closed() && kv->get_freeze_scn() <= end_scn && kv->get_ddl_kv_type() == ddl_kv_type) {
         const SCN &freeze_scn = kv->get_freeze_scn();
         free_ddl_kv(idx);
         ++head_;
-        LOG_INFO("succeed to release ddl kv", K(tablet_id_), K(freeze_scn));
+        LOG_INFO("succeed to release ddl kv", K(ls_id_), K(tablet_id_), K(freeze_scn));
       }
     }
   }
@@ -603,7 +606,7 @@ int ObTabletDDLKvMgr::get_ddl_kv_min_scn(SCN &min_scn)
       ObDDLKV *kv = ddl_kv_handles_[idx].get_obj();
       if (OB_ISNULL(kv)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("ddl kv is null", K(ret), K(tablet_id_), KP(kv), K(i), K(head_), K(tail_));
+        LOG_WARN("ddl kv is null", K(ret), K(ls_id_), K(tablet_id_), KP(kv), K(i), K(head_), K(tail_));
       } else {
         min_scn = SCN::min(min_scn, kv->get_min_scn());
       }
@@ -629,7 +632,7 @@ int ObTabletDDLKvMgr::get_ddl_kvs_unlock(
       ObDDLKV *cur_kv = cur_kv_handle.get_obj();
       if (OB_ISNULL(cur_kv)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("ddl kv is null", K(ret), K(tablet_id_), KP(cur_kv), K(pos), K(head_), K(tail_));
+        LOG_WARN("ddl kv is null", K(ret), K(ls_id_), K(tablet_id_), KP(cur_kv), K(pos), K(head_), K(tail_));
       } else if ((!frozen_only || cur_kv->is_freezed())
                  && ddl_kv_query_param.match_ddl_kv(*cur_kv)) {
         if (OB_FAIL(kv_handle_array.push_back(cur_kv_handle))) {
@@ -676,7 +679,7 @@ int ObTabletDDLKvMgr::get_ddl_kvs_for_query(ObTablet &tablet, ObIArray<ObDDLKVHa
 
 // when ddl commit scn is only in memory, try flush it, need wait log replay point elapsed the ddl commit scn
 int ObTabletDDLKvMgr::try_flush_ddl_commit_scn(
-    ObLS *ls,
+    ObLSHandle &ls_handle,
     const ObTabletHandle &tablet_handle,
     const ObTabletDirectLoadMgrHandle &direct_load_mgr_handle,
     const share::SCN &commit_scn)
@@ -686,9 +689,9 @@ int ObTabletDDLKvMgr::try_flush_ddl_commit_scn(
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     LOG_WARN("ObTabletDDLKvMgr is not inited", K(ret));
-  } else if (OB_UNLIKELY(OB_ISNULL(ls) || !tablet_handle.is_valid() || OB_ISNULL(direct_load_mgr = direct_load_mgr_handle.get_full_obj()))) {
+  } else if (OB_UNLIKELY(!ls_handle.is_valid() || !tablet_handle.is_valid() || OB_ISNULL(direct_load_mgr = direct_load_mgr_handle.get_full_obj()))) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(ls), K(tablet_handle));
+    LOG_WARN("invalid argument", K(ret), K(ls_handle), K(tablet_handle));
   } else if (commit_scn.is_valid_and_not_min() // already committed
       && tablet_handle.get_obj()->get_tablet_meta().ddl_checkpoint_scn_ != commit_scn) {// only exist in memory
     SCN max_decided_scn;
@@ -699,8 +702,8 @@ int ObTabletDDLKvMgr::try_flush_ddl_commit_scn(
     }
     if (already_freezed) {
       // do nothing
-    } else if (OB_FAIL(ls->get_max_decided_scn(max_decided_scn))) {
-      LOG_WARN("get max decided log ts failed", K(ret));
+    } else if (OB_FAIL(ls_handle.get_ls()->get_max_decided_scn(max_decided_scn))) {
+      LOG_WARN("get max decided log ts failed", K(ret), K(ls_handle.get_ls()->get_ls_id()));
     } else if (SCN::plus(max_decided_scn, 1) >= commit_scn) { // commit_scn elapsed, means the prev clog already replayed or applied
       // max_decided_scn is the left border scn - 1
       // the min deciding(replay or apply) scn (aka left border) is max_decided_scn + 1
@@ -743,7 +746,7 @@ int ObTabletDDLKvMgr::check_has_freezed_ddl_kv(bool &has_freezed_ddl_kv)
       ObDDLKV *cur_kv = cur_kv_handle.get_obj();
       if (OB_ISNULL(cur_kv)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("ddl kv is null", K(ret), K(tablet_id_), KP(cur_kv), K(pos), K(head_), K(tail_));
+        LOG_WARN("ddl kv is null", K(ret), K(ls_id_), K(tablet_id_), KP(cur_kv), K(pos), K(head_), K(tail_));
       } else if (cur_kv->is_freezed()) {
         has_freezed_ddl_kv = true;
       }
@@ -784,19 +787,20 @@ int ObTabletDDLKvMgr::alloc_ddl_kv(
   } else if (OB_ISNULL(kv = tmp_kv_handle.get_obj())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("ddl kv is null", K(ret));
-  } else if (OB_FAIL(kv->init(tablet_id_,
+  } else if (OB_FAIL(kv->init(ls_id_,
+                              tablet_id_,
                               start_scn,
                               snapshot_version,
                               max_freeze_scn_,
                               data_format_version,
                               ddl_kv_type))) {
-    LOG_WARN("fail to init ddl kv", K(ret), K(tablet_id_), K(ddl_kv_type));
+    LOG_WARN("fail to init ddl kv", K(ret), K(ls_id_), K(tablet_id_), K(ddl_kv_type));
   } else {
     const int64_t idx = get_idx(tail_);
     tail_++;
     ddl_kv_handles_[idx] = tmp_kv_handle;
     kv_handle = tmp_kv_handle;
-    FLOG_INFO("succeed to add ddl kv", K(tablet_id_), K(head_), K(tail_), K(max_freeze_scn_), "ddl_kv_cnt", get_count_nolock(), KP(kv));
+    FLOG_INFO("succeed to add ddl kv", K(ls_id_), K(tablet_id_), K(head_), K(tail_), K(max_freeze_scn_), "ddl_kv_cnt", get_count_nolock(), KP(kv));
   }
   return ret;
 }
@@ -818,7 +822,7 @@ void ObTabletDDLKvMgr::free_ddl_kv(const int64_t idx)
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(idx));
   } else {
-    FLOG_INFO("free ddl kv", K(tablet_id_), KPC(ddl_kv_handles_[idx].get_obj()));
+    FLOG_INFO("free ddl kv", K(ls_id_), K(tablet_id_), KPC(ddl_kv_handles_[idx].get_obj()));
     ddl_kv_handles_[idx].reset();
   }
 }

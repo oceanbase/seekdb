@@ -120,7 +120,7 @@ ObPhysicalPlan::ObPhysicalPlan(MemoryContext &mem_context /* = CURRENT_CONTEXT *
     need_switch_to_table_lock_worker_(false),
     data_complement_gen_doc_id_(false),
     dml_table_ids_(&allocator_),
-    insertup_can_use_snapshot_opt_(false),
+    insertup_can_do_gts_opt_(false),
     px_node_policy_(ObPxNodePolicy::INVALID),
     px_node_addrs_(&allocator_),
     px_node_count_(ObPxNodeHint::UNSET_PX_NODE_COUNT),
@@ -216,7 +216,7 @@ void ObPhysicalPlan::reset()
   need_switch_to_table_lock_worker_ = false;
   data_complement_gen_doc_id_ = false;
   dml_table_ids_.reset();
-  insertup_can_use_snapshot_opt_ = false;
+  insertup_can_do_gts_opt_ = false;
   px_node_policy_ = ObPxNodePolicy::INVALID;
   px_node_count_ = ObPxNodeHint::UNSET_PX_NODE_COUNT;
   px_node_addrs_.reset();
@@ -386,6 +386,16 @@ int ObPhysicalPlan::set_stmt_need_privs(const ObStmtNeedPrivs& stmt_need_privs)
     LOG_WARN("Failed to deep copy ObStmtNeedPrivs", K_(stmt_need_privs));
   }
   return ret;
+}
+
+void ObPhysicalPlan::inc_large_querys()
+{
+  ATOMIC_INC(&(stat_.large_querys_));
+}
+
+void ObPhysicalPlan::inc_delayed_large_querys()
+{
+  ATOMIC_INC(&(stat_.delayed_large_querys_));
 }
 
 void ObPhysicalPlan::inc_delayed_px_querys()
@@ -757,6 +767,7 @@ OB_SERIALIZE_MEMBER(ObPhysicalPlan,
                     is_need_trans_,
                     ddl_schema_version_,
                     ddl_table_id_,
+                    phy_hint_.monitor_,
                     need_serial_exec_,
                     contain_pl_udf_or_trigger_,
                     is_packed_,
@@ -1182,6 +1193,8 @@ int ObPhysicalPlan::update_cache_obj_stat(ObILibCacheCtx &ctx)
         SQL_PC_LOG(WARN, "fail to set truncate string", K(ret));
       }
     }
+    stat_.large_querys_= 0;
+    stat_.delayed_large_querys_= 0;
     stat_.delayed_px_querys_= 0;
     stat_.outline_version_ = get_outline_state().outline_version_.version_;
     stat_.outline_id_ = get_outline_state().outline_version_.object_id_;

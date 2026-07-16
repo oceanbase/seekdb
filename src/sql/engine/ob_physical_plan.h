@@ -120,7 +120,10 @@ public:
                         const int64_t sample_exec_usec);
   bool is_expired() const { return NOT_EXPIRED != stat_.is_expired_; }
   void set_is_expired(ObPlanExpiredStat expired_stat) { stat_.is_expired_ = expired_stat; }
+  void inc_large_querys();
+  void inc_delayed_large_querys();
   void inc_delayed_px_querys();
+  int update_operator_stat(ObPhyOperatorMonitorInfo &info);
   bool is_need_trans() const { return is_need_trans_; }
   bool is_stmt_modify_trans() const;
   //As there's ObString in phy_hint_,need deep copy
@@ -420,8 +423,8 @@ public:
   ObIArray<ObLocalSessionVar> & get_all_local_session_vars() { return all_local_session_vars_; }
   ObFixedArray<uint64_t, common::ObIAllocator> &get_dml_table_ids() { return dml_table_ids_; }
   const ObIArray<uint64_t> &get_dml_table_ids() const { return dml_table_ids_; }
-  inline bool get_insertup_can_use_snapshot_opt() const {return insertup_can_use_snapshot_opt_; }
-  inline void set_insertup_can_use_snapshot_opt(bool v) { insertup_can_use_snapshot_opt_ = v; }
+  inline bool get_insertup_can_do_gts_opt() const {return insertup_can_do_gts_opt_; }
+  inline void set_insertup_can_do_gts_opt(bool v) { insertup_can_do_gts_opt_ = v; }
   void set_is_use_auto_dop(bool use_auto_dop)  { stat_.is_use_auto_dop_ = use_auto_dop; }
   bool get_is_use_auto_dop() const { return stat_.is_use_auto_dop_; }
   void set_px_node_policy(ObPxNodePolicy px_node_policy)
@@ -624,7 +627,7 @@ private:
   // further cursor stmt will check agains
   // to decide whether it read uncommitted data
   common::ObFixedArray<uint64_t, common::ObIAllocator> dml_table_ids_;
-  bool insertup_can_use_snapshot_opt_;
+  bool insertup_can_do_gts_opt_;
   ObPxNodePolicy px_node_policy_;
   common::ObFixedArray<common::ObAddr, common::ObIAllocator> px_node_addrs_;
   int64_t px_node_count_;

@@ -21,6 +21,7 @@ ob_set_subtarget(ob_rootserver common
   ob_partition_creator.cpp
   ob_root_minor_freeze.cpp
   ob_root_utils.cpp
+  ob_dynamic_partition_manager.cpp
   ob_root_inspection.cpp
   ob_rs_event_history_table_operator.cpp
   ob_tenant_event_history_table_operator.cpp
@@ -38,6 +39,7 @@ ob_set_subtarget(ob_rootserver common
   ob_schema_history_recycler.cpp
   ob_lob_piece_builder.cpp
   ob_lob_meta_builder.cpp
+  ob_split_partition_helper.cpp
   ob_partition_exchange.cpp
   ob_catalog_ddl_operator.cpp
   ob_catalog_ddl_service.cpp
@@ -71,6 +73,7 @@ ob_set_subtarget(ob_rootserver ddl_task
   ddl_task/ob_fts_index_build_task.cpp
   ddl_task/ob_modify_autoinc_task.cpp
   ddl_task/ob_table_redefinition_task.cpp
+  ddl_task/ob_partition_split_task.cpp
   ddl_task/ob_ddl_tablet_scheduler.cpp
   ddl_task/ob_drop_vec_ivf_index_task.cpp
   ddl_task/ob_rebuild_index_task.cpp

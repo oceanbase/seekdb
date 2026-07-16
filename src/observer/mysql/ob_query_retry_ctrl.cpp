@@ -1060,6 +1060,7 @@ int ObQueryRetryCtrl::init()
   ERR_RETRY_FUNC("STORAGE",  OB_SNAPSHOT_DISCARDED,              snapshot_discard_proc,         short_wait_retry_proc,                             nullptr);
   ERR_RETRY_FUNC("STORAGE",  OB_DATA_NOT_UPTODATE,               long_wait_retry_proc,          short_wait_retry_proc,                             nullptr);
   ERR_RETRY_FUNC("STORAGE",  OB_REPLICA_NOT_READABLE,            long_wait_retry_proc,          short_wait_retry_proc,                             ObDASRetryCtrl::tablet_nothing_readable_proc);
+  ERR_RETRY_FUNC("STORAGE",  OB_PARTITION_IS_SPLITTING,          short_wait_retry_proc,         short_wait_retry_proc,                             nullptr);
   ERR_RETRY_FUNC("STORAGE",  OB_DISK_HUNG,                       nonblock_location_error_proc,  empty_proc,                                        nullptr);
 
   /* trx */

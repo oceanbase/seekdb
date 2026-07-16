@@ -398,7 +398,7 @@ int ObHeapRsSliceWriter::close()
     LOG_WARN("close row slice writer failed", K(ret));
   } else if (OB_FAIL(heap_info_.get_last_autoinc_val(last_autoinc_val))) {
     LOG_WARN("get last autoinc val failed", K(ret));
-  } else if (OB_FAIL(ObDDLUtil::set_tablet_autoinc_seq(tablet_id_, last_autoinc_val))) {
+  } else if (OB_FAIL(ObDDLUtil::set_tablet_autoinc_seq(writer_param_.ls_id_, tablet_id_, last_autoinc_val))) {
     LOG_WARN("set tablet autoinc seq failed", K(ret));
   }
   return ret;
@@ -1162,7 +1162,7 @@ int ObHeapBatchSliceWriter::close()
     LOG_WARN("close row slice writer failed", K(ret));
   } else if (OB_FAIL(heap_info_.get_last_autoinc_val(last_autoinc_val))) {
     LOG_WARN("get last autoinc val failed", K(ret));
-  } else if (OB_FAIL(ObDDLUtil::set_tablet_autoinc_seq(tablet_id_, last_autoinc_val))) {
+  } else if (OB_FAIL(ObDDLUtil::set_tablet_autoinc_seq(writer_param_.ls_id_, tablet_id_, last_autoinc_val))) {
     LOG_WARN("set tablet autoinc seq failed", K(ret));
   }
   return ret;

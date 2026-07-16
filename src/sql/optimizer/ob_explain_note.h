@@ -39,6 +39,7 @@ namespace sql
 #define PARALLEL_DISABLED_BY_PL_UDF_DAS  "Degree of Parallelisim is %ld because stmt contain pl_udf which force das scan"
 #define PDML_DISABLED_BY_INSERT_PK_AUTO_INC "PDML disabled because the insert statement primary key or partition key has specified auto-increment column"
 #define PDML_DISABLED_BY_TRANSFORMATIONS "PDML disabled because transformations like or-expansion"
+#define PARALLEL_DISABLED_BY_LICENSE "The degree of parallelism is set to %ld because current license does not allow this operation"
 #define NON_STANDARD_COMPARISON_SETTING "Non-standard comparison level is set to %s because of %s"
 
 }

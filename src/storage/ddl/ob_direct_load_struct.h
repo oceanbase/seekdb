@@ -22,7 +22,6 @@
 #include "common/ob_tablet_id.h"
 #include "common/row/ob_row_iterator.h"
 #include "share/scn.h"
-#include "share/tablet/ob_tablet_info.h"
 #include "share/ob_tablet_autoincrement_param.h"
 #include "observer/scheduler/ob_tenant_dag_scheduler.h"
 #include "observer/vector_index/ob_vector_index_util.h"
@@ -68,20 +67,23 @@ struct ObBatchSliceWriteInfo final
 public:
   ObBatchSliceWriteInfo()
     : data_tablet_id_(), // tablet id of the data table.
+      ls_id_(),
       trans_version_(0),
       direct_load_type_()
   { }
-  ObBatchSliceWriteInfo(const common::ObTabletID &tablet_id, const int64_t &trans_version,
+  ObBatchSliceWriteInfo(const common::ObTabletID &tablet_id, const share::ObLSID &ls_id, const int64_t &trans_version,
       const ObDirectLoadType &direct_load_type)
     : data_tablet_id_(tablet_id),
+      ls_id_(ls_id),
       trans_version_(trans_version),
       direct_load_type_(direct_load_type)
 
   { }
   ~ObBatchSliceWriteInfo() = default;
-  TO_STRING_KV(K(data_tablet_id_), K(trans_version_), K(direct_load_type_));
+  TO_STRING_KV(K(ls_id_), K(data_tablet_id_), K(trans_version_), K(direct_load_type_));
 public:
   common::ObTabletID data_tablet_id_;
+  share::ObLSID ls_id_;
   int64_t trans_version_;
   ObDirectLoadType direct_load_type_;
 };
@@ -134,15 +136,16 @@ struct ObDirectLoadSliceInfo final
 {
 public:
   ObDirectLoadSliceInfo()
-    : is_full_direct_load_(false), is_lob_slice_(false), data_tablet_id_(), slice_id_(-1),
+    : is_full_direct_load_(false), is_lob_slice_(false), ls_id_(), data_tablet_id_(), slice_id_(-1),
       context_id_(0), is_task_finish_(false), total_slice_cnt_(-1), slice_idx_(0), merge_slice_idx_(0)
     { }
   ~ObDirectLoadSliceInfo() = default;
-  bool is_valid() const { return data_tablet_id_.is_valid() && slice_id_ >= 0 && context_id_ >= 0; }
-  TO_STRING_KV(K_(is_full_direct_load), K_(is_lob_slice), K_(data_tablet_id), K_(slice_id), K_(context_id), K_(is_task_finish), K_(total_slice_cnt), K_(slice_idx), K_(merge_slice_idx));
+  bool is_valid() const { return ls_id_.is_valid() && data_tablet_id_.is_valid() && slice_id_ >= 0 && context_id_ >= 0; }
+  TO_STRING_KV(K_(is_full_direct_load), K_(is_lob_slice), K_(ls_id), K_(data_tablet_id), K_(slice_id), K_(context_id), K_(is_task_finish), K_(total_slice_cnt), K_(slice_idx), K_(merge_slice_idx));
 public:
   bool is_full_direct_load_;
   bool is_lob_slice_;
+  share::ObLSID ls_id_;
   common::ObTabletID data_tablet_id_;
   int64_t slice_id_;
   int64_t context_id_;
@@ -160,15 +163,16 @@ struct ObDirectInsertCommonParam final
 {
 public:
   ObDirectInsertCommonParam()
-    : tablet_id_(), direct_load_type_(DIRECT_LOAD_INVALID), data_format_version_(0), read_snapshot_(0), is_no_logging_(false)
+    : ls_id_(), tablet_id_(), direct_load_type_(DIRECT_LOAD_INVALID), data_format_version_(0), read_snapshot_(0), is_no_logging_(false)
 
   {}
   ~ObDirectInsertCommonParam() = default;
-  bool is_valid() const { return tablet_id_.is_valid()
+  bool is_valid() const { return ls_id_.is_valid() && tablet_id_.is_valid()
       && data_format_version_ >= 0 && read_snapshot_ >= 0 && is_valid_direct_load(direct_load_type_);
   }
-  TO_STRING_KV(K_(tablet_id), K_(direct_load_type), K_(data_format_version), K_(read_snapshot), K_(is_no_logging));
+  TO_STRING_KV(K_(ls_id), K_(tablet_id), K_(direct_load_type), K_(data_format_version), K_(read_snapshot), K_(is_no_logging));
 public:
+  share::ObLSID ls_id_;
   common::ObTabletID tablet_id_;
   ObDirectLoadType direct_load_type_;
   uint64_t data_format_version_;
@@ -260,6 +264,7 @@ public:
   ~ObTabletDDLParam();
   bool is_valid() const;
   TO_STRING_KV(K_(direct_load_type),
+               K_(ls_id),
                K_(start_scn),
                K_(commit_scn),
                K_(data_format_version),
@@ -267,6 +272,7 @@ public:
                K_(snapshot_version));
 public:
   ObDirectLoadType direct_load_type_;
+  share::ObLSID ls_id_;
   share::SCN start_scn_;
   share::SCN commit_scn_;
   uint64_t data_format_version_;
@@ -279,6 +285,7 @@ struct ObDDLTableMergeDagParam : public share::ObIDagInitParam
 public:
   ObDDLTableMergeDagParam()
     : direct_load_type_(ObDirectLoadType::DIRECT_LOAD_INVALID),
+      ls_id_(),
       tablet_id_(),
       rec_scn_(share::SCN::min_scn()),
       is_commit_(false),
@@ -292,15 +299,16 @@ public:
   bool is_valid() const
   {
     return data_format_version_ > 0 && snapshot_version_ > 0
-        && is_full_direct_load(direct_load_type_)
+        && is_full_direct_load(direct_load_type_) && ls_id_.is_valid()
         && tablet_id_.is_valid() && start_scn_.is_valid_and_not_min();
   }
   int assign(const ObDDLTableMergeDagParam &merge_param);
   virtual ~ObDDLTableMergeDagParam() = default;
-  VIRTUAL_TO_STRING_KV(K_(direct_load_type), K_(tablet_id), K_(rec_scn), K_(is_commit), K_(start_scn), K_(data_format_version),
+  VIRTUAL_TO_STRING_KV(K_(direct_load_type), K_(ls_id), K_(tablet_id), K_(rec_scn), K_(is_commit), K_(start_scn), K_(data_format_version),
                        K_(snapshot_version), K_(table_key), K_(user_data));
 public:
   ObDirectLoadType direct_load_type_;
+  share::ObLSID ls_id_;
   ObTabletID tablet_id_;
   share::SCN rec_scn_;
   bool is_commit_;
@@ -333,7 +341,7 @@ public:
   int assign(const ObDDLTabletMergeDagParamV2 &merge_param);
   int init_slice_sstable_array(hash::ObHashSet<int64_t> &slice_idxes);
   int set_slice_sstable(const int64_t slice_idx, const ObTableHandleV2 &sstable_handle);
-  int get_tablet_param(ObTabletID &tablet_id, ObWriteTabletParam *&tablet_param) const;
+  int get_tablet_param(share::ObLSID &ls_id, ObTabletID &tablet_id, ObWriteTabletParam *&tablet_param) const;
   int get_merge_ctx(ObDDLTabletContext::MergeCtx *&merge_ctx);
   int get_storage_schema(ObStorageSchema *stroage_schema);
   void set_merge_all_slice() { merge_all_slice_ = true; }
@@ -905,6 +913,7 @@ private:
       ObIAllocator &allocator,
       ObIAllocator &iter_allocator,
       blocksstable::ObStorageDatum &datum,
+      const share::ObLSID &ls_id,
       const ObTabletID &tablet_id,
       const int64_t trans_version,
       const ObObjType &obj_type,

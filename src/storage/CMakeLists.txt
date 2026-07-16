@@ -299,6 +299,9 @@ ob_set_subtarget(ob_storage tablet
   tablet/ob_tablet_multi_source_data.cpp
   tablet/ob_tablet_service_clog_replay_executor.cpp
   tablet/ob_tablet_status.cpp
+  tablet/ob_tablet_split_mds_helper.cpp
+  tablet/ob_tablet_split_mds_user_data.cpp
+  tablet/ob_tablet_split_replay_executor.cpp
   tablet/ob_tablet_table_store.cpp
   tablet/ob_tablet_table_store_iterator.cpp
   tablet/ob_table_store_util.cpp
@@ -332,13 +335,24 @@ ob_set_subtarget(ob_storage tablet
 
 ob_set_subtarget(ob_storage tx
   tx/ob_ctx_tx_data.cpp
+  tx/ob_gti_rpc.cpp
   tx/ob_gti_source.cpp
+  tx/ob_gts_local_cache.cpp
+  tx/ob_gts_msg.cpp
+  tx/ob_gts_rpc.cpp
+  tx/ob_gts_source.cpp
+  tx/ob_gts_task_queue.cpp
+  tx/ob_ts_response_handler.cpp
+  tx/ob_ts_worker.cpp
   tx/ob_id_service.cpp
   tx/ob_keep_alive_ls_handler.cpp
   tx/ob_tx_loop_worker.cpp
+  tx/ob_tx_ls_state_mgr.cpp
   tx/ob_tx_log_cb_define.cpp
   tx/ob_tx_log_cb_mgr.cpp
   tx/ob_tx_ctx_log_cb_helper.cpp
+  tx/ob_location_adapter.cpp
+  tx/ob_tablet_to_ls_cache.cpp
   tx/ob_timestamp_access.cpp
   tx/ob_timestamp_service.cpp
   tx/ob_weak_read_util.cpp
@@ -355,9 +369,10 @@ ob_set_subtarget(ob_storage tx
   tx/ob_trans_factory.cpp
   tx/ob_trans_id_service.cpp
   tx/ob_trans_memory_stat.cpp
-  tx/ob_tx_ctx.cpp
+  tx/ob_trans_part_ctx.cpp
   tx/ob_defensive_check_mgr.cpp
   tx/ob_trans_result.cpp
+  tx/ob_trans_rpc.cpp
   tx/ob_tx_result_struct.cpp
   tx/ob_trans_service.cpp
   tx/ob_trans_service_v4.cpp
@@ -372,14 +387,15 @@ ob_set_subtarget(ob_storage tx
   tx/ob_trans_timer.cpp
   tx/ob_trans_version_mgr.cpp
   tx/ob_ts_mgr.cpp
-  tx/ob_tx_timestamp_waiter.cpp
   tx/ob_tx_data_define.cpp
   tx/ob_tx_data_op.cpp
   tx/ob_tx_data_functor.cpp
-  tx/ob_tx_print_time_guard.cpp
+  tx/ob_tx_serialization.cpp
   tx/ob_tx_log.cpp
   tx/ob_tx_log_adapter.cpp
   tx/ob_tx_big_segment_buf.cpp
+  tx/ob_tx_ls_log_writer.cpp
+  tx/ob_tx_msg.cpp
   tx/ob_tx_on_demand_print.cpp
   tx/ob_tx_replay_executor.cpp
   tx/ob_xa_define.cpp
@@ -409,13 +425,18 @@ ob_set_subtarget(ob_storage tx_storage
   tx_storage/ob_access_service.cpp
   tx_storage/ob_checkpoint_service.cpp
   tx_storage/ob_ls_freeze_thread.cpp
+  tx_storage/ob_ls_handle.cpp
+  tx_storage/ob_ls_map.cpp
+  tx_storage/ob_ls_safe_destroy_task.cpp
   tx_storage/ob_ls_service.cpp
+  tx_storage/ob_safe_destroy_handler.cpp
   tx_storage/ob_tenant_freezer.cpp
   tx_storage/ob_tenant_freezer_common.cpp
   tx_storage/ob_tenant_freezer_rpc.cpp
   tx_storage/ob_tenant_memory_printer.cpp
   tx_storage/ob_tablet_gc_service.cpp
   tx_storage/ob_empty_shell_task.cpp
+  tx_storage/ob_empty_shell_object_checker.cpp
 )
 
 ob_set_subtarget(ob_storage tx_table
@@ -441,6 +462,8 @@ ob_set_subtarget(ob_storage ls
   ls/ob_ls_ddl_log_handler.cpp
   ls/ob_ls_lock.cpp
   ls/ob_ls_meta.cpp
+  ls/ob_ls_meta_package.cpp
+  ls/ob_ls_role_handler.cpp
   ls/ob_ls_state.cpp
   ls/ob_ls_sync_tablet_seq_handler.cpp
   ls/ob_ls_switch_checker.cpp
@@ -504,6 +527,7 @@ ob_set_subtarget(ob_storage ddl
   ddl/ob_ddl_common_storage_impl.cpp
   ddl/ob_build_index_task.cpp
   ddl/ob_complement_data_task.cpp
+  ddl/ob_tablet_split_task.cpp
   ddl/ob_delete_lob_meta_row_task.cpp
   ddl/ob_ddl_clog.cpp
   ddl/ob_ddl_merge_task.cpp
@@ -519,10 +543,13 @@ ob_set_subtarget(ob_storage ddl
   ddl/ob_tablet_barrier_log.cpp
   ddl/ob_tablet_ddl_kv.cpp
   ddl/ob_tablet_ddl_kv_mgr.cpp
+  ddl/ob_tablet_split_cache.cpp
   ddl/ob_ddl_lock.cpp
   ddl/ob_ddl_replay_executor.cpp
   ddl/ob_ddl_heart_beat_task.cpp
+  ddl/ob_tablet_lob_split_task.cpp
   ddl/ob_ddl_seq_generator.cpp
+  ddl/ob_ddl_alter_auto_part_attr.cpp
   ddl/ob_i_direct_load_mgr.cpp
   ddl/ob_direct_load_mgr_v3.cpp
   ddl/ob_direct_load_mgr_utils.cpp
@@ -557,6 +584,7 @@ ob_set_subtarget(ob_storage common
   ob_i_pre_warmer.cpp
   ob_tablet_autoincrement_service.cpp
   ob_row_bitmap.cpp
+  ob_partition_split_query.cpp
   ob_all_micro_block_range_iterator.cpp
   ob_bloom_filter_task.cpp
   ob_col_map.cpp
@@ -579,7 +607,7 @@ ob_set_subtarget(ob_storage common
   ob_storage_schema_recorder.cpp
   ob_storage_clog_recorder.cpp
   ob_storage_struct.cpp
-  ob_tablet_restore_state.cpp
+  ob_tablet_ha_status.cpp
   ob_storage_ha_struct.cpp
   ob_storage_table_guard.cpp
   ob_storage_util.cpp
@@ -592,6 +620,7 @@ ob_set_subtarget(ob_storage common
   ob_tenant_tablet_stat_mgr.cpp
   ob_protected_memtable_mgr_handle.cpp
   ob_gc_upper_trans_helper.cpp
+  ob_partition_pre_split.cpp
 )
 
 ob_set_subtarget(ob_storage common_mixed
@@ -683,6 +712,7 @@ ob_set_subtarget(ob_storage memtable
   memtable/ob_memtable_block_row_scanner.cpp
   memtable/ob_memtable_compact_writer.cpp
   memtable/ob_memtable_context.cpp
+  memtable/ob_memtable_interface.cpp
   memtable/ob_memtable_iterator.cpp
   memtable/ob_memtable_mutator.cpp
   memtable/ob_memtable_read_row_util.cpp
@@ -730,6 +760,7 @@ ob_set_subtarget(ob_storage multi_data_source
   multi_data_source/ob_mds_minor_compaction_filter.cpp
   multi_data_source/ob_tablet_create_mds_ctx.cpp
   multi_data_source/ob_tablet_mds_merge_ctx.cpp
+  multi_data_source/test/example_user_helper_define.cpp
   multi_data_source/mds_key_serialize_util.cpp
 )
 

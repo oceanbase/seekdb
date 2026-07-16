@@ -46,8 +46,6 @@ class ObDataMacroBlockMeta;
 namespace storage
 {
 
-class ObLS;
-
 class ObBlockMetaTreeValue final
 {
 public:
@@ -209,7 +207,8 @@ public:
   ObDDLKV();
   ~ObDDLKV();
 // full direct load.
-  int init(const common::ObTabletID &tablet_id,
+  int init(const share::ObLSID &ls_id,
+           const common::ObTabletID &tablet_id,
            const share::SCN &ddl_start_scn,
            const int64_t snapshot_version,
            const share::SCN &last_freezed_scn,
@@ -224,7 +223,7 @@ public: // derived from ObIMemtable
 public : // derived from ObITabletMemtable
   virtual bool is_inited() const override { return is_inited_; }
   virtual int init(const ObITable::TableKey &table_key,
-                   ObLS *ls,
+                   ObLSHandle &ls_handle,
                    ObFreezer *freezer,
                    ObTabletMemtableMgr *memtable_mgr,
                    const int64_t schema_version,
@@ -272,7 +271,7 @@ public:  // derived from ObITable
       ObStoreRowIterator *&row_iter) override;
 
 public: // derived from ObFreezeCheckpoint
-  virtual int flush() override;
+  virtual int flush(share::ObLSID ls_id) override;
   virtual bool ready_for_flush() override;
   virtual bool rec_scn_is_stable() override;
   virtual void set_allow_freeze(const bool allow_freeze) override;
@@ -321,6 +320,7 @@ public:
                        K_(is_inited),
                        K_(is_closed),
                        K_(is_independent_freezed),
+                       K_(ls_id),
                        K_(tablet_id),
                        K_(ddl_start_scn),
                        K_(snapshot_version),

@@ -287,6 +287,9 @@ const char *ObITask::ObITaskTypeStr[] = {
   "COMPACT_TO_LASTEST",
   "SSTABLE_MERGE_PREPARE",
   "SSTABLE_MERGE_FINISH",
+  "SPLIT_PREPARE_TASK",
+  "SPLIT_TASK",
+  "SPLIT_FINISH_TASK",
   "UNIQUE_CHECKING_PREPARE",
   "SIMPLE_UNIQUE_CHECKING",
   "MIGRATE_PREPARE",
@@ -306,7 +309,7 @@ const char *ObITask::ObITaskTypeStr[] = {
   "FAST_MIGRATE_ASYNC_TASK",
   "VALIDATE_BACKUP",
   "VALIDATE_FINISH",
-  "RESERVED_TASK_TYPE_36",
+  "BUILD_CHANGE_REPLICA",
   "RESTORE_TAILORED_PREPARE",
   "RESTORE_TAILORED_PROCESS",
   "RESTORE_TAILORED_FINISH",
@@ -318,8 +321,8 @@ const char *ObITask::ObITaskTypeStr[] = {
   "BACKUP_CLEAN",
   "DDL_KV_DUMP",
   "DDL_KV_MERGE",
-  "RESERVED_TASK_TYPE_48",
-  "RESERVED_TASK_TYPE_49",
+  "RESERVED_51",
+  "RESERVED_52",
   "MDS_MINI_MERGE",
   "TTL_DELETE",
   "TENANT_SNAPSHOT_CREATE",
@@ -328,6 +331,9 @@ const char *ObITask::ObITaskTypeStr[] = {
   "LOB_BUILD_MAP",
   "LOB_MERGE_MAP",
   "LOB_WRITE_DATA",
+  "DDL_SPLIT_PREPARE",
+  "DDL_SPLIT_WRITE",
+  "DDL_SPLIT_MERGE",
   "TABLE_FINISH_BACKFILL",
   "BACKUP_INITIAL_FUSE",
   "BACKUP_START_FUSE",
@@ -346,7 +352,7 @@ const char *ObITask::ObITaskTypeStr[] = {
   "CHECK_CONVERT_TABLET",
   "VECTOR_INDEX_MEMDATA_SYNC",
   "DELETE_LOB_META_ROW",
-  "RESERVED_TASK_TYPE_76",
+  "RESERVED_82",
   "BACKUP_LS_LOG_GROUP",
   "BACKUP_LS_LOG",
   "BACKUP_LS_LOG_FILE",
@@ -355,6 +361,8 @@ const char *ObITask::ObITaskTypeStr[] = {
   "COMPLEMENT_CALC_RANGE",
   "COMPLEMENT_RESCAN_WRITE",
   "UNIQUE_CHECKING_MERGE",
+  "DDL_SPLIT_DOWNLOAD_SSTABLE",
+  "DDL_SPLIT_FINISH",
   "UPLOAD_MINI_SSTABLE",
   "ATTACH_SHARED_SSTABLE",
   "SS_PHYSICAL_CREATE_TABLETS_PRODUCER",
@@ -363,13 +371,13 @@ const char *ObITask::ObITaskTypeStr[] = {
   "SS_MIGRATE_START",
   "MIGRATE_START_FINISH",
   "SS_MIGRATE_FINISH",
-  "RESERVED_TASK_TYPE_93",
-  "RESERVED_TASK_TYPE_94",
-  "RESERVED_TASK_TYPE_95",
-  "RESERVED_TASK_TYPE_96",
-  "RESERVED_TASK_TYPE_97",
-  "RESERVED_TASK_TYPE_98",
-  "RESERVED_TASK_TYPE_99",
+  "RESERVED_101",
+  "RESERVED_102",
+  "RESERVED_103",
+  "RESERVED_104",
+  "RESERVED_105",
+  "RESERVED_106",
+  "RESERVED_107",
   "MIGRATE_START_PHYSICAL",
   "SS_PHYSICAL_CREATE_TABLETS_CONSUMER",
   "UNUSED",
@@ -432,7 +440,7 @@ const char *ObITask::ObITaskTypeStr[] = {
   "UNUSED",
   "UNUSED",
   "UNUSED",
-  "RESERVED_TASK_TYPE_162",
+  "RESERVED_170",
   "DDL_FORK_PREPARE",
   "DDL_FORK_REUSE",
   "DDL_FORK_REWRITE",
@@ -1809,6 +1817,17 @@ const char *ObIDag::get_dag_module_str(const enum ObDagType::ObDagTypeEnum type)
 }
 
 
+const char *ObIDagNet::get_dag_net_type_str(ObDagNetType::ObDagNetTypeEnum type)
+{
+  const char *str = "";
+  if (type >= ObDagNetType::DAG_NET_TYPE_MAX || type < ObDagNetType::DAG_NET_TYPE_MIGRATION) {
+    str = "invalid_type";
+  } else {
+    str = OB_DAG_NET_TYPES[type].dag_net_type_str_;
+  }
+  return str;
+}
+
 ObDagInfo::ObDagInfo()
   : dag_type_(ObDagType::DAG_TYPE_MAX),
     dag_net_type_(ObDagNetType::DAG_NET_TYPE_MAX),
@@ -1850,8 +1869,10 @@ bool ObDagInfo::is_valid() const
       && add_time_ >= 0
       && start_time_ >= 0
       && indegree_ >= 0
-      && dag_type_ >= share::ObDagType::DAG_TYPE_MINI_MERGE
-      && dag_type_ < share::ObDagType::DAG_TYPE_MAX);
+      && ((dag_net_type_ >= ObDagNetType::DAG_NET_TYPE_MIGRATION
+          && dag_net_type_ < ObDagNetType::DAG_NET_TYPE_MAX)
+        || (dag_type_ >= share::ObDagType::DAG_TYPE_MINI_MERGE
+          && dag_type_ < share::ObDagType::DAG_TYPE_MAX)));
 }
 
 const char *ObDagSchedulerInfo::ObValueTypeStr[VALUE_TYPE_MAX] =
@@ -2822,15 +2843,15 @@ int ObDagPrioScheduler::finish_dag_(
         compaction::ObTabletMergeDag &merge_dag = static_cast<compaction::ObTabletMergeDag &>(*dag);
         if (OB_SUCCESS != dag->get_dag_ret()) {
           if (OB_TMP_FAIL(share::g_mp->diagnose_tablet_mgr()->add_diagnose_tablet(
-                merge_dag.tablet_id_, ObIDag::get_diagnose_tablet_type(dag->get_type())))) {
+                merge_dag.ls_id_, merge_dag.tablet_id_, ObIDag::get_diagnose_tablet_type(dag->get_type())))) {
             COMMON_LOG(WARN, "failed to add diagnose tablet", K(tmp_ret), 
-                "tablet_id", merge_dag.tablet_id_);
+                "ls_id", merge_dag.ls_id_, "tablet_id", merge_dag.tablet_id_);
           }
         } else if (OB_TMP_FAIL(share::g_mp->diagnose_tablet_mgr()->delete_diagnose_tablet(
-              merge_dag.tablet_id_, ObIDag::get_diagnose_tablet_type(dag->get_type())))) {
+              merge_dag.ls_id_, merge_dag.tablet_id_, ObIDag::get_diagnose_tablet_type(dag->get_type())))) {
           if (OB_HASH_NOT_EXIST != tmp_ret) {
             COMMON_LOG(ERROR, "failed to delete diagnose tablet", K(tmp_ret),
-              "tablet_id", merge_dag.tablet_id_);
+              "ls_id", merge_dag.ls_id_, "tablet_id", merge_dag.tablet_id_);
           }
         }
       }
@@ -3200,7 +3221,9 @@ void ObDagPrioScheduler::add_compaction_info(
   }
 }
 
-int ObDagPrioScheduler::check_compaction_dag_exist_with_cancel(bool &exist)
+int ObDagPrioScheduler::check_ls_compaction_dag_exist_with_cancel(
+    const ObLSID &ls_id,
+    bool &exist)
 {
   int ret = OB_SUCCESS;
   int tmp_ret = OB_SUCCESS;
@@ -3220,9 +3243,9 @@ int ObDagPrioScheduler::check_compaction_dag_exist_with_cancel(bool &exist)
       if (OB_ISNULL(cur)) {
         // do nothing
       } else if (ObDagType::DAG_TYPE_BATCH_FREEZE_TABLETS == cur->get_type()) {
-        cancel_flag = true;
+        cancel_flag = (ls_id == static_cast<compaction::ObBatchFreezeTabletsDag *>(cur)->get_param().ls_id_);
       } else {
-        cancel_flag = true;
+        cancel_flag = (ls_id == static_cast<compaction::ObTabletMergeDag *>(cur)->get_ls_id());
       }
 
       if (cancel_flag) {
@@ -3252,12 +3275,12 @@ int ObDagPrioScheduler::check_compaction_dag_exist_with_cancel(bool &exist)
     }
   }
   if (OB_SUCC(ret)) {
-    COMMON_LOG(INFO, "cancel dag when checking compaction dag", KR(ret), K(cancel_dag_cnt), K(exist));
+    COMMON_LOG(INFO, "cancel dag when check ls compaction dag exist", KR(ret), K(ls_id), K(cancel_dag_cnt), K(exist));
   }
   return OB_SUCCESS;
 }
 
-int ObDagPrioScheduler::get_min_end_scn_from_major_dag(SCN &min_end_scn)
+int ObDagPrioScheduler::get_min_end_scn_from_major_dag(const ObLSID &ls_id, SCN &min_end_scn)
 {
   int ret = OB_SUCCESS;
   ObDagListIndex loop_list[2] = { READY_DAG_LIST, RANK_DAG_LIST };
@@ -3272,7 +3295,8 @@ int ObDagPrioScheduler::get_min_end_scn_from_major_dag(SCN &min_end_scn)
       SCN tmp_min_end_scn = SCN::max_scn();
       if (ObDagType::DAG_TYPE_MAJOR_MERGE == cur->get_type()) {
         compaction::ObTabletMergeDag * dag = static_cast<compaction::ObTabletMergeDag *>(cur);
-        if (cur->get_dag_status() != ObIDag::DAG_STATUS_READY) {
+        if (ls_id == dag->get_ls_id()
+          && cur->get_dag_status() != ObIDag::DAG_STATUS_READY) {
           if (OB_FAIL(dag->get_min_sstable_end_scn(tmp_min_end_scn))) {
             LOG_WARN("failed to get min end scn from dag", KR(ret), KPC(cur));
           } else {
@@ -3285,7 +3309,7 @@ int ObDagPrioScheduler::get_min_end_scn_from_major_dag(SCN &min_end_scn)
   } // for
   if (OB_SUCC(ret)) {
     min_end_scn = dag_min_end_scn;
-    LOG_INFO("[MIN_END_SCN]success to get min end scn from major dag", KR(ret), K(dag_min_end_scn));
+    LOG_INFO("[MIN_END_SCN]success to get min end scn from major dag", KR(ret), K(ls_id), K(dag_min_end_scn));
   }
   return ret;
 }
@@ -3413,9 +3437,10 @@ int ObDagPrioScheduler::diagnose_compaction_dags()
         } else if (OB_ISNULL(merge_dag = static_cast<ObTabletMergeDag *>(dag))) {
           tmp_ret = OB_ERR_UNEXPECTED;
           COMMON_LOG(WARN, "get unexpected null stored dag", K(tmp_ret), KPC(dag));
-        } else if (OB_TMP_FAIL(share::g_mp->diagnose_tablet_mgr()->add_diagnose_tablet(merge_dag->tablet_id_,
+        } else if (OB_TMP_FAIL(share::g_mp->diagnose_tablet_mgr()->add_diagnose_tablet(merge_dag->ls_id_,
+                                                                               merge_dag->tablet_id_,
                                                                                ObIDag::get_diagnose_tablet_type(dag->get_type())))) {
-          COMMON_LOG(WARN, "failed to add diagnose tablet", K(tmp_ret), "tablet_id", merge_dag->tablet_id_);
+          COMMON_LOG(WARN, "failed to add diagnose tablet", K(tmp_ret), "ls_id", merge_dag->ls_id_, "tablet_id", merge_dag->tablet_id_);
         } else {
           COMMON_LOG(TRACE, "dag maybe abormal", KPC(merge_dag));
         }
@@ -4113,19 +4138,20 @@ int ObDagNetScheduler::get_first_dag_net(ObIDagNet *&dag_net)
   return ret;
 }
 
-int ObDagNetScheduler::check_compaction_dag_exist_with_cancel(bool &exist)
+int ObDagNetScheduler::check_ls_compaction_dag_exist_with_cancel(const ObLSID &ls_id, bool &exist)
 {
   int ret = OB_SUCCESS;
+  UNUSED(ls_id);
   exist = false;
-  LOG_INFO("skip compaction dag net cancel", KR(ret), K(exist));
+  LOG_INFO("skip compaction dag net cancel", KR(ret), K(ls_id), K(exist));
   return ret;
 }
 
-int ObDagNetScheduler::get_min_end_scn_from_major_dag(SCN &min_end_scn)
+int ObDagNetScheduler::get_min_end_scn_from_major_dag(const ObLSID &ls_id, SCN &min_end_scn)
 {
   int ret = OB_SUCCESS;
   min_end_scn = SCN::max_scn();
-  LOG_INFO("[MIN_END_SCN]skip compaction dag net", KR(ret), K(min_end_scn));
+  LOG_INFO("[MIN_END_SCN]skip compaction dag net", KR(ret), K(ls_id), K(min_end_scn));
   return ret;
 }
 
@@ -4680,7 +4706,7 @@ int ObTenantDagScheduler::get_minor_exe_dag_info(
   return ret;
 }
 
-int ObTenantDagScheduler::check_compaction_dag_exist_with_cancel(bool &exist)
+int ObTenantDagScheduler::check_ls_compaction_dag_exist_with_cancel(const ObLSID &ls_id, bool &exist)
 {
   int ret = OB_SUCCESS;
   exist = false;
@@ -4693,8 +4719,8 @@ int ObTenantDagScheduler::check_compaction_dag_exist_with_cancel(bool &exist)
    * - Need cancel dag for the final desctruction of dag net.
    * - Need cancel the dag net to avoid scheduling more dags.
    */
-  if (OB_FAIL(dag_net_sche_.check_compaction_dag_exist_with_cancel(tmp_exist))) {
-    LOG_WARN("failed to check compaction dag exist", K(ret));
+  if (OB_FAIL(dag_net_sche_.check_ls_compaction_dag_exist_with_cancel(ls_id, tmp_exist))) {
+    LOG_WARN("failed to check ls compaction dag exist", K(ret), K(ls_id));
   } else if (tmp_exist) {
     exist = true;
   }
@@ -4702,8 +4728,8 @@ int ObTenantDagScheduler::check_compaction_dag_exist_with_cancel(bool &exist)
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < ObIDag::MergeDagPrioCnt; ++i) {
       tmp_exist = false;
-      if (OB_FAIL(prio_sche_[ObIDag::MergeDagPrio[i]].check_compaction_dag_exist_with_cancel(tmp_exist))) {
-        LOG_WARN("failed to check compaction dag exist", K(ret));
+      if (OB_FAIL(prio_sche_[ObIDag::MergeDagPrio[i]].check_ls_compaction_dag_exist_with_cancel(ls_id, tmp_exist))) {
+        LOG_WARN("failed to check ls compaction dag exist", K(ret), K(ls_id));
       } else if (tmp_exist) {
         exist = true;
       }
@@ -4712,21 +4738,22 @@ int ObTenantDagScheduler::check_compaction_dag_exist_with_cancel(bool &exist)
   return ret;
 }
 
-int ObTenantDagScheduler::get_min_end_scn_from_major_dag(SCN &min_end_scn)
+int ObTenantDagScheduler::get_min_end_scn_from_major_dag(const ObLSID &ls_id, SCN &min_end_scn)
 {
   int ret = OB_SUCCESS;
   SCN min_end_scn_from_dag_net = SCN::max_scn();
   SCN min_end_scn_from_dag = SCN::max_scn();
-  if (OB_FAIL(dag_net_sche_.get_min_end_scn_from_major_dag(min_end_scn_from_dag_net))) {
-    LOG_WARN("failed to check compaction dag exist", K(ret));
-  } else if (OB_FAIL(prio_sche_[ObDagPrio::DAG_PRIO_COMPACTION_LOW].get_min_end_scn_from_major_dag(min_end_scn_from_dag))) {
-    LOG_WARN("failed to check compaction dag exist", K(ret));
+  if (OB_FAIL(dag_net_sche_.get_min_end_scn_from_major_dag(ls_id, min_end_scn_from_dag_net))) {
+    LOG_WARN("failed to check ls compaction dag exist", K(ret), K(ls_id));
+  } else if (OB_FAIL(prio_sche_[ObDagPrio::DAG_PRIO_COMPACTION_LOW].get_min_end_scn_from_major_dag(ls_id, min_end_scn_from_dag))) {
+    LOG_WARN("failed to check ls compaction dag exist", K(ret), K(ls_id));
   } else {
     min_end_scn = std::min(min_end_scn_from_dag, min_end_scn_from_dag_net);
 #ifdef ERRSIM
     if (!min_end_scn.is_max()) {
       SERVER_EVENT_SYNC_ADD("merge_errsim", "get_min_end_scn",
-                            "min_end_scn", min_end_scn.get_val_for_tx());
+                          "ls_id", ls_id.id(),
+                          "min_end_scn", min_end_scn.get_val_for_tx());
     }
 #endif
   }

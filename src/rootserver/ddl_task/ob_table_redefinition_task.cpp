@@ -235,14 +235,17 @@ int ObTableRedefinitionTask::send_build_replica_request_by_sql()
     if (!modify_autoinc) {
       sql_mode = sql_mode | SMO_NO_AUTO_VALUE_ON_ZERO;
     }
-    alter_table_arg_.inner_sql_exec_addr_ = GCTX.self_addr();
-    if (OB_FAIL(set_sql_exec_addr(alter_table_arg_.inner_sql_exec_addr_))) {
+    // get execute inner sql addr
+    if (OB_FAIL(ObDDLUtil::get_sys_ls_leader_addr(GCONF.cluster_id, alter_table_arg_.inner_sql_exec_addr_))) {
+      LOG_WARN("get sys ls leader addr fail", K(ret));
+      ret = OB_SUCCESS; // ignore ret
+    } else if (OB_FAIL(set_sql_exec_addr(alter_table_arg_.inner_sql_exec_addr_))) {
       LOG_WARN("failed to set sql execute addr", K(ret), K(alter_table_arg_.inner_sql_exec_addr_));
-    } else {
-      ObSchemaGetterGuard schema_guard;
-      const ObTableSchema *orig_table_schema = nullptr;
-      const ObTableSchema *hidden_table_schema = nullptr;
-      ObDDLRedefinitionSSTableBuildTask task(
+    }
+    ObSchemaGetterGuard schema_guard;
+    const ObTableSchema *orig_table_schema = nullptr;
+    const ObTableSchema *hidden_table_schema = nullptr;
+    ObDDLRedefinitionSSTableBuildTask task(
         task_id_,
         object_id_,
         target_object_id_,
@@ -257,17 +260,16 @@ int ObTableRedefinitionTask::send_build_replica_request_by_sql()
         alter_table_arg_.inner_sql_exec_addr_,
         data_format_version_,
         is_ddl_retryable_);
-      if (OB_FAIL(root_service->get_ddl_service().get_tenant_schema_guard_with_version_in_inner_table(schema_guard))) {
-        LOG_WARN("get schema guard failed", K(ret));
-      } else if (OB_FAIL(schema_guard.get_table_schema(object_id_, orig_table_schema))) {
-        LOG_WARN("failed to get orig table schema", K(ret));
-      } else if (OB_FAIL(schema_guard.get_table_schema(target_object_id_, hidden_table_schema))) {
-        LOG_WARN("fail to get table schema", K(ret), K(target_object_id_));
-      } else if (OB_FAIL(task.init(*orig_table_schema, *hidden_table_schema, alter_table_arg_.alter_table_schema_, alter_table_arg_.tz_info_wrap_))) {
-        LOG_WARN("fail to init table redefinition sstable build task", K(ret));
-      } else if (OB_FAIL(root_service->submit_ddl_single_replica_build_task(task))) {
-        LOG_WARN("fail to submit ddl build single replica", K(ret));
-      }
+    if (OB_FAIL(root_service->get_ddl_service().get_tenant_schema_guard_with_version_in_inner_table(schema_guard))) {
+      LOG_WARN("get schema guard failed", K(ret));
+    } else if (OB_FAIL(schema_guard.get_table_schema( object_id_, orig_table_schema))) {
+      LOG_WARN("failed to get orig table schema", K(ret));
+    } else if (OB_FAIL(schema_guard.get_table_schema( target_object_id_, hidden_table_schema))) {
+      LOG_WARN("fail to get table schema", K(ret), K(target_object_id_));
+    } else if (OB_FAIL(task.init(*orig_table_schema, *hidden_table_schema, alter_table_arg_.alter_table_schema_, alter_table_arg_.tz_info_wrap_))) {
+      LOG_WARN("fail to init table redefinition sstable build task", K(ret));
+    } else if (OB_FAIL(root_service->submit_ddl_single_replica_build_task(task))) {
+      LOG_WARN("fail to submit ddl build single replica", K(ret));
     }
   }
   return ret;
@@ -1211,11 +1213,22 @@ int ObTableRedefinitionTask::collect_longops_stat(ObLongopsValue &value)
       break;
     }
     case ObDDLTaskStatus::REDEFINITION: {
-      if (OB_FAIL(databuff_printf(stat_info_.message_,
-                                  MAX_LONG_OPS_MESSAGE_LENGTH,
-                                  pos,
-                                  "STATUS: REDEFINITION"))) {
-        LOG_WARN("failed to print", K(ret));
+      SMART_VARS_3((share::ObSqlMonitorStatsCollector, sql_monitor_stats_collector),
+                   (share::ObDDLDiagnoseInfo, diagnose_info),
+                   (share::ObSqlMonitorStats, sql_monitor_stats)) {
+        if (OB_FAIL(sql_monitor_stats_collector.scan_task_id_.push_back(task_id_))) {
+          LOG_WARN("failed to push back", K(ret));
+        } else if (OB_FAIL(sql_monitor_stats_collector.init(GCTX.sql_proxy_))) {
+          LOG_WARN("failed to init ObSqlMonitorStatsCollector", K(ret));
+        } else if (OB_FAIL(diagnose_info.init(task_id_, task_type_, execution_id_))) {
+          LOG_WARN("failed to init ObDDLDiagnoseInfo", K(ret), K(task_id_), K(task_type_));
+        } else if (OB_FAIL(sql_monitor_stats.init(task_id_, task_type_))) {
+          LOG_WARN("failed to init ObSqlMonitorStats", K(ret), K(task_id_), K(task_type_));
+        } else if (OB_FAIL(sql_monitor_stats_collector.get_next_sql_plan_monitor_stat(sql_monitor_stats))) {
+          LOG_WARN("failed to get next sql plan monitor stats", K(ret));
+        } else if (OB_FAIL(diagnose_info.process_sql_monitor_and_generate_longops_message(sql_monitor_stats, stat_info_, pos))) {
+          LOG_WARN("failed to process sql monitor and generate longops message", K(ret), K(sql_monitor_stats), K(stat_info_), K(pos));
+        }
       }
       break;
     }
