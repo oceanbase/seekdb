@@ -225,6 +225,11 @@ ob_set_subtarget(oblib_lib ob_vector_util
   vector/ob_vsag_adaptor.cpp
 )
 
+ob_set_subtarget(oblib_lib ai_split_document
+  ai_split_document/ob_ai_split_document.cpp
+  ai_split_document/ob_ai_split_document_util.cpp
+)
+
 ob_lib_add_target(oblib_lib)
 
 ob_set_subtarget(oblib_lib_bitmap common

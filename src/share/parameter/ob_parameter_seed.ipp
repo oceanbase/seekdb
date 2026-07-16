@@ -431,6 +431,9 @@ DEF_PARAM(_min_const_integer_precision, INT, OB_CLUSTER_PARAMETER, "1", "[1, 20]
 DEF_PARAM(_lob_rowsets_max_rows, INT, OB_CLUSTER_PARAMETER, "65535", "[1, 65535]",
         "max batch size of physical plan with lob data",
         ObParameterAttr(Section::TENANT, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
+DEF_PARAM(document_ai_file_max_size, CAP, OB_CLUSTER_PARAMETER, "100MB", "[0MB, 500MB]",
+        "max size of document AI processing file",
+        ObParameterAttr(Section::TENANT, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 DEF_PARAM(_use_hash_rollup, STR_WITH_CHECKER, OB_CLUSTER_PARAMETER, "AUTO", common::ObConfigEnableHashRollupChecker,
         "policy of hash based rollup plan:"\
         "AUTO: hash rollup plan is up to optimizer;"\
