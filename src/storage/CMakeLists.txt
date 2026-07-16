@@ -637,6 +637,8 @@ ob_set_subtarget(ob_storage ddl
   ddl/ob_direct_load_mgr_v3.cpp
   ddl/ob_direct_load_mgr_utils.cpp
   ddl/ob_tablet_slice_row_iterator.cpp
+  # Task4 Op9：编译 DDL DAG 阶段监控实现。
+  ddl/ob_ddl_dag_monitor.cpp
   ddl/ob_ddl_independent_dag.cpp
   ddl/ob_column_clustered_dag.cpp
   ddl/ob_cg_macro_block_writer.cpp

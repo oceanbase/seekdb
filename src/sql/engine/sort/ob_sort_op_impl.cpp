@@ -583,7 +583,8 @@ ObSortOpImpl::ObSortOpImpl() :
   max_node_cnt_(0), part_cnt_(0), topn_cnt_(INT64_MAX), outputted_rows_cnt_(0),
   is_fetch_with_ties_(false), topn_heap_(NULL), ties_array_pos_(0), last_ties_row_(NULL),
   pt_buckets_(NULL), use_partition_topn_sort_(false), heap_nodes_(), cur_heap_idx_(0), rows_(NULL),
-  sort_exprs_(nullptr), compress_type_(NONE_COMPRESSOR)
+  sort_exprs_(nullptr), compress_type_(NONE_COMPRESSOR), use_compact_format_(false),
+  is_task4_op9_fts_ddl_sort_(false)
 {}
 
 ObSortOpImpl::ObSortOpImpl(ObMonitorNode &op_monitor_info)
@@ -603,7 +604,7 @@ ObSortOpImpl::ObSortOpImpl(ObMonitorNode &op_monitor_info)
     is_fetch_with_ties_(false), topn_heap_(NULL), ties_array_pos_(0),
     last_ties_row_(NULL), pt_buckets_(NULL), use_partition_topn_sort_(false), heap_nodes_(), cur_heap_idx_(0), part_group_cnt_(0),
     rows_(NULL), sort_exprs_(nullptr),
-    compress_type_(NONE_COMPRESSOR), use_compact_format_(false)
+    compress_type_(NONE_COMPRESSOR), use_compact_format_(false), is_task4_op9_fts_ddl_sort_(false)
 {
 }
 
@@ -742,6 +743,11 @@ int ObSortOpImpl::init(
     sort_cmp_funs_ = sort_cmp_funs;
     eval_ctx_ = eval_ctx;
     exec_ctx_ = exec_ctx;
+    is_task4_op9_fts_ddl_sort_ = is_task4_op9_fts_ddl_sort(exec_ctx_);
+    // Task4 Op9：更早刷新 FTS 内存额度，并更快达到资源管理器批准的上限。
+    sql_mem_processor_.set_task4_op9_sort_adaptive_policy(
+        is_task4_op9_fts_ddl_sort_ ? 256 : 1024,
+        is_task4_op9_fts_ddl_sort_ ? 50 : 10);
     part_cnt_ = part_cnt;
     topn_cnt_ = topn_cnt;
     compress_type_ = compress_type;
@@ -1120,11 +1126,19 @@ int ObSortOpImpl::before_add_row()
     } else {
       got_first_row_ = true;
       int64_t size = OB_INVALID_ID == input_rows_ ? 0 : input_rows_ * input_width_;
+      if (is_task4_op9_fts_ddl_sort_ && size > 0) {
+        // Task4 Op9：为行指针和编码排序键元数据预留空间。
+        size = size > INT64_MAX - size / 2 ? INT64_MAX : size + size / 2;
+      }
       if (OB_FAIL(sql_mem_processor_.init(
                   &mem_context_->get_malloc_allocator(),
                   size, op_monitor_info_->op_type_, op_monitor_info_->op_id_, exec_ctx_))) {
         LOG_WARN("failed to init sql mem processor", K(ret));
       } else {
+        if (is_task4_op9_fts_ddl_sort_) {
+          LOG_INFO("Task4 Op9 enabled adaptive FTS DDL sort memory", K(size),
+                   "mem_bound", sql_mem_processor_.get_mem_bound());
+        }
         datum_store_.set_dir_id(sql_mem_processor_.get_dir_id());
         datum_store_.set_callback(&sql_mem_processor_);
         datum_store_.set_io_event_observer(io_event_observer_);

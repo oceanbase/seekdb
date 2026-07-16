@@ -67,7 +67,8 @@ public:
     ties_array_pos_(0), ties_array_(), sorted_dumped_rows_ptrs_(), last_ties_row_(nullptr), rows_(nullptr),
     sort_exprs_getter_(allocator_),
     store_row_factory_(allocator_, sql_mem_processor_, sk_row_meta_, addon_row_meta_, inmem_row_size_, topn_cnt_),
-    topn_filter_(nullptr), is_topn_filter_enabled_(false), is_fixed_key_sort_enabled_(false), fixed_sort_key_len_(0), compress_type_(NONE_COMPRESSOR)
+    topn_filter_(nullptr), is_topn_filter_enabled_(false), is_fixed_key_sort_enabled_(false),
+    fixed_sort_key_len_(0), compress_type_(NONE_COMPRESSOR), is_task4_op9_fts_ddl_sort_(false)
   {}
   virtual ~ObSortVecOpImpl()
   {
@@ -497,6 +498,7 @@ protected:
   bool is_fixed_key_sort_enabled_;
   uint32_t fixed_sort_key_len_;
   ObCompressorType compress_type_;
+  bool is_task4_op9_fts_ddl_sort_; // Task4 Op9：标记向量化 FTS 辅助表 DDL 排序。
   ObPushDownTopNFilter pd_topn_filter_;
 };
 

@@ -39,6 +39,7 @@ void ObSortVecOpImpl<Compare, Store_Row, has_addon>::reset()
   topn_cnt_ = INT64_MAX;
   outputted_rows_cnt_ = 0;
   is_fetch_with_ties_ = false;
+  is_task4_op9_fts_ddl_sort_ = false;
   rows_ = nullptr;
   ties_array_pos_ = 0;
   sort_exprs_getter_.reset();
@@ -286,6 +287,11 @@ int ObSortVecOpImpl<Compare, Store_Row, has_addon>::init(ObSortVecOpContext &ctx
     cmp_sort_collations_ = (enable_encode_sortkey_  && has_addon) ? addon_collations_ : sk_collations_;
     eval_ctx_ = ctx.eval_ctx_;
     exec_ctx_ = ctx.exec_ctx_;
+    is_task4_op9_fts_ddl_sort_ = is_task4_op9_fts_ddl_sort(exec_ctx_);
+    // Task4 Op9：向量化 FTS DDL 排序使用相同的自适应 workarea 策略。
+    sql_mem_processor_.set_task4_op9_sort_adaptive_policy(
+        is_task4_op9_fts_ddl_sort_ ? 256 : 1024,
+        is_task4_op9_fts_ddl_sort_ ? 50 : 10);
     part_cnt_ = ctx.part_cnt_;
     topn_cnt_ = ctx.topn_cnt_;
     use_heap_sort_ = is_topn_sort();
@@ -1763,11 +1769,19 @@ int ObSortVecOpImpl<Compare, Store_Row, has_addon>::before_add_row()
     } else {
       got_first_row_ = true;
       int64_t size = OB_INVALID_ID == input_rows_ ? 0 : input_rows_ * input_width_;
+      if (is_task4_op9_fts_ddl_sort_ && size > 0) {
+        // Task4 Op9：计入独立排序键、附加列存储和行元数据开销。
+        size = size > INT64_MAX - size / 2 ? INT64_MAX : size + size / 2;
+      }
       if (OB_FAIL(sql_mem_processor_.init(&mem_context_->get_malloc_allocator(), size,
                                           op_monitor_info_.op_type_, op_monitor_info_.op_id_,
                                           exec_ctx_))) {
         SQL_ENG_LOG(WARN, "failed to init sql mem processor", K(ret));
       } else {
+        if (is_task4_op9_fts_ddl_sort_) {
+          SQL_ENG_LOG(INFO, "Task4 Op9 enabled adaptive vector FTS DDL sort memory", K(size),
+                      "mem_bound", sql_mem_processor_.get_mem_bound());
+        }
         sk_store_.set_dir_id(sql_mem_processor_.get_dir_id());
         sk_store_.set_callback(&sql_mem_processor_);
         sk_store_.set_io_event_observer(io_event_observer_);

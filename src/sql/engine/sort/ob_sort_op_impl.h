@@ -883,6 +883,7 @@ protected:
   const ExprFixedArray *sort_exprs_;
   common::ObCompressorType compress_type_;
   bool use_compact_format_;
+  bool is_task4_op9_fts_ddl_sort_; // Task4 Op9：标记 FTS 辅助表 DDL 排序。
   ObPushDownTopNFilter pd_topn_filter_;
 };
 
