@@ -14830,7 +14830,6 @@ int ObTransformUtils::inner_check_need_calc_match_score(ObExecContext *exec_ctx,
 }
 
 int ObTransformUtils::check_need_calc_match_score(ObExecContext *exec_ctx,
-                                                  const ObDMLStmt *root_stmt,
                                                   const ObDMLStmt *stmt,
                                                   ObRawExpr *match_expr,
                                                   bool &need_calc,
@@ -14843,46 +14842,8 @@ int ObTransformUtils::check_need_calc_match_score(ObExecContext *exec_ctx,
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), KP(exec_ctx), KP(stmt), KP(match_expr));
   } else if (stmt->has_limit()) {
-    const ObDMLStmt *parent_stmt = nullptr;
-    const ObSelectStmt *parent_select = nullptr;
-    const ObSelectStmt *child_select = nullptr;
-    int64_t table_id = OB_INVALID_ID;
-    bool is_generated_table = false;
-    if (OB_ISNULL(root_stmt)) {
-      // No parent statement context: keep the conservative default.
-    } else if (OB_FAIL(get_parent_stmt(root_stmt, stmt, parent_stmt, table_id, is_generated_table))) {
-      LOG_WARN("failed to get parent statement", K(ret));
-    } else if (!is_generated_table
-        || OB_ISNULL(parent_stmt)
-        || !parent_stmt->is_select_stmt()
-        || !stmt->is_select_stmt()) {
-      // Natural-language MATCH with LIMIT may use relevance-ordered Top-K.
-    } else if (FALSE_IT(parent_select = static_cast<const ObSelectStmt *>(parent_stmt))) {
-    } else if (FALSE_IT(child_select = static_cast<const ObSelectStmt *>(stmt))) {
-    } else if (!child_select->has_order_by()
-        && parent_select->is_single_table_stmt()
-        && parent_select->get_table_item(0)->table_id_ == static_cast<uint64_t>(table_id)
-        && parent_select->get_table_item(0)->is_generated_table()
-        && parent_select->get_table_item(0)->ref_query_ == child_select
-        && parent_select->is_scala_group_by()
-        && 1 == parent_select->get_aggr_item_size()
-        && T_FUN_COUNT == parent_select->get_aggr_item(0)->get_expr_type()
-        && !parent_select->get_aggr_item(0)->is_param_distinct()
-        && 0 == parent_select->get_aggr_item(0)->get_real_param_count()
-        && 1 == parent_select->get_select_item_size()
-        && parent_select->get_select_item(0).expr_ == parent_select->get_aggr_item(0)
-        && 0 == parent_select->get_condition_size()
-        && !parent_select->has_having()
-        && !parent_select->has_order_by()
-        && !parent_select->has_limit()
-        && !parent_select->has_window_function()
-        && !parent_select->has_distinct()
-        && !parent_select->has_sequence()
-        && !parent_select->has_fetch()) {
-      // COUNT(*) observes only the number of rows produced by the limited
-      // generated table, not which equally-sized Top-K set was selected.
-      need_calc = false;
-    }
+    // Natural-language MATCH with LIMIT may use relevance-ordered Top-K even
+    // when the score is not part of the select list.
   } else if (OB_FAIL(stmt->get_relation_exprs(relation_exprs))) {
     LOG_WARN("failed to get statement relation expressions", K(ret));
   } else {

@@ -1890,7 +1890,6 @@ public:
                                 bool &eq_zero, 
                                 ObIArray<ObExprConstraint> &constraints);
   static int check_need_calc_match_score(ObExecContext *exec_ctx,
-                                         const ObDMLStmt *root_stmt,
                                          const ObDMLStmt *stmt,
                                          ObRawExpr *match_expr,
                                          bool &need_calc,
