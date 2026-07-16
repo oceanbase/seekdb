@@ -598,6 +598,9 @@ private:
   int generate_sort_exprs(const bool is_store_sortkey_separately, ObLogSort &op, ObSortVecSpec &spec,
                           ObIArray<OrderItem> &sk_keys);
 
+  // Task4 Op10：识别需要强制分离 sort-key 与 payload 的 FTS 辅助表 DDL 排序。
+  int check_is_fts_ddl_sort(const ObLogSort &op, bool &is_fts_ddl_sort);
+
   int extract_all_mview_ids(const ObIArray<ObRawExpr *> &exprs);
   int extract_all_mview_ids(const ObRawExpr *expr);
   int check_is_insert_overwrite_stmt(const ObLogPlan *plan, bool &is_insert_overwrite);
@@ -648,4 +651,3 @@ private:
 } // end namespace oceanbase
 
 #endif // OCEANBASE_SRC_OB_STATIC_ENGINE_CG_H_
-
