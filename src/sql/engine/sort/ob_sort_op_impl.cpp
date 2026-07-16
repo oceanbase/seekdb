@@ -745,11 +745,8 @@ int ObSortOpImpl::init(
     sort_cmp_funs_ = sort_cmp_funs;
     eval_ctx_ = eval_ctx;
     exec_ctx_ = exec_ctx;
+    // Task4 Op9：保留 FTS DDL 识别和监控，不再调整项目原有的排序内存策略。
     is_task4_op9_fts_ddl_sort_ = is_task4_op9_fts_ddl_sort(exec_ctx_);
-    // Task4 Op9：更早刷新 FTS 内存额度，并更快达到资源管理器批准的上限。
-    sql_mem_processor_.set_task4_op9_sort_adaptive_policy(
-        is_task4_op9_fts_ddl_sort_ ? 256 : 1024,
-        is_task4_op9_fts_ddl_sort_ ? 50 : 10);
     part_cnt_ = part_cnt;
     topn_cnt_ = topn_cnt;
     compress_type_ = compress_type;
@@ -966,18 +963,23 @@ void ObSortOpImpl::reset()
 void ObSortOpImpl::record_task4_op9_sort_monitor()
 {
   if (is_task4_op9_fts_ddl_sort_) {
-    // Task4 Op9：结构化日志可直接由 CI 收集并比较外排、归并和内存指标。
     const ObSqlWorkAreaProfile &profile = sql_mem_processor_.get_profile();
     const int64_t ddl_task_id = nullptr == op_monitor_info_ ? 0 : op_monitor_info_->otherstat_5_value_;
     const int64_t temp_write_bytes = nullptr == op_monitor_info_ ? 0 : op_monitor_info_->otherstat_6_value_;
-    LOG_INFO("Task4 Op9 FTS DDL sort monitor", K(ddl_task_id), K(op_id_),
-             K(task4_op9_dump_count_), K(temp_write_bytes),
-             "dumped_bytes", profile.get_dumped_size(),
-             "max_dumped_bytes", profile.get_max_dumped_size(),
-             K(task4_op9_merge_pass_count_), K(task4_op9_max_merge_ways_),
-             "workarea_pass_count", profile.get_number_pass(),
-             "peak_memory_bytes", profile.get_max_mem_used(),
-             "approved_memory_bytes", sql_mem_processor_.get_mem_bound());
+    const bool has_spill = task4_op9_dump_count_ > 0 || temp_write_bytes > 0
+        || profile.get_dumped_size() > 0 || profile.get_max_dumped_size() > 0
+        || task4_op9_merge_pass_count_ > 0 || profile.get_number_pass() > 0;
+    if (has_spill) {
+      // Task4 Op9：仅在实际发生外排时记录详细排序指标，避免无外排任务产生 INFO 日志。
+      LOG_INFO("Task4 Op9 FTS DDL sort spill monitor", K(ddl_task_id), K(op_id_),
+               K(task4_op9_dump_count_), K(temp_write_bytes),
+               "dumped_bytes", profile.get_dumped_size(),
+               "max_dumped_bytes", profile.get_max_dumped_size(),
+               K(task4_op9_merge_pass_count_), K(task4_op9_max_merge_ways_),
+               "workarea_pass_count", profile.get_number_pass(),
+               "peak_memory_bytes", profile.get_max_mem_used(),
+               "approved_memory_bytes", sql_mem_processor_.get_mem_bound());
+    }
   }
 }
 
@@ -1152,19 +1154,11 @@ int ObSortOpImpl::before_add_row()
     } else {
       got_first_row_ = true;
       int64_t size = OB_INVALID_ID == input_rows_ ? 0 : input_rows_ * input_width_;
-      if (is_task4_op9_fts_ddl_sort_ && size > 0) {
-        // Task4 Op9：为行指针和编码排序键元数据预留空间。
-        size = size > INT64_MAX - size / 2 ? INT64_MAX : size + size / 2;
-      }
       if (OB_FAIL(sql_mem_processor_.init(
                   &mem_context_->get_malloc_allocator(),
                   size, op_monitor_info_->op_type_, op_monitor_info_->op_id_, exec_ctx_))) {
         LOG_WARN("failed to init sql mem processor", K(ret));
       } else {
-        if (is_task4_op9_fts_ddl_sort_) {
-          LOG_INFO("Task4 Op9 enabled adaptive FTS DDL sort memory", K(size),
-                   "mem_bound", sql_mem_processor_.get_mem_bound());
-        }
         datum_store_.set_dir_id(sql_mem_processor_.get_dir_id());
         datum_store_.set_callback(&sql_mem_processor_);
         datum_store_.set_io_event_observer(io_event_observer_);

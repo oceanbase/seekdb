@@ -33,8 +33,7 @@ public:
   ObSqlMemMgrProcessor(ObSqlWorkAreaProfile &profile, ObMonitorNode &op_monitor_info) :
     profile_(profile), op_monitor_info_(&op_monitor_info),
     sql_mem_mgr_(nullptr), mem_callback_(nullptr),
-    periodic_cnt_(1024), initial_periodic_cnt_(1024), extend_ratio_(EXTEND_RATIO),
-    origin_max_mem_size_(0), default_available_mem_size_(0),
+    periodic_cnt_(1024), origin_max_mem_size_(0), default_available_mem_size_(0),
     is_auto_mgr_(false), dir_id_(0),
     dummy_ptr_(nullptr), dummy_alloc_(nullptr)
   {
@@ -45,8 +44,7 @@ public:
   ObSqlMemMgrProcessor(ObSqlWorkAreaProfile &profile) :
     profile_(profile), op_monitor_info_(nullptr),
     sql_mem_mgr_(nullptr), mem_callback_(nullptr),
-    periodic_cnt_(1024), initial_periodic_cnt_(1024), extend_ratio_(EXTEND_RATIO),
-    origin_max_mem_size_(0), default_available_mem_size_(0),
+    periodic_cnt_(1024), origin_max_mem_size_(0), default_available_mem_size_(0),
     is_auto_mgr_(false), dir_id_(0),
     dummy_ptr_(nullptr), dummy_alloc_(nullptr) {}
   virtual ~ObSqlMemMgrProcessor() {}
@@ -86,7 +84,7 @@ public:
   }
   void reset()
   {
-    periodic_cnt_ = initial_periodic_cnt_;
+    periodic_cnt_ = 1024;
     is_auto_mgr_ = false;
   }
   OB_INLINE bool is_auto_mgr() const { return is_auto_mgr_; }
@@ -103,15 +101,6 @@ public:
 
   void set_periodic_cnt(int64_t cnt) { periodic_cnt_ = cnt; }
   int64_t get_periodic_cnt() const { return periodic_cnt_; }
-  // Task4 Op9：设置 FTS DDL 排序的自适应内存策略。
-  void set_task4_op9_sort_adaptive_policy(const int64_t periodic_cnt,
-                                          const int64_t extend_ratio)
-  {
-    initial_periodic_cnt_ = periodic_cnt > 0 ? periodic_cnt : 1;
-    periodic_cnt_ = initial_periodic_cnt_;
-    extend_ratio_ = extend_ratio > 0 ? extend_ratio : EXTEND_RATIO;
-  }
-
   double get_data_ratio() const { return profile_.data_ratio_; }
   void set_data_ratio(double ratio) { profile_.data_ratio_ = ratio; }
 
@@ -203,8 +192,6 @@ private:
   ObTenantSqlMemoryManager *sql_mem_mgr_;
   ObSqlMemoryCallback *mem_callback_;
   int64_t periodic_cnt_;
-  int64_t initial_periodic_cnt_; // Task4 Op9：记录算子复用时需要恢复的检查周期。
-  int64_t extend_ratio_; // Task4 Op9：记录单次申请的扩容比例。
   int64_t origin_max_mem_size_;
   int64_t default_available_mem_size_;
   bool is_auto_mgr_;

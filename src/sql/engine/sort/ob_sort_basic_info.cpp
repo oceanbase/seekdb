@@ -29,7 +29,7 @@ namespace sql
 
 bool is_task4_op9_fts_ddl_sort(ObExecContext *exec_ctx)
 {
-  // Task4 Op9：仅为 FTS 辅助表 DDL 开启自适应排序内存，避免影响普通 SQL。
+  // Task4 Op9：识别 FTS 辅助表 DDL，供外排和归并监控使用。
   bool is_fts_ddl_sort = false;
   ObPhysicalPlanCtx *plan_ctx = nullptr;
   const ObPhysicalPlan *phy_plan = nullptr;

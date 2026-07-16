@@ -266,12 +266,7 @@ int ObSqlMemMgrProcessor::extend_max_memory_size(
           break;
         }
       } else {
-        // Task4 Op9：加快 FTS DDL 排序扩容，同时仍由 workarea 限制最终额度。
-        const int64_t cache_size = profile_.get_cache_size();
-        const int64_t growth = cache_size > INT64_MAX / extend_ratio_
-            ? INT64_MAX : cache_size * extend_ratio_ / 100;
-        const int64_t new_cache_size = growth > INT64_MAX - cache_size
-            ? INT64_MAX : cache_size + growth;
+        int64_t new_cache_size = profile_.get_cache_size() * (EXTEND_RATIO + 100) / 100;
         if (OB_FAIL(update_cache_size(allocator, new_cache_size))) {
           LOG_WARN("failed to upadte cache size", K(ret), K(new_cache_size));
         } else if (OB_FAIL(get_max_available_mem_size(allocator))) {

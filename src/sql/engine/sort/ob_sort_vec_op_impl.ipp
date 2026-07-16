@@ -126,18 +126,23 @@ template <typename Compare, typename Store_Row, bool has_addon>
 void ObSortVecOpImpl<Compare, Store_Row, has_addon>::record_task4_op9_sort_monitor()
 {
   if (is_task4_op9_fts_ddl_sort_) {
-    // Task4 Op9：结构化日志可直接由 CI 收集并比较外排、归并和内存指标。
     const ObSqlWorkAreaProfile &profile = sql_mem_processor_.get_profile();
     const int64_t ddl_task_id = op_monitor_info_.otherstat_5_value_;
     const int64_t temp_write_bytes = op_monitor_info_.otherstat_6_value_;
-    SQL_ENG_LOG(INFO, "Task4 Op9 vector FTS DDL sort monitor", K(ddl_task_id),
-                "op_id", op_monitor_info_.op_id_, K(task4_op9_dump_count_), K(temp_write_bytes),
-                "dumped_bytes", profile.get_dumped_size(),
-                "max_dumped_bytes", profile.get_max_dumped_size(),
-                K(task4_op9_merge_pass_count_), K(task4_op9_max_merge_ways_),
-                "workarea_pass_count", profile.get_number_pass(),
-                "peak_memory_bytes", profile.get_max_mem_used(),
-                "approved_memory_bytes", sql_mem_processor_.get_mem_bound());
+    const bool has_spill = task4_op9_dump_count_ > 0 || temp_write_bytes > 0
+        || profile.get_dumped_size() > 0 || profile.get_max_dumped_size() > 0
+        || task4_op9_merge_pass_count_ > 0 || profile.get_number_pass() > 0;
+    if (has_spill) {
+      // Task4 Op9：仅在实际发生外排时记录详细排序指标，避免无外排任务产生 INFO 日志。
+      SQL_ENG_LOG(INFO, "Task4 Op9 vector FTS DDL sort spill monitor", K(ddl_task_id),
+                  "op_id", op_monitor_info_.op_id_, K(task4_op9_dump_count_), K(temp_write_bytes),
+                  "dumped_bytes", profile.get_dumped_size(),
+                  "max_dumped_bytes", profile.get_max_dumped_size(),
+                  K(task4_op9_merge_pass_count_), K(task4_op9_max_merge_ways_),
+                  "workarea_pass_count", profile.get_number_pass(),
+                  "peak_memory_bytes", profile.get_max_mem_used(),
+                  "approved_memory_bytes", sql_mem_processor_.get_mem_bound());
+    }
   }
 }
 
@@ -311,11 +316,8 @@ int ObSortVecOpImpl<Compare, Store_Row, has_addon>::init(ObSortVecOpContext &ctx
     cmp_sort_collations_ = (enable_encode_sortkey_  && has_addon) ? addon_collations_ : sk_collations_;
     eval_ctx_ = ctx.eval_ctx_;
     exec_ctx_ = ctx.exec_ctx_;
+    // Task4 Op9：保留向量化 FTS DDL 识别和监控，不再调整排序内存策略。
     is_task4_op9_fts_ddl_sort_ = is_task4_op9_fts_ddl_sort(exec_ctx_);
-    // Task4 Op9：向量化 FTS DDL 排序使用相同的自适应 workarea 策略。
-    sql_mem_processor_.set_task4_op9_sort_adaptive_policy(
-        is_task4_op9_fts_ddl_sort_ ? 256 : 1024,
-        is_task4_op9_fts_ddl_sort_ ? 50 : 10);
     part_cnt_ = ctx.part_cnt_;
     topn_cnt_ = ctx.topn_cnt_;
     use_heap_sort_ = is_topn_sort();
@@ -1797,19 +1799,11 @@ int ObSortVecOpImpl<Compare, Store_Row, has_addon>::before_add_row()
     } else {
       got_first_row_ = true;
       int64_t size = OB_INVALID_ID == input_rows_ ? 0 : input_rows_ * input_width_;
-      if (is_task4_op9_fts_ddl_sort_ && size > 0) {
-        // Task4 Op9：计入独立排序键、附加列存储和行元数据开销。
-        size = size > INT64_MAX - size / 2 ? INT64_MAX : size + size / 2;
-      }
       if (OB_FAIL(sql_mem_processor_.init(&mem_context_->get_malloc_allocator(), size,
                                           op_monitor_info_.op_type_, op_monitor_info_.op_id_,
                                           exec_ctx_))) {
         SQL_ENG_LOG(WARN, "failed to init sql mem processor", K(ret));
       } else {
-        if (is_task4_op9_fts_ddl_sort_) {
-          SQL_ENG_LOG(INFO, "Task4 Op9 enabled adaptive vector FTS DDL sort memory", K(size),
-                      "mem_bound", sql_mem_processor_.get_mem_bound());
-        }
         sk_store_.set_dir_id(sql_mem_processor_.get_dir_id());
         sk_store_.set_callback(&sql_mem_processor_);
         sk_store_.set_io_event_observer(io_event_observer_);
