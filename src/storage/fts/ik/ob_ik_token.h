@@ -18,6 +18,7 @@
 #define _OCEANBASE_STORAGE_FTS_IK_OB_IK_TOKEN_H_
 
 #include "lib/allocator/ob_allocator.h"
+#include "lib/container/ob_se_array.h"
 #include "lib/list/ob_list.h"
 namespace oceanbase
 {
@@ -69,6 +70,96 @@ public:
   {
     return offset_ < token.offset_ || (offset_ == token.offset_ && length_ > token.length_);
   }
+  TO_STRING_KV(K_(offset), K_(length), K_(char_cnt), K_(type));
+};
+
+// Candidate tokens are short-lived and overwhelmingly fit in one document-sized
+// inline buffer.  Keeping them contiguous avoids allocating one ObList node per
+// token while preserving the original sorted/deduplicated semantics.
+class ObIKCandidateBuffer
+{
+public:
+  static constexpr int64_t INLINE_TOKEN_COUNT = 128;
+
+  explicit ObIKCandidateBuffer(ObIAllocator &allocator)
+      : allocator_(allocator), inline_used_(0), head_(nullptr), tail_(nullptr), size_(0)
+  {}
+
+  int add_token(const ObIKToken &token);
+  bool empty() const { return 0 == size_; }
+  bool is_empty() const { return empty(); }
+  int64_t size() const { return size_; }
+  ObIKToken &get_first() { return head_->token_; }
+  const ObIKToken &get_first() const { return head_->token_; }
+  ObIKToken &get_last() { return tail_->token_; }
+  const ObIKToken &get_last() const { return tail_->token_; }
+  int pop_front();
+  void reset()
+  {
+    inline_used_ = 0;
+    head_ = nullptr;
+    tail_ = nullptr;
+    size_ = 0;
+  }
+  ObIKCandidateBuffer &tokens() { return *this; }
+  const ObIKCandidateBuffer &tokens() const { return *this; }
+
+private:
+  struct Node
+  {
+    Node() : prev_(nullptr), next_(nullptr), token_() {}
+    Node *prev_;
+    Node *next_;
+    ObIKToken token_;
+  };
+
+  int alloc_node(const ObIKToken &token, Node *&node);
+  void link_after(Node *pos, Node *node);
+
+  ObIAllocator &allocator_;
+  Node inline_nodes_[INLINE_TOKEN_COUNT];
+  int64_t inline_used_;
+  Node *head_;
+  Node *tail_;
+  int64_t size_;
+};
+
+// Output tokens only need FIFO access.  A logical head makes pop_front O(1)
+// and allows the backing allocation to be retained across parser reuse.
+class ObIKResultBuffer
+{
+public:
+  static constexpr int64_t INLINE_TOKEN_COUNT = 128;
+  typedef ObSEArray<ObIKToken, INLINE_TOKEN_COUNT, ObWrapperAllocator, false> TokenArray;
+
+  explicit ObIKResultBuffer(ObIAllocator &allocator)
+      : tokens_(OB_MALLOC_NORMAL_BLOCK_SIZE, ObWrapperAllocator(allocator)), head_(0)
+  {}
+
+  int push_back(const ObIKToken &token) { return tokens_.push_back(token); }
+  bool empty() const { return head_ >= tokens_.count(); }
+  int64_t size() const { return tokens_.count() - head_; }
+  ObIKToken &get_first() { return tokens_.at(head_); }
+  const ObIKToken &get_first() const { return tokens_.at(head_); }
+  int pop_front()
+  {
+    int ret = OB_SUCCESS;
+    if (empty()) {
+      ret = OB_ENTRY_NOT_EXIST;
+    } else {
+      ++head_;
+    }
+    return ret;
+  }
+  void reset()
+  {
+    tokens_.reuse();
+    head_ = 0;
+  }
+
+private:
+  TokenArray tokens_;
+  int64_t head_;
 };
 
 class ObFTSortList

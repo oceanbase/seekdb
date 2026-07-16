@@ -54,7 +54,9 @@ TokenizeContext::TokenizeContext(ObCollationType coll_type,
                                  const char *fulltext,
                                  int64_t fulltext_len,
                                  bool is_smart)
-    : coll_type_(coll_type), fulltext_(fulltext), fulltext_len_(fulltext_len), cursor_(0),
+    : coll_type_(coll_type), charset_type_(ObCharset::charset_type_by_coll(coll_type)),
+      charset_info_(ObCharset::get_charset(coll_type)), well_formed_len_(nullptr),
+      fulltext_(fulltext), fulltext_len_(fulltext_len), cursor_(0),
       next_char_len_(0), handle_size_(0), is_smart_(is_smart), token_list_(allocator),
       result_list_(allocator)
 {
@@ -66,6 +68,11 @@ int TokenizeContext::init()
 
   if (OB_ISNULL(fulltext_) || fulltext_len_ <= 0) {
     ret = OB_INVALID_ARGUMENT;
+  } else if (OB_ISNULL(charset_info_) || OB_ISNULL(charset_info_->cset)
+             || OB_ISNULL(charset_info_->cset->well_formed_len)) {
+    ret = OB_NOT_SUPPORTED;
+    LOG_WARN("unsupported charset for IK tokenizer", K(ret), K(coll_type_), K(charset_type_));
+  } else if (FALSE_IT(well_formed_len_ = charset_info_->cset->well_formed_len)) {
   } else if (OB_FAIL(prepare_next_char())) {
     LOG_WARN("Failed to prepare next char", K(ret));
   }
@@ -124,17 +131,35 @@ int TokenizeContext::current_char_type(ObFTCharUtil::CharType &type)
 
 int TokenizeContext::prepare_next_char()
 {
+  int ret = read_char_at(cursor_, next_char_len_, next_char_type_);
+  if (OB_FAIL(ret)) {
+    LOG_WARN("failed to prepare next IK character", K(ret), K(cursor_));
+  }
+  return ret;
+}
+
+int TokenizeContext::read_char_at(int64_t offset,
+                                  int64_t &char_len,
+                                  ObFTCharUtil::CharType &type) const
+{
   int ret = OB_SUCCESS;
-  if (OB_FAIL(ObCharset::first_valid_char(coll_type_,
-                                          fulltext_ + cursor_,
-                                          fulltext_len_ - cursor_,
-                                          next_char_len_))) {
-    LOG_WARN("Failed to get first valid char, ", K(ret));
-  } else if (OB_FAIL(ObFTCharUtil::classify_first_char(coll_type_,
-                                                       fulltext_ + cursor_,
-                                                       next_char_len_,
-                                                       next_char_type_))) {
-    LOG_WARN("Failed to classify first char", K(ret));
+  int error = 0;
+  char_len = 0;
+  type = ObFTCharUtil::CharType::USELESS;
+  if (OB_UNLIKELY(offset < 0 || offset >= fulltext_len_)) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (OB_ISNULL(charset_info_) || OB_ISNULL(well_formed_len_)) {
+    ret = OB_NOT_INIT;
+  } else {
+    const char *start = fulltext_ + offset;
+    char_len = static_cast<int64_t>(
+        well_formed_len_(charset_info_, start, fulltext_ + fulltext_len_, 1, &error));
+    if (OB_UNLIKELY(0 != error || char_len <= 0 || char_len > UINT8_MAX)) {
+      ret = OB_INVALID_ARGUMENT;
+    } else if (OB_FAIL(ObFTCharUtil::classify_char(
+                   charset_type_, start, static_cast<uint8_t>(char_len), type))) {
+      LOG_WARN("failed to classify IK character", K(ret), K(offset), K(char_len));
+    }
   }
   return ret;
 }
@@ -235,7 +260,7 @@ int TokenizeContext::get_next_token(const char *&word,
 int TokenizeContext::compound(ObIKToken &token)
 {
   int ret = OB_SUCCESS;
-  ObList<ObIKToken, ObIAllocator> &list = result_list_;
+  ObIKResultBuffer &list = result_list_;
   if (is_smart_) {
     if (!list.empty()) {
       if (ObIKTokenType::IK_ARABIC_TOKEN == token.type_) {

@@ -25,6 +25,87 @@ namespace oceanbase
 {
 namespace storage
 {
+int ObIKCandidateBuffer::add_token(const ObIKToken &token)
+{
+  int ret = OB_SUCCESS;
+  Node *insert_after = tail_;
+  Node *node = nullptr;
+
+  while (OB_NOT_NULL(insert_after) && token < insert_after->token_) {
+    insert_after = insert_after->prev_;
+  }
+  if (OB_NOT_NULL(insert_after) && insert_after->token_ == token) {
+    // Duplicate token: keep the first copy, matching ObFTSortList.
+  } else if (OB_FAIL(alloc_node(token, node))) {
+    LOG_WARN("failed to allocate IK candidate token", K(ret));
+  } else {
+    link_after(insert_after, node);
+  }
+  return ret;
+}
+
+int ObIKCandidateBuffer::alloc_node(const ObIKToken &token, Node *&node)
+{
+  int ret = OB_SUCCESS;
+  if (inline_used_ < INLINE_TOKEN_COUNT) {
+    node = &inline_nodes_[inline_used_++];
+  } else {
+    void *buf = allocator_.alloc(sizeof(Node));
+    if (OB_ISNULL(buf)) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+      LOG_WARN("failed to grow IK candidate token pool", K(ret));
+    } else {
+      node = new (buf) Node();
+    }
+  }
+  if (OB_SUCC(ret)) {
+    node->prev_ = nullptr;
+    node->next_ = nullptr;
+    node->token_ = token;
+  }
+  return ret;
+}
+
+void ObIKCandidateBuffer::link_after(Node *pos, Node *node)
+{
+  if (OB_ISNULL(pos)) {
+    node->next_ = head_;
+    if (OB_NOT_NULL(head_)) {
+      head_->prev_ = node;
+    } else {
+      tail_ = node;
+    }
+    head_ = node;
+  } else {
+    node->prev_ = pos;
+    node->next_ = pos->next_;
+    if (OB_NOT_NULL(pos->next_)) {
+      pos->next_->prev_ = node;
+    } else {
+      tail_ = node;
+    }
+    pos->next_ = node;
+  }
+  ++size_;
+}
+
+int ObIKCandidateBuffer::pop_front()
+{
+  int ret = OB_SUCCESS;
+  if (empty()) {
+    ret = OB_ENTRY_NOT_EXIST;
+  } else {
+    head_ = head_->next_;
+    if (OB_NOT_NULL(head_)) {
+      head_->prev_ = nullptr;
+    } else {
+      tail_ = nullptr;
+    }
+    --size_;
+  }
+  return ret;
+}
+
 int ObFTSortList::add_token(const ObIKToken &token)
 {
   int ret = OB_SUCCESS;

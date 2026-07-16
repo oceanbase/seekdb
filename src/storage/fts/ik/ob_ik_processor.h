@@ -49,6 +49,10 @@ public:
   int current_char(const char *&ch, uint8_t &char_len);
   int current_char_type(ObFTCharUtil::CharType &type);
 
+  int read_char_at(int64_t offset,
+                   int64_t &char_len,
+                   ObFTCharUtil::CharType &type) const;
+
   int step_next();
 
   ObCollationType collation() const;
@@ -68,9 +72,9 @@ public:
                 int64_t char_cnt,
                 ObIKTokenType type);
 
-  ObFTSortList &token_list() { return token_list_; }
+  ObIKCandidateBuffer &token_list() { return token_list_; }
 
-  ObList<ObIKToken, ObIAllocator> &result_list() { return result_list_; }
+  ObIKResultBuffer &result_list() { return result_list_; }
 
   int32_t handle_size() const { return handle_size_; }
 
@@ -78,6 +82,13 @@ private:
   int prepare_next_char();
 
   ObCollationType coll_type_;
+  ObCharsetType charset_type_;
+  const ObCharsetInfo *charset_info_;
+  size_t (*well_formed_len_)(const ObCharsetInfo *,
+                             const char *,
+                             const char *,
+                             size_t,
+                             int *);
   const char *fulltext_;
   int64_t fulltext_len_;
 
@@ -88,8 +99,8 @@ private:
   uint32_t handle_size_;
   bool is_smart_;
 
-  ObFTSortList token_list_;
-  ObList<ObIKToken, ObIAllocator> result_list_;
+  ObIKCandidateBuffer token_list_;
+  ObIKResultBuffer result_list_;
 
 private:
   DISALLOW_COPY_AND_ASSIGN(TokenizeContext);
