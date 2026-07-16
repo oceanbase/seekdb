@@ -661,6 +661,68 @@ TEST_F(ObTestFTParseHelper, test_min_and_max_word_len)
   ASSERT_EQ(0, words.size());
 }
 
+TEST_F(ObTestFTParseHelper, test_reuse_token_iterator_after_scratch_reset)
+{
+  ObFTWordMap words;
+  ASSERT_EQ(OB_SUCCESS, words.create(10, "TestReuse"));
+  int64_t doc_length = 0;
+  const char *first_doc = "alpha beta";
+  const char *second_doc = "gamma delta";
+
+  ASSERT_EQ(OB_SUCCESS, parse_helper_.segment(meta_, first_doc, std::strlen(first_doc), doc_length, words));
+  ASSERT_EQ(2, words.size());
+  ASSERT_NE(nullptr, parse_helper_.token_iter_);
+  ObITokenIterator *first_iter = parse_helper_.token_iter_;
+
+  allocator_.reset();
+  words.clear();
+  doc_length = 0;
+  ASSERT_EQ(OB_SUCCESS, parse_helper_.segment(meta_, second_doc, std::strlen(second_doc), doc_length, words));
+  ASSERT_EQ(2, words.size());
+  ASSERT_EQ(first_iter, parse_helper_.token_iter_);
+
+  int64_t word_cnt = 0;
+  ObFTWord gamma_word(strlen("gamma"), "gamma", meta_);
+  ASSERT_EQ(OB_SUCCESS, words.get_refactored(gamma_word, word_cnt));
+  ASSERT_EQ(1, word_cnt);
+  ObFTWord delta_word(strlen("delta"), "delta", meta_);
+  ASSERT_EQ(OB_SUCCESS, words.get_refactored(delta_word, word_cnt));
+  ASSERT_EQ(1, word_cnt);
+}
+
+TEST_F(ObTestFTParseHelper, test_beng_reuse_uses_scratch_allocator_for_words)
+{
+  ObFTWordMap words;
+  ASSERT_EQ(OB_SUCCESS, words.create(10, "TestBengReuse"));
+  int64_t doc_length = 0;
+  const char *beng_name = "beng.1";
+  const ObString beng_plugin_name(STRLEN(beng_name), beng_name);
+  const char *first_doc = "OceanBase search";
+  const char *second_doc = "Parser reuse";
+
+  parse_helper_.reset();
+  ASSERT_EQ(OB_SUCCESS, parse_helper_.init(&allocator_, beng_plugin_name, plugin_properties_));
+  ASSERT_EQ(OB_SUCCESS, parse_helper_.segment(meta_, first_doc, std::strlen(first_doc), doc_length, words));
+  ASSERT_EQ(2, words.size());
+  ASSERT_NE(nullptr, parse_helper_.token_iter_);
+  ObITokenIterator *first_iter = parse_helper_.token_iter_;
+
+  allocator_.reset();
+  words.clear();
+  doc_length = 0;
+  ASSERT_EQ(OB_SUCCESS, parse_helper_.segment(meta_, second_doc, std::strlen(second_doc), doc_length, words));
+  ASSERT_EQ(2, words.size());
+  ASSERT_EQ(first_iter, parse_helper_.token_iter_);
+
+  int64_t word_cnt = 0;
+  ObFTWord parser_word(strlen("parser"), "parser", meta_);
+  ASSERT_EQ(OB_SUCCESS, words.get_refactored(parser_word, word_cnt));
+  ASSERT_EQ(1, word_cnt);
+  ObFTWord reuse_word(strlen("reuse"), "reuse", meta_);
+  ASSERT_EQ(OB_SUCCESS, words.get_refactored(reuse_word, word_cnt));
+  ASSERT_EQ(1, word_cnt);
+}
+
 class ObTestNgramFTParseHelper : public ::testing::Test
 {
 public:
@@ -859,6 +921,38 @@ TEST_F(ObTestNgramFTParseHelper, test_parse_corner_case)
   ASSERT_EQ(1, word_cnt);
   ObFTWord word_68(strlen("68"), "68", meta_);
   ASSERT_EQ(OB_SUCCESS, words.get_refactored(word_68, word_cnt));
+  ASSERT_EQ(1, word_cnt);
+}
+
+TEST_F(ObTestNgramFTParseHelper, test_reuse_token_iterator)
+{
+  ObFTWordMap words;
+  ASSERT_EQ(OB_SUCCESS, words.create(10, "TParseReuse"));
+  int64_t doc_length = 0;
+  const char *first_doc = "abcd";
+  const char *second_doc = "wxyz";
+
+  ASSERT_EQ(OB_SUCCESS, parse_helper_.segment(meta_, first_doc, std::strlen(first_doc), doc_length, words));
+  ASSERT_EQ(3, words.size());
+  ASSERT_NE(nullptr, parse_helper_.token_iter_);
+  ObITokenIterator *first_iter = parse_helper_.token_iter_;
+
+  allocator_.reset();
+  words.clear();
+  doc_length = 0;
+  ASSERT_EQ(OB_SUCCESS, parse_helper_.segment(meta_, second_doc, std::strlen(second_doc), doc_length, words));
+  ASSERT_EQ(3, words.size());
+  ASSERT_EQ(first_iter, parse_helper_.token_iter_);
+
+  int64_t word_cnt = 0;
+  ObFTWord wx_word(strlen("wx"), "wx", meta_);
+  ASSERT_EQ(OB_SUCCESS, words.get_refactored(wx_word, word_cnt));
+  ASSERT_EQ(1, word_cnt);
+  ObFTWord xy_word(strlen("xy"), "xy", meta_);
+  ASSERT_EQ(OB_SUCCESS, words.get_refactored(xy_word, word_cnt));
+  ASSERT_EQ(1, word_cnt);
+  ObFTWord yz_word(strlen("yz"), "yz", meta_);
+  ASSERT_EQ(OB_SUCCESS, words.get_refactored(yz_word, word_cnt));
   ASSERT_EQ(1, word_cnt);
 }
 
