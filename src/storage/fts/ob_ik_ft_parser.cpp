@@ -188,28 +188,13 @@ int ObIKFTParser::process_one_char(TokenizeContext &ctx,
                                    const ObFTCharUtil::CharType type)
 {
   int ret = OB_SUCCESS;
-  const bool is_letter = ObFTCharUtil::CharType::ENGLISH_LETTER == type
-                         || ObFTCharUtil::CharType::ARABIC_LETTER == type;
-  const bool is_surrogate = ObFTCharUtil::CharType::SURROGATE_HIGH == type
-                            || ObFTCharUtil::CharType::SURROGATE_LOW == type;
-
-  if (OB_ISNULL(letter_processor_) || OB_ISNULL(quantifier_processor_)
-      || OB_ISNULL(cjk_processor_) || OB_ISNULL(surrogate_processor_)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("ik processor is null", K(ret));
-  } else if ((is_letter || letter_processor_->has_pending_state())
-             && OB_FAIL(letter_processor_->do_process(ctx, ch, char_len, type))) {
-    LOG_WARN("failed to process letter", K(ret));
-  } else if ((ObFTCharUtil::CharType::CHINESE == type
-              || quantifier_processor_->has_pending_state())
-             && OB_FAIL(quantifier_processor_->do_process(ctx, ch, char_len, type))) {
-    LOG_WARN("failed to process quantifier", K(ret));
-  } else if ((ObFTCharUtil::CharType::USELESS != type || cjk_processor_->has_pending_hits())
-             && OB_FAIL(cjk_processor_->do_process(ctx, ch, char_len, type))) {
-    LOG_WARN("failed to process cjk", K(ret));
-  } else if ((is_surrogate || surrogate_processor_->has_pending_high())
-             && OB_FAIL(surrogate_processor_->do_process(ctx, ch, char_len, type))) {
-    LOG_WARN("failed to process surrogate", K(ret));
+  // proces by char with all segmenters
+  for (ObList<ObIIKProcessor *, ObIAllocator>::iterator iter = segmenters_.begin();
+       OB_SUCC(ret) && iter != segmenters_.end();
+       iter++) {
+    if (OB_FAIL((*iter)->process(ctx))) {
+      LOG_WARN("Failed to process segmenter", K(ret));
+    }
   }
   return ret;
 }

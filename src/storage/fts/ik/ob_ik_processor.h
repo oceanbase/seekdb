@@ -82,6 +82,8 @@ public:
 
   ObIKResultArray &result_list() { return result_list_; }
 
+  bool has_pending_result() const { return result_head_ < result_list_.count(); }
+
   int32_t handle_size() const { return handle_size_; }
 
 private:
