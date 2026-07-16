@@ -64,6 +64,8 @@ OMPKHandshake::OMPKHandshake()
   server_capabilities_upper_.capability_flag_.OB_SERVER_SESSION_VARIABLE_TRACK = 1;
   server_capabilities_upper_.capability_flag_.OB_SERVER_PLUGIN_AUTH = 1;
   server_capabilities_upper_.capability_flag_.OB_SERVER_CONNECT_ATTRS = 1;
+  server_capabilities_upper_.capability_flag_.OB_SERVER_USE_LOB_LOCATOR = 1;
+  server_capabilities_upper_.capability_flag_.OB_SERVER_RETURN_HIDDEN_ROWID = 1;
   server_capabilities_upper_.capability_flag_.OB_SERVER_PS_MULTIPLE_RESULTS = 1;
 
   if (server_capabilities_upper_.capability_flag_.OB_SERVER_PLUGIN_AUTH != 0) {
@@ -75,7 +77,9 @@ OMPKHandshake::OMPKHandshake()
   }
 
   server_language_ = 46;  // utf8mb4_bin
-  server_status_ = 0;     // no this value in mysql protocol document
+  // The greeting is sent before the SQL session is created. Advertise seekdb's
+  // default so clients do not skip an explicit SET AUTOCOMMIT based on stale state.
+  server_status_ = static_cast<uint16_t>(1U << OB_SERVER_STATUS_AUTOCOMMIT_POS);
   memset(reserved_, 0, sizeof(reserved_));
   memset(auth_plugin_data2_, 'b', sizeof(auth_plugin_data2_) - 1);
   auth_plugin_data2_[sizeof(auth_plugin_data2_) - 1] = '\0';
