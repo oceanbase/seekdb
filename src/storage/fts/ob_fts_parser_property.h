@@ -135,11 +135,18 @@ private:
 struct ObFTParserProperty final
 {
 public:
+  static constexpr int64_t MAX_DICT_TABLE_NAME_LEN = 512;
+
   ObFTParserProperty();
   ~ObFTParserProperty() = default;
-  int parse_for_parser_helper(const ObFTParser &parser,
-                              const ObString &json_str,
-                              common::ObIAllocator &alloc);
+  ObFTParserProperty(const ObFTParserProperty &other);
+  ObFTParserProperty &operator=(const ObFTParserProperty &other);
+
+  int parse_for_parser_helper(const ObFTParser &parser, const ObString &json_str);
+
+  int set_dict_table(const ObString &str);
+  int set_stopword_table(const ObString &str);
+  int set_quantifier_table(const ObString &str);
 
   bool is_equal(const ObFTParserProperty &other) const
   {
@@ -171,6 +178,11 @@ public:
   common::ObString quantifier_table_;
   int64_t min_ngram_token_size_;
   int64_t max_ngram_token_size_;
+
+private:
+  char dict_table_buf_[MAX_DICT_TABLE_NAME_LEN];
+  char stopword_table_buf_[MAX_DICT_TABLE_NAME_LEN];
+  char quantifier_table_buf_[MAX_DICT_TABLE_NAME_LEN];
 };
 
 } // end namespace storage

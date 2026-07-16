@@ -323,6 +323,10 @@ int ObResolver::resolve(IsPrepared if_prepared, const ParseNode &parse_tree, ObS
         REGISTER_STMT_RESOLVER(FlushKVCache);
         break;
       }
+      case T_REFRESH_FULLTEXT_DICT: {
+        REGISTER_STMT_RESOLVER(RefreshFullTextDict);
+        break;
+      }
       case T_FLUSH_ILOGCACHE: {
         REGISTER_STMT_RESOLVER(FlushIlogCache);
         break;

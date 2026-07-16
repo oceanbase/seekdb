@@ -2882,6 +2882,7 @@ typedef enum ObItemType
   T_DIFF_TABLE = 4918,
   T_MERGE_TABLE = 4919,
   T_FULLTEXT_DICT = 4920,
+  T_REFRESH_FULLTEXT_DICT = 4921,
   T_MAX //Attention: add a new type before T_MAX
 } ObItemType;
 

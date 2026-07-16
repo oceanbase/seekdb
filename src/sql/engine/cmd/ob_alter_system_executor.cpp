@@ -29,6 +29,8 @@
 #include "rootserver/freeze/ob_major_freeze_helper.h" //ObMajorFreezeHelper
 #include "pl/pl_cache/ob_pl_cache_mgr.h"
 #include "sql/plan_cache/ob_ps_cache.h"
+#include "storage/fts/ob_fts_plugin_helper.h"
+#include "storage/fts/dict/ob_ft_dict_hub.h"
 
 #include "rootserver/ob_tenant_event_def.h"
 #include "sql/engine/cmd/ob_redis_importer.h"
@@ -357,6 +359,27 @@ int ObFlushCacheExecutor::execute(ObExecContext &ctx, ObFlushCacheStmt &stmt)
                            stmt.flush_cache_arg_))) {
       LOG_WARN("flush cache failed", K(ret), "rpc_arg", stmt.flush_cache_arg_);
     }
+  }
+  return ret;
+}
+
+int ObRefreshFullTextDictExecutor::execute(ObExecContext &ctx, ObRefreshFullTextDictStmt &stmt)
+{
+  UNUSED(ctx);
+  int ret = OB_SUCCESS;
+  storage::ObFTDictHub *hub = NULL;
+  if (OB_UNLIKELY(stmt.dict_table_name_.is_empty())) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("dict table name is empty", K(ret));
+  } else if (OB_FAIL(storage::ObFTParsePluginData::instance().get_dict_hub(hub))) {
+    LOG_WARN("fail to get dict hub", K(ret));
+  } else if (OB_ISNULL(hub)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("dict hub is null", K(ret));
+  } else if (OB_FAIL(hub->invalidate_dict(stmt.dict_table_name_.str()))) {
+    LOG_WARN("fail to invalidate dict", K(ret), K(stmt.dict_table_name_));
+  } else {
+    LOG_INFO("success to refresh fulltext dict", K(stmt.dict_table_name_));
   }
   return ret;
 }

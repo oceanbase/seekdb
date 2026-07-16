@@ -142,6 +142,39 @@ int ObFTDictHub::load_cache(const ObFTDictDesc &desc, ObFTCacheRangeContainer &c
 }
 
 
+int ObFTDictHub::invalidate_dict(const common::ObString &name)
+{
+  int ret = OB_SUCCESS;
+  if (!is_inited_) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("dict hub not init", K(ret));
+  } else if (OB_UNLIKELY(name.empty())) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("dict name is empty", K(ret));
+  } else {
+    const ObFTDictType types[] = {ObFTDictType::DICT_IK_MAIN,
+                                  ObFTDictType::DICT_IK_QUAN,
+                                  ObFTDictType::DICT_IK_STOP};
+    for (int64_t i = 0; OB_SUCC(ret) && i < ARRAYSIZEOF(types); ++i) {
+      ObFTDictDesc desc(name,
+                        types[i],
+                        ObCharsetType::CHARSET_UTF8MB4,
+                        ObCollationType::CS_TYPE_UTF8MB4_BIN);
+      ObFTDictInfoKey key(static_cast<uint64_t>(types[i]), desc.name_hash());
+      ObBucketHashWLockGuard guard(rw_dict_lock_, key.hash());
+      const int tmp_ret = dict_map_.erase_refactored(key);
+      if (OB_SUCCESS != tmp_ret && OB_HASH_NOT_EXIST != tmp_ret) {
+        ret = tmp_ret;
+        LOG_WARN("fail to erase dict info", K(ret), K(name));
+      }
+    }
+    if (OB_SUCC(ret)) {
+      LOG_INFO("success to invalidate dict", K(name));
+    }
+  }
+  return ret;
+}
+
 int ObFTDictHub::get_dict_info(const ObFTDictInfoKey &key, ObFTDictInfo &info)
 {
   int ret = OB_SUCCESS;

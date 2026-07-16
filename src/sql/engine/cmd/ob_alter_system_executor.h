@@ -44,6 +44,8 @@ DEF_SIMPLE_EXECUTOR(ObFlushCache);
 
 DEF_SIMPLE_EXECUTOR(ObFlushKVCache);
 
+DEF_SIMPLE_EXECUTOR(ObRefreshFullTextDict);
+
 DEF_SIMPLE_EXECUTOR(ObFlushIlogCache);
 
 DEF_SIMPLE_EXECUTOR(ObFlushDagWarnings);

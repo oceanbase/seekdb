@@ -1148,27 +1148,82 @@ int ObFTParserJsonProps::show_parser_properties(const ObFTParserJsonProps &prope
 
 #undef __FT_PARSER_PROPERTY_SHOW_COMMA
 
-static int ft_deep_copy_str(common::ObIAllocator &alloc, const ObString &src, ObString &dst)
+int ObFTParserProperty::set_dict_table(const ObString &str)
 {
   int ret = OB_SUCCESS;
-  if (src.empty()) {
-    dst.reset();
+  if (str.empty()) {
+    dict_table_.reset();
+  } else if (OB_UNLIKELY(str.length() >= MAX_DICT_TABLE_NAME_LEN)) {
+    ret = OB_SIZE_OVERFLOW;
+    LOG_WARN("dict table name is too long", K(ret), K(str));
   } else {
-    char *buf = static_cast<char *>(alloc.alloc(src.length()));
-    if (OB_ISNULL(buf)) {
-      ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("Failed to alloc memory for dict name", K(ret), K(src));
-    } else {
-      MEMCPY(buf, src.ptr(), src.length());
-      dst.assign_ptr(buf, src.length());
-    }
+    MEMCPY(dict_table_buf_, str.ptr(), str.length());
+    dict_table_.assign_ptr(dict_table_buf_, str.length());
   }
   return ret;
 }
 
-int ObFTParserProperty::parse_for_parser_helper(const ObFTParser &parser,
-                                                const ObString &json_str,
-                                                common::ObIAllocator &alloc)
+int ObFTParserProperty::set_stopword_table(const ObString &str)
+{
+  int ret = OB_SUCCESS;
+  if (str.empty()) {
+    stopword_table_.reset();
+  } else if (OB_UNLIKELY(str.length() >= MAX_DICT_TABLE_NAME_LEN)) {
+    ret = OB_SIZE_OVERFLOW;
+    LOG_WARN("stopword table name is too long", K(ret), K(str));
+  } else {
+    MEMCPY(stopword_table_buf_, str.ptr(), str.length());
+    stopword_table_.assign_ptr(stopword_table_buf_, str.length());
+  }
+  return ret;
+}
+
+int ObFTParserProperty::set_quantifier_table(const ObString &str)
+{
+  int ret = OB_SUCCESS;
+  if (str.empty()) {
+    quantifier_table_.reset();
+  } else if (OB_UNLIKELY(str.length() >= MAX_DICT_TABLE_NAME_LEN)) {
+    ret = OB_SIZE_OVERFLOW;
+    LOG_WARN("quantifier table name is too long", K(ret), K(str));
+  } else {
+    MEMCPY(quantifier_table_buf_, str.ptr(), str.length());
+    quantifier_table_.assign_ptr(quantifier_table_buf_, str.length());
+  }
+  return ret;
+}
+
+ObFTParserProperty::ObFTParserProperty(const ObFTParserProperty &other)
+    : min_token_size_(ObFTSLiteral::FT_DEFAULT_MIN_TOKEN_SIZE),
+      max_token_size_(ObFTSLiteral::FT_DEFAULT_MAX_TOKEN_SIZE),
+      ngram_token_size_(ObFTSLiteral::FT_DEFAULT_NGRAM_TOKEN_SIZE),
+      ik_mode_smart_(true),
+      stopword_table_(),
+      dict_table_(),
+      quantifier_table_(),
+      min_ngram_token_size_(ObFTSLiteral::FT_DEFAULT_MIN_NGRAM_SIZE),
+      max_ngram_token_size_(ObFTSLiteral::FT_DEFAULT_MAX_NGRAM_SIZE)
+{
+  *this = other;
+}
+
+ObFTParserProperty &ObFTParserProperty::operator=(const ObFTParserProperty &other)
+{
+  if (this != &other) {
+    min_token_size_ = other.min_token_size_;
+    max_token_size_ = other.max_token_size_;
+    ngram_token_size_ = other.ngram_token_size_;
+    ik_mode_smart_ = other.ik_mode_smart_;
+    min_ngram_token_size_ = other.min_ngram_token_size_;
+    max_ngram_token_size_ = other.max_ngram_token_size_;
+    (void)set_dict_table(other.dict_table_);
+    (void)set_stopword_table(other.stopword_table_);
+    (void)set_quantifier_table(other.quantifier_table_);
+  }
+  return *this;
+}
+
+int ObFTParserProperty::parse_for_parser_helper(const ObFTParser &parser, const ObString &json_str)
 {
   int ret = OB_SUCCESS;
   ObFTParserJsonProps props;
@@ -1189,6 +1244,9 @@ int ObFTParserProperty::parse_for_parser_helper(const ObFTParser &parser,
           LOG_WARN("fail to get dict table", K(ret));
         }
       }
+      if (OB_SUCC(ret) && tmp_dict.empty()) {
+        tmp_dict = ObString(ObFTSLiteral::FT_DEFAULT_IK_DICT_UTF8_TABLE);
+      }
       if (OB_SUCC(ret) && OB_FAIL(props.config_get_stopword_table(tmp_stopword))) {
         if (OB_SEARCH_NOT_FOUND == ret) {
           tmp_stopword = ObString(ObFTSLiteral::FT_DEFAULT_IK_STOPWORD_UTF8_TABLE);
@@ -1206,12 +1264,12 @@ int ObFTParserProperty::parse_for_parser_helper(const ObFTParser &parser,
         }
       }
       if (OB_FAIL(ret)) {
-      } else if (OB_FAIL(ft_deep_copy_str(alloc, tmp_dict, dict_table_))) {
-        LOG_WARN("fail to copy dict table", K(ret), K(tmp_dict));
-      } else if (OB_FAIL(ft_deep_copy_str(alloc, tmp_stopword, stopword_table_))) {
-        LOG_WARN("fail to copy stopword table", K(ret), K(tmp_stopword));
-      } else if (OB_FAIL(ft_deep_copy_str(alloc, tmp_quantifier, quantifier_table_))) {
-        LOG_WARN("fail to copy quantifier table", K(ret), K(tmp_quantifier));
+      } else if (OB_FAIL(set_dict_table(tmp_dict))) {
+        LOG_WARN("fail to set dict table", K(ret), K(tmp_dict));
+      } else if (OB_FAIL(set_stopword_table(tmp_stopword))) {
+        LOG_WARN("fail to set stopword table", K(ret), K(tmp_stopword));
+      } else if (OB_FAIL(set_quantifier_table(tmp_quantifier))) {
+        LOG_WARN("fail to set quantifier table", K(ret), K(tmp_quantifier));
       }
       ObString ik_smart;
       if (OB_FAIL(ret)) {
@@ -1282,6 +1340,9 @@ ObFTParserProperty::ObFTParserProperty()
       min_ngram_token_size_(ObFTSLiteral::FT_DEFAULT_MIN_NGRAM_SIZE),
       max_ngram_token_size_(ObFTSLiteral::FT_DEFAULT_MAX_NGRAM_SIZE)
 {
+  dict_table_buf_[0] = '\0';
+  stopword_table_buf_[0] = '\0';
+  quantifier_table_buf_[0] = '\0';
 }
 
 int ObFTParserJsonProps::tokenize_array_to_props_json(ObIAllocator &allocator,

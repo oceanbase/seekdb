@@ -892,6 +892,66 @@ int ObFlushCacheResolver::resolve(const ParseNode &parse_tree)
   return ret;
 }
 
+int ObRefreshFullTextDictResolver::resolve(const ParseNode &parse_tree)
+{
+  int ret = OB_SUCCESS;
+  ObRefreshFullTextDictStmt *stmt = NULL;
+  if (OB_UNLIKELY(T_REFRESH_FULLTEXT_DICT != parse_tree.type_)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("type is not T_REFRESH_FULLTEXT_DICT", "type", get_type_name(parse_tree.type_));
+  } else if (OB_ISNULL(parse_tree.children_) || OB_ISNULL(parse_tree.children_[0])) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("children should not be null", K(ret));
+  } else if (OB_ISNULL(stmt = create_stmt<ObRefreshFullTextDictStmt>())) {
+    ret = OB_ALLOCATE_MEMORY_FAILED;
+    LOG_ERROR("create ObRefreshFullTextDictStmt failed", K(ret));
+  } else {
+    stmt_ = stmt;
+    ParseNode *relation_node = parse_tree.children_[0];
+    ParseNode *db_node = NULL;
+    ParseNode *tb_node = NULL;
+    if (OB_ISNULL(relation_node->children_) || relation_node->num_child_ < 2) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("invalid relation factor", K(ret));
+    } else {
+      db_node = relation_node->children_[0];
+      tb_node = relation_node->children_[1];
+      if (OB_ISNULL(tb_node) || OB_UNLIKELY(tb_node->str_len_ <= 0)) {
+        ret = OB_INVALID_ARGUMENT;
+        LOG_WARN("dict table name is empty", K(ret));
+        LOG_USER_ERROR(OB_INVALID_ARGUMENT, "the dict table name is empty");
+      } else {
+        ObSqlString full_name;
+        ObString db_name;
+        if (NULL != db_node && db_node->str_len_ > 0) {
+          db_name.assign_ptr(db_node->str_value_, static_cast<int32_t>(db_node->str_len_));
+        } else if (OB_ISNULL(params_.session_info_)) {
+          ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("session info is null", K(ret));
+        } else {
+          db_name = params_.session_info_->get_database_name();
+          if (db_name.empty()) {
+            ret = OB_ERR_NO_DB_SELECTED;
+            LOG_WARN("no database selected", K(ret));
+          }
+        }
+        if (OB_FAIL(ret)) {
+        } else if (OB_FAIL(full_name.append(db_name))) {
+          LOG_WARN("fail to append db name", K(ret));
+        } else if (OB_FAIL(full_name.append("."))) {
+          LOG_WARN("fail to append dot", K(ret));
+        } else if (OB_FAIL(full_name.append(
+                       ObString(static_cast<int32_t>(tb_node->str_len_), tb_node->str_value_)))) {
+          LOG_WARN("fail to append table name", K(ret));
+        } else if (OB_FAIL(stmt->dict_table_name_.assign(full_name.string()))) {
+          LOG_WARN("fail to assign dict table name", K(ret), K(full_name));
+        }
+      }
+    }
+  }
+  return ret;
+}
+
 int ObFlushKVCacheResolver::resolve(const ParseNode &parse_tree)
 {
   int ret = OB_SUCCESS;
