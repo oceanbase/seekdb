@@ -448,7 +448,7 @@ int ObExprTokenize::TokenizeParam::reform_parser_properties(const ObString &prop
       LOG_WARN("fail to get IK parser properties", K(ret));
     } else {
       for (int64_t i = 0; OB_SUCC(ret) && i < ARRAYSIZEOF(names); ++i) {
-        if (names[i].find('.') < 0) {
+        if (OB_ISNULL(names[i].find('.'))) {
           if (database_name_.empty()) {
             ret = OB_ERR_NO_DB_SELECTED;
           } else {

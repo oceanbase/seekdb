@@ -84,8 +84,8 @@ int ObDropTableResolver::resolve(const ParseNode &parse_tree)
 
     ObPlacementHashSet<ObTableItem> *tmp_ptr = NULL;
     ObPlacementHashSet<ObTableItem> *table_item_set = NULL;
-    if (NULL == (tmp_ptr = (ObPlacementHashSet<ObTableItem> *)
-      allocator_->alloc(sizeof(ObPlacementHashSet<ObTableItem>)))){
+    if (NULL == (tmp_ptr = static_cast<ObPlacementHashSet<ObTableItem> *>(
+      allocator_->alloc(sizeof(ObPlacementHashSet<ObTableItem>))))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
       SQL_RESV_LOG(ERROR, "failed to allocate memory", K(ret));
     } else {
@@ -134,15 +134,17 @@ int ObDropTableResolver::resolve(const ParseNode &parse_tree)
               } else if (OB_FAIL(qualified_name.append_fmt("%.*s.%.*s", db_name.length(),
                                                            db_name.ptr(), table_name.length(),
                                                            table_name.ptr()))) {
-                LOG_WARN("failed to build dictionary name", K(ret));
+                SQL_RESV_LOG(WARN, "failed to build dictionary name", K(ret));
               } else if (OB_FAIL(guard->get_table_schemas_in_tenant(schemas))) {
-                LOG_WARN("failed to list schemas", K(ret));
+                SQL_RESV_LOG(WARN, "failed to list schemas", K(ret));
               } else {
                 for (int64_t j = 0; !dict_referenced && j < schemas.count(); ++j) {
                   const ObTableSchema *schema = schemas.at(j);
-                  dict_referenced = OB_NOT_NULL(schema) && schema->is_fts_index()
-                                    && schema->get_parser_property_str().find(
-                                           qualified_name.string()) >= 0;
+                  if (OB_NOT_NULL(schema) && schema->is_fts_index()) {
+                    const ObString &properties = schema->get_parser_property_str();
+                    dict_referenced = OB_NOT_NULL(MEMMEM(properties.ptr(), properties.length(),
+                                                         qualified_name.ptr(), qualified_name.length()));
+                  }
                 }
               }
               if (OB_SUCC(ret) && dict_referenced) {

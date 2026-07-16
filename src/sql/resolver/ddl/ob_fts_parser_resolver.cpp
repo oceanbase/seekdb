@@ -31,7 +31,7 @@ static int qualify_fts_dictionary_table(common::ObIAllocator &allocator,
                                         ObString &output)
 {
   int ret = OB_SUCCESS;
-  if (input.find('.') >= 0) {
+  if (OB_NOT_NULL(input.find('.'))) {
     output = input;
   } else if (database_name.empty()) {
     ret = OB_ERR_NO_DB_SELECTED;

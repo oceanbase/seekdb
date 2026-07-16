@@ -1164,7 +1164,8 @@ int ObRefreshFulltextDictResolver::resolve(const ParseNode &parse_tree)
     ObString quoted_name;
     if (T_RELATION_FACTOR != relation->type_) {
       quoted_name.assign_ptr(relation->str_value_, static_cast<int32_t>(relation->str_len_));
-      const int64_t dot_pos = quoted_name.find('.');
+      const char *dot = quoted_name.find('.');
+      const int64_t dot_pos = OB_ISNULL(dot) ? -1 : dot - quoted_name.ptr();
       if (dot_pos > 0 && dot_pos < quoted_name.length() - 1) {
         db_node = nullptr;
         table_node = nullptr;
@@ -1205,7 +1206,8 @@ int ObRefreshFulltextDictResolver::resolve(const ParseNode &parse_tree)
   }
   if (OB_SUCC(ret) && OB_NOT_NULL(stmt_)) {
     const ObString &qualified = stmt->get_table_name();
-    const int64_t dot_pos = qualified.find('.');
+    const char *dot = qualified.find('.');
+    const int64_t dot_pos = OB_ISNULL(dot) ? -1 : dot - qualified.ptr();
     const ObTableSchema *dict_schema = nullptr;
     uint64_t database_id = OB_INVALID_ID;
     if (dot_pos <= 0 || dot_pos >= qualified.length() - 1) {
@@ -1215,8 +1217,8 @@ int ObRefreshFulltextDictResolver::resolve(const ParseNode &parse_tree)
       ObString tb_name(static_cast<int32_t>(qualified.length() - dot_pos - 1),
                        qualified.ptr() + dot_pos + 1);
       if (OB_FAIL(schema_checker_->get_database_id(db_name, database_id))
-          || OB_FAIL(schema_checker_->get_table_schema(database_id, tb_name, false,
-                                                       &dict_schema))) {
+          || OB_FAIL(schema_checker_->get_table_schema(database_id, tb_name, false, false,
+                                                       false, dict_schema))) {
         LOG_WARN("failed to resolve dictionary table", K(ret), K(qualified));
       } else if (OB_ISNULL(dict_schema) || !dict_schema->is_fulltext_dict_table()) {
         ret = OB_INVALID_ARGUMENT;

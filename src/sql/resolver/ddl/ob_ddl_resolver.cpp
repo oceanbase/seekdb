@@ -1642,7 +1642,8 @@ int ObDDLResolver::resolve_table_option(const ParseNode *option_node, const bool
                                     || 0 == table_names[i].case_compare(
                                         storage::ObFTSLiteral::FT_DEFAULT_IK_QUANTIFIER_UTF8_TABLE);
             if (!is_default) {
-              const int64_t dot_pos = table_names[i].find('.');
+              const char *dot = table_names[i].find('.');
+              const int64_t dot_pos = OB_ISNULL(dot) ? -1 : dot - table_names[i].ptr();
               ObString db_name(static_cast<int32_t>(dot_pos), table_names[i].ptr());
               ObString tb_name(static_cast<int32_t>(table_names[i].length() - dot_pos - 1),
                                table_names[i].ptr() + dot_pos + 1);
@@ -1650,8 +1651,8 @@ int ObDDLResolver::resolve_table_option(const ParseNode *option_node, const bool
               const ObTableSchema *dict_schema = nullptr;
               if (dot_pos <= 0
                   || OB_FAIL(schema_checker_->get_database_id(db_name, db_id))
-                  || OB_FAIL(schema_checker_->get_table_schema(db_id, tb_name, false,
-                                                               &dict_schema))) {
+                  || OB_FAIL(schema_checker_->get_table_schema(db_id, tb_name, false, false,
+                                                               false, dict_schema))) {
                 LOG_WARN("failed to resolve custom IK dictionary table", K(ret), K(table_names[i]));
               } else if (OB_ISNULL(dict_schema) || !dict_schema->is_fulltext_dict_table()) {
                 ret = OB_INVALID_ARGUMENT;
