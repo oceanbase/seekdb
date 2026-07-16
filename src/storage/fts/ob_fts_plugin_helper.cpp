@@ -15,7 +15,7 @@
  */
 
 #include "object/ob_object.h"
-#include "storage/fts/ob_fts_struct.h"  // ObFTWordMap typedef(previously hidden behind a transitive include)
+#include "storage/fts/ob_fts_struct.h"  // ObFTTokenMap typedef(previously hidden behind a transitive include)
 #define USING_LOG_PREFIX STORAGE_FTS
 
 #include "storage/fts/ob_fts_plugin_helper.h"
@@ -247,6 +247,7 @@ int ObFTParseHelper::segment(
     ObFTParserParam param;
     ObITokenIterator *iter = nullptr;
     param.allocator_ = &allocator;
+    param.scratch_alloc_ = &allocator;
     param.cs_ = cs;
     param.fulltext_ = ft;
     param.ft_length_ = ft_len;
@@ -361,7 +362,7 @@ int ObFTParseHelper::segment(
     const char *fulltext,
     const int64_t fulltext_len,
     int64_t &doc_length,
-    ObFTWordMap &words) const
+    ObFTTokenMap &words) const
 {
   int ret = OB_SUCCESS;
   const ObCharsetInfo *cs = nullptr;
@@ -429,7 +430,7 @@ int ObFTParseHelper::check_is_the_same(
 }
 
 int ObFTParseHelper::make_detail_json(
-    const ObFTWordMap &words,
+    const ObFTTokenMap &words,
     const int64_t doc_length,
     common::ObIJsonBase *&json_root)
 {
@@ -451,7 +452,7 @@ int ObFTParseHelper::make_detail_json(
    ret = OB_ALLOCATE_MEMORY_FAILED;
    LOG_WARN("Fail to alloc memory for json", K(ret));
  } else {
-   for (ObFTWordMap::const_iterator it = words.begin(); OB_SUCC(ret) && it != words.end(); ++it) {
+   for (ObFTTokenMap::const_iterator it = words.begin(); OB_SUCC(ret) && it != words.end(); ++it) {
      ObString key = it->first.get_word().get_string();
      ObJsonObject *node = nullptr;
      ObJsonInt *token_cnt_node = nullptr;
@@ -495,7 +496,7 @@ int ObFTParseHelper::make_detail_json(
 }
 
 int ObFTParseHelper::make_token_array_json(
-    const ObFTWordMap &words,
+    const ObFTTokenMap &words,
     common::ObIJsonBase *&json_root)
 {
   int ret = OB_SUCCESS;
@@ -504,7 +505,7 @@ int ObFTParseHelper::make_token_array_json(
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("Fail to alloc memory for json", K(ret));
   } else {
-    for (ObFTWordMap::const_iterator it = words.begin(); OB_SUCC(ret) && it != words.end(); ++it) {
+    for (ObFTTokenMap::const_iterator it = words.begin(); OB_SUCC(ret) && it != words.end(); ++it) {
       ObString key = it->first.get_word().get_string();
       ObJsonString *token = nullptr;
       if (OB_UNLIKELY(OB_ISNULL(token = OB_NEWx(ObJsonString, allocator_, key)))) {

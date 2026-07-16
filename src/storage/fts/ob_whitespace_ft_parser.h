@@ -60,6 +60,7 @@ public:
   virtual int segment(plugin::ObFTParserParam *param, plugin::ObITokenIterator *&iter) const override;
   virtual void free_token_iter(plugin::ObFTParserParam *param, plugin::ObITokenIterator *&iter) const override;
   virtual int get_add_word_flag(ObAddWordFlag &flag) const override;
+  virtual int reuse_parser(plugin::ObFTParserParam *param) const override;
   OB_INLINE void reset() { is_inited_ = false; }
 private:
   bool is_inited_;

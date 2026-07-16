@@ -195,5 +195,11 @@ int ObBasicEnglishFTParserDesc::get_add_word_flag(ObAddWordFlag &flag) const
   return ret;
 }
 
+int ObBasicEnglishFTParserDesc::reuse_parser(ObFTParserParam *param) const
+{
+  int ret = OB_SUCCESS;
+  return ret;
+}
+
 } // end namespace storage
 } // end namespace oceanbase

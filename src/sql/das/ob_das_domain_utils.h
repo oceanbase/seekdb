@@ -199,7 +199,7 @@ private:
       const common::ObObjMeta &meta,
       const ObString &fulltext,
       int64_t &doc_length,
-      ObFTWordMap &words_count);
+      ObFTTokenMap &words_count);
   static int calc_save_rowkey_policy(
     ObIAllocator &allocator,
     const ObDASDMLBaseCtDef &das_ctdef,

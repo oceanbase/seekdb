@@ -183,10 +183,8 @@ int ObIKFTParser::process_next_batch()
       const char *ch;
       uint8_t char_len = 0;
       ObFTCharUtil::CharType type = ObFTCharUtil::CharType::USELESS;
-      if (OB_FAIL(ctx_->current_char(ch, char_len))) {
-        LOG_WARN("Failed to get current char", K(ret));
-      } else if (OB_FAIL(ctx_->current_char_type(type))) {
-        LOG_WARN("Failed to get current char type", K(ret));
+      if (OB_FAIL(ctx_->current_char_and_type(ch, char_len, type))) {
+        LOG_WARN("Failed to get current char and type", K(ret));
       } else if (OB_FAIL(process_one_char(*ctx_, ch, char_len, type))) {
         LOG_WARN("Failed to process one char", K(ret));
       } else {
@@ -206,10 +204,11 @@ int ObIKFTParser::process_next_batch()
     }
 
     if (OB_SUCC(ret) || OB_ITER_END == ret) {
-      ObIKArbitrator arb;
-      if (OB_FAIL(arb.process(*ctx_))) {
+      if (OB_FAIL(arb_.reuse())) {
+        LOG_WARN("Failed to reuse arbitrator", K(ret));
+      } else if (OB_FAIL(arb_.process(*ctx_))) {
         LOG_WARN("Failed to process arbitrator", K(ret));
-      } else if (OB_FAIL(arb.output_result(*ctx_))) {
+      } else if (OB_FAIL(arb_.output_result(*ctx_))) {
         LOG_WARN("Failed to make result list");
       }
     } else {
@@ -274,6 +273,12 @@ int ObIKFTParserDesc::get_add_word_flag(ObAddWordFlag &flag) const
   int ret = OB_SUCCESS;
   flag.set_casedown();
   flag.set_groupby_word();
+  return ret;
+}
+
+int ObIKFTParserDesc::reuse_parser(ObFTParserParam *param) const
+{
+  int ret = OB_SUCCESS;
   return ret;
 }
 

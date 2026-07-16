@@ -112,13 +112,15 @@ public:
   {
     ObFTParserParamExport::reset();
     allocator_ = nullptr;
+    scratch_alloc_ = nullptr;
     ngram_token_size_ = NGRAM_TOKEN_SIZE;
   }
 
-  INHERIT_TO_STRING_KV("base", ObFTParserParamExport, KP_(allocator), K_(ngram_token_size));
+  INHERIT_TO_STRING_KV("base", ObFTParserParamExport, KP_(allocator), KP(scratch_alloc_), K_(ngram_token_size));
 
 public:
   common::ObIAllocator *allocator_ = nullptr;
+  common::ObIAllocator *scratch_alloc_ = nullptr;
 
   // ik parser params
   ObFTIKParam ik_param_;
@@ -180,6 +182,8 @@ public:
   virtual int get_add_word_flag(storage::ObAddWordFlag &flag) const = 0;
 
   virtual int check_if_charset_supported(const ObCharsetInfo *cs) const { return OB_SUCCESS; }
+
+  virtual int reuse_parser(ObFTParserParam *param) const { return OB_SUCCESS; }
 };
 
 } // namespace plugin
