@@ -28,18 +28,13 @@ namespace storage
 class ObDomainIdCmp
 {
 public:
-  ObDomainIdCmp() : cmp_func_(nullptr), use_binary_string_cmp_(false) {}
+  ObDomainIdCmp() : cmp_func_(nullptr) {}
   ~ObDomainIdCmp() {}
   inline int init(const ObObjMeta &obj_meta);
   inline int compare(const ObDatum &lhs, const ObDatum &rhs, int &cmp_ret) const;
-  inline void reset()
-  {
-    cmp_func_ = nullptr;
-    use_binary_string_cmp_ = false;
-  }
+  inline void reset() { cmp_func_ = nullptr; }
 private:
   common::ObDatumCmpFuncType cmp_func_;
-  bool use_binary_string_cmp_;
   DISALLOW_COPY_AND_ASSIGN(ObDomainIdCmp);
 };
 
@@ -57,8 +52,6 @@ int ObDomainIdCmp::init(const ObObjMeta &obj_meta)
       STORAGE_LOG(WARN,"failed to get basic functions", K(ret), K(obj_meta));
     } else {
       cmp_func_ = id_basic_funcs->null_first_cmp_;
-      use_binary_string_cmp_ = ObDatumFuncs::is_string_type(obj_meta.get_type())
-          && CS_TYPE_BINARY == obj_meta.get_collation_type();
     }
   }
   return ret;
@@ -85,11 +78,6 @@ int ObDomainIdCmp::compare(const ObDatum &lhs, const ObDatum &rhs, int &cmp_ret)
     } else {
       ret = OB_ERR_UNEXPECTED;
     }
-  } else if (OB_LIKELY(use_binary_string_cmp_ && 0 == lhs.null_ && 0 == rhs.null_)) {
-    const int64_t min_len = MIN(lhs.len_, rhs.len_);
-    const int byte_cmp = min_len > 0 ? MEMCMP(lhs.ptr_, rhs.ptr_, min_len) : 0;
-    cmp_ret = byte_cmp > 0 ? 1 : (byte_cmp < 0 ? -1
-        : (lhs.len_ > rhs.len_ ? 1 : (lhs.len_ < rhs.len_ ? -1 : 0)));
   } else {
     ret = cmp_func_(lhs, rhs, cmp_ret);
   }
