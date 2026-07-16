@@ -298,6 +298,7 @@ ObFTParseHelper::ObFTParseHelper()
     plugin_param_(nullptr),
     parser_name_(),
     add_word_flag_(),
+    parser_property_allocator_("FTParserProp"),
     parser_property_(),
     is_inited_(false)
 {
@@ -323,7 +324,7 @@ int ObFTParseHelper::init(
   } else if (OB_FAIL(parser_name_.parse_from_str(plugin_name.ptr(), plugin_name.length()))) {
     LOG_WARN("fail to parse name from cstring", K(ret), K(plugin_name));
   } else if (OB_FAIL(parser_property_.parse_for_parser_helper(parser_name_, plugin_properties,
-                                                              *allocator))) {
+                                                              parser_property_allocator_))) {
     LOG_WARN("fail to parse parser property from cstring", K(ret), K(plugin_properties), K(parser_name_));
   } else if (OB_FAIL(ObPluginHelper::find_ftparser(parser_name_.get_parser_name().str(),
                                                    parser_desc_, plugin_param_))) {
@@ -354,6 +355,7 @@ void ObFTParseHelper::reset()
   plugin_param_ = nullptr;
   allocator_ = nullptr;
   add_word_flag_.clear();
+  parser_property_allocator_.reset();
   is_inited_ = false;
 }
 
