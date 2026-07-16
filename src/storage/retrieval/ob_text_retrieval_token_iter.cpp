@@ -287,6 +287,7 @@ int ObTextRetrievalTokenIter::do_token_cnt_agg(const ObDocIdExt &doc_id)
     } else {
       token_count = fwd_idx_agg_expr_->locate_expr_datum(*eval_ctx_).get_int();
     }
+    LOG_DEBUG("retrieval iterator get token cnt for doc", K(ret), K(doc_id), K(token_count));
   }
   return ret;
 }
@@ -1012,6 +1013,7 @@ int ObTextRetrievalBlockMaxIter::advance_to(const ObDatum &id_datum)
 int ObTextRetrievalBlockMaxIter::advance_shallow(const ObDatum &id_datum, const bool inclusive)
 {
   int ret = OB_SUCCESS;
+  LOG_DEBUG("[Sparse Retrieval] advance shallow", K(ret), K(id_datum), K(inclusive));
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     LOG_WARN("not initialized", K(ret));
