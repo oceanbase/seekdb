@@ -19,6 +19,7 @@
 #include "src/storage/fts/ob_ik_ft_parser.h"
 
 #include "lib/charset/ob_charset.h"
+#include "lib/hash_func/murmur_hash.h"
 #include "lib/ob_errno.h"
 #include "lib/oblog/ob_log_module.h"
 #include "lib/utility/ob_macro_utils.h"
@@ -132,7 +133,11 @@ int ObIKFTParser::get_next_token(const char *&word,
         LOG_WARN("Failed to produce new token", K(ret));
       } else if (OB_FAIL(ctx_->get_next_token(output_word, len, offset, cnt))) {
         if (OB_ITER_END == ret) {
-          // ok, end this iter
+          if (current_segment_cache_hit_ || ctx_->iter_end()) {
+            ret = init_next_segment();
+          } else {
+            ret = OB_SUCCESS;
+          }
         } else {
           LOG_WARN("Failed to get next token", K(ret));
         }
@@ -161,7 +166,8 @@ int ObIKFTParser::produce()
 {
   int ret = OB_SUCCESS;
   // Loop until end or has data to output
-  while (OB_SUCC(ret) && ctx_->result_list().empty() && !ctx_->iter_end()) {
+  while (OB_SUCC(ret) && !current_segment_cache_hit_
+         && !ctx_->has_pending_result() && !ctx_->iter_end()) {
     if (OB_FAIL(process_next_batch())) {
       if (OB_ITER_END == ret) {
         // ok
@@ -182,13 +188,28 @@ int ObIKFTParser::process_one_char(TokenizeContext &ctx,
                                    const ObFTCharUtil::CharType type)
 {
   int ret = OB_SUCCESS;
-  // proces by char with all segmenters
-  for (ObList<ObIIKProcessor *, ObIAllocator>::iterator iter = segmenters_.begin();
-       OB_SUCC(ret) && iter != segmenters_.end();
-       iter++) {
-    if (OB_FAIL((*iter)->process(ctx))) {
-      LOG_WARN("Failed to process segmenter", K(ret));
-    }
+  const bool is_letter = ObFTCharUtil::CharType::ENGLISH_LETTER == type
+                         || ObFTCharUtil::CharType::ARABIC_LETTER == type;
+  const bool is_surrogate = ObFTCharUtil::CharType::SURROGATE_HIGH == type
+                            || ObFTCharUtil::CharType::SURROGATE_LOW == type;
+
+  if (OB_ISNULL(letter_processor_) || OB_ISNULL(quantifier_processor_)
+      || OB_ISNULL(cjk_processor_) || OB_ISNULL(surrogate_processor_)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("ik processor is null", K(ret));
+  } else if ((is_letter || letter_processor_->has_pending_state())
+             && OB_FAIL(letter_processor_->do_process(ctx, ch, char_len, type))) {
+    LOG_WARN("failed to process letter", K(ret));
+  } else if ((ObFTCharUtil::CharType::CHINESE == type
+              || quantifier_processor_->has_pending_state())
+             && OB_FAIL(quantifier_processor_->do_process(ctx, ch, char_len, type))) {
+    LOG_WARN("failed to process quantifier", K(ret));
+  } else if ((ObFTCharUtil::CharType::USELESS != type || cjk_processor_->has_pending_hits())
+             && OB_FAIL(cjk_processor_->do_process(ctx, ch, char_len, type))) {
+    LOG_WARN("failed to process cjk", K(ret));
+  } else if ((is_surrogate || surrogate_processor_->has_pending_high())
+             && OB_FAIL(surrogate_processor_->do_process(ctx, ch, char_len, type))) {
+    LOG_WARN("failed to process surrogate", K(ret));
   }
   return ret;
 }
@@ -235,6 +256,9 @@ int ObIKFTParser::process_next_batch()
         LOG_WARN("failed to process arbitrator", K(ret));
       } else if (OB_FAIL(arbitrator_.output_result(*ctx_))) {
         LOG_WARN("failed to make result list", K(ret));
+      } else if (ctx_->iter_end() && use_segment_cache_
+                 && OB_FAIL(save_current_segment())) {
+        LOG_WARN("failed to save ik segment cache", K(ret));
       }
     } else {
       // Already logged.
@@ -389,17 +413,19 @@ int ObIKFTParser::init_ctx(const ObFTParserParam &param)
   if (coll_type_ == common::CS_TYPE_INVALID) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("illegal collation type", K(ret), K(coll_type_));
-  } else if (OB_ISNULL(ctx_ = OB_NEWx(TokenizeContext,
-                                      &scratch_allocator_,
-                                      coll_type_,
-                                      scratch_allocator_,
-                                      param.fulltext_,
-                                      param.ft_length_,
-                                      param.ik_param_.mode_ == ObFTIKParam::Mode::SMART))) {
-    ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("failed to allocate tokenize context", K(ret));
-  } else if (OB_FAIL(ctx_->init())) {
-    LOG_WARN("failed to initialize tokenize context", K(ret));
+  } else {
+    document_fulltext_ = param.fulltext_;
+    document_fulltext_len_ = param.ft_length_;
+    next_segment_offset_ = 0;
+    current_segment_offset_ = 0;
+    current_segment_len_ = 0;
+    document_is_smart_ = param.ik_param_.mode_ == ObFTIKParam::Mode::SMART;
+    use_segment_cache_ = param.ik_param_.main_dict_.empty()
+                         && param.ik_param_.quan_dict_.empty()
+                         && param.ik_param_.stopword_dict_.empty();
+    if (OB_FAIL(init_next_segment())) {
+      LOG_WARN("failed to initialize first ik segment", K(ret), K(param.ft_length_));
+    }
   }
 
   if (OB_FAIL(ret) && OB_NOT_NULL(ctx_)) {
@@ -410,6 +436,218 @@ int ObIKFTParser::init_ctx(const ObFTParserParam &param)
   }
 
   return ret;
+}
+
+int ObIKFTParser::find_next_segment(int64_t &segment_len) const
+{
+  int ret = OB_SUCCESS;
+  segment_len = 0;
+  int64_t pos = next_segment_offset_;
+  while (OB_SUCC(ret) && pos < document_fulltext_len_ && 0 == segment_len) {
+    int64_t char_len = 0;
+    ObFTCharUtil::CharType type = ObFTCharUtil::CharType::USELESS;
+    if (OB_FAIL(ObFTCharUtil::get_first_valid_char_and_type(coll_type_,
+                                                            document_fulltext_ + pos,
+                                                            document_fulltext_len_ - pos,
+                                                            char_len,
+                                                            type))) {
+      LOG_WARN("failed to scan ik segment boundary", K(ret), K(pos));
+    } else {
+      const char *ch = document_fulltext_ + pos;
+      const bool ascii_space = 1 == char_len
+                               && (' ' == ch[0] || '\n' == ch[0] || '\r' == ch[0]
+                                   || '\t' == ch[0]);
+      const bool cjk_sentence_mark = 3 == char_len
+                                     && (0 == MEMCMP(ch, "。", 3)
+                                         || 0 == MEMCMP(ch, "！", 3)
+                                         || 0 == MEMCMP(ch, "？", 3)
+                                         || 0 == MEMCMP(ch, "；", 3)
+                                         || 0 == MEMCMP(ch, "，", 3));
+      pos += char_len;
+      if (ObFTCharUtil::CharType::USELESS == type
+          && (ascii_space || cjk_sentence_mark)) {
+        segment_len = pos - next_segment_offset_;
+      }
+    }
+  }
+  if (OB_SUCC(ret) && 0 == segment_len) {
+    segment_len = document_fulltext_len_ - next_segment_offset_;
+  }
+  return ret;
+}
+
+int ObIKFTParser::lookup_segment_cache(const char *text,
+                                       const int64_t text_len,
+                                       CachedSegment *&entry) const
+{
+  int ret = OB_ENTRY_NOT_EXIST;
+  entry = nullptr;
+  const uint64_t hash = murmurhash(text, text_len, 0);
+  for (int64_t i = 0; OB_ENTRY_NOT_EXIST == ret && i < segment_cache_.count(); ++i) {
+    CachedSegment *candidate = segment_cache_.at(i);
+    if (OB_NOT_NULL(candidate) && candidate->hash_ == hash
+        && candidate->coll_type_ == coll_type_
+        && candidate->is_smart_ == document_is_smart_
+        && candidate->text_.length() == text_len
+        && 0 == MEMCMP(candidate->text_.ptr(), text, text_len)) {
+      entry = candidate;
+      ret = OB_SUCCESS;
+    }
+  }
+  return ret;
+}
+
+int ObIKFTParser::replay_segment(const CachedSegment &entry)
+{
+  int ret = OB_SUCCESS;
+  for (int64_t i = 0; OB_SUCC(ret) && i < entry.tokens_.count(); ++i) {
+    const CachedToken &cached = entry.tokens_.at(i);
+    ObIKToken token;
+    token.ptr_ = document_fulltext_ + current_segment_offset_;
+    token.offset_ = cached.relative_offset_;
+    token.length_ = cached.length_;
+    token.char_cnt_ = cached.char_cnt_;
+    token.type_ = cached.type_;
+    if (OB_FAIL(ctx_->result_list().push_back(token))) {
+      LOG_WARN("failed to replay cached ik token", K(ret), K(i));
+    }
+  }
+  return ret;
+}
+
+void ObIKFTParser::reset_segment_state()
+{
+  if (OB_NOT_NULL(ctx_)) {
+    ctx_->~TokenizeContext();
+    scratch_allocator_.free(ctx_);
+    ctx_ = nullptr;
+  }
+  for (ObIIKProcessor *segmenter : segmenters_) {
+    if (OB_NOT_NULL(segmenter)) {
+      segmenter->reset_document();
+    }
+  }
+  const int ret = arbitrator_.reuse();
+  if (OB_SUCCESS != ret) {
+    LOG_WARN("failed to reuse arbitrator between ik segments", K(ret));
+  }
+  scratch_allocator_.reuse();
+}
+
+int ObIKFTParser::init_next_segment()
+{
+  int ret = OB_SUCCESS;
+  reset_segment_state();
+  current_segment_cache_hit_ = false;
+  if (next_segment_offset_ >= document_fulltext_len_) {
+    ret = OB_ITER_END;
+  } else if (OB_FAIL(find_next_segment(current_segment_len_))) {
+    LOG_WARN("failed to find next ik segment", K(ret));
+  } else {
+    current_segment_offset_ = next_segment_offset_;
+    next_segment_offset_ += current_segment_len_;
+    if (OB_ISNULL(ctx_ = OB_NEWx(TokenizeContext,
+                                 &scratch_allocator_,
+                                 coll_type_,
+                                 scratch_allocator_,
+                                 document_fulltext_ + current_segment_offset_,
+                                 current_segment_len_,
+                                 document_is_smart_))) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+      LOG_WARN("failed to allocate ik segment context", K(ret));
+    } else if (OB_FAIL(ctx_->init())) {
+      LOG_WARN("failed to initialize ik segment context", K(ret));
+    } else if (use_segment_cache_) {
+      CachedSegment *entry = nullptr;
+      const int cache_ret = lookup_segment_cache(document_fulltext_ + current_segment_offset_,
+                                                 current_segment_len_,
+                                                 entry);
+      if (OB_SUCCESS == cache_ret) {
+        current_segment_cache_hit_ = true;
+        ++segment_cache_hit_;
+        if (OB_FAIL(replay_segment(*entry))) {
+          LOG_WARN("failed to replay ik segment cache", K(ret));
+        }
+      } else if (OB_ENTRY_NOT_EXIST == cache_ret) {
+        ++segment_cache_miss_;
+      } else {
+        ret = cache_ret;
+        LOG_WARN("failed to lookup ik segment cache", K(ret));
+      }
+      const int64_t total = segment_cache_hit_ + segment_cache_miss_;
+      if (OB_SUCC(ret) && total > 0 && 0 == total % 1000) {
+        LOG_INFO("ik segment cache statistics",
+                 "ik_segment_cache_hit", segment_cache_hit_,
+                 "ik_segment_cache_miss", segment_cache_miss_);
+      }
+    }
+  }
+  return ret;
+}
+
+int ObIKFTParser::save_current_segment()
+{
+  int ret = OB_SUCCESS;
+  const int64_t token_bytes = ctx_->result_list().count() * sizeof(CachedToken);
+  const int64_t entry_bytes = sizeof(CachedSegment) + current_segment_len_ + token_bytes;
+  if (current_segment_cache_hit_) {
+  } else {
+    if (segment_cache_.count() >= MAX_SEGMENT_CACHE_ENTRIES
+        || segment_cache_bytes_ + entry_bytes > MAX_SEGMENT_CACHE_BYTES) {
+      clear_segment_cache();
+    }
+    CachedSegment *entry = nullptr;
+    char *text = nullptr;
+    if (OB_ISNULL(entry = OB_NEWx(CachedSegment, &segment_cache_allocator_))) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+    } else if (OB_ISNULL(text = static_cast<char *>(
+                             segment_cache_allocator_.alloc(current_segment_len_)))) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+    } else {
+      MEMCPY(text, document_fulltext_ + current_segment_offset_, current_segment_len_);
+      entry->hash_ = murmurhash(text, current_segment_len_, 0);
+      entry->coll_type_ = coll_type_;
+      entry->is_smart_ = document_is_smart_;
+      entry->text_.assign_ptr(text, current_segment_len_);
+      for (int64_t i = 0; OB_SUCC(ret) && i < ctx_->result_list().count(); ++i) {
+        const ObIKToken &token = ctx_->result_list().at(i);
+        CachedToken cached;
+        cached.relative_offset_ = token.offset_;
+        cached.length_ = token.length_;
+        cached.char_cnt_ = token.char_cnt_;
+        cached.type_ = token.type_;
+        cached.word_freq_ = 1;
+        if (OB_FAIL(entry->tokens_.push_back(cached))) {
+          LOG_WARN("failed to cache ik segment token", K(ret), K(i));
+        }
+      }
+      if (OB_SUCC(ret) && OB_FAIL(segment_cache_.push_back(entry))) {
+        LOG_WARN("failed to append ik segment cache entry", K(ret));
+      } else if (OB_SUCC(ret)) {
+        segment_cache_bytes_ += entry_bytes;
+      }
+    }
+    if (OB_FAIL(ret)) {
+      if (OB_NOT_NULL(entry)) {
+        entry->~CachedSegment();
+      }
+      clear_segment_cache();
+    }
+  }
+  return ret;
+}
+
+void ObIKFTParser::clear_segment_cache()
+{
+  for (int64_t i = 0; i < segment_cache_.count(); ++i) {
+    CachedSegment *entry = segment_cache_.at(i);
+    if (OB_NOT_NULL(entry)) {
+      entry->~CachedSegment();
+    }
+  }
+  segment_cache_.reuse();
+  segment_cache_allocator_.reuse();
+  segment_cache_bytes_ = 0;
 }
 
 int ObIKFTParser::init_segmenter(const ObFTParserParam &param)
@@ -440,15 +678,19 @@ int ObIKFTParser::init_segmenter(const ObFTParserParam &param)
     LOG_WARN("Failed to alloc surrogate segmenter", K(ret));
   } else if (OB_FAIL(segmenters_.push_back(letter_seg))) {
     LOG_WARN("Failed to push back letter segmenter", K(ret));
+  } else if (FALSE_IT(letter_processor_ = letter_seg)) {
   } else if (FALSE_IT(letter_seg = nullptr)) {
   } else if (OB_FAIL(segmenters_.push_back(cnqsg))) {
     LOG_WARN("Failed to push back cn quantifier segmenter", K(ret));
+  } else if (FALSE_IT(quantifier_processor_ = cnqsg)) {
   } else if (FALSE_IT(cnqsg = nullptr)) {
   } else if (OB_FAIL(segmenters_.push_back(cjksg))) {
     LOG_WARN("Failed to push back cjk segmenter", K(ret));
+  } else if (FALSE_IT(cjk_processor_ = cjksg)) {
   } else if (FALSE_IT(cjksg = nullptr)) {
   } else if (OB_FAIL(segmenters_.push_back(surrogate_seg))) {
     LOG_WARN("Failed to push back surrogate segmenter");
+  } else if (FALSE_IT(surrogate_processor_ = surrogate_seg)) {
   } else if (OB_FALSE_IT(surrogate_seg = nullptr)) {
   }
   // push back by order, quantifier is before cjk
@@ -464,24 +706,13 @@ int ObIKFTParser::init_segmenter(const ObFTParserParam &param)
 
 void ObIKFTParser::reset_document_state()
 {
-  if (OB_NOT_NULL(ctx_)) {
-    ctx_->~TokenizeContext();
-    scratch_allocator_.free(ctx_);
-    ctx_ = nullptr;
-  }
-
-  for (ObIIKProcessor *segmenter : segmenters_) {
-    if (OB_NOT_NULL(segmenter)) {
-      segmenter->reset_document();
-    }
-  }
-
-  const int ret = arbitrator_.reuse();
-  if (OB_SUCCESS != ret) {
-    LOG_WARN("failed to reuse ik arbitrator", K(ret));
-  }
-
-  scratch_allocator_.reuse();
+  reset_segment_state();
+  document_fulltext_ = nullptr;
+  document_fulltext_len_ = 0;
+  next_segment_offset_ = 0;
+  current_segment_offset_ = 0;
+  current_segment_len_ = 0;
+  current_segment_cache_hit_ = false;
 }
 
 void ObIKFTParser::reset()
@@ -495,6 +726,10 @@ void ObIKFTParser::reset()
     }
   }
   segmenters_.clear();
+  letter_processor_ = nullptr;
+  quantifier_processor_ = nullptr;
+  cjk_processor_ = nullptr;
+  surrogate_processor_ = nullptr;
 
   cache_main_.reset();
   cache_quan_.reset();
@@ -517,6 +752,8 @@ void ObIKFTParser::reset()
   }
 
   scratch_allocator_.reset();
+  clear_segment_cache();
+  segment_cache_allocator_.reset();
 
   coll_type_ = ObCollationType::CS_TYPE_INVALID;
   is_inited_ = false;

@@ -19,6 +19,7 @@
 #include "lib/alloc/alloc_struct.h"
 #include "lib/allocator/page_arena.h"
 #include "lib/charset/ob_charset.h"
+#include "lib/hash_func/murmur_hash.h"
 #include "common/json_type/ob_json_base.h"
 #include "common/json_type/ob_json_tree.h"
 #include "lib/ob_errno.h"
@@ -28,6 +29,7 @@
 #include "object/ob_object.h"
 #include "plugin/sys/ob_plugin_helper.h"
 #include "sql/resolver/ddl/ob_fts_index_builder_util.h"
+#include "sql/session/ob_basic_session_info.h"
 #include "share/ob_json_access_utils.h"
 #include "storage/fts/dict/ob_gen_dic_loader.h"
 #include "storage/fts/ob_fts_parser_property.h"
@@ -40,6 +42,199 @@ namespace oceanbase
 {
 namespace sql
 {
+ObTokenizeResultCacheKey::ObTokenizeResultCacheKey(
+    const uint64_t tenant_id,
+    const ObString &tenant_name,
+    const ObString &fulltext,
+    const ObCollationType collation,
+    const int8_t output_mode,
+    const ObString &parser_name,
+    const int64_t parser_version,
+    const ObString &properties)
+    : tenant_id_(tenant_id),
+      fulltext_hash_(murmurhash(fulltext.ptr(), fulltext.length(), 0)),
+      collation_(collation),
+      output_mode_(output_mode),
+      parser_version_(parser_version),
+      tenant_name_(tenant_name),
+      fulltext_(fulltext),
+      parser_name_(parser_name),
+      properties_(properties)
+{
+}
+
+bool ObTokenizeResultCacheKey::operator==(const ObIKVCacheKey &other) const
+{
+  const ObTokenizeResultCacheKey &rhs =
+      static_cast<const ObTokenizeResultCacheKey &>(other);
+  return this == &other
+         || (tenant_id_ == rhs.tenant_id_
+             && fulltext_hash_ == rhs.fulltext_hash_
+             && collation_ == rhs.collation_
+             && output_mode_ == rhs.output_mode_
+             && parser_version_ == rhs.parser_version_
+             && tenant_name_ == rhs.tenant_name_
+             && fulltext_ == rhs.fulltext_
+             && parser_name_ == rhs.parser_name_
+             && properties_ == rhs.properties_);
+}
+
+int ObTokenizeResultCacheKey::equal(const ObIKVCacheKey &other, bool &equal) const
+{
+  equal = *this == other;
+  return OB_SUCCESS;
+}
+
+int ObTokenizeResultCacheKey::hash(uint64_t &hash_value) const
+{
+  hash_value = murmurhash(&tenant_id_, sizeof(tenant_id_), 0);
+  hash_value = murmurhash(&fulltext_hash_, sizeof(fulltext_hash_), hash_value);
+  hash_value = murmurhash(&collation_, sizeof(collation_), hash_value);
+  hash_value = murmurhash(&output_mode_, sizeof(output_mode_), hash_value);
+  hash_value = murmurhash(&parser_version_, sizeof(parser_version_), hash_value);
+  hash_value = murmurhash(tenant_name_.ptr(), tenant_name_.length(), hash_value);
+  hash_value = murmurhash(parser_name_.ptr(), parser_name_.length(), hash_value);
+  hash_value = murmurhash(properties_.ptr(), properties_.length(), hash_value);
+  return OB_SUCCESS;
+}
+
+int64_t ObTokenizeResultCacheKey::size() const
+{
+  return sizeof(*this) + tenant_name_.length() + fulltext_.length()
+         + parser_name_.length() + properties_.length();
+}
+
+int ObTokenizeResultCacheKey::deep_copy(char *buf,
+                                        const int64_t buf_len,
+                                        ObIKVCacheKey *&key) const
+{
+  int ret = OB_SUCCESS;
+  if (OB_ISNULL(buf) || OB_UNLIKELY(buf_len < size())) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid tokenize cache key buffer", K(ret), K(buf_len), K(size()));
+  } else {
+    char *pos = buf + sizeof(*this);
+    ObString tenant_name(tenant_name_.length(), pos);
+    MEMCPY(pos, tenant_name_.ptr(), tenant_name_.length());
+    pos += tenant_name_.length();
+    ObString fulltext(fulltext_.length(), pos);
+    MEMCPY(pos, fulltext_.ptr(), fulltext_.length());
+    pos += fulltext_.length();
+    ObString parser_name(parser_name_.length(), pos);
+    MEMCPY(pos, parser_name_.ptr(), parser_name_.length());
+    pos += parser_name_.length();
+    ObString properties(properties_.length(), pos);
+    MEMCPY(pos, properties_.ptr(), properties_.length());
+    key = new (buf) ObTokenizeResultCacheKey(tenant_id_,
+                                             tenant_name,
+                                             fulltext,
+                                             collation_,
+                                             output_mode_,
+                                             parser_name,
+                                             parser_version_,
+                                             properties);
+  }
+  return ret;
+}
+
+int64_t ObTokenizeResultCacheValue::size() const
+{
+  return sizeof(*this) + json_.length();
+}
+
+int ObTokenizeResultCacheValue::deep_copy(char *buf,
+                                          const int64_t buf_len,
+                                          ObIKVCacheValue *&value) const
+{
+  int ret = OB_SUCCESS;
+  if (OB_ISNULL(buf) || OB_UNLIKELY(buf_len < size())) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid tokenize cache value buffer", K(ret), K(buf_len), K(size()));
+  } else {
+    char *json_buf = buf + sizeof(*this);
+    MEMCPY(json_buf, json_.ptr(), json_.length());
+    value = new (buf) ObTokenizeResultCacheValue(ObString(json_.length(), json_buf));
+  }
+  return ret;
+}
+
+ObTokenizeResultCache &ObTokenizeResultCache::get_instance()
+{
+  static ObTokenizeResultCache cache;
+  return cache;
+}
+
+int ObTokenizeResultCache::init()
+{
+  int ret = OB_SUCCESS;
+  if (is_inited_) {
+    ret = OB_INIT_TWICE;
+  } else if (OB_FAIL(cache_.init("tokenize_result", 1))) {
+    LOG_WARN("failed to initialize tokenize result cache", K(ret));
+  } else {
+    is_inited_ = true;
+  }
+  return ret;
+}
+
+void ObTokenizeResultCache::destroy()
+{
+  if (is_inited_) {
+    cache_.destroy();
+    is_inited_ = false;
+  }
+}
+
+int ObTokenizeResultCache::get(const ObTokenizeResultCacheKey &key,
+                               const ObTokenizeResultCacheValue *&value,
+                               ObKVCacheHandle &handle)
+{
+  return is_inited_ ? cache_.get(key, value, handle) : OB_NOT_INIT;
+}
+
+int ObTokenizeResultCache::evict_one(const uint64_t tenant_id)
+{
+  int ret = OB_SUCCESS;
+  ObKVCacheIterator iter;
+  if (OB_FAIL(cache_.get_iterator(iter))) {
+    LOG_WARN("failed to create tokenize cache iterator", K(ret));
+  } else {
+    const ObTokenizeResultCacheKey *key = nullptr;
+    const ObTokenizeResultCacheValue *value = nullptr;
+    ObKVCacheHandle handle;
+    bool erased = false;
+    while (OB_SUCC(ret) && !erased) {
+      if (OB_FAIL(iter.get_next_kvpair(key, value, handle))) {
+        if (OB_ITER_END == ret) {
+          ret = OB_SUCCESS;
+        }
+      } else if (key->tenant_id() == tenant_id) {
+        if (OB_FAIL(cache_.erase(*key))) {
+          LOG_WARN("failed to evict tokenize cache entry", K(ret));
+        } else {
+          erased = true;
+        }
+      }
+    }
+  }
+  return ret;
+}
+
+int ObTokenizeResultCache::put(const ObTokenizeResultCacheKey &key,
+                               const ObTokenizeResultCacheValue &value)
+{
+  int ret = OB_SUCCESS;
+  if (!is_inited_) {
+    ret = OB_NOT_INIT;
+  } else if (cache_.count() >= MAX_ENTRY_COUNT
+             && OB_FAIL(evict_one(key.tenant_id()))) {
+    LOG_WARN("failed to bound tokenize result cache", K(ret));
+  } else if (OB_FAIL(cache_.put(key, value))) {
+    LOG_WARN("failed to put tokenize result cache", K(ret));
+  }
+  return ret;
+}
+
 ObExprTokenize::ObExprTokenize(common::ObIAllocator &alloc)
     : ObStringExprOperator(alloc,
                            T_FUN_TOKENIZE,
@@ -60,6 +255,11 @@ int ObExprTokenize::eval_tokenize(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &e
 
   ObIJsonBase *json_result = nullptr;
   TokenizeParam param;
+  int64_t parser_version = -1;
+  bool cacheable = false;
+  bool cache_hit = false;
+  static int64_t cache_hit_count = 0;
+  static int64_t cache_miss_count = 0;
 
   // check param num, which is checked in ObExprOperator::calc_result_typeN.
   if (OB_UNLIKELY(expr.arg_cnt_ < 1 || expr.arg_cnt_ > 3)) {
@@ -67,14 +267,72 @@ int ObExprTokenize::eval_tokenize(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &e
     LOG_WARN("Args count invalid.", K(ret), K(expr.arg_cnt_));
   } else if (OB_FAIL(parse_param(expr, ctx, temp_allocator, param))) {
     LOG_WARN("Fail to parse param", K(ret));
-  } else if (OB_FAIL(tokenize_fulltext(param, param.output_mode_, temp_allocator, json_result))) {
-    LOG_WARN("Fail to tokenize fulltext", K(ret));
-  } else if (OB_FAIL(ObJsonExprHelper::pack_json_res(expr,
-                                                     ctx,
-                                                     temp_allocator,
-                                                     json_result,
-                                                     expr_datum))) {
-    LOG_WARN("fail to pack json result", K(ret));
+  } else {
+    cacheable = can_use_result_cache(expr, param, parser_version);
+    const ObBasicSessionInfo *session = ctx.exec_ctx_.get_my_session();
+    const ObString tenant_name = OB_ISNULL(session) ? ObString() : session->get_tenant_name();
+    const uint64_t tenant_id = murmurhash(tenant_name.ptr(), tenant_name.length(), 0);
+    ObTokenizeResultCacheKey key(tenant_id,
+                                 tenant_name,
+                                 param.fulltext_,
+                                 param.meta_.get_collation_type(),
+                                 static_cast<int8_t>(param.output_mode_),
+                                 param.parser_name_,
+                                 parser_version,
+                                 param.properties_);
+    const ObTokenizeResultCacheValue *cached_value = nullptr;
+    ObKVCacheHandle cache_handle;
+    int cache_ret = cacheable
+                        ? ObTokenizeResultCache::get_instance().get(key,
+                                                                    cached_value,
+                                                                    cache_handle)
+                        : OB_ENTRY_NOT_EXIST;
+    if (cacheable && OB_SUCCESS == cache_ret && OB_NOT_NULL(cached_value)) {
+      const ObString &cached_json = cached_value->json();
+      char *buf = expr.get_str_res_mem(ctx, cached_json.length());
+      if (OB_ISNULL(buf)) {
+        ret = OB_ALLOCATE_MEMORY_FAILED;
+        LOG_WARN("failed to allocate cached tokenize result", K(ret), K(cached_json.length()));
+      } else {
+        MEMCPY(buf, cached_json.ptr(), cached_json.length());
+        expr_datum.set_string(buf, cached_json.length());
+        cache_hit = true;
+        const int64_t hits = ATOMIC_AAF(&cache_hit_count, 1);
+        if (0 == hits % 1000) {
+          LOG_INFO("tokenize result cache statistics",
+                   "tokenize_result_cache_hit", hits,
+                   "tokenize_result_cache_miss", ATOMIC_LOAD(&cache_miss_count));
+        }
+      }
+    } else if (cacheable && OB_ENTRY_NOT_EXIST != cache_ret && OB_NOT_INIT != cache_ret) {
+      LOG_WARN("failed to lookup tokenize result cache", K(cache_ret));
+    }
+
+    if (OB_SUCC(ret) && !cache_hit) {
+      if (cacheable) {
+        const int64_t misses = ATOMIC_AAF(&cache_miss_count, 1);
+        if (0 == misses % 1000) {
+          LOG_INFO("tokenize result cache statistics",
+                   "tokenize_result_cache_hit", ATOMIC_LOAD(&cache_hit_count),
+                   "tokenize_result_cache_miss", misses);
+        }
+      }
+      if (OB_FAIL(tokenize_fulltext(param, param.output_mode_, temp_allocator, json_result))) {
+        LOG_WARN("Fail to tokenize fulltext", K(ret));
+      } else if (OB_FAIL(ObJsonExprHelper::pack_json_res(expr,
+                                                         ctx,
+                                                         temp_allocator,
+                                                         json_result,
+                                                         expr_datum))) {
+        LOG_WARN("fail to pack json result", K(ret));
+      } else if (cacheable) {
+        ObTokenizeResultCacheValue value(expr_datum.get_string());
+        cache_ret = ObTokenizeResultCache::get_instance().put(key, value);
+        if (OB_SUCCESS != cache_ret && OB_NOT_INIT != cache_ret) {
+          LOG_WARN("failed to cache tokenize result", K(cache_ret));
+        }
+      }
+    }
   }
 
   return ret;
@@ -90,8 +348,6 @@ int ObExprTokenize::tokenize_fulltext(const TokenizeParam &param,
   const int64_t ft_word_bkt_cnt = MIN(MAX(param.fulltext_.length() / 2, 2), 997);
   int64_t doc_len = 0;
   ObFTWordMap token_map;
-
-  ObArenaAllocator tmp_parse_alloc(ObMemAttr("Tmp buffer"));
 
   if (TokenizeParam::OUTPUT_MODE::DEFAULT != mode && TokenizeParam::OUTPUT_MODE::ALL != mode) {
     ret = OB_INVALID_ARGUMENT;
@@ -133,6 +389,34 @@ int ObExprTokenize::tokenize_fulltext(const TokenizeParam &param,
     }
   }
   return ret;
+}
+
+bool ObExprTokenize::can_use_result_cache(const ObExpr &expr,
+                                          const TokenizeParam &param,
+                                          int64_t &parser_version)
+{
+  bool can_cache = false;
+  storage::ObFTParser parser;
+  storage::ObFTParserJsonProps properties;
+  ObString dict_table;
+  ObString quan_table;
+  ObString stopword_table;
+  const bool parser_is_constant = expr.arg_cnt_ < 2 || expr.args_[1]->is_const_expr();
+  const bool properties_are_constant = expr.arg_cnt_ < 3 || expr.args_[2]->is_const_expr();
+  if (parser_is_constant && properties_are_constant
+      && OB_SUCCESS == parser.parse_from_str(param.parser_name_.ptr(), param.parser_name_.length())
+      && parser.is_ik()
+      && OB_SUCCESS == properties.init()
+      && OB_SUCCESS == properties.parse_from_valid_str(param.properties_)) {
+    const int dict_ret = properties.config_get_dict_table(dict_table);
+    const int quan_ret = properties.config_get_quantifier_table(quan_table);
+    const int stop_ret = properties.config_get_stopword_table(stopword_table);
+    can_cache = (OB_SUCCESS != dict_ret || dict_table.empty())
+                && (OB_SUCCESS != quan_ret || quan_table.empty())
+                && (OB_SUCCESS != stop_ret || stopword_table.empty());
+    parser_version = parser.get_parser_version();
+  }
+  return can_cache;
 }
 
 ObExprTokenize::TokenizeParam ::TokenizeParam()

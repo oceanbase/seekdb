@@ -20,6 +20,8 @@
 #include "lib/allocator/ob_allocator.h"
 #include "lib/allocator/page_arena.h"
 #include "lib/string/ob_string.h"
+#include "share/cache/ob_kv_storecache.h"
+#include "share/cache/ob_kvcache_struct.h"
 #include "sql/engine/expr/ob_expr_operator.h"
 #include "storage/fts/ob_fts_parser_property.h"
 
@@ -28,6 +30,81 @@ namespace oceanbase
 namespace sql
 {
 class MultimodeAlloctor;
+
+class ObTokenizeResultCacheKey : public common::ObIKVCacheKey
+{
+public:
+  ObTokenizeResultCacheKey(const uint64_t tenant_id,
+                           const common::ObString &tenant_name,
+                           const common::ObString &fulltext,
+                           const common::ObCollationType collation,
+                           const int8_t output_mode,
+                           const common::ObString &parser_name,
+                           const int64_t parser_version,
+                           const common::ObString &properties);
+  ~ObTokenizeResultCacheKey() override = default;
+
+  bool operator==(const common::ObIKVCacheKey &other) const override;
+  int equal(const common::ObIKVCacheKey &other, bool &equal) const override;
+  int hash(uint64_t &hash_value) const override;
+  int64_t size() const override;
+  int deep_copy(char *buf,
+                const int64_t buf_len,
+                common::ObIKVCacheKey *&key) const override;
+
+  uint64_t tenant_id() const { return tenant_id_; }
+
+private:
+  uint64_t tenant_id_;
+  uint64_t fulltext_hash_;
+  common::ObCollationType collation_;
+  int8_t output_mode_;
+  int64_t parser_version_;
+  common::ObString tenant_name_;
+  common::ObString fulltext_;
+  common::ObString parser_name_;
+  common::ObString properties_;
+};
+
+class ObTokenizeResultCacheValue : public common::ObIKVCacheValue
+{
+public:
+  explicit ObTokenizeResultCacheValue(const common::ObString &json) : json_(json) {}
+  ~ObTokenizeResultCacheValue() override = default;
+  int64_t size() const override;
+  int deep_copy(char *buf,
+                const int64_t buf_len,
+                common::ObIKVCacheValue *&value) const override;
+  const common::ObString &json() const { return json_; }
+
+private:
+  common::ObString json_;
+};
+
+class ObTokenizeResultCache
+{
+public:
+  static ObTokenizeResultCache &get_instance();
+  int init();
+  void destroy();
+  int get(const ObTokenizeResultCacheKey &key,
+          const ObTokenizeResultCacheValue *&value,
+          common::ObKVCacheHandle &handle);
+  int put(const ObTokenizeResultCacheKey &key,
+          const ObTokenizeResultCacheValue &value);
+
+private:
+  ObTokenizeResultCache() : cache_(), is_inited_(false) {}
+  ~ObTokenizeResultCache() { destroy(); }
+  int evict_one(const uint64_t tenant_id);
+
+private:
+  static constexpr int64_t MAX_ENTRY_COUNT = 128;
+  common::ObKVCache<ObTokenizeResultCacheKey, ObTokenizeResultCacheValue> cache_;
+  bool is_inited_;
+  DISALLOW_COPY_AND_ASSIGN(ObTokenizeResultCache);
+};
+
 class ObExprTokenize : public ObStringExprOperator
 {
 public:
@@ -99,6 +176,10 @@ private:
                                ObIJsonBase *&result);
 
   static int construct_ft_parser_inner_name(const ObString &input_str, TokenizeParam &param);
+
+  static bool can_use_result_cache(const ObExpr &expr,
+                                   const TokenizeParam &param,
+                                   int64_t &parser_version);
 
 private:
   DISALLOW_COPY_AND_ASSIGN(ObExprTokenize);
