@@ -135,7 +135,8 @@ int ObFTDictHub::refresh_cache(const ObFTDictDesc &desc)
   int ret = OB_SUCCESS;
   ObFTDictInfo info;
   ObFTDictInfoKey key(static_cast<uint64_t>(desc.type_), desc.name_.hash());
-  ObFTCacheRangeContainer container;
+  ObArenaAllocator allocator;
+  ObFTCacheRangeContainer container(allocator);
   if (!is_inited_) {
     ret = OB_NOT_INIT;
   } else {

@@ -77,7 +77,8 @@ int ObFTDictTableIter::init(const ObString &table_name)
   } else {
     SMART_VAR(ObSqlString, sql_string)
     {
-      const int64_t dot_pos = table_name.find('.');
+      const char *dot = table_name.find('.');
+      const int64_t dot_pos = OB_ISNULL(dot) ? -1 : dot - table_name.ptr();
       ObString database_name;
       ObString pure_table_name;
       if (dot_pos <= 0 || dot_pos >= table_name.length() - 1) {
