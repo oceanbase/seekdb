@@ -21,6 +21,7 @@
 
 #include "ob_das_text_retrieval_eval_node.h"
 #include "ob_das_text_retrieval_iter.h"
+#include "storage/fts/ob_fts_plugin_helper.h"
 #include "sql/das/ob_das_ir_define.h"
 
 namespace oceanbase
@@ -251,12 +252,12 @@ int ObDASTextRetrievalMergeIter::build_query_tokens(const ObDASIRScanCtDef *ir_c
     const ObObjMeta &meta = search_text->obj_meta_;
     int64_t doc_length = 0;
     storage::ObFTParseHelper tokenize_helper;
-    common::ObSEArray<ObFTWord, 16> tokens;
-    hash::ObHashMap<ObFTWord, int64_t> token_map;
+    common::ObSEArray<ObFTToken, 16> tokens;
+    ObFTTokenMap token_map;
     const int64_t ft_word_bkt_cnt = MAX(search_text_string.length() / 10, 2);
-    if (OB_FAIL(tokenize_helper.init(&alloc, parser_name, parser_properties))) {
+    if (OB_FAIL(tokenize_helper.init(&alloc, parser_name, parser_properties, share::schema::OB_FTS_INDEX_TYPE_MATCH))) {
       LOG_WARN("failed to init tokenize helper", K(ret));
-    } else if (OB_FAIL(token_map.create(ft_word_bkt_cnt, common::ObMemAttr("FTWordMap")))) {
+    } else if (OB_FAIL(token_map.create(ft_word_bkt_cnt, common::ObMemAttr("ft_token_map")))) {
       LOG_WARN("failed to create token map", K(ret));
     } else if (OB_FAIL(tokenize_helper.segment(
                            meta,
@@ -266,12 +267,12 @@ int ObDASTextRetrievalMergeIter::build_query_tokens(const ObDASIRScanCtDef *ir_c
                            token_map))) {
       LOG_WARN("failed to segment");
     } else {
-      for (hash::ObHashMap<ObFTWord, int64_t>::const_iterator iter = token_map.begin();
+      for (ObFTTokenMap::const_iterator iter = token_map.begin();
           OB_SUCC(ret) && iter != token_map.end();
           ++iter) {
-        const ObFTWord &token = iter->first;
+        const ObFTToken &token = iter->first;
         ObString token_string;
-        if (OB_FAIL(ob_write_string(alloc, token.get_word().get_string(), token_string))) {
+        if (OB_FAIL(ob_write_string(alloc, token.get_token().get_string(), token_string))) {
           LOG_WARN("failed to deep copy query token", K(ret));
         } else if (OB_FAIL(query_tokens.push_back(token_string))) {
           LOG_WARN("failed to append query token", K(ret));
@@ -283,7 +284,7 @@ int ObDASTextRetrievalMergeIter::build_query_tokens(const ObDASIRScanCtDef *ir_c
     share::ObITokenStream *token_stream = nullptr;
     share::ObTextAnalysisCtx query_analysis_ctx;
     query_analysis_ctx.need_grouping_ = true;
-    query_analysis_ctx.filter_stopword_ = true;
+    query_analysis_ctx.filter_stop_token_ = true;
     query_analysis_ctx.cs_ = common::ObCharset::get_charset(search_text->obj_meta_.get_collation_type());
     share::ObEnglishTextAnalyzer query_analyzer;
     if (OB_FAIL(query_analyzer.init(query_analysis_ctx, token_analyze_alloc))) {

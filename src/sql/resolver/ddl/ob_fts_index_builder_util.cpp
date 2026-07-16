@@ -24,6 +24,7 @@
 #include "share/ob_server_struct.h"
 #include "rootserver/ob_root_service.h"
 #include "plugin/sys/ob_plugin_helper.h"
+#include "plugin/interface/ob_plugin_ftparser_intf.h"
 #include "share/schema/ob_schema_utils.h"  // relocated-definition owner
 
 namespace oceanbase

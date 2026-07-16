@@ -437,6 +437,8 @@
 // ob_expr_oracle_to_char.h removed (Oracle cleanup)
 #include "sql/engine/expr/ob_expr_semantic_distance.h"
 #include "sql/engine/expr/ob_expr_ai/ob_expr_ai_complete.h"
+#include "sql/engine/expr/ob_expr_load_file.h"
+#include "sql/engine/expr/ob_expr_ai_split_document.h"
 #include "sql/engine/expr/ob_expr_ai/ob_expr_ai_embed.h"
 #include "sql/engine/expr/ob_expr_ai/ob_expr_ai_rerank.h"
 #include "sql/engine/expr/ob_expr_ai/ob_expr_ai_prompt.h"
@@ -1147,6 +1149,8 @@ void ObExprOperatorFactory::register_expr_operators()
     REG_OP(ObExprAIEmbed);
     REG_OP(ObExprAIRerank);
     REG_OP(ObExprAIPrompt);
+    REG_OP(ObExprLoadFile);
+    REG_OP(ObExprAISplitDocument);
     REG_OP(ObExprCheckLocationAccess);
   }();
 }
@@ -1332,4 +1336,3 @@ void ObExprOperatorFactory::get_function_alias_name(const ObString &origin_name,
 
 } //end sql
 } //end oceanbase
-

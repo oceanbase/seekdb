@@ -77,8 +77,10 @@ int ObFTDictTableIter::init(const ObString &table_name)
   } else {
     SMART_VAR(ObSqlString, sql_string)
     {
-      if (OB_FAIL(sql_string.append("SELECT word FROM oceanbase."))) {
+      if (OB_FAIL(sql_string.append("SELECT word FROM "))) {
         LOG_WARN("Failed to append sql", K(ret));
+      } else if (nullptr == table_name.find('.') && OB_FAIL(sql_string.append("oceanbase."))) {
+        LOG_WARN("Failed to append default database", K(ret));
       } else if (OB_FAIL(sql_string.append(table_name))) {
         LOG_WARN("Failed to append sql", K(ret));
       } else if (OB_FAIL(sql_string.append(" ORDER BY word"))) {

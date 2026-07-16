@@ -55,6 +55,7 @@ DEF_SIMPLE_EXECUTOR(ObAdminMerge);
 
 
 DEF_SIMPLE_EXECUTOR(ObRefreshMemStat);
+DEF_SIMPLE_EXECUTOR(ObRefreshFulltextDict);
 
 DEF_SIMPLE_EXECUTOR(ObWashMemFragmentation);
 

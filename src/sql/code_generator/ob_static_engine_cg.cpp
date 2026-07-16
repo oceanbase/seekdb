@@ -7943,6 +7943,8 @@ int ObStaticEngineCG::generate_spec(ObLogFunctionTable &op, ObFunctionTableSpec 
     LOG_WARN("failed to get stmt", K(ret));
   } else if (OB_FAIL(spec.column_exprs_.init(op.get_stmt()->get_column_size()))) {
     LOG_WARN("failed to init array", K(ret));
+  } else if (OB_FAIL(spec.column_ids_.init(op.get_stmt()->get_column_size()))) {
+    LOG_WARN("failed to init column id array", K(ret));
   } else if (OB_UNLIKELY(op.get_num_of_child() > 1)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected count of children", K(ret), K(op.get_num_of_child()));
@@ -7970,6 +7972,7 @@ int ObStaticEngineCG::generate_spec(ObLogFunctionTable &op, ObFunctionTableSpec 
         OZ (mark_expr_self_produced(col_item->expr_));
         OZ (generate_rt_expr(*col_item->expr_, rt_expr));
         OZ (spec.column_exprs_.push_back(rt_expr));
+        OZ (spec.column_ids_.push_back(col_item->column_id_));
       }
     }
   }

@@ -136,7 +136,7 @@ int ObFTParserJsonProps::config_set_ngram_token_size(const int64_t size)
 }
 
 // should string deep copy?
-int ObFTParserJsonProps::config_set_dict_table(const ObString &str)
+int ObFTParserJsonProps::config_set_dict_table_name(const ObString &str)
 {
   int ret = OB_SUCCESS;
   ObJsonString *dict_table = nullptr;
@@ -159,7 +159,7 @@ int ObFTParserJsonProps::config_set_dict_table(const ObString &str)
   return ret;
 }
 
-int ObFTParserJsonProps::config_set_stopword_table(const ObString &str)
+int ObFTParserJsonProps::config_set_stopword_table_name(const ObString &str)
 {
   int ret = OB_SUCCESS;
   ObJsonString *stopword_table = nullptr;
@@ -182,7 +182,7 @@ int ObFTParserJsonProps::config_set_stopword_table(const ObString &str)
   return ret;
 }
 
-int ObFTParserJsonProps::config_set_quantifier_table(const ObString &str)
+int ObFTParserJsonProps::config_set_quantifier_table_name(const ObString &str)
 {
   int ret = OB_SUCCESS;
   ObJsonString *quantifier_table = nullptr;
@@ -397,7 +397,7 @@ int ObFTParserJsonProps::config_get_ngram_token_size(int64_t &size) const
   return ret;
 }
 
-int ObFTParserJsonProps::config_get_dict_table(ObString &str) const
+int ObFTParserJsonProps::config_get_dict_table_name(ObString &str) const
 {
   int ret = OB_SUCCESS;
   if (!IS_INIT) {
@@ -422,7 +422,7 @@ int ObFTParserJsonProps::config_get_dict_table(ObString &str) const
   return ret;
 }
 
-int ObFTParserJsonProps::config_get_stopword_table(ObString &str) const
+int ObFTParserJsonProps::config_get_stopword_table_name(ObString &str) const
 {
   int ret = OB_SUCCESS;
   if (!IS_INIT) {
@@ -448,7 +448,7 @@ int ObFTParserJsonProps::config_get_stopword_table(ObString &str) const
   return ret;
 }
 
-int ObFTParserJsonProps::config_get_quantifier_table(ObString &str) const
+int ObFTParserJsonProps::config_get_quantifier_table_name(ObString &str) const
 {
   int ret = OB_SUCCESS;
   if (!IS_INIT) {
@@ -648,9 +648,9 @@ int ObFTParserJsonProps::ik_rebuild_props_for_ddl(const bool log_to_user)
     // do nothing
   } else {
     ObString table_name = "";
-    if (OB_FAIL(config_get_dict_table(table_name))) {
+    if (OB_FAIL(config_get_dict_table_name(table_name))) {
       if (OB_SEARCH_NOT_FOUND == ret) {
-        if (OB_FAIL(config_set_dict_table(ObFTSLiteral::FT_DEFAULT_IK_DICT_UTF8_TABLE))) {
+        if (OB_FAIL(config_set_dict_table_name(ObFTSLiteral::FT_DEFAULT_IK_DICT_UTF8_TABLE))) {
           LOG_WARN("Failed to set default dict table", K(ret));
         }
       }
@@ -660,11 +660,11 @@ int ObFTParserJsonProps::ik_rebuild_props_for_ddl(const bool log_to_user)
 
     if (OB_FAIL(ret)) {
       // do nothing
-    } else if (OB_FAIL(config_get_quantifier_table(table_name))) {
+    } else if (OB_FAIL(config_get_stopword_table_name(table_name))) {
       if (OB_SEARCH_NOT_FOUND == ret) {
         if (OB_FAIL(
-                config_set_quantifier_table(ObFTSLiteral::FT_DEFAULT_IK_QUANTIFIER_UTF8_TABLE))) {
-          LOG_WARN("Failed to set default quantifier table", K(ret));
+                config_set_stopword_table_name(ObFTSLiteral::FT_DEFAULT_IK_STOPWORD_UTF8_TABLE))) {
+          LOG_WARN("Failed to set default stopword table", K(ret));
         }
       }
     } else {
@@ -673,10 +673,10 @@ int ObFTParserJsonProps::ik_rebuild_props_for_ddl(const bool log_to_user)
 
     if (OB_FAIL(ret)) {
       // do nothing
-    } else if (OB_FAIL(config_get_quantifier_table(table_name))) {
+    } else if (OB_FAIL(config_get_quantifier_table_name(table_name))) {
       if (OB_SEARCH_NOT_FOUND == ret) {
         if (OB_FAIL(
-                config_set_quantifier_table(ObFTSLiteral::FT_DEFAULT_IK_QUANTIFIER_UTF8_TABLE))) {
+                config_set_quantifier_table_name(ObFTSLiteral::FT_DEFAULT_IK_QUANTIFIER_UTF8_TABLE))) {
           LOG_WARN("Failed to set default quantifier table", K(ret));
         }
       }
@@ -976,11 +976,16 @@ int ObFTParserJsonProps::plugin_rebuild_props_for_ddl(const bool log_to_user)
 }
 
 ObFTParserJsonProps::ObFTParserJsonProps()
-    : allocator_("FTJsonProps"), root_(NULL), is_inited_(false)
+    : allocator_("FTJsonProps"), root_(NULL), is_inited_(false), is_empty_str_(false)
 {
 }
 
 ObFTParserJsonProps::~ObFTParserJsonProps()
+{
+  reset();
+}
+
+void ObFTParserJsonProps::reset()
 {
   if (!OB_ISNULL(root_)) {
     root_->reset();
@@ -988,6 +993,8 @@ ObFTParserJsonProps::~ObFTParserJsonProps()
     root_ = nullptr;
   }
   allocator_.reset();
+  is_inited_ = false;
+  is_empty_str_ = false;
 }
 
 #define __FT_PARSER_PROPERTY_SHOW_COMMA(need_comma)                                                \
@@ -1148,72 +1155,92 @@ int ObFTParserJsonProps::show_parser_properties(const ObFTParserJsonProps &prope
 
 #undef __FT_PARSER_PROPERTY_SHOW_COMMA
 
-int ObFTParserProperty::parse_for_parser_helper(const ObFTParser &parser, const ObString &json_str)
+int ObFTParserProperty::parse_for_parser_helper(const ObFTParser &parser, const ObFTParserJsonProps &props)
 {
   int ret = OB_SUCCESS;
-  ObFTParserJsonProps props;
-  if (OB_FAIL(props.init())) {
-    LOG_WARN("fail to init props", K(ret));
-  } else if (OB_FAIL(props.parse_from_valid_str(json_str))) {
-    LOG_WARN("fail to parse from json str", K(ret), K(json_str));
-  } else {
-    if (parser.is_ik()) {
-      // set dict tables and copy dict name
-      dict_table_ = ObString(ObFTSLiteral::CONFIG_NAME_DICT_TABLE);
-      stopword_table_ = ObString(ObFTSLiteral::CONFIG_NAME_STOPWORD_TABLE);
-      quantifier_table_ = ObString(ObFTSLiteral::CONFIG_NAME_QUANTIFIER_TABLE);
-      ObString ik_smart;
-      if (OB_FAIL(props.config_get_ik_mode(ik_smart))) {
-        if (OB_SEARCH_NOT_FOUND == ret) {
-          // from old version, ik_mode is not set, so use default value
-          ik_mode_smart_ = true;
-          ret = OB_SUCCESS;
-        } else {
-          LOG_WARN("fail to get ik mode", K(ret));
-        }
+  if (parser.is_ik()) {
+    ObString table_name;
+    if (OB_FAIL(props.config_get_dict_table_name(table_name))) {
+      if (OB_SEARCH_NOT_FOUND == ret) {
+        ret = OB_SUCCESS;
+        dict_table_name_.reset();
       } else {
-        if (0 == ik_smart.case_compare(ObString(ObFTSLiteral::FT_IK_MODE_SMART))) {
-          ik_mode_smart_ = true;
-        } else if (0 == ik_smart.case_compare(ObString(ObFTSLiteral::FT_IK_MODE_MAX_WORD))) {
-          ik_mode_smart_ = false;
-        } else {
-          ret = OB_INVALID_ARGUMENT;
-          LOG_WARN("invalid ik_smart", K(ret), K(ik_smart));
-        }
+        LOG_WARN("fail to get dict table name", K(ret));
       }
-    } else if (parser.is_space()) {
-      if (json_str.empty()) {
-        min_token_size_ = ObFTSLiteral::FT_DEFAULT_MIN_TOKEN_SIZE;
-        max_token_size_ = ObFTSLiteral::FT_DEFAULT_MAX_TOKEN_SIZE;
-      } else if (OB_FAIL(props.config_get_min_token_size(min_token_size_))) {
-        LOG_WARN("fail to get min_token_size", K(ret));
-      } else if (OB_FAIL(props.config_get_max_token_size(max_token_size_))) {
-        LOG_WARN("fail to get max_token_size", K(ret));
+    } else {
+      dict_table_name_ = table_name;
+    }
+    if (OB_SUCC(ret) && OB_FAIL(props.config_get_quantifier_table_name(table_name))) {
+      if (OB_SEARCH_NOT_FOUND == ret) {
+        ret = OB_SUCCESS;
+        quantifier_table_name_.reset();
+      } else {
+        LOG_WARN("fail to get quantifier table name", K(ret));
       }
-    } else if (parser.is_ngram()) {
-      if (json_str.empty()) {
-        ngram_token_size_ = ObFTSLiteral::FT_DEFAULT_NGRAM_TOKEN_SIZE;
-      } else if (OB_FAIL(props.config_get_ngram_token_size(ngram_token_size_))) {
-        LOG_WARN("fail to get ngram_token_size", K(ret));
+    } else if (OB_SUCC(ret)) {
+      quantifier_table_name_ = table_name;
+    }
+    if (OB_SUCC(ret) && OB_FAIL(props.config_get_stopword_table_name(table_name))) {
+      if (OB_SEARCH_NOT_FOUND == ret) {
+        ret = OB_SUCCESS;
+        stopword_table_name_.reset();
+      } else {
+        LOG_WARN("fail to get stopword table name", K(ret));
       }
-    } else if (parser.is_beng()) {
-      if (json_str.empty()) {
-        min_token_size_ = ObFTSLiteral::FT_DEFAULT_MIN_TOKEN_SIZE;
-        max_token_size_ = ObFTSLiteral::FT_DEFAULT_MAX_TOKEN_SIZE;
-      } else if (OB_FAIL(props.config_get_min_token_size(min_token_size_))) {
-        LOG_WARN("fail to get min_token_size", K(ret));
-      } else if (OB_FAIL(props.config_get_max_token_size(max_token_size_))) {
-        LOG_WARN("fail to get max_token_size", K(ret));
+    } else if (OB_SUCC(ret)) {
+      stopword_table_name_ = table_name;
+    }
+
+    ObString ik_smart;
+    if (OB_SUCC(ret) && OB_FAIL(props.config_get_ik_mode(ik_smart))) {
+      if (OB_SEARCH_NOT_FOUND == ret) {
+        ik_mode_smart_ = true;
+        ret = OB_SUCCESS;
+      } else {
+        LOG_WARN("fail to get ik mode", K(ret));
       }
-    } else if (parser.is_ngram2()) {
-      if (json_str.empty()) {
-        min_ngram_token_size_ = ObFTSLiteral::FT_DEFAULT_MIN_NGRAM_SIZE;
-        max_ngram_token_size_ = ObFTSLiteral::FT_DEFAULT_MAX_NGRAM_SIZE;
-      } else if (OB_FAIL(props.config_get_min_ngram_token_size(min_ngram_token_size_))) {
-        LOG_WARN("fail to get min_ngram_token_size", K(ret));
-      } else if (OB_FAIL(props.config_get_max_ngram_token_size(max_ngram_token_size_))) {
-        LOG_WARN("fail to get max_ngram_token_size", K(ret));
+    } else {
+      if (0 == ik_smart.case_compare(ObString(ObFTSLiteral::FT_IK_MODE_SMART))) {
+        ik_mode_smart_ = true;
+      } else if (0 == ik_smart.case_compare(ObString(ObFTSLiteral::FT_IK_MODE_MAX_WORD))) {
+        ik_mode_smart_ = false;
+      } else {
+        ret = OB_INVALID_ARGUMENT;
+        LOG_WARN("invalid ik_smart", K(ret), K(ik_smart));
       }
+    }
+  } else if (parser.is_space()) {
+    if (props.is_empty_json_string()) {
+      min_token_size_ = ObFTSLiteral::FT_DEFAULT_MIN_TOKEN_SIZE;
+      max_token_size_ = ObFTSLiteral::FT_DEFAULT_MAX_TOKEN_SIZE;
+    } else if (OB_FAIL(props.config_get_min_token_size(min_token_size_))) {
+      LOG_WARN("fail to get min_token_size", K(ret));
+    } else if (OB_FAIL(props.config_get_max_token_size(max_token_size_))) {
+      LOG_WARN("fail to get max_token_size", K(ret));
+    }
+  } else if (parser.is_ngram()) {
+    if (props.is_empty_json_string()) {
+      ngram_token_size_ = ObFTSLiteral::FT_DEFAULT_NGRAM_TOKEN_SIZE;
+    } else if (OB_FAIL(props.config_get_ngram_token_size(ngram_token_size_))) {
+      LOG_WARN("fail to get ngram_token_size", K(ret));
+    }
+  } else if (parser.is_beng()) {
+    if (props.is_empty_json_string()) {
+      min_token_size_ = ObFTSLiteral::FT_DEFAULT_MIN_TOKEN_SIZE;
+      max_token_size_ = ObFTSLiteral::FT_DEFAULT_MAX_TOKEN_SIZE;
+    } else if (OB_FAIL(props.config_get_min_token_size(min_token_size_))) {
+      LOG_WARN("fail to get min_token_size", K(ret));
+    } else if (OB_FAIL(props.config_get_max_token_size(max_token_size_))) {
+      LOG_WARN("fail to get max_token_size", K(ret));
+    }
+  } else if (parser.is_ngram2()) {
+    if (props.is_empty_json_string()) {
+      min_ngram_token_size_ = ObFTSLiteral::FT_DEFAULT_MIN_NGRAM_SIZE;
+      max_ngram_token_size_ = ObFTSLiteral::FT_DEFAULT_MAX_NGRAM_SIZE;
+    } else if (OB_FAIL(props.config_get_min_ngram_token_size(min_ngram_token_size_))) {
+      LOG_WARN("fail to get min_ngram_token_size", K(ret));
+    } else if (OB_FAIL(props.config_get_max_ngram_token_size(max_ngram_token_size_))) {
+      LOG_WARN("fail to get max_ngram_token_size", K(ret));
     }
   }
   return ret;
@@ -1223,12 +1250,12 @@ ObFTParserProperty::ObFTParserProperty()
     : min_token_size_(ObFTSLiteral::FT_DEFAULT_MIN_TOKEN_SIZE),
       max_token_size_(ObFTSLiteral::FT_DEFAULT_MAX_TOKEN_SIZE),
       ngram_token_size_(ObFTSLiteral::FT_DEFAULT_NGRAM_TOKEN_SIZE),
-      ik_mode_smart_(true),
-      stopword_table_(),
-      dict_table_(),
-      quantifier_table_(),
+      stopword_table_id_(OB_INVALID_ID),
+      dict_table_id_(OB_INVALID_ID),
+      quantifier_table_id_(OB_INVALID_ID),
       min_ngram_token_size_(ObFTSLiteral::FT_DEFAULT_MIN_NGRAM_SIZE),
-      max_ngram_token_size_(ObFTSLiteral::FT_DEFAULT_MAX_NGRAM_SIZE)
+      max_ngram_token_size_(ObFTSLiteral::FT_DEFAULT_MAX_NGRAM_SIZE),
+      ik_mode_smart_(true)
 {
 }
 

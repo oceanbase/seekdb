@@ -404,6 +404,19 @@ int ObCreateTableResolver::resolve(const ParseNode &parse_tree)
             } else {
               table_schema.set_collation_type(collation_type_);
               table_schema.set_charset_type(charset_type_);
+              if (table_schema.is_fulltext_dict()) {
+                const ObColumnSchemaV2 *word_column = table_schema.get_column_schema("word");
+                if (CHARSET_UTF8MB4 != table_schema.get_charset_type()
+                    || !table_schema.is_index_organized_table()
+                    || 1 != table_schema.get_column_count()
+                    || 1 != table_schema.get_rowkey_column_num()
+                    || OB_ISNULL(word_column)
+                    || ObVarcharType != word_column->get_data_type()) {
+                  ret = OB_INVALID_ARGUMENT;
+                  LOG_USER_ERROR(OB_INVALID_ARGUMENT,
+                                 "FULLTEXT_DICT table must be an utf8mb4 IOT with only varchar primary key column 'word'");
+                }
+              }
               // No longer need this step. At the beginning of resolve, directly parse out the collation/charset information of the table, by the time column information is resolved, it can already be obtained
               // Table's collation/charset information
               //if (OB_FAIL(table_schema.fill_column_collation_info())) {

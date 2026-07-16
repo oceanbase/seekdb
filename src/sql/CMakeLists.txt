@@ -960,6 +960,8 @@ ob_set_subtarget(ob_sql engine_expr
   engine/expr/ob_expr_ai/ob_expr_ai_embed.cpp
   engine/expr/ob_expr_ai/ob_expr_ai_rerank.cpp
   engine/expr/ob_expr_ai/ob_expr_ai_prompt.cpp
+  engine/expr/ob_expr_load_file.cpp
+  engine/expr/ob_expr_ai_split_document.cpp
 )
 
 ob_set_subtarget(ob_sql_extra ALONE
@@ -1646,7 +1648,8 @@ else()
     ERROR_FILE _gen_parser.error)
 endif()
 if(RET AND NOT RET EQUAL 0)
-  message(FATAL_ERROR "Generate sql parser failed and check error in ${PROJECT_SOURCE_DIR}/src/sql/parser/_gen_parser.error")
+  file(READ "${PROJECT_SOURCE_DIR}/src/sql/parser/_gen_parser.error" GEN_PARSER_ERROR)
+  message(FATAL_ERROR "Generate sql parser failed:\n${GEN_PARSER_ERROR}")
 endif()
 
 add_subdirectory(parser)
