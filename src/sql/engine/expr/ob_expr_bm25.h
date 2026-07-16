@@ -66,11 +66,7 @@ public:
     const double score = query_token_weight(doc_freq, doc_cnt) * doc_token_weight(token_freq, norm_len);
     return score;
   }
-  static OB_INLINE double doc_token_weight(const int64_t token_freq, const double norm_len)
-  {
-    const double tf = static_cast<double>(token_freq);
-    return tf / (tf + p_k1 * (1.0 - p_b + p_b * norm_len));
-  }
+  static double doc_token_weight(const int64_t token_freq, const double norm_len);
   static double query_token_weight(const int64_t doc_freq, const int64_t doc_cnt);
   static bool use_new_version(const ObExpr &expr)
   {
