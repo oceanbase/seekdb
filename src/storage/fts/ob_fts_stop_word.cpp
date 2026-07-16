@@ -207,7 +207,10 @@ int ObAddWord::casedown_word(const ObFTWord &src, ObFTWord &dst, bool &owns_word
   if (OB_UNLIKELY(src.empty())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid src ft word", K(ret), K(src));
-  } else if (!flag_.casedown() || is_ascii_casedown_noop(src)) {
+  } else if (!flag_.casedown()) {
+    dst = src;
+    owns_word = true;
+  } else if (flag_.persist_unique_word() && is_ascii_casedown_noop(src)) {
     dst = src;
   } else {
     ObString dst_str;
@@ -269,6 +272,23 @@ int ObAddWord::groupby_word(const ObFTWord &word, const int64_t word_freq, const
   if (OB_UNLIKELY(word.empty() || word_freq <= 0)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", K(ret), K(word), K(word_freq));
+  } else if (!flag_.persist_unique_word()) {
+    if (!flag_.groupby_word()) {
+      if (OB_FAIL(word_map_.set_refactored(word, 1/*word count*/))) {
+        LOG_WARN("fail to set fulltext word and count", K(ret), K(word));
+      }
+    } else if (OB_FAIL(word_map_.get_refactored(word, word_count)) && OB_HASH_NOT_EXIST != ret) {
+      LOG_WARN("fail to get fulltext word", K(ret), K(word));
+    } else {
+      if (OB_HASH_NOT_EXIST == ret) {
+        word_count = 1;
+      } else {
+        word_count += word_freq;
+      }
+      if (OB_FAIL(word_map_.set_refactored(word, word_count, 1/*overwrite*/))) {
+        LOG_WARN("fail to set fulltext word and count", K(ret), K(word), K(word_count));
+      }
+    }
   } else if (!flag_.groupby_word()) {
     ObFTWord stored_word;
     if (!owns_word && OB_FAIL(persist_word(word, stored_word))) {

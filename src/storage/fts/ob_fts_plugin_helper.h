@@ -222,6 +222,14 @@ private:
       const char *fulltext,
       const int64_t fulltext_len,
       common::ObIAllocator &scratch_allocator);
+  int inner_segment(
+      const common::ObObjMeta &meta,
+      const char *fulltext,
+      const int64_t fulltext_len,
+      common::ObIAllocator &scratch_allocator,
+      const ObAddWordFlag &add_word_flag,
+      int64_t &doc_length,
+      ObFTWordMap &words);
   int segment_with_iter(ObAddWord &add_word);
   int set_add_word_flag(const plugin::ObIFTParserDesc &ftparser_desc);
 private:

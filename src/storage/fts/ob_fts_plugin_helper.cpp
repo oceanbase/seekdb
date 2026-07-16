@@ -378,7 +378,13 @@ int ObFTParseHelper::segment(
   if (OB_ISNULL(allocator_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("parser helper allocator is nullptr", K(ret), KP_(allocator));
-  } else if (OB_FAIL(segment(meta, fulltext, fulltext_len, *allocator_, doc_length, words))) {
+  } else if (OB_FAIL(inner_segment(meta,
+                                   fulltext,
+                                   fulltext_len,
+                                   *allocator_,
+                                   add_word_flag_,
+                                   doc_length,
+                                   words))) {
     LOG_WARN("failed to segment fulltext", K(ret), K(meta), KP(fulltext), K(fulltext_len));
   }
   return ret;
@@ -389,6 +395,28 @@ int ObFTParseHelper::segment(
     const char *fulltext,
     const int64_t fulltext_len,
     common::ObIAllocator &scratch_allocator,
+    int64_t &doc_length,
+    ObFTWordMap &words)
+{
+  ObAddWordFlag index_add_word_flag = add_word_flag_;
+  if (index_add_word_flag.casedown()) {
+    index_add_word_flag.set_persist_unique_word();
+  }
+  return inner_segment(meta,
+                       fulltext,
+                       fulltext_len,
+                       scratch_allocator,
+                       index_add_word_flag,
+                       doc_length,
+                       words);
+}
+
+int ObFTParseHelper::inner_segment(
+    const ObObjMeta &meta,
+    const char *fulltext,
+    const int64_t fulltext_len,
+    common::ObIAllocator &scratch_allocator,
+    const ObAddWordFlag &add_word_flag,
     int64_t &doc_length,
     ObFTWordMap &words)
 {
@@ -409,7 +437,7 @@ int ObFTParseHelper::segment(
     LOG_WARN("unexpected error, charset info is nullptr", K(ret), K(type));
   } else {
     words.reuse();
-    ObAddWord add_word(parser_property_, meta, add_word_flag_, scratch_allocator, words);
+    ObAddWord add_word(parser_property_, meta, add_word_flag, scratch_allocator, words);
     if (OB_FAIL(prepare_parser_param(cs, fulltext, fulltext_len, scratch_allocator))) {
       LOG_WARN("failed to prepare parser param", K(ret), KP(cs), KP(fulltext), K(fulltext_len));
     } else if (OB_FAIL(segment_with_iter(add_word))) {
@@ -419,7 +447,7 @@ int ObFTParseHelper::segment(
       doc_length = add_word.get_add_word_count();
     }
   }
-  LOG_DEBUG("ft parse segment", K(ret), K(type), K(add_word_flag_), K(parser_name_),
+  LOG_DEBUG("ft parse segment", K(ret), K(type), K(add_word_flag), K(parser_name_),
       K(ObString(fulltext_len, fulltext)), K(words.size()));
   return ret;
 }

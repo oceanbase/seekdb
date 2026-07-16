@@ -102,7 +102,9 @@ TEST(ObAddWordTest, stores_transient_word_on_first_insert)
 
   meta.set_varchar();
   meta.set_collation_type(CS_TYPE_UTF8MB4_GENERAL_CI);
+  flag.set_casedown();
   flag.set_groupby_word();
+  flag.set_persist_unique_word();
   ASSERT_EQ(OB_SUCCESS, word_map.create(2, "AddWordOwn"));
 
   ObAddWord add_word(property, meta, flag, allocator, word_map);
@@ -126,6 +128,7 @@ TEST(ObAddWordTest, allocates_once_for_repeated_lowercase_word)
   meta.set_collation_type(CS_TYPE_UTF8MB4_GENERAL_CI);
   flag.set_casedown();
   flag.set_groupby_word();
+  flag.set_persist_unique_word();
   ASSERT_EQ(OB_SUCCESS, word_map.create(2, "AddWordAlloc"));
 
   ObAddWord add_word(property, meta, flag, allocator, word_map);
@@ -135,6 +138,29 @@ TEST(ObAddWordTest, allocates_once_for_repeated_lowercase_word)
 
   ASSERT_EQ(1, word_map.size());
   ASSERT_EQ(1, allocator.alloc_count());
+}
+
+TEST(ObAddWordTest, preserves_default_casedown_allocation_behavior)
+{
+  ObFTParserProperty property;
+  ObObjMeta meta;
+  ObAddWordFlag flag;
+  CountingAllocator allocator;
+  ObFTWordMap word_map;
+
+  meta.set_varchar();
+  meta.set_collation_type(CS_TYPE_UTF8MB4_GENERAL_CI);
+  flag.set_casedown();
+  flag.set_groupby_word();
+  ASSERT_EQ(OB_SUCCESS, word_map.create(2, "AddWordBase"));
+
+  ObAddWord add_word(property, meta, flag, allocator, word_map);
+  for (int64_t i = 0; i < 100; ++i) {
+    ASSERT_EQ(OB_SUCCESS, add_word.process_word("database", 8, 8, 1));
+  }
+
+  ASSERT_EQ(1, word_map.size());
+  ASSERT_EQ(100, allocator.alloc_count());
 }
 
 int segment_and_calc_word_count(
