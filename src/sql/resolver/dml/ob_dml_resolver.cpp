@@ -4327,10 +4327,13 @@ int ObDMLResolver::resolve_ai_split_document_item(const ParseNode &parse_tree, T
   static const ObString CHUNK_TEXT("chunk_text");
 
   if (parse_tree.type_ != T_AI_SPLIT_DOCUMENT_EXPRESSION || parse_tree.num_child_ != 3
-      || OB_ISNULL(parse_tree.children_[0])) {
+      || OB_ISNULL(parse_tree.children_[0]) || parse_tree.children_[0]->type_ != T_EXPR_LIST) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid ai split document parse tree", K(ret), K(parse_tree.type_), K(parse_tree.num_child_));
-  } else if (OB_FAIL(resolve_sql_expr(*parse_tree.children_[0], content_expr))) {
+  } else if (parse_tree.children_[0]->num_child_ < 1 || parse_tree.children_[0]->num_child_ > 2) {
+    ret = OB_ERR_INVALID_ARGUMENT;
+    LOG_WARN("ai split document requires 1 or 2 arguments, got %ld", K(ret), parse_tree.children_[0]->num_child_);
+  } else if (OB_FAIL(resolve_sql_expr(*parse_tree.children_[0]->children_[0], content_expr))) {
     LOG_WARN("failed to resolve ai split document content", K(ret));
   } else if (OB_ISNULL(content_expr)) {
     ret = OB_ERR_UNEXPECTED;
@@ -4340,8 +4343,8 @@ int ObDMLResolver::resolve_ai_split_document_item(const ParseNode &parse_tree, T
   } else if (!ob_is_string_type(content_expr->get_result_type().get_type())) {
     ret = OB_ERR_INVALID_TYPE_FOR_OP;
     LOG_WARN("ai split document content must be a string", K(ret), K(content_expr->get_result_type()));
-  } else if (OB_NOT_NULL(parse_tree.children_[1])
-             && OB_FAIL(resolve_sql_expr(*parse_tree.children_[1], params_expr))) {
+  } else if (2 == parse_tree.children_[0]->num_child_
+             && OB_FAIL(resolve_sql_expr(*parse_tree.children_[0]->children_[1], params_expr))) {
     LOG_WARN("failed to resolve ai split document parameters", K(ret));
   } else if (OB_NOT_NULL(params_expr) && OB_FAIL(params_expr->deduce_type(session_info_))) {
     LOG_WARN("failed to deduce parameters type", K(ret));

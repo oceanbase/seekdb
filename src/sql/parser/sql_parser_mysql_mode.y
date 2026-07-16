@@ -292,7 +292,7 @@ END_P SET_VAR DELIMITER
         CTXCAT CTX_ID CUBE CURDATE CURRENT STACKED CURTIME CURSOR_NAME CUME_DIST CYCLE CALC_PARTITION_ID CONNECT
 
         DAG DATA DATAFILE DATA_DISK_SIZE DATA_SOURCE DATA_TABLE_ID DATE DATE_ADD DATE_SUB DATETIME DAY DEALLOCATE DECRYPT
-        DEFAULT_AUTH DEFAULT_LOB_INROW_THRESHOLD DEFINER DELAY DELAY_KEY_WRITE DEPTH DES_KEY_FILE DENSE_RANK DESCRIPTION DESTINATION DIAGNOSTICS DICT_TABLE
+        DEFAULT_AUTH DEFAULT_LOB_INROW_THRESHOLD DEFINER DELAY DELAY_KEY_WRITE DEPTH DES_KEY_FILE DENSE_RANK DESCRIPTION DESTINATION DIAGNOSTICS DICT DICT_TABLE
         DIFF DIRECTORY DISABLE DISALLOW DISCARD DISK DISKGROUP DO DOT DUMP DUMPFILE DUPLICATE DUPLICATE_SCOPE DUPLICATE_READ_CONSISTENCY DYNAMIC
         DATABASE_ID DEFAULT_TABLEGROUP DISCONNECT DEMAND DELETE_INSERT DYNAMIC_PARTITION_POLICY
 
@@ -7198,11 +7198,6 @@ dynamic_partition_option
   (void)($2);
   malloc_non_terminal_node($$, result->malloc_pool_, T_LINK_NODE, 2, $1, $3);
 }
-| FULLTEXT_DICT opt_equal_mark STRING_VALUE
-{
-  (void)($2);
-  malloc_non_terminal_node($$, result->malloc_pool_, T_FULLTEXT_DICT, 1, $3);
-}
 ;
 
 dynamic_partition_option:
@@ -7229,6 +7224,11 @@ ENABLE COMP_EQ BOOL_VALUE
 | BIGINT_PRECISION COMP_EQ STRING_VALUE
 {
   malloc_non_terminal_node($$, result->malloc_pool_, T_DYNAMIC_PARTITION_BIGINT_PRECISION, 1, $3);
+}
+| FULLTEXT_DICT opt_equal_mark STRING_VALUE
+{
+  (void)($2);
+  malloc_non_terminal_node($$, result->malloc_pool_, T_FULLTEXT_DICT, 1, $3);
 }
 ;
 
@@ -21866,29 +21866,17 @@ UNNEST '(' simple_expr_list ')'
 ;
 
 ai_split_document_expr:
-AI_SPLIT_DOCUMENT '(' simple_expr ')'
+AI_SPLIT_DOCUMENT '(' simple_expr_list ')'
 {
   malloc_non_terminal_node($$, result->malloc_pool_, T_AI_SPLIT_DOCUMENT_EXPRESSION, 3, $3, NULL, NULL);
 }
-| AI_SPLIT_DOCUMENT '(' simple_expr ',' simple_expr ')'
-{
-  malloc_non_terminal_node($$, result->malloc_pool_, T_AI_SPLIT_DOCUMENT_EXPRESSION, 3, $3, $5, NULL);
-}
-| AI_SPLIT_DOCUMENT '(' simple_expr ')' relation_name
+| AI_SPLIT_DOCUMENT '(' simple_expr_list ')' relation_name
 {
   malloc_non_terminal_node($$, result->malloc_pool_, T_AI_SPLIT_DOCUMENT_EXPRESSION, 3, $3, NULL, $5);
 }
-| AI_SPLIT_DOCUMENT '(' simple_expr ')' AS relation_name
+| AI_SPLIT_DOCUMENT '(' simple_expr_list ')' AS relation_name
 {
   malloc_non_terminal_node($$, result->malloc_pool_, T_AI_SPLIT_DOCUMENT_EXPRESSION, 3, $3, NULL, $6);
-}
-| AI_SPLIT_DOCUMENT '(' simple_expr ',' simple_expr ')' relation_name
-{
-  malloc_non_terminal_node($$, result->malloc_pool_, T_AI_SPLIT_DOCUMENT_EXPRESSION, 3, $3, $5, $7);
-}
-| AI_SPLIT_DOCUMENT '(' simple_expr ',' simple_expr ')' AS relation_name
-{
-  malloc_non_terminal_node($$, result->malloc_pool_, T_AI_SPLIT_DOCUMENT_EXPRESSION, 3, $3, $5, $8);
 }
 ;
 
@@ -22223,6 +22211,7 @@ ACCESS_INFO
 |       DESCRIPTION
 |       DEMAND
 |       DIAGNOSTICS
+|       DICT
 |       DICT_TABLE
 |       DIFF
 |       DIRECTORY
