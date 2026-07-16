@@ -77,6 +77,39 @@ int ObIKFTParser::init(const ObFTParserParam &param)
   return ret;
 }
 
+int ObIKFTParser::reuse(ObFTParserParam *param)
+{
+  int ret = OB_SUCCESS;
+  ObCollationType coll_type = ObCollationType::CS_TYPE_INVALID;
+  if (!IS_INIT) {
+    if (OB_ISNULL(param)) {
+      ret = OB_INVALID_ARGUMENT;
+      LOG_WARN("invalid ik parser reuse argument", K(ret), KP(param));
+    } else if (OB_FAIL(init(*param))) {
+      LOG_WARN("failed to init ik parser when reuse uninited parser", K(ret), KPC(param));
+    }
+  } else if (OB_ISNULL(param) || OB_ISNULL(param->cs_) || OB_ISNULL(param->cs_->name)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid ik parser reuse argument", K(ret), KPC(param));
+  } else if (CS_TYPE_INVALID == (coll_type = ObCharset::collation_type(param->cs_->name))) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid collation type for ik parser reuse", K(ret), KPC(param));
+  } else if (coll_type != coll_type_) {
+    reset();
+    if (OB_FAIL(init(*param))) {
+      LOG_WARN("failed to reinit ik parser for new collation", K(ret), KPC(param));
+    }
+  } else if (OB_ISNULL(ctx_)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("tokenize context is null when reuse ik parser", K(ret));
+  } else if (OB_FAIL(ctx_->reuse(param->fulltext_,
+                                 param->ft_length_,
+                                 param->ik_param_.mode_ == ObFTIKParam::Mode::SMART))) {
+    LOG_WARN("failed to reuse tokenize context", K(ret), KPC(param));
+  }
+  return ret;
+}
+
 int ObIKFTParser::get_next_token(const char *&word,
                                  int64_t &word_len,
                                  int64_t &char_cnt,
@@ -423,6 +456,7 @@ void ObIKFTParser::reset()
   if (!OB_ISNULL(ctx_)) {
     ctx_->~TokenizeContext();
     allocator_.free(ctx_);
+    ctx_ = nullptr;
   }
 
   for (ObIIKProcessor *segmenter : segmenters_) {
@@ -440,14 +474,17 @@ void ObIKFTParser::reset()
   if (!OB_ISNULL(dict_main_)) {
     dict_main_->~ObIFTDict();
     allocator_.free(dict_main_);
+    dict_main_ = nullptr;
   }
   if (!OB_ISNULL(dict_quan_)) {
     dict_quan_->~ObIFTDict();
     allocator_.free(dict_quan_);
+    dict_quan_ = nullptr;
   }
   if (!OB_ISNULL(dict_stop_)) {
     dict_stop_->~ObIFTDict();
     allocator_.free(dict_stop_);
+    dict_stop_ = nullptr;
   }
 
   is_inited_ = false;

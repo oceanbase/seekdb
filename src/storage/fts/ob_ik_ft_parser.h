@@ -53,6 +53,7 @@ public:
   virtual ~ObIKFTParser() { reset(); }
 
   int init(const plugin::ObFTParserParam &param);
+  virtual int reuse(plugin::ObFTParserParam *param) override;
 
   int get_next_token(const char *&word,
                      int64_t &word_len,

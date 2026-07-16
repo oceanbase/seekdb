@@ -55,7 +55,7 @@ TokenizeContext::TokenizeContext(ObCollationType coll_type,
                                  int64_t fulltext_len,
                                  bool is_smart)
     : coll_type_(coll_type), fulltext_(fulltext), fulltext_len_(fulltext_len), cursor_(0),
-      next_char_len_(0), handle_size_(0), is_smart_(is_smart), token_list_(allocator),
+      next_char_len_(0), next_char_type_(ObFTCharUtil::CharType::USELESS), handle_size_(0), is_smart_(is_smart), token_list_(allocator),
       result_list_(allocator)
 {
 }
@@ -68,6 +68,28 @@ int TokenizeContext::init()
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_FAIL(prepare_next_char())) {
     LOG_WARN("Failed to prepare next char", K(ret));
+  }
+  return ret;
+}
+
+int TokenizeContext::reuse(const char *fulltext, int64_t fulltext_len, bool is_smart)
+{
+  int ret = OB_SUCCESS;
+  if (OB_ISNULL(fulltext) || fulltext_len <= 0) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid tokenize context reuse argument", K(ret), KP(fulltext), K(fulltext_len));
+  } else {
+    fulltext_ = fulltext;
+    fulltext_len_ = fulltext_len;
+    cursor_ = 0;
+    next_char_len_ = 0;
+    next_char_type_ = ObFTCharUtil::CharType::USELESS;
+    is_smart_ = is_smart;
+    if (OB_FAIL(reset_resource())) {
+      LOG_WARN("failed to reset tokenize context resource", K(ret));
+    } else if (OB_FAIL(prepare_next_char())) {
+      LOG_WARN("failed to prepare first char when reuse tokenize context", K(ret));
+    }
   }
   return ret;
 }
