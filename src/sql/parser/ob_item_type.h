@@ -977,6 +977,7 @@ typedef enum ObItemType
   T_FUN_SYS_EMBEDDED_VEC = 1928,
   T_FUN_SYS_AI_PROMPT = 1929,
   T_FUN_SYS_VEC_VISIBLE = 1930, // vector index table 5
+  T_FUN_SYS_LOAD_FILE = 1931, // seekdb: load_file(location, filename) -> BLOB
 
   ///< @note add new sys function type before this line
   T_FUN_SYS_END = 2000,
@@ -2881,6 +2882,7 @@ typedef enum ObItemType
   T_FORK_DATABASE = 4917,
   T_DIFF_TABLE = 4918,
   T_MERGE_TABLE = 4919,
+  T_AI_SPLIT_DOCUMENT_EXPRESSION = 4920, // seekdb: ai_split_document table function
   T_MAX //Attention: add a new type before T_MAX
 } ObItemType;
 
