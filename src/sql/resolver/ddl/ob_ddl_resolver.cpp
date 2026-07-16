@@ -29,7 +29,6 @@
 #include "sql/resolver/ddl/ob_vec_index_builder_util.h"
 #include "sql/resolver/ddl/ob_fts_parser_resolver.h"
 #include "sql/session/ob_local_session_var.h"
-#include "rootserver/ob_dynamic_partition_manager.h"
 #include "observer/vector_index/ob_plugin_vector_index_service.h"
 #include "share/schema/ob_table_schema.h"  // relocated-definition owner
 
@@ -116,8 +115,7 @@ ObDDLResolver::ObDDLResolver(ObResolverParams &params)
     vec_column_name_(),
     vec_index_type_(INDEX_TYPE_MAX),
     enable_macro_block_bloom_filter_(false),
-    semistruct_encoding_type_(),
-    dynamic_partition_policy_()
+    semistruct_encoding_type_()
 {
   table_mode_.reset();
 }
@@ -2399,33 +2397,6 @@ int ObDDLResolver::resolve_table_option(const ParseNode *option_node, const bool
         }
         break;
       }
-      case T_DYNAMIC_PARTITION_POLICY: {
-        if (is_index_option) {
-          ret = OB_NOT_SUPPORTED;
-          SQL_RESV_LOG(WARN, "index option should not specify dynamic partition policy", KR(ret));
-        } else if (OB_ISNULL(option_node->children_)
-                   || 0 == option_node->num_child_
-                   || OB_ISNULL(option_node->str_value_)) {
-          ret = OB_INVALID_ARGUMENT;
-          SQL_RESV_LOG(WARN, "invalid dynamic partition policy arg", KR(ret), "num_child", option_node->num_child_);
-        } else {
-          ObString tmp_str;
-          tmp_str.assign_ptr(const_cast<char *>(option_node->str_value_),
-                             static_cast<int32_t>(option_node->str_len_));
-          if (OB_FAIL(ob_write_string(*allocator_, tmp_str, dynamic_partition_policy_))) {
-            SQL_RESV_LOG(WARN, "write string failed", KR(ret));
-          } else if (OB_FAIL(ObDynamicPartitionManager::format_dynamic_partition_policy_str(*allocator_, dynamic_partition_policy_, dynamic_partition_policy_))) {
-            SQL_RESV_LOG(WARN, "fail to format dynamic partition policy str", KR(ret));
-          } else if (stmt::T_CREATE_TABLE == stmt_->get_stmt_type()
-                     && OB_FAIL(ObDynamicPartitionManager::fill_default_value(*allocator_, dynamic_partition_policy_, dynamic_partition_policy_))) {
-            SQL_RESV_LOG(WARN, "fail to fill default value", KR(ret), K_(dynamic_partition_policy));
-          } else if (stmt::T_ALTER_TABLE == stmt_->get_stmt_type()
-                     && OB_FAIL(alter_table_bitset_.add_member(ObAlterTableArg::DYNAMIC_PARTITION_POLICY))) {
-            SQL_RESV_LOG(WARN, "failed to add member to bitset", KR(ret));
-          }
-        }
-        break;
-      }
       default: {
         /* won't be here */
         ret = OB_ERR_UNEXPECTED;
@@ -4248,7 +4219,6 @@ void ObDDLResolver::reset() {
   index_params_.reset();
   enable_macro_block_bloom_filter_ = false;
   semistruct_encoding_type_.reset();
-  dynamic_partition_policy_.reset();
 }
 
 void ObDDLResolver::reset_index()
@@ -6652,8 +6622,6 @@ int ObDDLResolver::resolve_index_partition_node(
       LOG_USER_ERROR(OB_NOT_SUPPORTED, "non global index with partition option");
     } else if (OB_FAIL(resolve_partition_node(crt_idx_stmt, index_partition_node, index_schema))) {
       LOG_WARN("failed to resolve partition node", K(ret));
-    } else if (OB_FAIL(resolve_auto_partition(crt_idx_stmt, index_partition_node, index_schema))) {
-      LOG_WARN("failed to resolve auto partition option", K(ret));
     } else if (PARTITION_LEVEL_ZERO == index_schema.get_part_level()
                || PARTITION_LEVEL_ONE == index_schema.get_part_level()) {
       // good
@@ -7124,213 +7092,6 @@ int ObDDLResolver::resolve_check_constraint_expr(
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("check_expr is null", K(ret));
     }
-  }
-  return ret;
-}
-
-int ObDDLResolver::resolve_split_partition_range_element(const ParseNode *node,
-                                                         const share::schema::ObPartitionFuncType part_type,
-                                                         const ObIArray<ObRawExpr *> &part_func_exprs,
-                                                         common::ObIArray<ObRawExpr *> &range_value_exprs,
-                                                         const bool &in_tablegroup)
-{
-  int ret = OB_SUCCESS;
-  if (OB_ISNULL(node)
-      || T_EXPR_LIST != node->type_) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid_argument", K(ret), "type", node->type_);
-  } else if (!in_tablegroup) {
-    if (node->num_child_ != part_func_exprs.count()) {
-      ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("invalid_argument", K(ret), "node num", node->num_child_,
-               "function num", part_func_exprs.count());
-    }
-  }
-  // This fallback name is only used because lower-level parsing requires part_name
-  // even when the partition name is omitted.
-  ObString part_name;
-  for (int i = 0 ; OB_SUCC(ret) && i < node->num_child_; ++i) {
-    if (OB_ISNULL(node->children_[i])) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("node is null", K(ret), K(i), "node", node->children_[i]);
-    } else if (T_MAXVALUE == node->children_[i]->type_) {
-      ObRawExpr *maxvalue_expr = NULL;
-      ObConstRawExpr *c_expr = NULL;
-      c_expr = (ObConstRawExpr *) allocator_->alloc(sizeof(ObConstRawExpr));
-      if (OB_ISNULL(c_expr)) {
-        ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("failed to alloc raw expr", K(ret), K(c_expr));
-      } else {
-        c_expr = new(c_expr) ObConstRawExpr();
-        maxvalue_expr = c_expr;
-        maxvalue_expr->set_data_type(common::ObMaxType);
-        if (OB_FAIL(range_value_exprs.push_back(maxvalue_expr))) {
-          LOG_WARN("array push back fail", K(ret));
-        }
-      }
-    } else if (T_NULL == node->children_[i]->type_) {
-      ret = OB_EER_NULL_IN_VALUES_LESS_THAN;
-      LOG_WARN("null value is not allowed in less than", K(ret));
-    } else if (T_EXPR_LIST != node->children_[i]->type_) {
-      ObRawExpr *part_value_expr = NULL;
-      ObRawExpr *part_func_expr = NULL;
-      if (!in_tablegroup) {
-        if (OB_FAIL(part_func_exprs.at(i, part_func_expr))) {
-          LOG_WARN("get part expr failed", K(ret), K(i), "size", part_func_exprs.count());
-        } else if (OB_ISNULL(part_func_expr)) {
-          ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("part func expr is invalid", K(ret), K(i));
-        } else if (OB_FAIL(ObResolverUtils::resolve_partition_range_value_expr(params_,
-                                                                               *(node->children_[i]),
-                                                                               part_name,
-                                                                               part_type,
-                                                                               *part_func_expr,
-                                                                               part_value_expr,
-                                                                               in_tablegroup))) {
-          LOG_WARN("failed to resolve at values", K(ret));
-        }
-      } else {
-        if (OB_FAIL(ObResolverUtils::resolve_partition_range_value_expr(params_,
-                                                                        *(node->children_[i]),
-                                                                        part_name,
-                                                                        part_type,
-                                                                        part_value_expr,
-                                                                        in_tablegroup))) {
-          LOG_WARN("failed to resolve at values", K(ret));
-        }
-      }
-      if (OB_FAIL(ret)) {
-      } else if (OB_FAIL(range_value_exprs.push_back(part_value_expr))) {
-        LOG_WARN("failed to push back raw_expr", K(ret), K(part_value_expr));
-      }
-    }
-  }// end for process t_expr_list
-  return ret;
-}
-
-int ObDDLResolver::resolve_split_partition_list_value(const ParseNode *node,
-                                                      const share::schema::ObPartitionFuncType part_type,
-                                                      const ObIArray<ObRawExpr *> &part_func_exprs,
-                                                      ObDDLStmt::array_t &list_value_exprs,
-                                                      int64_t &expr_num,
-                                                      const bool &in_tablegroup)
-{
-  int ret = OB_SUCCESS;
-  ObString part_name;
-  ObOpRawExpr *row_expr = NULL;
-  if (OB_ISNULL(node) || OB_ISNULL(params_.expr_factory_)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret), K(node), K(params_.expr_factory_));
-  } else if (T_EXPR_LIST != node->type_ && T_DEFAULT != node->type_) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument node type", K(ret), "node type", node->type_);
-  } else if (OB_FAIL(params_.expr_factory_->create_raw_expr(T_OP_ROW, row_expr))) {
-    LOG_WARN("failed to create raw expr", K(ret));
-  } else if (OB_ISNULL(row_expr)) {
-    ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("failed to allcoate memory", K(ret));
-  } else if (T_DEFAULT == node->type_) {
-    // Here use max to replace default value
-    ObRawExpr *maxvalue_expr = NULL;
-    ObConstRawExpr *c_expr = NULL;
-    c_expr = (ObConstRawExpr *)allocator_->alloc(sizeof(ObConstRawExpr));
-    if (OB_ISNULL(c_expr)) {
-      ret = OB_ALLOCATE_MEMORY_FAILED;
-    } else {
-      c_expr = new (c_expr) ObConstRawExpr();
-      maxvalue_expr = c_expr;
-      maxvalue_expr->set_data_type(common::ObMaxType);
-      ObDDLStmt::array_t part_value_expr_array;
-      if (OB_FAIL(row_expr->set_param_expr(maxvalue_expr))) {
-        LOG_WARN("failed to add param expr", K(ret));
-      } else if (OB_FAIL(list_value_exprs.push_back(row_expr))) {
-        LOG_WARN("array push back fail", K(ret));
-      }
-    }
-  } else {
-    ObSEArray<ObRawExpr *, 16> part_value_exprs;
-
-    bool is_all_expr_list = false;
-    if (node->num_child_ > 0) {
-      is_all_expr_list = (node->children_[0]->type_ == T_EXPR_LIST);
-    }
-    for (int64_t j = 0; OB_SUCC(ret) && j < node->num_child_; j++) {
-      part_value_exprs.reset();
-      if (OB_ISNULL(node->children_[j])) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("node is null", K(ret));
-      } else if ((is_all_expr_list && node->children_[j]->type_ != T_EXPR_LIST) ||
-                 (!is_all_expr_list && node->children_[j]->type_ == T_EXPR_LIST)) {
-        ret = OB_ERR_PARTITION_COLUMN_LIST_ERROR;
-        LOG_ERROR("Inconsistency in usage of column lists for partitioning near", K(ret));
-      } else if (!in_tablegroup && OB_FAIL(ObResolverUtils::resolve_partition_list_value_expr(params_,
-                                                                                              *(node->children_[j]),
-                                                                                              part_name,
-                                                                                              part_type,
-                                                                                              part_func_exprs,
-                                                                                              part_value_exprs))) {
-        LOG_WARN("resolve partition expr failed", K(ret));
-      } else if (in_tablegroup && OB_FAIL(ObResolverUtils::resolve_partition_list_value_expr(params_,
-                                                                                             *(node->children_[j]),
-                                                                                             part_name,
-                                                                                             part_type,
-                                                                                             expr_num,
-                                                                                             part_value_exprs,
-                                                                                             in_tablegroup))) {
-        LOG_WARN("resolve partition expr failed", K(ret));
-      }
-      if (OB_SUCC(ret) && 0 == j) {
-        if (OB_FAIL(row_expr->init_param_exprs(node->num_child_ * expr_num))) {
-          LOG_WARN("failed to init param exprs", K(ret));
-        }
-      }
-      for (int64_t k = 0; OB_SUCC(ret) && k < part_value_exprs.count(); k++) {
-        if (OB_FAIL(row_expr->add_param_expr(part_value_exprs.at(k)))) {
-          LOG_WARN("failed to add param expr", K(ret));
-        }
-      }//end for
-    }// end for
-    if (OB_FAIL(ret)) {
-    } else if (part_func_exprs.count() > 1 && !is_all_expr_list) {
-      if (row_expr->get_param_count() != part_func_exprs.count()) {
-        ret = OB_ERR_PARTITION_COLUMN_LIST_ERROR;
-        LOG_ERROR("Inconsistency in usage of column lists for partitioning near", K(ret));
-      }
-    }
-
-    if (OB_FAIL(ret)) {
-    } else if (OB_FAIL(list_value_exprs.push_back(row_expr))) {
-      LOG_WARN("array push back fail", K(ret));
-    }
-  }
-  return ret;
-}
-
-int ObDDLResolver::check_split_type_valid(const ParseNode *split_node,
-                                          const share::schema::ObPartitionFuncType part_type)
-{
-  int ret = OB_SUCCESS;
-  if (OB_ISNULL(split_node)
-      || T_SPLIT_ACTION != split_node->type_
-      || OB_ISNULL(split_node->children_[SPLIT_PARTITION_TYPE_NODE])
-      || PARTITION_FUNC_TYPE_MAX == part_type) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("node type error or partition type node is null", K(ret),
-             "node_type", split_node->type_,
-             "split_partition_type", split_node->children_[SPLIT_PARTITION_TYPE_NODE],
-             K(part_type));
-  } else if (share::schema::is_list_part(part_type)
-             && T_SPLIT_LIST != split_node->children_[SPLIT_PARTITION_TYPE_NODE]->type_) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_USER_ERROR(OB_ERR_UNEXPECTED, "VALUES LESS THAN or AT clause cannot be used with List partition");
-    LOG_WARN("at clause cannot be used with list partition", K(ret),
-             "node_type", split_node->children_[SPLIT_PARTITION_TYPE_NODE]->type_);
-  } else if (share::schema::is_range_part(part_type)
-             && T_SPLIT_RANGE != split_node->children_[SPLIT_PARTITION_TYPE_NODE]->type_) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_USER_ERROR(OB_ERR_UNEXPECTED, "expecting VALUES LESS THAN  or AT clause");
-    LOG_WARN("values clause cannot be used with range partitioned", K(ret),
-             "node_type", split_node->children_[SPLIT_PARTITION_TYPE_NODE]->type_);
   }
   return ret;
 }
@@ -8183,13 +7944,6 @@ bool ObDDLResolver::is_column_exists(ObIArray<ObColumnNameWrapper> &sort_column_
   return bret;
 }
 
-int ObDDLResolver::get_enable_split_partition(bool &enable_split_partition)
-{
-  int ret = OB_SUCCESS;
-  enable_split_partition = false;
-  return ret;
-}
-
 int ObDDLResolver::get_row_store_type(const ObStoreFormatType store_format,
                                       ObRowStoreType &row_store_type)
 {
@@ -8419,13 +8173,8 @@ int ObDDLResolver::resolve_partition_node(ObPartitionedStmt *stmt,
 
   if (OB_SUCC(ret) && !table_schema.is_external_table()) {
     if (PARTITION_LEVEL_ZERO == table_schema.get_part_level()) {
-      if (is_range_type_partition(part_node->type_) &&
-          nullptr == part_node->children_[RANGE_ELEMENTS_NODE]) {
-        // auto-partitioned non-partitioned table
-      } else {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("non-partitioned table should not have partition clause", KR(ret));
-      }
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("non-partitioned table should not have partition clause", KR(ret));
     } else if (OB_FAIL(check_and_set_partition_names(stmt, table_schema))) {
       LOG_WARN("failed to check and set partition names", K(ret));
     }
@@ -8966,7 +8715,7 @@ int ObDDLResolver::resolve_partition_range(ObPartitionedStmt *stmt,
   common::ObSEArray<ObRawExpr*, 8> part_func_exprs;
   common::ObSEArray<ObRawExpr*, 8> range_values_exprs;
   share::schema::ObPartitionOption *partition_option = NULL;
-  static const int32_t RANGE_PARTITION_NODE_NUM = 7;
+  static const int32_t RANGE_PARTITION_NODE_NUM = 6;
   static const int32_t RANGE_SUBPARTITION_NODE_NUM = 5;
 
   if (OB_ISNULL(stmt) || OB_ISNULL(node) || OB_ISNULL(node->children_)) {
@@ -8980,13 +8729,8 @@ int ObDDLResolver::resolve_partition_range(ObPartitionedStmt *stmt,
     ret = OB_ERR_UNEXPECTED;
     SQL_RESV_LOG(WARN, "get invalid num_child", KR(ret), K(is_subpartition), K(node->num_child_));
   } else if (nullptr == node->children_[RANGE_ELEMENTS_NODE]) {
-    if (!is_subpartition) {
-      // auto_partition clause allow sql without partition definition, do nothing
-      // e.g. create table t1 (c1 int primary key, c2 int) partition by range('c1')
-    } else {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("subpartition without partition definition", KR(ret));
-    }
+    ret = OB_ERR_PARSE_PARTITION_RANGE;
+    LOG_WARN("range partition without partition definition", KR(ret));
   } else {
     if (is_subpartition) {
       partition_option = &(table_schema.get_sub_part_option());
@@ -9091,459 +8835,6 @@ int ObDDLResolver::resolve_partition_range(ObPartitionedStmt *stmt,
       SQL_RESV_LOG(DEBUG, "succ to resolve_partition_range", KPC(stmt), K(part_func_exprs), K(range_values_exprs));
     }
   }
-  return ret;
-}
-
-// at first, resolve auto-partition clause.
-// then, if user doesn't use the clause, check whether enable auto-partition by tenant config
-int ObDDLResolver::resolve_auto_partition_with_tenant_config(ObCreateTableStmt *stmt, ParseNode *node,
-                                                             ObTableSchema &table_schema)
-{
-  int ret = OB_SUCCESS;
-
-  if (OB_ISNULL(stmt)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", KR(ret), K(stmt));
-  } else if (nullptr != node && OB_FAIL(resolve_auto_partition(stmt, node, table_schema))) {
-    LOG_WARN("fail to resolve auto partition", KR(ret), K(table_schema), KPC(stmt));
-  } else if (stmt->use_auto_partition_clause()) {
-    // check if all index support auto split
-    const common::ObIArray<obcall::ObCreateIndexArg> &index_arg_list = stmt->get_index_arg_list();
-    for (int64_t i = 0; OB_SUCC(ret) && i < index_arg_list.count(); ++i) {
-      const obcall::ObCreateIndexArg &index_arg = index_arg_list.at(i);
-      if (!is_support_split_index_type(index_arg.index_type_)) {
-        ret = OB_NOT_SUPPORTED;
-        LOG_WARN("there are the index types that are not supported by auto-partition", K(ret));
-        LOG_USER_ERROR(OB_NOT_SUPPORTED, "auto-partition table with domain index is");
-      }
-    }
-  } else if (!stmt->use_auto_partition_clause() &&
-             OB_FAIL(try_set_auto_partition_by_config(node, stmt->get_index_arg_list(), table_schema))) {
-    LOG_WARN("fail to try to set auto_partition by config", KR(ret), K(table_schema), KPC(stmt));
-  }
-  return ret;
-}
-
-int ObDDLResolver::check_only_modify_auto_partition_attr(ObPartitionedStmt *stmt, ParseNode *node,
-                                                         ObTableSchema &table_schema,
-                                                         bool &is_only_modify_auto_part_attr)
-{
-  int ret = OB_SUCCESS;
-  bool SET_PARTITION_DEFINITION = false;
-  bool SET_AUTO_PARTITION_SIZE = false;
-  bool SET_PARTITION_KEY = false;
-  is_only_modify_auto_part_attr = false;
-  if (OB_ISNULL(node) || OB_ISNULL(node->children_)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", KR(ret), K(node));
-  } else if (OB_ISNULL(stmt)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", KR(ret), K(stmt));
-  } else if (!table_schema.is_partitioned_table() ||
-             table_schema.get_part_option().is_valid_split_part_type()) {
-    static const int32_t RANGE_PARTITION_NODE_NUM = 7;
-    SET_PARTITION_DEFINITION = node->children_[RANGE_ELEMENTS_NODE] != nullptr;
-    SET_PARTITION_KEY = node->children_[RANGE_FUN_EXPR_NODE] != nullptr;
-    if (RANGE_PARTITION_NODE_NUM == node->num_child_) {
-      SET_AUTO_PARTITION_SIZE = node->children_[RANGE_AUTO_SPLIT_TABLET_SIZE] != nullptr;
-    }
-    if (!SET_PARTITION_DEFINITION && (SET_AUTO_PARTITION_SIZE || !SET_PARTITION_KEY)) {
-      is_only_modify_auto_part_attr = true;
-    }
-  }
-  return ret;
-}
-
-// we have two types of auto-partition clause in "partition by" clause:
-// 1. using "size" clause:
-//    e.g. create table t1 (c1 int primary key, c2 int)
-//                  partition by range(c1) size('128MB')
-//                 (partition p0 value less than(100),
-//                  partition p1 value less than(MAXVALUE))
-// 2. using "partition by" clause without partition definition (whatever set presetting partition key or not):
-//    e.g.1. create table t1 (c1 int primary key, c2 int) partition by range()
-//    e.g.2. create table t1 (c1 int primary key, c2 int) partition by range('c1')
-//    e.g.3. create table t1 (c1 int primary key, c2 int) partition by range('c1') size('128MB')
-//    spcifically, if using this clause to enable auto partition and the "size" is not specified,
-//    it will be filled with default tenant config.
-// Attention:
-// 1. Some partition definitions are conflict with auto-partition attributes,
-//    such as the existence of space index of table.
-//    Thus, we will check invalid settings of schema in rootservice
-// 2. Only data_table could set auto-partition attributes by using auto_partition clause.
-//    the auto-partition attributes of the global index are generated in RS based on its data_table.
-int ObDDLResolver::resolve_auto_partition(ObPartitionedStmt *stmt, ParseNode *node,
-                                          ObTableSchema &table_schema)
-{
-  int ret = OB_SUCCESS;
-  static const char* UNLIMITED_STR = "unlimited";
-  bool SET_PARTITION_DEFINITION = false;
-  bool SET_SUBPARTITION_DEFINITION = false;
-  bool SET_PARTITION_KEY = false;
-  bool SET_AUTO_PARTITION_SIZE = false;
-  bool SET_AUTO_PARTITION_NUM = false;
-  int64_t auto_part_size = 0;
-  bool enable_auto_split = false;
-
-  if (OB_ISNULL(node) || OB_ISNULL(node->children_)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", KR(ret), K(node));
-  } else if (OB_ISNULL(stmt)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", KR(ret), K(stmt));
-  } else if (!table_schema.is_partitioned_table() ||
-             table_schema.get_part_option().is_valid_split_part_type()) {
-    static const int32_t RANGE_PARTITION_NODE_NUM = 7;
-    if (OB_UNLIKELY(RANGE_PARTITION_NODE_NUM != node->num_child_)) {
-      ret = OB_ERR_UNEXPECTED;
-      SQL_RESV_LOG(WARN, "get invalid num_child", KR(ret), K(node->num_child_));
-    } else if (FALSE_IT(SET_PARTITION_DEFINITION = node->children_[RANGE_ELEMENTS_NODE] != nullptr)) {
-    } else if (FALSE_IT(SET_SUBPARTITION_DEFINITION = node->children_[RANGE_SUBPARTITION_NODE] != nullptr)) {
-    } else if (FALSE_IT(SET_PARTITION_KEY = node->children_[RANGE_FUN_EXPR_NODE] != nullptr)) {
-    } else if (FALSE_IT(SET_AUTO_PARTITION_SIZE = node->children_[RANGE_AUTO_SPLIT_TABLET_SIZE] != nullptr)) {
-    } else if (FALSE_IT(SET_AUTO_PARTITION_NUM = node->children_[RANGE_PARTITION_NUM_NODE] != nullptr)) {
-    } else if (!SET_PARTITION_DEFINITION && SET_AUTO_PARTITION_NUM) {
-      ret = OB_ERR_PARSE_PARTITION_RANGE;
-      LOG_WARN("in range partition, partition number can only be set, where partition definition has been set",
-          KR(ret), K(table_schema.get_table_type()));
-    } else if (SET_PARTITION_DEFINITION) {
-      if (!SET_PARTITION_KEY) {
-        // non-partitioned table could ingore partition key setting and enable auto-partition setting,
-        // e.g.:
-        //    create table t1 ... partition by range() size('128')
-        // however, partitioned table must have a partition key whatever auto-partition is enabled or not.
-        // incorrect example:
-        //    create table t1 ... partition by range() size('128')
-        //                 (partition p0 value less than(100),
-        //                  partition p1 value less than(MAXVALUE));
-        ret = OB_INVALID_ARGUMENT;
-        SQL_RESV_LOG(WARN, "invalid argument", KR(ret), K(node->children_));
-      } else if (SET_SUBPARTITION_DEFINITION && SET_AUTO_PARTITION_SIZE) {
-        ret = OB_NOT_SUPPORTED;
-        SQL_RESV_LOG(WARN, "auto partition for subpartition is", KR(ret), K(node->children_));
-      }
-    } else if (SET_SUBPARTITION_DEFINITION) { // !SET_PARTITION_DEFINITION
-      ret = OB_INVALID_ARGUMENT;
-      SQL_RESV_LOG(WARN, "invalid argument", KR(ret), K(node->children_));
-    }
-    if (OB_FAIL(ret)) {
-    } else if (FALSE_IT(stmt->set_use_auto_partition_clause(!SET_PARTITION_DEFINITION
-                                                            || SET_AUTO_PARTITION_SIZE))) {
-    } else if (!stmt->use_auto_partition_clause()) {
-      // user doesn't use auto-partitioning sql, we will disable the feature.
-      // e.g. create table t1 (c1 int primary key)
-      //           partition by range(c1) (PARTITION p0 VALUES LESS THAN (MAXVALUE))
-    } else if (!table_schema.is_user_table()) {
-      ret = OB_NOT_SUPPORTED;
-      LOG_WARN("not allow non-user-table to set auto-partition clause", KR(ret), K(table_schema.get_table_type()));
-      LOG_USER_ERROR(OB_NOT_SUPPORTED, "using auto-partition clause for non-user-table is");
-    } else if (table_schema.is_heap_organized_table() && stmt->use_auto_partition_clause()) {
-      ret = OB_NOT_SUPPORTED;
-      LOG_WARN("not allow heap organizated table to set auto-partition clause", KR(ret), K(table_schema.get_table_type()));
-      LOG_USER_ERROR(OB_NOT_SUPPORTED, "using auto-partition clause for heap organizated table is");
-    } else { // table_schema.is_user_table() && stmt->use_auto_partition_clause()
-      if (!SET_PARTITION_DEFINITION &&
-          OB_FAIL(resolve_presetting_partition_key(node, table_schema))) {
-        // non-partitioned table
-        LOG_WARN("fail to resolve presetting partition key", KR(ret), K(node->children_));
-      } else if (SET_AUTO_PARTITION_SIZE) { // SET_AUTO_PARTITION_SIZE means auto_split_size_node is not null
-        ParseNode *auto_split_size_node = node->children_[RANGE_AUTO_SPLIT_TABLET_SIZE];
-        if (T_AUTO_SPLIT_TABLET_SIZE != auto_split_size_node->type_) {
-          ret = OB_NOT_SUPPORTED;
-          SQL_RESV_LOG(WARN, "the type of auto_split_size_node is not varchar",
-                      KR(ret), K(auto_split_size_node->type_));
-        } else if (0 == ObString(auto_split_size_node->str_value_).case_compare(UNLIMITED_STR)) {
-          auto_part_size = 0; // forbid auto_parititon feature
-        } else {
-          bool valid = false;
-          common::ObSqlString buf;
-          if (OB_FAIL(buf.append(auto_split_size_node->str_value_, auto_split_size_node->str_len_))) {
-            SQL_RESV_LOG(WARN, "fail to assign child str", KR(ret));
-          } else if (FALSE_IT(auto_part_size = common::ObConfigCapacityParser::get(buf.ptr(), valid, false))){
-          } else if (!valid) {
-            ret = common::OB_ERR_PARSE_SQL;
-            LOG_WARN("invalid size", KR(ret), K(buf));
-          }
-        }
-      }
-      // check whether activate auto-partition
-      if (OB_FAIL(ret)) {
-      } else if (SET_AUTO_PARTITION_SIZE) {
-        if (auto_part_size == 0) {
-          SQL_RESV_LOG(INFO, "the auto split tablet size is configured as unlimited");
-          enable_auto_split = false;
-        } else {
-          enable_auto_split = true;
-        }
-      } else {
-        // user activates auto-partitioning feature without specified auto_split_size.
-        // e.g. create table t1 (c1 int primary key) partition by range();
-        if (!true) {
-          ret = OB_EAGAIN;
-          LOG_WARN("tenant_config has not been loaded", KR(ret));
-        } else {
-          enable_auto_split = true;
-          auto_part_size = GCONF.auto_split_tablet_size;
-          const int64_t errsim_auto_part_size = OB_E(common::EventTable::EN_AUTO_SPLIT_TABLET_SIZE) 0;
-          if (0 != errsim_auto_part_size) {
-            auto_part_size = std::abs(errsim_auto_part_size);
-          }
-          LOG_INFO("use default tenant config for auto partitioning", K(auto_part_size), K(errsim_auto_part_size));
-        }
-      }
-
-      if (OB_FAIL(ret)) {
-      } else if (!enable_auto_split) {
-        table_schema.forbid_auto_partition();
-      } else {
-        ObPartitionFuncType part_func_type = PARTITION_FUNC_TYPE_MAX;
-        if (T_RANGE_COLUMNS_PARTITION == node->type_) {
-          part_func_type = PARTITION_FUNC_TYPE_RANGE_COLUMNS;
-        } else if (T_RANGE_PARTITION == node->type_) {
-          part_func_type = PARTITION_FUNC_TYPE_RANGE;
-        }
-        if (OB_FAIL(table_schema.enable_auto_partition(auto_part_size, part_func_type))) {
-          LOG_WARN("fail to enable auto partition", KR(ret), K(table_schema));
-        }
-      }
-    }
-  }
-
-  return ret;
-}
-
-// Resolve presetting partition key of auto-partitioned non-partitioned table.
-// When auto-partitioned non-partitioned table triggers auto-partitioning,
-// the table will choose presetting partition key as actually partition key.
-// Specifically, if user doesn't set presetting partition key,
-// when the table triggers auto-partitioning,
-// if the table is data table, it will choose primary key as presetting partition key;
-// if the table is global index, it will choose index columns as presetting partition key
-int ObDDLResolver::resolve_presetting_partition_key(ParseNode *node, ObTableSchema &table_schema)
-{
-  int ret = OB_SUCCESS;
-  const ObRowkeyInfo &rowkey_info = table_schema.get_rowkey_info();
-  ObString part_func_name;
-  ParseNode *partition_fun_node = NULL;
-  ObSEArray<ObString, 4> presetting_partition_keys;
-  common::ObSEArray<ObRawExpr*, 8> part_func_exprs;
-  share::schema::ObPartitionFuncType part_func_type = share::schema::PARTITION_FUNC_TYPE_MAX;
-  ObArenaAllocator alloc;
-  static const int32_t RANGE_PARTITION_NODE_NUM = 7;
-
-  // check presetting partition func type whether is valid for auto-partition
-  if (OB_ISNULL(node) || OB_ISNULL(node->children_)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", KR(ret), K(node));
-  } else if (OB_UNLIKELY(RANGE_PARTITION_NODE_NUM != node->num_child_)) {
-    ret = OB_ERR_UNEXPECTED;
-    SQL_RESV_LOG(WARN, "get invalid num_child", KR(ret), K(node->num_child_));
-  } else if (!table_schema.is_user_table()) {
-    // we only allow user-table to set presetting partition key by using auto-partition clause.
-    // the presetting partition key of auto-partitioned non-partitioned global indexs will be set as "empty",
-    // which means using index columns as presetting partition key
-    ret = OB_NOT_SUPPORTED;
-    LOG_WARN("set presetting partition key for non-user-table", KR(ret), K(table_schema.get_table_type()));
-  } else if (T_RANGE_COLUMNS_PARTITION == node->type_) {
-    part_func_type = PARTITION_FUNC_TYPE_RANGE_COLUMNS;
-  } else if (T_RANGE_PARTITION == node->type_) {
-    part_func_type = PARTITION_FUNC_TYPE_RANGE;
-  } else {
-    ret = OB_NOT_SUPPORTED;
-    LOG_WARN("only support to auto partitioning range or range columns partition", KR(ret), K(node->type_));
-    LOG_USER_ERROR(OB_NOT_SUPPORTED, "hash/list/interval partition is");
-  }
-
-  // check presetting partition key whether is equal to prefix of rowkey for auto-partition
-  if (OB_FAIL(ret)) {
-  } else if (OB_NOT_NULL(node->children_[RANGE_ELEMENTS_NODE])) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("check presetting partition key for partitioned table", KR(ret));
-  } else if (table_schema.is_table_without_pk()) {
-    ret = OB_NOT_SUPPORTED;
-    LOG_WARN("not support to auto partitioning no primary key table", KR(ret), K(table_schema));
-    LOG_USER_ERROR(OB_NOT_SUPPORTED, "auto partitioned table without primary key is");
-  } else if ((partition_fun_node = node->children_[RANGE_FUN_EXPR_NODE]) == nullptr) {
-    // empty presetting partition key, do nothing
-  } else if (OB_FAIL(resolve_part_func(params_, partition_fun_node, part_func_type,
-                                       table_schema, part_func_exprs, presetting_partition_keys))) {
-    LOG_WARN("resolve part func failed", KR(ret));
-  } else {
-    const int64_t rowkey_size = table_schema.get_rowkey_column_num() - table_schema.get_shadow_rowkey_column_num();
-    bool is_matched_prefix = true;
-    if (OB_UNLIKELY(rowkey_size < presetting_partition_keys.count())) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("invalid presetting partition key", KR(ret), K(presetting_partition_keys), K(rowkey_info));
-      LOG_USER_ERROR(OB_ERR_UNEXPECTED, "mismatching between presetting partition key and primary key");
-    } else {
-      for (int64_t i = 0; OB_SUCC(ret) && is_matched_prefix && i < presetting_partition_keys.count(); i++) {
-        uint64_t rowkey_column_id = OB_INVALID_ID;
-        const common::ObString &column_name = presetting_partition_keys.at(i);
-        const ObColumnSchemaV2 *column = table_schema.get_column_schema(column_name);
-
-        if (OB_FAIL(rowkey_info.get_column_id(i, rowkey_column_id))) {
-          LOG_WARN("failed to get rowkey column id", KR(ret), K(i));
-        } else if (OB_ISNULL(column)) {
-          ret = OB_ERR_BAD_FIELD_ERROR;
-          LOG_WARN("fail to get column schema", KR(ret), K(column_name));
-        } else if (rowkey_column_id != column->get_column_id()) {
-          is_matched_prefix = false;
-        }
-      } // end for
-
-      if (OB_FAIL(ret)) {
-      } else if (is_matched_prefix) {
-        part_func_name.assign_ptr(node->str_value_, static_cast<int32_t>(node->str_len_));
-      } else {
-        ret = OB_NOT_SUPPORTED;
-        LOG_WARN("auto-partitioning should keep primary key prefix equal to partition key",
-                                                  KR(ret), K(presetting_partition_keys), K(table_schema));
-        LOG_USER_ERROR(OB_NOT_SUPPORTED, "mismatching between primary key prefix and partition key is");
-      }
-    }
-  }
-
-  if (OB_SUCC(ret)) {
-    if (OB_FAIL(ObSQLUtils::convert_sql_text_to_schema_for_storing(
-                              alloc, session_info_->get_dtc_params(), part_func_name))) {
-      LOG_WARN("fail to copy and convert string charset", KR(ret));
-    } else if (OB_FAIL(table_schema.get_part_option().set_part_expr(part_func_name))) {
-      SQL_RESV_LOG(WARN, "set partition expression string failed", KR(ret), K(part_func_name));
-    }
-  }
-
-  return ret;
-}
-
-// if GCONF.enable_auto_split == true and table_schema is valid for auto-partition,
-// enable auto-partition for the table;
-// otherwise, do nothing
-int ObDDLResolver::try_set_auto_partition_by_config(const ParseNode *node,
-                                                    common::ObIArray<obcall::ObCreateIndexArg> &index_arg_list,
-                                                    ObTableSchema &table_schema)
-{
-  int ret = OB_SUCCESS;
-
-  if (!table_schema.is_user_table()) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("attempt to set auto_partition by tenant config for non_user_table", KR(ret), K(table_schema));
-  } else if (table_schema.is_partitioned_table() &&
-             !table_schema.get_part_option().is_valid_split_part_type()) {
-    // do nothing
-  } else {
-
-    if (!true) {
-      table_schema.forbid_auto_partition();
-      LOG_INFO("tenant_config has not been loaded over");
-    } else if (GCONF.enable_auto_split) {
-      // check table
-      ObPartitionFuncType unused_part_func_type = PARTITION_FUNC_TYPE_MAX;// we can make sure that the part_expre is empty so enable_auto_partition will handle this situation
-      int64_t auto_part_size = GCONF.auto_split_tablet_size;
-      const int64_t errsim_auto_part_size = OB_E(common::EventTable::EN_AUTO_SPLIT_TABLET_SIZE) 0;
-      if (0 != errsim_auto_part_size) {
-        auto_part_size = std::abs(errsim_auto_part_size);
-      }
-
-      if (OB_FAIL(table_schema.enable_auto_partition(auto_part_size, unused_part_func_type))) {
-        LOG_WARN("fail to enable auto partition", KR(ret), K(table_schema));
-      } else if (OB_FAIL(table_schema.check_validity_for_auto_partition())) {
-        if (OB_NOT_SUPPORTED == ret) {
-          LOG_INFO("table schema is not valid for auto partition, "
-                   "not allow to enable auto_partition by default config", K(table_schema));
-        } else {
-          LOG_WARN("fail to check validity for auto-partition", KR(ret), K(table_schema));
-        }
-      } else if (!table_schema.is_partitioned_table()) {
-        // if data_table is non-partitioned table, when trigger auto-partitioning,
-        // we will choose primary key as partition key and set range partition type for it.
-        // thus, we need to check whether the primary key is valid partition column type
-        const ObRowkeyInfo &presetting_partition_keys = table_schema.get_rowkey_info();
-        ObPartitionFuncType part_type = presetting_partition_keys.get_size() > 1 ?
-                                              ObPartitionFuncType::PARTITION_FUNC_TYPE_RANGE_COLUMNS :
-                                              ObPartitionFuncType::PARTITION_FUNC_TYPE_RANGE;
-        for (int64_t i = 0; OB_SUCC(ret) && i < presetting_partition_keys.get_size(); ++i) {
-          const ObRowkeyColumn *partition_column = presetting_partition_keys.get_column(i);
-          if (OB_ISNULL(partition_column)) {
-            ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("the partition column is NULL, ", KR(ret), K(i), K(presetting_partition_keys));
-          } else {
-            ObObjType type = partition_column->get_meta_type().get_type();
-            if (ObResolverUtils::is_partition_range_column_type(type)) {
-              /* case: create table t1(c1 double, primary key(c1)) */
-              part_type = ObPartitionFuncType::PARTITION_FUNC_TYPE_RANGE_COLUMNS;
-            }
-            if (!ObResolverUtils::is_valid_partition_column_type(
-                                  partition_column->get_meta_type().get_type(), part_type, false)) {
-              ret = OB_NOT_SUPPORTED;
-              LOG_INFO("primary key is not valid partition column type, "
-                      "not allow to enable auto_partition by default config",
-                      K(table_schema), KPC(partition_column));
-            }
-          }
-        }
-      }
-
-      // check index
-      if (OB_SUCC(ret)) {
-        // the index infos of table_schema have not been set in resolver,
-        // thus we need to check index with index_arg
-        for (int64_t i = 0; OB_SUCC(ret) && i < index_arg_list.count(); i++) {
-          obcall::ObCreateIndexArg &index_arg = index_arg_list.at(i);
-          if (!index_arg.is_index_scope_specified_ && is_support_split_index_type(index_arg.index_type_)) {
-            bool is_prefix = false;
-            if (OB_FAIL(check_primary_key_prefix_of_index_columns(table_schema, index_arg, is_prefix))) {
-              LOG_WARN("check primary key prefix of index columns", K(ret), K(table_schema), K(index_arg));
-            } else if (!is_prefix) { // if primary key is prefix of index table, then it can still be local index
-              if (ObSimpleTableSchemaV2::is_unique_index(index_arg.index_type_)) {
-                index_arg.index_type_ = INDEX_TYPE_UNIQUE_GLOBAL;
-              } else {
-                index_arg.index_type_ = INDEX_TYPE_NORMAL_GLOBAL;
-              }
-              ObArray<ObColumnSchemaV2 *> gen_columns;
-              ObTableSchema &index_schema = index_arg.index_schema_;
-              index_schema.set_table_type(USER_INDEX);
-              index_schema.set_index_type(index_arg.index_type_);
-              bool check_data_schema = false;
-              if (OB_FAIL(share::ObIndexBuilderUtil::adjust_expr_index_args(
-                      index_arg, table_schema, *allocator_, gen_columns))) {
-                LOG_WARN("fail to adjust expr index args", K(ret));
-              } else if (OB_FAIL(share::ObIndexBuilderUtil::set_index_table_columns(
-                      index_arg, table_schema, index_schema, check_data_schema))) {
-                LOG_WARN("fail to set index table columns", K(ret));
-              }
-            }
-          }
-          if (OB_FAIL(ret)) {
-          } else if (ObSimpleTableSchemaV2::is_spatial_index(index_arg.index_type_) ||
-              INDEX_TYPE_DOMAIN_CTXCAT_DEPRECATED == index_arg.index_type_) {
-            ret = OB_NOT_SUPPORTED;
-            LOG_INFO("auto-partition doesn't support spatial index, "
-                     "not allow to enable auto_partition by default config",
-                     K(table_schema), K(index_arg));
-          } else if (share::schema::is_local_unique_index_table(index_arg.index_type_)) {
-            if (OB_FAIL(ObResolverUtils::check_unique_index_cover_partition_column(table_schema, index_arg))) {
-              if (OB_EER_UNIQUE_KEY_NEED_ALL_FIELDS_IN_PF == ret) {
-                ret = OB_NOT_SUPPORTED;
-                LOG_INFO("unique key does not cover all partition columns, "
-                         "not allow to enable auto_partition by default config",
-                         K(table_schema), K(index_arg));
-              } else {
-                LOG_WARN("fail to check_unique_index_cover_partition_column",
-                         KR(ret), K(table_schema), K(index_arg));
-              }
-            }
-          }
-        } // end for
-      }
-      if (OB_FAIL(ret)) {
-        table_schema.forbid_auto_partition();
-        if (OB_NOT_SUPPORTED == ret) {
-          ret = OB_SUCCESS;
-        }
-      }
-    }
-  }
-
   return ret;
 }
 
@@ -10969,72 +10260,6 @@ int ObDDLResolver::check_skip_index(share::schema::ObTableSchema &table_schema)
   }
   return ret;
 }
-
-int ObDDLResolver::get_suggest_index_scope(
-    const uint64_t data_table_id,
-    const ObCreateIndexArg &index_arg,
-    const INDEX_KEYNAME key,
-    bool &global)
-{
-  int ret = OB_SUCCESS;
-  const ObTableSchema *data_table_schema = nullptr;
-  if (OB_UNLIKELY(OB_INVALID_ID == data_table_id)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(ret), K(data_table_id));
-  } else if (OB_ISNULL(schema_checker_)) {
-    ret = OB_ERR_SYS;
-    LOG_WARN("error sys, schema checker must not be nullptr", K(ret));
-  } else if (OB_FAIL(schema_checker_->get_table_schema(data_table_id, data_table_schema))) {
-    LOG_WARN("get table schema failed", K(ret), K(data_table_id));
-  } else if (OB_ISNULL(data_table_schema)) {
-    ret = OB_TABLE_NOT_EXIST;
-    LOG_WARN("table not exist", K(ret), K(data_table_id));
-  } else {
-    if (data_table_schema->is_auto_partitioned_table() && is_support_split_index_key(key)) {
-      bool is_prefix = false;
-      if (OB_FAIL(check_primary_key_prefix_of_index_columns(*data_table_schema, index_arg, is_prefix))) {
-        LOG_WARN("check primary key prefix of index columns", K(ret), K(data_table_schema), K(index_arg));
-      } else {
-        global = !is_prefix;
-      }
-    }
-  }
-  return ret;
-}
-
-int ObDDLResolver::check_primary_key_prefix_of_index_columns(
-    const ObTableSchema &data_table_schema,
-    const ObCreateIndexArg &index_arg,
-    bool &is_prefix)
-{
-  int ret = OB_SUCCESS;
-  const ObRowkeyInfo &rowkey_info = data_table_schema.get_rowkey_info();
-  is_prefix = rowkey_info.get_size() <= index_arg.index_columns_.count();
-  for (int64_t i = 0; OB_SUCC(ret) && i < rowkey_info.get_size() && is_prefix; ++i) {
-    ObRowkeyColumn rowkey_column;
-    if (i >= index_arg.index_columns_.count()) {
-      ret = OB_ERR_SYS;
-      LOG_WARN("i is larger than index column count", K(ret), K(i), K(index_arg.index_columns_));
-    } else if (OB_FAIL(rowkey_info.get_column(i, rowkey_column))) {
-      LOG_WARN("get column info failed", K(ret));
-    } else {
-      const ObColumnSortItem &sort_item = index_arg.index_columns_.at(i);
-      const ObColumnSchemaV2 *column_schema = nullptr;
-      if (OB_ISNULL(column_schema = data_table_schema.get_column_schema(sort_item.column_name_))) {
-        is_prefix = false;
-      } else {
-        is_prefix = column_schema->get_column_id() == rowkey_column.column_id_;
-      }
-    }
-  }
-  return ret;
-}
-
-bool ObDDLResolver::is_support_split_index_key(const INDEX_KEYNAME key)
-{
-  return NORMAL_KEY == key || UNIQUE_KEY == key;
-}
-
 
 int ObDDLResolver::resolve_semistruct_encoding_type(const ParseNode *option_node, const bool is_index_option)
 {

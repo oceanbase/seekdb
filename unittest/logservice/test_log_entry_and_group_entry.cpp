@@ -236,22 +236,6 @@ TEST(TestPaddingLogEntry, test_invalid_padding_log_entry)
   EXPECT_EQ(OB_SUCCESS, LogEntryHeader::generate_padding_log_buf(1+min_padding_valid_data_len, share::SCN::min_scn(), buf, min_padding_valid_data_len));
 }
 
-TEST(TestLogBaseHeader, reject_compressed_payload)
-{
-  char buf[128] = {'\0'};
-  logservice::ObLogBaseHeader encoded(logservice::ObLogBaseType::TRANS_SERVICE_LOG_BASE_TYPE,
-                                      logservice::ObReplayBarrierType::NO_NEED_BARRIER);
-  encoded.flag_ |= logservice::ObLogBaseHeader::PAYLOAD_IS_COMPRESSED;
-  int64_t pos = 0;
-  ASSERT_EQ(OB_SUCCESS, encoded.serialize(buf, sizeof(buf), pos));
-
-  logservice::ObLogBaseHeader decoded;
-  int64_t decode_pos = 0;
-  EXPECT_EQ(OB_NOT_SUPPORTED, decoded.deserialize(buf, pos, decode_pos));
-  EXPECT_TRUE(decoded.is_compressed());
-  EXPECT_EQ(pos, decode_pos);
-}
-
 TEST(TestPaddingLogEntry, test_padding_log_entry)
 {
   PALF_LOG(INFO, "test_padding_log_entry");

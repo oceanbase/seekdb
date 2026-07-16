@@ -18,6 +18,9 @@
 #include "share/rc/ob_module_provider.h"
 #include "logservice/ob_ls_adapter.h"
 #include "lib/stat/ob_diagnostic_info_guard.h"
+#ifdef OB_BUILD_LOG_STORAGE_COMPRESS
+#include "logservice/ob_log_compression.h"
+#endif
 #include "storage/tx_storage/ob_tenant_freezer.h"
 
 namespace oceanbase
@@ -692,9 +695,18 @@ int ObLogReplayService::submit_task(ObReplayServiceTask *task)
   return ret;
 }
 
+void ObLogReplayService::free_decompression_buf_(void *&decompression_buf)
+{
+  if (NULL != decompression_buf) {
+    allocator_->free_replay_decompression_buf(decompression_buf);
+    decompression_buf = NULL;
+  }
+}
+
 void ObLogReplayService::free_replay_task(ObLogReplayTask *task)
 {
   CLOG_LOG(TRACE, "free_replay_task", KPC(task), K(task));
+  free_decompression_buf_(task->decompression_buf_);
   allocator_->free_replay_task(task);
   task = NULL;
 }
@@ -964,6 +976,10 @@ int ObLogReplayService::do_replay_task_(ObLogReplayTask *replay_task,
     }
   } else if (!need_replay) {
     //do nothing
+#ifdef OB_BUILD_LOG_STORAGE_COMPRESS
+  } else if (OB_FAIL(transform_replay_task_(replay_task, replay_status, replay_log_buff))) {
+    CLOG_LOG(WARN, "failed to transform_replay_task", KPC(replay_task), KPC(replay_task));
+#endif
   } else if (replay_task->is_pre_barrier_) {
     replay_task->read_log_buf_ = replay_log_buff->log_buf_;
     if (OB_FAIL(ls_adapter_->replay(replay_task))) {
@@ -1046,7 +1062,8 @@ int ObLogReplayService::fetch_pre_barrier_log_(ObReplayStatus &replay_status,
                                                const char *log_buf,
                                                const LSN &cur_lsn,
                                                const SCN &cur_log_submit_scn,
-                                               const int64_t log_size)
+                                               const int64_t log_size,
+                                               const int64_t header_pos)
 {
   int ret = OB_SUCCESS;
   const int64_t share_log_size = sizeof(ObLogReplayBuffer) + log_size;
@@ -1066,7 +1083,8 @@ int ObLogReplayService::fetch_pre_barrier_log_(ObReplayStatus &replay_status,
       CLOG_LOG(WARN, "failed to alloc log replay task buf", K(ret), K(cur_lsn));
     }
   } else {
-    replay_task = new (task_buf) ObLogReplayTask(header, cur_lsn, cur_log_submit_scn, log_size);
+    replay_task = new (task_buf) ObLogReplayTask(header, cur_lsn, cur_log_submit_scn,
+                                                 log_size, header_pos, NULL, 0);
     ObLogReplayBuffer *replay_log_buffer = new (share_log_buf) ObLogReplayBuffer();
     char *real_log_buf = share_log_buf + sizeof(ObLogReplayBuffer);
     replay_log_buffer->log_buf_ = real_log_buf;
@@ -1074,7 +1092,7 @@ int ObLogReplayService::fetch_pre_barrier_log_(ObReplayStatus &replay_status,
     if (OB_FAIL(replay_task->init(replay_log_buffer))) {
       free_replay_log_buf_(replay_log_buffer);
       CLOG_LOG(ERROR, "init replay task failed", K(ret), K(cur_lsn), K(cur_log_submit_scn),
-               K(log_size), KP(replay_log_buffer), K(header));
+               K(log_size), KP(replay_log_buffer), K(header), K(header_pos));
     } else {
       CLOG_LOG(TRACE, "fetch_and_submit_pre_barrier_log_", K(ret), K(replay_status), K(replay_task),
                KPC(replay_task), K(replay_log_buffer->log_buf_));
@@ -1097,6 +1115,8 @@ int ObLogReplayService::fetch_and_submit_single_log_(ObReplayStatus &replay_stat
   bool need_iterate_next_log = false;
   ObLogBaseHeader header;
   int64_t header_pos = 0;
+  void *decompression_buf = NULL;
+  int64_t decompressed_log_size = -1;
   ObLogReplayTask *replay_task = NULL;
   const SCN &replayable_point = inner_get_replayable_point_();
   if (OB_UNLIKELY(OB_ISNULL(submit_task))) {
@@ -1115,6 +1135,11 @@ int ObLogReplayService::fetch_and_submit_single_log_(ObReplayStatus &replay_stat
     // For padding log entry, iterate next log directly.
     need_iterate_next_log = true;
     CLOG_LOG(INFO, "no need to replay padding log entry", KPC(submit_task), K(header));
+#ifdef OB_BUILD_LOG_STORAGE_COMPRESS
+  } else if (OB_FAIL(prepare_decompression_buf_(log_buf, header, log_size, header_pos,
+                                                decompression_buf, decompressed_log_size))) {
+    CLOG_LOG(WARN, "failed to prepare_decompression_buf", KPC(submit_task), K(header));
+#endif
   } else if (header.need_pre_replay_barrier()) {
     // Forward barrier log replay task and log buf need to be allocated memory separately
     if (OB_FAIL(fetch_pre_barrier_log_(replay_status,
@@ -1124,7 +1149,8 @@ int ObLogReplayService::fetch_and_submit_single_log_(ObReplayStatus &replay_stat
                                        log_buf,
                                        cur_lsn,
                                        cur_log_submit_scn,
-                                       log_size))) {
+                                       log_size,
+                                       header_pos))) {
       //print log inside
     }
   } else {
@@ -1137,7 +1163,9 @@ int ObLogReplayService::fetch_and_submit_single_log_(ObReplayStatus &replay_stat
         CLOG_LOG(WARN, "failed to alloc log replay task buf", K(ret), K(cur_lsn));
       }
     } else {
-      replay_task = new (task_buf) ObLogReplayTask(header, cur_lsn, cur_log_submit_scn, log_size);
+      replay_task = new (task_buf) ObLogReplayTask(header, cur_lsn, cur_log_submit_scn, log_size,
+                                                   header_pos, decompression_buf, decompressed_log_size);
+      decompression_buf = NULL;//decompression_buf will be free by replay_task
       char *task_log_buf = task_buf + sizeof(ObLogReplayTask);
       MEMCPY(task_log_buf, log_buf, log_size);
       if (OB_FAIL(replay_task->init(task_log_buf))) {
@@ -1154,6 +1182,10 @@ int ObLogReplayService::fetch_and_submit_single_log_(ObReplayStatus &replay_stat
     } else {
       need_iterate_next_log = true;
     }
+  }
+
+  if (OB_FAIL(ret)) {
+    free_decompression_buf_(decompression_buf);
   }
 
   if (OB_FAIL(ret) && NULL != replay_task) {
@@ -1393,6 +1425,67 @@ int ObLogReplayService::submit_log_replay_task_(ObLogReplayTask &replay_task,
   return ret;
 }
 
+
+#ifdef OB_BUILD_LOG_STORAGE_COMPRESS
+int ObLogReplayService::prepare_decompression_buf_(const char *log_buf,
+                                                   const ObLogBaseHeader &header,
+                                                   const int64_t log_size,
+                                                   const int64_t base_header_len,
+                                                   void *&decompression_buf,
+                                                   int64_t &decompressed_log_size)
+{
+  int ret = OB_SUCCESS;
+  if (header.is_compressed()) {
+    if (OB_UNLIKELY(header.need_pre_replay_barrier())) {
+      ret = OB_ERR_UNEXPECTED;
+      CLOG_LOG(ERROR, "compression of pre_barrier log is not supported", K(header));
+    } else {
+      LogCompressedPayloadHeader comp_header;
+      int64_t pos = 0;
+      if (OB_FAIL(comp_header.deserialize(log_buf + base_header_len, log_size - base_header_len, pos))) {
+        CLOG_LOG(ERROR, "failed to deserialize LogCompressedPayloadHeader");
+      } else if (OB_UNLIKELY(NULL == (decompression_buf =
+                                      (allocator_->alloc_replay_decompression_buf(base_header_len + comp_header.get_original_len()))))) {
+        ret = OB_EAGAIN;
+        if (REACH_TIME_INTERVAL(2 * 1000 * 1000L)) {
+          CLOG_LOG(WARN, "failed to allocate decompression_buf");
+        }
+      } else {
+        decompressed_log_size = comp_header.get_original_len();
+      }
+    }
+  }
+  return ret;
+}
+
+int ObLogReplayService::transform_replay_task_(ObLogReplayTask *replay_task,
+                                               ObReplayStatus *replay_status,
+                                               ObLogReplayBuffer *replay_log_buf)
+{
+  int ret = OB_SUCCESS;
+  void *decompression_buf = replay_task->decompression_buf_;
+  if ((!replay_task->is_pre_barrier_)/*not pre_barrier log*/
+      && NULL != decompression_buf/*payload is compressed*/
+      && !replay_task->has_decompressed_/*has never been decompressed before*/) {
+    int64_t original_log_size = 0;
+    const int64_t base_header_len = replay_task->base_header_len_;
+    const int64_t decompress_log_size = replay_task->decompressed_log_size_;
+    if (OB_FAIL(logservice::decompress(static_cast<const char *>(replay_task->read_log_buf_) + base_header_len,
+                                       replay_task->read_log_size_ - base_header_len,
+                                       static_cast<char *>(decompression_buf) + base_header_len,
+                                       decompress_log_size, original_log_size))) {
+      CLOG_LOG(ERROR, "failed to decompress", KPC(replay_task), KPC(replay_status));
+    } else if (OB_UNLIKELY(original_log_size != decompress_log_size)) {
+      ret = OB_ERR_UNEXPECTED;
+      CLOG_LOG(ERROR, "data is corrupted", KPC(replay_task), KPC(replay_status), K(original_log_size));
+    } else {
+      MEMCPY(decompression_buf, replay_task->read_log_buf_, base_header_len);
+      replay_task->has_decompressed_ = true;
+    }
+  }
+  return ret;
+}
+#endif
 
 int ObLogReplayService::statistics_replay_cost_(const int64_t init_task_time,
                                                 const int64_t first_handle_time)

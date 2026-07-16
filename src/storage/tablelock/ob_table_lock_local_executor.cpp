@@ -62,6 +62,11 @@ int check_exist(const ObLockTaskBatchRequest<T> &arg,
   } else if (FALSE_IT(tablet_status = data.get_tablet_status())) {
   } else if (ObTabletStatus::NORMAL == tablet_status) {
     // do nothing
+  } else if (ObTabletStatus::RESERVED_STATUS_4 == tablet_status
+             || ObTabletStatus::RESERVED_STATUS_5 == tablet_status
+             || ObTabletStatus::RESERVED_STATUS_6 == tablet_status) {
+    ret = OB_NOT_SUPPORTED;
+    LOG_WARN("reserved tablet status is not supported", KR(ret), K(tablet_id), K(tablet_status));
   } else if (OB_UNLIKELY(data.tablet_status_.is_deleted_for_gc())) {
     // tablet shell
     ret = OB_TABLET_NOT_EXIST;

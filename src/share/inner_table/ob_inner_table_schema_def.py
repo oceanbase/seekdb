@@ -521,8 +521,6 @@ all_table_def = dict(
       ("dop", 'int', 'false', '1'),
       ('character_set_client', 'int', 'false', '0'),
       ('collation_connection', 'int', 'false', '0'),
-      ('auto_part_size', 'int', 'false', '-1'),
-      ('auto_part', 'bool', 'false', 'false'),
       ('association_table_id', 'int', 'false', '-1'),
       ('tablet_id', 'bigint', 'false', 'ObTabletID::INVALID_TABLET_ID'),
       ('max_dependency_version', 'int', 'false', '-1'),
@@ -552,7 +550,6 @@ all_table_def = dict(
       ('storage_cache_policy', 'varchar:OB_MAX_VARCHAR_LENGTH', 'false', r'{\"GLOBAL\":\"AUTO\"}'),
       ('merge_engine_type', 'int', 'false', '0'),
       ('semistruct_encoding_type', 'int', 'false', '0'),
-      ('dynamic_partition_policy', 'varchar:OB_MAX_DYNAMIC_PARTITION_POLICY_LENGTH', 'false', ''),
       ('external_location_id', 'int', 'false', 'OB_INVALID_ID'),
       ('external_sub_path', 'varbinary:OB_MAX_VARCHAR_LENGTH', 'true')
   ]
@@ -2469,11 +2466,11 @@ def_table_schema(
   ]
   )
 
-# 342: __all_ls_meta_table (abandoned)
+# 342: legacy ls meta table (abandoned)
 
 def_table_schema(
     owner = 'yanmu.ztl',
-    table_name = '__all_tablet_to_ls',
+    table_name = '__all_tablet_to_table',
     table_id = '343',
     table_type = 'SYSTEM_TABLE',
     gm_columns = ['gmt_create', 'gmt_modified'],
@@ -2490,16 +2487,16 @@ def_table_schema(
 # 344: __all_tablet_meta_table # migrated to SQLite, see gen_sqlite_table_def above
 # Placeholder - original definition removed, using SQLite version
 
-# 345: __all_ls_status (abandoned)
+# 345: legacy ls status table (abandoned)
 # 346: __all_zone_v2 # abandoned in 4.0
 
 # 348: __all_log_archive_progress # abandoned
 # 349: __all_log_archive_history # abandoned
 # 350: __all_log_archive_piece_files # abandoned
-# 351: __all_ls_log_archive_progress # abandoned
+# 351: legacy ls log archive progress table # abandoned
 
 
-# 352: __all_ls (abandoned)
+# 352: legacy ls table (abandoned)
 # 353: abandoned
 # 354: __all_backup_storage_info # abandoned
 # 357: __all_backup_job # abandoned
@@ -2533,7 +2530,7 @@ def_table_schema(
   ]
   )
 
-# 370: __all_ls_recovery_stat (abandoned)
+# 370: legacy ls recovery stat table (abandoned)
 # 371: __all_backup_ls_task_info_history # abandoned
 
 # 372: __all_tablet_replica_checksum # migrated to SQLite, see gen_sqlite_table_def above
@@ -2560,7 +2557,7 @@ def_table_schema(
   ]
   )
 
-# 374: __all_ls_replica_task (abandoned)
+# 374: legacy ls replica task table (abandoned)
 
 def_table_schema(
   owner = 'lixinze.lxz',
@@ -2577,7 +2574,6 @@ def_table_schema(
     ('gtrid', 'varbinary:128'),
     ('bqual', 'varbinary:128'),
     ('format_id', 'int', 'false', '1'),
-    ('coordinator', 'int'),
     ('scheduler_ip', 'varchar:OB_MAX_SERVER_ADDR_SIZE'),
     ('scheduler_port', 'int'),
     ('state', 'int'),
@@ -2748,7 +2744,7 @@ def_table_schema(**all_context_def)
 def_table_schema(**gen_history_table_def(382, all_context_def))
 
 # 383: __all_global_context_value (abandoned)
-# 385: __all_ls_election_reference_info (abandoned)
+# 385: legacy ls election reference info table (abandoned)
 
 # backup clean inner table
 # 386: __all_backup_delete_job # abandoned
@@ -2784,8 +2780,8 @@ def_table_schema(
 # 398:__all_spm_config abandoned
 # 399: abandoned
 # 400:__all_backup_parameter abandoned
-# 401: __all_ls_restore_progress (abandoned)
-# 402: __all_ls_restore_history (abandoned)
+# 401: legacy ls restore progress table (abandoned)
+# 402: legacy ls restore history table (abandoned)
 # 403: __all_backup_storage_info_history (abandoned)
 # 404: __all_backup_delete_policy (abandoned)
 
@@ -2876,7 +2872,7 @@ def_table_schema(
 # 419-422: abandoned metadata tables
 
 # 429: __all_arbitration_service (abandoned)
-# 430: __all_ls_arb_replica_task (abandoned)
+# 430: legacy ls arb replica task table (abandoned)
 
 def_table_schema(
     owner = 'bohou.ws',
@@ -2895,7 +2891,7 @@ def_table_schema(
     is_cluster_private = False
   )
 
-# 432: __all_ls_arb_replica_task_history (abandoned)
+# 432: legacy ls arb replica task history table (abandoned)
 
 def_table_schema(
   owner = 'luofan.zp',
@@ -2930,8 +2926,7 @@ def_table_schema(
 # Placeholder - original definition removed, using SQLite version
 
 # 445: __all_cluster_event_history # migrated to SQLite, see gen_sqlite_table_def above
-# 447 : __all_ls_log_restore_stat
-# 449 : __all_wait_for_partition_split_tablet
+# 447 : legacy ls log restore stat table
 
 # 450: __all_external_table_file # abandoned in seekdb
 
@@ -3055,26 +3050,6 @@ def_table_schema(
 # 479: __all_import_table_task # abandoned
 # 480: __all_import_table_task_history # abandoned
 # 481 : __all_import_stmt_exec_history
-
-def_table_schema(
-    owner = 'hanxuan.gzh',
-    table_name = '__all_tablet_reorganize_history',
-    table_id      = '482',
-    table_type = 'SYSTEM_TABLE',
-    gm_columns = [],
-    rowkey_columns = [
-        ('src_tablet_id', 'int'),
-        ('dest_tablet_id', 'int')
-  ],
-    is_cluster_private = False,
-    in_tenant_space = True,
-
-    normal_columns = [
-      ('type', 'int'),
-      ('create_time', 'timestamp'),
-      ('finish_time', 'timestamp')
-  ]
-  )
 
 # 485: __all_clone_job (abandoned)
 # 486: __all_clone_job_history (abandoned)
@@ -3253,8 +3228,8 @@ def_table_schema(**all_column_privilege_def)
 def_table_schema(**gen_history_table_def(506, all_column_privilege_def))
 
 # 507: __all_tenant_snapshot_ls_replica_history (abandoned)
-# 508: __all_ls_replica_task_history (abandoned)
-# 509 : __all_ls_compaction_status
+# 508: legacy ls replica task history table (abandoned)
+# 509 : legacy ls compaction status table
 # 510 : __all_tablet_compaction_status
 # 511 : __all_tablet_checksum_error_info (abandoned)
 # 516 : __all_service (abandoned)
@@ -4459,12 +4434,10 @@ def_table_schema(
   in_tenant_space = True,
 
   normal_columns = [
-  ('trans_type', 'int'),
   ('trans_id', 'int'),
   ('session_id', 'int'),
-  ('scheduler_addr', 'varchar:64'),
   ('is_decided', 'bool'),
-  ('participants', 'varchar:1024'),
+  ('write_state', 'varchar:1024'),
   ('ctx_create_time', 'timestamp', 'true'),
   ('expired_time', 'timestamp', 'true'),
   ('ref_cnt', 'int'),
@@ -4473,12 +4446,9 @@ def_table_schema(
   ('state', 'int'),
   ('part_trans_action', 'int'),
   ('trans_ctx_addr', 'varchar:20'),
-  ('mem_ctx_id', 'int'),
   ('pending_log_size', 'int'),
   ('flushed_log_size', 'int'),
-  ('role', 'int'),
   ('is_exiting', 'int'),
-  ('coordinator', 'int'),
   ('last_request_time', 'timestamp', 'true'),
   ('gtrid', 'varbinary:128'),
   ('bqual', 'varbinary:128'),
@@ -4503,10 +4473,10 @@ def_table_schema(
   ],
 
   normal_columns = [
-  ('is_master', 'int'),
   ('is_stopped', 'int'),
-  ('state', 'int'),
-  ('state_str', 'varchar:64'),
+  ('block_tx', 'int'),
+  ('block_normal_tx', 'int'),
+  ('block_all', 'int'),
   ('total_trans_ctx_count', 'int'),
   ('mgr_addr', 'bigint:20')
   ],  vtable_route_policy = 'local'
@@ -4523,11 +4493,10 @@ def_table_schema(
 
   normal_columns = [
   ('session_id', 'int'),
-  ('trans_id', 'int'),
-  ('state', 'int'),
-  ('cluster_id', 'int'),
-  ('coordinator', 'int'),
-  ('participants', 'varchar:1024', 'true'),
+	  ('trans_id', 'int'),
+	  ('state', 'int'),
+	  ('cluster_id', 'int'),
+	  ('write_state', 'varchar:1024', 'true'),
   ('isolation_level', 'int'),
   ('snapshot_version', 'uint', 'true'),
   ('access_mode', 'int'),
@@ -4760,7 +4729,7 @@ def_table_schema(
 
 # 11069: __all_virtual_leader_stat # abandoned in 4.0
 
-# 11070: __all_virtual_partition_migration_status # abandoned in 4.0
+# 11070: abandoned in 4.0
 
 
 def_table_schema(
@@ -4901,11 +4870,9 @@ def_table_schema(
   in_tenant_space = True,
   normal_columns = [
   ('trans_id', 'int'),
-  ('table_id', 'int'),
   ('tablet_id', 'int'),
   ('rowkey', 'varchar:512', 'true'),
   ('session_id', 'int'),
-  ('proxy_session_id', 'varchar:512'),
   ('ctx_create_time', 'timestamp', 'true'),
   ('expired_time', 'timestamp', 'true'),
   ('time_after_recv', 'int'),
@@ -5592,20 +5559,13 @@ def_table_schema(
   ('total_update_cnt', 'int'),
   ('trans_id', 'int'),
   ('holder_trans_id', 'int'),
-  ('holder_session_id', 'int'),
-  ('assoc_session_id', 'int'),
-  ('wait_timeout', 'int'),
-  ('tx_active_ts', 'int'),
-  ('node_id', 'int'),
-  ('node_type', 'int'),
-  ('remote_addr', 'varchar:MAX_LOCK_REMOTE_ADDR_BUF_LENGTH'),
-  ('is_placeholder', 'int')
+  ('holder_session_id', 'int')
   ],  vtable_route_policy = 'local'
   )
 
 # 12014: __all_virtual_partition_item # abandoned in 4.0
 
-# 12015: __all_virtual_replica_task # abandoned in 4.0
+# 12015: abandoned in 4.0
 # 12016: __all_virtual_partition_location # abandoned in 4.0
 
 # 12030: proc  # abandoned in 4.2.5.1, replaced by 21628
@@ -6225,8 +6185,7 @@ def_table_schema(
     ('rec_log_scn', 'uint'),
     ('latest_log_scn', 'uint'),
     ('pre_allocated_range', 'int'),
-    ('submit_log_ts', 'int'),
-    ('is_master', 'bool')
+    ('submit_log_ts', 'int')
   ],  vtable_route_policy = 'local'
   )
 
@@ -6568,7 +6527,7 @@ def_table_schema(**gen_sqlite_virtual_table_def(
   table_name = '__all_virtual_tablet_meta_table',
   keywords = all_def_keywords['__all_tablet_meta_table']))
 
-# 12241: __all_virtual_tablet_to_ls # removed (single-tenant: iterate VT mechanism deleted)
+# 12241: __all_virtual_tablet_to_table # removed (single-tenant: iterate VT mechanism deleted)
 
 def_table_schema(
   owner = 'yuya.yu',
@@ -6621,23 +6580,14 @@ def_table_schema(
   ],
 
   normal_columns = [
-  ('role', 'varchar:32'),
-  ('proposal_id', 'int'),
-  ('config_version', 'varchar:128'),
   ('access_mode', 'varchar:32'),
-  ('paxos_member_list', 'varchar:1024'),
-  ('paxos_replica_num', 'int'),
-  ('in_sync', 'bool'),
   ('base_lsn', 'uint'),
   ('begin_lsn', 'uint'),
   ('begin_scn', 'uint'),
   ('end_lsn', 'uint'),
   ('end_scn', 'uint'),
   ('max_lsn', 'uint'),
-  ('max_scn', 'uint'),
-  ('arbitration_member', 'varchar:128'),
-  ('degraded_list', 'varchar:1024'),
-  ('learner_list', 'longtext')
+  ('max_scn', 'uint')
   ],  vtable_route_policy = 'local'
   )
 
@@ -6792,9 +6742,7 @@ def_table_schema(
   ],
 
   normal_columns = [
-    ('role', 'varchar:32'),
     ('end_lsn', 'uint'),
-    ('proposal_id', 'int'),
     ('pending_cnt', 'int')
   ],  vtable_route_policy = 'local'
   )
@@ -6810,7 +6758,6 @@ def_table_schema(
   ],
 
   normal_columns = [
-    ('role', 'varchar:32'),
     ('end_lsn', 'uint'),
     ('enabled', 'bool'),
     ('unsubmitted_lsn', 'uint'),
@@ -6838,19 +6785,12 @@ def_table_schema(
 
   in_tenant_space = True,
   normal_columns = [
-  ('replica_type', 'varchar:MAX_REPLICA_TYPE_LENGTH'),
-  ('ls_state', 'varchar:MAX_LS_STATE_LENGTH'),
   ('tablet_count', 'int'),
   ('weak_read_scn', 'uint'),
-  ('need_rebuild', 'varchar:MAX_COLUMN_YES_NO_LENGTH'),
   ('checkpoint_scn', 'uint'),
   ('checkpoint_lsn', 'uint'),
-  ('migrate_status', 'int'),
-  ('rebuild_seq', 'int'),
   ('tablet_change_checkpoint_scn', 'uint'),
-  ('reserved_scn', 'uint'),
-  ('tx_blocked', 'int'),
-  ('required_data_disk_size', 'int', 'false', 0)
+  ('tx_blocked', 'int')
   ],  vtable_route_policy = 'local'
   )
 
@@ -7286,33 +7226,14 @@ def_table_schema(
   ],
 
   normal_columns = [
-    ('election_role', 'varchar:32'),
-    ('election_epoch', 'int'),
-    ('palf_role', 'varchar:32'),
     ('palf_state', 'varchar:32'),
-    ('palf_proposal_id', 'int'),
-    ('log_handler_role', 'varchar:32'),
-    ('log_handler_proposal_id', 'int'),
-    ('log_handler_takeover_state', 'varchar:32'),
-    ('log_handler_takeover_log_type', 'varchar:32'),
     ('max_applied_scn', 'uint'),
     ('max_replayed_lsn', 'uint'),
     ('max_replayed_scn', 'uint'),
     ('replay_diagnose_info', 'varchar:1024'),
-    ('gc_state', 'varchar:32'),
-    ('gc_start_ts', 'int'),
-    ('archive_scn', 'uint'),
     ('checkpoint_scn', 'uint'),
     ('min_rec_scn', 'uint'),
     ('min_rec_scn_log_type', 'varchar:32'),
-    ('restore_handler_role', 'varchar:32'),
-    ('restore_proposal_id', 'int'),
-    ('restore_context_info', 'varchar:1024'),
-    ('restore_err_context_info', 'varchar:1024'),
-    ('enable_sync', 'bool'),
-    ('enable_vote', 'bool'),
-    ('arb_srv_info', 'varchar:1024'),
-    ('parent', 'varchar:1024'),
     ('readonly_tx', 'varchar:1024')
   ],  vtable_route_policy = 'local'
   )
@@ -7405,13 +7326,12 @@ def_table_schema(
   ],
   vtable_route_policy = 'local',)
 
-# 12364: __all_ls_arb_replica_task (abandoned)
-# 12365: __all_ls_arb_replica_task_history (abandoned)
+# 12364: legacy ls arb replica task table (abandoned)
+# 12365: legacy ls arb replica task history table (abandoned)
 
 # 12366: __all_virtual_archive_dest_status (removed: backup/restore/log-archive deleted)
 
 # 12367: __all_virtual_kv_hotkey_stat
-# 12370: __all_virtual_wait_for_partition_split_tablet
 
 # 12371: __all_virtual_external_table_file # abandoned in seekdb
 
@@ -7593,10 +7513,7 @@ def_table_schema(
   rowkey_columns    = [],
   normal_columns = [
     ('ts_value', 'int'),
-    ('ts_type', 'varchar:100'),
-    ('service_role', 'varchar:100'),
-    ('role', 'varchar:100'),
-    ('service_epoch', 'int')
+    ('ts_type', 'varchar:100')
   ],  vtable_route_policy = 'local'
   )
 
@@ -7915,7 +7832,6 @@ def_table_schema(
   ]
   )
 
-# 12478: __all_virtual_tablet_reorganize_history # removed (single-tenant: iterate VT mechanism deleted)
 
 # 12479: __all_virtual_res_mgr_directive # removed (single-tenant: iterate VT mechanism deleted)
 
@@ -8003,35 +7919,6 @@ def_table_schema(
 
 # 12489: __all_virtual_deadlock_detector_stat
 # 12490: __all_virtual_spatial_reference_systems # removed (single-tenant: iterate VT mechanism deleted)
-
-def_table_schema(
-  owner = 'wenyue.zxl',
-  table_name     = '__all_virtual_log_transport_dest_stat',
-  table_id       = '12491',
-  table_type = 'VIRTUAL_TABLE',
-  gm_columns     = [],
-  rowkey_columns = [
-  ],
-
-  in_tenant_space = True,
-  normal_columns = [
-  ('client_ip', 'varchar:MAX_IP_ADDR_LENGTH'),
-  ('client_pid', 'int'),
-  ('client_type', 'int'),
-  ('start_serve_time', 'timestamp'),
-  ('last_serve_time', 'timestamp'),
-  ('last_read_source', 'int'),
-  ('last_request_type', 'int'),
-  ('last_request_log_lsn', 'uint'),
-  ('last_request_log_scn', 'uint'),
-  ('last_failed_request', 'longtext'),
-  ('avg_request_process_time', 'int'),
-  ('avg_request_queue_time', 'int'),
-  ('avg_request_read_log_time', 'int'),
-  ('avg_request_read_log_size', 'int'),
-  ('avg_log_transport_bandwidth', 'int')
-  ],  vtable_route_policy = 'local'
-  )
 
 # 12492: __all_virtual_ss_local_cache_info abandoned
 
@@ -8267,28 +8154,6 @@ def_table_schema(
   ],  vtable_route_policy = 'local'
   )
 
-def_table_schema(
-  owner             = 'zhaoziqian.zzq',
-  table_name        = '__all_virtual_dynamic_partition_table',
-  table_id          = '12536',
-  table_type        = 'VIRTUAL_TABLE',
-  gm_columns        = [],
-  rowkey_columns    = [],
-  in_tenant_space   = True,
-  normal_columns    = [
-    ('tenant_schema_version', 'int'),
-    ('database_name', 'varchar:OB_MAX_DATABASE_NAME_LENGTH'),
-    ('table_name', 'varchar:OB_MAX_TABLE_NAME_LENGTH'),
-    ('table_id', 'int'),
-    ('max_high_bound_val', 'varchar:OB_MAX_PARTITION_EXPR_LENGTH'),
-    ('enable', 'varchar:1024'),
-    ('time_unit', 'varchar:1024'),
-    ('precreate_time', 'varchar:1024'),
-    ('expire_time', 'varchar:1024'),
-    ('time_zone', 'varchar:1024'),
-    ('bigint_precision', 'varchar:1024')
-  ]
-  )
 
 # 12537: __all_virtual_ls_migration_task
 # 12538 __all_virtual_ss_notify_tasks_stat
@@ -8807,10 +8672,6 @@ def_table_schema(
                     cast(NULL as char(255)) as CREATE_OPTIONS,
                     cast(case when a.table_type = 4 then 'VIEW'
                              else a.comment end as char(2048)) as TABLE_COMMENT,
-                    cast(case when a.auto_part = 1 then 'TRUE'
-                              else 'FALSE' end as char(16)) as AUTO_SPLIT,
-                    cast(case when a.auto_part = 1 then a.auto_part_size
-                              else 0 end as unsigned) as AUTO_SPLIT_TABLET_SIZE,
                     cast(case when a.table_mode >> 30 = 1 then 'HEAP'
                               else 'INDEX' end as char(12)) as ORGANIZATION
                     from
@@ -8824,13 +8685,11 @@ def_table_schema(
                            usec_to_time(d.schema_version) as gmt_modified,
                            c.comment,
                            c.store_format,
-                           c.auto_part,
-                           c.auto_part_size,
                            c.table_mode
-                    from (select 201001 as database_id, 1 as table_id, '__all_core_table' as table_name, 45 as collation_type, 0 as table_type, '' as comment, 'DYNAMIC' as store_format, 0 as auto_part, 0 as auto_part_size, 0 as table_mode
-                union all select 201001 as database_id, 3 as table_id, '__all_table'      as table_name, 45 as collation_type, 0 as table_type, '' as comment, 'DYNAMIC' as store_format, 0 as auto_part, 0 as auto_part_size, 0 as table_mode
-                union all select 201001 as database_id, 4 as table_id, '__all_column'     as table_name, 45 as collation_type, 0 as table_type, '' as comment, 'DYNAMIC' as store_format, 0 as auto_part, 0 as auto_part_size, 0 as table_mode
-                union all select 201001 as database_id, 5 as table_id, '__all_ddl_operation'     as table_name, 45 as collation_type, 0 as table_type, '' as comment, 'DYNAMIC' as store_format, 0 as auto_part, 0 as auto_part_size, 0 as table_mode) c
+                    from (select 201001 as database_id, 1 as table_id, '__all_core_table' as table_name, 45 as collation_type, 0 as table_type, '' as comment, 'DYNAMIC' as store_format, 0 as table_mode
+                union all select 201001 as database_id, 3 as table_id, '__all_table'      as table_name, 45 as collation_type, 0 as table_type, '' as comment, 'DYNAMIC' as store_format, 0 as table_mode
+                union all select 201001 as database_id, 4 as table_id, '__all_column'     as table_name, 45 as collation_type, 0 as table_type, '' as comment, 'DYNAMIC' as store_format, 0 as table_mode
+                union all select 201001 as database_id, 5 as table_id, '__all_ddl_operation'     as table_name, 45 as collation_type, 0 as table_type, '' as comment, 'DYNAMIC' as store_format, 0 as table_mode) c
                     join oceanbase.__all_virtual_core_all_table d
                       on d.table_name = '__all_core_table'
                     where 1 = 1
@@ -8844,8 +8703,6 @@ def_table_schema(
                            gmt_modified,
                            comment,
                            store_format,
-                           auto_part,
-                           auto_part_size,
                            table_mode
                     from oceanbase.__all_table where table_mode >> 12 & 15 in (0,1) and index_attributes_set & 16 = 0) a
                     join oceanbase.__all_database b
@@ -10547,37 +10404,6 @@ WHERE EVENT_TYPE = 1
 
 def_table_schema(
   owner           = 'yanmu.ztl',
-  table_name      = 'DBA_OB_TABLET_TO_LS',
-  table_id        = '21170',
-  table_type      = 'SYSTEM_VIEW',
-  gm_columns      = [],
-  rowkey_columns  = [],
-  normal_columns  = [],
-  in_tenant_space = True,
-  view_definition =
-  """
-  (
-  SELECT CAST(TABLE_ID AS SIGNED) AS TABLET_ID
-  FROM OCEANBASE.__ALL_VIRTUAL_CORE_ALL_TABLE
-  )
-  UNION ALL
-  (
-  SELECT CAST(TABLE_ID AS SIGNED) AS TABLET_ID
-  FROM OCEANBASE.__ALL_TABLE
-  WHERE ((TABLE_ID > 0 AND TABLE_ID < 10000)
-          OR (TABLE_ID > 50000 AND TABLE_ID < 70000)
-          OR (TABLE_ID > 100000 AND TABLE_ID < 200000))
-  )
-  UNION ALL
-  (
-  SELECT TABLET_ID
-  FROM OCEANBASE.__ALL_TABLET_TO_LS
-  )
-  """.replace("\n", " ")
-  )
-
-def_table_schema(
-  owner           = 'yanmu.ztl',
   table_name      = 'DBA_OB_TABLET_REPLICAS',
   table_id        = '21172',
   table_type      = 'SYSTEM_VIEW',
@@ -12147,11 +11973,11 @@ FROM oceanbase.__all_virtual_processlist
 
 # 21224: V$OB_KVCACHE # removed (single-tenant GV/V collapse; use oceanbase.__all_virtual_kvcache_info)
 
-# 21225: GV$OB_TRANSACTION_PARTICIPANTS # removed (single-tenant GV/V collapse; folded into V$OB_TRANSACTION_PARTICIPANTS)
+# 21225: GV$OB_TRANSACTION_WRITE_STATE # removed (single-tenant GV/V collapse; folded into V$OB_TRANSACTION_WRITE_STATE)
 
 def_table_schema(
   owner = 'gjw228474',
-  table_name      = 'V$OB_TRANSACTION_PARTICIPANTS',
+  table_name      = 'V$OB_TRANSACTION_WRITE_STATE',
   table_id        = '21226',
   table_type      = 'SYSTEM_VIEW',
   rowkey_columns  = [],
@@ -12160,20 +11986,8 @@ def_table_schema(
   in_tenant_space = True,
   view_definition = """SELECT
       session_id AS SESSION_ID,
-      scheduler_addr AS SCHEDULER_ADDR,
-      CASE
-        WHEN part_trans_action >= 3 AND trans_type = 0
-          THEN 'LOCAL'
-        WHEN part_trans_action >= 3 AND trans_type = 2
-          THEN 'DISTRIBUTED'
-        WHEN trans_type = 0 and state = 10
-          THEN 'UNDECIDED'
-        WHEN trans_type = 0
-          THEN 'LOCAL'
-        ELSE 'DISTRIBUTED'
-        END AS TX_TYPE,
       trans_id AS TX_ID,
-      participants AS PARTICIPANTS,
+      write_state AS WRITE_STATE,
       ctx_create_time AS CTX_CREATE_TIME,
       expired_time AS TX_EXPIRED_TIME,
       CASE
@@ -12198,11 +12012,6 @@ def_table_schema(
         END AS CHAR(10)) AS ACTION,
       pending_log_size AS PENDING_LOG_SIZE,
       flushed_log_size AS FLUSHED_LOG_SIZE,
-      CASE
-        WHEN role = 0 THEN 'LEADER'
-        ELSE 'FOLLOWER'
-      END AS ROLE,
-      COORDINATOR AS COORD,
       LAST_REQUEST_TIME,
       FORMAT_ID AS FORMATID,
       HEX(GTRID) AS GLOBALID,
@@ -13325,28 +13134,16 @@ def_table_schema(
     rowkey_columns = [],
     normal_columns  = [],
     in_tenant_space = True,
-    view_definition = """
+  view_definition = """
   SELECT
-    ROLE,
-    PROPOSAL_ID,
-    CONFIG_VERSION,
     ACCESS_MODE,
-    PAXOS_MEMBER_LIST,
-    PAXOS_REPLICA_NUM,
-    CASE in_sync
-      WHEN 1 THEN 'YES'
-      ELSE 'NO' END
-    AS IN_SYNC,
     BASE_LSN,
     BEGIN_LSN,
     BEGIN_SCN,
     END_LSN,
     END_SCN,
     MAX_LSN,
-    MAX_SCN,
-    ARBITRATION_MEMBER,
-    DEGRADED_LIST,
-    LEARNER_LIST
+    MAX_SCN
   FROM oceanbase.__all_virtual_log_stat
 """.replace("\n", " ")
   )
@@ -14697,20 +14494,13 @@ def_table_schema(
       WHEN state = 5 THEN 'IN_TERMINATE'
       WHEN state = 6 THEN 'ABORTED'
       WHEN state = 7 THEN 'ROLLED_BACK'
-      WHEN state = 8 THEN 'COMMIT_TIMEOUT'
-      WHEN state = 9 THEN 'COMMIT_UNKNOWN'
-      WHEN state = 10 THEN 'COMMITTED'
-      WHEN state = 11 THEN 'SUB_PREPARING'
-      WHEN state = 12 THEN 'SUB_PREPARED'
-      WHEN state = 13 THEN 'SUB_COMMITTING'
-      WHEN state = 14 THEN 'SUB_COMMITTED'
-      WHEN state = 15 THEN 'SUB_ROLLBACKING'
-      WHEN state = 16 THEN 'SUB_ROLLBACKED'
-      ELSE 'UNKNOWN'
-      END AS STATE,
-    cluster_id AS CLUSTER_ID,
-    coordinator AS COORDINATOR,
-    participants AS PARTICIPANTS,
+	      WHEN state = 8 THEN 'COMMIT_TIMEOUT'
+	      WHEN state = 9 THEN 'COMMIT_UNKNOWN'
+	      WHEN state = 10 THEN 'COMMITTED'
+	      ELSE 'UNKNOWN'
+	      END AS STATE,
+	    cluster_id AS CLUSTER_ID,
+	    write_state AS WRITE_STATE,
     CASE
       WHEN isolation_level = -1 THEN 'INVALID'
       WHEN isolation_level = 0 THEN 'READ UNCOMMITTED'
@@ -15203,13 +14993,13 @@ def_table_schema(
 
     SELECT
     OBJ_LOCK.CREATE_TRANS_ID AS TRANS_ID,
-    TRX_PART.SESSION_ID AS SESSION_ID,
+    TRX_WRITE_PART.SESSION_ID AS SESSION_ID,
     CASE WHEN OBJ_LOCK.OBJ_TYPE IN ('TABLE', 'TABLET') THEN 'TM'
          WHEN OBJ_LOCK.OBJ_TYPE = 'DBMS_LOCK' THEN 'UL'
          ELSE 'UNKONWN' END
     AS TYPE,
     OBJ_LOCK.CREATE_TRANS_ID AS ID1,
-    TRX_PART.SESSION_ID AS ID2,
+    TRX_WRITE_PART.SESSION_ID AS ID2,
     OBJ_LOCK.OBJ_ID AS ID3,
     OBJ_LOCK.LOCK_MODE AS LMODE,
     'NONE' AS REQUEST,
@@ -15218,9 +15008,9 @@ def_table_schema(
     FROM
     oceanbase.__ALL_VIRTUAL_OBJ_LOCK AS OBJ_LOCK
     LEFT JOIN
-    oceanbase.V$OB_TRANSACTION_PARTICIPANTS TRX_PART
+    oceanbase.V$OB_TRANSACTION_WRITE_STATE TRX_WRITE_PART
     ON
-    TRX_PART.TX_ID = OBJ_LOCK.CREATE_TRANS_ID
+    TRX_WRITE_PART.TX_ID = OBJ_LOCK.CREATE_TRANS_ID
     WHERE
     OBJ_LOCK.OBJ_TYPE IN ('TABLE', 'TABLET', 'DBMS_LOCK') AND
     OBJ_LOCK.EXTRA_INFO LIKE '%tx_ctx%'
@@ -15246,22 +15036,9 @@ def_table_schema(
       TS_VALUE
     FROM
       oceanbase.__all_virtual_timestamp_service as a
-    WHERE
-      ROLE = 'LEADER' AND SERVICE_EPOCH =
-      (SELECT MAX(SERVICE_EPOCH) FROM
-      oceanbase.__all_virtual_timestamp_service)
-    GROUP BY TS_TYPE, TS_VALUE
 """.replace("\n", " ")
 )
 
-# 21405: DBA_OB_BALANCE_JOBS (abandoned)
-# 21406: CDB_OB_BALANCE_JOBS (abandoned)
-# 21407: DBA_OB_BALANCE_JOB_HISTORY (abandoned)
-# 21408: CDB_OB_BALANCE_JOB_HISTORY (abandoned)
-# 21409: DBA_OB_BALANCE_TASKS (abandoned)
-# 21410: CDB_OB_BALANCE_TASKS (abandoned)
-# 21411: DBA_OB_BALANCE_TASK_HISTORY (abandoned)
-# 21412: CDB_OB_BALANCE_TASK_HISTORY (abandoned)
 
 # 21417: DBA_OB_EXTERNAL_TABLE_FILES # abandoned in seekdb
 
@@ -16932,7 +16709,7 @@ def_table_schema(
         sum(avtps.required_size) as REQUIRED_SIZE
       from
       oceanbase.__all_virtual_tablet_pointer_status avtps
-      INNER JOIN oceanbase.__all_tablet_to_ls attl
+      INNER JOIN oceanbase.__all_tablet_to_table attl
         ON      attl.tablet_id = avtps.tablet_id
       INNER JOIN oceanbase.__all_table at
         ON      at.table_id = attl.table_id
@@ -16944,60 +16721,6 @@ def_table_schema(
     INNER JOIN oceanbase.__all_table at_name
       ON    subquery.TABLE_ID = at_name.table_id
     order by table_id
-""".replace("\n", " ")
-)
-
-# 21597: GV$OB_LOG_TRANSPORT_DEST_STAT # removed (single-tenant GV/V collapse; folded into V$OB_LOG_TRANSPORT_DEST_STAT)
-
-def_table_schema(
-  owner = 'wenyue.zxl',
-  table_name     = 'V$OB_LOG_TRANSPORT_DEST_STAT',
-  table_id       = '21598',
-  table_type      = 'SYSTEM_VIEW',
-  rowkey_columns  = [],
-  normal_columns  = [],
-  gm_columns      = [],
-  in_tenant_space = True,
-  view_definition = """
-    SELECT
-          CLIENT_IP,
-          CLIENT_PID,
-          CASE CLIENT_TYPE
-            WHEN 1 THEN 'CDC'
-            WHEN 2 THEN 'STANDBY'
-            ELSE 'UNKNOWN'
-          END AS CLIENT_TYPE,
-          START_SERVE_TIME,
-          LAST_SERVE_TIME,
-          CASE LAST_READ_SOURCE
-            WHEN 1 THEN 'ONLINE'
-            WHEN 2 THEN 'ARCHIVE'
-            ELSE 'UNKNOWN'
-          END AS LAST_READ_SOURCE,
-          CASE LAST_REQUEST_TYPE
-            WHEN 0 THEN 'SEQUENTIAL_READ_SERIAL'
-            WHEN 1 THEN 'SEQUENTIAL_READ_PARALLEL'
-            WHEN 2 THEN 'SCATTERED_READ'
-            ELSE 'UNKNOWN'
-          END AS LAST_REQUEST_TYPE,
-          LAST_REQUEST_LOG_LSN,
-          LAST_REQUEST_LOG_SCN,
-          LAST_FAILED_REQUEST,
-          AVG_REQUEST_PROCESS_TIME,
-          AVG_REQUEST_QUEUE_TIME,
-          AVG_REQUEST_READ_LOG_TIME,
-          AVG_REQUEST_READ_LOG_SIZE,
-          CASE
-            WHEN AVG_LOG_TRANSPORT_BANDWIDTH >= 1024 * 1024 * 1024 THEN
-              CONCAT(ROUND(AVG_LOG_TRANSPORT_BANDWIDTH/1024/1024/1024, 2), 'GB/S')
-            WHEN AVG_LOG_TRANSPORT_BANDWIDTH >= 1024 * 1024  THEN
-              CONCAT(ROUND(AVG_LOG_TRANSPORT_BANDWIDTH/1024/1024, 2), 'MB/S')
-            WHEN AVG_LOG_TRANSPORT_BANDWIDTH >= 1024 THEN
-              CONCAT(ROUND(AVG_LOG_TRANSPORT_BANDWIDTH/1024, 2), 'KB/S')
-            ELSE
-              CONCAT(AVG_LOG_TRANSPORT_BANDWIDTH, 'B/s')
-          END AS AVG_LOG_TRANSPORT_BANDWIDTH
-    FROM OCEANBASE.__ALL_VIRTUAL_LOG_TRANSPORT_DEST_STAT
 """.replace("\n", " ")
 )
 
@@ -17339,82 +17062,7 @@ def_table_schema(
   )
 
 
-def_table_schema(
-  owner           = 'zhaoziqian.zzq',
-  table_name      = 'DBA_OB_DYNAMIC_PARTITION_TABLES',
-  table_id        = '21655',
-  table_type      = 'SYSTEM_VIEW',
-  rowkey_columns  = [],
-  normal_columns  = [],
-  gm_columns      = [],
-  in_tenant_space = True,
-  view_definition = """
-  SELECT
-    D.DATABASE_NAME AS DATABASE_NAME,
-    A.TABLE_NAME AS TABLE_NAME,
-    A.TABLE_ID AS TABLE_ID,
-    B.HIGH_BOUND_VAL AS MAX_HIGH_BOUND_VAL,
-    SUBSTRING_INDEX(SUBSTRING_INDEX(A.DYNAMIC_PARTITION_POLICY, ',', 1), '=', -1) AS ENABLE,
-    SUBSTRING_INDEX(SUBSTRING_INDEX(A.DYNAMIC_PARTITION_POLICY, ',', 2), '=', -1) AS TIME_UNIT,
-    SUBSTRING_INDEX(SUBSTRING_INDEX(A.DYNAMIC_PARTITION_POLICY, ',', 3), '=', -1) AS PRECREATE_TIME,
-    SUBSTRING_INDEX(SUBSTRING_INDEX(A.DYNAMIC_PARTITION_POLICY, ',', 4), '=', -1) AS EXPIRE_TIME,
-    SUBSTRING_INDEX(SUBSTRING_INDEX(A.DYNAMIC_PARTITION_POLICY, ',', 5), '=', -1) AS TIME_ZONE,
-    SUBSTRING_INDEX(SUBSTRING_INDEX(A.DYNAMIC_PARTITION_POLICY, ',', 6), '=', -1) AS BIGINT_PRECISION
-  FROM
-    oceanbase.__all_table A
-  JOIN
-    oceanbase.__all_part B
-  ON
-    A.TABLE_ID = B.TABLE_ID
-  JOIN
-    (
-      SELECT
-        TABLE_ID,
-        MAX(PART_IDX) AS MAX_PART_IDX
-      FROM oceanbase.__all_part
-      GROUP BY
-        TABLE_ID
-    ) C
-  ON
-    B.TABLE_ID = C.TABLE_ID
-    AND
-    B.PART_IDX = C.MAX_PART_IDX
-  JOIN
-    oceanbase.__all_database D
-  ON
-    A.DATABASE_ID = D.DATABASE_ID
-  WHERE
-    A.DYNAMIC_PARTITION_POLICY != ''
-    AND D.DATABASE_NAME != '__recyclebin'
-    AND D.IN_RECYCLEBIN = 0;
-""".replace("\n", " ")
-)
 
-def_table_schema(
-  owner           = 'zhaoziqian.zzq',
-  table_name      = 'V$OB_DYNAMIC_PARTITION_TABLES',
-  table_id        = '21657',
-  table_type      = 'SYSTEM_VIEW',
-  rowkey_columns  = [],
-  normal_columns  = [],
-  gm_columns      = [],
-  in_tenant_space = True,
-  view_definition = """
-  SELECT
-    TENANT_SCHEMA_VERSION,
-    DATABASE_NAME,
-    TABLE_NAME,
-    TABLE_ID,
-    MAX_HIGH_BOUND_VAL,
-    ENABLE,
-    TIME_UNIT,
-    PRECREATE_TIME,
-    EXPIRE_TIME,
-    TIME_ZONE,
-    BIGINT_PRECISION
-  FROM oceanbase.__all_virtual_dynamic_partition_table;
-""".replace("\n", " ")
-)
 
 # 21661: GV$OB_VECTOR_MEMORY # removed (single-tenant GV/V collapse; folded into V$OB_VECTOR_MEMORY)
 
@@ -17985,7 +17633,7 @@ def_sys_index_table(
   index_columns = ['table_id'],
   index_using_type = 'USING_BTREE',
   index_type = 'INDEX_TYPE_NORMAL_LOCAL',
-  keywords = all_def_keywords['__all_tablet_to_ls'])
+  keywords = all_def_keywords['__all_tablet_to_table'])
 
 def_sys_index_table(
   index_name = 'idx_pending_tx_id',
@@ -18087,14 +17735,6 @@ def_sys_index_table(
   index_using_type = 'USING_BTREE',
   index_type = 'INDEX_TYPE_NORMAL_LOCAL',
   keywords = all_def_keywords['__all_dbms_lock_allocated'])
-
-def_sys_index_table(
-  index_name = 'idx_tablet_his_table_id_src',
-  index_table_id = 101092,
-  index_columns = ['src_tablet_id'],
-  index_using_type = 'USING_BTREE',
-  index_type = 'INDEX_TYPE_NORMAL_LOCAL',
-  keywords = all_def_keywords['__all_tablet_reorganize_history'])
 
 # 101093: idx_kv_ttl_task_table_id (abandoned)
 # 101094: idx_kv_ttl_task_history_upd_time (abandoned)
@@ -18275,14 +17915,6 @@ def_sys_index_table(
 #       * # 100001: idx_data_table_id
 #       * # 100001: __all_table
 ################################################################################
-
-def_sys_index_table(
-  index_name = 'idx_tablet_his_table_id_dest',
-  index_table_id = 101104,
-  index_columns = ['dest_tablet_id'],
-  index_using_type = 'USING_BTREE',
-  index_type = 'INDEX_TYPE_NORMAL_LOCAL',
-  keywords = all_def_keywords['__all_tablet_reorganize_history'])
 
 ################################################################################
 # Agent table Index

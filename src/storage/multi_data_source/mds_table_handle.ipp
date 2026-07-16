@@ -68,7 +68,7 @@ struct MdsTableHandleHelper {
   template <int IDX>
   static int get_unit_id(const uint8_t mds_table_id, uint8_t &mds_unit_id) {
     int ret = OB_SUCCESS;
-    if (IDX + MDS_TABLE_ID_OFFSET == mds_table_id) {
+    if (IDX == mds_table_id) {
       ret = InnerInnerHelper<typename TupleIdxType<MdsTableTypeTuple, IDX>::type>::
             template get_unit_id<0>(mds_unit_id);
     } else {
@@ -137,7 +137,8 @@ int MdsTableHandle::init(ObIAllocator &allocator,
                     K(typeid(MdsTableType).name()));
     } else {
       p_mds_table_base_ = p_mds_table;
-      ATOMIC_STORE(&mds_table_id_, GET_MDS_TABLE_ID<MdsTableType>::value);
+      uint8_t tablet_id = TupleTypeIdx<MdsTableTypeTuple, MdsTableType>::value;
+      ATOMIC_STORE(&mds_table_id_, tablet_id);
     }
   }
   return ret;
@@ -727,8 +728,11 @@ int MdsTableHandle::scan_all_nodes_to_dump(DUMP_OP &&for_each_op,
 inline int MdsTableHandle::flush(share::SCN need_advanced_rec_scn_lower_limit, share::SCN max_decided_scn)
 {
   int ret = OB_SUCCESS;
+  // return ret;// FIXME: for lixia test, will block CLOG recycle
+#ifndef TEST_MDS_TRANSACTION
   CHECK_MDS_TABLE_INIT();
   ret = p_mds_table_base_->flush(need_advanced_rec_scn_lower_limit, max_decided_scn);
+#endif
   return ret;
 }
 
@@ -768,8 +772,7 @@ inline int MdsTableHandle::get_node_cnt(int64_t &valid_cnt) const
 inline bool MdsTableHandle::is_valid() const
 {
   uint8_t mds_table_id = ATOMIC_LOAD(&mds_table_id_);
-  return mds_table_id >= MDS_TABLE_ID_OFFSET
-      && mds_table_id < MDS_TABLE_ID_OFFSET + MdsTableTypeTuple::get_element_size();
+  return mds_table_id >= 0 && mds_table_id < MdsTableTypeTuple::get_element_size();
 }
 
 inline void MdsTableHandle::reset()
@@ -846,7 +849,7 @@ struct MdsTableUnitConvertHelper {
                       MdsTableBase *p_mds_table,
                       MdsUnit<K, V> *&p_mds_unit) {
     int ret = OB_SUCCESS;
-    if (IDX + MDS_TABLE_ID_OFFSET == mds_table_id) {
+    if (IDX == mds_table_id) {
       ret = InnerInnerHelper<typename TupleIdxType<MdsTableTypeTuple, IDX>::type>::
             template get_unit<0>(p_mds_table, p_mds_unit);
     } else {

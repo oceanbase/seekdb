@@ -304,7 +304,7 @@ int ObSingleTabletMdsRangeQueryIterator<K, T>::convert_user_node_to_dump_kv(
     mds::MdsDumpKV &kv)
 {
   int ret = common::OB_SUCCESS;
-  constexpr uint8_t mds_table_id = mds::GET_MDS_TABLE_ID<mds::NormalMdsTable>::value;
+  constexpr uint8_t mds_table_id = mds::MdsTableTypeTuple::get_element_index<mds::NormalMdsTable>();
   constexpr uint8_t mds_unit_id = mds::TupleTypeIdx<mds::NormalMdsTable, mds::MdsUnit<K, T>>::value;
   mds::MdsDumpKey &key = kv.k_;
   mds::MdsDumpNode &node = kv.v_;

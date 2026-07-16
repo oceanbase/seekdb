@@ -120,7 +120,7 @@ ObPhysicalPlan::ObPhysicalPlan(MemoryContext &mem_context /* = CURRENT_CONTEXT *
     need_switch_to_table_lock_worker_(false),
     data_complement_gen_doc_id_(false),
     dml_table_ids_(&allocator_),
-    insertup_can_do_gts_opt_(false),
+    insertup_can_use_snapshot_opt_(false),
     px_node_policy_(ObPxNodePolicy::INVALID),
     px_node_addrs_(&allocator_),
     px_node_count_(ObPxNodeHint::UNSET_PX_NODE_COUNT),
@@ -216,7 +216,7 @@ void ObPhysicalPlan::reset()
   need_switch_to_table_lock_worker_ = false;
   data_complement_gen_doc_id_ = false;
   dml_table_ids_.reset();
-  insertup_can_do_gts_opt_ = false;
+  insertup_can_use_snapshot_opt_ = false;
   px_node_policy_ = ObPxNodePolicy::INVALID;
   px_node_count_ = ObPxNodeHint::UNSET_PX_NODE_COUNT;
   px_node_addrs_.reset();

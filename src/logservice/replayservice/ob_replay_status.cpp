@@ -458,6 +458,10 @@ void ObLogReplayTask::reset()
   replay_cost_ = common::OB_INVALID_TIMESTAMP;
   retry_cost_ = common::OB_INVALID_TIMESTAMP;
   read_log_buf_ = NULL;
+  decompression_buf_ = NULL;
+  has_decompressed_ = false;
+  decompressed_log_size_ = 0;
+  base_header_len_ = 0;
 }
 
 bool ObLogReplayTask::is_valid()
@@ -471,12 +475,12 @@ bool ObLogReplayTask::is_valid()
 }
 void *ObLogReplayTask::get_replay_payload() const
 {
-  return read_log_buf_;
+  return NULL != decompression_buf_ ? decompression_buf_ : read_log_buf_;
 }
 
 int64_t ObLogReplayTask::get_replay_payload_size() const
 {
-  return read_log_size_;
+  return decompressed_log_size_ > 0 ? decompressed_log_size_ + base_header_len_ : read_log_size_;
 }
 
 void ObLogReplayTask::shallow_copy(const ObLogReplayTask &other)
@@ -490,6 +494,10 @@ void ObLogReplayTask::shallow_copy(const ObLogReplayTask &other)
   replay_hint_ = other.replay_hint_;
   init_task_ts_ = other.init_task_ts_;
   read_log_buf_ = other.read_log_buf_;
+  decompression_buf_ = other.decompression_buf_;
+  has_decompressed_ = other.has_decompressed_;
+  decompressed_log_size_ = other.decompressed_log_size_;
+  base_header_len_ = other.base_header_len_;
 }
 
 int64_t ObLogReplayTask::to_string(char* buf, const int64_t buf_len) const
@@ -509,7 +517,11 @@ int64_t ObLogReplayTask::to_string(char* buf, const int64_t buf_len) const
        K(first_handle_ts_),
        K(replay_cost_),
        K(retry_cost_),
-       KP(read_log_buf_));
+       KP(read_log_buf_),
+       KP(decompression_buf_),
+       K(has_decompressed_),
+       K(decompressed_log_size_),
+       K(base_header_len_));
   J_OBJ_END();
   return pos;
 }

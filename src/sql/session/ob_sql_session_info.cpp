@@ -354,6 +354,17 @@ int ObSQLSessionInfo::is_force_temp_table_materialize(bool &force_materialize) c
   return ret;
 }
 
+int ObSQLSessionInfo::is_temp_table_transformation_enabled(bool &transformation_enabled) const
+{
+  int ret = OB_SUCCESS;
+  transformation_enabled = false;
+  
+  {
+    transformation_enabled = GCONF._xsolapi_generate_with_clause;
+  }
+  return ret;
+}
+
 int ObSQLSessionInfo::is_groupby_placement_transformation_enabled(bool &transformation_enabled) const
 {
   int ret = OB_SUCCESS;

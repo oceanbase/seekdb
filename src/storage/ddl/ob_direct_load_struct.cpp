@@ -136,7 +136,6 @@ int ObLobMetaRowIterator::get_next_row(const blocksstable::ObDatumRow *&row)
 
 ObTabletDDLParam::ObTabletDDLParam()
   : direct_load_type_(ObDirectLoadType::DIRECT_LOAD_INVALID),
-    ls_id_(),
     start_scn_(SCN::min_scn()),
     commit_scn_(SCN::min_scn()),
     data_format_version_(0),
@@ -495,14 +494,12 @@ int ObMacroBlockSliceStore::init(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), KPC(tablet_direct_load_mgr), K(data_seq));
   } else {
-    const ObLSID &ls_id = tablet_direct_load_mgr->get_ls_id();
     const ObITable::TableKey &table_key = tablet_direct_load_mgr->get_table_key(); // TODO(cangdi): fix it with right table key
     const int64_t ddl_task_id = tablet_direct_load_mgr->get_ddl_task_id();
     const uint64_t data_format_version = tablet_direct_load_mgr->get_tenant_data_version();
     const ObDirectLoadType direct_load_type = tablet_direct_load_mgr->get_direct_load_type();
     const ObWholeDataStoreDesc &data_desc = tablet_direct_load_mgr->get_data_block_desc();
     ObDDLRedoLogWriterCallbackInitParam init_param;
-    init_param.ls_id_ = ls_id;
     init_param.tablet_id_ = table_key.tablet_id_;
     init_param.direct_load_type_ = direct_load_type;
     init_param.table_key_ = table_key;
@@ -523,8 +520,8 @@ int ObMacroBlockSliceStore::init(
       macro_seq_param.start_ = data_seq.macro_data_seq_;
       ObPreWarmerParam pre_warm_param;
       ObSSTablePrivateObjectCleaner *object_cleaner = nullptr;
-      if (OB_FAIL(pre_warm_param.init(ls_id, table_key.tablet_id_))) {
-        LOG_WARN("failed to init pre warm param", K(ret), K(ls_id), "tablet_id", table_key.tablet_id_);
+      if (OB_FAIL(pre_warm_param.init(table_key.tablet_id_))) {
+        LOG_WARN("failed to init pre warm param", K(ret), "tablet_id", table_key.tablet_id_);
       } else if (OB_FAIL(ObSSTablePrivateObjectCleaner::get_cleaner_from_data_store_desc(
                                  tablet_direct_load_mgr->get_data_block_desc().get_desc(),
                                  object_cleaner))) {
@@ -581,7 +578,6 @@ int ObMacroBlockSliceStore::close()
 bool ObTabletDDLParam::is_valid() const
 {
   return is_valid_direct_load(direct_load_type_)
-    && ls_id_.is_valid()
     && table_key_.is_valid()
     && start_scn_.is_valid_and_not_min()
     && commit_scn_.is_valid() && commit_scn_ != SCN::max_scn()
@@ -731,8 +727,8 @@ int ObDirectLoadSliceWriter::prepare_vector_slice_store(
       // is tablet_direct_load_mgr_ is null, no need to erase ivf_build_helper
       if (OB_NOT_NULL(tablet_direct_load_mgr_)) {
         ObIvfHelperKey key(tablet_direct_load_mgr_->get_tablet_id(), context_id);
-        if (OB_TMP_FAIL(ObPluginVectorIndexUtils::erase_ivf_build_helper(tablet_direct_load_mgr_->get_ls_id(), key))) {
-          LOG_WARN("failed to erase ivf build helper", K(tmp_ret), K(tablet_direct_load_mgr_->get_ls_id()),
+        if (OB_TMP_FAIL(ObPluginVectorIndexUtils::erase_ivf_build_helper(key))) {
+          LOG_WARN("failed to erase ivf build helper", K(tmp_ret),
                    K(tablet_direct_load_mgr_->get_tablet_id()));
         }
         if (tmp_ret != OB_SUCCESS && tmp_ret != OB_HASH_NOT_EXIST) {
@@ -811,7 +807,6 @@ int ObDirectLoadSliceWriter::prepare_iters(
     ObIAllocator &allocator,
     ObIAllocator &iter_allocator,
     blocksstable::ObStorageDatum &datum,
-    const share::ObLSID &ls_id,
     const ObTabletID &tablet_id,
     const int64_t trans_version,
     const ObObjType &obj_type,
@@ -859,9 +854,9 @@ int ObDirectLoadSliceWriter::prepare_iters(
   if (OB_SUCC(ret)) {
     int64_t unused_affected_rows = 0;
     if (OB_FAIL(ObInsertLobColumnHelper::insert_lob_column(
-        allocator, *lob_allocator_, nullptr, pk_interval, ls_id, tablet_id/* tablet id of main table */, tablet_direct_load_mgr_->get_tablet_id()/*tablet id of lob meta table*/,
+        allocator, *lob_allocator_, nullptr, pk_interval, tablet_id/* tablet id of main table */, tablet_direct_load_mgr_->get_tablet_id()/*tablet id of lob meta table*/,
         obj_type, cs_type, lob_storage_param, datum, timeout_ts, true/*has_lob_header*/, *meta_write_iter_))) {
-      LOG_WARN("fail to insert_lob_col", K(ret), K(ls_id), K(tablet_id));
+      LOG_WARN("fail to insert_lob_col", K(ret), K(tablet_id));
     } else if (OB_FAIL(row_iterator_->init(meta_write_iter_, trans_version))) {
       LOG_WARN("fail to lob meta row iterator", K(ret), K(trans_version));
     } else {
@@ -917,7 +912,7 @@ int ObDirectLoadSliceWriter::fill_lob_into_memtable(
   int ret = OB_SUCCESS;
   const int64_t timeout_ts = ObTimeUtility::fast_current_time() + ObInsertLobColumnHelper::LOB_ACCESS_TX_TIMEOUT;
   if (OB_FAIL(ObInsertLobColumnHelper::insert_lob_column(
-    allocator, info.ls_id_, info.data_tablet_id_, col_type.get_type(), col_type.get_collation_type(), 
+    allocator, info.data_tablet_id_, col_type.get_type(), col_type.get_collation_type(),
     lob_storage_param, datum, timeout_ts, true/*has_lob_header*/))) {
     LOG_WARN("fail to insert_lob_col", K(ret), K(datum));
   }
@@ -941,7 +936,7 @@ int ObDirectLoadSliceWriter::fill_lob_into_macro_block(
   if (!datum.is_nop() && !datum.is_null()) {
     {
       ObLobMetaRowIterator *row_iter = nullptr;
-      if (OB_FAIL(prepare_iters(allocator, iter_allocator, datum, info.ls_id_, 
+      if (OB_FAIL(prepare_iters(allocator, iter_allocator, datum,
           info.data_tablet_id_, info.trans_version_, col_type.get_type(), col_type.get_collation_type(),
           timeout_ts, lob_storage_param, pk_interval, row_iter))) {
         LOG_WARN("fail to prepare iters", K(ret), KP(row_iter), K(datum));
@@ -1702,7 +1697,7 @@ int ObDirectLoadSliceWriter::inner_fill_hnsw_vector_index_data(
   if (OB_ISNULL(storage_schema) || snapshot_version < 0) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(vec_idx_slice_store), KP(storage_schema), K(snapshot_version));
-  } else if (OB_FAIL(ObInsertLobColumnHelper::start_trans(tablet_direct_load_mgr_->get_ls_id(), false/*is_for_read*/, timeout_us, tx_desc))) {
+  } else if (OB_FAIL(ObInsertLobColumnHelper::start_trans(false/*is_for_read*/, timeout_us, tx_desc))) {
     LOG_WARN("fail to get tx_desc", K(ret));
   } else if (OB_FAIL(vec_idx_slice_store.serialize_vector_index(&allocator_, tx_desc, lob_inrow_threshold, index_type, snapshot_version))) {
     LOG_WARN("fail to do vector index snapshot data serialize", K(ret));
@@ -1799,8 +1794,8 @@ int ObDirectLoadSliceWriter::inner_fill_ivf_vector_index_data(
   { // what ever fail or success, we need to release ivf build helper
     int tmp_ret = OB_SUCCESS;
     ObIvfHelperKey key(vec_idx_slice_store.tablet_id_, vec_idx_slice_store.get_context_id());
-    if (OB_TMP_FAIL(ObPluginVectorIndexUtils::erase_ivf_build_helper(tablet_direct_load_mgr_->get_ls_id(), key))) {
-      LOG_WARN("failed to erase ivf build helper", K(tmp_ret), K(tablet_direct_load_mgr_->get_ls_id()), K(vec_idx_slice_store.tablet_id_));
+    if (OB_TMP_FAIL(ObPluginVectorIndexUtils::erase_ivf_build_helper(key))) {
+      LOG_WARN("failed to erase ivf build helper", K(tmp_ret), K(vec_idx_slice_store.tablet_id_));
     }
     if (tmp_ret != OB_SUCCESS && tmp_ret != OB_HASH_NOT_EXIST) {
       ret = ret != OB_SUCCESS ? ret : tmp_ret;
@@ -1887,24 +1882,20 @@ int ObVectorIndexSliceStore::init(
   } else {
     const ObIArray<share::schema::ObColDesc> &col_desc_array = static_cast<ObTabletDirectLoadMgr *>(tablet_direct_load_mgr)->get_sqc_build_ctx().data_block_desc_.get_desc().get_col_desc_array();
     is_inited_ = true;
-    ctx_.ls_id_ = tablet_direct_load_mgr->get_ls_id();
     tablet_id_ = tablet_direct_load_mgr->get_tablet_id();
     vec_idx_param_ = vec_idx_param;
     vec_dim_ = vec_dim;
     // get data tablet id and lob tablet id
-    ObLSHandle ls_handle;
+    ObLS *ls = nullptr;
     ObTabletHandle five_tablet_handle;
     ObTabletHandle data_tablet_handle;
     ObTabletBindingMdsUserData ddl_data;
-    if (OB_FAIL(share::g_mp->ls_service()->get_ls(ctx_.ls_id_, ls_handle, ObLSGetMod::STORAGE_MOD))) {
-      LOG_WARN("failed to get log stream", K(ret), K(ctx_.ls_id_));
-    } else if (OB_ISNULL(ls_handle.get_ls())) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_ERROR("ls should not be null", K(ret));
-    } else if (OB_FAIL(ls_handle.get_ls()->get_tablet(tablet_id_, five_tablet_handle))) {
+    if (OB_FAIL(share::g_mp->ls_service()->get_ls(ls))) {
+      LOG_WARN("failed to get log stream", K(ret));
+    } else if (OB_FAIL(ls->get_tablet(tablet_id_, five_tablet_handle))) {
       LOG_WARN("fail to get tablet handle", K(ret), K(tablet_id_));
     } else if (FALSE_IT(ctx_.data_tablet_id_ = five_tablet_handle.get_obj()->get_data_tablet_id())) {
-    } else if (OB_FAIL(ls_handle.get_ls()->get_tablet(ctx_.data_tablet_id_, data_tablet_handle))) {
+    } else if (OB_FAIL(ls->get_tablet(ctx_.data_tablet_id_, data_tablet_handle))) {
       LOG_WARN("fail to get tablet handle", K(ret), K(ctx_.data_tablet_id_));
     } else if (OB_FAIL(data_tablet_handle.get_obj()->get_ddl_data(ddl_data))) {
       LOG_WARN("failed to get ddl data from tablet", K(ret), K(data_tablet_handle));
@@ -2079,13 +2070,12 @@ int ObVectorIndexSliceStore::append_row(const blocksstable::ObDatumRow &datum_ro
     if (OB_ISNULL(vec_index_service)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("get null ObPluginVectorIndexService ptr", K(ret));
-    } else if (OB_FAIL(vec_index_service->acquire_adapter_guard(ctx_.ls_id_,
-                                                                tablet_id_,
+    } else if (OB_FAIL(vec_index_service->acquire_adapter_guard(tablet_id_,
                                                                 ObIndexType::INDEX_TYPE_VEC_INDEX_SNAPSHOT_DATA_LOCAL,
                                                                 adaptor_guard,
                                                                 &vec_idx_param_,
                                                                 vec_dim_))) {
-      LOG_WARN("fail to get ObMockPluginVectorIndexAdapter", K(ret), K(ctx_.ls_id_), K(tablet_id_));
+      LOG_WARN("fail to get ObMockPluginVectorIndexAdapter", K(ret), K(tablet_id_));
     } else {
       // get vid and vector
       ObString vec_str;
@@ -2174,13 +2164,12 @@ int ObVectorIndexSliceStore::serialize_vector_index(
   if (OB_ISNULL(vec_index_service)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get null ObPluginVectorIndexService ptr", K(ret));
-  } else if (OB_FAIL(vec_index_service->acquire_adapter_guard(ctx_.ls_id_,
-                                                              tablet_id_,
+  } else if (OB_FAIL(vec_index_service->acquire_adapter_guard(tablet_id_,
                                                               ObIndexType::INDEX_TYPE_VEC_INDEX_SNAPSHOT_DATA_LOCAL,
                                                               adaptor_guard,
                                                               &vec_idx_param_,
                                                               vec_dim_))) {
-    LOG_WARN("fail to get ObMockPluginVectorIndexAdapter", K(ret), K(ctx_.ls_id_), K(tablet_id_));
+    LOG_WARN("fail to get ObMockPluginVectorIndexAdapter", K(ret), K(tablet_id_));
   } else {
     ObHNSWSerializeCallback callback;
     ObOStreamBuf::Callback cb = callback;
@@ -2197,7 +2186,7 @@ int ObVectorIndexSliceStore::serialize_vector_index(
     if (OB_ISNULL(tx_desc)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("fail to get tx desc, get nullptr", K(ret));
-    } else if (OB_FAIL(txs->get_ls_read_snapshot(*tx_desc, transaction::ObTxIsolationLevel::RC, ctx_.ls_id_, timeout, snapshot))) {
+    } else if (OB_FAIL(txs->get_read_snapshot(*tx_desc, transaction::ObTxIsolationLevel::RC, timeout, snapshot))) {
       LOG_WARN("fail to get snapshot", K(ret));
     } else {
       param.timeout_ = timeout;
@@ -2375,7 +2364,6 @@ int ObIvfCenterSliceStore::init(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), KPC(tablet_direct_load_mgr));
   } else {
-    ObLSID ls_id = tablet_direct_load_mgr->get_ls_id();
     tablet_id_ = tablet_direct_load_mgr->get_tablet_id();
     vec_idx_param_ = vec_idx_param;
     vec_dim_ = vec_dim;
@@ -2398,12 +2386,11 @@ int ObIvfCenterSliceStore::init(
         if (OB_ISNULL(vec_index_service)) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("get null ObPluginVectorIndexService ptr", K(ret));
-        } else if (OB_FAIL(vec_index_service->acquire_ivf_build_helper_guard(ls_id,
-                                                                             key,
+        } else if (OB_FAIL(vec_index_service->acquire_ivf_build_helper_guard(key,
                                                                              ObIndexType::INDEX_TYPE_VEC_IVFFLAT_CENTROID_LOCAL,
                                                                              helper_guard_,
                                                                              vec_idx_param_))) {
-          LOG_WARN("failed to acquire ivf build helper guard", K(ret), K(ls_id), K(tablet_id_));
+          LOG_WARN("failed to acquire ivf build helper guard", K(ret), K(tablet_id_));
         } else if (OB_FAIL(get_spec_ivf_helper(helper))) {
           LOG_WARN("fail to get ivf flat helper", K(ret));
         } else if (OB_FAIL(helper->init_ctx(vec_dim_))) {
@@ -2613,7 +2600,6 @@ int ObIvfSq8MetaSliceStore::init(
     ret = OB_ERR_NULL_VALUE;
     LOG_WARN("invalid null tablet_direct_load_mgr", K(ret));
   } else {
-    ObLSID ls_id = tablet_direct_load_mgr->get_ls_id();
     tablet_id_ = tablet_direct_load_mgr->get_tablet_id();
     vec_idx_param_ = vec_idx_param;
     vec_dim_ = vec_dim;
@@ -2636,12 +2622,11 @@ int ObIvfSq8MetaSliceStore::init(
         if (OB_ISNULL(vec_index_service)) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("get null ObPluginVectorIndexService ptr", K(ret));
-        } else if (OB_FAIL(vec_index_service->acquire_ivf_build_helper_guard(ls_id,
-                                                                             key,
+        } else if (OB_FAIL(vec_index_service->acquire_ivf_build_helper_guard(key,
                                                                              ObIndexType::INDEX_TYPE_VEC_IVFSQ8_META_LOCAL,
                                                                              helper_guard_,
                                                                              vec_idx_param_))) {
-          LOG_WARN("failed to acquire ivf build helper guard", K(ret), K(ls_id), K(tablet_id_));
+          LOG_WARN("failed to acquire ivf build helper guard", K(ret), K(tablet_id_));
         } else if (OB_FAIL(get_spec_ivf_helper(helper))) {
           LOG_WARN("fail to get ivf flat helper", K(ret));
         } else if (OB_FAIL(helper->init_ctx(vec_dim_))) {
@@ -2811,7 +2796,6 @@ int ObIvfPqSliceStore::init(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), KPC(tablet_direct_load_mgr));
   } else {
-    ObLSID ls_id = tablet_direct_load_mgr->get_ls_id();
     tablet_id_ = tablet_direct_load_mgr->get_tablet_id();
     table_id_ = static_cast<ObTabletDirectLoadMgr *>(tablet_direct_load_mgr)->get_sqc_build_ctx().build_param_.runtime_only_param_.table_id_;
     vec_idx_param_ = vec_idx_param;
@@ -2836,12 +2820,11 @@ int ObIvfPqSliceStore::init(
         if (OB_ISNULL(vec_index_service) || OB_ISNULL(GCTX.ddl_sql_proxy_)) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("get null ObPluginVectorIndexService or GCTX.ddl_sql_proxy_ ptr", K(ret), KP(vec_index_service));
-        } else if (OB_FAIL(vec_index_service->acquire_ivf_build_helper_guard(ls_id,
-                                                                             key,
+        } else if (OB_FAIL(vec_index_service->acquire_ivf_build_helper_guard(key,
                                                                              ObIndexType::INDEX_TYPE_VEC_IVFPQ_PQ_CENTROID_LOCAL,
                                                                              helper_guard_,
                                                                              vec_idx_param_))) {
-          LOG_WARN("failed to acquire ivf build helper guard", K(ret), K(ls_id), K(tablet_id_));
+          LOG_WARN("failed to acquire ivf build helper guard", K(ret), K(tablet_id_));
         } else if (OB_FAIL(get_spec_ivf_helper(helper))) {
           LOG_WARN("fail to get ivf flat helper", K(ret));
         } else if (OB_FAIL(helper->init_ctx(vec_dim_))) {
@@ -3024,7 +3007,6 @@ int ObDDLTableMergeDagParam::assign(const ObDDLTableMergeDagParam &merge_param)
     LOG_WARN("invalid argument", K(ret), K(merge_param));
   } else {
     direct_load_type_ = merge_param.direct_load_type_;
-    ls_id_            = merge_param.ls_id_;
     tablet_id_        = merge_param.tablet_id_;
     rec_scn_          = merge_param.rec_scn_;
     is_commit_        = merge_param.is_commit_;
@@ -3180,8 +3162,7 @@ int ObDDLTabletMergeDagParamV2::assign(const ObDDLTabletMergeDagParamV2 &merge_d
   return ret;
 }
 
-int ObDDLTabletMergeDagParamV2::get_tablet_param(share::ObLSID &ls_id, 
-                                                 ObTabletID    &tablet_id,
+int ObDDLTabletMergeDagParamV2::get_tablet_param(ObTabletID &tablet_id,
                                                  ObWriteTabletParam *&tablet_param) const 
 {
   int ret = OB_SUCCESS;
@@ -3197,12 +3178,10 @@ int ObDDLTabletMergeDagParamV2::get_tablet_param(share::ObLSID &ls_id,
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("lob tablet id not exist", K(ret), KPC(this));
     } else {
-      ls_id = tablet_ctx_->ls_id_;
       tablet_id = tablet_ctx_->lob_meta_tablet_id_;
       tablet_param = &tablet_ctx_->lob_meta_tablet_param_;
     }
   } else {
-    ls_id = tablet_ctx_->ls_id_;
     tablet_id = tablet_ctx_->tablet_id_;
     tablet_param = &tablet_ctx_->tablet_param_;
   }
@@ -3235,7 +3214,7 @@ int ObDDLTabletMergeDagParamV2::init_slice_sstable_array(hash::ObHashSet<int64_t
 {
   int ret = OB_SUCCESS;
   const int64_t row_store_sstable_slot_count = 1;
-  ObDDLTabletContext::MergeCtx    *merge_ctx    = nullptr;
+  ObDDLTabletContext::MergeCtx *merge_ctx = nullptr;
 
   if (OB_FAIL(get_merge_ctx(merge_ctx))) {
     LOG_WARN("failed to get merge ctx", K(ret), KPC(this));

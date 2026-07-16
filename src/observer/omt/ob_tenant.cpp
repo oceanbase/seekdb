@@ -342,8 +342,10 @@ ObTenant::ObTenant(const int64_t epoch,
       recv_mysql_cnt_(0),
       recv_task_cnt_(0),
       recv_sql_task_cnt_(0),
+      recv_large_req_cnt_(0),
       recv_retry_on_lock_rpc_cnt_(0),
       recv_retry_on_lock_mysql_cnt_(0),
+      tt_large_quries_(0),
       lock_(),
       mtl_init_ctx_(nullptr),
       workers_lock_(common::ObLatchIds::TENANT_WORKER_LOCK),
@@ -694,6 +696,7 @@ int64_t ObTenant::max_worker_cnt() const
 }
 
 int ObTenant::get_new_request(
+    ObThWorker &w,
     int64_t timeout,
     rpc::ObRequest *&req)
 {
@@ -701,11 +704,17 @@ int ObTenant::get_new_request(
   ObLink* task = nullptr;
 
   req = nullptr;
+  w.set_large_query(false);
   ret = req_queue_.pop(task, timeout);
 
   if (OB_SUCC(ret)) {
     if (nullptr == req && nullptr != task) {
       req = static_cast<rpc::ObRequest*>(task);
+    }
+    if (nullptr != req) {
+      if (req->large_retry_flag()) {
+        w.set_large_query();
+      }
     }
   }
   return ret;
@@ -842,10 +851,18 @@ void ObTenant::handle_retry_req(bool need_clear)
   while (OB_SUCC(retry_queue_.pop(task, need_clear))) {
     // if pop returns OB_SUCCESS, then the task must not be NULL.
     req = static_cast<rpc::ObRequest*>(task);
-    if (OB_FAIL(recv_request(*req))) {
-      LOG_WARN("tenant patrol push req into common queue fail, "
-          "and the req well be destroyed", "req", *req, K(ret));
-      on_translate_fail(req, ret);
+    if (req->large_retry_flag()) {
+      if (OB_FAIL(recv_request(*req))) {
+        LOG_WARN("tenant patrol push req into large_query queue fail, "
+            "and the req well be destroyed", "req", *req, K(ret));
+        on_translate_fail(req, ret);
+      }
+    } else {
+      if (OB_FAIL(recv_request(*req))) {
+        LOG_WARN("tenant patrol push req into common queue fail, "
+            "and the req well be destroyed", "req", *req, K(ret));
+        on_translate_fail(req, ret);
+      }
     }
   }
 }
@@ -866,6 +883,7 @@ void ObTenant::check_worker_count()
   }
 }
 
+// This interface is unnecessary after adding htap
 int ObTenant::acquire_more_worker(int64_t num, int64_t &succ_num, bool force)
 {
   int ret = OB_SUCCESS;

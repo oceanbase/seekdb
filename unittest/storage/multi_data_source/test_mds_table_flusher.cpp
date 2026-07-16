@@ -1,0 +1,319 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+#include <gtest/gtest.h>
+#define UNITTEST_DEBUG
+#define private public
+#define protected public
+#include "storage/ls/ob_ls.h"
+#include "storage/tablet/ob_mds_schema_helper.h"
+namespace oceanbase {
+namespace storage {
+namespace mds {
+void *DefaultAllocator::alloc(const int64_t size) {
+  void *ptr = std::malloc(size);// ob_malloc(size, "MDS"); 
+  ATOMIC_INC(&alloc_times_);
+  MDS_LOG(DEBUG, "alloc obj", KP(ptr), K(size), K(lbt()));
+  return ptr;
+}
+void DefaultAllocator::free(void *ptr) {
+  ATOMIC_INC(&free_times_);
+  MDS_LOG(DEBUG, "free obj", KP(ptr), K(lbt()));
+  std::free(ptr);// ob_free(ptr);
+}
+void *MdsAllocator::alloc(const int64_t size) {
+  void *ptr = std::malloc(size);// ob_malloc(size, "MDS"); 
+  ATOMIC_INC(&alloc_times_);
+  MDS_LOG(DEBUG, "alloc obj", KP(ptr), K(size), K(lbt()));
+  return ptr;
+}
+void MdsAllocator::free(void *ptr) {
+  ATOMIC_INC(&free_times_);
+  MDS_LOG(DEBUG, "free obj", KP(ptr), K(lbt()));
+  std::free(ptr);// ob_free(ptr);
+}
+}}}
+using namespace std;
+
+oceanbase::common::ObPromise<void> PROMISE1, PROMISE2;
+vector<oceanbase::storage::mds::FlushKey> V_ActualDoFlushKey;
+
+static std::atomic<bool> NEED_ALLOC_FAIL(false);
+static std::atomic<bool> NEED_ALLOC_FAIL_AFTER_RESERVE(false);
+
+namespace oceanbase {
+namespace logservice
+{
+int ObLogHandler::get_max_decided_scn(share::SCN &scn)
+{
+  scn = unittest::mock_scn(500);
+  return OB_SUCCESS;
+}
+}
+namespace storage
+{
+namespace mds
+{
+template <>
+int MdsTableImpl<UnitTestMdsTable>::flush(share::SCN need_advanced_rec_scn_lower_limit, share::SCN max_decided_scn) {
+  V_ActualDoFlushKey.push_back({tablet_id_, rec_scn_});
+  return OB_SUCCESS;
+}
+void *MdsFlusherModulePageAllocator::alloc(const int64_t size, const ObMemAttr &attr) {
+  void *ret = nullptr;
+  if (!NEED_ALLOC_FAIL) {
+    ret = (NULL == allocator_) ? share::mtl_malloc(size, attr) : allocator_->alloc(size, attr);
+  } else {
+    MDS_LOG(DEBUG, "mock no memory", K(lbt()));
+  }
+  return ret;
+}
+
+// template <>
+// void MdsTableOrderFlusher<FLUSH_FOR_ALL_SIZE, true>::reserve_memory(int64_t mds_table_total_size_likely) {// it'ok if failed
+//   int ret = OB_SUCCESS;
+//   abort();
+//   constexpr int64_t max_tablet_number = 100 * 10000;//sizeof(100w FlushKey) = 16MB
+//   int64_t reserve_size = std::min(mds_table_total_size_likely * 2, max_tablet_number);
+//   if (OB_FAIL(extra_mds_tables_.reserve(reserve_size))) {
+//     MDS_LOG(WARN, "fail to reserve memory", KR(ret));
+//     array_err_ = ret;
+//   }
+//   if (NEED_ALLOC_FAIL_AFTER_RESERVE) {
+//     NEED_ALLOC_FAIL = true;
+//     OCCAM_LOG(INFO, "set PEOMISE1 and wait PROMISE2");
+//     PROMISE1.set();
+//     ObFuture<void> future = PROMISE2.get_future();
+//     future.wait();
+//   }
+// }
+}
+}
+namespace unittest {
+
+using namespace common;
+using namespace std;
+using namespace storage;
+using namespace mds;
+using namespace transaction;
+
+static constexpr int64_t TEST_ALL_SIZE = FLUSH_FOR_ALL_SIZE * 10;
+
+class TestMdsTableFlush: public ::testing::Test
+{
+public:
+  TestMdsTableFlush() { ObMdsSchemaHelper::get_instance().init(); }
+  virtual ~TestMdsTableFlush() {}
+  virtual void SetUp() { V_ActualDoFlushKey.clear(); NEED_ALLOC_FAIL = false; NEED_ALLOC_FAIL_AFTER_RESERVE = false; }
+  virtual void TearDown() { }
+private:
+  // disallow copy
+  DISALLOW_COPY_AND_ASSIGN(TestMdsTableFlush);
+};
+
+TEST_F(TestMdsTableFlush, flusher_for_some_order) {
+  FlusherForSome some;
+  for (int i = FLUSH_FOR_SOME_SIZE; i > 0; --i) {
+    some.record_mds_table({ObTabletID(i), mock_scn(i)});
+  }
+  for (int i = 0; i < FLUSH_FOR_SOME_SIZE; ++i) {
+    ASSERT_EQ(some.high_priority_flusher_.high_priority_mds_tables_[i].rec_scn_, mock_scn(i + 1));
+  }
+  some.record_mds_table({ObTabletID(999), mock_scn(999)});// No effect, it is discarded
+  for (int i = 0; i < FLUSH_FOR_SOME_SIZE; ++i) {
+    ASSERT_EQ(some.high_priority_flusher_.high_priority_mds_tables_[i].rec_scn_, mock_scn(i + 1));
+  }
+  some.record_mds_table({ObTabletID(0), mock_scn(0)});// become the first, the rest move back
+  for (int i = 0; i < FLUSH_FOR_SOME_SIZE; ++i) {
+    ASSERT_EQ(some.high_priority_flusher_.high_priority_mds_tables_[i].rec_scn_, mock_scn(i));
+  }
+  some.record_mds_table({ObTabletID(999), mock_scn(FLUSH_FOR_SOME_SIZE - 2)});// The last one has two copies
+  for (int i = 0; i < FLUSH_FOR_SOME_SIZE - 1; ++i) {
+    ASSERT_EQ(some.high_priority_flusher_.high_priority_mds_tables_[i].rec_scn_, mock_scn(i));
+  }
+  ASSERT_EQ(some.high_priority_flusher_.high_priority_mds_tables_[FLUSH_FOR_SOME_SIZE - 1].rec_scn_, mock_scn(FLUSH_FOR_SOME_SIZE - 2));
+}
+
+TEST_F(TestMdsTableFlush, flusher_for_all_order_with_enough_memory) {
+  std::vector<FlushKey> v_key;
+  for (int i = 0; i < TEST_ALL_SIZE; ++i) {
+    v_key.push_back({ObTabletID(100 + i), mock_scn(100 + i)});
+  }
+#ifdef __APPLE__
+  std::random_device rd;
+  std::mt19937 rng(rd());
+  std::shuffle(v_key.begin(), v_key.end(), rng);
+#else
+  std::random_shuffle(v_key.begin(), v_key.end());
+#endif
+  ObLS ls;
+  ObMdsTableMgr mgr;
+  vector<MdsTableHandle> v;
+  ASSERT_EQ(mgr.init(&ls), OB_SUCCESS);
+  // The order of adding mgr is random
+  for (int i = 0; i < v_key.size(); ++i) {
+    MdsTableHandle mds_table;
+    ASSERT_EQ(OB_SUCCESS, mds_table.init<UnitTestMdsTable>(MdsAllocator::get_instance(),
+                                                            v_key[i].tablet_id_,
+                                                            share::SCN::min_scn(),
+                                                            (ObTabletPointer*)0x111,
+                                                            &mgr));
+    MdsTableBase *p_mds_table = mds_table.p_mds_table_base_.data_;
+    p_mds_table->rec_scn_ = v_key[i].rec_scn_;
+    v.push_back(mds_table);
+  }
+  ASSERT_EQ(OB_SUCCESS, mgr.flush(share::SCN::max_scn(), -1));
+  ASSERT_EQ(TEST_ALL_SIZE, V_ActualDoFlushKey.size());
+  for (int i = 0; i < V_ActualDoFlushKey.size(); ++i) {
+    if (V_ActualDoFlushKey[i].rec_scn_ != mock_scn(100 + i)) {
+      MDS_LOG(INFO, "DEBUG", K(V_ActualDoFlushKey[i].rec_scn_), K(i));
+    }
+    ASSERT_EQ(V_ActualDoFlushKey[i].rec_scn_, mock_scn(100 + i));
+    ASSERT_EQ(V_ActualDoFlushKey[i].tablet_id_, ObTabletID(100 + i));
+  }
+}
+
+TEST_F(TestMdsTableFlush, flusher_for_all_order_with_limitted_memory_reserve_fail) {
+  NEED_ALLOC_FAIL = true;
+  std::vector<FlushKey> v_key;
+  for (int i = 0; i < TEST_ALL_SIZE; ++i) {
+    v_key.push_back({ObTabletID(100 + i), mock_scn(100 + i)});
+  }
+#ifdef __APPLE__
+  std::random_device rd;
+  std::mt19937 rng(rd());
+  std::shuffle(v_key.begin(), v_key.end(), rng);
+#else
+  std::random_shuffle(v_key.begin(), v_key.end());
+#endif
+  ObLS ls;
+  ObMdsTableMgr mgr;
+  vector<MdsTableHandle> v;
+  ASSERT_EQ(mgr.init(&ls), OB_SUCCESS);
+  // The order of adding mgr is random
+  for (int i = 0; i < v_key.size(); ++i) {
+    MdsTableHandle mds_table;
+    ASSERT_EQ(OB_SUCCESS, mds_table.init<UnitTestMdsTable>(MdsAllocator::get_instance(),
+                                                            v_key[i].tablet_id_,
+                                                            share::SCN::min_scn(),
+                                                            (ObTabletPointer*)0x111,
+                                                            &mgr));
+    MdsTableBase *p_mds_table = mds_table.p_mds_table_base_.data_;
+    p_mds_table->rec_scn_ = v_key[i].rec_scn_;
+    v.push_back(mds_table);
+  }
+  ASSERT_EQ(OB_SUCCESS, mgr.flush(share::SCN::max_scn(), -1));
+  ASSERT_EQ(TEST_ALL_SIZE + FLUSH_FOR_ALL_SIZE, V_ActualDoFlushKey.size());// Only ensure that the first TEST_ALL_SIZE tablets are ordered, and the rec scn is minimum
+  for (int i = 0; i < FLUSH_FOR_ALL_SIZE; ++i) {
+    if (V_ActualDoFlushKey[i].rec_scn_ != mock_scn(100 + i)) {
+      MDS_LOG(INFO, "DEBUG", K(V_ActualDoFlushKey[i].rec_scn_), K(i));
+    }
+    ASSERT_EQ(V_ActualDoFlushKey[i].rec_scn_, mock_scn(100 + i));
+    ASSERT_EQ(V_ActualDoFlushKey[i].tablet_id_, ObTabletID(100 + i));
+  }
+}
+
+TEST_F(TestMdsTableFlush, flusher_for_one) {
+  FlusherForOne one;
+  for (int i = FLUSH_FOR_SOME_SIZE; i > 0; --i) {
+    one.record_mds_table({ObTabletID(i), mock_scn(i)});
+  }
+  ASSERT_EQ(one.min_key().rec_scn_, mock_scn(1));
+}
+// // logic rewrite for release version does not take effect
+// TEST_F(TestMdsTableFlush, flusher_for_all_order_with_limitted_memory_reserve_success_but_push_back_fail) {
+//   NEED_ALLOC_FAIL_AFTER_RESERVE = true;// Only supports memory allocation once during reserve
+//   const int64_t BIG_TEST_SIZE = 5 * TEST_ALL_SIZE;
+
+//   std::vector<FlushKey> v_key;
+//   for (int i = 0; i < BIG_TEST_SIZE; ++i) {
+//     v_key.push_back({ObTabletID(100 + i), mock_scn(100 + i)});
+//   }
+//   std::random_shuffle(v_key.begin(), v_key.end());
+//   ObLS ls;
+//   ObMdsTableMgr mgr;
+//   vector<MdsTableHandle> v;
+//   ASSERT_EQ(mgr.init(&ls), OB_SUCCESS);
+//   // First add the first part
+//   for (int i = 0; i < TEST_ALL_SIZE; ++i) {
+//     MdsTableHandle mds_table;
+//     ASSERT_EQ(OB_SUCCESS, mds_table.init<UnitTestMdsTable>(MdsAllocator::get_instance(),
+//                                                            v_key[i].tablet_id_,
+//                                                            share::SCN::min_scn(),
+//                                                            (ObTabletPointer*)0x111,
+//                                                            &mgr));
+//     MdsTableBase *p_mds_table = mds_table.p_mds_table_base_.data_;
+//     p_mds_table->rec_scn_ = v_key[i].rec_scn_;
+//     v.push_back(mds_table);
+//   }
+
+//   ASSERT_EQ(OB_SUCCESS, PROMISE1.init());
+//   ASSERT_EQ(OB_SUCCESS, PROMISE2.init());
+//   // Start a new thread to do flush, simulate concurrent increase of mds table (so that the memory for reverse is not enough, extra memory allocation occurs during the process, but fails)
+//   std::thread t1([&](){
+//     ASSERT_EQ(OB_SUCCESS, mgr.flush(share::SCN::max_scn()));
+//   });
+
+//   {
+//     OCCAM_LOG(INFO, "wait PEOMISE1");
+//     ObFuture<void> future = PROMISE1.get_future();
+//     future.wait();
+//   }
+
+//   {
+//     for (int i = TEST_ALL_SIZE; i < v_key.size(); ++i) {// continue to register 99 * TEST_ALL_SIZE new mds table
+//       MdsTableHandle mds_table;
+//       ASSERT_EQ(OB_SUCCESS, mds_table.init<UnitTestMdsTable>(MdsAllocator::get_instance(),
+//                                                              v_key[i].tablet_id_,
+//                                                              share::SCN::min_scn(),
+//                                                              (ObTabletPointer*)0x111,
+//                                                              &mgr));
+//       MdsTableBase *p_mds_table = mds_table.p_mds_table_base_.data_;
+//       p_mds_table->rec_scn_ = v_key[i].rec_scn_;
+//       v.push_back(mds_table);
+//     }
+//     PROMISE2.set();
+//   }
+
+//   t1.join();
+//   ASSERT_EQ(BIG_TEST_SIZE + FLUSH_FOR_ALL_SIZE, V_ActualDoFlushKey.size());// All mds tables have undergone a flush
+//   for (int i = 0; i < FLUSH_FOR_ALL_SIZE; ++i) {// but only guarantee that the tablet records on the stack are ordered, and rec scn is minimal}
+//     ASSERT_EQ(V_ActualDoFlushKey[i].rec_scn_, mock_scn(100 + i));
+//     ASSERT_EQ(V_ActualDoFlushKey[i].tablet_id_, ObTabletID(100 + i));
+//   }
+
+// }
+
+}
+}
+
+int main(int argc, char **argv)
+{
+  system("rm -rf test_mds_table_flusher.log");
+  oceanbase::common::ObLogger &logger = oceanbase::common::ObLogger::get_logger();
+  logger.set_file_name("test_mds_table_flusher.log", false);
+  logger.set_log_level(OB_LOG_LEVEL_DEBUG);
+  testing::InitGoogleTest(&argc, argv);
+  int ret = RUN_ALL_TESTS();
+  int64_t alloc_times = oceanbase::storage::mds::MdsAllocator::get_alloc_times();
+  int64_t free_times = oceanbase::storage::mds::MdsAllocator::get_free_times();
+  if (alloc_times != free_times) {
+    MDS_LOG(ERROR, "memory may leak", K(free_times), K(alloc_times));
+    ret = -1;
+  } else {
+    MDS_LOG(INFO, "all memory released", K(free_times), K(alloc_times));
+  }
+  return ret;
+}

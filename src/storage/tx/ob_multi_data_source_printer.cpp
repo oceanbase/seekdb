@@ -33,6 +33,9 @@ const char *ObMultiDataSourcePrinter::to_str_mds_type(const ObTxDataSourceType &
     TRX_ENUM_CASE_TO_STR(ObTxDataSourceType, LS_TABLE);
     TRX_ENUM_CASE_TO_STR(ObTxDataSourceType, DDL_BARRIER);
     TRX_ENUM_CASE_TO_STR(ObTxDataSourceType, DDL_TRANS);
+    TRX_ENUM_CASE_TO_STR(ObTxDataSourceType, TEST1);
+    TRX_ENUM_CASE_TO_STR(ObTxDataSourceType, TEST2);
+    TRX_ENUM_CASE_TO_STR(ObTxDataSourceType, TEST3);
     TRX_ENUM_CASE_TO_STR(ObTxDataSourceType, CREATE_TABLET_NEW_MDS);
     TRX_ENUM_CASE_TO_STR(ObTxDataSourceType, DELETE_TABLET_NEW_MDS);
     TRX_ENUM_CASE_TO_STR(ObTxDataSourceType, UNBIND_TABLET_NEW_MDS);

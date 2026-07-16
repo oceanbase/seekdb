@@ -822,6 +822,7 @@ int ObTabletMeta::update_meta_last_persisted_committed_tablet_status(
     user_data.tablet_status_ = tx_data.tablet_status_;
     user_data.create_commit_scn_ = create_commit_scn;
     user_data.create_commit_version_ = tx_data.tx_scn_.get_val_for_tx();
+    user_data.reserved_scn_ = tx_data.reserved_scn_;
     if (ObTabletStatus::DELETED == tx_data.tablet_status_) {
       //TODO(bizhu) check deleted trans scn
       user_data.delete_commit_scn_ = tx_data.tx_scn_;

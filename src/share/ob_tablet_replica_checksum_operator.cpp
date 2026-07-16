@@ -859,6 +859,7 @@ int ObTabletReplicaChecksumOperator::construct_tablet_replica_checksum_item_(
 
 
 // inner_batch_insert_or_update_by_sql_ removed - no longer used, replaced by SQLite storage
+// OB_BUILD_SHARED_STORAGE related functions removed
 
 
 int ObTabletReplicaChecksumOperator::get_tablet_replica_checksum_items(ObMySQLProxy &sql_proxy,

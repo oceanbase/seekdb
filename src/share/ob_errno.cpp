@@ -3644,15 +3644,6 @@ static const _error _error_OB_SERVER_MIGRATE_IN_DENIED = {
       .str_error             = "server migrate in denied",
       .str_user_error        = "server migrate in denied"
 };
-static const _error _error_OB_REBALANCE_TASK_CANT_EXEC = {
-      .error_name            = "OB_REBALANCE_TASK_CANT_EXEC",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "rebalance task can not executing now",
-      .str_user_error        = "rebalance task can not executing now"
-};
 static const _error _error_OB_PARTITION_CNT_REACH_ROOTSERVER_LIMIT = {
       .error_name            = "OB_PARTITION_CNT_REACH_ROOTSERVER_LIMIT",
       .error_cause           = "Internal Error",
@@ -3661,15 +3652,6 @@ static const _error _error_OB_PARTITION_CNT_REACH_ROOTSERVER_LIMIT = {
       .sqlstate              = "HY000",
       .str_error             = "rootserver can not hold more partition",
       .str_user_error        = "rootserver can not hold more partition"
-};
-static const _error _error_OB_REBALANCE_TASK_NOT_IN_PROGRESS = {
-      .error_name            = "OB_REBALANCE_TASK_NOT_IN_PROGRESS",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "rebalance task not in progress on seekdb",
-      .str_user_error        = "rebalance task not in progress on seekdb"
 };
 static const _error _error_OB_DATA_SOURCE_NOT_EXIST = {
       .error_name            = "OB_DATA_SOURCE_NOT_EXIST",
@@ -4589,15 +4571,6 @@ static const _error _error_OB_LEADER_COORDINATOR_NEED_RETRY = {
       .str_error             = "leader coordinator needs retry",
       .str_user_error        = "leader coordinator needs retry"
 };
-static const _error _error_OB_REBALANCE_TASK_NEED_RETRY = {
-      .error_name            = "OB_REBALANCE_TASK_NEED_RETRY",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "rebalance task needs retry",
-      .str_user_error        = "rebalance task needs retry"
-};
 static const _error _error_OB_LS_NOT_EXIST = {
       .error_name            = "OB_LS_NOT_EXIST",
       .error_cause           = "Internal Error",
@@ -4606,15 +4579,6 @@ static const _error _error_OB_LS_NOT_EXIST = {
       .sqlstate              = "HY000",
       .str_error             = "log stream does not exist",
       .str_user_error        = "log stream does not exist"
-};
-static const _error _error_OB_TOO_MANY_TENANT_LS = {
-      .error_name            = "OB_TOO_MANY_TENANT_LS",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "too many log streams were defined for this tenant",
-      .str_user_error        = "too many log streams were defined for this tenant"
 };
 static const _error _error_OB_LS_LOCATION_NOT_EXIST = {
       .error_name            = "OB_LS_LOCATION_NOT_EXIST",
@@ -4786,15 +4750,6 @@ static const _error _error_OB_DEVICE_NOT_EXIST = {
       .sqlstate              = "HY000",
       .str_error             = "Device does not exist",
       .str_user_error        = "Device does not exist"
-};
-static const _error _error_OB_LS_REPLICA_TASK_RESULT_UNCERTAIN = {
-      .error_name            = "OB_LS_REPLICA_TASK_RESULT_UNCERTAIN",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "log stream replica task result is uncertain",
-      .str_user_error        = "log stream replica task result is uncertain"
 };
 static const _error _error_OB_WAIT_REPLAY_TIMEOUT = {
       .error_name            = "OB_WAIT_REPLAY_TIMEOUT",
@@ -6892,15 +6847,6 @@ static const _error _error_OB_ERR_KEY_COLUMN_DOES_NOT_EXITS = {
       .sqlstate              = "42000",
       .str_error             = "Key column doesn't exist in table",
       .str_user_error        = "Key column '%.*s' doesn't exist in table"
-};
-static const _error _error_OB_ERR_AUTO_PARTITION_KEY = {
-      .error_name            = "OB_ERR_AUTO_PARTITION_KEY",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "42000",
-      .str_error             = "auto-increment column should not be part of partition key",
-      .str_user_error        = "auto-increment column '%.*s' should not be part of partition key"
 };
 static const _error _error_OB_ERR_CANT_USE_OPTION_HERE = {
       .error_name            = "OB_ERR_CANT_USE_OPTION_HERE",
@@ -9845,15 +9791,6 @@ static const _error _error_OB_EER_INVALID_ARGUMENT_FOR_LOGARITHM = {
       .str_error             = "Invalid argument for logarithm",
       .str_user_error        = "Invalid argument for logarithm"
 };
-static const _error _error_OB_ERR_REORGANIZE_OUTSIDE_RANGE = {
-      .error_name            = "OB_ERR_REORGANIZE_OUTSIDE_RANGE",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = ER_REORG_OUTSIDE_RANGE,
-      .sqlstate              = "HY000",
-      .str_error             = "Reorganize of range partitions cannot change total ranges except for last partition where it can extend the range",
-      .str_user_error        = "Reorganize of range partitions cannot change total ranges except for last partition where it can extend the range"
-};
 static const _error _error_OB_ER_SP_RECURSION_LIMIT = {
       .error_name            = "OB_ER_SP_RECURSION_LIMIT",
       .error_cause           = "Internal Error",
@@ -9898,24 +9835,6 @@ static const _error _error_OB_ER_SP_CASE_NOT_FOUND = {
       .sqlstate              = "20000",
       .str_error             = "Case not found for CASE statement",
       .str_user_error        = "Case not found for CASE statement"
-};
-static const _error _error_OB_ERR_INVALID_SPLIT_COUNT = {
-      .error_name            = "OB_ERR_INVALID_SPLIT_COUNT",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "a partition may be split into exactly two new partitions",
-      .str_user_error        = "a partition may be split into exactly two new partitions"
-};
-static const _error _error_OB_ERR_INVALID_SPLIT_GRAMMAR = {
-      .error_name            = "OB_ERR_INVALID_SPLIT_GRAMMAR",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "this physical attribute may not be specified for a table partition",
-      .str_user_error        = "this physical attribute may not be specified for a table partition"
 };
 static const _error _error_OB_ERR_MISS_VALUES = {
       .error_name            = "OB_ERR_MISS_VALUES",
@@ -10124,15 +10043,6 @@ static const _error _error_OB_ER_INVALID_USE_OF_NULL = {
       .str_error             = "Invalid use of NULL value",
       .str_user_error        = "Invalid use of NULL value"
 };
-static const _error _error_OB_ERR_SPLIT_LIST_LESS_VALUE = {
-      .error_name            = "OB_ERR_SPLIT_LIST_LESS_VALUE",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "last resulting partition cannot contain bounds",
-      .str_user_error        = "last resulting partition cannot contain bounds"
-};
 static const _error _error_OB_ERR_ADD_PARTITION_TO_DEFAULT_LIST = {
       .error_name            = "OB_ERR_ADD_PARTITION_TO_DEFAULT_LIST",
       .error_cause           = "Internal Error",
@@ -10141,15 +10051,6 @@ static const _error _error_OB_ERR_ADD_PARTITION_TO_DEFAULT_LIST = {
       .sqlstate              = "HY000",
       .str_error             = "cannot add partition when DEFAULT partition exists",
       .str_user_error        = "cannot add partition when DEFAULT partition exists"
-};
-static const _error _error_OB_ERR_SPLIT_INTO_ONE_PARTITION = {
-      .error_name            = "OB_ERR_SPLIT_INTO_ONE_PARTITION",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "cannot split partition into one partition, use rename instead",
-      .str_user_error        = "cannot split partition into one partition, use rename instead"
 };
 static const _error _error_OB_ERR_NO_TENANT_PRIVILEGE = {
       .error_name            = "OB_ERR_NO_TENANT_PRIVILEGE",
@@ -13976,15 +13877,6 @@ static const _error _error_OB_REPLICA_NOT_READABLE = {
       .str_error             = "replica is not readable",
       .str_user_error        = "replica is not readable"
 };
-static const _error _error_OB_PARTITION_IS_SPLITTING = {
-      .error_name            = "OB_PARTITION_IS_SPLITTING",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "Partition is splitting",
-      .str_user_error        = "Partition is splitting"
-};
 static const _error _error_OB_TRANS_COMMITED = {
       .error_name            = "OB_TRANS_COMMITED",
       .error_cause           = "Internal Error",
@@ -14426,15 +14318,6 @@ static const _error _error_OB_TRANS_COMMIT_TOO_MUCH_TIME = {
       .str_error             = "Transaction commit cost too much",
       .str_user_error        = "Transaction commit cost too much"
 };
-static const _error _error_OB_TRANS_TOO_MANY_PARTICIPANTS = {
-      .error_name            = "OB_TRANS_TOO_MANY_PARTICIPANTS",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = 6002,
-      .sqlstate              = "40000",
-      .str_error             = "too many transaction participants",
-      .str_user_error        = "too many transaction participants"
-};
 static const _error _error_OB_LOG_ALREADY_SPLIT = {
       .error_name            = "OB_LOG_ALREADY_SPLIT",
       .error_cause           = "Internal Error",
@@ -14704,33 +14587,6 @@ static const _error _error_OB_CLOG_DISK_HANG = {
       .sqlstate              = "HY000",
       .str_error             = "ob clog disk hang",
       .str_user_error        = "ob clog disk hang"
-};
-static const _error _error_OB_TABLE_LOCK_SPLIT_TWICE = {
-      .error_name            = "OB_TABLE_LOCK_SPLIT_TWICE",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "table lock has been splitted before, can not be splitted again",
-      .str_user_error        = "table lock has been splitted before, can not be splitted again"
-};
-static const _error _error_OB_TABLE_LOCK_IS_SPLITTING = {
-      .error_name            = "OB_TABLE_LOCK_IS_SPLITTING",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "table lock is being splitted, can not be splitted again",
-      .str_user_error        = "table lock is being splitted, can not be splitted again"
-};
-static const _error _error_OB_TABLE_LOCK_SPLIT_FAIL = {
-      .error_name            = "OB_TABLE_LOCK_SPLIT_FAIL",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "table lock splitting failed",
-      .str_user_error        = "table lock splitting failed"
 };
 static const _error _error_OB_SEQ_NO_REORDER_UNDER_PDML = {
       .error_name            = "OB_SEQ_NO_REORDER_UNDER_PDML",
@@ -16784,15 +16640,6 @@ static const _error _error_OB_INVALID_LOG_ARCHIVE_STATUS = {
       .str_error             = "log archive status is not valid",
       .str_user_error        = "log archive status is not valid"
 };
-static const _error _error_OB_CANNOT_ADD_REPLICA_DURING_SET_MEMBER_LIST = {
-      .error_name            = "OB_CANNOT_ADD_REPLICA_DURING_SET_MEMBER_LIST",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "Cannot add replica during set member list in restore",
-      .str_user_error        = "Cannot add replica during set member list in restore"
-};
 static const _error _error_OB_LOG_ARCHIVE_LEADER_CHANGED = {
       .error_name            = "OB_LOG_ARCHIVE_LEADER_CHANGED",
       .error_cause           = "Internal Error",
@@ -17504,15 +17351,6 @@ static const _error _error_OB_S2_ENTRY_NOT_EXIST = {
       .str_error             = "entry not exist in s2 micro_cache",
       .str_user_error        = "entry not exist in s2 micro_cache"
 };
-static const _error _error_OB_TABLET_IS_SPLIT_SRC = {
-      .error_name            = "OB_TABLET_IS_SPLIT_SRC",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "cannot write to split src tablet",
-      .str_user_error        = "cannot write to split src tablet"
-};
 static const _error _error_OB_ALLOCATE_TMP_FILE_PAGE_FAILED = {
       .error_name            = "OB_ALLOCATE_TMP_FILE_PAGE_FAILED",
       .error_cause           = "Internal Error",
@@ -17539,15 +17377,6 @@ static const _error _error_OB_SS_CACHE_REACH_MEM_LIMIT = {
       .sqlstate              = "HY000",
       .str_error             = "ss_micro_cache has reached memory limit",
       .str_user_error        = "ss_micro_cache has reached memory limit"
-};
-static const _error _error_OB_TABLET_STATUS_NO_NEED_TO_SPLIT = {
-      .error_name            = "OB_TABLET_STATUS_NO_NEED_TO_SPLIT",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "no need to split due to current tablet status",
-      .str_user_error        = "no need to split due to current tablet status"
 };
 static const _error _error_OB_FILE_DELETE_FAILED = {
       .error_name            = "OB_FILE_DELETE_FAILED",
@@ -21836,9 +21665,7 @@ struct ObStrErrorInit
     _errors[-OB_ROOTSERVICE_EXIST] = &_error_OB_ROOTSERVICE_EXIST;
     _errors[-OB_RS_SHUTDOWN] = &_error_OB_RS_SHUTDOWN;
     _errors[-OB_SERVER_MIGRATE_IN_DENIED] = &_error_OB_SERVER_MIGRATE_IN_DENIED;
-    _errors[-OB_REBALANCE_TASK_CANT_EXEC] = &_error_OB_REBALANCE_TASK_CANT_EXEC;
     _errors[-OB_PARTITION_CNT_REACH_ROOTSERVER_LIMIT] = &_error_OB_PARTITION_CNT_REACH_ROOTSERVER_LIMIT;
-    _errors[-OB_REBALANCE_TASK_NOT_IN_PROGRESS] = &_error_OB_REBALANCE_TASK_NOT_IN_PROGRESS;
     _errors[-OB_DATA_SOURCE_NOT_EXIST] = &_error_OB_DATA_SOURCE_NOT_EXIST;
     _errors[-OB_DATA_SOURCE_TABLE_NOT_EXIST] = &_error_OB_DATA_SOURCE_TABLE_NOT_EXIST;
     _errors[-OB_DATA_SOURCE_RANGE_NOT_EXIST] = &_error_OB_DATA_SOURCE_RANGE_NOT_EXIST;
@@ -21941,9 +21768,7 @@ struct ObStrErrorInit
     _errors[-OB_ERR_DROP_TRUNCATE_PARTITION_REBUILD_INDEX] = &_error_OB_ERR_DROP_TRUNCATE_PARTITION_REBUILD_INDEX;
     _errors[-OB_ERR_ATLER_TABLE_ILLEGAL_FK] = &_error_OB_ERR_ATLER_TABLE_ILLEGAL_FK;
     _errors[-OB_LEADER_COORDINATOR_NEED_RETRY] = &_error_OB_LEADER_COORDINATOR_NEED_RETRY;
-    _errors[-OB_REBALANCE_TASK_NEED_RETRY] = &_error_OB_REBALANCE_TASK_NEED_RETRY;
     _errors[-OB_LS_NOT_EXIST] = &_error_OB_LS_NOT_EXIST;
-    _errors[-OB_TOO_MANY_TENANT_LS] = &_error_OB_TOO_MANY_TENANT_LS;
     _errors[-OB_LS_LOCATION_NOT_EXIST] = &_error_OB_LS_LOCATION_NOT_EXIST;
     _errors[-OB_LS_LOCATION_LEADER_NOT_EXIST] = &_error_OB_LS_LOCATION_LEADER_NOT_EXIST;
     _errors[-OB_MAPPING_BETWEEN_TABLET_AND_LS_NOT_EXIST] = &_error_OB_MAPPING_BETWEEN_TABLET_AND_LS_NOT_EXIST;
@@ -21963,7 +21788,6 @@ struct ObStrErrorInit
     _errors[-OB_LS_EXIST] = &_error_OB_LS_EXIST;
     _errors[-OB_DEVICE_EXIST] = &_error_OB_DEVICE_EXIST;
     _errors[-OB_DEVICE_NOT_EXIST] = &_error_OB_DEVICE_NOT_EXIST;
-    _errors[-OB_LS_REPLICA_TASK_RESULT_UNCERTAIN] = &_error_OB_LS_REPLICA_TASK_RESULT_UNCERTAIN;
     _errors[-OB_WAIT_REPLAY_TIMEOUT] = &_error_OB_WAIT_REPLAY_TIMEOUT;
     _errors[-OB_WAIT_TABLET_READY_TIMEOUT] = &_error_OB_WAIT_TABLET_READY_TIMEOUT;
     _errors[-OB_FREEZE_SERVICE_EPOCH_MISMATCH] = &_error_OB_FREEZE_SERVICE_EPOCH_MISMATCH;
@@ -22197,7 +22021,6 @@ struct ObStrErrorInit
     _errors[-OB_ERR_CANT_DROP_FIELD_OR_KEY] = &_error_OB_ERR_CANT_DROP_FIELD_OR_KEY;
     _errors[-OB_ERR_MULTIPLE_PRI_KEY] = &_error_OB_ERR_MULTIPLE_PRI_KEY;
     _errors[-OB_ERR_KEY_COLUMN_DOES_NOT_EXITS] = &_error_OB_ERR_KEY_COLUMN_DOES_NOT_EXITS;
-    _errors[-OB_ERR_AUTO_PARTITION_KEY] = &_error_OB_ERR_AUTO_PARTITION_KEY;
     _errors[-OB_ERR_CANT_USE_OPTION_HERE] = &_error_OB_ERR_CANT_USE_OPTION_HERE;
     _errors[-OB_ERR_WRONG_OBJECT] = &_error_OB_ERR_WRONG_OBJECT;
     _errors[-OB_ERR_ON_RENAME] = &_error_OB_ERR_ON_RENAME;
@@ -22525,14 +22348,11 @@ struct ObStrErrorInit
     _errors[-OB_ERR_CONTRAINT_NOT_FOUND] = &_error_OB_ERR_CONTRAINT_NOT_FOUND;
     _errors[-OB_ERR_ALTER_TABLE_ALTER_DUPLICATED_INDEX] = &_error_OB_ERR_ALTER_TABLE_ALTER_DUPLICATED_INDEX;
     _errors[-OB_EER_INVALID_ARGUMENT_FOR_LOGARITHM] = &_error_OB_EER_INVALID_ARGUMENT_FOR_LOGARITHM;
-    _errors[-OB_ERR_REORGANIZE_OUTSIDE_RANGE] = &_error_OB_ERR_REORGANIZE_OUTSIDE_RANGE;
     _errors[-OB_ER_SP_RECURSION_LIMIT] = &_error_OB_ER_SP_RECURSION_LIMIT;
     _errors[-OB_ER_UNSUPPORTED_PS] = &_error_OB_ER_UNSUPPORTED_PS;
     _errors[-OB_ER_STMT_NOT_ALLOWED_IN_SF_OR_TRG] = &_error_OB_ER_STMT_NOT_ALLOWED_IN_SF_OR_TRG;
     _errors[-OB_ER_SP_NO_RECURSION] = &_error_OB_ER_SP_NO_RECURSION;
     _errors[-OB_ER_SP_CASE_NOT_FOUND] = &_error_OB_ER_SP_CASE_NOT_FOUND;
-    _errors[-OB_ERR_INVALID_SPLIT_COUNT] = &_error_OB_ERR_INVALID_SPLIT_COUNT;
-    _errors[-OB_ERR_INVALID_SPLIT_GRAMMAR] = &_error_OB_ERR_INVALID_SPLIT_GRAMMAR;
     _errors[-OB_ERR_MISS_VALUES] = &_error_OB_ERR_MISS_VALUES;
     _errors[-OB_ERR_MISS_AT_VALUES] = &_error_OB_ERR_MISS_AT_VALUES;
     _errors[-OB_ER_COMMIT_NOT_ALLOWED_IN_SF_OR_TRG] = &_error_OB_ER_COMMIT_NOT_ALLOWED_IN_SF_OR_TRG;
@@ -22556,9 +22376,7 @@ struct ObStrErrorInit
     _errors[-OB_ERR_TRUNCATE_ILLEGAL_FK] = &_error_OB_ERR_TRUNCATE_ILLEGAL_FK;
     _errors[-OB_ERR_DUP_KEY] = &_error_OB_ERR_DUP_KEY;
     _errors[-OB_ER_INVALID_USE_OF_NULL] = &_error_OB_ER_INVALID_USE_OF_NULL;
-    _errors[-OB_ERR_SPLIT_LIST_LESS_VALUE] = &_error_OB_ERR_SPLIT_LIST_LESS_VALUE;
     _errors[-OB_ERR_ADD_PARTITION_TO_DEFAULT_LIST] = &_error_OB_ERR_ADD_PARTITION_TO_DEFAULT_LIST;
-    _errors[-OB_ERR_SPLIT_INTO_ONE_PARTITION] = &_error_OB_ERR_SPLIT_INTO_ONE_PARTITION;
     _errors[-OB_ERR_NO_TENANT_PRIVILEGE] = &_error_OB_ERR_NO_TENANT_PRIVILEGE;
     _errors[-OB_ERR_INVALID_PERCENTAGE] = &_error_OB_ERR_INVALID_PERCENTAGE;
     _errors[-OB_ERR_COLLECT_HISTOGRAM] = &_error_OB_ERR_COLLECT_HISTOGRAM;
@@ -22984,7 +22802,6 @@ struct ObStrErrorInit
     _errors[-OB_PARTITION_IS_BLOCKED] = &_error_OB_PARTITION_IS_BLOCKED;
     _errors[-OB_TRANS_RPC_TIMEOUT] = &_error_OB_TRANS_RPC_TIMEOUT;
     _errors[-OB_REPLICA_NOT_READABLE] = &_error_OB_REPLICA_NOT_READABLE;
-    _errors[-OB_PARTITION_IS_SPLITTING] = &_error_OB_PARTITION_IS_SPLITTING;
     _errors[-OB_TRANS_COMMITED] = &_error_OB_TRANS_COMMITED;
     _errors[-OB_TRANS_CTX_COUNT_REACH_LIMIT] = &_error_OB_TRANS_CTX_COUNT_REACH_LIMIT;
     _errors[-OB_TRANS_CANNOT_SERIALIZE] = &_error_OB_TRANS_CANNOT_SERIALIZE;
@@ -23034,7 +22851,6 @@ struct ObStrErrorInit
     _errors[-OB_TRANS_FREE_ROUTE_NOT_SUPPORTED] = &_error_OB_TRANS_FREE_ROUTE_NOT_SUPPORTED;
     _errors[-OB_TRANS_LIVE_TOO_MUCH_TIME] = &_error_OB_TRANS_LIVE_TOO_MUCH_TIME;
     _errors[-OB_TRANS_COMMIT_TOO_MUCH_TIME] = &_error_OB_TRANS_COMMIT_TOO_MUCH_TIME;
-    _errors[-OB_TRANS_TOO_MANY_PARTICIPANTS] = &_error_OB_TRANS_TOO_MANY_PARTICIPANTS;
     _errors[-OB_LOG_ALREADY_SPLIT] = &_error_OB_LOG_ALREADY_SPLIT;
     _errors[-OB_ERR_UNSUPPROTED_REF_IN_JSON_SCHEMA] = &_error_OB_ERR_UNSUPPROTED_REF_IN_JSON_SCHEMA;
     _errors[-OB_ERR_TYPE_OF_JSON_SCHEMA] = &_error_OB_ERR_TYPE_OF_JSON_SCHEMA;
@@ -23065,9 +22881,6 @@ struct ObStrErrorInit
     _errors[-OB_LOG_REPLAY_ERROR] = &_error_OB_LOG_REPLAY_ERROR;
     _errors[-OB_TRY_LOCK_CONFIG_CHANGE_CONFLICT] = &_error_OB_TRY_LOCK_CONFIG_CHANGE_CONFLICT;
     _errors[-OB_CLOG_DISK_HANG] = &_error_OB_CLOG_DISK_HANG;
-    _errors[-OB_TABLE_LOCK_SPLIT_TWICE] = &_error_OB_TABLE_LOCK_SPLIT_TWICE;
-    _errors[-OB_TABLE_LOCK_IS_SPLITTING] = &_error_OB_TABLE_LOCK_IS_SPLITTING;
-    _errors[-OB_TABLE_LOCK_SPLIT_FAIL] = &_error_OB_TABLE_LOCK_SPLIT_FAIL;
     _errors[-OB_SEQ_NO_REORDER_UNDER_PDML] = &_error_OB_SEQ_NO_REORDER_UNDER_PDML;
     _errors[-OB_USER_OUTOF_DATA_DISK_SPACE] = &_error_OB_USER_OUTOF_DATA_DISK_SPACE;
     _errors[-OB_ARB_DEGRADE] = &_error_OB_ARB_DEGRADE;
@@ -23296,7 +23109,6 @@ struct ObStrErrorInit
     _errors[-OB_RESTORE_INDEX_FAILED] = &_error_OB_RESTORE_INDEX_FAILED;
     _errors[-OB_BACKUP_IN_PROGRESS] = &_error_OB_BACKUP_IN_PROGRESS;
     _errors[-OB_INVALID_LOG_ARCHIVE_STATUS] = &_error_OB_INVALID_LOG_ARCHIVE_STATUS;
-    _errors[-OB_CANNOT_ADD_REPLICA_DURING_SET_MEMBER_LIST] = &_error_OB_CANNOT_ADD_REPLICA_DURING_SET_MEMBER_LIST;
     _errors[-OB_LOG_ARCHIVE_LEADER_CHANGED] = &_error_OB_LOG_ARCHIVE_LEADER_CHANGED;
     _errors[-OB_BACKUP_CAN_NOT_START] = &_error_OB_BACKUP_CAN_NOT_START;
     _errors[-OB_CANCEL_BACKUP_NOT_ALLOWED] = &_error_OB_CANCEL_BACKUP_NOT_ALLOWED;
@@ -23376,11 +23188,9 @@ struct ObStrErrorInit
     _errors[-OB_OBJECT_NOT_EXIST] = &_error_OB_OBJECT_NOT_EXIST;
     _errors[-OB_S2_REUSE_VERSION_MISMATCH] = &_error_OB_S2_REUSE_VERSION_MISMATCH;
     _errors[-OB_S2_ENTRY_NOT_EXIST] = &_error_OB_S2_ENTRY_NOT_EXIST;
-    _errors[-OB_TABLET_IS_SPLIT_SRC] = &_error_OB_TABLET_IS_SPLIT_SRC;
     _errors[-OB_ALLOCATE_TMP_FILE_PAGE_FAILED] = &_error_OB_ALLOCATE_TMP_FILE_PAGE_FAILED;
     _errors[-OB_SS_MICRO_CACHE_DISABLED] = &_error_OB_SS_MICRO_CACHE_DISABLED;
     _errors[-OB_SS_CACHE_REACH_MEM_LIMIT] = &_error_OB_SS_CACHE_REACH_MEM_LIMIT;
-    _errors[-OB_TABLET_STATUS_NO_NEED_TO_SPLIT] = &_error_OB_TABLET_STATUS_NO_NEED_TO_SPLIT;
     _errors[-OB_FILE_DELETE_FAILED] = &_error_OB_FILE_DELETE_FAILED;
     _errors[-OB_OBJECT_STORAGE_IO_ERROR] = &_error_OB_OBJECT_STORAGE_IO_ERROR;
     _errors[-OB_OBJECT_STORAGE_PWRITE_OFFSET_NOT_MATCH] = &_error_OB_OBJECT_STORAGE_PWRITE_OFFSET_NOT_MATCH;

@@ -86,7 +86,6 @@ ObDDLTableMergeDag::~ObDDLTableMergeDag()
 int ObDDLTableMergeDag::init_by_param(const share::ObIDagInitParam *param)
 {
   int ret = OB_SUCCESS;
-  ObLSHandle ls_handle;
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
     LOG_WARN("init twice", K(ret), K(ddl_param_));
@@ -114,13 +113,13 @@ int ObDDLTableMergeDag::check_allow_major_merge()
   if (!is_inited_) {
     ret = OB_NOT_INIT;
     LOG_WARN("not inited", K(ret));
-  } else if (OB_FAIL(ObDirectLoadMgrUtil::get_tablet_handle(ddl_param_.ls_id_, ddl_param_.tablet_id_, tablet_handle))) {
+  } else if (OB_FAIL(ObDirectLoadMgrUtil::get_tablet_handle(ddl_param_.tablet_id_, tablet_handle))) {
     LOG_WARN("failed to get tablet handle", K(ret), K(ddl_param_));
   } else if (!tablet_handle.is_valid()) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("tablet handle is invalid", K(ret), K(ddl_param_));  
   } else if (ddl_param_.is_commit_) {
-    if (!tablet_handle.get_obj()->get_tablet_meta().ha_status_.check_allow_read()) {
+    if (!tablet_handle.get_obj()->get_tablet_meta().restore_state_.check_allow_read()) {
       ddl_param_.is_commit_ = false;
       LOG_INFO("status not full change to dump task", K(ret));
     }
@@ -136,7 +135,7 @@ int ObDDLTableMergeDag::init_tablet_ctx()
   if (!is_inited_) {
     ret = OB_NOT_INIT;
     LOG_WARN("not inited", K(ret));
-  } else if (OB_FAIL(ObDirectLoadMgrUtil::get_tablet_handle(ddl_param_.ls_id_, ddl_param_.tablet_id_, tablet_handle))) {
+  } else if (OB_FAIL(ObDirectLoadMgrUtil::get_tablet_handle(ddl_param_.tablet_id_, tablet_handle))) {
     LOG_WARN("failed to get tablet handle", K(ret), K(ddl_param_));
   } else if (tablet_ctx_ != nullptr) {
     LOG_INFO("tablet ctx already inited", K(ret));
@@ -145,7 +144,6 @@ int ObDDLTableMergeDag::init_tablet_ctx()
     LOG_WARN("failed to allocate memory", K(ret));
   } else if (FALSE_IT(tablet_ctx_ = new (buf) ObDDLTabletContext())) {
   } else {
-    tablet_ctx_->ls_id_       = ddl_param_.ls_id_;
     tablet_ctx_->tablet_id_   = ddl_param_.tablet_id_;
 
     /* only sn major merge need to load storage schema from user data 
@@ -173,7 +171,7 @@ int ObDDLTableMergeDag::create_first_task()
 {
   int ret = OB_SUCCESS;
   ObLSService *ls_service = share::g_mp->ls_service();
-  ObLSHandle ls_handle;
+  ObLS *ls = nullptr;
   ObTabletHandle tablet_handle;
   ObArray<ObDDLKVHandle> ddl_kvs_handle;
   if (is_idem_type(ddl_param_.direct_load_type_)) {
@@ -209,9 +207,9 @@ int ObDDLTableMergeDag::create_first_task()
     }
   } else {
     ObDDLTableMergeTask *merge_task = nullptr;
-    if (OB_FAIL(ls_service->get_ls(ddl_param_.ls_id_, ls_handle, ObLSGetMod::DDL_MOD))) {
+    if (OB_FAIL(ls_service->get_ls(ls))) {
       LOG_WARN("get ls failed", K(ret), K(ddl_param_));
-    } else if (OB_FAIL(ObDDLUtil::ddl_get_tablet(ls_handle,
+    } else if (OB_FAIL(ObDDLUtil::ddl_get_tablet(ls,
                                                ddl_param_.tablet_id_,
                                                tablet_handle,
                                                ObMDSGetTabletMode::READ_ALL_COMMITED))) {
@@ -287,7 +285,6 @@ bool ObDDLTableMergeDag::operator == (const ObIDag &other) const
     const ObDDLTableMergeDag &other_dag = static_cast<const ObDDLTableMergeDag&> (other);
     // each tablet has max 1 dag in running, so that the compaction task is unique and no need to consider concurrency
     is_same = ddl_param_.tablet_id_ == other_dag.ddl_param_.tablet_id_
-      && ddl_param_.ls_id_ == other_dag.ddl_param_.ls_id_
       && ddl_param_.direct_load_type_ == other_dag.ddl_param_.direct_load_type_;
   }
   return is_same;
@@ -305,7 +302,6 @@ int ObDDLTableMergeDag::fill_info_param(compaction::ObIBasicInfoParam *&out_para
     ret = OB_NOT_INIT;
     LOG_WARN("ObDDLTableMergeDag has not been initialized", K(ret));
   } else if (OB_FAIL(ADD_DAG_WARN_INFO_PARAM(out_param, allocator, get_type(),
-                                  ddl_param_.ls_id_.id(),
                                   static_cast<int64_t>(ddl_param_.tablet_id_.id()),
                                   static_cast<int64_t>(ddl_param_.rec_scn_.get_val_for_inner_table_field()),
                                   "is_commit", ddl_param_.is_commit_))) {
@@ -317,8 +313,8 @@ int ObDDLTableMergeDag::fill_info_param(compaction::ObIBasicInfoParam *&out_para
 int ObDDLTableMergeDag::fill_dag_key(char *buf, const int64_t buf_len) const
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(databuff_printf(buf, buf_len, "ddl table merge task: ls_id=%ld, tablet_id=%ld, rec_scn=%lu",
-                              ddl_param_.ls_id_.id(), ddl_param_.tablet_id_.id(), ddl_param_.rec_scn_.get_val_for_inner_table_field()))) {
+  if (OB_FAIL(databuff_printf(buf, buf_len, "ddl table merge task: tablet_id=%ld, rec_scn=%lu",
+                              ddl_param_.tablet_id_.id(), ddl_param_.rec_scn_.get_val_for_inner_table_field()))) {
     LOG_WARN("fill dag key for ddl table merge dag failed", K(ret), K(ddl_param_));
   }
   return ret;
@@ -363,7 +359,7 @@ int ObDDLTableMergeTask::init(const ObDDLTableMergeDagParam &ddl_dag_param, cons
   return ret;
 }
 
-int wait_lob_tablet_major_exist(const ObDirectLoadType &direct_load_type, ObLSHandle &ls_handle, ObTablet &tablet)
+int wait_lob_tablet_major_exist(const ObDirectLoadType &direct_load_type, ObLS *ls, ObTablet &tablet)
 {
   int ret = OB_SUCCESS;
   ObTabletBindingMdsUserData ddl_data;
@@ -379,7 +375,7 @@ int wait_lob_tablet_major_exist(const ObDirectLoadType &direct_load_type, ObLSHa
   } else if (ddl_data.lob_meta_tablet_id_.is_valid()) {
     ObTabletHandle lob_tablet_handle;
     const ObTabletID lob_tablet_id = ddl_data.lob_meta_tablet_id_;
-    if (OB_FAIL(ObDDLUtil::ddl_get_tablet(ls_handle, lob_tablet_id, lob_tablet_handle, ObMDSGetTabletMode::READ_ALL_COMMITED))) {
+    if (OB_FAIL(ObDDLUtil::ddl_get_tablet(ls, lob_tablet_id, lob_tablet_handle, ObMDSGetTabletMode::READ_ALL_COMMITED))) {
       LOG_WARN("get lob tablet handle failed", K(ret), K(lob_tablet_id));
     } else if (is_idem_type(direct_load_type)) {
       if (OB_FAIL(lob_tablet_handle.get_obj()->get_ddl_complete(share::SCN::max_scn(), allocator, ddl_complete))) {
@@ -397,7 +393,7 @@ int wait_lob_tablet_major_exist(const ObDirectLoadType &direct_load_type, ObLSHa
       if (!is_major_sstable_exist) {
         ret = OB_EAGAIN;
         int tmp_ret = OB_SUCCESS;
-        if (OB_TMP_FAIL(ObDDLMergeScheduler::schedule_tablet_ddl_major_merge(ls_handle, lob_tablet_handle))) {
+        if (OB_TMP_FAIL(ObDDLMergeScheduler::schedule_tablet_ddl_major_merge(ls, lob_tablet_handle))) {
           LOG_WARN("schedule ddl major merge for lob tablet failed", K(tmp_ret), K(lob_tablet_id));
         }
       }
@@ -411,14 +407,14 @@ int ObDDLTableMergeTask::process()
   int ret = OB_SUCCESS;
   LOG_INFO("ddl merge task start process", K(*this), "ddl_event_info", ObDDLEventInfo());
   ObLSService *ls_service = share::g_mp->ls_service();
-  ObLSHandle ls_handle;
+  ObLS *ls = nullptr;
   ObTabletHandle tablet_handle;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
-  } else if (OB_FAIL(ls_service->get_ls(merge_param_.ls_id_, ls_handle, ObLSGetMod::DDL_MOD))) {
+  } else if (OB_FAIL(ls_service->get_ls(ls))) {
     LOG_WARN("get ls failed", K(ret), K(merge_param_));
-  } else if (OB_FAIL(ObDDLUtil::ddl_get_tablet(ls_handle,
+  } else if (OB_FAIL(ObDDLUtil::ddl_get_tablet(ls,
                                                merge_param_.tablet_id_,
                                                tablet_handle,
                                                ObMDSGetTabletMode::READ_ALL_COMMITED))) {
@@ -427,18 +423,18 @@ int ObDDLTableMergeTask::process()
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected err", K(ret), K(merge_param_));
   } else if (is_idem_type(merge_param_.direct_load_type_) && merge_param_.is_commit_ &&
-             !tablet_handle.get_obj()->get_tablet_meta().ha_status_.check_allow_read()) {
+             !tablet_handle.get_obj()->get_tablet_meta().restore_state_.check_allow_read()) {
     LOG_INFO("skip since tablet not allow read", K(ret), K(merge_param_));
-  } else if (OB_FAIL(merge_ddl_kvs(ls_handle, *(tablet_handle.get_obj())))) {
+  } else if (OB_FAIL(merge_ddl_kvs(ls, *(tablet_handle.get_obj())))) {
     LOG_WARN("fail to merge ddl kvs", K(ret));
   }
   return ret;
 }
 
-int ObDDLTableMergeTask::merge_ddl_kvs(ObLSHandle &ls_handle, ObTablet &tablet)
+int ObDDLTableMergeTask::merge_ddl_kvs(ObLS *ls, ObTablet &tablet)
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(merge_full_direct_load_ddl_kvs(ls_handle, tablet))) {
+  if (OB_FAIL(merge_full_direct_load_ddl_kvs(ls, tablet))) {
     LOG_WARN("fail to merge ddl kvs", K(ret));
   }
   return ret;
@@ -497,7 +493,6 @@ int prepare_ddl_param_for_idem_sn(const ObDDLTableMergeDagParam &merge_param, Ob
     LOG_WARN("only support diem direct load type", K(ret));
   } else {
     ddl_param.direct_load_type_    = merge_param.direct_load_type_;
-    ddl_param.ls_id_               = merge_param.ls_id_;
     ddl_param.table_key_           = merge_param.table_key_;
     ddl_param.start_scn_           = merge_param.start_scn_;
     ddl_param.commit_scn_          = merge_param.rec_scn_;
@@ -524,18 +519,18 @@ int prepare_full_direct_load_ddl_param(const ObDDLTableMergeDagParam &merge_para
   return ret;
 }
 
-int ObDDLTableMergeTask::merge_full_direct_load_ddl_kvs(ObLSHandle &ls_handle, ObTablet &tablet)
+int ObDDLTableMergeTask::merge_full_direct_load_ddl_kvs(ObLS *ls, ObTablet &tablet)
 {
   int ret = OB_SUCCESS;
   if (!is_full_direct_load(merge_param_.direct_load_type_)) {
     LOG_WARN("func can only be used for full direct load", K(ret), K(merge_param_));
-  } else if (OB_FAIL(merge_full_direct_load_ddl_kvs_for_sn(ls_handle, tablet))) {
+  } else if (OB_FAIL(merge_full_direct_load_ddl_kvs_for_sn(ls, tablet))) {
     LOG_WARN("failed to merge full direct load", K(ret));
   }
   return ret; 
 }
 
-int ObDDLTableMergeTask::merge_full_direct_load_ddl_kvs_for_sn(ObLSHandle &ls_handle, ObTablet &tablet)
+int ObDDLTableMergeTask::merge_full_direct_load_ddl_kvs_for_sn(ObLS *ls, ObTablet &tablet)
 {
   int ret = OB_SUCCESS;
   ObTableStoreIterator ddl_table_iter;
@@ -578,7 +573,7 @@ int ObDDLTableMergeTask::merge_full_direct_load_ddl_kvs_for_sn(ObLSHandle &ls_ha
     const ObSSTable *first_major_sstable = nullptr;
     SCN compact_start_scn, compact_end_scn;
     if (OB_FAIL(ObTabletDDLUtil::check_and_get_major_sstable(
-        merge_param_.ls_id_, merge_param_.tablet_id_, first_major_sstable, table_store_wrapper))) {
+        merge_param_.tablet_id_, first_major_sstable, table_store_wrapper))) {
       LOG_WARN("check if major sstable exist failed", K(ret));
     } else if (nullptr != first_major_sstable) {
       is_major_exist = true;
@@ -586,7 +581,7 @@ int ObDDLTableMergeTask::merge_full_direct_load_ddl_kvs_for_sn(ObLSHandle &ls_ha
     } else if (tablet.get_tablet_meta().table_store_flag_.with_major_sstable()) {
       ret = OB_TASK_EXPIRED;
       LOG_INFO("tablet me says with major but no major, meaning its a migrated deleted tablet, skip");
-    } else if (merge_param_.is_commit_ && OB_FAIL(wait_lob_tablet_major_exist(merge_param_.direct_load_type_, ls_handle, tablet))) {
+    } else if (merge_param_.is_commit_ && OB_FAIL(wait_lob_tablet_major_exist(merge_param_.direct_load_type_, ls, tablet))) {
       if (OB_EAGAIN != ret) {
         LOG_WARN("wait lob tablet major sstable exist faild", K(ret), K(merge_param_));
       } else {
@@ -619,7 +614,7 @@ int ObDDLTableMergeTask::merge_full_direct_load_ddl_kvs_for_sn(ObLSHandle &ls_ha
       } else {
         // use the final table key of major, do nothing
       }
-      if (OB_FAIL(ObTabletDDLUtil::compact_ddl_kv(*ls_handle.get_ls(),
+      if (OB_FAIL(ObTabletDDLUtil::compact_ddl_kv(*ls,
                                                   tablet,
                                                   ddl_table_iter,
                                                   frozen_ddl_kvs_,
@@ -638,7 +633,7 @@ int ObDDLTableMergeTask::merge_full_direct_load_ddl_kvs_for_sn(ObLSHandle &ls_ha
 
     if (OB_SUCC(ret) && merge_param_.is_commit_ && is_major_exist) {  
       ObTenantDirectLoadMgr *tenant_direct_load_mgr = share::g_mp->tenant_direct_load_mgr();
-      if (OB_FAIL(share::g_mp->tablet_table_updater()->submit_tablet_update_task(merge_param_.ls_id_, merge_param_.tablet_id_))) {
+      if (OB_FAIL(share::g_mp->tablet_table_updater()->submit_tablet_update_task(merge_param_.tablet_id_))) {
         LOG_WARN("fail to submit tablet update task", K(ret), K(merge_param_));
       } else if (OB_FAIL(ddl_kv_mgr_handle.get_obj()->release_ddl_kvs(ObDDLKVType::DDL_KV_FULL, compact_end_scn))) {
         LOG_WARN("release all ddl kv failed", K(ret), K(ddl_param));
@@ -767,17 +762,14 @@ int ObTabletDDLUtil::prepare_index_data_desc(const ObTablet &tablet,
 {
   int ret = OB_SUCCESS;
   data_desc.reset();
-  ObLSService *ls_service = share::g_mp->ls_service();
   const ObTabletID &tablet_id = tablet.get_tablet_meta().tablet_id_;
-  const ObLSID &ls_id = tablet.get_tablet_meta().ls_id_;
   const SCN end_scn = table_key.get_end_scn();
   const bool micro_index_clustered = tablet.get_tablet_meta().micro_index_clustered_;
-  if (OB_UNLIKELY(!ls_id.is_valid() || !tablet_id.is_valid() || snapshot_version <= 0 || data_format_version <= 0 || OB_ISNULL(storage_schema))) {
+  if (OB_UNLIKELY(!tablet_id.is_valid() || snapshot_version <= 0 || data_format_version <= 0 || OB_ISNULL(storage_schema))) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(ls_id), K(tablet_id), K(snapshot_version), K(data_format_version), KP(storage_schema));
+    LOG_WARN("invalid argument", K(ret), K(tablet_id), K(snapshot_version), K(data_format_version), KP(storage_schema));
   } else if (OB_FAIL(data_desc.init(true/*is_ddl*/,
                                     *storage_schema,
-                                    ls_id,
                                     tablet_id,
                                     table_key.is_minor_sstable() ? compaction::MINOR_MERGE : compaction::MAJOR_MERGE,
                                     snapshot_version,
@@ -925,7 +917,6 @@ int ObTabletDDLUtil::update_ddl_table_store(
     LOG_WARN("invalid argument", K(ret), K(ddl_param), KP(storage_schema), KP(sstable));
   } else {
     const bool is_major_sstable = ddl_param.table_key_.is_major_sstable();
-    const int64_t rebuild_seq = ls.get_rebuild_seq();
     int64_t snapshot_version = 0;
     int64_t multi_version_start = 0;
     if (is_full_direct_load(ddl_param.direct_load_type_)) {
@@ -941,7 +932,6 @@ int ObTabletDDLUtil::update_ddl_table_store(
     ObUpdateTableStoreParam table_store_param(snapshot_version,
                                               multi_version_start,
                                               storage_schema,
-                                              rebuild_seq,
                                               sstable);
     if (OB_FAIL(table_store_param.init_with_compaction_info(
             ObCompactionTableStoreParam(is_major_sstable ? compaction::MEDIUM_MERGE : compaction::MINI_MERGE,
@@ -1386,7 +1376,6 @@ int ObTabletDDLUtil::get_compact_scn(
 }
 
 int ObTabletDDLUtil::report_ddl_checksum(
-    const share::ObLSID &ls_id,
     const ObTabletID &tablet_id,
     const uint64_t table_id,
     const int64_t execution_id,
@@ -1473,28 +1462,27 @@ int ObTabletDDLUtil::report_ddl_checksum(
   return ret;
 }
 
-int ObTabletDDLUtil::check_and_get_major_sstable(const share::ObLSID &ls_id,
-                                                 const ObTabletID &tablet_id,
+int ObTabletDDLUtil::check_and_get_major_sstable(const ObTabletID &tablet_id,
                                                  const blocksstable::ObSSTable *&first_major_sstable,
                                                  ObTabletMemberWrapper<ObTabletTableStore> &table_store_wrapper)
 {
   int ret = OB_SUCCESS;
-  ObLSHandle ls_handle;
+  ObLS *ls = nullptr;
   ObTabletHandle tablet_handle;
   first_major_sstable = nullptr;
-  if (OB_UNLIKELY(!ls_id.is_valid() || !tablet_id.is_valid())) {
+  if (OB_UNLIKELY(!tablet_id.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(ls_id), K(tablet_id));
-  } else if (OB_FAIL(share::g_mp->ls_service()->get_ls(ls_id, ls_handle, ObLSGetMod::DDL_MOD))) {
-    LOG_WARN("failed to get log stream", K(ret), K(ls_id));
-  } else if (OB_FAIL(ObDDLUtil::ddl_get_tablet(ls_handle,
+    LOG_WARN("invalid argument", K(ret), K(tablet_id));
+  } else if (OB_FAIL(share::g_mp->ls_service()->get_ls(ls))) {
+    LOG_WARN("failed to get log stream", K(ret));
+  } else if (OB_FAIL(ObDDLUtil::ddl_get_tablet(ls,
                                                tablet_id,
                                                tablet_handle,
                                                ObMDSGetTabletMode::READ_ALL_COMMITED))) {
-    LOG_WARN("get tablet handle failed", K(ret), K(ls_id), K(tablet_id));
+    LOG_WARN("get tablet handle failed", K(ret), K(tablet_id));
   } else if (OB_UNLIKELY(nullptr == tablet_handle.get_obj())) {
     ret = OB_ERR_SYS;
-    LOG_WARN("tablet handle is null", K(ret), K(ls_id), K(tablet_id));
+    LOG_WARN("tablet handle is null", K(ret), K(tablet_id));
   } else if (OB_FAIL(tablet_handle.get_obj()->fetch_table_store(table_store_wrapper))) {
     LOG_WARN("fail to fetch table store", K(ret));
   } else {
@@ -1506,7 +1494,7 @@ int ObTabletDDLUtil::check_and_get_major_sstable(const share::ObLSID &ls_id,
 
 int ObTabletDDLUtil::freeze_ddl_kv(const ObDDLTableMergeDagParam &param)
 {
-  return ObDDLMergeTaskUtils::freeze_ddl_kv(param.ls_id_, param.tablet_id_, param.direct_load_type_,
+  return ObDDLMergeTaskUtils::freeze_ddl_kv(param.tablet_id_, param.direct_load_type_,
                                             param.start_scn_, param.snapshot_version_, param.data_format_version_);
 }
 

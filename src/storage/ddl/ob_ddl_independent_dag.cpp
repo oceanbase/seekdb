@@ -67,7 +67,7 @@ void ObDDLIndependentDag::reuse()
   ObTabletObjLoadHelper::free(arena_, ddl_table_schema_.storage_schema_);
   ObTabletObjLoadHelper::free(arena_, ddl_table_schema_.lob_meta_storage_schema_);
   ddl_table_schema_.reset();
-  ls_tablet_ids_.reset();
+  tablet_ids_.reset();
   FOREACH(tc_it, tablet_context_map_) {
     ObDDLTabletContext *tablet_context = tc_it->second;
     free_tablet_context(arena_,  tablet_context);
@@ -88,8 +88,8 @@ int ObDDLIndependentDag::init_by_param(const share::ObIDagInitParam *param)
   } else if (init_param->ddl_task_param_.tenant_data_version_ < DDL_IDEM_DATA_FORMAT_VERSION) {
     ret = OB_NOT_SUPPORTED;
     LOG_WARN("reject execute dag when request comes from old version", K(ret), KPC(init_param));
-  } else if (OB_FAIL(ls_tablet_ids_.assign(init_param->ls_tablet_ids_))) {
-    LOG_WARN("assign ls tablet id array failed", K(ret), K(init_param->ls_tablet_ids_));
+  } else if (OB_FAIL(tablet_ids_.assign(init_param->tablet_ids_))) {
+    LOG_WARN("assign tablet id array failed", K(ret), K(init_param->tablet_ids_));
   } else {
     direct_load_type_ = init_param->direct_load_type_;
     ddl_thread_count_ = init_param->ddl_thread_count_;
@@ -102,7 +102,7 @@ int ObDDLIndependentDag::init_by_param(const share::ObIDagInitParam *param)
       is_inited_ = true;
     }
   }
-  FLOG_INFO("ddl independent dag init", K(ret), KPC(this), K(ddl_table_schema_), K(ls_tablet_ids_), K(tablet_context_map_.size()));
+  FLOG_INFO("ddl independent dag init", K(ret), KPC(this), K(ddl_table_schema_), K(tablet_ids_), K(tablet_context_map_.size()));
   return ret;
 }
 
@@ -118,18 +118,17 @@ int ObDDLIndependentDag::init_ddl_table_schema()
 int ObDDLIndependentDag::init_tablet_context_map()
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(tablet_context_map_.create(ls_tablet_ids_.count(), ObMemAttr("ddl_dag_ctx_map")))) {
-    LOG_WARN("create tablet context map failed", K(ret), K(ls_tablet_ids_.count()));
+  if (OB_FAIL(tablet_context_map_.create(tablet_ids_.count(), ObMemAttr("ddl_dag_ctx_map")))) {
+    LOG_WARN("create tablet context map failed", K(ret), K(tablet_ids_.count()));
   }
-  for (int64_t i = 0; OB_SUCC(ret) && i < ls_tablet_ids_.count(); ++i) {
-    const ObLSID &ls_id = ls_tablet_ids_.at(i).first;
-    const ObTabletID &tablet_id = ls_tablet_ids_.at(i).second;
+  for (int64_t i = 0; OB_SUCC(ret) && i < tablet_ids_.count(); ++i) {
+    const ObTabletID &tablet_id = tablet_ids_.at(i);
     ObDDLTabletContext *tablet_context = nullptr;
     if (OB_ISNULL(tablet_context = OB_NEWx(ObDDLTabletContext, &arena_))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("allocate memory for tablet context failed", K(ret));
-    } else if (OB_FAIL(tablet_context->init(ls_id, tablet_id, ddl_thread_count_, ddl_task_param_.snapshot_version_, direct_load_type_, ddl_table_schema_))) {
-      LOG_WARN("init ddl tablet context failed", K(ret), K(ls_id), K(tablet_id), K(ddl_thread_count_));
+    } else if (OB_FAIL(tablet_context->init(tablet_id, ddl_thread_count_, ddl_task_param_.snapshot_version_, direct_load_type_, ddl_table_schema_))) {
+      LOG_WARN("init ddl tablet context failed", K(ret), K(tablet_id), K(ddl_thread_count_));
     } else if (use_tablet_mode() && OB_FAIL(alloc_task(tablet_context->scan_task_))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("alloc tablet scan task failed", K(ret), K(tablet_id));
@@ -166,9 +165,9 @@ int ObDDLIndependentDag::schedule_tablet_merge_task()
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
   } else {
-    for (int64_t i = 0; OB_SUCC(ret) && i < ls_tablet_ids_.count(); ++i) {
+    for (int64_t i = 0; OB_SUCC(ret) && i < tablet_ids_.count(); ++i) {
       share::SCN mock_start_scn;
-      const ObTabletID &tablet_id = ls_tablet_ids_.at(i).second;
+      const ObTabletID &tablet_id = tablet_ids_.at(i);
 
       ObDDLTabletContext *tablet_context = nullptr;
 
@@ -356,13 +355,13 @@ int ObDDLIndependentDag::add_vector_index_append_pipeline(const ObIndexType &ind
 
 int ObDDLIndependentDag::alloc_vector_index_write_and_build_pipeline(
     const ObIndexType &index_type,
-    const ObIArray<std::pair<share::ObLSID, ObTabletID>> &ls_tablet_ids,
+    const ObIArray<ObTabletID> &tablet_ids,
     ObIArray<ObITask *> &vector_index_task_array)
 {
   int ret = OB_SUCCESS;
   vector_index_task_array.reuse();
-  for (int64_t i = 0; OB_SUCC(ret) && i < ls_tablet_ids.count(); ++i) {
-    const ObTabletID &tablet_id = ls_tablet_ids.at(i).second;
+  for (int64_t i = 0; OB_SUCC(ret) && i < tablet_ids.count(); ++i) {
+    const ObTabletID &tablet_id = tablet_ids.at(i);
     ObITask *vector_index_task = nullptr;
     if (schema::is_vec_index_snapshot_data_type(index_type)) {
       ObHNSWBuildAndWritePipeline *pipeline = nullptr;
@@ -472,7 +471,7 @@ int ObDDLIndependentDag::full_generate_write_macro_block_tasks(ObIArray<ObITask 
     LOG_WARN("fail to push back", KR(ret));
   }
   // vector_index_task
-  else if (OB_FAIL(alloc_vector_index_write_and_build_pipeline(ddl_table_schema_.table_item_.index_type_, ls_tablet_ids_, vector_index_tasks))) {
+  else if (OB_FAIL(alloc_vector_index_write_and_build_pipeline(ddl_table_schema_.table_item_.index_type_, tablet_ids_, vector_index_tasks))) {
     LOG_WARN("alloc vector index failed", K(ret));
   } else if (!vector_index_tasks.empty()) {
     for (int64_t i = 0; OB_SUCC(ret) && i < vector_index_tasks.count(); ++i) {
@@ -686,8 +685,8 @@ int ObDDLIndependentDag::init_merge_tasks(bool for_major, ObArray<ObITask*> &dat
   int ret = OB_SUCCESS;
   data_merge_tasks.reset();
   lob_merge_tasks.reset();
-  for (int64_t i = 0; OB_SUCC(ret) && i < ls_tablet_ids_.count(); ++i) {
-    const ObTabletID &tablet_id = ls_tablet_ids_.at(i).second;
+  for (int64_t i = 0; OB_SUCC(ret) && i < tablet_ids_.count(); ++i) {
+    const ObTabletID &tablet_id = tablet_ids_.at(i);
     ObITask *data_merge_task = nullptr;
     ObITask *lob_merge_task = nullptr;
     if (OB_FAIL(init_tablet_merge_task(tablet_id, for_major, data_merge_task, lob_merge_task))) {

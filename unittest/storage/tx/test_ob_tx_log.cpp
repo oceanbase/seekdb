@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+#define OB_TX_LOG_TEST
 #include <gtest/gtest.h>
 #define private public
 #include "storage/tx/ob_tx_log.h"
@@ -288,6 +289,103 @@ TEST_F(TestObTxLog, tx_log_body_redo)
   ASSERT_EQ(OB_SUCCESS, replay_block_2.deserialize_log_body(replay_commit));
   EXPECT_EQ(share::SCN::base_scn(), replay_commit.get_commit_version());
 
+}
+
+void test_big_commit_info_log(int64_t log_size)
+{
+
+  ObTxLogBlock fill_block;
+  ObTxLogBlock replay_block;
+  ObTxBigSegmentBuf fill_big_segment;
+  ObTxBigSegmentBuf replay_big_segment;
+
+  ObRedoLSNArray TEST_BIG_REDO_LSN_ARRAY;
+  for (int i = 0; i < log_size / sizeof(palf::LSN); i++) {
+    TEST_BIG_REDO_LSN_ARRAY.push_back(palf::LSN(i));
+  }
+
+  EXPECT_EQ(TEST_BIG_REDO_LSN_ARRAY.count(), log_size / sizeof(palf::LSN));
+  ObTxCommitInfoLog fill_commit_state(TEST_IS_DUP, TEST_CAN_ELR, TEST_TRACE_ID_STR, TEST_TRCE_INFO,
+                                      TEST_LOG_OFFSET, TEST_BIG_REDO_LSN_ARRAY, TEST_XID);
+  ObTxLogBlockHeader &fill_block_header = fill_block.get_header();
+  fill_block_header.init(TEST_ORG_CLUSTER_ID, TEST_CLUSTER_VERSION, TEST_LOG_ENTRY_NO, ObTransID(TEST_TX_ID));
+  ASSERT_EQ(OB_SUCCESS, fill_block.init_for_fill());
+  ASSERT_EQ(OB_LOG_TOO_LARGE, fill_block.add_new_log(fill_commit_state, &fill_big_segment));
+
+  const char *submit_buf = nullptr;
+  int64_t submit_buf_len = 0;
+  uint64_t part_count = 0;
+  ObTxLogHeader log_type_header;
+  int ret = OB_SUCCESS;
+  while (OB_SUCC(ret)
+         && OB_EAGAIN
+                == (ret = (fill_block.acquire_segment_log_buf(ObTxLogType::TX_COMMIT_INFO_LOG)))) {
+    share::SCN tmp_scn;
+    EXPECT_EQ(OB_SUCCESS, tmp_scn.convert_for_inner_table_field(part_count));
+    if (OB_FAIL(fill_block.set_prev_big_segment_scn(tmp_scn))) {
+      TRANS_LOG(WARN, "set prev big segment scn failed", K(ret), K(part_count));
+    } else if (OB_FAIL(fill_block.seal(TEST_TX_ID))) {
+      TRANS_LOG(WARN, "seal block fail", K(ret));
+    } else {
+      replay_block.reset();
+      ObTxLogBlockHeader &replay_block_header = replay_block.get_header();
+      ASSERT_EQ(OB_SUCCESS, replay_block.init_for_replay(fill_block.get_buf(), fill_block.get_size()));
+      if (OB_FAIL(replay_block.get_next_log(log_type_header, &replay_big_segment))) {
+        TRANS_LOG(WARN, "get next log failed", K(ret), K(part_count));
+        EXPECT_EQ(OB_LOG_TOO_LARGE, ret);
+        EXPECT_EQ(ObTxLogType::TX_BIG_SEGMENT_LOG, log_type_header.get_tx_log_type());
+        ret = OB_SUCCESS;
+      }
+      TRANS_LOG(INFO, "collect one part from fill_big_segment", K(ret), K(part_count),
+                K(log_type_header), K(replay_big_segment));
+    }
+    part_count++;
+  }
+  // EXPECT_EQ(ObTxLogType::TX_COMMIT_INFO_LOG, log_type_header.get_tx_log_type());
+  if (OB_ITER_END == ret) {
+    fill_block.seal(TEST_TX_ID);
+    replay_block.reset();
+    ObTxLogBlockHeader &replay_block_header = replay_block.get_header();
+    ASSERT_EQ(OB_SUCCESS, replay_block.init_for_replay(fill_block.get_buf(), fill_block.get_size()));
+    if (OB_FAIL(replay_block.get_next_log(log_type_header, &replay_big_segment))) {
+      TRANS_LOG(WARN, "get next log failed", K(ret), K(part_count));
+    }
+    EXPECT_EQ(OB_SUCCESS, ret);
+    EXPECT_EQ(ObTxLogType::TX_COMMIT_INFO_LOG, log_type_header.get_tx_log_type());
+
+    TRANS_LOG(INFO, "collect one part from fill_big_segment", K(ret), K(part_count),
+              K(log_type_header), K(replay_big_segment));
+    part_count++;
+  }
+
+  int64_t TOTAL_PART_COUNT =
+      fill_commit_state.get_serialize_size() / ObTxLogBlock::BIG_SEGMENT_SPILT_SIZE;
+  if (fill_commit_state.get_serialize_size() % ObTxLogBlock::BIG_SEGMENT_SPILT_SIZE > 0) {
+    TOTAL_PART_COUNT++;
+  }
+  TRANS_LOG(INFO, "TOTAL PART COUNT", K(TOTAL_PART_COUNT), K(part_count));
+  EXPECT_EQ(TOTAL_PART_COUNT, part_count);
+
+  ObTxCommitInfoLogTempRef commit_state_temp_ref;
+  ObTxCommitInfoLog replay_commit_state(commit_state_temp_ref);
+  EXPECT_EQ(OB_SUCCESS, replay_block.deserialize_log_body(replay_commit_state));
+
+  EXPECT_EQ(fill_commit_state.is_dup_tx(), replay_commit_state.is_dup_tx());
+  EXPECT_EQ(fill_commit_state.is_elr(), replay_commit_state.is_elr());
+  EXPECT_EQ(fill_commit_state.get_app_trace_id().length(),
+            replay_commit_state.get_app_trace_id().length());
+  EXPECT_EQ(fill_commit_state.get_app_trace_info().length(),
+            replay_commit_state.get_app_trace_info().length());
+  EXPECT_EQ(fill_commit_state.get_prev_record_lsn(), replay_commit_state.get_prev_record_lsn());
+  EXPECT_EQ(fill_commit_state.get_redo_lsns().count(), replay_commit_state.get_redo_lsns().count());
+  EXPECT_EQ(fill_commit_state.get_xid(), replay_commit_state.get_xid());
+}
+
+TEST_F(TestObTxLog, test_big_segment_log)
+{
+  test_big_commit_info_log(2*1024*1024);
+
+  test_big_commit_info_log(10*1024*1024);
 }
 
 TEST_F(TestObTxLog, test_commit_log_with_checksum_signature)

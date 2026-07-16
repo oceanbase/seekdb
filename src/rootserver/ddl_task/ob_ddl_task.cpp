@@ -152,7 +152,6 @@ ObDDLTaskSerializeField::ObDDLTaskSerializeField(const int64_t task_version,
                                                  const int32_t sub_task_trace_id,
                                                  const bool is_unique_index,
                                                  const bool is_global_index,
-                                                 const bool is_pre_split,
                                                  const bool is_no_logging)
 {
   task_version_ = task_version;
@@ -163,7 +162,6 @@ ObDDLTaskSerializeField::ObDDLTaskSerializeField(const int64_t task_version,
   is_no_logging_ = is_no_logging;
   is_unique_index_ = is_unique_index;
   is_global_index_ = is_global_index;
-  is_pre_split_ = is_pre_split;
 }
 
 void ObDDLTaskSerializeField::reset()
@@ -175,7 +173,6 @@ void ObDDLTaskSerializeField::reset()
   sub_task_trace_id_ = 0;
   is_unique_index_ = false;
   is_global_index_ = false;
-  is_pre_split_ = false;
   is_no_logging_ = false;
 }
 
@@ -187,7 +184,6 @@ OB_SERIALIZE_MEMBER(ObDDLTaskSerializeField,
                     sub_task_trace_id_,
                     is_unique_index_,
                     is_global_index_,
-                    is_pre_split_,
                     is_no_logging_);
 
 ObCreateDDLTaskParam::ObCreateDDLTaskParam()
@@ -197,7 +193,7 @@ ObCreateDDLTaskParam::ObCreateDDLTaskParam()
     aux_rowkey_doc_schema_(nullptr), aux_doc_rowkey_schema_(nullptr), fts_index_aux_schema_(nullptr), aux_doc_word_schema_(nullptr),
     vec_rowkey_vid_schema_(nullptr), vec_vid_rowkey_schema_(nullptr), vec_domain_index_schema_(nullptr), vec_index_id_schema_(nullptr), vec_snapshot_data_schema_(nullptr),
     vec_centroid_schema_(nullptr), vec_cid_vector_schema_(nullptr), vec_rowkey_cid_schema_(nullptr), vec_sq_meta_schema_(nullptr), vec_pq_centroid_schema_(nullptr), vec_pq_code_schema_(nullptr),
-    hybrid_vec_embedded_schema_(nullptr), tenant_data_version_(0), ddl_need_retry_at_executor_(false), is_pre_split_(false)
+    hybrid_vec_embedded_schema_(nullptr), tenant_data_version_(0), ddl_need_retry_at_executor_(false)
 {
 }
 
@@ -219,7 +215,7 @@ ObCreateDDLTaskParam::ObCreateDDLTaskParam(const share::ObDDLType &type,
     vec_rowkey_vid_schema_(nullptr), vec_vid_rowkey_schema_(nullptr), vec_domain_index_schema_(nullptr), vec_index_id_schema_(nullptr), vec_snapshot_data_schema_(nullptr), 
     vec_centroid_schema_(nullptr), vec_cid_vector_schema_(nullptr), vec_rowkey_cid_schema_(nullptr), vec_sq_meta_schema_(nullptr), vec_pq_centroid_schema_(nullptr), vec_pq_code_schema_(nullptr), 
     hybrid_vec_embedded_schema_(nullptr), tenant_data_version_(0),
-    ddl_need_retry_at_executor_(ddl_need_retry_at_executor), is_pre_split_(false), new_snapshot_version_(0)
+    ddl_need_retry_at_executor_(ddl_need_retry_at_executor), new_snapshot_version_(0)
 {
 }
 
@@ -387,23 +383,8 @@ int ObDDLTask::get_ddl_type_str(const int64_t ddl_type, const char *&ddl_type_st
     case DDL_DROP_VEC_IVFPQ_INDEX:
       ddl_type_str = "drop vec index";
       break;
-    case DDL_AUTO_SPLIT_BY_RANGE:
-      ddl_type_str = "auto split by range";
-      break;
-    case DDL_AUTO_SPLIT_NON_RANGE:
-      ddl_type_str = "auto split non range";
-      break;
-    case DDL_MANUAL_SPLIT_BY_RANGE:
-      ddl_type_str = "manual split by range";
-      break;
-    case DDL_MANUAL_SPLIT_NON_RANGE:
-      ddl_type_str = "manual split non range";
-      break;
     case DDL_MODIFY_AUTO_INCREMENT_WITH_REDEFINITION:
       ddl_type_str = "modify auto increment column with redefinition";
-      break;
-    case DDL_PARTITION_SPLIT_RECOVERY_TABLE_REDEFINITION:
-      ddl_type_str = "partition split recovery table redefinition";
       break;
     default:
       ret = OB_ERR_UNEXPECTED;
@@ -511,7 +492,7 @@ int ObDDLTask::serialize_params_to_message(char *buf, const int64_t buf_size, in
 {
   int ret = OB_SUCCESS;
   ObDDLTaskSerializeField serialize_field(task_version_, parallelism_, data_format_version_, is_abort_,
-                                          sub_task_trace_id_, is_unique_index_, is_global_index_, is_pre_split_, is_no_logging_);
+                                          sub_task_trace_id_, is_unique_index_, is_global_index_, is_no_logging_);
   
   if (OB_UNLIKELY(nullptr == buf || buf_size <= 0)) {
     ret = OB_INVALID_ARGUMENT;
@@ -541,7 +522,6 @@ int ObDDLTask::deserialize_params_from_message(const char *buf, const int64_t bu
     sub_task_trace_id_ = serialize_field.sub_task_trace_id_;
     is_unique_index_ = serialize_field.is_unique_index_;
     is_global_index_ = serialize_field.is_global_index_;
-    is_pre_split_ = serialize_field.is_pre_split_;
     is_no_logging_ = serialize_field.is_no_logging_;
   }
   return ret;
@@ -550,7 +530,7 @@ int ObDDLTask::deserialize_params_from_message(const char *buf, const int64_t bu
 int64_t ObDDLTask::get_serialize_param_size() const
 {
   ObDDLTaskSerializeField serialize_field(task_version_, parallelism_, data_format_version_, is_abort_,
-                                          sub_task_trace_id_, is_unique_index_, is_global_index_, is_pre_split_, is_no_logging_);
+                                          sub_task_trace_id_, is_unique_index_, is_global_index_, is_no_logging_);
   return serialize_field.get_serialize_size(); 
 }
 
@@ -653,7 +633,7 @@ int ObDDLTask::switch_status(const ObDDLTaskStatus new_status, const bool enable
   ObDDLTaskStatus real_new_status = new_status;
   const ObDDLTaskStatus old_status = task_status_;
   const bool error_need_retry = OB_SUCCESS != ret_code && is_error_need_retry(ret_code);
-  if (!is_partition_split_recovery_table_redefinition(task_type_) && OB_TMP_FAIL(check_ddl_task_is_cancel(trace_id_, is_cancel))) {
+  if (OB_TMP_FAIL(check_ddl_task_is_cancel(trace_id_, is_cancel))) {
     LOG_WARN("check ddl task is cancel failed", K(tmp_ret), K(task_id_), K(parent_task_id_), K_(trace_id));
   }
   if (is_cancel) {
@@ -667,11 +647,7 @@ int ObDDLTask::switch_status(const ObDDLTaskStatus new_status, const bool enable
     real_ret_code = OB_SUCCESS;
   }
   ret_code_ = OB_SUCCESS == ret_code_ ? real_ret_code : ret_code_;
-  if (is_tablet_split(task_type_)) {
-    real_new_status = OB_SUCCESS != real_ret_code ? WAIT_PARTITION_SPLIT_RECOVERY_TASK_FINISH : real_new_status;
-  } else {
-    real_new_status = OB_SUCCESS != real_ret_code ? FAIL : real_new_status;
-  }
+  real_new_status = OB_SUCCESS != real_ret_code ? FAIL : real_new_status;
   ObMySQLTransaction trans;
   if (OB_ISNULL(GCTX.sql_proxy_)) {
     ret = OB_INVALID_ARGUMENT;
@@ -1298,40 +1274,24 @@ void ObDDLWaitTransEndCtx::reset()
 struct SendItem final
 {
 public:
-  bool operator < (const SendItem &other) const { return leader_addr_ <  other.leader_addr_; }
-  TO_STRING_KV(K_(leader_addr), K_(ls_id), K_(tablet_id), KP_(other_info));
+  TO_STRING_KV(K_(tablet_id), KP_(other_info));
 public:
-  ObAddr leader_addr_;
-  ObLSID ls_id_;
   ObTabletID tablet_id_;
   void *other_info_;
 };
 
-int group_tablets_leader_addr(const ObIArray<ObTabletID> &tablet_ids, ObLocationService *location_service, ObArray<SendItem> &group_items)
+int build_send_items(const ObIArray<ObTabletID> &tablet_ids, ObArray<SendItem> &send_items)
 {
   int ret = OB_SUCCESS;
-  group_items.reuse();
-  if (OB_UNLIKELY(nullptr == location_service)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(tablet_ids.count()));
-  } else {
-    int64_t rpc_timeout = ObDDLUtil::get_default_ddl_rpc_timeout();
-    if (OB_FAIL(group_items.reserve(tablet_ids.count()))) {
-      LOG_WARN("reserve send array failed", K(ret), K(tablet_ids.count()));
-    }
-    for (int64_t i = 0; OB_SUCC(ret) && i < tablet_ids.count(); ++i) {
-      const ObTabletID &tablet_id = tablet_ids.at(i);
-      SendItem item;
-      if (OB_FAIL(ObDDLUtil::get_tablet_leader_addr(location_service,
-                                                    tablet_id,
-                                                    rpc_timeout,
-                                                    item.ls_id_,
-                                                    item.leader_addr_))) {
-        LOG_WARN("get tablet leader addr failed", K(ret));
-      } else if (FALSE_IT(item.tablet_id_ = tablet_id)) {
-      } else if (OB_FAIL(group_items.push_back(item))) {
-        LOG_WARN("push back send item failed", K(ret), K(item));
-      }
+  send_items.reuse();
+  if (OB_FAIL(send_items.reserve(tablet_ids.count()))) {
+    LOG_WARN("reserve send array failed", K(ret), K(tablet_ids.count()));
+  }
+  for (int64_t i = 0; OB_SUCC(ret) && i < tablet_ids.count(); ++i) {
+    SendItem item;
+    item.tablet_id_ = tablet_ids.at(i);
+    if (OB_FAIL(send_items.push_back(item))) {
+      LOG_WARN("push back send item failed", K(ret), K(item));
     }
   }
   return ret;
@@ -1348,7 +1308,7 @@ int check_trans_end(const ObArray<SendItem> &send_array,
   int ret = OB_SUCCESS;
   ret_array.reuse();
   snapshot_array.reuse();
-  hash::ObHashMap<obcall::ObLSTabletPair, obcall::ObCheckTransElapsedResult> result_map;
+  hash::ObHashMap<obcall::ObTabletPair, obcall::ObCheckTransElapsedResult> result_map;
   pending_tx_id.reset();
   if (OB_UNLIKELY(send_array.empty())) {
     ret = OB_INVALID_ARGUMENT;
@@ -1360,10 +1320,9 @@ int check_trans_end(const ObArray<SendItem> &send_array,
     arg.tablets_.reuse();
     for (int64_t i = 0; OB_SUCC(ret) && i < send_array.count(); ++i) {
       const SendItem &send_item = send_array.at(i);
-      ObLSTabletPair ls_tablet_pair;
-      ls_tablet_pair.ls_id_ = send_item.ls_id_;
-      ls_tablet_pair.tablet_id_ = send_item.tablet_id_;
-      if (OB_FAIL(arg.tablets_.push_back(ls_tablet_pair))) {
+      ObTabletPair tablet_pair;
+      tablet_pair.tablet_id_ = send_item.tablet_id_;
+      if (OB_FAIL(arg.tablets_.push_back(tablet_pair))) {
         LOG_WARN("push back send item failed", K(ret), K(i), K(send_item));
       }
     }
@@ -1376,7 +1335,7 @@ int check_trans_end(const ObArray<SendItem> &send_array,
           LOG_WARN("result count mismatch", K(ret), K(arg.tablets_.count()), K(result.results_.count()));
         } else {
           for (int64_t j = 0; OB_SUCC(ret) && j < result.results_.count(); ++j) {
-            const ObLSTabletPair &send_item = arg.tablets_.at(j);
+            const ObTabletPair &send_item = arg.tablets_.at(j);
             const ObCheckTransElapsedResult &result_item = result.results_.at(j);
             if (OB_FAIL(result_map.set_refactored(send_item, result_item))) {
               LOG_WARN("insert into result map failed", K(ret));
@@ -1399,12 +1358,11 @@ int check_trans_end(const ObArray<SendItem> &send_array,
         LOG_WARN("reserve snapshot array failed", K(ret));
       }
       for (int64_t i = 0; OB_SUCC(ret) && i < send_array.count(); ++i) {
-        const SendItem &send_item = send_array.at(i);
-        ObLSTabletPair ls_tablet_pair;
-        ls_tablet_pair.ls_id_ = send_item.ls_id_;
-        ls_tablet_pair.tablet_id_ = send_item.tablet_id_;
-        ObCheckTransElapsedResult result_item;
-        if (OB_FAIL(result_map.get_refactored(ls_tablet_pair, result_item))) {
+      const SendItem &send_item = send_array.at(i);
+      ObTabletPair tablet_pair;
+      tablet_pair.tablet_id_ = send_item.tablet_id_;
+      ObCheckTransElapsedResult result_item;
+      if (OB_FAIL(result_map.get_refactored(tablet_pair, result_item))) {
           LOG_WARN("get result failed", K(ret), K(send_item));
         } else if (OB_FAIL(ret_array.push_back(result_item.ret_code_))) {
           LOG_WARN("push back return code failed", K(ret), K(send_item), K(result_item));
@@ -1424,7 +1382,6 @@ int ObDDLWaitTransEndCtx::check_schema_trans_end(
     const common::ObIArray<common::ObTabletID> &tablet_ids,
     common::ObIArray<int> &ret_array,
     common::ObIArray<int64_t> &snapshot_array,
-    ObLocationService *location_service,
     const bool need_wait_trans_end,
     const bool need_write_defensive)
 {
@@ -1432,11 +1389,11 @@ int ObDDLWaitTransEndCtx::check_schema_trans_end(
   ret_array.reset();
   snapshot_array.reset();
   ObArray<SendItem> send_array;
-  if (OB_UNLIKELY(schema_version <= 0 || tablet_ids.count() <= 0 || nullptr == location_service)) {
+  if (OB_UNLIKELY(schema_version <= 0 || tablet_ids.count() <= 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(schema_version), K(tablet_ids.count()), KP(location_service));
-  } else if (OB_FAIL(group_tablets_leader_addr(tablet_ids, location_service, send_array))) {
-    LOG_WARN("group tablet by leader addr failed", K(ret), K(tablet_ids.count()));
+    LOG_WARN("invalid argument", K(ret), K(schema_version), K(tablet_ids.count()));
+  } else if (OB_FAIL(build_send_items(tablet_ids, send_array))) {
+    LOG_WARN("build tablet send items failed", K(ret), K(tablet_ids.count()));
   } else if (need_write_defensive && !is_write_defensive_done_) {
     if (OB_FAIL(do_write_defensive(ddl_task_id_, ddl_task_status_, tablet_ids, schema_version))) {
       LOG_WARN("failed to do write defense", K(ret), K(ddl_task_id_), K(ddl_task_status_), K(tablet_ids.count()));
@@ -1509,7 +1466,6 @@ int ObDDLWaitTransEndCtx::do_write_defensive(const int64_t ddl_task_id,
 
 int ObDDLWaitTransEndCtx::check_sstable_trans_end(const int64_t sstable_exist_ts,
     const common::ObIArray<common::ObTabletID> &tablet_ids,
-    ObLocationService *location_service,
     common::ObIArray<int> &ret_array,
     common::ObIArray<int64_t> &snapshot_array)
 {
@@ -1517,13 +1473,11 @@ int ObDDLWaitTransEndCtx::check_sstable_trans_end(const int64_t sstable_exist_ts
   ret_array.reset();
   snapshot_array.reset();
   ObArray<SendItem> send_array;
-  if (OB_UNLIKELY(sstable_exist_ts <= 0 || tablet_ids.count() <= 0
-      || nullptr == location_service)) {
+  if (OB_UNLIKELY(sstable_exist_ts <= 0 || tablet_ids.count() <= 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(sstable_exist_ts), K(tablet_ids.count()),
-        KP(location_service));
-  } else if (OB_FAIL(group_tablets_leader_addr(tablet_ids, location_service, send_array))) {
-    LOG_WARN("group tablet by leader addr failed", K(ret), K(tablet_ids.count()));
+    LOG_WARN("invalid argument", K(ret), K(sstable_exist_ts), K(tablet_ids.count()));
+  } else if (OB_FAIL(build_send_items(tablet_ids, send_array))) {
+    LOG_WARN("build tablet send items failed", K(ret), K(tablet_ids.count()));
   } else {
     obcall::ObCheckModifyTimeElapsedArg arg;
     
@@ -1573,7 +1527,7 @@ int ObDDLWaitTransEndCtx::try_wait(bool &is_trans_end, int64_t &snapshot_version
         case WaitTransType::WAIT_SCHEMA_TRANS: {
           if (OB_FAIL(check_schema_trans_end(
               wait_version_, need_check_tablets, ret_codes, tmp_snapshots,
-              GCTX.location_service_, need_wait_trans_end, true/*need_write_defensive*/))) {
+              need_wait_trans_end, true/*need_write_defensive*/))) {
             LOG_WARN("check schema transactions elapsed failed", K(ret), K(wait_type_), K(wait_version_));
           }
           break;
@@ -1581,14 +1535,14 @@ int ObDDLWaitTransEndCtx::try_wait(bool &is_trans_end, int64_t &snapshot_version
         case WaitTransType::WAIT_SCHEMA_TRANS_WITHOUT_WRITE_DEFENSIVE: {
           if (OB_FAIL(check_schema_trans_end(
               wait_version_, need_check_tablets, ret_codes, tmp_snapshots,
-              GCTX.location_service_, need_wait_trans_end, false/*need_write_defensive*/))) {
+              need_wait_trans_end, false/*need_write_defensive*/))) {
             LOG_WARN("check schema transactions elapsed failed", K(ret), K(wait_type_), K(wait_version_));
           }
           break;
         }
         case WaitTransType::WAIT_SSTABLE_TRANS: {
           if (OB_FAIL(check_sstable_trans_end(wait_version_, need_check_tablets,
-              GCTX.location_service_, ret_codes, tmp_snapshots))) {
+              ret_codes, tmp_snapshots))) {
             LOG_WARN("check sstable transactions elapsed failed", K(ret), K(wait_type_), K(wait_version_));
           }
           break;
@@ -1657,7 +1611,6 @@ int ObDDLWaitTransEndCtx::get_snapshot(int64_t &snapshot_version)
 {
   int ret = OB_SUCCESS;
   snapshot_version = 0;
-  bool is_external_consistent = false;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret), K(is_inited_));
@@ -1952,32 +1905,26 @@ int ObDDLWaitColumnChecksumCtx::refresh_zombie_task()
   return ret;
 }
 
-int send_batch_calc_rpc(const ObAddr &leader_addr,
-                        const ObCalcColumnChecksumRequestArg &arg,
+int send_batch_calc_rpc(const ObCalcColumnChecksumRequestArg &arg,
                         ObCalcColumnChecksumRequestRes &res,
                         ObIArray<SendItem> &send_array,
-                        const int64_t group_start_idx,
-                        const int64_t group_end_idx,
                         common::SpinRWLock &item_lock,
                         int64_t &send_succ_count)
 {
   int ret = OB_SUCCESS;
-  int64_t rpc_timeout = 0;
   const int64_t tablet_count = arg.calc_items_.count();
-  if (OB_FAIL(ObDDLUtil::get_ddl_rpc_timeout(tablet_count, rpc_timeout))) {
-    LOG_WARN("get ddl rpc timeout failed", K(ret));
-  } else if (OB_FAIL(GCTX.ob_service_->calc_column_checksum_request(arg, res))) {
-    LOG_WARN("send rpc failed", K(ret), K(arg), K(leader_addr));
-  } else if (res.ret_codes_.count() != arg.calc_items_.count() || res.ret_codes_.count() != (group_end_idx - group_start_idx)) {
+  if (OB_FAIL(GCTX.ob_service_->calc_column_checksum_request(arg, res))) {
+    LOG_WARN("calculate column checksum request failed", K(ret), K(arg));
+  } else if (res.ret_codes_.count() != tablet_count || send_array.count() != tablet_count) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("return codes count not match the argument", K(ret), K(arg.calc_items_.count()),
-        K(res.ret_codes_.count()), "group_count", group_end_idx - group_start_idx);
+        K(res.ret_codes_.count()), K(send_array.count()));
   } else {
     LOG_INFO("send checksum validation task", K(arg));
     SpinWLockGuard guard(item_lock);
-    for (int64_t j = group_start_idx, k = 0; j < group_end_idx; ++j, ++k) { // ignore ret
-      PartitionColChecksumStat *item = reinterpret_cast<PartitionColChecksumStat *>(send_array.at(j).other_info_);
-      int ret_code = res.ret_codes_.at(k);
+    for (int64_t i = 0; i < tablet_count; ++i) { // ignore ret
+      PartitionColChecksumStat *item = reinterpret_cast<PartitionColChecksumStat *>(send_array.at(i).other_info_);
+      int ret_code = res.ret_codes_.at(i);
       if (OB_SUCCESS == ret_code) {
         item->snapshot_ = arg.snapshot_version_;
         item->col_checksum_stat_ = CCS_INVALID;
@@ -1997,88 +1944,43 @@ int ObDDLWaitColumnChecksumCtx::send_calc_rpc(int64_t &send_succ_count)
 {
   int ret = OB_SUCCESS;
   send_succ_count = 0;
-  share::ObLocationService *location_service = nullptr;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret), K(is_inited_));
-  } else if (OB_ISNULL(location_service = GCTX.location_service_)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), KP(location_service));
   } else {
-    ObLSID ls_id;
-    int64_t rpc_timeout = ObDDLUtil::get_default_ddl_rpc_timeout();
     ObArray<SendItem> send_array;
+    ObCalcColumnChecksumRequestArg arg;
+    ObCalcColumnChecksumRequestRes res;
+    arg.task_id_ = task_id_;
+    arg.source_table_id_ = source_table_id_;
+    arg.target_table_id_ = target_table_id_;
+    arg.schema_version_ = schema_version_;
+    arg.execution_id_ = execution_id_;
+    arg.snapshot_version_ = snapshot_version_;
+    arg.user_parallelism_ = parallelism_;
     for (int64_t i = 0; OB_SUCC(ret) && i < stat_array_.count(); ++i) {
       PartitionColChecksumStat &item = stat_array_.at(i);
-      ObAddr leader_addr;
       if (!item.is_valid()) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("pkey invalid", K(ret), K(item));
       } else if (item.snapshot_ <= 0 || CCS_NOT_MASTER == item.col_checksum_stat_) {
-        // only send rpc for the request not send or not master
-        if (OB_FAIL(ObDDLUtil::get_tablet_leader_addr(location_service, item.tablet_id_, rpc_timeout, ls_id, leader_addr))) {
-          LOG_WARN("get tablet leader addr failed", K(ret));
-        } else {
-          SendItem send_item;
-          send_item.leader_addr_ = leader_addr;
-          send_item.ls_id_ = ls_id;
-          send_item.tablet_id_ = item.tablet_id_;
-          send_item.other_info_ = reinterpret_cast<void *>(&item);
-          if (OB_FAIL(send_array.push_back(send_item))) {
-            LOG_WARN("push send array failed", K(ret));
-          }
+        SendItem send_item;
+        send_item.tablet_id_ = item.tablet_id_;
+        send_item.other_info_ = reinterpret_cast<void *>(&item);
+        ObCalcColumnChecksumRequestArg::SingleItem calc_item;
+        calc_item.tablet_id_ = item.tablet_id_;
+        calc_item.calc_table_id_ = item.table_id_;
+        if (OB_FAIL(send_array.push_back(send_item))) {
+          LOG_WARN("push send array failed", K(ret));
+        } else if (OB_FAIL(arg.calc_items_.push_back(calc_item))) {
+          LOG_WARN("push checksum item failed", K(ret), K(calc_item));
         }
       }
     }
 
-    if (OB_SUCC(ret)) {
-      // group by leader addr and send batch rpc
-      lib::ob_sort(send_array.begin(), send_array.end());
-
-      ObAddr last_addr;
-      int64_t group_start_idx = 0;
-      ObCalcColumnChecksumRequestArg arg;
-      ObCalcColumnChecksumRequestRes res;
-      
-      arg.task_id_ = task_id_;
-      arg.source_table_id_ = source_table_id_;
-      arg.target_table_id_ = target_table_id_;
-      arg.schema_version_ = schema_version_;
-      arg.execution_id_ = execution_id_;
-      arg.snapshot_version_ = snapshot_version_;
-      arg.user_parallelism_ = parallelism_;
-      for (int64_t i = 0; OB_SUCC(ret) && i < send_array.count(); ++i) {
-        const SendItem &send_item = send_array.at(i);
-        if (send_item.leader_addr_ != last_addr) {
-          if (arg.calc_items_.count() > 0) {
-            if (OB_FAIL(send_batch_calc_rpc(last_addr,
-                    arg, res, send_array, group_start_idx, i, lock_, send_succ_count))) {
-              LOG_WARN("send batch calc rpc failed", K(ret));
-            }
-          }
-          if (OB_SUCC(ret)) {
-            arg.calc_items_.reuse();
-            res.ret_codes_.reuse();
-            last_addr = send_item.leader_addr_;
-            group_start_idx = i;
-          }
-        }
-        if (OB_SUCC(ret)) {
-          ObCalcColumnChecksumRequestArg::SingleItem calc_item;
-          calc_item.ls_id_ = send_item.ls_id_;
-          calc_item.tablet_id_ = send_item.tablet_id_;
-          calc_item.calc_table_id_ = reinterpret_cast<PartitionColChecksumStat *>(send_item.other_info_)->table_id_;
-          if (OB_FAIL(arg.calc_items_.push_back(calc_item))) {
-            LOG_WARN("push back send item failed", K(ret), K(i), K(send_item));
-          }
-        }
-      }
-      if (OB_SUCC(ret) && arg.calc_items_.count() > 0) {
-        if (OB_FAIL(send_batch_calc_rpc(last_addr,
-                arg, res, send_array, group_start_idx, send_array.count(), lock_, send_succ_count))) {
-          LOG_WARN("send batch calc rpc failed", K(ret));
-        }
-      }
+    if (OB_SUCC(ret) && !arg.calc_items_.empty() &&
+        OB_FAIL(send_batch_calc_rpc(arg, res, send_array, lock_, send_succ_count))) {
+      LOG_WARN("calculate column checksum batch failed", K(ret));
     }
   }
   return ret;
@@ -3165,7 +3067,6 @@ int ObDDLTaskRecordOperator::check_has_conflict_ddl(
               case ObDDLType::DDL_ADD_COLUMN_OFFLINE:
               case ObDDLType::DDL_COLUMN_REDEFINITION:
               case ObDDLType::DDL_TABLE_REDEFINITION:
-              case ObDDLType::DDL_PARTITION_SPLIT_RECOVERY_TABLE_REDEFINITION:
                 has_conflict_ddl = true;
                 break;
               default:
@@ -3745,58 +3646,6 @@ int ObDDLTaskRecordOperator::kill_inner_sql(
   } else if (OB_UNLIKELY(affected_rows < 0)) {  // kill session affected_rows is 0
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected affected_rows", K(ret), K(affected_rows));
-  }
-  return ret;
-}
-
-int ObDDLTaskRecordOperator::get_partition_split_task_ids(
-    common::ObISQLClient &proxy,
-    const ObIArray<uint64_t> &table_ids,
-    ObIArray<int64_t> &task_ids)
-{
-  int ret = OB_SUCCESS;
-  ObSqlString sql_table_ids;
-  ObSqlString sql_string;
-  task_ids.reset();
-  if (OB_UNLIKELY(table_ids.count() < 1)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(table_ids.count()));
-  } else {
-    SMART_VAR(ObMySQLProxy::MySQLResult, res) {
-      sqlclient::ObMySQLResult *result = NULL;
-      for (int64_t i = 0; OB_SUCC(ret) && i < table_ids.count(); i++) {
-        if (OB_FAIL(sql_table_ids.append_fmt("%s %lu", 0 == i ? "" : ", ", table_ids.at(i)))) {
-          LOG_WARN("append sql failed", K(ret));
-        }
-      }
-      if (OB_SUCC(ret)) {
-        if (OB_FAIL(sql_string.assign_fmt("SELECT task_id FROM %s WHERE object_id in (%.*s) AND ddl_type >= %u AND ddl_type <= %u",
-                    OB_ALL_DDL_TASK_STATUS_TNAME, static_cast<int>(sql_table_ids.length()), sql_table_ids.ptr(), ObDDLType::DDL_AUTO_SPLIT_BY_RANGE, ObDDLType::DDL_MANUAL_SPLIT_NON_RANGE))) {
-          LOG_WARN("assign sql string failed", K(ret));
-        } else if (OB_FAIL(proxy.read(res, sql_string.ptr()))) {
-          LOG_WARN("query task_ids task failed", K(ret), K(sql_string));
-        } else if (OB_UNLIKELY(NULL == (result = res.get_result()))) {
-          ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("fail to get sql result", K(ret));
-        } else {
-          while (OB_SUCC(ret) && OB_SUCC(result->next())) {
-            int64_t task_id = OB_INVALID_ID;
-            EXTRACT_INT_FIELD_MYSQL(*result, "task_id", task_id, int64_t);
-            if (OB_FAIL(ret)) {
-            } else if (OB_FAIL(task_ids.push_back(task_id))) {
-              LOG_WARN("failed to push bakc into task_ids", K(ret), K(task_ids));
-            }
-          }
-
-          if (OB_ITER_END == ret) {
-            //overwrite ret
-            ret = OB_SUCCESS;
-          } else {
-            LOG_WARN("fail to iter result", K(ret));
-          }
-        }
-      }
-    }
   }
   return ret;
 }

@@ -249,7 +249,6 @@ DEF_TO_STRING(ObDMLBaseParam)
        K_(branch_id),
        K_(check_schema_version),
        K_(ddl_task_id),
-       KPC_(data_row_for_lob),
        K_(is_main_table_in_fts_ddl),
        K_(has_async_index));
   J_OBJ_END();
@@ -285,7 +284,6 @@ DEF_TO_STRING(ObTableScanParam)
   int64_t pos = 0;
   J_OBJ_START();
   J_KV(K_(tablet_id),
-       K_(ls_id),
        N_COLUMN_IDS, column_ids_,
        N_INDEX_ID, index_id_,
        N_KEY_RANGES, key_ranges_,
@@ -312,8 +310,6 @@ DEF_TO_STRING(ObTableScanParam)
        K_(need_switch_param),
        K_(is_mds_query),
        K_(tx_seq_base),
-       K_(auto_split_filter_type),
-       K_(is_tablet_spliting),
        K_(need_update_tablet_param),
        KPC_(mds_collector));
   J_OBJ_END();

@@ -146,7 +146,9 @@ public:
   int64_t to_string(char *buf, const int64_t buf_len) const;
 
 public:
-  static constexpr uint64_t INVALID_TABLET_VERSION = static_cast<uint64_t>(-1);
+  // Must match MacroBlockId::meta_version_id_ (SF_BIT_META_VERSION_ID-bit unsigned field).
+  static constexpr uint64_t INVALID_TABLET_VERSION =
+      (1llu << (MacroBlockId::SF_BIT_META_VERSION_ID)) - 1;
   static bool is_inaccurate_tablet_addr(const storage::ObMetaDiskAddr &tablet_meta_addr)
   {
     return tablet_meta_addr.is_block() && tablet_meta_addr.block_id().meta_version_id() == INVALID_TABLET_VERSION;

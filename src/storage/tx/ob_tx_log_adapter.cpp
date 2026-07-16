@@ -56,6 +56,7 @@ int ObLSTxLogAdapter::submit_log(const char *buf,
   int64_t cur_ts = ObTimeUtility::current_time();
   int64_t retry_cnt = 0;
   const bool is_big_log = (size > palf::MAX_NORMAL_LOG_BODY_SIZE);
+  const bool allow_compression = true;
 
   if (base_scn.convert_to_ts() > cur_ts + 86400000000L) {
     // only print error log
@@ -84,11 +85,11 @@ int ObLSTxLogAdapter::submit_log(const char *buf,
     }
     do {
       if (is_big_log && OB_FAIL(log_handler_->append_big_log(buf, size, base_scn, block_flag,
-                                                              cb, lsn, scn))) {
+                                                              allow_compression, cb, lsn, scn))) {
         TRANS_LOG(WARN, "append big log to palf failed", K(ret), KP(log_handler_), KP(buf), K(size), K(base_scn),
               K(need_nonblock), K(block_flag), K(expire_us), K(is_big_log));
       } else if (!is_big_log && OB_FAIL(log_handler_->append(buf, size, base_scn, block_flag,
-                                                         cb, lsn, scn))) {
+                                                         allow_compression, cb, lsn, scn))) {
         TRANS_LOG(WARN, "append log to palf failed", K(ret), KP(log_handler_), KP(buf), K(size), K(base_scn),
               K(need_nonblock), K(block_flag), K(expire_us));
       } else {

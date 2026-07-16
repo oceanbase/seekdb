@@ -19,7 +19,7 @@
 
 #include "storage/ls/ob_ls_ddl_log_handler.h"
 #include "storage/tx/ob_trans_define.h"
-#include "storage/tx/ob_trans_part_ctx.h"
+#include "storage/tx/ob_tx_ctx.h"
 #include "storage/tx/ob_tx_log.h"
 
 namespace oceanbase
@@ -104,13 +104,12 @@ private:
     int tmp_ret = OB_SUCCESS;
     if (OB_FAIL(deserialize_log_())) {
       TRANS_LOG(WARN, "deserialize the log failed", K(ret), K(tx_ctx_->trans_id_),
-                K(tx_ctx_->ls_id_), KPC(this));
+                KPC(this));
     } else if (OB_FAIL(replay_out_ctx_())) {
       TRANS_LOG(WARN, "replay log out ctx failed", K(ret), K(tx_ctx_->trans_id_),
-                K(tx_ctx_->ls_id_), KPC(this));
-    } else if (OB_FAIL(replay_in_ctx_())) {
-      TRANS_LOG(WARN, "replay log in ctx failed", K(ret), K(tx_ctx_->trans_id_), K(tx_ctx_->ls_id_),
                 KPC(this));
+    } else if (OB_FAIL(replay_in_ctx_())) {
+      TRANS_LOG(WARN, "replay log in ctx failed", K(ret), K(tx_ctx_->trans_id_), KPC(this));
     }
 
     if (OB_FAIL(ret)) {
@@ -124,7 +123,7 @@ private:
 
 public:
   // submit
-  ObTxCtxLogOperator(ObPartTransCtx *tx_ctx_ptr,
+  ObTxCtxLogOperator(ObTxCtx *tx_ctx_ptr,
                      ObTxLogBlock *log_block_ptr,
                      typename T::ConstructArg *construct_arg,
                      const typename T::SubmitArg &submit_arg)
@@ -136,7 +135,7 @@ public:
   };
 
   // apply
-  ObTxCtxLogOperator(ObPartTransCtx *tx_ctx_ptr, ObTxLogCb *log_cb_ptr)
+  ObTxCtxLogOperator(ObTxCtx *tx_ctx_ptr, ObTxLogCb *log_cb_ptr)
       : tx_ctx_(tx_ctx_ptr), log_object_ptr_(nullptr), log_block_(nullptr), construct_arg_(nullptr),
         scn_(log_cb_ptr->get_log_ts()), lsn_(log_cb_ptr->get_lsn())
   {
@@ -145,7 +144,7 @@ public:
   };
 
   // replay
-  ObTxCtxLogOperator(ObPartTransCtx *tx_ctx_ptr,
+  ObTxCtxLogOperator(ObTxCtx *tx_ctx_ptr,
                      ObTxLogBlock *log_block_ptr,
                      typename T::ConstructArg *construct_arg,
                      const typename T::ReplayArg &replay_arg,
@@ -174,7 +173,7 @@ public:
   const palf::LSN &get_lsn() { return lsn_; }
 
 private:
-  ObPartTransCtx *tx_ctx_;
+  ObTxCtx *tx_ctx_;
   char log_object_memory_[sizeof(T)];
   T *log_object_ptr_;
   ObTxLogBlock *log_block_;
@@ -214,8 +213,7 @@ OB_INLINE int ObTxCtxLogOperator<T>::prepare_generic_resource_()
       // block.
       // the log_entry_no will be backfill before log-block to be submitted
       log_block_->get_header().init(tx_ctx_->cluster_id_, tx_ctx_->cluster_version_,
-                                    INT64_MAX /*log_entry_no*/, tx_ctx_->trans_id_,
-                                    tx_ctx_->exec_info_.scheduler_);
+                                    INT64_MAX /*log_entry_no*/, tx_ctx_->trans_id_);
     }
     log_op_arg_.submit_arg_.suggested_buf_size_ = log_op_arg_.submit_arg_.suggested_buf_size_ <= 0
                                                       ? ObTxAdaptiveLogBuf::NORMAL_LOG_BUF_SIZE
@@ -232,8 +230,7 @@ OB_INLINE int ObTxCtxLogOperator<T>::prepare_generic_resource_()
       TRANS_LOG(WARN, "get log cb failed", K(ret), KPC(this));
     }
   } else if (OB_FAIL(tx_ctx_->acquire_ctx_ref_())) {
-    TRANS_LOG(ERROR, "acquire ctx ref failed", KR(ret), K(tx_ctx_->trans_id_), K(tx_ctx_->ls_id_),
-              KPC(this));
+    TRANS_LOG(ERROR, "acquire ctx ref failed", KR(ret), K(tx_ctx_->trans_id_), KPC(this));
   } else if (OB_FALSE_IT(log_op_arg_.submit_arg_.hold_tx_ctx_ref_ = true)) {
     // do nothing
   }
@@ -285,7 +282,7 @@ OB_INLINE int ObTxCtxLogOperator<T>::insert_into_log_block_()
       TRANS_LOG(WARN, "add new log failed", KR(ret), KPC(this));
     } else {
       TRANS_LOG(DEBUG, "the buffer is not enough in log_block", K(ret), K(tx_ctx_->trans_id_),
-                K(tx_ctx_->ls_id_), KPC(this));
+                KPC(this));
     }
   }
 
@@ -304,8 +301,6 @@ template <typename T>
 OB_INLINE int ObTxCtxLogOperator<T>::submit_log_block_out_()
 {
   int ret = OB_SUCCESS;
-  bool is_2pc_state_log = false;
-
   if (tx_ctx_->is_exiting()) {
     ret = OB_TRANS_IS_EXITING;
     TRANS_LOG(WARN, "the tx ctx is exiting", K(ret), K(T::LOG_TYPE), KPC(tx_ctx_));
@@ -314,25 +309,15 @@ OB_INLINE int ObTxCtxLogOperator<T>::submit_log_block_out_()
     ret = OB_TRANS_KILLED;
     TRANS_LOG(ERROR, "tx has been aborting, can not submit log", K(ret), K(T::LOG_TYPE),
               KPC(tx_ctx_));
-  } else if (tx_ctx_->is_follower_()) {
-    ret = OB_NOT_MASTER;
-    TRANS_LOG(ERROR, "we can not submit a tx log on the follower", K(ret), K(T::LOG_TYPE),
+  } else if (tx_ctx_->is_for_replay()) {
+    ret = OB_STATE_NOT_MATCH;
+    TRANS_LOG(ERROR, "a replay context cannot submit transaction logs", K(ret), K(T::LOG_TYPE),
               KPC(tx_ctx_));
-  } else if (tx_ctx_->exec_info_.data_complete_
-             && tx_ctx_->start_working_log_ts_ > tx_ctx_->exec_info_.max_applying_log_ts_) {
-    ret = OB_ERR_UNEXPECTED;
-    TRANS_LOG(WARN,
-              "There exists a data completed transaction whose start_working_log_ts_ is greater "
-              "than any of its log_ts",
-              K(ret), K(T::LOG_TYPE), KPC(tx_ctx_));
-    tx_ctx_->print_trace_log_();
   } else if (ObTxLogTypeChecker::is_data_log(T::LOG_TYPE)
              && tx_ctx_->get_downstream_state() >= ObTxState::REDO_COMPLETE) {
     ret = OB_STATE_NOT_MATCH;
     TRANS_LOG(ERROR, "the data log can not be submitted after the commit info log", K(ret),
               K(T::LOG_TYPE), KPC(tx_ctx_));
-  } else if (is_contain_stat_log(log_block_->get_cb_arg_array())
-             && FALSE_IT(is_2pc_state_log = true)) {
   } else {
     const int64_t real_replay_hint = log_op_arg_.submit_arg_.replay_hint_ > 0
                                          ? log_op_arg_.submit_arg_.replay_hint_
@@ -402,13 +387,11 @@ OB_INLINE void ObTxCtxLogOperator<T>::after_submit_log_fail_(const int submit_re
       if (log_op_arg_.submit_arg_.log_cb_->get_prev() != nullptr
           || log_op_arg_.submit_arg_.log_cb_->get_next() != nullptr) {
         TRANS_LOG(ERROR, "the log cb is not alone", K(submit_ret), K(tmp_ret),
-                  K(tx_ctx_->get_trans_id()), K(tx_ctx_->get_ls_id()),
-                  KPC(log_op_arg_.submit_arg_.log_cb_), K(T::LOG_TYPE), KPC(this));
+                  K(tx_ctx_->get_trans_id()), KPC(log_op_arg_.submit_arg_.log_cb_), K(T::LOG_TYPE), KPC(this));
       }
       if (OB_TMP_FAIL(tx_ctx_->return_log_cb_(log_op_arg_.submit_arg_.log_cb_))) {
         TRANS_LOG(ERROR, "free the log cb failed", K(submit_ret), K(tmp_ret),
-                  K(tx_ctx_->get_trans_id()), K(tx_ctx_->get_ls_id()),
-                  KPC(log_op_arg_.submit_arg_.log_cb_), K(T::LOG_TYPE), KPC(this));
+                  K(tx_ctx_->get_trans_id()), KPC(log_op_arg_.submit_arg_.log_cb_), K(T::LOG_TYPE), KPC(this));
       }
     }
     if (log_op_arg_.submit_arg_.hold_tx_ctx_ref_) {

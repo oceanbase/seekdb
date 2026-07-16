@@ -247,19 +247,9 @@ int ObResultSet::implicit_commit_before_cmd_execute(ObSQLSessionInfo &session_in
 {
   int ret = OB_SUCCESS;
   if (session_info.is_in_transaction() && session_info.associated_xa()) {
-    int tmp_ret = OB_SUCCESS;
-    transaction::ObTxDesc *tx_desc = session_info.get_tx_desc();
     const transaction::ObXATransID xid = session_info.get_xid();
-    const transaction::ObGlobalTxType global_tx_type = tx_desc->get_global_tx_type(xid);
-    if (transaction::ObGlobalTxType::XA_TRANS == global_tx_type) {
-      // commit is not allowed in xa trans
-      ret = OB_TRANS_XA_ERR_COMMIT;
-      LOG_WARN("COMMIT is not allowed in a xa trans", K(ret), K(xid), K(global_tx_type),
-          KPC(tx_desc));
-    } else {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected global trans type", K(ret), K(xid), K(global_tx_type), KPC(tx_desc));
-    }
+    ret = OB_TRANS_XA_ERR_COMMIT;
+    LOG_WARN("COMMIT is not allowed in a xa trans", K(ret), K(xid));
     exec_ctx.set_need_disconnect(false);
   } else {
     ret = ObSqlTransControl::end_trans_before_cmd_execute(session_info,

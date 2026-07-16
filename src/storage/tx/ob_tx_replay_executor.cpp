@@ -21,6 +21,9 @@
 #include "storage/tx/ob_tx_replay_executor.h"
 #include "storage/tablelock/ob_lock_memtable.h"
 #include "logservice/replayservice/ob_tablet_replay_executor.h"
+#include "storage/ls/ob_ls.h"
+#include "storage/ls/ob_ls_tx_service.h"
+#include "storage/ob_relative_table.h"
 
 namespace oceanbase
 {
@@ -36,13 +39,11 @@ int ObTxReplayExecutor::execute(storage::ObLS *ls,
                                 const int skip_pos,
                                 const palf::LSN &lsn,
                                 const SCN &log_timestamp,
-                                const logservice::ObLogBaseHeader &base_header,
-                                const ObLSID &ls_id)
+                                const logservice::ObLogBaseHeader &base_header)
 {
   int ret = OB_SUCCESS;
   
   ObTxReplayExecutor replay_executor(ls,
-                                     ls_id,
                                      ls_tx_srv,
                                      lsn,
                                      log_timestamp,
@@ -53,7 +54,7 @@ int ObTxReplayExecutor::execute(storage::ObLS *ls,
     TRANS_LOG(ERROR, "invaild arguments", K(replay_executor), K(buf), K(size));
   } else if (OB_FAIL(replay_executor.do_replay_(buf, size, skip_pos))) {
     TRANS_LOG(WARN, "replay_executor.do_replay failed", K(ret),
-        K(replay_executor), K(buf), K(size), K(skip_pos), K(ls_id));
+        K(replay_executor), K(buf), K(size), K(skip_pos));
   } else {
     if (log_timestamp <= ls->get_ls_wrs_handler()->get_ls_weak_read_ts()) {
       SCN min_log_service_scn;
@@ -65,8 +66,7 @@ int ObTxReplayExecutor::execute(storage::ObLS *ls,
                                                                     K(buf),
                                                                     K(size),
                                                                     K(skip_pos),
-                                                                    K(min_log_service_scn),
-                                                                    K(ls_id));
+                                                                    K(min_log_service_scn));
     }
   }
   return ret;
@@ -85,16 +85,6 @@ int ObTxReplayExecutor::do_replay_(const char *buf, const int64_t size, const in
     while (OB_SUCC(ret)) {
       if (OB_FAIL(try_get_tx_ctx_())) {
         TRANS_LOG(WARN, "try get tx ctx failed", K(ret), KPC(this));
-      } else if (OB_ISNULL(ctx_)) {
-        // StartWorkingLog
-        if (OB_FAIL(log_block_.get_next_log(header))) {
-          if (OB_ITER_END == ret) {
-            ret = OB_SUCCESS;
-            break;
-          } else {
-            TRANS_LOG(ERROR, "[Replay Tx] get_next_log error in replay_buf", KPC(this));
-          }
-        }
       } else if (OB_FAIL(iter_next_log_for_replay_(header))) {
         if (OB_ITER_END == ret) {
           ret = OB_SUCCESS;
@@ -112,10 +102,6 @@ int ObTxReplayExecutor::do_replay_(const char *buf, const int64_t size, const in
             TRANS_LOG(ERROR, "can not replay tx log", K(ret), K(header), KPC(this));
           } else if (OB_FAIL(replay_redo_())) {
             TRANS_LOG(WARN, "[Replay Tx] replay redo log error", K(ret));
-          }
-        } else if (log_type == ObTxLogType::TX_START_WORKING_LOG) {
-          if (OB_FAIL(replay_start_working_())) {
-            TRANS_LOG(WARN, "[Replay Tx] replay clear log error", KR(ret));
           }
         } else {
           ret = replay_tx_log_(log_type);
@@ -174,21 +160,9 @@ int ObTxReplayExecutor::replay_tx_log_(const ObTxLogType log_type)
     }
     break;
   }
-  case ObTxLogType::TX_ACTIVE_INFO_LOG: {
-    if (OB_FAIL(replay_active_info_())) {
-      TRANS_LOG(WARN, "replay active_state error", K(ret));
-    }
-    break;
-  }
   case ObTxLogType::TX_COMMIT_INFO_LOG: {
     if (OB_FAIL(replay_commit_info_())) {
       TRANS_LOG(WARN, "[Replay Tx] replay commit info log error", K(ret));
-    }
-    break;
-  }
-  case ObTxLogType::TX_PREPARE_LOG: {
-    if (OB_FAIL(replay_prepare_())) {
-      TRANS_LOG(WARN, "[Replay Tx] replay prepare log error", K(ret));
     }
     break;
   }
@@ -264,23 +238,19 @@ int ObTxReplayExecutor::try_get_tx_ctx_()
     } else if (OB_TRANS_CTX_NOT_EXIST == ret) {
       ret = OB_SUCCESS;
       bool tx_ctx_existed = false;
-      common::ObAddr scheduler = log_block_.get_header().get_scheduler();
       // since 4.2.4, cluster version in log_block_header
       const uint64_t cluster_version = log_block_.get_header().get_cluster_version();
       ObTxCreateArg arg(true, /* for_replay */
-                        PartCtxSource::REPLAY,
+                        TxCtxSource::REPLAY,
                         tx_id,
-                        ls_id_,
                         log_block_.get_header().get_org_cluster_id(),
                         cluster_version,
                         0, /*session_id*/
                         0, /*client_sid*/
                         0, /*associated_session_id*/
-                        scheduler,
                         INT64_MAX,         /*trans_expired_time_*/
                         ls_tx_srv_->get_trans_service());
       ObTxDataThrottleGuard tx_data_throttle_guard(
-          ls_id_,
           true /* for_replay_ */,
           ObClockGenerator::getClock() + share::ObThrottleUnit<ObTenantTxDataAllocator>::DEFAULT_MAX_THROTTLE_TIME);
       if (OB_FAIL(ls_tx_srv_->create_tx_ctx(arg, tx_ctx_existed, ctx_))) {
@@ -402,7 +372,6 @@ int ObTxReplayExecutor::replay_rollback_to_()
   ObTxRollbackToLog log;
   const bool pre_barrier = base_header_.need_pre_replay_barrier();
   ObTxDataThrottleGuard tx_data_throttle_guard(
-      ls_id_,
       true /* for_replay_ */,
       ObClockGenerator::getClock() + share::ObThrottleUnit<ObTenantTxDataAllocator>::DEFAULT_MAX_THROTTLE_TIME);
   if (OB_FAIL(log_block_.deserialize_log_body(log))) {
@@ -415,44 +384,12 @@ int ObTxReplayExecutor::replay_rollback_to_()
   return ret;
 }
 
-int ObTxReplayExecutor::replay_active_info_()
-{
-  int ret = OB_SUCCESS;
-  ObTxActiveInfoLogTempRef temp_ref;
-  ObTxActiveInfoLog active_info_log(temp_ref);
-  if (OB_FAIL(log_block_.deserialize_log_body(active_info_log))) {
-    TRANS_LOG(WARN, "[Replay Tx] deserialize log body error", K(ret), K(active_info_log), K(lsn_),
-              K(log_ts_ns_));
-  } else if (OB_FAIL(
-                 ctx_->replay_active_info(active_info_log, lsn_, log_ts_ns_, tx_part_log_no_))) {
-    TRANS_LOG(WARN, "[Replay Tx] replay active_info in tx_ctx error", K(ret), K(lsn_),
-              K(log_ts_ns_));
-  }
-  return ret;
-}
-
-int ObTxReplayExecutor::replay_start_working_()
-{
-  int ret = OB_SUCCESS;
-  ObTxStartWorkingLogTempRef temp_ref;
-  ObTxStartWorkingLog start_working_log(temp_ref);
-  if (OB_FAIL(log_block_.deserialize_log_body(start_working_log))) {
-    TRANS_LOG(WARN, "[Replay Tx] deserialize start_working log body error", KR(ret), K(start_working_log),
-              K(lsn_), K(log_ts_ns_));
-  } else if (OB_FAIL(ls_tx_srv_->replay_start_working_log(start_working_log, log_ts_ns_))) {
-    TRANS_LOG(WARN, "[Replay Tx] replay start_working log in tx_ctx error", KR(ret), K(lsn_),
-              K(log_ts_ns_));
-  }
-  return ret;
-}
-
 int ObTxReplayExecutor::replay_multi_source_data_()
 {
   int ret = OB_SUCCESS;
   ObTxMultiDataSourceLog log;
 
-  ObMdsThrottleGuard mds_throttle_guard(ls_id_,
-                                        true /* for_replay */,
+  ObMdsThrottleGuard mds_throttle_guard(true /* for_replay */,
                                         ObClockGenerator::getClock() +
                                             share::ObThrottleUnit<ObTenantMdsAllocator>::DEFAULT_MAX_THROTTLE_TIME);
 
@@ -491,22 +428,6 @@ int ObTxReplayExecutor::replay_commit_info_()
   } else if (OB_FAIL(ctx_->replay_commit_info(commit_info_log, lsn_, log_ts_ns_, tx_part_log_no_, pre_barrier))) {
     TRANS_LOG(WARN, "[Replay Tx] replay commit_info in tx_ctx error", K(ret), K(lsn_),
               K(log_ts_ns_));
-  }
-
-  return ret;
-}
-
-int ObTxReplayExecutor::replay_prepare_()
-{
-  int ret = OB_SUCCESS;
-  ObTxPrepareLogTempRef temp_ref;
-  ObTxPrepareLog prepare_log(temp_ref);
-
-  if (OB_FAIL(log_block_.deserialize_log_body(prepare_log))) {
-    TRANS_LOG(WARN, "[Replay Tx] deserialize log body error", K(ret), K(prepare_log), K(lsn_),
-              K(log_ts_ns_));
-  } else if (OB_FAIL(ctx_->replay_prepare(prepare_log, lsn_, log_ts_ns_, tx_part_log_no_))) {
-    TRANS_LOG(WARN, "[Replay Tx] replay prepare in tx_ctx error", K(ret), K(lsn_), K(log_ts_ns_));
   }
 
   return ret;
@@ -657,7 +578,6 @@ int ObTxReplayExecutor::replay_redo_in_memtable_(ObTxRedoLog &redo, const bool s
               K(timeguard.get_diff()),
               K(log_ts_ns_),
               K(ctx_->get_trans_id()),
-              K(ctx_->get_ls_id()),
               K(mvcc_row_count_),
               K(table_lock_row_count_));
   }
@@ -702,7 +622,6 @@ int ObTxReplayExecutor::replay_one_row_in_memtable_(ObMutatorRowHeader &row_head
   } else {
     ObTablet *tablet = tablet_handle.get_obj();
     storage::ObStoreCtx storeCtx;
-    storeCtx.ls_id_ = ctx_->get_ls_id();
     (void)storeCtx.mvcc_acc_ctx_.init_replay(
       *ctx_,
       *mt_ctx_,
@@ -773,7 +692,6 @@ int ObTxReplayExecutor::replay_row_(storage::ObStoreCtx &store_ctx,
                                     memtable::ObMemtableMutatorIterator *mmi_ptr)
 {
   int ret = OB_SUCCESS;
-  const share::ObLSID &ls_id = tablet->get_ls_id();
   const common::ObTabletID &tablet_id = tablet->get_tablet_id();
   common::ObTimeGuard timeguard("replay_row_in_memtable", 10_ms);
   storage::ObIMemtable *mem_ptr = nullptr;
@@ -786,22 +704,19 @@ int ObTxReplayExecutor::replay_row_(storage::ObStoreCtx &store_ctx,
   } else if (OB_FAIL(prepare_memtable_replay_(w_guard, mem_ptr))) {
     if (OB_NO_NEED_UPDATE == ret) {
       TRANS_LOG(DEBUG, "[Replay Tx] Not need replay row for tablet",
-                K(ret), K(ls_id), K(tablet_id), K(log_ts_ns_),
+                K(ret), K(tablet_id), K(log_ts_ns_),
                 K(tx_part_log_no_), K(mmi_ptr->get_row_head()));
     } else if (OB_TABLET_NOT_EXIST == ret) {
-      if (OB_UNLIKELY(!true)) {
-        ret = OB_ERR_UNEXPECTED;
-        TRANS_LOG(WARN, "tenant config is invalid", K(ret));
-      } else if (GCONF._allow_skip_replay_redo_after_detete_tablet) {
+      if (GCONF._allow_skip_replay_redo_after_detete_tablet) {
         ret = OB_NO_NEED_UPDATE;
         TRANS_LOG(WARN, "[Replay Tx] tablet does not exist while preparing memtable for replay, allow to skip this clog replaying for emergency",
-            K(ret), K(ls_id), K(tablet_id), K_(log_ts_ns));
+            K(ret), K(tablet_id), K_(log_ts_ns));
       } else {
         TRANS_LOG(ERROR, "[Replay Tx] tablet does not exist while preparing memtable for replay",
-            K(ret), K(ls_id), K(tablet_id), K_(log_ts_ns));
+            K(ret), K(tablet_id), K_(log_ts_ns));
       }
     } else {
-      TRANS_LOG(WARN, "[Replay Tx] prepare for replay failed", K(ret), K(ls_id), K(tablet_id), KP(mem_ptr), KP(mmi_ptr));
+      TRANS_LOG(WARN, "[Replay Tx] prepare for replay failed", K(ret), K(tablet_id), KP(mem_ptr), KP(mmi_ptr));
     }
     // dynamic_cast will check whether this is really a ObMemtable.
   } else if (OB_ISNULL(data_mem_ptr = static_cast<ObMemtable *>(mem_ptr))) {
@@ -854,7 +769,7 @@ void ObTxReplayExecutor::rewrite_replay_retry_code_(int &ret_code)
   if (ret_code == OB_MINOR_FREEZE_NOT_ALLOW || ret_code == OB_SCN_OUT_OF_BOUND ||
       ret_code == OB_ALLOCATE_MEMORY_FAILED) {
     TRANS_LOG(INFO, "rewrite replay error_code as OB_EAGAIN for retry", K(ret_code),
-              K(ls_->get_ls_id()), K(log_ts_ns_));
+              K(log_ts_ns_));
     ret_code = OB_EAGAIN;
   }
 }

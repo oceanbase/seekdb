@@ -21,7 +21,7 @@
 #include "share/schema/ob_schema_getter_guard.h"
 #include "share/schema/ob_tenant_schema_service.h"
 #include "share/schema/ob_multi_version_schema_service.h"
-#include "share/tablet/ob_tablet_to_ls_operator.h"
+#include "share/tablet/ob_tablet_mapping_operator.h"
 #include "share/schema/ob_table_schema.h"
 #include "share/schema/ob_column_schema.h"
 #include "observer/vector_index/ob_vector_index_util.h"
@@ -35,12 +35,10 @@
 #include "storage/blocksstable/ob_datum_row.h"
 #include "storage/tx_storage/ob_access_service.h"
 #include "storage/tx_storage/ob_ls_service.h"
-#include "storage/tx_storage/ob_ls_handle.h"
 #include "storage/ls/ob_ls.h"
 #include "storage/access/ob_table_scan_iterator.h"
 #include "share/table/ob_table_util.h"
 #include "share/ob_server_struct.h"
-#include "share/location_cache/ob_location_service.h"
 #include "common/mysqlclient/ob_isql_connection.h"
 #include "storage/tx/ob_trans_define.h"
 #include "observer/ob_inner_sql_connection.h"
@@ -482,20 +480,20 @@ int ObCSAsyncIndexProcessor::resolve_table_id_from_tablet_id_(
     LOG_WARN("sql_proxy is null", K(ret));
   } else {
     common::ObSEArray<common::ObTabletID, 1> tablet_ids;
-    common::ObSEArray<ObTabletToLSInfo, 1> infos;
+    common::ObSEArray<ObTabletTablePair, 1> infos;
     if (OB_FAIL(tablet_ids.push_back(tablet_id))) {
       LOG_WARN("fail to push back tablet_id", K(ret), K(tablet_id));
-    } else if (OB_FAIL(ObTabletToLSTableOperator::batch_get(
+    } else if (OB_FAIL(ObTabletMappingTableOperator::batch_get(
                    *GCTX.sql_proxy_, tablet_ids, infos))) {
       if (common::OB_ITEM_NOT_MATCH == ret) {
-        LOG_WARN("tablet not in __all_tablet_to_ls", K(ret), K(tablet_id));
+        LOG_WARN("tablet mapping not found", K(ret), K(tablet_id));
         ret = common::OB_TABLET_NOT_EXIST;
         table_id = common::OB_INVALID_ID;
         if (OB_FAIL(tablet_to_table_.set_refactored(tablet_id.id(), common::OB_INVALID_ID))) {
           LOG_WARN("fail to cache invalid tablet_id", K(ret), K(tablet_id));
         }
       } else {
-        LOG_WARN("fail to get table_id from __all_tablet_to_ls", K(ret), K(tablet_id));
+        LOG_WARN("fail to get table_id from tablet mapping", K(ret), K(tablet_id));
       }
     } else if (OB_UNLIKELY(infos.count() != 1)) {
       ret = common::OB_ERR_UNEXPECTED;
@@ -504,7 +502,7 @@ int ObCSAsyncIndexProcessor::resolve_table_id_from_tablet_id_(
       table_id = infos.at(0).get_table_id();
       if (common::OB_INVALID_ID == table_id) {
         ret = common::OB_ERR_UNEXPECTED;
-        LOG_WARN("table_id invalid in __all_tablet_to_ls", K(ret), K(tablet_id));
+        LOG_WARN("table_id invalid in tablet mapping", K(ret), K(tablet_id));
       } else if (OB_FAIL(tablet_to_table_.set_refactored(tablet_id.id(), table_id))) {
         LOG_WARN("set tablet_to_table failed", KR(ret));
       }
@@ -957,7 +955,6 @@ int ObCSAsyncIndexProcessor::set_das_insert_context_(const common::ObIArray<ObAS
     LOG_WARN("events array is empty", K(ret));
   } else {
     insert_op->set_trans_desc(tx_desc);
-    share::ObLSID ls_id = share::SYS_LS;
     const common::ObTabletID &data_tablet_id = events.at(0).tablet_id_;
     
 
@@ -984,7 +981,6 @@ int ObCSAsyncIndexProcessor::set_das_insert_context_(const common::ObIArray<ObAS
       LOG_WARN("Invalid vbitmap_tablet_id from schema", K(ret), K(vec_info.index_id_table_id_));
     } else {
       insert_op->set_tablet_id(vbitmap_tablet_id);
-      insert_op->set_ls_id(ls_id);
     }
 
     if (OB_SUCC(ret)) {
@@ -1000,15 +996,14 @@ int ObCSAsyncIndexProcessor::set_das_insert_context_(const common::ObIArray<ObAS
           LOG_WARN("ObTransService is null", K(ret));
         } else {
           const int64_t timeout_ts = common::ObTimeUtility::current_time() + GCONF.internal_sql_execute_timeout;
-          if (OB_FAIL(txs->get_ls_read_snapshot(*tx_desc,
-                                                 transaction::ObTxIsolationLevel::RC,
-                                                 ls_id,
-                                                 timeout_ts,
-                                                 *snapshot))) {
-            LOG_WARN("Failed to get ls read snapshot", K(ret), K(ls_id), K(timeout_ts));
+          if (OB_FAIL(txs->get_read_snapshot(*tx_desc,
+                                             transaction::ObTxIsolationLevel::RC,
+                                             timeout_ts,
+                                             *snapshot))) {
+            LOG_WARN("Failed to get read snapshot", K(ret), K(timeout_ts));
           } else if (!snapshot->is_valid()) {
             ret = common::OB_ERR_UNEXPECTED;
-            LOG_WARN("Invalid snapshot from get_ls_read_snapshot", K(ret), KPC(snapshot));
+            LOG_WARN("Invalid snapshot from get_read_snapshot", K(ret), KPC(snapshot));
           } else {
             insert_op->set_snapshot(snapshot);
           }
@@ -1078,7 +1073,7 @@ int ObCSAsyncIndexProcessor::insert_vector_index_log_batch_(
                  K(ret), "event_cnt", events.count(), K(target_vec_info),
                  "first_event", events.at(0), "index_id_table_id", target_vec_info.index_id_table_id_,
                  "data_tablet_id", events.at(0).tablet_id_,
-                 "ls_id", insert_op->get_ls_id(), "tablet_id", insert_op->get_tablet_id(),
+                 "tablet_id", insert_op->get_tablet_id(),
                  "tx_desc_valid", (tx_desc != nullptr && tx_desc->is_valid()),
                  "schema_version", ctx_.schema_version_, "timeout_ts", rtdef != nullptr ? rtdef->timeout_ts_ : -1,
                  "column_ids_cnt", ctdef != nullptr ? ctdef->column_ids_.count() : 0,
@@ -1122,7 +1117,6 @@ int ObCSAsyncIndexProcessor::write_to_vsag_(
   if (!need_vsag) {
   } else {
     const common::ObTabletID &data_tablet_id = events.at(0).tablet_id_;
-    const share::ObLSID ls_id = share::SYS_LS;
     ObPluginVectorIndexService *vec_index_service = share::g_mp->plugin_vector_index_service();
     ObPluginVectorIndexAdapterGuard adapter_guard;
     ObPluginVectorIndexAdaptor *adaptor = nullptr;
@@ -1170,14 +1164,13 @@ int ObCSAsyncIndexProcessor::write_to_vsag_(
         }
       }
       if (OB_FAIL(ret)) {
-      } else if (OB_FAIL(vec_index_service->acquire_adapter_guard(ls_id,
-                                                                   inc_tablet_id,
+      } else if (OB_FAIL(vec_index_service->acquire_adapter_guard(inc_tablet_id,
                                                                    schema::INDEX_TYPE_VEC_DELTA_BUFFER_LOCAL,
                                                                    adapter_guard,
                                                                    &vec_idx_param,
                                                                    vec_info.dim_))) {
         LOG_WARN("Failed to acquire adapter for inc tablet",
-                 K(ret), K(inc_tablet_id), K(ls_id), K(vec_info.dim_));
+                 K(ret), K(inc_tablet_id), K(vec_info.dim_));
       } else {
         adaptor = adapter_guard.get_adatper();
         if (OB_ISNULL(adaptor)) {
@@ -1270,7 +1263,7 @@ int ObCSAsyncIndexProcessor::write_to_vsag_(
                                                   nullptr,
                                                   insert_count))) {
                 LOG_WARN("Failed to add vectors to vsag index",
-                         K(ret), K(insert_count), K(dim), K(ls_id), K(vec_info.index_id_table_id_));
+                         K(ret), K(insert_count), K(dim), K(vec_info.index_id_table_id_));
               } else {
                 int tmp_ret = adaptor->update_incr_bitmap(vids, insert_count);
                 if (OB_SUCCESS != tmp_ret) {

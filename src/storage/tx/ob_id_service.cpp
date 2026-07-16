@@ -126,7 +126,7 @@ int ObIDService::submit_log_(const int64_t last_id, const int64_t limited_id)
     } else {
       cb_.set_srv_type(service_type_);
       if (OB_FAIL(ls_->get_log_handler()->append(cb_.get_log_buf(), cb_.get_log_pos(), base_scn,
-                                                 false, &cb_, lsn, log_ts))) {
+                                                 false, false/*allow_compression*/, &cb_, lsn, log_ts))) {
         cb_.reset();
         if (REACH_TIME_INTERVAL(100 * 1000)) {
           TRANS_LOG(WARN, "submit ls log failed", KR(ret), K(service_type_));

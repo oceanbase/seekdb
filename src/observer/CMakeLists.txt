@@ -125,8 +125,6 @@ ob_set_subtarget(ob_server change_stream
 ob_set_subtarget(ob_server scheduler
   scheduler/ob_dag_warning_history_mgr.cpp
   scheduler/ob_independent_dag.cpp
-  scheduler/ob_partition_auto_split_helper.cpp
-  scheduler/ob_scheduled_manage_dynamic_partition.cpp
   scheduler/ob_sys_task_stat.cpp
   scheduler/ob_tenant_dag_scheduler.cpp
   scheduler/ob_tenant_ddl_count_guard.cpp
@@ -321,10 +319,8 @@ ob_set_subtarget(ob_server virtual_table
   virtual_table/ob_all_virtual_session_ps_info.cpp
   virtual_table/ob_all_virtual_sql_stat.cpp
   virtual_table/ob_all_virtual_tmp_file.cpp
-  virtual_table/ob_all_virtual_log_transport_dest_stat.cpp
   virtual_table/ob_all_virtual_plugin_info.cpp
   virtual_table/ob_all_virtual_change_stream_refresh_stat.cpp
-  virtual_table/ob_all_virtual_dynamic_partition_table.cpp
   virtual_table/ob_tenant_show_catalog_databases.cpp
   virtual_table/ob_all_virtual_tenant_vector_mem_info.cpp
   virtual_table/ob_all_virtual_ccl_status.cpp

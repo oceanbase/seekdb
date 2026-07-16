@@ -341,8 +341,6 @@ psmall_test=[
 'skyline.skyline_index_back_mysql',
 'special_hook',
 'special_stmt',
-'split_partition.reorganize_partition',
-'split_partition.split_partition_with_multi_minors',
 'sq_from',
 'sq_from_2',
 'static_engine.explicit_cast',

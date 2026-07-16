@@ -2790,7 +2790,7 @@ int ObStaticEngineCG::generate_spec(ObLogInsert &op, ObTableReplaceSpec &spec, c
 {
   int ret = OB_SUCCESS;
   UNUSED(in_root_job);
-  bool can_do_gts_opt = false;
+  bool can_use_snapshot_opt = false;
   bool has_unique_index = false;
   bool has_partition_index = false;
   const ObIArray<IndexDMLInfo *> &insert_dml_infos = op.get_index_dml_infos();;
@@ -2799,19 +2799,19 @@ int ObStaticEngineCG::generate_spec(ObLogInsert &op, ObTableReplaceSpec &spec, c
   if (NULL == primary_dml_info) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected null", K(ret));
-  } else if (OB_FAIL(op.is_insertup_or_replace_values(can_do_gts_opt))) {
+  } else if (OB_FAIL(op.is_insertup_or_replace_values(can_use_snapshot_opt))) {
     LOG_WARN("fail to check is plain insert", K(ret));
-  } else if (!can_do_gts_opt) {
+  } else if (!can_use_snapshot_opt) {
     // do nothing
-    LOG_TRACE("can't do insert_up gts opt", K(op.get_insert_up_index_dml_infos()));
+    LOG_TRACE("can't do insert_up snapshot opt", K(op.get_insert_up_index_dml_infos()));
   } else if (OB_FAIL(check_has_global_partiton_index(op.get_plan(),
                                                      primary_dml_info->ref_table_id_,
                                                      has_partition_index))) {
     LOG_WARN("check has global partition index failed", K(ret), K(primary_dml_info->ref_table_id_));
   } else if (has_partition_index) {
-    LOG_TRACE("has partition index, can't support gts opt");
+    LOG_TRACE("has partition index, can't support snapshot opt");
   } else {
-    spec.plan_->set_insertup_can_do_gts_opt(can_do_gts_opt);
+    spec.plan_->set_insertup_can_use_snapshot_opt(can_use_snapshot_opt);
     if (OB_FAIL(check_has_global_unique_index(op.get_plan(), primary_dml_info->ref_table_id_, has_unique_index))) {
       LOG_WARN("check has global unique index", K(ret), K(primary_dml_info->ref_table_id_));
     } else {
@@ -3225,16 +3225,16 @@ int ObStaticEngineCG::generate_spec(ObLogInsert &op, ObTableInsertUpSpec &spec, 
   }
 
   if (OB_SUCC(ret)) {
-    bool can_do_gts_opt = false;
+    bool can_use_snapshot_opt = false;
     bool has_unique_index = false;
     bool update_part_key = false;
     bool has_partition_index = false;
     const IndexDMLInfo *ins_pri_dml_info = op.get_index_dml_infos().at(0);
-    if (OB_FAIL(op.is_insertup_or_replace_values(can_do_gts_opt))) {
+    if (OB_FAIL(op.is_insertup_or_replace_values(can_use_snapshot_opt))) {
       LOG_WARN("fail to check is plain insert", K(ret));
-    } else if (!can_do_gts_opt) {
+    } else if (!can_use_snapshot_opt) {
       // do nothing
-      LOG_TRACE("can't do insert_up gts opt", K(op.get_insert_up_index_dml_infos()));
+      LOG_TRACE("can't do insert_up snapshot opt", K(op.get_insert_up_index_dml_infos()));
     } else if (OB_FAIL(check_has_update_part_key(op.get_insert_up_index_dml_infos(), update_part_key))) {
       LOG_WARN("fail to check has update part key", K(ret), K(op.get_insert_up_index_dml_infos()));
     } else if (update_part_key) {
@@ -3245,9 +3245,9 @@ int ObStaticEngineCG::generate_spec(ObLogInsert &op, ObTableInsertUpSpec &spec, 
                                                        has_partition_index))) {
       LOG_WARN("check has global partition index failed", K(ins_pri_dml_info->ref_table_id_));
     } else if (has_partition_index) {
-      LOG_TRACE("has partition index, can't support gts opt");
+      LOG_TRACE("has partition index, can't support snapshot opt");
     } else {
-      spec.plan_->set_insertup_can_do_gts_opt(can_do_gts_opt);
+      spec.plan_->set_insertup_can_use_snapshot_opt(can_use_snapshot_opt);
       if (OB_FAIL(check_has_global_unique_index(op.get_plan(), ins_pri_dml_info->ref_table_id_, has_unique_index))) {
         LOG_WARN("check has global unique index", K(ret), K(ins_pri_dml_info->ref_table_id_));
       } else {

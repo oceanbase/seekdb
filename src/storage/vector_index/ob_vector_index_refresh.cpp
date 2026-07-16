@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+// #define DBMS_VECTOR_MOCK_TEST
 #define USING_LOG_PREFIX STORAGE
 
 #include "storage/vector_index/ob_vector_index_refresh.h"
@@ -400,6 +401,22 @@ int ObVectorIndexRefresher::do_refresh() {
       SMART_VAR(ObMySQLProxy::MySQLResult, res) {
         common::sqlclient::ObMySQLResult *result = nullptr;
         ObSqlString insert_sel_sql;
+#ifdef DBMS_VECTOR_MOCK_TEST
+        if (OB_FAIL(insert_sel_sql.append_fmt(
+                "INSERT INTO `%.*s`.`%.*s` SELECT * FROM `%.*s`.`%.*s` WHERE "
+                "ora_rowscn <= %lu",
+                static_cast<int>(db_schema->get_database_name_str().length()),
+                db_schema->get_database_name_str().ptr(),
+                static_cast<int>(
+                    index_id_tb_schema->get_table_name_str().length()),
+                index_id_tb_schema->get_table_name_str().ptr(),
+                static_cast<int>(db_schema->get_database_name_str().length()),
+                db_schema->get_database_name_str().ptr(),
+                static_cast<int>(
+                    domain_table_schema->get_table_name_str().length()),
+                domain_table_schema->get_table_name_str().ptr(),
+                refresh_ctx_->scn_.get_val_for_sql())))
+#else
         if (OB_FAIL(get_vector_index_col_names(domain_table_schema,
                                                     true,
                                                     col_ids,
@@ -430,6 +447,7 @@ int ObVectorIndexRefresher::do_refresh() {
                     domain_table_schema->get_table_name_str().length()),
                 domain_table_schema->get_table_name_str().ptr(),
                 refresh_ctx_->scn_.get_val_for_sql())))
+#endif
         {
           LOG_WARN("fail to assign sql", KR(ret));
         } else if (OB_FAIL(refresh_ctx_->trans_->write(insert_sel_sql.ptr(), affected_rows))) {

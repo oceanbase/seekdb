@@ -144,6 +144,7 @@ const char * ObTabletStatusCache::tablet_execute_state_to_str(const ObTabletStat
 
 const static char * ObTabletScheduleNewRoundStateStr[] = {
     "CAN_SCHEDULE_NEW_ROUND",
+    "RESERVED_STATUS_BLOCKED",
     "NEED_CHECK_LAST_MEDIUM_CKM",
     "EXIST_UNFINISH_MEDIUM",
     "NONE",
@@ -273,6 +274,12 @@ void ObTabletStatusCache::inner_init_could_schedule_new_round(
   new_round_state_ = NEW_ROUND_STATE_MAX;
   if (OB_FAIL(tablet.ObITabletMdsInterface::get_latest_tablet_status(user_data, writer, trans_stat, trans_version))) {
     LOG_WARN("failed to get tablet status", K(ret), K(tablet), K(user_data));
+  } else if (ObTabletStatus::RESERVED_STATUS_4 == user_data.tablet_status_
+    || ObTabletStatus::RESERVED_STATUS_6 == user_data.tablet_status_) {
+    new_round_state_ = RESERVED_STATUS_BLOCKED;
+    if (REACH_THREAD_TIME_INTERVAL(PRINT_LOG_INVERVAL)) {
+      LOG_INFO("reserved tablet status, merging is not allowed", K(user_data), K(tablet));
+    }
   } else if (OB_FAIL(check_medium_list(tablet, normal_schedule))) {
     // call medium_list_->need_check_finish even if ls_could_schedule_new_round=false
     LOG_WARN("failed to check medium list", K(ret), K(tablet_id));

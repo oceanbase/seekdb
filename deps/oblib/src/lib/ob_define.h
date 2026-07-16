@@ -1540,8 +1540,21 @@ const char *const OB_MYSQL_SERVICE_NAME = "__proxy_service_name";
 
 const char *const OB_MYSQL_CLIENT_ATTRIBUTE_CAPABILITY_FLAG = "__ob_client_attribute_capability_flag";
 
+// for obproxy debug
+#define OBPROXY_DEBUG 0
 const char *const OB_SYS_TENANT_LOCALITY_STRATEGY = "sys_tenant_locality_strategy";
 const char *const OB_AUTO_LOCALITY_STRATEGY = "auto_locality_strategy";
+
+#if OBPROXY_DEBUG
+const char* const OB_MYSQL_PROXY_SESSION_ID = "session_id";
+const char* const OB_MYSQL_PROXY_TIMESTAMP = "proxy_time_stamp";
+const char* const OB_MYSQL_PROXY_SYNC_VERSION = "proxy_sync_version";
+
+const char* const OB_MYSQL_SERVER_SESSION_ID = "server_session_id";
+const char* const OB_MYSQL_SERVER_SQL = "sql";
+const char* const OB_MYSQL_SERVER_HANDLE_TIMESTAMP = "server_handle_time_stamp";
+const char* const OB_MYSQL_SERVER_RECEIVED_TIMESTAMP = "server_receive_time_stamp";
+#endif
 
 //TODO: rootservice's sequence_id for schema refresh will be removed later.
 #define OB_ROOTSERVICE_EPOCH_SHIFT 40
@@ -2312,6 +2325,10 @@ inline bool is_multi_overflow64(int64_t a, int64_t b)
 #define IS_ADD_OVERFLOW64(a, b, ret) \
   ((0 == ((static_cast<uint64_t>(a) >> 63) ^ (static_cast<uint64_t>(b) >> 63))) \
    && (1 == ((static_cast<uint64_t>(a) >> 63) ^ (static_cast<uint64_t>(ret) >> 63))))
+
+#ifdef __ENABLE_PRELOAD__
+#include "lib/utility/ob_preload.h"
+#endif
 
 struct ObNumberDesc
 {

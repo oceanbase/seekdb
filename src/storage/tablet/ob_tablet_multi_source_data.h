@@ -55,6 +55,7 @@ public:
   transaction::ObTransID tx_id_;
   share::SCN tx_scn_;
   ObTabletStatus tablet_status_;
+  share::SCN reserved_scn_;
 private:
   static const int32_t TX_DATA_VERSION = 2;
 };

@@ -53,8 +53,7 @@ public:
                                    ObIAllocator &allocator,
                                    ObArray<ObDDLBlockMeta> &sorted_metas);
 
-  static int freeze_ddl_kv(const ObLSID &ls_id, 
-                           const ObTabletID &tablet_id, 
+  static int freeze_ddl_kv(const ObTabletID &tablet_id,
                            const ObDirectLoadType &direct_load_type,
                            const share::SCN start_scn,
                            const int64_t snapshot_version,

@@ -771,8 +771,7 @@ ObDDLKV::~ObDDLKV()
   reset();
 }
 
-int ObDDLKV::init(const ObLSID &ls_id,
-                  const ObTabletID &tablet_id,
+int ObDDLKV::init(const ObTabletID &tablet_id,
                   const SCN &ddl_start_scn,
                   const int64_t snapshot_version,
                   const SCN &last_freezed_scn,
@@ -785,18 +784,17 @@ int ObDDLKV::init(const ObLSID &ls_id,
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
     LOG_WARN("init twice", K(ret), KP(this));
-  } else if (OB_UNLIKELY(!ls_id.is_valid()
-        || !tablet_id.is_valid()
+  } else if (OB_UNLIKELY(!tablet_id.is_valid()
         || !ddl_start_scn.is_valid_and_not_min()
         || snapshot_version <= 0
         || !last_freezed_scn.is_valid_and_not_min()
         || data_format_version <= 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(ls_id), K(tablet_id), K(ddl_start_scn), K(snapshot_version), K(last_freezed_scn), K(data_format_version));
+    LOG_WARN("invalid argument", K(ret), K(tablet_id), K(ddl_start_scn), K(snapshot_version), K(last_freezed_scn), K(data_format_version));
   } else if ((max_end_scn_ != SCN::min_scn() && last_freezed_scn >= max_end_scn_)
              || last_freezed_scn >= rec_scn_) {
     ret = OB_SCN_OUT_OF_BOUND;
-    TRANS_LOG(ERROR, "cannot set start ts now", K(ret), K(ls_id), KPC(this));
+    TRANS_LOG(ERROR, "cannot set start ts now", K(ret), KPC(this));
   } else if (OB_UNLIKELY(!(storage::is_full_ddl_kv(ddl_kv_type)))) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("only support full ddl kv", KR(ret), K(ddl_kv_type));
@@ -805,7 +803,6 @@ int ObDDLKV::init(const ObLSID &ls_id,
   }
 
   if (OB_SUCC(ret)) {
-    ls_id_ = ls_id;
     tablet_id_ = tablet_id;
     ddl_start_scn_ = ddl_start_scn;
     ddl_snapshot_version_ = snapshot_version;
@@ -1009,7 +1006,6 @@ int ObDDLKV::set_macro_block(
     ObDDLTableMergeDagParam param;
     param.direct_load_type_    = data_format_version >= DDL_IDEM_DATA_FORMAT_VERSION ? ObDirectLoadType::SN_IDEM_DIRECT_LOAD_DDL :
                                                                                        ObDirectLoadType::DIRECT_LOAD_DDL;
-    param.ls_id_               = ls_id_;
     param.tablet_id_           = tablet_id_;
     param.start_scn_           = ddl_start_scn_;
     param.data_format_version_ = data_format_version;
@@ -1029,15 +1025,15 @@ int ObDDLKV::set_macro_block(
       if (macro_block.ddl_start_scn_ > ddl_start_scn_) {
         ret = OB_EAGAIN;
         LOG_INFO("ddl start scn too large, retry", K(ret),
-            K(ls_id_), K(tablet_id_), K(ddl_start_scn_), K(macro_block));
+            K(tablet_id_), K(ddl_start_scn_), K(macro_block));
       } else {
         // filter out and do nothing
         LOG_INFO("ddl start scn too small, maybe from old build task, ignore", K(ret),
-            K(ls_id_), K(tablet_id_), K(ddl_start_scn_), K(macro_block));
+            K(tablet_id_), K(ddl_start_scn_), K(macro_block));
       }
     } else if (macro_block.scn_ > freeze_scn_) {
       ret = OB_EAGAIN;
-      LOG_INFO("this ddl kv is freezed, retry other ddl kv", K(ret), K(ls_id_), K(tablet_id_), K(macro_block), K(freeze_scn_));
+      LOG_INFO("this ddl kv is freezed, retry other ddl kv", K(ret), K(tablet_id_), K(macro_block), K(freeze_scn_));
     } else if (OB_UNLIKELY(snapshot_version != ddl_snapshot_version_ || data_format_version != data_format_version_)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected error", K(ret), K(macro_block), K(snapshot_version), K(data_format_version), KPC(this));
@@ -1137,14 +1133,14 @@ int ObDDLKV::full_load_freeze_(const SCN &freeze_scn)
       final_freeze_scn = max_scn_;
     } else {
       ret = OB_EAGAIN;
-      LOG_INFO("ddl kv not freezed, try again", K(ret), K(ls_id_), K(tablet_id_), K(get_macro_block_cnt()));
+      LOG_INFO("ddl kv not freezed, try again", K(ret), K(tablet_id_), K(get_macro_block_cnt()));
     }
     if (OB_SUCC(ret)) {
       if (OB_FAIL(set_end_scn(final_freeze_scn))) {
         LOG_WARN("fail to set end scn", K(ret), K(final_freeze_scn));
       } else {
         ATOMIC_SET(&is_independent_freezed_, true);
-        LOG_INFO("ddl kv freezed", K(ret), K(ls_id_), K(tablet_id_), K(get_macro_block_cnt()), K(final_freeze_scn), K(freeze_scn));
+        LOG_INFO("ddl kv freezed", K(ret), K(tablet_id_), K(get_macro_block_cnt()), K(final_freeze_scn), K(freeze_scn));
       }
     }
   }
@@ -1220,19 +1216,19 @@ int ObDDLKV::wait_pending()
 {
   int ret = OB_SUCCESS;
   ObLSService *ls_service = share::g_mp->ls_service();
-  ObLSHandle ls_handle;
+  ObLS *ls = nullptr;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret), K(is_inited_));
   } else if (OB_UNLIKELY(!is_freezed())) {
     ret = OB_STATE_NOT_MATCH;
     LOG_WARN("ddl kv not freezed", K(ret));
-  } else if (OB_FAIL(ls_service->get_ls(ls_id_, ls_handle, ObLSGetMod::DDL_MOD))) {
-    LOG_WARN("get ls handle failed", K(ret), K(ls_id_));
+  } else if (OB_FAIL(ls_service->get_ls(ls))) {
+    LOG_WARN("get ls failed", K(ret));
   } else {
     SCN max_decided_scn;
-    if (OB_FAIL(ls_handle.get_ls()->get_max_decided_scn(max_decided_scn))) {
-      LOG_WARN("get max decided log ts failed", K(ret), K(ls_id_));
+    if (OB_FAIL(ls->get_max_decided_scn(max_decided_scn))) {
+      LOG_WARN("get max decided log ts failed", K(ret));
       if (OB_STATE_NOT_MATCH == ret) {
         ret = OB_NEED_RETRY;
       }
@@ -1242,7 +1238,7 @@ int ObDDLKV::wait_pending()
       const bool pending_finished = SCN::plus(max_decided_scn, 1) >= freeze_scn_ && !is_pending();
       if (!pending_finished) {
         ret = OB_EAGAIN;
-        LOG_INFO("wait pending not finish", K(ret), K_(ls_id), K_(tablet_id), K_(freeze_scn), K_(min_scn), K_(max_scn), K(max_decided_scn));
+        LOG_INFO("wait pending not finish", K(ret), K_(tablet_id), K_(freeze_scn), K_(min_scn), K_(max_scn), K(max_decided_scn));
       }
     }
   }
@@ -1263,13 +1259,13 @@ int64_t ObDDLKV::get_memory_used() const
 
 /**************** Implement ObITabletMemtable Function *****************/
 int ObDDLKV::init(const ObITable::TableKey &table_key,
-                  ObLSHandle &ls_handle,
+                  ObLS *ls,
                   ObFreezer *freezer,
                   ObTabletMemtableMgr *memtable_mgr,
                   const int64_t schema_version,
                   const uint32_t freeze_clock)
 {
-  UNUSEDx(table_key, ls_handle, freezer, memtable_mgr, schema_version, freeze_clock);
+  UNUSEDx(table_key, ls, freezer, memtable_mgr, schema_version, freeze_clock);
   return OB_NOT_SUPPORTED;
 }
 
@@ -1287,9 +1283,8 @@ bool ObDDLKV::is_frozen_memtable()
   return is_freezed();
 }
 
-int ObDDLKV::flush(share::ObLSID ls_id)
+int ObDDLKV::flush()
 {
-  UNUSED(ls_id);
   return OB_NOT_SUPPORTED;
 }
 

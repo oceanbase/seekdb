@@ -24,7 +24,6 @@
 #include "share/ob_ddl_checksum.h"
 #include "share/ob_ddl_sim_point.h"
 #include "pl/sys_package/ob_dbms_stats.h"
-#include "storage/ob_partition_pre_split.h"
 #include "storage/ob_tablet_autoinc_seq_rpc_handler.h"
 #include "share/ob_ex_rpc.h"
 
@@ -1135,11 +1134,7 @@ int ObDDLRedefinitionTask::finish()
   ObSArray<uint64_t> objs;
   int64_t rpc_timeout = 0;
   int64_t all_orig_index_tablet_count = 0;
-  if (ObDDLType::DDL_PARTITION_SPLIT_RECOVERY_TABLE_REDEFINITION == task_type_) {
-    alter_table_arg_.ddl_task_type_ = share::PARTITION_SPLIT_RECOVERY_CLEANUP_GARBAGE_TASK;
-  } else {
-    alter_table_arg_.ddl_task_type_ = share::CLEANUP_GARBAGE_TASK;
-  }
+  alter_table_arg_.ddl_task_type_ = share::CLEANUP_GARBAGE_TASK;
   alter_table_arg_.table_id_ = object_id_;
   alter_table_arg_.hidden_table_id_ = target_object_id_;
   alter_table_arg_.task_id_ = task_id_;
@@ -1645,22 +1640,10 @@ int ObDDLRedefinitionTask::sync_part_stats_info_accross_tenant(common::ObMySQLTr
         int64_t target_partition_id = 0;
         target_part_stat->set_table_id(target_object_id_);
         target_part_stat->set_last_analyzed(0);
-        bool is_hidden_partition = false;
-        /* The auto split feature will create hidden partition(an intermediate state), so part_stats may contain hidden and normal partition stats.
-         * Recover table will not restore the hidden partition, hidden partition don't have a corresponding partition in the target table, so we skip
-         * partition statistics synchronization for hidden partition.
-         * And src_partition_ids which get from data_table_schema only have normal partition. */
         if (OB_FAIL(part_ids_map.get_refactored(src_partition_id, target_partition_id))) {
-          if (OB_HASH_NOT_EXIST == ret) {
-            is_hidden_partition = true;
-            ret = OB_SUCCESS;
-          } else {
-            LOG_WARN("failed to get part_ids_map", K(ret));
-          }
+          LOG_WARN("failed to get part_ids_map", K(ret));
         }
         if (OB_FAIL(ret)) {
-        } else if (is_hidden_partition) {
-          LOG_INFO("skip partition statistics synchronization for hidden partition", K(part_stat), K(is_hidden_partition));
         } else if (FALSE_IT(target_part_stat->set_partition_id(target_partition_id))) {
         } else if (OB_FAIL(target_part_stats.push_back(target_part_stat))) {
           LOG_WARN("failed to push back partition stat", K(ret));
@@ -2273,13 +2256,9 @@ int ObDDLRedefinitionTask::generate_rebuild_index_arg_list(
 {
   int ret = OB_SUCCESS;
   const ObTableSchema *table_schema = nullptr;
-  ObRootService *root_service = GCTX.root_service_;
   if (table_id == OB_INVALID_ID) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(table_id));
-  } else if (OB_ISNULL(root_service)) {
-    ret = OB_ERR_SYS;
-    LOG_WARN("error sys, root service must not be nullptr", K(ret));
   } else if (OB_FAIL(schema_guard.get_table_schema( table_id, table_schema))) {
     LOG_WARN("fail to get table schema", K(ret), K(table_id));
   } else if (OB_ISNULL(table_schema)) {
@@ -2288,12 +2267,8 @@ int ObDDLRedefinitionTask::generate_rebuild_index_arg_list(
   } else {
     const common::ObIArray<ObAuxTableMetaInfo> &index_infos = table_schema->get_simple_index_infos();
     if (index_infos.count() > 0) {
-      AlterTableSchema &alter_table_schema = const_cast<AlterTableSchema &>(alter_table_arg.alter_table_schema_);
-      const ObString database_name = alter_table_schema.get_origin_database_name();
-      ObPartitionPreSplit pre_split(root_service->get_ddl_service());
       for (int64_t i = 0; OB_SUCC(ret) && i < index_infos.count(); ++i) {
         const ObTableSchema *index_schema = nullptr;
-        ObTableSchema new_index_schema;
         const int64_t index_id = index_infos.at(i).table_id_;
         if (is_vec_index(index_infos.at(i).index_type_) && !is_vec_delta_buffer_type(index_infos.at(i).index_type_)) {
         } else if (is_fts_index(index_infos.at(i).index_type_) && !is_fts_index_aux(index_infos.at(i).index_type_)) {
@@ -2304,16 +2279,7 @@ int ObDDLRedefinitionTask::generate_rebuild_index_arg_list(
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("unexpected schema nullptr", K(ret), KP(index_schema));
         } else if (!index_schema->is_global_index_table()) { // skip
-        } else if (OB_FAIL(new_index_schema.assign(*index_schema))) {
-          LOG_WARN("fail to assign schema", K(ret));
-        } else if (OB_FAIL(pre_split.do_table_pre_split_if_need(database_name, ObDDLType::DDL_CREATE_INDEX, false, *table_schema, *index_schema, new_index_schema))) {
-          LOG_WARN("fail to pre split index partition", K(ret), K(index_id));
-          //overwrite ret code
-          ret = OB_SUCCESS;
-          if (OB_FAIL(alter_table_arg.rebuild_index_arg_list_.push_back(*index_schema))) {
-            LOG_WARN("fail to push back index schema", K(ret));
-          }
-        } else if (OB_FAIL(alter_table_arg.rebuild_index_arg_list_.push_back(new_index_schema))) {
+        } else if (OB_FAIL(alter_table_arg.rebuild_index_arg_list_.push_back(*index_schema))) {
           LOG_WARN("fail to push back index schema", K(ret));
         }
       }
@@ -2352,7 +2318,7 @@ int ObDDLRedefinitionTask::get_child_task_ids(char *buf, int64_t len)
 }
 
 ObSyncTabletAutoincSeqCtx::ObSyncTabletAutoincSeqCtx()
-  : is_inited_(false), is_synced_(false), need_renew_location_(false), orig_src_tablet_ids_(),
+  : is_inited_(false), is_synced_(false), orig_src_tablet_ids_(),
     src_tablet_ids_(), dest_tablet_ids_(), autoinc_params_()
 {}
 
@@ -2400,55 +2366,6 @@ int ObSyncTabletAutoincSeqCtx::sync()
       is_synced_ = true;
     }
   }
-  if (share::ObIDDLTask::in_ddl_retry_white_list(ret)) {
-    need_renew_location_ = true;
-  }
-  return ret;
-}
-
-int ObSyncTabletAutoincSeqCtx::build_ls_to_tablet_map(
-    share::ObLocationService *location_service,
-    const ObIArray<ObMigrateTabletAutoincSeqParam> &autoinc_params,
-    const int64_t timeout,
-    const bool force_renew,
-    const bool by_src_tablet,
-    ObHashMap<ObLSID, ObSEArray<ObMigrateTabletAutoincSeqParam, 1>> &map)
-{
-  int ret = OB_SUCCESS;
-  map.reuse();
-  bool is_cache_hit = false;
-  const int64_t expire_renew_time = force_renew ? INT64_MAX : 0;
-  ObTimeoutCtx timeout_ctx;
-  if (nullptr == location_service || autoinc_params.count() <= 0 || timeout <= 0) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(ret), KP(location_service), K(autoinc_params), K(timeout));
-  } else if (OB_FAIL(timeout_ctx.set_trx_timeout_us(timeout))) {
-    LOG_WARN("set trx timeout failed", K(ret));
-  } else if (OB_FAIL(timeout_ctx.set_timeout(timeout))) {
-    LOG_WARN("set timeout failed", K(ret));
-  } else {
-    for (int64_t i = 0; OB_SUCC(ret) && i < autoinc_params.count(); i++) {
-      ObLSID ls_id;
-      const ObMigrateTabletAutoincSeqParam &autoinc_param = autoinc_params.at(i);
-      const ObTabletID &tablet_id = by_src_tablet ? autoinc_param.src_tablet_id_ : autoinc_param.dest_tablet_id_;
-      ObSEArray<ObMigrateTabletAutoincSeqParam, 1> tmp_list;
-      if (OB_FAIL(location_service->get(tablet_id, expire_renew_time, is_cache_hit, ls_id))) {
-        LOG_WARN("fail to get log stream id", K(ret), K(tablet_id));
-      } else if (OB_FAIL(map.get_refactored(ls_id, tmp_list))) {
-        if (OB_HASH_NOT_EXIST == ret) {
-          ret = OB_SUCCESS;
-        } else {
-          LOG_WARN("failed to get from map", K(ret), K(ls_id));
-        }
-      }
-      if (OB_FAIL(ret)) {
-      } else if (OB_FAIL(tmp_list.push_back(autoinc_param))) {
-        LOG_WARN("failed to push tablet id", K(ret), K(tablet_id));
-      } else if (OB_FAIL(map.set_refactored(ls_id, tmp_list, 1/*overwrite*/))) {
-        LOG_WARN("failed to set map", K(ret), K(ls_id), K(tmp_list));
-      }
-    }
-  }
   return ret;
 }
 
@@ -2456,20 +2373,13 @@ int ObSyncTabletAutoincSeqCtx::call_and_process_all_tablet_autoinc_seqs(const bo
 {
   int ret = OB_SUCCESS;
   int64_t rpc_timeout = 0;
-  const int64_t tablet_count = src_tablet_ids_.count();
-  share::ObLocationService *location_service = nullptr;
-  ObHashMap<ObLSID, ObSEArray<ObMigrateTabletAutoincSeqParam, 1>> ls_to_tablet_map;
+  const int64_t tablet_count = is_get ? src_tablet_ids_.count() : autoinc_params_.count();
+  ObSEArray<ObMigrateTabletAutoincSeqParam, 1> request_params;
 
-  if (OB_ISNULL(location_service = GCTX.location_service_)) {
-    ret = OB_ERR_SYS;
-    LOG_WARN("location_cache is null", K(ret));
-  } else if (OB_FAIL(ls_to_tablet_map.create(MAP_BUCKET_NUM, "DDLRedefTmp"))) {
-    LOG_WARN("failed to create map", K(ret));
-  } else if (OB_FAIL(ObDDLUtil::get_ddl_rpc_timeout(tablet_count, rpc_timeout))) {
+  if (OB_FAIL(ObDDLUtil::get_ddl_rpc_timeout(tablet_count, rpc_timeout))) {
     LOG_WARN("failed to get ddl rpc timeout", K(ret));
   } else {
     if (is_get) {
-      ObSEArray<ObMigrateTabletAutoincSeqParam, 1> tmp_autoinc_params;
       if (OB_UNLIKELY(src_tablet_ids_.count() != dest_tablet_ids_.count())) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("invalid tablet ids count", K(ret), K(src_tablet_ids_), K(dest_tablet_ids_));
@@ -2478,163 +2388,110 @@ int ObSyncTabletAutoincSeqCtx::call_and_process_all_tablet_autoinc_seqs(const bo
         ObMigrateTabletAutoincSeqParam autoinc_param;
         autoinc_param.src_tablet_id_ = src_tablet_ids_.at(i);
         autoinc_param.dest_tablet_id_ = dest_tablet_ids_.at(i);
-        if (OB_FAIL(tmp_autoinc_params.push_back(autoinc_param))) {
+        if (OB_FAIL(request_params.push_back(autoinc_param))) {
           LOG_WARN("failed to push back", K(ret), K(autoinc_param));
         }
       }
-      if (OB_SUCC(ret) && OB_FAIL(build_ls_to_tablet_map(location_service,
-                                                         tmp_autoinc_params,
-                                                         rpc_timeout,
-                                                         need_renew_location_,
-                                                         true/*by src tablet*/,
-                                                         ls_to_tablet_map))) {
-        LOG_ERROR("failed to build ls to tabmap", K(ret));
-      }
-    } else {
-      if (OB_FAIL(build_ls_to_tablet_map(location_service,
-                                         autoinc_params_,
-                                         rpc_timeout,
-                                         need_renew_location_,
-                                         false/*by src tablet*/,
-                                         ls_to_tablet_map))) {
-        LOG_WARN("failed to build ls to tabmap", K(ret));
-      }
+    } else if (OB_FAIL(request_params.assign(autoinc_params_))) {
+      LOG_WARN("failed to assign request params", K(ret), K(autoinc_params_));
     }
   }
 
-  // dispatch each LS request directly to the local autoinc-seq handler and
-  // process results, replacing ObBatchGet/SetTabletAutoincSeqProxy + RPC transport.
+  // Dispatch one request to the local autoinc-seq handler.
   if (OB_SUCC(ret)) {
     storage::ObTabletAutoincSeqRpcHandler &handler = storage::ObTabletAutoincSeqRpcHandler::get_instance();
-    common::ObArray<int> tmp_ret_array;
-    // per-LS result params, parallel to tmp_ret_array (uniform for get/set);
-    // only populated when the handler call for that LS succeeds.
-    common::ObArray<common::ObSArray<ObMigrateTabletAutoincSeqParam>> result_params_array;
-    ObHashMap<ObLSID, ObSEArray<ObMigrateTabletAutoincSeqParam, 1>>::hashtable::const_iterator map_iter = ls_to_tablet_map.begin();
-    for (; OB_SUCC(ret) && map_iter != ls_to_tablet_map.end(); ++map_iter) {
-      const ObLSID &ls_id = map_iter->first;
-      int rpc_ret_code = OB_SUCCESS;
-      common::ObSArray<ObMigrateTabletAutoincSeqParam> result_params;
-      if (is_get) {
-        obcall::ObBatchGetTabletAutoincSeqArg arg;
-        obcall::ObBatchGetTabletAutoincSeqRes res;
-        if (OB_FAIL(arg.init(ls_id, map_iter->second))) {
-          LOG_WARN("failed to init arg", K(ret));
-        } else {
-          rpc_ret_code = ex_rpc::sync_call(rpc_timeout, [&]{ return handler.batch_get_tablet_autoinc_seq(arg, res); });
-          if (OB_SUCCESS == rpc_ret_code && OB_FAIL(result_params.assign(res.autoinc_params_))) {
-            LOG_WARN("failed to assign result params", K(ret));
-          }
-        }
+    int rpc_ret_code = OB_SUCCESS;
+    common::ObSArray<ObMigrateTabletAutoincSeqParam> result_params;
+    if (is_get) {
+      obcall::ObBatchGetTabletAutoincSeqArg arg;
+      obcall::ObBatchGetTabletAutoincSeqRes res;
+      if (OB_FAIL(arg.init(request_params))) {
+        LOG_WARN("failed to init arg", K(ret), K(request_params));
       } else {
-        obcall::ObBatchSetTabletAutoincSeqArg arg;
-        obcall::ObBatchSetTabletAutoincSeqRes res;
-        if (OB_FAIL(arg.init(ls_id, map_iter->second))) {
-          LOG_WARN("failed to init arg", K(ret));
-        } else {
-          rpc_ret_code = ex_rpc::sync_call(rpc_timeout, [&]{ return handler.batch_set_tablet_autoinc_seq(arg, res); });
-          if (OB_SUCCESS == rpc_ret_code && OB_FAIL(result_params.assign(res.autoinc_params_))) {
-            LOG_WARN("failed to assign result params", K(ret));
-          }
+        rpc_ret_code = ex_rpc::sync_call(rpc_timeout, [&]{ return handler.batch_get_tablet_autoinc_seq(arg, res); });
+        if (OB_SUCCESS == rpc_ret_code && OB_FAIL(result_params.assign(res.autoinc_params_))) {
+          LOG_WARN("failed to assign result params", K(ret));
         }
       }
-      if (OB_FAIL(ret)) {
-      } else if (OB_FAIL(tmp_ret_array.push_back(rpc_ret_code))) {
-        LOG_WARN("failed to push ret code", K(ret));
-      } else if (OB_FAIL(result_params_array.push_back(result_params))) {
-        LOG_WARN("failed to push result params", K(ret));
+    } else {
+      obcall::ObBatchSetTabletAutoincSeqArg arg;
+      obcall::ObBatchSetTabletAutoincSeqRes res;
+      if (OB_FAIL(arg.init(request_params))) {
+        LOG_WARN("failed to init arg", K(ret), K(request_params));
+      } else {
+        rpc_ret_code = ex_rpc::sync_call(rpc_timeout, [&]{ return handler.batch_set_tablet_autoinc_seq(arg, res); });
+        if (OB_SUCCESS == rpc_ret_code && OB_FAIL(result_params.assign(res.autoinc_params_))) {
+          LOG_WARN("failed to assign result params", K(ret));
+        }
       }
     }
 
-    // process result
     int tmp_ret = OB_SUCCESS;
-    if (OB_FAIL(ret)) {
-    } else if (tmp_ret_array.count() != ls_to_tablet_map.size()) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("result count not match", KR(ret), K(ls_to_tablet_map.size()), K(tmp_ret_array.count()));
-    } else {
-      ObHashMap<ObLSID, ObSEArray<ObMigrateTabletAutoincSeqParam, 1>>::hashtable::iterator map_iter = ls_to_tablet_map.begin();
+    if (OB_SUCC(ret)) {
       int64_t new_params_cnt = 0;
-      // check and reserve first
-      for (int64_t i = 0; OB_SUCC(ret) && i < tmp_ret_array.count(); ++i, ++map_iter) {
-        const int rpc_ret_code = tmp_ret_array.at(i);
-        if (OB_UNLIKELY(map_iter == ls_to_tablet_map.end())) {
+      if (OB_SUCCESS == rpc_ret_code) {
+        if (OB_UNLIKELY(request_params.count() != result_params.count())) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("map iter reach end unexpectedly", K(ret), K(i));
-        } else if (OB_SUCCESS == rpc_ret_code) {
-          const ObIArray<ObMigrateTabletAutoincSeqParam> &cur_params = result_params_array.at(i);
-          if (OB_UNLIKELY(map_iter->second.count() != cur_params.count())) {
-            ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("result params count must be equal to request params count when rpc succ",
-              K(ret), K(map_iter->second.count()), K(cur_params.count()));
-          }
-          for (int64_t j = 0; OB_SUCC(ret) && j < cur_params.count(); j++) {
-            const ObMigrateTabletAutoincSeqParam &autoinc_param = cur_params.at(j);
-            if (OB_SUCCESS == autoinc_param.ret_code_) {
-              if (is_get) {
-                new_params_cnt++;
-              }
+          LOG_WARN("result params count must be equal to request params count when rpc succ",
+              K(ret), K(request_params.count()), K(result_params.count()));
+        } else {
+          for (int64_t j = 0; OB_SUCC(ret) && j < result_params.count(); j++) {
+            const ObMigrateTabletAutoincSeqParam &autoinc_param = result_params.at(j);
+            if (OB_SUCCESS == autoinc_param.ret_code_ && is_get) {
+              new_params_cnt++;
             }
           }
+        }
+      } else {
+        for (int64_t j = 0; j < request_params.count(); j++) {
+          ObMigrateTabletAutoincSeqParam &autoinc_param = request_params.at(j);
+          autoinc_param.ret_code_ = rpc_ret_code;
         }
       }
       if (OB_FAIL(ret)) {
       } else if (is_get && OB_FAIL(autoinc_params_.reserve(new_params_cnt))) {
         LOG_WARN("failed to reserve new param cnt", K(ret));
-      }
-
-      // the following won't fail
-      if (OB_SUCC(ret)) {
+      } else {
         if (is_get) {
           src_tablet_ids_.reuse();
           dest_tablet_ids_.reuse();
         } else {
           autoinc_params_.reuse();
         }
+        const ObIArray<ObMigrateTabletAutoincSeqParam> &params_to_process =
+            OB_SUCCESS == rpc_ret_code
+                ? static_cast<const ObIArray<ObMigrateTabletAutoincSeqParam> &>(result_params)
+                : static_cast<const ObIArray<ObMigrateTabletAutoincSeqParam> &>(request_params);
         tmp_ret = OB_SUCCESS; // last non-retry error or first retry error or success
-        map_iter = ls_to_tablet_map.begin();
-        for (int64_t i = 0; OB_SUCC(ret) && i < tmp_ret_array.count(); ++i, ++map_iter) {
-          const int rpc_ret_code = tmp_ret_array.at(i);
-          const ObIArray<ObMigrateTabletAutoincSeqParam> *result_params = nullptr;
-          if (OB_SUCCESS == rpc_ret_code) {
-            result_params = &result_params_array.at(i);
-          } else {
-            for (int64_t j = 0; j < map_iter->second.count(); j++) {
-              ObMigrateTabletAutoincSeqParam &autoinc_param = map_iter->second.at(j);
-              autoinc_param.ret_code_ = rpc_ret_code;
-            }
-            result_params = &map_iter->second;
-          }
-          for (int64_t j = 0; OB_SUCC(ret) && j < result_params->count(); j++) {
-            const ObMigrateTabletAutoincSeqParam &autoinc_param = result_params->at(j);
-            if (OB_SUCCESS == autoinc_param.ret_code_) {
-              if (is_get) {
-                if (OB_FAIL(autoinc_params_.push_back(autoinc_param))) {
-                  LOG_WARN("failed to push autoinc param", K(ret), K(autoinc_param));
-                }
-              } else {
-                // do nothing
+        for (int64_t j = 0; OB_SUCC(ret) && j < params_to_process.count(); j++) {
+          const ObMigrateTabletAutoincSeqParam &autoinc_param = params_to_process.at(j);
+          if (OB_SUCCESS == autoinc_param.ret_code_) {
+            if (is_get) {
+              if (OB_FAIL(autoinc_params_.push_back(autoinc_param))) {
+                LOG_WARN("failed to push autoinc param", K(ret), K(autoinc_param));
               }
             } else {
-              // reclaim on failure
-              if (is_get) {
-                if (OB_FAIL(src_tablet_ids_.push_back(autoinc_param.src_tablet_id_))) {
-                  LOG_WARN("failed to push src tablet id", K(ret), K(autoinc_param));
-                } else if (OB_FAIL(dest_tablet_ids_.push_back(autoinc_param.dest_tablet_id_))) {
-                  LOG_WARN("failed to push dest tablet id", K(ret), K(autoinc_param));
-                }
-              } else {
-                if (OB_FAIL(autoinc_params_.push_back(autoinc_param))) {
-                  LOG_WARN("failed to push autoinc param", K(ret));
-                }
+              // do nothing
+            }
+          } else {
+            // reclaim on failure
+            if (is_get) {
+              if (OB_FAIL(src_tablet_ids_.push_back(autoinc_param.src_tablet_id_))) {
+                LOG_WARN("failed to push src tablet id", K(ret), K(autoinc_param));
+              } else if (OB_FAIL(dest_tablet_ids_.push_back(autoinc_param.dest_tablet_id_))) {
+                LOG_WARN("failed to push dest tablet id", K(ret), K(autoinc_param));
               }
-              if (is_error_need_retry(autoinc_param.ret_code_)) {
-                if (tmp_ret == OB_SUCCESS) {
-                  tmp_ret = autoinc_param.ret_code_;
-                }
-              } else {
+            } else {
+              if (OB_FAIL(autoinc_params_.push_back(autoinc_param))) {
+                LOG_WARN("failed to push autoinc param", K(ret));
+              }
+            }
+            if (is_error_need_retry(autoinc_param.ret_code_)) {
+              if (tmp_ret == OB_SUCCESS) {
                 tmp_ret = autoinc_param.ret_code_;
               }
+            } else {
+              tmp_ret = autoinc_param.ret_code_;
             }
           }
         }
@@ -2642,10 +2499,6 @@ int ObSyncTabletAutoincSeqCtx::call_and_process_all_tablet_autoinc_seqs(const bo
           ret = tmp_ret;
         }
       }
-    }
-
-    if (ls_to_tablet_map.created()) {
-      ls_to_tablet_map.destroy();
     }
   }
   if (OB_SUCC(ret) && is_get) {

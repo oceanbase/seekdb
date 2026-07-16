@@ -38,14 +38,16 @@ enum class ObFreezeSourceFlag : int64_t
   USER_MINOR_FREEZE   = 2,
   FREEZE_TRIGGER      = 3,
   BACKUP              = 4,
-  MAJOR_FREEZE        = 5,
-  FAST_FREEZE         = 6,
-  DIRECT_INC_START    = 7,
-  DIRECT_INC_END      = 8,
-  DIRECT_INC_FREEZE   = 9,
-  GC_RETAIN_CTX       = 10, // deprecated
-  TEST_MODE           = 11, // used for test only
-  MAX_SOURCE          = 12,
+  RESERVED_SOURCE_5   = 5,
+  RESERVED_SOURCE_6   = 6,
+  MAJOR_FREEZE        = 7,
+  FAST_FREEZE         = 8,
+  DIRECT_INC_START    = 9,
+  DIRECT_INC_END      = 10,
+  DIRECT_INC_FREEZE   = 11,
+  GC_RETAIN_CTX       = 12, // deprecated
+  TEST_MODE           = 13, // used for test only
+  MAX_SOURCE          = 14,
 };
 
 static const int64_t MAX_FREEZE_SOURCE_TYPE_COUNT = static_cast<int64_t>(ObFreezeSourceFlag::MAX_SOURCE);
@@ -74,6 +76,12 @@ inline const char *obj_to_cstring(const ObFreezeSourceFlag type)
     break;
   case ObFreezeSourceFlag::BACKUP:
     ret = "BACKUP";
+    break;
+  case ObFreezeSourceFlag::RESERVED_SOURCE_5:
+    ret = "RESERVED_SOURCE_5";
+    break;
+  case ObFreezeSourceFlag::RESERVED_SOURCE_6:
+    ret = "RESERVED_SOURCE_6";
     break;
   case ObFreezeSourceFlag::MAJOR_FREEZE:
     ret = "MAJOR_FREEZE";

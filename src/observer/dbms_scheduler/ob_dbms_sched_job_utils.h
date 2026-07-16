@@ -232,6 +232,7 @@ public:
 
   bool is_default_job_class() const { return (0 == job_class_.case_compare("DEFAULT_JOB_CLASS")); }
   bool is_mysql_event_job() const { return ObDBMSSchedFuncType::MYSQL_EVENT_JOB == get_func_type(); }
+  bool is_olap_async_job() const { return ObDBMSSchedFuncType::OLAP_ASYNC_JOB == get_func_type(); }
   bool is_stats_maintenance_job() const { return ObDBMSSchedFuncType::STAT_MAINTENANCE_JOB == get_func_type(); }
   bool is_user_job() const { return ObDBMSSchedFuncType::USER_JOB == get_func_type(); }
   bool is_shadow() const { return ObDBMSSchedFuncSet::instance_.is_shadow(get_func_type()); }

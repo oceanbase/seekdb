@@ -40,21 +40,21 @@ public:
       : direct_load_type_(other.direct_load_type_),
         ddl_thread_count_(other.ddl_thread_count_),
         ddl_task_param_(other.ddl_task_param_),
-        ls_tablet_ids_(other.ls_tablet_ids_) {}
+        tablet_ids_(other.tablet_ids_) {}
   virtual bool is_valid() const override
   {
     return is_valid_direct_load(direct_load_type_) &&
            ddl_thread_count_ > 0 &&
            ddl_task_param_.is_valid() &&
-           ls_tablet_ids_.count() > 0;
+           tablet_ids_.count() > 0;
   }
-  VIRTUAL_TO_STRING_KV(K(direct_load_type_), K(ddl_thread_count_), K(ddl_task_param_), K(ls_tablet_ids_));
+  VIRTUAL_TO_STRING_KV(K(direct_load_type_), K(ddl_thread_count_), K(ddl_task_param_), K(tablet_ids_));
 
 public:
   ObDirectLoadType direct_load_type_;
   int64_t ddl_thread_count_;
   ObDDLTaskParam ddl_task_param_;
-  ObArray<std::pair<share::ObLSID, ObTabletID>> ls_tablet_ids_;
+  ObArray<ObTabletID> tablet_ids_;
 };
 
 class ObDDLIndependentDag : public share::ObIndependentDag
@@ -69,7 +69,7 @@ public:
   int64_t get_ddl_thread_count() const { return ddl_thread_count_; }
   const ObDDLTaskParam &get_ddl_task_param() const { return ddl_task_param_; }
   const ObDDLTableSchema &get_ddl_table_schema() const { return ddl_table_schema_; }
-  const ObIArray<std::pair<share::ObLSID, ObTabletID>> &get_ls_tablet_ids() { return ls_tablet_ids_; }
+  const ObIArray<ObTabletID> &get_tablet_ids() { return tablet_ids_; }
   int64_t get_pipeline_count() const { return ATOMIC_LOAD(&pipeline_count_); }
   void inc_pipeline_count() { ATOMIC_INC(&pipeline_count_); }
   void dec_pipeline_count() { ATOMIC_DEC(&pipeline_count_); }
@@ -90,7 +90,7 @@ public:
 protected:
   int alloc_vector_index_write_and_build_pipeline(
       const ObIndexType &index_type,
-      const ObIArray<std::pair<share::ObLSID, ObTabletID>> &ls_tablet_ids,
+      const ObIArray<ObTabletID> &tablet_ids,
       ObIArray<share::ObITask *> &vector_index_task_array);
 private:
   int init_ddl_table_schema();
@@ -114,7 +114,7 @@ protected:
   int64_t ddl_thread_count_;
   ObDDLTaskParam ddl_task_param_;
   ObDDLTableSchema ddl_table_schema_;
-  ObArray<std::pair<share::ObLSID, ObTabletID>> ls_tablet_ids_;
+  ObArray<ObTabletID> tablet_ids_;
   hash::ObHashMap<ObTabletID, ObDDLTabletContext *> tablet_context_map_;
   int64_t pipeline_count_;
   int ret_code_;

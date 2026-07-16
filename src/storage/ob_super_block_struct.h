@@ -36,8 +36,9 @@ enum GCTabletType
 {
   InvalidType = -1,
   DropTablet = 0,
-  CreateAbort = 1,
-  DropLS = 2
+  ReservedOut = 1,
+  CreateAbort = 2,
+  DropLS = 3
 };
 
 struct ObServerSuperBlockHeader final
@@ -199,6 +200,7 @@ public:
 #define IS_EMPTY_BLOCK_LIST(entry_block) (entry_block == oceanbase::storage::ObServerSuperBlock::EMPTY_LIST_ENTRY_BLOCK)
 // Due to the design of slog, the log_id_'s initial value must be 1
 #define SET_FIRST_VALID_SLOG_CURSOR(cursor) (set_cursor(cursor, 1/*file_id*/, 1/*log_id*/, 0/*offset*/))
+
 
 }  // end namespace storage
 }  // end namespace oceanbase

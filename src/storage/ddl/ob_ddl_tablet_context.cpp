@@ -185,7 +185,6 @@ int init_tablet_param(ObTablet *tablet, ObStorageSchema *storage_schema, const O
 }
 
 int ObDDLTabletContext::init(
-    const share::ObLSID &ls_id,
     const ObTabletID &tablet_id,
     const int64_t ddl_thread_count,
     const int64_t snapshot_version,
@@ -196,13 +195,12 @@ int ObDDLTabletContext::init(
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
     LOG_WARN("init twice", K(ret), K(is_inited_));
-  } else if (OB_UNLIKELY(!ls_id.is_valid() || !tablet_id.is_valid() || ddl_thread_count <= 0 ||
+  } else if (OB_UNLIKELY(!tablet_id.is_valid() || ddl_thread_count <= 0 ||
                          !is_valid_direct_load(direct_load_type))) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invlaid argument", K(ret), K(ls_id), K(tablet_id), K(ddl_thread_count),
+    LOG_WARN("invlaid argument", K(ret), K(tablet_id), K(ddl_thread_count),
              K(direct_load_type));
   } else {
-    ls_id_ = ls_id;
     tablet_id_ = tablet_id;
     bucket_count_ = ddl_thread_count * 2;
     if (OB_FAIL(slice_map_.create(bucket_count_, ObMemAttr("tblt_slice_map")))) {
@@ -210,13 +208,13 @@ int ObDDLTabletContext::init(
     } else if (OB_FAIL(bucket_lock_.init(bucket_count_))) {
       LOG_WARN("init bucket lock failed", K(ret), K(bucket_count_));
     } else {
-      ObLSHandle ls_handle;
+      ObLS *ls = nullptr;
       ObTabletHandle tablet_handle;
       ObTabletBindingMdsUserData mds_data;
-      if (OB_FAIL(share::g_mp->ls_service()->get_ls(ls_id, ls_handle, ObLSGetMod::DDL_MOD))) {
-        LOG_WARN("get ls failed", K(ret), K(ls_id));
-      } else if (OB_FAIL(ObDDLUtil::ddl_get_tablet(ls_handle, tablet_id, tablet_handle, ObMDSGetTabletMode::READ_ALL_COMMITED))) {
-        LOG_WARN("ddl get tablet failed", K(ret), K(ls_handle), K(tablet_id));
+      if (OB_FAIL(share::g_mp->ls_service()->get_ls(ls))) {
+        LOG_WARN("get ls failed", K(ret));
+      } else if (OB_FAIL(ObDDLUtil::ddl_get_tablet(ls, tablet_id, tablet_handle, ObMDSGetTabletMode::READ_ALL_COMMITED))) {
+        LOG_WARN("ddl get tablet failed", K(ret), K(ls), K(tablet_id));
       } else if (OB_FAIL(init_tablet_param(tablet_handle.get_obj(), ddl_table_schema.storage_schema_, direct_load_type, arena_, tablet_param_))) {
         LOG_WARN("init tablet param failed", K(ret));
       } else if (OB_FAIL(merge_ctx_.init(direct_load_type))) {
@@ -229,8 +227,8 @@ int ObDDLTabletContext::init(
       } else if (mds_data.lob_meta_tablet_id_.is_valid()) {
         lob_meta_tablet_id_ = mds_data.lob_meta_tablet_id_;
         ObTabletHandle lob_meta_tablet_handle;
-        if (OB_FAIL(ObDDLUtil::ddl_get_tablet(ls_handle, lob_meta_tablet_id_, lob_meta_tablet_handle, ObMDSGetTabletMode::READ_ALL_COMMITED))) {
-          LOG_WARN("ddl get tablet failed", K(ret), K(ls_handle), KPC(this));
+        if (OB_FAIL(ObDDLUtil::ddl_get_tablet(ls, lob_meta_tablet_id_, lob_meta_tablet_handle, ObMDSGetTabletMode::READ_ALL_COMMITED))) {
+          LOG_WARN("ddl get tablet failed", K(ret), K(ls), KPC(this));
         } else if (OB_FAIL(init_tablet_param(lob_meta_tablet_handle.get_obj(), ddl_table_schema.lob_meta_storage_schema_, direct_load_type, arena_, lob_meta_tablet_param_))) {
           LOG_WARN("init lob meta tablet param failed", K(ret));
         } else if (OB_FAIL(lob_merge_ctx_.init(direct_load_type))) {
@@ -260,7 +258,7 @@ int ObDDLTabletContext::init_vector_index_context(const int64_t snapshot_version
       LOG_WARN("allocate memory failed", K(ret));
     } else {
       vector_index_ctx_ = new (buf) ObVectorIndexTabletContext();
-      if (OB_FAIL(vector_index_ctx_->init(ls_id_, tablet_id_, tablet_param_.storage_schema_->get_index_type(), snapshot_version, ddl_table_schema))) {
+      if (OB_FAIL(vector_index_ctx_->init(tablet_id_, tablet_param_.storage_schema_->get_index_type(), snapshot_version, ddl_table_schema))) {
         LOG_WARN("init vector index ctx failed", K(ret));
       }
     }
@@ -271,7 +269,6 @@ int ObDDLTabletContext::init_vector_index_context(const int64_t snapshot_version
 void ObDDLTabletContext::reset()
 {
   is_inited_ = false;
-  ls_id_.reset();
   tablet_id_.reset();
   tablet_param_.reset();
   lob_meta_tablet_id_.reset();

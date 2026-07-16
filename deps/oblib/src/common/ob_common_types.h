@@ -49,6 +49,7 @@ struct ObQueryFlag
 #define OBSF_BIT_FAST_AGG             1
 #define OBSF_BIT_ITER_UNCOMMITTED_ROW 1
 #define OBSF_BIT_IGNORE_TRANS_STAT    1
+#define OBSF_BIT_IS_LARGE_QUERY       1
 #define OBSF_BIT_IS_SSTABLE_CUT       1
 #define OBSF_BIT_IS_SHOW_SEED         1
 #define OBSF_BIT_SKIP_READ_LOB        1
@@ -63,7 +64,7 @@ struct ObQueryFlag
 #define OBSF_BIT_IS_BARE_ROW_SCAN     1
 #define OBSF_BIT_SNAPSHOT_OPT         1
 #define OBSF_BIT_SKIP_RUNNING_TX      1
-#define OBSF_BIT_RESERVED             22
+#define OBSF_BIT_RESERVED             21
 
   static const uint64_t OBSF_MASK_SCAN_ORDER = (0x1UL << OBSF_BIT_SCAN_ORDER) - 1;
   static const uint64_t OBSF_MASK_DAILY_MERGE =  (0x1UL << OBSF_BIT_DAILY_MERGE) - 1;
@@ -84,6 +85,7 @@ struct ObQueryFlag
   static const uint64_t OBSF_MASK_FAST_AGG = (0x1UL << OBSF_BIT_FAST_AGG) - 1;
   static const uint64_t OBSF_MASK_ITER_UNCOMMITTED_ROW = (0x1UL << OBSF_BIT_ITER_UNCOMMITTED_ROW) - 1;
   static const uint64_t OBSF_MASK_IGNORE_TRANS_STAT = (0x1UL << OBSF_BIT_IGNORE_TRANS_STAT) - 1;
+  static const uint64_t OBSF_MASK_IS_LARGE_QUERY = (0x1UL << OBSF_BIT_IS_LARGE_QUERY) - 1;
   static const uint64_t OBSF_MASK_IS_SSTABLE_CUT = (0x1UL << OBSF_BIT_IS_SSTABLE_CUT) - 1;
   static const uint64_t OBSF_MASK_SKIP_READ_LOB = (0x1UL << OBSF_BIT_SKIP_READ_LOB) - 1;
   static const uint64_t OBSF_MASK_ENABLE_RICH_FORMAT = (0x1UL << OBSF_BIT_ENABLE_RICH_FORMAT) - 1;
@@ -151,6 +153,7 @@ struct ObQueryFlag
       uint64_t use_fast_agg_ : OBSF_BIT_FAST_AGG;
       uint64_t iter_uncommitted_row_ : OBSF_BIT_ITER_UNCOMMITTED_ROW;
       uint64_t ignore_trans_stat_: OBSF_BIT_IGNORE_TRANS_STAT;
+      uint64_t is_large_query_ : OBSF_BIT_IS_LARGE_QUERY;
       uint64_t is_sstable_cut_ : OBSF_BIT_IS_SSTABLE_CUT; //0:sstable no need cut, 1: sstable need cut
       uint64_t is_show_seed_   : OBSF_BIT_IS_SHOW_SEED;
       uint64_t skip_read_lob_   : OBSF_BIT_SKIP_READ_LOB;
@@ -183,6 +186,7 @@ struct ObQueryFlag
               const uint64_t join_type = 0,
               const bool multi_version_minor_merge = false,
               const bool need_feedback = false,
+              const bool is_large_query = false,
               const bool is_sstable_cut = false,
               const bool is_mds_query = false)
   {
@@ -202,6 +206,7 @@ struct ObQueryFlag
     join_type_ = join_type & OBSF_MASK_JOIN_TYPE;
     multi_version_minor_merge_ = multi_version_minor_merge & OBSF_MASK_MULTI_VERSION_MERGE;
     is_need_feedback_ = need_feedback & OBSF_MASK_NEED_FEEDBACK;
+    is_large_query_ = is_large_query & OBSF_MASK_IS_LARGE_QUERY;
     is_sstable_cut_ = is_sstable_cut & OBSF_MASK_IS_SSTABLE_CUT;
     is_mds_query_ = is_mds_query & OBSF_MASK_IS_MDS_QUERY;
   }
@@ -231,6 +236,7 @@ struct ObQueryFlag
   inline uint64_t get_join_type() const { return join_type_; }
   inline bool is_multi_version_minor_merge() const { return multi_version_minor_merge_; }
   inline bool is_need_feedback() const { return is_need_feedback_; }
+  inline bool is_large_query() const { return is_large_query_; }
   inline bool is_enable_rich_format() const { return enable_rich_format_; }
   inline bool is_skip_running_tx() const { return skip_running_tx_; }
   inline void set_skip_running_tx(const bool skip) { skip_running_tx_ = skip ? 1 : 0; }
@@ -291,6 +297,7 @@ struct ObQueryFlag
                "use_fast_agg", use_fast_agg_,
                "iter_uncommitted_row", iter_uncommitted_row_,
                "ignore_trans_stat", ignore_trans_stat_,
+               "is_large_query", is_large_query_,
                "is_sstable_cut", is_sstable_cut_,
                "skip_read_lob", skip_read_lob_,
                "is_lookup_for_4377", is_lookup_for_4377_,

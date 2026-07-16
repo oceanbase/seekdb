@@ -70,6 +70,11 @@ public:
   virtual void free_replay_log_buf(void *ptr) = 0;
   virtual palf::LogIOPurgeThrottlingTask *alloc_log_io_purge_throttling_task(const int64_t palf_epoch) = 0;
   virtual void free_log_io_purge_throttling_task(palf::LogIOPurgeThrottlingTask *ptr) = 0;
+  virtual void *alloc_append_compression_buf(const int64_t size) = 0;
+  virtual void free_append_compression_buf(void *ptr) = 0;
+  virtual void *alloc_replay_decompression_buf(const int64_t size) = 0;
+  virtual void free_replay_decompression_buf(void *ptr) = 0;
+  virtual ObIAllocator *get_replay_decompression_allocator() = 0;
   TO_STRING_KV(K_(flying_log_task), K_(flying_meta_task));
 
 
@@ -89,6 +94,11 @@ public:
   const int64_t REPLAY_MEM_LIMIT_PERCENT = 5;
   // The memory limit of replay engine
   const int64_t REPLAY_MEM_LIMIT_THRESHOLD = 512 * 1024 * 1024ll;
+  // The memory percent of clog compression
+  const int64_t CLOG_COMPRESSION_MEM_LIMIT_PERCENT = 3;
+  // The memory limit of clog compression
+  const int64_t CLOG_COMPRESSION_MEM_LIMIT_THRESHOLD = 128 * 1024 * 1024L;
+
   // The memory percent of replay engine for inner_table
   static int choose_blk_size(int obj_size);
 
@@ -124,6 +134,13 @@ public:
   palf::LogIOPurgeThrottlingTask *alloc_log_io_purge_throttling_task(const int64_t palf_epoch);
   void free_log_io_purge_throttling_task(palf::LogIOPurgeThrottlingTask *ptr);
 
+  void *alloc_append_compression_buf(const int64_t size);
+  void free_append_compression_buf(void *ptr);
+  //alloc buf from replay_log_task_alloc
+  void *alloc_replay_decompression_buf(const int64_t size);
+  void free_replay_decompression_buf(void *ptr);
+  ObIAllocator *get_replay_decompression_allocator() {return &replay_log_task_alloc_;}
+
 private:
   int64_t total_limit_;
   int64_t pending_replay_mutator_size_;
@@ -134,6 +151,7 @@ private:
   const int LOG_IO_PURGE_THROTTLING_TASK_SIZE;
   ObBlockAllocMgr clog_blk_alloc_;
   ObBlockAllocMgr replay_log_task_blk_alloc_;
+  ObBlockAllocMgr clog_compressing_blk_alloc_;
   ObVSliceAlloc clog_ge_alloc_;
   ObSliceAlloc log_handle_submit_task_alloc_;
   ObSliceAlloc log_io_flush_log_task_alloc_;
@@ -141,6 +159,7 @@ private:
   ObSliceAlloc log_io_truncate_prefix_blocks_task_alloc_;
   ObVSliceAlloc replay_log_task_alloc_;
   ObSliceAlloc log_io_purge_throttling_task_alloc_;
+  ObVSliceAlloc clog_compression_buf_alloc_;
 };
 
 } // end of namespace common

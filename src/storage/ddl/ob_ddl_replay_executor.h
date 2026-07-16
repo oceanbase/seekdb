@@ -21,8 +21,6 @@
 #include "logservice/replayservice/ob_tablet_replay_executor.h"
 #include "storage/ddl/ob_ddl_clog.h"
 #include "storage/ddl/ob_ddl_struct.h"
-#include "storage/ddl/ob_tablet_split_task.h"
-#include "storage/ddl/ob_tablet_lob_split_task.h"
 #include "storage/ddl/ob_direct_load_struct.h"
 #include "storage/blocksstable/ob_block_sstable_struct.h"
 
@@ -152,102 +150,6 @@ protected:
 
 private:
   const ObDDLCommitLog *log_;
-};
-
-class ObSplitStartReplayExecutor final : public ObDDLReplayExecutor
-{
-public:
-  ObSplitStartReplayExecutor();
-  ~ObSplitStartReplayExecutor() = default;
-
-  int init(
-      ObLS *ls,
-      const ObTabletSplitStartLog &log,
-      const share::SCN &scn);
-  static int prepare_param_from_log(
-      const share::ObLSID &ls_id,
-      const ObTabletHandle &handle,
-      const ObTabletSplitInfo &info,
-      const share::SCN &scn,
-      ObTabletSplitParam &param);
-  static int prepare_param_from_log(
-      const share::ObLSID &ls_id,
-      const ObTabletHandle &handle,
-      const ObTabletSplitInfo &info,
-      const share::SCN &scn,
-      ObLobSplitParam &param);
-  static bool is_split_log_retry_ret(const int ret_code) {
-    return OB_EAGAIN == ret_code || OB_SIZE_OVERFLOW == ret_code || OB_NEED_RETRY == ret_code;
-  }
-
-protected:
-  // replay to the tablet
-  // @return OB_SUCCESS, replay successfully, data has written to tablet.
-  // @return OB_EAGAIN, failed to replay, need retry.
-  // @return OB_NO_NEED_UPDATE, this log needs to be ignored.
-  // @return other error codes, failed to replay.
-  virtual int do_replay_(ObTabletHandle &handle) override;
-
-private:
-  int check_need_wait_split_finished(
-      const share::ObLSID &ls_id,
-      const ObTabletHandle &handle,
-      const ObIArray<ObTabletID> &dest_tablets_id,
-      bool &need_wait_split_finished);
-
-private:
-  const ObTabletSplitStartLog *log_;
-};
-
-class ObSplitFinishReplayExecutor final : public ObDDLReplayExecutor
-{
-public:
-  ObSplitFinishReplayExecutor();
-  ~ObSplitFinishReplayExecutor() = default;
-
-  int init(
-      ObLS *ls,
-      const ObTabletSplitFinishLog &log,
-      const share::SCN &scn);
-
-protected:
-  // replay to the tablet
-  // @return OB_SUCCESS, replay successfully, data has written to tablet.
-  // @return OB_EAGAIN, failed to replay, need retry.
-  // @return OB_NO_NEED_UPDATE, this log needs to be ignored.
-  // @return other error codes, failed to replay.
-  virtual int do_replay_(ObTabletHandle &handle) override;
-private:
-  static int modify_tablet_restore_status_if_need(
-      const ObIArray<ObTabletID> &dest_tablet_ids, 
-      const ObTabletHandle &src_tablet_handle, 
-      ObLS* ls);
-  int check_can_skip_replay(ObTabletHandle &handle, bool &can_skip);
-private:
-  const ObTabletSplitFinishLog *log_;
-};
-
-class ObTabletFreezeReplayExecutor final : public ObDDLReplayExecutor
-{
-public:
-  ObTabletFreezeReplayExecutor();
-  ~ObTabletFreezeReplayExecutor() = default;
-
-  int init(
-      ObLS *ls,
-      const ObTabletFreezeLog &log,
-      const share::SCN &scn);
-
-protected:
-   // replay to the tablet
-  // @return OB_SUCCESS, replay successfully, data has written to tablet.
-  // @return OB_EAGAIN, failed to replay, need retry.
-  // @return OB_NO_NEED_UPDATE, this log needs to be ignored.
-  // @return other error codes, failed to replay.
-  virtual int do_replay_(ObTabletHandle &handle) override;
-
-private:
-  const ObTabletFreezeLog *log_;
 };
 
 class ObTabletForkFreezeReplayExecutor final : public ObDDLReplayExecutor

@@ -64,7 +64,6 @@ public:
 
 public: // derived from ObIMemtableMgr
   virtual int init(const common::ObTabletID &tablet_id,
-                   const share::ObLSID &ls_id,
                    ObFreezer *freezer,
                    ObTenantMetaMemMgr *t3m) override;
 
@@ -78,7 +77,6 @@ public: // derived from ObIMemtableMgr
   virtual int get_last_frozen_memtable(ObTableHandleV2 &handle) override;
   virtual int set_is_tablet_freeze_for_active_memtable(ObTableHandleV2 &handle);
   virtual int init_storage_recorder(const ObTabletID &tablet_id,
-                                    const share::ObLSID &ls_id,
                                     const int64_t max_saved_schema_version,
                                     const int64_t max_saved_medium_scn,
                                     const lib::Worker::CompatMode compat_mode,

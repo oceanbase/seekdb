@@ -423,8 +423,8 @@ public:
   ObIArray<ObLocalSessionVar> & get_all_local_session_vars() { return all_local_session_vars_; }
   ObFixedArray<uint64_t, common::ObIAllocator> &get_dml_table_ids() { return dml_table_ids_; }
   const ObIArray<uint64_t> &get_dml_table_ids() const { return dml_table_ids_; }
-  inline bool get_insertup_can_do_gts_opt() const {return insertup_can_do_gts_opt_; }
-  inline void set_insertup_can_do_gts_opt(bool v) { insertup_can_do_gts_opt_ = v; }
+  inline bool get_insertup_can_use_snapshot_opt() const {return insertup_can_use_snapshot_opt_; }
+  inline void set_insertup_can_use_snapshot_opt(bool v) { insertup_can_use_snapshot_opt_ = v; }
   void set_is_use_auto_dop(bool use_auto_dop)  { stat_.is_use_auto_dop_ = use_auto_dop; }
   bool get_is_use_auto_dop() const { return stat_.is_use_auto_dop_; }
   void set_px_node_policy(ObPxNodePolicy px_node_policy)
@@ -627,7 +627,7 @@ private:
   // further cursor stmt will check agains
   // to decide whether it read uncommitted data
   common::ObFixedArray<uint64_t, common::ObIAllocator> dml_table_ids_;
-  bool insertup_can_do_gts_opt_;
+  bool insertup_can_use_snapshot_opt_;
   ObPxNodePolicy px_node_policy_;
   common::ObFixedArray<common::ObAddr, common::ObIAllocator> px_node_addrs_;
   int64_t px_node_count_;

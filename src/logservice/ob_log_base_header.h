@@ -55,6 +55,7 @@ public:
 public:
   void reset();
   bool is_valid() const;
+  void set_compressed();
   bool is_compressed() const;
   bool need_pre_replay_barrier() const;
   bool need_post_replay_barrier() const;

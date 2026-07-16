@@ -1151,6 +1151,7 @@ public:
 
   int is_force_temp_table_inline(bool &force_inline) const;
   int is_force_temp_table_materialize(bool &force_materialize) const;
+  int is_temp_table_transformation_enabled(bool &transformation_enabled) const;
   int is_groupby_placement_transformation_enabled(bool &transformation_enabled) const;
   bool is_in_range_optimization_enabled() const;
   int64_t get_inlist_rewrite_threshold() const;

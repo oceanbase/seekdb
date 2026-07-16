@@ -81,6 +81,8 @@
 #include "observer/virtual_table/ob_all_virtual_memory_info.h"
 #include "observer/virtual_table/ob_all_virtual_raid_stat.h"
 #include "observer/virtual_table/ob_all_virtual_tablet_sstable_macro_info.h"
+#include "observer/virtual_table/ob_virtual_sql_plan_monitor.h"
+#include "observer/virtual_table/ob_virtual_sql_monitor_statname.h"
 #include "observer/virtual_table/ob_tenant_virtual_concurrent_limit_sql.h"
 #include "observer/virtual_table/ob_all_virtual_sys_task_status.h"
 #include "observer/virtual_table/ob_all_virtual_macro_block_marker_status.h"
@@ -173,6 +175,7 @@
 #include "observer/virtual_table/ob_all_virtual_tmp_file.h"
 #include "observer/virtual_table/ob_all_virtual_dml_stats.h"
 #include "observer/virtual_table/ob_all_virtual_plugin_info.h"
+#include "observer/virtual_table/ob_all_virtual_ddl_diagnose_info.h"
 #include "observer/virtual_table/ob_all_virtual_change_stream_refresh_stat.h"
 #include "observer/virtual_table/ob_all_virtual_tenant_vector_mem_info.h"
 #include "observer/virtual_table/ob_all_virtual_ccl_status.h"
@@ -1308,6 +1311,31 @@ int ObVTIterCreator::create_vt_iter(ObVTableScanParam &params,
             }
             break;
           }
+          case OB_ALL_VIRTUAL_SQL_PLAN_MONITOR_TID: {
+            ObVirtualSqlPlanMonitor *plan_monitor = NULL;
+            if (OB_SUCC(NEW_VIRTUAL_TABLE(ObVirtualSqlPlanMonitor, plan_monitor))) {
+              plan_monitor->set_allocator(&allocator);
+              plan_monitor->set_addr(addr_);
+              // optimizer choose to use index i1('tenant', 'request_id') to scan
+              bool is_index = false;
+              if (OB_FAIL(check_is_index(*index_schema, "i1", is_index))) {
+                LOG_WARN("check is index failed", K(ret));
+              } else if (is_index) {
+                plan_monitor->use_index_scan();
+              }
+              if (OB_SUCC(ret)) {
+                vt_iter = static_cast<ObVirtualTableIterator *>(plan_monitor);
+              }
+            }
+            break;
+          }
+          case OB_ALL_VIRTUAL_SQL_MONITOR_STATNAME_TID: {
+            ObVirtualSqlMonitorStatname *stat_name = NULL;
+            if (OB_SUCC(NEW_VIRTUAL_TABLE(ObVirtualSqlMonitorStatname, stat_name))) {
+              vt_iter = static_cast<ObVirtualTableIterator *>(stat_name);
+            }
+            break;
+          }
           case OB_ALL_VIRTUAL_OUTLINE_TID: {
             ObTenantVirtualOutline *outline = NULL;
             if (OB_SUCC(NEW_VIRTUAL_TABLE(ObTenantVirtualOutline, outline))) {
@@ -1770,6 +1798,28 @@ int ObVTIterCreator::create_vt_iter(ObVTableScanParam &params,
                 SERVER_LOG(WARN, "fail to init ddl sim point stat iterator, ", K(ret));
               } else {
                 vt_iter = static_cast<ObVirtualTableIterator *>(ddl_sim_point_stat);
+              }
+            }
+            break;
+          }
+          case OB_ALL_VIRTUAL_DDL_DIAGNOSE_INFO_TID: {
+            ObAllVirtualDDLDiagnoseInfo *ddl_diagnose_info = nullptr;
+            bool is_index = false;
+            if (OB_FAIL(check_is_index(*index_schema, "i1", is_index))) {
+              LOG_WARN("check is index failed", K(ret));
+            } else if (is_index) {
+              if (OB_FAIL(NEW_VIRTUAL_TABLE(ObAllVirtualDDLDiagnoseInfoI1, ddl_diagnose_info))) {
+                LOG_WARN("new virtual table failed", K(ret));
+              }
+            } else {
+              OZ(NEW_VIRTUAL_TABLE(ObAllVirtualDDLDiagnoseInfo, ddl_diagnose_info));
+            }
+
+            if (OB_SUCC(ret)) {
+              if (OB_FAIL(ddl_diagnose_info->init(GCTX.sql_proxy_))) {
+                SERVER_LOG(WARN, "fail to init ddl diagnose info iterator, ", K(ret));
+              } else {
+                vt_iter = static_cast<ObVirtualTableIterator *>(ddl_diagnose_info);
               }
             }
             break;

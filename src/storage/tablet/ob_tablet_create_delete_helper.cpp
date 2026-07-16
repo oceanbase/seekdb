@@ -167,6 +167,12 @@ int ObTabletCreateDeleteHelper::check_status_for_new_mds(
       case ObTabletStatus::DELETED:
         ret = check_read_snapshot_for_deleted(tablet, snapshot_version, user_data, writer, trans_state, trans_version);
         break;
+      case ObTabletStatus::RESERVED_STATUS_5:
+      case ObTabletStatus::RESERVED_STATUS_4:
+      case ObTabletStatus::RESERVED_STATUS_6:
+        ret = OB_NOT_SUPPORTED;
+        LOG_WARN("reserved tablet transfer status is not supported", K(ret), K(tablet_id), K(user_data));
+        break;
       default:
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("unexpected tablet status", K(ret), K(tablet_id), K(user_data));

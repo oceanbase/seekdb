@@ -125,7 +125,7 @@ int ObKeepAliveLSHandler::try_submit_log(const SCN &min_start_scn, MinStartScnSt
       ATOMIC_STORE(&is_busy_, false);
       TRANS_LOG(WARN, "[Keep Alive] serialize keep alive log failed", K(ret));
     } else if (OB_FAIL(log_handler_ptr_->append(submit_buf_, submit_buf_pos_, ref_scn, true,
-                                                this, lsn, scn))) {
+                                                false/*allow_compression*/, this, lsn, scn))) {
       stat_info_.other_error_cnt += 1;
       ATOMIC_STORE(&is_busy_, false);
       TRANS_LOG(WARN, "[Keep Alive] submit keep alive log failed", K(ret));

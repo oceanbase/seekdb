@@ -155,7 +155,7 @@ void ObDDLStartClogCb::try_release()
 }
 
 ObDDLMacroBlockClogCb::ObDDLMacroBlockClogCb()
-  : is_inited_(false), status_(), ls_id_(), macro_block_id_(),
+  : is_inited_(false), status_(), macro_block_id_(),
     data_buffer_lock_(), is_data_buffer_freed_(false), ddl_macro_block_(), snapshot_version_(0),
     data_format_version_(0), direct_load_type_(ObDirectLoadType::DIRECT_LOAD_INVALID),
     block_checksum_(0), is_macro_block_exist_(false)
@@ -170,8 +170,7 @@ ObDDLMacroBlockClogCb::~ObDDLMacroBlockClogCb()
   macro_block_id_.reset();
 }
 
-int ObDDLMacroBlockClogCb::init(const share::ObLSID &ls_id,
-                                const storage::ObDDLMacroBlockRedoInfo &redo_info,
+int ObDDLMacroBlockClogCb::init(const storage::ObDDLMacroBlockRedoInfo &redo_info,
                                 const blocksstable::MacroBlockId &macro_block_id,
                                 ObTabletHandle &tablet_handle,
                                 const ObDirectLoadType &direct_load_type)
@@ -180,14 +179,13 @@ int ObDDLMacroBlockClogCb::init(const share::ObLSID &ls_id,
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
     LOG_WARN("init twice", K(ret));
-  } else if (OB_UNLIKELY(!ls_id.is_valid() || !redo_info.is_valid() || !macro_block_id.is_valid()
+  } else if (OB_UNLIKELY(!redo_info.is_valid() || !macro_block_id.is_valid()
                          || !is_valid_direct_load(direct_load_type))) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(ls_id), K(redo_info), K(macro_block_id));
+    LOG_WARN("invalid argument", K(ret), K(redo_info), K(macro_block_id));
   } else if (OB_FAIL(OB_STORAGE_OBJECT_MGR.inc_ref(macro_block_id))) {
     LOG_WARN("inc reference count failed", K(ret), K(macro_block_id));
   } else {
-    ls_id_ = ls_id;
     macro_block_id_ = macro_block_id;
     tablet_handle_ = tablet_handle;
     snapshot_version_ = redo_info.table_key_.get_snapshot_version();
@@ -272,7 +270,7 @@ int ObDDLMacroBlockClogCb::on_success()
   } else if (ObDDLUtil::use_idempotent_mode()) {
     /* Do not fetch direct load mgr. */
   } else if (OB_FAIL(tenant_direct_load_mgr->get_tablet_mgr_and_check_major(
-        ls_id_, tablet->get_tablet_meta().tablet_id_, true/*is_full_direct_load*/, direct_load_mgr_handle, is_major_sstable_exist))) {
+        tablet->get_tablet_meta().tablet_id_, true/*is_full_direct_load*/, direct_load_mgr_handle, is_major_sstable_exist))) {
     if (OB_ENTRY_NOT_EXIST == ret && is_major_sstable_exist) {
       ret = OB_TASK_EXPIRED;
       LOG_INFO("major sstable already exist", K(ret), "tablet_id", tablet->get_tablet_meta().tablet_id_);
@@ -331,13 +329,12 @@ int ObDDLMacroBlockClogCb::on_failure()
 }
 
 ObDDLCommitClogCb::ObDDLCommitClogCb()
-  : is_inited_(false), status_(), ls_id_(), tablet_id_(), start_scn_(SCN::min_scn()), lock_tid_(0), direct_load_mgr_handle_(), lob_direct_load_mgr_handle_()
+  : is_inited_(false), status_(), tablet_id_(), start_scn_(SCN::min_scn()), lock_tid_(0), direct_load_mgr_handle_(), lob_direct_load_mgr_handle_()
 {
 
 }
 
-int ObDDLCommitClogCb::init(const share::ObLSID &ls_id,
-                            const common::ObTabletID &tablet_id,
+int ObDDLCommitClogCb::init(const common::ObTabletID &tablet_id,
                             const share::SCN &start_scn,
                             const uint32_t lock_tid,
                             ObTabletDirectLoadMgrHandle &direct_load_mgr_handle,
@@ -347,16 +344,15 @@ int ObDDLCommitClogCb::init(const share::ObLSID &ls_id,
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
     LOG_WARN("init twice", K(ret));
-  } else if (OB_UNLIKELY(!ls_id.is_valid() || !tablet_id.is_valid() || !start_scn.is_valid_and_not_min()
+  } else if (OB_UNLIKELY(!tablet_id.is_valid() || !start_scn.is_valid_and_not_min()
       || 0 == lock_tid)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(ls_id), K(tablet_id), K(start_scn), K(lock_tid));
+    LOG_WARN("invalid argument", K(ret), K(tablet_id), K(start_scn), K(lock_tid));
   } else if (OB_FAIL(direct_load_mgr_handle_.assign(direct_load_mgr_handle))) {
     LOG_WARN("assign handle failed", K(ret));
   } else if (OB_FAIL(lob_direct_load_mgr_handle_.assign(lob_direct_load_mgr_handle))) {
     LOG_WARN("assign handle failed", K(ret));
   } else {
-    ls_id_ = ls_id;
     tablet_id_ = tablet_id;
     start_scn_ = start_scn;
     lock_tid_ = lock_tid;
@@ -550,98 +546,7 @@ int ObTabletSchemaVersionChangeLog::init(const ObTabletID &tablet_id, const int6
 
 OB_SERIALIZE_MEMBER(ObTabletSchemaVersionChangeLog, tablet_id_, schema_version_);
 
-OB_SERIALIZE_MEMBER(ObDDLBarrierLog, ls_id_, hidden_tablet_ids_);
-
-ObTabletSplitInfo::ObTabletSplitInfo()
-  : rowkey_allocator_("SplitRangeClog"),
-    table_id_(OB_INVALID_ID), lob_table_id_(OB_INVALID_ID),
-    schema_version_(0), task_id_(0),
-    source_tablet_id_(), dest_tablets_id_(), 
-    compaction_scn_(0), data_format_version_(0),
-    can_reuse_macro_block_(false),
-    lob_col_idxs_(), parallel_datum_rowkey_list_()
-{
-}
-
-int ObTabletSplitInfo::assign(const ObTabletSplitInfo &info)
-{
-  int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(!info.is_valid())) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arg", K(ret), K(info));
-  } else if (OB_FAIL(dest_tablets_id_.assign(info.dest_tablets_id_))) {
-    LOG_WARN("assign failed", K(ret));
-  } else if (OB_FAIL(parallel_datum_rowkey_list_.assign(info.parallel_datum_rowkey_list_))) {
-    // shallow copy enough.
-    LOG_WARN("assign failed", K(ret));
-  } else if (OB_FAIL(lob_col_idxs_.assign(info.lob_col_idxs_))) {
-    LOG_WARN("assign failed", K(ret));
-  } else {
-    table_id_            = info.table_id_;
-    lob_table_id_        = info.lob_table_id_;
-    schema_version_      = info.schema_version_;
-    task_id_             = info.task_id_;
-    source_tablet_id_    = info.source_tablet_id_;
-    compaction_scn_      = info.compaction_scn_;
-    data_format_version_ = info.data_format_version_;
-    can_reuse_macro_block_ = info.can_reuse_macro_block_;
-  }
-  return ret;
-}
-
-bool ObTabletSplitInfo::is_valid() const
-{
-  bool is_valid = OB_INVALID_ID != table_id_ 
-      && schema_version_ > 0 && task_id_ > 0
-      && source_tablet_id_.is_valid() && dest_tablets_id_.count() > 0
-      && compaction_scn_ > 0
-      && data_format_version_ > 0
-      && parallel_datum_rowkey_list_.count() > 0;
-  if (!lob_col_idxs_.empty()) {
-    is_valid = is_valid && (OB_INVALID_ID != lob_table_id_);
-  }
-  return is_valid;
-}
-
-OB_DEF_SERIALIZE(ObTabletSplitInfo)
-{
-  int ret = OB_SUCCESS;
-  LST_DO_CODE(OB_UNIS_ENCODE, table_id_, lob_table_id_, schema_version_, 
-    task_id_, source_tablet_id_, dest_tablets_id_, 
-    compaction_scn_, data_format_version_,
-    can_reuse_macro_block_, split_sstable_type_, lob_col_idxs_,
-    parallel_datum_rowkey_list_);
-  return ret;
-}
-
-OB_DEF_DESERIALIZE(ObTabletSplitInfo)
-{
-  int ret = OB_SUCCESS;
-  LST_DO_CODE(OB_UNIS_DECODE, table_id_, lob_table_id_, schema_version_, 
-    task_id_, source_tablet_id_, dest_tablets_id_, 
-    compaction_scn_, data_format_version_,
-    can_reuse_macro_block_, split_sstable_type_, lob_col_idxs_);
-  if (FAILEDx(ObSplitUtil::deserializ_parallel_datum_rowkey(
-      rowkey_allocator_, buf, data_len, pos, parallel_datum_rowkey_list_))) {
-    LOG_WARN("deserialzie parallel info failed", K(ret));
-  }
-  return ret;
-}
-
-OB_DEF_SERIALIZE_SIZE(ObTabletSplitInfo)
-{
-  int64_t len = 0;
-  LST_DO_CODE(OB_UNIS_ADD_LEN, table_id_, lob_table_id_, schema_version_, 
-    task_id_, source_tablet_id_, dest_tablets_id_, 
-    compaction_scn_, data_format_version_,
-    can_reuse_macro_block_, split_sstable_type_, lob_col_idxs_,
-    parallel_datum_rowkey_list_);
-  return len;
-}
-
-OB_SERIALIZE_MEMBER(ObTabletSplitStartLog, basic_info_);
-OB_SERIALIZE_MEMBER(ObTabletSplitFinishLog, basic_info_);
-OB_SERIALIZE_MEMBER(ObTabletFreezeLog, tablet_id_);
+OB_SERIALIZE_MEMBER(ObDDLBarrierLog, hidden_tablet_ids_);
 
 OB_SERIALIZE_MEMBER(ObTableForkFreezeLog, tablet_ids_);
 OB_SERIALIZE_MEMBER(ObTableForkStartLog, fork_info_);

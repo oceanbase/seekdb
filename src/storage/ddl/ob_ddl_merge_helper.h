@@ -52,7 +52,7 @@ public:
                               const ObDirectLoadType direct_load_type,
                               ObIDDLMergeHelper *&helper);
   static int get_rec_scn_from_ddl_kvs(ObDDLTabletMergeDagParamV2 &merge_param);
-  static int remove_tablet_from_log_handler(const ObLSID &ls_id, const ObTabletID &tablet_id);
+  static int remove_tablet_from_log_handler(const ObTabletID &tablet_id);
 public:
 /* interface used for prpare_task*/
   ObIDDLMergeHelper() {}
@@ -113,13 +113,6 @@ public:
   int assemble_sstable(ObDDLTabletMergeDagParamV2 &param) override;
 
   int get_rec_scn(ObDDLTabletMergeDagParamV2 &merge_param) override;
-
-  // Partition-level DDL fills an empty major for unspecified partitions.
-  static int set_ddl_complete_for_direct_load(const share::ObLSID &ls_id,
-                                              const ObTabletID &tablet_id,
-                                              const ObDirectLoadType direct_load_type,
-                                              const int64_t snapshot_version,
-                                              const int64_t data_version);
 
 protected:
   bool is_supported_direct_load_type(const ObDirectLoadType direct_load_type) override ;

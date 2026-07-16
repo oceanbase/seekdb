@@ -18,6 +18,7 @@
 #define OCEANBASE_STORAGE_OB_TABLET_HANDLE
 
 #include "storage/meta_mem/ob_meta_obj_struct.h"
+#include "share/leak_checker/obj_leak_checker.h"
 #include "storage/tablet/ob_table_store_util.h"
 #include "storage/tablet/ob_tablet_table_store_iterator.h"
 #include "share/ob_ddl_common.h"
@@ -69,6 +70,7 @@ private:
   int32_t index_;  // initialize as -1
   WashTabletPriority wash_priority_;
   bool allow_copy_and_assign_;
+  DEFINE_OBJ_LEAK_DEBUG_NODE(node_);
 };
 
 class ObTabletTableIterator final
