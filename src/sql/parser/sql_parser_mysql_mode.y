@@ -22301,6 +22301,7 @@ ACCESS_INFO
 |       FRAGMENTATION
 |       FREEZE
 |       FREQUENCY
+|       FULLTEXT_DICT
 |       FUNCTION
 |       FULL %prec HIGHER_PARENS
 |       GENERAL
