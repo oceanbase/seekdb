@@ -237,6 +237,9 @@ int ObFTParseHelper::segment(
     const char *ft,
     const int64_t ft_len,
     common::ObIAllocator &allocator,
+    common::ObIAllocator &token_iter_allocator,
+    ObITokenIterator *&cached_iter,
+    bool &cache_disabled,
     ObAddWord &add_word)
 {
   int ret = OB_SUCCESS;
@@ -246,7 +249,8 @@ int ObFTParseHelper::segment(
   } else {
     ObFTParserParam param;
     ObITokenIterator *iter = nullptr;
-    param.allocator_ = &allocator;
+    param.allocator_ = cache_disabled ? &allocator : &token_iter_allocator;
+    param.scratch_allocator_ = &allocator;
     param.cs_ = cs;
     param.fulltext_ = ft;
     param.ft_length_ = ft_len;
@@ -261,8 +265,34 @@ int ObFTParseHelper::segment(
     param.min_ngram_size_ = property.min_ngram_token_size_;
     param.max_ngram_size_ = property.max_ngram_token_size_;
 
-    if (OB_FAIL(parser_desc->segment(&param, iter))) {
-      LOG_WARN("fail to segment", K(ret), K(param));
+    if (cache_disabled) {
+      if (OB_FAIL(parser_desc->segment(&param, iter))) {
+        LOG_WARN("fail to segment", K(ret), K(param));
+      }
+    } else if (OB_ISNULL(cached_iter)) {
+      if (OB_FAIL(parser_desc->segment(&param, cached_iter))) {
+        LOG_WARN("fail to segment", K(ret), K(param));
+      } else {
+        iter = cached_iter;
+      }
+    } else if (OB_FAIL(cached_iter->reuse(&param))) {
+      if (OB_NOT_SUPPORTED == ret) {
+        parser_desc->free_token_iter(&param, cached_iter);
+        cached_iter = nullptr;
+        cache_disabled = true;
+        param.allocator_ = &allocator;
+        if (OB_FAIL(parser_desc->segment(&param, iter))) {
+          LOG_WARN("fail to segment after reusable iterator fallback", K(ret), K(param));
+        }
+      } else {
+        LOG_WARN("fail to reuse token iterator", K(ret), K(param), KPC(cached_iter));
+      }
+    } else {
+      iter = cached_iter;
+    }
+
+    if (OB_FAIL(ret)) {
+      // already logged
     } else if (OB_ISNULL(iter)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected error, token iterator is nullptr", K(ret), KP(iter));
@@ -284,7 +314,11 @@ int ObFTParseHelper::segment(
         ret = OB_SUCCESS;
       }
     }
-    if (OB_NOT_NULL(iter)) {
+    if (OB_FAIL(ret) && !cache_disabled && iter == cached_iter && OB_NOT_NULL(cached_iter)) {
+      parser_desc->free_token_iter(&param, cached_iter);
+      cached_iter = nullptr;
+      iter = nullptr;
+    } else if (cache_disabled && OB_NOT_NULL(iter)) {
       parser_desc->free_token_iter(&param, iter);
       iter = nullptr;
     }
@@ -296,9 +330,12 @@ ObFTParseHelper::ObFTParseHelper()
     : allocator_(nullptr),
     parser_desc_(nullptr),
     plugin_param_(nullptr),
+    token_iter_allocator_(),
+    token_iter_(nullptr),
     parser_name_(),
     add_word_flag_(),
     parser_property_(),
+    token_iter_cache_disabled_(false),
     is_inited_(false)
 {
 }
@@ -320,6 +357,10 @@ int ObFTParseHelper::init(
   } else if (OB_ISNULL(allocator) || OB_UNLIKELY(plugin_name.empty())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), KP(allocator), K(plugin_name));
+  } else if (OB_FAIL(token_iter_allocator_.init(lib::ObMallocAllocator::get_instance(),
+                                                OB_MALLOC_NORMAL_BLOCK_SIZE,
+                                                lib::ObMemAttr("FTIterCache")))) {
+    LOG_WARN("fail to init token iterator allocator", K(ret));
   } else if (OB_FAIL(parser_name_.parse_from_str(plugin_name.ptr(), plugin_name.length()))) {
     LOG_WARN("fail to parse name from cstring", K(ret), K(plugin_name));
   } else if (OB_FAIL(parser_property_.parse_for_parser_helper(parser_name_, plugin_properties))) {
@@ -349,10 +390,19 @@ int ObFTParseHelper::init(
 
 void ObFTParseHelper::reset()
 {
+  if (OB_NOT_NULL(token_iter_) && OB_NOT_NULL(parser_desc_) && OB_NOT_NULL(allocator_)) {
+    ObFTParserParam param;
+    param.allocator_ = &token_iter_allocator_;
+    param.scratch_allocator_ = allocator_;
+    parser_desc_->free_token_iter(&param, token_iter_);
+    token_iter_ = nullptr;
+  }
   parser_desc_ = nullptr;
   plugin_param_ = nullptr;
   allocator_ = nullptr;
+  token_iter_allocator_.reset();
   add_word_flag_.clear();
+  token_iter_cache_disabled_ = false;
   is_inited_ = false;
 }
 
@@ -390,6 +440,9 @@ int ObFTParseHelper::segment(
                     fulltext,
                     fulltext_len,
                     *allocator_,
+                    token_iter_allocator_,
+                    token_iter_,
+                    token_iter_cache_disabled_,
                     add_word))) {
       LOG_WARN("fail to segment fulltext", K(ret), K(parser_name_), KP(parser_desc_), KP(cs), KP(fulltext),
           K(fulltext_len), KP(allocator_), K(parser_property_));

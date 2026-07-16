@@ -54,7 +54,10 @@ int ObBEngFTParser::get_next_token(
   } else if (OB_ISNULL(token.ptr_) || OB_UNLIKELY(0 >= token.len_ || 0 >= token_freq)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", K(ret), KP(token.ptr_), K(token.len_), K(token_freq));
-  } else if (OB_ISNULL(buf = static_cast<char *>(allocator_.alloc(token.len_)))) {
+  } else if (OB_ISNULL(scratch_allocator_)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("scratch allocator is nullptr", K(ret));
+  } else if (OB_ISNULL(buf = static_cast<char *>(scratch_allocator_->alloc(token.len_)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("fail to allocate word memory", K(ret), K(token.len_));
   } else {
@@ -85,6 +88,7 @@ int ObBEngFTParser::init(ObFTParserParam *param)
     analysis_ctx_.cs_ = param->cs_;
     analysis_ctx_.filter_stopword_ = false;
     analysis_ctx_.need_grouping_ = false;
+    scratch_allocator_ = OB_NOT_NULL(param->scratch_allocator_) ? param->scratch_allocator_ : param->allocator_;
     if (OB_FAIL(english_analyzer_.init(analysis_ctx_, *param->allocator_))) {
       LOG_WARN("fail to init english analyzer", K(ret), KPC(param), K(analysis_ctx_));
     } else if (OB_FAIL(segment(doc_, token_stream_))) {
@@ -132,6 +136,7 @@ void ObBEngFTParser::reset()
   english_analyzer_.reset();
   doc_.reset();
   token_stream_ = nullptr;
+  scratch_allocator_ = nullptr;
   is_inited_ = false;
 }
 
