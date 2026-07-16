@@ -45,12 +45,34 @@ static constexpr int64_t FT_WORD_DOC_COL_CNT = 4;
 static constexpr int64_t FT_MIN_WORD_BUCKET_COUNT = 2;
 static constexpr int64_t FT_MAX_WORD_BUCKET_COUNT = 997;
 static constexpr int64_t FT_ESTIMATED_BYTES_PER_TOKEN = 10;
+static constexpr int64_t FT_MIN_RESERVED_WORD_NODES = 128;
 
 static int64_t estimate_ft_word_bucket_count(const int64_t fulltext_length)
 {
   return MIN(MAX(fulltext_length / FT_ESTIMATED_BYTES_PER_TOKEN,
                  FT_MIN_WORD_BUCKET_COUNT),
              FT_MAX_WORD_BUCKET_COUNT);
+}
+
+static int prepare_ft_word_map(storage::ObFTWordMap &words, const int64_t bucket_count)
+{
+  int ret = OB_SUCCESS;
+  const bool need_grow = words.created() && bucket_count > words.bucket_count();
+  const bool need_create = !words.created() || need_grow;
+  const int64_t old_bucket_count = words.created() ? words.bucket_count() : 0;
+  if (need_grow && OB_FAIL(words.destroy())) {
+    LOG_WARN("fail to destroy undersized fulltext word map", K(ret),
+        K(bucket_count), K(old_bucket_count));
+  } else if (need_create
+             && OB_FAIL(words.create(bucket_count, common::ObMemAttr("FTWordMap")))) {
+    LOG_WARN("fail to create fulltext word map", K(ret), K(bucket_count));
+  } else if (need_create
+             && OB_FAIL(words.get_local_allocer().reserve(
+                 MAX(words.bucket_count(), FT_MIN_RESERVED_WORD_NODES)))) {
+    LOG_WARN("fail to reserve fulltext word map nodes", K(ret), K(bucket_count),
+        "actual_bucket_count", words.bucket_count());
+  }
+  return ret;
 }
 
 ObFTIndexRowCache::ObFTIndexRowCache()
@@ -112,8 +134,8 @@ int ObFTIndexRowCache::segment(const common::ObObjMeta &ft_obj_meta,
   } else if (FALSE_IT(reuse())) {
   } else if (0 == fulltext.length()) {
     ret = OB_ITER_END;
-  } else if (OB_FAIL(words_.create(ft_word_bkt_cnt, common::ObMemAttr("FTWordMap")))) {
-    LOG_WARN("fail to create fulltext word map", K(ret), K(ft_word_bkt_cnt));
+  } else if (OB_FAIL(prepare_ft_word_map(words_, ft_word_bkt_cnt))) {
+    LOG_WARN("fail to prepare fulltext word map", K(ret), K(ft_word_bkt_cnt));
   } else if (OB_FAIL(helper_.segment(ft_obj_meta,
                                     fulltext.ptr(),
                                     fulltext.length(),
@@ -162,6 +184,12 @@ int ObFTIndexRowCache::get_next_row(blocksstable::ObDatumRow *&row)
 void ObFTIndexRowCache::reset()
 {
   reuse();
+  if (words_.created()) {
+    const int tmp_ret = words_.destroy();
+    if (OB_SUCCESS != tmp_ret) {
+      LOG_WARN_RET(tmp_ret, "fail to destroy fulltext word map");
+    }
+  }
   row_.reset();
   helper_.reset();
   if (OB_NOT_NULL(merge_memctx_)) {
@@ -175,9 +203,9 @@ void ObFTIndexRowCache::reset()
 void ObFTIndexRowCache::reuse()
 {
   if (words_.created()) {
-    const int tmp_ret = words_.destroy();
+    const int tmp_ret = words_.reuse();
     if (OB_SUCCESS != tmp_ret) {
-      LOG_WARN_RET(tmp_ret, "fail to destroy fulltext word map");
+      LOG_WARN_RET(tmp_ret, "fail to reuse fulltext word map");
     }
   }
   word_iter_ = storage::ObFTWordMap::const_iterator();

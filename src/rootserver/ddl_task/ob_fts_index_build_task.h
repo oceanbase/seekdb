@@ -125,6 +125,12 @@ private:
                            share::schema::is_multivalue_index_aux(index_type) || share::schema::is_vec_spiv_index_aux(index_type); }
   bool is_domain_index(const ObIndexType index_type) const { return share::schema::is_fts_index(index_type) ||
                        share::schema::is_multivalue_index(index_type) || share::schema::is_vec_spiv_index(index_type); }
+  int64_t get_aux_build_parallelism() const
+  {
+    return is_fts_task() && !use_doc_id_
+        ? MAX(create_index_arg_.parallelism_ / 2, 1L)
+        : parallelism_;
+  }
   int get_next_status(share::ObDDLTaskStatus &next_status);
   int prepare_aux_table(
       const ObIndexType index_type,

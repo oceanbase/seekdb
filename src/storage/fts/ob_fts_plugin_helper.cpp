@@ -459,8 +459,9 @@ int ObFTParseHelper::segment(
   } else if (OB_ISNULL(cs = common::ObCharset::get_charset(type))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected error, charset info is nullptr", K(ret), K(type));
+  } else if (!words.empty() && OB_FAIL(words.reuse())) {
+    LOG_WARN("fail to reuse fulltext word map", K(ret), K(words.size()));
   } else {
-    words.reuse();
     parser_scratch_allocator_.reset_remain_one_page();
     const bool builtin_main = parser_property_.dict_table_.empty()
         || 0 == parser_property_.dict_table_.case_compare(
