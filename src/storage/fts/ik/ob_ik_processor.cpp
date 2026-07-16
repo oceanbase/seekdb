@@ -56,7 +56,7 @@ TokenizeContext::TokenizeContext(ObCollationType coll_type,
                                  bool is_smart)
     : coll_type_(coll_type), fulltext_(fulltext), fulltext_len_(fulltext_len), cursor_(0),
       next_char_len_(0), handle_size_(0), is_smart_(is_smart), token_list_(allocator),
-      result_list_(allocator)
+      result_list_(), result_head_(0)
 {
 }
 
@@ -75,7 +75,8 @@ int TokenizeContext::init()
 int TokenizeContext::reset_resource()
 {
   handle_size_ = 0;
-  result_list_.reset();
+  result_list_.reuse();
+  result_head_ = 0;
   token_list_.reset();
   return OB_SUCCESS;
 }
@@ -179,6 +180,7 @@ TokenizeContext::~TokenizeContext()
 {
   token_list_.reset();
   result_list_.reset();
+  result_head_ = 0;
 }
 
 int TokenizeContext::get_next_token(const char *&word,
@@ -187,80 +189,77 @@ int TokenizeContext::get_next_token(const char *&word,
                                     int64_t &char_cnt)
 {
   int ret = OB_SUCCESS;
-  if (!result_list_.empty()) {
-    ObIKToken &token = result_list_.get_first();
-    result_list_.pop_front();
-    if (!result_list_.empty()) {
+
+  if (result_head_ >= result_list_.count()) {
+    ret = OB_ITER_END;
+  } else {
+    ObIKToken token = result_list_.at(result_head_);
+    ++result_head_;
+
+    if (result_head_ < result_list_.count()) {
       if (OB_FAIL(compound(token))) {
-        LOG_WARN("Failed to compound", K(ret));
-      } else {
-        // pass
+        LOG_WARN("failed to compound token", K(ret));
       }
     }
+
     if (OB_SUCC(ret)) {
       word = token.ptr_;
       word_len = token.length_;
       offset = token.offset_;
       char_cnt = token.char_cnt_;
     }
-  } else {
-    ret = OB_ITER_END;
   }
+
   return ret;
 }
 
 int TokenizeContext::compound(ObIKToken &token)
 {
   int ret = OB_SUCCESS;
-  ObList<ObIKToken, ObIAllocator> &list = result_list_;
-  if (is_smart_) {
-    if (!list.empty()) {
-      if (ObIKTokenType::IK_ARABIC_TOKEN == token.type_) {
-        ObIKToken &next = list.get_first();
-        bool append = false;
 
-        if (ObIKTokenType::IK_CNNUM_TOKEN == next.type_) {
-          // handle eng num + chn num
-          if (token.offset_ + token.length_ == next.offset_) {
-            append = true;
-            token.length_ += next.length_;
-            token.char_cnt_ += next.char_cnt_;
-            token.type_ = ObIKTokenType::IK_CNNUM_TOKEN;
-          }
-        } else if (ObIKTokenType::IK_COUNT_TOKEN == next.type_) {
-          // handle eng num + chn count
-          if (token.offset_ + token.length_ == next.offset_) {
-            append = true;
-            token.length_ += next.length_;
-            token.char_cnt_ += next.char_cnt_;
-            token.type_ = ObIKTokenType::IK_CNQUAN_TOKEN;
-          }
-        } else {
-          // pass
+  if (is_smart_ && result_head_ < result_list_.count()) {
+    if (ObIKTokenType::IK_ARABIC_TOKEN == token.type_) {
+      const ObIKToken &next = result_list_.at(result_head_);
+      bool append = false;
+
+      if (ObIKTokenType::IK_CNNUM_TOKEN == next.type_) {
+        if (token.offset_ + token.length_ == next.offset_) {
+          append = true;
+          token.length_ += next.length_;
+          token.char_cnt_ += next.char_cnt_;
+          token.type_ = ObIKTokenType::IK_CNNUM_TOKEN;
         }
-        if (append) {
-          list.pop_front();
+      } else if (ObIKTokenType::IK_COUNT_TOKEN == next.type_) {
+        if (token.offset_ + token.length_ == next.offset_) {
+          append = true;
+          token.length_ += next.length_;
+          token.char_cnt_ += next.char_cnt_;
+          token.type_ = ObIKTokenType::IK_CNQUAN_TOKEN;
         }
       }
-      // There may be another round of append
-      if (OB_SUCC(ret)) {
-        ObIKToken next = list.get_first();
-        bool append = false;
-        if (ObIKTokenType::IK_COUNT_TOKEN == next.type_) {
-          if (token.offset_ + token.length_ == next.offset_) {
-            append = true;
-            token.length_ += next.length_;
-            token.type_ = ObIKTokenType::IK_CNQUAN_TOKEN;
-          }
-        }
-        if (append) {
-          list.pop_front();
-        }
+
+      if (append) {
+        ++result_head_;
       }
     }
-  } else {
-    // nothing todo, just return
+
+    if (result_head_ < result_list_.count()) {
+      const ObIKToken &next = result_list_.at(result_head_);
+      bool append = false;
+
+      if (ObIKTokenType::IK_COUNT_TOKEN == next.type_
+          && token.offset_ + token.length_ == next.offset_) {
+        append = true;
+        token.length_ += next.length_;
+        token.type_ = ObIKTokenType::IK_CNQUAN_TOKEN;
+      }
+
+      if (append) {
+        ++result_head_;
+      }
+    }
   }
+
   return ret;
 }
 
