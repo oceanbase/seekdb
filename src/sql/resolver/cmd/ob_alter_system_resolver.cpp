@@ -1719,6 +1719,64 @@ int ObAlterSystemResolverUtil::get_and_verify_tenant_name(
   return ret;
 }
 
+// seekdb: ALTER SYSTEM REFRESH FULLTEXT DICT db.table
+// The parse tree is T_REFRESH_FULLTEXT_DICT(1 child) -> T_RELATION_FACTOR(db, table).
+int ObRefreshFulltextDictResolver::resolve(const ParseNode &parse_tree)
+{
+  int ret = OB_SUCCESS;
+  ObSQLSessionInfo *session_info = params_.session_info_;
+  if (OB_UNLIKELY(T_REFRESH_FULLTEXT_DICT != parse_tree.type_)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("type is not T_REFRESH_FULLTEXT_DICT", K(ret), "type", get_type_name(parse_tree.type_));
+  } else if (OB_UNLIKELY(parse_tree.num_child_ < 1) || OB_ISNULL(parse_tree.children_)
+             || OB_ISNULL(parse_tree.children_[0])) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("invalid parse tree for refresh fulltext dict", K(ret));
+  } else if (OB_ISNULL(session_info)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("session info is null", K(ret));
+  } else {
+    ObRefreshFulltextDictStmt *stmt = create_stmt<ObRefreshFulltextDictStmt>();
+    if (OB_ISNULL(stmt)) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+      LOG_ERROR("create ObRefreshFulltextDictStmt failed", K(ret));
+    } else {
+      stmt_ = stmt;
+      const ParseNode *relation_node = parse_tree.children_[0];
+      ObString database_name;
+      ObString table_name;
+      if (OB_UNLIKELY(OB_ISNULL(relation_node) || relation_node->num_child_ < 2
+                      || OB_ISNULL(relation_node->children_))) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("invalid relation node for refresh fulltext dict", K(ret));
+      } else {
+        if (OB_NOT_NULL(relation_node->children_[0])) {
+          database_name.assign_ptr(relation_node->children_[0]->str_value_,
+                                   static_cast<int32_t>(relation_node->children_[0]->str_len_));
+        }
+        if (OB_NOT_NULL(relation_node->children_[1])) {
+          table_name.assign_ptr(relation_node->children_[1]->str_value_,
+                                static_cast<int32_t>(relation_node->children_[1]->str_len_));
+        }
+        if (database_name.empty()) {
+          database_name = session_info->get_database_name();
+        }
+        if (OB_UNLIKELY(table_name.empty())) {
+          ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("refresh fulltext dict table name is empty", K(ret));
+        } else if (OB_UNLIKELY(database_name.empty())) {
+          ret = OB_ERR_NO_DB_SELECTED;
+          LOG_WARN("no database selected for refresh fulltext dict", K(ret));
+        } else {
+          stmt->set_database_name(database_name);
+          stmt->set_table_name(table_name);
+        }
+      }
+    }
+  }
+  return ret;
+}
+
 int ObUpgradeVirtualSchemaResolver::resolve(const ParseNode &parse_tree)
 {
   int ret = OB_SUCCESS;

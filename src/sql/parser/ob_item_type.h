@@ -2883,6 +2883,8 @@ typedef enum ObItemType
   T_DIFF_TABLE = 4918,
   T_MERGE_TABLE = 4919,
   T_AI_SPLIT_DOCUMENT_EXPRESSION = 4920, // seekdb: ai_split_document table function
+  T_FULLTEXT_DICT = 4921, // seekdb: custom fulltext dict table option FULLTEXT_DICT='Y'
+  T_REFRESH_FULLTEXT_DICT = 4922, // seekdb: ALTER SYSTEM REFRESH FULLTEXT DICT db.table
   T_MAX //Attention: add a new type before T_MAX
 } ObItemType;
 
