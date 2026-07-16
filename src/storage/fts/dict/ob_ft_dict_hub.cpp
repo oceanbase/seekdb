@@ -24,10 +24,20 @@
 #include "storage/fts/dict/ob_ft_cache_container.h"
 #include "storage/fts/dict/ob_ft_dict_def.h"
 #include "storage/fts/dict/ob_ft_range_dict.h"
+#include "storage/fts/ob_fts_literal.h"
 namespace oceanbase
 {
 namespace storage
 {
+static bool is_custom_dict(const ObFTDictDesc &desc)
+{
+  bool bret = false;
+  if (ObFTDictType::DICT_IK_MAIN == desc.type_ && !desc.name_.empty()) {
+    bret = 0 != desc.name_.case_compare(ObFTSLiteral::FT_DEFAULT_IK_DICT_UTF8_TABLE);
+  }
+  return bret;
+}
+
 int ObFTDictHub::init()
 {
   static constexpr int K_MAX_DICT_BUCKET = 128; // for now, only built-in dicts.
@@ -51,7 +61,7 @@ int ObFTDictHub::destroy()
 int ObFTDictHub::build_cache(const ObFTDictDesc &desc, ObFTCacheRangeContainer &container)
 {
   int ret = OB_SUCCESS;
-  ObFTDictInfoKey key(static_cast<uint64_t>(desc.type_));
+  ObFTDictInfoKey key(static_cast<uint64_t>(desc.type_), desc.name_hash());
   ObFTDictInfo info;
   container.reset();
 
@@ -78,8 +88,15 @@ int ObFTDictHub::build_cache(const ObFTDictDesc &desc, ObFTCacheRangeContainer &
 
     if (OB_FAIL(ret)) {
       if (OB_ENTRY_NOT_EXIST == ret) {
-        if (OB_FAIL(ObFTRangeDict::build_cache_from_ik_dict(desc, container))) {
+        if (is_custom_dict(desc)) {
+          if (OB_FAIL(ObFTRangeDict::build_cache(desc, container))) {
+            LOG_WARN("Failed to build cache from dict table", K(ret), K(desc.name_));
+          }
+        } else if (OB_FAIL(ObFTRangeDict::build_cache_from_ik_dict(desc, container))) {
           LOG_WARN("Failed to build cache", K(ret));
+        }
+
+        if (OB_FAIL(ret)) {
         } else if (FALSE_IT(info.range_count_ = container.get_handles().size())) {
         } else if (OB_FAIL(put_dict_info(key, info))) {
           LOG_WARN("Failed to put dict info", K(ret));
@@ -95,7 +112,7 @@ int ObFTDictHub::load_cache(const ObFTDictDesc &desc, ObFTCacheRangeContainer &c
   int ret = OB_SUCCESS;
   ObFTDictInfo info;
   container.reset();
-  ObFTDictInfoKey key(static_cast<uint64_t>(desc.type_));
+  ObFTDictInfoKey key(static_cast<uint64_t>(desc.type_), desc.name_hash());
   if (!is_inited_) {
     ret = OB_NOT_INIT;
     LOG_WARN("dict hub not init", K(ret));

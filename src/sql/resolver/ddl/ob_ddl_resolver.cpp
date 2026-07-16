@@ -1669,6 +1669,21 @@ int ObDDLResolver::resolve_table_option(const ParseNode *option_node, const bool
         }
         break;
       }
+      case T_FULLTEXT_DICT: {
+        if (OB_ISNULL(option_node->children_[0])) {
+          ret = OB_ERR_UNEXPECTED;
+          SQL_RESV_LOG(WARN, "option_node child is null", K(ret));
+        } else {
+          ObString fulltext_dict_str(static_cast<int32_t>(option_node->children_[0]->str_len_),
+                                     (char *)(option_node->children_[0]->str_value_));
+          if (0 != fulltext_dict_str.case_compare("Y") && 0 != fulltext_dict_str.case_compare("N")) {
+            ret = OB_INVALID_ARGUMENT;
+            SQL_RESV_LOG(WARN, "invalid fulltext dict option", K(ret), K(fulltext_dict_str));
+            LOG_USER_ERROR(OB_INVALID_ARGUMENT, "the fulltext_dict must be Y or N");
+          }
+        }
+        break;
+      }
       case T_TABLE_MODE: {
         uint64_t tenant_data_version = 0;
         if (OB_FAIL(GET_MIN_DATA_VERSION(tenant_data_version))) {

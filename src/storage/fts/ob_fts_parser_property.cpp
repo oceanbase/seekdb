@@ -1148,7 +1148,27 @@ int ObFTParserJsonProps::show_parser_properties(const ObFTParserJsonProps &prope
 
 #undef __FT_PARSER_PROPERTY_SHOW_COMMA
 
-int ObFTParserProperty::parse_for_parser_helper(const ObFTParser &parser, const ObString &json_str)
+static int ft_deep_copy_str(common::ObIAllocator &alloc, const ObString &src, ObString &dst)
+{
+  int ret = OB_SUCCESS;
+  if (src.empty()) {
+    dst.reset();
+  } else {
+    char *buf = static_cast<char *>(alloc.alloc(src.length()));
+    if (OB_ISNULL(buf)) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+      LOG_WARN("Failed to alloc memory for dict name", K(ret), K(src));
+    } else {
+      MEMCPY(buf, src.ptr(), src.length());
+      dst.assign_ptr(buf, src.length());
+    }
+  }
+  return ret;
+}
+
+int ObFTParserProperty::parse_for_parser_helper(const ObFTParser &parser,
+                                                const ObString &json_str,
+                                                common::ObIAllocator &alloc)
 {
   int ret = OB_SUCCESS;
   ObFTParserJsonProps props;
@@ -1158,12 +1178,44 @@ int ObFTParserProperty::parse_for_parser_helper(const ObFTParser &parser, const 
     LOG_WARN("fail to parse from json str", K(ret), K(json_str));
   } else {
     if (parser.is_ik()) {
-      // set dict tables and copy dict name
-      dict_table_ = ObString(ObFTSLiteral::CONFIG_NAME_DICT_TABLE);
-      stopword_table_ = ObString(ObFTSLiteral::CONFIG_NAME_STOPWORD_TABLE);
-      quantifier_table_ = ObString(ObFTSLiteral::CONFIG_NAME_QUANTIFIER_TABLE);
+      ObString tmp_dict;
+      ObString tmp_stopword;
+      ObString tmp_quantifier;
+      if (OB_FAIL(props.config_get_dict_table(tmp_dict))) {
+        if (OB_SEARCH_NOT_FOUND == ret) {
+          tmp_dict = ObString(ObFTSLiteral::FT_DEFAULT_IK_DICT_UTF8_TABLE);
+          ret = OB_SUCCESS;
+        } else {
+          LOG_WARN("fail to get dict table", K(ret));
+        }
+      }
+      if (OB_SUCC(ret) && OB_FAIL(props.config_get_stopword_table(tmp_stopword))) {
+        if (OB_SEARCH_NOT_FOUND == ret) {
+          tmp_stopword = ObString(ObFTSLiteral::FT_DEFAULT_IK_STOPWORD_UTF8_TABLE);
+          ret = OB_SUCCESS;
+        } else {
+          LOG_WARN("fail to get stopword table", K(ret));
+        }
+      }
+      if (OB_SUCC(ret) && OB_FAIL(props.config_get_quantifier_table(tmp_quantifier))) {
+        if (OB_SEARCH_NOT_FOUND == ret) {
+          tmp_quantifier = ObString(ObFTSLiteral::FT_DEFAULT_IK_QUANTIFIER_UTF8_TABLE);
+          ret = OB_SUCCESS;
+        } else {
+          LOG_WARN("fail to get quantifier table", K(ret));
+        }
+      }
+      if (OB_FAIL(ret)) {
+      } else if (OB_FAIL(ft_deep_copy_str(alloc, tmp_dict, dict_table_))) {
+        LOG_WARN("fail to copy dict table", K(ret), K(tmp_dict));
+      } else if (OB_FAIL(ft_deep_copy_str(alloc, tmp_stopword, stopword_table_))) {
+        LOG_WARN("fail to copy stopword table", K(ret), K(tmp_stopword));
+      } else if (OB_FAIL(ft_deep_copy_str(alloc, tmp_quantifier, quantifier_table_))) {
+        LOG_WARN("fail to copy quantifier table", K(ret), K(tmp_quantifier));
+      }
       ObString ik_smart;
-      if (OB_FAIL(props.config_get_ik_mode(ik_smart))) {
+      if (OB_FAIL(ret)) {
+      } else if (OB_FAIL(props.config_get_ik_mode(ik_smart))) {
         if (OB_SEARCH_NOT_FOUND == ret) {
           // from old version, ik_mode is not set, so use default value
           ik_mode_smart_ = true;
