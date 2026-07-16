@@ -32,6 +32,16 @@ namespace oceanbase
 {
 namespace storage
 {
+// Signature of ObCharsetHandler::well_formed_len, cached on the context so
+// the per-character loop avoids re-loading it via cs->cset->well_formed_len
+// on every iteration.
+// Note: ObCharsetInfo lives in the global namespace (see ob_ctype.h).
+using WellFormedLenFn = size_t (*)(const ObCharsetInfo *,
+                                   const char *b,
+                                   const char *e,
+                                   size_t nchars,
+                                   int *error);
+
 // See: lang/Character.java
 class ObFTCharUtil
 {
@@ -51,6 +61,26 @@ public:
                                  const char *input,
                                  const uint8_t char_len,
                                  CharType &type);
+
+  // Combined: locate the first well-formed char in [input, input + input_len) and
+  // classify it. Avoids two separate calls into the charset layer for every char.
+  // Matches ObCharset::first_valid_char's int64_t char_len signature so callers can
+  // forward the result directly without an intermediate narrowing cast.
+  static int classify_first_valid_char(ObCollationType coll_type,
+                                       const char *input,
+                                       const int64_t input_len,
+                                       int64_t &char_len,
+                                       CharType &type);
+
+  // Fast variant: caller hands in a previously-resolved well_formed_len
+  // function pointer so we skip the ObCharset::get_charset + handler lookup
+  // on every character. Used by TokenizeContext to avoid per-char dispatch.
+  static int classify_first_valid_char_fast(WellFormedLenFn wfl_fn,
+                                            ObCollationType coll_type,
+                                            const char *input,
+                                            const int64_t input_len,
+                                            int64_t &char_len,
+                                            CharType &type);
 
   static int check_cn_number(ObCollationType coll_type,
                              const char *input,
@@ -510,6 +540,66 @@ inline int ObFTCharUtil::classify_first_char(ObCollationType coll_type,
     ret = OB_NOT_SUPPORTED;
     STORAGE_FTS_LOG(WARN, "Not supported charset type", K(ret), K(cs_type));
     break;
+  }
+  return ret;
+}
+
+inline int ObFTCharUtil::classify_first_valid_char(ObCollationType coll_type,
+                                                   const char *input,
+                                                   const int64_t input_len,
+                                                   int64_t &char_len,
+                                                   CharType &type)
+{
+  int ret = OB_SUCCESS;
+  if (OB_FAIL(ObCharset::first_valid_char(coll_type, input, input_len, char_len))) {
+    STORAGE_FTS_LOG(WARN, "Failed to get first valid char", K(ret));
+  } else if (OB_FAIL(classify_first_char(coll_type,
+                                        input,
+                                        static_cast<uint8_t>(char_len),
+                                        type))) {
+    STORAGE_FTS_LOG(WARN, "Failed to classify first char", K(ret));
+  }
+  return ret;
+}
+
+inline int ObFTCharUtil::classify_first_valid_char_fast(WellFormedLenFn wfl_fn,
+                                                         ObCollationType coll_type,
+                                                         const char *input,
+                                                         const int64_t input_len,
+                                                         int64_t &char_len,
+                                                         CharType &type)
+{
+  int ret = OB_SUCCESS;
+  if (OB_UNLIKELY(input_len <= 0)) {
+    // Mirror ObCharset::first_valid_char's "buf_size <= 0" branch: report no
+    // bytes consumed and let classify_first_char produce a default type.
+    char_len = 0;
+  } else {
+    int error = 0;
+    // Use the cached well_formed_len directly; no charset lookup or handler
+    // pointer reload per call. The function pointer was resolved at init
+    // time against the same coll_type.
+    const ObCharsetInfo *cs = common::ObCharset::get_charset(coll_type);
+    if (OB_ISNULL(wfl_fn) || OB_ISNULL(cs)) {
+      ret = OB_ERR_UNEXPECTED;
+      STORAGE_FTS_LOG(WARN, "cached well_formed_len or charset is null",
+                      K(ret), KP(wfl_fn), KP(cs), K(coll_type));
+    } else {
+      const size_t len = wfl_fn(cs, input, input + input_len, 1, &error);
+      if (OB_UNLIKELY(0 != error)) {
+        ret = OB_INVALID_ARGUMENT;
+        STORAGE_FTS_LOG(WARN, "invalid encoding found", K(ret));
+      } else {
+        char_len = static_cast<int64_t>(len);
+      }
+    }
+  }
+  if (OB_SUCC(ret)
+      && OB_FAIL(classify_first_char(coll_type,
+                                     input,
+                                     static_cast<uint8_t>(char_len),
+                                     type))) {
+    STORAGE_FTS_LOG(WARN, "Failed to classify first char", K(ret));
   }
   return ret;
 }

@@ -54,6 +54,11 @@ public:
 
   int init(const plugin::ObFTParserParam &param);
 
+  // Reset parser state and recycle its per-document buffers so the same
+  // parser instance can be re-initialized for the next document via
+  // init(), without going through destroy + reallocate.
+  inline void reuse_parser() { reset(); }
+
   int get_next_token(const char *&word,
                      int64_t &word_len,
                      int64_t &char_cnt,
