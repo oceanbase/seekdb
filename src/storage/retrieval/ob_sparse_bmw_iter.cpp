@@ -325,7 +325,6 @@ int ObSRBMWIterImpl::next_pivot_range(int64_t &skip_range_cnt)
   for (int64_t i = 0; OB_SUCC(ret) && i < next_round_cnt_; ++i) {
     const int64_t iter_idx = next_round_iter_idxes_[i];
     const ObMaxScoreTuple *max_score_tuple = nullptr;
-    int cmp_ret = 0;
     ObISRDimBlockMaxIter *iter = nullptr;
     if (is_next_round_iter_end(i)) {
       ++next_round_iter_end_cnt;
@@ -334,15 +333,12 @@ int ObSRBMWIterImpl::next_pivot_range(int64_t &skip_range_cnt)
       LOG_WARN("unexpected null iter", K(ret));
     } else if (OB_FAIL(iter->get_curr_block_max_info(max_score_tuple))) {
       LOG_WARN("failed to get block max info", K(ret), K(iter_idx));
-    } else if (OB_ISNULL(max_score_tuple)) {
+    } else if (OB_ISNULL(max_score_tuple) || OB_UNLIKELY(!max_score_tuple->is_valid())) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected null max score tuple", K(ret));
-    } else if (nullptr == minimum_max_domain_id) {
-      minimum_max_domain_id = max_score_tuple->max_domain_id_;
-    } else if (OB_FAIL(domain_id_cmp_.compare(*max_score_tuple->max_domain_id_, *minimum_max_domain_id, cmp_ret))) {
-      LOG_WARN("failed to compare domain id", K(ret));
-    } else if (0 < cmp_ret) {
-      minimum_max_domain_id = max_score_tuple->max_domain_id_;
+      LOG_WARN("unexpected invalid max score tuple", K(ret), KP(max_score_tuple));
+    } else if (OB_FAIL(update_minimum_domain_id(
+        max_score_tuple->max_domain_id_, minimum_max_domain_id))) {
+      LOG_WARN("failed to update minimum max domain id", K(ret), K(iter_idx));
     }
   }
 
@@ -536,6 +532,26 @@ int ObSRBMWIterImpl::fill_merge_heap_with_shallow_dims(const ObDatum *last_range
   return ret;
 }
 
+int ObSRBMWIterImpl::update_minimum_domain_id(
+    const ObDatum *candidate_domain_id,
+    const ObDatum *&minimum_domain_id)
+{
+  int ret = OB_SUCCESS;
+  int cmp_ret = 0;
+  if (OB_ISNULL(candidate_domain_id)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected null candidate domain id", K(ret));
+  } else if (OB_ISNULL(minimum_domain_id)) {
+    minimum_domain_id = candidate_domain_id;
+  } else if (OB_FAIL(domain_id_cmp_.compare(
+      *candidate_domain_id, *minimum_domain_id, cmp_ret))) {
+    LOG_WARN("failed to compare domain id", K(ret));
+  } else if (cmp_ret < 0) {
+    minimum_domain_id = candidate_domain_id;
+  }
+  return ret;
+}
+
 int ObSRBMWIterImpl::try_generate_next_range_from_merge_heap(
     bool &is_candidate_range,
     const ObDatum *&min_domain_id_with_pivot,
@@ -575,22 +591,24 @@ int ObSRBMWIterImpl::try_generate_next_range_from_merge_heap(
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(iter->get_curr_block_max_info(max_score_tuple))) {
       LOG_WARN("failed to get block max info", K(ret), K(iter_idx));
-    } else if (OB_ISNULL(max_score_tuple)) {
+    } else if (OB_ISNULL(max_score_tuple) || OB_UNLIKELY(!max_score_tuple->is_valid())) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected null max score tuple", K(ret));
+      LOG_WARN("unexpected invalid max score tuple", K(ret), KP(max_score_tuple));
     } else {
       int cmp_ret = 0;
       if (nullptr == minimum_max_domain_id) {
-        minimum_max_domain_id = max_score_tuple->max_domain_id_;
+        if (OB_FAIL(update_minimum_domain_id(
+            max_score_tuple->max_domain_id_, minimum_max_domain_id))) {
+          LOG_WARN("failed to initialize minimum max domain id", K(ret), K(iter_idx));
+        }
       } else if (OB_FAIL(domain_id_cmp_.compare(*max_score_tuple->min_domain_id_, *minimum_max_domain_id, cmp_ret))) {
         LOG_WARN("failed to compare min domain id with minimum max domain id", K(ret));
       } else if (cmp_ret > 0) {
         // no intersected range with this block max iter
         curr_range_reach_end = true;
-      } else if (OB_FAIL(domain_id_cmp_.compare(*max_score_tuple->max_domain_id_, *minimum_max_domain_id, cmp_ret))) {
-        LOG_WARN("failed to compare max domain id with minimum max domain id", K(ret));
-      } else if (0 < cmp_ret) {
-        minimum_max_domain_id = max_score_tuple->max_domain_id_;
+      } else if (OB_FAIL(update_minimum_domain_id(
+          max_score_tuple->max_domain_id_, minimum_max_domain_id))) {
+        LOG_WARN("failed to update minimum max domain id", K(ret), K(iter_idx));
       }
 
       if (OB_FAIL(ret) || curr_range_reach_end) {

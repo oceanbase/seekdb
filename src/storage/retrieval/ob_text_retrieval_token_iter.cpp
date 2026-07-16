@@ -1118,7 +1118,8 @@ int ObTextRetrievalBlockMaxIter::calc_dim_max_score(
     ObTableScanParam &scan_param)
 {
   int ret = OB_SUCCESS;
-  // Maybe a specialized interface to calculate dimension max score based on statistics is more efficient
+  // Reuse the tuples scanned for the dimension upper bound when the metadata set is small enough.
+  block_max_iter_.enable_replay_cache();
   if (OB_FAIL(block_max_iter_.init(ranking_param, block_max_iter_param, scan_param))) {
     LOG_WARN("failed to init block max iter", K(ret));
   }
@@ -1141,7 +1142,12 @@ int ObTextRetrievalBlockMaxIter::calc_dim_max_score(
 
   if (OB_LIKELY(OB_ITER_END == ret)) {
     ret = OB_SUCCESS;
-    block_max_iter_.reset(); // TODO: reuse or rewind iter
+    bool rewound = false;
+    if (OB_FAIL(block_max_iter_.rewind_to_replay_cache(rewound))) {
+      LOG_WARN("failed to rewind block max replay cache", K(ret));
+    } else if (!rewound) {
+      block_max_iter_.reset();
+    }
   } else {
     LOG_WARN("failed to calc dim max score", K(ret));
   }
@@ -1163,7 +1169,8 @@ int ObTextRetrievalBlockMaxIter::init_block_max_iter(const int64_t total_doc_cnt
     LOG_WARN("failed to get token doc cnt", K(ret));
   } else if (OB_FAIL(calc_dim_max_score(*block_max_iter_param_, ranking_param_, *block_max_scan_param_))) {
     LOG_WARN("failed to calc dim max score", K(ret));
-  } else if (OB_FAIL(block_max_iter_.init(ranking_param_, *block_max_iter_param_, *block_max_scan_param_))) {
+  } else if (!block_max_iter_.is_replaying_cache()
+      && OB_FAIL(block_max_iter_.init(ranking_param_, *block_max_iter_param_, *block_max_scan_param_))) {
     LOG_WARN("failed to init block max iter", K(ret));
   } else {
     block_max_inited_ = true;

@@ -159,6 +159,13 @@ ObBlockMaxScoreIterator::ObBlockMaxScoreIterator()
     scorer_(nullptr),
     calc_max_score_(nullptr),
     scan_dim_datum_(),
+    replay_cache_allocator_("BlkMaxCache"),
+    max_score_cache_(),
+    replay_cache_pos_(0),
+    replay_cache_datum_bytes_(0),
+    replay_cache_enabled_(false),
+    replay_cache_complete_(false),
+    replaying_cache_(false),
     has_been_advanced_(false),
     is_inited_(false)
 {
@@ -180,6 +187,13 @@ void ObBlockMaxScoreIterator::reset()
   }
   calc_max_score_ = nullptr;
   scan_dim_datum_.reuse();
+  max_score_cache_.reset();
+  replay_cache_allocator_.reset();
+  replay_cache_pos_ = 0;
+  replay_cache_datum_bytes_ = 0;
+  replay_cache_enabled_ = false;
+  replay_cache_complete_ = false;
+  replaying_cache_ = false;
   has_been_advanced_ = false;
   is_inited_ = false;
 }
@@ -195,13 +209,24 @@ int ObBlockMaxScoreIterator::get_next(const ObMaxScoreTuple *&max_score_tuple)
   int ret = OB_SUCCESS;
   const ObDatumRow *agg_row = nullptr;
   const ObDatumRowkey *endkey = nullptr;
+  max_score_tuple = nullptr;
   max_score_tuple_.reset();
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     LOG_WARN("not initialized", K(ret));
+  } else if (replaying_cache_) {
+    if (replay_cache_pos_ >= max_score_cache_.count()) {
+      ret = OB_ITER_END;
+    } else if (OB_FAIL(load_cached_max_score_tuple(replay_cache_pos_++))) {
+      LOG_WARN("fail to load cached max score tuple", K(ret), K_(replay_cache_pos));
+    } else {
+      max_score_tuple = &max_score_tuple_;
+    }
   } else if (OB_FAIL(stat_iter_.get_next(agg_row, endkey))) {
     if (OB_UNLIKELY(OB_ITER_END != ret)) {
       LOG_WARN("fail to get next", K(ret));
+    } else if (replay_cache_enabled_) {
+      replay_cache_complete_ = true;
     }
   } else if (OB_ISNULL(agg_row) || OB_ISNULL(endkey)
       || OB_UNLIKELY(agg_row->get_column_count() != block_max_scan_param_->stat_cols_.count())) {
@@ -213,6 +238,33 @@ int ObBlockMaxScoreIterator::get_next(const ObMaxScoreTuple *&max_score_tuple)
     LOG_WARN("fail to calc max score", K(ret));
   } else {
     max_score_tuple = &max_score_tuple_;
+    if (replay_cache_enabled_) {
+      int cache_ret = cache_curr_max_score_tuple();
+      if (OB_SUCCESS != cache_ret) {
+        LOG_DEBUG("disable block max replay cache", K(cache_ret),
+            "cached_tuple_count", max_score_cache_.count(), K_(replay_cache_datum_bytes));
+        disable_replay_cache();
+      }
+    }
+  }
+  return ret;
+}
+
+int ObBlockMaxScoreIterator::rewind_to_replay_cache(bool &rewound)
+{
+  int ret = OB_SUCCESS;
+  rewound = false;
+  if (IS_NOT_INIT) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("not initialized", K(ret));
+  } else if (replay_cache_enabled_ && replay_cache_complete_) {
+    max_score_tuple_.reset();
+    stat_iter_.reset();
+    advance_doc_id_.reset();
+    replay_cache_pos_ = 0;
+    replaying_cache_ = true;
+    has_been_advanced_ = false;
+    rewound = true;
   }
   return ret;
 }
@@ -235,43 +287,196 @@ int ObBlockMaxScoreIterator::get_curr_max_score_tuple(const ObMaxScoreTuple *&ma
 int ObBlockMaxScoreIterator::advance_to(const ObDatum &domain_id, const bool inclusive)
 {
   int ret = OB_SUCCESS;
-
-  ObStorageDatum &rowkey_domain_id_datum = advance_rowkey_.datums_[block_max_scan_param_->domain_id_idx_in_rowkey_];
-  bool id_in_range = false;
-  int cmp_ret = 0;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     LOG_WARN("not initialized", K(ret));
-  } else if (OB_FAIL(advance_doc_id_.from_datum(domain_id))) {
-    LOG_WARN("fail to deep copy domain id", K(ret), K(domain_id));
-  } else if (!max_score_tuple_.is_valid()) {
-    id_in_range = false;
-  } else if (OB_FAIL(domain_id_cmp_.compare(domain_id, *max_score_tuple_.max_domain_id_, cmp_ret))) {
-    LOG_WARN("fail to compare domain id", K(ret), K(domain_id), K_(advance_doc_id));
-  } else if (cmp_ret > 0 || (cmp_ret == 0 && !inclusive)) {
-    id_in_range = false;
+  } else if (replaying_cache_) {
+    if (OB_FAIL(advance_replay_cache_to(domain_id, inclusive))) {
+      if (OB_UNLIKELY(OB_ITER_END != ret)) {
+        LOG_WARN("fail to advance replay cache", K(ret), K(domain_id), K(inclusive));
+      }
+    }
   } else {
-    id_in_range = true;
+    ObStorageDatum &rowkey_domain_id_datum =
+        advance_rowkey_.datums_[block_max_scan_param_->domain_id_idx_in_rowkey_];
+    bool id_in_range = false;
+    int cmp_ret = 0;
+    if (OB_FAIL(advance_doc_id_.from_datum(domain_id))) {
+      LOG_WARN("fail to deep copy domain id", K(ret), K(domain_id));
+    } else if (!max_score_tuple_.is_valid()) {
+      id_in_range = false;
+    } else if (OB_FAIL(domain_id_cmp_.compare(domain_id, *max_score_tuple_.max_domain_id_, cmp_ret))) {
+      LOG_WARN("fail to compare domain id", K(ret), K(domain_id), K_(advance_doc_id));
+    } else if (cmp_ret > 0 || (cmp_ret == 0 && !inclusive)) {
+      id_in_range = false;
+    } else {
+      id_in_range = true;
+    }
+
+    const ObMaxScoreTuple *next_max_score_tuple = nullptr;
+    if (OB_FAIL(ret)) {
+    } else if (id_in_range) {
+      max_score_tuple_.min_domain_id_ = &advance_doc_id_.get_datum();
+      has_been_advanced_ = true;
+    } else if (FALSE_IT(rowkey_domain_id_datum.shallow_copy_from_datum(advance_doc_id_.get_datum()))) {
+    } else if (OB_FAIL(stat_iter_.advance_to(advance_rowkey_, inclusive))) {
+      LOG_WARN("fail to advance to", K(ret), K_(advance_rowkey), K(inclusive));
+    } else if (OB_FAIL(get_next(next_max_score_tuple))) {
+      if (OB_UNLIKELY(OB_ITER_END != ret)) {
+        LOG_WARN("fail to get next", K(ret));
+      }
+    } else {
+      has_been_advanced_ = true;
+    }
+  }
+  return ret;
+}
+
+int ObBlockMaxScoreIterator::cache_curr_max_score_tuple()
+{
+  int ret = OB_SUCCESS;
+  const int64_t datum_bytes = max_score_tuple_.is_valid()
+      ? max_score_tuple_.min_domain_id_->get_deep_copy_size()
+          + max_score_tuple_.max_domain_id_->get_deep_copy_size()
+      : 0;
+  if (OB_UNLIKELY(!max_score_tuple_.is_valid())) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected invalid max score tuple", K(ret),
+        KP(max_score_tuple_.min_domain_id_), KP(max_score_tuple_.max_domain_id_));
+  } else {
+    int cmp_ret = 0;
+    if (OB_FAIL(domain_id_cmp_.compare(
+        *max_score_tuple_.min_domain_id_, *max_score_tuple_.max_domain_id_, cmp_ret))) {
+      LOG_WARN("fail to validate max score tuple range", K(ret));
+    } else if (OB_UNLIKELY(cmp_ret > 0)) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("unexpected reversed max score tuple range", K(ret),
+          KPC(max_score_tuple_.min_domain_id_), KPC(max_score_tuple_.max_domain_id_));
+    } else if (!max_score_cache_.empty()
+        && OB_FAIL(domain_id_cmp_.compare(
+            max_score_cache_.at(max_score_cache_.count() - 1).max_domain_id_,
+            *max_score_tuple_.max_domain_id_, cmp_ret))) {
+      LOG_WARN("fail to validate replay cache order", K(ret));
+    } else if (OB_UNLIKELY(cmp_ret > 0)) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("unexpected non-monotonic replay cache range", K(ret));
+    }
   }
 
-  const ObMaxScoreTuple *next_max_score_tuple = nullptr;
+  if (OB_FAIL(ret)) {
+  } else if (max_score_cache_.count() >= MAX_REPLAY_CACHE_TUPLE_COUNT
+      || replay_cache_datum_bytes_ + datum_bytes > MAX_REPLAY_CACHE_DATUM_BYTES) {
+    ret = OB_SIZE_OVERFLOW;
+  } else {
+    ObCachedMaxScoreTuple cached_tuple;
+    const int64_t alloc_size = OB_MAX(datum_bytes, 1);
+    char *buf = static_cast<char *>(replay_cache_allocator_.alloc(alloc_size));
+    int64_t pos = 0;
+    if (OB_ISNULL(buf)) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+      LOG_WARN("fail to allocate replay cache datum buffer", K(ret), K(alloc_size));
+    } else if (OB_FAIL(cached_tuple.min_domain_id_.deep_copy(
+        *max_score_tuple_.min_domain_id_, buf, alloc_size, pos))) {
+      LOG_WARN("fail to copy minimum domain id", K(ret), K(alloc_size), K(pos));
+    } else if (OB_FAIL(cached_tuple.max_domain_id_.deep_copy(
+        *max_score_tuple_.max_domain_id_, buf, alloc_size, pos))) {
+      LOG_WARN("fail to copy maximum domain id", K(ret), K(alloc_size), K(pos));
+    } else {
+      cached_tuple.max_score_ = max_score_tuple_.max_score_;
+      if (OB_FAIL(max_score_cache_.push_back(cached_tuple))) {
+        LOG_WARN("fail to cache max score tuple", K(ret));
+      } else {
+        replay_cache_datum_bytes_ += datum_bytes;
+      }
+    }
+  }
+  return ret;
+}
+
+int ObBlockMaxScoreIterator::load_cached_max_score_tuple(const int64_t cache_idx)
+{
+  int ret = OB_SUCCESS;
+  if (OB_UNLIKELY(cache_idx < 0 || cache_idx >= max_score_cache_.count())) {
+    ret = OB_ARRAY_OUT_OF_RANGE;
+    LOG_WARN("cache index out of range", K(ret), K(cache_idx), "cache_count", max_score_cache_.count());
+  } else {
+    const ObCachedMaxScoreTuple &cached_tuple = max_score_cache_.at(cache_idx);
+    max_score_tuple_.max_score_ = cached_tuple.max_score_;
+    max_score_tuple_.max_domain_id_ = &cached_tuple.max_domain_id_;
+    if (!has_been_advanced_) {
+      max_score_tuple_.min_domain_id_ = &cached_tuple.min_domain_id_;
+    } else {
+      int cmp_ret = 0;
+      if (OB_FAIL(domain_id_cmp_.compare(
+          cached_tuple.min_domain_id_, advance_doc_id_.get_datum(), cmp_ret))) {
+        LOG_WARN("fail to compare cached minimum domain id", K(ret), K(cache_idx));
+      } else {
+        max_score_tuple_.min_domain_id_ = cmp_ret >= 0
+            ? &cached_tuple.min_domain_id_ : &advance_doc_id_.get_datum();
+      }
+    }
+  }
+  return ret;
+}
+
+int ObBlockMaxScoreIterator::advance_replay_cache_to(
+    const ObDatum &domain_id,
+    const bool inclusive)
+{
+  int ret = OB_SUCCESS;
+  bool id_in_range = false;
+  int cmp_ret = 0;
+  if (OB_FAIL(advance_doc_id_.from_datum(domain_id))) {
+    LOG_WARN("fail to deep copy domain id", K(ret), K(domain_id));
+  } else if (max_score_tuple_.is_valid()) {
+    if (OB_FAIL(domain_id_cmp_.compare(domain_id, *max_score_tuple_.max_domain_id_, cmp_ret))) {
+      LOG_WARN("fail to compare domain id", K(ret), K(domain_id));
+    } else {
+      id_in_range = cmp_ret < 0 || (cmp_ret == 0 && inclusive);
+    }
+  }
+
   if (OB_FAIL(ret)) {
   } else if (id_in_range) {
     max_score_tuple_.min_domain_id_ = &advance_doc_id_.get_datum();
     has_been_advanced_ = true;
-  } else if (FALSE_IT(rowkey_domain_id_datum.shallow_copy_from_datum(advance_doc_id_.get_datum()))) {
-  } else if (OB_FAIL(stat_iter_.advance_to(advance_rowkey_, inclusive))) {
-    LOG_WARN("fail to advance to", K(ret), K_(advance_rowkey), K(inclusive));
-  } else if (OB_FAIL(get_next(next_max_score_tuple))) {
-    if (OB_UNLIKELY(OB_ITER_END != ret)) {
-      LOG_WARN("fail to get next", K(ret));
-    }
   } else {
-    has_been_advanced_ = true;
+    int64_t left = replay_cache_pos_;
+    int64_t right = max_score_cache_.count();
+    while (OB_SUCC(ret) && left < right) {
+      const int64_t mid = left + (right - left) / 2;
+      if (OB_FAIL(domain_id_cmp_.compare(
+          max_score_cache_.at(mid).max_domain_id_, domain_id, cmp_ret))) {
+        LOG_WARN("fail to compare cached maximum domain id", K(ret), K(mid));
+      } else if (cmp_ret > 0 || (cmp_ret == 0 && inclusive)) {
+        right = mid;
+      } else {
+        left = mid + 1;
+      }
+    }
+    if (OB_FAIL(ret)) {
+    } else if (left >= max_score_cache_.count()) {
+      ret = OB_ITER_END;
+    } else {
+      replay_cache_pos_ = left + 1;
+      has_been_advanced_ = true;
+      if (OB_FAIL(load_cached_max_score_tuple(left))) {
+        LOG_WARN("fail to load advanced cached max score tuple", K(ret), K(left));
+      }
+    }
   }
-
-
   return ret;
+}
+
+void ObBlockMaxScoreIterator::disable_replay_cache()
+{
+  max_score_cache_.reset();
+  replay_cache_allocator_.reset();
+  replay_cache_pos_ = 0;
+  replay_cache_datum_bytes_ = 0;
+  replay_cache_enabled_ = false;
+  replay_cache_complete_ = false;
+  replaying_cache_ = false;
 }
 
 int ObBlockMaxScoreIterator::inner_init(
