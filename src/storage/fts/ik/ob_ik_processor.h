@@ -48,9 +48,15 @@ public:
   int current_char(const char *&ch, uint8_t &char_len);
   int current_char_type(ObFTCharUtil::CharType &type);
 
+  int first_valid_char(const char *buf, const int64_t buf_size, int64_t &char_len) const;
+  int classify_char(const char *input,
+                    const uint8_t char_len,
+                    ObFTCharUtil::CharType &type) const;
+
   int step_next();
 
   ObCollationType collation() const;
+  ObCharsetType charset_type() const;
   int64_t get_end_cursor() const;
   const char *fulltext() const;
   int64_t fulltext_len() const;
@@ -77,6 +83,9 @@ private:
   int prepare_next_char();
 
   ObCollationType coll_type_;
+  const ObCharsetInfo *charset_info_;
+  const ObCharsetHandler *charset_handler_;
+  ObCharsetType charset_type_;
   const char *fulltext_;
   int64_t fulltext_len_;
 
@@ -101,7 +110,10 @@ public:
 
   virtual ~ObIIKProcessor() {}
 
-  int process(TokenizeContext &ctx);
+  int process(TokenizeContext &ctx,
+              const char *ch,
+              const uint8_t char_len,
+              const ObFTCharUtil::CharType type);
 
   virtual int do_process(TokenizeContext &ctx,
                          const char *ch,
