@@ -16,9 +16,12 @@
 
 #include "sql/engine/expr/ob_expr_tokenize.h"
 
+#include "lib/alloc/alloc_func.h"
 #include "lib/alloc/alloc_struct.h"
 #include "lib/allocator/page_arena.h"
 #include "lib/charset/ob_charset.h"
+#include "lib/hash/ob_hashutils.h"
+#include "lib/lock/ob_spin_lock.h"
 #include "common/json_type/ob_json_base.h"
 #include "common/json_type/ob_json_tree.h"
 #include "lib/ob_errno.h"
@@ -28,6 +31,7 @@
 #include "object/ob_object.h"
 #include "plugin/sys/ob_plugin_helper.h"
 #include "sql/resolver/ddl/ob_fts_index_builder_util.h"
+#include "sql/session/ob_sql_session_info.h"
 #include "share/ob_json_access_utils.h"
 #include "storage/fts/dict/ob_gen_dic_loader.h"
 #include "storage/fts/ob_fts_parser_property.h"
@@ -40,6 +44,386 @@ namespace oceanbase
 {
 namespace sql
 {
+namespace
+{
+enum class ObBuiltinTokenizer : uint8_t
+{
+  INVALID = 0,
+  IK,
+  BENG,
+};
+
+struct ObTokenizeCacheKey
+{
+  ObTokenizeCacheKey()
+    : collation_(CS_TYPE_INVALID),
+      parser_(ObBuiltinTokenizer::INVALID),
+      tenant_name_(),
+      text_(),
+      hash_(0)
+  {}
+
+  ObCollationType collation_;
+  ObBuiltinTokenizer parser_;
+  ObString tenant_name_;
+  ObString text_;
+  uint64_t hash_;
+};
+
+class ObTokenizeThreadCache final
+{
+  static constexpr int64_t MAX_RESULT_LENGTH = 64 * 1024;
+
+public:
+  ObTokenizeThreadCache()
+    : collation_(CS_TYPE_INVALID),
+      parser_(ObBuiltinTokenizer::INVALID),
+      tenant_name_length_(0),
+      text_length_(0),
+      result_length_(0),
+      capacity_(0),
+      buffer_(nullptr)
+  {}
+
+  ~ObTokenizeThreadCache()
+  {
+    if (nullptr != buffer_) {
+      ob_free(buffer_);
+      buffer_ = nullptr;
+    }
+  }
+
+  bool get(const ObTokenizeCacheKey &key,
+           const ObExpr &expr,
+           ObEvalCtx &ctx,
+           ObDatum &result) const
+  {
+    bool found = false;
+    if (matches(key)) {
+      char *result_buffer = expr.get_str_res_mem(ctx, result_length_);
+      if (OB_NOT_NULL(result_buffer)) {
+        MEMCPY(result_buffer, result_ptr(), result_length_);
+        result.set_string(result_buffer, result_length_);
+        found = true;
+      }
+    }
+    return found;
+  }
+
+  void put(const ObTokenizeCacheKey &key, const ObDatum &result)
+  {
+    if (key.tenant_name_.empty()
+        || key.text_.empty()
+        || result.is_null()
+        || result.len_ <= 0
+        || result.len_ > MAX_RESULT_LENGTH) {
+      return;
+    }
+
+    const int64_t required_size =
+        key.tenant_name_.length() + key.text_.length() + result.len_;
+    if (required_size > capacity_) {
+      char *new_buffer =
+          static_cast<char *>(ob_malloc(required_size, ObMemAttr("TokenizeHot")));
+      if (OB_ISNULL(new_buffer)) {
+        return;
+      }
+      if (nullptr != buffer_) {
+        ob_free(buffer_);
+      }
+      buffer_ = new_buffer;
+      capacity_ = required_size;
+    }
+
+    MEMCPY(buffer_, key.tenant_name_.ptr(), key.tenant_name_.length());
+    MEMCPY(buffer_ + key.tenant_name_.length(), key.text_.ptr(), key.text_.length());
+    MEMCPY(buffer_ + key.tenant_name_.length() + key.text_.length(),
+           result.ptr_,
+           result.len_);
+    collation_ = key.collation_;
+    parser_ = key.parser_;
+    tenant_name_length_ = key.tenant_name_.length();
+    text_length_ = key.text_.length();
+    result_length_ = result.len_;
+  }
+
+private:
+  bool matches(const ObTokenizeCacheKey &key) const
+  {
+    return nullptr != buffer_
+        && collation_ == key.collation_
+        && parser_ == key.parser_
+        && tenant_name_length_ == key.tenant_name_.length()
+        && text_length_ == key.text_.length()
+        && 0 == MEMCMP(buffer_, key.tenant_name_.ptr(), tenant_name_length_)
+        && 0 == MEMCMP(buffer_ + tenant_name_length_, key.text_.ptr(), text_length_);
+  }
+
+  const char *result_ptr() const
+  {
+    return buffer_ + tenant_name_length_ + text_length_;
+  }
+
+  ObCollationType collation_;
+  ObBuiltinTokenizer parser_;
+  int64_t tenant_name_length_;
+  int64_t text_length_;
+  int64_t result_length_;
+  int64_t capacity_;
+  char *buffer_;
+};
+
+ObTokenizeThreadCache &get_tokenize_thread_cache()
+{
+  static thread_local ObTokenizeThreadCache cache;
+  return cache;
+}
+
+class ObTokenizeResultCache final
+{
+  static constexpr int64_t SHARD_COUNT = 16;
+  static constexpr int64_t ENTRIES_PER_SHARD = 4;
+  static constexpr int64_t MAX_TEXT_LENGTH = 4096;
+  static constexpr int64_t MAX_RESULT_LENGTH = 64 * 1024;
+
+  struct Entry
+  {
+    Entry()
+      : collation_(CS_TYPE_INVALID),
+        parser_(ObBuiltinTokenizer::INVALID),
+        hash_(0),
+        tenant_name_length_(0),
+        text_length_(0),
+        result_length_(0),
+        last_access_(0),
+        buffer_(nullptr)
+    {}
+
+    bool matches(const ObTokenizeCacheKey &key) const
+    {
+      return nullptr != buffer_
+          && hash_ == key.hash_
+          && collation_ == key.collation_
+          && parser_ == key.parser_
+          && tenant_name_length_ == key.tenant_name_.length()
+          && text_length_ == key.text_.length()
+          && 0 == MEMCMP(buffer_, key.tenant_name_.ptr(), tenant_name_length_)
+          && 0 == MEMCMP(buffer_ + tenant_name_length_, key.text_.ptr(), text_length_);
+    }
+
+    const char *result() const
+    {
+      return buffer_ + tenant_name_length_ + text_length_;
+    }
+
+    ObCollationType collation_;
+    ObBuiltinTokenizer parser_;
+    uint64_t hash_;
+    int64_t tenant_name_length_;
+    int64_t text_length_;
+    int64_t result_length_;
+    uint64_t last_access_;
+    char *buffer_;
+  };
+
+  struct Shard
+  {
+    Shard() : lock_(), clock_(0), entries_() {}
+
+    ObSpinLock lock_;
+    uint64_t clock_;
+    Entry entries_[ENTRIES_PER_SHARD];
+  };
+
+public:
+  static bool is_cacheable_text(const ObString &text)
+  {
+    return !text.empty() && text.length() <= MAX_TEXT_LENGTH;
+  }
+
+  static ObTokenizeResultCache &instance()
+  {
+    static ObTokenizeResultCache cache;
+    return cache;
+  }
+
+  bool get(const ObTokenizeCacheKey &key,
+           const ObExpr &expr,
+           ObEvalCtx &ctx,
+           ObDatum &result)
+  {
+    bool found = false;
+    Shard &shard = get_shard(key);
+    ObSpinLockGuard guard(shard.lock_);
+    for (int64_t i = 0; !found && i < ENTRIES_PER_SHARD; ++i) {
+      Entry &entry = shard.entries_[i];
+      if (entry.matches(key)) {
+        char *result_buffer = expr.get_str_res_mem(ctx, entry.result_length_);
+        if (OB_NOT_NULL(result_buffer)) {
+          MEMCPY(result_buffer, entry.result(), entry.result_length_);
+          result.set_string(result_buffer, entry.result_length_);
+          entry.last_access_ = ++shard.clock_;
+          found = true;
+        }
+      }
+    }
+    return found;
+  }
+
+  void put(const ObTokenizeCacheKey &key, const ObDatum &result)
+  {
+    if (!is_cacheable_text(key.text_)
+        || key.tenant_name_.empty()
+        || result.is_null()
+        || result.len_ <= 0
+        || result.len_ > MAX_RESULT_LENGTH) {
+      return;
+    }
+
+    const int64_t allocation_size =
+        key.tenant_name_.length() + key.text_.length() + result.len_;
+    char *new_buffer =
+        static_cast<char *>(ob_malloc(allocation_size, ObMemAttr("TokenizeCache")));
+    if (OB_ISNULL(new_buffer)) {
+      return;
+    }
+    MEMCPY(new_buffer, key.tenant_name_.ptr(), key.tenant_name_.length());
+    MEMCPY(new_buffer + key.tenant_name_.length(), key.text_.ptr(), key.text_.length());
+    MEMCPY(new_buffer + key.tenant_name_.length() + key.text_.length(),
+           result.ptr_,
+           result.len_);
+
+    Shard &shard = get_shard(key);
+    char *old_buffer = nullptr;
+    bool insert_new_entry = true;
+    {
+      ObSpinLockGuard guard(shard.lock_);
+      int64_t target = 0;
+      uint64_t oldest = UINT64_MAX;
+      for (int64_t i = 0; i < ENTRIES_PER_SHARD; ++i) {
+        if (shard.entries_[i].matches(key)) {
+          shard.entries_[i].last_access_ = ++shard.clock_;
+          insert_new_entry = false;
+          break;
+        } else if (nullptr == shard.entries_[i].buffer_) {
+          target = i;
+          oldest = 0;
+          break;
+        } else if (shard.entries_[i].last_access_ < oldest) {
+          target = i;
+          oldest = shard.entries_[i].last_access_;
+        }
+      }
+
+      if (insert_new_entry) {
+        Entry &entry = shard.entries_[target];
+        old_buffer = entry.buffer_;
+        entry.collation_ = key.collation_;
+        entry.parser_ = key.parser_;
+        entry.hash_ = key.hash_;
+        entry.tenant_name_length_ = key.tenant_name_.length();
+        entry.text_length_ = key.text_.length();
+        entry.result_length_ = result.len_;
+        entry.last_access_ = ++shard.clock_;
+        entry.buffer_ = new_buffer;
+      }
+    }
+
+    if (!insert_new_entry) {
+      ob_free(new_buffer);
+    } else if (nullptr != old_buffer) {
+      ob_free(old_buffer);
+    }
+  }
+
+private:
+  ObTokenizeResultCache() : shards_() {}
+  ~ObTokenizeResultCache()
+  {
+    for (int64_t shard_idx = 0; shard_idx < SHARD_COUNT; ++shard_idx) {
+      for (int64_t entry_idx = 0; entry_idx < ENTRIES_PER_SHARD; ++entry_idx) {
+        if (nullptr != shards_[shard_idx].entries_[entry_idx].buffer_) {
+          ob_free(shards_[shard_idx].entries_[entry_idx].buffer_);
+          shards_[shard_idx].entries_[entry_idx].buffer_ = nullptr;
+        }
+      }
+    }
+  }
+
+  Shard &get_shard(const ObTokenizeCacheKey &key)
+  {
+    return shards_[key.hash_ & (SHARD_COUNT - 1)];
+  }
+
+  Shard shards_[SHARD_COUNT];
+};
+
+ObBuiltinTokenizer parse_builtin_tokenizer(const ObString &parser_name)
+{
+  ObBuiltinTokenizer parser = ObBuiltinTokenizer::INVALID;
+  if (2 == parser_name.length()
+      && ('i' == parser_name.ptr()[0] || 'I' == parser_name.ptr()[0])
+      && ('k' == parser_name.ptr()[1] || 'K' == parser_name.ptr()[1])) {
+    parser = ObBuiltinTokenizer::IK;
+  } else if (4 == parser_name.length()
+             && ('b' == parser_name.ptr()[0] || 'B' == parser_name.ptr()[0])
+             && ('e' == parser_name.ptr()[1] || 'E' == parser_name.ptr()[1])
+             && ('n' == parser_name.ptr()[2] || 'N' == parser_name.ptr()[2])
+             && ('g' == parser_name.ptr()[3] || 'G' == parser_name.ptr()[3])) {
+    parser = ObBuiltinTokenizer::BENG;
+  }
+  return parser;
+}
+
+void calc_tokenize_cache_hash(ObTokenizeCacheKey &key)
+{
+  key.hash_ = murmurhash(key.tenant_name_.ptr(), key.tenant_name_.length(), 0);
+  key.hash_ = murmurhash(&key.collation_, sizeof(key.collation_), key.hash_);
+  key.hash_ = murmurhash(&key.parser_, sizeof(key.parser_), key.hash_);
+  key.hash_ = murmurhash(key.text_.ptr(), key.text_.length(), key.hash_);
+}
+
+int build_tokenize_cache_key(const ObExpr &expr,
+                             ObEvalCtx &ctx,
+                             ObTokenizeCacheKey &key,
+                             bool &cacheable)
+{
+  int ret = OB_SUCCESS;
+  cacheable = false;
+  ObDatum *text_datum = nullptr;
+  ObDatum *parser_datum = nullptr;
+  ObString parser_name;
+  const ObSQLSessionInfo *session = ctx.exec_ctx_.get_my_session();
+
+  // The two-argument form has the immutable built-in parser configuration.
+  // Three-argument custom dictionaries and row-dependent expressions deliberately
+  // bypass this cache, so their updates and per-row values are always observed.
+  if (2 != expr.arg_cnt_
+      || !expr.args_[0]->is_const_expr()
+      || !expr.args_[1]->is_const_expr()
+      || OB_ISNULL(session)) {
+  } else if (OB_FAIL(expr.args_[0]->eval(ctx, text_datum))) {
+    LOG_WARN("fail to evaluate tokenize cache text", K(ret));
+  } else if (OB_FAIL(expr.args_[1]->eval(ctx, parser_datum))) {
+    LOG_WARN("fail to evaluate tokenize cache parser", K(ret));
+  } else if (OB_ISNULL(text_datum) || text_datum->is_null()
+             || OB_ISNULL(parser_datum) || parser_datum->is_null()) {
+  } else if (FALSE_IT(parser_name = parser_datum->get_string().trim())) {
+  } else {
+    key.parser_ = parse_builtin_tokenizer(parser_name);
+  }
+
+  if (OB_SUCC(ret) && ObBuiltinTokenizer::INVALID != key.parser_) {
+    key.collation_ = expr.args_[0]->obj_meta_.get_collation_type();
+    key.tenant_name_ = session->get_tenant_name();
+    key.text_ = text_datum->get_string();
+    cacheable = !key.tenant_name_.empty()
+        && ObTokenizeResultCache::is_cacheable_text(key.text_);
+  }
+  return ret;
+}
+} // namespace
+
 ObExprTokenize::ObExprTokenize(common::ObIAllocator &alloc)
     : ObStringExprOperator(alloc,
                            T_FUN_TOKENIZE,
@@ -60,11 +444,26 @@ int ObExprTokenize::eval_tokenize(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &e
 
   ObIJsonBase *json_result = nullptr;
   TokenizeParam param;
+  ObTokenizeCacheKey cache_key;
+  bool cacheable = false;
+  bool cache_hit = false;
+  ObTokenizeThreadCache &thread_cache = get_tokenize_thread_cache();
 
   // check param num, which is checked in ObExprOperator::calc_result_typeN.
   if (OB_UNLIKELY(expr.arg_cnt_ < 1 || expr.arg_cnt_ > 3)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("Args count invalid.", K(ret), K(expr.arg_cnt_));
+  } else if (OB_FAIL(build_tokenize_cache_key(expr, ctx, cache_key, cacheable))) {
+    LOG_WARN("fail to build tokenize cache key", K(ret));
+  } else if (cacheable
+             && FALSE_IT(cache_hit = thread_cache.get(cache_key, expr, ctx, expr_datum))) {
+  } else if (cache_hit) {
+  } else if (cacheable
+             && FALSE_IT(calc_tokenize_cache_hash(cache_key))
+             && FALSE_IT(cache_hit = ObTokenizeResultCache::instance().get(
+                 cache_key, expr, ctx, expr_datum))) {
+  } else if (cache_hit) {
+    thread_cache.put(cache_key, expr_datum);
   } else if (OB_FAIL(parse_param(expr, ctx, param))) {
     LOG_WARN("Fail to parse param", K(ret));
   } else if (OB_FAIL(tokenize_fulltext(param, param.output_mode_, temp_allocator, json_result))) {
@@ -75,6 +474,9 @@ int ObExprTokenize::eval_tokenize(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &e
                                                      json_result,
                                                      expr_datum))) {
     LOG_WARN("fail to pack json result", K(ret));
+  } else if (cacheable) {
+    ObTokenizeResultCache::instance().put(cache_key, expr_datum);
+    thread_cache.put(cache_key, expr_datum);
   }
 
   return ret;
