@@ -126,16 +126,15 @@ int ObIKArbitrator::output_result(TokenizeContext &ctx)
   for (int64_t current = 0; OB_SUCC(ret) && current < ctx.fulltext_len();) {
     ObFTCharUtil::CharType type;
     // maybe not so good to keep single, check it later
-    if (OB_FAIL(ObCharset::first_valid_char(ctx.collation(),
-                                            ctx.fulltext() + current,
-                                            ctx.fulltext_len() - current,
-                                            char_len))) {
-      LOG_WARN("Failed to get next valid char", K(ret));
-    } else if (OB_FAIL(ObFTCharUtil::classify_first_char(ctx.collation(),
-                                                         ctx.fulltext() + current,
-                                                         char_len,
-                                                         type))) {
-      LOG_WARN("Failed to classify first char", K(ret));
+    if (OB_FAIL(ObFTCharUtil::get_first_valid_char_and_type(ctx.collation(),
+                                                            ctx.fulltext() + current,
+                                                            ctx.fulltext_len() - current,
+                                                            char_len,
+                                                            type))) {
+      LOG_WARN("failed to get first valid character and type",
+               K(ret),
+               K(current),
+               K(ctx.fulltext_len()));
     } else if (ObFTCharUtil::CharType::USELESS == type) {
       current += char_len; // skip useless char
     } else if (OB_FAIL(chains_.get_refactored(current, chain)) && OB_HASH_NOT_EXIST != ret) {
@@ -182,11 +181,15 @@ int ObIKArbitrator::output_result(TokenizeContext &ctx)
         } else {
           // output single word between two token
           while (OB_SUCC(ret) && current < token.offset_) {
-            if (OB_FAIL(ObCharset::first_valid_char(ctx.collation(),
-                                                    ctx.fulltext() + current,
-                                                    ctx.fulltext_len() - current,
-                                                    char_len))) {
-              LOG_WARN("Failed to get next valid char, ", K(ret));
+            if (OB_FAIL(ObFTCharUtil::get_first_valid_char_and_type(ctx.collation(),
+                                                                    ctx.fulltext() + current,
+                                                                    ctx.fulltext_len() - current,
+                                                                    char_len,
+                                                                    type))) {
+              LOG_WARN("failed to get supplementary character and type",
+                       K(ret),
+                       K(current),
+                       K(ctx.fulltext_len()));
               break;
             } else {
               ObIKToken token;
