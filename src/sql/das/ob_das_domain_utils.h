@@ -33,10 +33,11 @@ namespace sql
 class ObFTIndexRowCache final
 {
 public:
-  static ObObjDatumMapType FTS_INDEX_TYPES[4];
-  static ObObjDatumMapType FTS_DOC_WORD_TYPES[4];
-  static ObExprOperatorType FTS_INDEX_EXPR_TYPE[4];
-  static ObExprOperatorType FTS_DOC_WORD_EXPR_TYPE[4];
+  static constexpr int64_t FTS_COL_CNT = 4;
+  static ObObjDatumMapType FTS_INDEX_TYPES[FTS_COL_CNT];
+  static ObObjDatumMapType FTS_DOC_WORD_TYPES[FTS_COL_CNT];
+  static ObExprOperatorType FTS_INDEX_EXPR_TYPE[FTS_COL_CNT];
+  static ObExprOperatorType FTS_DOC_WORD_EXPR_TYPE[FTS_COL_CNT];
 
   ObFTIndexRowCache();
   ~ObFTIndexRowCache();

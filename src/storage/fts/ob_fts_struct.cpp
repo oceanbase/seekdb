@@ -37,13 +37,29 @@ int ObFTWord::init(const char *ptr, const int64_t length, const ObObjMeta &meta)
     if (OB_UNLIKELY(nullptr == funcs || nullptr == funcs->default_hash_ || nullptr == cmp_func)) {
       ret = OB_ERR_UNEXPECTED;
     } else {
-      word_.set_string(ptr, length);
-      meta_ = meta;
-      hash_func_ = funcs->default_hash_;
-      cmp_func_ = cmp_func;
-      hash_calculated_ = false;
-      hash_value_ = 0;
+      ret = init(ptr, length, meta, funcs->default_hash_, cmp_func);
     }
+  }
+  return ret;
+}
+
+int ObFTWord::init(const char *ptr,
+                   const int64_t length,
+                   const ObObjMeta &meta,
+                   const ObDatumHashFuncType hash_func,
+                   const ObDatumCmpFuncType cmp_func)
+{
+  int ret = OB_SUCCESS;
+  if (OB_UNLIKELY(nullptr == ptr || length <= 0
+                  || nullptr == hash_func || nullptr == cmp_func)) {
+    ret = OB_INVALID_ARGUMENT;
+  } else {
+    word_.set_string(ptr, length);
+    meta_ = meta;
+    hash_func_ = hash_func;
+    cmp_func_ = cmp_func;
+    hash_calculated_ = false;
+    hash_value_ = 0;
   }
   return ret;
 }

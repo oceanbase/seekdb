@@ -307,7 +307,7 @@ int ObSortVecOpImpl<Compare, Store_Row, has_addon>::init(ObSortVecOpContext &ctx
       SQL_ENG_LOG(WARN, "failed to init sort key column result array", K(ret));
     } else if (OB_FAIL(comp_.init(cmp_sk_exprs_, sk_row_meta_, addon_row_meta_,
                                   cmp_sort_collations_, ctx.exec_ctx_,
-                                  ctx.enable_encode_sortkey_ && !(ctx.part_cnt_ > 0)))) {
+                                  ctx.enable_encode_sortkey_))) {
       SQL_ENG_LOG(WARN, "failed to init compare functions", K(ret));
     } else if (is_topn_sort()
                && OB_ISNULL(topn_heap_ = OB_NEWx(TopnHeap, (&mem_context_->get_malloc_allocator()),
@@ -1309,44 +1309,37 @@ int ObSortVecOpImpl<Compare, Store_Row, has_addon>::is_equal_part(const Store_Ro
   } else if (OB_ISNULL(l) || OB_ISNULL(r)) {
     is_equal = false;
   } else {
-    int64_t hash_idx = sk_collations_->at(0).field_idx_;
-    const uint64_t l_hash_value =
-      *(reinterpret_cast<const uint64_t *>(l->get_cell_payload(row_meta, hash_idx)));
-    const uint64_t r_hash_value =
-      *(reinterpret_cast<const uint64_t *>(r->get_cell_payload(row_meta, hash_idx)));
-    if (l_hash_value != r_hash_value) {
-      is_equal = false;
-    } else {
-      int cmp_ret = 0;
-      ObLength l_len = 0;
-      ObLength r_len = 0;
-      bool l_null = false;
-      bool r_null = false;
-      const char *l_data = nullptr;
-      const char *r_data = nullptr;
-      for (int64_t i = 1; is_equal && i <= part_cnt_; ++i) {
-        const int64_t idx = sk_collations_->at(i).field_idx_;
-        const ObExpr *e = sk_exprs_->at(idx);
-        auto &sort_cmp_fun = NULL_FIRST == sk_collations_->at(i).null_pos_ ?
-                               e->basic_funcs_->row_null_first_cmp_ :
-                               e->basic_funcs_->row_null_last_cmp_;
-        l_null = l->is_null(idx);
-        r_null = r->is_null(idx);
-        if (l_null != r_null) {
-          is_equal = false;
-        } else if (l_null && r_null) {
+    int cmp_ret = 0;
+    ObLength l_len = 0;
+    ObLength r_len = 0;
+    bool l_null = false;
+    bool r_null = false;
+    const char *l_data = nullptr;
+    const char *r_data = nullptr;
+    // The caller has already compared the cached hash values. Compare only
+    // the real partition columns here to resolve the rare hash collision.
+    for (int64_t i = 1; is_equal && i <= part_cnt_; ++i) {
+      const int64_t idx = sk_collations_->at(i).field_idx_;
+      const ObExpr *e = sk_exprs_->at(idx);
+      auto &sort_cmp_fun = NULL_FIRST == sk_collations_->at(i).null_pos_ ?
+                             e->basic_funcs_->row_null_first_cmp_ :
+                             e->basic_funcs_->row_null_last_cmp_;
+      l_null = l->is_null(idx);
+      r_null = r->is_null(idx);
+      if (l_null != r_null) {
+        is_equal = false;
+      } else if (l_null && r_null) {
+        is_equal = true;
+      } else {
+        l->get_cell_payload(row_meta, idx, l_data, l_len);
+        r->get_cell_payload(row_meta, idx, r_data, r_len);
+        if (l_len == r_len && (0 == memcmp(l_data, r_data, l_len))) {
           is_equal = true;
+        } else if (OB_FAIL(sort_cmp_fun(e->obj_meta_, e->obj_meta_, l_data, l_len, l_null, r_data,
+                                        r_len, r_null, cmp_ret))) {
+          SQL_ENG_LOG(WARN, "failed to compare", K(ret));
         } else {
-          l->get_cell_payload(row_meta, idx, l_data, l_len);
-          r->get_cell_payload(row_meta, idx, r_data, r_len);
-          if (l_len == r_len && (0 == memcmp(l_data, r_data, l_len))) {
-            is_equal = true;
-          } else if (OB_FAIL(sort_cmp_fun(e->obj_meta_, e->obj_meta_, l_data, l_len, l_null, r_data,
-                                          r_len, r_null, cmp_ret))) {
-            SQL_ENG_LOG(WARN, "failed to compare", K(ret));
-          } else {
-            is_equal = (0 == cmp_ret);
-          }
+          is_equal = (0 == cmp_ret);
         }
       }
     }
@@ -1405,11 +1398,14 @@ int ObSortVecOpImpl<Compare, Store_Row, has_addon>::do_partition_sort(
       uint64_t pos = hash_value >> shift_right; // high n bit
       PartHashNode &insert_node = part_hash_nodes_->at(i - rows_begin);
       PartHashNode *&bucket = buckets_->at(pos);
+      insert_node.hash_value_ = hash_value;
       insert_node.store_row_ = rows.at(i);
       PartHashNode *exist = bucket;
       bool equal = false;
       while (nullptr != exist && OB_SUCC(ret)) {
-        if (OB_FAIL(is_equal_part(exist->store_row_, rows.at(i), row_meta, equal))) {
+        if (exist->hash_value_ != hash_value) {
+          equal = false;
+        } else if (OB_FAIL(is_equal_part(exist->store_row_, rows.at(i), row_meta, equal))) {
           SQL_ENG_LOG(WARN, "failed to check equal", K(ret));
         } else if (equal) {
           break;
@@ -1454,8 +1450,10 @@ int ObSortVecOpImpl<Compare, Store_Row, has_addon>::do_partition_sort(
       bucket_part_cnt++;
     }
     comp_.set_cmp_range(0, part_cnt_ + hash_expr_cnt);
-    lib::ob_sort(&bucket_nodes.at(0), &bucket_nodes.at(0) + bucket_part_cnt, HashNodeComparer(comp_));
+    HashNodeComparer hash_node_cmp(*sk_exprs_, *sk_collations_, part_cnt_, row_meta, ret);
+    lib::ob_sort(&bucket_nodes.at(0), &bucket_nodes.at(0) + bucket_part_cnt, hash_node_cmp);
     comp_.set_cmp_range(part_cnt_ + hash_expr_cnt, comp_.get_cnt());
+    const bool has_order_by = sk_collations_->count() > part_cnt_ + hash_expr_cnt;
     for (int64_t i = 0; OB_SUCC(ret) && i < bucket_part_cnt; ++i) {
       int64_t rows_last = rows_idx;
       PartHashNode *part_node = bucket_nodes.at(i);
@@ -1463,7 +1461,7 @@ int ObSortVecOpImpl<Compare, Store_Row, has_addon>::do_partition_sort(
         rows.at(rows_idx++) = part_node->store_row_;
         part_node = part_node->part_row_next_;
       }
-      if (comp_.cmp_start_ != comp_.cmp_end_) {
+      if (has_order_by && rows_idx - rows_last > 1) {
         if (enable_encode_sortkey_) {
           bool can_encode = true;
           ObAdaptiveQS<Store_Row> aqs(rows, row_meta, allocator_);
@@ -1758,7 +1756,7 @@ int ObSortVecOpImpl<Compare, Store_Row, has_addon>::before_add_row()
   } else if (OB_UNLIKELY(!got_first_row_)) {
     if (!comp_.is_inited()
         && OB_FAIL(comp_.init(cmp_sk_exprs_, sk_row_meta_, addon_row_meta_, cmp_sort_collations_,
-                              exec_ctx_, enable_encode_sortkey_ && !(part_cnt_ > 0)))) {
+                              exec_ctx_, enable_encode_sortkey_))) {
       SQL_ENG_LOG(WARN, "init compare failed", K(ret));
     } else {
       got_first_row_ = true;

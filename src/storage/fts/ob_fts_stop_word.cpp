@@ -154,8 +154,16 @@ ObAddWord::ObAddWord(
     stopword_cnt_(0),
     min_token_size_(property.min_token_size_),
     max_token_size_(property.max_token_size_),
-    flag_(flag)
+    flag_(flag),
+    hash_func_(nullptr),
+    cmp_func_(nullptr)
 {
+  sql::ObExprBasicFuncs *basic_funcs =
+      ObDatumFuncs::get_basic_func(meta.get_type(), meta.get_collation_type());
+  if (OB_NOT_NULL(basic_funcs)) {
+    hash_func_ = basic_funcs->default_hash_;
+  }
+  cmp_func_ = get_datum_cmp_func(meta, meta);
 }
 
 int ObAddWord::process_word(
@@ -166,11 +174,16 @@ int ObAddWord::process_word(
 {
   int ret = OB_SUCCESS;
   bool is_stopword = false;
-  ObFTWord src_word(word_len, word, word_meta_);
+  ObFTWord src_word;
   ObFTWord dst_word;
   if (OB_ISNULL(word) || OB_UNLIKELY(0 >= word_len || 0 >= char_cnt || 0 >= word_freq)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", K(ret), KP(word), K(word_len), K(char_cnt), K(word_freq));
+  } else if (OB_UNLIKELY(nullptr == hash_func_ || nullptr == cmp_func_)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("fulltext token functions are unavailable", K(ret), K(word_meta_));
+  } else if (OB_FAIL(src_word.init(word, word_len, word_meta_, hash_func_, cmp_func_))) {
+    LOG_WARN("fail to initialize source word", K(ret), KP(word), K(word_len), K(word_meta_));
   } else if (is_min_max_word(char_cnt)) {
     ++min_max_word_cnt_;
     LOG_DEBUG("skip too small or large word", K(ret), K(src_word), K(char_cnt));
@@ -209,9 +222,9 @@ int ObAddWord::casedown_word(const ObFTWord &src, ObFTWord &dst)
                     dst_str,
                     allocator_))) {
       LOG_WARN("fail to tolower", K(ret), K(src), K(word_meta_));
-    } else {
-      ObFTWord tmp(dst_str.length(), dst_str.ptr(), word_meta_);
-      dst = tmp;
+    } else if (OB_FAIL(dst.init(dst_str.ptr(), dst_str.length(), word_meta_,
+                                hash_func_, cmp_func_))) {
+      LOG_WARN("fail to initialize normalized word", K(ret), K(dst_str), K(word_meta_));
     }
   } else {
     dst = src;

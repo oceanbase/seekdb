@@ -46,6 +46,11 @@ public:
   ~ObFTWord() = default;
 
   int init(const char *ptr, const int64_t length, const ObObjMeta &meta);
+  int init(const char *ptr,
+           const int64_t length,
+           const ObObjMeta &meta,
+           const ObDatumHashFuncType hash_func,
+           const ObDatumCmpFuncType cmp_func);
 
   OB_INLINE const ObDatum &get_word() const { return word_; }
   OB_INLINE ObCollationType get_collation_type() const { return meta_.get_collation_type(); }
