@@ -1286,10 +1286,22 @@ int ObFTParserProperty::parse_for_parser_helper(const ObFTParser &parser, const 
   int ret = OB_SUCCESS;
   ObFTParserJsonProps props;
   allocator_.reset();
+  min_token_size_ = ObFTSLiteral::FT_DEFAULT_MIN_TOKEN_SIZE;
+  max_token_size_ = ObFTSLiteral::FT_DEFAULT_MAX_TOKEN_SIZE;
+  ngram_token_size_ = ObFTSLiteral::FT_DEFAULT_NGRAM_TOKEN_SIZE;
+  ik_mode_smart_ = true;
   dict_table_.reset();
   stopword_table_.reset();
   quantifier_table_.reset();
-  if (OB_FAIL(props.init())) {
+  min_ngram_token_size_ = ObFTSLiteral::FT_DEFAULT_MIN_NGRAM_SIZE;
+  max_ngram_token_size_ = ObFTSLiteral::FT_DEFAULT_MAX_NGRAM_SIZE;
+  if (json_str.empty()) {
+    if (parser.is_ik()) {
+      dict_table_ = ObString(ObFTSLiteral::FT_DEFAULT_IK_DICT_UTF8_TABLE);
+      stopword_table_ = ObString(ObFTSLiteral::FT_DEFAULT_IK_STOPWORD_UTF8_TABLE);
+      quantifier_table_ = ObString(ObFTSLiteral::FT_DEFAULT_IK_QUANTIFIER_UTF8_TABLE);
+    }
+  } else if (OB_FAIL(props.init())) {
     LOG_WARN("fail to init props", K(ret));
   } else if (OB_FAIL(props.parse_from_valid_str(json_str))) {
     LOG_WARN("fail to parse from json str", K(ret), K(json_str));

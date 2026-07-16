@@ -64,7 +64,6 @@ private:
     // check and reform parser properties to standard format
     int reform_parser_properties(const ObString &properties,
                                  const ObString &database_name);
-    int try_load_dictionary_for_ik();
 
   public:
     // for property and tmp json string
@@ -95,6 +94,7 @@ private:
   static int tokenize_fulltext(const TokenizeParam &param,
                                TokenizeParam::OUTPUT_MODE mode,
                                common::ObIAllocator &allocator,
+                               const uint64_t dictionary_epoch,
                                ObIJsonBase *&result);
 
   static int construct_ft_parser_inner_name(const ObString &input_str, TokenizeParam &param);

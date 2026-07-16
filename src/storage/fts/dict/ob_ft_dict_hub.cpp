@@ -173,6 +173,9 @@ int ObFTDictHub::refresh_cache(const ObString &table_name)
         LOG_WARN("failed to invalidate dictionary cache", K(ret), K(table_name), K(dict_types[index]));
       }
     }
+    if (OB_SUCC(ret)) {
+      ATOMIC_INC(&dictionary_epoch_);
+    }
   }
   return ret;
 }

@@ -497,7 +497,7 @@ int ObSRTaaTIterImpl::project_results(const int64_t safe_capacity, int64_t &coun
   ObDatum *relevance_datum = nullptr;
   ObExpr *filter_expr = iter_param_->filter_expr_;
   const ObLimitParam *limit_param = iter_param_->limit_param_;
-  if (iter_param_->need_project_relevance()) {
+  if (iter_param_->need_fill_relevance_output()) {
     if (count == 0) {
       relevance_datum = relevance_expr->locate_datums_for_update(*eval_ctx, safe_capacity);
     } else {
@@ -508,8 +508,9 @@ int ObSRTaaTIterImpl::project_results(const int64_t safe_capacity, int64_t &coun
     ObEvalCtx::BatchInfoScopeGuard guard(*eval_ctx);
     guard.set_batch_idx(count);
     set_datum_func_(id_datum[count], (*cur_map_iter_)->first);
-    if (iter_param_->need_project_relevance()) {
-      relevance_datum[count].set_double((*cur_map_iter_)->second);
+    if (iter_param_->need_fill_relevance_output()) {
+      relevance_datum[count].set_double(
+          iter_param_->need_project_relevance() ? (*cur_map_iter_)->second : 0.0);
       relevance_expr->set_evaluated_flag(*eval_ctx);
     }
     if (0 == count) {
@@ -542,7 +543,7 @@ int ObSRTaaTIterImpl::project_results(const int64_t safe_capacity, int64_t &coun
       }
     }
   }
-  if (OB_SUCC(ret) && iter_param_->need_project_relevance()) {
+  if (OB_SUCC(ret) && iter_param_->need_fill_relevance_output()) {
     relevance_expr->set_evaluated_projected(*eval_ctx);
   }
   return ret;

@@ -95,7 +95,7 @@ class ObFTCacheRangeContainer;
 class ObFTDictHub
 {
 public:
-  ObFTDictHub() : is_inited_(false), dict_map_(), rw_dict_lock_() {}
+  ObFTDictHub() : is_inited_(false), dictionary_epoch_(1), dict_map_(), rw_dict_lock_() {}
   ~ObFTDictHub() {}
 
   int init();
@@ -108,6 +108,8 @@ public:
 
   int refresh_cache(const ObString &table_name);
 
+  uint64_t get_dictionary_epoch() const { return ATOMIC_LOAD(&dictionary_epoch_); }
+
 private:
   int get_dict_info(const ObFTDictInfoKey &key, ObFTDictInfo &info);
 
@@ -116,6 +118,7 @@ private:
 
 private:
   bool is_inited_;
+  uint64_t dictionary_epoch_;
   // holds info of dict
   hash::ObHashMap<ObFTDictInfoKey, ObFTDictInfo> dict_map_;
   ObBucketLock rw_dict_lock_;

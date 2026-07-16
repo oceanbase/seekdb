@@ -201,6 +201,11 @@ public:
       const ObFTWordMap &words,
       const int64_t doc_length,
       common::ObIJsonBase *&json_root);
+  int make_detail_json(
+      const ObFTWordMap &words,
+      const int64_t doc_length,
+      common::ObIAllocator &result_allocator,
+      common::ObIJsonBase *&json_root);
 
   /**
    * Make json document for fulltext search
@@ -210,6 +215,10 @@ public:
    */
   int make_token_array_json(
       const ObFTWordMap &words,
+      common::ObIJsonBase *&json_root);
+  int make_token_array_json(
+      const ObFTWordMap &words,
+      common::ObIAllocator &result_allocator,
       common::ObIJsonBase *&json_root);
 
   void reset();
