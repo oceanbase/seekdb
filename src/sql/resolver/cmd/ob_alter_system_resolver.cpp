@@ -1157,38 +1157,29 @@ int ObRefreshFulltextDictResolver::resolve(const ParseNode &parse_tree)
     ret = OB_ALLOCATE_MEMORY_FAILED;
   } else {
     const ParseNode *relation = parse_tree.children_[0];
-    const ParseNode *db_node = T_RELATION_FACTOR == relation->type_
-                                   ? relation->children_[0] : nullptr;
-    const ParseNode *table_node = T_RELATION_FACTOR == relation->type_
-                                      ? relation->children_[1] : relation;
-    ObString quoted_name;
-    if (T_RELATION_FACTOR != relation->type_) {
-      quoted_name.assign_ptr(relation->str_value_, static_cast<int32_t>(relation->str_len_));
-      const char *dot = quoted_name.find('.');
-      const int64_t dot_pos = OB_ISNULL(dot) ? -1 : dot - quoted_name.ptr();
-      if (dot_pos > 0 && dot_pos < quoted_name.length() - 1) {
-        db_node = nullptr;
-        table_node = nullptr;
-        ObString stored_name;
-        if (OB_FAIL(ob_write_string(*allocator_, quoted_name, stored_name))) {
-          LOG_WARN("failed to copy quoted dictionary table name", K(ret));
-        } else {
-          stmt->set_table_name(stored_name);
-          stmt_ = stmt;
-        }
+    ObString database_name;
+    ObString table_name;
+    if (T_RELATION_FACTOR == relation->type_) {
+      if (OB_FAIL(resolve_table_relation_node(relation, table_name, database_name))) {
+        LOG_WARN("failed to resolve dictionary table relation", K(ret));
+      }
+    } else {
+      ObString input(static_cast<int32_t>(relation->str_len_), relation->str_value_);
+      const char *dot = input.find('.');
+      const int64_t dot_pos = OB_ISNULL(dot) ? -1 : dot - input.ptr();
+      if (dot_pos > 0 && dot_pos < input.length() - 1) {
+        database_name.assign_ptr(input.ptr(), static_cast<int32_t>(dot_pos));
+        table_name.assign_ptr(input.ptr() + dot_pos + 1,
+                              static_cast<int32_t>(input.length() - dot_pos - 1));
+      } else if (OB_ISNULL(session_info_) || session_info_->get_database_name().empty()) {
+        ret = OB_ERR_NO_DB_SELECTED;
+      } else {
+        database_name = session_info_->get_database_name();
+        table_name = input;
       }
     }
-    ObString database_name = OB_ISNULL(db_node)
-                                 ? session_info_->get_database_name()
-                                 : ObString(static_cast<int32_t>(db_node->str_len_),
-                                            db_node->str_value_);
-    ObString table_name;
     ObSqlString qualified_name;
-    if (OB_SUCC(ret) && OB_NOT_NULL(stmt_)) {
-    } else if (database_name.empty() || OB_ISNULL(table_node)) {
-      ret = OB_ERR_NO_DB_SELECTED;
-    } else {
-      table_name.assign_ptr(table_node->str_value_, static_cast<int32_t>(table_node->str_len_));
+    if (OB_SUCC(ret)) {
       if (OB_FAIL(qualified_name.append_fmt("%.*s.%.*s", database_name.length(),
                                             database_name.ptr(), table_name.length(),
                                             table_name.ptr()))) {
@@ -1212,6 +1203,7 @@ int ObRefreshFulltextDictResolver::resolve(const ParseNode &parse_tree)
     uint64_t database_id = OB_INVALID_ID;
     if (dot_pos <= 0 || dot_pos >= qualified.length() - 1) {
       ret = OB_INVALID_ARGUMENT;
+      LOG_WARN("invalid qualified dictionary table name", K(ret), K(qualified));
     } else {
       ObString db_name(static_cast<int32_t>(dot_pos), qualified.ptr());
       ObString tb_name(static_cast<int32_t>(qualified.length() - dot_pos - 1),
