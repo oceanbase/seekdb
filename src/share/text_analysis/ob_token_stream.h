@@ -31,6 +31,7 @@ public:
   virtual void reset() = 0;
   virtual void reuse() = 0;
   virtual int get_next(ObDatum &next_token, int64_t &token_freq) = 0;
+  virtual bool is_ascii_alnum_token_stream() const { return false; }
   virtual int get_next(ObDatum &next_token)
   {
     int64_t token_freq = 0;
@@ -70,6 +71,7 @@ public:
   ObTextWhitespaceTokenizer();
   virtual ~ObTextWhitespaceTokenizer() {}
   virtual int get_next(ObDatum &next_token, int64_t &token_freq) override;
+  virtual bool is_ascii_alnum_token_stream() const override { return is_ascii_doc_; }
   virtual void reset() override;
 protected:
   virtual int inner_open(const ObDatum &document, const ObCharsetInfo *cs) override;
@@ -81,6 +83,7 @@ private:
 private:
   const char *curr_token_ptr_;
   int64_t trav_pos_;
+  bool is_ascii_doc_;
 };
 
 class ObTokenNormalizer : public ObITokenStream
