@@ -22,6 +22,7 @@
 #include "lib/oblog/ob_log_module.h"
 #include "lib/utility/ob_macro_utils.h"
 #include "storage/fts/dict/ob_ft_cache_container.h"
+#include "storage/fts/dict/ob_ft_cache.h"
 #include "storage/fts/dict/ob_ft_dict_def.h"
 #include "storage/fts/dict/ob_ft_range_dict.h"
 namespace oceanbase
@@ -51,7 +52,7 @@ int ObFTDictHub::destroy()
 int ObFTDictHub::build_cache(const ObFTDictDesc &desc, ObFTCacheRangeContainer &container)
 {
   int ret = OB_SUCCESS;
-  ObFTDictInfoKey key(static_cast<uint64_t>(desc.type_));
+  ObFTDictInfoKey key(static_cast<uint64_t>(desc.type_), desc.name_.hash());
   ObFTDictInfo info;
   container.reset();
 
@@ -78,8 +79,13 @@ int ObFTDictHub::build_cache(const ObFTDictDesc &desc, ObFTCacheRangeContainer &
 
     if (OB_FAIL(ret)) {
       if (OB_ENTRY_NOT_EXIST == ret) {
-        if (OB_FAIL(ObFTRangeDict::build_cache_from_ik_dict(desc, container))) {
+        const bool is_builtin = 0 == desc.name_.case_compare("main_dict")
+                                || 0 == desc.name_.case_compare("quan_dict")
+                                || 0 == desc.name_.case_compare("stopword");
+        if (is_builtin && OB_FAIL(ObFTRangeDict::build_cache_from_ik_dict(desc, container))) {
           LOG_WARN("Failed to build cache", K(ret));
+        } else if (!is_builtin && OB_FAIL(ObFTRangeDict::build_cache(desc, container))) {
+          LOG_WARN("Failed to build custom dictionary cache", K(ret), K(desc.name_));
         } else if (FALSE_IT(info.range_count_ = container.get_handles().size())) {
         } else if (OB_FAIL(put_dict_info(key, info))) {
           LOG_WARN("Failed to put dict info", K(ret));
@@ -95,7 +101,7 @@ int ObFTDictHub::load_cache(const ObFTDictDesc &desc, ObFTCacheRangeContainer &c
   int ret = OB_SUCCESS;
   ObFTDictInfo info;
   container.reset();
-  ObFTDictInfoKey key(static_cast<uint64_t>(desc.type_));
+  ObFTDictInfoKey key(static_cast<uint64_t>(desc.type_), desc.name_.hash());
   if (!is_inited_) {
     ret = OB_NOT_INIT;
     LOG_WARN("dict hub not init", K(ret));
@@ -121,6 +127,41 @@ int ObFTDictHub::load_cache(const ObFTDictDesc &desc, ObFTCacheRangeContainer &c
     }
   }
 
+  return ret;
+}
+
+int ObFTDictHub::refresh_cache(const ObFTDictDesc &desc)
+{
+  int ret = OB_SUCCESS;
+  ObFTDictInfo info;
+  ObFTDictInfoKey key(static_cast<uint64_t>(desc.type_), desc.name_.hash());
+  ObFTCacheRangeContainer container;
+  if (!is_inited_) {
+    ret = OB_NOT_INIT;
+  } else {
+    ObBucketHashWLockGuard guard(rw_dict_lock_, key.hash());
+    int tmp_ret = get_dict_info(key, info);
+    if (OB_SUCCESS != tmp_ret && OB_HASH_NOT_EXIST != tmp_ret) {
+      ret = tmp_ret;
+    }
+    for (int32_t i = 0; OB_SUCC(ret) && i < info.range_count_; ++i) {
+      ObDictCacheKey cache_key(desc.name_.hash(), desc.type_, i);
+      if (OB_FAIL(ObDictCache::get_instance().erase(cache_key)) && OB_ENTRY_NOT_EXIST != ret) {
+        LOG_WARN("failed to erase old dictionary cache", K(ret), K(i), K(desc.name_));
+      } else {
+        ret = OB_SUCCESS;
+      }
+    }
+    if (OB_SUCC(ret) && OB_FAIL(ObFTRangeDict::build_cache(desc, container))) {
+      LOG_WARN("failed to rebuild dictionary cache", K(ret), K(desc.name_));
+    } else if (OB_SUCC(ret)) {
+      info.type_ = desc.type_;
+      info.charset_ = desc.charset_;
+      info.version_++;
+      info.range_count_ = static_cast<int32_t>(container.get_handles().size());
+      ret = put_dict_info(key, info);
+    }
+  }
   return ret;
 }
 

@@ -25,9 +25,35 @@ namespace oceanbase
 namespace sql
 {
 
+static int qualify_fts_dictionary_table(common::ObIAllocator &allocator,
+                                        const ObString &database_name,
+                                        const ObString &input,
+                                        ObString &output)
+{
+  int ret = OB_SUCCESS;
+  if (input.find('.') >= 0) {
+    output = input;
+  } else if (database_name.empty()) {
+    ret = OB_ERR_NO_DB_SELECTED;
+  } else {
+    const int64_t length = database_name.length() + 1 + input.length();
+    char *buffer = static_cast<char *>(allocator.alloc(length));
+    if (OB_ISNULL(buffer)) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+    } else {
+      MEMCPY(buffer, database_name.ptr(), database_name.length());
+      buffer[database_name.length()] = '.';
+      MEMCPY(buffer + database_name.length() + 1, input.ptr(), input.length());
+      output.assign_ptr(buffer, static_cast<int32_t>(length));
+    }
+  }
+  return ret;
+}
+
 int ObFTParserResolverHelper::resolve_parser_properties(
     const ParseNode &parse_tree,
     common::ObIAllocator &allocator,
+    const common::ObString &database_name,
     common::ObString &parser_property)
 {
   int ret = OB_SUCCESS;
@@ -44,7 +70,8 @@ int ObFTParserResolverHelper::resolve_parser_properties(
       if (OB_ISNULL(parse_tree.children_[i])) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("option_node child is nullptr", K(ret));
-      } else if (OB_FAIL(resolve_fts_index_parser_properties(parse_tree.children_[i], property))) {
+      } else if (OB_FAIL(resolve_fts_index_parser_properties(parse_tree.children_[i], allocator,
+                                                             database_name, property))) {
         LOG_WARN("fail to resolve fts index parser properties", K(ret));
       }
     }
@@ -58,6 +85,8 @@ int ObFTParserResolverHelper::resolve_parser_properties(
 
 int ObFTParserResolverHelper::resolve_fts_index_parser_properties(
     const ParseNode *node,
+    common::ObIAllocator &allocator,
+    const common::ObString &database_name,
     storage::ObFTParserJsonProps &property)
 {
   int ret = OB_SUCCESS;
@@ -124,8 +153,12 @@ int ObFTParserResolverHelper::resolve_fts_index_parser_properties(
           LOG_USER_ERROR(OB_INVALID_ARGUMENT, "the stopword table is empty");
         } else {
           int32_t str_len = static_cast<int32_t>(node->children_[0]->str_len_);
-          if (OB_FAIL(property.config_set_stopword_table(
-                  common::ObString(str_len, node->children_[0]->str_value_)))) {
+          ObString table_name(str_len, node->children_[0]->str_value_);
+          ObString qualified_name;
+          if (OB_FAIL(qualify_fts_dictionary_table(allocator, database_name, table_name,
+                                                   qualified_name))) {
+            LOG_WARN("fail to qualify stopword table", K(ret), K(table_name));
+          } else if (OB_FAIL(property.config_set_stopword_table(qualified_name))) {
             LOG_WARN("fail to set stopword table", K(ret));
           }
         }
@@ -141,8 +174,12 @@ int ObFTParserResolverHelper::resolve_fts_index_parser_properties(
           LOG_USER_ERROR(OB_INVALID_ARGUMENT, "the dict table is empty");
         } else {
           int32_t str_len = static_cast<int32_t>(node->children_[0]->str_len_);
-          if (OB_FAIL(property.config_set_dict_table(
-                  common::ObString(str_len, node->children_[0]->str_value_)))) {
+          ObString table_name(str_len, node->children_[0]->str_value_);
+          ObString qualified_name;
+          if (OB_FAIL(qualify_fts_dictionary_table(allocator, database_name, table_name,
+                                                   qualified_name))) {
+            LOG_WARN("fail to qualify dict table", K(ret), K(table_name));
+          } else if (OB_FAIL(property.config_set_dict_table(qualified_name))) {
             LOG_WARN("fail to set dict table", K(ret));
           }
         }
@@ -158,8 +195,12 @@ int ObFTParserResolverHelper::resolve_fts_index_parser_properties(
           LOG_USER_ERROR(OB_INVALID_ARGUMENT, "the quanitfier table is empty");
         } else {
           int32_t str_len = static_cast<int32_t>(node->children_[0]->str_len_);
-          if (OB_FAIL(property.config_set_quantifier_table(
-                  common::ObString(str_len, node->children_[0]->str_value_)))) {
+          ObString table_name(str_len, node->children_[0]->str_value_);
+          ObString qualified_name;
+          if (OB_FAIL(qualify_fts_dictionary_table(allocator, database_name, table_name,
+                                                   qualified_name))) {
+            LOG_WARN("fail to qualify quantifier table", K(ret), K(table_name));
+          } else if (OB_FAIL(property.config_set_quantifier_table(qualified_name))) {
             LOG_WARN("fail to set quantifier table", K(ret));
           }
         }

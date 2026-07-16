@@ -399,6 +399,22 @@ int ObCreateTableResolver::resolve(const ParseNode &parse_tree)
               SQL_RESV_LOG(WARN, "resolve table options failed", K(ret));
             } else if (OB_FAIL(set_table_option_to_schema(table_schema))) {
               SQL_RESV_LOG(WARN, "set table option to schema failed", K(ret));
+            } else if (table_schema.is_fulltext_dict_table()) {
+              const ObColumnSchemaV2 *word_column = table_schema.get_column_schema("word");
+              if (1 != table_schema.get_column_count()
+                  || OB_ISNULL(word_column)
+                  || ObVarcharType != word_column->get_data_type()
+                  || word_column->get_accuracy().get_length() < 1
+                  || word_column->get_accuracy().get_length() > 500
+                  || 0 == word_column->get_rowkey_position()
+                  || CHARSET_UTF8MB4 != ObCharset::charset_type_by_coll(
+                                           word_column->get_collation_type())
+                  || !table_schema.is_index_organized_table()) {
+                ret = OB_INVALID_ARGUMENT;
+                LOG_USER_ERROR(OB_INVALID_ARGUMENT,
+                               "FULLTEXT_DICT table must be an index-organized table with only "
+                               "one utf8mb4 varchar(1..500) primary-key column named word");
+              }
             } else if (OB_FAIL(check_max_row_data_length(table_schema))) {
               SQL_RESV_LOG(WARN, "check max row data length failed", K(ret));
             } else {

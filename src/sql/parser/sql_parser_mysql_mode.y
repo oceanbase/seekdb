@@ -242,7 +242,7 @@ END_P SET_VAR DELIMITER
         DATABASE DATABASES DAY_HOUR DAY_MICROSECOND DAY_MINUTE DAY_SECOND /*DEC*/ DECLARE DECIMAL DEFAULT
         DELAYED DELETE DESC DESCRIBE DETERMINISTIC DISTINCT DISTINCTROW DIV DOUBLE DROP DUAL
         EACH ELSE ELSEIF ENCLOSED ESCAPED EXISTS EXIT EXPLAIN
-        /*FALSE*/ FETCH FLOAT FLOAT4 FLOAT8 FOR FORCE FOREIGN FROM FULLTEXT
+        /*FALSE*/ FETCH FLOAT FLOAT4 FLOAT8 FOR FORCE FOREIGN FROM FULLTEXT FULLTEXT_DICT
         GENERATED GET GRANT GROUP
         HAVING HIGH_PRIORITY HOUR_MICROSECOND HOUR_MINUTE HOUR_SECOND
         IF IGNORE IN INDEX INFILE INNER INOUT INSENSITIVE INSERT INT INT1 INT2 INT3 INT4 INT8 INTEGER
@@ -6863,6 +6863,11 @@ TABLE_MODE opt_equal_mark STRING_VALUE
 {
   (void)($2);
   malloc_non_terminal_node($$, result->malloc_pool_, T_TABLE_MODE, 1, $3);
+}
+| FULLTEXT_DICT opt_equal_mark STRING_VALUE
+{
+  (void)($2);
+  malloc_non_terminal_node($$, result->malloc_pool_, T_FULLTEXT_DICT, 1, $3);
 }
 | DUPLICATE_SCOPE opt_equal_mark STRING_VALUE
 {
@@ -18447,6 +18452,28 @@ alter_with_opt_hint SYSTEM REFRESH MEMORY STAT
 {
   (void)($1);
   malloc_non_terminal_node($$, result->malloc_pool_, T_REFRESH_MEMORY_STAT, 1, NULL);
+}
+|
+alter_with_opt_hint SYSTEM REFRESH FULLTEXT relation_name relation_factor
+{
+  (void)($1);
+  if (!nodename_equal($5, "DICT", 4)) {
+    yyerror(&@5, result, "expect DICT after FULLTEXT");
+    YYERROR;
+  } else {
+    malloc_non_terminal_node($$, result->malloc_pool_, T_REFRESH_FULLTEXT_DICT, 1, $6);
+  }
+}
+|
+alter_with_opt_hint SYSTEM REFRESH FULLTEXT relation_name STRING_VALUE
+{
+  (void)($1);
+  if (!nodename_equal($5, "DICT", 4)) {
+    yyerror(&@5, result, "expect DICT after FULLTEXT");
+    YYERROR;
+  } else {
+    malloc_non_terminal_node($$, result->malloc_pool_, T_REFRESH_FULLTEXT_DICT, 1, $6);
+  }
 }
 |
 alter_with_opt_hint SYSTEM WASH MEMORY FRAGMENTATION

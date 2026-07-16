@@ -278,17 +278,26 @@ int ObIKFTParser::init_dict(const plugin::ObFTParserParam &param)
   }
 
   ObFTRangeDict *dict = nullptr;
-  ObFTDictDesc main_dict_desc("main_dict",
+  const ObString main_dict_name = 0 == param.ik_param_.main_dict_.case_compare(
+                                      ObFTSLiteral::FT_DEFAULT_IK_DICT_UTF8_TABLE)
+                                      ? ObString("main_dict") : param.ik_param_.main_dict_;
+  const ObString quan_dict_name = 0 == param.ik_param_.quan_dict_.case_compare(
+                                      ObFTSLiteral::FT_DEFAULT_IK_QUANTIFIER_UTF8_TABLE)
+                                      ? ObString("quan_dict") : param.ik_param_.quan_dict_;
+  const ObString stop_dict_name = 0 == param.ik_param_.stopword_dict_.case_compare(
+                                      ObFTSLiteral::FT_DEFAULT_IK_STOPWORD_UTF8_TABLE)
+                                      ? ObString("stopword") : param.ik_param_.stopword_dict_;
+  ObFTDictDesc main_dict_desc(main_dict_name,
                               ObFTDictType::DICT_IK_MAIN,
                               ObCharsetType::CHARSET_UTF8MB4,
                               ObCollationType::CS_TYPE_UTF8MB4_BIN);
 
-  ObFTDictDesc quan_dict_desc("quan_dict",
+  ObFTDictDesc quan_dict_desc(quan_dict_name,
                               ObFTDictType::DICT_IK_QUAN,
                               ObCharsetType::CHARSET_UTF8MB4,
                               ObCollationType::CS_TYPE_UTF8MB4_BIN);
 
-  ObFTDictDesc stopword_dict_desc("stopword",
+  ObFTDictDesc stopword_dict_desc(stop_dict_name,
                                   ObFTDictType::DICT_IK_STOP,
                                   ObCharsetType::CHARSET_UTF8MB4,
                                   ObCollationType::CS_TYPE_UTF8MB4_BIN);

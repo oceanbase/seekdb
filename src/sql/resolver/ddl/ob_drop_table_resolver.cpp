@@ -117,7 +117,42 @@ int ObDropTableResolver::resolve(const ParseNode &parse_tree)
             SQL_RESV_LOG(WARN, "failed to resolve table relation node!", K(ret));
           } else {
             table_item.reset();
-            if (OB_FAIL(session_info_->get_name_case_mode(table_item.mode_))) {
+            const ObTableSchema *drop_schema = nullptr;
+            bool dict_referenced = false;
+            if (T_DROP_TABLE == parse_tree.type_
+                && OB_FAIL(schema_checker_->get_table_schema(db_name, table_name, false,
+                                                             drop_schema))) {
+              if (drop_table_arg.if_exist_ && OB_TABLE_NOT_EXIST == ret) {
+                ret = OB_SUCCESS;
+              }
+            } else if (OB_NOT_NULL(drop_schema) && drop_schema->is_fulltext_dict_table()) {
+              ObArray<const ObTableSchema *> schemas;
+              ObSqlString qualified_name;
+              ObSchemaGetterGuard *guard = schema_checker_->get_schema_guard();
+              if (OB_ISNULL(guard)) {
+                ret = OB_ERR_UNEXPECTED;
+              } else if (OB_FAIL(qualified_name.append_fmt("%.*s.%.*s", db_name.length(),
+                                                           db_name.ptr(), table_name.length(),
+                                                           table_name.ptr()))) {
+                LOG_WARN("failed to build dictionary name", K(ret));
+              } else if (OB_FAIL(guard->get_table_schemas_in_tenant(schemas))) {
+                LOG_WARN("failed to list schemas", K(ret));
+              } else {
+                for (int64_t j = 0; !dict_referenced && j < schemas.count(); ++j) {
+                  const ObTableSchema *schema = schemas.at(j);
+                  dict_referenced = OB_NOT_NULL(schema) && schema->is_fts_index()
+                                    && schema->get_parser_property_str().find(
+                                           qualified_name.string()) >= 0;
+                }
+              }
+              if (OB_SUCC(ret) && dict_referenced) {
+                ret = OB_OP_NOT_ALLOW;
+                LOG_USER_ERROR(OB_OP_NOT_ALLOW,
+                               "drop a FULLTEXT_DICT table referenced by a fulltext index");
+              }
+            }
+            if (OB_FAIL(ret)) {
+            } else if (OB_FAIL(session_info_->get_name_case_mode(table_item.mode_))) {
               SQL_RESV_LOG(WARN, "failed to get name case mode!", K(ret));
             } else {
               table_item.database_name_ = db_name;
