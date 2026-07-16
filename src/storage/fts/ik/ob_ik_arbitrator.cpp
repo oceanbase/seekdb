@@ -39,7 +39,9 @@ int ObIKArbitrator::process(TokenizeContext &ctx)
   ObList<ObIKToken, ObIAllocator> &tokens = ctx.token_list().tokens();
   ObIKTokenChain *chain_need_arbitrate = nullptr;
   bool use_smart = ctx.is_smart();
-  if (OB_FAIL(prepare(ctx))) {
+  if (OB_FAIL(reuse())) {
+    LOG_WARN("failed to reuse ik arbitrator", K(ret));
+  } else if (OB_FAIL(prepare(ctx))) {
   } else if (OB_ISNULL(chain_need_arbitrate = OB_NEWx(ObIKTokenChain, &alloc_, alloc_))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("alloc memory failed");
@@ -327,16 +329,37 @@ int ObIKArbitrator::remove_conflict(const ObIKToken &token, ObIKTokenChain *opti
 int ObIKArbitrator::prepare(TokenizeContext &ctx)
 {
   int ret = OB_SUCCESS;
-
-  int cal_bucket_num = MAX(ctx.fulltext_len() / 100, 10);
+  int64_t cal_bucket_num = MAX(ctx.fulltext_len() / 100, 10);
   cal_bucket_num = MIN(cal_bucket_num, 100);
-  if (OB_FAIL(chains_.create(cal_bucket_num, ObMemAttr("IK ARBITRATE")))) {
-    LOG_WARN("create chain map failed", K(ret));
+
+  if (!chains_.created()) {
+    if (OB_FAIL(chains_.create(cal_bucket_num, ObMemAttr("IK ARBITRATE")))) {
+      LOG_WARN("failed to create chain map", K(ret), K(cal_bucket_num));
+    }
+  } else if (OB_UNLIKELY(!chains_.empty())) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("arbitrator chain map is not empty after reuse", K(ret), K(chains_.size()));
   }
+
   return ret;
 }
 
 ObIKArbitrator::ObIKArbitrator() : alloc_(lib::ObMemAttr("IK Arbitrator")) {}
+
+int ObIKArbitrator::reuse()
+{
+  int ret = OB_SUCCESS;
+
+  if (chains_.created() && OB_FAIL(chains_.reuse())) {
+    LOG_WARN("failed to reuse arbitrator chain map", K(ret));
+  }
+
+  if (OB_SUCC(ret)) {
+    alloc_.reuse();
+  }
+
+  return ret;
+}
 
 int ObIKArbitrator::add_chain(ObIKTokenChain *chain)
 {
