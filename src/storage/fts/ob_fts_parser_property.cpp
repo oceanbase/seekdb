@@ -591,9 +591,25 @@ int ObFTParserJsonProps::rebuild_props_for_ddl(const ObString &parser_name,
   } else if (parser_name.empty()) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("parser_name is empty", K(ret));
+  } else if (OB_ISNULL(parser_name.find('.'))) {
+    // Parser names coming directly from SQL (for example, WITH PARSER ik) do not
+    // carry the plugin version yet.  The version is added later by
+    // generate_fts_parser_name(), while property validation must also work at
+    // resolve time.  Only the parser kind is needed below, so use a placeholder
+    // non-negative version for an unqualified name.
+    share::ObPluginName plugin_name;
+    if (OB_FAIL(plugin_name.set_name(parser_name))) {
+      LOG_WARN("fail to set parser name", K(ret), K(parser_name));
+    } else {
+      parser.set_name_and_version(plugin_name, 0);
+    }
   } else if (OB_FAIL(parser.parse_from_str(parser_name.ptr(), parser_name.length()))) {
-    LOG_WARN("fail to parse name from cstring", K(ret), K(parser_name));
+    LOG_WARN("fail to parse versioned parser name", K(ret), K(parser_name));
   } else {
+    // The parser name is ready for property dispatch.
+  }
+
+  if (OB_SUCC(ret)) {
     if (parser.is_ik()) {
       if (OB_FAIL(ik_rebuild_props_for_ddl(log_to_user))) {
         LOG_WARN("fail to rebuild props for ddl", K(ret));
