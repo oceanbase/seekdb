@@ -16,6 +16,7 @@
 
 
 #include <cstdint>
+#include <cstdlib>
 #include <gtest/gtest.h>
 #include <vector>
 
@@ -43,6 +44,98 @@ namespace storage
 {
 
 typedef common::hash::ObHashMap<ObFTWord, int64_t> ObFTWordMap;
+
+class CountingAllocator final : public common::ObIAllocator
+{
+public:
+  CountingAllocator() : alloc_count_(0), allocations_() {}
+  ~CountingAllocator() override
+  {
+    for (void *ptr : allocations_) {
+      std::free(ptr);
+    }
+  }
+
+  void *alloc(const int64_t size) override
+  {
+    void *ptr = std::malloc(size);
+    ++alloc_count_;
+    if (nullptr != ptr) {
+      allocations_.push_back(ptr);
+    }
+    return ptr;
+  }
+
+  void *alloc(const int64_t size, const lib::ObMemAttr &attr) override
+  {
+    UNUSED(attr);
+    return alloc(size);
+  }
+
+  void free(void *ptr) override
+  {
+    for (void *&allocation : allocations_) {
+      if (allocation == ptr) {
+        allocation = nullptr;
+        break;
+      }
+    }
+    std::free(ptr);
+  }
+
+  int64_t alloc_count() const { return alloc_count_; }
+
+private:
+  int64_t alloc_count_;
+  std::vector<void *> allocations_;
+};
+
+TEST(ObAddWordTest, stores_transient_word_on_first_insert)
+{
+  ObFTParserProperty property;
+  ObObjMeta meta;
+  ObAddWordFlag flag;
+  CountingAllocator allocator;
+  ObFTWordMap word_map;
+  char transient_word[] = "database";
+  int64_t word_count = 0;
+
+  meta.set_varchar();
+  meta.set_collation_type(CS_TYPE_UTF8MB4_GENERAL_CI);
+  flag.set_groupby_word();
+  ASSERT_EQ(OB_SUCCESS, word_map.create(2, "AddWordOwn"));
+
+  ObAddWord add_word(property, meta, flag, allocator, word_map);
+  ASSERT_EQ(OB_SUCCESS, add_word.process_word(transient_word, 8, 8, 1));
+  MEMSET(transient_word, 'x', 8);
+
+  ObFTWord lookup_word(8, "database", meta);
+  ASSERT_EQ(OB_SUCCESS, word_map.get_refactored(lookup_word, word_count));
+  ASSERT_EQ(1, word_count);
+}
+
+TEST(ObAddWordTest, allocates_once_for_repeated_lowercase_word)
+{
+  ObFTParserProperty property;
+  ObObjMeta meta;
+  ObAddWordFlag flag;
+  CountingAllocator allocator;
+  ObFTWordMap word_map;
+
+  meta.set_varchar();
+  meta.set_collation_type(CS_TYPE_UTF8MB4_GENERAL_CI);
+  flag.set_casedown();
+  flag.set_groupby_word();
+  ASSERT_EQ(OB_SUCCESS, word_map.create(2, "AddWordAlloc"));
+
+  ObAddWord add_word(property, meta, flag, allocator, word_map);
+  for (int64_t i = 0; i < 100; ++i) {
+    ASSERT_EQ(OB_SUCCESS, add_word.process_word("database", 8, 8, 1));
+  }
+
+  ASSERT_EQ(1, word_map.size());
+  ASSERT_EQ(1, allocator.alloc_count());
+}
 
 int segment_and_calc_word_count(
     common::ObIAllocator &allocator,
