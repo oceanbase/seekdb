@@ -132,6 +132,7 @@ class ObITokenIterator
 public:
   ObITokenIterator() = default;
   virtual ~ObITokenIterator() = default;
+  virtual int reuse(ObFTParserParam *param) { UNUSED(param); return OB_NOT_SUPPORTED; }
   virtual int get_next_token(
       const char *&word,
       int64_t &word_len,
