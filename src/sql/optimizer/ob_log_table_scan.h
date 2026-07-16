@@ -63,7 +63,10 @@ struct ObTextRetrievalInfo
                K_(fwd_idx_tid), K_(doc_id_idx_tid), K_(column_boost_idx));
 
   bool need_sort() const { return sort_key_.expr_ != nullptr; }
-  bool need_block_max_scan() const { return need_sort() && nullptr != topk_limit_expr_ && sort_key_.is_descending(); }
+  bool need_block_max_scan() const
+  {
+    return need_calc_relevance_ && need_sort() && nullptr != topk_limit_expr_ && sort_key_.is_descending();
+  }
   ObMatchFunRawExpr *match_expr_;
   ObRawExpr *pushdown_match_filter_;
   OrderItem sort_key_;  // for pushdown topk, only support match expr as sort expr
