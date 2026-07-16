@@ -1164,7 +1164,9 @@ int ObFTParserJsonProps::show_parser_properties(const ObFTParserJsonProps &prope
 
 #undef __FT_PARSER_PROPERTY_SHOW_COMMA
 
-int ObFTParserProperty::parse_for_parser_helper(const ObFTParser &parser, const ObString &json_str)
+int ObFTParserProperty::parse_for_parser_helper(const ObFTParser &parser,
+                                                const ObString &json_str,
+                                                ObIAllocator &allocator)
 {
   int ret = OB_SUCCESS;
   ObFTParserJsonProps props;
@@ -1174,12 +1176,21 @@ int ObFTParserProperty::parse_for_parser_helper(const ObFTParser &parser, const 
     LOG_WARN("fail to parse from json str", K(ret), K(json_str));
   } else {
     if (parser.is_ik()) {
-      if (OB_FAIL(props.config_get_dict_table(dict_table_))) {
+      ObString dict_table;
+      ObString stopword_table;
+      ObString quantifier_table;
+      if (OB_FAIL(props.config_get_dict_table(dict_table))) {
         LOG_WARN("fail to get IK main dictionary", K(ret));
-      } else if (OB_FAIL(props.config_get_stopword_table(stopword_table_))) {
+      } else if (OB_FAIL(props.config_get_stopword_table(stopword_table))) {
         LOG_WARN("fail to get IK stopword dictionary", K(ret));
-      } else if (OB_FAIL(props.config_get_quantifier_table(quantifier_table_))) {
+      } else if (OB_FAIL(props.config_get_quantifier_table(quantifier_table))) {
         LOG_WARN("fail to get IK quantifier dictionary", K(ret));
+      } else if (OB_FAIL(ob_write_string(allocator, dict_table, dict_table_))) {
+        LOG_WARN("fail to copy IK main dictionary", K(ret));
+      } else if (OB_FAIL(ob_write_string(allocator, stopword_table, stopword_table_))) {
+        LOG_WARN("fail to copy IK stopword dictionary", K(ret));
+      } else if (OB_FAIL(ob_write_string(allocator, quantifier_table, quantifier_table_))) {
+        LOG_WARN("fail to copy IK quantifier dictionary", K(ret));
       }
       ObString ik_smart;
       if (OB_SUCC(ret) && OB_FAIL(props.config_get_ik_mode(ik_smart))) {

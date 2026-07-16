@@ -322,7 +322,8 @@ int ObFTParseHelper::init(
     LOG_WARN("invalid argument", K(ret), KP(allocator), K(plugin_name));
   } else if (OB_FAIL(parser_name_.parse_from_str(plugin_name.ptr(), plugin_name.length()))) {
     LOG_WARN("fail to parse name from cstring", K(ret), K(plugin_name));
-  } else if (OB_FAIL(parser_property_.parse_for_parser_helper(parser_name_, plugin_properties))) {
+  } else if (OB_FAIL(parser_property_.parse_for_parser_helper(parser_name_, plugin_properties,
+                                                              *allocator))) {
     LOG_WARN("fail to parse parser property from cstring", K(ret), K(plugin_properties), K(parser_name_));
   } else if (OB_FAIL(ObPluginHelper::find_ftparser(parser_name_.get_parser_name().str(),
                                                    parser_desc_, plugin_param_))) {
@@ -410,6 +411,7 @@ int ObFTParseHelper::check_is_the_same(
   int ret = OB_SUCCESS;
   is_same = false;
   if (is_inited_) {
+    ObArenaAllocator allocator("FTPropCmp");
     storage::ObFTParser parser_name;
     ObFTParserProperty parser_property;
     if (OB_UNLIKELY(plugin_name.empty())) {
@@ -417,7 +419,8 @@ int ObFTParseHelper::check_is_the_same(
       LOG_WARN("invalid argument", K(ret), K(plugin_name));
     } else if (OB_FAIL(parser_name.parse_from_str(plugin_name.ptr(), plugin_name.length()))) {
       LOG_WARN("fail to parse name from cstring", K(ret), K(plugin_name));
-    } else if (OB_FAIL(parser_property.parse_for_parser_helper(parser_name, plugin_properties))) {
+    } else if (OB_FAIL(parser_property.parse_for_parser_helper(parser_name, plugin_properties,
+                                                               allocator))) {
       LOG_WARN("fail to parse parser property from cstring", K(ret), K(plugin_properties), K(parser_name_));
     } else if (parser_name == parser_name_ && parser_property.is_equal(parser_property_)) {
       is_same = true;
