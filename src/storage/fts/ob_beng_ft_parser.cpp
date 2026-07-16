@@ -103,6 +103,12 @@ int ObBEngFTParser::init(ObFTParserParam *param)
   return ret;
 }
 
+int ObBEngFTParser::reuse(ObFTParserParam *param)
+{
+  reset();
+  return init(param);
+}
+
 int ObBEngFTParser::segment(
     const common::ObDatum &doc,
     share::ObITokenStream *&token_stream)

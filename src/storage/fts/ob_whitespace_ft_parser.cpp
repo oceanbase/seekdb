@@ -79,6 +79,12 @@ int ObSpaceFTParser::init(ObFTParserParam *param)
   return ret;
 }
 
+int ObSpaceFTParser::reuse(ObFTParserParam *param)
+{
+  reset();
+  return init(param);
+}
+
 int ObSpaceFTParser::get_next_token(const char *&word,
                                     int64_t &word_len,
                                     int64_t &char_len,
