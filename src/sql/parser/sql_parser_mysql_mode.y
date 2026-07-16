@@ -22040,6 +22040,7 @@ ACCESS_INFO
 |       ADMIN
 |       AFTER
 |       AI
+|       AI_SPLIT_DOCUMENT
 |       AGAINST
 |       AGGREGATE
 |       ALGORITHM
