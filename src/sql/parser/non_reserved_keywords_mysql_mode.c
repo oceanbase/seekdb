@@ -250,6 +250,7 @@ static const NonReservedKeyword Mysql_none_reserved_keywords[] =
   {"deterministic", DETERMINISTIC},
   {"dense_rank", DENSE_RANK},
   {"diagnostics", DIAGNOSTICS},
+  {"ai_split_document", AI_SPLIT_DOCUMENT},
   {"dict", DICT},
   {"dict_table", DICT_TABLE},
   {"diff", DIFF},

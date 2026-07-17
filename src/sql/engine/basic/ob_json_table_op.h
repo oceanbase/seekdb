@@ -168,6 +168,10 @@ struct JtScanCtx {
     return spec_ptr_->table_type_ == OB_UNNEST_TABLE_TYPE;
   }
 
+  bool is_ai_split_table_func() {
+    return spec_ptr_->table_type_ == OB_AI_SPLIT_TABLE_TYPE;
+  }
+
   ObJsonTableSpec* spec_ptr_;
   ObEvalCtx* eval_ctx_;
   ObExecContext* exec_ctx_;
@@ -330,6 +334,59 @@ public:
   int reset_path_iter(ObRegCol &scan_node, void* in, JtScanCtx*& ctx, ScanType init_flag, bool &is_null_value);
   int get_iter_value(ObRegCol &col_node, JtScanCtx* ctx, bool &is_null_value);
   int reset_ctx(ObRegCol &scan_node, JtScanCtx*& ctx);
+};
+
+struct ObAiSplitChunk
+{
+  ObAiSplitChunk() : id_(0), offset_(0), length_(0), text_() {}
+  int64_t id_;
+  int64_t offset_;
+  int64_t length_;
+  common::ObString text_;
+  TO_STRING_KV(K_(id), K_(offset), K_(length), K_(text));
+};
+
+struct ObAiSplitParam
+{
+  ObAiSplitParam() : is_markdown_(true), by_sentence_(false), max_(256), overlap_(0) {}
+  bool is_markdown_;
+  bool by_sentence_;
+  int64_t max_;
+  int64_t overlap_;
+};
+
+class ObAiSplitCtx
+{
+public:
+  ObAiSplitCtx() : chunks_(), cursor_(0) {}
+  common::ObSEArray<ObAiSplitChunk, 16> chunks_;
+  int64_t cursor_;
+};
+
+class AiSplitTableFunc : public MulModeTableFunc {
+public:
+  AiSplitTableFunc()
+  : MulModeTableFunc() {}
+  ~AiSplitTableFunc() {}
+
+  int init_ctx(ObRegCol &scan_node, JtScanCtx*& ctx);
+  int eval_input(ObJsonTableOp &jt, JtScanCtx& ctx, ObEvalCtx &eval_ctx);
+  int reset_path_iter(ObRegCol &scan_node, void* in, JtScanCtx*& ctx, ScanType init_flag, bool &is_null_value);
+  int get_iter_value(ObRegCol &col_node, JtScanCtx* ctx, bool &is_null_value);
+  int reset_ctx(ObRegCol &scan_node, JtScanCtx*& ctx);
+
+  static int parse_params(common::ObIAllocator &alloc, const common::ObString &json_str, ObAiSplitParam &param);
+  static int do_split(common::ObIAllocator &alloc,
+                      const common::ObString &content,
+                      const ObAiSplitParam &param,
+                      common::ObIArray<ObAiSplitChunk> &chunks);
+private:
+  static int split_plain(common::ObIAllocator &alloc,
+                         const common::ObString &content,
+                         int64_t base_offset,
+                         const common::ObString &title,
+                         const ObAiSplitParam &param,
+                         common::ObIArray<ObAiSplitChunk> &chunks);
 };
 
 class ObMultiModeTableNode {

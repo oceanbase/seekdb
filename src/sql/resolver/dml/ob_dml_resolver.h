@@ -215,6 +215,9 @@ public:
   int create_rb_iterate_table_item(TableItem *&table_item, ObString alias_name = NULL);
   int create_unnest_table_item(TableItem *&table_item, ObItemType item_type, ObString table_name);
   int rb_iterate_table_add_column(TableItem *&table_item, ColumnItem *&col_item, int64_t col_id = 1);
+  int resolve_ai_split_item(const ParseNode &parse_tree, TableItem *&tbl_item);
+  int ai_split_table_add_column(TableItem *&table_item, ColumnItem *&col_item,
+                                const common::ObString &col_name, int64_t col_idx);
   int unnest_table_add_column(TableItem *&table_item, ColumnItem *&col_item, ObString col_name);
   int resolve_hybrid_search_item(const ParseNode &parse_tree, TableItem *&table_item);
 
