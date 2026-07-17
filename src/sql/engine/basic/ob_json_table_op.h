@@ -344,6 +344,7 @@ public:
     int64_t offset_;
     int64_t length_;
     ObString text_;
+    TO_STRING_KV(K_(id), K_(offset), K_(length), K_(text));
   };
 
   AiSplitDocumentTableFunc()

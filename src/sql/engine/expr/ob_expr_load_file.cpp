@@ -119,10 +119,10 @@ int ObExprLoadFile::calc_result_type2(ObExprResType &type,
   type1.set_calc_collation_type(CS_TYPE_UTF8MB4_BIN);
   type2.set_calc_type(ObVarcharType);
   type2.set_calc_collation_type(CS_TYPE_UTF8MB4_BIN);
-  type.set_type(ObLongBlobType);
+  type.set_type(ObLongTextType);
   type.set_collation_type(CS_TYPE_BINARY);
   type.set_collation_level(CS_LEVEL_IMPLICIT);
-  type.set_accuracy(ObAccuracy::DDL_DEFAULT_ACCURACY[ObLongBlobType]);
+  type.set_accuracy(ObAccuracy::DDL_DEFAULT_ACCURACY[ObLongTextType]);
   return ret;
 }
 

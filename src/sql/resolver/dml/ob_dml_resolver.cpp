@@ -4331,8 +4331,8 @@ int ObDMLResolver::resolve_ai_split_document_item(const ParseNode &parse_tree, T
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid ai split document parse tree", K(ret), K(parse_tree.type_), K(parse_tree.num_child_));
   } else if (parse_tree.children_[0]->num_child_ < 1 || parse_tree.children_[0]->num_child_ > 2) {
-    ret = OB_ERR_INVALID_ARGUMENT;
-    LOG_WARN("ai split document requires 1 or 2 arguments, got %ld", K(ret), parse_tree.children_[0]->num_child_);
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("ai split document requires 1 or 2 arguments", K(ret));
   } else if (OB_FAIL(resolve_sql_expr(*parse_tree.children_[0]->children_[0], content_expr))) {
     LOG_WARN("failed to resolve ai split document content", K(ret));
   } else if (OB_ISNULL(content_expr)) {
