@@ -18,6 +18,7 @@
 #define _OCEANBASE_STORAGE_FTS_DICT_OB_FT_DICT_HUB_H_
 
 #include "lib/charset/ob_charset.h"
+#include "lib/hash_func/murmur_hash.h"
 #include "lib/lock/ob_bucket_lock.h"
 #include "storage/fts/dict/ob_ft_dict_def.h"
 
@@ -52,11 +53,13 @@ struct ObFTDictInfoKey
 {
 public:
   ObFTDictInfoKey()
-      : type_(static_cast<uint64_t>(ObFTDictType::DICT_TYPE_INVALID))
+      : name_hash_(0),
+        type_(static_cast<uint64_t>(ObFTDictType::DICT_TYPE_INVALID))
   {
   } // default constructor
-  ObFTDictInfoKey(const uint64_t type)
-      : type_(type)
+  ObFTDictInfoKey(const ObString &name, const uint64_t type)
+      : name_hash_(common::murmurhash(name.ptr(), name.length(), 0)),
+        type_(type)
   {
   }
   int hash(uint64_t &hash_value) const
@@ -69,27 +72,31 @@ public:
   uint64_t hash() const
   {
     uint64_t hash = 0;
+    hash = common::murmurhash(&name_hash_, sizeof(name_hash_), hash);
     hash = common::murmurhash(&type_, sizeof(int64_t), hash);
     return hash;
   }
 
   bool operator==(const ObFTDictInfoKey &other) const
   {
-    return type_ == other.type_ && true;
+    return name_hash_ == other.name_hash_ && type_ == other.type_;
   }
 
   int compare(const ObFTDictInfoKey &other) const
   {
     int ret = 0;
     if (0 == ret) {
-      ret = type_ - other.type_;
+      ret = name_hash_ == other.name_hash_ ? 0 : (name_hash_ > other.name_hash_ ? 1 : -1);
+    }
+    if (0 == ret) {
+      ret = type_ == other.type_ ? 0 : (type_ > other.type_ ? 1 : -1);
     }
     return ret;
   }
 
 private:
+  uint64_t name_hash_;
   uint64_t type_;
-  // name
 };
 
 class ObFTCacheRangeContainer;
@@ -106,6 +113,8 @@ public:
   int build_cache(const ObFTDictDesc &desc, ObFTCacheRangeContainer &container);
 
   int load_cache(const ObFTDictDesc &desc, ObFTCacheRangeContainer &container);
+
+  int refresh_cache(const ObString &dict_table_name);
 
 private:
   int get_dict_info(const ObFTDictInfoKey &key, ObFTDictInfo &info);

@@ -3431,6 +3431,9 @@ OB_SERIALIZE_MEMBER(ObAdminMigrateReplicaArg, force_cmd_);
 OB_SERIALIZE_MEMBER(ObServerZoneArg,
     server_, zone_);
 
+OB_SERIALIZE_MEMBER((ObAdminRefreshFullTextDictArg, ObServerZoneArg),
+                    dict_table_name_);
+
 OB_SERIALIZE_MEMBER(ObRefreshIOCalibrationArg,
                     storage_name_,
                     only_refresh_,

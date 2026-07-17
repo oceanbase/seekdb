@@ -3977,6 +3977,30 @@ int ObRootService::admin_refresh_io_calibration(const obcall::ObAdminRefreshIOCa
   return ret;
 }
 
+int ObRootService::admin_refresh_fulltext_dict(const obcall::ObAdminRefreshFullTextDictArg &arg)
+{
+  int ret = OB_SUCCESS;
+  if (OB_UNLIKELY(!inited_)) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("not init", K(ret));
+  } else if (OB_UNLIKELY(!arg.is_valid())) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument", K(ret), K(arg));
+  } else {
+    ObSystemAdminCtx ctx;
+    if (OB_FAIL(init_sys_admin_ctx(ctx))) {
+      LOG_WARN("init_sys_admin_ctx failed", K(ret));
+    } else {
+      ObAdminRefreshFullTextDict admin_util(ctx);
+      if (OB_FAIL(admin_util.execute(arg))) {
+        LOG_WARN("execute refresh fulltext dict failed", K(ret), K(arg));
+      }
+    }
+  }
+  ROOTSERVICE_EVENT_ADD("root_service", "admin_refresh_fulltext_dict", K(ret), K(arg));
+  return ret;
+}
+
 int ObRootService::admin_clear_merge_error(const obcall::ObAdminMergeArg &arg)
 {
   int ret = OB_SUCCESS;

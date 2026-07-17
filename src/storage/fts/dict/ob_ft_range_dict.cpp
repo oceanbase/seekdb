@@ -20,6 +20,7 @@
 #include "lib/allocator/page_arena.h"
 #include "lib/charset/ob_charset.h"
 #include "common/mysqlclient/ob_isql_client.h"
+#include "lib/hash_func/murmur_hash.h"
 #include "lib/ob_errno.h"
 #include "lib/oblog/ob_log_module.h"
 #include "lib/utility/ob_macro_utils.h"
@@ -35,6 +36,7 @@
 #include "storage/fts/dict/ob_ft_dict_iterator.h"
 #include "storage/fts/dict/ob_ft_dict_table_iter.h"
 #include "storage/fts/dict/ob_ft_trie.h"
+#include "storage/fts/ob_fts_literal.h"
 
 #define USING_LOG_PREFIX STORAGE_FTS
 
@@ -49,6 +51,25 @@ int ObFTRangeDict::build_cache_from_ik_dict(const ObFTDictDesc &desc, ObFTCacheR
   int ret = OB_SUCCESS;
 
   ObIKDictLoader::RawDict raw_dict;
+  const bool is_default_main = ObFTDictType::DICT_IK_MAIN == desc.type_
+                               && desc.name_ == ObString(ObFTSLiteral::FT_DEFAULT_IK_DICT_UTF8_TABLE);
+  const bool is_default_quan = ObFTDictType::DICT_IK_QUAN == desc.type_
+                               && desc.name_ == ObString(ObFTSLiteral::FT_DEFAULT_IK_QUANTIFIER_UTF8_TABLE);
+  const bool is_default_stop = ObFTDictType::DICT_IK_STOP == desc.type_
+                               && desc.name_ == ObString(ObFTSLiteral::FT_DEFAULT_IK_STOPWORD_UTF8_TABLE);
+  if (!is_default_main && !is_default_quan && !is_default_stop) {
+    SMART_VAR(ObISQLClient::ReadResult, result)
+    {
+      ObFTDictTableIter iter_table(result);
+      if (OB_FAIL(iter_table.init(desc.name_))) {
+        LOG_WARN("Failed to init dict table iterator", K(ret), K(desc.name_));
+      } else if (OB_FAIL(ObFTRangeDict::build_ranges(desc, iter_table, range_container))) {
+        LOG_WARN("Failed to build ranges from dict table", K(ret), K(desc.name_));
+      }
+    }
+    return ret;
+  }
+
   switch (desc.type_) {
   case ObFTDictType::DICT_IK_MAIN: {
     raw_dict = ObIKDictLoader::dict_text();
@@ -273,7 +294,9 @@ int ObFTRangeDict::build_one_range(const ObFTDictDesc &desc,
   while (OB_SUCC(ret) && !range_end) {
     ObString key;
     if (OB_FAIL(iter.get_key(key))) {
-      LOG_WARN("Failed to get key", K(ret));
+      if (OB_ITER_END != ret) {
+        LOG_WARN("Failed to get key", K(ret));
+      }
     } else if (OB_FALSE_IT(++count)) {
       // do nothing
     } else if (count >= DEFAULT_KEY_PER_RANGE
@@ -304,6 +327,8 @@ int ObFTRangeDict::build_one_range(const ObFTDictDesc &desc,
 
   if (OB_FAIL(ret)) {
     // to do clean up
+  } else if (0 == count) {
+    build_next_range = false;
   } else if (OB_FAIL(builder.init(trie))) {
     LOG_WARN("Failed to build dat.", K(ret));
   } else if (OB_FAIL(builder.build_from_trie(trie))) {
@@ -465,32 +490,13 @@ int ObFTRangeDict::build_dict_from_cache(const ObFTCacheRangeContainer &range_co
 int ObFTRangeDict::build_cache(const ObFTDictDesc &desc, ObFTCacheRangeContainer &range_container)
 {
   int ret = OB_SUCCESS;
-
-  ObString table_name;
-  switch (desc.type_) {
-  case ObFTDictType::DICT_IK_MAIN: {
-    table_name = ObString(share::OB_FT_DICT_IK_UTF8_TNAME);
-  } break;
-  case ObFTDictType::DICT_IK_QUAN: {
-    table_name = ObString(share::OB_FT_QUANTIFIER_IK_UTF8_TNAME);
-  } break;
-  case ObFTDictType::DICT_IK_STOP: {
-    table_name = ObString(share::OB_FT_STOPWORD_IK_UTF8_TNAME);
-  } break;
-  default:
-    ret = OB_NOT_SUPPORTED;
-    LOG_WARN("Not supported dict type.", K(ret));
-  }
-
-  if (OB_SUCC(ret)) {
-    SMART_VAR(ObISQLClient::ReadResult, result)
-    {
-      ObFTDictTableIter iter_table(result);
-      if (OB_FAIL(iter_table.init(table_name))) {
-        LOG_WARN("Failed to init iterator.", K(ret));
-      } else if (OB_FAIL(ObFTRangeDict::build_ranges(desc, iter_table, range_container))) {
-        LOG_WARN("Failed to build ranges.", K(ret));
-      }
+  SMART_VAR(ObISQLClient::ReadResult, result)
+  {
+    ObFTDictTableIter iter_table(result);
+    if (OB_FAIL(iter_table.init(desc.name_))) {
+      LOG_WARN("Failed to init iterator.", K(ret), K(desc.name_));
+    } else if (OB_FAIL(ObFTRangeDict::build_ranges(desc, iter_table, range_container))) {
+      LOG_WARN("Failed to build ranges.", K(ret), K(desc.name_));
     }
   }
 
@@ -502,7 +508,7 @@ int ObFTRangeDict::try_load_cache(const ObFTDictDesc &desc,
                                   ObFTCacheRangeContainer &range_container)
 {
   int ret = OB_SUCCESS;
-  uint64_t name = static_cast<uint64_t>(desc.type_);
+  uint64_t name = common::murmurhash(desc.name_.ptr(), desc.name_.length(), 0);
 
   for (int64_t i = 0; OB_SUCC(ret) && i < range_count; ++i) {
     ObDictCacheKey key(name, desc.type_, i);

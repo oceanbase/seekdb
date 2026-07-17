@@ -6,7 +6,7 @@ USE ai_ik_test;
 CREATE TABLE my_dict (word varchar(100) primary key)
 ORGANIZATION INDEX DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci FULLTEXT_DICT='Y';
 INSERT INTO my_dict (word) VALUES ('OceanBase'),('分布式数据库'),('全文索引');
-ALTER SYSTEM REFRESH FULLTEXT DICT ai_ik_test.my_dict;
+ALTER SYSTEM REFRESH FULLTEXT DICT my_dict;
 # business table + fulltext index that uses the custom dictionary
 CREATE TABLE articles (
 id int unsigned NOT NULL AUTO_INCREMENT,
@@ -14,7 +14,7 @@ title varchar(200) NOT NULL,
 PRIMARY KEY (id)
 ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin;
 ALTER TABLE articles ADD FULLTEXT INDEX ft_title(title)
-WITH PARSER ik PARSER_PROPERTIES=(dict_table='ai_ik_test.my_dict');
+WITH PARSER ik PARSER_PROPERTIES=(dict_table='my_dict');
 INSERT INTO articles (title) VALUES ('OceanBase数据库介绍'),('全文索引使用指南');
 # custom-dictionary words match their rows
 SELECT id, title FROM articles WHERE MATCH(title) AGAINST('OceanBase' IN BOOLEAN MODE) ORDER BY id;
@@ -29,7 +29,7 @@ SELECT id, title FROM articles WHERE MATCH(title) AGAINST('数据库' IN BOOLEAN
 id	title
 # dynamic update: add a word -> REFRESH -> index a new row -> it matches
 INSERT INTO my_dict (word) VALUES ('新词汇');
-ALTER SYSTEM REFRESH FULLTEXT DICT ai_ik_test.my_dict;
+ALTER SYSTEM REFRESH FULLTEXT DICT 'ai_ik_test.my_dict';
 INSERT INTO articles (title) VALUES ('包含新词汇的标题');
 SELECT id, title FROM articles WHERE MATCH(title) AGAINST('新词汇' IN BOOLEAN MODE) ORDER BY id;
 id	title

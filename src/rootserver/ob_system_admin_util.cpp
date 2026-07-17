@@ -32,6 +32,8 @@
 #include "share/cache/ob_cache_name_define.h"
 #include "observer/omt/ob_multi_tenant.h"
 #include "observer/ob_service.h"
+#include "storage/fts/ob_fts_plugin_helper.h"
+#include "storage/fts/dict/ob_ft_dict_hub.h"
 namespace oceanbase
 {
 using namespace common;
@@ -585,6 +587,46 @@ int ObAdminRefreshIOCalibration::call_server(const common::ObAddr &server)
   // should never go here
   UNUSED(server);
   return OB_NOT_SUPPORTED;
+}
+
+int ObAdminRefreshFullTextDict::execute(const obcall::ObAdminRefreshFullTextDictArg &arg)
+{
+  int ret = OB_SUCCESS;
+  LOG_INFO("execute refresh fulltext dict request", K(arg));
+  if (OB_UNLIKELY(!ctx_.is_inited())) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("not init", K(ret));
+  } else if (OB_UNLIKELY(!arg.is_valid())) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument", K(ret), K(arg));
+  } else if (FALSE_IT(dict_table_name_ = arg.dict_table_name_)) {
+  } else if (OB_FAIL(call_all(arg))) {
+    LOG_WARN("execute refresh fulltext dict failed", K(ret), K(arg));
+  }
+  return ret;
+}
+
+int ObAdminRefreshFullTextDict::call_server(const common::ObAddr &server)
+{
+  int ret = OB_SUCCESS;
+  storage::ObFTDictHub *hub = nullptr;
+  if (OB_UNLIKELY(!ctx_.is_inited())) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("not init", K(ret));
+  } else if (OB_UNLIKELY(!server.is_valid())) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid server", K(ret), K(server));
+  } else if (OB_FAIL(storage::ObFTParsePluginData::instance().get_dict_hub(hub))) {
+    LOG_WARN("get fts dict hub failed", K(ret), K(server), K(dict_table_name_));
+  } else if (OB_ISNULL(hub)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("dict hub is null", K(ret), K(server), K(dict_table_name_));
+  } else if (OB_FAIL(hub->refresh_cache(dict_table_name_))) {
+    LOG_WARN("refresh fts dict cache failed", K(ret), K(server), K(dict_table_name_));
+  } else {
+    LOG_INFO("refresh fts dict cache success", K(server), K(dict_table_name_));
+  }
+  return ret;
 }
 
 int ObAdminFlushCache::execute(const obcall::ObAdminFlushCacheArg &arg)

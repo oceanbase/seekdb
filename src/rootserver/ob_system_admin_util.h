@@ -251,6 +251,21 @@ private:
   DISALLOW_COPY_AND_ASSIGN(ObAdminRefreshIOCalibration);
 };
 
+class ObAdminRefreshFullTextDict : public ObAdminCallServer
+{
+public:
+  explicit ObAdminRefreshFullTextDict(const ObSystemAdminCtx &ctx)
+    : ObAdminCallServer(ctx), dict_table_name_() {}
+  virtual ~ObAdminRefreshFullTextDict() {}
+
+  int execute(const obcall::ObAdminRefreshFullTextDictArg &arg);
+  virtual int call_server(const common::ObAddr &server);
+
+private:
+  common::ObString dict_table_name_;
+  DISALLOW_COPY_AND_ASSIGN(ObAdminRefreshFullTextDict);
+};
+
 class ObTenantServerAdminUtil : public ObSystemAdminUtil
 {
 public:

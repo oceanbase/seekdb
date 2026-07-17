@@ -140,6 +140,7 @@ ObExprTokenize::TokenizeParam ::TokenizeParam()
     parser_name_(ObString(OB_DEFAULT_FULLTEXT_PARSER_NAME)),
     meta_(),
     fulltext_(),
+    default_database_(),
     output_mode_(OUTPUT_MODE::DEFAULT)
 {
 }
@@ -237,10 +238,15 @@ int ObExprTokenize::parse_param(const ObExpr &expr,
     LOG_WARN("Fail to parse parser params.", K(ret));
   } else if (OB_FAIL(parse_parser_properties(expr, ctx, temp_allocator, param))) {
     LOG_WARN("Fail to parse parser params.", K(ret));
-  } else if (OB_FAIL(param.reform_parser_properties(param.properties_))) {
-    LOG_WARN("Fail to reform parser params.", K(ret));
-  } else if (OB_FAIL(param.try_load_dictionary_for_ik())) {
-    LOG_WARN("fail to try load dictionary for ik", K(ret));
+  } else {
+    if (OB_NOT_NULL(ctx.exec_ctx_.get_my_session())) {
+      param.default_database_ = ctx.exec_ctx_.get_my_session()->get_database_name();
+    }
+    if (OB_FAIL(param.reform_parser_properties(param.properties_))) {
+      LOG_WARN("Fail to reform parser params.", K(ret));
+    } else if (OB_FAIL(param.try_load_dictionary_for_ik())) {
+      LOG_WARN("fail to try load dictionary for ik", K(ret));
+    }
   }
   return ret;
 }
@@ -427,7 +433,8 @@ int ObExprTokenize::TokenizeParam::reform_parser_properties(const ObString &prop
     LOG_USER_ERROR(OB_INVALID_ARGUMENT, "parser properties invalid.");
   } else if (OB_FAIL(parser_properties.rebuild_props_for_ddl(parser_name_,
                                                              ObCollationType::CS_TYPE_UTF8MB4_BIN,
-                                                             true))) {
+                                                             true,
+                                                             default_database_))) {
     LOG_WARN("fail to serialize to string", K(ret), K(parser_properties));
   } else if (OB_FAIL(parser_properties.to_format_json(allocator_, properties_))) {
     LOG_WARN("fail to serialize to string", K(ret), K(parser_properties));

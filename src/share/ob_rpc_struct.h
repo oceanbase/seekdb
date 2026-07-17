@@ -4030,6 +4030,22 @@ struct ObAdminWashMemFragmentationArg : public ObServerZoneArg
 {
 };
 
+struct ObAdminRefreshFullTextDictArg : public ObServerZoneArg
+{
+  OB_UNIS_VERSION(1);
+public:
+  ObAdminRefreshFullTextDictArg() : ObServerZoneArg(), dict_table_name_() {}
+  virtual ~ObAdminRefreshFullTextDictArg() {}
+  virtual bool is_valid() const override
+  {
+    return ObServerZoneArg::is_valid() && !dict_table_name_.empty();
+  }
+  INHERIT_TO_STRING_KV("server_zone_arg", ObServerZoneArg, K_(dict_table_name));
+
+public:
+  common::ObString dict_table_name_;
+};
+
 struct ObRefreshIOCalibrationArg
 {
   OB_UNIS_VERSION(1);

@@ -246,6 +246,7 @@ OB_STMT_TYPE_DEF_UNKNOWN_AT(T_CREATE_CONTEXT, no_priv_needed, 273)
 OB_STMT_TYPE_DEF_UNKNOWN_AT(T_DROP_CONTEXT, no_priv_needed, 274)
 OB_STMT_TYPE_DEF_UNKNOWN_AT(T_CHECKPOINT_SLOG, get_sys_tenant_alter_system_priv, 275)
 OB_STMT_TYPE_DEF_UNKNOWN_AT(T_REFRESH_IO_CALIBRATION, get_sys_tenant_alter_system_priv, 276)
+OB_STMT_TYPE_DEF_UNKNOWN_AT(T_REFRESH_FULLTEXT_DICT, get_sys_tenant_alter_system_priv, 277)
 // 278: T_PHYSICAL_RESTORE_STANDBY_TENANT abandoned, id reserved
 OB_STMT_TYPE_DEF_UNKNOWN_AT(T_RECOVER, get_sys_tenant_alter_system_priv, 279)
 OB_STMT_TYPE_DEF_UNKNOWN_AT(T_SHOW_SEQUENCES, err_stmt_type_priv, 283)

@@ -502,6 +502,19 @@ int ObRefreshIOCalibraitonExecutor::execute(ObExecContext &ctx, ObRefreshIOCalib
   return ret;
 }
 
+int ObRefreshFullTextDictExecutor::execute(ObExecContext &ctx, ObRefreshFullTextDictStmt &stmt)
+{
+  int ret = OB_SUCCESS;
+  ObTaskExecutorCtx *task_exec_ctx = GET_TASK_EXECUTOR_CTX(ctx);
+  if (OB_ISNULL(task_exec_ctx)) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("get task executor context failed");
+  } else if (OB_FAIL(GCTX.root_service_->admin_refresh_fulltext_dict(stmt.get_rpc_arg()))) {
+    LOG_WARN("refresh fulltext dict failed", K(ret), "rpc_arg", stmt.get_rpc_arg());
+  }
+  return ret;
+}
+
 int ObSetConfigExecutor::execute(ObExecContext &ctx, ObSetConfigStmt &stmt)
 {
   int ret = OB_SUCCESS;

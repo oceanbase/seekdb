@@ -1495,6 +1495,116 @@ int ObSetConfigResolver::convert_param_value(ObAdminSetConfigItem &item)
   return ret;
 }
 
+int ObRefreshFullTextDictResolver::resolve(const ParseNode &parse_tree)
+{
+  int ret = OB_SUCCESS;
+  ObRefreshFullTextDictStmt *stmt = nullptr;
+  obcall::ObAdminRefreshFullTextDictArg *arg = nullptr;
+  if (OB_UNLIKELY(T_REFRESH_FULLTEXT_DICT != parse_tree.type_)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("type is not T_REFRESH_FULLTEXT_DICT", "type", get_type_name(parse_tree.type_));
+  } else if (OB_ISNULL(session_info_) || OB_ISNULL(allocator_)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("session info or allocator is null", K(ret), KP(session_info_), KP(allocator_));
+  } else if (OB_ISNULL(stmt = create_stmt<ObRefreshFullTextDictStmt>())) {
+    ret = OB_ALLOCATE_MEMORY_FAILED;
+    LOG_ERROR("create ObRefreshFullTextDictStmt failed");
+  } else if (FALSE_IT(stmt_ = stmt)) {
+  } else if (OB_UNLIKELY(NULL == parse_tree.children_ || 1 != parse_tree.num_child_)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("parse tree children is invalid", K(ret), K(parse_tree.num_child_));
+  } else {
+    arg = &stmt->get_rpc_arg();
+  }
+
+  if (OB_SUCC(ret)) {
+    const ParseNode *dict_table_node = parse_tree.children_[0];
+    const ParseNode *db_node = nullptr;
+    const ParseNode *table_node = nullptr;
+    ObString db_name;
+    ObString table_name;
+    if (OB_ISNULL(dict_table_node)) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("dict table node is null", K(ret));
+    } else if (T_RELATION_FACTOR == dict_table_node->type_) {
+      if (OB_ISNULL(dict_table_node->children_) || dict_table_node->num_child_ < 2) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("invalid dict table node", K(ret), KP(dict_table_node));
+      } else if (dict_table_node->num_child_ >= 4 && OB_NOT_NULL(dict_table_node->children_[3])) {
+        ret = OB_INVALID_ARGUMENT;
+        LOG_WARN("catalog name is not supported for dict table", K(ret), KP(dict_table_node));
+      } else if (FALSE_IT(db_node = dict_table_node->children_[0])) {
+      } else if (FALSE_IT(table_node = dict_table_node->children_[1])) {
+      } else if (OB_ISNULL(table_node) || T_IDENT != table_node->type_
+                 || table_node->str_len_ <= 0) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("invalid dict table name", K(ret), KP(table_node));
+      } else if (OB_ISNULL(db_node)) {
+        if (session_info_->get_database_name().empty()) {
+          ret = OB_ERR_NO_DB_SELECTED;
+          LOG_WARN("No database selected", K(ret));
+          LOG_USER_ERROR(OB_ERR_NO_DB_SELECTED);
+        } else {
+          db_name = session_info_->get_database_name();
+        }
+      } else if (T_IDENT != db_node->type_ || db_node->str_len_ <= 0) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("invalid dict database name", K(ret), KP(db_node));
+      } else {
+        db_name.assign_ptr(db_node->str_value_, static_cast<int32_t>(db_node->str_len_));
+      }
+      if (OB_SUCC(ret)) {
+        table_name.assign_ptr(table_node->str_value_, static_cast<int32_t>(table_node->str_len_));
+      }
+    } else if (T_VARCHAR == dict_table_node->type_ || T_CHAR == dict_table_node->type_) {
+      ObString qualified_table_name;
+      if (OB_FAIL(Util::resolve_string(dict_table_node, qualified_table_name))) {
+        LOG_WARN("resolve dict table string failed", K(ret));
+      } else {
+        const char *dot = qualified_table_name.find('.');
+        if (OB_ISNULL(dot)) {
+          if (session_info_->get_database_name().empty()) {
+            ret = OB_ERR_NO_DB_SELECTED;
+            LOG_WARN("No database selected", K(ret));
+            LOG_USER_ERROR(OB_ERR_NO_DB_SELECTED);
+          } else {
+            db_name = session_info_->get_database_name();
+            table_name = qualified_table_name;
+          }
+        } else if (OB_UNLIKELY(dot == qualified_table_name.ptr())
+                   || OB_UNLIKELY(dot == qualified_table_name.ptr() + qualified_table_name.length() - 1)) {
+          ret = OB_INVALID_ARGUMENT;
+          LOG_WARN("invalid dict table string", K(ret), K(qualified_table_name));
+        } else {
+          db_name.assign_ptr(qualified_table_name.ptr(),
+                             static_cast<int32_t>(dot - qualified_table_name.ptr()));
+          table_name.assign_ptr(dot + 1,
+                                static_cast<int32_t>(qualified_table_name.length()
+                                                     - (dot - qualified_table_name.ptr()) - 1));
+        }
+      }
+    } else {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("invalid dict table node type", K(ret), K(dict_table_node->type_));
+    }
+
+    if (OB_SUCC(ret)) {
+      const int64_t buf_len = db_name.length() + 1 + table_name.length();
+      char *buf = static_cast<char *>(allocator_->alloc(buf_len));
+      if (OB_ISNULL(buf)) {
+        ret = OB_ALLOCATE_MEMORY_FAILED;
+        LOG_WARN("fail to alloc dict table name", K(ret), K(buf_len));
+      } else {
+        MEMCPY(buf, db_name.ptr(), db_name.length());
+        buf[db_name.length()] = '.';
+        MEMCPY(buf + db_name.length() + 1, table_name.ptr(), table_name.length());
+        arg->dict_table_name_.assign_ptr(buf, static_cast<int32_t>(buf_len));
+      }
+    }
+  }
+  return ret;
+}
+
 int ObSetTPResolver::resolve(const ParseNode &parse_tree)
 {
   int ret = OB_SUCCESS;

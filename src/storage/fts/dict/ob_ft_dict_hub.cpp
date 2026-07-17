@@ -24,6 +24,7 @@
 #include "storage/fts/dict/ob_ft_cache_container.h"
 #include "storage/fts/dict/ob_ft_dict_def.h"
 #include "storage/fts/dict/ob_ft_range_dict.h"
+#include "storage/fts/ob_fts_literal.h"
 namespace oceanbase
 {
 namespace storage
@@ -51,7 +52,7 @@ int ObFTDictHub::destroy()
 int ObFTDictHub::build_cache(const ObFTDictDesc &desc, ObFTCacheRangeContainer &container)
 {
   int ret = OB_SUCCESS;
-  ObFTDictInfoKey key(static_cast<uint64_t>(desc.type_));
+  ObFTDictInfoKey key(desc.name_, static_cast<uint64_t>(desc.type_));
   ObFTDictInfo info;
   container.reset();
 
@@ -95,7 +96,7 @@ int ObFTDictHub::load_cache(const ObFTDictDesc &desc, ObFTCacheRangeContainer &c
   int ret = OB_SUCCESS;
   ObFTDictInfo info;
   container.reset();
-  ObFTDictInfoKey key(static_cast<uint64_t>(desc.type_));
+  ObFTDictInfoKey key(desc.name_, static_cast<uint64_t>(desc.type_));
   if (!is_inited_) {
     ret = OB_NOT_INIT;
     LOG_WARN("dict hub not init", K(ret));
@@ -121,6 +122,42 @@ int ObFTDictHub::load_cache(const ObFTDictDesc &desc, ObFTCacheRangeContainer &c
     }
   }
 
+  return ret;
+}
+
+int ObFTDictHub::refresh_cache(const ObString &dict_table_name)
+{
+  int ret = OB_SUCCESS;
+  static const ObFTDictType dict_types[] = {
+      ObFTDictType::DICT_IK_MAIN,
+      ObFTDictType::DICT_IK_QUAN,
+      ObFTDictType::DICT_IK_STOP,
+  };
+  if (!is_inited_) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("dict hub not init", K(ret));
+  } else if (OB_UNLIKELY(dict_table_name.empty())) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("dict table name is empty", K(ret));
+  } else {
+    for (int64_t i = 0; OB_SUCC(ret) && i < ARRAYSIZEOF(dict_types); ++i) {
+      ObArenaAllocator allocator(lib::ObMemAttr("DictRefresh"));
+      ObFTCacheRangeContainer container(allocator);
+      ObFTDictInfo info;
+      ObFTDictDesc desc(dict_table_name,
+                        dict_types[i],
+                        ObCharsetType::CHARSET_UTF8MB4,
+                        ObCollationType::CS_TYPE_UTF8MB4_BIN);
+      ObFTDictInfoKey key(desc.name_, static_cast<uint64_t>(desc.type_));
+      ObBucketHashWLockGuard guard(rw_dict_lock_, key.hash());
+      if (OB_FAIL(ObFTRangeDict::build_cache_from_ik_dict(desc, container))) {
+        LOG_WARN("Failed to refresh dict cache", K(ret), K(dict_table_name), K(desc.type_));
+      } else if (FALSE_IT(info.range_count_ = container.get_handles().size())) {
+      } else if (OB_FAIL(put_dict_info(key, info))) {
+        LOG_WARN("Failed to update dict info", K(ret), K(dict_table_name), K(desc.type_));
+      }
+    }
+  }
   return ret;
 }
 
