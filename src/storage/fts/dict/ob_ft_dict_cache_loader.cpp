@@ -143,7 +143,7 @@ int ObFTDictCacheLoaderBase::get_table_row_scn_and_count(const ObFTDictDesc &des
 
   SMART_VAR(ObISQLClient::ReadResult, result)
   {
-    if (OB_FAIL(sql_string.append_fmt("SELECT MAX(ORA_ROWSCN) as max_version, COUNT(*) as cnt FROM %.*s",
+    if (OB_FAIL(sql_string.append_fmt("SELECT COUNT(*) as cnt FROM %.*s",
                                        static_cast<int>(desc.table_name_.length()), desc.table_name_.ptr()))) {
       LOG_WARN("Failed to build sql for row_scn and count", K(ret));
     } else if (snapshot_version > 0 && OB_FAIL(sql_string.append_fmt(" AS OF SNAPSHOT %ld", snapshot_version))) {
@@ -170,9 +170,10 @@ int ObFTDictCacheLoaderBase::get_table_row_scn_and_count(const ObFTDictDesc &des
       } else if (OB_FAIL(mysql_result->next())) {
         LOG_WARN("Failed to get next row", K(ret));
       } else {
-        EXTRACT_INT_FIELD_MYSQL_WITH_DEFAULT_VALUE(*mysql_result, "max_version", row_scn, int64_t,
-                                                    true /* skip_null_error */, false /* skip_column_error */, 0);
         EXTRACT_INT_FIELD_MYSQL(*mysql_result, "cnt", row_count, int64_t);
+        if (OB_SUCC(ret)) {
+          row_scn = snapshot_version;
+        }
       }
     }
   }
