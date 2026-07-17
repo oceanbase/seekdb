@@ -22,6 +22,7 @@
 #include "storage/fts/dict/ob_ft_dict.h"
 #include "storage/fts/dict/ob_ft_dict_def.h"
 #include "storage/fts/ik/ob_ik_processor.h"
+#include "storage/fts/ik/ob_ik_arbitrator.h"
 #include "plugin/interface/ob_plugin_ftparser_intf.h"
 
 #include <cstdint>
@@ -46,7 +47,8 @@ public:
         cache_stop_(allocator),
         dict_main_(nullptr),
         dict_quan_(nullptr),
-        dict_stop_(nullptr)
+        dict_stop_(nullptr),
+        arbitrator_()
   {
   }
 
@@ -106,6 +108,7 @@ private:
   ObIFTDict *dict_main_;
   ObIFTDict *dict_quan_;
   ObIFTDict *dict_stop_;
+  ObIKArbitrator arbitrator_;
 
   DISABLE_COPY_ASSIGN(ObIKFTParser);
 };

@@ -338,6 +338,12 @@ int ObIKArbitrator::prepare(TokenizeContext &ctx)
 
 ObIKArbitrator::ObIKArbitrator() : alloc_(lib::ObMemAttr("IK Arbitrator")) {}
 
+void ObIKArbitrator::reuse()
+{
+  chains_.destroy();
+  alloc_.reset();
+}
+
 int ObIKArbitrator::add_chain(ObIKTokenChain *chain)
 {
   int ret = OB_SUCCESS;
@@ -354,8 +360,7 @@ int ObIKArbitrator::add_chain(ObIKTokenChain *chain)
 
 ObIKArbitrator::~ObIKArbitrator()
 {
-  chains_.destroy();
-  alloc_.reset();
+  reuse();
 }
 } // namespace storage
 } // namespace oceanbase

@@ -581,6 +581,21 @@ TEST_F(FTParserTest, test_char_util)
   ObFTCharUtil::classify_first_char(common::CS_TYPE_UTF8MB4_BIN, cjk, 3, type);
   ASSERT_EQ(type, ObFTCharUtil::CharType::CHINESE);
   ObFTCharUtil::classify_first_char(common::CS_TYPE_UTF8MB4_BIN, eng, 1, type);
+  ASSERT_EQ(type, ObFTCharUtil::CharType::ENGLISH_LETTER);
+  ObFTCharUtil::classify_first_char(common::CS_TYPE_UTF8MB4_BIN, "7", 1, type);
+  ASSERT_EQ(type, ObFTCharUtil::CharType::ARABIC_LETTER);
+  ObFTCharUtil::classify_first_char(common::CS_TYPE_UTF8MB4_BIN, " ", 1, type);
+  ASSERT_EQ(type, ObFTCharUtil::CharType::USELESS);
+
+  ObArenaAllocator allocator;
+  TokenizeContext ctx(common::CS_TYPE_UTF8MB4_BIN, allocator, "a1", 2, true);
+  ASSERT_EQ(OB_SUCCESS, ctx.init());
+  const char *ch = nullptr;
+  uint8_t char_len = 0;
+  ASSERT_EQ(OB_SUCCESS, ctx.current_char_and_type(ch, char_len, type));
+  ASSERT_EQ(1, char_len);
+  ASSERT_EQ('a', *ch);
+  ASSERT_EQ(type, ObFTCharUtil::CharType::ENGLISH_LETTER);
 }
 
 TEST_F(FTParserTest, test_lex_container)
