@@ -39,14 +39,22 @@ int ObIIKProcessor::process(TokenizeContext &ctx)
   const char *ch = nullptr;
   uint8_t char_len = 0;
 
-  if (OB_FAIL(ctx.current_char_type(type))) {
-    LOG_WARN("fail to get current char type", K(ret));
-  } else if (OB_FAIL(ctx.current_char(ch, char_len))) {
-    LOG_WARN("Fail to get current char", K(ret));
-  } else if (OB_FAIL(do_process(ctx, ch, char_len, type))) {
+  // Task4：兼容旧调用方式，但只对上下文执行一次边界检查。
+  if (OB_FAIL(ctx.current_char_and_type(ch, char_len, type))) {
+    LOG_WARN("Fail to get current char and type", K(ret));
+  } else if (OB_FAIL(process(ctx, ch, char_len, type))) {
     LOG_WARN("Failed to do process char", K(ret));
   }
   return ret;
+}
+
+// Task4：供解析器热路径直接传入已读取的字符信息。
+int ObIIKProcessor::process(TokenizeContext &ctx,
+                            const char *ch,
+                            const uint8_t char_len,
+                            const ObFTCharUtil::CharType type)
+{
+  return do_process(ctx, ch, char_len, type);
 }
 
 TokenizeContext::TokenizeContext(ObCollationType coll_type,
@@ -54,9 +62,17 @@ TokenizeContext::TokenizeContext(ObCollationType coll_type,
                                  const char *fulltext,
                                  int64_t fulltext_len,
                                  bool is_smart)
-    : coll_type_(coll_type), fulltext_(fulltext), fulltext_len_(fulltext_len), cursor_(0),
+    // Task4：字符集对象和 well_formed_len 函数指针只解析一次。
+    : coll_type_(coll_type), charset_info_(ObCharset::get_charset(coll_type)),
+      well_formed_len_func_(nullptr == charset_info_ || nullptr == charset_info_->cset
+                                ? nullptr
+                                : charset_info_->cset->well_formed_len),
+      fulltext_(fulltext), fulltext_len_(fulltext_len), cursor_(0),
       next_char_len_(0), handle_size_(0), is_smart_(is_smart), token_list_(allocator),
-      result_list_(allocator)
+      // Task4 Op1：结果数组与消费下标在上下文生命周期内复用。
+      results_(allocator), result_idx_(0),
+      // Task4 Op3：首批次从文档起点开始。
+      batch_start_cursor_(0)
 {
 }
 
@@ -64,7 +80,8 @@ int TokenizeContext::init()
 {
   int ret = OB_SUCCESS;
 
-  if (OB_ISNULL(fulltext_) || fulltext_len_ <= 0) {
+  if (OB_ISNULL(fulltext_) || fulltext_len_ <= 0 || OB_ISNULL(charset_info_)
+      || OB_ISNULL(well_formed_len_func_)) {
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_FAIL(prepare_next_char())) {
     LOG_WARN("Failed to prepare next char", K(ret));
@@ -72,11 +89,35 @@ int TokenizeContext::init()
   return ret;
 }
 
+// Task4 Op2：上下文复用只替换文档并重置短生命周期状态。
+int TokenizeContext::reuse_context(const char *fulltext, int64_t fulltext_len)
+{
+  int ret = OB_SUCCESS;
+  if (OB_ISNULL(fulltext) || fulltext_len <= 0) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("Invalid fulltext for context reuse", K(ret), KP(fulltext), K(fulltext_len));
+  } else {
+    fulltext_ = fulltext;
+    fulltext_len_ = fulltext_len;
+    cursor_ = 0;
+    // Task4 Op3：复用解析器处理新文档时同步重置批次边界。
+    batch_start_cursor_ = 0;
+    if (OB_FAIL(reset_resource())) {
+      LOG_WARN("Failed to reset tokenize context", K(ret));
+    } else if (OB_FAIL(prepare_next_char())) {
+      LOG_WARN("Failed to prepare reused context", K(ret));
+    }
+  }
+  return ret;
+}
+
 int TokenizeContext::reset_resource()
 {
   handle_size_ = 0;
-  result_list_.reset();
-  token_list_.reset();
+  // Task4 Op1：保留已申请的 token 块，仅重置逻辑长度。
+  results_.reuse();
+  result_idx_ = 0;
+  token_list_.reuse();
   return OB_SUCCESS;
 }
 
@@ -103,14 +144,35 @@ int TokenizeContext::current_char_type(ObFTCharUtil::CharType &type)
   return ret;
 }
 
+// Task4：合并原先 current_char 和 current_char_type 的重复边界判断。
+int TokenizeContext::current_char_and_type(const char *&ch,
+                                            uint8_t &char_len,
+                                            ObFTCharUtil::CharType &type)
+{
+  int ret = OB_SUCCESS;
+  if (cursor_ >= fulltext_len_) {
+    ret = OB_ITER_END;
+  } else {
+    ch = fulltext_ + cursor_;
+    char_len = next_char_len_;
+    type = next_char_type_;
+  }
+  return ret;
+}
+
 int TokenizeContext::prepare_next_char()
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(ObCharset::first_valid_char(coll_type_,
-                                          fulltext_ + cursor_,
-                                          fulltext_len_ - cursor_,
-                                          next_char_len_))) {
-    LOG_WARN("Failed to get first valid char, ", K(ret));
+  int well_formed_error = 0;
+  // Task4：直接调用初始化时缓存的字符集函数，消除逐字符的 collation 查表和分支校验。
+  next_char_len_ = static_cast<int64_t>(well_formed_len_func_(charset_info_,
+                                                              fulltext_ + cursor_,
+                                                              fulltext_ + fulltext_len_,
+                                                              1,
+                                                              &well_formed_error));
+  if (OB_UNLIKELY(0 != well_formed_error || next_char_len_ <= 0)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("Failed to get first valid char", K(ret), K(well_formed_error), K(next_char_len_));
   } else if (OB_FAIL(ObFTCharUtil::classify_first_char(coll_type_,
                                                        fulltext_ + cursor_,
                                                        next_char_len_,
@@ -160,6 +222,9 @@ bool TokenizeContext::iter_end() const { return cursor_ >= fulltext_len_; }
 
 bool TokenizeContext::is_smart() const { return is_smart_; }
 
+// Task4 Op1：分块数组使用下标消费，避免 pop_front 修改链表节点。
+bool TokenizeContext::is_results_exhaust() const { return result_idx_ >= results_.count(); }
+
 int TokenizeContext::add_token(const char *fulltext,
                                int64_t offset,
                                int64_t length,
@@ -182,7 +247,7 @@ int TokenizeContext::add_token(const char *fulltext,
 TokenizeContext::~TokenizeContext()
 {
   token_list_.reset();
-  result_list_.reset();
+  results_.reset();
 }
 
 int TokenizeContext::get_next_token(const char *&word,
@@ -191,10 +256,10 @@ int TokenizeContext::get_next_token(const char *&word,
                                     int64_t &char_cnt)
 {
   int ret = OB_SUCCESS;
-  if (!result_list_.empty()) {
-    ObIKToken &token = result_list_.get_first();
-    result_list_.pop_front();
-    if (!result_list_.empty()) {
+  // Task4 Op1：按下标顺序读取分块结果，消除逐 token 节点释放。
+  if (result_idx_ < results_.count()) {
+    ObIKToken &token = results_.at(result_idx_++);
+    if (result_idx_ < results_.count()) {
       if (OB_FAIL(compound(token))) {
         LOG_WARN("Failed to compound", K(ret));
       } else {
@@ -216,11 +281,12 @@ int TokenizeContext::get_next_token(const char *&word,
 int TokenizeContext::compound(ObIKToken &token)
 {
   int ret = OB_SUCCESS;
-  ObList<ObIKToken, ObIAllocator> &list = result_list_;
+  // Task4 Op1：复合词通过结果下标前移完成消费。
+  ObFastSegmentArray<ObIKToken> &list = results_;
   if (is_smart_) {
-    if (!list.empty()) {
+    if (result_idx_ < list.count()) {
       if (ObIKTokenType::IK_ARABIC_TOKEN == token.type_) {
-        ObIKToken &next = list.get_first();
+        ObIKToken &next = list.at(result_idx_);
         bool append = false;
 
         if (ObIKTokenType::IK_CNNUM_TOKEN == next.type_) {
@@ -243,12 +309,12 @@ int TokenizeContext::compound(ObIKToken &token)
           // pass
         }
         if (append) {
-          list.pop_front();
+          ++result_idx_;
         }
       }
       // There may be another round of append
-      if (OB_SUCC(ret)) {
-        ObIKToken next = list.get_first();
+      if (OB_SUCC(ret) && result_idx_ < list.count()) {
+        ObIKToken &next = list.at(result_idx_);
         bool append = false;
         if (ObIKTokenType::IK_COUNT_TOKEN == next.type_) {
           if (token.offset_ + token.length_ == next.offset_) {
@@ -258,7 +324,7 @@ int TokenizeContext::compound(ObIKToken &token)
           }
         }
         if (append) {
-          list.pop_front();
+          ++result_idx_;
         }
       }
     }

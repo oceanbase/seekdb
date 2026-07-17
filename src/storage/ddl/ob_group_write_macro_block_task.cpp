@@ -20,6 +20,7 @@
 #include "storage/ddl/ob_cg_macro_block_writer.h"
 #include "storage/ddl/ob_cg_macro_block_write_op.h"
 #include "storage/ddl/ob_tablet_ddl_kv_mgr.h"
+#include "storage/ddl/ob_ddl_dag_monitor.h"
 
 #define USING_LOG_PREFIX STORAGE
 
@@ -69,6 +70,8 @@ int ObGroupWriteMacroBlockTask::init(ObDDLIndependentDag *ddl_dag, const ObTable
 int ObGroupWriteMacroBlockTask::process()
 {
   int ret = OB_SUCCESS;
+  // Task4 Op9：按 DDL DAG 汇总 doc-word 和 word-doc 宏块写入。
+  ObDDLDagStageGuard monitor_guard(ddl_dag_, TASK4_OP9_GROUP_WRITE);
   if (OB_ISNULL(ddl_dag_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("ddl dag is null", K(ret), KP(ddl_dag_));
@@ -84,6 +87,7 @@ int ObGroupWriteMacroBlockTask::process()
       }
     }
   }
+  monitor_guard.set_ret_code(ret);
   return ret;
 }
 
@@ -282,6 +286,8 @@ int ObGroupCGBlockFileWriteTask::init(ObDDLIndependentDag *ddl_dag, const ObTabl
 int ObGroupCGBlockFileWriteTask::process()
 {
   int ret = OB_SUCCESS;
+  // Task4 Op9：将列组块文件写入计入宏块写入阶段。
+  ObDDLDagStageGuard monitor_guard(ddl_dag_, TASK4_OP9_GROUP_WRITE);
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
@@ -351,6 +357,7 @@ int ObGroupCGBlockFileWriteTask::process()
     }
     block_files_.reset();
   }
+  monitor_guard.set_ret_code(ret);
   return ret;
 }
 

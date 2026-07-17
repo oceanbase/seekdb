@@ -101,7 +101,6 @@ public:
 
   void set_periodic_cnt(int64_t cnt) { periodic_cnt_ = cnt; }
   int64_t get_periodic_cnt() const { return periodic_cnt_; }
-
   double get_data_ratio() const { return profile_.data_ratio_; }
   void set_data_ratio(double ratio) { profile_.data_ratio_ = ratio; }
 

@@ -42,6 +42,7 @@ public:
   ~ObFTIndexRowCache();
   int init(
       const bool is_fts_index_aux,
+      const bool enable_ddl_token_cache,
       const common::ObString &parser_name,
       const common::ObString &parser_properties);
   int segment(const common::ObObjMeta &ft_obj_meta, const ObDatum &doc_id, const common::ObString &fulltext);
@@ -54,7 +55,19 @@ private:
   ObDomainIndexRow rows_;
   uint64_t row_idx_;
   bool is_fts_index_aux_;
+  // Task4 Op11：共享生产缓存仅允许由 FTS DDL 扫描显式开启。
+  bool enable_ddl_token_cache_;
+  // Task4 Op11：记录本扫描是否已注册缓存生命周期，确保退出时释放 DDL 遗留条目。
+  bool ddl_token_cache_registered_;
+  // Task4 Op2：解析器使用独立的长生命周期 allocator，不能随每行输出缓存一起回收。
+  common::ObArenaAllocator parser_allocator_;
   storage::ObFTParseHelper helper_;
+  // Task4 Op11：保留解析器配置，用于在 word-doc 和 doc-word 之间精确匹配共享分词结果。
+  common::ObString parser_name_;
+  common::ObString parser_properties_;
+  // Task4 Op11：按扫描算子统计共享分词缓存命中率，避免在逐文档热路径输出日志。
+  int64_t task4_op11_cache_hit_count_;
+  int64_t task4_op11_cache_miss_count_;
   bool is_inited_;
 
   DISALLOW_COPY_AND_ASSIGN(ObFTIndexRowCache);
@@ -339,6 +352,7 @@ public:
   : ObDomainDMLIterator(allocator, row_projector, write_iter, das_ctdef, main_ctdef),
     doc_word_info_(ft_doc_word_info),
     ft_doc_word_iter_(),
+    parser_allocator_(lib::ObMemAttr("FTDMLParser")),
     ft_parse_helper_(),
     is_inited_(false)
   {
@@ -371,6 +385,8 @@ protected:
 private:
   const ObFTDocWordInfo *doc_word_info_;
   storage::ObFTDocWordScanIterator ft_doc_word_iter_;
+  // Task4 Op2：DML 行缓冲会逐行 reuse，解析器必须使用独立的长生命周期 allocator。
+  common::ObArenaAllocator parser_allocator_;
   storage::ObFTParseHelper ft_parse_helper_;
   bool is_inited_;
 };

@@ -41,6 +41,14 @@ public:
                  const uint8_t char_len,
                  const ObFTCharUtil::CharType type) override;
 
+  // Task4 Op2：清除上一文档未完成的字典命中。
+  void reuse() override
+  {
+    hits_.clear();
+    cjk_start_ = -1;
+    cjk_end_ = -1;
+  }
+
 private:
   ObList<ObDATrieHit, ObIAllocator> hits_;
   const ObIFTDict &dict_main_;

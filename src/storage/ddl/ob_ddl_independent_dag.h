@@ -19,6 +19,7 @@
 
 #include "observer/scheduler/ob_independent_dag.h"
 #include "storage/ddl/ob_ddl_struct.h"
+#include "storage/ddl/ob_ddl_dag_monitor.h"
 #include "storage/ddl/ob_pipeline.h"
 
 namespace oceanbase
@@ -89,6 +90,8 @@ public:
                                               ObIArray<share::ObITask *> &write_macro_block_tasks,
                                               share::ObITask *next_task = nullptr);
   int schedule_tablet_merge_task();
+  // Task4 Op9：获取或并发创建当前 DAG 的阶段监控节点。
+  ObDDLDagMonitorNode *get_or_create_dag_monitor_node(const ObDDLDagMonitorStage stage);
   virtual bool use_tablet_mode() const { return false; }
   bool is_inc_major_log() const { return is_inc_major_log_; }
   INHERIT_TO_STRING_KV("IndependentDag", ObIndependentDag, K_(is_inited), K_(direct_load_type),
@@ -133,6 +136,9 @@ protected:
   int64_t pipeline_count_;
   int ret_code_;
   bool is_inc_major_log_;
+  // Task4 Op9：缓存监控租户及各阶段节点，供 DAG 内任务共享。
+  uint64_t dag_monitor_tenant_id_;
+  ObDDLDagMonitorNode *dag_monitor_nodes_[TASK4_OP9_STAGE_MAX];
 };
 
 }// namespace storage

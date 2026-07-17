@@ -170,7 +170,25 @@ int ObAlterTableResolver::resolve(const ParseNode &parse_tree)
       }
     }
     if (OB_SUCC(ret)) {
-      
+      if (table_schema_->is_fulltext_dict_table()) {
+        bool referenced = false;
+        if (OB_ISNULL(schema_checker_) || OB_ISNULL(schema_checker_->get_schema_guard())) {
+          ret = OB_ERR_UNEXPECTED;
+          SQL_RESV_LOG(WARN, "schema checker or schema guard is null", K(ret));
+        } else if (OB_FAIL(ObFtsIndexBuilderUtil::check_fulltext_dict_table_referenced(
+                   database_name_,
+                   table_name_,
+                   *schema_checker_->get_schema_guard(),
+                   referenced))) {
+          SQL_RESV_LOG(WARN, "failed to check fulltext dict table reference", K(ret), K(database_name_), K(table_name_));
+        } else if (referenced) {
+          ret = OB_NOT_SUPPORTED;
+          SQL_RESV_LOG(WARN, "alter referenced fulltext dict table is not supported", K(ret), K(database_name_), K(table_name_));
+          LOG_USER_ERROR(OB_NOT_SUPPORTED, "alter referenced FULLTEXT_DICT table");
+        }
+      }
+    }
+    if (OB_SUCC(ret)) {
       alter_table_stmt->set_table_id(table_schema_->get_table_id());
       alter_table_stmt->get_alter_table_arg().alter_table_schema_.set_charset_type(table_schema_->get_charset_type());
       alter_table_stmt->get_alter_table_arg().alter_table_schema_.set_collation_type(table_schema_->get_collation_type());
@@ -1591,7 +1609,12 @@ int ObAlterTableResolver::resolve_add_index(const ParseNode &node)
                 ret = OB_NOT_SUPPORTED;
                 LOG_USER_ERROR(OB_NOT_SUPPORTED, "spatial global index");
               } else if (share::schema::is_fts_index(create_index_arg->index_type_)
-                  && OB_FAIL(ObFtsIndexBuilderUtil::generate_fts_parser_name_and_property(*table_schema_, *create_index_arg, allocator_))) {
+                  && OB_FAIL(ObFtsIndexBuilderUtil::generate_fts_parser_name_and_property(*table_schema_,
+                                                                                          *create_index_arg,
+                                                                                          allocator_,
+                                                                                          OB_ISNULL(schema_checker_)
+                                                                                              ? nullptr
+                                                                                              : schema_checker_->get_schema_guard()))) {
                 LOG_WARN("failed to generate fts parser name", K(ret));
               } else {
                 create_index_arg->index_schema_.set_table_type(USER_INDEX);

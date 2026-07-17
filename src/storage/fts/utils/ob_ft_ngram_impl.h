@@ -41,6 +41,9 @@ public:
 
   void reset();
 
+  // Task4 Op2：保留 ngram 配置，仅切换文档并清空滑动窗口。
+  int reuse_parser(const char *fulltext, const int64_t fulltext_len);
+
   int get_next_token(const char *&word, int64_t &word_len, int64_t &char_cnt, int64_t &word_freq);
 
 private:

@@ -26,6 +26,8 @@
 #include "sql/engine/expr/ob_expr_lob_utils.h"
 #include "observer/omt/ob_tenant_srs.h"
 #include "storage/tx/ob_trans_service.h"
+#include "lib/hash_func/murmur_hash.h"
+#include "lib/lock/ob_mutex.h"
 
 using namespace oceanbase::common;
 
@@ -41,11 +43,364 @@ ObObjDatumMapType ObFTIndexRowCache::FTS_DOC_WORD_TYPES[] = {OBJ_DATUM_STRING, O
 ObExprOperatorType ObFTIndexRowCache::FTS_INDEX_EXPR_TYPE[] = {T_FUN_SYS_WORD_SEGMENT, T_FUN_SYS_DOC_ID, T_FUN_SYS_WORD_COUNT, T_FUN_SYS_DOC_LENGTH};
 ObExprOperatorType ObFTIndexRowCache::FTS_DOC_WORD_EXPR_TYPE[] = {T_FUN_SYS_DOC_ID, T_FUN_SYS_WORD_SEGMENT, T_FUN_SYS_WORD_COUNT, T_FUN_SYS_DOC_LENGTH};
 
+namespace
+{
+// Task4 Op11：两个 FTS 输出共享同一份文档分词结果，先到的输出负责生产，后到的输出负责消费。
+class ObFtsDDLTokenCache final
+{
+  static constexpr int64_t SLOT_COUNT = 65536;
+  static constexpr int64_t LOCK_COUNT = 64;
+  static constexpr int64_t PRODUCER_LOCK_COUNT = 256;
+  static constexpr int64_t PROBE_COUNT = 8;
+  static constexpr int64_t MAX_ENTRY_SIZE = 256L * 1024L;
+  struct EntryHeader
+  {
+    uint64_t hash_;
+    int32_t obj_type_;
+    int32_t collation_type_;
+    int32_t parser_name_len_;
+    int32_t parser_properties_len_;
+    int32_t doc_id_len_;
+    int32_t fulltext_len_;
+    int32_t token_count_;
+    int32_t reserved_;
+    int64_t doc_length_;
+  };
+  struct TokenHeader
+  {
+    int32_t word_len_;
+    int32_t reserved_;
+    int64_t word_count_;
+  };
+  struct Slot
+  {
+    Slot() : data_(nullptr), size_(0) {}
+    char *data_;
+    int64_t size_;
+  };
+public:
+  ObFtsDDLTokenCache() : active_ddl_scan_count_(0) {}
+  ~ObFtsDDLTokenCache()
+  {
+    clear();
+  }
+  void acquire()
+  {
+    lib::ObMutexGuard guard(lifecycle_lock_);
+    ++active_ddl_scan_count_;
+  }
+  void release()
+  {
+    lib::ObMutexGuard guard(lifecycle_lock_);
+    if (active_ddl_scan_count_ > 0 && 0 == --active_ddl_scan_count_) {
+      // Task4 Op11：最后一个 FTS DDL 扫描结束后释放未配对条目，不影响后续普通 TOKENIZE。
+      clear();
+    }
+  }
+  void clear()
+  {
+    for (int64_t i = 0; i < SLOT_COUNT; ++i) {
+      if (nullptr != slots_[i].data_) {
+        ob_free(slots_[i].data_);
+        slots_[i].data_ = nullptr;
+        slots_[i].size_ = 0;
+      }
+    }
+  }
+  static ObFtsDDLTokenCache &instance()
+  {
+    static ObFtsDDLTokenCache cache;
+    return cache;
+  }
+  lib::ObMutex &get_producer_lock(const ObString &parser_name,
+                                  const ObString &parser_properties,
+                                  const ObObjMeta &ft_obj_meta,
+                                  const ObDatum &doc_id,
+                                  const ObString &fulltext)
+  {
+    const uint64_t hash = calc_hash(parser_name, parser_properties, ft_obj_meta,
+        doc_id.get_string(), fulltext);
+    return producer_locks_[hash % PRODUCER_LOCK_COUNT];
+  }
+  int get(const ObString &parser_name,
+          const ObString &parser_properties,
+          const ObObjMeta &ft_obj_meta,
+          const ObDatum &doc_id,
+          const ObString &fulltext,
+          const bool is_fts_index_aux,
+          ObIAllocator &allocator,
+          ObDomainIndexRow &rows,
+          bool &hit);
+  void put(const ObString &parser_name,
+           const ObString &parser_properties,
+           const ObObjMeta &ft_obj_meta,
+           const ObDatum &doc_id,
+           const ObString &fulltext,
+           const bool is_fts_index_aux,
+           const ObDomainIndexRow &rows);
+private:
+  static uint64_t calc_hash(const ObString &parser_name,
+                            const ObString &parser_properties,
+                            const ObObjMeta &ft_obj_meta,
+                            const ObString &doc_id,
+                            const ObString &fulltext)
+  {
+    uint64_t hash = 0;
+    const int32_t obj_type = static_cast<int32_t>(ft_obj_meta.get_type());
+    const int32_t collation_type = static_cast<int32_t>(ft_obj_meta.get_collation_type());
+    hash = murmurhash(&obj_type, sizeof(obj_type), hash);
+    hash = murmurhash(&collation_type, sizeof(collation_type), hash);
+    hash = parser_name.hash(hash);
+    hash = parser_properties.hash(hash);
+    hash = doc_id.hash(hash);
+    return fulltext.hash(hash);
+  }
+  static bool match_string(const char *&pos, const ObString &value)
+  {
+    const bool matched = 0 == value.length() || 0 == MEMCMP(pos, value.ptr(), value.length());
+    pos += value.length();
+    return matched;
+  }
+  static bool match_entry(const Slot &slot,
+                          const uint64_t hash,
+                          const ObString &parser_name,
+                          const ObString &parser_properties,
+                          const ObObjMeta &ft_obj_meta,
+                          const ObString &doc_id,
+                          const ObString &fulltext,
+                          const EntryHeader *&header,
+                          const char *&token_pos);
+  static int materialize_rows(const EntryHeader &header,
+                              const char *token_pos,
+                              const ObDatum &doc_id,
+                              const bool is_fts_index_aux,
+                              ObIAllocator &allocator,
+                              ObDomainIndexRow &rows);
+private:
+  // Task4 Op11：按哈希分片加锁，避免两条 FTS 构建流在单锁上串行。
+  lib::ObMutex locks_[LOCK_COUNT];
+  // Task4 Op11：同一文档只允许一个输出进入“检查、分词、发布”流程，消除同步扫描时的双生产竞态。
+  lib::ObMutex producer_locks_[PRODUCER_LOCK_COUNT];
+  // Task4 Op11：以 FTS DDL 扫描为生命周期管理共享缓存，DDL 外不保留动态内存。
+  lib::ObMutex lifecycle_lock_;
+  int64_t active_ddl_scan_count_;
+  Slot slots_[SLOT_COUNT];
+  DISALLOW_COPY_AND_ASSIGN(ObFtsDDLTokenCache);
+};
+
+bool ObFtsDDLTokenCache::match_entry(const Slot &slot,
+                                     const uint64_t hash,
+                                     const ObString &parser_name,
+                                     const ObString &parser_properties,
+                                     const ObObjMeta &ft_obj_meta,
+                                     const ObString &doc_id,
+                                     const ObString &fulltext,
+                                     const EntryHeader *&header,
+                                     const char *&token_pos)
+{
+  bool matched = false;
+  header = nullptr;
+  token_pos = nullptr;
+  if (nullptr != slot.data_ && slot.size_ >= static_cast<int64_t>(sizeof(EntryHeader))) {
+    header = reinterpret_cast<const EntryHeader *>(slot.data_);
+    const int64_t key_size = sizeof(EntryHeader) + header->parser_name_len_
+        + header->parser_properties_len_ + header->doc_id_len_ + header->fulltext_len_;
+    const bool valid_lengths = header->parser_name_len_ == parser_name.length()
+        && header->parser_properties_len_ == parser_properties.length()
+        && header->doc_id_len_ == doc_id.length()
+        && header->fulltext_len_ == fulltext.length()
+        && key_size <= slot.size_;
+    const char *pos = slot.data_ + sizeof(EntryHeader);
+    matched = header->hash_ == hash && valid_lengths
+        && header->obj_type_ == static_cast<int32_t>(ft_obj_meta.get_type())
+        && header->collation_type_ == static_cast<int32_t>(ft_obj_meta.get_collation_type())
+        && match_string(pos, parser_name)
+        && match_string(pos, parser_properties)
+        && match_string(pos, doc_id)
+        && match_string(pos, fulltext);
+    if (matched) {
+      token_pos = pos;
+    }
+  }
+  return matched;
+}
+
+int ObFtsDDLTokenCache::materialize_rows(const EntryHeader &header,
+                                         const char *token_pos,
+                                         const ObDatum &doc_id,
+                                         const bool is_fts_index_aux,
+                                         ObIAllocator &allocator,
+                                         ObDomainIndexRow &rows)
+{
+  int ret = OB_SUCCESS;
+  void *rows_buf = nullptr;
+  if (header.token_count_ <= 0) {
+    ret = OB_ITER_END;
+  } else if (OB_ISNULL(rows_buf = allocator.alloc(
+                 header.token_count_ * sizeof(blocksstable::ObDatumRow)))) {
+    ret = OB_ALLOCATE_MEMORY_FAILED;
+  } else {
+    blocksstable::ObDatumRow *datum_rows =
+        new (rows_buf) blocksstable::ObDatumRow[header.token_count_];
+    for (int64_t i = 0; OB_SUCC(ret) && i < header.token_count_; ++i) {
+      const TokenHeader *token = reinterpret_cast<const TokenHeader *>(token_pos);
+      token_pos += sizeof(TokenHeader);
+      char *word = nullptr;
+      if (token->word_len_ < 0
+          || OB_ISNULL(word = static_cast<char *>(allocator.alloc(token->word_len_)))) {
+        ret = token->word_len_ < 0 ? OB_ERR_UNEXPECTED : OB_ALLOCATE_MEMORY_FAILED;
+      } else if (OB_FAIL(datum_rows[i].init(allocator, 4))) {
+        LOG_WARN("init cached fulltext row failed", K(ret), K(i));
+      } else {
+        MEMCPY(word, token_pos, token->word_len_);
+        token_pos += token->word_len_;
+        const int64_t word_idx = is_fts_index_aux ? 0 : 1;
+        const int64_t doc_id_idx = is_fts_index_aux ? 1 : 0;
+        datum_rows[i].storage_datums_[word_idx].set_string(
+            ObString(token->word_len_, word));
+        datum_rows[i].storage_datums_[doc_id_idx].shallow_copy_from_datum(doc_id);
+        datum_rows[i].storage_datums_[2].set_uint(token->word_count_);
+        datum_rows[i].storage_datums_[3].set_uint(header.doc_length_);
+        if (OB_FAIL(rows.push_back(&datum_rows[i]))) {
+          LOG_WARN("append cached fulltext row failed", K(ret), K(i));
+        }
+      }
+    }
+  }
+  return ret;
+}
+
+int ObFtsDDLTokenCache::get(const ObString &parser_name,
+                            const ObString &parser_properties,
+                            const ObObjMeta &ft_obj_meta,
+                            const ObDatum &doc_id,
+                            const ObString &fulltext,
+                            const bool is_fts_index_aux,
+                            ObIAllocator &allocator,
+                            ObDomainIndexRow &rows,
+                            bool &hit)
+{
+  int ret = OB_SUCCESS;
+  hit = false;
+  const ObString doc_id_str = doc_id.get_string();
+  const uint64_t hash = calc_hash(
+      parser_name, parser_properties, ft_obj_meta, doc_id_str, fulltext);
+  const int64_t lock_idx = hash % LOCK_COUNT;
+  const int64_t shard_slot_count = SLOT_COUNT / LOCK_COUNT;
+  const int64_t shard_base = (hash / LOCK_COUNT) % shard_slot_count;
+  lib::ObMutexGuard guard(locks_[lock_idx]);
+  for (int64_t probe = 0; OB_SUCC(ret) && !hit && probe < PROBE_COUNT; ++probe) {
+    const int64_t slot_idx = lock_idx
+        + ((shard_base + probe) % shard_slot_count) * LOCK_COUNT;
+    Slot &slot = slots_[slot_idx];
+    const EntryHeader *header = nullptr;
+    const char *token_pos = nullptr;
+    if (match_entry(slot, hash, parser_name, parser_properties, ft_obj_meta,
+                    doc_id_str, fulltext, header, token_pos)) {
+      if (OB_FAIL(materialize_rows(
+              *header, token_pos, doc_id, is_fts_index_aux, allocator, rows))) {
+        LOG_WARN("materialize shared fulltext tokens failed", K(ret), K(hash));
+      } else {
+        hit = true;
+        // Task4 Op11：两个输出各消费一次，第二个输出取走后立即释放共享 token。
+        ob_free(slot.data_);
+        slot.data_ = nullptr;
+        slot.size_ = 0;
+      }
+    }
+  }
+  return ret;
+}
+
+void ObFtsDDLTokenCache::put(const ObString &parser_name,
+                             const ObString &parser_properties,
+                             const ObObjMeta &ft_obj_meta,
+                             const ObDatum &doc_id,
+                             const ObString &fulltext,
+                             const bool is_fts_index_aux,
+                             const ObDomainIndexRow &rows)
+{
+  const ObString doc_id_str = doc_id.get_string();
+  int64_t entry_size = sizeof(EntryHeader) + parser_name.length()
+      + parser_properties.length() + doc_id_str.length() + fulltext.length();
+  const int64_t word_idx = is_fts_index_aux ? 0 : 1;
+  for (int64_t i = 0; i < rows.count(); ++i) {
+    entry_size += sizeof(TokenHeader)
+        + rows.at(i)->storage_datums_[word_idx].get_string().length();
+  }
+  if (entry_size <= MAX_ENTRY_SIZE && rows.count() <= INT32_MAX) {
+    char *data = static_cast<char *>(ob_malloc(entry_size, ObMemAttr("FtsDDLToken")));
+    if (nullptr != data) {
+      const uint64_t hash = calc_hash(
+          parser_name, parser_properties, ft_obj_meta, doc_id_str, fulltext);
+      EntryHeader *header = new (data) EntryHeader();
+      header->hash_ = hash;
+      header->obj_type_ = static_cast<int32_t>(ft_obj_meta.get_type());
+      header->collation_type_ = static_cast<int32_t>(ft_obj_meta.get_collation_type());
+      header->parser_name_len_ = parser_name.length();
+      header->parser_properties_len_ = parser_properties.length();
+      header->doc_id_len_ = doc_id_str.length();
+      header->fulltext_len_ = fulltext.length();
+      header->token_count_ = rows.count();
+      header->reserved_ = 0;
+      header->doc_length_ = rows.empty() ? 0 : rows.at(0)->storage_datums_[3].get_uint();
+      char *pos = data + sizeof(EntryHeader);
+      MEMCPY(pos, parser_name.ptr(), parser_name.length());
+      pos += parser_name.length();
+      MEMCPY(pos, parser_properties.ptr(), parser_properties.length());
+      pos += parser_properties.length();
+      MEMCPY(pos, doc_id_str.ptr(), doc_id_str.length());
+      pos += doc_id_str.length();
+      MEMCPY(pos, fulltext.ptr(), fulltext.length());
+      pos += fulltext.length();
+      for (int64_t i = 0; i < rows.count(); ++i) {
+        const ObString word = rows.at(i)->storage_datums_[word_idx].get_string();
+        TokenHeader *token = new (pos) TokenHeader();
+        token->word_len_ = word.length();
+        token->reserved_ = 0;
+        token->word_count_ = rows.at(i)->storage_datums_[2].get_uint();
+        pos += sizeof(TokenHeader);
+        MEMCPY(pos, word.ptr(), word.length());
+        pos += word.length();
+      }
+      const int64_t lock_idx = hash % LOCK_COUNT;
+      const int64_t shard_slot_count = SLOT_COUNT / LOCK_COUNT;
+      const int64_t shard_base = (hash / LOCK_COUNT) % shard_slot_count;
+      lib::ObMutexGuard guard(locks_[lock_idx]);
+      Slot *target_slot = nullptr;
+      for (int64_t probe = 0; nullptr == target_slot && probe < PROBE_COUNT; ++probe) {
+        const int64_t slot_idx = lock_idx
+            + ((shard_base + probe) % shard_slot_count) * LOCK_COUNT;
+        if (nullptr == slots_[slot_idx].data_) {
+          target_slot = &slots_[slot_idx];
+        }
+      }
+      // Task4 Op11：极端哈希拥塞时只覆盖同一探测组的首槽，不影响其他分片。
+      if (nullptr == target_slot) {
+        target_slot = &slots_[lock_idx + shard_base * LOCK_COUNT];
+      }
+      if (nullptr != target_slot->data_) {
+        ob_free(target_slot->data_);
+      }
+      target_slot->data_ = data;
+      target_slot->size_ = entry_size;
+    }
+  }
+}
+} // namespace
+
 ObFTIndexRowCache::ObFTIndexRowCache()
   : rows_(),
     row_idx_(0),
     is_fts_index_aux_(true),
+    enable_ddl_token_cache_(false),
+    ddl_token_cache_registered_(false),
+    parser_allocator_(),
     helper_(),
+    parser_name_(),
+    parser_properties_(),
+    task4_op11_cache_hit_count_(0),
+    task4_op11_cache_miss_count_(0),
     is_inited_(false)
 {
 }
@@ -57,6 +412,7 @@ ObFTIndexRowCache::~ObFTIndexRowCache()
 
 int ObFTIndexRowCache::init(
     const bool is_fts_index_aux,
+    const bool enable_ddl_token_cache,
     const common::ObString &parser_name,
     const common::ObString &parser_properties)
 {
@@ -68,11 +424,22 @@ int ObFTIndexRowCache::init(
     LOG_WARN("init fulltext dml iterator twice", K(ret), K(is_inited_));
   } else if (OB_FAIL(CURRENT_CONTEXT->CREATE_CONTEXT(merge_memctx_, param))) {
     LOG_WARN("failed to create merge memctx", K(ret));
-  } else if (OB_FAIL(helper_.init(&(merge_memctx_->get_arena_allocator()), parser_name, parser_properties))) {
+  } else if (FALSE_IT(parser_allocator_.set_attr(lib::ObMemAttr("FTParserCache")))) {
+  // Task4 Op2：行缓存会逐行 reset，解析器必须放在不被该 reset 影响的独立 allocator 中
+  } else if (OB_FAIL(ob_write_string(parser_allocator_, parser_name, parser_name_))) {
+    LOG_WARN("copy parser name failed", K(ret), K(parser_name));
+  } else if (OB_FAIL(ob_write_string(parser_allocator_, parser_properties, parser_properties_))) {
+    LOG_WARN("copy parser properties failed", K(ret), K(parser_properties));
+  } else if (OB_FAIL(helper_.init(&parser_allocator_, parser_name_, parser_properties_))) {
     LOG_WARN("fail to init full-text parser helper", K(ret));
   } else {
     row_idx_ = 0;
     is_fts_index_aux_ = is_fts_index_aux;
+    enable_ddl_token_cache_ = enable_ddl_token_cache;
+    if (enable_ddl_token_cache_) {
+      ObFtsDDLTokenCache::instance().acquire();
+      ddl_token_cache_registered_ = true;
+    }
     is_inited_ = true;
   }
   if (OB_UNLIKELY(!is_inited_)) {
@@ -90,16 +457,56 @@ int ObFTIndexRowCache::segment(const common::ObObjMeta &ft_obj_meta,
     ret = OB_NOT_INIT;
     LOG_WARN("ObFTIndexRowCache hasn't be initialized", K(ret), K(is_inited_));
   } else if (FALSE_IT(reuse())) {
-  } else if (OB_FAIL(ObDASDomainUtils::generate_fulltext_word_rows(merge_memctx_->get_arena_allocator(),
-                                                                   &helper_,
-                                                                   ft_obj_meta,
-                                                                   doc_id_datum,
-                                                                   fulltext,
-                                                                   is_fts_index_aux_,
-                                                                   rows_))) {
-    LOG_WARN("fail to generate fulltext word rows", K(ret), K(helper_), K(is_fts_index_aux_));
+  } else if (!enable_ddl_token_cache_) {
+    // Task4 Op11：非 FTS DDL 上下文完全绕过共享缓存、哈希计算和锁竞争。
+    if (OB_FAIL(ObDASDomainUtils::generate_fulltext_word_rows(
+            merge_memctx_->get_arena_allocator(), &helper_, ft_obj_meta,
+            doc_id_datum, fulltext, is_fts_index_aux_, rows_))) {
+      LOG_WARN("fail to generate fulltext word rows", K(ret), K(helper_), K(is_fts_index_aux_));
+    } else {
+      row_idx_ = 0;
+    }
   } else {
-    row_idx_ = 0;
+    bool cache_hit = false;
+    ObFtsDDLTokenCache &token_cache = ObFtsDDLTokenCache::instance();
+    // Task4 Op11：相同文档的两个输出共享 single-flight 临界区，确保只执行一次分词。
+    lib::ObMutexGuard producer_guard(token_cache.get_producer_lock(
+        parser_name_, parser_properties_, ft_obj_meta, doc_id_datum, fulltext));
+    // Task4 Op11：先复用另一个 FTS 辅助表已生成的 token，未命中才执行原分词逻辑。
+    if (OB_FAIL(token_cache.get(
+            parser_name_, parser_properties_, ft_obj_meta, doc_id_datum, fulltext,
+            is_fts_index_aux_, merge_memctx_->get_arena_allocator(), rows_, cache_hit))) {
+      LOG_WARN("get shared fulltext tokens failed", K(ret));
+    } else if (!cache_hit
+        && OB_FAIL(ObDASDomainUtils::generate_fulltext_word_rows(
+            merge_memctx_->get_arena_allocator(), &helper_, ft_obj_meta,
+            doc_id_datum, fulltext, is_fts_index_aux_, rows_))) {
+      LOG_WARN("fail to generate fulltext word rows", K(ret), K(helper_), K(is_fts_index_aux_));
+    } else {
+      if (cache_hit) {
+        ++task4_op11_cache_hit_count_;
+      } else {
+        ++task4_op11_cache_miss_count_;
+      }
+      const int64_t task4_op11_cache_total =
+          task4_op11_cache_hit_count_ + task4_op11_cache_miss_count_;
+      // Task4 Op11：扫描对象可能跨越单次索引构建，每处理一批文档记录一次累计命中率。
+      if (0 == task4_op11_cache_total % 20000) {
+        LOG_INFO("Task4 Op11 FTS DDL token cache periodic statistics",
+            K_(is_fts_index_aux),
+            K_(task4_op11_cache_hit_count),
+            K_(task4_op11_cache_miss_count),
+            K(task4_op11_cache_total),
+            "hit_rate_percent",
+            100.0 * task4_op11_cache_hit_count_ / task4_op11_cache_total);
+      }
+      if (!cache_hit) {
+        token_cache.put(
+            parser_name_, parser_properties_, ft_obj_meta, doc_id_datum, fulltext,
+            is_fts_index_aux_, rows_);
+      }
+      row_idx_ = 0;
+    }
   }
   LOG_TRACE("word segment", K(ret), K(row_idx_), K(rows_.count()), K(doc_id_datum), K(fulltext));
   return ret;
@@ -123,10 +530,33 @@ int ObFTIndexRowCache::get_next_row(blocksstable::ObDatumRow *&row)
 
 void ObFTIndexRowCache::reset()
 {
+  const int64_t task4_op11_cache_total =
+      task4_op11_cache_hit_count_ + task4_op11_cache_miss_count_;
+  if (task4_op11_cache_total > 0) {
+    // Task4 Op11：仅在扫描结束时记录一次，用于判断两条子 DDL 的推进速度是否造成缓存错过。
+    LOG_INFO("Task4 Op11 FTS DDL token cache statistics",
+        K_(is_fts_index_aux),
+        K_(task4_op11_cache_hit_count),
+        K_(task4_op11_cache_miss_count),
+        K(task4_op11_cache_total),
+        "hit_rate_percent",
+        100.0 * task4_op11_cache_hit_count_ / task4_op11_cache_total);
+  }
   rows_.reset();
+  if (ddl_token_cache_registered_) {
+    ObFtsDDLTokenCache::instance().release();
+    ddl_token_cache_registered_ = false;
+  }
   row_idx_ = 0;
   is_fts_index_aux_ = true;
+  enable_ddl_token_cache_ = false;
   helper_.reset();
+  // Task4 Op2：先析构缓存解析器，再统一释放其长生命周期内存
+  parser_name_.reset();
+  parser_properties_.reset();
+  task4_op11_cache_hit_count_ = 0;
+  task4_op11_cache_miss_count_ = 0;
+  parser_allocator_.reset();
   if (OB_NOT_NULL(merge_memctx_)) {
     DESTROY_CONTEXT(merge_memctx_);
     merge_memctx_ = nullptr;
@@ -924,6 +1354,8 @@ void ObFTDMLIterator::reset()
   is_inited_ = false;
   ft_doc_word_iter_.reset();
   ft_parse_helper_.reset();
+  // Task4 Op2：解析器析构后再释放独立 allocator，避免跨行悬空指针
+  parser_allocator_.reset();
   ObDomainDMLIterator::reset();
 }
 
@@ -947,7 +1379,9 @@ int ObFTDMLIterator::rewind()
         // This is the same as the parser name of the previous index.
         // nothing to do, just skip.
       } else if (FALSE_IT(ft_parse_helper_.reset())) {
-      } else if (OB_FAIL(ft_parse_helper_.init(&allocator_, parser_str, parser_property_str))) {
+      } else if (FALSE_IT(parser_allocator_.reset())) {
+      // Task4 Op2：配置变化时在独立 allocator 上重建解析器
+      } else if (OB_FAIL(ft_parse_helper_.init(&parser_allocator_, parser_str, parser_property_str))) {
         LOG_WARN("fail to init fulltext parse helper", K(ret), K(parser_str), K(parser_property_str));
       }
     } else if (ObDomainDMLMode::DOMAIN_DML_MODE_FT_SCAN == mode_) {
@@ -981,7 +1415,8 @@ int ObFTDMLIterator::init(
   } else {
     switch (mode_) {
       case ObDomainDMLMode::DOMAIN_DML_MODE_DEFAULT: {
-        if (OB_FAIL(ft_parse_helper_.init(&allocator_, parser_name, parser_properties))) {
+        // Task4 Op2：解析器不再依赖会被逐行 reuse 的 DML 行缓冲 allocator
+        if (OB_FAIL(ft_parse_helper_.init(&parser_allocator_, parser_name, parser_properties))) {
           LOG_WARN("fail to init fulltext parse helper", K(ret), K(parser_name), K(parser_properties));
         }
         break;
@@ -1043,7 +1478,9 @@ int ObFTDMLIterator::change_domain_dml_mode(const ObDomainDMLMode &mode)
           // This is the same as the parser name of the previous index.
           // nothing to do, just skip.
         } else if (FALSE_IT(ft_parse_helper_.reset())) {
-        } else if (OB_FAIL(ft_parse_helper_.init(&allocator_, parser_str, parser_property_str))) {
+        } else if (FALSE_IT(parser_allocator_.reset())) {
+        // Task4 Op2：模式切换后在独立 allocator 上重建解析器
+        } else if (OB_FAIL(ft_parse_helper_.init(&parser_allocator_, parser_str, parser_property_str))) {
           LOG_WARN("fail to init fulltext parse helper", K(ret), K(parser_str), K(parser_property_str));
         }
         break;
