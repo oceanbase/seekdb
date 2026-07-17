@@ -1495,7 +1495,7 @@ int AiSplitDocumentTableFunc::eval_column(ObRegCol &col_node, JtScanCtx *ctx, Ob
 {
   UNUSED(col_node);
   INIT_SUCC(ret);
-  if (!ctx.is_ai_split_document_table_func()) {
+  if (!ctx->is_ai_split_document_table_func()) {
     ret = OB_ERR_UNEXPECTED;
   } else if (current_chunk_ < 0 || current_chunk_ >= chunks_.count()) {
     ret = OB_ERR_UNEXPECTED;
