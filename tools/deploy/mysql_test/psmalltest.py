@@ -262,7 +262,6 @@ psmall_test=[
 'optimizer.optimizer_bug18135868_mysql',
 'optimizer.optimizer_bug18595461_mysql',
 'optimizer.optimizer_bug19634818_mysql',
-'optimizer.optimizer_bug2025021300107203892_mysql',
 'optimizer.optimizer_bug21444584_mysql',
 'optimizer.unique_index_get_range',
 'outer_join_where_is_null',
