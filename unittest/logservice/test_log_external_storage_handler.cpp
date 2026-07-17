@@ -1,0 +1,286 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#define private public
+#define protected public
+#include "share/rc/ob_tenant_base.h"
+#include "logservice/ob_log_external_storage_handler.h"
+#include "logservice/ob_log_external_storage_utils.h"
+#include "share/io/ob_backup_io_adapter.h"
+#include "share/io/ob_io_manager.h"
+#include "share/rc/ob_tenant_base.h"
+#undef protected
+#undef private
+#include "share/ob_device_manager.h"
+#include <gtest/gtest.h>
+#include <thread>
+
+namespace oceanbase
+{
+namespace unittest
+{
+using namespace common;
+using namespace logservice;
+
+
+int delete_oss_object(const common::ObString &uri,
+                   const ObString &oss_info)
+{
+  int ret = OB_SUCCESS;
+  common::ObBackupIoAdapter io_adapter;
+  share::ObBackupStorageInfo storage_info;
+  if (OB_FAIL(storage_info.set(OB_STORAGE_FILE, oss_info.ptr()))) {
+    CLOG_LOG(WARN, "set ObBackupStorageInfo failed", K(oss_info));
+  } else if (OB_FAIL(io_adapter.del_file(uri, &storage_info))) {
+    CLOG_LOG(WARN, "del dir failed", K(oss_info));
+  } else {}
+  return ret;
+}
+
+int generate_oss_data(const common::ObString &uri,
+                      const ObString &oss_info,
+                      const char *buf,
+                      const int64_t size)
+{
+
+  common::ObBackupIoAdapter io_adapter;
+  share::ObBackupStorageInfo storage_info;
+  int ret = OB_SUCCESS;
+  bool exist = false;
+  if (OB_FAIL(storage_info.set(OB_STORAGE_FILE, oss_info.ptr()))) {
+    CLOG_LOG(WARN, "set ObBackupStorageInfo failed", K(oss_info));
+  } else if (OB_FAIL(io_adapter.is_exist(uri, &storage_info, exist))) {
+    CLOG_LOG(WARN, "is_exist failed", K(oss_info));
+  } else if (!exist && OB_FAIL(io_adapter.write_single_file(uri, &storage_info, buf, size,
+                                          ObStorageIdMod::get_default_id_mod()))) {
+    CLOG_LOG(WARN, "ObBackupStorageInfo write_single_file failed", K(oss_info));
+  } else {
+    CLOG_LOG(INFO, "ObBackupStorageInfo write_single_file success", K(oss_info), K(uri), K(size));
+  }
+  return ret;
+}
+
+TEST(TestLogExternalStorageHandler, test_log_external_storage_handler)
+{
+  ObLogExternalStorageHandler handler;
+  // Test abnormal memory state——no init
+  EXPECT_EQ(false, handler.is_inited_);
+  EXPECT_EQ(OB_NOT_INIT, handler.start(10));
+  const int64_t MB = 1*1024*1024;
+#ifdef __APPLE__
+  char buf[PATH_MAX];
+  std::string curr_dir(getcwd(buf, sizeof(buf)));
+#else
+  std::string curr_dir(getcwd(NULL, 0));
+#endif
+  std::string test_file = "file://" + curr_dir + "/runlin_test";
+  ObString uri = test_file.c_str();
+  ObString storage_info = "runlin_test";
+  int64_t offset = 0;
+  int64_t read_buf_size = 15*MB;
+  char *read_buf = reinterpret_cast<char*>(ob_malloc(palf::PALF_PHY_BLOCK_SIZE, "unittest"));
+  ASSERT_NE(nullptr, read_buf);
+  int64_t real_read_size = 0;
+  uint64_t storage_id = 2;
+  palf::LogIOContext io_ctx;
+  EXPECT_EQ(OB_NOT_INIT, handler.pread(uri, storage_info, storage_id, offset, read_buf, read_buf_size, real_read_size, io_ctx));
+  EXPECT_EQ(OB_NOT_INIT, handler.resize(16, 0));
+  // Test abnormal memory state--no start
+  EXPECT_EQ(OB_SUCCESS, handler.init());
+  EXPECT_EQ(true, handler.is_inited_);
+  EXPECT_EQ(OB_NOT_RUNNING, handler.pread(uri, storage_info, storage_id, offset, read_buf, read_buf_size, real_read_size, io_ctx));
+  EXPECT_EQ(OB_NOT_RUNNING, handler.resize(16, 100));
+  // Test invalid argument
+  EXPECT_EQ(OB_INVALID_ARGUMENT, handler.start(-1));
+  // When concurrency exceeds the maximum concurrency, use the maximum concurrency as the standard
+  EXPECT_NE(OB_INVALID_ARGUMENT, handler.start(ObLogExternalStorageHandler::CONCURRENCY_LIMIT+1));
+  EXPECT_EQ(ObLogExternalStorageHandler::CONCURRENCY_LIMIT, handler.concurrency_);
+  EXPECT_EQ(ObLogExternalStorageHandler::CONCURRENCY_LIMIT*ObLogExternalStorageHandler::CAPACITY_COEFFICIENT,
+            handler.capacity_);
+  EXPECT_EQ(true, handler.is_running_);
+  // duplicate start
+  const int64_t concurrency = 16;
+  EXPECT_EQ(OB_SUCCESS, handler.start(concurrency));
+
+  EXPECT_EQ(OB_SUCCESS, generate_oss_data(uri, storage_info, read_buf, palf::PALF_PHY_BLOCK_SIZE));
+  // Validate read——invalid argument
+  {
+    ObString empty_uri;
+    EXPECT_EQ(OB_INVALID_ARGUMENT, handler.pread(empty_uri, storage_info, storage_id, offset, read_buf, read_buf_size, real_read_size, io_ctx));
+    // NFS storage info is empty
+    ObString empty_storage_info;
+    EXPECT_EQ(OB_SUCCESS, handler.pread(uri, storage_info, storage_id, offset, read_buf, read_buf_size, real_read_size, io_ctx));
+    int64_t invalid_offset = -1;
+    EXPECT_EQ(OB_INVALID_ARGUMENT, handler.pread(uri, storage_info, storage_id, invalid_offset, read_buf, read_buf_size, real_read_size, io_ctx));
+    // Read offset equals file length, return success, real_read_size=0
+    int64_t valid_offset = 64*1024*1024;
+    EXPECT_NE(OB_INVALID_ARGUMENT, handler.pread(uri, storage_info, storage_id, valid_offset, read_buf, read_buf_size, real_read_size, io_ctx));
+    EXPECT_EQ(0, real_read_size);
+    char *invalid_read_buf = NULL;
+    EXPECT_EQ(OB_INVALID_ARGUMENT, handler.pread(uri, storage_info, storage_id, offset, invalid_read_buf, read_buf_size, real_read_size, io_ctx));
+    int64_t invalid_read_buf_size = 0;
+    EXPECT_EQ(OB_INVALID_ARGUMENT, handler.pread(uri, storage_info, storage_id, offset, read_buf, invalid_read_buf_size, real_read_size, io_ctx));
+  }
+  // Validate resize——invalid argument
+  {
+    int64_t invalid_concurrency = -1;
+    EXPECT_EQ(OB_INVALID_ARGUMENT, handler.resize(invalid_concurrency, 0));
+    int64_t invalid_timeout_us = 0;
+    EXPECT_EQ(OB_INVALID_ARGUMENT, handler.resize(concurrency, invalid_timeout_us));
+
+  }
+  // Validate private function
+  {
+    EXPECT_EQ(OB_SUCCESS, handler.resize_(16));
+    // Validate is_valid_concurrency_ is false
+    int64_t invalid_concurrency = -1;
+    EXPECT_EQ(false, handler.is_valid_concurrency_(invalid_concurrency));
+    // When concurrency exceeds 128, concurrency_ will be set to 128.
+    invalid_concurrency = ObLogExternalStorageHandler::CONCURRENCY_LIMIT + 1;
+    EXPECT_EQ(true, handler.is_valid_concurrency_(invalid_concurrency));
+    // Validate get_async_task_count_
+    // Single task minimum 2M, in case of sufficient concurrency, up to 8 asynchronous tasks can exist
+    int64_t total_size = 15 * MB;
+    EXPECT_EQ(8, handler.get_async_task_count_(total_size));
+    // A maximum of 51 asynchronous tasks can exist, due to concurrency issues, only 16 can exist
+    total_size = 101 * MB;
+    EXPECT_EQ(16, handler.get_async_task_count_(total_size));
+
+    ObLogExternalStorageCtx pread_ctx;
+    // Validate construct_async_tasks_and_push_them_into_thread_pool_
+    real_read_size = 0;
+    EXPECT_EQ(OB_SUCCESS, handler.construct_async_pread_tasks_
+              (uri, storage_info, storage_id, offset, read_buf, read_buf_size, pread_ctx)); 
+    EXPECT_EQ(OB_SUCCESS, pread_ctx.wait(real_read_size));
+    ASSERT_EQ(real_read_size, read_buf_size);
+    CLOG_LOG(INFO, "after test private interface", K(real_read_size), K(read_buf_size));
+  }
+  // Validate public function
+  {
+    real_read_size = 0;
+    int64_t invalid_offset = 100*1024*1024;
+    EXPECT_EQ(OB_FILE_LENGTH_INVALID, handler.pread(uri, storage_info, storage_id, invalid_offset, read_buf, read_buf_size, real_read_size, io_ctx));
+
+    {
+      int64_t start_ts = ObTimeUtility::current_time();
+      EXPECT_EQ(OB_SUCCESS, handler.pread(uri, storage_info, storage_id, offset, read_buf, read_buf_size, real_read_size, io_ctx));
+      EXPECT_EQ(read_buf_size, real_read_size);
+      int64_t cost_ts = ObTimeUtility::current_time() - start_ts;
+      CLOG_LOG(INFO, "after first read", K(read_buf_size), K(real_read_size), K(cost_ts), K(concurrency));
+    }
+    int64_t new_concurrency = 8;
+    EXPECT_EQ(OB_SUCCESS, handler.resize(new_concurrency));
+    EXPECT_EQ(new_concurrency, handler.concurrency_);
+    EXPECT_EQ(new_concurrency*ObLogExternalStorageHandler::CAPACITY_COEFFICIENT,
+              handler.capacity_);
+
+    new_concurrency = 129;
+    EXPECT_EQ(OB_SUCCESS, handler.resize(new_concurrency));
+    EXPECT_EQ(ObLogExternalStorageHandler::CONCURRENCY_LIMIT, handler.concurrency_);
+    EXPECT_EQ(ObLogExternalStorageHandler::CONCURRENCY_LIMIT*ObLogExternalStorageHandler::CAPACITY_COEFFICIENT,
+              handler.capacity_);
+    new_concurrency = 0;
+    EXPECT_EQ(OB_SUCCESS, handler.resize(new_concurrency));
+
+    real_read_size = 0;
+    {
+      int64_t start_ts = ObTimeUtility::current_time();
+      EXPECT_EQ(OB_SUCCESS, handler.pread(uri, storage_info, storage_id, offset, read_buf, read_buf_size, real_read_size, io_ctx));
+      EXPECT_EQ(read_buf_size, real_read_size);
+      int64_t cost_ts = ObTimeUtility::current_time() - start_ts;
+      CLOG_LOG(INFO, "after second read", K(read_buf_size), K(real_read_size), K(cost_ts), K(concurrency));
+    }
+
+    new_concurrency = 32;
+    EXPECT_EQ(OB_SUCCESS, handler.resize(new_concurrency));
+
+    real_read_size = 0;
+    {
+      int64_t start_ts = ObTimeUtility::current_time();
+      EXPECT_EQ(OB_SUCCESS, handler.pread(uri, storage_info, storage_id, offset, read_buf, read_buf_size, real_read_size, io_ctx));
+      EXPECT_EQ(read_buf_size, real_read_size);
+      int64_t cost_ts = ObTimeUtility::current_time() - start_ts;
+      CLOG_LOG(INFO, "after third read", K(read_buf_size), K(real_read_size), K(cost_ts), K(concurrency));
+    }
+
+
+    real_read_size = 0;
+    {
+      read_buf_size = palf::PALF_PHY_BLOCK_SIZE;
+      int64_t start_ts = ObTimeUtility::current_time();
+      EXPECT_EQ(OB_SUCCESS, handler.pread(uri, storage_info, storage_id, offset, read_buf, read_buf_size, real_read_size, io_ctx));
+      EXPECT_EQ(read_buf_size, real_read_size);
+      int64_t cost_ts = ObTimeUtility::current_time() - start_ts;
+      CLOG_LOG(INFO, "after fourth read", K(read_buf_size), K(real_read_size), K(cost_ts), K(concurrency));
+    }
+
+  }
+  // Concurrency scenario validation
+  {
+    const int64_t pread_thread_count = 2;
+    std::vector<std::thread> pread_thread;
+    auto read_func = [&](){
+      for (int i = 0; i < 8; i++) {
+        srandom(ObTimeUtility::current_time());
+        const int64_t tmp_read_buf_size = random()%64*1024*1024 + 1;
+        int64_t tmp_real_read_size = 0;
+        int64_t tmp_offset = 64*1024*1024 - tmp_read_buf_size;
+        handler.pread(uri, storage_info, storage_id, tmp_offset, read_buf, tmp_read_buf_size, tmp_real_read_size, io_ctx);
+        EXPECT_EQ(tmp_real_read_size, tmp_read_buf_size);
+        CLOG_LOG(INFO, "pread in thread success", K(tmp_real_read_size), K(tmp_read_buf_size));
+      }
+    };
+    auto resize_func = [&](){
+      for (int i = 0; i < 8; i++) {
+        srandom(ObTimeUtility::current_time());
+        handler.resize(random()%7);
+        usleep(1000 * 1000);
+      }
+    };
+    for (int i = 0; i < pread_thread_count; i++) {
+      pread_thread.emplace_back(std::thread(read_func));
+    }
+    std::thread resize_thread(resize_func);
+
+    for (int i = 0; i < pread_thread_count; i++) {
+      pread_thread[i].join();
+    }
+    resize_thread.join();
+  }
+  delete_oss_object(uri, storage_info);
+}
+
+}
+}
+
+using namespace oceanbase;
+using namespace oceanbase::common;
+
+int main(int argc, char **argv)
+{
+  system("rm -rf test_log_external_storage_handler.log*");
+  OB_LOGGER.set_file_name("test_log_external_storage_handler.log", true);
+  OB_LOGGER.set_log_level("TRACE");
+  srandom(ObTimeUtility::current_time());
+  PALF_LOG(INFO, "begin unittest::test_log_external_storage_handler");
+  EXPECT_EQ(OB_SUCCESS, ObDeviceManager::get_instance().init_devices_env());
+  EXPECT_EQ(OB_SUCCESS, ObIOManager::get_instance().init(1000000000));
+  EXPECT_EQ(OB_SUCCESS, ObIOManager::get_instance().start());
+  static oceanbase::share::ObTenantBase tenant_base;
+  oceanbase::share::ObTenantEnv::set_tenant(&tenant_base);
+  ::testing::InitGoogleTest(&argc, argv);
+  return RUN_ALL_TESTS();
+}

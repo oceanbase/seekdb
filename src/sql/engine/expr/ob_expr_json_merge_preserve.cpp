@@ -1,0 +1,135 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+
+#define USING_LOG_PREFIX SQL_ENG
+#include "ob_expr_json_merge_preserve.h"
+#include "sql/engine/expr/ob_expr_json_func_helper.h"
+#include "share/ob_json_access_utils.h"
+
+using namespace oceanbase::common;
+using namespace oceanbase::sql;
+
+namespace oceanbase
+{
+namespace sql
+{
+ObExprJsonMergePreserve::ObExprJsonMergePreserve(ObIAllocator &alloc)
+    : ObFuncExprOperator(alloc,
+      T_FUN_SYS_JSON_MERGE_PRESERVE,
+      N_JSON_MERGE_PRESERVE, 
+      MORE_THAN_ONE,
+      VALID_FOR_GENERATED_COL,
+      NOT_ROW_DIMENSION)
+{
+}
+
+ObExprJsonMergePreserve::ObExprJsonMergePreserve(
+    ObIAllocator &alloc,
+    ObExprOperatorType type,
+    const char *name,
+    int32_t param_num, 
+    int32_t dimension) : ObFuncExprOperator(alloc, type, name, param_num, VALID_FOR_GENERATED_COL, dimension) 
+{
+}
+
+ObExprJsonMergePreserve::~ObExprJsonMergePreserve()
+{
+}
+
+int ObExprJsonMergePreserve::calc_result_typeN(ObExprResType& type,
+                                        ObExprResType* types_stack,
+                                        int64_t param_num,
+                                        ObExprTypeCtx& type_ctx) const
+{
+  UNUSED(type_ctx);
+  INIT_SUCC(ret);
+  type.set_json();
+  type.set_length((ObAccuracy::DDL_DEFAULT_ACCURACY[ObJsonType]).get_length());
+  bool is_result_null = false;
+  for (int64_t i = 0; OB_SUCC(ret) && !is_result_null && i < param_num; i++) {
+    if (types_stack[0].get_type() == ObNullType) {
+      is_result_null = true;
+    } else if (OB_FAIL(ObJsonExprHelper::is_valid_for_json(types_stack, i, N_JSON_MERGE_PRESERVE))) {
+      LOG_WARN("wrong type for json doc.", K(ret), K(types_stack[i].get_type()));
+    }
+  }
+  return ret;
+}
+
+int ObExprJsonMergePreserve::eval_json_merge_preserve(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
+{
+  INIT_SUCC(ret);
+  ObDatum *json_datum = NULL;
+  ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
+  
+  MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator(), expr.type_, ret);
+  lib::ObMallocHookAttrGuard malloc_guard(lib::ObMemAttr("JSONModule"));
+  ObIJsonBase *j_base = NULL;
+  ObIJsonBase *j_patch_node = NULL;
+  bool has_null = false;
+  if (expr.datum_meta_.cs_type_ != CS_TYPE_UTF8MB4_BIN) {
+    ret = OB_ERR_INVALID_JSON_CHARSET;
+    LOG_WARN("invalid out put charset", K(ret), K(expr.datum_meta_.cs_type_));
+  }
+
+  for (int32 i = 0; OB_SUCC(ret) && i < expr.arg_cnt_ && !has_null; i++) {
+    ObIJsonBase *j_res = NULL;
+    if (OB_FAIL(temp_allocator.add_baseline_size(expr.args_[i], ctx))) {
+      LOG_WARN("failed to add baseline size.", K(ret));
+    } else if (OB_FAIL(ObJsonExprHelper::get_json_doc(expr, ctx, temp_allocator, i, j_patch_node, has_null))) {
+      LOG_WARN("get_json_doc failed", K(ret));
+    } else if (has_null) {
+      // do nothing
+    } else {
+      if (i == 0) {
+        j_base = j_patch_node;
+      } else {
+        ObIJsonBase *j_res = NULL;
+        if (OB_FAIL(j_base->merge_tree(&temp_allocator, j_patch_node, j_res))) {
+          LOG_WARN("error, merge tree failed", K(ret), K(i));
+        } else {
+          j_base = j_res;
+        }
+      }
+    }
+  }
+
+  if (OB_SUCC(ret)) {
+    ObString raw_bin;
+    if (has_null) {
+      res.set_null();
+    } else if (OB_FAIL(ObJsonWrapper::get_raw_binary(j_base, raw_bin, &temp_allocator))) {
+      LOG_WARN("failed: get json raw binary", K(ret));
+    } else if (OB_FAIL(ObJsonExprHelper::pack_json_str_res(expr, ctx, res, raw_bin))) {
+      LOG_WARN("fail to pack json result", K(ret));
+    }
+  }
+
+  return ret;
+}
+
+int ObExprJsonMergePreserve::cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_expr,
+                              ObExpr &rt_expr) const
+{
+  UNUSED(expr_cg_ctx);
+  UNUSED(raw_expr);
+  rt_expr.eval_func_ = eval_json_merge_preserve;
+  return OB_SUCCESS;
+}
+
+}
+}

@@ -1,0 +1,170 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef _OB_SHARE_OB_GAIS_MSG_H_
+#define _OB_SHARE_OB_GAIS_MSG_H_
+
+#include "lib/utility/ob_unify_serialize.h"
+#include "lib/net/ob_addr.h"
+#include "share/ob_autoincrement_param.h"
+#include "share/ob_define.h"
+
+namespace oceanbase
+{
+namespace obcall
+{
+struct ObGAISNextValRpcResult;
+struct ObGAISCurrValRpcResult;
+}
+namespace share
+{
+
+/* Request for get next auto increment value */
+struct ObGAISNextAutoIncValReq
+{
+  OB_UNIS_VERSION(1);
+
+public:
+  ObGAISNextAutoIncValReq() : autoinc_key_(), offset_(0), increment_(0), base_value_(0),
+                              max_value_(0), desired_cnt_(0), cache_size_(0), sender_(), autoinc_version_(OB_INVALID_VERSION) {}
+  int init(const AutoincKey &autoinc_key,
+           const uint64_t offset,
+           const uint64_t increment,
+           const uint64_t base_value,
+           const uint64_t max_value,
+           const uint64_t desired_cnt,
+           const uint64_t cache_size,
+           const common::ObAddr &sender,
+           const int64_t &autoinc_version);
+  bool is_valid() const
+  {
+    return true && offset_ > 0 && increment_ > 0 &&
+             max_value_ > 0 && desired_cnt_ > 0 && cache_size_ > 0 && sender_.is_valid()
+             && autoinc_version_ >= OB_INVALID_VERSION;
+  }
+  TO_STRING_KV(K_(autoinc_key), K_(offset), K_(increment), K_(base_value), K_(max_value),
+                                K_(desired_cnt), K_(cache_size), K_(sender), K_(autoinc_version));
+
+  AutoincKey autoinc_key_;
+  uint64_t offset_;
+  uint64_t increment_;
+  uint64_t base_value_;
+  uint64_t max_value_;
+  uint64_t desired_cnt_;
+  uint64_t cache_size_;
+  common::ObAddr sender_;
+  int64_t autoinc_version_;
+};
+
+/* GAIS autoinc key rpc argument */
+struct ObGAISAutoIncKeyArg
+{
+  OB_UNIS_VERSION(1);
+
+public:
+  ObGAISAutoIncKeyArg() : autoinc_key_(), sender_(), autoinc_version_(OB_INVALID_VERSION) {}
+  int init(const AutoincKey &autoinc_key, const common::ObAddr &sender, const int64_t autoinc_version);
+  bool is_valid() const
+  {
+    return true && sender_.is_valid() && autoinc_version_ >= OB_INVALID_VERSION;
+  }
+  TO_STRING_KV(K_(autoinc_key), K_(sender), K_(autoinc_version));
+
+  AutoincKey autoinc_key_;
+  common::ObAddr sender_;
+  int64_t autoinc_version_;
+};
+
+/* Request for push local sync value to global */
+struct ObGAISPushAutoIncValReq
+{
+  OB_UNIS_VERSION(1);
+
+public:
+  ObGAISPushAutoIncValReq() : autoinc_key_(), base_value_(0), max_value_(0), sender_(),
+                              autoinc_version_(OB_INVALID_VERSION), cache_size_(0) {}
+  int init(const AutoincKey &autoinc_key,
+           const uint64_t base_value,
+           const uint64_t max_value,
+           const common::ObAddr &sender,
+           const int64_t &autoinc_version,
+           const int64_t cache_size);
+  bool is_valid() const
+  {
+    return true && max_value_ > 0 && base_value_ <= max_value_ 
+            && sender_.is_valid() && autoinc_version_ >= OB_INVALID_VERSION && cache_size_ >= 0;
+  }
+  TO_STRING_KV(K_(autoinc_key), K_(base_value), K_(max_value), K_(sender), K_(autoinc_version),
+               K_(cache_size));
+
+  AutoincKey autoinc_key_;
+  uint64_t base_value_;
+  uint64_t max_value_;
+  common::ObAddr sender_;
+  int64_t autoinc_version_;
+  int64_t cache_size_;
+};
+
+struct ObGAISBroadcastAutoIncCacheReq
+{
+  OB_UNIS_VERSION(1);
+
+public:
+  ObGAISBroadcastAutoIncCacheReq() : buf_(NULL), buf_size_(0) {}
+
+  int init(const char *buf, const int64_t size)
+  {
+    
+    buf_ = buf;
+    buf_size_ = size;
+    return common::OB_SUCCESS;
+  }
+
+  bool is_valid() const
+  {
+    return true && NULL != buf_ && buf_size_ > 0;
+  }
+
+  TO_STRING_KV(KP_(buf), K_(buf_size));
+  
+  const char *buf_;
+  int64_t buf_size_;
+};
+
+/* Request for get next sequence value */
+struct ObGAISNextSequenceValReq
+{
+  OB_UNIS_VERSION(1);
+
+public:
+  ObGAISNextSequenceValReq() : schema_(), sender_()
+  {}
+  int init(const schema::ObSequenceSchema &schema, const common::ObAddr &sender);
+  bool is_valid() const
+  {
+    return true && schema_.get_sequence_id() != OB_INVALID_ID
+           && schema_.get_cache_size() > static_cast<int64_t>(0) && sender_.is_valid();
+  }
+  TO_STRING_KV(K_(schema), K_(sender));
+
+  schema::ObSequenceSchema schema_;
+  common::ObAddr sender_;
+};
+
+} // share
+} // oceanbase
+
+#endif // _OB_SHARE_OB_GAIS_MSG_H_

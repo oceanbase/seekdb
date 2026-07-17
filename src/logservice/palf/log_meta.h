@@ -1,0 +1,76 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef OCEANBASE_LOGSERVICE_LOG_META_
+#define OCEANBASE_LOGSERVICE_LOG_META_
+
+#include "log_meta_info.h"
+
+namespace oceanbase
+{
+namespace palf
+{
+// LogMeta is not a mutil version data strucate, therefore,
+// we must discard old message
+//
+// NB: not thread safe
+class LogMeta
+{
+public:
+  LogMeta();
+  ~LogMeta();
+  LogMeta(const LogMeta &rmeta);
+
+public:
+  int generate_by_palf_base_info(const PalfBaseInfo &palf_base_info,
+                                 const AccessMode &access_mode,
+                                 const LogReplicaType &replica_type);
+
+  int load(const char *buf, int64_t buf_len);
+  bool is_valid() const;
+  void reset();
+
+  LogPrepareMeta get_log_prepare_meta() const { return log_prepare_meta_; }
+  LogConfigMeta get_log_config_meta() const { return log_config_meta_; }
+  LogModeMeta get_log_mode_meta() const { return log_mode_meta_; }
+  LogSnapshotMeta get_log_snapshot_meta() const { return log_snapshot_meta_; }
+  LogReplicaPropertyMeta get_log_replica_property_meta() const { return log_replica_property_meta_; }
+  void operator=(const LogMeta &log_meta);
+
+  // The follow functions used to set few fields of this object
+  int update_log_prepare_meta(const LogPrepareMeta &log_prepare_meta);
+  int update_log_config_meta(const LogConfigMeta &log_config_meta);
+  int update_log_snapshot_meta(const LogSnapshotMeta &log_snapshot_meta);
+  int update_log_replica_property_meta(const LogReplicaPropertyMeta &log_replica_property_meta);
+  int update_log_mode_meta(const LogModeMeta &log_mode_meta);
+
+  TO_STRING_KV(K_(version), K_(log_prepare_meta), K_(log_config_meta), K_(log_snapshot_meta),
+      K_(log_replica_property_meta), K_(log_mode_meta));
+  NEED_SERIALIZE_AND_DESERIALIZE;
+
+private:
+  int64_t version_;
+  LogPrepareMeta log_prepare_meta_;
+  LogConfigMeta log_config_meta_;
+  LogModeMeta log_mode_meta_;
+  LogSnapshotMeta log_snapshot_meta_;
+  LogReplicaPropertyMeta log_replica_property_meta_;
+  static constexpr int64_t LOG_META_VERSION = 1;
+};
+} // end namespace palf
+} // end namespace oceanbase
+
+#endif

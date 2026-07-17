@@ -1,0 +1,85 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef OCEANBASE_SHARE_DEVICE_OB_DEVICE_CONNECTIVITY_H_
+#define OCEANBASE_SHARE_DEVICE_OB_DEVICE_CONNECTIVITY_H_
+
+#include "common/mysqlclient/ob_mysql_proxy.h"
+#include "lib/restore/ob_device_common.h"
+
+namespace oceanbase
+{
+namespace common
+{
+  class ObIODirentEntry;
+}
+namespace share
+{
+class ObBackupDest;
+
+class ObDeviceCheckFile final
+{
+public:
+  ObDeviceCheckFile() {}
+  ~ObDeviceCheckFile() {}
+  int check_io_permission(const share::ObBackupDest &storage_dest);
+
+private:
+  int get_check_file_path_(const share::ObBackupDest &storage_dest, char *path);
+  int get_permission_check_file_path_(const share::ObBackupDest &storage_dest,
+                                      const bool is_appender,
+                                      char *path);
+  int check_appender_permission_(const share::ObBackupDest &storage_dest);
+  bool is_permission_error_(const int result);
+  // Convert time string, return like '2023-04-28T12:00:00' if concat is 'T'.
+  int storage_time_to_strftime_(const int64_t &ts_s,
+                                char *buf,
+                                const int64_t buf_len,
+                                int64_t &pos,
+                                const char concat);
+
+private:
+  static const char OB_STR_CONNECTIVITY_CHECK[];
+  static const char OB_SS_SUFFIX[];
+  static constexpr int64_t OB_MAX_DEVICE_CHECK_FILE_NAME_LENGTH = 256;
+  static constexpr int64_t OB_STORAGE_MAX_TIME_STR_LEN = 50; // time string max length
+private:
+  DISALLOW_COPY_AND_ASSIGN(ObDeviceCheckFile);
+};
+
+class ObDirPrefixEntryFilter : public ObBaseDirEntryOperator
+{
+public:
+  ObDirPrefixEntryFilter(common::ObIArray<common::ObIODirentEntry> &d_entrys)
+      : is_inited_(false), d_entrys_(d_entrys)
+  {
+    filter_str_[0] = '\0';
+  }
+  virtual ~ObDirPrefixEntryFilter() = default;
+  int init(const char *filter_str, const int32_t filter_str_len);
+  virtual int func(const dirent *entry) override;
+private:
+  bool is_inited_;
+  char filter_str_[common::MAX_PATH_SIZE];
+  common::ObIArray<common::ObIODirentEntry> &d_entrys_;
+private:
+  DISALLOW_COPY_AND_ASSIGN(ObDirPrefixEntryFilter);
+};
+
+}  // namespace share
+}  // namespace oceanbase
+
+#endif  // OCEANBASE_SHARE_DEVICE_OB_DEVICE_CONNECTIVITY_H_

@@ -1,0 +1,123 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#define USING_LOG_PREFIX STORAGE
+
+#include <gtest/gtest.h>
+#include "storage/blocksstable/encoding/ob_hex_string_encoder.h"
+
+namespace oceanbase
+{
+namespace blocksstable
+{
+using namespace common;
+
+TEST(ObHexStringMap, store_order)
+{
+  ObHexStringMap map;
+  const char *input_str = "0123456789";
+  for (int i = 0; i < 10; i++) {
+    map.mark(input_str[i]);
+  }
+  ASSERT_TRUE(map.can_packing());
+  unsigned char index[10];
+  map.build_index(index);
+
+  unsigned char data[5];
+  MEMSET(data, 0, sizeof(data));
+  ObHexStringPacker packer(map, data);
+  packer.pack(reinterpret_cast<const unsigned char *>(input_str), 10);
+
+  char str[11];
+  MEMSET(str, 0, 11);
+  for (int i = 0; i < 10; i += 2) {
+    snprintf(str + i, 3,  "%02x", data[i/2]);
+  }
+
+  ASSERT_EQ(0, memcmp(str, input_str, 10));
+}
+
+void pack(ObHexStringPacker &packer, const unsigned char *str, const int64_t len)
+{
+  int64_t done = 0;
+  while (done < len) {
+    const int64_t step =  std::max(std::min(len - done, random() % (std::max(len / 2, static_cast<int64_t>(1)))), static_cast<int64_t>(1));
+    if (random() & 0x1) {
+      packer.pack(str + done, step);
+    } else {
+      for (int64_t i = 0; i < step; i++) {
+        packer.pack(str[done + i]);
+      }
+    }
+    done += step;
+  }
+}
+
+void unpack(ObHexStringUnpacker &unpacker, unsigned char *str, const int64_t len)
+{
+  int64_t done = 0;
+  while (done < len) {
+    const int64_t step =  std::max(std::min(len - done, random() % (std::max(len / 2, static_cast<int64_t>(1)))), static_cast<int64_t>(1));
+    if (random() & 0x1) {
+      unpacker.unpack(str + done, step);
+    } else {
+      for (int64_t i = 0; i < step; i++) {
+        unpacker.unpack(str[done + i]);
+      }
+    }
+    done += step;
+  }
+}
+
+TEST(ObHexString, pack_unpack)
+{
+  for (int64_t i = 0; i < 100; i++) {
+    ObHexStringMap map;
+    while (map.size_ < 16) {
+      map.mark(static_cast<unsigned char>(random() % 256));
+    }
+    ASSERT_TRUE(map.can_packing());
+    unsigned char index[16];
+    map.build_index(index);
+    const int64_t len = random() % 1000 + 32;
+
+    unsigned char input[len];
+    unsigned char hex[len];
+    unsigned char output[len];
+
+    for (int64_t j = 0; j < len; j++) {
+      input[j] = index[random() % 16];
+    }
+    MEMSET(hex, 0, len);
+    ObHexStringPacker packer(map, hex);
+    pack(packer, input, len);
+    ObHexStringUnpacker unpacker(index, hex);
+    unpack(unpacker, output, len);
+
+    ASSERT_EQ(0, memcmp(input, output, len));
+  }
+}
+
+} // end namespace blocksstable
+} // end namespace oceanbase
+
+int main(int argc, char **argv)
+{
+
+  OB_LOGGER.set_log_level("INFO");
+  testing::InitGoogleTest(&argc, argv);
+  return RUN_ALL_TESTS();
+}

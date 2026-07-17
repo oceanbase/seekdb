@@ -1,0 +1,1 @@
+sql_unittest(test_phy_operator_stats)

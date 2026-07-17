@@ -1,0 +1,68 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+#define USING_LOG_PREFIX SHARE
+
+#include "ob_ddl_args.h"
+
+namespace oceanbase
+{
+namespace obcall
+{
+int ObDDLArg::assign(const ObDDLArg &other)
+{
+  int ret = OB_SUCCESS;
+  if (OB_FAIL(based_schema_object_infos_.assign(other.based_schema_object_infos_))) {
+    LOG_WARN("fail to assign based_schema_object_infos", KR(ret));
+  } else {
+    ddl_stmt_str_ = other.ddl_stmt_str_;
+    
+    ddl_id_str_ = other.ddl_id_str_;
+    sync_from_primary_ = other.sync_from_primary_;
+    parallelism_ = other.parallelism_;
+    task_id_ = other.task_id_;
+    consumer_group_id_ = other.consumer_group_id_;
+    is_parallel_ = other.is_parallel_;
+  }
+  return ret;
+}
+
+DEF_TO_STRING(ObDDLArg)
+{
+  int64_t pos = 0;
+  J_KV("ddl_stmt_str", contain_sensitive_data() ? ObString(OB_MASKED_STR) : ddl_stmt_str_,
+       
+       K_(ddl_id_str),
+       K_(sync_from_primary),
+       K_(based_schema_object_infos),
+       K_(parallelism),
+       K_(task_id),
+       K_(consumer_group_id));
+  return pos;
+}
+
+OB_SERIALIZE_MEMBER(ObDDLArg,
+                    ddl_stmt_str_,
+                    
+                    ddl_id_str_,
+                    sync_from_primary_,
+                    based_schema_object_infos_,
+                    parallelism_,
+                    task_id_,
+                    consumer_group_id_,
+                    is_parallel_);
+
+} // namespace obcall
+} // namespace oceanbase

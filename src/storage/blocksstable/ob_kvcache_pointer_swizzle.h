@@ -1,0 +1,76 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef OCEANBASE_CACHE_OB_KVCACHE_POINTER_SWIZZLE_H_
+#define OCEANBASE_CACHE_OB_KVCACHE_POINTER_SWIZZLE_H_
+
+#include "share/cache/ob_kvcache_hazard_version.h"
+#include "share/cache/ob_kvcache_struct.h"
+
+namespace oceanbase
+{
+namespace blocksstable 
+{
+  class ObMicroBlockBufferHandle;
+}
+namespace common
+{
+class ObPointerSwizzleNode final
+{
+public:
+  ObPointerSwizzleNode();
+  ~ObPointerSwizzleNode();
+  void operator=(const ObPointerSwizzleNode &ps_node);
+  int swizzle(const blocksstable::ObMicroBlockBufferHandle &handle);
+  int access_mem_ptr(blocksstable::ObMicroBlockBufferHandle &handle);
+  TO_STRING_KV(K_(seq_num), KPC_(mb_handle), KP_(value), K_(node_version));
+private:
+  void unswizzle();
+  bool load_node(ObPointerSwizzleNode &tmp_ps_node);
+  void reset();
+  void set(ObKVMemBlockHandle *mb_handle, const ObIKVCacheValue *value);
+private:
+  union ObNodeVersion
+  {
+    uint64_t value_;
+    struct {
+      uint64_t version_value_: 63;
+      uint64_t write_flag_: 1;
+    };
+    ObNodeVersion(const uint64_t &value) : value_(value) {}
+    ObNodeVersion(const uint64_t &version_value, const uint64_t &write_flag) : version_value_(version_value), write_flag_(write_flag) {}
+    TO_STRING_KV(K_(value), K_(version_value), K_(write_flag));
+  } node_version_;
+  ObKVMemBlockHandle *mb_handle_;
+  const ObIKVCacheValue *value_;
+  int32_t seq_num_;
+private:
+  class ObPointerSwizzleGuard final
+  {
+  public:
+    ObPointerSwizzleGuard(ObNodeVersion &cur_version);
+    ~ObPointerSwizzleGuard();
+    bool is_multi_thd_safe() { return is_multi_thd_safe_; }
+  private:
+    ObNodeVersion &cur_version_;
+    bool is_multi_thd_safe_;
+  };
+};
+
+}//end namespace common
+}//end namespace oceanbase
+
+#endif //OCEANBASE_CACHE_OB_KVCACHE_POINTER_SWIZZLE_H_

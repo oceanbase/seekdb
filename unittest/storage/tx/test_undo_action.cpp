@@ -1,0 +1,91 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#include "lib/ob_name_id_def.h"
+#include "lib/json/ob_yson.h"
+#include "storage/tx/ob_trans_define.h"
+#include <gtest/gtest.h>
+namespace oceanbase
+{
+using namespace transaction;
+namespace unittest
+{
+struct TestUndoAction : public ::testing::Test
+{
+  virtual void SetUp() {}
+  virtual void TearDown() {}
+};
+TEST_F(TestUndoAction, valid)
+{
+  ObUndoAction a1(ObTxSEQ(100, 0), ObTxSEQ(1, 1));
+  EXPECT_FALSE(a1.is_valid());
+  ObUndoAction a2(ObTxSEQ(100, 1), ObTxSEQ(100, 1));
+  EXPECT_FALSE(a2.is_valid());
+  ObUndoAction a3(ObTxSEQ(100, 0), ObTxSEQ(100, 0));
+  EXPECT_FALSE(a3.is_valid());
+  ObUndoAction a4(ObTxSEQ(100, 0), ObTxSEQ(100, 1));
+  EXPECT_FALSE(a4.is_valid());
+  ObUndoAction a5(ObTxSEQ(100, 1), ObTxSEQ(100, 0));
+  EXPECT_FALSE(a5.is_valid());
+  ObUndoAction a6(ObTxSEQ(100, 1), ObTxSEQ(1, 0));
+  EXPECT_FALSE(a6.is_valid());
+  ObUndoAction a7(ObTxSEQ(100, 1), ObTxSEQ(1, 1));
+  EXPECT_TRUE(a7.is_valid());
+  ObUndoAction a8(ObTxSEQ(100, 0), ObTxSEQ(1, 0));
+  EXPECT_TRUE(a8.is_valid());
+}
+TEST_F(TestUndoAction, contain)
+{
+  ObUndoAction a1(ObTxSEQ(100,1), ObTxSEQ(1, 1));
+  ObUndoAction a2(ObTxSEQ(99,1), ObTxSEQ(1, 1));
+  EXPECT_TRUE(a1.is_contain(a2));
+  EXPECT_FALSE(a2.is_contain(a1));
+  ObUndoAction a3(ObTxSEQ(100,0), ObTxSEQ(1, 0));
+  ObUndoAction a4(ObTxSEQ(99,0), ObTxSEQ(1, 0));
+  EXPECT_TRUE(a3.is_contain(a4));
+  EXPECT_FALSE(a4.is_contain(a3));
+  ObUndoAction a5(ObTxSEQ(100,2), ObTxSEQ(1, 2));
+  EXPECT_FALSE(a5.is_contain(a1));
+  EXPECT_FALSE(a5.is_contain(a2));
+  EXPECT_FALSE(a1.is_contain(a5));
+  EXPECT_TRUE(a3.is_contain(a5));
+  EXPECT_FALSE(a4.is_contain(a5));
+}
+
+TEST_F(TestUndoAction, contain_point)
+{
+  ObUndoAction a1(ObTxSEQ(100,1), ObTxSEQ(1, 1));
+  ObUndoAction a3(ObTxSEQ(100,0), ObTxSEQ(1, 0));
+  EXPECT_TRUE(a3.is_contain(ObTxSEQ(50, 1)));
+  EXPECT_TRUE(a1.is_contain(ObTxSEQ(50, 1)));
+  EXPECT_FALSE(a1.is_contain(ObTxSEQ(50, 0)));
+  EXPECT_FALSE(a1.is_contain(ObTxSEQ(50, 2)));
+  EXPECT_TRUE(a3.is_contain(ObTxSEQ(50, 0)));
+}
+} // unittest
+} //oceanbase
+using namespace oceanbase;
+using namespace transaction;
+int main(int argc, char **argv)
+{
+  int ret = 1;
+  ObLogger &logger = ObLogger::get_logger();
+  logger.set_file_name("test_undo_action.log", true);
+  logger.set_log_level(OB_LOG_LEVEL_INFO);
+  testing::InitGoogleTest(&argc, argv);
+  ret = RUN_ALL_TESTS();
+  return ret;
+}

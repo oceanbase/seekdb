@@ -1,0 +1,217 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#define USING_LOG_PREFIX PL
+#include "ob_dbms_session.h"
+#include "pl/ob_pl.h"
+#include "sql/monitor/flt/ob_flt_control_info_mgr.h"
+
+namespace oceanbase
+{
+namespace pl
+{
+
+int ObDBMSSession::clear_identifier(sql::ObExecContext &ctx,
+                                    sql::ParamStore &params,
+                                    common::ObObj &result)
+{
+  int ret = OB_SUCCESS;
+  sql::ObSQLSessionInfo *session = ctx.get_my_session();
+  ObString client_id = "";
+  if (OB_UNLIKELY(OB_ISNULL(session))) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("session info is nullptr", K(ret));
+  } else if (OB_UNLIKELY(0 != params.count())) {
+    ObString func_name("CLEAR_IDENTIFIER");
+    ret = OB_ERR_WRONG_FUNC_ARGUMENTS_TYPE;
+    LOG_USER_ERROR(OB_ERR_WRONG_FUNC_ARGUMENTS_TYPE, func_name.length(), func_name.ptr());
+  } else if (OB_FAIL(session->set_client_id(client_id))) {
+    LOG_WARN("failed to set client id", K(ret));
+  }
+  return ret;
+}
+
+int ObDBMSSession::set_identifier(sql::ObExecContext &ctx,
+                                  sql::ParamStore &params,
+                                  common::ObObj &result)
+{
+  int ret = OB_SUCCESS;
+  sql::ObSQLSessionInfo *session = ctx.get_my_session();
+  ObString client_id;
+  if (OB_UNLIKELY(OB_ISNULL(session))) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("session info is nullptr", K(ret));
+  } else if (OB_UNLIKELY(1 != params.count())) {
+    ObString func_name("SET_IDENTIFIER");
+    ret = OB_ERR_WRONG_FUNC_ARGUMENTS_TYPE;
+    LOG_USER_ERROR(OB_ERR_WRONG_FUNC_ARGUMENTS_TYPE, func_name.length(), func_name.ptr());
+  } else if (params.at(0).is_null()) {
+    client_id = ObString("");
+  } else if (!params.at(0).is_varchar()) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("get wrong param in set identifier", K(ret), K(params.at(0)));
+  } else if (OB_FAIL(params.at(0).get_varchar(client_id))) {
+    LOG_WARN("failed to get param", K(ret), K(params.at(0)));
+  }
+  if (OB_FAIL(ret)) {
+  } else if (OB_FAIL(session->set_client_id(client_id))) {
+    LOG_WARN("failed to set client id", K(ret));
+  }
+
+  if (OB_FAIL(ret)) {
+    // do nothing
+  } else {
+    ObFLTControlInfoManager mgr;
+    if (OB_FAIL(mgr.init())) {
+      LOG_WARN("failed to init full link trace info manager", K(ret));
+    } else if (OB_FAIL(mgr.find_appropriate_con_info(*session))) {
+      LOG_WARN("failed to get control info for client info", K(ret));
+    } else {
+      // do nothing
+    }
+  }
+  return ret;
+}
+
+int ObDBMSSession::reset_package(sql::ObExecContext &ctx,
+                                  sql::ParamStore &params,
+                                  common::ObObj &result)
+{
+  int ret = OB_SUCCESS;
+  sql::ObSQLSessionInfo *session = ctx.get_my_session();
+  ObPLContext *pl_ctx = nullptr;
+  ObString client_id;
+  if (OB_UNLIKELY(OB_ISNULL(session))) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("session info is nullptr", K(ret));
+  } else if (OB_UNLIKELY(0 != params.count())) {
+    ObString func_name("RESET_PACKAGE");
+    ret = OB_ERR_WRONG_FUNC_ARGUMENTS_TYPE;
+    LOG_USER_ERROR(OB_ERR_WRONG_FUNC_ARGUMENTS_TYPE, func_name.length(), func_name.ptr());
+  } else {
+    session->set_need_reset_package(true);
+  }
+  return ret;
+}
+
+int ObDBMSSession::check_argument(const ObObj &input_param, bool allow_null,
+                                  bool need_case_up, int32_t param_idx,
+                                  int64_t max_len, ObString &output_param,
+                                  ObIAllocator &alloc)
+{
+  int ret = OB_SUCCESS;
+  if (input_param.is_null()) {
+    if (allow_null) {
+      output_param.reset();
+    } else {
+      ret = OB_ERR_INVALID_INPUT_ARGUMENT;
+      LOG_USER_ERROR(OB_ERR_INVALID_INPUT_ARGUMENT, param_idx + 1);
+    }
+  } else if (!input_param.is_varchar()) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("get unexpected param", K(ret), K(input_param), K(param_idx));
+  } else if (OB_FAIL(input_param.get_varchar(output_param))) {
+    LOG_WARN("failed to get varchar", K(ret), K(input_param), K(param_idx));
+  } else if (output_param.length() > max_len) {
+    ret = OB_ERR_INVALID_INPUT_ARGUMENT;
+    LOG_USER_ERROR(OB_ERR_INVALID_INPUT_ARGUMENT, param_idx + 1);
+  } else if (need_case_up) {
+    if (OB_FAIL(try_caseup(input_param.get_collation_type(), output_param, alloc))) {
+      LOG_WARN("failed to case up", K(ret));
+    }
+  }
+  return ret;
+}
+
+int ObDBMSSession::check_client_id(const ObObj &input_param,
+                                   int64_t max_len,
+                                   ObString &output_param,
+                                   ObIAllocator &alloc)
+{
+  int ret = OB_SUCCESS;
+  if (input_param.is_null()) {
+    output_param.reset();
+  } else if (!input_param.is_varchar()) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("get unexpected param", K(ret), K(input_param));
+  } else if (OB_FAIL(input_param.get_varchar(output_param))) {
+    LOG_WARN("failed to get varchar", K(ret), K(input_param));
+  } else if (output_param.length() > max_len) {
+    ret = OB_ERR_CLIENT_IDENTIFIER_TOO_LONG;
+    LOG_USER_ERROR(OB_ERR_CLIENT_IDENTIFIER_TOO_LONG);
+  } else if (OB_FAIL(try_caseup(input_param.get_collation_type(), output_param, alloc))) {
+    LOG_WARN("failed to case up", K(ret));
+  }
+  return ret;
+}
+
+int ObDBMSSession::try_caseup(ObCollationType cs_type, ObString &str_val, ObIAllocator &alloc)
+{
+  int ret = OB_SUCCESS;
+  ObString dest;
+  if (!str_val.empty()) {
+    if (str_val.ptr()[0] == '\"' && str_val.ptr()[str_val.length() - 1] == '\"') {
+      str_val.assign(str_val.ptr() + 1, str_val.length() - 2);
+    } else if (OB_FAIL(ObCharset::caseup(cs_type, str_val, dest, alloc))) {
+      LOG_WARN("failed to case up", K(ret));
+    } else {
+      str_val = dest;
+    }
+  }
+  return ret;
+}
+
+int ObDBMSSession::check_privileges(pl::ObPLContext *pl_ctx,
+                                    const ObString &package_name,
+                                    const ObString &schema_name)
+{
+  int ret = OB_SUCCESS;
+  ObPLExecState *frame = NULL;
+  bool trusted = false;
+  // ob store sys package in oceanbase schema, to compat with oracle
+  // we rewrite SYS to OCEANBASE
+  ObString real_schema_name = (0 == schema_name.case_compare("SYS") 
+                               && 0 == package_name.case_compare("DBMS_SESSION"))
+                               ? "OCEANBASE" : schema_name;
+  CK (OB_NOT_NULL(pl_ctx));
+  if (OB_SUCC(ret)) {
+    uint64_t stack_cnt = pl_ctx->get_exec_stack().count();
+    for (int64_t i = 0; OB_SUCC(ret) && i < stack_cnt && !trusted; ++i) {
+      frame = pl_ctx->get_exec_stack().at(i);
+      if (OB_ISNULL(frame)) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("failed to get frame", K(i), K(stack_cnt), K(ret));
+      } else {
+        ObPLFunction &func = frame->get_function();
+        if (0 == package_name.case_compare(func.get_package_name())
+            || (func.get_package_name().empty()
+                && 0 == package_name.case_compare(func.get_function_name()))) {
+          if (0 == real_schema_name.case_compare(func.get_database_name())) {
+            trusted = true;
+          }
+        }
+      }
+    }
+  }
+  if (OB_SUCC(ret) && !trusted) {
+    ret = OB_ERR_NO_SYS_PRIVILEGE;
+    LOG_USER_ERROR(OB_ERR_NO_SYS_PRIVILEGE);
+  }
+  return ret;
+}
+
+} // end of pl
+} // end oceanbase

@@ -1,0 +1,102 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#define USING_LOG_PREFIX LIB
+
+#include "lib/utility/ob_fast_convert.h"
+
+namespace oceanbase
+{
+namespace common
+{
+const char ObFastFormatInt::DIGITS[] =
+    "0001020304050607080910111213141516171819"
+    "2021222324252627282930313233343536373839"
+    "4041424344454647484950515253545556575859"
+    "6061626364656667686970717273747576777879"
+    "8081828384858687888990919293949596979899";
+
+char *ObFastFormatInt::format_unsigned(uint64_t value)
+{
+  char *ptr = buf_ + (MAX_DIGITS10_STR_SIZE - 1);
+  uint32_t index = 0;
+  while (value >= 100) {
+    index = static_cast<uint32_t>(value % 100) << 1;
+    value /= 100;
+    *--ptr = DIGITS[index + 1];
+    *--ptr = DIGITS[index];
+  }
+  if (value < 10) {
+    *--ptr = (char)('0' + value);
+  } else {
+    index = static_cast<uint32_t>(value) << 1;
+    *--ptr = DIGITS[index + 1];
+    *--ptr = DIGITS[index];
+  }
+  return ptr;
+}
+
+void ObFastFormatInt::format_signed(int64_t value)
+{
+  uint64_t abs_value = static_cast<uint64_t>(value);
+  if (value < 0) {
+    abs_value = ~abs_value + 1;
+    ptr_ = format_unsigned(abs_value);
+    *--ptr_ = '-';
+  } else {
+    ptr_ = format_unsigned(abs_value);
+  }
+  len_ = buf_ - ptr_ + MAX_DIGITS10_STR_SIZE - 1;
+}
+
+int64_t ObFastFormatInt::format_unsigned(uint64_t value, char *buf)
+{
+  int64_t len = ob_fast_digits10(value);
+  buf += len;
+  *buf = '\0';
+
+  uint32_t index = 0;
+  while (value >= 100) {
+    index = static_cast<uint32_t>(value % 100) << 1;
+    value /= 100;
+    *--buf = DIGITS[index + 1];
+    *--buf = DIGITS[index];
+  }
+  if (value < 10) {
+    *--buf = (char)('0' + value);
+  } else {
+    index = static_cast<uint32_t>(value) << 1;
+    *--buf = DIGITS[index + 1];
+    *--buf = DIGITS[index];
+  }
+  return len;
+}
+
+int64_t ObFastFormatInt::format_signed(int64_t value, char *buf)
+{
+  int64_t len = 0;
+  uint64_t abs_value = static_cast<uint64_t>(value);
+  if (value < 0) {
+    abs_value = ~abs_value + 1;
+    *buf++ = '-';
+    ++len;
+  }
+  len += format_unsigned(abs_value, buf);
+  return len;
+}
+
+} // end namespace common
+} // end namespace oceanbase

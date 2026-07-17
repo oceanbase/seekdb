@@ -1,0 +1,11 @@
+#!/bin/bash
+set -u
+
+CONFIG_FILE="/opt/seekdb/etc/seekdb/seekdb.cnf"
+BACKUP_FILE="/tmp/seekdb.cnf.pkg.bak"
+
+if [ -f "$CONFIG_FILE" ]; then
+  cp "$CONFIG_FILE" "$BACKUP_FILE"
+fi
+
+exit 0

@@ -1,0 +1,91 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef OCEANBASE_STORAGE_BLOCKSSTABLE_OB_DDL_SSTABLE_SCAN_MERGE_H
+#define OCEANBASE_STORAGE_BLOCKSSTABLE_OB_DDL_SSTABLE_SCAN_MERGE_H
+
+#include "storage/blocksstable/ob_block_sstable_struct.h"
+#include "storage/column_store/ob_column_store_util.h"
+#include "ob_index_block_row_struct.h"
+#include "storage/access/ob_simple_rows_merger.h"
+
+namespace oceanbase
+{
+namespace blocksstable
+{
+struct ObDDLSSTableMergeLoserTreeItem final
+{
+public:
+  ObDDLSSTableMergeLoserTreeItem()
+    : equal_with_next_(false),
+      is_scan_left_border_(false),
+      is_scan_right_border_(false),
+      end_key_(),
+      header_(nullptr),
+      iter_idx_(0),
+      agg_buf_size_(0),
+      row_offset_(0),
+      idx_minor_info_(nullptr),
+      agg_row_buf_(nullptr)
+  {
+  }
+  ~ObDDLSSTableMergeLoserTreeItem() = default;
+  void reset()
+  {
+    end_key_.reset();
+    header_ = nullptr;
+    idx_minor_info_ = nullptr;
+    agg_row_buf_ = nullptr;
+    iter_idx_ = 0;
+    agg_buf_size_ = 0;
+    row_offset_ = 0;
+    equal_with_next_ = false;
+    is_scan_left_border_ = false;
+    is_scan_right_border_ = false;
+  }
+  TO_STRING_KV(K_(equal_with_next), K_(end_key), KPC(header_), K_(iter_idx), K_(is_scan_left_border), K_(is_scan_right_border), 
+               K_(agg_buf_size), K_(row_offset), KP_(idx_minor_info), KP_(agg_row_buf));
+public:
+  bool equal_with_next_; // for simple row merger
+  bool is_scan_left_border_;
+  bool is_scan_right_border_;
+  ObCommonDatumRowkey end_key_;
+  const blocksstable::ObIndexBlockRowHeader *header_;
+  int64_t iter_idx_;
+  int64_t agg_buf_size_;
+  int64_t row_offset_;
+  const ObIndexBlockRowMinorMetaInfo *idx_minor_info_;
+  const char *agg_row_buf_;
+};
+
+class ObDDLSSTableMergeLoserTreeCompare final
+{
+public:
+  ObDDLSSTableMergeLoserTreeCompare();
+  ~ObDDLSSTableMergeLoserTreeCompare();
+  void reset();
+  int cmp(const ObDDLSSTableMergeLoserTreeItem &lhs,
+          const ObDDLSSTableMergeLoserTreeItem &rhs,
+          int64_t &cmp_ret);
+  TO_STRING_KV(K(reverse_scan_), KPC(datum_utils_));
+public:
+  bool reverse_scan_;
+  const blocksstable::ObStorageDatumUtils *datum_utils_;
+};
+
+} // end namespace blocksstable
+} // end namespace oceanbase
+#endif

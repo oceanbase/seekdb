@@ -1,0 +1,43 @@
+result_format: 4
+
+
+
+set @@ob_enable_plan_cache = 0;
+
+select sys_privilege_check('table_acc', 1, 'oceanbase', '__all_user');
++----------------------------------------------------------------+
+| sys_privilege_check('table_acc', 1, 'oceanbase', '__all_user') |
++----------------------------------------------------------------+
+|                                                              0 |
++----------------------------------------------------------------+
+select sys_privilege_check('db_acc', 1, 'oceanbase_', '__all_user_');
++---------------------------------------------------------------+
+| sys_privilege_check('db_acc', 1, 'oceanbase_', '__all_user_') |
++---------------------------------------------------------------+
+|                                                             0 |
++---------------------------------------------------------------+
+
+drop database if exists espcndb;
+create database espcndb;
+
+create user espcnouser;
+grant all on test.* to espcnouser;
+
+
+select sys_privilege_check('db_acc', 1, 'test', 't');
++-----------------------------------------------+
+| sys_privilege_check('db_acc', 1, 'test', 't') |
++-----------------------------------------------+
+|                                             0 |
++-----------------------------------------------+
+select sys_privilege_check('db_acc', 1, 'espcndb', 't');
++--------------------------------------------------+
+| sys_privilege_check('db_acc', 1, 'espcndb', 't') |
++--------------------------------------------------+
+|                                               -1 |
++--------------------------------------------------+
+
+drop user espcnouser;
+drop database espcnouser;
+ERROR HY000: Can't drop database 'espcnouser'; database doesn't exist
+

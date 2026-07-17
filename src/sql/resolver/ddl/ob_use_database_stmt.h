@@ -1,0 +1,78 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef OCEANBASE_SQL_OB_USE_DATABASE_STMT_H_
+#define OCEANBASE_SQL_OB_USE_DATABASE_STMT_H_
+
+#include "sql/resolver/ddl/ob_ddl_stmt.h"
+namespace oceanbase
+{
+namespace sql
+{
+class ObUseDatabaseStmt : public ObDDLStmt
+{
+public:
+  ObUseDatabaseStmt() : ObDDLStmt(stmt::T_USE_DATABASE),
+    catalog_id_(common::OB_INVALID_ID),
+    db_id_(common::OB_INVALID_ID),
+    db_name_(),
+    db_charset_(),
+    db_collation_(),
+    db_priv_set_()
+  {
+  }
+
+  explicit ObUseDatabaseStmt(common::ObIAllocator *name_pool)
+      : ObDDLStmt(name_pool, stmt::T_USE_DATABASE),
+      catalog_id_(common::OB_INVALID_ID),
+      db_id_(common::OB_INVALID_ID),
+      db_name_(),
+      db_charset_(),
+      db_collation_(),
+      db_priv_set_()
+  {
+  }
+
+  virtual ~ObUseDatabaseStmt()
+  {}
+  void set_db_name(const common::ObString &db_name)
+  { db_name_.assign_ptr(db_name.ptr(), db_name.length()); }
+  void set_catalog_id(const uint64_t catalog_id) { catalog_id_ = catalog_id; }
+  uint64_t get_catalog_id() const { return catalog_id_; }
+  void set_db_id(const int64_t db_id) { db_id_ = db_id; }
+  const common::ObString& get_db_name() const { return db_name_; }
+  int64_t get_db_id() const { return db_id_; }
+  void set_db_id(uint64_t db_id) { db_id_ = db_id; }
+  const common::ObString& get_db_charset() const { return db_charset_; }
+  void set_db_charset(const common::ObString &db_charset) { db_charset_ = db_charset; }
+  const common::ObString& get_db_collation() const { return db_collation_; }
+  void set_db_collation(const common::ObString &db_collation) { db_collation_ = db_collation; }
+  const ObPrivSet& get_db_priv_set() const { return db_priv_set_; }
+  void set_db_priv_set(const ObPrivSet &db_priv_set) { db_priv_set_ = db_priv_set; }
+  virtual obcall::ObDDLArg &get_ddl_arg() { return use_database_arg_; }
+  virtual bool cause_implicit_commit() const { return false; }
+private:
+  uint64_t catalog_id_;
+  int64_t db_id_;
+  common::ObString db_name_;
+  common::ObString db_charset_;
+  common::ObString db_collation_;
+  ObPrivSet db_priv_set_;
+  obcall::ObUseDatabaseArg use_database_arg_; // used to return exec_tid_
+};
+} //namespace sql
+}//namespace oceanbase
+#endif //OCEANBASE_SQL_OB_USE_DATABASE_STMT_H_

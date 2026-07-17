@@ -1,0 +1,63 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef OB_DTL_LOCAL_FIRST_BUFFER_MANAGER_H
+#define OB_DTL_LOCAL_FIRST_BUFFER_MANAGER_H
+
+#include "lib/utility/ob_unify_serialize.h"
+#include "lib/atomic/ob_atomic.h"
+#include "sql/dtl/ob_dtl_flow_control.h"
+#include "sql/dtl/ob_dtl_linked_buffer.h"
+#include "sql/dtl/ob_dtl_tenant_mem_manager.h"
+#include "lib/list/ob_dlist.h"
+#include "lib/hash/ob_hashmap.h"
+#include "lib/lock/ob_mutex.h"
+#include "lib/ob_define.h"
+#include "share/config/ob_server_config.h"
+
+namespace oceanbase {
+namespace sql {
+namespace dtl {
+
+
+class ObDtlCacheBufferInfo : public common::ObDLinkBase<ObDtlCacheBufferInfo>
+{
+public:
+  ObDtlCacheBufferInfo() :buffer_(nullptr), chid_(common::OB_INVALID_ID), ts_(0)
+  {}
+
+  ObDtlCacheBufferInfo(ObDtlLinkedBuffer *buffer, int64_t ts) :
+    buffer_(buffer), chid_(common::OB_INVALID_ID), ts_(ts)
+  {}
+
+  void set_buffer(ObDtlLinkedBuffer *buffer);
+  ObDtlLinkedBuffer *buffer() { return buffer_; }
+  int64_t &ts() { return ts_; }
+  int64_t &chid() { return chid_; }
+  uint64_t get_key() const { return chid_; }
+private:
+  ObDtlLinkedBuffer *buffer_;
+  int64_t chid_;
+  int64_t ts_;
+private:
+  DISALLOW_COPY_AND_ASSIGN(ObDtlCacheBufferInfo);
+};
+
+} // dtl
+} // sql
+} // oceanbase
+
+#endif /* OB_DTL_LOCAL_FIRST_BUFFER_MANAGER_H */

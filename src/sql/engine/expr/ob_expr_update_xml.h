@@ -1,0 +1,135 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef OCEANBASE_SQL_ENGINE_EXPR_OB_EXPR_UPDATE_XML_H
+#define OCEANBASE_SQL_ENGINE_EXPR_OB_EXPR_UPDATE_XML_H
+
+#include "sql/engine/expr/ob_expr_operator.h"
+#include "common/xml/ob_multi_mode_interface.h"
+#include "common/xml/ob_xml_tree.h"
+#include "common/xml/ob_xpath.h"
+
+namespace oceanbase 
+{
+
+namespace sql
+{
+
+enum ObUpdateXMLRetType: uint32_t {
+  ObRetInputStr,
+  ObRetNullType,
+  ObRetMax
+};
+
+enum XmlUpdateNodeType
+{
+  ObUpdateTextType,
+  ObUpdateAttributeType,
+  ObUpdateNamespaceType,
+  ObUpdateCdateCommentType,
+  ObUpdateElementType,
+  ObUpdateInstructType,
+  ObUpdateMaxType = 8
+};
+
+struct ObXmlUpdateNodeInfo
+{
+  ObObjType update_type;
+  ObString update_str;
+  ObXmlNode *update_node;
+};
+
+typedef ObXmlUpdateNodeInfo* ObXmlUpdateNodeInfoArray[ObUpdateMaxType];
+
+class ObExprUpdateXml : public ObFuncExprOperator
+{
+public: 
+  explicit ObExprUpdateXml(common::ObIAllocator &alloc);
+  virtual ~ObExprUpdateXml();
+  virtual int calc_result_typeN(ObExprResType &type,
+                                ObExprResType *types,
+                                int64_t param_num,
+                                common::ObExprTypeCtx &type_ctx) const override;
+  
+  static int eval_mysql_update_xml(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res);
+  virtual int cg_expr(ObExprCGCtx &expr_cg_ctx, 
+                      const ObRawExpr &raw_expr, 
+                      ObExpr &rt_expr) 
+                      const override;
+private:
+  static int update_xml_tree_mysql(ObMulModeMemCtx* xml_mem_ctx, 
+                                   ObString xml_target,
+                                   ObEvalCtx &ctx,
+                                   ObString &xpath_str,
+                                   ObIMulModeBase *&xml_tree,
+                                   ObUpdateXMLRetType &res_origin);
+  static int update_xml_child_text(ObXmlNode *old_node, ObXmlNode *text_node);
+  static int update_xml_node(ObMulModeMemCtx* xml_mem_ctx, const ObExpr *expr, ObEvalCtx &ctx, ObXmlUpdateNodeInfoArray &update_info, ObIMulModeBase *node);
+  // for text node and attribute
+  static int update_text_or_attribute_node(ObMulModeMemCtx* xml_mem_ctx, 
+                                           ObXmlNode *xml_node, 
+                                           const ObExpr *expr, 
+                                           ObEvalCtx &ctx,
+                                           bool is_text,
+                                           ObXmlUpdateNodeInfo *&update_info);
+  static int update_attribute_node(ObIAllocator &allocator, ObXmlNode *xml_node, const ObExpr *expr, ObEvalCtx &ctx);
+  static int update_attribute_xml_node(ObXmlNode *old_node, ObXmlNode *update_node);
+  // for cdata and comment
+  static int update_cdata_and_comment_node(ObMulModeMemCtx* xml_mem_ctx, ObXmlNode *xml_node, const ObExpr *expr, ObEvalCtx &ctx, ObXmlUpdateNodeInfo *&update_info);
+  // for namespace
+  static int update_namespace_node(ObMulModeMemCtx* xml_mem_ctx, ObXmlNode *xml_node, const ObExpr *expr, ObEvalCtx &ctx, ObXmlUpdateNodeInfo *&update_info);
+  static int update_namespace_xml_node(ObIAllocator &allocator, ObXmlNode *old_node, ObXmlNode *update_node);
+  static int update_namespace_value(ObIAllocator &allocator, ObXmlNode *xml_node, const ObString &ns_value);
+  static int get_valid_default_ns_from_parent(ObXmlNode *cur_node, ObXmlAttribute* &default_ns);
+  static int set_ns_recrusively(ObXmlNode *update_node, ObXmlAttribute *ns);
+  static int update_new_nodes_ns(ObIAllocator &allocator, ObXmlNode *parent, ObXmlNode *update_node);
+  static int update_exist_nodes_ns(ObXmlElement *parent, ObXmlAttribute *prefix_ns);
+  // for element
+  static int update_element_node(ObMulModeMemCtx* xml_mem_ctx, ObXmlNode *xml_node, const ObExpr *expr, ObEvalCtx &ctx, ObXmlUpdateNodeInfo *&update_info);
+  static int clear_element_child_node(ObXmlElement *ele_node);
+  static int update_xml_child_node(ObIAllocator &allocator, ObXmlNode *old_node, ObXmlNode *update_node);
+  static int remove_and_insert_element_node(ObXmlElement *ele_node, ObXmlNode *update_node, int64_t pos, bool is_remove);
+  // for pi node
+  static int update_pi_node(ObMulModeMemCtx* xml_mem_ctx, ObXmlNode *xml_node, const ObExpr *expr, ObEvalCtx &ctx, ObXmlUpdateNodeInfo *&update_info);
+  static int pack_long_text_res(const ObExpr &expr, 
+                                ObEvalCtx &ctx, 
+                                ObDatum &res, 
+                                ObIAllocator &allocator,
+                                ObString input_res);
+
+  static int get_update_str_info(ObMulModeMemCtx* xml_mem_ctx, 
+                                 const ObExpr *expr,
+                                 ObEvalCtx &ctx, 
+                                 ObXmlUpdateNodeInfo *&update_info);
+
+  static int get_update_xml_info(ObMulModeMemCtx* xml_mem_ctx, 
+                                 const ObExpr *expr,
+                                 ObEvalCtx &ctx, 
+                                 ObXmlUpdateNodeInfo *&update_info);
+
+  static int get_update_parse_str_info(ObMulModeMemCtx* xml_mem_ctx, 
+                                       const ObExpr *expr,
+                                       ObEvalCtx &ctx, 
+                                       ObXmlUpdateNodeInfo *&update_info);
+private:
+  DISALLOW_COPY_AND_ASSIGN(ObExprUpdateXml);
+};
+
+} // sql
+} // oceanbase
+
+
+#endif // OCEANBASE_SQL_ENGINE_EXPR_OB_EXPR_UPDATE_XML_H

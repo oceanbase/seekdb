@@ -1,0 +1,161 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#pragma once
+
+#include "share/cache/ob_kv_storecache.h"
+#include "storage/tx/ob_trans_define.h"
+#include "storage/tx/ob_tx_data_define.h"
+
+#define OB_TX_DATA_KV_CACHE oceanbase::storage::ObTxDataKVCache::get_instance()
+
+namespace oceanbase {
+namespace storage {
+
+#define DELETE_COPY_CONSTRUCTOR(TypeName) \
+  TypeName(const TypeName &) = delete;    \
+  TypeName &operator=(const TypeName &) = delete;
+
+class ObTxDataCacheKey : public common::ObIKVCacheKey {
+public:
+  ObTxDataCacheKey() : ls_id_(0), tx_id_(0) {}
+  ObTxDataCacheKey(share::ObLSID ls_id, transaction::ObTransID tx_id)
+      : ls_id_(ls_id), tx_id_(tx_id) {}
+  ~ObTxDataCacheKey() {}
+
+  bool is_valid() const
+  {
+    bool is_valid = true && ls_id_.is_valid() && tx_id_.is_valid();
+    return is_valid;
+  }
+
+  share::ObLSID get_ls_id() const { return ls_id_; }
+
+  transaction::ObTransID get_tx_id() const { return tx_id_; }
+
+  TO_STRING_KV(K_(ls_id), K_(tx_id));
+
+public:  // derived from ObIKVCacheKey
+  virtual bool operator==(const ObIKVCacheKey &other) const
+  {
+    const ObTxDataCacheKey &rhs = static_cast<const ObTxDataCacheKey&>(other);
+    bool equal = (true && ls_id_ == rhs.get_ls_id() && tx_id_ == rhs.get_tx_id());
+    return equal;
+  }
+
+  virtual uint64_t hash() const
+  {
+    uint64_t hash_code = 0;
+    hash_code = murmurhash(&ls_id_, sizeof(ls_id_), hash_code);
+    hash_code = murmurhash(&tx_id_, sizeof(tx_id_), hash_code);
+    return hash_code;
+  }
+
+  
+
+  virtual int64_t size() const { return sizeof(*this); }
+
+  virtual int deep_copy(char *buf, const int64_t buf_len, ObIKVCacheKey *&key) const
+  {
+    int ret = OB_SUCCESS;
+    if (OB_ISNULL(buf) || OB_UNLIKELY(buf_len < size())) {
+      ret = OB_INVALID_ARGUMENT;
+      STORAGE_LOG(WARN, "invalid argument", KR(ret), K(buf_len), K(size()));
+    } else {
+      ObTxDataCacheKey *new_key = new (buf) ObTxDataCacheKey(ls_id_, tx_id_);
+      if (OB_ISNULL(new_key)) {
+        ret = OB_ERR_UNEXPECTED;
+        STORAGE_LOG(WARN, "new key ptr is null", KR(ret), KPC(this));
+      } else {
+        key = new_key;
+      }
+    }
+    return ret;
+  }
+
+private:
+  
+  share::ObLSID ls_id_;
+  transaction::ObTransID tx_id_;
+};
+
+class ObTxDataCacheValue : public common::ObIKVCacheValue {
+public:
+  ObTxDataCacheValue() : is_inited_(false), tx_data_(nullptr), undo_node_array_(nullptr), mtl_alloc_buf_(nullptr) {}
+  ~ObTxDataCacheValue();
+
+  int init(const ObTxData &tx_data);
+
+  int init(const ObTxDataCacheValue &tx_data_cache_val, void *buf, const int64_t buf_len);
+
+  bool is_valid() const { return is_inited_; }
+
+  const ObTxData *get_tx_data() const { return tx_data_; }
+
+  void destroy();
+
+  TO_STRING_KV(K_(is_inited), KP_(tx_data), KPC_(tx_data), KP_(mtl_alloc_buf), KP(&reserved_buf_));
+
+public:  // derived from ObIKVCacheValue
+  virtual int64_t size() const { return (IS_INIT && OB_NOT_NULL(tx_data_)) ? sizeof(*this) + tx_data_->size_need_cache() : 0; }
+
+  virtual int deep_copy(char *buf, const int64_t buf_len, ObIKVCacheValue *&value) const;
+
+private:
+  int inner_deep_copy_(void *buf, const ObTxData &rhs);
+  int inner_deep_copy_undo_status_(const ObTxData &rhs);
+
+private:
+  bool is_inited_;
+  storage::ObTxData *tx_data_;
+  storage::ObUndoStatusNode *undo_node_array_;
+  void *mtl_alloc_buf_;
+  storage::ObTxData reserved_buf_;
+};
+
+struct ObTxDataValueHandle {
+  const ObTxDataCacheValue *value_;
+  common::ObKVCacheHandle handle_;
+
+  ObTxDataValueHandle() : value_(nullptr), handle_() {}
+  ~ObTxDataValueHandle() {}
+
+  OB_INLINE bool is_valid() const { return OB_NOT_NULL(value_) && value_->is_valid() && handle_.is_valid(); }
+
+  TO_STRING_KV(KP_(value), KPC_(value))
+};
+
+class ObTxDataKVCache : public common::ObKVCache<ObTxDataCacheKey, ObTxDataCacheValue> {
+public:
+  static ObTxDataKVCache &get_instance()
+  {
+    static ObTxDataKVCache instance;
+    return instance;
+  }
+
+public:
+  ObTxDataKVCache() {}
+  DELETE_COPY_CONSTRUCTOR(ObTxDataKVCache);
+  ~ObTxDataKVCache() {}
+
+  int get_row(const ObTxDataCacheKey &key, ObTxDataValueHandle &val_handle);
+  int put_row(const ObTxDataCacheKey &key, const ObTxDataCacheValue &value);
+};
+
+
+#undef DELETE_COPY_CONSTRUCTOR
+}  // namespace storage
+}  // namespace oceanbase

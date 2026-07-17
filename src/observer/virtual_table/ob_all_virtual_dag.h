@@ -1,0 +1,117 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef OB_ALL_VIRTUAL_DAG_H_
+#define OB_ALL_VIRTUAL_DAG_H_
+#include "observer/virtual_table/ob_virtual_table_scanner_iterator.h"
+#include "lib/container/ob_array.h"
+#include "observer/scheduler/ob_dag_warning_history_mgr.h"
+
+namespace oceanbase
+{
+namespace observer
+{
+
+/*
+ * ObDagInfoIterator
+ * */
+
+template <typename T>
+class ObDagInfoIterator
+{
+public:
+
+  ObDagInfoIterator()
+    : allocator_("DagInfo"),
+    cur_idx_(0),
+    is_opened_(false)
+  {
+  }
+  virtual ~ObDagInfoIterator() { reset(); }
+  int open();
+  int get_next_info(T &info);
+  void reset();
+
+private:
+  common::ObArenaAllocator allocator_;
+  common::ObArray<void*> all_tenants_dag_infos_;
+
+  int64_t cur_idx_;
+  bool is_opened_;
+};
+
+class ObAllVirtualDag : public common::ObVirtualTableScannerIterator
+{
+public:
+  enum COLUMN_ID_LIST
+  {
+        DAG_TYPE = common::OB_APP_MIN_COLUMN_ID,
+    DAG_KEY,
+    DAG_NET_KEY,
+    DAG_ID,
+    DAG_STATUS,
+    RUNNING_TASK_CNT,
+    ADD_TIME,
+    START_TIME,
+    INDEGREE,
+    COMMENT
+  };
+  ObAllVirtualDag();
+  virtual ~ObAllVirtualDag();
+  int init();
+  virtual int inner_get_next_row(common::ObNewRow *&row);
+  virtual void reset();
+protected:
+  int fill_cells(share::ObDagInfo &dag_warning_info);
+private:
+  char ip_buf_[common::OB_IP_STR_BUFF];
+  char dag_id_buf_[common::OB_TRACE_STAT_BUFFER_SIZE];
+  share::ObDagInfo dag_info_;
+  ObDagInfoIterator<share::ObDagInfo> dag_info_iter_;
+  bool is_inited_;
+  DISALLOW_COPY_AND_ASSIGN(ObAllVirtualDag);
+};
+
+
+class ObAllVirtualDagScheduler : public common::ObVirtualTableScannerIterator
+{
+public:
+  enum COLUMN_ID_LIST
+  {
+        VALUE_TYPE = common::OB_APP_MIN_COLUMN_ID,
+    KEY,
+    VALUE
+  };
+  ObAllVirtualDagScheduler();
+  virtual ~ObAllVirtualDagScheduler();
+  int init();
+  virtual int inner_get_next_row(common::ObNewRow *&row);
+  virtual void reset();
+protected:
+  int fill_cells(share::ObDagSchedulerInfo &dag_scheduler_info);
+private:
+  char ip_buf_[common::OB_IP_STR_BUFF];
+  char dag_id_buf_[common::OB_TRACE_STAT_BUFFER_SIZE];
+  share::ObDagSchedulerInfo dag_scheduler_info_;
+  ObDagInfoIterator<share::ObDagSchedulerInfo> dag_scheduler_info_iter_;
+  bool is_inited_;
+  DISALLOW_COPY_AND_ASSIGN(ObAllVirtualDagScheduler);
+};
+
+
+} /* namespace observer */
+} /* namespace oceanbase */
+#endif

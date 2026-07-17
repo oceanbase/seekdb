@@ -1,0 +1,120 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#define USING_LOG_PREFIX SQL_OPT
+#include "ob_log_plan_factory.h"
+#include "sql/optimizer/ob_select_log_plan.h"
+#include "sql/optimizer/ob_delete_log_plan.h"
+#include "sql/optimizer/ob_insert_log_plan.h"
+#include "sql/optimizer/ob_update_log_plan.h"
+#include "sql/optimizer/ob_explain_log_plan.h"
+#include "sql/optimizer/ob_help_log_plan.h"
+using namespace oceanbase;
+using namespace oceanbase::sql;
+using namespace oceanbase::common;
+
+ObLogPlanFactory::ObLogPlanFactory(ObIAllocator &allocator)
+  : allocator_(allocator),
+    plan_store_(allocator)
+{
+}
+
+ObLogPlanFactory::~ObLogPlanFactory()
+{
+  //destroy();
+}
+// TODO(jiuman): will rewrite it with template later to remove redundancy
+ObLogPlan *ObLogPlanFactory::create(ObOptimizerContext &ctx, const ObDMLStmt &stmt)
+{
+  ObLogPlan *ret = NULL;
+  switch (stmt.get_stmt_type()) {
+  case stmt::T_SHOW_INDEXES:
+  case stmt::T_SELECT: {
+    void *ptr = allocator_.alloc(sizeof(ObSelectLogPlan));
+    if (NULL != ptr) {
+      ret = new (ptr) ObSelectLogPlan(ctx, static_cast<const ObSelectStmt*>(&stmt));
+    } else {
+      SQL_OPT_LOG_RET(WARN, OB_ALLOCATE_MEMORY_FAILED, "Allocate ObSelectLogPlan error");
+    }
+    break;
+  }
+  case stmt::T_DELETE: {
+    void *ptr = allocator_.alloc(sizeof(ObDeleteLogPlan));
+    if (NULL != ptr) {
+      ret = new (ptr) ObDeleteLogPlan(ctx, static_cast<const ObDeleteStmt*>(&stmt));
+    } else {
+      SQL_OPT_LOG_RET(WARN, OB_ALLOCATE_MEMORY_FAILED, "Allocate ObDeleteLogPlan error");
+    }
+    break;
+  }
+  case stmt::T_UPDATE: {
+    void *ptr = allocator_.alloc(sizeof(ObUpdateLogPlan));
+    if (NULL != ptr) {
+      ret = new (ptr) ObUpdateLogPlan(ctx, static_cast<const ObUpdateStmt*>(&stmt));
+    } else {
+      SQL_OPT_LOG_RET(WARN, OB_ALLOCATE_MEMORY_FAILED, "Allocate ObUpdateLogPlan error");
+    }
+    break;
+  }
+  case stmt::T_INSERT:
+  case stmt::T_REPLACE: {
+    void *ptr = allocator_.alloc(sizeof(ObInsertLogPlan));
+    if (NULL != ptr) {
+      ret = new (ptr) ObInsertLogPlan(ctx, static_cast<const ObInsertStmt*>(&stmt));
+    } else {
+      SQL_OPT_LOG_RET(WARN, OB_ALLOCATE_MEMORY_FAILED, "Allocate ObInsertLogPlan error");
+    }
+    break;
+  }
+  case stmt::T_EXPLAIN: {
+    void *ptr = allocator_.alloc(sizeof(ObExplainLogPlan));
+    if (NULL != ptr) {
+      ret = new (ptr) ObExplainLogPlan(ctx, &stmt);
+    } else {
+      SQL_OPT_LOG_RET(WARN, OB_ALLOCATE_MEMORY_FAILED, "Allocate ObExplainLogPlan error");
+    }
+    break;
+  }
+  case stmt::T_HELP: {
+    void *ptr = allocator_.alloc(sizeof(ObHelpLogPlan));
+    if (NULL != ptr) {
+      ret = new (ptr) ObHelpLogPlan(ctx, &stmt);
+    } else {
+    }
+    break;
+  }
+  default:
+    break;
+  }
+  if (ret != NULL) {
+    int err = OB_SUCCESS;
+    if (OB_SUCCESS != (err = plan_store_.store_obj(ret))) {
+      LOG_WARN_RET(err, "store log plan failed", K(err));
+      ret->~ObLogPlan();
+      ret = NULL;
+    }
+  }
+  return ret;
+}
+
+void ObLogPlanFactory::destroy()
+{
+  DLIST_FOREACH_NORET(node, plan_store_.get_obj_list()) {
+    if (node != NULL && node->get_obj() != NULL) {
+      node->get_obj()->destory();
+    }
+  }
+}

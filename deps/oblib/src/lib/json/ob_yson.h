@@ -1,0 +1,146 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef _OB_YSON_H
+#define _OB_YSON_H 1
+#include "lib/ob_define.h"
+#include "lib/utility/ob_print_utils.h"  // for databuff_printf etc.
+#include "lib/json/ob_yson_encode.h"     // TO_YSON_KV
+// YSON: Yet Another Binary JSON
+// difference with lib/utility/ob_uni_serialization:
+// 1. Self-explanatory
+// 2. need faster encoding, don't care decoding
+#include "lib/ob_name_id_def.h"  // for NAME()
+
+namespace oceanbase
+{
+namespace yson
+{
+// YSON to Text
+int databuff_print_elements(char *buf, const int64_t buf_len, int64_t &pos,
+                            const char *yson_buf, const int64_t yson_buf_len, bool in_array = false);
+
+}  // yson
+namespace common
+{
+struct ObYsonToString
+{
+  ObYsonToString(char* yson_buf, int64_t yson_buf_len)
+      :yson_buf_(yson_buf),
+       yson_buf_len_(yson_buf_len) {}
+  int64_t to_string(char *buf, const int64_t buf_len) const
+  {
+    int64_t pos = 0;
+    (void)::oceanbase::common::databuff_printf(buf, buf_len, pos, "{");
+    (void)::oceanbase::yson::databuff_print_elements(buf, buf_len, pos, yson_buf_, yson_buf_len_);
+    (void)::oceanbase::common::databuff_printf(buf, buf_len, pos, "}");
+    return pos;
+  }
+private:
+  char *yson_buf_;
+  int64_t yson_buf_len_;
+};
+
+// define template <...> databuff_print_id_value(buf, buf_len, pos, ...)
+#define PRINT_ID_VALUE_TEMPLATE_TYPE(N) CAT(typename T, N)
+#define PRINT_ID_VALUE_ARG_PAIR(N) oceanbase::yson::ElementKeyType CAT(key, N), const CAT(T, N) &CAT(obj, N)
+#define PRINT_ID_VALUE_ONE(N) if (OB_SUCC(ret)) {                       \
+    ret = ::oceanbase::common::databuff_print_json_kv(buf, buf_len, pos, NAME(CAT(key, N)), CAT(obj,N)); \
+  }
+
+#define J_COMMA_WITH_RET \
+    if (OB_FAIL(ret)) { \
+    } else if (OB_FAIL(J_COMMA())) { \
+    } else {}
+
+#define DEFINE_PRINT_ID_VALUE(N)                                        \
+  template < LST_DO_(N, PRINT_ID_VALUE_TEMPLATE_TYPE, (,), PROC_ONE, ONE_TO_HUNDRED) > \
+  int databuff_print_id_value(char *buf, const int64_t buf_len, int64_t& pos, \
+                              LST_DO_(N, PRINT_ID_VALUE_ARG_PAIR, (,), PROC_ONE, ONE_TO_HUNDRED) \
+                              )                                         \
+  {                                                                     \
+    int ret = OB_SUCCESS;                            \
+    LST_DO_(N, PRINT_ID_VALUE_ONE, (J_COMMA_WITH_RET), PROC_ONE, ONE_TO_HUNDRED);                 \
+    return ret;                                                         \
+  }
+
+// TO_STRING_AND_YSON
+#define TO_STRING_AND_YSON(...)                                         \
+  int to_yson(char *buf, const int64_t buf_len, int64_t &pos) const     \
+  {                                                                     \
+    return oceanbase::yson::databuff_encode_elements(buf, buf_len, pos, __VA_ARGS__); \
+  }                                                                     \
+  DECLARE_TO_STRING                                                     \
+  {                                                                     \
+    int64_t pos = 0;                                                    \
+    J_OBJ_START();                                                      \
+    ::oceanbase::common::databuff_print_id_value(buf, buf_len, pos, __VA_ARGS__);  \
+    J_OBJ_END();                                                        \
+    return pos;                                                         \
+  }
+
+#define DEFINE_TO_STRING_AND_YSON(T, ...)                               \
+  int T::to_yson(char *buf, const int64_t buf_len, int64_t &pos) const  \
+  {                                                                     \
+    return oceanbase::yson::databuff_encode_elements(buf, buf_len, pos, __VA_ARGS__); \
+  }                                                                     \
+  DEF_TO_STRING(T)                                                      \
+  {                                                                     \
+    int64_t pos = 0;                                                    \
+    J_OBJ_START();                                                      \
+    ::oceanbase::common::databuff_print_id_value(buf, buf_len, pos, __VA_ARGS__);  \
+    J_OBJ_END();                                                        \
+    return pos;                                                         \
+  }
+
+// TO_YSON_KV
+#define TO_YSON_KV(...)                                                 \
+  DECLARE_TO_YSON_KV                                                    \
+  {                                                                     \
+    return oceanbase::yson::databuff_encode_elements(buf, buf_len, pos, __VA_ARGS__); \
+  }
+#define VIRTUAL_TO_YSON_KV(...) virtual TO_YSON_KV(__VA_ARGS__)
+#define DEFINE_TO_YSON_KV(T, ...) \
+  int T::to_yson(char *buf, const int64_t buf_len, int64_t &pos) const  \
+  {                                                                     \
+    return oceanbase::yson::databuff_encode_elements(buf, buf_len, pos, __VA_ARGS__); \
+  }
+
+template <typename T>
+int databuff_print_id_value(char *buf, const int64_t buf_len, int64_t &pos,
+                            oceanbase::yson::ElementKeyType key,
+                            T &&obj)
+{
+  return ::oceanbase::common::databuff_print_json_kv(buf, buf_len, pos, (::oceanbase::name::get_name(key)), std::forward<T>(obj));
+}
+
+template <typename T, typename ...ARGS>
+int databuff_print_id_value(char *buf, const int64_t buf_len, int64_t &pos,
+                            oceanbase::yson::ElementKeyType head_key,
+                            T &&head,
+                            ARGS &&...others)
+{
+  int ret = OB_SUCCESS;
+  if (OB_SUCC(databuff_print_id_value(buf, buf_len, pos, head_key, std::forward<T>(head)))) {
+    ret = databuff_print_id_value(buf, buf_len, pos, std::forward<ARGS>(others)...);
+  } 
+  return ret;
+};
+
+} // end namespace common
+} // end namespace oceanbase
+
+#endif /* _OB_YSON_H */

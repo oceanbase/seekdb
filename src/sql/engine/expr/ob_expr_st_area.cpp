@@ -1,0 +1,133 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#define USING_LOG_PREFIX SQL_ENG
+
+#include "ob_expr_st_area.h"
+#include "share/geo/ob_geo_func_register.h"
+#include "sql/engine/expr/ob_geo_expr_utils.h"
+
+using namespace oceanbase::common;
+using namespace oceanbase::sql;
+using namespace oceanbase::omt;
+
+namespace oceanbase
+{
+namespace sql
+{
+
+ObExprSTArea::ObExprSTArea(ObIAllocator &alloc)
+    : ObFuncExprOperator(alloc, T_FUN_SYS_ST_AREA, N_ST_AREA, 1, VALID_FOR_GENERATED_COL, NOT_ROW_DIMENSION)
+{
+}
+
+ObExprSTArea::~ObExprSTArea()
+{
+}
+
+int ObExprSTArea::calc_result_type1(ObExprResType &type,
+                                    ObExprResType &type1,
+                                    common::ObExprTypeCtx &type_ctx) const
+{
+  UNUSED(type_ctx); 
+  INIT_SUCC(ret);
+  if (ob_is_numeric_type(type1.get_type())) {
+    type1.set_calc_type(ObLongTextType);
+  } else if (!ob_is_geometry(type1.get_type())
+             && !ob_is_string_type(type1.get_type())
+             && type1.get_type() != ObNullType) {
+    // handle string types as hex strings(wkb)
+    ret = OB_ERR_GIS_INVALID_DATA;
+    LOG_USER_ERROR(OB_ERR_GIS_INVALID_DATA, N_ST_AREA);
+    LOG_WARN("invalid type", K(ret), K(type1.get_type()));
+  } else {
+    type.set_double();
+  }
+  return ret;
+}
+
+int ObExprSTArea::eval_st_area(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
+{
+  int ret = OB_SUCCESS;
+  ObDatum *gis_datum = NULL;
+  ObExpr *gis_arg = expr.args_[0];
+  ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
+  
+  MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator(), expr.type_, ret, N_ST_AREA);
+  ObObjType input_type = gis_arg->datum_meta_.type_;
+
+  if (OB_FAIL(temp_allocator.eval_arg(gis_arg, ctx, gis_datum))) {
+    LOG_WARN("eval geo arg failed", K(ret));
+  } else if (gis_datum->is_null()) {
+    res.set_null();
+  } else {
+    ObGeometry *geo = NULL;
+    omt::ObSrsCacheGuard srs_guard;
+    const ObSrsItem *srs = NULL;
+    ObString wkb = gis_datum->get_string();
+    ObGeoBoostAllocGuard guard{};
+    lib::MemoryContext *mem_ctx = nullptr;
+    if (OB_FAIL(ObTextStringHelper::read_real_string_data_with_copy(temp_allocator, *gis_datum,
+        gis_arg->datum_meta_, gis_arg->obj_meta_.has_lob_header(), wkb))) {
+      LOG_WARN("fail to get real string data", K(ret), K(wkb));
+    } else if (FALSE_IT(temp_allocator.set_baseline_size(wkb.length()))) {
+    } else if (OB_FAIL(ObGeoExprUtils::get_srs_item(ctx, srs_guard, wkb, srs, true, N_ST_AREA))) {
+      LOG_WARN("fail to get srs item", K(ret), K(wkb));
+    } else if (OB_FAIL(ObGeoExprUtils::build_geometry(temp_allocator, wkb, geo, srs, N_ST_AREA, GEO_ALLOW_3D_DEFAULT | GEO_NOT_COPY_WKB))) {
+      LOG_WARN("get geo by wkb failed", K(ret));
+    } else if (geo->type() != ObGeoType::POLYGON && geo->type() != ObGeoType::MULTIPOLYGON) {
+      ret = OB_ERR_UNEXPECTED_GEOMETRY_TYPE;
+      LOG_WARN("unexpected geometry type for st_area", K(ret));
+      LOG_USER_ERROR(OB_ERR_UNEXPECTED_GEOMETRY_TYPE, "POLYGON/MULTIPOLYGON", 
+        ObGeoTypeUtil::get_geo_name_by_type(geo->type()), N_ST_AREA);
+    } else if (OB_FAIL(guard.init())) {
+      LOG_WARN("fail to init geo allocator guard", K(ret));
+    } else if (OB_ISNULL(mem_ctx = guard.get_memory_ctx())) {
+      ret = OB_ERR_NULL_VALUE;
+      LOG_WARN("fail to get mem ctx", K(ret));
+    } else {
+      ObGeoEvalCtx gis_context(*mem_ctx, srs);
+      int correct_result;
+      double result = 0.0;
+      if (OB_FAIL(gis_context.append_geo_arg(geo))) {
+        LOG_WARN("build gis context failed", K(ret), K(gis_context.get_geo_count()));
+      } else if (OB_FAIL(ObGeoFunc<ObGeoFuncType::Area>::geo_func::eval(gis_context, result))) {
+        LOG_WARN("eval st area failed", K(ret));
+        ObGeoExprUtils::geo_func_error_handle(ret, N_ST_AREA);
+      } else if (!std::isfinite(result)) {
+        ret = OB_OPERATE_OVERFLOW;
+        LOG_WARN("Result value is out of range in st_area", K(ret));
+        LOG_USER_ERROR(OB_OPERATE_OVERFLOW, "Result", N_ST_AREA);
+      } else {
+        res.set_double(result);
+      }
+    }
+    if (mem_ctx != nullptr) {
+      temp_allocator.add_ext_used((*mem_ctx)->arena_used());
+    }
+  }
+  return ret;
+}
+
+int ObExprSTArea::cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_expr, ObExpr &rt_expr) const
+{
+  UNUSEDx(expr_cg_ctx, raw_expr);
+  rt_expr.eval_func_ = eval_st_area;
+  return OB_SUCCESS;
+}
+
+}
+}

@@ -1,0 +1,103 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef OB_CREATE_MLOG_STMT_H_
+#define OB_CREATE_MLOG_STMT_H_
+
+#include "sql/resolver/ddl/ob_ddl_stmt.h"
+#include "lib/allocator/ob_allocator.h"
+
+namespace oceanbase
+{
+namespace sql
+{
+
+class ObCreateMLogStmt : public ObDDLStmt
+{
+public:
+  explicit ObCreateMLogStmt(common::ObIAllocator *name_pool);
+  ObCreateMLogStmt();
+  virtual ~ObCreateMLogStmt();
+
+  obcall::ObCreateMLogArg &get_create_mlog_arg() { return create_mlog_arg_; }
+  inline void set_database_name(const common::ObString &database_name)
+  {
+    create_mlog_arg_.database_name_ = database_name;
+  }
+  inline const common::ObString &get_database_name() const { return create_mlog_arg_.database_name_; }
+  inline void set_table_name(const common::ObString &table_name)
+  {
+    create_mlog_arg_.table_name_ = table_name;
+  }
+  inline const common::ObString &get_table_name() const { return create_mlog_arg_.table_name_; }
+  inline void set_mlog_name(const common::ObString &mlog_name)
+  {
+    create_mlog_arg_.mlog_name_ = mlog_name;
+  }
+  inline const common::ObString &get_mlog_name() const { return create_mlog_arg_.mlog_name_; }
+  
+  
+  
+  
+  inline void set_data_table_id(const uint64_t table_id)
+  {
+    create_mlog_arg_.base_table_id_ = table_id;
+  }
+  inline uint64_t get_data_table_id() const { return create_mlog_arg_.base_table_id_; }
+  inline void set_mlog_table_id(const uint64_t table_id)
+  {
+    create_mlog_arg_.mlog_table_id_ = table_id;
+  }
+  inline uint64_t get_mlog_table_id() const { return create_mlog_arg_.mlog_table_id_; }
+  inline void set_with_primary_key(bool with_primary_key)
+  {
+    create_mlog_arg_.with_primary_key_ = with_primary_key;
+  }
+  inline bool get_with_primary_key() const { return create_mlog_arg_.with_primary_key_; }
+  inline void set_with_rowid(bool with_rowid)
+  {
+    create_mlog_arg_.with_rowid_ = with_rowid;
+  }
+  inline bool get_with_rowid() const { return create_mlog_arg_.with_rowid_; }
+  inline void set_with_sequence(bool with_sequence)
+  {
+    create_mlog_arg_.with_sequence_ = with_sequence;
+  }
+  inline bool get_with_sequence() const { return create_mlog_arg_.with_sequence_; }
+  inline void set_include_new_values(bool include_new_values)
+  {
+    create_mlog_arg_.include_new_values_ = include_new_values;
+  }
+  inline bool get_include_new_values() const { return create_mlog_arg_.include_new_values_; }
+  inline void set_name_generated_type(const ObNameGeneratedType type)
+  {
+    create_mlog_arg_.mlog_schema_.set_name_generated_type(type);
+  }
+  inline void set_purge_mode(ObMLogPurgeMode purge_mode)
+  {
+    create_mlog_arg_.purge_options_.purge_mode_ = purge_mode;
+  }
+  inline bool get_replace_if_exists() const { return create_mlog_arg_.replace_if_exists_; }
+  inline void set_replace_if_exists(bool replace_if_exists) { create_mlog_arg_.replace_if_exists_ = replace_if_exists; }
+  
+  virtual obcall::ObDDLArg &get_ddl_arg() { return create_mlog_arg_; }
+
+private:
+  obcall::ObCreateMLogArg create_mlog_arg_;
+};
+} // sql
+} // oceanbase
+#endif  // OB_CREATE_MLOG_STMT_H_

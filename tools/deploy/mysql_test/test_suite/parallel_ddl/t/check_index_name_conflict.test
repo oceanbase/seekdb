@@ -1,0 +1,39 @@
+# owner: wenyu.ffz
+# owner group: RS
+# tags: rs
+# description
+# test parallel create index name conflict in mysql
+
+connect (mysql,$OBMYSQL_MS0,root,,test,$OBMYSQL_PORT);
+
+--disable_query_log
+--disable_warnings
+--disable_result_log
+--disable_abort_on_error
+drop table t1;
+drop table t2;
+drop index i1;
+--enable_query_log
+--enable_warnings
+--enable_result_log
+--enable_abort_on_error
+
+create table t1 (col1 int, col2 int);
+create table t2 (col1 int, col2 int);
+create index i1 on t1(col1);
+
+# mysql name duplicate in table space
+create index i1 on t2(col1);
+
+# mysql is not case sensitive
+--error 1061
+create index I1 on t1 (col2);
+
+--disable_query_log
+--disable_warnings
+--disable_result_log
+drop table t2;
+drop table t1;
+--enable_query_log
+--enable_warnings
+--enable_result_log

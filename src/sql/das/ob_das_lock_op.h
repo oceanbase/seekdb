@@ -1,0 +1,84 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef DEV_SRC_SQL_DAS_OB_DAS_LOCK_OP_H_
+#define DEV_SRC_SQL_DAS_OB_DAS_LOCK_OP_H_
+#include "sql/das/ob_das_task.h"
+#include "storage/access/ob_dml_param.h"
+#include "sql/engine/basic/ob_chunk_datum_store.h"
+#include "sql/das/ob_das_dml_ctx_define.h"
+namespace oceanbase
+{
+namespace sql
+{
+class ObDASLockOp : public ObIDASTaskOp
+{
+  OB_UNIS_VERSION(1);
+public:
+  ObDASLockOp(common::ObIAllocator &op_alloc);
+  virtual ~ObDASLockOp() = default;
+
+  virtual int open_op() override;
+  virtual int release_op() override;
+  virtual int assign_task_result(ObIDASTaskOp *other) override;
+  virtual int record_task_result_to_rtdef() override;
+  virtual int decode_task_result(ObIDASTaskResult *task_result) override;
+  virtual int fill_task_result(ObIDASTaskResult &task_result, bool &has_more, int64_t &memory_limit) override;
+  virtual int init_task_info(uint32_t row_extend_size) override;
+  virtual int swizzling_remote_task(ObDASRemoteInfo *remote_info) override;
+  virtual const ObDASBaseCtDef *get_ctdef() const override { return lock_ctdef_; }
+  virtual ObDASBaseRtDef *get_rtdef() override { return lock_rtdef_; }
+  int write_row(const ExprFixedArray &row,
+                ObEvalCtx &eval_ctx,
+                ObChunkDatumStore::StoredRow *&stored_row);
+  int64_t get_row_cnt() const { return lock_buffer_.get_row_cnt(); }
+  void set_das_ctdef(const ObDASLockCtDef *del_ctdef) { lock_ctdef_ = del_ctdef; }
+  void set_das_rtdef(ObDASLockRtDef *del_rtdef) { lock_rtdef_ = del_rtdef; }
+  virtual int dump_data() const override
+  {
+    return lock_buffer_.dump_data(*lock_ctdef_);
+  }
+  int64_t get_affected_rows() { return affected_rows_; }
+
+  INHERIT_TO_STRING_KV("parent", ObIDASTaskOp,
+                       KPC_(lock_ctdef),
+                       KPC_(lock_rtdef),
+                       K_(lock_buffer));
+private:
+  const ObDASLockCtDef *lock_ctdef_;
+  ObDASLockRtDef *lock_rtdef_;
+  ObDASWriteBuffer lock_buffer_;
+  int64_t affected_rows_;  // local execute result, no need to serialize
+};
+
+class ObDASLockResult : public ObIDASTaskResult
+{
+  OB_UNIS_VERSION_V(1);
+public:
+  ObDASLockResult();
+  virtual ~ObDASLockResult();
+  virtual int init(const ObIDASTaskOp &op, common::ObIAllocator &alloc) override;
+  virtual int reuse() override;
+  int64_t get_affected_rows() const { return affected_rows_; }
+  void set_affected_rows(int64_t affected_rows) { affected_rows_ = affected_rows; }
+  INHERIT_TO_STRING_KV("ObIDASTaskResult", ObIDASTaskResult,
+                        K_(affected_rows));
+private:
+  int64_t affected_rows_;
+};
+}  // namespace sql
+}  // namespace oceanbase
+#endif /* DEV_SRC_SQL_DAS_OB_DAS_LOCK_OP_H_ */

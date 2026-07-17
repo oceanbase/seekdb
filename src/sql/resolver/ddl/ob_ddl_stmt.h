@@ -1,0 +1,74 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef OCEANBASE_SQL_RESOLVER_OB_DDL_STMT_H_
+#define OCEANBASE_SQL_RESOLVER_OB_DDL_STMT_H_ 1
+#include "share/ob_rpc_struct.h"
+#include "sql/resolver/ob_stmt.h"
+#include "sql/resolver/ob_cmd.h"
+#include "sql/resolver/dml/ob_hint.h"
+#include "share/ob_rpc_struct.h"
+namespace oceanbase
+{
+namespace sql
+{
+class ObDDLStmt : public ObStmt, public ObICmd
+{
+  const static int OB_DEFAULT_ARRAY_SIZE = 16;
+public:
+  ObDDLStmt(common::ObIAllocator *name_pool, stmt::StmtType type)
+      : ObStmt(name_pool, type), parallelism_(1L), has_parallel_hint_(false),
+        has_append_hint_(false)
+  {
+  }
+  explicit ObDDLStmt(stmt::StmtType type)
+      : ObStmt(type), parallelism_(1L), has_parallel_hint_(false), has_append_hint_(false)
+  {
+  }
+  virtual ~ObDDLStmt() {}
+  virtual int get_cmd_type() const { return get_stmt_type(); }
+  virtual obcall::ObDDLArg &get_ddl_arg() = 0;
+  typedef common::ObSEArray<ObRawExpr *,
+                            OB_DEFAULT_ARRAY_SIZE,
+                            common::ModulePageAllocator,
+                            true> array_t;
+  typedef common::ObSEArray<array_t,
+                            OB_DEFAULT_ARRAY_SIZE,
+                            common::ModulePageAllocator,
+                            true> array_array_t;
+  virtual bool cause_implicit_commit() const { return true; }
+  virtual int get_first_stmt(common::ObString &first_stmt);
+  void set_parallelism(const int64_t parallelism) { parallelism_ = parallelism; }
+  int64_t &get_parallelism() { return parallelism_; }
+  void set_has_parallel_hint(bool has_parallel_hint) { has_parallel_hint_ = has_parallel_hint; }
+  bool get_has_parallel_hint() const { return has_parallel_hint_; }
+  void set_has_append_hint(bool has_append_hint) { has_append_hint_ = has_append_hint; }
+  bool get_has_append_hint() const { return has_append_hint_; }
+  void set_direct_load_hint(const ObDirectLoadHint &hint) { direct_load_hint_.merge(hint); }
+  const ObDirectLoadHint &get_direct_load_hint() const { return direct_load_hint_; }
+protected:
+  ObArenaAllocator allocator_;
+private:
+  int64_t parallelism_;
+  bool has_parallel_hint_;
+  bool has_append_hint_;
+  ObDirectLoadHint direct_load_hint_;
+
+  DISALLOW_COPY_AND_ASSIGN(ObDDLStmt);
+};
+}  // namespace sql
+}  // namespace oceanbase
+#endif /* OCEANBASE_SQL_RESOLVER_OB_DDL_STMT_H_ */

@@ -1,0 +1,82 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef OCEANBASE_ROOTSERVER_OB_DDL_RETRY_TASK_H
+#define OCEANBASE_ROOTSERVER_OB_DDL_RETRY_TASK_H
+
+#include "rootserver/ddl_task/ob_ddl_task.h"
+#include "rpc/frame/ob_result_code.h"
+
+namespace oceanbase
+{
+namespace rootserver
+{
+class ObRootService;
+
+class ObDDLRetryTask : public ObDDLTask
+{
+public:
+  ObDDLRetryTask();
+  virtual ~ObDDLRetryTask();
+  int init(
+      const int64_t task_id,
+      const uint64_t object_id,
+      const int64_t schema_version,
+      const int64_t consumer_group_id,
+      const int32_t sub_task_trace_id,
+      const share::ObDDLType &type,
+      const obcall::ObDDLArg *ddl_arg,
+      const int64_t task_status = share::ObDDLTaskStatus::PREPARE);
+  int init(const ObDDLTaskRecord &task_record);
+  virtual int process() override;
+  virtual bool is_valid() const override;
+  virtual int serialize_params_to_message(char *buf, const int64_t buf_size, int64_t &pos) const override;
+  virtual int deserialize_params_from_message(const char *buf, const int64_t buf_size, int64_t &pos) override;
+  virtual int64_t get_serialize_param_size() const override;
+  static int update_task_status_wait_child_task_finish(
+        common::ObMySQLTransaction &trans,
+        const int64_t task_id);
+private:
+  int check_health();
+  int prepare(const share::ObDDLTaskStatus next_task_status);
+  int drop_schema(const share::ObDDLTaskStatus next_task_status);
+  int wait_alter_table(const share::ObDDLTaskStatus next_task_status);
+  int succ();
+  int fail();
+  virtual int cleanup_impl() override;
+  int deep_copy_ddl_arg(common::ObIAllocator &allocator, const share::ObDDLType &ddl_type, const obcall::ObDDLArg *source_arg);
+  int init_compat_mode(const share::ObDDLType &ddl_type, const obcall::ObDDLArg *source_arg);
+  int get_forward_user_message(const rpc::frame::ObResultCode &rcode);
+  int check_schema_change_done();
+  virtual bool is_error_need_retry(const int ret_code) override
+  {
+    return common::OB_PARTITION_NOT_EXIST != ret_code && ObDDLTask::is_error_need_retry(ret_code);
+  }
+private:
+  static const int64_t OB_DDL_RETRY_TASK_VERSION = 1L;
+  obcall::ObDDLArg *ddl_arg_;
+  ObRootService *root_service_;
+  int64_t affected_rows_;
+  common::ObString forward_user_message_;
+  common::ObArenaAllocator allocator_;
+  obcall::ObAlterTableRes alter_table_res_; // in memory
+  bool is_schema_change_done_;
+};
+
+}  // end namespace rootserver
+}  // end namespace oceanbase
+
+#endif  // OCEANBASE_ROOTSERVER_OB_DDL_RETRY_TASK_H

@@ -1,0 +1,96 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef SRC_SQL_ENGINE_JOIN_HASH_JOIN_OB_HJ_PARTITION_MGR_H_
+#define SRC_SQL_ENGINE_JOIN_HASH_JOIN_OB_HJ_PARTITION_MGR_H_
+
+#include "lib/list/ob_list.h"
+#include "sql/engine/join/hash_join/ob_hj_partition.h"
+
+namespace oceanbase
+{
+namespace sql
+{
+
+struct ObHJPartitionPair
+{
+  ObHJPartition *left_;
+  ObHJPartition *right_;
+
+  ObHJPartitionPair() : left_(NULL), right_(NULL) {}
+};
+
+class ObHJPartitionMgr {
+public:
+  ObHJPartitionMgr(common::ObIAllocator &alloc) :
+    total_dump_count_(0),
+    total_dump_size_(0),
+    part_count_(0),
+    alloc_(alloc),
+    part_pair_list_(alloc)
+  {}
+
+  virtual ~ObHJPartitionMgr();
+  void reset();
+
+  typedef common::ObList<ObHJPartitionPair, common::ObIAllocator> ObHJPartitionPairList;
+
+  int next_part_pair(ObHJPartitionPair &part_pair);
+
+  int64_t get_part_list_size() { return part_pair_list_.size(); }
+  int remove_undumped_part(int64_t cur_dumped_partition,
+                            int32_t part_round);
+  int get_or_create_part(int32_t level,
+                         int64_t part_shift,
+                         int64_t partno,
+                         bool is_left,
+                         ObHJPartition *&part,
+                         bool only_get = false,
+                         bool create_left_store = true);
+
+  void free(ObHJPartition *&part) {
+    if (NULL != part) {
+      ObPartitionStore *partition_store = part->get_partition_store();
+      const common::ObIAllocator *partition_store_allocator = nullptr;
+      if (partition_store != nullptr) {
+        partition_store_allocator = partition_store->get_alloc_this_from();
+      }
+      part->~ObHJPartition();
+      alloc_.free(part);
+      part = NULL;
+      part_count_ --;
+      if (&alloc_ == partition_store_allocator) {
+        partition_store->~ObPartitionStore();
+        alloc_.free(partition_store);
+      }
+    }
+  }
+
+public:
+  int64_t total_dump_count_;
+  int64_t total_dump_size_;
+  int64_t part_count_;
+
+private:
+  static const int64_t PARTITION_IDX_MASK = 0x00000000FFFFFFFF;
+  common::ObIAllocator &alloc_;
+  ObHJPartitionPairList part_pair_list_;
+};
+
+} // end namespace sql
+} // end namespace oceanbase
+
+#endif /* SRC_SQL_ENGINE_JOIN_HASH_JOIN_OB_HJ_PARTITION_MGR_H_*/

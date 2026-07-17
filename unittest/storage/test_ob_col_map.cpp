@@ -1,0 +1,78 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#include "storage/ob_col_map.h"
+#include <gmock/gmock.h>
+
+namespace oceanbase
+{
+using namespace common;
+using namespace storage;
+
+namespace unittest
+{
+void test_col_map(const int64_t col_count)
+{
+  int ret = OB_SUCCESS;
+  ObColMap col_map;
+
+  ret = col_map.init(col_count);
+  ASSERT_EQ(OB_SUCCESS, ret);
+
+  for (int64_t i = 0; i < col_count; i++) {
+    ret = col_map.set_refactored(static_cast<uint64_t>(i), col_count - i);
+    ASSERT_EQ(OB_SUCCESS, ret);
+  }
+
+  int64_t col_idx = 0;
+  for (int64_t i = col_count - 1; OB_SUCC(ret) && i >= 0; i--) {
+    ret = col_map.get_refactored(static_cast<uint64_t>(i), col_idx);
+    ASSERT_EQ(OB_SUCCESS, ret);
+    ASSERT_EQ(col_idx, col_count - i);
+  }
+
+  if (col_count < 1024 /* FIRST_LEVEL_MAX_COL_NUM */) {
+    ASSERT_EQ(NULL, col_map.get(1023));
+  } else if (col_count < 65535 /* FINAL_LEVEL_MAX_COL_NUM */) {
+    ASSERT_EQ(NULL, col_map.get(65534));
+  }
+}
+
+TEST(TestObColMap, test_col_map_first_level)
+{
+  // less than FIRST_LEVEL_MAX_COL_NUM = 1024
+  int64_t col_count = 752;
+  test_col_map(col_count);
+}
+
+TEST(TestObColMap, test_col_map_final_level)
+{
+  // greater than FIRST_LEVEL_MAX_COL_NUM = 1024
+  int64_t col_count = 12281;
+  test_col_map(col_count);
+}
+
+} // namespace unittest
+} // namespace oceanbase
+
+int main(int argc, char **argv)
+{
+  OB_LOGGER.set_file_name("test_ob_col_map.log");
+  OB_LOGGER.set_log_level("WARN");
+  CLOG_LOG(INFO, "begin unittest: test_ob_col_map");
+  ::testing::InitGoogleTest(&argc, argv);
+  return RUN_ALL_TESTS();
+}

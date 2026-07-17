@@ -1,0 +1,74 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef OB_SINGLE_MERGE_H_
+#define OB_SINGLE_MERGE_H_
+#include "ob_multiple_merge.h"
+#include "ob_fuse_row_cache_fetcher.h"
+#include "storage/blocksstable/ob_fuse_row_cache.h"
+
+namespace oceanbase
+{
+namespace storage
+{
+class ObSingleMerge : public ObMultipleMerge
+{
+public:
+  ObSingleMerge();
+  virtual ~ObSingleMerge();
+  int open(const blocksstable::ObDatumRowkey &rowkey);
+  virtual void reset() override;
+  virtual void reuse() override;
+  virtual void reclaim() override;
+  virtual int pause(bool& do_pause) override final { do_pause = false; return OB_SUCCESS; }
+protected:
+  virtual int calc_scan_range() override;
+  virtual int construct_iters() override;
+  virtual int is_range_valid() const override;
+  virtual int inner_get_next_row(blocksstable::ObDatumRow &row);
+private:
+  virtual int get_table_row(const int64_t table_idx,
+                            const common::ObIArray<ObITable *> &tables,
+                            blocksstable::ObDatumRow &fuse_row,
+                            bool &final_result,
+                            bool &has_uncommited_row);
+  virtual int get_and_fuse_cache_row(const int64_t read_snapshot_version,
+                                     const int64_t multi_version_start,
+                                     blocksstable::ObDatumRow &fuse_row,
+                                     bool &final_result,
+                                     bool &have_uncommited_row,
+                                     bool &need_update_fuse_cache);
+  int get_normal_table_scan_row(const int64_t read_snapshot_version,
+                                const int64_t multi_version_start,
+                                const bool enable_fuse_row_cache,
+                                bool &have_uncommited_row,
+                                bool &need_update_fuse_cache);
+  int get_mview_table_scan_row(const bool enable_fuse_row_cache,
+                               bool &have_uncommited_row,
+                               bool &need_update_fuse_cache);
+private:
+  static const int64_t SINGLE_GET_FUSE_ROW_CACHE_PUT_COUNT_THRESHOLD = 50;
+  const blocksstable::ObDatumRowkey *rowkey_;
+  blocksstable::ObDatumRow full_row_;
+  blocksstable::ObFuseRowValueHandle handle_;
+  ObFuseRowCacheFetcher fuse_row_cache_fetcher_;
+  // disallow copy
+  DISALLOW_COPY_AND_ASSIGN(ObSingleMerge);
+};
+} /* namespace storage */
+} /* namespace oceanbase */
+
+#endif /* OB_SINGLE_MERGE_H_ */

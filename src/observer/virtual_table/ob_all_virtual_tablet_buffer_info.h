@@ -1,0 +1,69 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef SRC_OBSERVER_VIRTUAL_TABLE_OB_ALL_VIRTUAL_TABLET_BUFFER_INFO_H_
+#define SRC_OBSERVER_VIRTUAL_TABLE_OB_ALL_VIRTUAL_TABLET_BUFFER_INFO_H_
+
+#include "common/row/ob_row.h"
+#include "lib/guard/ob_shared_guard.h"
+#include "observer/omt/ob_multi_tenant.h"
+#include "sql/ob_scanner.h"
+#include "observer/virtual_table/ob_virtual_table_scanner_iterator.h"
+#include "share/rc/ob_tenant_base.h"
+#include "observer/omt/ob_multi_tenant.h"
+#include "storage/meta_mem/ob_tablet_handle.h"
+#include "share/ob_ls_id.h"
+#include "storage/meta_mem/ob_tenant_meta_mem_mgr.h"
+
+namespace oceanbase
+{
+namespace observer
+{
+class ObAllVirtualTabletBufferInfo : public common::ObVirtualTableScannerIterator
+{
+  enum COLUMN_ID_LIST
+  {
+        TABLET_BUFFER_PTR = common::OB_APP_MIN_COLUMN_ID,
+    TABLET_OBJ_PTR,
+    POOL_TYPE,
+    TABLET_ID,
+    IN_MAP,
+    LAST_ACCESS_TIME
+  };
+public:
+  ObAllVirtualTabletBufferInfo();
+  virtual ~ObAllVirtualTabletBufferInfo();
+  virtual void reset();
+  int init(common::ObAddr &addr);
+  virtual int inner_get_next_row(common::ObNewRow *&row);
+
+private:
+  int get_tablet_pool_infos();
+  int gen_row(const ObTabletBufferInfo &buffer_info, common::ObNewRow *&row);
+private:
+  static const int64_t STR_LEN = 128;
+private:
+  common::ObAddr addr_;
+  char ip_buf_[common::OB_IP_STR_BUFF];
+  int64_t index_;
+  ObTabletPoolType pool_type_;
+  ObSArray<ObTabletBufferInfo> buffer_infos_;
+  char tablet_pointer_[STR_LEN];
+  char tablet_buffer_pointer_[STR_LEN];
+};
+} // observer
+} // oceanbase
+#endif

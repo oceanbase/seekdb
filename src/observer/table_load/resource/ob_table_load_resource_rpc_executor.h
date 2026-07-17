@@ -1,0 +1,136 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#pragma once
+
+#include "observer/table_load/resource/ob_table_load_resource_rpc.h"
+#include "observer/table_load/resource/ob_table_load_resource_service.h"
+
+namespace oceanbase
+{
+namespace observer
+{
+
+template <ObDirectLoadResourceCommandType pcode>
+class ObTableLoadResourceRpcExecutor
+  : public ObTableLoadRpcExecutor<ObTableLoadResourceRpcProxy::ObTableLoadResourceRpc<pcode>>
+{
+  typedef ObTableLoadRpcExecutor<ObTableLoadResourceRpcProxy::ObTableLoadResourceRpc<pcode>> ParentType;
+
+public:
+  ObTableLoadResourceRpcExecutor(common::ObIAllocator &allocator,
+                                 const ObDirectLoadResourceOpRequest &request,
+                                 ObDirectLoadResourceOpResult &result)
+    : ParentType(request, result), allocator_(allocator)
+  {
+  }
+  virtual ~ObTableLoadResourceRpcExecutor() = default;
+
+protected:
+  int deserialize() override { return this->request_.get_arg(this->arg_); }
+  int set_result_header() override
+  {
+    this->result_.command_type_ = pcode;
+    return OB_SUCCESS;
+  }
+  int serialize() override { return this->result_.set_res(this->res_, allocator_); }
+
+protected:
+  common::ObIAllocator &allocator_;
+};
+
+// apply_resource
+class ObDirectLoadResourceApplyExecutor
+  : public ObTableLoadResourceRpcExecutor<ObDirectLoadResourceCommandType::APPLY>
+{
+  typedef ObTableLoadResourceRpcExecutor<ObDirectLoadResourceCommandType::APPLY> ParentType;
+
+public:
+  ObDirectLoadResourceApplyExecutor(common::ObIAllocator &allocator,
+                                    const ObDirectLoadResourceOpRequest &request,
+                                    ObDirectLoadResourceOpResult &result)
+    : ParentType(allocator, request, result)
+  {
+  }
+  virtual ~ObDirectLoadResourceApplyExecutor() = default;
+
+protected:
+  int check_args() override;
+  int process() override;
+};
+
+// release_resource
+class ObDirectLoadResourceReleaseExecutor
+  : public ObTableLoadResourceRpcExecutor<ObDirectLoadResourceCommandType::RELEASE>
+{
+  typedef ObTableLoadResourceRpcExecutor<ObDirectLoadResourceCommandType::RELEASE> ParentType;
+
+public:
+  ObDirectLoadResourceReleaseExecutor(common::ObIAllocator &allocator,
+                                      const ObDirectLoadResourceOpRequest &request,
+                                      ObDirectLoadResourceOpResult &result)
+    : ParentType(allocator, request, result)
+  {
+  }
+  virtual ~ObDirectLoadResourceReleaseExecutor() = default;
+
+protected:
+  int check_args() override;
+  int process() override;
+};
+
+// update_resource
+class ObDirectLoadResourceUpdateExecutor
+  : public ObTableLoadResourceRpcExecutor<ObDirectLoadResourceCommandType::UPDATE>
+{
+  typedef ObTableLoadResourceRpcExecutor<ObDirectLoadResourceCommandType::UPDATE> ParentType;
+
+public:
+  ObDirectLoadResourceUpdateExecutor(common::ObIAllocator &allocator,
+                                     const ObDirectLoadResourceOpRequest &request,
+                                     ObDirectLoadResourceOpResult &result)
+    : ParentType(allocator, request, result)
+  {
+  }
+  virtual ~ObDirectLoadResourceUpdateExecutor() = default;
+
+protected:
+  int check_args() override;
+  int process() override;
+};
+
+// check_resource
+class ObDirectLoadResourceCheckExecutor
+  : public ObTableLoadResourceRpcExecutor<ObDirectLoadResourceCommandType::CHECK>
+{
+  typedef ObTableLoadResourceRpcExecutor<ObDirectLoadResourceCommandType::CHECK> ParentType;
+
+public:
+  ObDirectLoadResourceCheckExecutor(common::ObIAllocator &allocator,
+                                    const ObDirectLoadResourceOpRequest &request,
+                                    ObDirectLoadResourceOpResult &result)
+    : ParentType(allocator, request, result)
+  {
+  }
+  virtual ~ObDirectLoadResourceCheckExecutor() = default;
+
+protected:
+  int check_args() override;
+  int process() override;
+};
+
+} // namespace observer
+} // namespace oceanbase

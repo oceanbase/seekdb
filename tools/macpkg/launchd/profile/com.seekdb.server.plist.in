@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.seekdb.server</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/opt/seekdb/libexec/seekdb/scripts/seekdb_launchd_start</string>
+  </array>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <false/>
+  <key>WorkingDirectory</key>
+  <string>/opt/seekdb/var/seekdb/data</string>
+  <key>StandardOutPath</key>
+  <string>/opt/seekdb/var/seekdb/data/log/launchd.out.log</string>
+  <key>StandardErrorPath</key>
+  <string>/opt/seekdb/var/seekdb/data/log/launchd.err.log</string>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>REPORTER</key>
+    <string>launchd</string>
+  </dict>
+  <key>ProcessType</key>
+  <string>Background</string>
+  <key>SoftResourceLimits</key>
+  <dict>
+    <key>NumberOfFiles</key>
+    <integer>1048576</integer>
+  </dict>
+  <key>HardResourceLimits</key>
+  <dict>
+    <key>NumberOfFiles</key>
+    <integer>1048576</integer>
+  </dict>
+</dict>
+</plist>

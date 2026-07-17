@@ -1,0 +1,131 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#include "fts_base.h"
+
+static int fts_node_create(FtsParserResult *arg, FtsNode **node)
+{
+  int ret = FTS_OK;
+  *node = (FtsNode *)parse_malloc(sizeof(FtsNode), arg->malloc_pool_);
+  if (NULL == *node) {
+    ret = FTS_ERROR_MEMORY;
+  }
+  return ret;
+}
+
+int fts_create_node_list(
+  void *arg,
+  FtsNode *expr,
+  FtsNode **list)
+{
+  int ret = FTS_OK;
+  if (NULL == expr) {
+  } else {
+    ret = fts_node_create((FtsParserResult *)arg, list);
+    if (FTS_OK == ret) {
+      (*list)->type = FTS_NODE_LIST;
+      (*list)->list.head = (*list)->list.tail = expr;
+    }
+  }
+  return ret;
+}
+
+int fts_string_create(FtsParserResult *arg, const char *str, uint32_t len, FtsString **ast_str)
+{
+  int ret = FTS_OK;
+  if (len <= 0) {
+    ret = FTS_ERROR_OTHER;
+  } else {
+    *ast_str = (FtsString *)parse_malloc(sizeof(FtsString), arg->malloc_pool_);
+    if (NULL == *ast_str) {
+      ret = FTS_ERROR_MEMORY;
+    } else {
+      (*ast_str)->str_ = (char *)(parse_malloc(len + 1, arg->malloc_pool_));
+      if (NULL == (*ast_str)->str_) {
+        ret = FTS_ERROR_MEMORY;
+      } else {
+        (*ast_str)->len_ = len;
+        memcpy((*ast_str)->str_, str, len);
+        (*ast_str)->str_[len] = '\0';
+      }
+    }
+  }
+  return ret;
+}
+
+int fts_create_node_term(void *arg, const FtsString *term, FtsNode **node)
+{
+  int ret = FTS_OK;
+  ret = fts_node_create((FtsParserResult *)arg, node);
+  if (FTS_OK == ret) {
+    (*node)->type = FTS_NODE_TERM;
+    (*node)->term.str_ = term->str_;
+    (*node)->term.len_ = term->len_;
+  }
+  return ret;
+}
+
+int fts_create_node_oper(
+  void *arg,           
+  enum FtsOperType oper,
+  FtsNode **node)
+{
+  int ret = FTS_OK;
+  ret = fts_node_create((FtsParserResult *)arg, node);
+  if (FTS_OK == ret) {
+    (*node)->type = FTS_NODE_OPER;
+    (*node)->oper = oper;
+  }
+  return ret;
+}
+
+int fts_add_node(
+    FtsNode *node, /*!< in: list instance */
+    FtsNode *elem) /*!< in: node to add to list */
+{
+  int ret = FTS_OK;
+  if (NULL == elem) {
+    // do nothing
+  } else if (node->type != FTS_NODE_LIST && node->type != FTS_NODE_SUBEXP_LIST) {
+    ret = FTS_ERROR_OTHER;
+  } else if (NULL == node->list.head) {
+    if (node->list.tail) {
+      ret = FTS_ERROR_OTHER;
+    } else {
+      node->list.head = node->list.tail = elem;
+    }
+  } else {
+    if (NULL == node->list.tail) {
+      ret = FTS_ERROR_OTHER;
+    } else {
+      node->list.tail->next = elem;
+      node->list.tail = elem;
+    }
+  }
+  return ret;
+}
+
+int fts_create_node_subexp_list(void *arg, FtsNode *expr, FtsNode **node)
+{
+  int ret = FTS_OK;
+  ret = fts_node_create((FtsParserResult *)arg, node);
+
+  if (FTS_OK == ret) {
+    (*node)->type = FTS_NODE_SUBEXP_LIST; 
+    (*node)->list.head = (*node)->list.tail = expr;
+  }
+  return ret;
+}

@@ -1,0 +1,71 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#define USING_LOG_PREFIX SQL_ENG
+#include "sql/engine/expr/ob_expr_inner_trim.h"
+#include "sql/engine/expr/ob_expr_trim.h"
+
+namespace oceanbase
+{
+using namespace common;
+using namespace share;
+namespace sql
+{
+
+ObExprInnerTrim::ObExprInnerTrim(ObIAllocator &alloc)
+    : ObStringExprOperator(alloc, T_FUN_INNER_TRIM, N_INNER_TRIM, 3, VALID_FOR_GENERATED_COL, INTERNAL_IN_MYSQL_MODE, INTERNAL_IN_ORACLE_MODE)
+{
+  need_charset_convert_ = false;
+}
+
+ObExprInnerTrim::~ObExprInnerTrim()
+{
+}
+
+inline int ObExprInnerTrim::calc_result_type3(ObExprResType &type,
+                                         ObExprResType &trim_type,
+                                         ObExprResType &trim_pattern,
+                                         ObExprResType &text,
+                                         common::ObExprTypeCtx &type_ctx) const
+{
+  int ret = OB_SUCCESS;
+  // %trim_type, %trim_pattern, %text are adjacent elements in the array
+  CK(&trim_type + 1 == &trim_pattern);
+  CK(&trim_type + 2 == &text);
+  OZ(ObExprTrim::deduce_result_type(type, &trim_type, 3, type_ctx));
+  LOG_DEBUG("inner trim", K(type), K(text), K(trim_pattern));
+
+  return ret;
+}
+
+int ObExprInnerTrim::cg_expr(ObExprCGCtx &, const ObRawExpr &, ObExpr &rt_expr) const
+{
+  int ret = OB_SUCCESS;
+  CK(3 == rt_expr.arg_cnt_);
+  // inner trim seems has no difference with trim, set the trim evaluate function directly.
+  rt_expr.eval_func_ = &ObExprTrim::eval_trim;
+  return ret;
+}
+
+DEF_SET_LOCAL_SESSION_VARS(ObExprInnerTrim, raw_expr) {
+  int ret = OB_SUCCESS;
+  SET_LOCAL_SYSVAR_CAPACITY(1);
+  EXPR_ADD_LOCAL_SYSVAR(share::SYS_VAR_COLLATION_CONNECTION);
+  return ret;
+}
+
+}
+}

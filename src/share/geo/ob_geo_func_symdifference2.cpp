@@ -1,0 +1,528 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#define USING_LOG_PREFIX LIB
+
+#include "ob_geo_func_symdifference_helper.ipp"
+
+using namespace oceanbase::common;
+namespace oceanbase
+{
+namespace common
+{
+
+int ob_geo_func_symdifference_eval_wkb_geog(const common::ObGeometry *g1, const common::ObGeometry *g2,
+    const ObGeoEvalCtx &context, ObGeometry *&result);
+
+// geograph point
+OB_GEO_GEOG_BINARY_FUNC_BEGIN(
+    ObGeoFuncSymDifferenceImpl, ObWkbGeogPoint, ObWkbGeogPoint, ObGeometry *)
+{
+  return apply_bg_symdifference_pt_pt<ObWkbGeogPoint, ObWkbGeogPoint, ObGeographMultipoint>(
+      g1, g2, context, result);
+}
+OB_GEO_FUNC_END;
+
+OB_GEO_GEOG_BINARY_FUNC_BEGIN(
+    ObGeoFuncSymDifferenceImpl, ObWkbGeogPoint, ObWkbGeogLineString, ObGeometry *)
+{
+  return apply_bg_symdifference_pl_pa<ObWkbGeogPoint,
+      ObWkbGeogLineString,
+      ObGeographGeometrycollection>(g1, g2, context, ObBGStrategyType::PL_PA_STRATEGY, result);
+}
+OB_GEO_FUNC_END;
+
+OB_GEO_GEOG_BINARY_FUNC_BEGIN(
+    ObGeoFuncSymDifferenceImpl, ObWkbGeogPoint, ObWkbGeogPolygon, ObGeometry *)
+{
+  return apply_bg_symdifference_pl_pa<ObWkbGeogPoint,
+      ObWkbGeogPolygon,
+      ObGeographGeometrycollection>(g1, g2, context, ObBGStrategyType::PL_PA_STRATEGY, result);
+}
+OB_GEO_FUNC_END;
+
+OB_GEO_GEOG_BINARY_FUNC_BEGIN(
+    ObGeoFuncSymDifferenceImpl, ObWkbGeogPoint, ObWkbGeogMultiPoint, ObGeometry *)
+{
+  return apply_bg_symdifference_pt_pt<ObWkbGeogPoint, ObWkbGeogMultiPoint, ObGeographMultipoint>(
+      g1, g2, context, result);
+}
+OB_GEO_FUNC_END;
+
+OB_GEO_GEOG_BINARY_FUNC_BEGIN(
+    ObGeoFuncSymDifferenceImpl, ObWkbGeogPoint, ObWkbGeogMultiLineString, ObGeometry *)
+{
+  return apply_bg_symdifference_pl_pa<ObWkbGeogPoint,
+      ObWkbGeogMultiLineString,
+      ObGeographGeometrycollection>(g1, g2, context, ObBGStrategyType::PL_PA_STRATEGY, result);
+}
+OB_GEO_FUNC_END;
+
+OB_GEO_GEOG_BINARY_FUNC_BEGIN(
+    ObGeoFuncSymDifferenceImpl, ObWkbGeogPoint, ObWkbGeogMultiPolygon, ObGeometry *)
+{
+  return apply_bg_symdifference_pl_pa<ObWkbGeogPoint,
+      ObWkbGeogMultiPolygon,
+      ObGeographGeometrycollection>(g1, g2, context, ObBGStrategyType::PL_PA_STRATEGY, result);
+}
+OB_GEO_FUNC_END;
+
+OB_GEO_GEOG_BINARY_FUNC_BEGIN(
+    ObGeoFuncSymDifferenceImpl, ObWkbGeogPoint, ObWkbGeogCollection, ObGeometry *)
+{
+  return apply_bg_symdifference_pt_coll<ObGeographPoint, ObGeographGeometrycollection>(
+      g1, g2, context, ObBGStrategyType::PL_PA_STRATEGY, result);
+}
+OB_GEO_FUNC_END;
+
+// geograph linestring
+OB_GEO_GEOG_BINARY_FUNC_BEGIN(
+    ObGeoFuncSymDifferenceImpl, ObWkbGeogLineString, ObWkbGeogPoint, ObGeometry *)
+{
+  return apply_bg_symdifference_pl_pa<ObWkbGeogPoint,
+      ObWkbGeogLineString,
+      ObGeographGeometrycollection>(g2, g1, context, ObBGStrategyType::PL_PA_STRATEGY, result);
+}
+OB_GEO_FUNC_END;
+
+OB_GEO_GEOG_BINARY_FUNC_BEGIN(
+    ObGeoFuncSymDifferenceImpl, ObWkbGeogLineString, ObWkbGeogLineString, ObGeometry *)
+{
+  return apply_bg_symdifference<ObWkbGeogLineString,
+      ObWkbGeogLineString,
+      ObGeographMultilinestring>(g1, g2, context, result, ObBGStrategyType::LL_LA_AA_STRATEGY);
+}
+OB_GEO_FUNC_END;
+
+OB_GEO_GEOG_BINARY_FUNC_BEGIN(
+    ObGeoFuncSymDifferenceImpl, ObWkbGeogLineString, ObWkbGeogPolygon, ObGeometry *)
+{
+  return apply_bg_symdifference_la<ObWkbGeogLineString,
+      ObWkbGeogPolygon,
+      ObGeographGeometrycollection>(g1, g2, context, result,
+      ObBGStrategyType::LL_LA_AA_STRATEGY);
+}
+OB_GEO_FUNC_END;
+
+OB_GEO_GEOG_BINARY_FUNC_BEGIN(
+    ObGeoFuncSymDifferenceImpl, ObWkbGeogLineString, ObWkbGeogMultiPoint, ObGeometry *)
+{
+  return apply_bg_symdifference_mpl_mpa<ObWkbGeogMultiPoint,
+      ObWkbGeogLineString,
+      ObGeographGeometrycollection>(g2, g1, context, ObBGStrategyType::PL_PA_STRATEGY, result);
+}
+OB_GEO_FUNC_END;
+
+OB_GEO_GEOG_BINARY_FUNC_BEGIN(
+    ObGeoFuncSymDifferenceImpl, ObWkbGeogLineString, ObWkbGeogMultiLineString, ObGeometry *)
+{
+  return apply_bg_symdifference<ObWkbGeogLineString,
+      ObWkbGeogMultiLineString,
+      ObGeographMultilinestring>(g1, g2, context, result, ObBGStrategyType::LL_LA_AA_STRATEGY);
+}
+OB_GEO_FUNC_END;
+
+OB_GEO_GEOG_BINARY_FUNC_BEGIN(
+    ObGeoFuncSymDifferenceImpl, ObWkbGeogLineString, ObWkbGeogMultiPolygon, ObGeometry *)
+{
+  return apply_bg_symdifference_la<ObWkbGeogLineString,
+      ObWkbGeogMultiPolygon,
+      ObGeographGeometrycollection>(g1, g2, context, result,
+      ObBGStrategyType::LL_LA_AA_STRATEGY);
+}
+OB_GEO_FUNC_END;
+
+OB_GEO_GEOG_BINARY_FUNC_BEGIN(
+    ObGeoFuncSymDifferenceImpl, ObWkbGeogLineString, ObWkbGeogCollection, ObGeometry *)
+{
+  return apply_bg_symdifference_line_coll<ObGeographLineString, ObGeographGeometrycollection>(
+      g1, g2, context, ObBGStrategyType::DEFAULT_NONE, result);
+}
+OB_GEO_FUNC_END;
+
+
+// geograph polygon
+OB_GEO_GEOG_BINARY_FUNC_BEGIN(
+    ObGeoFuncSymDifferenceImpl, ObWkbGeogPolygon, ObWkbGeogPoint, ObGeometry *)
+{
+  return apply_bg_symdifference_pl_pa<ObWkbGeogPoint,
+      ObWkbGeogPolygon,
+      ObGeographGeometrycollection>(g2, g1, context, ObBGStrategyType::PL_PA_STRATEGY, result);
+}
+OB_GEO_FUNC_END;
+
+OB_GEO_GEOG_BINARY_FUNC_BEGIN(
+    ObGeoFuncSymDifferenceImpl, ObWkbGeogPolygon, ObWkbGeogLineString, ObGeometry *)
+{
+  return apply_bg_symdifference_la<ObWkbGeogLineString,
+      ObWkbGeogPolygon,
+      ObGeographGeometrycollection>(g2, g1, context, result,
+      ObBGStrategyType::LL_LA_AA_STRATEGY);
+}
+OB_GEO_FUNC_END;
+
+OB_GEO_GEOG_BINARY_FUNC_BEGIN(
+    ObGeoFuncSymDifferenceImpl, ObWkbGeogPolygon, ObWkbGeogPolygon, ObGeometry *)
+{
+  return apply_bg_symdifference<ObWkbGeogPolygon, ObWkbGeogPolygon, ObGeographMultipolygon>(
+      g1, g2, context, result, ObBGStrategyType::LL_LA_AA_STRATEGY);
+}
+OB_GEO_FUNC_END;
+
+OB_GEO_GEOG_BINARY_FUNC_BEGIN(
+    ObGeoFuncSymDifferenceImpl, ObWkbGeogPolygon, ObWkbGeogMultiPoint, ObGeometry *)
+{
+  return apply_bg_symdifference_mpl_mpa<ObWkbGeogMultiPoint,
+      ObWkbGeogPolygon,
+      ObGeographGeometrycollection>(g2, g1, context, ObBGStrategyType::PL_PA_STRATEGY, result);
+}
+OB_GEO_FUNC_END;
+
+OB_GEO_GEOG_BINARY_FUNC_BEGIN(
+    ObGeoFuncSymDifferenceImpl, ObWkbGeogPolygon, ObWkbGeogMultiLineString, ObGeometry *)
+{
+  return apply_bg_symdifference_la<ObWkbGeogMultiLineString,
+      ObWkbGeogPolygon,
+      ObGeographGeometrycollection>(g2, g1, context, result,
+      ObBGStrategyType::LL_LA_AA_STRATEGY);
+}
+OB_GEO_FUNC_END;
+
+OB_GEO_GEOG_BINARY_FUNC_BEGIN(
+    ObGeoFuncSymDifferenceImpl, ObWkbGeogPolygon, ObWkbGeogMultiPolygon, ObGeometry *)
+{
+  return apply_bg_symdifference<ObWkbGeogPolygon, ObWkbGeogMultiPolygon, ObGeographMultipolygon>(
+      g1, g2, context, result, ObBGStrategyType::LL_LA_AA_STRATEGY);
+}
+OB_GEO_FUNC_END;
+
+OB_GEO_GEOG_BINARY_FUNC_BEGIN(
+    ObGeoFuncSymDifferenceImpl, ObWkbGeogPolygon, ObWkbGeogCollection, ObGeometry *)
+{
+  return apply_bg_symdifference_poly_coll<ObGeographPolygon, ObGeographGeometrycollection, ObWkbGeogPolygon>(
+      g1, g2, context, ObBGStrategyType::LL_LA_AA_STRATEGY, result);
+}
+OB_GEO_FUNC_END;
+
+// geograph multipoint
+OB_GEO_GEOG_BINARY_FUNC_BEGIN(
+    ObGeoFuncSymDifferenceImpl, ObWkbGeogMultiPoint, ObWkbGeogPoint, ObGeometry *)
+{
+  return apply_bg_symdifference_pt_pt<ObWkbGeogPoint, ObWkbGeogMultiPoint, ObGeographMultipoint>(
+      g2, g1, context, result);
+}
+OB_GEO_FUNC_END;
+
+OB_GEO_GEOG_BINARY_FUNC_BEGIN(
+    ObGeoFuncSymDifferenceImpl, ObWkbGeogMultiPoint, ObWkbGeogLineString, ObGeometry *)
+{
+  return apply_bg_symdifference_mpl_mpa<ObWkbGeogMultiPoint,
+      ObWkbGeogLineString,
+      ObGeographGeometrycollection>(g1, g2, context, ObBGStrategyType::PL_PA_STRATEGY, result);
+}
+OB_GEO_FUNC_END;
+
+OB_GEO_GEOG_BINARY_FUNC_BEGIN(
+    ObGeoFuncSymDifferenceImpl, ObWkbGeogMultiPoint, ObWkbGeogPolygon, ObGeometry *)
+{
+  return apply_bg_symdifference_mpl_mpa<ObWkbGeogMultiPoint,
+      ObWkbGeogPolygon,
+      ObGeographGeometrycollection>(g1, g2, context, ObBGStrategyType::PL_PA_STRATEGY, result);
+}
+OB_GEO_FUNC_END;
+
+OB_GEO_GEOG_BINARY_FUNC_BEGIN(
+    ObGeoFuncSymDifferenceImpl, ObWkbGeogMultiPoint, ObWkbGeogMultiPoint, ObGeometry *)
+{
+  return apply_bg_symdifference_pt_pt<ObWkbGeogMultiPoint,
+      ObWkbGeogMultiPoint,
+      ObGeographMultipoint>(g2, g1, context, result);
+}
+OB_GEO_FUNC_END;
+
+OB_GEO_GEOG_BINARY_FUNC_BEGIN(
+    ObGeoFuncSymDifferenceImpl, ObWkbGeogMultiPoint, ObWkbGeogMultiLineString, ObGeometry *)
+{
+  return apply_bg_symdifference_mpl_mpa<ObWkbGeogMultiPoint,
+      ObWkbGeogMultiLineString,
+      ObGeographGeometrycollection>(g1, g2, context, ObBGStrategyType::PL_PA_STRATEGY, result);
+}
+OB_GEO_FUNC_END;
+
+OB_GEO_GEOG_BINARY_FUNC_BEGIN(
+    ObGeoFuncSymDifferenceImpl, ObWkbGeogMultiPoint, ObWkbGeogMultiPolygon, ObGeometry *)
+{
+  return apply_bg_symdifference_mpl_mpa<ObWkbGeogMultiPoint,
+      ObWkbGeogMultiPolygon,
+      ObGeographGeometrycollection>(g1, g2, context, ObBGStrategyType::PL_PA_STRATEGY, result);
+}
+OB_GEO_FUNC_END;
+
+OB_GEO_GEOG_BINARY_FUNC_BEGIN(
+    ObGeoFuncSymDifferenceImpl, ObWkbGeogMultiPoint, ObWkbGeogCollection, ObGeometry *)
+{
+  return apply_bg_symdifference_pt_coll<ObGeographMultipoint, ObGeographGeometrycollection>(
+      g1, g2, context, ObBGStrategyType::PL_PA_STRATEGY, result);
+}
+OB_GEO_FUNC_END;
+
+// geograph mutilinestring
+OB_GEO_GEOG_BINARY_FUNC_BEGIN(
+    ObGeoFuncSymDifferenceImpl, ObWkbGeogMultiLineString, ObWkbGeogPoint, ObGeometry *)
+{
+  return apply_bg_symdifference_pl_pa<ObWkbGeogPoint,
+      ObWkbGeogMultiLineString,
+      ObGeographGeometrycollection>(g2, g1, context, ObBGStrategyType::PL_PA_STRATEGY, result);
+}
+OB_GEO_FUNC_END;
+
+OB_GEO_GEOG_BINARY_FUNC_BEGIN(
+    ObGeoFuncSymDifferenceImpl, ObWkbGeogMultiLineString, ObWkbGeogLineString, ObGeometry *)
+{
+  return apply_bg_symdifference<ObWkbGeogLineString,
+      ObWkbGeogMultiLineString,
+      ObGeographMultilinestring>(g2, g1, context, result, ObBGStrategyType::LL_LA_AA_STRATEGY);
+}
+OB_GEO_FUNC_END;
+
+OB_GEO_GEOG_BINARY_FUNC_BEGIN(
+    ObGeoFuncSymDifferenceImpl, ObWkbGeogMultiLineString, ObWkbGeogPolygon, ObGeometry *)
+{
+  return apply_bg_symdifference_la<ObWkbGeogMultiLineString,
+      ObWkbGeogPolygon,
+      ObGeographGeometrycollection>(g1, g2, context, result,
+      ObBGStrategyType::LL_LA_AA_STRATEGY);
+}
+OB_GEO_FUNC_END;
+
+OB_GEO_GEOG_BINARY_FUNC_BEGIN(
+    ObGeoFuncSymDifferenceImpl, ObWkbGeogMultiLineString, ObWkbGeogMultiPoint, ObGeometry *)
+{
+  return apply_bg_symdifference_mpl_mpa<ObWkbGeogMultiPoint,
+      ObWkbGeogMultiLineString,
+      ObGeographGeometrycollection>(g2, g1, context, ObBGStrategyType::PL_PA_STRATEGY, result);
+}
+OB_GEO_FUNC_END;
+
+OB_GEO_GEOG_BINARY_FUNC_BEGIN(
+    ObGeoFuncSymDifferenceImpl, ObWkbGeogMultiLineString, ObWkbGeogMultiLineString, ObGeometry *)
+{
+  return apply_bg_symdifference<ObWkbGeogMultiLineString,
+      ObWkbGeogMultiLineString,
+      ObGeographMultilinestring>(g1, g2, context, result, ObBGStrategyType::LL_LA_AA_STRATEGY);
+}
+OB_GEO_FUNC_END;
+
+OB_GEO_GEOG_BINARY_FUNC_BEGIN(
+    ObGeoFuncSymDifferenceImpl, ObWkbGeogMultiLineString, ObWkbGeogMultiPolygon, ObGeometry *)
+{
+  return apply_bg_symdifference_la<ObWkbGeogMultiLineString,
+      ObWkbGeogMultiPolygon,
+      ObGeographGeometrycollection>(g1, g2, context, result,
+      ObBGStrategyType::LL_LA_AA_STRATEGY);
+}
+OB_GEO_FUNC_END;
+
+OB_GEO_GEOG_BINARY_FUNC_BEGIN(
+    ObGeoFuncSymDifferenceImpl, ObWkbGeogMultiLineString, ObWkbGeogCollection, ObGeometry *)
+{
+  return apply_bg_symdifference_line_coll<ObGeographMultilinestring,
+  ObGeographGeometrycollection>(
+      g1, g2, context, ObBGStrategyType::LL_LA_AA_STRATEGY, result);
+}
+OB_GEO_FUNC_END;
+
+// geograph multipolygon
+OB_GEO_GEOG_BINARY_FUNC_BEGIN(
+    ObGeoFuncSymDifferenceImpl, ObWkbGeogMultiPolygon, ObWkbGeogPoint, ObGeometry *)
+{
+  return apply_bg_symdifference_pl_pa<ObWkbGeogPoint,
+      ObWkbGeogMultiPolygon,
+      ObGeographGeometrycollection>(g2, g1, context, ObBGStrategyType::PL_PA_STRATEGY, result);
+}
+OB_GEO_FUNC_END;
+
+OB_GEO_GEOG_BINARY_FUNC_BEGIN(
+    ObGeoFuncSymDifferenceImpl, ObWkbGeogMultiPolygon, ObWkbGeogLineString, ObGeometry *)
+{
+  return apply_bg_symdifference_la<ObWkbGeogLineString,
+      ObWkbGeogMultiPolygon,
+      ObGeographGeometrycollection>(g2, g1, context, result,
+      ObBGStrategyType::LL_LA_AA_STRATEGY);
+}
+OB_GEO_FUNC_END;
+
+OB_GEO_GEOG_BINARY_FUNC_BEGIN(
+    ObGeoFuncSymDifferenceImpl, ObWkbGeogMultiPolygon, ObWkbGeogPolygon, ObGeometry *)
+{
+  return apply_bg_symdifference<ObWkbGeogPolygon, ObWkbGeogMultiPolygon, ObGeographMultipolygon>(
+      g2, g1, context, result, ObBGStrategyType::LL_LA_AA_STRATEGY);
+}
+OB_GEO_FUNC_END;
+
+OB_GEO_GEOG_BINARY_FUNC_BEGIN(
+    ObGeoFuncSymDifferenceImpl, ObWkbGeogMultiPolygon, ObWkbGeogMultiPoint, ObGeometry *)
+{
+  return apply_bg_symdifference_mpl_mpa<ObWkbGeogMultiPoint,
+      ObWkbGeogMultiPolygon,
+      ObGeographGeometrycollection>(g2, g1, context, ObBGStrategyType::PL_PA_STRATEGY, result);
+}
+OB_GEO_FUNC_END;
+
+OB_GEO_GEOG_BINARY_FUNC_BEGIN(
+    ObGeoFuncSymDifferenceImpl, ObWkbGeogMultiPolygon, ObWkbGeogMultiLineString, ObGeometry *)
+{
+  return apply_bg_symdifference_la<ObWkbGeogMultiLineString,
+      ObWkbGeogMultiPolygon,
+      ObGeographGeometrycollection>(g2, g1, context, result,
+      ObBGStrategyType::LL_LA_AA_STRATEGY);
+}
+OB_GEO_FUNC_END;
+
+OB_GEO_GEOG_BINARY_FUNC_BEGIN(
+    ObGeoFuncSymDifferenceImpl, ObWkbGeogMultiPolygon, ObWkbGeogMultiPolygon, ObGeometry *)
+{
+  return apply_bg_symdifference<ObWkbGeogMultiPolygon,
+      ObWkbGeogMultiPolygon,
+      ObGeographMultipolygon>(g1, g2, context, result, ObBGStrategyType::LL_LA_AA_STRATEGY);
+}
+OB_GEO_FUNC_END;
+
+OB_GEO_GEOG_BINARY_FUNC_BEGIN(
+    ObGeoFuncSymDifferenceImpl, ObWkbGeogMultiPolygon, ObWkbGeogCollection, ObGeometry *)
+{
+  return apply_bg_symdifference_poly_coll<ObGeographMultipolygon, ObGeographGeometrycollection, ObWkbGeogMultiPolygon>(
+      g1, g2, context, ObBGStrategyType::LL_LA_AA_STRATEGY, result);
+}
+OB_GEO_FUNC_END;
+
+// geograph collection
+OB_GEO_GEOG_BINARY_FUNC_BEGIN(
+    ObGeoFuncSymDifferenceImpl, ObWkbGeogCollection, ObWkbGeogPoint, ObGeometry *)
+{
+  return apply_bg_symdifference_pt_coll<ObGeographPoint, ObGeographGeometrycollection>(
+      g2, g1, context, ObBGStrategyType::PL_PA_STRATEGY, result);
+}
+OB_GEO_FUNC_END;
+
+OB_GEO_GEOG_BINARY_FUNC_BEGIN(
+    ObGeoFuncSymDifferenceImpl, ObWkbGeogCollection, ObWkbGeogLineString, ObGeometry *)
+{
+  return apply_bg_symdifference_line_coll<ObGeographLineString, ObGeographGeometrycollection>(
+      g2, g1, context, ObBGStrategyType::LL_LA_AA_STRATEGY, result);
+}
+OB_GEO_FUNC_END;
+
+OB_GEO_GEOG_BINARY_FUNC_BEGIN(
+    ObGeoFuncSymDifferenceImpl, ObWkbGeogCollection, ObWkbGeogPolygon, ObGeometry *)
+{
+  return apply_bg_symdifference_poly_coll<ObGeographPolygon, ObGeographGeometrycollection, ObWkbGeogPolygon>(
+      g2, g1, context, ObBGStrategyType::LL_LA_AA_STRATEGY, result);
+}
+OB_GEO_FUNC_END;
+
+OB_GEO_GEOG_BINARY_FUNC_BEGIN(
+    ObGeoFuncSymDifferenceImpl, ObWkbGeogCollection, ObWkbGeogMultiPoint, ObGeometry *)
+{
+  return apply_bg_symdifference_pt_coll<ObGeographMultipoint, ObGeographGeometrycollection>(
+      g2, g1, context, ObBGStrategyType::PL_PA_STRATEGY, result);
+}
+OB_GEO_FUNC_END;
+
+OB_GEO_GEOG_BINARY_FUNC_BEGIN(
+    ObGeoFuncSymDifferenceImpl, ObWkbGeogCollection, ObWkbGeogMultiLineString, ObGeometry *)
+{
+  return apply_bg_symdifference_line_coll<ObGeographMultilinestring,
+  ObGeographGeometrycollection>(
+      g2, g1, context, ObBGStrategyType::LL_LA_AA_STRATEGY, result);
+}
+OB_GEO_FUNC_END;
+
+OB_GEO_GEOG_BINARY_FUNC_BEGIN(
+    ObGeoFuncSymDifferenceImpl, ObWkbGeogCollection, ObWkbGeogMultiPolygon, ObGeometry *)
+{
+  return apply_bg_symdifference_poly_coll<ObGeographMultipolygon, ObGeographGeometrycollection, ObWkbGeogMultiPolygon>(
+      g2, g1, context, ObBGStrategyType::LL_LA_AA_STRATEGY, result);
+}
+OB_GEO_FUNC_END;
+
+int ob_geo_func_symdifference_eval_wkb_geog(const common::ObGeometry *g1, const common::ObGeometry *g2,
+    const ObGeoEvalCtx &context, ObGeometry *&result)
+{
+  return ObGeoFuncSymDifferenceImpl::eval_wkb_binary_geog(g1, g2, context, result);
+}
+
+OB_GEO_GEOG_BINARY_FUNC_BEGIN(
+    ObGeoFuncSymDifferenceImpl, ObWkbGeogCollection, ObWkbGeogCollection, ObGeometry *)
+{
+  return eval_symdifference_gc_gc<ObGeographGeometrycollection>(g1, g2, context, result,
+      ob_geo_func_symdifference_eval_wkb_geog);
+}
+OB_GEO_FUNC_END;
+
+// tree cartesian polygon
+OB_GEO_CART_TREE_FUNC_BEGIN(ObGeoFuncSymDifferenceImpl, ObCartesianPolygon, ObCartesianPolygon, ObGeometry *)
+{
+  return apply_bg_symdifference<ObCartesianPolygon, ObCartesianPolygon, ObCartesianMultipolygon>(g1, g2, context, result);
+} OB_GEO_FUNC_END;
+
+OB_GEO_CART_TREE_FUNC_BEGIN(ObGeoFuncSymDifferenceImpl, ObCartesianPolygon, ObCartesianMultipolygon, ObGeometry *)
+{
+  return apply_bg_symdifference<ObCartesianPolygon, ObCartesianMultipolygon, ObCartesianMultipolygon>(g1, g2, context, result);
+} OB_GEO_FUNC_END;
+
+OB_GEO_CART_TREE_FUNC_BEGIN(ObGeoFuncSymDifferenceImpl, ObCartesianMultipolygon, ObCartesianPolygon, ObGeometry *)
+{
+  return apply_bg_symdifference<ObCartesianMultipolygon, ObCartesianPolygon, ObCartesianMultipolygon>(g1, g2, context, result);
+} OB_GEO_FUNC_END;
+
+static int ob_geo_func_symdifference_eval_tree(const common::ObGeometry *g1, const common::ObGeometry *g2,
+    const ObGeoEvalCtx &context, ObGeometry *&result)
+{
+  int ret = OB_SUCCESS;
+  if (g1->crs() != g2->crs()) {
+    ret = OB_ERR_GIS_DIFFERENT_SRIDS;
+  } else {
+    switch (g1->crs()) {
+    case common::ObGeoCRS::Cartesian:
+      ret = ObGeoFuncSymDifferenceImpl::eval_tree_binary_cart(g1, g2, context, result);
+      break;
+    case common::ObGeoCRS::Geographic:
+      ret = ObGeoFuncSymDifferenceImpl::eval_tree_binary_geog(g1, g2, context, result);
+      break;
+    default:
+      ret = OB_ERR_GIS_INVALID_DATA;
+      break;
+    }
+  }
+  return ret;
+}
+
+extern int ob_geo_func_symdifference_eval_wkb_cart(const common::ObGeometry *g1, const common::ObGeometry *g2,
+    const ObGeoEvalCtx &context, ObGeometry *&result);
+
+// implement of outer class eval
+// use an outer class to void implement templates in header files
+int ObGeoFuncSymDifference::eval(const ObGeoEvalCtx &gis_context, ObGeometry *&result)
+{
+  return ObGeoFuncSymDifferenceImpl::eval_geo_func_split(gis_context, result,
+      ob_geo_func_symdifference_eval_wkb_cart,
+      ob_geo_func_symdifference_eval_wkb_geog,
+      ob_geo_func_symdifference_eval_tree);
+}
+
+}  // namespace common
+}  // namespace oceanbase

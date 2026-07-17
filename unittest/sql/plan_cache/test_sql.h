@@ -1,0 +1,72 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef OCEANBASE_TEST_SQL_H_
+#define OCEANBASE_TEST_SQL_H_ 1
+
+#undef protected
+#undef private
+#include <gtest/gtest.h>
+#include "sql/optimizer/test_optimizer_utils.h"
+#define protected public
+#define private public
+#include "lib/container/ob_iarray.h"
+#include "lib/atomic/ob_atomic.h"
+
+using namespace oceanbase;
+
+namespace test
+{
+struct TestSqlCtx
+{
+  ObStmtFactory *stmt_factory_;
+  ObRawExprFactory *expr_factory_;
+  ObLogPlanFactory *log_plan_factory_;
+  ObIAllocator *allocator_;
+};
+
+class TestSQL : public TestOptimizerUtils
+{
+public:
+  TestSQL(const ObString &schema_file_name);
+  virtual ~TestSQL();
+  void TestBody(){}
+  // function members
+  int do_parse(ObIAllocator &allocator, const char* query_str, ParseResult &parse_result);
+  int do_resolve(TestSqlCtx &test_sql_ctx,
+                 ParseResult &parse_result, ObStmt *&stmt, ParamStore *params);
+  int generate_logical_plan(TestSqlCtx &test_sql_ctx,
+                            ParamStore *params,
+                            ObStmt *stmt,
+                            ObLogPlan *&logical_plan);
+  int generate_physical_plan(ObLogPlan *logical_plan, ObPhysicalPlan *&physical_plan);
+
+  int64_t get_case_id() { return case_id_; }
+  int64_t next_case_id() { return ATOMIC_AAF((uint64_t*)&case_id_, 1); }
+  ObAddr &get_addr() { return addr_; }
+  ObSQLSessionInfo &get_session_info() { return session_info_; }
+  uint64_t get_database_id() { return combine_id( sys_tenant_id_, next_user_database_id_);}
+  void set_merged_version(int64_t version) { merged_version_ = version; }
+  int64_t get_merged_version() { return merged_version_; }
+protected:
+  ObAddr addr_;  //local addr
+  int64_t merged_version_;
+private:
+  // disallow copy
+  DISALLOW_COPY_AND_ASSIGN(TestSQL);
+};
+}//
+#endif

@@ -1,0 +1,79 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef __SQL_ENG_PX_ADMISSION_H__
+#define __SQL_ENG_PX_ADMISSION_H__
+
+#include "share/ob_define.h"
+#include "lib/utility/ob_macro_utils.h"
+#include "lib/lock/ob_spin_rwlock.h"
+#include "lib/lock/ob_monitor.h"
+#include "lib/lock/mutex.h"
+#include "lib/rc/ob_rc.h"
+#include "lib/hash/ob_hashset.h"
+#include "sql/resolver/ob_stmt_type.h"
+
+namespace oceanbase
+{
+using namespace oceanbase::common;
+using namespace oceanbase::common::hash;
+
+namespace sql
+{
+
+class ObSQLSessionInfo;
+class ObPhysicalPlan;
+class ObExecContext;
+
+class ObPxAdmission
+{
+public:
+  ObPxAdmission() = default;
+  ~ObPxAdmission() = default;
+  static int64_t admit(ObSQLSessionInfo &session, ObExecContext &exec_ctx,
+                       int64_t wait_time_us, int64_t minimal_px_worker_count, int64_t &session_target,
+                       ObHashMap<ObAddr, int64_t> &worker_map, int64_t req_cnt, int64_t &admit_cnt);
+  static int enter_query_admission(sql::ObSQLSessionInfo &session,
+                                   sql::ObExecContext &exec_ctx,
+                                   sql::stmt::StmtType stmt_type,
+                                   sql::ObPhysicalPlan &plan);
+  static void exit_query_admission(sql::ObSQLSessionInfo &session,
+                                   sql::ObExecContext &exec_ctx,
+                                   sql::stmt::StmtType stmt_type,
+                                   sql::ObPhysicalPlan &plan);
+private:
+  static int get_parallel_session_target(sql::ObSQLSessionInfo &session,
+                                         int64_t minimal_session_target,
+                                         int64_t &session_target);
+  /* variables */
+  DISALLOW_COPY_AND_ASSIGN(ObPxAdmission);
+};
+class ObPxSubAdmission
+{
+public:
+  ObPxSubAdmission() = default;
+  ~ObPxSubAdmission() = default;
+  static void acquire(int64_t max, int64_t min, int64_t &acquired_cnt);
+  static void release(int64_t acquired_cnt);
+private:
+  /* variables */
+  DISALLOW_COPY_AND_ASSIGN(ObPxSubAdmission);
+};
+
+}
+}
+#endif /* __SQL_ENG_PX_ADMISSION_H__ */
+//// end of header file

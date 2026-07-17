@@ -1,0 +1,146 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef _OBMP_CONNECT_H_
+#define _OBMP_CONNECT_H_
+
+#include "rpc/obmysql/packet/ompk_handshake_response.h"
+#include "observer/mysql/obmp_base.h"
+#include "rpc/obmysql/ob_i_cs_mem_pool.h"
+
+namespace oceanbase
+{
+namespace sql
+{
+class ObMultiStmtItem;
+class ObSQLSessionInfo;
+}
+namespace observer
+{
+struct ObSMConnection;
+
+ObString extract_user_name(const ObString &in);
+int extract_user_tenant(const ObString &in, ObString &user_name, ObString &tenant_name);
+
+class AuthSwitchResonseMemPool : public obmysql::ObICSMemPool
+{
+public:
+  explicit AuthSwitchResonseMemPool(ObIAllocator *allocator)
+      : allocator_(allocator)
+  {}
+
+  virtual ~AuthSwitchResonseMemPool() {}
+
+  void *alloc(int64_t size) override
+  {
+    return allocator_->alloc(size);
+  }
+private:
+  ObIAllocator *allocator_;
+};
+
+class ObMPConnect
+    : public ObMPBase
+{
+public:
+  explicit ObMPConnect(const ObGlobalContext &gctx);
+  virtual ~ObMPConnect();
+
+protected:
+  int process();
+  int deserialize();
+
+  int load_privilege_info(sql::ObSQLSessionInfo &session);
+
+private:
+  int64_t get_user_id();
+  int64_t get_database_id();
+  int get_conn_id(uint32_t &conn_id) const;
+  int get_client_addr_port(int32_t &client_addr_port) const;
+  int get_client_conn_id(uint32_t &conn_id) const;
+  int get_client_create_time(int64_t &client_create_time) const;
+  int get_proxy_capability(uint64_t &cap) const;
+
+  int get_client_attribute_capability(uint64_t &cap) const;
+
+  int get_user_tenant(ObSMConnection &conn);
+
+  int check_client_property(ObSMConnection &conn);
+  int check_common_property(ObSMConnection &conn, obmysql::ObMySQLCapabilityFlags &client_cap);
+  int check_update_proxy_capability(ObSMConnection &conn) const;
+  int check_update_client_capability(uint64_t &cap) const;
+  int check_user_cluster(const ObString &server_cluster, const int64_t server_cluster_id) const;
+  int init_process_single_stmt(const sql::ObMultiStmtItem &multi_stmt_item,
+                               sql::ObSQLSessionInfo &session,
+                               bool has_more_result) const;
+  int init_connect_process(common::ObString &init_sql,
+                           sql::ObSQLSessionInfo &session) const;
+  int init_connection_group(ObSMConnection &conn);
+  int verify_connection() const;
+  int verify_identify(ObSMConnection &conn, sql::ObSQLSessionInfo &session);
+  int verify_ip_white_list() const;
+  int convert_oracle_object_name(ObString &object_name);
+
+  int switch_lock_status_for_current_login_user(bool do_lock);
+  int switch_lock_status_for_user(const ObString &host_name,
+                                  ObCompatibilityMode compat_mode, bool do_lock);
+  int get_last_failed_login_info(const uint64_t user_id,
+                                 ObISQLClient &sql_client,
+                                 int64_t &current_failed_login_num,
+                                 int64_t &last_failed_timestamp);
+
+  int update_current_user_failed_login_num(const uint64_t user_id,
+                                           ObISQLClient &sql_client,
+                                           int64_t new_failed_login_num);
+  int clear_current_user_failed_login_num(const uint64_t user_id,
+                                          ObISQLClient &sql_client);
+  int update_login_stat_mysql(const bool is_login_succ,
+                              ObSchemaGetterGuard &schema_guard,
+                              bool &is_unlocked_now);
+  int update_login_stat_in_trans_mysql(const ObUserInfo &user_info,
+                                       const bool is_login_succ,
+                                       bool &is_locked_now);
+  bool is_connection_control_enabled();
+  int get_connection_control_stat(const int64_t current_failed_login_num,
+                                  const int64_t last_failed_login_timestamp,
+                                  bool &need_lock, bool &is_locked);
+
+  int unlock_user_if_time_is_up_mysql(const uint64_t user_id,
+                                      share::schema::ObSchemaGetterGuard &schema_guard,
+                                      bool &is_unlock);
+  int check_password_expired(share::schema::ObSchemaGetterGuard &schema_guard,
+                             sql::ObSQLSessionInfo &session);
+  int set_client_version(ObSMConnection &conn);
+private:
+  DISALLOW_COPY_AND_ASSIGN(ObMPConnect);
+  obmysql::OMPKHandshakeResponse hsr_;
+  common::ObString user_name_;
+  common::ObString client_ip_;
+  common::ObString tenant_name_;
+  common::ObString db_name_;
+  char client_ip_buf_[common::MAX_IP_ADDR_LENGTH + 1];
+  char user_name_var_[OB_MAX_USER_NAME_BUF_LENGTH];
+  char db_name_var_[OB_MAX_DATABASE_NAME_BUF_LENGTH];
+  int deser_ret_;
+  ObArenaAllocator allocator_;
+  AuthSwitchResonseMemPool asr_mem_pool_;
+  int32_t client_port_;
+}; // end of class ObMPConnect
+
+} // end of namespace observer
+} // end of namespace oceanbase
+
+#endif /* _OBMP_CONNECT_H_ */

@@ -1,0 +1,64 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef OCEANBASE_SQL_OB_ALTER_DATABASE_STMT_
+#define OCEANBASE_SQL_OB_ALTER_DATABASE_STMT_
+
+#include "share/ob_rpc_struct.h"
+#include "sql/resolver/ddl/ob_ddl_stmt.h"
+namespace oceanbase
+{
+namespace sql
+{
+class ObAlterDatabaseStmt : public ObDDLStmt
+{
+public:
+  ObAlterDatabaseStmt();
+  explicit ObAlterDatabaseStmt(common::ObIAllocator *name_pool);
+  virtual ~ObAlterDatabaseStmt();
+  void set_database_id(const uint64_t database_id);
+  int set_database_name(const common::ObString &database_name);
+  void set_collation_type(const common::ObCollationType type);
+  void set_charset_type(const common::ObCharsetType type);
+  common::ObCharsetType get_charset_type() const;
+  void set_read_only(const bool read_only);
+  int set_default_tablegroup_name(const common::ObString &tablegroup_name);
+  void set_alter_option_set(const common::ObBitSet<> &alter_option_set);
+  common::ObBitSet<> &get_alter_option_set() { return alter_database_arg_.alter_option_bitset_; }
+  obcall::ObAlterDatabaseArg &get_alter_database_arg();
+  bool only_alter_primary_zone() const
+  { return alter_database_arg_.only_alter_primary_zone(); }
+  virtual bool cause_implicit_commit() const { return true; }
+
+  inline const common::ObString &get_database_name() const;
+  virtual obcall::ObDDLArg &get_ddl_arg() { return alter_database_arg_; }
+  common::ObCollationType get_collation_type() {
+    return alter_database_arg_.database_schema_.get_collation_type();
+  }
+
+  TO_STRING_KV(K_(alter_database_arg));
+private:
+  obcall::ObAlterDatabaseArg alter_database_arg_;
+};
+
+inline const common::ObString &ObAlterDatabaseStmt::get_database_name() const
+{
+  return alter_database_arg_.database_schema_.get_database_name_str();
+}
+
+}//oceanbase sql
+}//oceanbase namespace
+#endif //OCEANBASE_SQL_OB_ALTER_DATABASE_STMT_

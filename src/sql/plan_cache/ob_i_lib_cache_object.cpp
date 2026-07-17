@@ -1,0 +1,147 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#define USING_LOG_PREFIX SQL_PC
+#include "ob_i_lib_cache_object.h"
+#include "share/rc/ob_module_provider.h"
+#include "sql/plan_cache/ob_plan_cache.h"
+
+using namespace oceanbase::common;
+using namespace oceanbase::share::schema;
+
+namespace oceanbase
+{
+namespace sql
+{
+ObILibCacheObject::ObILibCacheObject(ObLibCacheNameSpace ns, lib::MemoryContext &mem_context)
+  : mem_context_(mem_context),
+    allocator_(mem_context->get_safe_arena_allocator()),
+    ref_count_(0),
+    object_id_(OB_INVALID_ID),
+    log_del_time_(INT64_MAX),
+    added_to_lc_(false),
+    ns_(ns),
+    dynamic_ref_handle_(MAX_HANDLE),
+    obj_status_(ObILibCacheObject::ACTIVE)
+{
+}
+
+void ObILibCacheObject::reset()
+{
+  ref_count_ = 0;
+  object_id_ = OB_INVALID_ID;
+  log_del_time_ = INT64_MAX;
+  added_to_lc_ = false;
+  ns_ = NS_INVALID;
+  
+  dynamic_ref_handle_ = MAX_HANDLE;
+  obj_status_ = ObILibCacheObject::ACTIVE;
+}
+
+void ObILibCacheObject::dump_deleted_log_info(const bool is_debug_log /* = true */) const
+{
+  if (is_debug_log) {
+    SQL_PC_LOG_RET(WARN, OB_SUCCESS, "Dumping Cache Deleted Info",
+               K(object_id_),
+               K(added_to_lc_),
+               K(ns_),
+               K(get_ref_count()),
+               K(log_del_time_),
+               K(this));
+  } else {
+    SQL_PC_LOG(INFO, "Dumping Cache Deleted Info",
+               K(object_id_),
+               K(added_to_lc_),
+               K(ns_),
+               K(get_ref_count()),
+               K(log_del_time_),
+               K(this));
+  }
+}
+
+int ObILibCacheObject::before_cache_evicted()
+{
+  int ret = OB_SUCCESS;
+  LOG_INFO("before_cache_evicted", K(this), KPC(this));
+  return ret;
+}
+
+int ObILibCacheObject::check_need_add_cache_obj_stat(ObILibCacheCtx &ctx, bool &need_real_add)
+{
+  UNUSED(ctx);
+  int ret = OB_SUCCESS;
+  need_real_add = true;
+  return ret;
+}
+
+int ObILibCacheObject::update_cache_obj_stat(ObILibCacheCtx &ctx)
+{
+  UNUSED(ctx);
+  int ret = OB_SUCCESS;
+  return ret;
+}
+
+int64_t ObILibCacheObject::inc_ref_count(const CacheRefHandleID ref_handle)
+{
+  int ret = OB_SUCCESS;
+  if (GCONF._enable_plan_cache_mem_diagnosis) {
+    ObPlanCache *lib_cache = share::g_mp->plan_cache();
+    if (OB_ISNULL(lib_cache)) {
+      // ignore ret
+      LOG_ERROR("invalid null lib cache", K(ret));
+    } else {
+      lib_cache->get_ref_handle_mgr().record_ref_op(ref_handle);
+    }
+  }
+  return ATOMIC_AAF(&ref_count_, 1);
+}
+
+bool ObILibCacheObject::try_inc_ref_count(const CacheRefHandleID ref_handle)
+{
+  int ret = OB_SUCCESS;
+  int64_t ref_cnt = ATOMIC_LOAD(&ref_count_);
+  while (ref_cnt > 0 && !ATOMIC_BCAS(&ref_count_, ref_cnt, ref_cnt + 1)) {
+    ref_cnt = ATOMIC_LOAD(&ref_count_);
+  }
+  if (ref_cnt > 0 && GCONF._enable_plan_cache_mem_diagnosis) {
+    ObPlanCache *lib_cache = share::g_mp->plan_cache();
+    if (OB_ISNULL(lib_cache)) {
+      // ignore ret
+      LOG_ERROR("invalid null lib cache", K(ret));
+    } else {
+      lib_cache->get_ref_handle_mgr().record_ref_op(ref_handle);
+    }
+  }
+  return ref_cnt > 0;
+}
+
+int64_t ObILibCacheObject::dec_ref_count(const CacheRefHandleID ref_handle)
+{
+  int ret = OB_SUCCESS;
+  if (GCONF._enable_plan_cache_mem_diagnosis) {
+    ObPlanCache *lib_cache = share::g_mp->plan_cache();
+    if (OB_ISNULL(lib_cache)) {
+      // ignore ret
+      LOG_ERROR("invalid null lib cache", K(ret));
+    } else {
+      lib_cache->get_ref_handle_mgr().record_deref_op(ref_handle);
+    }
+  }
+  return ATOMIC_SAF(&ref_count_, 1);
+}
+
+} // namespace common
+} // namespace oceanbase

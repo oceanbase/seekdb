@@ -1,0 +1,66 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef OCEANBASE_ROOTSERVER_OB_UPDATE_INDEX_STATUS_HELPER_H_
+#define OCEANBASE_ROOTSERVER_OB_UPDATE_INDEX_STATUS_HELPER_H_
+
+#include "rootserver/parallel_ddl/ob_ddl_helper.h"
+
+namespace oceanbase
+{
+namespace share
+{
+namespace schema
+{
+class ObMultiVersionSchemaService;
+}
+}
+namespace obcall
+{
+class ObUpdateIndexStatusArg;
+}
+namespace rootserver
+{
+class ObUpdateIndexStatusHelper : public ObDDLHelper
+{
+public:
+  ObUpdateIndexStatusHelper(
+    share::schema::ObMultiVersionSchemaService *schema_service,
+    const obcall::ObUpdateIndexStatusArg &arg,
+    obcall::ObParallelDDLRes &res);
+  virtual ~ObUpdateIndexStatusHelper();
+private:
+  virtual int lock_objects_() override;
+  virtual int generate_schemas_() override;
+  int calc_schema_version_cnt_();
+  virtual int operate_schemas_() override;
+  int lock_database_by_obj_name_();
+  virtual int init_() override;
+  virtual int operation_before_commit_() override;
+  virtual int clean_on_fail_commit_() override;
+  virtual int construct_and_adjust_result_(int &return_ret) override;
+private:
+  const obcall::ObUpdateIndexStatusArg &arg_;
+  obcall::ObParallelDDLRes &res_;
+  const ObTableSchema *orig_index_table_schema_;
+  ObTableSchema* new_data_table_schema_;
+  share::schema::ObIndexStatus new_status_;
+  bool index_table_exist_;
+  uint64_t database_id_;
+};
+}
+}
+#endif

@@ -1,0 +1,83 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef OCEANBASE_ENGINE_PX_EXCHANGE_OB_PX_REPART_TRANSMIT_OP_H_
+#define OCEANBASE_ENGINE_PX_EXCHANGE_OB_PX_REPART_TRANSMIT_OP_H_
+
+#include "ob_px_transmit_op.h"
+
+namespace oceanbase
+{
+namespace sql
+{
+
+class ObRepartSliceIdxCalc;
+class ObDynamicSamplePieceMsg;
+
+class ObPxRepartTransmitOpInput : public ObPxTransmitOpInput
+{
+public:
+  OB_UNIS_VERSION_V(1);
+public:
+  ObPxRepartTransmitOpInput(ObExecContext &ctx, const ObOpSpec &spec)
+    : ObPxTransmitOpInput(ctx, spec)
+  {}
+  virtual ~ObPxRepartTransmitOpInput()
+  {}
+};
+
+class ObPxRepartTransmitSpec : public ObPxTransmitSpec
+{
+  OB_UNIS_VERSION_V(1);
+public:
+  ObPxRepartTransmitSpec(common::ObIAllocator &alloc, const ObPhyOperatorType type);
+  ~ObPxRepartTransmitSpec() {}
+  virtual int register_to_datahub(ObExecContext &exec_ctx) const override;
+
+public:
+  ObExpr *calc_tablet_id_expr_; // for pkey, pkey-hash, pkey-range
+  ExprFixedArray dist_exprs_; // for pkey-hash, pkey-range
+  common::ObHashFuncs dist_hash_funcs_; // for pkey-hash
+  ObSortFuncs sort_cmp_funs_; // for pkey-range
+  ObSortCollations sort_collations_; // for pkey-range
+  ObFixedArray<uint64_t, common::ObIAllocator> ds_tablet_ids_; // tablet_ids for dynamic sample
+  ExprFixedArray repartition_exprs_; // for naaj pkey
+};
+
+class ObPxRepartTransmitOp : public ObPxTransmitOp
+{
+public:
+  ObPxRepartTransmitOp(ObExecContext &exec_ctx, const ObOpSpec &spec, ObOpInput *input);
+  virtual ~ObPxRepartTransmitOp() { destroy(); }
+
+  virtual int inner_open() override;
+  virtual void destroy() override;
+  virtual int inner_rescan() override { return ObPxTransmitOp::inner_rescan(); }
+  virtual int inner_close() override;
+  int do_transmit();
+private:
+  template <ObSliceIdxCalc::SliceCalcType CALC_TYPE>
+  int do_repart_transmit(ObRepartSliceIdxCalc &repart_slice_calc);
+private:
+  virtual int build_ds_piece_msg(int64_t expected_range_count,
+    ObDynamicSamplePieceMsg &piece_msg) override;
+  int dynamic_sample();
+};
+
+} // end namespace sql
+} // end namespace oceanbase
+
+#endif // OCEANBASE_ENGINE_PX_EXCHANGE_OB_PX_REPART_TRANSMIT_OP_H_

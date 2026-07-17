@@ -1,0 +1,88 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+#ifndef OCEANBASE_ROOTSERVER_OB_CREATE_INDEX_HELPER_H_
+#define OCEANBASE_ROOTSERVER_OB_CREATE_INDEX_HELPER_H_
+
+#include "rootserver/parallel_ddl/ob_ddl_helper.h"
+#include "rootserver/ob_index_builder.h"
+namespace oceanbase
+{
+namespace share
+{
+namespace schema
+{
+class ObMultiVersionSchemaService;
+}
+}
+namespace obcall
+{
+class ObCreateIndexArg;
+class ObAlterTableRes;
+}
+namespace rootserver
+{
+class ObCreateIndexHelper : public ObDDLHelper
+{
+public:
+  ObCreateIndexHelper(
+    share::schema::ObMultiVersionSchemaService *schema_service,
+    rootserver::ObDDLService &ddl_service,
+    const obcall::ObCreateIndexArg &arg,
+    obcall::ObAlterTableRes &res);
+  virtual ~ObCreateIndexHelper();
+
+private:
+  virtual int lock_objects_() override;
+  int lock_database_by_obj_name_();
+  int lock_objects_by_name_();
+  int check_database_legitimacy_();
+  int lock_objects_by_id_();
+  int check_table_legitimacy_();
+  int generate_index_schema_();
+  int calc_schema_version_cnt_();
+  virtual int operate_schemas_() override;
+  int is_local_generate_schema_(bool &is_local_generate);
+  int create_table_();
+  int create_tablets_();
+  int add_index_name_to_cache_();
+  int check_fk_related_table_ddl_(const share::schema::ObTableSchema &data_table_schema,
+                                  const share::ObDDLType &ddl_type);
+  virtual int init_() override;
+  virtual int generate_schemas_() override;
+  virtual int clean_on_fail_commit_() override;
+  virtual int operation_before_commit_() override;
+  virtual int construct_and_adjust_result_(int &return_ret) override;
+
+private:
+  const obcall::ObCreateIndexArg &arg_;
+  obcall::ObCreateIndexArg *new_arg_;
+  obcall::ObAlterTableRes &res_;
+  uint64_t database_id_;
+  const ObTableSchema *orig_data_table_schema_;
+  ObTableSchema* new_data_table_schema_;
+  ObArray<ObTableSchema> index_schemas_;
+  ObSEArray<ObColumnSchemaV2*, 1> gen_columns_;
+  ObIndexBuilder index_builder_;
+  ObDDLTaskRecord task_record_;
+  bool create_index_on_empty_table_opt_;
+
+private:
+  DISALLOW_COPY_AND_ASSIGN(ObCreateIndexHelper);
+};
+}
+}
+
+#endif//OCEANBASE_ROOTSERVER_OB_CREATE_TABLE_HELPER_H_

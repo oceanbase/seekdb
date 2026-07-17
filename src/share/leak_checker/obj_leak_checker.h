@@ -1,0 +1,178 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef OCEANBASE_SHARE_OBJ_LEAK_CHECKER_H
+#define OCEANBASE_SHARE_OBJ_LEAK_CHECKER_H
+
+#include <unordered_map>
+#include <vector>
+#include <string>
+#include "lib/ob_define.h"
+#include "lib/lock/ob_spin_lock.h"
+
+namespace oceanbase
+{
+namespace share
+{
+
+enum ObLeakCheckObjType
+{
+  LEAK_CHECK_OBJ_TABLET_HANDLE,
+  LEAK_CHECK_OBJ_LS_HANDLE,
+  LEAK_CHECK_OBJ_MAX_NUM
+};
+
+#define OBJ_LEAK_CHECKER ::oceanbase::share::ObObjLeakChecker::get_instance()
+
+class ObObjLeakChecker final
+{
+public:
+  // key_token -> lbt info 
+  using ObLeakCheckObjMap = std::unordered_map<uint64_t, std::string>;
+  using ObLeakCheckTenantObjVec = std::vector<ObLeakCheckObjMap>;
+  // owner -> ObLeakCheckTenantObjVec;
+  using ObLeakCheckAllMap = std::unordered_map<uint64_t, ObLeakCheckTenantObjVec>;
+
+  ObObjLeakChecker() : key_token_(0) {
+  }
+  ~ObObjLeakChecker() {}
+
+  static ObObjLeakChecker &get_instance() {
+    static ObObjLeakChecker instance_;
+    return instance_;
+  }
+
+  template<typename T>
+  void add(const ObLeakCheckObjType obj_type, const T *obj, uint64_t &key_token)
+  {
+    int ret = OB_SUCCESS;
+    common::ObSpinLockGuard guard(lock_);
+    key_token = key_token_++;
+
+    int n = snprintf(lbt_buf_, 4096, "obj_type:%d obj:%p BT:%s", obj_type, obj, lbt());
+    if (n <= 0) {
+      abort();
+    }
+    auto it = map_.find(1UL);
+    if (it == map_.end()) {
+      ObLeakCheckTenantObjVec obj_vec;
+      obj_vec.resize(LEAK_CHECK_OBJ_MAX_NUM);
+      it = map_.insert({1UL, obj_vec}).first;
+    }
+    bool insert_ret = it->second[obj_type].insert({key_token, lbt_buf_}).second;
+    ob_assert(insert_ret == true);
+  }
+
+  void del(const ObLeakCheckObjType obj_type, const uint64_t key_token)
+  {
+    common::ObSpinLockGuard guard(lock_);
+    auto &obj_map = map_[1UL].at(obj_type);
+    auto it = obj_map.find(key_token);
+    ob_assert(it != obj_map.end());
+    obj_map.erase(it);
+  }
+
+  void print_obj_leak(const ObLeakCheckObjType obj_type)
+  {
+    common::ObSpinLockGuard guard(lock_);
+    auto it = map_.find(1UL);
+    if (it != map_.end()) {
+      if (LEAK_CHECK_OBJ_MAX_NUM == obj_type) {
+        for (int64_t i = 0; i < LEAK_CHECK_OBJ_MAX_NUM; i++) {
+          auto &obj_map = it->second.at(i);
+          for (auto &pair : obj_map) {
+            SHARE_LOG(INFO, "dump leak obj", K(pair.first), K(pair.second.c_str()));
+          }
+        }
+      } else {
+        auto &obj_map = it->second.at(obj_type);
+        for (auto &pair : obj_map) {
+          SHARE_LOG(INFO, "dump leak obj", K(pair.first), K(pair.second.c_str()));
+        }
+      }
+    }
+  }
+
+private:
+  ObSpinLock lock_;
+  uint64_t key_token_;
+  ObLeakCheckAllMap map_;
+  char lbt_buf_[4096];
+};
+
+
+
+class ObObjLeakDebugNode final
+{
+public:
+  ObObjLeakDebugNode() : is_inited_(false), key_token_(0) { }
+  ~ObObjLeakDebugNode()
+  {
+    reset();
+  }
+  ObObjLeakDebugNode(const ObObjLeakDebugNode &) = delete;
+  ObObjLeakDebugNode &operator=(const ObObjLeakDebugNode &) = delete;
+
+
+  template<typename T>
+  void init(const T *obj, const ObLeakCheckObjType obj_type)
+  {
+    if (is_inited_) {
+      abort();
+    } else if (nullptr == obj) {
+      abort();
+    } else {
+      OBJ_LEAK_CHECKER.add(obj_type, obj, key_token_);
+      obj_type_ = obj_type;
+      is_inited_ = true;
+    }
+  }
+  void reset()
+  {
+    if (is_inited_) {
+      OBJ_LEAK_CHECKER.del(obj_type_, key_token_);
+      key_token_ = 0;
+      is_inited_ = false;
+    }
+  }
+  bool is_inited_;
+  ObLeakCheckObjType obj_type_;
+
+  uint64_t key_token_;
+};
+
+} // end share
+} // end oceanbase
+
+#ifdef ENABLE_OBJ_LEAK_CHECK
+#define DEFINE_OBJ_LEAK_DEBUG_NODE(node) oceanbase::share::ObObjLeakDebugNode node
+#define INIT_OBJ_LEAK_DEBUG_NODE(node, obj_ptr, obj_type)  node.init(obj_ptr, obj_type)
+
+// if obj_type == LEAK_CHECK_OBJ_MAX_NUM, dump all type obj
+#define PRINT_OBJ_LEAK(obj_type)                                                  \
+  {                                                                               \
+    OBJ_LEAK_CHECKER.print_obj_leak(obj_type);                                    \
+  }
+
+#else
+#define DEFINE_OBJ_LEAK_DEBUG_NODE(node)
+#define INIT_OBJ_LEAK_DEBUG_NODE(node, obj_ptr, desc)
+#define PRINT_OBJ_LEAK(obj_type)
+#endif
+
+
+
+#endif // OCEANBASE_SHARE_OBJ_LEAK_CHECKER_H

@@ -1,0 +1,108 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef OCEANBASE_STORAGE_OB_VALUE_ROW_ITERATOR_
+#define OCEANBASE_STORAGE_OB_VALUE_ROW_ITERATOR_
+
+#include "access/ob_table_access_param.h"
+#include "access/ob_table_access_context.h"
+#include "lib/allocator/page_arena.h"
+#include "lib/hash/ob_placement_hashmap.h"
+#include "lib/container/ob_se_array.h"
+#include "lib/allocator/page_arena.h"
+#include "common/row/ob_row_iterator.h"
+#include "storage/ob_i_store.h"
+#include "storage/access/ob_dml_param.h"
+#include "blocksstable/ob_datum_rowkey.h"
+#include "blocksstable/ob_datum_row_iterator.h"
+
+namespace oceanbase
+{
+namespace storage
+{
+class ObTablet;
+
+class ObValueRowIterator : public blocksstable::ObDatumRowIterator
+{
+  static const int64_t DEFAULT_ROW_NUM = 2;
+  typedef common::ObSEArray<blocksstable::ObDatumRow*, DEFAULT_ROW_NUM> RowArray;
+public:
+  ObValueRowIterator();
+  virtual ~ObValueRowIterator();
+  virtual int init();
+  virtual int get_next_row(blocksstable::ObDatumRow *&row);
+  virtual void reset();
+  int add_row(blocksstable::ObDatumRow &row);
+  int add_row(blocksstable::ObDatumRow &row,  const ObIArray<int32_t> &projector);
+  void rescan() { cur_idx_ = 0; }
+private:
+  bool is_inited_;
+  common::ObArenaAllocator allocator_;
+  RowArray rows_;
+  int64_t cur_idx_;
+private:
+  DISALLOW_COPY_AND_ASSIGN(ObValueRowIterator);
+};
+
+class ObSingleMerge;
+class ObMultipleGetMerge;
+class ObRowGetter
+{
+  static const int64_t DEFAULT_PROJECTOR_CNT = 16;
+  typedef common::ObSEArray<int32_t, DEFAULT_PROJECTOR_CNT> Projector;
+public:
+  ObRowGetter(common::ObIAllocator &allocator, ObTablet &tablet);
+  ~ObRowGetter();
+
+  int init_dml_access_ctx(
+      ObStoreCtx &store_ctx,
+      bool skip_read_lob = false);
+  int init_dml_access_param(
+      ObRelativeTable &data_table,
+      const common::ObIArray<uint64_t> &out_col_ids,
+      const bool skip_read_lob = false);
+  int prepare_cached_iter_node(const ObDMLBaseParam &dml_param, const bool is_multi_get);
+  ObTableAccessParam &get_access_param() { return access_param_; }
+  ObTableAccessContext &get_access_ctx() { return access_ctx_; }
+  void set_relative_table(ObRelativeTable *relative_table) { relative_table_ = relative_table; }
+  int open(const blocksstable::ObDatumRowkey &rowkey, bool use_fuse_row_cache = false);
+  int open(const ObIArray<blocksstable::ObDatumRowkey> &rowkeys, bool use_fuse_row_cache);
+  int get_next_row(blocksstable::ObDatumRow *&row);
+private:
+  bool can_use_global_iter_pool(const ObDMLBaseParam &dml_param) const;
+  int init_single_merge();
+  int init_multi_get_merge();
+private:
+  ObTablet *tablet_;
+  ObQRIterType iter_type_;
+  ObSingleMerge *single_merge_;
+  ObMultipleGetMerge *multi_get_merge_;
+  ObQueryRowIterator *row_iter_;
+
+  ObStoreCtx *store_ctx_;
+  Projector output_projector_;
+  ObTableAccessParam access_param_;
+  ObTableAccessContext access_ctx_;
+  ObGetTableParam get_table_param_;
+  ObRelativeTable *relative_table_;
+  common::ObIAllocator &allocator_;
+  CachedIteratorNode *cached_iter_node_;
+};
+
+} // end namespace storage
+} // end namespace oceanbase
+
+#endif // OCEANBASE_STORAGE_OB_VALUE_ROW_ITERATOR_

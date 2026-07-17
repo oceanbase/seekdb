@@ -1,0 +1,130 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+#define USING_LOG_PREFIX SQL_ENG
+
+#include "sql/engine/expr/ob_expr_fun_default.h"
+#include "sql/engine/expr/ob_expr_column_conv.h"
+#include "src/sql/resolver/expr/ob_raw_expr.h"
+using namespace oceanbase::common;
+
+namespace oceanbase
+{
+namespace sql
+{
+
+ObExprFunDefault::ObExprFunDefault(ObIAllocator &alloc)
+    : ObFuncExprOperator(alloc, T_FUN_SYS_DEFAULT, N_DEFAULT, 5, VALID_FOR_GENERATED_COL, NOT_ROW_DIMENSION)
+{
+  disable_operand_auto_cast();
+}
+
+ObExprFunDefault::~ObExprFunDefault()
+{
+}
+
+int ObExprFunDefault::calc_result_typeN(ObExprResType &type,
+                                        ObExprResType *types,
+                                        int64_t param_num,
+                                        common::ObExprTypeCtx &type_ctx) const
+{
+  //no need to set calc type of types
+
+  int ret = OB_SUCCESS;
+  //objs[0] type
+  //objs[1] collation_type
+  //objs[2] accuray_expr
+  //objs[3] nullable_expr
+  //objs[4] default_value
+  //objs[5] column_info
+  const ObRawExpr *raw_expr = type_ctx.get_raw_expr();
+  if (OB_ISNULL(raw_expr) || OB_ISNULL(raw_expr->get_param_expr(0))) {
+    ret = OB_ERR_UNEXPECTED;
+    SQL_ENG_LOG(WARN,"unexpected null", K(ret));
+  } else if (raw_expr->get_param_expr(0)->is_column_ref_expr()) {
+    type.set_type(types[0].get_type());
+    type.set_collation_type(types[0].get_collation_type());
+    type.set_collation_level(CS_LEVEL_IMPLICIT);
+    type.set_accuracy(types[0].get_accuracy());
+    if (ob_is_enumset_tc(type.get_type())) {
+      type.set_subschema_id(types[0].get_subschema_id());
+      type.mark_enum_set_with_subschema(types[0].get_enum_set_subschema_state());
+    }
+  } else if (param_num != ObExprColumnConv::PARAMS_COUNT_WITH_COLUMN_INFO
+      && param_num != ObExprColumnConv::PARAMS_COUNT_WITHOUT_COLUMN_INFO) {
+    ret = OB_INVALID_ARGUMENT;
+    SQL_ENG_LOG(WARN, "invalid argument, param_num should be 5 or 6", K(param_num));
+  } else {
+    type.set_type(types[0].get_type());
+    type.set_collation_type(types[1].get_collation_type());
+    type.set_collation_level(CS_LEVEL_IMPLICIT);
+    type.set_accuracy(types[2].get_accuracy());
+    if (ob_is_enumset_tc(type.get_type())) {
+      type.set_subschema_id(types[0].get_subschema_id());
+      type.mark_enum_set_with_subschema(types[0].get_enum_set_subschema_state());
+    }
+    types[ObExprColumnConv::VALUE_EXPR].set_calc_type(type.get_type());
+    types[ObExprColumnConv::VALUE_EXPR].set_calc_collation_type(type.get_collation_type());
+    types[ObExprColumnConv::VALUE_EXPR].set_calc_collation_level(type.get_collation_level());
+  }
+  return ret;
+}
+
+int ObExprFunDefault::calc_default_expr(const ObExpr &expr, ObEvalCtx &ctx,
+                                        ObDatum &res)
+{
+  int ret = OB_SUCCESS;
+  //objs[0] type
+  //objs[1] collation_type
+  //objs[2] accuray_expr
+  //objs[3] nullable_expr
+  //objs[4] default_value
+  //objs[5] column_info
+  ObDatum *nullable = NULL;
+  ObDatum *def = NULL;
+  if (OB_UNLIKELY(expr.arg_cnt_ != ObExprColumnConv::PARAMS_COUNT_WITH_COLUMN_INFO
+      && expr.arg_cnt_ != ObExprColumnConv::PARAMS_COUNT_WITHOUT_COLUMN_INFO)) {
+    ret = OB_INVALID_ARGUMENT_NUM;
+    SQL_ENG_LOG(WARN, "arg cnt must be 5", K(ret), K(expr.arg_cnt_));
+  } else if (OB_FAIL(expr.args_[3]->eval(ctx, nullable)) ||
+             OB_FAIL(expr.args_[4]->eval(ctx, def))) {
+    SQL_ENG_LOG(WARN, "eval arg failed", K(ret));
+  } else if (nullable->is_null()) {
+    ret = OB_ERR_UNEXPECTED;
+    SQL_ENG_LOG(WARN, "nullable param should be bool type", K(ret));
+  } else if (def->is_null()) {
+    if (!nullable->get_bool()) {
+      ret = OB_ERR_NO_DEFAULT_FOR_FIELD;
+      SQL_ENG_LOG(WARN, "Field doesn't have a default value", K(ret));
+    }
+  }
+  if (OB_SUCC(ret)) {
+    res.set_datum(*def);
+  }
+  return ret;
+}
+
+int ObExprFunDefault::cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_expr,
+                              ObExpr &rt_expr) const
+{
+  int ret = OB_SUCCESS;
+  UNUSED(expr_cg_ctx);
+  UNUSED(raw_expr);
+  rt_expr.eval_func_ = calc_default_expr;
+  return ret;
+}
+
+}
+}

@@ -1,0 +1,94 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#include <gtest/gtest.h>
+#define protected public
+#define private public
+#include "storage/blocksstable/ob_block_sstable_struct.h"
+
+namespace oceanbase
+{
+using namespace common;
+using namespace blocksstable;
+namespace unittest
+{
+TEST(ObCommitLogSpec, normal)
+{
+  //is_valid() test
+  ObCommitLogSpec log_spec;
+  log_spec.log_dir_ = "./";
+  log_spec.max_log_file_size_ = 2L * 1024L;
+  log_spec.log_sync_type_ = 0;
+  ASSERT_TRUE(log_spec.is_valid());
+  log_spec.log_dir_ = NULL;
+  ASSERT_FALSE(log_spec.is_valid());
+  //to_string() test
+  ObCStringHelper helper;
+  const char *out = helper.convert(log_spec);
+  ASSERT_STRNE(NULL, out);
+}
+
+TEST(ObStorageEnv, normal)
+{
+  //to_string() test
+  ObStorageEnv env;
+  ObCStringHelper helper;
+  const char *out = helper.convert(env);
+  ASSERT_STRNE(NULL, out);
+}
+
+TEST(ObMicroBlockHeader, normal)
+{
+  //to_string() test
+  ObMicroBlockHeader micro_header;
+  ObCStringHelper helper;
+  const char *out = helper.convert(micro_header);
+  ASSERT_STRNE(NULL, out);
+}
+
+TEST(ObMacroBlockCommonHeader, normal)
+{
+  //check() test
+  ObMacroBlockCommonHeader common_header;
+  common_header.set_attr(ObMacroBlockCommonHeader::LinkedBlock);
+  ASSERT_TRUE(common_header.is_valid());
+  //to_string() test
+  ObCStringHelper helper;
+  const char *out = helper.convert(common_header);
+  ASSERT_STRNE(NULL, out);
+  //serialization length test
+  ASSERT_EQ(common_header.header_size_, common_header.get_serialize_size());
+}
+
+TEST(ObSSTableMacroBlockHeader, normal)
+{
+  //to_string() test
+  ObSSTableMacroBlockHeader sstable_header;
+  ObCStringHelper helper;
+  const char *out = helper.convert(sstable_header);
+  ASSERT_STRNE(NULL, out);
+}
+}//blocksstable
+}//oceanbase
+
+int main(int argc, char** argv)
+{
+  OB_LOGGER.set_log_level("INFO");
+  testing::InitGoogleTest(&argc, argv);
+  oceanbase::lib::set_memory_limit(40L << 30);
+  return RUN_ALL_TESTS();
+}
+

@@ -1,0 +1,46 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#include "ob_expr_str_cmp_func_common.ipp"
+
+namespace oceanbase
+{
+namespace sql
+{
+DEF_COMPILE_STR_FUNC_INIT(CS_TYPE_GBK_CHINESE_CI, 0);
+DEF_COMPILE_STR_FUNC_INIT(CS_TYPE_UTF8MB4_GENERAL_CI, 1);
+DEF_COMPILE_STR_FUNC_INIT(CS_TYPE_UTF8MB4_BIN, 2);
+DEF_COMPILE_STR_FUNC_INIT(CS_TYPE_UTF16_GENERAL_CI, 3);
+DEF_COMPILE_STR_FUNC_INIT(CS_TYPE_UTF16_BIN, 4);
+DEF_COMPILE_STR_FUNC_INIT(CS_TYPE_BINARY, 5);
+DEF_COMPILE_STR_FUNC_INIT(CS_TYPE_GBK_BIN, 6);
+DEF_COMPILE_STR_FUNC_INIT(CS_TYPE_UTF16_UNICODE_CI, 7);
+DEF_COMPILE_STR_FUNC_INIT(CS_TYPE_UTF8MB4_UNICODE_CI, 8);
+DEF_COMPILE_STR_FUNC_INIT(CS_TYPE_GB18030_CHINESE_CI, 9);
+DEF_COMPILE_STR_FUNC_INIT(CS_TYPE_GB18030_BIN, 10);
+DEF_COMPILE_STR_FUNC_INIT(CS_TYPE_UJIS_JAPANESE_CI, 11);
+DEF_COMPILE_STR_FUNC_INIT(CS_TYPE_UJIS_BIN, 12);
+DEF_COMPILE_STR_FUNC_INIT(CS_TYPE_EUCKR_KOREAN_CI, 13);
+DEF_COMPILE_STR_FUNC_INIT(CS_TYPE_EUCKR_BIN, 14);
+DEF_COMPILE_STR_FUNC_INIT(CS_TYPE_CP932_JAPANESE_CI, 15);
+DEF_COMPILE_STR_FUNC_INIT(CS_TYPE_CP932_BIN, 16);
+DEF_COMPILE_STR_FUNC_INIT(CS_TYPE_EUCJPMS_JAPANESE_CI, 17);
+DEF_COMPILE_STR_FUNC_INIT(CS_TYPE_EUCJPMS_BIN, 18);
+DEF_COMPILE_STR_FUNC_INIT(CS_TYPE_LATIN1_GERMAN1_CI, 19);
+DEF_COMPILE_STR_FUNC_INIT(CS_TYPE_LATIN1_SWEDISH_CI, 20);
+
+} // end sql
+} // end oceanbase

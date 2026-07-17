@@ -1,0 +1,51 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#include "ob_i_sample_iterator.h"
+
+namespace oceanbase
+{
+using namespace common;
+namespace storage
+{
+
+ObISampleIterator::ObISampleIterator(const SampleInfo &sample_info)
+  : sample_info_(&sample_info)
+{
+}
+
+ObISampleIterator::~ObISampleIterator()
+{
+  sample_info_ = nullptr;
+}
+
+bool ObISampleIterator::return_this_sample(const int64_t num) const
+{
+  bool bret = false;
+  int64_t seed = sample_info_->seed_;
+  if (seed == -1) {
+    // seed is not specified, generate random seed
+    seed = ObTimeUtility::current_time();
+  }
+  uint64_t hash_value = murmurhash(&num, sizeof(num), static_cast<uint64_t>(seed));
+  double cut_off_tmp = static_cast<double>(UINT64_MAX) * sample_info_->percent_ / 100.0;
+  uint64_t cut_off = cut_off_tmp >= UINT64_MAX ? UINT64_MAX : static_cast<uint64_t>(cut_off_tmp);
+  bret = hash_value <= cut_off;
+  return bret;
+}
+
+}
+}

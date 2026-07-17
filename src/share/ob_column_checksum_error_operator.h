@@ -1,0 +1,91 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef OCEANBASE_SHARE_OB_COLUMN_CHECKSUM_ERROR_OPERATOR_H_
+#define OCEANBASE_SHARE_OB_COLUMN_CHECKSUM_ERROR_OPERATOR_H_
+
+#include "lib/container/ob_iarray.h"
+#include "common/mysqlclient/ob_isql_client.h"
+#include "common/ob_tablet_id.h"
+#include "share/scn.h"
+#include "share/storage/ob_column_checksum_error_info_table_storage.h"
+
+namespace oceanbase
+{
+namespace share
+{
+struct ObColumnChecksumErrorInfo
+{
+public:
+  ObColumnChecksumErrorInfo() 
+    : frozen_scn_(), is_global_index_(false), 
+      data_table_id_(OB_INVALID_ID), index_table_id_(OB_INVALID_ID), data_tablet_id_(),
+      index_tablet_id_(), column_id_(OB_INVALID_ID), data_column_checksum_(-1),
+      index_column_checksum_(-1) {}
+  virtual ~ObColumnChecksumErrorInfo() = default;
+
+  ObColumnChecksumErrorInfo(const SCN &frozen_scn, const bool is_global_index,
+    const int64_t data_table_id, const int64_t index_table_id, const common::ObTabletID &data_tablet_id,
+    const common::ObTabletID &index_tablet_id)
+    : frozen_scn_(frozen_scn), is_global_index_(is_global_index), 
+      data_table_id_(data_table_id), index_table_id_(index_table_id), data_tablet_id_(data_tablet_id),
+      index_tablet_id_(index_tablet_id), column_id_(OB_INVALID_ID), data_column_checksum_(-1),
+      index_column_checksum_(-1) {}
+
+  bool is_valid() const;
+
+  TO_STRING_KV(K_(frozen_scn), K_(is_global_index), K_(data_table_id), K_(index_table_id), 
+    K_(data_tablet_id), K_(index_tablet_id), K_(column_id), K_(data_column_checksum), K_(index_column_checksum));
+  
+  SCN frozen_scn_;
+  bool is_global_index_;
+  int64_t data_table_id_;
+  int64_t index_table_id_;
+  common::ObTabletID data_tablet_id_;
+  common::ObTabletID index_tablet_id_;
+  int64_t column_id_;
+  int64_t data_column_checksum_;
+  int64_t index_column_checksum_;
+};
+
+// CRUD operation to __all_column_checksum_error_info table
+class ObColumnChecksumErrorOperator
+{
+public:
+  // Initialize SQLite storage (called once at startup)
+  static int init();
+  static int insert_column_checksum_err_info(
+      common::ObISQLClient &sql_client,
+      const ObColumnChecksumErrorInfo &info);
+  // delete records whose 'frozen_scn' < min_frozen_scn
+  static int delete_column_checksum_err_info(
+      common::ObISQLClient &sql_client,
+      const SCN &min_frozen_scn);
+  // delete records whose 'frozen_scn' = compaction_scn
+  static int delete_column_checksum_err_info_by_scn(
+      common::ObISQLClient &sql_client,
+      const int64_t compaction_scn);
+  static int check_exist_ckm_error_table(const int64_t compaction_scn,
+                                          bool &exist);
+
+private:
+  static ObColumnChecksumErrorInfoTableStorage storage_;
+};
+
+} // end namespace share
+} // end namespace oceanbase
+
+#endif // OCEANBASE_SHARE_OB_COLUMN_CHECKSUM_ERROR_OPERATOR_H_

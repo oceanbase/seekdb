@@ -1,0 +1,85 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef OCEANBASE_STORAGE_OB_DDL_HEART_BEAT_TASK_H
+#define OCEANBASE_STORAGE_OB_DDL_HEART_BEAT_TASK_H
+
+#include "observer/ob_server_struct.h"
+#include "rootserver/ddl_task/ob_ddl_task.h"
+
+namespace oceanbase
+{
+namespace storage
+{
+class ObDDLHeartBeatTaskInfo final
+{
+public:
+  TO_STRING_KV(K_(task_id));
+  ObDDLHeartBeatTaskInfo() : task_id_(0) {};
+  ObDDLHeartBeatTaskInfo(int64_t task_id) : task_id_(task_id) {}
+  ~ObDDLHeartBeatTaskInfo() = default;
+  inline int64_t get_task_id() {return task_id_;}
+  
+  inline void set_task_id(int64_t task_id) {task_id_ = task_id;}
+  
+private:
+  int64_t task_id_;
+};
+class ObDDLHeartBeatTaskContainer final
+{
+public:
+  static ObDDLHeartBeatTaskContainer &get_instance();
+  ObDDLHeartBeatTaskContainer();
+  ~ObDDLHeartBeatTaskContainer();
+  int init();
+  int set_register_task_id(const int64_t task_id);
+  int remove_register_task_id(const int64_t task_id);
+  int send_task_status_to_rs();
+private:
+  static const int64_t BUCKET_LOCK_BUCKET_CNT = 10243L;
+  static const int64_t RETRY_COUNT = 3L;
+  static const int64_t RETRY_TIME_INTERVAL = 100L;
+  common::hash::ObHashMap<rootserver::ObDDLTaskID, uint64_t> register_tasks_;
+  bool is_inited_;
+  common::ObBucketLock bucket_lock_;
+};
+
+class ObRedefTableHeartBeatTask : public common::ObTimerTask
+{
+public:
+  ObRedefTableHeartBeatTask();
+  virtual ~ObRedefTableHeartBeatTask() = default;
+  int init(const int tg_id);
+  virtual void runTimerTask() override;
+private:
+  int send_task_status_to_rs();
+private:
+  const static int64_t HEARTBEAT_INTERVAL = 30L * 1000L * 1000L;//30s
+  bool is_inited_;
+};
+
+inline ObDDLHeartBeatTaskContainer &ObDDLHeartBeatTaskContainer::get_instance()
+{
+  static ObDDLHeartBeatTaskContainer THE_ONE;
+  return THE_ONE;
+}
+
+}  // end of namespace observer
+}  // end of namespace oceanbase
+
+#define OB_DDL_HEART_BEAT_TASK_CONTAINER (::oceanbase::storage::ObDDLHeartBeatTaskContainer::get_instance())
+
+#endif /*_OCEANBASE_STORAGE_OB_DDL_HEART_BEAT_TASK_H_ */

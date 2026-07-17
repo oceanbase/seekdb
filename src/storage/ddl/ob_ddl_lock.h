@@ -1,0 +1,294 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef OCEANBASE_STORAGE_OB_DDL_LOCK_H_
+#define OCEANBASE_STORAGE_OB_DDL_LOCK_H_
+
+#include "common/mysqlclient/ob_mysql_transaction.h"
+#include "storage/tablelock/ob_table_lock_rpc_struct.h"  // previously hidden behind the srv proxy include chain
+#include "share/schema/ob_table_schema.h"
+#include "observer/ob_inner_sql_connection.h"
+#include "storage/tablelock/ob_table_lock_rpc_struct.h"
+
+namespace oceanbase
+{
+namespace storage
+{
+
+// handle both table lock and online ddl lock for ddl
+class ObDDLLock {
+public:
+  static bool need_lock(const share::schema::ObTableSchema &table_schema);
+
+  static int lock_for_add_drop_index_in_trans(
+      const share::schema::ObTableSchema &data_table_schema,
+      const share::schema::ObTableSchema &index_schema,
+      ObMySQLTransaction &trans);
+  static int lock_for_add_drop_index(
+      const share::schema::ObTableSchema &data_table_schema,
+      const common::ObIArray<ObTabletID> *inc_data_tablet_ids,
+      const common::ObIArray<ObTabletID> *del_data_tablet_ids,
+      const share::schema::ObTableSchema &index_schema,
+      const transaction::tablelock::ObTableLockOwnerID lock_owner,
+      ObMySQLTransaction &trans);
+  static int unlock_for_add_drop_index(
+      const ObTableSchema &data_table_schema,
+      const uint64_t index_table_id,
+      const bool is_global_index,
+      const transaction::tablelock::ObTableLockOwnerID lock_owner,
+      ObMySQLTransaction &trans);
+  static int lock_for_rebuild_index(
+      const share::schema::ObTableSchema &data_table_schema,
+      const uint64_t old_index_table_id,
+      const uint64_t new_index_table_id,
+      const bool is_global_index,
+      const transaction::tablelock::ObTableLockOwnerID lock_owner,
+      ObMySQLTransaction &trans);
+  static int unlock_for_rebuild_index(
+      const share::schema::ObTableSchema &data_table_schema,
+      const uint64_t old_index_table_id,
+      const uint64_t new_index_table_id,
+      const bool is_global_index,
+      const transaction::tablelock::ObTableLockOwnerID lock_owner,
+      ObMySQLTransaction &trans);
+
+  static int lock_for_split_partition(
+      const share::schema::ObTableSchema &table_schema,
+      const share::ObLSID *ls_id,
+      const ObIArray<ObTabletID> *src_tablet_ids,
+      const ObIArray<ObTabletID> &dst_tablet_ids,
+      const transaction::tablelock::ObTableLockOwnerID lock_owner,
+      ObMySQLTransaction &trans);
+  static int unlock_for_split_partition(
+      const share::schema::ObTableSchema &table_schema,
+      const ObIArray<ObTabletID> &src_tablet_ids,
+      const ObIArray<ObTabletID> &dst_tablet_ids,
+      const transaction::tablelock::ObTableLockOwnerID lock_owner,
+      ObMySQLTransaction &trans);
+  static int replace_table_lock_for_split(
+    const share::schema::ObTableSchema &table_schema,
+    const ObIArray<transaction::tablelock::ObTableLockOwnerID> &global_idx_lock_owners,
+    const ObIArray<transaction::tablelock::ObTableLockOwnerID> &old_lock_owners,
+    const transaction::tablelock::ObTableLockOwnerID new_lock_owner,
+    ObMySQLTransaction &trans);
+  static int replace_tablet_lock_for_split(const ObTableSchema &table_schema,
+    const ObIArray<ObTabletID> &tablet_ids,
+    const transaction::tablelock::ObTableLockOwnerID &lock_owner,
+    const transaction::tablelock::ObTableLockOwnerID new_lock_owner,
+    const bool is_global_idx,
+    ObMySQLTransaction &trans);
+
+  static int lock_for_modify_auto_part_size_in_trans(const uint64_t data_table_id,
+      const ObIArray<uint64_t> &global_index_table_ids,
+      ObMySQLTransaction &trans);
+
+  static int lock_for_modify_truncate_info_in_trans(const uint64_t global_index_table_id,
+      ObMySQLTransaction &trans);
+
+  static int lock_for_add_lob_in_trans(
+      const share::schema::ObTableSchema &data_table_schema,
+      ObMySQLTransaction &trans);
+  
+  static int lock_for_online_drop_column_in_trans(
+      const share::schema::ObTableSchema &table_schema, 
+      ObMySQLTransaction &trans);
+  static int lock_for_drop_lob(
+      const share::schema::ObTableSchema &data_table_schema,
+      const transaction::tablelock::ObTableLockOwnerID lock_owner,
+      ObMySQLTransaction &trans);
+  static int unlock_for_drop_lob(
+      const share::schema::ObTableSchema &data_table_schema,
+      const transaction::tablelock::ObTableLockOwnerID lock_owner,
+      ObMySQLTransaction &trans);
+
+  static int lock_for_add_partition_in_trans(
+      const share::schema::ObTableSchema &table_schema,
+      ObMySQLTransaction &trans);
+
+  static int lock_for_fork_table(
+      share::schema::ObSchemaGetterGuard &schema_guard,
+      const share::schema::ObTableSchema &src_table_schema,
+      const ObIArray<share::schema::ObTableSchema> &dst_table_schemas,
+      const transaction::tablelock::ObTableLockOwnerID lock_owner,
+      ObMySQLTransaction &trans);
+
+  static int unlock_for_fork_table(
+      share::schema::ObSchemaGetterGuard &schema_guard,
+      const share::schema::ObTableSchema &src_table_schema,
+      const share::schema::ObTableSchema &dst_table_schema,
+      const int64_t task_id,
+      const transaction::tablelock::ObTableLockOwnerID lock_owner,
+      ObMySQLTransaction &trans);
+
+  static int lock_for_common_ddl_in_trans(
+      const share::schema::ObTableSchema &table_schema,
+      const bool require_strict_binary_format,
+      ObMySQLTransaction &trans);
+  static int lock_for_common_ddl(
+      const share::schema::ObTableSchema &table_schema,
+      const transaction::tablelock::ObTableLockOwnerID lock_owner,
+      ObMySQLTransaction &trans);
+  static int unlock_for_common_ddl(
+      const share::schema::ObTableSchema &table_schema,
+      const transaction::tablelock::ObTableLockOwnerID lock_owner,
+      ObMySQLTransaction &trans);
+
+  static int lock_for_offline_ddl(
+      const share::schema::ObTableSchema &table_schema,
+      const share::schema::ObTableSchema *hidden_table_schema_to_check_bind,
+      const transaction::tablelock::ObTableLockOwnerID lock_owner,
+      ObMySQLTransaction &trans);
+  static int unlock_for_offline_ddl(const uint64_t table_id,
+      const ObIArray<ObTabletID> *hidden_tablet_ids_alone,
+      const transaction::tablelock::ObTableLockOwnerID lock_owner,
+      ObMySQLTransaction &trans);
+  static int lock_table_in_trans(
+      const ObTableSchema &table_schema,
+      const transaction::tablelock::ObTableLockMode lock_mode,
+      ObMySQLTransaction &trans);
+
+protected:
+  static int do_table_lock(const uint64_t table_id,
+    const transaction::tablelock::ObTableLockMode lock_mode,
+    const transaction::tablelock::ObTableLockOwnerID lock_owner,
+    const int64_t timeout_us,
+    const bool is_lock,
+    ObMySQLTransaction &trans);
+  
+private:
+  static int lock_table_lock_in_trans(const uint64_t table_id,
+      const ObIArray<ObTabletID> &tablet_ids,
+      const transaction::tablelock::ObTableLockMode lock_mode,
+      const int64_t timeout_us,
+      ObMySQLTransaction &trans);
+  static int do_table_lock(const uint64_t table_id,
+    const ObIArray<ObTabletID> &tablet_ids,
+    const transaction::tablelock::ObTableLockMode lock_mode,
+    const transaction::tablelock::ObTableLockOwnerID lock_owner,
+    const int64_t timeout_us,
+    const bool is_lock,
+    ObMySQLTransaction &trans);
+  static int check_tablet_in_same_ls(
+      const share::schema::ObTableSchema &lhs_schema,
+      const share::schema::ObTableSchema &rhs_schema,
+      ObMySQLTransaction &trans);
+  static int replace_tablet_lock(const uint64_t table_id,
+    const ObIArray<ObTabletID> &tablet_ids,
+    const transaction::tablelock::ObTableLockMode old_lock_mode,
+    const transaction::tablelock::ObTableLockOwnerID old_lock_owner,
+    const transaction::tablelock::ObTableLockMode new_lock_mode,
+    const transaction::tablelock::ObTableLockOwnerID new_lock_owner,
+    const int64_t timeout_us,
+    ObMySQLTransaction &trans);
+  static int get_unlock_alone_tablet_request_args(const transaction::tablelock::ObTableLockMode lock_mode,
+    const transaction::tablelock::ObTableLockOwnerID lock_owner,
+    const int64_t timeout_us,
+    const ObIArray<ObTabletID> &tablet_ids,
+    ObArray<transaction::tablelock::ObUnLockAloneTabletRequest> &unlock_args,
+    ObMySQLTransaction &trans);
+  static int lock_table_and_global_indexes_for_fork(
+      share::schema::ObSchemaGetterGuard &schema_guard,
+      const share::schema::ObTableSchema &table_schema,
+      const transaction::tablelock::ObTableLockOwnerID lock_owner,
+      ObMySQLTransaction &trans);
+  static int lock_dst_table_and_global_indexes_for_fork(
+      const ObIArray<share::schema::ObTableSchema> &dst_table_schemas,
+      const transaction::tablelock::ObTableLockOwnerID lock_owner,
+      ObMySQLTransaction &trans);
+  static int unlock_table_and_global_indexes_for_fork(
+    share::schema::ObSchemaGetterGuard &schema_guard,
+    const share::schema::ObTableSchema &table_schema,
+    const transaction::tablelock::ObTableLockOwnerID lock_owner,
+    ObMySQLTransaction &trans);
+  static int check_has_dependent_task(const int64_t current_task_id,
+    const uint64_t table_id,
+    ObMySQLTransaction &trans,
+    bool &has_dependent_task);
+  static constexpr int64_t DEFAULT_TIMEOUT = 0;
+};
+
+class ObOnlineDDLLock {
+public:
+  /*
+   * acquire online ddl lock for transfer and release after trans end
+   *
+   * @return
+   * - OB_SUCCESS:                  successful
+   * - OB_TRY_LOCK_ROW_CONFLICT:    failed and guarantee not locked
+   * - other:                       unknown, transaction must abort
+   */
+
+  /*
+   * acquire online ddl lock for transfer
+   *
+   * @return
+   * - OB_SUCCESS:  successful
+   * - other:       unknown, transaction must be abort
+   */
+
+  /*
+   * release online ddl lock for transfer
+   *
+   * @return
+   * - OB_SUCCESS:                  all locks are unlocked here
+   * - OB_OBJ_LOCK_NOT_EXIST:       at least one lock is not locked, others are unlocked here
+   * - other:                       unknown, transaction must be abort
+   */
+
+  static int lock_table_in_trans(
+      const uint64_t table_id,
+      const transaction::tablelock::ObTableLockMode lock_mode,
+      const int64_t timeout_us,
+      ObMySQLTransaction &trans);
+
+  static int lock_tablets_in_trans(const ObIArray<ObTabletID> &tablet_ids,
+      const transaction::tablelock::ObTableLockMode lock_mode,
+      const int64_t timeout_us,
+      ObMySQLTransaction &trans);
+
+  static int lock_table(
+      const uint64_t table_id,
+      const transaction::tablelock::ObTableLockMode lock_mode,
+      const transaction::tablelock::ObTableLockOwnerID lock_owner,
+      const int64_t timeout_us,
+      ObMySQLTransaction &trans);
+
+  static int lock_tablets(
+      const ObIArray<ObTabletID> &tablet_ids,
+      const transaction::tablelock::ObTableLockMode lock_mode,
+      const transaction::tablelock::ObTableLockOwnerID lock_owner,
+      const int64_t timeout_us,
+      ObMySQLTransaction &trans);
+  
+  static int unlock_table(
+      const uint64_t table_id,
+      const transaction::tablelock::ObTableLockMode lock_mode,
+      const transaction::tablelock::ObTableLockOwnerID lock_owner,
+      const int64_t timeout_us,
+      ObMySQLTransaction &trans,
+      bool &some_lock_not_exist);
+  
+  static int unlock_tablets(const ObIArray<ObTabletID> &tablet_ids,
+      const transaction::tablelock::ObTableLockMode lock_mode,
+      const transaction::tablelock::ObTableLockOwnerID lock_owner,
+      const int64_t timeout_us,
+      ObMySQLTransaction &trans,
+      bool &some_lock_not_exist);
+};
+
+} // namespace storage
+} // namespace oceanbase
+#endif

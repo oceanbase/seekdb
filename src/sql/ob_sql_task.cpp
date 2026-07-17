@@ -1,0 +1,145 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#define USING_LOG_PREFIX SQL
+
+#include "ob_sql_task.h"
+#include "ob_sql.h"
+
+using namespace oceanbase::observer;
+using namespace oceanbase::common;
+using namespace oceanbase::obcall;
+
+namespace oceanbase {
+namespace sql {
+
+void ObSqlTaskHandler::reset()
+{
+  task_ = NULL;
+  sql_engine_ = NULL;
+}
+
+int ObSqlTaskHandler::init(observer::ObSrvTask *task, ObSql *sql_engine)
+{
+  int ret = OB_SUCCESS;
+  if (NULL == task || NULL == sql_engine) {
+    ret = OB_INVALID_ARGUMENT;;
+    SQL_LOG(WARN, "invalid argument", K(ret), KP(task), KP(sql_engine));
+  } else {
+    // Indicates that this task is an internally generated task by Observer
+    task_ = task;
+    sql_engine_ = sql_engine;
+  }
+  return ret;
+}
+
+int ObSqlTaskHandler::run()
+{
+  int ret = OB_SUCCESS;
+  if (NULL == task_) {
+    ret = OB_ERR_UNEXPECTED;
+    SQL_LOG(WARN, "task is null, unexpected error", K(ret), KP_(task));
+  } else if (NULL == sql_engine_) {
+    ret = OB_ERR_UNEXPECTED;
+    SQL_LOG(WARN, "sql engine is null, unexpected error", K(ret), KP_(sql_engine));
+  } else {
+//    ObSqlTask *task = static_cast<ObSqlTask *>(task_);
+//    ObCurTraceId::set(task->get_trace_id());
+//    if (OB_FAIL(sql_engine_->handle_batch_req(task->get_msg_type(),
+//                                              task->get_req_ts(),
+//                                              task->get_buf(),
+//                                              task->get_size()))) {
+//      SQL_LOG(WARN, "handle sql task failed", K(ret), K(*task));
+//    }
+  }
+  return ret;
+}
+
+
+int ObSqlTask::init(const int msg_type, const ObReqTimestamp &req_ts, const char *buf, const int64_t size, ObSql *sql_engine)
+{
+  int ret = OB_SUCCESS;
+  if (OB_ISNULL(buf) ||
+      OB_UNLIKELY(0 >= size) ||
+      OB_UNLIKELY(MAX_SQL_TASK_SIZE < size) ||
+      OB_ISNULL(sql_engine)) {
+    ret = OB_INVALID_ARGUMENT;
+    SQL_LOG(WARN, "invalid argument", K(ret), KP(buf), K(size), KP(sql_engine), K(msg_type));
+  } else if (OB_FAIL(handler_.init(this, sql_engine))) {
+    SQL_LOG(WARN, "ObSqlTaskHandler init failed", K(ret));
+  } else {
+    // Distinguish from the task of disconnecting from sql, used for memory release
+    set_type(ObRequest::OB_SQL_TASK);
+    msg_type_ = msg_type;
+    memcpy(buf_, buf, size);
+    size_ = size;
+    req_ts_ = req_ts;
+    ObCurTraceId::TraceId *trace_id = ObCurTraceId::get_trace_id();
+    if (OB_LIKELY(NULL != trace_id)) {
+      trace_id_.set(*trace_id);
+    }
+  }
+  return ret;
+}
+
+int ObSqlTaskFactory::init()
+{
+  // do nothing
+  return OB_SUCCESS;
+}
+
+void ObSqlTaskFactory::destroy()
+{
+}
+
+ObSqlTask *ObSqlTaskFactory::alloc()
+{
+  return alloc_();
+}
+
+void ObSqlTaskFactory::free(ObSqlTask *task)
+{
+  free_(task);
+}
+
+ObSqlTaskFactory &ObSqlTaskFactory::get_instance()
+{
+  static ObSqlTaskFactory instance;
+  return instance;
+}
+
+ObSqlTask *ObSqlTaskFactory::alloc_()
+{
+  ObMemAttr memattr("OB_SQL_TASK");
+  void *ptr = NULL;
+  ObSqlTask *task = NULL;
+  if (NULL != (ptr = ob_malloc(sizeof(ObSqlTask), memattr))) {
+    task = new(ptr) ObSqlTask();
+  }
+  return task;
+}
+
+void ObSqlTaskFactory::free_(ObSqlTask *task)
+{
+  if (NULL != task) {
+    task->~ObSqlTask();
+    ob_free(task);
+    task = NULL;
+  }
+}
+
+} // namespace sql
+} // namespace oceanbase

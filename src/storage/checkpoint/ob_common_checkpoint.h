@@ -1,0 +1,112 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef OCEANBASE_STORAGE_OB_COMMON_CHECKPOINT_H_
+#define OCEANBASE_STORAGE_OB_COMMON_CHECKPOINT_H_
+
+#include <cstdint>
+#include "share/ob_ls_id.h"
+#include "common/ob_tablet_id.h"
+#include "share/scn.h"
+
+namespace oceanbase
+{
+namespace storage
+{
+namespace checkpoint
+{
+
+enum ObCommonCheckpointType
+{
+  INVALID_BASE_TYPE = 0,
+  TX_CTX_MEMTABLE_TYPE,
+  TX_DATA_MEMTABLE_TYPE,
+  LOCK_MEMTABLE_TYPE,
+  MDS_TABLE_TYPE,
+  DATA_CHECKPOINT_TYPE,
+  // for unittest
+  TEST_COMMON_CHECKPOINT,
+  MAX_BASE_TYPE
+};
+
+static inline
+int common_checkpoint_type_to_string(const ObCommonCheckpointType common_checkpoint_type,
+                                     char *str,
+                                     const int64_t str_len)
+{
+  int ret = OB_SUCCESS;
+  if (common_checkpoint_type == DATA_CHECKPOINT_TYPE) {
+    strncpy(str ,"DATA_CHECKPOINT_TYPE", str_len);
+  } else if (common_checkpoint_type == TX_CTX_MEMTABLE_TYPE) {
+    strncpy(str ,"TX_CTX_MEMTABLE_TYPE", str_len);
+  } else if (common_checkpoint_type == TX_DATA_MEMTABLE_TYPE) {
+    strncpy(str ,"TX_DATA_MEMTABLE_TYPE", str_len);
+  } else if (common_checkpoint_type == LOCK_MEMTABLE_TYPE) {
+    strncpy(str ,"LOCK_MEMTABLE_TYPE", str_len);
+  } else if (common_checkpoint_type == MDS_TABLE_TYPE) {
+    strncpy(str, "MDS_TABLE_TYPE", str_len);
+  } else {
+    ret = OB_INVALID_ARGUMENT;
+  }
+  return ret;
+}
+
+struct ObCommonCheckpointVTInfo
+{
+  ObTabletID tablet_id;
+  share::SCN rec_scn;
+  int checkpoint_type;
+  bool is_flushing;
+
+  TO_STRING_KV(
+    K(tablet_id),
+    K(rec_scn),
+    K(checkpoint_type),
+    K(is_flushing)
+  );
+};
+
+inline bool is_valid_log_base_type(const ObCommonCheckpointType &type)
+{
+  return type > INVALID_BASE_TYPE && type < MAX_BASE_TYPE;
+}
+
+// checkpoint unit inherit from CommonCheckpoint
+// and register into ls_tx_service's common_list
+// the checkpoint units:
+// 1. write TRANS_SERVICE_LOG_BASE_TYPE clog
+// 2. have no freeze operation and rec_scn can't become smaller
+class ObCommonCheckpoint
+{
+public:
+  virtual share::SCN get_rec_scn() = 0;
+  virtual int flush(share::SCN recycle_scn, bool need_freeze = true) = 0;
+
+  virtual ObTabletID get_tablet_id() const = 0;
+  virtual share::SCN get_rec_scn(ObTabletID &tablet_id) {
+    share::SCN rec_scn = get_rec_scn();
+    tablet_id = get_tablet_id();
+    return rec_scn;
+  }
+  virtual bool is_flushing() const = 0;
+
+  VIRTUAL_TO_STRING_KV(KP(this));
+};
+
+}  // namespace checkpoint
+}  // namespace storage
+}  // namespace oceanbase
+#endif

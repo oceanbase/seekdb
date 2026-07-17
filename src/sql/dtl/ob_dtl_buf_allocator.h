@@ -1,0 +1,60 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef OB_DTL_BUF_ALLOCATOR_H_
+#define OB_DTL_BUF_ALLOCATOR_H_
+
+#include <stdint.h>
+#include "lib/utility/ob_macro_utils.h"
+#include "share/ob_define.h"
+
+namespace oceanbase {
+namespace sql {
+namespace dtl {
+
+class ObDtlLinkedBuffer;
+class ObDtlBasicChannel;
+
+class ObDtlBufIAllocator
+{
+public:
+  virtual ObDtlLinkedBuffer *alloc_buf(ObDtlBasicChannel &ch, const int64_t payload_size) = 0;
+  virtual void free_buf(ObDtlBasicChannel &ch, ObDtlLinkedBuffer *&buf) = 0;
+};
+
+class ObDtlBufAllocator : public ObDtlBufIAllocator
+{
+public:
+  ObDtlBufAllocator() : alloc_buffer_cnt_(0), free_buffer_cnt_(0), sys_buffer_size_(0), timeout_ts_(0) {};
+  virtual ~ObDtlBufAllocator() = default;
+  virtual ObDtlLinkedBuffer *alloc_buf(ObDtlBasicChannel &ch, const int64_t payload_size);
+  virtual void free_buf(ObDtlBasicChannel &ch, ObDtlLinkedBuffer *&buf);
+  
+  void set_sys_buffer_size(int64_t sys_buffer_size) { sys_buffer_size_ = sys_buffer_size; }
+  void set_timeout_ts(int64_t timeout_ts) { timeout_ts_ = timeout_ts; }
+private:
+  int64_t alloc_buffer_cnt_;
+  int64_t free_buffer_cnt_;
+  
+  int64_t sys_buffer_size_;
+  int64_t timeout_ts_;
+};
+
+}// end of namespace dtl
+}// end of namespace sql
+}// end of namespace oceanbase
+
+#endif

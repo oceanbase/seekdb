@@ -1,0 +1,46 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef OCEANBASE_SRC_SQL_RESOLVER_DDL_OB_DROP_PACKAGE_STMT_H_
+#define OCEANBASE_SRC_SQL_RESOLVER_DDL_OB_DROP_PACKAGE_STMT_H_
+
+#include "share/ob_rpc_struct.h"
+#include "sql/resolver/ddl/ob_ddl_stmt.h"
+namespace oceanbase
+{
+namespace sql
+{
+class ObDropPackageStmt : public ObDDLStmt
+{
+public:
+  explicit ObDropPackageStmt(common::ObIAllocator *name_pool)
+      : ObDDLStmt(name_pool, stmt::T_DROP_PACKAGE),
+        drop_package_arg_() {}
+  ObDropPackageStmt()
+      : ObDDLStmt(stmt::T_DROP_PACKAGE),
+        drop_package_arg_() {}
+  virtual ~ObDropPackageStmt() {}
+  obcall::ObDropPackageArg &get_drop_package_arg() { return drop_package_arg_; }
+  virtual obcall::ObDDLArg &get_ddl_arg() { return drop_package_arg_; }
+private:
+  DISALLOW_COPY_AND_ASSIGN(ObDropPackageStmt);
+
+  obcall::ObDropPackageArg drop_package_arg_;
+};
+} //namespace sql
+} //namespace oceanbase
+
+#endif /* OCEANBASE_SRC_SQL_RESOLVER_DDL_OB_DROP_PACKAGE_STMT_H_ */

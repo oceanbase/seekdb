@@ -1,0 +1,149 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef SRC_STORAGE_MEMTABLE_OB_NOP_BITMAP_H_
+#define SRC_STORAGE_MEMTABLE_OB_NOP_BITMAP_H_
+
+#include "share/ob_define.h"
+#include "lib/container/ob_iarray.h"
+#include "common/object/ob_object.h"
+#include "share/schema/ob_table_schema.h"
+#include "storage/blocksstable/ob_datum_row.h"
+
+namespace oceanbase
+{
+namespace memtable
+{
+#define MEMSET_(ptr, m, n)                                 \
+  {                                                        \
+    if (n == 8 && m == 0xFF) {                             \
+      *static_cast<uint64_t *>(ptr) = 0xFFFFFFFFFFFFFFFF;  \
+    } else {                                               \
+      MEMSET(ptr, m, n);                                   \
+    }                                                      \
+  }
+
+class ObNopBitMap
+{
+public:
+  ObNopBitMap():
+    size_(0), cnt_(0), nop_cnt_(0), rowkey_cnt_(0) {}
+
+  int init(int64_t size, int64_t rowkey_cnt)
+  {
+    size_ = round_up(size);
+    cnt_ = size;
+    nop_cnt_ = size - rowkey_cnt;
+    rowkey_cnt_ = rowkey_cnt;
+    MEMSET_(static_cast<void*>(bitmap_), 0xFF, size_ >> 3);
+    return common::OB_SUCCESS;
+  }
+
+  inline void set_false(int64_t pos)
+  {
+    bitmap_[pos>>shift_bits] &= ~(1LLU << (pos & mask));
+    nop_cnt_ -= (pos >= rowkey_cnt_);
+  }
+
+  inline int64_t get_nop_cnt()
+  {
+    return nop_cnt_;
+  }
+
+  inline bool test(int64_t pos)
+  {
+    return 0 != (bitmap_[pos>>shift_bits] & (1LLU << (pos & mask)));
+  }
+
+  inline bool is_empty()
+  {
+    return 0 == nop_cnt_;
+  }
+
+  inline void reuse()
+  {
+    MEMSET_(static_cast<void*>(bitmap_), 0xFF, size_ >> 3);
+    nop_cnt_ = cnt_ - rowkey_cnt_;
+  }
+
+  inline int set_nop_obj(common::ObObj *obj_ptr)
+  {
+    const int64_t block_cnt = size_ >> shift_bits;
+    int64_t start_block = rowkey_cnt_ >> shift_bits;
+    int64_t offset = rowkey_cnt_ & mask;
+    // NOTE: bitmap_ is 64-bit. On Windows LLP64 `unsigned long` is 32-bit,
+    // so `~0LU`, `1LU << pos` and `__builtin_ctzl` would all operate on
+    // only the low 32 bits and corrupt bits in the upper half. Use the
+    // 64-bit variants (`~0ULL`, `1ULL`, `__builtin_ctzll`).
+    bitmap_[start_block] &= ~0ULL << offset;
+    int64_t left = (64 - (cnt_ & mask)) & mask;
+    bitmap_[block_cnt - 1] &= ~0ULL >> left;
+    for (int64_t i = start_block; i < block_cnt; ++i) {
+      uint64_t tmp = bitmap_[i];
+      const int64_t base = i << shift_bits;
+      int pos = 0;
+      while (0 != tmp) {
+        pos = __builtin_ctzll(tmp);
+        obj_ptr[pos + base].set_nop_value();
+        tmp ^= (1ULL << pos);
+      }
+    }
+    return common::OB_SUCCESS;
+  }
+
+  inline int set_nop_datums(blocksstable::ObStorageDatum *datum_ptr)
+  {
+    const int64_t block_cnt = size_ >> shift_bits;
+    int64_t start_block = rowkey_cnt_ >> shift_bits;
+    int64_t offset = rowkey_cnt_ & mask;
+    bitmap_[start_block] &= ~0ULL << offset;
+    int64_t left = (64 - (cnt_ & mask)) & mask;
+    bitmap_[block_cnt - 1] &= ~0ULL >> left;
+    for (int64_t i = start_block; i < block_cnt; ++i) {
+      uint64_t tmp = bitmap_[i];
+      const int64_t base = i << shift_bits;
+      int pos = 0;
+      while (0 != tmp) {
+        pos = __builtin_ctzll(tmp);
+        datum_ptr[pos + base].set_nop();
+        tmp ^= (1ULL << pos);
+      }
+    }
+    return common::OB_SUCCESS;
+  }
+
+  TO_STRING_KV(K(size_), K(cnt_), K(nop_cnt_), K(rowkey_cnt_), K(bitmap_));
+
+private:
+  DISALLOW_COPY_AND_ASSIGN(ObNopBitMap);
+  inline int64_t round_up(int64_t n)
+  {
+    return (n + mask) & ~mask;
+  }
+private:
+  static const int64_t mask = 63;
+  static const int64_t shift_bits = 6;
+  int64_t size_;
+  int64_t cnt_;
+  int64_t nop_cnt_;
+  int64_t rowkey_cnt_;
+  uint64_t bitmap_[(common::OB_ROW_MAX_COLUMNS_COUNT >> shift_bits) + 1];
+};
+
+}
+}
+
+#endif /* SRC_STORAGE_MEMTABLE_OB_NOP_BITMAP_H_ */

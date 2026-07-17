@@ -1,0 +1,95 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef OCEANBASE_STORAGE_OB_STORAGE_LOG_STRUCT_H_
+#define OCEANBASE_STORAGE_OB_STORAGE_LOG_STRUCT_H_
+
+#include "storage/meta_mem/ob_meta_obj_struct.h"
+
+namespace oceanbase
+{
+namespace storage
+{
+enum class ObRedoLogMainType
+{
+  OB_REDO_LOG_INVALID = 0,
+  OB_REDO_LOG_SYS = 1,
+  OB_REDO_LOG_TENANT_STORAGE = 2,
+  OB_REDO_LOG_SERVER_TENANT = 3,
+  OB_REDO_LOG_MAX = 4
+};
+
+enum class ObRedoLogSubType
+{
+  OB_REDO_LOG_INVALID = 0,
+  OB_REDO_LOG_NOP = 1,
+
+  OB_REDO_LOG_CREATE_TENANT_PREPARE = 2,
+  OB_REDO_LOG_CREATE_TENANT_COMMIT = 3,
+  OB_REDO_LOG_CREATE_TENANT_ABORT = 4,
+  OB_REDO_LOG_DELETE_TENANT_PREPARE = 5,
+  OB_REDO_LOG_DELETE_TENANT_COMMIT = 6,
+  OB_REDO_LOG_UPDATE_TENANT_UNIT = 7,
+  OB_REDO_LOG_UPDATE_TENANT_SUPER_BLOCK = 8,
+
+  OB_REDO_LOG_CREATE_LS = 9,
+  OB_REDO_LOG_CREATE_LS_COMMIT = 10,
+  OB_REDO_LOG_CREATE_LS_ABORT = 11,
+
+  OB_REDO_LOG_UPDATE_LS = 12,
+  OB_REDO_LOG_DELETE_LS = 13,
+
+  OB_REDO_LOG_PUT_OLD_TABLET = 14, // discard from 4.1
+  OB_REDO_LOG_DELETE_TABLET = 15,
+  OB_REDO_LOG_UPDATE_TABLET = 16,
+  OB_REDO_LOG_EMPTY_SHELL_TABLET = 17,
+
+  OB_REDO_LOG_UPDATE_DUP_TABLE_LS = 18,
+
+  OB_REDO_LOG_MAX
+};
+
+class ObIBaseStorageLogEntry
+{
+public:
+  ObIBaseStorageLogEntry() {}
+  virtual ~ObIBaseStorageLogEntry() = default;
+  virtual bool is_valid() const = 0;
+  virtual int64_t to_string(char *buf, const int64_t buf_len) const = 0;
+
+  PURE_VIRTUAL_NEED_SERIALIZE_AND_DESERIALIZE;
+};
+
+struct ObStorageLogParam final
+{
+  ObStorageLogParam();
+  ObStorageLogParam(const int32_t cmd, ObIBaseStorageLogEntry *data);
+  ~ObStorageLogParam() = default;
+
+  void reset();
+  bool is_valid() const;
+
+  TO_STRING_KV(K_(cmd), KPC_(data), K_(disk_addr));
+
+  int32_t cmd_;
+  ObIBaseStorageLogEntry *data_;
+  ObMetaDiskAddr disk_addr_;
+};
+
+}//end namespace blocksstable
+}//end namespace oceanbase
+
+#endif //OCEANBASE_SLOG_OB_STORAGE_LOG_STRUCT_H_

@@ -1,0 +1,105 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+ 
+#ifndef OB_ALL_VIRTUAL_TMP_FILE_H_
+#define OB_ALL_VIRTUAL_TMP_FILE_H_
+
+#include "observer/virtual_table/ob_virtual_table_scanner_iterator.h"
+#include "lib/time/ob_clock_generator.h"
+#include "lib/time/ob_clock_generator.h"
+
+namespace oceanbase
+{
+namespace tmp_file
+{
+class ObTmpFileInfo;
+class ObTmpFileGlobal;
+}
+namespace observer
+{
+
+class ObAllVirtualTmpFileInfo: public common::ObVirtualTableScannerIterator
+{
+public:
+  ObAllVirtualTmpFileInfo();
+  ~ObAllVirtualTmpFileInfo();
+
+public:
+  virtual int inner_get_next_row(common::ObNewRow *&row);
+  virtual void reset();
+
+private:
+  int get_next_tmp_file_info_(tmp_file::ObTmpFileInfo *tmp_file_info);
+  int fill_columns_(tmp_file::ObTmpFileInfo *tmp_file_info);
+  int fill_sn_column_(const uint64_t col_index, tmp_file::ObSNTmpFileInfo *tmp_file_info);
+
+private:
+  enum
+  {
+        FILE_ID,
+    TRACE_ID,
+    DIR_ID,
+    DATA_BYTES,
+    START_OFFSET,
+    IS_DELETING,
+    CACHED_DATA_PAGE_NUM,
+    WRITE_BACK_DATA_PAGE_NUM,
+    FLUSHED_DATA_PAGE_NUM,
+    REF_CNT,
+    TOTAL_WRITES,
+    UNALIGNED_WRITES,
+    TOTAL_READS,
+    UNALIGNED_READS,
+    TOTAL_READ_BYTES,
+    LAST_ACCESS_TIME,
+    LAST_MODIFY_TIME,
+    BIRTH_TIME,
+    TMP_FILE_PTR,
+    LABEL,
+    META_TREE_EPOCH,
+    META_TREE_LEVELS,
+    META_BYTES,
+    CACHED_META_PAGE_NUM,
+    WRITE_BACK_META_PAGE_NUM,
+    PAGE_FLUSH_CNT,
+    TYPE,
+    COMPRESSIBLE_FD,
+    PERSISTED_TAIL_PAGE_WRITES,
+    LACK_PAGE_CNT,
+    TOTAL_TRUNCATED_PAGE_READ_CNT,
+    TRUNCATED_PAGE_HITS,
+    TOTAL_KV_CACHE_PAGE_READ_CNT,
+    KV_CACHE_PAGE_HITS,
+    TOTAL_UNCACHED_PAGE_READ_CNT,
+    UNCACHED_PAGE_HITS,
+    AGGREGATE_READ_IO_CNT,
+    TOTAL_WBP_PAGE_READ_CNT,
+    WBP_PAGE_HITS
+  };
+  static const int64_t OB_MAX_FILE_LABEL_SIZE = tmp_file::ObTmpFileGlobal::TMP_FILE_MAX_LABEL_SIZE + 1;
+  char ip_buffer_[common::OB_IP_STR_BUFF];
+  char trace_id_buffer_[common::OB_MAX_TRACE_ID_BUFFER_SIZE];
+  char file_ptr_buffer_[20];
+  char file_label_buffer_[OB_MAX_FILE_LABEL_SIZE];
+  ObArray<int64_t> fd_arr_;
+  bool is_ready_;
+  int64_t fd_idx_;
+  DISALLOW_COPY_AND_ASSIGN(ObAllVirtualTmpFileInfo);
+};
+
+}
+}
+#endif /* OB_ALL_VIRTUAL_TMP_FILE_H_ */

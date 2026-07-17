@@ -1,0 +1,190 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#include <gtest/gtest.h>
+#include "lib/thread/ob_test_util.h"
+#include "sql/resolver/expr/ob_raw_expr_print_visitor.h"
+
+using namespace oceanbase::common;
+using namespace oceanbase::sql;
+
+class TestRawExprPrintVisitor: public ::testing::Test
+{
+public:
+  TestRawExprPrintVisitor();
+  virtual ~TestRawExprPrintVisitor();
+  virtual void SetUp();
+  virtual void TearDown();
+private:
+  // disallow copy
+  DISALLOW_COPY_AND_ASSIGN(TestRawExprPrintVisitor);
+protected:
+  // function members
+protected:
+  // data members
+};
+
+TestRawExprPrintVisitor::TestRawExprPrintVisitor()
+{
+}
+
+TestRawExprPrintVisitor::~TestRawExprPrintVisitor()
+{
+}
+
+void TestRawExprPrintVisitor::SetUp()
+{
+}
+
+void TestRawExprPrintVisitor::TearDown()
+{
+}
+
+TEST_F(TestRawExprPrintVisitor, const_test)
+{
+  ObCStringHelper helper;
+  {
+    ObObj obj;
+    obj.set_int(123);
+    ObConstRawExpr expr(obj, T_INT);
+    _OB_LOG(INFO, "%s", helper.convert(ObRawExprPrintVisitor(expr)));
+  }
+  {
+    ObString str = ObString::make_string("abcd");
+    ObObj obj;
+    obj.set_varchar(str);
+    ObConstRawExpr expr(obj, T_VARCHAR);
+    _OB_LOG(INFO, "%s", helper.convert(ObRawExprPrintVisitor(expr)));
+  }
+  {
+    ObObj obj;
+    obj.set_null();
+    ObConstRawExpr expr(obj, T_NULL);
+    _OB_LOG(INFO, "%s", helper.convert(ObRawExprPrintVisitor(expr)));
+  }
+  {
+    ObObj obj;
+    obj.set_int(3);
+    ObConstRawExpr expr(obj, T_QUESTIONMARK);
+    _OB_LOG(INFO, "%s", helper.convert(ObRawExprPrintVisitor(expr)));
+  }
+  {
+    number::ObNumber nmb;
+    ObArenaAllocator allocator(ObModIds::TEST);
+    nmb.from(static_cast<int64_t>(9000000000L), allocator);
+    ObObj obj;
+    obj.set_number(nmb);
+    ObConstRawExpr expr(obj, T_NUMBER);
+    _OB_LOG(INFO, "%s", helper.convert(ObRawExprPrintVisitor(expr)));
+  }
+  {
+    ObString var = ObString::make_string("sql_mode");
+    ObObj obj;
+    obj.set_varchar(var);
+    ObConstRawExpr expr(obj, T_SYSTEM_VARIABLE);
+    _OB_LOG(INFO, "%s", helper.convert(ObRawExprPrintVisitor(expr)));
+  }
+}
+
+TEST_F(TestRawExprPrintVisitor, unary_ref_test)
+{
+  ObQueryRefRawExpr expr(1, T_REF_QUERY);
+  ObCStringHelper helper;
+  _OB_LOG(INFO, "unary=%s", helper.convert(ObRawExprPrintVisitor(expr)));
+}
+
+TEST_F(TestRawExprPrintVisitor, binary_ref_test)
+{
+  ObColumnRefRawExpr expr(3, 7, T_REF_COLUMN);
+  ObCStringHelper helper;
+  _OB_LOG(INFO, "%s", helper.convert(ObRawExprPrintVisitor(expr)));
+}
+
+TEST_F(TestRawExprPrintVisitor, multi_op_test)
+{
+  ObObj obj;
+  obj.set_int(123);
+  ObConstRawExpr const_expr1(obj, T_INT);
+  ObConstRawExpr const_expr2(obj, T_INT);
+  ObConstRawExpr const_expr3(obj, T_INT);
+  ObConstRawExpr const_expr4(obj, T_INT);
+  ObArenaAllocator allocator(ObModIds::TEST);
+  ObOpRawExpr expr(allocator);
+  expr.set_expr_type(T_OP_ROW);
+  OK(expr.init_param_exprs(4));
+  OK(expr.add_param_expr(&const_expr1));
+  OK(expr.add_param_expr(&const_expr2));
+  OK(expr.add_param_expr(&const_expr3));
+  OK(expr.add_param_expr(&const_expr4));
+
+  ObCStringHelper helper;
+  _OB_LOG(INFO, "%s", helper.convert(ObRawExprPrintVisitor(expr)));
+}
+
+TEST_F(TestRawExprPrintVisitor, case_op_test)
+{
+  ObObj obj;
+  obj.set_int(123);
+  ObConstRawExpr const_expr1(obj, T_INT);
+  ObConstRawExpr const_expr2(obj, T_INT);
+  ObConstRawExpr const_expr3(obj, T_INT);
+  ObConstRawExpr const_expr4(obj, T_INT);
+
+  ObCaseOpRawExpr expr;
+  expr.set_arg_param_expr(&const_expr1);
+  OK(expr.add_when_param_expr(&const_expr2));
+  OK(expr.add_then_param_expr(&const_expr3));
+  expr.set_default_param_expr(&const_expr4);
+  ObCStringHelper helper;
+  _OB_LOG(INFO, "%s", helper.convert(ObRawExprPrintVisitor(expr)));
+}
+
+TEST_F(TestRawExprPrintVisitor, agg_op_test)
+{
+  ObObj obj;
+  obj.set_int(123);
+  ObConstRawExpr const_expr1(obj, T_INT);
+  ObSEArray<ObRawExpr *, 1, ModulePageAllocator, true> real_param_exprs1;
+  OK(real_param_exprs1.push_back(&const_expr1));
+  ObAggFunRawExpr expr(real_param_exprs1, true, T_FUN_MAX);
+  ObCStringHelper helper;
+  _OB_LOG(INFO, "%s", helper.convert(ObRawExprPrintVisitor(expr)));
+  ObSEArray<ObRawExpr *, 1, ModulePageAllocator, true> real_param_exprs2;
+  ObAggFunRawExpr expr2(real_param_exprs2, false, T_FUN_COUNT);
+  _OB_LOG(INFO, "%s", helper.convert(ObRawExprPrintVisitor(expr2)));
+}
+
+TEST_F(TestRawExprPrintVisitor, sys_fun_test)
+{
+  ObObj obj;
+  obj.set_int(123);
+  ObConstRawExpr const_expr1(obj, T_INT);
+  ObConstRawExpr const_expr2(obj, T_INT);
+  ObArenaAllocator allocator(ObModIds::TEST);
+  ObSysFunRawExpr expr(allocator);
+  expr.set_func_name(ObString::make_string("myfunc"));
+  OK(expr.init_param_exprs(2));
+  OK(expr.add_param_expr(&const_expr1));
+  OK(expr.add_param_expr(&const_expr2));
+  ObCStringHelper helper;
+  _OB_LOG(INFO, "%s", helper.convert(ObRawExprPrintVisitor(expr)));
+}
+
+int main(int argc, char **argv)
+{
+  ::testing::InitGoogleTest(&argc,argv);
+  return RUN_ALL_TESTS();
+}

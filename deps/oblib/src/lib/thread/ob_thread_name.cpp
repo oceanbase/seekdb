@@ -1,0 +1,77 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#include "lib/thread/ob_thread_name.h"
+#ifdef __linux__
+#include <sys/prctl.h>
+#elif defined(__APPLE__)
+#include <pthread.h>
+#elif defined(_WIN32)
+#include <windows.h>
+#ifdef ERROR
+#undef ERROR
+#endif
+#endif
+#include "lib/ob_define.h"
+
+namespace oceanbase
+{
+namespace lib
+{
+
+void set_thread_name_inner(const char* name)
+{
+#ifdef __APPLE__
+  pthread_setname_np(name);
+#elif defined(_WIN32)
+  wchar_t wname[16] = {0};
+  int len = MultiByteToWideChar(CP_UTF8, 0, name, -1, wname, 15);
+  if (len == 0) {
+    MultiByteToWideChar(CP_UTF8, 0, name, 14, wname, 15);
+  }
+  wname[15] = L'\0';
+  SetThreadDescription(GetCurrentThread(), wname);
+#else
+  prctl(PR_SET_NAME, name);
+#endif
+}
+
+void set_thread_name(const char* type, uint64_t idx)
+{
+  char *name = ob_get_tname();
+  
+  char *ori_tname = ob_get_origin_thread_name();
+  STRNCPY(ori_tname, type, oceanbase::OB_THREAD_NAME_BUF_LEN);
+  {
+    snprintf(name, OB_THREAD_NAME_BUF_LEN, "T%ld_%s%ld", 1UL, type, idx);
+  }
+  set_thread_name_inner(name);
+}
+
+void set_thread_name(const char* type)
+{
+  char *name = ob_get_tname();
+  
+  char *ori_tname = ob_get_origin_thread_name();
+  STRNCPY(ori_tname, type, oceanbase::OB_THREAD_NAME_BUF_LEN);
+  {
+    snprintf(name, OB_THREAD_NAME_BUF_LEN, "T%ld_%s", 1UL, type);
+  }
+  set_thread_name_inner(name);
+}
+
+}; // end namespace lib
+}; // end namespace oceanbase

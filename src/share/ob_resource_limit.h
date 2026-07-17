@@ -1,0 +1,78 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef OCEANBASE_SHARE_OB_RESOURCE_LIMIT_H
+#define OCEANBASE_SHARE_OB_RESOURCE_LIMIT_H
+
+#include <stdint.h>
+#include <type_traits>
+#include "lib/ob_abort.h"
+#include "lib/utility/ob_macro_utils.h"
+#include "share/ob_errno.h"
+
+namespace oceanbase
+{
+namespace common
+{
+class ObString;
+}
+
+namespace share
+{
+
+using TStr = char[32];
+
+struct RLInt { int64_t v_; };
+struct RLStr { TStr v_; };
+struct RLCap { int64_t v_; };
+
+class ObResourceLimit
+{
+public:
+  static bool IS_ENABLED;
+  ObResourceLimit();
+  int update(const common::ObString &key, const common::ObString &value);
+  void load_default();
+  int load_json(const char *str);
+  int load_config(const char *str);
+  void assign(const ObResourceLimit &other);
+  int64_t to_string(char *buf, const int64_t buf_len) const;
+#define RL_DEF(name, rltype, ...)                                                             \
+  using name##_return_type =                                                                  \
+    std::conditional<!std::is_same<rltype, RLStr>::value, decltype(rltype::v_), char*>::type; \
+  name##_return_type get_##name() const { return (name##_return_type)name; }
+#include "share/ob_resource_limit_def.h"
+#undef RL_DEF
+private:
+#define RL_DEF(name, type, default_value) decltype(type::v_) name;
+#include "share/ob_resource_limit_def.h"
+#undef RL_DEF
+  DISALLOW_COPY_AND_ASSIGN(ObResourceLimit);
+};
+
+inline ObResourceLimit &get_rl_config()
+{
+  static ObResourceLimit one;
+  return one;
+}
+
+#define RL_CONF (::oceanbase::share::get_rl_config())
+#define RL_IS_ENABLED (::oceanbase::share::ObResourceLimit::IS_ENABLED)
+
+} //end share
+} //end oceanbase
+
+#endif

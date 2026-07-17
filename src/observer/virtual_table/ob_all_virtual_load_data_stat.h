@@ -1,0 +1,97 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef OB_ALL_VIRTUAL_LOAD_DATA_STAT_H_
+#define OB_ALL_VIRTUAL_LOAD_DATA_STAT_H_
+
+#include "observer/virtual_table/ob_virtual_table_scanner_iterator.h"
+#include "sql/ob_scanner.h"
+#include "common/row/ob_row.h"
+#include "lib/container/ob_se_array.h"
+#include "sql/engine/cmd/ob_load_data_utils.h"
+
+namespace oceanbase
+{
+namespace observer
+{
+class ObAllVirtualLoadDataStat : public common::ObVirtualTableScannerIterator
+{
+public:
+  ObAllVirtualLoadDataStat();
+  virtual ~ObAllVirtualLoadDataStat();
+
+public:
+  virtual int inner_get_next_row(common::ObNewRow *&row);
+  virtual void reset();
+  virtual int inner_open();
+  virtual int inner_close();
+  inline void set_addr(common::ObAddr &addr)
+  {
+    addr_ = addr;
+  }
+
+private:
+  int64_t calc_remaining_time(sql::ObLoadDataStat &job_status) const;
+
+private:
+  enum TABLE_COLUMN
+  {
+        JOB_ID = common::OB_APP_MIN_COLUMN_ID,
+    JOB_TYPE,
+    TABLE_NAME,
+    FILE_PATH,
+    TABLE_COLUMN,
+    FILE_COLUMN,
+    BATCH_SIZE,
+    PARALLEL,
+    LOAD_MODE,
+    LOAD_TIME,
+    ESTIMATED_REMAINING_TIME,
+    TOTAL_BYTES,
+    READ_BYTES,
+    PARSED_BYTES,
+    PARSED_ROWS,
+    TOTAL_SHUFFLE_TASK,
+    TOTAL_INSERT_TASK,
+    SHUFFLE_RT_SUM,
+    INSERT_RT_SUM,
+    TOTAL_WAIT_SECS,
+    MAX_ALLOWED_ERROR_ROWS,
+    DETECTED_ERROR_ROWS,
+    COORDINATOR_RECEIVED_ROWS,
+    COORDINATOR_LAST_COMMIT_SEGMENT_ID,
+    COORDINATOR_STATUS,
+    COORDINATOR_TRANS_STATUS,
+    STORE_PROCESSED_ROWS,
+    STORE_LAST_COMMIT_SEGMENT_ID,
+    STORE_STATUS,
+    STORE_TRANS_STATUS,
+    MESSAGE
+  };
+  common::ObAddr addr_;
+  char ip_buf_[common::OB_IP_STR_BUFF];
+  sql::ObGetAllJobStatusOp all_job_status_op_;
+
+  TO_STRING_KV(K(addr_));
+
+private:
+  DISALLOW_COPY_AND_ASSIGN(ObAllVirtualLoadDataStat);
+};
+
+}
+}
+
+#endif  /* OB_ALL_VIRTUAL_LOAD_DATA_STAT_H_*/

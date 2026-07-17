@@ -1,0 +1,114 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#include "ob_all_virtual_compaction_diagnose_info.h"
+
+namespace oceanbase
+{
+using namespace storage;
+using namespace common;
+namespace observer
+{
+ObAllVirtualCompactionDiagnoseInfo::ObAllVirtualCompactionDiagnoseInfo()
+    : diagnose_info_(),
+      diagnose_info_iter_(),
+      is_inited_(false)
+{
+}
+
+ObAllVirtualCompactionDiagnoseInfo::~ObAllVirtualCompactionDiagnoseInfo()
+{
+  reset();
+}
+
+int ObAllVirtualCompactionDiagnoseInfo::init()
+{
+  int ret = OB_SUCCESS;
+  if (IS_INIT) {
+    ret = OB_INIT_TWICE;
+    SERVER_LOG(WARN, "ObAllVirtualCompactionDiagnoseInfo has been inited", K(ret));
+  } else if (OB_FAIL(diagnose_info_iter_.open())) {
+    SERVER_LOG(WARN, "Fail to open suggestion iter", K(ret));
+  } else {
+    is_inited_ = true;
+  }
+  return ret;
+}
+
+int ObAllVirtualCompactionDiagnoseInfo::inner_get_next_row(common::ObNewRow *&row)
+{
+  int ret = OB_SUCCESS;
+
+  if (IS_NOT_INIT) {
+    ret = OB_NOT_INIT;
+    SERVER_LOG(WARN, "ObAllVirtualCompactionDiagnoseInfo has been inited", K(ret));
+  } else if (OB_FAIL(diagnose_info_iter_.get_next_info(diagnose_info_))) {
+    if (OB_ITER_END != ret) {
+      STORAGE_LOG(WARN, "Fail to get next suggestion info", K(ret));
+    }
+  } else if (OB_FAIL(fill_cells())) {
+    STORAGE_LOG(WARN, "Fail to fill cells", K(ret), K(diagnose_info_));
+  } else {
+    row = &cur_row_;
+  }
+  return ret;
+}
+
+int ObAllVirtualCompactionDiagnoseInfo::fill_cells()
+{
+  int ret = OB_SUCCESS;
+  const int64_t col_count = output_column_ids_.count();
+  ObObj *cells = cur_row_.cells_;
+  for (int64_t i = 0; OB_SUCC(ret) && i < col_count; ++i) {
+    uint64_t col_id = output_column_ids_.at(i);
+    switch (col_id) {
+    case MERGE_TYPE:
+      cells[i].set_varchar(merge_type_to_str(diagnose_info_.merge_type_));
+      cells[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
+      break;
+    case TABLET_ID:
+      cells[i].set_int(diagnose_info_.tablet_id_);
+      break;
+    case STATUS:
+      cells[i].set_varchar(diagnose_info_.get_diagnose_status_str(diagnose_info_.status_));
+      cells[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
+      break;
+    case CREATE_TIME:
+      cells[i].set_timestamp(diagnose_info_.timestamp_);
+      break;
+    case DIAGNOSE_INFO: {
+      cells[i].set_varchar(diagnose_info_.diagnose_info_);
+      cells[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
+      break;
+    }
+    default:
+      ret = OB_ERR_UNEXPECTED;
+      SERVER_LOG(WARN, "invalid column id", K(ret), K(col_id));
+    }
+  }
+
+  return ret;
+}
+void ObAllVirtualCompactionDiagnoseInfo::reset()
+{
+  ObVirtualTableScannerIterator::reset();
+  diagnose_info_iter_.reset();
+  memset(ip_buf_, 0, sizeof(ip_buf_));
+  is_inited_ = false;
+}
+
+} /* namespace observer */
+} /* namespace oceanbase */

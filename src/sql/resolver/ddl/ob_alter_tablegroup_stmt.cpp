@@ -1,0 +1,55 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#include "sql/resolver/ddl/ob_alter_tablegroup_stmt.h"
+
+namespace oceanbase
+{
+
+using namespace share::schema;
+
+namespace sql
+{
+
+ObAlterTablegroupStmt::ObAlterTablegroupStmt(common::ObIAllocator *name_pool)
+    : ObTablegroupStmt(name_pool, stmt::T_ALTER_TABLEGROUP)
+{
+}
+
+ObAlterTablegroupStmt::ObAlterTablegroupStmt()
+    : ObTablegroupStmt(stmt::T_ALTER_TABLEGROUP)
+{
+}
+
+ObAlterTablegroupStmt::~ObAlterTablegroupStmt()
+{
+}
+
+
+int ObAlterTablegroupStmt::add_table_item(const obcall::ObTableItem &table_item)
+{
+  return alter_tablegroup_arg_.table_items_.push_back(table_item);
+}
+
+int ObAlterTablegroupStmt::set_tablegroup_sharding(const common::ObString &sharding)
+{
+  return alter_tablegroup_arg_.alter_tablegroup_schema_.set_sharding(sharding);
+}
+
+} //namespace sql
+} //namespace oceanbase
+
+

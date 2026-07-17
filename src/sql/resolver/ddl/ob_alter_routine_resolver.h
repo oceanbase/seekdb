@@ -1,0 +1,71 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef OCEANBASE_SRC_SQL_RESOLVER_DDL_OB_ALTER_ROUTINE_RESOLVER_H_
+#define OCEANBASE_SRC_SQL_RESOLVER_DDL_OB_ALTER_ROUTINE_RESOLVER_H_
+
+#include "sql/resolver/ddl/ob_ddl_resolver.h"
+#include "sql/resolver/ddl/ob_create_routine_resolver.h"
+#include "share/ob_rpc_struct.h"
+#include "share/schema/ob_schema_struct.h"
+#include "share/system_variable/ob_sys_var_class_type.h"
+
+namespace oceanbase
+{
+namespace sql
+{
+class ObAlterRoutineResolver: public ObDDLResolver
+{
+protected:
+  explicit ObAlterRoutineResolver(ObResolverParams &params) : ObDDLResolver(params) {}
+
+public:
+  virtual int resolve(const ParseNode &parse_tree);
+
+protected:
+  int resolve_impl(
+    obcall::ObCreateRoutineArg &crt_routine_arg,
+    const share::schema::ObRoutineInfo &routine_info, const ParseNode &alter_clause_node);
+  int resolve_clause_list(const ParseNode *node,
+                          obcall::ObCreateRoutineArg &crt_routine_arg);
+};
+
+class ObAlterProcedureResolver: public ObAlterRoutineResolver
+{
+public:
+  explicit ObAlterProcedureResolver(ObResolverParams &params) : ObAlterRoutineResolver(params) {}
+  virtual ~ObAlterProcedureResolver() {}
+
+private:
+  DISALLOW_COPY_AND_ASSIGN(ObAlterProcedureResolver);
+};
+
+class ObAlterFunctionResolver: public ObAlterRoutineResolver
+{
+public:
+  explicit ObAlterFunctionResolver(ObResolverParams &params) : ObAlterRoutineResolver(params) {}
+  virtual ~ObAlterFunctionResolver() {}
+
+private:
+  DISALLOW_COPY_AND_ASSIGN(ObAlterFunctionResolver);
+};
+
+} // end namespace sql
+} // end namespace oceanbase
+
+
+
+#endif /* OCEANBASE_SRC_SQL_RESOLVER_DDL_OB_ALTER_ROUTINE_RESOLVER_H_ */

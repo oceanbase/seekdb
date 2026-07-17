@@ -1,0 +1,178 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef OCEANBASE_COMMON_OB_MASK_SET2_
+#define OCEANBASE_COMMON_OB_MASK_SET2_
+
+#include "ob_bit_set.h"
+#include "ob_iarray.h"
+
+namespace oceanbase
+{
+namespace common
+{
+
+template<typename T>
+class ObMaskSet2
+{
+public:
+  ObMaskSet2() : is_inited_(false), array_(NULL), bitset_() {}
+  ~ObMaskSet2() {}
+  int init(const ObIArray<T> *array)
+  {
+    int ret = OB_SUCCESS;
+    if (NULL == array) {
+      ret = OB_INVALID_ARGUMENT;
+    } else if (OB_FAIL(bitset_.reserve(array->count()))) {
+    } else {
+      array_ = array;
+      is_inited_ = true;
+    }
+    return ret;
+  }
+  void reset()
+  {
+    is_inited_ = false;
+    array_ = NULL;
+    bitset_.reuse();
+  }
+  void clear()
+  {
+    bitset_.reuse();
+  }
+public:
+  int mask(const T &key)
+  {
+    int ret = OB_SUCCESS;
+    if (!is_inited_) {
+      ret = OB_NOT_INIT;
+    } else {
+      bool hit = false;
+      for (int64_t i = 0 ; OB_SUCCESS == ret && i < array_->count(); i++) {
+        if (array_->at(i) == key) {
+          hit = true;
+          if (OB_FAIL(bitset_.add_member(i))) {
+          }
+          break;
+        }
+      }
+      if (OB_SUCCESS == ret) {
+        if (!hit) {
+          ret = OB_MASK_SET_NO_NODE;
+        }
+      }
+    }
+    return ret;
+  }
+  int unmask(const T &key)
+  {
+    int ret = OB_SUCCESS;
+    if (!is_inited_) {
+      ret = OB_NOT_INIT;
+    } else {
+      bool hit = false;
+      for (int64_t i = 0 ; OB_SUCCESS == ret && i < array_->count(); i++) {
+        if (array_->at(i) == key) {
+          hit = true;
+          if (OB_FAIL(bitset_.del_member(i))) {
+          }
+          break;
+        }
+      }
+      if (OB_SUCCESS == ret) {
+        if (!hit) {
+          ret = OB_MASK_SET_NO_NODE;
+        }
+      }
+    }
+    return ret;
+  }
+  int mask(const T &key, bool &is_new_mask)
+  {
+    int ret = OB_SUCCESS;
+    bool tmp_new_mask = false;
+    if (!is_inited_) {
+      ret = OB_NOT_INIT;
+    } else {
+      bool hit = false;
+      for (int64_t i = 0 ; OB_SUCCESS == ret && i < array_->count(); i++) {
+        if (array_->at(i) == key) {
+          hit = true;
+          if (bitset_.has_member(i)) {
+            tmp_new_mask = false;
+          } else if (OB_FAIL(bitset_.add_member(i))) {
+          } else {
+            tmp_new_mask = true;
+          }
+          break;
+        }
+      }
+      if (OB_SUCCESS == ret) {
+        if (!hit) {
+          ret = OB_MASK_SET_NO_NODE;
+        } else {
+          is_new_mask = tmp_new_mask;
+        }
+      }
+    }
+    return ret;
+  }
+  bool is_all_mask() const
+  {
+    bool bool_ret = false;
+    if (is_inited_) {
+      bool_ret = (array_->count() == bitset_.num_members());
+    }
+    return bool_ret;
+  }
+  int get_not_mask(ObIArray<T> &array) const
+  {
+    int ret = OB_SUCCESS;
+    if (!is_inited_) {
+      ret = OB_NOT_INIT;
+    } else {
+      array.reset();
+      for (int64_t i = 0; OB_SUCC(ret) && i < array_->count(); ++i) {
+        if (!bitset_.has_member(i)) {
+          if (OB_FAIL(array.push_back(array_->at(i)))) {
+          }
+        }
+      }
+    }
+    return ret;
+  }
+  bool is_mask(const T &key)
+  {
+    bool bool_ret = false;
+    if (is_inited_) {
+      for (int64_t i = 0; i < array_->count(); ++i) {
+        if (array_->at(i) == key && bitset_.has_member(i)) {
+          bool_ret = true;
+          break;
+        }
+      }
+    }
+    return bool_ret;
+  }
+private:
+  bool is_inited_;
+  const ObIArray<T> *array_;
+  ObBitSet<> bitset_;
+};
+
+} // common
+} // oceanbase
+#endif // OCEANBASE_COMMON_OB_MASK_SET_

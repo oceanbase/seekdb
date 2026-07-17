@@ -1,0 +1,16 @@
+select @@version_comment limit 1;
+@@version_comment
+ob_version_info
+SELECT @@session.auto_increment_increment;
+@@session.auto_increment_increment
+1
+SHOW COLLATION;
+Collation	Charset	Id	Default	Compiled	Sortlen
+utf8mb4_general_ci	utf8mb4	45	Yes	Yes	1
+utf8mb4_bin	utf8mb4	46		Yes	1
+binary	binary	63	Yes	Yes	1
+SHOW CHARACTER SET;
+Charset	Description	Default collation	Maxlen
+binary	Binary pseudo charset	binary	1
+utf8mb4	UTF-8 Unicode	utf8mb4_general_ci	4
+SET NAMES utf8mb4;

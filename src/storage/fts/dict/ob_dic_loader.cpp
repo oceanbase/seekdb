@@ -1,0 +1,222 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#define USING_LOG_PREFIX STORAGE_FTS
+#include "storage/fts/dict/ob_dic_loader.h"
+#include "storage/fts/dict/ob_dic_lock.h"
+namespace oceanbase
+{
+namespace storage
+{
+/**
+* -----------------------------------ObTenantDicLoader-----------------------------------
+*/
+int ObTenantDicLoader::load_dictionary_in_trans(ObMySQLTransaction &trans)
+{
+  int ret = OB_SUCCESS;
+  if (OB_UNLIKELY(!is_inited_)) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("the dic loader is not initialized", K(ret));
+  } else if (OB_UNLIKELY(!true)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid tenant id", K(ret));
+  } else {
+    for (int64_t i = 0; OB_SUCC(ret) && i < dic_tables_info_.count(); ++i) {
+      int64_t array_size = dic_tables_info_.at(i).array_size_;
+      const char *table_name = dic_tables_info_.at(i).table_name_;
+      common::ObSqlString query_string;
+      common::ObSqlString columns;
+      common::ObSqlString values;
+      share::ObDMLSqlSplicer dml;
+      int64_t pos = 0;
+      while (array_size > 0 && OB_SUCC(ret)) {
+        columns.reuse();
+        query_string.reuse();
+        for (int64_t j = 0; OB_SUCC(ret) && j < DEFAULT_BATCH_SIZE && j < array_size; ++j, ++pos) {
+          ObDicItem item;
+          dml.reuse();
+          if (OB_FAIL(get_dic_item(i, pos, item))) {
+            LOG_WARN("fail to get dic item", K(ret), K(i), K(pos));
+          } else if (OB_FAIL(fill_dic_item(item, dml))){
+            LOG_WARN("fail to fill dic item", K(ret));
+          } else {
+            if (0 == j) {
+              if (OB_FAIL(dml.splice_column_names(columns))) {
+                LOG_WARN("fail to splice column names", K(ret));
+              } else if (OB_FAIL(query_string.append_fmt("INSERT INTO %s (%s) VALUES", 
+                          table_name, columns.ptr()))) {
+                LOG_WARN("assign sql string failed", KR(ret), K(query_string));
+              }
+            }
+
+            if (OB_SUCC(ret)) {
+              values.reset();
+              if (OB_FAIL(dml.splice_values(values))) {
+                LOG_WARN("fail to splice values", K(ret));
+              } else if (OB_FAIL(query_string.append_fmt("%s(%s)",
+                      0 == j ? " " : " , ", values.ptr()))) {
+                LOG_WARN("fail to assign sql string", K(ret));
+              }
+            }
+          }
+        }
+        array_size -= DEFAULT_BATCH_SIZE;
+        if (OB_SUCC(ret)) {
+          int64_t affected_rows = 0;
+          if (OB_ISNULL(GCTX.sql_proxy_)) {
+            ret = OB_ERR_UNEXPECTED;
+            LOG_WARN("sql proxy is null", K(ret));
+          } else if (OB_FAIL(trans.write(query_string.ptr(), affected_rows))) {
+            LOG_WARN("fail to execute sql", K(ret));
+          } else if (OB_UNLIKELY(((array_size > 0) && affected_rows != DEFAULT_BATCH_SIZE) || (affected_rows <= 0))) {
+            ret = OB_ERR_UNEXPECTED;
+            LOG_WARN("invalid affected rows", K(ret), K(affected_rows));
+          }
+        }
+      }
+    }
+  }
+  return ret;
+}
+
+int ObTenantDicLoader::try_load_dictionary_in_trans(ObMySQLTransaction &trans)
+{
+  int ret = OB_SUCCESS;
+  if (OB_UNLIKELY(!is_inited_)) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("the dic loader is not initialized", K(ret));
+  } else if (OB_UNLIKELY(!true)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid tenant id", K(ret));
+  } else {
+    if (!is_load_) {
+      bool is_need_load_dic = false;
+      if (OB_FAIL(check_need_load_dic(is_need_load_dic))) {
+        LOG_WARN("failed to check is real load", K(ret));
+      } else if (is_need_load_dic) {
+        if (OB_FAIL(ObDicLock::lock_dic_tables_in_trans(*this,
+                                                        transaction::tablelock::EXCLUSIVE, 
+                                                        trans))) {
+          LOG_WARN("failed to lock all dictionary table", K(ret), KPC(this));
+        }
+        if (OB_SUCC(ret)) {
+          if (OB_FALSE_IT(is_need_load_dic = false)) {
+          } else if (OB_FAIL(check_need_load_dic(is_need_load_dic))) {
+            LOG_WARN("failed to check is real load", K(ret));
+          } else if (is_need_load_dic) {
+            if (OB_FAIL(load_dictionary_in_trans( trans))) {
+              LOG_WARN("failed to load dictionary", K(ret));
+            }
+          }
+        }
+      }
+      if (OB_SUCC(ret)) {
+        is_load_ = true;
+      }
+    }
+  }
+  return ret;
+}
+
+int ObTenantDicLoader::try_load_dictionary_in_trans()
+{
+  int ret = OB_SUCCESS;
+  if (OB_UNLIKELY(!is_inited_)) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("the dic loader is not initialized", K(ret));
+  } else if (OB_UNLIKELY(!true)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid tenant id", K(ret));
+  } else {
+    if (!is_load_) {
+      ObTimeoutCtx timeout_ctx;
+      const int64_t default_timeout = DEFAULT_TIMEOUT_US;
+      const int64_t timeout = MAX(default_timeout, GCONF.internal_sql_execute_timeout);
+      ObMySQLTransaction trans;
+      if (OB_ISNULL(GCTX.sql_proxy_)) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("sql proxy is null", K(ret));
+      } else if (OB_FAIL(timeout_ctx.set_trx_timeout_us(timeout))) {
+        LOG_WARN("set trx timeout failed", K(ret));
+      } else if (OB_FAIL(timeout_ctx.set_timeout(timeout))) {
+        LOG_WARN("set timeout failed", K(ret));
+      } else if (OB_FAIL(trans.start(GCTX.sql_proxy_))) {
+        LOG_WARN("failed to start trans", K(ret));
+      } else if (OB_FAIL(try_load_dictionary_in_trans(trans))) {
+        LOG_WARN("fail to try load dictionary in trans", K(ret));
+      }
+      if (trans.is_started()) {
+        int tmp_ret = OB_SUCCESS;
+        if (OB_SUCCESS != (tmp_ret = trans.end(OB_SUCC(ret)))) {
+          LOG_WARN("failed to commit trans", K(ret), K(tmp_ret));
+          ret = OB_SUCC(ret) ? tmp_ret : ret;
+        }
+      }
+    }
+  }
+  return ret; 
+}
+
+int ObTenantDicLoader::check_need_load_dic(bool &is_need_load_dic)
+{
+  int ret = OB_SUCCESS;
+  // we keep the code here even though we don't load data into system table anymore.
+  is_need_load_dic = false;
+  return ret;
+}
+
+/**
+* -----------------------------------ObTenantDicLoaderHandle-----------------------------------
+*/
+ObTenantDicLoaderHandle &ObTenantDicLoaderHandle::operator =(const ObTenantDicLoaderHandle &other)
+{
+  if (this != &other) {
+    reset();
+    if (OB_NOT_NULL(other.loader_)) {
+      loader_ = other.loader_;
+      loader_->inc_ref();
+    }
+  }
+  return *this;
+}
+
+void ObTenantDicLoaderHandle::reset()
+{
+  if (nullptr != loader_) {
+    const int64_t ref_cnt = loader_->dec_ref();
+    if (0 == ref_cnt) {
+      ObMemAttr attr("dic_loader");
+      OB_DELETE(ObTenantDicLoader, attr, loader_);
+    }
+    loader_ = nullptr;
+  }
+}
+
+int ObTenantDicLoaderHandle::set_loader(ObTenantDicLoader *loader)
+{
+  int ret = OB_SUCCESS;
+  if (OB_ISNULL(loader)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid args", K(ret), KP(loader));
+  } else {
+    reset();
+    loader_ = loader;
+    loader_->inc_ref();
+  }
+  return ret;
+}
+} // end storage
+} // end oceanbase

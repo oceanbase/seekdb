@@ -1,0 +1,364 @@
+/**
+ * 注意点！！！
+ * 为了可以直接使用join_type枚举类型，这里的表格列举了所有类型
+ * 的join，但是实际只使用了left style join去生成冲突检测器
+ * 所有的right style join默认不符合所有的规则
+ */
+
+/**
+ * 定义join类型的交换律
+ */
+static bool COMM_PROPERTY[MAX_JOIN_TYPE] = 
+{
+    false,  // UNKNOWN_JOIN
+    true,  // INNER_JOIN
+    false,  // LEFT_OUTER_JOIN
+    false,  // RIGHT_OUTER_JOIN
+    true,  // FULL_OUTER_JOIN
+    false,  // LEFT_SEMI_JOIN
+    false,  // RIGHT_SEMI_JOIN
+    false,  // LEFT_ANTI_JOIN
+    false,  // RIGHT_ANTI_JOIN
+};
+
+/**
+ * 定义join类型的结合律
+ */
+static bool ASSOC_PROPERTY[MAX_JOIN_TYPE][MAX_JOIN_TYPE] = {
+//UNKNOWN_JOIN
+{
+    false,  // UNKNOWN_JOIN
+    false,  // INNER_JOIN
+    false,  // LEFT_OUTER_JOIN
+    false,  // RIGHT_OUTER_JOIN
+    false,  // FULL_OUTER_JOIN
+    false,  // LEFT_SEMI_JOIN
+    false,  // RIGHT_SEMI_JOIN
+    false,  // LEFT_ANTI_JOIN
+    false,  // RIGHT_ANTI_JOIN
+},
+//INNER_JOIN
+{
+    false,  // UNKNOWN_JOIN
+    true,   // INNER_JOIN
+    true,   // LEFT_OUTER_JOIN
+    false,  // RIGHT_OUTER_JOIN
+    false,  // FULL_OUTER_JOIN
+    true,   // LEFT_SEMI_JOIN
+    false,  // RIGHT_SEMI_JOIN
+    true,   // LEFT_ANTI_JOIN
+    false,  // RIGHT_ANTI_JOIN
+},
+//LEFT_OUTER_JOIN
+{
+    false,  // UNKNOWN_JOIN
+    false,  // INNER_JOIN
+    true,   // LEFT_OUTER_JOIN
+    false,  // RIGHT_OUTER_JOIN
+    false,  // FULL_OUTER_JOIN
+    false,  // LEFT_SEMI_JOIN
+    false,  // RIGHT_SEMI_JOIN
+    false,  // LEFT_ANTI_JOIN
+    false,  // RIGHT_ANTI_JOIN
+},
+//RIGHT_OUTER_JOIN
+{
+    false,  // UNKNOWN_JOIN
+    false,  // INNER_JOIN
+    false,  // LEFT_OUTER_JOIN
+    false,  // RIGHT_OUTER_JOIN
+    false,  // FULL_OUTER_JOIN
+    false,  // LEFT_SEMI_JOIN
+    false,  // RIGHT_SEMI_JOIN
+    false,  // LEFT_ANTI_JOIN
+    false,  // RIGHT_ANTI_JOIN
+},
+//FULL_OUTER_JOIN
+{
+    false,  // UNKNOWN_JOIN
+    false,  // INNER_JOIN
+    true,   // LEFT_OUTER_JOIN
+    false,  // RIGHT_OUTER_JOIN
+    true,   // FULL_OUTER_JOIN
+    false,  // LEFT_SEMI_JOIN
+    false,  // RIGHT_SEMI_JOIN
+    false,  // LEFT_ANTI_JOIN
+    false,  // RIGHT_ANTI_JOIN
+},
+//LEFT_SEMI_JOIN
+{
+    false,  // UNKNOWN_JOIN
+    false,  // INNER_JOIN
+    false,  // LEFT_OUTER_JOIN
+    false,  // RIGHT_OUTER_JOIN
+    false,  // FULL_OUTER_JOIN
+    false,  // LEFT_SEMI_JOIN
+    false,  // RIGHT_SEMI_JOIN
+    false,  // LEFT_ANTI_JOIN
+    false,  // RIGHT_ANTI_JOIN
+},
+//RIGHT_SEMI_JOIN
+{
+    false,  // UNKNOWN_JOIN
+    false,  // INNER_JOIN
+    false,  // LEFT_OUTER_JOIN
+    false,  // RIGHT_OUTER_JOIN
+    false,  // FULL_OUTER_JOIN
+    false,  // LEFT_SEMI_JOIN
+    false,  // RIGHT_SEMI_JOIN
+    false,  // LEFT_ANTI_JOIN
+    false,  // RIGHT_ANTI_JOIN
+},
+//LEFT_ANTI_JOIN
+{
+    false,  // UNKNOWN_JOIN
+    false,  // INNER_JOIN
+    false,  // LEFT_OUTER_JOIN
+    false,  // RIGHT_OUTER_JOIN
+    false,  // FULL_OUTER_JOIN
+    false,  // LEFT_SEMI_JOIN
+    false,  // RIGHT_SEMI_JOIN
+    false,  // LEFT_ANTI_JOIN
+    false,  // RIGHT_ANTI_JOIN
+},
+//RIGHT_ANTI_JOIN
+{
+    false,  // UNKNOWN_JOIN
+    false,  // INNER_JOIN
+    false,  // LEFT_OUTER_JOIN
+    false,  // RIGHT_OUTER_JOIN
+    false,  // FULL_OUTER_JOIN
+    false,  // LEFT_SEMI_JOIN
+    false,  // RIGHT_SEMI_JOIN
+    false,  // LEFT_ANTI_JOIN
+    false,  // RIGHT_ANTI_JOIN
+}
+};
+
+/**
+ * 定义join类型的l-asscom规律
+ */
+static bool L_ASSCOM_PROPERTY[MAX_JOIN_TYPE][MAX_JOIN_TYPE] = {
+//UNKNOWN_JOIN
+{
+    false,  // UNKNOWN_JOIN
+    false,  // INNER_JOIN
+    false,  // LEFT_OUTER_JOIN
+    false,  // RIGHT_OUTER_JOIN
+    false,  // FULL_OUTER_JOIN
+    false,  // LEFT_SEMI_JOIN
+    false,  // RIGHT_SEMI_JOIN
+    false,  // LEFT_ANTI_JOIN
+    false,  // RIGHT_ANTI_JOIN
+},
+    //INNER_JOIN
+{
+    false,  // UNKNOWN_JOIN
+    true,  // INNER_JOIN
+    true,  // LEFT_OUTER_JOIN
+    false,  // RIGHT_OUTER_JOIN
+    false,  // FULL_OUTER_JOIN
+    true,  // LEFT_SEMI_JOIN
+    false,  // RIGHT_SEMI_JOIN
+    true,  // LEFT_ANTI_JOIN
+    false,  // RIGHT_ANTI_JOIN
+},
+//LEFT_OUTER_JOIN
+{
+    false,  // UNKNOWN_JOIN
+    true,   // INNER_JOIN
+    true,   // LEFT_OUTER_JOIN
+    false,  // RIGHT_OUTER_JOIN
+    true,   // FULL_OUTER_JOIN
+    true,   // LEFT_SEMI_JOIN
+    false,  // RIGHT_SEMI_JOIN
+    true,   // LEFT_ANTI_JOIN
+    false,  // RIGHT_ANTI_JOIN
+},
+//RIGHT_OUTER_JOIN
+{
+    false,  // UNKNOWN_JOIN
+    false,  // INNER_JOIN
+    false,  // LEFT_OUTER_JOIN
+    false,  // RIGHT_OUTER_JOIN
+    false,  // FULL_OUTER_JOIN
+    false,  // LEFT_SEMI_JOIN
+    false,  // RIGHT_SEMI_JOIN
+    false,  // LEFT_ANTI_JOIN
+    false,  // RIGHT_ANTI_JOIN
+},
+//FULL_OUTER_JOIN
+{
+    false,  // UNKNOWN_JOIN
+    false,  // INNER_JOIN
+    true,   // LEFT_OUTER_JOIN
+    false,  // RIGHT_OUTER_JOIN
+    true,   // FULL_OUTER_JOIN
+    false,  // LEFT_SEMI_JOIN
+    false,  // RIGHT_SEMI_JOIN
+    false,  // LEFT_ANTI_JOIN
+    false,  // RIGHT_ANTI_JOIN
+},
+//LEFT_SEMI_JOIN
+{
+    false,  // UNKNOWN_JOIN
+    true,   // INNER_JOIN
+    true,   // LEFT_OUTER_JOIN
+    false,  // RIGHT_OUTER_JOIN
+    false,  // FULL_OUTER_JOIN
+    true,   // LEFT_SEMI_JOIN
+    false,  // RIGHT_SEMI_JOIN
+    true,   // LEFT_ANTI_JOIN
+    false,  // RIGHT_ANTI_JOIN
+},
+//RIGHT_SEMI_JOIN
+{
+    false,  // UNKNOWN_JOIN
+    false,  // INNER_JOIN
+    false,  // LEFT_OUTER_JOIN
+    false,  // RIGHT_OUTER_JOIN
+    false,  // FULL_OUTER_JOIN
+    false,  // LEFT_SEMI_JOIN
+    false,  // RIGHT_SEMI_JOIN
+    false,  // LEFT_ANTI_JOIN
+    false,  // RIGHT_ANTI_JOIN
+},
+//LEFT_ANTI_JOIN
+{
+    false,  // UNKNOWN_JOIN
+    true,   // INNER_JOIN
+    true,   // LEFT_OUTER_JOIN
+    false,  // RIGHT_OUTER_JOIN
+    false,  // FULL_OUTER_JOIN
+    true,   // LEFT_SEMI_JOIN
+    false,  // RIGHT_SEMI_JOIN
+    true,   // LEFT_ANTI_JOIN
+    false,  // RIGHT_ANTI_JOIN
+},
+//RIGHT_ANTI_JOIN
+{
+    false,  // UNKNOWN_JOIN
+    false,  // INNER_JOIN
+    false,  // LEFT_OUTER_JOIN
+    false,  // RIGHT_OUTER_JOIN
+    false,  // FULL_OUTER_JOIN
+    false,  // LEFT_SEMI_JOIN
+    false,  // RIGHT_SEMI_JOIN
+    false,  // LEFT_ANTI_JOIN
+    false,  // RIGHT_ANTI_JOIN
+}
+};
+
+/**
+ * 定义join类型的r-asscom规律
+ */
+static bool R_ASSCOM_PROPERTY[MAX_JOIN_TYPE][MAX_JOIN_TYPE] = {
+//UNKNOWN_JOIN
+{
+    false,  // UNKNOWN_JOIN
+    false,  // INNER_JOIN
+    false,  // LEFT_OUTER_JOIN
+    false,  // RIGHT_OUTER_JOIN
+    false,  // FULL_OUTER_JOIN
+    false,  // LEFT_SEMI_JOIN
+    false,  // RIGHT_SEMI_JOIN
+    false,  // LEFT_ANTI_JOIN
+    false,  // RIGHT_ANTI_JOIN
+},
+    //INNER_JOIN
+{
+    false,  // UNKNOWN_JOIN
+    true,   // INNER_JOIN
+    false,  // LEFT_OUTER_JOIN
+    false,  // RIGHT_OUTER_JOIN
+    false,  // FULL_OUTER_JOIN
+    false,  // LEFT_SEMI_JOIN
+    false,  // RIGHT_SEMI_JOIN
+    false,  // LEFT_ANTI_JOIN
+    false,  // RIGHT_ANTI_JOIN
+},
+//LEFT_OUTER_JOIN
+{
+    false,  // UNKNOWN_JOIN
+    false,  // INNER_JOIN
+    false,  // LEFT_OUTER_JOIN
+    false,  // RIGHT_OUTER_JOIN
+    false,  // FULL_OUTER_JOIN
+    false,  // LEFT_SEMI_JOIN
+    false,  // RIGHT_SEMI_JOIN
+    false,  // LEFT_ANTI_JOIN
+    false,  // RIGHT_ANTI_JOIN
+},
+//RIGHT_OUTER_JOIN
+{
+    false,  // UNKNOWN_JOIN
+    false,  // INNER_JOIN
+    false,  // LEFT_OUTER_JOIN
+    false,  // RIGHT_OUTER_JOIN
+    false,  // FULL_OUTER_JOIN
+    false,  // LEFT_SEMI_JOIN
+    false,  // RIGHT_SEMI_JOIN
+    false,  // LEFT_ANTI_JOIN
+    false,  // RIGHT_ANTI_JOIN
+},
+//FULL_OUTER_JOIN
+{
+    false,  // UNKNOWN_JOIN
+    false,  // INNER_JOIN
+    false,  // LEFT_OUTER_JOIN
+    false,  // RIGHT_OUTER_JOIN
+    true,   // FULL_OUTER_JOIN
+    false,  // LEFT_SEMI_JOIN
+    false,  // RIGHT_SEMI_JOIN
+    false,  // LEFT_ANTI_JOIN
+    false,  // RIGHT_ANTI_JOIN
+},
+//LEFT_SEMI_JOIN
+{
+    false,  // UNKNOWN_JOIN
+    false,  // INNER_JOIN
+    false,  // LEFT_OUTER_JOIN
+    false,  // RIGHT_OUTER_JOIN
+    false,  // FULL_OUTER_JOIN
+    false,  // LEFT_SEMI_JOIN
+    false,  // RIGHT_SEMI_JOIN
+    false,  // LEFT_ANTI_JOIN
+    false,  // RIGHT_ANTI_JOIN
+},
+//RIGHT_SEMI_JOIN
+{
+    false,  // UNKNOWN_JOIN
+    false,  // INNER_JOIN
+    false,  // LEFT_OUTER_JOIN
+    false,  // RIGHT_OUTER_JOIN
+    false,  // FULL_OUTER_JOIN
+    false,  // LEFT_SEMI_JOIN
+    false,  // RIGHT_SEMI_JOIN
+    false,  // LEFT_ANTI_JOIN
+    false,  // RIGHT_ANTI_JOIN
+},
+//LEFT_ANTI_JOIN
+{
+    false,  // UNKNOWN_JOIN
+    false,  // INNER_JOIN
+    false,  // LEFT_OUTER_JOIN
+    false,  // RIGHT_OUTER_JOIN
+    false,  // FULL_OUTER_JOIN
+    false,  // LEFT_SEMI_JOIN
+    false,  // RIGHT_SEMI_JOIN
+    false,  // LEFT_ANTI_JOIN
+    false,  // RIGHT_ANTI_JOIN
+},
+//RIGHT_ANTI_JOIN
+{
+    false,  // UNKNOWN_JOIN
+    false,  // INNER_JOIN
+    false,  // LEFT_OUTER_JOIN
+    false,  // RIGHT_OUTER_JOIN
+    false,  // FULL_OUTER_JOIN
+    false,  // LEFT_SEMI_JOIN
+    false,  // RIGHT_SEMI_JOIN
+    false,  // LEFT_ANTI_JOIN
+    false,  // RIGHT_ANTI_JOIN
+}
+};

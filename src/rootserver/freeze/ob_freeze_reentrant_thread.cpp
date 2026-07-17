@@ -1,0 +1,104 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#define USING_LOG_PREFIX RS_COMPACTION
+
+#include "rootserver/freeze/ob_freeze_reentrant_thread.h"
+#include "share/rc/ob_module_provider.h"
+#include "storage/tx_storage/ob_ls_service.h"
+
+namespace oceanbase
+{
+using namespace common;
+using namespace share;
+
+namespace rootserver
+{
+ObFreezeReentrantThread::ObFreezeReentrantThread()
+  : ObRsReentrantThread(true),
+    sql_proxy_(nullptr), is_paused_(false), epoch_(-1)
+{}
+
+int ObFreezeReentrantThread::set_epoch(const int64_t epoch)
+{
+  int ret = OB_SUCCESS;
+  if (epoch < 0) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument", KR(ret), K(epoch));
+  } else {
+    epoch_ = epoch;
+  }
+  return ret;
+}
+
+void ObFreezeReentrantThread::pause()
+{
+  is_paused_ = true;
+}
+
+void ObFreezeReentrantThread::resume()
+{
+  is_paused_ = false;
+}
+
+int ObFreezeReentrantThread::try_idle(
+    const int64_t idle_time_us,
+    const int exe_ret)
+{
+  int ret = exe_ret;
+  if (idle_time_us <= 0) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument", KR(ret), K(idle_time_us));
+  } else if (!stop_) {
+    if (is_paused()) {
+      LOG_INFO("this thread is paused", KR(ret), K(idle_time_us), "epoch", get_epoch());
+      while (!stop_ && is_paused()) {
+        idle_wait(idle_time_us / 1000);
+        // if in paused state, we also need to update run_ts. otherwise, the checker may
+        // mark this thread as hang.
+        update_last_run_timestamp();
+      }
+      LOG_INFO("this thread is not paused", KR(ret), K(idle_time_us), "epoch", get_epoch());
+    } else {
+      idle_wait(idle_time_us / 1000);
+    }
+  }
+  return ret;
+}
+
+int ObFreezeReentrantThread::obtain_proposal_id_from_ls(
+    const bool is_primary_service,
+    int64_t &proposal_id,
+    ObRole &role)
+{
+  int ret = OB_SUCCESS;
+
+  storage::ObLSHandle ls_handle;
+  logservice::ObLogHandler *handler = nullptr;
+  if (OB_FAIL(share::g_mp->ls_service()->get_ls(SYS_LS, ls_handle, ObLSGetMod::RS_MOD))) {
+    LOG_WARN("fail to get ls", KR(ret));
+  } else if (OB_ISNULL(ls_handle.get_ls())
+      || OB_ISNULL(handler = ls_handle.get_ls()->get_log_handler())) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("should not null", KR(ret), K(is_primary_service));
+  } else if (OB_FAIL(handler->get_role(role, proposal_id))) {
+    LOG_WARN("fail to get role", KR(ret), K(is_primary_service));
+  }
+  return ret;
+}
+
+} // rootserver
+} // oceanbase

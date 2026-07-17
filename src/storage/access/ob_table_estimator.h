@@ -1,0 +1,101 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef OCEANBASE_STORAGE_OB_TABLE_ESTIMATOR_H_
+#define OCEANBASE_STORAGE_OB_TABLE_ESTIMATOR_H_
+
+#include "lib/oblog/ob_log_module.h"
+#include "storage/blocksstable/ob_sstable.h"
+#include "storage/memtable/ob_memtable.h"
+
+namespace oceanbase
+{
+namespace storage
+{
+class ObTabletHandle;
+typedef common::ObIArray<ObITable*> ObTableArray;
+typedef common::ObIArray<blocksstable::ObDatumRowkey> ObExtSRowkeyArray;
+typedef common::ObIArray<common::ObEstRowCountRecord> ObEstRCRecArray;
+typedef common::ObIArray<blocksstable::ObDatumRange> ObExtSRangeArray;
+
+// A helper struct used for passing some identical parameters.
+struct ObTableEstimateBaseInput {
+  ObTableEstimateBaseInput(
+      const common::ObQueryFlag query_flag,
+      const uint64_t table_id,
+      const transaction::ObTransID tx_id,
+      const ObTableArray &tables,
+      const ObTabletHandle &tablet_handle) :
+      query_flag_(query_flag),
+      table_id_(table_id),
+      tx_id_(tx_id),
+      tables_(tables),
+      tablet_handle_(tablet_handle) {}
+
+  OB_INLINE bool is_table_invalid() {
+    return !is_valid_id(table_id_) || tables_.count() <= 0;
+  }
+
+  const common::ObQueryFlag query_flag_;
+  const uint64_t table_id_;
+  const transaction::ObTransID tx_id_;
+  const ObTableArray &tables_;
+  const ObTabletHandle &tablet_handle_;
+};
+
+class ObTableEstimator
+{
+public:
+  static int estimate_row_count_for_get(
+      ObTableEstimateBaseInput &base_input,
+      const ObExtSRowkeyArray &rowkeys,
+      ObPartitionEst &part_estimate);
+  static int estimate_row_count_for_scan(
+      ObTableEstimateBaseInput &base_input,
+      const ObExtSRangeArray &ranges,
+      ObPartitionEst &part_estimate,
+      ObEstRCRecArray &est_records);
+
+  static int estimate_sstable_scan_row_count(
+      const ObTableEstimateBaseInput &base_input,
+      blocksstable::ObSSTable *sstable,
+      const blocksstable::ObDatumRange &key_range,
+      ObPartitionEst &part_est);
+
+  static int estimate_memtable_scan_row_count(
+      const ObTableEstimateBaseInput &base_input,
+      const memtable::ObMemtable *memtable,
+      const blocksstable::ObDatumRange &key_range,
+      ObPartitionEst &part_est);
+
+  static int estimate_multi_scan_row_count(
+      const ObTableEstimateBaseInput &base_input,
+      ObITable *current_table,
+      const ObExtSRangeArray &ranges,
+      ObPartitionEst &part_est);
+
+  static void fix_invalid_logic_row(
+      const ObPartitionEst &part_estimate,
+      ObPartitionEst &table_est);
+
+    TO_STRING_KV("name", "ObTableEstimator");
+};
+
+
+} /* namespace storage */
+} /* namespace oceanbase */
+
+#endif /* OCEANBASE_STORAGE_OB_TABLE_ESTIMATOR_H_ */

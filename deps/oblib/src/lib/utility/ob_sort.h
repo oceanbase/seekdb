@@ -1,0 +1,199 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef OCEANBASE_SORT_WRAPPER_H_
+#define OCEANBASE_SORT_WRAPPER_H_
+
+#include <algorithm>
+#include "lib/utility/ob_tracepoint.h"
+#include "lib/oblog/ob_log_module.h"
+namespace oceanbase
+{
+namespace lib
+{
+#ifdef FATAL_ERROR_HANG
+template <class Iterator>
+class IteratorWrapper
+{
+public:
+  using value_type = typename std::iterator_traits<Iterator>::value_type;
+  using difference_type = typename std::iterator_traits<Iterator>::difference_type;
+  using pointer = value_type*;
+  using reference = value_type&;
+  using iterator_category = std::random_access_iterator_tag;
+  
+  IteratorWrapper(Iterator iter, int64_t index, int64_t end)
+    : iter_(iter), index_(index), end_(end)
+  {}
+  bool abort_maybe_bad_compare() const
+  {
+    abort();
+  }
+  inline reference operator*()
+  {
+    return *iter_;
+  }
+  inline reference operator*() const
+  {
+    // For random access iterators, even const iterators should return non-const references
+    // to allow standard library algorithms to modify values
+    return *iter_;
+  }
+  inline pointer operator->()
+  {
+    return &(*iter_);
+  }
+  inline pointer operator->() const
+  {
+    return &(*iter_);
+  }
+  inline reference operator[](difference_type n)
+  {
+    return iter_[n];
+  }
+  inline reference operator[](difference_type n) const
+  {
+    return iter_[n];
+  }
+  inline IteratorWrapper operator++(int)
+  {
+    if (OB_UNLIKELY(index_ >= end_)) abort_maybe_bad_compare();
+    return IteratorWrapper(iter_++, index_++, end_);
+  }
+  inline IteratorWrapper operator++()
+  {
+    if (OB_UNLIKELY(index_ >= end_)) abort_maybe_bad_compare();
+    ++iter_;
+    ++index_;
+    return *this;
+  }
+  inline IteratorWrapper operator--(int)
+  {
+    if (OB_UNLIKELY(index_ < 0)) abort_maybe_bad_compare();
+    return IteratorWrapper(iter_--, index_--, end_);
+  }
+  inline IteratorWrapper operator--()
+  {
+    if (OB_UNLIKELY(index_ < 0)) abort_maybe_bad_compare();
+    --iter_;
+    --index_;
+    return *this;
+  }
+  inline IteratorWrapper operator+(int64_t off) const
+  {
+    if (OB_UNLIKELY(index_ >= end_)) abort_maybe_bad_compare();
+    Iterator new_iter = iter_;
+    new_iter += off;
+    return IteratorWrapper(new_iter, index_ + off, end_);
+  }
+  inline IteratorWrapper &operator+=(int64_t off)
+  {
+    if (OB_UNLIKELY(index_ >= end_)) abort_maybe_bad_compare();
+    iter_ += off;
+    index_ += off;
+    return *this;
+  }
+  inline IteratorWrapper &operator-=(int64_t off)
+  {
+    if (OB_UNLIKELY(index_ < 0)) abort_maybe_bad_compare();
+    iter_ -= off;
+    index_ -= off;
+    return *this;
+  }
+  inline IteratorWrapper operator-(int64_t off) const
+  {
+    if (OB_UNLIKELY(index_ < 0)) abort_maybe_bad_compare();
+    Iterator new_iter = iter_;
+    new_iter -= off;
+    return IteratorWrapper(new_iter, index_ - off, end_);
+  }
+  inline difference_type operator-(const IteratorWrapper &rhs) const
+  {
+    return index_ - rhs.index_;
+  }
+  inline bool operator==(const IteratorWrapper &rhs) const
+  {
+    return (index_ == rhs.index_);
+  }
+  inline bool operator!=(const IteratorWrapper &rhs) const
+  {
+    return (index_ != rhs.index_);
+  }
+  inline bool operator<(const IteratorWrapper &rhs) const
+  {
+    return (index_ < rhs.index_);
+  }
+
+  inline bool operator<=(const IteratorWrapper &rhs) const
+  {
+    return (index_ <= rhs.index_);
+  }
+  inline bool operator>(const IteratorWrapper &rhs) const
+  {
+    return (index_ > rhs.index_);
+  }
+  inline bool operator>=(const IteratorWrapper &rhs) const
+  {
+    return (index_ >= rhs.index_);
+  }
+  
+private:
+  Iterator iter_;
+  int64_t index_;
+  int64_t end_;
+};
+#endif
+template <class Iterator, class Compare>
+void ob_sort(Iterator first, Iterator last, Compare comp)
+{
+  int ret = OB_E(EventTable::EN_CHECK_SORT_CMP) OB_SUCCESS;
+  if (OB_FAIL(ret) && std::is_empty<Compare>::value) {
+    ret = OB_SUCCESS;
+    for (Iterator iter = first; OB_SUCC(ret) && iter != last; ++iter) {
+      if (comp(*iter, *iter)) {
+        ret = common::OB_ERR_UNEXPECTED;
+        OB_LOG_RET(ERROR, common::OB_ERR_UNEXPECTED,"check irreflexivity failed");
+      }
+    }
+  }
+#ifdef FATAL_ERROR_HANG
+  int64_t end = last - first;
+  typedef IteratorWrapper<Iterator>  Wrapper;
+  Wrapper first_wrapper = Wrapper(first, 0, end);
+  Wrapper last_wrapper = Wrapper(last, end, end);
+  std::sort(first_wrapper, last_wrapper, comp);
+#else
+  std::sort(first, last, comp);
+#endif
+}
+
+template <class Iterator>
+void ob_sort(Iterator first, Iterator last)
+{
+  using ValueType = typename std::iterator_traits<Iterator>::value_type;
+  struct Compare
+  {
+    bool operator()(ValueType& l, ValueType& r)
+    {
+      return l < r;
+    }
+  };
+  ob_sort(first, last, Compare());
+}
+} // end of namespace lib
+} // end of namespace oceanbase
+#endif
+

@@ -1,0 +1,83 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef SRC_STORAGE_BLOCKSSTABLE_OB_MICRO_BLOCK_INFO_H_
+#define SRC_STORAGE_BLOCKSSTABLE_OB_MICRO_BLOCK_INFO_H_
+
+#include "lib/utility/ob_print_utils.h"
+#include "storage/blocksstable/ob_logic_macro_id.h"
+
+namespace oceanbase
+{
+namespace blocksstable
+{
+struct ObMicroBlockInfo
+{
+  static const int64_t SF_BIT_OFFSET = 24;
+  static const int64_t MAX_OFFSET = (1 << (SF_BIT_OFFSET - 1)) - 1;
+  static const int64_t SF_BIT_SIZE = 24;
+  static const int64_t MAX_SIZE = (1 << (SF_BIT_SIZE - 1)) - 1;
+  static const int64_t SF_BIT_MARK_DELETION = 1;
+  static const uint64_t MAX_MARK_DELETION = (1 << (SF_BIT_MARK_DELETION)) - 1;
+  static const int64_t SF_BIT_RESERVED = 15;
+
+  struct
+  {
+    int32_t offset_ : SF_BIT_OFFSET;
+    int32_t size_ : SF_BIT_SIZE;
+    bool mark_deletion_ : SF_BIT_MARK_DELETION;
+    uint16_t reserved_: SF_BIT_RESERVED;
+  };
+  ObLogicMicroBlockId logic_micro_id_;
+  int64_t data_checksum_;
+  ObMicroBlockInfo() : offset_(0), size_(0), mark_deletion_(false), reserved_(0), logic_micro_id_(), data_checksum_(0) {}
+
+  int64_t get_block_size() const
+  { return size_; }
+  int64_t get_block_offset() const
+  { return  offset_; }
+  void reset() { offset_ = 0; size_ = 0; mark_deletion_ = false; reserved_ = 0; logic_micro_id_.reset(); data_checksum_ = 0; }
+  int set(const int32_t offset, const int32_t size, const ObLogicMicroBlockId &logic_micro_id, const int64_t data_checksum, bool mark_deletion = false)
+  {
+    int ret = common::OB_SUCCESS;
+    if (!is_offset_valid(offset) || !is_size_valid(size)) {
+      ret = common::OB_INVALID_ARGUMENT;
+      STORAGE_LOG(WARN, "Setting invalid value, it may be caused by overflow when converting type",
+          K(ret), K(offset), K(size));
+    } else {
+      offset_ = offset & MAX_OFFSET;
+      size_ = size & MAX_SIZE;
+      mark_deletion_ = mark_deletion & MAX_MARK_DELETION;
+      logic_micro_id_ = logic_micro_id;
+      data_checksum_ = data_checksum;
+    }
+    return ret;
+  }
+  bool is_offset_valid(const int32_t offset) const
+  {
+    return offset >= 0 && offset <= MAX_OFFSET;
+  }
+  bool is_size_valid(const int32_t size) const
+  {
+    return size > 0 && size <= MAX_SIZE;
+  }
+  bool is_valid() const { return offset_ >=0 && size_ > 0; }
+  TO_STRING_KV(K_(offset), K_(size), K_(mark_deletion), K_(logic_micro_id), K_(data_checksum));
+};
+}
+}
+
+#endif /* SRC_STORAGE_BLOCKSSTABLE_OB_MICRO_BLOCK_INFO_H_ */

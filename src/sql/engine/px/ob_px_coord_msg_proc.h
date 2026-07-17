@@ -1,0 +1,152 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef _OB_SQL_PX_COORD_MSG_PROC_H_
+#define _OB_SQL_PX_COORD_MSG_PROC_H_
+
+#include "sql/engine/px/ob_dfo.h"
+#include "sql/engine/px/ob_px_dtl_msg.h"
+
+namespace oceanbase
+{
+namespace sql
+{
+class ObExecContext;
+class ObBarrierWholeMsg;
+class ObBarrierPieceMsg;
+class ObWinbufWholeMsg;
+class ObWinbufPieceMsg;
+class ObRollupKeyWholeMsg;
+class ObRollupKeyPieceMsg;
+class ObDynamicSamplePieceMsg;
+class ObDynamicSampleWholeMsg;
+class ObRDWFPieceMsg;
+class ObRDWFWholeMsg;
+class ObInitChannelPieceMsg;
+class ObInitChannelWholeMsg;
+class ObReportingWFPieceMsg;
+class ObReportingWFWholeMsg;
+class ObOptStatsGatherPieceMsg;
+class ObOptStatsGatherWholeMsg;
+class SPWinFuncPXPieceMsg;
+class SPWinFuncPXWholeMsg;
+class RDWinFuncPXPieceMsg;
+class RDWinFuncPXWholeMsg;
+class ObJoinFilterCountRowPieceMsg;
+class ObJoinFilterCountRowWholeMsg;
+// The purpose of abstracting this interface class is to decouple MsgProc and ObPxCoord
+class ObIPxCoordMsgProc
+{
+public:
+  // msg processor callback
+  virtual int on_sqc_init_msg(ObExecContext &ctx, const ObPxInitSqcResultMsg &pkt) = 0;
+  virtual int on_sqc_finish_msg(ObExecContext &ctx, const ObPxFinishSqcResultMsg &pkt) = 0;
+  virtual int on_eof_row(ObExecContext &ctx) = 0;
+  virtual int on_sqc_init_fail(ObDfo &dfo, ObPxSqcMeta &sqc) = 0;
+  virtual int on_interrupted(ObExecContext &ctx, const ObInterruptCode &ic) = 0;
+  virtual int on_piece_msg(ObExecContext &ctx, const ObBarrierPieceMsg &pkt) = 0;
+  virtual int on_piece_msg(ObExecContext &ctx, const ObWinbufPieceMsg &pkt) = 0;
+  virtual int on_piece_msg(ObExecContext &ctx, const ObDynamicSamplePieceMsg &pkt) = 0;
+  virtual int on_piece_msg(ObExecContext &ctx, const ObRollupKeyPieceMsg &pkt) = 0;
+  virtual int on_piece_msg(ObExecContext &ctx, const ObRDWFPieceMsg &pkt) = 0;
+  virtual int on_piece_msg(ObExecContext &ctx, const ObInitChannelPieceMsg &pkt) = 0;
+  virtual int on_piece_msg(ObExecContext &ctx, const ObReportingWFPieceMsg &pkt) = 0;
+  virtual int on_piece_msg(ObExecContext &ctx, const ObOptStatsGatherPieceMsg &pkt) = 0;
+  virtual int on_piece_msg(ObExecContext &ctx, const SPWinFuncPXPieceMsg &pkt) = 0;
+  virtual int on_piece_msg(ObExecContext &ctx, const RDWinFuncPXPieceMsg &pkt) = 0;
+  virtual int on_piece_msg(ObExecContext &ctx, const ObJoinFilterCountRowPieceMsg &pkt) = 0;
+};
+
+class ObIPxSubCoordMsgProc
+{
+public:
+  // Received TransmitDataChannel message, notifying ObPxTransmit that it can send data now
+  virtual int on_transmit_data_ch_msg(
+      const ObPxTransmitDataChannelMsg &pkt) const = 0;
+  // Received ReceiveDataChannel message, notify ObPxReceive that it can receive data now
+  virtual int on_receive_data_ch_msg(
+      const ObPxReceiveDataChannelMsg &pkt) const = 0;
+  virtual int on_whole_msg(
+      const ObBarrierWholeMsg &pkt) const = 0;
+  virtual int on_whole_msg(
+      const ObWinbufWholeMsg &pkt) const = 0;
+  virtual int on_whole_msg(
+      const ObDynamicSampleWholeMsg &pkt) const = 0;
+  virtual int on_whole_msg(
+      const ObRollupKeyWholeMsg &pkt) const = 0;
+  virtual int on_whole_msg(
+      const ObRDWFWholeMsg &pkt) const = 0;
+  virtual int on_whole_msg(
+      const ObInitChannelWholeMsg &pkt) const = 0;
+  virtual int on_whole_msg(
+      const ObReportingWFWholeMsg &pkt) const = 0;
+  virtual int on_whole_msg(
+      const ObOptStatsGatherWholeMsg &pkt) const = 0;
+  virtual int on_whole_msg(
+      const SPWinFuncPXWholeMsg &pkt) const = 0;
+  virtual int on_whole_msg(
+      const RDWinFuncPXWholeMsg &pkt) const = 0;
+  virtual int on_whole_msg(
+      const ObJoinFilterCountRowWholeMsg &pkt) const = 0;
+  // SQC is interrupted
+  virtual int on_interrupted(const ObInterruptCode &ic) const = 0;
+};
+
+class ObPxRpcInitSqcArgs;
+class ObSqcCtx;
+class ObPxSubCoordMsgProc : public ObIPxSubCoordMsgProc
+{
+public:
+  ObPxSubCoordMsgProc(ObPxRpcInitSqcArgs &sqc_arg, ObSqcCtx &sqc_ctx)
+      : sqc_ctx_(sqc_ctx) { UNUSED(sqc_arg); }
+  ~ObPxSubCoordMsgProc() = default;
+  virtual int on_transmit_data_ch_msg(
+      const ObPxTransmitDataChannelMsg &pkt) const;
+  virtual int on_receive_data_ch_msg(
+      const ObPxReceiveDataChannelMsg &pkt) const;
+  virtual int on_interrupted(
+      const common::ObInterruptCode &pkt) const;
+  virtual int on_whole_msg(
+      const ObBarrierWholeMsg &pkt) const;
+  virtual int on_whole_msg(
+      const ObWinbufWholeMsg &pkt) const;
+  virtual int on_whole_msg(
+      const ObDynamicSampleWholeMsg &pkt) const;
+  virtual int on_whole_msg(
+      const ObRollupKeyWholeMsg &pkt) const;
+  virtual int on_whole_msg(
+      const ObRDWFWholeMsg &pkt) const;
+  virtual int on_whole_msg(
+      const ObInitChannelWholeMsg &pkt) const;
+  virtual int on_whole_msg(
+      const ObReportingWFWholeMsg &pkt) const;
+  virtual int on_whole_msg(
+      const ObOptStatsGatherWholeMsg &pkt) const;
+   virtual int on_whole_msg(
+      const SPWinFuncPXWholeMsg &pkt) const;
+   virtual int on_whole_msg(
+      const RDWinFuncPXWholeMsg &pkt) const;
+  virtual int on_whole_msg(
+      const ObJoinFilterCountRowWholeMsg &pkt) const;
+ private:
+   ObSqcCtx &sqc_ctx_;
+};
+
+}
+}
+
+
+#endif

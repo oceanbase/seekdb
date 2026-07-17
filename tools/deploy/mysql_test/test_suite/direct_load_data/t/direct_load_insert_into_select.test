@@ -1,0 +1,2021 @@
+--disable_query_log
+set @@session.explicit_defaults_for_timestamp=off;
+--enable_query_log
+# owner: jianming.cjq
+# owner group: Storage Group
+# description: direct load support 'INSERT INTO SELECT FROM' test
+
+--source mysql_test/test_suite/direct_load_data/include/copy_data_for_direct_load.inc
+connect (conn_query,$OBMYSQL_MS0,admin,$OBMYSQL_PWD,oceanbase,$OBMYSQL_PORT);
+--disable_warnings
+connection default;
+--enable_query_log
+use test;
+
+--source mysql_test/test_suite/direct_load_data/include/set_direct_load_allow_fallback_false.inc
+
+#===============================主键表=======================================
+
+##----------------------------------非PDML---------------------------------
+
+##TEST1 主键表，源表和目标表均为非分区表，非pdml
+## Create source table
+#--disable_warnings
+#drop table if exists lineitem;
+#--enable_warnings
+#create table lineitem (
+    #c01 int(255) NOT NULL,
+    #c02 numeric,
+    #c03 bit(64),
+    #c04 char(4),
+    #c05 binary(255),
+    #c06 varbinary(255),
+    #c07 datetime(6),
+    #c08 timestamp(6) NULL DEFAULT NULL,
+    #tchar char(64) not null,
+    #ttinyint tinyint,
+    #tsmallint smallint,
+    #tmediumint mediumint,
+    #tinteger integer,
+    #tbigint bigint,
+    #tfloat float,
+    #tdouble double,
+    #tdecimal decimal(10,5),
+    #tdate date,
+    #ttime time,
+    #tyear year,
+    #tdatetime datetime,
+    #ttimestamp timestamp NULL DEFAULT NULL,
+    #tvarchar varchar(128),
+    #ttinyint1 tinyint(1),
+    #ttinyint4 tinyint(4),
+    #tblob blob,
+    #tjson json,
+    #primary key (c01)
+#);
+#set @@ob_query_timeout = 1000000*60*60*10, @@ob_trx_timeout=1000000*60*60*10;
+## Start load data
+#--disable_query_log
+#eval load data /*+ direct(true,0) parallel(1) */ infile "$OBSERVER_DIR/$DATA_FOLDER_NAME/lineitem/lineitem-empty-table.tbl" into table lineitem fields terminated by '|' enclosed by '' lines starting by '' terminated by '\n';
+#--enable_query_log
+## Query table
+#select count(*) from lineitem;
+## Create target table
+#--disable_warnings
+#drop table if exists lineitem1;
+#--enable_warnings
+#create table lineitem1 (
+    #c01 int(255) NOT NULL,
+    #c02 numeric,
+    #c03 bit(64),
+    #c04 char(4),
+    #c05 binary(255),
+    #c06 varbinary(255),
+    #c07 datetime(6),
+    #c08 timestamp(6) NULL DEFAULT NULL,
+    #tchar char(64) not null,
+    #ttinyint tinyint,
+    #tsmallint smallint,
+    #tmediumint mediumint,
+    #tinteger integer,
+    #tbigint bigint,
+    #tfloat float,
+    #tdouble double,
+    #tdecimal decimal(10,5),
+    #tdate date,
+    #ttime time,
+    #tyear year,
+    #tdatetime datetime,
+    #ttimestamp timestamp NULL DEFAULT NULL,
+    #tvarchar varchar(128),
+    #ttinyint1 tinyint(1),
+    #ttinyint4 tinyint(4),
+    #tblob blob,
+    #tjson json,
+    #primary key (c01)
+#);
+## Start insert into select
+#insert /*+ append */ into lineitem1 select * from lineitem;
+## Query table
+#select count(*) from lineitem1;
+
+
+##TEST2 主键表，源表和目标表均为分区表，非pdml
+## Create source table
+#--disable_warnings
+#drop table if exists lineitem;
+#--enable_warnings
+#create table lineitem (
+    #c01 int(255) NOT NULL,
+    #c02 numeric,
+    #c03 bit(64),
+    #c04 char(4),
+    #c05 binary(255),
+    #c06 varbinary(255),
+    #c07 datetime(6),
+    #c08 timestamp(6) NULL DEFAULT NULL,
+    #tchar char(64) not null,
+    #ttinyint tinyint,
+    #tsmallint smallint,
+    #tmediumint mediumint,
+    #tinteger integer,
+    #tbigint bigint,
+    #tfloat float,
+    #tdouble double,
+    #tdecimal decimal(10,5),
+    #tdate date,
+    #ttime time,
+    #tyear year,
+    #tdatetime datetime,
+    #ttimestamp timestamp NULL DEFAULT NULL,
+    #tvarchar varchar(128),
+    #ttinyint1 tinyint(1),
+    #ttinyint4 tinyint(4),
+    #tblob blob,
+    #tjson json,
+    #primary key (c01)
+#) partition by hash(c01) partitions 10;
+#set @@ob_query_timeout = 1000000*60*60*10, @@ob_trx_timeout=1000000*60*60*10;
+## Start load data
+#--disable_query_log
+#eval load data /*+ direct(true,0) parallel(1) */ infile "$OBSERVER_DIR/$DATA_FOLDER_NAME/lineitem/lineitem-empty-table.tbl" into table lineitem fields terminated by '|' enclosed by '' lines starting by '' terminated by '\n';
+#--enable_query_log
+## Query table
+#select count(*) from lineitem;
+## Create target table
+#--disable_warnings
+#drop table if exists lineitem1;
+#--enable_warnings
+#create table lineitem1 (
+    #c01 int(255) NOT NULL,
+    #c02 numeric,
+    #c03 bit(64),
+    #c04 char(4),
+    #c05 binary(255),
+    #c06 varbinary(255),
+    #c07 datetime(6),
+    #c08 timestamp(6) NULL DEFAULT NULL,
+    #tchar char(64) not null,
+    #ttinyint tinyint,
+    #tsmallint smallint,
+    #tmediumint mediumint,
+    #tinteger integer,
+    #tbigint bigint,
+    #tfloat float,
+    #tdouble double,
+    #tdecimal decimal(10,5),
+    #tdate date,
+    #ttime time,
+    #tyear year,
+    #tdatetime datetime,
+    #ttimestamp timestamp NULL DEFAULT NULL,
+    #tvarchar varchar(128),
+    #ttinyint1 tinyint(1),
+    #ttinyint4 tinyint(4),
+    #tblob blob,
+    #tjson json,
+    #primary key (c01)
+#) partition by hash(c01) partitions 10;
+## Start insert into select
+#insert /*+ append */ into lineitem1 select * from lineitem;
+## Query table
+#select count(*) from lineitem1;
+
+
+##TEST3 主键表，源表为分区表，目标表为非分区表，非pdml
+## Create source table
+#--disable_warnings
+#drop table if exists lineitem;
+#--enable_warnings
+#create table lineitem (
+    #c01 int(255) NOT NULL,
+    #c02 numeric,
+    #c03 bit(64),
+    #c04 char(4),
+    #c05 binary(255),
+    #c06 varbinary(255),
+    #c07 datetime(6),
+    #c08 timestamp(6) NULL DEFAULT NULL,
+    #tchar char(64) not null,
+    #ttinyint tinyint,
+    #tsmallint smallint,
+    #tmediumint mediumint,
+    #tinteger integer,
+    #tbigint bigint,
+    #tfloat float,
+    #tdouble double,
+    #tdecimal decimal(10,5),
+    #tdate date,
+    #ttime time,
+    #tyear year,
+    #tdatetime datetime,
+    #ttimestamp timestamp NULL DEFAULT NULL,
+    #tvarchar varchar(128),
+    #ttinyint1 tinyint(1),
+    #ttinyint4 tinyint(4),
+    #tblob blob,
+    #tjson json,
+    #primary key (c01)
+#) partition by hash(c01) partitions 10;
+#set @@ob_query_timeout = 1000000*60*60*10, @@ob_trx_timeout=1000000*60*60*10;
+## Start load data
+#--disable_query_log
+#eval load data /*+ direct(true,0) parallel(1) */ infile "$OBSERVER_DIR/$DATA_FOLDER_NAME/lineitem/lineitem-empty-table.tbl" into table lineitem fields terminated by '|' enclosed by '' lines starting by '' terminated by '\n';
+#--enable_query_log
+## Query table
+#select count(*) from lineitem;
+## Create target table
+#--disable_warnings
+#drop table if exists lineitem1;
+#--enable_warnings
+#create table lineitem1 (
+    #c01 int(255) NOT NULL,
+    #c02 numeric,
+    #c03 bit(64),
+    #c04 char(4),
+    #c05 binary(255),
+    #c06 varbinary(255),
+    #c07 datetime(6),
+    #c08 timestamp(6) NULL DEFAULT NULL,
+    #tchar char(64) not null,
+    #ttinyint tinyint,
+    #tsmallint smallint,
+    #tmediumint mediumint,
+    #tinteger integer,
+    #tbigint bigint,
+    #tfloat float,
+    #tdouble double,
+    #tdecimal decimal(10,5),
+    #tdate date,
+    #ttime time,
+    #tyear year,
+    #tdatetime datetime,
+    #ttimestamp timestamp NULL DEFAULT NULL,
+    #tvarchar varchar(128),
+    #ttinyint1 tinyint(1),
+    #ttinyint4 tinyint(4),
+    #tblob blob,
+    #tjson json,
+    #primary key (c01)
+#);
+## Start insert into select
+#insert /*+ append */ into lineitem1 select * from lineitem;
+## Query table
+#select count(*) from lineitem1;
+
+
+##TEST4 主键表，源表为非分区表，目标表为非分区表，非pdml
+## Create source table
+#--disable_warnings
+#drop table if exists lineitem;
+#--enable_warnings
+#create table lineitem (
+    #c01 int(255) NOT NULL,
+    #c02 numeric,
+    #c03 bit(64),
+    #c04 char(4),
+    #c05 binary(255),
+    #c06 varbinary(255),
+    #c07 datetime(6),
+    #c08 timestamp(6) NULL DEFAULT NULL,
+    #tchar char(64) not null,
+    #ttinyint tinyint,
+    #tsmallint smallint,
+    #tmediumint mediumint,
+    #tinteger integer,
+    #tbigint bigint,
+    #tfloat float,
+    #tdouble double,
+    #tdecimal decimal(10,5),
+    #tdate date,
+    #ttime time,
+    #tyear year,
+    #tdatetime datetime,
+    #ttimestamp timestamp NULL DEFAULT NULL,
+    #tvarchar varchar(128),
+    #ttinyint1 tinyint(1),
+    #ttinyint4 tinyint(4),
+    #tblob blob,
+    #tjson json,
+    #primary key (c01)
+#);
+#set @@ob_query_timeout = 1000000*60*60*10, @@ob_trx_timeout=1000000*60*60*10;
+## Start load data
+#--disable_query_log
+#eval load data /*+ direct(true,0) parallel(1) */ infile "$OBSERVER_DIR/$DATA_FOLDER_NAME/lineitem/lineitem-empty-table.tbl" into table lineitem fields terminated by '|' enclosed by '' lines starting by '' terminated by '\n';
+#--enable_query_log
+## Query table
+#select count(*) from lineitem;
+## Create target table
+#--disable_warnings
+#drop table if exists lineitem1;
+#--enable_warnings
+#create table lineitem1 (
+    #c01 int(255) NOT NULL,
+    #c02 numeric,
+    #c03 bit(64),
+    #c04 char(4),
+    #c05 binary(255),
+    #c06 varbinary(255),
+    #c07 datetime(6),
+    #c08 timestamp(6) NULL DEFAULT NULL,
+    #tchar char(64) not null,
+    #ttinyint tinyint,
+    #tsmallint smallint,
+    #tmediumint mediumint,
+    #tinteger integer,
+    #tbigint bigint,
+    #tfloat float,
+    #tdouble double,
+    #tdecimal decimal(10,5),
+    #tdate date,
+    #ttime time,
+    #tyear year,
+    #tdatetime datetime,
+    #ttimestamp timestamp NULL DEFAULT NULL,
+    #tvarchar varchar(128),
+    #ttinyint1 tinyint(1),
+    #ttinyint4 tinyint(4),
+    #tblob blob,
+    #tjson json,
+    #primary key (c01)
+#) partition by hash(c01) partitions 10;
+## Start insert into select
+#insert /*+ append */ into lineitem1 select * from lineitem;
+## Query table
+#select count(*) from lineitem1;
+
+
+#-----------------------------------PDML--------------------------------
+
+#TEST5 主键表，源表和目标表均为非分区表，pdml
+# Create source table
+--disable_warnings
+drop table if exists lineitem;
+--enable_warnings
+create table lineitem (
+    c01 int(255) NOT NULL,
+    c02 numeric,
+    c03 bit(64),
+    c04 char(4),
+    c05 binary(255),
+    c06 varbinary(255),
+    c07 datetime(6),
+    c08 timestamp(6) NULL DEFAULT NULL,
+    tchar char(64) not null,
+    ttinyint tinyint,
+    tsmallint smallint,
+    tmediumint mediumint,
+    tinteger integer,
+    tbigint bigint,
+    tfloat float,
+    tdouble double,
+    tdecimal decimal(10,5),
+    tdate date,
+    ttime time,
+    tyear year,
+    tdatetime datetime,
+    ttimestamp timestamp NULL DEFAULT NULL,
+    tvarchar varchar(128),
+    ttinyint1 tinyint(1),
+    ttinyint4 tinyint(4),
+    tblob blob,
+    tjson json,
+    primary key (c01)
+);
+set @@ob_query_timeout = 1000000*60*60*10, @@ob_trx_timeout=1000000*60*60*10;
+# Start load data
+--disable_query_log
+eval load data /*+ direct(true,0) parallel(1) */ infile "$OBSERVER_DIR/$DATA_FOLDER_NAME/lineitem/lineitem-empty-table.tbl" into table lineitem fields terminated by '|' enclosed by '' lines starting by '' terminated by '\n';
+--enable_query_log
+# Query table
+select count(*) from lineitem;
+# Create target table
+--disable_warnings
+drop table if exists lineitem1;
+--enable_warnings
+create table lineitem1 (
+    c01 int(255) NOT NULL,
+    c02 numeric,
+    c03 bit(64),
+    c04 char(4),
+    c05 binary(255),
+    c06 varbinary(255),
+    c07 datetime(6),
+    c08 timestamp(6) NULL DEFAULT NULL,
+    tchar char(64) not null,
+    ttinyint tinyint,
+    tsmallint smallint,
+    tmediumint mediumint,
+    tinteger integer,
+    tbigint bigint,
+    tfloat float,
+    tdouble double,
+    tdecimal decimal(10,5),
+    tdate date,
+    ttime time,
+    tyear year,
+    tdatetime datetime,
+    ttimestamp timestamp NULL DEFAULT NULL,
+    tvarchar varchar(128),
+    ttinyint1 tinyint(1),
+    ttinyint4 tinyint(4),
+    tblob blob,
+    tjson json,
+    primary key (c01)
+);
+# Start insert into select
+insert /*+ enable_parallel_dml parallel(3) append */ into lineitem1 select * from lineitem;
+# Query table
+select count(*) from lineitem1;
+
+
+#TEST6 主键表，源表和目标表均为分区表，pdml
+# Create source table
+--disable_warnings
+drop table if exists lineitem;
+--enable_warnings
+create table lineitem (
+    c01 int(255) NOT NULL,
+    c02 numeric,
+    c03 bit(64),
+    c04 char(4),
+    c05 binary(255),
+    c06 varbinary(255),
+    c07 datetime(6),
+    c08 timestamp(6) NULL DEFAULT NULL,
+    tchar char(64) not null,
+    ttinyint tinyint,
+    tsmallint smallint,
+    tmediumint mediumint,
+    tinteger integer,
+    tbigint bigint,
+    tfloat float,
+    tdouble double,
+    tdecimal decimal(10,5),
+    tdate date,
+    ttime time,
+    tyear year,
+    tdatetime datetime,
+    ttimestamp timestamp NULL DEFAULT NULL,
+    tvarchar varchar(128),
+    ttinyint1 tinyint(1),
+    ttinyint4 tinyint(4),
+    tblob blob,
+    tjson json,
+    primary key (c01)
+) partition by hash(c01) partitions 10;
+set @@ob_query_timeout = 1000000*60*60*10, @@ob_trx_timeout=1000000*60*60*10;
+# Start load data
+--disable_query_log
+eval load data /*+ direct(true,0) parallel(1) */ infile "$OBSERVER_DIR/$DATA_FOLDER_NAME/lineitem/lineitem-empty-table.tbl" into table lineitem fields terminated by '|' enclosed by '' lines starting by '' terminated by '\n';
+--enable_query_log
+# Query table
+select count(*) from lineitem;
+# Create target table
+--disable_warnings
+drop table if exists lineitem1;
+--enable_warnings
+create table lineitem1 (
+    c01 int(255) NOT NULL,
+    c02 numeric,
+    c03 bit(64),
+    c04 char(4),
+    c05 binary(255),
+    c06 varbinary(255),
+    c07 datetime(6),
+    c08 timestamp(6) NULL DEFAULT NULL,
+    tchar char(64) not null,
+    ttinyint tinyint,
+    tsmallint smallint,
+    tmediumint mediumint,
+    tinteger integer,
+    tbigint bigint,
+    tfloat float,
+    tdouble double,
+    tdecimal decimal(10,5),
+    tdate date,
+    ttime time,
+    tyear year,
+    tdatetime datetime,
+    ttimestamp timestamp NULL DEFAULT NULL,
+    tvarchar varchar(128),
+    ttinyint1 tinyint(1),
+    ttinyint4 tinyint(4),
+    tblob blob,
+    tjson json,
+    primary key (c01)
+) partition by hash(c01) partitions 10;
+# Start insert into select
+insert /*+ enable_parallel_dml parallel(3) append */ into lineitem1 select * from lineitem;
+# Query table
+select count(*) from lineitem1;
+
+
+#TEST7 主键表，源表为分区表，目标表为非分区表，pdml
+# Create source table
+--disable_warnings
+drop table if exists lineitem;
+--enable_warnings
+create table lineitem (
+    c01 int(255) NOT NULL,
+    c02 numeric,
+    c03 bit(64),
+    c04 char(4),
+    c05 binary(255),
+    c06 varbinary(255),
+    c07 datetime(6),
+    c08 timestamp(6) NULL DEFAULT NULL,
+    tchar char(64) not null,
+    ttinyint tinyint,
+    tsmallint smallint,
+    tmediumint mediumint,
+    tinteger integer,
+    tbigint bigint,
+    tfloat float,
+    tdouble double,
+    tdecimal decimal(10,5),
+    tdate date,
+    ttime time,
+    tyear year,
+    tdatetime datetime,
+    ttimestamp timestamp NULL DEFAULT NULL,
+    tvarchar varchar(128),
+    ttinyint1 tinyint(1),
+    ttinyint4 tinyint(4),
+    tblob blob,
+    tjson json,
+    primary key (c01)
+) partition by hash(c01) partitions 10;
+set @@ob_query_timeout = 1000000*60*60*10, @@ob_trx_timeout=1000000*60*60*10;
+# Start load data
+--disable_query_log
+eval load data /*+ direct(true,0) parallel(1) */ infile "$OBSERVER_DIR/$DATA_FOLDER_NAME/lineitem/lineitem-empty-table.tbl" into table lineitem fields terminated by '|' enclosed by '' lines starting by '' terminated by '\n';
+--enable_query_log
+# Query table
+select count(*) from lineitem;
+# Create target table
+--disable_warnings
+drop table if exists lineitem1;
+--enable_warnings
+create table lineitem1 (
+    c01 int(255) NOT NULL,
+    c02 numeric,
+    c03 bit(64),
+    c04 char(4),
+    c05 binary(255),
+    c06 varbinary(255),
+    c07 datetime(6),
+    c08 timestamp(6) NULL DEFAULT NULL,
+    tchar char(64) not null,
+    ttinyint tinyint,
+    tsmallint smallint,
+    tmediumint mediumint,
+    tinteger integer,
+    tbigint bigint,
+    tfloat float,
+    tdouble double,
+    tdecimal decimal(10,5),
+    tdate date,
+    ttime time,
+    tyear year,
+    tdatetime datetime,
+    ttimestamp timestamp NULL DEFAULT NULL,
+    tvarchar varchar(128),
+    ttinyint1 tinyint(1),
+    ttinyint4 tinyint(4),
+    tblob blob,
+    tjson json,
+    primary key (c01)
+);
+# Start insert into select
+insert /*+ enable_parallel_dml parallel(3) append */ into lineitem1 select * from lineitem;
+# Query table
+select count(*) from lineitem1;
+
+
+#TEST8 主键表，源表为非分区表，目标表为分区表，pdml
+# Create source table
+--disable_warnings
+drop table if exists lineitem;
+--enable_warnings
+create table lineitem (
+    c01 int(255) NOT NULL,
+    c02 numeric,
+    c03 bit(64),
+    c04 char(4),
+    c05 binary(255),
+    c06 varbinary(255),
+    c07 datetime(6),
+    c08 timestamp(6) NULL DEFAULT NULL,
+    tchar char(64) not null,
+    ttinyint tinyint,
+    tsmallint smallint,
+    tmediumint mediumint,
+    tinteger integer,
+    tbigint bigint,
+    tfloat float,
+    tdouble double,
+    tdecimal decimal(10,5),
+    tdate date,
+    ttime time,
+    tyear year,
+    tdatetime datetime,
+    ttimestamp timestamp NULL DEFAULT NULL,
+    tvarchar varchar(128),
+    ttinyint1 tinyint(1),
+    ttinyint4 tinyint(4),
+    tblob blob,
+    tjson json,
+    primary key (c01)
+);
+set @@ob_query_timeout = 1000000*60*60*10, @@ob_trx_timeout=1000000*60*60*10;
+# Start load data
+--disable_query_log
+eval load data /*+ direct(true,0) parallel(1) */ infile "$OBSERVER_DIR/$DATA_FOLDER_NAME/lineitem/lineitem-empty-table.tbl" into table lineitem fields terminated by '|' enclosed by '' lines starting by '' terminated by '\n';
+--enable_query_log
+# Query table
+select count(*) from lineitem;
+# Create target table
+--disable_warnings
+drop table if exists lineitem1;
+--enable_warnings
+create table lineitem1 (
+    c01 int(255) NOT NULL,
+    c02 numeric,
+    c03 bit(64),
+    c04 char(4),
+    c05 binary(255),
+    c06 varbinary(255),
+    c07 datetime(6),
+    c08 timestamp(6) NULL DEFAULT NULL,
+    tchar char(64) not null,
+    ttinyint tinyint,
+    tsmallint smallint,
+    tmediumint mediumint,
+    tinteger integer,
+    tbigint bigint,
+    tfloat float,
+    tdouble double,
+    tdecimal decimal(10,5),
+    tdate date,
+    ttime time,
+    tyear year,
+    tdatetime datetime,
+    ttimestamp timestamp NULL DEFAULT NULL,
+    tvarchar varchar(128),
+    ttinyint1 tinyint(1),
+    ttinyint4 tinyint(4),
+    tblob blob,
+    tjson json,
+    primary key (c01)
+) partition by hash(c01) partitions 10;
+# Start insert into select
+insert /*+ enable_parallel_dml parallel(3) append */ into lineitem1 select * from lineitem;
+# Query table
+select count(*) from lineitem1;
+
+
+
+#===============================无主键表=======================================
+
+##----------------------------------非PDML---------------------------------
+
+##TEST9 无主键表，源表和目标表均为非分区表，非pdml
+## Create source table
+#--disable_warnings
+#drop table if exists lineitem;
+#--enable_warnings
+#create table lineitem (
+    #c01 int(255) NOT NULL,
+    #c02 numeric,
+    #c03 bit(64),
+    #c04 char(4),
+    #c05 binary(255),
+    #c06 varbinary(255),
+    #c07 datetime(6),
+    #c08 timestamp(6) NULL DEFAULT NULL,
+    #tchar char(64) not null,
+    #ttinyint tinyint,
+    #tsmallint smallint,
+    #tmediumint mediumint,
+    #tinteger integer,
+    #tbigint bigint,
+    #tfloat float,
+    #tdouble double,
+    #tdecimal decimal(10,5),
+    #tdate date,
+    #ttime time,
+    #tyear year,
+    #tdatetime datetime,
+    #ttimestamp timestamp NULL DEFAULT NULL,
+    #tvarchar varchar(128),
+    #ttinyint1 tinyint(1),
+    #ttinyint4 tinyint(4),
+    #tblob blob,
+    #tjson json
+#);
+#set @@ob_query_timeout = 1000000*60*60*10, @@ob_trx_timeout=1000000*60*60*10;
+## Start load data
+#--disable_query_log
+#eval load data /*+ direct(true,0) parallel(1) */ infile "$OBSERVER_DIR/$DATA_FOLDER_NAME/lineitem/lineitem-heap-table.tbl" into table lineitem fields terminated by '|' enclosed by '' lines starting by '' terminated by '\n';
+#--enable_query_log
+## Query table
+#select count(*) from lineitem;
+## Create target table
+#--disable_warnings
+#drop table if exists lineitem1;
+#--enable_warnings
+#create table lineitem1 (
+    #c01 int(255) NOT NULL,
+    #c02 numeric,
+    #c03 bit(64),
+    #c04 char(4),
+    #c05 binary(255),
+    #c06 varbinary(255),
+    #c07 datetime(6),
+    #c08 timestamp(6) NULL DEFAULT NULL,
+    #tchar char(64) not null,
+    #ttinyint tinyint,
+    #tsmallint smallint,
+    #tmediumint mediumint,
+    #tinteger integer,
+    #tbigint bigint,
+    #tfloat float,
+    #tdouble double,
+    #tdecimal decimal(10,5),
+    #tdate date,
+    #ttime time,
+    #tyear year,
+    #tdatetime datetime,
+    #ttimestamp timestamp NULL DEFAULT NULL,
+    #tvarchar varchar(128),
+    #ttinyint1 tinyint(1),
+    #ttinyint4 tinyint(4),
+    #tblob blob,
+    #tjson json
+#);
+## Start insert into select
+#insert /*+ append */ into lineitem1 select * from lineitem;
+## Query table
+#select count(*) from lineitem1;
+
+
+##TEST10 无主键表，源表和目标表均为分区表，非pdml
+## Create source table
+#--disable_warnings
+#drop table if exists lineitem;
+#--enable_warnings
+#create table lineitem (
+    #c01 int(255) NOT NULL,
+    #c02 numeric,
+    #c03 bit(64),
+    #c04 char(4),
+    #c05 binary(255),
+    #c06 varbinary(255),
+    #c07 datetime(6),
+    #c08 timestamp(6) NULL DEFAULT NULL,
+    #tchar char(64) not null,
+    #ttinyint tinyint,
+    #tsmallint smallint,
+    #tmediumint mediumint,
+    #tinteger integer,
+    #tbigint bigint,
+    #tfloat float,
+    #tdouble double,
+    #tdecimal decimal(10,5),
+    #tdate date,
+    #ttime time,
+    #tyear year,
+    #tdatetime datetime,
+    #ttimestamp timestamp NULL DEFAULT NULL,
+    #tvarchar varchar(128),
+    #ttinyint1 tinyint(1),
+    #ttinyint4 tinyint(4),
+    #tblob blob,
+    #tjson json
+#) partition by hash(c01) partitions 10;
+#set @@ob_query_timeout = 1000000*60*60*10, @@ob_trx_timeout=1000000*60*60*10;
+## Start load data
+#--disable_query_log
+#eval load data /*+ direct(true,0) parallel(1) */ infile "$OBSERVER_DIR/$DATA_FOLDER_NAME/lineitem/lineitem-heap-table.tbl" into table lineitem fields terminated by '|' enclosed by '' lines starting by '' terminated by '\n';
+#--enable_query_log
+## Query table
+#select count(*) from lineitem;
+## Create target table
+#--disable_warnings
+#drop table if exists lineitem1;
+#--enable_warnings
+#create table lineitem1 (
+    #c01 int(255) NOT NULL,
+    #c02 numeric,
+    #c03 bit(64),
+    #c04 char(4),
+    #c05 binary(255),
+    #c06 varbinary(255),
+    #c07 datetime(6),
+    #c08 timestamp(6) NULL DEFAULT NULL,
+    #tchar char(64) not null,
+    #ttinyint tinyint,
+    #tsmallint smallint,
+    #tmediumint mediumint,
+    #tinteger integer,
+    #tbigint bigint,
+    #tfloat float,
+    #tdouble double,
+    #tdecimal decimal(10,5),
+    #tdate date,
+    #ttime time,
+    #tyear year,
+    #tdatetime datetime,
+    #ttimestamp timestamp NULL DEFAULT NULL,
+    #tvarchar varchar(128),
+    #ttinyint1 tinyint(1),
+    #ttinyint4 tinyint(4),
+    #tblob blob,
+    #tjson json
+#) partition by hash(c01) partitions 10;
+## Start insert into select
+#insert /*+ append */ into lineitem1 select * from lineitem;
+## Query table
+#select count(*) from lineitem1;
+
+
+##TEST11 无主键表，源表为分区表，目标表为非分区表，非pdml
+## Create source table
+#--disable_warnings
+#drop table if exists lineitem;
+#--enable_warnings
+#create table lineitem (
+    #c01 int(255) NOT NULL,
+    #c02 numeric,
+    #c03 bit(64),
+    #c04 char(4),
+    #c05 binary(255),
+    #c06 varbinary(255),
+    #c07 datetime(6),
+    #c08 timestamp(6) NULL DEFAULT NULL,
+    #tchar char(64) not null,
+    #ttinyint tinyint,
+    #tsmallint smallint,
+    #tmediumint mediumint,
+    #tinteger integer,
+    #tbigint bigint,
+    #tfloat float,
+    #tdouble double,
+    #tdecimal decimal(10,5),
+    #tdate date,
+    #ttime time,
+    #tyear year,
+    #tdatetime datetime,
+    #ttimestamp timestamp NULL DEFAULT NULL,
+    #tvarchar varchar(128),
+    #ttinyint1 tinyint(1),
+    #ttinyint4 tinyint(4),
+    #tblob blob,
+    #tjson json
+#) partition by hash(c01) partitions 10;
+#set @@ob_query_timeout = 1000000*60*60*10, @@ob_trx_timeout=1000000*60*60*10;
+## Start load data
+#--disable_query_log
+#eval load data /*+ direct(true,0) parallel(1) */ infile "$OBSERVER_DIR/$DATA_FOLDER_NAME/lineitem/lineitem-heap-table.tbl" into table lineitem fields terminated by '|' enclosed by '' lines starting by '' terminated by '\n';
+#--enable_query_log
+## Query table
+#select count(*) from lineitem;
+## Create target table
+#--disable_warnings
+#drop table if exists lineitem1;
+#--enable_warnings
+#create table lineitem1 (
+    #c01 int(255) NOT NULL,
+    #c02 numeric,
+    #c03 bit(64),
+    #c04 char(4),
+    #c05 binary(255),
+    #c06 varbinary(255),
+    #c07 datetime(6),
+    #c08 timestamp(6) NULL DEFAULT NULL,
+    #tchar char(64) not null,
+    #ttinyint tinyint,
+    #tsmallint smallint,
+    #tmediumint mediumint,
+    #tinteger integer,
+    #tbigint bigint,
+    #tfloat float,
+    #tdouble double,
+    #tdecimal decimal(10,5),
+    #tdate date,
+    #ttime time,
+    #tyear year,
+    #tdatetime datetime,
+    #ttimestamp timestamp NULL DEFAULT NULL,
+    #tvarchar varchar(128),
+    #ttinyint1 tinyint(1),
+    #ttinyint4 tinyint(4),
+    #tblob blob,
+    #tjson json
+#);
+## Start insert into select
+#insert /*+ append */ into lineitem1 select * from lineitem;
+## Query table
+#select count(*) from lineitem1;
+
+
+##TEST12 无主键表，源表为非分区表，目标表为非分区表，非pdml
+## Create source table
+#--disable_warnings
+#drop table if exists lineitem;
+#--enable_warnings
+#create table lineitem (
+    #c01 int(255) NOT NULL,
+    #c02 numeric,
+    #c03 bit(64),
+    #c04 char(4),
+    #c05 binary(255),
+    #c06 varbinary(255),
+    #c07 datetime(6),
+    #c08 timestamp(6) NULL DEFAULT NULL,
+    #tchar char(64) not null,
+    #ttinyint tinyint,
+    #tsmallint smallint,
+    #tmediumint mediumint,
+    #tinteger integer,
+    #tbigint bigint,
+    #tfloat float,
+    #tdouble double,
+    #tdecimal decimal(10,5),
+    #tdate date,
+    #ttime time,
+    #tyear year,
+    #tdatetime datetime,
+    #ttimestamp timestamp NULL DEFAULT NULL,
+    #tvarchar varchar(128),
+    #ttinyint1 tinyint(1),
+    #ttinyint4 tinyint(4),
+    #tblob blob,
+    #tjson json
+#);
+#set @@ob_query_timeout = 1000000*60*60*10, @@ob_trx_timeout=1000000*60*60*10;
+## Start load data
+#--disable_query_log
+#eval load data /*+ direct(true,0) parallel(1) */ infile "$OBSERVER_DIR/$DATA_FOLDER_NAME/lineitem/lineitem-heap-table.tbl" into table lineitem fields terminated by '|' enclosed by '' lines starting by '' terminated by '\n';
+#--enable_query_log
+## Query table
+#select count(*) from lineitem;
+## Create target table
+#--disable_warnings
+#drop table if exists lineitem1;
+#--enable_warnings
+#create table lineitem1 (
+    #c01 int(255) NOT NULL,
+    #c02 numeric,
+    #c03 bit(64),
+    #c04 char(4),
+    #c05 binary(255),
+    #c06 varbinary(255),
+    #c07 datetime(6),
+    #c08 timestamp(6) NULL DEFAULT NULL,
+    #tchar char(64) not null,
+    #ttinyint tinyint,
+    #tsmallint smallint,
+    #tmediumint mediumint,
+    #tinteger integer,
+    #tbigint bigint,
+    #tfloat float,
+    #tdouble double,
+    #tdecimal decimal(10,5),
+    #tdate date,
+    #ttime time,
+    #tyear year,
+    #tdatetime datetime,
+    #ttimestamp timestamp NULL DEFAULT NULL,
+    #tvarchar varchar(128),
+    #ttinyint1 tinyint(1),
+    #ttinyint4 tinyint(4),
+    #tblob blob,
+    #tjson json
+#) partition by hash(c01) partitions 10;
+## Start insert into select
+#insert /*+ append */ into lineitem1 select * from lineitem;
+## Query table
+#select count(*) from lineitem1;
+
+
+#-----------------------------------PDML--------------------------------
+
+#TEST13 无主键表，源表和目标表均为非分区表，pdml
+# Create source table
+--disable_warnings
+drop table if exists lineitem;
+--enable_warnings
+create table lineitem (
+    c01 int(255) NOT NULL,
+    c02 numeric,
+    c03 bit(64),
+    c04 char(4),
+    c05 binary(255),
+    c06 varbinary(255),
+    c07 datetime(6),
+    c08 timestamp(6) NULL DEFAULT NULL,
+    tchar char(64) not null,
+    ttinyint tinyint,
+    tsmallint smallint,
+    tmediumint mediumint,
+    tinteger integer,
+    tbigint bigint,
+    tfloat float,
+    tdouble double,
+    tdecimal decimal(10,5),
+    tdate date,
+    ttime time,
+    tyear year,
+    tdatetime datetime,
+    ttimestamp timestamp NULL DEFAULT NULL,
+    tvarchar varchar(128),
+    ttinyint1 tinyint(1),
+    ttinyint4 tinyint(4),
+    tblob blob,
+    tjson json
+);
+set @@ob_query_timeout = 1000000*60*60*10, @@ob_trx_timeout=1000000*60*60*10;
+# Start load data
+--disable_query_log
+eval load data /*+ direct(true,0) parallel(1) */ infile "$OBSERVER_DIR/$DATA_FOLDER_NAME/lineitem/lineitem-heap-table.tbl" into table lineitem fields terminated by '|' enclosed by '' lines starting by '' terminated by '\n';
+--enable_query_log
+# Query table
+select count(*) from lineitem;
+# Create target table
+--disable_warnings
+drop table if exists lineitem1;
+--enable_warnings
+create table lineitem1 (
+    c01 int(255) NOT NULL,
+    c02 numeric,
+    c03 bit(64),
+    c04 char(4),
+    c05 binary(255),
+    c06 varbinary(255),
+    c07 datetime(6),
+    c08 timestamp(6) NULL DEFAULT NULL,
+    tchar char(64) not null,
+    ttinyint tinyint,
+    tsmallint smallint,
+    tmediumint mediumint,
+    tinteger integer,
+    tbigint bigint,
+    tfloat float,
+    tdouble double,
+    tdecimal decimal(10,5),
+    tdate date,
+    ttime time,
+    tyear year,
+    tdatetime datetime,
+    ttimestamp timestamp NULL DEFAULT NULL,
+    tvarchar varchar(128),
+    ttinyint1 tinyint(1),
+    ttinyint4 tinyint(4),
+    tblob blob,
+    tjson json
+);
+# Start insert into select
+insert /*+ enable_parallel_dml parallel(3) append */ into lineitem1 select * from lineitem;
+# Query table
+select count(*) from lineitem1;
+
+
+#TEST14 无主键表，源表和目标表均为分区表，pdml
+# Create source table
+--disable_warnings
+drop table if exists lineitem;
+--enable_warnings
+create table lineitem (
+    c01 int(255) NOT NULL,
+    c02 numeric,
+    c03 bit(64),
+    c04 char(4),
+    c05 binary(255),
+    c06 varbinary(255),
+    c07 datetime(6),
+    c08 timestamp(6) NULL DEFAULT NULL,
+    tchar char(64) not null,
+    ttinyint tinyint,
+    tsmallint smallint,
+    tmediumint mediumint,
+    tinteger integer,
+    tbigint bigint,
+    tfloat float,
+    tdouble double,
+    tdecimal decimal(10,5),
+    tdate date,
+    ttime time,
+    tyear year,
+    tdatetime datetime,
+    ttimestamp timestamp NULL DEFAULT NULL,
+    tvarchar varchar(128),
+    ttinyint1 tinyint(1),
+    ttinyint4 tinyint(4),
+    tblob blob,
+    tjson json
+) partition by hash(c01) partitions 10;
+set @@ob_query_timeout = 1000000*60*60*10, @@ob_trx_timeout=1000000*60*60*10;
+# Start load data
+--disable_query_log
+eval load data /*+ direct(true,0) parallel(1) */ infile "$OBSERVER_DIR/$DATA_FOLDER_NAME/lineitem/lineitem-heap-table.tbl" into table lineitem fields terminated by '|' enclosed by '' lines starting by '' terminated by '\n';
+--enable_query_log
+# Query table
+select count(*) from lineitem;
+# Create target table
+--disable_warnings
+drop table if exists lineitem1;
+--enable_warnings
+create table lineitem1 (
+    c01 int(255) NOT NULL,
+    c02 numeric,
+    c03 bit(64),
+    c04 char(4),
+    c05 binary(255),
+    c06 varbinary(255),
+    c07 datetime(6),
+    c08 timestamp(6) NULL DEFAULT NULL,
+    tchar char(64) not null,
+    ttinyint tinyint,
+    tsmallint smallint,
+    tmediumint mediumint,
+    tinteger integer,
+    tbigint bigint,
+    tfloat float,
+    tdouble double,
+    tdecimal decimal(10,5),
+    tdate date,
+    ttime time,
+    tyear year,
+    tdatetime datetime,
+    ttimestamp timestamp NULL DEFAULT NULL,
+    tvarchar varchar(128),
+    ttinyint1 tinyint(1),
+    ttinyint4 tinyint(4),
+    tblob blob,
+    tjson json
+) partition by hash(c01) partitions 10;
+# Start insert into select
+insert /*+ enable_parallel_dml parallel(3) append */ into lineitem1 select * from lineitem;
+# Query table
+select count(*) from lineitem1;
+
+
+#TEST15 无主键表，源表为分区表，目标表为非分区表，pdml
+# Create source table
+--disable_warnings
+drop table if exists lineitem;
+--enable_warnings
+create table lineitem (
+    c01 int(255) NOT NULL,
+    c02 numeric,
+    c03 bit(64),
+    c04 char(4),
+    c05 binary(255),
+    c06 varbinary(255),
+    c07 datetime(6),
+    c08 timestamp(6) NULL DEFAULT NULL,
+    tchar char(64) not null,
+    ttinyint tinyint,
+    tsmallint smallint,
+    tmediumint mediumint,
+    tinteger integer,
+    tbigint bigint,
+    tfloat float,
+    tdouble double,
+    tdecimal decimal(10,5),
+    tdate date,
+    ttime time,
+    tyear year,
+    tdatetime datetime,
+    ttimestamp timestamp NULL DEFAULT NULL,
+    tvarchar varchar(128),
+    ttinyint1 tinyint(1),
+    ttinyint4 tinyint(4),
+    tblob blob,
+    tjson json
+) partition by hash(c01) partitions 10;
+set @@ob_query_timeout = 1000000*60*60*10, @@ob_trx_timeout=1000000*60*60*10;
+# Start load data
+--disable_query_log
+eval load data /*+ direct(true,0) parallel(1) */ infile "$OBSERVER_DIR/$DATA_FOLDER_NAME/lineitem/lineitem-heap-table.tbl" into table lineitem fields terminated by '|' enclosed by '' lines starting by '' terminated by '\n';
+--enable_query_log
+# Query table
+select count(*) from lineitem;
+# Create target table
+--disable_warnings
+drop table if exists lineitem1;
+--enable_warnings
+create table lineitem1 (
+    c01 int(255) NOT NULL,
+    c02 numeric,
+    c03 bit(64),
+    c04 char(4),
+    c05 binary(255),
+    c06 varbinary(255),
+    c07 datetime(6),
+    c08 timestamp(6) NULL DEFAULT NULL,
+    tchar char(64) not null,
+    ttinyint tinyint,
+    tsmallint smallint,
+    tmediumint mediumint,
+    tinteger integer,
+    tbigint bigint,
+    tfloat float,
+    tdouble double,
+    tdecimal decimal(10,5),
+    tdate date,
+    ttime time,
+    tyear year,
+    tdatetime datetime,
+    ttimestamp timestamp NULL DEFAULT NULL,
+    tvarchar varchar(128),
+    ttinyint1 tinyint(1),
+    ttinyint4 tinyint(4),
+    tblob blob,
+    tjson json
+);
+# Start insert into select
+insert /*+ enable_parallel_dml parallel(3) append */ into lineitem1 select * from lineitem;
+# Query table
+select count(*) from lineitem1;
+
+
+#TEST16 无主键表，源表为非分区表，目标表为分区表，pdml
+# Create source table
+--disable_warnings
+drop table if exists lineitem;
+--enable_warnings
+create table lineitem (
+    c01 int(255) NOT NULL,
+    c02 numeric,
+    c03 bit(64),
+    c04 char(4),
+    c05 binary(255),
+    c06 varbinary(255),
+    c07 datetime(6),
+    c08 timestamp(6) NULL DEFAULT NULL,
+    tchar char(64) not null,
+    ttinyint tinyint,
+    tsmallint smallint,
+    tmediumint mediumint,
+    tinteger integer,
+    tbigint bigint,
+    tfloat float,
+    tdouble double,
+    tdecimal decimal(10,5),
+    tdate date,
+    ttime time,
+    tyear year,
+    tdatetime datetime,
+    ttimestamp timestamp NULL DEFAULT NULL,
+    tvarchar varchar(128),
+    ttinyint1 tinyint(1),
+    ttinyint4 tinyint(4),
+    tblob blob,
+    tjson json
+);
+set @@ob_query_timeout = 1000000*60*60*10, @@ob_trx_timeout=1000000*60*60*10;
+# Start load data
+--disable_query_log
+eval load data /*+ direct(true,0) parallel(1) */ infile "$OBSERVER_DIR/$DATA_FOLDER_NAME/lineitem/lineitem-heap-table.tbl" into table lineitem fields terminated by '|' enclosed by '' lines starting by '' terminated by '\n';
+--enable_query_log
+# Query table
+select count(*) from lineitem;
+# Create target table
+--disable_warnings
+drop table if exists lineitem1;
+--enable_warnings
+create table lineitem1 (
+    c01 int(255) NOT NULL,
+    c02 numeric,
+    c03 bit(64),
+    c04 char(4),
+    c05 binary(255),
+    c06 varbinary(255),
+    c07 datetime(6),
+    c08 timestamp(6) NULL DEFAULT NULL,
+    tchar char(64) not null,
+    ttinyint tinyint,
+    tsmallint smallint,
+    tmediumint mediumint,
+    tinteger integer,
+    tbigint bigint,
+    tfloat float,
+    tdouble double,
+    tdecimal decimal(10,5),
+    tdate date,
+    ttime time,
+    tyear year,
+    tdatetime datetime,
+    ttimestamp timestamp NULL DEFAULT NULL,
+    tvarchar varchar(128),
+    ttinyint1 tinyint(1),
+    ttinyint4 tinyint(4),
+    tblob blob,
+    tjson json
+) partition by hash(c01) partitions 10;
+# Start insert into select
+insert /*+ enable_parallel_dml parallel(3) append */ into lineitem1 select * from lineitem;
+# Query table
+select count(*) from lineitem1;
+
+
+#TEST17 源表是主键表，目标表是非主键表，源表和目标表均为非分区表，pdml
+# Create source table
+--disable_warnings
+drop table if exists lineitem;
+--enable_warnings
+create table lineitem (
+    c01 int(255) NOT NULL,
+    c02 numeric,
+    c03 bit(64),
+    c04 char(4),
+    c05 binary(255),
+    c06 varbinary(255),
+    c07 datetime(6),
+    c08 timestamp(6) NULL DEFAULT NULL,
+    tchar char(64) not null,
+    ttinyint tinyint,
+    tsmallint smallint,
+    tmediumint mediumint,
+    tinteger integer,
+    tbigint bigint,
+    tfloat float,
+    tdouble double,
+    tdecimal decimal(10,5),
+    tdate date,
+    ttime time,
+    tyear year,
+    tdatetime datetime,
+    ttimestamp timestamp NULL DEFAULT NULL,
+    tvarchar varchar(128),
+    ttinyint1 tinyint(1),
+    ttinyint4 tinyint(4),
+    tblob blob,
+    tjson json,
+    primary key (c01)
+);
+set @@ob_query_timeout = 1000000*60*60*10, @@ob_trx_timeout=1000000*60*60*10;
+# Start load data
+--disable_query_log
+eval load data /*+ direct(true,0) parallel(1) */ infile "$OBSERVER_DIR/$DATA_FOLDER_NAME/lineitem/lineitem-empty-table.tbl" into table lineitem fields terminated by '|' enclosed by '' lines starting by '' terminated by '\n';
+--enable_query_log
+# Query table
+select count(*) from lineitem;
+# Create target table
+--disable_warnings
+drop table if exists lineitem1;
+--enable_warnings
+create table lineitem1 (
+    c01 int(255) NOT NULL,
+    c02 numeric,
+    c03 bit(64),
+    c04 char(4),
+    c05 binary(255),
+    c06 varbinary(255),
+    c07 datetime(6),
+    c08 timestamp(6) NULL DEFAULT NULL,
+    tchar char(64) not null,
+    ttinyint tinyint,
+    tsmallint smallint,
+    tmediumint mediumint,
+    tinteger integer,
+    tbigint bigint,
+    tfloat float,
+    tdouble double,
+    tdecimal decimal(10,5),
+    tdate date,
+    ttime time,
+    tyear year,
+    tdatetime datetime,
+    ttimestamp timestamp NULL DEFAULT NULL,
+    tvarchar varchar(128),
+    ttinyint1 tinyint(1),
+    ttinyint4 tinyint(4),
+    tblob blob,
+    tjson json
+);
+# Start insert into select
+insert /*+ enable_parallel_dml parallel(3) append */ into lineitem1 select * from lineitem;
+# Query table
+select count(*) from lineitem1;
+
+
+#TEST18 源表是非主键表，目标表是主键表，源表和目标表均为非分区表，pdml
+# Create source table
+--disable_warnings
+drop table if exists lineitem;
+--enable_warnings
+create table lineitem (
+    c01 int(255) NOT NULL,
+    c02 numeric,
+    c03 bit(64),
+    c04 char(4),
+    c05 binary(255),
+    c06 varbinary(255),
+    c07 datetime(6),
+    c08 timestamp(6) NULL DEFAULT NULL,
+    tchar char(64) not null,
+    ttinyint tinyint,
+    tsmallint smallint,
+    tmediumint mediumint,
+    tinteger integer,
+    tbigint bigint,
+    tfloat float,
+    tdouble double,
+    tdecimal decimal(10,5),
+    tdate date,
+    ttime time,
+    tyear year,
+    tdatetime datetime,
+    ttimestamp timestamp NULL DEFAULT NULL,
+    tvarchar varchar(128),
+    ttinyint1 tinyint(1),
+    ttinyint4 tinyint(4),
+    tblob blob,
+    tjson json
+);
+set @@ob_query_timeout = 1000000*60*60*10, @@ob_trx_timeout=1000000*60*60*10;
+# Start load data
+--disable_query_log
+eval load data /*+ direct(true,0) parallel(1) */ infile "$OBSERVER_DIR/$DATA_FOLDER_NAME/lineitem/lineitem-heap-table.tbl" into table lineitem fields terminated by '|' enclosed by '' lines starting by '' terminated by '\n';
+--enable_query_log
+# Query table
+select count(*) from lineitem;
+# Create target table
+--disable_warnings
+drop table if exists lineitem1;
+--enable_warnings
+create table lineitem1 (
+    c01 int(255) NOT NULL,
+    c02 numeric,
+    c03 bit(64),
+    c04 char(4),
+    c05 binary(255),
+    c06 varbinary(255),
+    c07 datetime(6),
+    c08 timestamp(6) NULL DEFAULT NULL,
+    tchar char(64) not null,
+    ttinyint tinyint,
+    tsmallint smallint,
+    tmediumint mediumint,
+    tinteger integer,
+    tbigint bigint,
+    tfloat float,
+    tdouble double,
+    tdecimal decimal(10,5),
+    tdate date,
+    ttime time,
+    tyear year,
+    tdatetime datetime,
+    ttimestamp timestamp NULL DEFAULT NULL,
+    tvarchar varchar(128),
+    ttinyint1 tinyint(1),
+    ttinyint4 tinyint(4),
+    tblob blob,
+    tjson json,
+    primary key (c01)
+);
+# Start insert into select
+--error 1062
+insert  /*+ enable_parallel_dml parallel(3) append */into lineitem1 select * from lineitem;
+
+
+#TEST19 源表和目标表为不同数据库的表
+# Create source table
+--disable_warnings
+drop table if exists lineitem;
+--enable_warnings
+create table lineitem (
+    c01 int(255) NOT NULL,
+    c02 numeric,
+    c03 bit(64),
+    c04 char(4),
+    c05 binary(255),
+    c06 varbinary(255),
+    c07 datetime(6),
+    c08 timestamp(6) NULL DEFAULT NULL,
+    tchar char(64) not null,
+    ttinyint tinyint,
+    tsmallint smallint,
+    tmediumint mediumint,
+    tinteger integer,
+    tbigint bigint,
+    tfloat float,
+    tdouble double,
+    tdecimal decimal(10,5),
+    tdate date,
+    ttime time,
+    tyear year,
+    tdatetime datetime,
+    ttimestamp timestamp NULL DEFAULT NULL,
+    tvarchar varchar(128),
+    ttinyint1 tinyint(1),
+    ttinyint4 tinyint(4),
+    tblob blob,
+    tjson json,
+    primary key (c01)
+);
+set @@ob_query_timeout = 1000000*60*60*10, @@ob_trx_timeout=1000000*60*60*10;
+# Start load data
+--disable_query_log
+eval load data /*+ direct(true,0) parallel(1) */ infile "$OBSERVER_DIR/$DATA_FOLDER_NAME/lineitem/lineitem-empty-table.tbl" into table lineitem fields terminated by '|' enclosed by '' lines starting by '' terminated by '\n';
+--enable_query_log
+# Query table
+select count(*) from lineitem;
+# Create target table
+--disable_warnings
+drop database if exists test1;
+--enable_warnings
+create database test1;
+use test1;
+--disable_warnings
+drop table if exists lineitem1;
+--enable_warnings
+create table lineitem1 (
+    c01 int(255) NOT NULL,
+    c02 numeric,
+    c03 bit(64),
+    c04 char(4),
+    c05 binary(255),
+    c06 varbinary(255),
+    c07 datetime(6),
+    c08 timestamp(6) NULL DEFAULT NULL,
+    tchar char(64) not null,
+    ttinyint tinyint,
+    tsmallint smallint,
+    tmediumint mediumint,
+    tinteger integer,
+    tbigint bigint,
+    tfloat float,
+    tdouble double,
+    tdecimal decimal(10,5),
+    tdate date,
+    ttime time,
+    tyear year,
+    tdatetime datetime,
+    ttimestamp timestamp NULL DEFAULT NULL,
+    tvarchar varchar(128),
+    ttinyint1 tinyint(1),
+    ttinyint4 tinyint(4),
+    tblob blob,
+    tjson json,
+    primary key (c01)
+);
+# Start insert into select
+insert  /*+ enable_parallel_dml parallel(3) append */into test1.lineitem1 select * from test.lineitem;
+# Query table
+select count(*) from lineitem1;
+
+
+#TEST20 autocommit and transaction
+use test;
+--echo autocommit_and_transaction
+# autocommit=on, no append
+--disable_warnings
+drop table if exists t1;
+drop table if exists t2;
+--enable_warnings
+create table t1(id int primary key);
+create table t2(id int);
+# fill initial data without a transaction
+set autocommit=on;
+insert into t1 values (1), (2), (3), (4), (5), (6), (7), (8), (9), (10);
+insert /*+ enable_parallel_dml parallel(3)*/ into t2 select * from t1;
+select count(*) from t1;
+select count(*) from t2;
+# fill extra data in a transaction and then rollback
+begin;
+insert into t1 values (11), (12), (13), (14), (15), (16), (17), (18), (19), (20);
+insert /*+ enable_parallel_dml parallel(3)*/ into t2 select * from t1;
+rollback;
+select count(*) from t1;
+select count(*) from t2;
+
+# autocommit=on, append
+--disable_warnings
+drop table if exists t1;
+drop table if exists t2;
+--enable_warnings
+create table t1(id int primary key);
+create table t2(id int);
+# fill initial data without a transaction
+set autocommit=on;
+insert into t1 values (1), (2), (3), (4), (5), (6), (7), (8), (9), (10);
+insert /*+ enable_parallel_dml parallel(3) append */ into t2 select * from t1;
+select count(*) from t1;
+select count(*) from t2;
+# fill extra data in a transaction and then rollback
+begin;
+insert into t1 values (11), (12), (13), (14), (15), (16), (17), (18), (19), (20);
+--error 1235
+insert /*+ enable_parallel_dml parallel(3) append */ into t2 select * from t1;
+rollback;
+select count(*) from t1;
+select count(*) from t2;
+
+# autocommit=off, inexplicitly begin transaction, no append
+--disable_warnings
+drop table if exists t1;
+drop table if exists t2;
+--enable_warnings
+create table t1(id int primary key);
+create table t2(id int);
+# fill initial data without a transaction
+set autocommit=on;
+insert into t1 values (1), (2), (3), (4), (5), (6), (7), (8), (9), (10);
+insert /*+ enable_parallel_dml parallel(3) */ into t2 select * from t1;
+select count(*) from t1;
+select count(*) from t2;
+# fill extra data in a inexplicit transaction and then rollback
+set autocommit=off;
+insert into t1 values (11), (12), (13), (14), (15), (16), (17), (18), (19), (20);
+insert /*+ enable_parallel_dml parallel(3) */ into t2 select * from t1;
+rollback;
+select count(*) from t1;
+select count(*) from t2;
+
+# autocommit=off, inexplicitly begin transaction, append
+--disable_warnings
+drop table if exists t1;
+drop table if exists t2;
+--enable_warnings
+create table t1(id int primary key);
+create table t2(id int);
+# fill initial data without a transaction
+set autocommit=on;
+insert into t1 values (1), (2), (3), (4), (5), (6), (7), (8), (9), (10);
+insert /*+ enable_parallel_dml parallel(3) append */ into t2 select * from t1;
+select count(*) from t1;
+select count(*) from t2;
+# fill extra data in a inexplicit transaction and then rollback
+set autocommit=off;
+insert into t1 values (11), (12), (13), (14), (15), (16), (17), (18), (19), (20);
+--error 1235
+insert /*+ enable_parallel_dml parallel(3) append */ into t2 select * from t1;
+rollback;
+select count(*) from t1;
+select count(*) from t2;
+
+
+# autocommit=off, explicitly begin transaction, no append
+--disable_warnings
+drop table if exists t1;
+drop table if exists t2;
+--enable_warnings
+create table t1(id int primary key);
+create table t2(id int);
+# fill initial data without a transaction
+set autocommit=on;
+insert into t1 values (1), (2), (3), (4), (5), (6), (7), (8), (9), (10);
+insert /*+ enable_parallel_dml parallel(3) */ into t2 select * from t1;
+select count(*) from t1;
+select count(*) from t2;
+# fill extra data in an explicit transaction and then rollback
+set autocommit=off;
+begin;
+insert into t1 values (11), (12), (13), (14), (15), (16), (17), (18), (19), (20);
+insert /*+ enable_parallel_dml parallel(3) */ into t2 select * from t1;
+rollback;
+select count(*) from t1;
+select count(*) from t2;
+
+# autocommit=off, explicitly begin transaction, append
+--disable_warnings
+drop table if exists t1;
+drop table if exists t2;
+--enable_warnings
+create table t1(id int primary key);
+create table t2(id int);
+# fill initial data without a transaction
+set autocommit=on;
+insert into t1 values (1), (2), (3), (4), (5), (6), (7), (8), (9), (10);
+insert /*+ enable_parallel_dml parallel(3) append */ into t2 select * from t1;
+select count(*) from t1;
+select count(*) from t2;
+# fill extra data in an explicit transaction and then rollback
+set autocommit=off;
+begin;
+insert into t1 values (11), (12), (13), (14), (15), (16), (17), (18), (19), (20);
+--error 1235
+insert /*+ enable_parallel_dml parallel(3) append */ into t2 select * from t1;
+rollback;
+select count(*) from t1;
+select count(*) from t2;
+
+#TEST20 global and local index
+use test;
+set autocommit=on;
+--echo global_and_local_index
+# create tables
+--disable_warnings
+drop table if exists table_origin;
+drop table if exists table_global_index;
+drop table if exists table_local_index;
+--enable_warnings
+CREATE TABLE `table_origin` ( `c1` varchar(10) NOT NULL, `c2` bigint(20) NOT NULL, `c3` char(10) NOT NULL, `c4` date NOT NULL, `c5` datetime NOT NULL, `c6` decimal(5,2) NOT NULL, `c7` double NOT NULL, `c8` int(11) NOT NULL, `c9` smallint(6) NOT NULL, `c10` time NOT NULL, `c11` tinyint(4) NOT NULL, `c13` json DEFAULT NULL,  `c14` mediumint(9) DEFAULT NULL,  `c15` mediumtext DEFAULT NULL,  `c16` float DEFAULT NULL, `c17` enum('M','F') DEFAULT NULL,  `md5` varchar(128) DEFAULT NULL);
+CREATE TABLE `table_global_index` (
+	`c1` varchar(10) NOT NULL,
+	`c2` bigint(20) auto_increment,
+	`c3` char(10) NOT NULL,
+	`c4` date NOT NULL,
+	`c5` datetime NOT NULL,
+	`c6` decimal(5,2) NOT NULL,
+	`c7` double NOT NULL, `c8` int(11) NOT NULL,
+	`c9` smallint(6) NOT NULL,
+	`c10` time NOT NULL,
+	`c11` tinyint(4) NOT NULL,
+	`c13` json DEFAULT NULL,
+	`c14` mediumint(9) DEFAULT NULL,
+	`c15` mediumtext DEFAULT NULL,
+	`c16` float DEFAULT NULL,
+	`c17` enum('M','F') DEFAULT NULL,
+	`md5` varchar(128) DEFAULT NULL,
+	PRIMARY KEY (`c1`,c8),
+	index k1 (c4,c2,c1) global partition by hash(c2) partitions 10) partition by hash(c8) partitions 10;
+CREATE TABLE `table_local_index` (
+	`c1` varchar(10) NOT NULL,
+	`c2` bigint(20) auto_increment,
+	`c3` char(10) NOT NULL,
+	`c4` date NOT NULL,
+	`c5` datetime NOT NULL,
+	`c6` decimal(5,2) NOT NULL,
+	`c7` double NOT NULL, `c8` int(11) NOT NULL,
+	`c9` smallint(6) NOT NULL,
+	`c10` time NOT NULL,
+	`c11` tinyint(4) NOT NULL,
+	`c13` json DEFAULT NULL,
+	`c14` mediumint(9) DEFAULT NULL,
+	`c15` mediumtext DEFAULT NULL,
+	`c16` float DEFAULT NULL,
+	`c17` enum('M','F') DEFAULT NULL,
+	`md5` varchar(128) DEFAULT NULL,
+	PRIMARY KEY (`c1`,c8),
+	index k1 (c4,c2,c1) local) partition by hash(c8) partitions 10;
+
+set @@ob_query_timeout = 1000000*60*60*10, @@ob_trx_timeout=1000000*60*60*10;
+# fill table_origin
+--disable_query_log
+eval load data /*+ direct(true,0) parallel(2) */ infile "$OBSERVER_DIR/$DATA_FOLDER_NAME/misc/index-table.csv" into table table_origin fields terminated by '|' enclosed by '''' lines starting by '' terminated by '\n';
+--enable_query_log
+select count(*) from table_origin;
+# global index
+insert /*+ enable_parallel_dml parallel(3) append */ into table_global_index select * from table_origin;
+select count(*) from table_global_index;
+# local index
+insert /*+ enable_parallel_dml parallel(3) append */ into table_local_index select * from table_origin;
+select count(*) from table_local_index;
+
+disconnect conn_query;
+
+# Clean Up
+drop table test1.lineitem1;
+drop table test.lineitem;
+
+
+# insert into table in other database
+
+--disable_warnings
+drop database if exists test2;
+create database test2;
+--enable_warnings
+
+use test;
+--disable_warnings
+drop table if exists t1;
+--enable_warnings
+
+create table t1 (c1 int primary key, c2 int);
+insert into t1 values(1,2), (2,2), (3,2);
+create table test2.t2 (c1 int primary key, c2 int);
+insert /*+ append enable_parallel_dml parallel(3) */ into test2.t2 select * from t1;
+
+drop table t1;
+drop database test2;
+
+--echo ================ test vectorized ================
+--disable_query_log
+--disable_warnings
+drop sequence if exists s1;
+drop table if exists t1;
+drop table if exists t2;
+drop table if exists t3;
+drop table if exists t_pqTly6tEb1;
+drop table if exists t1_pqTly6tEb1;
+drop table if exists t2_pqTly6tEb1;
+drop table if exists t3_pqTly6tEb1;
+drop table if exists t4_pqTly6tEb1;
+--enable_warnings
+
+create sequence s1 cache 1000000 noorder;
+create table t1 (c1 int);
+create table t2 (c1 int, c2 int default 2, c3 varchar(256) default 'hello world');
+create table t3 (c1 int, c2 int default 2, c3 varchar(256) default 'hello world') ROW_FORMAT = COMPRESSED;
+
+create table t_pqTly6tEb1(
+    l_orderkey           bigint NOT NULL ,
+    l_partkey            bigint NOT NULL ,
+    l_suppkey            bigint NOT NULL ,
+    l_linenumber         bigint NOT NULL ,
+    l_quantity           bigint NOT NULL ,
+    l_extendedprice      decimal(10,2) NOT NULL ,
+    l_discount           decimal(10,2) NOT NULL ,
+    l_tax                decimal(10,2) NOT NULL ,
+    l_returnflag         char(1) ,
+    l_linestatus         char(1) ,
+    l_shipdate           date ,
+    l_commitdate         date ,
+    l_receiptdate        date ,
+    l_shipinstruct       char(25) ,
+    l_shipmode           char(10) ,
+    l_comment            varchar(44)
+);
+
+create table t1_pqTly6tEb1(
+    l_orderkey           bigint NOT NULL ,
+    l_partkey            bigint NOT NULL ,
+    l_suppkey            bigint NOT NULL ,
+    l_linenumber         bigint NOT NULL ,
+    l_quantity           bigint NOT NULL ,
+    l_extendedprice      decimal(10,2) NOT NULL ,
+    l_discount           decimal(10,2) NOT NULL ,
+    l_tax                decimal(10,2) NOT NULL ,
+    l_returnflag         char(1) ,
+    l_linestatus         char(1) ,
+    l_shipdate           date ,
+    l_commitdate         date ,
+    l_receiptdate        date ,
+    l_shipinstruct       char(25) ,
+    l_shipmode           char(10) ,
+    l_comment            varchar(44)
+);
+
+create table t2_pqTly6tEb1(
+    l_orderkey           bigint NOT NULL ,
+    l_partkey            bigint NOT NULL ,
+    l_suppkey            bigint NOT NULL ,
+    l_linenumber         bigint NOT NULL ,
+    l_quantity           bigint NOT NULL ,
+    l_extendedprice      decimal(10,2) NOT NULL ,
+    l_discount           decimal(10,2) NOT NULL ,
+    l_tax                decimal(10,2) NOT NULL ,
+    l_returnflag         char(1) ,
+    l_linestatus         char(1) ,
+    l_shipdate           date ,
+    l_commitdate         date ,
+    l_receiptdate        date ,
+    l_shipinstruct       char(25) ,
+    l_shipmode           char(10) ,
+    l_comment            varchar(44),
+    primary key(L_ORDERKEY, L_LINENUMBER)
+);
+
+create table t3_pqTly6tEb1(
+    l_orderkey           bigint NOT NULL ,
+    l_partkey            bigint NOT NULL ,
+    l_suppkey            bigint NOT NULL ,
+    l_linenumber         bigint NOT NULL ,
+    l_quantity           bigint NOT NULL ,
+    l_extendedprice      decimal(10,2) NOT NULL ,
+    l_discount           decimal(10,2) NOT NULL ,
+    l_tax                decimal(10,2) NOT NULL ,
+    l_returnflag         char(1) ,
+    l_linestatus         char(1) ,
+    l_shipdate           date ,
+    l_commitdate         date ,
+    l_receiptdate        date ,
+    l_shipinstruct       char(25) ,
+    l_shipmode           char(10) ,
+    l_comment            varchar(44)
+) partition by hash(l_orderkey) partitions 50;
+
+create table t4_pqTly6tEb1(
+    l_orderkey           bigint NOT NULL ,
+    l_partkey            bigint NOT NULL ,
+    l_suppkey            bigint NOT NULL ,
+    l_linenumber         bigint NOT NULL ,
+    l_quantity           bigint NOT NULL ,
+    l_extendedprice      decimal(10,2) NOT NULL ,
+    l_discount           decimal(10,2) NOT NULL ,
+    l_tax                decimal(10,2) NOT NULL ,
+    l_returnflag         char(1) ,
+    l_linestatus         char(1) ,
+    l_shipdate           date ,
+    l_commitdate         date ,
+    l_receiptdate        date ,
+    l_shipinstruct       char(25) ,
+    l_shipmode           char(10) ,
+    l_comment            varchar(44),
+    primary key(L_ORDERKEY, L_LINENUMBER)
+) partition by hash(l_orderkey) partitions 50;
+
+insert into t1 (c1) select s1.nextval from table(generator(1000));
+
+set @@ob_query_timeout = 1000000*60*60*10, @@ob_trx_timeout=1000000*60*60*10;
+eval load data /*+ parallel(8) direct(true, 0, 'full') */ infile "$OBSERVER_DIR/$DATA_FOLDER_NAME/lineitem/lineitem-100k.tbl" into table t_pqTly6tEb1 fields terminated by '|' enclosed by '' lines starting by '' terminated by '\n';
+--enable_query_log
+
+select count(*) from t1;
+select count(*) from t_pqTly6tEb1;
+
+#TEST Non-vectorized
+--echo TEST Non-vectorized
+
+alter system set _rowsets_enabled = false;
+sleep 1;
+
+insert /*+ append enable_parallel_dml parallel(8) */ into t2 (c1) select * from t1;
+insert /*+ append enable_parallel_dml parallel(8) */ into t3 (c1) select * from t1;
+
+select count(*) from t2 where c3 = 'hello world';
+select count(*) from t3 where c3 = 'hello world';
+
+insert /*+ append enable_parallel_dml parallel(8) */ into t1_pqTly6tEb1 select * from t_pqTly6tEb1;
+insert /*+ append enable_parallel_dml parallel(8) */ into t2_pqTly6tEb1 select * from t_pqTly6tEb1;
+insert /*+ append enable_parallel_dml parallel(8) */ into t3_pqTly6tEb1 select * from t_pqTly6tEb1;
+insert /*+ append enable_parallel_dml parallel(8) */ into t4_pqTly6tEb1 select * from t_pqTly6tEb1;
+
+select count(*) from t1_pqTly6tEb1;
+select count(*) from t2_pqTly6tEb1;
+select count(*) from t3_pqTly6tEb1;
+select count(*) from t4_pqTly6tEb1;
+
+alter system set _rowsets_enabled = true;
+sleep 1;
+
+--disable_query_log
+truncate table t2;
+truncate table t3;
+truncate table t1_pqTly6tEb1;
+truncate table t2_pqTly6tEb1;
+truncate table t3_pqTly6tEb1;
+truncate table t4_pqTly6tEb1;
+--enable_query_log
+
+#TEST vectorized 1.0
+--echo TEST vectorized 1.0
+
+set _enable_rich_vector_format = false;
+
+insert /*+ append enable_parallel_dml parallel(8) */ into t2 (c1) select * from t1;
+insert /*+ append enable_parallel_dml parallel(8) */ into t3 (c1) select * from t1;
+
+select count(*) from t2 where c3 = 'hello world';
+select count(*) from t3 where c3 = 'hello world';
+
+insert /*+ append enable_parallel_dml parallel(8) */ into t1_pqTly6tEb1 select * from t_pqTly6tEb1;
+insert /*+ append enable_parallel_dml parallel(8) */ into t2_pqTly6tEb1 select * from t_pqTly6tEb1;
+insert /*+ append enable_parallel_dml parallel(8) */ into t3_pqTly6tEb1 select * from t_pqTly6tEb1;
+insert /*+ append enable_parallel_dml parallel(8) */ into t4_pqTly6tEb1 select * from t_pqTly6tEb1;
+
+select count(*) from t1_pqTly6tEb1;
+select count(*) from t2_pqTly6tEb1;
+select count(*) from t3_pqTly6tEb1;
+select count(*) from t4_pqTly6tEb1;
+
+set _enable_rich_vector_format = true;
+
+--disable_query_log
+truncate table t2;
+truncate table t3;
+truncate table t1_pqTly6tEb1;
+truncate table t2_pqTly6tEb1;
+truncate table t3_pqTly6tEb1;
+truncate table t4_pqTly6tEb1;
+--enable_query_log
+
+#TEST vectorized 2.0
+--echo TEST vectorized 2.0
+
+insert /*+ append enable_parallel_dml parallel(8) */ into t2 (c1) select * from t1;
+insert /*+ append enable_parallel_dml parallel(8) */ into t3 (c1) select * from t1;
+
+select count(*) from t2 where c3 = 'hello world';
+select count(*) from t3 where c3 = 'hello world';
+
+insert /*+ append enable_parallel_dml parallel(8) */ into t1_pqTly6tEb1 select * from t_pqTly6tEb1;
+insert /*+ append enable_parallel_dml parallel(8) */ into t2_pqTly6tEb1 select * from t_pqTly6tEb1;
+insert /*+ append enable_parallel_dml parallel(8) */ into t3_pqTly6tEb1 select * from t_pqTly6tEb1;
+insert /*+ append enable_parallel_dml parallel(8) */ into t4_pqTly6tEb1 select * from t_pqTly6tEb1;
+
+select count(*) from t1_pqTly6tEb1;
+select count(*) from t2_pqTly6tEb1;
+select count(*) from t3_pqTly6tEb1;
+select count(*) from t4_pqTly6tEb1;
+
+--disable_query_log
+drop sequence s1;
+drop table t1;
+drop table t2;
+drop table t3;
+drop table t_pqTly6tEb1;
+drop table t1_pqTly6tEb1;
+drop table t2_pqTly6tEb1;
+drop table t3_pqTly6tEb1;
+drop table t4_pqTly6tEb1;
+--enable_query_log
+
+--source mysql_test/test_suite/direct_load_data/include/set_direct_load_allow_fallback_true.inc

@@ -1,0 +1,80 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef _OB_EXPR_MOD_H_
+#define _OB_EXPR_MOD_H_
+
+#include "sql/engine/expr/ob_expr_operator.h"
+
+namespace oceanbase
+{
+namespace sql
+{
+class ObExprMod: public ObArithExprOperator
+{
+public:
+  ObExprMod();
+  explicit  ObExprMod(common::ObIAllocator &alloc);
+  virtual ~ObExprMod() {};
+  virtual int calc_result_type2(ObExprResType &type,
+                                ObExprResType &type1,
+                                ObExprResType &type2,
+                                common::ObExprTypeCtx &type_ctx) const;
+
+  static int mod_int_int(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum);
+  static int mod_int_uint(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum);
+  static int mod_uint_int(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum);
+  static int mod_uint_uint(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum);
+  static int mod_float(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum);
+  static int mod_double(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum);
+  static int mod_number(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum);
+  static int mod_decimalint(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum);
+
+  // temporary used, remove after all expr converted
+  virtual int cg_expr(ObExprCGCtx &op_cg_ctx,
+                      const ObRawExpr &raw_expr,
+                      ObExpr &rt_expr) const override;
+
+private:
+  OB_INLINE static int mod_int(common::ObObj &res,
+                     const common::ObObj &left,
+                     const common::ObObj &right,
+                     common::ObIAllocator *allocator,
+                     common::ObScale scale);
+  OB_INLINE static int mod_uint(common::ObObj &res,
+                      const common::ObObj &left,
+                      const common::ObObj &right,
+                      common::ObIAllocator *allocator,
+                      common::ObScale scale);
+  static int mod_double(common::ObObj &res,
+                        const common::ObObj &left,
+                        const common::ObObj &right,
+                        common::ObIAllocator *allocator,
+                        common::ObScale scale);
+  static int mod_number(common::ObObj &res,
+                        const common::ObObj &left,
+                        const common::ObObj &right,
+                        common::ObIAllocator *allocator,
+                        common::ObScale scale);
+  DISALLOW_COPY_AND_ASSIGN(ObExprMod);
+private:
+  static ObArithFunc mod_funcs_[common::ObMaxTC];
+};
+}
+}
+
+
+#endif  /* _OB_EXPR_MOD_H_ */

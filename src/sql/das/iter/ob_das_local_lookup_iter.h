@@ -1,0 +1,99 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef OBDEV_SRC_SQL_DAS_ITER_OB_DAS_LOCAL_LOOKUP_ITER_H_
+#define OBDEV_SRC_SQL_DAS_ITER_OB_DAS_LOCAL_LOOKUP_ITER_H_
+
+#include "sql/das/iter/ob_das_lookup_iter.h"
+#include "storage/access/ob_dml_param.h"
+
+namespace oceanbase
+{
+using namespace common;
+namespace sql
+{
+
+struct ObDASLocalLookupIterParam : public ObDASLookupIterParam
+{
+public:
+  ObDASLocalLookupIterParam()
+    : ObDASLookupIterParam(false /*local lookup*/),
+      trans_desc_(nullptr),
+      snapshot_(nullptr)
+  {}
+  transaction::ObTxDesc *trans_desc_;
+  transaction::ObTxReadSnapshot *snapshot_;
+  virtual bool is_valid() const override
+  {
+    return true;
+  }
+};
+
+class ObDASScanCtDef;
+class ObDASScanRtDef;
+class ObDASFuncLookupIter;
+class ObDASLocalLookupIter : public ObDASLookupIter
+{
+public:
+  ObDASLocalLookupIter(const ObDASIterType type = ObDASIterType::DAS_ITER_LOCAL_LOOKUP)
+    : ObDASLookupIter(type),
+      trans_info_array_(),
+      lookup_param_(),
+      lookup_tablet_id_(),
+      lookup_ls_id_(),
+      trans_desc_(nullptr),
+      snapshot_(nullptr),
+      is_first_lookup_(true)
+  {}
+  virtual ~ObDASLocalLookupIter() {}
+
+  storage::ObTableScanParam &get_lookup_param() { return lookup_param_; }
+  void set_tablet_id(const ObTabletID &tablet_id) { lookup_tablet_id_ = tablet_id; }
+  void set_ls_id(const share::ObLSID &ls_id) { lookup_ls_id_ = ls_id; }
+  int init_scan_param(storage::ObTableScanParam &param, const ObDASScanCtDef *ctdef, ObDASScanRtDef *rtdef);
+
+protected:
+  virtual int inner_init(ObDASIterParam &param) override;
+  virtual int inner_reuse() override;
+  virtual int inner_release() override;
+  virtual int do_table_scan() override;
+  virtual int rescan() override;
+  virtual void reset_lookup_state() override;
+
+  virtual int add_rowkey() override;
+  virtual int add_rowkeys(int64_t count) override;
+  virtual int do_index_lookup() override;
+  virtual int check_index_lookup() override;
+protected:
+  int init_rowkey_exprs_for_compat();
+
+protected:
+  ObSEArray<ObDatum *, 4> trans_info_array_;
+   // Local lookup das task could rescan multiple times during execution, lookup_tablet_id_ and
+   // lookup_ls_id_ store the lookup parameter for this time.
+  storage::ObTableScanParam lookup_param_;
+  ObTabletID lookup_tablet_id_;
+  share::ObLSID lookup_ls_id_;
+  transaction::ObTxDesc *trans_desc_;
+  transaction::ObTxReadSnapshot *snapshot_;
+  bool is_first_lookup_;
+};
+
+}  // namespace sql
+}  // namespace oceanbase
+
+
+#endif /* OBDEV_SRC_SQL_DAS_ITER_OB_DAS_LOOKUP_ITER_H_ */

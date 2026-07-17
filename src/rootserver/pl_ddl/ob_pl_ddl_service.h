@@ -1,0 +1,215 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef _OCEANBASE_ROOTSERVER_OB_PL_DDL_SERVICE_H_
+#define _OCEANBASE_ROOTSERVER_OB_PL_DDL_SERVICE_H_
+
+#include "rootserver/ob_ddl_service.h"
+#include "ob_pl_ddl_operator.h"
+#include "rootserver/ob_root_utils.h" // for RS_TRACE
+#include "share/ob_rpc_struct.h"
+#include "share/schema/ob_schema_struct.h"
+#include "share/schema/ob_dependency_info.h"
+
+namespace oceanbase
+{
+using namespace obcall;
+using namespace share;
+
+namespace rootserver
+{
+class ObDDLSQLTransaction;
+class ObDDLService;
+class ObDDLOperator;
+
+class ObPLDDLService
+{
+public:
+  //----Functions for managing routine----
+  static int create_routine(const obcall::ObCreateRoutineArg &arg,
+                            obcall::ObRoutineDDLRes* res,
+                            rootserver::ObDDLService &ddl_service);
+  static int alter_routine(const obcall::ObCreateRoutineArg &arg,
+                           obcall::ObRoutineDDLRes* res,
+                           rootserver::ObDDLService &ddl_service);
+  static int drop_routine(const ObDropRoutineArg &arg,
+                          rootserver::ObDDLService &ddl_service);
+  //----End of functions for managing routine----
+
+
+  //----Functions for managing package----
+  static int create_package(const obcall::ObCreatePackageArg &arg,
+                            obcall::ObRoutineDDLRes *res,
+                            rootserver::ObDDLService &ddl_service);
+  static int drop_package(const obcall::ObDropPackageArg &arg,
+                          rootserver::ObDDLService &ddl_service);
+  //----End of functions for managing package----
+
+  //----Functions for managing trigger----
+  static int create_trigger(const obcall::ObCreateTriggerArg &arg,
+                            obcall::ObCreateTriggerRes *res,
+                            rootserver::ObDDLService &ddl_service);
+  static int alter_trigger(const obcall::ObAlterTriggerArg &arg,
+                           obcall::ObRoutineDDLRes *res,
+                           rootserver::ObDDLService &ddl_service);
+  static int drop_trigger(const obcall::ObDropTriggerArg &arg,
+                          rootserver::ObDDLService &ddl_service);
+  static int drop_trigger_in_drop_table(ObMySQLTransaction &trans,
+                                        rootserver::ObDDLOperator &ddl_operator,
+                                        share::schema::ObSchemaGetterGuard &schema_guard,
+                                        const share::schema::ObTableSchema &table_schema,
+                                        const bool to_recyclebin);
+  static int drop_trigger_in_drop_user(ObMySQLTransaction &trans,
+                                      rootserver::ObDDLOperator &ddl_operator,
+                                      ObSchemaGetterGuard &schema_guard,
+                                      const uint64_t user_id);
+  static int rebuild_triggers_on_hidden_table(const obcall::ObAlterTableArg &alter_table_arg,
+                                              const ObTableSchema &orig_table_schema,
+                                              const ObTableSchema &hidden_table_schema,
+                                              ObSchemaGetterGuard &src_tenant_schema_guard,
+                                              ObSchemaGetterGuard &dst_tenant_schema_guard,
+                                              rootserver::ObDDLOperator &ddl_operator,
+                                              ObMySQLTransaction &trans);
+  static int rebuild_trigger_on_rename(share::schema::ObSchemaGetterGuard &schema_guard,
+                                       const share::schema::ObTableSchema &table_schema,
+                                       rootserver::ObDDLOperator &ddl_operator,
+                                       ObMySQLTransaction &trans);
+  static int rebuild_trigger_on_rename(share::schema::ObSchemaGetterGuard &schema_guard,
+                                       const common::ObIArray<uint64_t> &trigger_list,
+                                       const common::ObString &database_name,
+                                       const common::ObString &table_name,
+                                       rootserver::ObDDLOperator &ddl_operator,
+                                       ObMySQLTransaction &trans);
+  static int create_trigger_for_truncate_table(share::schema::ObSchemaGetterGuard &schema_guard,
+                                               const common::ObIArray<uint64_t> &origin_trigger_list,
+                                               share::schema::ObTableSchema &new_table_schema,
+                                               rootserver::ObDDLOperator &ddl_operator,
+                                               ObMySQLTransaction &trans);
+  static int flashback_trigger(const share::schema::ObTableSchema &table_schema,
+                               const uint64_t new_database_id,
+                               const common::ObString &new_table_name,
+                               share::schema::ObSchemaGetterGuard &schema_guard,
+                               ObMySQLTransaction &trans,
+                               rootserver::ObDDLOperator &ddl_operator);
+  //----End of functions for managing trigger----
+private:
+  template <typename ArgType>
+  static int check_env_before_ddl(share::schema::ObSchemaGetterGuard &schema_guard,
+                                  const ArgType &arg,
+                                  rootserver::ObDDLService &ddl_service);
+  //----Functions for managing routine----
+  static int create_routine(ObRoutineInfo &routine_info,
+                            const ObRoutineInfo* old_routine_info,
+                            bool replace,
+                            ObErrorInfo &error_info,
+                            ObIArray<ObDependencyInfo> &dep_infos,
+                            const ObString *ddl_stmt_str,
+                            share::schema::ObSchemaGetterGuard &schema_guard,
+                            rootserver::ObDDLService &ddl_service);
+  static int alter_routine(const ObRoutineInfo &routine_info,
+                           ObErrorInfo &error_info,
+                           const ObString *ddl_stmt_str,
+                           share::schema::ObSchemaGetterGuard &schema_guard,
+                           rootserver::ObDDLService &ddl_service);
+  static int drop_routine(const ObRoutineInfo &routine_info,
+                          ObErrorInfo &error_info,
+                          const ObString *ddl_stmt_str,
+                          share::schema::ObSchemaGetterGuard &schema_guard,
+                          rootserver::ObDDLService &ddl_service);
+  //----End of functions for managing routine----
+
+  //----Functions for managing package----
+  static int create_package(ObSchemaGetterGuard &schema_guard,
+                            const ObPackageInfo *old_package_info,
+                            ObPackageInfo &new_package_info,
+                            ObIArray<ObRoutineInfo> &public_routine_infos,
+                            ObErrorInfo &error_info,
+                            ObIArray<ObDependencyInfo> &dep_infos,
+                            const ObString *ddl_stmt_str,
+                            rootserver::ObDDLService &ddl_service);
+  static int drop_package(ObSchemaGetterGuard &schema_guard,
+                          const ObPackageInfo &package_info,
+                          ObErrorInfo &error_info,
+                          const ObString *ddl_stmt_str,
+                          rootserver::ObDDLService &ddl_service);
+  //----Functions for managing trigger----
+  static int create_trigger(const obcall::ObCreateTriggerArg &arg,
+                            ObSchemaGetterGuard &schema_guard,
+                            obcall::ObCreateTriggerRes *res,
+                            rootserver::ObDDLService &ddl_service);
+  static int create_trigger_in_trans(share::schema::ObTriggerInfo &trigger_info,
+                                      share::schema::ObErrorInfo &error_info,
+                                      ObIArray<ObDependencyInfo> &dep_infos,
+                                      const common::ObString *ddl_stmt_str,
+                                      bool in_second_stage,
+                                      share::schema::ObSchemaGetterGuard &schema_guard,
+                                      int64_t &table_schema_version,
+                                      rootserver::ObDDLService &ddl_service);
+  static int drop_trigger_in_trans(const share::schema::ObTriggerInfo &trigger_info,
+                                    const common::ObString *ddl_stmt_str,
+                                    share::schema::ObSchemaGetterGuard &schema_guard,
+                                    rootserver::ObDDLService &ddl_service);
+  static int try_get_exist_trigger(share::schema::ObSchemaGetterGuard &schema_guard,
+                                    const share::schema::ObTriggerInfo &new_trigger_info,
+                                    const share::schema::ObTriggerInfo *&old_trigger_info,
+                                    bool with_replace);
+  static int adjust_trigger_action_order(share::schema::ObSchemaGetterGuard &schema_guard,
+                                          rootserver::ObDDLSQLTransaction &trans,
+                                          ObPLDDLOperator &pl_operator,
+                                          ObTriggerInfo &trigger_info,
+                                          bool is_create_trigger);
+  static int recursive_alter_ref_trigger(share::schema::ObSchemaGetterGuard &schema_guard,
+                                          rootserver::ObDDLSQLTransaction &trans,
+                                          ObPLDDLOperator &pl_operator,
+                                          const ObTriggerInfo &ref_trigger_info,
+                                          const common::ObIArray<uint64_t> &trigger_list,
+                                          const ObString &trigger_name,
+                                          int64_t action_order);
+  static int recursive_check_trigger_ref_cyclic(share::schema::ObSchemaGetterGuard &schema_guard,
+                                                const ObTriggerInfo &ref_trigger_info,
+                                                const common::ObIArray<uint64_t> &trigger_list,
+                                                const ObString &create_trigger_name,
+                                                const ObString &generate_cyclic_name);
+  static int get_object_info(ObSchemaGetterGuard &schema_guard,
+                             const ObString &object_database,
+                             const ObString &object_name,
+                             ObSchemaType &object_type,
+                             uint64_t &object_id,
+                             rootserver::ObDDLService &ddl_service);
+  //----End of functions for managing trigger----
+
+  //----Functions for restore table ddl ----
+  //  Dont rebuild trigger if 
+  //  1. database name has changed.
+  //  2. base_table name has changed.
+  //  3. database of the trigger does no exist.
+  //  4. same name trigger has existed.
+  static int check_and_construct_restore_trigger_info(
+        const obcall::ObAlterTableArg &alter_table_arg,
+        ObSchemaGetterGuard &src_tenant_schema_guard,
+        ObSchemaGetterGuard &dst_tenant_schema_guard,
+        const ObTableSchema &orig_table_schema,
+        const ObTableSchema &hidden_table_schema,
+        const ObTriggerInfo &src_trigger_info,
+        ObTriggerInfo &new_trigger_info,
+        bool &need_rebuild);
+//----End of functions for restore table ddl----
+};
+
+} // namespace rootserver
+} // namespace oceanbase
+
+#endif // _OCEANBASE_ROOTSERVER_OB_PL_DDL_SERVICE_H_

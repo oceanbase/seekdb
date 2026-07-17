@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<plist version="1.0">
+<dict>
+  <key>CFBundleIdentifier</key>
+  <string>com.seekdb.monitor</string>
+  <key>CFBundleName</key>
+  <string>seekdb Monitor</string>
+  <key>CFBundleDisplayName</key>
+  <string>seekdb Monitor</string>
+  <key>CFBundleExecutable</key>
+  <string>seekdb-menubar</string>
+  <key>CFBundleIconFile</key>
+  <string>AppIcon</string>
+  <key>CFBundleVersion</key>
+  <string>@OceanBase_VERSION@</string>
+  <key>CFBundleShortVersionString</key>
+  <string>@OceanBase_VERSION@</string>
+  <key>CFBundlePackageType</key>
+  <string>APPL</string>
+  <key>LSMinimumSystemVersion</key>
+  <string>13.0</string>
+  <key>LSUIElement</key>
+  <true/>
+  <key>NSHighResolutionCapable</key>
+  <true/>
+</dict>
+</plist>

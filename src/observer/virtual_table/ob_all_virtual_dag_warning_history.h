@@ -1,0 +1,63 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef OB_ALL_VIRTUAL_DAG_WARNING_HISTORY_H_
+#define OB_ALL_VIRTUAL_DAG_WARNING_HISTORY_H_
+#include "observer/virtual_table/ob_virtual_table_scanner_iterator.h"
+#include "lib/container/ob_array.h"
+#include "observer/scheduler/ob_dag_warning_history_mgr.h"
+
+namespace oceanbase
+{
+namespace observer
+{
+
+class ObAllVirtualDagWarningHistory : public common::ObVirtualTableScannerIterator
+{
+public:
+  enum COLUMN_ID_LIST
+  {
+        TASK_ID = common::OB_APP_MIN_COLUMN_ID,
+    MODULE,
+    TYPE,
+    RET,
+    STATUS,
+    GMT_CREATE,
+    GMT_MODIFIED,
+    RETRY_CNT,
+    WARNING_INFO,
+  };
+  ObAllVirtualDagWarningHistory();
+  virtual ~ObAllVirtualDagWarningHistory();
+  virtual int inner_get_next_row(common::ObNewRow *&row);
+  virtual void reset();
+protected:
+  int fill_cells(share::ObDagWarningInfo &dag_warning_info);
+private:
+private:
+  char ip_buf_[common::OB_IP_STR_BUFF];
+  char task_id_buf_[common::OB_TRACE_STAT_BUFFER_SIZE];
+  char warning_info_buf_[common::OB_DAG_WARNING_INFO_LENGTH];
+  share::ObDagWarningInfo dag_warning_info_;
+  compaction::ObIDiagnoseInfoMgr::Iterator dag_warning_info_iter_;
+  bool is_inited_;
+  char comment_[common::OB_DAG_WARNING_INFO_LENGTH];
+  DISALLOW_COPY_AND_ASSIGN(ObAllVirtualDagWarningHistory);
+};
+
+} /* namespace observer */
+} /* namespace oceanbase */
+#endif

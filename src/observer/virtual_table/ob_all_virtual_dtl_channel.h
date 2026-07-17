@@ -1,0 +1,167 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef OB_ALL_VIRTUAL_DTL_CHANNEL_H
+#define OB_ALL_VIRTUAL_DTL_CHANNEL_H
+
+#include "sql/dtl/ob_dtl_channel.h"
+#include "lib/utility/ob_macro_utils.h"
+#include "observer/virtual_table/ob_virtual_table_scanner_iterator.h"
+#include "common/row/ob_row.h"
+
+namespace oceanbase
+{
+namespace observer
+{
+
+class ObVirtualChannelInfo
+{
+public:
+  ObVirtualChannelInfo() :
+    is_local_(false), is_data_(false), is_transmit_(false), channel_id_(0), op_id_(-1), peer_id_(0), alloc_buffer_cnt_(0),
+    free_buffer_cnt_(0), send_buffer_cnt_(0), recv_buffer_cnt_(0), processed_buffer_cnt_(0), send_buffer_size_(0),
+    hash_val_(0), buffer_pool_id_(0), pins_(0), first_in_ts_(0), first_out_ts_(0), last_in_ts_(0), last_out_ts_(0),
+    state_(0), thread_id_(0), owner_mod_(0), peer_(), eof_(false)
+  {}
+
+  void get_info(sql::dtl::ObDtlChannel* ch);
+
+  TO_STRING_KV(K(channel_id_), K(op_id_), K(peer_id_));
+public:
+  bool is_local_;                 // 1
+  bool is_data_;
+  bool is_transmit_;
+  uint64_t channel_id_;
+  int64_t op_id_;                // 5
+  int64_t peer_id_;
+  int64_t alloc_buffer_cnt_;
+  int64_t free_buffer_cnt_;
+  int64_t send_buffer_cnt_;       // 10
+  int64_t recv_buffer_cnt_;
+  int64_t processed_buffer_cnt_;
+  int64_t send_buffer_size_;
+  int64_t hash_val_;
+  int64_t buffer_pool_id_;        // 15
+  int64_t pins_;
+  int64_t first_in_ts_;
+  int64_t first_out_ts_;
+  int64_t last_in_ts_;
+  int64_t last_out_ts_;           // 20
+  int64_t state_;
+  int64_t thread_id_;
+  int64_t owner_mod_;
+  ObAddr peer_;
+  bool eof_;
+};
+
+class ObVirtualDtlChannelOp
+{
+public:
+  explicit ObVirtualDtlChannelOp(common::ObArray<ObVirtualChannelInfo, common::ObWrapperAllocator> *channels):
+    channels_(channels)
+  {}
+  ~ObVirtualDtlChannelOp() { channels_ = nullptr; }
+  int operator()(sql::dtl::ObDtlChannel *entry);
+
+private:
+  // the maxinum of get channels
+  static const int64_t MAX_CHANNEL_CNT_PER_TENANT = 1000000;
+  common::ObArray<ObVirtualChannelInfo, common::ObWrapperAllocator> *channels_;
+};
+
+class ObVirtualDtlChannelIterator
+{
+public:
+  ObVirtualDtlChannelIterator(common::ObArenaAllocator *allocator);
+  ~ObVirtualDtlChannelIterator() { destroy(); }
+
+  void destroy()
+  {
+    channels_.reset();
+    iter_allocator_ = nullptr;
+    cur_nth_channel_ = 0;
+  }
+
+  void reset()
+  {
+    channels_.reset();
+    iter_allocator_->reuse();
+    cur_nth_channel_ = 0;
+  }
+  int init();
+  int get_all_channels();
+
+  int get_next_channel(ObVirtualChannelInfo &chan_info);
+private:
+  common::ObArenaAllocator *iter_allocator_;
+  common::ObArray<ObVirtualChannelInfo, common::ObWrapperAllocator> channels_;
+  int64_t cur_nth_channel_;
+};
+
+class ObAllVirtualDtlChannel : public common::ObVirtualTableScannerIterator
+{
+public:
+  ObAllVirtualDtlChannel();
+  ~ObAllVirtualDtlChannel() { destroy(); }
+
+  void destroy();
+  void reset();
+  int inner_open();
+  int inner_get_next_row(common::ObNewRow *&row);
+
+private:
+  enum STORAGE_COLUMN
+  {
+        CHANNEL_ID = common::OB_APP_MIN_COLUMN_ID,
+    OP_ID,
+    PEER_ID,
+    IS_LOCAL,
+    IS_DATA,
+    IS_TRANSMIT,
+    ALLOC_BUFFER_CNT,
+    FREE_BUFFER_CNT,      // OB_APP_MIN_COLUMN_ID + 10
+    SEND_BUFFER_CNT,
+    RECV_BUFFER_CNT,
+    PROCESSED_BUFFER_CNT,
+    SEND_BUFFER_SIZE,
+    HASH_VAL,       // OB_APP_MIN_COLUMN_ID + 15
+    BUFFER_POOL_ID,
+    PINS,
+    FIRST_IN_TS,
+    FIRST_OUT_TS,
+    LAST_IN_TS,         // OB_APP_MIN_COLUMN_ID + 20
+    LAST_OUT_TS,
+    STATE,
+    THREAD_ID,
+    OWNER_MOD,
+    PEER_IP,              // OB_APP_MIN_COLUMN_ID + 25
+    PEER_PORT,            // OB_APP_MIN_COLUMN_ID + 26
+    DTL_EOF,
+  };
+  int get_row(ObVirtualChannelInfo &chan_info, common::ObNewRow *&row);
+
+private:
+  common::ObString ipstr_;
+  int32_t port_;
+  char peer_ip_buf_[common::OB_IP_STR_BUFF];
+  common::ObArenaAllocator arena_allocator_;
+  ObVirtualDtlChannelIterator iter_;
+};
+
+} /* namespace observer */
+} /* namespace oceanbase */
+
+#endif /* OB_ALL_VIRTUAL_DTL_CHANNEL_H */

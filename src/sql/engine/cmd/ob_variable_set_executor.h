@@ -1,0 +1,133 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef OCEANBASE_SQL_ENGINE_CMD_OB_VARIABLE_SET_EXECUTOR_
+#define OCEANBASE_SQL_ENGINE_CMD_OB_VARIABLE_SET_EXECUTOR_
+#include "sql/resolver/cmd/ob_variable_set_stmt.h"
+#include "share/ob_define.h"
+#include "sql/session/ob_session_val_map.h"
+
+namespace oceanbase
+{
+namespace common
+{
+class ObIAllocator;
+class ObExprCtx;
+// namespace sqlclient
+// {
+class ObMySQLProxy;
+// }
+}
+namespace sql
+{
+class ObExecContext;
+class ObSQLSessionInfo;
+class ObPhysicalPlanCtx;
+class ObVariableSetExecutor
+{
+public:
+  ObVariableSetExecutor();
+  virtual ~ObVariableSetExecutor();
+  int execute(ObExecContext &ctx, ObVariableSetStmt &stmt);
+  static int calc_var_value_static_engine(
+          ObVariableSetStmt::VariableSetNode &node,
+          ObVariableSetStmt &stmt,
+          ObExecContext &exec_ctx,
+          common::ObObj &value_obj);
+  static int calc_subquery_expr_value(ObExecContext &ctx,
+                                      ObSQLSessionInfo *session_info,
+                                      ObRawExpr *expr,
+                                      common::ObObj &value_obj);
+  static int execute_subquery_expr(ObExecContext &ctx,
+                                   ObSQLSessionInfo *session_info,
+                                   const ObSqlString &subquery_expr,
+                                   common::ObObj &value_obj);
+  static int check_and_convert_sys_var(ObExecContext &ctx,
+                                       const sql::ObSetVar &set_var,
+                                       sql::ObBasicSysVar &sys_var,
+                                       const common::ObObj &in_val,
+                                       common::ObObj &out_val,
+                                       bool is_set_stmt);
+  static int set_user_variable(const common::ObObj &val,
+                               const common::ObString &name,
+                               const common::ObExprCtx &expr_ctx);
+  static int set_user_variable(const common::ObObj &val,
+                               const common::ObString &name,
+                               ObSQLSessionInfo *session);
+  static int cast_value(ObExecContext &ctx,
+                        const ObVariableSetStmt::VariableSetNode &var_node,
+                        common::ObIAllocator &calc_buf,
+                        const sql::ObBasicSysVar &sys_val,
+                        const common::ObObj &in_val,
+                        common::ObObj &out_val);
+  static int switch_to_session_variable(const common::ObExprCtx &expr_ctx,
+                                        const common::ObObj &value,
+                                        ObSessionVariable &sess_var);
+  static int switch_to_session_variable(const common::ObObj &value,
+                                        ObSessionVariable &sess_var);
+private:
+  struct ObValidatePasswordCtx {
+    ObValidatePasswordCtx() :
+      expect_length_(0),
+      cur_length_(0),
+      cur_mixed_case_count_(0),
+      cur_number_count_(0),
+      cur_special_count_(0)
+    {}
+    int init();
+    int get_current_val(share::schema::ObSchemaGetterGuard &schema_guard,
+                        share::ObSysVarClassType var_id,
+                        uint64_t &val);
+    int update_expect_length();
+
+    uint64_t expect_length_;
+    uint64_t cur_length_;
+    uint64_t cur_mixed_case_count_;
+    uint64_t cur_number_count_;
+    uint64_t cur_special_count_;
+  };
+  int process_session_autocommit_hook(ObExecContext &exec_ctx,
+                                      const common::ObObj &val);
+  int process_auto_increment_hook(const ObSQLMode sql_mode,
+                                  const common::ObString var_name,
+                                  common::ObObj &val);
+  int process_last_insert_id_hook(ObPhysicalPlanCtx *plan_ctx,
+                                  const ObSQLMode sql_mode,
+                                  const common::ObString var_name,
+                                  common::ObObj &val);
+  int update_resource_mapping_rule_version(ObMySQLProxy &sql_proxy);
+
+  int update_global_variables(ObExecContext &ctx,
+                              ObDDLStmt &stmt,
+                              const sql::ObSetVar &set_var,
+                              const common::ObObj &value_obj);
+  int global_variable_timezone_formalize(ObExecContext &ctx, ObObj &val);
+  int process_validate_password_hook(ObValidatePasswordCtx &ctx,
+                                     const common::ObString var_name,
+                                     const common::ObObj &val);
+  int cascade_set_validate_password(ObExecContext &ctx,
+                                    ObVariableSetStmt &stmt,
+                                    common::ObIAllocator &calc_buf,
+                                    common::ObMySQLProxy &sql_proxy,
+                                    const ObValidatePasswordCtx &password_ctx);
+  int is_support(const sql::ObSetVar &set_var);
+  int do_set_names(ObExecContext &ctx, ObSetNamesStmt &stmt);
+private:
+  DISALLOW_COPY_AND_ASSIGN(ObVariableSetExecutor);
+};
+}
+}
+#endif /* OCEANBASE_SQL_ENGINE_CMD_OB_VARIABLE_SET_EXECUTOR_ */

@@ -1,0 +1,131 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+#ifndef __SQL_ENG_P2P_DH_MGR_H__
+#define __SQL_ENG_P2P_DH_MGR_H__
+#include "lib/ob_define.h"
+#include "lib/hash/ob_hashmap.h"
+#include "sql/engine/px/p2p_datahub/ob_p2p_dh_share_info.h"
+#include "sql/engine/px/p2p_datahub/ob_p2p_dh_msg.h"
+
+namespace oceanbase
+{
+namespace sql
+{
+
+class ObPxSQCProxy;
+
+class ObP2PDatahubManager
+{
+public:
+  struct P2PMsgMergeCall
+  {
+    P2PMsgMergeCall(ObP2PDatahubMsgBase &db_msg) : dh_msg_(db_msg), need_free_(false) {};
+    ~P2PMsgMergeCall() = default;
+    int operator() (common::hash::HashMapPair<ObP2PDhKey, ObP2PDatahubMsgBase *> &entry);
+    int ret_;
+    ObP2PDatahubMsgBase &dh_msg_;
+    bool need_free_;
+  };
+
+  struct P2PMsgGetCall
+  {
+    P2PMsgGetCall(ObP2PDatahubMsgBase *&db_msg) : dh_msg_(db_msg), ret_(OB_SUCCESS) {};
+    ~P2PMsgGetCall() = default;
+    void operator() (common::hash::HashMapPair<ObP2PDhKey, ObP2PDatahubMsgBase *> &entry);
+    ObP2PDatahubMsgBase *&dh_msg_;
+    int ret_;
+  };
+
+  struct P2PMsgEraseIfCall
+  {
+    P2PMsgEraseIfCall() : ret_(OB_SUCCESS) {};
+    ~P2PMsgEraseIfCall() = default;
+    bool operator() (common::hash::HashMapPair<ObP2PDhKey, ObP2PDatahubMsgBase *> &entry);
+    int ret_;
+  };
+
+  struct P2PMsgSetCall
+  {
+    P2PMsgSetCall(ObP2PDhKey &dh_key, ObP2PDatahubMsgBase &db_msg)
+        : dh_key_(dh_key), dh_msg_(db_msg), ret_(OB_SUCCESS), succ_reg_dm_(false) {};
+    ~P2PMsgSetCall() = default;
+    int operator() (const common::hash::HashMapPair<ObP2PDhKey, ObP2PDatahubMsgBase *> &entry);
+    ObP2PDhKey &dh_key_;
+    ObP2PDatahubMsgBase &dh_msg_;
+    int ret_;
+    bool succ_reg_dm_;
+  };
+
+public:
+  ObP2PDatahubManager() : map_(), is_inited_(false),
+      p2p_dh_id_(0)
+  {}
+  ~ObP2PDatahubManager() { destroy(); }
+  static ObP2PDatahubManager &instance();
+  typedef common::hash::ObHashMap<ObP2PDhKey, ObP2PDatahubMsgBase *> MsgMap;
+  int init();
+  void destroy();
+  int process_msg(ObP2PDatahubMsgBase &msg);
+  int send_p2p_msg(
+      ObP2PDatahubMsgBase &msg,
+      ObPxSQCProxy &sqc_proxy);
+  int send_local_p2p_msg(ObP2PDatahubMsgBase &msg);
+  template<typename T>
+  int alloc_msg(const ObMemAttr &attr, T *&msg_ptr)
+  {
+    int ret = OB_SUCCESS;
+    void *ptr = nullptr;
+    if (OB_ISNULL(ptr = (ob_malloc(sizeof(T), attr)))) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+      SQL_LOG(WARN, "failed to alloc memory for p2p dh msg", K(ret));
+    } else {
+      msg_ptr = new (ptr) T();
+    }
+    return ret;
+  }
+
+  int alloc_msg(common::ObIAllocator &allocator,
+                ObP2PDatahubMsgBase::ObP2PDatahubMsgType type,
+                ObP2PDatahubMsgBase *&msg_ptr);
+  int send_local_msg(ObP2PDatahubMsgBase *msg);
+  int atomic_get_msg(ObP2PDhKey &dh_key, ObP2PDatahubMsgBase *&msg);
+  int erase_msg(ObP2PDhKey &dh_key, ObP2PDatahubMsgBase *&msg);
+  int erase_msg_if(ObP2PDhKey &dh_key, ObP2PDatahubMsgBase *&msg, bool& is_erased);
+  MsgMap &get_map() { return map_; }
+  int deep_copy_msg(ObP2PDatahubMsgBase &msg, ObP2PDatahubMsgBase *&new_msg);
+  void free_msg(ObP2PDatahubMsgBase *&msg);
+  int generate_p2p_dh_id(int64_t &p2p_dh_id);
+private:
+  template<typename T>
+  int alloc_msg(common::ObIAllocator &allocator,
+                T *&msg_ptr, const ObMemAttr &mem_attr);
+private:
+  static const int64_t BUCKET_NUM = 10000;
+private:
+  MsgMap map_;
+  bool is_inited_;
+  int64_t p2p_dh_id_;
+private:
+  DISALLOW_COPY_AND_ASSIGN(ObP2PDatahubManager);
+};
+
+#define PX_P2P_DH (::oceanbase::sql::ObP2PDatahubManager::instance())
+
+} //end sql;
+} //end oceanbase
+
+
+#endif

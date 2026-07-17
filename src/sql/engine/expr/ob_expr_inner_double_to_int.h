@@ -1,0 +1,60 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef OCEANBASE_SQL_ENGINE_EXPR_OB_EXPR_INNER_DOUBLE_TO_INT_
+#define OCEANBASE_SQL_ENGINE_EXPR_OB_EXPR_INNER_DOUBLE_TO_INT_
+
+#include "sql/engine/expr/ob_expr_operator.h"
+
+namespace oceanbase
+{
+namespace sql
+{
+//This expression is used to extract double to int range.
+//inner_double_to_int(val)
+//for example: inner_double_to_int(9.223372036854776e+18) = 9223372036854775296 
+//             inner_double_to_int(9.223372036854776e+18) = INT64_MAX
+class ObExprInnerDoubleToInt : public ObFuncExprOperator
+{
+public:
+  explicit  ObExprInnerDoubleToInt(common::ObIAllocator &alloc);
+  virtual ~ObExprInnerDoubleToInt() {};
+
+  virtual int calc_result_type1(ObExprResType &type,
+                                ObExprResType &type1,
+                                common::ObExprTypeCtx &type_ctx) const;
+  virtual int cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_expr,
+                      ObExpr &rt_expr) const override;
+  static int eval_inner_double_to_int(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum);
+
+  static int convert_double_to_int64_range(double d, int64_t &start, int64_t &end);
+
+  static int convert_double_to_uint64_range(double d, uint64_t &start, uint64_t &end);
+
+  static int add_double_bit_1(double d, double &out);
+
+  static int sub_double_bit_1(double d, double &out);
+
+  static int double_to_number(double in_val, ObIAllocator &alloc,
+                                  number::ObNumber &number);
+
+private:
+  DISALLOW_COPY_AND_ASSIGN(ObExprInnerDoubleToInt) const;
+};
+} // namespace sql
+} // namespace oceanbase
+
+#endif // OCEANBASE_SQL_ENGINE_EXPR_OB_EXPR_INNER_DOUBLE_TO_INT_

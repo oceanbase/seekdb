@@ -1,0 +1,117 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef OCEANBASE_STORAGE_OB_TABLET_STATUS
+#define OCEANBASE_STORAGE_OB_TABLET_STATUS
+
+#include <stdint.h>
+#include "lib/utility/ob_print_utils.h"
+
+namespace oceanbase
+{
+namespace storage
+{
+class ObTabletStatus
+{
+public:
+  enum Status : uint8_t
+  {
+    CREATING = 0, // deprecated after 4.1
+    NORMAL   = 1,
+    DELETING = 2, // deprecated after 4.1
+    DELETED  = 3,
+    TRANSFER_OUT = 4,
+    TRANSFER_IN  = 5,
+    TRANSFER_OUT_DELETED = 6,
+    NONE = 7,
+    SPLIT_SRC = 8,
+    SPLIT_DST = 9,
+    SPLIT_SRC_DELETED = 10,
+    MAX,
+  };
+public:
+  ObTabletStatus();
+  ~ObTabletStatus() = default;
+  explicit ObTabletStatus(const Status &status);
+public:
+  ObTabletStatus &operator=(const Status &status);
+  bool operator==(const Status &status);
+  bool operator!=(const Status &status);
+  operator Status() const;
+
+  bool is_valid() const;
+  static const char *get_str(const ObTabletStatus &status);
+  Status &get_status() { return status_; }
+  const Status &get_status() const { return status_; }
+
+  bool is_deleted_for_gc() const;
+  bool is_writable_for_dml() const;
+
+  int serialize(char *buf, const int64_t len, int64_t &pos) const;
+  int deserialize(const char *buf, const int64_t len, int64_t &pos);
+  int64_t get_serialize_size() const;
+
+  TO_STRING_KV("val", static_cast<uint8_t>(status_),
+               "str", get_str(*this));
+private:
+  static constexpr const char *status_str_array_[] = {
+    "CREATING",
+    "NORMAL",
+    "DELETING",
+    "DELETED",
+    "TRANSFER_OUT",
+    "TRANSFER_IN",
+    "TRANSFER_OUT_DELETED",
+    "NONE",
+    "SPLIT_SRC",
+    "SPLIT_DST",
+    "SPLIT_SRC_DELETED",
+    "MAX"
+  };
+
+  Status status_;
+};
+
+inline ObTabletStatus &ObTabletStatus::operator=(const Status &status)
+{
+  status_ = status;
+  return *this;
+}
+
+inline bool ObTabletStatus::operator==(const Status &status)
+{
+  return status_ == status;
+}
+
+inline bool ObTabletStatus::operator!=(const Status &status)
+{
+  return status_ != status;
+}
+
+inline ObTabletStatus::operator Status() const
+{
+  return status_;
+}
+
+inline bool ObTabletStatus::is_valid() const
+{
+  return status_ < Status::MAX;
+}
+
+} // namespace storage
+} // namespace oceanbase
+
+#endif // OCEANBASE_STORAGE_OB_TABLET_STATUS

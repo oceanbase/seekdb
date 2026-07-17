@@ -1,0 +1,78 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef OCEANBASE_STORAGE_TMP_FILE_OB_TMP_FILE_GLOBAL_H_
+#define OCEANBASE_STORAGE_TMP_FILE_OB_TMP_FILE_GLOBAL_H_
+#include  "lib/ob_define.h"
+
+namespace oceanbase
+{
+namespace tmp_file
+{
+struct ObTmpFileGlobal final
+{
+  // SN_TMP_FILE
+  static const int64_t INVALID_TMP_FILE_FD;
+  static const int64_t INVALID_TMP_FILE_DIR_ID;
+
+  static constexpr int64_t ALLOC_PAGE_SIZE = 8 * 1024;  // 8KB
+  static constexpr int64_t SN_BLOCK_SIZE = OB_DEFAULT_MACRO_BLOCK_SIZE; // 2MB
+  static constexpr int64_t BLOCK_PAGE_NUMS =
+                           SN_BLOCK_SIZE / ALLOC_PAGE_SIZE;   // 256 pages per macro block
+
+  static const int64_t TMP_FILE_READ_BATCH_SIZE;
+  static const int64_t TMP_FILE_WRITE_BATCH_PAGE_NUM;
+
+  static const int64_t TMP_FILE_MAX_LABEL_SIZE = 15;
+
+  // SN_TMP_FILE_BLOCK
+  static const int64_t INVALID_TMP_FILE_BLOCK_INDEX;
+
+  // TMP_FILE_WRITE_BUFFER
+  static const uint32_t INVALID_PAGE_ID;
+  static const int64_t INVALID_VIRTUAL_PAGE_ID;
+
+  // TMP_FILE_FLUSH_STAGE
+  enum FlushCtxState
+  {
+    FSM_F1 = 0,  // flush data list L1
+    FSM_F2 = 1,  // flush data list L2 & L3 & L4
+    FSM_F3 = 2,  // flush data list L5
+    FSM_F4 = 3,  // flush meta list non-rightmost pages
+    FSM_F5 = 4,  // flush meta list rightmost pages
+    FSM_FINISHED = 5
+  };
+  static int advance_flush_ctx_state(const FlushCtxState cur_stage, FlushCtxState &next_stage);
+  static const int64_t INVALID_FLUSH_SEQUENCE = -1;
+  static const int32_t FLUSH_TIMER_CNT = 4;
+  static const int64_t MAX_FLUSHING_BLOCK_NUM = 200;
+
+  enum FileList {
+    INVALID = -1,
+    L1 = 0, // [2MB, INFINITE)
+    L2,     // [1MB, 2MB)
+    L3,     // [128KB, 1MB)
+    L4,     // data_list: [8KB, 128KB); meta_list: (0KB, 128KB)
+    L5,     // data_list: (0, 8KB); meta_list: 0KB
+    MAX
+  };
+  static int switch_data_list_level_to_flush_state(const FileList list_level, FlushCtxState &flush_state);
+  static const int64_t TMP_FILE_STAT_FREQUENCY = 1 * 1000 * 1000; // 1s
+};
+
+}  // end namespace tmp_file
+}  // end namespace oceanbase
+#endif // OCEANBASE_STORAGE_TMP_FILE_OB_TMP_FILE_GLOBAL_H_

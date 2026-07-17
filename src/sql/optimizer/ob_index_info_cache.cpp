@@ -1,0 +1,142 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#define USING_LOG_PREFIX SQL_OPT
+#include "ob_index_info_cache.h"
+#include "sql/resolver/dml/ob_dml_stmt.h"
+namespace oceanbase
+{
+using namespace common;
+namespace sql
+{
+
+ObIndexInfoCache::~ObIndexInfoCache()
+{
+  for (int i = 0; i < entry_count_; ++i) {
+    if (NULL != index_entrys_[i]) {
+      index_entrys_[i]->~IndexInfoEntry();
+    }
+  }
+}
+
+int ObIndexInfoCache::get_index_info_entry(const uint64_t table_id,
+                                           const uint64_t index_id,
+                                           IndexInfoEntry *&entry,
+                                           int64_t *idx) const
+{
+  int ret = OB_SUCCESS;
+  entry = NULL;
+  if (table_id != table_id_ ||
+      OB_UNLIKELY(OB_INVALID_ID == index_id)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("table_id is invalid", K(index_id), K_(table_id), K(ret));
+  } else {
+    for (int64_t i = 0; OB_SUCC(ret) && i < entry_count_; ++i) {
+      if (OB_ISNULL(index_entrys_[i])) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("entry should not be null", K(ret));
+      } else if (index_entrys_[i]->get_index_id() == index_id) {
+        entry = index_entrys_[i];
+        if (idx != nullptr) {
+          *idx = i;
+        }
+        break;
+      }
+    }
+  }
+  return ret;
+}
+
+int ObIndexInfoCache::get_query_range(const uint64_t table_id,
+                                      const uint64_t index_id,
+                                      const QueryRangeInfo *&range_info) const
+{
+  int ret = OB_SUCCESS;
+  range_info = NULL;
+  if (table_id != table_id_) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("table_id is invalid", K(table_id), K_(table_id), K(ret));
+  } else {
+    IndexInfoEntry *entry = NULL;
+    if (OB_FAIL(get_index_info_entry(table_id, index_id, entry))) {
+      LOG_WARN("failed to get index_info entry", K(index_id), K(ret));
+    } else if (OB_ISNULL(entry)) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("entry should not be null", K(ret));
+    } else if (entry->get_range_info().is_valid()){
+      range_info = &entry->get_range_info();
+    } else {
+      LOG_TRACE("entry is invalid", K(table_id), K(index_id));
+    }
+  }
+  return ret;
+}
+
+/*
+ * This interface is the same as get_access_path_ordering in ob_join_order.cpp, it just gets the ordering info from the cache
+ * */
+int ObIndexInfoCache::get_access_path_ordering(const uint64_t table_id,
+                                               const uint64_t index_id,
+                                               const OrderingInfo *&ordering_info) const
+{
+  int ret = OB_SUCCESS;
+  ordering_info = NULL;
+  if (table_id != table_id_) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("table_id is invalid", K(table_id), K_(table_id), K(ret));
+  } else {
+    IndexInfoEntry *entry = NULL;
+    if (OB_FAIL(get_index_info_entry(table_id, index_id, entry))) {
+      LOG_WARN("failed to get index_info entry", K(index_id), K(ret));
+    } else if (OB_ISNULL(entry)) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("entry should not be null", K(ret));
+    } else {
+      ordering_info = &entry->get_ordering_info();
+    }
+  }
+  return ret;
+}
+
+int ObIndexInfoCache::add_index_info_entry(IndexInfoEntry *entry)
+{
+  int ret = OB_SUCCESS;
+  IndexInfoEntry *old_entry;
+  int64_t idx = OB_INVALID_INDEX;
+  if (OB_ISNULL(entry)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("entry should not be null", K(ret));
+  } else if (OB_FAIL(get_index_info_entry(table_id_, entry->get_index_id(), old_entry, &idx))) {
+    LOG_WARN("failed to get index info entry", KPC(entry), K(ret));
+  } else if (old_entry != nullptr) {
+    // update index info entry
+    old_entry->~IndexInfoEntry();
+    index_entrys_[idx] = entry;
+  } else if (entry_count_ >= OB_MAX_AUX_TABLE_PER_MAIN_TABLE + 1) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid entry count", K(ret), K_(entry_count),
+             K(OB_MAX_AUX_TABLE_PER_MAIN_TABLE));
+  } else {
+    index_entrys_[entry_count_] = entry;
+    ++entry_count_;
+  }
+  return ret;
+}
+
+} //end of namespace sql
+} //end of namespace oceanbase
+
+

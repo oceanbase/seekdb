@@ -1,0 +1,66 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef OB_HASH_PARTITIONING_BASIC_H_
+#define OB_HASH_PARTITIONING_BASIC_H_
+
+#include "share/datum/ob_datum_funcs.h"
+#include "sql/engine/sort/ob_sort_basic_info.h"
+#include "sql/engine/basic/ob_chunk_datum_store.h"
+
+namespace oceanbase
+{
+namespace sql
+{
+
+static const uint64_t DEFAULT_PART_HASH_VALUE = 99194853094755497L;
+struct ObHashPartStoredRow : public sql::ObChunkDatumStore::StoredRow
+{
+  const static int64_t HASH_VAL_BIT = 63;
+  const static int64_t HASH_VAL_MASK = UINT64_MAX >> (64 - HASH_VAL_BIT);
+  struct ExtraInfo
+  {
+    uint64_t hash_val_:HASH_VAL_BIT;
+    uint64_t is_match_:1;
+  };
+  ExtraInfo &get_extra_info()
+  {
+    static_assert(sizeof(ObHashPartStoredRow) == sizeof(sql::ObChunkDatumStore::StoredRow),
+        "sizeof StoredJoinRow must be the save with StoredRow");
+    return *reinterpret_cast<ExtraInfo *>(get_extra_payload());
+  }
+  const ExtraInfo &get_extra_info() const
+  { return *reinterpret_cast<const ExtraInfo *>(get_extra_payload()); }
+
+  uint64_t get_hash_value() const
+  { return get_extra_info().hash_val_; }
+  void set_hash_value(const uint64_t hash_val)
+  { get_extra_info().hash_val_ = hash_val & HASH_VAL_MASK; }
+  bool is_match() const { return get_extra_info().is_match_; }
+  void set_is_match(bool is_match) { get_extra_info().is_match_ = is_match; }
+  static uint64_t get_hash_mask() { return HASH_VAL_MASK; }
+};
+
+enum InputSide
+{
+  LEFT = 0,
+  RIGHT = 1,
+};
+
+}  // namespace sql
+}  // namespace oceanbase
+
+#endif /* OB_HASH_PARTITIONING_BASIC_H_ */

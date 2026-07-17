@@ -1,0 +1,80 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef OCEANBASE_COMMON_OB_LEARNER_LIST_H_
+#define OCEANBASE_COMMON_OB_LEARNER_LIST_H_
+
+#include "lib/container/ob_se_array.h"        // SEArray
+#include "lib/container/ob_se_array_iterator.h"        // SEArrayIterator
+#include "lib/string/ob_sql_string.h"         // ObSqlString
+#include "lib/utility/ob_unify_serialize.h"   // serialize
+#include "common/ob_member.h"
+
+namespace oceanbase
+{
+namespace common
+{
+
+template <int64_t MAX_SIZE, typename T = common::ObMember>
+class BaseLearnerList
+{
+  OB_UNIS_VERSION(1);
+public:
+  BaseLearnerList(): learner_array_() { }
+  ~BaseLearnerList() { reset(); }
+
+public:
+  bool is_valid() const;
+  bool is_full() const;
+  void reset();
+  int get_learner(const int64_t idx, T &learner) const;
+  // dangerous
+  T &get_learner(const int64_t idx);
+  int get_server_by_index(const int64_t idx, common::ObAddr &server) const;
+  int get_member_by_index(const int64_t idx, common::ObMember &member) const;
+  int add_server(const common::ObAddr &server);
+  int add_learner(const T &learner);
+  int remove_learner(const T &learner);
+  int remove_learner(const common::ObAddr &server);
+  bool contains(const T &learner) const;
+  bool contains(const common::ObAddr &server) const;
+  int get_learner_by_addr(const common::ObAddr server, T &learner) const;
+  int64_t get_member_number() const;
+  bool learner_addr_equal(const BaseLearnerList<MAX_SIZE, T> &learner_list) const;
+  BaseLearnerList &operator=(const BaseLearnerList<MAX_SIZE, T> &learner_list);
+  int append(const BaseLearnerList<MAX_SIZE, T> &learner_list);
+  int deep_copy(const BaseLearnerList<MAX_SIZE, T> &learner_list);
+  template <int64_t ARG_MAX_SIZE>
+  int deep_copy_to(BaseLearnerList<ARG_MAX_SIZE, common::ObMember> &learner_list) const;
+  int transform_to_string(common::ObSqlString &output_string) const;
+  TO_STRING_KV("learner_num", learner_array_.count(), K_(learner_array));
+  // by operator ==
+  int64_t get_index_by_learner(const T &learner) const;
+  // by addr
+  int64_t get_index_by_addr(const common::ObAddr &server) const;
+  int get_addr_array(ObIArray<common::ObAddr> &addr_array) const;
+private:
+  typedef common::ObSEArray<T, OB_MAX_MEMBER_NUMBER> LogLearnerArray;
+  LogLearnerArray learner_array_;
+};
+
+typedef BaseLearnerList<common::OB_MAX_GLOBAL_LEARNER_NUMBER, common::ObMember> GlobalLearnerList;
+typedef BaseLearnerList<OB_MAX_MEMBER_NUMBER + OB_MAX_GLOBAL_LEARNER_NUMBER, common::ObMember> ResendConfigLogList;
+
+} // namespace common end
+} // namespace oceanbase end
+#include "ob_learner_list.ipp"
+#endif

@@ -1,0 +1,89 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef OCEANBASE_SHARE_OB_COMMON_ID_H_
+#define OCEANBASE_SHARE_OB_COMMON_ID_H_
+
+#include <stdint.h>
+#include "lib/utility/ob_print_utils.h"     // TO_STRING_KV
+#include "share/ob_display_list.h"          // ObDisplayType
+
+namespace oceanbase
+{
+namespace share
+{
+
+// Define a common ID type for all ID requirement.
+class ObCommonID
+{
+public:
+  static const int64_t INVALID_ID = -1;
+
+public:
+  ObCommonID() : id_(INVALID_ID) {}
+  ObCommonID(const ObCommonID &other) : id_(other.id_) {}
+  explicit ObCommonID(const int64_t id) : id_(id) {}
+  ~ObCommonID() { reset(); }
+
+public:
+  int64_t id() const { return id_; }
+  void reset() { id_ = INVALID_ID; }
+
+  // assignment
+  ObCommonID &operator=(const int64_t id) { id_ = id; return *this; }
+  ObCommonID &operator=(const ObCommonID &other) { id_ = other.id_; return *this; }
+
+  bool is_valid() const { return INVALID_ID != id_; }
+
+  // compare operator
+  bool operator == (const ObCommonID &other) const { return id_ == other.id_; }
+  bool operator >  (const ObCommonID &other) const { return id_ > other.id_; }
+  bool operator != (const ObCommonID &other) const { return id_ != other.id_; }
+  bool operator <  (const ObCommonID &other) const { return id_ < other.id_; }
+  bool operator <= (const ObCommonID &other) const { return id_ <= other.id_; }
+  bool operator >= (const ObCommonID &other) const { return id_ >= other.id_; }
+  int compare(const ObCommonID &other) const
+  {
+    if (id_ == other.id_) {
+      return 0;
+    } else if (id_ < other.id_) {
+      return -1;
+    } else {
+      return 1;
+    }
+  }
+
+  /////////////////////// for ObDisplayType ///////////////////////
+  //NOTE: to use ObDisplayList, we should implement all interfaces of ObDisplayType
+  //
+  // max length of "id": 20 + '\0'
+  int64_t max_display_str_len() const { return 21; }
+  // convert to "id"
+  int to_display_str(char *buf, const int64_t len, int64_t &pos) const;
+  // parse from "id"
+  int parse_from_display_str(const common::ObString &str);
+
+  uint64_t hash() const;
+  NEED_SERIALIZE_AND_DESERIALIZE;
+  TO_STRING_KV(K_(id));
+private:
+  int64_t id_;
+};
+
+}
+}
+
+#endif /* OCEANBASE_SHARE_OB_COMMON_ID_H_ */

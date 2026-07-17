@@ -1,0 +1,96 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#include "ob_virtual_data_access_service.h"
+#include "lib/stat/ob_diagnostic_info_guard.h"
+#include "sql/ob_sql_context.h"
+
+using namespace oceanbase::common;
+using namespace oceanbase::sql;
+using oceanbase::common::ObNewRowIterator;
+namespace oceanbase
+{
+namespace observer
+{
+int ObVirtualDataAccessService::table_scan(ObVTableScanParam &param, ObNewRowIterator *&result)
+{
+  ACTIVE_SESSION_FLAG_SETTER_GUARD(in_storage_read);
+  const share::ObLSID &ls_id = param.ls_id_;
+  common::ObASHTabletIdSetterGuard ash_tablet_id_guard(param.index_id_);
+  ACTIVE_SESSION_RETRY_DIAG_INFO_SETTER(ls_id_, ls_id.id());
+  ACTIVE_SESSION_RETRY_DIAG_INFO_SETTER(tablet_id_, param.index_id_);
+  int ret = OB_SUCCESS;
+  ObVirtualTableIterator *vt_iter = NULL;
+  if (OB_FAIL(vt_iter_factory_.create_virtual_table_iterator(param, vt_iter))) {
+    COMMON_LOG(WARN, "failed to create virtual table iterator", K(ret), K(param));
+  } else if (NULL == vt_iter) {
+    ret = OB_ERR_UNEXPECTED;
+    COMMON_LOG(WARN, "invalid argument", K(vt_iter));
+  } else if (OB_FAIL(vt_iter->set_output_column_ids(param.column_ids_))) {
+    COMMON_LOG(WARN, "fail to set output column ids", K(ret));
+  } else {
+    vt_iter->set_scan_param(&param);
+    vt_iter->set_allocator(param.scan_allocator_);
+    vt_iter->set_reserved_column_cnt(param.reserved_cell_count_);
+    if (OB_FAIL(vt_iter->open())) {
+      COMMON_LOG(WARN, "fail to init row iterator", K(ret));
+    } else {
+      result = static_cast<ObNewRowIterator* > (vt_iter);
+    }
+  }
+
+  // clean up
+  if (OB_FAIL(ret) && !OB_ISNULL(vt_iter)) {
+    int tmp_ret = OB_SUCCESS;
+    if (OB_SUCCESS != (tmp_ret = revert_scan_iter(vt_iter))) {
+      COMMON_LOG(WARN, "failed to revert_scan_iter", K(tmp_ret));
+    }
+    vt_iter = NULL;
+  }
+  return ret;
+}
+
+int ObVirtualDataAccessService::revert_scan_iter(ObNewRowIterator *result)
+{
+  ACTIVE_SESSION_FLAG_SETTER_GUARD(in_storage_read);
+  int ret = OB_SUCCESS;
+  if (NULL == result) {
+    COMMON_LOG(DEBUG, "reuslt is null", K(ret), K(result));
+  } else {
+    ObVirtualTableIterator * vt_iter = dynamic_cast<ObVirtualTableIterator *> (result);
+    if (NULL == vt_iter) {
+      ret = OB_INVALID_ARGUMENT;
+      COMMON_LOG(WARN, "dynamic_cast failed, iter is not vt iter", K(ret));
+    } else if (OB_FAIL(vt_iter->close())) {
+      COMMON_LOG(WARN, "fail to close ObNewRowIterator", K(ret));
+    } else {
+      ret = vt_iter_factory_.revert_virtual_table_iterator(vt_iter);
+    }
+  }
+  return ret;
+}
+
+int ObVirtualDataAccessService::check_iter(common::ObVTableScanParam &param)
+{
+  int ret = OB_SUCCESS;
+  if (OB_FAIL(vt_iter_factory_.check_can_create_iter(param))) {
+    COMMON_LOG(WARN, "failed to check create virtual table iterator", K(ret), K(param));
+  }
+  return ret;
+}
+
+}
+}

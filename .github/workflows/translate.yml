@@ -1,0 +1,53 @@
+name: 'translator'
+on:
+  issues:
+    types: [opened, edited]
+  issue_comment:
+    types: [created, edited]
+  discussion:
+    types: [created, edited]
+  discussion_comment:
+    types: [created, edited]
+  pull_request_target:
+    branches: [master, develop]
+    types: [opened, edited]
+  pull_request_review_comment:
+    types: [created, edited]
+
+jobs:
+  translate:
+    if: ${{ github.event_name != 'pull_request_review_comment' || github.event.pull_request.base.ref == 'master' || github.event.pull_request.base.ref == 'develop' }}
+    permissions:
+      contents: read
+      issues: write
+      discussions: write
+      pull-requests: write
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Check if content contains Chinese
+        id: check-chinese
+        if: github.event_name == 'issues'
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            let content = '';
+            let hasChinese = false;
+            if (context.payload.issue) {
+              content = (context.payload.issue.title || '') + ' ' + (context.payload.issue.body || '');
+            }
+            console.log('Content:', content);
+
+            const chineseRegex = /[\u4e00-\u9fff]/;
+            hasChinese = chineseRegex.test(content);
+            console.log('Chinese?:', hasChinese);
+
+            core.setOutput('hasChinese', hasChinese ? 'true' : 'false');
+      - name: Translate content
+        uses: oceanbase/github-translate-action@ob-1.1.2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          IS_MODIFY_TITLE: true
+          APPEND_TRANSLATION: true

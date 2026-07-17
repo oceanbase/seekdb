@@ -1,0 +1,82 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef OCEANBASE_STORAGE_OB_TX_CTX_MEMTABLE_MGR
+#define OCEANBASE_STORAGE_OB_TX_CTX_MEMTABLE_MGR
+
+#include "storage/ob_i_memtable_mgr.h"
+#include "storage/tx_table/ob_tx_ctx_memtable.h"
+
+namespace oceanbase
+{
+namespace storage
+{
+// """
+// Computer engineering is not limited to operating computer systems but is
+// aimed at creating a broad way to design more comprehensive technological
+// solutions.
+//                                                   -- Great Architecturer
+// """
+//
+// In the design of 4.0, multiple storage types with different behaviors from
+// user data (sstable + memtable) are introduced at the log stream level, such
+// as transaction context tables, data state tables, partition lists, etc,
+// although they are different in data usage and user data The way to write
+// memtable through the SQL layer call is different, but in terms of persistent
+// storage, it is still hoped to be structurally consistent with the current
+// storage structure for unified management, and to use sstable to achieve data
+// persistence.
+//
+// After all, We need to adapt to the general storage type with LSM as the
+// design prototype, the goal is a unified abstraction of the dump module.
+//
+class ObTxCtxMemtableMgr : public ObIMemtableMgr
+{
+public:
+  ObTxCtxMemtableMgr();
+  virtual ~ObTxCtxMemtableMgr();
+
+  // ================== Unified Class Method ==================
+  //
+  // Init the memtable mgr, we use logstream id to fetch the ls_ctx_mgr and t3m
+  // to alloc the memtable.
+  virtual int init(const common::ObTabletID &tablet_id,
+                   const share::ObLSID &ls_id,
+                   ObFreezer *freezer,
+                   ObTenantMetaMemMgr *t3m) override;
+  virtual void destroy() override;
+
+  // create_memtable is used for creating the only memtable for CheckpointMgr
+  virtual int create_memtable(const CreateMemtableArg &arg) override;
+
+  const ObTxCtxMemtable *get_tx_ctx_memtable_(const int64_t pos) const;
+
+  DECLARE_VIRTUAL_TO_STRING;
+protected:
+  virtual int release_head_memtable_(ObIMemtable *imemtable,
+                                     const bool force) override;
+
+  int unregister_from_common_checkpoint_(const ObTxCtxMemtable *memtable);
+private:
+  share::ObLSID ls_id_;
+  common::SpinRWLock lock_def_;
+};
+
+} // namespace storage
+} // namespace oceanbase
+
+#endif // OCEANBASE_STORAGE_OB_TX_CTX_MEMTABLE_MGR
+

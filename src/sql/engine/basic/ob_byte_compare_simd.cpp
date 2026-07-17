@@ -1,0 +1,63 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#define USING_LOG_PREFIX SQL_ENG
+
+#include <cstdint>
+#include <cstdlib>
+
+#if defined(__GNUC__) && defined(__x86_64__) && !defined(_MSC_VER)
+#include <immintrin.h>
+#endif
+
+
+namespace oceanbase
+{
+namespace sql
+{
+int fast_compare_simd(const unsigned char *s,
+                      const unsigned char *t,
+                      int64_t length,
+                      int64_t &differ_at,
+                      int64_t cache_ends)
+{
+#if defined(__GNUC__) && defined(__x86_64__) && !defined(_MSC_VER)
+  __m128i vs = _mm_loadu_si128((__m128i *)&s[0]);
+  __m128i vt = _mm_loadu_si128((__m128i *)&t[0]);
+  __mmask16 x = _mm_cmpeq_epi8_mask(vs, vt);
+  unsigned short val = *((unsigned short *)&x);
+  if (val != 0xFFFF) {
+    int val_x = (int)(val ^ 0xFFFF);
+    int x_val = (val_x & -val_x);
+    // LOG2(x_val);
+    int y = ((unsigned)(8 * sizeof(unsigned long long) - __builtin_clzll((x_val)) - 1));
+    differ_at = y + cache_ends;
+    return s[y] - t[y];
+  }
+  return 0;
+#else
+  (void)s;
+  (void)t;
+  (void)length;
+  (void)differ_at;
+  (void)cache_ends;
+  abort();
+  return 0;
+#endif
+}
+
+}  // namespace sql
+}  // namespace oceanbase

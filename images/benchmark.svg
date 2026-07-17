@@ -1,0 +1,103 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 820 592" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif">
+  <defs>
+    <linearGradient id="seekdb-grad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#2563EB"/>
+      <stop offset="100%" style="stop-color:#3B82F6"/>
+    </linearGradient>
+    <linearGradient id="es-grad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#F59E0B"/>
+      <stop offset="100%" style="stop-color:#FBBF24"/>
+    </linearGradient>
+    <linearGradient id="milvus-grad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#8B5CF6"/>
+      <stop offset="100%" style="stop-color:#A78BFA"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Background -->
+  <rect width="820" height="592" rx="12" fill="#FFFFFF" stroke="#E5E7EB" stroke-width="1"/>
+
+  <!-- Title -->
+  <text x="410" y="36" text-anchor="middle" font-size="18" font-weight="700" fill="#111827">VectorDBBench StreamingPerformanceCase</text>
+  <text x="410" y="56" text-anchor="middle" font-size="12" fill="#6B7280">Cohere 10M dataset · 768 dimensions · continuous write + concurrent search</text>
+  <text x="410" y="74" text-anchor="middle" font-size="11" fill="#9CA3AF">16 vCPU · 64 GiB RAM</text>
+
+  <!-- Legend -->
+  <rect x="230" y="88" width="12" height="12" rx="2" fill="url(#seekdb-grad)"/>
+  <text x="247" y="99" font-size="11" fill="#374151" font-weight="600">seekdb v1.3.0</text>
+  <rect x="370" y="88" width="12" height="12" rx="2" fill="url(#es-grad)"/>
+  <text x="387" y="99" font-size="11" fill="#374151">Elasticsearch v9.3.3</text>
+  <rect x="540" y="88" width="12" height="12" rx="2" fill="url(#milvus-grad)"/>
+  <text x="557" y="99" font-size="11" fill="#374151">Milvus v2.6.9</text>
+
+  <!-- ==================== Section 1: QPS ==================== -->
+  <text x="40" y="134" font-size="14" font-weight="700" fill="#111827">QPS</text>
+  <text x="77" y="134" font-size="11" fill="#9CA3AF">(higher is better)</text>
+
+  <!-- seekdb: 1523 — bar width = (1523/1523)*530 = 530 -->
+  <rect x="200" y="148" width="530" height="24" rx="4" fill="url(#seekdb-grad)" opacity="0.9"/>
+  <text x="738" y="165" font-size="13" font-weight="700" fill="#2563EB">1,523</text>
+
+  <!-- ES: 470 — bar width = (470/1523)*530 = 164 -->
+  <rect x="200" y="180" width="164" height="24" rx="4" fill="url(#es-grad)" opacity="0.9"/>
+  <text x="372" y="197" font-size="13" font-weight="600" fill="#D97706">470</text>
+  <text x="135" y="197" text-anchor="end" font-size="11" font-weight="700" fill="#059669">3.2×</text>
+  <text x="139" y="197" font-size="10" fill="#6B7280">faster</text>
+
+  <!-- Milvus: 142 — bar width = (142/1523)*530 = 49 -->
+  <rect x="200" y="212" width="49" height="24" rx="4" fill="url(#milvus-grad)" opacity="0.9"/>
+  <text x="257" y="229" font-size="13" font-weight="600" fill="#7C3AED">142</text>
+  <text x="135" y="229" text-anchor="end" font-size="11" font-weight="700" fill="#059669">10.7×</text>
+  <text x="139" y="229" font-size="10" fill="#6B7280">faster</text>
+
+  <!-- Divider -->
+  <line x1="40" y1="252" x2="780" y2="252" stroke="#E5E7EB" stroke-width="1"/>
+
+  <!-- ==================== Section 2: P99 Latency ==================== -->
+  <text x="40" y="280" font-size="14" font-weight="700" fill="#111827">Concurrent P99 Latency</text>
+  <text x="228" y="280" font-size="11" fill="#9CA3AF">(lower is better)</text>
+
+  <!-- seekdb: 21.7ms — bar width = (21.7/153.6)*530 = 75 -->
+  <rect x="200" y="294" width="75" height="24" rx="4" fill="url(#seekdb-grad)" opacity="0.9"/>
+  <text x="283" y="311" font-size="13" font-weight="700" fill="#2563EB">21.7 ms</text>
+
+  <!-- ES: 53.6ms — bar width = (53.6/153.6)*530 = 185 -->
+  <rect x="200" y="326" width="185" height="24" rx="4" fill="url(#es-grad)" opacity="0.9"/>
+  <text x="393" y="343" font-size="13" font-weight="600" fill="#D97706">53.6 ms</text>
+  <text x="135" y="343" text-anchor="end" font-size="11" font-weight="700" fill="#059669">2.5×</text>
+  <text x="139" y="343" font-size="10" fill="#6B7280">lower</text>
+
+  <!-- Milvus: 153.6ms — bar width = (153.6/153.6)*530 = 530 -->
+  <rect x="200" y="358" width="530" height="24" rx="4" fill="url(#milvus-grad)" opacity="0.9"/>
+  <text x="738" y="375" font-size="13" font-weight="600" fill="#7C3AED">153.6 ms</text>
+  <text x="135" y="375" text-anchor="end" font-size="11" font-weight="700" fill="#059669">7.1×</text>
+  <text x="139" y="375" font-size="10" fill="#6B7280">lower</text>
+
+  <!-- Divider -->
+  <line x1="40" y1="398" x2="780" y2="398" stroke="#E5E7EB" stroke-width="1"/>
+
+  <!-- ==================== Section 3: P99 Jitter ==================== -->
+  <text x="40" y="426" font-size="14" font-weight="700" fill="#111827">P99 Jitter (serial → concurrent)</text>
+  <text x="290" y="426" font-size="11" fill="#9CA3AF">(closer to 1× is more stable)</text>
+
+  <!-- seekdb: 1.1× — bar width = (1.1/10.3)*530 = 57 -->
+  <rect x="200" y="440" width="57" height="24" rx="4" fill="url(#seekdb-grad)" opacity="0.9"/>
+  <text x="265" y="457" font-size="13" font-weight="700" fill="#2563EB">1.1×</text>
+
+  <!-- ES: 10.3× — bar width = (10.3/10.3)*530 = 530 -->
+  <rect x="200" y="472" width="530" height="24" rx="4" fill="url(#es-grad)" opacity="0.9"/>
+  <text x="738" y="489" font-size="13" font-weight="600" fill="#D97706">10.3×</text>
+  <text x="135" y="489" text-anchor="end" font-size="11" font-weight="700" fill="#059669">9.4×</text>
+  <text x="139" y="489" font-size="10" fill="#6B7280">more stable</text>
+
+  <!-- Milvus: 9.7× — bar width = (9.7/10.3)*530 = 499 -->
+  <rect x="200" y="504" width="499" height="24" rx="4" fill="url(#milvus-grad)" opacity="0.9"/>
+  <text x="707" y="521" font-size="13" font-weight="600" fill="#7C3AED">9.7×</text>
+  <text x="135" y="521" text-anchor="end" font-size="11" font-weight="700" fill="#059669">8.8×</text>
+  <text x="139" y="521" font-size="10" fill="#6B7280">more stable</text>
+
+  <!-- Bottom highlight -->
+  <rect x="120" y="548" width="580" height="32" rx="6" fill="#EFF6FF"/>
+  <text x="410" y="569" text-anchor="middle" font-size="13" font-weight="700" fill="#1E40AF">10.7× the QPS of Milvus, 3.2× of Elasticsearch — P99 barely moves under concurrency</text>
+
+</svg>

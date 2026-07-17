@@ -1,0 +1,80 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#define USING_LOG_PREFIX SQL_ENG
+#include "sql/engine/expr/ob_expr_fun_values.h"
+using namespace oceanbase::common;
+
+namespace oceanbase
+{
+namespace sql
+{
+
+ObExprFunValues::ObExprFunValues(ObIAllocator &alloc)
+    : ObFuncExprOperator(alloc, T_FUN_SYS_VALUES, N_VALUES, 1, NOT_VALID_FOR_GENERATED_COL, NOT_ROW_DIMENSION)
+{
+}
+
+ObExprFunValues::~ObExprFunValues()
+{
+}
+
+int ObExprFunValues::calc_result_type1(ObExprResType &type,
+                                       ObExprResType &text,
+                                       common::ObExprTypeCtx &type_ctx) const
+{
+  UNUSED(type_ctx);
+  type.set_type(text.get_type());
+  if (ob_is_collection_sql_type(text.get_type())) {
+    type.set_subschema_id(text.get_subschema_id());
+  } else {
+    type.set_collation_level(text.get_collation_level());
+    type.set_collation_type(text.get_collation_type());
+  }
+  type.set_accuracy(text.get_accuracy());
+  return OB_SUCCESS;
+}
+
+int ObExprFunValues::cg_expr(ObExprCGCtx &, const ObRawExpr &, ObExpr &rt_expr) const
+{
+  int ret = OB_SUCCESS;
+  CK(1 == rt_expr.arg_cnt_);
+  rt_expr.eval_func_ = &ObExprFunValues::eval_values;
+  return ret;
+}
+
+int ObExprFunValues::eval_values(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
+{
+  // values() meaningful only in insert on duplicate update clause (extra_ set to 1),
+  // return NULL otherwise.
+  int ret = OB_SUCCESS;
+  if (expr.extra_) {
+    // in insert update scope
+    ObDatum *arg = NULL;
+    if (OB_FAIL(expr.eval_param_value(ctx, arg))) {
+      LOG_WARN("evaluate parameter value failed", K(ret));
+    } else {
+      expr_datum.set_datum(*arg);
+    }
+  } else {
+    expr_datum.set_null();
+  }
+
+  return ret;
+}
+
+}
+}

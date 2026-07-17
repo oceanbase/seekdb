@@ -1,0 +1,90 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef OCEANBASE_SQL_OB_EXPR_ST_ASWKB_
+#define OCEANBASE_SQL_OB_EXPR_ST_ASWKB_
+
+#include "sql/engine/expr/ob_expr_operator.h"
+
+namespace oceanbase
+{
+namespace sql
+{
+
+class ObExprGeomWkb : public ObFuncExprOperator
+{
+public:
+  explicit ObExprGeomWkb(common::ObIAllocator &alloc,
+                         ObExprOperatorType type, 
+                         const char *name,
+                         int32_t param_num,
+                         int32_t dimension);
+  virtual ~ObExprGeomWkb();
+  virtual int calc_result_typeN(ObExprResType& type,
+                                ObExprResType* types_stack,
+                                int64_t param_num,
+                                common::ObExprTypeCtx& type_ctx) const override;
+  int eval_geom_wkb(const ObExpr &expr,
+                    ObEvalCtx &ctx,
+                    ObDatum &res);
+  virtual int cg_expr(ObExprCGCtx &expr_cg_ctx,
+                      const ObRawExpr &raw_expr,
+                      ObExpr &rt_expr) const override = 0;
+  virtual const char *get_func_name() const = 0;
+  virtual ObItemType get_expr_type() const = 0;
+private:
+  bool is_blank_string(const common::ObCollationType coll_type,
+                       const common::ObString &str) const;
+  DISALLOW_COPY_AND_ASSIGN(ObExprGeomWkb);
+};
+
+class ObExprSTAsWkb : public ObExprGeomWkb
+{
+public:
+  explicit ObExprSTAsWkb(common::ObIAllocator &alloc);
+  virtual ~ObExprSTAsWkb();
+  static int eval_st_aswkb(const ObExpr &expr,
+                           ObEvalCtx &ctx,
+                           ObDatum &res);
+  int cg_expr(ObExprCGCtx &expr_cg_ctx,
+              const ObRawExpr &raw_expr,
+              ObExpr &rt_expr) const override;
+  const char *get_func_name() const override { return N_ST_ASWKB; }
+  ObItemType get_expr_type() const override { return T_FUN_SYS_ST_ASWKB; };
+private:
+  DISALLOW_COPY_AND_ASSIGN(ObExprSTAsWkb);
+};
+
+class ObExprSTAsBinary : public ObExprGeomWkb
+{
+public:
+  explicit ObExprSTAsBinary(common::ObIAllocator &alloc);
+  virtual ~ObExprSTAsBinary();
+  static int eval_st_asbinary(const ObExpr &expr,
+                              ObEvalCtx &ctx,
+                              ObDatum &res);
+  int cg_expr(ObExprCGCtx &expr_cg_ctx,
+              const ObRawExpr &raw_expr,
+              ObExpr &rt_expr) const override;
+  const char *get_func_name() const override { return N_ST_ASBINARY; }
+  ObItemType get_expr_type() const override { return T_FUN_SYS_ST_ASBINARY; };
+private:
+  DISALLOW_COPY_AND_ASSIGN(ObExprSTAsBinary);
+};
+
+} // sql
+} // oceanbase
+#endif // OCEANBASE_SQL_OB_EXPR_ST_ASWKB_

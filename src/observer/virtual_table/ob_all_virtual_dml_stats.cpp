@@ -1,0 +1,152 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#include "ob_all_virtual_dml_stats.h"
+#include "share/rc/ob_module_provider.h"
+
+namespace oceanbase
+{
+using namespace common;
+using namespace share;
+using namespace sql;
+
+namespace observer
+{
+
+int ObAllVirtualDMmlStats::inner_open()
+{
+  int ret = OB_SUCCESS;
+  return ret;
+}
+
+int ObOptDmlStatMapGetter::operator()(common::hash::HashMapPair<StatKey, ObOptDmlStat> &entry)
+{
+  int ret = OB_SUCCESS;
+  ObObj *cells = cur_row_.cells_;
+  ObOptDmlStat &dml_stat = entry.second;
+  for (int64_t cell_idx = 0; OB_SUCC(ret) && cell_idx < output_column_ids_.count(); ++cell_idx) {
+    uint64_t col_id = output_column_ids_.at(cell_idx);
+    switch(col_id) {
+      case ObAllVirtualDMmlStats::COLUMNS::TABLE_ID: {
+        cells[cell_idx].set_int(dml_stat.table_id_);
+        break;
+      }
+      case ObAllVirtualDMmlStats::COLUMNS::TABLET_ID: {
+        cells[cell_idx].set_int(dml_stat.tablet_id_);
+        break;
+      }
+      case ObAllVirtualDMmlStats::COLUMNS::INSERT_ROW_COUNT: {
+        cells[cell_idx].set_int(dml_stat.insert_row_count_);
+        break;
+      }
+      case ObAllVirtualDMmlStats::COLUMNS::UPDATE_ROW_COUNT: {
+        cells[cell_idx].set_int(dml_stat.update_row_count_);
+        break;
+      }
+      case ObAllVirtualDMmlStats::COLUMNS::DELETE_ROW_COUNT: {
+        cells[cell_idx].set_int(dml_stat.delete_row_count_);
+        break;
+      }
+      default: {
+        ret = OB_ERR_UNEXPECTED;
+        SERVER_LOG(WARN, "unexpected column id", K(col_id));
+      }
+    }
+  }
+  if (OB_SUCC(ret)) {
+    if (OB_FAIL(scanner_.add_row(cur_row_))) {
+      SERVER_LOG(WARN, "fail to add row", K(ret), K(cur_row_));
+    } else {/*do nothing*/}
+  }
+  return ret;
+}
+
+ObAllVirtualDMmlStats::ObAllVirtualDMmlStats()
+  : port_(0), done_(false)
+{
+  MEMSET(svr_ip_, 0, sizeof(svr_ip_));
+}
+
+ObAllVirtualDMmlStats::~ObAllVirtualDMmlStats()
+{
+  reset();
+}
+
+void ObAllVirtualDMmlStats::reset()
+{
+  ObVirtualTableScannerIterator::reset();
+  MEMSET(svr_ip_, 0, sizeof(svr_ip_));
+  port_ = 0;
+}
+
+int ObAllVirtualDMmlStats::inner_get_next_row(ObNewRow *&row)
+{
+  int ret = OB_SUCCESS;
+  if (done_) {
+    ret = OB_ITER_END;
+  } else if (!start_to_read_) {
+    if (OB_FAIL(fill_scanner())) {
+      SERVER_LOG(WARN, "fill scanner failed", K(ret));
+    } else {
+      start_to_read_ = true;
+    }
+  }
+  if (OB_SUCC(ret) && start_to_read_) {
+    if (OB_FAIL(scanner_it_.get_next_row(cur_row_))) {
+      if (OB_ITER_END != ret) {
+        SERVER_LOG(WARN, "fail to get next row", K(ret));
+      } else {
+        done_ = true;
+      }
+    } else {
+      row = &cur_row_;
+    }
+  }
+  return ret;
+}
+
+int ObAllVirtualDMmlStats::fill_scanner()
+{
+  int ret = OB_SUCCESS;
+  ObObj *cells = NULL;
+  const common::ObAddr &addr = GCTX.self_addr();
+  if (OB_ISNULL(cells = cur_row_.cells_)) {
+    ret = OB_ERR_UNEXPECTED;
+    SERVER_LOG(WARN, "cur row cell is NULL", K(ret));
+  } else if (!addr.ip_to_string(svr_ip_, sizeof(svr_ip_))) {
+    SERVER_LOG(ERROR, "ip to string failed", K(ret), K(addr));
+    ret = OB_ERR_UNEXPECTED;
+  } else {
+    port_ = addr.get_port();
+    MOD_SCOPE {
+      ObOptDmlStatMapGetter getter(scanner_, output_column_ids_, svr_ip_, port_, cur_row_);
+      ObOptStatMonitorManager *optstat_monitor_mgr = share::g_mp->opt_stat_monitor_manager();
+      if (OB_ISNULL(optstat_monitor_mgr)) {
+        ret = OB_ERR_UNEXPECTED;
+        SERVER_LOG(WARN, "optstat monitor mgr is NULL", K(ret), K(1UL));
+      } else if (OB_FAIL(optstat_monitor_mgr->generate_opt_stat_monitoring_info_rows(getter))) {
+        SERVER_LOG(WARN, "generate monitor info array failed", K(ret));
+      } else {
+        scanner_it_ = scanner_.begin();
+        start_to_read_ = true;
+      }
+    }
+  }
+  return ret;
+}
+
+} // namespace observer
+} // namespace oceanbase

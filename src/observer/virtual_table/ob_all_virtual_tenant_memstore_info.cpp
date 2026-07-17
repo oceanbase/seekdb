@@ -1,0 +1,133 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#include "observer/virtual_table/ob_all_virtual_tenant_memstore_info.h"
+#include "share/rc/ob_module_provider.h"
+#include "storage/tx_storage/ob_tenant_freezer.h"
+
+using namespace oceanbase::common;
+namespace oceanbase
+{
+namespace observer
+{
+
+ObAllVirtualTenantMemstoreInfo::ObAllVirtualTenantMemstoreInfo()
+    : ObVirtualTableScannerIterator(),
+      current_pos_(0),
+      addr_()
+{
+}
+
+ObAllVirtualTenantMemstoreInfo::~ObAllVirtualTenantMemstoreInfo()
+{
+  reset();
+}
+
+void ObAllVirtualTenantMemstoreInfo::reset()
+{
+  current_pos_ = 0;
+  addr_.reset();
+  ObVirtualTableScannerIterator::reset();
+}
+
+int ObAllVirtualTenantMemstoreInfo::inner_get_next_row(ObNewRow *&row)
+{
+  int ret = OB_SUCCESS;
+  if (NULL == allocator_) {
+    ret = OB_NOT_INIT;
+    SERVER_LOG(WARN, "allocator_ shouldn't be NULL", K(allocator_), K(ret));
+  } else if (!start_to_read_) {
+    ObObj *cells = NULL;
+    // allocator_ is allocator of PageArena type, no need to free
+    if (NULL == (cells = cur_row_.cells_)) {
+      ret = OB_ERR_UNEXPECTED;
+      SERVER_LOG(ERROR, "cur row cell is NULL", K(ret));
+    } else {
+      
+      char ip_buf[common::OB_IP_STR_BUFF];
+      omt::ObMultiTenant *omt = GCTX.omt_;
+      if (OB_ISNULL(omt)) {
+        ret = OB_ERR_UNEXPECTED;
+        SERVER_LOG(WARN, "omt is null", K(ret));
+      }
+      // does not check ret code, run for the single (sys) tenant.
+      {
+        int64_t active_span = 0;
+        int64_t memstore_used = 0;
+        int64_t freeze_trigger = 0;
+        int64_t memstore_limit = 0;
+        int64_t freeze_cnt = 0;
+        MOD_SCOPE {
+          storage::ObTenantFreezer *freezer = nullptr;
+          if (FALSE_IT(freezer = share::g_mp->tenant_freezer())) {
+          } else if (OB_FAIL(freezer->get_tenant_memstore_cond(active_span,
+                                                               memstore_used,
+                                                               freeze_trigger,
+                                                               memstore_limit,
+                                                               freeze_cnt))) {
+            SERVER_LOG(WARN, "fail to get memstore used", K(ret));
+          }
+          for (int64_t i = 0; OB_SUCC(ret) && i < output_column_ids_.count(); ++i) {
+            uint64_t col_id = output_column_ids_.at(i);
+            switch (col_id) {
+              case ACTIVE_SPAN:
+                cells[i].set_int(active_span);
+                break;
+              case FREEZE_TRIGGER:
+                cells[i].set_int(freeze_trigger);
+                break;
+              case FREEZE_CNT:
+                cells[i].set_int(freeze_cnt);
+                break;
+              case MEMSTORE_USED:
+                cells[i].set_int(memstore_used);
+                break;
+              case MEMSTORE_LIMIT:
+                cells[i].set_int(memstore_limit);
+                break;
+              default:
+                // abnormal column id
+                ret = OB_ERR_UNEXPECTED;
+                SERVER_LOG(WARN, "unexpected column id", K(ret));
+                break;
+            }
+          }
+          if (OB_SUCCESS == ret
+              && OB_SUCCESS != (ret = scanner_.add_row(cur_row_))) {
+            SERVER_LOG(WARN, "fail to add row", K(ret), K(cur_row_));
+          }
+        }
+      }
+      // always start to read, event it failed.
+      scanner_it_ = scanner_.begin();
+      start_to_read_ = true;
+    }
+  }
+  // always get next row, if we have start to read.
+  if (start_to_read_) {
+    if (OB_SUCCESS != (ret = scanner_it_.get_next_row(cur_row_))) {
+      if (OB_ITER_END != ret) {
+        SERVER_LOG(WARN, "fail to get next row", K(ret));
+      }
+    } else {
+      row = &cur_row_;
+    }
+  }
+  return ret;
+}
+
+}/* ns observer*/
+}/* ns oceanbase */

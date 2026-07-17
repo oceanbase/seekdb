@@ -1,0 +1,237 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef OCEANBASE_STORAGE_OB_TABLET_DDL_KV_MGR_H
+#define OCEANBASE_STORAGE_OB_TABLET_DDL_KV_MGR_H
+
+#include "common/ob_tablet_id.h"
+#include "lib/allocator/ob_concurrent_fifo_allocator.h"
+#include "lib/lock/ob_tc_rwlock.h"
+#include "lib/ob_define.h"
+#include "share/scn.h"
+#include "share/ob_ls_id.h"
+#include "storage/ob_i_table.h"
+#include "storage/meta_mem/ob_tablet_pointer.h"
+
+namespace oceanbase
+{
+namespace storage
+{
+class ObTablet;
+class ObDDLKV;
+
+struct ObDDLKVQueryParam
+{
+public:
+  ObDDLKVQueryParam()
+    : ddl_kv_type_(ObDDLKVType::DDL_KV_INVALID),
+      trans_id_(),
+      seq_no_() {}
+  ~ObDDLKVQueryParam() {}
+  bool match_ddl_kv(const ObDDLKV &ddl_kv) const;
+  TO_STRING_KV(K_(ddl_kv_type), K_(trans_id), K_(seq_no));
+
+public:
+  ObDDLKVType ddl_kv_type_;
+  transaction::ObTransID trans_id_;
+  transaction::ObTxSEQ seq_no_;
+};
+
+
+class ObDDLIdemKey
+{
+public:
+  ObDDLIdemKey();
+  ~ObDDLIdemKey();
+  ObDDLIdemKey(const ObDDLIdemKey &other);
+  int init(const MacroBlockId &macro_block_id,
+           const ObLogicMacroBlockId &logic_block_id,
+           const ObITable::TableType table_type);
+  bool operator ==(const ObDDLIdemKey &other) const;
+  ObDDLIdemKey& operator =(const ObDDLIdemKey &other);
+  uint64_t hash() const;
+  int hash(uint64_t &hash_val) const;
+private:
+  union ObDDLKeyType {
+    MacroBlockId macro_block_id_;
+    ObLogicMacroBlockId logic_block_id_;
+    ObDDLKeyType(): macro_block_id_() {}
+  } key_;
+  ObITable::TableType table_type_;
+  TO_STRING_KV(K(key_.macro_block_id_), K(key_.logic_block_id_), K(table_type_));
+};
+
+class ObDDLMacroIdemChecker final
+{
+public:
+  ObDDLMacroIdemChecker();
+  ~ObDDLMacroIdemChecker();
+  int init();
+  bool is_inited();
+  static bool need_check_block_checksum(const ObDDLMacroBlockType block_type, const ObDirectLoadType direct_load_type);
+  static int calc_block_checksum(const ObDDLMacroBlockType block_type,
+                                 const ObDirectLoadType direct_load_type,
+                                 const char *buf, 
+                                 const int64_t buf_size, 
+                                 int64_t &checksum);
+  int check_block_exist(const ObDDLMacroBlockType block_type, 
+                        const ObDirectLoadType direct_load_type,
+                        const blocksstable::MacroBlockId &block_id,
+                        const blocksstable::ObLogicMacroBlockId &logic_id,
+                        const int64_t checksum,
+                        const ObITable::TableType table_type,
+                        bool &is_marco_block_already_exist);
+  int set_block_checksum(const ObDDLMacroBlockType block_type, 
+                         const ObDirectLoadType direct_load_type,
+                         const blocksstable::MacroBlockId &block_id,
+                         const blocksstable::ObLogicMacroBlockId &logic_id,
+                         const int64_t checksum,
+                         const ObITable::TableType table_type);
+  void destroy();
+private:
+  hash::ObHashMap<ObDDLIdemKey, int64_t> checksum_map_;
+  ObArenaAllocator allocator_;
+  DISALLOW_COPY_AND_ASSIGN(ObDDLMacroIdemChecker);
+};
+
+
+// ddl kv: create, get, freeze, dump, release
+// checkpoint manage
+// recycle scn manage
+class ObTabletDDLKvMgr final
+{
+public:
+  ObTabletDDLKvMgr();
+  ~ObTabletDDLKvMgr();
+  int register_to_tablet(ObDDLKvMgrHandle &kv_mgr_handle);
+  int init(const share::ObLSID &ls_id, const common::ObTabletID &tablet_id); // init before memtable mgr
+  int set_max_freeze_scn(const share::SCN &checkpoint_scn);
+  int get_or_create_shared_nothing_ddl_kv(
+      const share::SCN &macro_redo_scn,
+      const share::SCN &macro_redo_start_scn,
+      ObTabletDirectLoadMgrHandle &direct_load_mgr_handle,
+      ObDDLKVHandle &kv_handle);
+  int get_or_create_idem_ddl_kv(
+      const share::SCN &macro_redo_scn,
+      const share::SCN &macro_redo_start_scn,
+      const int64_t snapshot_version,
+      const uint64_t data_format_version,
+      ObDDLKVHandle &kv_handle);
+  int get_freezed_ddl_kv(const share::SCN &freeze_scn, ObDDLKVHandle &kv_handle); // locate ddl kv with exeact freeze log ts
+  int get_ddl_kvs(const bool frozen_only,
+                  ObIArray<ObDDLKVHandle> &kv_handle_array,
+                  const ObDDLKVQueryParam &ddl_kv_query_param = ObDDLKVQueryParam());
+  int get_ddl_kvs_for_query(ObTablet &tablet, ObIArray<ObDDLKVHandle> &kv_handle_array);
+  int freeze_ddl_kv(
+      const share::SCN &start_scn,
+      const int64_t snapshot_version,
+      const uint64_t data_format_version,
+      const share::SCN &freeze_scn = share::SCN::min_scn(), // freeze the active ddl kv, when memtable freeze or ddl commit
+      const ObDDLKVType ddl_kv_type = ObDDLKVType::DDL_KV_FULL,
+      const transaction::ObTransID &trans_id = transaction::ObTransID(),
+      const transaction::ObTxSEQ &seq_no = transaction::ObTxSEQ());
+  int release_ddl_kvs(const ObDDLKVType ddl_kv_type, const share::SCN &rec_scn); // release persistent ddl kv, used in ddl merge task for free ddl kv
+  int check_has_effective_ddl_kv(bool &has_ddl_kv); // used in ddl log handler for checkpoint
+  int try_flush_ddl_commit_scn(
+      ObLSHandle &ls_handle,
+      const ObTabletHandle &tablet_handle,
+      const ObTabletDirectLoadMgrHandle &direct_load_mgr_handle,
+      const share::SCN &commit_scn);
+  int check_has_freezed_ddl_kv(bool &has_freezed_ddl_kv);
+  int64_t get_count();
+  void set_ddl_kv(const int64_t idx, ObDDLKVHandle &kv_handle); //for unittest
+  OB_INLINE void inc_ref() { ATOMIC_INC(&ref_cnt_); }
+  OB_INLINE int64_t dec_ref() { return ATOMIC_SAF(&ref_cnt_, 1 /* just sub 1 */); }
+  OB_INLINE int64_t get_ref() const { return ATOMIC_LOAD(&ref_cnt_); }
+  OB_INLINE void reset() { destroy(); }
+  int get_rec_scn(share::SCN &rec_scn); // when data persisted, should return INT64_MAX
+  ObTabletID get_tablet_id() { return tablet_id_; }
+  int cleanup();
+  bool can_freeze();
+  int calc_idem_block_checksum(const ObDDLMacroBlockType block_type,
+                               const ObDirectLoadType direct_load_type,
+                               const char *buf,
+                               const int64_t buf_size,
+                               int64_t &checksum);
+  int check_idem_block_exist(const ObDDLMacroBlockType block_type,
+                             const ObDirectLoadType direct_load_type,
+                             const blocksstable::MacroBlockId &macro_block_id,
+                             const blocksstable::ObLogicMacroBlockId &logic_id,
+                             const int64_t checksum,
+                             const ObITable::TableType table_type,
+                             bool &is_marco_block_already_exist);
+  int set_idem_block_checksum(const ObDDLMacroBlockType block_type,
+                              const ObDirectLoadType direct_load_type,
+                              const blocksstable::MacroBlockId &block_id,
+                              const blocksstable::ObLogicMacroBlockId &logic_id,
+                              const int64_t checksum,
+                              const ObITable::TableType table_type);
+  int remove_idempotence_checker();
+  share::SCN get_max_freeze_scn() const { return max_freeze_scn_;}
+  TO_STRING_KV(K_(is_inited), K_(ls_id), K_(tablet_id), 
+      K_(max_freeze_scn),
+      K_(head), K_(tail), K_(ref_cnt));
+
+private:
+  int64_t get_idx(const int64_t pos) const;
+  int alloc_ddl_kv(
+    const share::SCN &start_scn,
+    const int64_t snapshot_version,
+    const uint64_t data_format_version,
+    ObDDLKVHandle &kv_handle,
+    const ObDDLKVType ddl_kv_type,
+    const transaction::ObTransID &trans_id = transaction::ObTransID(),
+    const transaction::ObTxSEQ &seq_no = transaction::ObTxSEQ());
+  void free_ddl_kv(const int64_t idx);
+  int get_active_ddl_kv_impl(ObDDLKVHandle &kv_handle);
+  void try_get_ddl_kv_unlock(const share::SCN &scn, ObDDLKVHandle &kv_handle);
+  int get_ddl_kvs_unlock(const bool frozen_only,
+                         ObIArray<ObDDLKVHandle> &kv_handle_array,
+                         const ObDDLKVQueryParam &ddl_kv_query_param = ObDDLKVQueryParam());
+  int64_t get_count_nolock() const;
+  int get_ddl_kv_min_scn(share::SCN &min_scn); // for calculate rec_scn of ls
+  int create_empty_ddl_sstable(common::ObArenaAllocator &allocator, blocksstable::ObSSTable &sstable);
+  void destroy();
+  int rdlock(const int64_t timeout_us, uint32_t &lock_tid);
+  int wrlock(const int64_t timeout_us, uint32_t &lock_tid);
+  void unlock(const uint32_t lock_tid);
+  void cleanup_unlock();
+  int add_idempotence_checker();
+  int add_idempotence_checker_nolock();
+  int handle_ddl_kv_queue_overflow(const ObDDLKVType ddl_kv_type);
+public:
+  static const int64_t MAX_DDL_KV_CNT_IN_STORAGE = 16;
+  static const int64_t TRY_LOCK_TIMEOUT = 10 * 1000000; // 10s
+private:
+  bool is_inited_;
+  share::ObLSID ls_id_;
+  common::ObTabletID tablet_id_;
+  share::SCN max_freeze_scn_;
+  ObDDLKVHandle ddl_kv_handles_[MAX_DDL_KV_CNT_IN_STORAGE];
+
+  int64_t head_;
+  int64_t tail_;
+  common::ObLatch lock_;
+  ObDDLMacroIdemChecker idem_checker_;
+
+  volatile int64_t ref_cnt_ CACHE_ALIGNED;
+  DISALLOW_COPY_AND_ASSIGN(ObTabletDDLKvMgr);
+};
+
+}  // end namespace storage
+}  // end namespace oceanbase
+
+#endif  // OCEANBASE_STORAGE_OB_PG_DDL_KV_MGR_H

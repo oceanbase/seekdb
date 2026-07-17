@@ -1,0 +1,75 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef OB_DTL_MSG_ID_H
+#define OB_DTL_MSG_ID_H
+
+namespace oceanbase {
+namespace sql {
+namespace dtl {
+
+enum ObDtlMsgType {
+  // assume ID below 10 is for testing.
+  TESTING = 10,
+  INIT_SQC_RESULT,
+  FINISH_SQC_RESULT,
+  FINISH_TASK_RESULT,
+  PX_RECEIVE_DATA_CHANNEL,
+  PX_TRANSMIT_DATA_CHANNEL, //15
+  PX_CANCEL_DFO,
+  PX_NEW_ROW,
+  UNBLOCKING_DATA_FLOW,
+  PX_CHUNK_ROW,
+  DRAIN_DATA_FLOW,          //20
+  PX_BLOOM_FILTER_CHANNEL,
+  PX_BLOOM_FILTER_DATA,
+  PX_DATUM_ROW,
+  DH_BARRIER_PIECE_MSG,
+  DH_BARRIER_WHOLE_MSG,     //25
+  DH_WINBUF_PIECE_MSG,
+  DH_WINBUF_WHOLE_MSG,
+  FINISH_DAS_TASK_RESULT,
+  DH_DYNAMIC_SAMPLE_PIECE_MSG,
+  DH_DYNAMIC_SAMPLE_WHOLE_MSG,  //30
+  DH_ROLLUP_KEY_PIECE_MSG,
+  DH_ROLLUP_KEY_WHOLE_MSG,
+  DH_RANGE_DIST_WF_PIECE_MSG,
+  DH_RANGE_DIST_WF_WHOLE_MSG,
+  DH_INIT_CHANNEL_PIECE_MSG,   //35
+  DH_INIT_CHANNEL_WHOLE_MSG,
+  DH_SECOND_STAGE_REPORTING_WF_PIECE_MSG,
+  DH_SECOND_STAGE_REPORTING_WF_WHOLE_MSG,
+  DH_OPT_STATS_GATHER_PIECE_MSG, 
+  DH_OPT_STATS_GATHER_WHOLE_MSG, //40
+  PX_VECTOR,
+  PX_VECTOR_FIXED,
+  PX_VECTOR_ROW,
+  DH_SP_WINFUNC_PX_PIECE_MSG, // SP stands for single partition
+  DH_SP_WINFUNC_PX_WHOLE_MSG, // 45
+  DH_RD_WINFUNC_PX_PIECE_MSG,
+  DH_RD_WINFUNC_PX_WHOLE_MSG,
+  DH_JOIN_FILTER_COUNT_ROW_PIECE_MSG,
+  DH_JOIN_FILTER_COUNT_ROW_WHOLE_MSG,
+  DH_STATISTICS_COLLECTOR_PIECE_MSG, // 50  // placeholder
+  DH_STATISTICS_COLLECTOR_WHOLE_MSG, // placeholder
+  MAX
+};
+
+}  // dtl
+}  // sql
+}  // oceanbase
+
+#endif /* OB_DTL_MSG_ID_H */

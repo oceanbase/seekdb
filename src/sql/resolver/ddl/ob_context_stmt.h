@@ -1,0 +1,112 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef OCEANBASE_SQL_OB_RESOLVER_DDL_CONTEXT_STMT_H_
+#define OCEANBASE_SQL_OB_RESOLVER_DDL_CONTEXT_STMT_H_
+
+#include "share/ob_rpc_struct.h"
+#include "share/schema/ob_schema_struct.h"
+#include "sql/resolver/ob_stmt_resolver.h"
+#include "sql/resolver/ddl/ob_create_context_resolver.h"
+#include "sql/resolver/ddl/ob_ddl_stmt.h"
+
+namespace oceanbase
+{
+namespace sql
+{
+
+class ObContextDDLStmt : public ObDDLStmt
+{
+public:
+  explicit ObContextDDLStmt(common::ObIAllocator *name_pool, stmt::StmtType type) :
+      ObDDLStmt(name_pool, type),
+      arg_()
+  {
+    arg_.set_stmt_type(type);
+  }
+  ObContextDDLStmt(stmt::StmtType type) :
+      ObDDLStmt(type),
+      arg_()
+  {
+    arg_.set_stmt_type(type);
+  }
+  virtual ~ObContextDDLStmt() = default;
+  virtual void print(FILE *fp, int32_t level, int32_t index = 0)
+  {
+    UNUSED(index);
+    UNUSED(fp);
+    UNUSED(level);
+  }
+  void set_context_id(uint64_t context_id)
+  {
+    arg_.set_context_id(context_id);
+  }
+  void set_context_namespace(const common::ObString &ctx_namespace)
+  {
+    arg_.set_namespace(ctx_namespace);
+  }
+  void set_database_name(const common::ObString &db_name)
+  {
+    arg_.set_schema_name(db_name);
+  }
+  
+  void set_context_type(ObContextType type)
+  {
+    arg_.set_context_type(type);
+  }
+  void set_package_name(const common::ObString &package_name)
+  {
+    arg_.set_package_name(package_name);
+  }
+  virtual obcall::ObDDLArg &get_ddl_arg() { return arg_; }
+  obcall::ObContextDDLArg &get_arg() { return arg_; }
+private:
+  obcall::ObContextDDLArg arg_;
+  DISALLOW_COPY_AND_ASSIGN(ObContextDDLStmt);
+};
+
+class ObCreateContextStmt : public ObContextDDLStmt
+{
+public:
+  explicit ObCreateContextStmt(common::ObIAllocator *name_pool) :
+      ObContextDDLStmt(name_pool, stmt::T_CREATE_CONTEXT)
+  {
+  }
+  ObCreateContextStmt() :
+      ObContextDDLStmt(stmt::T_CREATE_CONTEXT)
+  {
+  }
+  virtual ~ObCreateContextStmt() = default;
+};
+
+class ObDropContextStmt : public ObContextDDLStmt
+{
+public:
+  explicit ObDropContextStmt(common::ObIAllocator *name_pool) :
+      ObContextDDLStmt(name_pool, stmt::T_DROP_CONTEXT)
+  {
+  }
+  ObDropContextStmt() :
+      ObContextDDLStmt(stmt::T_DROP_CONTEXT)
+  {
+  }
+  virtual ~ObDropContextStmt() = default;
+};
+
+
+} /* sql */
+} /* oceanbase */
+#endif //OCEANBASE_SQL_OB_RESOLVER_DDL_CONTEXT_STMT_H_

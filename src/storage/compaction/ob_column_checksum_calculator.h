@@ -1,0 +1,103 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef OCEANBASE_BLOCKSSTABLE_OB_COLUMN_CHECKSUM_CALCULATOR_H_
+#define OCEANBASE_BLOCKSSTABLE_OB_COLUMN_CHECKSUM_CALCULATOR_H_
+
+#include "storage/ob_i_store.h"
+
+namespace oceanbase
+{
+namespace blocksstable
+{
+class ObSSTableMeta;
+}
+namespace compaction
+{
+
+class ObColumnChecksumCalculator
+{
+public:
+  ObColumnChecksumCalculator();
+  virtual ~ObColumnChecksumCalculator();
+  int init(const int64_t column_cnt);
+  int calc_column_checksum(
+      const ObIArray<share::schema::ObColDesc> &col_descs,
+      const blocksstable::ObDatumRow *new_row,
+      const blocksstable::ObDatumRow *old_row,
+      const bool *is_column_changed);
+  int64_t *get_column_checksum() const { return column_checksum_; }
+  int64_t get_column_count() const { return column_cnt_; }
+  TO_STRING_KV(KP_(column_checksum), K_(column_cnt));
+private:
+  int calc_column_checksum(
+      const ObIArray<share::schema::ObColDesc> &col_descs,
+      const blocksstable::ObDatumRow &row,
+      const bool new_row,
+      const bool *column_changed,
+      int64_t *column_checksum);
+private:
+  bool is_inited_;
+  common::ObArenaAllocator allocator_;
+  int64_t *column_checksum_;
+  int64_t column_cnt_;
+};
+
+class ObColumnChecksumAccumulator
+{
+public:
+  ObColumnChecksumAccumulator();
+  virtual ~ObColumnChecksumAccumulator();
+  int add_column_checksum(const int64_t column_cnt,
+      const int64_t *column_checksum);
+  int64_t *get_column_checksum() const { return column_checksum_; }
+  int64_t get_column_count() const { return column_cnt_; }
+private:
+  bool is_inited_;
+  int64_t *column_checksum_;
+  common::ObArenaAllocator allocator_;
+  int64_t column_cnt_;
+  lib::ObMutex lock_;
+};
+
+class ObSSTableColumnChecksum
+{
+public:
+  ObSSTableColumnChecksum();
+  virtual ~ObSSTableColumnChecksum();
+  int init(const int64_t concurrent_cnt,
+      const share::schema::ObTableSchema &table_schema,
+      const bool need_org_checksum,
+      const common::ObIArray<const blocksstable::ObSSTableMeta*> &org_sstable_metas);
+  int64_t *get_column_checksum() const { return accumulator_.get_column_checksum(); }
+  int64_t get_column_count() const { return accumulator_.get_column_count(); }
+private:
+  int init_column_checksum(
+      const share::schema::ObTableSchema &table_schema,
+      const bool need_org_checksum,
+      const common::ObIArray<const blocksstable::ObSSTableMeta *> &org_sstable_metas);
+  void destroy();
+private:
+  bool is_inited_;
+  common::ObSEArray<compaction::ObColumnChecksumCalculator *, OB_DEFAULT_SE_ARRAY_COUNT> checksums_;
+  ObColumnChecksumAccumulator accumulator_;
+  common::ObArenaAllocator allocator_;
+};
+
+}  // end namespace compaction
+}  // end namespace oceanbase
+
+#endif  // OCEANBASE_BLOCKSSTABLE_OB_COLUMN_CHECKSUM_CALCULATOR_H_

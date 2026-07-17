@@ -1,0 +1,255 @@
+--disable_query_log
+set @@session.explicit_defaults_for_timestamp=off;
+--enable_query_log
+#owner : yangjiali.yjl
+#owner group: obkv
+#description: basic test ob create table with vector index
+
+
+connect (conn_user,$OBMYSQL_MS0,root@sys,,test,$OBMYSQL_PORT);
+
+connection conn_user;
+--disable_warnings
+drop database if exists yjl_vec;
+create database yjl_vec;
+use yjl_vec;
+
+alter system set ob_vector_memory_limit_percentage = 20;
+sleep 3;
+--echo
+--echo
+--echo "------------------------------- not support vec index and fts in same table -------------------------------"
+drop table if exists t_vec;
+create table t_vec(c1 int, c2 vector(3), c3 varchar(3), c4 vector(3), c5 varchar(3), vector index idx1(c2) with (distance=l2, type=hnsw), fulltext index idx2(c3));
+drop table if exists t_vec;
+create table t_vec(c1 int primary key, c2 vector(3), c3 varchar(3), c4 vector(3), c5 varchar(3));
+create vector index idx1 on t_vec(c2) with (distance=l2, type=hnsw);
+create fulltext index idx2 on t_vec(c3);
+create vector index idx3 on t_vec(c4) with (distance=l2, type=hnsw);
+create index idx4 on t_vec(c1);
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
+show create table t_vec;
+show index from t_vec;
+drop table t_vec;
+
+--echo
+--echo
+--echo "---------------------------------not support vec index dim larger then 4096 or equql to 0-------------------------------"
+drop table if exists t_vec;
+--error 1235
+create table t_vec(c1 int, c2 vector(4097), primary key(c1), vector index idx1(c2) with (distance=l2, type=hnsw));
+--error 1235
+create table t_vec(c1 int, c2 vector(0), primary key(c1), vector index idx1(c2) with (distance=l2, type=hnsw));
+
+--echo
+--echo
+--echo "---------------------------------not support multi index column --------------------------------------------------------"
+drop table if exists t_vec;
+--error 1235
+create table t_vec(c1 int, c2 vector(3), c3 vector(3), primary key(c1), vector index idx1(c1,c3) with (distance=l2, type=hnsw));
+--error 1235
+create table t_vec(c1 int, c2 vector(3), c3 vector(3), primary key(c1), vector index idx1(c2,c3) with (distance=l2, type=hnsw));
+create table t_vec(c1 int, c2 vector(3), c3 vector(3), primary key(c1));
+--error 1235
+create vector index idx1 on t_vec(c2,c3) with (distance=l2, type=hnsw);
+--error 1235
+create vector index idx1 on t_vec(c1,c3) with (distance=l2, type=hnsw);
+
+--echo
+--echo
+--echo "---------------------------------not support more than one vector index on same column -----------------------------------"
+drop table if exists t_vec;
+--error 1235
+create table t_vec(c1 int, c2 vector(3), c3 vector(3), c4 vector(3), primary key(c1), vector index idx1(c2) with (distance=l2, type=hnsw), vector index idx2(c2) with (distance=l2, type=hnsw));
+--error 1235
+create table t_vec(c1 int, c2 vector(3), c3 vector(3), c4 vector(3), primary key(c1), vector index idx1(c2) with (distance=l2, type=hnsw), vector index idx2(c3) with (distance=l2, type=hnsw), vector index idx3(c2) with (distance=l2, type=hnsw));
+create table t_vec(c1 int, c2 vector(3), c3 vector(3), primary key(c1));
+create vector index idx1 on t_vec(c2) with (distance=l2, type=hnsw);
+--error 1235
+create vector index idx2 on t_vec(c2) with (distance=l2, type=hnsw);
+create vector index idx3 on t_vec(c3) with (distance=l2, type=hnsw);
+
+--echo
+--echo
+--echo "-------------------------------------not support same index name ----------------------------------------------------------"
+drop table if exists t_vec;
+--error 1061
+create table t_vec(c1 int, c2 vector(3), c3 vector(3), c4 int, primary key(c1), index idx1(c4), vector index idx1(c2) with (distance=l2, type=hnsw));
+create table t_vec(c1 int, c2 vector(3), c3 vector(3), c4 int, primary key(c1), vector index idx1(c2) with (distance=l2, type=hnsw));
+--error 1061
+create index idx1 on t_vec(c4);
+--error 1061
+create vector index idx1 on t_vec(c3) with (distance=l2, type=hnsw);
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
+show create table t_vec;
+show index from t_vec;
+
+--echo
+--echo
+--echo "---------------------------------normal create ---------------------------------------------------------------------------"
+drop table if exists t_vec;
+--error 7601
+create table t_vec(c1 int, c2 vector(3), primary key(c1), vector index idx1(c1));
+--error 1235
+create table t_vec(c1 int, c2 vector(3), primary key(c1), vector index idx1(c2));
+--error 1235
+create table t_vec(c1 int, c2 vector(3), primary key(c1), vector index idx1(c2) with(distance=l2));
+--error 1235
+create table t_vec(c1 int, c2 vector(3), primary key(c1), vector index idx1(c2) with(distance=l2, lib=vsag));
+--error 1235
+create table t_vec(c1 int, c2 vector(3), primary key(c1), vector index idx1(c2) with(distance=l2, lib=vsag, type=xxx));
+--error 1235
+create table t_vec(c1 int, c2 vector(3), primary key(c1), vector index idx1(c2) with(distance=l2, lib=vsag, type=hnsw, m=130));
+--error 1235
+create table t_vec(c1 int, c2 vector(3), primary key(c1), vector index idx1(c2) with(distance=l2, lib=vsag, type=hnsw, m1=100));
+--error 1235
+create table t_vec(c1 int, c2 vector(3), primary key(c1), vector index idx1(c2) with(distance=l2, lib=vsag, type=hnsw, m=64, ef_construction=1001));
+--error 1235
+create table t_vec(c1 int, c2 vector(3), primary key(c1), vector index idx1(c2) with(distance=l2, lib=vsag, type=hnsw, ef_construction=10));
+--error 1235
+create table t_vec(c1 int, c2 vector(3), primary key(c1), vector index idx1(c2) with(distance=l2, lib=vsag, type=hnsw, m=64, ef_construction=63));
+--error 1235
+create table t_vec(c1 int, c2 vector(3), primary key(c1), vector index idx1(c2) with(distance=l2, lib=vsag, type=hnsw, m=64, ef_construction=64));
+--error 1235
+create table t_vec(c1 int, c2 vector(3), primary key(c1), vector index idx1(c2) with(distance=l2, lib=vsag, type=hnsw, m=64, ef_construction=1000, ef_search=160001));
+--error 1235
+create table t_vec(c1 int, c2 vector(3), primary key(c1), vector index idx1(c2) with(distance=l3, lib=vsag, type=hnsw, m=64, ef_construction=1000, ef_search=1000));
+--error 1235
+create table t_vec(c1 int, c2 vector(3), primary key(c1), vector index idx1(c2) with(distance=l2, lib=xxx, type=hnsw, m=64, ef_construction=1000, ef_search=1000));
+--error 1235
+create table t_vec(c1 int, c2 vector(3), primary key(c1), vector index idx1(c2) with(distance=l2, lib=vsag, type=xxx, m=64, ef_construction=1000, ef_search=1000));
+--error 1235
+create table t_vec(c1 int, c2 vector(3), primary key(c1), vector index idx1(c2) with(distance1=l2, lib=vsag, type=hnsw, m=64, ef_construction=1000, ef_search=1000));
+--error 1235
+create table t_vec(c1 int, c2 vector(3), primary key(c1), vector index idx1(c2) with(distance=l2, lib1=vsag, type=hnsw, m=64, ef_construction=1000, ef_search=1000));
+--error 1235
+create table t_vec(c1 int, c2 vector(3), primary key(c1), vector index idx1(c2) with(distance=l2, lib=vsag, type1=hnsw, m=64, ef_construction=1000, ef_search=1000));
+
+# 不支持storing column
+--error 1235
+create table t_vec(c1 int, c2 vector(3), c3 int, primary key(c1), vector index idx1(c2) storing (c3) with (distance=l2, type=hnsw));
+
+# cosine距离算法 & hnsw_sq 模式
+#create table t_vec(c1 int, c2 vector(3), c3 int, primary key(c1), vector index idx1(c2) with (distance=cosine, type=hnsw_sq));
+#--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
+#show create table t_vec;
+#show index from t_vec;
+#drop table t_vec;
+
+# 展示相关
+--echo
+--echo
+--echo "----------------------------------------- specify case ---------------------------------------------------------------"
+alter system set ob_vector_memory_limit_percentage = 20;
+sleep 3;
+drop table if exists t_vec;
+create table t_vec(c1 int, c2 vector(3), primary key(c1), vector index idx1(c2) with (distance=L2, type=hnsw));
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
+show create table t_vec;
+show index from t_vec;
+
+drop table if exists t_vec;
+create table t_vec(c1 int, c2 vector(3), primary key(c1), vector index idx1(c2) with (distance=inner_product, type=hnsw));
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
+show create table t_vec;
+show index from t_vec;
+
+#drop table if exists t_vec;
+#create table t_vec(c1 int, c2 vector(3), primary key(c1), vector index idx1(c2) with (distance=cosine, type=hnsw));
+#--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
+#show create table t_vec;
+#show index from t_vec;
+
+drop table if exists t_vec;
+create table t_vec(c1 int, c2 vector(3), c3 vector(3), primary key(c1), vector index idx1(c2) with (distance=L2, type=hnsw), vector index idx2(c3) with (distance=L2, type=hnsw));
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
+show create table t_vec;
+show index from t_vec;
+
+drop table if exists t_vec;
+create table t_vec(c1 int, c2 vector(3), primary key(c1), vector index idx1(c2) with (distance=L2, type=hnsw, lib=vsag, m=20));
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
+show create table t_vec;
+show index from t_vec;
+
+drop table if exists t_vec;
+create table t_vec(c1 int, c2 vector(3), primary key(c1), vector index idx1(c2) with (distance=L2, type=hnsw, lib=vsag, m=20, ef_construction=200));
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
+show create table t_vec;
+show index from t_vec;
+
+drop table if exists t_vec;
+create table t_vec(c1 int, c2 vector(3), primary key(c1), vector index idx1(c2) with (distance=L2, type=hnsw, lib=vsag, m=20, ef_construction=200, ef_search=200));
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
+show create table t_vec;
+show index from t_vec;
+
+# 创建向量索引后，再创建普通索引
+drop table if exists t_vec;
+create table t_vec(c1 int, c2 vector(3), c3 int, primary key(c1), vector index idx1(c2) with(distance=l2, type=hnsw));
+create index idx2 on t_vec(c3);
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
+show create table t_vec;
+show index from t_vec;
+
+# 创建非可见性表同名表，预期成功
+drop table if exists t_vec;
+create table t_vec(c1 int, c2 vector(3), c3 int, c4 int, c5 int, c6 int, primary key(c1), vector index idx1(c2) with(distance=l2, type=hnsw));
+create index vid_rowkey_table on t_vec(c3);
+create index rowkey_vid_table on t_vec(c4);
+create index idx1_index_id_table on t_vec(c5);
+create index idx1_index_snapshot_data_table on t_vec(c6);
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
+show create table t_vec;
+
+# 不支持在物化视图上创建向量索引
+drop table if exists t_vec;
+create table t_vec(c1 int primary key, c2 vector(3), c3 vector(3), c4 vector(3), vector index vector_idx(c3) with (distance=l2, type=hnsw));
+insert into t_vec(c1,c2,c3,c4) values(1,'[1,1,2]','[2,2,3]','[1,3,2]');
+create materialized view mv1 refresh complete on demand as select c1,c2,c3,c4 from t_vec ;
+--error 1235
+create vector index vector_idx on mv1 (c2) with (distance=l2, type=hnsw);
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
+show create table t_vec;
+drop materialized view mv1;
+
+# 不支持在普通视图上创建向量索引
+drop table if exists t_vec;
+drop view if exists v1;
+create table t_vec(c1 int primary key, c2 vector(3), c3 vector(3), c4 vector(3));
+create view v1 as select * from t_vec;
+insert into v1(c1,c2,c3,c4) values(1,'[1,1,2]','[2,2,3]','[1,3,2]');
+--error 1235
+create vector index vector_idx_c2 on v1(c2) with (distance=l2, type=hnsw);
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
+show create table t_vec;
+drop view if exists v1;
+
+# 不支持向量列作为mv主键列
+drop table if exists t_vec;
+create table t_vec(c1 int primary key, c2 vector(3), c3 vector(3), c4 vector(3), vector index vector_idx(c3) with (distance=l2, type=hnsw));
+insert into t_vec(c1,c2,c3,c4) values(1,'[1,1,2]','[2,2,3]','[1,3,2]');
+--error 1167
+create materialized view mv1(primary key(c2)) refresh complete on demand as select c1,c2 from t_vec ;
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
+show create table t_vec;
+
+#bugfix : 不支持创建向量函数索引
+--disable_warnings
+drop table if exists t_vec;
+--enable_warnings
+--error 3762
+create table t_vec(c1 vector(3), c2 vector(3), c3 vector(4), c4 int, c5 json, c6 char(20), vector index idx_1((c1+c2)) with (distance=l2, type=hnsw));
+create table t_vec(c1 vector(3), c2 vector(3), c3 vector(4), c4 int, c5 json, c6 char(20));
+--error 3762
+create vector index idx_1 on t_vec((c1 + c2)) with (distance=l2, type=hnsw);
+drop table t_vec;
+
+create table t_vec(c1 int, c2 vector(3), vector index idx1(c2) with (distance=L2, type=hnsw));
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
+show create table t_vec;
+
+drop table if exists t_vec;
+drop database if exists yjl_vec;
+alter system set ob_vector_memory_limit_percentage = 0;
+PURGE RECYCLEBIN;

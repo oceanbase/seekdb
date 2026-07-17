@@ -1,0 +1,189 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef SRC_OBSERVER_OB_DBMS_SCHED_JOB_MASTER_H_
+#define SRC_OBSERVER_OB_DBMS_SCHED_JOB_MASTER_H_
+
+#include "ob_dbms_sched_job_utils.h"
+#include "ob_dbms_sched_table_operator.h"
+
+#include "lib/ob_define.h"
+#include "lib/net/ob_addr.h"
+#include "lib/allocator/page_arena.h"
+#include "common/mysqlclient/ob_isql_client.h"
+#include "lib/lock/ob_spin_lock.h"
+#include "lib/lock/ob_thread_cond.h"
+#include "lib/thread/ob_simple_thread_pool.h"
+#include "lib/task/ob_timer.h"
+#include "lib/container/ob_iarray.h"
+#include "share/schema/ob_schema_service.h"
+#include "share/schema/ob_multi_version_schema_service.h"
+
+#include "observer/dbms_job/ob_dbms_job_utils.h"
+#include "rootserver/ob_ddl_service.h"
+
+
+namespace oceanbase
+{
+
+namespace dbms_scheduler
+{
+
+class ObDBMSSchedJobKey : public common::ObLink
+{
+public:
+  ObDBMSSchedJobKey(
+    bool is_oracle_tenant, uint64_t job_id, const common::ObString &job_name)
+  : is_oracle_tenant_(is_oracle_tenant),
+    job_id_(job_id),
+    job_name_() {
+      job_name_.assign_buffer(job_name_buf_, JOB_NAME_MAX_SIZE);
+      job_name_.write(job_name.ptr(), job_name.length());
+    }
+
+  virtual ~ObDBMSSchedJobKey() {}
+
+  static constexpr int64_t JOB_NAME_MAX_SIZE = 128;
+  OB_INLINE uint64_t get_job_id_with_tenant() const { return job_id_; }
+  
+  OB_INLINE uint64_t get_job_id() const { return job_id_; }
+  OB_INLINE common::ObString &get_job_name() { return job_name_; }
+  OB_INLINE uint64_t get_execute_at() const { return execute_at_;}
+  
+  OB_INLINE void set_job_id(uint64_t job_id) { job_id_ = job_id; }
+  OB_INLINE void set_execute_at(uint64_t execute_at) { execute_at_ = execute_at; }
+  OB_INLINE uint64_t get_adjust_delay() const
+  {
+    uint64_t now = ObTimeUtility::current_time();
+    return (execute_at_ < now) ? 0 : (execute_at_ - now);
+  }
+
+  OB_INLINE bool is_valid()
+  {
+    return job_id_ != OB_INVALID_ID && true;
+  }
+
+  bool is_oracle_tenant() { return is_oracle_tenant_; }
+
+  TO_STRING_KV(
+    K_(is_oracle_tenant),
+    K_(job_id),
+    K_(job_name),
+    K_(execute_at));
+
+private:
+  bool is_oracle_tenant_;
+  int64_t job_id_;
+  char job_name_buf_[JOB_NAME_MAX_SIZE];
+  common::ObString job_name_;
+  uint64_t execute_at_;
+};
+
+class ObDBMSSchedJobMaster
+{
+public:
+  ObDBMSSchedJobMaster()
+    : inited_(false),
+      stoped_(true),
+      is_leader_(false),
+      wokeup_(false),
+      rand_(),
+      schema_service_(NULL),
+      self_addr_(),
+      allocator_(ObMemAttr("DbmsScheduler"), OB_MALLOC_NORMAL_BLOCK_SIZE, block_alloc_),
+      alive_jobs_(),
+      wait_vector_(0, NULL, ObModIds::VECTOR) {}
+
+  virtual ~ObDBMSSchedJobMaster() { alive_jobs_.destroy(); };
+
+  bool is_inited() { return inited_; }
+  int init(common::ObMySQLProxy *sql_client,
+           share::schema::ObMultiVersionSchemaService *schema_service);
+
+  int start();
+  int stop();
+  bool is_stop() { return stoped_; }
+  bool is_leader() { return is_leader_; }
+  int scheduler();
+  int destroy();
+  void wakeup();
+  bool idle(int64_t deadline_us);
+  int alloc_job_key(
+    ObDBMSSchedJobKey *&job_key, bool is_oracle_tenant, uint64_t job_id, const common::ObString &job_name);
+  void free_job_key(ObDBMSSchedJobKey *&job_key);
+
+  int get_execute_addr(ObDBMSSchedJobInfo &job_info, common::ObAddr &execute_addr);
+  void switch_to_leader();
+  void switch_to_follower();
+  int check_tenant();
+  int check_new_jobs(bool is_oracle_tenant);
+  int register_new_jobs(bool is_oracle_tenant, ObIArray<ObDBMSSchedJobInfo> &job_infos);
+  int register_job(ObDBMSSchedJobKey *job_key, int64_t next_date);
+  int scheduler_job(ObDBMSSchedJobKey *job_key);
+  int schedule_due_jobs();
+  int64_t calc_next_date(ObDBMSSchedJobInfo &job_info);
+  int64_t run_job(ObDBMSSchedJobInfo &job_info, ObDBMSSchedJobKey *job_key, int64_t next_date);
+  int purge_run_detail();
+  bool mysql_event_scheduler_is_off(ObDBMSSchedJobInfo &job_info);
+  bool mysql_event_check_databse_exist(ObDBMSSchedJobInfo &job_info);
+
+private:
+  const static int MAX_READY_JOBS_CAPACITY = 1024 * 1024;
+  const static int MIN_SCHEDULER_INTERVAL = 1 * 1000 * 1000;
+  const static int CHECK_NEW_INTERVAL = 20 * 1000 * 1000;
+  const static int FILTER_ZONE_SIZE = 1;
+  const static int DEFALUT_SERVER_SIZE = 16;
+#ifdef _WIN32
+  static constexpr uint64_t PURGE_RUN_DETAIL_INTERVAL = 3600000000ULL; // 1h
+#else
+  const static uint64_t PURGE_RUN_DETAIL_INTERVAL = 60 * 60 * 1000 * 1000L; // 1h
+#endif
+  const static int CHECK_JOB_LOST_THRESHOLD = 60 * 1000 * 1000;
+
+  bool inited_;
+  bool stoped_;
+  bool is_leader_;
+  bool wokeup_;
+
+  common::ObThreadCond thread_cond_;
+
+  common::ObRandom rand_; // for random pick server
+  share::schema::ObMultiVersionSchemaService *schema_service_; // for got all tenant info
+
+  common::ObAddr self_addr_;
+  ObDBMSSchedTableOperator table_operator_;
+
+  common::ObBlockAllocMgr block_alloc_;
+  common::ObVSliceAlloc allocator_;
+
+  common::hash::ObHashSet<int64_t> alive_jobs_;
+
+  // wait list
+  common::ObSortedVector<ObDBMSSchedJobKey *> wait_vector_;
+  void clear_wait_vector();
+  inline static bool compare_job_key(
+    const ObDBMSSchedJobKey *lhs, const ObDBMSSchedJobKey *rhs);
+  inline static bool equal_job_key(
+    const ObDBMSSchedJobKey *lhs, const ObDBMSSchedJobKey *rhs);
+
+private:
+  DISALLOW_COPY_AND_ASSIGN(ObDBMSSchedJobMaster);
+};
+
+} //end for namespace dbms_scheduler
+} //end for namespace oceanbase
+
+#endif /* SRC_OBSERVER_OB_DBMS_SCHED_JOB_MASTER_H_ */

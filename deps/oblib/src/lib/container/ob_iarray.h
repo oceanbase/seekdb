@@ -1,0 +1,136 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef OCEANBASE_LIB_CONTAINER_IARRAY_
+#define OCEANBASE_LIB_CONTAINER_IARRAY_
+#include <stdint.h>
+#include "lib/ob_errno.h"
+#include "lib/utility/ob_print_utils.h"
+#include "lib/container/ob_array_wrap.h"
+
+namespace oceanbase
+{
+namespace common
+{
+// this interface has three derived classes: ObArray, ObSEArray and Ob2DArray.
+template <typename T>
+class ObIArray : public ObIArrayWrap<T>
+{
+public:
+  using ObIArrayWrap<T>::at;
+  using ObIArrayWrap<T>::count;
+  ObIArray() : ObIArrayWrap<T>() {}
+  ObIArray(T *data, const int64_t count) : ObIArrayWrap<T>(data, count) {}
+
+  virtual ~ObIArray() {}
+  virtual int push_back(const T &obj) = 0;
+  virtual void pop_back() = 0;
+  virtual int pop_back(T &obj) = 0;
+  virtual int remove(int64_t idx) = 0;
+
+  virtual int at(int64_t idx, T &obj) const = 0;
+
+  /// reset is the same as clear()
+  virtual void reset() = 0;
+  virtual void reuse() = 0;
+  virtual void destroy() = 0;
+  virtual int reserve(int64_t capacity) = 0;
+  virtual int assign(const ObIArray &other) = 0;
+  virtual int prepare_allocate(int64_t capacity) = 0;
+  virtual T *alloc_place_holder()
+  { OB_LOG_RET(WARN, OB_NOT_SUPPORTED, "Not supported"); return NULL; }
+
+  virtual int64_t to_string(char* buf, int64_t buf_len) const
+  {
+    int64_t pos = 0;
+    J_ARRAY_START();
+    int64_t N = count();
+    J_KV("cnt", N);
+    for (int64_t index = 0; index < N - 1; ++index) {
+      J_COMMA();
+      BUF_PRINTO(at(index));
+    }
+    if (0 < N) {
+      J_COMMA();
+      BUF_PRINTO(at(N - 1));
+    }
+    J_ARRAY_END();
+    return pos;
+  }
+protected:
+  using ObIArrayWrap<T>::data_;
+  using ObIArrayWrap<T>::count_;
+  DISALLOW_COPY_AND_ASSIGN(ObIArray);
+};
+
+template<typename T>
+bool is_contain(const ObIArray<T> &arr, const T &item)
+{
+  bool bret = false;
+  for (int64_t i = 0; i < arr.count(); ++i) {
+    bret = (arr.at(i) == item);
+    if (bret) {
+      break;
+    }
+  }
+  return bret;
+}
+
+template<typename T>
+int get_difference(const ObIArray<T> &a, const ObIArray<T> &b, ObIArray<T> &dest)
+{
+  int ret = OB_SUCCESS;
+  dest.reset();
+  for (int64_t i = 0; OB_SUCCESS == ret && i < a.count(); i++) {
+    if (!is_contain(b, a.at(i))) {
+      ret = dest.push_back(a.at(i));
+    }
+  }
+  return ret;
+}
+
+template<typename DstArrayT, typename SrcArrayT>
+int append(DstArrayT &dst, const SrcArrayT &src)
+{
+  int ret = OB_SUCCESS;
+  int64_t N = src.count();
+  for (int64_t i = 0; OB_SUCC(ret) && i < N; ++i) {
+    ret = dst.push_back(src.at(i));
+  } // end for
+  return ret;
+}
+
+template<typename DstArrayT, typename SrcArrayT>
+bool is_array_equal(DstArrayT &left, const SrcArrayT &right)
+{
+  int bret = true;
+
+  if (&left == &right) {
+    // same
+  } else if (left.count() != right.count()) {
+    bret = false;
+  } else {
+    for (int64_t i = 0; bret && i < left.count(); ++i) {
+      bret = left.at(i) == right.at(i);
+    }
+  }
+  return bret;
+}
+
+} // end namespace common
+} // end namespace oceanbase
+
+#endif // OCEANBASE_LIB_CONTAINER_IARRAY_

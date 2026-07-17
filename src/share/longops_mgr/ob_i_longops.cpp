@@ -1,0 +1,89 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+#define USING_LOG_PREFIX SHARE
+
+#include "ob_i_longops.h"
+
+using namespace oceanbase::common;
+using namespace oceanbase::share;
+
+ObILongopsKey::ObILongopsKey()
+  : sid_(OB_INVALID_ID)
+{
+  MEMSET(name_, 0, sizeof(name_));
+  MEMSET(target_, 0 ,sizeof(target_));
+}
+
+int64_t ObILongopsKey::hash() const
+{
+  uint64_t hash_val = 0;
+  hash_val = murmurhash(&sid_, sizeof(sid_), hash_val);
+  hash_val = murmurhash(name_, sizeof(name_), hash_val);
+  hash_val = murmurhash(target_, sizeof(target_), hash_val);
+  return hash_val;
+}
+
+bool ObILongopsKey::operator==(const ObILongopsKey &other) const
+{
+  return
+         sid_ == other.sid_ &&
+         (0 == MEMCMP(name_, other.name_, sizeof(name_))) &&
+         (0 == MEMCMP(target_, other.target_, sizeof(target_)));
+}
+
+bool ObILongopsKey::is_valid() const
+{
+  return '\0' != name_[0] &&
+         '\0' != target_[0];
+}
+
+ObLongopsValue::ObLongopsValue()
+  : trace_id_(), sid_(OB_INVALID_ID), start_time_(-1), finish_time_(-1), elapsed_seconds_(0),
+    time_remaining_(0), percentage_(0), last_update_time_(0), op_name_(), target_(), message_()
+{
+}
+
+ObLongopsValue &ObLongopsValue::operator=(const ObLongopsValue &other)
+{
+  if (this != &other) {
+    trace_id_ = other.trace_id_;
+    sid_ = other.sid_;
+    start_time_ = other.start_time_;
+    finish_time_ = other.finish_time_;
+    elapsed_seconds_ = other.elapsed_seconds_;
+    time_remaining_ = other.time_remaining_;
+    percentage_ = other.percentage_;
+    last_update_time_ = other.last_update_time_;
+    MEMCPY(op_name_, other.op_name_, sizeof(op_name_));
+    MEMCPY(target_, other.target_, sizeof(target_));
+    MEMCPY(message_, other.message_, sizeof(message_));
+  }
+  return *this;
+}
+
+void ObLongopsValue::reset()
+{
+  trace_id_.reset();
+  start_time_ = -1;
+  finish_time_ = -1;
+  elapsed_seconds_ = 0;
+  time_remaining_ = 0;
+  percentage_ = 0;
+  last_update_time_ = 0;
+  memset(op_name_, 0, sizeof(op_name_));
+  memset(target_, 0, sizeof(target_));
+  memset(message_, 0, sizeof(message_));
+}

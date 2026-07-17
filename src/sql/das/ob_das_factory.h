@@ -1,0 +1,119 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef OBDEV_SRC_SQL_DAS_OB_DAS_FACTORY_H_
+#define OBDEV_SRC_SQL_DAS_OB_DAS_FACTORY_H_
+#include "lib/list/ob_obj_store.h"
+#include "sql/das/ob_das_task.h"
+namespace oceanbase
+{
+namespace sql
+{
+class ObDASExtraData;
+class ObIDASTaskResult;
+class ObIDASTaskOp;
+class ObIDASTaskResult;
+class ObDASTaskArg;
+class ObDASRef;
+
+class ObDASTaskFactory
+{
+  friend class ObDASRef;
+public:
+  explicit ObDASTaskFactory(common::ObIAllocator &allocator);
+  ~ObDASTaskFactory();
+  void cleanup();
+  int create_das_task_op(ObDASOpType op_type, ObIDASTaskOp *&das_op);
+  int create_das_task_result(ObDASOpType op_type, ObIDASTaskResult *&das_result);
+  int create_das_extra_data(ObDASExtraData *&extra_result);
+  int create_das_ctdef(ObDASOpType op_type, ObDASBaseCtDef *&ctdef);
+  int create_das_rtdef(ObDASOpType op_type, ObDASBaseRtDef *&rtdef);
+  static int create_das_ctdef(ObDASOpType op_type, common::ObIAllocator &alloc, ObDASBaseCtDef *&ctdef);
+  static int create_das_rtdef(ObDASOpType op_type, common::ObIAllocator &alloc, ObDASBaseRtDef *&rtdef);
+  template <typename CtDef>
+  static int alloc_das_ctdef(ObDASOpType op_type, common::ObIAllocator &alloc, CtDef *&ctdef);
+  template <typename RtDef>
+  static int alloc_das_rtdef(ObDASOpType op_type, common::ObIAllocator &alloc, RtDef *&rtdef);
+
+  static inline bool is_registered(const ObDASOpType op_type)
+  {
+    return op_type >= 0 && op_type < DAS_OP_MAX && NULL != G_DAS_ALLOC_FUNS_[op_type].ctdef_func_;
+  }
+
+  static inline bool is_attached(const ObDASOpType op_type)
+  {
+    return op_type >= 0 && op_type < DAS_OP_MAX && NULL == G_DAS_ALLOC_FUNS_[op_type].op_func_;
+  }
+
+  struct AllocFun
+  {
+    int (*op_func_)(ObIAllocator &, ObIDASTaskOp *&);
+    int (*result_func_)(ObIAllocator &, ObIDASTaskResult *&);
+    int (*ctdef_func_)(ObIAllocator &, ObDASBaseCtDef *&);
+    int (*rtdef_func_)(ObIAllocator &, ObDASBaseRtDef *&);
+  };
+private:
+  typedef common::ObObjStore<ObIDASTaskOp*, common::ObIAllocator&> DasOpStore;
+  typedef DasOpStore::Iterator DasOpIter;
+  typedef common::ObObjStore<ObIDASTaskResult*, common::ObIAllocator&> DasResultStore;
+  typedef DasResultStore::Iterator DasResultIter;
+  typedef common::ObObjStore<ObDASExtraData*, common::ObIAllocator&> DasExtraDataStore;
+  typedef DasExtraDataStore::Iterator DasExtraDataIter;
+  typedef common::ObObjStore<ObDASBaseCtDef*, common::ObIAllocator&> DasCtDefStore;
+  typedef DasCtDefStore::Iterator DasCtDefIter;
+  typedef common::ObObjStore<ObDASBaseRtDef*, common::ObIAllocator&> DasRtDefStore;
+  typedef DasRtDefStore::Iterator DasRtDefIter;
+
+  DasOpStore das_op_store_;
+  DasResultStore das_result_store_;
+  DasExtraDataStore das_extra_data_store_;
+  DasCtDefStore ctdef_store_;
+  DasRtDefStore rtdef_store_;
+  common::ObIAllocator &allocator_;
+private:
+  static AllocFun *G_DAS_ALLOC_FUNS_;
+};
+
+template <typename CtDef>
+int ObDASTaskFactory::alloc_das_ctdef(ObDASOpType op_type,
+                                      common::ObIAllocator &alloc,
+                                      CtDef *&ctdef)
+{
+  int ret = common::OB_SUCCESS;
+  ObDASBaseCtDef *base_ctdef = nullptr;
+  ret = create_das_ctdef(op_type, alloc, base_ctdef);
+  if (OB_SUCC(ret)) {
+    ctdef = static_cast<CtDef*>(base_ctdef);
+  }
+  return ret;
+}
+
+template <typename RtDef>
+int ObDASTaskFactory::alloc_das_rtdef(ObDASOpType op_type,
+                                      common::ObIAllocator &alloc,
+                                      RtDef *&rtdef)
+{
+  int ret = common::OB_SUCCESS;
+  ObDASBaseRtDef *base_rtdef = nullptr;
+  ret = create_das_rtdef(op_type, alloc, base_rtdef);
+  if (OB_SUCC(ret)) {
+    rtdef = static_cast<RtDef*>(base_rtdef);
+  }
+  return ret;
+}
+}  // namespace sql
+}  // namespace oceanbase
+#endif /* OBDEV_SRC_SQL_DAS_OB_DAS_FACTORY_H_ */

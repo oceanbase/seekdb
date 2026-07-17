@@ -1,0 +1,94 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#define USING_LOG_PREFIX SQL_RESV
+#include "sql/resolver/ddl/ob_drop_func_resolver.h"
+
+namespace oceanbase
+{
+using namespace common;
+namespace sql
+{
+
+ObDropFuncResolver::ObDropFuncResolver(ObResolverParams &params)
+    : ObDDLResolver(params)
+{
+}
+
+ObDropFuncResolver::~ObDropFuncResolver()
+{
+}
+
+int ObDropFuncResolver::resolve(const ParseNode &parse_tree)
+{
+  int ret = OB_SUCCESS;
+  ObDropFuncStmt *drop_func_stmt = NULL;
+  ObCollationType cs_type;
+  ObString lower_name;
+  if (OB_ISNULL(session_info_)
+      || OB_ISNULL(schema_checker_)
+      || OB_ISNULL(allocator_)
+      || (T_DROP_FUNC != parse_tree.type_)
+      || 2 != parse_tree.num_child_
+      || OB_ISNULL(parse_tree.children_)
+      || (parse_tree.children_[0] != NULL && T_IF_EXISTS != parse_tree.children_[0]->type_)) {
+    ret = OB_ERR_UNEXPECTED;
+    SQL_RESV_LOG(WARN, "invalid parse tree!", K(ret));
+  } else if (OB_FAIL(session_info_->get_collation_connection(cs_type))) {
+    LOG_WARN("failed to get collation", K(ret));
+  } else {
+    ObString udf_name(parse_tree.children_[1]->str_len_, parse_tree.children_[1]->str_value_);
+    if (OB_FAIL(ob_write_string(*allocator_, udf_name, lower_name))) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+      LOG_ERROR("Malloc function name failed", K(ret));
+    } else {
+      ObCharset::casedn(CS_TYPE_UTF8MB4_GENERAL_CI, lower_name);
+    }
+  }
+
+  if (OB_SUCC(ret)) {
+    bool exist = false;
+    const share::schema::ObUDF *udf_info = nullptr;
+    
+    if (OB_FAIL(schema_checker_->get_udf_info( lower_name, udf_info, exist))) {
+      LOG_WARN("failed to get udf info", K(ret));
+    } else if (exist) {
+      // dll udf
+      if (OB_ISNULL(drop_func_stmt = create_stmt<ObDropFuncStmt>())) {
+        ret = OB_ALLOCATE_MEMORY_FAILED;
+        SQL_RESV_LOG(ERROR, "create drop func stmt failed");
+      }
+      //stmt_ = drop_func_stmt;
+    } else {
+      //pl udf
+      ret = OB_ERR_FUNCTION_UNKNOWN;
+    }
+  }
+
+
+  if (OB_SUCC(ret)) {
+    
+    obcall::ObDropUserDefinedFunctionArg &drop_func_arg = drop_func_stmt->get_drop_func_arg();
+    
+    
+    drop_func_arg.name_ = lower_name;
+    drop_func_arg.if_exist_ =  (NULL != parse_tree.children_[0]);
+  }
+  return ret;
+}
+
+}
+}

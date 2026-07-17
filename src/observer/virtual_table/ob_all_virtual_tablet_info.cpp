@@ -1,0 +1,228 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#include "observer/virtual_table/ob_all_virtual_tablet_info.h"
+#include "share/rc/ob_module_provider.h"
+#include "storage/multi_data_source/runtime_utility/common_define.h"
+#include "storage/tx_storage/ob_ls_service.h"
+
+using namespace oceanbase::common;
+using namespace oceanbase::storage;
+namespace oceanbase
+{
+namespace observer
+{
+
+ObAllVirtualTabletInfo::ObAllVirtualTabletInfo()
+    : ObVirtualTableScannerIterator(),
+      addr_(),
+      ls_iter_guard_(),
+      ls_tablet_iter_(ObMDSGetTabletMode::READ_WITHOUT_CHECK)
+{
+}
+
+ObAllVirtualTabletInfo::~ObAllVirtualTabletInfo()
+{
+  reset();
+}
+
+void ObAllVirtualTabletInfo::reset()
+{
+  addr_.reset();
+  ls_tablet_iter_.reset();
+  ls_iter_guard_.reset();
+  ObVirtualTableScannerIterator::reset();
+}
+
+int ObAllVirtualTabletInfo::get_next_ls(ObLS *&ls)
+{
+  int ret = OB_SUCCESS;
+
+  while (OB_SUCC(ret)) {
+    if (!ls_iter_guard_.get_ptr()
+        || OB_FAIL(ls_iter_guard_->get_next(ls))) {
+      if (OB_ITER_END != ret) {
+        SERVER_LOG(WARN, "fail to switch tenant", K(ret));
+      }
+      // switch to next tenant
+      ret = OB_ITER_END;
+    } else if (OB_ISNULL(ls)) {
+      ret = OB_ERR_UNEXPECTED;
+      SERVER_LOG(ERROR, "ls is null", K(ret));
+    } else {
+      break;
+    }
+  }
+
+  return ret;
+}
+
+int ObAllVirtualTabletInfo::get_next_tablet(ObTabletHandle &tablet_handle)
+{
+  int ret = OB_SUCCESS;
+
+  while (OB_SUCC(ret)) {
+    if (!ls_tablet_iter_.is_valid()) {
+      ObLS *ls = nullptr;
+      if (OB_FAIL(get_next_ls(ls))) {
+        if (OB_ITER_END != ret) {
+          SERVER_LOG(WARN, "fail to get next ls", K(ret));
+        }
+      } else if (OB_FAIL(ls->build_tablet_iter(ls_tablet_iter_))) {
+        SERVER_LOG(WARN, "fail to build tablet iter", K(ret));
+      }
+    }
+
+    if (OB_FAIL(ret)) {
+    } else if (OB_FAIL(ls_tablet_iter_.get_next_tablet(tablet_handle))) {
+      if (OB_ITER_END == ret) {
+        ls_tablet_iter_.reset();
+        ret = OB_SUCCESS;
+      } else {
+        SERVER_LOG(WARN, "fail to get next tablet", K(ret));
+      }
+    } else {
+      break;
+    }
+  }
+
+  return ret;
+}
+
+int ObAllVirtualTabletInfo::inner_get_next_row(ObNewRow *&row)
+{
+  int ret = OB_SUCCESS;
+  ObTabletHandle tablet_handle;
+  ObTablet *tablet = nullptr;
+  ObTabletCreateDeleteMdsUserData latest_user_data;
+  mds::MdsWriter writer;// will be removed later
+  mds::TwoPhaseCommitState trans_stat;// will be removed later
+  share::SCN trans_version;// will be removed later
+  bool is_empty_result = false;
+  if (OB_ISNULL(allocator_)) {
+    ret = OB_NOT_INIT;
+    SERVER_LOG(WARN, "allocator_ shouldn't be NULL", K(allocator_), K(ret));
+  } else if (FALSE_IT(start_to_read_ = true)) {
+  } else if (ls_iter_guard_.get_ptr() == nullptr && OB_FAIL(share::g_mp->ls_service()->get_ls_iter(ls_iter_guard_, ObLSGetMod::OBSERVER_MOD))) {
+    SERVER_LOG(WARN, "get_ls_iter fail", K(ret));
+  } else if (OB_FAIL(get_next_tablet(tablet_handle))) {
+    if (OB_ITER_END != ret) {
+      SERVER_LOG(WARN, "get_next_tablet failed", K(ret));
+    }
+  } else if (OB_UNLIKELY(!tablet_handle.is_valid())) {
+    ret = OB_ERR_UNEXPECTED;
+    SERVER_LOG(WARN, "invalid tablet handle", K(ret), K(tablet_handle));
+  } else if (OB_ISNULL(tablet = tablet_handle.get_obj())) {
+    ret = OB_ERR_UNEXPECTED;
+    SERVER_LOG(WARN, "tablet should not null", K(ret), K(tablet_handle));
+  } else if (OB_FAIL(tablet->get_latest(latest_user_data,
+      writer, trans_stat, trans_version))) {
+    if (OB_EMPTY_RESULT == ret || OB_ERR_SHARED_LOCK_CONFLICT == ret) {
+      trans_stat = mds::TwoPhaseCommitState::STATE_END;
+      trans_version.reset();
+      is_empty_result = true;
+      ret = OB_SUCCESS;
+    } else {
+      SERVER_LOG(WARN, "failed to get latest tablet status", K(ret), KPC(tablet));
+    }
+  }
+
+  if (OB_SUCC(ret)) {
+    const ObTabletMeta &tablet_meta = tablet->get_tablet_meta();
+    const int64_t col_count = output_column_ids_.count();
+    for (int64_t i = 0; OB_SUCC(ret) && i < col_count; ++i) {
+      uint64_t col_id = output_column_ids_.at(i);
+      switch (col_id) {
+        case OB_APP_MIN_COLUMN_ID:
+          // tablet_id
+          cur_row_.cells_[i].set_int(tablet_meta.tablet_id_.id());
+          break;
+        case OB_APP_MIN_COLUMN_ID + 1:
+          // data_tablet_id
+          cur_row_.cells_[i].set_int(tablet_meta.data_tablet_id_.id());
+          break;
+        case OB_APP_MIN_COLUMN_ID + 2:
+          // ref_tablet_id
+          cur_row_.cells_[i].set_int(0);
+          break;
+          //TODO:SCN
+        case OB_APP_MIN_COLUMN_ID + 3:
+          // checkpoint_ts
+          cur_row_.cells_[i].set_uint64(tablet_meta.clog_checkpoint_scn_.get_val_for_inner_table_field());
+          break;
+        case OB_APP_MIN_COLUMN_ID + 4:
+          // snapshot_version
+          cur_row_.cells_[i].set_uint64(tablet_meta.snapshot_version_);
+          break;
+        case OB_APP_MIN_COLUMN_ID + 5:
+          // multi_version_start
+          cur_row_.cells_[i].set_uint64(tablet_meta.multi_version_start_);
+          break;
+        case OB_APP_MIN_COLUMN_ID + 6:
+          // transfer_start_scn
+          cur_row_.cells_[i].set_uint64(0);
+          break;
+        case OB_APP_MIN_COLUMN_ID + 7:
+          // transfer_seq
+          cur_row_.cells_[i].set_int(0);
+          break;
+        case OB_APP_MIN_COLUMN_ID + 8:
+          // has_transfer_table
+          cur_row_.cells_[i].set_int(0);
+          break;
+        case OB_APP_MIN_COLUMN_ID + 9: {
+          // restore_status
+          ObTabletRestoreStatus::STATUS restore_status;
+          if (OB_FAIL(tablet_meta.ha_status_.get_restore_status(restore_status))) {
+            SERVER_LOG(WARN, "failed to get restore status", K(ret), K(tablet_meta));
+          } else {
+            cur_row_.cells_[i].set_int(restore_status);
+          }
+        }
+          break;
+        case OB_APP_MIN_COLUMN_ID + 10: {
+          // tablet_status
+          if (is_empty_result) {
+            cur_row_.cells_[i].set_int(static_cast<int64_t>(ObTabletStatus::MAX));
+          } else {
+            cur_row_.cells_[i].set_int(static_cast<int64_t>(latest_user_data.get_tablet_status()));
+          }
+          break;
+        }
+        case OB_APP_MIN_COLUMN_ID + 11:
+          // is_committed
+          cur_row_.cells_[i].set_int(trans_stat == mds::TwoPhaseCommitState::ON_COMMIT ? 1 : 0);
+          break;
+        case OB_APP_MIN_COLUMN_ID + 12:
+          // is_empty_shell
+          cur_row_.cells_[i].set_int(tablet->is_empty_shell() ? 1 : 0);
+          break;
+        default:
+          ret = OB_ERR_UNEXPECTED;
+          SERVER_LOG(WARN, "invalid col_id", K(ret), K(col_id));
+          break;
+      }
+    }
+  }
+  if (OB_SUCC(ret)) {
+    row = &cur_row_;
+  }
+
+  return ret;
+}
+
+}/* ns observer*/
+}/* ns oceanbase */

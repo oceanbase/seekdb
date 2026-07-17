@@ -1,0 +1,130 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef OCEANBASE_OB_THREAD_LEASE_H__
+#define OCEANBASE_OB_THREAD_LEASE_H__
+
+#include "lib/atomic/ob_atomic.h"
+
+namespace oceanbase
+{
+namespace common
+{
+
+/* state transfer: IDLE <------> HANDLING <------> READY
+ *  - IDLE:     idle state, no thread handling
+ *  - HANDLING: thread is handling
+ *  - READY:    thread is handling and new data need to handle
+ *
+ *  1. IDLE -> HANDLING:                      thread succ to acquire lease and is handling
+ *  2. HANDLING -> READY or READY -> READY:   new data need to handle when thread is handling
+ *  3. READY -> HANDLING:                     thread fail to revoke lease as new data arrived
+ *  4. HANDLING -> IDLE:                      thread succ to revoke lease
+ **/
+class ObThreadLease
+{
+public:
+  typedef enum { IDLE = 0, READY = 1, HANDLING = 2 } StatusType;
+
+public:
+  ObThreadLease() : status_(IDLE) {}
+  ~ObThreadLease() { status_ = IDLE; }
+
+  // for unittest
+  StatusType value() const { return status_; }
+
+  void reset()
+  {
+    status_ = IDLE;
+  }
+
+public:
+  bool is_idle() const
+  {
+    return IDLE == ATOMIC_LOAD(&status_);
+  }
+  bool acquire()
+  {
+    bool bool_ret = false;
+    bool done = false;
+    StatusType st = status_;
+
+    while (! done) {
+      switch (st) {
+        case IDLE:
+          // IDLE -> HANDLING
+          st = ATOMIC_CAS(&status_, IDLE, HANDLING);
+          done = (IDLE == st);
+          bool_ret = done;
+          break;
+
+          // HANDLING -> READY
+        case HANDLING:
+          st = ATOMIC_CAS(&status_, HANDLING, READY);
+          done = (HANDLING == st);
+          break;
+
+          // READY -> READY
+        case READY:
+          done = true;
+          break;
+
+          // unexpected
+        default:
+          done = true;
+          bool_ret = false;
+      }
+    }
+    return bool_ret;
+  }
+
+  bool revoke()
+  {
+    bool bool_ret = false;
+    bool done = false;
+    StatusType st = status_;
+
+    while (! done) {
+      switch (st) {
+          // HANDLING -> IDLE
+        case HANDLING:
+          st = ATOMIC_CAS(&status_, HANDLING, IDLE);
+          done = (HANDLING == st);
+          bool_ret = done;
+          break;
+
+          // READY -> HANDLING
+        case READY:
+          st = ATOMIC_CAS(&status_, READY, HANDLING);
+          done = (READY == st);
+          break;
+
+          // return true
+        default:
+          done = true;
+          bool_ret = true;
+      }
+    }
+    return bool_ret;
+  }
+
+private:
+  StatusType status_;
+};
+
+} // namespace common
+} // namespace oceanbase
+#endif /* OCEANBASE_OB_THREAD_LEASE_H__ */

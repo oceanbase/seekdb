@@ -1,0 +1,85 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+%option noyywrap nounput noinput case-insensitive
+%option noyyalloc noyyrealloc noyyfree
+%option reentrant bison-bridge bison-locations
+%option prefix="obsql_fts_yy"
+%option header-file="ftsblex_lex.h"
+%top{
+#include "ftsparser_tab.h" // 包含 Yacc 生成的头文件
+#include "fts_base.h"
+
+}
+
+%{
+#include "ftsparser_tab.h" // 包含 Yacc 生成的头文件
+#include "fts_base.h"
+
+extern int yyparse();
+%}
+
+%%
+[\t \n]+  /* Ignore whitespace */ ;
+
+[()+\-<>~@*]            {
+        yylval_param->oper = obsql_fts_yyget_text(yyscanner)[0];
+
+        return(yylval_param->oper);
+}
+
+[^" \n*()+\-<>~@]*     {
+        FtsParserResult *p = yyget_extra(yyscanner);
+        struct FtsString *ast_str = NULL;
+        int ret = fts_string_create(p, (const char*)(obsql_fts_yyget_text(yyscanner)), obsql_fts_yyget_leng(yyscanner), &ast_str);
+        if (FTS_OK != ret) {
+          p->ret_ = ret;
+        } else {
+          yylval_param->token = ast_str;
+        }
+        return(FTS_TERM);
+}
+
+%%
+
+void *yyalloc(size_t bytes, void *yyscanner)
+{
+  void *ptr_ret = NULL;
+  FtsParserResult *p = yyget_extra(yyscanner);
+  if (OB_UNLIKELY(NULL == p)) {
+  } else {
+    ptr_ret = parse_malloc(bytes, p->malloc_pool_);
+  }
+  return ptr_ret;
+}
+
+void *yyrealloc(void *ptr, size_t bytes, void *yyscanner)
+{
+  void *ptr_ret = NULL;
+  FtsParserResult *p = yyget_extra(yyscanner);
+  if (OB_UNLIKELY(NULL == p)) {
+  } else {
+    ptr_ret = parse_realloc(ptr, bytes, p->malloc_pool_);
+  }
+  return ptr_ret;
+}
+
+void yyfree(void *ptr, void *yyscanner)
+{
+  UNUSED(yyscanner);
+  /* Do nothing -- we leave it to the garbage collector. */
+  parse_free(ptr);
+}

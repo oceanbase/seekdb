@@ -1,0 +1,49 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef OB_SQL_ENGINE_EXPR_MAKEDATE_
+#define OB_SQL_ENGINE_EXPR_MAKEDATE_
+
+#include "lib/allocator/ob_allocator.h"
+#include "sql/engine/expr/ob_expr_operator.h"
+
+namespace oceanbase
+{
+namespace sql
+{
+class ObExprMakedate : public ObFuncExprOperator
+{
+public:
+  explicit  ObExprMakedate(common::ObIAllocator &alloc);
+  virtual ~ObExprMakedate();
+  virtual int calc_result_type2(ObExprResType &type,
+                                ObExprResType &year,
+                                ObExprResType &day,
+                                common::ObExprTypeCtx &type_ctx) const;
+  virtual common::ObCastMode get_cast_mode() const { return CM_STRING_INTEGER_TRUNC;}
+  static int calc_makedate(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &result);
+  template <typename T>
+  static int calc(T &res, int64_t year, int64_t day);
+  virtual int cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_expr,
+                      ObExpr &rt_expr) const override;
+private:
+  // disallow copy
+  DISALLOW_COPY_AND_ASSIGN(ObExprMakedate);
+};
+}
+}
+
+#endif /* OB_SQL_ENGINE_EXPR_MAKEDATE_ */

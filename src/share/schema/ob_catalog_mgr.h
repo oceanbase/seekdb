@@ -1,0 +1,147 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef OB_CATALOG_MGR_H
+#define OB_CATALOG_MGR_H
+
+#include "lib/hash/ob_pointer_hashmap.h"
+#include "share/ob_define.h"
+#include "share/schema/ob_schema_struct.h"
+#include "lib/container/ob_vector.h"
+#include "share/schema/ob_catalog_schema_struct.h"
+
+namespace oceanbase
+{
+namespace share
+{
+namespace schema
+{
+
+class ObCatalogNameHashKey
+{
+public:
+  ObCatalogNameHashKey()
+    : name_case_mode_(common::OB_NAME_CASE_INVALID),
+      name_()
+  {}
+  ObCatalogNameHashKey(const common::ObNameCaseMode mode,
+                       common::ObString name)
+    : name_case_mode_(mode),
+      name_(name)
+  {}
+  ~ObCatalogNameHashKey() {}
+  inline uint64_t hash() const
+  {
+    uint64_t hash_ret = 0;
+    common::ObCollationType cs_type = ObSchema::get_cs_type_with_cmp_mode(name_case_mode_);
+    hash_ret = common::ObCharset::hash(cs_type, name_, 0);
+    return hash_ret;
+  }
+  inline bool operator == (const ObCatalogNameHashKey &rv) const
+  {
+    ObCompareNameWithTenantID name_cmp(name_case_mode_);
+    return (true)
+           && (name_case_mode_ == rv.name_case_mode_)
+           && (0 == name_cmp.compare(name_ ,rv.name_));
+  }
+private:
+  common::ObNameCaseMode name_case_mode_;
+  common::ObString name_;
+};
+
+template<class T, class V>
+struct ObGetCatalogKey {
+  void operator()(const T &t, const V &v) const {
+    UNUSED(t);
+    UNUSED(v);
+  }
+};
+
+template<>
+struct ObGetCatalogKey<ObCatalogNameHashKey, ObCatalogSchema *>
+{
+  ObCatalogNameHashKey operator() (const ObCatalogSchema *schema) const {
+    return OB_ISNULL(schema)
+           ? ObCatalogNameHashKey()
+           : ObCatalogNameHashKey(schema->get_name_case_mode(),
+                                  schema->get_catalog_name_str());
+  }
+};
+
+
+template<>
+struct ObGetCatalogKey<uint64_t, ObCatalogSchema *>
+{
+  uint64_t operator()(const ObCatalogSchema *schema) const
+  {
+    return OB_ISNULL(schema) ? common::OB_INVALID_ID : schema->get_catalog_id();
+  }
+};
+
+class ObCatalogMgr
+{
+public:
+  typedef common::ObSortedVector<ObCatalogSchema *> CatalogInfos;
+  typedef common::hash::ObPointerHashMap<ObCatalogNameHashKey, ObCatalogSchema *,
+                                         ObGetCatalogKey, 128> ObCatalogNameMap;
+  typedef common::hash::ObPointerHashMap<uint64_t, ObCatalogSchema *,
+                                         ObGetCatalogKey, 128> ObCatalogIdMap;
+  typedef CatalogInfos::iterator CatalogIter;
+  typedef CatalogInfos::const_iterator ConstCatalogIter;
+  ObCatalogMgr();
+  explicit ObCatalogMgr(common::ObIAllocator &allocator);
+  virtual ~ObCatalogMgr();
+  int init();
+  void reset();
+  int assign(const ObCatalogMgr &other);
+  int deep_copy(const ObCatalogMgr &other);
+  int add_catalog(const ObCatalogSchema &schema, const ObNameCaseMode mode);
+  int del_catalog(const ObTenantCatalogId &id);
+  int get_schema_by_id(const uint64_t catalog_id,
+                       const ObCatalogSchema *&schema) const;
+  int get_schema_by_name(const ObNameCaseMode mode,
+                         const common::ObString &name,
+                         const ObCatalogSchema *&schema) const;
+  int get_schemas_in_tenant(common::ObIArray<const ObCatalogSchema *> &schemas) const;
+  inline static bool schema_cmp(const ObCatalogSchema *lhs,
+                                const ObCatalogSchema *rhs) {
+    return lhs->get_catalog_id() < rhs->get_catalog_id();
+  }
+  inline static bool schema_equal(const ObCatalogSchema *lhs,
+                                  const ObCatalogSchema *rhs) {
+    return true
+        && lhs->get_catalog_id() == rhs->get_catalog_id();
+  }
+  static bool compare_with_tenant_catalog_id(const ObCatalogSchema *lhs, const ObTenantCatalogId &id);
+  static bool equal_to_tenant_catalog_id(const ObCatalogSchema *lhs, const ObTenantCatalogId &id);
+
+  int get_schema_count(int64_t &schema_count) const;
+  int get_schema_statistics(ObSchemaStatisticsInfo &schema_info) const;
+private:
+  bool is_inited_;
+  common::ObArenaAllocator local_allocator_;
+  common::ObIAllocator &allocator_;
+  CatalogInfos schema_infos_;
+  ObCatalogNameMap name_map_;
+  ObCatalogIdMap id_map_;
+};
+
+
+}
+}
+}
+
+#endif // OB_CATALOG_MGR_H

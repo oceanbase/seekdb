@@ -1,0 +1,85 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef OCEANBASE_OBSERVER_VIRTUAL_TABLE_OB_INFORMATION_REFERENTIAL_CONSTRAINTS_
+#define OCEANBASE_OBSERVER_VIRTUAL_TABLE_OB_INFORMATION_REFERENTIAL_CONSTRAINTS_
+#include "observer/virtual_table/ob_virtual_table_scanner_iterator.h"
+
+namespace oceanbase
+{
+namespace common
+{
+class ObObj;
+
+}
+namespace share
+{
+namespace schema
+{
+class ObTableSchema;
+class ObDatabaseSchema;
+
+}
+}
+
+namespace observer
+{
+
+class ObInfoSchemaReferentialConstraintsTable : public common::ObVirtualTableScannerIterator
+{
+public:
+  ObInfoSchemaReferentialConstraintsTable();
+  virtual ~ObInfoSchemaReferentialConstraintsTable();
+  virtual int inner_get_next_row(common::ObNewRow *&row);
+  virtual void reset();
+
+  
+
+private:
+  int add_fk_constraints_in_db(
+      const share::schema::ObDatabaseSchema &database_schema,
+      common::ObObj *cells,
+      const int64_t col_count);
+  int add_fk_constraints_in_table(
+      const share::schema::ObTableSchema &table_schema,
+      const common::ObString &database_name,
+      common::ObObj *cells,
+      const int64_t col_count);
+
+private:
+  enum REFERENTIAL_CONSTRAINTS_COLUMN_COUNT_COLUMN
+  {
+    CONSTRAINT_CATALOG = common::OB_APP_MIN_COLUMN_ID,
+    CONSTRAINT_SCHEMA,
+    CONSTRAINT_NAME,
+    UNIQUE_CONSTRAINT_CATALOG,
+    UNIQUE_CONSTRAINT_SCHEMA,
+    UNIQUE_CONSTRAINT_NAME,
+    MATCH_OPTION,
+    UPDATE_RULE,
+    DELETE_RULE,
+    TABLE_NAME,
+    REFERENCED_TABLE_NAME,
+    MAX_REFERENTIAL_CONSTRAINTS_COLUMN
+  };
+  static const int64_t REFERENTIAL_CONSTRAINTS_COLUMN_COUNT = 11;
+  DISALLOW_COPY_AND_ASSIGN(ObInfoSchemaReferentialConstraintsTable);
+};
+
+
+}
+}
+#endif /* OCEANBASE_OBSERVER_VIRTUAL_TABLE_OB_INFORMATION_REFERENTIAL_CONSTRAINTS_ */

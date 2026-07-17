@@ -1,0 +1,152 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#define USING_LOG_PREFIX SHARE
+
+#include "share/tablet/ob_tablet_to_table_history_operator.h"
+#include "share/inner_table/ob_inner_table_schema_constants.h"
+#include "share/ob_dml_sql_splicer.h"                // ObDMLSqlSplicer
+#include "share/schema/ob_schema_service.h"
+
+namespace oceanbase
+{
+using namespace common;
+using namespace share;
+using namespace share::schema;
+
+namespace share
+{
+using namespace schema;
+int ObTabletToTableHistoryOperator::create_tablet_to_table_history(
+    common::ObISQLClient &sql_proxy,
+    const int64_t schema_version,
+    const common::ObIArray<ObTabletTablePair> &pairs)
+{
+  int ret = OB_SUCCESS;
+  if (OB_UNLIKELY(false
+      || pairs.count() <= 0
+      || schema_version <= 0
+      || !ObSchemaService::is_formal_version(schema_version))) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid arg", KR(ret), K(schema_version), "pairs_cnt", pairs.count());
+  } else {
+    ObSqlString sql;
+    ObDMLSqlSplicer dml_splicer;
+    int64_t affected_rows = 0;
+    const int64_t BATCH_NUM = 10000;
+    int64_t start_idx = 0;
+    int64_t end_idx = min(pairs.count(), start_idx + BATCH_NUM);
+    const int64_t is_deleted = 0;
+    while (OB_SUCC(ret)
+           && end_idx - start_idx > 0
+           && end_idx <= pairs.count()) {
+      sql.reset();
+      dml_splicer.reset();
+      for (int64_t i = start_idx; OB_SUCC(ret) && i < end_idx; i++) {
+        const ObTabletTablePair &pair = pairs.at(i);
+        if (OB_UNLIKELY(!pair.is_valid()
+            || !pair.get_tablet_id().is_valid_with_tenant())) {
+          ret = OB_INVALID_ARGUMENT;
+          LOG_WARN("invalid tablet-table pair", KR(ret), K(pair));
+        } else if (OB_FAIL(dml_splicer.add_pk_column("tablet_id", pair.get_tablet_id().id()))
+                   || OB_FAIL(dml_splicer.add_pk_column("schema_version", schema_version))
+                   || OB_FAIL(dml_splicer.add_column("table_id",
+                              ObSchemaUtils::get_extract_schema_id(pair.get_table_id())))
+                   || OB_FAIL(dml_splicer.add_column("is_deleted", is_deleted))
+                   ) {
+          LOG_WARN("fail to add column", KR(ret), K(schema_version), K(pair));
+        } else if (OB_FAIL(dml_splicer.finish_row())) {
+          LOG_WARN("fail to finish row", KR(ret));
+        }
+      } // end for
+      if (FAILEDx(dml_splicer.splice_batch_insert_sql(OB_ALL_TABLET_TO_TABLE_HISTORY_TNAME, sql))) {
+        LOG_WARN("fail to generate sql", KR(ret));
+      } else if (OB_FAIL(sql_proxy.write(sql.ptr(), affected_rows))) {
+        LOG_WARN("fail to execute sql", KR(ret), K(sql));
+      } else if (affected_rows != (end_idx - start_idx)) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("affected_rows not match", KR(ret),
+                 K(affected_rows), "pairs_cnt", start_idx - end_idx);
+      }
+      start_idx = end_idx;
+      end_idx = min(pairs.count(), start_idx + BATCH_NUM);
+    } //end while
+  }
+  return ret;
+}
+
+int ObTabletToTableHistoryOperator::drop_tablet_to_table_history(
+    common::ObISQLClient &sql_proxy,
+    const int64_t schema_version,
+    const common::ObIArray<ObTabletID> &tablet_ids)
+{
+  int ret = OB_SUCCESS;
+  if (OB_UNLIKELY(false
+      || tablet_ids.count() <= 0
+      || schema_version <= 0
+      || !ObSchemaService::is_formal_version(schema_version))) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid arg", KR(ret),
+             K(schema_version), "tablet_cnt", tablet_ids.count());
+  } else {
+    ObSqlString sql;
+    ObDMLSqlSplicer dml_splicer;
+    int64_t affected_rows = 0;
+    const int64_t BATCH_NUM = 10000;
+    int64_t start_idx = 0;
+    int64_t end_idx = min(tablet_ids.count(), start_idx + BATCH_NUM);
+    const int64_t is_deleted = 1;
+    const uint64_t table_id = OB_INVALID_ID; // means been dropped
+    while (OB_SUCC(ret)
+           && end_idx - start_idx > 0
+           && end_idx <= tablet_ids.count()) {
+      sql.reset();
+      dml_splicer.reset();
+      for (int64_t i = start_idx; OB_SUCC(ret) && i < end_idx; i++) {
+        const ObTabletID &tablet_id = tablet_ids.at(i);
+        if (OB_UNLIKELY(!tablet_id.is_valid()
+            || !tablet_id.is_valid_with_tenant())) {
+          ret = OB_INVALID_ARGUMENT;
+          LOG_WARN("invalid tablet_id", KR(ret), K(tablet_id));
+        } else if (OB_FAIL(dml_splicer.add_pk_column("tablet_id", tablet_id.id()))
+                   || OB_FAIL(dml_splicer.add_pk_column("schema_version", schema_version))
+                   || OB_FAIL(dml_splicer.add_column("table_id",
+                              ObSchemaUtils::get_extract_schema_id(table_id)))
+                   || OB_FAIL(dml_splicer.add_column("is_deleted", 1))
+                   ) {
+          LOG_WARN("fail to add column", KR(ret), K(schema_version), K(tablet_id));
+        } else if (OB_FAIL(dml_splicer.finish_row())) {
+          LOG_WARN("fail to finish row", KR(ret));
+        }
+      } // end for
+      if (FAILEDx(dml_splicer.splice_batch_insert_sql(OB_ALL_TABLET_TO_TABLE_HISTORY_TNAME, sql))) {
+        LOG_WARN("fail to generate sql", KR(ret));
+      } else if (OB_FAIL(sql_proxy.write(sql.ptr(), affected_rows))) {
+        LOG_WARN("fail to execute sql", KR(ret), K(sql));
+      } else if (affected_rows != (end_idx - start_idx)) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("affected_rows not match", KR(ret),
+                 K(affected_rows), "tablet_cnt", start_idx - end_idx);
+      }
+      start_idx = end_idx;
+      end_idx = min(tablet_ids.count(), start_idx + BATCH_NUM);
+    } //end while
+  }
+  return ret;
+}
+
+} // end share
+} // end oceanbase

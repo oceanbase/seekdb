@@ -1,0 +1,81 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef OCEANBASE_ROOTSERVER_OB_DROP_INDEX_TASK_H
+#define OCEANBASE_ROOTSERVER_OB_DROP_INDEX_TASK_H
+
+#include "rootserver/ddl_task/ob_ddl_task.h"
+
+namespace oceanbase
+{
+namespace rootserver
+{
+
+class ObDropIndexTask final: public ObDDLTask
+{
+public:
+  ObDropIndexTask();
+  virtual ~ObDropIndexTask();
+  int init(
+      const int64_t task_id,
+      const share::ObDDLType &ddl_type,
+      const uint64_t data_table_id,
+      const uint64_t index_table_id,
+      const int64_t schema_version,
+      const int64_t parent_task_id,
+      const int64_t consumer_group_id,
+      const int32_t sub_task_trace_id,
+      const obcall::ObDropIndexArg &drop_index_arg);
+  int init(const ObDDLTaskRecord &task_record);
+  virtual int process() override;
+  virtual bool is_valid() const override;
+  virtual int serialize_params_to_message(char *buf, const int64_t buf_size, int64_t &pos) const override;
+  virtual int deserialize_params_from_message(const char *buf, const int64_t buf_size, int64_t &pos) override;
+  virtual int64_t get_serialize_param_size() const override;
+  INHERIT_TO_STRING_KV("ObDDLTask", ObDDLTask, KP_(root_service));
+private:
+  int check_switch_succ();
+
+  int prepare(const share::ObDDLTaskStatus new_status);
+  int set_write_only(const share::ObDDLTaskStatus new_status);
+  int set_unusable(const share::ObDDLTaskStatus new_status);
+  int update_index_status(const share::schema::ObIndexStatus new_status);
+  int drop_index_impl();
+  int drop_index(const share::ObDDLTaskStatus new_status);
+  int succ();
+  int fail();
+  virtual int cleanup_impl() override;
+  int deep_copy_index_arg(common::ObIAllocator &allocator,
+                          const obcall::ObDropIndexArg &src_index_arg,
+                          obcall::ObDropIndexArg &dst_index_arg);
+  virtual bool is_error_need_retry(const int ret_code) override
+  {
+    UNUSED(ret_code);
+    // we should always retry on drop index task
+    return task_status_ < share::ObDDLTaskStatus::DROP_SCHEMA;
+  }
+private:
+  static const int64_t OB_DROP_INDEX_TASK_VERSION = 1;
+private:
+  ObRootService *root_service_;
+  obcall::ObDropIndexArg drop_index_arg_;
+};
+
+}  // end namespace rootserver
+}  // end namespace oceanbase
+
+#endif  // OCEANBASE_ROOTSERVER_OB_DROP_INDEX_TASK_H
+

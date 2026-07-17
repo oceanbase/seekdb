@@ -1,0 +1,734 @@
+#!/bin/bash
+set -u
+
+LABEL="com.seekdb.server"
+PLIST="/Library/LaunchDaemons/${LABEL}.plist"
+CONFIG_FILE="${SEEKDB_CONFIG_FILE:-/opt/seekdb/etc/seekdb/seekdb.cnf}"
+BASE_DIR="/opt/seekdb/var/seekdb/data"
+LOG_DIR="${BASE_DIR}/log"
+START_SCRIPT="/opt/seekdb/libexec/seekdb/scripts/seekdb_launchd_start"
+STOP_SCRIPT="/opt/seekdb/libexec/seekdb/scripts/seekdb_launchd_stop"
+SEEKDB_BIN="/opt/seekdb/bin/seekdb"
+DEFAULT_PORT="2881"
+LOCK_FILE="/tmp/seekdbctl.lock.d"
+RUNTIME_DIR="/opt/seekdb/var/seekdb/run"
+ACTIVE_PATHS_FILE="${RUNTIME_DIR}/active_paths"
+UNINSTALL_MARKER_NAME="uninstalling"
+MONITOR_BUNDLE_ID="com.seekdb.monitor"
+MONITOR_APP="/Applications/seekdb Monitor.app"
+MONITOR_APP_LEGACY="/Applications/SeekDB Monitor.app"
+MONITOR_EXECUTABLE="seekdb-menubar"
+HELPER_LABEL="com.seekdb.helper"
+HELPER_PLIST="/Library/LaunchDaemons/${HELPER_LABEL}.plist"
+HELPER_TOOL="/Library/PrivilegedHelperTools/${HELPER_LABEL}"
+
+usage() {
+  cat <<EOF
+Usage: seekdbctl <command> [options]
+
+Commands:
+  start        Load and start the launchd service
+  stop         Stop the service and unload it from launchd
+  restart      Restart the service
+  status       Show launchd, process, port, and SQL status
+  logs [-f]    Show seekdb logs, optionally following them
+  doctor       Run local diagnostics
+  paths        Print important paths
+  config       Print or update the active configuration
+  setup        Alias for `initialize` (kept for backward compat)
+  initialize   Wipe data and bootstrap a fresh database
+  boot-status  Print whether seekdb is enabled to start at boot (enabled|disabled|unavailable)
+  enable-boot  Register seekdb to start automatically at boot
+  disable-boot Unregister seekdb from starting automatically at boot
+  uninstall    Stop service and remove installed files, config, and data
+  help         Show this help
+
+Recommended shortcuts:
+  seekdb_start    Start seekdb daemon
+  seekdb_stop     Stop seekdb daemon
+  seekdb_status   Check seekdb status
+  seekdb_paths    Show paths
+  seekdb_config   Show or update path configuration
+  seekdb_setup    Initialize, enable boot startup, and start
+  seekdb_uninstall Remove seekdb completely
+
+Examples:
+  seekdb_paths
+  sudo seekdb_config --base-dir /opt/seekdb/data --restart
+  sudo seekdb_setup
+  sudo seekdb_uninstall
+EOF
+}
+
+info() { printf '[seekdbctl] %s\n' "$*"; }
+warn() { printf '[seekdbctl][WARN] %s\n' "$*" >&2; }
+die() { printf '[seekdbctl][ERROR] %s\n' "$*" >&2; exit 1; }
+
+require_root() {
+  [ "$(id -u)" -eq 0 ] || die "This command requires root privileges. Please run with sudo."
+}
+
+acquire_lock() {
+  if mkdir "$LOCK_FILE" 2>/dev/null; then
+    echo $$ > "$LOCK_FILE/pid"
+    trap release_lock EXIT
+    return
+  fi
+  # Check if the holding process is still alive
+  local holder
+  holder="$(cat "$LOCK_FILE/pid" 2>/dev/null || true)"
+  if [ -n "$holder" ] && ! kill -0 "$holder" 2>/dev/null; then
+    rmdir "$LOCK_FILE" 2>/dev/null || rm -rf "$LOCK_FILE"
+    if mkdir "$LOCK_FILE" 2>/dev/null; then
+      echo $$ > "$LOCK_FILE/pid"
+      trap release_lock EXIT
+      return
+    fi
+  fi
+  die "Another seekdbctl operation is in progress. Please wait."
+}
+
+release_lock() {
+  rm -rf "$LOCK_FILE" 2>/dev/null || true
+}
+
+trim() {
+  local value="$*"
+  value="${value#"${value%%[![:space:]]*}"}"
+  value="${value%"${value##*[![:space:]]}"}"
+  printf "%s" "$value"
+}
+
+read_config_value() {
+  local wanted="$1"
+  [ -f "$CONFIG_FILE" ] || return 1
+
+  read_key_value "$CONFIG_FILE" "$wanted"
+}
+
+read_active_path_value() {
+  local wanted="$1"
+  [ -f "$ACTIVE_PATHS_FILE" ] || return 1
+
+  read_key_value "$ACTIVE_PATHS_FILE" "$wanted"
+}
+
+read_key_value() {
+  local file="$1"
+  local wanted="$2"
+  [ -r "$file" ] || return 1
+  while IFS= read -r line || [ -n "$line" ]; do
+    line="$(trim "$line")"
+    [ -z "$line" ] && continue
+    case "$line" in
+      \#*|\;*) continue ;;
+    esac
+    key="$(trim "${line%%=*}")"
+    value="$(trim "${line#*=}")"
+    if [ "$key" = "$wanted" ]; then
+      printf "%s" "$value"
+      return 0
+    fi
+  done < "$file"
+  return 1
+}
+
+ensure_config_file() {
+  require_root
+  mkdir -p "$(dirname "$CONFIG_FILE")"
+  if [ ! -f "$CONFIG_FILE" ]; then
+    cat > "$CONFIG_FILE" <<EOF
+# These parameters are permanently valid
+base-dir=$BASE_DIR
+data-dir=$BASE_DIR/store
+redo-dir=$BASE_DIR/store/redo
+
+# These parameters are valid only during initialization
+port=$DEFAULT_PORT
+cpu_count=4
+memory_limit=2G
+plugin-dir=$BASE_DIR/plugin_dir
+EOF
+  fi
+  chmod 644 "$CONFIG_FILE" 2>/dev/null || true
+}
+
+write_config_value() {
+  local key="$1"
+  local value="$2"
+  local tmp_file
+  tmp_file="$(mktemp "${TMPDIR:-/tmp}/seekdb.cnf.XXXXXX")"
+
+  if [ -f "$CONFIG_FILE" ] && awk -F= -v key="$key" '
+    /^[[:space:]]*[#;]/ { next }
+    {
+      k=$1
+      gsub(/^[[:space:]]+|[[:space:]]+$/, "", k)
+      if (k == key) found=1
+    }
+    END { exit(found ? 0 : 1) }
+  ' "$CONFIG_FILE"; then
+    awk -F= -v key="$key" -v value="$value" '
+      /^[[:space:]]*[#;]/ { print; next }
+      {
+        k=$1
+        gsub(/^[[:space:]]+|[[:space:]]+$/, "", k)
+        if (k == key) {
+          print key "=" value
+          next
+        }
+        print
+      }
+    ' "$CONFIG_FILE" > "$tmp_file"
+  else
+    [ -f "$CONFIG_FILE" ] && cp "$CONFIG_FILE" "$tmp_file" || : > "$tmp_file"
+    printf "%s=%s\n" "$key" "$value" >> "$tmp_file"
+  fi
+
+  mv "$tmp_file" "$CONFIG_FILE"
+  chmod 644 "$CONFIG_FILE" 2>/dev/null || true
+}
+
+refresh_paths() {
+  BASE_DIR="$(read_config_value "base-dir" || printf "%s" "$BASE_DIR")"
+  LOG_DIR="$BASE_DIR/log"
+}
+
+refresh_active_paths() {
+  local active_base
+  active_base="$(read_active_path_value "base-dir" || true)"
+  [ -n "$active_base" ] || return 1
+  BASE_DIR="$active_base"
+  LOG_DIR="$(read_active_path_value "log-dir" || printf "%s/log" "$BASE_DIR")"
+}
+
+get_port() {
+  read_config_value "port" || printf "%s" "$DEFAULT_PORT"
+}
+
+get_active_port() {
+  read_active_path_value "port" || get_port
+}
+
+launchd_loaded() {
+  launchctl print "system/${LABEL}" >/dev/null 2>&1 && return 0
+  # Fallback for non-root: active_paths is created at start, removed at stop
+  [ -r "$ACTIVE_PATHS_FILE" ]
+}
+
+boot_startup_disabled() {
+  local line
+  line="$(launchctl print-disabled system 2>/dev/null | grep "\"${LABEL}\"" || true)"
+  [ -n "$line" ] && echo "$line" | grep -q "=> disabled"
+}
+
+boot_startup_status() {
+  if [ ! -f "$PLIST" ]; then
+    printf "unavailable"
+    return 0
+  fi
+  if boot_startup_disabled; then
+    printf "disabled"
+  else
+    printf "enabled"
+  fi
+}
+
+pid_from_file() {
+  refresh_active_paths || refresh_paths
+  local pid_file="$BASE_DIR/run/seekdb.pid"
+  local pid=""
+  if [ -r "$pid_file" ]; then
+    pid="$(cat "$pid_file" 2>/dev/null || true)"
+  fi
+  if [ -z "$pid" ]; then
+    # Fallback when PID file is not readable (root-owned, 0600).
+    # Use -x for exact process name match to avoid matching seekdbctl, seekdb-menubar, etc.
+    pid="$(pgrep -x seekdb 2>/dev/null | head -1 || true)"
+  fi
+  [ -n "$pid" ] || return 1
+  printf "%s" "$pid"
+}
+
+pid_alive() {
+  local pid="$1"
+  [ -n "$pid" ] || return 1
+  # Use ps instead of kill -0: kill -0 returns EPERM for root-owned processes
+  # when run as non-root, making status unreliable without sudo.
+  ps -p "$pid" >/dev/null 2>&1
+}
+
+port_open() {
+  local port="$1"
+  nc -z 127.0.0.1 "$port" >/dev/null 2>&1
+}
+
+cmd_start() {
+  require_root
+  [ -f "$PLIST" ] || die "LaunchDaemon plist not found: $PLIST"
+  [ -x "$START_SCRIPT" ] || die "Start script not found or not executable: $START_SCRIPT"
+  [ -f "$CONFIG_FILE" ] || die "Config file not found: $CONFIG_FILE. Run 'sudo seekdbctl initialize' first."
+
+  if launchd_loaded; then
+    info "Service is already loaded; kickstarting ${LABEL}"
+    launchctl kickstart -k "system/${LABEL}"
+  else
+    info "Loading ${PLIST}"
+    launchctl bootstrap system "$PLIST"
+    launchctl enable "system/${LABEL}" >/dev/null 2>&1 || true
+  fi
+}
+
+cmd_initialize() {
+  require_root
+  ensure_config_file
+  refresh_paths
+
+  local data_dir
+  local redo_dir
+  data_dir="$(read_config_value "data-dir" || printf "%s/store" "$BASE_DIR")"
+  redo_dir="$(read_config_value "redo-dir" || printf "%s/store/redo" "$BASE_DIR")"
+
+  # Stop the service if it's loaded — must release files before wiping.
+  if launchd_loaded; then
+    info "Stopping ${LABEL} before initialization"
+    if [ -x "$STOP_SCRIPT" ]; then
+      "$STOP_SCRIPT" || true
+    fi
+    launchctl bootout "system/${LABEL}" >/dev/null 2>&1 || true
+  fi
+
+  info "Wiping database state"
+  rm -rf "$data_dir" "$redo_dir" "$LOG_DIR" "$BASE_DIR/run" "$BASE_DIR/etc" "$BASE_DIR/.meta" 2>/dev/null || true
+
+  mkdir -p "$BASE_DIR" "$BASE_DIR/run" "$data_dir" "$redo_dir" "$LOG_DIR"
+  chown -R root:wheel "$(dirname "$CONFIG_FILE")" "$(dirname "$BASE_DIR")" 2>/dev/null || true
+  chmod 755 "$BASE_DIR" "$BASE_DIR/run" "$data_dir" "$redo_dir" "$LOG_DIR" 2>/dev/null || true
+
+  launchctl enable "system/${LABEL}" >/dev/null 2>&1 || true
+  cmd_start
+  info "Database initialized fresh and started."
+}
+
+cmd_setup() {
+  cmd_initialize "$@"
+}
+
+cmd_stop() {
+  require_root
+  if [ -x "$STOP_SCRIPT" ]; then
+    "$STOP_SCRIPT" || true
+  fi
+
+  if launchd_loaded; then
+    info "Unloading ${LABEL}"
+    launchctl bootout "system/${LABEL}" >/dev/null 2>&1 || true
+  else
+    info "Service is not loaded"
+  fi
+}
+
+cmd_restart() {
+  cmd_stop
+  cmd_start
+}
+
+cmd_boot_status() {
+  boot_startup_status
+  printf "\n"
+}
+
+cmd_enable_boot() {
+  require_root
+  [ -f "$PLIST" ] || die "LaunchDaemon plist not found: $PLIST"
+  launchctl enable "system/${LABEL}" >/dev/null 2>&1 || true
+  info "seekdb is enabled to start at boot."
+}
+
+cmd_disable_boot() {
+  require_root
+  launchctl disable "system/${LABEL}" >/dev/null 2>&1 || true
+  info "seekdb is disabled from starting at boot."
+}
+
+cmd_status() {
+  local config_base
+  local use_active=0
+  config_base="$(read_config_value "base-dir" || printf "%s" "$BASE_DIR")"
+  if launchd_loaded; then
+    if refresh_active_paths; then
+      use_active=1
+    else
+      refresh_paths
+    fi
+  else
+    refresh_paths
+  fi
+  local port
+  if [ "$use_active" -eq 1 ]; then
+    port="$(get_active_port)"
+  else
+    port="$(get_port)"
+  fi
+
+  echo "Config     : $CONFIG_FILE"
+  echo "Base dir   : $BASE_DIR"
+  if [ "$BASE_DIR" != "$config_base" ]; then
+    echo "Config base: $config_base"
+  fi
+  echo "Log dir    : $LOG_DIR"
+  echo "Port       : $port"
+
+  if launchd_loaded; then
+    echo "launchd    : loaded"
+  else
+    echo "launchd    : not loaded"
+  fi
+
+  echo "boot-startup: $(boot_startup_status)"
+
+  local pid=""
+  pid="$(pid_from_file || true)"
+  if pid_alive "$pid"; then
+    echo "process    : running (pid $pid)"
+  else
+    echo "process    : not running"
+  fi
+
+  if port_open "$port"; then
+    echo "port       : open"
+  else
+    echo "port       : closed"
+  fi
+
+  if command -v mysql >/dev/null 2>&1 && port_open "$port"; then
+    if mysql --protocol=TCP -h127.0.0.1 -P"$port" -uroot -e "select 1" >/dev/null 2>&1; then
+      echo "sql        : ok"
+    else
+      echo "sql        : mysql client found, query failed"
+    fi
+  else
+    echo "sql        : skipped"
+  fi
+}
+
+cmd_paths() {
+  refresh_paths
+  local port
+  port="$(get_port)"
+  echo "Config: $CONFIG_FILE"
+  echo "Base:   $BASE_DIR"
+  echo "Data:   $(read_config_value "data-dir" || printf "%s/store" "$BASE_DIR")"
+  echo "Redo:   $(read_config_value "redo-dir" || printf "%s/store/redo" "$BASE_DIR")"
+  echo "PID:    $BASE_DIR/run/seekdb.pid"
+  echo "Log:    $LOG_DIR/seekdb.log"
+  echo "Share:  /opt/seekdb/share/seekdb"
+  echo "Port:   $port"
+}
+
+cmd_logs() {
+  if launchd_loaded; then
+    refresh_active_paths || refresh_paths
+  else
+    refresh_paths
+  fi
+  local follow=0
+  if [ "${1:-}" = "-f" ] || [ "${1:-}" = "--follow" ]; then
+    follow=1
+  fi
+
+  local files=()
+  [ -f "$LOG_DIR/seekdb.log" ] && files+=("$LOG_DIR/seekdb.log")
+  [ -f "$LOG_DIR/launchd.out.log" ] && files+=("$LOG_DIR/launchd.out.log")
+  [ -f "$LOG_DIR/launchd.err.log" ] && files+=("$LOG_DIR/launchd.err.log")
+
+  [ "${#files[@]}" -gt 0 ] || die "No log files found under $LOG_DIR"
+
+  if [ "$follow" -eq 1 ]; then
+    tail -n 200 -F "${files[@]}"
+  else
+    tail -n 200 "${files[@]}"
+  fi
+}
+
+cmd_doctor() {
+  local use_active=0
+  if launchd_loaded; then
+    if refresh_active_paths; then
+      use_active=1
+    else
+      refresh_paths
+    fi
+  else
+    refresh_paths
+  fi
+  local port
+  if [ "$use_active" -eq 1 ]; then
+    port="$(get_active_port)"
+  else
+    port="$(get_port)"
+  fi
+
+  echo "seekdb diagnostics"
+  echo "------------------"
+  [ -x "$SEEKDB_BIN" ] && echo "binary     : ok ($SEEKDB_BIN)" || echo "binary     : missing ($SEEKDB_BIN)"
+  [ -f "$CONFIG_FILE" ] && echo "config     : ok ($CONFIG_FILE)" || echo "config     : missing ($CONFIG_FILE)"
+  [ -d "$BASE_DIR" ] && echo "base dir   : ok ($BASE_DIR)" || echo "base dir   : missing ($BASE_DIR)"
+  [ -d "$LOG_DIR" ] && echo "log dir    : ok ($LOG_DIR)" || echo "log dir    : missing ($LOG_DIR)"
+
+  if port_open "$port"; then
+    echo "port       : open ($port)"
+  elif command -v lsof >/dev/null 2>&1 && lsof -nP -iTCP:"$port" -sTCP:LISTEN >/dev/null 2>&1; then
+    echo "port       : occupied by another process ($port)"
+    lsof -nP -iTCP:"$port" -sTCP:LISTEN
+  else
+    echo "port       : closed ($port)"
+  fi
+
+  if command -v df >/dev/null 2>&1; then
+    echo "disk       :"
+    df -h "$BASE_DIR" 2>/dev/null || df -h /opt/seekdb 2>/dev/null || true
+  fi
+
+  if command -v sysctl >/dev/null 2>&1; then
+    local mem_bytes
+    mem_bytes="$(sysctl -n hw.memsize 2>/dev/null || true)"
+    [ -n "$mem_bytes" ] && echo "memory     : $((mem_bytes / 1024 / 1024)) MB"
+  fi
+
+  if command -v otool >/dev/null 2>&1 && [ -x "$SEEKDB_BIN" ]; then
+    echo "deps       :"
+    otool -L "$SEEKDB_BIN" | sed 's/^/  /'
+  fi
+}
+
+cmd_config() {
+  if [ "$#" -eq 0 ]; then
+    [ -f "$CONFIG_FILE" ] || die "Config file not found: $CONFIG_FILE"
+    echo "# $CONFIG_FILE"
+    sed -n '1,200p' "$CONFIG_FILE"
+    return 0
+  fi
+
+  if [ "${1:-}" = "-h" ] || [ "${1:-}" = "--help" ]; then
+    cat <<EOF
+Usage:
+  seekdb_config
+  sudo seekdb_config --base-dir <path> [--restart]
+  sudo seekdb_config --base-dir <path> --data-dir <path> --redo-dir <path> [--port <port>] [--plugin-dir <path>] [--restart]
+EOF
+    return 0
+  fi
+
+  require_root
+  acquire_lock
+  ensure_config_file
+
+  local new_base=""
+  local new_data=""
+  local new_redo=""
+  local new_port=""
+  local new_plugin=""
+  local new_cpu=""
+  local new_memory=""
+  local restart=0
+
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --base-dir)
+        [ "$#" -ge 2 ] || die "--base-dir requires a path"
+        new_base="$2"
+        shift 2
+        ;;
+      --data-dir)
+        [ "$#" -ge 2 ] || die "--data-dir requires a path"
+        new_data="$2"
+        shift 2
+        ;;
+      --redo-dir)
+        [ "$#" -ge 2 ] || die "--redo-dir requires a path"
+        new_redo="$2"
+        shift 2
+        ;;
+      --port)
+        [ "$#" -ge 2 ] || die "--port requires a value"
+        new_port="$2"
+        shift 2
+        ;;
+      --plugin-dir)
+        [ "$#" -ge 2 ] || die "--plugin-dir requires a path"
+        new_plugin="$2"
+        shift 2
+        ;;
+      --cpu-count)
+        [ "$#" -ge 2 ] || die "--cpu-count requires a value"
+        new_cpu="$2"
+        shift 2
+        ;;
+      --memory-limit)
+        [ "$#" -ge 2 ] || die "--memory-limit requires a value"
+        new_memory="$2"
+        shift 2
+        ;;
+      --restart)
+        restart=1
+        shift
+        ;;
+      *)
+        die "Unknown config option: $1"
+        ;;
+    esac
+  done
+
+  if [ -n "$new_base" ]; then
+    write_config_value "base-dir" "$new_base"
+    if [ -z "$new_data" ]; then
+      new_data="$new_base/store"
+    fi
+    if [ -z "$new_redo" ]; then
+      new_redo="$new_base/store/redo"
+    fi
+  fi
+  [ -n "$new_data" ] && write_config_value "data-dir" "$new_data"
+  [ -n "$new_redo" ] && write_config_value "redo-dir" "$new_redo"
+  [ -n "$new_port" ] && write_config_value "port" "$new_port"
+  [ -n "$new_plugin" ] && write_config_value "plugin-dir" "$new_plugin"
+  [ -n "$new_cpu" ] && write_config_value "cpu_count" "$new_cpu"
+  [ -n "$new_memory" ] && write_config_value "memory_limit" "$new_memory"
+
+  refresh_paths
+  mkdir -p "$BASE_DIR" "$(read_config_value "data-dir" || printf "%s/store" "$BASE_DIR")" "$(read_config_value "redo-dir" || printf "%s/store/redo" "$BASE_DIR")" "$BASE_DIR/run" "$LOG_DIR"
+  info "Configuration updated: $CONFIG_FILE"
+  cmd_paths
+
+  if [ "$restart" -eq 1 ]; then
+    cmd_restart
+  fi
+}
+
+remove_seekdb_link() {
+  local link="$1"
+  local target=""
+  [ -L "$link" ] || return 0
+  target="$(readlink "$link" 2>/dev/null || true)"
+  case "$target" in
+    /opt/seekdb/bin/*|/opt/homebrew/bin/*) rm -f "$link" ;;
+  esac
+}
+
+uninstall_marker() {
+  refresh_paths
+  printf "%s/run/%s" "$BASE_DIR" "$UNINSTALL_MARKER_NAME"
+}
+
+mark_uninstalling() {
+  local marker
+  marker="$(uninstall_marker)"
+  mkdir -p "$(dirname "$marker")" 2>/dev/null || true
+  : > "$marker" 2>/dev/null || true
+  info "Marked seekdb for uninstall: $marker"
+}
+
+safe_rm_rf() {
+  local path="$1"
+  [ -n "$path" ] || return 0
+  case "$path" in
+    /*) ;;
+    *)
+      warn "Skipping non-absolute removal path: $path"
+      return 0
+      ;;
+  esac
+  [ "$path" != "/" ] || return 0
+  case "$path" in
+    /Applications|/Library|/System|/Users|/opt|/usr|/var|/tmp|/private)
+      warn "Skipping unsafe removal path: $path"
+      return 0
+      ;;
+  esac
+  rm -rf "$path"
+}
+
+quit_monitor_app() {
+  info "Quitting seekdb Monitor"
+  if command -v osascript >/dev/null 2>&1; then
+    osascript -e "tell application id \"$MONITOR_BUNDLE_ID\" to quit" >/dev/null 2>&1 || true
+  fi
+
+  local elapsed=0
+  while pgrep -x "$MONITOR_EXECUTABLE" >/dev/null 2>&1 && [ "$elapsed" -lt 5 ]; do
+    sleep 1
+    elapsed=$((elapsed + 1))
+  done
+
+  pkill -x "$MONITOR_EXECUTABLE" >/dev/null 2>&1 || true
+}
+
+schedule_helper_self_removal() {
+  info "Scheduling privileged helper self-removal"
+  (
+    sleep 2
+    launchctl bootout "system/${HELPER_LABEL}" >/dev/null 2>&1 || true
+    rm -f "$HELPER_PLIST" "$HELPER_TOOL"
+  ) >/dev/null 2>&1 &
+}
+
+cmd_uninstall() {
+  require_root
+  local active_base=""
+  local active_data=""
+  local active_redo=""
+  active_base="$(read_active_path_value "base-dir" || true)"
+  active_data="$(read_active_path_value "data-dir" || true)"
+  active_redo="$(read_active_path_value "redo-dir" || true)"
+
+  refresh_paths
+  local data_dir
+  local redo_dir
+  data_dir="$(read_config_value "data-dir" || printf "%s/store" "$BASE_DIR")"
+  redo_dir="$(read_config_value "redo-dir" || printf "%s/store/redo" "$BASE_DIR")"
+
+  mark_uninstalling
+  cmd_stop || true
+  quit_monitor_app
+  rm -f "$PLIST"
+  for cmd in seekdb seekdbctl ob_admin ob_error \
+             seekdb_start seekdb_stop seekdb_status seekdb_config \
+             seekdb_setup seekdb_paths seekdb_uninstall \
+             seekdb-start seekdb-stop seekdb-status seekdb-config \
+             seekdb-setup seekdb-paths seekdb-uninstall; do
+    remove_seekdb_link "/usr/local/bin/${cmd}"
+  done
+  safe_rm_rf "$data_dir"
+  safe_rm_rf "$redo_dir"
+  safe_rm_rf "$BASE_DIR"
+  [ -n "$active_data" ] && safe_rm_rf "$active_data"
+  [ -n "$active_redo" ] && safe_rm_rf "$active_redo"
+  [ -n "$active_base" ] && safe_rm_rf "$active_base"
+  safe_rm_rf "$MONITOR_APP"
+  safe_rm_rf "$MONITOR_APP_LEGACY"
+  safe_rm_rf /opt/seekdb
+  pkgutil --forget com.seekdb.server >/dev/null 2>&1 || true
+  pkgutil --forget com.seekdb.server.server >/dev/null 2>&1 || true
+  schedule_helper_self_removal
+  info "seekdb has been completely removed."
+}
+
+case "${1:-help}" in
+  start) shift; acquire_lock; cmd_start "$@" ;;
+  stop) shift; acquire_lock; cmd_stop "$@" ;;
+  restart) shift; acquire_lock; cmd_restart "$@" ;;
+  status) shift; cmd_status "$@" ;;
+  logs) shift; cmd_logs "$@" ;;
+  doctor) shift; cmd_doctor "$@" ;;
+  paths) shift; cmd_paths "$@" ;;
+  config) shift; cmd_config "$@" ;;
+  initialize|init) shift; acquire_lock; cmd_initialize "$@" ;;
+  setup) shift; acquire_lock; cmd_setup "$@" ;;
+  boot-status) shift; cmd_boot_status "$@" ;;
+  enable-boot) shift; acquire_lock; cmd_enable_boot "$@" ;;
+  disable-boot) shift; acquire_lock; cmd_disable_boot "$@" ;;
+  uninstall) shift; acquire_lock; cmd_uninstall "$@" ;;
+  help|-h|--help) usage ;;
+  *) usage; exit 1 ;;
+esac

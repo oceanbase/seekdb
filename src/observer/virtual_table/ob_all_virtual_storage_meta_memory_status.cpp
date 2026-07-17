@@ -1,0 +1,117 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#include "ob_all_virtual_storage_meta_memory_status.h"
+#include "share/rc/ob_module_provider.h"
+
+using namespace oceanbase::common;
+using namespace oceanbase::storage;
+
+namespace oceanbase
+{
+namespace observer
+{
+ObAllVirtualStorageMetaMemoryStatus::ObAllVirtualStorageMetaMemoryStatus()
+  : ObVirtualTableScannerIterator(),
+    addr_(),
+    pool_idx_(0)
+{
+}
+
+ObAllVirtualStorageMetaMemoryStatus::~ObAllVirtualStorageMetaMemoryStatus()
+{
+  reset();
+}
+
+void ObAllVirtualStorageMetaMemoryStatus::reset()
+{
+  pool_idx_ = 0;
+  status_arr_.reset();
+  addr_.reset();
+  ObVirtualTableScannerIterator::reset();
+}
+
+int ObAllVirtualStorageMetaMemoryStatus::init(ObIAllocator *allocator, common::ObAddr &addr)
+{
+  int ret = OB_SUCCESS;
+  if (OB_UNLIKELY(start_to_read_)) {
+    ret = OB_INIT_TWICE;
+    SERVER_LOG(WARN, "cannot init twice", K(ret));
+  } else if (OB_ISNULL(allocator)) {
+    ret = OB_INVALID_ARGUMENT;
+    SERVER_LOG(WARN, "invalid argument", K(ret));
+  } else {
+    allocator_ = allocator;
+    addr_ = addr;
+    start_to_read_ = true;
+  }
+  return ret;
+}
+
+int ObAllVirtualStorageMetaMemoryStatus::inner_get_next_row(ObNewRow *&row)
+{
+  int ret = OB_SUCCESS;
+  if (OB_UNLIKELY(!start_to_read_)) {
+    ret = OB_NOT_INIT;
+    SERVER_LOG(WARN, "not inited", K(start_to_read_), K(ret));
+  } else if (OB_ISNULL(cur_row_.cells_)) {
+    ret = OB_ERR_UNEXPECTED;
+    SERVER_LOG(ERROR, "cur row cell is NULL", K(ret));
+  } else if (0 == status_arr_.count() && OB_FAIL(share::g_mp->tenant_meta_mem_mgr()->get_meta_mem_status(status_arr_))) {
+    SERVER_LOG(WARN, "fail to get obj pools' status", K(ret));
+  } else if (pool_idx_ == status_arr_.count()) {
+    ret = OB_ITER_END;
+  } else {
+    const int64_t col_count = output_column_ids_.count();
+    for (int64_t i = 0; OB_SUCC(ret) && i < col_count; i++) {
+      uint64_t col_id = output_column_ids_.at(i);
+      switch(col_id) {
+        case NAME:
+          cur_row_.cells_[i].set_varchar(status_arr_[pool_idx_].name_);
+          cur_row_.cells_[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
+          break;
+        case USED_SIZE:
+          cur_row_.cells_[i].set_int(status_arr_[pool_idx_].used_size_);
+          break;
+        case TOTAL_SIZE:
+          cur_row_.cells_[i].set_int(status_arr_[pool_idx_].total_size_);
+          break;
+        case USED_OBJ_CNT:
+          cur_row_.cells_[i].set_int(status_arr_[pool_idx_].used_obj_cnt_);
+          break;
+        case FREE_OBJ_CNT:
+          cur_row_.cells_[i].set_int(status_arr_[pool_idx_].free_obj_cnt_);
+          break;
+        case EACH_OBJ_SIZE:
+          cur_row_.cells_[i].set_int(status_arr_[pool_idx_].each_obj_size_);
+          break;
+        default:
+          ret = OB_ERR_UNEXPECTED;
+          SERVER_LOG(WARN, "invalid col_id", K(ret), K(col_id));
+          break;
+      }
+    }
+  }
+
+  if (OB_SUCC(ret)) {
+    row = &cur_row_;
+    pool_idx_++;
+  }
+  return ret;
+}
+
+}
+}

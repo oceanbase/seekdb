@@ -1,0 +1,78 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef OB_ALL_VIRTUAL_ID_SERVICE_H_
+#define OB_ALL_VIRTUAL_ID_SERVICE_H_
+
+#include "observer/virtual_table/ob_virtual_table_scanner_iterator.h"
+#include "storage/tx/ob_id_service.h"
+#include "lib/container/ob_array.h"
+
+namespace oceanbase
+{
+namespace share
+{
+namespace schema
+{
+class ObMultiVersionSchemaService;
+class ObSchemaGetterGuard;
+}
+}
+
+namespace observer
+{
+class ObAllVirtualIDService: public common::ObVirtualTableScannerIterator
+{
+public:
+  explicit ObAllVirtualIDService() { reset(); }
+  virtual ~ObAllVirtualIDService() { destroy(); }
+public:
+  virtual void reset();
+  virtual void destroy() { reset(); }
+  virtual int inner_get_next_row(common::ObNewRow *&row);
+  static const int64_t ID_SERVICE_NUM = 2;
+  TO_STRING_KV("service_type", service_types_index_,
+               "last_id", last_id_,
+               "limit_id", limit_id_,
+               "rec_log_ts", rec_log_ts_,
+               "latest_log_ts", latest_log_ts_,
+               "pre_allocated_range", pre_allocated_range_,
+               "submit_log_ts", submit_log_ts_,
+               "is_master", is_master_);
+private:
+  int prepare_start_to_read_();
+  int get_next_info_();
+  int fill_ids_();
+private:
+  bool init_;
+  int64_t service_types_index_;
+  int64_t service_type_[transaction::ObIDService::MAX_SERVICE_TYPE];
+  int64_t expire_time_;
+  char ip_buf_[common::OB_IP_STR_BUFF];
+  
+  int64_t last_id_;
+  int64_t limit_id_;
+  share::SCN rec_log_ts_;
+  share::SCN latest_log_ts_;
+  int64_t pre_allocated_range_;
+  int64_t submit_log_ts_;
+  bool is_master_;
+private:
+  DISALLOW_COPY_AND_ASSIGN(ObAllVirtualIDService);
+};
+} // observer
+} // oceanbase
+#endif // OB_ALL_VIRTUAL_ID_SERVICE_H_

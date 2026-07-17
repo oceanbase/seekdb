@@ -1,0 +1,72 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#include <gtest/gtest.h>
+
+#include "common/ob_timeout_ctx.h"
+
+namespace oceanbase
+{
+namespace common
+{
+
+void process_func(const int64_t timeout_us)
+{
+  const ObTimeoutCtx *cc = &ObTimeoutCtx::get_ctx();
+  ASSERT_TRUE(cc->is_timeout_set());
+  ASSERT_TRUE(cc->get_timeout() > timeout_us - 10000);
+  ASSERT_TRUE(cc->get_timeout() < timeout_us + 10000);
+
+  ::usleep((int32_t)timeout_us + 10000);
+  ASSERT_TRUE(cc->is_timeouted());
+}
+
+TEST(ObTimeoutCtx, all)
+{
+  const ObTimeoutCtx *cc = &ObTimeoutCtx::get_ctx();
+  ASSERT_FALSE(cc->is_timeout_set());
+  ASSERT_FALSE(cc->is_timeouted());
+  {
+    ObTimeoutCtx ctx;
+    ASSERT_NE(OB_SUCCESS, ctx.set_timeout(-1));
+    ASSERT_NE(OB_SUCCESS, ctx.set_abs_timeout(-1));
+
+    ASSERT_EQ(OB_SUCCESS, ctx.set_timeout(20000));
+    int64_t abs_timeout = ctx.get_abs_timeout();
+    process_func(20000);
+
+    {
+      ObTimeoutCtx ctx2;
+      ASSERT_TRUE(ctx2.is_timeout_set());
+      ASSERT_TRUE(ctx2.is_timeouted());
+
+      ASSERT_EQ(OB_SUCCESS, ctx2.set_abs_timeout(::oceanbase::common::ObTimeUtility::current_time() + 30000));
+      process_func(30000);
+    }
+    ASSERT_EQ(abs_timeout, ObTimeoutCtx::get_ctx().get_abs_timeout());
+  }
+  cc = &ObTimeoutCtx::get_ctx();
+  ASSERT_FALSE(cc->is_timeout_set());
+}
+
+} // end namespace common
+} // end namespace oceanbase
+
+int main(int argc, char **argv)
+{
+  ::testing::InitGoogleTest(&argc,argv);
+  return RUN_ALL_TESTS();
+}

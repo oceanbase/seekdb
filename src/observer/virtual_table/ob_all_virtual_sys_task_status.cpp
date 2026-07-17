@@ -1,0 +1,132 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#include "ob_all_virtual_sys_task_status.h"
+
+namespace oceanbase
+{
+using namespace common;
+using namespace share;
+
+namespace observer
+{
+
+ObAllVirtualSysTaskStatus::ObAllVirtualSysTaskStatus()
+  : iter_(),
+    task_id_(),
+    svr_ip_(),
+    comment_()
+{
+}
+
+ObAllVirtualSysTaskStatus::~ObAllVirtualSysTaskStatus()
+{
+}
+
+int ObAllVirtualSysTaskStatus::init(ObSysTaskStatMgr &status_mgr)
+{
+  int ret = OB_SUCCESS;
+
+  if (start_to_read_) {
+    ret = OB_INIT_TWICE;
+    SERVER_LOG(WARN, "cannot init twice", K(ret));
+  } else if (OB_FAIL(status_mgr.get_iter(iter_))) {
+    SERVER_LOG(WARN, "failed to get iter", K(ret));
+  } else {
+    start_to_read_ = true;
+  }
+  return ret;
+}
+
+int ObAllVirtualSysTaskStatus::inner_get_next_row(ObNewRow *&row)
+{
+  int ret = OB_SUCCESS;
+  ObSysTaskStat status;
+  row = NULL;
+
+  if (!start_to_read_) {
+    ret = OB_NOT_INIT;
+    SERVER_LOG(WARN, "not inited", K(ret));
+  } else if (!iter_.is_ready()) {
+    ret = OB_NOT_INIT;
+    SERVER_LOG(WARN, "iter not ready", K(ret));
+  } else if (OB_FAIL(iter_.get_next(status))) {
+    if (OB_ITER_END != ret) {
+      SERVER_LOG(WARN, "failed to get next status", K(ret));
+    }
+  } else {
+    const int64_t col_count = output_column_ids_.count();
+    ObCollationType collcation_type = ObCharset::get_default_collation(ObCharset::get_default_charset());
+     for (int64_t i = 0; OB_SUCC(ret) && i < col_count; i++) {
+      uint64_t col_id = output_column_ids_.at(i);
+      switch(col_id) {
+        case OB_APP_MIN_COLUMN_ID: {
+          // start_time
+          cur_row_.cells_[i].set_timestamp(status.start_time_);
+          break;
+        }
+        case OB_APP_MIN_COLUMN_ID + 1: {
+          // task_type
+          const char *task_type = sys_task_type_to_str(status.task_type_);
+          cur_row_.cells_[i].set_varchar(task_type);
+          cur_row_.cells_[i].set_collation_type(collcation_type);
+          break;
+        }
+        case OB_APP_MIN_COLUMN_ID + 2: {
+          // task_id
+          int64_t n = status.task_id_.to_string(task_id_, sizeof(task_id_));
+          if (n < 0 || n >= sizeof(task_id_)) {
+            ret = OB_BUF_NOT_ENOUGH;
+            SERVER_LOG(WARN, "buffer not enough", K(ret));
+          } else {
+            cur_row_.cells_[i].set_varchar(task_id_);
+            cur_row_.cells_[i].set_collation_type(collcation_type);
+          }
+          break;
+        }
+        case OB_APP_MIN_COLUMN_ID + 3: {
+          // comment, ignore ret
+          snprintf(comment_, sizeof(comment_), "%s", status.comment_);
+          cur_row_.cells_[i].set_varchar(comment_);
+          cur_row_.cells_[i].set_collation_type(collcation_type);
+          break;
+        }
+        case OB_APP_MIN_COLUMN_ID + 4: {
+          // is_cancel
+          cur_row_.cells_[i].set_int(status.is_cancel_);
+          break;
+        }
+        default: {
+          ret = OB_ERR_UNEXPECTED;
+          SERVER_LOG(ERROR, "invalid coloum_id", K(ret), K(col_id));
+        }
+      }
+    }
+  }
+
+  if (OB_SUCC(ret)) {
+    row = &cur_row_;
+  }
+  return ret;
+}
+
+void ObAllVirtualSysTaskStatus::reset()
+{
+  iter_.reset();
+  ObVirtualTableScannerIterator::reset();
+}
+}//observer
+}//oceanbase

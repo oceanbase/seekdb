@@ -1,0 +1,128 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef OCEANBASE_SQL_PLAN_CACHE_OB_PLAN_MATCH_HELPER_
+#define OCEANBASE_SQL_PLAN_CACHE_OB_PLAN_MATCH_HELPER_
+
+#include "lib/container/ob_se_array.h"
+#include "sql/ob_sql_context.h"
+#include "sql/optimizer/ob_pwj_comparer.h"
+
+namespace oceanbase {
+namespace sql {
+class ObPhysicalPlan;
+class ObPlanCacheCtx;
+class ObTableLocation;
+class ObPhyTableLocation;
+class ObSqlPlanSet;
+
+class ObPlanMatchHelper
+{
+public:
+  ObPlanMatchHelper(ObSqlPlanSet *plan_set)
+    : plan_set_(plan_set)
+  {
+  }
+  int match_plan(const ObPlanCacheCtx &pc_ctx,
+                 const ObPhysicalPlan *plan,
+                 bool &is_matched,
+                 common::ObIArray<ObCandiTableLoc> &phy_tbl_infos,
+                 common::ObIArray<ObTableLocation> &out_tbl_locations) const;
+
+  /**
+   * @brief Get the table locations of all relational tables involved in LocationConstraint
+   * from the table location cached by Physical Plan
+   *
+   */
+  int calc_table_locations(
+      const ObIArray<LocationConstraint> &loc_cons,
+      const common::ObIArray<ObTableLocation> &in_tbl_locations,
+      const ObPlanCacheCtx &pc_ctx,
+      common::ObIArray<ObTableLocation> &out_tbl_locations,
+      common::ObIArray<ObCandiTableLoc> &phy_tbl_infos) const;
+
+private:
+  /**
+   * @brief Get table location with table location key
+   *
+   */
+  int get_tbl_loc_with_key(
+      const TableLocationKey key,
+      const ObIArray<ObTableLocation> &table_locations,
+      const ObTableLocation *&ret_loc_ptr) const;
+  /**
+   * @brief Compare table location types
+   *
+   */
+  int cmp_table_types(
+      const ObIArray<LocationConstraint> &loc_cons,
+      const common::ObAddr &server,
+      const common::ObIArray<ObTableLocation> &tbl_locs,
+      const common::ObIArray<ObCandiTableLoc> &phy_tbl_infos,
+      bool &is_same) const;
+  /**
+   * @brief Check only_one_first_part constraint and only_one_sub_part constraint
+   * in base table constraints
+   *
+   */
+  int check_partition_constraint(const ObPlanCacheCtx &pc_ctx,
+                                 const ObIArray<LocationConstraint> &loc_cons,
+                                 const common::ObIArray<ObCandiTableLoc> &phy_tbl_infos,
+                                 bool &is_match) const;
+  /**
+   * @brief Check that tables in strict pwj constraints and non-strict pwj constraints
+   * conform to physical partition consistent constraints. And save the mapping relationship
+   * of partition_id of the base table with constraint relationship to pwj_map
+   *
+   */
+  int check_inner_constraints(const common::ObIArray<ObPlanPwjConstraint>& strict_cons,
+                              const common::ObIArray<ObPlanPwjConstraint>& non_strict_cons,
+                              const common::ObIArray<ObCandiTableLoc> &phy_tbl_infos,
+                              const ObPlanCacheCtx &pc_ctx,
+                              PWJTabletIdMap &pwj_map,
+                              bool &is_same) const;
+  /**
+   * @brief Check if strict pwj constraints are satisfied
+   *
+   */
+  int check_strict_pwj_cons(const ObPlanCacheCtx &pc_ctx,
+                            const ObPlanPwjConstraint &pwj_cons,
+                            const ObIArray<ObCandiTableLoc> &phy_tbl_infos,
+                            ObStrictPwjComparer &pwj_comparer,
+                            PWJTabletIdMap &pwj_map,
+                            bool &is_same) const;
+  /**
+   * @brief Check if non-strict pwj constraints are satisfied
+   *
+   */
+  int check_non_strict_pwj_cons(const ObPlanPwjConstraint &pwj_cons,
+                                const ObIArray<ObCandiTableLoc> &phy_tbl_infos,
+                                ObNonStrictPwjComparer &pwj_comparer,
+                                bool &is_same) const;                              
+  /**
+   * @brief Check table partition location
+   *
+   */
+  int match_tbl_partition_locs(const ObCandiTableLoc &left,
+                               const ObCandiTableLoc &right,
+                               bool &is_matched) const;
+private:
+  ObSqlPlanSet *plan_set_;
+};
+} // namespace sql
+} // namespace oceanbase
+
+#endif /* OCEANBASE_SQL_PLAN_CACHE_OB_PLAN_MATCH_HELPER_ */

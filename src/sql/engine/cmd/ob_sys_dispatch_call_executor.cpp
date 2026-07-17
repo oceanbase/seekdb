@@ -1,0 +1,175 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#define USING_LOG_PREFIX SQL_ENG
+
+#include "sql/engine/cmd/ob_sys_dispatch_call_executor.h"
+
+#include "lib/ob_errno.h"
+#include "observer/ob_inner_sql_connection.h"
+#include "observer/ob_inner_sql_connection_pool.h"
+#include "share/ob_define.h"
+#include "share/schema/ob_schema_getter_guard.h"
+#include "sql/engine/ob_exec_context.h"
+#include "sql/resolver/cmd/ob_sys_dispatch_call_stmt.h"
+#include "sql/session/ob_sql_session_info.h"
+
+namespace oceanbase
+{
+
+using namespace common;
+using namespace lib;
+using namespace share::schema;
+using namespace observer;
+
+namespace sql
+{
+
+int ObSysDispatchCallExecutor::execute(ObExecContext &ctx, ObSysDispatchCallStmt &stmt)
+{
+  int ret = OB_SUCCESS;
+  ObFreeSessionCtx free_session_ctx;
+  ObSQLSessionInfo *session = nullptr;
+  ObInnerSQLConnectionPool *pool = nullptr;
+  ObInnerSQLConnection *conn = nullptr;
+  int64_t affected_rows = 0;
+
+  OZ (create_session(free_session_ctx, session));
+  CK (OB_NOT_NULL(session));
+  OZ (init_session(*session,
+                   stmt.get_designated_tenant_name(),
+                   stmt.get_tenant_compat_mode()));
+  CK (OB_NOT_NULL(pool = static_cast<ObInnerSQLConnectionPool *>(ctx.get_sql_proxy()->get_pool())));
+  OZ (pool->acquire_spi_conn(session, conn));
+  OZ (conn->execute_write(stmt.get_call_stmt(), affected_rows),
+      stmt);
+  if (OB_NOT_NULL(conn)) {
+    ctx.get_sql_proxy()->close(conn, ret);
+  }
+  if (OB_NOT_NULL(session)) {
+    int tmp_ret = OB_SUCCESS;
+    if (OB_TMP_FAIL(destroy_session(free_session_ctx, session))) {
+      LOG_WARN("failed to destroy session", KR(tmp_ret));
+      ret = (OB_SUCC(ret)) ? tmp_ret : ret;
+    } else {
+      session = nullptr;
+    }
+  }
+
+  return ret;
+}
+
+int ObSysDispatchCallExecutor::create_session(ObFreeSessionCtx &free_session_ctx,
+                                              ObSQLSessionInfo *&session_info)
+{
+  int ret = OB_SUCCESS;
+  uint32_t sid = sql::ObSQLSessionInfo::INVALID_SESSID;
+  if (OB_ISNULL(GCTX.session_mgr_)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("session_mgr_ is null");
+  } else if (OB_FAIL(GCTX.session_mgr_->create_sessid(sid))) {
+    LOG_WARN("alloc session id failed");
+  } else if (OB_FAIL(GCTX.session_mgr_->create_session(
+                 sid, ObTimeUtility::current_time(), session_info))) {
+    LOG_WARN("create session failed", K(ret), K(sid));
+    session_info = nullptr;
+  } else if (OB_ISNULL(session_info)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected session info is null", K(ret));
+  } else {
+    free_session_ctx.sessid_ = sid;
+  }
+  return ret;
+}
+
+int ObSysDispatchCallExecutor::init_session(sql::ObSQLSessionInfo &session,
+                                            const ObString &tenant_name,
+                                            const ObCompatibilityMode compat_mode)
+{
+  int ret = OB_SUCCESS;
+  ObSchemaGetterGuard schema_guard;
+  ObPrivSet db_priv_set = OB_PRIV_SET_EMPTY;
+  const bool print_info_log = true;
+  const bool is_sys_tenant = true;
+  ObPCMemPctConf pc_mem_conf;
+  ObObj compatibility_mode;
+  ObObj sql_mode;
+  ObSEArray<const ObUserInfo *, 1> user_infos;
+  const ObUserInfo *user_info = nullptr;
+
+  CK (OB_NOT_NULL(GCTX.schema_service_));
+  OZ (GCTX.schema_service_->get_tenant_schema_guard(schema_guard));
+  {
+    compatibility_mode.set_int(0);
+    sql_mode.set_uint(ObUInt64Type, DEFAULT_MYSQL_MODE);
+  }
+  OX (session.set_inner_session());
+  OZ (session.load_default_sys_variable(print_info_log, is_sys_tenant));
+  OZ (session.update_max_packet_size());
+  OZ (session.init_tenant(tenant_name.ptr()));
+  OZ (session.load_all_sys_vars(schema_guard));
+  OZ (session.update_sys_variable(share::SYS_VAR_SQL_MODE, sql_mode));
+  OZ (session.update_sys_variable(share::SYS_VAR_OB_COMPATIBILITY_MODE, compatibility_mode));
+  OZ (session.update_sys_variable(share::SYS_VAR_NLS_DATE_FORMAT,
+                                  ObTimeConverter::COMPAT_OLD_NLS_DATE_FORMAT));
+  OZ (session.update_sys_variable(share::SYS_VAR_NLS_TIMESTAMP_FORMAT,
+                                  ObTimeConverter::COMPAT_OLD_NLS_TIMESTAMP_FORMAT));
+  OZ (session.update_sys_variable(share::SYS_VAR_NLS_TIMESTAMP_TZ_FORMAT,
+                                  ObTimeConverter::COMPAT_OLD_NLS_TIMESTAMP_TZ_FORMAT));
+  OZ (session.get_pc_mem_conf(pc_mem_conf));
+  CK (OB_NOT_NULL(GCTX.sql_engine_));
+
+  {
+    OX (session.set_database_id(OB_SYS_DATABASE_ID));
+    OZ (session.set_default_database(OB_SYS_DATABASE_NAME));
+    OZ (schema_guard.get_user_info(OB_SYS_USER_NAME, user_infos));
+  }
+  OV (1 == user_infos.count(),
+      0 == user_infos.count() ? OB_USER_NOT_EXIST : OB_ERR_UNEXPECTED,
+      K(user_infos));
+  CK (OB_NOT_NULL(user_info = user_infos.at(0)));
+  OZ (session.set_user(
+          user_info->get_user_name(), user_info->get_host_name_str(), user_info->get_user_id()));
+  OX (session.set_priv_user_id(user_info->get_user_id()));
+  OX (session.set_user_priv_set(user_info->get_priv_set()));
+  OZ (schema_guard.get_db_priv_set(
+          user_info->get_user_id(), OB_SYS_DATABASE_NAME, db_priv_set));
+  OX (session.set_db_priv_set(db_priv_set));
+
+  OX (session.set_shadow(true));
+  return ret;
+}
+
+int ObSysDispatchCallExecutor::destroy_session(ObFreeSessionCtx &free_session_ctx,
+                                               ObSQLSessionInfo *session_info)
+{
+  int ret = OB_SUCCESS;
+  if (OB_ISNULL(GCTX.session_mgr_)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("session_mgr_ is null");
+  } else if (OB_ISNULL(session_info)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("session_info is null");
+  } else {
+    session_info->set_session_sleep();
+    GCTX.session_mgr_->revert_session(session_info);
+    GCTX.session_mgr_->free_session(free_session_ctx);
+  }
+  return ret;
+}
+
+}  // namespace sql
+}  // namespace oceanbase

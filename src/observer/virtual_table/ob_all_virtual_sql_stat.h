@@ -1,0 +1,152 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef OB_ALL_VIRTUAL_SQL_STAT_H
+#define OB_ALL_VIRTUAL_SQL_STAT_H
+
+#include "sql/engine/ob_tenant_sql_memory_manager.h"
+#include "lib/utility/ob_macro_utils.h"
+#include "observer/virtual_table/ob_virtual_table_scanner_iterator.h"
+#include "common/row/ob_row.h"
+#include "sql/monitor/ob_sql_stat_record.h"
+
+namespace oceanbase
+{
+namespace observer
+{
+typedef common::hash::ObHashMap<sql::ObSqlStatRecordKey, sql::ObExecutedSqlStatRecord*> TmpSqlStatMap;
+struct ObGetAllSqlStatCacheIdOp
+{
+  ObGetAllSqlStatCacheIdOp(common::ObIArray<uint64_t> *key_array)
+    : key_array_(key_array)
+  {}
+  void reset() { key_array_ = NULL; }
+  int operator()(common::hash::HashMapPair<sql::ObCacheObjID, sql::ObILibCacheObject *> &entry);
+public:
+  common::ObIArray<uint64_t> *key_array_;
+};
+
+class ObAllVirtualSqlStatIter
+{
+public:
+  ObAllVirtualSqlStatIter();
+  ~ObAllVirtualSqlStatIter() { destroy(); }
+public:
+  void destroy();
+  void reset();
+  int init(ObIAllocator *allocator);
+  int get_next_sql_stat(sql::ObExecutedSqlStatRecord &sql_stat_value);
+  bool operator()(sql::ObSQLSessionMgr::Key key, sql::ObSQLSessionInfo *sess_info);
+
+private:
+  int get_next_batch_sql_stat();
+private:
+  ObIAllocator *allocator_;
+  bool done_;
+  
+  TmpSqlStatMap tmp_sql_stat_map_;
+  common::ObSEArray<uint64_t, 1024> sql_stat_cache_id_array_;
+  int64_t sql_stat_cache_id_array_idx_;
+};
+
+class ObAllVirtualSqlStat : public common::ObVirtualTableScannerIterator
+{
+public:
+  ObAllVirtualSqlStat();
+  virtual ~ObAllVirtualSqlStat() { destroy(); }
+
+public:
+  void destroy();
+  void reset();
+  int inner_get_next_row(common::ObNewRow *&row);
+
+private:
+  enum STORAGE_COLUMN
+  {
+        SQL_ID = common::OB_APP_MIN_COLUMN_ID,
+    PLAN_ID,
+    PLAN_HASH,
+    PLAN_TYPE,
+    QUERY_SQL,
+    SQL_TYPE,
+    MODULE,
+    ACTION,
+    PARSING_DB_ID,
+    PARSING_DB_NAME,
+    PARSING_USER_ID,
+    EXECUTIONS_TOTAL,
+    EXECUTIONS_DELTA,
+    DISK_READS_TOTAL,
+    DISK_READS_DELTA,
+    BUFFER_GETS_TOTAL,
+    BUFFER_GETS_DELTA,
+    ELAPSED_TIME_TOTAL,
+    ELAPSED_TIME_DELTA,
+    CPU_TIME_TOTAL,
+    CPU_TIME_DELTA,
+    CCWAIT_TOTAL,
+    CCWAIT_DELTA,
+    USERIO_WAIT_TOTAL,
+    USERIO_WAIT_DELTA,
+    APWAIT_TOTAL,
+    APWAIT_DELTA,
+    PHYSICAL_READ_REQUESTS_TOTAL,
+    PHYSICAL_READ_REQUESTS_DELTA,
+    PHYSICAL_READ_BYTES_TOTAL,
+    PHYSICAL_READ_BYTES_DELTA,
+    WRITE_THROTTLE_TOTAL,
+    WRITE_THROTTLE_DELTA,
+    ROWS_PROCESSED_TOTAL,
+    ROWS_PROCESSED_DELTA,
+    MEMSTORE_READ_ROWS_TOTAL,
+    MEMSTORE_READ_ROWS_DELTA,
+    MINOR_SSSTORE_READ_ROWS_TOTAL,
+    MINOR_SSSTORE_READ_ROWS_DELTA,
+    MAJOR_SSSTORE_READ_ROWS_TOTAL,
+    MAJOR_SSSTORE_READ_ROWS_DELTA,
+    RPC_TOTAL,
+    RPC_DELTA,
+    FETCHES_TOTAL,
+    FETCHES_DELTA,
+    RETRY_TOTAL,
+    RETRY_DELTA,
+    PARTITION_TOTAL,
+    PARTITION_DELTA,
+    NESTED_SQL_TOTAL,
+    NESTED_SQL_DELTA,
+    SOURCE_IP,
+    SOURCE_PORT,
+    ROUTE_MISS_TOTAL,
+    ROUTE_MISS_DELTA,
+    FIRST_LOAD_TIME,
+    PLAN_CACHE_HIT_TOTAL,
+    PLAN_CACHE_HIT_DELTA
+  };
+  int fill_row(const sql::ObExecutedSqlStatRecord *sql_stat_record,
+               common::ObNewRow *&row);
+  int get_server_ip_and_port();
+private:
+  common::ObString ipstr_;
+  int32_t port_;
+  ObAllVirtualSqlStatIter iter_;
+  sql::ObExecutedSqlStatRecord *last_sql_stat_record_;
+};
+
+
+} /* namespace observer */
+} /* namespace oceanbase */
+
+#endif /* OB_ALL_VIRTUAL_SQL_STAT_H */

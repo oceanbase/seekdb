@@ -1,0 +1,204 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef OCEANBASE_COMMON_OB_ROW_DESC_
+#define OCEANBASE_COMMON_OB_ROW_DESC_
+
+#include "lib/ob_define.h"
+#include "lib/hash/ob_array_index_hash_set.h"
+
+namespace oceanbase
+{
+namespace common
+{
+
+/// Line description
+class ObRowDesc
+{
+public:
+  struct Desc
+  {
+    uint64_t table_id_;
+    uint64_t column_id_;
+
+    Desc()
+    : table_id_(OB_INVALID_ID), column_id_(OB_INVALID_ID)
+    {
+    }
+
+    Desc(const uint64_t table_id, const uint64_t column_id)
+        : table_id_(table_id), column_id_(column_id)
+    {
+    }
+
+    inline bool is_invalid() const;
+    inline bool operator== (const Desc &other) const;
+    bool operator!= (const Desc &other) const;
+
+    inline uint64_t hash() const {return ((table_id_ << 16) | ((column_id_ * 29 + 7) & 0xFFFF));};
+  };
+
+public:
+  ObRowDesc();
+  ~ObRowDesc();
+  /**
+   * Get the index of the column in the element array based on table ID and column ID
+   *
+   * @param table_id table ID
+   * @param column_id column ID
+   *
+   * @return index or OB_INVALID_INDEX
+   */
+  int64_t get_idx(const uint64_t table_id, const uint64_t column_id) const;
+  /**
+   * Get table ID and column ID based on column index
+   *
+   * @param idx
+   * @param table_id [out]
+   * @param column_id [out]
+   *
+   * @return OB_SUCCESS or error code
+   */
+  int get_tid_cid(const int64_t idx, uint64_t &table_id, uint64_t &column_id) const;
+
+  /// Number of columns in a row
+  inline int64_t get_column_num() const;
+
+  /// Add the description information of the next column
+  int add_column_desc(const uint64_t table_id, const uint64_t column_id);
+
+  /// Reset
+  void reset();
+
+  int64_t get_rowkey_cell_count() const;
+  void set_rowkey_cell_count(int64_t rowkey_cell_count);
+
+  int64_t to_string(char *buf, const int64_t buf_len) const;
+
+  NEED_SERIALIZE_AND_DESERIALIZE;
+
+  /// Obtain the total number of hash collisions encountered during internal operation for monitoring and tuning
+  uint64_t get_hash_collisions_count() const;
+
+  const Desc *get_cells_desc_array(int64_t &array_size) const;
+
+  ObRowDesc &operator = (const ObRowDesc &r);
+  inline bool operator== (const ObRowDesc &other) const;
+  inline bool operator!= (const ObRowDesc &other) const;
+
+  ObRowDesc(const ObRowDesc &other);
+
+  int assign(const ObRowDesc &other);
+
+private:
+  struct DescIndex
+  {
+    Desc desc_;
+    int64_t idx_;
+  };
+private:
+  static const int64_t MAX_COLUMNS_COUNT = common::OB_ROW_MAX_COLUMNS_COUNT; // 4224
+  static uint64_t HASH_COLLISIONS_COUNT;
+  // data members
+  typedef Desc *CellDescArray;
+  CellDescArray cells_desc_;
+  char cells_desc_buf_[MAX_COLUMNS_COUNT *sizeof(Desc)];
+  int64_t cells_desc_count_;
+  int64_t rowkey_cell_count_;
+  hash::ObArrayIndexHashSet<CellDescArray, Desc, 733> hash_map_;
+};
+
+inline bool ObRowDesc::Desc::operator== (const Desc &other) const
+{
+  return table_id_ == other.table_id_ && column_id_ == other.column_id_;
+}
+
+inline bool ObRowDesc::Desc::operator!= (const Desc &other) const
+{
+  return !(this->operator ==(other));
+}
+
+inline bool ObRowDesc::Desc::is_invalid() const
+{
+  return (OB_INVALID_ID == table_id_ || OB_INVALID_ID == column_id_);
+}
+
+inline void ObRowDesc::reset()
+{
+  if (0 != cells_desc_count_) {
+    cells_desc_count_ = 0;
+    rowkey_cell_count_ = 0;
+    hash_map_.reset();
+  }
+}
+
+inline const ObRowDesc::Desc *ObRowDesc::get_cells_desc_array(int64_t &array_size) const
+{
+  array_size = cells_desc_count_;
+  return cells_desc_;
+}
+
+inline int64_t ObRowDesc::get_column_num() const
+{
+  return cells_desc_count_;
+}
+
+inline int ObRowDesc::get_tid_cid(const int64_t idx, uint64_t &table_id, uint64_t &column_id) const
+{
+  int ret = OB_SUCCESS;
+  if (idx < 0
+      || idx >= cells_desc_count_) {
+    ret = OB_INVALID_ARGUMENT;
+  } else {
+    table_id = cells_desc_[idx].table_id_;
+    column_id = cells_desc_[idx].column_id_;
+  }
+  return ret;
+}
+
+inline uint64_t ObRowDesc::get_hash_collisions_count() const
+{
+  return hash_map_.get_collision_count();
+}
+
+inline int64_t ObRowDesc::get_rowkey_cell_count() const
+{
+  return rowkey_cell_count_;
+}
+
+inline void ObRowDesc::set_rowkey_cell_count(int64_t rowkey_cell_count)
+{
+  this->rowkey_cell_count_ = rowkey_cell_count;
+}
+
+inline bool ObRowDesc::operator ==(const ObRowDesc &other) const
+{
+  bool is_equal = (cells_desc_count_ == other.cells_desc_count_);
+  for (int64_t i = 0; is_equal && i < cells_desc_count_; i++) {
+    is_equal = (cells_desc_[i] == other.cells_desc_[i]);
+  }
+  return is_equal;
+}
+
+inline bool ObRowDesc::operator !=(const ObRowDesc &other) const
+{
+  return !(this->operator ==(other));
+}
+
+} // end namespace common
+} // end namespace oceanbase
+
+#endif /* OCEANBASE_COMMON_OB_ROW_DESC_ */

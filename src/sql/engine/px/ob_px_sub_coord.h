@@ -1,0 +1,164 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef _OB_SQL_PX_SUB_CORRD_H_
+#define _OB_SQL_PX_SUB_CORRD_H_
+
+#include "sql/engine/px/ob_dfo.h"
+#include "sql/engine/px/ob_px_coord_msg_proc.h"
+#include "sql/engine/px/ob_px_data_ch_provider.h"
+#include "sql/engine/px/ob_granule_pump.h"
+#include "sql/engine/px/ob_px_dtl_proc.h"
+#include "sql/engine/px/ob_px_sqc_proxy.h"
+#include "sql/engine/px/ob_sqc_ctx.h"
+#include "sql/engine/px/ob_px_worker.h"
+#include "sql/engine/px/ob_sub_trans_ctrl.h"
+#include "sql/engine/ob_engine_op_traits.h"
+#include "sql/dtl/ob_dtl_channel_loop.h"
+#include "sql/engine/px/p2p_datahub/ob_p2p_dh_msg.h"
+#include "sql/ob_sql_trans_control.h"
+#include "lib/allocator/ob_safe_arena.h"
+#include "storage/ddl/ob_ddl_dag_thread_pool.h"
+
+
+namespace oceanbase
+{
+
+namespace storage
+{
+class ObColumnClusteredDag;
+}
+
+namespace sql
+{
+class ObPxSQCHandler;
+class ObPxSubCoord
+{
+public:
+  explicit ObPxSubCoord(const observer::ObGlobalContext &gctx,
+                        ObPxRpcInitSqcArgs &arg)
+      : gctx_(gctx),
+        sqc_arg_(arg),
+        sqc_ctx_(arg),
+        allocator_(common::ObModIds::OB_SQL_PX),
+        local_worker_factory_(gctx, allocator_),
+        thread_worker_factory_(gctx, allocator_),
+        is_single_tsc_leaf_dfo_(false),
+        all_shared_rf_msgs_(),
+        ddl_dag_(nullptr)
+  {}
+  virtual ~ObPxSubCoord() = default;
+  int pre_process();
+  int try_start_tasks(int64_t &dispatch_worker_count, bool is_fast_sqc = false);
+  void notify_dispatched_task_exit(int64_t dispatched_work);
+  int end_process();
+  int init_exec_env(ObExecContext &exec_ctx);
+  ObPxSQCProxy &get_sqc_proxy() { return sqc_ctx_.sqc_proxy_; }
+  ObSqcCtx &get_sqc_ctx() { return sqc_ctx_; }
+  const ObDDLCtrl &get_ddl_control() { return ddl_ctrl_; }
+  ObColumnClusteredDag *get_ddl_dag() { return ddl_dag_; }
+  int set_tablets_info(ObIArray<ObPxTabletInfo> &tablets_info) {
+    return sqc_ctx_.partitions_info_.assign(tablets_info);
+  }
+  int report_sqc_finish(int end_ret) {
+    return sqc_ctx_.sqc_proxy_.report(end_ret);
+  }
+
+  // for ddl insert sstable
+  // using start and end pair function to control the life cycle of ddl context
+  int check_need_start_ddl(bool &need_start_ddl);
+  int start_ddl();
+  int end_ddl(const bool need_commit);
+
+  int pre_setup_op_input(ObExecContext &ctx,
+      ObOpSpec &root,
+      ObSqcCtx &sqc_ctx,
+      const DASTabletLocIArray &tsc_locations,
+      const ObIArray<ObSqcTableLocationKey> &tsc_location_keys);
+  int rebuild_sqc_access_table_locations();
+  void set_is_single_tsc_leaf_dfo(bool flag) { is_single_tsc_leaf_dfo_ = flag; }
+  int get_participants(ObPxSqcMeta &sqc,
+                       const int64_t table_id,
+                       ObIArray<std::pair<share::ObLSID, ObTabletID>> &ls_tablet_ids) const;
+  void destroy_shared_rf_msgs();
+private:
+  int setup_loop_proc(ObSqcCtx &sqc_ctx) const;
+  int setup_op_input(ObExecContext &ctx,
+                     ObOpSpec &root,
+                     ObSqcCtx &sqc_ctx,
+                     const DASTabletLocIArray &tsc_locations,
+                     const ObIArray<ObSqcTableLocationKey> &tsc_location_keys);
+  int setup_gi_op_input(ObExecContext &ctx,
+                        ObOpSpec &root,
+                        ObSqcCtx &sqc_ctx,
+                        const DASTabletLocIArray &tsc_locations,
+                        const ObIArray<ObSqcTableLocationKey> &tsc_location_keys);
+  int get_tsc_or_dml_op_tablets(ObOpSpec &root,
+                                const DASTabletLocIArray &tsc_locations,
+                                const common::ObIArray<ObSqcTableLocationKey> &tsc_location_keys,
+                                common::ObIArray<const ObTableScanSpec*> &scan_ops,
+                                common::ObIArray<DASTabletLocArray> &tablets_array);
+  int link_sqc_qc_channel(ObPxRpcInitSqcArgs &sqc_arg);
+  int dispatch_tasks(ObPxRpcInitSqcArgs &sqc_arg,
+                     ObSqcCtx &sqc_ctx,
+                     int64_t &dispatch_worker_count,
+                     bool is_fast_sqc = false);
+  int link_sqc_task_channel(ObSqcCtx &sqc_ctx);
+  int unlink_sqc_task_channel(ObSqcCtx &sqc_ctx);
+  int unlink_sqc_qc_channel(ObPxRpcInitSqcArgs &sqc_arg);
+  int create_tasks(ObPxRpcInitSqcArgs &sqc_arg, ObSqcCtx &sqc_ctx, bool is_fast_sqc = false);
+  int try_cleanup_tasks();
+
+  int dispatch_task_to_thread_pool(ObPxRpcInitSqcArgs &sqc_arg,
+                                   ObSqcCtx &sqc_ctx,
+                                   ObPxSqcMeta &sqc,
+                                   int64_t task_idx);
+  int dispatch_task_to_local_thread(ObPxRpcInitSqcArgs &sqc_arg,
+                                    ObSqcCtx &sqc_ctx,
+                                    ObPxSqcMeta &sqc);
+
+  int try_prealloc_data_channel(ObSqcCtx &sqc_ctx, ObPxSqcMeta &sqc);
+  int try_prealloc_transmit_channel(ObSqcCtx &sqc_ctx, ObPxSqcMeta &sqc);
+  int try_prealloc_receive_channel(ObSqcCtx &sqc_ctx, ObPxSqcMeta &sqc);
+  void try_get_dml_op(ObOpSpec &root, ObTableModifySpec *&dml_op);
+  int construct_p2p_dh_map() {
+    return sqc_ctx_.sqc_proxy_.construct_p2p_dh_map(
+           sqc_arg_.sqc_.get_p2p_dh_map_info());
+  }
+private:
+  void ddl_rewrite_ret_code(int &ret_code);
+  int sync_table_autoinc_value();
+
+private:
+  const observer::ObGlobalContext &gctx_;
+  ObPxRpcInitSqcArgs &sqc_arg_;
+  ObSqcCtx sqc_ctx_;
+  ObSubTransCtrl trans_ctrl_;
+  ObDDLCtrl ddl_ctrl_; // for ddl insert sstable
+  common::ObSafeArena allocator_;
+  ObPxLocalWorkerFactory local_worker_factory_; // When there is only 1 task, use local to construct worker
+  ObPxThreadWorkerFactory thread_worker_factory_; // For tasks exceeding 1, use thread to construct worker
+  int64_t reserved_thread_count_;
+  bool is_single_tsc_leaf_dfo_;
+  ObArray<int64_t> all_shared_rf_msgs_; // for clear
+  storage::ObColumnClusteredDag *ddl_dag_;
+  storage::ObDDLDagThreadPool ddl_dag_threads_;
+  DISALLOW_COPY_AND_ASSIGN(ObPxSubCoord);
+};
+}
+}
+#endif /* _OB_SQL_PX_SUB_CORRD_H_ */
+//// end of header file

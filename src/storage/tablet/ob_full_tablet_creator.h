@@ -1,0 +1,68 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef OCEANBASE_STORAGE_OB_FULL_TABLET_CREATOR
+#define OCEANBASE_STORAGE_OB_FULL_TABLET_CREATOR
+
+#include "lib/allocator/ob_fifo_allocator.h"
+#include "lib/allocator/page_arena.h"
+#include "lib/list/ob_dlist.h"
+#include "storage/meta_mem/ob_tablet_handle.h"
+#include "lib/rc/context.h"
+
+namespace oceanbase
+{
+namespace common
+{
+class ObIAllocator;
+}
+
+namespace storage
+{
+
+class ObFullTabletCreator final
+{
+public:
+  ObFullTabletCreator();
+  ~ObFullTabletCreator() = default;
+public:
+  int init();
+  void reset();
+  int create_tablet(ObTabletHandle &tablet_handle);
+  /* ATTENTION: below functions should be called without any ls_tablet or t3m locks */
+  int throttle_tablet_creation();
+  void free_tablet(ObTablet *tablet);
+  OB_INLINE int64_t total() const {
+      return tiny_allocator_.total() + (nullptr == mstx_mem_ctx_ ? 0 : mstx_mem_ctx_->hold()); }
+  OB_INLINE int64_t used() const {
+      return tiny_allocator_.used() + (nullptr == mstx_mem_ctx_ ? 0 : mstx_mem_ctx_->used()); }
+  OB_INLINE int64_t get_used_obj_cnt() const { return ATOMIC_LOAD(&created_tablets_cnt_); }
+  TO_STRING_KV(K(tiny_allocator_.used()), K(tiny_allocator_.total()),
+               "full allocator used", used(), "full allocator total", total());
+private:
+  common::ObIAllocator &get_allocator() { return mstx_mem_ctx_->get_malloc_allocator(); }
+private:
+  bool is_inited_;
+  common::ObFIFOAllocator tiny_allocator_;
+  int64_t wait_create_tablets_cnt_; // tablets waiting to be created
+  int64_t created_tablets_cnt_; // tablets has been created
+  lib::MemoryContext mstx_mem_ctx_;
+  DISALLOW_COPY_AND_ASSIGN(ObFullTabletCreator);
+};
+} // namespace storage
+} // namespace oceanbase
+
+#endif // OCEANBASE_STORAGE_OB_FULL_TABLET_CREATOR

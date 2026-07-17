@@ -1,0 +1,416 @@
+name: VLDB CI
+
+on:
+  pull_request:
+    branches: [vldb_2026]
+    types: [opened, reopened, synchronize, ready_for_review]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  cache-name: cache-deps
+  VLDB_WORK_DIR: ${{ github.workspace }}/vldb_smoke
+  SEEKDB_TASK_DIR: ${{ github.workspace }}/seekdb_build/${{ github.run_id }}
+
+jobs:
+  build-and-smoke:
+    name: build-observer-and-smoke
+    if: ${{ github.repository_owner == 'oceanbase' && (github.event_name != 'pull_request' || !github.event.pull_request.draft) }}
+    runs-on: arc-runner-k8s-ci-org
+    container:
+      image: harbor.oceanbase-dev.com/obrde-test/ob-actions-runner-worker:0.0.2
+    steps:
+      - name: Checkout with retry
+        shell: bash
+        env:
+          CHECKOUT_REPOSITORY: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
+          CHECKOUT_REF: ${{ github.event.pull_request.head.ref || github.ref_name }}
+          CHECKOUT_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$GITHUB_WORKSPACE"
+          cd "$GITHUB_WORKSPACE"
+          git init
+          git remote remove origin 2>/dev/null || true
+          git remote add origin "https://github.com/${CHECKOUT_REPOSITORY}.git"
+          for i in $(seq 1 10); do
+            if git fetch --no-tags --depth=1 origin "+refs/heads/${CHECKOUT_REF}:refs/remotes/origin/${CHECKOUT_REF}"; then
+              if git checkout --force "$CHECKOUT_SHA" || { git fetch --no-tags --depth=1 origin "$CHECKOUT_SHA" && git checkout --force FETCH_HEAD; }; then
+                git clean -ffdx
+                git config --global --add safe.directory "$GITHUB_WORKSPACE"
+                exit 0
+              fi
+            fi
+            echo "checkout failed, retry ${i}/10"
+            sleep $((i * 10))
+          done
+          exit 1
+
+      - name: Cache deps
+        uses: actions/cache@v4
+        with:
+          key: ${{ runner.os }}-build-${{ env.cache-name }}-el9.x86_64-${{ hashFiles('deps/init/oceanbase.el9.x86_64.deps') }}
+          path: deps/3rd
+
+      - name: Setup ccache
+        uses: hendrikmuhs/ccache-action@v1.2.11
+        with:
+          max-size: 800M
+          save: false
+          key: vldb
+
+      - name: Compile observer
+        shell: bash
+        run: |
+          set -euo pipefail
+          chmod +x .github/script/seekdb/compile.sh
+          export GITHUB_RUN_ID="${{ github.run_id }}"
+          WS="${{ github.workspace }}"
+          if [[ ! -f "$WS/build.sh" ]] && [[ -f "$(pwd)/build.sh" ]]; then
+            export GITHUB_WORKSPACE="$(pwd)"
+          else
+            export GITHUB_WORKSPACE="$WS"
+          fi
+          export SEEKDB_TASK_DIR="${{ env.SEEKDB_TASK_DIR }}"
+          export RELEASE_MODE="${{ vars.RELEASE_MODE || '' }}"
+          export FORWARDING_HOST="${{ vars.FORWARDING_HOST || '' }}"
+          export PATH="$GITHUB_WORKSPACE/deps/3rd/usr/local/oceanbase/devtools/bin:$PATH"
+          .github/script/seekdb/compile.sh
+
+      - name: Prepare observer
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$VLDB_WORK_DIR"
+          if [[ ! -x observer ]]; then
+            for base in build_debug build_release build; do
+              for cand in "$base/observer" "$base/src/observer/observer"; do
+                if [[ -f "$cand" ]] && [[ -x "$cand" ]]; then
+                  cp -f "$cand" observer && chmod +x observer
+                  echo "observer copied from $cand"
+                  break 2
+                fi
+              done
+            done
+          fi
+          if [[ ! -x observer ]]; then echo "observer missing or not executable"; exit 1; fi
+          cp -f observer "$VLDB_WORK_DIR/observer"
+          chmod +x "$VLDB_WORK_DIR/observer"
+          echo "observer size: $(stat -c%s "$VLDB_WORK_DIR/observer" 2>/dev/null || stat -f%z "$VLDB_WORK_DIR/observer" 2>/dev/null) bytes"
+          "$VLDB_WORK_DIR/observer" -V
+
+      - name: Start observer
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$VLDB_WORK_DIR"
+          ./observer
+          for i in $(seq 1 60); do
+            [[ -f run/seekdb.pid ]] && break
+            sleep 1
+          done
+          [[ -f run/seekdb.pid ]] || { echo "observer pid file not found"; tail -n 200 log/seekdb.log 2>/dev/null || true; exit 1; }
+          echo "observer pid: $(cat run/seekdb.pid)"
+
+      - name: Run smoke SQL
+        shell: bash
+        run: |
+          set -euo pipefail
+          WS="${{ github.workspace }}"
+          if [[ ! -f "$WS/build.sh" ]] && [[ -f "$(pwd)/build.sh" ]]; then
+            WORKSPACE="$(pwd)"
+          else
+            WORKSPACE="$WS"
+          fi
+          if grep -q 'dep_create.sh' "$WORKSPACE/build.sh" 2>/dev/null; then
+            DEP_PATH="$WORKSPACE/deps/3rd"
+          else
+            DEP_PATH="$WORKSPACE/rpm/.dep_create/var"
+          fi
+          export LD_LIBRARY_PATH="$DEP_PATH/u01/obclient/lib:${LD_LIBRARY_PATH:-}"
+
+          CLIENT=""
+          for cand in \
+            "$DEP_PATH/u01/obclient/bin/obclient" \
+            "$WORKSPACE/deps/3rd/u01/obclient/bin/obclient" \
+            "$WORKSPACE/rpm/.dep_create/var/u01/obclient/bin/obclient" \
+            "$WORKSPACE/tools/deploy/obclient"; do
+            if [[ -x "$cand" ]]; then
+              CLIENT="$cand"
+              break
+            fi
+          done
+          if [[ -z "$CLIENT" ]]; then
+            for root in "$WORKSPACE/deps/3rd" "$WORKSPACE/rpm/.dep_create/var"; do
+              [[ -d "$root" ]] || continue
+              cand="$(find "$root" -maxdepth 8 -path '*/bin/obclient' -type f -print -quit 2>/dev/null || true)"
+              if [[ -n "$cand" ]]; then
+                chmod +x "$cand" 2>/dev/null || true
+                if [[ -x "$cand" ]]; then
+                  CLIENT="$cand"
+                  break
+                fi
+              fi
+            done
+          fi
+          if [[ -z "$CLIENT" ]] && command -v obclient >/dev/null 2>&1; then
+            CLIENT="$(command -v obclient)"
+          elif [[ -z "$CLIENT" ]] && command -v mysql >/dev/null 2>&1; then
+            CLIENT="$(command -v mysql)"
+          fi
+          if [[ -z "$CLIENT" ]]; then
+            echo "no mysql-compatible client found"
+            echo "WORKSPACE=$WORKSPACE"
+            echo "DEP_PATH=$DEP_PATH"
+            for root in "$WORKSPACE/deps/3rd" "$WORKSPACE/rpm/.dep_create/var"; do
+              [[ -d "$root" ]] || continue
+              find "$root" -maxdepth 6 -path '*/bin/obclient' -type f -print 2>/dev/null || true
+            done
+            exit 1
+          fi
+          echo "mysql-compatible client: $CLIENT"
+
+          for i in $(seq 1 90); do
+            if "$CLIENT" -h127.0.0.1 -P2881 -uroot -A -e "select 1;" > "$VLDB_WORK_DIR/sql.out" 2>&1; then
+              cat "$VLDB_WORK_DIR/sql.out"
+              exit 0
+            fi
+            sleep 2
+          done
+
+          echo "failed to run smoke SQL"
+          cat "$VLDB_WORK_DIR/sql.out" 2>/dev/null || true
+          tail -n 200 "$VLDB_WORK_DIR/log/seekdb.log" 2>/dev/null || true
+          exit 1
+
+      - name: Run mysqltest (Document AI functions + custom IK parser)
+        shell: bash
+        run: |
+          set -euo pipefail
+          WS="${{ github.workspace }}"
+          if [[ ! -f "$WS/build.sh" ]] && [[ -f "$(pwd)/build.sh" ]]; then
+            WORKSPACE="$(pwd)"
+          else
+            WORKSPACE="$WS"
+          fi
+          if grep -q 'dep_create.sh' "$WORKSPACE/build.sh" 2>/dev/null; then
+            DEP_PATH="$WORKSPACE/deps/3rd"
+          else
+            DEP_PATH="$WORKSPACE/rpm/.dep_create/var"
+          fi
+          export LD_LIBRARY_PATH="$DEP_PATH/u01/obclient/lib:${LD_LIBRARY_PATH:-}"
+
+          # mysqltest ships next to obclient in the obclient toolchain
+          MT=""
+          for cand in \
+            "$DEP_PATH/u01/obclient/bin/mysqltest" \
+            "$WORKSPACE/deps/3rd/u01/obclient/bin/mysqltest" \
+            "$WORKSPACE/rpm/.dep_create/var/u01/obclient/bin/mysqltest"; do
+            if [[ -x "$cand" ]]; then MT="$cand"; break; fi
+          done
+          if [[ -z "$MT" ]]; then
+            cand="$(find "$DEP_PATH" -maxdepth 8 -path '*/bin/mysqltest' -type f -print -quit 2>/dev/null || true)"
+            if [[ -n "$cand" ]]; then chmod +x "$cand" 2>/dev/null || true; MT="$cand"; fi
+          fi
+          if [[ -z "$MT" || ! -x "$MT" ]]; then echo "mysqltest not found under $DEP_PATH"; exit 1; fi
+          OBC="$(dirname "$MT")/obclient"
+          echo "mysqltest: $MT"
+
+          # mysqltest's default connection needs the 'test' database to exist
+          "$OBC" -h127.0.0.1 -P2881 -uroot -A -e "CREATE DATABASE IF NOT EXISTS test;"
+
+          MTR_TMP="$VLDB_WORK_DIR/mtr_tmp"; mkdir -p "$MTR_TMP"
+          cd "$WORKSPACE/tools/deploy"
+          export MYSQL_TMP_DIR="$MTR_TMP" OBMYSQL_MS0=127.0.0.1 OBMYSQL_PORT=2881 OBMYSQL_PWD=
+
+          # ai_funcs suite (ai_parse_doc excluded -- it needs a live vision endpoint):
+          # load_file, ai_split_document (Document AI) + ik_custom_dict (custom IK parser).
+          suite=mysql_test/test_suite/ai_funcs
+          fail=0
+          # A passing case earns its full points; a failing one earns zero.
+          # Document AI Functions = load_file (50) + ai_split_document (50).
+          # IK Custom Dictionary  = ik_custom_dict (100).
+          LOAD_FILE_PTS=0
+          SPLIT_DOC_PTS=0
+          IK_SCORE=0
+          for t in load_file ai_split_document ik_custom_dict; do
+            tf="$suite/t/$t.test"
+            echo "===================== ai_funcs/$t ====================="
+            if "$MT" --host=127.0.0.1 --port=2881 --user=root --database=test \
+                 --test-file="$tf" --result-file="$suite/r/$t.result"; then
+              echo ">>> $t: PASS"
+              case "$t" in
+                load_file)         LOAD_FILE_PTS=50 ;;
+                ai_split_document) SPLIT_DOC_PTS=50 ;;
+                ik_custom_dict)    IK_SCORE=100 ;;
+              esac
+            else
+              echo ">>> $t: FAIL"
+              fail=1
+            fi
+          done
+          DOC_AI_SCORE=$((LOAD_FILE_PTS + SPLIT_DOC_PTS))
+
+          # Write the score report for the comment-artifact step to pick up.
+          # It is deliberately not printed here.
+          {
+            echo "Document AI Functions Score"
+            echo "==========================="
+            printf "score: %.2f / 100\n" "$DOC_AI_SCORE"
+            echo "load_file: $LOAD_FILE_PTS / 50"
+            echo "ai_split_document: $SPLIT_DOC_PTS / 50"
+            echo
+            echo "IK Custom Dictionary Score"
+            echo "=========================="
+            printf "score: %.2f / 100\n" "$IK_SCORE"
+            echo "ik_custom_dict: $IK_SCORE / 100"
+          } > "$VLDB_WORK_DIR/ai_funcs_score.txt"
+
+      - name: Run FTS large benchmark
+        shell: bash
+        run: |
+          set -euo pipefail
+          WS="${{ github.workspace }}"
+          if [[ ! -f "$WS/build.sh" ]] && [[ -f "$(pwd)/build.sh" ]]; then
+            WORKSPACE="$(pwd)"
+          else
+            WORKSPACE="$WS"
+          fi
+          if grep -q 'dep_create.sh' "$WORKSPACE/build.sh" 2>/dev/null; then
+            DEP_PATH="$WORKSPACE/deps/3rd"
+          else
+            DEP_PATH="$WORKSPACE/rpm/.dep_create/var"
+          fi
+          export LD_LIBRARY_PATH="$DEP_PATH/u01/obclient/lib:${LD_LIBRARY_PATH:-}"
+
+          CLIENT=""
+          for cand in \
+            "$DEP_PATH/u01/obclient/bin/obclient" \
+            "$WORKSPACE/deps/3rd/u01/obclient/bin/obclient" \
+            "$WORKSPACE/rpm/.dep_create/var/u01/obclient/bin/obclient" \
+            "$WORKSPACE/tools/deploy/obclient"; do
+            if [[ -x "$cand" ]]; then
+              CLIENT="$cand"
+              break
+            fi
+          done
+          if [[ -z "$CLIENT" ]]; then
+            for root in "$WORKSPACE/deps/3rd" "$WORKSPACE/rpm/.dep_create/var"; do
+              [[ -d "$root" ]] || continue
+              cand="$(find "$root" -maxdepth 8 -path '*/bin/obclient' -type f -print -quit 2>/dev/null || true)"
+              if [[ -n "$cand" ]]; then
+                chmod +x "$cand" 2>/dev/null || true
+                if [[ -x "$cand" ]]; then
+                  CLIENT="$cand"
+                  break
+                fi
+              fi
+            done
+          fi
+          if [[ -z "$CLIENT" ]] && command -v obclient >/dev/null 2>&1; then
+            CLIENT="$(command -v obclient)"
+          elif [[ -z "$CLIENT" ]] && command -v mysql >/dev/null 2>&1; then
+            CLIENT="$(command -v mysql)"
+          fi
+          if [[ -z "$CLIENT" ]]; then
+            echo "no mysql-compatible client found"
+            echo "WORKSPACE=$WORKSPACE"
+            echo "DEP_PATH=$DEP_PATH"
+            for root in "$WORKSPACE/deps/3rd" "$WORKSPACE/rpm/.dep_create/var"; do
+              [[ -d "$root" ]] || continue
+              find "$root" -maxdepth 6 -path '*/bin/obclient' -type f -print 2>/dev/null || true
+            done
+            exit 1
+          fi
+          echo "mysql-compatible client: $CLIENT"
+
+          chmod +x \
+            "$WORKSPACE/tools/benchmark/fts_large_bench.sh" \
+            "$WORKSPACE/tools/benchmark/fts_large_bench_gen.py" \
+            "$WORKSPACE/tools/benchmark/fts_large_bench_score.py"
+          BENCH_OUTPUT="$VLDB_WORK_DIR/fts_large_bench_report.txt"
+          SCORE_OUTPUT="$VLDB_WORK_DIR/fts_large_bench_score.txt"
+          export MYSQL="$CLIENT -h127.0.0.1 -P2881 -uroot -N -s -A --default-character-set=utf8mb4"
+          export MYSQL_VERBOSE="$CLIENT -h127.0.0.1 -P2881 -uroot -A --default-character-set=utf8mb4"
+          export LABEL="vldb-ci-${{ github.run_id }}-${{ github.run_attempt }}"
+          export OUTPUT="$BENCH_OUTPUT"
+
+          "$WORKSPACE/tools/benchmark/fts_large_bench.sh" | tee "$VLDB_WORK_DIR/fts_large_bench.log"
+          "$WORKSPACE/tools/benchmark/fts_large_bench_score.py" "$BENCH_OUTPUT" | tee "$SCORE_OUTPUT"
+
+          if [[ -n "${GITHUB_STEP_SUMMARY:-}" ]]; then
+            {
+              echo "### FTS Large Benchmark Score"
+              echo '```'
+              cat "$SCORE_OUTPUT"
+              echo '```'
+              echo
+              echo "### FTS Large Benchmark Report"
+              echo '```'
+              cat "$BENCH_OUTPUT"
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Prepare benchmark comment artifact
+        if: ${{ always() && github.event_name == 'pull_request' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          FTS_REPORT="$VLDB_WORK_DIR/fts_large_bench_report.txt"
+          FTS_SCORE="$VLDB_WORK_DIR/fts_large_bench_score.txt"
+          AI_FUNCS_SCORE="$VLDB_WORK_DIR/ai_funcs_score.txt"
+          ARTIFACT_DIR="$VLDB_WORK_DIR/vldb_comment"
+
+          # ai_funcs score, written by the mysqltest step
+          if [[ -f "$AI_FUNCS_SCORE" ]]; then
+            cat "$AI_FUNCS_SCORE"
+            echo
+          fi
+
+          if [[ ! -f "$FTS_REPORT" && ! -f "$AI_FUNCS_SCORE" ]]; then
+            echo "neither benchmark report nor ai_funcs score found, skip comment artifact"
+            exit 0
+          fi
+          mkdir -p "$ARTIFACT_DIR"
+          # The file names below are a contract with vldb-benchmark-comment.yml, which
+          # runs from the default branch. Renaming one side alone silently drops the
+          # PR comment, so change both together.
+          if [[ -f "$FTS_REPORT" ]]; then
+            cp -f "$FTS_REPORT" "$ARTIFACT_DIR/report.txt"
+          fi
+          if [[ -f "$FTS_SCORE" ]]; then
+            cp -f "$FTS_SCORE" "$ARTIFACT_DIR/score.txt"
+          fi
+          if [[ -f "$AI_FUNCS_SCORE" ]]; then
+            cp -f "$AI_FUNCS_SCORE" "$ARTIFACT_DIR/ai_funcs_score.txt"
+          fi
+          echo "${{ github.event.pull_request.number }}" > "$ARTIFACT_DIR/pr_number"
+          echo "${{ github.run_id }}" > "$ARTIFACT_DIR/source_run_id"
+          echo "${{ github.run_attempt }}" > "$ARTIFACT_DIR/source_run_attempt"
+
+      - name: Upload benchmark comment artifact
+        if: ${{ always() && github.event_name == 'pull_request' }}
+        uses: actions/upload-artifact@v7
+        continue-on-error: true
+        with:
+          # Artifact name is a contract with vldb-benchmark-comment.yml on the default
+          # branch; renaming it here alone silently disables the PR comment.
+          name: vldb-fts-large-benchmark
+          path: ${{ env.VLDB_WORK_DIR }}/vldb_comment/
+          if-no-files-found: ignore
+          retention-days: 7
+
+      - name: Stop observer
+        if: always()
+        shell: bash
+        run: |
+          set +e
+          if [[ -f "$VLDB_WORK_DIR/run/seekdb.pid" ]]; then
+            PID="$(cat "$VLDB_WORK_DIR/run/seekdb.pid")"
+            kill "$PID"
+            sleep 5
+            kill -9 "$PID" 2>/dev/null || true
+          fi

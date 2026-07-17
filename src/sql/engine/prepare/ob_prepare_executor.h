@@ -1,0 +1,49 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef OCEANBASE_SRC_SQL_ENGINE_PREPARE_OB_PREPARE_EXECUTOR_H_
+#define OCEANBASE_SRC_SQL_ENGINE_PREPARE_OB_PREPARE_EXECUTOR_H_
+
+#include "lib/container/ob_vector.h"
+#include "sql/parser/parse_node.h"
+#include "sql/resolver/ob_stmt_type.h"
+#include "sql/session/ob_sql_session_info.h"
+
+
+namespace oceanbase
+{
+namespace sql
+{
+class ObExecContext;
+class ObPrepareStmt;
+
+class ObPrepareExecutor
+{
+public:
+  ObPrepareExecutor() {}
+  virtual ~ObPrepareExecutor() {}
+  int execute(ObExecContext &ctx, ObPrepareStmt &stmt);
+private:
+  int multiple_query_check(const ObSQLSessionInfo &session,
+                           const common::ObString &sql,
+                           common::ObIAllocator &allocator);
+  DISALLOW_COPY_AND_ASSIGN(ObPrepareExecutor);
+};
+
+}
+}
+
+#endif /* OCEANBASE_SRC_SQL_ENGINE_PREPARE_OB_PREPARE_EXECUTOR_H_ */
