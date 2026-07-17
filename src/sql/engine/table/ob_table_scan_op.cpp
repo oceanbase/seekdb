@@ -1675,7 +1675,7 @@ int ObTableScanOp::inner_open()
     LOG_WARN("das tasks key is invalid", K(ret));
   } else if (OB_FAIL(init_table_scan_rtdef())) {
     LOG_WARN("prepare scan param failed", K(ret));
-  } else if (MY_SPEC.is_fts_ddl_ && OB_FAIL(fts_index_.init(MY_SPEC.is_fts_index_aux_, MY_SPEC.parser_name_,
+  } else if (MY_SPEC.is_fts_ddl_ && OB_FAIL(fts_index_.init(MY_SPEC.is_fts_index_aux_, MY_SPEC.is_fts_ddl_, MY_SPEC.parser_name_,
           MY_SPEC.parser_properties_))) {
     LOG_WARN("fail to init fts index cache", K(ret));
   } else {

@@ -79,12 +79,31 @@ class ObFtsDDLTokenCache final
     int64_t size_;
   };
 public:
-  ObFtsDDLTokenCache() = default;
+  ObFtsDDLTokenCache() : active_ddl_scan_count_(0) {}
   ~ObFtsDDLTokenCache()
+  {
+    clear();
+  }
+  void acquire()
+  {
+    lib::ObMutexGuard guard(lifecycle_lock_);
+    ++active_ddl_scan_count_;
+  }
+  void release()
+  {
+    lib::ObMutexGuard guard(lifecycle_lock_);
+    if (active_ddl_scan_count_ > 0 && 0 == --active_ddl_scan_count_) {
+      // Task4 Op11：最后一个 FTS DDL 扫描结束后释放未配对条目，不影响后续普通 TOKENIZE。
+      clear();
+    }
+  }
+  void clear()
   {
     for (int64_t i = 0; i < SLOT_COUNT; ++i) {
       if (nullptr != slots_[i].data_) {
         ob_free(slots_[i].data_);
+        slots_[i].data_ = nullptr;
+        slots_[i].size_ = 0;
       }
     }
   }
@@ -162,6 +181,9 @@ private:
   lib::ObMutex locks_[LOCK_COUNT];
   // Task4 Op11：同一文档只允许一个输出进入“检查、分词、发布”流程，消除同步扫描时的双生产竞态。
   lib::ObMutex producer_locks_[PRODUCER_LOCK_COUNT];
+  // Task4 Op11：以 FTS DDL 扫描为生命周期管理共享缓存，DDL 外不保留动态内存。
+  lib::ObMutex lifecycle_lock_;
+  int64_t active_ddl_scan_count_;
   Slot slots_[SLOT_COUNT];
   DISALLOW_COPY_AND_ASSIGN(ObFtsDDLTokenCache);
 };
@@ -371,6 +393,8 @@ ObFTIndexRowCache::ObFTIndexRowCache()
   : rows_(),
     row_idx_(0),
     is_fts_index_aux_(true),
+    enable_ddl_token_cache_(false),
+    ddl_token_cache_registered_(false),
     parser_allocator_(),
     helper_(),
     parser_name_(),
@@ -388,6 +412,7 @@ ObFTIndexRowCache::~ObFTIndexRowCache()
 
 int ObFTIndexRowCache::init(
     const bool is_fts_index_aux,
+    const bool enable_ddl_token_cache,
     const common::ObString &parser_name,
     const common::ObString &parser_properties)
 {
@@ -410,6 +435,11 @@ int ObFTIndexRowCache::init(
   } else {
     row_idx_ = 0;
     is_fts_index_aux_ = is_fts_index_aux;
+    enable_ddl_token_cache_ = enable_ddl_token_cache;
+    if (enable_ddl_token_cache_) {
+      ObFtsDDLTokenCache::instance().acquire();
+      ddl_token_cache_registered_ = true;
+    }
     is_inited_ = true;
   }
   if (OB_UNLIKELY(!is_inited_)) {
@@ -427,6 +457,15 @@ int ObFTIndexRowCache::segment(const common::ObObjMeta &ft_obj_meta,
     ret = OB_NOT_INIT;
     LOG_WARN("ObFTIndexRowCache hasn't be initialized", K(ret), K(is_inited_));
   } else if (FALSE_IT(reuse())) {
+  } else if (!enable_ddl_token_cache_) {
+    // Task4 Op11：非 FTS DDL 上下文完全绕过共享缓存、哈希计算和锁竞争。
+    if (OB_FAIL(ObDASDomainUtils::generate_fulltext_word_rows(
+            merge_memctx_->get_arena_allocator(), &helper_, ft_obj_meta,
+            doc_id_datum, fulltext, is_fts_index_aux_, rows_))) {
+      LOG_WARN("fail to generate fulltext word rows", K(ret), K(helper_), K(is_fts_index_aux_));
+    } else {
+      row_idx_ = 0;
+    }
   } else {
     bool cache_hit = false;
     ObFtsDDLTokenCache &token_cache = ObFtsDDLTokenCache::instance();
@@ -504,8 +543,13 @@ void ObFTIndexRowCache::reset()
         100.0 * task4_op11_cache_hit_count_ / task4_op11_cache_total);
   }
   rows_.reset();
+  if (ddl_token_cache_registered_) {
+    ObFtsDDLTokenCache::instance().release();
+    ddl_token_cache_registered_ = false;
+  }
   row_idx_ = 0;
   is_fts_index_aux_ = true;
+  enable_ddl_token_cache_ = false;
   helper_.reset();
   // Task4 Op2：先析构缓存解析器，再统一释放其长生命周期内存
   parser_name_.reset();

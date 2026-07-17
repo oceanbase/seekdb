@@ -42,6 +42,7 @@ public:
   ~ObFTIndexRowCache();
   int init(
       const bool is_fts_index_aux,
+      const bool enable_ddl_token_cache,
       const common::ObString &parser_name,
       const common::ObString &parser_properties);
   int segment(const common::ObObjMeta &ft_obj_meta, const ObDatum &doc_id, const common::ObString &fulltext);
@@ -54,6 +55,10 @@ private:
   ObDomainIndexRow rows_;
   uint64_t row_idx_;
   bool is_fts_index_aux_;
+  // Task4 Op11：共享生产缓存仅允许由 FTS DDL 扫描显式开启。
+  bool enable_ddl_token_cache_;
+  // Task4 Op11：记录本扫描是否已注册缓存生命周期，确保退出时释放 DDL 遗留条目。
+  bool ddl_token_cache_registered_;
   // Task4 Op2：解析器使用独立的长生命周期 allocator，不能随每行输出缓存一起回收。
   common::ObArenaAllocator parser_allocator_;
   storage::ObFTParseHelper helper_;
