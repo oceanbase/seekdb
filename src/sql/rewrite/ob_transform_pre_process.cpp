@@ -4625,11 +4625,14 @@ int ObTransformPreProcess::preserve_order_for_fulltext_search(
   TableItem *table_item = NULL;
   ObRawExpr *match_expr = nullptr;
   bool count_limited_rows_only = false;
+  bool can_drop_counted_value = false;
+  ObSelectStmt *limited_child = nullptr;
   if (OB_ISNULL(stmt)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected null", K(ret));
   } else if (parent_stmts.count() == 1 && stmt->is_select_stmt()) {
-    const ObSelectStmt *child = static_cast<const ObSelectStmt *>(stmt);
+    limited_child = static_cast<ObSelectStmt *>(stmt);
+    const ObSelectStmt *child = limited_child;
     const ObDMLStmt *parent_stmt = parent_stmts.at(0).stmt_;
     if (OB_NOT_NULL(parent_stmt) && parent_stmt->is_select_stmt()) {
       const ObSelectStmt *parent = static_cast<const ObSelectStmt *>(parent_stmt);
@@ -4659,6 +4662,10 @@ int ObTransformPreProcess::preserve_order_for_fulltext_search(
           && OB_NOT_NULL(source)
           && source->is_generated_table()
           && source->ref_query_ == child;
+      can_drop_counted_value = count_limited_rows_only
+          && child->get_select_item_size() == 1
+          && OB_NOT_NULL(child->get_select_item(0).expr_)
+          && child->get_select_item(0).expr_->is_column_ref_expr();
     }
   }
 
@@ -4667,6 +4674,22 @@ int ObTransformPreProcess::preserve_order_for_fulltext_search(
     // FTS PERF OPT 2: the outer COUNT(*) observes only how many rows LIMIT
     // returns. With no explicit ORDER BY, the identity and relevance order of
     // those rows are not observable, so retain the child's streaming order.
+    if (can_drop_counted_value) {
+      ObConstRawExpr *row_marker = nullptr;
+      if (OB_ISNULL(ctx_) || OB_ISNULL(ctx_->expr_factory_)) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("unexpected null transform context", K(ret), KP(ctx_));
+      } else if (OB_FAIL(ObRawExprUtils::build_const_int_expr(
+          *ctx_->expr_factory_, ObIntType, 1, row_marker))) {
+        LOG_WARN("failed to build count row marker", K(ret));
+      } else {
+        // FTS PERF OPT 3: EXPLAIN showed an index-back solely for the child id.
+        // COUNT(*) discards that value, so project a constant row marker and
+        // let the text scan return row existence without fetching the base row.
+        limited_child->get_select_item(0).expr_ = row_marker;
+        trans_happened = true;
+      }
+    }
   } else if (stmt->get_table_items().count() != 1 || stmt->get_order_item_size() != 0) {
     // do nothing
   } else if (stmt->is_select_stmt() && 
