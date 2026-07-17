@@ -79,6 +79,7 @@ class ObTenantMdsService;
   class ObTenantMetaMemMgr;
   class ObTenantStorageMetaService;
   class ObTenantFTPluginMgr;
+  class ObFTDictMgr;
   class ObTenantFreezeInfoMgr;
   class ObStorageHAService;
   class ObStorageHAHandlerService;
@@ -237,6 +238,7 @@ using ObTableScanIteratorObjPool = common::ObServerObjectPool<oceanbase::storage
       oceanbase::sql::ObTenantSQLSessionMgr*,        \
       storage::ObTenantMetaMemMgr*,                  \
       storage::ObTenantFTPluginMgr*,                 \
+      storage::ObFTDictMgr*,                         \
       ObPartTransCtxObjPool*,                        \
       ObTableScanIteratorObjPool*,                   \
       common::ObTenantIOManager*,                    \

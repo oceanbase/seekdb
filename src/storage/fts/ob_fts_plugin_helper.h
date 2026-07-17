@@ -42,7 +42,6 @@ namespace storage
 {
 
 class ObStopWordChecker;
-class ObFTDictHub;
 class ObAddWord;
 
 #define FTS_BUILD_IN_PARSER_LIST                                                                   \
@@ -120,15 +119,12 @@ public:
 
 public:
   ObStopWordChecker *stop_word_checker() const { return stop_word_checker_; }
-  int get_dict_hub(ObFTDictHub *&hub);
 
 private:
   int init_and_set_stopword_list();
-  int init_dict_hub();
 
 private:
   ObStopWordChecker *     stop_word_checker_ = nullptr;
-  ObFTDictHub *           dict_hub_          = nullptr;
   common::ObFIFOAllocator handler_allocator_;
   bool                    is_inited_         = false;
 };
@@ -162,7 +158,8 @@ public:
   int init(
       common::ObIAllocator *allocator,
       const common::ObString &plugin_name,
-      const common::ObString &plugin_properties);
+      const common::ObString &plugin_properties,
+      const bool is_ddl_mode = false);
   /**
    * Split document into multiple words
    *
@@ -206,7 +203,8 @@ public:
 
   void reset();
 
-  TO_STRING_KV(KP_(allocator), K_(parser_name), KP_(parser_desc), K_(is_inited));
+  TO_STRING_KV(KP_(allocator), K_(parser_name), KP_(parser_desc), K_(parser_property),
+               K_(is_ddl_mode), K_(is_inited));
 
 private:
   static int segment(
@@ -218,7 +216,9 @@ private:
       const char *fulltext,
       const int64_t fulltext_len,
       common::ObIAllocator &allocator,
-      ObAddWord &add_word);
+      ObAddWord &add_word,
+      const bool is_ddl_mode,
+      const bool need_casedown);
   int set_add_word_flag(const plugin::ObIFTParserDesc &ftparser_desc);
 private:
   common::ObIAllocator *allocator_;
@@ -226,7 +226,9 @@ private:
   plugin::ObPluginParam *plugin_param_;
   ObFTParser parser_name_;
   ObAddWordFlag add_word_flag_;
+  ObFTParserJsonProps props_;
   ObFTParserProperty parser_property_;
+  bool is_ddl_mode_;
   bool is_inited_;
 
 private:

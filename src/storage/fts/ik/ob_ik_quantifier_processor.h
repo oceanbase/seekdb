@@ -26,7 +26,6 @@ namespace oceanbase
 {
 namespace storage
 {
-class ObFTDictHub;
 class ObIKQuantifierProcessor : public ObIIKProcessor
 {
 public:

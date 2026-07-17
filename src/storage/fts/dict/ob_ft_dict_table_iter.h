@@ -1,17 +1,6 @@
-/*
- * Copyright (c) 2025 OceanBase.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+/**
+ * Copyright (c) 2024 OceanBase
+ * SPDX-License-Identifier: Apache-2.0
  */
 
 #ifndef _OCEANBASE_STORAGE_FTS_DICT_OB_FT_DICT_TABLE_ITER_H_
@@ -19,6 +8,8 @@
 
 #include "common/mysqlclient/ob_isql_client.h"
 #include "storage/fts/dict/ob_ft_dict_iterator.h"
+#include "storage/fts/dict/ob_ft_dict_def.h"
+#include "storage/fts/dict/ob_ft_dict_cache_loader.h"
 
 namespace oceanbase
 {
@@ -37,12 +28,18 @@ public:
   int next() override;
 
 public:
-  int init(const ObString &table_name);
+  int init(const ObString &table_name,
+           const uint64_t tenant_id,
+           const int64_t snapshot_version,
+           const bool need_casedown,
+           const ObIArray<ObMissingRangeInfo> *partial_ranges = nullptr);
 
 private:
   void reset();
 
-private:
+  int append_where_clause(ObSqlString &sql_string, const bool need_casedown,
+                          const ObIArray<ObMissingRangeInfo> *partial_ranges);
+
   bool is_inited_;
   ObISQLClient::ReadResult &res_;
 };

@@ -617,6 +617,8 @@ int ObFtsIndexBuildTask::prepare_aux_index_tables()
   ObTenantDicLoaderHandle dic_loader_handle;
   ObCharsetType charset_type = ObCharsetType::CHARSET_ANY;
   ObTableLockOwnerID owner_id;
+  const ObString &parser_properties = create_index_arg_.index_option_.parser_properties_;
+  ObSEArray<uint64_t, 3> dict_table_ids;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
@@ -647,12 +649,16 @@ int ObFtsIndexBuildTask::prepare_aux_index_tables()
       LOG_WARN("the dic loader handle is not valid", K(ret), K(dic_loader_handle));
     } else if (OB_FAIL(owner_id.convert_from_value(ObLockOwnerType::DEFAULT_OWNER_TYPE, task_id_))) {
       LOG_WARN("failed to get owner id", K(ret), K(task_id_));
-    } else if (OB_FAIL(ObDicLock::lock_dic_tables_out_trans(*dic_loader_handle.get_loader(),
+    } else if (OB_FAIL(ObFtsIndexBuilderUtil::get_dict_table_ids(
+                           parser_properties, dict_table_ids))) {
+      LOG_WARN("fail to get dictionary table ids from parser properties",
+               K(ret), K(parser_name), K(parser_properties));
+    } else if (OB_FAIL(ObDicLock::lock_dic_tables_out_trans(dict_table_ids,
                                                             transaction::tablelock::SHARE,
                                                             owner_id,
                                                             trans))) {
       LOG_WARN("failed to lock all dictionary table", 
-          K(ret), K(dic_loader_handle), K(owner_id));
+          K(ret), K(dict_table_ids), K(owner_id));
     } else if (OB_FAIL(update_task_message(trans))) {
       LOG_WARN("fail to update fulltext index build task message",
           K(ret), K(task_id_));
@@ -1960,8 +1966,8 @@ int ObFtsIndexBuildTask::cleanup_impl()
     ObMySQLTransaction trans;
     bool need_to_load_dic = false;
     const ObString &parser_name = create_index_arg_.index_option_.parser_name_;
-    ObTenantDicLoaderHandle dic_loader_handle;
-    ObCharsetType charset_type = CHARSET_INVALID;
+    const ObString &parser_properties = create_index_arg_.index_option_.parser_properties_;
+    ObSEArray<uint64_t, 3> dict_table_ids;
     bool is_skip_unlock = false;
     if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(schema_guard))) {
       LOG_WARN("get tenant schema guard failed", K(ret));
@@ -1994,24 +2000,16 @@ int ObFtsIndexBuildTask::cleanup_impl()
       if (!try_unlock_dictionaries) {
         LOG_INFO("The dictionaries table is not locked, skip unlock dictionaries",
             K(ret), K(charset_type_), K(parser_name));
-      } else if (OB_FAIL(get_charset_type(charset_type))) {
-        LOG_WARN("fail to get charset type", K(ret), K(charset_type));
-      } else if (OB_FAIL(ObGenDicLoader::get_instance().get_dic_loader(
-                                                                       parser_name,
-                                                                       charset_type,
-                                                                       dic_loader_handle))) {
-
-          LOG_WARN("fail to get dic loader",
-              K(ret), K(parser_name), K(charset_type));
-      } else if (OB_UNLIKELY(!dic_loader_handle.is_valid())) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("the dic loader handle is not valid", K(ret), K(dic_loader_handle));
-      } else if (OB_FAIL(ObDicLock::unlock_dic_tables(*dic_loader_handle.get_loader(),
-                                                      transaction::tablelock::SHARE,
-                                                      owner_id,
-                                                      trans))) {
+      } else if (OB_FAIL(ObFtsIndexBuilderUtil::get_dict_table_ids(
+                             parser_properties, dict_table_ids))) {
+        LOG_WARN("fail to get dictionary table ids from parser properties",
+                 K(ret), K(parser_name), K(parser_properties));
+      } else if (OB_FAIL(ObDicLock::unlock_dict_tables(dict_table_ids,
+                                                       transaction::tablelock::SHARE,
+                                                       owner_id,
+                                                       trans))) {
         LOG_WARN("failed to unlock all dictionary tables",
-            K(ret), K(dic_loader_handle), K(owner_id));
+            K(ret), K(dict_table_ids), K(owner_id));
       }
     }
     if (OB_FAIL(ret)) {
