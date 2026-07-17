@@ -2884,7 +2884,8 @@ typedef enum ObItemType
   T_FORK_DATABASE = 4917,
   T_DIFF_TABLE = 4918,
   T_MERGE_TABLE = 4919,
-  T_AI_SPLIT_DOCUMENT_EXPRESSION = 4920, // Task2
+  // Document AI function fix: keep this distinct from T_REFRESH_FULLTEXT_DICT (4920).
+  T_AI_SPLIT_DOCUMENT_EXPRESSION = 4921,
   T_MAX //Attention: add a new type before T_MAX
 } ObItemType;
 
