@@ -70,6 +70,9 @@ int ObFTIndexRowCache::init(
     LOG_WARN("failed to create merge memctx", K(ret));
   } else if (OB_FAIL(helper_.init(&(merge_memctx_->get_arena_allocator()), parser_name, parser_properties))) {
     LOG_WARN("fail to init full-text parser helper", K(ret));
+  } else if (OB_FAIL(ft_word_map_.create(ObDASDomainUtils::FT_WORD_ROW_MAP_BUCKET,
+                                         common::ObMemAttr("FTWordMap")))) {
+    LOG_WARN("fail to create ft word map", K(ret));
   } else {
     row_idx_ = 0;
     is_fts_index_aux_ = is_fts_index_aux;
@@ -96,6 +99,7 @@ int ObFTIndexRowCache::segment(const common::ObObjMeta &ft_obj_meta,
                                                                    doc_id_datum,
                                                                    fulltext,
                                                                    is_fts_index_aux_,
+                                                                   ft_word_map_,
                                                                    rows_))) {
     LOG_WARN("fail to generate fulltext word rows", K(ret), K(helper_), K(is_fts_index_aux_));
   } else {
@@ -127,6 +131,7 @@ void ObFTIndexRowCache::reset()
   row_idx_ = 0;
   is_fts_index_aux_ = true;
   helper_.reset();
+  ft_word_map_.destroy();
   if (OB_NOT_NULL(merge_memctx_)) {
     DESTROY_CONTEXT(merge_memctx_);
     merge_memctx_ = nullptr;
@@ -314,13 +319,9 @@ int ObDASDomainUtils::build_ft_doc_word_infos(
                                                              ObDomainIndexRow &word_rows)
 {
   int ret = OB_SUCCESS;
-  static int64_t FT_WORD_DOC_COL_CNT = 4;
   static constexpr int64_t FT_MAX_WORD_BUCKET = 997;
   const int64_t ft_word_bkt_cnt = MIN(MAX(fulltext.length() / 10, 2), FT_MAX_WORD_BUCKET);
-  int64_t doc_length = 0;
   ObFTWordMap ft_word_map;
-  void *rows_buf = nullptr;
-  blocksstable::ObDatumRow *rows = nullptr;
   if (OB_ISNULL(helper) || OB_UNLIKELY(!ft_obj_meta.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", K(ret), KPC(helper), K(ft_obj_meta), K(doc_id_datum));
@@ -328,6 +329,40 @@ int ObDASDomainUtils::build_ft_doc_word_infos(
     ret = OB_ITER_END;
   } else if (OB_FAIL(ft_word_map.create(ft_word_bkt_cnt, common::ObMemAttr("FTWordMap")))) {
     LOG_WARN("fail to create ft word map", K(ret), K(ft_word_bkt_cnt));
+  } else if (OB_FAIL(generate_fulltext_word_rows(allocator,
+                                                 helper,
+                                                 ft_obj_meta,
+                                                 doc_id_datum,
+                                                 fulltext,
+                                                 is_fts_index_aux,
+                                                 ft_word_map,
+                                                 word_rows))) {
+    if (OB_UNLIKELY(OB_ITER_END != ret)) {
+      LOG_WARN("fail to generate fulltext word rows", K(ret));
+    }
+  }
+  return ret;
+}
+
+/*static*/ int ObDASDomainUtils::generate_fulltext_word_rows(common::ObIAllocator &allocator,
+                                                             storage::ObFTParseHelper *helper,
+                                                             const common::ObObjMeta &ft_obj_meta,
+                                                             const ObDatum &doc_id_datum,
+                                                             const ObString &fulltext,
+                                                             const bool is_fts_index_aux,
+                                                             ObFTWordMap &ft_word_map,
+                                                             ObDomainIndexRow &word_rows)
+{
+  int ret = OB_SUCCESS;
+  static int64_t FT_WORD_DOC_COL_CNT = 4;
+  int64_t doc_length = 0;
+  void *rows_buf = nullptr;
+  blocksstable::ObDatumRow *rows = nullptr;
+  if (OB_ISNULL(helper) || OB_UNLIKELY(!ft_obj_meta.is_valid())) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid arguments", K(ret), KPC(helper), K(ft_obj_meta), K(doc_id_datum));
+  } else if (0 == fulltext.length()) {
+    ret = OB_ITER_END;
   } else if (OB_FAIL(segment_and_calc_word_count(allocator,
                                                  helper,
                                                  ft_obj_meta,
