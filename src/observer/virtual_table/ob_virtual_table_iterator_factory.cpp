@@ -123,6 +123,7 @@
 #include "observer/virtual_table/ob_all_virtual_tablet_compaction_history.h"
 #include "observer/virtual_table/ob_all_virtual_tablet_compaction_info.h"
 #include "observer/virtual_table/ob_all_virtual_tablet_ddl_kv_info.h"
+#include "observer/virtual_table/ob_all_virtual_ddl_dag_monitor.h"
 #include "observer/virtual_table/ob_all_virtual_ddl_sim_point_stat.h"
 #include "observer/virtual_table/ob_all_virtual_tablet_pointer_status.h"
 #include "observer/virtual_table/ob_all_virtual_storage_meta_memory_status.h"
@@ -731,6 +732,17 @@ int ObVTIterCreator::create_vt_iter(ObVTableScanParam &params,
             } else {
               ddl_kv_info->set_addr(addr_);
               vt_iter = static_cast<ObVirtualTableIterator *>(ddl_kv_info);
+            }
+            break;
+          }
+          case OB_ALL_VIRTUAL_DDL_DAG_MONITOR_TID: {
+            ObAllVirtualDDLDagMonitor *ddl_dag_monitor = NULL;
+            if (OB_FAIL(NEW_VIRTUAL_TABLE(ObAllVirtualDDLDagMonitor, ddl_dag_monitor))) {
+              SERVER_LOG(ERROR, "ObAllVirtualDDLDagMonitor construct failed", K(ret));
+            } else if (OB_FAIL(ddl_dag_monitor->init(addr_))) {
+              SERVER_LOG(WARN, "ObAllVirtualDDLDagMonitor init failed", K(ret), K(addr_));
+            } else {
+              vt_iter = static_cast<ObVirtualTableIterator *>(ddl_dag_monitor);
             }
             break;
           }

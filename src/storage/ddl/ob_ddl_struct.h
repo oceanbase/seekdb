@@ -343,11 +343,35 @@ public:
   int64_t row_count_;
 };
 
+struct ObFTSBuildStat final
+{
+public:
+  ObFTSBuildStat()
+    : tokenized_word_cnt_(0), forward_written_row_cnt_(0),
+      inverted_sorted_row_cnt_(0), inverted_written_row_cnt_(0)
+  {}
+  void reset()
+  {
+    tokenized_word_cnt_ = 0;
+    forward_written_row_cnt_ = 0;
+    inverted_sorted_row_cnt_ = 0;
+    inverted_written_row_cnt_ = 0;
+  }
+  TO_STRING_KV(K_(tokenized_word_cnt), K_(forward_written_row_cnt),
+               K_(inverted_sorted_row_cnt), K_(inverted_written_row_cnt));
+public:
+  int64_t tokenized_word_cnt_;
+  int64_t forward_written_row_cnt_;
+  int64_t inverted_sorted_row_cnt_;
+  int64_t inverted_written_row_cnt_;
+};
+
 struct ObDDLTaskParam
 {
 public:
-  ObDDLTaskParam() : tenant_data_version_(0), snapshot_version_(0), schema_version_(0), ddl_task_id_(0), execution_id_(0), 
-    target_table_id_(0),  is_no_logging_(false), max_batch_size_(0), is_offline_index_rebuild_(false) {}
+  ObDDLTaskParam() : tenant_data_version_(0), snapshot_version_(0), schema_version_(0), ddl_task_id_(0), execution_id_(0),
+    target_table_id_(0), is_no_logging_(false), max_batch_size_(0),
+    is_offline_index_rebuild_(false), is_partition_local_(false) {}
   void reset()
   {
     tenant_data_version_ = 0;
@@ -359,9 +383,10 @@ public:
     is_no_logging_ = false;
     max_batch_size_ = 0;
     is_offline_index_rebuild_ = false;
+    is_partition_local_ = false;
   }
   bool is_valid() const { return ddl_task_id_ > 0 && execution_id_ >= 0 && tenant_data_version_ > 0 && snapshot_version_ >= 0 && target_table_id_ > 0 && schema_version_ > 0; }
-  TO_STRING_KV(K_(ddl_task_id), K_(execution_id), K_(tenant_data_version), K_(snapshot_version), K_(target_table_id), K_(schema_version), K_(is_no_logging), K_(max_batch_size), K_(is_offline_index_rebuild));
+  TO_STRING_KV(K_(ddl_task_id), K_(execution_id), K_(tenant_data_version), K_(snapshot_version), K_(target_table_id), K_(schema_version), K_(is_no_logging), K_(max_batch_size), K_(is_offline_index_rebuild), K_(is_partition_local));
 public:
   /* necessary param */
   int64_t tenant_data_version_;
@@ -375,6 +400,7 @@ public:
   bool is_no_logging_;
   int64_t max_batch_size_; // for batch rows when load data, from hint named load_batch_size
   bool is_offline_index_rebuild_;
+  bool is_partition_local_;
 };
 
 struct ObDDLAutoincParam

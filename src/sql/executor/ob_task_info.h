@@ -95,7 +95,8 @@ public:
       ss_ranges_(),
 	    tablet_loc_(nullptr),
 	    task_id_(0),
-      granule_type_(OB_GRANULE_UNINITIALIZED)
+      granule_type_(OB_GRANULE_UNINITIALIZED),
+      slice_idx_(0)
 	{ }
 	virtual ~ObGranuleTaskInfo() { }
   int assign(const ObGranuleTaskInfo &other);
@@ -108,6 +109,7 @@ public:
   //just for print
   int64_t task_id_;
   ObGranuleType granule_type_;
+  int64_t slice_idx_;
 };
 // Used for NLJ scenario to perform partition pruning on the right-side partition table scan
 class ObGIPruningInfo

@@ -2301,7 +2301,8 @@ DEF_TO_STRING(ObCreateIndexArg)
        K_(is_index_scope_specified),
        K_(is_offline_rebuild),
        K_(index_key),
-       K_(data_version));
+       K_(data_version),
+       K_(is_partition_local_ddl));
   J_OBJ_END();
   return pos;
 }
@@ -2333,7 +2334,8 @@ OB_SERIALIZE_MEMBER((ObCreateIndexArg, ObIndexArg),
                     is_index_scope_specified_,
                     is_offline_rebuild_,
                     index_key_,
-                    data_version_);
+                    data_version_,
+                    is_partition_local_ddl_);
 
 
 

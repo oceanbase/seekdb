@@ -42,6 +42,7 @@ namespace storage
 class ObDDLIndependentDag;
 class ObCgMacroBlockWriter;
 class ObLobMacroBlockWriter;
+class ObDirectLoadBatchDatumRows;
 
 // write storage rows
 class ObITabletSliceWriter
@@ -319,6 +320,36 @@ protected:
   blocksstable::ObStorageDatumUtils datum_utils_;
 };
 
+class ObFtsSliceWriter : public ObCsSliceWriter
+{
+public:
+  ObFtsSliceWriter();
+  virtual ~ObFtsSliceWriter();
+  int init(const ObWriteMacroParam &write_param,
+           const bool direct_write_macro_block,
+           const bool is_append_batch)
+  {
+    return ObCsSliceWriter::init(write_param,
+                                 direct_write_macro_block,
+                                 is_append_batch,
+                                 0 /* max_batch_size */);
+  }
+  virtual int append_current_row(const ObIArray<ObDatum *> &datums) override;
+  virtual int append_current_batch(const ObIArray<ObIVector *> &vectors,
+                                   share::ObBatchSelector &selector) override;
+  virtual int64_t get_row_count() const override;
+  virtual int close() override;
+
+private:
+  int get_row_buffer(ObDirectLoadBatchDatumRows *&row_buffer);
+  int output_row_buffer();
+  int output_end_chunk();
+
+private:
+  ObDirectLoadBatchDatumRows *fts_row_buffer_;
+  DISALLOW_COPY_AND_ASSIGN(ObFtsSliceWriter);
+};
+
 class ObHeapCsSliceWriter : public ObCsSliceWriter
 {
 public:
@@ -347,4 +378,3 @@ private:
 }// namespace oceanbase
 
 #endif//_STORAGE_DDL_OB_TABLET_SLICE_WRITER_
-

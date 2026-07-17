@@ -20,6 +20,7 @@
 #include "lib/utility/ob_print_utils.h"
 #include "lib/container/ob_array.h"
 #include "observer/scheduler/ob_tenant_dag_scheduler.h"
+#include "observer/scheduler/ob_independent_dag.h"
 #include "observer/table_load/ob_table_load_row_array.h"
 #include "storage/direct_load/ob_direct_load_batch_datum_rows.h"
 #include "storage/ddl/ob_cg_block_tmp_file.h"
@@ -44,6 +45,7 @@ class ObTaskBatchInfo;
 class ObDDLTabletContext;
 class ObDDLSlice;
 class ObPipeline;
+class ObDDLSortChunk;
 
 struct ObChunk
 {
@@ -60,6 +62,7 @@ public:
     BATCH_DATUM_ROWS,
     DIRECT_LOAD_ROW_ARRAY,
     TASK_BATCH_INFO,
+    DDL_SORT_CHUNK_ARRAY,
     MAX_TYPE
   };
 public:
@@ -77,6 +80,7 @@ public:
   OB_INLINE bool is_datum_row_type() const { return ChunkType::DATUM_ROW == type_; }
   OB_INLINE bool is_direct_load_row_array_type() const { return ChunkType::DIRECT_LOAD_ROW_ARRAY == type_; }
   OB_INLINE bool is_task_batch_info_type() const { return ChunkType::TASK_BATCH_INFO == type_; }
+  OB_INLINE bool is_ddl_sort_chunk_array_type() const { return ChunkType::DDL_SORT_CHUNK_ARRAY == type_; }
   TO_STRING_KV(K_(type), KP_(data_ptr));
 public:
   ChunkType type_;
@@ -89,6 +93,8 @@ public:
     blocksstable::ObBatchDatumRows *bdrs_;
     table::ObTableLoadTabletObjRowArray *row_array_;
     storage::ObTaskBatchInfo *batch_info_;
+    common::ObArray<ObDDLSortChunk> *ddl_sort_chunk_array_;
+    common::ObIArray<common::ObIVector *> *sql_vector_array_;
   };
 };
 
@@ -126,11 +132,11 @@ protected:
   ObPipeline *pipeline_;
 };
 
-class ObPipeline: public share::ObITask
+class ObPipeline: public share::ObITaskWithMonitor
 {
 public:
   explicit ObPipeline(const share::ObITask::ObITaskType &task_type)
-    : ObITask(task_type)
+    : ObITaskWithMonitor(task_type)
   {}
   ~ObPipeline() {}
   int add_op(ObPipelineOperator *op);
@@ -147,4 +153,3 @@ protected:
 }  // end namespace storage
 }  // end namespace oceanbase
 #endif//_OCEANBASE_STORAGE_DDL_OB_PIPELINE_H_
-

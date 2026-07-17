@@ -366,6 +366,47 @@ int ObDirectLoadBatchRows::append_selective(const ObIArray<ObDatumVector> &datum
 
 
 
+int ObDirectLoadBatchRows::shallow_copy(const IVectorPtrs &vectors, const int64_t batch_size)
+{
+  int ret = OB_SUCCESS;
+  if (IS_NOT_INIT) {
+    ret = OB_NOT_INIT;
+  } else if (OB_UNLIKELY(vectors.count() != vectors_.count() || batch_size <= 0
+                         || batch_size > max_batch_size_)) {
+    ret = OB_INVALID_ARGUMENT;
+  } else {
+    for (int64_t i = (row_flag_.uncontain_hidden_pk_ ? 1 : 0);
+         OB_SUCC(ret) && i < vectors_.count(); ++i) {
+      if (OB_FAIL(vectors_.at(i)->shallow_copy(vectors.at(i), batch_size))) {
+        LOG_WARN("fail to shallow copy vector", KR(ret), K(i));
+      }
+    }
+    if (OB_SUCC(ret)) { size_ = batch_size; }
+  }
+  return ret;
+}
+
+int ObDirectLoadBatchRows::shallow_copy(const ObIArray<ObDatumVector> &datum_vectors,
+                                        const int64_t batch_size)
+{
+  int ret = OB_SUCCESS;
+  if (IS_NOT_INIT) {
+    ret = OB_NOT_INIT;
+  } else if (OB_UNLIKELY(datum_vectors.count() != vectors_.count() || batch_size <= 0
+                         || batch_size > max_batch_size_)) {
+    ret = OB_INVALID_ARGUMENT;
+  } else {
+    for (int64_t i = (row_flag_.uncontain_hidden_pk_ ? 1 : 0);
+         OB_SUCC(ret) && i < vectors_.count(); ++i) {
+      if (OB_FAIL(vectors_.at(i)->shallow_copy(datum_vectors.at(i), batch_size))) {
+        LOG_WARN("fail to shallow copy datum vector", KR(ret), K(i));
+      }
+    }
+    if (OB_SUCC(ret)) { size_ = batch_size; }
+  }
+  return ret;
+}
+
 int ObDirectLoadBatchRows::get_datum_row(const int64_t batch_idx,
                                          ObDirectLoadDatumRow &datum_row) const
 {

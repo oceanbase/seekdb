@@ -17,6 +17,7 @@
 #include "storage/ddl/ob_pipeline.h"
 #include "storage/ddl/ob_ddl_struct.h"
 #include "storage/ddl/ob_ddl_pipeline.h"
+#include "storage/ddl/ob_ddl_tablet_context.h"
 
 #define USING_LOG_PREFIX STORAGE
 
@@ -49,6 +50,14 @@ ObChunk::~ObChunk()
     type_ = INVALID_TYPE;
   } else if (DIRECT_LOAD_ROW_ARRAY == type_) {
     OB_DELETE(ObTableLoadTabletObjRowArray, ObMemAttr("TLD_RowArray"), row_array_);
+  } else if (DDL_SORT_CHUNK_ARRAY == type_ && nullptr != ddl_sort_chunk_array_) {
+    for (int64_t i = 0; i < ddl_sort_chunk_array_->count(); ++i) {
+      ddl_sort_chunk_array_->at(i).free_sort_op_chunk();
+    }
+    ddl_sort_chunk_array_->~ObArray<ObDDLSortChunk>();
+    ob_free(ddl_sort_chunk_array_);
+    ddl_sort_chunk_array_ = nullptr;
+    type_ = INVALID_TYPE;
   }
 }
 
@@ -70,6 +79,7 @@ bool ObChunk::is_valid() const
       case ChunkType::BATCH_DATUM_ROWS:
       case ChunkType::DIRECT_LOAD_ROW_ARRAY:
       case ChunkType::TASK_BATCH_INFO:
+      case ChunkType::DDL_SORT_CHUNK_ARRAY:
         bret = nullptr != data_ptr_;
         break;
       default:

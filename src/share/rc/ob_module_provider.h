@@ -87,6 +87,7 @@ public:
   virtual sql::ObTenantSqlMemoryManager * tenant_sql_memory_manager() { return nullptr; }
   virtual sql::dtl::ObDTLIntermResultManager * dtl_interm_result_manager() { return nullptr; }
   virtual sql::ObPlanMonitorNodeList * plan_monitor_node_list() { return nullptr; }
+  virtual storage::ObDDLDagMonitorMgr * ddl_dag_monitor_mgr() { return nullptr; }
   virtual sql::ObDataAccessService * data_access_service() { return nullptr; }
   virtual sql::ObDASIDService * dasid_service() { return nullptr; }
   virtual share::schema::ObTenantSchemaService * tenant_schema_service() { return nullptr; }

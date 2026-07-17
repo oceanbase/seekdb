@@ -643,6 +643,17 @@ ob_set_subtarget(ob_storage ddl
   ddl/ob_cg_macro_block_write_task.cpp
   ddl/ob_lob_macro_block_writer.cpp
   ddl/ob_ddl_dag_thread_pool.cpp
+  ddl/ob_ddl_dag_monitor_entry.cpp
+  ddl/ob_ddl_dag_monitor_mgr.cpp
+  ddl/ob_ddl_dag_monitor_node.cpp
+  ddl/ob_ddl_encode_sortkey_utils.cpp
+  ddl/ob_ddl_sort_provider.cpp
+  ddl/ob_ddl_merge_sort_task.cpp
+  ddl/ob_merge_sort_prepare_task.cpp
+  ddl/ob_final_merge_sort_write_task.cpp
+  ddl/ob_fts_macro_block_write_op.cpp
+  ddl/ob_fts_sample_pipeline.cpp
+  ddl/ob_full_text_index_write_task.cpp
   ddl/ob_cg_block_tmp_file.cpp
   ddl/ob_cg_block_tmp_files_iterator.cpp
   ddl/ob_tablet_slice_writer.cpp

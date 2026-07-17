@@ -31,7 +31,8 @@ using namespace oceanbase::blocksstable;
 using namespace oceanbase::sql;
 
 ObGroupWriteMacroBlockTask::ObGroupWriteMacroBlockTask()
-  : ObITask(TASK_TYPE_DDL_GROUP_WRITE_TASK), ddl_dag_(nullptr)
+  : ObITask(TASK_TYPE_DDL_GROUP_WRITE_TASK), ddl_dag_(nullptr), tablet_id_(),
+    tablet_ids_(), group_write_tasks_()
 {
 
 }
@@ -49,6 +50,8 @@ int ObGroupWriteMacroBlockTask::init(ObDDLIndependentDag *ddl_dag)
     LOG_WARN("invalid argument", K(ret));
   } else {
     ddl_dag_ = ddl_dag;
+    tablet_id_.reset();
+    tablet_ids_.reset();
   }
   return ret;
 }
@@ -62,6 +65,23 @@ int ObGroupWriteMacroBlockTask::init(ObDDLIndependentDag *ddl_dag, const ObTable
   } else {
     ddl_dag_ = ddl_dag;
     tablet_id_ = tablet_id;
+    tablet_ids_.reset();
+  }
+  return ret;
+}
+
+int ObGroupWriteMacroBlockTask::init(ObDDLIndependentDag *ddl_dag,
+                                     const ObIArray<ObTabletID> &tablet_ids)
+{
+  int ret = OB_SUCCESS;
+  if (OB_UNLIKELY(nullptr == ddl_dag || tablet_ids.empty())) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument", K(ret), KP(ddl_dag), K(tablet_ids));
+  } else if (OB_FAIL(tablet_ids_.assign(tablet_ids))) {
+    LOG_WARN("assign tablet ids failed", K(ret));
+  } else {
+    ddl_dag_ = ddl_dag;
+    tablet_id_.reset();
   }
   return ret;
 }
@@ -72,6 +92,12 @@ int ObGroupWriteMacroBlockTask::process()
   if (OB_ISNULL(ddl_dag_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("ddl dag is null", K(ret), KP(ddl_dag_));
+  } else if (!tablet_ids_.empty()) {
+    for (int64_t i = 0; OB_SUCC(ret) && i < tablet_ids_.count(); ++i) {
+      if (OB_FAIL(group_write_macro_block(tablet_ids_.at(i)))) {
+        LOG_WARN("group write macro block failed", K(ret), K(i), K(tablet_ids_.at(i)));
+      }
+    }
   } else if (tablet_id_.is_valid()) {
     if (OB_FAIL(group_write_macro_block(tablet_id_))) {
       LOG_WARN("group write macro block failed", K(ret));

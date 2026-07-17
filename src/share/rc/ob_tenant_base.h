@@ -94,6 +94,7 @@ class ObTenantMdsService;
   class ObTenantCGReadInfoMgr;
   struct ObDDLMergeBucketLock;
   class ObTenantDirectLoadMgr;
+  class ObDDLDagMonitorMgr;
   class ObEmptyReadBucket;
   class ObTabletMemtableMgrPool;
 
@@ -285,6 +286,7 @@ using ObTableScanIteratorObjPool = common::ObServerObjectPool<oceanbase::storage
       sql::ObTenantSqlMemoryManager*,                \
       sql::dtl::ObDTLIntermResultManager*,           \
       sql::ObPlanMonitorNodeList*,                   \
+      storage::ObDDLDagMonitorMgr*,                  \
       sql::ObDataAccessService*,                     \
       sql::ObDASIDService*,                          \
       share::schema::ObTenantSchemaService*,         \

@@ -46,6 +46,7 @@ int ObGITaskSet::get_task_at_pos(ObGranuleTaskInfo &info, const int64_t &pos) co
     info.ranges_.reset();
     info.ss_ranges_.reset();
     info.granule_type_ = gi_task_set_.at(pos).granule_type_;
+    info.slice_idx_ = cur_idx; // only for fts slice idx
     for (int64_t i = pos; OB_SUCC(ret) && i < gi_task_set_.count(); i++) {
       if (cur_idx == gi_task_set_.at(i).idx_) {
         if (OB_FAIL(info.ranges_.push_back(gi_task_set_.at(i).range_))) {
@@ -1946,6 +1947,8 @@ int ObGranulePumpArgs::assign(const ObGranulePumpArgs &rhs)
   lucky_one_ = rhs.lucky_one_;
   extract_finished_ = rhs.extract_finished_;
   gi_op_id_ = rhs.gi_op_id_;
+  lucky_one_regenerate_ = rhs.lucky_one_regenerate_;
+  regenerate_finished_ = rhs.regenerate_finished_;
   if (OB_FAIL(op_info_.assign(rhs.op_info_))) {
     LOG_WARN("Failed to assign op_info", K(ret));
   } else if (OB_FAIL(tablet_arrays_.assign(rhs.tablet_arrays_))) {

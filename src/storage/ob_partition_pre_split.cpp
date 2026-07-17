@@ -318,8 +318,13 @@ int ObPartitionPreSplit::get_global_index_pre_split_schema_if_need(
     for (int64_t i = 0; OB_SUCC(ret) && i < index_arg_list.count(); ++i) {
       ObIndexArg *index_arg = index_arg_list.at(i);
       if (index_arg->index_action_type_ == ObIndexArg::ADD_INDEX) {
+        ObCreateIndexArg *create_index_arg = static_cast<ObCreateIndexArg *>(index_arg);
+        if (!ObSimpleTableSchemaV2::is_global_index_table(create_index_arg->index_type_)) {
+          // Pre-split only applies to global indexes.  A local FTS arg still
+          // contains user columns here, before its hidden columns are built.
+          continue;
+        }
         HEAP_VAR(ObTableSchema, index_schema) {
-          ObCreateIndexArg *create_index_arg = static_cast<ObCreateIndexArg *>(index_arg);
           if (OB_FAIL(index_schema.assign(create_index_arg->index_schema_))) {
             LOG_WARN("fail to assign index schema", K(ret));
           } else if (OB_FALSE_IT(index_schema.set_data_table_id(data_table_schema->get_table_id()))) {

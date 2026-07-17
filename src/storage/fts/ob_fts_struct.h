@@ -28,6 +28,31 @@ namespace oceanbase
 namespace storage
 {
 
+class ObFTToken final
+{
+public:
+  ObFTToken()
+      : is_calc_hash_val_(false), hash_val_(0), hash_func_(nullptr),
+        cmp_func_(nullptr), meta_(), token_() {}
+  ~ObFTToken() = default;
+  int init(const char *ptr, const int64_t length, const ObObjMeta &meta,
+           const common::ObDatumHashFuncType hash_func, const ObDatumCmpFuncType cmp_func);
+  const ObDatum &get_token() const { return token_; }
+  ObCollationType get_collation_type() const { return meta_.get_collation_type(); }
+  bool empty() const { return token_.get_string().empty(); }
+  int hash(uint64_t &hash_val) const;
+  bool operator==(const ObFTToken &other) const;
+  bool operator!=(const ObFTToken &other) const { return !(*this == other); }
+  TO_STRING_KV(K_(is_calc_hash_val), K_(hash_val), KP_(hash_func), KP_(cmp_func), K_(meta), K_(token));
+private:
+  mutable bool is_calc_hash_val_;
+  mutable uint64_t hash_val_;
+  common::ObDatumHashFuncType hash_func_;
+  ObDatumCmpFuncType cmp_func_;
+  ObObjMeta meta_;
+  ObDatum token_;
+};
+
 class ObFTWord final
 {
 public:

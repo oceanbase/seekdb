@@ -3183,3 +3183,10 @@ void ObDDLEventInfo::set_inner_sql_id(const int64_t execution_id)
   ObCurTraceId::set_inner_sql_id(execution_id);
   trace_id_ = *ObCurTraceId::get_trace_id();
 }
+
+
+/* if satisfy any following requirements, using batch interface
+ * 1. column store table
+ * 2. vec index
+ * 3. fts index or fts doc word aux index
+*/

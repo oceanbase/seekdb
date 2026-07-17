@@ -65,6 +65,8 @@ public:
                        int64_t size);
 
   // Shallow copy
+  int shallow_copy(const IVectorPtrs &vectors, const int64_t batch_size);
+  int shallow_copy(const common::ObIArray<ObDatumVector> &datum_vectors, const int64_t batch_size);
 
   int get_datum_row(const int64_t batch_idx, ObDirectLoadDatumRow &datum_row) const;
 

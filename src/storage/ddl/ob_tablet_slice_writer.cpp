@@ -23,6 +23,7 @@
 #include "storage/ddl/ob_cg_macro_block_writer.h"
 #include "storage/ddl/ob_lob_macro_block_writer.h"
 #include "storage/direct_load/ob_direct_load_vector_utils.h"
+#include "storage/direct_load/ob_direct_load_batch_datum_rows.h"
 #include "sql/engine/ob_batch_rows.h"
 #include "storage/ob_tablet_autoincrement_service.h"
 
@@ -1260,6 +1261,191 @@ int ObCsSliceWriter::flush_row_buffer()
     } else {
       row_buffer_.reuse();
     }
+  }
+  return ret;
+}
+
+ObFtsSliceWriter::ObFtsSliceWriter()
+  : ObCsSliceWriter(), fts_row_buffer_(nullptr)
+{
+}
+
+ObFtsSliceWriter::~ObFtsSliceWriter()
+{
+  if (OB_NOT_NULL(fts_row_buffer_)) {
+    fts_row_buffer_->~ObDirectLoadBatchDatumRows();
+    ob_free(fts_row_buffer_);
+    fts_row_buffer_ = nullptr;
+  }
+}
+
+int ObFtsSliceWriter::get_row_buffer(ObDirectLoadBatchDatumRows *&row_buffer)
+{
+  int ret = OB_SUCCESS;
+  row_buffer = fts_row_buffer_;
+  if (OB_NOT_NULL(row_buffer)) {
+    // already initialized
+  } else {
+    const ObMemAttr mem_attr("FtsSWRows");
+    const int64_t multi_version_col_cnt = ObMultiVersionRowkeyHelpper::get_extra_rowkey_col_cnt();
+    ObDirectLoadBatchDatumRows *new_buffer = OB_NEW(ObDirectLoadBatchDatumRows, mem_attr);
+    if (OB_ISNULL(new_buffer)) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+      LOG_WARN("failed to allocate FTS row buffer", K(ret));
+    } else if (OB_FAIL(ObDDLUtil::init_batch_rows(writer_param_.ddl_table_schema_,
+                                                  writer_param_.max_batch_size_,
+                                                  new_buffer->batch_rows_))) {
+      LOG_WARN("init FTS row buffer failed", K(ret));
+    } else {
+      const int64_t snapshot_version = writer_param_.snapshot_version_;
+      const int64_t storage_column_count = writer_param_.ddl_table_schema_.column_items_.count();
+      ObIVector *snapshot_version_vector = nullptr;
+      ObIVector *sql_seq_vector = nullptr;
+      if (OB_FAIL(ObDirectLoadVectorUtils::make_const_multi_version_vector(
+              -snapshot_version, new_buffer->allocator_, snapshot_version_vector))) {
+        LOG_WARN("init snapshot version vector failed", K(ret));
+      } else if (OB_FAIL(ObDirectLoadVectorUtils::make_const_multi_version_vector(
+                     0, new_buffer->allocator_, sql_seq_vector))) {
+        LOG_WARN("init sql sequence vector failed", K(ret));
+      } else {
+        new_buffer->datum_rows_.row_flag_ = ObDmlFlag::DF_INSERT;
+        const ObIArray<ObDirectLoadVector *> &vectors = new_buffer->batch_rows_.get_vectors();
+        for (int64_t i = 0; OB_SUCC(ret) && i < rowkey_column_count_; ++i) {
+          if (OB_FAIL(new_buffer->datum_rows_.vectors_.push_back(vectors.at(i)->get_vector()))) {
+            LOG_WARN("append rowkey vector failed", K(ret));
+          }
+        }
+        if (OB_SUCC(ret) && OB_FAIL(new_buffer->datum_rows_.vectors_.push_back(snapshot_version_vector))) {
+          LOG_WARN("append snapshot version vector failed", K(ret));
+        } else if (OB_SUCC(ret) && OB_FAIL(new_buffer->datum_rows_.vectors_.push_back(sql_seq_vector))) {
+          LOG_WARN("append sql sequence vector failed", K(ret));
+        }
+        for (int64_t i = rowkey_column_count_; OB_SUCC(ret) && i < vectors.count(); ++i) {
+          if (OB_FAIL(new_buffer->datum_rows_.vectors_.push_back(
+                  vectors.at(i)->get_vector()))) {
+            LOG_WARN("append storage vector failed", K(ret), K(i), K(storage_column_count), K(multi_version_col_cnt));
+          }
+        }
+      }
+    }
+    if (OB_FAIL(ret)) {
+      if (OB_NOT_NULL(new_buffer)) {
+        new_buffer->~ObDirectLoadBatchDatumRows();
+        ob_free(new_buffer);
+      }
+    } else {
+      fts_row_buffer_ = new_buffer;
+      row_buffer = new_buffer;
+    }
+  }
+  return ret;
+}
+
+int ObFtsSliceWriter::append_current_row(const ObIArray<ObDatum *> &datums)
+{
+  int ret = OB_SUCCESS;
+  ObDirectLoadBatchDatumRows *row_buffer = nullptr;
+  if (OB_UNLIKELY(!is_inited_)) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("FTS slice writer not initialized", K(ret));
+  } else if (OB_FAIL(get_row_buffer(row_buffer))) {
+    LOG_WARN("get FTS row buffer failed", K(ret));
+  } else if (OB_FAIL(row_buffer->batch_rows_.append_row(datums))) {
+    LOG_WARN("append FTS row failed", K(ret));
+  } else if (row_buffer->batch_rows_.full() && OB_FAIL(output_row_buffer())) {
+    LOG_WARN("output FTS row buffer failed", K(ret));
+  }
+  return ret;
+}
+
+int ObFtsSliceWriter::append_current_batch(
+    const ObIArray<ObIVector *> &vectors,
+    share::ObBatchSelector &selector)
+{
+  int ret = OB_SUCCESS;
+  if (OB_UNLIKELY(!is_inited_ || !selector.is_valid()
+      || ObBatchSelector::CONTINIOUS_LENGTH != selector.get_type())) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid FTS batch", K(ret), K(is_inited_), K(selector));
+  } else {
+    int64_t remain_row_count = selector.size();
+    int64_t current_offset = selector.get_offset();
+    while (OB_SUCC(ret) && remain_row_count > 0) {
+      ObDirectLoadBatchDatumRows *row_buffer = nullptr;
+      if (OB_FAIL(get_row_buffer(row_buffer))) {
+        LOG_WARN("get FTS row buffer failed", K(ret));
+      } else {
+        const int64_t append_size = min(row_buffer->batch_rows_.remain_size(), remain_row_count);
+        if (OB_FAIL(row_buffer->batch_rows_.append_batch(vectors, current_offset, append_size))) {
+          LOG_WARN("append FTS batch failed", K(ret), K(current_offset), K(append_size));
+        } else if (row_buffer->batch_rows_.full() && OB_FAIL(output_row_buffer())) {
+          LOG_WARN("output FTS row buffer failed", K(ret));
+        } else {
+          remain_row_count -= append_size;
+          current_offset += append_size;
+        }
+      }
+    }
+  }
+  return ret;
+}
+
+int64_t ObFtsSliceWriter::get_row_count() const
+{
+  return OB_NOT_NULL(fts_row_buffer_) ? fts_row_buffer_->batch_rows_.size() : 0;
+}
+
+int ObFtsSliceWriter::output_row_buffer()
+{
+  int ret = OB_SUCCESS;
+  ObDDLChunk output_chunk;
+  ObChunk *chunk_data = nullptr;
+  if (OB_ISNULL(fts_row_buffer_) || fts_row_buffer_->batch_rows_.empty()) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("invalid FTS row buffer", K(ret), KP(fts_row_buffer_));
+  } else if (OB_ISNULL(chunk_data = OB_NEW(ObChunk, ObMemAttr("FtsSWChunk")))) {
+    ret = OB_ALLOCATE_MEMORY_FAILED;
+    LOG_WARN("allocate FTS chunk failed", K(ret));
+  } else {
+    fts_row_buffer_->datum_rows_.row_count_ = fts_row_buffer_->batch_rows_.size();
+    chunk_data->type_ = ObChunk::DIRECT_LOAD_BATCH_DATUM_ROWS;
+    chunk_data->direct_load_batch_rows_ = fts_row_buffer_;
+    output_chunk.tablet_id_ = tablet_id_;
+    output_chunk.slice_idx_ = slice_idx_;
+    output_chunk.is_slice_end_ = false;
+    output_chunk.chunk_data_ = chunk_data;
+    fts_row_buffer_ = nullptr;
+    if (OB_FAIL(writer_param_.ddl_dag_->add_scan_chunk(output_chunk))) {
+      LOG_WARN("add FTS scan chunk failed", K(ret), K(output_chunk));
+    }
+  }
+  return ret;
+}
+
+int ObFtsSliceWriter::output_end_chunk()
+{
+  int ret = OB_SUCCESS;
+  ObDDLChunk output_chunk;
+  output_chunk.tablet_id_ = tablet_id_;
+  output_chunk.slice_idx_ = slice_idx_;
+  output_chunk.is_slice_end_ = true;
+  if (OB_FAIL(writer_param_.ddl_dag_->add_scan_chunk(output_chunk))) {
+    LOG_WARN("add FTS end chunk failed", K(ret), K(output_chunk));
+  }
+  return ret;
+}
+
+int ObFtsSliceWriter::close()
+{
+  int ret = OB_SUCCESS;
+  if (OB_UNLIKELY(!is_inited_)) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("FTS slice writer not initialized", K(ret));
+  } else if (OB_NOT_NULL(fts_row_buffer_) && !fts_row_buffer_->batch_rows_.empty()
+      && OB_FAIL(output_row_buffer())) {
+    LOG_WARN("flush FTS row buffer failed", K(ret));
+  } else if (OB_FAIL(output_end_chunk())) {
+    LOG_WARN("output FTS end chunk failed", K(ret));
   }
   return ret;
 }

@@ -173,6 +173,7 @@ int ObIndexSSTableBuildTask::process()
         session_param.ddl_info_.set_source_table_hidden(data_schema->is_user_hidden_table());
         session_param.ddl_info_.set_dest_table_hidden(index_schema->is_user_hidden_table());
         session_param.ddl_info_.set_retryable_ddl(is_retryable_ddl_);
+        session_param.ddl_info_.set_partition_local_ddl(is_partition_local_ddl_);
         session_param.nls_formats_[ObNLSFormatEnum::NLS_DATE] = nls_date_format_;
         session_param.nls_formats_[ObNLSFormatEnum::NLS_TIMESTAMP] = nls_timestamp_format_;
         session_param.nls_formats_[ObNLSFormatEnum::NLS_TIMESTAMP_TZ] = nls_timestamp_tz_format_;
@@ -265,7 +266,8 @@ ObAsyncTask *ObIndexSSTableBuildTask::deep_copy(char *buf, const int64_t buf_siz
         is_partitioned_local_index_task_,
         root_service_,
         inner_sql_exec_addr_,
-        is_retryable_ddl_);
+        is_retryable_ddl_,
+        is_partition_local_ddl_);
     if (OB_SUCCESS != (task->set_nls_format(nls_date_format_, nls_timestamp_format_, nls_timestamp_tz_format_))) {
       task->~ObIndexSSTableBuildTask();
       task = nullptr;
@@ -945,7 +947,8 @@ int ObIndexBuildTask::send_build_single_replica_request(const bool &is_partition
           is_partitioned_local_index_task,
           root_service_,
           ls_leader_addr,
-          is_retryable_ddl_);
+          is_retryable_ddl_,
+          create_index_arg_.is_partition_local_ddl_);
       if (OB_FAIL(set_sql_exec_addr(ls_leader_addr))) {
         LOG_WARN("failed to set sql execute addr", K(ret), K(ls_leader_addr));
       } else if (OB_FAIL(task.set_nls_format(create_index_arg_.nls_date_format_,

@@ -51,6 +51,7 @@
 #include "storage/compaction/ob_sstable_merge_info_mgr.h" // ObTenantSSTableMergeInfoMgr
 #include "observer/scheduler/ob_dag_warning_history_mgr.h"
 #include "storage/access/ob_table_scan_iterator.h"
+#include "storage/ddl/ob_ddl_dag_monitor_mgr.h"
 #include "share/ob_ddl_sim_point.h"
 #include "rootserver/freeze/ob_major_freeze_service.h"
 #include "observer/omt/ob_tenant_srs.h"
@@ -2056,6 +2057,7 @@ int ObServer::obs_construct_modules()
   if (OB_SUCC(ret) && OB_FAIL(ObTenantSqlMemoryManager::mtl_new(mods_tenant_sql_memory_manager_))) { SERVER_LOG(WARN, "mods_tenant_sql_memory_manager_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(mtl_new_default(mods_dtl_interm_result_manager_))) { SERVER_LOG(WARN, "mods_dtl_interm_result_manager_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(mtl_new_default(mods_plan_monitor_node_list_))) { SERVER_LOG(WARN, "mods_plan_monitor_node_list_ fail", KR(ret)); }
+  if (OB_SUCC(ret) && OB_FAIL(mtl_new_default(mods_ddl_dag_monitor_mgr_))) { SERVER_LOG(WARN, "mods_ddl_dag_monitor_mgr_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(mtl_new_default(mods_data_access_service_))) { SERVER_LOG(WARN, "mods_data_access_service_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(mtl_new_default(mods_dasid_service_))) { SERVER_LOG(WARN, "mods_dasid_service_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(mtl_new_default(mods_tenant_schema_service_))) { SERVER_LOG(WARN, "mods_tenant_schema_service_ fail", KR(ret)); }
@@ -2142,6 +2144,7 @@ int ObServer::obs_init_modules()
   if (OB_SUCC(ret) && OB_FAIL(ObTenantSqlMemoryManager::mtl_init(mods_tenant_sql_memory_manager_))) { SERVER_LOG(WARN, "mods_tenant_sql_memory_manager_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(ObDTLIntermResultManager::mtl_init(mods_dtl_interm_result_manager_))) { SERVER_LOG(WARN, "mods_dtl_interm_result_manager_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(ObPlanMonitorNodeList::mtl_init(mods_plan_monitor_node_list_))) { SERVER_LOG(WARN, "mods_plan_monitor_node_list_ fail", KR(ret)); }
+  if (OB_SUCC(ret) && OB_FAIL(ObDDLDagMonitorMgr::mtl_init(mods_ddl_dag_monitor_mgr_))) { SERVER_LOG(WARN, "mods_ddl_dag_monitor_mgr_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(ObDataAccessService::mtl_init(mods_data_access_service_))) { SERVER_LOG(WARN, "mods_data_access_service_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(ObDASIDService::mtl_init(mods_dasid_service_))) { SERVER_LOG(WARN, "mods_dasid_service_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(ObTenantSchemaService::mtl_init(mods_tenant_schema_service_))) { SERVER_LOG(WARN, "mods_tenant_schema_service_ fail", KR(ret)); }
@@ -2367,6 +2370,7 @@ void ObServer::obs_destroy_modules()
   mtl_destroy_default(mods_dasid_service_);
   ObDataAccessService::mtl_destroy(mods_data_access_service_);
   ObPlanMonitorNodeList::mtl_destroy(mods_plan_monitor_node_list_);
+  mtl_destroy_default(mods_ddl_dag_monitor_mgr_);
   ObDTLIntermResultManager::mtl_destroy(mods_dtl_interm_result_manager_);
   ObTenantSqlMemoryManager::mtl_destroy(mods_tenant_sql_memory_manager_);
   ObPxPools::mtl_destroy(mods_px_pools_);

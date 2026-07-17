@@ -454,6 +454,7 @@ public:
   sql::ObTenantSqlMemoryManager * tenant_sql_memory_manager() override { return mods_tenant_sql_memory_manager_; }
   sql::dtl::ObDTLIntermResultManager * dtl_interm_result_manager() override { return mods_dtl_interm_result_manager_; }
   sql::ObPlanMonitorNodeList * plan_monitor_node_list() override { return mods_plan_monitor_node_list_; }
+  storage::ObDDLDagMonitorMgr * ddl_dag_monitor_mgr() override { return mods_ddl_dag_monitor_mgr_; }
   sql::ObDataAccessService * data_access_service() override { return mods_data_access_service_; }
   sql::ObDASIDService * dasid_service() override { return mods_dasid_service_; }
   share::schema::ObTenantSchemaService * tenant_schema_service() override { return mods_tenant_schema_service_; }
@@ -560,6 +561,7 @@ private:
   sql::ObTenantSqlMemoryManager * mods_tenant_sql_memory_manager_ = nullptr;
   sql::dtl::ObDTLIntermResultManager * mods_dtl_interm_result_manager_ = nullptr;
   sql::ObPlanMonitorNodeList * mods_plan_monitor_node_list_ = nullptr;
+  storage::ObDDLDagMonitorMgr * mods_ddl_dag_monitor_mgr_ = nullptr;
   sql::ObDataAccessService * mods_data_access_service_ = nullptr;
   sql::ObDASIDService * mods_dasid_service_ = nullptr;
   share::schema::ObTenantSchemaService * mods_tenant_schema_service_ = nullptr;

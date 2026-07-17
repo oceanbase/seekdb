@@ -20,6 +20,8 @@
 #include "storage/ddl/ob_ddl_struct.h"
 #include "storage/ddl/ob_ddl_independent_dag.h"
 #include "observer/scheduler/ob_tenant_dag_scheduler.h"
+#include "lib/lock/ob_thread_cond.h"
+#include "sql/engine/px/ob_px_dtl_msg.h"
 
 namespace oceanbase
 {
@@ -46,6 +48,23 @@ public:
   virtual int init_by_param(const share::ObIDagInitParam *param) override;
 
   int set_px_finished();
+  int append_sample_ranges(const bool is_inverted,
+                           const common::Ob2DArray<sql::ObPxTabletRange> &part_ranges,
+                           const int64_t expect_range_cnt);
+  int set_sample_scan_finished();
+  bool is_sample_scan_finished() const
+  {
+    return px_thread_count_ > 0 && sample_scan_finished_count_ >= px_thread_count_;
+  }
+  int wait_sample_finish();
+  int notify_sample_finished();
+  int sample_signal_notify();
+  int process();
+  int get_tablet_forward_sample_ranges(const ObTabletID &tablet_id,
+                                       ObIAllocator &allocator,
+                                       common::ObIArray<common::ObNewRange> &ranges);
+  int generate_partition_local_fixed_tasks(common::ObIArray<share::ObITask *> &tasks,
+                                           share::ObITask *next_task = nullptr);
   int update_tablet_range_count();
   int64_t get_total_slice_count() const { return total_slice_count_; }
   virtual bool is_scan_finished() override { return px_thread_count_ > 0 && px_finished_count_ >= px_thread_count_; }
@@ -53,12 +72,19 @@ public:
   INHERIT_TO_STRING_KV("DDLDag", ObDDLIndependentDag, K_(px_thread_count), K_(px_finished_count), K_(is_range_count_ready), K_(total_slice_count), K_(use_static_plan));
 
 protected:
+  int alloc_fts_sample_task(share::ObITask *&fts_sample_task);
+  int convert_range_cut_to_ranges(const sql::ObPxTabletRange::RangeCut &range_cut,
+                                  const uint64_t table_id,
+                                  ObIAllocator &allocator,
+                                  common::ObIArray<common::ObNewRange> &ranges) const;
   int64_t px_thread_count_;
   int64_t px_finished_count_;
+  int64_t sample_scan_finished_count_;
   lib::ObMutex mutex_;
   bool is_range_count_ready_; // update table total slice count and each tablet slice count
   int64_t total_slice_count_; // for idempotence of user autoinc column
   bool use_static_plan_;
+  common::ObThreadCond sample_cond_;
 };
 
 

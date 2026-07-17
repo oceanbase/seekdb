@@ -31,6 +31,7 @@ namespace oceanbase
 {
 namespace sql
 {
+class ObGranuleTaskInfo;
 class ObP2PDatahubMsgBase;
 class ObPartitionIdHashFunc
 {
@@ -206,6 +207,7 @@ public:
   ObPxRFStaticInfo px_rf_info_;
   bool hash_part_;
   bool enable_adaptive_task_splitting_;
+  ObExpr *ddl_slice_id_expr_; // DDL slice id for partition-local FTS
 };
 
 class ObGranuleIteratorOp : public ObOperator
@@ -330,6 +332,8 @@ private:
   bool enable_parallel_runtime_filter_extract_query_range();
   int do_single_runtime_filter_extract_query_range(ObGranuleTaskInfo &gi_task_info);
   int do_parallel_runtime_filter_extract_query_range(bool need_regenerate_gi_task = true);
+  // regenerate gi task by sample ranges
+  int lucky_one_regenerate(ObGranulePumpArgs *args);
   // ---end----
   bool enable_adaptive_task_splitting()
   {
@@ -368,7 +372,10 @@ private:
   ObPxTablet2PartIdMap tablet2part_id_map_;
   ObOperator *real_child_;
   bool is_parallel_runtime_filtered_;
-
+  // FTS slice_idx state
+  bool is_fts_sample_done_;
+  int64_t current_slice_idx_;
+  int64_t total_slice_count_;
   // for runtime filter extract query range
   bool is_parallel_rf_qr_extracted_; // parallel runtime filter query range extracted
   ObSEArray<ObP2PDhKey, 2> query_range_rf_keys_;

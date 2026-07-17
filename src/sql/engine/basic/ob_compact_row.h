@@ -29,6 +29,16 @@ class ObIAllocator;
 }
 namespace sql
 {
+struct ColMetaInfo
+{
+  ColMetaInfo() : is_fixed_(false), fixed_length_(0) {}
+  ColMetaInfo(const bool is_fixed, const uint32_t fixed_length)
+      : is_fixed_(is_fixed), fixed_length_(fixed_length) {}
+  TO_STRING_KV(K_(is_fixed), K_(fixed_length));
+  bool is_fixed_;
+  uint32_t fixed_length_;
+};
+
 struct RowHeader {
   RowHeader() : row_size_(0) {}
 
@@ -63,6 +73,9 @@ public:
     reset();
   }
   int init(const ObExprPtrIArray &exprs, const int32_t extra_size,
+           const bool reorder_fixed_expr = true,
+           common::ObIAllocator *allocator = NULL);
+  int init(const common::ObIArray<ColMetaInfo> &expr_infos, const int32_t extra_size,
            const bool reorder_fixed_expr = true,
            common::ObIAllocator *allocator = NULL);
   int assign(const RowMeta &row_meta, common::ObIAllocator *allocator = NULL);

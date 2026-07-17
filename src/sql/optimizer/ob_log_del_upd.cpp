@@ -20,6 +20,7 @@
 #include "sql/optimizer/ob_log_table_scan.h"
 #include "sql/optimizer/ob_log_exchange.h"
 #include "sql/optimizer/ob_log_join.h"
+#include "sql/optimizer/ob_log_granule_iterator.h"
 #include "sql/resolver/ddl/ob_fts_index_builder_util.h"
 
 using namespace oceanbase;
@@ -507,8 +508,50 @@ int ObLogDelUpd::generate_ddl_slice_id_expr()
   ObLogicalOperator *sort_op = nullptr;
   ObLogicalOperator *consumer = nullptr;
   ObLogExchange *producer = nullptr;
+  ObLogicalOperator *stat_collector_op = nullptr;
+  ObLogicalOperator *subplan_scan_op = nullptr;
+  ObLogicalOperator *op = nullptr;
   ObOptimizerContext &ctx = get_plan()->get_optimizer_context();
-  if (OB_FAIL(ObRawExprUtils::build_pseudo_ddl_slice_id(ctx.get_expr_factory(), *ctx.get_session_info(), ddl_slice_expr))) {
+
+  if (OB_ISNULL(ctx.get_session_info())) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("session info is null", K(ret));
+  } else if (ctx.get_session_info()->get_ddl_info().is_partition_local_ddl()) {
+    stat_collector_op = get_child(ObLogicalOperator::first_child);
+    if (OB_NOT_NULL(stat_collector_op) && stat_collector_op->get_type() == log_op_def::LOG_SORT) {
+      stat_collector_op = stat_collector_op->get_child(ObLogicalOperator::first_child);
+    }
+    if (OB_ISNULL(stat_collector_op)
+        || stat_collector_op->get_type() != log_op_def::LOG_STAT_COLLECTOR
+        || OB_ISNULL(subplan_scan_op = stat_collector_op->get_child(ObLogicalOperator::first_child))) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("get ddl slice id failed", K(ret), KP(stat_collector_op), KP(subplan_scan_op));
+    } else {
+      if (subplan_scan_op->get_type() == log_op_def::LOG_SORT) {
+        subplan_scan_op = subplan_scan_op->get_child(ObLogicalOperator::first_child);
+      }
+      if (OB_ISNULL(subplan_scan_op)
+        || subplan_scan_op->get_type() != log_op_def::LOG_SUBPLAN_SCAN
+        || OB_ISNULL(op = subplan_scan_op->get_child(ObLogicalOperator::first_child))) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("get ddl slice id failed", K(ret), KP(stat_collector_op), KP(subplan_scan_op));
+      } else if (op->get_type() == log_op_def::LOG_GRANULE_ITERATOR) {
+        if (OB_FAIL(ObRawExprUtils::build_pseudo_ddl_slice_id(
+            ctx.get_expr_factory(), *ctx.get_session_info(), ddl_slice_expr))) {
+          LOG_WARN("build pseudo ddl slice id expr failed", K(ret));
+        } else {
+          ObLogGranuleIterator *gi_op = static_cast<ObLogGranuleIterator *>(op);
+          ddl_slice_id_expr_ = ddl_slice_expr;
+          gi_op->set_ddl_slice_id_expr(ddl_slice_expr);
+        }
+      } else if (op->get_type() == log_op_def::LOG_TABLE_SCAN) {
+        // A serial partition-local plan has no GI and therefore needs no slice id expression.
+      } else {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("op type not match", K(ret), KP(op));
+      }
+    }
+  } else if (OB_FAIL(ObRawExprUtils::build_pseudo_ddl_slice_id(ctx.get_expr_factory(), *ctx.get_session_info(), ddl_slice_expr))) {
     LOG_WARN("build pseudo ddl slice id expr failed", K(ret));
   } else if (OB_ISNULL(sort_op = get_child(ObLogicalOperator::first_child)) || sort_op->get_type() != log_op_def::LOG_SORT // sort op
       || OB_ISNULL(consumer = sort_op->get_child(ObLogicalOperator::first_child)) || consumer->get_type() != log_op_def::LOG_EXCHANGE // exchange consumer

@@ -19,6 +19,7 @@
 
 #include "observer/scheduler/ob_independent_dag.h"
 #include "storage/ddl/ob_ddl_struct.h"
+#include "storage/ddl/ob_ddl_dag_monitor_node.h"
 #include "storage/ddl/ob_pipeline.h"
 
 namespace oceanbase
@@ -31,6 +32,8 @@ struct ObDDLTabletContext;
 class ObDDLSlice;
 class ObTabletDDLKvMgr;
 class ObIDDLMergeHelper;
+class ObDDLSortProvider;
+class ObDDLIndependentDagRootMonitorInfo;
 
 struct ObDDLIndependentDagInitParam : public share::ObIDagInitParam
 {
@@ -74,8 +77,14 @@ public:
   int64_t get_ddl_thread_count() const { return ddl_thread_count_; }
   const ObDDLTaskParam &get_ddl_task_param() const { return ddl_task_param_; }
   const ObDDLTableSchema &get_ddl_table_schema() const { return ddl_table_schema_; }
+  int get_ddl_table_schema(const ObTabletID &tablet_id,
+                           const ObDDLTableSchema *&ddl_table_schema) const;
+  const ObDDLTableSchema &get_fts_word_doc_ddl_table_schema() const { return fts_word_doc_ddl_table_schema_; }
+  int get_sort_ddl_table_schema(const ObDDLTableSchema *&ddl_table_schema) const;
+  int check_enable_encode_sortkey(bool &enable_encode) const;
   const ObDirectLoadTxInfo &get_tx_info() const { return tx_info_; }
   const ObIArray<std::pair<share::ObLSID, ObTabletID>> &get_ls_tablet_ids() { return ls_tablet_ids_; }
+  const ObIArray<std::pair<share::ObLSID, ObTabletID>> &get_sort_ls_tablet_ids() { return sort_ls_tablet_ids_; }
   int64_t get_pipeline_count() const { return ATOMIC_LOAD(&pipeline_count_); }
   void inc_pipeline_count() { ATOMIC_INC(&pipeline_count_); }
   void dec_pipeline_count() { ATOMIC_DEC(&pipeline_count_); }
@@ -91,16 +100,34 @@ public:
   int schedule_tablet_merge_task();
   virtual bool use_tablet_mode() const { return false; }
   bool is_inc_major_log() const { return is_inc_major_log_; }
+  ObDDLSortProvider *get_sort_provider() { return sort_provider_; }
+  void update_fts_build_stat(const ObFTSBuildStat &stat);
   INHERIT_TO_STRING_KV("IndependentDag", ObIndependentDag, K_(is_inited), K_(direct_load_type),
-                       K_(ddl_thread_count), K_(ddl_task_param), K_(pipeline_count), K_(ret_code));
-
+                       K_(ddl_thread_count), K_(ddl_task_param), K_(pipeline_count), K_(ret_code),
+                       KP_(sort_provider));
+public:
+  static constexpr int64_t DEFAULT_ROW_BUFFER_SIZE = 256;
 protected:
+  virtual int init_monitor_node() override;
+  int init_sort_provider();
+  int init_merge_tasks(const bool for_major,
+                       const ObIArray<std::pair<share::ObLSID, ObTabletID>> &ls_tablet_ids,
+                       ObArray<share::ObITask*> &data_merge_tasks,
+                       ObArray<share::ObITask*> &lob_merge_tasks);
+  int add_merge_tasks(const ObIArray<share::ObITask *> &data_merge_tasks,
+                      const ObIArray<share::ObITask *> &lob_merge_tasks,
+                      ObIArray<share::ObITask *> &tasks);
+  int set_merge_tasks(const ObIArray<share::ObITask *> &data_merge_tasks,
+                      const ObIArray<share::ObITask *> &lob_merge_tasks,
+                      share::ObITask *prev_task,
+                      share::ObITask *next_task);
   int alloc_vector_index_write_and_build_pipeline(
       const ObIndexType &index_type,
       const ObIArray<std::pair<share::ObLSID, ObTabletID>> &ls_tablet_ids,
       ObIArray<share::ObITask *> &vector_index_task_array);
 private:
   int init_ddl_table_schema();
+  int init_sort_ls_tablet_ids();
   int init_tablet_context_map();
   int push_chunk(ObDDLSlice *ddl_slice, ObChunk *&chunk_data);
   int add_vector_index_append_pipeline(const ObIndexType &index_type, ObDDLTabletContext *tablet_context, ObDDLSlice *ddl_slice);
@@ -115,7 +142,6 @@ private:
   int init_merge_tasks(bool for_major, ObArray<share::ObITask*> &data_merge_tasks, ObArray<share::ObITask*> &lob_merge_tasks);
   int check_is_first_ddl_kv(bool &is_first);
   int check_is_first_ddl_kv(ObTabletDDLKvMgr &ddl_kv_mgr, bool &is_first);
-
   int inc_generate_write_macro_block_tasks(common::ObIArray<share::ObITask *> &write_macro_block_tasks, share::ObITask *next_task);
   int full_generate_write_macro_block_tasks(common::ObIArray<share::ObITask *> &write_macro_block_tasks, share::ObITask *next_task);
   int finish_chunk(ObChunk *&chunk);
@@ -127,12 +153,38 @@ protected:
   int64_t ddl_thread_count_;
   ObDDLTaskParam ddl_task_param_;
   ObDDLTableSchema ddl_table_schema_;
+  ObDDLTableSchema fts_word_doc_ddl_table_schema_;
   ObDirectLoadTxInfo tx_info_;
   ObArray<std::pair<share::ObLSID, ObTabletID>> ls_tablet_ids_;
+  ObArray<std::pair<share::ObLSID, ObTabletID>> sort_ls_tablet_ids_;
   hash::ObHashMap<ObTabletID, ObDDLTabletContext *> tablet_context_map_;
   int64_t pipeline_count_;
   int ret_code_;
   bool is_inc_major_log_;
+  ObDDLSortProvider *sort_provider_;
+  ObDDLIndependentDagRootMonitorInfo *root_monitor_info_;
+};
+
+class ObDDLIndependentDagRootMonitorInfo : public ObDDLDagMonitorInfo
+{
+public:
+  explicit ObDDLIndependentDagRootMonitorInfo(common::ObIAllocator *allocator,
+                                               share::ObITask *task);
+  virtual ~ObDDLIndependentDagRootMonitorInfo() = default;
+  void init_dag_info(const ObDDLIndependentDag &dag);
+  void add_tokenized_word_count(const int64_t cnt) { (void)ATOMIC_AAF(&fts_stat_.tokenized_word_cnt_, MAX(0, cnt)); }
+  void add_forward_written_row_count(const int64_t cnt) { (void)ATOMIC_AAF(&fts_stat_.forward_written_row_cnt_, MAX(0, cnt)); }
+  void add_inverted_sorted_row_count(const int64_t cnt) { (void)ATOMIC_AAF(&fts_stat_.inverted_sorted_row_cnt_, MAX(0, cnt)); }
+  void add_inverted_written_row_count(const int64_t cnt) { (void)ATOMIC_AAF(&fts_stat_.inverted_written_row_cnt_, MAX(0, cnt)); }
+  void set_ret_code(const int ret_code) { ret_code_ = ret_code; }
+  virtual int convert_to_monitor_entry(ObDDLDagMonitorEntry &entry) const override;
+private:
+  int64_t ddl_task_id_;
+  int64_t execution_id_;
+  int64_t direct_load_type_;
+  int64_t ddl_thread_cnt_;
+  ObFTSBuildStat fts_stat_;
+  int ret_code_;
 };
 
 }// namespace storage

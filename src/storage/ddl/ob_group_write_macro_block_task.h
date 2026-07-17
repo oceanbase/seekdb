@@ -41,6 +41,7 @@ public:
   virtual ~ObGroupWriteMacroBlockTask();
   int init(ObDDLIndependentDag *ddl_dag);
   int init(ObDDLIndependentDag *ddl_dag, const ObTabletID &tablet_id);
+  int init(ObDDLIndependentDag *ddl_dag, const ObIArray<ObTabletID> &tablet_ids);
   int process();
   virtual void task_debug_info_to_string(char *buf, const int64_t buf_len, int64_t &pos) const override;
   int group_write_macro_block(const ObTabletID &tablet_id);
@@ -48,6 +49,7 @@ public:
 private:
   ObDDLIndependentDag *ddl_dag_;
   ObTabletID tablet_id_;
+  ObArray<ObTabletID> tablet_ids_;
   ObArray<ObITask *> group_write_tasks_;
 };
 
@@ -75,4 +77,3 @@ private:
 } // end namespace oceanbase
 
 #endif//_OCEANBASE_STORAGE_DDL_OB_GROUP_WRTIE_MACRO_BLOCK_TASK_H_
-

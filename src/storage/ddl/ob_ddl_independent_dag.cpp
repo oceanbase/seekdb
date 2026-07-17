@@ -25,8 +25,14 @@
 #include "storage/column_store/ob_column_store_replica_util.h"
 #include "storage/ddl/ob_macro_meta_store_manager.h"
 #include "storage/ddl/ob_ddl_merge_task_v2.h"
+#include "storage/ddl/ob_full_text_index_write_task.h"
 #include "storage/ddl/ob_tablet_ddl_kv_mgr.h"
+#include "storage/ddl/ob_ddl_sort_provider.h"
+#include "storage/ddl/ob_ddl_dag_monitor_entry.h"
+#include "storage/ob_order_perserving_encoder.h"
+#include "share/schema/ob_multi_version_schema_service.h"
 #include "share/ob_server_struct.h"
+#include "sql/engine/expr/ob_expr_ai/ob_ai_func_utils.h"
 
 #define USING_LOG_PREFIX STORAGE
 
@@ -42,9 +48,12 @@ ObDDLIndependentDag::ObDDLIndependentDag()
     arena_(ObMemAttr("ddl_dag")),
     direct_load_type_(ObDirectLoadType::DIRECT_LOAD_INVALID),
     ddl_thread_count_(0),
+    sort_ls_tablet_ids_(),
     pipeline_count_(0),
     ret_code_(OB_SUCCESS),
-    is_inc_major_log_(false)
+    is_inc_major_log_(false),
+    sort_provider_(nullptr),
+    root_monitor_info_(nullptr)
 {
 
 }
@@ -62,6 +71,18 @@ ObDDLIndependentDag::~ObDDLIndependentDag()
   reuse();
 }
 
+int ObDDLIndependentDag::init_monitor_node()
+{
+  int ret = OB_SUCCESS;
+  if (OB_FAIL(share::ObIndependentDag::init_monitor_node())) {
+    LOG_WARN("init independent dag monitor node failed", K(ret));
+  } else if (OB_NOT_NULL(monitor_node_)
+             && OB_FAIL(monitor_node_->alloc_monitor_info(nullptr, root_monitor_info_))) {
+    LOG_WARN("alloc ddl dag root monitor info failed", K(ret));
+  }
+  return ret;
+}
+
 void ObDDLIndependentDag::reuse()
 {
   FLOG_INFO("ddl independent dag reuse");
@@ -72,8 +93,12 @@ void ObDDLIndependentDag::reuse()
   ObTabletObjLoadHelper::free(arena_, ddl_table_schema_.storage_schema_);
   ObTabletObjLoadHelper::free(arena_, ddl_table_schema_.lob_meta_storage_schema_);
   ddl_table_schema_.reset();
+  ObTabletObjLoadHelper::free(arena_, fts_word_doc_ddl_table_schema_.storage_schema_);
+  ObTabletObjLoadHelper::free(arena_, fts_word_doc_ddl_table_schema_.lob_meta_storage_schema_);
+  fts_word_doc_ddl_table_schema_.reset();
   tx_info_.reset();
   ls_tablet_ids_.reset();
+  sort_ls_tablet_ids_.reset();
   FOREACH(tc_it, tablet_context_map_) {
     ObDDLTabletContext *tablet_context = tc_it->second;
     free_tablet_context(arena_,  tablet_context);
@@ -82,7 +107,13 @@ void ObDDLIndependentDag::reuse()
   pipeline_count_ = 0;
   ret_code_ = OB_SUCCESS;
   is_inc_major_log_ = false;
+  OB_DELETEx(ObDDLSortProvider, &arena_, sort_provider_);
   arena_.reset();
+  if (OB_NOT_NULL(root_monitor_info_)) {
+    root_monitor_info_->set_ret_code(get_dag_ret());
+    root_monitor_info_->mark_finished();
+    root_monitor_info_ = nullptr;
+  }
 }
 
 int ObDDLIndependentDag::init_by_param(const share::ObIDagInitParam *param)
@@ -105,9 +136,14 @@ int ObDDLIndependentDag::init_by_param(const share::ObIDagInitParam *param)
     is_inc_major_log_ = init_param->is_inc_major_log_;
     if (OB_FAIL(init_ddl_table_schema())) {
       LOG_WARN("init ddl table schema failed", K(ret));
+    } else if (OB_FAIL(init_sort_ls_tablet_ids())) {
+      LOG_WARN("init sort ls tablet ids failed", K(ret));
     } else if (OB_FAIL(init_tablet_context_map())) {
       LOG_WARN("init tablet context failed", K(ret));
     } else {
+      if (OB_NOT_NULL(root_monitor_info_)) {
+        root_monitor_info_->init_dag_info(*this);
+      }
       is_inited_ = true;
     }
   }
@@ -121,23 +157,186 @@ int ObDDLIndependentDag::init_ddl_table_schema()
   if (OB_FAIL(ObDDLTableSchema::fill_ddl_table_schema(ddl_task_param_.target_table_id_, arena_, ddl_table_schema_))) {
     LOG_WARN("fill ddl table schema failed", K(ret));
   }
+  if (OB_SUCC(ret)
+      && ddl_task_param_.is_partition_local_
+      && share::schema::is_fts_doc_word_aux(ddl_table_schema_.table_item_.index_type_)) {
+    static const ObString DOC_WORD_SUFFIX = ObString::make_string("_fts_doc_word");
+    ObSchemaGetterGuard schema_guard;
+    const ObTableSchema *doc_word_schema = nullptr;
+    const ObTableSchema *data_table_schema = nullptr;
+    const ObTableSchema *word_doc_schema = nullptr;
+    ObArray<ObAuxTableMetaInfo> index_infos;
+    uint64_t word_doc_table_id = OB_INVALID_ID;
+    if (OB_FAIL(ObMultiVersionSchemaService::get_instance().get_tenant_schema_guard(schema_guard))) {
+      LOG_WARN("get schema guard failed", K(ret));
+    } else if (OB_FAIL(schema_guard.get_table_schema(ddl_task_param_.target_table_id_, doc_word_schema))) {
+      LOG_WARN("get doc-word schema failed", K(ret), K(ddl_task_param_.target_table_id_));
+    } else if (OB_ISNULL(doc_word_schema)
+               || doc_word_schema->get_table_name_str().length() <= DOC_WORD_SUFFIX.length()) {
+      ret = OB_TABLE_NOT_EXIST;
+      LOG_WARN("invalid doc-word schema", K(ret), KP(doc_word_schema));
+    } else if (OB_FAIL(schema_guard.get_table_schema(doc_word_schema->get_data_table_id(), data_table_schema))) {
+      LOG_WARN("get data table schema failed", K(ret), K(doc_word_schema->get_data_table_id()));
+    } else if (OB_ISNULL(data_table_schema)) {
+      ret = OB_TABLE_NOT_EXIST;
+      LOG_WARN("data table schema is null", K(ret));
+    } else if (OB_FAIL(data_table_schema->get_simple_index_infos(index_infos))) {
+      LOG_WARN("get simple index infos failed", K(ret));
+    } else {
+      const ObString target_name(doc_word_schema->get_table_name_str().length() - DOC_WORD_SUFFIX.length(),
+                                 doc_word_schema->get_table_name_str().ptr());
+      for (int64_t i = 0; OB_SUCC(ret) && OB_INVALID_ID == word_doc_table_id && i < index_infos.count(); ++i) {
+        if (share::schema::is_fts_index_aux(index_infos.at(i).index_type_)) {
+          if (OB_FAIL(schema_guard.get_table_schema(index_infos.at(i).table_id_, word_doc_schema))) {
+            LOG_WARN("get word-doc schema failed", K(ret), K(index_infos.at(i).table_id_));
+          } else if (OB_NOT_NULL(word_doc_schema) && word_doc_schema->get_table_name_str() == target_name) {
+            word_doc_table_id = index_infos.at(i).table_id_;
+          }
+        }
+      }
+      if (OB_SUCC(ret) && OB_INVALID_ID == word_doc_table_id) {
+        ret = OB_TABLE_NOT_EXIST;
+        LOG_WARN("matching word-doc schema not found", K(ret), K(target_name));
+      } else if (OB_SUCC(ret) && OB_FAIL(ObDDLTableSchema::fill_ddl_table_schema(
+                     word_doc_table_id, arena_, fts_word_doc_ddl_table_schema_))) {
+        LOG_WARN("fill word-doc ddl table schema failed", K(ret), K(word_doc_table_id));
+      }
+    }
+  }
+  return ret;
+}
+
+int ObDDLIndependentDag::get_sort_ddl_table_schema(const ObDDLTableSchema *&ddl_table_schema) const
+{
+  int ret = OB_SUCCESS;
+  ddl_table_schema = nullptr;
+  if (!share::schema::is_fts_doc_word_aux(ddl_table_schema_.table_item_.index_type_)
+      || fts_word_doc_ddl_table_schema_.table_id_ == OB_INVALID_ID) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("sort ddl schema is unavailable", K(ret), K(ddl_table_schema_.table_item_.index_type_));
+  } else {
+    ddl_table_schema = &fts_word_doc_ddl_table_schema_;
+  }
+  return ret;
+}
+
+int ObDDLIndependentDag::get_ddl_table_schema(
+    const ObTabletID &tablet_id,
+    const ObDDLTableSchema *&ddl_table_schema) const
+{
+  int ret = OB_SUCCESS;
+  ddl_table_schema = &ddl_table_schema_;
+  for (int64_t i = 0; i < sort_ls_tablet_ids_.count(); ++i) {
+    if (sort_ls_tablet_ids_.at(i).second == tablet_id) {
+      ddl_table_schema = &fts_word_doc_ddl_table_schema_;
+      break;
+    }
+  }
+  return ret;
+}
+
+int ObDDLIndependentDag::init_sort_ls_tablet_ids()
+{
+  int ret = OB_SUCCESS;
+  sort_ls_tablet_ids_.reset();
+  if (!ddl_task_param_.is_partition_local_
+      || !share::schema::is_fts_doc_word_aux(ddl_table_schema_.table_item_.index_type_)) {
+    // No auxiliary sort tablet is needed for the normal DDL path.
+  } else {
+    ObSchemaGetterGuard schema_guard;
+    const ObTableSchema *doc_word_schema = nullptr;
+    const ObTableSchema *word_doc_schema = nullptr;
+    if (OB_FAIL(ObMultiVersionSchemaService::get_instance().get_tenant_schema_guard(schema_guard))) {
+      LOG_WARN("get schema guard failed", K(ret));
+    } else if (OB_FAIL(schema_guard.get_table_schema(ddl_table_schema_.table_id_, doc_word_schema))) {
+      LOG_WARN("get doc-word schema failed", K(ret), K(ddl_table_schema_.table_id_));
+    } else if (OB_FAIL(schema_guard.get_table_schema(fts_word_doc_ddl_table_schema_.table_id_, word_doc_schema))) {
+      LOG_WARN("get word-doc schema failed", K(ret), K(fts_word_doc_ddl_table_schema_.table_id_));
+    } else if (OB_ISNULL(doc_word_schema) || OB_ISNULL(word_doc_schema)) {
+      ret = OB_TABLE_NOT_EXIST;
+      LOG_WARN("fts auxiliary schema is missing", K(ret), KP(doc_word_schema), KP(word_doc_schema));
+    }
+    for (int64_t i = 0; OB_SUCC(ret) && i < ls_tablet_ids_.count(); ++i) {
+      int64_t part_idx = OB_INVALID_INDEX;
+      int64_t subpart_idx = OB_INVALID_INDEX;
+      ObObjectID object_id;
+      ObObjectID first_level_part_id;
+      ObTabletID sort_tablet_id;
+      if (!doc_word_schema->is_partitioned_table()) {
+        part_idx = OB_INVALID_INDEX;
+        subpart_idx = OB_INVALID_INDEX;
+      } else if (OB_FAIL(doc_word_schema->get_part_idx_by_tablet(ls_tablet_ids_.at(i).second,
+                                                                 part_idx, subpart_idx))) {
+        LOG_WARN("get doc-word partition index failed", K(ret), K(ls_tablet_ids_.at(i).second));
+      }
+      if (OB_SUCC(ret)) {
+        if (OB_FAIL(word_doc_schema->get_part_id_and_tablet_id_by_idx(
+                       part_idx, subpart_idx, object_id, first_level_part_id, sort_tablet_id))) {
+          LOG_WARN("get word-doc tablet failed", K(ret), K(part_idx), K(subpart_idx));
+        } else if (OB_FAIL(sort_ls_tablet_ids_.push_back(
+                       std::make_pair(ls_tablet_ids_.at(i).first, sort_tablet_id)))) {
+          LOG_WARN("append sort tablet failed", K(ret), K(sort_tablet_id));
+        }
+      }
+    }
+  }
+  return ret;
+}
+
+int ObDDLIndependentDag::init_sort_provider()
+{
+  int ret = OB_SUCCESS;
+  if (OB_NOT_NULL(sort_provider_)) {
+    ret = OB_INIT_TWICE;
+    LOG_WARN("sort provider init twice", K(ret));
+  } else if (OB_ISNULL(sort_provider_ = OB_NEWx(ObDDLSortProvider, &arena_))) {
+    ret = OB_ALLOCATE_MEMORY_FAILED;
+    LOG_WARN("allocate sort provider failed", K(ret));
+  } else if (OB_FAIL(sort_provider_->init(this))) {
+    LOG_WARN("init sort provider failed", K(ret));
+  }
+  return ret;
+}
+
+int ObDDLIndependentDag::check_enable_encode_sortkey(bool &enable_encode) const
+{
+  int ret = OB_SUCCESS;
+  const ObDDLTableSchema *ddl_table_schema = nullptr;
+  enable_encode = true;
+  if (OB_FAIL(get_sort_ddl_table_schema(ddl_table_schema))) {
+    LOG_WARN("get sort ddl schema failed", K(ret));
+  } else {
+    for (int64_t i = 0; enable_encode && i < ddl_table_schema->table_item_.rowkey_column_num_; ++i) {
+      const ObObjMeta &meta = ddl_table_schema->column_descs_.at(i).col_type_;
+      enable_encode = ObOrderPerservingEncoder::can_encode_sortkey(
+          meta.get_type(), meta.get_collation_type());
+    }
+  }
   return ret;
 }
 
 int ObDDLIndependentDag::init_tablet_context_map()
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(tablet_context_map_.create(ls_tablet_ids_.count(), ObMemAttr("ddl_dag_ctx_map")))) {
-    LOG_WARN("create tablet context map failed", K(ret), K(ls_tablet_ids_.count()));
+  ObArray<std::pair<share::ObLSID, ObTabletID>> all_ls_tablet_ids;
+  if (OB_FAIL(all_ls_tablet_ids.assign(ls_tablet_ids_))) {
+    LOG_WARN("assign tablet ids failed", K(ret));
+  } else if (OB_FAIL(append(all_ls_tablet_ids, sort_ls_tablet_ids_))) {
+    LOG_WARN("append sort tablet ids failed", K(ret));
+  } else if (OB_FAIL(tablet_context_map_.create(all_ls_tablet_ids.count(), ObMemAttr("ddl_dag_ctx_map")))) {
+    LOG_WARN("create tablet context map failed", K(ret), K(all_ls_tablet_ids.count()));
   }
-  for (int64_t i = 0; OB_SUCC(ret) && i < ls_tablet_ids_.count(); ++i) {
-    const ObLSID &ls_id = ls_tablet_ids_.at(i).first;
-    const ObTabletID &tablet_id = ls_tablet_ids_.at(i).second;
+  for (int64_t i = 0; OB_SUCC(ret) && i < all_ls_tablet_ids.count(); ++i) {
+    const ObLSID &ls_id = all_ls_tablet_ids.at(i).first;
+    const ObTabletID &tablet_id = all_ls_tablet_ids.at(i).second;
+    const ObDDLTableSchema *use_schema = nullptr;
     ObDDLTabletContext *tablet_context = nullptr;
     if (OB_ISNULL(tablet_context = OB_NEWx(ObDDLTabletContext, &arena_))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("allocate memory for tablet context failed", K(ret));
-    } else if (OB_FAIL(tablet_context->init(ls_id, tablet_id, ddl_thread_count_, ddl_task_param_.snapshot_version_, direct_load_type_, ddl_table_schema_))) {
+    } else if (OB_FAIL(get_ddl_table_schema(tablet_id, use_schema))) {
+      LOG_WARN("get ddl table schema failed", K(ret), K(tablet_id));
+    } else if (OB_FAIL(tablet_context->init(ls_id, tablet_id, ddl_thread_count_, ddl_task_param_.snapshot_version_, direct_load_type_, *use_schema))) {
       LOG_WARN("init ddl tablet context failed", K(ret), K(ls_id), K(tablet_id), K(ddl_thread_count_));
     } else if (use_tablet_mode() && OB_FAIL(alloc_task(tablet_context->scan_task_))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
@@ -153,6 +352,16 @@ int ObDDLIndependentDag::init_tablet_context_map()
     }
   }
   return ret;
+}
+
+void ObDDLIndependentDag::update_fts_build_stat(const ObFTSBuildStat &stat)
+{
+  if (OB_NOT_NULL(root_monitor_info_)) {
+    root_monitor_info_->add_tokenized_word_count(stat.tokenized_word_cnt_);
+    root_monitor_info_->add_forward_written_row_count(stat.forward_written_row_cnt_);
+    root_monitor_info_->add_inverted_sorted_row_count(stat.inverted_sorted_row_cnt_);
+    root_monitor_info_->add_inverted_written_row_count(stat.inverted_written_row_cnt_);
+  }
 }
 
 int ObDDLIndependentDag::get_tablet_context(const ObTabletID &tablet_id, ObDDLTabletContext *&tablet_context)
@@ -245,7 +454,9 @@ int ObDDLIndependentDag::add_scan_chunk(ObDDLChunk &ddl_chunk, const int64_t tim
                                                             !ddl_chunk.chunk_data_->is_end_chunk());
     
     if (OB_UNLIKELY(nullptr != ddl_chunk.chunk_data_ &&
-                    !(ddl_chunk.chunk_data_->is_cg_row_tmp_files_type() || ddl_chunk.chunk_data_->is_end_chunk()))) {
+                    !(ddl_chunk.chunk_data_->is_cg_row_tmp_files_type()
+                      || ddl_chunk.chunk_data_->is_direct_load_batch_datum_rows_type()
+                      || ddl_chunk.chunk_data_->is_end_chunk()))) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("invalid chunk data", K(ret), KPC(ddl_chunk.chunk_data_));
     } else if (OB_FAIL(get_tablet_context(ddl_chunk.tablet_id_, tablet_context))) {
@@ -321,6 +532,11 @@ int ObDDLIndependentDag::add_pipeline(
   if (ObDDLUtil::is_vector_index_complement(index_type)) {
     if (OB_FAIL(add_vector_index_append_pipeline(index_type, tablet_context, ddl_slice))) {
       LOG_WARN("add vector index pipeline failed", K(ret));
+    }
+  } else if (ddl_task_param_.is_partition_local_ && is_fts_doc_word_aux(index_type)) {
+    ObFullTextIndexWritePipeline *pipeline = nullptr;
+    if (OB_FAIL(add_pipeline(tablet_context, ddl_slice, pipeline))) {
+      LOG_WARN("add full text index pipeline failed", K(ret), KPC(ddl_slice));
     }
   } else {
     ObDDLMemoryFriendWriteMacroBlockPipeline *pipeline = nullptr;
@@ -938,11 +1154,20 @@ int ObDDLIndependentDag::init_tablet_merge_task(
 
 int ObDDLIndependentDag::init_merge_tasks(bool for_major, ObArray<ObITask*> &data_merge_tasks, ObArray<ObITask*> &lob_merge_tasks)
 {
+  return init_merge_tasks(for_major, ls_tablet_ids_, data_merge_tasks, lob_merge_tasks);
+}
+
+int ObDDLIndependentDag::init_merge_tasks(
+    const bool for_major,
+    const ObIArray<std::pair<share::ObLSID, ObTabletID>> &ls_tablet_ids,
+    ObArray<ObITask*> &data_merge_tasks,
+    ObArray<ObITask*> &lob_merge_tasks)
+{
   int ret = OB_SUCCESS;
   data_merge_tasks.reset();
   lob_merge_tasks.reset();
-  for (int64_t i = 0; OB_SUCC(ret) && i < ls_tablet_ids_.count(); ++i) {
-    const ObTabletID &tablet_id = ls_tablet_ids_.at(i).second;
+  for (int64_t i = 0; OB_SUCC(ret) && i < ls_tablet_ids.count(); ++i) {
+    const ObTabletID &tablet_id = ls_tablet_ids.at(i).second;
     ObITask *data_merge_task = nullptr;
     ObITask *lob_merge_task = nullptr;
     if (OB_FAIL(init_tablet_merge_task(tablet_id, for_major, data_merge_task, lob_merge_task))) {
@@ -959,6 +1184,59 @@ int ObDDLIndependentDag::init_merge_tasks(bool for_major, ObArray<ObITask*> &dat
   return ret;
 }
 
+int ObDDLIndependentDag::add_merge_tasks(
+    const ObIArray<ObITask *> &data_merge_tasks,
+    const ObIArray<ObITask *> &lob_merge_tasks,
+    ObIArray<ObITask *> &tasks)
+{
+  int ret = OB_SUCCESS;
+  if (OB_UNLIKELY(data_merge_tasks.empty()
+      || (!lob_merge_tasks.empty() && data_merge_tasks.count() != lob_merge_tasks.count()))) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected merge tasks", K(ret), K(data_merge_tasks.count()), K(lob_merge_tasks.count()));
+  }
+  for (int64_t i = 0; OB_SUCC(ret) && i < data_merge_tasks.count(); ++i) {
+    ObITask *data_merge_task = data_merge_tasks.at(i);
+    ObITask *lob_merge_task = lob_merge_tasks.empty() ? nullptr : lob_merge_tasks.at(i);
+    if (OB_FAIL(tasks.push_back(data_merge_task))) {
+      LOG_WARN("append data merge task failed", K(ret));
+    } else if (OB_NOT_NULL(lob_merge_task) && OB_FAIL(tasks.push_back(lob_merge_task))) {
+      LOG_WARN("append lob merge task failed", K(ret));
+    }
+  }
+  return ret;
+}
+
+int ObDDLIndependentDag::set_merge_tasks(
+    const ObIArray<ObITask *> &data_merge_tasks,
+    const ObIArray<ObITask *> &lob_merge_tasks,
+    ObITask *prev_task,
+    ObITask *next_task)
+{
+  int ret = OB_SUCCESS;
+  if (OB_UNLIKELY(data_merge_tasks.empty() || OB_ISNULL(prev_task)
+      || (!lob_merge_tasks.empty() && data_merge_tasks.count() != lob_merge_tasks.count()))) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected merge tasks", K(ret), K(data_merge_tasks.count()),
+             K(lob_merge_tasks.count()), KP(prev_task), KP(next_task));
+  }
+  for (int64_t i = 0; OB_SUCC(ret) && i < data_merge_tasks.count(); ++i) {
+    ObITask *data_merge_task = data_merge_tasks.at(i);
+    ObITask *lob_merge_task = lob_merge_tasks.empty() ? nullptr : lob_merge_tasks.at(i);
+    if (OB_FAIL(prev_task->add_child(*data_merge_task))) {
+      LOG_WARN("add data merge child failed", K(ret));
+    } else if (OB_NOT_NULL(lob_merge_task) && OB_FAIL(prev_task->add_child(*lob_merge_task))) {
+      LOG_WARN("add lob merge child failed", K(ret));
+    } else if (OB_NOT_NULL(next_task) && OB_FAIL(data_merge_task->add_child(*next_task))) {
+      LOG_WARN("add next task failed", K(ret));
+    } else if (OB_NOT_NULL(next_task) && OB_NOT_NULL(lob_merge_task)
+               && OB_FAIL(lob_merge_task->add_child(*next_task))) {
+      LOG_WARN("add lob next task failed", K(ret));
+    }
+  }
+  return ret;
+}
+
 int ObDDLIndependentDag::finish_chunk(ObChunk *&chunk)
 {
   int ret = OB_SUCCESS;
@@ -966,6 +1244,72 @@ int ObDDLIndependentDag::finish_chunk(ObChunk *&chunk)
     chunk->~ObChunk();
     ob_free(chunk);
     chunk = nullptr;
+  }
+  return ret;
+}
+
+ObDDLIndependentDagRootMonitorInfo::ObDDLIndependentDagRootMonitorInfo(
+    ObIAllocator *allocator, ObITask *task)
+  : ObDDLDagMonitorInfo(allocator, task),
+    ddl_task_id_(0),
+    execution_id_(0),
+    direct_load_type_(0),
+    ddl_thread_cnt_(0),
+    fts_stat_(),
+    ret_code_(OB_SUCCESS)
+{
+}
+
+void ObDDLIndependentDagRootMonitorInfo::init_dag_info(const ObDDLIndependentDag &dag)
+{
+  ddl_task_id_ = dag.get_ddl_task_param().ddl_task_id_;
+  execution_id_ = dag.get_ddl_task_param().execution_id_;
+  direct_load_type_ = static_cast<int64_t>(dag.get_direct_load_type());
+  ddl_thread_cnt_ = dag.get_ddl_thread_count();
+}
+
+int ObDDLIndependentDagRootMonitorInfo::convert_to_monitor_entry(ObDDLDagMonitorEntry &entry) const
+{
+  int ret = OB_SUCCESS;
+  if (OB_FAIL(ObDDLDagMonitorInfo::convert_to_monitor_entry(entry))) {
+    LOG_WARN("convert base monitor info failed", K(ret));
+  } else if (OB_FAIL(entry.set_task_id(nullptr))) {
+    LOG_WARN("set root task id failed", K(ret));
+  } else if (OB_FAIL(entry.set_task_info(ObString::make_string("DAG_ROOT")))) {
+    LOG_WARN("set root task info failed", K(ret));
+  } else if (OB_FAIL(entry.set_dag_info(ObString::make_string("DDL_INDEPENDENT_DAG")))) {
+    LOG_WARN("set dag info failed", K(ret));
+  } else {
+    ObJsonObject *json_obj = nullptr;
+    ObJsonInt *ddl_task_id_node = nullptr;
+    ObJsonInt *execution_id_node = nullptr;
+    ObJsonInt *direct_load_type_node = nullptr;
+    ObJsonInt *ddl_thread_cnt_node = nullptr;
+    ObJsonInt *ret_code_node = nullptr;
+    ObString json_str = entry.get_message();
+    ObArenaAllocator &allocator = entry.get_allocator();
+    if (OB_FAIL(ObAIFuncJsonUtils::get_json_object_form_str(allocator, json_str, json_obj))) {
+      LOG_WARN("parse root monitor message failed", K(ret), K(json_str));
+    } else if (OB_FAIL(ObAIFuncJsonUtils::get_json_int(allocator, ddl_task_id_, ddl_task_id_node))
+               || OB_FAIL(json_obj->add("ddl_task_id", ddl_task_id_node))) {
+      LOG_WARN("add ddl task id failed", K(ret));
+    } else if (OB_FAIL(ObAIFuncJsonUtils::get_json_int(allocator, execution_id_, execution_id_node))
+               || OB_FAIL(json_obj->add("execution_id", execution_id_node))) {
+      LOG_WARN("add execution id failed", K(ret));
+    } else if (OB_FAIL(ObAIFuncJsonUtils::get_json_int(allocator, direct_load_type_, direct_load_type_node))
+               || OB_FAIL(json_obj->add("direct_load_type", direct_load_type_node))) {
+      LOG_WARN("add direct load type failed", K(ret));
+    } else if (OB_FAIL(ObAIFuncJsonUtils::get_json_int(allocator, ddl_thread_cnt_, ddl_thread_cnt_node))
+               || OB_FAIL(json_obj->add("ddl_thread_cnt", ddl_thread_cnt_node))) {
+      LOG_WARN("add ddl thread count failed", K(ret));
+    } else if (OB_FAIL(ObAIFuncJsonUtils::get_json_int(allocator, ret_code_, ret_code_node))
+               || OB_FAIL(json_obj->add("ret_code", ret_code_node))) {
+      LOG_WARN("add return code failed", K(ret));
+    } else if (OB_FAIL(ObAIFuncJsonUtils::print_json_to_str(allocator, json_obj, json_str))) {
+      LOG_WARN("print root monitor message failed", K(ret));
+    } else if (OB_FAIL(entry.set_message(json_str))) {
+      LOG_WARN("set root monitor message failed", K(ret));
+    }
   }
   return ret;
 }

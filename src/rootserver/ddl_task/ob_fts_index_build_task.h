@@ -132,6 +132,13 @@ private:
       uint64_t &aux_table_id,
       int64_t &task_id);
   int prepare_rowkey_doc_table();
+  int prepare_doc_rowkey_table();
+  int prepare_doc_word_table();
+  int prepare_domain_index_table();
+  int enable_word_doc_aux_index_table();
+  int update_index_status_in_schema(
+      const share::schema::ObTableSchema &index_schema,
+      const share::schema::ObIndexStatus new_status);
   int prepare_aux_index_tables();
   int construct_create_index_arg(
       const ObIndexType index_type,
@@ -143,8 +150,12 @@ private:
   int get_index_table_id(
       const obcall::ObCreateIndexArg *create_index_arg,
       uint64_t &index_table_id);
+  int calculate_aux_table_parallelism(const ObIndexType index_type,
+                                      const int64_t total_parallelism,
+                                      int64_t &aux_table_parallelism);
   int prepare();
   int load_dictionary();
+  int try_lock_dictionary_tables_out_trans();
   int get_charset_type(ObCharsetType &charset_type);
   int wait_aux_table_complement();
   int clean_on_failed();
@@ -152,7 +163,6 @@ private:
   int wait_drop_index_finish(bool &is_finish);
   int succ();
   int check_health();
-  int check_aux_table_schemas_exist(bool &is_all_exist);
   int deep_copy_index_arg(
       common::ObIAllocator &allocator,
       const obcall::ObCreateIndexArg &source_arg,
@@ -167,25 +177,10 @@ private:
       bool &is_trans_end);
   virtual int refresh_task_context(const share::ObDDLTaskStatus status) override;
   int refresh_task_depend_map_context(const ObFtsIndexBuildTask &task);
+  int check_is_partition_local_ddl(bool &is_partition_local_ddl);
 
 private:
   typedef share::ObDomainDependTaskStatus DependTaskStatus;
-
-  struct ColumnChecksumInfo final
-  {
-  public:
-    ColumnChecksumInfo() : table_id_(OB_INVALID_ID), task_id_(OB_INVALID_ID) {}
-    ~ColumnChecksumInfo() = default;
-    bool is_valid() const { return OB_INVALID_ID != table_id_ && OB_INVALID_ID != task_id_; }
-    TO_STRING_KV(K_(table_id), K_(task_id));
-  public:
-    uint64_t table_id_;
-    int64_t task_id_;
-  };
-
-private:
-  int verify_children_checksum() const;
-  int check_column_checksum(const ColumnChecksumInfo &a, const ColumnChecksumInfo &b) const;
   int try_release_snapshot(ObMySQLTransaction &trans);
 
 private:
