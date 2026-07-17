@@ -90,11 +90,17 @@ int ObVritualCoreInnerTable::inner_open()
         if (OB_FAIL(core_table.load())) {
           LOG_WARN("core_table load failed", KR(ret));
         } else {
-          ObArray<int64_t> table_ids;
-          ObArray<int64_t> column_ids;
-          ObArray<int64_t> schema_versions;
-          ObArray<int64_t> row_ids;
-          ObArray<int8_t> is_deleted;
+          struct CoreHistoryRowInfo
+          {
+            int64_t table_id_;
+            int64_t column_id_;
+            int64_t schema_version_;
+            int64_t row_id_;
+            bool is_deleted_;
+            TO_STRING_KV(K_(table_id), K_(column_id), K_(schema_version),
+                         K_(row_id), K_(is_deleted));
+          };
+          ObArray<CoreHistoryRowInfo> latest_rows;
           const bool is_column_table = OB_ALL_VIRTUAL_CORE_COLUMN_TABLE_TID == table_id_;
           while (OB_SUCC(ret) && OB_SUCC(core_table.next())) {
             const ObCoreTableProxy::Row *row = NULL;
@@ -114,25 +120,25 @@ int ObVritualCoreInnerTable::inner_open()
               LOG_WARN("get core history rowkey failed", KR(ret), K(is_column_table));
             } else {
               int64_t idx = 0;
-              for (; idx < table_ids.count(); ++idx) {
-                if (table_ids.at(idx) == table_id
-                    && (!is_column_table || column_ids.at(idx) == column_id)) {
+              for (; idx < latest_rows.count(); ++idx) {
+                if (latest_rows.at(idx).table_id_ == table_id
+                    && (!is_column_table || latest_rows.at(idx).column_id_ == column_id)) {
                   break;
                 }
               }
-              if (idx == table_ids.count()) {
-                if (OB_FAIL(table_ids.push_back(table_id))
-                    || OB_FAIL(column_ids.push_back(column_id))
-                    || OB_FAIL(schema_versions.push_back(schema_version))
-                    || OB_FAIL(row_ids.push_back(row->get_row_id()))
-                    || OB_FAIL(is_deleted.push_back(static_cast<int8_t>(deleted)))) {
+              if (idx == latest_rows.count()) {
+                const CoreHistoryRowInfo latest_row = {
+                  table_id, column_id, schema_version, row->get_row_id(), 0 != deleted
+                };
+                if (OB_FAIL(latest_rows.push_back(latest_row))) {
                   LOG_WARN("save core history row failed", KR(ret), K(table_id),
                            K(column_id), K(schema_version));
                 }
-              } else if (schema_version > schema_versions.at(idx)) {
-                schema_versions.at(idx) = schema_version;
-                row_ids.at(idx) = row->get_row_id();
-                is_deleted.at(idx) = static_cast<int8_t>(deleted);
+              } else if (schema_version > latest_rows.at(idx).schema_version_) {
+                CoreHistoryRowInfo &latest_row = latest_rows.at(idx);
+                latest_row.schema_version_ = schema_version;
+                latest_row.row_id_ = row->get_row_id();
+                latest_row.is_deleted_ = 0 != deleted;
               }
             }
           }
@@ -152,8 +158,9 @@ int ObVritualCoreInnerTable::inner_open()
               LOG_WARN("current row is null", KR(ret));
             } else {
               int64_t idx = 0;
-              for (; idx < row_ids.count() && row_ids.at(idx) != row->get_row_id(); ++idx) {}
-              if (idx == row_ids.count() || 0 != is_deleted.at(idx)) {
+              for (; idx < latest_rows.count()
+                  && latest_rows.at(idx).row_id_ != row->get_row_id(); ++idx) {}
+              if (idx == latest_rows.count() || latest_rows.at(idx).is_deleted_) {
                 // Skip obsolete history rows and tombstones.
               } else {
                 columns.reuse();
