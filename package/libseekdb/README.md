@@ -43,6 +43,58 @@ To check your system: `ldd --version` or `getconf GNU_LIBC_VERSION`.
 
 CI macOS builds use **macOS 14** runners and set **CMAKE_OSX_DEPLOYMENT_TARGET=11.0**, so the prebuilt `libseekdb.dylib` runs on **macOS 11 (Big Sur) and later** (12, 13, 14, 15). Setting the deployment target to 11.0 allows use on most current and recent macOS versions.
 
+### CI validation (packed zip smoke)
+
+After `libseekdb-build.sh`, CI runs `test-packed-artifact-smoke.sh` on the zip. It:
+
+1. Unpacks the zip into a temp directory (`libseekdb.dylib` + `libs/` on macOS).
+2. Ad-hoc signs dylibs (same as seekdb-js `build:package`).
+3. Builds `seekdb.node` **into that directory** with `@loader_path` (`smoke-loader/binding.gyp`).
+4. Runs `smoke-loader/smoke-vsag.js` (VECTOR INDEX `lib=vsag` + `DBMS_HYBRID_SEARCH.SEARCH`).
+
+Layout matches **seekdb-js** (`pkgs/js-bindings/seekdb.node` + `@loader_path/libseekdb.dylib` + `libs/`).  
+The old smoke used `nodejs_napi` linked to `build_release` via `@rpath`, which could pass while seekdb-js failed.
+
+On **macOS CI**, when `SEEKDB_JS_ROOT` is set, the same script also runs `test-packed-artifact-smoke-js.sh` (checks out [seekdb-js](https://github.com/oceanbase/seekdb-js), rebuilds bindings, runs embedded vitest `sparseEmbedding`). That path reproduces `vsag::VsagException` on bad darwin zips; the N-API-only smoke can still pass.
+
+Locally:
+
+```bash
+cd package/libseekdb
+./test-packed-artifact-smoke.sh libseekdb-darwin-arm64.zip
+
+# Full seekdb-js reproduction (requires pnpm install in seekdb-js once):
+SEEKDB_JS_ROOT=../seekdb-js ./test-packed-artifact-smoke-js.sh libseekdb-darwin-arm64.zip
+```
+
+### Pack debugging (local vs CI / S3)
+
+Each zip may include `pack-metadata.json` (uname, sha256, `otool -L`, CI env).
+
+Compare two artifacts:
+
+```bash
+./diagnose-packed-artifact.sh \
+  package/libseekdb/libseekdb-darwin-arm64.zip \
+  'https://oceanbase-seekdb-builds.s3.ap-southeast-1.amazonaws.com/libseekdb/all_commits/<sha>/libseekdb-darwin-arm64.zip'
+```
+
+### macOS CI vs local dev builds (likely causes of divergent zips)
+
+| Factor | GitHub Actions (macos-14) | Typical local Mac |
+| ------ | ------------------------- | ----------------- |
+| Runner / OS | `macos-14`, `CMAKE_OSX_DEPLOYMENT_TARGET=11.0` | Host SDK, often no deployment target |
+| Dependencies | `install-macos-brew-deps.sh` (thrift **0.22** via formula or `brew extract`) | `brew install thrift` may pull 0.23+ |
+| Compile | `-DOB_USE_CCACHE=ON`, cached `deps/3rd` | Local ccache / incremental `build.sh` |
+| Pack input | Bundled dylib from CI `build_release` | Bundled from local `build_release` |
+| Codesign | Optional Developer ID + entitlements (repo secrets) | Often ad-hoc only |
+
+If `diagnose-packed-artifact.sh` shows a **different main library sha256** for the same source commit, the bug is in the **CI compile**, not dylibbundler. If only `libs/*` differ, check **dylibbundler / brew** versions. If smoke fails only on the CI zip, use metadata + diagnose output in the seekdb issue.
+
+**ccache:** macOS/Linux CI ccache keys include `COMMIT_SHA` so object files from other commits are not restored into the same cache slot.
+
+**seekdb-js:** [embedded CI](https://github.com/oceanbase/seekdb-js/actions) passes on **Linux** (`libseekdb-linux-*.zip`). A bad **darwin-arm64** S3 zip can fail macOS embedded tests while Linux stays green—use the smoke script on the macOS zip before publishing.
+
 ## Package contents and standalone distribution
 
 Zip layout:
@@ -52,12 +104,13 @@ seekdb.h           # C API header
 libseekdb.dylib    # Main library (macOS) or libseekdb.so (Linux)
 seekdb.dll         # Main library (Windows)
 seekdb.lib         # Import library for MSVC-style linking (Windows)
-libs/              # Dependency dylibs (macOS only; collected by dylibbundler)
-  *.dylib
+libs/              # Runtime dependencies (macOS: dylibbundler; Windows: vcpkg/OpenSSL/etc.)
+  *.dylib / *.dll
 ```
 
 - **Standalone distribution**: After extraction, the package can be used by other projects without this repo or the build environment.
 - **macOS**: The main library and its dependencies use relative paths (`@loader_path/libs`). Unzip to any directory and keep the main library and `libs/` at the same level so they load correctly.
+- **Windows**: `libseekdb-build.ps1` runs `cmake/BundleRuntimeDllsWindows.cmake` to copy third-party DLLs into `libs/` (same dependency set as CI binding tests). Consumers should prepend the extract directory and `libs/` to `PATH`, or load `seekdb.dll` from a directory that includes `libs/` on the DLL search path.
 - **Linux**: Usually has no extra dependencies or relies on system libraries; unzip and use as-is.
 
 ### How to use (standalone)

@@ -2577,6 +2577,118 @@ TestResult test_very_long_document_100kb() {
     return {true, ""};
 }
 
+// seekdb-js collection DDL: document STRING column, 100KB round-trip.
+TestResult test_collection_string_document_100kb() {
+    SeekdbHandle handle = nullptr;
+    int ret = seekdb_connect(&handle, "test", true);
+    if (ret != SEEKDB_SUCCESS) {
+        return {false, "Failed to connect"};
+    }
+    SeekdbResult result = nullptr;
+    ret = seekdb_query(handle, "SET SESSION max_allowed_packet = 2097152", &result);
+    if (result) seekdb_result_free(result);
+    ret = seekdb_query(handle, "SET SESSION ob_default_lob_inrow_threshold = 262144", &result);
+    if (result) seekdb_result_free(result);
+    ret = seekdb_query(handle, "DROP TABLE IF EXISTS test_coll_doc_100k", &result);
+    if (result) seekdb_result_free(result);
+    ret = seekdb_query(handle,
+        "CREATE TABLE test_coll_doc_100k (_id VARBINARY(512) PRIMARY KEY, document STRING)",
+        &result);
+    if (ret != SEEKDB_SUCCESS) {
+        seekdb_connect_close(handle);
+        return {false, "Failed to create collection-like table"};
+    }
+    if (result) seekdb_result_free(result);
+    const char* id_val = "id_long";
+    const size_t doc_len = 100000;
+    std::string doc_val(doc_len, 'a');
+    SeekdbBind binds[2];
+    binds[0].buffer_type = SEEKDB_TYPE_VARBINARY_ID;
+    binds[0].buffer = const_cast<char*>(id_val);
+    binds[0].buffer_length = static_cast<unsigned long>(strlen(id_val));
+    unsigned long id_len = binds[0].buffer_length;
+    binds[0].length = &id_len;
+    bool null0 = false;
+    binds[0].is_null = &null0;
+    binds[1].buffer_type = SEEKDB_TYPE_STRING;
+    binds[1].buffer = const_cast<char*>(doc_val.data());
+    binds[1].buffer_length = static_cast<unsigned long>(doc_len);
+    unsigned long doc_len_ul = static_cast<unsigned long>(doc_len);
+    binds[1].length = &doc_len_ul;
+    bool null1 = false;
+    binds[1].is_null = &null1;
+    ret = seekdb_query_with_params(handle,
+        "INSERT INTO test_coll_doc_100k (_id, document) VALUES (CAST(? AS BINARY), ?)",
+        &result, binds, 2);
+    if (ret != SEEKDB_SUCCESS) {
+        const char* err = seekdb_error(handle);
+        std::string msg = "Failed to insert 100KB STRING document";
+        if (err && strlen(err) > 0) {
+            msg += " (";
+            msg += err;
+            msg += ")";
+        }
+        seekdb_connect_close(handle);
+        return {false, msg};
+    }
+    if (result) seekdb_result_free(result);
+    SeekdbBind sel_binds[1];
+    sel_binds[0].buffer_type = SEEKDB_TYPE_VARBINARY_ID;
+    sel_binds[0].buffer = const_cast<char*>(id_val);
+    sel_binds[0].buffer_length = id_len;
+    sel_binds[0].length = &id_len;
+    bool sel_null = false;
+    sel_binds[0].is_null = &sel_null;
+    ret = seekdb_query_with_params(handle,
+        "SELECT document FROM test_coll_doc_100k WHERE _id = CAST(? AS BINARY)",
+        &result, sel_binds, 1);
+    if (ret != SEEKDB_SUCCESS) {
+        seekdb_connect_close(handle);
+        return {false, "Failed to select STRING document"};
+    }
+    // query_with_params returns result set directly; store_result is only for seekdb_query().
+    if (result == nullptr) {
+        result = seekdb_store_result(handle);
+    }
+    if (result == nullptr) {
+        seekdb_connect_close(handle);
+        return {false, "Failed to get select result"};
+    }
+    SeekdbRow row = seekdb_fetch_row(result);
+    if (row == nullptr) {
+        seekdb_result_free(result);
+        seekdb_connect_close(handle);
+        return {false, "Failed to fetch row"};
+    }
+    if (seekdb_row_is_null(row, 0)) {
+        seekdb_result_free(result);
+        seekdb_connect_close(handle);
+        return {false, "STRING document must not be null"};
+    }
+    const size_t len = seekdb_row_get_string_len(row, 0);
+    if (len != doc_len) {
+        seekdb_result_free(result);
+        seekdb_connect_close(handle);
+        return {false, "get_string_len mismatch for STRING document column"};
+    }
+    std::vector<char> buf(doc_len + 1);
+    if (seekdb_row_get_string(row, 0, buf.data(), buf.size()) != SEEKDB_SUCCESS) {
+        seekdb_result_free(result);
+        seekdb_connect_close(handle);
+        return {false, "get_string failed for STRING document column"};
+    }
+    for (size_t i = 0; i < doc_len; i++) {
+        if (buf[i] != 'a') {
+            seekdb_result_free(result);
+            seekdb_connect_close(handle);
+            return {false, "STRING document content mismatch"};
+        }
+    }
+    seekdb_result_free(result);
+    seekdb_connect_close(handle);
+    return {true, ""};
+}
+
 // Metadata with newlines, quotes, backslashes must be stored and read back completely (no truncation/corruption).
 TestResult test_special_characters_in_metadata() {
     SeekdbHandle handle = nullptr;
@@ -2644,6 +2756,98 @@ TestResult test_special_characters_in_metadata() {
         seekdb_result_free(result);
         seekdb_connect_close(handle);
         return {false, "metadata content mismatch (truncation or corruption)"};
+    }
+    seekdb_result_free(result);
+    seekdb_connect_close(handle);
+    return {true, ""};
+}
+
+// JSON column parameterized INSERT (seekdb-js collection metadata path).
+TestResult test_json_column_param_insert() {
+    SeekdbHandle handle = nullptr;
+    int ret = seekdb_connect(&handle, "test", true);
+    if (ret != SEEKDB_SUCCESS) {
+        return {false, "Failed to connect"};
+    }
+    SeekdbResult result = nullptr;
+    ret = seekdb_query(handle, "DROP TABLE IF EXISTS test_json_param", &result);
+    if (result) seekdb_result_free(result);
+    ret = seekdb_query(handle,
+        "CREATE TABLE test_json_param (id INT PRIMARY KEY, meta JSON)",
+        &result);
+    if (ret != SEEKDB_SUCCESS) {
+        seekdb_connect_close(handle);
+        return {false, "Failed to create table"};
+    }
+    if (result) seekdb_result_free(result);
+    const char* meta_json =
+        "{\"key with spaces\":\"value\",\"key-with-dashes\":\"value\",\"key\\nwith\\nnewlines\":\"value\","
+        "\"key\\\"with\\\"quotes\":\"value\"}";
+    SeekdbBind binds[1];
+    binds[0].buffer_type = SEEKDB_TYPE_STRING;
+    binds[0].buffer = const_cast<char*>(meta_json);
+    unsigned long meta_len = static_cast<unsigned long>(strlen(meta_json));
+    binds[0].buffer_length = meta_len;
+    binds[0].length = &meta_len;
+    bool null0 = false;
+    binds[0].is_null = &null0;
+    ret = seekdb_query_with_params(handle,
+        "INSERT INTO test_json_param (id, meta) VALUES (1, ?)",
+        &result, binds, 1);
+    if (ret != SEEKDB_SUCCESS) {
+        const char* err = seekdb_error(handle);
+        std::string msg = "Failed JSON param insert";
+        if (err && strlen(err) > 0) {
+            msg += " (";
+            msg += err;
+            msg += ")";
+        }
+        seekdb_connect_close(handle);
+        return {false, msg};
+    }
+    if (result) seekdb_result_free(result);
+    ret = seekdb_query(handle, "SELECT meta FROM test_json_param WHERE id = 1", &result);
+    if (ret != SEEKDB_SUCCESS) {
+        seekdb_connect_close(handle);
+        return {false, "Failed to select JSON"};
+    }
+    if (result == nullptr) {
+        result = seekdb_store_result(handle);
+    }
+    if (result == nullptr) {
+        seekdb_connect_close(handle);
+        return {false, "Failed to get select result"};
+    }
+    SeekdbRow row = seekdb_fetch_row(result);
+    if (row == nullptr) {
+        seekdb_result_free(result);
+        seekdb_connect_close(handle);
+        return {false, "Failed to fetch row"};
+    }
+    if (seekdb_row_is_null(row, 0)) {
+        seekdb_result_free(result);
+        seekdb_connect_close(handle);
+        return {false, "JSON meta must not be null"};
+    }
+    const size_t len = seekdb_row_get_string_len(row, 0);
+    if (len == static_cast<size_t>(-1) || len == 0) {
+        seekdb_result_free(result);
+        seekdb_connect_close(handle);
+        return {false, "JSON meta length invalid after param insert"};
+    }
+    std::vector<char> buf(len + 1);
+    if (seekdb_row_get_string(row, 0, buf.data(), buf.size()) != SEEKDB_SUCCESS) {
+        seekdb_result_free(result);
+        seekdb_connect_close(handle);
+        return {false, "get_string failed for JSON meta"};
+    }
+    std::string read_meta(buf.data());
+    if (read_meta.find("key with spaces") == std::string::npos ||
+        read_meta.find("key\\nwith\\nnewlines") == std::string::npos ||
+        read_meta.find("key\\\"with\\\"quotes") == std::string::npos) {
+        seekdb_result_free(result);
+        seekdb_connect_close(handle);
+        return {false, "JSON meta content missing expected keys after param insert"};
     }
     seekdb_result_free(result);
     seekdb_connect_close(handle);
@@ -4352,7 +4556,9 @@ int main(int argc, char* argv[]) {
         {"NULL vs Empty String (C ABI)", test_null_vs_empty_string},
         {"Long String Length and Full Read (C ABI)", test_long_string_length_and_full_read},
         {"Very Long Document 100KB (embedded)", test_very_long_document_100kb},
+        {"Collection STRING Document 100KB (embedded)", test_collection_string_document_100kb},
         {"Special Characters in Metadata (embedded)", test_special_characters_in_metadata},
+        {"JSON Column Param Insert (embedded)", test_json_column_param_insert},
         {"Empty JSON Metadata (embedded)", test_empty_json_metadata},
         {"Same-Process Same-Path Reuse (relative)", test_embedded_same_path_reuse_relative},
         {"Same-Process Same-Path Reuse (absolute)", test_embedded_same_path_reuse_absolute},

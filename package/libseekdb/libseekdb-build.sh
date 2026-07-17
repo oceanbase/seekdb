@@ -268,6 +268,11 @@ if [[ -d "$DEPS_DIR" ]]; then
   done
 fi
 
+if [[ -x "$SCRIPT_DIR/collect-pack-metadata.sh" ]]; then
+  BUILD_TYPE="$BUILD_TYPE" ARCH="${ARCH:-}" CMAKE_OSX_DEPLOYMENT_TARGET="${CMAKE_OSX_DEPLOYMENT_TARGET:-}" \
+    "$SCRIPT_DIR/collect-pack-metadata.sh" "$PACK_DIR"
+fi
+
 (cd "$PACK_DIR" && zip -r "$OUTPUT_ZIP" . -x "*.DS_Store")
 echo "[BUILD] Created: $OUTPUT_ZIP"
 

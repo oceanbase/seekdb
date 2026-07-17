@@ -3,18 +3,20 @@
 # Reference build environments (use these systems/env as the standard):
 #   linux-x64:   runner ubuntu-22.04, container quay.io/pypa/manylinux2014_x86_64 (glibc 2.17, CentOS 7+), zip libseekdb-linux-x64.zip
 #   linux-arm64: runner ubuntu-22.04-arm, container quay.io/pypa/manylinux2014_aarch64 (glibc 2.17), zip libseekdb-linux-arm64.zip
-#   darwin-arm64: runner macos-14, native, zip libseekdb-darwin-arm64.zip (min macOS 11.0)
-#   windows-x64: runner windows-2022, .\build.ps1 + libseekdb-build.ps1, zip libseekdb-windows-x64.zip
-#   android-arm64-v8a: runner macos-14, NDK + ./build.sh --android, zip libseekdb-android-arm64-v8a.zip
+#   darwin-arm64: runner macos-15, native, zip libseekdb-darwin-arm64.zip (min macOS 11.0)
+#   windows-x64: runner windows-2022, .\build.ps1 + libseekdb-build.ps1, zip libseekdb-windows-x64.zip (seekdb.dll + libs/*.dll)
+#   android-arm64-v8a: runner macos-15, NDK + ./build.sh --android, zip libseekdb-android-arm64-v8a.zip
 #
-# macOS builds use runner macos-14 and set CMAKE_OSX_DEPLOYMENT_TARGET=11.0 so the dylib runs on macOS 11+ (Big Sur and later).
+# macOS builds use runner macos-15 and set CMAKE_OSX_DEPLOYMENT_TARGET=11.0 so the dylib runs on macOS 11+ (Big Sur and later).
 # On macOS, dylibs are signed in libseekdb-build.sh: ad-hoc when no cert; when repo is oceanbase/seekdb and secrets are set,
 # use Developer ID (secrets: OSX_CODESIGN_BUILD_CERTIFICATE_BASE64, OSX_CODESIGN_P12_PASSWORD, OSX_CODESIGN_KEYCHAIN_PASSWORD, OSX_CODESIGN_IDENTITY).
 # Optional: add notarization step and APPLE_ID/PASSWORD/TEAM_ID secrets to notarize the zip.
 # Artifacts: platform zips including libseekdb-android-arm64-v8a.zip; combined artifact libseekdb-all-platforms; optional S3 upload when DESTINATION_TARGET_PATH or AWS_S3_BUCKET and credentials are set.
 #
 # Job step order: Checkout → caches → compile → setup Node/Rust/Go/Java → FFI binding tests (continue-on-error per language
-# so all languages run; final summary step fails the job if any binding test failed) → pack → upload artifact → save caches (always).
+# so all languages run; final summary step fails the job if any binding test failed) → pack → packed-zip smoke (nodejs_napi)
+# → upload artifact → save caches (always).
+# macOS ccache keys include COMMIT_SHA so object files from other commits are not reused (see package/libseekdb/README.md).
 # Android: compile → setup toolchains → host-skip FFI notice → pack → verify zip → upload → save caches → summary (see job comment).
 name: Build libseekdb
 run-name: Build libseekdb for ${{ github.event_name == 'workflow_dispatch' && inputs.ref != '' && inputs.ref || (github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha) }}
@@ -99,10 +101,9 @@ jobs:
         uses: actions/cache@v4
         with:
           path: .ccache
-          # Static key per platform so second run always hits; ccache content is keyed by source hash internally
-          key: ${{ runner.os }}-ccache-libseekdb-${{ matrix.platform }}
+          key: ${{ runner.os }}-ccache-libseekdb-${{ matrix.platform }}-${{ env.COMMIT_SHA }}
           restore-keys: |
-            ${{ runner.os }}-ccache-libseekdb-${{ matrix.platform }}
+            ${{ runner.os }}-ccache-libseekdb-${{ matrix.platform }}-
 
       # Run build inside manylinux2014 so Node/actions run on host (glibc 2.28+), build runs in CentOS 7 (glibc 2.17) for compatibility
       - name: Build libseekdb (Linux, manylinux2014)
@@ -218,6 +219,11 @@ jobs:
           chmod +x package/libseekdb/libseekdb-build.sh
           cd package/libseekdb && bash libseekdb-build.sh "${GITHUB_WORKSPACE}/build_release/src/include"
 
+      - name: Smoke test packed artifact (Linux)
+        run: |
+          chmod +x package/libseekdb/test-packed-artifact-smoke.sh
+          package/libseekdb/test-packed-artifact-smoke.sh "package/libseekdb/libseekdb-${{ matrix.platform }}.zip"
+
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
@@ -235,7 +241,7 @@ jobs:
         uses: actions/cache/save@v4
         with:
           path: .ccache
-          key: ${{ runner.os }}-ccache-libseekdb-${{ matrix.platform }}
+          key: ${{ runner.os }}-ccache-libseekdb-${{ matrix.platform }}-${{ env.COMMIT_SHA }}
 
       - name: Binding tests outcome (Linux)
         if: always()
@@ -265,7 +271,7 @@ jobs:
       matrix:
         include:
           - platform: darwin-arm64
-            runner: macos-14
+            runner: macos-15
             artifact_name: libseekdb-darwin-arm64
             arch: arm64
             cmake_arch: arm64
@@ -276,8 +282,10 @@ jobs:
         with:
           ref: ${{ github.event_name == 'workflow_dispatch' && inputs.ref != '' && inputs.ref || (github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha) }}
 
-      - name: Install macOS dependencies
-        run: brew install cmake dylibbundler googletest ccache pybind11 utf8proc thrift re2 brotli bzip2 || true
+      - name: Install macOS dependencies (pinned Homebrew)
+        run: |
+          chmod +x package/libseekdb/install-macos-brew-deps.sh
+          package/libseekdb/install-macos-brew-deps.sh
 
       - name: Cache deps (macOS)
         uses: actions/cache@v4
@@ -291,10 +299,9 @@ jobs:
         uses: actions/cache@v4
         with:
           path: .ccache
-          # Static key per platform so second run always hits
-          key: ${{ runner.os }}-ccache-libseekdb-${{ matrix.platform }}
+          key: ${{ runner.os }}-ccache-libseekdb-${{ matrix.platform }}-${{ env.COMMIT_SHA }}
           restore-keys: |
-            ${{ runner.os }}-ccache-libseekdb-${{ matrix.platform }}
+            ${{ runner.os }}-ccache-libseekdb-${{ matrix.platform }}-
 
       - name: Build init (macOS)
         run: bash build.sh init
@@ -405,6 +412,30 @@ jobs:
           CODESIGN_ENTITLEMENTS: ${{ github.workspace }}/package/libseekdb/entitlements.plist
         run: cd package/libseekdb && bash libseekdb-build.sh
 
+      - name: Checkout seekdb-js (macOS JS smoke)
+        uses: actions/checkout@v4
+        with:
+          repository: oceanbase/seekdb-js
+          path: seekdb-js
+          fetch-depth: 1
+
+      - name: Setup Node/pnpm (macOS JS smoke)
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Install seekdb-js deps (macOS JS smoke)
+        working-directory: seekdb-js
+        run: pnpm install --filter seekdb --filter @seekdb/js-bindings-build
+
+      - name: Smoke test packed artifact (macOS)
+        env:
+          SEEKDB_JS_ROOT: ${{ github.workspace }}/seekdb-js
+        run: |
+          chmod +x package/libseekdb/test-packed-artifact-smoke.sh \
+            package/libseekdb/test-packed-artifact-smoke-js.sh
+          package/libseekdb/test-packed-artifact-smoke.sh package/libseekdb/libseekdb-darwin-arm64.zip
+
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
@@ -423,7 +454,7 @@ jobs:
         uses: actions/cache/save@v4
         with:
           path: .ccache
-          key: ${{ runner.os }}-ccache-libseekdb-${{ matrix.platform }}
+          key: ${{ runner.os }}-ccache-libseekdb-${{ matrix.platform }}-${{ env.COMMIT_SHA }}
 
       - name: Binding tests outcome (macOS)
         if: always()
@@ -445,7 +476,7 @@ jobs:
           echo "All binding test steps succeeded (or were skipped)."
 
   # ---------- Android NDK cross-compile (macOS arm64 host; target arm64-v8a) ----------
-  # ubuntu-* runners are x86_64 by default. macOS-14 uses Apple silicon + NDK darwin-arm64 prebuilts (see docs).
+  # ubuntu-* runners are x86_64 by default. macOS-15 uses Apple silicon + NDK darwin-arm64 prebuilts (see docs).
   # Alternative: runs-on: ubuntu-24.04-arm for Linux ARM64.
   #
   # Why no FFI binding tests here: libseekdb.so is Android arm64-v8a / ELF for Bionic — the dynamic linker,
@@ -453,7 +484,7 @@ jobs:
   # Running the same unittest/include/*/test.sh would require an Android emulator, rooted device, or adb push + adb shell test.
   build-android:
     name: Build libseekdb (android-arm64-v8a)
-    runs-on: macos-14
+    runs-on: macos-15
     timeout-minutes: 180
     steps:
       - name: Checkout
@@ -813,6 +844,24 @@ jobs:
         env:
           BUILD_TYPE: release
         run: .\package\libseekdb\libseekdb-build.ps1
+
+      - name: Verify libseekdb Windows zip layout
+        shell: pwsh
+        run: |
+          Set-StrictMode -Version Latest
+          $ErrorActionPreference = "Stop"
+          $zip = "package/libseekdb/libseekdb-windows-x64.zip"
+          if (-not (Test-Path $zip)) { throw "Missing $zip" }
+          $tmp = Join-Path $env:TEMP ("libseekdb-verify-" + [guid]::NewGuid().ToString())
+          Expand-Archive -Path $zip -DestinationPath $tmp -Force
+          foreach ($f in @("seekdb.h", "seekdb.dll")) {
+            if (-not (Test-Path (Join-Path $tmp $f))) { throw "Zip missing $f" }
+          }
+          $libs = Join-Path $tmp "libs"
+          if (-not (Test-Path $libs)) { throw "Zip missing libs/ (runtime DLLs required for standalone load)" }
+          $n = @(Get-ChildItem $libs -Filter *.dll -File).Count
+          if ($n -lt 1) { throw "libs/ has no .dll files ($n)" }
+          Write-Host "libseekdb-windows-x64.zip OK: seekdb.dll + libs/ ($n DLLs)"
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4

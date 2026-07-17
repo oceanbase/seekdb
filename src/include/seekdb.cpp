@@ -378,6 +378,117 @@ static bool vector_binary_to_json(const char* ptr, int64_t len, std::string& out
     return true;
 }
 
+static std::string seekdb_escape_sql_single_quoted(const std::string& str_val, bool escape_backslash) {
+    std::string escaped;
+    escaped.reserve(str_val.size() + 16);
+    for (char c : str_val) {
+        if (escape_backslash && c == '\\') {
+            escaped += "\\\\";
+        } else if (c == '\'') {
+            escaped += "''";
+        } else {
+            escaped += c;
+        }
+    }
+    return escaped;
+}
+
+static bool seekdb_is_json_bind_string(const std::string& str_val) {
+    return str_val.size() >= 2 && str_val.front() == '{' && str_val.find('"') != std::string::npos;
+}
+
+static bool seekdb_is_sparse_vector_bind_string(const std::string& str_val) {
+    return str_val.size() >= 2 && str_val.front() == '{' && str_val.find('"') == std::string::npos &&
+           str_val.find(':') != std::string::npos;
+}
+
+static std::string seekdb_format_string_bind_param(
+    SeekdbConnection* conn,
+    const SeekdbStmtData* stmt_data,
+    size_t param_idx,
+    const std::string& str_val) {
+    if (!str_val.empty() && str_val.front() == '[') {
+        return str_val;
+    }
+    if (seekdb_is_sparse_vector_bind_string(str_val)) {
+        return "'" + seekdb_escape_sql_single_quoted(str_val, false) + "'";
+    }
+    size_t col_idx = param_idx;
+    if (stmt_data != nullptr && !stmt_data->param_column_types.empty()) {
+        col_idx = param_idx % stmt_data->param_column_types.size();
+    }
+    const bool json_column =
+        seekdb_is_json_bind_string(str_val) ||
+        (stmt_data != nullptr && col_idx < stmt_data->param_column_types.size() &&
+         ob_is_json_tc(stmt_data->param_column_types[col_idx]));
+    if (json_column) {
+        return "'" + seekdb_escape_sql_single_quoted(str_val, true) + "'";
+    }
+    const size_t buf_len = str_val.length() * 2 + 1;
+    std::vector<char> escaped_buf(buf_len);
+    const unsigned long escaped_length = seekdb_real_escape_string(
+        static_cast<SeekdbHandle>(conn),
+        escaped_buf.data(),
+        static_cast<unsigned long>(escaped_buf.size()),
+        str_val.c_str(),
+        static_cast<unsigned long>(str_val.length()));
+    if (escaped_length != static_cast<unsigned long>(-1)) {
+        return "'" + std::string(escaped_buf.data(), escaped_length) + "'";
+    }
+    return "'" + seekdb_escape_sql_single_quoted(str_val, false) + "'";
+}
+
+static void seekdb_materialize_string_cell(
+    oceanbase::common::ObObj& obj,
+    oceanbase::common::ObObjType obj_type,
+    oceanbase::common::ObArenaAllocator& lob_allocator,
+    std::string& cell_out) {
+    using namespace oceanbase::common;
+    cell_out.clear();
+    if (obj.is_null()) {
+        return;
+    }
+    ObString str_val;
+    const int get_ret = obj.get_string(str_val);
+    if (OB_SUCCESS == get_ret && str_val.ptr() != nullptr && str_val.length() > 0) {
+        cell_out.assign(str_val.ptr(), str_val.length());
+        return;
+    }
+    if (ob_is_text_tc(obj_type) || ob_is_string_type(obj_type)) {
+        ObString lob_str;
+        if (OB_SUCCESS == obj.read_lob_data(lob_allocator, lob_str) && lob_str.ptr() != nullptr &&
+            lob_str.length() > 0) {
+            cell_out.assign(lob_str.ptr(), lob_str.length());
+            return;
+        }
+    }
+    char buf[4096];
+    int64_t pos = 0;
+    if (OB_SUCCESS == obj.print_sql_literal(buf, sizeof(buf), pos) && pos > 0) {
+        std::string sql_literal(buf, static_cast<size_t>(pos));
+        if (sql_literal.length() >= 2 && sql_literal.front() == '\'' && sql_literal.back() == '\'') {
+            sql_literal = sql_literal.substr(1, sql_literal.length() - 2);
+            for (size_t q = 0; (q = sql_literal.find("''", q)) != std::string::npos; q += 1) {
+                sql_literal.replace(q, 2, "'");
+            }
+        }
+        cell_out = std::move(sql_literal);
+        return;
+    }
+    std::vector<char> large_buf(2 * 1024 * 1024, 0);
+    pos = 0;
+    if (OB_SUCCESS == obj.print_sql_literal(large_buf.data(), large_buf.size(), pos) && pos > 0) {
+        std::string sql_literal(large_buf.data(), static_cast<size_t>(pos));
+        if (sql_literal.length() >= 2 && sql_literal.front() == '\'' && sql_literal.back() == '\'') {
+            sql_literal = sql_literal.substr(1, sql_literal.length() - 2);
+            for (size_t q = 0; (q = sql_literal.find("''", q)) != std::string::npos; q += 1) {
+                sql_literal.replace(q, 2, "'");
+            }
+        }
+        cell_out = std::move(sql_literal);
+    }
+}
+
 // Global state
 static std::mutex g_init_mutex;
 static bool g_initialized = false;
@@ -1846,6 +1957,10 @@ static int do_seekdb_execute_inner(ExecuteParams* params) {
         if (errmsg.empty()) {
             errmsg = "Query execution failed";
         }
+        // Append OB error code so logs always carry numeric ret even when the message is non-empty.
+        char code_suffix[32];
+        snprintf(code_suffix, sizeof(code_suffix), " (ret=%d)", ret);
+        errmsg += code_suffix;
         set_error(conn, errmsg.c_str());
         if (conn->embed_result) {
             conn->embed_result->close();
@@ -2219,48 +2334,9 @@ static int do_seekdb_execute_inner(ExecuteParams* params) {
                         }
                         row_null.push_back(false);
                     } else if (ob_is_string_type(obj_type) || ob_is_text_tc(obj_type)) {
-                        // String/TEXT: get_string first; then read_lob_data (100KB+ docs); then print_sql_literal.
-                        ObString str_val;
-                        int get_ret = obj.get_string(str_val);
-                        bool filled = false;
-                        if (OB_SUCCESS == get_ret && str_val.length() > 0 && str_val.ptr()) {
-                            row.push_back(std::string(str_val.ptr(), str_val.length()));
-                            filled = true;
-                        }
-                        if (!filled) {
-                            ObString lob_str;
-                            if (OB_SUCCESS == obj.read_lob_data(row_lob_allocator, lob_str)
-                                && lob_str.ptr() && lob_str.length() > 0) {
-                                row.push_back(std::string(lob_str.ptr(), lob_str.length()));
-                                filled = true;
-                            }
-                        }
-                        if (!filled) {
-                            pos = 0;
-                            if (OB_SUCCESS == obj.print_sql_literal(buf, sizeof(buf), pos) && pos > 0) {
-                                std::string sql_literal(buf, static_cast<size_t>(pos));
-                                if (sql_literal.length() >= 2 && sql_literal.front() == '\'' && sql_literal.back() == '\'') {
-                                    sql_literal = sql_literal.substr(1, sql_literal.length() - 2);
-                                    for (size_t q = 0; (q = sql_literal.find("''", q)) != std::string::npos; q += 1)
-                                        sql_literal.replace(q, 2, "'");
-                                }
-                                row.push_back(sql_literal);
-                            } else {
-                                std::vector<char> large_buf(2 * 1024 * 1024, 0);
-                                pos = 0;
-                                if (OB_SUCCESS == obj.print_sql_literal(large_buf.data(), large_buf.size(), pos) && pos > 0) {
-                                    std::string sql_literal(large_buf.data(), static_cast<size_t>(pos));
-                                    if (sql_literal.length() >= 2 && sql_literal.front() == '\'' && sql_literal.back() == '\'') {
-                                        sql_literal = sql_literal.substr(1, sql_literal.length() - 2);
-                                        for (size_t q = 0; (q = sql_literal.find("''", q)) != std::string::npos; q += 1)
-                                            sql_literal.replace(q, 2, "'");
-                                    }
-                                    row.push_back(sql_literal);
-                                } else {
-                                    row.push_back("");
-                                }
-                            }
-                        }
+                        std::string cell_str;
+                        seekdb_materialize_string_cell(obj, obj_type, row_lob_allocator, cell_str);
+                        row.push_back(std::move(cell_str));
                         row_null.push_back(false);
                     } else if (ob_is_float_tc(obj_type)) {
                         // Float types
@@ -3287,7 +3363,33 @@ static int do_seekdb_execute_update_inner(ExecuteUpdateParams* params) {
         *affected_rows = rows;
         params->ret_code = SEEKDB_SUCCESS;
     } else {
-        set_error(conn, "Update execution failed");
+        // Get detailed error message (aligned with do_seekdb_execute_inner / Python embed)
+        // Surface the real OB error/warning so callers can diagnose failures instead of
+        // seeing only a generic "Update execution failed".
+        std::string errmsg;
+        const oceanbase::common::ObWarningBuffer *wb = oceanbase::common::ob_get_tsi_warning_buffer();
+        if (nullptr != wb) {
+            if (wb->get_err_code() == ret ||
+                (ret >= OB_MIN_RAISE_APPLICATION_ERROR && ret <= OB_MAX_RAISE_APPLICATION_ERROR)) {
+                if (wb->get_err_msg() != nullptr && wb->get_err_msg()[0] != '\0') {
+                    errmsg = std::string(wb->get_err_msg());
+                }
+            }
+        }
+        if (errmsg.empty()) {
+            const char *err_str = ob_errpkt_strerror(ret, false);
+            if (nullptr != err_str && err_str[0] != '\0') {
+                errmsg = std::string(err_str);
+            }
+        }
+        if (errmsg.empty()) {
+            errmsg = "Update execution failed";
+        }
+        // Append OB error code so logs always carry numeric ret even when the message is non-empty.
+        char code_suffix[32];
+        snprintf(code_suffix, sizeof(code_suffix), " (ret=%d)", ret);
+        errmsg += code_suffix;
+        set_error(conn, errmsg.c_str());
         params->ret_code = SEEKDB_ERROR_QUERY_FAILED;
     }
     return OB_SUCCESS;
@@ -4504,40 +4606,6 @@ int seekdb_stmt_prepare(SeekdbStmt stmt, const char* query, unsigned long length
     return SEEKDB_SUCCESS;
 }
 
-// Format STRING bind for SQL substitution with MySQL-compatible escaping (\\n, \\', etc.).
-static std::string format_stmt_string_param(
-    SeekdbConnection* conn,
-    const SeekdbBind& bind,
-    oceanbase::common::ObObjType col_type = oceanbase::common::ObNullType)
-{
-    if (bind.is_null && *bind.is_null) {
-        return "NULL";
-    }
-    if (!bind.buffer || !bind.length) {
-        return "NULL";
-    }
-    const char* raw = static_cast<const char*>(bind.buffer);
-    unsigned long raw_len = static_cast<unsigned long>(*bind.length);
-    if (raw_len == 0) {
-        return "''";
-    }
-    std::vector<char> escaped_buf(raw_len * 2 + 1);
-    unsigned long escaped_len = seekdb_real_escape_string(
-        static_cast<SeekdbHandle>(conn),
-        escaped_buf.data(),
-        static_cast<unsigned long>(escaped_buf.size()),
-        raw,
-        raw_len);
-    if (escaped_len == static_cast<unsigned long>(-1)) {
-        return "NULL";
-    }
-    std::string quoted = "'" + std::string(escaped_buf.data(), escaped_len) + "'";
-    if (col_type == oceanbase::common::ObJsonType) {
-        return "CAST(" + quoted + " AS JSON)";
-    }
-    return quoted;
-}
-
 int seekdb_stmt_bind_param(SeekdbStmt stmt, SeekdbBind* bind) {
     if (!stmt || !bind) {
         return SEEKDB_ERROR_INVALID_PARAM;
@@ -4630,15 +4698,12 @@ int seekdb_stmt_execute(SeekdbStmt stmt) {
                             param_value = std::to_string(val);
                         }
                         break;
-                    case SEEKDB_TYPE_STRING: {
-                        oceanbase::common::ObObjType col_type = oceanbase::common::ObNullType;
-                        const size_t column_count = stmt_data->param_column_types.size();
-                        if (column_count > 0) {
-                            col_type = stmt_data->param_column_types[param_idx % column_count];
+                    case SEEKDB_TYPE_STRING:
+                        if (bind.buffer && bind.length) {
+                            const std::string str_val(static_cast<const char*>(bind.buffer), *bind.length);
+                            param_value = seekdb_format_string_bind_param(conn, stmt_data, param_idx, str_val);
                         }
-                        param_value = format_stmt_string_param(conn, bind, col_type);
                         break;
-                    }
                     case SEEKDB_TYPE_BLOB:
                         // BLOB type: use hexadecimal format (aligned with MySQL MYSQL_TYPE_BLOB)
                         // BLOB type indicates binary data that should not undergo charset conversion

@@ -407,3 +407,4 @@ test/var
 .worktrees/
 .claude/
 CLAUDE.md
+.codegraph/
