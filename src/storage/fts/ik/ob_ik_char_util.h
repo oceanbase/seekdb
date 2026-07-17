@@ -458,7 +458,16 @@ inline int ObFTCharUtil::do_classify(const char *input, const uint8_t char_len, 
   bool checker = false;
   type = CharType::USELESS;
 
-  if (OB_FAIL(is_alpha<CS_TYPE>(input, char_len, checker))) {
+  // UTF-8 ASCII does not need Unicode decoding or the full class probe chain.
+  if (CS_TYPE == CHARSET_UTF8MB4 && char_len == 1
+      && static_cast<unsigned char>(input[0]) < 0x80) {
+    const unsigned char ch = static_cast<unsigned char>(input[0]);
+    if ((ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z')) {
+      type = CharType::ENGLISH_LETTER;
+    } else if (ch >= '0' && ch <= '9') {
+      type = CharType::ARABIC_LETTER;
+    }
+  } else if (OB_FAIL(is_alpha<CS_TYPE>(input, char_len, checker))) {
   } else if (checker) {
     type = CharType::ENGLISH_LETTER;
   } else if (OB_FAIL(is_arabic<CS_TYPE>(input, char_len, checker))) {

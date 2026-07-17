@@ -238,7 +238,7 @@ int ObTransformPreProcess::transform_one_stmt(common::ObIArray<ObParentDMLStmt> 
     }
     if (OB_SUCC(ret)) {
       if (stmt->get_match_exprs().count() > 0 &&
-          OB_FAIL(preserve_order_for_fulltext_search(stmt, is_happened))) {
+          OB_FAIL(preserve_order_for_fulltext_search(parent_stmts, stmt, is_happened))) {
         LOG_WARN("failed to preserve order for fulltext search", K(ret));
       } else {
         trans_happened |= is_happened;
@@ -4615,15 +4615,55 @@ int ObTransformPreProcess::do_flatten_conditions(ObDMLStmt *stmt, ObIArray<ObRaw
 
 // full-text index queries on a single base table are processed with order preservation. 
 // (Order is not preserved in multi-table join scenarios.)
-int ObTransformPreProcess::preserve_order_for_fulltext_search(ObDMLStmt *stmt, bool& trans_happened)
+int ObTransformPreProcess::preserve_order_for_fulltext_search(
+    const ObIArray<ObParentDMLStmt> &parent_stmts,
+    ObDMLStmt *stmt,
+    bool &trans_happened)
 {
   int ret = OB_SUCCESS;
   trans_happened = false;
   TableItem *table_item = NULL;
   ObRawExpr *match_expr = nullptr;
+  bool parent_only_counts_rows = false;
   if (OB_ISNULL(stmt)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected null", K(ret));
+  } else if (parent_stmts.count() == 1 && stmt->is_select_stmt()) {
+    const ObSelectStmt *child_stmt = static_cast<const ObSelectStmt *>(stmt);
+    const ObDMLStmt *parent_stmt = parent_stmts.at(0).stmt_;
+    if (OB_NOT_NULL(parent_stmt) && parent_stmt->is_select_stmt()) {
+      const ObSelectStmt *parent_select = static_cast<const ObSelectStmt *>(parent_stmt);
+      const ObAggFunRawExpr *count_expr = parent_select->get_aggr_item_size() == 1
+          ? parent_select->get_aggr_item(0) : nullptr;
+      const TableItem *parent_table = parent_select->get_table_size() == 1
+          ? parent_select->get_table_item(0) : nullptr;
+      parent_only_counts_rows = child_stmt->has_limit()
+          && !child_stmt->is_calc_found_rows()
+          && !child_stmt->is_fetch_with_ties()
+          && OB_ISNULL(child_stmt->get_limit_percent_expr())
+          && parent_select->is_scala_group_by()
+          && parent_select->get_select_item_size() == 1
+          && parent_select->get_from_item_size() == 1
+          && parent_select->get_condition_exprs().empty()
+          && !parent_select->has_having()
+          && !parent_select->has_order_by()
+          && !parent_select->has_distinct()
+          && !parent_select->has_window_function()
+          && !parent_select->has_limit()
+          && !parent_select->has_select_into()
+          && OB_NOT_NULL(count_expr)
+          && count_expr->get_expr_type() == T_FUN_COUNT
+          && count_expr->get_real_param_count() == 0
+          && parent_select->get_select_item(0).expr_ == count_expr
+          && OB_NOT_NULL(parent_table)
+          && parent_table->is_generated_table()
+          && parent_table->ref_query_ == child_stmt;
+    }
+  }
+
+  if (OB_FAIL(ret)) {
+  } else if (parent_only_counts_rows) {
+    // COUNT(*) observes only how many rows LIMIT produces, not their score order.
   } else if (stmt->get_table_items().count() != 1 || stmt->get_order_item_size() != 0) {
     // do nothing
   } else if (stmt->is_select_stmt() && 

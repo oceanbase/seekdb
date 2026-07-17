@@ -31,6 +31,14 @@ class MultimodeAlloctor;
 class ObExprTokenize : public ObStringExprOperator
 {
 public:
+  class ObTokenizeCtx final : public ObExprOperatorCtx
+  {
+  public:
+    ObTokenizeCtx() : ObExprOperatorCtx(), cached_result_(), is_cached_(false) {}
+    ObString cached_result_;
+    bool is_cached_;
+  };
+
   explicit ObExprTokenize(common::ObIAllocator &alloc);
   ~ObExprTokenize() override;
   /**
@@ -47,6 +55,7 @@ public:
                         int64_t param_num,
                         common::ObExprTypeCtx &type_ctx) const override;
   int cg_expr(ObExprCGCtx &op_cg_ctx, const ObRawExpr &raw_expr, ObExpr &rt_expr) const override;
+  bool need_rt_ctx() const override { return true; }
 
 private:
   struct TokenizeParam

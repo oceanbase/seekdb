@@ -55,6 +55,21 @@ int ObExprTokenize::eval_tokenize(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &e
 {
   int ret = OB_SUCCESS;
 
+  ObTokenizeCtx *tokenize_ctx = nullptr;
+  const bool cacheable = expr.extra_ != 0 && expr.expr_ctx_id_ != ObExpr::INVALID_EXP_CTX_ID;
+  if (cacheable) {
+    tokenize_ctx = static_cast<ObTokenizeCtx *>(
+        ctx.exec_ctx_.get_expr_op_ctx(static_cast<uint64_t>(expr.expr_ctx_id_)));
+    if (OB_ISNULL(tokenize_ctx)
+        && OB_FAIL(ctx.exec_ctx_.create_expr_op_ctx(
+            static_cast<uint64_t>(expr.expr_ctx_id_), tokenize_ctx))) {
+      LOG_WARN("fail to create tokenize expression context", K(ret), K(expr.expr_ctx_id_));
+    } else if (OB_NOT_NULL(tokenize_ctx) && tokenize_ctx->is_cached_) {
+      expr_datum.set_string(tokenize_ctx->cached_result_);
+      return OB_SUCCESS;
+    }
+  }
+
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
   common::ObArenaAllocator &temp_allocator = tmp_alloc_g.get_allocator();
 
@@ -75,6 +90,18 @@ int ObExprTokenize::eval_tokenize(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &e
                                                      json_result,
                                                      expr_datum))) {
     LOG_WARN("fail to pack json result", K(ret));
+  } else if (cacheable && OB_NOT_NULL(tokenize_ctx)) {
+    const ObString packed = expr_datum.get_string();
+    char *buf = static_cast<char *>(ctx.exec_ctx_.get_allocator().alloc(packed.length()));
+    if (OB_ISNULL(buf)) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+      LOG_WARN("fail to allocate tokenize result cache", K(ret), K(packed.length()));
+    } else {
+      MEMCPY(buf, packed.ptr(), packed.length());
+      tokenize_ctx->cached_result_.assign_ptr(buf, packed.length());
+      tokenize_ctx->is_cached_ = true;
+      expr_datum.set_string(tokenize_ctx->cached_result_);
+    }
   }
 
   return ret;
@@ -324,6 +351,12 @@ int ObExprTokenize::cg_expr(ObExprCGCtx &op_cg_ctx,
   if (OB_SUCC(ret)) {
     // do register
     rt_expr.eval_func_ = eval_tokenize;
+    bool all_static_const = true;
+    for (int64_t i = 0; all_static_const && i < raw_expr.get_param_count(); ++i) {
+      const ObRawExpr *param = raw_expr.get_param_expr(i);
+      all_static_const = OB_NOT_NULL(param) && param->is_static_const_expr();
+    }
+    rt_expr.extra_ = all_static_const ? 1 : 0;
   }
   return ret;
 }
