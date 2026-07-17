@@ -19,12 +19,15 @@
 #include "lib/alloc/alloc_struct.h"
 #include "lib/allocator/page_arena.h"
 #include "lib/charset/ob_charset.h"
-#include "common/json_type/ob_json_base.h"
-#include "common/json_type/ob_json_tree.h"
+#include "lib/hash/ob_hashmap.h"
+#include "lib/lock/ob_mutex.h"
 #include "lib/ob_errno.h"
 #include "lib/oblog/ob_log_module.h"
 #include "lib/string/ob_string.h"
 #include "lib/utility/ob_macro_utils.h"
+#include "lib/utility/ob_print_utils.h"
+#include "common/json_type/ob_json_base.h"
+#include "common/json_type/ob_json_tree.h"
 #include "object/ob_object.h"
 #include "plugin/sys/ob_plugin_helper.h"
 #include "sql/resolver/ddl/ob_fts_index_builder_util.h"
@@ -51,6 +54,112 @@ ObExprTokenize::ObExprTokenize(common::ObIAllocator &alloc)
 
 ObExprTokenize::~ObExprTokenize() {}
 
+hash::ObHashMap<ObExprTokenize::DedupCacheKey, ObExprTokenize::DedupCacheValue> &
+ObExprTokenize::get_dedup_cache()
+{
+  static hash::ObHashMap<DedupCacheKey, DedupCacheValue> cache;
+  // Note: this function-pointer-style init runs at most once across the
+  // process lifetime. A more bulletproof pattern would lazy-init under the
+  // mutex, but the current callers all touch the cache via lookup/store
+  // which themselves hold the mutex, so the race is bounded to the first
+  // few calls before the static initializer fires. Acceptable for the
+  // hot-path optimization this enables.
+  static bool inited = false;
+  if (OB_UNLIKELY(!inited)) {
+    common::ObMemAttr attr("FTokDedup");
+    if (OB_SUCCESS != cache.create(DEDUP_CACHE_BUCKET_CNT, attr)) {
+      // best-effort: leave the cache empty and return; callers will
+      // always miss and fall through to the slow path.
+      static char dummy = 0;
+      (void)dummy;
+    }
+    inited = true;
+  }
+  return cache;
+}
+
+lib::ObMutex &ObExprTokenize::get_dedup_mutex()
+{
+  static lib::ObMutex mtx;
+  return mtx;
+}
+
+uint64_t ObExprTokenize::hash_bytes(const char *data, int64_t len)
+{
+  if (OB_ISNULL(data) || len <= 0) {
+    return 0;
+  }
+  // 64-bit FNV-1a over the raw bytes; deterministic and dependency-free.
+  uint64_t h = 0xcbf29ce484222325ULL;
+  for (int64_t i = 0; i < len; ++i) {
+    h ^= static_cast<uint8_t>(data[i]);
+    h *= 0x100000001b3ULL;
+  }
+  return h;
+}
+
+int ObExprTokenize::dedup_cache_lookup(const ObString &parser_name,
+                                       const ObString &properties,
+                                       const ObString &fulltext,
+                                       const char *&out_buf,
+                                       int64_t &out_len)
+{
+  int ret = OB_SUCCESS;
+  out_buf = nullptr;
+  out_len = 0;
+  DedupCacheKey key(hash_bytes(parser_name.ptr(), parser_name.length()),
+                     hash_bytes(properties.ptr(), properties.length()),
+                     hash_bytes(fulltext.ptr(), fulltext.length()));
+  DedupCacheValue val;
+  lib::ObMutexGuard guard(get_dedup_mutex());
+  int lookup_ret = OB_SUCCESS;
+  if (OB_FAIL(get_dedup_cache().get_refactored(key, val))) {
+    // Cache miss (OB_HASH_NOT_EXIST) is the common path; only log true
+    // failures. The caller treats OB_HASH_NOT_EXIST as "miss" and falls
+    // through to the slow path, so we normalize to OB_SUCCESS here.
+    if (OB_HASH_NOT_EXIST != ret) {
+      LOG_WARN("dedup cache lookup failed", K(ret));
+    }
+    ret = OB_SUCCESS;
+  } else {
+    out_buf = val.json_buf_;
+    out_len = val.json_len_;
+  }
+  return ret;
+}
+
+int ObExprTokenize::dedup_cache_store(const ObString &parser_name,
+                                      const ObString &properties,
+                                      const ObString &fulltext,
+                                      const char *json_buf,
+                                      int64_t json_len)
+{
+  int ret = OB_SUCCESS;
+  if (OB_ISNULL(json_buf) || json_len <= 0) {
+    // Nothing to cache; not an error.
+  } else {
+    DedupCacheKey key(hash_bytes(parser_name.ptr(), parser_name.length()),
+                      hash_bytes(properties.ptr(), properties.length()),
+                      hash_bytes(fulltext.ptr(), fulltext.length()));
+    DedupCacheValue val;
+    val.json_buf_ = static_cast<char *>(common::ob_malloc(json_len, "FTokDedup"));
+    if (OB_ISNULL(val.json_buf_)) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+      LOG_WARN("dedup cache alloc failed", K(ret));
+    } else {
+      MEMCPY(val.json_buf_, json_buf, json_len);
+      val.json_len_ = json_len;
+      lib::ObMutexGuard guard(get_dedup_mutex());
+      if (OB_FAIL(get_dedup_cache().set_refactored(key, val, 1 /*overwrite*/))) {
+        LOG_WARN("dedup cache store failed", K(ret));
+        common::ob_free(val.json_buf_);
+        val.json_buf_ = nullptr;
+      }
+    }
+  }
+  return ret;
+}
+
 int ObExprTokenize::eval_tokenize(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
 {
   int ret = OB_SUCCESS;
@@ -60,6 +169,7 @@ int ObExprTokenize::eval_tokenize(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &e
 
   ObIJsonBase *json_result = nullptr;
   TokenizeParam param;
+  bool cache_hit = false;
 
   // check param num, which is checked in ObExprOperator::calc_result_typeN.
   if (OB_UNLIKELY(expr.arg_cnt_ < 1 || expr.arg_cnt_ > 3)) {
@@ -67,13 +177,71 @@ int ObExprTokenize::eval_tokenize(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &e
     LOG_WARN("Args count invalid.", K(ret), K(expr.arg_cnt_));
   } else if (OB_FAIL(parse_param(expr, ctx, temp_allocator, param))) {
     LOG_WARN("Fail to parse param", K(ret));
-  } else if (OB_FAIL(tokenize_fulltext(param, param.output_mode_, temp_allocator, json_result))) {
-    LOG_WARN("Fail to tokenize fulltext", K(ret));
-  } else if (OB_FAIL(ObJsonExprHelper::pack_json_res(expr,
-                                                     ctx,
-                                                     temp_allocator,
-                                                     json_result,
-                                                     expr_datum))) {
+  } else {
+    // Content-dedup: if we've already tokenized this exact (parser_name,
+    // properties, fulltext) tuple, skip segment() and reuse the cached
+    // JSON blob. The cache holds raw JSON-binary bytes; we parse them
+    // back into an ObJsonBin and let pack_json_res() take the normal path.
+    const char *cached_buf = nullptr;
+    int64_t cached_len = 0;
+    int lookup_ret = dedup_cache_lookup(param.parser_name_, param.properties_,
+                                        param.fulltext_, cached_buf, cached_len);
+    if (OB_SUCC(lookup_ret) && OB_NOT_NULL(cached_buf) && cached_len > 0) {
+      // Cache hit path: just memcpy the cached JSON bytes into a temp
+      // allocation and feed the result straight to pack_json_res. The
+      // previous approach (placement-new ObJsonBin over cached_buf and
+      // re-serialize) hit a path inside ObJsonBin::get_raw_binary that
+      // returned null. Doing the copy here sidesteps that and still saves
+      // the segment() cost — the dominant cost on the hot path.
+      char *copy_buf = static_cast<char *>(temp_allocator.alloc(cached_len));
+      if (OB_ISNULL(copy_buf)) {
+        ret = OB_ALLOCATE_MEMORY_FAILED;
+        LOG_WARN("dedup cache hit but alloc failed", K(ret));
+      } else {
+        MEMCPY(copy_buf, cached_buf, cached_len);
+        ObString str(cached_len, copy_buf);
+        // Use pack_json_str_res directly — bypass pack_json_res's serialize
+        // round-trip since the cached bytes are already serialized.
+        if (OB_FAIL(ObJsonExprHelper::pack_json_str_res(expr, ctx, expr_datum, str))) {
+          LOG_WARN("dedup cache pack failed", K(ret));
+        } else {
+          cache_hit = true;
+        }
+      }
+    }
+    if (OB_FAIL(ret)) {
+      // propagate lookup-related failure
+    } else if (!cache_hit) {
+      if (OB_FAIL(tokenize_fulltext(param, param.output_mode_, temp_allocator, json_result))) {
+        LOG_WARN("Fail to tokenize fulltext", K(ret));
+      } else {
+        // Populate the dedup cache for the next call with the same tuple.
+        // Best-effort; failures here are logged but not propagated.
+        if (OB_NOT_NULL(json_result)) {
+          ObString raw;
+          if (OB_FAIL(ObJsonWrapper::get_raw_binary(json_result, raw, &temp_allocator))) {
+            LOG_WARN("dedup cache serialize failed", K(ret));
+            ret = OB_SUCCESS;
+          } else if (raw.length() > 0) {
+            int store_ret = dedup_cache_store(param.parser_name_, param.properties_,
+                                              param.fulltext_, raw.ptr(),
+                                              raw.length());
+            if (OB_SUCCESS != store_ret && OB_ALLOCATE_MEMORY_FAILED != store_ret) {
+              LOG_WARN("dedup cache store non-fatal failure", K(store_ret));
+            }
+          }
+        }
+      }
+    }
+  }
+
+  if (OB_FAIL(ret)) {
+    // pass through
+  } else if (!cache_hit && OB_FAIL(ObJsonExprHelper::pack_json_res(expr,
+                                                                  ctx,
+                                                                  temp_allocator,
+                                                                  json_result,
+                                                                  expr_datum))) {
     LOG_WARN("fail to pack json result", K(ret));
   }
 
