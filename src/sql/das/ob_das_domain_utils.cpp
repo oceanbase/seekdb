@@ -50,7 +50,7 @@ class ObFtsDDLTokenCache final
 {
   static constexpr int64_t SLOT_COUNT = 65536;
   static constexpr int64_t LOCK_COUNT = 64;
-  static constexpr int64_t PRODUCER_LOCK_COUNT = 256;
+  static constexpr int64_t PRODUCER_LOCK_COUNT = 8192;
   static constexpr int64_t PROBE_COUNT = 8;
   static constexpr int64_t MAX_ENTRY_SIZE = 256L * 1024L;
   struct EntryHeader
@@ -266,26 +266,39 @@ int ObFtsDDLTokenCache::get(const ObString &parser_name,
   const int64_t lock_idx = hash % LOCK_COUNT;
   const int64_t shard_slot_count = SLOT_COUNT / LOCK_COUNT;
   const int64_t shard_base = (hash / LOCK_COUNT) % shard_slot_count;
-  lib::ObMutexGuard guard(locks_[lock_idx]);
-  for (int64_t probe = 0; OB_SUCC(ret) && !hit && probe < PROBE_COUNT; ++probe) {
-    const int64_t slot_idx = lock_idx
-        + ((shard_base + probe) % shard_slot_count) * LOCK_COUNT;
-    Slot &slot = slots_[slot_idx];
-    const EntryHeader *header = nullptr;
-    const char *token_pos = nullptr;
-    if (match_entry(slot, hash, parser_name, parser_properties, ft_obj_meta,
-                    doc_id_str, fulltext, header, token_pos)) {
-      if (OB_FAIL(materialize_rows(
-              *header, token_pos, doc_id, is_fts_index_aux, allocator, rows))) {
-        LOG_WARN("materialize shared fulltext tokens failed", K(ret), K(hash));
-      } else {
+  char *hit_data = nullptr;
+  int64_t hit_size = 0;
+  const char *hit_token_pos = nullptr;
+  {
+    lib::ObMutexGuard guard(locks_[lock_idx]);
+    for (int64_t probe = 0; OB_SUCC(ret) && !hit && probe < PROBE_COUNT; ++probe) {
+      const int64_t slot_idx = lock_idx
+          + ((shard_base + probe) % shard_slot_count) * LOCK_COUNT;
+      Slot &slot = slots_[slot_idx];
+      const EntryHeader *header = nullptr;
+      const char *token_pos = nullptr;
+      if (match_entry(slot, hash, parser_name, parser_properties, ft_obj_meta,
+                      doc_id_str, fulltext, header, token_pos)) {
+        // Task4 Op11：命中后先摘出槽位，释放分片锁，再做行物化拷贝。
         hit = true;
-        // Task4 Op11：两个输出各消费一次，第二个输出取走后立即释放共享 token。
-        ob_free(slot.data_);
+        hit_data = slot.data_;
+        hit_size = slot.size_;
+        hit_token_pos = token_pos;
         slot.data_ = nullptr;
         slot.size_ = 0;
       }
     }
+  }
+  if (OB_NOT_NULL(hit_data)) {
+    const EntryHeader *header = reinterpret_cast<const EntryHeader *>(hit_data);
+    if (OB_UNLIKELY(hit_size < static_cast<int64_t>(sizeof(EntryHeader)))) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("invalid shared fulltext token cache entry", K(ret), K(hash), K(hit_size));
+    } else if (OB_FAIL(materialize_rows(
+            *header, hit_token_pos, doc_id, is_fts_index_aux, allocator, rows))) {
+      LOG_WARN("materialize shared fulltext tokens failed", K(ret), K(hash));
+    }
+    ob_free(hit_data);
   }
   return ret;
 }
