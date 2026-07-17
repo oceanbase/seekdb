@@ -44,6 +44,7 @@ ObExprOperatorType ObFTIndexRowCache::FTS_DOC_WORD_EXPR_TYPE[] = {T_FUN_SYS_DOC_
 ObFTIndexRowCache::ObFTIndexRowCache()
   : parser_memctx_(nullptr),
     merge_memctx_(nullptr),
+    row_memctx_(nullptr),
     rows_(),
     word_map_(),
     word_map_bucket_count_(0),
@@ -76,6 +77,8 @@ int ObFTIndexRowCache::init(
     LOG_WARN("failed to create full-text parser memctx", K(ret));
   } else if (OB_FAIL(CURRENT_CONTEXT->CREATE_CONTEXT(merge_memctx_, param))) {
     LOG_WARN("failed to create merge memctx", K(ret));
+  } else if (OB_FAIL(CURRENT_CONTEXT->CREATE_CONTEXT(row_memctx_, param))) {
+    LOG_WARN("failed to create full-text row memctx", K(ret));
   } else if (OB_FAIL(word_map_.create(8, common::ObMemAttr("FTReuseWordMap")))) {
     LOG_WARN("failed to create reusable full-text word map", K(ret));
   } else if (OB_FAIL(helper_.init(&(parser_memctx_->get_arena_allocator()), parser_name, parser_properties))) {
@@ -161,6 +164,10 @@ void ObFTIndexRowCache::reset()
     DESTROY_CONTEXT(merge_memctx_);
     merge_memctx_ = nullptr;
   }
+  if (OB_NOT_NULL(row_memctx_)) {
+    DESTROY_CONTEXT(row_memctx_);
+    row_memctx_ = nullptr;
+  }
   is_inited_ = false;
 }
 
@@ -171,7 +178,7 @@ void ObFTIndexRowCache::reuse()
   if (word_map_.created()) {
     word_map_.reuse();
   }
-  if (OB_NOT_NULL(parser_memctx_) && !helper_.can_reuse_parser_session()) {
+  if (OB_NOT_NULL(parser_memctx_)) {
     parser_memctx_->reset_remain_one_page();
   }
   if (OB_NOT_NULL(merge_memctx_)) {
@@ -206,14 +213,14 @@ int ObFTIndexRowCache::prepare_word_map(const int64_t fulltext_len)
 int ObFTIndexRowCache::ensure_row_slots(const int64_t row_count)
 {
   int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(row_count <= 0 || OB_ISNULL(parser_memctx_))) {
+  if (OB_UNLIKELY(row_count <= 0 || OB_ISNULL(row_memctx_))) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid reusable full-text row request", K(ret), K(row_count));
   } else if (row_count <= row_slot_capacity_) {
     // The current slot array is large enough and its datum storage is stable.
   } else {
     const int64_t grown_capacity = MAX(row_count, MAX(row_slot_capacity_ * 2, 32L));
-    void *buffer = parser_memctx_->get_arena_allocator().alloc(
+    void *buffer = row_memctx_->get_arena_allocator().alloc(
         sizeof(blocksstable::ObDatumRow) * grown_capacity);
     blocksstable::ObDatumRow *new_slots = static_cast<blocksstable::ObDatumRow *>(buffer);
     if (OB_ISNULL(new_slots)) {
@@ -222,7 +229,7 @@ int ObFTIndexRowCache::ensure_row_slots(const int64_t row_count)
     } else {
       new (new_slots) blocksstable::ObDatumRow[grown_capacity];
       for (int64_t idx = 0; OB_SUCC(ret) && idx < grown_capacity; ++idx) {
-        if (OB_FAIL(new_slots[idx].init(parser_memctx_->get_arena_allocator(), 4))) {
+        if (OB_FAIL(new_slots[idx].init(row_memctx_->get_arena_allocator(), 4))) {
           LOG_WARN("failed to initialize reusable full-text row slot", K(ret), K(idx), K(grown_capacity));
         }
       }

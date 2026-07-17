@@ -58,6 +58,7 @@ private:
 private:
   lib::MemoryContext parser_memctx_;
   lib::MemoryContext merge_memctx_;
+  lib::MemoryContext row_memctx_;
   ObDomainIndexRow rows_;
   ObFTWordMap word_map_;
   int64_t word_map_bucket_count_;

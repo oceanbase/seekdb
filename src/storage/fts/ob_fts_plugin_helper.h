@@ -36,7 +36,6 @@ namespace plugin
 {
 class ObIFTParserDesc;
 class ObPluginParam;
-class ObITokenIterator;
 }
 
 namespace storage
@@ -190,10 +189,6 @@ public:
       const common::ObString &plugin_name,
       const common::ObString &plugin_properties,
       bool &is_same) const;
-  bool can_reuse_parser_session() const
-  {
-    return is_inited_ && (parser_name_.is_ik() || parser_name_.is_beng());
-  }
   /**
    * Make json document for fulltext search
    *
@@ -234,8 +229,6 @@ private:
   ObFTParser parser_name_;
   ObAddWordFlag add_word_flag_;
   ObFTParserProperty parser_property_;
-  mutable plugin::ObITokenIterator *ik_session_iter_;
-  mutable plugin::ObITokenIterator *beng_session_iter_;
   bool is_inited_;
 
 private:
