@@ -511,20 +511,8 @@ int ObRefreshFulltextDictExecutor::execute(ObExecContext &ctx, ObRefreshFulltext
   const ObSQLSessionInfo *session = ctx.get_my_session();
   ObSchemaGetterGuard schema_guard;
   const ObTableSchema *table_schema = nullptr;
-  ObString table_name = stmt.get_table_name();
-  ObString db_name;
-  ObString tbl_name;
-  // Split "db.table" or just "table"
-  const char *name_ptr = table_name.ptr();
-  int64_t name_len = table_name.length();
-  const char *dot = static_cast<const char*>(memchr(name_ptr, '.', name_len));
-  if (NULL != dot) {
-    int64_t db_len = dot - name_ptr;
-    db_name.assign_ptr(name_ptr, db_len);
-    tbl_name.assign_ptr(dot + 1, name_len - db_len - 1);
-  } else {
-    tbl_name = table_name;
-  }
+  ObString db_name = stmt.get_database_name();
+  ObString tbl_name = stmt.get_table_name();
 
   if (OB_FAIL(ret)) {
   } else if (OB_ISNULL(session)) {

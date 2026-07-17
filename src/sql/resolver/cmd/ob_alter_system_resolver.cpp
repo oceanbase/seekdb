@@ -1234,23 +1234,29 @@ int ObRefreshFulltextDictResolver::resolve(const ParseNode &parse_tree)
 {
   int ret = OB_SUCCESS;
   ObRefreshFulltextDictStmt *stmt = nullptr;
-  if (OB_UNLIKELY(T_REFRESH_FULLTEXT_DICT != parse_tree.type_)) {
+  if (OB_UNLIKELY(T_REFRESH_FULLTEXT_DICT != parse_tree.type_)
+      || OB_ISNULL(parse_tree.children_) || parse_tree.num_child_ < 1
+      || OB_ISNULL(parse_tree.children_[0])) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("type is not T_REFRESH_FULLTEXT_DICT", "type", get_type_name(parse_tree.type_));
+    LOG_WARN("invalid REFRESH FULLTEXT DICT parse tree", K(ret));
   } else if (OB_ISNULL(stmt = create_stmt<ObRefreshFulltextDictStmt>())) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_ERROR("create ObRefreshFulltextDictStmt failed");
-  } else if (FALSE_IT(stmt_ = stmt)) {
-  } else if (OB_UNLIKELY(NULL == parse_tree.children_ || 1 != parse_tree.num_child_)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("parse tree children is invalid", K(ret), K(parse_tree.num_child_));
   } else {
-    const ParseNode *name_node = parse_tree.children_[0];
-    if (OB_ISNULL(name_node)) {
-      ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("table name is null", K(ret));
-    } else {
-      ObString table_name(name_node->str_len_, name_node->str_value_);
+    stmt_ = stmt;
+    const ParseNode *node = parse_tree.children_[0];
+    ObString full_name(node->str_len_, node->str_value_);
+    if (OB_SUCC(ret)) {
+      ObString database_name;
+      ObString table_name;
+      const char *dot = static_cast<const char*>(memchr(full_name.ptr(), '.', full_name.length()));
+      if (OB_NOT_NULL(dot)) {
+        database_name.assign_ptr(full_name.ptr(), dot - full_name.ptr());
+        table_name.assign_ptr(dot + 1, full_name.length() - (dot - full_name.ptr()) - 1);
+      } else {
+        table_name = full_name;
+      }
+      stmt->set_database_name(database_name);
       stmt->set_table_name(table_name);
     }
   }
