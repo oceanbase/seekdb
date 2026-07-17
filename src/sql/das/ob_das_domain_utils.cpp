@@ -85,6 +85,9 @@ int ObFTIndexRowCache::init(
   } else if (OB_FAIL(token_map_.create(
                          FT_TOKEN_MIN_BUCKET_COUNT, common::ObMemAttr("FTIndexTokenMap")))) {
     LOG_WARN("fail to create full-text token map", K(ret), K(FT_TOKEN_MIN_BUCKET_COUNT));
+  } else if (OB_FAIL(token_map_.get_local_allocer().reserve(FT_TOKEN_MAX_BUCKET_COUNT))) {
+    LOG_WARN("fail to reserve reusable full-text token nodes", K(ret),
+        K(FT_TOKEN_MAX_BUCKET_COUNT));
   } else if (OB_FAIL(datum_row_.init(metadata_allocator_, FT_WORD_DOC_COL_CNT))) {
     LOG_WARN("fail to initialize reusable full-text datum row", K(ret), K(FT_WORD_DOC_COL_CNT));
   } else {
