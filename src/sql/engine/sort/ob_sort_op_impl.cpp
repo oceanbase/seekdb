@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SQL_ENG
 
 #include "ob_sort_op_impl.h"
+#include "sql/engine/sort/ob_sort_memory_policy.h"
 #include "sql/engine/px/p2p_datahub/ob_pushdown_topn_filter_msg.h"
 
 namespace oceanbase
@@ -1787,22 +1788,15 @@ int ObSortOpImpl::build_ems_heap(int64_t &merge_ways)
       ems_heap_->reset();
     }
     if (OB_SUCC(ret)) {
-      merge_ways = get_memory_limit() / ObChunkDatumStore::BLOCK_SIZE;
-      merge_ways = std::max(static_cast<int64_t>(2), merge_ways);
-      if (merge_ways < max_ways) {
-        bool dumped = false;
-        int64_t need_size = max_ways * ObChunkDatumStore::BLOCK_SIZE;
-        if (OB_FAIL(sql_mem_processor_.extend_max_memory_size(
-            &mem_context_->get_malloc_allocator(),
-            [&](int64_t max_memory_size) {
-              return max_memory_size < need_size;
-            },
-            dumped, mem_context_->used()))) {
-          LOG_WARN("failed to extend memory size", K(ret));
-        }
-        merge_ways = std::max(merge_ways, get_memory_limit() / ObChunkDatumStore::BLOCK_SIZE);
+      if (OB_FAIL(ObSortMemoryPolicy::calc_adaptive_merge_ways(
+            sql_mem_processor_,
+            mem_context_->get_malloc_allocator(),
+            mem_context_->used(),
+            ObChunkDatumStore::BLOCK_SIZE,
+            max_ways,
+            merge_ways))) {
+        LOG_WARN("failed to calculate adaptive merge ways", K(ret));
       }
-      merge_ways = std::min(merge_ways, max_ways);
       LOG_TRACE("do merge sort ", K(first->level_), K(merge_ways), K(sort_chunks_.get_size()), K(get_memory_limit()), K(sql_mem_processor_.get_profile()));
     }
 
