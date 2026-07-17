@@ -39,6 +39,8 @@
 #include "ob_expr_host_ip.h"
 #include "ob_expr_trim.h"
 #include "ob_expr_tokenize.h"
+#include "ob_expr_load_file.h"
+#include "ob_expr_ai_split_document.h"
 #include "ob_expr_insert.h"
 #include "ob_expr_int2ip.h"
 #include "ob_expr_int_div.h"
@@ -1341,6 +1343,8 @@ static ObExpr::EvalFunc g_expr_eval_functions[] = {
   ObExprVectorCosineSimilarity::calc_cosine_similarity,                /* 872 */
   ObExprVectorIPSimilarity::calc_ip_similarity,                        /* 873 */
   ObExprVectorSimilarity::calc_similarity,                             /* 874 */
+  ObExprLoadFile::eval_load_file,                                     /* 875 */
+  ObExprAISplitDocument::eval_ai_split_document,                      /* 876 */
 };
 
 static ObExpr::EvalBatchFunc g_expr_eval_batch_functions[] = {

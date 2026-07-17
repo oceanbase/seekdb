@@ -18,6 +18,7 @@
 #define OB_FTS_PLUGIN_HELPER_H_
 
 #include "lib/allocator/ob_fifo_allocator.h"
+#include "lib/allocator/page_arena.h"
 #include "lib/charset/ob_charset.h"
 #include "lib/string/ob_string.h"
 #include "object/ob_object.h"
@@ -35,6 +36,7 @@ class ObIJsonBase;
 namespace plugin
 {
 class ObIFTParserDesc;
+class ObITokenIterator;
 class ObPluginParam;
 }
 
@@ -218,6 +220,9 @@ private:
       const char *fulltext,
       const int64_t fulltext_len,
       common::ObIAllocator &allocator,
+      common::ObIAllocator &metadata_allocator,
+      const bool reuse_parser,
+      plugin::ObITokenIterator *&iter,
       ObAddWord &add_word);
   int set_add_word_flag(const plugin::ObIFTParserDesc &ftparser_desc);
 private:
@@ -227,6 +232,8 @@ private:
   ObFTParser parser_name_;
   ObAddWordFlag add_word_flag_;
   ObFTParserProperty parser_property_;
+  mutable common::ObArenaAllocator parser_allocator_;
+  mutable plugin::ObITokenIterator *token_iterator_;
   bool is_inited_;
 
 private:
