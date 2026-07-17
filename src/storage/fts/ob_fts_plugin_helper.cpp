@@ -26,6 +26,7 @@
 #include "share/ob_force_print_log.h"
 #include "storage/fts/dict/ob_ft_dict_hub.h"
 #include "storage/fts/ob_fts_parser_property.h"
+#include "storage/fts/ob_i_ft_parser.h"
 #include "storage/fts/ob_fts_stop_word.h"
 
 using namespace oceanbase::plugin;
@@ -237,16 +238,27 @@ int ObFTParseHelper::segment(
     const char *ft,
     const int64_t ft_len,
     common::ObIAllocator &allocator,
-    ObAddWord &add_word)
+    ObAddWord &add_word) const
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(parser_version < 0 || nullptr == parser_desc || nullptr == cs || nullptr == ft || 0 >= ft_len)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", K(ret), K(parser_version), KP(parser_desc), KP(cs), K(ft), K(ft_len));
   } else {
-    ObFTParserParam param;
-    ObITokenIterator *iter = nullptr;
+    ObFTParserParam local_param;
+    const bool reuse_parser = can_reuse_parser();
+    ObFTParserParam &param = reuse_parser ? parser_param_ : local_param;
+    ObITokenIterator *iter = reuse_parser ? cached_iter_ : nullptr;
+    if (reuse_parser && OB_NOT_NULL(iter) && cached_charset_ != cs) {
+      destroy_cached_parser();
+      iter = nullptr;
+    }
+    if (reuse_parser) {
+      parser_scratch_alloc_.reset_remain_one_page();
+    }
     param.allocator_ = &allocator;
+    param.metadata_alloc_ = reuse_parser ? &parser_metadata_alloc_ : &allocator;
+    param.scratch_alloc_ = reuse_parser ? &parser_scratch_alloc_ : &allocator;
     param.cs_ = cs;
     param.fulltext_ = ft;
     param.ft_length_ = ft_len;
@@ -258,12 +270,23 @@ int ObFTParseHelper::segment(
     param.min_ngram_size_ = property.min_ngram_token_size_;
     param.max_ngram_size_ = property.max_ngram_token_size_;
 
-    if (OB_FAIL(parser_desc->segment(&param, iter))) {
+    if (reuse_parser && OB_NOT_NULL(iter)) {
+      if (OB_FAIL(static_cast<ObIFTParser *>(iter)->reuse_parser(ft, ft_len))) {
+        LOG_WARN("fail to reuse parser", K(ret), K(parser_name_), KP(iter));
+      }
+    } else if (OB_FAIL(parser_desc->segment(&param, iter))) {
       LOG_WARN("fail to segment", K(ret), K(param));
+    } else if (reuse_parser) {
+      cached_iter_ = iter;
+      cached_charset_ = cs;
     } else if (OB_ISNULL(iter)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected error, token iterator is nullptr", K(ret), KP(iter));
-    } else {
+    }
+    if (OB_SUCC(ret) && OB_ISNULL(iter)) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("unexpected error, token iterator is nullptr", K(ret), KP(iter));
+    } else if (OB_SUCC(ret)) {
       const char *word = nullptr;
       int64_t word_len = 0;
       int64_t char_cnt = 0;
@@ -281,9 +304,11 @@ int ObFTParseHelper::segment(
         ret = OB_SUCCESS;
       }
     }
-    if (OB_NOT_NULL(iter)) {
+    if (!reuse_parser && OB_NOT_NULL(iter)) {
       parser_desc->free_token_iter(&param, iter);
       iter = nullptr;
+    } else if (reuse_parser && OB_SUCCESS != ret) {
+      destroy_cached_parser();
     }
   }
   return ret;
@@ -296,6 +321,12 @@ ObFTParseHelper::ObFTParseHelper()
     parser_name_(),
     add_word_flag_(),
     parser_property_(),
+    parser_metadata_alloc_(),
+    parser_scratch_alloc_(),
+    parser_param_(),
+    cached_iter_(nullptr),
+    cached_charset_(nullptr),
+    enable_parser_reuse_(false),
     is_inited_(false)
 {
 }
@@ -308,7 +339,8 @@ ObFTParseHelper::~ObFTParseHelper()
 int ObFTParseHelper::init(
     common::ObIAllocator *allocator,
     const common::ObString &plugin_name,
-    const common::ObString &plugin_properties)
+    const common::ObString &plugin_properties,
+    const bool enable_parser_reuse)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(is_inited_)) {
@@ -335,6 +367,9 @@ int ObFTParseHelper::init(
     LOG_WARN("fail to set add word flag", K(ret), K(parser_name_));
   } else {
     allocator_ = allocator;
+    parser_metadata_alloc_.set_attr(common::ObMemAttr("FTParserMeta"));
+    parser_scratch_alloc_.set_attr(common::ObMemAttr("FTParserScratch"));
+    enable_parser_reuse_ = enable_parser_reuse;
     is_inited_ = true;
     LOG_TRACE("succeed to init ft parser helper", K(ret), K(plugin_name), K(plugin_properties), KPC(this));
   }
@@ -346,11 +381,31 @@ int ObFTParseHelper::init(
 
 void ObFTParseHelper::reset()
 {
+  destroy_cached_parser();
   parser_desc_ = nullptr;
   plugin_param_ = nullptr;
   allocator_ = nullptr;
   add_word_flag_.clear();
+  parser_param_.reset();
+  parser_scratch_alloc_.reset();
+  parser_metadata_alloc_.reset();
+  cached_charset_ = nullptr;
+  enable_parser_reuse_ = false;
   is_inited_ = false;
+}
+
+bool ObFTParseHelper::can_reuse_parser() const
+{
+  return enable_parser_reuse_ && parser_name_.is_ik();
+}
+
+void ObFTParseHelper::destroy_cached_parser() const
+{
+  if (OB_NOT_NULL(cached_iter_) && OB_NOT_NULL(parser_desc_)) {
+    parser_desc_->free_token_iter(&parser_param_, cached_iter_);
+  }
+  cached_iter_ = nullptr;
+  cached_charset_ = nullptr;
 }
 
 int ObFTParseHelper::segment(

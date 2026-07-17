@@ -30,6 +30,25 @@ namespace storage
 {
 using common::ObArenaAllocator;
 
+namespace
+{
+
+class ObWordFrequencyUpdater
+{
+public:
+  explicit ObWordFrequencyUpdater(const int64_t increment) : increment_(increment) {}
+
+  void operator()(common::hash::HashMapPair<ObFTWord, int64_t> &entry) const
+  {
+    entry.second += increment_;
+  }
+
+private:
+  int64_t increment_;
+};
+
+} // namespace
+
 ////////////////////////////////////////////////////////////////////////////////
 // class ObStopWordChecker
 ObStopWordChecker::~ObStopWordChecker()
@@ -196,16 +215,26 @@ int ObAddWord::casedown_word(const ObFTWord &src, ObFTWord &dst)
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid src ft word", K(ret), K(src));
   } else if (flag_.casedown()) {
-    ObString dst_str;
-    if (OB_FAIL(ObCharset::tolower(
-                    word_meta_.get_collation_type(),
-                    src.get_word().get_string(),
-                    dst_str,
-                    allocator_))) {
-      LOG_WARN("fail to tolower", K(ret), K(src), K(word_meta_));
+    const ObString &src_str = src.get_word().get_string();
+    bool is_lower_ascii = true;
+    for (int64_t i = 0; is_lower_ascii && i < src_str.length(); ++i) {
+      const unsigned char ch = static_cast<unsigned char>(src_str.ptr()[i]);
+      is_lower_ascii = ch < 0x80 && !(ch >= 'A' && ch <= 'Z');
+    }
+    if (is_lower_ascii) {
+      dst = src;
     } else {
-      ObFTWord tmp(dst_str.length(), dst_str.ptr(), word_meta_);
-      dst = tmp;
+      ObString dst_str;
+      if (OB_FAIL(ObCharset::tolower(
+                      word_meta_.get_collation_type(),
+                      src_str,
+                      dst_str,
+                      allocator_))) {
+        LOG_WARN("fail to tolower", K(ret), K(src), K(word_meta_));
+      } else {
+        ObFTWord tmp(dst_str.length(), dst_str.ptr(), word_meta_);
+        dst = tmp;
+      }
     }
   } else {
     dst = src;
@@ -252,7 +281,6 @@ int ObAddWord::check_stopword(const ObFTWord &ft_word, bool &is_stopword)
 int ObAddWord::groupby_word(const ObFTWord &word, const int64_t word_freq)
 {
   int ret = OB_SUCCESS;
-  int64_t word_count = 0;
   if (OB_UNLIKELY(word.empty() || word_freq <= 0)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", K(ret), K(word), K(word_freq));
@@ -260,16 +288,10 @@ int ObAddWord::groupby_word(const ObFTWord &word, const int64_t word_freq)
     if (OB_FAIL(word_map_.set_refactored(word, 1/*word count*/))) {
       LOG_WARN("fail to set fulltext word and count", K(ret), K(word));
     }
-  } else if (OB_FAIL(word_map_.get_refactored(word, word_count)) && OB_HASH_NOT_EXIST != ret) {
-    LOG_WARN("fail to get fulltext word", K(ret), K(word));
   } else {
-    if (OB_HASH_NOT_EXIST == ret) {
-      word_count = 1;
-    } else {
-      word_count += word_freq;
-    }
-    if (OB_FAIL(word_map_.set_refactored(word, word_count, 1/*overwrite*/))) {
-      LOG_WARN("fail to set fulltext word and count", K(ret), K(word), K(word_count));
+    ObWordFrequencyUpdater updater(word_freq);
+    if (OB_FAIL(word_map_.set_or_update(word, 1 /* first occurrence */, updater))) {
+      LOG_WARN("fail to insert or update fulltext word", K(ret), K(word), K(word_freq));
     }
   }
   return ret;

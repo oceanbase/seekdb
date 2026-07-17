@@ -22,6 +22,7 @@
 #include "lib/utility/ob_macro_utils.h"
 #include "storage/fts/ik/ob_ik_char_util.h"
 #include "storage/fts/ik/ob_ik_token.h"
+#include "storage/fts/ik/ob_fast_segment_array.h"
 
 namespace oceanbase
 {
@@ -39,6 +40,7 @@ public:
   ~TokenizeContext();
 
   int init();
+  int reuse_context(const char *fulltext, const int64_t fulltext_len);
   int reset_resource();
 
   int get_next_token(const char *&word, int64_t &word_len, int64_t &offset, int64_t &char_cnt);
@@ -65,6 +67,7 @@ public:
   bool is_last() const;
   bool iter_end() const;
   bool is_smart() const;
+  bool is_results_exhaust() const;
 
   int add_chain(ObIKTokenChain *chain);
   int add_token(const char *fulltext,
@@ -73,11 +76,15 @@ public:
                 int64_t char_cnt,
                 ObIKTokenType type);
 
-  ObFTSortList &token_list() { return token_list_; }
+  ObFTFastSortList &token_list() { return token_list_; }
 
-  ObList<ObIKToken, ObIAllocator> &result_list() { return result_list_; }
+  ObFastSegmentArray<ObIKToken> &get_results() { return results_; }
 
   int32_t handle_size() const { return handle_size_; }
+
+  void calc_buffer_start_cursor() { buffer_start_cursor_ = cursor_; }
+  int64_t get_buffer_start_cursor() const { return buffer_start_cursor_; }
+  int64_t get_buffer_end_cursor() const { return cursor_; }
 
 private:
   int prepare_next_char();
@@ -96,8 +103,10 @@ private:
   uint32_t handle_size_;
   bool is_smart_;
 
-  ObFTSortList token_list_;
-  ObList<ObIKToken, ObIAllocator> result_list_;
+  ObFTFastSortList token_list_;
+  ObFastSegmentArray<ObIKToken> results_;
+  int64_t result_idx_;
+  int64_t buffer_start_cursor_;
 
 private:
   DISALLOW_COPY_AND_ASSIGN(TokenizeContext);
@@ -109,6 +118,8 @@ public:
   ObIIKProcessor() {}
 
   virtual ~ObIIKProcessor() {}
+
+  virtual void reuse() {}
 
   int process(TokenizeContext &ctx,
               const char *ch,

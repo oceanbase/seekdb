@@ -29,6 +29,13 @@ namespace oceanbase
 {
 namespace storage
 {
+void ObIKLetterProcessor::reuse()
+{
+  reset_english_state();
+  reset_arabic_state();
+  reset_mix_state();
+}
+
 ObIKLetterProcessor::ObIKLetterProcessor() {}
 
 int ObIKLetterProcessor::do_process(TokenizeContext &ctx,
