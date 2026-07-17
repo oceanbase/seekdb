@@ -1,0 +1,13 @@
+=== FTS hot-path benchmark ===
+mysql: mysql -h127.0.0.1 -P2882 -uroot@sys -N -s
+rounds=2000, warmup=50
+
+[1/3] ik tokenizer (Chinese, dict lookup hot path)
+  parser=ik  rounds=2000  total_ms=43761  avg_ms=21.881
+[2/3] beng tokenizer (English)
+  parser=beng  rounds=2000  total_ms=43262  avg_ms=21.631
+[3/3] space tokenizer (English, baseline)
+  parser=space  rounds=2000  total_ms=43196  avg_ms=21.598
+
+Done. Run the same script on the baseline build and compare avg_ms.
+Functional check: mysql ... < tools/benchmark/fts_hotpath_bench.sql
