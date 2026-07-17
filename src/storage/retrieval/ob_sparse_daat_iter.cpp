@@ -251,22 +251,36 @@ int ObSRDaaTIterImpl::get_next_rows(const int64_t capacity, int64_t &count)
       count = 0;
     }
   } else {
+    const bool streaming = iter_param_->stream_daat_mode();
+    // Streaming DAAT fast-path: emit each matched doc id directly into the
+    // eval ctx, skipping per-row relevance collection and the
+    // buffered_domain_ids_/buffered_relevances_ cache. project_results is
+    // then a no-op for this path.
     count = 0;
     const int64_t real_capacity = MIN(capacity, iter_param_->max_batch_size_);
-    while (OB_SUCC(ret) && count < real_capacity) {
-      if (OB_FAIL(do_one_merge_round(count))) {
-        if (OB_UNLIKELY(OB_ITER_END != ret)) {
-          LOG_WARN("failed to do one merge round", K(ret), K(count));
+    if (streaming) {
+      while (OB_SUCC(ret) && count < real_capacity) {
+        if (OB_FAIL(do_one_merge_round_streaming(count, real_capacity))) {
+          if (OB_UNLIKELY(OB_ITER_END != ret)) {
+            LOG_WARN("failed to do one merge round (streaming)", K(ret), K(count));
+          }
+        }
+      }
+      // rows already projected inline; skip project_results.
+    } else {
+      while (OB_SUCC(ret) && count < real_capacity) {
+        if (OB_FAIL(do_one_merge_round(count))) {
+          if (OB_UNLIKELY(OB_ITER_END != ret)) {
+            LOG_WARN("failed to do one merge round", K(ret), K(count));
+          }
+        }
+      }
+      if (OB_SUCC(ret) || OB_ITER_END == ret) {
+        if (count > 0 && OB_FAIL(project_results(count))) {
+          LOG_WARN("failed to project results", K(ret), K(count));
         }
       }
     }
-
-    if (OB_SUCC(ret) || OB_ITER_END == ret) {
-      if (count > 0 && OB_FAIL(project_results(count))) {
-        LOG_WARN("failed to project results", K(ret), K(count));
-      }
-    }
-
   }
   return ret;
 }
@@ -298,25 +312,86 @@ int ObSRDaaTIterImpl::do_one_merge_round(int64_t &count)
   return ret;
 }
 
+int ObSRDaaTIterImpl::do_one_merge_round_streaming(int64_t &count, const int64_t capacity)
+{
+  int ret = OB_SUCCESS;
+  const ObDatum *id_datum = nullptr;
+  bool got_valid_id = false;
+  // Limit-parallel locals so the hot loop avoids iter_param_->X deref churn.
+  const common::ObLimitParam *limit_param = iter_param_->limit_param_;
+  const int64_t offset = limit_param->offset_;
+  const int64_t limit = limit_param->limit_;
+  const bool has_limit = limit_param->is_valid();
+
+  if (OB_FAIL(fill_merge_heap())) {
+    if (OB_UNLIKELY(OB_ITER_END != ret)) {
+      LOG_WARN("failed to fill merge heap (streaming)", K(ret));
+    }
+  } else if (OB_FAIL(collect_dims_by_id_streaming(id_datum, got_valid_id))) {
+    LOG_WARN("failed to merge dimensions (streaming)", K(ret));
+  } else if (!got_valid_id) {
+    // no doc id emitted this round
+  } else {
+    ++input_row_cnt_;
+    if (has_limit && input_row_cnt_ <= offset) {
+      // past offset window — emit nothing this round, just continue.
+    } else if (count >= capacity) {
+      // shouldn't happen: caller checks count < capacity before calling
+    } else {
+      // Inline projection: write doc id directly into eval ctx at slot `count`.
+      // set_datum_func_ expects an ObDocIdExt; wrap the raw datum via
+      // ObDocIdExt::from_datum (same path cache_result uses to populate
+      // buffered_domain_ids_, but we skip the buffer here).
+      sql::ObDocIdExt id_ext;
+      id_ext.from_datum(*id_datum);
+      sql::ObExpr *id_proj_expr = iter_param_->id_proj_expr_;
+      sql::ObEvalCtx *eval_ctx = iter_param_->eval_ctx_;
+      ObEvalCtx::BatchInfoScopeGuard guard(*eval_ctx);
+      guard.set_batch_idx(count);
+      ObDatum &id_proj_datum = id_proj_expr->locate_datum_for_write(*eval_ctx);
+      set_datum_func_(id_proj_datum, id_ext);
+      id_proj_expr->get_evaluated_flags(*eval_ctx).set(count);
+      id_proj_expr->set_evaluated_projected(*eval_ctx);
+      ++count;
+      ++output_row_cnt_;
+      if (has_limit && output_row_cnt_ >= limit) {
+        ret = OB_ITER_END;
+      }
+    }
+  }
+  return ret;
+}
+
 int ObSRDaaTIterImpl::fill_merge_heap()
 {
   int ret = OB_SUCCESS;
   ObSRMergeItem item;
-  for (int64_t i = 0; OB_SUCC(ret) && i < next_round_cnt_; ++i) {
-    const int64_t iter_idx = next_round_iter_idxes_[i];
-    ObISRDaaTDimIter *dim_iter = nullptr;
-    if (OB_ISNULL(dim_iter = dim_iters_->at(iter_idx))) {
+  // Cache members/pointers locally: this loop runs once per dim_iter per
+  // merge round and per emitted doc; deref through iter_param_->X and
+  // dim_iters_->at(X) on every iteration costs L1 misses.
+  const ObSparseRetrievalMergeParam *ip = iter_param_;
+  const ObIArray<double> *dim_weights = ip->dim_weights_;
+  const bool have_weights = (nullptr != dim_weights);
+  const double field_boost = ip->field_boost_;
+  const int64_t round_cnt = next_round_cnt_;
+  const int64_t *round_idxes = (round_cnt > 0) ? &next_round_iter_idxes_[0] : nullptr;
+  ObISRDaaTDimIter *const *dim_iters_arr = (dim_iters_->count() > 0) ? &dim_iters_->at(0) : nullptr;
+
+  for (int64_t i = 0; OB_SUCC(ret) && i < round_cnt; ++i) {
+    const int64_t iter_idx = round_idxes[i];
+    ObISRDaaTDimIter *dim_iter = dim_iters_arr[iter_idx];
+    if (OB_ISNULL(dim_iter)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected null dimension iter", K(ret), K(iter_idx), KPC_(iter_param));
     } else if (OB_FAIL(dim_iter->get_next_row())) {
       if (OB_UNLIKELY(OB_ITER_END != ret)) {
-        LOG_WARN("fail to try load next batch dimension data", K(ret));\
+        LOG_WARN("fail to try load next batch dimension data", K(ret));
       } else {
         ret = OB_SUCCESS;
       }
     } else if (OB_FAIL(dim_iter->get_curr_score(item.relevance_))) {
       LOG_WARN("fail to get current score", K(ret));
-    } else if (OB_NOT_NULL(iter_param_->dim_weights_) && FALSE_IT(item.relevance_ = item.relevance_ * iter_param_->field_boost_ * iter_param_->dim_weights_->at(iter_idx))) {
+    } else if (have_weights && FALSE_IT(item.relevance_ = item.relevance_ * field_boost * dim_weights->at(iter_idx))) {
     } else if (OB_FAIL(dim_iter->get_curr_id(iter_domain_ids_[iter_idx]))) {
       LOG_WARN("fail to get current doc id", K(ret));
     } else if (FALSE_IT(item.iter_idx_ = iter_idx)) {
@@ -330,7 +405,7 @@ int ObSRDaaTIterImpl::fill_merge_heap()
   if (OB_FAIL(ret)) {
   } else if (merge_heap_->empty()) {
     ret = OB_ITER_END;
-  } else if (0 != next_round_cnt_ && OB_FAIL(merge_heap_->rebuild())) {
+  } else if (0 != round_cnt && OB_FAIL(merge_heap_->rebuild())) {
     LOG_WARN("fail to rebuild merge heap", K(ret));
   } else {
     next_round_cnt_ = 0;
@@ -347,17 +422,20 @@ int ObSRDaaTIterImpl::collect_dims_by_id(const ObDatum *&id_datum, double &relev
   int64_t iter_idx = 0;
   relevance = 0.0;
   got_valid_id = false;
+  // Local aliases to avoid re-deref'ing class members in the hot loop.
+  ObSRMergeHeap *heap = merge_heap_;
+  ObSRDaaTRelevanceCollector *coll = relevance_collector_;
 
-  while (OB_SUCC(ret) && !merge_heap_->empty() && !curr_doc_end) {
-    if (merge_heap_->is_unique_champion()) {
+  while (OB_SUCC(ret) && !heap->empty() && !curr_doc_end) {
+    if (heap->is_unique_champion()) {
       curr_doc_end = true;
     }
-    if (OB_FAIL(merge_heap_->top(top_item))) {
+    if (OB_FAIL(heap->top(top_item))) {
       LOG_WARN("failed to get top item from merge heap", K(ret));
-    } else if (OB_FAIL(relevance_collector_->collect_one_dim(top_item->iter_idx_, top_item->relevance_))) {
+    } else if (OB_FAIL(coll->collect_one_dim(top_item->iter_idx_, top_item->relevance_))) {
       LOG_WARN("failed to collect one dimension", K(ret));
     } else if (FALSE_IT(iter_idx = top_item->iter_idx_)) {
-    } else if (OB_FAIL(merge_heap_->pop())) {
+    } else if (OB_FAIL(heap->pop())) {
       LOG_WARN("failed to pop top item in heap", K(ret));
     } else {
       next_round_iter_idxes_[next_round_cnt_++] = iter_idx;
@@ -370,7 +448,7 @@ int ObSRDaaTIterImpl::collect_dims_by_id(const ObDatum *&id_datum, double &relev
     if (OB_ISNULL(id_datum)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected null id datum", K(ret));
-    } else if (OB_FAIL(relevance_collector_->get_result(relevance, got_valid_id))) {
+    } else if (OB_FAIL(coll->get_result(relevance, got_valid_id))) {
       LOG_WARN("failed to get result", K(ret));
     } else if (got_valid_id && OB_FAIL(process_collected_row(*id_datum, relevance))) {
       LOG_WARN("failed to process collected row", K(ret));
@@ -383,6 +461,43 @@ int ObSRDaaTIterImpl::collect_dims_by_id(const ObDatum *&id_datum, double &relev
 int ObSRDaaTIterImpl::process_collected_row(const ObDatum &id_datum, const double relevance)
 {
   return OB_SUCCESS;
+}
+
+int ObSRDaaTIterImpl::collect_dims_by_id_streaming(const ObDatum *&id_datum, bool &got_valid_id)
+{
+  int ret = OB_SUCCESS;
+  // Streaming counterpart of collect_dims_by_id: skip relevance collection
+  // entirely, just consume the merge heap until the current doc id group
+  // is exhausted (curr_doc_end == true).
+  const ObSRMergeItem *top_item = nullptr;
+  bool curr_doc_end = false;
+  int64_t iter_idx = 0;
+  got_valid_id = false;
+
+  while (OB_SUCC(ret) && !merge_heap_->empty() && !curr_doc_end) {
+    if (merge_heap_->is_unique_champion()) {
+      curr_doc_end = true;
+    }
+    if (OB_FAIL(merge_heap_->top(top_item))) {
+      LOG_WARN("failed to get top item from merge heap", K(ret));
+    } else if (FALSE_IT(iter_idx = top_item->iter_idx_)) {
+    } else if (OB_FAIL(merge_heap_->pop())) {
+      LOG_WARN("failed to pop top item in heap", K(ret));
+    } else {
+      next_round_iter_idxes_[next_round_cnt_++] = iter_idx;
+    }
+  }
+
+  if (OB_SUCC(ret)) {
+    id_datum = iter_domain_ids_[iter_idx];
+    if (OB_ISNULL(id_datum)) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("unexpected null id datum", K(ret));
+    } else {
+      got_valid_id = true;
+    }
+  }
+  return ret;
 }
 
 int ObSRDaaTIterImpl::filter_on_demand(const int64_t count, const double relevance, bool &need_project)
@@ -428,11 +543,15 @@ int ObSRDaaTIterImpl::filter_on_demand(const int64_t count, const double relevan
 int ObSRDaaTIterImpl::cache_result(int64_t &count, const ObDatum &id_datum, const double relevance)
 {
   int ret = OB_SUCCESS;
-  const common::ObLimitParam *limit_param= iter_param_->limit_param_;
+  // Cache pointer + scalar limit values once; the hot loop calls this for
+  // every emitted doc, so avoid reloading iter_param_->limit_param_->X in
+  // each invocation.
+  const common::ObLimitParam *limit_param = iter_param_->limit_param_;
   const int64_t limit = limit_param->limit_;
   const int64_t offset = limit_param->offset_;
+  const bool has_limit = limit_param->is_valid();
   ++input_row_cnt_;
-  if (limit_param->is_valid() && input_row_cnt_ <= offset) {
+  if (has_limit && input_row_cnt_ <= offset) {
     // TODO: Maybe we should not process offset logic here
     // don't need to project
   } else if (OB_UNLIKELY(count >= buffered_domain_ids_.count() || count >= buffered_relevances_.count())) {
@@ -443,7 +562,7 @@ int ObSRDaaTIterImpl::cache_result(int64_t &count, const ObDatum &id_datum, cons
     buffered_relevances_[count] = relevance;
     ++count;
     ++output_row_cnt_;
-    if (limit_param->is_valid() && output_row_cnt_ >= limit) {
+    if (has_limit && output_row_cnt_ >= limit) {
       ret = OB_ITER_END;
     }
   }
@@ -453,26 +572,32 @@ int ObSRDaaTIterImpl::cache_result(int64_t &count, const ObDatum &id_datum, cons
 int ObSRDaaTIterImpl::project_results(const int64_t count)
 {
   int ret = OB_SUCCESS;
+  // Cache pointers once: this loop runs once per emitted doc, so every
+  // iter_param_->X dereference on the vectorized path matters.
   ObExpr *relevance_proj_expr = iter_param_->relevance_proj_expr_;
   ObExpr *id_proj_expr = iter_param_->id_proj_expr_;
   ObEvalCtx *eval_ctx = iter_param_->eval_ctx_;
   ObEvalCtx::BatchInfoScopeGuard guard(*eval_ctx);
+  const bool project_relevance = iter_param_->need_project_relevance();
+  void (*const set_datum_fn)(ObDatum &, const sql::ObDocIdExt &) = set_datum_func_;
+  const ObDocIdExt *buffered_ids = (count > 0) ? &buffered_domain_ids_[0] : nullptr;
+  const double *buffered_rels = (count > 0) ? &buffered_relevances_[0] : nullptr;
 
   if (eval_ctx->is_vectorized()) {
     sql::ObBitVector &id_evaluated_flags = id_proj_expr->get_evaluated_flags(*eval_ctx);
     for (int64_t i = 0; i < count; ++i) {
       guard.set_batch_idx(i);
       ObDatum &id_proj_datum = id_proj_expr->locate_datum_for_write(*eval_ctx);
-      set_datum_func_(id_proj_datum, buffered_domain_ids_[i]);
+      set_datum_fn(id_proj_datum, buffered_ids[i]);
       id_evaluated_flags.set(i);
       id_proj_expr->set_evaluated_projected(*eval_ctx);
     }
-    if (iter_param_->need_project_relevance()) {
+    if (project_relevance) {
       sql::ObBitVector &relevance_evaluated_flags = relevance_proj_expr->get_evaluated_flags(*eval_ctx);
       for (int64_t i = 0; i < count; ++i) {
         guard.set_batch_idx(i);
         ObDatum &relevance_proj_datum = relevance_proj_expr->locate_datum_for_write(*eval_ctx);
-        relevance_proj_datum.set_double(buffered_relevances_[i]);
+        relevance_proj_datum.set_double(buffered_rels[i]);
         relevance_evaluated_flags.set(i);
         relevance_proj_expr->set_evaluated_projected(*eval_ctx);
       }
@@ -483,10 +608,10 @@ int ObSRDaaTIterImpl::project_results(const int64_t count)
   } else {
     guard.set_batch_idx(0);
     ObDatum &id_proj_datum = id_proj_expr->locate_datum_for_write(*eval_ctx);
-    set_datum_func_(id_proj_datum, buffered_domain_ids_[0]);
+    set_datum_fn(id_proj_datum, buffered_ids[0]);
     id_proj_expr->set_evaluated_projected(*eval_ctx);
     ObDatum &relevance_proj_datum = relevance_proj_expr->locate_datum_for_write(*eval_ctx);
-    relevance_proj_datum.set_double(buffered_relevances_[0]);
+    relevance_proj_datum.set_double(buffered_rels[0]);
     relevance_proj_expr->set_evaluated_projected(*eval_ctx);
   }
   return ret;
