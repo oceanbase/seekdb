@@ -299,7 +299,7 @@ int ObSRTaaTIterImpl::fill_chunk_stores()
     ObSEArray<ObExpr *, 2> exprs;
     if (OB_FAIL(exprs.push_back(iter_param_->id_proj_expr_))) {
       LOG_WARN("failed to push back id expr", K(ret));
-    } else if (iter_param_->need_project_relevance()
+    } else if (nullptr != iter_param_->relevance_expr_
         && OB_FAIL(exprs.push_back(iter_param_->relevance_expr_))) {
       LOG_WARN("failed to push back relevance expr", K(ret));
     }
@@ -430,7 +430,7 @@ int ObSRTaaTIterImpl::load_next_hash_map()
     ObSEArray<ObExpr *, 2> exprs;
     if (OB_FAIL(exprs.push_back(iter_param_->id_proj_expr_))) {
       LOG_WARN("failed to push back id expr", K(ret));
-    } else if (iter_param_->need_project_relevance()
+    } else if (nullptr != iter_param_->relevance_expr_
         && OB_FAIL(exprs.push_back(iter_param_->relevance_expr_))) {
       LOG_WARN("failed to push back relevance expr", K(ret));
     }
@@ -450,7 +450,7 @@ int ObSRTaaTIterImpl::load_next_hash_map()
         ObDatum &id_datum = iter_param_->id_proj_expr_->locate_expr_datum(*eval_ctx);
         if (OB_FAIL(id.from_datum(id_datum))) {
           LOG_WARN("failed to get id from datum", K(ret));
-        } else if (iter_param_->need_project_relevance()) {
+        } else if (nullptr != iter_param_->relevance_expr_) {
           ObDatum &relevance_datum = iter_param_->relevance_expr_->locate_expr_datum(*eval_ctx);
           cur_relevance = relevance_datum.get_double();
           if (OB_FAIL(map->get_refactored(id, last_relevance))) {

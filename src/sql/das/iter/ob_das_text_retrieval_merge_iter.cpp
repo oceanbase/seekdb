@@ -1104,7 +1104,7 @@ int ObDASTRTaatIter::fill_output_exprs(int64_t &count, int64_t safe_capacity)
   int ret = OB_SUCCESS;
   const bool need_relevance = ir_ctdef_->need_proj_relevance_score();
   ObDatum *filter_res = nullptr;
-  ObExpr *match_filter = need_relevance ? ir_ctdef_->match_filter_ : nullptr;
+  ObExpr *match_filter = ir_ctdef_->match_filter_;
   ObDASTRTaatHashMap *map = hash_maps_[cur_map_idx_];
   ObEvalCtx *eval_ctx = ir_rtdef_->eval_ctx_;
   ObExpr *relevance_proj_col = ir_ctdef_->relevance_proj_col_;
@@ -1279,7 +1279,7 @@ int ObDASTRTaatIter::fill_chunk_store_by_tr_iter()
     ObSEArray<ObExpr *, 2> exprs;
     if (OB_FAIL(exprs.push_back(ir_ctdef_->inv_scan_domain_id_col_))) {
       LOG_WARN("failed to push back expr", K(ret));
-    } else if (ir_ctdef_->need_proj_relevance_score()) {
+    } else if (ir_ctdef_->need_calc_relevance()) {
       if (OB_FAIL(exprs.push_back(ir_ctdef_->relevance_expr_))) {
         LOG_WARN("failed to push back expr", K(ret));
       }
@@ -1462,7 +1462,7 @@ int ObDASTRTaatIter::load_next_hashmap()
 int ObDASTRTaatIter::inner_load_next_hashmap()
 {
   int ret = OB_SUCCESS;
-  const bool need_relevance = ir_ctdef_->need_proj_relevance_score();
+  const bool need_relevance = ir_ctdef_->need_calc_relevance();
   if (OB_UNLIKELY(hash_maps_[cur_map_idx_]->size() != 0)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected to get one empty hashmap", K(ret), K_(cur_map_idx));
@@ -1954,7 +1954,7 @@ int ObDASTRDaatIter::inner_get_next_row()
     bool filter_valid = false;
     bool got_valid_document = false;
     bool doc_valid = false;
-    ObExpr *match_filter = ir_ctdef_->need_calc_relevance() ? ir_ctdef_->match_filter_ : nullptr;
+    ObExpr *match_filter = ir_ctdef_->match_filter_;
     ObDatum *filter_res = nullptr;
     const bool is_batch = false;
     while (OB_SUCC(ret) && !got_valid_document) {
@@ -2001,7 +2001,7 @@ int ObDASTRDaatIter::inner_get_next_rows(int64_t &count, int64_t capacity)
   } else if (0 == capacity) {
     count = 0;
   } else {
-    ObExpr *match_filter = ir_ctdef_->need_calc_relevance() ? ir_ctdef_->match_filter_ : nullptr;
+    ObExpr *match_filter = ir_ctdef_->match_filter_;
     int64_t real_capacity = min(capacity, ir_rtdef_->eval_ctx_->max_batch_size_);
     ObDatum *filter_res = nullptr;
     const bool is_batch = true;
@@ -2137,6 +2137,7 @@ int ObDASTRDaatIter::fill_loser_tree_item(
 {
   int ret = OB_SUCCESS;
   item.iter_idx_ = iter_idx;
+  item.relevance_ = 1;
   ObExpr *doc_id_expr = ir_ctdef_->inv_scan_domain_id_col_;
   const ObDatum &doc_id_datum = doc_id_expr->locate_expr_datum(*ir_rtdef_->eval_ctx_);
   if (OB_FAIL(iter_doc_ids_[iter_idx].from_datum(doc_id_datum))) {
@@ -2345,7 +2346,7 @@ int ObDASTRDaatLookupIter::inner_get_next_rows(int64_t &count, int64_t capacity)
     LOG_WARN("unexpected capacity size", K(ret), K(capacity));
   } else if (next_written_idx_ == 0) {
     // for normal case
-    ObExpr *match_filter = ir_ctdef_->need_calc_relevance() ? ir_ctdef_->match_filter_ : nullptr;
+    ObExpr *match_filter = ir_ctdef_->match_filter_;
     const bool is_batch = true;
     next_written_idx_ = 0;
     bool filter_valid = false;

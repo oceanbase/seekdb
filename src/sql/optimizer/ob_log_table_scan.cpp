@@ -3177,23 +3177,31 @@ int ObLogTableScan::extract_text_retrieval_access_expr(ObTextRetrievalInfo &tr_i
                                                        ObIArray<ObRawExpr *> &exprs)
 {
   int ret = OB_SUCCESS;
-  if (OB_ISNULL(tr_info.match_expr_) || OB_ISNULL(tr_info.total_doc_cnt_) ||
-      OB_ISNULL(tr_info.doc_token_cnt_) || OB_ISNULL(tr_info.related_doc_cnt_)) {
+  if (OB_ISNULL(tr_info.match_expr_) || OB_ISNULL(tr_info.docid_or_rowkey_column_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected null match against expr", K(ret));
-  } else if (OB_FAIL(exprs.push_back(tr_info.token_column_))) {
-    LOG_WARN("failed to append token column to access exprs", K(ret));
-  } else if (OB_FAIL(exprs.push_back(tr_info.token_cnt_column_))) {
-    LOG_WARN("failed to append token count column to access exprs", K(ret));
   } else if (OB_FAIL(exprs.push_back(tr_info.docid_or_rowkey_column_))) {
     LOG_WARN("failed to append doc id column to access exprs", K(ret));
-  } else if (OB_FAIL(exprs.push_back(tr_info.doc_length_column_))) {
+  } else if (tr_info.need_calc_relevance_ &&
+      (OB_ISNULL(tr_info.token_column_)
+       || OB_ISNULL(tr_info.token_cnt_column_)
+       || OB_ISNULL(tr_info.doc_length_column_)
+       || OB_ISNULL(tr_info.total_doc_cnt_)
+       || OB_ISNULL(tr_info.doc_token_cnt_)
+       || OB_ISNULL(tr_info.related_doc_cnt_))) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected null text retrieval relevance expr", K(ret), K(tr_info));
+  } else if (tr_info.need_calc_relevance_ && OB_FAIL(exprs.push_back(tr_info.token_column_))) {
+    LOG_WARN("failed to append token column to access exprs", K(ret));
+  } else if (tr_info.need_calc_relevance_ && OB_FAIL(exprs.push_back(tr_info.token_cnt_column_))) {
+    LOG_WARN("failed to append token count column to access exprs", K(ret));
+  } else if (tr_info.need_calc_relevance_ && OB_FAIL(exprs.push_back(tr_info.doc_length_column_))) {
     LOG_WARN("failed to append doc length column to access exprs", K(ret));
-  } else if (OB_FAIL(exprs.push_back(tr_info.total_doc_cnt_->get_param_expr(0)))) {
+  } else if (tr_info.need_calc_relevance_ && OB_FAIL(exprs.push_back(tr_info.total_doc_cnt_->get_param_expr(0)))) {
     LOG_WARN("failed to append total doc cnt access col to access exprs", K(ret));
-  } else if (OB_FAIL(exprs.push_back(tr_info.doc_token_cnt_->get_param_expr(0)))) {
+  } else if (tr_info.need_calc_relevance_ && OB_FAIL(exprs.push_back(tr_info.doc_token_cnt_->get_param_expr(0)))) {
     LOG_WARN("failed to append doc token cnt access col to access exprs", K(ret));
-  } else if (OB_FAIL(exprs.push_back(tr_info.related_doc_cnt_->get_param_expr(0)))) {
+  } else if (tr_info.need_calc_relevance_ && OB_FAIL(exprs.push_back(tr_info.related_doc_cnt_->get_param_expr(0)))) {
     LOG_WARN("failed to append relater doc cnt access col to access exprs", K(ret));
   }
   return ret;
@@ -3384,14 +3392,12 @@ int ObLogTableScan::get_text_retrieval_calc_exprs(ObTextRetrievalInfo &tr_info,
   if (OB_ISNULL(tr_info.match_expr_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected null match against expr", K(ret));
-  } else if (OB_FAIL(all_exprs.push_back(tr_info.related_doc_cnt_))) {
-    LOG_WARN("failed to append relevanced doc cnt expr", K(ret));
-  } else if (OB_FAIL(all_exprs.push_back(tr_info.doc_token_cnt_))) {
-    LOG_WARN("failed to append doc token cnt expr", K(ret));
-  } else if (OB_FAIL(all_exprs.push_back(tr_info.total_doc_cnt_))) {
-    LOG_WARN("failed to append total doc cnt expr", K(ret));
-  } else if (OB_FAIL(all_exprs.push_back(tr_info.relevance_expr_))) {
-    LOG_WARN("failed to append relevance expr", K(ret));
+  } else if (tr_info.need_calc_relevance_
+      && (OB_FAIL(all_exprs.push_back(tr_info.related_doc_cnt_))
+          || OB_FAIL(all_exprs.push_back(tr_info.doc_token_cnt_))
+          || OB_FAIL(all_exprs.push_back(tr_info.total_doc_cnt_))
+          || OB_FAIL(all_exprs.push_back(tr_info.relevance_expr_)))) {
+    LOG_WARN("failed to append text retrieval relevance exprs", K(ret));
   } else if (OB_FAIL(all_exprs.push_back(tr_info.match_expr_))) {
     LOG_WARN("failed to append text retrieval expr", K(ret));
   } else if (nullptr != tr_info.pushdown_match_filter_

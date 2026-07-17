@@ -116,7 +116,9 @@ int ObDASTRMergeIter::init_das_iter_scan_params()
 {
   int ret = OB_SUCCESS;
   const int64_t dim_iter_cnt = taat_mode_ ? 1 : query_tokens_.count();
-  if (!ir_ctdef_->need_estimate_total_doc_cnt() && 0 != dim_iter_cnt) {
+  if (ir_ctdef_->need_calc_relevance()
+      && !ir_ctdef_->need_estimate_total_doc_cnt()
+      && 0 != dim_iter_cnt) {
     void *buf = nullptr;
     if (OB_ISNULL(buf = myself_allocator_.alloc(sizeof(ObTableScanParam)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
@@ -587,26 +589,33 @@ int ObDASTRMergeIter::create_sparse_retrieval_iter()
 int ObDASTRMergeIter::init_daat_iter_param(ObTextDaaTParam &iter_param)
 {
   int ret = OB_SUCCESS;
+  const bool need_calc_relevance = ir_ctdef_->need_calc_relevance();
   iter_param.dim_iters_ = &dim_iters_;
   iter_param.base_param_ = &sr_iter_param_;
   iter_param.allocator_ = &myself_allocator_;
   iter_param.mode_flag_ = ir_ctdef_->mode_flag_;
   iter_param.function_lookup_mode_ = function_lookup_mode_;
-  iter_param.bm25_param_est_ctx_.total_doc_cnt_expr_
-      = ir_ctdef_->get_doc_agg_ctdef()->pd_expr_spec_.pd_storage_aggregate_output_.at(0);
-  iter_param.bm25_param_est_ctx_.estimated_total_doc_cnt_ = ir_ctdef_->estimated_total_doc_cnt_;
-  iter_param.bm25_param_est_ctx_.need_est_avg_doc_token_cnt_ = ir_ctdef_->need_avg_doc_len_est();
-  iter_param.bm25_param_est_ctx_.can_est_by_sum_skip_index_ = ir_ctdef_->avg_doc_len_est_spec_.can_est_by_sum_skip_index_;
-  iter_param.bm25_param_est_ctx_.avg_doc_token_cnt_expr_ = ir_ctdef_->avg_doc_token_cnt_expr_;
-  iter_param.bm25_param_est_ctx_.doc_length_est_param_ = &doc_length_est_param_;
   if (query_tokens_.count() == 0) {
     // do nothing
-  } else if (OB_ISNULL(iter_param.bm25_param_est_ctx_.total_doc_cnt_expr_)) {
+  } else if (need_calc_relevance
+      && FALSE_IT(iter_param.bm25_param_est_ctx_.total_doc_cnt_expr_
+          = ir_ctdef_->get_doc_agg_ctdef()->pd_expr_spec_.pd_storage_aggregate_output_.at(0))) {
+  } else if (need_calc_relevance
+      && FALSE_IT(iter_param.bm25_param_est_ctx_.estimated_total_doc_cnt_ = ir_ctdef_->estimated_total_doc_cnt_)) {
+  } else if (need_calc_relevance
+      && FALSE_IT(iter_param.bm25_param_est_ctx_.need_est_avg_doc_token_cnt_ = ir_ctdef_->need_avg_doc_len_est())) {
+  } else if (need_calc_relevance
+      && FALSE_IT(iter_param.bm25_param_est_ctx_.can_est_by_sum_skip_index_ = ir_ctdef_->avg_doc_len_est_spec_.can_est_by_sum_skip_index_)) {
+  } else if (need_calc_relevance
+      && FALSE_IT(iter_param.bm25_param_est_ctx_.avg_doc_token_cnt_expr_ = ir_ctdef_->avg_doc_token_cnt_expr_)) {
+  } else if (need_calc_relevance
+      && FALSE_IT(iter_param.bm25_param_est_ctx_.doc_length_est_param_ = &doc_length_est_param_)) {
+  } else if (need_calc_relevance && OB_ISNULL(iter_param.bm25_param_est_ctx_.total_doc_cnt_expr_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected null total doc cnt expr", K(ret));
-  } else if (OB_FAIL(init_doc_length_est_param())) {
+  } else if (need_calc_relevance && OB_FAIL(init_doc_length_est_param())) {
     LOG_WARN("failed to init doc length est param", K(ret));
-  } else if (!ir_ctdef_->need_estimate_total_doc_cnt()) {
+  } else if (need_calc_relevance && !ir_ctdef_->need_estimate_total_doc_cnt()) {
     if (OB_UNLIKELY(!static_cast<sql::ObStoragePushdownFlag>(total_doc_cnt_scan_param_->pd_storage_flag_).is_aggregate_pushdown())) {
       ret = OB_NOT_IMPLEMENT;
       LOG_ERROR("aggregate without pushdown not implemented", K(ret));
@@ -644,27 +653,34 @@ int ObDASTRMergeIter::init_daat_iter_param(ObTextDaaTParam &iter_param)
 int ObDASTRMergeIter::init_taat_iter_param(ObTextTaaTParam &iter_param)
 {
   int ret = OB_SUCCESS;
+  const bool need_calc_relevance = ir_ctdef_->need_calc_relevance();
   iter_param.query_tokens_ = &query_tokens_;
   iter_param.base_param_ = &sr_iter_param_;
   iter_param.allocator_ = &myself_allocator_;
   iter_param.mode_flag_ = ir_ctdef_->mode_flag_;
   iter_param.function_lookup_mode_ = function_lookup_mode_;
-  iter_param.bm25_param_est_ctx_.total_doc_cnt_expr_
-      = ir_ctdef_->get_doc_agg_ctdef()->pd_expr_spec_.pd_storage_aggregate_output_.at(0);
-  iter_param.bm25_param_est_ctx_.estimated_total_doc_cnt_ = ir_ctdef_->estimated_total_doc_cnt_;
-  iter_param.bm25_param_est_ctx_.need_est_avg_doc_token_cnt_ = ir_ctdef_->need_avg_doc_len_est();
-  iter_param.bm25_param_est_ctx_.can_est_by_sum_skip_index_ = ir_ctdef_->avg_doc_len_est_spec_.can_est_by_sum_skip_index_;
-  iter_param.bm25_param_est_ctx_.avg_doc_token_cnt_expr_ = ir_ctdef_->avg_doc_token_cnt_expr_;
-  iter_param.bm25_param_est_ctx_.doc_length_est_param_ = &doc_length_est_param_;
   if (OB_ISNULL(iter_param.dim_iter_ = dim_iter_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected null dim iter", K(ret));
-  } else if (OB_ISNULL(iter_param.bm25_param_est_ctx_.total_doc_cnt_expr_)) {
+  } else if (need_calc_relevance
+      && FALSE_IT(iter_param.bm25_param_est_ctx_.total_doc_cnt_expr_
+          = ir_ctdef_->get_doc_agg_ctdef()->pd_expr_spec_.pd_storage_aggregate_output_.at(0))) {
+  } else if (need_calc_relevance
+      && FALSE_IT(iter_param.bm25_param_est_ctx_.estimated_total_doc_cnt_ = ir_ctdef_->estimated_total_doc_cnt_)) {
+  } else if (need_calc_relevance
+      && FALSE_IT(iter_param.bm25_param_est_ctx_.need_est_avg_doc_token_cnt_ = ir_ctdef_->need_avg_doc_len_est())) {
+  } else if (need_calc_relevance
+      && FALSE_IT(iter_param.bm25_param_est_ctx_.can_est_by_sum_skip_index_ = ir_ctdef_->avg_doc_len_est_spec_.can_est_by_sum_skip_index_)) {
+  } else if (need_calc_relevance
+      && FALSE_IT(iter_param.bm25_param_est_ctx_.avg_doc_token_cnt_expr_ = ir_ctdef_->avg_doc_token_cnt_expr_)) {
+  } else if (need_calc_relevance
+      && FALSE_IT(iter_param.bm25_param_est_ctx_.doc_length_est_param_ = &doc_length_est_param_)) {
+  } else if (need_calc_relevance && OB_ISNULL(iter_param.bm25_param_est_ctx_.total_doc_cnt_expr_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected null total doc cnt expr", K(ret));
-  } else if (OB_FAIL(init_doc_length_est_param())) {
+  } else if (need_calc_relevance && OB_FAIL(init_doc_length_est_param())) {
     LOG_WARN("failed to init doc length est param", K(ret));
-  } else if (!ir_ctdef_->need_estimate_total_doc_cnt()) {
+  } else if (need_calc_relevance && !ir_ctdef_->need_estimate_total_doc_cnt()) {
     if (OB_UNLIKELY(!static_cast<sql::ObStoragePushdownFlag>(total_doc_cnt_scan_param_->pd_storage_flag_).is_aggregate_pushdown())) {
       ret = OB_NOT_IMPLEMENT;
       LOG_ERROR("aggregate without pushdown not implemented", K(ret));
