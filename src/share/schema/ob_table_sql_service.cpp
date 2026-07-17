@@ -1148,7 +1148,7 @@ int ObTableSqlService::update_single_column(
     LOG_WARN("check ddl allowd failed", K(ret), K(new_table_schema));
   } else if (OB_FAIL(gen_column_dml(new_column_schema, dml))) {
     LOG_WARN("gen column dml failed", K(ret));
-  } else {
+  } else if (!is_core_table(table_id)) {
     int64_t affected_rows = 0;
     if (OB_FAIL(exec_update(sql_client, table_id,
                             OB_ALL_COLUMN_TNAME, dml, affected_rows))) {
@@ -1242,7 +1242,7 @@ int ObTableSqlService::add_columns_for_core(ObISQLClient &sql_client, const ObTa
   
 
   ObDMLSqlSplicer dml;
-  ObCoreTableProxy kv(OB_ALL_COLUMN_TNAME, sql_client);
+  ObCoreTableProxy kv(OB_ALL_COLUMN_HISTORY_TNAME, sql_client);
   ObArray<ObCoreTableProxy::UpdateCell> cells;
   if (OB_FAIL(check_ddl_allowed(table))) {
     LOG_WARN("check ddl allowd failed", K(ret), K(table));
@@ -1272,8 +1272,10 @@ int ObTableSqlService::add_columns_for_core(ObISQLClient &sql_client, const ObTa
       
       column.set_table_id(table.get_table_id());
     }
-    if (FAILEDx(gen_column_dml(column, dml))) {
+    if (FAILEDx(gen_column_dml(column, dml, true/*is_history*/))) {
       LOG_WARN("gen column dml failed", K(ret));
+    } else if (OB_FAIL(dml.add_column("is_deleted", 0))) {
+      LOG_WARN("add is_deleted failed", K(ret));
     } else if (OB_FAIL(dml.splice_core_cells(kv, cells))) {
       LOG_WARN("splice core cells failed", K(ret));
     } else if (OB_FAIL(kv.replace_row(cells, affected_rows))) {
@@ -1281,10 +1283,7 @@ int ObTableSqlService::add_columns_for_core(ObISQLClient &sql_client, const ObTa
     }
     if (OB_FAIL(ret)) {
     } else if (enable_stash_query) {
-      const int64_t is_deleted = 0;
-      if (OB_FAIL(dml.add_column("is_deleted", is_deleted))) {
-        LOG_WARN("add column failed", K(ret));
-      } else if (stash_desc->get_stash_query().empty()) {
+      if (stash_desc->get_stash_query().empty()) {
         if (OB_FAIL(dml.splice_insert_sql_without_plancache(OB_ALL_COLUMN_HISTORY_TNAME, stash_desc->get_stash_query()))) {
           LOG_WARN("dml splice_insert_sql fail", K(ret));
         }
@@ -1301,10 +1300,7 @@ int ObTableSqlService::add_columns_for_core(ObISQLClient &sql_client, const ObTa
       }
     } else {
       ObDMLExecHelper exec(sql_client);
-      const int64_t is_deleted = 0;
-      if (OB_FAIL(dml.add_column("is_deleted", is_deleted))) {
-        LOG_WARN("add column failed", K(ret));
-      } else if (OB_FAIL(exec.exec_insert(OB_ALL_COLUMN_HISTORY_TNAME, dml, affected_rows))) {
+      if (OB_FAIL(exec.exec_insert(OB_ALL_COLUMN_HISTORY_TNAME, dml, affected_rows))) {
         LOG_WARN("execute insert failed", K(ret));
       } else if (!is_single_row(affected_rows)) {
         ret = OB_ERR_UNEXPECTED;
@@ -1811,11 +1807,11 @@ int ObTableSqlService::supplement_for_core_table(ObISQLClient &sql_client,
   const char *supplement_tbl_name = NULL;
   if (OB_FAIL(ret)) {
   } else if (is_all_table) {
-    if (OB_FAIL(ObSchemaUtils::get_all_table_name(supplement_tbl_name))) {
-      LOG_WARN("fail to get all table name", K(ret));
+    if (OB_FAIL(ObSchemaUtils::get_all_table_history_name(supplement_tbl_name))) {
+      LOG_WARN("fail to get all table history name", K(ret));
     }
   } else {
-    supplement_tbl_name = OB_ALL_COLUMN_TNAME;
+    supplement_tbl_name = OB_ALL_COLUMN_HISTORY_TNAME;
   }
   if (OB_SUCC(ret)) {
     
@@ -1945,22 +1941,26 @@ int ObTableSqlService::add_single_column(ObISQLClient &sql_client,
 {
   int ret = OB_SUCCESS;
   ObDMLSqlSplicer dml;
-  
-  
-  if (OB_FAIL(gen_column_dml(column, dml))) {
+  const uint64_t table_id = column.get_table_id();
+  const bool is_core = is_core_table(table_id);
+
+  if (OB_FAIL(gen_column_dml(column, dml, is_core/*is_history*/))) {
     LOG_WARN("gen column dml failed", K(ret));
+  } else if (is_core && OB_FAIL(dml.add_column("is_deleted", 0))) {
+    LOG_WARN("add is_deleted failed", KR(ret), K(table_id));
   } else {
     ObDMLExecHelper exec(sql_client);
     int64_t affected_rows = 0;
-    if (!only_history) {
-      const int64_t table_id = column.get_table_id();
+    if (is_core || !only_history) {
+      const char *logical_table_name = is_core
+          ? OB_ALL_COLUMN_HISTORY_TNAME : OB_ALL_COLUMN_TNAME;
       if (OB_FAIL(exec_insert(sql_client, table_id,
-                              OB_ALL_COLUMN_TNAME, dml, affected_rows))) {
+                              logical_table_name, dml, affected_rows))) {
         LOG_WARN("exec insert failed", K(ret));
       } else if (!is_single_row(affected_rows)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("affected_rows unexpected to be one", K(affected_rows), K(ret));
-      } else {
+      } else if (!only_history) {
         bool is_all_table = OB_ALL_TABLE_TID == table_id;
         bool is_all_column = OB_ALL_COLUMN_TID == table_id;
         if (is_all_table || is_all_column) {
@@ -1971,8 +1971,7 @@ int ObTableSqlService::add_single_column(ObISQLClient &sql_client,
       }
     }
     if (OB_SUCC(ret)) {
-      const int64_t is_deleted = 0;
-      if (OB_FAIL(dml.add_column("is_deleted", is_deleted))) {
+      if (!is_core && OB_FAIL(dml.add_column("is_deleted", 0))) {
         LOG_WARN("add column failed", K(ret));
       } else if (OB_FAIL(exec.exec_insert(OB_ALL_COLUMN_HISTORY_TNAME, dml, affected_rows))) {
         LOG_WARN("execute insert failed", K(ret));
@@ -1996,15 +1995,21 @@ int ObTableSqlService::add_table(
   ObDMLSqlSplicer dml;
   
   const int64_t table_id = table.get_table_id();
+  const bool is_core = is_core_table(table_id);
   
-  if (OB_FAIL(add_table_dml(table, update_object_status_ignore_version, dml))) {
+  if (OB_FAIL(add_table_dml(
+          table, update_object_status_ignore_version, dml, is_core/*is_history*/))) {
     LOG_WARN("failed to add table dml", KR(ret), K(table));
+  } else if (is_core && OB_FAIL(dml.add_column("is_deleted", 0))) {
+    LOG_WARN("failed to add is_deleted", KR(ret), K(table_id));
   } else if (OB_FAIL(dml.finish_row())) {
     LOG_WARN("failed to finish_row", KR(ret));
   } else {
-    if (!only_history) {
+    if (is_core || !only_history) {
       int64_t affected_rows = 0;
-      if (OB_FAIL(exec_insert(sql_client, table_id, OB_ALL_TABLE_TNAME, dml, affected_rows))) {
+      const char *logical_table_name = is_core
+          ? OB_ALL_TABLE_HISTORY_TNAME : OB_ALL_TABLE_TNAME;
+      if (OB_FAIL(exec_insert(sql_client, table_id, logical_table_name, dml, affected_rows))) {
         LOG_WARN("exec insert failed", KR(ret));
       } else if (!is_single_row(affected_rows) && !is_zero_row(affected_rows)) {
         ret = OB_ERR_UNEXPECTED;
@@ -2012,7 +2017,7 @@ int ObTableSqlService::add_table(
       }
     }
     if (OB_SUCC(ret)) {
-      if (OB_FAIL(dml.set_default_columns("is_deleted", "0"))) {
+      if (!is_core && OB_FAIL(dml.set_default_columns("is_deleted", "0"))) {
         LOG_WARN("add column failed", KR(ret));
       } else if (OB_FAIL(exec_dml(sql_client, OB_ALL_TABLE_HISTORY_TNAME, dml,
               1/*target_affected_row_count*/))) {
@@ -2033,7 +2038,8 @@ int ObTableSqlService::add_table(
 
 int ObTableSqlService::add_table_dml(const ObTableSchema &table,
     const bool update_object_status_ignore_version,
-    ObDMLSqlSplicer &all_table_dml)
+    ObDMLSqlSplicer &all_table_dml,
+    const bool is_history)
 {
   int ret = OB_SUCCESS;
   
@@ -2041,7 +2047,7 @@ int ObTableSqlService::add_table_dml(const ObTableSchema &table,
   if (OB_FAIL(check_ddl_allowed(table))) {
     LOG_WARN("check ddl allowd failed", KR(ret), K(table));
   } else if (OB_FAIL(gen_table_dml(table,
-          update_object_status_ignore_version, all_table_dml))) {
+          update_object_status_ignore_version, all_table_dml, is_history))) {
     LOG_WARN("gen table dml failed", KR(ret));
   }
   return ret;
@@ -2393,7 +2399,7 @@ int ObTableSqlService::delete_single_column(
                                                table_id)))
       || OB_FAIL(dml.add_pk_column("column_id", column_id))) {
     LOG_WARN("add column failed", K(ret));
-  } else {
+  } else if (!is_core_table(table_id)) {
     int64_t affected_rows = 0;
     if (OB_FAIL(exec_delete(sql_client, table_id,
                             OB_ALL_COLUMN_TNAME, dml, affected_rows))) {
@@ -2410,26 +2416,32 @@ int ObTableSqlService::delete_single_column(
     }
   }
 
-  ObSqlString sql;
   int64_t affected_rows = 0;
-  // xiyu: TODO
   // mark delete in __all_column_history
   if (OB_SUCC(ret)) {
     const int64_t is_deleted = 1;
-    if (OB_FAIL(sql.assign_fmt(
-        "INSERT INTO %s (TABLE_ID, COLUMN_ID, SCHEMA_VERSION, IS_DELETED) values "
-        "(%lu, %lu, %ld, %ld)",
-        OB_ALL_COLUMN_HISTORY_TNAME,
-        ObSchemaUtils::get_extract_schema_id(orig_column_schema.get_table_id()),
-        orig_column_schema.get_column_id(),
-        new_schema_version,
-        is_deleted))) {
-      LOG_WARN("assign_fmt failed", K(ret));
-    } else if (OB_FAIL(sql_client.write(sql.ptr(), affected_rows))) {
-      LOG_WARN("execute sql failed", K(sql), K(ret));
-    } else if (!is_single_row(affected_rows)) {
+    dml.reset();
+    if (OB_FAIL(dml.add_pk_column("table_id", ObSchemaUtils::get_extract_schema_id(table_id)))
+        || OB_FAIL(dml.add_pk_column("column_id", column_id))
+        || OB_FAIL(dml.add_pk_column("schema_version", new_schema_version))
+        || OB_FAIL(dml.add_column("is_deleted", is_deleted))) {
+      LOG_WARN("add column history tombstone failed", KR(ret), K(table_id),
+               K(column_id), K(new_schema_version));
+    } else if (is_core_table(table_id)
+        && OB_FAIL(exec_insert(sql_client, table_id,
+                              OB_ALL_COLUMN_HISTORY_TNAME, dml, affected_rows))) {
+      LOG_WARN("insert core column history tombstone failed", KR(ret),
+               K(table_id), K(column_id), K(new_schema_version));
+    } else {
+      ObDMLExecHelper exec(sql_client);
+      if (OB_FAIL(exec.exec_insert(OB_ALL_COLUMN_HISTORY_TNAME, dml, affected_rows))) {
+        LOG_WARN("insert column history tombstone failed", KR(ret),
+                 K(table_id), K(column_id), K(new_schema_version));
+      }
+    }
+    if (OB_SUCC(ret) && !is_single_row(affected_rows)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("affect_rows expected to be one", K(affected_rows), K(ret));
+      LOG_WARN("affected rows expected to be one", KR(ret), K(affected_rows));
     }
   }
 
@@ -2849,7 +2861,8 @@ int ObTableSqlService::add_interval_range_val(ObDMLSqlSplicer &dml,
 int ObTableSqlService::gen_table_dml_without_check(
     const ObTableSchema &table,
     const bool update_object_status_ignore_version,
-    share::ObDMLSqlSplicer &dml)
+    share::ObDMLSqlSplicer &dml,
+    const bool is_history)
 {
   int ret = OB_SUCCESS;
   ObString empty_str("");
@@ -2913,7 +2926,9 @@ int ObTableSqlService::gen_table_dml_without_check(
       || OB_FAIL(dml.add_column("sub_part_func_type", sub_part_option.get_part_func_type()))
       || OB_FAIL(dml.add_column("sub_part_func_expr", ObHexEscapeSqlStr(sub_part_func_expr)))
       || OB_FAIL(dml.add_column("sub_part_num", sub_part_num))
-      || OB_FAIL(dml.add_column("schema_version", table.get_schema_version()))
+      || OB_FAIL(is_history
+                     ? dml.add_pk_column("schema_version", table.get_schema_version())
+                     : dml.add_column("schema_version", table.get_schema_version()))
       || OB_FAIL(dml.add_column("view_definition", ObHexEscapeSqlStr(table.get_view_schema().get_view_definition())))
       || OB_FAIL(dml.add_column("view_check_option", table.get_view_schema().get_view_check_option()))
       || OB_FAIL(dml.add_column("view_is_updatable", table.get_view_schema().get_view_is_updatable()))
@@ -2976,7 +2991,8 @@ int ObTableSqlService::gen_table_dml_without_check(
 int ObTableSqlService::gen_table_dml(
     const ObTableSchema &table,
     const bool update_object_status_ignore_version,
-    ObDMLSqlSplicer &dml)
+    ObDMLSqlSplicer &dml,
+    const bool is_history)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(check_ddl_allowed(table))) {
@@ -2984,7 +3000,7 @@ int ObTableSqlService::gen_table_dml(
   } else if (OB_FAIL(check_table_options(table))) {
     LOG_WARN("fail to check table option", K(ret), K(table));
   } else if (OB_FAIL(gen_table_dml_without_check(table,
-          update_object_status_ignore_version, dml))) {
+          update_object_status_ignore_version, dml, is_history))) {
     LOG_WARN("failed to gen_table_dml_with_data_version", KR(ret));
   }
   return ret;
@@ -3024,7 +3040,7 @@ int ObTableSqlService::update_table_attribute(ObISQLClient &sql_client,
       LOG_WARN("fail to reset interval column info", KR(ret), K(new_table_schema));
     }
   }
-  if (OB_SUCC(ret)) {
+  if (OB_SUCC(ret) && !is_core_table(table_id)) {
     int64_t affected_rows = 0;
     const char *table_name = NULL;
     if (OB_FAIL(ObSchemaUtils::get_all_table_name(table_name))) {
@@ -3160,7 +3176,9 @@ int ObTableSqlService::update_partition_option_(ObISQLClient &sql_client,
   int64_t affected_rows = 0;
   const char *table_name = NULL;
 
-  if (OB_FAIL(ObSchemaUtils::get_all_table_name(table_name))) {
+  if (is_core_table(table_id)) {
+    // The full versioned row is appended below.
+  } else if (OB_FAIL(ObSchemaUtils::get_all_table_name(table_name))) {
     LOG_WARN("fail to get all table name", KR(ret));
   } else if (OB_FAIL(exec_update(sql_client, table_id,
                                  table_name, dml, affected_rows))) {
@@ -3290,22 +3308,23 @@ int ObTableSqlService::delete_from_all_table(
     const uint64_t table_id)
 {
   int ret = OB_SUCCESS;
-  
-  ObDMLSqlSplicer dml;
-  if (OB_FAIL(dml.add_pk_column("table_id", ObSchemaUtils::get_extract_schema_id(
-                                               table_id)))) {
-    LOG_WARN("add column failed", K(ret));
-  } else {
-    int64_t affected_rows = 0;
-    const char *table_name = NULL;
-    if (OB_FAIL(ObSchemaUtils::get_all_table_name(table_name))) {
-      LOG_WARN("fail to get all table name", K(ret), K(1UL));
-    } else if (OB_FAIL(exec_delete(sql_client, table_id,
-                                   table_name, dml, affected_rows))) {
-      LOG_WARN("exec delete failed", K(ret));
-    } else if (!is_single_row(affected_rows)) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected error", K(affected_rows), K(ret), K(table_id));
+  if (!is_core_table(table_id)) {
+    ObDMLSqlSplicer dml;
+    if (OB_FAIL(dml.add_pk_column("table_id", ObSchemaUtils::get_extract_schema_id(
+                                                 table_id)))) {
+      LOG_WARN("add column failed", K(ret));
+    } else {
+      int64_t affected_rows = 0;
+      const char *table_name = NULL;
+      if (OB_FAIL(ObSchemaUtils::get_all_table_name(table_name))) {
+        LOG_WARN("fail to get all table name", K(ret), K(1UL));
+      } else if (OB_FAIL(exec_delete(sql_client, table_id,
+                                     table_name, dml, affected_rows))) {
+        LOG_WARN("exec delete failed", K(ret));
+      } else if (!is_single_row(affected_rows)) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("unexpected error", K(affected_rows), K(ret), K(table_id));
+      }
     }
   }
 
@@ -3366,20 +3385,20 @@ int ObTableSqlService::delete_from_all_column(ObISQLClient &sql_client,
                                               bool check_affect_rows)
 {
   int ret = OB_SUCCESS;
-
-  ObDMLSqlSplicer dml;
-  
-  if (OB_FAIL(dml.add_pk_column("table_id", ObSchemaUtils::get_extract_schema_id(
-                                               table_id)))) {
-    LOG_WARN("add column failed", K(ret));
-  } else {
-    int64_t affected_rows = 0;
-    if (OB_FAIL(exec_delete(sql_client, table_id,
-                            OB_ALL_COLUMN_TNAME, dml, affected_rows))) {
-      LOG_WARN("exec delete failed", K(ret));
-    } else if (check_affect_rows && affected_rows < column_count) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("not all row deleted, ", K(column_count), K(affected_rows), K(ret));
+  if (!is_core_table(table_id)) {
+    ObDMLSqlSplicer dml;
+    if (OB_FAIL(dml.add_pk_column("table_id", ObSchemaUtils::get_extract_schema_id(
+                                                 table_id)))) {
+      LOG_WARN("add column failed", K(ret));
+    } else {
+      int64_t affected_rows = 0;
+      if (OB_FAIL(exec_delete(sql_client, table_id,
+                              OB_ALL_COLUMN_TNAME, dml, affected_rows))) {
+        LOG_WARN("exec delete failed", K(ret));
+      } else if (check_affect_rows && affected_rows < column_count) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("not all row deleted, ", K(column_count), K(affected_rows), K(ret));
+      }
     }
   }
 
@@ -3439,32 +3458,41 @@ int ObTableSqlService::delete_from_all_table_history(ObISQLClient &sql_client,
                                                      const int64_t new_schema_version)
 {
   int ret = OB_SUCCESS;
-  ObSqlString sql;
   const int64_t is_deleted = 1;
   int64_t affected_rows = 0;
-  
-  
+  const uint64_t table_id = table_schema.get_table_id();
+  ObDMLSqlSplicer dml;
+
   // insert into __all_table_history
   const char *table_name = NULL;
   if (OB_FAIL(check_ddl_allowed(table_schema))) {
     LOG_WARN("check ddl allowd failed", K(ret), K(table_schema));
   } else if (OB_FAIL(ObSchemaUtils::get_all_table_history_name(table_name))) {
     LOG_WARN("fail to get all table name", K(ret));
-  } else if (OB_FAIL(sql.assign_fmt(
-      "INSERT INTO %s(table_id,schema_version,data_table_id,is_deleted)"
-      " VALUES(%lu,%ld,%lu,%ld)",
-      table_name,
-      ObSchemaUtils::get_extract_schema_id(table_schema.get_table_id()),
-      new_schema_version,
-      ObSchemaUtils::get_extract_schema_id(table_schema.get_data_table_id()),
-      is_deleted))) {
-    LOG_WARN("assign insert into all talbe history fail",
-             K(table_schema), K(ret));
-  } else if (OB_FAIL(sql_client.write(sql.ptr(), affected_rows))) {
-    LOG_WARN("execute sql fail", K(sql));
-  } else if (1 != affected_rows) {
+  } else if (OB_FAIL(dml.add_pk_column("table_id",
+          ObSchemaUtils::get_extract_schema_id(table_id)))
+      || OB_FAIL(dml.add_pk_column("schema_version", new_schema_version))
+      || OB_FAIL(dml.add_column("data_table_id",
+          ObSchemaUtils::get_extract_schema_id(table_schema.get_data_table_id())))
+      || OB_FAIL(dml.add_column("is_deleted", is_deleted))) {
+    LOG_WARN("add table history tombstone failed", KR(ret),
+             K(table_id), K(new_schema_version));
+  } else if (is_core_table(table_id)
+      && OB_FAIL(exec_insert(sql_client, table_id, table_name, dml, affected_rows))) {
+    LOG_WARN("insert core table history tombstone failed", KR(ret),
+             K(table_id), K(new_schema_version));
+  } else if (is_core_table(table_id) && !is_single_row(affected_rows)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("no row has inserted", K(ret));
+    LOG_WARN("core history affected rows expected to be one", KR(ret), K(affected_rows));
+  } else {
+    ObDMLExecHelper exec(sql_client);
+    if (OB_FAIL(exec.exec_insert(table_name, dml, affected_rows))) {
+      LOG_WARN("insert table history tombstone failed", KR(ret),
+               K(table_id), K(new_schema_version));
+    } else if (!is_single_row(affected_rows)) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("affected rows expected to be one", KR(ret), K(affected_rows));
+    }
   }
   return ret;
 }
@@ -3488,10 +3516,31 @@ int ObTableSqlService::delete_from_all_column_history(ObISQLClient &sql_client,
   int64_t affected_rows = 0;
   for (ObTableSchema::const_column_iterator iter = table_schema.column_begin();
       OB_SUCCESS == ret && iter != table_schema.column_end(); ++iter) {
-    if (OB_FAIL(sql.append_fmt("%s(%lu, %lu, %ld, %ld)",
+    const uint64_t table_id = (*iter)->get_table_id();
+    const uint64_t column_id = (*iter)->get_column_id();
+    if (is_core_table(table_id)) {
+      ObDMLSqlSplicer dml;
+      if (OB_FAIL(dml.add_pk_column("table_id",
+              ObSchemaUtils::get_extract_schema_id(table_id)))
+          || OB_FAIL(dml.add_pk_column("column_id", column_id))
+          || OB_FAIL(dml.add_pk_column("schema_version", new_schema_version))
+          || OB_FAIL(dml.add_column("is_deleted", is_deleted))) {
+        LOG_WARN("add column history tombstone failed", KR(ret),
+                 K(table_id), K(column_id), K(new_schema_version));
+      } else if (OB_FAIL(exec_insert(sql_client, table_id,
+                                    OB_ALL_COLUMN_HISTORY_TNAME,
+                                    dml, affected_rows))) {
+        LOG_WARN("insert core column history tombstone failed", KR(ret),
+                 K(table_id), K(column_id), K(new_schema_version));
+      } else if (!is_single_row(affected_rows)) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("affected rows expected to be one", KR(ret), K(affected_rows));
+      }
+    }
+    if (OB_SUCC(ret) && OB_FAIL(sql.append_fmt("%s(%lu, %lu, %ld, %ld)",
         (iter == table_schema.column_begin()) ? "" : ",",
-        ObSchemaUtils::get_extract_schema_id((*iter)->get_table_id()),
-        (*iter)->get_column_id(),
+        ObSchemaUtils::get_extract_schema_id(table_id),
+        column_id,
         new_schema_version, is_deleted))) {
       LOG_WARN("append_fmt failed", K(ret));
     }
@@ -3565,7 +3614,7 @@ int ObTableSqlService::update_data_table_schema_version(
           || OB_FAIL(dml.add_column("max_used_column_id", table_schema.get_max_used_column_id()))
           || OB_FAIL(dml.add_gmt_modified())) {
         LOG_WARN("add column failed", K(ret));
-    } else {
+    } else if (!is_core_table(data_table_id)) {
       int64_t affected_rows = 0;
       const char *table_name = NULL;
       if (OB_FAIL(ObSchemaUtils::get_all_table_name(table_name))) {
@@ -3731,6 +3780,8 @@ int ObTableSqlService::sync_schema_version_for_history(
                                                  table_id)))
         || OB_FAIL(dml.add_column("schema_version", new_schema_version))) {
       LOG_WARN("add column failed", KR(ret));
+    } else if (is_core_table(table_id)) {
+      // The full versioned row is appended below.
     } else if (OB_FAIL(ObSchemaUtils::get_all_table_name(table_name))) {
       LOG_WARN("fail to get all table name", KR(ret));
     } else if (OB_FAIL(exec_update(sql_client, table_id,
@@ -3780,7 +3831,7 @@ int ObTableSqlService::update_tablegroup(ObSchemaGetterGuard &schema_guard,
         || OB_FAIL(dml.add_column("tablegroup_id", ObSchemaUtils::get_extract_schema_id(
                                                    new_table_schema.get_tablegroup_id())))) {
       LOG_WARN("add column failed", K(ret));
-    } else {
+    } else if (!is_core_table(new_table_schema.get_table_id())) {
       int64_t affected_rows = 0;
       const char *table_name = NULL;
       if (OB_FAIL(ObSchemaUtils::get_all_table_name(table_name))) {
@@ -3818,7 +3869,8 @@ int ObTableSqlService::update_tablegroup(ObSchemaGetterGuard &schema_guard,
 
 int ObTableSqlService::gen_column_dml_without_check(
     const ObColumnSchemaV2 &column,
-    share::ObDMLSqlSplicer &dml)
+    share::ObDMLSqlSplicer &dml,
+    const bool is_history)
 {
   int ret = OB_SUCCESS;
   ObString orig_default_value;
@@ -3927,7 +3979,9 @@ int ObTableSqlService::gen_column_dml_without_check(
                          || OB_FAIL(dml.add_column("order_in_rowkey", column.get_order_in_rowkey()))
                          || OB_FAIL(dml.add_column("collation_type", column.get_collation_type()))
                          || OB_FAIL(dml.add_column("comment", ObHexEscapeSqlStr(column.get_comment())))
-                         || OB_FAIL(dml.add_column("schema_version", column.get_schema_version()))
+                         || OB_FAIL(is_history
+                                        ? dml.add_pk_column("schema_version", column.get_schema_version())
+                                        : dml.add_column("schema_version", column.get_schema_version()))
                          || OB_FAIL(dml.add_column("column_flags", column.get_stored_column_flags()))
                          || OB_FAIL(dml.add_column("extended_type_info", ObHexEscapeSqlStr(bin_extended_type_info)))
                          || OB_FAIL(dml.add_column("prev_column_id", column.get_prev_column_id()))
@@ -3947,10 +4001,11 @@ int ObTableSqlService::gen_column_dml_without_check(
 
 int ObTableSqlService::gen_column_dml(
     const ObColumnSchemaV2 &column,
-    ObDMLSqlSplicer &dml)
+    ObDMLSqlSplicer &dml,
+    const bool is_history)
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(gen_column_dml_without_check(column, dml))) {
+  if (OB_FAIL(gen_column_dml_without_check(column, dml, is_history))) {
     LOG_WARN("failed to gen_column_dml_without_check", KR(ret));
   }
   LOG_DEBUG("gen column dml", K(column.get_table_id()), K(column.get_column_id()),
@@ -4919,7 +4974,7 @@ int ObTableSqlService::inner_update_table_options_(ObISQLClient &sql_client,
     LOG_WARN("check ddl allowd failed", K(ret), K(new_table_schema));
   } else if (OB_FAIL(gen_table_options_dml(new_table_schema, update_object_status_ignore_version, dml))) {
     LOG_WARN("gen table options dml failed", K(ret));
-  } else {
+  } else if (!is_core_table(table_id)) {
     int64_t affected_rows = 0;
     const char *table_name = nullptr;
     if (OB_FAIL(ObSchemaUtils::get_all_table_name(table_name))) {
@@ -4960,7 +5015,7 @@ int ObTableSqlService::update_table_schema_version(ObISQLClient &sql_client,
         || OB_FAIL(dml.add_column("schema_version", table_schema.get_schema_version()))
         || OB_FAIL(dml.add_gmt_modified())) {
       LOG_WARN("add column failed", K(ret));
-  } else {
+  } else if (!is_core_table(table_id)) {
     int64_t affected_rows = 0;
     const char *table_name = NULL;
     if (OB_FAIL(ObSchemaUtils::get_all_table_name(table_name))) {

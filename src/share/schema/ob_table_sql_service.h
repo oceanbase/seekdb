@@ -50,10 +50,12 @@ public:
   static int gen_table_dml_without_check(
       const ObTableSchema &table,
       const bool update_object_status_ignore_version,
-      share::ObDMLSqlSplicer &dml);
+      share::ObDMLSqlSplicer &dml,
+      const bool is_history = false);
   static int gen_column_dml_without_check(
       const ObColumnSchemaV2 &column,
-      share::ObDMLSqlSplicer &dml);
+      share::ObDMLSqlSplicer &dml,
+      const bool is_history = false);
   virtual int batch_create_table(ObIArray<ObTableSchema> &tables,
                            common::ObISQLClient &sql_client,
                            const common::ObString *ddl_stmt_str = NULL,
@@ -325,7 +327,8 @@ private:
   // just add single line, the caller should call finish_row
   int add_table_dml(const ObTableSchema &table,
       const bool update_object_status_ignore_version,
-      ObDMLSqlSplicer &all_table_dml);
+      ObDMLSqlSplicer &all_table_dml,
+      const bool is_history = false);
   int batch_add_table_for_create_table(common::ObISQLClient &sql_client, const ObIArray<ObTableSchema> &tables);
   int delete_from_all_table(common::ObISQLClient &sql_client,
                             const uint64_t table_id);
@@ -399,7 +402,9 @@ private:
   static int add_interval_range_val(share::ObDMLSqlSplicer &dml,
                                const ObTableSchema &table);
   static int gen_table_dml(const ObTableSchema &table,
-                    const bool update_object_status_ignore_version, share::ObDMLSqlSplicer &dml);
+                    const bool update_object_status_ignore_version,
+                    share::ObDMLSqlSplicer &dml,
+                    const bool is_history = false);
   static int check_tenant_data_version_in_gen_table_dml(
       const ObTableSchema &table,
       uint64_t &data_version);
@@ -407,7 +412,8 @@ private:
                             const bool update_object_status_ignore_version,
                             share::ObDMLSqlSplicer &dml);
   static int gen_column_dml(const ObColumnSchemaV2 &column,
-      share::ObDMLSqlSplicer &dml);
+      share::ObDMLSqlSplicer &dml,
+      const bool is_history = false);
   int gen_constraint_dml(const ObConstraint &constraint, share::ObDMLSqlSplicer &dml);
   int gen_constraint_column_dml(
       const ObConstraint &constraint,

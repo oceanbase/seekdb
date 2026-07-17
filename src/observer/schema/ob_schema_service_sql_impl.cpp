@@ -281,6 +281,7 @@ int ObSchemaServiceSQLImpl::get_all_core_table_schema(ObTableSchema &table_schem
 int ObSchemaServiceSQLImpl::get_core_table_schema(
     const ObRefreshSchemaStatus &schema_status,
     const uint64_t table_id,
+    const int64_t schema_version,
     ObISQLClient &sql_client,
     ObIAllocator &allocator,
     ObTableSchema *&table_schema)
@@ -301,7 +302,8 @@ int ObSchemaServiceSQLImpl::get_core_table_schema(
   } else {
     ObArray<ObTableSchema> core_schemas;
     const ObTableSchema *target_schema = NULL;
-    if (OB_FAIL(get_core_table_schemas(sql_client, schema_status, core_schemas))) {
+    if (OB_FAIL(get_core_table_schemas_at_version(
+            sql_client, schema_status, schema_version, core_schemas))) {
       LOG_WARN("get core table schemas failed", KR(ret), K(table_id), K(schema_status));
     } else {
       FOREACH_CNT_X(core_schema, core_schemas, OB_SUCC(ret)) {
@@ -339,14 +341,27 @@ int ObSchemaServiceSQLImpl::get_core_table_schemas(
     const ObRefreshSchemaStatus &schema_status,
     ObArray<ObTableSchema> &core_schemas)
 {
+  return get_core_table_schemas_at_version(
+      sql_client, schema_status, INT64_MAX, core_schemas);
+}
+
+int ObSchemaServiceSQLImpl::get_core_table_schemas_at_version(
+    ObISQLClient &sql_client,
+    const ObRefreshSchemaStatus &schema_status,
+    const int64_t schema_version,
+    ObArray<ObTableSchema> &core_schemas)
+{
   int ret = OB_SUCCESS;
   if (!check_inner_stat()) {
     ret = OB_NOT_INIT;
     LOG_WARN("check inner stat fail", KR(ret), K(schema_status));
-  } else if (OB_FAIL(get_core_table_priorities(sql_client, schema_status, core_schemas))) {
+  } else if (schema_version <= 0) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid schema version", KR(ret), K(schema_version));
+  } else if (OB_FAIL(get_core_table_priorities(sql_client, schema_status, schema_version, core_schemas))) {
     LOG_WARN("get_core_table_priorities failed", KR(ret), K(schema_status));
   } else if (core_schemas.count() > 0) {
-    if (OB_FAIL(get_core_table_columns(sql_client, schema_status, core_schemas))) {
+    if (OB_FAIL(get_core_table_columns(sql_client, schema_status, schema_version, core_schemas))) {
       LOG_WARN("get_core_table_columns failed", KR(ret), K(schema_status));
     } else {
       // mock partition array
@@ -549,19 +564,22 @@ int ObSchemaServiceSQLImpl::gen_new_schema_version_(
 int ObSchemaServiceSQLImpl::get_core_table_priorities(
     ObISQLClient &sql_client,
     const ObRefreshSchemaStatus &schema_status,
+    const int64_t schema_version,
     ObArray<ObTableSchema> &core_schemas)
 {
   int ret = OB_SUCCESS;
   ObArray<ObTableSchema *> temp_table_schema_ptrs;
   ObArray<ObTableSchema> temp_table_schemas;
+  ObArray<int64_t> temp_schema_versions;
+  ObArray<bool> temp_is_deleted;
   core_schemas.reset();
   const char *table_name = NULL;
   
   if (!check_inner_stat()) {
     ret = OB_NOT_INIT;
     LOG_WARN("check inner stat fail", KR(ret), K(schema_status));
-  } else if (OB_FAIL(ObSchemaUtils::get_all_table_name(table_name,
-                                                       schema_service_))) {
+  } else if (OB_FAIL(ObSchemaUtils::get_all_table_history_name(table_name,
+                                                               schema_service_))) {
     LOG_WARN("fail to get all table name", KR(ret), K(schema_status));
   } else {
     const int64_t snapshot_timestamp = schema_status.snapshot_timestamp_;
@@ -589,23 +607,47 @@ int ObSchemaServiceSQLImpl::get_core_table_priorities(
           LOG_WARN("NULL row", KR(ret), K(schema_status));
         } else {
           core_schema.reset();
-          const bool check_deleted = false;
+          const bool check_deleted = true;
           bool is_deleted = false;
-          if (OB_FAIL(ObSchemaRetrieveUtils::fill_table_schema(check_deleted, *priority_row, core_schema, is_deleted))) {
+          int64_t row_schema_version = OB_INVALID_VERSION;
+          if (OB_FAIL(priority_row->get_int("schema_version", row_schema_version))) {
+            LOG_WARN("get schema version failed", KR(ret), K(schema_status), KPC(priority_row));
+          } else if (row_schema_version > schema_version) {
+            // The history row is newer than the requested schema snapshot.
+          } else if (OB_FAIL(ObSchemaRetrieveUtils::fill_table_schema(
+                         check_deleted, *priority_row, core_schema, is_deleted))) {
             LOG_WARN("fill_table_schema failed", KR(ret), K(schema_status), K(check_deleted), KPC(priority_row));
-          } else if (is_deleted) {
-            ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("core table don't read history table, "
-                     "impossible to have is_deleted set", KR(ret), K(schema_status));
-          } else if (OB_ALL_CORE_TABLE_TID == core_schema.get_table_id()) {
-            // __all_core_table's schema in inner_table only used for sys views, won't be used by schema.
-          } else if (OB_FAIL(temp_table_schemas.push_back(core_schema))) {
-            LOG_WARN("push_back failed", KR(ret), K(schema_status));
+          } else {
+            int64_t idx = 0;
+            for (; idx < temp_table_schemas.count(); ++idx) {
+              if (temp_table_schemas.at(idx).get_table_id() == core_schema.get_table_id()) {
+                break;
+              }
+            }
+            if (idx == temp_table_schemas.count()) {
+              if (OB_FAIL(temp_table_schemas.push_back(core_schema))) {
+                LOG_WARN("push back table schema failed", KR(ret), K(schema_status));
+              } else if (OB_FAIL(temp_schema_versions.push_back(row_schema_version))) {
+                LOG_WARN("push back schema version failed", KR(ret), K(row_schema_version));
+              } else if (OB_FAIL(temp_is_deleted.push_back(is_deleted))) {
+                LOG_WARN("push back delete flag failed", KR(ret), K(is_deleted));
+              }
+            } else if (row_schema_version > temp_schema_versions.at(idx)) {
+              if (OB_FAIL(temp_table_schemas.at(idx).assign(core_schema))) {
+                LOG_WARN("assign table schema failed", KR(ret), K(core_schema));
+              } else {
+                temp_schema_versions.at(idx) = row_schema_version;
+                temp_is_deleted.at(idx) = is_deleted;
+              }
+            }
           }
         }
       }
       for (int64_t i = 0; OB_SUCC(ret) && i < temp_table_schemas.count(); ++i) {
-        if (OB_FAIL(temp_table_schema_ptrs.push_back(&temp_table_schemas.at(i)))) {
+        if (temp_is_deleted.at(i)
+            || OB_ALL_CORE_TABLE_TID == temp_table_schemas.at(i).get_table_id()) {
+          // __all_core_table is hard coded; deleted schemas are invisible at this version.
+        } else if (OB_FAIL(temp_table_schema_ptrs.push_back(&temp_table_schemas.at(i)))) {
           LOG_WARN("fail to push back table", KR(ret), K(schema_status), K(i));
         }
       }
@@ -625,6 +667,7 @@ int ObSchemaServiceSQLImpl::get_core_table_priorities(
 int ObSchemaServiceSQLImpl::get_core_table_columns(
     ObISQLClient &sql_client,
     const ObRefreshSchemaStatus &schema_status,
+    const int64_t schema_version,
     ObArray<ObTableSchema> &core_schemas)
 {
   int ret = OB_SUCCESS;
@@ -632,11 +675,13 @@ int ObSchemaServiceSQLImpl::get_core_table_columns(
   const int64_t snapshot_timestamp = schema_status.snapshot_timestamp_;
   bool check_sys_variable = false;  // to avoid cyclic dependence
   DEFINE_SQL_CLIENT_RETRY_WEAK_WITH_PARAMETER(sql_client, snapshot_timestamp, check_sys_variable);
-  ObCoreTableProxy core_kv(OB_ALL_COLUMN_TNAME, sql_client_retry_weak);
+  ObCoreTableProxy core_kv(OB_ALL_COLUMN_HISTORY_TNAME, sql_client_retry_weak);
   if (OB_FAIL(core_kv.load())) {
     LOG_WARN("core_kv load failed", KR(ret), K(schema_status));
   } else {
-    ObColumnSchemaV2 column_schema;
+    ObArray<ObColumnSchemaV2> latest_columns;
+    ObArray<int64_t> latest_schema_versions;
+    ObArray<bool> latest_is_deleted;
     while (OB_SUCC(ret)) {
       const ObCoreTableProxy::Row *column_row = NULL;
       if (OB_FAIL(core_kv.next())) {
@@ -652,24 +697,60 @@ int ObSchemaServiceSQLImpl::get_core_table_columns(
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("NULL row", KR(ret), K(schema_status));
       } else {
-        const bool check_deleted = false;
+        ObColumnSchemaV2 column_schema;
+        const bool check_deleted = true;
         bool is_deleted = false;
-        if (OB_FAIL(ObSchemaRetrieveUtils::fill_column_schema(check_deleted, *column_row, column_schema, is_deleted))) {
+        int64_t row_schema_version = OB_INVALID_VERSION;
+        if (OB_FAIL(column_row->get_int("schema_version", row_schema_version))) {
+          LOG_WARN("get schema version failed", KR(ret), K(schema_status), KPC(column_row));
+        } else if (row_schema_version > schema_version) {
+          // The history row is newer than the requested schema snapshot.
+        } else if (OB_FAIL(ObSchemaRetrieveUtils::fill_column_schema(
+                       check_deleted, *column_row, column_schema, is_deleted))) {
           LOG_WARN("fill_column_schema failed", KR(ret),
                    K(schema_status), K(check_deleted), KPC(column_row));
-        } else if (is_deleted) {
-          ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("core table don't read history table, "
-                   "impossible to have is_deleted set", KR(ret), K(schema_status));
         } else {
-          FOREACH_CNT_X(core_schema, core_schemas, OB_SUCCESS == ret) {
-            if (column_schema.get_table_id() == core_schema->get_table_id()) {
-              if (OB_FAIL(core_schema->add_column(column_schema))) {
-                LOG_WARN("push_back failed", KR(ret), K(schema_status));
-              }
+          int64_t idx = 0;
+          for (; idx < latest_columns.count(); ++idx) {
+            if (latest_columns.at(idx).get_table_id() == column_schema.get_table_id()
+                && latest_columns.at(idx).get_column_id() == column_schema.get_column_id()) {
               break;
             }
           }
+          if (idx == latest_columns.count()) {
+            if (OB_FAIL(latest_columns.push_back(column_schema))) {
+              LOG_WARN("push back column schema failed", KR(ret), K(column_schema));
+            } else if (OB_FAIL(latest_schema_versions.push_back(row_schema_version))) {
+              LOG_WARN("push back schema version failed", KR(ret), K(row_schema_version));
+            } else if (OB_FAIL(latest_is_deleted.push_back(is_deleted))) {
+              LOG_WARN("push back delete flag failed", KR(ret), K(is_deleted));
+            }
+          } else if (row_schema_version > latest_schema_versions.at(idx)) {
+            if (OB_FAIL(latest_columns.at(idx).assign(column_schema))) {
+              LOG_WARN("assign column schema failed", KR(ret), K(column_schema));
+            } else {
+              latest_schema_versions.at(idx) = row_schema_version;
+              latest_is_deleted.at(idx) = is_deleted;
+            }
+          }
+        }
+      }
+    }
+    for (int64_t i = 0; OB_SUCC(ret) && i < latest_columns.count(); ++i) {
+      if (!latest_is_deleted.at(i)) {
+        bool table_found = false;
+        FOREACH_CNT_X(core_schema, core_schemas, OB_SUCCESS == ret) {
+          if (latest_columns.at(i).get_table_id() == core_schema->get_table_id()) {
+            table_found = true;
+            if (OB_FAIL(core_schema->add_column(latest_columns.at(i)))) {
+              LOG_WARN("push_back failed", KR(ret), K(schema_status));
+            }
+            break;
+          }
+        }
+        if (OB_SUCC(ret) && !table_found) {
+          LOG_DEBUG("column belongs to an invisible core table",
+                    K(schema_version), K(latest_columns.at(i)));
         }
       }
     }
@@ -4870,7 +4951,8 @@ int ObSchemaServiceSQLImpl::get_table_schema(
   int ret = OB_SUCCESS;
 
   if (is_core_table(table_id)) {
-    if (OB_FAIL(get_core_table_schema(schema_status, table_id, sql_client, allocator, table_schema))) {
+    if (OB_FAIL(get_core_table_schema(
+            schema_status, table_id, schema_version, sql_client, allocator, table_schema))) {
       LOG_WARN("get core table schema failed", K(ret), K(table_id));
     }
   } else {
