@@ -1976,6 +1976,11 @@ public:
                                             bool check_current_stmt,
                                             bool check_basic_deterministic,
                                             bool &strict_deterministic);
+  static int check_need_calc_match_score(ObExecContext *exec_ctx,
+                                         const ObDMLStmt *stmt,
+                                         ObRawExpr *match_expr,
+                                         bool &need_calc,
+                                         ObIArray<ObExprConstraint> &constraints);
 
 private:
   static int inner_get_lazy_left_join(ObDMLStmt *stmt,

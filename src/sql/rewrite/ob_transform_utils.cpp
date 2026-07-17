@@ -14771,6 +14771,36 @@ bool ObTransformUtils::is_full_group_by(ObSelectStmt& stmt, ObSQLMode mode)
   return !stmt.has_order_by() && is_only_full_group_by_on(mode);
 }
 
+int ObTransformUtils::check_need_calc_match_score(ObExecContext *exec_ctx,
+                                                  const ObDMLStmt *stmt,
+                                                  ObRawExpr *match_expr,
+                                                  bool &need_calc,
+                                                  ObIArray<ObExprConstraint> &constraints)
+{
+  int ret = OB_SUCCESS;
+  ObSEArray<ObRawExpr *, 16> relation_exprs;
+  need_calc = false;
+  if (OB_ISNULL(exec_ctx) || OB_ISNULL(stmt) || OB_ISNULL(match_expr)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument", K(ret), KP(exec_ctx), KP(stmt), KP(match_expr));
+  } else if (OB_FAIL(stmt->get_relation_exprs(relation_exprs))) {
+    LOG_WARN("failed to get relation exprs", K(ret));
+  }
+  for (int64_t i = 0; OB_SUCC(ret) && !need_calc && i < relation_exprs.count(); ++i) {
+    bool expr_need_calc = false;
+    if (OB_FAIL(inner_check_need_calc_match_score(exec_ctx,
+                                                  relation_exprs.at(i),
+                                                  match_expr,
+                                                  expr_need_calc,
+                                                  constraints))) {
+      LOG_WARN("failed to check relation expr", K(ret), K(i));
+    } else if (expr_need_calc) {
+      need_calc = true;
+    }
+  }
+  return ret;
+}
+
 int ObTransformUtils::inner_check_need_calc_match_score(ObExecContext *exec_ctx,
                                                         ObRawExpr* expr, 
                                                         ObRawExpr* match_expr, 
@@ -14786,26 +14816,6 @@ int ObTransformUtils::inner_check_need_calc_match_score(ObExecContext *exec_ctx,
   } else if (expr == match_expr) {
     need_calc = true;
     need_check_child = false;
-  } else if (expr->get_expr_type() == T_OP_GT || expr->get_expr_type() == T_OP_LT) {
-    ObRawExpr *gt_param = NULL;
-    ObRawExpr *lt_param = NULL;
-    bool is_param_zero = false;
-    if (expr->get_param_count() != 2 || OB_ISNULL(expr->get_param_expr(0)) || 
-        OB_ISNULL(expr->get_param_expr(1))) {
-      ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("invalid argument", K(ret));
-    } else if (OB_FALSE_IT(gt_param = expr->get_expr_type() == T_OP_GT ? expr->get_param_expr(0) : 
-                                                                         expr->get_param_expr(1))) {
-    } else if (OB_FALSE_IT(lt_param = expr->get_expr_type() == T_OP_GT ? expr->get_param_expr(1) : 
-                                                                         expr->get_param_expr(0))) {
-    } else if (gt_param != match_expr) {
-      /* do nothing */
-    } else if (OB_FAIL(check_expr_eq_zero(exec_ctx, lt_param, is_param_zero, constraints))) {
-      LOG_WARN("failed to check param eq zero", K(ret));
-    } else if (is_param_zero) {
-      need_calc = false;
-      need_check_child = false;
-    }
   } else if (expr->get_expr_type() == T_OP_BOOL) {
     if (expr->get_param_count() == 1 && expr->get_param_expr(0) == match_expr) {
       need_calc = false;

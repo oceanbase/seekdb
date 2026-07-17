@@ -102,7 +102,7 @@ private:
   int estimate_token_doc_cnt();
   inline bool need_inv_idx_agg() { return inv_idx_agg_iter_ != nullptr; }
   inline bool need_fwd_idx_agg() { return fwd_idx_agg_iter_ != nullptr; }
-  inline bool need_calc_relevance() { return inv_idx_agg_iter_ != nullptr; }
+  inline bool need_calc_relevance() { return relevance_expr_ != nullptr; }
   inline bool need_fill_token_cnt() { return nullptr != relevance_expr_ && !sql::ObExprBM25::use_new_version(*relevance_expr_); }
   inline bool need_fill_token_weight() { return !need_fill_token_cnt(); }
   // tools method

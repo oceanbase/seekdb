@@ -260,7 +260,13 @@ void ObFTIndexRowCache::reuse()
   row_pool_index_ = 0;
   token_arr_.reuse();
   ft_token_processor_.reuse();
-  ft_token_map_.destroy();
+  if (ft_token_map_.created()) {
+    const int tmp_ret = ft_token_map_.reuse();
+    if (OB_SUCCESS != tmp_ret) {
+      LOG_WARN_RET(tmp_ret, "fail to reuse ft token map");
+      ft_token_map_.destroy();
+    }
+  }
   scratch_allocator_.reset_remain_one_page();
 }
 
@@ -297,7 +303,11 @@ int ObFTIndexRowCache::prepare_parser(const common::ObObjMeta &ft_obj_meta,
 int ObFTIndexRowCache::create_ft_token_map(const int64_t ft_token_bkt_cnt)
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(ft_token_map_.create(ft_token_bkt_cnt, common::ObMemAttr("ft_token_map")))) {
+  if (ft_token_map_.created() && ft_token_map_.bucket_count() < ft_token_bkt_cnt) {
+    ft_token_map_.destroy();
+  }
+  if (!ft_token_map_.created()
+      && OB_FAIL(ft_token_map_.create(ft_token_bkt_cnt, common::ObMemAttr("ft_token_map")))) {
     LOG_WARN("fail to create ft token map", K(ret), K(ft_token_bkt_cnt));
   }
   return ret;

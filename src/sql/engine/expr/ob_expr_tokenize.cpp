@@ -237,9 +237,19 @@ int ObExprTokenize::parse_param(const ObExpr &expr,
     LOG_WARN("Fail to parse parser params.", K(ret));
   } else if (OB_FAIL(parse_parser_properties(expr, ctx, temp_allocator, param))) {
     LOG_WARN("Fail to parse parser params.", K(ret));
+  } else if (expr.arg_cnt_ < 3) {
+    bool is_ik_parser = false;
+    if (OB_FAIL(ObFtsIndexBuilderUtil::check_need_to_load_dic(param.parser_name_,
+                                                              is_ik_parser))) {
+      LOG_WARN("fail to check parser type", K(ret), K(param.parser_name_));
+    } else if (!is_ik_parser
+               && OB_FAIL(param.reform_parser_properties(param.properties_))) {
+      LOG_WARN("Fail to reform parser params.", K(ret));
+    }
   } else if (OB_FAIL(param.reform_parser_properties(param.properties_))) {
     LOG_WARN("Fail to reform parser params.", K(ret));
-  } else if (OB_FAIL(param.try_load_dictionary_for_ik())) {
+  }
+  if (OB_SUCC(ret) && OB_FAIL(param.try_load_dictionary_for_ik())) {
     LOG_WARN("fail to try load dictionary for ik", K(ret));
   }
   return ret;
