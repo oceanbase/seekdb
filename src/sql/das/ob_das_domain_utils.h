@@ -54,6 +54,8 @@ private:
   ObDomainIndexRow rows_;
   uint64_t row_idx_;
   bool is_fts_index_aux_;
+  // Task4 Op2：解析器使用独立的长生命周期 allocator，不能随每行输出缓存一起回收。
+  common::ObArenaAllocator parser_allocator_;
   storage::ObFTParseHelper helper_;
   bool is_inited_;
 
@@ -339,6 +341,7 @@ public:
   : ObDomainDMLIterator(allocator, row_projector, write_iter, das_ctdef, main_ctdef),
     doc_word_info_(ft_doc_word_info),
     ft_doc_word_iter_(),
+    parser_allocator_(lib::ObMemAttr("FTDMLParser")),
     ft_parse_helper_(),
     is_inited_(false)
   {
@@ -371,6 +374,8 @@ protected:
 private:
   const ObFTDocWordInfo *doc_word_info_;
   storage::ObFTDocWordScanIterator ft_doc_word_iter_;
+  // Task4 Op2：DML 行缓冲会逐行 reuse，解析器必须使用独立的长生命周期 allocator。
+  common::ObArenaAllocator parser_allocator_;
   storage::ObFTParseHelper ft_parse_helper_;
   bool is_inited_;
 };

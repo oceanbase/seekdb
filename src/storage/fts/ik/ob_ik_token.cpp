@@ -25,7 +25,9 @@ namespace oceanbase
 {
 namespace storage
 {
-int ObFTSortList::add_token(const ObIKToken &token)
+// Task4 Op1：同一排序逻辑同时服务普通链表和分块节点池链表。
+template <typename ListType>
+int ObFTSortList<ListType>::add_token(const ObIKToken &token)
 {
   int ret = OB_SUCCESS;
 
@@ -44,7 +46,8 @@ int ObFTSortList::add_token(const ObIKToken &token)
       LOG_WARN("fail to push back token", K(ret));
     }
   } else {
-    for (ObFTSortList::CellIter iter = tokens_.last(); OB_SUCC(ret) && iter != tokens_.end();
+    for (typename ObFTSortList<ListType>::CellIter iter = tokens_.last();
+         OB_SUCC(ret) && iter != tokens_.end();
          --iter) {
       if (token < *iter) {
         continue;
@@ -165,7 +168,7 @@ int ObIKTokenChain::copy(ObIKTokenChain *other)
     min_offset_ = other->min_offset_;
     max_offset_ = other->max_offset_;
     payload_ = other->payload_;
-    ObFTSortList::CellIter iter = other->list().tokens().begin();
+    ObFTLightSortList::CellIter iter = other->list().tokens().begin();
 
     for (; OB_SUCC(ret) && iter != other->list().tokens().end(); ++iter) {
       bool added = false;
@@ -218,19 +221,29 @@ int ObIKTokenChain::pop_back(ObIKToken &token)
   return ret;
 }
 
-int64_t ObFTSortList::max()
+template <typename ListType>
+int64_t ObFTSortList<ListType>::max()
 {
   if (tokens_.empty()) {
     return 0;
   }
   return tokens_.get_last().offset_ + tokens_.get_last().length_;
 }
-int64_t ObFTSortList::min()
+template <typename ListType>
+int64_t ObFTSortList<ListType>::min()
 {
   if (tokens_.empty()) {
     return 0;
   }
   return tokens_.get_first().offset_;
 }
+
+// Task4 Op1：仅实例化跨编译单元使用的方法，兼容没有 reuse() 的旧版 ObList。
+template int ObFTSortList<ObList<ObIKToken, ObIAllocator>>::add_token(const ObIKToken &);
+template int64_t ObFTSortList<ObList<ObIKToken, ObIAllocator>>::max();
+template int64_t ObFTSortList<ObList<ObIKToken, ObIAllocator>>::min();
+template int ObFTSortList<ObFastList<ObIKToken, HANDLE_SIZE_LIMIT>>::add_token(const ObIKToken &);
+template int64_t ObFTSortList<ObFastList<ObIKToken, HANDLE_SIZE_LIMIT>>::max();
+template int64_t ObFTSortList<ObFastList<ObIKToken, HANDLE_SIZE_LIMIT>>::min();
 } //  namespace storage
 } //  namespace oceanbase

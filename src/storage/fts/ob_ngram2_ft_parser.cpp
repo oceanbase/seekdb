@@ -71,6 +71,12 @@ int ObNgram2FTParser::reuse(ObFTParserParam *param)
   return init(param);
 }
 
+// Task4 Op2：将新输入交给已初始化的 ngram2 滑动窗口。
+int ObNgram2FTParser::reuse_parser(const char *fulltext, const int64_t fulltext_len)
+{
+  return ngram_impl_.reuse_parser(fulltext, fulltext_len);
+}
+
 int ObNgram2FTParser::get_next_token(const char *&word,
                                      int64_t &word_len,
                                      int64_t &char_len,

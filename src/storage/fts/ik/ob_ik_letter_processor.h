@@ -34,6 +34,14 @@ public:
                  const uint8_t char_len,
                  const ObFTCharUtil::CharType type) override;
 
+  // Task4 Op2：重置英文、数字和混合词的跨字符状态。
+  void reuse() override
+  {
+    reset_english_state();
+    reset_arabic_state();
+    reset_mix_state();
+  }
+
 private:
   int process_english_letter(TokenizeContext &ctx,
                              const char *ch,

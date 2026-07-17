@@ -1259,4 +1259,6 @@
 #define N_AI_RERANK                         "ai_rerank"
 #define N_AI_PROMPT                         "ai_prompt"
 #define N_CHECK_LOCATION_ACCESS "check_location_access"
+// Task2: 注册 LOAD_FILE 的标准函数名。
+#define N_LOAD_FILE                         "load_file"
 #endif //OCEANBASE_LIB_OB_NAME_DEF_H_

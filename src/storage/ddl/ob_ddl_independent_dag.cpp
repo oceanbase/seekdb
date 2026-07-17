@@ -44,9 +44,10 @@ ObDDLIndependentDag::ObDDLIndependentDag()
     ddl_thread_count_(0),
     pipeline_count_(0),
     ret_code_(OB_SUCCESS),
-    is_inc_major_log_(false)
+    is_inc_major_log_(false),
+    dag_monitor_tenant_id_(OB_INVALID_TENANT_ID)
 {
-
+  MEMSET(dag_monitor_nodes_, 0, sizeof(dag_monitor_nodes_));
 }
 
 void free_tablet_context(ObIAllocator &allocator, ObDDLTabletContext *tablet_context)
@@ -65,6 +66,10 @@ ObDDLIndependentDag::~ObDDLIndependentDag()
 void ObDDLIndependentDag::reuse()
 {
   FLOG_INFO("ddl independent dag reuse");
+  // Task4 Op9：重置 DDL 任务标识前关闭全部阶段记录。
+  ObDDLDagMonitorMgr::get_instance().close_dag(
+      dag_monitor_tenant_id_, ddl_task_param_, this, ret_code_);
+  MEMSET(dag_monitor_nodes_, 0, sizeof(dag_monitor_nodes_));
   is_inited_ = false;
   direct_load_type_ = ObDirectLoadType::DIRECT_LOAD_INVALID;
   ddl_thread_count_ = 0;
@@ -82,6 +87,7 @@ void ObDDLIndependentDag::reuse()
   pipeline_count_ = 0;
   ret_code_ = OB_SUCCESS;
   is_inc_major_log_ = false;
+  dag_monitor_tenant_id_ = OB_INVALID_TENANT_ID;
   arena_.reset();
 }
 
@@ -101,6 +107,7 @@ int ObDDLIndependentDag::init_by_param(const share::ObIDagInitParam *param)
     direct_load_type_ = init_param->direct_load_type_;
     ddl_thread_count_ = init_param->ddl_thread_count_;
     ddl_task_param_ = init_param->ddl_task_param_;
+    dag_monitor_tenant_id_ = common::OB_SERVER_TENANT_ID;
     tx_info_ = init_param->tx_info_;
     is_inc_major_log_ = init_param->is_inc_major_log_;
     if (OB_FAIL(init_ddl_table_schema())) {
@@ -109,10 +116,34 @@ int ObDDLIndependentDag::init_by_param(const share::ObIDagInitParam *param)
       LOG_WARN("init tablet context failed", K(ret));
     } else {
       is_inited_ = true;
+      // Task4 Op9：DAG 初始化完成后开始记录总耗时。
+      ObDDLDagMonitorNode *dag_total_node = get_or_create_dag_monitor_node(TASK4_OP9_DAG_TOTAL);
+      if (nullptr != dag_total_node) {
+        dag_total_node->start(ObTimeUtility::current_time());
+      }
     }
   }
   FLOG_INFO("ddl independent dag init", K(ret), KPC(this), K(ddl_table_schema_), K(tx_info_), K(ls_tablet_ids_), K(tablet_context_map_.size()));
   return ret;
+}
+
+ObDDLDagMonitorNode *ObDDLIndependentDag::get_or_create_dag_monitor_node(
+    const ObDDLDagMonitorStage stage)
+{
+  // Task4 Op9：并发任务共享同一个阶段节点，避免重复统计。
+  ObDDLDagMonitorNode *node = nullptr;
+  if (stage >= TASK4_OP9_DAG_TOTAL && stage < TASK4_OP9_STAGE_MAX && ddl_task_param_.ddl_task_id_ > 0) {
+    node = ATOMIC_LOAD(&dag_monitor_nodes_[stage]);
+    if (nullptr == node) {
+      ObDDLDagMonitorNode *new_node = ObDDLDagMonitorMgr::get_instance().get_or_create_node(
+          dag_monitor_tenant_id_, ddl_task_param_, this, stage);
+      if (nullptr != new_node) {
+        (void)ATOMIC_BCAS(&dag_monitor_nodes_[stage], nullptr, new_node);
+        node = ATOMIC_LOAD(&dag_monitor_nodes_[stage]);
+      }
+    }
+  }
+  return node;
 }
 
 int ObDDLIndependentDag::init_ddl_table_schema()

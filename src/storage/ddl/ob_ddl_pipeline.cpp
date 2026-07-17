@@ -28,6 +28,7 @@
 #include "sql/engine/expr/ob_expr_lob_utils.h"
 #include "sql/engine/expr/ob_array_expr_utils.h"
 #include "sql/engine/expr/ob_expr_ai/ob_ai_func_utils.h"
+#include "storage/ddl/ob_ddl_dag_monitor.h"
 
 using namespace oceanbase::storage;
 using namespace oceanbase::common;
@@ -51,6 +52,9 @@ int ObIDDLPipeline::init(
 int ObIDDLPipeline::process()
 {
   int ret = OB_SUCCESS;
+  // Task4 Op9：统计流水线的每次调度，包括挂起和重试轮次。
+  ObDDLIndependentDag *ddl_dag = static_cast<ObDDLIndependentDag *>(get_dag());
+  ObDDLDagStageGuard monitor_guard(ddl_dag, TASK4_OP9_WRITE_PIPELINE);
   if (OB_FAIL(preprocess())) {
     LOG_WARN("preprocess failed", K(ret));
   } else {
@@ -84,6 +88,7 @@ int ObIDDLPipeline::process()
     }
   }
   postprocess(ret);
+  monitor_guard.set_ret_code(ret);
   return ret;
 }
 

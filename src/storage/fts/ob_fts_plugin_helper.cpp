@@ -240,7 +240,7 @@ int ObFTParseHelper::segment(
     common::ObIAllocator &token_iter_allocator,
     ObITokenIterator *&cached_iter,
     bool &cache_disabled,
-    ObAddWord &add_word)
+    ObAddWord &add_word) const
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(parser_version < 0 || nullptr == parser_desc || nullptr == cs || nullptr == ft || 0 >= ft_len)) {
@@ -320,7 +320,6 @@ int ObFTParseHelper::segment(
       iter = nullptr;
     } else if (cache_disabled && OB_NOT_NULL(iter)) {
       parser_desc->free_token_iter(&param, iter);
-      iter = nullptr;
     }
   }
   return ret;

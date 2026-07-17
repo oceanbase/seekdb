@@ -209,7 +209,7 @@ public:
   TO_STRING_KV(KP_(allocator), K_(parser_name), KP_(parser_desc), K_(is_inited));
 
 private:
-  static int segment(
+  int segment(
       const ObFTParserProperty &property,
       const int64_t parser_version,
       const plugin::ObIFTParserDesc *parser_desc,
@@ -221,7 +221,7 @@ private:
       common::ObIAllocator &token_iter_allocator,
       plugin::ObITokenIterator *&cached_iter,
       bool &cache_disabled,
-      ObAddWord &add_word);
+      ObAddWord &add_word) const;
   int set_add_word_flag(const plugin::ObIFTParserDesc &ftparser_desc);
 private:
   common::ObIAllocator *allocator_;

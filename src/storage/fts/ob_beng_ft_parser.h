@@ -45,6 +45,8 @@ public:
   ~ObBEngFTParser() { reset(); }
 
   int init(plugin::ObFTParserParam *param);
+  // Task4 Op2：复用 English analyzer，仅重新分析新文档。
+  int reuse_parser(const char *fulltext, const int64_t fulltext_len) override;
   void reset();
   virtual int reuse(plugin::ObFTParserParam *param) override;
   virtual int get_next_token(

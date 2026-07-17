@@ -21,6 +21,7 @@
 #include "storage/fts/dict/ob_ft_cache_container.h"
 #include "storage/fts/dict/ob_ft_dict.h"
 #include "storage/fts/dict/ob_ft_dict_def.h"
+#include "storage/fts/ik/ob_ik_arbitrator.h"
 #include "storage/fts/ik/ob_ik_processor.h"
 #include "plugin/interface/ob_plugin_ftparser_intf.h"
 
@@ -41,6 +42,7 @@ public:
         ctx_(nullptr),
         hub_(hub),
         segmenters_(allocator_),
+        arb_(),
         cache_main_(allocator),
         cache_quan_(allocator),
         cache_stop_(allocator),
@@ -59,6 +61,9 @@ public:
                      int64_t &word_len,
                      int64_t &char_cnt,
                      int64_t &word_freq) override;
+
+  // Task4 Op2：复用字典、处理器及 Fast 容器，仅切换输入文档。
+  int reuse_parser(const char *fulltext, const int64_t fulltext_len) override;
 
   VIRTUAL_TO_STRING_KV(K(is_inited_));
 
@@ -98,6 +103,9 @@ private:
   TokenizeContext *ctx_;
   ObFTDictHub *hub_;
   ObList<ObIIKProcessor *, ObIAllocator> segmenters_;
+
+  // Task4：解析器生命周期内复用仲裁器，避免每批次重复创建哈希表和 Arena。
+  ObIKArbitrator arb_;
 
   // For now there's no change of dict in one query, so we can pin dict this level.
   ObFTCacheRangeContainer cache_main_;

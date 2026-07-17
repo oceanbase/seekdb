@@ -45,6 +45,7 @@ ObFTIndexRowCache::ObFTIndexRowCache()
   : rows_(),
     row_idx_(0),
     is_fts_index_aux_(true),
+    parser_allocator_(),
     helper_(),
     is_inited_(false)
 {
@@ -68,7 +69,9 @@ int ObFTIndexRowCache::init(
     LOG_WARN("init fulltext dml iterator twice", K(ret), K(is_inited_));
   } else if (OB_FAIL(CURRENT_CONTEXT->CREATE_CONTEXT(merge_memctx_, param))) {
     LOG_WARN("failed to create merge memctx", K(ret));
-  } else if (OB_FAIL(helper_.init(&(merge_memctx_->get_arena_allocator()), parser_name, parser_properties))) {
+  } else if (FALSE_IT(parser_allocator_.set_attr(lib::ObMemAttr("FTParserCache")))) {
+  // Task4 Op2：行缓存会逐行 reset，解析器必须放在不被该 reset 影响的独立 allocator 中。
+  } else if (OB_FAIL(helper_.init(&parser_allocator_, parser_name, parser_properties))) {
     LOG_WARN("fail to init full-text parser helper", K(ret));
   } else {
     row_idx_ = 0;
@@ -127,6 +130,8 @@ void ObFTIndexRowCache::reset()
   row_idx_ = 0;
   is_fts_index_aux_ = true;
   helper_.reset();
+  // Task4 Op2：先析构缓存解析器，再统一释放其长生命周期内存。
+  parser_allocator_.reset();
   if (OB_NOT_NULL(merge_memctx_)) {
     DESTROY_CONTEXT(merge_memctx_);
     merge_memctx_ = nullptr;
@@ -924,6 +929,8 @@ void ObFTDMLIterator::reset()
   is_inited_ = false;
   ft_doc_word_iter_.reset();
   ft_parse_helper_.reset();
+  // Task4 Op2：解析器析构后再释放独立 allocator，避免跨行悬空指针。
+  parser_allocator_.reset();
   ObDomainDMLIterator::reset();
 }
 
@@ -947,7 +954,9 @@ int ObFTDMLIterator::rewind()
         // This is the same as the parser name of the previous index.
         // nothing to do, just skip.
       } else if (FALSE_IT(ft_parse_helper_.reset())) {
-      } else if (OB_FAIL(ft_parse_helper_.init(&allocator_, parser_str, parser_property_str))) {
+      } else if (FALSE_IT(parser_allocator_.reset())) {
+      // Task4 Op2：配置变化时在独立 allocator 上重建解析器。
+      } else if (OB_FAIL(ft_parse_helper_.init(&parser_allocator_, parser_str, parser_property_str))) {
         LOG_WARN("fail to init fulltext parse helper", K(ret), K(parser_str), K(parser_property_str));
       }
     } else if (ObDomainDMLMode::DOMAIN_DML_MODE_FT_SCAN == mode_) {
@@ -981,7 +990,8 @@ int ObFTDMLIterator::init(
   } else {
     switch (mode_) {
       case ObDomainDMLMode::DOMAIN_DML_MODE_DEFAULT: {
-        if (OB_FAIL(ft_parse_helper_.init(&allocator_, parser_name, parser_properties))) {
+        // Task4 Op2：解析器不再依赖会被逐行 reuse 的 DML 行缓冲 allocator。
+        if (OB_FAIL(ft_parse_helper_.init(&parser_allocator_, parser_name, parser_properties))) {
           LOG_WARN("fail to init fulltext parse helper", K(ret), K(parser_name), K(parser_properties));
         }
         break;
@@ -1043,7 +1053,9 @@ int ObFTDMLIterator::change_domain_dml_mode(const ObDomainDMLMode &mode)
           // This is the same as the parser name of the previous index.
           // nothing to do, just skip.
         } else if (FALSE_IT(ft_parse_helper_.reset())) {
-        } else if (OB_FAIL(ft_parse_helper_.init(&allocator_, parser_str, parser_property_str))) {
+        } else if (FALSE_IT(parser_allocator_.reset())) {
+        // Task4 Op2：模式切换后在独立 allocator 上重建解析器。
+        } else if (OB_FAIL(ft_parse_helper_.init(&parser_allocator_, parser_str, parser_property_str))) {
           LOG_WARN("fail to init fulltext parse helper", K(ret), K(parser_str), K(parser_property_str));
         }
         break;

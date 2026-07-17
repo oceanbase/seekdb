@@ -68,7 +68,9 @@ public:
     ties_array_pos_(0), ties_array_(), sorted_dumped_rows_ptrs_(), last_ties_row_(nullptr), rows_(nullptr),
     sort_exprs_getter_(allocator_),
     store_row_factory_(allocator_, sql_mem_processor_, sk_row_meta_, addon_row_meta_, inmem_row_size_, topn_cnt_),
-    topn_filter_(nullptr), is_topn_filter_enabled_(false), is_fixed_key_sort_enabled_(false), fixed_sort_key_len_(0), compress_type_(NONE_COMPRESSOR)
+    topn_filter_(nullptr), is_topn_filter_enabled_(false), is_fixed_key_sort_enabled_(false),
+    fixed_sort_key_len_(0), compress_type_(NONE_COMPRESSOR), is_task4_op9_fts_ddl_sort_(false),
+    task4_op9_dump_count_(0), task4_op9_merge_pass_count_(0), task4_op9_max_merge_ways_(0)
   {}
   virtual ~ObSortVecOpImpl()
   {
@@ -194,6 +196,8 @@ protected:
   typedef int (ObSortVecOpImpl::*NextStoredRowFunc)(const Store_Row *&sr);
   int sort_inmem_data();
   int do_dump();
+  // Task4 Op9：在释放 workarea 前记录向量化 FTS DDL 排序指标。
+  void record_task4_op9_sort_monitor();
   int build_ems_heap(int64_t &merge_ways);
   template <typename Heap, typename NextFunc, typename Item>
   int heap_next(Heap &heap, const NextFunc &func, Item &item);
@@ -498,6 +502,10 @@ protected:
   bool is_fixed_key_sort_enabled_;
   uint32_t fixed_sort_key_len_;
   ObCompressorType compress_type_;
+  bool is_task4_op9_fts_ddl_sort_; // Task4 Op9：标记向量化 FTS 辅助表 DDL 排序。
+  int64_t task4_op9_dump_count_; // Task4 Op9：成功生成外排分片的次数。
+  int64_t task4_op9_merge_pass_count_; // Task4 Op9：执行外部归并的轮次。
+  int64_t task4_op9_max_merge_ways_; // Task4 Op9：单轮归并的最大路数。
   ObPushDownTopNFilter pd_topn_filter_;
 };
 
