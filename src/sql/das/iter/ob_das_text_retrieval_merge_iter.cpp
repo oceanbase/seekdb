@@ -83,6 +83,24 @@ int ObIRIterLoserTreeCmp::cmp(
   return ret;
 }
 
+int ObIRIterLoserTreeCmp::compare_doc_ids(
+    const ObDocIdExt &left,
+    const ObDocIdExt &right,
+    int64_t &cmp_ret) const
+{
+  int ret = OB_SUCCESS;
+  int tmp_ret = 0;
+  if (IS_NOT_INIT) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("doc id comparator not initialized", K(ret));
+  } else if (OB_FAIL(cmp_func_(left.get_datum(), right.get_datum(), tmp_ret))) {
+    LOG_WARN("failed to compare cached doc ids", K(ret));
+  } else {
+    cmp_ret = tmp_ret;
+  }
+  return ret;
+}
+
 ObDASTextRetrievalMergeIter::ObDASTextRetrievalMergeIter()
   : ObDASIter(ObDASIterType::DAS_ITER_TEXT_RETRIEVAL_MERGE),
     mem_context_(nullptr),
@@ -1788,13 +1806,18 @@ ObDASTRDaatIter::ObDASTRDaatIter()
     iter_row_heap_(nullptr),
     iter_doc_ids_(),
     next_batch_iter_idxes_(),
-    next_batch_cnt_(0)
+    cache_iter_states_(),
+    next_batch_cnt_(0),
+    matched_doc_count_(0),
+    count_result_output_(false)
 {
 }
 
 int ObDASTRDaatIter::rescan()
 {
   int ret = OB_SUCCESS;
+  matched_doc_count_ = 0;
+  count_result_output_ = false;
   if (OB_FAIL(ObDASTextRetrievalMergeIter::rescan())) {
     LOG_WARN("failed to rescan iter", K(ret));
   } else if (OB_UNLIKELY(query_tokens_.count() != token_iters_.count())) {
@@ -1810,6 +1833,10 @@ int ObDASTRDaatIter::rescan()
       LOG_WARN("failed to init next batch iter idxes array", K(ret));
     } else if (OB_FAIL(next_batch_iter_idxes_.prepare_allocate(query_tokens_.count()))) {
       LOG_WARN("failed to prepare allocate next batch iter idxes array", K(ret));
+    } else if (OB_FAIL(cache_iter_states_.init(query_tokens_.count()))) {
+      LOG_WARN("failed to init cache iterator states", K(ret));
+    } else if (OB_FAIL(cache_iter_states_.prepare_allocate(query_tokens_.count()))) {
+      LOG_WARN("failed to prepare cache iterator states", K(ret));
     } else if (OB_FAIL(iter_row_heap_->open(query_tokens_.count()))) {
       LOG_WARN("failed to open iter row heap", K(ret), K_(query_tokens));
     } else {
@@ -1822,6 +1849,7 @@ int ObDASTRDaatIter::rescan()
           LOG_WARN("failed to append token iter to array", K(ret));
         } else {
           next_batch_iter_idxes_[i] = i;
+          cache_iter_states_[i] = CACHE_ITER_NOT_STARTED;
         }
       }
     }
@@ -1848,6 +1876,8 @@ int ObDASTRDaatIter::set_merge_iters(const ObIArray<ObDASIter *> &retrieval_iter
     LOG_WARN("processing type unexpected", K(ret));
   } else {
     next_batch_cnt_ = query_tokens_.count();
+    matched_doc_count_ = 0;
+    count_result_output_ = false;
     for (int64_t i = 0; OB_SUCC(ret) && i < query_tokens_.count(); ++i) {
       const ObString &query_token = query_tokens_.at(i);
       ObDASTextRetrievalIter *iter = static_cast<ObDASTextRetrievalIter *>(retrieval_iters.at(i));
@@ -1872,12 +1902,18 @@ int ObDASTRDaatIter::do_table_scan()
     LOG_WARN("failed to init next batch iter idxes array", K(ret));
   } else if (OB_FAIL(next_batch_iter_idxes_.prepare_allocate(query_tokens_.count()))) {
     LOG_WARN("failed to prepare allocate next batch iter idxes array", K(ret));
+  } else if (FALSE_IT(cache_iter_states_.set_allocator(&mem_context_->get_arena_allocator()))) {
+  } else if (OB_FAIL(cache_iter_states_.init(query_tokens_.count()))) {
+    LOG_WARN("failed to init cache iterator states", K(ret));
+  } else if (OB_FAIL(cache_iter_states_.prepare_allocate(query_tokens_.count()))) {
+    LOG_WARN("failed to prepare cache iterator states", K(ret));
   } else if (query_tokens_.count()!= 0 && OB_FAIL(iter_row_heap_->open(query_tokens_.count()))) {
       LOG_WARN("failed to open iter row heap", K(ret), K_(query_tokens));
   } else {
     next_batch_cnt_ = query_tokens_.count();
     for (int64_t i = 0; i < next_batch_cnt_; ++i) {
       next_batch_iter_idxes_[i] = i;
+      cache_iter_states_[i] = CACHE_ITER_NOT_STARTED;
     }
   }
   if (OB_FAIL(ret)) {
@@ -1916,8 +1952,11 @@ int ObDASTRDaatIter::inner_reuse()
 {
   int ret = OB_SUCCESS;
   next_batch_cnt_ = 0;
+  matched_doc_count_ = 0;
+  count_result_output_ = false;
   next_batch_iter_idxes_.reuse();
   iter_doc_ids_.reuse();
+  cache_iter_states_.reuse();
   if (iter_row_heap_) {
     iter_row_heap_->reuse();
   }
@@ -1936,7 +1975,10 @@ int ObDASTRDaatIter::inner_release()
   }
   next_batch_iter_idxes_.reset();
   iter_doc_ids_.reset();
+  cache_iter_states_.reset();
   next_batch_cnt_ = 0;
+  matched_doc_count_ = 0;
+  count_result_output_ = false;
   if (OB_FAIL(ObDASTextRetrievalMergeIter::inner_release())) {
     LOG_WARN("failed to inner release", K(ret));
   }
@@ -1946,7 +1988,9 @@ int ObDASTRDaatIter::inner_release()
 int ObDASTRDaatIter::inner_get_next_row()
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(check_and_prepare())) {
+  if (ir_ctdef_->is_count_agg()) {
+    ret = get_next_count_row();
+  } else if (OB_FAIL(check_and_prepare())) {
     if (OB_ITER_END != ret) {
       LOG_WARN("failed to prepare to get next row", K(ret));
     }
@@ -1994,12 +2038,20 @@ int ObDASTRDaatIter::inner_get_next_rows(int64_t &count, int64_t capacity)
 {
   int ret = OB_SUCCESS;
 
-  if (OB_FAIL(check_and_prepare())) {
+  if (ir_ctdef_->is_count_agg()) {
+    ret = get_next_count_batch(count);
+  } else if (OB_FAIL(check_and_prepare())) {
     if (OB_ITER_END != ret) {
       LOG_WARN("failed to prepare to get next rows", K(ret));
     }
   } else if (0 == capacity) {
     count = 0;
+  } else if (can_use_docid_batch_merge()) {
+    if (OB_FAIL(get_next_docid_batch(count, capacity))) {
+      if (OB_UNLIKELY(OB_ITER_END != ret)) {
+        LOG_WARN("failed to get cached doc id batch", K(ret));
+      }
+    }
   } else {
     ObExpr *match_filter = ir_ctdef_->need_calc_relevance() ? ir_ctdef_->match_filter_ : nullptr;
     int64_t real_capacity = min(capacity, ir_rtdef_->eval_ctx_->max_batch_size_);
@@ -2050,6 +2102,215 @@ int ObDASTRDaatIter::inner_get_next_rows(int64_t &count, int64_t capacity)
     if ((OB_SUCC(ret) || OB_ITER_END == ret) && count > 0 && OB_FAIL(project_docid())) {
       LOG_WARN("failed to project docids", K(ret));
     }
+  }
+  return ret;
+}
+
+int ObDASTRDaatIter::get_next_count_row()
+{
+  int ret = OB_SUCCESS;
+  if (count_result_output_) {
+    ret = OB_ITER_END;
+  } else if (0 == query_tokens_.count()) {
+    if (OB_FAIL(project_count_result())) {
+      LOG_WARN("failed to project empty text retrieval count", K(ret));
+    }
+  } else {
+    bool doc_valid = true;
+    while (OB_SUCC(ret)) {
+      if (OB_FAIL(pull_next_batch_rows())) {
+        if (OB_ITER_END != ret) {
+          LOG_WARN("failed to pull text retrieval row for count", K(ret));
+        }
+      } else if (OB_FAIL(next_disjunctive_document(false, doc_valid))) {
+        LOG_WARN("failed to merge text retrieval row for count", K(ret));
+      } else if (doc_valid) {
+        ++matched_doc_count_;
+      }
+    }
+    if (OB_ITER_END == ret) {
+      ret = project_count_result();
+    }
+  }
+  return ret;
+}
+
+int ObDASTRDaatIter::get_next_count_batch(int64_t &count)
+{
+  int ret = OB_SUCCESS;
+  count = 0;
+  if (count_result_output_) {
+    ret = OB_ITER_END;
+  } else if (0 == query_tokens_.count()) {
+    if (OB_FAIL(project_count_result())) {
+      LOG_WARN("failed to project empty text retrieval count batch", K(ret));
+    } else {
+      count = 1;
+    }
+  } else if (!can_use_docid_batch_merge()) {
+    if (OB_FAIL(get_next_count_row())) {
+      if (OB_ITER_END != ret) {
+        LOG_WARN("failed to get scalar text retrieval count", K(ret));
+      }
+    } else {
+      count = 1;
+    }
+  } else {
+    for (int64_t i = 0; OB_SUCC(ret) && i < cache_iter_states_.count(); ++i) {
+      if (CACHE_ITER_NOT_STARTED == cache_iter_states_[i]
+          && OB_FAIL(advance_cache_iter(i))) {
+        LOG_WARN("failed to initialize count cache iterator", K(ret), K(i));
+      }
+    }
+    while (OB_SUCC(ret) && !count_result_output_) {
+      int64_t min_iter_idx = OB_INVALID_INDEX;
+      if (OB_FAIL(find_min_cache_iter(min_iter_idx))) {
+        LOG_WARN("failed to find minimum count doc id", K(ret));
+      } else if (OB_INVALID_INDEX == min_iter_idx) {
+        if (OB_FAIL(project_count_result())) {
+          LOG_WARN("failed to project text retrieval count batch", K(ret));
+        } else {
+          count = 1;
+        }
+      } else {
+        const ObDocIdExt current_doc_id = iter_doc_ids_[min_iter_idx];
+        for (int64_t i = 0; OB_SUCC(ret) && i < cache_iter_states_.count(); ++i) {
+          if (CACHE_ITER_ACTIVE == cache_iter_states_[i]) {
+            int64_t cmp_ret = 0;
+            if (OB_FAIL(loser_tree_cmp_.compare_doc_ids(iter_doc_ids_[i], current_doc_id, cmp_ret))) {
+              LOG_WARN("failed to compare count doc ids", K(ret), K(i));
+            } else if (0 == cmp_ret && OB_FAIL(advance_cache_iter(i))) {
+              LOG_WARN("failed to consume count doc id", K(ret), K(i));
+            }
+          }
+        }
+        if (OB_SUCC(ret)) {
+          ++matched_doc_count_;
+        }
+      }
+    }
+  }
+  return ret;
+}
+
+int ObDASTRDaatIter::project_count_result()
+{
+  int ret = OB_SUCCESS;
+  ObExpr *count_expr = ir_ctdef_->count_agg_expr_;
+  ObEvalCtx *eval_ctx = ir_rtdef_->eval_ctx_;
+  if (OB_ISNULL(count_expr) || OB_ISNULL(eval_ctx)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected null text retrieval count output", K(ret), KP(count_expr), KP(eval_ctx));
+  } else {
+    ObEvalCtx::BatchInfoScopeGuard guard(*eval_ctx);
+    guard.set_batch_idx(0);
+    ObDatum &count_datum = count_expr->locate_datum_for_write(*eval_ctx);
+    count_datum.set_int(matched_doc_count_);
+    count_expr->set_evaluated_projected(*eval_ctx);
+    count_result_output_ = true;
+  }
+  return ret;
+}
+
+bool ObDASTRDaatIter::can_use_docid_batch_merge() const
+{
+  return DISJUNCTIVE == relation_type_
+      && !ir_ctdef_->need_calc_relevance()
+      && !force_return_docid_;
+}
+
+int ObDASTRDaatIter::advance_cache_iter(const int64_t iter_idx)
+{
+  int ret = OB_SUCCESS;
+  ObDASTRCacheIter *iter = nullptr;
+  if (OB_UNLIKELY(iter_idx < 0 || iter_idx >= token_iters_.count())) {
+    ret = OB_ARRAY_OUT_OF_RANGE;
+    LOG_WARN("cache iterator index out of bounds", K(ret), K(iter_idx), K(token_iters_.count()));
+  } else if (OB_ISNULL(iter = static_cast<ObDASTRCacheIter *>(token_iters_.at(iter_idx)))) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected null cache iterator", K(ret), K(iter_idx));
+  } else if (OB_FAIL(iter->advance_cached_row())) {
+    if (OB_ITER_END == ret) {
+      cache_iter_states_[iter_idx] = CACHE_ITER_END;
+      ret = OB_SUCCESS;
+    } else {
+      LOG_WARN("failed to advance cache iterator", K(ret), K(iter_idx));
+    }
+  } else if (OB_FAIL(iter->get_cur_doc_id(iter_doc_ids_[iter_idx]))) {
+    LOG_WARN("failed to get current cached doc id", K(ret), K(iter_idx));
+  } else {
+    cache_iter_states_[iter_idx] = CACHE_ITER_ACTIVE;
+  }
+  return ret;
+}
+
+int ObDASTRDaatIter::find_min_cache_iter(int64_t &min_iter_idx) const
+{
+  int ret = OB_SUCCESS;
+  min_iter_idx = OB_INVALID_INDEX;
+  for (int64_t i = 0; OB_SUCC(ret) && i < cache_iter_states_.count(); ++i) {
+    if (CACHE_ITER_ACTIVE != cache_iter_states_[i]) {
+    } else if (OB_INVALID_INDEX == min_iter_idx) {
+      min_iter_idx = i;
+    } else {
+      int64_t cmp_ret = 0;
+      if (OB_FAIL(loser_tree_cmp_.compare_doc_ids(iter_doc_ids_[i], iter_doc_ids_[min_iter_idx], cmp_ret))) {
+        LOG_WARN("failed to compare active cache iterators", K(ret), K(i), K(min_iter_idx));
+      } else if (cmp_ret < 0) {
+        min_iter_idx = i;
+      }
+    }
+  }
+  return ret;
+}
+
+int ObDASTRDaatIter::get_next_docid_batch(int64_t &count, const int64_t capacity)
+{
+  int ret = OB_SUCCESS;
+  const int64_t real_capacity = min(capacity, ir_rtdef_->eval_ctx_->max_batch_size_);
+  count = 0;
+  next_written_idx_ = 0;
+  for (int64_t i = 0; OB_SUCC(ret) && i < cache_iter_states_.count(); ++i) {
+    if (CACHE_ITER_NOT_STARTED == cache_iter_states_[i]
+        && OB_FAIL(advance_cache_iter(i))) {
+      LOG_WARN("failed to initialize cache iterator", K(ret), K(i));
+    }
+  }
+
+  while (OB_SUCC(ret) && count < real_capacity) {
+    int64_t min_iter_idx = OB_INVALID_INDEX;
+    if (OB_FAIL(find_min_cache_iter(min_iter_idx))) {
+      LOG_WARN("failed to find minimum cached doc id", K(ret));
+    } else if (OB_INVALID_INDEX == min_iter_idx) {
+      ret = OB_ITER_END;
+    } else {
+      const ObDocIdExt current_doc_id = iter_doc_ids_[min_iter_idx];
+      for (int64_t i = 0; OB_SUCC(ret) && i < cache_iter_states_.count(); ++i) {
+        if (CACHE_ITER_ACTIVE == cache_iter_states_[i]) {
+          int64_t cmp_ret = 0;
+          if (OB_FAIL(loser_tree_cmp_.compare_doc_ids(iter_doc_ids_[i], current_doc_id, cmp_ret))) {
+            LOG_WARN("failed to compare cached doc id for deduplication", K(ret), K(i));
+          } else if (0 == cmp_ret && OB_FAIL(advance_cache_iter(i))) {
+            LOG_WARN("failed to consume duplicate cached doc id", K(ret), K(i));
+          }
+        }
+      }
+      if (OB_SUCC(ret)) {
+        ++input_row_cnt_;
+        if (input_row_cnt_ > limit_param_.offset_) {
+          cache_doc_ids_[count] = current_doc_id;
+          ++count;
+          ++next_written_idx_;
+          ++output_row_cnt_;
+          if (limit_param_.limit_ > 0 && output_row_cnt_ >= limit_param_.limit_) {
+            ret = OB_ITER_END;
+          }
+        }
+      }
+    }
+  }
+  if ((OB_SUCC(ret) || OB_ITER_END == ret) && count > 0 && OB_FAIL(project_docid())) {
+    LOG_WARN("failed to project cached doc id batch", K(ret));
   }
   return ret;
 }

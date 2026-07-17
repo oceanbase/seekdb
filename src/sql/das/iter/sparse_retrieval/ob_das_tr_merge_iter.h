@@ -148,6 +148,9 @@ private:
   int init_topk_limit();
   int init_block_max_iter_param();
   int init_doc_length_est_param();
+  int get_next_count_row();
+  int get_next_count_rows(int64_t &count);
+  int project_count_result(const int64_t matched_doc_count);
 private:
   static const int64_t FWD_IDX_ROWKEY_COL_CNT = 2;
   static const int64_t INV_IDX_ROWKEY_COL_CNT = 2;
@@ -192,6 +195,7 @@ private:
   };
   bool check_rangekey_inited_;
   bool inv_idx_tablet_switched_;
+  bool count_result_output_;
   bool is_inited_;
   DISALLOW_COPY_AND_ASSIGN(ObDASTRMergeIter);
 };

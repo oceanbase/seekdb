@@ -84,6 +84,97 @@ int ObTextDaaTIter::pre_process()
   return ret;
 }
 
+int ObTextDaaTIter::fill_merge_heap()
+{
+  int ret = OB_SUCCESS;
+  ObSRMergeItem item;
+  for (int64_t i = 0; OB_SUCC(ret) && i < next_round_cnt_; ++i) {
+    const int64_t iter_idx = next_round_iter_idxes_[i];
+    ObTextRetrievalDaaTTokenIter *dim_iter = nullptr;
+    bool has_row = true;
+    if (OB_ISNULL(dim_iter = static_cast<ObTextRetrievalDaaTTokenIter *>(dim_iters_->at(iter_idx)))) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("unexpected null text retrieval dimension iterator", K(ret), K(iter_idx));
+    } else if (OB_FAIL(dim_iter->get_next_row())) {
+      if (OB_ITER_END == ret) {
+        ret = OB_SUCCESS;
+        has_row = false;
+      } else {
+        LOG_WARN("failed to load next text retrieval dimension row", K(ret), K(iter_idx));
+      }
+    } else if (!iter_param_->need_project_relevance()) {
+      item.relevance_ = 1.0;
+    } else if (OB_FAIL(dim_iter->get_curr_score(item.relevance_))) {
+      LOG_WARN("failed to get current text retrieval score", K(ret), K(iter_idx));
+    } else if (OB_NOT_NULL(iter_param_->dim_weights_)) {
+      item.relevance_ *= iter_param_->field_boost_ * iter_param_->dim_weights_->at(iter_idx);
+    }
+    if (OB_FAIL(ret) || !has_row) {
+    } else if (OB_FAIL(dim_iter->get_curr_id(iter_domain_ids_[iter_idx]))) {
+      LOG_WARN("failed to get current text retrieval document id", K(ret), K(iter_idx));
+    } else {
+      item.iter_idx_ = iter_idx;
+      if (OB_FAIL(merge_heap_->push(item))) {
+        LOG_WARN("failed to push text retrieval item into merge heap", K(ret), K(item));
+      }
+    }
+  }
+
+  if (OB_FAIL(ret)) {
+  } else if (merge_heap_->empty()) {
+    ret = OB_ITER_END;
+  } else if (0 != next_round_cnt_ && OB_FAIL(merge_heap_->rebuild())) {
+    LOG_WARN("failed to rebuild text retrieval merge heap", K(ret));
+  } else {
+    next_round_cnt_ = 0;
+  }
+  return ret;
+}
+
+int ObTextDaaTIter::collect_dims_by_id(
+    const ObDatum *&id_datum,
+    double &relevance,
+    bool &got_valid_id)
+{
+  int ret = OB_SUCCESS;
+  const ObSRMergeItem *top_item = nullptr;
+  bool current_doc_end = false;
+  int64_t iter_idx = OB_INVALID_INDEX;
+  relevance = 0.0;
+  got_valid_id = false;
+
+  while (OB_SUCC(ret) && !merge_heap_->empty() && !current_doc_end) {
+    current_doc_end = merge_heap_->is_unique_champion();
+    if (OB_FAIL(merge_heap_->top(top_item))) {
+      LOG_WARN("failed to get top text retrieval merge item", K(ret));
+    } else if (OB_FAIL(relevance_collector_->collect_one_dim(top_item->iter_idx_, top_item->relevance_))) {
+      LOG_WARN("failed to collect text retrieval dimension", K(ret));
+    } else {
+      iter_idx = top_item->iter_idx_;
+      if (OB_FAIL(merge_heap_->pop())) {
+        LOG_WARN("failed to pop text retrieval merge item", K(ret));
+      } else {
+        next_round_iter_idxes_[next_round_cnt_++] = iter_idx;
+      }
+    }
+  }
+
+  if (OB_SUCC(ret)) {
+    if (OB_UNLIKELY(OB_INVALID_INDEX == iter_idx)) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("unexpected invalid text retrieval dimension index", K(ret));
+    } else if (OB_ISNULL(id_datum = iter_domain_ids_[iter_idx])) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("unexpected null text retrieval document id", K(ret), K(iter_idx));
+    } else if (OB_FAIL(relevance_collector_->get_result(relevance, got_valid_id))) {
+      LOG_WARN("failed to get text retrieval relevance result", K(ret));
+    } else if (got_valid_id && OB_FAIL(process_collected_row(*id_datum, relevance))) {
+      LOG_WARN("failed to process collected text retrieval row", K(ret));
+    }
+  }
+  return ret;
+}
+
 ObTextBMWIter::ObTextBMWIter()
   : ObSRBMWIterImpl(),
     bm25_param_estimator_() {}

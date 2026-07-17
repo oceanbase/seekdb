@@ -59,6 +59,28 @@ bool find_skip_delta_buffer_in_ctdef(const ObDASBaseCtDef *ctdef)
   }
   return found;
 }
+
+bool set_text_retrieval_local_limit(const ObDASBaseCtDef *ctdef,
+                                    ObDASBaseRtDef *rtdef,
+                                    const int64_t local_limit)
+{
+  bool found = false;
+  if (OB_ISNULL(ctdef) || OB_ISNULL(rtdef) || local_limit <= 0) {
+  } else if (DAS_OP_IR_SCAN == ctdef->op_type_ && DAS_OP_IR_SCAN == rtdef->op_type_) {
+    ObDASIRScanRtDef *ir_rtdef = static_cast<ObDASIRScanRtDef *>(rtdef);
+    ObDASScanRtDef *inv_idx_rtdef = ir_rtdef->get_inv_idx_scan_rtdef();
+    if (OB_NOT_NULL(inv_idx_rtdef)) {
+      inv_idx_rtdef->limit_param_.offset_ = 0;
+      inv_idx_rtdef->limit_param_.limit_ = local_limit;
+      found = true;
+    }
+  } else if (ctdef->children_cnt_ == rtdef->children_cnt_) {
+    for (int64_t i = 0; !found && i < ctdef->children_cnt_; ++i) {
+      found = set_text_retrieval_local_limit(ctdef->children_[i], rtdef->children_[i], local_limit);
+    }
+  }
+  return found;
+}
 }  // anonymous namespace
 
 int FlashBackItem::set_flashback_query_info(ObEvalCtx &eval_ctx, ObDASScanRtDef &scan_rtdef) const
@@ -904,9 +926,9 @@ int ObTableScanOp::prepare_pushdown_limit_param()
   int ret = OB_SUCCESS;
   if (!limit_param_.is_valid()) {
     //ignore, do nothing
-  } else if (MY_SPEC.batch_scan_flag_ || nullptr != tsc_rtdef_.attach_rtinfo_) {
+  } else if (MY_SPEC.batch_scan_flag_) {
     //batch scan can not pushdown limit param to storage
-    // do final limit for TSC op with attached ops for now
+    // do final limit for TSC op for now
     need_final_limit_ = true;
     tsc_rtdef_.scan_rtdef_.limit_param_.offset_ = 0;
     tsc_rtdef_.scan_rtdef_.limit_param_.limit_ = -1;
@@ -915,6 +937,28 @@ int ObTableScanOp::prepare_pushdown_limit_param()
       OB_ASSERT(nullptr != tsc_rtdef_.lookup_rtdef_);
       tsc_rtdef_.lookup_rtdef_->limit_param_.offset_ = 0;
       tsc_rtdef_.lookup_rtdef_->limit_param_.limit_  = -1;
+    }
+  } else if (nullptr != tsc_rtdef_.attach_rtinfo_) {
+    need_final_limit_ = true;
+    tsc_rtdef_.scan_rtdef_.limit_param_.offset_ = 0;
+    tsc_rtdef_.scan_rtdef_.limit_param_.limit_ = -1;
+
+    if (nullptr != MY_CTDEF.lookup_ctdef_) {
+      OB_ASSERT(nullptr != tsc_rtdef_.lookup_rtdef_);
+      tsc_rtdef_.lookup_rtdef_->limit_param_.offset_ = 0;
+      tsc_rtdef_.lookup_rtdef_->limit_param_.limit_ = -1;
+    }
+
+    if (limit_param_.limit_ > 0
+        && MY_SPEC.filters_.empty()
+        && nullptr != MY_CTDEF.attach_spec_.attach_ctdef_) {
+      const int64_t local_limit = limit_param_.offset_ + limit_param_.limit_;
+      const bool pushed_down = set_text_retrieval_local_limit(
+          MY_CTDEF.attach_spec_.attach_ctdef_,
+          tsc_rtdef_.attach_rtinfo_->attach_rtdef_,
+          local_limit);
+      LOG_DEBUG("push local limit into text retrieval iterator",
+          K(pushed_down), K(local_limit), K_(limit_param));
     }
   } else if (tsc_rtdef_.has_lookup_limit() || (OB_NOT_NULL(scan_iter_) && scan_iter_->get_das_task_cnt() > 1)) {
     //for index back, need to final limit output rows in TableScan operator,

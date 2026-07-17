@@ -62,6 +62,8 @@ public:
   virtual void reset() override;
 protected:
   virtual int pre_process() override;
+  virtual int fill_merge_heap() override;
+  virtual int collect_dims_by_id(const ObDatum *&id_datum, double &relevance, bool &got_valid_id) override;
 protected:
   ObBM25ParamEstimator bm25_param_estimator_;
   ObMatchAgainstMode mode_flag_;

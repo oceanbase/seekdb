@@ -55,6 +55,7 @@ ObDASTRMergeIter::ObDASTRMergeIter()
     flags_(0),
     check_rangekey_inited_(false),
     inv_idx_tablet_switched_(false),
+    count_result_output_(false),
     is_inited_(false)
 {
 }
@@ -977,6 +978,7 @@ int ObDASTRMergeIter::inner_reuse()
   if (OB_SUCC(ret)) {
     sparse_retrieval_iter_->reuse(inv_idx_tablet_switched_);
     inv_idx_tablet_switched_ = false;
+    count_result_output_ = false;
   }
 
   if (OB_NOT_NULL(mem_context_)) {
@@ -989,6 +991,7 @@ int ObDASTRMergeIter::inner_reuse()
 int ObDASTRMergeIter::rescan()
 {
   int ret = OB_SUCCESS;
+  count_result_output_ = false;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     LOG_WARN("not inited", K(ret));
@@ -1082,6 +1085,7 @@ int ObDASTRMergeIter::inner_release()
   snapshot_ = nullptr;
   topk_limit_ = 0;
   inv_idx_tablet_switched_ = false;
+  count_result_output_ = false;
   is_inited_ = false;
   return ret;
 }
@@ -1095,6 +1099,8 @@ int ObDASTRMergeIter::inner_get_next_row()
   } else if (OB_ISNULL(sparse_retrieval_iter_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("sparse retrieval iter is null", K(ret));
+  } else if (ir_ctdef_->is_count_agg()) {
+    ret = get_next_count_row();
   } else {
     ret = sparse_retrieval_iter_->get_next_row();
   }
@@ -1112,8 +1118,62 @@ int ObDASTRMergeIter::inner_get_next_rows(int64_t &count, int64_t capacity)
     LOG_WARN("sparse retrieval iter is null", K(ret));
   } else if (OB_UNLIKELY(0 == capacity)) {
     count = 0;
+  } else if (ir_ctdef_->is_count_agg()) {
+    ret = get_next_count_rows(count);
   } else {
     ret = sparse_retrieval_iter_->get_next_rows(capacity, count);
+  }
+  return ret;
+}
+
+int ObDASTRMergeIter::get_next_count_row()
+{
+  int ret = OB_SUCCESS;
+  if (count_result_output_) {
+    ret = OB_ITER_END;
+  } else {
+    int64_t matched_doc_count = 0;
+    int64_t batch_count = 0;
+    const int64_t batch_size = OB_MAX(sr_iter_param_.max_batch_size_, 1);
+    while (OB_SUCC(ret)) {
+      batch_count = 0;
+      ret = sparse_retrieval_iter_->get_next_rows(batch_size, batch_count);
+      matched_doc_count += batch_count;
+    }
+    if (OB_ITER_END == ret) {
+      ret = project_count_result(matched_doc_count);
+    } else {
+      LOG_WARN("failed to count text retrieval results", K(ret), K(matched_doc_count));
+    }
+  }
+  return ret;
+}
+
+int ObDASTRMergeIter::get_next_count_rows(int64_t &count)
+{
+  int ret = get_next_count_row();
+  count = OB_SUCC(ret) ? 1 : 0;
+  return ret;
+}
+
+int ObDASTRMergeIter::project_count_result(const int64_t matched_doc_count)
+{
+  int ret = OB_SUCCESS;
+  ObExpr *count_expr = ir_ctdef_->count_agg_expr_;
+  ObEvalCtx *eval_ctx = ir_rtdef_->eval_ctx_;
+  if (OB_ISNULL(count_expr) || OB_ISNULL(eval_ctx)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected null text retrieval count output", K(ret), KP(count_expr), KP(eval_ctx));
+  } else {
+    ObEvalCtx::BatchInfoScopeGuard guard(*eval_ctx);
+    guard.set_batch_idx(0);
+    ObDatum &count_datum = count_expr->locate_datum_for_write(*eval_ctx);
+    count_datum.set_int(matched_doc_count);
+    if (eval_ctx->is_vectorized()) {
+      count_expr->get_evaluated_flags(*eval_ctx).set(0);
+    }
+    count_expr->set_evaluated_projected(*eval_ctx);
+    count_result_output_ = true;
   }
   return ret;
 }

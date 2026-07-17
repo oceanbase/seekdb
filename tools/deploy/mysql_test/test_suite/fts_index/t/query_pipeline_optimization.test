@@ -1,0 +1,61 @@
+# owner: vldb_2026
+# owner group: storage
+# description: fulltext query pipeline optimization correctness
+
+--disable_warnings
+drop database if exists fts_query_pipeline;
+--enable_warnings
+create database fts_query_pipeline;
+use fts_query_pipeline;
+
+create table docs (
+  id int primary key,
+  content varchar(1024),
+  fulltext index idx_content(content)
+);
+
+insert into docs values
+  (1, 'alpha database engine'),
+  (2, 'beta database storage'),
+  (3, 'alpha beta optimizer'),
+  (4, 'gamma transaction'),
+  (5, 'alpha execution pipeline');
+
+select count(*) from docs where match(content) against('alpha');
+select count(*) from docs where match(content) against('alpha beta');
+select count(*) from docs where match(content) against('alpha alpha beta');
+select count(*) from (
+  select id from docs where match(content) against('alpha beta') limit 2
+) t;
+select count(*) from (
+  select id from docs where match(content) against('alpha beta') limit 1, 2
+) t;
+select count(*) from (
+  select id from docs where match(content) against('alpha beta') limit 0
+) t;
+select count(*) from (
+  select id from docs where match(content) against('alpha beta') limit 10, 2
+) t;
+select count(id) from (
+  select id from docs where match(content) against('alpha beta') limit 2
+) t;
+
+create table partitioned_docs (
+  id int,
+  content varchar(1024),
+  primary key (id),
+  fulltext index idx_content(content)
+) partition by hash(id) partitions 4;
+
+insert into partitioned_docs select * from docs;
+
+select count(*) from partitioned_docs where match(content) against('alpha');
+select count(*) from partitioned_docs where match(content) against('alpha beta');
+select count(*) from (
+  select id from partitioned_docs where match(content) against('alpha beta') limit 2
+) t;
+select count(*) from (
+  select id from partitioned_docs where match(content) against('alpha beta') limit 1, 2
+) t;
+
+drop database fts_query_pipeline;
