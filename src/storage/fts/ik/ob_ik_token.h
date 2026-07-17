@@ -55,19 +55,30 @@ public:
 
 public:
   ~ObIKToken() {}
+  OB_INLINE int compare(const ObIKToken &token) const
+  {
+    int cmp = 0;
+    if (offset_ != token.offset_) {
+      cmp = offset_ < token.offset_ ? -1 : 1;
+    } else if (length_ != token.length_) {
+      // Longer token sorts first when two tokens start at the same offset.
+      cmp = length_ > token.length_ ? -1 : 1;
+    }
+    return cmp;
+  }
   OB_INLINE bool operator==(const ObIKToken &token) const
   {
-    return (offset_ == token.offset_ && length_ == token.length_);
+    return 0 == compare(token);
   }
 
   OB_INLINE bool operator>(const ObIKToken &token) const
   {
-    return offset_ > token.offset_ || (offset_ == token.offset_ && length_ < token.length_);
+    return compare(token) > 0;
   }
 
   OB_INLINE bool operator<(const ObIKToken &token) const
   {
-    return offset_ < token.offset_ || (offset_ == token.offset_ && length_ > token.length_);
+    return compare(token) < 0;
   }
 };
 

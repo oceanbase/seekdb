@@ -101,7 +101,10 @@ public:
 
   virtual ~ObIIKProcessor() {}
 
-  int process(TokenizeContext &ctx);
+  int process(TokenizeContext &ctx,
+              const char *ch,
+              const uint8_t char_len,
+              const ObFTCharUtil::CharType type);
 
   virtual int do_process(TokenizeContext &ctx,
                          const char *ch,

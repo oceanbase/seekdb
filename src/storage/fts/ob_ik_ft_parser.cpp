@@ -56,9 +56,21 @@ int ObIKFTParser::init(const ObFTParserParam &param)
     if (OB_ISNULL(param.cs_) || OB_ISNULL(param.cs_->name)) {
       ret = OB_INVALID_ARGUMENT;
       LOG_WARN("Invalid parser param.", K(ret));
-    } else if (CS_TYPE_INVALID == (coll_type_ = ObCharset::collation_type(param.cs_->name))) {
-      ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("Invalid collation type.", K(ret));
+    } else if (FALSE_IT(coll_type_ = static_cast<ObCollationType>(param.cs_->number))) {
+    } else if (coll_type_ <= CS_TYPE_INVALID
+               || coll_type_ >= CS_TYPE_PINYIN_BEGIN_MARK
+               || ObCharset::get_charset(coll_type_) != param.cs_) {
+      // FTS index hot-path optimization: production parser parameters point
+      // at the global charset table, whose number is the collation id. Keep a
+      // name-lookup fallback for plugin callers and unit tests using local
+      // ObCharsetInfo instances.
+      coll_type_ = ObCharset::collation_type(param.cs_->name);
+      if (CS_TYPE_INVALID == coll_type_) {
+        ret = OB_INVALID_ARGUMENT;
+        LOG_WARN("Invalid collation type.", K(ret));
+      }
+    }
+    if (OB_FAIL(ret)) {
     } else if (OB_FAIL(init_dict(param))) {
       LOG_WARN("Failed to init dict", K(ret));
     } else if (OB_FAIL(init_ctx(param))) {
@@ -152,7 +164,7 @@ int ObIKFTParser::process_one_char(TokenizeContext &ctx,
   for (ObList<ObIIKProcessor *, ObIAllocator>::iterator iter = segmenters_.begin();
        OB_SUCC(ret) && iter != segmenters_.end();
        iter++) {
-    if (OB_FAIL((*iter)->process(ctx))) {
+    if (OB_FAIL((*iter)->process(ctx, ch, char_len, type))) {
       LOG_WARN("Failed to process segmenter", K(ret));
     }
   }
@@ -271,23 +283,17 @@ int ObIKFTParserDesc::get_add_word_flag(ObAddWordFlag &flag) const
 int ObIKFTParser::init_dict(const plugin::ObFTParserParam &param)
 {
   int ret = OB_SUCCESS;
-  ObIFTDict *tmp_dict = nullptr;
-
   if (OB_ISNULL(hub_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("Dict hub is not inited", K(ret));
   }
 
-  ObFTRangeDict *dict = nullptr;
   ObString main_dict_name = param.ik_param_.main_dict_.empty()
       ? ObString(ObFTSLiteral::FT_DEFAULT_IK_DICT_UTF8_TABLE)
       : param.ik_param_.main_dict_;
   ObString quan_dict_name = param.ik_param_.quan_dict_.empty()
       ? ObString(ObFTSLiteral::FT_DEFAULT_IK_QUANTIFIER_UTF8_TABLE)
       : param.ik_param_.quan_dict_;
-  ObString stopword_dict_name = param.ik_param_.stopword_dict_.empty()
-      ? ObString(ObFTSLiteral::FT_DEFAULT_IK_STOPWORD_UTF8_TABLE)
-      : param.ik_param_.stopword_dict_;
   ObFTDictDesc main_dict_desc(main_dict_name,
                               ObFTDictType::DICT_IK_MAIN,
                               ObCharsetType::CHARSET_UTF8MB4,
@@ -298,11 +304,6 @@ int ObIKFTParser::init_dict(const plugin::ObFTParserParam &param)
                               ObCharsetType::CHARSET_UTF8MB4,
                               ObCollationType::CS_TYPE_UTF8MB4_BIN);
 
-  ObFTDictDesc stopword_dict_desc(stopword_dict_name,
-                                  ObFTDictType::DICT_IK_STOP,
-                                  ObCharsetType::CHARSET_UTF8MB4,
-                                  ObCollationType::CS_TYPE_UTF8MB4_BIN);
-
   if (should_read_newest_table()) {
     // clear dict cache, always false now
   } else {
@@ -310,8 +311,6 @@ int ObIKFTParser::init_dict(const plugin::ObFTParserParam &param)
       LOG_WARN("Failed to init main dict", K(ret));
     } else if (OB_FAIL(init_single_dict(quan_dict_desc, cache_quan_))) {
       LOG_WARN("Failed to init quantifier dict", K(ret));
-    } else if (OB_FAIL(init_single_dict(stopword_dict_desc, cache_stop_))) {
-      LOG_WARN("Failed to init stopword dict", K(ret));
     }
   }
 
@@ -321,9 +320,12 @@ int ObIKFTParser::init_dict(const plugin::ObFTParserParam &param)
     LOG_WARN("Failed to build dict main", K(ret));
   } else if (OB_FAIL(build_dict_from_cache(quan_dict_desc, cache_quan_, dict_quan_))) {
     LOG_WARN("Failed to build dict quantifier", K(ret));
-  } else if (OB_FAIL(build_dict_from_cache(stopword_dict_desc, cache_stop_, dict_stop_))) {
-    LOG_WARN("Failed to build dict stopword", K(ret));
   }
+
+  // FTS index hot-path optimization: IK stop-word matching is currently not
+  // enabled in get_next_token(), and the IK descriptor does not request the
+  // generic stop-word filter. Avoid loading and wrapping an unused dictionary
+  // for every document; restore this initialization together with filtering.
 
   return ret;
 }
@@ -435,7 +437,6 @@ void ObIKFTParser::reset()
 
   cache_main_.reset();
   cache_quan_.reset();
-  cache_stop_.reset();
 
   if (!OB_ISNULL(dict_main_)) {
     dict_main_->~ObIFTDict();
@@ -445,11 +446,6 @@ void ObIKFTParser::reset()
     dict_quan_->~ObIFTDict();
     allocator_.free(dict_quan_);
   }
-  if (!OB_ISNULL(dict_stop_)) {
-    dict_stop_->~ObIFTDict();
-    allocator_.free(dict_stop_);
-  }
-
   is_inited_ = false;
 }
 

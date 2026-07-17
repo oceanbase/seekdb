@@ -33,30 +33,34 @@ int ObFTSortList::add_token(const ObIKToken &token)
     if (OB_FAIL(tokens_.push_back(token))) {
       LOG_WARN("Failed to push back token", K(ret));
     }
-  } else if (tokens_.get_last() == token) {
-    // pass
-  } else if (token > tokens_.get_last()) {
-    if (OB_FAIL(tokens_.push_back(token))) {
-      LOG_WARN("fail to push back token", K(ret));
-    }
-  } else if (token < tokens_.get_first()) {
-    if (OB_FAIL(tokens_.push_front(token))) {
-      LOG_WARN("fail to push back token", K(ret));
-    }
   } else {
-    for (ObFTSortList::CellIter iter = tokens_.last(); OB_SUCC(ret) && iter != tokens_.end();
-         --iter) {
-      if (token < *iter) {
-        continue;
+    // FTS index hot-path optimization: calculate each ordering relation once.
+    // The previous code re-read list ends and repeated offset/length compares
+    // on every token before falling back to the backward insertion scan.
+    const int last_cmp = token.compare(tokens_.get_last());
+    if (0 == last_cmp) {
+      // duplicate tail token, do nothing
+    } else if (last_cmp > 0) {
+      if (OB_FAIL(tokens_.push_back(token))) {
+        LOG_WARN("fail to push back token", K(ret));
       }
-      if (*iter == token) {
-        // no need to add again
-      } else if (OB_FAIL(tokens_.insert(++iter, token))) { // NOTE: insert after iter
-        LOG_WARN("fail to insert token", K(ret));
-      } else {
-        // insert ok
+    } else if (token.compare(tokens_.get_first()) < 0) {
+      if (OB_FAIL(tokens_.push_front(token))) {
+        LOG_WARN("fail to push front token", K(ret));
       }
-      break;
+    } else {
+      for (ObFTSortList::CellIter iter = tokens_.last(); OB_SUCC(ret) && iter != tokens_.end();
+           --iter) {
+        const int cmp = token.compare(*iter);
+        if (cmp < 0) {
+          continue;
+        } else if (0 == cmp) {
+          // duplicate token, do nothing
+        } else if (OB_FAIL(tokens_.insert(++iter, token))) { // NOTE: insert after iter
+          LOG_WARN("fail to insert token", K(ret));
+        }
+        break;
+      }
     }
   }
 

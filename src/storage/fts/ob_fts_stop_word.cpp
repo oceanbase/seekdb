@@ -78,18 +78,22 @@ void ObStopWordChecker::destroy()
 int ObStopWordChecker::check_stopword(const ObFTWord &word, bool &is_stopword)
 {
   int ret = OB_SUCCESS;
-  
-  
-  common::ObArenaAllocator allocator(lib::ObMemAttr("ChkStopWord"));
   if (OB_UNLIKELY(!inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("ObStopWordChecker hasn't been initialized", K(ret), K(inited_));
   } else if (OB_UNLIKELY(word.empty())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("word is empty", K(ret), K(word));
+  } else if (word.get_collation_type() == stopword_type_.get_collation_type()) {
+    // FTS index hot-path optimization: most indexed UTF8 words already use
+    // the stop-word set collation. Avoid constructing an arena and invoking
+    // charset conversion for every token in that common case.
+    if (OB_FAIL(check_stopword_set(word, is_stopword))) {
+      LOG_WARN("fail to check stop word set", K(ret), K(word));
+    }
   } else {
+    common::ObArenaAllocator allocator(lib::ObMemAttr("ChkStopWord"));
     common::ObString cmp_str;
-    // do nothing set out with in if type is the same.
     if (OB_FAIL(common::ObCharset::charset_convert(
                                        allocator,
                                        word.get_word().get_string(),
@@ -99,20 +103,28 @@ int ObStopWordChecker::check_stopword(const ObFTWord &word, bool &is_stopword)
       LOG_WARN("fail to convert charset", K(ret), K(word), K(stopword_type_));
     } else {
       ObFTWord converted(cmp_str.length(), cmp_str.ptr(), stopword_type_);
-      ret = stopword_set_.exist_refactored(converted);
-      if (OB_HASH_NOT_EXIST == ret) {
-        is_stopword = false;
-        ret = OB_SUCCESS;
-      } else if (OB_HASH_EXIST == ret) {
-        is_stopword = true;
-        ret = OB_SUCCESS;
-      } else if (OB_SUCC(ret)) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("the exist of hastset shouldn't return success", K(ret), K(word), K(converted));
-      } else {
-        LOG_WARN("fail to do exist", K(ret), K(word), K(converted));
+      if (OB_FAIL(check_stopword_set(converted, is_stopword))) {
+        LOG_WARN("fail to check converted stop word", K(ret), K(word), K(converted));
       }
     }
+  }
+  return ret;
+}
+
+int ObStopWordChecker::check_stopword_set(const ObFTWord &word, bool &is_stopword)
+{
+  int ret = stopword_set_.exist_refactored(word);
+  if (OB_HASH_NOT_EXIST == ret) {
+    is_stopword = false;
+    ret = OB_SUCCESS;
+  } else if (OB_HASH_EXIST == ret) {
+    is_stopword = true;
+    ret = OB_SUCCESS;
+  } else if (OB_SUCC(ret)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("the exist of hashset shouldn't return success", K(ret), K(word));
+  } else {
+    LOG_WARN("fail to check stop word hashset", K(ret), K(word));
   }
   return ret;
 }
