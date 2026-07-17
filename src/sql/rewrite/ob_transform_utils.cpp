@@ -14830,7 +14830,8 @@ int ObTransformUtils::inner_check_need_calc_match_score(ObExecContext *exec_ctx,
 }
 
 int ObTransformUtils::check_need_calc_match_score(ObExecContext *exec_ctx,
-                                                  const ObDMLStmt *root_stmt,
+                                                  const ObDMLStmt *parent_stmt,
+                                                  const uint64_t generated_table_id,
                                                   const ObDMLStmt *stmt,
                                                   ObRawExpr *match_expr,
                                                   bool &need_calc,
@@ -14845,34 +14846,27 @@ int ObTransformUtils::check_need_calc_match_score(ObExecContext *exec_ctx,
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), KP(exec_ctx), KP(stmt), KP(match_expr));
   } else if (stmt->has_limit()) {
-    const ObDMLStmt *parent_stmt = nullptr;
     const ObSelectStmt *parent_select = nullptr;
     const ObSelectStmt *child_select = nullptr;
     const TableItem *parent_table = nullptr;
-    int64_t table_id = OB_INVALID_ID;
-    bool is_generated_table = false;
     bool is_count_only_parent = false;
-    if (OB_ISNULL(root_stmt)) {
+    if (OB_ISNULL(parent_stmt) || OB_INVALID_ID == generated_table_id) {
       // Without parent context a LIMIT may still imply relevance Top-K.
-    } else if (OB_FAIL(get_parent_stmt(root_stmt,
-                                       stmt,
-                                       parent_stmt,
-                                       table_id,
-                                       is_generated_table))) {
-      LOG_WARN("failed to get parent statement", K(ret));
-    } else if (!is_generated_table
-        || OB_ISNULL(parent_stmt)
-        || !parent_stmt->is_select_stmt()
+    } else if (!parent_stmt->is_select_stmt()
         || !stmt->is_select_stmt()) {
       // Keep the conservative relevance Top-K behavior.
     } else if (FALSE_IT(parent_select = static_cast<const ObSelectStmt *>(parent_stmt))) {
     } else if (FALSE_IT(child_select = static_cast<const ObSelectStmt *>(stmt))) {
     } else if (!parent_select->is_single_table_stmt()) {
       // The parent must observe exactly this generated table.
-    } else if (OB_ISNULL(parent_table = parent_select->get_table_item(0))) {
+    } else if (OB_ISNULL(parent_table = parent_select->get_table_item_by_id(generated_table_id))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected null generated table", K(ret), K(table_id));
+      LOG_WARN("unexpected null generated table", K(ret), K(generated_table_id));
     } else {
+      const ObAggFunRawExpr *count_expr = parent_select->get_aggr_item_size() == 1
+          ? parent_select->get_aggr_item(0) : nullptr;
+      const ObRawExpr *select_expr = parent_select->get_select_item_size() == 1
+          ? parent_select->get_select_item(0).expr_ : nullptr;
       is_count_only_parent = !child_select->is_set_stmt()
           && child_select->is_single_table_stmt()
           && !child_select->has_order_by()
@@ -14886,18 +14880,17 @@ int ObTransformUtils::check_need_calc_match_score(ObExecContext *exec_ctx,
           && nullptr == child_select->get_limit_percent_expr()
           && !child_select->is_calc_found_rows()
           && !child_select->has_select_into()
-          && parent_table->table_id_ == static_cast<uint64_t>(table_id)
+          && parent_table->table_id_ == generated_table_id
           && parent_table->is_generated_table()
-          && parent_table->ref_query_ == child_select
           && parent_select->is_scala_group_by()
           && 0 == parent_select->get_group_expr_size()
           && !parent_select->has_rollup()
-          && 1 == parent_select->get_aggr_item_size()
-          && T_FUN_COUNT == parent_select->get_aggr_item(0)->get_expr_type()
-          && !parent_select->get_aggr_item(0)->is_param_distinct()
-          && 0 == parent_select->get_aggr_item(0)->get_real_param_count()
-          && 1 == parent_select->get_select_item_size()
-          && parent_select->get_select_item(0).expr_ == parent_select->get_aggr_item(0)
+          && OB_NOT_NULL(count_expr)
+          && T_FUN_COUNT == count_expr->get_expr_type()
+          && !count_expr->is_param_distinct()
+          && 0 == count_expr->get_real_param_count()
+          && OB_NOT_NULL(select_expr)
+          && (select_expr == count_expr || select_expr->same_as(*count_expr))
           && 0 == parent_select->get_condition_size()
           && !parent_select->has_having()
           && !parent_select->has_order_by()

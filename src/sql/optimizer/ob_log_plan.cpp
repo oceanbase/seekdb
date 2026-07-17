@@ -76,6 +76,7 @@ ObLogPlan::ObLogPlan(ObOptimizerContext &ctx, const ObDMLStmt *stmt)
     allocator_(ctx.get_allocator()),
     stmt_(stmt),
     generated_table_parent_stmt_(nullptr),
+    generated_table_id_(OB_INVALID_ID),
     log_op_factory_(allocator_),
     candidates_(),
     group_replaced_exprs_(),
@@ -7983,8 +7984,11 @@ int ObLogPlan::try_push_limit_into_table_scan(ObLogicalOperator *top,
     const ObTextRetrievalInfo &tr_info = table_scan->get_text_retrieval_info();
     const ObIArray<ObRawExpr *> &pushdown_filters = table_scan->get_pushdown_filter_exprs();
     for (int64_t i = 0; !has_extra_pushdown_filter && i < pushdown_filters.count(); ++i) {
-      has_extra_pushdown_filter = OB_ISNULL(pushdown_filters.at(i))
-          || pushdown_filters.at(i) != tr_info.pushdown_match_filter_;
+      const ObRawExpr *filter = pushdown_filters.at(i);
+      const ObRawExpr *match_filter = tr_info.pushdown_match_filter_;
+      has_extra_pushdown_filter = OB_ISNULL(filter)
+          || OB_ISNULL(match_filter)
+          || (filter != match_filter && !filter->same_as(*match_filter));
     }
     //if TSC contains filters that cannot be pushdown to the storage
     //the limit clause cannot be pushed down either.
@@ -14946,10 +14950,9 @@ int ObLogPlan::prepare_text_retrieval_info(const uint64_t ref_table_id,
     }
   }
   if (OB_SUCC(ret)) {
-    const ObDMLStmt *match_root_stmt = OB_NOT_NULL(get_generated_table_parent_stmt())
-        ? get_generated_table_parent_stmt() : get_optimizer_context().get_root_stmt();
     if (OB_FAIL(ObTransformUtils::check_need_calc_match_score(get_optimizer_context().get_exec_ctx(),
-                                                              match_root_stmt,
+                                                              get_generated_table_parent_stmt(),
+                                                              get_generated_table_id(),
                                                               get_stmt(),
                                                               match_against,
                                                               need_calc_relevance,

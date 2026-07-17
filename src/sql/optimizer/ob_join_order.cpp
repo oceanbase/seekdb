@@ -10981,7 +10981,7 @@ int ObJoinOrder::generate_subquery_paths(PathHelper &helper)
              get_plan()->get_optimizer_context(), *child_stmt))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("failed to create plan", K(ret));
-  } else if (OB_FALSE_IT(log_plan->set_generated_table_parent_stmt(parent_stmt))) {
+  } else if (OB_FALSE_IT(log_plan->set_generated_table_context(parent_stmt, table_id_))) {
   } else if (OB_FAIL(log_plan->add_pushdown_filters(helper.pushdown_filters_))) {
     LOG_WARN("failed to add pushdown filters", K(ret));
   } else if (OB_FAIL(log_plan->add_exec_params_meta(helper.exec_params_,
