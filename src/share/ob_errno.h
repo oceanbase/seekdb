@@ -38,7 +38,6 @@ constexpr int OB_PACKET_NOT_SENT = -4011;
 constexpr int OB_SCHEMA_ERROR = -4029;
 constexpr int OB_TENANT_OUT_OF_MEM = -4030;
 constexpr int OB_UNKNOWN_OBJ = -4031;
-constexpr int OB_NO_MONITOR_DATA = -4032;
 constexpr int OB_TOO_MANY_SSTABLE = -4037;
 constexpr int OB_KILLED_BY_THROTTLING = -4039;
 constexpr int OB_USER_NOT_EXIST = -4042;
@@ -1968,7 +1967,6 @@ constexpr int OB_ERR_INVALID_DATE_MSG_FMT_V2 = -4219;
 #define OB_SCHEMA_ERROR__USER_ERROR_MSG "Schema error"
 #define OB_TENANT_OUT_OF_MEM__USER_ERROR_MSG "Over tenant memory limits"
 #define OB_UNKNOWN_OBJ__USER_ERROR_MSG "Unknown object"
-#define OB_NO_MONITOR_DATA__USER_ERROR_MSG "No monitor data"
 #define OB_SERIALIZE_ERROR__USER_ERROR_MSG "Serialize error"
 #define OB_DESERIALIZE_ERROR__USER_ERROR_MSG "Deserialize error"
 #define OB_AIO_TIMEOUT__USER_ERROR_MSG "Asynchronous IO error"
@@ -4295,7 +4293,7 @@ constexpr int OB_ERR_INVALID_DATE_MSG_FMT_V2 = -4219;
 #define OB_ERR_DATA_TOO_LONG_MSG_FMT_V2__USER_ERROR_MSG "Data too long for column '%.*s' at row %ld"
 #define OB_ERR_INVALID_DATE_MSG_FMT_V2__USER_ERROR_MSG "Incorrect datetime value for column '%.*s' at row %ld"
 
-extern int g_all_ob_errnos[2376];
+extern int g_all_ob_errnos[2356];
 
   const char *ob_error_name(const int oberr);
   const char* ob_error_cause(const int oberr);

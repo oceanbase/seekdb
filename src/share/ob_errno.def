@@ -101,7 +101,6 @@ DEFINE_ERROR_DEP(OB_DISCONTINUOUS_LOG, -4028, -1, "HY000", "Log entry not contin
 DEFINE_ERROR(OB_SCHEMA_ERROR, -4029, -1, "HY000", "Schema error");
 DEFINE_ERROR(OB_TENANT_OUT_OF_MEM, -4030, -1, "HY000", "Over tenant memory limits");
 DEFINE_ERROR(OB_UNKNOWN_OBJ, -4031, -1, "HY004", "Unknown object");
-DEFINE_ERROR(OB_NO_MONITOR_DATA, -4032, -1, "02000", "No monitor data");
 DEFINE_ERROR_DEP(OB_SERIALIZE_ERROR, -4033, -1, "HY000", "Serialize error");
 DEFINE_ERROR_DEP(OB_DESERIALIZE_ERROR, -4034, -1, "HY000", "Deserialize error");
 DEFINE_ERROR_DEP(OB_AIO_TIMEOUT, -4035, -1, "HY000", "Asynchronous IO error");

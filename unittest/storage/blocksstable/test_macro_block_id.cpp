@@ -100,7 +100,7 @@ TEST_F(TestMacroBlockId, verification)
   ASSERT_EQ(0, pos);
 }
 
-TEST_F(TestMacroBlockId, test_path_id)
+TEST_F(TestMacroBlockId, test_tablet_meta_version)
 {
   int ret = OB_SUCCESS;
   MacroBlockId test_block_id;
@@ -120,7 +120,6 @@ TEST_F(TestMacroBlockId, test_path_id)
   test_block_id.set_second_id(test_tablet_id);
   test_block_id.set_third_id(1/*server_id*/);
   test_block_id.set_meta_version_id(test_tablet_version);
-  test_block_id.set_meta_path_id(-1);
 
   OB_LOG(INFO, "after set");
   hex_dump(&test_block_id.fourth_id_,
@@ -128,13 +127,7 @@ TEST_F(TestMacroBlockId, test_path_id)
            true,
            OB_LOG_LEVEL_WARN);
 
-  OB_LOG(INFO, "show test_block_id", K(test_block_id), K(test_block_id.meta_path_id()), K(test_block_id.meta_version_id()));
-  int64_t path_id1 = test_block_id.meta_path_id();
-  OB_LOG(INFO, "path_id1");
-  hex_dump(&path_id1,
-           sizeof(int64_t),
-           true,
-           OB_LOG_LEVEL_WARN);
+  OB_LOG(INFO, "show test_block_id", K(test_block_id), K(test_block_id.meta_version_id()));
   uint64_t tablet_version1 = test_block_id.meta_version_id();
   OB_LOG(INFO, "tablet_version1");
   hex_dump(&tablet_version1,
@@ -142,7 +135,6 @@ TEST_F(TestMacroBlockId, test_path_id)
            true,
            OB_LOG_LEVEL_WARN);
 
-  ASSERT_EQ(-1, path_id1);
   ASSERT_EQ(ObStorageObjectOpt::INVALID_TABLET_VERSION, tablet_version1);
   ASSERT_FALSE(test_block_id.is_valid());
 
@@ -152,8 +144,7 @@ TEST_F(TestMacroBlockId, test_path_id)
   ret = test_block_id.serialize(buf, 50, pos);
   ASSERT_EQ(OB_INVALID_ARGUMENT, ret);
   ASSERT_EQ(0, pos);
-  
-  test_block_id.set_meta_path_id(0);
+
   test_block_id.set_meta_version_id(100002);
 
   ret = test_block_id.serialize(buf, 50, pos);

@@ -3950,59 +3950,6 @@ id	field	type	length	precision	nullable
 20	latest_log_scn	10	0	20	0
 21	pre_allocated_range	5	0	20	0
 22	submit_log_ts	5	0	20	0
-table oceanbase.__all_virtual_sql_plan_monitor column_count 42 table_id 12185
-select column_id id, column_name field, data_type type, data_length length, data_precision `precision`, nullable from __all_column where table_id=12185 order by column_id;
-id	field	type	length	precision	nullable
-16	REQUEST_ID	5	0	20	0
-17	TRACE_ID	22	64	-1	0
-18	FIRST_REFRESH_TIME	18	0	25	1
-19	LAST_REFRESH_TIME	18	0	25	1
-20	FIRST_CHANGE_TIME	18	0	25	1
-21	LAST_CHANGE_TIME	18	0	25	1
-22	OTHERSTAT_1_ID	5	0	20	0
-23	OTHERSTAT_1_VALUE	5	0	20	0
-24	OTHERSTAT_2_ID	5	0	20	0
-25	OTHERSTAT_2_VALUE	5	0	20	0
-26	OTHERSTAT_3_ID	5	0	20	0
-27	OTHERSTAT_3_VALUE	5	0	20	0
-28	OTHERSTAT_4_ID	5	0	20	0
-29	OTHERSTAT_4_VALUE	5	0	20	0
-30	OTHERSTAT_5_ID	5	0	20	0
-31	OTHERSTAT_5_VALUE	5	0	20	0
-32	OTHERSTAT_6_ID	5	0	20	0
-33	OTHERSTAT_6_VALUE	5	0	20	0
-34	OTHERSTAT_7_ID	5	0	20	0
-35	OTHERSTAT_7_VALUE	5	0	20	0
-36	OTHERSTAT_8_ID	5	0	20	0
-37	OTHERSTAT_8_VALUE	5	0	20	0
-38	OTHERSTAT_9_ID	5	0	20	0
-39	OTHERSTAT_9_VALUE	5	0	20	0
-40	OTHERSTAT_10_ID	5	0	20	0
-41	OTHERSTAT_10_VALUE	5	0	20	0
-42	THREAD_ID	5	0	20	0
-43	PLAN_OPERATION	22	128	-1	0
-44	STARTS	5	0	20	0
-45	OUTPUT_ROWS	5	0	20	0
-46	PLAN_LINE_ID	5	0	20	0
-47	PLAN_DEPTH	5	0	20	0
-48	OUTPUT_BATCHES	5	0	20	0
-49	SKIPPED_ROWS_COUNT	5	0	20	0
-50	DB_TIME	5	0	20	0
-51	USER_IO_WAIT_TIME	5	0	20	0
-52	WORKAREA_MEM	5	0	20	0
-53	WORKAREA_MAX_MEM	5	0	20	0
-54	WORKAREA_TEMPSEG	5	0	20	0
-55	WORKAREA_MAX_TEMPSEG	5	0	20	0
-56	SQL_ID	22	32	-1	0
-57	PLAN_HASH_VALUE	10	0	20	0
-table oceanbase.__all_virtual_sql_monitor_statname column_count 5 table_id 12186
-select column_id id, column_name field, data_type type, data_length length, data_precision `precision`, nullable from __all_column where table_id=12186 order by column_id;
-id	field	type	length	precision	nullable
-16	ID	5	0	20	0
-17	GROUP_ID	5	0	20	0
-18	NAME	22	40	-1	0
-19	DESCRIPTION	22	200	-1	0
-20	TYPE	5	0	20	0
 table oceanbase.__all_virtual_open_cursor column_count 12 table_id 12187
 select column_id id, column_name field, data_type type, data_length length, data_precision `precision`, nullable from __all_column where table_id=12187 order by column_id;
 id	field	type	length	precision	nullable
@@ -4891,15 +4838,6 @@ id	field	type	length	precision	nullable
 52	aggregate_read_io_cnt	5	0	20	0
 53	total_wbp_page_read_cnt	5	0	20	0
 54	wbp_page_hits	5	0	20	0
-table oceanbase.__all_virtual_ddl_diagnose_info column_count 6 table_id 12514
-select column_id id, column_name field, data_type type, data_length length, data_precision `precision`, nullable from __all_column where table_id=12514 order by column_id;
-id	field	type	length	precision	nullable
-16	ddl_task_id	5	0	20	0
-17	object_table_id	5	0	20	0
-18	opname	22	64	-1	0
-19	create_time	18	0	25	0
-20	finish_time	18	0	25	0
-21	diagnose_info	22	1024	-1	0
 table oceanbase.__all_virtual_plugin_info column_count 10 table_id 12515
 select column_id id, column_name field, data_type type, data_length length, data_precision `precision`, nullable from __all_column where table_id=12515 order by column_id;
 id	field	type	length	precision	nullable

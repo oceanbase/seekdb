@@ -939,9 +939,6 @@ int ObTenantMetaMemMgr::get_min_end_scn_from_single_tablet(ObTablet *tablet,
     } else {
       LOG_WARN("get tablet status failed", KR(ret), KP(tablet));
     }
-  } else if (ObTabletStatus::RESERVED_STATUS_5 == user_data.tablet_status_) {
-    ret = OB_NOT_SUPPORTED;
-    LOG_WARN("reserved tablet status is not supported", K(ret), K(user_data));
   } else {
     SCN cur_recycle_end_scn = SCN::max_scn();
     bool contain_uncommitted_row = false;

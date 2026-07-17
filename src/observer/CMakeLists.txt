@@ -224,7 +224,6 @@ ob_set_subtarget(ob_server virtual_table
   virtual_table/ob_all_virtual_table_mgr.cpp
   virtual_table/ob_all_virtual_unit.cpp
   virtual_table/ob_all_virtual_tablet_ddl_kv_info.cpp
-  virtual_table/ob_all_virtual_ddl_diagnose_info.cpp
   virtual_table/ob_all_virtual_ddl_sim_point_stat.cpp
   virtual_table/ob_all_virtual_tablet_info.cpp
   virtual_table/ob_all_virtual_server.cpp
@@ -295,9 +294,6 @@ ob_set_subtarget(ob_server virtual_table
   virtual_table/ob_tenant_virtual_warning.cpp
   virtual_table/ob_virtual_data_access_service.cpp
   virtual_table/ob_virtual_open_cursor_table.cpp
-  virtual_table/ob_virtual_sql_monitor.cpp
-  virtual_table/ob_virtual_sql_monitor_statname.cpp
-  virtual_table/ob_virtual_sql_plan_monitor.cpp
   virtual_table/ob_virtual_sql_plan_statistics.cpp
   virtual_table/ob_virtual_table_iterator.cpp
   virtual_table/ob_virtual_table_iterator_factory.cpp

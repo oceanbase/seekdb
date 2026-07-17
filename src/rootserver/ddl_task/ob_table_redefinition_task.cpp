@@ -1211,22 +1211,11 @@ int ObTableRedefinitionTask::collect_longops_stat(ObLongopsValue &value)
       break;
     }
     case ObDDLTaskStatus::REDEFINITION: {
-      SMART_VARS_3((share::ObSqlMonitorStatsCollector, sql_monitor_stats_collector),
-                   (share::ObDDLDiagnoseInfo, diagnose_info),
-                   (share::ObSqlMonitorStats, sql_monitor_stats)) {
-        if (OB_FAIL(sql_monitor_stats_collector.scan_task_id_.push_back(task_id_))) {
-          LOG_WARN("failed to push back", K(ret));
-        } else if (OB_FAIL(sql_monitor_stats_collector.init(GCTX.sql_proxy_))) {
-          LOG_WARN("failed to init ObSqlMonitorStatsCollector", K(ret));
-        } else if (OB_FAIL(diagnose_info.init(task_id_, task_type_, execution_id_))) {
-          LOG_WARN("failed to init ObDDLDiagnoseInfo", K(ret), K(task_id_), K(task_type_));
-        } else if (OB_FAIL(sql_monitor_stats.init(task_id_, task_type_))) {
-          LOG_WARN("failed to init ObSqlMonitorStats", K(ret), K(task_id_), K(task_type_));
-        } else if (OB_FAIL(sql_monitor_stats_collector.get_next_sql_plan_monitor_stat(sql_monitor_stats))) {
-          LOG_WARN("failed to get next sql plan monitor stats", K(ret));
-        } else if (OB_FAIL(diagnose_info.process_sql_monitor_and_generate_longops_message(sql_monitor_stats, stat_info_, pos))) {
-          LOG_WARN("failed to process sql monitor and generate longops message", K(ret), K(sql_monitor_stats), K(stat_info_), K(pos));
-        }
+      if (OB_FAIL(databuff_printf(stat_info_.message_,
+                                  MAX_LONG_OPS_MESSAGE_LENGTH,
+                                  pos,
+                                  "STATUS: REDEFINITION"))) {
+        LOG_WARN("failed to print", K(ret));
       }
       break;
     }

@@ -123,7 +123,6 @@ public:
   void inc_large_querys();
   void inc_delayed_large_querys();
   void inc_delayed_px_querys();
-  int update_operator_stat(ObPhyOperatorMonitorInfo &info);
   bool is_need_trans() const { return is_need_trans_; }
   bool is_stmt_modify_trans() const;
   //As there's ObString in phy_hint_,need deep copy

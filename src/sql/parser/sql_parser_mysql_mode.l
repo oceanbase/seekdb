@@ -1009,7 +1009,6 @@ Timestamp{whitespace}?\"[^\"]*\" {
 <hint>MANUAL { return MANUAL; }
 <hint>NO_PARALLEL { return NO_PARALLEL; }
 <hint>DML_PARALLEL { return DML_PARALLEL; }
-<hint>MONITOR  { return MONITOR; }
 <hint>AUTO { return AUTO; }
 <hint>FORCE { return FORCE; }
 <hint>[(),.@]  {

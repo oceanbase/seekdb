@@ -2526,6 +2526,15 @@ OB_INLINE int ObSql::handle_text_query(const ObString &stmt, ObSqlCtx &context, 
     }
   }
 
+  int tmp_ret = ret;
+  if (!is_begin_commit_stmt
+      && 0 == context.multi_stmt_item_.get_seq_num() /* only first item of a multi stmt, or single stmt */
+      && OB_FAIL(handle_large_query(tmp_ret,
+                                    result,
+                                    ectx.get_need_disconnect_for_update(),
+                                    ectx))) {
+    //do nothing
+  }
   if (OB_SUCC(ret) && !result.get_is_from_plan_cache()) { // did not get plan from plan cache, take the long path to generate plan
     if (OB_FAIL(SMART_CALL_LARGE(handle_physical_plan(trimed_stmt, context, result, *pc_ctx, get_plan_err)))) {
       if (OB_ERR_PROXY_REROUTE == ret) {
@@ -2554,6 +2563,67 @@ OB_INLINE int ObSql::handle_text_query(const ObString &stmt, ObSqlCtx &context, 
   if (NULL != pc_ctx) {
     pc_ctx->~ObPlanCacheCtx();
   }
+  return ret;
+}
+
+OB_NOINLINE int ObSql::handle_large_query(int tmp_ret,
+                                          ObResultSet &result,
+                                          bool &need_disconnect,
+                                          ObExecContext &exec_ctx)
+{
+  int ret = OB_SUCCESS;
+  if (tmp_ret != OB_SUCCESS
+      && tmp_ret != OB_PC_LOCK_CONFLICT) {
+    ret = tmp_ret;
+  } else if (result.get_session().is_inner()
+             || !ObStmt::is_dml_stmt(result.get_stmt_type())) {
+    ret = (tmp_ret == OB_PC_LOCK_CONFLICT) ? OB_SUCCESS : tmp_ret;
+  } else {
+    const int64_t lqt = GCONF.large_query_threshold;
+    int64_t elapsed_time = ObClockGenerator::getClock() - THIS_THWORKER.get_query_start_time();
+    bool is_large_query = false;
+    bool lq_from_plan = true;
+    int64_t total_process_time = 0;
+    int64_t exec_times = 0;
+    ObPhysicalPlan *plan = NULL;
+    // Use plan from plan cache to predict if it's a large request
+    if (result.get_is_from_plan_cache()) {
+      if (OB_ISNULL(plan = result.get_physical_plan())) {
+        ret = OB_INVALID_ARGUMENT;
+        LOG_WARN("invalid argument", K(ret));
+      } else {
+        exec_times = plan->stat_.get_execute_count();
+        total_process_time = plan->stat_.total_process_time_;
+        if (exec_times > 0
+            && (0 != lqt && (total_process_time / exec_times) > lqt)) {
+          plan->inc_large_querys();
+          is_large_query = true;
+          lq_from_plan = true;
+        }
+      }
+    }
+    // Actual compilation time judgment whether it is a large request
+    if (OB_SUCC(ret) && is_large_query == false) {
+      if (0 != lqt && elapsed_time > lqt) {
+        is_large_query = true;
+        lq_from_plan = false;
+      }
+    }
+    if (OB_SUCC(ret) && is_large_query && OB_FAIL(THIS_WORKER.check_large_query_quota())) {
+      need_disconnect = false;
+      if (lq_from_plan) {
+        plan->inc_delayed_large_querys();
+        LOG_INFO("It's a large query, need delay, do not need disconnect",
+                 "avg_process_time", total_process_time / exec_times,
+                 "exec_cnt", exec_times,
+                 "large_query_threshold", lqt,
+                 K(plan->get_plan_id()), K(ret));
+      } else {
+        LOG_INFO("compile time is too long, need delay", K(elapsed_time), K(ret));
+      }
+    }
+  }
+
   return ret;
 }
 
@@ -3750,11 +3820,6 @@ int ObSql::pc_get_plan(ObPlanCacheCtx &pc_ctx,
         || OB_ERR_PROXY_REROUTE == ret
         || OB_BATCHED_MULTI_STMT_ROLLBACK == ret) {
       /*do nothing*/
-    } else if (OB_PC_LOCK_CONFLICT == ret) {
-      // Lock contention is a plan-cache miss. Continue on the long path instead
-      // of exposing an internal cache error to the client.
-      get_plan_err = ret;
-      ret = OB_SUCCESS;
     } else {
       get_plan_err = ret;
       int tmp_ret = OB_SUCCESS;

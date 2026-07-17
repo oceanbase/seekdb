@@ -1017,27 +1017,9 @@ int ObFreezer::decide_real_snapshot_version_(const ObTabletID &tablet_id,
                                              SCN &real_snapshot_version)
 {
   int ret = OB_SUCCESS;
-  ObTabletCreateDeleteMdsUserData user_data;
-  mds::MdsWriter writer;
-  mds::TwoPhaseCommitState trans_stat;
-  share::SCN trans_version;
-
-  if (tablet_id.is_ls_inner_tablet()) {
-    //do nothing
-  } else if (OB_FAIL(tablet->ObITabletMdsInterface::get_latest_tablet_status(user_data,
-                                                                             writer,
-                                                                             trans_stat,
-                                                                             trans_version))) {
-    LOG_WARN("fail to get latest tablet status", K(ret), KPC(tablet));
-  } else if (ObTabletStatus::RESERVED_STATUS_4 == user_data.tablet_status_
-             || ObTabletStatus::RESERVED_STATUS_6 == user_data.tablet_status_) {
-    ret = OB_NOT_SUPPORTED;
-    LOG_WARN("reserved tablet status is not supported", K(ret), K(user_data));
-  }
-
-  if (OB_SUCC(ret)) {
-    real_snapshot_version = freeze_snapshot_version;
-  }
+  UNUSED(tablet_id);
+  UNUSED(tablet);
+  real_snapshot_version = freeze_snapshot_version;
 
   return ret;
 }

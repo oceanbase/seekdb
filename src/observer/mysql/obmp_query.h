@@ -28,8 +28,6 @@ namespace oceanbase
 {
 namespace sql
 {
-class ObMonitorInfoManager;
-class ObPhyPlanMonitorInfo;
 class ObMPParseStat;
 }
 namespace share

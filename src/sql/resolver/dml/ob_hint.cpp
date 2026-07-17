@@ -32,7 +32,6 @@ void ObPhyPlanHint::reset()
   force_trace_log_ = false;
   log_level_.reset();
   parallel_ = -1;
-  monitor_ = false;
 }
 
 OB_SERIALIZE_MEMBER(ObPhyPlanHint,
@@ -41,8 +40,7 @@ OB_SERIALIZE_MEMBER(ObPhyPlanHint,
                     plan_cache_policy_,
                     force_trace_log_,
                     log_level_,
-                    parallel_,
-                    monitor_);
+                    parallel_);
 
 int ObPhyPlanHint::deep_copy(const ObPhyPlanHint &other, ObIAllocator &allocator)
 {
@@ -52,7 +50,6 @@ int ObPhyPlanHint::deep_copy(const ObPhyPlanHint &other, ObIAllocator &allocator
   plan_cache_policy_ = other.plan_cache_policy_;
   force_trace_log_ = other.force_trace_log_;
   parallel_ = other.parallel_;
-  monitor_ = other.monitor_;
   if (OB_FAIL(ob_write_string(allocator, other.log_level_, log_level_))) {
     LOG_WARN("Failed to deep copy log level", K(ret));
   }
@@ -303,7 +300,6 @@ bool ObGlobalHint::has_hint_exclude_concurrent() const
          || !log_level_.empty()
          || has_parallel_hint()
          || has_dml_parallel_hint()
-         || false != monitor_
          || ObPDMLOption::NOT_SPECIFIED != pdml_option_
          || ObParamOption::NOT_SPECIFIED != param_option_
          || !alloc_op_hints_.empty()
@@ -334,7 +330,6 @@ void ObGlobalHint::reset()
   log_level_.reset();
   parallel_ = UNSET_PARALLEL;
   dml_parallel_ = UNSET_PARALLEL;
-  monitor_ = false;
   pdml_option_ = ObPDMLOption::NOT_SPECIFIED;
   param_option_ = ObParamOption::NOT_SPECIFIED;
   dops_.reuse();
@@ -367,7 +362,6 @@ int ObGlobalHint::merge_global_hint(const ObGlobalHint &other)
   merge_max_concurrent_hint(other.max_concurrent_);
   merge_parallel_hint(other.parallel_);
   merge_dml_parallel_hint(other.dml_parallel_);
-  monitor_ |= other.monitor_;
   merge_param_option_hint(other.param_option_);
   merge_opt_features_version_hint(other.opt_features_version_);
   disable_transform_ |= other.disable_transform_;
@@ -493,9 +487,6 @@ int ObGlobalHint::print_global_hint(PlanText &plan_text) const
   }
   if (OB_SUCC(ret) && has_dml_parallel_hint()) { //DML_PARALLEL
     PRINT_GLOBAL_HINT_NUM("DML_PARALLEL", dml_parallel_);
-  }
-  if (OB_SUCC(ret) && monitor_) { //MONITOR
-    PRINT_GLOBAL_HINT_STR("MONITOR");
   }
   if (OB_SUCC(ret) && ObPDMLOption::NOT_SPECIFIED != pdml_option_) { //PDML
     if (ObPDMLOption::ENABLE == pdml_option_) {

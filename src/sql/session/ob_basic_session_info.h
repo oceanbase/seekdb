@@ -1353,8 +1353,6 @@ public:
   int64_t get_runtime_filter_max_in_num() const { return sys_vars_cache_.get_runtime_filter_max_in_num(); }
   int64_t get_runtime_bloom_filter_max_size() const { return sys_vars_cache_.get_runtime_bloom_filter_max_size(); }
 
-  bool get_enable_sql_plan_monitor() const { return sys_vars_cache_.get_enable_sql_plan_monitor(); }
-
   const ObString &get_app_trace_id() const { return app_trace_id_; }
   void set_app_trace_id(common::ObString trace_id) {
     app_trace_id_.assign_ptr(trace_id.ptr(), trace_id.length());
@@ -1725,7 +1723,6 @@ public:
         ncharacter_set_connection_(ObCharsetType::CHARSET_SESSION_CACHE_NOT_LOADED_MARK),
         compat_type_(share::ObCompatType::COMPAT_MYSQL57),
         compat_version_(0),
-        enable_sql_plan_monitor_(false),
         ob_enable_parameter_anonymous_block_(false),
         current_default_catalog_(0),
         security_version_(0),
@@ -1780,7 +1777,6 @@ public:
       default_lob_inrow_threshold_ = OB_DEFAULT_LOB_INROW_THRESHOLD;
       compat_type_ = share::ObCompatType::COMPAT_MYSQL57;
       compat_version_ = 0;
-      enable_sql_plan_monitor_ = false;
       ob_enable_parameter_anonymous_block_ = false;
       security_version_ = 0;
       ob_enable_ps_parameter_anonymous_block_ = false;
@@ -1933,8 +1929,6 @@ public:
     ObCharsetType ncharacter_set_connection_;
     share::ObCompatType compat_type_;
     uint64_t compat_version_;
-    // No use. Placeholder.
-    bool enable_sql_plan_monitor_;
     bool ob_enable_parameter_anonymous_block_;
     uint64_t current_default_catalog_;
     uint64_t security_version_;
@@ -2046,7 +2040,6 @@ private:
     DEF_SYS_VAR_CACHE_FUNCS(int64_t, default_lob_inrow_threshold);
     DEF_SYS_VAR_CACHE_FUNCS(share::ObCompatType, compat_type);
     DEF_SYS_VAR_CACHE_FUNCS(uint64_t, compat_version);
-    DEF_SYS_VAR_CACHE_FUNCS(bool, enable_sql_plan_monitor);
     DEF_SYS_VAR_CACHE_FUNCS(bool, ob_enable_parameter_anonymous_block);
     DEF_SYS_VAR_CACHE_FUNCS(uint64_t, security_version);
     DEF_SYS_VAR_CACHE_FUNCS(bool, ob_enable_ps_parameter_anonymous_block);
@@ -2117,7 +2110,6 @@ private:
         bool inc_ob_enable_pl_cache_:1;
         bool inc_compat_type_:1;
         bool inc_compat_version_:1;
-        bool inc_enable_sql_plan_monitor_:1;
         bool inc_ob_enable_parameter_anonymous_block_:1;
         bool inc_security_version_:1;
         bool inc_ob_enable_ps_parameter_anonymous_block_:1;

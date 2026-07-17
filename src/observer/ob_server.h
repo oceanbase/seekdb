@@ -437,7 +437,6 @@ public:
   lib::Worker::CompatMode compat_mode() override { return mods_compat_mode_; }
   sql::ObTenantSqlMemoryManager * tenant_sql_memory_manager() override { return mods_tenant_sql_memory_manager_; }
   sql::dtl::ObDTLIntermResultManager * dtl_interm_result_manager() override { return mods_dtl_interm_result_manager_; }
-  sql::ObPlanMonitorNodeList * plan_monitor_node_list() override { return mods_plan_monitor_node_list_; }
   sql::ObDataAccessService * data_access_service() override { return mods_data_access_service_; }
   share::schema::ObTenantSchemaService * tenant_schema_service() override { return mods_tenant_schema_service_; }
   storage::ObTenantFreezer * tenant_freezer() override { return mods_tenant_freezer_; }
@@ -536,7 +535,6 @@ private:
   lib::Worker::CompatMode mods_compat_mode_;
   sql::ObTenantSqlMemoryManager * mods_tenant_sql_memory_manager_ = nullptr;
   sql::dtl::ObDTLIntermResultManager * mods_dtl_interm_result_manager_ = nullptr;
-  sql::ObPlanMonitorNodeList * mods_plan_monitor_node_list_ = nullptr;
   sql::ObDataAccessService * mods_data_access_service_ = nullptr;
   share::schema::ObTenantSchemaService * mods_tenant_schema_service_ = nullptr;
   storage::ObTenantFreezer * mods_tenant_freezer_ = nullptr;

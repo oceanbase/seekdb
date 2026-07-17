@@ -193,7 +193,6 @@ ObExecContext::ObExecContext(ObIAllocator &allocator)
     parent_ctx_(nullptr),
     nested_level_(0),
     is_ps_prepare_stage_(false),
-    register_op_id_(OB_INVALID_ID),
     tmp_alloc_used_(false),
     errcode_(OB_SUCCESS),
     user_logging_ctx_(),
