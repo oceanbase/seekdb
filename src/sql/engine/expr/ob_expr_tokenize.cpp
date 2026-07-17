@@ -431,13 +431,13 @@ int ObExprTokenize::TokenizeParam::reform_parser_properties(const ObString &prop
   } else if (OB_FAIL(parser_properties.parse_from_valid_str(properties))) {
     LOG_WARN("fail to parse properties", K(ret));
     LOG_USER_ERROR(OB_INVALID_ARGUMENT, "parser properties invalid.");
+  } else if (OB_FAIL(ObFtsIndexBuilderUtil::normalize_and_check_ik_dictionary_tables(
+                         parser_name_, database_name, parser_properties))) {
+    LOG_WARN("fail to normalize IK dictionary properties", K(ret), K(database_name));
   } else if (OB_FAIL(parser_properties.rebuild_props_for_ddl(parser_name_,
                                                              ObCollationType::CS_TYPE_UTF8MB4_BIN,
                                                              true))) {
     LOG_WARN("fail to serialize to string", K(ret), K(parser_properties));
-  } else if (OB_FAIL(ObFtsIndexBuilderUtil::normalize_and_check_ik_dictionary_tables(
-                         parser_name_, database_name, parser_properties))) {
-    LOG_WARN("fail to normalize IK dictionary properties", K(ret), K(database_name));
   } else if (OB_FAIL(parser_properties.to_format_json(allocator_, properties_))) {
     LOG_WARN("fail to serialize to string", K(ret), K(parser_properties));
   }

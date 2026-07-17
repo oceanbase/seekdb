@@ -2163,14 +2163,6 @@ int ObFtsIndexBuilderUtil::normalize_and_check_ik_dictionary_tables(
     LOG_WARN("check parser dictionary requirement failed", K(ret), K(parser_name));
   } else if (!need_dictionary) {
     // Other parsers do not accept IK dictionary properties.
-  } else if (database_name.empty()) {
-    ret = OB_ERR_NO_DB_SELECTED;
-    LOG_USER_ERROR(OB_ERR_NO_DB_SELECTED);
-  } else if (OB_ISNULL(GCTX.schema_service_)) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("schema service is null", K(ret));
-  } else if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(schema_guard))) {
-    LOG_WARN("get tenant schema guard failed", K(ret));
   } else {
     typedef int (storage::ObFTParserJsonProps::*Getter)(ObString &) const;
     typedef int (storage::ObFTParserJsonProps::*Setter)(const ObString &);
@@ -2189,6 +2181,7 @@ int ObFtsIndexBuilderUtil::normalize_and_check_ik_dictionary_tables(
       storage::ObFTSLiteral::FT_DEFAULT_IK_STOPWORD_UTF8_TABLE,
       storage::ObFTSLiteral::FT_DEFAULT_IK_QUANTIFIER_UTF8_TABLE
     };
+    bool schema_guard_ready = false;
     for (int64_t i = 0; OB_SUCC(ret) && i < ARRAYSIZEOF(getters); ++i) {
       ObString configured_name;
       ObString table_name;
@@ -2196,7 +2189,11 @@ int ObFtsIndexBuilderUtil::normalize_and_check_ik_dictionary_tables(
       const ObTableSchema *table_schema = nullptr;
       ObSqlString qualified_name;
       if (OB_FAIL((properties.*getters[i])(configured_name))) {
-        LOG_WARN("get IK dictionary table property failed", K(ret), K(i));
+        if (OB_SEARCH_NOT_FOUND == ret) {
+          ret = OB_SUCCESS;
+        } else {
+          LOG_WARN("get IK dictionary table property failed", K(ret), K(i));
+        }
       } else if (0 == configured_name.case_compare(builtins[i])) {
         // Built-in dictionaries are compiled into the server and need no schema lookup.
       } else {
@@ -2205,9 +2202,19 @@ int ObFtsIndexBuilderUtil::normalize_and_check_ik_dictionary_tables(
         if (nullptr != separator) {
           dict_database_name = table_name.split_on(separator);
         }
-        if (dict_database_name.empty() || table_name.empty() || nullptr != table_name.find('.')) {
+        if (table_name.empty() || nullptr != table_name.find('.')) {
           ret = OB_INVALID_ARGUMENT;
           LOG_USER_ERROR(OB_INVALID_ARGUMENT, "dictionary table must be table_name or database_name.table_name");
+        } else if (dict_database_name.empty()) {
+          ret = OB_ERR_NO_DB_SELECTED;
+          LOG_USER_ERROR(OB_ERR_NO_DB_SELECTED);
+        } else if (!schema_guard_ready && OB_ISNULL(GCTX.schema_service_)) {
+          ret = OB_NOT_INIT;
+          LOG_WARN("schema service is null", K(ret));
+        } else if (!schema_guard_ready
+                   && OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(schema_guard))) {
+          LOG_WARN("get tenant schema guard failed", K(ret));
+        } else if (OB_FALSE_IT(schema_guard_ready = true)) {
         } else if (OB_FAIL(schema_guard.get_table_schema(dict_database_name,
                                                          table_name,
                                                          false,
