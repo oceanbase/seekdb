@@ -1,10 +1,10 @@
 # Task4 Fulltext Index Build Performance Implementation Plan
 
-> **2026-07-18 当前执行范围**：尽量完成上游六类优化在 seekdb 单机环境中可适配的功能，以 `tools/benchmark/fts_large_bench.sh` 的实际建索引、TOKENIZE 和查询结果为优先验收。上游 283 文件差异用于寻找实现参考，不按路径数量验收；PX、跨分区 DAG、GI 等分布式专有部分只保留其可带来单机收益的等价实现。
+> **2026-07-18 当前执行范围**：尽量完成上游六类优化在 seekdb 单机环境中可适配的功能，以 `tools/benchmark/fts_large_bench.sh` 的实际建索引、TOKENIZE 和查询结果为优先验收。上游 283 文件差异用于寻找实现参考，不按路径数量验收；PX、跨节点路由、跨分区 DAG/shuffle、GI 及分布式监控均明确排除。
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** 在 seekdb `vldb_2026` 上实现直接影响单机全文索引构建的 Task4 功能，保持 Task2/Task3 能力和检索结果不变，并以 `fts_large_bench.sh` 的正向实测改善为主要验收。
+**Goal:** 在 seekdb `vldb_2026` 上实现直接影响单机全文索引构建的 Task4 功能，保持 Task2/Task3 能力和检索结果不变，并以 `fts_large_bench.sh` 三类等权综合改善 50%（约 ±2 分波动）为满分验收目标。
 
 **Architecture:** 以上游提交作为性能实现参考而非逐文件移植目标。按“热路径基础与真实调用链 → Release 服务端 → `fts_large_bench.sh` 基线/优化对比 → 瓶颈驱动的最小后续改动”推进；每项保留中文注释、必要的功能验证和可复现的基准结果。
 
@@ -14,18 +14,18 @@
 
 - 实现基线固定为 seekdb `vldb_2026` 分支；设计文档基线提交为 `a0ffb3c3`，设计提交为 `1e2eeef63`。
 - 功能来源固定为上游 `81c822ca5cb2d88c3495192d21e6006d6785fbb4`，差异父提交固定为 `b786266ba3fc07b8437d07c8d1d177580e788cd0`。
-- 覆盖分词热路径、解析器复用、token/停止词、排序、构建流水线、编码/位置列表、单机 SQL 计划适配和 DDL 可观测性；按 `fts_large_bench.sh` 的瓶颈和可验证性排序实施。
+- 覆盖分词热路径、解析器复用、token/停止词、排序、构建流水线、编码/位置列表、单机 SQL 计划适配和轻量构建可观测性；按 `fts_large_bench.sh` 的瓶颈和可验证性排序实施。
 - 不改变用户可见的分词结果、MATCH 命中集合、排序结果和 `fts_large_bench.sh` 计时口径。
 - Task2、Task3 已有能力必须保留；当前工作区中的未跟踪文件属于用户，不允许删除或覆盖。
 - 不启用 delta + zigzag + PFor position-list 编码；当前只启用 variable-int64。
 - 每个新增类、公开接口、关键内部接口以及行为修改块必须写中文职责/修改说明注释。
 - 所有实现文件只能通过 `apply_patch` 修改；格式化和生成器命令只用于机械生成其声明的产物。
-- 不创建、修改或提交测试文件；功能验证只运行已有单元测试和 `fts_large_bench.sh`，避免与该基准无关的大范围移植。
+- 不修改 `fts_large_bench.sh`、其基线 JSON、评分程序或其关联测试；新增测试只可创建于独立 `unittest/task4/`，Task2/Task3 既有测试仅用于回归执行。
 
 ## 当前执行任务（替代后文历史 Task 3–8）
 
 1. 完成并接入分词容器、五种解析器复用、token/停止词快路径，修复真实建索引调用链中的生命周期问题。
-2. 针对 benchmark 建索引阶段依次评估并适配排序、FTS 构建流水线、sort key/位置列表、单机 SQL 计划和 DDL DAG 可观测性中的有效子项。
+2. 针对 benchmark 建索引阶段依次评估并适配排序、FTS 构建流水线、sort key/位置列表、单机 SQL 计划和轻量构建阶段统计中的有效子项；不实现 PX、跨分区或分布式调度。
 3. 构建并启动隔离的 Release seekdb 实例，运行固定配置的 `fts_large_bench.sh`，记录 build、TOKENIZE、MATCH 指标与命中数。
 4. 每项改动后复跑同配置基准；只保留具备正确性证据且带来收益、或解决基准阻塞问题的实现。
 5. 最终提交只包含实际采用的功能、中文接口/修改注释和基准报告；不修改或提交测试文件，历史 283 行审计保留作参考。

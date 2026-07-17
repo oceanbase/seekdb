@@ -1,6 +1,6 @@
 # Task4 全文索引构建性能优化：需求与设计
 
-> **2026-07-18 范围调整（当前有效）**：本任务尽量完成本文第 5 节的六类优化，但以 seekdb 单机全文索引构建的可用功能和 `tools/benchmark/fts_large_bench.sh` 的实测性能提升排序验收。OceanBase 提交 `81c822c...` 仅作为实现参考，不要求机械完整移植 283 个文件；分布式/PX 能力仅在可直接转化为单机建索引收益时适配。不得为了追求目录覆盖率牺牲基准性能、稳定性或现有测试。
+> **2026-07-18 范围调整（当前有效）**：本任务尽量完成本文第 5 节六类优化的单机子集，以 seekdb 单机全文索引构建和 `tools/benchmark/fts_large_bench.sh` 的实测性能为唯一性能裁判。OceanBase 提交 `81c822c...` 仅作为实现参考，不要求机械移植 283 个文件；PX、跨节点路由、跨分区 shuffle、分布式 GI 和分布式 DAG 不在范围内。不得为了追求目录覆盖率牺牲基准性能、稳定性或现有测试。
 
 ## 1. 文档范围与基线
 
@@ -16,7 +16,7 @@ Task2、Task3 已有能力必须保留。当前工作区中的未跟踪文件属
 
 - 实现并稳定接入对单机全文索引构建热路径有直接收益的优化，保持全文索引创建、查询和辅助表数据正确。
 - 降低逐文档分词产生的分配、析构、字符分类和虚调用开销。
-- 以固定配置运行 `fts_large_bench.sh`，对比建索引耗时、TOKENIZE 延迟和查询正确性；只保留能带来实测收益或保障正确性的优化。
+- 以固定配置运行 `fts_large_bench.sh`，对比建索引耗时、TOKENIZE 延迟和查询正确性；评分按 build、tokenize、query 三类等权平均，综合改善达到 50% 为满分，低于 0% 为 0 分。
 - 当基准证明排序、编码或位置列表是主要瓶颈时，再以最小范围接入相应单机实现。
 - 所有新增或修改的关键接口具有中文说明注释；兼容合并及行为变化处具有中文修改说明。
 
@@ -26,8 +26,8 @@ Task2、Task3 已有能力必须保留。当前工作区中的未跟踪文件属
 - 不修改 `fts_large_bench.sh` 的工作负载、命中校验和计时口径来制造性能提升。
 - 不启用上游仍预留的 delta + zigzag + PFor position-list 编码；当前使用 variable-int64 编码。
 - 不进行与六类优化无关的通用重构。
-- 不为满足上游目录结构或 283 文件审计状态而引入 seekdb 单机环境不需要的分布式/PX/监控组件。
-- 不修改任何现有或新增测试文件；验证只运行已有测试与基准脚本。
+- 不为满足上游目录结构或 283 文件审计状态而引入 seekdb 单机环境不需要的分布式/PX/GI/跨分区组件。
+- 不修改 `fts_large_bench.sh`、其基线 JSON、评分程序或其工作负载关联测试；新增验证只能置于独立 `unittest/task4/` 目录，已有 Task2/Task3 测试仅执行、不修改。
 
 ## 3. 当前基线与主要缺口
 
@@ -78,6 +78,8 @@ Task2、Task3 已有能力必须保留。当前工作区中的未跟踪文件属
 
 ### 5.2 排序框架
 
+单机实施只接入 FTS 构建会实际调用的内存排序、紧凑 key 与缓冲复用快路径；不重构通用 SQL 分区排序、TopN 或分布式外排框架。
+
 1. `ObISortStrategy` 只定义内存数据排序契约；完整排序、分区排序和分区 TopN 分别由独立策略实现。
 2. `ObFullSortStrategy` 对可编码的定长 2–18 字节 sort key 使用 `FixedKeySort`，其他 encoded key 使用自适应快速排序，无法编码时回退到比较器排序。
 3. `ObSortResourceManager` 负责内存边界、使用量更新、dump 前处理和归并路数计算；SQL 与存储层派生类只承担各自额外资源核算。
@@ -89,16 +91,20 @@ Task2、Task3 已有能力必须保留。当前工作区中的未跟踪文件属
 
 ### 5.3 FTS 构建流水线
 
+单机实施将解析、token 聚合、排序和写入保留在本地 tablet/进程内，并复用临时资源；不实现 PX 采样、跨 slice 调度、跨分区 shuffle 或远端恢复协议。
+
 1. 当目标表不需要 doc-id 列且不是广播/复制表时选择分区本地构建，采样、分词、排序和写入均在 tablet 内完成。
 2. `ObColumnClusteredDag::generate_partition_local_fixed_tasks()` 创建采样、doc-word 写入、归并准备、word-doc 写入和最终归并的依赖图。
-3. `ObFtsForwardInvertSampleOperator` 收集 PX 范围键、转换为列式向量、调用 `ObStorageVecSortImpl` 排序，并以等深方式生成正排和倒排边界。
+3. 若范围采样对本地构建有实测收益，`ObFtsForwardInvertSampleOperator` 仅收集本地范围键、调用本地排序并生成边界；不得依赖 PX worker。
 4. `ObFtsWriteInnerTableOperator` 幂等地持久化边界；恢复时优先读取已有边界。
-5. PX 扫描通过 `wait_sample_finish()` 等待，采样成功或失败后由 `notify_sample_finished()` 唤醒，避免永久阻塞。
+5. 本地采样任务如有等待关系，必须无论成功或失败都唤醒等待方，避免永久阻塞。
 6. `ObDDLMergeSortTask` 原子领取同一 slice 的 chunk 子集，归并后推回；未达到最终路数时返回 `OB_DAG_TASK_IS_SUSPENDED` 以重新调度。
 7. `ObFullTextIndexWritePipeline` 从并发队列消费 chunk，将 `(doc_id, word)` 重排为 `(word, doc_id)`，再交给 macro-block writer 构建 SSTable。
 8. `ObDDLSortProvider` 管理线程级及 slice 级句柄，完成的 slice 句柄进入互斥保护的复用队列；最终归并路数按内存预算计算且不小于 2。
 
 ### 5.4 Sort key 与位置列表
+
+单机实施优先使用可选的保持排序关系编码和变长位置列表；若编码不能改善基准或改变辅助表兼容性，则保持现有布局并记录排除理由。
 
 1. `ObDDLEncodeSortkeyUtils` 将多列 rowkey 编码为单个保持排序关系的二进制串，支持 schema 到编码元信息的转换和逐行编码。
 2. `ObFtsSegmentSort` 对 token map 中的 token 编码并排序，保持原 collation 下的顺序语义。
@@ -109,6 +115,8 @@ Task2、Task3 已有能力必须保留。当前工作区中的未跟踪文件属
 
 ### 5.5 SQL 执行计划与并行 DDL
 
+单机实施仅保留 FTS 辅助表正确排序、范围计算和统计收集所需的本地接线；PX coordinator、GI 跨 worker 分发与 doc-id 重分布明确排除。
+
 1. `ObGranuleFtsUtil` 从执行上下文取得正排范围，并根据 GI task 计算当前 slice 和总 slice 数。
 2. Granule Iterator、pump、sub coordinator 和 table scan 传递 FTS 专用范围及 slice 信息。
 3. `ObDelUpdLogPlan` 对 FTS doc-word 辅助表构建倒排 sort key，并为 PX coordinator 生成采样排序键。
@@ -116,6 +124,8 @@ Task2、Task3 已有能力必须保留。当前工作区中的未跟踪文件属
 5. `ObStatCollectorOp` 与逻辑统计节点接入 FTS 范围采样，保持普通统计路径不变。
 
 ### 5.6 DDL DAG 监控
+
+单机实施只增加低开销的本地构建阶段计时/计数，供诊断 build 指标；不移植租户级分布式 DAG monitor、虚拟表或 TTL 回收体系。
 
 1. `ObDDLDagMonitorMgr` 作为租户级 MTL 单例，使用有上限的 FIFO allocator、节点 hashmap、TTL 和周期清理任务。
 2. `ObDDLDagMonitorNode` 以 `(dag_ptr, trace_id)` 为键，记录 DAG 创建/完成时间并维护任务信息链表；并发访问使用引用计数。
@@ -245,6 +255,8 @@ Task2、Task3 已有能力必须保留。当前工作区中的未跟踪文件属
 
 ### 10.1 TDD 单元测试
 
+新增测试一律位于独立 `unittest/task4/`；不得修改 benchmark 脚本、其输入、基线、评分程序或既有 Task2/Task3 测试文件。
+
 - `ObFastSegmentArray`：跨块索引、扩容、`reuse()` 地址复用、`reset()` 释放和越界行为。
 - `ObFastList`：头尾插入、排序插入、删除、清空和节点池复用。
 - 五种解析器：首次解析和 `reuse_parser()` 后解析结果完全一致，包含 UTF-8、多字节字符、空文本和长文本。
@@ -269,15 +281,15 @@ Task2、Task3 已有能力必须保留。当前工作区中的未跟踪文件属
 bash fts_large_bench.sh
 ```
 
-使用 `fts_large_bench_score.py` 和 `fts_large_bench_baseline.json` 计算结果。验收要求：脚本完整成功、命中数不变、build/tokenize/query 三类综合改善为正。硬件噪声通过脚本既有 warmup、三次采样、中位数/均值和标准差记录体现，不修改计分公式。
+使用 `fts_large_bench_score.py` 和 `fts_large_bench_baseline.json` 计算结果。验收要求：脚本完整成功、命中数不变、build/tokenize/query 三类等权综合改善达到 50% 视为满分；改善低于 0% 视为 0 分。硬件噪声容忍约 2 个评分点：应在相同机器负载下复跑并记录三次采样、中位数、均值和标准差，不修改计分公式。
 
 ## 11. 完成判定
 
 只有同时满足以下条件才能声明完成：
 
-1. 六类需求均可映射到已移植接口和调用路径。
+1. 六类需求均可映射到一个单机已实现子项或一条有性能/兼容性证据的排除理由。
 2. 上游 283 文件差异经过逐项审计：已移植、因当前分支已有等价实现而合并，或有明确且不影响六类目标的排除理由。
 3. 所有新增/修改接口和关键修改块符合中文注释规范。
 4. 目标单元测试、集成测试和构建命令具有当次运行的成功证据。
 5. Task2/Task3 相关测试无回归。
-6. benchmark 正确完成、命中数不变且综合性能改善为正。
+6. benchmark 正确完成、命中数不变，并报告相对基线的综合改善及按 ±2 分噪声解释的评分。
