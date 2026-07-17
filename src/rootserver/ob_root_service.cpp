@@ -879,11 +879,6 @@ int ObRootService::execute_bootstrap()
                     DBA_STEP_INC_INFO(bootstrap),
                     "cluster bootstrap success.");
   }
-  // after bootstrap success, clear bootstrap schema cache
-  // because in bootstrap, bootstrap schema cache will cache all sys table schemas, after bootstrap success, we just need part of sys table schemas
-  ObMultiVersionSchemaService &multi_schema_service = ddl_service_.get_schema_service();
-  multi_schema_service.clear_bootstrap_schema_cache();
-
   return ret;
 }
 

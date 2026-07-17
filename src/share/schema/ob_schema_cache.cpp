@@ -23,8 +23,6 @@
 #include "share/ob_sql_client_decorator.h"
 #include "share/ob_server_struct.h"
 #include "lib/utility/ob_smart_call.h"
-#include "lib/lock/ob_latch.h"
-#include "lib/stat/ob_latch_define.h"
 namespace oceanbase
 {
 using namespace common;
@@ -365,12 +363,9 @@ int ObTabletCacheValue::deep_copy(char *buf,
 }
 
 ObSchemaCache::ObSchemaCache()
-  : mem_context_(nullptr),
-    cache_(),
+  : cache_(),
     history_cache_(),
-    is_inited_(false),
-    bootstrap_cache_(),
-    bootstrap_cache_lock_()
+    is_inited_(false)
 {
 }
 
@@ -383,11 +378,6 @@ void ObSchemaCache::destroy()
 {
   tablet_cache_.destroy();
   cache_.destroy();
-  bootstrap_cache_.destroy();
-  if (mem_context_ != nullptr) {
-    DESTROY_CONTEXT(mem_context_);
-    mem_context_ = nullptr;
-  }
 }
 
 int ObSchemaCache::init_all_core_table()
@@ -415,26 +405,10 @@ int ObSchemaCache::init()
     LOG_WARN("init schema history cache failed", K(ret));
   } else if (OB_FAIL(tablet_cache_.init(OB_TABLET_TABLE_CACHE_NAME))) {
     LOG_WARN("init tablet-table cache failed", KR(ret));
-  } else if (OB_FAIL(bootstrap_cache_.create(
-      OB_SCHEMA_CACHE_BOOTSTRAP_CACHE_MAP_BUCKET_NUM,
-      SET_USE_500(ObModIds::OB_SCHEMA_CACHE_SYS_CACHE_MAP)))) {
-    LOG_WARN("init bootstrap cache failed", KR(ret));
   } else if (OB_FAIL(init_all_core_table())) {
     LOG_WARN("init all_core_table cache failed", K(ret));
   } else {
-    lib::ContextParam param;
-    param.set_mem_attr("SchemaBootCache", ObCtxIds::SCHEMA_SERVICE)
-      .set_properties(lib::ALLOC_THREAD_SAFE)
-      .set_ablock_size(lib::INTACT_MIDDLE_AOBJECT_SIZE)
-      .set_parallel(1);
-    if (OB_FAIL(ROOT_CONTEXT->CREATE_CONTEXT(mem_context_, param))) {
-      SQL_ENG_LOG(WARN, "create memory entity failed");
-    } else if (OB_ISNULL(mem_context_)) {
-      ret = OB_ERR_UNEXPECTED;
-      SQL_ENG_LOG(WARN, "null memory entity returned");
-    } else {
-      is_inited_ = true;
-    }
+    is_inited_ = true;
   }
   return ret;
 }
@@ -482,35 +456,14 @@ int ObSchemaCache::get_schema(
   } else {
     ObSchemaCacheKey cache_key(schema_type, schema_id, schema_version);
     const ObSchemaCacheValue *cache_value = NULL;
-    if (GCTX.in_bootstrap_) {
-      if (OB_FAIL(cache_.get(cache_key, cache_value, handle))) {
-        if (OB_ENTRY_NOT_EXIST != ret) {
-          LOG_WARN("get value from cache failed", K(cache_key), K(ret));
-        } else {
-          const ObSchemaCacheValue *tmp_cache_value = nullptr;
-          common::ObLatchRGuard guard(bootstrap_cache_lock_, ObLatchIds::SCHEMA_SERVICE_LOCK);
-          if (OB_FAIL(bootstrap_cache_.get_refactored(cache_key, tmp_cache_value))) {
-            LOG_WARN("get value from bootstrap cache failed", KR(ret), K(cache_key));
-          } else if (OB_ISNULL(tmp_cache_value)) {
-            ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("tmp_cache_value is NULL", KR(ret), K(cache_key));
-          } else if (OB_FAIL(cache_.put_and_fetch(cache_key, *tmp_cache_value, cache_value, handle))) {
-            LOG_WARN("put value to cache failed", KR(ret), K(cache_key));
-          } else {
-            LOG_DEBUG("put value to cache succeed", K(cache_key));
-          }
-        }
+    if (OB_FAIL(cache_.get(cache_key, cache_value, handle))) {
+      if (OB_ENTRY_NOT_EXIST != ret) {
+        LOG_WARN("get value from cache failed", K(cache_key), K(ret));
       }
+      EVENT_INC(ObStatEventIds::SCHEMA_CACHE_MISS);
     } else {
-      if (OB_FAIL(cache_.get(cache_key, cache_value, handle))) {
-        if (OB_ENTRY_NOT_EXIST != ret) {
-          LOG_WARN("get value from cache failed", K(cache_key), K(ret));
-        }
-        EVENT_INC(ObStatEventIds::SCHEMA_CACHE_MISS);
-      } else {
-        LOG_DEBUG("get value from cache succeed", K(cache_key), K(ret));
-        EVENT_INC(ObStatEventIds::SCHEMA_CACHE_HIT);
-      }
+      LOG_DEBUG("get value from cache succeed", K(cache_key), K(ret));
+      EVENT_INC(ObStatEventIds::SCHEMA_CACHE_HIT);
     }
 
     if (OB_SUCC(ret)) {
@@ -524,83 +477,6 @@ int ObSchemaCache::get_schema(
   }
 
   return ret;
-}
-
-int ObSchemaCache::put_schema_to_cache(
-    const ObSchemaCacheKey &cache_key,
-    const ObSchema &schema,
-    NoSwapCache &target_cache,
-    const char *cache_name)
-{
-  int ret = OB_SUCCESS;
-  if (!check_inner_stat()) {
-    ret = OB_INNER_STAT_ERROR;
-    LOG_WARN("inner stat error", KR(ret));
-  } else {
-    const ObSchemaCacheValue *cache_value = NULL;
-    bool need_put = OB_HASH_NOT_EXIST == target_cache.get_refactored(cache_key, cache_value);
-    if (OB_SUCC(ret) && need_put) {
-      ObSchemaCacheValue tmp_cache_value(cache_key.schema_type_, &schema);
-      int64_t deep_copy_size = tmp_cache_value.size();
-      // NoSwapCache values use the thread-safe memory context.
-      ObMemAttr attr("SchemaBootCache", ObCtxIds::SCHEMA_SERVICE);
-      void *tmp_ptr = mem_context_->allocf(deep_copy_size, attr);
-      ObIKVCacheValue *kv_cache_value = NULL;
-      if (NULL == tmp_ptr) {
-        ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_ERROR("alloc failed", KR(ret));
-      } else if (OB_FAIL(tmp_cache_value.deep_copy(static_cast<char *>(tmp_ptr),
-                                                   deep_copy_size,
-                                                   kv_cache_value))) {
-        LOG_WARN("deep copy cache value failed", KR(ret), K(tmp_ptr),
-                 K(deep_copy_size));
-      } else if (OB_ISNULL(kv_cache_value)) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("cache value is NULL", KR(ret), KP(kv_cache_value));
-      } else {
-        ObSchemaCacheValue *cache_value = static_cast<ObSchemaCacheValue *>(kv_cache_value);
-        int overwrite_flag = 1;
-        int hash_ret = target_cache.set_refactored(cache_key, cache_value, overwrite_flag);
-        if (OB_SUCCESS == hash_ret) {
-          LOG_DEBUG("put value to cache succeed", "cache_name", cache_name, K(hash_ret), K(cache_key),
-                    KPC(cache_value));
-        } else {
-          ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("put value to cache failed", "cache_name", cache_name, KR(ret), K(hash_ret),
-                   K(cache_key), KPC(cache_value));
-        }
-      }
-    }
-  }
-  return ret;
-}
-
-int ObSchemaCache::put_bootstrap_schema(
-    const ObSchemaCacheKey &cache_key,
-    const ObSchema &schema)
-{
-  int ret = OB_SUCCESS;
-  if (!check_inner_stat()) {
-    ret = OB_INNER_STAT_ERROR;
-    LOG_WARN("inner stat error", KR(ret));
-  } else {
-    common::ObLatchWGuard guard(bootstrap_cache_lock_, ObLatchIds::SCHEMA_SERVICE_LOCK);
-    ret = put_schema_to_cache(cache_key, schema, bootstrap_cache_, "bootstrap cache");
-  }
-  return ret;
-}
-
-void ObSchemaCache::clear_bootstrap_schema()
-{
-  common::ObLatchWGuard guard(bootstrap_cache_lock_, ObLatchIds::SCHEMA_SERVICE_LOCK);
-  NoSwapCache::iterator iter;
-  for (iter = bootstrap_cache_.begin(); iter != bootstrap_cache_.end(); ++iter) {
-    if (OB_NOT_NULL(iter->second)) {
-      mem_context_->free((void *)iter->second);
-    }
-  }
-  bootstrap_cache_.clear();
-  LOG_INFO("Bootstrap cache cleared successfully");
 }
 
 int ObSchemaCache::put_schema(
@@ -621,12 +497,7 @@ int ObSchemaCache::put_schema(
   } else {
     ObSchemaCacheKey cache_key(schema_type, schema_id, schema_version);
     ObSchemaCacheValue cache_value(schema_type, &schema);
-    if (GCTX.in_bootstrap_) {
-      if (OB_FAIL(put_bootstrap_schema(cache_key, schema))) {
-        LOG_WARN("fail to put bootstrap schema", KR(ret), K(cache_key));
-      }
-    }
-    if (FAILEDx(cache_.put(cache_key, cache_value))) {
+    if (OB_FAIL(cache_.put(cache_key, cache_value))) {
       LOG_WARN("put value to schema cache failed",
                K(cache_key), K(cache_value), KR(ret));
     } else {
