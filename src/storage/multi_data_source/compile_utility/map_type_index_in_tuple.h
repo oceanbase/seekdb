@@ -54,9 +54,10 @@ typedef DropFirstElemtTuple<char
 #undef _GENERATE_MDS_FRAME_CODE_FOR_TRANSACTION_
 #undef NEED_GENERATE_MDS_FRAME_CODE_FOR_TRANSACTION
 
-// BufferCtx binding IDs are serialized with transaction state. Keep the IDs
-// assigned before obsolete registrations were removed; the gaps belong to
-// deleted types and are deliberately not represented in the production tuple.
+// BufferCtx binding IDs are serialized with transaction state.  Keep the IDs
+// assigned before the test-only registrations were removed; the gaps belong to
+// deleted test types and are deliberately not represented in the production
+// tuple.
 template <typename T>
 struct BufferCtxBindingTypeId;
 
@@ -68,6 +69,16 @@ struct BufferCtxBindingTypeId<MdsCtx> {
 template <>
 struct BufferCtxBindingTypeId<ObTabletCreateMdsCtx> {
   static constexpr int64_t value = 3;
+};
+
+template <>
+struct BufferCtxBindingTypeId<::oceanbase::storage::ObUnUseCtx> {
+  static constexpr int64_t value = 11;
+};
+
+template <>
+struct BufferCtxBindingTypeId<::oceanbase::storage::ObMViewMdsOpCtx> {
+  static constexpr int64_t value = 16;
 };
 
 template <typename K, typename V>
