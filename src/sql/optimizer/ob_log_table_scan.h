@@ -41,6 +41,7 @@ struct ObTextRetrievalInfo
     topk_offset_expr_(NULL),
     with_ties_(false),
     need_calc_relevance_(true),
+    cardinality_only_limit_(false),
     inv_idx_tid_(OB_INVALID_ID),
     fwd_idx_tid_(OB_INVALID_ID),
     doc_id_idx_tid_(OB_INVALID_ID),
@@ -59,11 +60,16 @@ struct ObTextRetrievalInfo
   ~ObTextRetrievalInfo() {}
 
   TO_STRING_KV(K_(match_expr), K_(pushdown_match_filter), K_(sort_key), K_(topk_limit_expr),
-               K_(topk_offset_expr), K_(with_ties), K_(need_calc_relevance), K_(inv_idx_tid),
-               K_(fwd_idx_tid), K_(doc_id_idx_tid), K_(column_boost_idx));
+               K_(topk_offset_expr), K_(with_ties), K_(need_calc_relevance),
+               K_(cardinality_only_limit), K_(inv_idx_tid), K_(fwd_idx_tid),
+               K_(doc_id_idx_tid), K_(column_boost_idx));
 
   bool need_sort() const { return sort_key_.expr_ != nullptr; }
-  bool need_block_max_scan() const { return need_sort() && nullptr != topk_limit_expr_ && sort_key_.is_descending(); }
+  bool need_block_max_scan() const
+  {
+    return need_calc_relevance_ && need_sort()
+        && nullptr != topk_limit_expr_ && sort_key_.is_descending();
+  }
   ObMatchFunRawExpr *match_expr_;
   ObRawExpr *pushdown_match_filter_;
   OrderItem sort_key_;  // for pushdown topk, only support match expr as sort expr
@@ -71,6 +77,7 @@ struct ObTextRetrievalInfo
   ObRawExpr *topk_offset_expr_;
   bool with_ties_;
   bool need_calc_relevance_;  // match expr just for retireval (accurate score is not required)
+  bool cardinality_only_limit_; // LIMIT is observed only through an outer COUNT(*)
   uint64_t inv_idx_tid_;  // chosen aux inverted index table id (word-doc)
   uint64_t fwd_idx_tid_;  // chosen aux forward index table id (doc-word)
   uint64_t doc_id_idx_tid_; // chosen aux doc_id index table id (doc-rowkey)

@@ -7982,7 +7982,31 @@ int ObLogPlan::try_push_limit_into_table_scan(ObLogicalOperator *top,
     //the limit clause cannot be pushed down either.
     if (OB_FAIL(table_scan->has_nonpushdown_filter(has_npd_filter))) {
       LOG_WARN("check whether has non-pushdown filter failed", K(ret));
-    } else if (!has_npd_filter && !is_virtual_table(table_scan->get_ref_table_id()) &&
+    } else if (!has_npd_filter
+        && table_scan->get_text_retrieval_info().cardinality_only_limit_
+        && table_scan->is_single()
+        && !top->is_distributed()
+        && !is_virtual_table(table_scan->get_ref_table_id())
+        && !get_stmt()->is_calc_found_rows()
+        && !table_scan->is_sample_scan()
+        && table_scan->get_filter_exprs().empty()
+        && table_scan->get_pushdown_filter_exprs().empty()
+        && NULL == table_scan->get_limit_expr()
+        && NULL == table_scan->get_text_retrieval_info().topk_limit_expr_
+        && (!table_scan->use_das()
+            || (NULL != table_scan->get_table_partition_info()
+                && 1 == table_scan->get_table_partition_info()->get_phy_tbl_location_info()
+                            .get_phy_part_loc_info_list().count()))) {
+      // Apply LIMIT to the IR merge result. Truncating every token scan here
+      // could lose valid intersections for AND and Boolean queries.
+      ObTextRetrievalInfo &tr_info = table_scan->get_text_retrieval_info();
+      tr_info.topk_limit_expr_ = limit_expr;
+      tr_info.topk_offset_expr_ = offset_expr;
+      tr_info.need_calc_relevance_ = false;
+      is_pushed = true;
+    } else if (!has_npd_filter
+        && !table_scan->get_text_retrieval_info().cardinality_only_limit_
+        && !is_virtual_table(table_scan->get_ref_table_id()) &&
         !get_stmt()->is_calc_found_rows() && !table_scan->is_sample_scan() &&
         !(table_scan->get_is_index_global() && table_scan->get_index_back() && table_scan->has_index_lookup_filter()) &&
         (NULL == table_scan->get_limit_expr() ||
@@ -14815,6 +14839,7 @@ int ObLogPlan::prepare_text_retrieval_info(const uint64_t ref_table_id,
   uint64_t inv_idx_tid = OB_INVALID_ID;
   ObSEArray<ObAuxTableMetaInfo, 4> index_infos;
   bool need_calc_relevance = true;
+  bool cardinality_only_limit = false;
   ObSEArray<ObExprConstraint, 2> constraints;
   uint64_t docid_col_id = OB_INVALID_ID;
   if (OB_ISNULL(match_against) || OB_ISNULL(get_stmt()) || OB_ISNULL(get_optimizer_context().get_query_ctx())) {
@@ -14896,12 +14921,14 @@ int ObLogPlan::prepare_text_retrieval_info(const uint64_t ref_table_id,
   }
   if (OB_SUCC(ret)) {
     if (OB_FAIL(ObTransformUtils::check_need_calc_match_score(get_optimizer_context().get_exec_ctx(),
+                                                              get_optimizer_context().get_root_stmt(),
                                                               get_stmt(),
                                                               match_against,
                                                               need_calc_relevance,
+                                                              cardinality_only_limit,
                                                               constraints))) {
       LOG_WARN("failed to check need calc relevance", K(ret));
-    } else if (!need_calc_relevance &&
+    } else if ((!need_calc_relevance || cardinality_only_limit) &&
                OB_FAIL(append_array_no_dup(get_optimizer_context().get_query_ctx()->all_expr_constraints_, constraints))) {
       LOG_WARN("failed to append array no dup", K(ret));
     }
@@ -14915,6 +14942,7 @@ int ObLogPlan::prepare_text_retrieval_info(const uint64_t ref_table_id,
     tr_info.data_table_id_ = ref_table_id;
     tr_info.pushdown_match_filter_ = nullptr;
     tr_info.need_calc_relevance_ = need_calc_relevance;
+    tr_info.cardinality_only_limit_ = cardinality_only_limit;
   }
   return ret;
 }

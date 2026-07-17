@@ -48,6 +48,7 @@ ObDASTRMergeIter::ObDASTRMergeIter()
     doc_length_est_param_(),
     doc_length_est_stat_cols_(),
     topk_limit_(0),
+    result_limit_param_(),
     ls_id_(),
     total_doc_cnt_tablet_id_(),
     inv_idx_tablet_id_(),
@@ -94,6 +95,8 @@ int ObDASTRMergeIter::inner_init(ObDASIterParam &param)
       LOG_WARN("unexpected null pointer", K(ret), KP_(ir_ctdef), KP_(ir_rtdef));
     } else if (topk_mode_ && OB_FAIL(init_topk_limit())) {
       LOG_WARN("failed to init topk limit", K(ret));
+    } else if (ir_ctdef_->has_result_limit() && OB_FAIL(init_result_limit())) {
+      LOG_WARN("failed to init text retrieval result limit", K(ret));
     } else if (OB_UNLIKELY(!ir_ctdef_->need_inv_idx_agg() && ir_ctdef_->need_fwd_idx_agg())) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("inv idx agg and fwd idx agg are not both needed", K(ret));
@@ -476,14 +479,20 @@ int ObDASTRMergeIter::create_sparse_retrieval_iter()
 {
   int ret = OB_SUCCESS;
   sr_iter_param_.dim_weights_ = dim_weights_.count() >= 1 ? &dim_weights_ : nullptr;
-  sr_iter_param_.limit_param_ = &ir_rtdef_->get_inv_idx_scan_rtdef()->limit_param_;
+  sr_iter_param_.limit_param_ = ir_ctdef_->has_result_limit()
+      ? &result_limit_param_ : &ir_rtdef_->get_inv_idx_scan_rtdef()->limit_param_;
   sr_iter_param_.eval_ctx_ = ir_rtdef_->eval_ctx_;
   sr_iter_param_.id_proj_expr_ = ir_ctdef_->inv_scan_domain_id_col_;
   sr_iter_param_.relevance_expr_ = ir_ctdef_->relevance_expr_;
-  sr_iter_param_.relevance_proj_expr_ = ir_ctdef_->relevance_proj_col_;
-  sr_iter_param_.filter_expr_ = ir_ctdef_->match_filter_;
+  sr_iter_param_.relevance_proj_expr_ = ir_ctdef_->is_match_only()
+      ? nullptr : ir_ctdef_->relevance_proj_col_;
+  sr_iter_param_.filter_expr_ = ir_ctdef_->is_match_only()
+      ? nullptr : ir_ctdef_->match_filter_;
   sr_iter_param_.topk_limit_ = topk_limit_;
-  if (OB_NOT_NULL(ir_ctdef_->field_boost_expr_)) {
+  sr_iter_param_.match_only_ = ir_ctdef_->is_match_only();
+  if (sr_iter_param_.match_only_) {
+    // Token presence is sufficient; field and token boosts affect only score.
+  } else if (OB_NOT_NULL(ir_ctdef_->field_boost_expr_)) {
     ObDatum *boost_datum = nullptr;
     if (OB_FAIL(ir_ctdef_->field_boost_expr_->eval(*ir_rtdef_->eval_ctx_, boost_datum))) {
       LOG_WARN("failed to eval field boost expr", K(ret));
@@ -1433,6 +1442,34 @@ int ObDASTRMergeIter::init_topk_limit()
         offset = (topk_offset_datum->is_null() || topk_offset_datum->get_int() < 0) ? 0 : topk_offset_datum->get_int();
       }
       topk_limit_ = limit + offset;
+    }
+  }
+  return ret;
+}
+
+int ObDASTRMergeIter::init_result_limit()
+{
+  int ret = OB_SUCCESS;
+  ObExpr *limit_expr = ir_ctdef_->topk_limit_expr_;
+  ObExpr *offset_expr = ir_ctdef_->topk_offset_expr_;
+  ObDatum *limit_datum = nullptr;
+  ObDatum *offset_datum = nullptr;
+  result_limit_param_.limit_ = -1;
+  result_limit_param_.offset_ = 0;
+  if (OB_UNLIKELY(!ir_ctdef_->has_result_limit()) || OB_ISNULL(limit_expr)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected result limit state", K(ret), KPC_(ir_ctdef));
+  } else if (OB_FAIL(limit_expr->eval(*ir_rtdef_->eval_ctx_, limit_datum))) {
+    LOG_WARN("failed to eval result limit", K(ret));
+  } else if (nullptr != offset_expr
+      && OB_FAIL(offset_expr->eval(*ir_rtdef_->eval_ctx_, offset_datum))) {
+    LOG_WARN("failed to eval result offset", K(ret));
+  } else {
+    result_limit_param_.limit_ =
+        (limit_datum->is_null() || limit_datum->get_int() < 0) ? 0 : limit_datum->get_int();
+    if (nullptr != offset_datum) {
+      result_limit_param_.offset_ =
+          (offset_datum->is_null() || offset_datum->get_int() < 0) ? 0 : offset_datum->get_int();
     }
   }
   return ret;

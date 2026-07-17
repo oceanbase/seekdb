@@ -130,10 +130,13 @@ int ObSRDaaTIterImpl::init(
       LOG_WARN("failed to init buffered domain ids array", K(ret));
     } else if (OB_FAIL(buffered_domain_ids_.prepare_allocate(max_batch_size))) {
       LOG_WARN("failed to prepare allocate buffered domain ids array", K(ret));
-    } else if (FALSE_IT(buffered_relevances_.set_allocator(iter_allocator_))) {
-    } else if (OB_FAIL(buffered_relevances_.init(max_batch_size))) {
+    } else if (!iter_param_->match_only_
+        && FALSE_IT(buffered_relevances_.set_allocator(iter_allocator_))) {
+    } else if (!iter_param_->match_only_
+        && OB_FAIL(buffered_relevances_.init(max_batch_size))) {
       LOG_WARN("failed to init buffered relevances array", K(ret));
-    } else if (OB_FAIL(buffered_relevances_.prepare_allocate(max_batch_size))) {
+    } else if (!iter_param_->match_only_
+        && OB_FAIL(buffered_relevances_.prepare_allocate(max_batch_size))) {
       LOG_WARN("failed to prepare allocate buffered relevances array", K(ret));
     } else if (OB_FAIL(merge_cmp_.init(iter_param_->id_proj_expr_->datum_meta_, &iter_domain_ids_))) {
       LOG_WARN("failed to init loser tree comparator", K(ret));
@@ -241,8 +244,10 @@ int ObSRDaaTIterImpl::get_next_rows(const int64_t capacity, int64_t &count)
   } else if (OB_UNLIKELY(0 == capacity)) {
     count = 0;
   } else if (0 == dim_iters_->count()) {
+    count = 0;
     ret = OB_ITER_END;
   } else if (iter_param_->limit_param_->is_valid() && output_row_cnt_ >= iter_param_->limit_param_->limit_) {
+    count = 0;
     ret = OB_ITER_END;
   } else if (OB_FAIL(pre_process())) {
     if (OB_UNLIKELY(OB_ITER_END != ret)) {
@@ -314,9 +319,11 @@ int ObSRDaaTIterImpl::fill_merge_heap()
       } else {
         ret = OB_SUCCESS;
       }
-    } else if (OB_FAIL(dim_iter->get_curr_score(item.relevance_))) {
+    } else if (iter_param_->match_only_ && FALSE_IT(item.relevance_ = 1.0)) {
+    } else if (!iter_param_->match_only_ && OB_FAIL(dim_iter->get_curr_score(item.relevance_))) {
       LOG_WARN("fail to get current score", K(ret));
-    } else if (OB_NOT_NULL(iter_param_->dim_weights_) && FALSE_IT(item.relevance_ = item.relevance_ * iter_param_->field_boost_ * iter_param_->dim_weights_->at(iter_idx))) {
+    } else if (!iter_param_->match_only_ && OB_NOT_NULL(iter_param_->dim_weights_)
+        && FALSE_IT(item.relevance_ = item.relevance_ * iter_param_->field_boost_ * iter_param_->dim_weights_->at(iter_idx))) {
     } else if (OB_FAIL(dim_iter->get_curr_id(iter_domain_ids_[iter_idx]))) {
       LOG_WARN("fail to get current doc id", K(ret));
     } else if (FALSE_IT(item.iter_idx_ = iter_idx)) {
@@ -435,12 +442,15 @@ int ObSRDaaTIterImpl::cache_result(int64_t &count, const ObDatum &id_datum, cons
   if (limit_param->is_valid() && input_row_cnt_ <= offset) {
     // TODO: Maybe we should not process offset logic here
     // don't need to project
-  } else if (OB_UNLIKELY(count >= buffered_domain_ids_.count() || count >= buffered_relevances_.count())) {
+  } else if (OB_UNLIKELY(count >= buffered_domain_ids_.count()
+      || (!iter_param_->match_only_ && count >= buffered_relevances_.count()))) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid buffered idx", K(ret), K(count), K(buffered_domain_ids_.count()), K(buffered_relevances_.count()));
   } else {
     buffered_domain_ids_[count].from_datum(id_datum);
-    buffered_relevances_[count] = relevance;
+    if (!iter_param_->match_only_) {
+      buffered_relevances_[count] = relevance;
+    }
     ++count;
     ++output_row_cnt_;
     if (limit_param->is_valid() && output_row_cnt_ >= limit) {
