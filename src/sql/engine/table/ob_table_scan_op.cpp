@@ -764,6 +764,10 @@ ObTableScanOp::ObTableScanOp(ObExecContext &exec_ctx, const ObOpSpec &spec, ObOp
     in_rescan_(false),
     domain_index_(),
     fts_index_(),
+    fts_word_segment_expr_(nullptr),
+    fts_doc_id_expr_(nullptr),
+    fts_word_count_expr_(nullptr),
+    fts_doc_length_expr_(nullptr),
     output_   (nullptr),
     fold_iter_(nullptr),
     iter_tree_(nullptr),
@@ -4071,14 +4075,7 @@ int ObTableScanOp::fetch_next_fts_index_rows()
       LOG_WARN("unexpeted error, ft or doc id datum is nullptr", K(ret), KP(ft_datum), KP(doc_id_datum));
     } else {
       ObString ft = ft_datum->get_string();
-      ObArenaAllocator tmp_allocator(ObModIds::OB_LOB_ACCESS_BUFFER, OB_MALLOC_NORMAL_BLOCK_SIZE);
-      if (OB_FAIL(ObTextStringHelper::read_real_string_data(tmp_allocator,
-                                                            *ft_datum,
-                                                            ft_expr->datum_meta_,
-                                                            ft_expr->obj_meta_.has_lob_header(),
-                                                            ft))) {
-        LOG_WARN("fail to read real string data", K(ret));
-      } else if (OB_FAIL(fts_index_.segment(ft_expr->obj_meta_, *doc_id_datum, ft)) &&OB_ITER_END != ret) {
+      if (OB_FAIL(fts_index_.segment(ft_expr->obj_meta_, *doc_id_datum, ft)) && OB_ITER_END != ret) {
         LOG_WARN("fail to segment fulltext", K(ret), K(doc_id_datum), K(ft));
       } else if (OB_ITER_END == ret) {
         has_segment_word = false;
@@ -4086,6 +4083,56 @@ int ObTableScanOp::fetch_next_fts_index_rows()
       } else {
         has_segment_word = true;
       }
+    }
+  }
+  return ret;
+}
+
+int ObTableScanOp::init_output_fts_exprs()
+{
+  int ret = OB_SUCCESS;
+  if (OB_NOT_NULL(fts_word_segment_expr_)
+      && OB_NOT_NULL(fts_doc_id_expr_)
+      && OB_NOT_NULL(fts_word_count_expr_)
+      && OB_NOT_NULL(fts_doc_length_expr_)) {
+  } else {
+    fts_word_segment_expr_ = nullptr;
+    fts_doc_id_expr_ = nullptr;
+    fts_word_count_expr_ = nullptr;
+    fts_doc_length_expr_ = nullptr;
+    for (int64_t i = 0; OB_SUCC(ret) && i < MY_SPEC.output_.count(); ++i) {
+      ObExpr *tmp_expr = MY_SPEC.output_.at(i);
+      if (OB_ISNULL(tmp_expr)) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("unexpected error, expr in output is nullptr", K(ret), K(i));
+      } else if (T_FUN_SYS_WORD_SEGMENT == tmp_expr->type_) {
+        fts_word_segment_expr_ = tmp_expr;
+        const int64_t doc_id_idx = MY_SPEC.is_fts_index_aux_ ? i + 1 : i - 1;
+        if (OB_UNLIKELY(doc_id_idx < 0 || doc_id_idx >= MY_SPEC.output_.count())) {
+          ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("unexpected error, invalid doc id idx", K(ret), K(doc_id_idx), K(i), K(MY_SPEC.output_));
+        } else {
+          fts_doc_id_expr_ = MY_SPEC.output_.at(doc_id_idx);
+        }
+      } else if (T_FUN_SYS_WORD_COUNT == tmp_expr->type_) {
+        fts_word_count_expr_ = tmp_expr;
+      } else if (T_FUN_SYS_DOC_LENGTH == tmp_expr->type_) {
+        fts_doc_length_expr_ = tmp_expr;
+      }
+    }
+    if (OB_SUCC(ret)
+        && (OB_ISNULL(fts_word_segment_expr_)
+            || OB_ISNULL(fts_doc_id_expr_)
+            || OB_ISNULL(fts_word_count_expr_)
+            || OB_ISNULL(fts_doc_length_expr_))) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("unexpected error, fts output expr isn't found",
+               K(ret),
+               K(MY_SPEC.output_),
+               KP(fts_word_segment_expr_),
+               KP(fts_doc_id_expr_),
+               KP(fts_word_count_expr_),
+               KP(fts_doc_length_expr_));
     }
   }
   return ret;
@@ -4132,23 +4179,7 @@ int ObTableScanOp::get_output_fts_col_expr_by_type(
                && T_FUN_SYS_POS_LIST != type)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid fts column expr type", K(ret), "type", get_type_name(type));
-  } else if (T_FUN_SYS_DOC_ID == type) {
-    for (int64_t i = 0; OB_SUCC(ret) && OB_ISNULL(expr) && i < MY_SPEC.output_.count(); ++i) {
-      ObExpr *tmp_expr = MY_SPEC.output_.at(i);
-      if (OB_ISNULL(tmp_expr)) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected error, expr in output is nullptr", K(ret), K(i));
-      } else if (T_FUN_SYS_WORD_SEGMENT == tmp_expr->type_) {
-        const int64_t idx = MY_SPEC.is_fts_index_aux_ ? i+1 : i-1;
-        if (OB_UNLIKELY(idx < 0 || idx >= MY_SPEC.output_.count())) {
-          ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("unexpected error, invalid doc id idx", K(ret), K(idx), K(i), K(MY_SPEC.output_));
-        } else {
-          expr = MY_SPEC.output_.at(idx);
-        }
-      }
-    }
-  } else {
+  } else if (T_FUN_SYS_POS_LIST == type) {
     for (int64_t i = 0; OB_SUCC(ret) && OB_ISNULL(expr) && i < MY_SPEC.output_.count(); ++i) {
       ObExpr *tmp_expr = MY_SPEC.output_.at(i);
       if (OB_ISNULL(tmp_expr)) {
@@ -4157,6 +4188,25 @@ int ObTableScanOp::get_output_fts_col_expr_by_type(
       } else if (type == tmp_expr->type_) {
         expr = tmp_expr;
       }
+    }
+  } else if (OB_FAIL(init_output_fts_exprs())) {
+    LOG_WARN("failed to init cached fts exprs", K(ret));
+  } else {
+    switch (type) {
+      case T_FUN_SYS_WORD_SEGMENT:
+        expr = fts_word_segment_expr_;
+        break;
+      case T_FUN_SYS_DOC_ID:
+        expr = fts_doc_id_expr_;
+        break;
+      case T_FUN_SYS_WORD_COUNT:
+        expr = fts_word_count_expr_;
+        break;
+      case T_FUN_SYS_DOC_LENGTH:
+        expr = fts_doc_length_expr_;
+        break;
+      default:
+        break;
     }
   }
   if (OB_SUCC(ret) && OB_ISNULL(expr)) {
