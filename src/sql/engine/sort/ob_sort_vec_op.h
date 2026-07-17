@@ -22,6 +22,7 @@
 #include "sql/engine/basic/ob_temp_row_store.h"
 #include "sql/engine/ob_operator.h"
 #include "sql/engine/sort/ob_sort_basic_info.h"
+#include "sql/engine/sort/ob_sort_op.h"
 #include "sql/engine/sort/ob_sort_vec_op_provider.h"
 #include "sql/engine/px/p2p_datahub/ob_pushdown_topn_filter_msg.h"
 
@@ -88,6 +89,17 @@ public:
   {
     return sort_row_count_;
   }
+  int init_fts_secondary_sort(
+      const common::ObIArray<ObSortFieldCollation> *sort_collations,
+      const common::ObIArray<ObSortCmpFunc> *sort_cmp_funs,
+      const ExprFixedArray *sort_exprs,
+      const int64_t input_rows,
+      const int64_t input_width,
+      const ObPhyOperatorType operator_type,
+      const uint64_t operator_id);
+  int wait_fts_secondary_sort();
+  int get_next_fts_secondary_batch(int64_t &read_rows);
+  bool has_fts_secondary_sort() const { return fts_secondary_sort_enabled_; }
 
 private:
   void reset();
@@ -106,10 +118,16 @@ private:
   int init_temp_row_store(const common::ObIArray<ObExpr *> &exprs, const int64_t batch_size,
                           const ObMemAttr &mem_attr, const bool is_sort_key, ObCompressorType compress_type,
                           ObTempRowStore &row_store);
+  int add_fts_secondary_batch(const ObBatchRows &brs);
+  int start_fts_secondary_sort();
   void reset_pd_topn_filter_expr_ctx();  
 
 private:
   ObSortVecOpProvider sort_op_provider_;
+  ObMonitorNode fts_secondary_monitor_info_;
+  ObSortVecOpProvider fts_secondary_sort_provider_;
+  ObFtsSecondarySortThread fts_secondary_sort_thread_;
+  bool fts_secondary_sort_enabled_;
   int64_t sort_row_count_;
   bool is_first_;
   int64_t ret_row_count_;

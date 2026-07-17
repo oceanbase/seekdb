@@ -2475,19 +2475,29 @@ public:
 };
 
 
+enum class ObAuxIndexBuildMode : int64_t
+{
+  SCHEMA_AND_DATA = 0,
+  SCHEMA_ONLY = 1,
+  MAX_MODE
+};
+
 struct ObCreateAuxIndexArg : public ObDDLArg
 {
   OB_UNIS_VERSION_V(1);
 public:
   ObCreateAuxIndexArg()
     : data_table_id_(OB_INVALID_ID),
-      snapshot_version_(0)
+      snapshot_version_(0),
+      build_mode_(ObAuxIndexBuildMode::SCHEMA_AND_DATA)
   {}
   ~ObCreateAuxIndexArg() {}
   bool is_valid() const
   {
     return 1UL != OB_INVALID_TENANT_ID &&
            data_table_id_ != OB_INVALID_ID &&
+           build_mode_ >= ObAuxIndexBuildMode::SCHEMA_AND_DATA &&
+           build_mode_ < ObAuxIndexBuildMode::MAX_MODE &&
            create_index_arg_.is_valid();
   }
   void reset()
@@ -2496,14 +2506,16 @@ public:
     data_table_id_ = OB_INVALID_ID;
     create_index_arg_.reset();
     snapshot_version_ = 0;
+    build_mode_ = ObAuxIndexBuildMode::SCHEMA_AND_DATA;
   }
-  TO_STRING_KV(K(1UL), K(data_table_id_), K(create_index_arg_), K(snapshot_version_));
+  TO_STRING_KV(K(1UL), K(data_table_id_), K(create_index_arg_), K(snapshot_version_), K(build_mode_));
 
 public:
   
   uint64_t data_table_id_;
   ObCreateIndexArg create_index_arg_;
   int64_t snapshot_version_;
+  ObAuxIndexBuildMode build_mode_;
 };
 
 struct ObCreateAuxIndexRes final

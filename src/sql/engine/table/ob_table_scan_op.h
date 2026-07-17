@@ -726,7 +726,9 @@ private:
   int fetch_next_fts_index_rows();
   int fill_generated_fts_cols(ObDatumRow *row);
   int fill_generated_fts_cols(const ObStorageDatum *datums);
-  int fill_generated_fts_col_vectors();
+  int fill_generated_fts_token_batch(const ObFTIndexToken *tokens,
+                                     const int64_t token_count);
+  int init_generated_fts_exprs();
   int init_generated_fts_col_vectors(const int64_t batch_size);
   int mark_generated_fts_cols_evaluated(const int64_t batch_size);
   int get_output_fts_col_expr_by_type(const ObExprOperatorType &type, ObExpr *&expr);
@@ -759,6 +761,7 @@ protected:
   bool in_rescan_;
   ObDomainIndexCache domain_index_;
   ObFTIndexRowCache fts_index_;
+  ObExpr *fts_output_exprs_[ObFTIndexRowCache::FTS_COLUMN_COUNT];
 
   // output_ is used to output data, TSC operator directly invokes output_::get_next_row(s),
   // it points to fold_iter_ in group rescan and iter_tree_ in normal scan.

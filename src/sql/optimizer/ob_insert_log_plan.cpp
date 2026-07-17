@@ -20,6 +20,7 @@
 #include "sql/optimizer/ob_log_expr_values.h"
 #include "sql/optimizer/ob_log_insert.h"
 #include "sql/resolver/dml/ob_del_upd_resolver.h"
+#include "sql/resolver/ddl/ob_fts_index_builder_util.h"
 #include "sql/rewrite/ob_transform_utils.h"
 #include "sql/optimizer/stat/ob_dbms_stats_utils.h"
 using namespace oceanbase;
@@ -1423,6 +1424,13 @@ int ObInsertLogPlan::prepare_table_dml_info_for_ddl(const ObInsertTableInfo& tab
       index_dml_info->ref_table_id_ = table_item->ddl_table_id_;
     }
 
+    if (OB_SUCC(ret)
+        && optimizer_context_.is_online_ddl()
+        && index_schema->is_fts_index_aux()
+        && OB_FAIL(append_fts_doc_word_related_index(*index_schema, *index_dml_info))) {
+      LOG_WARN("failed to append fused fulltext doc word index", K(ret), KPC(index_schema));
+    }
+
     if (OB_SUCC(ret)) {
       if (OB_FAIL(get_all_rowkey_columns_for_ddl(table_info, index_schema, index_dml_info->column_exprs_))) {
         LOG_WARN("failed to get all rowkey columns for ddl" , K(ret));
@@ -1469,6 +1477,35 @@ int ObInsertLogPlan::prepare_table_dml_info_for_ddl(const ObInsertTableInfo& tab
         LOG_WARN("failed to push back index dml info", K(ret));
       }
     }
+  }
+  return ret;
+}
+
+int ObInsertLogPlan::append_fts_doc_word_related_index(
+    const ObTableSchema &fts_index_schema,
+    IndexDMLInfo &index_dml_info)
+{
+  int ret = OB_SUCCESS;
+  ObSchemaGetterGuard *schema_guard = optimizer_context_.get_schema_guard();
+  const ObTableSchema *data_schema = nullptr;
+  const ObTableSchema *doc_word_schema = nullptr;
+  if (OB_ISNULL(schema_guard)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("schema guard is nullptr", K(ret));
+  } else if (OB_FAIL(schema_guard->get_table_schema(fts_index_schema.get_data_table_id(), data_schema))) {
+    LOG_WARN("failed to get fulltext data table schema", K(ret), K(fts_index_schema.get_data_table_id()));
+  } else if (OB_ISNULL(data_schema)) {
+    ret = OB_TABLE_NOT_EXIST;
+    LOG_WARN("fulltext data table schema is nullptr", K(ret), K(fts_index_schema.get_data_table_id()));
+  } else if (OB_FAIL(ObFtsIndexBuilderUtil::find_fts_doc_word_schema(
+                 *schema_guard, *data_schema, fts_index_schema, doc_word_schema))) {
+    LOG_WARN("failed to find matching fulltext doc word schema", K(ret), KPC(data_schema),
+        KPC(&fts_index_schema));
+  } else if (OB_ISNULL(doc_word_schema)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("matching fulltext doc word schema is nullptr", K(ret), KPC(&fts_index_schema));
+  } else if (OB_FAIL(index_dml_info.related_index_ids_.push_back(doc_word_schema->get_table_id()))) {
+    LOG_WARN("failed to append fulltext doc word related index", K(ret), KPC(doc_word_schema));
   }
   return ret;
 }

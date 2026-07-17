@@ -498,6 +498,7 @@ int ObFtsIndexBuildTask::prepare()
 
 int ObFtsIndexBuildTask::prepare_aux_table(
     const ObIndexType index_type,
+    const obcall::ObAuxIndexBuildMode build_mode,
     bool &task_submitted,
     uint64_t &aux_table_id,
     int64_t &task_id)
@@ -522,6 +523,7 @@ int ObFtsIndexBuildTask::prepare_aux_table(
       
       arg.data_table_id_ = data_table_id;
       arg.task_id_ = task_id_;
+      arg.build_mode_ = build_mode;
       if (task_submitted) {
         // do nothing
       } else if (OB_FAIL(construct_create_index_arg(index_type, index_arg))) {
@@ -533,10 +535,10 @@ int ObFtsIndexBuildTask::prepare_aux_table(
       } else if (OB_FAIL(rootserver::serial_call([&]{ return GCTX.root_service_->create_aux_index(arg, res); }))) {
         LOG_WARN("generate fts aux index schema failed", K(ret), K(arg));
       } else if (res.schema_generated_) {
-        task_submitted = true;
         aux_table_id = res.aux_table_id_;
+        task_submitted = obcall::ObAuxIndexBuildMode::SCHEMA_AND_DATA == build_mode;
         if (res.ddl_task_id_ < 0) {
-          // rowkey_doc/doc_rowkey table already exist and data is ready
+          // The schema is ready and no separate data complement task is required.
           task_id = OB_INVALID_ID;
         } else { // need to wait data complement finish
           task_id = res.ddl_task_id_;
@@ -576,6 +578,7 @@ int ObFtsIndexBuildTask::prepare_rowkey_doc_table()
     ret = OB_STATE_NOT_MATCH;
     LOG_WARN("task status not match", K(ret), K(task_status_));
   } else if (use_doc_id_ && OB_FAIL(prepare_aux_table(index_type,
+                                       obcall::ObAuxIndexBuildMode::SCHEMA_AND_DATA,
                                        rowkey_doc_task_submitted_,
                                        rowkey_doc_aux_table_id_,
                                        rowkey_doc_task_id_))) {
@@ -678,6 +681,7 @@ int ObFtsIndexBuildTask::prepare_aux_index_tables()
     if (OB_FAIL(ret)) {
     } else if (use_doc_id_ && OB_FAIL(prepare_aux_table(
                               doc_rowkey_type,
+                              obcall::ObAuxIndexBuildMode::SCHEMA_AND_DATA,
                               doc_rowkey_task_submitted_,
                               doc_rowkey_aux_table_id_,
                               doc_rowkey_task_id_))) {
@@ -694,39 +698,46 @@ int ObFtsIndexBuildTask::prepare_aux_index_tables()
         }
       }
 #endif
-     DEBUG_SYNC(BEFOR_PREPARE_CREATE_TFS_INDEX_WORD_DOC);
-     if (OB_FAIL(ret)) {
-     } else if (OB_FAIL(prepare_aux_table(domain_index_aux_type,
-                    domain_index_aux_task_submitted_,
-                    domain_index_aux_table_id_,
-                    domain_index_aux_task_id_))) {
-       LOG_WARN("failed to prepare aux table", K(ret),
-           K(domain_index_aux_task_submitted_), K(domain_index_aux_table_id_));
-     } else if (!is_fts_task()) {
-       fts_doc_word_task_submitted_ = true;
-     } else {
+      if (!is_fts_task()) {
+        fts_doc_word_task_submitted_ = true;
+      } else {
 #ifdef ERRSIM
-      if (OB_SUCC(ret)) {
-        ret = OB_E(EventTable::EN_FTS_INDEX_BUILD_DOC_WORD_FAILED) OB_SUCCESS;
+        if (OB_SUCC(ret)) {
+          ret = OB_E(EventTable::EN_FTS_INDEX_BUILD_DOC_WORD_FAILED) OB_SUCCESS;
+          if (OB_FAIL(ret)) {
+            LOG_WARN("errsim ddl execute building fts index failed", KR(ret));
+          }
+        }
+#endif
+        DEBUG_SYNC(BEFOR_PREPARE_CREATE_TFS_INDEX_DOC_WORD);
         if (OB_FAIL(ret)) {
-          LOG_WARN("errsim ddl execute building fts index failed", KR(ret));
+        } else if (OB_FAIL(prepare_aux_table(fts_doc_word_type,
+                                             obcall::ObAuxIndexBuildMode::SCHEMA_ONLY,
+                                             fts_doc_word_task_submitted_,
+                                             fts_doc_word_aux_table_id_,
+                                             fts_doc_word_task_id_))) {
+          LOG_WARN("failed to prepare fused doc word schema", K(ret),
+              K(fts_doc_word_task_submitted_), K(fts_doc_word_aux_table_id_));
         }
       }
-#endif
-      DEBUG_SYNC(BEFOR_PREPARE_CREATE_TFS_INDEX_DOC_WORD);
+
+      DEBUG_SYNC(BEFOR_PREPARE_CREATE_TFS_INDEX_WORD_DOC);
       if (OB_FAIL(ret)) {
-      } else if (OB_FAIL(prepare_aux_table(fts_doc_word_type,
-                                       fts_doc_word_task_submitted_,
-                                       fts_doc_word_aux_table_id_,
-                                       fts_doc_word_task_id_))) {
-        LOG_WARN("failed to prepare aux table", K(ret),
-            K(fts_doc_word_task_submitted_), K(fts_doc_word_aux_table_id_));
+      } else if (OB_FAIL(prepare_aux_table(domain_index_aux_type,
+                                           obcall::ObAuxIndexBuildMode::SCHEMA_AND_DATA,
+                                           domain_index_aux_task_submitted_,
+                                           domain_index_aux_table_id_,
+                                           domain_index_aux_task_id_))) {
+        LOG_WARN("failed to prepare fused fulltext build task", K(ret),
+            K(domain_index_aux_task_submitted_), K(domain_index_aux_table_id_));
       }
-     }
     }
   }
 
-  if (OB_SUCC(ret) && doc_rowkey_task_submitted_ && domain_index_aux_task_submitted_ && fts_doc_word_task_submitted_) {
+  if (OB_SUCC(ret)
+      && doc_rowkey_task_submitted_
+      && domain_index_aux_task_submitted_
+      && OB_INVALID_ID != fts_doc_word_aux_table_id_) {
     state_finished = true;
   }
   if (state_finished || OB_FAIL(ret)) {
@@ -1010,6 +1021,24 @@ int ObFtsIndexBuildTask::wait_aux_table_complement()
     }
   }
 
+  if (OB_SUCC(ret) && state_finished && !child_task_failed
+      && ObDDLTaskStatus::WAIT_AUX_TABLE_COMPLEMENT == task_status_
+      && is_fts_task() && !fts_doc_word_task_submitted_) {
+    if (OB_FAIL(enable_fused_doc_word_index())) {
+      state_finished = false;
+      LOG_WARN("failed to enable fused fulltext doc word index", K(ret),
+          K(fts_doc_word_aux_table_id_), K(domain_index_aux_task_id_));
+    } else {
+      fts_doc_word_task_submitted_ = true;
+      fts_doc_word_task_id_ = domain_index_aux_task_id_;
+      is_fts_doc_word_succ_ = true;
+    }
+  }
+
+  if (OB_FAIL(ret) && !child_task_failed && ObIDDLTask::in_ddl_retry_white_list(ret)) {
+    ret = OB_SUCCESS;
+  }
+
   if (state_finished || OB_FAIL(ret)) {
     ObDDLTaskStatus next_status;
     ObDDLTaskStatus old_status = static_cast<ObDDLTaskStatus>(task_status_);
@@ -1030,6 +1059,53 @@ int ObFtsIndexBuildTask::wait_aux_table_complement()
     LOG_WARN("wait aux table complement finished", K(ret), K(parent_task_id_),
             K(task_id_), K(old_status), K(next_status), K(*this));
     ret = OB_SUCCESS;
+  }
+  return ret;
+}
+
+int ObFtsIndexBuildTask::enable_fused_doc_word_index()
+{
+  int ret = OB_SUCCESS;
+  ObSchemaGetterGuard schema_guard;
+  const ObTableSchema *doc_word_schema = nullptr;
+  const ObDatabaseSchema *database_schema = nullptr;
+  if (OB_UNLIKELY(!is_inited_)) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("not init", K(ret));
+  } else if (OB_UNLIKELY(!is_fts_task()
+                         || OB_INVALID_ID == fts_doc_word_aux_table_id_
+                         || domain_index_aux_task_id_ <= 0)) {
+    ret = OB_STATE_NOT_MATCH;
+    LOG_WARN("invalid fused fulltext build state", K(ret), K(fts_doc_word_aux_table_id_),
+        K(domain_index_aux_task_id_), K(task_type_));
+  } else if (OB_FAIL(root_service_->get_schema_service().get_tenant_schema_guard(schema_guard))) {
+    LOG_WARN("failed to get tenant schema guard", K(ret));
+  } else if (OB_FAIL(schema_guard.get_table_schema(fts_doc_word_aux_table_id_, doc_word_schema))) {
+    LOG_WARN("failed to get fused fulltext doc word schema", K(ret), K(fts_doc_word_aux_table_id_));
+  } else if (OB_ISNULL(doc_word_schema)) {
+    ret = OB_TABLE_NOT_EXIST;
+    LOG_WARN("fused fulltext doc word schema is nullptr", K(ret), K(fts_doc_word_aux_table_id_));
+  } else if (INDEX_STATUS_AVAILABLE == doc_word_schema->get_index_status()) {
+    // The schema update may have succeeded before a retry.
+  } else if (INDEX_STATUS_UNAVAILABLE != doc_word_schema->get_index_status()) {
+    ret = OB_STATE_NOT_MATCH;
+    LOG_WARN("unexpected fused fulltext doc word index status", K(ret), KPC(doc_word_schema));
+  } else if (OB_FAIL(schema_guard.get_database_schema(doc_word_schema->get_database_id(), database_schema))) {
+    LOG_WARN("failed to get fulltext database schema", K(ret), K(doc_word_schema->get_database_id()));
+  } else if (OB_ISNULL(database_schema)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("fulltext database schema is nullptr", K(ret), K(doc_word_schema->get_database_id()));
+  } else {
+    obcall::ObUpdateIndexStatusArg arg;
+    arg.index_table_id_ = doc_word_schema->get_table_id();
+    arg.status_ = INDEX_STATUS_AVAILABLE;
+    arg.in_offline_ddl_white_list_ = true;
+    arg.task_id_ = domain_index_aux_task_id_;
+    arg.data_table_id_ = doc_word_schema->get_data_table_id();
+    arg.database_name_ = database_schema->get_database_name();
+    if (OB_FAIL(rootserver::serial_call([&]{ return GCTX.root_service_->update_index_status(arg); }))) {
+      LOG_WARN("failed to update fused fulltext doc word index status", K(ret), K(arg));
+    }
   }
   return ret;
 }
@@ -1726,18 +1802,18 @@ int ObFtsIndexBuildTask::submit_drop_fts_index_task()
     LOG_WARN("invalid argument", KR(ret), KP(GCTX.schema_service_));
   } else if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(schema_guard))) {
     LOG_WARN("get tenant schema guard failed", K(ret));
-  } else if (OB_INVALID_ID != rowkey_doc_aux_table_id_ &&
-             OB_FAIL(drop_index_arg.index_ids_.push_back(rowkey_doc_aux_table_id_))) {
-    LOG_WARN("fail to push back rowkey_doc_aux_table_id_", K(ret), K(rowkey_doc_aux_table_id_));
-  } else if (OB_INVALID_ID != doc_rowkey_aux_table_id_ &&
-             OB_FAIL(drop_index_arg.index_ids_.push_back(doc_rowkey_aux_table_id_))) {
-    LOG_WARN("fail to push back doc_rowkey_aux_table_id_", K(ret), K(doc_rowkey_aux_table_id_));
   } else if (OB_INVALID_ID != domain_index_aux_table_id_ &&
              OB_FAIL(drop_index_arg.index_ids_.push_back(domain_index_aux_table_id_))) {
     LOG_WARN("fail to push back domain_index_aux_table_id_", K(ret), K(domain_index_aux_table_id_));
   } else if (OB_INVALID_ID != fts_doc_word_aux_table_id_ &&
              OB_FAIL(drop_index_arg.index_ids_.push_back(fts_doc_word_aux_table_id_))) {
     LOG_WARN("fail to push back fts_doc_word_aux_table_id_", K(ret), K(fts_doc_word_aux_table_id_));
+  } else if (OB_INVALID_ID != rowkey_doc_aux_table_id_ &&
+             OB_FAIL(drop_index_arg.index_ids_.push_back(rowkey_doc_aux_table_id_))) {
+    LOG_WARN("fail to push back rowkey_doc_aux_table_id_", K(ret), K(rowkey_doc_aux_table_id_));
+  } else if (OB_INVALID_ID != doc_rowkey_aux_table_id_ &&
+             OB_FAIL(drop_index_arg.index_ids_.push_back(doc_rowkey_aux_table_id_))) {
+    LOG_WARN("fail to push back doc_rowkey_aux_table_id_", K(ret), K(doc_rowkey_aux_table_id_));
   } else if (drop_index_arg.index_ids_.count() <= 0) {
     LOG_INFO("no table need to be drop, skip", K(ret)); // no table exist, skip drop
   } else if (schema_guard.get_table_schema( object_id_, data_table_schema)) {

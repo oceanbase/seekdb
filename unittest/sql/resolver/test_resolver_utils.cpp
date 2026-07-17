@@ -16,6 +16,7 @@
 
 #include <gtest/gtest.h>
 #include "sql/resolver/ob_resolver_utils.h"
+#include "sql/resolver/ddl/ob_fts_index_builder_util.h"
 
 using namespace oceanbase::common;
 
@@ -129,6 +130,43 @@ TEST_F(TestResovlerUtils, check_secure_path)
     system("rm -rf /tmp/test_resolver_utils_check_secure_path");
   }
 #endif
+}
+
+TEST_F(TestResovlerUtils, decide_fts_ddl_parallelism)
+{
+  int64_t decided_parallelism = 0;
+
+  ASSERT_EQ(OB_SUCCESS,
+      share::ObFtsIndexBuilderUtil::decide_ddl_parallelism(
+          share::schema::INDEX_TYPE_FTS_INDEX_LOCAL,
+          1,
+          false,
+          decided_parallelism));
+  ASSERT_EQ(2, decided_parallelism);
+
+  ASSERT_EQ(OB_SUCCESS,
+      share::ObFtsIndexBuilderUtil::decide_ddl_parallelism(
+          share::schema::INDEX_TYPE_FTS_INDEX_LOCAL,
+          1,
+          true,
+          decided_parallelism));
+  ASSERT_EQ(1, decided_parallelism);
+
+  ASSERT_EQ(OB_SUCCESS,
+      share::ObFtsIndexBuilderUtil::decide_ddl_parallelism(
+          share::schema::INDEX_TYPE_FTS_INDEX_LOCAL,
+          4,
+          true,
+          decided_parallelism));
+  ASSERT_EQ(4, decided_parallelism);
+
+  ASSERT_EQ(OB_SUCCESS,
+      share::ObFtsIndexBuilderUtil::decide_ddl_parallelism(
+          share::schema::INDEX_TYPE_NORMAL_LOCAL,
+          1,
+          false,
+          decided_parallelism));
+  ASSERT_EQ(1, decided_parallelism);
 }
 } // namespace sql
 } // namespace oceanbase

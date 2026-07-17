@@ -328,6 +328,8 @@ int ObAlterTableResolver::resolve(const ParseNode &parse_tree)
       if (OB_FAIL(resolve_hints(parse_tree.children_[ALTER_HINT],
           *alter_table_stmt, nullptr == index_schema_ ? *table_schema_ : *index_schema_))) {
         LOG_WARN("resolve hints failed", K(ret));
+      } else if (OB_FAIL(adjust_fts_ddl_parallelism(*alter_table_stmt))) {
+        LOG_WARN("adjust fulltext ddl parallelism failed", K(ret));
       }
     }
     if (OB_SUCC(ret)){
@@ -347,6 +349,31 @@ int ObAlterTableResolver::resolve(const ParseNode &parse_tree)
     }
   }
   DEBUG_SYNC(HANG_BEFORE_RESOLVER_FINISH);
+  return ret;
+}
+
+int ObAlterTableResolver::adjust_fts_ddl_parallelism(ObAlterTableStmt &alter_table_stmt)
+{
+  int ret = OB_SUCCESS;
+  const ObIArray<obcall::ObCreateIndexArg *> &index_args = alter_table_stmt.get_index_arg_list();
+  const int64_t original_parallelism = alter_table_stmt.get_parallelism();
+  int64_t decided_parallelism = original_parallelism;
+  for (int64_t i = 0; OB_SUCC(ret) && i < index_args.count(); ++i) {
+    const obcall::ObCreateIndexArg *index_arg = index_args.at(i);
+    if (OB_ISNULL(index_arg)) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("index argument is null", K(ret), K(i), K(index_args.count()));
+    } else if (OB_FAIL(share::ObFtsIndexBuilderUtil::decide_ddl_parallelism(
+                   index_arg->index_type_,
+                   original_parallelism,
+                   alter_table_stmt.get_has_parallel_hint(),
+                   decided_parallelism))) {
+      LOG_WARN("decide fulltext ddl parallelism failed", K(ret), K(i), KPC(index_arg));
+    } else if (decided_parallelism != original_parallelism) {
+      alter_table_stmt.set_parallelism(decided_parallelism);
+      break;
+    }
+  }
   return ret;
 }
 

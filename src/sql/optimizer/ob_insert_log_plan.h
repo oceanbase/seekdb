@@ -112,6 +112,8 @@ protected:
                                      ObUniqueConstraintInfo &constraint_info);
   int prepare_table_dml_info_for_ddl(const ObInsertTableInfo& table_info,
                                      ObIArray<IndexDMLInfo*> &all_index_dml_infos);
+  int append_fts_doc_word_related_index(const ObTableSchema &fts_index_schema,
+                                        IndexDMLInfo &index_dml_info);
 
   int get_all_rowkey_columns_for_ddl(const ObInsertTableInfo& table_info,
                                      const ObTableSchema* ddl_table_schema,

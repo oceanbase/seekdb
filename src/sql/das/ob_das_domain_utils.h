@@ -22,7 +22,6 @@
 #include "common/datum/ob_datum.h"
 #include "sql/das/ob_das_dml_ctx_define.h"
 #include "storage/fts/ob_fts_doc_word_iterator.h"
-#include "storage/fts/dict/ob_ft_cache.h"
 #include "storage/fts/ob_fts_plugin_helper.h"
 
 namespace oceanbase
@@ -30,10 +29,23 @@ namespace oceanbase
 namespace sql
 {
 
+struct ObFTIndexToken final
+{
+  ObFTIndexToken() : word_(), word_count_(0) {}
+  ObFTIndexToken(const common::ObString &word, const int64_t word_count)
+      : word_(word), word_count_(word_count)
+  {}
+
+  TO_STRING_KV(K_(word), K_(word_count));
+
+  common::ObString word_;
+  int64_t word_count_;
+};
 
 class ObFTIndexRowCache final
 {
 public:
+  static constexpr int64_t FTS_COLUMN_COUNT = 4;
   static ObObjDatumMapType FTS_INDEX_TYPES[4];
   static ObObjDatumMapType FTS_DOC_WORD_TYPES[4];
   static ObExprOperatorType FTS_INDEX_EXPR_TYPE[4];
@@ -47,31 +59,33 @@ public:
       const common::ObString &parser_properties);
   int segment(const common::ObObjMeta &ft_obj_meta, const ObDatum &doc_id, const common::ObString &fulltext);
   int get_next_row(blocksstable::ObDatumRow *&row);
+  int get_next_batch(const ObFTIndexToken *&tokens,
+                     const int64_t max_count,
+                     int64_t &token_count);
+  const ObDatum &get_doc_id() const { return doc_id_; }
+  int64_t get_document_length() const { return document_length_; }
   void reset();
   void reuse();
-  TO_STRING_KV(K_(row_idx), K_(is_fts_index_aux), K_(helper), K_(is_inited), K_(rows));
+  TO_STRING_KV(K_(token_idx), K_(document_length), K_(is_fts_index_aux), K_(helper),
+      K_(is_inited), K_(tokens));
 private:
   int prepare_word_map(const int64_t fulltext_length);
-  int get_cached_tokens(const common::ObObjMeta &ft_obj_meta,
-                        const ObDatum &doc_id_datum,
-                        const common::ObString &fulltext,
-                        int64_t &document_length,
-                        bool &cache_hit);
-  int cache_tokens(const common::ObObjMeta &ft_obj_meta,
-                   const common::ObString &fulltext,
-                   const int64_t document_length);
+  int materialize_word_map_tokens();
+  int fill_scalar_row(const ObFTIndexToken &token);
 
   lib::MemoryContext parser_memctx_;
   lib::MemoryContext document_memctx_;
-  ObDomainIndexRow rows_;
+  common::ObSEArray<ObFTIndexToken, 32> tokens_;
   storage::ObFTWordMap word_map_;
   int64_t word_map_bucket_count_;
-  uint64_t row_idx_;
-  uint64_t dictionary_epoch_;
+  int64_t token_idx_;
+  ObDatum doc_id_;
+  int64_t document_length_;
   bool is_fts_index_aux_;
   common::ObString parser_name_;
   common::ObString parser_properties_;
   storage::ObFTParseHelper helper_;
+  blocksstable::ObDatumRow scalar_row_;
   bool is_inited_;
 
   DISALLOW_COPY_AND_ASSIGN(ObFTIndexRowCache);

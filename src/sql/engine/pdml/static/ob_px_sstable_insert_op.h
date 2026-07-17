@@ -18,6 +18,7 @@
 #define OCEANBASE_SQL_PX_OB_PX_SSTABLE_INSERT_OP_H
 
 #include "sql/engine/pdml/static/ob_px_multi_part_insert_op.h"
+#include "sql/engine/sort/ob_sort_op_impl.h"
 #include "share/ob_tablet_autoincrement_param.h"
 
 namespace oceanbase
@@ -36,6 +37,8 @@ struct ObDDLAutoincParam;
 
 namespace sql
 {
+
+class ObSortVecOp;
 class ObPxMultiPartSSTableInsertOpInput : public ObPxMultiPartModifyOpInput
 {
   OB_UNIS_VERSION_V(1);
@@ -105,6 +108,14 @@ public:
       tablet_autoinc_expr_(nullptr),
       tablet_autoinc_column_idx_(-1),
       ddl_dag_(nullptr),
+      fts_doc_word_ddl_dag_(nullptr),
+      fts_doc_word_ctdef_(nullptr),
+      fts_doc_word_sort_exprs_(exec_ctx.get_allocator()),
+      fts_doc_word_row_exprs_(exec_ctx.get_allocator()),
+      fts_doc_word_sort_impl_(op_monitor_info_),
+      fts_input_vec_sort_op_(nullptr),
+      fts_doc_word_table_id_(OB_INVALID_ID),
+      is_fused_fts_build_(false),
       need_idempotent_tablet_autoinc_(false),
       need_idempotent_table_autoinc_(false),
       need_idempotent_doc_id_(false)
@@ -137,6 +148,17 @@ protected:
   int init_table_autoinc_param(const ObTabletID &tablet_id, const int64_t slice_idx, ObDDLAutoincParam &autoinc_param);
   int init_tablet_autoinc_param(const ObTabletID &tablet_id, const int64_t slice_idx, ObDDLAutoincParam &autoinc_param);
   int locate_exprs();
+  int init_fused_fts_build();
+  int add_fused_doc_word_row(const common::ObTabletID &tablet_id);
+  int add_fused_doc_word_batch(const ObBatchRows &brs);
+  int flush_fused_doc_word_rows();
+  int append_fused_doc_word_vector_batch(const int64_t row_count,
+                                         ObISliceWriter *&slice_writer);
+  int get_fused_doc_word_tablet_id(const common::ObTabletID &fts_tablet_id,
+                                   common::ObTabletID &doc_word_tablet_id) const;
+  int switch_fused_doc_word_slice_if_need(const common::ObTabletID &tablet_id,
+                                          ObISliceWriter *&slice_writer);
+  int finish_fused_doc_word_dag();
   int check_need_idempotence();
   int get_or_create_heap_writer(const ObTabletID &tablet_id, const bool is_append_batch, ObISliceWriter *&slice_writer);
   int generate_tablet_active_rows(const ObIVector *tablet_id_vector, const ObBatchRows &brs,
@@ -160,6 +182,16 @@ protected:
   ObExpr *tablet_autoinc_expr_; // valid when heap plan
   int64_t tablet_autoinc_column_idx_;
   storage::ObColumnClusteredDag *ddl_dag_;
+  storage::ObColumnClusteredDag *fts_doc_word_ddl_dag_;
+  const ObDASInsCtDef *fts_doc_word_ctdef_;
+  ExprFixedArray fts_doc_word_sort_exprs_;
+  ExprFixedArray fts_doc_word_row_exprs_;
+  common::ObSEArray<ObSortFieldCollation, 3> fts_doc_word_sort_collations_;
+  common::ObSEArray<ObSortCmpFunc, 3> fts_doc_word_sort_cmp_funs_;
+  ObSortOpImpl fts_doc_word_sort_impl_;
+  ObSortVecOp *fts_input_vec_sort_op_;
+  uint64_t fts_doc_word_table_id_;
+  bool is_fused_fts_build_;
   // for heap plan, direct write tablet
   typedef common::hash::ObHashMap<common::ObTabletID, ObISliceWriter *, common::hash::NoPthreadDefendMode> TabletWriterMap;
   TabletWriterMap heap_tablet_writer_map_;

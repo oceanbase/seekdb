@@ -11939,7 +11939,10 @@ int ObLogPlan::collect_location_related_info(ObLogicalOperator &op)
       ObTableID table_loc_id = index_info.loc_table_id_;
       ObTableID ref_table_id = index_info.ref_table_id_;
       TableLocRelInfo *loc_rel_info = nullptr;
-      if (index_info.is_primary_index_) {
+      const bool is_online_ddl_with_related_index =
+          optimizer_context_.is_online_ddl()
+          && !index_info.related_index_ids_.empty();
+      if (index_info.is_primary_index_ || is_online_ddl_with_related_index) {
         if (OB_ISNULL(loc_rel_info = optimizer_context_.get_loc_rel_info_by_id(
                                        table_loc_id, ref_table_id))) {
           //init table location related info with the main table
@@ -11964,7 +11967,23 @@ int ObLogPlan::collect_location_related_info(ObLogicalOperator &op)
           }
         }
         if (OB_SUCC(ret)) {
-          if (OB_FAIL(append_array_no_dup(loc_rel_info->related_ids_, index_info.related_index_ids_))) {
+          const ObTableSchema *index_schema = nullptr;
+          ObSchemaGetterGuard *schema_guard = optimizer_context_.get_schema_guard();
+          if (is_online_ddl_with_related_index && OB_ISNULL(schema_guard)) {
+            ret = OB_ERR_UNEXPECTED;
+            LOG_WARN("schema guard is nullptr", K(ret));
+          } else if (is_online_ddl_with_related_index
+                     && OB_FAIL(schema_guard->get_table_schema(ref_table_id, index_schema))) {
+            LOG_WARN("failed to get online ddl index schema", K(ret), K(ref_table_id));
+          } else if (is_online_ddl_with_related_index && OB_ISNULL(index_schema)) {
+            ret = OB_TABLE_NOT_EXIST;
+            LOG_WARN("online ddl index schema is nullptr", K(ret), K(ref_table_id));
+          } else if (is_online_ddl_with_related_index
+                     && index_schema->is_storage_local_index_table()
+                     && OB_FAIL(add_var_to_array_no_dup(
+                         loc_rel_info->related_ids_, index_schema->get_data_table_id()))) {
+            LOG_WARN("add online ddl data table id failed", K(ret), KPC(index_schema));
+          } else if (OB_FAIL(append_array_no_dup(loc_rel_info->related_ids_, index_info.related_index_ids_))) {
             LOG_WARN("add the ref table id to the related ids failed", K(ret));
           } else {
             LOG_DEBUG("collect dml op related table id", KPC(loc_rel_info), K(table_loc_id), K(ref_table_id));

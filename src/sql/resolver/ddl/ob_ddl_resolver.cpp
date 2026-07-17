@@ -10844,6 +10844,9 @@ int ObDDLResolver::resolve_hints(const ParseNode *node, ObDDLStmt &stmt, const O
             hint_parallel = parallel_node->value_;
             stmt.set_has_parallel_hint(true);
           }
+        } else if (T_NO_PARALLEL == hint_node->type_) {
+          hint_parallel = 1;
+          stmt.set_has_parallel_hint(true);
         } else if (T_APPEND == hint_node->type_) {
           stmt.set_has_append_hint(true);
         } else if (T_DIRECT == hint_node->type_) {

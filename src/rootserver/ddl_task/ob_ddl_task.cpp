@@ -2944,7 +2944,7 @@ int ObDDLTaskRecordOperator::update_parent_task_message(
           } else if (index_schema.is_fts_doc_word_aux()) {
             task.set_fts_doc_word_aux_table_id(target_table_id);
             task.set_fts_doc_word_aux_task_id(target_task_id);
-            task.set_fts_doc_word_task_submitted(true);
+            task.set_fts_doc_word_task_submitted(target_task_id > 0);
           }
         } else if (UPDATE_DROP_INDEX_TASK_ID == update_type) {
           task.set_drop_index_task_id(target_task_id);

@@ -907,30 +907,79 @@ int ObPxSubCoord::start_ddl()
     if (OB_FAIL(ret))  {
     } else {
       const int64_t px_thread_count = sqc_arg_.sqc_.get_task_count();
-      ObColumnClusteredDagInitParam ddl_dag_param;
-      ddl_dag_param.direct_load_type_ = ObDirectLoadMgrUtil::ddl_get_direct_load_type(tenant_data_version);
-      ddl_dag_param.ddl_thread_count_ = px_thread_count;
-      ddl_dag_param.px_thread_count_ = px_thread_count;
-      ddl_dag_param.ddl_task_param_.ddl_task_id_ = ddl_task_id;
-      ddl_dag_param.ddl_task_param_.execution_id_ = ddl_execution_id;
-      ddl_dag_param.ddl_task_param_.tenant_data_version_ = tenant_data_version;
-      ddl_dag_param.ddl_task_param_.snapshot_version_ = snapshot_version;
-      ddl_dag_param.ddl_task_param_.target_table_id_ = ddl_table_id;
-      ddl_dag_param.ddl_task_param_.schema_version_ = schema_version; // for idempotence, the schema version must be fixed, so get it from task record
-      ddl_dag_param.ddl_task_param_.is_no_logging_ = is_no_logging;
-      ddl_dag_param.ddl_task_param_.is_offline_index_rebuild_ = is_offline_index_rebuild;
-      if (OB_FAIL(get_participants(sqc_arg_.sqc_, ddl_table_id, ddl_dag_param.ls_tablet_ids_))) {
-        LOG_WARN("fail to get tablet ids", K(ret), K(ddl_task_id), K(ddl_table_id));
-      } else if (OB_FAIL(ObTenantDagScheduler::alloc_dag(exec_ctx->get_allocator(), false/*is_ha_dag*/, ddl_dag_))) {
-        LOG_WARN("alloc ddl dag failed", K(ret), K(ddl_task_id), KP(ddl_dag_));
-      } else if (OB_FAIL(ddl_dag_->init(&ddl_dag_param, nullptr, true/*trace id*/))) {
-        LOG_WARN("init ddl dag failed", K(ret), K(ddl_dag_param));
-      } else if (OB_FAIL(ddl_dag_threads_.init(px_thread_count, ddl_dag_, GET_MY_SESSION(*exec_ctx)))) {
-        LOG_WARN("init ddl dag thread pool failed", K(ret));
-      } else if (OB_FAIL(ddl_dag_threads_.start())) {
-        LOG_WARN("start ddl dag threads failed", K(ret));
-      } else {
-        ddl_dag_->set_start_time();
+      const ObDirectLoadType direct_load_type =
+          ObDirectLoadMgrUtil::ddl_get_direct_load_type(tenant_data_version);
+      ObDDLTaskParam ddl_task_param;
+      ddl_task_param.ddl_task_id_ = ddl_task_id;
+      ddl_task_param.execution_id_ = ddl_execution_id;
+      ddl_task_param.tenant_data_version_ = tenant_data_version;
+      ddl_task_param.snapshot_version_ = snapshot_version;
+      ddl_task_param.target_table_id_ = ddl_table_id;
+      ddl_task_param.schema_version_ = schema_version;
+      ddl_task_param.is_no_logging_ = is_no_logging;
+      ddl_task_param.is_offline_index_rebuild_ = is_offline_index_rebuild;
+      if (OB_FAIL(start_ddl_dag(*exec_ctx,
+                                ddl_task_param,
+                                direct_load_type,
+                                px_thread_count,
+                                false,
+                                ddl_dag_,
+                                ddl_dag_threads_))) {
+        LOG_WARN("start ddl dag failed", K(ret), K(ddl_task_param));
+      } else if (share::schema::is_fts_index_aux(
+                     ddl_dag_->get_ddl_table_schema().table_item_.index_type_)) {
+        ObTableModifySpec *dml_op = nullptr;
+        const ObDMLBaseCtDef *dml_ctdef = nullptr;
+        const ObDASInsCtDef *doc_word_ctdef = nullptr;
+        try_get_dml_op(*sqc_arg_.op_spec_root_, dml_op);
+        if (OB_ISNULL(dml_op)) {
+          ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("fulltext ddl dml operator is null", K(ret));
+        } else if (OB_FAIL(dml_op->get_single_dml_ctdef(dml_ctdef))) {
+          LOG_WARN("get fulltext ddl ctdef failed", K(ret));
+        } else if (OB_ISNULL(dml_ctdef)
+                   || DAS_OP_TABLE_INSERT != dml_ctdef->dml_type_) {
+          ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("invalid fulltext ddl ctdef", K(ret), KP(dml_ctdef));
+        } else {
+          const ObInsCtDef *ins_ctdef = static_cast<const ObInsCtDef *>(dml_ctdef);
+          for (int64_t i = 0;
+               OB_SUCC(ret) && i < ins_ctdef->related_ctdefs_.count();
+               ++i) {
+            const ObDASInsCtDef *related_ctdef = static_cast<const ObDASInsCtDef *>(
+                ins_ctdef->related_ctdefs_.at(i));
+            if (OB_ISNULL(related_ctdef)) {
+              ret = OB_ERR_UNEXPECTED;
+              LOG_WARN("related fulltext ddl ctdef is null", K(ret), K(i));
+            } else if (related_ctdef->is_access_vidx_as_master_table_) {
+              if (OB_NOT_NULL(doc_word_ctdef)) {
+                ret = OB_ERR_UNEXPECTED;
+                LOG_WARN("multiple fulltext doc word ctdefs", K(ret), K(i));
+              } else {
+                doc_word_ctdef = related_ctdef;
+              }
+            }
+          }
+        }
+        if (OB_FAIL(ret)) {
+        } else if (OB_ISNULL(doc_word_ctdef)) {
+          ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("fulltext doc word ctdef is missing", K(ret), KPC(dml_ctdef));
+        } else {
+          ObDDLTaskParam doc_word_task_param = ddl_task_param;
+          doc_word_task_param.target_table_id_ = doc_word_ctdef->index_tid_;
+          doc_word_task_param.schema_version_ = doc_word_ctdef->schema_version_;
+          if (OB_FAIL(start_ddl_dag(*exec_ctx,
+                                    doc_word_task_param,
+                                    direct_load_type,
+                                    px_thread_count,
+                                    true,
+                                    fts_doc_word_ddl_dag_,
+                                    fts_doc_word_ddl_dag_threads_))) {
+            LOG_WARN("start fused fulltext doc word ddl dag failed", K(ret),
+                K(doc_word_task_param));
+          }
+        }
       }
     }
     FLOG_INFO("start ddl with dag", K(ret), K(ddl_task_id), K(ddl_execution_id), K(ddl_table_id), KPC(ddl_dag_));
@@ -942,24 +991,89 @@ int ObPxSubCoord::start_ddl()
 int ObPxSubCoord::end_ddl(const bool need_commit)
 {
   int ret = OB_SUCCESS;
+  int tmp_ret = OB_SUCCESS;
   UNUSEDx(need_commit);
-  if (OB_NOT_NULL(ddl_dag_)) {
-    DEBUG_SYNC(END_DDL_IN_PX_SUBCOORD);
-    FLOG_INFO("end ddl with dag", K(ret), KPC(ddl_dag_));
-    ddl_dag_->simply_set_stop();
-    ddl_dag_threads_.stop();
-    ddl_dag_threads_.wait();
-    ret = ddl_dag_->get_dag_ret();
-    ddl_dag_->~ObColumnClusteredDag();
-    if (OB_ISNULL(sqc_arg_.exec_ctx_)) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("sqc exec context is null", K(ret), KPC(ddl_dag_));
-    } else {
-      sqc_arg_.exec_ctx_->get_allocator().free(ddl_dag_);
-      ddl_dag_ = nullptr;
-    }
+  DEBUG_SYNC(END_DDL_IN_PX_SUBCOORD);
+  if (OB_TMP_FAIL(end_ddl_dag(fts_doc_word_ddl_dag_, fts_doc_word_ddl_dag_threads_))) {
+    LOG_WARN("end fused fulltext doc word ddl dag failed", K(tmp_ret));
+    ret = COVER_SUCC(tmp_ret);
+  }
+  if (OB_TMP_FAIL(end_ddl_dag(ddl_dag_, ddl_dag_threads_))) {
+    LOG_WARN("end ddl dag failed", K(tmp_ret));
+    ret = COVER_SUCC(tmp_ret);
   }
   ddl_rewrite_ret_code(ret);
+  return ret;
+}
+
+int ObPxSubCoord::start_ddl_dag(
+    ObExecContext &exec_ctx,
+    const ObDDLTaskParam &ddl_task_param,
+    const ObDirectLoadType direct_load_type,
+    const int64_t px_thread_count,
+    const bool use_uniform_slice_count,
+    ObColumnClusteredDag *&ddl_dag,
+    ObDDLDagThreadPool &ddl_dag_threads)
+{
+  int ret = OB_SUCCESS;
+  ObColumnClusteredDagInitParam ddl_dag_param;
+  if (OB_UNLIKELY(OB_NOT_NULL(ddl_dag) || !ddl_task_param.is_valid()
+                  || px_thread_count <= 0)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid ddl dag arguments", K(ret), KP(ddl_dag), K(ddl_task_param),
+        K(px_thread_count));
+  } else {
+    ddl_dag_param.direct_load_type_ = direct_load_type;
+    ddl_dag_param.ddl_thread_count_ = px_thread_count;
+    ddl_dag_param.px_thread_count_ = px_thread_count;
+    ddl_dag_param.ddl_task_param_ = ddl_task_param;
+    if (OB_FAIL(get_participants(sqc_arg_.sqc_,
+                                 ddl_task_param.target_table_id_,
+                                 ddl_dag_param.ls_tablet_ids_))) {
+      LOG_WARN("get ddl participants failed", K(ret), K(ddl_task_param));
+    } else if (OB_FAIL(ObTenantDagScheduler::alloc_dag(
+                   exec_ctx.get_allocator(), false, ddl_dag))) {
+      LOG_WARN("allocate ddl dag failed", K(ret), K(ddl_task_param));
+    } else if (OB_FAIL(ddl_dag->init(&ddl_dag_param, nullptr, true))) {
+      LOG_WARN("initialize ddl dag failed", K(ret), K(ddl_dag_param));
+    } else if (use_uniform_slice_count
+               && OB_FAIL(ddl_dag->set_uniform_tablet_slice_count(px_thread_count))) {
+      LOG_WARN("set uniform ddl slice count failed", K(ret), K(px_thread_count),
+          K(ddl_task_param));
+    } else if (OB_FAIL(ddl_dag_threads.init(px_thread_count,
+                                            ddl_dag,
+                                            GET_MY_SESSION(exec_ctx)))) {
+      LOG_WARN("initialize ddl dag thread pool failed", K(ret), K(ddl_task_param));
+    } else if (OB_FAIL(ddl_dag_threads.start())) {
+      LOG_WARN("start ddl dag thread pool failed", K(ret), K(ddl_task_param));
+    } else {
+      ddl_dag->set_start_time();
+      FLOG_INFO("ddl dag started", K(ddl_task_param), KPC(ddl_dag));
+    }
+  }
+  return ret;
+}
+
+int ObPxSubCoord::end_ddl_dag(
+    ObColumnClusteredDag *&ddl_dag,
+    ObDDLDagThreadPool &ddl_dag_threads)
+{
+  int ret = OB_SUCCESS;
+  if (OB_NOT_NULL(ddl_dag)) {
+    FLOG_INFO("end ddl with dag", KPC(ddl_dag));
+    ddl_dag->simply_set_stop();
+    ddl_dag_threads.stop();
+    ddl_dag_threads.wait();
+    ret = ddl_dag->get_dag_ret();
+    ddl_dag->~ObColumnClusteredDag();
+    if (OB_ISNULL(sqc_arg_.exec_ctx_)) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("sqc exec context is null", K(ret), KP(ddl_dag));
+    } else {
+      sqc_arg_.exec_ctx_->get_allocator().free(ddl_dag);
+      ddl_dag = nullptr;
+    }
+  }
   return ret;
 }
 
@@ -977,8 +1091,18 @@ int ObPxSubCoord::get_participants(ObPxSqcMeta &sqc,
   int ret = OB_SUCCESS;
   const DASTabletLocIArray &locations = sqc.get_access_table_locations();
   for (int64_t i = 0; OB_SUCC(ret) && i < locations.count(); ++i) {
-    ObDASTabletLoc *tablet_loc = ObDASUtils::get_related_tablet_loc(*locations.at(i), table_id);
-    if (OB_FAIL(add_var_to_array_no_dup(ls_tablet_ids, std::make_pair(tablet_loc->ls_id_, tablet_loc->tablet_id_)))) {
+    ObDASTabletLoc *tablet_loc = nullptr;
+    if (OB_ISNULL(locations.at(i))) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("ddl access tablet location is null", K(ret), K(i), K(table_id));
+    } else if (OB_ISNULL(tablet_loc =
+                   ObDASUtils::get_related_tablet_loc(*locations.at(i), table_id))) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("ddl related tablet location does not exist", K(ret), K(i), K(table_id),
+          KPC(locations.at(i)));
+    } else if (OB_FAIL(add_var_to_array_no_dup(
+                   ls_tablet_ids,
+                   std::make_pair(tablet_loc->ls_id_, tablet_loc->tablet_id_)))) {
       LOG_WARN("add var to array no dup failed", K(ret));
     }
   }
