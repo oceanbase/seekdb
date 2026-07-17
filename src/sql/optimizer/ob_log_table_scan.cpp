@@ -3492,15 +3492,31 @@ int ObLogTableScan::print_text_retrieval_annotation(char *buf, int64_t buf_len, 
   ObRawExpr *offset = tr_info.topk_offset_expr_;
   ObSEArray<OrderItem, 1> sort_keys;
   bool calc_relevance = tr_info.need_calc_relevance_;
+  bool match_only = !calc_relevance;
+  bool cardinality_only_limit = tr_info.cardinality_only_limit_;
+  bool has_result_limit = cardinality_only_limit && OB_NOT_NULL(limit);
   if (OB_FAIL(BUF_PRINTF(", "))) {
     LOG_WARN("BUF_PRINTF fails", K(ret));
   } else if (OB_FAIL(BUF_PRINTF("\n      "))) {
     LOG_WARN("BUF_PRINTF fails", K(ret));
-  } else if (OB_FAIL(BUF_PRINTF("calc_relevance=%s", calc_relevance ? "true" : "false"))) {
+  } else if (OB_FAIL(BUF_PRINTF("calc_relevance=%s, match_only=%s, cardinality_only_limit=%s, result_limit=%s",
+                                calc_relevance ? "true" : "false",
+                                match_only ? "true" : "false",
+                                cardinality_only_limit ? "true" : "false",
+                                has_result_limit ? "true" : "false"))) {
     LOG_WARN("BUF_PRINTF fails", K(ret));
   } else if (OB_FAIL(BUF_PRINTF(", "))) {
     LOG_WARN("BUF_PRINTF fails", K(ret));
   } else if (FALSE_IT(EXPLAIN_PRINT_EXPR(match_expr, type))) {
+  }
+  if (OB_SUCC(ret) && has_result_limit) {
+    if (OB_FAIL(BUF_PRINTF(", \n      result_limit_expr="))) {
+      LOG_WARN("BUF_PRINTF fails", K(ret));
+    } else if (FALSE_IT(EXPLAIN_PRINT_EXPR(limit, type))) {
+    } else if (OB_NOT_NULL(offset) && OB_FAIL(BUF_PRINTF(", result_offset_expr="))) {
+      LOG_WARN("BUF_PRINTF fails", K(ret));
+    } else if (OB_NOT_NULL(offset) && FALSE_IT(EXPLAIN_PRINT_EXPR(offset, type))) {
+    }
   }
   if (OB_SUCC(ret) && OB_NOT_NULL(pushdown_match_filter)) {
     if (OB_FAIL(BUF_PRINTF(", "))) {

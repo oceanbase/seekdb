@@ -2231,7 +2231,8 @@ int ObTscCgService::generate_text_ir_ctdef(const ObLogTableScan &op,
         && !cg_ctx.is_es_match_
         && !cg_ctx.is_merge_fts_index_;
     ir_scan_ctdef->cardinality_only_limit_ =
-        is_primary_ir_scan && tr_info.cardinality_only_limit_ && !tr_info.need_calc_relevance_;
+        is_primary_ir_scan && tr_info.cardinality_only_limit_
+        && !tr_info.need_calc_relevance_ && OB_NOT_NULL(tr_info.topk_limit_expr_);
     ir_scan_ctdef->match_only_ = is_primary_ir_scan && !tr_info.need_calc_relevance_;
     if (!(cg_ctx.is_func_lookup_ || cg_ctx.is_es_match_)) {
       inv_idx_scan_ctdef = &scan_ctdef;

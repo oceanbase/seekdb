@@ -14934,9 +14934,10 @@ int ObTransformUtils::check_need_calc_match_score(ObExecContext *exec_ctx,
           }
         }
         if (OB_SUCC(ret) && !score_is_observed) {
-          // Activation is delayed until the optimizer confirms that the scan
-          // executes on one server, where LIMIT can stop the merge directly.
+          // The parent observes only the number of rows. Match-only execution
+          // is safe regardless of where a separate result LIMIT is applied.
           cardinality_only_limit = true;
+          need_calc = false;
         }
       }
     }
