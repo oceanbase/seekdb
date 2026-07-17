@@ -24,6 +24,7 @@ struct ObAISplitDocumentChunk
   int64_t offset_;
   int64_t length_;
   common::ObString text_;
+  TO_STRING_KV(K_(offset), K_(length), K_(text));
 };
 
 class ObExprAISplitDocument : public ObStringExprOperator
