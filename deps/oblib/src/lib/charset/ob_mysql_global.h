@@ -131,7 +131,10 @@ typedef unsigned short ushort;
 
 
 typedef int	File;		
-typedef int	my_socket;	
+#ifndef my_socket_defined
+typedef int	my_socket;
+#define my_socket_defined
+#endif
 #define INVALID_SOCKET -1
 
 #define sig_handler RETSIGTYPE

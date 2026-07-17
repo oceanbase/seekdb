@@ -408,3 +408,14 @@ CLAUDE.md
 docs/ai_functions_implementation_zh.md
 task.md
 tools/deploy/mysql_test/run_ai_funcs_pymysql.py
+
+## Generated inner-table and virtual-table sources
+src/observer/virtual_table/ob_all_virtual_sqlite_tables.cpp
+src/observer/virtual_table/ob_all_virtual_sqlite_tables.h
+src/share/inner_table/ob_inner_table_schema.[0-9]*_*.cpp
+src/share/inner_table/ob_inner_table_schema.h
+src/share/inner_table/ob_inner_table_schema.lob.cpp
+src/share/inner_table/ob_inner_table_schema.vt.cpp
+src/share/inner_table/ob_inner_table_schema_constants.h
+src/share/inner_table/ob_inner_table_schema_misc.ipp
+src/share/inner_table/table_id_to_name
