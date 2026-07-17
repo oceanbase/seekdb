@@ -101,6 +101,8 @@ public:
 public:
   ObFTParserParam()
       : ObFTParserParamExport(),
+        metadata_alloc_(nullptr),
+        scratch_alloc_(nullptr),
         ngram_token_size_(NGRAM_TOKEN_SIZE),
         min_ngram_size_(NGRAM_TOKEN_SIZE),
         max_ngram_size_(NGRAM_TOKEN_SIZE)
@@ -112,13 +114,18 @@ public:
   {
     ObFTParserParamExport::reset();
     allocator_ = nullptr;
+    metadata_alloc_ = nullptr;
+    scratch_alloc_ = nullptr;
     ngram_token_size_ = NGRAM_TOKEN_SIZE;
   }
 
-  INHERIT_TO_STRING_KV("base", ObFTParserParamExport, KP_(allocator), K_(ngram_token_size));
+  INHERIT_TO_STRING_KV("base", ObFTParserParamExport, KP_(allocator),
+      KP_(metadata_alloc), KP_(scratch_alloc), K_(ngram_token_size));
 
 public:
   common::ObIAllocator *allocator_ = nullptr;
+  common::ObIAllocator *metadata_alloc_;
+  common::ObIAllocator *scratch_alloc_;
 
   // ik parser params
   ObFTIKParam ik_param_;

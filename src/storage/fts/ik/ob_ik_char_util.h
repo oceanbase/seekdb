@@ -51,8 +51,16 @@ public:
                                  const char *input,
                                  const uint8_t char_len,
                                  CharType &type);
+  static int classify_first_char(ObCharsetType charset_type,
+                                 const char *input,
+                                 const uint8_t char_len,
+                                 CharType &type);
 
   static int check_cn_number(ObCollationType coll_type,
+                             const char *input,
+                             const uint8_t char_len,
+                             bool &is_cn_number);
+  static int check_cn_number(ObCharsetType charset_type,
                              const char *input,
                              const uint8_t char_len,
                              bool &is_cn_number);
@@ -61,14 +69,26 @@ public:
                                  const char *input,
                                  const uint8_t char_len,
                                  bool &is_connector);
+  static int check_num_connector(ObCharsetType charset_type,
+                                 const char *input,
+                                 const uint8_t char_len,
+                                 bool &is_connector);
 
   static int check_letter_connector(ObCollationType coll_type,
+                                    const char *input,
+                                    const uint8_t char_len,
+                                    bool &is_connector);
+  static int check_letter_connector(ObCharsetType charset_type,
                                     const char *input,
                                     const uint8_t char_len,
                                     bool &is_connector);
 
   // some cjk word should be ignored
   static int is_ignore_single_cjk(ObCollationType coll_type,
+                                  const char *input,
+                                  const uint8_t char_len,
+                                  bool &ignore);
+  static int is_ignore_single_cjk(ObCharsetType charset_type,
                                   const char *input,
                                   const uint8_t char_len,
                                   bool &ignore);
@@ -373,17 +393,25 @@ inline int ObFTCharUtil::check_cn_number(ObCollationType coll_type,
                                          const uint8_t char_len,
                                          bool &is_cn_number)
 {
-  int ret = OB_SUCCESS;
-  ObCharsetType cs_type = ObCharset::charset_type_by_coll(coll_type);
+  return check_cn_number(
+      ObCharset::charset_type_by_coll(coll_type), input, char_len, is_cn_number);
+}
 
-  switch (cs_type) {
+inline int ObFTCharUtil::check_cn_number(ObCharsetType charset_type,
+                                         const char *input,
+                                         const uint8_t char_len,
+                                         bool &is_cn_number)
+{
+  int ret = OB_SUCCESS;
+
+  switch (charset_type) {
   case CHARSET_UTF8MB4: {
     ret = ObFTCharUtil::is_cn_number<CHARSET_UTF8MB4>(input, char_len, is_cn_number);
     break;
   }
   default:
     ret = OB_NOT_SUPPORTED;
-    STORAGE_FTS_LOG(WARN, "Not supported charset type", K(ret), K(cs_type));
+    STORAGE_FTS_LOG(WARN, "Not supported charset type", K(ret), K(charset_type));
   }
   return ret;
 }
@@ -393,17 +421,25 @@ inline int ObFTCharUtil::check_num_connector(ObCollationType coll_type,
                                              const uint8_t char_len,
                                              bool &is_connector)
 {
-  int ret = OB_SUCCESS;
-  ObCharsetType cs_type = ObCharset::charset_type_by_coll(coll_type);
+  return check_num_connector(
+      ObCharset::charset_type_by_coll(coll_type), input, char_len, is_connector);
+}
 
-  switch (cs_type) {
+inline int ObFTCharUtil::check_num_connector(ObCharsetType charset_type,
+                                             const char *input,
+                                             const uint8_t char_len,
+                                             bool &is_connector)
+{
+  int ret = OB_SUCCESS;
+
+  switch (charset_type) {
   case CHARSET_UTF8MB4: {
     ret = ObFTCharUtil::is_num_connector<CHARSET_UTF8MB4>(input, char_len, is_connector);
     break;
   }
   default:
     ret = OB_NOT_SUPPORTED;
-    STORAGE_FTS_LOG(WARN, "Not supported charset type", K(ret), K(cs_type));
+    STORAGE_FTS_LOG(WARN, "Not supported charset type", K(ret), K(charset_type));
   }
   return ret;
 }
@@ -413,10 +449,18 @@ inline int ObFTCharUtil::check_letter_connector(ObCollationType coll_type,
                                                 const uint8_t char_len,
                                                 bool &is_connector)
 {
-  int ret = OB_SUCCESS;
-  ObCharsetType cs_type = ObCharset::charset_type_by_coll(coll_type);
+  return check_letter_connector(
+      ObCharset::charset_type_by_coll(coll_type), input, char_len, is_connector);
+}
 
-  switch (cs_type) {
+inline int ObFTCharUtil::check_letter_connector(ObCharsetType charset_type,
+                                                const char *input,
+                                                const uint8_t char_len,
+                                                bool &is_connector)
+{
+  int ret = OB_SUCCESS;
+
+  switch (charset_type) {
   case CHARSET_UTF8MB4: {
     // ret = ObFTCharUtil::do_check_letter_connector<CHARSET_UTF8MB4>(input, char_len,
     // is_connector);
@@ -425,7 +469,7 @@ inline int ObFTCharUtil::check_letter_connector(ObCollationType coll_type,
   }
   default:
     ret = OB_NOT_SUPPORTED;
-    STORAGE_FTS_LOG(WARN, "Not supported charset type", K(ret), K(cs_type));
+    STORAGE_FTS_LOG(WARN, "Not supported charset type", K(ret), K(charset_type));
   }
   return ret;
 }
@@ -435,17 +479,25 @@ inline int ObFTCharUtil::is_ignore_single_cjk(ObCollationType coll_type,
                                               const uint8_t char_len,
                                               bool &ignore)
 {
-  int ret = OB_SUCCESS;
-  ObCharsetType cs_type = ObCharset::charset_type_by_coll(coll_type);
+  return is_ignore_single_cjk(
+      ObCharset::charset_type_by_coll(coll_type), input, char_len, ignore);
+}
 
-  switch (cs_type) {
+inline int ObFTCharUtil::is_ignore_single_cjk(ObCharsetType charset_type,
+                                              const char *input,
+                                              const uint8_t char_len,
+                                              bool &ignore)
+{
+  int ret = OB_SUCCESS;
+
+  switch (charset_type) {
   case CHARSET_UTF8MB4: {
     ret = ObFTCharUtil::is_ignore<CHARSET_UTF8MB4>(input, char_len, ignore);
     break;
   }
   default:
     ret = OB_NOT_SUPPORTED;
-    STORAGE_FTS_LOG(WARN, "Not supported charset type", K(ret), K(cs_type));
+    STORAGE_FTS_LOG(WARN, "Not supported charset type", K(ret), K(charset_type));
     break;
   }
   return ret;
@@ -490,10 +542,18 @@ inline int ObFTCharUtil::classify_first_char(ObCollationType coll_type,
                                              const uint8_t char_len,
                                              CharType &type)
 {
-  int ret = OB_SUCCESS;
-  ObCharsetType cs_type = ObCharset::charset_type_by_coll(coll_type);
+  return classify_first_char(
+      ObCharset::charset_type_by_coll(coll_type), input, char_len, type);
+}
 
-  switch (cs_type) {
+inline int ObFTCharUtil::classify_first_char(ObCharsetType charset_type,
+                                             const char *input,
+                                             const uint8_t char_len,
+                                             CharType &type)
+{
+  int ret = OB_SUCCESS;
+
+  switch (charset_type) {
   case CHARSET_UTF8MB4: {
     ret = do_classify<CHARSET_UTF8MB4>(input, char_len, type);
     break;
@@ -508,7 +568,7 @@ inline int ObFTCharUtil::classify_first_char(ObCollationType coll_type,
   }
   default:
     ret = OB_NOT_SUPPORTED;
-    STORAGE_FTS_LOG(WARN, "Not supported charset type", K(ret), K(cs_type));
+    STORAGE_FTS_LOG(WARN, "Not supported charset type", K(ret), K(charset_type));
     break;
   }
   return ret;

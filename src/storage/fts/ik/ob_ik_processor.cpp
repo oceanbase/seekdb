@@ -31,19 +31,14 @@ namespace oceanbase
 {
 namespace storage
 {
-int ObIIKProcessor::process(TokenizeContext &ctx)
+int ObIIKProcessor::process(TokenizeContext &ctx,
+                            const char *ch,
+                            const uint8_t char_len,
+                            const ObFTCharUtil::CharType type)
 {
   int ret = OB_SUCCESS;
 
-  ObFTCharUtil::CharType type;
-  const char *ch = nullptr;
-  uint8_t char_len = 0;
-
-  if (OB_FAIL(ctx.current_char_type(type))) {
-    LOG_WARN("fail to get current char type", K(ret));
-  } else if (OB_FAIL(ctx.current_char(ch, char_len))) {
-    LOG_WARN("Fail to get current char", K(ret));
-  } else if (OB_FAIL(do_process(ctx, ch, char_len, type))) {
+  if (OB_FAIL(do_process(ctx, ch, char_len, type))) {
     LOG_WARN("Failed to do process char", K(ret));
   }
   return ret;
@@ -54,9 +49,10 @@ TokenizeContext::TokenizeContext(ObCollationType coll_type,
                                  const char *fulltext,
                                  int64_t fulltext_len,
                                  bool is_smart)
-    : coll_type_(coll_type), fulltext_(fulltext), fulltext_len_(fulltext_len), cursor_(0),
+    : coll_type_(coll_type), charset_info_(nullptr), charset_handler_(nullptr),
+      charset_type_(CHARSET_INVALID), fulltext_(fulltext), fulltext_len_(fulltext_len), cursor_(0),
       next_char_len_(0), handle_size_(0), is_smart_(is_smart), token_list_(allocator),
-      result_list_(allocator)
+      results_(allocator), result_idx_(0), buffer_start_cursor_(0)
 {
 }
 
@@ -66,8 +62,42 @@ int TokenizeContext::init()
 
   if (OB_ISNULL(fulltext_) || fulltext_len_ <= 0) {
     ret = OB_INVALID_ARGUMENT;
+  } else if (OB_UNLIKELY(coll_type_ <= CS_TYPE_INVALID || coll_type_ >= CS_TYPE_MAX)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("Invalid collation type", K(ret), K(coll_type_));
+  } else if (OB_ISNULL(charset_info_ = ObCharset::get_charset(coll_type_))) {
+    ret = OB_NOT_SUPPORTED;
+    LOG_WARN("Unsupported charset or collation", K(ret), K(coll_type_));
+  } else if (OB_ISNULL(charset_handler_ = charset_info_->cset)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("Invalid charset handler", K(ret), K(coll_type_), KP(charset_info_));
+  } else if (CHARSET_INVALID
+             == (charset_type_ = ObCharset::charset_type_by_coll(coll_type_))) {
+    ret = OB_NOT_SUPPORTED;
+    LOG_WARN("Unsupported charset type", K(ret), K(coll_type_));
   } else if (OB_FAIL(prepare_next_char())) {
     LOG_WARN("Failed to prepare next char", K(ret));
+  }
+  return ret;
+}
+
+int TokenizeContext::reuse_context(const char *fulltext, const int64_t fulltext_len)
+{
+  int ret = OB_SUCCESS;
+  if (OB_ISNULL(fulltext) || OB_UNLIKELY(fulltext_len <= 0)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid fulltext", K(ret), KP(fulltext), K(fulltext_len));
+  } else {
+    reset_resource();
+    fulltext_ = fulltext;
+    fulltext_len_ = fulltext_len;
+    cursor_ = 0;
+    buffer_start_cursor_ = 0;
+    next_char_len_ = 0;
+    next_char_type_ = ObFTCharUtil::CharType::USELESS;
+    if (OB_FAIL(prepare_next_char())) {
+      LOG_WARN("failed to prepare first char", K(ret));
+    }
   }
   return ret;
 }
@@ -75,8 +105,9 @@ int TokenizeContext::init()
 int TokenizeContext::reset_resource()
 {
   handle_size_ = 0;
-  result_list_.reset();
-  token_list_.reset();
+  results_.reuse();
+  result_idx_ = 0;
+  token_list_.reuse();
   return OB_SUCCESS;
 }
 
@@ -103,18 +134,47 @@ int TokenizeContext::current_char_type(ObFTCharUtil::CharType &type)
   return ret;
 }
 
+int TokenizeContext::first_valid_char(const char *buf,
+                                      const int64_t buf_size,
+                                      int64_t &char_len) const
+{
+  int ret = OB_SUCCESS;
+  if (OB_ISNULL(charset_info_) || OB_ISNULL(charset_handler_)) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("Charset handler has not been initialized", K(ret), KP(charset_info_),
+             KP(charset_handler_));
+  } else if (OB_ISNULL(buf)) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("Null buffer passed in", K(ret), KP(buf));
+  } else if (buf_size <= 0) {
+    char_len = 0;
+  } else {
+    int error = 0;
+    char_len = static_cast<int64_t>(
+        charset_handler_->well_formed_len(charset_info_, buf, buf + buf_size, 1, &error));
+    if (OB_UNLIKELY(0 != error)) {
+      ret = OB_INVALID_ARGUMENT;
+      LOG_WARN("Invalid encoding found", K(ret), K(error));
+    }
+  }
+  return ret;
+}
+
+int TokenizeContext::classify_char(const char *input,
+                                   const uint8_t char_len,
+                                   ObFTCharUtil::CharType &type) const
+{
+  return ObFTCharUtil::classify_first_char(charset_type_, input, char_len, type);
+}
+
 int TokenizeContext::prepare_next_char()
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(ObCharset::first_valid_char(coll_type_,
-                                          fulltext_ + cursor_,
-                                          fulltext_len_ - cursor_,
-                                          next_char_len_))) {
+  if (OB_FAIL(first_valid_char(
+          fulltext_ + cursor_, fulltext_len_ - cursor_, next_char_len_))) {
     LOG_WARN("Failed to get first valid char, ", K(ret));
-  } else if (OB_FAIL(ObFTCharUtil::classify_first_char(coll_type_,
-                                                       fulltext_ + cursor_,
-                                                       next_char_len_,
-                                                       next_char_type_))) {
+  } else if (OB_FAIL(classify_char(
+                 fulltext_ + cursor_, next_char_len_, next_char_type_))) {
     LOG_WARN("Failed to classify first char", K(ret));
   }
   return ret;
@@ -146,6 +206,8 @@ int TokenizeContext::step_next()
 
 ObCollationType TokenizeContext::collation() const { return coll_type_; }
 
+ObCharsetType TokenizeContext::charset_type() const { return charset_type_; }
+
 int64_t TokenizeContext::get_end_cursor() const { return cursor_ + next_char_len_; }
 
 const char *TokenizeContext::fulltext() const { return fulltext_; }
@@ -159,6 +221,8 @@ bool TokenizeContext::is_last() const { return cursor_ + next_char_len_ >= fullt
 bool TokenizeContext::iter_end() const { return cursor_ >= fulltext_len_; }
 
 bool TokenizeContext::is_smart() const { return is_smart_; }
+
+bool TokenizeContext::is_results_exhaust() const { return result_idx_ >= results_.count(); }
 
 int TokenizeContext::add_token(const char *fulltext,
                                int64_t offset,
@@ -182,7 +246,7 @@ int TokenizeContext::add_token(const char *fulltext,
 TokenizeContext::~TokenizeContext()
 {
   token_list_.reset();
-  result_list_.reset();
+  results_.reset();
 }
 
 int TokenizeContext::get_next_token(const char *&word,
@@ -191,10 +255,9 @@ int TokenizeContext::get_next_token(const char *&word,
                                     int64_t &char_cnt)
 {
   int ret = OB_SUCCESS;
-  if (!result_list_.empty()) {
-    ObIKToken &token = result_list_.get_first();
-    result_list_.pop_front();
-    if (!result_list_.empty()) {
+  if (result_idx_ < results_.count()) {
+    ObIKToken &token = results_.at(result_idx_++);
+    if (result_idx_ < results_.count()) {
       if (OB_FAIL(compound(token))) {
         LOG_WARN("Failed to compound", K(ret));
       } else {
@@ -216,11 +279,11 @@ int TokenizeContext::get_next_token(const char *&word,
 int TokenizeContext::compound(ObIKToken &token)
 {
   int ret = OB_SUCCESS;
-  ObList<ObIKToken, ObIAllocator> &list = result_list_;
+  ObFastSegmentArray<ObIKToken> &list = results_;
   if (is_smart_) {
-    if (!list.empty()) {
+    if (result_idx_ < list.count()) {
       if (ObIKTokenType::IK_ARABIC_TOKEN == token.type_) {
-        ObIKToken &next = list.get_first();
+        ObIKToken &next = list.at(result_idx_);
         bool append = false;
 
         if (ObIKTokenType::IK_CNNUM_TOKEN == next.type_) {
@@ -243,12 +306,12 @@ int TokenizeContext::compound(ObIKToken &token)
           // pass
         }
         if (append) {
-          list.pop_front();
+          ++result_idx_;
         }
       }
       // There may be another round of append
-      if (OB_SUCC(ret)) {
-        ObIKToken next = list.get_first();
+      if (OB_SUCC(ret) && result_idx_ < list.count()) {
+        ObIKToken &next = list.at(result_idx_);
         bool append = false;
         if (ObIKTokenType::IK_COUNT_TOKEN == next.type_) {
           if (token.offset_ + token.length_ == next.offset_) {
@@ -258,7 +321,7 @@ int TokenizeContext::compound(ObIKToken &token)
           }
         }
         if (append) {
-          list.pop_front();
+          ++result_idx_;
         }
       }
     }

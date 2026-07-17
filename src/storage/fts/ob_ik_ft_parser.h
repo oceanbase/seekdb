@@ -18,11 +18,13 @@
 #define _OCEANBASE_STORAGE_FTS_OB_IK_FT_PARSER_H_
 
 #include "lib/allocator/ob_allocator.h"
+#include "lib/allocator/page_arena.h"
 #include "storage/fts/dict/ob_ft_cache_container.h"
 #include "storage/fts/dict/ob_ft_dict.h"
 #include "storage/fts/dict/ob_ft_dict_def.h"
+#include "storage/fts/ik/ob_ik_arbitrator.h"
 #include "storage/fts/ik/ob_ik_processor.h"
-#include "plugin/interface/ob_plugin_ftparser_intf.h"
+#include "storage/fts/ob_i_ft_parser.h"
 
 #include <cstdint>
 namespace oceanbase
@@ -31,28 +33,32 @@ namespace storage
 {
 class ObFTDictHub;
 
-class ObIKFTParser final : public plugin::ObITokenIterator
+class ObIKFTParser final : public ObIFTParser
 {
 public:
-  ObIKFTParser(ObIAllocator &allocator, ObFTDictHub *hub)
-      : allocator_(allocator),
+  ObIKFTParser(ObIAllocator &metadata_alloc, ObFTDictHub *hub)
+      : metadata_alloc_(metadata_alloc),
         is_inited_(false),
         coll_type_(ObCollationType::CS_TYPE_INVALID),
         ctx_(nullptr),
         hub_(hub),
-        segmenters_(allocator_),
-        cache_main_(allocator),
-        cache_quan_(allocator),
-        cache_stop_(allocator),
+        segmenters_(metadata_alloc_),
+        cache_main_(metadata_alloc),
+        cache_quan_(metadata_alloc),
+        cache_stop_(metadata_alloc),
         dict_main_(nullptr),
         dict_quan_(nullptr),
-        dict_stop_(nullptr)
+        dict_stop_(nullptr),
+        scratch_alloc_(),
+        arbitrator_()
   {
+    scratch_alloc_.set_attr(common::ObMemAttr("IKParserScratch"));
   }
 
   virtual ~ObIKFTParser() { reset(); }
 
   int init(const plugin::ObFTParserParam &param);
+  int reuse_parser(const char *fulltext, const int64_t fulltext_len) override;
 
   int get_next_token(const char *&word,
                      int64_t &word_len,
@@ -89,8 +95,7 @@ private:
                             ObIFTDict *&dict);
 
 private:
-  static constexpr int SEGMENT_LIMIT = 1000;
-  ObIAllocator &allocator_;
+  ObIAllocator &metadata_alloc_;
   bool is_inited_;
 
   ObCollationType coll_type_;
@@ -106,6 +111,8 @@ private:
   ObIFTDict *dict_main_;
   ObIFTDict *dict_quan_;
   ObIFTDict *dict_stop_;
+  ObArenaAllocator scratch_alloc_;
+  ObIKArbitrator arbitrator_;
 
   DISABLE_COPY_ASSIGN(ObIKFTParser);
 };

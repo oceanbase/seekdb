@@ -18,6 +18,7 @@
 #define OB_FTS_PLUGIN_HELPER_H_
 
 #include "lib/allocator/ob_fifo_allocator.h"
+#include "lib/allocator/page_arena.h"
 #include "lib/charset/ob_charset.h"
 #include "lib/string/ob_string.h"
 #include "object/ob_object.h"
@@ -36,6 +37,7 @@ namespace plugin
 {
 class ObIFTParserDesc;
 class ObPluginParam;
+class ObITokenIterator;
 }
 
 namespace storage
@@ -162,7 +164,8 @@ public:
   int init(
       common::ObIAllocator *allocator,
       const common::ObString &plugin_name,
-      const common::ObString &plugin_properties);
+      const common::ObString &plugin_properties,
+      const bool enable_parser_reuse = false);
   /**
    * Split document into multiple words
    *
@@ -209,7 +212,7 @@ public:
   TO_STRING_KV(KP_(allocator), K_(parser_name), KP_(parser_desc), K_(is_inited));
 
 private:
-  static int segment(
+  int segment(
       const ObFTParserProperty &property,
       const int64_t parser_version,
       const plugin::ObIFTParserDesc *parser_desc,
@@ -218,7 +221,9 @@ private:
       const char *fulltext,
       const int64_t fulltext_len,
       common::ObIAllocator &allocator,
-      ObAddWord &add_word);
+      ObAddWord &add_word) const;
+  bool can_reuse_parser() const;
+  void destroy_cached_parser() const;
   int set_add_word_flag(const plugin::ObIFTParserDesc &ftparser_desc);
 private:
   common::ObIAllocator *allocator_;
@@ -227,6 +232,12 @@ private:
   ObFTParser parser_name_;
   ObAddWordFlag add_word_flag_;
   ObFTParserProperty parser_property_;
+  mutable common::ObArenaAllocator parser_metadata_alloc_;
+  mutable common::ObArenaAllocator parser_scratch_alloc_;
+  mutable plugin::ObFTParserParam parser_param_;
+  mutable plugin::ObITokenIterator *cached_iter_;
+  mutable const ObCharsetInfo *cached_charset_;
+  bool enable_parser_reuse_;
   bool is_inited_;
 
 private:

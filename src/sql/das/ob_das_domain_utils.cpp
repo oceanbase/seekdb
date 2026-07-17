@@ -42,7 +42,12 @@ ObExprOperatorType ObFTIndexRowCache::FTS_INDEX_EXPR_TYPE[] = {T_FUN_SYS_WORD_SE
 ObExprOperatorType ObFTIndexRowCache::FTS_DOC_WORD_EXPR_TYPE[] = {T_FUN_SYS_DOC_ID, T_FUN_SYS_WORD_SEGMENT, T_FUN_SYS_WORD_COUNT, T_FUN_SYS_DOC_LENGTH};
 
 ObFTIndexRowCache::ObFTIndexRowCache()
-  : rows_(),
+  : merge_memctx_(nullptr),
+    row_allocator_(common::ObMemAttr("FTIndexRow")),
+    datum_row_(),
+    word_map_(),
+    words_(),
+    counts_(),
     row_idx_(0),
     is_fts_index_aux_(true),
     helper_(),
@@ -68,7 +73,13 @@ int ObFTIndexRowCache::init(
     LOG_WARN("init fulltext dml iterator twice", K(ret), K(is_inited_));
   } else if (OB_FAIL(CURRENT_CONTEXT->CREATE_CONTEXT(merge_memctx_, param))) {
     LOG_WARN("failed to create merge memctx", K(ret));
-  } else if (OB_FAIL(helper_.init(&(merge_memctx_->get_arena_allocator()), parser_name, parser_properties))) {
+  } else if (OB_FAIL(datum_row_.init(row_allocator_, 4))) {
+    LOG_WARN("failed to initialize reusable full-text row", K(ret));
+  } else if (OB_FAIL(word_map_.create(FT_WORD_MAP_BUCKET_COUNT,
+                                      common::ObMemAttr("FTWordMap")))) {
+    LOG_WARN("failed to create reusable full-text word map", K(ret));
+  } else if (OB_FAIL(helper_.init(&(merge_memctx_->get_arena_allocator()), parser_name, parser_properties,
+                                  true /* enable_parser_reuse */))) {
     LOG_WARN("fail to init full-text parser helper", K(ret));
   } else {
     row_idx_ = 0;
@@ -86,22 +97,38 @@ int ObFTIndexRowCache::segment(const common::ObObjMeta &ft_obj_meta,
                                const ObString &fulltext)
 {
   int ret = OB_SUCCESS;
+  int64_t doc_length = 0;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("ObFTIndexRowCache hasn't be initialized", K(ret), K(is_inited_));
   } else if (FALSE_IT(reuse())) {
-  } else if (OB_FAIL(ObDASDomainUtils::generate_fulltext_word_rows(merge_memctx_->get_arena_allocator(),
-                                                                   &helper_,
-                                                                   ft_obj_meta,
-                                                                   doc_id_datum,
-                                                                   fulltext,
-                                                                   is_fts_index_aux_,
-                                                                   rows_))) {
-    LOG_WARN("fail to generate fulltext word rows", K(ret), K(helper_), K(is_fts_index_aux_));
+  } else if (fulltext.empty()) {
+    ret = OB_ITER_END;
+  } else if (OB_FAIL(helper_.segment(ft_obj_meta,
+                                     fulltext.ptr(),
+                                     fulltext.length(),
+                                     doc_length,
+                                     word_map_))) {
+    LOG_WARN("fail to segment fulltext", K(ret), K(helper_), K(is_fts_index_aux_));
+  } else if (word_map_.size() <= 0) {
+    ret = OB_ITER_END;
   } else {
-    row_idx_ = 0;
+    for (ObFTWordMap::const_iterator iter = word_map_.begin();
+         OB_SUCC(ret) && iter != word_map_.end();
+         ++iter) {
+      if (OB_FAIL(words_.push_back(iter->first))) {
+        LOG_WARN("failed to cache full-text word", K(ret));
+      } else if (OB_FAIL(counts_.push_back(iter->second))) {
+        LOG_WARN("failed to cache full-text word count", K(ret));
+      }
+    }
+    if (OB_SUCC(ret)) {
+      const int64_t doc_id_idx = is_fts_index_aux_ ? 1 : 0;
+      datum_row_.storage_datums_[doc_id_idx].shallow_copy_from_datum(doc_id_datum);
+      datum_row_.storage_datums_[3].set_uint(doc_length);
+    }
   }
-  LOG_TRACE("word segment", K(ret), K(row_idx_), K(rows_.count()), K(doc_id_datum), K(fulltext));
+  LOG_TRACE("word segment", K(ret), K(row_idx_), K(words_.count()), K(doc_id_datum), K(fulltext));
   return ret;
 }
 
@@ -111,19 +138,26 @@ int ObFTIndexRowCache::get_next_row(blocksstable::ObDatumRow *&row)
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("ObFTIndexRowCache hasn't be initialized", K(ret), K(is_inited_));
-  } else if (row_idx_ >= rows_.count()) {
+  } else if (row_idx_ >= words_.count()) {
     ret = OB_ITER_END;
   } else {
-    row = (rows_[row_idx_]);
+    const int64_t word_idx = is_fts_index_aux_ ? 0 : 1;
+    datum_row_.storage_datums_[word_idx].set_datum(words_.at(row_idx_).get_word());
+    datum_row_.storage_datums_[2].set_uint(counts_.at(row_idx_));
+    row = &datum_row_;
     ++row_idx_;
   }
-  LOG_TRACE("get next row", K(ret), KPC(row), K(row_idx_), K(rows_.count()));
+  LOG_TRACE("get next row", K(ret), KPC(row), K(row_idx_), K(words_.count()));
   return ret;
 }
 
 void ObFTIndexRowCache::reset()
 {
-  rows_.reset();
+  words_.reset();
+  counts_.reset();
+  word_map_.destroy();
+  datum_row_.reset();
+  row_allocator_.reset();
   row_idx_ = 0;
   is_fts_index_aux_ = true;
   helper_.reset();
@@ -136,7 +170,9 @@ void ObFTIndexRowCache::reset()
 
 void ObFTIndexRowCache::reuse()
 {
-  rows_.reuse();
+  words_.reuse();
+  counts_.reuse();
+  word_map_.reuse();
   row_idx_ = 0;
   if (OB_NOT_NULL(merge_memctx_)) {
     merge_memctx_->reset_remain_one_page();
@@ -947,7 +983,8 @@ int ObFTDMLIterator::rewind()
         // This is the same as the parser name of the previous index.
         // nothing to do, just skip.
       } else if (FALSE_IT(ft_parse_helper_.reset())) {
-      } else if (OB_FAIL(ft_parse_helper_.init(&allocator_, parser_str, parser_property_str))) {
+      } else if (OB_FAIL(ft_parse_helper_.init(&allocator_, parser_str, parser_property_str,
+                                               true /* enable_parser_reuse */))) {
         LOG_WARN("fail to init fulltext parse helper", K(ret), K(parser_str), K(parser_property_str));
       }
     } else if (ObDomainDMLMode::DOMAIN_DML_MODE_FT_SCAN == mode_) {
@@ -981,7 +1018,8 @@ int ObFTDMLIterator::init(
   } else {
     switch (mode_) {
       case ObDomainDMLMode::DOMAIN_DML_MODE_DEFAULT: {
-        if (OB_FAIL(ft_parse_helper_.init(&allocator_, parser_name, parser_properties))) {
+        if (OB_FAIL(ft_parse_helper_.init(&allocator_, parser_name, parser_properties,
+                                          true /* enable_parser_reuse */))) {
           LOG_WARN("fail to init fulltext parse helper", K(ret), K(parser_name), K(parser_properties));
         }
         break;
@@ -1043,7 +1081,8 @@ int ObFTDMLIterator::change_domain_dml_mode(const ObDomainDMLMode &mode)
           // This is the same as the parser name of the previous index.
           // nothing to do, just skip.
         } else if (FALSE_IT(ft_parse_helper_.reset())) {
-        } else if (OB_FAIL(ft_parse_helper_.init(&allocator_, parser_str, parser_property_str))) {
+        } else if (OB_FAIL(ft_parse_helper_.init(&allocator_, parser_str, parser_property_str,
+                                                 true /* enable_parser_reuse */))) {
           LOG_WARN("fail to init fulltext parse helper", K(ret), K(parser_str), K(parser_property_str));
         }
         break;

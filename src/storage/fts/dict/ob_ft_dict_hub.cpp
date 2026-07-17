@@ -32,6 +32,7 @@ int ObFTDictHub::init()
 {
   static constexpr int K_MAX_DICT_BUCKET = 128; // for now, only built-in dicts.
   int ret = OB_SUCCESS;
+  ATOMIC_STORE(&generation_epoch_, 0);
   if (OB_FAIL(dict_map_.create(K_MAX_DICT_BUCKET, "dict_map"))) {
     LOG_WARN("init dict map failed", K(ret));
   } else if (OB_FAIL(rw_dict_lock_.init(K_MAX_DICT_BUCKET))) {
@@ -83,6 +84,8 @@ int ObFTDictHub::build_cache(const ObFTDictDesc &desc, ObFTCacheRangeContainer &
         } else if (FALSE_IT(info.range_count_ = container.get_handles().size())) {
         } else if (OB_FAIL(put_dict_info(key, info))) {
           LOG_WARN("Failed to put dict info", K(ret));
+        } else {
+          ATOMIC_INC(&generation_epoch_);
         }
       }
     }
