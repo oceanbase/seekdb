@@ -29,6 +29,60 @@ namespace oceanbase
 namespace storage
 {
 
+namespace
+{
+
+// FTS next-stage optimization (reference d325f95): the built-in stop-word
+// list is entirely ASCII. Resolve normalized ASCII tokens directly and avoid
+// constructing ObFTWord/hash metadata on the per-token hot path.
+bool is_ascii_stopword(const ObString &word, bool &is_ascii)
+{
+  is_ascii = true;
+  for (int64_t i = 0; is_ascii && i < word.length(); ++i) {
+    is_ascii = static_cast<unsigned char>(word.ptr()[i]) < 0x80;
+  }
+
+  bool is_stopword = false;
+  if (is_ascii) {
+    switch (word.length()) {
+      case 1:
+        is_stopword = 0 == word.case_compare("a") || 0 == word.case_compare("i");
+        break;
+      case 2:
+        is_stopword = 0 == word.case_compare("an") || 0 == word.case_compare("as")
+            || 0 == word.case_compare("at") || 0 == word.case_compare("be")
+            || 0 == word.case_compare("by") || 0 == word.case_compare("de")
+            || 0 == word.case_compare("en") || 0 == word.case_compare("in")
+            || 0 == word.case_compare("is") || 0 == word.case_compare("it")
+            || 0 == word.case_compare("la") || 0 == word.case_compare("of")
+            || 0 == word.case_compare("on") || 0 == word.case_compare("or")
+            || 0 == word.case_compare("to");
+        break;
+      case 3:
+        is_stopword = 0 == word.case_compare("are") || 0 == word.case_compare("com")
+            || 0 == word.case_compare("for") || 0 == word.case_compare("how")
+            || 0 == word.case_compare("the") || 0 == word.case_compare("und")
+            || 0 == word.case_compare("was") || 0 == word.case_compare("who")
+            || 0 == word.case_compare("www");
+        break;
+      case 4:
+        is_stopword = 0 == word.case_compare("from") || 0 == word.case_compare("that")
+            || 0 == word.case_compare("this") || 0 == word.case_compare("what")
+            || 0 == word.case_compare("when") || 0 == word.case_compare("will")
+            || 0 == word.case_compare("with");
+        break;
+      case 5:
+        is_stopword = 0 == word.case_compare("about") || 0 == word.case_compare("where");
+        break;
+      default:
+        break;
+    }
+  }
+  return is_stopword;
+}
+
+} // namespace
+
 ////////////////////////////////////////////////////////////////////////////////
 // class ObStopWordChecker
 ObStopWordChecker::~ObStopWordChecker()
@@ -78,33 +132,42 @@ void ObStopWordChecker::destroy()
 int ObStopWordChecker::check_stopword(const ObFTWord &word, bool &is_stopword)
 {
   int ret = OB_SUCCESS;
+  is_stopword = false;
   if (OB_UNLIKELY(!inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("ObStopWordChecker hasn't been initialized", K(ret), K(inited_));
   } else if (OB_UNLIKELY(word.empty())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("word is empty", K(ret), K(word));
-  } else if (word.get_collation_type() == stopword_type_.get_collation_type()) {
+  } else {
+    const ObString src_str = word.get_word().get_string();
+    bool is_ascii = false;
+    if (is_ascii_stopword(src_str, is_ascii)) {
+      is_stopword = true;
+    } else if (is_ascii) {
+      // All built-in stop words are ASCII; no hash-table lookup is needed.
+    } else if (word.get_collation_type() == stopword_type_.get_collation_type()) {
     // FTS index hot-path optimization: most indexed UTF8 words already use
     // the stop-word set collation. Avoid constructing an arena and invoking
     // charset conversion for every token in that common case.
-    if (OB_FAIL(check_stopword_set(word, is_stopword))) {
-      LOG_WARN("fail to check stop word set", K(ret), K(word));
-    }
-  } else {
-    common::ObArenaAllocator allocator(lib::ObMemAttr("ChkStopWord"));
-    common::ObString cmp_str;
-    if (OB_FAIL(common::ObCharset::charset_convert(
-                                       allocator,
-                                       word.get_word().get_string(),
-                                       word.get_collation_type(),
-                                       stopword_type_.get_collation_type(),
-                                       cmp_str))) {
-      LOG_WARN("fail to convert charset", K(ret), K(word), K(stopword_type_));
+      if (OB_FAIL(check_stopword_set(word, is_stopword))) {
+        LOG_WARN("fail to check stop word set", K(ret), K(word));
+      }
     } else {
-      ObFTWord converted(cmp_str.length(), cmp_str.ptr(), stopword_type_);
-      if (OB_FAIL(check_stopword_set(converted, is_stopword))) {
-        LOG_WARN("fail to check converted stop word", K(ret), K(word), K(converted));
+      common::ObArenaAllocator allocator(lib::ObMemAttr("ChkStopWord"));
+      common::ObString cmp_str;
+      if (OB_FAIL(common::ObCharset::charset_convert(
+                                         allocator,
+                                         src_str,
+                                         word.get_collation_type(),
+                                         stopword_type_.get_collation_type(),
+                                         cmp_str))) {
+        LOG_WARN("fail to convert charset", K(ret), K(word), K(stopword_type_));
+      } else {
+        ObFTWord converted(cmp_str.length(), cmp_str.ptr(), stopword_type_);
+        if (OB_FAIL(check_stopword_set(converted, is_stopword))) {
+          LOG_WARN("fail to check converted stop word", K(ret), K(word), K(converted));
+        }
       }
     }
   }
@@ -131,6 +194,19 @@ int ObStopWordChecker::check_stopword_set(const ObFTWord &word, bool &is_stopwor
 
 ////////////////////////////////////////////////////////////////////////////////
 // class ObAddWord
+
+// FTS next-stage optimization (Op6): update an existing token's frequency in
+// the same bucket probe used to find it.
+struct ObUpdateFTWordCountOp
+{
+  explicit ObUpdateFTWordCountOp(const int64_t word_freq) : word_freq_(word_freq) {}
+  void operator()(common::hash::HashMapPair<ObFTWord, int64_t> &entry)
+  {
+    entry.second += word_freq_;
+  }
+  int64_t word_freq_;
+};
+
 ObAddWord::ObAddWord(
     const ObFTParserProperty &property,
     const ObObjMeta &meta,
@@ -231,7 +307,6 @@ int ObAddWord::check_stopword(const ObFTWord &ft_word, bool &is_stopword)
 int ObAddWord::groupby_word(const ObFTWord &word, const int64_t word_freq)
 {
   int ret = OB_SUCCESS;
-  int64_t word_count = 0;
   if (OB_UNLIKELY(word.empty() || word_freq <= 0)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", K(ret), K(word), K(word_freq));
@@ -239,16 +314,12 @@ int ObAddWord::groupby_word(const ObFTWord &word, const int64_t word_freq)
     if (OB_FAIL(word_map_.set_refactored(word, 1/*word count*/))) {
       LOG_WARN("fail to set fulltext word and count", K(ret), K(word));
     }
-  } else if (OB_FAIL(word_map_.get_refactored(word, word_count)) && OB_HASH_NOT_EXIST != ret) {
-    LOG_WARN("fail to get fulltext word", K(ret), K(word));
   } else {
-    if (OB_HASH_NOT_EXIST == ret) {
-      word_count = 1;
-    } else {
-      word_count += word_freq;
-    }
-    if (OB_FAIL(word_map_.set_refactored(word, word_count, 1/*overwrite*/))) {
-      LOG_WARN("fail to set fulltext word and count", K(ret), K(word), K(word_count));
+    // FTS next-stage optimization (Op6): insert a new token or accumulate an
+    // existing one without a separate get + overwrite traversal.
+    ObUpdateFTWordCountOp update_op(word_freq);
+    if (OB_FAIL(word_map_.set_or_update(word, 1/*initial count*/, update_op))) {
+      LOG_WARN("fail to set or update fulltext word count", K(ret), K(word), K(word_freq));
     }
   }
   return ret;

@@ -25,7 +25,8 @@ namespace oceanbase
 {
 namespace storage
 {
-int ObFTSortList::add_token(const ObIKToken &token)
+template <typename ListType>
+int ObFTSortListBase<ListType>::add_token(const ObIKToken &token)
 {
   int ret = OB_SUCCESS;
 
@@ -49,7 +50,8 @@ int ObFTSortList::add_token(const ObIKToken &token)
         LOG_WARN("fail to push front token", K(ret));
       }
     } else {
-      for (ObFTSortList::CellIter iter = tokens_.last(); OB_SUCC(ret) && iter != tokens_.end();
+      for (typename ObFTSortListBase<ListType>::CellIter iter = tokens_.last();
+           OB_SUCC(ret) && iter != tokens_.end();
            --iter) {
         const int cmp = token.compare(*iter);
         if (cmp < 0) {
@@ -169,7 +171,7 @@ int ObIKTokenChain::copy(ObIKTokenChain *other)
     min_offset_ = other->min_offset_;
     max_offset_ = other->max_offset_;
     payload_ = other->payload_;
-    ObFTSortList::CellIter iter = other->list().tokens().begin();
+    ObFTLightSortList::CellIter iter = other->list().tokens().begin();
 
     for (; OB_SUCC(ret) && iter != other->list().tokens().end(); ++iter) {
       bool added = false;
@@ -222,19 +224,31 @@ int ObIKTokenChain::pop_back(ObIKToken &token)
   return ret;
 }
 
-int64_t ObFTSortList::max()
+template <typename ListType>
+int64_t ObFTSortListBase<ListType>::max()
 {
   if (tokens_.empty()) {
     return 0;
   }
   return tokens_.get_last().offset_ + tokens_.get_last().length_;
 }
-int64_t ObFTSortList::min()
+template <typename ListType>
+int64_t ObFTSortListBase<ListType>::min()
 {
   if (tokens_.empty()) {
     return 0;
   }
   return tokens_.get_first().offset_;
 }
+
+// Keep template implementation out of the header while explicitly covering
+// both storage policies used by IK.
+template int ObFTSortListBase<ObList<ObIKToken, ObIAllocator>>::add_token(const ObIKToken &);
+template int64_t ObFTSortListBase<ObList<ObIKToken, ObIAllocator>>::max();
+template int64_t ObFTSortListBase<ObList<ObIKToken, ObIAllocator>>::min();
+template int ObFTSortListBase<ObFastList<ObIKToken, IK_TOKEN_BLOCK_CAPACITY>>::add_token(
+    const ObIKToken &);
+template int64_t ObFTSortListBase<ObFastList<ObIKToken, IK_TOKEN_BLOCK_CAPACITY>>::max();
+template int64_t ObFTSortListBase<ObFastList<ObIKToken, IK_TOKEN_BLOCK_CAPACITY>>::min();
 } //  namespace storage
 } //  namespace oceanbase

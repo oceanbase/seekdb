@@ -135,11 +135,34 @@ int ObIKFTParser::get_next_token(const char *&word,
   return ret;
 }
 
+int ObIKFTParser::reuse_parser(const char *fulltext, const int64_t fulltext_len)
+{
+  int ret = OB_SUCCESS;
+  if (OB_UNLIKELY(!is_inited_)) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("IK parser has not been initialized", K(ret));
+  } else if (OB_ISNULL(fulltext) || fulltext_len <= 0) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid fulltext for IK parser reuse", K(ret), KP(fulltext), K(fulltext_len));
+  } else if (OB_FAIL(arb_.reuse())) {
+    LOG_WARN("failed to clear IK arbitrator for reuse", K(ret));
+  } else if (OB_FAIL(ctx_->reuse_context(fulltext, fulltext_len))) {
+    LOG_WARN("failed to reuse IK tokenize context", K(ret));
+  } else {
+    for (ObList<ObIIKProcessor *, ObIAllocator>::iterator iter = segmenters_.begin();
+         iter != segmenters_.end();
+         ++iter) {
+      (*iter)->reuse();
+    }
+  }
+  return ret;
+}
+
 int ObIKFTParser::produce()
 {
   int ret = OB_SUCCESS;
   // Loop until end or has data to output
-  while (OB_SUCC(ret) && ctx_->result_list().empty() && !ctx_->iter_end()) {
+  while (OB_SUCC(ret) && ctx_->is_results_exhaust() && !ctx_->iter_end()) {
     if (OB_FAIL(process_next_batch())) {
       if (OB_ITER_END == ret) {
         // ok
@@ -182,14 +205,13 @@ int ObIKFTParser::process_next_batch()
   if (ctx_->iter_end()) {
     ret = OB_ITER_END;
   } else {
+    ctx_->mark_batch_start();
     while (OB_SUCC(ret) && !do_seg && !ctx_->iter_end()) {
       const char *ch;
       uint8_t char_len = 0;
       ObFTCharUtil::CharType type = ObFTCharUtil::CharType::USELESS;
-      if (OB_FAIL(ctx_->current_char(ch, char_len))) {
-        LOG_WARN("Failed to get current char", K(ret));
-      } else if (OB_FAIL(ctx_->current_char_type(type))) {
-        LOG_WARN("Failed to get current char type", K(ret));
+      if (OB_FAIL(ctx_->current_char_and_type(ch, char_len, type))) {
+        LOG_WARN("Failed to get current char and type", K(ret));
       } else if (OB_FAIL(process_one_char(*ctx_, ch, char_len, type))) {
         LOG_WARN("Failed to process one char", K(ret));
       } else {
@@ -209,11 +231,15 @@ int ObIKFTParser::process_next_batch()
     }
 
     if (OB_SUCC(ret) || OB_ITER_END == ret) {
-      ObIKArbitrator arb;
-      if (OB_FAIL(arb.process(*ctx_))) {
+      if (OB_FAIL(arb_.process(*ctx_))) {
         LOG_WARN("Failed to process arbitrator", K(ret));
-      } else if (OB_FAIL(arb.output_result(*ctx_))) {
+      } else if (OB_FAIL(arb_.output_result(*ctx_))) {
         LOG_WARN("Failed to make result list");
+      }
+      const int reuse_ret = arb_.reuse();
+      if (OB_SUCCESS == ret && OB_SUCCESS != reuse_ret) {
+        ret = reuse_ret;
+        LOG_WARN("failed to reuse IK arbitrator", K(ret));
       }
     } else {
       // Already logged.
@@ -240,15 +266,21 @@ int ObIKFTParserDesc::segment(ObFTParserParam *param, ObITokenIterator *&iter) c
   int ret = OB_SUCCESS;
   ObIKFTParser *parser = nullptr;
   ObFTDictHub *hub = nullptr;
+  ObIAllocator *metadata_allocator = OB_NOT_NULL(param) && OB_NOT_NULL(param->metadata_allocator_)
+      ? param->metadata_allocator_ : (OB_NOT_NULL(param) ? param->allocator_ : nullptr);
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("default ft parser desc hasn't be initialized", K(ret), K(is_inited_));
   } else if (OB_ISNULL(param) || OB_UNLIKELY(!param->is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), KPC(param));
+  } else if (OB_ISNULL(metadata_allocator)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("IK parser metadata allocator is null", K(ret));
   } else if (OB_FAIL(ObFTParsePluginData::instance().get_dict_hub(hub))) {
     LOG_WARN("Failed to get dict hub.", K(ret));
-  } else if (OB_ISNULL(parser = OB_NEWx(ObIKFTParser, param->allocator_, *(param->allocator_), hub))) {
+  } else if (OB_ISNULL(parser = OB_NEWx(ObIKFTParser, metadata_allocator,
+                                        *metadata_allocator, hub))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("fail to allocate ik ft parser", K(ret));
   } else if (OB_FAIL(parser->init(*param))) {
@@ -257,8 +289,8 @@ int ObIKFTParserDesc::segment(ObFTParserParam *param, ObITokenIterator *&iter) c
     iter = parser;
   }
 
-  if (OB_FAIL(ret)) {
-    OB_DELETEx(ObIKFTParser, param->allocator_, parser);
+  if (OB_FAIL(ret) && OB_NOT_NULL(metadata_allocator)) {
+    OB_DELETEx(ObIKFTParser, metadata_allocator, parser);
   }
 
   return ret;
@@ -267,8 +299,15 @@ int ObIKFTParserDesc::segment(ObFTParserParam *param, ObITokenIterator *&iter) c
 void ObIKFTParserDesc::free_token_iter(ObFTParserParam *param,
                                        ObITokenIterator *&iter) const
 {
-  iter->~ObITokenIterator();
-  param->allocator_->free(iter);
+  if (OB_NOT_NULL(iter)) {
+    abort_unless(nullptr != param);
+    ObIAllocator *metadata_allocator = OB_NOT_NULL(param->metadata_allocator_)
+        ? param->metadata_allocator_ : param->allocator_;
+    abort_unless(nullptr != metadata_allocator);
+    iter->~ObITokenIterator();
+    metadata_allocator->free(iter);
+    iter = nullptr;
+  }
 }
 
 

@@ -21,6 +21,7 @@
 #include "storage/fts/dict/ob_ft_cache_container.h"
 #include "storage/fts/dict/ob_ft_dict.h"
 #include "storage/fts/dict/ob_ft_dict_def.h"
+#include "storage/fts/ik/ob_ik_arbitrator.h"
 #include "storage/fts/ik/ob_ik_processor.h"
 #include "plugin/interface/ob_plugin_ftparser_intf.h"
 
@@ -41,6 +42,7 @@ public:
         ctx_(nullptr),
         hub_(hub),
         segmenters_(allocator_),
+        arb_(),
         cache_main_(allocator),
         cache_quan_(allocator),
         dict_main_(nullptr),
@@ -56,6 +58,10 @@ public:
                      int64_t &word_len,
                      int64_t &char_cnt,
                      int64_t &word_freq) override;
+
+  // FTS next-stage optimization (Op2): keep dictionaries and processor
+  // objects hot while switching only the document-specific state.
+  int reuse_parser(const char *fulltext, const int64_t fulltext_len) override;
 
   VIRTUAL_TO_STRING_KV(K(is_inited_));
 
@@ -95,6 +101,9 @@ private:
   TokenizeContext *ctx_;
   ObFTDictHub *hub_;
   ObList<ObIIKProcessor *, ObIAllocator> segmenters_;
+
+  // Reuse arbitration buckets and arena pages across IK batches/documents.
+  ObIKArbitrator arb_;
 
   // For now there's no change of dict in one query, so we can pin dict this level.
   ObFTCacheRangeContainer cache_main_;
