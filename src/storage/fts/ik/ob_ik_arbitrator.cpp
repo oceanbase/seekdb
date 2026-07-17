@@ -325,10 +325,40 @@ int ObIKArbitrator::prepare(TokenizeContext &ctx)
 {
   int ret = OB_SUCCESS;
 
-  int cal_bucket_num = MAX(ctx.fulltext_len() / 100, 10);
-  cal_bucket_num = MIN(cal_bucket_num, 100);
-  if (OB_FAIL(chains_.create(cal_bucket_num, ObMemAttr("IK ARBITRATE")))) {
-    LOG_WARN("create chain map failed", K(ret));
+  // Idempotent: only allocate the bucket array on the first call. Reuse()
+  // may be invoked many times against the same map across batches.
+  if (!chains_.created()) {
+    int cal_bucket_num = MAX(ctx.fulltext_len() / 100, 10);
+    cal_bucket_num = MIN(cal_bucket_num, 100);
+    if (OB_FAIL(chains_.create(cal_bucket_num, ObMemAttr("IK ARBITRATE")))) {
+      LOG_WARN("create chain map failed", K(ret));
+    }
+  }
+  return ret;
+}
+
+int ObIKArbitrator::reuse(TokenizeContext &ctx)
+{
+  int ret = OB_SUCCESS;
+
+  // Clear chain map entries first: chains_ holds raw pointers into alloc_,
+  // so we must drop those references before recycling the arena below.
+  if (chains_.created()) {
+    if (OB_FAIL(chains_.reuse())) {
+      LOG_WARN("Failed to clear arbitrator chains", K(ret));
+    }
+  }
+
+  // Reset the arena allocator — every ObIKTokenChain allocated in the
+  // previous batch is freed in one shot.
+  if (OB_SUCC(ret)) {
+    alloc_.reset();
+  }
+
+  // Ensure the map is sized appropriately for the new batch (no-op after
+  // the first call thanks to the created() guard in prepare()).
+  if (OB_SUCC(ret) && OB_FAIL(prepare(ctx))) {
+    LOG_WARN("Failed to prepare arbitrator on reuse", K(ret));
   }
   return ret;
 }

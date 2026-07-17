@@ -21,6 +21,7 @@
 #include "storage/fts/dict/ob_ft_cache_container.h"
 #include "storage/fts/dict/ob_ft_dict.h"
 #include "storage/fts/dict/ob_ft_dict_def.h"
+#include "storage/fts/ik/ob_ik_arbitrator.h"
 #include "storage/fts/ik/ob_ik_processor.h"
 #include "plugin/interface/ob_plugin_ftparser_intf.h"
 
@@ -46,7 +47,8 @@ public:
         cache_stop_(allocator),
         dict_main_(nullptr),
         dict_quan_(nullptr),
-        dict_stop_(nullptr)
+        dict_stop_(nullptr),
+        arbitrator_()
   {
   }
 
@@ -111,6 +113,12 @@ private:
   ObIFTDict *dict_main_;
   ObIFTDict *dict_quan_;
   ObIFTDict *dict_stop_;
+
+  // Persistent arbitrator: its chain map and arena allocator survive across
+  // batches, and are reset by reuse() instead of being torn down and rebuilt
+  // for every batch. Saves an ObHashMap create/destroy per batch (~1000 batches
+  // per document on long texts).
+  ObIKArbitrator arbitrator_;
 
   DISABLE_COPY_ASSIGN(ObIKFTParser);
 };

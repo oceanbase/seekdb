@@ -194,10 +194,14 @@ int ObIKFTParser::process_next_batch()
     }
 
     if (OB_SUCC(ret) || OB_ITER_END == ret) {
-      ObIKArbitrator arb;
-      if (OB_FAIL(arb.process(*ctx_))) {
+      // arbitrator_ is a persistent member of this parser; reuse() resets
+      // its chain map and arena allocator in place rather than rebuilding
+      // the hashmap for every batch.
+      if (OB_FAIL(arbitrator_.reuse(*ctx_))) {
+        LOG_WARN("Failed to reuse arbitrator", K(ret));
+      } else if (OB_FAIL(arbitrator_.process(*ctx_))) {
         LOG_WARN("Failed to process arbitrator", K(ret));
-      } else if (OB_FAIL(arb.output_result(*ctx_))) {
+      } else if (OB_FAIL(arbitrator_.output_result(*ctx_))) {
         LOG_WARN("Failed to make result list");
       }
     } else {
