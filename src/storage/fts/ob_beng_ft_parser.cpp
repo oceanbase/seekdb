@@ -68,6 +68,29 @@ int ObBEngFTParser::get_next_token(
   return ret;
 }
 
+// Task4 Op2：保留 analyzer 实例并为新文档重新创建 token stream。
+int ObBEngFTParser::reuse_parser(const char *fulltext, const int64_t fulltext_len)
+{
+  int ret = OB_SUCCESS;
+  if (OB_UNLIKELY(!is_inited_)) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("basic english parser has not been initialized", K(ret));
+  } else if (OB_UNLIKELY(nullptr == fulltext || fulltext_len <= 0)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("Invalid fulltext for basic english parser reuse", K(ret), KP(fulltext), K(fulltext_len));
+  } else {
+    doc_.set_string(fulltext, fulltext_len);
+    token_stream_ = nullptr;
+    if (OB_FAIL(segment(doc_, token_stream_))) {
+      LOG_WARN("Failed to analyze reused english document", K(ret));
+    } else if (OB_ISNULL(token_stream_)) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("Reused english token stream is null", K(ret));
+    }
+  }
+  return ret;
+}
+
 int ObBEngFTParser::init(ObFTParserParam *param)
 {
   int ret = OB_SUCCESS;

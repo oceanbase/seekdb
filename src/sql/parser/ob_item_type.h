@@ -1057,6 +1057,8 @@ typedef enum ObItemType
   T_FUN_SYS_AI_RERANK = 2084,
   T_FUN_MD5_CNN_WS = 2085,
   T_FUN_SYS_BUCKET = 2086,
+  // Task2: LOAD_FILE 系统函数表达式编号。
+  T_FUN_SYS_LOAD_FILE = 2087,
   T_MAX_OP = 3000,
 
   //pseudo column, to mark the group iterator id
@@ -2732,6 +2734,7 @@ typedef enum ObItemType
   // parser config: ik_mode
   T_IK_MODE = 4800,
   T_DML_PARALLEL = 4801,
+  T_FULLTEXT_DICT = 4808,
 
   //pl dbms scheduler calendar
   T_SCHED_CALENDAR = 4802,
@@ -2782,6 +2785,7 @@ typedef enum ObItemType
   T_DYNAMIC_PARTITION_BIGINT_PRECISION = 4839,
 
   T_DATABASE_FACTOR = 4840,
+  T_REFRESH_FULLTEXT_DICT = 4920, // Task3: 刷新全文索引自定义词典。
   T_IGNORE_LAST_EMPTY_COLUMN = 4841,
   T_LOG_ERROR_LIMIT = 4842,
   T_LOG_ERROR_UNLIMITED = 4843,
@@ -2881,6 +2885,7 @@ typedef enum ObItemType
   T_FORK_DATABASE = 4917,
   T_DIFF_TABLE = 4918,
   T_MERGE_TABLE = 4919,
+  T_AI_SPLIT_DOCUMENT_EXPRESSION = 4921, // Task2: 避免与 Task3 词典刷新类型冲突。
   T_MAX //Attention: add a new type before T_MAX
 } ObItemType;
 

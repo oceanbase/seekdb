@@ -3251,6 +3251,16 @@ int ObDMLResolver::resolve_table(const ParseNode &parse_tree,
         }
         break;
       }
+      // Task2: 将 FROM 中的文档切分语法节点交给专用解析函数。
+      case T_AI_SPLIT_DOCUMENT_EXPRESSION: {
+        if (OB_ISNULL(session_info_)) {
+          ret = OB_INVALID_ARGUMENT;
+          LOG_WARN("invalid argument", K(ret));
+        } else if (OB_FAIL(resolve_ai_split_document_item(*table_node, table_item))) {
+          LOG_WARN("failed to resolve ai_split_document item", K(ret));
+        }
+        break;
+      }
       case T_HYBRID_SEARCH_EXPRESSION: {
         if (OB_ISNULL(session_info_)) {
           ret = OB_INVALID_ARGUMENT;
@@ -4300,6 +4310,71 @@ int ObDMLResolver::resolve_unnest_item(const ParseNode &parse_tree, TableItem *&
 
   return ret;
 }
+// Task2: 解析文档内容和可选 JSON 参数，并建立固定输出列。
+int ObDMLResolver::resolve_ai_split_document_item(const ParseNode &parse_tree,
+                                                  TableItem *&tbl_item)
+{
+  int ret = OB_SUCCESS;
+  TableItem *item = NULL;
+  ParseNode *expr_list = NULL;
+  ParseNode *alias_node = NULL;
+  ObString table_name("ai_split_document");
+
+  // Task2: AI_SPLIT_DOCUMENT 接受 content 和可选的 parameters 两个表达式。
+  if (T_AI_SPLIT_DOCUMENT_EXPRESSION != parse_tree.type_ || 2 != parse_tree.num_child_) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected ai_split_document parse tree", K(ret), K(parse_tree.type_),
+             K(parse_tree.num_child_));
+  } else if (OB_ISNULL(expr_list = parse_tree.children_[0]) ||
+             T_EXPR_LIST != expr_list->type_) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected ai_split_document argument list", K(ret));
+  } else if (expr_list->num_child_ < 1 || expr_list->num_child_ > 2) {
+    ret = OB_ERR_PARAM_SIZE;
+    const ObString func_name("AI_SPLIT_DOCUMENT");
+    LOG_USER_ERROR(OB_ERR_PARAM_SIZE, func_name.length(), func_name.ptr());
+  } else if (OB_NOT_NULL(alias_node = parse_tree.children_[1])) {
+    table_name.assign_ptr(alias_node->str_value_, alias_node->str_len_);
+  }
+
+  // Task2: 参数表达式保存在 doc_exprs_ 中，运行时切分器会按原顺序读取。
+  for (int64_t i = 0; OB_SUCC(ret) && i < expr_list->num_child_; ++i) {
+    ObRawExpr *arg_expr = NULL;
+    if (OB_FAIL(resolve_sql_expr(*expr_list->children_[i], arg_expr))) {
+      LOG_WARN("failed to resolve ai_split_document argument", K(ret), K(i));
+    } else if (OB_ISNULL(arg_expr)) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("ai_split_document argument is null", K(ret), K(i));
+    } else if (OB_FAIL(arg_expr->deduce_type(session_info_))) {
+      LOG_WARN("failed to deduce ai_split_document argument type", K(ret), K(i));
+    } else if (OB_ISNULL(item) &&
+               OB_FAIL(create_unnest_table_item(item, parse_tree.type_, table_name))) {
+      LOG_WARN("failed to create ai_split_document table item", K(ret));
+    } else if (OB_FAIL(item->json_table_def_->doc_exprs_.push_back(arg_expr))) {
+      LOG_WARN("failed to store ai_split_document argument", K(ret), K(i));
+    }
+  }
+
+  // Task2: 输出列顺序是公开接口的一部分，不允许根据查询投影动态改变。
+  if (OB_SUCC(ret) &&
+      OB_FAIL(ai_split_document_add_column(item, ObString("chunk_id"), false))) {
+    LOG_WARN("failed to add chunk_id column", K(ret));
+  } else if (OB_SUCC(ret) &&
+             OB_FAIL(ai_split_document_add_column(item, ObString("chunk_offset"), false))) {
+    LOG_WARN("failed to add chunk_offset column", K(ret));
+  } else if (OB_SUCC(ret) &&
+             OB_FAIL(ai_split_document_add_column(item, ObString("chunk_length"), false))) {
+    LOG_WARN("failed to add chunk_length column", K(ret));
+  } else if (OB_SUCC(ret) &&
+             OB_FAIL(ai_split_document_add_column(item, ObString("chunk_text"), true))) {
+    LOG_WARN("failed to add chunk_text column", K(ret));
+  }
+
+  if (OB_SUCC(ret)) {
+    tbl_item = item;
+  }
+  return ret;
+}
 
 int ObDMLResolver::create_rb_iterate_table_item(TableItem *&table_item, ObString alias_name)
 {
@@ -4405,6 +4480,9 @@ int ObDMLResolver::create_unnest_table_item(TableItem *&table_item, ObItemType i
       table_def->table_type_ = MulModeTableType::OB_RB_ITERATE_TABLE_TYPE;
     } else if (item_type == T_UNNEST_EXPRESSION) {
       table_def->table_type_ = MulModeTableType::OB_UNNEST_TABLE_TYPE;
+    // Task2: 为文档切分复用多模态表定义，并设置独立类型。
+    } else if (item_type == T_AI_SPLIT_DOCUMENT_EXPRESSION) {
+      table_def->table_type_ = MulModeTableType::OB_AI_SPLIT_DOCUMENT_TABLE_TYPE;
     } else {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected item_type", K(ret), K(item_type));
@@ -4597,6 +4675,56 @@ int ObDMLResolver::unnest_table_add_column(TableItem *&table_item, ColumnItem *&
 
   return ret;
 }
+// Task2: 创建 chunk_id、chunk_offset、chunk_length 和 chunk_text 的列定义。
+int ObDMLResolver::ai_split_document_add_column(TableItem *&table_item,
+                                                const ObString &col_name,
+                                                const bool is_text_column)
+{
+  int ret = OB_SUCCESS;
+  ObDmlJtColDef *col_def = NULL;
+  ColumnItem *col_item = NULL;
+  ObDataType data_type;
+  const int64_t col_id = table_item->json_table_def_->all_cols_.count();
+
+  if (OB_ISNULL(col_def = static_cast<ObDmlJtColDef *>(
+                    allocator_->alloc(sizeof(ObDmlJtColDef))))) {
+    ret = OB_ALLOCATE_MEMORY_FAILED;
+    LOG_WARN("failed to allocate ai_split_document column", K(ret));
+  } else {
+    col_def = new (col_def) ObDmlJtColDef();
+    col_def->col_base_info_.col_name_ = col_name;
+    col_def->col_base_info_.col_type_ = COL_TYPE_AI_SPLIT_DOCUMENT;
+    col_def->col_base_info_.parent_id_ = 0;
+    col_def->col_base_info_.id_ = col_id;
+    col_def->col_base_info_.output_column_idx_ = col_id;
+  }
+
+  if (OB_SUCC(ret) && is_text_column) {
+    // Task2: chunk_text使用连接字符集，最大长度与普通VARCHAR保持一致
+    data_type.set_obj_type(ObVarcharType);
+    data_type.set_collation_level(CS_LEVEL_IMPLICIT);
+    data_type.set_collation_type(session_info_->get_local_collation_connection());
+    data_type.set_length(OB_MAX_VARCHAR_LENGTH);
+  } else if (OB_SUCC(ret)) {
+    data_type.set_int();
+    data_type.set_accuracy(ObAccuracy::DDL_DEFAULT_ACCURACY[ObIntType]);
+  }
+
+  if (OB_SUCC(ret)) {
+    col_def->col_base_info_.data_type_ = data_type;
+    if (OB_FAIL(generate_json_table_output_column_item(
+            table_item, data_type, col_name, col_id, col_item))) {
+      LOG_WARN("failed to generate ai_split_document output column", K(ret), K(col_name));
+    } else if (OB_FALSE_IT(col_item->col_idx_ =
+                              table_item->json_table_def_->all_cols_.count())) {
+    } else if (OB_FAIL(table_item->json_table_def_->all_cols_.push_back(
+                   &col_def->col_base_info_))) {
+      LOG_WARN("failed to store ai_split_document output column", K(ret), K(col_name));
+    }
+  }
+  return ret;
+}
+
 int ObDMLResolver::resolve_hybrid_search_item(const ParseNode &parse_tree, TableItem *&table_item)
 {
   INIT_SUCC(ret);

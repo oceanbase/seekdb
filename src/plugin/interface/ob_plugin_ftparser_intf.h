@@ -137,6 +137,13 @@ public:
       int64_t &word_len,
       int64_t &char_cnt,
       int64_t &word_freq) = 0;
+  // Task4 Op2：内置解析器可覆盖该接口跨文档复用；外部插件默认保持原行为。
+  virtual int reuse_parser(const char *fulltext, const int64_t fulltext_len)
+  {
+    UNUSED(fulltext);
+    UNUSED(fulltext_len);
+    return OB_NOT_SUPPORTED;
+  }
   DECLARE_PURE_VIRTUAL_TO_STRING;
 };
 

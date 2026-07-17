@@ -722,7 +722,7 @@ class SqlKeywords:
          FORCE
          FOREIGN
          FROM
-         FULLTEXT
+         FULLTEXT FULLTEXT_DICT
          GET
          GRANT
          GROUP

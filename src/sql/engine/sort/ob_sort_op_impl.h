@@ -687,6 +687,8 @@ protected:
   }
   int sort_inmem_data();
   int do_dump();
+  // Task4 Op9：在释放 workarea 前记录 FTS DDL 排序的外排与归并指标。
+  void record_task4_op9_sort_monitor();
   int inner_dump_part_topn_heap();
 
   template <typename Input>
@@ -883,6 +885,10 @@ protected:
   const ExprFixedArray *sort_exprs_;
   common::ObCompressorType compress_type_;
   bool use_compact_format_;
+  bool is_task4_op9_fts_ddl_sort_; // Task4 Op9：标记 FTS 辅助表 DDL 排序。
+  int64_t task4_op9_dump_count_; // Task4 Op9：成功生成外排分片的次数。
+  int64_t task4_op9_merge_pass_count_; // Task4 Op9：执行外部归并的轮次。
+  int64_t task4_op9_max_merge_ways_; // Task4 Op9：单轮归并的最大路数。
   ObPushDownTopNFilter pd_topn_filter_;
 };
 

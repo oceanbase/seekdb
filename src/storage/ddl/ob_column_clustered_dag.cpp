@@ -58,6 +58,12 @@ int ObColumnClusteredDag::init_by_param(const share::ObIDagInitParam *param)
     px_thread_count_ = init_param->px_thread_count_;
     is_inited_ = true;
 
+    // Task4 Op9：PX 扫描是首个可独立观测的 DDL DAG 阶段。
+    ObDDLDagMonitorNode *scan_node = get_or_create_dag_monitor_node(TASK4_OP9_FTS_SCAN);
+    if (nullptr != scan_node) {
+      scan_node->start(ObTimeUtility::current_time());
+    }
+
     ObArray<ObITask *> write_macro_block_tasks;
     if (OB_FAIL(generate_write_macro_block_tasks(write_macro_block_tasks))) {
       LOG_WARN("fail to generate write macro block tasks", KR(ret));
@@ -77,6 +83,13 @@ int ObColumnClusteredDag::set_px_finished()
     LOG_WARN("not init", K(ret));
   } else {
     ATOMIC_INC(&px_finished_count_);
+    if (is_scan_finished()) {
+      // Task4 Op9：最后一个 PX 扫描任务结束时关闭扫描阶段监控。
+      ObDDLDagMonitorNode *scan_node = get_or_create_dag_monitor_node(TASK4_OP9_FTS_SCAN);
+      if (nullptr != scan_node) {
+        scan_node->close(ObTimeUtility::current_time(), ret);
+      }
+    }
     if (is_scan_finished() && !use_static_plan_) {
       /* do nothing */
     }
@@ -160,4 +173,3 @@ int ObColumnClusteredDag::update_tablet_range_count()
   }
   return ret;
 }
-

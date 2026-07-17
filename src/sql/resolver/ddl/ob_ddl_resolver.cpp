@@ -117,6 +117,7 @@ ObDDLResolver::ObDDLResolver(ObResolverParams &params)
     vec_column_name_(),
     vec_index_type_(INDEX_TYPE_MAX),
     enable_macro_block_bloom_filter_(false),
+    is_fulltext_dict_table_(false),
     semistruct_encoding_type_(),
     dynamic_partition_policy_()
 {
@@ -133,7 +134,8 @@ int ObDDLResolver::append_fts_args(const share::schema::ObTableSchema &data_sche
                                    bool &fts_common_aux_table_exist,
                                    ObIArray<ObPartitionResolveResult> &resolve_results,
                                    ObIArray<ObCreateIndexArg> &index_arg_list,
-                                   ObIAllocator *allocator)
+                                   ObIAllocator *allocator,
+                                   ObSchemaGetterGuard *schema_guard)
 {
   int ret = OB_SUCCESS;
   ObDocIDType doc_id_type = ObDocIDType::INVALID;
@@ -148,7 +150,8 @@ int ObDDLResolver::append_fts_args(const share::schema::ObTableSchema &data_sche
     if (OB_FAIL(ObFtsIndexBuilderUtil::append_fts_index_arg(data_schema,
                                                             index_arg,
                                                             allocator,
-                                                            index_arg_list))) {
+                                                            index_arg_list,
+                                                            schema_guard))) {
       LOG_WARN("failed to append fts_index arg", K(ret));
     } else if (OB_FAIL(ObFtsIndexBuilderUtil::append_fts_rowkey_doc_arg(index_arg,
                                                                         allocator,
@@ -161,7 +164,8 @@ int ObDDLResolver::append_fts_args(const share::schema::ObTableSchema &data_sche
     } else if (OB_FAIL(ObFtsIndexBuilderUtil::append_fts_doc_word_arg(data_schema,
                                                                       index_arg,
                                                                       allocator,
-                                                                      index_arg_list))) {
+                                                                      index_arg_list,
+                                                                      schema_guard))) {
       LOG_WARN("failed to append fts_doc_word arg", K(ret));
     }
     for (int64_t i = 0; OB_SUCC(ret) && i < num_fts_args; ++i) {
@@ -177,12 +181,14 @@ int ObDDLResolver::append_fts_args(const share::schema::ObTableSchema &data_sche
     if (OB_FAIL(ObFtsIndexBuilderUtil::append_fts_index_arg(data_schema,
                                                             index_arg,
                                                             allocator,
-                                                            index_arg_list))) {
+                                                            index_arg_list,
+                                                            schema_guard))) {
       LOG_WARN("failed to append fts_index arg", K(ret));
     } else if (OB_FAIL(ObFtsIndexBuilderUtil::append_fts_doc_word_arg(data_schema,
                                                                       index_arg,
                                                                       allocator,
-                                                                      index_arg_list))) {
+                                                                      index_arg_list,
+                                                                      schema_guard))) {
       LOG_WARN("failed to append fts_doc_word arg", K(ret));
     }
     for (int64_t i = 0; OB_SUCC(ret) && i < num_fts_args; ++i) {
@@ -2394,6 +2400,26 @@ int ObDDLResolver::resolve_table_option(const ParseNode *option_node, const bool
         }
         break;
       }
+      case T_FULLTEXT_DICT: {
+        if (is_index_option) {
+          ret = OB_ERR_PARSE_SQL;
+          SQL_RESV_LOG(WARN, "fulltext dict can not be specified in index option", K(ret));
+        } else if (OB_ISNULL(option_node->children_) || OB_ISNULL(option_node->children_[0])) {
+          ret = OB_ERR_UNEXPECTED;
+          SQL_RESV_LOG(WARN, "option_node child is null", K(ret));
+        } else {
+          ObString value(static_cast<int32_t>(option_node->children_[0]->str_len_),
+                         option_node->children_[0]->str_value_);
+          if (0 == value.case_compare("Y")) {
+            is_fulltext_dict_table_ = true;
+          } else {
+            ret = OB_INVALID_ARGUMENT;
+            LOG_USER_ERROR(OB_INVALID_ARGUMENT, "FULLTEXT_DICT only supports 'Y'");
+            SQL_RESV_LOG(WARN, "invalid fulltext dict option", K(ret), K(value));
+          }
+        }
+        break;
+      }
       case T_SEMISTRUCT_ENCODING_TYPE: {
         ret = resolve_semistruct_encoding_type(option_node, is_index_option);
         break;
@@ -4278,6 +4304,7 @@ void ObDDLResolver::reset() {
   index_params_.reset();
   mv_refresh_dop_ = 0;
   enable_macro_block_bloom_filter_ = false;
+  is_fulltext_dict_table_ = false;
   semistruct_encoding_type_.reset();
   dynamic_partition_policy_.reset();
 }
@@ -6862,7 +6889,12 @@ int ObDDLResolver::generate_global_index_schema(
               my_create_index_arg, new_table_schema, *allocator_, gen_columns))) {
         LOG_WARN("fail to adjust expr index args", K(ret));
       } else if (share::schema::is_fts_index(my_create_index_arg.index_type_) &&
-                 OB_FAIL(ObFtsIndexBuilderUtil::generate_fts_parser_name_and_property(*table_schema, my_create_index_arg, allocator_))) {
+                 OB_FAIL(ObFtsIndexBuilderUtil::generate_fts_parser_name_and_property(*table_schema,
+                                                                                      my_create_index_arg,
+                                                                                      allocator_,
+                                                                                      OB_ISNULL(schema_checker_)
+                                                                                          ? nullptr
+                                                                                          : schema_checker_->get_schema_guard()))) {
         LOG_WARN("failed to genearte fts parser name", K(ret));
       } else if (share::schema::is_vec_index(my_create_index_arg.index_type_) &&
                  OB_FAIL((ObVecIndexBuilderUtil::generate_vec_index_name(allocator_, my_create_index_arg.index_type_,

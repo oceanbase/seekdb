@@ -24,6 +24,7 @@
 #include "lib/utility/ob_macro_utils.h"
 #include "lib/utility/utility.h"
 #include "storage/fts/ob_fts_struct.h"
+#include "storage/fts/ob_fts_literal.h"
 #include "storage/fts/ob_fts_plugin_helper.h"
 #include "storage/fts/dict/ob_ft_dict.h"
 #include "storage/fts/dict/ob_ft_dict_def.h"
@@ -122,11 +123,34 @@ int ObIKFTParser::get_next_token(const char *&word,
   return ret;
 }
 
+// Task4 Op2：避免为每个文档重新加载字典并构造 IK 处理器。
+int ObIKFTParser::reuse_parser(const char *fulltext, const int64_t fulltext_len)
+{
+  int ret = OB_SUCCESS;
+  if (OB_UNLIKELY(!is_inited_)) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("IK parser has not been initialized", K(ret));
+  } else if (OB_UNLIKELY(nullptr == fulltext || fulltext_len <= 0)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("Invalid fulltext for IK parser reuse", K(ret), KP(fulltext), K(fulltext_len));
+  } else if (OB_FAIL(ctx_->reuse_context(fulltext, fulltext_len))) {
+    LOG_WARN("Failed to reuse IK tokenize context", K(ret));
+  } else {
+    for (ObList<ObIIKProcessor *, ObIAllocator>::iterator iter = segmenters_.begin();
+         iter != segmenters_.end();
+         ++iter) {
+      (*iter)->reuse();
+    }
+  }
+  return ret;
+}
+
 int ObIKFTParser::produce()
 {
   int ret = OB_SUCCESS;
   // Loop until end or has data to output
-  while (OB_SUCC(ret) && ctx_->result_list().empty() && !ctx_->iter_end()) {
+  // Task4 Op1：分块结果通过消费下标判断是否需要生成下一批。
+  while (OB_SUCC(ret) && ctx_->is_results_exhaust() && !ctx_->iter_end()) {
     if (OB_FAIL(process_next_batch())) {
       if (OB_ITER_END == ret) {
         // ok
@@ -151,7 +175,8 @@ int ObIKFTParser::process_one_char(TokenizeContext &ctx,
   for (ObList<ObIIKProcessor *, ObIAllocator>::iterator iter = segmenters_.begin();
        OB_SUCC(ret) && iter != segmenters_.end();
        iter++) {
-    if (OB_FAIL((*iter)->process(ctx))) {
+    // Task4：所有处理器共享解析器已取得的字符信息，消除重复上下文读取。
+    if (OB_FAIL((*iter)->process(ctx, ch, char_len, type))) {
       LOG_WARN("Failed to process segmenter", K(ret));
     }
   }
@@ -169,14 +194,15 @@ int ObIKFTParser::process_next_batch()
   if (ctx_->iter_end()) {
     ret = OB_ITER_END;
   } else {
+    // Task4 Op3：保存本批次起点，输出时只遍历本批次覆盖的原文区间。
+    ctx_->mark_batch_start();
     while (OB_SUCC(ret) && !do_seg && !ctx_->iter_end()) {
       const char *ch;
       uint8_t char_len = 0;
       ObFTCharUtil::CharType type = ObFTCharUtil::CharType::USELESS;
-      if (OB_FAIL(ctx_->current_char(ch, char_len))) {
-        LOG_WARN("Failed to get current char", K(ret));
-      } else if (OB_FAIL(ctx_->current_char_type(type))) {
-        LOG_WARN("Failed to get current char type", K(ret));
+      // Task4：一次调用取得当前字符的全部元数据。
+      if (OB_FAIL(ctx_->current_char_and_type(ch, char_len, type))) {
+        LOG_WARN("Failed to get current char and type", K(ret));
       } else if (OB_FAIL(process_one_char(*ctx_, ch, char_len, type))) {
         LOG_WARN("Failed to process one char", K(ret));
       } else {
@@ -196,11 +222,16 @@ int ObIKFTParser::process_next_batch()
     }
 
     if (OB_SUCC(ret) || OB_ITER_END == ret) {
-      ObIKArbitrator arb;
-      if (OB_FAIL(arb.process(*ctx_))) {
+      // Task4：使用解析器成员仲裁器，并在本批次输出完成后保留资源供下批复用。
+      if (OB_FAIL(arb_.process(*ctx_))) {
         LOG_WARN("Failed to process arbitrator", K(ret));
-      } else if (OB_FAIL(arb.output_result(*ctx_))) {
+      } else if (OB_FAIL(arb_.output_result(*ctx_))) {
         LOG_WARN("Failed to make result list");
+      }
+      int reuse_ret = arb_.reuse();
+      if (OB_SUCCESS == ret && OB_SUCCESS != reuse_ret) {
+        ret = reuse_ret;
+        LOG_WARN("Failed to reuse arbitrator", K(ret));
       }
     } else {
       // Already logged.
@@ -278,17 +309,26 @@ int ObIKFTParser::init_dict(const plugin::ObFTParserParam &param)
   }
 
   ObFTRangeDict *dict = nullptr;
-  ObFTDictDesc main_dict_desc("main_dict",
+  ObString main_dict_name = param.ik_param_.main_dict_.empty()
+      ? ObString(ObFTSLiteral::FT_DEFAULT_IK_DICT_UTF8_TABLE)
+      : param.ik_param_.main_dict_;
+  ObString quan_dict_name = param.ik_param_.quan_dict_.empty()
+      ? ObString(ObFTSLiteral::FT_DEFAULT_IK_QUANTIFIER_UTF8_TABLE)
+      : param.ik_param_.quan_dict_;
+  ObString stopword_dict_name = param.ik_param_.stopword_dict_.empty()
+      ? ObString(ObFTSLiteral::FT_DEFAULT_IK_STOPWORD_UTF8_TABLE)
+      : param.ik_param_.stopword_dict_;
+  ObFTDictDesc main_dict_desc(main_dict_name,
                               ObFTDictType::DICT_IK_MAIN,
                               ObCharsetType::CHARSET_UTF8MB4,
                               ObCollationType::CS_TYPE_UTF8MB4_BIN);
 
-  ObFTDictDesc quan_dict_desc("quan_dict",
+  ObFTDictDesc quan_dict_desc(quan_dict_name,
                               ObFTDictType::DICT_IK_QUAN,
                               ObCharsetType::CHARSET_UTF8MB4,
                               ObCollationType::CS_TYPE_UTF8MB4_BIN);
 
-  ObFTDictDesc stopword_dict_desc("stopword",
+  ObFTDictDesc stopword_dict_desc(stopword_dict_name,
                                   ObFTDictType::DICT_IK_STOP,
                                   ObCharsetType::CHARSET_UTF8MB4,
                                   ObCollationType::CS_TYPE_UTF8MB4_BIN);

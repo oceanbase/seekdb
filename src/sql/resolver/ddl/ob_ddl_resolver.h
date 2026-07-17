@@ -196,7 +196,8 @@ public:
       bool &fts_common_aux_table_exist,
       ObIArray<ObPartitionResolveResult> &resolve_results,
       ObIArray<obcall::ObCreateIndexArg> &index_arg_list,
-      ObIAllocator *allocator);
+      ObIAllocator *allocator,
+      share::schema::ObSchemaGetterGuard *schema_guard = nullptr);
   static int append_multivalue_args(
       const share::schema::ObTableSchema &data_schema,
       const ObPartitionResolveResult &resolve_result,
@@ -1060,6 +1061,7 @@ protected:
   common::ObString vec_column_name_;
   ObIndexType vec_index_type_;
   bool enable_macro_block_bloom_filter_;
+  bool is_fulltext_dict_table_;
   ObSemiStructEncodingType semistruct_encoding_type_;
   common::ObString dynamic_partition_policy_;
 private:

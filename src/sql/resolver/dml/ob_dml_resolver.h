@@ -212,10 +212,16 @@ public:
   int resolve_rb_iterate_item(const ParseNode &table_node,
                               TableItem *&table_item);
   int resolve_unnest_item(const ParseNode &table_node, TableItem *&table_item);
+  // Task2: 解析 AI_SPLIT_DOCUMENT(content[, parameters]) 表函数。
+  int resolve_ai_split_document_item(const ParseNode &table_node, TableItem *&table_item);
   int create_rb_iterate_table_item(TableItem *&table_item, ObString alias_name = NULL);
   int create_unnest_table_item(TableItem *&table_item, ObItemType item_type, ObString table_name);
   int rb_iterate_table_add_column(TableItem *&table_item, ColumnItem *&col_item, int64_t col_id = 1);
   int unnest_table_add_column(TableItem *&table_item, ColumnItem *&col_item, ObString col_name);
+  // Task2: 按固定顺序创建文档切分结果的四个输出列。
+  int ai_split_document_add_column(TableItem *&table_item,
+                                   const ObString &col_name,
+                                   const bool is_text_column);
   int resolve_hybrid_search_item(const ParseNode &parse_tree, TableItem *&table_item);
 
   int fill_same_column_to_using(JoinedTable* &joined_table);
