@@ -91,6 +91,18 @@ int ObNgramFTParser::get_next_token(
   return ret;
 }
 
+int ObNgramFTParser::reuse_parser(const char *fulltext, const int64_t fulltext_len)
+{
+  int ret = OB_SUCCESS;
+  if (OB_UNLIKELY(!is_inited_)) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("ngram ft parser has not been initialized", K(ret));
+  } else if (OB_FAIL(ngram_impl_.reuse_parser(fulltext, fulltext_len))) {
+    LOG_WARN("fail to reuse ngram parser", K(ret));
+  }
+  return ret;
+}
+
 ObNgramFTParserDesc::ObNgramFTParserDesc()
   : is_inited_(false)
 {
@@ -114,13 +126,19 @@ int ObNgramFTParserDesc::segment(
 {
   int ret = OB_SUCCESS;
   ObNgramFTParser *parser = nullptr;
+  ObIAllocator *metadata_allocator = nullptr;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("ngram ft parser desc hasn't be initialized", K(ret), K(is_inited_));
   } else if (OB_ISNULL(param) || OB_ISNULL(param->fulltext_) || OB_UNLIKELY(!param->is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), KPC(param));
-  } else if (OB_ISNULL(parser = OB_NEWx(ObNgramFTParser, param->allocator_))) {
+  } else if (FALSE_IT(metadata_allocator = OB_NOT_NULL(param->metadata_alloc_)
+          ? param->metadata_alloc_ : param->allocator_)) {
+  } else if (OB_ISNULL(metadata_allocator)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("ngram parser metadata allocator is null", K(ret), KPC(param));
+  } else if (OB_ISNULL(parser = OB_NEWx(ObNgramFTParser, metadata_allocator))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("fail to allocate ngram ft parser", K(ret));
   } else {
@@ -130,8 +148,8 @@ int ObNgramFTParserDesc::segment(
       iter = parser;
     }
   }
-  if (OB_FAIL(ret)) {
-    OB_DELETEx(ObNgramFTParser, param->allocator_, parser);
+  if (OB_FAIL(ret) && OB_NOT_NULL(metadata_allocator)) {
+    OB_DELETEx(ObNgramFTParser, metadata_allocator, parser);
   }
   return ret;
 }
@@ -142,9 +160,12 @@ void ObNgramFTParserDesc::free_token_iter(
 {
   if (OB_NOT_NULL(iter)) {
     abort_unless(nullptr != param);
-    abort_unless(nullptr != param->allocator_);
+    ObIAllocator *metadata_allocator = OB_NOT_NULL(param->metadata_alloc_)
+        ? param->metadata_alloc_ : param->allocator_;
+    abort_unless(nullptr != metadata_allocator);
     iter->~ObITokenIterator();
-    param->allocator_->free(iter);
+    metadata_allocator->free(iter);
+    iter = nullptr;
   }
 }
 

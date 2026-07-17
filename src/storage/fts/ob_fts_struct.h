@@ -20,7 +20,6 @@
 #include "lib/charset/ob_charset.h"
 #include "lib/hash/ob_hashmap.h"
 #include "object/ob_object.h"
-#include "plugin/interface/ob_plugin_ftparser_intf.h"
 #include "share/datum/ob_datum_funcs.h"
 
 namespace oceanbase
@@ -53,6 +52,73 @@ private:
 };
 
 typedef common::hash::ObHashMap<ObFTWord, int64_t> ObFTWordMap;
+
+// Token representation used by the optimized full-text hot path.  Unlike
+// ObFTWord, it caches the datum hash and the collation functions selected for
+// the indexed column, so hash-table probes do not rediscover them per token.
+class ObFTToken final
+{
+public:
+  ObFTToken()
+      : is_calc_hash_val_(false), hash_val_(0), hash_func_(nullptr),
+        cmp_func_(nullptr), meta_(), token_()
+  {}
+  ~ObFTToken() = default;
+
+  int init(const char *ptr,
+           const int64_t length,
+           const ObObjMeta &meta,
+           const ObDatumHashFuncType hash_func,
+           const ObDatumCmpFuncType cmp_func);
+  OB_INLINE const ObDatum &get_token() const { return token_; }
+  OB_INLINE ObCollationType get_collation_type() const { return meta_.get_collation_type(); }
+  OB_INLINE bool empty() const { return token_.get_string().empty(); }
+  int hash(uint64_t &hash_val) const;
+  bool operator==(const ObFTToken &other) const;
+  OB_INLINE bool operator!=(const ObFTToken &other) const { return !(other == *this); }
+
+  TO_STRING_KV(K_(is_calc_hash_val), K_(hash_val), KP_(hash_func),
+      KP_(cmp_func), K_(meta), K_(token));
+
+private:
+  int do_compare(const ObFTToken &other, bool &is_equal) const;
+
+private:
+  mutable bool is_calc_hash_val_;
+  mutable uint64_t hash_val_;
+  ObDatumHashFuncType hash_func_;
+  ObDatumCmpFuncType cmp_func_;
+  ObObjMeta meta_;
+  ObDatum token_;
+};
+
+class ObFTTokenInfo final
+{
+public:
+  ObFTTokenInfo() : count_(0) {}
+  ~ObFTTokenInfo() = default;
+  int update_without_pos_list()
+  {
+    ++count_;
+    return OB_SUCCESS;
+  }
+  TO_STRING_KV(K_(count));
+public:
+  int64_t count_;
+};
+
+typedef common::hash::HashMapPair<ObFTToken, ObFTTokenInfo> ObFTTokenPair;
+typedef common::hash::ObHashMap<
+    ObFTToken,
+    ObFTTokenInfo,
+    common::hash::NoPthreadDefendMode,
+    common::hash::hash_func<ObFTToken>,
+    common::hash::equal_to<ObFTToken>,
+    common::hash::SimpleAllocer<
+        typename common::hash::HashMapTypes<ObFTToken, ObFTTokenInfo>::AllocType,
+        common::hash::NodeNumTraits<
+            typename common::hash::HashMapTypes<ObFTToken, ObFTTokenInfo>::AllocType>::NODE_NUM,
+        common::hash::NoPthreadDefendMode>> ObFTTokenMap;
 
 class ObAddWordFlag final
 {

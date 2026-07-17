@@ -20,14 +20,14 @@
 #include "lib/utility/ob_macro_utils.h"
 #include "lib/utility/ob_print_utils.h"
 #include "share/text_analysis/ob_text_analyzer.h"
-#include "plugin/interface/ob_plugin_ftparser_intf.h"
+#include "storage/fts/ob_i_ft_parser.h"
 
 namespace oceanbase
 {
 namespace storage
 {
 
-class ObSpaceFTParser final : public plugin::ObITokenIterator
+class ObSpaceFTParser final : public ObIFTParser
 {
 public:
   ObSpaceFTParser();
@@ -35,6 +35,7 @@ public:
 
   int init(plugin::ObFTParserParam *param);
   void reset();
+  virtual int reuse_parser(const char *fulltext, const int64_t fulltext_len) override;
   virtual int get_next_token(
       const char *&word,
       int64_t &word_len,

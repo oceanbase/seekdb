@@ -1237,28 +1237,49 @@ int ObDASIterUtils::create_text_retrieval_tree(ObTableScanParam &scan_param,
     switch (op_type) {
     case ObDASOpType::DAS_OP_IR_SCAN:
     case ObDASOpType::DAS_OP_SORT: {
-      ObDASCacheLookupIter *lookup_iter = nullptr;
       if (nullptr != ir_scan_ctdef && ir_scan_ctdef->need_calc_relevance()) {
         main_lookup_keep_order = true;
         // TODO: may be optimized to use forward
       }
-      if (table_lookup_ctdef->op_type_ != ObDASOpType::DAS_OP_INDEX_PROJ_LOOKUP) {
+      if (table_lookup_ctdef->op_type_ == ObDASOpType::DAS_OP_TABLE_LOOKUP) {
+        ObDASLocalLookupIter *lookup_iter = nullptr;
+        if (OB_FAIL(create_local_lookup_sub_tree(
+            scan_param,
+            alloc,
+            table_lookup_ctdef->get_rowkey_scan_ctdef(),
+            table_lookup_rtdef->get_rowkey_scan_rtdef(),
+            table_lookup_ctdef->get_lookup_scan_ctdef(),
+            table_lookup_rtdef->get_lookup_scan_rtdef(),
+            trans_desc,
+            snapshot,
+            root_iter,
+            related_tablet_ids.lookup_tablet_id_,
+            lookup_iter,
+            main_lookup_keep_order))) {
+          LOG_WARN("failed to create local lookup sub tree", K(ret));
+        } else {
+          root_iter = lookup_iter;
+        }
+      } else if (table_lookup_ctdef->op_type_ == ObDASOpType::DAS_OP_INDEX_PROJ_LOOKUP) {
+        ObDASCacheLookupIter *lookup_iter = nullptr;
+        if (OB_FAIL(create_cache_lookup_sub_tree(
+            scan_param,
+            alloc,
+            table_lookup_ctdef,
+            table_lookup_rtdef,
+            trans_desc,
+            snapshot,
+            root_iter,
+            related_tablet_ids,
+            lookup_iter,
+            main_lookup_keep_order))) {
+          LOG_WARN("failed to create cache lookup sub tree", K(ret));
+        } else {
+          root_iter = lookup_iter;
+        }
+      } else {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("unexpected table lookup", K(ret));
-      } else if (OB_FAIL(create_cache_lookup_sub_tree(
-          scan_param,
-          alloc,
-          table_lookup_ctdef,
-          table_lookup_rtdef,
-          trans_desc,
-          snapshot,
-          root_iter,
-          related_tablet_ids,
-          lookup_iter,
-          main_lookup_keep_order))) {
-        LOG_WARN("failed to create cache lookup sub tree", K(ret));
-      } else {
-        root_iter = lookup_iter;
       }
       break;
     }
@@ -1661,15 +1682,21 @@ int ObDASIterUtils::create_text_retrieval_sub_tree(
     if (ir_scan_ctdef->has_pushdown_topk() && !has_duplicate_boolean_tokens) {
       merge_iter_param.topk_mode_ = 1;
       merge_iter_param.daat_mode_ = 1;
-    } else if (merge_iter_param.query_tokens_.count() > OB_MAX_TEXT_RETRIEVAL_TOKEN_CNT
-        || (!is_func_lookup && !ir_scan_ctdef->need_proj_relevance_score())) {
+    } else if (merge_iter_param.query_tokens_.count() > OB_MAX_TEXT_RETRIEVAL_TOKEN_CNT) {
       if (BOOLEAN_MODE == ir_scan_ctdef->mode_flag_) {
         ret = OB_NOT_SUPPORTED;
         LOG_WARN("boolean mode with too many tokens not supported", K(ret), K(merge_iter_param.query_tokens_.count()));
         LOG_USER_ERROR(OB_NOT_SUPPORTED, "Boolean mode with more than 256 tokens is");
       }
       merge_iter_param.taat_mode_ = 1;
+    } else if (!is_func_lookup && !ir_scan_ctdef->need_proj_relevance_score()
+        && BOOLEAN_MODE == ir_scan_ctdef->mode_flag_) {
+      // Boolean evaluation depends on the per-token match state maintained by TaaT.
+      merge_iter_param.taat_mode_ = 1;
     } else {
+      // DaaT can stream and deduplicate naturally ordered posting lists without
+      // materializing all candidates. This is especially important for COUNT(*)
+      // and LIMIT queries which do not project relevance scores.
       merge_iter_param.daat_mode_ = 1;
     }
     if (OB_SUCC(ret) && ir_scan_ctdef->has_pushdown_topk() && has_duplicate_boolean_tokens) {
@@ -4426,4 +4453,3 @@ int ObDASIterUtils::create_vec_ivf_lookup_tree(ObTableScanParam &scan_param,
 
 } // namespace sql
 } // namespace oceanbase
-
