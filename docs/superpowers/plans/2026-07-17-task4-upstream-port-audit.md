@@ -30,6 +30,29 @@
 | `build_debug/unittest/storage/test_task3` | exit 0；23 tests passed |
 | 合计 | 42 tests passed；0 failed；另有 1 个既有 disabled test |
 
+## 单机 Release 性能证据（2026-07-18）
+
+所有记录均在同一机器、默认配置、未修改的 `bash tools/benchmark/fts_large_bench.sh` 下取得；临时 seekdb 实例在每次运行后均已停止。
+
+| 二进制来源 | build / tokenize / query 平均改善（历史 CI 基线） | 综合改善 | 命中数（cn/beng/mixed/limit） | 结论 |
+| --- | --- | ---: | --- | --- |
+| 原始源码 `6299b0ee4` 的 Release 二进制 | 21.63% / 57.99% / 81.84% | 53.82% | 8001 / 11000 / 7332 / 20 | 原版对照完整成功 |
+| 当前无 map 投影候选的 Release 二进制 | 19.96% / 58.89% / 81.88% | 53.58% | 8001 / 11000 / 7332 / 20 | 相比原版 -0.24 个百分点，低于约 2 分波动带；不作为新增收益保留 |
+
+- `ObFTTokenMap -> ObFTWordMap` 投影消除曾作为本地构建流水线候选实测，建索引阶段显著回退，已用补丁撤回。
+- benchmark 正常建索引路径的 `need_position_list=false`，所以 position-list 编码不影响该 workload；不为目录覆盖率接入未被使用的编码。
+- 单机范围内排除 PX/GI、跨分区 shuffle、分布式 DDL DAG、虚拟表/TTL 监控和通用 SQL 分区/TopN 排序；它们不在本 benchmark 的单机调用链。
+- 后续候选项必须在同机同 Release、正确命中数下相对紧邻前态提升超过约 2 个评分点，否则撤回并在本节追加证据。
+
+| 六类单机范围 | 当前判定 | 代码/运行时证据 |
+| --- | --- | --- |
+| 5.1 分词器与解析器热路径 | 保留既有 Task4/Task2 兼容实现 | 五类内置解析器复用、token/停止词路径已在 `src/storage/fts`；原版与当前均通过完整 benchmark 且命中数一致。该路径的单次综合差异仅 -0.24 分，不能把它宣称为本轮新增性能收益，但不得破坏既有 Task2/Task3 能力。 |
+| 5.2 本地排序 | 功能排除 | 当前 FTS DML 在 `ObDASDomainUtils::generate_fulltext_word_rows` 生成局部行；没有 FTS 专用 sort 调用点。上游实现要求通用 SQL/storage sort、chunk 与外归并框架，超出单机最小调用链；不能证明 >2 分收益。 |
+| 5.3 本地构建流水线 | 候选撤回 | 实测过 token-map 到 legacy word-map 的直接消费候选，build 明显回退，已撤回。上游 sample/merge/write pipeline 依赖 seekdb 未接入的 DDL pipeline 和跨 slice 调度。 |
+| 5.4 sort key 与位置列表 | 功能排除 | benchmark 路径传入 `need_position_list=false`；`ObFTSPositionListStore`/五列辅助表改变当前兼容布局且没有运行时覆盖，不能产生可测收益。 |
+| 5.5 本地计划/范围接线 | 功能排除 | 上游可见实现以 `ObGranuleFtsUtil`、GI 和 PX 范围分发为中心；单机 benchmark 不进入这些分布式路径，且本任务明确排除。 |
+| 5.6 轻量阶段统计 | 功能排除 | 新计数/计时只能增加观测开销，不能缩短固定 workload；不引入 DAG monitor、虚拟表、TTL 或无收益计数。 |
+
 ## 路径与状态约定
 
 - 责任任务严格按实施计划的 Task 2–7 功能边界归属；rootserver/RPC 等最终接线按其依赖归入 Task 6。

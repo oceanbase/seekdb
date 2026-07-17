@@ -25,71 +25,70 @@ namespace storage
 {
 
 // 使用分块数组作为节点池的双向链表，保留 IK 排序插入语义并消除逐节点分配。
-// T 必须是可批量回收的轻量对象；reuse 不逐个析构元素，上一文档结果必须先停止被引用。
+// reuse 会结束当前节点中 T 的对象生命周期，但保留已分配块和可复用槽位；调用前上一文档结果必须停止被引用。
 template <typename T, int64_t block_capacity = 256>
 class ObFastList
 {
-  struct Node
+  // 链接基类同时服务于哨兵和真实节点，避免把非 Node 的哨兵 reinterpret_cast 成 Node。
+  struct Link
   {
-    Node() : next(nullptr), prev(nullptr), value() {}
-    explicit Node(const T &input) : next(nullptr), prev(nullptr), value(input) {}
-    Node *next;
-    Node *prev;
-    T value;
+    Link() : next(nullptr), prev(nullptr) {}
+    Link *next;
+    Link *prev;
   };
 
-  struct NodeHolder
+  struct Node
+      : public Link
   {
-    operator Node *() { return reinterpret_cast<Node *>(this); }
-    operator const Node *() const { return reinterpret_cast<const Node *>(this); }
-    Node *next;
-    Node *prev;
+    Node() : Link(), value() {}
+    explicit Node(const T &input) : Link(), value(input) {}
+    T value;
   };
 
 public:
   class iterator
   {
   public:
-    iterator() : node_(nullptr) {}
-    explicit iterator(Node *node) : node_(node) {}
-    T &operator*() const { return node_->value; }
-    T *operator->() const { return &node_->value; }
-    iterator &operator++() { node_ = nullptr == node_ ? nullptr : node_->next; return *this; }
+    iterator() : link_(nullptr) {}
+    explicit iterator(Link *link) : link_(link) {}
+    T &operator*() const { return static_cast<Node *>(link_)->value; }
+    T *operator->() const { return &static_cast<Node *>(link_)->value; }
+    iterator &operator++() { link_ = nullptr == link_ ? nullptr : link_->next; return *this; }
     iterator operator++(int) { iterator tmp(*this); ++(*this); return tmp; }
-    iterator &operator--() { node_ = nullptr == node_ ? nullptr : node_->prev; return *this; }
+    iterator &operator--() { link_ = nullptr == link_ ? nullptr : link_->prev; return *this; }
     iterator operator--(int) { iterator tmp(*this); --(*this); return tmp; }
-    bool operator==(const iterator &other) const { return node_ == other.node_; }
-    bool operator!=(const iterator &other) const { return node_ != other.node_; }
+    bool operator==(const iterator &other) const { return link_ == other.link_; }
+    bool operator!=(const iterator &other) const { return link_ != other.link_; }
   private:
     friend class ObFastList;
-    Node *node_;
+    Link *link_;
   };
 
   class const_iterator
   {
   public:
-    const_iterator() : node_(nullptr) {}
-    explicit const_iterator(const Node *node) : node_(const_cast<Node *>(node)) {}
-    const_iterator(const iterator &iter) : node_(iter.node_) {}
-    const T &operator*() const { return node_->value; }
-    const T *operator->() const { return &node_->value; }
-    const_iterator &operator++() { node_ = nullptr == node_ ? nullptr : node_->next; return *this; }
+    const_iterator() : link_(nullptr) {}
+    explicit const_iterator(const Link *link) : link_(link) {}
+    const_iterator(const iterator &iter) : link_(iter.link_) {}
+    const T &operator*() const { return static_cast<const Node *>(link_)->value; }
+    const T *operator->() const { return &static_cast<const Node *>(link_)->value; }
+    const_iterator &operator++() { link_ = nullptr == link_ ? nullptr : link_->next; return *this; }
     const_iterator operator++(int) { const_iterator tmp(*this); ++(*this); return tmp; }
-    const_iterator &operator--() { node_ = nullptr == node_ ? nullptr : node_->prev; return *this; }
+    const_iterator &operator--() { link_ = nullptr == link_ ? nullptr : link_->prev; return *this; }
     const_iterator operator--(int) { const_iterator tmp(*this); --(*this); return tmp; }
-    bool operator==(const const_iterator &other) const { return node_ == other.node_; }
-    bool operator!=(const const_iterator &other) const { return node_ != other.node_; }
+    bool operator==(const const_iterator &other) const { return link_ == other.link_; }
+    bool operator!=(const const_iterator &other) const { return link_ != other.link_; }
   private:
     friend class ObFastList;
-    Node *node_;
+    const Link *link_;
   };
 
 public:
   // allocator 生命周期必须覆盖链表；节点内存由 pool_ 批量申请和释放。
   explicit ObFastList(common::ObIAllocator &allocator) : pool_(allocator), size_(0)
   {
-    root_.next = root_;
-    root_.prev = root_;
+    root_.next = &root_;
+    root_.prev = &root_;
   }
 
   ~ObFastList() { reset(); }
@@ -101,31 +100,31 @@ public:
     pool_.reset();
   }
 
-  // 文档间只重置链关系和节点池逻辑长度，下一次插入会复用原节点地址。
+  // 文档间结束当前节点对象生命周期并重置链关系；底层块和槽位保留，下一次插入会复用原节点地址。
   void reuse()
   {
-    root_.next = root_;
-    root_.prev = root_;
+    root_.next = &root_;
+    root_.prev = &root_;
     size_ = 0;
     pool_.reuse();
   }
 
   bool empty() const { return 0 == size_; }
   int64_t size() const { return size_; }
-  T &get_first() { return root_.next->value; }
-  const T &get_first() const { return root_.next->value; }
-  T &get_last() { return root_.prev->value; }
-  const T &get_last() const { return root_.prev->value; }
+  T &get_first() { return static_cast<Node *>(root_.next)->value; }
+  const T &get_first() const { return static_cast<const Node *>(root_.next)->value; }
+  T &get_last() { return static_cast<Node *>(root_.prev)->value; }
+  const T &get_last() const { return static_cast<const Node *>(root_.prev)->value; }
   iterator begin() { return iterator(root_.next); }
-  iterator end() { return iterator(root_); }
+  iterator end() { return iterator(&root_); }
   const_iterator begin() const { return const_iterator(root_.next); }
-  const_iterator end() const { return const_iterator(root_); }
+  const_iterator end() const { return const_iterator(&root_); }
   iterator last() { return iterator(root_.prev); }
   const_iterator last() const { return const_iterator(root_.prev); }
   int push_front(const T &value) { return insert_before_(root_.next, value); }
-  int push_back(const T &value) { return insert_before_(root_, value); }
-  int insert(iterator pos, const T &value) { return insert_before_(pos.node_, value); }
-  int insert(const_iterator pos, const T &value) { return insert_before_(pos.node_, value); }
+  int push_back(const T &value) { return insert_before_(&root_, value); }
+  int insert(iterator pos, const T &value) { return insert_before_(pos.link_, value); }
+  int insert(const_iterator pos, const T &value) { return insert_before_(const_cast<Link *>(pos.link_), value); }
 
   int pop_front()
   {
@@ -133,7 +132,7 @@ public:
     if (empty()) {
       ret = OB_ENTRY_NOT_EXIST;
     } else {
-      remove_node_(root_.next);
+      remove_node_(static_cast<Node *>(root_.next));
     }
     return ret;
   }
@@ -144,7 +143,7 @@ public:
     if (empty()) {
       ret = OB_ENTRY_NOT_EXIST;
     } else {
-      remove_node_(root_.prev);
+      remove_node_(static_cast<Node *>(root_.prev));
     }
     return ret;
   }
@@ -152,24 +151,24 @@ public:
 private:
   void clear_()
   {
-    Node *cur = root_.next;
-    while (cur != root_) {
-      Node *next = cur->next;
-      destroy_node_(cur);
+    Link *cur = root_.next;
+    while (cur != &root_) {
+      Link *next = cur->next;
+      destroy_node_(static_cast<Node *>(cur));
       cur = next;
     }
-    root_.next = root_;
-    root_.prev = root_;
+    root_.next = &root_;
+    root_.prev = &root_;
     size_ = 0;
   }
 
-  int insert_before_(Node *pos, const T &value)
+  int insert_before_(Link *pos, const T &value)
   {
     int ret = OB_SUCCESS;
     Node *node = nullptr;
     if (OB_FAIL(alloc_node_(node, value))) {
     } else {
-      Node *anchor = nullptr == pos ? root_ : pos;
+      Link *anchor = nullptr == pos ? &root_ : pos;
       node->next = anchor;
       node->prev = anchor->prev;
       anchor->prev->next = node;
@@ -192,7 +191,7 @@ private:
 
   void remove_node_(Node *node)
   {
-    if (nullptr != node && node != root_) {
+    if (nullptr != node && static_cast<Link *>(node) != &root_) {
       node->prev->next = node->next;
       node->next->prev = node->prev;
       destroy_node_(node);
@@ -204,7 +203,7 @@ private:
 
 private:
   ObFastSegmentArray<Node, block_capacity> pool_;
-  NodeHolder root_;
+  Link root_;
   int64_t size_;
 };
 

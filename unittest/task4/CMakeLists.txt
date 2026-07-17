@@ -1,0 +1,1 @@
+ob_unittest(test_task4_fts_perf)

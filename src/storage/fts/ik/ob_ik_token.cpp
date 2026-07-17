@@ -26,7 +26,7 @@ namespace oceanbase
 namespace storage
 {
 template <typename ListType>
-int ObFTSortList<ListType>::add_token(const ObIKToken &token)
+int ObFTSortListT<ListType>::add_token(const ObIKToken &token)
 {
   int ret = OB_SUCCESS;
 
@@ -45,7 +45,7 @@ int ObFTSortList<ListType>::add_token(const ObIKToken &token)
       LOG_WARN("fail to push back token", K(ret));
     }
   } else {
-    for (typename ObFTSortList<ListType>::CellIter iter = tokens_.last(); OB_SUCC(ret) && iter != tokens_.end();
+    for (typename ObFTSortListT<ListType>::CellIter iter = tokens_.last(); OB_SUCC(ret) && iter != tokens_.end();
          --iter) {
       if (token < *iter) {
         continue;
@@ -65,13 +65,13 @@ int ObFTSortList<ListType>::add_token(const ObIKToken &token)
 }
 
 template <typename ListType>
-int64_t ObFTSortList<ListType>::max()
+int64_t ObFTSortListT<ListType>::max()
 {
   return tokens_.empty() ? 0 : tokens_.get_last().offset_ + tokens_.get_last().length_;
 }
 
 template <typename ListType>
-int64_t ObFTSortList<ListType>::min()
+int64_t ObFTSortListT<ListType>::min()
 {
   return tokens_.empty() ? 0 : tokens_.get_first().offset_;
 }

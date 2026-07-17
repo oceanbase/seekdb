@@ -62,6 +62,13 @@ public:
                                        int64_t &char_len,
                                        CharType &type);
 
+  // 兼容既有调用方：旧接口的字符长度已由调用方验证，直接复用新的分类核心，
+  // 不参与 TokenizeContext 的逐字符解码快路径。
+  static int classify_first_char(ObCollationType coll_type,
+                                 const char *input,
+                                 const uint8_t char_len,
+                                 CharType &type);
+
   static int check_cn_number(ObCollationType coll_type,
                              const char *input,
                              const uint8_t char_len,

@@ -247,6 +247,8 @@ ObFTParseHelper::ObFTParseHelper()
     parser_name_(),
     process_token_flag_(),
     parser_property_(),
+    parser_metadata_allocator_(lib::ObMemAttr("FTParserMeta")),
+    cached_builtin_parser_(nullptr),
     need_position_list_(false),
     is_inited_(false)
 {
@@ -308,12 +310,35 @@ int ObFTParseHelper::init(
 
 void ObFTParseHelper::reset()
 {
+  destroy_cached_builtin_parser_();
   parser_desc_ = nullptr;
   plugin_param_ = nullptr;
   allocator_ = nullptr;
   process_token_flag_.clear();
+  // 缓存解析器已通过 descriptor 析构，此处才可回收其长生命周期元数据 arena。
+  parser_metadata_allocator_.reset();
   need_position_list_ = false;
   is_inited_ = false;
+}
+
+void ObFTParseHelper::destroy_cached_builtin_parser_()
+{
+  // seekdb 的 LOG_WARN 宏会统一记录 ret；即使析构路径无返回值，也要提供成功缺省值。
+  int ret = OB_SUCCESS;
+  if (OB_NOT_NULL(cached_builtin_parser_)) {
+    if (OB_NOT_NULL(parser_desc_) && OB_NOT_NULL(allocator_)) {
+      // descriptor 的 free_token_iter 是解析器唯一的释放入口，不能跨越插件 ABI 直接 free。
+      ObFTParserParam release_param;
+      plugin::ObITokenIterator *iter = cached_builtin_parser_;
+      // 缓存对象一定从 helper 自有 arena 分配，释放时必须使用同一 allocator。
+      release_param.metadata_alloc_ = &parser_metadata_allocator_;
+      parser_desc_->free_token_iter(&release_param, iter);
+    } else {
+      LOG_WARN("cached builtin parser has incomplete release context",
+               KP(cached_builtin_parser_), KP(parser_desc_), KP(allocator_));
+    }
+    cached_builtin_parser_ = nullptr;
+  }
 }
 
 int ObFTParseHelper::segment(
@@ -321,7 +346,7 @@ int ObFTParseHelper::segment(
     const char *fulltext,
     const int64_t fulltext_len,
     int64_t &doc_length,
-    ObFTTokenMap &ft_token_map) const
+    ObFTTokenMap &ft_token_map)
 {
   int ret = OB_SUCCESS;
   const ObCharsetInfo *cs = nullptr;
@@ -353,7 +378,9 @@ int ObFTParseHelper::segment(
     ObFTTokenProcessor token_processor(*allocator_);
     ObFTParserParam param;
     ObITokenIterator *iter = nullptr;
-    param.metadata_alloc_ = allocator_;
+    // 内置解析器会跨文档缓存，不能使用调用方每行 reset 的 arena；外部插件保持旧 ABI。
+    param.metadata_alloc_ = parser_name_.is_builtin_parser()
+        ? static_cast<ObIAllocator *>(&parser_metadata_allocator_) : allocator_;
     param.scratch_alloc_ = allocator_;
     param.allocator_ = allocator_; // 兼容尚未迁移的外部插件 ABI。
     param.cs_ = cs;
@@ -376,41 +403,54 @@ int ObFTParseHelper::segment(
 
     if (OB_FAIL(token_processor.init(parser_property_, meta, process_token_flag_, &ft_token_map))) {
       LOG_WARN("fail to initialize token processor", K(ret), K(token_processor));
-    } else if (OB_FAIL(parser_desc_->segment(&param, iter))) {
-      LOG_WARN("fail to get token iterator", K(ret), K(param));
-    } else if (OB_ISNULL(iter)) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected error, token iterator is nullptr", K(ret));
     } else {
-      const char *word = nullptr;
-      int64_t word_len = 0;
-      int64_t char_cnt = 0;
-      int64_t word_freq = 0;
-      int64_t simple_pos = 0;
-      int64_t token_interval_cnt = 0;
-      constexpr int64_t CHECK_STATUS_TOKEN_INTERVAL_CNT = 100;
-      while (OB_SUCC(ret)) {
-        if (OB_FAIL(iter->get_next_token(word, word_len, char_cnt, word_freq))) {
-          if (OB_ITER_END != ret) {
-            LOG_WARN("fail to get next token", K(ret), KPC(iter));
-          }
-        } else if (OB_FAIL(token_processor.process_token(
-                       need_position_list_, word, word_len, char_cnt, simple_pos++))) {
-          LOG_WARN("fail to process token", K(ret), KP(word), K(word_len), K(char_cnt));
-        } else if (++token_interval_cnt >= CHECK_STATUS_TOKEN_INTERVAL_CNT) {
-          if (OB_FAIL(THIS_WORKER.check_status())) {
-            LOG_WARN("worker interrupted during fulltext segment", K(ret));
-          } else {
-            token_interval_cnt = 0;
+      if (OB_NOT_NULL(cached_builtin_parser_)) {
+        // 同一 helper 只在配置未变时存活；此处只替换文档视图，词典和解析器元数据继续复用。
+        iter = cached_builtin_parser_;
+        if (OB_FAIL(cached_builtin_parser_->reuse_parser(param.fulltext_, param.ft_length_))) {
+          LOG_WARN("failed to reuse builtin token iterator", K(ret), K(param));
+        }
+      } else if (OB_FAIL(parser_desc_->segment(&param, iter))) {
+        LOG_WARN("fail to get token iterator", K(ret), K(param));
+      } else if (parser_name_.is_builtin_parser()) {
+        // 仅运行时类型确认成功才进入缓存；同名外部插件不能越过其既有 ABI 被错误复用。
+        cached_builtin_parser_ = dynamic_cast<ObIFTParser *>(iter);
+      }
+      if (OB_SUCC(ret) && OB_ISNULL(iter)) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("unexpected error, token iterator is nullptr", K(ret));
+      }
+      if (OB_SUCC(ret)) {
+        const char *word = nullptr;
+        int64_t word_len = 0;
+        int64_t char_cnt = 0;
+        int64_t word_freq = 0;
+        int64_t simple_pos = 0;
+        int64_t token_interval_cnt = 0;
+        constexpr int64_t CHECK_STATUS_TOKEN_INTERVAL_CNT = 100;
+        while (OB_SUCC(ret)) {
+          if (OB_FAIL(iter->get_next_token(word, word_len, char_cnt, word_freq))) {
+            if (OB_ITER_END != ret) {
+              LOG_WARN("fail to get next token", K(ret), KPC(iter));
+            }
+          } else if (OB_FAIL(token_processor.process_token(
+                         need_position_list_, word, word_len, char_cnt, simple_pos++))) {
+            LOG_WARN("fail to process token", K(ret), KP(word), K(word_len), K(char_cnt));
+          } else if (++token_interval_cnt >= CHECK_STATUS_TOKEN_INTERVAL_CNT) {
+            if (OB_FAIL(THIS_WORKER.check_status())) {
+              LOG_WARN("worker interrupted during fulltext segment", K(ret));
+            } else {
+              token_interval_cnt = 0;
+            }
           }
         }
-      }
-      if (OB_ITER_END == ret) {
-        doc_length = token_processor.get_non_stop_token_count();
-        ret = OB_SUCCESS;
+        if (OB_ITER_END == ret) {
+          doc_length = token_processor.get_non_stop_token_count();
+          ret = OB_SUCCESS;
+        }
       }
     }
-    if (OB_NOT_NULL(iter)) {
+    if (OB_NOT_NULL(iter) && iter != cached_builtin_parser_) {
       parser_desc_->free_token_iter(&param, iter);
       iter = nullptr;
     }
@@ -425,7 +465,7 @@ int ObFTParseHelper::segment(
     const char *fulltext,
     const int64_t fulltext_len,
     int64_t &doc_length,
-    ObFTWordMap &words) const
+    ObFTWordMap &words)
 {
   int ret = OB_SUCCESS;
   const int64_t bucket_count = MIN(MAX(fulltext_len / 10, 2), 997);

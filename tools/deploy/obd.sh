@@ -263,7 +263,10 @@ function deploy_cluster {
       else
         temp_config_yaml=$(mktemp /tmp/oceanbase-seekdb-config-XXXXXX.yaml)
       fi
-      cp $config_yaml $temp_config_yaml
+      # 临时 YAML 会被放到 /tmp；OBD 此时不能再以原配置目录解释相对 include。
+      # 仅规范化 seekdb 自带 include，用户 YAML 的其他内容保持原样。
+      sed "s|^\([[:space:]]*\)include: obd/observer.include.yaml|\1include: $DEPLOY_PATH/obd/observer.include.yaml|" \
+        "$config_yaml" > "$temp_config_yaml"
       config_yaml=$temp_config_yaml
 
     else

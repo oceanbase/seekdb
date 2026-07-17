@@ -75,11 +75,11 @@ public:
 };
 
 template <typename ListType>
-class ObFTSortList
+class ObFTSortListT
 {
 public:
-  ObFTSortList(ObIAllocator &alloc) : tokens_(alloc) {}
-  ~ObFTSortList() { tokens_.reset(); }
+  ObFTSortListT(ObIAllocator &alloc) : tokens_(alloc) {}
+  ~ObFTSortListT() { tokens_.reset(); }
 
   int add_token(const ObIKToken &token);
 
@@ -104,8 +104,10 @@ private:
   ListType tokens_;
 };
 
-typedef ObFTSortList<ObList<ObIKToken, ObIAllocator>> ObFTLightSortList;
-typedef ObFTSortList<ObFastList<ObIKToken, HANDLE_SIZE_LIMIT>> ObFTFastSortList;
+typedef ObFTSortListT<ObList<ObIKToken, ObIAllocator>> ObFTLightSortList;
+typedef ObFTSortListT<ObFastList<ObIKToken, HANDLE_SIZE_LIMIT>> ObFTFastSortList;
+// 保留 Task2 前的公开类型名，供既有 IK 调用和单元测试使用；热路径显式使用 Fast 版本。
+typedef ObFTLightSortList ObFTSortList;
 
 class ObIKTokenChain
 {

@@ -4,7 +4,7 @@
 
 **Goal:** Improve the single-node `fts_large_bench.sh` build, tokenize, and MATCH categories without changing its workload or regressing Task2/Task3 behavior.
 
-**Architecture:** Retain the already-landed parser reuse path, complete its dictionary lookup fast path, then implement one minimal, testable single-node subfeature for each of the remaining five Task4 areas. The benchmark determines the priority and whether a local fast path remains enabled, but does not permit skipping an area; all distributed PX/GI/shuffle/DAG code is excluded.
+**Architecture:** Retain the already-landed parser reuse path, then evaluate one minimal, testable single-node subfeature for each remaining Task4 area. The same-machine Release benchmark determines priority and retention: a candidate remains only when it improves the score by more than the roughly two-point noise band; otherwise it is reverted and documented as excluded. All distributed PX/GI/shuffle/DAG code is excluded.
 
 **Tech Stack:** C++17, seekdb FTS/storage code, Google Test, CMake, existing mysqltest runner, Bash/Python benchmark scorer.
 
@@ -12,6 +12,7 @@
 
 - Run and score exactly `tools/benchmark/fts_large_bench.sh`; do not change it, its baseline JSON, scorer, SQL workload, hit checks, or timing method.
 - The score is the equal-weight average of build, tokenize, and query improvement. A 50% improvement is full score; negative improvement is zero; interpret repeated score differences within about two points as noise.
+- Each candidate is measured before and after with the same Release binary configuration and the unmodified script. Keep it only for a score improvement greater than roughly two points with correct hits; revert neutral/noisy/regressive candidates instead of retaining theoretical optimizations.
 - Only single-node paths are in scope. Do not add PX, cross-node routing, GI distribution, cross-partition shuffle, or distributed DAG monitoring.
 - OceanBase commit `81c822ca5cb2d88c3495192d21e6006d6785fbb4` is reference material, not a cherry-pick target.
 - Preserve Task2 parser semantics and Task3 custom dictionary behavior. Do not edit their existing test files.
@@ -229,9 +230,9 @@ Keep only the local FTS doc-word sort/range helper needed by the current DDL pat
 
 Record local parse, sort, and write counters/timestamps in the owning build object; do not add tenant monitor maps, virtual tables, or TTL cleanup. Run `Task4FtsPerf.BuildStageCountersAreMonotonic`; expected: PASS.
 
-- [ ] **Step 8: Measure each admitted subfeature and commit the complete single-node set**
+- [ ] **Step 8: Measure each candidate subfeature and commit only the admitted single-node set**
 
-After each subfeature, run the exact benchmark and scorer commands from Task 1. Preserve hit counts and record both the result and any score change. Keep the simple local implementation even when a score change is inside the noise band, unless it causes a regression outside that band or harms compatibility.
+After each subfeature, run the exact benchmark and scorer commands from Task 1. Preserve hit counts and record both the result and score change. Keep only a change whose same-machine Release score exceeds its immediately preceding result by more than roughly two points; revert a neutral, noisy, or regressive candidate and record the exclusion evidence.
 
 ```bash
 git add src/storage/fts src/sql unittest/task4 docs/superpowers/plans/2026-07-17-task4-upstream-port-audit.md

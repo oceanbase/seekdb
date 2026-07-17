@@ -343,5 +343,34 @@ int ObFTCharUtil::classify_first_valid_char(ObCharsetType cs_type,
   return ret;
 }
 
+int ObFTCharUtil::classify_first_char(const ObCollationType coll_type,
+                                      const char *input,
+                                      const uint8_t char_len,
+                                      CharType &type)
+{
+  int ret = OB_SUCCESS;
+  const ObCharsetType cs_type = ObCharset::charset_type_by_coll(coll_type);
+  if (OB_UNLIKELY(nullptr == input || 0 == char_len)) {
+    ret = OB_INVALID_ARGUMENT;
+  } else {
+    switch (cs_type) {
+      case CHARSET_UTF8MB4:
+        ret = do_classify<CHARSET_UTF8MB4>(input, char_len, type);
+        break;
+      case CHARSET_UTF16:
+        ret = do_classify<CHARSET_UTF16>(input, char_len, type);
+        break;
+      case CHARSET_UTF16LE:
+        ret = do_classify<CHARSET_UTF16LE>(input, char_len, type);
+        break;
+      default:
+        ret = OB_NOT_SUPPORTED;
+        STORAGE_FTS_LOG(WARN, "unsupported charset for compatible char classification", K(ret), K(coll_type), K(cs_type));
+        break;
+    }
+  }
+  return ret;
+}
+
 } // namespace storage
 } // namespace oceanbase

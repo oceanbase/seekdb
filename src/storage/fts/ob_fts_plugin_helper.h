@@ -18,6 +18,7 @@
 #define OB_FTS_PLUGIN_HELPER_H_
 
 #include "lib/allocator/ob_fifo_allocator.h"
+#include "lib/allocator/page_arena.h"
 #include "lib/charset/ob_charset.h"
 #include "lib/string/ob_string.h"
 #include "object/ob_object.h"
@@ -25,6 +26,7 @@
 #include "share/ob_plugin_helper.h"
 #include "storage/fts/ob_fts_parser_property.h"
 #include "storage/fts/ob_fts_struct.h"
+#include "storage/fts/ob_i_ft_parser.h"
 
 namespace oceanbase
 {
@@ -193,14 +195,14 @@ public:
       const char *fulltext,
       const int64_t fulltext_len,
       int64_t &doc_length,
-      ObFTTokenMap &ft_token_map) const;
+      ObFTTokenMap &ft_token_map);
   // 兼容尚由 Task 4 迁移的构建调用点；内部仍走同一 token 热路径，再投影为旧词频布局。
   int segment(
       const common::ObObjMeta &meta,
       const char *fulltext,
       const int64_t fulltext_len,
       int64_t &doc_length,
-      ObFTWordMap &words) const;
+      ObFTWordMap &words);
   int check_is_the_same(
       const common::ObString &plugin_name,
       const common::ObString &plugin_properties,
@@ -247,11 +249,15 @@ public:
   const plugin::ObIFTParserDesc *get_parser_desc() const { return parser_desc_; }
   const ObProcessTokenFlag &get_process_token_flags() const { return process_token_flag_; }
   bool is_builtin_parser() const { return parser_name_.is_builtin_parser(); }
+  // 仅用于诊断内置解析器复用状态；返回值不转移所有权，调用方不得保存到 helper.reset() 之后。
+  const ObIFTParser *get_cached_builtin_parser() const { return cached_builtin_parser_; }
 
   TO_STRING_KV(KP_(allocator), K_(parser_name), KP_(parser_desc), K_(need_position_list), K_(is_inited));
 
 private:
   int set_process_token_flag(const plugin::ObIFTParserDesc &ftparser_desc);
+  // 仍通过原 descriptor 释放，确保内置解析器的 allocator、词典和插件生命周期保持一致。
+  void destroy_cached_builtin_parser_();
 private:
   common::ObIAllocator *allocator_;
   plugin::ObIFTParserDesc *parser_desc_;
@@ -259,6 +265,10 @@ private:
   ObFTParser parser_name_;
   ObProcessTokenFlag process_token_flag_;
   ObFTParserProperty parser_property_;
+  // 内置解析器的对象与词典元数据独立于调用方的逐文档 arena，避免行缓存复用时产生悬空指针。
+  common::ObArenaAllocator parser_metadata_allocator_;
+  // 只缓存经 RTTI 确认的内置解析器；外部插件继续沿用一次 segment/一次释放的 ABI。
+  ObIFTParser *cached_builtin_parser_;
   bool need_position_list_;
   bool is_inited_;
 
