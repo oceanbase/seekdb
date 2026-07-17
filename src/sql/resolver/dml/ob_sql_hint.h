@@ -77,8 +77,7 @@ struct ObQueryHint {
 
   int set_outline_data_hints(const ObGlobalHint &global_hint,
                              const int64_t stmt_id,
-                             const ObIArray<ObHint*> &hints,
-                             const bool is_user_defined);
+                             const ObIArray<ObHint*> &hints);
   static int get_qb_name_source_hash_value(const ObString &src_qb_name,
                                            const ObIArray<uint32_t> &src_hash_val,
                                            uint32_t &hash_val);

@@ -96,8 +96,7 @@ int ObQueryHint::get_qb_name_source_hash_value(const ObString &src_qb_name,
 
 int ObQueryHint::set_outline_data_hints(const ObGlobalHint &global_hint,
                                         const int64_t stmt_id,
-                                        const ObIArray<ObHint*> &hints,
-                                        const bool is_user_defined)
+                                        const ObIArray<ObHint*> &hints)
 {
   int ret = OB_SUCCESS;
   qb_hints_.reuse();
@@ -107,13 +106,9 @@ int ObQueryHint::set_outline_data_hints(const ObGlobalHint &global_hint,
     LOG_WARN("failed to assign global hint.", K(ret));
   } else if (OB_FAIL(append_hints(stmt_id, hints))) {
     LOG_WARN("failed to assign global hint.", K(ret));
-  } else if (is_user_defined) {
-    user_def_outline_ = true;
   } else {
     is_valid_outline_ = true;
     outline_stmt_id_ = stmt_id;
-  }
-  if (OB_SUCC(ret)) {
     ObHint *cur_hint = NULL;
     for (int64_t i = 0; OB_SUCC(ret) && i < hints.count(); ++i) {
       if (OB_ISNULL(cur_hint = hints.at(i))) {
