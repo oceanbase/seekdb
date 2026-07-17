@@ -83,7 +83,9 @@ ObSRDaaTIterImpl::ObSRDaaTIterImpl()
     buffered_relevances_(),
     next_round_iter_idxes_(),
     next_round_cnt_(0),
-    set_datum_func_(nullptr)
+    set_datum_func_(nullptr),
+    id_proj_expr_cached_(nullptr),
+    eval_ctx_cached_(nullptr)
 {
 }
 
@@ -111,6 +113,13 @@ int ObSRDaaTIterImpl::init(
     } else {
       set_datum_func_ = ObISparseRetrievalMergeIter::set_datum_shallow;
     }
+    // K2 (batched Union Scan): cache id_proj_expr_ and eval_ctx_ for the
+    // streaming DAAT hot loop. The non-streaming path uses project_results
+    // which re-reads iter_param_ via the pre-extracted set_datum_func_; for
+    // the streaming path these two extra caches let do_one_merge_round_streaming
+    // and project_one_doc_id_streaming skip repeated member derefs.
+    id_proj_expr_cached_ = iter_param_->id_proj_expr_;
+    eval_ctx_cached_ = iter_param_->eval_ctx_;
     if (OB_UNLIKELY(dim_iters.count() == 0)) {
     } else if (OB_NOT_NULL(iter_param_->dim_weights_) && dim_iters.count() != iter_param_->dim_weights_->count()) {
       ret = OB_ERR_UNEXPECTED;
@@ -243,6 +252,13 @@ int ObSRDaaTIterImpl::get_next_rows(const int64_t capacity, int64_t &count)
   } else if (0 == dim_iters_->count()) {
     ret = OB_ITER_END;
   } else if (iter_param_->limit_param_->is_valid() && output_row_cnt_ >= iter_param_->limit_param_->limit_) {
+    // K1 (skip-redundant-TopK / early-stop): once we've emitted the LIMIT
+    // number of rows for this query, refuse to fetch more. This applies to
+    // both COUNT(*) wrapped in a LIMIT subquery (the inner SELECT ... LIMIT k
+    // already pushes the limit down via scan_param.limit_param_), and any
+    // MATCH ... LIMIT k without ORDER BY (which goes through this streaming
+    // DAAT path, not the TopK/BMW iter). The check also fires for LIMIT 0 —
+    // we return ITER_END without doing any scan work.
     ret = OB_ITER_END;
   } else if (OB_FAIL(pre_process())) {
     if (OB_UNLIKELY(OB_ITER_END != ret)) {
@@ -252,10 +268,22 @@ int ObSRDaaTIterImpl::get_next_rows(const int64_t capacity, int64_t &count)
     }
   } else {
     const bool streaming = iter_param_->stream_daat_mode();
-    // Streaming DAAT fast-path: emit each matched doc id directly into the
-    // eval ctx, skipping per-row relevance collection and the
-    // buffered_domain_ids_/buffered_relevances_ cache. project_results is
-    // then a no-op for this path.
+    // K1 (skip-redundant-TopK): COUNT(*) / MATCH ... LIMIT k callers bypass
+    // the TopK heap / sort entirely by going through the streaming DAAT path.
+    // stream_daat_mode_ is set in ObDASTRMergeIter::create_sparse_retrieval_iter
+    // when the caller doesn't need per-doc BM25 relevance and doesn't apply a
+    // score-side filter — see that function for the exact predicate. We then
+    // skip relevance collection (collect_dims_by_id_streaming), skip the
+    // buffered_domain_ids_/buffered_relevances_ cache, and project directly
+    // into the eval ctx as each row is produced.
+    //
+    // K2 (batched Union Scan): do_one_merge_round_streaming uses the cached
+    // id_proj_expr_/eval_ctx_ pointers (set in init) instead of chasing
+    // iter_param_->X on every emitted row. The merge-heap work itself
+    // (fill_merge_heap / collect_dims_by_id_streaming) is unchanged because
+    // it has to process the dim iters one doc at a time to preserve OR-of-AND
+    // semantics across tokens; the saved work is the per-doc pointer churn
+    // around the projection.
     count = 0;
     const int64_t real_capacity = MIN(capacity, iter_param_->max_batch_size_);
     if (streaming) {
@@ -266,7 +294,8 @@ int ObSRDaaTIterImpl::get_next_rows(const int64_t capacity, int64_t &count)
           }
         }
       }
-      // rows already projected inline; skip project_results.
+      // rows already projected inline via do_one_merge_round_streaming;
+      // skip project_results.
     } else {
       while (OB_SUCC(ret) && count < real_capacity) {
         if (OB_FAIL(do_one_merge_round(count))) {
@@ -339,14 +368,19 @@ int ObSRDaaTIterImpl::do_one_merge_round_streaming(int64_t &count, const int64_t
       // shouldn't happen: caller checks count < capacity before calling
     } else {
       // Inline projection: write doc id directly into eval ctx at slot `count`.
-      // set_datum_func_ expects an ObDocIdExt; wrap the raw datum via
-      // ObDocIdExt::from_datum (same path cache_result uses to populate
-      // buffered_domain_ids_, but we skip the buffer here).
+      //
+      // K2 (batched Union Scan): use cached id_proj_expr_/eval_ctx_ pointers
+      // (set in init() from id_proj_expr_cached_/eval_ctx_cached_) instead of
+      // chasing iter_param_->id_proj_expr_/iter_param_->eval_ctx_ on every
+      // emitted doc. The BatchInfoScopeGuard ctor/dtor is cheap (3 int ptr
+      // copies in, 3 int stores out); we keep it local for clarity since
+      // ObEvalCtx::batch_idx_ is private and the public set_batch_idx also
+      // requires being inside ObEvalCtx.
       sql::ObDocIdExt id_ext;
       id_ext.from_datum(*id_datum);
-      sql::ObExpr *id_proj_expr = iter_param_->id_proj_expr_;
-      sql::ObEvalCtx *eval_ctx = iter_param_->eval_ctx_;
-      ObEvalCtx::BatchInfoScopeGuard guard(*eval_ctx);
+      sql::ObExpr *const id_proj_expr = id_proj_expr_cached_;
+      sql::ObEvalCtx *const eval_ctx = eval_ctx_cached_;
+      sql::ObEvalCtx::BatchInfoScopeGuard guard(*eval_ctx);
       guard.set_batch_idx(count);
       ObDatum &id_proj_datum = id_proj_expr->locate_datum_for_write(*eval_ctx);
       set_datum_func_(id_proj_datum, id_ext);

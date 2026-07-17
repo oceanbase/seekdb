@@ -114,6 +114,12 @@ protected:
   ObFixedArray<int64_t, ObIAllocator> next_round_iter_idxes_;
   int64_t next_round_cnt_;
   void (*set_datum_func_)(ObDatum &, const ObDocIdExt &);
+  // K2 (batched Union Scan): cached pointers extracted from iter_param_ in
+  // init() so the per-round hot loop avoids a class-member deref + virtual
+  // dispatch per emitted doc. Only populated for the streaming DAAT path;
+  // non-streaming callers keep using iter_param_->X directly via project_results.
+  sql::ObExpr *id_proj_expr_cached_;
+  sql::ObEvalCtx *eval_ctx_cached_;
 private:
   DISALLOW_COPY_AND_ASSIGN(ObSRDaaTIterImpl);
 };
