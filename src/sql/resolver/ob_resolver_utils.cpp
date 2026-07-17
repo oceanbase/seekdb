@@ -90,6 +90,18 @@ int ObResolverUtils::get_all_function_table_column_names(const TableItem &table_
   ObPLPackageGuard *package_guard = nullptr;
   const ObUserDefinedType *user_type = NULL;
   ObExecContext *exec_ctx = params.session_info_->get_cur_exec_ctx();
+  CK (OB_LIKELY(table_item.is_function_table()));
+  CK (OB_NOT_NULL(table_expr = table_item.function_table_expr_));
+  if (OB_FAIL(ret)) {
+    // do nothing
+  } else if (T_FUN_SYS_AI_SPLIT_DOCUMENT == table_expr->get_expr_type()) {
+    OZ (column_names.push_back(ObString("chunk_id")));
+    OZ (column_names.push_back(ObString("chunk_offset")));
+    OZ (column_names.push_back(ObString("chunk_length")));
+    OZ (column_names.push_back(ObString("chunk_text")));
+    return ret;
+  }
+  table_expr = NULL;
   CK (OB_NOT_NULL(exec_ctx));
   OZ (exec_ctx->get_package_guard(package_guard));
   CK (OB_NOT_NULL(package_guard));

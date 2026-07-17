@@ -11,6 +11,7 @@
 #include "lib/string/ob_string.h"
 #include "share/schema/ob_location_schema_struct.h"
 #include "share/schema/ob_schema_getter_guard.h"
+#include "sql/engine/expr/ob_expr_lob_utils.h"
 #include "sql/engine/ob_exec_context.h"
 #include "sql/session/ob_sql_session_info.h"
 
@@ -126,17 +127,26 @@ int ObExprLoadFile::read_file_to_datum(const ObExpr &expr,
       ret = OB_IO_ERROR;
       LOG_WARN("failed to rewind load_file path", K(ret), K(path));
     } else {
-      char *buf = expr.get_str_res_mem(ctx, file_size);
-      if (OB_ISNULL(buf)) {
-        ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("failed to alloc load_file result", K(ret), K(file_size));
+      ObTextStringDatumResult output_result(expr.datum_meta_.type_, &expr, &ctx, &res);
+      char *buf = NULL;
+      int64_t reserve_len = 0;
+      if (OB_FAIL(output_result.init(file_size))) {
+        LOG_WARN("failed to init load_file result", K(ret), K(file_size));
+      } else if (file_size > 0
+                 && OB_FAIL(output_result.get_reserved_buffer(buf, reserve_len))) {
+        LOG_WARN("failed to get reserved buffer", K(ret), K(file_size));
+      } else if (file_size > 0 && reserve_len != file_size) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("reserved buffer length mismatch", K(ret), K(reserve_len), K(file_size));
       } else {
-        const size_t read_size = fread(buf, 1, file_size, fp);
+        const size_t read_size = file_size > 0 ? fread(buf, 1, file_size, fp) : 0;
         if (read_size != static_cast<size_t>(file_size)) {
           ret = OB_IO_ERROR;
           LOG_WARN("failed to read load_file path", K(ret), K(path), K(read_size), K(file_size));
+        } else if (file_size > 0 && OB_FAIL(output_result.lseek(file_size, 0))) {
+          LOG_WARN("failed to lseek load_file result", K(ret), K(file_size));
         } else {
-          res.set_string(buf, static_cast<int32_t>(file_size));
+          output_result.set_result();
         }
       }
     }

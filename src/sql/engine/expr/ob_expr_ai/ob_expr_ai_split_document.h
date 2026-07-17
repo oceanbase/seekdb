@@ -22,6 +22,7 @@ struct ObAISplitDocumentChunk
   int64_t chunk_offset_;
   int64_t chunk_length_;
   common::ObString chunk_text_;
+  TO_STRING_KV(K_(chunk_id), K_(chunk_offset), K_(chunk_length), K_(chunk_text));
 };
 
 class ObExprAISplitDocument : public ObFuncExprOperator
@@ -52,6 +53,7 @@ public:
   virtual int cg_expr(ObExprCGCtx &expr_cg_ctx,
                       const ObRawExpr &raw_expr,
                       ObExpr &rt_expr) const override;
+  virtual bool need_rt_ctx() const override { return true; }
   static int eval_ai_split_document(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res);
   static int eval_next_chunk(const ObExpr &expr,
                              ObEvalCtx &ctx,

@@ -9241,6 +9241,7 @@ int ObDMLResolver::resolve_function_table_column_item_sys_func(const TableItem &
     int_meta.set_int();
     text_meta.set_varchar();
     text_meta.set_collation_type(CS_TYPE_UTF8MB4_BIN);
+    text_meta.set_collation_level(CS_LEVEL_IMPLICIT);
     const ObString col_names[] = {
       ObString::make_string("chunk_id"),
       ObString::make_string("chunk_offset"),

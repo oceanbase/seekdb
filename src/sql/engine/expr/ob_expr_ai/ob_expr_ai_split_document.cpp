@@ -173,7 +173,11 @@ int ObExprAISplitDocument::split_words(ObIAllocator &allocator,
                                        ObIArray<ObAISplitDocumentChunk> &chunks)
 {
   int ret = OB_SUCCESS;
-  struct WordSpan { int64_t off_; int64_t len_; };
+  struct WordSpan {
+    int64_t off_;
+    int64_t len_;
+    TO_STRING_KV(K_(off), K_(len));
+  };
   ObSEArray<WordSpan, 32> words;
   const char *p = content.ptr();
   int64_t i = 0;
