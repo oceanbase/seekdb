@@ -27,7 +27,7 @@ int ObTextTaaTIter::init(const ObTextTaaTParam &param)
 {
   int ret = OB_SUCCESS;
   lib::ContextParam mem_param;
-  mem_param.set_mem_attr(MTL_ID(), "TextTaaTIter", ObCtxIds::DEFAULT_CTX_ID);
+  mem_param.set_mem_attr("TextTaaTIter", ObCtxIds::DEFAULT_CTX_ID);
   if (OB_ISNULL(param.base_param_) || OB_ISNULL(param.dim_iter_) || OB_ISNULL(param.allocator_)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("unexpected null pointer in param", K(ret), KP_(param.base_param),

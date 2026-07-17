@@ -15,7 +15,7 @@
  */
 #ifndef OB_SHARE_COMPACTION_COMPACTION_TIMER_TASK_MGR_H_
 #define OB_SHARE_COMPACTION_COMPACTION_TIMER_TASK_MGR_H_
-#include "deps/oblib/src/lib/task/ob_timer.h"
+#include "lib/task/ob_timer.h"
 namespace oceanbase
 {
 namespace compaction
@@ -35,15 +35,6 @@ namespace compaction
     virtual void runTimerTask() override;                                      \
   };
 
-#define THREAD_OP(FUNC_NAME, tg_id)                                            \
-  if (-1 != tg_id) {                                                           \
-    FUNC_NAME(tg_id);                                                          \
-  }
-#define DESTROY_THREAD(tg_id) \
-  THREAD_OP(TG_DESTROY, tg_id) \
-  tg_id = -1;
-#define STOP_THREAD(tg_id) THREAD_OP(TG_STOP, tg_id)
-#define WAIT_THREAD(tg_id) THREAD_OP(TG_WAIT, tg_id)
 struct ObCompactionTimerTask
 {
   ObCompactionTimerTask() {}
@@ -54,8 +45,9 @@ struct ObCompactionTimerTask
   virtual void wait() = 0;
   static int restart_schedule_timer_task(
     const int64_t interval,
-    const int64_t tg_id,
-    common::ObTimerTask &timer_task);
+    common::ObTimer &timer,
+    common::ObTimerTask &timer_task,
+    const bool immediate = false);
 };
 
 

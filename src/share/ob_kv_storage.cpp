@@ -75,7 +75,7 @@ int ObKVStorage::get(const common::ObString &key, common::ObString &value)
 {
   int ret = OB_SUCCESS;
   value.reset();
-
+  
   if (!is_inited()) {
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));

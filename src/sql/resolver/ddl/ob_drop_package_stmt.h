@@ -33,12 +33,12 @@ public:
       : ObDDLStmt(stmt::T_DROP_PACKAGE),
         drop_package_arg_() {}
   virtual ~ObDropPackageStmt() {}
-  obrpc::ObDropPackageArg &get_drop_package_arg() { return drop_package_arg_; }
-  virtual obrpc::ObDDLArg &get_ddl_arg() { return drop_package_arg_; }
+  obcall::ObDropPackageArg &get_drop_package_arg() { return drop_package_arg_; }
+  virtual obcall::ObDDLArg &get_ddl_arg() { return drop_package_arg_; }
 private:
   DISALLOW_COPY_AND_ASSIGN(ObDropPackageStmt);
 
-  obrpc::ObDropPackageArg drop_package_arg_;
+  obcall::ObDropPackageArg drop_package_arg_;
 };
 } //namespace sql
 } //namespace oceanbase

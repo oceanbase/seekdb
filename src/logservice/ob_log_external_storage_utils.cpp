@@ -15,7 +15,7 @@
  */
 #include "ob_log_external_storage_utils.h"
 #include "share/ob_device_manager.h"                          // ObDeviceManager
-#include "share/backup/ob_backup_io_adapter.h"                // ObBackupIOAdapter
+#include "share/io/ob_backup_io_adapter.h"                // ObBackupIOAdapter
 namespace oceanbase
 {
 namespace common
@@ -359,26 +359,5 @@ int ObLogExternalStorageHandleAdapter::async_pread(const int64_t offset,
   return ret;
 }
 
-int ObLogExternalStorageHandleAdapter::async_pwrite(const int64_t offset,
-                                                    const char *buf,
-                                                    const int64_t write_buf_size,
-                                                    ObLogExternalStorageCtxItem &io_ctx)
-{
-  ObTimeGuard time_guard("storage pread", 100 * 1000);
-  int ret = OB_SUCCESS;
-  ObBackupIoAdapter io_adapter;
-  if (0 > offset || NULL == buf || 0 >= write_buf_size || !io_ctx.is_valid()) {
-    ret = OB_INVALID_ARGUMENT;
-    CLOG_LOG(WARN, "invalid argument", KR(ret), K(offset), KP(buf), K(write_buf_size), K(io_ctx));
-  } else if (OB_FAIL(io_adapter.async_upload_data(*io_ctx.io_device_, io_ctx.io_fd_, buf,
-                                                   offset, write_buf_size, io_ctx.io_handle_, common::ObIOModule::CLOG_WRITE_IO))) {
-    CLOG_LOG(WARN, "async_upload_data failed", KR(ret), K(io_ctx), K(offset), K(write_buf_size),
-             KP(buf), K(time_guard));
-  } else if (FALSE_IT(time_guard.click("after async_upload_data"))) {
-  } else {
-    CLOG_LOG(TRACE, "async_upload_data success", K(time_guard), K(io_ctx), K(offset), K(write_buf_size), KP(buf));
-  }
-  return ret;
-}
 } // end namespace logservice
 } // end namespace oceanbase

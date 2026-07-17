@@ -124,3 +124,4 @@ private:
 } // namespace oceanbase
 
 #endif // OCEANBASE_SHARE_STORAGE_OB_SERVER_EVENT_HISTORY_TABLE_STORAGE_H_
+

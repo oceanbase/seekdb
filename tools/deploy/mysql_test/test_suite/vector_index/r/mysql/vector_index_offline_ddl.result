@@ -367,12 +367,12 @@ drop table if exists t_vec;
 create table t_vec(c1 int, c2 vector(3), c3 varchar(10), c4 int, primary key(c1), vector index idx1(c2) with (distance=l2, type=hnsw)) partition by range(c1) (partition p0 values less than (10), partition p1 values less than (100));
 insert into t_vec values(1, '[1,1,1]', 'cc', 4);
 alter table t_vec modify c1 tinyint;
-alter table t_vec modify c3 varchar(5) charset 'gbk';
+alter table t_vec modify c3 varchar(5) charset 'utf8mb4';
 alter table t_vec modify c1 int;
 alter table t_vec add constraint cc check (c1 < 10);
 alter table t_vec modify c3 char(8) , add c5 int, drop column c4;
 alter table t_vec convert to CHARACTER SET 'utf8';
-alter table t_vec convert to CHARACTER SET 'gbk';
+alter table t_vec convert to CHARACTER SET 'utf8mb4';
 truncate table t_vec;
 show create table t_vec;
 Table	Create Table
@@ -384,7 +384,7 @@ t_vec	CREATE TABLE `t_vec` (
   PRIMARY KEY (`c1`),
   VECTOR KEY `idx1` (`c2`) WITH (DISTANCE=L2, TYPE=HNSW, LIB=VSAG, M=16, EF_CONSTRUCTION=200, EF_SEARCH=64) BLOCK_SIZE 16384,
   CONSTRAINT `cc` CHECK ((`c1` < 10))
-) ORGANIZATION INDEX DEFAULT CHARSET = gbk ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = replica_num BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = replica_num BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
  partition by range(c1)
 (partition `p0` values less than (10),
 partition `p1` values less than (100))

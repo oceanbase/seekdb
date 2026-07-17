@@ -30,11 +30,11 @@ namespace oceanbase
 namespace share
 {
 class SCN;
-class ObLSID;
 }
 
 namespace storage
 {
+class ObLS;
 namespace mds
 {
 class MdsCtx;
@@ -57,7 +57,7 @@ public:
   // @return OB_TABLET_NOT_EXIST, the tablet is not exist.
   // @return OB_NO_NEED_UPDATE, this log needs to be ignored.
   // @return other error codes, failed to replay.
-  int execute(const share::SCN &scn, const share::ObLSID &ls_id, const common::ObTabletID &tablet_id);
+  int execute(const share::SCN &scn, const common::ObTabletID &tablet_id);
 
   // check restore status before replay
   // @return OB_SUCCESS, need replay.
@@ -69,13 +69,9 @@ public:
 
 protected:
   // Check if this replay operation will update the tablet status(ObTabletCreateDeleteMdsUserData), for example, the following
-  // 6 types of ObTxDataSourceType need return TRUE.
+  // types of ObTxDataSourceType need return TRUE.
   // 1. CREATE_TABLET
   // 2. REMOVE_TABLET
-  // 3. TX_START_TRANSFER_IN
-  // 4. TX_START_TRANSFER_OUT
-  // 5. TX_FINISH_TRANSFER_OUT
-  // 6. TX_FINISH_TRANSFER_IN
   virtual bool is_replay_update_tablet_status_() const = 0;
 
   // replay to the tablet
@@ -118,20 +114,17 @@ protected:
       storage::ObTabletHandle &tablet_handle,
       const ObTabletCreateDeleteMdsUserData &mds,
       storage::mds::MdsCtx &ctx,
-      const share::SCN &scn,
-      const bool for_old_mds = false);
+      const share::SCN &scn);
   int replay_to_mds_table_(
       storage::ObTabletHandle &tablet_handle,
       const ObTabletDDLCompleteMdsUserData &mds,
       storage::mds::MdsCtx &ctx,
-      const share::SCN &scn,
-      const bool for_old_mds);
+      const share::SCN &scn);
   int replay_to_mds_table_(
       storage::ObTabletHandle &tablet_handle,
       const ObTabletBindingMdsUserData &mds,
       storage::mds::MdsCtx &ctx,
-      const share::SCN &scn,
-      const bool for_old_mds = false);
+      const share::SCN &scn);
   template <typename K, typename V>
   int replay_to_mds_table_(
       storage::ObTabletHandle &tablet_handle,
@@ -153,12 +146,12 @@ private:
       bool &can_skip);
   //  The replay of multi-source log modified by ObTabletCreateDeleteMdsUserData needs to be filtered by tablet_change_checkpoint_scn
   int check_can_skip_replay_(
-      const storage::ObLSHandle &ls_handle,
+      storage::ObLS *ls,
       const share::SCN &scn,
       bool &can_skip);
 
   int replay_get_tablet_(
-      const storage::ObLSHandle &ls_handle,
+      storage::ObLS *ls,
       const common::ObTabletID &tablet_id,
       const share::SCN &scn,
       storage::ObTabletHandle &tablet_handle);
@@ -180,7 +173,7 @@ int ObTabletReplayExecutor::replay_to_mds_table_(
   storage::ObTablet *tablet = tablet_handle.get_obj();
   if (!is_replay_update_mds_table_()) {
     ret = OB_ERR_UNEXPECTED;
-    CLOG_LOG(WARN, "replay log do not update mds table, cannot replay to mds table", K(ret), K(tablet_handle));
+    CLOG_LOG(ERROR, "replay log do not update mds table, cannot replay to mds table", K(ret), K(tablet_handle));
   } else if (OB_ISNULL(tablet)) {
     ret = OB_ERR_UNEXPECTED;
     CLOG_LOG(WARN, "tablet should not be NULL", KR(ret));
@@ -205,7 +198,7 @@ int ObTabletReplayExecutor::replay_to_mds_table_(
   storage::ObTablet *tablet = tablet_handle.get_obj();
   if (!is_replay_update_mds_table_()) {
     ret = OB_ERR_UNEXPECTED;
-    CLOG_LOG(WARN, "replay log do not update mds table, cannot replay to mds table", K(ret), K(tablet_handle));
+    CLOG_LOG(ERROR, "replay log do not update mds table, cannot replay to mds table", K(ret), K(tablet_handle));
   } else if (OB_ISNULL(tablet)) {
     ret = OB_ERR_UNEXPECTED;
     CLOG_LOG(WARN, "tablet should not be NULL", KR(ret));
@@ -229,7 +222,7 @@ int ObTabletReplayExecutor::replay_remove_to_mds_table_(
   storage::ObTablet *tablet = tablet_handle.get_obj();
   if (!is_replay_update_mds_table_()) {
     ret = OB_ERR_UNEXPECTED;
-    CLOG_LOG(WARN, "replay log do not remove mds table, cannot replay to mds table", K(ret), K(tablet_handle));
+    CLOG_LOG(ERROR, "replay log do not remove mds table, cannot replay to mds table", K(ret), K(tablet_handle));
   } else if (OB_ISNULL(tablet)) {
     ret = OB_ERR_UNEXPECTED;
     CLOG_LOG(WARN, "tablet should not be NULL", KR(ret));
@@ -237,7 +230,7 @@ int ObTabletReplayExecutor::replay_remove_to_mds_table_(
     ret = OB_NOT_SUPPORTED;
     CLOG_LOG(WARN, "inner tablets have no mds table", KR(ret));
   } else if (OB_SUCCESS != (ret = tablet->replay_remove<K, V>(key, ctx, scn))) {
-    CLOG_LOG(WARN, "failed to do tablet replay", KR(ret));
+    CLOG_LOG(ERROR, "failed to do tablet replay", KR(ret));
   }
   return ret;
 }

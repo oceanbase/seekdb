@@ -26,7 +26,6 @@ namespace sql {
 
 int ObSqlMemMgrProcessor::init(
   ObIAllocator *allocator,
-  uint64_t tenant_id,
   int64_t cache_size,
   const ObPhyOperatorType op_type,
   const uint64_t op_id,
@@ -37,7 +36,6 @@ int ObSqlMemMgrProcessor::init(
   ObTenantSqlMemoryManager *sql_mem_mgr = get_sql_mem_mgr();
   is_auto_mgr_ = false;
   reset();
-  tenant_id_ = tenant_id;
   profile_.set_operator_type(op_type);
   profile_.set_operator_id(op_id);
   profile_.set_exec_info(exec_info);
@@ -99,8 +97,8 @@ int ObSqlMemMgrProcessor::init(
   int64_t max_mem_size = MAX_SQL_MEM_SIZE;
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(ObSqlWorkareaUtil::get_workarea_size(
-      profile_.get_work_area_type(), tenant_id_, exec_info, max_mem_size))) {
-    LOG_WARN("failed to get workarea size", K(ret), K(tenant_id_), K(max_mem_size));
+      profile_.get_work_area_type(), exec_info, max_mem_size))) {
+    LOG_WARN("failed to get workarea size", K(ret), K(max_mem_size));
   }
   if (!profile_.get_auto_policy()) {
     profile_.set_max_bound(max_mem_size);
@@ -216,7 +214,7 @@ int ObSqlMemMgrProcessor::try_upgrade_auto_mgr(ObIAllocator *allocator, int64_t 
         && sql_mem_mgr_->get_global_bound_size() < max_area_size) {
     } else if (OB_FAIL(update_used_mem_size(0))) {
       LOG_WARN("failed to update used mem size", K(ret));
-    } else if (OB_FAIL(init(allocator, tenant_id_,
+    } else if (OB_FAIL(init(allocator,
                             max_area_size * (EXTEND_RATIO + 100) /100,
                             profile_.get_operator_type(),
                             profile_.get_operator_id(), profile_.get_exec_info()))) {
@@ -316,7 +314,7 @@ int ObSqlMemMgrProcessor::alloc_dir_id(int64_t &dir_id)
 {
   int ret = OB_SUCCESS;
   if (0 == dir_id_) {
-    if (OB_FAIL(ObChunkStoreUtil::alloc_dir_id(tenant_id_, dir_id_))) {
+    if (OB_FAIL(ObChunkStoreUtil::alloc_dir_id(dir_id_))) {
       LOG_WARN("failed to alloc dir id", K(ret));
     }
   }
@@ -325,35 +323,32 @@ int ObSqlMemMgrProcessor::alloc_dir_id(int64_t &dir_id)
 }
 
 int ObSqlWorkareaUtil::get_workarea_size(const ObSqlWorkAreaType wa_type,
-                                         const int64_t tenant_id,
                                          ObExecContext *exec_ctx,
                                          int64_t &value)
 {
   int ret = OB_SUCCESS;
   if (OB_ISNULL(exec_ctx)) {
-    if (OB_FAIL(get_workarea_size(wa_type, tenant_id, value, nullptr))) {
+    if (OB_FAIL(get_workarea_size(wa_type, value, nullptr))) {
       LOG_WARN("Fail to get workarea size", K(ret));
     }
-  } else if (OB_FAIL(get_workarea_size(wa_type, tenant_id, value, exec_ctx->get_my_session()))) {
+  } else if (OB_FAIL(get_workarea_size(wa_type, value, exec_ctx->get_my_session()))) {
     LOG_WARN("Fail to get workarea size", K(ret));
   }
   return ret;
 }
 
 int ObSqlWorkareaUtil::get_workarea_size(const ObSqlWorkAreaType wa_type,
-                                         const int64_t tenant_id,
                                          ObSqlProfileExecInfo &exec_info,
                                          int64_t &value)
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(get_workarea_size(wa_type, tenant_id, value, exec_info.get_my_session()))) {
+  if (OB_FAIL(get_workarea_size(wa_type, value, exec_info.get_my_session()))) {
     LOG_WARN("Fail to get workarea size", K(ret));
   }
   return ret;
 }
 
 int ObSqlWorkareaUtil::get_workarea_size(const ObSqlWorkAreaType wa_type,
-                                         const int64_t tenant_id,
                                          int64_t &value,
                                          ObSQLSessionInfo *session)
 {
@@ -365,25 +360,19 @@ int ObSqlWorkareaUtil::get_workarea_size(const ObSqlWorkAreaType wa_type,
       value = session->get_tenant_sort_area_size();
     } else {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected status: workarea type", K(wa_type), K(tenant_id));
+      LOG_WARN("unexpected status: workarea type", K(wa_type));
     }
   } else {
-    ObTenantConfigGuard tenant_config(TENANT_CONF(tenant_id));
-    if (tenant_config.is_valid()) {
-      if (HASH_WORK_AREA == wa_type) {
-        value = tenant_config->_hash_area_size;
-      } else if (SORT_WORK_AREA == wa_type) {
-        value = tenant_config->_sort_area_size;
-      } else {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected status: workarea type", K(wa_type), K(tenant_id));
-      }
+    if (HASH_WORK_AREA == wa_type) {
+      value = GCONF._hash_area_size;
+    } else if (SORT_WORK_AREA == wa_type) {
+      value = GCONF._sort_area_size;
     } else {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("failed to init tenant config", K(tenant_id), K(ret));
+      LOG_WARN("unexpected status: workarea type", K(wa_type));
     }
   }
-  LOG_DEBUG("debug workarea size", K(value), K(tenant_id), K(lbt()));
+  LOG_DEBUG("debug workarea size", K(value), K(lbt()));
   return ret;
 }
 

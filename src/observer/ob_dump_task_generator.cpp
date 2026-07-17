@@ -58,7 +58,7 @@ int ObDumpTaskGenerator::generate_task_from_file()
   int ret = OB_SUCCESS;
   auto &mem_dump = ObMemoryDump::get_instance();
   ObArenaAllocator allocator;
-  ObMemAttr attr(common::OB_SERVER_TENANT_ID, "dumpParser", ObCtxIds::DEFAULT_CTX_ID);
+  ObMemAttr attr("dumpParser", ObCtxIds::DEFAULT_CTX_ID);
   allocator.set_attr(attr);
   ObParser parser(allocator, SMO_DEFAULT);
   ParseResult parse_result;
@@ -100,43 +100,37 @@ int ObDumpTaskGenerator::generate_task_from_file()
     } else if (MEMORY_LEAK == node->value_) {
       dump_memory_leak();
     } else {
-      ObMemoryDumpTask *task = mem_dump.alloc_task();
-      if (OB_ISNULL(task)) {
-        ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("alloc task failed", K(ret));
-      } else {
-        task->type_ = node->value_ <= 1 ? DUMP_CONTEXT : DUMP_CHUNK;
-        task->dump_all_ = 0 == node->value_ || 2 == node->value_;
-        char atoi_buf[32];
-        if (CONTEXT_ALL == node->value_) {
-          // do-nothing
-        } else if (CONTEXT == node->value_) {
-          snprintf(atoi_buf, sizeof(atoi_buf), "%.*s",
-                   (int32_t)node->children_[0]->str_len_, node->children_[0]->str_value_);
-          task->p_context_ = (void*)std::stoll(atoi_buf, nullptr, 0);
-          task->slot_idx_ = node->children_[1]->value_;
-        } else if (CHUNK_ALL == node->value_) {
-          // do-nothing
-        } else if (CHUNK_OF_TENANT_CTX == node->value_) {
-          task->dump_tenant_ctx_ = true;
-          task->tenant_id_ = node->children_[0]->value_;
-          uint64_t ctx_id = 0;
-          if (!get_global_ctx_info().is_valid_ctx_name(node->children_[1]->str_value_, ctx_id)) {
-            ret = OB_INVALID_ARGUMENT;
-            LOG_WARN("invalid ctx", K(node->children_[1]->str_value_));
-          } else {
-            task->ctx_id_ = ctx_id;
-          }
-        } else if (CHUNK == node->value_) {
-          snprintf(atoi_buf, sizeof(atoi_buf), "%.*s",
-                   (int32_t)node->children_[0]->str_len_, node->children_[0]->str_value_);
-          task->p_chunk_ = (void*)std::stoll(atoi_buf, nullptr, 0);
+      ObMemoryDumpTask task;
+      task.type_ = node->value_ <= 1 ? DUMP_CONTEXT : DUMP_CHUNK;
+      task.dump_all_ = 0 == node->value_ || 2 == node->value_;
+      char atoi_buf[32];
+      if (CONTEXT_ALL == node->value_) {
+        // do-nothing
+      } else if (CONTEXT == node->value_) {
+        snprintf(atoi_buf, sizeof(atoi_buf), "%.*s",
+                 (int32_t)node->children_[0]->str_len_, node->children_[0]->str_value_);
+        task.p_context_ = (void*)std::stoll(atoi_buf, nullptr, 0);
+        task.slot_idx_ = node->children_[1]->value_;
+      } else if (CHUNK_ALL == node->value_) {
+        // do-nothing
+      } else if (CHUNK_OF_TENANT_CTX == node->value_) {
+        task.dump_tenant_ctx_ = true;
+        
+        uint64_t ctx_id = 0;
+        if (!get_global_ctx_info().is_valid_ctx_name(node->children_[1]->str_value_, ctx_id)) {
+          ret = OB_INVALID_ARGUMENT;
+          LOG_WARN("invalid ctx", K(node->children_[1]->str_value_));
+        } else {
+          task.ctx_id_ = ctx_id;
         }
-        LOG_INFO("task info", K(*task));
-        if (OB_FAIL(mem_dump.push(task))) {
-          LOG_WARN("push task failed", K(ret));
-          mem_dump.free_task(task);
-        }
+      } else if (CHUNK == node->value_) {
+        snprintf(atoi_buf, sizeof(atoi_buf), "%.*s",
+                 (int32_t)node->children_[0]->str_len_, node->children_[0]->str_value_);
+        task.p_chunk_ = (void*)std::stoll(atoi_buf, nullptr, 0);
+      }
+      LOG_INFO("task info", K(task));
+      if (OB_FAIL(mem_dump.request_dump(task))) {
+        LOG_WARN("request dump failed", K(ret));
       }
     }
   }
@@ -157,7 +151,7 @@ void ObDumpTaskGenerator::dump_memory_leak()
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("create new file failed", K(strerror(errno)));
   } else {
-    ObMemAttr attr(common::OB_SERVER_TENANT_ID, "dumpLeak", ObCtxIds::DEFAULT_CTX_ID);
+    ObMemAttr attr("dumpLeak", ObCtxIds::DEFAULT_CTX_ID);
     const int buf_len = 1L << 20;
     char *buf = (char*)ob_malloc(buf_len, attr);
     if (OB_ISNULL(buf)) {

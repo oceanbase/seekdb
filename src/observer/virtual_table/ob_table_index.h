@@ -18,7 +18,7 @@
 #define OCEANBASE_OBSERVER_VIRTUAL_TABLE_OB_TABLE_INDEX_
 
 #include "lib/container/ob_se_array.h"
-#include "share/ob_virtual_table_scanner_iterator.h"
+#include "observer/virtual_table/ob_virtual_table_scanner_iterator.h"
 #include "common/ob_range.h"
 namespace oceanbase
 {
@@ -45,7 +45,7 @@ public:
   virtual int inner_open();
   virtual int inner_get_next_row(common::ObNewRow *&row);
   virtual void reset();
-  int init(uint64_t tenant_id);
+  int init();
 private:
 
   int add_table_indexes(const share::schema::ObTableSchema &table_schema,
@@ -99,7 +99,6 @@ private:
                            const share::schema::ObColumnSchemaV2 &column_schema,
                            common::ObString &column_name);
 private:
-  uint64_t tenant_id_;
   uint64_t show_table_id_;
   common::ObSArray<const share::schema::ObDatabaseSchema *> database_schemas_;
   int64_t database_schema_idx_;

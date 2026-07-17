@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_EXE
 
+#include "lib/stat/ob_diagnostic_info_guard.h"
 #include "ob_task.h"
 #include "sql/engine/px/ob_px_util.h"
 
@@ -114,12 +115,6 @@ OB_DEF_DESERIALIZE(ObTask)
     }
   }
   if (OB_SUCC(ret)) {
-    // Compact mode may not set while rpc argument deserialize, set it manually.
-    // See: 
-    lib::CompatModeGuard g(ORACLE_MODE == exec_ctx_->get_my_session()->get_compatibility_mode()
-        ? lib::Worker::CompatMode::ORACLE
-        : lib::Worker::CompatMode::MYSQL);
-
     LST_DO_CODE(OB_UNIS_DECODE, ctrl_svr_);
     LST_DO_CODE(OB_UNIS_DECODE, runner_svr_);
     LST_DO_CODE(OB_UNIS_DECODE, ob_task_id_);
@@ -301,7 +296,7 @@ OB_SERIALIZE_MEMBER(ObPingSqlTaskResult, err_code_, ret_status_);
 OB_DEF_SERIALIZE(ObRemoteTask)
 {
   int ret = OB_SUCCESS;
-  int64_t tenant_id = OB_INVALID_ID;
+  
   ParamStore *ps_params = nullptr;
   ParamStore empty_param_store;
   //for serialize ObObjParam' param_meta_
@@ -312,7 +307,6 @@ OB_DEF_SERIALIZE(ObRemoteTask)
     ret = OB_NOT_INIT;
     LOG_WARN("remote task not init", K(ret), K_(remote_sql_info), K_(session_info), K(ps_params));
   } else {
-    tenant_id = session_info_->get_effective_tenant_id();
     if (!remote_sql_info_->use_ps_) {
       ps_params = &empty_param_store;
     } else {
@@ -329,7 +323,6 @@ OB_DEF_SERIALIZE(ObRemoteTask)
               remote_sql_info_->use_ps_,
               remote_sql_info_->remote_sql_,
               *ps_params,
-              tenant_id,
               *session_info_,
               remote_sql_info_->is_batched_stmt_,
               dependency_tables_,
@@ -343,7 +336,6 @@ OB_DEF_SERIALIZE(ObRemoteTask)
   }
   OB_UNIS_ENCODE(remote_sql_info_->is_original_ps_mode_);
   OB_UNIS_ENCODE(remote_sql_info_->sql_from_pl_);
-  OB_UNIS_ENCODE(ls_list_);
   return ret;
 }
 
@@ -358,7 +350,7 @@ OB_DEF_SERIALIZE_SIZE(ObRemoteTask)
       || OB_ISNULL(remote_sql_info_->ps_params_)) {
     LOG_WARN_RET(OB_NOT_INIT, "remote task not init", K_(remote_sql_info), K_(session_info), K(ps_params));
   } else {
-    int64_t tenant_id = session_info_->get_effective_tenant_id();
+    
     if (!remote_sql_info_->use_ps_) {
       ps_params = &empty_param_store;
     } else {
@@ -373,7 +365,6 @@ OB_DEF_SERIALIZE_SIZE(ObRemoteTask)
                 remote_sql_info_->use_ps_,
                 remote_sql_info_->remote_sql_,
                 *ps_params,
-                tenant_id,
                 *session_info_,
                 remote_sql_info_->is_batched_stmt_,
                 dependency_tables_,
@@ -388,7 +379,6 @@ OB_DEF_SERIALIZE_SIZE(ObRemoteTask)
     }
     OB_UNIS_ADD_LEN(remote_sql_info_->is_original_ps_mode_);
     OB_UNIS_ADD_LEN(remote_sql_info_->sql_from_pl_);
-    OB_UNIS_ADD_LEN(ls_list_);
   }
   return len;
 }
@@ -396,7 +386,6 @@ OB_DEF_SERIALIZE_SIZE(ObRemoteTask)
 OB_DEF_DESERIALIZE(ObRemoteTask)
 {
   int ret = OB_SUCCESS;
-  int64_t tenant_id = OB_INVALID_ID;
   ParamStore *ps_params = nullptr;
   ObObjMeta tmp_meta;
   ParamFlag tmp_flag;
@@ -414,13 +403,12 @@ OB_DEF_DESERIALIZE(ObRemoteTask)
               task_id_,
               remote_sql_info_->use_ps_,
               remote_sql_info_->remote_sql_,
-              *ps_params,
-              tenant_id);
+              *ps_params);
   if (OB_SUCC(ret)) {
-    // Subsequent session creation requires dependency on tenant_id
+    // Subsequent session creation requires dependency on tenant
     remote_sql_info_->ps_param_cnt_ = static_cast<int32_t>(ps_params->count());
-    if (OB_FAIL(exec_ctx_->create_my_session(tenant_id))) {
-      LOG_WARN("create my session failed", K(ret), K(tenant_id));
+    if (OB_FAIL(exec_ctx_->create_my_session())) {
+      LOG_WARN("create my session failed", K(ret));
     } else {
       session_info_ = exec_ctx_->get_my_session();
       ObSQLSessionInfo::LockGuard query_guard(session_info_->get_query_lock());
@@ -473,7 +461,6 @@ OB_DEF_DESERIALIZE(ObRemoteTask)
       }
       OB_UNIS_DECODE(remote_sql_info_->is_original_ps_mode_);
       OB_UNIS_DECODE(remote_sql_info_->sql_from_pl_);
-      OB_UNIS_DECODE(ls_list_);
     }
   }
   return ret;
@@ -485,33 +472,6 @@ int ObRemoteTask::assign_dependency_tables(const DependenyTableStore &dependency
     LOG_WARN("failed to assign file list", K(ret));
   }
   return ret;
-}
-
-int ObRemoteTask::assign_ls_list(const share::ObLSArray ls_ids) {
-  int ret = OB_SUCCESS;
-  if (OB_FAIL(ls_list_.assign(ls_ids))) {
-    LOG_WARN("failed to assign ls list", K(ret));
-  }
-  return ret;
-}
-// Need to ensure that elements in the two ls arrays are not duplicated
-bool ObRemoteTask::check_ls_list(share::ObLSArray &ls_ids) const {
-  bool is_valid = true;
-
-  if (ls_ids.count() > ls_list_.count()) {
-    is_valid = false;
-  } else {
-    ARRAY_FOREACH_X(ls_ids, i, ls_ids_cnt, is_valid) {
-      is_valid = false;
-      ARRAY_FOREACH_X(ls_list_, j, ls_list_cnt, !is_valid) {
-        if (ls_ids.at(i) == ls_list_.at(j)) {
-          is_valid = true;
-        }
-      }
-    }
-  }
-
-  return is_valid;
 }
 
 DEFINE_TO_YSON_KV(ObRemoteTask, OB_ID(task_id), task_id_,

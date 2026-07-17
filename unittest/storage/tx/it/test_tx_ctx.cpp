@@ -27,6 +27,7 @@ using namespace transaction;
 using namespace share;
 
 static ObSharedMemAllocMgr MTL_MEM_ALLOC_MGR;
+static FakeModuleProvider G_TEST_MODULE_PROVIDER;
 
 namespace share {
 int ObTenantTxDataAllocator::init(const char *label)
@@ -80,14 +81,14 @@ public:
   virtual void SetUp() override
   {
     oceanbase::ObClusterVersion::get_instance().update_data_version(DATA_CURRENT_VERSION);
-    ObMallocAllocator::get_instance()->create_and_add_tenant_allocator(1001);
+    ObMallocAllocator::get_instance()->create_and_add_tenant_allocator();
     const uint64_t tv = ObTimeUtility::current_time();
     ObCurTraceId::set(&tv);
-    GCONF._ob_trans_rpc_timeout = 500;
     ObClockGenerator::init();
     const testing::TestInfo *const test_info =
         testing::UnitTest::GetInstance()->current_test_info();
-    MTL_MEM_ALLOC_MGR.init();
+    // publish the fake module set as the process-global provider (see tx_node.h).
+    publish_test_module_provider(G_TEST_MODULE_PROVIDER, MTL_MEM_ALLOC_MGR);
     auto test_name = test_info->name();
     _TRANS_LOG(INFO, ">>>> starting test : %s", test_name);
   }
@@ -98,96 +99,11 @@ public:
     auto test_name = test_info->name();
     _TRANS_LOG(INFO, ">>>> tearDown test : %s", test_name);
     ObClockGenerator::destroy();
-    ObMallocAllocator::get_instance()->recycle_tenant_allocator(1001);
+    ObMallocAllocator::get_instance()->recycle_tenant_allocator();
   }
   MsgBus bus_;
 };
 
-TEST_F(ObTestTxCtx, DelayAbort)
-{
-  ObTxPartList backup_parts;
-  START_ONE_TX_NODE(n1);
-  PREPARE_TX_PARAM(tx_param);
-  PREPARE_TX(n1, tx);
-  { // prepare snapshot for write
-    ObTxReadSnapshot snapshot;
-    ASSERT_EQ(OB_SUCCESS,
-              n1->get_read_snapshot(tx, tx_param.isolation_, n1->ts_after_ms(100), snapshot));
-    CREATE_IMPLICIT_SAVEPOINT(n1, tx, tx_param, sp1);
-    ASSERT_EQ(OB_SUCCESS, n1->create_implicit_savepoint(tx, tx_param, sp1));
-    ASSERT_EQ(OB_SUCCESS, n1->write(tx, snapshot, 100, 112));
-  }
-  ASSERT_EQ(OB_SUCCESS, backup_parts.assign(tx.parts_));
-  tx.parts_.reset();
-
-  ObLSTxCtxMgr *ls_tx_ctx_mgr = nullptr;
-  ObPartTransCtx *tx_ctx = nullptr;
-  ASSERT_EQ(OB_SUCCESS, n1->txs_.tx_ctx_mgr_.get_ls_tx_ctx_mgr(n1->ls_id_, ls_tx_ctx_mgr));
-
-  {
-    ASSERT_EQ(OB_SUCCESS, ls_tx_ctx_mgr->get_tx_ctx(tx.tx_id_, false /*for_replay*/, tx_ctx));
-    GCONF._private_buffer_size = 1;
-    // ASSERT_EQ(OB_SUCCESS, tx_ctx->submit_log_impl_(ObTxLogType::TX_REDO_LOG));
-    ASSERT_EQ(OB_SUCCESS, tx_ctx->submit_redo_after_write(false, ObTxSEQ()));
-    TRANS_LOG(INFO, "[TEST] after submit redo", K(tx_ctx->trans_id_),
-              K(tx_ctx->exec_info_.max_applied_log_ts_));
-    n1->wait_all_redolog_applied();
-    TRANS_LOG(INFO, "[TEST] after on_success redo", K(tx_ctx->trans_id_),
-              K(tx_ctx->exec_info_.max_applied_log_ts_));
-    ASSERT_EQ(true, tx_ctx->exec_info_.redo_lsns_.count() > 0);
-    ASSERT_EQ(true, tx_ctx->exec_info_.max_applied_log_ts_.is_valid());
-    ASSERT_EQ(ObTxState::INIT, tx_ctx->exec_info_.state_);
-    ASSERT_EQ(false, tx_ctx->is_follower_());
-    ASSERT_EQ(OB_SUCCESS, ls_tx_ctx_mgr->revert_tx_ctx(tx_ctx));
-  }
-  // disable keepalive msg, because switch to follower forcedly will send keepalive msg to notify
-  // scheduler abort tx
-  TRANS_LOG(INFO, "add drop KEEPALIVE msg");
-  n1->add_drop_msg_type(KEEPALIVE);
-
-  ls_tx_ctx_mgr->switch_to_follower_forcedly();
-
-  {
-    ASSERT_EQ(OB_SUCCESS, ls_tx_ctx_mgr->get_tx_ctx(tx.tx_id_, true /*for_replay*/, tx_ctx));
-    ASSERT_EQ(true, tx_ctx->exec_info_.redo_lsns_.count() > 0);
-    ASSERT_EQ(true, tx_ctx->exec_info_.max_applied_log_ts_.is_valid());
-    ASSERT_EQ(ObTxState::INIT, tx_ctx->exec_info_.state_);
-    ASSERT_EQ(true, tx_ctx->is_follower_());
-    ASSERT_EQ(OB_SUCCESS, ls_tx_ctx_mgr->revert_tx_ctx(tx_ctx));
-  }
-
-  ASSERT_EQ(OB_SUCCESS, ls_tx_ctx_mgr->switch_to_leader());
-  n1->wait_all_redolog_applied();
-
-  {
-    ASSERT_EQ(OB_SUCCESS, ls_tx_ctx_mgr->get_tx_ctx(tx.tx_id_, false /*for_replay*/, tx_ctx));
-    TRANS_LOG(INFO, "[TEST] after leader takeover", K(tx_ctx->trans_id_),
-              K(tx_ctx->exec_info_.state_), K(tx_ctx->exec_info_.max_applied_log_ts_));
-    ASSERT_EQ(true, tx_ctx->exec_info_.redo_lsns_.count() > 0);
-    ASSERT_EQ(true, tx_ctx->exec_info_.max_applied_log_ts_.is_valid());
-    ASSERT_EQ(true, tx_ctx->sub_state_.is_force_abort());
-    ASSERT_EQ(false, tx_ctx->sub_state_.is_state_log_submitted());
-    ASSERT_EQ(ObTxState::INIT, tx_ctx->exec_info_.state_);
-    ASSERT_EQ(false, tx_ctx->is_follower_());
-    ASSERT_EQ(OB_SUCCESS, ls_tx_ctx_mgr->revert_tx_ctx(tx_ctx));
-  }
-
-  { // prepare snapshot for write
-    ObTxReadSnapshot snapshot;
-    ASSERT_EQ(OB_SUCCESS,
-              n1->get_read_snapshot(tx, tx_param.isolation_, n1->ts_after_ms(100), snapshot));
-    CREATE_IMPLICIT_SAVEPOINT(n1, tx, tx_param, sp2);
-    ASSERT_EQ(OB_SUCCESS, n1->create_implicit_savepoint(tx, tx_param, sp2));
-    ASSERT_EQ(OB_TRANS_KILLED, n1->write(tx, snapshot, 1110, 1120));
-  }
-
-  ASSERT_EQ(OB_SUCCESS, tx.parts_.assign(backup_parts));
-  ASSERT_EQ(OB_TRANS_KILLED, n1->commit_tx(tx, n1->ts_after_ms(500)));
-  ASSERT_EQ(OB_SUCCESS, n1->release_tx(tx));
-
-  ASSERT_EQ(OB_SUCCESS, n1->wait_all_tx_ctx_is_destoryed());
-  ASSERT_EQ(OB_SUCCESS, n1->txs_.tx_ctx_mgr_.revert_ls_tx_ctx_mgr(ls_tx_ctx_mgr));
-}
 } // namespace oceanbase
 
 int main(int argc, char **argv)

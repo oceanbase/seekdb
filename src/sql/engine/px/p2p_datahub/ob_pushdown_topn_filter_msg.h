@@ -17,7 +17,7 @@
 #pragma once
 #include "lib/ob_define.h"
 #include "lib/container/ob_array.h"
-#include "share/datum/ob_datum.h"
+#include "common/datum/ob_datum.h"
 #include "sql/engine/basic/ob_chunk_datum_store.h"
 #include "sql/engine/px/p2p_datahub/ob_p2p_dh_msg.h"
 
@@ -122,7 +122,7 @@ public:
   {
     destroy();
   }
-  int init(const ObPushDownTopNFilterInfo *pd_topn_filter_info, uint64_t tenant_id,
+  int init(const ObPushDownTopNFilterInfo *pd_topn_filter_info,
            const ObIArray<ObSortFieldCollation> *sort_collations, ObExecContext *exec_ctx,
            int64_t px_seq_id, bool is_fetch_with_ties);
   int destroy();

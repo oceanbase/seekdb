@@ -21,7 +21,6 @@
 #include "sql/dtl/ob_dtl_msg.h"
 #include "sql/dtl/ob_dtl_basic_channel.h"
 #include "sql/dtl/ob_dtl_local_channel.h"
-#include "sql/dtl/ob_dtl_rpc_channel.h"
 #include "lib/allocator/page_arena.h"
 #include "share/ob_cluster_version.h"
 
@@ -32,7 +31,6 @@ class ObNewRow;
 namespace sql {
 namespace dtl {
 
-class ObDtlRpcChannel;
 class ObDtlLocalChannel;
 
 class ObDtlBufEncoder
@@ -40,15 +38,13 @@ class ObDtlBufEncoder
 public:
   ObDtlBufEncoder()
   : use_row_store_(false),
-    tenant_id_(500),
     buffer_(nullptr),
     msg_writer_(nullptr),
     meta_(nullptr),
     size_per_buffer_(-1)
   {}
   ~ObDtlBufEncoder() {}
-  void set_tenant_id(int64_t tenant_id) {
-    tenant_id_ = tenant_id;
+  void set_use_row_store() {
     use_row_store_ = true;
   }
   int switch_writer(const ObDtlMsg &msg);
@@ -57,7 +53,7 @@ public:
   int write_data_msg(const ObDtlMsg &msg, ObEvalCtx *eval_ctx, bool is_eof);
   int set_new_buffer(ObDtlLinkedBuffer *buffer) {
     buffer_ = buffer;
-    int ret = msg_writer_->init(buffer_, tenant_id_);
+    int ret = msg_writer_->init(buffer_);
     if (VECTOR_ROW_WRITER == msg_writer_->type()) {
       (static_cast<ObDtlVectorRowMsgWriter *> (msg_writer_))->set_row_meta(meta_);
     }
@@ -85,7 +81,6 @@ public:
   void set_plan_min_cluster_version(uint64_t plan_min_cluster_version) {plan_min_cluster_version_ = plan_min_cluster_version;};
 private:
   int64_t use_row_store_;
-  int64_t tenant_id_;
   ObDtlLinkedBuffer *buffer_;
   ObDtlControlMsgWriter ctl_msg_writer_;
   ObDtlRowMsgWriter row_msg_writer_;
@@ -102,8 +97,8 @@ private:
 class ObDtlBcastService
 {
 public:
-  ObDtlBcastService(int64_t tenant_id, bool send_by_tenant) : server_addr_(), bcast_buf_(nullptr), send_count_(0), bcast_ch_count_(0),
-              ch_infos_(), resps_(), peer_ids_(), active_chs_count_(0), tenant_id_(tenant_id), send_by_tenant_(send_by_tenant) {}
+  ObDtlBcastService(bool send_by_tenant) : server_addr_(), bcast_buf_(nullptr), send_count_(0), bcast_ch_count_(0),
+              ch_infos_(), resps_(), peer_ids_(), active_chs_count_(0), send_by_tenant_(send_by_tenant) {}
   virtual ~ObDtlBcastService() {}
   int send_message(ObDtlLinkedBuffer *&bcast_buf, bool drain);
   void set_bcast_ch_count(int64_t ch_count) { bcast_ch_count_ = ch_count; }
@@ -125,7 +120,6 @@ public:
   common::ObArray<int64_t> peer_ids_;
   // active channel count, some of channel in this group may by drained.
   int64_t active_chs_count_;
-  uint64_t tenant_id_;
   bool send_by_tenant_;
 };
 
@@ -140,7 +134,7 @@ class ObDtlChanAgent
     TO_STRING_KV(K(server_addr_), K(ch_count_));
   };
 public:
-  ObDtlChanAgent() : init_(false), local_channels_(), rpc_channels_(),
+  ObDtlChanAgent() : init_(false), local_channels_(),
   bcast_channel_(nullptr), current_buffer_(nullptr), dtl_buf_encoder_(), dtl_buf_allocator_(),
   bc_services_(), dfo_key_(), sys_dtl_buf_size_(0)
     {};
@@ -150,7 +144,6 @@ public:
   int init(dtl::ObDtlFlowControl &dfc,
            ObPxTaskChSet &task_ch_set,
            common::ObIArray<ObDtlChannel *> &channels,
-           int64_t tenant_id,
            int64_t timeout_ts);
   int destroy();
   void set_row_meta(RowMeta &meta) { dtl_buf_encoder_.set_row_meta(meta); }
@@ -168,8 +161,6 @@ private:
   common::ObArenaAllocator allocator_;
   // all local channel in this sqc.
   common::ObArray<ObDtlLocalChannel *> local_channels_;
-  // all rpc channel in this sqc.
-  common::ObArray<ObDtlRpcChannel *> rpc_channels_;
   // the represent channel use to allocate buf from data manager.
   ObDtlBasicChannel *bcast_channel_;
   // the buffer we are now write on.

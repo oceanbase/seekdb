@@ -22,10 +22,11 @@
 #include "lib/thread/thread_pool.h"
 #include "lib/thread/ob_dynamic_thread_pool.h"
 #include "lib/thread/ob_adaptive_worker_pool.h"
+#include "lib/thread/ob_link_task.h"
 #include "lib/list/ob_dlist.h"
 #include "lib/lock/ob_mutex.h"
 #include "lib/thread/threads.h"
-#include "common/ob_queue_thread.h"
+#include "lib/thread/ob_queue_thread.h"
 
 namespace oceanbase
 {
@@ -74,8 +75,7 @@ public:
   virtual ~ObSimpleThreadPoolBase();
 
   int init(const int64_t thread_num, const int64_t task_num_limit,
-           const char *name = "unknown",
-           const uint64_t tenant_id = OB_SERVER_TENANT_ID);
+           const char *name = "unknown");
   void destroy();
   int push(TaskType *task);
   virtual int64_t get_queue_num() const override { return queue_.size(); }
@@ -93,7 +93,7 @@ public:
   void set_run_wrapper(lib::IRunWrapper *rw) { run_wrapper_ = rw; }
   lib::IRunWrapper *get_run_wrapper() const { return run_wrapper_; }
 
-  // Thread count queries (TG handler compatibility)
+  // Thread count queries
   int64_t get_thread_count() const { return worker_count(); }
   uint64_t get_thread_idx() const { return cur_worker_idx_; }
 

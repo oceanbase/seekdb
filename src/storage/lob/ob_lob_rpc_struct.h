@@ -18,10 +18,7 @@
 #define OCEANBASE_OB_LOB_RPC_STRUCT_
 
 #include "share/ob_define.h"
-#include "rpc/obrpc/ob_rpc_packet.h"
-#include "rpc/obrpc/ob_rpc_proxy.h"
-#include "rpc/obrpc/ob_rpc_processor.h"
-#include "rpc/obrpc/ob_rpc_result_code.h"
+#include "rpc/frame/ob_result_code.h"
 #include "share/ob_rpc_struct.h"
 #include "share/config/ob_server_config.h"
 #include "observer/ob_server_struct.h"
@@ -29,7 +26,7 @@
 namespace oceanbase
 {
 
-namespace obrpc
+namespace obcall
 {
 
 struct ObLobQueryBlock
@@ -55,12 +52,12 @@ public:
   };
   ObLobQueryArg();
   ~ObLobQueryArg();
-  TO_STRING_KV(K_(tenant_id), K_(offset), K_(len), K_(cs_type), K_(qtype), K_(scan_backward), K_(lob_locator),
+  TO_STRING_KV(K_(offset), K_(len), K_(cs_type), K_(qtype), K_(scan_backward), K_(lob_locator),
       K_(enable_remote_retry));
 public:
   static const int64_t OB_LOB_QUERY_BUFFER_LEN = 256*1024L;
   static const int64_t OB_LOB_QUERY_OLD_LEN_REFACTOR = 8;
-  uint64_t tenant_id_;
+  
   uint64_t offset_; // char offset
   uint64_t len_; // char len
   common::ObCollationType cs_type_;
@@ -71,7 +68,7 @@ public:
   DISALLOW_COPY_AND_ASSIGN(ObLobQueryArg);
 };
 
-} // obrpc
+} // obcall
 
 } // oceanbase
 

@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX STORAGE_COMPACTION
 #include "ob_partition_merger.h"
+#include "share/rc/ob_module_provider.h"
 #include "ob_tenant_tablet_scheduler.h"
 #include "storage/blocksstable/ob_data_macro_block_merge_writer.h"
 
@@ -113,7 +114,7 @@ int ObMerger::prepare_merge(ObBasicTabletMergeCtx &ctx, const int64_t idx)
     merge_ctx_ = &ctx;
     task_idx_ = idx;
 
-    if (OB_FAIL(merge_param_.init(ctx, task_idx_, &merger_arena_))) {
+    if (OB_FAIL(merge_param_.init(ctx, task_idx_))) {
       STORAGE_LOG(WARN, "Failed to assign the merge param", K(ret), KPC(merge_ctx_), K_(task_idx));
     } else {
       int tmp_ret = OB_SUCCESS;
@@ -269,15 +270,6 @@ int ObPartitionMerger::inner_open_macro_writer(
     } else {
       macro_writer_ = alloc_helper<ObDataMacroBlockMergeWriter>(merger_arena_);
     }
-
-#ifdef OB_BUILD_SHARED_STORAGE
-    if (is_validate_exec_mode(merge_ctx_->get_exec_mode())) {
-      ObTabletMajorValidateMergeCtx *validate_ctx = static_cast<ObTabletMajorValidateMergeCtx *>(merge_ctx_);
-      if (OB_FAIL(validate_ctx->alloc_validator(merge_param, merger_arena_.get_arena_allocator(), validator_))) {
-        LOG_WARN("failed to alloc verifyer", KR(ret));
-      }
-    }
-#endif
 
     ObSSTablePrivateObjectCleaner *object_cleaner = nullptr;
     if (OB_ISNULL(macro_writer_)) {
@@ -659,10 +651,6 @@ int ObPartitionMajorMerger::merge_partition(
       }
     } else if (OB_FAIL(close())){
       STORAGE_LOG(WARN, "failed to close partition merger", K(ret));
-    } else if (merge_param_.is_mv_merge() &&
-          MTL(ObTenantTabletScheduler*)->get_mview_validation().need_do_validation() &&
-          OB_FAIL(ObMviewCompactionHelper::validate_row_count(merge_param_, macro_writer_->get_merge_block_info().total_row_count_))) {
-      STORAGE_LOG(WARN, "failed to validate mv result", K(ret));
     }
 
     if (OB_SUCC(ret)) {
@@ -873,7 +861,7 @@ ObPartitionMinorMerger::ObPartitionMinorMerger(
     const ObStaticMergeParam &static_param)
   : ObPartitionMerger(allocator, static_param),
     minimum_iter_idxs_(DEFAULT_ITER_COUNT * sizeof(int64_t), ModulePageAllocator(allocator)),
-    obj_copy_allocator_("MinorMergeObj", OB_MALLOC_MIDDLE_BLOCK_SIZE, MTL_ID(), ObCtxIds::MERGE_NORMAL_CTX_ID),
+    obj_copy_allocator_("MinorMergeObj", OB_MALLOC_MIDDLE_BLOCK_SIZE, ObCtxIds::MERGE_NORMAL_CTX_ID),
     nop_pos_(),
     row_queue_()
 {
@@ -1064,11 +1052,6 @@ int ObPartitionMinorMerger::merge_partition(
   return ret;
 }
 
-/*
- * TODO(@DanLing)
- * Add mysql test case after column store branch is merged into master,
- * cause __all_virtual_tablet_stat is on column store.
- */
 int ObPartitionMinorMerger::collect_merge_stat(
     const ObMergeType &merge_type,
     ObPartitionMinorMergeHelper &merge_helper,
@@ -1146,7 +1129,6 @@ int ObPartitionMinorMerger::merge_single_iter(ObPartitionMergeIter &merge_iter)
       }
     }
   }
-
 
   return ret;
 }

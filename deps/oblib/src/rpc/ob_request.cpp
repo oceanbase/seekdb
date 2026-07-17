@@ -27,7 +27,7 @@ namespace rpc
 void OB_WEAK_SYMBOL response_rpc_error_packet(ObRequest* req, int ret)
 {
   UNUSED(ret);
-  RPC_REQ_OP.response_result(req, NULL);
+  RPC_REQ_OP.response_result(req);
 }
 
 void on_translate_fail(ObRequest* req, int ret)
@@ -38,7 +38,6 @@ void on_translate_fail(ObRequest* req, int ret)
   } else if (ObRequest::OB_MYSQL == req_type) {
     SQL_REQ_OP.disconnect_sql_conn(req);
     SQL_REQ_OP.finish_sql_request(req);
-    req->reset_diagnostic_info();
   }
 }
 

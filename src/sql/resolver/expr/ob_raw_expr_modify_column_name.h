@@ -18,7 +18,6 @@
 #define _OB_RAW_EXPR_MODIFY_COLUMN_NAME_H 1
 
 #include "lib/string/ob_string.h"
-#include "lib/worker.h"
 #include "sql/resolver/expr/ob_raw_expr.h"
 
 namespace oceanbase
@@ -30,12 +29,10 @@ class ObRawExprModifyColumnName : public ObRawExprVisitor
 public:
   ObRawExprModifyColumnName(
       common::ObString new_column_name,
-      common::ObString orig_column_name,
-      const lib::Worker::CompatMode compat_mode)
+      common::ObString orig_column_name)
     : ObRawExprVisitor() {
     orig_column_name_ = orig_column_name;
     new_column_name_ = new_column_name;
-    compat_mode_ = compat_mode;
   }
   virtual ~ObRawExprModifyColumnName() {}
 
@@ -63,7 +60,6 @@ private:
   DISALLOW_COPY_AND_ASSIGN(ObRawExprModifyColumnName);
   common::ObString orig_column_name_;
   common::ObString new_column_name_;
-  lib::Worker::CompatMode compat_mode_;
 };
 } // end namespace sql
 } // end namespace oceanbase

@@ -1,3 +1,4 @@
+#include "share/object/ob_decint_scale_util.h"
 /*
  * Copyright (c) 2025 OceanBase.
  *
@@ -457,7 +458,7 @@ static void logging_truncated_decint(const ObExpr &expr, ObEvalCtx &ctx, int64_t
                                      const ObBitVector &skip, const ObScale in_scale, const ObScale out_scale)
 {
   ObDatumVector arg_dv = expr.args_[0]->locate_expr_datumvector(ctx);
-  if (CM_IS_COLUMN_CONVERT(expr.extra_) && in_scale > out_scale && lib::is_mysql_mode()) {
+  if (CM_IS_COLUMN_CONVERT(expr.extra_) && in_scale > out_scale) {
     in_type sf = get_scale_factor<in_type>(in_scale - out_scale);
     int diff_len = wide::ObDecimalIntConstValue::get_int_bytes_by_precision(in_scale - out_scale);
     for (int i = 0; i < batch_size; i++) {
@@ -841,8 +842,7 @@ ObBatchCast::batch_func_ ObBatchCast::get_explicit_cast_func(const ObObjTypeClas
                                                              const ObObjTypeClass tc2)
 {
   OB_ASSERT(tc1 < ObMaxTC && tc2 < ObMaxTC);
-  ObExpr::EvalFunc **func_arr = (ObExpr::EvalFunc **)OB_DATUM_CAST_ORACLE_EXPLICIT;
-  if (lib::is_mysql_mode()) { func_arr = (ObExpr::EvalFunc **)OB_DATUM_CAST_MYSQL_IMPLICIT; }
+  ObExpr::EvalFunc **func_arr = (ObExpr::EvalFunc **)OB_DATUM_CAST_MYSQL_IMPLICIT;
   if (func_arr[tc1][tc2] == cast_not_expected || func_arr[tc1][tc2] == cast_not_support
       || func_arr[tc1][tc2] == cast_inconsistent_types
       || func_arr[tc1][tc2] == cast_inconsistent_types_json) {
@@ -856,8 +856,7 @@ ObBatchCast::batch_func_ ObBatchCast::get_implicit_cast_func(const ObObjTypeClas
                                                              const ObObjTypeClass tc2)
 {
   OB_ASSERT(tc1 < ObMaxTC && tc2 < ObMaxTC);
-  ObExpr::EvalFunc **func_arr = (ObExpr::EvalFunc **)OB_DATUM_CAST_ORACLE_IMPLICIT;
-  if (lib::is_mysql_mode()) { func_arr = (ObExpr::EvalFunc **)OB_DATUM_CAST_MYSQL_IMPLICIT; }
+  ObExpr::EvalFunc **func_arr = (ObExpr::EvalFunc **)OB_DATUM_CAST_MYSQL_IMPLICIT;
   if (func_arr[tc1][tc2] == cast_not_expected || func_arr[tc1][tc2] == cast_not_support
       || func_arr[tc1][tc2] == cast_inconsistent_types
       || func_arr[tc1][tc2] == cast_inconsistent_types_json) {
@@ -1252,12 +1251,6 @@ static ObExpr::EvalBatchFunc g_decimalint_cast_batch_functions[] = {
   decimalint_fast_batch_cast<int512_t, int512_t, false, false>,
 };
 
-REG_SER_FUNC_ARRAY(OB_SFA_DECIMAL_INT_CAST_EXPR_EVAL, g_decimalint_cast_functions,
-                   ARRAYSIZEOF(g_decimalint_cast_functions));
-
-REG_SER_FUNC_ARRAY(OB_SFA_DECIMAL_INT_CAST_EXPR_EVAL_BATCH, g_decimalint_cast_batch_functions,
-                   ARRAYSIZEOF(g_decimalint_cast_batch_functions));
-
 int eval_questionmark_decint2nmb(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
 {
   int ret = OB_SUCCESS;
@@ -1303,7 +1296,7 @@ static int _eval_questionmark_nmb2decint(const ObExpr &expr, ObEvalCtx &ctx, ObD
     int32_t int_bytes = 0;
     if (OB_FAIL(wide::from_number(in_nmb, tmp_alloc, in_scale, decint, int_bytes))) {
       LOG_WARN("from number failed", K(ret));
-    } else if (OB_FAIL(scale_const_decimalint_expr(decint, int_bytes, in_scale, out_scale, out_prec, cm, res_val))) {
+    } else if (OB_FAIL(common::decint_scale::scale_const_decimalint_expr(decint, int_bytes, in_scale, out_scale, out_prec, cm, res_val))) {
       LOG_WARN("scale const decimal int failed", K(ret));
     } else {
       expr_datum.set_decimal_int(res_val.get_decimal_int(), res_val.get_int_bytes());

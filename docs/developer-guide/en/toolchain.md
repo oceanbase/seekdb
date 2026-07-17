@@ -4,25 +4,27 @@ To build OceanBase seekdb from source code, you need to install the C++ toolchai
 
 ## Supported OS
 
-OceanBase makes strong assumption on the underlying operating systems. Not all the operating systems are supported; especially, Windows is not supported yet.
+OceanBase makes strong assumption on the underlying operating systems. Not all the operating systems are supported.
 
 Below is the OS compatibility list:
 
 ### Linux
 
- | Alibaba Cloud Linux | 3                     | x86_64 / aarch64 | Yes        | Yes                | Yes                        | Yes              |
- | CentOS              | 7 / 8 / 9             | x86_64 / aarch64 | Yes        | Yes                | Yes                        | Yes              |
- | Debian              | 11 / 12 / 13          | x86_84 / aarch64 | Yes        | Yes                | Yes                        | Yes              |
- | Fedora              | 33                    | x86_84 / aarch64 | Yes        | Yes                | Yes                        | Yes              |
- | Kylin               | V10                   | x86_84 / aarch64 | Yes        | Yes                | Yes                        | Yes
- | openSUSE            | 15.2                  | x86_84 / aarch64 | Yes        | Yes                | Yes                        | Yes              |
- | OpenAnolis          | 8  / 23               | x86_84 / aarch64 | Yes        | Yes                | Yes                        | Yes              |
- | OpenEuler           | 22.03  / 24.03        | x86_84 / aarch64 | Yes        | Yes                | Yes                        | Yes              |
- | Rocky Linux         | 8  / 9                | x86_84 / aarch64 | Yes        | Yes                | Yes                        | Yes              |
- | StreamOS            | 3.4.8                 | x86_84 / aarch64 | Unknown    | Yes                | Yes                        | Unknown          |
- | SUSE                | 15.2                  | x86_84 / aarch64 | Yes        | Yes                | Yes                        | Yes              |
- | Ubuntu              | 20.04 / 22.04 / 24.04 | x86_84 / aarch64 | Yes        | Yes                | Yes                        | Yes              |
- | UOS                 | 20                    | x86_84 / aarch64 | Yes        | Yes                | Yes                        | Yes              |
+| OS                  | Version               | Arch             | Compilable | Package Deployable | Compiled Binary Deployable | MYSQLTEST Passed |
+| ------------------- | --------------------- | ---------------- | ---------- | ------------------ | -------------------------- | ---------------- |
+| Alibaba Cloud Linux | 3                     | x86_64 / aarch64 | Yes        | Yes                | Yes                        | Yes              |
+| CentOS              | 7 / 8 / 9             | x86_64 / aarch64 | Yes        | Yes                | Yes                        | Yes              |
+| Debian              | 11 / 12 / 13          | x86_84 / aarch64 | Yes        | Yes                | Yes                        | Yes              |
+| Fedora              | 33                    | x86_84 / aarch64 | Yes        | Yes                | Yes                        | Yes              |
+| Kylin               | V10                   | x86_84 / aarch64 | Yes        | Yes                | Yes                        | Yes              |
+| openSUSE            | 15.2                  | x86_84 / aarch64 | Yes        | Yes                | Yes                        | Yes              |
+| OpenAnolis          | 8  / 23               | x86_84 / aarch64 | Yes        | Yes                | Yes                        | Yes              |
+| OpenEuler           | 22.03  / 24.03        | x86_84 / aarch64 | Yes        | Yes                | Yes                        | Yes              |
+| Rocky Linux         | 8  / 9                | x86_84 / aarch64 | Yes        | Yes                | Yes                        | Yes              |
+| StreamOS            | 3.4.8                 | x86_84 / aarch64 | Unknown    | Yes                | Yes                        | Unknown          |
+| SUSE                | 15.2                  | x86_84 / aarch64 | Yes        | Yes                | Yes                        | Yes              |
+| Ubuntu              | 20.04 / 22.04 / 24.04 | x86_84 / aarch64 | Yes        | Yes                | Yes                        | Yes              |
+| UOS                 | 20                    | x86_84 / aarch64 | Yes        | Yes                | Yes                        | Yes              |
 
 ### macOS
 
@@ -33,6 +35,17 @@ Below is the OS compatibility list:
 > **Note**:
 >
 > - macOS support is limited to **macOS 13 (Ventura) or later** with **Apple Silicon (M1/M2/M3/M4) chips only**. Intel-based Macs are not supported.
+
+### Windows
+
+| OS      | Version | Architecture | Supported |
+| ------- | ------- | ------------ | --------- |
+| Windows | 11      | x64          | Yes       |
+
+> **Note**:
+>
+> - The compiler, build tools, and third-party libraries are downloaded into `deps/3rd` automatically by `build.ps1 init`; no manual installation is needed.
+> - You still need to install Python 3.x and Visual Studio 2022 Build Tools yourself (see the installation steps below).
 
 > **Note**:
 >
@@ -82,3 +95,28 @@ brew install zstd lz4 utf8proc thrift re2 brotli
 ```
 
 > **Tip**: If Homebrew downloads are slow, see [Homebrew Optimization](homebrew.md) for mirror configuration.
+
+### Windows
+
+Applies to: Windows 11 x64.
+
+**Required**:
+
+- **Python 3.x**: download the installer from [python.org](https://www.python.org/downloads/windows/) and tick "Add Python to PATH" during install.
+- **Visual Studio 2022 Build Tools**: download from the [Visual Studio downloads page](https://visualstudio.microsoft.com/downloads/) and select the **"Desktop development with C++"** workload. The workload installs the Windows 11 SDK, which provides `windows.h`, system import libraries, and `signtool.exe` — all required for Clang/LLD to produce native Windows binaries.
+
+**Optional (only needed for packaging)**:
+
+- **.NET 8 SDK**: required to build the seekdb Configurator setup wizard (WPF). The `package` step skips the wizard if it is missing.
+- **WiX v4**: required to generate the MSI installer; falls back to a ZIP package when missing.
+  ```powershell
+  dotnet tool install --global wix
+  ```
+
+**Auto-downloaded (no manual install needed)**:
+
+CMake, Ninja, LLVM 18, win_flex_bison, OpenSSL, and all third-party libraries are downloaded into `deps/3rd` when you run:
+
+```powershell
+.\build.ps1 init
+```

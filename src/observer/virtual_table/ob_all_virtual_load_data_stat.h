@@ -17,8 +17,8 @@
 #ifndef OB_ALL_VIRTUAL_LOAD_DATA_STAT_H_
 #define OB_ALL_VIRTUAL_LOAD_DATA_STAT_H_
 
-#include "share/ob_virtual_table_scanner_iterator.h"
-#include "share/ob_scanner.h"
+#include "observer/virtual_table/ob_virtual_table_scanner_iterator.h"
+#include "sql/ob_scanner.h"
 #include "common/row/ob_row.h"
 #include "lib/container/ob_se_array.h"
 #include "sql/engine/cmd/ob_load_data_utils.h"
@@ -38,10 +38,6 @@ public:
   virtual void reset();
   virtual int inner_open();
   virtual int inner_close();
-  inline void set_addr(common::ObAddr &addr)
-  {
-    addr_ = addr;
-  }
 
 private:
   int64_t calc_remaining_time(sql::ObLoadDataStat &job_status) const;
@@ -81,11 +77,8 @@ private:
     STORE_TRANS_STATUS,
     MESSAGE
   };
-  common::ObAddr addr_;
   char ip_buf_[common::OB_IP_STR_BUFF];
   sql::ObGetAllJobStatusOp all_job_status_op_;
-
-  TO_STRING_KV(K(addr_));
 
 private:
   DISALLOW_COPY_AND_ASSIGN(ObAllVirtualLoadDataStat);

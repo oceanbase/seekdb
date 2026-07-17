@@ -16,7 +16,6 @@
 
 #define USING_LOG_PREFIX PL
 #include "pl/sys_package/ob_dbms_application.h"
-#include "sql/monitor/flt/ob_flt_control_info_mgr.h"
 namespace oceanbase
 {
 
@@ -33,11 +32,7 @@ int ObDBMSAppInfo::read_client_info(sql::ObExecContext &ctx, sql::ParamStore &pa
   CK (OB_LIKELY(1 == params.count()));
   OV (params.at(0).get_param_meta().is_varchar(), OB_INVALID_ARGUMENT);
   client_info = ctx.get_my_session()->get_client_info();
-  if (lib::is_oracle_mode() && client_info.empty()) {
-    params.at(0).set_null();
-  } else {
-    params.at(0).set_varchar(client_info);
-  }
+  params.at(0).set_varchar(client_info);
   return ret;
 }
 // this is a procedure, and not need to return result
@@ -53,16 +48,8 @@ int ObDBMSAppInfo::read_module(sql::ObExecContext &ctx, sql::ParamStore &params,
   OV (params.at(1).get_param_meta().is_varchar(), OB_INVALID_ARGUMENT);
   module_name = ctx.get_my_session()->get_module_name();
   action_name = ctx.get_my_session()->get_action_name();
-  if (lib::is_oracle_mode() && module_name.empty()) {
-    params.at(0).set_null();
-  } else {
-    params.at(0).set_varchar(module_name);
-  }
-  if (lib::is_oracle_mode() && action_name.empty()) {
-    params.at(1).set_null();
-  } else {
-    params.at(1).set_varchar(action_name);
-  }
+  params.at(0).set_varchar(module_name);
+  params.at(1).set_varchar(action_name);
   return ret;
 }
 // this is a procedure, and not need to return result
@@ -75,26 +62,11 @@ int ObDBMSAppInfo::set_action(sql::ObExecContext &ctx, sql::ParamStore &params, 
   ObSQLSessionInfo* sess = const_cast<ObSQLSessionInfo*>(ctx.get_my_session());
   if (OB_FAIL(ret)) {
     // do nothing
-  } else if (sess->is_obproxy_mode() && !sess->is_ob20_protocol()) {
-    ret = OB_OP_NOT_ALLOW;
-    LOG_USER_ERROR(OB_OP_NOT_ALLOW, "oceanbase 2.0 protocol is not ready, and dbms_application_info not support");
   } else {
     CK (OB_LIKELY(1 == params.count()));
     OV (params.at(0).is_varchar(), OB_INVALID_ARGUMENT);
     OZ (params.at(0).get_string(action_name));
     OZ (sess->get_app_info_encoder().set_action_name(sess, action_name));
-
-    FLTControlInfo con;
-    ObFLTControlInfoManager mgr(GET_MY_SESSION(ctx)->get_effective_tenant_id());
-    if (OB_FAIL(ret)) {
-
-    } else if (OB_FAIL(mgr.init())) {
-      LOG_WARN("failed to init full link trace info manager", K(ret));
-    } else if (OB_FAIL(mgr.find_appropriate_con_info(*sess))) {
-      LOG_WARN("failed to get control info for client info", K(ret));
-    } else {
-      // do nothing
-    }
   }
   return ret;
 }
@@ -108,30 +80,15 @@ int ObDBMSAppInfo::set_client_info(sql::ObExecContext &ctx, sql::ParamStore &par
   ObSQLSessionInfo* sess = const_cast<ObSQLSessionInfo*>(ctx.get_my_session());
   if (OB_FAIL(ret)) {
     // do nothing
-  } else if (sess->is_obproxy_mode() && !sess->is_ob20_protocol()) {
-    ret = OB_OP_NOT_ALLOW;
-    LOG_USER_ERROR(OB_OP_NOT_ALLOW, "oceanbase 2.0 protocol is not ready, and dbms_application_info not support");
   } else {
     CK (OB_LIKELY(1 == params.count()));
-    OV (params.at(0).is_varchar() || params.at(0).is_null_oracle(), OB_INVALID_ARGUMENT);
-    if (params.at(0).is_null_oracle()) {
+    OV (params.at(0).is_varchar() || params.at(0).is_null_or_empty_string(), OB_INVALID_ARGUMENT);
+    if (params.at(0).is_null_or_empty_string()) {
       client_info.reset();
     } else {
       OZ (params.at(0).get_string(client_info));
     }
     OZ (sess->get_app_info_encoder().set_client_info(sess, client_info));
-
-    FLTControlInfo con;
-    ObFLTControlInfoManager mgr(GET_MY_SESSION(ctx)->get_effective_tenant_id());
-    if (OB_FAIL(ret)) {
-      // do nothing
-    } else if (OB_FAIL(mgr.init())) {
-      LOG_WARN("failed to init full link trace info manager", K(ret));
-    } else if (OB_FAIL(mgr.find_appropriate_con_info(*sess))) {
-      LOG_WARN("failed to get control info for client info", K(ret), K(client_info));
-    } else {
-      // do nothing
-    }
   }
   return ret;
 }
@@ -146,40 +103,24 @@ int ObDBMSAppInfo::set_module(sql::ObExecContext &ctx, sql::ParamStore &params, 
   ObSQLSessionInfo* sess = const_cast<ObSQLSessionInfo*>(ctx.get_my_session());
   if (OB_FAIL(ret)) {
     // do nothing
-  } else if (sess->is_obproxy_mode() && !sess->is_ob20_protocol()) {
-    ret = OB_OP_NOT_ALLOW;
-    LOG_USER_ERROR(OB_OP_NOT_ALLOW, "oceanbase 2.0 protocol is not ready, and dbms_application_info not support");
   } else {
     CK (OB_LIKELY(2 == params.count()));
-    OV (params.at(0).is_varchar() || params.at(0).is_null_oracle(), OB_INVALID_ARGUMENT);
-    if (params.at(0).is_null_oracle()) {
+    OV (params.at(0).is_varchar() || params.at(0).is_null_or_empty_string(), OB_INVALID_ARGUMENT);
+    if (params.at(0).is_null_or_empty_string()) {
       module_name.reset();
     } else {
       OZ (params.at(0).get_string(module_name));
     }
-    OV (params.at(1).is_varchar() || params.at(1).is_null_oracle(), OB_INVALID_ARGUMENT);
-    if (params.at(1).is_null_oracle()) {
+    OV (params.at(1).is_varchar() || params.at(1).is_null_or_empty_string(), OB_INVALID_ARGUMENT);
+    if (params.at(1).is_null_or_empty_string()) {
       action_name.reset();
     } else {   
       OZ (params.at(1).get_string(action_name));
     }
     OZ (sess->get_app_info_encoder().set_module_name(sess, module_name));
     OZ (sess->get_app_info_encoder().set_action_name(sess, action_name));
-
-    FLTControlInfo con;
-    ObFLTControlInfoManager mgr(GET_MY_SESSION(ctx)->get_effective_tenant_id());
-    if (OB_FAIL(ret)) {
-      // do nothing
-    } else if (OB_FAIL(mgr.init())) {
-      LOG_WARN("failed to init full link trace info manager", K(ret));
-    } else if (OB_FAIL(mgr.find_appropriate_con_info(*sess))) {
-      LOG_WARN("failed to get control info for client info", K(ret));
-    } else {
-      // do nothing
-    }
   }
   return ret;
 }
 } // end of pl
 } // end oceanbase
-

@@ -16,8 +16,10 @@
 
 #ifndef OCEANBASE_STORAGE_OB_LOCK_TABLE_H_
 #define OCEANBASE_STORAGE_OB_LOCK_TABLE_H_
+#include "storage/tablet/ob_batch_create_tablet_arg.h"
 #include <stdint.h>
 #include "lib/lock/ob_spin_lock.h"
+#include "lib/task/ob_timer.h"
 #include "lib/worker.h"
 #include "storage/ob_i_table.h"
 #include "storage/tablelock/ob_obj_lock.h"
@@ -26,7 +28,7 @@
 
 namespace oceanbase
 {
-namespace obrpc
+namespace obcall
 {
 class ObBatchCreateTabletArg;
 class ObBatchRemoveTabletArg;
@@ -39,7 +41,6 @@ class ObTabletID;
 
 namespace share
 {
-class ObLSID;
 namespace schema
 {
 class ObTableSchema;
@@ -70,8 +71,7 @@ class ObTableLockOp;
 class ObLockMemtable;
 class ObLockMemtableMgr;
 
-class ObLockTable : public logservice::ObIReplaySubHandler,
-                    public logservice::ObIRoleChangeSubHandler,
+class ObLockTable : public logservice::ObILocalLogHandler,
                     public logservice::ObICheckpointSubHandler
 {
 public:
@@ -79,7 +79,9 @@ public:
     : is_inited_(false),
       parent_(nullptr),
       lock_mt_mgr_(nullptr),
-      lock_memtable_handle_() {}
+      lock_memtable_handle_(),
+      check_obj_lock_task_(*this),
+      check_obj_lock_timer_() {}
   ~ObLockTable() {}
   int init(storage::ObLS *parent);
   int prepare_for_safe_destroy();
@@ -152,19 +154,12 @@ public:
   // See the ObLockMemtable::check_and_clear_obj_lock for deatails.
   int check_and_clear_obj_lock(const bool force_compact);
   int add_lock_into_queue(storage::ObStoreCtx &ctx, const ObLockParam &lock_param);
-  // for replay
-  int replay(const void *buffer,
-             const int64_t nbytes,
-             const palf::LSN &lsn,
-             const share::SCN &scn) override;
   // for checkpoint
   share::SCN get_rec_scn() override;
   int flush(share::SCN &rec_scn) override;
   // for role change
-  void switch_to_follower_forcedly() override;
-  int switch_to_leader() override;
-  int switch_to_follower_gracefully() override;
-  int resume_leader() override { return OB_SUCCESS; }
+  void deactivate() override;
+  int activate() override;
   // flush lock_memtable that flush had been failed                     
 
 
@@ -172,9 +167,19 @@ private:
   // We use the method to recover the lock_table for reboot.
   int restore_lock_table_(storage::ObITable &sstable);
   int recover_(const blocksstable::ObDatumRow &row);
-  int get_table_schema_(const uint64_t tenant_id,
-                        share::schema::ObTableSchema &schema);
+  int get_table_schema_(share::schema::ObTableSchema &schema);
   int switch_to_follower_();
+
+private:
+  class CheckObjLockTask : public common::ObTimerTask
+  {
+  public:
+    explicit CheckObjLockTask(ObLockTable &lock_table) : lock_table_(lock_table) {}
+    virtual ~CheckObjLockTask() = default;
+    void runTimerTask() override;
+  private:
+    ObLockTable &lock_table_;
+  };
 
 private:
   static const int64_t LOCKTABLE_SCHEMA_VERSION = 0;
@@ -184,6 +189,8 @@ private:
   storage::ObLS *parent_;
   ObLockMemtableMgr *lock_mt_mgr_;
   storage::ObTableHandleV2 lock_memtable_handle_;
+  CheckObjLockTask check_obj_lock_task_;
+  common::ObTimer check_obj_lock_timer_;
   TCRWLock rw_lock_;
 };
 

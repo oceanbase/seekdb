@@ -546,7 +546,6 @@ int ObTmpFileBlockHandle::init(ObTmpFileBlock *block, ObTmpFileBlockManager *tmp
 //-----------------------ObTmpFileBlockManager-----------------------
 ObTmpFileBlockManager::ObTmpFileBlockManager() :
                              is_inited_(false),
-                             tenant_id_(OB_INVALID_TENANT_ID),
                              used_page_num_(0),
                              physical_block_num_(0),
                              block_index_generator_(0),
@@ -563,7 +562,6 @@ ObTmpFileBlockManager::~ObTmpFileBlockManager()
 void ObTmpFileBlockManager::destroy()
 {
   is_inited_ = false;
-  tenant_id_ = OB_INVALID_TENANT_ID;
   used_page_num_ = 0;
   physical_block_num_ = 0;
   block_index_generator_ = 0;
@@ -571,24 +569,23 @@ void ObTmpFileBlockManager::destroy()
   block_allocator_.reset();
 }
 
-int ObTmpFileBlockManager::init(const uint64_t tenant_id)
+int ObTmpFileBlockManager::init()
 {
   int ret = OB_SUCCESS;
 
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
     LOG_WARN("ObTmpFileBlockManager init twice", KR(ret), K(is_inited_));
-  } else if (OB_UNLIKELY(!is_valid_tenant_id(tenant_id))) {
+  } else if (OB_UNLIKELY(!true)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", KR(ret), K(tenant_id));
-  } else if (OB_FAIL(block_map_.init("TmpFileBlkMgr", tenant_id))) {
-    LOG_WARN("fail to init tenant temporary file block manager", KR(ret), K(tenant_id));
+    LOG_WARN("invalid arguments", KR(ret));
+  } else if (OB_FAIL(block_map_.init("TmpFileBlkMgr"))) {
+    LOG_WARN("fail to init tenant temporary file block manager", KR(ret));
   } else if (OB_FAIL(block_allocator_.init(common::OB_MALLOC_MIDDLE_BLOCK_SIZE,
-                                           ObModIds::OB_TMP_BLOCK_MANAGER, tenant_id_, INT64_MAX))) {
-    LOG_WARN("fail to init temporary file block allocator", KR(ret), K(tenant_id_));
+                                           ObModIds::OB_TMP_BLOCK_MANAGER, INT64_MAX))) {
+    LOG_WARN("fail to init temporary file block allocator", KR(ret));
   } else {
-    block_allocator_.set_attr(ObMemAttr(tenant_id, "TmpFileBlk"));
-    tenant_id_ = tenant_id;
+    block_allocator_.set_attr(ObMemAttr("TmpFileBlk"));
     is_inited_ = true;
   }
 
@@ -606,8 +603,8 @@ int ObTmpFileBlockManager::create_tmp_file_block(const int64_t begin_page_id, co
 
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObTmpFileBlockManager has not been inited", KR(ret), K(tenant_id_));
-  } else if (OB_ISNULL(buf = block_allocator_.alloc(blk_size, lib::ObMemAttr(tenant_id_, "TmpFileBlk")))) {
+    LOG_WARN("ObTmpFileBlockManager has not been inited", KR(ret));
+  } else if (OB_ISNULL(buf = block_allocator_.alloc(blk_size, lib::ObMemAttr("TmpFileBlk")))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("fail to allocate memory for tmp file block", KR(ret), K(blk_size));
   } else if (FALSE_IT(blk = new (buf) ObTmpFileBlock())) {
@@ -640,7 +637,7 @@ int ObTmpFileBlockManager::write_back_start(const int64_t block_index)
 
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObTmpFileBlockManager has not been inited", KR(ret), K(tenant_id_));
+    LOG_WARN("ObTmpFileBlockManager has not been inited", KR(ret));
   } else if (OB_FAIL(block_map_.get(ObTmpFileBlockKey(block_index), handle))) {
     LOG_WARN("fail to get tmp file block", KR(ret), K(block_index));
   } else if (OB_ISNULL(blk = handle.get())) {
@@ -662,7 +659,7 @@ int ObTmpFileBlockManager::write_back_failed(const int64_t block_index)
 
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObTmpFileBlockManager has not been inited", KR(ret), K(tenant_id_));
+    LOG_WARN("ObTmpFileBlockManager has not been inited", KR(ret));
   } else if (OB_FAIL(block_map_.get(ObTmpFileBlockKey(block_index), handle))) {
     LOG_WARN("fail to get tmp file block", KR(ret), K(block_index));
   } else if (OB_ISNULL(blk = handle.get())) {
@@ -691,7 +688,7 @@ int ObTmpFileBlockManager::write_back_succ(const int64_t block_index, const bloc
 
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObTmpFileBlockManager has not been inited", KR(ret), K(tenant_id_));
+    LOG_WARN("ObTmpFileBlockManager has not been inited", KR(ret));
   } else if (OB_FAIL(block_map_.get(ObTmpFileBlockKey(block_index), handle))) {
     LOG_WARN("fail to get tmp file block", KR(ret), K(block_index));
   } else if (OB_ISNULL(blk = handle.get())) {
@@ -731,7 +728,7 @@ int ObTmpFileBlockManager::release_tmp_file_page(const int64_t block_index,
 
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObTmpFileBlockManager has not been inited", KR(ret), K(tenant_id_));
+    LOG_WARN("ObTmpFileBlockManager has not been inited", KR(ret));
   } else if (OB_FAIL(block_map_.get(ObTmpFileBlockKey(block_index), handle))) {
     LOG_WARN("fail to get tmp file block", KR(ret), K(block_index));
   } else if (OB_ISNULL(handle.get())) {
@@ -770,7 +767,7 @@ int ObTmpFileBlockManager::remove_tmp_file_block_(const int64_t block_index)
 
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObTmpFileBlockManager has not been inited", KR(ret), K(tenant_id_));
+    LOG_WARN("ObTmpFileBlockManager has not been inited", KR(ret));
   } else {
     if (OB_FAIL(block_map_.erase(ObTmpFileBlockKey(block_index), handle))) {
       if (ret != OB_ENTRY_NOT_EXIST) {
@@ -783,7 +780,7 @@ int ObTmpFileBlockManager::remove_tmp_file_block_(const int64_t block_index)
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected null", KR(ret), K(block_index));
     } else {
-      ObTmpBlockCache::get_instance().erase(ObTmpBlockCacheKey(block_index, MTL_ID()));
+      ObTmpBlockCache::get_instance().erase(ObTmpBlockCacheKey(block_index));
       LOG_DEBUG("erase tmp file block from map succ", KR(ret), K(handle));
     }
   }
@@ -810,7 +807,7 @@ int ObTmpFileBlockManager::get_block_usage_stat(int64_t &used_page_num, int64_t 
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObTmpFileBlockManager has not been inited", KR(ret), K(tenant_id_));
+    LOG_WARN("ObTmpFileBlockManager has not been inited", KR(ret));
   } else {
     SpinRLockGuard guard(stat_lock_);
     used_page_num = used_page_num_;
@@ -828,7 +825,7 @@ void ObTmpFileBlockManager::print_block_usage()
 
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObTmpFileBlockManager has not been inited", KR(ret), K(tenant_id_));
+    LOG_WARN("ObTmpFileBlockManager has not been inited", KR(ret));
   } else if (OB_FAIL(get_block_usage_stat(used_page_num, block_num))) {
     LOG_WARN("fail to get block usage stat", KR(ret));
   } else if (OB_UNLIKELY(0 == block_num)) {
@@ -846,7 +843,7 @@ int ObTmpFileBlockManager::get_macro_block_count(int64_t &macro_block_count)
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObTmpFileBlockManager has not been inited", KR(ret), K(tenant_id_));
+    LOG_WARN("ObTmpFileBlockManager has not been inited", KR(ret));
   } else {
     SpinRLockGuard guard(stat_lock_);
     macro_block_count = physical_block_num_;
@@ -860,7 +857,7 @@ int ObTmpFileBlockManager::get_macro_block_list(common::ObIArray<blocksstable::M
   CollectMacroBlockIdFunctor func(macro_id_list);
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObTmpFileBlockManager has not been inited", KR(ret), K(tenant_id_));
+    LOG_WARN("ObTmpFileBlockManager has not been inited", KR(ret));
   } else if (OB_FAIL(block_map_.for_each(func))) {
     LOG_WARN("fail to collect macro block ids", KR(ret));
   }
@@ -892,7 +889,7 @@ int ObTmpFileBlockManager::get_macro_block_id(const int64_t block_index, blockss
   ObTmpFileBlockHandle handle;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObTmpFileBlockManager has not been inited", KR(ret), K(tenant_id_));
+    LOG_WARN("ObTmpFileBlockManager has not been inited", KR(ret));
   } else if (OB_FAIL(block_map_.get(ObTmpFileBlockKey(block_index), handle))) {
     LOG_WARN("fail to get tmp file block", KR(ret), K(block_index));
   } else if (OB_ISNULL(handle.get())) {
@@ -913,7 +910,7 @@ int ObTmpFileBlockManager::get_tmp_file_block_handle(const int64_t block_index, 
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObTmpFileBlockManager has not been inited", KR(ret), K(tenant_id_));
+    LOG_WARN("ObTmpFileBlockManager has not been inited", KR(ret));
   } else if (OB_FAIL(block_map_.get(ObTmpFileBlockKey(block_index), handle))) {
     LOG_WARN("fail to get tmp file block", KR(ret), K(block_index));
   } else if (OB_ISNULL(handle.get())) {

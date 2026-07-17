@@ -47,7 +47,7 @@ public:
   ObTxCtxMemtable();
   ~ObTxCtxMemtable();
 
-  int init(const ObITable::TableKey &table_key, const share::ObLSID &ls_id);
+  int init(const ObITable::TableKey &table_key);
 
   void reset();
   int on_memtable_flushed() override;
@@ -70,7 +70,7 @@ public:
 
   // ================ INHERITED FROM ObCommonCheckpoint ===============
   virtual share::SCN get_rec_scn();
-  virtual int flush(share::SCN recycle_scn, const int64_t trace_id, bool need_freeze = true);
+  virtual int flush(share::SCN recycle_scn, bool need_freeze = true);
 
   virtual ObTabletID get_tablet_id() const override;
   virtual bool is_flushing() const override;
@@ -102,7 +102,7 @@ public:
   void set_max_end_scn(const share::SCN end_scn);
 
   INHERIT_TO_STRING_KV("ObITable", ObITable, KP(this), K_(snapshot_version),
-                       K_(ls_id), K_(is_frozen), K_(max_end_scn));
+                       K_(is_frozen), K_(max_end_scn));
 
 private:
   bool is_inited_;

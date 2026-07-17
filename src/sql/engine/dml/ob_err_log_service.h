@@ -56,7 +56,7 @@ public:
                             const ObErrLogCtDef &err_log_ct_def,
                             ObErrLogRtDef &err_log_rt_def,
                             ObDASOpType type);
-  int execute_write(uint64_t tenant_id, char *sql_str);
+  int execute_write(char *sql_str);
 
 private:
   ObEvalCtx &eval_ctx_;

@@ -17,7 +17,7 @@
 #ifndef OCEANBASE_OBSERVER_VIRTUAL_TABLE_OB_INFORMATION_PARTITIONS_TABLE_
 #define OCEANBASE_OBSERVER_VIRTUAL_TABLE_OB_INFORMATION_PARTITIONS_TABLE_
 
-#include "share/ob_virtual_table_scanner_iterator.h"
+#include "observer/virtual_table/ob_virtual_table_scanner_iterator.h"
 #include "lib/container/ob_se_array.h"
 namespace oceanbase
 {
@@ -44,7 +44,6 @@ public:
   virtual int inner_get_next_row(common::ObNewRow *&row);
   virtual void reset();
 
-  inline void set_tenant_id(uint64_t tenant_id);
 
 private:
   int add_partitions(const share::schema::ObDatabaseSchema &database_schema,
@@ -55,14 +54,11 @@ private:
                      common::ObObj *cells,
                      const int64_t col_count);
   int gen_high_bound_val_str(
-      const bool is_oracle_mode,
       const share::schema::ObBasePartition *part,
       common::ObString &val_str);
   int gen_list_bound_val_str(
-      const bool is_oracle_mode,
       const share::schema::ObBasePartition *part,
       common::ObString &val_str);
-  uint64_t tenant_id_;
 private:
   enum PARTITION_COLUMN
   {
@@ -97,10 +93,7 @@ private:
   DISALLOW_COPY_AND_ASSIGN(ObInfoSchemaPartitionsTable);
 };
 
-inline void ObInfoSchemaPartitionsTable::set_tenant_id(uint64_t tenant_id)
-{
-  tenant_id_ = tenant_id;
-}
+
 
 }
 }

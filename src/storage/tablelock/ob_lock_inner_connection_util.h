@@ -17,7 +17,7 @@
 #ifndef OCEABASE_OB_LOCK_INNER_CONNECTION_UTIL_
 #define OCEABASE_OB_LOCK_INNER_CONNECTION_UTIL_
 
-#include "observer/ob_inner_sql_rpc_proxy.h"
+#include "observer/ob_inner_sql_transmit_struct.h"
 #include "storage/tablelock/ob_table_lock_common.h"
 #include "storage/tablelock/ob_table_lock_rpc_struct.h"
 
@@ -62,23 +62,22 @@ class ObInnerConnectionLockUtil
 // --------------------- interface for inner connection rpc processor -----------------------
 public:
   static int process_lock_rpc(
-      const obrpc::ObInnerSQLTransmitArg &arg,
+      const obcall::ObInnerSQLTransmitArg &arg,
       common::sqlclient::ObISQLConnection *conn);
 private:
   static int process_lock_table_(
-      const obrpc::ObInnerSQLTransmitArg::InnerSQLOperationType operation_type,
-      const obrpc::ObInnerSQLTransmitArg &arg,
+      const obcall::ObInnerSQLTransmitArg::InnerSQLOperationType operation_type,
+      const obcall::ObInnerSQLTransmitArg &arg,
       observer::ObInnerSQLConnection *conn);
   static int process_lock_tablet_(
-      const obrpc::ObInnerSQLTransmitArg::InnerSQLOperationType operation_type,
-      const obrpc::ObInnerSQLTransmitArg &arg,
+      const obcall::ObInnerSQLTransmitArg::InnerSQLOperationType operation_type,
+      const obcall::ObInnerSQLTransmitArg &arg,
       observer::ObInnerSQLConnection *conn);
-  static int process_replace_lock_(const obrpc::ObInnerSQLTransmitArg &arg, observer::ObInnerSQLConnection *conn);
-  static int process_replace_all_locks_(const obrpc::ObInnerSQLTransmitArg &arg, observer::ObInnerSQLConnection *conn);
+  static int process_replace_lock_(const obcall::ObInnerSQLTransmitArg &arg, observer::ObInnerSQLConnection *conn);
+  static int process_replace_all_locks_(const obcall::ObInnerSQLTransmitArg &arg, observer::ObInnerSQLConnection *conn);
   // --------------------- interface for inner connection client -----------------------
 public:
   static int lock_table(
-      const uint64_t tenant_id,
       const uint64_t table_id,
       const ObTableLockMode lock_mode,
       const int64_t timeout_us,
@@ -86,57 +85,45 @@ public:
       const ObTableLockOwnerID owner_id = ObTableLockOwnerID::default_owner(),
       const ObTableLockPriority lock_priority = ObTableLockPriority::NORMAL);
   static int lock_table(
-      const uint64_t tenant_id,
       const ObLockTableRequest &arg,
       observer::ObInnerSQLConnection *conn);
   static int unlock_table(
-      const uint64_t tenant_id,
       const ObUnLockTableRequest &arg,
       observer::ObInnerSQLConnection *conn);
   static int lock_tablet(
-      const uint64_t tenant_id,
       const uint64_t table_id,
       const ObTabletID tablet_id,
       const ObTableLockMode lock_mode,
       const int64_t timeout_us,
       observer::ObInnerSQLConnection *conn);
   static int lock_tablet(
-      const uint64_t tenant_id,
       const uint64_t table_id,
       const ObIArray<ObTabletID> &tablet_ids,
       const ObTableLockMode lock_mode,
       const int64_t timeout_us,
       observer::ObInnerSQLConnection *conn);
   static int lock_tablet(
-      const uint64_t tenant_id,
       const ObLockAloneTabletRequest &arg,
       observer::ObInnerSQLConnection *conn);
   static int unlock_tablet(
-      const uint64_t tenant_id,
       const ObUnLockAloneTabletRequest &arg,
       observer::ObInnerSQLConnection *conn);
   static int lock_obj(
-      const uint64_t tenant_id,
       const ObLockObjRequest &arg,
       observer::ObInnerSQLConnection *conn);
   static int unlock_obj(
-      const uint64_t tenant_id,
       const ObUnLockObjRequest &arg,
       observer::ObInnerSQLConnection *conn);
   static int lock_obj(
-      const uint64_t tenant_id,
       const ObLockObjsRequest &arg,
       observer::ObInnerSQLConnection *conn);
   static int unlock_obj(
-      const uint64_t tenant_id,
       const ObUnLockObjsRequest &arg,
       observer::ObInnerSQLConnection *conn);
   static int replace_lock(
-      const uint64_t tenant_id,
       const ObReplaceLockRequest &req,
       observer::ObInnerSQLConnection *conn);
   static int replace_lock(
-      const uint64_t tenant_id,
       const ObReplaceAllLocksRequest &req,
       observer::ObInnerSQLConnection *conn);
   static int create_inner_conn(sql::ObSQLSessionInfo *session_info,
@@ -149,39 +136,29 @@ public:
   static int build_tx_param(sql::ObSQLSessionInfo *session_info, ObTxParam &tx_param, const bool *readonly = nullptr);
 
 private:
-  static int replace_lock_(
-      const uint64_t tenant_id,
-      const ObReplaceLockRequest &req,
+  static int replace_lock_(const ObReplaceLockRequest &req,
       observer::ObInnerSQLConnection *conn,
       observer::ObInnerSQLResult &res);
-  static int replace_lock_(
-      const uint64_t tenant_id,
-      const ObReplaceAllLocksRequest &req,
+  static int replace_lock_(const ObReplaceAllLocksRequest &req,
       observer::ObInnerSQLConnection *conn,
       observer::ObInnerSQLResult &res);
-  static int do_obj_lock_(
-      const uint64_t tenant_id,
-      const ObLockRequest &arg,
-      const obrpc::ObInnerSQLTransmitArg::InnerSQLOperationType operation_type,
+  static int do_obj_lock_(const ObLockRequest &arg,
+      const obcall::ObInnerSQLTransmitArg::InnerSQLOperationType operation_type,
       observer::ObInnerSQLConnection *conn,
       observer::ObInnerSQLResult &res);
   static int handle_request_by_operation_type_(
     ObTxDesc &tx_desc,
     const ObTxParam &tx_param,
     const ObLockRequest &arg,
-    const obrpc::ObInnerSQLTransmitArg::InnerSQLOperationType operation_type);
-  static int request_lock_(
-      const uint64_t tenant_id,
-      const uint64_t table_id,
+    const obcall::ObInnerSQLTransmitArg::InnerSQLOperationType operation_type);
+  static int request_lock_(const uint64_t table_id,
       const ObTabletID tablet_id, //just used when lock_tablet
       const ObTableLockMode lock_mode,
       const int64_t timeout_us,
-      const obrpc::ObInnerSQLTransmitArg::InnerSQLOperationType operation_type,
+      const obcall::ObInnerSQLTransmitArg::InnerSQLOperationType operation_type,
       observer::ObInnerSQLConnection *conn);
-  static int request_lock_(
-      const uint64_t tenant_id,
-      const ObLockRequest &arg,
-      const obrpc::ObInnerSQLTransmitArg::InnerSQLOperationType operation_type,
+  static int request_lock_(const ObLockRequest &arg,
+      const obcall::ObInnerSQLTransmitArg::InnerSQLOperationType operation_type,
       observer::ObInnerSQLConnection *conn);
   static int get_org_cluster_id_(sql::ObSQLSessionInfo *session, int64_t &org_cluster_id);
   static int set_to_mysql_compat_mode_(observer::ObInnerSQLConnection *conn,

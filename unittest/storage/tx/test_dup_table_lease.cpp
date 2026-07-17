@@ -15,7 +15,7 @@
  */
 
 #include <gtest/gtest.h>
-#include "deps/oblib/src/lib/hash/ob_hashmap.h"
+#include "lib/hash/ob_hashmap.h"
 
 namespace oceanbase 
 {

@@ -18,8 +18,6 @@
 #define OCEANBASE_SQL_ENGINE_CMD_LOAD_DATA_RPC_H_
 
 #include "share/ob_define.h"
-#include "rpc/obrpc/ob_rpc_proxy.h"
-#include "rpc/obrpc/ob_rpc_processor.h"
 #include "lib/container/ob_bit_set.h"
 #include "lib/lock/ob_thread_cond.h"
 #include "sql/ob_sql_utils.h"
@@ -46,18 +44,6 @@ struct ObShuffleTaskHandle;
 class ObInsertValueGenerator;
 class ObPartIdCalculator;
 class ObPartDataFragMgr;
-}
-
-namespace obrpc
-{
-class ObLoadDataRpcProxy : public obrpc::ObRpcProxy
-{
-public:
-  DEFINE_TO(ObLoadDataRpcProxy);
-  RPC_AP(@PR5 ap_load_data_execute, obrpc::OB_LOAD_DATA_EXECUTE, (sql::ObLoadbuffer), sql::ObLoadResult);
-  RPC_AP(@PR5 ap_load_data_shuffle, obrpc::OB_LOAD_DATA_SHUFFLE, (sql::ObShuffleTask), sql::ObShuffleResult);
-  RPC_AP(@PR5 ap_load_data_insert, obrpc::OB_LOAD_DATA_INSERT, (sql::ObInsertTask), sql::ObInsertResult);
-};
 }
 
 namespace sql {
@@ -163,7 +149,7 @@ struct ObInsertTask
   }
 
   void reset() {
-    tenant_id_ = common::OB_INVALID_TENANT_ID;
+    
     column_count_ = 0;
     reuse();
     token_server_idx_ = OB_INVALID_INDEX;
@@ -179,14 +165,13 @@ struct ObInsertTask
     return task_id_ == OB_INVALID_ID;
   }
 
-  TO_STRING_KV(K(tenant_id_),
-               K(task_id_),
+  TO_STRING_KV(K(task_id_),
                K(row_count_),
                K(column_count_),
                K(insert_value_data_.count()));
 
   //serialized data:
-  uint64_t tenant_id_;
+  
   int64_t task_id_;
   int64_t row_count_;
   int64_t column_count_;
@@ -214,9 +199,9 @@ struct ObInsertTask
 };
 
 template<class T>
-class ObRpcPointerArg {
+class ObCallPointerArg {
 public:
-  ObRpcPointerArg() : ptr_value_(0) {}
+  ObCallPointerArg() : ptr_value_(0) {}
   int set_arg(T *ptr) {
     int ret = OB_SUCCESS;
     if (OB_ISNULL(ptr)) {
@@ -243,12 +228,12 @@ private:
   OB_UNIS_VERSION(1);
 };
 
-OB_SERIALIZE_MEMBER_TEMP(template<class T>, ObRpcPointerArg<T>, ptr_value_);
+OB_SERIALIZE_MEMBER_TEMP(template<class T>, ObCallPointerArg<T>, ptr_value_);
 
 struct ObShuffleTask {
   ObShuffleTask() : task_id_(OB_INVALID_INDEX_INT64) {}
   int64_t task_id_;
-  ObRpcPointerArg<ObShuffleTaskHandle> shuffle_task_handle_;
+  ObCallPointerArg<ObShuffleTaskHandle> shuffle_task_handle_;
   ObLoadDataGID gid_;
   TO_STRING_KV(K(task_id_), K(gid_));
   OB_UNIS_VERSION(1);
@@ -341,8 +326,7 @@ class ObLoadbuffer
 {
 public:
   const static int64_t LOAD_BUFFER_MAX_ROW_COUNT = DEFAULT_BUFFERRED_ROW_COUNT;
-  ObLoadbuffer (): tenant_id_(common::OB_INVALID_ID),
-                   table_id_(common::OB_INVALID_ID),
+  ObLoadbuffer (): table_id_(common::OB_INVALID_ID),
                    insert_column_num_(0),
                    stored_row_cnt_(0),
                    stored_pos_(0),
@@ -389,8 +373,8 @@ public:
   OB_INLINE ObTabletID get_tablet_id() { return tablet_id_; }
   OB_INLINE void set_table_id(uint64_t table_id) { table_id_ = table_id; }
   OB_INLINE uint64_t get_table_id() { return table_id_; }
-  OB_INLINE void set_tenant_id(uint64_t tenant_id) { tenant_id_ = tenant_id; }
-  OB_INLINE uint64_t get_tenant_id(){ return tenant_id_; }
+  
+  
   OB_INLINE void set_column_num(int64_t insert_column_num) { insert_column_num_ = insert_column_num; }
   OB_INLINE int64_t get_column_num(){ return insert_column_num_; }
   OB_INLINE int64_t get_stored_pos() { return stored_pos_; }
@@ -411,7 +395,7 @@ public:
   common::ObIArray<int64_t>& get_file_line_number() { return file_line_number_; }
   common::ObIArray<int16_t>& get_failed_row_idx() { return failed_inserted_row_idx_; }
   common::ObIArray<int>& get_error_code_array() { return error_codes_; }
-  TO_STRING_KV(K_(tenant_id),
+  TO_STRING_KV(
                K_(table_id),
                K_(insert_column_num),
                K_(stored_row_cnt),
@@ -424,7 +408,7 @@ public:
   OB_UNIS_VERSION(1);
 private:
   //send params
-  uint64_t tenant_id_;
+  
   uint64_t table_id_;
   common::ObString table_name_;
   int64_t insert_column_num_;
@@ -467,144 +451,6 @@ public:
   common::ObSEArray<int16_t, DEFAULT_BUFFERRED_ROW_COUNT> row_number_;
   common::ObSEArray<int, DEFAULT_BUFFERRED_ROW_COUNT> row_err_code_;
   OB_UNIS_VERSION(1);
-};
-
-class ObRpcLoadDataTaskExecuteP : public oceanbase::obrpc::ObRpcProcessor<
-    obrpc::ObLoadDataRpcProxy::ObRpc<obrpc::OB_LOAD_DATA_EXECUTE> >
-{
-public:
-  explicit ObRpcLoadDataTaskExecuteP(const observer::ObGlobalContext &gctx) : gctx_(gctx), escape_data_buffer_() {}
-  virtual ~ObRpcLoadDataTaskExecuteP() {}
-protected:
-  int process();
-private:
-  const observer::ObGlobalContext &gctx_;
-  common::ObDataBuffer escape_data_buffer_;
-  char str_buf_[common::OB_MAX_DEFAULT_VALUE_LENGTH];  //TODO wjh: change this
-};
-
-class ObRpcLoadDataTaskCallBack
-      : public obrpc::ObLoadDataRpcProxy::AsyncCB<obrpc::OB_LOAD_DATA_EXECUTE>
-{
-public:
-  ObRpcLoadDataTaskCallBack(ObParallelTaskController &task_controller,
-                            CompleteTaskArray &complete_task_list,
-                            Request *request)
-    : task_controller_(task_controller),
-      complete_task_list_(complete_task_list),
-      request_buffer_ptr_(request) {}
-  virtual void on_timeout();
-  void set_args(const Request &arg);
-  oceanbase::rpc::frame::ObReqTransport::AsyncCB *clone(
-      const oceanbase::rpc::frame::SPAlloc &alloc) const
-  {
-    void *buf = alloc(sizeof(*this));
-    ObRpcLoadDataTaskCallBack *newcb = NULL;
-    if (NULL != buf) {
-      newcb = new(buf) ObRpcLoadDataTaskCallBack(task_controller_,
-                                                 complete_task_list_,
-                                                 request_buffer_ptr_);
-    }
-    return newcb;
-  }
-  int process();
-private:
-  ObParallelTaskController &task_controller_;
-  CompleteTaskArray &complete_task_list_;
-  Request *request_buffer_ptr_;
-};
-
-//load data V2
-
-class ObRpcLoadDataShuffleTaskExecuteP : public oceanbase::obrpc::ObRpcProcessor<
-    obrpc::ObLoadDataRpcProxy::ObRpc<obrpc::OB_LOAD_DATA_SHUFFLE> >
-{
-public:
-  explicit ObRpcLoadDataShuffleTaskExecuteP(const observer::ObGlobalContext &gctx) : gctx_(gctx) {}
-  virtual ~ObRpcLoadDataShuffleTaskExecuteP() {}
-protected:
-  int process();
-private:
-  const observer::ObGlobalContext &gctx_;
-};
-
-class ObRpcLoadDataShuffleTaskCallBack
-      : public obrpc::ObLoadDataRpcProxy::AsyncCB<obrpc::OB_LOAD_DATA_SHUFFLE>
-{
-public:
-  ObRpcLoadDataShuffleTaskCallBack(
-      ObParallelTaskController &task_controller,
-      ObConcurrentFixedCircularArray<ObShuffleTaskHandle *> &complete_task_list,
-      ObShuffleTaskHandle *handle
-      )
-    : task_controller_(task_controller),
-      complete_task_list_(complete_task_list),
-      handle_(handle) {}
-  virtual void on_timeout();
-  void set_args(const Request &arg);
-  oceanbase::rpc::frame::ObReqTransport::AsyncCB *clone(
-      const oceanbase::rpc::frame::SPAlloc &alloc) const
-  {
-    void *buf = alloc(sizeof(*this));
-    ObRpcLoadDataShuffleTaskCallBack *newcb = NULL;
-    if (NULL != buf) {
-      newcb = new(buf) ObRpcLoadDataShuffleTaskCallBack(task_controller_,
-                                                        complete_task_list_,
-                                                        handle_);
-    }
-    return newcb;
-  }
-  int process();
-  int release_resouce();
-private:
-  ObParallelTaskController &task_controller_;
-  ObConcurrentFixedCircularArray<ObShuffleTaskHandle *> &complete_task_list_;
-  ObShuffleTaskHandle *handle_;
-};
-
-class ObRpcLoadDataInsertTaskExecuteP : public oceanbase::obrpc::ObRpcProcessor<
-    obrpc::ObLoadDataRpcProxy::ObRpc<obrpc::OB_LOAD_DATA_INSERT> >
-{
-public:
-  explicit ObRpcLoadDataInsertTaskExecuteP(const observer::ObGlobalContext &gctx) : gctx_(gctx) {}
-  virtual ~ObRpcLoadDataInsertTaskExecuteP() {}
-protected:
-  int process();
-private:
-  const observer::ObGlobalContext &gctx_;
-};
-
-class ObRpcLoadDataInsertTaskCallBack
-      : public obrpc::ObLoadDataRpcProxy::AsyncCB<obrpc::OB_LOAD_DATA_INSERT>
-{
-public:
-  ObRpcLoadDataInsertTaskCallBack(
-      ObParallelTaskController &task_controller,
-      ObConcurrentFixedCircularArray<ObInsertTask *> &complete_task_list,
-      ObInsertTask *insert_task)
-    : task_controller_(task_controller),
-      complete_task_list_(complete_task_list),
-      insert_task_(insert_task) {}
-  virtual void on_timeout();
-  void set_args(const Request &arg);
-  oceanbase::rpc::frame::ObReqTransport::AsyncCB *clone(
-      const oceanbase::rpc::frame::SPAlloc &alloc) const
-  {
-    void *buf = alloc(sizeof(*this));
-    ObRpcLoadDataInsertTaskCallBack *newcb = NULL;
-    if (NULL != buf) {
-      newcb = new(buf) ObRpcLoadDataInsertTaskCallBack(task_controller_,
-                                                       complete_task_list_,
-                                                       insert_task_);
-    }
-    return newcb;
-  }
-  int process();
-  int release_resouce();
-private:
-  ObParallelTaskController &task_controller_;
-  ObConcurrentFixedCircularArray<ObInsertTask *> &complete_task_list_;
-  ObInsertTask *insert_task_;
 };
 
 }

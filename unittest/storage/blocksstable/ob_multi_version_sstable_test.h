@@ -40,7 +40,6 @@
 #include "../mockcontainer/mock_ob_iterator.h"
 #include "storage/tablet/ob_tablet_create_sstable_param.h"
 #include "unittest/storage/mock_ob_table_read_info.h"
-#include "storage/column_store/ob_column_oriented_sstable.h"
 #include "storage/compaction/ob_compaction_memory_context.h"
 #include "storage/ob_storage_schema_util.h"
 #include "storage/blocksstable/ob_sstable_private_object_cleaner.h"
@@ -197,7 +196,6 @@ public:
   static const uint64_t tenant_id_ = 1001;
   static const uint64_t tablet_id_ = 300000;
   static const uint64_t table_id_ = 300000;
-  static const uint64_t ls_id_ = 1001;
 
   ObMergeType merge_type_;
   ObTenantFreezeInfoMgr *mgr_;
@@ -241,9 +239,8 @@ void ObMultiVersionSSTableTest::SetUpTestCase()
   SERVER_STORAGE_META_SERVICE.is_started_ = true;
   //OK(init_io_device("multi_version_test"));
 
-  // create ls
-  ObLSHandle ls_handle;
-  ret = TestDmlCommon::create_ls(tenant_id_, ObLSID(ls_id_), ls_handle);
+  ObLS *ls = nullptr;
+  ret = TestDmlCommon::create_ls(ls);
   ASSERT_EQ(OB_SUCCESS, ret);
 }
 
@@ -298,7 +295,7 @@ ObITable::TableType ObMultiVersionSSTableTest::get_merged_table_type() const
   } else if (META_MAJOR_MERGE == merge_type_) {
     table_type = ObITable::TableType::META_MAJOR_SSTABLE;
   } else if (DDL_KV_MERGE == merge_type_) {
-    table_type = ObITable::TableType::DDL_MERGE_CO_SSTABLE;
+    table_type = ObITable::TableType::DDL_DUMP_SSTABLE;
   } else { // MINOR_MERGE
     table_type = ObITable::TableType::MINOR_SSTABLE;
   }
@@ -339,7 +336,6 @@ void ObMultiVersionSSTableTest::prepare_table_schema(
   OK(full_read_info_.init(allocator_,
                           column_cnt - extra_rowkey_cnt,
                           schema_rowkey_cnt,
-                          lib::is_oracle_mode(),
                           tmp_col_descs));
 
   //init table schema
@@ -393,21 +389,20 @@ void ObMultiVersionSSTableTest::prepare_table_schema(
 
 void ObMultiVersionSSTableTest::init_tablet()
 {
-  ObLSID ls_id(ls_id_);
   ObTabletID tablet_id(tablet_id_);
-  ObLSHandle ls_handle;
+  ObLS *ls = nullptr;
   ObLSService *ls_svr = MTL(ObLSService*);
-  ASSERT_EQ(OB_SUCCESS, ls_svr->get_ls(ls_id, ls_handle, ObLSGetMod::STORAGE_MOD));
+  ASSERT_EQ(OB_SUCCESS, ls_svr->get_ls(ls));
 
   ObTabletHandle tablet_handle;
   void *ptr = nullptr;
-  ASSERT_EQ(OB_SUCCESS, ls_handle.get_ls()->get_tablet(tablet_id, tablet_handle));
+  ASSERT_EQ(OB_SUCCESS, ls->get_tablet(tablet_id, tablet_handle));
   ObTablet *tablet = tablet_handle.get_obj();
   ASSERT_EQ(OB_SUCCESS, ObStorageSchemaUtil::alloc_storage_schema(allocator_, tablet->storage_schema_addr_.ptr_));
   tablet->storage_schema_addr_.get_ptr()->init(allocator_, table_schema_, lib::Worker::CompatMode::MYSQL);
   ASSERT_NE(nullptr, ptr = allocator_.alloc(sizeof(ObRowkeyReadInfo)));
   tablet->rowkey_read_info_ = new (ptr) ObRowkeyReadInfo();
-  tablet->build_read_info(allocator_, nullptr /*tablet*/, false /*is_cs_replica_compat*/);
+  tablet->build_read_info(allocator_, nullptr /*tablet*/);
 }
 
 void ObMultiVersionSSTableTest::reset_writer(
@@ -425,12 +420,11 @@ void ObMultiVersionSSTableTest::reset_writer(
     root_index_builder_ = nullptr;
   }
 
-  ObLSID ls_id(ls_id_);
   ObTabletID tablet_id(tablet_id_);
   SCN scn;
   scn.convert_for_tx(snapshot_version);
-  ASSERT_EQ(OB_SUCCESS, data_desc_.init(false/*is_ddl*/, table_schema_, ls_id, tablet_id, merge_type, snapshot_version, DATA_VERSION_1_0_0_0,
-                                        table_schema_.get_micro_index_clustered(), 0 /*transfer_seq*/, 0/*concurrent_cnt*/, scn));
+  ASSERT_EQ(OB_SUCCESS, data_desc_.init(false/*is_ddl*/, table_schema_, tablet_id, merge_type, snapshot_version, DATA_VERSION_1_0_0_0,
+                                        table_schema_.get_micro_index_clustered(), 0/*concurrent_cnt*/, scn));
   void *builder_buf = allocator_.alloc(sizeof(ObSSTableIndexBuilder));
   root_index_builder_ = new (builder_buf) ObSSTableIndexBuilder(false /* not need writer buffer*/);
   ASSERT_NE(nullptr, root_index_builder_);
@@ -510,7 +504,6 @@ void ObMultiVersionSSTableTest::prepare_data_end(
   ASSERT_EQ(OB_SUCCESS, root_index_builder_->close(res));
 
   ObTabletCreateSSTableParam param;
-  param.set_init_value_for_column_store_();
   table_key_.table_type_ = table_type;
   ASSERT_EQ(OB_SUCCESS, param.data_block_ids_.assign(res.data_block_ids_));
   ASSERT_EQ(OB_SUCCESS, param.other_block_ids_.assign(res.other_block_ids_));
@@ -558,12 +551,7 @@ void ObMultiVersionSSTableTest::prepare_data_end(
     ASSERT_EQ(OB_SUCCESS, ObSSTableMergeRes::fill_column_checksum_for_empty_major(param.column_cnt_, param.column_checksums_));
   }
 
-  if (table_type == ObITable::COLUMN_ORIENTED_SSTABLE) {
-    param.table_key_.column_group_idx_ = column_idx;
-    OK(ObTabletCreateDeleteHelper::create_sstable<ObCOSSTableV2>(param, allocator_, handle));
-  } else {
-    OK(ObTabletCreateDeleteHelper::create_sstable(param, allocator_, handle));
-  }
+  OK(ObTabletCreateDeleteHelper::create_sstable(param, allocator_, handle));
 }
 
 void ObMultiVersionSSTableTest::prepare_data(

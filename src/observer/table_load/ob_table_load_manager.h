@@ -32,7 +32,7 @@ class ObTableLoadClientTaskBrief;
 class ObTableLoadManager
 {
 public:
-  ObTableLoadManager(const uint64_t tenant_id);
+  ObTableLoadManager();
   ~ObTableLoadManager();
   int init();
 
@@ -105,19 +105,19 @@ private:
     }
     int64_t get_used_count() const
     {
-      ObMutexGuard guard(mutex_);
+      lib::ObMutexGuard guard(mutex_);
       return used_list_.get_size();
     }
 
   private:
     inline void add_list(Value *value)
     {
-      ObMutexGuard guard(mutex_);
+      lib::ObMutexGuard guard(mutex_);
       OB_ASSERT(used_list_.add_last(value));
     }
     inline void remove_list(Value *value)
     {
-      ObMutexGuard guard(mutex_);
+      lib::ObMutexGuard guard(mutex_);
       OB_ASSERT(OB_NOT_NULL(used_list_.remove(value)));
     }
 
@@ -289,7 +289,6 @@ private:
   };
 
 private:
-  const uint64_t tenant_id_;
 
   ObjAllocator<ObTableLoadTableCtx> table_ctx_alloc_;
   ObjAllocator<ObTableLoadClientTask> client_task_alloc_;

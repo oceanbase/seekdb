@@ -16,10 +16,10 @@
 
  #ifndef OCEANBASE_ROOTSERVER_OB_AI_MODEL_DDL_OPERATOR_H_
  #define OCEANBASE_ROOTSERVER_OB_AI_MODEL_DDL_OPERATOR_H_
-
+ 
  #include "share/ob_rpc_struct.h"
  #include "share/schema/ob_schema_service.h"
-
+ 
 namespace oceanbase
 {
 

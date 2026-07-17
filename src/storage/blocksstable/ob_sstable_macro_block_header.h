@@ -107,7 +107,6 @@ public:
   common::ObObjMeta *column_types_;
   common::ObOrderType *column_orders_;
   int64_t *column_checksum_;
-  bool is_normal_cg_;
   bool is_inited_;
 };
 

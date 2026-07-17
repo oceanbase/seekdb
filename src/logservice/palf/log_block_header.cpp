@@ -15,6 +15,7 @@
  */
 
 #include "log_block_header.h"
+#include "lib/checksum/ob_crc64.h"
 
 namespace oceanbase
 {
@@ -38,8 +39,7 @@ bool LogBlockHeader::is_valid() const
          && LOG_INFO_BLOCK_VERSION == version_
          && true == min_lsn_.is_valid()
          && true == min_scn_.is_valid()
-         && true == is_valid_block_id(curr_block_id_)
-         && true == is_valid_palf_id(palf_id_);
+         && true == is_valid_block_id(curr_block_id_);
 }
 
 void LogBlockHeader::reset()
@@ -51,7 +51,6 @@ void LogBlockHeader::reset()
   min_scn_.reset();
   max_scn_.reset();
   curr_block_id_ = LOG_INVALID_BLOCK_ID;
-  palf_id_ = INVALID_PALF_ID;
   checksum_ = 0;
 }
 
@@ -62,33 +61,9 @@ void LogBlockHeader::update_lsn_and_scn(const LSN &lsn,
   min_scn_ = scn;
 }
 
-void LogBlockHeader::update_palf_id_and_curr_block_id(const int64_t palf_id,
-                                                      const block_id_t curr_block_id)
+void LogBlockHeader::update_curr_block_id(const block_id_t curr_block_id)
 {
-  palf_id_ = palf_id;
   curr_block_id_ = curr_block_id;
-}
-
-int LogBlockHeader::generate(const int64_t palf_id,
-                             const block_id_t block_id,
-                             const LSN &min_lsn,
-                             const share::SCN &min_scn)
-{
-  int ret = OB_SUCCESS;
-  if (OB_UNLIKELY((!is_valid_palf_id(palf_id)) || (!is_valid_block_id(block_id))
-                  || (!min_lsn.is_valid()) || (!min_scn.is_valid()))) {
-    ret = OB_INVALID_ARGUMENT;
-    PALF_LOG(WARN, "invalid arguments", K(palf_id), K(block_id), K(min_lsn), K(min_scn));
-  } else {
-    magic_ = MAGIC;
-    version_ = LOG_INFO_BLOCK_VERSION;
-    palf_id_ = palf_id;
-    curr_block_id_ = block_id;
-    min_lsn_ = min_lsn;
-    min_scn_ = min_scn;
-    checksum_ = calc_checksum_();
-  }
-  return ret;
 }
 void LogBlockHeader::mark_block_can_be_reused(const SCN &max_scn)
 {
@@ -150,7 +125,6 @@ DEFINE_SERIALIZE(LogBlockHeader)
              || OB_FAIL(min_scn_.fixed_serialize(buf, buf_len, new_pos))
              || OB_FAIL(max_scn_.fixed_serialize(buf, buf_len, new_pos))
              || OB_FAIL(serialization::encode_i64(buf, buf_len, new_pos, curr_block_id_))
-             || OB_FAIL(serialization::encode_i64(buf, buf_len, new_pos, palf_id_))
              || OB_FAIL(serialization::encode_i64(buf, buf_len, new_pos, checksum_))) {
     PALF_LOG(ERROR, "serialize failed", K(ret), K(pos), K(buf_len));
   } else {
@@ -172,7 +146,6 @@ DEFINE_DESERIALIZE(LogBlockHeader)
              || OB_FAIL(min_scn_.fixed_deserialize(buf, data_len, new_pos))
              || OB_FAIL(max_scn_.fixed_deserialize_without_transform(buf, data_len, new_pos))
              || OB_FAIL(serialization::decode_i64(buf, data_len, new_pos, reinterpret_cast<int64_t*>(&curr_block_id_)))
-             || OB_FAIL(serialization::decode_i64(buf, data_len, new_pos, &palf_id_))
              || OB_FAIL(serialization::decode_i64(buf, data_len, new_pos, &checksum_))) {
     PALF_LOG(ERROR, "serialize failed", K(ret), K(pos), K(data_len));
   } else {
@@ -191,7 +164,6 @@ DEFINE_GET_SERIALIZE_SIZE(LogBlockHeader)
   size += min_scn_.get_fixed_serialize_size();
   size += max_scn_.get_fixed_serialize_size();
   size += serialization::encoded_length_i64(curr_block_id_);
-  size += serialization::encoded_length_i64(palf_id_);
   size += serialization::encoded_length_i64(checksum_);
   return size;
 }

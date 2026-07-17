@@ -16,10 +16,8 @@
 
 #include "ob_base_log_writer.h"
 #include "lib/lock/ob_scond.h"
-#include "deps/oblib/src/lib/rc/context.h"
+#include "lib/rc/context.h"
 #include "lib/thread/ob_thread_name.h"
-#include "lib/ash/ob_active_session_guard.h"
-#include "lib/stat/ob_diagnostic_info_guard.h"
 
 using namespace oceanbase::lib;
 extern "C" {
@@ -50,11 +48,10 @@ ObBaseLogWriter::~ObBaseLogWriter()
 
 int ObBaseLogWriter::init(
     const ObBaseLogWriterCfg &log_cfg,
-    const char *thread_name,
-    const uint64_t tenant_id)
+    const char *thread_name)
 {
   int ret = OB_SUCCESS;
-  ObMemAttr attr(tenant_id, "BaseLogWriter");
+  ObMemAttr attr("BaseLogWriter");
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
     LOG_STDERR("The ObBaseLogWriter has been inited.\n");
@@ -262,7 +259,6 @@ void *ObBaseLogWriter::flush_log_thread(void *arg)
     pthread_cleanup_push(cleanup_log_thread, arg);
     ObBaseLogWriter *log_writer = reinterpret_cast<ObBaseLogWriter*> (arg);
     lib::set_thread_name(log_writer->thread_name_);
-    ObDIActionGuard ag("flush log");
     log_writer->flush_log();
     pthread_cleanup_pop(1);
   }
@@ -288,7 +284,6 @@ void ObBaseLogWriter::do_flush_log()
   int64_t item_cnt = 0;
   const uint32_t key = log_flush_cond_->get_key();
   if (!need_flush() && !has_stopped_) {
-    common::ObBKGDSessInActiveGuard inactive_guard;
     log_flush_cond_->wait(key, log_cfg_.group_commit_max_wait_us_);
   }
   while (OB_LIKELY(need_flush() && !has_stopped_)) {

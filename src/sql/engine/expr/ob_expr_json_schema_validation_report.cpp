@@ -77,7 +77,7 @@ int ObExprJsonSchemaValidationReport::cg_expr(ObExprCGCtx &op_cg_ctx,
 {
   INIT_SUCC(ret);
   const ObRawExpr *schema = raw_expr.get_param_expr(0);
-  if (lib::is_mysql_mode() && OB_JSON_SCHEMA_EXPR_ARG_NUM == rt_expr.arg_cnt_ 
+  if (OB_JSON_SCHEMA_EXPR_ARG_NUM == rt_expr.arg_cnt_
      && OB_NOT_NULL(schema) && (schema->is_const_expr() || schema->is_static_scalar_const_expr())
      && schema->get_expr_type() != T_OP_GET_USER_VAR) {
     ObIAllocator &alloc = *op_cg_ctx.allocator_;
@@ -109,9 +109,9 @@ int ObExprJsonSchemaValidationReport::eval_json_schema_validation_report(const O
   ObIJsonBase* j_doc = nullptr;
   bool is_null_result = false;
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
-  uint64_t tenant_id = ObMultiModeExprHelper::get_tenant_id(ctx.exec_ctx_.get_my_session());
-  MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator(), expr.type_, tenant_id, ret);
-  lib::ObMallocHookAttrGuard malloc_guard(lib::ObMemAttr(tenant_id, "JSONModule"));
+  
+  MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator(), expr.type_, ret);
+  lib::ObMallocHookAttrGuard malloc_guard(lib::ObMemAttr("JSONModule"));
   ObJsonBin j_schema_bin;
   if (OB_ISNULL(info)) {
     // schema is not const
@@ -167,11 +167,11 @@ int ObExprJsonSchemaValidationReport::raise_validation_report(ObIAllocator &allo
   ObJsonBoolean* schema_result = nullptr;
   if (OB_ISNULL(report_obj = OB_NEWx(ObJsonObject, &allocator, &allocator))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("fail to init schema report.", K(ret));
+    LOG_ERROR("fail to init schema report.", K(ret));
   } else if (OB_FALSE_IT(validation_report = report_obj)) { 
   } else if (OB_ISNULL(schema_result = OB_NEWx(ObJsonBoolean, &allocator, is_valid))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("fail to init schema report result.", K(ret));
+    LOG_ERROR("fail to init schema report result.", K(ret));
   } else if (OB_FAIL(report_obj->add(ObJsonSchemaReportItem::RESULT, schema_result, false, true, false))) {
     LOG_WARN("fail to add schema result.", K(ret));
   } else if (!is_valid) { // if not valid, need to describe the reason in detail

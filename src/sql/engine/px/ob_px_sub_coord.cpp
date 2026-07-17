@@ -33,7 +33,7 @@
 #include "sql/engine/basic/ob_select_into_op.h"
 #include "storage/ddl/ob_direct_load_mgr_v3.h"
 #include "storage/ddl/ob_direct_load_mgr_utils.h"
-#include "storage/ddl/ob_column_clustered_dag.h"
+#include "storage/ddl/ob_ddl_insert_dag.h"
 
 using namespace oceanbase::common;
 using namespace oceanbase::sql;
@@ -368,7 +368,7 @@ int ObPxSubCoord::setup_op_input(ObExecContext &ctx,
     ObPxSqcMeta &sqc = sqc_arg_.sqc_;
     ObJoinFilterSpec *filter_spec = reinterpret_cast<ObJoinFilterSpec *>(&root);
     ObJoinFilterOpInput *filter_input = NULL;
-    int64_t tenant_id = ctx.get_my_session()->get_effective_tenant_id();
+    
     ObOperatorKit *kit = ctx.get_operator_kit(root.id_);
     if (OB_ISNULL(kit) || OB_ISNULL(kit->input_)) {
       ret = OB_ERR_UNEXPECTED;
@@ -570,26 +570,6 @@ int ObPxSubCoord::setup_op_input(ObExecContext &ctx,
       }
       LOG_DEBUG("debug wf input", K(wf_spec->role_type_), K(sqc.get_task_count()),
                 K(sqc.get_total_task_count()));
-    }
-  } else if (root.get_type() == PHY_SELECT_INTO) {
-    ObPxSqcMeta &sqc = sqc_arg_.sqc_;
-    ObSelectIntoSpec *select_into_spec = reinterpret_cast<ObSelectIntoSpec *>(&root);
-    sql::ObExternalFileFormat external_properties;
-    ObString &properties = select_into_spec->external_properties_.str_;
-    if (properties.empty()) {
-      // do nothing
-    } else if (OB_FAIL(external_properties.load_from_string(properties, ctx.get_allocator()))) {
-      LOG_WARN("failed to init external_odps_format", K(ret));
-    } else if (sql::ObExternalFileFormat::ODPS_FORMAT != external_properties.format_type_) {
-      // do nothing
-    } else { 
-      if (!GCONF._use_odps_jni_connector) {
-        ret = OB_NOT_SUPPORTED;
-        LOG_WARN("not support odps cpp connector", K(ret));
-      } else {
-        ret = OB_NOT_SUPPORTED;
-        LOG_WARN("not support odps jni connector", K(ret));
-      }
     }
   }
   if (OB_SUCC(ret)) {
@@ -916,7 +896,7 @@ int ObPxSubCoord::start_ddl()
     uint64_t unused_taget_object_id = 0;
     bool is_offline_index_rebuild = false;
 
-    if (OB_FAIL(ObDDLUtil::get_data_information(MTL_ID(), ddl_task_id,
+    if (OB_FAIL(ObDDLUtil::get_data_information(ddl_task_id,
             tenant_data_version, snapshot_version, unused_task_status, unused_taget_object_id, schema_version, is_no_logging, is_offline_index_rebuild))) {
       LOG_WARN("get ddl task info failed", K(ret), K(ddl_task_id));
     } else if (tenant_data_version < DDL_IDEM_DATA_FORMAT_VERSION ) {
@@ -927,8 +907,8 @@ int ObPxSubCoord::start_ddl()
     if (OB_FAIL(ret))  {
     } else {
       const int64_t px_thread_count = sqc_arg_.sqc_.get_task_count();
-      ObColumnClusteredDagInitParam ddl_dag_param;
-      ddl_dag_param.direct_load_type_ = ObDirectLoadMgrUtil::ddl_get_direct_load_type(GCTX.is_shared_storage_mode(), tenant_data_version);
+      ObDDLInsertDagInitParam ddl_dag_param;
+      ddl_dag_param.direct_load_type_ = ObDirectLoadMgrUtil::ddl_get_direct_load_type(tenant_data_version);
       ddl_dag_param.ddl_thread_count_ = px_thread_count;
       ddl_dag_param.px_thread_count_ = px_thread_count;
       ddl_dag_param.ddl_task_param_.ddl_task_id_ = ddl_task_id;
@@ -939,7 +919,7 @@ int ObPxSubCoord::start_ddl()
       ddl_dag_param.ddl_task_param_.schema_version_ = schema_version; // for idempotence, the schema version must be fixed, so get it from task record
       ddl_dag_param.ddl_task_param_.is_no_logging_ = is_no_logging;
       ddl_dag_param.ddl_task_param_.is_offline_index_rebuild_ = is_offline_index_rebuild;
-      if (OB_FAIL(get_participants(sqc_arg_.sqc_, ddl_table_id, ddl_dag_param.ls_tablet_ids_))) {
+      if (OB_FAIL(get_participants(sqc_arg_.sqc_, ddl_table_id, ddl_dag_param.tablet_ids_))) {
         LOG_WARN("fail to get tablet ids", K(ret), K(ddl_task_id), K(ddl_table_id));
       } else if (OB_FAIL(ObTenantDagScheduler::alloc_dag(exec_ctx->get_allocator(), false/*is_ha_dag*/, ddl_dag_))) {
         LOG_WARN("alloc ddl dag failed", K(ret), K(ddl_task_id), KP(ddl_dag_));
@@ -970,7 +950,7 @@ int ObPxSubCoord::end_ddl(const bool need_commit)
     ddl_dag_threads_.stop();
     ddl_dag_threads_.wait();
     ret = ddl_dag_->get_dag_ret();
-    ddl_dag_->~ObColumnClusteredDag();
+    ddl_dag_->~ObDDLInsertDag();
     if (OB_ISNULL(sqc_arg_.exec_ctx_)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("sqc exec context is null", K(ret), KPC(ddl_dag_));
@@ -992,13 +972,16 @@ void ObPxSubCoord::ddl_rewrite_ret_code(int &ret_code)
 
 int ObPxSubCoord::get_participants(ObPxSqcMeta &sqc,
                                    const int64_t table_id,
-                                   ObIArray<std::pair<ObLSID, ObTabletID>> &ls_tablet_ids) const
+                                   ObIArray<ObTabletID> &tablet_ids) const
 {
   int ret = OB_SUCCESS;
   const DASTabletLocIArray &locations = sqc.get_access_table_locations();
   for (int64_t i = 0; OB_SUCC(ret) && i < locations.count(); ++i) {
     ObDASTabletLoc *tablet_loc = ObDASUtils::get_related_tablet_loc(*locations.at(i), table_id);
-    if (OB_FAIL(add_var_to_array_no_dup(ls_tablet_ids, std::make_pair(tablet_loc->ls_id_, tablet_loc->tablet_id_)))) {
+    if (OB_ISNULL(tablet_loc)) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("tablet location is null", K(ret), K(table_id), K(i));
+    } else if (OB_FAIL(add_var_to_array_no_dup(tablet_ids, tablet_loc->tablet_id_))) {
       LOG_WARN("add var to array no dup failed", K(ret));
     }
   }
@@ -1028,7 +1011,6 @@ int ObPxSubCoord::rebuild_sqc_access_table_locations()
         ObDASLocationRouter &loc_router = DAS_CTX(*sqc_arg_.exec_ctx_).get_location_router();
         OZ(ObTableLocation::get_full_leader_table_loc(loc_router,
            sqc_arg_.exec_ctx_->get_allocator(),
-           sqc_arg_.exec_ctx_->get_my_session()->get_effective_tenant_id(),
            location_keys.at(i).table_location_key_,
            location_keys.at(i).ref_table_id_,
            table_loc));

@@ -33,7 +33,7 @@ public:
   virtual ~ObCreateUserStmt();
 
   void set_if_not_exists(const bool if_not_exists) { if_not_exist_ = if_not_exists; }
-  void set_tenant_id(const uint64_t tenant_id) { tenant_id_ = tenant_id; }
+  
   int add_user(const common::ObString &user_name,
                const common::ObString &host_name,
                const common::ObString &password,
@@ -43,12 +43,12 @@ public:
                    const common::ObString &x509_issuer,
                    const common::ObString &x509_subject);
   void set_masked_sql(const common::ObString &masked_sql) { masked_sql_ = masked_sql; }
-  uint64_t get_tenant_id() { return tenant_id_; }
+  
   bool get_if_not_exists() const { return if_not_exist_; }
   const common::ObStrings &get_users() const { return users_; }
   const common::ObString &get_masked_sql() const { return masked_sql_; }
   virtual bool cause_implicit_commit() const { return true; }
-  virtual obrpc::ObDDLArg &get_ddl_arg() { return create_user_arg_; }
+  virtual obcall::ObDDLArg &get_ddl_arg() { return create_user_arg_; }
   void set_profile_id(const uint64_t profile_id) { profile_id_ = profile_id; }
   uint64_t get_profile_id() const { return profile_id_; }
   common::ObString &get_primary_zone() { return create_user_arg_.primary_zone_;}
@@ -64,15 +64,14 @@ public:
   DECLARE_VIRTUAL_TO_STRING;
 private:
   // data members
-  uint64_t tenant_id_;
   common::ObStrings users_; // (user1, host1, pass1, need_enc1;
                             //  user2, host2, pass2, need_enc2,
                             //  ...,
                             //  ssl_type, ssl_cipher, x509_issuer, x509_subject)
   common::ObString masked_sql_;
   bool if_not_exist_;
-  uint64_t profile_id_; //only used in oracle mode
-  obrpc::ObCreateUserArg create_user_arg_; // used to return exec_tenant_id_
+  uint64_t profile_id_; // Legacy profile id kept for follow-up cleanup.
+  obcall::ObCreateUserArg create_user_arg_; // used to return exec_tid_
   uint64_t max_connections_per_hour_;
   uint64_t max_user_connections_;
 private:

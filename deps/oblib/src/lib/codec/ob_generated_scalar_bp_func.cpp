@@ -11446,7 +11446,7 @@ void scalar_fastpackwithoutmask_32(const uint32_t *__restrict__ in, uint32_t *__
   }
   }
 } 
-void scalar_fastunpack_32(const uint32 *__restrict__ in, uint32_t *__restrict__ out, const uint32_t bit)
+void scalar_fastunpack_32(const uint32_t *__restrict__ in, uint32_t *__restrict__ out, const uint32_t bit)
 {
   switch (bit) {
   case 0:
@@ -11591,3 +11591,4 @@ void scalar_fastunpack_32(const uint32 *__restrict__ in, uint32_t *__restrict__ 
   
 } // end namespace share
 } // end namespace oceanbase
+  

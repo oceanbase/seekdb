@@ -16,8 +16,8 @@
 
 #include "storage/fts/dict/ob_ft_dict_table_iter.h"
 
-#include "lib/mysqlclient/ob_mysql_proxy.h"
-#include "lib/mysqlclient/ob_mysql_result.h"
+#include "common/mysqlclient/ob_mysql_proxy.h"
+#include "common/mysqlclient/ob_mysql_result.h"
 #include "lib/ob_errno.h"
 #include "lib/oblog/ob_log_module.h"
 #include "lib/utility/ob_macro_utils.h"
@@ -83,7 +83,7 @@ int ObFTDictTableIter::init(const ObString &table_name)
         LOG_WARN("Failed to append sql", K(ret));
       } else if (OB_FAIL(sql_string.append(" ORDER BY word"))) {
         LOG_WARN("Failed to append sql", K(ret));
-      } else if (OB_FAIL(sql_proxy->read(res_, MTL_ID(), sql_string.ptr()))) {
+      } else if (OB_FAIL(sql_proxy->read(res_, sql_string.ptr()))) {
         LOG_WARN("Failed to execute sql", K(ret));
       }
     }

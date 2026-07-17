@@ -26,24 +26,8 @@ namespace oceanbase
 namespace sql
 {
 
-uint64_t ObMultiModeExprHelper::get_tenant_id(ObSQLSessionInfo *session)
-{
-  uint64_t tenant_id = 0;
-  if (OB_ISNULL(session)) {
-    // If the session is not obtained, 500 tenant memory will be temporarily used, 
-    // but it will not affect subsequent execution.
-    tenant_id = OB_SERVER_TENANT_ID;
-    int ret = OB_ERR_UNEXPECTED;
-    LOG_ERROR("failed to get session, set tenant_id 500.", K(ret), K(lbt()));
-  } else if (session->get_ddl_info().is_ddl_check_default_value()) {
-    tenant_id = OB_SERVER_TENANT_ID;
-  } else {
-    tenant_id = session->get_effective_tenant_id();
-  }
-  return tenant_id;
-}
 
-MultimodeAlloctor::MultimodeAlloctor(ObArenaAllocator &arena, uint64_t type, int64_t tenant_id, int &ret, const char *func_name/* = ""*/)
+MultimodeAlloctor::MultimodeAlloctor(ObArenaAllocator &arena, uint64_t type, int &ret, const char *func_name/* = ""*/)
     : arena_(arena),
       baseline_size_(0),
       type_(type),
@@ -55,40 +39,13 @@ MultimodeAlloctor::MultimodeAlloctor(ObArenaAllocator &arena, uint64_t type, int
       ret_(ret),
       ext_used_(0)
 {
-  uint64_t alloc_tenant = arena.get_arena().get_tenant_id();
-  if (alloc_tenant != tenant_id) {
-    INIT_SUCC(ret);
-    LOG_WARN("[Multi-mode ALARM] different tenants", K(ret), K(alloc_tenant), K(tenant_id));
-  } else {
-    omt::ObTenantConfigGuard tenant_config(TENANT_CONF(alloc_tenant));
-    if (tenant_config.is_valid()) {
-      check_level_ = tenant_config->_multimodel_memory_trace_level;
-      if (check_level_ > 2) {
-        check_level_ = 0;
-      }
-    }
-  }
-}
+  {
 
-MultimodeAlloctor::MultimodeAlloctor(ObArenaAllocator &arena, uint64_t type, int &ret)
-    : arena_(arena),
-      baseline_size_(0),
-      type_(type),
-      mem_threshold_flag_(0),
-      check_level_(0),
-      func_name_(""),
-      children_used_(used()),
-      expect_threshold_(0),
-      ret_(ret),
-      ext_used_(0)
-{
-  uint64_t alloc_tenant = arena.get_arena().get_tenant_id();
-  omt::ObTenantConfigGuard tenant_config(TENANT_CONF(alloc_tenant));
-  if (tenant_config.is_valid()) {
-    check_level_ = tenant_config->_multimodel_memory_trace_level;
+    check_level_ = GCONF._multimodel_memory_trace_level;
     if (check_level_ > 2) {
       check_level_ = 0;
     }
+
   }
 }
 

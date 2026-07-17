@@ -8,14 +8,14 @@ insert into t1 values(1, '[0.203846,0.205289,0.880265,0.824340,0.615737,0.496899
 insert into t2 values(1, [1,1,1]);
 insert into t2 values(2, [2,2,2]);
 select count(distinct inc_index_tablet_id) as count
-from oceanbase.__all_virtual_vector_index_info a, oceanbase.__all_virtual_table b
+from oceanbase.__all_virtual_vector_index_info a, oceanbase.__all_table b
 where a.data_table_id = b.table_id and b.table_name in ('t1', 't2');
 count
 3
 drop table t1;
 drop index idx1 on t2;
 select count(*) as count
-from oceanbase.__all_virtual_vector_index_info a, oceanbase.__all_virtual_table b
+from oceanbase.__all_virtual_vector_index_info a, oceanbase.__all_table b
 where a.data_table_id = b.table_id and b.table_name in ('t1', 't2');
 count
 0

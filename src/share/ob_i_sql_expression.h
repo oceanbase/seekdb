@@ -275,9 +275,6 @@ public:
   /// Print expression
   virtual int64_t to_string(char *buf, const int64_t buf_len) const = 0;
 
-  // Whether to call the expression compiled by jit
-  virtual bool is_use_jitted_expr() const = 0;
-
   virtual const sql::ObExpr *get_expr() const = 0;
 };
 

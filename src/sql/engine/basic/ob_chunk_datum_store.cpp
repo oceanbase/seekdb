@@ -563,7 +563,7 @@ int ObChunkDatumStore::Block::swizzling(int64_t *col_cnt)
 }
 
 ObChunkDatumStore::ObChunkDatumStore(const ObLabel &label, common::ObIAllocator *alloc /* = NULL */)
-  : inited_(false), tenant_id_(0), label_(label),
+  : inited_(false), label_(label),
     ctx_id_(0), mem_limit_(0), cur_blk_(NULL), cur_blk_buffer_(nullptr),
     max_blk_size_(0), min_blk_size_(INT64_MAX),
     default_block_size_(BLOCK_SIZE),
@@ -580,7 +580,6 @@ ObChunkDatumStore::ObChunkDatumStore(const ObLabel &label, common::ObIAllocator 
 }
 
 int ObChunkDatumStore::init(int64_t mem_limit,
-    uint64_t tenant_id,
     int64_t mem_ctx_id /* = common::ObCtxIds::DEFAULT_CTX_ID */,
     const char *label /* = common::ObModIds::OB_SQL_CHUNK_ROW_STORE) */,
     bool enable_dump /* = true */,
@@ -590,7 +589,7 @@ int ObChunkDatumStore::init(int64_t mem_limit,
 {
   int ret = OB_SUCCESS;
   enable_dump_ = enable_dump;
-  tenant_id_ = tenant_id;
+  
   ctx_id_ = mem_ctx_id;
   UNUSED(label_);
   if (0 == GCONF._chunk_row_store_mem_limit) {
@@ -612,7 +611,7 @@ void ObChunkDatumStore::reset()
   int ret = OB_SUCCESS;
   if (is_file_open()) {
     aio_write_handle_.reset();
-    if (OB_FAIL(FILE_MANAGER_INSTANCE_WITH_MTL_SWITCH.remove(tenant_id_, io_.fd_))) {
+    if (OB_FAIL(FILE_MANAGER_INSTANCE_WITH_MTL_SWITCH.remove(io_.fd_))) {
       LOG_WARN("remove file failed", K(ret), K_(io_.fd));
     } else {
       LOG_INFO("close file success", K(ret), K_(io_.fd));
@@ -671,7 +670,7 @@ void *ObChunkDatumStore::alloc_blk_mem(const int64_t size, const bool for_iterat
   if (size < 0) {
     LOG_WARN("invalid argument", K(size));
   } else {
-    ObMemAttr attr(tenant_id_, label_, ctx_id_);
+    ObMemAttr attr(label_, ctx_id_);
     void *mem = allocator_->alloc(size, attr);
     if (NULL == mem) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
@@ -1981,7 +1980,7 @@ int ObChunkDatumStore::get_timeout(int64_t &timeout_ms)
 int ObChunkDatumStore::alloc_dir_id()
 {
   int ret = OB_SUCCESS;
-  if (-1 == io_.dir_id_ && OB_FAIL(ObChunkStoreUtil::alloc_dir_id(tenant_id_, io_.dir_id_))) {
+  if (-1 == io_.dir_id_ && OB_FAIL(ObChunkStoreUtil::alloc_dir_id(io_.dir_id_))) {
     LOG_WARN("allocate file directory failed", K(ret));
   }
   return ret;
@@ -2004,7 +2003,7 @@ int ObChunkDatumStore::write_file(void *buf, int64_t size)
       if (-1 == io_.dir_id_) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("temp file dir id is not init", K(ret), K(io_.dir_id_));
-      } else if (OB_FAIL(FILE_MANAGER_INSTANCE_WITH_MTL_SWITCH.open(tenant_id_, io_.fd_, io_.dir_id_))) {
+      } else if (OB_FAIL(FILE_MANAGER_INSTANCE_WITH_MTL_SWITCH.open(io_.fd_, io_.dir_id_))) {
         LOG_WARN("open file failed", K(ret));
       } else {
         file_size_ = 0;
@@ -2019,7 +2018,7 @@ int ObChunkDatumStore::write_file(void *buf, int64_t size)
     set_io(size, static_cast<char *>(buf));
     if (aio_write_handle_.is_valid() && OB_FAIL(aio_write_handle_.wait())) {
       LOG_WARN("failed to wait write", K(ret));
-    } else if (OB_FAIL(FILE_MANAGER_INSTANCE_WITH_MTL_SWITCH.aio_write(tenant_id_, io_, aio_write_handle_))) {
+    } else if (OB_FAIL(FILE_MANAGER_INSTANCE_WITH_MTL_SWITCH.aio_write(io_, aio_write_handle_))) {
       LOG_WARN("write to file failed", K(ret), K_(io), K(timeout_ms));
     }
   }
@@ -2052,7 +2051,7 @@ int ObChunkDatumStore::aio_read_file(
     tmp_io.io_desc_.set_wait_event(ObWaitEventIds::ROW_STORE_DISK_READ);
     if (OB_FAIL(get_timeout(tmp_io.io_timeout_ms_))) {
       LOG_WARN("get timeout failed", K(ret));
-    } else if (OB_FAIL(FILE_MANAGER_INSTANCE_WITH_MTL_SWITCH.aio_pread(tenant_id_, tmp_io, offset, handle))) {
+    } else if (OB_FAIL(FILE_MANAGER_INSTANCE_WITH_MTL_SWITCH.aio_pread(tmp_io, offset, handle))) {
       if (OB_ITER_END != ret) {
         LOG_WARN("read form file failed", K(ret), K(tmp_io), K(offset));
       }
@@ -2125,7 +2124,6 @@ OB_DEF_SERIALIZE(ObChunkDatumStore)
   }
   int64_t ser_ctx_id = ctx_id_;
   LST_DO_CODE(OB_UNIS_ENCODE,
-              tenant_id_,
               ser_ctx_id,
               mem_limit_,
               default_block_size_,
@@ -2164,7 +2162,7 @@ OB_DEF_DESERIALIZE(ObChunkDatumStore)
 {
   int ret = OB_SUCCESS;
   LST_DO_CODE(OB_UNIS_DECODE,
-              tenant_id_,
+              
               ctx_id_,
               mem_limit_);
   if (ObCtxIds::DEFAULT_CTX_ID == ctx_id_
@@ -2176,7 +2174,7 @@ OB_DEF_DESERIALIZE(ObChunkDatumStore)
     LOG_WARN_RET(OB_ERR_UNEXPECTED, "unexpected ctx id", K(ctx_id_), K(lbt()));
   }
   if (!is_inited()) {
-    if (OB_FAIL(init(mem_limit_, tenant_id_,
+    if (OB_FAIL(init(mem_limit_,
                      ctx_id_, label_, false/*enable_dump*/))) {
       LOG_WARN("fail to init chunk row store", K(ret));
     }
@@ -2219,7 +2217,6 @@ OB_DEF_SERIALIZE_SIZE(ObChunkDatumStore)
 {
   int64_t len = 0;
   LST_DO_CODE(OB_UNIS_ADD_LEN,
-              tenant_id_,
               ctx_id_,
               mem_limit_,
               default_block_size_,
@@ -2419,7 +2416,7 @@ int ObChunkDatumStore::Iterator::read_next_blk()
   }
   if (OB_SUCC(ret) && !aio_blk_->magic_check()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("read corrupt data", K(ret), K(aio_blk_->magic_),
+    LOG_ERROR("read corrupt data", K(ret), K(aio_blk_->magic_),
              K(store_->file_size_), K(cur_iter_pos_));
   }
   if (OB_SUCC(ret)) {

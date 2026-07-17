@@ -21,7 +21,6 @@
 #include "lib/container/ob_array.h"
 #include "lib/container/ob_array_serialization.h"
 #include "lib/ob_define.h"
-#include "share/ob_ls_id.h"
 
 namespace oceanbase
 {

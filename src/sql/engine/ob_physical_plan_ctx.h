@@ -20,15 +20,15 @@
 #include "share/ob_tablet_autoincrement_param.h"
 #include "common/sql_mode/ob_sql_mode.h"
 #include "common/ob_field.h"
-#include "common/ob_clock_generator.h"
+#include "lib/time/ob_clock_generator.h"
 #include "storage/tx/ob_trans_define.h"
 #include "lib/container/ob_fixed_array.h"
 #include "lib/container/ob_2d_array.h"
 #include "sql/plan_cache/ob_plan_cache_util.h"
 #include "sql/engine/user_defined_function/ob_udf_ctx_mgr.h"
 #include "sql/engine/expr/ob_expr.h"
-#include "lib/udt/ob_udt_type.h"
-#include "lib/enumset/ob_enum_set_meta.h"
+#include "common/udt/ob_udt_type.h"
+#include "common/enumset/ob_enum_set_meta.h"
 #include "sql/engine/ob_subschema_ctx.h"
 #include "sql/engine/expr/ob_expr_util.h"
 
@@ -111,9 +111,9 @@ public:
     subschema_ctx_.destroy();
     all_local_session_vars_.destroy();
   }
-  inline void set_tenant_id(uint64_t tenant_id) { tenant_id_ = tenant_id; }
+  
   inline void set_show_seed(bool show_seed) { is_show_seed_ = show_seed; }
-  inline uint64_t get_tenant_id() { return tenant_id_; }
+  
   inline bool get_show_seed() const { return is_show_seed_; }
   inline void set_tenant_schema_version(const int64_t version) { tenant_schema_version_ = version; }
   inline int64_t get_tenant_schema_version() const { return tenant_schema_version_; }
@@ -486,7 +486,7 @@ public:
   int64_t get_cur_stmt_id() const { return cur_stmt_id_; }
   int switch_implicit_cursor();
   void add_px_dml_row_info(const ObPxDmlRowInfo &dml_row_info);
-  TO_STRING_KV("tenant_id", tenant_id_);
+  TO_STRING_KV(K_(tenant_schema_version));
   void set_field_array(const common::ObIArray<common::ObField> *field_array) { field_array_ = field_array; }
   const common::ObIArray<common::ObField> *get_field_array() { return field_array_;}
   void set_is_ps_protocol(const bool is_ps_protocol) { is_ps_protocol_ = is_ps_protocol; }
@@ -537,17 +537,6 @@ public:
   ObIArray<ObArrayParamGroup> &get_array_param_groups() { return array_param_groups_; }
   int set_all_local_session_vars(ObIArray<ObLocalSessionVar> &all_local_session_vars);
   int get_local_session_vars(int64_t idx, const ObSolidifiedVarsContext *&local_vars);
-  common::ObFixedArray<uint64_t, common::ObIAllocator> &get_mview_ids() {  return mview_ids_; }
-  common::ObFixedArray<uint64_t, common::ObIAllocator> &get_last_refresh_scns() {  return last_refresh_scns_; }
-  uint64_t get_last_refresh_scn(uint64_t mview_id) const;
-  void set_tx_id(int64_t tx_id) { tx_id_ = tx_id; }
-  int64_t get_tx_id() const { return tx_id_; }
-  void set_tm_sessid(int64_t tm_sessid) { tm_sessid_ = tm_sessid; }
-  int64_t get_tm_sessid() const { return tm_sessid_; }
-  void set_hint_xa_trans_stop_check_lock(int64_t hint_xa_trans_stop_check_lock) { hint_xa_trans_stop_check_lock_ = hint_xa_trans_stop_check_lock; }
-  int64_t get_hint_xa_trans_stop_check_lock() const { return hint_xa_trans_stop_check_lock_; }
-  void set_main_xa_trans_branch(int64_t main_xa_trans_branch) { main_xa_trans_branch_ = main_xa_trans_branch; }
-  int64_t get_main_xa_trans_branch() const { return main_xa_trans_branch_; }
   inline void set_is_direct_insert_plan(const bool is_direct_insert_plan)
   {
     is_direct_insert_plan_ = is_direct_insert_plan;
@@ -572,16 +561,17 @@ private:
   DISALLOW_COPY_AND_ASSIGN(ObPhysicalPlanCtx);
 private:
   static const int64_t ESTIMATE_TRANS_RESERVE_TIME = 70 * 1000;
-  //oracle calc time during running, not before running.
-  //oracle datetime func has two categories: sysdate/systimestamp, current_date/current_timestamp/localtimestamp
-  //so we use `cur_time_` for first used-category, `cur_time_ + DELTA_TARDY_TIME_US` for second used-category.
+  // Some datetime functions are evaluated during execution, not before execution.
+  // sysdate/systimestamp and current_date/current_timestamp/localtimestamp use
+  // different timestamps, so we use `cur_time_` for the first category and
+  // `cur_time_ + DELTA_TARDY_TIME_US` for the second category.
   static const int64_t DELTA_TARDY_TIME_US = 5;
   common::ObIAllocator &allocator_;
 private:
   /**
    * @note these member need serialize
    */
-  int64_t tenant_id_;
+  
   // used for TRANSACTION SET CONSISTENCY check
   int64_t tsc_snapshot_timestamp_;
   // only used when the sql contains fun like current_time
@@ -698,14 +688,6 @@ private:
   bool enable_rich_format_;
   // for dependant exprs of generated columns
   common::ObFixedArray<ObSolidifiedVarsContext, common::ObIAllocator> all_local_session_vars_;
-  // for last_refresh_scn expr to get last_refresh_scn for rt mview used in query
-  common::ObFixedArray<uint64_t, common::ObIAllocator> mview_ids_;
-  common::ObFixedArray<uint64_t, common::ObIAllocator> last_refresh_scns_;
-  int64_t tx_id_; //for dblink recover xa tx
-  uint32_t tm_sessid_; //for dblink get connection attached on tm session
-  bool hint_xa_trans_stop_check_lock_; // for dblink to stop check stmt lock in xa trans
-  bool main_xa_trans_branch_; // for dblink to indicate weather this sql is executed in main_xa_trans_branch
-  ObSEArray<uint64_t, 8> dblink_ids_;
   int64_t total_memstore_read_row_count_;
   int64_t total_ssstore_read_row_count_;
   bool is_direct_insert_plan_; // for direct load: insert into/overwrite select

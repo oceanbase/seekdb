@@ -50,10 +50,10 @@ ObTableLoadParallelCompactTabletCtx::ObTableLoadParallelCompactTabletCtx()
     range_sstable_count_(0),
     range_allocator_("TLD_ParalMerge")
 {
-  allocator_.set_tenant_id(MTL_ID());
-  range_allocator_.set_tenant_id(MTL_ID());
-  ranges_.set_tenant_id(MTL_ID());
-  range_sstables_.set_tenant_id(MTL_ID());
+  
+  
+  
+  
 }
 
 ObTableLoadParallelCompactTabletCtx::~ObTableLoadParallelCompactTabletCtx()
@@ -246,8 +246,8 @@ public:
                                                           tablet_ctx_->ranges_.count()))) {
           LOG_WARN("fail to set parallel merge param", KR(ret));
         } else if (OB_FAIL(
-                     parallel_table_compactor_->handle_tablet_split_range_finish(tablet_ctx_))) {
-          LOG_WARN("fail to handle tablet split range finish", KR(ret));
+                     parallel_table_compactor_->handle_range_split_finish(tablet_ctx_))) {
+          LOG_WARN("fail to handle range split finish", KR(ret));
         }
       }
     }
@@ -504,10 +504,10 @@ ObTableLoadParallelTableCompactor::ObTableLoadParallelTableCompactor()
     is_stop_(false),
     is_inited_(false)
 {
-  allocator_.set_tenant_id(MTL_ID());
-  light_task_list_.set_tenant_id(MTL_ID());
-  heavy_task_list_.set_tenant_id(MTL_ID());
-  idle_thread_list_.set_tenant_id(MTL_ID());
+  
+  
+  
+  
 }
 
 ObTableLoadParallelTableCompactor::~ObTableLoadParallelTableCompactor()
@@ -546,7 +546,7 @@ int ObTableLoadParallelTableCompactor::init(ObTableLoadMergeCompactTableOp *op)
     op_ = op;
     thread_count_ = op_->store_ctx_->thread_cnt_;
     table_data_desc_ = op->merge_table_ctx_->table_store_->get_table_data_desc();
-    if (OB_FAIL(tablet_ctx_map_.create(1024, "TLD_CptCtxMap", "TLD_CptCtxMap", MTL_ID()))) {
+    if (OB_FAIL(tablet_ctx_map_.create(1024, "TLD_CptCtxMap", "TLD_CptCtxMap"))) {
       LOG_WARN("fail to create ctx map", KR(ret));
     } else {
       is_inited_ = true;
@@ -795,7 +795,7 @@ int ObTableLoadParallelTableCompactor::construct_compact_sstable_task(
   return ret;
 }
 
-int ObTableLoadParallelTableCompactor::handle_tablet_split_range_finish(
+int ObTableLoadParallelTableCompactor::handle_range_split_finish(
   ObTableLoadParallelCompactTabletCtx *tablet_ctx)
 {
   int ret = OB_SUCCESS;

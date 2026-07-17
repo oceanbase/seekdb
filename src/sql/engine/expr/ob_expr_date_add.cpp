@@ -325,14 +325,9 @@ int ObExprDateAdjust::calc_date_adjust(const ObExpr &expr, ObEvalCtx &ctx, ObDat
 
 DEF_SET_LOCAL_SESSION_VARS(ObExprDateAdjust, raw_expr) {
   int ret = OB_SUCCESS;
-  if (is_mysql_mode()) {
-    SET_LOCAL_SYSVAR_CAPACITY(2);
-    EXPR_ADD_LOCAL_SYSVAR(SYS_VAR_SQL_MODE);
-    EXPR_ADD_LOCAL_SYSVAR(SYS_VAR_TIME_ZONE);
-  } else {
-    SET_LOCAL_SYSVAR_CAPACITY(1);
-    EXPR_ADD_LOCAL_SYSVAR(SYS_VAR_TIME_ZONE);
-  }
+  SET_LOCAL_SYSVAR_CAPACITY(2);
+  EXPR_ADD_LOCAL_SYSVAR(SYS_VAR_SQL_MODE);
+  EXPR_ADD_LOCAL_SYSVAR(SYS_VAR_TIME_ZONE);
   return ret;
 }
 
@@ -425,13 +420,10 @@ int ObExprLastDay::calc_result_type1(ObExprResType &type,
 {
   int ret = OB_SUCCESS;
   UNUSED(type_ctx);
-  bool accept_input_type = type1.is_null()
-      || ob_is_string_tc(type1.get_type())
-      || type1.is_datetime()
-      || is_mysql_mode();
+  bool accept_input_type = true;
   if (OB_UNLIKELY(!accept_input_type)) {
     ret = OB_ERR_INVALID_TYPE_FOR_OP;
-    LOG_WARN("inconsistent type", K(ret), K(type1));
+    LOG_ERROR("inconsistent type", K(ret), K(type1));
   } else {
     type.set_type(type_ctx.enable_mysql_compatible_dates() ? ObMySQLDateType : ObDateType);
     type.set_scale(OB_MAX_DATE_PRECISION);
@@ -516,10 +508,8 @@ int ObExprLastDay::calc_last_day(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &ex
 
 DEF_SET_LOCAL_SESSION_VARS(ObExprLastDay, raw_expr) {
   int ret = OB_SUCCESS;
-  if (is_mysql_mode()) {
-    SET_LOCAL_SYSVAR_CAPACITY(1);
-    EXPR_ADD_LOCAL_SYSVAR(SYS_VAR_SQL_MODE);
-  }
+  SET_LOCAL_SYSVAR_CAPACITY(1);
+  EXPR_ADD_LOCAL_SYSVAR(SYS_VAR_SQL_MODE);
   return ret;
 }
 

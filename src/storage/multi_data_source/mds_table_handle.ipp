@@ -111,23 +111,9 @@ inline int MdsTableHandle::get_tablet_id(common::ObTabletID &tablet_id) const
   return ret;
 }
 
-inline int MdsTableHandle::get_ls_id(share::ObLSID &ls_id) const
-{
-  int ret = OB_SUCCESS;
-  CHECK_MDS_TABLE_INIT();
-  if (!p_mds_table_base_.is_valid()) {
-    ret = OB_BAD_NULL_ERROR;
-    MDS_LOG(WARN, "p_mds_table_base_ is invalid", K(*this));
-  } else {
-    ls_id = p_mds_table_base_->get_ls_id();
-  }
-  return ret;
-}
-
 template <typename MdsTableType>
 int MdsTableHandle::init(ObIAllocator &allocator,
                          const ObTabletID tablet_id,
-                         const share::ObLSID ls_id,
                          const share::SCN mds_ckpt_scn_from_tablet,// this is used to filter replayed nodes after removed action
                          ObTabletPointer *pointer,
                          ObMdsTableMgr *p_mgr)
@@ -146,7 +132,7 @@ int MdsTableHandle::init(ObIAllocator &allocator,
   if (OB_SUCC(ret)) {
     if (OB_FAIL(p_mds_table.construct(allocator))) {
       MDS_LOG(WARN, "construct mds table impl failed", KP(this), K(lbt()));
-    } else if (OB_FAIL(p_mds_table->init(tablet_id, ls_id, mds_ckpt_scn_from_tablet, pointer, p_mgr))) {
+    } else if (OB_FAIL(p_mds_table->init(tablet_id, mds_ckpt_scn_from_tablet, pointer, p_mgr))) {
       MDS_LOG(WARN, "init mds table failed", KR(ret), K(mds_table_id_),
                     K(typeid(MdsTableType).name()));
     } else {

@@ -15,7 +15,7 @@
  */
  
 #include <gtest/gtest.h>
-#include "lib/geo/ob_geo_func_register.h"
+#include "share/geo/ob_geo_func_register.h"
 #include "ob_geo_func_testx.h"
 #include "ob_geo_func_testy.h"
 

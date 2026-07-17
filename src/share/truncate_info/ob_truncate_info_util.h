@@ -16,7 +16,7 @@
 #ifndef OB_SHARE_TRUNCATE_INFO_TRUNCATE_EXPR_UTIL_H_
 #define OB_SHARE_TRUNCATE_INFO_TRUNCATE_EXPR_UTIL_H_
 #include "share/schema/ob_schema_struct.h"
-#include "src/share/ob_rpc_struct.h"
+#include "share/ob_rpc_struct.h"
 namespace oceanbase
 {
 namespace share
@@ -25,16 +25,16 @@ namespace share
 struct ObTruncateInfoUtil final
 {
   static bool could_write_truncate_info_part_type(
-    const obrpc::ObAlterTableArg::AlterPartitionType &alter_type,
+    const obcall::ObAlterTableArg::AlterPartitionType &alter_type,
     const schema::ObPartitionFuncType input_part_type,
     const schema::ObPartitionFuncType input_subpart_type)
   {
     bool bret = false;
-    if (obrpc::ObAlterTableArg::DROP_PARTITION == alter_type ||
-        obrpc::ObAlterTableArg::TRUNCATE_PARTITION == alter_type) {
+    if (obcall::ObAlterTableArg::DROP_PARTITION == alter_type ||
+        obcall::ObAlterTableArg::TRUNCATE_PARTITION == alter_type) {
       bret = could_write_truncate_info_part_type(input_part_type);
-    } else if (obrpc::ObAlterTableArg::DROP_SUB_PARTITION == alter_type ||
-        obrpc::ObAlterTableArg::TRUNCATE_SUB_PARTITION == alter_type) {
+    } else if (obcall::ObAlterTableArg::DROP_SUB_PARTITION == alter_type ||
+        obcall::ObAlterTableArg::TRUNCATE_SUB_PARTITION == alter_type) {
       bret = could_write_truncate_info_part_type(input_part_type)
              && could_write_truncate_info_part_type(input_subpart_type);
     }

@@ -21,8 +21,7 @@
 #include "lib/list/ob_list.h"
 #include "lib/literals/ob_literals.h"
 #include "lib/lock/ob_tc_rwlock.h"
-#include "lib/thread/thread_mgr.h"
-#include "lib/thread/thread_mgr_interface.h"
+#include "lib/task/ob_timer.h"
 #include "share/ob_occam_timer.h"
 #include "share/ob_tenant_mgr.h"
 #include "storage/tx_storage/ob_tenant_freezer_rpc.h"
@@ -123,7 +122,7 @@ public:
   const static int64_t TIME_WHEEL_PRECISION = 100_ms;
   const static int64_t SLOW_FREEZE_INTERVAL = 30_s;
   const static int FREEZE_TRIGGER_THREAD_NUM= 1;
-  const static int FREEZE_THREAD_NUM= 5;
+  const static int FREEZE_THREAD_NUM= 1;
   const static int64_t FREEZE_TRIGGER_INTERVAL = 2_s;
   const static int64_t UPDATE_INTERVAL = 100_ms;
   const static int64_t MAX_FREEZE_TIMEOUT_US = 1800 * 1000 * 1000; // 30 min
@@ -146,14 +145,8 @@ public:
   // freeze all the checkpoint unit of this tenant.
   int tenant_freeze(const ObFreezeSourceFlag source);
 
-  // freeze a ls, if the ls is freezing, do nothing and return OB_ENTRY_EXIST.
-  // if there is some process hold the ls lock or a OB_EAGAIN occur, we will retry
-  // until timeout.
-  int ls_freeze_all_unit(const share::ObLSID &ls_id,
-                         const ObFreezeSourceFlag source);
   // freeze a tablet
-  int tablet_freeze(share::ObLSID ls_id,
-                    const common::ObTabletID &tablet_id,
+  int tablet_freeze(const common::ObTabletID &tablet_id,
                     const bool is_sync,
                     const int64_t max_retry_time,
                     const bool need_rewrite_tablet_meta,
@@ -165,8 +158,7 @@ public:
   int do_freeze_diagnose();
 
   // record freeze source history
-  void record_freezer_source_event(const share::ObLSID &ls_id,
-                                   const ObFreezeSourceFlag source);
+  void record_freezer_source_event(const ObFreezeSourceFlag source);
 
   // report freeze source history
   void report_freezer_source_events();
@@ -221,7 +213,6 @@ public:
   // this check if a major freeze is needed
   bool tenant_need_major_freeze();
   // used to print a log.
-  static int rpc_callback();
   // update the memstore limit use sysconf.
   int reload_config();
   // print the tenant usage info into print_buf.
@@ -254,6 +245,8 @@ public:
 
   void get_freezer_stat_from_history(int64_t pos, ObTenantFreezerStat& stat);
 
+  // Tenant-wide monotonic id for checkpoint/freeze batch log correlation (not persisted).
+
   // record major frozen scn and reset freeze cnt
   int update_frozen_scn(const int64_t frozen_scn);
 
@@ -276,7 +269,7 @@ private:
     ObLS *ls,
     const int64_t abs_timeout_ts = INT64_MAX,
     const ObFreezeSourceFlag source = ObFreezeSourceFlag::INVALID_SOURCE);
-  // freeze all the ls of this tenant.
+  // Freeze the tenant's log stream.
   // return the first failed code.
   int tenant_freeze_data_();
   // we can only deal with freeze one by one.
@@ -287,6 +280,7 @@ private:
   int unset_tenant_freezing_(const bool rollback_freeze_cnt);
   static int64_t get_freeze_trigger_percentage_();
   static int64_t get_memstore_limit_percentage_();
+  int async_freeze_(const ObTenantFreezeArg &arg);
   int post_freeze_request_(const storage::ObFreezeType freeze_type,
                            const int64_t try_frozen_version);
   int retry_failed_major_freeze_(bool &triggered);
@@ -331,14 +325,10 @@ private:
   bool is_inited_;
   bool is_freezing_tx_data_;
   ObTenantInfo tenant_info_;                  // store the mem limit, memstore limit and etc.
-  obrpc::ObTenantFreezerRpcProxy rpc_proxy_;  // used to trigger minor/major freeze
-  obrpc::ObTenantFreezerRpcCb tenant_mgr_cb_; // callback after the trigger rpc finish.
-  obrpc::ObSrvRpcProxy *svr_rpc_proxy_;
-  obrpc::ObCommonRpcProxy *common_rpc_proxy_;
-  ObAddr self_;
+ObAddr self_;
   ObRetryMajorInfo retry_major_info_;
 
-  int freeze_trigger_tg_id_;
+  common::ObTimer freeze_trigger_timer_;
   TimerTask freeze_trigger_timer_task_;
   common::ObOccamThreadPool freeze_thread_pool_;
   ObSpinLock freeze_thread_pool_lock_;
@@ -388,6 +378,8 @@ private:
   bool can_freeze_;
   ObTenantFreezer *tenant_freezer_;
 };
-}
-}
+
+}  // namespace storage
+}  // namespace oceanbase
+
 #endif

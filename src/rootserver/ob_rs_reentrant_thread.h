@@ -29,7 +29,6 @@ namespace rootserver
 
 //can set Rootserver Thread properties,
 //before real running and after running
-class CheckThreadSet;
 class ObRsReentrantThread
     : public share::ObReentrantThread
 {
@@ -88,18 +87,6 @@ private:
 #else
   static const int64_t MAX_THREAD_SCHEDULE_OVERRUN_TIME = 10LL * 60LL * 1000LL * 1000LL;
 #endif
-};
-
-class CheckThreadSet 
-{
-public:
-  CheckThreadSet();
-  virtual ~CheckThreadSet();
-
-
-private:
-  ObSEArray<const ObRsReentrantThread *, 128> arr_;
-  common::SpinRWLock rwlock_;
 };
 
 }//ns rootserver

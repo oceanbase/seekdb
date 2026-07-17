@@ -17,7 +17,7 @@
 #ifndef OCEANBASE_OBSERVER_VIRTUAL_TABLE_OB_USER_PRIVILEGES_
 #define OCEANBASE_OBSERVER_VIRTUAL_TABLE_OB_USER_PRIVILEGES_
 
-#include "share/ob_virtual_table_scanner_iterator.h"
+#include "observer/virtual_table/ob_virtual_table_scanner_iterator.h"
 #include "share/schema/ob_priv_type.h"
 
 namespace oceanbase
@@ -50,7 +50,7 @@ public:
   virtual void reset();
   virtual int inner_get_next_row(common::ObNewRow *&row);
 
-  inline void set_tenant_id(uint64_t tenant_id) { tenant_id_ = tenant_id; }
+  
   inline void set_user_id(uint64_t user_id) { user_id_ = user_id; }
 
 private:
@@ -67,13 +67,11 @@ private:
     USERNAME_AUX_LEN = 6// "''@''" + '\0'
   };
 
-  int get_user_infos(const uint64_t tenant_id,
-                     const uint64_t user_id,
+  int get_user_infos(const uint64_t user_id,
                      common::ObArray<const share::schema::ObUserInfo *> &user_infos);
   int fill_row_with_user_info(const share::schema::ObUserInfo &user_info);
 
   static const char *priv_type_strs[OB_PRIV_MAX_SHIFT + 1];
-  uint64_t tenant_id_;
   uint64_t user_id_;
 
   DISALLOW_COPY_AND_ASSIGN(ObInfoSchemaUserPrivilegesTable);

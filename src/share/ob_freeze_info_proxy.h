@@ -27,7 +27,7 @@
 #include "common/storage/ob_freeze_define.h"
 #include "share/ob_cluster_version.h"
 #include "share/scn.h"
-#include "share/ob_tenant_id_schema_version.h"
+#include "share/ob_schema_version_info.h"
 
 namespace oceanbase
 {
@@ -120,7 +120,7 @@ struct ObFreezeInfo
 class ObFreezeInfoProxy
 {
 public:
-  ObFreezeInfoProxy(int64_t tenant_id) : tenant_id_(tenant_id) {}
+  ObFreezeInfoProxy() {}
   virtual ~ObFreezeInfoProxy() {}
 
 public:
@@ -170,9 +170,9 @@ public:
                           ObFreezeInfo &frozen_status);
 
   int get_freeze_schema_info(common::ObISQLClient &sql_proxy,
-                            const uint64_t tenant_id,
                             const SCN &frozen_scn,
                             TenantIdAndSchemaVersion &schema_version_info);
+
 
 private:
   int get_min_major_available_and_larger_info_inner_(common::ObISQLClient &sql_proxy,
@@ -183,7 +183,6 @@ private:
   int construct_frozen_status_(common::sqlclient::ObMySQLResult &result,
                                ObFreezeInfo &frozen_status);
 private:
-  uint64_t tenant_id_;
 };
 
 } // end namespace share

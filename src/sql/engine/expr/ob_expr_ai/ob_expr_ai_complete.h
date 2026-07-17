@@ -23,16 +23,16 @@
 #include "ob_ai_func.h"
 #include "ob_ai_func_utils.h"
 
-namespace oceanbase
+namespace oceanbase 
 {
-namespace sql
+namespace sql 
 {
-class ObExprAIComplete : public ObFuncExprOperator
+class ObExprAIComplete : public ObFuncExprOperator 
 {
 public:
   explicit ObExprAIComplete(common::ObIAllocator &alloc);
   virtual ~ObExprAIComplete();
-  virtual int calc_result_typeN(ObExprResType &type,
+  virtual int calc_result_typeN(ObExprResType &type, 
                                 ObExprResType *types_array,
                                 int64_t param_num,
                                 common::ObExprTypeCtx &type_ctx) const override;
@@ -42,13 +42,13 @@ public:
 
   static int eval_ai_complete_vector_v2(const ObExpr &expr, ObEvalCtx &ctx,
                                           const ObBitVector &skip, const EvalBound &bound);
-  virtual int cg_expr(ObExprCGCtx &expr_cg_ctx,
+  virtual int cg_expr(ObExprCGCtx &expr_cg_ctx, 
                       const ObRawExpr &raw_expr,
                       ObExpr &rt_expr) const override;
   virtual bool need_rt_ctx() const override { return true; }
 private:
   static int get_prompt_object_from_str(ObIAllocator &allocator,
-                                          const ObDatumMeta &meta,
+                                          const ObDatumMeta &meta, 
                                           ObArray<ObString> &prompts,
                                           ObArray<ObJsonObject *> &prompt_objects,
                                           bool& is_all_str);
@@ -62,21 +62,21 @@ private:
   static int construct_tuple_str(ObIAllocator &allocator, ObArray<ObString> &contents, ObString &content_str);
   static int get_tuple_str(ObIAllocator &allocator, ObString &content, ObString &tuple_str);
   static int get_config_with_json_response_format(ObIAllocator &allocator, ObJsonObject *config);
-  static int get_vector_params(const ObExpr &expr,
-                              ObEvalCtx &ctx,
-                              const ObBitVector &skip,
-                              const EvalBound &bound,
-                              ObString &model_id,
-                              ObArray<ObString> &prompts,
+  static int get_vector_params(const ObExpr &expr, 
+                              ObEvalCtx &ctx, 
+                              const ObBitVector &skip, 
+                              const EvalBound &bound, 
+                              ObString &model_id, 
+                              ObArray<ObString> &prompts, 
                               ObJsonObject *&config);
   static int pack_json_array_to_res_vector(const ObExpr &expr, ObEvalCtx &ctx,
                                       ObIAllocator &allocator,
-                                      ObArray<ObJsonObject *> &responses,
-                                      const ObBitVector &skip,
-                                      const EvalBound &bound,
+                                      ObArray<ObJsonObject *> &responses, 
+                                      const ObBitVector &skip, 
+                                      const EvalBound &bound, 
                                       const ObAiModelEndpointInfo &endpoint_info,
                                       ObIVector *res_vec);
-  static int pack_json_string_to_res_vector(const ObExpr &expr,
+  static int pack_json_string_to_res_vector(const ObExpr &expr, 
                                             ObEvalCtx &ctx,
                                             ObIAllocator &allocator,
                                             ObIJsonBase *response,

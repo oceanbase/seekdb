@@ -18,18 +18,19 @@
 #define OCEANBASE_COMMON_OB_OBJECT_H_
 
 #include "lib/ob_define.h"
+#include "common/timezone/ob_time_def.h"
 #include "lib/string/ob_string.h"
 #include "common/ob_action_flag.h"
 #include "common/object/ob_obj_type.h"
 #include "common/ob_accuracy.h"
 #include "lib/checksum/ob_crc64.h"
-#include "lib/number/ob_number_v2.h"
+#include "common/number/ob_number_v2.h"
 #include "lib/charset/ob_charset.h"
-#include "lib/timezone/ob_timezone_info.h"
+#include "common/timezone/ob_timezone_info.h"
 #include "lib/hash/ob_hashutils.h"
 #include "lib/hash_func/ob_hash_func.h"
 #include "lib/charset/ob_dtoa.h"
-#include "lib/wide_integer/ob_wide_integer.h"
+#include "common/wide_integer/ob_wide_integer.h"
 
 namespace oceanbase
 {
@@ -59,7 +60,7 @@ enum ObCmpNullPos
 
 inline ObCmpNullPos default_null_pos()
 {
-  return lib::is_oracle_mode() ? NULL_LAST : NULL_FIRST;
+  return NULL_FIRST;
 }
 
 struct ObEnumSetInnerValue
@@ -175,10 +176,10 @@ public:
   }
 
   OB_INLINE ObObjType get_type() const { return static_cast<ObObjType>(type_); }
-  OB_INLINE ObObjOType get_oracle_type() const { return ob_obj_type_to_oracle_type(static_cast<ObObjType>(type_)); }
+  OB_INLINE ObObjOType get_extended_type() const { return ob_obj_type_to_extended_type(static_cast<ObObjType>(type_)); }
   OB_INLINE const ObObjMeta &get_obj_meta() const { return *this; }
   OB_INLINE ObObjTypeClass get_type_class() const { return ob_obj_type_class(get_type()); }
-  OB_INLINE ObObjTypeClass get_type_class_for_oracle() const { return ob_oracle_type_class(get_type()); }
+  OB_INLINE ObObjTypeClass get_type_class_for_extended() const { return ob_extended_type_class(get_type()); }
 
   OB_INLINE void set_null() { type_ = static_cast<uint8_t>(ObNullType); set_collation_level(CS_LEVEL_IGNORABLE); set_collation_type(CS_TYPE_BINARY); }
   OB_INLINE void set_tinyint() { type_ = static_cast<uint8_t>(ObTinyIntType); set_collation_level(CS_LEVEL_NUMERIC);set_collation_type(CS_TYPE_BINARY); }
@@ -318,18 +319,10 @@ public:
   {
     return (ob_is_text_tc(get_type()) && CS_TYPE_BINARY != get_collation_type());
   }
-  /*OB_INLINE bool is_oracle_clob() const
-  {
-    return (lib::is_oracle_mode() && ObLongTextType == get_type() && CS_TYPE_BINARY != get_collation_type());
-  }*/
   OB_INLINE bool is_clob() const
   {
-    return (lib::is_oracle_mode() && ObLongTextType == get_type() && CS_TYPE_BINARY != get_collation_type());
+    return false;
   }
-  /*OB_INLINE bool is_oracle_blob() const
-  {
-    return (lib::is_oracle_mode() && ObLongTextType == get_type() && CS_TYPE_BINARY == get_collation_type());
-  }*/
   OB_INLINE bool is_blob() const
   {
     return (ob_is_text_tc(get_type()) && CS_TYPE_BINARY == get_collation_type());
@@ -390,8 +383,8 @@ public:
   }
   OB_INLINE bool is_enumset_inner_type() const { return static_cast<uint8_t>(ObEnumInnerType) == type_
     || static_cast<uint8_t>(ObSetInnerType) == type_;}
-  OB_INLINE bool is_oracle_decimal() const { return ObNumberType == type_ || ObFloatType == type_ || ObDoubleType == type_ || ObDecimalIntType == type_; }
-  OB_INLINE bool is_oracle_temporal_type() const { return is_datetime(); }
+  OB_INLINE bool is_decimal_or_float() const { return ObNumberType == type_ || ObFloatType == type_ || ObDoubleType == type_ || ObDecimalIntType == type_; }
+  OB_INLINE bool is_extended_temporal_type() const { return is_datetime(); }
 
   OB_INLINE void set_cs_level(uint8_t cs_level) {
     cs_level_ = cs_level;
@@ -494,8 +487,7 @@ public:
     set_subschema_id(subschema_id);
   }
   OB_INLINE bool is_calc_end_space() const {
-    return ((type_ == ObVarcharType && cs_type_ != CS_TYPE_BINARY))
-           && lib::is_oracle_mode();
+    return false;
   }
 
   void set_stored_precision(int16_t precision)
@@ -823,7 +815,7 @@ struct ObMemLobCommon
   uint32_t has_inrow_data_ : 1;  // Indicate whether the lob is in-Memory inrow
                                  // However, it may not be the same with the flag in disk locator.
                                  // compatibility flag for client
-  uint32_t is_open_ : 1;   // Indicate whether the persist lob is open, compatible with oracle
+  uint32_t is_open_ : 1;   // Indicate whether the persist lob is open
   uint32_t is_simple_ : 1; // Indicate whether the lob has this common part only. Used for inrow lobs
                            // which do not need rowkey (Only used in mysql modes now)
   uint32_t has_extern_ : 1; // Indicate whether the lob locator has extern segment
@@ -930,13 +922,12 @@ struct ObMemLobReadSnapshot
 struct ObMemLobLocationInfo
 {
   ObMemLobLocationInfo(){}
-  ObMemLobLocationInfo(int64_t table_id, int64_t ls_id, ObCollationType collation_id) :
-    tablet_id_(table_id), ls_id_(ls_id), cid_(collation_id)
+  ObMemLobLocationInfo(int64_t table_id, ObCollationType collation_id) :
+    tablet_id_(table_id), cid_(collation_id)
   {}
-  TO_STRING_KV(K_(tablet_id), K_(ls_id), K_(cid));
+  TO_STRING_KV(K_(tablet_id), K_(cid));
 
   int64_t tablet_id_;
-  int64_t ls_id_;
   ObCollationType cid_; // charset for dbmslob
   char data_[0];
 };
@@ -1306,7 +1297,6 @@ struct ObObjPrintParams
       uint32_t use_memcpy_:1;
       uint32_t skip_escape_:1;
       uint32_t beginning_space_:1;
-      uint32_t for_dblink_:1;
       uint32_t binary_string_print_hex_:1;
       uint32_t need_print_converter_:1;
       uint32_t print_const_expr_type_:1;
@@ -1315,7 +1305,7 @@ struct ObObjPrintParams
       uint32_t character_hex_safe_represent_:1;
       uint32_t binary_string_print_base64_:1;
       uint32_t not_print_internal_catalog_:1;
-      uint32_t reserved_:19;
+      uint32_t reserved_:20;
     };
   };
 
@@ -1815,7 +1805,7 @@ public:
   OB_INLINE bool is_invalid_type() const { return meta_.is_invalid(); }
 
   OB_INLINE bool is_null() const { return meta_.is_null(); }
-  OB_INLINE bool is_null_oracle() const { return meta_.is_null()
+  OB_INLINE bool is_null_or_empty_string() const { return meta_.is_null()
       || (meta_.is_character_type() && (0 == get_string_len())); }
   OB_INLINE bool is_tinyint() const { return meta_.is_tinyint(); }
   OB_INLINE bool is_smallint() const { return meta_.is_smallint(); }
@@ -1833,7 +1823,7 @@ public:
   OB_INLINE bool is_udouble() const { return meta_.is_udouble(); }
   OB_INLINE bool is_number() const { return meta_.is_number(); }
   OB_INLINE bool is_unumber() const { return meta_.is_unumber(); }
-  OB_INLINE bool is_oracle_decimal() const { return meta_.is_oracle_decimal(); }
+  OB_INLINE bool is_decimal_or_float() const { return meta_.is_decimal_or_float(); }
   OB_INLINE bool is_datetime() const { return meta_.is_datetime(); }
   OB_INLINE bool is_mysql_datetime() const { return meta_.is_mysql_datetime(); }
   OB_INLINE bool is_timestamp() const { return meta_.is_timestamp(); }
@@ -1853,9 +1843,7 @@ public:
   OB_INLINE bool is_set() const { return meta_.is_set(); }
   OB_INLINE bool is_text() const { return meta_.is_text(); }
   OB_INLINE bool is_clob() const { return meta_.is_clob(); }
-  //OB_INLINE bool is_oracle_clob() const { return meta_.is_oracle_clob(); }
   OB_INLINE bool is_blob() const { return meta_.is_blob(); }
-  //OB_INLINE bool is_oracle_blob() const { return meta_.is_oracle_blob(); }
   OB_INLINE bool is_lob_storage() const { return meta_.is_lob_storage(); }
   OB_INLINE bool is_lob() const { return meta_.is_lob(); }
   OB_INLINE bool is_outrow_lob() const;
@@ -2073,7 +2061,7 @@ public:
   static uint32_t val_len_offset_bits() { return offsetof(ObObj, val_len_) * 8; }
   static uint32_t nmb_desc_offset_bits() { return offsetof(ObObj, nmb_desc_) * 8; }
   static uint32_t v_offset_bits() { return offsetof(ObObj, v_) * 8; }
-  int get_char_length(const ObAccuracy accuracy, int32_t &char_len, bool is_oracle_mode) const;
+  int get_char_length(const ObAccuracy accuracy, int32_t &char_len) const;
   int convert_string_value_charset(ObCharsetType charset_type, ObIAllocator &allocator);
   int read_lob_data(ObIAllocator &allocator, ObString &data) const;
 private:
@@ -2746,13 +2734,13 @@ inline void ObObj::set_lob_value(const ObObjType type, const char *ptr, const in
 inline void ObObj::set_json_value(const ObObjType type, const ObLobCommon *value, const int32_t length)
 {
   set_lob_value(type, value, length);
-  meta_.set_collation_type(CS_TYPE_UTF8MB4_BIN); // for oracle it is decided by sys collation.
+  meta_.set_collation_type(CS_TYPE_UTF8MB4_BIN);
 }
 
 inline void ObObj::set_json_value(const ObObjType type, const char *ptr, const int32_t length)
 {
   set_lob_value(type, ptr, length);
-  meta_.set_collation_type(CS_TYPE_UTF8MB4_BIN); // for oracle it is decided by sys collation.
+  meta_.set_collation_type(CS_TYPE_UTF8MB4_BIN);
 }
 
 inline void ObObj::set_geometry_value(const ObObjType type, const ObLobCommon *value, const int32_t length)
@@ -3398,7 +3386,7 @@ OB_INLINE static uint64_t varchar_hash_with_collation(const ObObj &obj,
                                                       const uint64_t hash, hash_algo hash_al)
 {
   return ObCharset::hash(cs_type, obj.get_string_ptr(), obj.get_string_len(), hash,
-           obj.is_varying_len_char_type() && lib::is_oracle_mode(), hash_al);
+           false, hash_al);
 }
 
 inline uint64_t ObObj::varchar_hash(ObCollationType cs_type, uint64_t seed) const
@@ -3788,9 +3776,9 @@ public:
     }
     if (ob_is_numeric_type(get_type())) {
       ObPrecision default_prec =
-        ObAccuracy::DDL_DEFAULT_ACCURACY2[lib::is_oracle_mode()][get_type()].get_precision();
+        ObAccuracy::DDL_DEFAULT_ACCURACY2[0][get_type()].get_precision();
       ObScale default_scale =
-        ObAccuracy::DDL_DEFAULT_ACCURACY2[lib::is_oracle_mode()][get_type()].get_scale();
+        ObAccuracy::DDL_DEFAULT_ACCURACY2[0][get_type()].get_scale();
       if (get_scale() < 0) {
         if (meta_.get_scale() >= 0) {
           set_scale(meta_.get_scale());
@@ -3827,7 +3815,7 @@ private:
   ParamFlag flag_;
   int32_t raw_text_pos_;
   int32_t raw_text_len_;
-  ObObjMeta param_meta_; //meta for objparma, to solve Oracle NULL/'' problem
+  ObObjMeta param_meta_; // meta for objparam, preserves NULL and empty-string metadata
 };
 
 struct ObDataType
@@ -3969,21 +3957,21 @@ class ObHexEscapeSqlStr
 public:
   ObHexEscapeSqlStr(const common::ObString &str) : str_(str),
                                                    skip_escape_(false),
-                                                   do_oracle_mode_escape_(lib::is_oracle_mode()) { }
+                                                   do_single_quote_escape_(false) { }
   ObHexEscapeSqlStr(const common::ObString &str, const bool skip_escape) : str_(str),
                                                                            skip_escape_(skip_escape),
-                                                                           do_oracle_mode_escape_(lib::is_oracle_mode()){ }
+                                                                           do_single_quote_escape_(false){ }
   ObHexEscapeSqlStr(const common::ObString &str,
                     const bool skip_escape,
-                    const bool do_oracle_mode_escape)
-    : str_(str), skip_escape_(skip_escape), do_oracle_mode_escape_(do_oracle_mode_escape){ }
+                    const bool do_single_quote_escape)
+    : str_(str), skip_escape_(skip_escape), do_single_quote_escape_(do_single_quote_escape){ }
   ObString str() const { return str_; }
   int64_t get_extra_length() const;
   DECLARE_TO_STRING;
 private:
   ObString str_;
   bool skip_escape_;
-  bool do_oracle_mode_escape_;
+  bool do_single_quote_escape_;
 };
 
 typedef Ob2DArray<ObObjParam, OB_MALLOC_BIG_BLOCK_SIZE,
@@ -4002,7 +3990,7 @@ public:
   static int ob_udt_obj_value_get_serialize_size(const ObObj &obj, int64_t &value_len);
 
   static bool ob_is_supported_sql_udt(const uint64_t udt_id)
-  { // only oracle gis related udt is supported currently
+  { // only XML and GIS related SQL UDTs are supported currently
     return udt_id == T_OBJ_XML
           || udt_id == T_OBJ_SDO_POINT
           || udt_id == T_OBJ_SDO_GEOMETRY
@@ -4016,7 +4004,6 @@ class ObObjCharacterUtil
   // Utils for safe hex representation of character types.
   // Only use for the character types that supported as primary key columns.
 public:
-  static int print_safe_hex_represent_oracle(const ObObj &obj, char* buf, const int64_t buf_len, int64_t& pos, const ObAccuracy &accuracy);
   static int print_safe_hex_represent_mysql(const ObObj &obj, char *buffer, int64_t length, int64_t &pos);
   static int print_safe_hex_represent(const ObObj &obj, char *buffer, int64_t length, int64_t &pos, const ObAccuracy &accuracy);
 };

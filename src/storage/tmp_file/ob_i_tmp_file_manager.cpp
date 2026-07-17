@@ -31,7 +31,6 @@ namespace tmp_file
 ObITenantTmpFileManager::ObITenantTmpFileManager()
   : is_inited_(false),
     is_running_(false),
-    tenant_id_(OB_INVALID_TENANT_ID),
     tmp_file_allocator_(),
     callback_allocator_(),
     wbp_index_cache_allocator_(),
@@ -51,31 +50,31 @@ int ObITenantTmpFileManager::init()
   if (OB_UNLIKELY(IS_INIT)) {
     ret = OB_INIT_TWICE;
     LOG_WARN("ObITenantTmpFileManager init twice", KR(ret), K(is_inited_));
-  } else if (OB_UNLIKELY(!is_valid_tenant_id(tenant_id_ = MTL_ID()))) {
+  } else if (OB_UNLIKELY(!true)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid tenant id", KR(ret), K(tenant_id_));
-  } else if (OB_FAIL(files_.init("TmpFileMap", tenant_id_))) {
+    LOG_WARN("invalid tenant id", KR(ret));
+  } else if (OB_FAIL(files_.init("TmpFileMap"))) {
     LOG_WARN("fail to init tmp files map", KR(ret));
   } else if (OB_FAIL(tmp_file_allocator_.init(common::OB_MALLOC_MIDDLE_BLOCK_SIZE,
-                                              ObModIds::OB_TMP_FILE_MANAGER, tenant_id_,
+                                              ObModIds::OB_TMP_FILE_MANAGER,
                                               INT64_MAX))) {
-    LOG_WARN("fail to init tmp file allocator", KR(ret), K(tenant_id_));
+    LOG_WARN("fail to init tmp file allocator", KR(ret));
   } else if (OB_FAIL(callback_allocator_.init(lib::ObMallocAllocator::get_instance(),
                                               OB_MALLOC_MIDDLE_BLOCK_SIZE,
-                                              ObMemAttr(tenant_id_, "TmpFileCallback", ObCtxIds::DEFAULT_CTX_ID)))) {
-    LOG_WARN("fail to init callback allocator", KR(ret), K(tenant_id_));
+                                              ObMemAttr("TmpFileCallback", ObCtxIds::DEFAULT_CTX_ID)))) {
+    LOG_WARN("fail to init callback allocator", KR(ret));
   } else if (OB_FAIL(wbp_index_cache_allocator_.init(lib::ObMallocAllocator::get_instance(),
                                                      OB_MALLOC_NORMAL_BLOCK_SIZE,
-                                                     ObMemAttr(tenant_id_, "TmpFileIndCache",
+                                                     ObMemAttr("TmpFileIndCache",
                                                      ObCtxIds::DEFAULT_CTX_ID)))) {
-    LOG_WARN("fail to init wbp index cache allocator", KR(ret), K(tenant_id_));
+    LOG_WARN("fail to init wbp index cache allocator", KR(ret));
   } else if (OB_FAIL(wbp_index_cache_bucket_allocator_.init(lib::ObMallocAllocator::get_instance(),
                                                             OB_MALLOC_MIDDLE_BLOCK_SIZE,
-                                                            ObMemAttr(tenant_id_, "TmpFileIndCBkt",
+                                                            ObMemAttr("TmpFileIndCBkt",
                                                             ObCtxIds::DEFAULT_CTX_ID)))) {
-    LOG_WARN("fail to init wbp index cache bucket allocator", KR(ret), K(tenant_id_));
+    LOG_WARN("fail to init wbp index cache bucket allocator", KR(ret));
   } else if (OB_FAIL(init_sub_module_())) {
-    LOG_WARN("fail to init sub module", KR(ret), K(tenant_id_));
+    LOG_WARN("fail to init sub module", KR(ret));
   } else {
     is_inited_ = true;
   }
@@ -88,12 +87,12 @@ int ObITenantTmpFileManager::start()
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObITenantTmpFileManager has not been inited", KR(ret), K(tenant_id_));
+    LOG_WARN("ObITenantTmpFileManager has not been inited", KR(ret));
   } else if (OB_UNLIKELY(is_running())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("ObITenantTmpFileManager has already been started", KR(ret), K(tenant_id_));
+    LOG_WARN("ObITenantTmpFileManager has already been started", KR(ret));
   } else if (OB_FAIL(start_sub_module_())) {
-    LOG_WARN("fail to start sub module", KR(ret), K(tenant_id_));
+    LOG_WARN("fail to start sub module", KR(ret));
   } else {
     is_running_ = true;
   }
@@ -106,7 +105,7 @@ void ObITenantTmpFileManager::stop()
   int ret = OB_SUCCESS;
   if (is_running_) {
     if (OB_FAIL(stop_sub_module_())) {
-      LOG_WARN("fail to stop sub module", KR(ret), K(tenant_id_));
+      LOG_WARN("fail to stop sub module", KR(ret));
     } else {
       is_running_ = false;
     }
@@ -117,7 +116,7 @@ void ObITenantTmpFileManager::wait()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(wait_sub_module_())) {
-    LOG_WARN("fail to wait sub module", KR(ret), K(tenant_id_));
+    LOG_WARN("fail to wait sub module", KR(ret));
   }
 }
 
@@ -126,7 +125,7 @@ void ObITenantTmpFileManager::destroy()
   int ret = OB_SUCCESS;
   if (IS_INIT) {
     if (OB_FAIL(destroy_sub_module_())) {
-      LOG_WARN("fail to destroy sub module", KR(ret), K(tenant_id_));
+      LOG_WARN("fail to destroy sub module", KR(ret));
     } else {
       int64_t curr_file_cnt = files_.count();
       if (OB_UNLIKELY(curr_file_cnt > 0)) {
@@ -140,7 +139,7 @@ void ObITenantTmpFileManager::destroy()
               ret = OB_SUCCESS;
               break;
             } else {
-              LOG_WARN("fail to get next tmp file", KR(ret), K(tenant_id_));
+              LOG_WARN("fail to get next tmp file", KR(ret));
             }
           } else {
             // resource leak
@@ -150,7 +149,7 @@ void ObITenantTmpFileManager::destroy()
 
         int64_t new_file_cnt = files_.count();
         if (OB_UNLIKELY(new_file_cnt != curr_file_cnt)) {
-          LOG_ERROR("there are some operation for tmp files when tmp file mgr is destroying", K(tenant_id_), K(curr_file_cnt));
+          LOG_ERROR("there are some operation for tmp files when tmp file mgr is destroying", K(curr_file_cnt));
         }
       }
       files_.destroy();
@@ -162,7 +161,7 @@ void ObITenantTmpFileManager::destroy()
     }
   }
 
-  LOG_INFO("ObITenantTmpFileManager destroy", K(tenant_id_), KP(this));
+  LOG_INFO("ObITenantTmpFileManager destroy", KP(this));
 }
 
 int ObITenantTmpFileManager::remove(const int64_t fd)
@@ -174,7 +173,7 @@ int ObITenantTmpFileManager::remove(const int64_t fd)
 
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObITenantTmpFileManager has not been inited", KR(ret), K(tenant_id_));
+    LOG_WARN("ObITenantTmpFileManager has not been inited", KR(ret));
   // } else if (OB_UNLIKELY(!is_running())) {
   //   // some modules remove tmp file when they are destroying.
   //   // at this time, the tmp file mgr is not running because of stop().
@@ -224,8 +223,7 @@ int ObITenantTmpFileManager::remove(const int64_t fd)
   return ret;
 }
 
-int ObITenantTmpFileManager::aio_read(const uint64_t tenant_id,
-                                      const ObTmpFileIOInfo &io_info,
+int ObITenantTmpFileManager::aio_read(const ObTmpFileIOInfo &io_info,
                                       ObTmpFileIOHandle &io_handle)
 {
   int ret = OB_SUCCESS;
@@ -233,21 +231,21 @@ int ObITenantTmpFileManager::aio_read(const uint64_t tenant_id,
 
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObITenantTmpFileManager has not been inited", KR(ret), K(tenant_id_));
+    LOG_WARN("ObITenantTmpFileManager has not been inited", KR(ret));
   } else if (OB_UNLIKELY(!io_info.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("fail to aio read, invalid argument", KR(ret), K(io_info));
-  } else if (OB_UNLIKELY(MTL_ID() != tenant_id)) {
+  } else if (OB_UNLIKELY(false)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("tenant id not match", KR(ret), K(tenant_id), K(MTL_ID()));
+    LOG_WARN("tenant id not match", KR(ret));
   } else if (OB_UNLIKELY(io_handle.is_valid() && !io_handle.is_finished())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("tmp file io handle has remain data need to be waited", KR(ret), K(io_info), K(io_handle));
   } else if (FALSE_IT(io_handle.reset())) {
   } else if (OB_FAIL(get_tmp_file(io_info.fd_, tmp_file_handle))) {
     LOG_WARN("fail to get tmp file io handle", KR(ret), K(io_info));
-  } else if (OB_FAIL(io_handle.init_read(tenant_id, io_info))) {
-    LOG_WARN("fail to init io handle", KR(ret), K(tenant_id), K(io_info));
+  } else if (OB_FAIL(io_handle.init_read(io_info))) {
+    LOG_WARN("fail to init io handle", KR(ret), K(io_info));
   } else if (OB_FAIL(tmp_file_handle.get()->aio_pread(io_handle.get_io_ctx()))) {
     LOG_WARN("fail to aio pread", KR(ret), K(io_info), KPC(tmp_file_handle.get()));
   } else {
@@ -258,8 +256,7 @@ int ObITenantTmpFileManager::aio_read(const uint64_t tenant_id,
   return ret;
 }
 
-int ObITenantTmpFileManager::aio_pread(const uint64_t tenant_id,
-                                       const ObTmpFileIOInfo &io_info,
+int ObITenantTmpFileManager::aio_pread(const ObTmpFileIOInfo &io_info,
                                        const int64_t offset,
                                        ObTmpFileIOHandle &io_handle)
 {
@@ -268,21 +265,21 @@ int ObITenantTmpFileManager::aio_pread(const uint64_t tenant_id,
 
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObITenantTmpFileManager has not been inited", KR(ret), K(tenant_id_));
+    LOG_WARN("ObITenantTmpFileManager has not been inited", KR(ret));
   } else if (OB_UNLIKELY(!io_info.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("fail to aio read, invalid argument", KR(ret), K(io_info));
-  } else if (OB_UNLIKELY(MTL_ID() != tenant_id)) {
+  } else if (OB_UNLIKELY(false)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("tenant id not match", KR(ret), K(tenant_id), K(MTL_ID()));
+    LOG_WARN("tenant id not match", KR(ret));
   } else if (OB_UNLIKELY(io_handle.is_valid() && !io_handle.is_finished())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("tmp file io handle has remain data need to be waited", KR(ret), K(io_info), K(io_handle));
   } else if (FALSE_IT(io_handle.reset())) {
   } else if (OB_FAIL(get_tmp_file(io_info.fd_, tmp_file_handle))) {
     LOG_WARN("fail to get tmp file io handle", KR(ret), K(io_info));
-  } else if (OB_FAIL(io_handle.init_pread(tenant_id, io_info, offset))) {
-    LOG_WARN("fail to init io handle", KR(ret), K(tenant_id), K(io_info));
+  } else if (OB_FAIL(io_handle.init_pread( io_info, offset))) {
+    LOG_WARN("fail to init io handle", KR(ret), K(io_info));
   } else if (OB_FAIL(tmp_file_handle.get()->aio_pread(io_handle.get_io_ctx()))) {
     LOG_WARN("fail to aio pread", KR(ret), K(io_info), KPC(tmp_file_handle.get()));
   } else {
@@ -293,8 +290,7 @@ int ObITenantTmpFileManager::aio_pread(const uint64_t tenant_id,
   return ret;
 }
 
-int ObITenantTmpFileManager::read(const uint64_t tenant_id,
-                                  const ObTmpFileIOInfo &io_info,
+int ObITenantTmpFileManager::read(const ObTmpFileIOInfo &io_info,
                                   ObTmpFileIOHandle &io_handle)
 {
   int ret = OB_SUCCESS;
@@ -302,21 +298,21 @@ int ObITenantTmpFileManager::read(const uint64_t tenant_id,
 
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObITenantTmpFileManager has not been inited", KR(ret), K(tenant_id_));
+    LOG_WARN("ObITenantTmpFileManager has not been inited", KR(ret));
   } else if (OB_UNLIKELY(!io_info.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("fail to aio read, invalid argument", KR(ret), K(io_info));
-  } else if (OB_UNLIKELY(MTL_ID() != tenant_id)) {
+  } else if (OB_UNLIKELY(false)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("tenant id not match", KR(ret), K(tenant_id), K(MTL_ID()));
+    LOG_WARN("tenant id not match", KR(ret));
   } else if (OB_UNLIKELY(io_handle.is_valid() && !io_handle.is_finished())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("tmp file io handle has remain data need to be waited", KR(ret), K(io_info), K(io_handle));
   } else if (FALSE_IT(io_handle.reset())) {
   } else if (OB_FAIL(get_tmp_file(io_info.fd_, tmp_file_handle))) {
     LOG_WARN("fail to get tmp file io handle", KR(ret), K(io_info));
-  } else if (OB_FAIL(io_handle.init_read(tenant_id, io_info))) {
-    LOG_WARN("fail to init io handle", KR(ret), K(tenant_id), K(io_info));
+  } else if (OB_FAIL(io_handle.init_read(io_info))) {
+    LOG_WARN("fail to init io handle", KR(ret), K(io_info));
   } else if (OB_FAIL(tmp_file_handle.get()->aio_pread(io_handle.get_io_ctx()))) {
     LOG_WARN("fail to aio pread", KR(ret), K(io_info), KPC(tmp_file_handle.get()));
   } else {
@@ -335,8 +331,7 @@ int ObITenantTmpFileManager::read(const uint64_t tenant_id,
   return ret;
 }
 
-int ObITenantTmpFileManager::pread(const uint64_t tenant_id,
-                                   const ObTmpFileIOInfo &io_info,
+int ObITenantTmpFileManager::pread(const ObTmpFileIOInfo &io_info,
                                    const int64_t offset,
                                    ObTmpFileIOHandle &io_handle)
 {
@@ -345,21 +340,21 @@ int ObITenantTmpFileManager::pread(const uint64_t tenant_id,
 
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObITenantTmpFileManager has not been inited", KR(ret), K(tenant_id_));
+    LOG_WARN("ObITenantTmpFileManager has not been inited", KR(ret));
   } else if (OB_UNLIKELY(!io_info.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("fail to aio read, invalid argument", KR(ret), K(io_info));
-  } else if (OB_UNLIKELY(MTL_ID() != tenant_id)) {
+  } else if (OB_UNLIKELY(false)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("tenant id not match", KR(ret), K(tenant_id), K(MTL_ID()));
+    LOG_WARN("tenant id not match", KR(ret));
   } else if (OB_UNLIKELY(io_handle.is_valid() && !io_handle.is_finished())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("tmp file io handle has remain data need to be waited", KR(ret), K(io_info), K(io_handle));
   } else if (FALSE_IT(io_handle.reset())) {
   } else if (OB_FAIL(get_tmp_file(io_info.fd_, tmp_file_handle))) {
     LOG_WARN("fail to get tmp file io handle", KR(ret), K(io_info));
-  } else if (OB_FAIL(io_handle.init_pread(tenant_id, io_info, offset))) {
-    LOG_WARN("fail to init io handle", KR(ret), K(tenant_id), K(io_info));
+  } else if (OB_FAIL(io_handle.init_pread( io_info, offset))) {
+    LOG_WARN("fail to init io handle", KR(ret), K(io_info));
   } else if (OB_FAIL(tmp_file_handle.get()->aio_pread(io_handle.get_io_ctx()))) {
     LOG_WARN("fail to aio pread", KR(ret), K(io_info), KPC(tmp_file_handle.get()));
   } else {
@@ -378,8 +373,7 @@ int ObITenantTmpFileManager::pread(const uint64_t tenant_id,
   return ret;
 }
 
-int ObITenantTmpFileManager::aio_write(const uint64_t tenant_id,
-                                       const ObTmpFileIOInfo &io_info,
+int ObITenantTmpFileManager::aio_write(const ObTmpFileIOInfo &io_info,
                                        ObTmpFileIOHandle &io_handle)
 {
   int ret = OB_SUCCESS;
@@ -388,17 +382,17 @@ int ObITenantTmpFileManager::aio_write(const uint64_t tenant_id,
 
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObITenantTmpFileManager has not been inited", KR(ret), K(tenant_id_));
+    LOG_WARN("ObITenantTmpFileManager has not been inited", KR(ret));
   } else if (OB_UNLIKELY(!io_info.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("fail to aio write, invalid argument", KR(ret), K(io_info));
-  } else if (OB_UNLIKELY(MTL_ID() != tenant_id)) {
+  } else if (OB_UNLIKELY(false)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("tenant id not match", KR(ret), K(tenant_id), K(MTL_ID()));
+    LOG_WARN("tenant id not match", KR(ret));
   } else if (OB_FAIL(get_tmp_file(io_info.fd_, tmp_file_handle))) {
     LOG_WARN("fail to get tmp file io handle", KR(ret), K(io_info));
-  } else if (OB_FAIL(io_handle.init_write(tenant_id, io_info))) {
-    LOG_WARN("fail to init io handle", KR(ret), K(tenant_id), K(io_info));
+  } else if (OB_FAIL(io_handle.init_write(io_info))) {
+    LOG_WARN("fail to init io handle", KR(ret), K(io_info));
   } else if (OB_FAIL(tmp_file_handle.get()->aio_write(io_handle.get_io_ctx()))) {
     LOG_WARN("fail to aio write", KR(ret), K(io_info), KPC(tmp_file_handle.get()));
   } else {
@@ -410,12 +404,12 @@ int ObITenantTmpFileManager::aio_write(const uint64_t tenant_id,
 }
 
 // tmp file is always buffer writing, there are no io tasks need to be waited
-int ObITenantTmpFileManager::write(const uint64_t tenant_id, const ObTmpFileIOInfo &io_info)
+int ObITenantTmpFileManager::write(const ObTmpFileIOInfo &io_info)
 {
   int ret = OB_SUCCESS;
   ObTmpFileIOHandle io_handle;
 
-  if (OB_FAIL(aio_write(tenant_id, io_info, io_handle))) {
+  if (OB_FAIL(aio_write(io_info, io_handle))) {
     LOG_WARN("fail to aio write", KR(ret), K(io_info));
   }
 
@@ -430,7 +424,7 @@ int ObITenantTmpFileManager::truncate(const int64_t fd, const int64_t offset)
 
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObITenantTmpFileManager has not been inited", KR(ret), K(tenant_id_));
+    LOG_WARN("ObITenantTmpFileManager has not been inited", KR(ret));
   } else if (OB_UNLIKELY(fd == ObTmpFileGlobal::INVALID_TMP_FILE_FD || offset < 0)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", KR(ret), K(offset), K(fd));
@@ -451,7 +445,7 @@ int ObITenantTmpFileManager::seal(const int64_t fd)
 
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObITenantTmpFileManager has not been inited", KR(ret), K(tenant_id_));
+    LOG_WARN("ObITenantTmpFileManager has not been inited", KR(ret));
   } else if (OB_FAIL(get_tmp_file(fd, tmp_file_handle))) {
     LOG_WARN("fail to get tmp file handle", KR(ret), K(fd));
   } else if (OB_FAIL(tmp_file_handle.get()->seal())) {
@@ -490,7 +484,7 @@ int ObITenantTmpFileManager::get_tmp_file_size(const int64_t fd, int64_t &size)
   ObITmpFileHandle tmp_file_handle;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObITenantTmpFileManager has not been inited", KR(ret), K(tenant_id_));
+    LOG_WARN("ObITenantTmpFileManager has not been inited", KR(ret));
   } else if (OB_FAIL(get_tmp_file(fd, tmp_file_handle))) {
     LOG_WARN("fail to get tmp file handle", KR(ret), K(fd));
   } else {
@@ -522,7 +516,7 @@ int ObITenantTmpFileManager::get_tmp_file_fds(ObIArray<int64_t> &fd_arr)
   CollectTmpFileKeyFunctor func(fd_arr);
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObITenantTmpFileManager has not been inited", KR(ret), K(tenant_id_));
+    LOG_WARN("ObITenantTmpFileManager has not been inited", KR(ret));
   } else if (OB_FAIL(files_.for_each(func))) {
     LOG_WARN("fail to collect tmp file fds", KR(ret));
   }
@@ -536,7 +530,7 @@ int ObITenantTmpFileManager::get_tmp_file_info(const int64_t fd, ObTmpFileInfo &
   ObITmpFileHandle file_handle;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObITenantTmpFileManager has not been inited", KR(ret), K(tenant_id_));
+    LOG_WARN("ObITenantTmpFileManager has not been inited", KR(ret));
   } else if (OB_FAIL(get_tmp_file(fd, file_handle))) {
     if (OB_ENTRY_NOT_EXIST == ret) {
       LOG_INFO("tmp file not exist", KR(ret), K(fd));

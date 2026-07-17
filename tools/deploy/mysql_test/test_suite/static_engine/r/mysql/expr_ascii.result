@@ -42,8 +42,8 @@ Warnings:
 Warning	1265	Data truncated for column 'c17' at row 1
 Warning	1265	Data truncated for column '"oceanbase"."t1"."c18"' at row 1
 create table t2(col_int int, col_utf8 varchar(100) charset utf8, 
-                col_utf16 varchar(100) charset utf16,
-                col_gbk varchar(100) charset gbk);
+                col_utf16 varchar(100) charset utf8mb4,
+                col_gbk varchar(100) charset utf8mb4);
 insert into t2 values(1, 'a', 'a', 'a');
 insert into t2 values(-1, '中国', '中文', '中文');
 insert into t2 values(256, ' 中国', ' 中文', '中文');
@@ -238,16 +238,15 @@ select col_utf16, ascii(col_utf16), ord(col_utf16) from t2;
 +-----------+------------------+----------------+
 | col_utf16 | ascii(col_utf16) | ord(col_utf16) |
 +-----------+------------------+----------------+
-| a         |                0 |             97 |
-| 中文      |               78 |          20013 |
-|  中文     |                0 |             32 |
+| a         |               97 |             97 |
+| 中文      |              228 |       14989485 |
+|  中文     |               32 |             32 |
 +-----------+------------------+----------------+
 select col_gbk, ascii(col_gbk), ord(col_gbk) from t2;
 +---------+----------------+--------------+
 | col_gbk | ascii(col_gbk) | ord(col_gbk) |
 +---------+----------------+--------------+
 | a       |             97 |           97 |
-| 中文    |            214 |        54992 |
-| 中文    |            214 |        54992 |
+| 中文    |            228 |     14989485 |
+| 中文    |            228 |     14989485 |
 +---------+----------------+--------------+
-

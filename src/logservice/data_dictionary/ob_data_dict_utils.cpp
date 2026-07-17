@@ -25,10 +25,10 @@ namespace oceanbase
 namespace datadict
 {
 
-void *ob_dict_malloc(const int64_t nbyte, const uint64_t tenant_id)
+void *ob_dict_malloc(const int64_t nbyte)
 {
   ObMemAttr mem_attr;
-  mem_attr.tenant_id_ = tenant_id;
+  
   mem_attr.label_ = "ObDataDict";
   return ob_malloc(nbyte, mem_attr);
 }
@@ -125,24 +125,6 @@ int deep_copy_str_array(
       DDLOG(WARN, "dest str arr push back dst_str failded", KR(ret), K(src_str), K(dst_str), K(i));
     }
   }
-  return ret;
-}
-
-int check_ls_leader(logservice::ObLogHandler *log_handler, bool &is_leader, int64_t &proposal_id)
-{
-  int ret = OB_SUCCESS;
-  common::ObRole role = common::ObRole::INVALID_ROLE;
-  proposal_id = 0;
-
-  if (OB_ISNULL(log_handler)) {
-    ret = OB_ERR_UNEXPECTED;
-    DDLOG(WARN, "log_handler_ is invalid", KR(ret));
-  } else if (OB_FAIL(log_handler->get_role(role, proposal_id))) {
-    DDLOG(WARN, "get ls role fail", K(ret), K(proposal_id));
-  } else {
-    is_leader = is_strong_leader(role);
-  }
-
   return ret;
 }
 

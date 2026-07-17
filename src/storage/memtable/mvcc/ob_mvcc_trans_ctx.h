@@ -329,7 +329,7 @@ public:
     return (idx == 0) || !for_replay_ || is_serial_final_();
   }
   void print_statistics(char *buf, const int64_t buf_len, int64_t &pos) const;
-  transaction::ObPartTransCtx *get_trans_ctx() const;
+  transaction::ObTxCtx *get_trans_ctx() const;
   TO_STRING_KV(KP(this),
                K_(serial_final_scn),
                K_(serial_final_seq_no),

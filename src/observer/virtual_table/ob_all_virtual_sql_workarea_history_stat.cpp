@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SQL_ENG
 
 #include "ob_all_virtual_sql_workarea_history_stat.h"
+#include "share/rc/ob_module_provider.h"
 
 using namespace oceanbase::common;
 using namespace oceanbase::sql;
@@ -24,7 +25,7 @@ using namespace oceanbase::observer;
 using namespace oceanbase::share;
 
 ObSqlWorkareaHistoryStatIterator::ObSqlWorkareaHistoryStatIterator() :
-  wa_stats_(), tenant_ids_(), cur_nth_wa_(0), cur_nth_tenant_(0)
+  wa_stats_(), cur_nth_wa_(0), done_(false)
 {}
 
 void ObSqlWorkareaHistoryStatIterator::destroy()
@@ -35,23 +36,16 @@ void ObSqlWorkareaHistoryStatIterator::destroy()
 void ObSqlWorkareaHistoryStatIterator::reset()
 {
   wa_stats_.reset();
-  tenant_ids_.reset();
   cur_nth_wa_ = 0;
-  cur_nth_tenant_ = 0;
+  done_ = false;
 }
 
-int ObSqlWorkareaHistoryStatIterator::init(const uint64_t effective_tenant_id)
+int ObSqlWorkareaHistoryStatIterator::init()
 {
   int ret = OB_SUCCESS;
   if (OB_ISNULL(GCTX.omt_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected null of omt", KR(ret));
-  } else if (is_sys_tenant(effective_tenant_id)) {
-    if (OB_FAIL(GCTX.omt_->get_mtl_tenant_ids(tenant_ids_))) {
-      LOG_WARN("failed to get_mtl_tenant_ids", KR(ret));
-    }
-  } else if (OB_FAIL(tenant_ids_.push_back(effective_tenant_id))) {
-    LOG_WARN("failed to push back tenant_id", KR(ret), K(effective_tenant_id));
   }
   return ret;
 }
@@ -61,25 +55,24 @@ int ObSqlWorkareaHistoryStatIterator::get_next_batch_wa_stats()
   int ret = OB_SUCCESS;
   cur_nth_wa_ = 0;
   wa_stats_.reset();
-  if (cur_nth_tenant_ >= tenant_ids_.count()) {
+  if (done_) {
     ret = OB_ITER_END;
   } else {
-    uint64_t tenant_id = tenant_ids_.at(cur_nth_tenant_);
+    
     ObTenantSqlMemoryManager *sql_mem_mgr = nullptr;
-    MTL_SWITCH(tenant_id) {
-      sql_mem_mgr = MTL(ObTenantSqlMemoryManager*);
+    MOD_SCOPE {
+      sql_mem_mgr = share::g_mp->tenant_sql_memory_manager();
       if (nullptr != sql_mem_mgr && OB_FAIL(sql_mem_mgr->get_workarea_stat(wa_stats_))) {
         LOG_WARN("failed to get workarea stat", K(ret));
       }
     }
-    ++cur_nth_tenant_;
+    done_ = true;
   }
   return ret;
 }
 
 int ObSqlWorkareaHistoryStatIterator::get_next_wa_stat(
-  ObSqlWorkAreaStat *&wa_stat,
-  uint64_t &tenant_id)
+  ObSqlWorkAreaStat *&wa_stat)
 {
   int ret = OB_SUCCESS;
   if (0 > cur_nth_wa_ || cur_nth_wa_ > wa_stats_.count()) {
@@ -93,7 +86,6 @@ int ObSqlWorkareaHistoryStatIterator::get_next_wa_stat(
   }
   if (OB_SUCC(ret)) {
     wa_stat = &wa_stats_.at(cur_nth_wa_);
-    tenant_id = tenant_ids_.at(cur_nth_tenant_ - 1);
     ++cur_nth_wa_;
   }
   return ret;
@@ -137,12 +129,10 @@ int ObSqlWorkareaHistoryStat::get_server_ip_and_port()
 }
 
 int ObSqlWorkareaHistoryStat::fill_row(
-  uint64_t tenant_id,
   ObSqlWorkAreaStat &wa_stat,
   common::ObNewRow *&row)
 {
   int ret = OB_SUCCESS;
-  UNUSED(tenant_id);
   ObObj *cells = cur_row_.cells_;
   for (int64_t cell_idx = 0; OB_SUCC(ret) && cell_idx < output_column_ids_.count(); ++cell_idx) {
     uint64_t col_id = output_column_ids_.at(cell_idx);
@@ -261,7 +251,7 @@ int ObSqlWorkareaHistoryStat::inner_get_next_row(common::ObNewRow *&row)
 {
   int ret = OB_SUCCESS;
   if (!start_to_read_) {
-    if (OB_FAIL(iter_.init(effective_tenant_id_))) {
+    if (OB_FAIL(iter_.init())) {
       LOG_WARN("failed to init iterator", K(ret));
     } else {
       start_to_read_ = true;
@@ -271,14 +261,13 @@ int ObSqlWorkareaHistoryStat::inner_get_next_row(common::ObNewRow *&row)
     }
   }
   ObSqlWorkAreaStat *wa_stat = nullptr;
-  uint64_t tenant_id = 0;
   if (OB_FAIL(ret)) {
     // do nothing
-  } else if (OB_FAIL(iter_.get_next_wa_stat(wa_stat, tenant_id))) {
+  } else if (OB_FAIL(iter_.get_next_wa_stat(wa_stat))) {
     if (OB_ITER_END != ret) {
       LOG_WARN("failed to get next channel", K(ret));
     }
-  } else if (OB_FAIL(fill_row(tenant_id, *wa_stat, row))) {
+  } else if (OB_FAIL(fill_row(*wa_stat, row))) {
     LOG_WARN("failed to get row from channel info", K(ret));
   }
   return ret;

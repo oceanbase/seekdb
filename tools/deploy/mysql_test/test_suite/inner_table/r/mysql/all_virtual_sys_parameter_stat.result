@@ -1,6 +1,6 @@
-select tenant_id, table_name from oceanbase.__all_virtual_table where table_name = '__all_virtual_sys_parameter_stat';
-tenant_id	table_name
-1	__all_virtual_sys_parameter_stat
+select table_name from oceanbase.__all_table where table_name = '__all_virtual_sys_parameter_stat';
+table_name
+__all_virtual_sys_parameter_stat
 use oceanbase;
 desc __all_virtual_sys_parameter_stat;
 Field	Type	Null	Key	Default	Extra
@@ -25,19 +25,12 @@ alert_log_level
 all_server_list
 arbitration_degradation_policy
 arbitration_timeout
-archive_lag_target
 autoinc_cache_refresh_interval
-auto_split_tablet_size
 backup_data_file_size
-balancer_idle_time
-balancer_log_interval
-balancer_task_timeout
-balancer_tolerance_percentage
 bf_cache_miss_count_threshold
 bf_cache_priority
 builtin_db_data_verify_cycle
 cache_wash_threshold
-choose_migration_source_policy
 clog_io_isolation_mode
 clog_sync_time_warn_threshold
 cluster
@@ -60,13 +53,11 @@ datafile_size
 data_dir
 data_disk_usage_limit_percentage
 data_disk_write_limit_percentage
-data_storage_error_tolerance_time
 data_storage_warning_tolerance_time
 ddl_thread_score
 dead_socket_detection_timeout
 debug_sync_timeout
 default_auto_increment_mode
-default_compress
 default_compress_func
 default_enable_extended_rowid
 default_load_mode
@@ -75,7 +66,6 @@ default_row_format
 default_storage_cache_policy
 default_table_merge_engine
 default_table_organization
-default_table_store_format
 devname
 diag_syslog_per_error_limit
 direct_load_allow_fallback
@@ -84,41 +74,30 @@ dtl_buffer_size
 dump_data_dictionary_to_log_interval
 enable_adaptive_plan_cache
 enable_async_syslog
-enable_auto_split
-enable_cgroup
-enable_dblink
 enable_ddl
 enable_early_lock_release
-enable_global_background_resource_isolation
 enable_kv_ttl
 enable_lock_priority
 enable_major_freeze
 enable_manual_storage_cache_policy
 enable_monotonic_weak_read
-enable_ob_error_msg_style
 enable_ob_ratelimit
 enable_perf_event
-enable_rebalance
 enable_record_trace_id
 enable_record_trace_log
-enable_rereplication
 enable_rich_error_msg
 enable_rpc_authentication_bypass
 enable_rpc_service
 enable_rpc_tls
-enable_sql_audit
 enable_sql_extension
 enable_sql_operator_dump
 enable_sys_table_ddl
 enable_sys_unit_standalone
 enable_tcp_keepalive
-enable_transfer
 enable_upgrade_mode
 enable_user_defined_rewrite_rules
 freeze_trigger_percentage
 fuse_row_cache_priority
-global_background_cpu_quota
-global_index_auto_split_policy
 ha_high_thread_score
 ha_info
 ha_low_thread_score
@@ -129,11 +108,6 @@ index_block_cache_priority
 internal_sql_execute_timeout
 job_queue_processes
 json_document_max_depth
-kv_group_commit_batch_size
-kv_group_commit_rw_mode
-kv_hbase_client_scanner_timeout_period
-kv_transport_compress_func
-kv_transport_compress_threshold
 kv_ttl_duty_duration
 kv_ttl_history_recycle_interval
 large_query_threshold
@@ -205,7 +179,6 @@ open_cursors
 optimizer_index_cost_adj
 opt_tab_stat_cache_priority
 package_state_sync_max_size
-partition_balance_schedule_interval
 plan_cache_evict_interval
 plsql_code_type
 plsql_debug
@@ -256,7 +229,6 @@ ss_cache_maxsize_percpu
 ss_cache_max_percentage
 stack_size
 standby_db_fetch_log_rpc_timeout
-standby_db_preferred_upstream_log_region
 standby_fetch_log_bandwidth_limit
 storage_meta_cache_priority
 storage_rowsets_size
@@ -273,7 +245,6 @@ system_memory
 sys_bkgd_migration_change_member_list_timeout
 sys_bkgd_migration_retry_num
 sys_bkgd_net_percentage
-tablet_ls_cache_priority
 tablet_meta_table_check_interval
 tablet_meta_table_scan_batch_count
 tablet_size
@@ -285,7 +256,7 @@ tenant_sql_login_thread_count
 tenant_sql_net_thread_count
 tenant_task_queue_size
 trace_log_slow_query_watermark
-trx_2pc_retry_interval
+trx_commit_retry_interval
 ttl_thread_score
 undo_retention
 unit_gc_wait_time
@@ -312,12 +283,9 @@ _auto_refresh_tablet_location_interval
 _backup_idle_time
 _backup_task_keep_alive_interval
 _backup_task_keep_alive_timeout
-_balance_kill_transaction_threshold
-_balance_wait_killing_transaction_end_threshold
 _bloom_filter_enabled
 _bloom_filter_ratio
 _cache_wash_interval
-_checkpoint_diagnose_preservation_count
 _chunk_row_store_mem_limit
 _compaction_prewarm_percentage
 _complex_cbqt_table_num
@@ -329,7 +297,6 @@ _delay_resource_recycle_after_correctness_issue
 _display_mysql_version
 _display_non_session_cursor
 _dop_of_collect_external_table_statistics
-_enable_active_txn_transfer
 _enable_adaptive_auto_dop
 _enable_adaptive_compaction
 _enable_adaptive_merge_schedule
@@ -337,18 +304,15 @@ _enable_add_fulltext_index_to_existing_table
 _enable_async_load_sys_package
 _enable_auth_switch
 _enable_backtrace_function
-_enable_balance_kill_transaction
 _enable_block_file_punch_hole
 _enable_check_trigger_const_variables_assign
 _enable_choose_migration_source_policy
-_enable_column_store
 _enable_compaction_diagnose
 _enable_compatible_monotonic
 _enable_constant_type_demotion
 _enable_convert_real_to_decimal
 _enable_das_batch_rescan_flag
 _enable_das_keep_order
-_enable_dblink_reuse_connection
 _enable_dbms_job_package
 _enable_dbms_lob_partial_update
 _enable_ddl_worker_isolation
@@ -370,12 +334,8 @@ _enable_hgby_llc_ndv_adaptive
 _enable_hgby_skew_detection
 _enable_index_merge
 _enable_inner_session_mgr
-_enable_insertup_replace_gts_opt
 _enable_in_range_optimization
 _enable_kvcache_hazard_pointer
-_enable_kv_feature
-_enable_kv_group_commit_ops
-_enable_kv_hbase_admin_ddl
 _enable_log_cache
 _enable_malloc_v2
 _enable_memleak_light_backtrace
@@ -387,7 +347,6 @@ _enable_nlj_spf_use_rich_format
 _enable_numa_aware
 _enable_obdal
 _enable_optimizer_qualify_filter
-_enable_oracle_priv_check
 _enable_parallel_das_dml
 _enable_parallel_minor_merge
 _enable_parallel_redo_logging
@@ -458,9 +417,7 @@ _lob_rowsets_max_rows
 _log_writer_parallelism
 _ls_gc_wait_readonly_tx_time
 _ls_migration_wait_completing_timeout
-_max_dblink_conn_per_observer
 _max_elr_dependent_trx_count
-_max_ls_cnt_per_server
 _max_malloc_sample_interval
 _max_partition_count_to_collect_statistic
 _max_px_workers_per_cpu
@@ -481,11 +438,6 @@ _nested_loop_join_enabled
 _non_standard_comparison_level
 _no_logging
 _object_storage_io_timeout
-_obkv_enable_distributed_execution
-_obkv_feature_mode
-_ob_ash_disk_write_enable
-_ob_ash_enable
-_ob_ash_size
 _ob_ddl_temp_file_compress_func
 _ob_ddl_timeout
 _ob_elr_fast_freeze_threshold
@@ -508,7 +460,6 @@ _ob_pl_compile_max_concurrency
 _ob_query_rate_limit
 _ob_sqlstat_enable
 _ob_ssl_invited_nodes
-_ob_trans_rpc_timeout
 _optimizer_ads_time_limit
 _optimizer_better_inlist_costing
 _optimizer_group_by_placement
@@ -520,8 +471,6 @@ _parallel_max_active_sessions
 _parallel_min_message_pool
 _parallel_redo_logging_trigger
 _parallel_server_sleep_time
-_parquet_filter_pushdown_level
-_parquet_row_group_prebuffer_size
 _partition_wise_plan_enabled
 _pc_adaptive_effectiveness_ratio_threshold
 _pc_adaptive_min_exec_time_threshold
@@ -571,22 +520,12 @@ _ss_micro_cache_memory_percentage
 _ss_new_leader_overwrite_delay
 _ss_old_ver_retention_time
 _stall_threshold_for_dynamic_worker
-_standby_max_replay_gap_time
-_storage_leak_check_mod
 _storage_meta_memory_limit_percentage
 _storage_stream_rpc_buffer_size
 _stream_rpc_max_wait_timeout
 _system_tenant_limit_mode
 _temporary_file_io_area_size
 _trace_control_info
-_transfer_finish_trans_timeout
-_transfer_process_lock_tx_timeout
-_transfer_service_wakeup_interval
-_transfer_start_retry_count
-_transfer_start_rpc_timeout
-_transfer_start_trans_timeout
-_transfer_task_retry_interval
-_transfer_task_tablet_count_threshold
 _trx_max_log_cb_limit
 _tx_data_memory_limit_percentage
 _tx_debug_level

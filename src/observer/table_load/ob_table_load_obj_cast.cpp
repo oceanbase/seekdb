@@ -53,13 +53,6 @@ static int pad_obj(ObTableLoadCastObjCtx &cast_obj_ctx, const ObColumnSchemaV2 *
   int ret = OB_SUCCESS;
   bool is_pad = false;
   bool is_fixed_string = obj.is_fixed_len_char_type() || obj.is_binary();
-  //if (lib::is_mysql_mode()) {
-  //  if (is_fixed_string && (SMO_PAD_CHAR_TO_FULL_LENGTH & cast_obj_ctx.param_.sql_mode_)) {
-  //    is_pad = true;
-  //  }
-  //} else {
-  //  is_pad = is_fixed_string;
-  //}
   if (is_fixed_string) {
     int32_t fixed_len = column_schema->get_data_length();
     if (fixed_len > obj.val_len_) {
@@ -100,12 +93,9 @@ int ObTableLoadObjCaster::cast_obj(ObTableLoadCastObjCtx &cast_obj_ctx,
     }
   } else if (src.is_nop_value()) {
     // Default value is expression
-    if (lib::is_mysql_mode() && column_schema->get_cur_default_value().is_ext()) {
+    if (column_schema->get_cur_default_value().is_ext()) {
       ret = OB_NOT_SUPPORTED;
       LOG_WARN("column default value is ext", KR(ret), KPC(column_schema));
-    } else if (lib::is_oracle_mode() && column_schema->is_default_expr_v2_column()) {
-      ret = OB_NOT_SUPPORTED;
-      LOG_WARN("column default value is expr", KR(ret), KPC(column_schema));
     }
     // No default value, and is NOT NULL
     // Exception: Enum type defaults to the first one
@@ -120,7 +110,7 @@ int ObTableLoadObjCaster::cast_obj(ObTableLoadCastObjCtx &cast_obj_ctx,
       }
     }
     // mysql mode
-    else if (lib::is_mysql_mode()) {
+    else {
       // char,nchar,binary need conversion
       if (column_schema->get_meta_type().is_fixed_len_char_type() || column_schema->get_meta_type().is_binary()) {
         convert_src_obj = &(column_schema->get_cur_default_value());
@@ -128,10 +118,6 @@ int ObTableLoadObjCaster::cast_obj(ObTableLoadCastObjCtx &cast_obj_ctx,
         // directly use default value
         dst = column_schema->get_cur_default_value();
       }
-    }
-    // Oracle mode needs conversion
-    else {
-      convert_src_obj = &(column_schema->get_cur_default_value());
     }
   } else {
     if (OB_FAIL(convert_obj(expect_type, src, convert_src_obj))) {
@@ -175,12 +161,9 @@ int ObTableLoadObjCaster::convert_obj(const ObObjType &expect_type, const ObObj 
 {
   int ret = OB_SUCCESS;
   dest = &src;
-  if (src.is_string_type() && !src.is_null() && lib::is_mysql_mode() && 0 == src.get_val_len() &&
+  if (src.is_string_type() && !src.is_null() && 0 == src.get_val_len() &&
       !ob_is_string_type(expect_type)) {
     dest = &zero_obj;
-  } else if (src.is_string_type() && lib::is_oracle_mode() &&
-             (src.is_null_oracle() || 0 == src.get_val_len())) {
-    dest = &null_obj;
   }
   return ret;
 }
@@ -408,11 +391,6 @@ int ObTableLoadObjCaster::to_type(const ObObjType &expect_type, const share::sch
         dst.set_number(expect_type, value);
       }
     }
-  } else if (src.get_type_class() == ObStringTC && expect_type == ObDateTimeType && lib::is_oracle_mode()) {
-    if (OB_FAIL(string_datetime_oracle(expect_type, cast_ctx, src, dst, cast_mode, time_cvrt))) {
-      LOG_WARN("fail to convert string to datetime in oracle mode", KR(ret), K(src),
-               K(expect_type));
-    }
   } else {
     if (expect_type == ObJsonType) {
       cast_ctx.cast_mode_ |= CM_ERROR_ON_SCALE_OVER;
@@ -459,42 +437,6 @@ int ObTableLoadObjCaster::cast_obj_check(ObTableLoadCastObjCtx &cast_obj_ctx,
   } else if (OB_FAIL(obj_accuracy_check(*cast_obj_ctx.cast_ctx_, accuracy, collation_type, *res_obj,
                                         obj, res_obj))) {
     LOG_WARN("failed to check accuracy", KR(ret), K(accuracy), K(collation_type), KPC(res_obj));
-  }
-  return ret;
-}
-
-int ObTableLoadObjCaster::string_datetime_oracle(const ObObjType expect_type,
-                                                 ObObjCastParams &params, const ObObj &in,
-                                                 ObObj &out, const ObCastMode cast_mode,
-                                                 const ObTableLoadTimeConverter &time_cvrt)
-{
-  int ret = OB_SUCCESS;
-  ObString utf8_string;
-
-  if (OB_UNLIKELY((ObStringTC != in.get_type_class() && ObTextTC != in.get_type_class()) ||
-                  ObDateTimeTC != ob_obj_type_class(expect_type))) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid input type", KR(ret), K(in), K(expect_type));
-  } else if (in.is_blob()) {
-    ret = OB_NOT_SUPPORTED;
-    LOG_WARN("invalid use of blob type", KR(ret), K(in), K(expect_type));
-  } else if (OB_FAIL(ObExprUtil::convert_string_collation(
-               in.get_string(), in.get_collation_type(), utf8_string,
-               ObCharset::get_system_collation(), *params.allocator_v2_))) {
-    LOG_WARN("fail to convert string collation", K(ret));
-  } else {
-    int64_t value = 0;
-    ObTimeConvertCtx cvrt_ctx(params.dtc_params_.tz_info_, ObTimestampType == expect_type);
-    cvrt_ctx.oracle_nls_format_ = params.dtc_params_.get_nls_format(ObDateTimeType);
-    if (OB_FAIL(time_cvrt.str_to_datetime_oracle(utf8_string, cvrt_ctx, value))) {
-      LOG_WARN("fail to convert str to date in oracle mode", KR(ret), K(utf8_string), K(value));
-    } else if (CM_IS_ERROR_ON_SCALE_OVER(cast_mode) &&
-               (value == ObTimeConverter::ZERO_DATE || value == ObTimeConverter::ZERO_DATETIME)) {
-      ret = OB_INVALID_DATE_VALUE;
-      LOG_WARN("invalid date value", KR(ret), K(utf8_string));
-    } else {
-      out.set_datetime(value);
-    }
   }
   return ret;
 }

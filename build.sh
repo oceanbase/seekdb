@@ -25,6 +25,7 @@ LLD_OPTION=ON
 ASAN_OPTION=ON
 STATIC_LINK_LGPL_DEPS_OPTION=ON
 ENABLE_BOLT_OPTION=ON
+WITH_COVERAGE=OFF
 
 echo "$0 ${ALL_ARGS[@]}"
 
@@ -48,6 +49,7 @@ function usage
     echo -e "\nOPTIONS:"
     echo -e "\tBuildType => debug(default), release, errsim, dissearray, rpm"
     echo -e "\t--android  => Cross-compile for Android NDK (arm64-v8a)"
+    echo -e "\t--coverage => turn ON clang source-based coverage (WITH_COVERAGE); omitting it = OFF; also disables BOLT"
     echo -e "\tMakeOptions => Options to make command, default: -j N"
 
     echo -e "\nExamples:"
@@ -83,8 +85,10 @@ function parse_args
             MAKE_ARGS=()
         elif [[ "$i" == "-DBUILD_CDC_ONLY=ON" ]]
         then
-            ENABLE_BOLT_OPTION=OFF
             BUILD_ARGS+=("$i")
+        elif [[ "$i" == "--coverage" ]]
+        then
+            WITH_COVERAGE=ON
         elif [[ $NEED_MAKE == false ]]
         then
             BUILD_ARGS+=("$i")
@@ -97,6 +101,9 @@ function parse_args
         echo_log '[NOTICE] lld is disabled in kernel release 6'
         LLD_OPTION="OFF"
     fi
+
+    BUILD_ARGS+=("-DWITH_COVERAGE=$WITH_COVERAGE")
+    [[ "$WITH_COVERAGE" == "ON" ]] && BUILD_ARGS+=("-DENABLE_BOLT=OFF")
 }
 
 # try call command make, if use give --make in command line.
@@ -180,7 +187,7 @@ function do_build
     if [[ -z "$CMAKE_PATH" ]] && command -v cmake >/dev/null 2>&1; then
       CMAKE_PATH="$(command -v cmake)"
     fi
-
+    
     if [ -z "$CMAKE_PATH" ]; then
       echo_log "[NOTICE] cmake not found. On Linux install cmake (e.g. apt install cmake) or run --init so ${TOOLS_DIR}/bin/cmake exists"
       exit 1
@@ -218,15 +225,13 @@ function do_clean
 function build_package
 {
     STATIC_LINK_LGPL_DEPS_OPTION=ON
-    ENABLE_BOLT_OPTION=OFF
-    do_build "$@" -DOB_BUILD_PACKAGE=ON -DCMAKE_BUILD_TYPE=RelWithDebInfo -DOB_USE_LLD=$LLD_OPTION -DENABLE_FATAL_ERROR_HANG=OFF -DENABLE_AUTO_FDO=ON -DENABLE_THIN_LTO=ON -DENABLE_HOTFUNC=ON -DENABLE_BOLT=$ENABLE_BOLT_OPTION -DOB_STATIC_LINK_LGPL_DEPS=$STATIC_LINK_LGPL_DEPS_OPTION -DDEFAULT_LOG_LEVEL=OB_LOG_LEVEL_DBA_WARN -DDEFAULT_LOG_FILE_SIZE_MB=16
+    do_build "$@" -DOB_BUILD_PACKAGE=ON -DCMAKE_BUILD_TYPE=RelWithDebInfo -DOB_USE_LLD=$LLD_OPTION -DENABLE_FATAL_ERROR_HANG=OFF -DENABLE_AUTO_FDO=ON -DENABLE_THIN_LTO=ON -DENABLE_HOTFUNC=ON -DOB_STATIC_LINK_LGPL_DEPS=$STATIC_LINK_LGPL_DEPS_OPTION -DDEFAULT_LOG_LEVEL=OB_LOG_LEVEL_DBA_WARN -DDEFAULT_LOG_FILE_SIZE_MB=16
 }
 
 function build_package_tgz
 {
     STATIC_LINK_LGPL_DEPS_OPTION=ON
-    ENABLE_BOLT_OPTION=OFF
-    do_build "$@" -DOB_BUILD_PACKAGE=ON -DCMAKE_BUILD_TYPE=RelWithDebInfo -DOB_USE_LLD=$LLD_OPTION -DENABLE_THIN_LTO=ON -DDEFAULT_LOG_LEVEL=OB_LOG_LEVEL_DBA_WARN -DDEFAULT_LOG_FILE_SIZE_MB=16 -DENABLE_FATAL_ERROR_HANG=OFF -DENABLE_AUTO_FDO=OFF -DENABLE_HOTFUNC=OFF -DOB_ENABLE_BOLT=$ENABLE_BOLT_OPTION -DOB_STATIC_LINK_LGPL_DEPS=$STATIC_LINK_LGPL_DEPS_OPTION
+    do_build "$@" -DOB_BUILD_PACKAGE=ON -DCMAKE_BUILD_TYPE=RelWithDebInfo -DOB_USE_LLD=$LLD_OPTION -DENABLE_THIN_LTO=ON -DDEFAULT_LOG_LEVEL=OB_LOG_LEVEL_DBA_WARN -DDEFAULT_LOG_FILE_SIZE_MB=16 -DENABLE_FATAL_ERROR_HANG=OFF -DENABLE_AUTO_FDO=OFF -DENABLE_HOTFUNC=OFF -DOB_STATIC_LINK_LGPL_DEPS=$STATIC_LINK_LGPL_DEPS_OPTION
 }
 
 # build - configurate project and prepare to compile, by calling make
@@ -243,8 +248,8 @@ function build
       xrelease_asan)
         do_build "$@" -DCMAKE_BUILD_TYPE=RelWithDebInfo -DOB_USE_LLD=$LLD_OPTION -DOB_USE_ASAN=$ASAN_OPTION -DOB_ENABLE_MCMODEL=OFF
         ;;
-      xrelease_coverage)
-        do_build "$@" -DCMAKE_BUILD_TYPE=RelWithDebInfo -DOB_USE_LLD=$LLD_OPTION -DWITH_COVERAGE=ON
+      xrelease_embedded)
+        do_build "$@" -DCMAKE_BUILD_TYPE=RelWithDebInfo -DOB_USE_LLD=$LLD_OPTION
         ;;
       xdebug)
         do_build "$@" -DCMAKE_BUILD_TYPE=Debug -DOB_USE_LLD=$LLD_OPTION
@@ -263,15 +268,15 @@ function build
         ln -sf ${TOPDIR}/build_clangd/compile_commands.json ${TOPDIR}/compile_commands.json
         ;;
       xperf)
-        do_build "$@" -DCMAKE_BUILD_TYPE=RelWithDebInfo -DENABLE_AUTO_FDO=ON -DENABLE_THIN_LTO=ON -DOB_USE_LLD=$LLD_OPTION -DENABLE_HOTFUNC=ON -DENABLE_BOLT_AUTO=ON -DENABLE_FATAL_ERROR_HANG=OFF
+        do_build "$@" -DCMAKE_BUILD_TYPE=RelWithDebInfo -DENABLE_AUTO_FDO=ON -DENABLE_THIN_LTO=ON -DOB_USE_LLD=$LLD_OPTION -DENABLE_HOTFUNC=ON -DENABLE_FATAL_ERROR_HANG=OFF
         ;;
       xmac_perf)
-        do_build "$@" -DCMAKE_BUILD_TYPE=RelWithDebInfo -DENABLE_THIN_LTO=ON -DOB_USE_LLD=ON -DENABLE_AUTO_FDO=OFF -DENABLE_HOTFUNC=OFF -DOB_ENABLE_BOLT=OFF -DENABLE_FATAL_ERROR_HANG=OFF
+        do_build "$@" -DCMAKE_BUILD_TYPE=RelWithDebInfo -DENABLE_THIN_LTO=ON -DOB_USE_LLD=ON -DENABLE_AUTO_FDO=OFF -DENABLE_HOTFUNC=OFF -DENABLE_FATAL_ERROR_HANG=OFF
         ;;
       xerrsim)
         do_build "$@" -DCMAKE_BUILD_TYPE=RelWithDebInfo -DOB_ERRSIM=ON -DOB_USE_LLD=$LLD_OPTION
         ;;
-      xrpm) 
+      xrpm)
         build_package "$@" -DCMAKE_BUILD_RPM=ON
         ;;
       xtgz)
@@ -283,9 +288,6 @@ function build
       xpackage) 
         # automatic determination of packaging type 
         build_package "$@"
-        ;;
-      xcoverage)
-        do_build "$@" -DCMAKE_BUILD_TYPE=Debug -DOB_USE_LLD=$LLD_OPTION -DWITH_COVERAGE=ON
         ;;
       xsanity)
         do_build "$@" -DCMAKE_BUILD_TYPE=RelWithDebInfo -DOB_USE_LLD=$LLD_OPTION -DENABLE_SANITY=ON -DOB_ENABLE_MCMODEL=ON

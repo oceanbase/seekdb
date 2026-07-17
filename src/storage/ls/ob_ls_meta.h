@@ -20,53 +20,32 @@
 #include "lib/utility/utility.h"           // ObTimeGuard
 #include "lib/lock/ob_spin_lock.h"
 #include "logservice/palf/lsn.h"
-#include "share/ob_ls_id.h"
 #include "lib/ob_define.h"
 #include "lib/function/ob_function.h"
 #include "share/ob_unit_getter.h"
 #include "storage/ls/ob_ls_state.h"
-#include "storage/high_availability/ob_storage_ha_struct.h"
 #include "logservice/ob_log_handler.h"
-#include "share/restore/ob_ls_restore_status.h"
-#include "storage/high_availability/ob_restore_status.h"
+#include "share/ls/ob_ls_restore_status.h"
+#include "share/ls/ob_restore_status.h"
 #include "storage/tx/ob_id_service.h"
 #include "storage/ls/ob_ls_saved_info.h"
 #include "share/scn.h"
-#include "storage/mview/ob_major_mv_merge_info.h"
-#include "common/ob_store_format.h"       // ObLSStoreFormat
 
 namespace oceanbase
 {
 namespace storage
 {
-class ObLSCreateType
-{
-public:
-  static const int64_t NORMAL = 0;
-  static const int64_t RESTORE = 1;
-  static const int64_t MIGRATE = 2;
-};
-
 class ObLSMeta
 {
-  friend class ObLSMetaPackage;
 
-  OB_UNIS_VERSION_V(1);
+  OB_UNIS_VERSION_V(3);
 public:
   ObLSMeta();
   ObLSMeta(const ObLSMeta &ls_meta);
   ~ObLSMeta() {}
-  int init(const uint64_t tenant_id,
-           const share::ObLSID &ls_id,
-           const ObMigrationStatus &migration_status,
-           const ObRestoreStatus &restore_status,
-           const int64_t create_scn,
-           const ObLSStoreFormat &store_format);
   void reset();
   bool is_valid() const;
   int set_start_work_state();
-  int set_start_ha_state();
-  int set_finish_ha_state();
   int set_remove_state();
   const ObLSPersistentState &get_persistent_state() const;
   ObLSMeta &operator=(const ObLSMeta &other);
@@ -76,11 +55,6 @@ public:
                           const palf::LSN &clog_checkpoint_lsn,
                           const share::SCN &clog_checkpoint_scn,
                           const bool write_slog);
-  int64_t get_rebuild_seq() const;
-  int set_migration_status(const int64_t ls_epoch,
-                           const ObMigrationStatus &migration_status,
-                           const bool write_slog = true);
-  int get_migration_status (ObMigrationStatus &migration_status) const;
   int get_offline_scn(share::SCN &offline_scn);
 
   int set_restore_status(const int64_t ls_epoch, const ObRestoreStatus &restore_status);
@@ -88,18 +62,8 @@ public:
   int update_ls_replayable_point(const int64_t ls_epoch, const share::SCN &replayable_point);
   int get_ls_replayable_point(share::SCN &replayable_point);
 
-  //for ha batch update ls meta element
-  int update_ls_meta(
-      const int64_t ls_epoch,
-      const bool update_restore_status,
-      const ObLSMeta &src_ls_meta);
-  //for ha rebuild update ls meta
-  int set_ls_rebuild(const int64_t ls_epoch);
-  int check_valid_for_backup() const;
   share::SCN get_tablet_change_checkpoint_scn() const;
   int set_tablet_change_checkpoint_scn(const int64_t ls_epoch, const share::SCN &tablet_change_checkpoint_scn);
-  share::SCN get_transfer_scn() const;
-  int inc_update_transfer_scn(const int64_t ls_epoch, const share::SCN &transfer_scn);
   int update_id_meta(const int64_t ls_epoch,
                      const int64_t service_type,
                      const int64_t limited_id,
@@ -109,30 +73,11 @@ public:
   int get_saved_info(ObLSSavedInfo &saved_info);
   int build_saved_info(const int64_t ls_epoch);
   int clear_saved_info(const int64_t ls_epoch);
-  int get_migration_and_restore_status(
-      ObMigrationStatus &migration_status,
-      ObRestoreStatus &ls_restore_status);
-  int set_rebuild_info(const int64_t ls_epoch, const ObLSRebuildInfo &rebuild_info);
-  int get_rebuild_info(ObLSRebuildInfo &rebuild_info) const;
-  int get_create_type(int64_t &create_type) const;
   int check_ls_need_online(bool &need_online) const;
-  ObMajorMVMergeInfo get_major_mv_merge_info() const;
-  int set_major_mv_merge_scn(const int64_t ls_epoch, const SCN &major_mv_merge_scn);
-  int set_major_mv_merge_scn_safe_calc(const int64_t ls_epoch, const SCN &major_mv_merge_scn_safe_calc);
-  int set_major_mv_merge_scn_publish(const int64_t ls_epoch, const SCN &major_mv_merge_scn_publish);
-  ObLSStoreFormat get_store_format() const;
-
   int init(
-      const uint64_t tenant_id,
-      const share::ObLSID &ls_id,
-      const ObMigrationStatus &migration_status,
       const ObRestoreStatus &restore_status,
-      const share::SCN &create_scn,
-      const ObMajorMVMergeInfo &major_mv_merge_info,
-      const ObLSStoreFormat &store_format);
+      const share::SCN &create_scn);
 
-  ObReplicaType get_replica_type() const
-  { return unused_replica_type_; }
   // IF I have locked with W:
   //    lock with R/W will be succeed do nothing.
   // ELSE:
@@ -169,25 +114,18 @@ public:
     common::ObLatch &lock_;
     int ret_;
   };
-  TO_STRING_KV(K_(tenant_id), K_(ls_id), K_(ls_persistent_state),
+  TO_STRING_KV(K_(ls_persistent_state),
                K_(clog_checkpoint_scn), K_(clog_base_lsn),
-               K_(rebuild_seq), K_(migration_status), K(offline_scn_),
+               K(offline_scn_),
                K_(restore_status), K_(replayable_point), K_(tablet_change_checkpoint_scn),
-               K_(all_id_meta), K_(transfer_scn), K_(rebuild_info),
-               K_(store_format));
+               K_(all_id_meta));
 private:
   int check_can_update_();
 public:
   mutable common::ObLatch rw_lock_;     // only for atomic read/write in memory.
   mutable common::ObLatch update_lock_; // only one process can update ls meta. both for write slog and memory
-  uint64_t tenant_id_;
-  share::ObLSID ls_id_;
-
+  
 private:
-  void update_clog_checkpoint_in_ls_meta_package_(const share::SCN& clog_checkpoint_scn,
-                                                  const palf::LSN& clog_base_lsn);
-private:
-  ObReplicaType unused_replica_type_;
   ObLSPersistentState ls_persistent_state_;
   typedef common::ObFunction<int(const int64_t, const ObLSMeta &)> WriteSlog;
   // for test
@@ -202,8 +140,6 @@ private:
   // 2. log_scn of log entry that clog_base_lsn_ points to is smaller than/equal to clog_checkpoint_scn_
   // 3. clog starts to replay log entries from clog_base_lsn_ on crash recovery
   palf::LSN clog_base_lsn_;
-  int64_t rebuild_seq_;
-  ObMigrationStatus migration_status_;
   share::SCN offline_scn_;
   ObRestoreStatus restore_status_;
   share::SCN replayable_point_;
@@ -211,10 +147,6 @@ private:
   share::SCN tablet_change_checkpoint_scn_;
   transaction::ObAllIDMeta all_id_meta_;
   ObLSSavedInfo saved_info_;
-  share::SCN transfer_scn_;
-  ObLSRebuildInfo rebuild_info_;
-  ObMajorMVMergeInfo major_mv_merge_info_;
-  common::ObLSStoreFormat store_format_;    // set on initialization and then remain unchanged
 };
 
 }  // namespace storage

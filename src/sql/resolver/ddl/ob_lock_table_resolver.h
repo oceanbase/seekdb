@@ -27,8 +27,7 @@ namespace sql
 
 class ObLockTableStmt;
 
-// NOTE: yanyuan.cxf LOCK TABLE is dml at oracle, but it does not have
-// SQL plan, so we treat it as ddl operator.
+// NOTE: LOCK TABLE does not have a SQL plan here, so treat it as a DDL operator.
 class ObLockTableResolver : public ObDMLResolver
 {
 public:
@@ -47,10 +46,6 @@ public:
   inline ObLockTableStmt *get_lock_table_stmt() { return static_cast<ObLockTableStmt*>(stmt_); }
 private:
   int resolve_mysql_mode_(const ParseNode &parse_tree);
-  int resolve_oracle_mode_(const ParseNode &parse_tree);
-  int resolve_oracle_table_list_(const ParseNode &table_list);
-  int resolve_oracle_lock_mode_(const ParseNode &parse_tree);
-  int resolve_oracle_wait_lock_(const ParseNode &parse_tree);
 
   int resolve_mysql_lock_node_(const ParseNode &parse_node);
 

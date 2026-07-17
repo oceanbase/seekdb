@@ -44,7 +44,7 @@ public:
       is_single_version_rows_(true),
       is_delete_insert_(false),
       allocator_(allocator),
-      inner_allocator_("MtlBlkReader", OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID()),
+      inner_allocator_("MtlBlkReader", OB_MALLOC_NORMAL_BLOCK_SIZE),
       single_row_reader_(single_row_reader)
   {
     reader_type_ = MemtableReader;

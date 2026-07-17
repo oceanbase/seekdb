@@ -258,13 +258,13 @@ ObExprAlignDate4Cmp::DateArgType ObExprAlignDate4Cmp::validate_time(ObTime &ob_t
 {
   DateArgType date_arg_type = VALID_DATE;
   const int32_t *parts = ob_time.parts_;
-  if (!HAS_TYPE_ORACLE(ob_time.mode_)
+  if (!HAS_TYPE_NANOSECOND(ob_time.mode_)
       && 0 == parts[DT_YEAR] && 0 == parts[DT_MON] && 0 == parts[DT_MDAY] && 0 == parts[DT_HOUR]
       && 0 == parts[DT_MIN] && 0 == parts[DT_SEC] && 0 == parts[DT_USEC]) {
     date_arg_type = ZERO_DATE;
   } else {
-    const int64_t *part_min = (HAS_TYPE_ORACLE(ob_time.mode_) ? TZ_PART_MIN : DT_PART_MIN);
-    const int64_t *part_max = (HAS_TYPE_ORACLE(ob_time.mode_) ? TZ_PART_MAX : DT_PART_MAX);
+    const int64_t *part_min = (HAS_TYPE_NANOSECOND(ob_time.mode_) ? TZ_PART_MIN : DT_PART_MIN);
+    const int64_t *part_max = (HAS_TYPE_NANOSECOND(ob_time.mode_) ? TZ_PART_MAX : DT_PART_MAX);
     for (int i = 0; i < DATETIME_PART_CNT; ++i) {
       if (!(part_min[i] <= parts[i] && parts[i] <= part_max[i])) {
         date_arg_type = INVALID_DATE;
@@ -382,7 +382,7 @@ int ObExprAlignDate4Cmp::datum_to_ob_time(const ObExpr &expr,
   if (date_datum->is_null()) {
     date_arg_type = NULL_DATE;
   } else if (ob_is_string_type(date_arg_obj_type)) {
-    ObArenaAllocator lob_allocator(ObModIds::OB_LOB_ACCESS_BUFFER, OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID());
+    ObArenaAllocator lob_allocator(ObModIds::OB_LOB_ACCESS_BUFFER, OB_MALLOC_NORMAL_BLOCK_SIZE);
     ObString str = date_datum->get_string();
     if (OB_FAIL(ObTextStringHelper::read_real_string_data(&lob_allocator, date_arg_obj_type,
                               CS_TYPE_BINARY, expr.args_[0]->obj_meta_.has_lob_header(), str))) {

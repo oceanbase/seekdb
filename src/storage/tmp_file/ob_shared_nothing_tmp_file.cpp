@@ -44,8 +44,8 @@ ObSharedNothingTmpFile::InnerFlushContext::InnerFlushContext()
         need_to_wait_for_the_previous_data_flush_req_to_complete_(false),
         need_to_wait_for_the_previous_meta_flush_req_to_complete_(false)
 {
-  data_flush_infos_.set_attr(ObMemAttr(MTL_ID(), "TmpFileFInfo"));
-  meta_flush_infos_.set_attr(ObMemAttr(MTL_ID(), "TmpFileFInfo"));
+  data_flush_infos_.set_attr(ObMemAttr("TmpFileFInfo"));
+  meta_flush_infos_.set_attr(ObMemAttr("TmpFileFInfo"));
 }
 
 void ObSharedNothingTmpFile::InnerFlushContext::reset()
@@ -88,7 +88,7 @@ ObSharedNothingTmpFile::InnerFlushInfo::InnerFlushInfo()
     file_size_(0),
     flush_meta_page_array_()
 {
-  flush_meta_page_array_.set_attr(ObMemAttr(MTL_ID(), "TFFlushMetaArr"));
+  flush_meta_page_array_.set_attr(ObMemAttr("TFFlushMetaArr"));
 }
 
 void ObSharedNothingTmpFile::InnerFlushInfo::reset()
@@ -137,7 +137,7 @@ ObSharedNothingTmpFile::~ObSharedNothingTmpFile()
   reset();
 }
 
-int ObSharedNothingTmpFile::init(const uint64_t tenant_id, const int64_t fd, const int64_t dir_id,
+int ObSharedNothingTmpFile::init(const int64_t fd, const int64_t dir_id,
                                  ObTmpFileBlockManager *block_manager,
                                  ObIAllocator *callback_allocator,
                                  ObIAllocator *wbp_index_cache_allocator,
@@ -149,13 +149,13 @@ int ObSharedNothingTmpFile::init(const uint64_t tenant_id, const int64_t fd, con
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
     LOG_WARN("init twice", KR(ret), KPC(this));
-  } else if (OB_FAIL(ObITmpFile::init(tenant_id, dir_id, fd, &pc_ctrl->get_write_buffer_pool(),
+  } else if (OB_FAIL(ObITmpFile::init(dir_id, fd, &pc_ctrl->get_write_buffer_pool(),
                                       &pc_ctrl->get_flush_priority_mgr(),
                                       callback_allocator,
                                       wbp_index_cache_allocator,
                                       wbp_index_cache_bkt_allocator,
                                       label))) {
-    LOG_WARN("init ObITmpFile failed", KR(ret), K(tenant_id), K(dir_id), K(fd), KP(label));
+    LOG_WARN("init ObITmpFile failed", KR(ret), K(dir_id), K(fd), KP(label));
   } else {
     if (OB_ISNULL(block_manager) || OB_ISNULL(pc_ctrl)) {
       ret = OB_INVALID_ARGUMENT;
@@ -289,7 +289,7 @@ int ObSharedNothingTmpFile::inner_read_from_disk_(const int64_t expected_read_di
 
     ObTmpBlockValueHandle block_value_handle;
     if (!io_ctx.is_disable_block_cache() &&
-        OB_SUCC(ObTmpBlockCache::get_instance().get_block(ObTmpBlockCacheKey(block_index, MTL_ID()),
+        OB_SUCC(ObTmpBlockCache::get_instance().get_block(ObTmpBlockCacheKey(block_index),
                                                           block_value_handle))) {
       LOG_DEBUG("hit block cache", K(block_index), K(fd_), K(io_ctx));
       char *read_buf = io_ctx.get_todo_buffer();
@@ -587,7 +587,7 @@ int ObSharedNothingTmpFile::collect_pages_in_block_(const int64_t block_index,
     for (int64_t page_idx_in_block = begin_page_idx_in_block;
         OB_SUCC(ret) && page_idx_in_block <= end_page_idx_in_block;
         page_idx_in_block++) {
-      ObTmpPageCacheKey key(block_index, page_idx_in_block, tenant_id_);
+      ObTmpPageCacheKey key(block_index, page_idx_in_block);
       ObTmpPageValueHandle p_handle;
       if (OB_SUCC(ObTmpPageCache::get_instance().get_page(key, p_handle))) {
         if (OB_FAIL(page_value_handles.push_back(p_handle))) {
@@ -624,7 +624,7 @@ int ObSharedNothingTmpFile::inner_read_continuous_uncached_pages_(const int64_t 
   const int64_t offset_in_block_buf = begin_io_read_offset - block_read_begin_offset;
 
   for (int64_t page_id = begin_page_idx; OB_SUCC(ret) && page_id <= end_page_idx; page_id++) {
-    ObTmpPageCacheKey key(block_index, page_id, tenant_id_);
+    ObTmpPageCacheKey key(block_index, page_id);
     if (OB_FAIL(page_keys.push_back(key))) {
       LOG_WARN("fail to push back", KR(ret), K(fd_), K(key));
     }
@@ -968,12 +968,12 @@ int ObSharedNothingTmpFile::evict_data_pages(const int64_t expected_evict_page_n
 
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObSharedNothingTmpFile has not been inited", KR(ret), K(tenant_id_), K(fd_), KPC(this));
+    LOG_WARN("ObSharedNothingTmpFile has not been inited", KR(ret), K(fd_), KPC(this));
   } else if (OB_UNLIKELY(is_deleting_)) {
     // actual_evict_page_num = 0;
     // remain_flushed_page_num = 0;
     is_in_data_eviction_list_ = false;
-    LOG_INFO("try to evict data pages when file is deleting", K(fd_), K(tenant_id_), KPC(this));
+    LOG_INFO("try to evict data pages when file is deleting", K(fd_), KPC(this));
   } else if (OB_UNLIKELY(expected_evict_page_num <= 0)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", KR(ret), K(fd_), K(expected_evict_page_num));
@@ -1101,11 +1101,11 @@ int ObSharedNothingTmpFile::evict_meta_pages(const int64_t expected_evict_page_n
 
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObSharedNothingTmpFile has not been inited", KR(ret), K(tenant_id_), K(fd_), KPC(this));
+    LOG_WARN("ObSharedNothingTmpFile has not been inited", KR(ret), K(fd_), KPC(this));
   } else if (OB_UNLIKELY(is_deleting_)) {
     // actual_evict_page_num = 0;
     is_in_meta_eviction_list_ = false;
-    LOG_INFO("try to evict data pages when file is deleting", K(fd_), K(tenant_id_), KPC(this));
+    LOG_INFO("try to evict data pages when file is deleting", K(fd_), KPC(this));
   } else if (OB_UNLIKELY(expected_evict_page_num <= 0)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", KR(ret), K(fd_), K(expected_evict_page_num));
@@ -1296,7 +1296,7 @@ int ObSharedNothingTmpFile::copy_info_for_virtual_table(ObTmpFileInfo &tmp_file_
     LOG_WARN("fail to get lock for reading in virtual table", KR(ret), KPC(this));
   } else{
     ObSpinLockGuard guard(stat_lock_);
-    if (OB_FAIL(sn_tmp_file_info.init(trace_id_, tenant_id_, dir_id_, fd_,
+    if (OB_FAIL(sn_tmp_file_info.init(trace_id_, dir_id_, fd_,
                                       file_size_, truncated_offset_, is_deleting_,
                                       cached_page_nums_, write_back_data_page_num_,
                                       flushed_data_page_num_, ref_cnt_,
@@ -1456,9 +1456,9 @@ int ObSharedNothingTmpFile::update_meta_after_flush(const int64_t info_idx, cons
     LOG_WARN("fail to cal end position for update after flush", KR(ret), K(info_idx), KPC(this));
   } else if (start_pos < end_pos) { // have new continuous finished flush infos
     if (is_meta && OB_FAIL(update_meta_tree_after_flush_(start_pos, end_pos))) {
-      LOG_WARN("fail to update meta tree", KR(ret), K(start_pos), K(end_pos), KPC(this));
+      LOG_ERROR("fail to update meta tree", KR(ret), K(start_pos), K(end_pos), KPC(this));
     } else if (!is_meta && OB_FAIL(update_file_meta_after_flush_(start_pos, end_pos, flushed_data_page_num))) {
-      LOG_WARN("fail to update file meta", KR(ret), K(start_pos), K(end_pos), K(flushed_data_page_num), KPC(this));
+      LOG_ERROR("fail to update file meta", KR(ret), K(start_pos), K(end_pos), K(flushed_data_page_num), KPC(this));
     } else {
       // When the flush info segment between [start_pos, end_pos] is updated, the corresponding pages can be immediately freed.
       // However, the flush context in flush_mgr may still contain stale flush positions.
@@ -1870,7 +1870,7 @@ int ObSharedNothingTmpFile::collect_flush_data_page_id_(
       LOG_ERROR("fail to push back flush page id", KR(ret), K(fd_), K(cur_page_id), KPC(this));
     } else {
       // ObTmpPageCacheKey cache_key(flush_task.get_block_index(),
-      //                             write_offset / ObTmpFileGlobal::ALLOC_PAGE_SIZE, tenant_id_);
+      //                             write_offset / ObTmpFileGlobal::ALLOC_PAGE_SIZE, tenant_);
       // ObTmpPageCacheValue cache_value(page_buf);
       // ObTmpPageCache::get_instance().try_put_page_to_cache(cache_key, cache_value);
 
@@ -2021,7 +2021,7 @@ int ObSharedNothingTmpFile::generate_meta_flush_info_(
     flush_task.set_type(ObTmpFileFlushTask::META);
     inner_flush_ctx_.flush_seq_ = flush_sequence;
   } else {
-    LOG_WARN("fail to generate meta flush info", KR(ret), K(fd_), K(flush_task),
+    LOG_ERROR("fail to generate meta flush info", KR(ret), K(fd_), K(flush_task),
         K(meta_flush_context), K(flush_sequence), K(need_flush_tail));
     if (flush_infos.size() == origin_info_num + 1) {
       flush_infos.pop_back();

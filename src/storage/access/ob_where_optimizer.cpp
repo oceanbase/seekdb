@@ -25,8 +25,6 @@ namespace storage
 ObWhereOptimizer::ObWhereOptimizer() 
   : iter_param_(nullptr)
   , filter_(nullptr)
-  , filter_iters_(nullptr)
-  , iter_filter_node_(nullptr)
   , batch_num_(0)
   , reorder_filter_times_(0)
   , reorder_filter_interval_(1)
@@ -37,9 +35,7 @@ ObWhereOptimizer::ObWhereOptimizer()
 
 int ObWhereOptimizer::init(
   const ObTableIterParam *iter_param,
-  sql::ObPushdownFilterExecutor *filter,
-  ObSEArray<ObICGIterator*, 4> *filter_iters,
-  ObSEArray<sql::ObPushdownFilterExecutor*, 4> *iter_filter_node)
+  sql::ObPushdownFilterExecutor *filter)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(is_inited_)) {
@@ -49,11 +45,6 @@ int ObWhereOptimizer::init(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("iter param or filter is null", K(ret), K(iter_param_), K(filter_));
   } else {
-    if (filter_iters != nullptr) {
-      filter_->inc_ref();
-    }
-    filter_iters_ = filter_iters;
-    iter_filter_node_ = iter_filter_node;
     filter_conditions_.reset();
     batch_num_ = 0;
     reorder_filter_times_ = 0;
@@ -67,13 +58,8 @@ int ObWhereOptimizer::init(
 
 void ObWhereOptimizer::reset()
 {
-  if (filter_iters_ != nullptr) {
-    filter_->dec_ref();
-  }
   iter_param_ = nullptr;
   filter_ = nullptr;
-  filter_iters_ = nullptr;
-  iter_filter_node_ = nullptr;
   filter_conditions_.reset();
   batch_num_ = 0;
   reorder_filter_times_ = 0;
@@ -86,8 +72,6 @@ void ObWhereOptimizer::reuse()
 {
   iter_param_ = nullptr;
   filter_ = nullptr;
-  filter_iters_ = nullptr;
-  iter_filter_node_ = nullptr;
   filter_conditions_.reuse();
   batch_num_ = 0;
   reorder_filter_times_ = 0;
@@ -132,17 +116,8 @@ int ObWhereOptimizer::analyze_impl(sql::ObPushdownFilterExecutor &filter, bool &
         }
       }
       if (need_reorder) {
-        int cg_iter_idxs[child_cnt];
-        for (int64_t i = 0; i < child_cnt; ++i) {
-          cg_iter_idxs[i] = children[i]->get_cg_iter_idx();
-        }
         for (int64_t i = 0; i < child_cnt; ++i) {
           children[i] = filter_conditions_.at(i).filter_;
-          children[i]->set_cg_iter_idx(cg_iter_idxs[i]);
-          if (filter_iters_ != nullptr && iter_filter_node_ != nullptr && cg_iter_idxs[i] != -1) {
-            (*filter_iters_).at(cg_iter_idxs[i]) = filter_conditions_.at(i).filter_iter_;
-            (*iter_filter_node_).at(cg_iter_idxs[i]) = filter_conditions_.at(i).filter_node_;
-          }
         }
         reordered = true;
       }
@@ -167,10 +142,6 @@ void ObWhereOptimizer::collect_filter_info(
   filter_condition.skip_index_skip_mb_cnt_ = filter.get_filter_realtime_statistics().get_skip_index_skip_mb_cnt();
   filter.get_filter_realtime_statistics().reset();
   filter_condition.filter_ = &filter;
-  if (filter_iters_ != nullptr && iter_filter_node_ != nullptr && filter.get_cg_iter_idx() != -1) {
-    filter_condition.filter_iter_ = (*filter_iters_).at(filter.get_cg_iter_idx());
-    filter_condition.filter_node_ = (*iter_filter_node_).at(filter.get_cg_iter_idx());
-  }
 }
 
 void ObWhereOptimizer::judge_filter_whether_enable_reorder(sql::ObPushdownFilterExecutor *filter) {
@@ -191,36 +162,12 @@ void ObWhereOptimizer::judge_filter_whether_enable_reorder(sql::ObPushdownFilter
   }
 }
 
-int ObWhereOptimizer::reorder_co_filter()
-{
-  int ret = OB_SUCCESS;
-  bool reordered = false;
-  ++batch_num_;
-  if (filter_->get_ref() != 1 || !filter_->is_logic_op_node()) {
-    /* If there is only one node in the filter tree, do nothing. */
-  } else if (reorder_filter_times_ >= reorder_filter_interval_) {
-    if (OB_FAIL(analyze(reordered))) {  // reordered is used to ajust the reorder interval adaptively in the future.
-      LOG_WARN("Failed to analyze in co where optimzier", K(ret));
-    } else {
-      reorder_filter_times_ = 0;
-      reorder_filter_interval_ = REORDER_FILTER_INTERVAL;
-    }
-  } else {
-    ++reorder_filter_times_;
-  }
-  if (reordered) {
-    LOG_TRACE("Reorder co filter tree", K(ret), KP(this), K(batch_num_), KP(filter_), K(filter_->get_ref()), K(filter_->get_type()),
-      K(reorder_filter_times_), K(reorder_filter_interval_), K(reordered), K(filter_->get_filter_realtime_statistics()));
-  }
-  return ret;
-}
-
 int ObWhereOptimizer::reorder_row_filter() {
   int ret = OB_SUCCESS;
   bool reordered = false;
   ++batch_num_;
-  if (!filter_->is_logic_op_node() || iter_param_->is_use_column_store()) {
-    /* If there is only one node in the filter tree, do nothing. If the column store filter reaches here, do nothing. */
+  if (!filter_->is_logic_op_node()) {
+    /* If there is only one node in the filter tree, do nothing. */
   } else if (reorder_filter_times_ >= reorder_filter_interval_) {
     if (OB_FAIL(analyze(reordered))) {  // reordered is used to ajust the reorder interval adaptively in the future.
       LOG_WARN("Failed to analyze in row where optimzier", K(ret));
@@ -232,7 +179,7 @@ int ObWhereOptimizer::reorder_row_filter() {
     ++reorder_filter_times_;
   }
   if (reordered) {
-    LOG_TRACE("Reorder row filter tree", K(ret), KP(this), K(batch_num_), KP(filter_), K(filter_->get_type()), K(iter_param_->is_use_column_store()),
+    LOG_TRACE("Reorder row filter tree", K(ret), KP(this), K(batch_num_), KP(filter_), K(filter_->get_type()),
       K(reorder_filter_times_), K(reorder_filter_interval_), K(reordered), K(filter_->get_filter_realtime_statistics()));
   }
   return ret;

@@ -38,7 +38,6 @@ struct ObMdsInfoDistinctMgr final
   int init(
     common::ObArenaAllocator &allocator,
     storage::ObTablet &tablet,
-    const common::ObIArray<ObTabletHandle> *split_extra_tablet_handles,
     const common::ObVersionRange &read_version_range,
     const bool for_access);
   bool is_valid() const { return is_inited_; }
@@ -64,10 +63,6 @@ struct ObMdsInfoDistinctMgr final
   bool operator ==(const ObMdsInfoDistinctMgr &other) const = delete;
   TO_STRING_KV(K_(array), "distinct_array_cnt", distinct_array_.count(), K_(distinct_array));
 private:
-  int read_split_truncate_info_array(
-    const common::ObIArray<ObTabletHandle> *split_extra_tablet_handles,
-    const common::ObVersionRange &read_version_range,
-    const bool for_access);
   int build_distinct_array(const ObVersionRange &read_version_range, const bool for_access);
 private:
   ObTruncateInfoArray array_;

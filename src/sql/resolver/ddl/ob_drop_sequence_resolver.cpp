@@ -91,7 +91,7 @@ int ObDropSequenceResolver::resolve(const ParseNode &parse_tree)
     } else {
       mystmt->set_sequence_name(sequence_name);
       mystmt->set_database_name(db_name);
-      mystmt->set_tenant_id(session_info_->get_effective_tenant_id());
+      
       mystmt->set_ignore_exists_error(if_exists);
     }
   }

@@ -17,26 +17,25 @@
 #define USING_LOG_PREFIX SQL_ENG
 
 #include "sql/engine/expr/ob_geo_expr_utils.h"
-#include "lib/geo/ob_geo_func_register.h"
-#include "lib/geo/ob_geo_wkb_size_visitor.h"
-#include "lib/geo/ob_geo_wkb_visitor.h"
-#include "lib/geo/ob_geo_normalize_visitor.h"
-#include "lib/geo/ob_geo_denormalize_visitor.h"
-#include "lib/geo/ob_geo_check_empty_visitor.h"
-#include "lib/geo/ob_geo_latlong_check_visitor.h"
-#include "lib/geo/ob_geo_zoom_in_visitor.h"
-#include "lib/geo/ob_geo_3d.h"
-#include "lib/geo/ob_geo_reverse_coordinate_visitor.h"
+#include "share/geo/ob_geo_func_register.h"
+#include "share/geo/ob_geo_wkb_size_visitor.h"
+#include "share/geo/ob_geo_wkb_visitor.h"
+#include "share/geo/ob_geo_normalize_visitor.h"
+#include "share/geo/ob_geo_denormalize_visitor.h"
+#include "share/geo/ob_geo_check_empty_visitor.h"
+#include "share/geo/ob_geo_latlong_check_visitor.h"
+#include "share/geo/ob_geo_zoom_in_visitor.h"
+#include "share/geo/ob_geo_3d.h"
+#include "share/geo/ob_geo_reverse_coordinate_visitor.h"
 #include "share/object/ob_obj_cast_util.h"
-#include "deps/oblib/src/lib/geo/ob_geo_cache.h"
+#include "share/geo/ob_geo_cache.h"
 
 using namespace oceanbase::common;
 namespace oceanbase
 {
 namespace sql
 {
-int ObGeoExprUtils::get_srs_item(uint64_t tenant_id,
-                                 omt::ObSrsCacheGuard &srs_guard,
+int ObGeoExprUtils::get_srs_item(omt::ObSrsCacheGuard &srs_guard,
                                  const uint32_t srid,
                                  const ObSrsItem *&srs)
 {
@@ -45,7 +44,7 @@ int ObGeoExprUtils::get_srs_item(uint64_t tenant_id,
   if (!ObGeoTypeUtil::need_get_srs(srid)) {
     // do nothing
   } else if (OB_FAIL(OTSRS_MGR->get_tenant_srs_guard(srs_guard))) {
-    LOG_WARN("fail to get srs guard", K(ret), K(tenant_id));
+    LOG_WARN("fail to get srs guard", K(ret));
   } else if (OB_FAIL(srs_guard.get_srs_item(srid, srs))) {
     LOG_WARN("fail to get srs", K(ret), K(srid));
   }
@@ -82,7 +81,7 @@ int ObGeoExprUtils::get_srs_item(ObEvalCtx &ctx,
   } else if (OB_ISNULL(session)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("failed to get session", K(ret));
-  } else if (OB_FAIL(get_srs_item(session->get_effective_tenant_id(), srs_guard, srid, srs))) {
+  } else if (OB_FAIL(get_srs_item(srs_guard, srid, srs))) {
     LOG_WARN("fail to get srs inner", K(ret), K(srid));
   }
 
@@ -144,7 +143,7 @@ int ObGeoExprUtils::construct_geometry(ObIAllocator &allocator,
       LOG_USER_ERROR(OB_ERR_GIS_INVALID_DATA, func_name);
     }
   } else if (FALSE_IT(srid = static_cast<ObGeoSrid>(ObGeoWkbByteOrderUtil::read<uint32_t>(data, ObGeoWkbByteOrder::LittleEndian)))) {
-  } else if (OB_FAIL(get_srs_item(MTL_ID(), srs_guard, srid, srs))) {
+  } else if (OB_FAIL(get_srs_item(srs_guard, srid, srs))) {
     if (OB_ERR_SRS_NOT_FOUND == ret) {
       LOG_USER_WARN(OB_ERR_SRS_NOT_FOUND, srid); // adapt mysql
       ret = OB_SUCCESS;
@@ -1328,7 +1327,7 @@ int ObGeoExprUtils::get_intersects_res(ObGeometry &geo1, ObGeometry &geo2,
     } else if (OB_FAIL(ObGeoFunc<ObGeoFuncType::Intersects>::geo_func::eval(gis_context, result))) {
       LOG_WARN("eval st intersection failed", K(ret));
       ObGeoExprUtils::geo_func_error_handle(ret, N_ST_INTERSECTS);
-    } else if (lib::is_mysql_mode() && geo1.type() == ObGeoType::POINT
+    } else if (geo1.type() == ObGeoType::POINT
                     && geo2.type() == ObGeoType::POINT
                     && result == true
                     && OB_FAIL(ObGeoTypeUtil::eval_point_box_intersects(srs, &geo1, &geo2, result))) {

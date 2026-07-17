@@ -18,7 +18,7 @@
 
  using namespace oceanbase::common;
  using namespace oceanbase::share::schema;
-
+ 
  namespace oceanbase
  {
  namespace sql
@@ -28,15 +28,16 @@
      arg_()
  {
  }
-
+ 
  ObCreateLocationStmt::ObCreateLocationStmt(common::ObIAllocator *name_pool)
    : ObDDLStmt(name_pool, stmt::T_CREATE_LOCATION),
      arg_()
  {
  }
-
+ 
  ObCreateLocationStmt::~ObCreateLocationStmt()
  {
  }
  } // namespace sql
  } // namespace oceanbase
+

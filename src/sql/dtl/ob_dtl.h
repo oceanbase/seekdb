@@ -20,7 +20,6 @@
 #include <stdint.h>
 #include "lib/hash/ob_hashmap.h"
 #include "lib/allocator/ob_safe_arena.h"
-#include "sql/dtl/ob_dtl_rpc_proxy.h"
 #include "sql/dtl/ob_dtl_fc_server.h"
 
 namespace oceanbase {
@@ -28,7 +27,6 @@ namespace sql {
 namespace dtl {
 
 class ObDtlChannel;
-using obrpc::ObDtlRpcProxy;
 
 class ObDtlHashTableCell
 {
@@ -99,17 +97,12 @@ public:
   // Initialize DTL service.
   int init();
 
-  ObDtlRpcProxy &get_rpc_proxy();
-  const ObDtlRpcProxy &get_rpc_proxy() const;
-
   //// Channel Manipulations
   //
   // Create channel and register it into DTL service, so that we can
   // retrieve it back by channel ID.
   int create_local_channel(
-      uint64_t tenant_id, uint64_t chid, const common::ObAddr &peer, ObDtlChannel *&chan, ObDtlFlowControl *dfc = nullptr);
-  int create_rpc_channel(
-      uint64_t tenant_id, uint64_t chid, const common::ObAddr &peer, ObDtlChannel *&chan, ObDtlFlowControl *dfc = nullptr);
+      uint64_t chid, const common::ObAddr &peer, ObDtlChannel *&chan, ObDtlFlowControl *dfc = nullptr);
   //
   // Destroy channel from DTL service.
   int destroy_channel(uint64_t chid);
@@ -142,9 +135,9 @@ public:
   }
 private:
   int new_channel(
-      uint64_t tenant_id, uint64_t chid, const common::ObAddr &peer, ObDtlChannel *&chan, bool is_local);
+      uint64_t chid, const common::ObAddr &peer, ObDtlChannel *&chan, bool is_local);
   int init_channel(
-      uint64_t tenant_id, uint64_t chid, const ObAddr &peer, ObDtlChannel *&chan,
+      uint64_t chid, const ObAddr &peer, ObDtlChannel *&chan,
       ObDtlFlowControl *dfc, const bool need_free_chan);
   int get_dtl_channel_manager(uint64_t hash_val, ObDtlChannelManager *&ch_mgr);
 private:
@@ -156,21 +149,10 @@ private:
   static const int64_t BUCKET_NUM = 256;
   bool is_inited_;
   common::ObSafeArena allocator_;
-  ObDtlRpcProxy rpc_proxy_;
   ObDfcServer dfc_server_;
   ObDtlHashTable hash_table_;
   ObDtlChannelManager *ch_mgrs_;
 };
-
-OB_INLINE ObDtlRpcProxy &ObDtl::get_rpc_proxy()
-{
-  return rpc_proxy_;
-}
-
-OB_INLINE const ObDtlRpcProxy &ObDtl::get_rpc_proxy() const
-{
-  return rpc_proxy_;
-}
 
 OB_INLINE ObDfcServer &ObDtl::get_dfc_server()
 {

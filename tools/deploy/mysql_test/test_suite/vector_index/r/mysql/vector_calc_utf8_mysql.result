@@ -435,13 +435,13 @@ c1	sum(c2)	avg(c2)	count(c2)
 drop table t1;
 create table t1 (c1 date, c2 vector(3));
 insert into t1 values ('2024-08-01', [0.1,0.1,0.1]), ('2024-08-02', [0.2,0.2,0.2]), ('2024-08-03', [0.3,0.3,0.3]), ('2024-08-04', [0.4,0.4,0.4]), ('2024-08-05', [0.5,0.5,0.5]), ('2024-08-06', [0.6,0.6,0.6]);
-SELECT
+SELECT 
 c1,
 SUM(c2) OVER (
 ORDER BY c1
 ROWS BETWEEN 2 PRECEDING AND CURRENT ROW
 ) AS rolling_sum_3_days
-FROM
+FROM 
 t1;
 c1	rolling_sum_3_days
 2024-08-01	[0.1,0.1,0.1]
@@ -451,13 +451,13 @@ c1	rolling_sum_3_days
 2024-08-05	[1.2,1.2,1.2]
 2024-08-06	[1.5,1.5,1.5]
 set _enable_rich_vector_format = false;
-SELECT
+SELECT 
 c1,
 SUM(c2) OVER (
 ORDER BY c1
 ROWS BETWEEN 2 PRECEDING AND CURRENT ROW
 ) AS rolling_sum_3_days
-FROM
+FROM 
 t1;
 c1	rolling_sum_3_days
 2024-08-01	[0.1,0.1,0.1]

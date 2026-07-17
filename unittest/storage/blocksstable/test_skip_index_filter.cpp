@@ -101,7 +101,6 @@ void TestSkipIndexFilter::SetUp()
   ObTableSchema table;
   ObColumnSchemaV2 col;
   table.reset();
-  table.set_tenant_id(1);
   table.set_tablegroup_id(1);
   table.set_database_id(1);
   table.set_table_id(tid);
@@ -150,7 +149,6 @@ void TestSkipIndexFilter::SetUp()
       allocator_,
       table.get_column_count(),
       table.get_rowkey_column_num(),
-      lib::is_oracle_mode(),
       col_descs_,
       nullptr));
   const int64_t extra_rowkey_cnt = ObMultiVersionRowkeyHelpper::get_extra_rowkey_col_cnt();

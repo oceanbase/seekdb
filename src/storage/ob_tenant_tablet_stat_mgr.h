@@ -18,9 +18,9 @@
 #define OCEANBASE_STORAGE_TENANT_TABLET_STAT_MGR_H_
 
 #include "common/ob_tablet_id.h"
-#include "share/ob_ls_id.h"
 #include "lib/hash/ob_hashmap.h"
 #include "share/rc/ob_tenant_base.h"
+#include "lib/task/ob_timer.h"
 #include "share/schema/ob_table_schema.h"
 #include "lib/allocator/page_arena.h"
 #include "lib/allocator/ob_fifo_allocator.h"
@@ -57,18 +57,17 @@ public:
 struct ObTabletStatKey
 {
 public:
-  ObTabletStatKey() : ls_id_(), tablet_id_() {}
-  ObTabletStatKey(const int64_t ls_id, const uint64_t tablet_id);
-  ObTabletStatKey(const share::ObLSID ls_id, const common::ObTabletID tablet_id);
+  ObTabletStatKey() : tablet_id_() {}
+  explicit ObTabletStatKey(const uint64_t tablet_id);
+  explicit ObTabletStatKey(const common::ObTabletID tablet_id);
   ~ObTabletStatKey();
   void reset();
   uint64_t hash() const;
   int hash(uint64_t &hash_val) const;
   bool is_valid() const;
   bool operator == (const ObTabletStatKey &other) const;
-  TO_STRING_KV(K_(ls_id), K_(tablet_id));
+  TO_STRING_KV(K_(tablet_id));
 
-  share::ObLSID ls_id_;
   common::ObTabletID tablet_id_;
 };
 
@@ -84,7 +83,7 @@ public:
   int64_t get_total_merge_row_count() const { return insert_row_cnt_ + update_row_cnt_ + delete_row_cnt_; }
   ObTabletStat& operator=(const ObTabletStat &other);
   ObTabletStat& operator+=(const ObTabletStat &other);
-  TO_STRING_KV(K_(ls_id), K_(tablet_id), K_(query_cnt), K_(merge_cnt), K_(scan_logical_row_cnt),
+  TO_STRING_KV(K_(tablet_id), K_(query_cnt), K_(merge_cnt), K_(scan_logical_row_cnt),
                K_(scan_physical_row_cnt), K_(scan_micro_block_cnt), K_(pushdown_micro_block_cnt),
                K_(exist_row_total_table_cnt), K_(exist_row_read_table_cnt), K_(insert_row_cnt),
                K_(update_row_cnt), K_(delete_row_cnt));
@@ -93,7 +92,6 @@ public:
   static constexpr int64_t QUERY_REPORT_INEFFICIENT_THRESHOLD = 3;
   static constexpr int64_t MERGE_REPORT_MIN_ROW_CNT = 1000;
 public:
-  int64_t ls_id_;
   uint64_t tablet_id_;
   uint32_t query_cnt_;
   uint32_t merge_cnt_;
@@ -171,7 +169,7 @@ public:
   ~ObTenantSysStat() = default;
   void reset();
   bool is_small_tenant() const;
-  int refresh(const uint64_t tenant_id, const bool force_refresh = false);
+  int refresh(const bool force_refresh = false);
   TO_STRING_KV(K_(min_cpu_cnt), K_(max_cpu_cnt), K_(memory_hold), K_(memory_limit));
 
 public:
@@ -386,7 +384,7 @@ public:
   static int mtl_init(ObTenantTabletStatMgr* &tablet_stat_mgr);
   ObTenantTabletStatMgr();
   virtual ~ObTenantTabletStatMgr();
-  int init(const int64_t tenant_id);
+  int init();
   bool is_inited() const { return is_inited_; }
   // int start();
   void wait();
@@ -398,7 +396,6 @@ public:
       const ObTabletStat &stat,
       bool &succ_report);
   int get_latest_tablet_stat(
-      const share::ObLSID &ls_id,
       const common::ObTabletID &tablet_id,
       ObTabletStat &tablet_stat,
       ObTabletStat &total_tablet_stat,
@@ -406,20 +403,16 @@ public:
   int get_all_tablet_stats(
       common::ObIArray<ObTabletStat> &tablet_stats);
   int get_tablet_analyzer(
-      const share::ObLSID &ls_id,
       const common::ObTabletID &tablet_id,
       ObTabletStatAnalyzer &analyzer);
   int clear_tablet_stat(
-      const share::ObLSID &ls_id,
       const common::ObTabletID &tablet_id);
   int batch_clear_tablet_stat(
-      const share::ObLSID &ls_id,
       const ObIArray<ObTabletID> &tablet_ids);
   void process_stats();
   void refresh_all(const int64_t step);
   void refresh_queuing_mode();
   int get_queuing_cfg(
-      const share::ObLSID &ls_id,
       const common::ObTabletID &tablet_id,
       ObTableQueuingModeCfg& queuing_cfg);
   int64_t get_last_update_time() { return report_stat_task_.last_update_time_; }
@@ -473,7 +466,7 @@ private:
   ObTenantSysStat sys_stat_;
   uint64_t report_cursor_;
   uint64_t pending_cursor_;
-  int report_tg_id_;
+  common::ObTimer report_timer_;
   int64_t extreme_tablet_cnt_;
   bool is_inited_;
 };

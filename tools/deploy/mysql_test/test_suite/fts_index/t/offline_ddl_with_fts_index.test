@@ -160,7 +160,7 @@ CREATE TABLE fts_character_set_table_1 (
   /*Indices*/
   FULLTEXT INDEX f101(name, title) WITH PARSER space);
 
-ALTER TABLE fts_character_set_table_1 convert to character set gbk;
+ALTER TABLE fts_character_set_table_1 convert to character set utf8mb4;
 
 --disable_warnings
 DROP TABLE IF EXISTS fts_character_set_table_1;
@@ -172,9 +172,9 @@ DROP TABLE IF EXISTS fts_table;
 
 create table fts_table(c1 int, c2 varchar(20), c3 varchar(10), c4 int, primary key(c1), fulltext index f102(c2)) partition by range(c1) (partition p0 values less than (10), partition p1 values less than (100));
 alter table fts_table modify c1 tinyint;
-alter table fts_table modify c3 varchar(5) charset 'gbk';
+alter table fts_table modify c3 varchar(5) charset 'utf8mb4';
 alter table fts_table modify c3 char(8) , add c5 int, drop column c4;
-alter table fts_table convert to CHARACTER SET 'gbk';
+alter table fts_table convert to CHARACTER SET 'utf8mb4';
 alter table fts_table modify c3 varchar(5) charset 'utf8';
 --replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
 show create table fts_table;

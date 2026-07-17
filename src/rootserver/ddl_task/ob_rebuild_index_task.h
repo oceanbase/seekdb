@@ -30,24 +30,22 @@ public:
   ObRebuildIndexTask();
   virtual ~ObRebuildIndexTask();
   int init(
-      const uint64_t tenant_id,
       const int64_t task_id,
       const share::ObDDLType &ddl_type,
       const uint64_t data_table_id,
       const uint64_t index_table_id,
       const int64_t schema_version,
       const int64_t parent_task_id,
-      const int64_t consumer_group_id,
       const int32_t sub_task_trace_id,
       const int64_t parallelism,
       const uint64_t tenant_data_version,
       const ObTableSchema &index_schema,
-      const obrpc::ObRebuildIndexArg &rebuild_index_arg);
+      const obcall::ObRebuildIndexArg &rebuild_index_arg);
   int init(const ObDDLTaskRecord &task_record);
   virtual int process() override;
   virtual bool is_valid() const override;
   virtual int serialize_params_to_message(char *buf, const int64_t buf_size, int64_t &pos) const override;
-  virtual int deserialize_params_from_message(const uint64_t tenant_id, const char *buf, const int64_t buf_size, int64_t &pos) override;
+  virtual int deserialize_params_from_message(const char *buf, const int64_t buf_size, int64_t &pos) override;
   virtual int64_t get_serialize_param_size() const override;
 
   void set_index_build_task_id(const int64_t id) { index_build_task_id_ = id; }
@@ -65,35 +63,31 @@ public:
   uint64_t get_new_index_id() { return new_index_id_; };
   static bool is_ddl_type_for_rebuild_index_task(const share::ObDDLType &ddl_type)
   {
-    return share::DDL_REBUILD_INDEX == ddl_type || share::DDL_REPLACE_MLOG == ddl_type;
+    return share::DDL_REBUILD_INDEX == ddl_type;
   }
 private:
   int check_switch_succ();
   int prepare(const share::ObDDLTaskStatus new_status);
   int rebuild_index();
   int rebuild_vec_index_impl();
-  int rebuild_mlog_impl();
   int drop_index_impl();
   int prepare_drop_index_arg(ObSchemaGetterGuard &schema_guard, 
                              const ObTableSchema *index_schema,
                              const ObDatabaseSchema *database_schema,
                              const ObTableSchema *data_table_schema,
-                             obrpc::ObDropIndexArg &drop_index_arg);
-  int purge_old_mlog(const share::ObDDLTaskStatus next_task_status);
+                             obcall::ObDropIndexArg &drop_index_arg);
   int switch_index_name(const share::ObDDLTaskStatus next_task_status);
-  int get_switch_index_name_task_type(share::ObDDLTaskType &ddl_task_type);
   int create_and_wait_rebuild_task_finish(const share::ObDDLTaskStatus new_status);
   int create_and_wait_drop_task_finish(const share::ObDDLTaskStatus new_status);
   int succ();
   int fail();
   int check_ddl_task_finish(
-      const int64_t tenant_id, 
       int64_t &task_id, 
       bool &is_finished);
   int deep_copy_index_arg(
       common::ObIAllocator &allocator, 
-      const obrpc::ObRebuildIndexArg &src_index_arg, 
-      obrpc::ObRebuildIndexArg &dst_index_arg);
+      const obcall::ObRebuildIndexArg &src_index_arg, 
+      obcall::ObRebuildIndexArg &dst_index_arg);
   virtual bool is_error_need_retry(const int ret_code) override
   {
     bool retry = false;
@@ -107,7 +101,7 @@ private:
 private:
   static const int64_t OB_REBUILD_INDEX_TASK_VERSION = 1;
   ObRootService *root_service_;
-  obrpc::ObRebuildIndexArg rebuild_index_arg_;
+  obcall::ObRebuildIndexArg rebuild_index_arg_;
   int64_t index_build_task_id_;
   int64_t index_drop_task_id_;
   uint64_t new_index_id_;
@@ -118,4 +112,3 @@ private:
 }  // end namespace oceanbase
 
 #endif  // OCEANBASE_ROOTSERVER_OB_REBUILD_INDEX_TASK_H
-

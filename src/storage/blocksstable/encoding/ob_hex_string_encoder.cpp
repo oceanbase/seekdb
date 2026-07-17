@@ -272,9 +272,9 @@ void ObHexStringEncoder::reuse()
   MEMSET(&hex_string_map_, 0, sizeof(ObHexStringMap));
 }
 
-struct ObHexStringEncoder::ColumnStoreFiller
+struct ObHexStringEncoder::FixedDataFiller
 {
-  explicit ColumnStoreFiller(ObHexStringEncoder &encoder) : enc_(encoder) {}
+  explicit FixedDataFiller(ObHexStringEncoder &encoder) : enc_(encoder) {}
 
   // fill fix store value
   inline int operator()(
@@ -310,9 +310,9 @@ int ObHexStringEncoder::store_fix_data(ObBufferWriter &buf_writer)
       header_->length_ = static_cast<uint32_t>(desc_.fix_data_length_);
     }
     EmptyGetter getter;
-    ColumnStoreFiller filler(*this);
-    if (OB_FAIL(fill_column_store(buf_writer, *ctx_->col_datums_, getter, filler))) {
-      LOG_WARN("fill column store failed", K(ret));
+    FixedDataFiller filler(*this);
+    if (OB_FAIL(fill_fixed_data(buf_writer, *ctx_->col_datums_, getter, filler))) {
+      LOG_WARN("fill fixed data failed", K(ret));
     }
   }
   return ret;

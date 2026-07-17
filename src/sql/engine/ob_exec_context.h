@@ -33,8 +33,9 @@
 #include "sql/das/ob_das_context.h"
 #include "sql/engine/cmd/ob_table_direct_insert_ctx.h"
 #include "pl/ob_pl_package_guard.h"
-#include "lib/udt/ob_udt_type.h"
-#include "lib/udt/ob_collection_type.h"
+#include "common/udt/ob_udt_type.h"
+#include "common/udt/ob_collection_type.h"
+#include "common/row/ob_row_iterator.h"
 #include "sql/plan_cache/ob_adaptive_auto_dop.h"
 
 #define GET_PHY_PLAN_CTX(ctx) ((ctx).get_physical_plan_ctx())
@@ -48,13 +49,11 @@
                                                                   sizeof(ctx_type), \
                                                                   op_type, ptr))) { \
       op_ctx = new (ptr) ctx_type(exec_ctx); \
-      int64_t tenant_id = GET_MY_SESSION(exec_ctx)->get_effective_tenant_id(); \
-      if (oceanbase::common::OB_SUCCESS != (_ret_ = op_ctx->init_base(tenant_id))) { \
+      if (oceanbase::common::OB_SUCCESS != (_ret_ = op_ctx->init_base())) { \
         SQL_ENG_LOG_RET(WARN, _ret_, "init operator ctx failed", K(_ret_)); \
       } else { \
         op_ctx->set_op_id(op_id); \
         op_ctx->set_op_type(op_type); \
-        op_ctx->set_tenant_id(tenant_id); \
         op_ctx->get_monitor_info().open_time_ = oceanbase::common::ObClockGenerator::getClock(); \
       } \
    } \
@@ -116,21 +115,21 @@ struct ObOperatorKit
   ObOpInput *input_;
 };
 
-struct ObDiagnosisManager
+struct ObDiagnosisManager : public common::ObRowDiagnosisInfo
 {
   ObDiagnosisManager() : cur_file_url_(NULL), cur_line_number_(0)
   {
-    ObMemAttr attr(MTL_ID(), "DiagnosisMgr");
+    ObMemAttr attr("DiagnosisMgr");
     idxs_.set_attr(attr);
     rets_.set_attr(attr);
     col_names_.set_attr(attr);
     allocator_.set_attr(attr);
   }
 
-  void set_cur_file_url(ObString file_url) { cur_file_url_ = file_url; }
-  ObString get_cur_file_url() { return cur_file_url_; }
-  void set_cur_line_number(int64_t line_number) { cur_line_number_  = line_number; }
-  int64_t get_cur_line_number() { return cur_line_number_; }
+  void set_cur_file_url(ObString file_url) override { cur_file_url_ = file_url; }
+  ObString get_cur_file_url() const override { return cur_file_url_; }
+  void set_cur_line_number(int64_t line_number) override { cur_line_number_ = line_number; }
+  int64_t get_cur_line_number() const override { return cur_line_number_; }
   int do_diagnosis(ObBitVector &skip, int64_t limit_num);
   int add_warning_info(int err_ret, int line_idx);
 
@@ -307,24 +306,24 @@ public:
   inline ObSQLSessionMgr *get_session_mgr() const;
 
   /**
-   * @brief get execution stat from all tasks
+   * @brief get execution stat collector on demand
    */
-  ObExecStatCollector &get_exec_stat_collector();
+  int get_exec_stat_collector(ObExecStatCollector *&collector);
 
   /**
-   * @brief set admission version
+   * @brief mark whether px target was acquired for this query
    */
-  void set_admission_version(uint64_t admission_version);
+  void set_admission_acquired(bool acquired);
 
   /**
-   * @brief get admission version
+   * @brief whether px target was acquired for this query
    */
-  uint64_t get_admission_version() const;
+  bool get_admission_acquired() const;
 
   /**
    * @brief get admission addr set
    */
-  hash::ObHashMap<ObAddr, int64_t> &get_admission_addr_map();
+  int get_admission_addr_map(hash::ObHashMap<ObAddr, int64_t> *&addr_map);
 
   /**
    * @brief get allocator.
@@ -409,6 +408,8 @@ public:
   inline pl::ObPLPackageGuard* get_original_package_guard() { return package_guard_; }
   inline void set_package_guard(pl::ObPLPackageGuard* v) { package_guard_ = v; }
   int init_pl_ctx();
+  inline ObIAllocator* get_pl_expr_alloc() { return pl_expr_allocator_; }
+  inline void set_pl_expr_alloc(ObIAllocator *alloc) { pl_expr_allocator_ = alloc; }
 
   ObPartIdRowMapManager& get_part_row_manager() { return part_row_map_manager_; }
 
@@ -532,7 +533,6 @@ public:
   ObTableDirectInsertCtx &get_table_direct_insert_ctx() { return table_direct_insert_ctx_; }
   void set_errcode(const int errcode) { ATOMIC_STORE(&errcode_, errcode); }
   int get_errcode() const { return ATOMIC_LOAD(&errcode_); }
-  hash::ObHashMap<uint64_t, void*> &get_dblink_snapshot_map() { return dblink_snapshot_map_; }
   int get_sqludt_meta_by_subschema_id(uint16_t subschema_id, ObSqlUDTMeta &udt_meta) const;
   int get_sqludt_meta_by_subschema_id(uint16_t subschema_id, ObSubSchemaValue &sub_meta) const;
   int get_subschema_id_by_udt_id(uint64_t udt_type_id,
@@ -609,6 +609,7 @@ public:
 private:
   int build_temp_expr_ctx(const ObTempExpr &temp_expr, ObTempExprCtx *&temp_expr_ctx);
   int check_extra_status();
+  void release_admission_addr_map();
   void set_pl_stack_ctx(pl::ObPLContext *pl_stack_ctx) { pl_stack_ctx_ = pl_stack_ctx; }
   //set the parent execute context in nested sql
   void set_parent_ctx(ObExecContext *parent_ctx) { parent_ctx_ = parent_ctx; }
@@ -658,8 +659,7 @@ protected:
   ObExprOperatorCtx **expr_op_ctx_store_;
   ObTaskExecutorCtx task_executor_ctx_;
   ObSQLSessionInfo *my_session_;
-  common::ObMySQLProxy *sql_proxy_;
-  ObExecStatCollector exec_stat_collector_;
+  ObExecStatCollector *exec_stat_collector_;
   ObStmtFactory *stmt_factory_;
   ObRawExprFactory *expr_factory_;
   const share::schema::ObOutlineParamsWrapper *outline_params_wrapper_;
@@ -672,6 +672,7 @@ protected:
   //@todo: (linlin.xll) ObPLCtx is ambiguous with ObPLContext, need to rename it
   pl::ObPLCtx *pl_ctx_;
   pl::ObPLPackageGuard *package_guard_;
+  ObIAllocator *pl_expr_allocator_;
 
   ObPartIdRowMapManager part_row_map_manager_;
   const common::ObIArray<int64_t> *row_id_list_;
@@ -732,7 +733,6 @@ protected:
   // just for convert charset in query response result
   lib::MemoryContext convert_allocator_;
   lib::MemoryContext mem_context_;
-  PWJTabletIdMap* pwj_map_;
   GroupPWJTabletIdMap *group_pwj_map_;
   // sample result
   Ob2DArray<ObPxTabletRange> part_ranges_;
@@ -742,8 +742,8 @@ protected:
   // for px batch rescan
   int64_t px_batch_id_;
 
-  uint64_t admission_version_;
-  hash::ObHashMap<ObAddr, int64_t> admission_addr_map_;
+  bool admission_acquired_;
+  hash::ObHashMap<ObAddr, int64_t> *admission_addr_map_;
   // used for temp expr ctx manager
   bool use_temp_expr_ctx_cache_;
   hash::ObHashMap<int64_t, int64_t> temp_expr_ctx_map_;
@@ -774,7 +774,6 @@ protected:
   ObTableDirectInsertCtx table_direct_insert_ctx_;
   // for deadlock detect, set in do_close_plan
   int errcode_;
-  hash::ObHashMap<uint64_t, void*> dblink_snapshot_map_;
   // for feedback
   ObExecFeedbackInfo fb_info_;
   // for dml report user warning/error at specific row and column
@@ -796,7 +795,7 @@ protected:
   bool force_local_plan_;
   ObDiagnosisManager diagnosis_manager_;
   common::ObArenaAllocator deterministic_udf_cache_allocator_;
-
+  
   // Granule type for current GI task
   ObGranuleType current_granule_type_;
 
@@ -832,8 +831,7 @@ inline void ObExecContext::set_my_session(ObSQLSessionInfo *session)
 {
   my_session_ = session;
   if (OB_NOT_NULL(session)) {
-    set_mem_attr(ObMemAttr(session->get_effective_tenant_id(),
-                         ObModIds::OB_SQL_EXEC_CONTEXT,
+    set_mem_attr(ObMemAttr(ObModIds::OB_SQL_EXEC_CONTEXT,
                          ObCtxIds::EXECUTE_CTX_ID));
   }
 }
@@ -883,24 +881,28 @@ inline ObSQLSessionMgr *ObExecContext::get_session_mgr() const
   return GCTX.session_mgr_;
 }
 
-inline ObExecStatCollector &ObExecContext::get_exec_stat_collector()
+inline void ObExecContext::set_admission_acquired(bool acquired)
 {
-  return exec_stat_collector_;
+  admission_acquired_ = acquired;
 }
 
-inline void ObExecContext::set_admission_version(uint64_t admission_version)
+inline bool ObExecContext::get_admission_acquired() const
 {
-  admission_version_ = admission_version;
+  return admission_acquired_;
 }
 
-inline uint64_t ObExecContext::get_admission_version() const
+inline int ObExecContext::get_admission_addr_map(hash::ObHashMap<ObAddr, int64_t> *&addr_map)
 {
-  return admission_version_;
-}
-
-inline hash::ObHashMap<ObAddr, int64_t> &ObExecContext::get_admission_addr_map()
-{
-  return admission_addr_map_;
+  int ret = OB_SUCCESS;
+  typedef hash::ObHashMap<ObAddr, int64_t> AdmissionAddrMap;
+  if (OB_ISNULL(admission_addr_map_)) {
+    void *buf = ob_malloc(sizeof(AdmissionAddrMap), ObMemAttr("PxAdmAddrMap"));
+    if (OB_NOT_NULL(buf)) {
+      admission_addr_map_ = new (buf) AdmissionAddrMap();
+    }
+  }
+  addr_map = admission_addr_map_;
+  return ret;
 }
 
 struct ObTempExprCtxReplaceGuard

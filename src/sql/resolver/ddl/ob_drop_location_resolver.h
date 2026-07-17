@@ -16,9 +16,9 @@
 
  #ifndef OCEANBASE_SQL_OB_DROP_LOCATION_RESOLVER_H_
  #define OCEANBASE_SQL_OB_DROP_LOCATION_RESOLVER_H_
-
+ 
  #include "sql/resolver/ddl/ob_ddl_resolver.h"
-
+ 
  namespace oceanbase
  {
  namespace sql
@@ -36,5 +36,6 @@
  };
  } // end namespace sql
  } // end namespace oceanbase
-
+ 
  #endif // OCEANBASE_SQL_OB_DROP_LOCATION_RESOLVER_H_
+

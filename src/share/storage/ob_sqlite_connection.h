@@ -80,13 +80,13 @@ class ObSQLiteRowReader
 {
 public:
   // Default constructor (for use with step_query)
-  ObSQLiteRowReader()
+  ObSQLiteRowReader() 
     : stmt_(nullptr), col_idx_(0), row_buffer_(nullptr) {}
 
   // Set statement and optional allocator (for use after default construction)
-  void set_stmt(ObSQLiteStmt *stmt, common::ObArenaAllocator *row_buffer = nullptr)
-  {
-    stmt_ = stmt;
+  void set_stmt(ObSQLiteStmt *stmt, common::ObArenaAllocator *row_buffer = nullptr) 
+  { 
+    stmt_ = stmt; 
     col_idx_ = 0;
     row_buffer_ = row_buffer;
   }

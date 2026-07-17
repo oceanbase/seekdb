@@ -19,7 +19,7 @@ Outputs & filters:
 -------------------------------------
   0 - output([t1.c1], [t1.c2], [t1.c3]), filter([t1.c1 = 1], [t1.c2 = 1]), rowset=16
       access([t1.c1], [t1.c2], [t1.c3]), partitions(p0)
-      is_index_back=false, is_global_index=false, filter_before_indexback[false,false],
+      is_index_back=false, is_global_index=false, filter_before_indexback[false,false], 
       range_key([t1.__pk_increment]), range(MIN ; MAX)always true
 select /*+full(t1) no_rewrite*/ * from t1 where c1 = 1 and c2 = 1;
 +------+------+------+
@@ -38,8 +38,8 @@ Outputs & filters:
 -------------------------------------
   0 - output([t1.c1], [t1.c2], [t1.c3]), filter(nil), rowset=16
       access([t1.__pk_increment], [t1.c1], [t1.c2], [t1.c3]), partitions(p0)
-      is_index_back=true, is_global_index=false,
-      range_key([t1.c1], [t1.c2], [t1.shadow_pk_0]), range[1,1,NULL ; 1,1,NULL],
+      is_index_back=true, is_global_index=false, 
+      range_key([t1.c1], [t1.c2], [t1.shadow_pk_0]), range[1,1,NULL ; 1,1,NULL], 
       range_cond([t1.c1 = 1], [t1.c2 = 1])
 select /*+index(t1 u12) no_rewrite*/ * from t1 where c1 = 1 and c2 = 1;
 +------+------+------+
@@ -59,7 +59,7 @@ Outputs & filters:
 -------------------------------------
   0 - output([t1.c1], [t1.c2], [t1.c3]), filter([t1.c1 = 1 AND t1.c2 = 1 OR t1.c1 = 2 AND t1.c2 = 2]), rowset=16
       access([t1.c1], [t1.c2], [t1.c3]), partitions(p0)
-      is_index_back=false, is_global_index=false, filter_before_indexback[false],
+      is_index_back=false, is_global_index=false, filter_before_indexback[false], 
       range_key([t1.__pk_increment]), range(MIN ; MAX)always true
 select /*+full(t1) no_rewrite*/ * from t1 where c1 = 1 and c2 = 1 or c1 = 2 and c2 = 2;
 +------+------+------+
@@ -79,8 +79,8 @@ Outputs & filters:
 -------------------------------------
   0 - output([t1.c1], [t1.c2], [t1.c3]), filter(nil), rowset=16
       access([t1.__pk_increment], [t1.c1], [t1.c2], [t1.c3]), partitions(p0)
-      is_index_back=true, is_global_index=false,
-      range_key([t1.c1], [t1.c2], [t1.shadow_pk_0]), range[1,1,NULL ; 1,1,NULL], [2,2,NULL ; 2,2,NULL],
+      is_index_back=true, is_global_index=false, 
+      range_key([t1.c1], [t1.c2], [t1.shadow_pk_0]), range[1,1,NULL ; 1,1,NULL], [2,2,NULL ; 2,2,NULL], 
       range_cond([t1.c1 = 1 AND t1.c2 = 1 OR t1.c1 = 2 AND t1.c2 = 2])
 select /*+index(t1 u12) no_rewrite*/ * from t1 where c1 = 1 and c2 = 1 or c1 = 2 and c2 = 2;
 +------+------+------+
@@ -101,7 +101,7 @@ Outputs & filters:
 -------------------------------------
   0 - output([t1.c1], [t1.c2], [t1.c3]), filter([t1.c2 = 1]), rowset=16
       access([t1.c2], [t1.c1], [t1.c3]), partitions(p0)
-      is_index_back=false, is_global_index=false, filter_before_indexback[false],
+      is_index_back=false, is_global_index=false, filter_before_indexback[false], 
       range_key([t1.__pk_increment]), range(MIN ; MAX)always true
 select /*+full(t1) no_rewrite*/ * from t1 where c2 = 1;
 +------+------+------+
@@ -120,8 +120,8 @@ Outputs & filters:
 -------------------------------------
   0 - output([t1.c1], [t1.c2], [t1.c3]), filter(nil), rowset=16
       access([t1.__pk_increment], [t1.c2], [t1.c1], [t1.c3]), partitions(p0)
-      is_index_back=true, is_global_index=false,
-      range_key([t1.c2], [t1.shadow_pk_0]), range[1,NULL ; 1,NULL],
+      is_index_back=true, is_global_index=false, 
+      range_key([t1.c2], [t1.shadow_pk_0]), range[1,NULL ; 1,NULL], 
       range_cond([t1.c2 = 1])
 select /*+index(t1 u2) no_rewrite*/ * from t1 where c2 = 1;
 +------+------+------+
@@ -141,7 +141,7 @@ Outputs & filters:
 -------------------------------------
   0 - output([t1.c1], [t1.c2], [t1.c3]), filter([t1.c2 = 1], [t1.c2 <= 1]), rowset=16
       access([t1.c2], [t1.c1], [t1.c3]), partitions(p0)
-      is_index_back=false, is_global_index=false, filter_before_indexback[false,false],
+      is_index_back=false, is_global_index=false, filter_before_indexback[false,false], 
       range_key([t1.__pk_increment]), range(MIN ; MAX)always true
 select /*+full(t1) no_rewrite*/ * from t1 where c2 = 1 and c2 <= 1;
 +------+------+------+
@@ -160,8 +160,8 @@ Outputs & filters:
 -------------------------------------
   0 - output([t1.c1], [t1.c2], [t1.c3]), filter(nil), rowset=16
       access([t1.__pk_increment], [t1.c2], [t1.c1], [t1.c3]), partitions(p0)
-      is_index_back=true, is_global_index=false,
-      range_key([t1.c2], [t1.shadow_pk_0]), range(1,MIN ; 1,MAX),
+      is_index_back=true, is_global_index=false, 
+      range_key([t1.c2], [t1.shadow_pk_0]), range(1,MIN ; 1,MAX), 
       range_cond([t1.c2 = 1], [t1.c2 <= 1])
 select /*+index(t1 u2) no_rewrite*/ * from t1 where c2 = 1 and c2 <= 1;
 +------+------+------+
@@ -181,7 +181,7 @@ Outputs & filters:
 -------------------------------------
   0 - output([t1.c1], [t1.c2], [t1.c3]), filter([t1.c2 = 1], [t1.c2 < 1]), rowset=16
       access([t1.c2], [t1.c1], [t1.c3]), partitions(p0)
-      is_index_back=false, is_global_index=false, filter_before_indexback[false,false],
+      is_index_back=false, is_global_index=false, filter_before_indexback[false,false], 
       range_key([t1.__pk_increment]), range(MIN ; MAX)always true
 select /*+full(t1) no_rewrite*/ * from t1 where c2 = 1 and c2 < 1;
 +------+------+------+
@@ -199,8 +199,8 @@ Outputs & filters:
 -------------------------------------
   0 - output([t1.c1], [t1.c2], [t1.c3]), filter(nil), rowset=16
       access([t1.__pk_increment], [t1.c2], [t1.c1], [t1.c3]), partitions(p0)
-      is_index_back=true, is_global_index=false,
-      range_key([t1.c2], [t1.shadow_pk_0]), range(MAX,MAX ; MIN,MIN)always false,
+      is_index_back=true, is_global_index=false, 
+      range_key([t1.c2], [t1.shadow_pk_0]), range(MAX,MAX ; MIN,MIN)always false, 
       range_cond([t1.c2 = 1], [t1.c2 < 1])
 select /*+index(t1 u2) no_rewrite*/ * from t1 where c2 = 1 and c2 < 1;
 +------+------+------+
@@ -219,7 +219,7 @@ Outputs & filters:
 -------------------------------------
   0 - output([t1.c1], [t1.c2], [t1.c3]), filter([t1.c2 = 1 OR t1.c2 > 9999]), rowset=16
       access([t1.c2], [t1.c1], [t1.c3]), partitions(p0)
-      is_index_back=false, is_global_index=false, filter_before_indexback[false],
+      is_index_back=false, is_global_index=false, filter_before_indexback[false], 
       range_key([t1.__pk_increment]), range(MIN ; MAX)always true
 select /*+full(t1) no_rewrite*/ * from t1 where c2 = 1 or c2 > 9999;
 +-------+-------+-------+
@@ -239,8 +239,8 @@ Outputs & filters:
 -------------------------------------
   0 - output([t1.c1], [t1.c2], [t1.c3]), filter(nil), rowset=16
       access([t1.__pk_increment], [t1.c2], [t1.c1], [t1.c3]), partitions(p0)
-      is_index_back=true, is_global_index=false,
-      range_key([t1.c2], [t1.shadow_pk_0]), range(1,MIN ; 1,MAX), (9999,MAX ; MAX,MAX),
+      is_index_back=true, is_global_index=false, 
+      range_key([t1.c2], [t1.shadow_pk_0]), range(1,MIN ; 1,MAX), (9999,MAX ; MAX,MAX), 
       range_cond([t1.c2 = 1 OR t1.c2 > 9999])
 select /*+index(t1 u2) no_rewrite*/ * from t1 where c2 = 1 or c2 > 9999;
 +-------+-------+-------+
@@ -261,7 +261,7 @@ Outputs & filters:
 -------------------------------------
   0 - output([t1.c1], [t1.c2], [t1.c3]), filter([t1.c2 = 1], [t1.c1 = 1 AND t1.c3 = 1 OR t1.c1 = 2 AND t1.c3 = 2]), rowset=16
       access([t1.c1], [t1.c3], [t1.c2]), partitions(p0)
-      is_index_back=false, is_global_index=false, filter_before_indexback[false,false],
+      is_index_back=false, is_global_index=false, filter_before_indexback[false,false], 
       range_key([t1.__pk_increment]), range(MIN ; MAX)always true
 select /*+full(t1) no_rewrite*/ * from t1 where ((c1 = 1 and c3 = 1) or (c1 = 2 and c3 = 2)) and c2 = 1;
 +------+------+------+
@@ -280,8 +280,8 @@ Outputs & filters:
 -------------------------------------
   0 - output([t1.c1], [t1.c2], [t1.c3]), filter([t1.c1 = 1 AND t1.c3 = 1 OR t1.c1 = 2 AND t1.c3 = 2]), rowset=16
       access([t1.__pk_increment], [t1.c1], [t1.c3], [t1.c2]), partitions(p0)
-      is_index_back=true, is_global_index=false, filter_before_indexback[false],
-      range_key([t1.c1], [t1.c2], [t1.shadow_pk_0]), range[1,1,NULL ; 1,1,NULL], [2,1,NULL ; 2,1,NULL],
+      is_index_back=true, is_global_index=false, filter_before_indexback[false], 
+      range_key([t1.c1], [t1.c2], [t1.shadow_pk_0]), range[1,1,NULL ; 1,1,NULL], [2,1,NULL ; 2,1,NULL], 
       range_cond([t1.c1 = 1 AND t1.c2 = 1 OR t1.c1 = 2 AND t1.c2 = 1])
 select /*+index(t1 u12) no_rewrite*/ * from t1 where ((c1 = 1 and c3 = 1) or (c1 = 2 and c3 = 2)) and c2 = 1;
 +------+------+------+
@@ -300,8 +300,8 @@ Outputs & filters:
 -------------------------------------
   0 - output([t1.c1], [t1.c2], [t1.c3]), filter(nil), rowset=16
       access([t1.c1], [t1.c3], [t1.c2]), partitions(p0)
-      is_index_back=false, is_global_index=false,
-      range_key([t1.c1], [t1.c2], [t1.c3], [t1.shadow_pk_0]), range[1,1,1,NULL ; 1,1,1,NULL], [2,1,2,NULL ; 2,1,2,NULL],
+      is_index_back=false, is_global_index=false, 
+      range_key([t1.c1], [t1.c2], [t1.c3], [t1.shadow_pk_0]), range[1,1,1,NULL ; 1,1,1,NULL], [2,1,2,NULL ; 2,1,2,NULL], 
       range_cond([t1.c1 = 1 AND t1.c3 = 1 OR t1.c1 = 2 AND t1.c3 = 2], [t1.c2 = 1])
 select /*+index(t1 u123) no_rewrite*/ * from t1 where ((c1 = 1 and c3 = 1) or (c1 = 2 and c3 = 2)) and c2 = 1;
 +------+------+------+
@@ -322,7 +322,7 @@ Outputs & filters:
 -------------------------------------
   0 - output([t1.c1], [t1.c2], [t1.c3]), filter([t1.c2 IN (1, 2, 3)]), rowset=16
       access([t1.c2], [t1.c1], [t1.c3]), partitions(p0)
-      is_index_back=false, is_global_index=false, filter_before_indexback[false],
+      is_index_back=false, is_global_index=false, filter_before_indexback[false], 
       range_key([t1.__pk_increment]), range(MIN ; MAX)always true
 select /*+full(t1) no_rewrite*/ * from t1 where c2 in (1,2,3);
 +------+------+------+
@@ -343,8 +343,8 @@ Outputs & filters:
 -------------------------------------
   0 - output([t1.c1], [t1.c2], [t1.c3]), filter(nil), rowset=16
       access([t1.__pk_increment], [t1.c2], [t1.c1], [t1.c3]), partitions(p0)
-      is_index_back=true, is_global_index=false,
-      range_key([t1.c2], [t1.shadow_pk_0]), range[1,NULL ; 1,NULL], [2,NULL ; 2,NULL], [3,NULL ; 3,NULL],
+      is_index_back=true, is_global_index=false, 
+      range_key([t1.c2], [t1.shadow_pk_0]), range[1,NULL ; 1,NULL], [2,NULL ; 2,NULL], [3,NULL ; 3,NULL], 
       range_cond([t1.c2 IN (1, 2, 3)])
 select /*+index(t1 u2) no_rewrite*/ * from t1 where c2 in (1,2,3);
 +------+------+------+
@@ -366,7 +366,7 @@ Outputs & filters:
 -------------------------------------
   0 - output([t1.c1], [t1.c2], [t1.c3]), filter([(t1.c1, t1.c2) IN ((1, 1), (2, 2), (3, 3))]), rowset=16
       access([t1.c1], [t1.c2], [t1.c3]), partitions(p0)
-      is_index_back=false, is_global_index=false, filter_before_indexback[false],
+      is_index_back=false, is_global_index=false, filter_before_indexback[false], 
       range_key([t1.__pk_increment]), range(MIN ; MAX)always true
 select /*+full(t1) no_rewrite*/ * from t1 where (c1, c2) in ((1,1),(2,2),(3,3));
 +------+------+------+
@@ -387,8 +387,8 @@ Outputs & filters:
 -------------------------------------
   0 - output([t1.c1], [t1.c2], [t1.c3]), filter(nil), rowset=16
       access([t1.__pk_increment], [t1.c1], [t1.c2], [t1.c3]), partitions(p0)
-      is_index_back=true, is_global_index=false,
-      range_key([t1.c1], [t1.c2], [t1.shadow_pk_0]), range[1,1,NULL ; 1,1,NULL], [2,2,NULL ; 2,2,NULL], [3,3,NULL ; 3,3,NULL],
+      is_index_back=true, is_global_index=false, 
+      range_key([t1.c1], [t1.c2], [t1.shadow_pk_0]), range[1,1,NULL ; 1,1,NULL], [2,2,NULL ; 2,2,NULL], [3,3,NULL ; 3,3,NULL], 
       range_cond([(t1.c1, t1.c2) IN ((1, 1), (2, 2), (3, 3))])
 select /*+index(t1 u12) no_rewrite*/ * from t1 where (c1, c2) in ((1,1),(2,2),(3,3));
 +------+------+------+

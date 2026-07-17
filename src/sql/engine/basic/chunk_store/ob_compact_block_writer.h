@@ -22,7 +22,7 @@
 #include "lib/allocator/page_arena.h"
 #include "lib/utility/ob_print_utils.h"
 #include "lib/list/ob_dlist.h"
-#include "src/share/datum/ob_datum.h"
+#include "common/datum/ob_datum.h"
 #include "sql/engine/expr/ob_expr.h"
 #include "sql/engine/basic/chunk_store/ob_chunk_block.h"
 #include "sql/engine/basic/chunk_store/ob_block_iwriter.h"
@@ -108,7 +108,7 @@ public:
   // if full, construct the block and use the block's block_mgr. return block
   virtual int add_row(const ObChunkDatumStore::StoredRow &src_sr, ObChunkDatumStore::StoredRow **dst_sr = nullptr) override;
   //virtual int try_add_row(const common::ObIArray<ObExpr*> &exprs, ObEvalCtx &ctx);
-  virtual int add_row(const blocksstable::ObStorageDatum *storage_datums, const ObStorageColumnGroupSchema &cg_schema,
+  virtual int add_row(const blocksstable::ObStorageDatum *storage_datums, const int64_t column_count,
               const int64_t extra_size, ObChunkDatumStore::StoredRow **stored_row) override;
 
   virtual int add_batch(const common::ObDatum **datums, const common::ObIArray<ObExpr *> &exprs,
@@ -131,14 +131,14 @@ protected:
    */
   int ensure_write(const common::ObIArray<ObExpr*> &exprs, ObEvalCtx &ctx);
   int ensure_write(const ObChunkDatumStore::StoredRow &stored_row);
-  int ensure_write(const blocksstable::ObStorageDatum *storage_datums, const ObStorageColumnGroupSchema &cg_schema,
+  int ensure_write(const blocksstable::ObStorageDatum *storage_datums, const int64_t column_count,
                   const int64_t extra_size);
   int ensure_write(const int64_t size);
 
   // get the stored size in writer buffer for a row.
   int get_row_stored_size(const common::ObIArray<ObExpr*> &exprs, ObEvalCtx &ctx, uint64_t &size);
   int get_row_stored_size(const ObChunkDatumStore::StoredRow &sr, uint64_t &size);
-  int get_row_stored_size(const blocksstable::ObStorageDatum *storage_datums, const ObStorageColumnGroupSchema &cg_schema,
+  int get_row_stored_size(const blocksstable::ObStorageDatum *storage_datums, const int64_t column_count,
                           const int64_t extra_size, uint64_t &size);
 
 private:
@@ -153,7 +153,7 @@ private:
   template <typename T>
   int inner_add_row(const common::ObIArray<ObExpr*> &exprs, ObEvalCtx &ctx);
   template <typename T>
-  int inner_add_row(const blocksstable::ObStorageDatum *storage_datums, const ObStorageColumnGroupSchema &cg_schema,
+  int inner_add_row(const blocksstable::ObStorageDatum *storage_datums, const int64_t column_count,
                     const int64_t extra_size, ObChunkDatumStore::StoredRow **stored_row);
 
   inline int ensure_init()

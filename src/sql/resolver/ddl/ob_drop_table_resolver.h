@@ -26,7 +26,7 @@ class ObDropTableResolver : public ObDDLResolver
 {
 public:
   enum node_type {
-    MATERIALIZED_NODE = 0,
+    TEMPORARY_NODE = 0,
     IF_EXIST_NODE,
     TABLE_LIST_NODE,
     MAX_NODE

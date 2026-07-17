@@ -22,6 +22,9 @@ namespace oceanbase
 {
 namespace sql
 {
+class ObSQLSessionInfo;
+// demoted from share::ObEncryptionUtil::get_cipher_op_mode(A-setmember split; session dependency)
+int get_cipher_op_mode(share::ObCipherOpMode &op_mode, const ObSQLSessionInfo *session);
 class ObExprBaseEncrypt : public ObFuncExprOperator 
 {
 public:

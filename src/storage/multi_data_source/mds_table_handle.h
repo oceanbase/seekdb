@@ -40,11 +40,9 @@ public:
   bool operator==(const MdsTableHandle &rhs) const;
   ~MdsTableHandle();
   int get_tablet_id(common::ObTabletID &tablet_id) const;
-  int get_ls_id(share::ObLSID &ls_id) const;
   template <typename MdsTableType>
   int init(ObIAllocator &allocator,
            const ObTabletID tablet_id,
-           const share::ObLSID ls_id,
            const share::SCN mds_ckpt_scn_from_tablet,// this is used to filter replayed nodes after removed action
            ObTabletPointer *pointer,
            ObMdsTableMgr *mgr_handle = nullptr);

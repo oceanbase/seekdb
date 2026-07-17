@@ -28,12 +28,11 @@ namespace oceanbase
 namespace sql
 {
 
-enum ObDmlGTSOptState
+enum ObDmlSnapshotOptState
 {
-  WITHOUT_GTS_OPT_STATE = 0,
-  USE_PARTITION_SNAPSHOT_STATE = 1,
-  WITH_UNIQUE_GLOBAL_INDEX_STATE = 2,
-  GTE_GTS_STATE = 3,
+  WITHOUT_SNAPSHOT_OPT_STATE = 0,
+  USE_RESPONSE_SNAPSHOT_STATE = 1,
+  USE_STMT_SNAPSHOT_STATE = 2,
 };
   
 class ForeignKeyHandle
@@ -303,7 +302,6 @@ protected:
 public:
   common::ObMySQLProxy *sql_proxy_;
   observer::ObInnerSQLConnection *inner_conn_;
-  uint64_t tenant_id_;
   observer::ObInnerSQLConnection::SavedValue saved_conn_;
   bool need_foreign_key_check_;
   bool need_close_conn_;

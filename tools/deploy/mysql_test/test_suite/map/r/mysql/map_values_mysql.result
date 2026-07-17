@@ -241,16 +241,16 @@ map_values(m)
 [[[]]]
 [[["a","b"],["c"],NULL]]
 NULL
-CREATE TABLE output_test (
+CREATE TABLE output_test ( 
 pk bigint not null AUTO_INCREMENT,
-s_1   Array(varchar(64)),
+s_1   Array(varchar(64)), 
 i_1   Array(BigInt),
 f_1   Array(float),
 d_1   Array(double),
 i_2   Array(BigInt)
 );
-insert into output_test(i_1)
-select map_values(m)
+insert into output_test(i_1) 
+select map_values(m) 
 from t1;
 select pk, i_1 from output_test;
 pk	i_1
@@ -264,7 +264,7 @@ pk	s_1	i_1	f_1	d_1	i_2
 2	NULL	[1,2,3]	NULL	NULL	NULL
 3	NULL	[1,2,3]	NULL	NULL	NULL
 4	NULL	[3]	NULL	NULL	NULL
-insert into output_test(i_2)
+insert into output_test(i_2) 
 values (map_values(map(1,2)));
 select * from output_test;
 pk	s_1	i_1	f_1	d_1	i_2

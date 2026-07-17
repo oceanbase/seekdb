@@ -18,7 +18,7 @@
 #define OCEANBASE_ROOTSERVER_OB_DDL_REDEFINITION_TASK_H
 
 #include "rootserver/ddl_task/ob_ddl_task.h"
-#include "share/stat/ob_opt_stat_manager.h"
+#include "sql/optimizer/stat/ob_opt_stat_manager.h"
 
 namespace oceanbase
 {
@@ -31,32 +31,25 @@ class ObDDLRedefinitionSSTableBuildTask : public share::ObAsyncTask
 public:
   ObDDLRedefinitionSSTableBuildTask(
       const int64_t task_id,
-      const uint64_t tenant_id,
       const int64_t data_table_id,
       const int64_t dest_table_id,
       const int64_t schema_version,
       const int64_t snapshot_version,
       const int64_t execution_id,
-      const int64_t consumer_group_id,
       const ObSQLMode &sql_mode,
       const common::ObCurTraceId::TraceId &trace_id,
       const int64_t parallelism,
       const bool use_heap_table_ddl_plan,
-      const bool is_mview_complete_refresh,
-      const int64_t mview_table_id,
       ObRootService *root_service,
       const common::ObAddr &inner_sql_exec_addr,
       const int64_t data_format_version,
-      const bool is_retryable_ddl,
-      const uint64_t mview_target_data_sync_scn,
-      const ObString &mview_select_sql);
+      const bool is_retryable_ddl);
   int init(
       const ObTableSchema &orig_table_schema,
       const ObTableSchema &hidden_table_schema,
       const AlterTableSchema &alter_table_schema,
-      const ObTimeZoneInfoWrap &tz_info_wrap,
-      const common::ObIArray<share::schema::ObBasedSchemaObjectInfo> &based_schema_object_infos);
-  ObDDLTaskID get_ddl_task_id() { return ObDDLTaskID(tenant_id_, task_id_); }
+      const ObTimeZoneInfoWrap &tz_info_wrap);
+  ObDDLTaskID get_ddl_task_id() { return ObDDLTaskID(task_id_); }
   virtual ~ObDDLRedefinitionSSTableBuildTask() = default;
   virtual int process() override;
   virtual int64_t get_deep_copy_size() const override { return sizeof(*this); }
@@ -64,29 +57,22 @@ public:
   void add_event_info(const int ret, const ObString &ddl_event_stmt);
 private:
   bool is_inited_;
-  uint64_t tenant_id_;
   int64_t task_id_;
   int64_t data_table_id_;
   int64_t dest_table_id_;
   int64_t schema_version_;
   int64_t snapshot_version_;
   int64_t execution_id_;
-  int64_t consumer_group_id_;
   ObSQLMode sql_mode_;
   ObTimeZoneInfoWrap tz_info_wrap_;
   share::ObColumnNameMap col_name_map_;
   common::ObCurTraceId::TraceId trace_id_;
   int64_t parallelism_;
   bool use_heap_table_ddl_plan_;
-  bool is_mview_complete_refresh_;
   bool is_retryable_ddl_;
-  int64_t mview_table_id_;
-  common::ObArray<share::schema::ObBasedSchemaObjectInfo> based_schema_object_infos_;
   ObRootService *root_service_;
   common::ObAddr inner_sql_exec_addr_;
   int64_t data_format_version_;
-  uint64_t mview_target_data_sync_scn_;
-  ObString mview_select_sql_;
 };
 
 class ObSyncTabletAutoincSeqCtx final
@@ -95,37 +81,22 @@ public:
   ObSyncTabletAutoincSeqCtx();
   ~ObSyncTabletAutoincSeqCtx() {}
   int init(
-      const uint64_t src_tenant_id, 
-      const uint64_t dst_tenant_id,
       int64_t src_table_id,
       int64_t dest_table_id);
   int sync();
   bool is_inited() const { return is_inited_; }
-  TO_STRING_KV(K_(is_inited), K_(is_synced), K_(src_tenant_id), K_(dst_tenant_id), K_(orig_src_tablet_ids), K_(src_tablet_ids),
+  TO_STRING_KV(K_(is_inited), K_(is_synced), K_(orig_src_tablet_ids), K_(src_tablet_ids),
                K_(dest_tablet_ids), K_(autoinc_params));
 private:
-  int build_ls_to_tablet_map(
-      share::ObLocationService *location_service,
-      const uint64_t tenant_id,
-      const common::ObIArray<share::ObMigrateTabletAutoincSeqParam> &tablet_ids,
-      const int64_t timeout,
-      const bool force_renew,
-      const bool by_src_tablet,
-      common::hash::ObHashMap<share::ObLSID, common::ObSEArray<share::ObMigrateTabletAutoincSeqParam, 1>> &map);
-  template<typename P, typename A>
-  int call_and_process_all_tablet_autoinc_seqs(P &proxy, A &arg, const bool is_get);
+  int call_and_process_all_tablet_autoinc_seqs(const bool is_get);
   bool is_error_need_retry(const int ret_code) const
   {
     return common::OB_TIMEOUT == ret_code || common::OB_TABLET_NOT_EXIST == ret_code || common::OB_NOT_MASTER == ret_code ||
            common::OB_EAGAIN == ret_code;
   }
 private:
-  static const int64_t MAP_BUCKET_NUM = 1024;
   bool is_inited_;
   bool is_synced_;
-  bool need_renew_location_;
-  uint64_t src_tenant_id_;
-  uint64_t dst_tenant_id_;
   ObSEArray<ObTabletID, 1> orig_src_tablet_ids_;
   ObSEArray<ObTabletID, 1> src_tablet_ids_;
   ObSEArray<ObTabletID, 1> dest_tablet_ids_;
@@ -171,7 +142,6 @@ protected:
   int send_build_single_replica_request();
   int check_build_single_replica(bool &is_end);
   bool check_can_validate_column_checksum(
-      const bool is_oracle_mode,
       const share::schema::ObColumnSchemaV2 &src_column_schema,
       const share::schema::ObColumnSchemaV2 &dest_column_schema);
   int get_validate_checksum_columns_id(
@@ -270,16 +240,11 @@ protected:
   int get_estimated_timeout(const share::schema::ObTableSchema *dst_table_schema, int64_t &estimated_timeout);
   int get_orig_all_index_tablet_count(ObSchemaGetterGuard &schema_guard, int64_t &all_tablet_count);
 
-  int generate_rebuild_index_arg_list(const int64_t tenant_id, 
-                                      const int64_t table_id, 
+  int generate_rebuild_index_arg_list(const int64_t table_id,
                                       ObSchemaGetterGuard &schema_guard, 
-                                      obrpc::ObAlterTableArg &alter_table_arg);
+                                      obcall::ObAlterTableArg &alter_table_arg);
   int64_t get_build_replica_request_time();
 private:
-  int add_table_tablets_for_snapshot_(const uint64_t table_id, ObSchemaGetterGuard &schema_guard,
-                                      common::ObIArray<common::ObTabletID> &tablet_ids);
-  int prepare_tablets_for_major_refresh_mv_(common::ObIArray<common::ObTabletID> &tablet_ids);
-
   virtual int cleanup_impl() override;
 protected:
   static const int64_t MAP_BUCKET_NUM = 1024;
@@ -302,7 +267,7 @@ protected:
   ObSyncTabletAutoincSeqCtx sync_tablet_autoinc_seq_ctx_;
   int64_t build_replica_request_time_;
   int64_t complete_sstable_job_ret_code_;
-  obrpc::ObAlterTableArg alter_table_arg_;
+  obcall::ObAlterTableArg alter_table_arg_;
   common::hash::ObHashMap<uint64_t, DependTaskStatus> dependent_task_result_map_;
   bool has_synced_autoincrement_;
   bool has_synced_stats_info_;

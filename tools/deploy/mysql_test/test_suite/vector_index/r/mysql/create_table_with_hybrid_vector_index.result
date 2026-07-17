@@ -167,12 +167,6 @@ CREATE TABLE t_vec(id int NOT NULL PRIMARY KEY, c1 int, c2 vector(100),  vector 
 ERROR 0A000: hnsw vector index setting model or sync_interval is not supported
 create table t_vec(c1 int, c2 varchar(100), c3 int, primary key(c1), vector index vec_idx1(c2) storing (c3) with (distance=L2, type=hnsw, model=ob_embed, dim=1024));
 ERROR 0A000: setting vector index storing column is not supported
-create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c2) with (distance=L2, type=hnsw, model=ob_embed, dim=1024) WITH COLUMN GROUP(all column, each column));
-ERROR 42000: You have an error in your SQL syntax; check the manual that corresponds to your OceanBase version for the right syntax to use near 'WITH COLUMN GROUP(all column, each column))' at line 1
-create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c2) with (distance=L2, type=hnsw, model=ob_embed, dim=1024) WITH COLUMN GROUP(all column));
-ERROR 42000: You have an error in your SQL syntax; check the manual that corresponds to your OceanBase version for the right syntax to use near 'WITH COLUMN GROUP(all column))' at line 1
-create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c2) with (distance=L2, type=hnsw, model=ob_embed, dim=1024) WITH COLUMN GROUP(each column));
-ERROR 42000: You have an error in your SQL syntax; check the manual that corresponds to your OceanBase version for the right syntax to use near 'WITH COLUMN GROUP(each column))' at line 1
 "------------------------------------------ show create table -------------------------------------------------------"
 alter system set ob_vector_memory_limit_percentage = 20;
 drop table if exists t_vec;
@@ -507,12 +501,6 @@ CREATE TABLE t_vec(id int NOT NULL PRIMARY KEY, c1 int, c2 vector(100),  vector 
 ERROR 0A000: hnsw vector index setting model or sync_interval is not supported
 create table t_vec(c1 int, c2 varchar(100), c3 int, primary key(c1), vector index vec_idx1(c2) storing (c3) with (distance=L2, type=hnsw, model=ob_embed, dim=1024)) ORGANIZATION HEAP;
 ERROR 0A000: setting vector index storing column is not supported
-create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c2) with (distance=L2, type=hnsw, model=ob_embed, dim=1024) WITH COLUMN GROUP(all column, each column)) ORGANIZATION HEAP;
-ERROR 42000: You have an error in your SQL syntax; check the manual that corresponds to your OceanBase version for the right syntax to use near 'WITH COLUMN GROUP(all column, each column)) ORGANIZATION HEAP' at line 1
-create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c2) with (distance=L2, type=hnsw, model=ob_embed, dim=1024) WITH COLUMN GROUP(all column)) ORGANIZATION HEAP;
-ERROR 42000: You have an error in your SQL syntax; check the manual that corresponds to your OceanBase version for the right syntax to use near 'WITH COLUMN GROUP(all column)) ORGANIZATION HEAP' at line 1
-create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c2) with (distance=L2, type=hnsw, model=ob_embed, dim=1024) WITH COLUMN GROUP(each column)) ORGANIZATION HEAP;
-ERROR 42000: You have an error in your SQL syntax; check the manual that corresponds to your OceanBase version for the right syntax to use near 'WITH COLUMN GROUP(each column)) ORGANIZATION HEAP' at line 1
 "------------------------------------------ show create table -------------------------------------------------------"
 alter system set ob_vector_memory_limit_percentage = 20;
 drop table if exists t_vec;

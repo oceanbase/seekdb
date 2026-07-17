@@ -22,58 +22,28 @@ namespace oceanbase
 {
 namespace observer
 {
-int ObAllVirtualServerSchemaInfo::inner_open()
-{
-  int ret = OB_SUCCESS;
-  idx_ = 0;
-  share::schema::ObSchemaGetterGuard guard;
-  if (OB_FAIL(schema_service_.get_tenant_schema_guard(OB_SYS_TENANT_ID, guard))) {
-    LOG_WARN("fail to get schema guard", K(ret));
-  } else if (OB_INVALID_TENANT_ID == effective_tenant_id_) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid tenant_id", KR(ret), K_(effective_tenant_id));
-  } else if (is_sys_tenant(effective_tenant_id_)) {
-    // all tenant's schema is visible in sys tenant
-    if (OB_FAIL(guard.get_tenant_ids(tenant_ids_))) {
-      LOG_WARN("fail to get tenant_ids", KR(ret));
-    }
-  } else {
-    // user/meta tenant can see its own schema
-    bool is_exist = false;
-    if (OB_FAIL(guard.check_tenant_exist(effective_tenant_id_, is_exist))) {
-      LOG_WARN("fail to check tenant exist", KR(ret), K_(effective_tenant_id));
-    } else if (is_exist && OB_FAIL(tenant_ids_.push_back(effective_tenant_id_))) {
-      LOG_WARN("fail to push back effective_tenant_id", KR(ret), K_(effective_tenant_id));
-    }
-  }
-  return ret;
-}
-
 int ObAllVirtualServerSchemaInfo::inner_get_next_row(common::ObNewRow *&row)
 {
   int ret = OB_SUCCESS;
-  if (idx_ >= tenant_ids_.count()) {
+  if (start_to_read_) {
     ret = OB_ITER_END;
-  } else if (OB_INVALID_TENANT_ID == tenant_ids_[idx_]) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid tenant_id", K(ret));
   } else {
-    const uint64_t tenant_id = tenant_ids_[idx_];
+    start_to_read_ = true;
     int64_t refreshed_schema_version = OB_INVALID_VERSION;
     int64_t received_schema_version = OB_INVALID_VERSION;
     int64_t schema_count = OB_INVALID_ID;
     int64_t schema_size = OB_INVALID_ID;
     share::schema::ObSchemaGetterGuard schema_guard;
-    if (OB_FAIL(schema_service_.get_tenant_refreshed_schema_version(tenant_id, refreshed_schema_version))) {
-      LOG_WARN("fail to get tenant refreshed schema version", K(ret), K(tenant_id), K(refreshed_schema_version));
-    } else if (OB_FAIL(schema_service_.get_tenant_received_broadcast_version(tenant_id, received_schema_version))) {
-      LOG_WARN("fail to get tenant receieved schema version", K(ret), K(tenant_id), K(received_schema_version));
+    if (OB_FAIL(schema_service_.get_tenant_refreshed_schema_version(refreshed_schema_version))) {
+      LOG_WARN("fail to get tenant refreshed schema version", K(ret), K(refreshed_schema_version));
+    } else if (OB_FAIL(schema_service_.get_tenant_received_broadcast_version(received_schema_version))) {
+      LOG_WARN("fail to get tenant receieved schema version", K(ret), K(received_schema_version));
     } else {
       int tmp_ret = OB_SUCCESS;
-      if (OB_SUCCESS != (tmp_ret = schema_service_.get_tenant_schema_guard(tenant_id, schema_guard))) {
-        LOG_WARN("fail to get schema guard", K(tmp_ret), K(tenant_id));
-      } else if (OB_SUCCESS != (tmp_ret = schema_guard.get_schema_count(tenant_id, schema_count))) {
-        LOG_WARN("fail to get schema count", K(tmp_ret), K(tenant_id));
+      if (OB_SUCCESS != (tmp_ret = schema_service_.get_tenant_schema_guard(schema_guard))) {
+        LOG_WARN("fail to get schema guard", K(tmp_ret));
+      } else if (OB_SUCCESS != (tmp_ret = schema_guard.get_schema_count(schema_count))) {
+        LOG_WARN("fail to get schema count", K(tmp_ret));
       }
     }
 
@@ -116,7 +86,6 @@ int ObAllVirtualServerSchemaInfo::inner_get_next_row(common::ObNewRow *&row)
 
     if (OB_SUCC(ret)) {
       row = &cur_row_;
-      idx_++;
     }
   }
   return ret;

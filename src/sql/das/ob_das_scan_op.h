@@ -23,10 +23,9 @@
 #include "sql/das/ob_group_scan_iter.h"
 #include "sql/das/iter/ob_das_iter.h"
 #include "sql/rewrite/ob_query_range_define.h"
-#include "share/domain_id/ob_domain_id.h"
-#include "share/external_table/ob_external_table_part_info.h"
-#include "share/external_table/ob_external_object_ctx.h"
-#include "share/vector_index/ob_vector_index_util.h"
+#include "sql/das/ob_domain_id.h"
+#include "share/catalog/ob_external_object_ctx.h"
+#include "observer/vector_index/ob_vector_index_util.h"
 
 namespace oceanbase
 {
@@ -101,13 +100,7 @@ public:
       group_id_expr_(nullptr),
       result_output_(alloc),
       is_get_(false),
-      is_external_table_(false),
-      external_file_access_info_(alloc),
-      external_file_location_(alloc),
-      external_file_pattern_(alloc),
-      external_files_(alloc),
-      external_file_format_str_(alloc),
-      partition_infos_(alloc),
+
       external_object_ctx_(alloc),
       trans_info_expr_(nullptr),
       ir_scan_type_(ObTSCIRScanType::OB_NOT_A_SPEC_SCAN),
@@ -157,11 +150,6 @@ public:
                        KPC_(group_id_expr),
                        K_(result_output),
                        K_(is_get),
-                       K_(is_external_table),
-                       K_(external_files),
-                       K_(external_file_format_str),
-                       K_(external_file_location),
-                       K_(external_file_pattern),
                        KPC_(trans_info_expr),
                        K_(ir_scan_type),
                        K_(rowkey_exprs),
@@ -184,13 +172,6 @@ public:
   //result_output_ indicate exprs that the storage layer will fill in the value
   sql::ExprFixedArray result_output_;
   bool is_get_;
-  bool is_external_table_;
-  ObExternalFileFormat::StringData external_file_access_info_;
-  ObExternalFileFormat::StringData external_file_location_;
-  ObExternalFileFormat::StringData external_file_pattern_;
-  ExternalFileNameArray external_files_; //for external table scan TODO jim.wjh remove
-  ObExternalFileFormat::StringData external_file_format_str_;
-  share::ObExternalTablePartInfoArray partition_infos_; // FARM COMPAT WHITELIST
   share::ObExternalObjectCtx external_object_ctx_;
   ObExpr *trans_info_expr_; // transaction information pseudo-column
   ObTSCIRScanType ir_scan_type_; // specify retrieval scan type
@@ -228,7 +209,6 @@ public:
       need_scn_(false),
       force_refresh_lc_(false),
       need_check_output_datum_(false),
-      fb_read_tx_uncommitted_(false),
       frozen_version_(-1),
       fb_snapshot_(),
       timeout_ts_(-1),
@@ -264,7 +244,6 @@ public:
                        K_(force_refresh_lc),
                        K_(frozen_version),
                        K_(fb_snapshot),
-                       K_(fb_read_tx_uncommitted),
                        K_(timeout_ts),
                        K_(tx_lock_timeout),
                        K_(sql_mode),
@@ -286,7 +265,6 @@ public:
   bool need_scn_;
   bool force_refresh_lc_;
   bool need_check_output_datum_;
-  bool fb_read_tx_uncommitted_;
   int64_t frozen_version_;
   share::SCN fb_snapshot_;
   int64_t timeout_ts_;
@@ -422,7 +400,7 @@ protected:
   {
     if (nullptr == retry_alloc_) {
       ObMemAttr attr;
-      attr.tenant_id_ = MTL_ID();
+      
       attr.label_ = "RetryDASCtx";
       retry_alloc_ = new(&retry_alloc_buf_) common::ObArenaAllocator();
       retry_alloc_->set_attr(attr);
@@ -511,7 +489,6 @@ public:
       rowkey_iter_(nullptr),
       lookup_iter_(),
       tablet_id_(),
-      ls_id_(),
       scan_param_(),
       lookup_memctx_(),
       status_(0),
@@ -544,7 +521,6 @@ public:
   bool is_group_scan() const { return is_group_scan_; }
   void set_tablet_id(const common::ObTabletID &tablet_id) { tablet_id_ = tablet_id; }
   void set_index_tablet_id(const common::ObTabletID &tablet_id) { index_tablet_id_ = tablet_id; }
-  void set_ls_id(const share::ObLSID &ls_id) { ls_id_ = ls_id; }
   void set_rowkey_iter(common::ObNewRowIterator *rowkey_iter) {rowkey_iter_ = rowkey_iter;}
   common::ObNewRowIterator *get_rowkey_iter() { return rowkey_iter_; }
   int reuse_iter();
@@ -554,7 +530,6 @@ public:
                        KPC_(tx_desc),
                        KPC_(snapshot),
                        K_(tablet_id),
-                       K_(ls_id),
                        K_(state),
                        K_(index_end));
   common::ObITabletScan &get_tsc_service();
@@ -574,7 +549,6 @@ protected:
   common::ObNewRowIterator *rowkey_iter_;
   common::ObNewRowIterator *lookup_iter_;
   common::ObTabletID tablet_id_;
-  share::ObLSID ls_id_;
   storage::ObTableScanParam scan_param_;
 
   ObSEArray<ObDatum *, 4> trans_info_array_;
@@ -608,8 +582,6 @@ private:
   int64_t group_size_;
 };
 
-
 }  // namespace sql
 }  // namespace oceanbase
 #endif /* OBDEV_SRC_SQL_DAS_OB_DAS_SCAN_OP_H_ */
-

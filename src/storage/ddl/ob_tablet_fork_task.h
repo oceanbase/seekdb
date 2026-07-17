@@ -20,7 +20,7 @@
 #define USING_LOG_PREFIX STORAGE
 
 #include "share/ob_ddl_common.h"
-#include "share/scheduler/ob_tenant_dag_scheduler.h"
+#include "observer/scheduler/ob_tenant_dag_scheduler.h"
 #include "storage/access/ob_table_access_context.h"
 #include "storage/access/ob_store_row_iterator.h"
 #include "storage/access/ob_sstable_row_whole_scanner.h"
@@ -30,7 +30,6 @@
 #include "storage/tablet/ob_tablet_obj_load_helper.h"
 #include "storage/tablet/ob_tablet_member_wrapper.h"
 #include "lib/oblog/ob_log_module.h"
-#include "storage/tx_storage/ob_ls_handle.h" // For ObLSHandle
 #include "storage/tablet/ob_tablet_create_delete_helper.h"
 #include "lib/lock/ob_mutex.h"
 #include "storage/ddl/ob_tablet_rebuild_util.h"
@@ -41,8 +40,8 @@ namespace oceanbase
 {
 namespace storage
 {
+class ObLS;
 class ObTableForkInfo;
-struct ObMigrationTabletParam;
 
 struct ObForkScanParam final
 {
@@ -52,12 +51,12 @@ public:
     const ObTabletHandle &tablet_handle,
     const ObDatumRange &query_range,
     const ObStorageSchema &storage_schema) :
-    table_id_(table_id), tablet_handle_(tablet_handle),
+    table_id_(table_id), tablet_handle_(tablet_handle), 
     query_range_(&query_range), storage_schema_(&storage_schema)
   { }
   ~ObForkScanParam() = default;
-  bool is_valid() const {
-    return table_id_ > 0 && tablet_handle_.is_valid() && nullptr != query_range_
+  bool is_valid() const { 
+    return table_id_ > 0 && tablet_handle_.is_valid() && nullptr != query_range_ 
         && (nullptr != storage_schema_ && storage_schema_->is_valid());
   }
   TO_STRING_KV(K_(table_id), K_(tablet_handle), KPC_(query_range), KPC_(storage_schema));
@@ -73,23 +72,21 @@ class ObForkSnapshotRowScan : public ObIStoreRowIterator
 public:
   ObForkSnapshotRowScan();
   virtual ~ObForkSnapshotRowScan();
-
+  
   int init(
       const ObForkScanParam &param,
       ObSSTable &sstable,
-      const share::ObLSID &ls_id,
       const int64_t fork_snapshot_version);
-
+  
   virtual int get_next_row(const blocksstable::ObDatumRow *&tmp_row) override;
 
   const ObITableReadInfo *get_rowkey_read_info() const { return rowkey_read_info_; }
   storage::ObTxTableGuards &get_tx_table_guards() { return ctx_.mvcc_acc_ctx_.get_tx_table_guards(); }
 
-  TO_STRING_KV(K_(is_inited), K_(fork_snapshot_version), K_(ls_id), K_(ctx), K_(access_ctx), KPC_(rowkey_read_info), K_(access_param));
+  TO_STRING_KV(K_(is_inited), K_(fork_snapshot_version), K_(ctx), K_(access_ctx), KPC_(rowkey_read_info), K_(access_param));
 private:
   int construct_access_param(const ObForkScanParam &param);
   int construct_access_ctx(
-      const share::ObLSID &ls_id,
       const common::ObTabletID &tablet_id,
       const int64_t fork_snapshot_version);
   int build_rowkey_read_info(const ObForkScanParam &param);
@@ -101,7 +98,6 @@ private:
   ObRowkeyReadInfo *rowkey_read_info_;
   ObTableAccessParam access_param_;
   common::ObArenaAllocator allocator_;
-  share::ObLSID ls_id_;
   int64_t fork_snapshot_version_;
 };
 
@@ -118,13 +114,11 @@ public:
   void reset();
   bool is_valid() const;
   int init(const ObTabletForkParam &param);
-  TO_STRING_KV(K_(is_inited), K_(tenant_id), K_(ls_id), K_(table_id), K_(schema_version),
+  TO_STRING_KV(K_(is_inited), K_(table_id), K_(schema_version),
                K_(task_id), K_(source_tablet_id), K_(dest_tablet_id), K_(fork_snapshot_version),
-               K_(compat_mode), K_(data_format_version), K_(consumer_group_id));
+               K_(compat_mode), K_(data_format_version));
 public:
   bool is_inited_;
-  uint64_t tenant_id_;
-  share::ObLSID ls_id_;
   uint64_t table_id_;
   int64_t schema_version_;
   int64_t task_id_;
@@ -133,7 +127,6 @@ public:
   int64_t fork_snapshot_version_;
   lib::Worker::CompatMode compat_mode_;
   int64_t data_format_version_;
-  int64_t consumer_group_id_;
 };
 
 struct ObTabletForkCtx final
@@ -143,8 +136,7 @@ public:
   ~ObTabletForkCtx();
   int init(const ObTabletForkParam &param);
   bool is_valid() const;
-  TO_STRING_KV(K_(is_inited), K_(complement_data_ret), K_(row_inserted),
-               K_(ls_rebuild_seq));
+  TO_STRING_KV(K_(is_inited), K_(complement_data_ret), K_(row_inserted));
 public:
   int prepare_index_builder(const ObTabletForkParam &param);
   common::ObIAllocator &get_allocator() { return allocator_; }
@@ -171,7 +163,7 @@ public:
   typedef common::hash::ObHashMap<ObForkSSTableTaskKey, ObSSTableIndexBuilder*> INDEX_BUILDER_MAP;
   bool is_inited_;
   int complement_data_ret_;
-  ObLSHandle ls_handle_;
+  ObLS *ls_;
   ObTabletHandle src_tablet_handle_;
   ObTabletHandle dst_tablet_handle_;
   ObTabletMemberWrapper<ObTabletTableStore> snapshot_table_store_;
@@ -181,7 +173,6 @@ public:
   ObTablesHandleArray created_sstable_handles_;
   lib::ObMutex created_sstable_handles_lock_;  // Protect concurrent access to created_sstable_handles_
   int64_t row_inserted_;
-  int64_t ls_rebuild_seq_;
   DISALLOW_COPY_AND_ASSIGN(ObTabletForkCtx);
 };
 
@@ -201,15 +192,12 @@ public:
   int fill_dag_key(char *buf, const int64_t buf_len) const override;
   virtual lib::Worker::CompatMode get_compat_mode() const override
   { return param_.compat_mode_; }
-  virtual uint64_t get_consumer_group_id() const override
-  { return static_cast<uint64_t>(consumer_group_id_); }
   virtual bool is_ha_dag() const override { return false; }
   int calc_total_row_count();
 private:
   bool is_inited_;
   ObTabletForkParam param_;
   ObTabletForkCtx context_;
-  int64_t consumer_group_id_;
   DISALLOW_COPY_AND_ASSIGN(ObTabletForkDag);
 };
 
@@ -287,8 +275,7 @@ public:
 private:
   int create_sstables();
   int update_table_store_with_batch_tables(
-      const int64_t ls_rebuild_seq,
-      const ObLSHandle &ls_handle,
+      ObLS *ls,
       const ObTabletHandle &src_tablet_handle,
       const ObTabletHandle &dst_tablet_handle,
       const common::ObTabletID &dst_tablet_id,
@@ -315,8 +302,8 @@ public:
       const int64_t fork_snapshot_version,
       ObIArray<ObITable *> &participants);
   static int try_schedule_fork_dags(const ObTableForkInfo &fork_info);
-  static int freeze_tablet(const share::ObLSID &ls_id, const common::ObTabletID &tablet_id);
-  static int freeze_tablets(const share::ObLSID &ls_id, const ObIArray<common::ObTabletID> &tablet_ids);
+  static int freeze_tablet(const common::ObTabletID &tablet_id);
+  static int freeze_tablets(const ObIArray<common::ObTabletID> &tablet_ids);
 };
 
 }  // end namespace storage

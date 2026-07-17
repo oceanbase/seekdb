@@ -35,21 +35,21 @@ public:
   ~ObScheduleStatistics() {}
   OB_INLINE void reset()
   {
-    all_ls_weak_read_ts_ready_ = false;
+    weak_read_ts_ready_ = false;
     add_weak_read_ts_event_flag_ = false;
     check_weak_read_ts_cnt_ = 0;
     start_timestamp_ = 0;
   }
   OB_INLINE void start_merge()
   {
-    all_ls_weak_read_ts_ready_ = false;
+    weak_read_ts_ready_ = false;
     add_weak_read_ts_event_flag_ = true;
     check_weak_read_ts_cnt_ = 0;
     start_timestamp_ = ObTimeUtility::fast_current_time();
   }
-  TO_STRING_KV(K_(all_ls_weak_read_ts_ready), K_(start_timestamp));
+  TO_STRING_KV(K_(weak_read_ts_ready), K_(start_timestamp));
 
-  bool all_ls_weak_read_ts_ready_;
+  bool weak_read_ts_ready_;
   bool add_weak_read_ts_event_flag_;
   int64_t check_weak_read_ts_cnt_;
   int64_t start_timestamp_;

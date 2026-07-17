@@ -43,7 +43,6 @@ extern void ob_signal_handler(int, siginfo_t *, void *);
 typedef void (*signal_handler_t)(int, siginfo_t *, void *);
 extern signal_handler_t &get_signal_handler();
 extern bool g_redirect_handler;
-extern const int SIG_STACK_SIZE;
 extern uint64_t g_rlimit_core;
 
 struct ObSignalHandlerGuard

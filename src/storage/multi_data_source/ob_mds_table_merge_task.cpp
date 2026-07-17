@@ -98,7 +98,6 @@ int ObMdsTableMergeTask::process()
     ObTablet *tablet = nullptr;
     ObTabletMergeCtx &ctx = *ctx_ptr;
     ctx.static_param_.start_time_ = common::ObTimeUtility::fast_current_time();
-    const share::ObLSID &ls_id = ctx.get_ls_id();
     const common::ObTabletID &tablet_id = ctx.get_tablet_id();
 #ifdef ERRSIM
     if (GCONF.errsim_test_tablet_id.get_value() > 0 && tablet_id.id() == GCONF.errsim_test_tablet_id.get_value()) {
@@ -119,53 +118,52 @@ int ObMdsTableMergeTask::process()
       LOG_WARN("failed to get ls and tablet", KR(ret), K(ctx), KPC(mds_merge_dag_));
     } else if (OB_ISNULL(ls = ctx.get_ls())) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("ls is null", K(ret), K(ls_id), "ls_handle", ctx.static_param_.ls_handle_, KPC(mds_merge_dag_));
+      LOG_WARN("ls is null", K(ret), "tenant_ls", ctx.static_param_.ls_, KPC(mds_merge_dag_));
     } else if (ls->is_offline()) {
       ret = OB_CANCELED;
       LOG_INFO("ls offline, skip merge", K(ret), K(ctx), KPC(mds_merge_dag_));
     } else if (OB_FAIL(ctx.init_tablet_merge_info())) {
-      LOG_WARN("failed to init tablet merge info", K(ret), K(ls_id), K(tablet_id), KPC(mds_merge_dag_));
+      LOG_WARN("failed to init tablet merge info", K(ret), K(tablet_id), KPC(mds_merge_dag_));
     } else if (OB_ISNULL(tablet = ctx.get_tablet())) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("tablet is null", K(ret), K(ls_id), K(tablet_id));
+      LOG_WARN("tablet is null", K(ret), K(tablet_id));
     } else if (CLICK_FAIL(tablet->get_mds_table_for_dump(mds_table))) {
       if (OB_EMPTY_RESULT != ret) {
-        LOG_WARN("fail to get mds table", K(ret), K(ls_id), K(tablet_id));
+        LOG_WARN("fail to get mds table", K(ret), K(tablet_id));
       } else {
         ret = OB_NO_NEED_MERGE;
       }
     } else if (OB_UNLIKELY(!mds_table.get_mds_table_ptr()->is_construct_sequence_matched(mds_construct_sequence))) {
       ret = OB_NO_NEED_MERGE;
-      LOG_WARN("construct sequence does not match current mds table, no need to merge", K(ret), K(ls_id), K(tablet_id), K(mds_construct_sequence));
+      LOG_WARN("construct sequence does not match current mds table, no need to merge", K(ret), K(tablet_id), K(mds_construct_sequence));
     } else if (tablet->get_mds_checkpoint_scn() >= flush_scn) {
       need_schedule_mds_minor = false;
       FLOG_INFO("flush scn smaller than mds ckpt scn, only flush nodes of mds table and do not generate mds mini",
-          K(ret), K(ls_id), K(tablet_id), K(flush_scn),
+          K(ret), K(tablet_id), K(flush_scn),
           "mds_checkpoint_scn", tablet->get_mds_checkpoint_scn(),
           KPC(mds_merge_dag_));
       ctx.time_guard_click(ObStorageCompactionTimeGuard::EXECUTE);
       share::dag_yield();
     } else if (FALSE_IT(ctx.static_param_.scn_range_.start_scn_ = tablet->get_mds_checkpoint_scn())) {
-    } else if (FALSE_IT(ctx.static_desc_.tablet_transfer_seq_ = tablet->get_transfer_seq())) {
     } else if (MDS_FAIL(build_mds_sstable(ctx, mds_construct_sequence, table_handle))) {
       if (OB_EMPTY_RESULT != ret) {
-        LOG_WARN("fail to build mds sstable", K(ret), K(ls_id), K(tablet_id), KPC(mds_merge_dag_));
+        LOG_ERROR("fail to build mds sstable", K(ret), K(tablet_id), KPC(mds_merge_dag_));
       } else {
         // abort transaction may trigger an empty mds table dump to relase mem and clog scn
-        // however, an uncommitted tablet for example create/transfer in/split dest, need to
+        // however, an uncommitted tablet, for example create/split dest, needs to
         // transform to empty shell accoring to the mds table rec scn (See 
         // ObTabletEmptyShellHandler::check_tablet_from_aborted_tx_).
         // So here double check tablet status that only flush those committed tablet status.
         ret = OB_SUCCESS;
         if (OB_FAIL(check_tablet_status_for_empty_mds_table_(*tablet))) {
           if (OB_NO_NEED_MERGE != ret) {
-            LOG_WARN("fail to check tablet status", K(ret), K(ls_id), K(tablet_id), KPC(mds_merge_dag_));
+            LOG_WARN("fail to check tablet status", K(ret), K(tablet_id), KPC(mds_merge_dag_));
           } else  {
-            FLOG_INFO("skip uncommitted creation tablet", K(ls_id), K(tablet_id));
+            FLOG_INFO("skip uncommitted creation tablet", K(tablet_id));
           }
         } else {
           need_schedule_mds_minor = false;
-          FLOG_INFO("trigger empty mds table flush", K(ls_id), K(tablet_id));
+          FLOG_INFO("trigger empty mds table flush", K(tablet_id));
         }
       }
     } else if (CLICK_FAIL(ls->build_new_tablet_from_mds_table(
@@ -174,7 +172,7 @@ int ObMdsTableMergeTask::process()
         table_handle,
         flush_scn,
         new_tablet_handle))) {
-      LOG_WARN("failed to build new tablet from mds table", K(ret), K(ctx), K(ls_id), K(tablet_id), 
+      LOG_ERROR("failed to build new tablet from mds table", K(ret), K(ctx), K(tablet_id),
               K(flush_scn), KPC(mds_merge_dag_));
     }
 
@@ -204,25 +202,24 @@ int ObMdsTableMergeTask::process()
 void ObMdsTableMergeTask::try_schedule_compaction_after_mds_mini(compaction::ObTabletMergeCtx &ctx, ObTabletHandle &tablet_handle)
 {
   int ret = OB_SUCCESS;
-  const share::ObLSID &ls_id = ctx.get_ls_id();
   const common::ObTabletID &tablet_id = ctx.get_tablet_id();
   bool during_restore = false;
-  if (OB_UNLIKELY(!ls_id.is_valid() || !tablet_id.is_valid() || !tablet_handle.is_valid())) {
+  if (OB_UNLIKELY(!tablet_id.is_valid() || !tablet_handle.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid args", K(ret), K(ls_id), K(tablet_id), K(tablet_handle), KPC(mds_merge_dag_));
+    LOG_WARN("invalid args", K(ret), K(tablet_id), K(tablet_handle), KPC(mds_merge_dag_));
   // when restoring, some log stream may be not ready,
   // thus the inner sql in ObTenantFreezeInfoMgr::try_update_info may timeout
   } else if (OB_SUCCESS == ObBasicMergeScheduler::get_merge_scheduler()->during_restore(during_restore) && !during_restore) {
     if (0 == ctx.get_merge_info().get_merge_history().block_info_.macro_block_count_) {
       // no need to schedule mds minor merge
     } else if (OB_FAIL(ObTenantTabletScheduler::schedule_tablet_minor_merge<ObTabletMergeExecuteDag>(
-        compaction::MDS_MINOR_MERGE, ctx.static_param_.ls_handle_, tablet_handle))) {
+        compaction::MDS_MINOR_MERGE, ctx.static_param_.ls_, tablet_handle))) {
       if (OB_SIZE_OVERFLOW != ret) {
-        LOG_WARN("failed to schedule special tablet minor merge which triggle mds",
-            K(ret), K(ls_id), K(tablet_id), KPC(mds_merge_dag_));
+        LOG_ERROR("failed to schedule special tablet minor merge which triggle mds",
+            K(ret), K(tablet_id), KPC(mds_merge_dag_));
       }
     } else {
-      LOG_TRACE("succeed to try schedule mds minor after mds", K(ls_id), K(tablet_id), KPC(mds_merge_dag_));
+      LOG_TRACE("succeed to try schedule mds minor after mds", K(tablet_id), KPC(mds_merge_dag_));
     }
   }
 }
@@ -248,14 +245,13 @@ int ObMdsTableMergeTask::build_mds_sstable(
     ObTableHandleV2 &table_handle)
 {
   int ret = OB_SUCCESS;
-  const share::ObLSID &ls_id = ctx.get_ls_id();
   const common::ObTabletID &tablet_id = ctx.get_tablet_id();
 
   SMART_VARS_2((ObMdsTableMiniMerger, mds_mini_merger), (ObTabletDumpMds2MiniOperator, op)) {
     if (OB_FAIL(mds_mini_merger.init(ctx, op))) {
-      LOG_WARN("fail to init mds mini merger", K(ret), K(ctx), K(ls_id), K(tablet_id));
+      LOG_WARN("fail to init mds mini merger", K(ret), K(ctx), K(tablet_id));
     } else if (OB_FAIL(ctx.get_tablet()->scan_mds_table_with_op(mds_construct_sequence, op))) {
-      LOG_WARN("fail to scan mds table with op", K(ret), K(ctx), K(ls_id), K(tablet_id));
+      LOG_WARN("fail to scan mds table with op", K(ret), K(ctx), K(tablet_id));
     } else if (OB_FAIL(mds_mini_merger.generate_mds_mini_sstable(
           ctx.mem_ctx_.get_allocator(), table_handle))) {
       LOG_WARN("fail to generate mds mini sstable with mini merger", K(ret), K(mds_mini_merger));

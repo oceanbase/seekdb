@@ -268,7 +268,7 @@ TEST_F(TestDefaultFTParser, test_space_ft_parser_segment_bug_56324268)
 
   ft_parser_param_.fulltext_ = fulltext;
   ft_parser_param_.ft_length_ = ft_len;
-  ft_parser_param_.cs_ = common::ObCharset::get_charset(ObCollationType::CS_TYPE_LATIN1_SWEDISH_CI);
+  ft_parser_param_.cs_ = common::ObCharset::get_charset(ObCollationType::CS_TYPE_UTF8MB4_BIN);
 
   LOG_INFO("before space segment", KCSTRING(fulltext), K(ft_len), K(ft_parser_param_));
   ASSERT_EQ(OB_SUCCESS, parser.init(&ft_parser_param_));
@@ -472,7 +472,7 @@ ObTestFTParseHelper::ObTestFTParseHelper()
 void ObTestFTParseHelper::SetUp()
 {
   if (OB_ISNULL(GCTX.plugin_mgr_)) {
-    GCTX.plugin_mgr_ = OB_NEW(ObPluginMgr, ObMemAttr(OB_SYS_TENANT_ID, "test"));
+    GCTX.plugin_mgr_ = OB_NEW(ObPluginMgr, ObMemAttr("test"));
     ASSERT_NE(nullptr, GCTX.plugin_mgr_);
     ASSERT_EQ(OB_SUCCESS, GCTX.plugin_mgr_->init(ObString("")));
     ASSERT_EQ(OB_SUCCESS, GCTX.plugin_mgr_->load_builtin_plugins());

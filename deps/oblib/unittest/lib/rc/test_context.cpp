@@ -52,17 +52,16 @@ TEST_F(TestContext, Basic)
   ASSERT_TRUE(context->tree_node_.parent_ == context->tree_node_.child_ &&
               context->tree_node_.parent_ == context->tree_node_.next_ &&
               context->tree_node_.parent_ == nullptr);
-  uint64_t tenant_id = 1001;
   uint64_t ctx_id = ObCtxIds::WORK_AREA;
   ObMallocAllocator *ma = ObMallocAllocator::get_instance();
-  ASSERT_EQ(OB_SUCCESS, ma->create_and_add_tenant_allocator(tenant_id));
+  ASSERT_EQ(OB_SUCCESS, ma->create_and_add_tenant_allocator());
 
   ObPageManager g_pm;
   ObPageManager::set_thread_local_instance(g_pm);
-  g_pm.set_tenant_ctx(tenant_id, ctx_id);
+  g_pm.set_tenant_ctx(ctx_id);
   MemoryContext &root = MemoryContext::root();
   ContextParam param;
-  param.set_mem_attr(tenant_id, "Context", ctx_id);
+  param.set_mem_attr("Context", ctx_id);
   ContextTLOptGuard guard(true);
   param.properties_ = USE_TL_PAGE_OPTIONAL;
   MemoryContext mem_context;
@@ -72,7 +71,7 @@ TEST_F(TestContext, Basic)
   int64_t used = g_pm.used_;
   ASSERT_EQ(0, used);
   void *ptr = nullptr;
-  ObMemAttr attr(OB_SERVER_TENANT_ID, ObNewModIds::TEST);
+  ObMemAttr attr(ObNewModIds::TEST);
   WITH_CONTEXT(mem_context) {
     ptr = ctxalp(100);
     ASSERT_NE(ptr, nullptr);
@@ -220,16 +219,15 @@ TEST_F(TestContext, Basic)
   // Based on testing needs, this code is temporarily retained
   ob_malloc(10000000, ObNewModIds::OB_COMMON_ARRAY);
   ObMemoryDump::get_instance().init();
-  auto task = ObMemoryDump::get_instance().alloc_task();
-  task->type_ = DUMP_CHUNK;
-  task->dump_all_ = true;
-  ObMemoryDump::get_instance().push(task);
+  ObMemoryDumpTask task;
+  task.type_ = DUMP_CHUNK;
+  task.dump_all_ = true;
+  ObMemoryDump::get_instance().request_dump(task);
 
-  task = ObMemoryDump::get_instance().alloc_task();
-  task->type_ = STAT_LABEL;
-  ObMemoryDump::get_instance().push(task);
+  task.type_ = STAT_LABEL;
+  ObMemoryDump::get_instance().request_dump(task);
   usleep(1000000);
-  ObMallocAllocator::get_instance()->get_tenant_ctx_allocator(500, ObCtxIds::DEFAULT_CTX_ID)->print_memory_usage();
+  ObMallocAllocator::get_instance()->get_tenant_ctx_allocator(ObCtxIds::DEFAULT_CTX_ID)->print_memory_usage();
 }
 
 bool req_cache_empty(ObTenantCtxAllocator *ta)
@@ -244,15 +242,14 @@ bool req_cache_empty(ObTenantCtxAllocator *ta)
 
 TEST_F(TestContext, PM_Wash)
 {
-  uint64_t tenant_id = 1002;
   uint64_t ctx_id = ObCtxIds::DEFAULT_CTX_ID;
   ObMallocAllocator *ma = ObMallocAllocator::get_instance();
-  ASSERT_EQ(OB_SUCCESS, ma->create_and_add_tenant_allocator(tenant_id));
-  auto ta = ObMallocAllocator::get_instance()->get_tenant_ctx_allocator(tenant_id, ctx_id);
-  ObMemAttr attr(tenant_id, "test", ctx_id);
+  ASSERT_EQ(OB_SUCCESS, ma->create_and_add_tenant_allocator());
+  auto ta = ObMallocAllocator::get_instance()->get_tenant_ctx_allocator(ctx_id);
+  ObMemAttr attr("test", ctx_id);
   ObPageManager g_pm;
   ObPageManager::set_thread_local_instance(g_pm);
-  g_pm.set_tenant_ctx(tenant_id, ctx_id);
+  g_pm.set_tenant_ctx(ctx_id);
   ContextTLOptGuard guard(true);
   ContextParam param;
   param.set_mem_attr(attr);

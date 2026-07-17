@@ -32,11 +32,10 @@ namespace rootserver
 {
 ////////////////////////////////////////////////////////////////
 ObPurgeRecyclebinTask::ObPurgeRecyclebinTask(ObRootService &rs)
-    :ObAsyncTimerTask(rs.get_inspect_task_queue()),
-    root_service_(rs)
+    :root_service_(rs)
 {}
 
-int ObPurgeRecyclebinTask::process()
+void ObPurgeRecyclebinTask::runTimerTask()
 {
   LOG_INFO("purge recyclebin task begin");
   int ret = OB_SUCCESS;
@@ -45,7 +44,7 @@ int ObPurgeRecyclebinTask::process()
   int64_t expire_time = GCONF.recyclebin_object_expire_time;
   int64_t purge_interval = GCONF._recyclebin_object_purge_frequency;
   if (expire_time > 0 && purge_interval > 0) {
-   if (OB_FAIL(root_service_.purge_recyclebin_objects(PURGE_EACH_TIME))) {
+    if (OB_FAIL(root_service_.purge_recyclebin_objects(PURGE_EACH_TIME))) {
       LOG_WARN("fail to purge recyclebin objects", KR(ret));
     }
     delay = purge_interval;
@@ -59,18 +58,6 @@ int ObPurgeRecyclebinTask::process()
     LOG_INFO("submit purge recyclebin task success", K(delay));
   }
   LOG_INFO("purge recyclebin task end", K(delay));
-  return OB_SUCCESS;
-}
-
-ObAsyncTask *ObPurgeRecyclebinTask::deep_copy(char *buf, const int64_t buf_size) const
-{
-  ObPurgeRecyclebinTask *task = NULL;
-  if (NULL == buf || buf_size < static_cast<int64_t>(sizeof(*this))) {
-    LOG_WARN_RET(OB_BUF_NOT_ENOUGH, "buffer not large enough", K(buf_size));
-  } else {
-    task = new(buf) ObPurgeRecyclebinTask(root_service_);
-  }
-  return task;
 }
 
 }//end namespace rootserver

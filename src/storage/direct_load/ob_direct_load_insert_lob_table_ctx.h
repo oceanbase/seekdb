@@ -32,7 +32,7 @@ public:
   ObDirectLoadInsertLobTabletContext();
   virtual ~ObDirectLoadInsertLobTabletContext();
   int init(ObDirectLoadInsertLobTableContext *table_ctx,
-           ObDirectLoadInsertDataTabletContext *data_tablet_ctx, const share::ObLSID &ls_id,
+           ObDirectLoadInsertDataTabletContext *data_tablet_ctx,
            const common::ObTabletID &origin_tablet_id, const common::ObTabletID &tablet_id);
   int open() override;
   int close() override;
@@ -88,9 +88,9 @@ public:
   virtual ~ObDirectLoadInsertLobTableContext();
   int init(const ObDirectLoadInsertTableParam &param,
            ObDirectLoadInsertDataTableContext *data_table_ctx,
-           const common::ObIArray<table::ObTableLoadLSIdAndPartitionId> &ls_partition_ids,
-           const common::ObIArray<table::ObTableLoadLSIdAndPartitionId> &target_ls_partition_ids,
-           const common::ObIArray<table::ObTableLoadLSIdAndPartitionId> &data_ls_partition_ids);
+           const common::ObIArray<table::ObTableLoadTabletId> &partition_ids,
+           const common::ObIArray<table::ObTableLoadTabletId> &target_partition_ids,
+           const common::ObIArray<table::ObTableLoadTabletId> &data_partition_ids);
 
   void set_data_table_ctx(ObDirectLoadInsertTableContext *data_table_ctx)
   {
@@ -101,9 +101,9 @@ public:
 private:
   int create_all_tablet_contexts(
     ObDirectLoadInsertDataTableContext *data_table_ctx,
-    const common::ObIArray<table::ObTableLoadLSIdAndPartitionId> &ls_partition_ids,
-    const common::ObIArray<table::ObTableLoadLSIdAndPartitionId> &target_ls_partition_ids,
-    const common::ObIArray<table::ObTableLoadLSIdAndPartitionId> &data_ls_partition_ids);
+    const common::ObIArray<table::ObTableLoadTabletId> &partition_ids,
+    const common::ObIArray<table::ObTableLoadTabletId> &target_partition_ids,
+    const common::ObIArray<table::ObTableLoadTabletId> &data_partition_ids);
 
 private:
   ObDirectLoadInsertTableContext *data_table_ctx_;

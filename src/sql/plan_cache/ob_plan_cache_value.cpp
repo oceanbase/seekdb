@@ -18,7 +18,6 @@
 #include "ob_plan_cache_value.h"
 #include "sql/resolver/ob_resolver_utils.h"
 #include "sql/plan_cache/ob_pcv_set.h"
-#include "share/resource_manager/ob_resource_manager.h"
 #include "sql/plan_cache/ob_values_table_compression.h"
 
 using namespace oceanbase::share::schema;
@@ -38,14 +37,12 @@ int PCVSchemaObj::init(const ObTableSchema *schema)
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("unexpected null argument", K(ret), K(schema), K(inner_alloc_));
   } else {
-    tenant_id_ = schema->get_tenant_id();
     database_id_ = schema->get_database_id();
     schema_id_ = schema->get_table_id();
     schema_version_ = schema->get_schema_version();
     schema_type_ = TABLE_SCHEMA;
     table_type_ = schema->get_table_type();
     is_tmp_table_ = schema->is_tmp_table();
-    is_mv_container_table_ = schema->mv_container_table();
     // copy table name
     char *buf = nullptr;
     const ObString &tname = schema->get_table_name_str();
@@ -66,7 +63,7 @@ bool PCVSchemaObj::operator==(const PCVSchemaObj &other) const
   if (schema_type_ != other.schema_type_) {
     ret = false;
   } else if (TABLE_SCHEMA == other.schema_type_) {
-    ret = tenant_id_ == other.tenant_id_ &&
+    ret = true &&
           database_id_ == other.database_id_ &&
           schema_id_ == other.schema_id_ &&
           schema_version_ == other.schema_version_ &&
@@ -86,7 +83,6 @@ int PCVSchemaObj::init_without_copy_name(const ObSimpleTableSchemaV2 *schema)
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("unexpected null argument", K(ret), K(schema));
   } else {
-    tenant_id_ = schema->get_tenant_id();
     database_id_ = schema->get_database_id();
     schema_id_ = schema->get_table_id();
     schema_version_ = schema->get_schema_version();
@@ -110,7 +106,6 @@ int PCVSchemaObj::init_with_version_obj(const ObSchemaObjVersion &schema_obj_ver
 
 void PCVSchemaObj::reset()
 {
-  tenant_id_ = common::OB_INVALID_ID;
   database_id_ = common::OB_INVALID_ID;
   schema_id_ = common::OB_INVALID_ID;
   schema_type_ = OB_MAX_SCHEMA;
@@ -152,13 +147,13 @@ ObPlanCacheValue::ObPlanCacheValue()
 {
   MEMSET(sql_id_, 0, sizeof(sql_id_));
   MEMSET(format_sql_id_, 0, sizeof(format_sql_id_));
-  not_param_index_.set_attr(ObMemAttr(MTL_ID(), "NotParamIdex"));
-  neg_param_index_.set_attr(ObMemAttr(MTL_ID(), "NegParamIdex"));
-  must_be_positive_idx_.set_attr(ObMemAttr(MTL_ID(), "MustBePosiIdx"));
-  not_param_info_.set_attr(ObMemAttr(MTL_ID(), "NotParamInfo"));
-  not_param_var_.set_attr(ObMemAttr(MTL_ID(), "NotParamVar"));
-  param_charset_type_.set_attr(ObMemAttr(MTL_ID(), "ParamCharsType"));
-  fmt_int_or_ch_decint_idx_.set_attr(ObMemAttr(MTL_ID(), "FMTIntPrecIdx"));
+  not_param_index_.set_attr(ObMemAttr("NotParamIdex"));
+  neg_param_index_.set_attr(ObMemAttr("NegParamIdex"));
+  must_be_positive_idx_.set_attr(ObMemAttr("MustBePosiIdx"));
+  not_param_info_.set_attr(ObMemAttr("NotParamInfo"));
+  not_param_var_.set_attr(ObMemAttr("NotParamVar"));
+  param_charset_type_.set_attr(ObMemAttr("ParamCharsType"));
+  fmt_int_or_ch_decint_idx_.set_attr(ObMemAttr("FMTIntPrecIdx"));
 }
 
 int ObPlanCacheValue::init(ObPCVSet *pcv_set, const ObILibCacheObject *cache_obj, ObPlanCacheCtx &pc_ctx)
@@ -413,7 +408,7 @@ int ObPlanCacheValue::choose_plan(ObPlanCacheCtx &pc_ctx,
   bool is_old_version = false;
   plan_out = NULL;
   ObSQLSessionInfo *session = NULL;
-  uint64_t tenant_id = OB_INVALID_ID;
+  
   ObPlanCacheObject *plan = NULL;
   int64_t outline_param_idx = 0;
   // Check the version of the view and table involved in this SQL cached in pcv,
@@ -436,9 +431,6 @@ int ObPlanCacheValue::choose_plan(ObPlanCacheCtx &pc_ctx,
     SQL_PC_LOG(ERROR, "got session is NULL", K(ret));
   } else if (FALSE_IT(orig_rich_format_status = session->get_force_rich_format_status())) {
   } else if (FALSE_IT(session->set_stmt_type(stmt_type_))) {
-  } else if (OB_INVALID_ID == (tenant_id = session->get_effective_tenant_id())) {
-    ret = OB_ERR_UNEXPECTED;
-    SQL_PC_LOG(ERROR, "got effective tenant id is invalid", K(ret));
   } else if (OB_UNLIKELY(switchover_epoch_ != new_switchover_epoch)) {
     ret = OB_OLD_SCHEMA_VERSION;
     switchover_epoch_ = new_switchover_epoch;
@@ -446,7 +438,6 @@ int ObPlanCacheValue::choose_plan(ObPlanCacheCtx &pc_ctx,
   } else if (OB_FAIL(check_value_version_for_get(pc_ctx.sql_ctx_.schema_guard_,
                                                  need_check_schema,
                                                  schema_array,
-                                                 tenant_id,
                                                  is_old_version))) {
     SQL_PC_LOG(WARN, "fail to check table version", K(ret));
   } else if (true == is_old_version) {
@@ -527,66 +518,6 @@ int ObPlanCacheValue::choose_plan(ObPlanCacheCtx &pc_ctx,
               SQL_PC_LOG(TRACE, "failed to select plan in plan set", K(ret));
             }
           } else if (NULL != params) {
-            if (pc_ctx.sql_ctx_.enable_sql_resource_manage_) {
-              uint64_t rule_id = plan_set->resource_map_rule_.get_res_map_rule_id();
-              int64_t param_idx = plan_set->resource_map_rule_.get_res_map_rule_param_idx();
-              if (plan_set->resource_map_rule_.use_hint_control_resource()
-                  || (rule_id != OB_INVALID_ID && param_idx != OB_INVALID_INDEX)) {
-                uint64_t final_choosed_group_id = OB_INVALID_ID;
-                // 1. check hint first
-                if (plan_set->resource_map_rule_.use_hint_control_resource()) {
-                } else {
-                  // 2. check col res map rule
-                  uint64_t tenant_id = OB_INVALID_ID;
-                  ObString param_text;
-                  ObCollationType cs_type = CS_TYPE_INVALID;
-                  if (OB_UNLIKELY(param_idx < 0 || param_idx >= params->count())) {
-                    ret = OB_ERR_UNEXPECTED;
-                    LOG_ERROR("unexpected res map rule param idx", K(ret), K(rule_id), K(param_idx),
-                              K(params->count()));
-                  } else if (OB_FAIL(session->get_collation_connection(cs_type))) {
-                    LOG_WARN("get collation connection failed", K(ret));
-                  } else if (OB_INVALID_ID == (tenant_id = session->get_effective_tenant_id())) {
-                    ret = OB_ERR_UNEXPECTED;
-                    SQL_PC_LOG(ERROR, "got effective tenant id is invalid", K(ret));
-                  } else if (OB_FAIL(ObObjCaster::get_obj_param_text(
-                               params->at(param_idx), pc_ctx.raw_sql_, pc_ctx.allocator_, cs_type,
-                               param_text))) {
-                    LOG_WARN("get obj param text failed", K(ret));
-                  } else {
-                    final_choosed_group_id = 0;
-                  }
-                }
-                // 3.use default resource group if not match any resource group
-                // OB_INVALID_ID means current neither
-                // resource group specified by hint
-                // nor
-                // user+param_value column rule
-                // is in used
-                // get group_id according to current user.
-                if (OB_SUCC(ret) && OB_INVALID_ID == final_choosed_group_id) {
-                  final_choosed_group_id = 0;
-                }
-                if (OB_SUCC(ret)) {
-                  if (final_choosed_group_id == THIS_WORKER.get_group_id()) {
-                    // do nothing if equals to current group id.
-                  } else if (session->get_is_in_retry()
-                             && OB_NEED_SWITCH_CONSUMER_GROUP
-                                  == session->get_retry_info().get_last_query_retry_err()) {
-                    LOG_ERROR(
-                      "use unexpected group when retry, maybe set packet retry failed before",
-                      K(final_choosed_group_id), K(THIS_WORKER.get_group_id()),
-                      K(plan_set->resource_map_rule_));
-                  } else {
-                    session->set_expect_group_id(final_choosed_group_id);
-                    ret = OB_NEED_SWITCH_CONSUMER_GROUP;
-                  }
-                  LOG_TRACE("get expect rule id", K(ret), K(final_choosed_group_id),
-                            K(THIS_WORKER.get_group_id()), K(session->get_expect_group_id()),
-                            K(pc_ctx.raw_sql_));
-                }
-              }
-            }
             break; // this place is recommended to keep, if removed, additional markers need to be added in for() to judge, and the macro above the for loop should not be used;
           }
         }
@@ -1340,7 +1271,6 @@ int ObPlanCacheValue::check_value_version_for_add(const ObPlanCacheObject &cache
 int ObPlanCacheValue::check_value_version_for_get(share::schema::ObSchemaGetterGuard *schema_guard,
                                                   bool need_check_schema,
                                                   const ObIArray<PCVSchemaObj> &schema_array,
-                                                  const uint64_t tenant_id,
                                                   bool &result)
 {
   int ret = OB_SUCCESS;
@@ -1351,9 +1281,8 @@ int ObPlanCacheValue::check_value_version_for_get(share::schema::ObSchemaGetterG
     LOG_WARN("invalid argument", K(ret), K(schema_guard));
   } else if (need_check_schema
              &&OB_FAIL(get_outline_version(*schema_guard,
-                                           tenant_id,
                                            local_outline_version))) {
-    LOG_WARN("failed to get local outline version", K(ret), K(tenant_id));
+    LOG_WARN("failed to get local outline version", K(ret));
   } else if (OB_FAIL(check_value_version(need_check_schema,
                                          local_outline_version,
                                          schema_array,
@@ -1399,16 +1328,12 @@ int ObPlanCacheValue::check_dep_schema_version(const ObIArray<PCVSchemaObj> &sch
   int ret = OB_SUCCESS;
   is_old_version = false;
   int64_t table_count = schema_array.count();
-  ObSEArray<PCVSchemaObj*, 4> check_stored_schema;
-
-  if (OB_FAIL(remove_mv_schema(schema_array, check_stored_schema))) {
-    LOG_WARN("failed to remove mv schema", K(ret));
-  } else if (schema_array.count() != check_stored_schema.count()) {
+  if (schema_array.count() != stored_schema_objs_.count()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("table count do not match", K(ret), K(schema_array.count()), K(check_stored_schema.count()));
+    LOG_WARN("table count do not match", K(ret), K(schema_array.count()), K(stored_schema_objs_.count()));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && !is_old_version && i < table_count; ++i) {
-      const PCVSchemaObj *schema_obj1 = check_stored_schema.at(i);
+      const PCVSchemaObj *schema_obj1 = stored_schema_objs_.at(i);
       const PCVSchemaObj &schema_obj2 = schema_array.at(i);
       if (nullptr == schema_obj1) {
         ret = OB_ERR_UNEXPECTED;
@@ -1427,7 +1352,6 @@ int ObPlanCacheValue::check_dep_schema_version(const ObIArray<PCVSchemaObj> &sch
 }
 // Check if outline version is expired
 int ObPlanCacheValue::get_outline_version(ObSchemaGetterGuard &schema_guard,
-                                          const uint64_t tenant_id,
                                           ObSchemaObjVersion &local_outline_version)
 {
   int ret = OB_SUCCESS;
@@ -1437,9 +1361,6 @@ int ObPlanCacheValue::get_outline_version(ObSchemaGetterGuard &schema_guard,
   if (OB_ISNULL(pcv_set_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("pcv_set_ is null");
-  } else if (OB_INVALID_ID == tenant_id) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(tenant_id), K(database_id));
   } else if (OB_INVALID_ID == (database_id = pcv_set_->get_plan_cache_key().db_id_)
              || ObLibCacheNameSpace::NS_PRCR == pcv_set_->get_plan_cache_key().namespace_
              || ObLibCacheNameSpace::NS_SFC == pcv_set_->get_plan_cache_key().namespace_
@@ -1450,36 +1371,32 @@ int ObPlanCacheValue::get_outline_version(ObSchemaGetterGuard &schema_guard,
     const ObString &signature = outline_signature_;
     const ObString &format_signature = outline_format_signature_;
     // try normal
-    if (OB_FAIL(schema_guard.get_outline_info_with_signature(tenant_id,
-            database_id,
+    if (OB_FAIL(schema_guard.get_outline_info_with_signature(database_id,
             signature,
             false,
             outline_info))) {
-      LOG_WARN("failed to get_outline_info", K(tenant_id), K(database_id), K(signature));
+      LOG_WARN("failed to get_outline_info", K(database_id), K(signature));
     // try format
     } else if (NULL == outline_info && 
-              OB_FAIL(schema_guard.get_outline_info_with_signature(tenant_id,
-                      database_id,
+              OB_FAIL(schema_guard.get_outline_info_with_signature(database_id,
                       format_signature,
                       true,
                       outline_info))) {
-        LOG_WARN("failed to get_outline_info", K(tenant_id), K(database_id), K(signature));
+        LOG_WARN("failed to get_outline_info", K(database_id), K(signature));
     // try normal
     } else if (NULL == outline_info && !ObString::make_string(sql_id_).empty() &&
-              OB_FAIL(schema_guard.get_outline_info_with_sql_id(tenant_id,
-                      database_id,
+              OB_FAIL(schema_guard.get_outline_info_with_sql_id(database_id,
                       ObString::make_string(sql_id_),
                       false,
                       outline_info))) {
-        LOG_WARN("failed to get_outline_info", K(tenant_id), K(database_id), K(signature));
+        LOG_WARN("failed to get_outline_info", K(database_id), K(signature));
     // try format
     } else if (NULL == outline_info && !ObString::make_string(format_sql_id_).empty() &&
-              OB_FAIL(schema_guard.get_outline_info_with_sql_id(tenant_id,
-                      database_id,
+              OB_FAIL(schema_guard.get_outline_info_with_sql_id(database_id,
                       ObString::make_string(format_sql_id_),
                       true,
                       outline_info))) {
-        LOG_WARN("failed to get_outline_info", K(tenant_id), K(database_id), K(signature));
+        LOG_WARN("failed to get_outline_info", K(database_id), K(signature));
     }
     if (OB_SUCC(ret)) {
       if (NULL == outline_info) {
@@ -1599,7 +1516,7 @@ bool ObPlanCacheValue::is_contain_sys_pl_object() const
     if (nullptr != stored_schema_objs_.at(i)
         && (PACKAGE_SCHEMA == stored_schema_objs_.at(i)->schema_type_
             || UDT_SCHEMA == stored_schema_objs_.at(i)->schema_type_)
-        && OB_SYS_TENANT_ID == get_tenant_id_by_object_id(stored_schema_objs_.at(i)->schema_id_)) {
+        && true) {
       is_contain = true;
     }
   }
@@ -1707,7 +1624,6 @@ int ObPlanCacheValue::set_stored_schema_objs(const DependenyTableStore &dep_tabl
           pcv_schema_obj = nullptr;
         }
       } else if (OB_FAIL(schema_guard->get_table_schema(
-                  MTL_ID(),
                   table_version.get_object_id(),
                   table_schema))) { // now deal with table schema
         LOG_WARN("failed to get table schema", K(ret), K(table_version), K(table_schema));
@@ -1729,13 +1645,13 @@ int ObPlanCacheValue::set_stored_schema_objs(const DependenyTableStore &dep_tabl
       } else if (OB_FAIL(stored_schema_objs_.push_back(pcv_schema_obj))) {
         LOG_WARN("failed to push back array", K(ret));
       } else if(!contain_sys_name_table_) {
-        // oracle mode allows regular tables to have the same name as tables under sys, plan matching needs to distinguish to match different plans
-        // The tables under sys include system tables and views, so call is_sys_table_name to check if the table is under sys
-        // In addition, if the sql contains internal tables, changes in the schema version of internal tables will not be reflected in the tenant schema version of normal tenants
-        // In order to update the plan in a timely manner, it is necessary to check the schema version number of the corresponding internal table. The internal tables of Oracle tenants are under sys, mysql tenants
-        // Under oceanbase.
-        if (OB_FAIL(share::schema::ObSysTableChecker::is_sys_table_name(MTL_ID(),
-                                                                               OB_SYS_DATABASE_ID,
+        // Plan matching needs to distinguish regular tables from system tables
+        // with the same name. Tables under sys include system tables and views,
+        // so call is_sys_table_name to check whether the table is under sys.
+        // If SQL contains internal tables, internal-table schema changes are
+        // not reflected in the normal tenant schema version, so check the
+        // corresponding internal table schema version directly.
+        if (OB_FAIL(share::schema::ObSysTableChecker::is_sys_table_name(OB_SYS_DATABASE_ID,
                                                                                table_schema->get_table_name(),
                                                                                contain_sys_name_table_))) {
           LOG_WARN("failed to check sys table", K(ret));
@@ -1761,22 +1677,13 @@ int ObPlanCacheValue::set_stored_schema_objs(const DependenyTableStore &dep_tabl
 
 /* used to get plan
 
-   For the case where the query is for Table Schema, the database id needs to be passed in, with different strategies for different modes
-   MySQL mode:
-     When getting the plan, directly retrieve the database id from the cache PCVSchemaObj
-
-   Oracle mode:
-     In Oracle mode, if the schema is not specified in the SQL, use the db id from the session, e.g., select xx from test;
-     Otherwise, directly use the table id from PCVSchemaObj to query the schema, e.g., select xx from user.test;
-
-     The reason for doing this is to solve the following scenario: user1 and user2 both have a table named test,
-     when connecting with user1 and executing select * from user2.test,
-     if the db id from the session connected with user1 is used directly, since the table_name is used to query the schema,
-     it will query the schema under user1 and use it for match logic, which will definitely fail to match. In this scenario, if the db id is specified, the db id is fixed, directly using the table_id
-     to query the schema can query the schema of the test table under user2
-
-   Oracle system tables and regular tables solution:
-     Use the database id from the current session to query the table_name, if it exists then use this table schema as the matching condition; otherwise go to SYS DB to query the schema
+   For the case where the query is for table schema, schema matching must
+   distinguish three cases:
+   1. Unqualified table names use the session database id passed by the caller.
+   2. Explicitly qualified table names use the cached database id in PCVSchemaObj,
+      so same-name tables under different schemas do not match accidentally.
+   3. System-table names may collide with regular table names; first check the
+      session database, and fall back to SYS DB only when the name is not found.
  */
 int ObPlanCacheValue::get_all_dep_schema(ObPlanCacheCtx &pc_ctx,
                                          const uint64_t database_id,
@@ -1799,9 +1706,8 @@ int ObPlanCacheValue::get_all_dep_schema(ObPlanCacheCtx &pc_ctx,
     schema_array.reset();
     const ObSimpleTableSchemaV2 *table_schema = nullptr;
     PCVSchemaObj tmp_schema_obj;
-    uint64_t tenant_id = OB_INVALID_ID;
+    
     for (int64_t i = 0; OB_SUCC(ret) && i < stored_schema_objs_.count(); i++) {
-      tenant_id = MTL_ID();
       ObSchemaGetterGuard &schema_guard = *pc_ctx.sql_ctx_.schema_guard_;
       PCVSchemaObj *pcv_schema = stored_schema_objs_.at(i);
       if (OB_ISNULL(pcv_schema)) {
@@ -1812,15 +1718,13 @@ int ObPlanCacheValue::get_all_dep_schema(ObPlanCacheCtx &pc_ctx,
         int64_t new_version = 0;
         if (PACKAGE_SCHEMA == stored_schema_objs_.at(i)->schema_type_
             || UDT_SCHEMA == stored_schema_objs_.at(i)->schema_type_) {
-          tenant_id = get_tenant_id_by_object_id(stored_schema_objs_.at(i)->schema_id_);
         }
         if (OB_FAIL(ret)) { 
         } else if (OB_FAIL(schema_guard.get_schema_version(pcv_schema->schema_type_,
-                                                    tenant_id,
                                                     pcv_schema->schema_id_,
                                                     new_version))) {
           LOG_WARN("failed to get schema version",
-                   K(ret), K(tenant_id), K(pcv_schema->schema_type_), K(pcv_schema->schema_id_));
+                   K(ret), K(pcv_schema->schema_type_), K(pcv_schema->schema_id_));
         } else {
           if (SYNONYM_SCHEMA != pcv_schema->schema_type_) {
             tmp_schema_obj.schema_id_ = pcv_schema->schema_id_;
@@ -1833,13 +1737,13 @@ int ObPlanCacheValue::get_all_dep_schema(ObPlanCacheCtx &pc_ctx,
             tmp_schema_obj.reset();
           }
         }
-      } else if (OB_FAIL(schema_guard.get_simple_table_schema(tenant_id,
+      } else if (OB_FAIL(schema_guard.get_simple_table_schema(
                                                               pcv_schema->database_id_,
                                                               pcv_schema->table_name_,
                                                               false,
                                                               table_schema))) { // mysql mode directly use pcv schema cached db id query
         LOG_WARN("failed to get table schema",
-                 K(ret), K(pcv_schema->tenant_id_), K(pcv_schema->database_id_),
+                 K(ret), K(pcv_schema->database_id_),
                  K(pcv_schema->table_name_));
       } else {
         // do nothing
@@ -1864,40 +1768,6 @@ int ObPlanCacheValue::get_all_dep_schema(ObPlanCacheCtx &pc_ctx,
   }
   return ret;
 }
-// Targeting
-// Materialized view rewrite makes different plans for the same SQL depend on different tables, leading to plan cache entering different pcv set
-// In checking pcv set, skip tables related to materialized views, so that rewritten and non-rewritten SQL enter the same pcv set
-int ObPlanCacheValue::remove_mv_schema(const common::ObIArray<PCVSchemaObj> &schema_array,
-                                       common::ObIArray<PCVSchemaObj*> &check_stored_schema)
-{
-  int ret = OB_SUCCESS;
-  bool need_remove = true;
-  int64_t j = 0;
-  for (int64_t i = 0; OB_SUCC(ret) && i < stored_schema_objs_.count(); ++i) {
-    if (OB_ISNULL(stored_schema_objs_.at(i))) {
-      ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("invalid null table schema", K(ret), K(i), K(stored_schema_objs_.at(i)));
-    } else if (MATERIALIZED_VIEW == stored_schema_objs_.at(i)->table_type_
-        || MATERIALIZED_VIEW_LOG == stored_schema_objs_.at(i)->table_type_
-        || stored_schema_objs_.at(i)->is_mv_container_table_) {
-      if (j < schema_array.count()
-          && stored_schema_objs_.at(i)->schema_id_ == schema_array.at(j).schema_id_) {
-        if (OB_FAIL(check_stored_schema.push_back(stored_schema_objs_.at(i)))) {
-          LOG_WARN("failed to push back schema", K(ret));
-        } else {
-          ++j;
-        }
-      } else {
-        // do nothing, only materialized views existing in pcv set are rewritten, discard
-      }
-    } else if (OB_FAIL(check_stored_schema.push_back(stored_schema_objs_.at(i)))) {
-      LOG_WARN("failed to push back schema", K(ret));
-    } else {
-      ++j;
-    }
-  }
-  return ret;
-}
 // For comparing the schema that the plan depends on, note that the version information of the table schema is not compared here
 // table schema version information is used to phase out pcv set, during check_value_version comparison
 int ObPlanCacheValue::match_dep_schema(const ObPlanCacheCtx &pc_ctx,
@@ -1907,31 +1777,28 @@ int ObPlanCacheValue::match_dep_schema(const ObPlanCacheCtx &pc_ctx,
   int ret = OB_SUCCESS;
   is_same = true;
   ObSQLSessionInfo *session_info = pc_ctx.sql_ctx_.session_info_;
-  common::ObSEArray<PCVSchemaObj*, 4> check_stored_schema;
   if (OB_ISNULL(session_info)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(session_info));
-  } else if (OB_FAIL(remove_mv_schema(schema_array, check_stored_schema))) {
-    LOG_WARN("failed to remove mv schema", K(ret));
-  } else if (schema_array.count() != check_stored_schema.count()) {
+  } else if (schema_array.count() != stored_schema_objs_.count()) {
     // schema objs count mismatch, may be the following cases:
     // select * from all_sequences;  // system view, the dependency_table of the system view has multiple entries
     // select * from all_sequences;  // ordinary table
     is_same = false;
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && is_same && i < schema_array.count(); i++) {
-      if (OB_ISNULL(check_stored_schema.at(i))) {
+      if (OB_ISNULL(stored_schema_objs_.at(i))) {
         ret = OB_INVALID_ARGUMENT;
         LOG_WARN("invalid null table schema",
-                 K(ret), K(i), K(schema_array.at(i)), K(check_stored_schema.at(i)));
+                 K(ret), K(i), K(schema_array.at(i)), K(stored_schema_objs_.at(i)));
       } else if (TMP_TABLE == schema_array.at(i).table_type_
                  && schema_array.at(i).is_tmp_table_) { // check for mysql tmp table
         // If it contains a temporary table
         // Temporary table is also a special case of a table with the same name, but here sessid_ is used to distinguish whether this pcv contains a temporary plan,
         // sessid_is not 0, then it is a pocv containing temporary tables, otherwise it is a pcv of an ordinary table
-        // oracle mode, temporary tables are actually regular tables, server internally rewrites them by adding a sessid field to distinguish temporary tables on different sessions
-        // sessid may be reused, so different temporary tables need to match the sessid and sess_create_time_ fields
-        // In mysql mode, temporary tables are only created in the corresponding session, different sessid can distinguish them, sess_create_time must be the same
+        // Temporary tables are only created in the corresponding session.
+        // Different sessid values can distinguish them, and sess_create_time
+        // must also be the same because sessid may be reused.
         // plan cache matching temporary tables should always use the user-created session to ensure the correctness of semantics
         // When executed remotely, a temporary session object will be created, and its session_id is also temporary,
         // So here the get_sessid_for_table() rule must be used to determine
@@ -1967,8 +1834,7 @@ int ObPlanCacheValue::get_all_dep_schema(ObSchemaGetterGuard &schema_guard,
       } else {
         tmp_schema_obj.reset();
       }
-    } else if (OB_FAIL(schema_guard.get_simple_table_schema(
-                 MTL_ID(), dep_schema_objs.at(i).get_object_id(), table_schema))) {
+    } else if (OB_FAIL(schema_guard.get_simple_table_schema( dep_schema_objs.at(i).get_object_id(), table_schema))) {
       LOG_WARN("failed to get table schema",
                K(ret), K(dep_schema_objs.at(i)));
     } else if (nullptr == table_schema) {
@@ -2000,8 +1866,7 @@ int ObPlanCacheValue::need_check_schema_version(ObPlanCacheCtx &pc_ctx,
 {
   int ret = OB_SUCCESS;
   need_check = false;
-  if (OB_FAIL(pc_ctx.sql_ctx_.schema_guard_->get_schema_version(pc_ctx.sql_ctx_.session_info_->get_effective_tenant_id(),
-                                                                new_schema_version))) {
+  if (OB_FAIL(pc_ctx.sql_ctx_.schema_guard_->get_schema_version(new_schema_version))) {
     LOG_WARN("failed to get tenant schema version", K(ret));
   } else {
     int64_t cached_tenant_schema_version = ATOMIC_LOAD(&tenant_schema_version_);

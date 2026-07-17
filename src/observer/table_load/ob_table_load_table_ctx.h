@@ -77,8 +77,8 @@ public:
                            const common::ObIArray<ObTabletID> &tablet_ids,
                            ObTableLoadExecCtx *exec_ctx);
   int init_store_ctx(
-    const table::ObTableLoadArray<table::ObTableLoadLSIdAndPartitionId> &partition_id_array,
-    const table::ObTableLoadArray<table::ObTableLoadLSIdAndPartitionId> &target_partition_id_array);
+    const table::ObTableLoadArray<table::ObTableLoadTabletId> &partition_id_array,
+    const table::ObTableLoadArray<table::ObTableLoadTabletId> &target_partition_id_array);
 public:
   int alloc_task(ObTableLoadTask *&task);
   void free_task(ObTableLoadTask *task);

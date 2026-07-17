@@ -48,7 +48,7 @@ public:
   static int make_handle(ObTableLoadHandle &handle, Args... args)
   {
     int ret = OB_SUCCESS;
-    ObMemAttr attr(MTL_ID(), "TLD_Handle");
+    ObMemAttr attr("TLD_Handle");
     handle.reset();
     if (OB_ISNULL(handle.ptr_ = OB_NEW(Object, attr, args...))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;

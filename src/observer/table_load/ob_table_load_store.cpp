@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SERVER
 
 #include "observer/table_load/ob_table_load_store.h"
+#include "share/rc/ob_module_provider.h"
 #include "observer/table_load/dag/ob_table_load_dag.h"
 #include "observer/table_load/dag/ob_table_load_dag_write_channel.h"
 #include "observer/table_load/ob_table_load_pre_sort_writer.h"
@@ -32,8 +33,8 @@
 #include "observer/table_load/ob_table_load_task_scheduler.h"
 #include "observer/table_load/ob_table_load_trans_store.h"
 #include "observer/table_load/ob_table_load_utils.h"
-#include "share/stat/ob_opt_stat_monitor_manager.h"
-#include "share/table/ob_table_load_dml_stat.h"
+#include "sql/optimizer/stat/ob_opt_stat_monitor_manager.h"
+#include "storage/direct_load/ob_table_load_dml_stat.h"
 #include "storage/blocksstable/ob_sstable.h"
 
 namespace oceanbase
@@ -51,8 +52,8 @@ ObTableLoadStore::ObTableLoadStore(ObTableLoadTableCtx *ctx)
 
 int ObTableLoadStore::init_ctx(
   ObTableLoadTableCtx *ctx,
-  const ObTableLoadArray<ObTableLoadLSIdAndPartitionId> &partition_id_array,
-  const ObTableLoadArray<ObTableLoadLSIdAndPartitionId> &target_partition_id_array)
+  const ObTableLoadArray<ObTableLoadTabletId> &partition_id_array,
+  const ObTableLoadArray<ObTableLoadTabletId> &target_partition_id_array)
 {
   int ret = OB_SUCCESS;
   if (OB_ISNULL(ctx)) {
@@ -109,7 +110,7 @@ int ObTableLoadStore::abort_active_trans(ObTableLoadTableCtx *ctx)
 {
   int ret = OB_SUCCESS;
   ObArray<ObTableLoadTransId> trans_id_array;
-  trans_id_array.set_tenant_id(MTL_ID());
+  
   if (OB_FAIL(ctx->store_ctx_->get_active_trans_ids(trans_id_array))) {
     LOG_WARN("fail to get active trans ids", KR(ret));
   }
@@ -184,7 +185,7 @@ int ObTableLoadStore::confirm_begin()
     LOG_INFO("store confirm begin");
     store_ctx_->heart_beat(); // init heart beat
     if (store_ctx_->enable_dag_) {
-      // 等待write_ctx初始化完成
+      // wait for write_ctx initialization
       while (OB_SUCC(ret)) {
         if (OB_FAIL(store_ctx_->dag_exec_ctx_.dag_->check_status())) {
           LOG_WARN("fail to check status", KR(ret));
@@ -269,7 +270,7 @@ int ObTableLoadStore::pre_merge(
     ObArenaAllocator allocator("TLD_Tmp");
     bool trans_exist = false;
     ObTableLoadArray<ObTableLoadTransId> store_committed_trans_id_array;
-    allocator.set_tenant_id(MTL_ID());
+    
     // 1. Frozen state, prevent further creation of trans
     if (OB_FAIL(store_ctx_->set_status_frozen())) {
       LOG_WARN("fail to set store status frozen", KR(ret));
@@ -370,7 +371,7 @@ int ObTableLoadStore::commit(ObTableLoadResultInfo &result_info,
     LOG_INFO("store commit");
     ObTransService *txs = nullptr;
     ObMutexGuard guard(store_ctx_->get_op_lock());
-    if (OB_ISNULL(MTL(ObTransService *))) {
+    if (OB_ISNULL(share::g_mp->trans_service())) {
       ret = OB_ERR_SYS;
       LOG_WARN("trans service is null", KR(ret));
     } else if (OB_FAIL(store_ctx_->check_status(ObTableLoadStatusType::MERGED))) {

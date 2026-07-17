@@ -63,7 +63,7 @@ int ObSRLookupIter::init(
     } else {
       ObDatumMeta id_meta = iter_param_->id_proj_expr_->datum_meta_;
       sql::ObExprBasicFuncs *basic_funcs = ObDatumFuncs::get_basic_func(id_meta.type_, id_meta.cs_type_);
-      cmp_func_ = lib::is_oracle_mode() ? basic_funcs->null_last_cmp_ : basic_funcs->null_first_cmp_;
+      cmp_func_ = basic_funcs->null_first_cmp_;
       if (iter_param_->id_proj_expr_->datum_meta_.type_ == common::ObUInt64Type) {
         set_datum_func_ = ObISparseRetrievalMergeIter::set_datum_int;
       } else {
@@ -285,7 +285,7 @@ ObSRHashLookupIter::ObSRHashLookupIter()
 int ObSRHashLookupIter::inner_init()
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(hash_map_.create(cache_capacity_, common::ObMemAttr(MTL_ID(), "SRTaaTMap")))) {
+  if (OB_FAIL(hash_map_.create(cache_capacity_, common::ObMemAttr("SRTaaTMap")))) {
     LOG_WARN("failed to create hash map");
   }
   return ret;

@@ -32,7 +32,7 @@ namespace rootserver
 class ObFreezeReentrantThread : public ObRsReentrantThread
 {
 public:
-  ObFreezeReentrantThread(const uint64_t tenant_id);
+  ObFreezeReentrantThread();
   virtual ~ObFreezeReentrantThread() {}
 
   virtual void pause();
@@ -44,10 +44,7 @@ public:
 
 protected:
   virtual int try_idle(const int64_t idle_time_us, const int exe_ret);
-  int obtain_proposal_id_from_ls(const bool is_primary_service, int64_t &proposal_id, common::ObRole &role);
-
 protected:
-  uint64_t tenant_id_;
   common::ObMySQLProxy *sql_proxy_;
 
 private:

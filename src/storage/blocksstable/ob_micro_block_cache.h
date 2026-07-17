@@ -25,6 +25,7 @@
 #include "storage/blocksstable/ob_micro_block_info.h"
 #include "storage/meta_mem/ob_tablet_handle.h"
 #include "lib/stat/ob_diagnose_info.h"
+#include "lib/stat/ob_diagnostic_info_guard.h"
 #include "storage/blocksstable/ob_block_manager.h"
 
 
@@ -51,29 +52,26 @@ class ObMicroBlockCacheKey : public common::ObIKVCacheKey
 {
 public:
   ObMicroBlockCacheKey();
-  ObMicroBlockCacheKey(uint64_t tenant_id, const blocksstable::ObMicroIndexInfo &micro_index_info);
+  ObMicroBlockCacheKey(const blocksstable::ObMicroIndexInfo &micro_index_info);
   ObMicroBlockCacheKey(const ObMicroBlockCacheKey &other);
   virtual ~ObMicroBlockCacheKey();
   ObMicroBlockCacheKey &operator=(const ObMicroBlockCacheKey&) = delete;
   int assign(const ObMicroBlockCacheKey &other);
   virtual bool operator ==(const ObIKVCacheKey &other) const;
-  virtual uint64_t get_tenant_id() const;
+  
   virtual uint64_t hash() const;
   virtual int64_t size() const;
   virtual int deep_copy(char *buf, const int64_t buf_len, ObIKVCacheKey *&key) const;
-  void set(const uint64_t tenant_id,
-           const MacroBlockId &block_id,
+  void set(const MacroBlockId &block_id,
            const int64_t offset,
            const int64_t size);
-  void set(const uint64_t tenant_id,
-           const ObMicroBlockId &micro_id);
-  void set(const uint64_t tenant_id,
-           const ObLogicMicroBlockId &logic_micro_id,
+  void set(const ObMicroBlockId &micro_id);
+  void set(const ObLogicMicroBlockId &logic_micro_id,
            const int64_t data_checksum);
   inline bool is_valid() const
   {
-    return (ObMicroBlockCacheKeyMode::PHYSICAL_KEY_MODE == mode_ && tenant_id_ > 0 && block_id_.is_valid()) ||
-           (ObMicroBlockCacheKeyMode::LOGICAL_KEY_MODE == mode_ && tenant_id_ > 0 && logic_micro_id_.is_valid());
+    return (ObMicroBlockCacheKeyMode::PHYSICAL_KEY_MODE == mode_ && 1UL > 0 && block_id_.is_valid()) ||
+           (ObMicroBlockCacheKeyMode::LOGICAL_KEY_MODE == mode_ && 1UL > 0 && logic_micro_id_.is_valid());
   }
   inline bool is_logic_key() const { return ObMicroBlockCacheKeyMode::LOGICAL_KEY_MODE == mode_; }
   inline ObMicroBlockCacheKeyMode get_mode() const{ return mode_; }
@@ -88,10 +86,10 @@ public:
     return logic_micro_id_;
   }
   inline int64_t get_data_checksum() const { return data_checksum_; }
-  TO_STRING_KV(K_(mode), K_(tenant_id), K_(block_id), K_(logic_micro_id), K_(data_checksum));
+  TO_STRING_KV(K_(mode), K_(block_id), K_(logic_micro_id), K_(data_checksum));
 private:
   ObMicroBlockCacheKeyMode mode_;
-  uint64_t tenant_id_;
+  
   union {
     ObMicroBlockId block_id_;
     ObLogicMicroBlockId logic_micro_id_;
@@ -300,7 +298,6 @@ protected:
   ObIPutSizeStat *put_size_stat_;
   common::ObIAllocator *allocator_;
   char *data_buffer_;
-  uint64_t tenant_id_;
   MacroBlockId block_id_;
   int64_t offset_;
   ObLogicMicroBlockId logic_micro_id_;
@@ -389,13 +386,11 @@ class ObMicroBlockBufTransformer final
 
  private:
    bool is_inited_;
-   bool is_cs_full_transfrom_;
    const ObMicroBlockDesMeta &block_des_meta_;
    ObMacroBlockReader *reader_;
    ObMicroBlockHeader &header_;
    const char *payload_buf_;
    int64_t payload_size_;
-   ObCSMicroBlockTransformer transformer_;
 };
 
 
@@ -409,7 +404,6 @@ public:
       const ObMicroBlockCacheKey &key,
       ObMicroBlockBufferHandle &handle);
   int prefetch(
-      const uint64_t tenant_id,
       const MacroBlockId &macro_id,
       const ObMicroIndexInfo& idx_row,
       const bool use_cache,
@@ -451,14 +445,12 @@ public:
 
 protected:
   int prefetch(
-      const uint64_t tenant_id,
       const MacroBlockId &macro_id,
       const ObMicroIndexInfo& idx_row,
       ObStorageObjectHandle &macro_handle,
       ObIMicroBlockIOCallback &callback,
       const bool is_major_macro_preread = false);
   int prefetch(
-      const uint64_t tenant_id,
       const MacroBlockId &macro_id,
       const ObMultiBlockIOParam &io_param,
       const bool use_cache,
@@ -478,9 +470,7 @@ public:
   int init(const char *cache_name);
   virtual void destroy() override;
   using ObIMicroBlockCache::prefetch;
-  int prefetch_multi_block(
-      const uint64_t tenant_id,
-      const MacroBlockId &macro_id,
+  int prefetch_multi_block(const MacroBlockId &macro_id,
       const ObMultiBlockIOParam &io_param,
       const bool use_cache,
       ObStorageObjectHandle &macro_handle);

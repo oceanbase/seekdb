@@ -38,10 +38,7 @@ public:
   int prepare_index_builder();
   int create_sstable(
       ObBasicTabletMergeCtx &ctx,
-      ObTableHandleV2 &merge_table_handle,
-      bool &skip_to_create_empty_cg,
-      const ObStorageColumnGroupSchema *cg_schema = nullptr,
-      const int64_t column_group_idx = 0);
+      ObTableHandleV2 &merge_table_handle);
   ObSSTableMergeHistory &get_merge_history() { return merge_history_; }
   blocksstable::ObWholeDataStoreDesc &get_sstable_build_desc() { return sstable_builder_.get_data_desc(); }
   blocksstable::ObSSTableIndexBuilder *get_index_builder() { return sstable_builder_.get_index_builder(); }
@@ -56,9 +53,7 @@ public:
 private:
   static int build_create_sstable_param(const ObBasicTabletMergeCtx &ctx,
                                         const blocksstable::ObSSTableMergeRes &res,
-                                        ObTabletCreateSSTableParam &param,
-                                        const ObStorageColumnGroupSchema *cg_schema = nullptr,
-                                        const int64_t column_group_idx = 0);
+                                        ObTabletCreateSSTableParam &param);
 
   static int record_start_tx_scn_for_tx_data(const ObBasicTabletMergeCtx &ctx, ObTabletCreateSSTableParam &param);
 private:

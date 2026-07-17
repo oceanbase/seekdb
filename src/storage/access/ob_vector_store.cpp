@@ -15,10 +15,12 @@
  */
 
 #define USING_LOG_PREFIX STORAGE
+#include "lib/stat/ob_diagnostic_info_guard.h"
 #include "ob_vector_store.h"
 #include "ob_aggregated_store_vec.h"
 #include "storage/blocksstable/ob_micro_block_row_scanner.h"
 #include "storage/access/ob_pushdown_aggregate.h"
+#include "storage/lob/ob_lob_manager.h"
 
 namespace oceanbase
 {
@@ -210,7 +212,7 @@ int ObVectorStore::check_need_group_by(const ObTableAccessParam &param)
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("Invalid argument", K(ret), K(param));
   } else {
-    ObMemAttr attr(MTL_ID(), common::ObModIds::OB_HASH_BUCKET);
+    ObMemAttr attr(common::ObModIds::OB_HASH_BUCKET);
     common::hash::ObHashSet<int32_t> col_offset_set;
     const int32_t group_by_col_offset = param.iter_param_.group_by_cols_project_->at(0);
     const int32_t agg_expr_cnt = nullptr == param.aggregate_exprs_ ? 0 : param.aggregate_exprs_->count();

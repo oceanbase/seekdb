@@ -82,7 +82,7 @@ Outputs & filters:
 -------------------------------------
   0 - output([t1.c1], [t1.c2]), filter(nil), rowset=16
       access([t1.c1], [t1.c2]), partitions(p0)
-      is_index_back=true, is_global_index=false,
+      is_index_back=true, is_global_index=false, 
       range_key([t1.__vid_0], [t1.__type_0_0]), range(MIN,MIN ; MAX,MAX)always true
 explain select * from t1 where c1 < 3 order by negative_inner_product(c2, '{3:1, 4:1}') approx limit 2;
 Query Plan
@@ -95,7 +95,7 @@ Outputs & filters:
 -------------------------------------
   0 - output([t1.c1], [t1.c2]), filter([t1.c1 < 3]), rowset=16
       access([t1.c1], [t1.c2]), partitions(p0)
-      is_index_back=true, is_global_index=false, filter_before_indexback[false],
+      is_index_back=true, is_global_index=false, filter_before_indexback[false], 
       range_key([t1.c1]), range(NULL ; 3)
 explain select * from t1 where c1 > 10 order by negative_inner_product(c2, '{3:1, 4:1}') approx limit 2;
 Query Plan
@@ -108,7 +108,7 @@ Outputs & filters:
 -------------------------------------
   0 - output([t1.c1], [t1.c2]), filter([t1.c1 > 10]), rowset=16
       access([t1.c1], [t1.c2]), partitions(p0)
-      is_index_back=true, is_global_index=false, filter_before_indexback[false],
+      is_index_back=true, is_global_index=false, filter_before_indexback[false], 
       range_key([t1.c1]), range(10 ; MAX)
 explain select /*+ index(t1 idx1)*/ * from t1 where c1 > 10 order by negative_inner_product(c2, '{3:1, 4:1}') approx limit 2;
 Query Plan
@@ -121,7 +121,7 @@ Outputs & filters:
 -------------------------------------
   0 - output([t1.c1], [t1.c2]), filter([t1.c1 > 10]), rowset=16
       access([t1.c1], [t1.c2]), partitions(p0)
-      is_index_back=true, is_global_index=false, filter_before_indexback[false],
+      is_index_back=true, is_global_index=false, filter_before_indexback[false], 
       range_key([t1.c1]), range(10 ; MAX)
 explain select /*+ index(t1 primary)*/ * from t1 where c1 <= 5 order by negative_inner_product(c2, '{3:1, 4:1}') approx limit 2;
 Query Plan
@@ -134,7 +134,7 @@ Outputs & filters:
 -------------------------------------
   0 - output([t1.c1], [t1.c2]), filter([t1.c1 <= 5]), rowset=16
       access([t1.c1], [t1.c2]), partitions(p0)
-      is_index_back=true, is_global_index=false, filter_before_indexback[false],
+      is_index_back=true, is_global_index=false, filter_before_indexback[false], 
       range_key([t1.c1]), range(NULL ; 5]
 # 单分区查询: 全是快照数据
 drop table if exists t1;
@@ -207,7 +207,7 @@ Outputs & filters:
 -------------------------------------
   0 - output([t1.c1], [t1.c2]), filter(nil), rowset=16
       access([t1.c1], [t1.c2]), partitions(p0)
-      is_index_back=true, is_global_index=false,
+      is_index_back=true, is_global_index=false, 
       range_key([t1.__vid_0], [t1.__type_0_0]), range(MIN,MIN ; MAX,MAX)always true
 explain select * from t1 where c1 < 3 order by negative_inner_product(c2, '{3:1, 4:1}') approx limit 2;
 Query Plan
@@ -220,7 +220,7 @@ Outputs & filters:
 -------------------------------------
   0 - output([t1.c1], [t1.c2]), filter([t1.c1 < 3]), rowset=16
       access([t1.c1], [t1.c2]), partitions(p0)
-      is_index_back=true, is_global_index=false, filter_before_indexback[false],
+      is_index_back=true, is_global_index=false, filter_before_indexback[false], 
       range_key([t1.c1]), range(NULL ; 3)
 explain select /*+ index(t1 idx1)*/ * from t1 where c1 > 10 order by negative_inner_product(c2, '{3:1, 4:1}') approx limit 2;
 Query Plan
@@ -233,7 +233,7 @@ Outputs & filters:
 -------------------------------------
   0 - output([t1.c1], [t1.c2]), filter([t1.c1 > 10]), rowset=16
       access([t1.c1], [t1.c2]), partitions(p0)
-      is_index_back=true, is_global_index=false, filter_before_indexback[false],
+      is_index_back=true, is_global_index=false, filter_before_indexback[false], 
       range_key([t1.c1]), range(10 ; MAX)
 explain select /*+ index(t1 primary)*/ * from t1 where c1 < 3 order by negative_inner_product(c2, '{3:1, 4:1}') approx limit 2;
 Query Plan
@@ -246,7 +246,7 @@ Outputs & filters:
 -------------------------------------
   0 - output([t1.c1], [t1.c2]), filter([t1.c1 < 3]), rowset=16
       access([t1.c1], [t1.c2]), partitions(p0)
-      is_index_back=true, is_global_index=false, filter_before_indexback[false],
+      is_index_back=true, is_global_index=false, filter_before_indexback[false], 
       range_key([t1.c1]), range(NULL ; 3)
 # 单分区查询: 快照+增量数据
 drop table if exists t1;
@@ -333,7 +333,7 @@ Outputs & filters:
 -------------------------------------
   0 - output([t1.c1], [t1.c2]), filter(nil), rowset=16
       access([t1.c1], [t1.c2]), partitions(p0)
-      is_index_back=true, is_global_index=false,
+      is_index_back=true, is_global_index=false, 
       range_key([t1.__vid_0], [t1.__type_0_0]), range(MIN,MIN ; MAX,MAX)always true
 explain select * from t1 where c1 < 3 order by negative_inner_product(c2, '{3:1, 4:1}') approx limit 2;
 Query Plan
@@ -346,7 +346,7 @@ Outputs & filters:
 -------------------------------------
   0 - output([t1.c1], [t1.c2]), filter([t1.c1 < 3]), rowset=16
       access([t1.c1], [t1.c2]), partitions(p0)
-      is_index_back=true, is_global_index=false, filter_before_indexback[false],
+      is_index_back=true, is_global_index=false, filter_before_indexback[false], 
       range_key([t1.c1]), range(NULL ; 3)
 explain select /*+ index(t1 idx1)*/ * from t1 where c1 > 10 order by negative_inner_product(c2, '{3:1, 4:1}') approx limit 2;
 Query Plan
@@ -359,7 +359,7 @@ Outputs & filters:
 -------------------------------------
   0 - output([t1.c1], [t1.c2]), filter([t1.c1 > 10]), rowset=16
       access([t1.c1], [t1.c2]), partitions(p0)
-      is_index_back=true, is_global_index=false, filter_before_indexback[false],
+      is_index_back=true, is_global_index=false, filter_before_indexback[false], 
       range_key([t1.c1]), range(10 ; MAX)
 explain select /*+ index(t1 primary)*/ * from t1 where c1 < 3 order by negative_inner_product(c2, '{3:1, 4:1}') approx limit 2;
 Query Plan
@@ -372,7 +372,7 @@ Outputs & filters:
 -------------------------------------
   0 - output([t1.c1], [t1.c2]), filter([t1.c1 < 3]), rowset=16
       access([t1.c1], [t1.c2]), partitions(p0)
-      is_index_back=true, is_global_index=false, filter_before_indexback[false],
+      is_index_back=true, is_global_index=false, filter_before_indexback[false], 
       range_key([t1.c1]), range(NULL ; 3)
 alter system set vector_index_optimize_duty_time='[00:00:00, 24:00:00]';
 drop table if exists t1;
@@ -607,7 +607,7 @@ Outputs & filters:
       force partition granule
   5 - output([t1.c1], [t1.c2], [negative_inner_product(t1.c2, cast('{3:1, 4:1}', ARRAY(18, -1)))]), filter([t1.c1 < 3]), rowset=16
       access([t1.c1], [t1.c2]), partitions(p[0-2])
-      is_index_back=true, is_global_index=false, filter_before_indexback[false],
+      is_index_back=true, is_global_index=false, filter_before_indexback[false], 
       range_key([t1.c1]), range(NULL ; 3)
 explain select /*+ index(t1 idx1)*/ * from t1 where c1 > 10 order by negative_inner_product(c2, '{3:1, 4:1}') approx limit 2;
 Query Plan
@@ -635,7 +635,7 @@ Outputs & filters:
       force partition granule
   5 - output([t1.c1], [t1.c2], [negative_inner_product(t1.c2, cast('{3:1, 4:1}', ARRAY(18, -1)))]), filter([t1.c1 > 10]), rowset=16
       access([t1.c1], [t1.c2]), partitions(p[0-2])
-      is_index_back=true, is_global_index=false, filter_before_indexback[false],
+      is_index_back=true, is_global_index=false, filter_before_indexback[false], 
       range_key([t1.c1]), range(10 ; MAX)
 explain select /*+ index(t1 primary)*/ * from t1 where c1 < 3 order by negative_inner_product(c2, '{3:1, 4:1}') approx limit 2;
 Query Plan
@@ -663,7 +663,7 @@ Outputs & filters:
       force partition granule
   5 - output([t1.c1], [t1.c2], [negative_inner_product(t1.c2, cast('{3:1, 4:1}', ARRAY(18, -1)))]), filter([t1.c1 < 3]), rowset=16
       access([t1.c1], [t1.c2]), partitions(p[0-2])
-      is_index_back=true, is_global_index=false, filter_before_indexback[false],
+      is_index_back=true, is_global_index=false, filter_before_indexback[false], 
       range_key([t1.c1]), range(NULL ; 3)
 # 多分区查询: 快照数据
 drop table if exists t1;
@@ -743,7 +743,7 @@ Outputs & filters:
       force partition granule
   5 - output([t1.c1], [t1.c2], [negative_inner_product(t1.c2, cast('{3:1, 4:1}', ARRAY(18, -1)))]), filter([t1.c1 < 3]), rowset=16
       access([t1.c1], [t1.c2]), partitions(p[0-2])
-      is_index_back=true, is_global_index=false, filter_before_indexback[false],
+      is_index_back=true, is_global_index=false, filter_before_indexback[false], 
       range_key([t1.c1]), range(NULL ; 3)
 explain select /*+ index(t1 idx1)*/ * from t1 where c1 > 10 order by negative_inner_product(c2, '{3:1, 4:1}') approx limit 2;
 Query Plan
@@ -771,7 +771,7 @@ Outputs & filters:
       force partition granule
   5 - output([t1.c1], [t1.c2], [negative_inner_product(t1.c2, cast('{3:1, 4:1}', ARRAY(18, -1)))]), filter([t1.c1 > 10]), rowset=16
       access([t1.c1], [t1.c2]), partitions(p[0-2])
-      is_index_back=true, is_global_index=false, filter_before_indexback[false],
+      is_index_back=true, is_global_index=false, filter_before_indexback[false], 
       range_key([t1.c1]), range(10 ; MAX)
 explain select /*+ index(t1 primary)*/ * from t1 where c1 < 3 order by negative_inner_product(c2, '{3:1, 4:1}') approx limit 2;
 Query Plan
@@ -799,7 +799,7 @@ Outputs & filters:
       force partition granule
   5 - output([t1.c1], [t1.c2], [negative_inner_product(t1.c2, cast('{3:1, 4:1}', ARRAY(18, -1)))]), filter([t1.c1 < 3]), rowset=16
       access([t1.c1], [t1.c2]), partitions(p[0-2])
-      is_index_back=true, is_global_index=false, filter_before_indexback[false],
+      is_index_back=true, is_global_index=false, filter_before_indexback[false], 
       range_key([t1.c1]), range(NULL ; 3)
 # 多分区查询: 快照数据+增量数据
 drop table if exists t1;
@@ -891,7 +891,7 @@ Outputs & filters:
       force partition granule
   5 - output([t1.c1], [t1.c2], [negative_inner_product(t1.c2, cast('{3:1, 4:1}', ARRAY(18, -1)))]), filter([t1.c1 < 3]), rowset=16
       access([t1.c1], [t1.c2]), partitions(p[0-2])
-      is_index_back=true, is_global_index=false, filter_before_indexback[false],
+      is_index_back=true, is_global_index=false, filter_before_indexback[false], 
       range_key([t1.c1]), range(NULL ; 3)
 explain select /*+ index(t1 idx1)*/ * from t1 where c1 > 10 order by negative_inner_product(c2, '{3:1, 4:1}') approx limit 2;
 Query Plan
@@ -919,7 +919,7 @@ Outputs & filters:
       force partition granule
   5 - output([t1.c1], [t1.c2], [negative_inner_product(t1.c2, cast('{3:1, 4:1}', ARRAY(18, -1)))]), filter([t1.c1 > 10]), rowset=16
       access([t1.c1], [t1.c2]), partitions(p[0-2])
-      is_index_back=true, is_global_index=false, filter_before_indexback[false],
+      is_index_back=true, is_global_index=false, filter_before_indexback[false], 
       range_key([t1.c1]), range(10 ; MAX)
 explain select /*+ index(t1 primary)*/ * from t1 where c1 < 3 order by negative_inner_product(c2, '{3:1, 4:1}') approx limit 2;
 Query Plan
@@ -947,7 +947,7 @@ Outputs & filters:
       force partition granule
   5 - output([t1.c1], [t1.c2], [negative_inner_product(t1.c2, cast('{3:1, 4:1}', ARRAY(18, -1)))]), filter([t1.c1 < 3]), rowset=16
       access([t1.c1], [t1.c2]), partitions(p[0-2])
-      is_index_back=true, is_global_index=false, filter_before_indexback[false],
+      is_index_back=true, is_global_index=false, filter_before_indexback[false], 
       range_key([t1.c1]), range(NULL ; 3)
 drop table if exists t1;
 create table t1(c1 int, c2 int, c3 sparsevector, primary key(c1), vector index idxv(c3) with (lib=vsag, type=sindi, distance=inner_product))
@@ -1119,7 +1119,7 @@ Outputs & filters:
       force partition granule
   5 - output([t1.c1], [t1.c3], [t1.c2], [negative_inner_product(t1.c3, cast('{3:1, 4:1}', ARRAY(18, -1)))]), filter([t1.c1 < 100]), rowset=256
       access([t1.c1], [t1.c3], [t1.c2]), partitions(p[0-3])
-      is_index_back=true, is_global_index=false, filter_before_indexback[false],
+      is_index_back=true, is_global_index=false, filter_before_indexback[false], 
       range_key([t1.c1]), range(NULL ; 100)
 explain select/*+index(t1 idx1)*/ * from t1 where c1 < 100 order by negative_inner_product(c3, '{3:1, 4:1}') APPROXIMATE limit 10;
 Query Plan
@@ -1147,7 +1147,7 @@ Outputs & filters:
       force partition granule
   5 - output([t1.c1], [t1.c3], [t1.c2], [negative_inner_product(t1.c3, cast('{3:1, 4:1}', ARRAY(18, -1)))]), filter([t1.c1 < 100]), rowset=16
       access([t1.c1], [t1.c3], [t1.c2]), partitions(p[0-3])
-      is_index_back=true, is_global_index=false, filter_before_indexback[true],
+      is_index_back=true, is_global_index=false, filter_before_indexback[true], 
       range_key([t1.c2], [t1.c1]), range(MIN,MIN ; MAX,MAX)always true
 explain select/*+index(t1 idxv)*/ * from t1 where c1 < 100 order by negative_inner_product(c3, '{3:1, 4:1}') APPROXIMATE limit 10;
 Query Plan
@@ -1175,7 +1175,7 @@ Outputs & filters:
       force partition granule
   5 - output([t1.c1], [t1.c3], [t1.c2], [negative_inner_product(t1.c3, cast('{3:1, 4:1}', ARRAY(18, -1)))]), filter([t1.c1 < 100]), rowset=256
       access([t1.c1], [t1.c3], [t1.c2]), partitions(p[0-3])
-      is_index_back=true, is_global_index=false, filter_before_indexback[false],
+      is_index_back=true, is_global_index=false, filter_before_indexback[false], 
       range_key([t1.c1]), range(NULL ; 100)
 select * from t1 where c1 < 10 or c1 > 40 order by negative_inner_product(c3, '{3:1, 4:1}') APPROXIMATE limit 10;
 c1	c2	c3
@@ -1239,7 +1239,7 @@ Outputs & filters:
       force partition granule
   5 - output([t1.c1], [t1.c3], [t1.c2], [negative_inner_product(t1.c3, cast('{3:1, 4:1}', ARRAY(18, -1)))]), filter([t1.c1 < 10 OR t1.c1 > 40]), rowset=256
       access([t1.c1], [t1.c3], [t1.c2]), partitions(p0, p[2-4])
-      is_index_back=true, is_global_index=false, filter_before_indexback[false],
+      is_index_back=true, is_global_index=false, filter_before_indexback[false], 
       range_key([t1.c1]), range(NULL ; 10), (40 ; MAX)
 explain select/*+index(t1 idx1)*/  * from t1 where c1 < 10 or c1 > 40 order by negative_inner_product(c3, '{3:1, 4:1}') APPROXIMATE limit 10;
 Query Plan
@@ -1267,7 +1267,7 @@ Outputs & filters:
       force partition granule
   5 - output([t1.c1], [t1.c3], [t1.c2], [negative_inner_product(t1.c3, cast('{3:1, 4:1}', ARRAY(18, -1)))]), filter([t1.c1 < 10 OR t1.c1 > 40]), rowset=16
       access([t1.c1], [t1.c3], [t1.c2]), partitions(p0, p[2-4])
-      is_index_back=true, is_global_index=false, filter_before_indexback[true],
+      is_index_back=true, is_global_index=false, filter_before_indexback[true], 
       range_key([t1.c2], [t1.c1]), range(MIN,MIN ; MAX,MAX)always true
 explain select/*+index(t1 idxv)*/ * from t1 where c1 < 10 or c1 > 40  order by negative_inner_product(c3, '{3:1, 4:1}') APPROXIMATE limit 10;
 Query Plan
@@ -1295,7 +1295,7 @@ Outputs & filters:
       force partition granule
   5 - output([t1.c1], [t1.c3], [t1.c2], [negative_inner_product(t1.c3, cast('{3:1, 4:1}', ARRAY(18, -1)))]), filter([t1.c1 < 10 OR t1.c1 > 40]), rowset=256
       access([t1.c1], [t1.c3], [t1.c2]), partitions(p0, p[2-4])
-      is_index_back=true, is_global_index=false, filter_before_indexback[false],
+      is_index_back=true, is_global_index=false, filter_before_indexback[false], 
       range_key([t1.c1]), range(NULL ; 10), (40 ; MAX)
 select * from t1 where c2 < 80 and c2 > 20 order by negative_inner_product(c3, '{3:1, 4:1}') APPROXIMATE limit 10;
 c1	c2	c3
@@ -1359,7 +1359,7 @@ Outputs & filters:
       force partition granule
   5 - output([t1.c1], [t1.c3], [t1.c2], [negative_inner_product(t1.c3, cast('{3:1, 4:1}', ARRAY(18, -1)))]), filter([t1.c2 < 80], [t1.c2 > 20]), rowset=256
       access([t1.c1], [t1.c3], [t1.c2]), partitions(p[0-4])
-      is_index_back=true, is_global_index=false, filter_before_indexback[true,true],
+      is_index_back=true, is_global_index=false, filter_before_indexback[true,true], 
       range_key([t1.c2], [t1.c1]), range(20,MAX ; 80,MIN)
 explain select/*+index(t1 idxv)*/ * from t1 where c1 < 80 and c1 > 20  order by negative_inner_product(c3, '{3:1, 4:1}') APPROXIMATE limit 10;
 Query Plan
@@ -1387,7 +1387,7 @@ Outputs & filters:
       force partition granule
   5 - output([t1.c1], [t1.c3], [t1.c2], [negative_inner_product(t1.c3, cast('{3:1, 4:1}', ARRAY(18, -1)))]), filter([t1.c1 < 80], [t1.c1 > 20]), rowset=256
       access([t1.c1], [t1.c3], [t1.c2]), partitions(p[1-3])
-      is_index_back=true, is_global_index=false, filter_before_indexback[false,false],
+      is_index_back=true, is_global_index=false, filter_before_indexback[false,false], 
       range_key([t1.c1]), range(20 ; 80)
 explain select/*+index(t1 primary)*/ * from t1 where c1 < 80 and c1 > 20  order by negative_inner_product(c3, '{3:1, 4:1}') APPROXIMATE limit 10;
 Query Plan
@@ -1415,7 +1415,7 @@ Outputs & filters:
       force partition granule
   5 - output([t1.c1], [t1.c3], [t1.c2], [negative_inner_product(t1.c3, cast('{3:1, 4:1}', ARRAY(18, -1)))]), filter([t1.c1 < 80], [t1.c1 > 20]), rowset=256
       access([t1.c1], [t1.c3], [t1.c2]), partitions(p[1-3])
-      is_index_back=true, is_global_index=false, filter_before_indexback[false,false],
+      is_index_back=true, is_global_index=false, filter_before_indexback[false,false], 
       range_key([t1.c1]), range(20 ; 80)
 select * from t1 where c1 < 80 and c2 > 20 order by negative_inner_product(c3, '{3:1, 4:1}') APPROXIMATE limit 10;
 c1	c2	c3
@@ -1479,7 +1479,7 @@ Outputs & filters:
       force partition granule
   5 - output([t1.c1], [t1.c3], [t1.c2], [negative_inner_product(t1.c3, cast('{3:1, 4:1}', ARRAY(18, -1)))]), filter([t1.c1 < 80], [t1.c2 > 20]), rowset=16
       access([t1.c1], [t1.c3], [t1.c2]), partitions(p[0-3])
-      is_index_back=true, is_global_index=false, filter_before_indexback[true,true],
+      is_index_back=true, is_global_index=false, filter_before_indexback[true,true], 
       range_key([t1.c2], [t1.c1]), range(20,MAX ; MAX,MAX)
 explain select/*+index(t1 idxv)*/ * from t1 where c1 < 80 and c2 > 20 order by negative_inner_product(c3, '{3:1, 4:1}') APPROXIMATE limit 10;
 Query Plan
@@ -1507,7 +1507,7 @@ Outputs & filters:
       force partition granule
   5 - output([t1.c1], [t1.c3], [t1.c2], [negative_inner_product(t1.c3, cast('{3:1, 4:1}', ARRAY(18, -1)))]), filter([t1.c1 < 80], [t1.c2 > 20]), rowset=16
       access([t1.c1], [t1.c3], [t1.c2]), partitions(p[0-3])
-      is_index_back=true, is_global_index=false, filter_before_indexback[false,false],
+      is_index_back=true, is_global_index=false, filter_before_indexback[false,false], 
       range_key([t1.c1]), range(NULL ; 80)
 explain select/*+index(t1 idx1)*/ * from t1 where c1 < 80 and c2 > 20 order by negative_inner_product(c3, '{3:1, 4:1}') APPROXIMATE limit 10;
 Query Plan
@@ -1535,7 +1535,7 @@ Outputs & filters:
       force partition granule
   5 - output([t1.c1], [t1.c3], [t1.c2], [negative_inner_product(t1.c3, cast('{3:1, 4:1}', ARRAY(18, -1)))]), filter([t1.c1 < 80], [t1.c2 > 20]), rowset=16
       access([t1.c1], [t1.c3], [t1.c2]), partitions(p[0-3])
-      is_index_back=true, is_global_index=false, filter_before_indexback[true,true],
+      is_index_back=true, is_global_index=false, filter_before_indexback[true,true], 
       range_key([t1.c2], [t1.c1]), range(20,MAX ; MAX,MAX)
 drop table if exists t1;
 create table t1(c1 int, c2 int, c3 int, v sparsevector, primary key(c1), vector index idx3(v) with (lib=vsag, type=sindi, distance=inner_product));
@@ -1584,7 +1584,7 @@ Outputs & filters:
 -------------------------------------
   0 - output([t1.c1], [t1.c2], [t1.c3], [t1.v]), filter([t1.c2 > 5], [t1.c3 < 6]), rowset=16
       access([t1.c1], [t1.v], [t1.c2], [t1.c3]), partitions(p0)
-      is_index_back=true, is_global_index=false, filter_before_indexback[true,false],
+      is_index_back=true, is_global_index=false, filter_before_indexback[true,false], 
       range_key([t1.c2], [t1.c1]), range(5,MAX ; MAX,MAX)
 explain select /*+index(t1 idx1) */ * from t1 where c2 > 5 and c3 < 6 order by negative_inner_product(v, '{3:1, 4:1}') APPROXIMATE limit 5;
 Query Plan
@@ -1597,7 +1597,7 @@ Outputs & filters:
 -------------------------------------
   0 - output([t1.c1], [t1.c2], [t1.c3], [t1.v]), filter([t1.c2 > 5], [t1.c3 < 6]), rowset=16
       access([t1.c1], [t1.v], [t1.c2], [t1.c3]), partitions(p0)
-      is_index_back=true, is_global_index=false, filter_before_indexback[true,false],
+      is_index_back=true, is_global_index=false, filter_before_indexback[true,false], 
       range_key([t1.c2], [t1.c1]), range(5,MAX ; MAX,MAX)
 explain select /*+index(t1 idx2) */ * from t1 where c2 > 5 and c3 < 6 order by negative_inner_product(v, '{3:1, 4:1}') APPROXIMATE limit 5;
 Query Plan
@@ -1610,7 +1610,7 @@ Outputs & filters:
 -------------------------------------
   0 - output([t1.c1], [t1.c2], [t1.c3], [t1.v]), filter([t1.c2 > 5], [t1.c3 < 6]), rowset=16
       access([t1.c1], [t1.v], [t1.c2], [t1.c3]), partitions(p0)
-      is_index_back=true, is_global_index=false, filter_before_indexback[false,true],
+      is_index_back=true, is_global_index=false, filter_before_indexback[false,true], 
       range_key([t1.c3], [t1.c1]), range(NULL,MAX ; 6,MIN)
 explain select /*+index(t1 idx3) */ * from t1 where c2 > 5 and c3 < 6 order by negative_inner_product(v, '{3:1, 4:1}') APPROXIMATE limit 5;
 Query Plan
@@ -1623,7 +1623,7 @@ Outputs & filters:
 -------------------------------------
   0 - output([t1.c1], [t1.c2], [t1.c3], [t1.v]), filter([t1.c2 > 5], [t1.c3 < 6]), rowset=16
       access([t1.c1], [t1.v], [t1.c2], [t1.c3]), partitions(p0)
-      is_index_back=true, is_global_index=false, filter_before_indexback[true,false],
+      is_index_back=true, is_global_index=false, filter_before_indexback[true,false], 
       range_key([t1.c2], [t1.c1]), range(5,MAX ; MAX,MAX)
 explain select * from t1 order by negative_inner_product(v, '{3:1, 4:1}') APPROXIMATE limit 5;
 Query Plan
@@ -1636,10 +1636,10 @@ Outputs & filters:
 -------------------------------------
   0 - output([t1.c1], [t1.c2], [t1.c3], [t1.v]), filter(nil), rowset=16
       access([t1.c1], [t1.v], [t1.c2], [t1.c3]), partitions(p0)
-      is_index_back=true, is_global_index=false,
+      is_index_back=true, is_global_index=false, 
       range_key([t1.__vid_0], [t1.__type_0_0]), range(MIN,MIN ; MAX,MAX)always true
 drop table if exists t1;
-create table t1(c1 int, c2 int, c3 int, v sparsevector, primary key(c1), vector index idx3(v) with (lib=vsag, type=sindi, distance=inner_product)) WITH COLUMN GROUP (each column);
+create table t1(c1 int, c2 int, c3 int, v sparsevector, primary key(c1), vector index idx3(v) with (lib=vsag, type=sindi, distance=inner_product));
 insert into t1 values(1, 1, 10, '{1:0.1,2:0.2, 3:0.3}');
 insert into t1 values(2, 2, 9, '{3:0.3, 2:0.2, 4:0.4}');
 insert into t1 values(3, 3, 8, '{3:0.3, 4:0.4, 5:0.5}');
@@ -1688,10 +1688,10 @@ insert into t2 values(7, 7, 4, '{7:0.7, 8:0.8, 9:0.9}');
 insert into t2 values(8, 8, 3, '{9:0.9, 8:0.8, 10:1.0}');
 insert into t2 values(9, 9, 2, '{9:0.9, 10:1.0, 11:1.1}');
 insert into t2 values(10, 10, 1, '{11:1.1, 10:1.0, 12:1.2}');
-select * from t1 where c2 > 5
+select * from t1 where c2 > 5 
 order by negative_inner_product(v, '{3:1, 4:1}') APPROXIMATE limit 5;
 c1	c2	c3	v
-select * from t1 where c2 > 5 GROUP BY c1
+select * from t1 where c2 > 5 GROUP BY c1 
 order by negative_inner_product(v, '{3:1, 4:1}') APPROXIMATE limit 5;
 c1	c2	c3	v
 select * from t1 where c2 > 5 GROUP BY c1 having c1 < 8
@@ -1701,7 +1701,7 @@ select *, CASE
 WHEN c1 < 6 THEN 'first halp'
     ELSE 'second half'
   END AS pri_category
-from t1 where c2 > 5
+from t1 where c2 > 5 
 order by negative_inner_product(v, '{3:1, 4:1}') APPROXIMATE limit 8;
 c1	c2	c3	v	pri_category
 select * from t1 a join t2 b on a.c1=b.c1 order by negative_inner_product(a.v, '{3:1, 4:1}') approximate limit 3;
@@ -1709,10 +1709,10 @@ c1	c2	c3	v	c1	c2	c3	v
 3	3	8	{3:0.3,4:0.4,5:0.5}	3	3	8	{3:0.3,4:0.4,5:0.5}
 2	2	9	{2:0.2,3:0.3,4:0.4}	2	2	9	{2:0.2,3:0.3,4:0.4}
 4	4	7	{4:0.4,5:0.5,6:0.6}	4	4	7	{4:0.4,5:0.5,6:0.6}
-select count(*) from
-(select * from t1 where c2 - 1 > 5 order by negative_inner_product(v, '{3:1, 4:1}')
-APPROXIMATE limit 5) as tmp1,
-(select * from t2 order by negative_inner_product(v, '{3:1, 4:1}') APPROXIMATE limit 5)
+select count(*) from 
+(select * from t1 where c2 - 1 > 5 order by negative_inner_product(v, '{3:1, 4:1}') 
+APPROXIMATE limit 5) as tmp1, 
+(select * from t2 order by negative_inner_product(v, '{3:1, 4:1}') APPROXIMATE limit 5) 
 as tmp2 where tmp1.c1=tmp2.c1;
 count(*)
 0
@@ -1729,7 +1729,7 @@ c1	c2	c3	v
 select /*+ ENABLE_PARALLEL_DML parallel(256) */ * from t1 where c2 > 5 order by negative_inner_product(v, '{3:1, 4:1}') APPROXIMATE limit 5;
 c1	c2	c3	v
 WITH query_result AS (
-select * from t1 where c2 > 5
+select * from t1 where c2 > 5 
 order by negative_inner_product(v, '{3:1, 4:1}') APPROXIMATE limit 5
 )
 SELECT c1 FROM query_result;
@@ -1890,7 +1890,7 @@ Outputs & filters:
       force partition granule
   5 - output([t1.c1], [t1.c2], [negative_inner_product(t1.c2, cast('{3:1, 4:1}', ARRAY(18, -1)))]), filter([t1.c1 < 3]), rowset=16
       access([t1.__pk_increment], [t1.c1], [t1.c2]), partitions(p[0-2])
-      is_index_back=true, is_global_index=false, filter_before_indexback[false],
+      is_index_back=true, is_global_index=false, filter_before_indexback[false], 
       range_key([t1.__pk_increment]), range(MIN ; MAX)always true
 explain select /*+ index(t1 idx1)*/ * from t1 where c1 <=5 order by negative_inner_product(c2, '{3:1, 4:1}') approx limit 2;
 Query Plan
@@ -1918,6 +1918,6 @@ Outputs & filters:
       force partition granule
   5 - output([t1.c1], [t1.c2], [negative_inner_product(t1.c2, cast('{3:1, 4:1}', ARRAY(18, -1)))]), filter([t1.c1 <= 5]), rowset=16
       access([t1.__pk_increment], [t1.c1], [t1.c2]), partitions(p[0-2])
-      is_index_back=true, is_global_index=false, filter_before_indexback[false],
+      is_index_back=true, is_global_index=false, filter_before_indexback[false], 
       range_key([t1.__pk_increment]), range(MIN ; MAX)always true
 drop table if exists t1;

@@ -315,16 +315,6 @@ void test_token_pos()
     "select /*+ index(t1.name primary) */* from t1 where `c1` = 'abc';",
   };
 
-  const char *test_sqls_oracle[] = {
-    // test hint and comment
-    "/*+ c1 */ /* c2 */ select /* ignored */ /*+ no_rewrite, index(t1 primary)    */ /* ignored  */ c1 from t1;",
-    // test sys fun / add minus... / order by
-    "select * from t1 where c1 = c2+1*2/3-4 and rownum < 1 order by c1 + 2;",
-    "select * from t1 where c1 = c2+1*2/3-4 and rownum < 1+1 order by c1 + 2;",
-    "select /*+ index(t1.c1 primary) */* from t1 where \"name\" = 'abc';",
-    "select /*+ index(t1.name primary) */* from t1 where \"c1\" = 'abc';",
-  };
-
   const char* res_file = "./test_sql_fast_parser.result";
   const char* tmp_file = "./test_sql_fast_parser.tmp";
   bool generate_res_file = false;
@@ -339,11 +329,6 @@ void test_token_pos()
                             sizeof(test_sqls_mysql) / sizeof(char*),
                             DEFAULT_MYSQL_MODE,
                             tmp_of);
-    tmp_of << "Oracle mode: \n";
-    start_test_token_offset(test_sqls_oracle,
-                            sizeof(test_sqls_oracle) / sizeof(char*),
-                            DEFAULT_ORACLE_MODE | SMO_ORACLE,
-                            tmp_of);
 
     res_of.close();
     tmp_of.close();
@@ -356,11 +341,6 @@ void test_token_pos()
     start_test_token_offset(test_sqls_mysql,
                             sizeof(test_sqls_mysql) / sizeof(char*),
                             DEFAULT_MYSQL_MODE,
-                            tmp_of);
-    tmp_of << "Oracle mode: \n";
-    start_test_token_offset(test_sqls_oracle,
-                            sizeof(test_sqls_oracle) / sizeof(char*),
-                            DEFAULT_ORACLE_MODE | SMO_ORACLE ,
                             tmp_of);
 
     tmp_of.close();

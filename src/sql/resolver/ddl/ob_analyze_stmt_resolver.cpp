@@ -18,7 +18,7 @@
 #include "sql/resolver/ddl/ob_analyze_stmt_resolver.h"
 #include "sql/resolver/ddl/ob_analyze_stmt.h"
 #include "share/catalog/ob_catalog_utils.h"
-#include "share/stat/ob_dbms_stats_utils.h"
+#include "sql/optimizer/stat/ob_dbms_stats_utils.h"
 
 using namespace oceanbase::common;
 using namespace oceanbase::share::schema;
@@ -49,20 +49,20 @@ int ObAnalyzeStmtResolver::resolve(const ParseNode &parse_tree)
   } else if (OB_ISNULL(analyze_stmt = create_stmt<ObAnalyzeStmt>())) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_ERROR("failed to create analyze stmt", K(ret));
-  } else if (FALSE_IT(analyze_stmt->set_tenant_id(session_info_->get_effective_tenant_id()))) {
+  } else if (FALSE_IT((void)0)) {
     /*do nothing*/
   } else if (OB_FAIL(session_info_->get_force_parallel_query_dop(parallel_degree))) {
     LOG_WARN("failed to get force parallel query dop", K(ret));
   } else if (T_ANALYZE == parse_tree.type_) {
-    if (lib::is_mysql_mode() && !session_info_->is_enable_sql_extension()) {
+    if (!session_info_->is_enable_sql_extension()) {
       ret = OB_NOT_SUPPORTED;
-      LOG_USER_ERROR(OB_NOT_SUPPORTED, "The Oracle-mode analyze syntax is used in the disable sql extension MySQL-mode");
-    } else if (OB_FAIL(resolve_oracle_analyze(parse_tree, *analyze_stmt))) {
-      LOG_WARN("failed to resolve oracle analyze stmt", K(ret));
+      LOG_USER_ERROR(OB_NOT_SUPPORTED, "The extended analyze syntax is used while sql extension is disabled");
+    } else if (OB_FAIL(resolve_analyze_table(parse_tree, *analyze_stmt))) {
+      LOG_WARN("failed to resolve analyze stmt", K(ret));
     } else { /*do nothing*/ }
   } else if (T_MYSQL_ANALYZE == parse_tree.type_) {
-    if (OB_FAIL(resolve_oracle_analyze(parse_tree, *analyze_stmt))) {
-      LOG_WARN("failed to resolve oracle analyze stmt", K(ret));
+    if (OB_FAIL(resolve_analyze_table(parse_tree, *analyze_stmt))) {
+      LOG_WARN("failed to resolve analyze stmt", K(ret));
     } else { /*do nothing*/ }
   } else if (T_MYSQL_UPDATE_HISTOGRAM == parse_tree.type_) {
     if (OB_FAIL(resolve_mysql_update_histogram(parse_tree, *analyze_stmt))) {
@@ -103,8 +103,8 @@ int ObAnalyzeStmtResolver::resolve(const ParseNode &parse_tree)
   return ret;
 }
 
-int ObAnalyzeStmtResolver::resolve_oracle_analyze(const ParseNode &parse_node,
-                                                  ObAnalyzeStmt &analyze_stmt)
+int ObAnalyzeStmtResolver::resolve_analyze_table(const ParseNode &parse_node,
+                                                 ObAnalyzeStmt &analyze_stmt)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(3 != parse_node.num_child_)) {
@@ -203,9 +203,9 @@ int ObAnalyzeStmtResolver::resolve_mysql_column_bucket_info(const ParseNode *col
   if (OB_ISNULL(column_node) || OB_ISNULL(schema_checker_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid params", K(ret), K(column_node), K(schema_checker_));
-  } else if (OB_FAIL(schema_checker_->get_table_schema(analyze_stmt.get_tenant_id(), table_info.get_table_id(),
+  } else if (OB_FAIL(schema_checker_->get_table_schema( table_info.get_table_id(),
                                                        table_schema))) {
-    LOG_WARN("failed to get table schema", K(analyze_stmt.get_tenant_id()), K(table_info.get_table_id()), K(ret));
+    LOG_WARN("failed to get table schema", K(table_info.get_table_id()), K(ret));
   } else if (OB_ISNULL(table_schema)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("null table schema", K(ret));
@@ -263,7 +263,7 @@ int ObAnalyzeStmtResolver::resolve_table_info(const ParseNode *table_node,
   ObString catalog_name;
   ObNameCaseMode case_mode = ObNameCaseMode::OB_NAME_CASE_INVALID;
   const ObTableSchema *table_schema = NULL;
-  int64_t tenant_id = analyze_stmt.get_tenant_id();
+  
   uint64_t database_id = OB_INVALID_ID;
   if (OB_ISNULL(table_node) || OB_ISNULL(schema_checker_)) {
     ret = OB_INVALID_ARGUMENT;
@@ -274,16 +274,16 @@ int ObAnalyzeStmtResolver::resolve_table_info(const ParseNode *table_node,
     ret = OB_NOT_SUPPORTED;
     LOG_WARN("analyze table is not supported in catalog", K(ret), K(catalog_name));
     LOG_USER_ERROR(OB_NOT_SUPPORTED, "analyze table in catalog is");
-  } else if (OB_FAIL(schema_checker_->get_database_id(tenant_id, database_name, database_id))) {
+  } else if (OB_FAIL(schema_checker_->get_database_id(database_name, database_id))) {
     LOG_WARN("failed to get database id", K(ret));
-  } else if (OB_FAIL(schema_checker_->get_table_schema(tenant_id, database_name,
+  } else if (OB_FAIL(schema_checker_->get_table_schema( database_name,
                                                        table_name, false, table_schema))){
     LOG_WARN("failed to get table schema", K(ret));
   } else if (OB_ISNULL(table_schema)) {
     ret = OB_TABLE_NOT_EXIST;
     LOG_WARN("null table schema", K(ret));
   } else if (OB_FAIL(analyze_stmt.add_table(database_name, database_id, table_name,
-                           table_schema->is_materialized_view() ? table_schema->get_data_table_id() : table_schema->get_table_id(),
+                           table_schema->get_table_id(),
                            table_schema->get_table_type()))) {
     LOG_WARN("add table failed", K(ret));
   } else {
@@ -309,7 +309,7 @@ int ObAnalyzeStmtResolver::resolve_partition_info(const ParseNode *part_node,
   int ret = OB_SUCCESS;
   ObIArray<ObAnalyzeTableInfo> &tables = analyze_stmt.get_tables();
   for (int64_t i = 0; OB_SUCC(ret) && i < tables.count(); ++i) {
-    if (OB_FAIL(inner_resolve_partition_info(part_node, analyze_stmt.get_tenant_id(), tables.at(i)))) {
+    if (OB_FAIL(inner_resolve_partition_info(part_node, tables.at(i)))) {
       LOG_WARN("resolve table partition info failed", K(ret));
     }
   }
@@ -317,7 +317,6 @@ int ObAnalyzeStmtResolver::resolve_partition_info(const ParseNode *part_node,
 }
 
 int ObAnalyzeStmtResolver::inner_resolve_partition_info(const ParseNode *part_node,
-                                                        uint64_t tenant_id,
                                                         ObAnalyzeTableInfo &table_info)
 {
   int ret = OB_SUCCESS;
@@ -333,8 +332,8 @@ int ObAnalyzeStmtResolver::inner_resolve_partition_info(const ParseNode *part_no
   if (OB_ISNULL(schema_checker_) || OB_ISNULL(params_.allocator_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("null schema checker", K(schema_checker_), K(params_.allocator_), K(ret));
-  } else if (OB_FAIL(schema_checker_->get_table_schema(tenant_id, table_id, table_schema))) {
-    LOG_WARN("failed to get table schema", K(tenant_id), K(table_id), K(ret));
+  } else if (OB_FAIL(schema_checker_->get_table_schema( table_id, table_schema))) {
+    LOG_WARN("failed to get table schema", K(table_id), K(ret));
   } else if (OB_ISNULL(table_schema)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("null table schema", K(ret));
@@ -427,8 +426,8 @@ int ObAnalyzeStmtResolver::resolve_for_clause_info(const ParseNode *for_clause_n
   } else if (NULL == for_clause_node) {
     //there can be multi tables in mysql mode without for clause
     for (int64_t i = 0; OB_SUCC(ret) && i < tables.count(); ++i) {
-      if (OB_FAIL(schema_checker_->get_table_schema(analyze_stmt.get_tenant_id(), tables.at(i).get_table_id(), table_schema))) {
-        LOG_WARN("failed to get table schema", K(analyze_stmt.get_tenant_id()), K(tables.at(i).get_table_id()), K(ret));
+      if (OB_FAIL(schema_checker_->get_table_schema( tables.at(i).get_table_id(), table_schema))) {
+        LOG_WARN("failed to get table schema", K(tables.at(i).get_table_id()), K(ret));
       } else if (OB_ISNULL(table_schema)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("null table schema", K(ret));
@@ -442,8 +441,8 @@ int ObAnalyzeStmtResolver::resolve_for_clause_info(const ParseNode *for_clause_n
         tables.at(i).set_gather_subpart_hist(is_hist_subpart);
       }
     }
-  } else if (OB_FAIL(schema_checker_->get_table_schema(analyze_stmt.get_tenant_id(), tables.at(0).get_table_id(), table_schema))) {
-    LOG_WARN("failed to get table schema", K(analyze_stmt.get_tenant_id()), K(tables.at(0).get_table_id()), K(ret));
+  } else if (OB_FAIL(schema_checker_->get_table_schema( tables.at(0).get_table_id(), table_schema))) {
+    LOG_WARN("failed to get table schema", K(tables.at(0).get_table_id()), K(ret));
   } else if (OB_ISNULL(table_schema)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("null table schema", K(ret));

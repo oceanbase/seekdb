@@ -21,8 +21,8 @@
 #include "lib/net/ob_addr.h"
 #include "lib/container/ob_se_array.h"
 
-#include "share/ob_virtual_table_iterator.h"
-#include "share/ob_scanner.h"
+#include "observer/virtual_table/ob_virtual_table_iterator.h"
+#include "sql/ob_scanner.h"
 #include "common/row/ob_row.h"
 
 #include "sql/plan_cache/ob_plan_cache_util.h"
@@ -56,8 +56,8 @@ public:
   // deriative class specific
   virtual int inner_get_next_row() = 0;
 protected:
-  common::ObSEArray<uint64_t, 16> tenant_id_array_;
-  int64_t tenant_id_array_idx_;
+  // Single-shot iteration guard
+  bool iter_end_;
   DISALLOW_COPY_AND_ASSIGN(ObAllPlanCacheBase);
 };
 
@@ -71,7 +71,7 @@ public:
 protected:
   int get_row_from_tenants();
   int fill_cells(sql::ObPlanCache &plan_cache);
-  virtual int get_all_tenant_ids(common::ObIArray<uint64_t> &tenant_ids);
+  virtual int get_all_ids(common::ObIArray<uint64_t> &batch_ids);
 private:
   enum
   {
@@ -134,10 +134,9 @@ public:
   ObAllPlanCacheStatI1() {}
   virtual ~ObAllPlanCacheStatI1() {}
 protected:
-  int set_tenant_ids(const common::ObIArray<common::ObNewRange> &ranges);
-  virtual int get_all_tenant_ids(common::ObIArray<uint64_t> &tenant_ids);
+  int set_ids(const common::ObIArray<common::ObNewRange> &ranges, common::ObIArray<uint64_t> &batch_ids);
+  virtual int get_all_ids(common::ObIArray<uint64_t> &batch_ids);
 private:
-  common::ObSEArray<uint64_t, 16> tenant_ids_;
   DISALLOW_COPY_AND_ASSIGN(ObAllPlanCacheStatI1);
 };
 

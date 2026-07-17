@@ -79,30 +79,12 @@ int ObLSSyncTabletSeqHandler::replay(const void *buffer,
   return ret;
 }
 
-void ObLSSyncTabletSeqHandler::switch_to_follower_forcedly()
+void ObLSSyncTabletSeqHandler::deactivate()
 {
   // TODO
 }
 
-int ObLSSyncTabletSeqHandler::switch_to_leader()
-{
-  int ret = OB_SUCCESS;
-
-  //TODO
-
-  return ret;
-}
-
-int ObLSSyncTabletSeqHandler::switch_to_follower_gracefully()
-{
-  int ret = OB_SUCCESS;
-
-  //TODO
-
-  return ret;
-}
-
-int ObLSSyncTabletSeqHandler::resume_leader()
+int ObLSSyncTabletSeqHandler::activate()
 {
   int ret = OB_SUCCESS;
 

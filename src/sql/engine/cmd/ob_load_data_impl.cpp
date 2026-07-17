@@ -20,18 +20,20 @@
 
 
 #include "sql/engine/cmd/ob_load_data_impl.h"
+#include "share/rc/ob_module_provider.h"
 
 #include "sql/resolver/ob_resolver.h"
 #include "sql/resolver/dml/ob_insert_stmt.h"
 #include "sql/plan_cache/ob_sql_parameterization.h"
 #include "sql/resolver/expr/ob_raw_expr_util.h"
-#include "share/backup/ob_backup_io_adapter.h"
+#include "share/io/ob_backup_io_adapter.h"
 #include "storage/tx_storage/ob_tenant_freezer.h"
 #include "sql/rewrite/ob_transform_utils.h"
-#include "observer/omt/ob_tenant_timezone_mgr.h"
+#include "share/ob_tenant_timezone_mgr.h"
 #include "src/observer/mysql/ob_query_driver.h"
 #include "observer/ob_inner_sql_connection_pool.h"
 #include "share/catalog/ob_catalog_utils.h"
+#include "share/ob_ex_rpc.h"
 
 using namespace oceanbase::sql;
 using namespace oceanbase::common;
@@ -66,7 +68,7 @@ static void delay_process_by_probability(int64_t percentage) {
 const char *ObLoadDataBase::SERVER_TENANT_MEMORY_EXAMINE_SQL =
     "SELECT case when memstore_used < freeze_trigger * 1.02 then false else true end"
     " as need_wait_freeze"
-    " FROM oceanbase.__all_virtual_tenant_memstore_info";
+    " FROM oceanbase.__all_virtual_memstore_info";
 
 const char *log_file_column_names = "\nBatchId\tLineNum\tType\tErrCode\tErrMsg\t\n";
 const char *log_file_row_fmt = "%ld\t%ld\t%s\t%d\t%.*s\t\n";
@@ -152,13 +154,13 @@ int ObLoadDataBase::make_parameterize_stmt(ObExecContext &ctx,
   return ret;
 }
 
-int ObLoadDataBase::memory_check_remote(uint64_t tenant_id, bool &need_wait_minor_freeze)
+int ObLoadDataBase::memory_check_remote(bool &need_wait_minor_freeze)
 {
   int ret = OB_SUCCESS;
 
-  MTL_SWITCH(tenant_id) {
+  MOD_SCOPE {
     storage::ObTenantFreezer *freezer = nullptr;
-    if (FALSE_IT(freezer = MTL(storage::ObTenantFreezer *))) {
+    if (FALSE_IT(freezer = share::g_mp->tenant_freezer())) {
     } else {
       int64_t active_memstore_used = 0;
       int64_t total_memstore_used = 0;
@@ -187,7 +189,7 @@ int ObLoadDataBase::memory_check_remote(uint64_t tenant_id, bool &need_wait_mino
                                                        K(need_wait_minor_freeze));
     }
   } else {
-    LOG_ERROR("switch tenant failed", K(tenant_id), K(ret));
+    LOG_ERROR("switch tenant failed", K(ret));
   }
   return ret;
 }
@@ -213,7 +215,7 @@ int ObLoadDataBase::memory_wait_local(ObExecContext &ctx,
     ObSqlString sql;
     int64_t start_wait_ts = ObTimeUtil::current_time();
     int64_t wait_timeout_ts = 0;
-    uint64_t tenant_id = OB_INVALID_TENANT_ID;
+    
 
     if (OB_UNLIKELY(!tablet_id.is_valid())) {
       ret = OB_ERR_UNEXPECTED;
@@ -226,74 +228,48 @@ int ObLoadDataBase::memory_wait_local(ObExecContext &ctx,
       LOG_WARN("session is null", K(ret));
     } else {
       session->get_query_timeout(wait_timeout_ts);
-      tenant_id = session->get_effective_tenant_id();
       //print info
       LOG_INFO("LOAD DATA is suspended until the memory is available",
                K(tablet_id), K(server_addr), K(total_wait_secs));
     }
 
     bool need_wait_freeze = true;
-    ObAddr leader_addr;
-    ObDASLocationRouter &loc_router = DAS_CTX(ctx).get_location_router();
 
     while (OB_SUCC(ret) && need_wait_freeze) {
 
       ob_usleep(WAIT_INTERVAL_US);
 
-      leader_addr.reset();
       res.reuse();
-      char leader_ip_str[MAX_IP_ADDR_LENGTH];
-      const int64_t retry_us = 200 * 1000;
-      //Try to use the results in the cache as much as possible, without forcing a cache refresh.
-      const int64_t expire_renew_time = 0;
       if (OB_FAIL(ObLoadDataUtils::check_session_status(*session))) {
         LOG_WARN("session is not valid during wait", K(ret));
-      } else if (OB_FAIL(loc_router.get_leader(tenant_id, tablet_id, leader_addr, expire_renew_time))) {
-        LOG_WARN("failed to get location", K(ret));
-        ob_usleep(retry_us);
-      } else {
-        LOG_DEBUG("get participants", K(tablet_id), K(leader_addr));
       }
 
       if (OB_FAIL(ret)) {
-      } else if (!leader_addr.ip_to_string(leader_ip_str, sizeof(leader_ip_str))) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("format leader ip failed", K(ret), K(leader_addr));
       } else if (OB_FAIL(sql.assign_fmt(SERVER_TENANT_MEMORY_EXAMINE_SQL))) {
-        LOG_WARN("fail to append sql", K(ret), K(tenant_id), K(leader_addr));
-      } else if (OB_FAIL(sql_proxy_->read(res, OB_SYS_TENANT_ID, sql.ptr()))) {
+        LOG_WARN("fail to append sql", K(ret));
+      } else if (OB_FAIL(sql_proxy_->read(res, sql.ptr()))) {
         LOG_WARN("fail to execute sql", K(ret), K(sql));
       } else if (NULL == (result = res.get_result())) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("fail to get sql result", K(ret));
       } else if (OB_FAIL(result->next())) {
-        LOG_WARN("fail to get result, force renew location", K(ret), K(leader_addr));
+        LOG_WARN("fail to get result", K(ret));
         if (OB_ITER_END == ret) {
           ret = OB_SUCCESS;
         }
       } else {
         EXTRACT_BOOL_FIELD_MYSQL(*result, "need_wait_freeze", need_wait_freeze);
         //LOG_INFO("LOAD DATA is waiting for tenant memory available",
-                 //K(waited_seconds), K(total_wait_secs), K(tenant_id));
+                 //K(waited_seconds), K(total_wait_secs));
       }
-      //if it is location exception, refresh location cache with block interface
-      //because load data can only local retry
-      loc_router.refresh_location_cache_by_errno(false, ret);
     }
 
     //print info
     if (OB_SUCC(ret)) {
       int64_t wait_secs = (ObTimeUtil::current_time() - start_wait_ts) / 1000000;
       total_wait_secs += wait_secs;
-      if (leader_addr != server_addr) {
-        LOG_INFO("LOAD DATA location change",
-                 "old_addr", server_addr,
-                 "new_addr", leader_addr);
-        server_addr = leader_addr;
-        is_leader_changed = true;
-      } else {
-        is_leader_changed = false;
-      }
+      server_addr = GCTX.self_addr();
+      is_leader_changed = false;
       LOG_INFO("LOAD DATA is resumed",
                "waited_seconds", wait_secs,
                K(total_wait_secs));
@@ -754,7 +730,7 @@ void ObCSVFormats::init(const ObDataInFileStruct &file_formats)
         INT64_MAX : file_formats.line_term_str_[0];
   enclose_char_ = file_formats.field_enclosed_char_;
   escape_char_ = file_formats.field_escaped_char_;
-  null_column_fill_zero_string_ = lib::is_mysql_mode();
+  null_column_fill_zero_string_ = true;
 
   if (!file_formats.field_term_str_.empty()
       && file_formats.line_term_str_.empty()) {
@@ -771,9 +747,8 @@ void ObCSVFormats::init(const ObDataInFileStruct &file_formats)
 }
 
 ObShuffleTaskHandle::ObShuffleTaskHandle(ObDataFragMgr &main_datafrag_mgr,
-                                         ObBitSet<> &main_string_values,
-                                         uint64_t tenant_id)
-  : allocator(ObMemAttr(tenant_id, ObModIds::OB_SQL_LOAD_DATA)),
+                                         ObBitSet<> &main_string_values)
+  : allocator(ObMemAttr(ObModIds::OB_SQL_LOAD_DATA)),
     exec_ctx(allocator, GCTX.session_mgr_),
     data_buffer(NULL),
     escape_buffer(NULL),
@@ -781,7 +756,7 @@ ObShuffleTaskHandle::ObShuffleTaskHandle(ObDataFragMgr &main_datafrag_mgr,
     datafrag_mgr(main_datafrag_mgr),
     string_values(main_string_values)
 {
-  attr = ObMemAttr(tenant_id, ObModIds::OB_SQL_LOAD_DATA);
+  attr = ObMemAttr(ObModIds::OB_SQL_LOAD_DATA);
 }
 
 ObShuffleTaskHandle::~ObShuffleTaskHandle()
@@ -820,7 +795,7 @@ int ObLoadDataSPImpl::exec_shuffle(int64_t task_id, ObShuffleTaskHandle *handle)
 {
   int ret = OB_SUCCESS;
 
-  int64_t tenant_id = OB_INVALID_TENANT_ID;
+  
   void *expr_buf = NULL;
   ObLoadFileBuffer *expr_buffer = NULL;
   ObArrayHashMap<ObTabletID, ObDataFrag *> part_buf_mgr;
@@ -864,8 +839,7 @@ int ObLoadDataSPImpl::exec_shuffle(int64_t task_id, ObShuffleTaskHandle *handle)
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", KP(handle));
 //  } else if (FALSE_IT(handle->exec_ctx.get_allocator().reuse())) {
-  } else if (FALSE_IT(tenant_id = handle->exec_ctx.get_my_session()->get_effective_tenant_id())) {
-  } else if (OB_FAIL(part_buf_mgr.init(ObMemAttr(tenant_id, ObModIds::OB_SQL_LOAD_DATA),
+  } else if (OB_FAIL(part_buf_mgr.init(ObMemAttr(ObModIds::OB_SQL_LOAD_DATA),
                                        handle->datafrag_mgr.get_total_part_cnt()))) {
     LOG_WARN("fail to init part buf mgr", K(ret));
   } else if (OB_FAIL(insert_values.prepare_allocate(
@@ -873,7 +847,7 @@ int ObLoadDataSPImpl::exec_shuffle(int64_t task_id, ObShuffleTaskHandle *handle)
     LOG_WARN("fail to prealloc", K(ret),
              "insert values count", handle->generator.get_insert_exprs().count());
   } else if (OB_ISNULL(expr_buf = ob_malloc(handle->data_buffer->get_buffer_size() + sizeof(ObLoadFileBuffer),
-                                            ObMemAttr(tenant_id, ObModIds::OB_SQL_LOAD_DATA)))) {
+                                            ObMemAttr(ObModIds::OB_SQL_LOAD_DATA)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("not enough memory", K(ret));
   } else {
@@ -1044,7 +1018,7 @@ int ObLoadDataSPImpl::exec_insert(ObInsertTask &task, ObInsertResult& result)
   int64_t sql_buff_len_init = OB_MALLOC_BIG_BLOCK_SIZE; //2M
   int64_t field_buf_len = OB_MAX_VARCHAR_LENGTH;
   char *field_buff = NULL;
-  ObMemAttr attr(task.tenant_id_, ObModIds::OB_SQL_LOAD_DATA);
+  ObMemAttr attr(ObModIds::OB_SQL_LOAD_DATA);
   ObSqlString sql_str;
   ObSEArray<ObString, 1> single_row_values;
   sql_str.set_attr(attr);
@@ -1109,7 +1083,7 @@ int ObLoadDataSPImpl::exec_insert(ObInsertTask &task, ObInsertResult& result)
 
   if (OB_SUCC(ret)) {
     ObTZMapWrap tz_map_wrap;
-    if (OB_FAIL(OTTZ_MGR.get_tenant_tz(task.tenant_id_, tz_map_wrap))) {
+    if (OB_FAIL(OTTZ_MGR.get_tenant_tz(tz_map_wrap))) {
       LOG_WARN("get tenant timezone map failed", K(ret));
     } else {
       task.timezone_.set_tz_info_map(tz_map_wrap.get_tz_map());
@@ -1123,8 +1097,7 @@ int ObLoadDataSPImpl::exec_insert(ObInsertTask &task, ObInsertResult& result)
   param.sql_mode_ = &task.sql_mode_;
   param.tz_info_wrap_ = &task.timezone_;
 
-  if (OB_SUCC(ret) && OB_FAIL(GCTX.sql_proxy_->write(task.tenant_id_,
-                                                     sql_str.string(),
+  if (OB_SUCC(ret) && OB_FAIL(GCTX.sql_proxy_->write(sql_str.string(),
                                                      affected_rows,
                                                      get_compatibility_mode(),
                                                      &param))) {
@@ -1207,7 +1180,7 @@ int ObLoadDataSPImpl::handle_returned_shuffle_task(ToolBox &box, ObShuffleTaskHa
              K(handle.result.task_id_), K(box.file_buf_row_num.count()));
   } else if (!box.file_appender.is_opened()
              && OB_FAIL(create_log_file(box))) {
-    LOG_WARN("fail to create log file", K(ret));
+    LOG_ERROR("fail to create log file", K(ret));
   }
 
   for (int64_t i = 0; OB_SUCC(ret) && i < handle.err_records.count(); ++i) {
@@ -1337,12 +1310,24 @@ int ObLoadDataSPImpl::shuffle_task_gen_and_dispatch(ObExecContext &ctx, ToolBox 
     }
 
     if (OB_SUCC(ret)) {
-      ObRpcLoadDataShuffleTaskCallBack mycallback(box.shuffle_task_controller,
-                                                  box.shuffle_task_reserve_queue,
-                                                  handle);
+      // Completion bookkeeping formerly done by ObCallLoadDataShuffleTaskCallBack:
+      // push the handle back to the reserve queue and notify the controller.
+      // Used only for the empty-buffer fast path below; the dispatched path
+      // does the same bookkeeping at the END of its async worker.
+      auto release_shuffle_resource = [&]() -> int {
+        int rel_ret = OB_SUCCESS;
+        int ret1 = box.shuffle_task_reserve_queue.push_back(handle);
+        MEM_BARRIER();
+        int ret2 = box.shuffle_task_controller.on_task_finished();
+        if (OB_SUCCESS != ret1 || OB_SUCCESS != ret2) {
+          rel_ret = (OB_SUCCESS != ret1) ? ret1 : ret2;
+          LOG_ERROR("shuffle release resource failed", K(ret1), K(ret2));
+        }
+        return rel_ret;
+      };
 
       if (OB_UNLIKELY(handle->data_buffer->get_data_len() <= 0)) {
-        ret = mycallback.release_resouce();
+        ret = release_shuffle_resource();
       } else {
         ObShuffleTask task;
         task.task_id_ = task_id;
@@ -1350,12 +1335,68 @@ int ObLoadDataSPImpl::shuffle_task_gen_and_dispatch(ObExecContext &ctx, ToolBox 
         if (OB_FAIL(task.shuffle_task_handle_.set_arg(handle))) {
           LOG_WARN("fail to set arg", K(ret));
         } else {
-          if (OB_FAIL(GCTX.load_data_proxy_->to(box.self_addr)
-                                             .by(box.tenant_id)
-                                             .timeout(box.txn_timeout)
-                                             .ap_load_data_shuffle(task, &mycallback))) {
-            LOG_WARN("load data proxy post rpc failed", K(ret));
-          }
+          // Single-replica seekdb: target is always self (box.self_addr).
+          // Fire-and-forget onto the shared async worker pool to restore
+          // pipeline parallelism. Mirrors ObCallLoadDataShuffleTaskExecuteP::
+          // process and drives the same completion bookkeeping the callback
+          // would (push handle back to reserve queue + on_task_finished) at the
+          // END of the worker so the controller token is returned only when the
+          // task truly finishes. Per-task errors propagate via
+          // handle->result.exec_ret_ (inspected later), never returned here.
+          const int64_t shuffle_begin_ts = ObTimeUtil::current_time();
+          // exec_handle from get_arg equals the handle pointer (ObCallPointerArg
+          // just stores the raw pointer), so capture handle / task_id / gid_.
+          const ObLoadDataGID shuffle_gid = task.gid_;
+          const int64_t shuffle_task_id = task.task_id_;
+          // Capture the dispatching tenant so the async pool thread (no MTL
+          // context) can switch into it for get_job_status / exec_shuffle.
+          
+          ToolBox *box_ptr = &box;
+          (void)ex_rpc::async_call([handle, box_ptr, shuffle_gid, shuffle_task_id,
+                                      shuffle_begin_ts]() {
+            int tmp_ret = OB_SUCCESS;
+            // MTL_SWITCH expands to OB_SUCC(...) which assigns to a variable
+            // named `ret`; declare a local one for it (separate from the task
+            // result tracked in tmp_ret). A switch failure is folded into
+            // handle->result.exec_ret_ below.
+            int ret = OB_SUCCESS;
+            MOD_SCOPE {
+              ObLoadDataStat *job_status = nullptr;
+              if (OB_FAIL(ObGlobalLoadDataStatMap::getInstance()->get_job_status(
+                      shuffle_gid, job_status))) {
+                LOG_WARN("fail to get job, main thread has already quit", K(tmp_ret), K(shuffle_gid));
+              } else if (OB_ISNULL(job_status)) {
+                tmp_ret = OB_ERR_UNEXPECTED;
+                LOG_WARN("job status is null", K(tmp_ret));
+              } else {
+                if (OB_ISNULL(handle)) {
+                  tmp_ret = OB_ERR_UNEXPECTED;
+                  LOG_ERROR("handle is null", K(tmp_ret));
+                } else {
+                  if (OB_FAIL(ObLoadDataSPImpl::exec_shuffle(shuffle_task_id, handle))) {
+                    LOG_WARN("fail to exec shuffle task", K(tmp_ret));
+                  }
+                  handle->result.exec_ret_ = tmp_ret;
+                }
+                MEM_BARRIER();
+                job_status->release();
+              }
+            }
+            if (OB_FAIL(ret) && OB_SUCCESS == tmp_ret) {
+              // tenant switch failed before exec ran; surface it as the result.
+              tmp_ret = ret;
+              handle->result.exec_ret_ = tmp_ret;
+              LOG_WARN("fail to switch tenant for shuffle task", K(tmp_ret));
+            }
+            handle->result.process_us_ = ObTimeUtil::current_time() - shuffle_begin_ts;
+            // Completion bookkeeping (run LAST): push handle back + finish token.
+            int ret1 = box_ptr->shuffle_task_reserve_queue.push_back(handle);
+            MEM_BARRIER();
+            int ret2 = box_ptr->shuffle_task_controller.on_task_finished();
+            if (OB_SUCCESS != ret1 || OB_SUCCESS != ret2) {
+              LOG_ERROR("shuffle release resource failed", K(ret1), K(ret2));
+            }
+          });
         }
       }
     }
@@ -1403,9 +1444,9 @@ int ObLoadDataSPImpl::log_failed_line(ToolBox &box,
   } else {
     box.expr_buffer->reset();
     int64_t log_buf_pos = 0;
-    //int err_no = ob_errpkt_errno(err_code, box.is_oracle_mode);
+    //int err_no = ob_errpkt_errno(err_code);
     if (err_msg.empty()) {
-      err_msg = ob_errpkt_strerror(err_code, box.is_oracle_mode);
+      err_msg = ob_errpkt_strerror(err_code);
     }
     if (OB_FAIL(databuff_printf(box.expr_buffer->begin_ptr(),
                                 box.expr_buffer->get_buffer_size(),
@@ -1438,7 +1479,7 @@ int ObLoadDataSPImpl::log_failed_insert_task(ToolBox &box, ObInsertTask &task)
 
   if (!box.file_appender.is_opened()
       && OB_FAIL(create_log_file(box))) {
-    LOG_WARN("fail to create log file", K(ret));
+    LOG_ERROR("fail to create log file", K(ret));
   } else {
     log_err = task.result_.exec_ret_;
     LOG_DEBUG("check task result", K(task.result_));
@@ -1619,16 +1660,82 @@ int ObLoadDataSPImpl::handle_returned_insert_task(ObExecContext &ctx,
 int ObLoadDataSPImpl::insert_task_send(ObInsertTask *insert_task, ToolBox &box)
 {
   int ret = OB_SUCCESS;
-  ObRpcLoadDataInsertTaskCallBack mycallback(box.insert_task_controller,
-                                             box.insert_task_reserve_queue,
-                                             insert_task);
   if (OB_ISNULL(insert_task)) {
     ret = OB_ERR_UNEXPECTED;
-  } else if (OB_FAIL(GCTX.load_data_proxy_->to(insert_task->part_mgr->get_leader_addr())
-                                           .by(box.tenant_id)
-                                           .timeout(box.txn_timeout)
-                                           .ap_load_data_insert(*insert_task, &mycallback))) {
-    LOG_WARN("load data proxy post rpc failed", K(ret));
+  } else {
+    // Single-replica seekdb: partition leader is always self. Run the insert
+    // task in-process (mirrors ObCallLoadDataInsertTaskExecuteP::process),
+    // copy the result back onto the task (mirrors the callback process()) and
+    // drive the same completion bookkeeping (release_resouce: push task back
+    // to the reserve queue + on_task_finished).
+    const int64_t insert_begin_ts = ObTimeUtil::current_time();
+    
+    ToolBox *box_ptr = &box;
+    // Fire-and-forget onto the shared async worker pool to restore pipeline
+    // parallelism. Per-task errors propagate via insert_task->result_.exec_ret_
+    // (inspected later by the main loop), never returned from send().
+    (void)ex_rpc::async_call([insert_task, box_ptr, insert_begin_ts]() {
+      // Async pool threads have no tenant MTL context; switch into the task's
+      // tenant so exec_insert / warning-buffer / memory_check_remote work.
+      int tmp_ret = OB_SUCCESS;
+      // MTL_SWITCH expands to OB_SUCC(...) which assigns to a variable named
+      // `ret`; declare a local one for it (separate from the task result
+      // tracked in tmp_ret). A switch failure is folded into tmp_ret below.
+      int ret = OB_SUCCESS;
+      ObInsertTask &task = *insert_task;
+      ObInsertResult result;
+      MOD_SCOPE {
+        ObWarningBuffer *warning_buf = NULL;
+        bool need_wait_freeze = false;
+        if (OB_FAIL(ObLoadDataSPImpl::exec_insert(task, result))) {
+          LOG_WARN("fail to exec insert", K(tmp_ret));
+        }
+        result.exec_ret_ = tmp_ret;
+        if (OB_FAIL(tmp_ret) && OB_NOT_NULL(warning_buf = ob_get_tsi_warning_buffer())) {
+          int ret_backup = tmp_ret;
+          result.err_line_no_ = warning_buf->get_error_line();
+          // Cannot use OZ here: a macro return would skip the completion
+          // bookkeeping below in this fire-and-forget worker.
+          int write_ret = ob_write_string(result.allocator_, warning_buf->get_err_msg(), result.err_msg_);
+          if (OB_SUCCESS != write_ret) {
+            LOG_WARN("fail to write err msg", K(write_ret));
+          }
+          tmp_ret = ret_backup;
+        }
+        int temp_ret = ObLoadDataBase::memory_check_remote(need_wait_freeze);
+        if (OB_SUCCESS != temp_ret) {
+          LOG_WARN("LOAD DATA remote memory check failed", K(temp_ret));
+        }
+        result.flags_.reset();
+        if (need_wait_freeze) {
+          result.flags_.set_bit(ObTaskResFlag::NEED_WAIT_MINOR_FREEZE);
+        }
+      }
+      if (OB_FAIL(ret) && OB_SUCCESS == tmp_ret) {
+        // tenant switch failed before exec ran; surface it as the task result.
+        tmp_ret = ret;
+        result.exec_ret_ = tmp_ret;
+        LOG_WARN("fail to switch tenant for insert task", K(tmp_ret));
+      }
+      // mirror ObCallLoadDataInsertTaskCallBack::process()
+      int assign_ret = insert_task->result_.assign(result);
+      if (OB_SUCCESS != assign_ret) {
+        LOG_WARN("fail to assign result", K(assign_ret));
+      } else {
+        insert_task->result_recv_ts_ = ObTimeUtil::current_time();
+        insert_task->process_us_ = insert_task->result_recv_ts_ - insert_begin_ts;
+      }
+      // Completion bookkeeping formerly done by ObCallLoadDataInsertTaskCallBack:
+      // push the task back to the reserve queue and notify the controller. Run
+      // LAST so the controller token is returned only when the task truly
+      // finishes -- this bounds and re-enables the parallel pipeline.
+      int ret1 = box_ptr->insert_task_reserve_queue.push_back(insert_task);
+      MEM_BARRIER();
+      int ret2 = box_ptr->insert_task_controller.on_task_finished();
+      if (OB_SUCCESS != ret1 || OB_SUCCESS != ret2) {
+        LOG_ERROR("insert release resource failed", K(ret1), K(ret2));
+      }
+    });
   }
   return ret;
 }
@@ -2037,7 +2144,6 @@ int ObDataFragMgr::init(ObExecContext &ctx, uint64_t table_id)
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("sql ctx is null", K(ret), KP(ctx.get_sql_ctx()));
   } else if (OB_FAIL(schema_guard->get_table_schema(
-             ctx.get_my_session()->get_effective_tenant_id(),
              table_id, table_schema))) {
     LOG_WARN("fail to get partition count", K(ret));
   } else if (OB_ISNULL(table_schema)) {
@@ -2058,7 +2164,6 @@ int ObDataFragMgr::init(ObExecContext &ctx, uint64_t table_id)
                   = OB_NEWx(ObPartDataFragMgr,
                             (&ctx.get_allocator()),
                             *this,
-                            ctx.get_my_session()->get_effective_tenant_id(),
                             tablet_id))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("allocate memory failed", K(ret));
@@ -2073,7 +2178,7 @@ int ObDataFragMgr::init(ObExecContext &ctx, uint64_t table_id)
   }
 
   if (OB_SUCC(ret)) {
-    attr_.tenant_id_ = ctx.get_my_session()->get_effective_tenant_id();
+    
     attr_.label_ = common::ObModIds::OB_SQL_LOAD_DATA;
     //attr_.ctx_id_ = common::ObCtxIds::WORK_AREA;
     total_alloc_cnt_ = 0;
@@ -2118,36 +2223,13 @@ void ObDataFragMgr::distory_datafrag(ObDataFrag *frag) {
 int ObPartDataFragMgr::update_part_location(ObExecContext &ctx)
 {
   int ret = OB_SUCCESS;
-  const int64_t retry_us = 200 * 1000;
-  const int64_t retry_timeout =
-    std::min(ObTimeUtil::current_time() + 30 * USECS_PER_SEC, // the RTO is 30s
-             ctx.get_my_session()->get_query_timeout_ts());
+  UNUSED(ctx);
 
   if (OB_UNLIKELY(!tablet_id_.is_valid())) {
     ret = OB_NOT_INIT;
     LOG_WARN("invalid partition key", K(ret));
   } else {
-    bool force_renew = false;
-    ObDASLocationRouter &loc_router = DAS_CTX(ctx).get_location_router();
-    do {
-      const int64_t expire_renew_time = force_renew ? INT64_MAX : 0;
-      if (OB_FAIL(loc_router.get_leader(tenant_id_, tablet_id_, leader_addr_, expire_renew_time))) {
-        if (is_location_service_renew_error(ret) && !force_renew) {
-          // retry one time
-          force_renew = true;
-          LOG_WARN("failed to get location and force renew", K(ret), K(tablet_id_));
-        } else {
-          LOG_WARN("failed to get location", K(ret), K(tablet_id_));
-          if (ObTimeUtil::current_time() + retry_us > retry_timeout) {
-            force_renew = false;
-          } else {
-            ob_usleep(retry_us);
-          }
-        }
-      } else {
-        LOG_DEBUG("get participants", K(tablet_id_), K(leader_addr_));
-      }
-    } while (is_location_service_renew_error(ret) && force_renew);
+    leader_addr_ = GCTX.self_addr();
   }
 
   return ret;
@@ -2485,8 +2567,6 @@ int ObLoadDataSPImpl::ToolBox::init(ObExecContext &ctx, ObLoadDataStmt &load_stm
   formats.init(file_formats);
   self_addr = ctx.get_task_executor_ctx()->get_self_addr();
   //batch_row_count = DEFAULT_BUFFERRED_ROW_COUNT;
-  is_oracle_mode = false;
-  tenant_id = load_args.tenant_id_;
   wait_secs_for_mem_release = 0;
   affected_rows = 0;
   insert_rt_sum = 0;
@@ -2583,13 +2663,6 @@ int ObLoadDataSPImpl::ToolBox::init(ObExecContext &ctx, ObLoadDataStmt &load_stm
     }
   }
 
-  if (OB_UNLIKELY(ObLoadFileLocation::OSS == load_file_storage &&
-                    ObLoadDataFormat::CSV != load_args.access_info_.get_load_data_format())) {
-    ret = OB_NOT_SUPPORTED;
-    LOG_WARN("load data format not support", KR(ret), K(load_args.access_info_));
-    LOG_USER_ERROR(OB_NOT_SUPPORTED, "non-csv format in load data is");
-  }
-
   if (OB_SUCC(ret) && OB_FAIL(file_iter.copy(load_args.file_iter_))) {
     LOG_WARN("failed to copy file iter", K(ret));
   }
@@ -2630,7 +2703,7 @@ int ObLoadDataSPImpl::ToolBox::init(ObExecContext &ctx, ObLoadDataStmt &load_stm
     } else if (OB_FAIL(field_values_in_file.prepare_allocate(num_of_file_column))) {
       LOG_WARN("fail to reserve array", K(ret));
     } else if (OB_ISNULL(buf = ob_malloc(ObLoadFileBuffer::MAX_BUFFER_SIZE,
-                                         ObMemAttr(tenant_id, ObModIds::OB_SQL_LOAD_DATA)))) {
+                                         ObMemAttr(ObModIds::OB_SQL_LOAD_DATA)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("allocate memory failed", K(ret));
     } else if (FALSE_IT(expr_buffer = new(buf) ObLoadFileBuffer(
@@ -2680,7 +2753,7 @@ int ObLoadDataSPImpl::ToolBox::init(ObExecContext &ctx, ObLoadDataStmt &load_stm
     double max_cpu;
     if (OB_ISNULL(GCTX.omt_)) {
       ret = OB_ERR_UNEXPECTED;
-    } else if (OB_FAIL(GCTX.omt_->get_tenant_cpu(load_args.tenant_id_, min_cpu, max_cpu))) {
+    } else if (OB_FAIL(GCTX.omt_->get_tenant_cpu(min_cpu, max_cpu))) {
       LOG_WARN("fail to get tenant cpu", K(ret));
     } else {
       max_cpus = std::max(1L, lround(min_cpu));
@@ -2781,7 +2854,7 @@ int ObLoadDataSPImpl::ToolBox::init(ObExecContext &ctx, ObLoadDataStmt &load_stm
 
     if (OB_SUCC(ret)) {
       if (OB_ISNULL(temp_handle = OB_NEWx(ObShuffleTaskHandle, (&ctx.get_allocator()),
-                                          data_frag_mgr, string_type_column_bitset, tenant_id))) {
+                                          data_frag_mgr, string_type_column_bitset))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
         LOG_WARN("Failed to alloc", K(ret));
       } else if (OB_FAIL(temp_handle->expand_buf(batch_buffer_size, ObLoadFileBuffer::MAX_BUFFER_SIZE))) {
@@ -2794,7 +2867,7 @@ int ObLoadDataSPImpl::ToolBox::init(ObExecContext &ctx, ObLoadDataStmt &load_stm
       int64_t pos = 0;
 
       if (OB_ISNULL(handle = OB_NEWx(ObShuffleTaskHandle, (&ctx.get_allocator()),
-                                     data_frag_mgr, string_type_column_bitset, tenant_id))) {
+                                     data_frag_mgr, string_type_column_bitset))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
         LOG_WARN("Failed to alloc", K(ret));
       } else {
@@ -2831,7 +2904,7 @@ int ObLoadDataSPImpl::ToolBox::init(ObExecContext &ctx, ObLoadDataStmt &load_stm
           }
         }
         if (OB_SUCC(ret)) {
-          if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(MTL_ID(), handle->schema_guard))) {
+          if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(handle->schema_guard))) {
             LOG_WARN("get tenant schema guard failed", KR(ret));
           } else  {
             handle->exec_ctx.get_sql_ctx()->schema_guard_ = &handle->schema_guard;
@@ -2858,7 +2931,7 @@ int ObLoadDataSPImpl::ToolBox::init(ObExecContext &ctx, ObLoadDataStmt &load_stm
         insert_task->insert_stmt_head_ = insert_stmt_head_buff;
         insert_task->column_count_ = insert_infos.count();
         insert_task->row_count_ = batch_row_count;
-        insert_task->tenant_id_ = ctx.get_my_session()->get_effective_tenant_id();
+        
         insert_task->token_server_idx_ = server_j;
         insert_task->sql_mode_ = ctx.get_my_session()->get_sql_mode();
         if (OB_FAIL(insert_resource.push_back(insert_task))) {
@@ -2870,7 +2943,7 @@ int ObLoadDataSPImpl::ToolBox::init(ObExecContext &ctx, ObLoadDataStmt &load_stm
       }
     }
     if (OB_SUCC(ret)) {
-      if (OB_FAIL(server_last_available_ts.init(ObMemAttr(tenant_id, ObModIds::OB_SQL_LOAD_DATA), MAX_SERVER_COUNT))) {
+      if (OB_FAIL(server_last_available_ts.init(ObMemAttr(ObModIds::OB_SQL_LOAD_DATA), MAX_SERVER_COUNT))) {
         LOG_WARN("fail to create server map", K(ret));
       }
     }
@@ -2909,7 +2982,7 @@ int ObLoadDataSPImpl::ToolBox::init(ObExecContext &ctx, ObLoadDataStmt &load_stm
   if (OB_SUCC(ret)) {
     const int64_t fake_file_size = (file_size > 0) ? file_size : (2 << 30); // use 2G as default in load local mode
     int64_t max_task_count = (fake_file_size / ObLoadFileBuffer::MAX_BUFFER_SIZE + 1) * 2;
-    file_buf_row_num.set_attr(ObMemAttr(tenant_id, ObModIds::OB_SQL_LOAD_DATA));
+    file_buf_row_num.set_attr(ObMemAttr(ObModIds::OB_SQL_LOAD_DATA));
     if (OB_FAIL(file_buf_row_num.reserve(max_task_count))) {
       LOG_WARN("fail to reserve", K(ret));
     }
@@ -2970,9 +3043,9 @@ int ObLoadDataSPImpl::ToolBox::init(ObExecContext &ctx, ObLoadDataStmt &load_stm
     } else {
       ObLoadDataGID temp_gid;
       ObLoadDataGID::generate_new_id(temp_gid);
-      job_status->tenant_id_ = tenant_id;
+      
       job_status->job_id_ = temp_gid.id;
-      job_status->allocator_.set_tenant_id(tenant_id);
+      
       OZ(ob_write_string(job_status->allocator_,
                          load_args.combined_name_, job_status->table_name_));
       OZ(ob_write_string(job_status->allocator_,
@@ -3046,160 +3119,6 @@ int ObLoadDataSPImpl::ToolBox::init_file_size(ObExecContext &ctx)
       ret = OB_SUCCESS;
     }
     file_iter.rewind();
-  }
-
-  return ret;
-}
-
-int ObLoadDataURLImpl::construct_sql(ObLoadDataStmt &load_stmt, ObSqlString &sql)
-{
-  int ret = OB_SUCCESS;
-
-  ObDataInFileStruct data_struct_in_file = load_stmt.get_data_struct_in_file();
-  ObLoadArgument load_args = load_stmt.get_load_arguments();
-  ObLoadDataHint stmt_hints = load_stmt.get_hints();
-
-  OZ (sql.append(load_args.dupl_action_ == ObLoadDupActionType::LOAD_REPLACE ? "replace " : "insert "));
-  // Only when hint is not empty should it be added
-  if (!stmt_hints.get_hint_str().empty()) {
-
-    const ObString &hint_str = stmt_hints.get_hint_str();
-    const char* hint_start = strstr(hint_str.ptr(), "/*");
-
-    if (OB_ISNULL(hint_start)) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("invalid hint", K(ret), K(hint_str));
-    } else {
-      ObString new_hint(hint_str.length() - (hint_start - hint_str.ptr()), hint_start);
-      OZ (sql.append(new_hint));
-    }
-  }
-
-  if (load_args.dupl_action_ == ObLoadDupActionType::LOAD_IGNORE) {
-    OZ (sql.append("ignore "));
-  }
-
-  OZ (sql.append_fmt(" into %.*s ", 
-                load_args.combined_name_.length(), load_args.combined_name_.ptr()));
-
-  ObIArray<ObString> &part_names = load_stmt.get_part_names();
-  if (part_names.count() > 0) {
-    OZ (sql.append("partition("));
-    for (int64_t i = 0; OB_SUCC(ret) && i < part_names.count(); ++i) {
-      if (i > 0) {
-        OZ (sql.append(","));
-      }
-      OZ (sql.append_fmt("%.*s", part_names.at(i).length(), part_names.at(i).ptr()));
-    }
-    OZ (sql.append(") "));
-  }
-  // Get field list
-  const ObIArray<ObLoadDataStmt::FieldOrVarStruct> &field_list = load_stmt.get_field_or_var_list();
-  // Check for non-table column
-  for (int64_t i = 0; OB_SUCC(ret) && i < field_list.count(); ++i) {
-    const ObLoadDataStmt::FieldOrVarStruct &field = field_list.at(i);
-    if (OB_UNLIKELY(!field.is_table_column_)) {
-      ret = OB_NOT_SUPPORTED;
-      LOG_WARN("var is not supported", KR(ret), K(field), K(i), K(field_list));
-    }
-  }
-
-  if (OB_SUCC(ret)) {
-    // Add column name list
-    if (field_list.count() > 0) {
-      OZ (sql.append("("));
-      bool first = true;
-      for (int64_t i = 0; OB_SUCC(ret) && i < field_list.count(); ++i) {
-        const ObLoadDataStmt::FieldOrVarStruct &field = field_list.at(i);
-        if (!first) {
-          OZ (sql.append(","));
-        }
-        OZ (sql.append_fmt("`%.*s`", field.field_or_var_name_.length(), field.field_or_var_name_.ptr()));
-        first = false;
-      }
-      OZ (sql.append(") "));
-    }
-
-    if (!load_args.url_spec_.empty()) {
-      OZ (sql.append(load_args.url_spec_.ptr()));
-      OZ (sql.append(" "));
-    } else {
-      OZ (sql.append_fmt(" select * from %.*s ", load_args.file_name_.length(), load_args.file_name_.ptr()));
-    }
-  }
-
-  return ret;
-}
-
-int ObLoadDataURLImpl::execute(ObExecContext &ctx, ObLoadDataStmt &load_stmt)
-{
-  int ret = OB_SUCCESS;
-
-  int64_t affected_rows = 0;
-  common::ObMySQLProxy *sql_proxy = GCTX.sql_proxy_;
-  ObSqlString sql;
-
-  OZ (construct_sql(load_stmt, sql));
-
-  common::sqlclient::ObISQLConnection *conn = NULL;
-  ObInnerSQLConnectionPool *pool = NULL;
-  ObSQLSessionInfo *session = NULL;
-  ObSwitchCatalogHelper switch_catalog_helper;
-  int tmp_ret = OB_SUCCESS;
-  if (OB_SUCC(ret)) {
-    if (OB_ISNULL(session = ctx.get_my_session())) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("session is null", K(ret));
-    } else {
-      if (load_stmt.get_load_arguments().is_diagnosis_enabled_) {
-        session->set_diagnosis_enabled(true);
-        session->set_diagnosis_limit_num(load_stmt.get_load_arguments().diagnosis_limit_num_);
-      }
-      if (session->is_in_external_catalog()
-          && OB_FAIL(session->set_internal_catalog_db(&switch_catalog_helper))) {
-        LOG_WARN("failed to set catalog", K(ret));
-      }
-    }
-  }
-
-  if (OB_SUCC(ret)) {
-    if (OB_ISNULL(pool = static_cast<ObInnerSQLConnectionPool*>(sql_proxy->get_pool()))) {
-      ret = OB_NOT_INIT;
-      LOG_WARN("connection pool is NULL", K(ret));
-    } else if (OB_FAIL(pool->acquire(session, conn))) {
-      LOG_WARN("failed to acquire inner connection", K(ret));
-    } else if (OB_FAIL(conn->execute_write(session->get_effective_tenant_id(), sql.ptr(), affected_rows, true))) {
-      LOG_WARN("failed to exec sql", K(session->get_effective_tenant_id()), K(sql), K(ret));
-    }
-  }
-
-  if (OB_NOT_NULL(conn) && OB_NOT_NULL(sql_proxy)) {
-    OZ (sql_proxy->close(conn, true));
-  }
-
-  if (OB_SUCC(ret)) {
-    if (OB_NOT_NULL(ctx.get_physical_plan_ctx())) {
-      ctx.get_physical_plan_ctx()->set_affected_rows(affected_rows);
-      ctx.get_physical_plan_ctx()->set_row_matched_count(affected_rows);
-    }
-  }
-
-  if (OB_NOT_NULL(session) && session->is_diagnosis_enabled()) {
-    session->set_diagnosis_enabled(false);
-    session->set_diagnosis_limit_num(0);
-  }
-
-  if (OB_NOT_NULL(session) && switch_catalog_helper.is_set()) {
-    if (OB_SUCCESS != (tmp_ret = switch_catalog_helper.restore())) {
-      ret = OB_SUCCESS == ret ? tmp_ret : ret;
-      LOG_WARN("failed to reset catalog", K(ret), K(tmp_ret));
-    }
-  }
-
-  if (OB_SUCC(ret)) {
-    if (OB_NOT_NULL(ctx.get_my_session())) {
-      ctx.get_my_session()->reset_cur_phy_plan_to_null();
-    }
   }
 
   return ret;

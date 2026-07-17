@@ -48,3 +48,4 @@ void scalar_fastunpack_64(const uint64_t*__restrict__ in, uint64_t *__restrict__
 } // end namespace common
 } // end namespace oceanbase
 #endif /* OB_GENERATED_SCALAR_BP_FUNC_H_ */
+  

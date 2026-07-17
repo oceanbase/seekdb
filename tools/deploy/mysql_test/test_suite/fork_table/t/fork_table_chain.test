@@ -280,13 +280,13 @@ let $wait_task_cnt = 2;
 --source mysql_test/test_suite/fork_table/include/wait_fork_table.inc
 
 --echo # 验证所有fork任务都卡在BUILD_DATA阶段
-select count(*) as parallel_fork_count
-from oceanbase.__all_virtual_ddl_task_status
+select count(*) as parallel_fork_count 
+from oceanbase.__all_ddl_task_status 
 where ddl_type = 10009;
 
 --echo # 显示所有fork任务的详细信息
-select ddl_type, status
-from oceanbase.__all_virtual_ddl_task_status
+select ddl_type, status 
+from oceanbase.__all_ddl_task_status 
 where ddl_type = 10009;
 
 --echo # 释放所有fork操作，让它们继续执行
@@ -444,3 +444,4 @@ drop table if exists t6_fork2;
 drop table if exists t6_fork1_chain;
 drop table if exists t6_fork2_chain;
 drop database if exists db_fork_chain;
+

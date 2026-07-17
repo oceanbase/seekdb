@@ -23,8 +23,8 @@
 #include "rpc/obmysql/packet/ompk_resheader.h"
 #include "rpc/obmysql/packet/ompk_field.h"
 #include "rpc/obmysql/packet/ompk_eof.h"
-#include "observer/mysql/obmp_stmt_prexecute.h"
 #include "sql/engine/expr/ob_expr_xml_func_helper.h"
+#include "sql/monitor/show_trace/ob_show_trace.h"
 
 namespace oceanbase
 {
@@ -40,22 +40,15 @@ int ObQueryDriver::response_query_header(ObResultSet &result,
                                          bool need_flush_buffer)
 {
   int ret = OB_SUCCESS;
-  if (is_prexecute_) {
-    // Two-in-one protocol sends header package, does not send column separately
-    if (OB_FAIL(static_cast<ObMPStmtPrexecute&>(sender_).response_query_header(session_, result, need_flush_buffer))) {
-      LOG_WARN("prexecute response query head fail. ", K(ret));
-    } 
-  } else {
-    if (NULL == result.get_field_columns()) {
-      ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("response field is null. ", K(ret));
-    } else if (OB_FAIL(response_query_header(*result.get_field_columns(),
-                                             has_more_result, 
-                                             need_set_ps_out_flag, 
-                                             false,
-                                             &result))) {
-      LOG_WARN("response query head fail. ", K(ret));
-    }
+  if (NULL == result.get_field_columns()) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("response field is null. ", K(ret));
+  } else if (OB_FAIL(response_query_header(*result.get_field_columns(),
+                                           has_more_result,
+                                           need_set_ps_out_flag,
+                                           false,
+                                           &result))) {
+    LOG_WARN("response query head fail. ", K(ret));
   }
   if (OB_FAIL(ret)) {
     result.set_errcode(ret);
@@ -145,31 +138,12 @@ int ObQueryDriver::response_query_header(const ColumnsFieldIArray &fields,
     flags.status_flags_.OB_SERVER_PS_OUT_PARAMS = need_set_ps_out_flag ? 1 : 0;
     // NULL == result indicates it is an old protocol ps cursor execute response, or fetch protocol response, cursor_exit = true
     flags.status_flags_.OB_SERVER_STATUS_CURSOR_EXISTS = NULL == result ? 1 : 0; 
-    if (!session_.is_obproxy_mode()) {
-      // in java client or others, use slow query bit to indicate partition hit or not
-      flags.status_flags_.OB_SERVER_QUERY_WAS_SLOW = !session_.partition_hit().get_bool();
-    }
+    // in java client or others, use slow query bit to indicate partition hit or not
+    flags.status_flags_.OB_SERVER_QUERY_WAS_SLOW = !session_.partition_hit().get_bool();
     eofp.set_server_status(flags);
 
-    if (ps_cursor_execute && sender_.need_send_extra_ok_packet()) {
-      // Old protocol ps cursor execute response, only returns field information, so for proxy, an additional OK packet needs to be returned
-      // However, since the 2.0 protocol needs to understand the EOF packet situation at the same time as sending an OK packet, this OK packet cannot be extracted to the execute protocol layer for processing
-      if (OB_FAIL(sender_.update_last_pkt_pos())) {
-        LOG_WARN("failed to update last packet pos", K(ret));
-      } else {
-        // in multi-stmt, send extra ok packet in the last stmt(has no more result)
-        ObOKPParam ok_param;
-        ok_param.affected_rows_ = 0;
-        ok_param.is_partition_hit_ = session_.partition_hit().get_bool();
-        ok_param.has_more_result_ = false;
-        if (OB_FAIL(sender_.send_ok_packet(session_, ok_param, &eofp))) {
-          LOG_WARN("fail to send ok packt", K(ok_param), K(ret));
-        }
-      }
-    } else {
-      if (OB_FAIL(sender_.response_packet(eofp, &session_))) {
-        LOG_WARN("response packet fail", K(ret));
-      }
+    if (OB_FAIL(sender_.response_packet(eofp, &session_))) {
+      LOG_WARN("response packet fail", K(ret));
     }
   }
   return ret;
@@ -182,7 +156,7 @@ int ObQueryDriver::response_query_result(ObResultSet &result,
                                          int64_t fetch_limit)
 {
   int ret = OB_SUCCESS;
-  FLTSpanGuard(response_result);
+  ObTraceSpanGuard response_span(&session_, TRACE_RESPONSE_RESULT);
   can_retry = true;
   bool is_first_row = true;
   const ObNewRow *result_row = NULL;
@@ -196,13 +170,9 @@ int ObQueryDriver::response_query_result(ObResultSet &result,
   if (OB_FAIL(ret)) {
   } else if (OB_INVALID_COUNT != fetch_limit) {
     limit_count = fetch_limit;
-  } else if (lib::is_mysql_mode()) {
+  } else {
     if (!result.get_has_top_limit() && OB_FAIL(session_.get_sql_select_limit(limit_count))) {
       LOG_WARN("failed to get sytem variable sql_select_limit", K(ret));
-    }
-  } else { // lib::is_oracle_mode()
-    if (OB_FAIL(session_.get_oracle_sql_select_limit(limit_count))) {
-      LOG_WARN("failed to get sytem variable _oracle_sql_select_limit", K(ret));
     }
   }
 
@@ -229,10 +199,6 @@ int ObQueryDriver::response_query_result(ObResultSet &result,
 
   while (OB_SUCC(ret) && row_num < limit_count && !OB_FAIL(result.get_next_row(result_row)) ) {
     ObNewRow *row = const_cast<ObNewRow*>(result_row);
-    if (is_prexecute_ && row_num == limit_count - 1) {
-      LOG_DEBUG("is_prexecute_ and row_num is equal with limit_count", K(limit_count));
-      break;
-    }
     // If it is the first line, then reply to the client with field information etc.
     if (is_first_row) {
       is_first_row = false;
@@ -243,8 +209,7 @@ int ObQueryDriver::response_query_result(ObResultSet &result,
     }
     for (int64_t i = 0; OB_SUCC(ret) && i < row->get_count(); i++) {
       ObObj& value = row->get_cell(i);
-      if (result.is_ps_protocol() && !is_packed 
-          && !(value.is_geometry() && lib::is_oracle_mode())) { // oracle gis will do cast in process_sql_udt_results
+      if (result.is_ps_protocol() && !is_packed) {
         if (value.get_type() != fields->at(i).type_.get_type()) {
           ObCastCtx cast_ctx(&result.get_mem_pool(), NULL, CM_WARN_ON_FAIL, 
             fields->at(i).type_.get_collation_type());
@@ -260,10 +225,10 @@ int ObQueryDriver::response_query_result(ObResultSet &result,
       if (OB_SUCC(ret) && !is_packed) {
         // cluster version < 4.1
         //    use only locator and response routine
-        // >= 4.1 for oracle modle
-        //    1. user full lob locator v2 with extern header if client supports locator
+        // >= 4.1 with full lob locator v2
+        //    1. use extern header if client supports locator
         //    2. remove locator if client does not support locator
-        // >= 4.1 for mysql modle
+        // >= 4.1 for mysql mode
         //    remove locator
         if (ob_is_string_tc(value.get_type())
             && CS_TYPE_INVALID != value.get_collation_type()) {
@@ -287,8 +252,7 @@ int ObQueryDriver::response_query_result(ObResultSet &result,
       ObSMRow sm(protocol_type, *row, dtc_params,
                          session_,  
                          result.get_field_columns(),
-                         ctx_.schema_guard_,
-                         session_.get_effective_tenant_id());
+                         ctx_.schema_guard_);
       sm.set_packed(is_packed);
       OMPKRow rp(sm);
       rp.set_is_packed(is_packed);
@@ -475,9 +439,6 @@ int ObQueryDriver::convert_lob_locator_to_longtext(ObObj& value,
   int ret = OB_SUCCESS;
   // If the client uses the new lob locator, then return the lob locator data
   // If the client uses the old lob (without locator header, only data), then return the old lob
-  if (lib::is_mysql_mode()) {
-    // do nothing for mysql
-  }
   return ret;
 }
 
@@ -515,20 +476,18 @@ int ObQueryDriver::process_lob_locator_results(ObObj& value,
   // 3. if client does not support use_lob_locator ,,return full lob data without locator header
   bool is_lob_type = value.is_lob()
                      || value.is_json() || value.is_geometry() || value.is_roaringbitmap() ;
-  bool is_actual_return_lob_locator = is_use_lob_locator && !value.is_json() 
-                                      && !value.is_geometry() && !value.is_roaringbitmap();
+  UNUSED(is_use_lob_locator);
   if (!is_lob_type) {
     // not lob types, do nothing
   } else if (value.is_null() || value.is_nop_value()) {
     // do nothing
-  } else if ((!is_actual_return_lob_locator && lib::is_oracle_mode())
-             || lib::is_mysql_mode()) {
+  } else {
     // Should remove locator header and read full lob data
     ObString data;
     ObLobLocatorV2 loc(value.get_string(), value.has_lob_header());
     if (loc.is_null()) { // maybe v1 empty lob
     } else { // lob locator v2
-      ObArenaAllocator tmp_alloc("LobRead", OB_MALLOC_NORMAL_BLOCK_SIZE, session_info->get_effective_tenant_id());
+      ObArenaAllocator tmp_alloc("LobRead", OB_MALLOC_NORMAL_BLOCK_SIZE);
       ObTextStringIter instr_iter(value);
       if (OB_FAIL(ObTextStringHelper::build_text_iter(instr_iter, exec_ctx, session_info, allocator, &tmp_alloc))) {
         LOG_WARN("init lob str inter failed", K(ret), K(value));
@@ -547,11 +506,11 @@ int ObQueryDriver::process_lob_locator_results(ObObj& value,
         value.set_lob_value(dst_type, data.ptr(), static_cast<int32_t>(data.length()));
       }
     }
-  } else { /* do nothing */ }
+  }
   return ret;
 }
 
-int ObQueryDriver::convert_string_charset(const ObString &in_str, const ObCollationType in_cs_type, 
+int ObQueryDriver::convert_string_charset(const ObString &in_str, const ObCollationType in_cs_type,
                                           const ObCollationType out_cs_type, 
                                           char *buf, int32_t buf_len, uint32_t &result_len)
 {
@@ -618,77 +577,11 @@ int ObQueryDriver::convert_text_value_charset(ObObj& value,
       LOG_WARN("Lob: invalid collation", K(from_collation_type), K(to_collation_type), K(ret));
     } else if (CS_TYPE_BINARY != from_collation_type && CS_TYPE_BINARY != to_collation_type
         && strcmp(from_charset_info->csname, to_charset_info->csname) != 0) {
-      bool is_actual_return_lob_locator = session->is_client_use_lob_locator() && !value.is_json();
-      if (value.is_lob_storage() && value.has_lob_header() && OB_NOT_NULL(session) &&
-          is_actual_return_lob_locator && lib::is_oracle_mode()) {
-        ObLobLocatorV2 lob;
-        ObString inrow_data;
-        if (OB_FAIL(process_lob_locator_results(value, 
-                                                session->is_client_use_lob_locator(),
-                                                session->is_client_support_lob_locatorv2(),
-                                                &allocator,
-                                                session,
-                                                exec_ctx))) {
-          LOG_WARN("fail to process lob locator", K(ret), K(value));
-        } else if (OB_FAIL(value.get_lob_locatorv2(lob))) {
-          LOG_WARN("fail to lob locator v2", K(ret), K(value));
-        } else if (!lob.has_inrow_data()) {
-          // do nothing
-        } else if (OB_FAIL(lob.get_inrow_data(inrow_data))) {
-          LOG_WARN("fail to get inrow data", K(ret), K(lob));
-        } else if (inrow_data.length() == 0) {
-          // do nothing
-        } else {
-          int64_t lob_data_byte_len = inrow_data.length();
-          int64_t offset_len = reinterpret_cast<uint64_t>(inrow_data.ptr()) - reinterpret_cast<uint64_t>(lob.ptr_);
-          int64_t res_len = offset_len + lob_data_byte_len * ObCharset::CharConvertFactorNum;
-          char *buf = static_cast<char*>(allocator.alloc(res_len));
-          if (OB_ISNULL(buf)) {
-            ret = OB_ALLOCATE_MEMORY_FAILED;
-            LOG_WARN("fail to alloc memory", K(ret), K(res_len));
-          } else {
-            MEMCPY(buf, lob.ptr_, offset_len);
-            uint32_t result_len = 0;
-            if (OB_FAIL(convert_string_charset(inrow_data, from_collation_type, to_collation_type,
-                                               buf + offset_len, res_len - offset_len, result_len))) {
-              LOG_WARN("Lob: convert string charset failed", K(ret));
-            } else {
-              lob.assign_buffer(buf, offset_len + result_len, lob.has_lob_header());
-              // refresh payload size
-              if (lob.has_extern()) {
-                ObMemLobExternHeader *ex_header = nullptr;
-                if (OB_FAIL(lob.get_extern_header(ex_header))) {
-                  LOG_WARN("fail to get extern header", K(ret), K(lob));
-                } else {
-                  ex_header->payload_size_ = result_len;
-                }
-              }
-              // refresh lob data size
-              if (OB_SUCC(ret)) {
-                ObLobCommon *lob_common = nullptr;
-                if (OB_FAIL(lob.get_disk_locator(lob_common))) {
-                  LOG_WARN("fail to get lob common", K(ret), K(lob));
-                } else if (lob_common->is_init_) {
-                  ObLobData *lob_data = reinterpret_cast<ObLobData*>(lob_common->buffer_);
-                  lob_data->byte_size_ = result_len;
-                }
-              }
-              if (OB_SUCC(ret)) {
-                LOG_DEBUG("Lob: new temp convert_text_value_charset in convert_text_value",
-                K(ret), K(raw_str), K(type), K(to_collation_type), K(from_collation_type),
-                K(from_charset_info->csname), K(to_charset_info->csname));
-                value.set_lob_value(type, buf, offset_len + result_len);
-                value.set_collation_type(to_collation_type);
-                value.set_has_lob_header();
-              }
-            }
-          }
-        }
-      } else {
+      {
         // get full data, buffer size is full byte length * ObCharset::CharConvertFactorNum
         ObString data_str = value.get_string();
         int64_t lob_data_byte_len = data_str.length();
-        ObArenaAllocator tmp_alloc("LobRead", OB_MALLOC_NORMAL_BLOCK_SIZE, session->get_effective_tenant_id());
+        ObArenaAllocator tmp_alloc("LobRead", OB_MALLOC_NORMAL_BLOCK_SIZE);
         if (!value.has_lob_header()) {
         } else {
           ObLobLocatorV2 loc(raw_str, value.has_lob_header());
@@ -788,4 +681,3 @@ int ObQueryDriver::is_com_filed_list_match_wildcard_str(ObResultSet &result,
 
 }
 }
-

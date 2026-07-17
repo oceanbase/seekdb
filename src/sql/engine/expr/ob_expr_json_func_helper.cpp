@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 #include "ob_expr_json_func_helper.h"
+#include "share/rc/ob_module_provider.h"
 #include "share/ob_json_access_utils.h"
 #include "ob_expr_json_utils.h"
 #include "sql/engine/expr/ob_expr_cast.h"
@@ -92,7 +93,7 @@ int ObJsonExprHelper::get_json_schema(const ObExpr &expr, ObEvalCtx &ctx,
   } else if (!ob_is_string_type(type) && type != ObJsonType) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("input type error", K(type));
-  } else if (lib::is_mysql_mode() && OB_FAIL(ObJsonExprHelper::ensure_collation(type, cs_type))) {
+  } else if (OB_FAIL(ObJsonExprHelper::ensure_collation(type, cs_type))) {
     LOG_WARN("fail to ensure collation", K(ret), K(type), K(cs_type));
   } else {
     ObString j_str;
@@ -113,67 +114,6 @@ int ObJsonExprHelper::get_json_schema(const ObExpr &expr, ObEvalCtx &ctx,
   return ret;
 }
 
-/*
-int ObJsonExprHelper::get_json_doc(const ObExpr &expr, ObEvalCtx &ctx,
-                                   common::ObIAllocator &allocator,
-                                   uint16_t index, ObIJsonBase*& j_base,
-                                   bool &is_null, bool need_to_tree, 
-                                   bool relax, bool preserve_dup)
-{
-  INIT_SUCC(ret);
-  ObDatum *json_datum = NULL;
-  ObExpr *json_arg = expr.args_[index];
-  ObObjType val_type = json_arg->datum_meta_.type_;
-  ObCollationType cs_type = json_arg->datum_meta_.cs_type_;
-
-  bool is_oracle = lib::is_oracle_mode();
-  bool allow_partial_update = false;
-
-  if (OB_UNLIKELY(OB_FAIL(json_arg->eval(ctx, json_datum)))) {
-    LOG_WARN("eval json arg failed", K(ret));
-  } else if (val_type == ObNullType || json_datum->is_null()) {
-    is_null = true;
-  } else if (val_type != ObJsonType && !ob_is_string_type(val_type)) {
-    ret = OB_ERR_INVALID_TYPE_FOR_OP;
-    LOG_WARN("input type error", K(val_type));
-  } else if (lib::is_mysql_mode() && OB_FAIL(ObJsonExprHelper::ensure_collation(val_type, cs_type))) {
-    LOG_WARN("fail to ensure collation", K(ret), K(val_type), K(cs_type));
-  } else if (ob_is_json(val_type)
-      && OB_FAIL(ObJsonExprHelper::is_allow_partial_update(expr, ctx, json_datum->get_string(), allow_partial_update))) {
-    LOG_WARN("get partial updaet setting fail", K(ret));
-  } else if (allow_partial_update) {
-    if (OB_FAIL(get_json_for_partial_update(expr, *json_arg, ctx, allocator, *json_datum, j_base))) {
-      LOG_WARN("get_json_for_partial_update fail", K(ret), K(val_type));
-    }
-  } else {
-    ObString j_str;
-    if (OB_FAIL(get_json_or_str_data(json_arg, ctx, allocator, j_str, is_null))) {
-      LOG_WARN("fail to get real data.", K(ret), K(j_str));
-    } else if (is_null) {
-    } else {
-      ObJsonInType j_in_type = ObJsonExprHelper::get_json_internal_type(val_type);
-      ObJsonInType expect_type = need_to_tree ? ObJsonInType::JSON_TREE : j_in_type;
-      bool relax_json = (lib::is_oracle_mode() && relax);
-      uint32_t parse_flag = relax_json ? ObJsonParser::JSN_RELAXED_FLAG : 0;
-      ADD_FLAG_IF_NEED(preserve_dup, parse_flag, ObJsonParser::JSN_PRESERVE_DUP_FLAG);
-      if (is_oracle && j_str.length() == 0) {
-        is_null = true;
-      } else if (OB_FAIL(ObJsonBaseFactory::get_json_base(&allocator, j_str, j_in_type,
-                                                  expect_type, j_base, parse_flag, ObJsonExprHelper::get_json_max_depth_config()))) {
-        LOG_WARN("fail to get json base", K(ret), K(j_in_type));
-        if (is_oracle) {
-          ret = OB_ERR_JSON_SYNTAX_ERROR;
-        } else {
-          ret = OB_ERR_INVALID_JSON_TEXT_IN_PARAM;
-          LOG_USER_ERROR(OB_ERR_INVALID_JSON_TEXT_IN_PARAM);
-        }
-      }
-    }
-  }
-  return ret;
-}
-*/
-
 int ObJsonExprHelper::get_json_doc(const ObExpr &expr, ObEvalCtx &ctx,
                                     MultimodeAlloctor &allocator,
                                     uint16_t index, ObIJsonBase*& j_base,
@@ -185,7 +125,6 @@ int ObJsonExprHelper::get_json_doc(const ObExpr &expr, ObEvalCtx &ctx,
   ObExpr *json_arg = expr.args_[index];
   ObObjType val_type = json_arg->datum_meta_.type_;
   ObCollationType cs_type = json_arg->datum_meta_.cs_type_;
-  const bool is_oracle = false;
   bool allow_partial_update = false;
 
   if (OB_UNLIKELY(OB_FAIL(allocator.eval_arg(json_arg, ctx, json_datum)))) {
@@ -195,7 +134,7 @@ int ObJsonExprHelper::get_json_doc(const ObExpr &expr, ObEvalCtx &ctx,
   } else if (val_type != ObJsonType && !ob_is_string_type(val_type)) {
     ret = OB_ERR_INVALID_TYPE_FOR_OP;
     LOG_WARN("input type error", K(val_type));
-  } else if (lib::is_mysql_mode() && OB_FAIL(ObJsonExprHelper::ensure_collation(val_type, cs_type))) {
+  } else if (OB_FAIL(ObJsonExprHelper::ensure_collation(val_type, cs_type))) {
     LOG_WARN("fail to ensure collation", K(ret), K(val_type), K(cs_type));
   } else if (ob_is_json(val_type)
       && OB_FAIL(ObJsonExprHelper::is_allow_partial_update(expr, ctx, json_datum->get_string(), allow_partial_update))) {
@@ -247,8 +186,8 @@ int ObJsonExprHelper::get_const_json_schema(const common::ObObj &data, const cha
   } else if (ObJsonExprHelper::is_convertible_to_json(val_type)) {
     ObCollationType cs_type = data.get_collation_type();
     ObIJsonBase* j_base = nullptr;
-    // whether it is Oracle or MySQL, only lowercase true/false is considered a Boolean value
-    // so, use strict mode
+    // Only lowercase true/false is considered a Boolean value, so use strict
+    // mode.
     if (OB_FAIL(ObJsonExprHelper::transform_convertible_2jsonBase(data, val_type, allocator,
                                                                   cs_type, j_base, ObConv2JsonParam(false,
                                                                   data.has_lob_header(), false,
@@ -329,7 +268,7 @@ int ObJsonExprHelper::get_json_for_partial_update(
   ObString metas;
   storage::ObLobCursor *cursor = nullptr;
   int64_t query_timeout_ts = ObTimeUtility::current_time() + 60 * USECS_PER_SEC;
-  storage::ObLobManager *lob_mgr = MTL(storage::ObLobManager*);
+  storage::ObLobManager *lob_mgr = share::g_mp->lob_manager();
   uint8_t root_type = 0;
   if (lob_str.empty()) {
     ret = OB_ERR_UNEXPECTED;
@@ -674,15 +613,15 @@ int ObJsonExprHelper::get_json_val(const ObExpr &expr, ObEvalCtx &ctx,
 }
 
 
-int ObJsonExprHelper::oracle_datum2_json_val(const ObDatum *json_datum,
-                                             ObObjMeta& data_meta,
-                                             common::ObIAllocator *allocator,
-                                             ObBasicSessionInfo *session,
-                                             ObIJsonBase*& j_base,
-                                             bool is_bool_data_type,
-                                             bool is_format_json,
-                                             bool is_strict,
-                                             bool is_bin)
+int ObJsonExprHelper::datum_to_json_val(const ObDatum *json_datum,
+                                        ObObjMeta& data_meta,
+                                        common::ObIAllocator *allocator,
+                                        ObBasicSessionInfo *session,
+                                        ObIJsonBase*& j_base,
+                                        bool is_bool_data_type,
+                                        bool is_format_json,
+                                        bool is_strict,
+                                        bool is_bin)
 {
   INIT_SUCC(ret);
   ObObjType val_type = data_meta.get_type();
@@ -1449,8 +1388,7 @@ int ObJsonExprHelper::transform_convertible_2jsonBase(const T &datum,
     case ObMediumTextType:
     case ObLongTextType: {
       ObString j_str;
-      if (is_mysql_mode() 
-          && OB_FAIL(ObJsonExprHelper::ensure_collation(type, cs_type))) {
+      if (OB_FAIL(ObJsonExprHelper::ensure_collation(type, cs_type))) {
         // should check collation first
         LOG_WARN("Invalid collation type for input string.", K(ret));
       } else {
@@ -1587,7 +1525,7 @@ int ObJsonExprHelper::get_sql_scalar_type(
       } else if (OB_FAIL(ObSQLUtils::check_enable_decimalint(
         ctx.exec_ctx_.get_my_session(), enable_decimalint))) {
         LOG_WARN("fail to check_enable_decimalint_type",
-            K(ret), K(ctx.exec_ctx_.get_my_session()->get_effective_tenant_id()));
+            K(ret));
       } else if (enable_decimalint) {
         scalar_type = ObDecimalIntType;
       }
@@ -1632,7 +1570,7 @@ int ObJsonExprHelper::get_cast_type(const ObExprResType param_type2,
       }
       dst_type.set_precision(-1);
       dst_type.set_scale(parse_node.int16_values_[OB_NODE_CAST_N_SCALE_IDX]);
-    } else if (lib::is_mysql_mode() && ObJsonType == dst_type.get_type()) {
+    } else if (ObJsonType == dst_type.get_type()) {
       dst_type.set_collation_type(CS_TYPE_UTF8MB4_BIN);
     } else {
       dst_type.set_precision(parse_node.int16_values_[OB_NODE_CAST_N_PREC_IDX]);
@@ -1646,7 +1584,7 @@ int ObJsonExprHelper::get_cast_type(const ObExprResType param_type2,
         } else if (OB_FAIL(ObSQLUtils::check_enable_decimalint(type_ctx.get_session(),
                                                                enable_decimalint))) {
           LOG_WARN("fail to check_enable_decimalint_type",
-              K(ret), K(type_ctx.get_session()->get_effective_tenant_id()));
+              K(ret));
         } else if (enable_decimalint) {
           dst_type.set_type(ObDecimalIntType);
         }
@@ -1693,7 +1631,7 @@ int ObJsonExprHelper::set_dest_type(ObExprResType &type1,
         int16_t length_semantics = ((dst_type.is_string_type())
             ? dst_type.get_length_semantics()
             : (OB_NOT_NULL(type_ctx.get_session())
-                ? type_ctx.get_session()->get_actual_nls_length_semantics()
+                ? type_ctx.get_session()->get_actual_length_semantics()
                 : LS_BYTE));
         if (len > 0) { // cast(1 as char(10))
           type.set_full_length(len, length_semantics);
@@ -1713,8 +1651,8 @@ int ObJsonExprHelper::set_dest_type(ObExprResType &type1,
       } else {
         type.set_length(length);
         if (ObNumberTC == dst_type.get_type_class() && 0 == dst_type.get_precision()) {
-          // MySql:cast (1 as decimal(0)) = cast(1 as decimal)
-          // Oracle: cast(1.4 as number) = cast(1.4 as number(-1, -1))
+          // A zero precision number uses the default accuracy for the current
+          // compatibility mode.
           type.set_precision(ObAccuracy::DDL_DEFAULT_ACCURACY2[compatibility_mode][ObNumberType].get_precision());
         } else if (ObDecimalIntTC == dst_type.get_type_class() && 0 == dst_type.get_precision()) {
           ret = OB_ERR_UNEXPECTED;
@@ -1729,9 +1667,6 @@ int ObJsonExprHelper::set_dest_type(ObExprResType &type1,
             len = len > OB_LITERAL_MAX_INT_LEN ? OB_LITERAL_MAX_INT_LEN : len;
             type.set_precision(static_cast<int16_t>(len));
           }
-        } else if (ORACLE_MODE == compatibility_mode && ObDoubleType == dst_type.get_type()) {
-          ObAccuracy acc = ObAccuracy::DDL_DEFAULT_ACCURACY2[compatibility_mode][dst_type.get_type()];
-          type.set_accuracy(acc);
         } else {
           type.set_precision(dst_type.get_precision());
         }
@@ -1921,7 +1856,7 @@ int ObJsonExprHelper::parse_res_type(ObExprResType& type1,
     result_type.set_type(ObJsonType);
     result_type.set_collation_type(CS_TYPE_UTF8MB4_BIN);
     int16_t length_semantics = (OB_NOT_NULL(type_ctx.get_session())
-                ? type_ctx.get_session()->get_actual_nls_length_semantics() : LS_BYTE);
+                ? type_ctx.get_session()->get_actual_length_semantics() : LS_BYTE);
     result_type.set_length((ObAccuracy::DDL_DEFAULT_ACCURACY[ObJsonType]).get_length());
 
     result_type.set_collation_level(CS_LEVEL_IMPLICIT);
@@ -2147,7 +2082,7 @@ int ObJsonExprHelper::parse_asc_option(ObExprResType& asc_type,
     temp_type.set_meta(type1.get_calc_meta());
     temp_type.set_length_semantics(res_type.get_length_semantics());
 
-    if (!temp_type.is_blob() && OB_FAIL(ObExprResultTypeUtil::deduce_max_string_length_oracle(
+    if (!temp_type.is_blob() && OB_FAIL(ObExprResultTypeUtil::deduce_max_string_length_extended(
       type_ctx.get_session()->get_dtc_params(), type1, temp_type, length))) {
       LOG_WARN("fail to deduce max string length.", K(ret), K(temp_type), K(type1));
     } else {
@@ -2200,16 +2135,6 @@ int ObJsonExprHelper::pre_default_value_check(ObObjType dst_type, ObString val_s
     case ObVarcharType:
     case ObCharType:
     case ObHexStringType: {
-      if (lib::is_mysql_mode()) {
-      } else  if (val_type != ObVarcharType && val_type != ObCharType) {
-        ret = OB_ERR_DEFAULT_VALUE_NOT_MATCH;
-        LOG_WARN("default value not match",K(ret));
-      } else if (dst_type == ObVarcharType) {
-         if (val_str.length() > length) {
-          ret = OB_ERR_VALUE_EXCEEDED_MAX;
-          LOG_USER_ERROR(OB_ERR_VALUE_EXCEEDED_MAX, static_cast<int>(val_str.length()), static_cast<int>(length));
-         }
-      }
       break;
     }
     case ObNumberType:
@@ -2257,13 +2182,12 @@ int ObJsonExprHelper::pre_default_value_check(ObObjType dst_type, ObString val_s
 int ObJsonExprHelper::get_json_max_depth_config()
 {
   uint32_t json_max_depth = JSON_DOCUMENT_MAX_DEPTH;
-  omt::ObTenantConfigGuard tenant_config(TENANT_CONF(MTL_ID()));
-  if (tenant_config.is_valid()) {
-    json_max_depth = tenant_config->json_document_max_depth;
-    if (json_max_depth < JSON_DOCUMENT_MAX_DEPTH || json_max_depth > 1024) {
-      json_max_depth = JSON_DOCUMENT_MAX_DEPTH;
-    }
+
+  json_max_depth = GCONF.json_document_max_depth;
+  if (json_max_depth < JSON_DOCUMENT_MAX_DEPTH || json_max_depth > 1024) {
+    json_max_depth = JSON_DOCUMENT_MAX_DEPTH;
   }
+
   return json_max_depth;
 }
 
@@ -2646,7 +2570,7 @@ int ObJsonDeltaLob::deserialize_partial_data(storage::ObLobDiffHeader *diff_head
   int64_t data_len = diff_header->persist_loc_size_;
   int64_t pos = 0;
   ObLobLocatorV2 locator;
-  ObLobManager* lob_mgr = MTL(ObLobManager*);
+  ObLobManager* lob_mgr = share::g_mp->lob_manager();
   if (OB_ISNULL(partial_data_ = OB_NEWx(storage::ObLobPartialData, allocator_))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("alloc lob param fail", K(ret), "size", sizeof(ObLobPartialData));
@@ -2746,3 +2670,14 @@ int ObJsonDeltaLob::deserialize_lob_diffs(char* buf, const int64_t buf_len, stor
 
 }
 }
+
+
+// ── share/object obj_cast json max-depth hook registration ──
+#include "share/object/ob_obj_cast_hooks.h"
+namespace oceanbase {
+namespace sql {
+static const bool g_reg_obj_cast_json_depth_hook =
+    (common::g_obj_cast_json_max_depth =
+         &ObJsonExprHelper::get_json_max_depth_config, true);
+}  // namespace sql
+}  // namespace oceanbase

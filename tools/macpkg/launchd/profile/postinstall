@@ -1,0 +1,86 @@
+#!/bin/bash
+set -u
+
+LABEL="com.seekdb.server"
+PLIST="/Library/LaunchDaemons/${LABEL}.plist"
+CONFIG_DIR="/opt/seekdb/etc/seekdb"
+CONFIG_FILE="${CONFIG_DIR}/seekdb.cnf"
+BACKUP_FILE="/tmp/seekdb.cnf.pkg.bak"
+BASE_DIR="/opt/seekdb/var/seekdb/data"
+LOG_DIR="${BASE_DIR}/log"
+
+mkdir -p "$CONFIG_DIR" "$BASE_DIR" "$BASE_DIR/run" "$BASE_DIR/store" "$BASE_DIR/store/redo" "$LOG_DIR"
+
+if [ -f "$BACKUP_FILE" ]; then
+  mv "$BACKUP_FILE" "$CONFIG_FILE"
+fi
+
+chown -R root:wheel "$CONFIG_DIR" "$BASE_DIR" "$LOG_DIR" 2>/dev/null || true
+chmod 755 "$BASE_DIR" "$BASE_DIR/run" "$BASE_DIR/store" "$BASE_DIR/store/redo" "$LOG_DIR" 2>/dev/null || true
+[ -f "$CONFIG_FILE" ] && chmod 644 "$CONFIG_FILE" 2>/dev/null || true
+
+if [ -f "$PLIST" ]; then
+  chown root:wheel "$PLIST" 2>/dev/null || true
+  chmod 644 "$PLIST" 2>/dev/null || true
+fi
+
+chmod 755 /opt/seekdb/libexec/seekdb/scripts/seekdb_launchd_start 2>/dev/null || true
+chmod 755 /opt/seekdb/libexec/seekdb/scripts/seekdb_launchd_stop 2>/dev/null || true
+chmod 755 /opt/seekdb/bin/seekdbctl 2>/dev/null || true
+chmod 755 /opt/seekdb/bin/seekdb_start 2>/dev/null || true
+chmod 755 /opt/seekdb/bin/seekdb_stop 2>/dev/null || true
+chmod 755 /opt/seekdb/bin/seekdb_status 2>/dev/null || true
+chmod 755 /opt/seekdb/bin/seekdb_paths 2>/dev/null || true
+chmod 755 /opt/seekdb/bin/seekdb_config 2>/dev/null || true
+chmod 755 /opt/seekdb/bin/seekdb_setup 2>/dev/null || true
+chmod 755 /opt/seekdb/bin/seekdb_uninstall 2>/dev/null || true
+
+# Keep command-line tools on the default macOS PATH while the payload lives
+# under /opt/seekdb.
+mkdir -p /usr/local/bin 2>/dev/null || true
+for cmd in seekdb seekdbctl seekdb_start seekdb_stop seekdb_status \
+           seekdb_paths seekdb_config seekdb_setup seekdb_uninstall; do
+  if [ -x "/opt/seekdb/bin/${cmd}" ]; then
+    ln -sf "/opt/seekdb/bin/${cmd}" "/usr/local/bin/${cmd}" 2>/dev/null || true
+  fi
+done
+
+if command -v launchctl >/dev/null 2>&1 && [ -f "$PLIST" ]; then
+  launchctl bootout "system/${LABEL}" >/dev/null 2>&1 || true
+  if launchctl bootstrap system "$PLIST" >/dev/null 2>&1; then
+    launchctl enable "system/${LABEL}" >/dev/null 2>&1 || true
+    launchctl kickstart -k "system/${LABEL}" >/dev/null 2>&1 || true
+    echo "seekdb service loaded and started: ${LABEL}"
+  else
+    echo "Warning: failed to bootstrap ${LABEL}. Run 'sudo seekdbctl start' for details." >&2
+  fi
+fi
+
+# Start privileged helper for menu bar app
+HELPER_LABEL="com.seekdb.helper"
+HELPER_PLIST="/Library/LaunchDaemons/${HELPER_LABEL}.plist"
+if [ -f "$HELPER_PLIST" ]; then
+  chown root:wheel "$HELPER_PLIST" 2>/dev/null || true
+  chmod 644 "$HELPER_PLIST" 2>/dev/null || true
+  chmod 755 /Library/PrivilegedHelperTools/com.seekdb.helper 2>/dev/null || true
+  launchctl bootout "system/${HELPER_LABEL}" >/dev/null 2>&1 || true
+  launchctl bootstrap system "$HELPER_PLIST" >/dev/null 2>&1 || true
+  echo "Privileged helper loaded: ${HELPER_LABEL}"
+fi
+
+# Launch menu bar app for current user
+CONSOLE_USER=$(stat -f "%Su" /dev/console 2>/dev/null || echo "")
+if [ -n "$CONSOLE_USER" ] && [ -d "/Applications/seekdb Monitor.app" ]; then
+  su "$CONSOLE_USER" -c 'open "/Applications/seekdb Monitor.app"' 2>/dev/null || true
+fi
+
+echo "Manual control commands:"
+echo "  seekdb_start    # Start seekdb daemon"
+echo "  seekdb_stop     # Stop seekdb daemon"
+echo "  seekdb_status   # Check seekdb status"
+echo "  seekdb_paths    # Show config, data, pid, log, and share paths"
+echo "  seekdb_config   # Show or update path configuration"
+echo "  seekdb_setup    # Initialize, enable boot startup, and start"
+echo "  seekdb_uninstall # Remove seekdb completely"
+echo "Advanced management: seekdbctl {start|stop|restart|status|logs|doctor|paths|config|setup|clean-data|uninstall}"
+exit 0

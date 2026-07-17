@@ -41,7 +41,7 @@ ALTER TABLE t2 DROP COLUMN rb1;
 ALTER TABLE t2 DROP COLUMN rb2;
 desc t2;
 Field	Type	Null	Key	Default	Extra
-i	int(11)	NO	PRI	NULL
+i	int(11)	NO	PRI	NULL	
 DROP TABLE t2;
 CREATE TABLE roaringbitmap(roaringbitmap int);
 INSERT INTO roaringbitmap(roaringbitmap) VALUES (1);
@@ -143,19 +143,19 @@ ERROR 0A000: Modify other type to roaringbitmap not supported
 create table tt1 as select rb_build_empty();
 desc tt1;
 Field	Type	Null	Key	Default	Extra
-rb_build_empty()	roaringbitmap	YES		NULL
+rb_build_empty()	roaringbitmap	YES		NULL	
 create table tt2 as select rb_from_string('');
 desc tt2;
 Field	Type	Null	Key	Default	Extra
-rb_from_string('')	roaringbitmap	YES		NULL
+rb_from_string('')	roaringbitmap	YES		NULL	
 create table tt3 as select rb_build_varbinary(0x01030401000000020000000300000004000000);
 desc tt3;
 Field	Type	Null	Key	Default	Extra
-rb_build_varbinary(0x01030401000000020000000300000004000000)	roaringbitmap	YES		NULL
+rb_build_varbinary(0x01030401000000020000000300000004000000)	roaringbitmap	YES		NULL	
 create table tt4 as select rb_build_agg(1);
 desc tt4;
 Field	Type	Null	Key	Default	Extra
-rb_build_agg(1)	roaringbitmap	YES		NULL
+rb_build_agg(1)	roaringbitmap	YES		NULL	
 create table roaringbitmap_ddl_t (rb roaringbitmap DEFAULT 0x0100);
 show create table roaringbitmap_ddl_t;
 Table	Create Table
@@ -164,7 +164,7 @@ roaringbitmap_ddl_t	CREATE TABLE `roaringbitmap_ddl_t` (
 ) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM =  BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
 desc roaringbitmap_ddl_t;
 Field	Type	Null	Key	Default	Extra
-rb	roaringbitmap	YES		X'0100'
+rb	roaringbitmap	YES		X'0100'	
 select ddl_stmt_str from oceanbase.__all_ddl_operation where ddl_stmt_str like '%roaringbitmap%' order by gmt_create desc limit 22;
 ddl_stmt_str
 create table roaringbitmap_ddl_t (rb roaringbitmap DEFAULT 0x0100)
@@ -194,9 +194,6 @@ CREATE TABLE t2(i INT PRIMARY KEY, rb1 ROARINGBITMAP, rb2 ROARINGBITMAP NOT NULL
 ALTER TABLE t1 ADD COLUMN rb5 ROARINGBITMAP default x'01060100000000000000000000003a3000000100000000000000100000000100'
 ALTER TABLE t1 ADD COLUMN rb4 ROARINGBITMAP default x'0100'
 ALTER TABLE t1 ADD COLUMN rb3 ROARINGBITMAP default NULL
-select TABLE_NAME, COLUMN_NAME, DATA_TYPE, DATA_LENGTH, DATA_PRECISION, DATA_SCALE from  CDB_TAB_COLS_V$ where table_name='roaringbitmap_ddl_t';
-TABLE_NAME	COLUMN_NAME	DATA_TYPE	DATA_LENGTH	DATA_PRECISION	DATA_SCALE
-roaringbitmap_ddl_t	rb	ROARINGBITMAP	0	NULL	NULL
 drop table if exists t1,t2,t3,t4,t5,t6,t7,t8,t9;
 drop table if exists tt1, tt2, tt3, tt4;
 drop table if exists roaringbitmap_ddl_t;

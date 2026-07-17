@@ -24,7 +24,6 @@
 #include "lib/utility/ob_print_utils.h"
 #include "lib/ob_lib_config.h"
 #include "lib/thread/thread.h"
-// #include "lib/stat/ob_diagnostic_info_guard.h"
 
 namespace oceanbase
 {
@@ -35,17 +34,11 @@ typedef ObStatArray<ObWaitEventStat, WAIT_EVENTS_TOTAL> ObWaitEventStatArray;
 typedef ObStatArray<ObStatEventAddStat, ObStatEventIds::STAT_EVENT_ADD_END> ObStatEventAddStatArray;
 typedef ObStatArray<ObStatEventSetStat, ObStatEventIds::STAT_EVENT_SET_END - ObStatEventIds::STAT_EVENT_ADD_END -1> ObStatEventSetStatArray;
 
-class ObDiagnosticInfo;
-
 struct ObLatchStat
 {
   ObLatchStat();
   int add(const ObLatchStat &other);
   void reset();
-  // uint64_t addr_;
-  // uint64_t id_;
-  // uint64_t level_;
-  // uint64_t hash_;
   uint64_t gets_;
   uint64_t misses_;
   uint64_t sleeps_;
@@ -142,7 +135,6 @@ public:
   ObWaitEventDesc items_[SESSION_WAIT_HISTORY_CNT];
 };
 
-class ObDiagnoseTenantInfo;
 class ObDiagnoseSessionInfo
 {
 public:
@@ -168,7 +160,7 @@ public:
   inline void reset_total_wait() { total_wait_ = NULL; }
   inline ObWaitEventDesc *get_max_wait() { return max_wait_; }
   inline ObWaitEventStat *get_total_wait() { return total_wait_; }
-  inline bool is_valid() const { return tenant_id_ < UINT32_MAX; }
+  inline bool is_valid() const { return true; }
   const ObWaitEventDesc &get_curr_wait() const
   {
     return curr_wait_;
@@ -177,8 +169,7 @@ public:
   {
     curr_wait_ = wait;
   };
-  int set_tenant_id(uint64_t tenant_id);
-  inline uint64_t get_tenant_id() { return tenant_id_; }
+  
   TO_STRING_EMPTY();
 private:
   ObWaitEventDesc curr_wait_;
@@ -187,100 +178,13 @@ private:
   ObWaitEventHistory event_history_;
   ObWaitEventStatArray event_stats_;
   ObStatEventAddStatArray stat_add_stats_;
-  uint64_t tenant_id_;
+  
   DIRWLock lock_;
 };
 
-class ObDiagnoseTenantInfo final
-{
-public:
-  ObDiagnoseTenantInfo(ObIAllocator *allocator = NULL);
-  ~ObDiagnoseTenantInfo();
-  void add_wait_event(const ObDiagnoseTenantInfo &other);
-  void add_stat_event(const ObDiagnoseTenantInfo &other);
-  void add_latch_stat(const ObDiagnoseTenantInfo &other);
-  void reset();
-  int set_stat(const int16_t stat_no, const int64_t value);
-  int get_stat(const int16_t stat_no, int64_t &value);
-  inline ObWaitEventStatArray &get_event_stats()  { return event_stats_; }
-  inline ObStatEventAddStatArray &get_add_stat_stats()  { return stat_add_stats_; }
-  inline ObStatEventSetStatArray &get_set_stat_stats()  { return stat_set_stats_; }
-  inline ObLatchStatArray &get_latch_stats() { return latch_stats_; }
-  TO_STRING_EMPTY();
-private:
-  ObWaitEventStatArray event_stats_;
-  ObStatEventAddStatArray stat_add_stats_;
-  ObStatEventSetStatArray stat_set_stats_;
-  ObLatchStatArray latch_stats_;
-};
 
-class ObWaitEventGuard
-{
-public:
-  explicit ObWaitEventGuard(
-    const int64_t event_no,
-    const uint64_t timeout_ms = 0,
-    const int64_t p1 = 0,
-    const int64_t p2 = 0,
-    const int64_t p3 = 0,
-    const bool is_atomic = false);
-  ~ObWaitEventGuard();
-private:
-  int64_t event_no_;
-  ObDiagnosticInfo *di_;
-  bool is_atomic_;
-  //Do you need statistics
-  bool need_record_;
-};
-
-template<ObWaitEventIds::ObWaitEventIdEnum EVENT_ID>
-class ObSleepEventGuard : public ObWaitEventGuard
-{
-public:
-  ObSleepEventGuard(
-      const int64_t sleep_us,
-      const uint64_t timeout_ms = 0
-  ) : ObWaitEventGuard(EVENT_ID, timeout_ms, sleep_us, 0, 0)
-  {
-    lib::Thread::sleep_us_ = sleep_us;
-  }
-  ObSleepEventGuard(
-      const int64_t sleep_us,
-      const int64_t p1,
-      const int64_t p2,
-      const int64_t p3,
-      const uint64_t timeout_ms = 0
-  ) : ObWaitEventGuard(EVENT_ID, timeout_ms, p1, p2, p3)
-  {
-    lib::Thread::sleep_us_ = sleep_us;
-  }
-  ~ObSleepEventGuard()
-  {
-    lib::Thread::sleep_us_ = 0;
-  }
-};
-
-class ObMaxWaitGuard
-{
-public:
-  explicit ObMaxWaitGuard(ObWaitEventDesc *max_wait);
-  ~ObMaxWaitGuard();
-  TO_STRING_KV(K_(need_record), K_(max_wait));
-private:
-  bool need_record_;
-  ObWaitEventDesc *max_wait_;
-  ObDiagnosticInfo *di_;
-};
-
-class ObTotalWaitGuard
-{
-public:
-  explicit ObTotalWaitGuard(ObWaitEventStat *total_wait);
-  ~ObTotalWaitGuard();
-private:
-  ObWaitEventStat *total_wait_;
-  ObDiagnosticInfo *di_;
-};
+// ObWaitEventGuard, ObMaxWaitGuard, ObTotalWaitGuard deleted - wait event diagnostics removed
+// ObSleepEventGuard deleted - wait event diagnostics removed
 
 } /* namespace common */
 } /* namespace oceanbase */
@@ -288,41 +192,23 @@ private:
 #ifdef _WIN32
 #define SLEEP(time)                                                                        \
   do {                                                                                     \
-    oceanbase::common::ObSleepEventGuard<oceanbase::common::ObWaitEventIds::DEFAULT_SLEEP> \
-        wait_guard(((int64_t)time) * 1000 * 1000);                                         \
     ::Sleep((DWORD)(time) * 1000);                                                         \
   } while (0)
 
 #define USLEEP(time)                                                                       \
   do {                                                                                     \
-    oceanbase::common::ObSleepEventGuard<oceanbase::common::ObWaitEventIds::DEFAULT_SLEEP> \
-        wait_guard((int64_t)time);                                                         \
     ::Sleep((DWORD)(((time) + 999) / 1000));                                               \
   } while (0)
 #else
 #define SLEEP(time)                                                                        \
   do {                                                                                     \
-    oceanbase::common::ObSleepEventGuard<oceanbase::common::ObWaitEventIds::DEFAULT_SLEEP> \
-        wait_guard(((int64_t)time) * 1000 * 1000);                                         \
     ::sleep(time);                                                                         \
   } while (0)
 
 #define USLEEP(time)                                                                       \
   do {                                                                                     \
-    oceanbase::common::ObSleepEventGuard<oceanbase::common::ObWaitEventIds::DEFAULT_SLEEP> \
-        wait_guard((int64_t)time);                                                         \
     ::usleep(time);                                                                        \
   } while (0)
 #endif
-
-#define GLOBAL_EVENT_GET(stat_no)             \
-  ({                                                \
-      int64_t ret = 0;                              \
-      ObStatEventAddStat *stat = tenant_info->get_add_stat_stats().get(stat_no); \
-      if (NULL != stat) {         \
-        ret = stat->stat_value_;   \
-      }   \
-      ret; \
-   })
 
 #endif /* OB_DIAGNOSE_INFO_H_ */

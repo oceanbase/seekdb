@@ -20,9 +20,6 @@
 #include "logservice/palf/palf_env.h"
 #include "share/scn.h"
 #include "logservice/ob_log_base_type.h"
-#ifdef OB_BUILD_SHARED_STORAGE
-#include "log/ob_log_iterator_storage.h"
-#endif
 
 #ifndef MOCK_OB_LOG_HANDLER_H_
 #define MOCK_OB_LOG_HANDLER_H_
@@ -38,6 +35,7 @@ class MockObLogHandler : public logservice::ObILogHandler
 {
 public:
   MockObLogHandler(){};
+  int bootstrap() override { return OB_SUCCESS; }
   virtual bool is_valid() const { return true; }
   virtual int append(const void *buffer,
                      const int64_t nbytes,
@@ -154,24 +152,6 @@ public:
     UNUSED(iter);
     return OB_SUCCESS;
   };
-  int set_initial_member_list(const common::ObMemberList &member_list,
-                              const int64_t paxos_replica_num,
-                              const common::GlobalLearnerList &learner_list)
-  {
-    UNUSED(member_list);
-    UNUSED(paxos_replica_num);
-    UNUSED(learner_list);
-    return OB_SUCCESS;
-  }
-  int set_initial_member_list(const common::ObMemberList &member_list,
-                              const common::ObMember &arb_replica,
-                              const int64_t paxos_replica_num,
-                              const common::GlobalLearnerList &learner_list)
-  {
-    UNUSEDx(member_list, arb_replica, paxos_replica_num);
-    UNUSED(learner_list);
-    return OB_SUCCESS;
-  }
   int get_end_scn(share::SCN &scn) const
   {
     UNUSED(scn);
@@ -284,21 +264,9 @@ public:
     UNUSED(is_rebuild);
     return OB_SUCCESS;
   }
-  bool is_sync_enabled() const
-  {
-    return true;
-  }
   bool is_replay_enabled() const
   {
     return true;
-  }
-  int enable_sync()
-  {
-    return OB_SUCCESS;
-  }
-  int disable_sync()
-  {
-    return OB_SUCCESS;
   }
   int get_leader_config_version(palf::LogConfigVersion &config_version) const
   {
@@ -417,7 +385,7 @@ public:
     UNUSEDx(upgrade_servers, timeout_us);
     return OB_SUCCESS;
   }
-  int get_member_gc_stat(const common::ObAddr &addr, bool &is_valid_member, obrpc::LogMemberGCStat &stat) const
+  int get_member_gc_stat(const common::ObAddr &addr, bool &is_valid_member, obcall::LogMemberGCStat &stat) const
   {
     UNUSEDx(addr, is_valid_member, stat);
     return OB_SUCCESS;
@@ -434,25 +402,6 @@ public:
 
   int restore_submit_replay_log()
   {
-    return OB_SUCCESS;
-  }
-
-  int try_lock_config_change(const int64_t lock_owner, const int64_t timeout_us)
-  {
-    UNUSED(lock_owner);
-    UNUSED(timeout_us);
-    return OB_SUCCESS;
-  }
-  int unlock_config_change(const int64_t lock_owner, const int64_t timeout_us)
-  {
-    UNUSED(lock_owner);
-    UNUSED(timeout_us);
-    return OB_SUCCESS;
-  }
-  int get_config_change_lock_stat(int64_t &lock_owner, bool &is_locked)
-  {
-    lock_owner = palf::OB_INVALID_CONFIG_CHANGE_LOCK_OWNER;
-    is_locked = false;
     return OB_SUCCESS;
   }
 
@@ -508,12 +457,6 @@ public:
     UNUSED(parent);
     return OB_SUCCESS;
   }
-  int register_rebuild_cb(palf::PalfRebuildCb *rebuild_cb)
-  {
-    UNUSED(rebuild_cb);
-    return OB_SUCCESS;
-  }
-  int unregister_rebuild_cb() { return OB_SUCCESS; }
   bool is_offline() const {return false;};
   int offline() {return OB_SUCCESS;};
   int online(const LSN &lsn, const share::SCN &scn) { UNUSED(lsn); UNUSED(scn); return OB_SUCCESS;};
@@ -525,4 +468,3 @@ public:
 
 
 #endif
-

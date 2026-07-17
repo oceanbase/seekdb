@@ -22,7 +22,7 @@
 #include "lib/lock/ob_mutex.h"
 #include "lib/lock/ob_spin_rwlock.h"
 #include "lib/alloc/alloc_struct.h"
-#include "lib/allocator/ob_mod_define.h"
+#include "lib/utility/ob_mod_define.h"
 #include "lib/resource/ob_cache_washer.h"
 #include "lib/resource/achunk_mgr.h"
 
@@ -35,7 +35,7 @@ class ObTenantMemoryMgr
 public:
   static const int64_t LARGE_REQUEST_EXTRA_MB_COUNT = 2;
   static const int64_t ALIGN_SIZE = static_cast<int64_t>(INTACT_ACHUNK_SIZE);
-  ObTenantMemoryMgr(const uint64_t tenant_id = common::OB_INVALID_ID);
+  ObTenantMemoryMgr();
 
   virtual ~ObTenantMemoryMgr() {}
 
@@ -47,7 +47,7 @@ public:
   void *alloc_cache_mb(const int64_t size);
   void free_cache_mb(void *ptr);
 
-  uint64_t get_tenant_id() const { return tenant_id_; }
+  
   void set_hard_limit(const int64_t hard_limit) { hard_limit_ = hard_limit; }
   int64_t get_hard_limit() const { return hard_limit_; }
   void set_limit(const int64_t limit) { limit_ = limit; }
@@ -73,7 +73,7 @@ private:
   AChunk *alloc_chunk_(const int64_t size, const ObMemAttr &attr);
   void free_chunk_(AChunk *chunk, const ObMemAttr &attr);
   ObICacheWasher *cache_washer_;
-  uint64_t tenant_id_;
+  
   int64_t limit_;
   int64_t hard_limit_;
   int64_t sum_hold_;
@@ -87,10 +87,9 @@ private:
 struct ObTenantResourceMgr : public common::ObLink
 {
   ObTenantResourceMgr();
-  explicit ObTenantResourceMgr(const uint64_t tenant_id);
   virtual ~ObTenantResourceMgr();
 
-  uint64_t tenant_id_;
+  
   ObTenantMemoryMgr memory_mgr_;
   // add other mgr here
   int64_t ref_cnt_;
@@ -126,19 +125,19 @@ public:
   int set_cache_washer(ObICacheWasher &cache_washer);
 
   // will create resource mgr if not exist
-  int get_tenant_resource_mgr(const uint64_t tenant_id, ObTenantResourceMgrHandle &handle);
+  int get_tenant_resource_mgr(ObTenantResourceMgrHandle &handle);
 private:
-  static const int64_t MAX_TENANT_COUNT = 5;  // prime number
   void inc_ref(ObTenantResourceMgr *tenant_resource_mgr);
   void dec_ref(ObTenantResourceMgr *tenant_resource_mgr);
-  int get_tenant_resource_mgr_unsafe(const uint64_t tenant_id, ObTenantResourceMgr *&tenant_resource_mgr);
-  int remove_tenant_resource_mgr_unsafe(const uint64_t tenant_id);
-  int create_tenant_resource_mgr_unsafe(const uint64_t tenant_id, ObTenantResourceMgr *&tenant_resource_mgr);
+  int get_tenant_resource_mgr_unsafe(ObTenantResourceMgr *&tenant_resource_mgr);
+  int remove_tenant_resource_mgr_unsafe();
+  int create_tenant_resource_mgr_unsafe(ObTenantResourceMgr *&tenant_resource_mgr);
 
   bool inited_;
   ObICacheWasher *cache_washer_;
-  common::SpinRWLock locks_[MAX_TENANT_COUNT];
-  ObTenantResourceMgr *tenant_resource_mgrs_[MAX_TENANT_COUNT];
+  // single-tenant: bucket array collapsed to one slot
+  common::SpinRWLock lock_;
+  ObTenantResourceMgr *tenant_resource_mgr_;
 };
 
 }//end namespace lib

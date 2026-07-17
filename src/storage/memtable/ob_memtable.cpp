@@ -16,25 +16,27 @@
 
 #define USING_LOG_PREFIX STORAGE
 
+#include "lib/stat/ob_diagnostic_info_guard.h"
 #include "ob_memtable.h"
-#include "share/stat/ob_opt_stat_monitor_manager.h"
+#include "share/rc/ob_module_provider.h"
+#include "sql/optimizer/stat/ob_opt_stat_monitor_manager.h"
 #include "storage/memtable/ob_lock_wait_mgr.h"
 #include "storage/memtable/ob_memtable_read_row_util.h"
 #include "storage/memtable/ob_row_conflict_handler.h"
 #include "storage/memtable/ob_row_compactor.h"
 #include "storage/compaction/ob_schedule_dag_func.h"
 #include "storage/access/ob_sstable_row_getter.h"
-#include "storage/tx/ob_trans_part_ctx.h"
+#include "storage/tx/ob_tx_ctx.h"
 #include "storage/tx_storage/ob_tenant_freezer.h"
 #include "storage/tx_storage/ob_tenant_freezer.h"
 #include "storage/access/ob_row_sample_iterator.h"
 #include "storage/ddl/ob_tablet_ddl_kv.h"
 #include "storage/ob_i_table.h"
 #include "storage/ob_i_store.h"
-#include "share/ob_fork_table_util.h"
 #include "lib/hash/ob_hashmap.h"
 
 #include "logservice/ob_log_service.h"
+#include "storage/tx_storage/ob_ls_service.h"
 
 namespace oceanbase
 {
@@ -129,10 +131,10 @@ private:
 
 ObMemtable::ObMemtable()
   :   is_inited_(false),
-      transfer_freeze_flag_(false),
+      recommend_snapshot_freeze_flag_(false),
       contain_hotspot_row_(false),
       is_delete_insert_table_(false),
-      ls_handle_(),
+      ls_(nullptr),
       local_allocator_(*this),
       query_engine_(local_allocator_),
       mvcc_engine_(),
@@ -150,7 +152,7 @@ ObMemtable::~ObMemtable()
 }
 
 int ObMemtable::init(const ObITable::TableKey &table_key,
-                     ObLSHandle &ls_handle,
+                     ObLS *tenant_ls,
                      storage::ObFreezer *freezer,
                      storage::ObTabletMemtableMgr *memtable_mgr,
                      const int64_t schema_version,
@@ -165,10 +167,10 @@ int ObMemtable::init(const ObITable::TableKey &table_key,
              OB_ISNULL(freezer) ||
              OB_ISNULL(memtable_mgr) ||
              schema_version < 0 ||
-             OB_UNLIKELY(!ls_handle.is_valid())) {
+             OB_UNLIKELY(OB_ISNULL(tenant_ls))) {
     ret = OB_INVALID_ARGUMENT;
     TRANS_LOG(WARN, "invalid param", K(ret), K(table_key), KP(freezer), KP(memtable_mgr),
-              K(schema_version), K(freeze_clock), K(ls_handle));
+              K(schema_version), K(freeze_clock), K(tenant_ls));
   } else if (OB_FAIL(set_memtable_mgr_(memtable_mgr))) {
     TRANS_LOG(WARN, "fail to set memtable mgr", K(ret), KP(memtable_mgr));
   } else if (FALSE_IT(set_freeze_clock(freeze_clock))) {
@@ -176,9 +178,9 @@ int ObMemtable::init(const ObITable::TableKey &table_key,
   } else if (OB_FAIL(set_freezer(freezer))) {
     TRANS_LOG(WARN, "fail to set freezer", K(ret), KP(freezer));
   } else if (OB_FAIL(local_allocator_.init())) {
-    TRANS_LOG(WARN, "fail to init memstore allocator", K(ret), "tenant id", MTL_ID());
+    TRANS_LOG(WARN, "fail to init memstore allocator", K(ret));
   } else if (OB_FAIL(query_engine_.init())) {
-    TRANS_LOG(WARN, "query_engine.init fail", K(ret), "tenant_id", MTL_ID());
+    TRANS_LOG(WARN, "query_engine.init fail", K(ret));
   } else if (OB_FAIL(mvcc_engine_.init(&local_allocator_,
                                        &kv_builder_,
                                        &query_engine_,
@@ -187,12 +189,11 @@ int ObMemtable::init(const ObITable::TableKey &table_key,
   } else if (OB_FAIL(ObITable::init(table_key))) {
     TRANS_LOG(WARN, "failed to set_table_key", K(ret), K(table_key));
   } else {
-    ls_handle_ = ls_handle;
-    ls_id_ = ls_handle_.get_ls()->get_ls_id();
+    ls_ = tenant_ls;
     if (table_key.get_tablet_id().is_sys_tablet()) {
       mode_ = lib::Worker::CompatMode::MYSQL;
     } else {
-      mode_ = MTL(lib::Worker::CompatMode);
+      mode_ = share::g_mp->compat_mode();
     }
     state_ = ObMemtableState::ACTIVE;
     init_timestamp_ = ObTimeUtility::current_time();
@@ -216,16 +217,16 @@ void ObMemtable::pre_batch_destroy_keybtree()
 }
 
 int ObMemtable::batch_remove_unused_callback_for_uncommited_txn(
-  const ObLSID ls_id, const memtable::ObMemtableSet *memtable_set)
+  const memtable::ObMemtableSet *memtable_set)
 {
   int ret = OB_SUCCESS;
   // NB: Do not use cache here, because the trans_service may be destroyed under
   // MTL_DESTROY() and the cache is pointing to a broken memory.
   transaction::ObTransService *txs_svr =
-    MTL_CTX()->get<transaction::ObTransService *>();
+    ::oceanbase::share::g_mp->trans_service();
 
   if (NULL != txs_svr
-      && OB_FAIL(txs_svr->remove_callback_for_uncommited_txn(ls_id, memtable_set))) {
+      && OB_FAIL(txs_svr->remove_callback_for_uncommited_txn(memtable_set))) {
     TRANS_LOG(WARN, "remove callback for uncommited txn failed", K(ret), KPC(memtable_set));
   }
 
@@ -254,12 +255,12 @@ void ObMemtable::destroy()
   time_guard.click();
   local_allocator_.destroy();
   time_guard.click();
-  ls_handle_.reset();
+  ls_ = nullptr;
   max_data_schema_version_ = 0;
   max_column_cnt_ = 0;
   state_ = ObMemtableState::INVALID;
   reported_dml_stat_.reset();
-  transfer_freeze_flag_ = false;
+  recommend_snapshot_freeze_flag_ = false;
   recommend_snapshot_version_.reset();
   contain_hotspot_row_ = false;
   ObITabletMemtable::reset();
@@ -302,7 +303,7 @@ int ObMemtable::safe_to_destroy(bool &is_safe)
     if (!is_inited_) {
       is_safe = true;
       TRANS_LOG(INFO, "memtable is not inited and safe to destroy", KPC(this));
-    } else if (OB_FAIL(ls_handle_.get_ls()->get_max_decided_scn(max_decided_scn))) {
+    } else if (OB_FAIL(ls_->get_max_decided_scn(max_decided_scn))) {
       TRANS_LOG(WARN, "fail to get max decided scn", K(ret), K(max_decided_scn));
       is_safe = false;
     } else {
@@ -315,9 +316,8 @@ int ObMemtable::safe_to_destroy(bool &is_safe)
       ret = OB_SUCCESS;
       bool is_done = false;
       palf::LSN end_lsn;
-      if (OB_FAIL(MTL(logservice::ObLogService*)->get_log_apply_service()->
-                  is_apply_done(ls_handle_.get_ls()->get_ls_id(),
-                                is_done,
+      if (OB_FAIL(share::g_mp->log_service()->get_log_apply_service()->
+                  is_apply_done(is_done,
                                 end_lsn))) {
         if (OB_ENTRY_NOT_EXIST == ret) {
           ret = OB_SUCCESS;
@@ -387,7 +387,6 @@ int ObMemtable::multi_set(
   } else if (OB_FAIL(guard.write_auth(*context.store_ctx_))) {
     TRANS_LOG(WARN, "not allow to write", K(*context.store_ctx_));
   } else {
-    lib::CompatModeGuard compat_guard(mode_);
 
     ret = multi_set_(param,
                      context,
@@ -560,7 +559,6 @@ int ObMemtable::set(
     } else if (OB_FAIL(memtable_key_generator.generate_memtable_key(*new_row))) {
       TRANS_LOG(WARN, "generate memtable key fail", K(ret), K(new_row));
     } else {
-      lib::CompatModeGuard compat_guard(mode_);
 
       ret = set_(param,
                  context,
@@ -704,18 +702,17 @@ int ObMemtable::get(
   } else {
     const ObColDescIArray &out_cols = read_info->get_columns_desc();
     ObStoreRowLockState lock_state;
-    bool is_plain_insert_gts_opt = context.query_flag_.is_plain_insert_gts_opt();
+    bool is_snapshot_opt = context.query_flag_.is_snapshot_opt();
     if (OB_FAIL(parameter_mtk.encode(out_cols, &rowkey.get_store_rowkey()))) {
       TRANS_LOG(WARN, "mtk encode fail", "ret", ret);
     } else if (OB_FAIL(mvcc_engine_.get(context.store_ctx_->mvcc_acc_ctx_,
                                         context.query_flag_,
                                         &parameter_mtk,
-                                        ls_id_,
                                         &returned_mtk,
                                         value_iter,
                                         lock_state))) {
       if (OB_TRY_LOCK_ROW_CONFLICT == ret || OB_TRANSACTION_SET_VIOLATION == ret) {
-        if (!context.query_flag_.is_for_foreign_key_check() && !is_plain_insert_gts_opt) {
+        if (!context.query_flag_.is_for_foreign_key_check() && !is_snapshot_opt) {
           ret = OB_ERR_UNEXPECTED;  // to prevent retrying casued by throwing 6005
           TRANS_LOG(WARN, "should not meet lock conflict if it's not for foreign key check",
                     K(ret), K(context.query_flag_));
@@ -725,7 +722,6 @@ int ObMemtable::get(
                         *parameter_mtk.get_rowkey(),
                         lock_state,
                         key_.tablet_id_,
-                        get_ls_id(),
                         0, 0 /* these two params get from mvcc_row, and for statistics, so we ignore them */,
                         lock_state.trans_scn_);
         }
@@ -1012,7 +1008,7 @@ int ObMemtable::replay_row(ObStoreCtx &ctx,
   ObRowData old_row;
   blocksstable::ObDmlFlag dml_flag = blocksstable::ObDmlFlag::DF_NOT_EXIST;
   ObMemtableCtx *mt_ctx = ctx.mvcc_acc_ctx_.mem_ctx_;
-  ObPartTransCtx *part_ctx = static_cast<ObPartTransCtx *>(mt_ctx->get_trans_ctx());
+  ObTxCtx *part_ctx = static_cast<ObTxCtx *>(mt_ctx->get_trans_ctx());
   common::ObTimeGuard timeguard("ObMemtable::replay_row", 5 * 1000);
 
   if (OB_FAIL(mmi->get_mutator_row().copy(table_id, rowkey, table_version, row,
@@ -1026,7 +1022,6 @@ int ObMemtable::replay_row(ObStoreCtx &ctx,
     ret = OB_ERR_UNEXPECTED;
     TRANS_LOG(ERROR, "Unexpected not exist trans node", K(ret), K(dml_flag), K(rowkey));
   } else {
-    lib::CompatModeGuard compat_guard(mode_);
     ObMemtableData mtd(dml_flag, row.size_, row.data_);
     ObMemtableKey mtk;
     ObRowData empty_old_row;
@@ -1122,7 +1117,6 @@ int ObMemtable::check_row_locked_on_frozen_stores_(
         } else if (stores->at(i)->is_data_memtable()) {
           ObMemtable *memtable = static_cast<ObMemtable *>(stores->at(i));
           ObMvccEngine &mvcc_engine = memtable->get_mvcc_engine();
-          // FIXME(handora.qc): two active memtable in transfer
           if (OB_FAIL(mvcc_engine.check_row_locked(ctx.mvcc_acc_ctx_,
                                                    memtable_key,
                                                    lock_state))) {
@@ -1394,22 +1388,12 @@ int ObMemtable::check_rows_locked_on_frozen_stores_(
                     K(ctx), K(rows_info), KPC(memtable));
         } else if (stores->at(i)->is_sstable()) {
           ObSSTable *sstable = static_cast<ObSSTable *>(stores->at(i));
-          if (sstable->is_ddl_merge_sstable()) {
-            if (OB_FAIL(check_rows_locked_on_ddl_merge_sstable(sstable,
-                                                               check_exist,
-                                                               param,
-                                                               context,
-                                                               rows_info))) {
-              TRANS_LOG(WARN, "Failed to check rows locked for sstable", K(ret), K(i), K(iter_tables));
-            }
-          } else {
-            if (OB_FAIL(sstable->check_rows_locked(check_exist,
-                                                   context,
-                                                   tmp_max_trans_version,
-                                                   rows_info))) {
-              TRANS_LOG(WARN, "sstable check rows lock fail", K(ret),
-                        K(ctx), K(rows_info), KPC(sstable));
-            }
+          if (OB_FAIL(sstable->check_rows_locked(check_exist,
+                                                 context,
+                                                 tmp_max_trans_version,
+                                                 rows_info))) {
+            TRANS_LOG(WARN, "sstable check rows lock fail", K(ret),
+                      K(ctx), K(rows_info), KPC(sstable));
           }
           TRANS_LOG(DEBUG, "check_rows_locked meet sstable", K(ret),
                     K(ctx), K(rows_info), KPC(sstable));
@@ -1535,16 +1519,6 @@ int ObMemtable::row_compact(ObMvccRow *row,
   return ret;
 }
 
-int64_t ObMemtable::get_hash_item_count() const
-{
-  return query_engine_.hash_size();
-}
-
-int64_t ObMemtable::get_hash_alloc_memory() const
-{
-  return query_engine_.hash_alloc_memory();
-}
-
 int64_t ObMemtable::get_btree_item_count() const
 {
   return query_engine_.btree_size();
@@ -1562,7 +1536,7 @@ void ObMemtable::set_allow_freeze(const bool allow_freeze)
     const common::ObTabletID tablet_id = key_.tablet_id_;
     const int64_t retire_clock = local_allocator_.get_retire_clock();
     ObTenantFreezer *freezer = nullptr;
-    freezer = MTL(ObTenantFreezer *);
+    freezer = share::g_mp->tenant_freezer();
 
     if (allow_freeze) {
       set_allow_freeze_();
@@ -1632,14 +1606,13 @@ bool ObMemtable::ready_for_flush_()
 
   int ret = OB_SUCCESS;
   SCN current_right_boundary = ObScnRange::MIN_SCN;
-  share::ObLSID ls_id = get_ls_id();
   if (bool_ret) {
     if (OB_FAIL(resolve_snapshot_version_())) {
-      TRANS_LOG(WARN, "fail to resolve snapshot version", K(ret), KPC(this), K(ls_id));
+      TRANS_LOG(WARN, "fail to resolve snapshot version", K(ret), KPC(this));
     } else if (OB_FAIL(resolve_max_end_scn_())) {
-      TRANS_LOG(WARN, "fail to resolve max_end_scn", K(ret), KPC(this), K(ls_id));
+      TRANS_LOG(WARN, "fail to resolve max_end_scn", K(ret), KPC(this));
     } else {
-      TRANS_LOG(INFO, "[resolve_right_boundary] ready_for_flush_", K(ls_id), KPC(this));
+      TRANS_LOG(INFO, "[resolve_right_boundary] ready_for_flush_", KPC(this));
       if (OB_FAIL(get_ls_current_right_boundary_(current_right_boundary))) {
         TRANS_LOG(WARN, "fail to get current right boundary", K(ret));
       }
@@ -1662,7 +1635,7 @@ bool ObMemtable::ready_for_flush_()
         }
       }
 
-      TRANS_LOG(INFO, "ready for flush", K(bool_ret), K(ret), K(current_right_boundary), K(ls_id), KPC(this));
+      TRANS_LOG(INFO, "ready for flush", K(bool_ret), K(ret), K(current_right_boundary), KPC(this));
     }
   } else if (is_frozen && get_logging_blocked()) {
     // ensure unset all frozen memtables'logging_block
@@ -1685,7 +1658,7 @@ bool ObMemtable::ready_for_flush_()
       ObTimeUtility::current_time() - mt_stat_.frozen_time_ > 10 * 1000 * 1000L)) {
     if (ObTimeUtility::current_time() - mt_stat_.last_print_time_ > 10 * 1000) {
       STORAGE_LOG(WARN, "memtable not ready for flush for long time",
-                  K(get_ls_id()), K(*this), K(mt_stat_.frozen_time_),
+                  K(*this), K(mt_stat_.frozen_time_),
                   K(current_right_boundary));
       mt_stat_.last_print_time_ = ObTimeUtility::current_time();
     }
@@ -1698,7 +1671,7 @@ bool ObMemtable::ready_for_flush_()
 
     int tmp_ret = OB_SUCCESS;
     if (OB_TMP_FAIL(ADD_SUSPECT_INFO(MINI_MERGE, ObDiagnoseTabletType::TYPE_MINI_MERGE,
-                    ls_id, get_tablet_id(),
+                    get_tablet_id(),
                     ObSuspectInfoType::SUSPECT_NOT_READY_FOR_FLUSH,
                     static_cast<int64_t>(is_frozen_memtable()), get_write_ref(), get_unsubmitted_cnt(),
                     current_right_boundary.get_val_for_tx(), get_end_scn().get_val_for_tx()))) {
@@ -1712,7 +1685,6 @@ bool ObMemtable::ready_for_flush_()
 void ObMemtable::print_ready_for_flush()
 {
   int ret = OB_SUCCESS;
-  share::ObLSID ls_id = get_ls_id();
   const common::ObTabletID tablet_id = key_.tablet_id_;
   bool frozen_memtable_flag = is_frozen_memtable();
   int64_t write_ref = get_write_ref();
@@ -1728,11 +1700,11 @@ void ObMemtable::print_ready_for_flush()
                   current_right_boundary >= end_scn;
 
   TRANS_LOG(INFO, "[ObFreezer] print_ready_for_flush",
-            KP(this), K(ls_id), K(tablet_id),
+            KP(this), K(tablet_id),
             K(ret), K(bool_ret),
             K(frozen_memtable_flag), K(write_ref),
             K(current_right_boundary), K(end_scn),
-            K(logstream_freeze_clock), K(memtable_freeze_clock), K_(trace_id));
+            K(logstream_freeze_clock), K(memtable_freeze_clock));
 }
 
 // The freeze_snapshot_version is needed for mini merge, which represents that
@@ -1781,18 +1753,16 @@ int ObMemtable::resolve_snapshot_version_()
   } else if (SCN::invalid_scn() == freeze_snapshot_version) {
     ret = OB_ERR_UNEXPECTED;
     TRANS_LOG(ERROR, "fail to get freeze_snapshot_version", K(ret), KPC(this));
-  } else if (is_transfer_freeze()) {
+  } else if (has_recommend_snapshot_freeze()) {
     // freeze_snapshot_version is used for read tables decision which guarantees
     // that all version smaller than the freeze_snapshot_version belongs to
-    // table before the memtable. While the transfer want the it to be smaller
-    // than the transfer_scn which require we ignore the input snapshot version.
+    // table before the memtable. Some replay paths require a smaller boundary,
+    // so they set a recommended snapshot version explicitly.
     //
     // NOTICE: While the recommend snapshot may be unsafe, so user must ensure
     // its correctness.
     //
-    // So use recommend snapshot version if transfer freeze
-    // recommend snapshot maybe smaller than data commit version when transfer rollback,
-    // but it will not has any bad effect when major freeze which relay on snapshot version.
+    // Use the recommended snapshot version when it is set explicitly.
     if (!recommend_snapshot_version_.is_valid()
         || ObScnRange::MAX_SCN == recommend_snapshot_version_
         || ObScnRange::MIN_SCN == recommend_snapshot_version_) {
@@ -1835,16 +1805,13 @@ int ObMemtable::resolve_max_end_scn_()
     TRANS_LOG(ERROR, "fail to get freeze_snapshot_version", K(ret));
   } else if (SCN::invalid_scn() == max_decided_scn) {
     // Pass if not necessary
-  } else if (is_transfer_freeze()) {
+  } else if (has_recommend_snapshot_freeze()) {
     // max_decided_scn is critial for sstable read performance using larger
     // right boundary of memtable(You can learn from the comments that follow
-    // the class member). While the transfer want the right boundary smaller
-    // than the transfer_out_scn which require we ignore the max_decided_scn.
-    // NOTICE: You should notice that we must double check the concurrency issue
-    // between transfer handler set_transfer_freeze then submit transfer out log
-    // and freezer get_transfer_freeze and decide its max_decided scn.
+    // the class member). Some replay paths require a smaller right boundary,
+    // so max_decided_scn is ignored when a recommended snapshot is set.
     //
-    // So pass if transfer freeze
+    // Pass when recommended snapshot freeze is set.
   } else if (OB_TMP_FAIL(set_max_end_scn(max_decided_scn))) {
     TRANS_LOG(WARN, "fail to set max_end_scn", K(ret));
   }
@@ -1852,9 +1819,7 @@ int ObMemtable::resolve_max_end_scn_()
   return ret;
 }
 
-
-DEF_REPORT_CHEKCPOINT_DIAGNOSE_INFO(UpdateScheduleDagTime, update_schedule_dag_time)
-int ObMemtable::flush(share::ObLSID ls_id)
+int ObMemtable::flush()
 {
   int ret = OB_SUCCESS;
   int tmp_ret = OB_SUCCESS;
@@ -1864,7 +1829,6 @@ int ObMemtable::flush(share::ObLSID ls_id)
     ret = OB_NO_NEED_UPDATE;
   } else {
     ObTabletMergeDagParam param;
-    param.ls_id_ = ls_id;
     param.tablet_id_ = key_.tablet_id_;
     param.merge_type_ = MINI_MERGE;
     param.merge_version_ = ObVersion::MIN_VERSION;
@@ -1872,11 +1836,10 @@ int ObMemtable::flush(share::ObLSID ls_id)
 
     if (OB_FAIL(compaction::ObScheduleDagFunc::schedule_tablet_merge_dag(param))) {
       if (OB_EAGAIN != ret && OB_SIZE_OVERFLOW != ret) {
-        TRANS_LOG(WARN, "failed to schedule tablet merge dag", K(ret));
+        TRANS_LOG(ERROR, "failed to schedule tablet merge dag", K(ret));
       }
     } else {
       mt_stat_.create_flush_dag_time_ = cur_time;
-      report_memtable_diagnose_info(UpdateScheduleDagTime());
       TRANS_LOG(INFO, "schedule tablet merge dag successfully", K(ret), K(param), KPC(this));
     }
 
@@ -1884,10 +1847,10 @@ int ObMemtable::flush(share::ObLSID ls_id)
         mt_stat_.ready_for_flush_time_ != 0 &&
         cur_time - mt_stat_.ready_for_flush_time_ > 30 * 1000 * 1000) {
       STORAGE_LOG(WARN, "memtable can not create dag successfully for long time",
-                K(ls_id), K(*this), K(mt_stat_.ready_for_flush_time_));
+                K(*this), K(mt_stat_.ready_for_flush_time_));
       int tmp_ret = OB_SUCCESS;
       if (OB_TMP_FAIL(ADD_SUSPECT_INFO(MINI_MERGE, ObDiagnoseTabletType::TYPE_MINI_MERGE,
-                      ls_id, get_tablet_id(),
+                      get_tablet_id(),
                       ObSuspectInfoType::SUSPECT_MEMTABLE_CANT_CREATE_DAG,
                       static_cast<int64_t>(ret),
                       cur_time - mt_stat_.ready_for_flush_time_, mt_stat_.ready_for_flush_time_))) {
@@ -1905,7 +1868,7 @@ void ObMemtable::fill_compaction_param_(
 {
   ObCompactionParam &compaction_param = param.compaction_param_;
   compaction_param.occupy_size_ = get_occupied_size();
-  compaction_param.replay_interval_ = get_start_scn().get_val_for_tx() - ls_handle_.get_ls()->get_ls_meta().get_clog_checkpoint_scn().get_val_for_tx();
+  compaction_param.replay_interval_ = get_start_scn().get_val_for_tx() - ls_->get_ls_meta().get_clog_checkpoint_scn().get_val_for_tx();
   compaction_param.last_end_scn_ = get_end_scn();
   compaction_param.add_time_ = current_time;
   compaction_param.estimate_phy_size_ = mt_stat_.row_size_;
@@ -2131,8 +2094,6 @@ int ObMemtable::dump2text(const char *fname)
       TRANS_LOG(WARN, "convert key fail", K_(key), K(ret));
     } else {
       fprintf(fd, "memtable: key=%s\n", key_ptr);
-      fprintf(fd, "hash_item_count=%ld, hash_alloc_size=%ld\n",
-              get_hash_item_count(), get_hash_alloc_memory());
       fprintf(fd, "btree_item_count=%ld, btree_alloc_size=%ld\n",
               get_btree_item_count(), get_btree_alloc_memory());
       query_engine_.dump2text(fd);
@@ -2325,7 +2286,7 @@ int ObMemtable::multi_set_(
     } else {
       ObMemtableKeyGenerator::ObMemtableKeyBuffer *memtable_key_buffer = memtable_key_generator.get_key_buffer();
       for (int64_t idx = 0; idx < memtable_key_buffer->count(); ++idx) {
-        MTL(ObLockWaitMgr*)->set_hash_holder(key_.get_tablet_id(),
+        share::g_mp->lock_wait_mgr()->set_hash_holder(key_.get_tablet_id(),
                                              memtable_key_buffer->at(idx),
                                              context.store_ctx_->mvcc_acc_ctx_.get_mem_ctx()->get_tx_id());
       }
@@ -2486,7 +2447,7 @@ int ObMemtable::set_(
     if (param.is_non_unique_local_index_) {
       // no need to detect deadlock for non-unique local index table
     } else {
-      MTL(ObLockWaitMgr*)->set_hash_holder(key_.get_tablet_id(),
+      share::g_mp->lock_wait_mgr()->set_hash_holder(key_.get_tablet_id(),
                                            mtk,
                                            context.store_ctx_->mvcc_acc_ctx_.get_mem_ctx()->get_tx_id());
     }
@@ -2616,7 +2577,7 @@ int ObMemtable::lock_(
       if (param.is_non_unique_local_index_) {
         // no need to detect deadlock for non-unique local index table
       } else {
-        MTL(ObLockWaitMgr*)->set_hash_holder(key_.get_tablet_id(),
+        share::g_mp->lock_wait_mgr()->set_hash_holder(key_.get_tablet_id(),
                                              mtk,
                                              context.store_ctx_->mvcc_acc_ctx_.get_mem_ctx()->get_tx_id());
       }
@@ -2677,7 +2638,6 @@ int ObMemtable::mvcc_replay_(storage::ObStoreCtx &ctx,
   common::ObTimeGuard timeguard("ObMemtable::mvcc_replay_", 5 * 1000);
 
   if (OB_FAIL(mvcc_engine_.create_kv(key,
-                                     false, // is_insert
                                      &stored_key,
                                      value))) {
     TRANS_LOG(WARN, "prepare kv before lock fail", K(ret));
@@ -2685,9 +2645,6 @@ int ObMemtable::mvcc_replay_(storage::ObStoreCtx &ctx,
   } else if (OB_FAIL(mvcc_engine_.mvcc_replay(arg, res))) {
     TRANS_LOG(WARN, "mvcc replay fail", K(ret));
   } else if (FALSE_IT(timeguard.click("mvcc_engine_.mvcc_replay"))) {
-  } else if (OB_FAIL(mvcc_engine_.ensure_kv(&stored_key, value))) {
-    TRANS_LOG(WARN, "prepare kv after lock fail", K(ret));
-  } else if (FALSE_IT(timeguard.click("mvcc_engine_.ensure_kv"))) {
   } else if (OB_FAIL(mem_ctx->register_row_replay_cb(&stored_key,
                                                      value,
                                                      res.tx_node_,
@@ -2735,9 +2692,6 @@ int ObMemtable::batch_mvcc_write_(const storage::ObTableIterParam &param,
     TRANS_LOG(WARN, "reserce kvs failed", K(ret));
   } else if (OB_FAIL(mvcc_engine_.create_kvs(memtable_set_arg,
                                              memtable_key_generator,
-                                             // is_normal_insert
-                                             blocksstable::ObDmlFlag::DF_INSERT == writer_dml_flag
-                                                && !rows_info.need_find_all_duplicate_key(),
                                              stored_kvs))) {
     TRANS_LOG(WARN, "create kv failed", K(ret), K(tx_node_args));
   }
@@ -2834,13 +2788,7 @@ int ObMemtable::batch_mvcc_write_(const storage::ObTableIterParam &param,
                                               mvcc_results[i]);
           }
         }
-        // Step3: insert the stored key(pay attention to the life cycle of the
-        // stored key itself) and the mvcc row into the b+tree to support a better
-        // scan performance
-      } else if (OB_FAIL(mvcc_engine_.ensure_kv(&stored_kvs[i].key_,
-                                                stored_kvs[i].value_))) {
-        TRANS_LOG(WARN, "prepare kv after lock fail", K(ret));
-        // Step4: remember the stored key for later callback registration(pay
+        // Step3: remember the stored key for later callback registration(pay
         // attention to the life cycle between the stored key and local allocated
         // memtable key) and value for later the follow-ups of mvcc-write
       } else {
@@ -2879,11 +2827,9 @@ int ObMemtable::mvcc_write_(ObStoreCtx &ctx,
   ObMemtableCtx *mem_ctx = ctx.mvcc_acc_ctx_.get_mem_ctx();
   transaction::ObTxSnapshot &snapshot = ctx.mvcc_acc_ctx_.snapshot_;
 
-  // Step1: create or get the memtable key and mvcc row from the hash table
-  // which ensuring the unqiueness of the key and value
+  // Step1: create or get the memtable key and mvcc row from the btree
+  // which ensuring the uniqueness of the key and value
   if (OB_FAIL(mvcc_engine_.create_kv(&memtable_key,
-                                     // is_insert
-                                     blocksstable::ObDmlFlag::DF_INSERT == tx_node_arg.data_->dml_flag_,
                                      &stored_key,
                                      value))) {
     TRANS_LOG(WARN, "create kv failed", K(ret), K(tx_node_arg), K(memtable_key));
@@ -2916,12 +2862,7 @@ int ObMemtable::mvcc_write_(ObStoreCtx &ctx,
     } else {
       TRANS_LOG(WARN, "mvcc write fail", K(ret));
     }
-  // Step3: insert the stored key(pay attention to the life cycle of the
-  // stored key itself) and the mvcc row into the b+tree to support a better
-  // scan performance
-  } else if (OB_FAIL(mvcc_engine_.ensure_kv(&stored_key, value))) {
-    TRANS_LOG(WARN, "prepare kv after lock fail", K(ret));
-  // Step4: remember the stored key for later callback registration(pay
+  // Step3: remember the stored key for later callback registration(pay
   // attention to the life cycle between the stored key and local allocated
   // memtable key) and value for later the follow-ups of mvcc-write
   } else {
@@ -2971,17 +2912,14 @@ int ObMemtable::post_row_write_conflict_(ObMvccAccessCtx &acc_ctx,
     ret = OB_ERR_EXCLUSIVE_LOCK_CONFLICT;
     TRANS_LOG(WARN, "exclusive lock conflict", K(ret), K(row_key),
               K(conflict_tx_id), K(acc_ctx), K(lock_wait_expire_ts));
-  } else if (OB_ISNULL(lock_wait_mgr = MTL_WITH_CHECK_TENANT(ObLockWaitMgr*,
-                                                  mem_ctx->get_tenant_id()))) {
+  } else if (OB_ISNULL(lock_wait_mgr = MTL_WITH_CHECK(ObLockWaitMgr*))) {
     ret = OB_ERR_UNEXPECTED;
-    TRANS_LOG(WARN, "can not get tenant lock_wait_mgr MTL", K(mem_ctx->get_tenant_id()));
+    TRANS_LOG(WARN, "can not get tenant lock_wait_mgr MTL");
   } else {
     mem_ctx->add_conflict_trans_id(conflict_tx_id);
     mem_ctx->on_wlock_retry(row_key, conflict_tx_id);
     int tmp_ret = OB_SUCCESS;
-    transaction::ObPartTransCtx *tx_ctx = acc_ctx.tx_ctx_;
     transaction::ObTransID tx_id = acc_ctx.get_tx_id();
-    bool remote_tx = tx_ctx->get_scheduler() != tx_ctx->get_addr();
     ObFunction<int(bool&, bool&)> recheck_func([&](bool &locked, bool &wait_on_row) -> int {
       int ret = OB_SUCCESS;
       lock_state.is_locked_ = false;
@@ -3007,13 +2945,12 @@ int ObMemtable::post_row_write_conflict_(ObMvccAccessCtx &acc_ctx,
                                        key_.get_tablet_id(),
                                        *row_key.get_rowkey(),
                                        lock_wait_expire_ts,
-                                       remote_tx,
+                                       false,
                                        last_compact_cnt,
                                        total_trans_node_cnt,
                                        acc_ctx.tx_desc_->get_assoc_session_id(),
                                        tx_id,
                                        conflict_tx_id,
-                                       get_ls_id(),
                                        recheck_func);
     if (OB_SUCCESS != tmp_ret) {
       TRANS_LOG(WARN, "post_lock after tx conflict failed",
@@ -3029,10 +2966,10 @@ int ObMemtable::get_tx_table_guard(ObTxTableGuard &tx_table_guard)
 {
   int ret = OB_SUCCESS;
 
-  if (OB_UNLIKELY(!ls_handle_.is_valid())) {
+  if (OB_UNLIKELY(OB_ISNULL(ls_))) {
     ret = OB_ERR_UNEXPECTED;
-    TRANS_LOG(ERROR, "ls_handle is invalid", K(ret));
-  } else if (OB_FAIL(ls_handle_.get_ls()->get_tx_table_guard(tx_table_guard))) {
+    TRANS_LOG(ERROR, "tenant_ls is invalid", K(ret));
+  } else if (OB_FAIL(ls_->get_tx_table_guard(tx_table_guard))) {
     TRANS_LOG(WARN, "Get tx table guard from ls failed.", KR(ret));
   }
 
@@ -3048,7 +2985,7 @@ bool ObMemtable::rec_scn_is_stable()
   } else {
     SCN max_consequent_callbacked_scn;
     if (OB_FAIL(freezer_->get_max_consequent_callbacked_scn(max_consequent_callbacked_scn))) {
-      STORAGE_LOG(WARN, "get_max_consequent_callbacked_scn failed", K(ret), K(get_ls_id()));
+      STORAGE_LOG(WARN, "get_max_consequent_callbacked_scn failed", K(ret));
     } else {
       rec_scn_is_stable = (max_consequent_callbacked_scn >= get_rec_scn());
     }
@@ -3057,13 +2994,12 @@ bool ObMemtable::rec_scn_is_stable()
         (mt_stat_.frozen_time_ != 0 &&
         ObTimeUtility::current_time() - mt_stat_.frozen_time_ > 10 * 1000 * 1000L)) {
       STORAGE_LOG(WARN, "memtable rec_scn not stable for long time",
-                  K(get_ls_id()), K(*this), K(mt_stat_.frozen_time_),
+                  K(*this), K(mt_stat_.frozen_time_),
                   K(max_consequent_callbacked_scn));
 
       int tmp_ret = OB_SUCCESS;
       if (OB_TMP_FAIL(ADD_SUSPECT_INFO(compaction::ObMergeType::MINI_MERGE,
                                        ObDiagnoseTabletType::TYPE_MINI_MERGE,
-                                       get_ls_id(),
                                        get_tablet_id(),
                                        ObSuspectInfoType::SUSPECT_REC_SCN_NOT_STABLE,
                                        get_rec_scn().get_val_for_tx(),
@@ -3078,7 +3014,6 @@ bool ObMemtable::rec_scn_is_stable()
 int64_t ObMemtable::dec_write_ref()
 {
   int ret = OB_SUCCESS;
-  share::ObLSID ls_id = get_ls_id();
 
   // fix issue 47021079
   // To avoid the following case where logging_block cannot be unset:
@@ -3105,7 +3040,7 @@ int64_t ObMemtable::dec_write_ref()
     (void)unset_logging_blocked_for_active_memtable_();
     share::SCN right_boundary;
     if (OB_FAIL(get_ls_current_right_boundary_(right_boundary))) {
-      TRANS_LOG(WARN, "get ls right bound fail", K(ret), K(ls_id), KPC(this));
+      TRANS_LOG(WARN, "get ls right bound fail", K(ret), KPC(this));
     } else if (right_boundary >= get_max_end_scn()) {
       resolve_right_boundary();
       if (OB_LIKELY(!get_resolved_active_memtable_left_boundary())) {
@@ -3127,7 +3062,7 @@ int ObMemtable::try_report_dml_stat_(const int64_t table_id)
       // double check
       if (current_ts - reported_dml_stat_.last_report_time_ > ObReportedDmlStat::REPORT_INTERVAL) {
         ObOptDmlStat dml_stat;
-        dml_stat.tenant_id_ = MTL_ID();
+        
         dml_stat.table_id_ = table_id;
         dml_stat.tablet_id_ = get_tablet_id().id();
         const int64_t current_insert_row_cnt = mt_stat_.insert_row_count_;
@@ -3136,7 +3071,7 @@ int ObMemtable::try_report_dml_stat_(const int64_t table_id)
         dml_stat.insert_row_count_ = current_insert_row_cnt - reported_dml_stat_.insert_row_count_;
         dml_stat.update_row_count_ = current_update_row_cnt - reported_dml_stat_.update_row_count_;
         dml_stat.delete_row_count_ = current_delete_row_cnt - reported_dml_stat_.delete_row_count_;
-        if (OB_FAIL(MTL(ObOptStatMonitorManager*)->update_local_cache(dml_stat))) {
+        if (OB_FAIL(share::g_mp->opt_stat_monitor_manager()->update_local_cache(dml_stat))) {
           TRANS_LOG(WARN, "failed to update local cache", K(ret), K(dml_stat));
         } else {
           reported_dml_stat_.insert_row_count_ = current_insert_row_cnt;
@@ -3156,8 +3091,6 @@ int ObMemtable::finish_freeze()
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObFreezeCheckpoint::finish_freeze())) {
     TRANS_LOG(WARN, "fail to finish_freeze", KR(ret));
-  } else {
-    report_memtable_diagnose_info(TabletMemtableUpdateFreezeInfo(*this));
   }
   return ret;
 }
@@ -3193,13 +3126,13 @@ int ObMemtable::report_residual_dml_stat_()
         mt_stat_.update_row_count_ > reported_dml_stat_.update_row_count_ ||
         mt_stat_.delete_row_count_ > reported_dml_stat_.delete_row_count_) {
       ObOptDmlStat dml_stat;
-      dml_stat.tenant_id_ = MTL_ID();
+      
       dml_stat.table_id_ = reported_dml_stat_.table_id_;
       dml_stat.tablet_id_ = get_tablet_id().id();
       dml_stat.insert_row_count_ = mt_stat_.insert_row_count_ - reported_dml_stat_.insert_row_count_;
       dml_stat.update_row_count_ = mt_stat_.update_row_count_ - reported_dml_stat_.update_row_count_;
       dml_stat.delete_row_count_ = mt_stat_.delete_row_count_ - reported_dml_stat_.delete_row_count_;
-      if (OB_FAIL(MTL(ObOptStatMonitorManager*)->update_local_cache(dml_stat))) {
+      if (OB_FAIL(share::g_mp->opt_stat_monitor_manager()->update_local_cache(dml_stat))) {
         TRANS_LOG(WARN, "failed to update local cache", K(ret), K(dml_stat), K(reported_dml_stat_));
       } else {
         reported_dml_stat_.insert_row_count_ = mt_stat_.insert_row_count_;

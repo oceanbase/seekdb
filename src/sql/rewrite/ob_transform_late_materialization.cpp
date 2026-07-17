@@ -55,7 +55,7 @@ int ObTransformLateMaterialization::transform_one_stmt(ObIArray<ObParentDMLStmt>
     OPT_TRACE("there is no need to late materialization");
   } else if (OB_FAIL(generate_late_materialization_info(*select_stmt, info, check_ctx))) {
     LOG_WARN("failed to check if table need late materialization", K(ret));
-  } else if (info.candi_indexs_.empty() && !info.is_allow_column_table_) {
+  } else if (info.candi_indexs_.empty()) {
     /* do nothing */
   } else if (OB_FAIL(inner_accept_transform(parent_stmts, stmt, force_trans, info, check_ctx,
                                             trans_happened))) {
@@ -184,12 +184,6 @@ int ObTransformLateMaterialization::generate_late_materialization_info(
                                                   select_col_ids, table_item,
                                                   table_schema, info, check_ctx))) {
     LOG_WARN("failed to gen trans info for row store", K(ret));
-  } else if (!info.candi_indexs_.empty()) {
-    /* do nothing */
-  } else if (OB_FAIL(gen_trans_info_for_column_store(select_stmt, key_col_ids, filter_col_ids,
-                                                     orderby_col_ids, select_col_ids, table_item,
-                                                     table_schema, info, check_ctx))) {
-    LOG_WARN("failed to gen trans info for column store", K(ret));
   }
   return ret;
 }
@@ -261,7 +255,6 @@ int ObTransformLateMaterialization::gen_trans_info_for_row_store(const ObSelectS
       } else if (OB_FAIL(append_array_no_dup(info.project_col_in_view_, common_select_cols))) {
         LOG_WARN("failed to append array no dup", K(ret));
       } else {
-        info.is_allow_column_table_ = false;
         check_ctx.late_table_id_ = table_item->table_id_;
       }
     }
@@ -508,8 +501,7 @@ int ObTransformLateMaterialization::evaluate_stmt_cost(ObIArray<ObParentDMLStmt>
   } else {
     ctx_->eval_cost_ = true;
     lib::ContextParam param;
-    param.set_mem_attr(ctx_->session_info_->get_effective_tenant_id(),
-                       "CostBasedRewrit",
+    param.set_mem_attr("CostBasedRewrit",
                        ObCtxIds::DEFAULT_CTX_ID)
          .set_properties(lib::USE_TL_PAGE_OPTIONAL)
          .set_page_size(OB_MALLOC_NORMAL_BLOCK_SIZE);
@@ -524,7 +516,6 @@ int ObTransformLateMaterialization::evaluate_stmt_cost(ObIArray<ObParentDMLStmt>
                CURRENT_CONTEXT->get_arena_allocator(),
                &ctx_->exec_ctx_->get_physical_plan_ctx()->get_param_store(),
                *ctx_->self_addr_,
-               GCTX.srv_rpc_proxy_,
                root_stmt->get_query_ctx()->get_global_hint(),
                tmp_expr_factory,
                root_stmt,
@@ -828,7 +819,7 @@ int ObTransformLateMaterialization::generate_pk_join_conditions(const uint64_t r
   const ObTableSchema *table_schema = NULL;
   ObSEArray<uint64_t, 4> key_col_ids;
   ObSEArray<uint64_t, 4> part_col_ids;
-  const bool is_mysql_mode = lib::is_mysql_mode();
+  const bool is_mysql_mode = true;
   if (OB_ISNULL(ctx_) || OB_ISNULL(ctx_->expr_factory_) ||
       OB_ISNULL(schema_guard = ctx_->sql_schema_guard_)) {
     ret = OB_ERR_UNEXPECTED;
@@ -982,7 +973,7 @@ int ObTransformLateMaterialization::generate_late_materialization_hint(
       }
     }
     // index hint
-    if (OB_SUCC(ret) && !info.is_allow_column_table_) {
+    if (OB_SUCC(ret)) {
       ObIArray<ObHint*> &opt_hints = select_stmt.get_stmt_hint().other_opt_hints_;
       for (int64_t i = opt_hints.count() - 1; OB_SUCC(ret) && i >= 0; --i) {
         ObHint* hint = opt_hints.at(i);
@@ -1045,25 +1036,6 @@ int ObTransformLateMaterialization::generate_late_materialization_hint(
                                                            conflict_hints))) {
             LOG_WARN("merge index hint failed", K(ret));
           }
-        }
-      }
-    }
-    if (OB_SUCC(ret) && info.is_allow_column_table_) {
-      ObTableInHint table_in_hint(table_item_inner->qb_name_,
-                                  table_item_inner->database_name_,
-                                  table_item_inner->get_object_name());
-      ObIndexHint *index_hint = NULL;
-      if (OB_FAIL(ObQueryHint::create_hint(ctx_->allocator_, T_USE_COLUMN_STORE_HINT, index_hint))) {
-        LOG_WARN("failed to create hint", K(ret));
-      } else if (OB_FAIL(index_hint->get_table().assign(table_in_hint))) {
-        LOG_WARN("assign table in hint failed", K(ret));
-      } else {
-        index_hint->set_qb_name(view_qb_name);
-        index_hint->set_trans_added(true);
-        if (OB_FAIL(view_stmt.get_stmt_hint().merge_hint(*index_hint,
-                                                        HINT_DOMINATED_EQUAL,
-                                                        conflict_hints))) {
-          LOG_WARN("merge index hint failed", K(ret));
         }
       }
     }
@@ -1223,8 +1195,7 @@ int ObTransformLateMaterialization::check_transform_plan_expected(ObLogicalOpera
         is_expected = false;
         LOG_TRACE("not table scan, reject transform");
       } else if (FALSE_IT(index_scan = static_cast<ObLogTableScan *>(join_left_branch))) {
-      } else if (!ctx.check_column_store_) {
-        // row store table
+      } else {
         if (!index_scan->is_index_scan()) {
           is_expected = false;
           LOG_TRACE("not index scan, reject transform", K(index_scan->is_index_scan()));
@@ -1272,15 +1243,6 @@ int ObTransformLateMaterialization::check_transform_plan_expected(ObLogicalOpera
             LOG_TRACE("there is no range", K(ret));
           }
         }
-      } else {
-        // column store table
-        if (!index_scan->use_column_store()) {
-          is_expected = false;
-          LOG_TRACE("not use column store, reject transform");
-        } else if (NULL == sort_op) {
-          is_expected = false;
-          LOG_TRACE("check sort op, reject transform");
-        }
       }
     }
   }
@@ -1299,88 +1261,6 @@ int ObTransformLateMaterialization::contain_enum_set_rowkeys(const ObRowkeyInfo 
       LOG_WARN("unexpected null", K(ret));
     } else if (ob_is_enumset_tc(col->get_meta_type().get_type())) {
       contain = true;
-    }
-  }
-  return ret;
-}
-
-/* select * from t1 where c1 > 10 order by c2 limit 3;
-    -->
-    select t1.* from (select / *+use_column_table(t1)* /key_col_ids from t1 where c1 > 10 order by c2 limit 3) v,
-                    t1
-                where v.pk = t1.pk order by t1.c2;
-*/
-int ObTransformLateMaterialization::gen_trans_info_for_column_store(const ObSelectStmt &stmt,
-                                                                    const ObIArray<uint64_t> &key_col_ids,
-                                                                    const ObIArray<uint64_t> &filter_col_ids,
-                                                                    const ObIArray<uint64_t> &orderby_col_ids,
-                                                                    const ObIArray<uint64_t> &select_col_ids,
-                                                                    const TableItem *table_item,
-                                                                    const ObTableSchema *table_schema,
-                                                                    ObLateMaterializationInfo &info,
-                                                                    ObCostBasedLateMaterializationCtx &check_ctx)
-{
-  int ret = OB_SUCCESS;
-  bool is_allow_column_store = false;
-  if (OB_FAIL(check_is_allow_column_store(stmt, table_item, table_schema, is_allow_column_store))) {
-    LOG_WARN("failed to check is allow column store", K(ret));
-  } else if (!is_allow_column_store) {
-    OPT_TRACE("not allow column store late materialization");
-  } else if (OB_FAIL(info.project_col_in_view_.assign(key_col_ids))) {
-    LOG_WARN("failed to assign predicate col in view", K(ret));
-  } else {
-    info.is_allow_column_table_ = true;
-    check_ctx.late_table_id_ = table_item->table_id_;
-    check_ctx.check_column_store_ = true;
-  }
-  return ret;
-}
-
-int ObTransformLateMaterialization::check_is_allow_column_store(const ObSelectStmt &stmt,
-                                                                const TableItem *table_item,
-                                                                const ObTableSchema *table_schema,
-                                                                bool &is_allow)
-{
-  int ret = OB_SUCCESS;
-  int64_t route_policy_type = 0;
-  bool has_all_column_group = false;
-  bool has_normal_column_group = false;
-  const ObQueryHint *query_hint = NULL;
-  is_allow = true;
-  if (OB_ISNULL(ctx_) || OB_ISNULL(ctx_->session_info_) || OB_ISNULL(table_item) ||
-      OB_ISNULL(table_schema) || OB_ISNULL(query_hint = stmt.get_stmt_hint().query_hint_)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("got unexpected NULL ptr", K(ret));
-  } else if (table_item->is_link_table()) {
-    is_allow = false;
-  } else if (OB_FAIL(table_schema->has_all_column_group(has_all_column_group))) {
-    LOG_WARN("failed to check has row store", K(ret));
-  } else if (OB_FAIL(table_schema->get_is_column_store(has_normal_column_group))) {
-    LOG_WARN("failed to get is column store", K(ret));
-  } else if (!ctx_->session_info_->is_enable_column_store()) {
-    if (has_all_column_group) {
-      is_allow = false;
-    }
-  } else {
-    is_allow = has_normal_column_group;
-  }
-  if (OB_SUCC(ret) && is_allow) {
-    const ObIArray<ObHint*> &opt_hints = stmt.get_stmt_hint().other_opt_hints_;
-    for (int64_t i = 0; OB_SUCC(ret) && i < opt_hints.count(); ++i) {
-      ObIndexHint *index_hint = NULL;
-      int64_t index_schema_i = 0;
-      if (OB_ISNULL(opt_hints.at(i))) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected null", K(ret));
-      } else if (!opt_hints.at(i)->is_access_path_hint()) {
-        /* do nothing */
-      } else if (FALSE_IT(index_hint = static_cast<ObIndexHint *>(opt_hints.at(i)))) {
-        /* do nothing */
-      } else if (T_NO_USE_COLUMN_STORE_HINT == index_hint->get_hint_type()) {
-        if (index_hint->get_table().is_match_table_item(query_hint->cs_type_, *table_item)) {
-          is_allow = false;
-        }
-      }
     }
   }
   return ret;

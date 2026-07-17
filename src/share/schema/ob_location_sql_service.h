@@ -16,9 +16,9 @@
 
  #ifndef OCEANBASE_SHARE_SCHEMA_OB_LOCATION_SQL_SERVICE_H_
  #define OCEANBASE_SHARE_SCHEMA_OB_LOCATION_SQL_SERVICE_H_
-
+ 
  #include "ob_ddl_sql_service.h"
-
+ 
  namespace oceanbase
  {
  namespace common
@@ -31,16 +31,16 @@
  namespace schema
  {
  class ObLocationSchema;
-
+ 
  class ObLocationSqlService : public ObDDLSqlService
  {
  public:
    explicit ObLocationSqlService(ObSchemaService &schema_service);
    virtual ~ObLocationSqlService();
-
+ 
    ObLocationSqlService(const ObLocationSqlService&) = delete;
    ObLocationSqlService &operator=(const ObLocationSqlService&) = delete;
-
+ 
    int apply_new_schema(const ObLocationSchema &schema,
                         ObISQLClient &sql_client,
                         ObSchemaOperationType ddl_type,
@@ -58,5 +58,6 @@
  } // namespace schema
  } // namespace share
  } // namespace oceanbase
-
+ 
  #endif // OCEANBASE_SHARE_SCHEMA_OB_LOCATION_SQL_SERVICE_H_
+

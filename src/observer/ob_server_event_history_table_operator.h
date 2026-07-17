@@ -17,6 +17,7 @@
 #ifndef _OB_SERVER_EVENT_HISTORY_TABLE_OPERATOR_H
 #define _OB_SERVER_EVENT_HISTORY_TABLE_OPERATOR_H 1
 #include "share/ob_event_history_table_operator.h"
+#include "share/storage/ob_sqlite_connection_pool.h"
 
 namespace oceanbase
 {
@@ -27,7 +28,7 @@ class ObAllServerEventHistoryTableOperator: public share::ObEventHistoryTableOpe
 public:
   virtual ~ObAllServerEventHistoryTableOperator() {}
 
-  int init(ObSQLiteConnectionPool *pool, const common::ObAddr &self_addr);
+  int init(share::ObSQLiteConnectionPool *pool, const common::ObAddr &self_addr);
 
   virtual int async_delete() override;
 

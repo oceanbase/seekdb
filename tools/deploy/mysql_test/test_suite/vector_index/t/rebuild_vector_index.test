@@ -191,7 +191,7 @@ connection conn2;
 # ObDDLTaskStatus::PREPARE state: 0
 --disable_query_log
 --let $ddl_status = 1000
-while ($ddl_status != 0)
+while ($ddl_status != 0) 
 {
   sleep 1;
   let $ddl_status = query_get_value(select status from oceanbase.__all_ddl_task_status where ddl_type=17, status, 1);
@@ -240,7 +240,7 @@ connection conn2;
 # SWITCH_INDEX_NAME state: 36
 --disable_query_log
 --let $ddl_status = 0
-while ($ddl_status != 36)
+while ($ddl_status != 36) 
 {
   sleep 1;
   let $ddl_status = query_get_value(select status from oceanbase.__all_ddl_task_status where ddl_type=17, status, 1);
@@ -291,7 +291,7 @@ connection conn2;
 # ObDDLTaskStatus::DROP_SCHEMA state: 14
 --disable_query_log
 --let $ddl_status = 1000
-while ($ddl_status != 14)
+while ($ddl_status != 14) 
 {
   sleep 1;
   let $ddl_status = query_get_value(select status from oceanbase.__all_ddl_task_status where ddl_type=17, status, 1);

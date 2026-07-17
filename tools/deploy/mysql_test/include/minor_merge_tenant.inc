@@ -10,14 +10,7 @@ while($__i__ > 0)
   dec $__i__;
   dec $__j__;
 
-  if ($TENANT == 'mysql') {
-    let $__memstore_cnt__ = query_get_value(select count(*) as cnt from oceanbase.__all_virtual_memstore_info where tablet_id >= 200000, cnt, 1);
-  }
-  if ($TENANT == 'oracle') {
-    select count(*) into @cnt from SYS.gv$ob_memstore_info where tablet_id >= 200000;
-    let $__memstore_cnt__ = query_get_value(select @cnt as RES from dual, RES, 1);
-    # --echo $__memstore_cnt__
-  }
+  let $__memstore_cnt__ = query_get_value(select count(*) as cnt from oceanbase.__all_virtual_tablet_memstore_info where tablet_id >= 200000, cnt, 1);
 
   if ($__memstore_cnt__ == 0)
   {

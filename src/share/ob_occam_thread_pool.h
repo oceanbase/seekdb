@@ -40,7 +40,6 @@
 #include "lib/thread/ob_thread_name.h"
 #include "share/rc/ob_tenant_base.h"
 #include "share/ob_thread_pool.h"
-#include "lib/ash/ob_active_session_guard.h"
 
 
 namespace oceanbase
@@ -86,12 +85,22 @@ class ObOccamThread : public share::ObThreadPool
     return ATOMIC_AAF(&id_count, 1);
   }
 public:
-  ObOccamThread() : id_(get_id_count()), is_inited_(false), is_stopped_(false) {}
+  ObOccamThread() : id_(get_id_count()), is_inited_(false), is_stopped_(false)
+  {
+    MEMSET(thread_name_, 0, sizeof(thread_name_));
+    STRNCPY(thread_name_, "Occam", sizeof(thread_name_) - 1);
+  }
   ~ObOccamThread() {
     destroy();
   }
   template <typename T>
-  int init_and_start(T &&func, bool need_set_tenant_ctx = true) {
+  int init_and_start(T &&func,
+                     bool need_set_tenant_ctx = true,
+                     const char *thread_name = "Occam") {
+    if (OB_NOT_NULL(thread_name) && '\0' != thread_name[0]) {
+      MEMSET(thread_name_, 0, sizeof(thread_name_));
+      STRNCPY(thread_name_, thread_name, sizeof(thread_name_) - 1);
+    }
     if (need_set_tenant_ctx) {
       share::ObThreadPool::set_run_wrapper(MTL_CTX());
     }
@@ -127,7 +136,7 @@ public:
   }
   bool is_stopped() const { return ATOMIC_LOAD(&is_stopped_); }
   void run1() {
-    lib::set_thread_name("Occam");
+    lib::set_thread_name(thread_name_);
     if (func_.is_valid()) {
       OCCAM_LOG(INFO, "thread is running function");
       func_();
@@ -139,6 +148,7 @@ private:
   uint64_t id_;
   bool is_inited_;
   bool is_stopped_;
+  char thread_name_[OB_THREAD_NAME_BUF_LEN];
 };
 
 enum class TASK_PRIORITY
@@ -208,7 +218,9 @@ public:
     is_inited_(false),
     is_stopped_(false) {}
   ~ObOccamThreadPool() { destroy(); }
-  int init(int64_t thread_num, int64_t queue_size_square_of_2 = 10)
+  int init(int64_t thread_num,
+           int64_t queue_size_square_of_2 = 10,
+           const char *thread_name = "Occam")
   {
     int ret = OB_SUCCESS;
     if (is_inited_) {
@@ -245,7 +257,10 @@ public:
           for (; thread_init_idx < thread_num && OB_SUCC(ret); ++thread_init_idx) {
             new(&threads_[thread_init_idx]) occam::ObOccamThread();
             uint64_t thread_id = threads_[thread_init_idx].get_id();
-            ret = threads_[thread_init_idx].init_and_start([this, thread_id]() { this->keep_fetching_task_until_stop_(thread_id); });
+            ret = threads_[thread_init_idx].init_and_start(
+                [this, thread_id]() { this->keep_fetching_task_until_stop_(thread_id); },
+                true /* need_set_tenant_ctx */,
+                thread_name);
           }
           if (OB_SUCC(ret)) {
             step = 0; // step done
@@ -402,7 +417,6 @@ private:
         } else if (ret == OB_EAGAIN) { // all queue empty, waiting for someone commit task
           // OCCAM_LOG(DEBUG, "no task in queue, waiting...", K(thread_id));
           ObThreadCondGuard guard(cv_);
-          common::ObBKGDSessInActiveGuard inactive_guard;
           while (total_task_count_ == 0 && !is_stopped_) {
             if (OB_FAIL(cv_.wait())) {
               OCCAM_LOG(ERROR, "cv_ wait return err code", K(ret));
@@ -515,13 +529,15 @@ public:
   ObOccamThreadPool() :
     thread_num_(0),
     queue_size_square_of_2_(0) {}
-  int init_and_start(int thread_num, int queue_size_square_of_2 = 10)
+  int init_and_start(int thread_num,
+                     int queue_size_square_of_2 = 10,
+                     const char *thread_name = "Occam")
   {
     int ret = OB_SUCCESS;
     ret = ob_make_shared<occam::ObOccamThreadPool>(thread_pool_);
     if (OB_FAIL(ret)) {
       OCCAM_LOG(WARN, "make shared failed");
-    } else if (OB_FAIL(thread_pool_->init(thread_num, queue_size_square_of_2))) {
+    } else if (OB_FAIL(thread_pool_->init(thread_num, queue_size_square_of_2, thread_name))) {
       thread_pool_.reset();
       OCCAM_LOG(WARN, "thread_pool_ init failed",
                   K(thread_pool_), K(thread_num_), K(queue_size_square_of_2_));

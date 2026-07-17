@@ -106,7 +106,6 @@ TEST(ObTestDatumCmp, defined_expr_func_by_type)
                                                         SCALE_UNKNOWN_YET,
                                                         PRECISION_UNKNOWN_YET,
                                                         PRECISION_UNKNOWN_YET,
-                                                        false,
                                                         CS_TYPE_COLLATION_FREE,
                                                         false)) {
         of_result << "defined\n";

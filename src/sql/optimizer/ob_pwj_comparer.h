@@ -17,7 +17,6 @@
 #ifndef OCEANBASE_SQL_OPTIMIZER_OB_PWJ_COMPARER_H
 #define OCEANBASE_SQL_OPTIMIZER_OB_PWJ_COMPARER_H 1
 #include "lib/container/ob_array.h"
-#include "share/partition_table/ob_partition_location.h"
 #include "sql/optimizer/ob_table_partition_info.h"
 #include "sql/resolver/expr/ob_raw_expr.h"
 #include "sql/optimizer/ob_sharding_info.h"

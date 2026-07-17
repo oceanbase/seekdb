@@ -21,13 +21,12 @@
 #include "sql/engine/px/p2p_datahub/ob_runtime_filter_vec_msg.h"
 #include "sql/engine/px/p2p_datahub/ob_pushdown_topn_filter_msg.h"
 #include "sql/engine/px/ob_px_sqc_proxy.h"
-#include "share/ob_rpc_share.h"
 
 using namespace oceanbase;
 using namespace oceanbase::common;
 using namespace oceanbase::share;
 using namespace oceanbase::sql;
-using namespace oceanbase::obrpc;
+using namespace oceanbase::obcall;
 
 ObP2PDatahubManager &ObP2PDatahubManager::instance()
 {
@@ -45,8 +44,6 @@ int ObP2PDatahubManager::init()
       "PxP2PDhMgrKey",
       "PxP2PDhMgrNode"))) {
     LOG_WARN("create hash table failed", K(ret));
-  } else if (OB_FAIL(share::init_obrpc_proxy(p2p_dh_proxy_))) {
-    LOG_WARN("fail to init obrpc proxy", K(ret));
   } else {
     is_inited_ = true;
   }
@@ -109,7 +106,7 @@ int ObP2PDatahubManager::alloc_msg(
 #define ALLOC_MSG_HELPER(msg_type, detail_class, label)                                            \
   case ObP2PDatahubMsgBase::msg_type: {                                                            \
     detail_class *new_msg = nullptr;                                                               \
-    ObMemAttr attr(ob_get_tenant_id(), label);                                                     \
+    ObMemAttr attr(label);                                                     \
     if (OB_FAIL(alloc_msg<detail_class>(allocator, new_msg, attr))) {                              \
       LOG_WARN("fail to alloc msg", K(ret));                                                       \
     } else {                                                                                       \
@@ -291,7 +288,7 @@ int ObP2PDatahubManager::send_p2p_msg(
         }
       }
     }
-  } else if (OB_FAIL(msg.broadcast(*target_addrs, p2p_dh_proxy_))) {
+  } else if (OB_FAIL(msg.broadcast(*target_addrs))) {
     LOG_WARN("fail to do broadcast");
   }
   return ret;

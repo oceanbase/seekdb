@@ -37,10 +37,6 @@ function(ob_unittest case)
   endif()
   target_include_directories(${case}
     PRIVATE ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_SOURCE_DIR}/unittest ${CMAKE_SOURCE_DIR}/mittest ${CMAKE_SOURCE_DIR}/deps/oblib/unittest)
-  # oblib_grpc generates grpc/*.grpc.pb.h at build time; many headers (e.g. via ob_ls.h ->
-  # ob_restore_helper_ctx.h -> ob_storage_grpc.h) need those files before any TU compiles.
-  # add_dependencies(ob_storage oblib_grpc) is not enough: unittest objects can compile in parallel.
-  add_dependencies(${case} oblib_grpc)
 endfunction()
 
 file(COPY . DESTINATION . FILES_MATCHING PATTERN "*.test")
@@ -106,7 +102,6 @@ if(ANDROID)
   target_include_directories(all_tests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}
     ${CMAKE_SOURCE_DIR}/unittest
-    ${CMAKE_SOURCE_DIR}/mittest
     ${CMAKE_SOURCE_DIR}/deps/oblib/unittest)
   # Add test subdirectories so relative includes (e.g. ../share/...) resolve
   set(_android_test_inc_dirs backup lib logservice observer plugin rootserver share sql storage)

@@ -16,7 +16,6 @@
 
 #define USING_LOG_PREFIX RS
 #include "ob_rs_job_table_operator.h"
-#include "share/ob_upgrade_utils.h"
 #include "share/storage/ob_rootservice_job_table_storage.h"
 #include "observer/ob_server_struct.h"
 using namespace oceanbase::common;
@@ -61,7 +60,6 @@ static const char* job_type_str_array[JOB_TYPE_MAX] = {
   "ALTER_TENANT_PRIMARY_ZONE",
   "UPGRADE_FINISH",
   "LOAD_MYSQL_SYS_PACKAGE",
-  "LOAD_ORACLE_SYS_PACKAGE",
 };
 
 bool ObRsJobTableOperator::is_valid_job_type(const ObRsJobType &rs_job_type)

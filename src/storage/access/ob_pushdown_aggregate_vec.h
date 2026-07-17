@@ -17,7 +17,7 @@
 #ifndef OCEANBASE_STORAGE_OB_PUSHDOWN_AGGREGATE_VEC_H_
 #define OCEANBASE_STORAGE_OB_PUSHDOWN_AGGREGATE_VEC_H_
 
-#include "share/aggregate/agg_ctx.h"
+#include "sql/engine/aggregate/agg_ctx.h"
 #include "ob_aggregate_base.h"
 
 namespace oceanbase
@@ -86,7 +86,6 @@ public:
                          const int64_t row_offset = 0,
                          const int64_t agg_row_idx = 0);
   virtual int eval_index_info(const blocksstable::ObMicroIndexInfo &index_info,
-                              const bool is_cg,
                               const int64_t agg_row_idx = 0);
   virtual int eval_batch_in_group_by(common::ObDatum *datums,
                                      const int64_t count,
@@ -135,8 +134,8 @@ public:
   }
   OB_INLINE bool is_agg_finish(const ObPushdownRowIdCtx &pd_row_id_ctx)
   {
-    return OB_INVALID_CS_ROW_ID != agg_row_id_
-        && OB_INVALID_CS_ROW_ID != pd_row_id_ctx.bound_row_id_
+    return INVALID_AGG_ROW_ID != agg_row_id_
+        && INVALID_AGG_ROW_ID != pd_row_id_ctx.bound_row_id_
         && ((!pd_row_id_ctx.is_reverse_ && agg_row_id_ >= pd_row_id_ctx.bound_row_id_ ) 
             || (pd_row_id_ctx.is_reverse_ && agg_row_id_ <= pd_row_id_ctx.bound_row_id_));
   }
@@ -191,7 +190,6 @@ public:
                  const int64_t row_offset = 0,
                  const int64_t agg_row_idx = 0) override;
   int eval_index_info(const blocksstable::ObMicroIndexInfo &index_info,
-                      const bool is_cg,
                       const int64_t agg_row_idx = 0) override;
   int eval_batch_in_group_by(common::ObDatum *datums,
                              const int64_t count,
@@ -248,7 +246,6 @@ public:
            const int64_t row_count = 1,
            const int64_t agg_row_idx = 0) override;
   int eval_index_info(const blocksstable::ObMicroIndexInfo &index_info,
-                      const bool is_cg,
                       const int64_t agg_row_idx = 0) override;
   bool can_pushdown_decoder(blocksstable::ObIMicroBlockReader *reader,
                             const int32_t col_offset,
@@ -294,7 +291,6 @@ public:
                  const int64_t row_offset = 0,
                  const int64_t agg_row_idx = 0) override;
   int eval_index_info(const blocksstable::ObMicroIndexInfo &index_info,
-                      const bool is_cg,
                       const int64_t agg_row_idx = 0) override;
   int can_use_index_info(const blocksstable::ObMicroIndexInfo &index_info,
                          const int32_t col_index, bool &can_agg) override;

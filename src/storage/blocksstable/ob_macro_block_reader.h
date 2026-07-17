@@ -19,12 +19,13 @@
 
 #include "lib/hash/ob_array_index_hash_set.h"
 #include "lib/compress/ob_compressor.h"
-#include "share/schema/ob_table_param.h"
+#include "storage/access/ob_table_param.h"
 #include "storage/slog_ckpt/ob_linked_macro_block_struct.h"
 #include "ob_macro_block_common_header.h"
 #include "ob_imicro_block_reader.h"
 #include "storage/blocksstable/ob_sstable_printer.h"
 #include "storage/blocksstable/ob_simplified_sstable_macro_block_header.h"
+#include "storage/compaction/ob_compaction_memory_context.h"
 namespace oceanbase
 {
 namespace common
@@ -47,7 +48,7 @@ class ObMacroBlockRowBareIterator;
 class ObMacroBlockReader
 {
 public:
-  ObMacroBlockReader(const uint64_t tenant_id = MTL_ID());
+  ObMacroBlockReader();
   virtual ~ObMacroBlockReader();
   int decompress_data(
       const common::ObCompressorType compressor_type,
@@ -107,16 +108,6 @@ public:
       int64_t &uncomp_size,
       bool &is_compressed,
       const bool need_deep_copy,
-      ObIAllocator *ext_allocator);
-
-  // only for cs_encoding which has no block-level compression
-  int decrypt_and_full_transform_data(
-      const ObMicroBlockHeader &header,
-      const ObMicroBlockDesMeta &deserialize_meta,
-      const char *src_buf,
-      const int64_t src_buf_size,
-      const char *&uncomp_buf,
-      int64_t &uncomp_size,
       ObIAllocator *ext_allocator);
 
 private:

@@ -33,10 +33,7 @@ public:
   ObExpandAggregateUtils(ObRawExprFactory &expr_factory,
                          ObSQLSessionInfo *session_info): 
     expr_factory_(expr_factory),
-    session_info_(session_info),
-    expand_for_mv_(false) {}
-
-  void set_expand_for_mv() { expand_for_mv_ = true; }
+    session_info_(session_info) {}
 
   int expand_aggr_expr(ObDMLStmt *stmt, bool &trans_happened);
 
@@ -193,7 +190,6 @@ private:
 
   ObRawExprFactory &expr_factory_;
   ObSQLSessionInfo *session_info_;
-  bool expand_for_mv_;
 };
 
 } // namespace sql

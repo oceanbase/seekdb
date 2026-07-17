@@ -55,7 +55,7 @@ struct ObConstMetaHeader
 class ObConstEncoder : public ObIColumnEncoder
 {
 public:
-  static const int64_t MAX_EXCEPTION_SIZE = 32; // Maybe need tune up for pure columnar store
+  static const int64_t MAX_EXCEPTION_SIZE = 32;
   static const int64_t MAX_EXCEPTION_PCT = 10;
   static const ObColumnHeader::Type type_ = ObColumnHeader::CONST;
 

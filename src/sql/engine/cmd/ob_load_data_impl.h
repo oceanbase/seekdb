@@ -36,7 +36,7 @@
 #include "sql/engine/ob_des_exec_context.h"
 #include "sql/engine/cmd/ob_load_data_parser.h"
 #include "sql/engine/cmd/ob_load_data_file_reader.h"
-#include "common/storage/ob_io_device.h"
+#include "lib/restore/ob_io_device.h"
 
 namespace oceanbase
 {
@@ -143,9 +143,8 @@ struct ObDataFrag : common::ObLink
 class ObPartDataFragMgr
 {
 public:
-  ObPartDataFragMgr(ObDataFragMgr &data_frag_mgr, uint64_t tenant_id, ObTabletID tablet_id)
+  ObPartDataFragMgr(ObDataFragMgr &data_frag_mgr, ObTabletID tablet_id)
     : data_frag_mgr_(data_frag_mgr),
-      tenant_id_(tenant_id),
       tablet_id_(tablet_id),
       total_row_consumed_(0),
       total_row_proceduced_(0) {}
@@ -172,7 +171,6 @@ public:
 
   ObDataFragMgr &data_frag_mgr_;
 
-  uint64_t tenant_id_;
   ObTabletID tablet_id_;
 
   int64_t total_row_consumed_;
@@ -373,9 +371,8 @@ struct ObCSVFormats {
   int64_t line_term_char_;
   int64_t enclose_char_;
   int64_t escape_char_;
-  /* for empty column, oracle mode do insert '';
-   * mysql mode do insert '0' for nonstring-type column, '' for string-type column
-   * */
+  /* For empty columns, nonstring-type columns may be filled with '0',
+   * while string-type columns are filled with ''. */
   bool null_column_fill_zero_string_;
   bool is_simple_format_;
   bool is_line_term_by_counting_field_;
@@ -496,8 +493,7 @@ struct ObParserErrRec {
 
 struct ObShuffleTaskHandle {
   ObShuffleTaskHandle(ObDataFragMgr &main_datafrag_mgr,
-                      common::ObBitSet<> &main_string_values,
-                      uint64_t tenant_id);
+                      common::ObBitSet<> &main_string_values);
   ~ObShuffleTaskHandle();
 
   int expand_buf(const int64_t max_size, const int64_t to_buffer_size);
@@ -601,7 +597,7 @@ public:
                                     ParamStore &param_store,
                                     ObInsertStmt *&insert_stmt);
 
-  static int memory_check_remote(uint64_t tenant_id, bool &need_wait_minor_freeze);
+  static int memory_check_remote(bool &need_wait_minor_freeze);
   static int memory_wait_local(ObExecContext &ctx,
                                const ObTabletID &tablet_id,
                                ObAddr &server_addr,
@@ -706,8 +702,6 @@ public:
     common::ObSEArray<ObLoadServerInfo*, 16> server_infos;
 
     //exec params
-    bool is_oracle_mode;
-    int64_t tenant_id;
     int64_t max_cpus; //real cpu num of a tenant
     int64_t num_of_file_column;
     int64_t num_of_table_column;
@@ -804,19 +798,6 @@ private:
   bool is_schema_error_need_retry_for_load_data(const int ret_code);
   // disallow copy
   DISALLOW_COPY_AND_ASSIGN(ObLoadDataSPImpl);
-  // function members
-};
-
-class ObLoadDataURLImpl : public ObLoadDataBase
-{
-public:
-  ObLoadDataURLImpl() {}
-  ~ObLoadDataURLImpl() {}
-  int construct_sql(ObLoadDataStmt &load_stmt, ObSqlString &sql);
-  int execute(ObExecContext &ctx, ObLoadDataStmt &load_stmt);
-private:
-  // disallow copy
-  DISALLOW_COPY_AND_ASSIGN(ObLoadDataURLImpl);
   // function members
 };
 

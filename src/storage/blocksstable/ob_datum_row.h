@@ -19,7 +19,7 @@
 
 #include "common/ob_common_types.h"
 #include "common/ob_tablet_id.h"
-#include "share/datum/ob_datum.h"
+#include "common/datum/ob_datum.h"
 #include "share/datum/ob_datum_funcs.h"
 #include "storage/meta_mem/ob_fixed_meta_obj_array.h"
 #include "storage/tx/ob_trans_define.h"
@@ -317,7 +317,7 @@ struct ObDatumRow
 {
   OB_UNIS_VERSION(1);
 public:
-  ObDatumRow(const uint64_t tenant_id = MTL_ID());
+  ObDatumRow();
   ~ObDatumRow();
   int init(common::ObIAllocator &allocator, const int64_t capacity, char *trans_info_ptr = nullptr);
   int init(const int64_t capacity);

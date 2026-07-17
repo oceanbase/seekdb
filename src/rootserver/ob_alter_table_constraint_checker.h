@@ -27,7 +27,7 @@ class ObTableSchema;
 class AlterTableSchema; 
 }
 }
-namespace obrpc
+namespace obcall
 {
 class ObAlterTableArg;
 }
@@ -39,12 +39,12 @@ class ObAlterTableConstraintChecker {
 public:
 
   static int check_can_change_cst_column_name(
-      const obrpc::ObAlterTableArg &alter_table_arg,
+      const obcall::ObAlterTableArg &alter_table_arg,
       const share::schema::ObTableSchema &orig_table_schema,
       bool &can_modify_column_name_and_constraint);
 
   static int check_can_add_cst_on_multi_column(
-      const obrpc::ObAlterTableArg &alter_table_arg,
+      const obcall::ObAlterTableArg &alter_table_arg,
       bool &can_add_cst_on_multi_column);
   static int check_is_change_cst_column_name(
         const share::schema::ObTableSchema &table_schema,
@@ -52,16 +52,16 @@ public:
         bool &change_cst_column_name);
   static int check_alter_table_constraint(
       rootserver::ObDDLService &ddl_service,
-      const obrpc::ObAlterTableArg &alter_table_arg,
+      const obcall::ObAlterTableArg &alter_table_arg,
       const share::schema::ObTableSchema &orig_table_schema,
       share::ObDDLType &ddl_type);
   static int need_modify_not_null_constraint_validate(
       rootserver::ObDDLService &ddl_service, 
-      const obrpc::ObAlterTableArg &alter_table_arg,
+      const obcall::ObAlterTableArg &alter_table_arg,
       bool &is_add_not_null_col,
       bool &need_modify);
   static int modify_not_null_constraint_validate(
-      const obrpc::ObAlterTableArg &alter_table_arg,
+      const obcall::ObAlterTableArg &alter_table_arg,
       AlterTableSchema &alter_table_schema);
 };
 

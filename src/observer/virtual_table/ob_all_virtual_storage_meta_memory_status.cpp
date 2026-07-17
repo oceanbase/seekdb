@@ -15,6 +15,7 @@
  */
 
 #include "ob_all_virtual_storage_meta_memory_status.h"
+#include "share/rc/ob_module_provider.h"
 
 using namespace oceanbase::common;
 using namespace oceanbase::storage;
@@ -25,7 +26,6 @@ namespace observer
 {
 ObAllVirtualStorageMetaMemoryStatus::ObAllVirtualStorageMetaMemoryStatus()
   : ObVirtualTableScannerIterator(),
-    addr_(),
     pool_idx_(0)
 {
 }
@@ -37,12 +37,12 @@ ObAllVirtualStorageMetaMemoryStatus::~ObAllVirtualStorageMetaMemoryStatus()
 
 void ObAllVirtualStorageMetaMemoryStatus::reset()
 {
-  omt::ObMultiTenantOperator::reset();
-  addr_.reset();
+  pool_idx_ = 0;
+  status_arr_.reset();
   ObVirtualTableScannerIterator::reset();
 }
 
-int ObAllVirtualStorageMetaMemoryStatus::init(ObIAllocator *allocator, common::ObAddr &addr)
+int ObAllVirtualStorageMetaMemoryStatus::init(ObIAllocator *allocator)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(start_to_read_)) {
@@ -53,7 +53,6 @@ int ObAllVirtualStorageMetaMemoryStatus::init(ObIAllocator *allocator, common::O
     SERVER_LOG(WARN, "invalid argument", K(ret));
   } else {
     allocator_ = allocator;
-    addr_ = addr;
     start_to_read_ = true;
   }
   return ret;
@@ -62,37 +61,13 @@ int ObAllVirtualStorageMetaMemoryStatus::init(ObIAllocator *allocator, common::O
 int ObAllVirtualStorageMetaMemoryStatus::inner_get_next_row(ObNewRow *&row)
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(execute(row))) {
-    SERVER_LOG(WARN, "fail to execute", K(ret));
-  }
-  return ret;
-}
-
-void ObAllVirtualStorageMetaMemoryStatus::release_last_tenant()
-{
-  pool_idx_ = 0;
-  status_arr_.reset();
-}
-
-bool ObAllVirtualStorageMetaMemoryStatus::is_need_process(uint64_t tenant_id)
-{
-  if (!is_virtual_tenant_id(tenant_id) &&
-      (is_sys_tenant(effective_tenant_id_) || tenant_id == effective_tenant_id_)){
-    return true;
-  }
-  return false;
-}
-
-int ObAllVirtualStorageMetaMemoryStatus::process_curr_tenant(ObNewRow *&row)
-{
-  int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!start_to_read_)) {
     ret = OB_NOT_INIT;
     SERVER_LOG(WARN, "not inited", K(start_to_read_), K(ret));
   } else if (OB_ISNULL(cur_row_.cells_)) {
     ret = OB_ERR_UNEXPECTED;
     SERVER_LOG(ERROR, "cur row cell is NULL", K(ret));
-  } else if (0 == status_arr_.count() && OB_FAIL(MTL(ObTenantMetaMemMgr*)->get_meta_mem_status(status_arr_))) {
+  } else if (0 == status_arr_.count() && OB_FAIL(share::g_mp->tenant_meta_mem_mgr()->get_meta_mem_status(status_arr_))) {
     SERVER_LOG(WARN, "fail to get obj pools' status", K(ret));
   } else if (pool_idx_ == status_arr_.count()) {
     ret = OB_ITER_END;

@@ -29,7 +29,7 @@ namespace dtl {
  * The previous make_channel was created at the PX(coord) end, then sent sqc to both the transmit and receive ends,
  * where the transmit and receive ends directly create channel instances based on the created channel information. However, this method has performance issues
  * The algorithm complexity of the previous approach is: transmit_dfo_task_cnt * receive_dfo_task_cnt, assuming dop=512, it would be at least 512*512
- * As dop increases, the time taken becomes longer. See bug
+ * As dop increases, the time taken becomes longer. See bug 
  * New solution:
  *        The new solution no longer constructs all channel specific information at the PX end,
  *        but instead constructs overall channel information at the PX end, sending this overall channel information to all dfo sqcs,
@@ -51,76 +51,54 @@ namespace dtl {
  *  chid = start_ch_id + j * N + i;
  * }
  **/
-void ObDtlChannelGroup::make_transmit_channel(const uint64_t tenant_id,
-                                    const ObAddr &peer_exec_addr,
+void ObDtlChannelGroup::make_transmit_channel(const ObAddr &peer_exec_addr,
                                     uint64_t chid,
                                     ObDtlChannelInfo &ci_producer,
                                     bool is_local)
 {
   UNUSED(is_local);
+  // single-replica: only local (in-process) channels are supported
   ci_producer.chid_ = chid << 1;
-  if (is_local) {
-    ci_producer.type_ = DTL_CT_LOCAL;
-  } else {
-    ci_producer.type_ = DTL_CT_RPC;
-  }
+  ci_producer.type_ = DTL_CT_LOCAL;
   ci_producer.peer_ = peer_exec_addr;
   ci_producer.role_ = DTL_CR_PUSHER;
-  ci_producer.tenant_id_ = tenant_id;
+  
 }
 
-void ObDtlChannelGroup::make_receive_channel(const uint64_t tenant_id,
-                                    const ObAddr &peer_exec_addr,
+void ObDtlChannelGroup::make_receive_channel(const ObAddr &peer_exec_addr,
                                     uint64_t chid,
                                     ObDtlChannelInfo &ci_consumer,
                                     bool is_local)
 {
   UNUSED(is_local);
+  // single-replica: only local (in-process) channels are supported
   ci_consumer.chid_ = (chid << 1) + 1;
-  if (is_local) {
-    ci_consumer.type_ = DTL_CT_LOCAL;
-  } else {
-    ci_consumer.type_ = DTL_CT_RPC;
-  }
+  ci_consumer.type_ = DTL_CT_LOCAL;
   ci_consumer.peer_ = peer_exec_addr;
   ci_consumer.role_ = DTL_CR_PUSHER;
-  ci_consumer.tenant_id_ = tenant_id;
+  
 }
 
-int ObDtlChannelGroup::make_channel(const uint64_t tenant_id,
-                                    const ObAddr &producer_exec_addr,
+int ObDtlChannelGroup::make_channel(const ObAddr &producer_exec_addr,
                                     const ObAddr &consumer_exec_addr,
                                     ObDtlChannelInfo &ci_producer,
                                     ObDtlChannelInfo &ci_consumer)
 {
   int ret = OB_SUCCESS;
   const uint64_t chid = ObDtlChannel::generate_id();
-  if (producer_exec_addr != consumer_exec_addr) {
-    // @TODO: rpc channel isn't supported right now
-    ci_producer.chid_ = chid << 1;
-    ci_producer.type_ = DTL_CT_RPC;
-    ci_producer.peer_ = consumer_exec_addr;
-    ci_producer.role_ = DTL_CR_PUSHER;
-    ci_producer.tenant_id_ = tenant_id;
-    ci_consumer.chid_ = (chid << 1) + 1;
-    ci_consumer.type_ = DTL_CT_RPC;
-    ci_consumer.peer_ = producer_exec_addr;
-    ci_consumer.role_ = DTL_CR_PULLER;
-    ci_consumer.tenant_id_ = tenant_id;
-  } else {
-    // If producer and consumer are in the same execution process, we
-    // can use in memory channel.
-    ci_producer.chid_ = chid << 1;
-    ci_producer.type_ = DTL_CT_LOCAL;
-    ci_producer.peer_ = consumer_exec_addr;
-    ci_producer.role_ = DTL_CR_PUSHER;
-    ci_producer.tenant_id_ = tenant_id;
-    ci_consumer.chid_ = (chid << 1) + 1;
-    ci_consumer.type_ = DTL_CT_LOCAL;
-    ci_consumer.peer_ = producer_exec_addr;
-    ci_consumer.role_ = DTL_CR_PULLER;
-    ci_consumer.tenant_id_ = tenant_id;
-  }
+  // single-replica: producer and consumer always execute in the same process,
+  // so always use the in-memory (local) channel. The rpc channel is removed.
+  UNUSED(producer_exec_addr);
+  ci_producer.chid_ = chid << 1;
+  ci_producer.type_ = DTL_CT_LOCAL;
+  ci_producer.peer_ = consumer_exec_addr;
+  ci_producer.role_ = DTL_CR_PUSHER;
+  
+  ci_consumer.chid_ = (chid << 1) + 1;
+  ci_consumer.type_ = DTL_CT_LOCAL;
+  ci_consumer.peer_ = producer_exec_addr;
+  ci_consumer.role_ = DTL_CR_PULLER;
+  
   return ret;
 }
 
@@ -128,18 +106,14 @@ int ObDtlChannelGroup::link_channel(const ObDtlChannelInfo &ci, ObDtlChannel *&c
 {
   int ret = OB_SUCCESS;
   const auto chid = ci.chid_;
-  // Flow control can use local, i.e., data channel
-  if (nullptr != dfc && ci.type_ == DTL_CT_LOCAL) {
-    if (OB_FAIL(DTL.create_local_channel(ci.tenant_id_, ci.chid_, ci.peer_, chan, dfc))) {
-      LOG_WARN("create local channel fail", KP(chid), K(ret));
-    }
-    LOG_TRACE("trace create local channel", KP(chid), K(ret), K(ci.peer_), K(ci.type_));
-  } else {
-    if (OB_FAIL(DTL.create_rpc_channel(ci.tenant_id_, ci.chid_, ci.peer_, chan, dfc))) {
-      LOG_WARN("create rpc channel fail", KP(chid), K(ret), K(ci.peer_));
-    }
-    LOG_TRACE("trace create rpc channel", KP(chid), K(ret), K(ci.peer_), K(ci.type_));
+  // single-replica: only local (in-process) channels exist.
+  if (OB_UNLIKELY(ci.type_ != DTL_CT_LOCAL)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("only local dtl channel is supported", KP(chid), K(ret), K(ci.type_));
+  } else if (OB_FAIL(DTL.create_local_channel(ci.chid_, ci.peer_, chan, dfc))) {
+    LOG_WARN("create local channel fail", KP(chid), K(ret));
   }
+  LOG_TRACE("trace create local channel", KP(chid), K(ret), K(ci.peer_), K(ci.type_));
   return ret;
 }
 

@@ -41,7 +41,7 @@ public:
   int set_database_name(const common::ObString &database_name);
   int set_table_name(const common::ObString &table_name);
   void set_masked_sql(const common::ObString &masked_sql) { masked_sql_ = masked_sql; }
-  void set_tenant_id(uint64_t tenant_id) { tenant_id_ = tenant_id; }
+  
   void set_need_create_user(bool need_create_user) { need_create_user_ = need_create_user; }
   void set_need_create_user_priv(bool need_create_user_priv)
   { need_create_user_priv_ = need_create_user_priv; }
@@ -78,12 +78,12 @@ public:
   uint64_t get_grantor_id() const { return grantor_id_; }
   ObSelectStmt* get_ref_query() const { return ref_query_; }
   ObPrivSet get_priv_set() const { return priv_set_; }
-  uint64_t get_tenant_id() const { return tenant_id_; }
+  
   const common::ObStrings& get_grantees() const { return grantees_; }
   bool is_grant_all_tab_priv() const { return is_grant_all_tab_priv_; }
 
   virtual bool cause_implicit_commit() const { return true; }
-  virtual obrpc::ObDDLArg &get_ddl_arg() { return grant_arg_; }
+  virtual obcall::ObDDLArg &get_ddl_arg() { return grant_arg_; }
   int add_column_privs(const ObString& column_name,const ObPrivSet priv_set) { return column_names_priv_.push_back(std::make_pair(column_name, priv_set)); }
   const ObIArray<std::pair<ObString, ObPrivType>> &get_column_privs() const { return column_names_priv_; }
   void set_table_schema_version(int64_t schema_version) { table_schema_version_ = schema_version; }
@@ -99,13 +99,12 @@ private:
   share::schema::ObPrivLevel grant_level_;
   common::ObString database_;
   common::ObString table_;
-  uint64_t tenant_id_;
   common::ObStrings grantees_;
   common::ObStrings users_;//user1, host1, pwd1, nec1; user2, host2, pwd2, nec2;..
   common::ObString masked_sql_;
   bool need_create_user_;
   bool need_create_user_priv_; // grant user identified by pwd
-  obrpc::ObGrantArg grant_arg_; // used to return exec_tenant_id_
+  obcall::ObGrantArg grant_arg_; // used to return exec_tid_
   common::hash::ObPlacementHashSet<common::ObString, common::MAX_ENABLED_ROLES> user_name_set_;
   common::hash::ObPlacementHashSet<common::ObString, common::MAX_ENABLED_ROLES> role_name_set_;
   share::schema::ObObjectType object_type_;

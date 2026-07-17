@@ -16,11 +16,10 @@
 
 #ifndef OCEANBASE_ROOTSERVER_OB_DDL_HELP_H
 #define OCEANBASE_ROOTSERVER_OB_DDL_HELP_H
-#include "lib/mysqlclient/ob_mysql_transaction.h"
+#include "common/mysqlclient/ob_mysql_transaction.h"
 #include "share/schema/ob_schema_getter_guard.h"
 #include "share/schema/ob_part_mgr_util.h"
 #include "share/ob_rpc_struct.h"
-#include "share/ob_partition_modify.h"
 namespace oceanbase
 {
 namespace common
@@ -29,7 +28,6 @@ class ObMySQLProxy;
 }
 namespace share
 {
-class ObSplitInfo;
 namespace schema
 {
 class ObMultiVersionSchemaService;
@@ -58,11 +56,11 @@ public:
   int add_tables_to_tablegroup(common::ObMySQLTransaction &trans,
                                share::schema::ObSchemaGetterGuard &schema_guard,
                                const share::schema::ObTablegroupSchema &tablegroup_schema,
-                               const obrpc::ObAlterTablegroupArg &arg);
+                               const obcall::ObAlterTablegroupArg &arg);
   int modify_partition_option(ObMySQLTransaction &trans,
                               ObSchemaGetterGuard &schema_guard,
                               const ObTablegroupSchema &tablegroup_schema,
-                              const obrpc::ObAlterTablegroupArg &arg);
+                              const obcall::ObAlterTablegroupArg &arg);
 
   int check_table_alter_tablegroup(
       share::schema::ObSchemaGetterGuard &schema_guard,
@@ -70,7 +68,7 @@ public:
       const share::schema::ObTableSchema &orig_table_schema,
       share::schema::ObTableSchema &new_table_schema);
       
-  int modify_sharding_type(const obrpc::ObAlterTablegroupArg &arg,
+  int modify_sharding_type(const obcall::ObAlterTablegroupArg &arg,
                            const ObTablegroupSchema &tablegroup_schema,
                            common::ObMySQLTransaction &trans,
                            ObSchemaGetterGuard &schema_guard); 
@@ -104,5 +102,3 @@ private:
 } //namespace rootserver
 } //namespace oceanbase
 #endif
-
-

@@ -24,7 +24,8 @@ namespace oceanbase
 using namespace common;
 namespace sql
 {
-//oracle mode, some analytic function parameters require partition by expression such as ntile(c1) (partition by c2) need to report an error
+// Some analytic function parameters require partition-by expressions, such as
+// ntile(c1) (partition by c2), and must report an error otherwise.
 int ObGroupByChecker::check_analytic_function(const ParamStore *param_store,
                                               ObSelectStmt *ref_stmt,
                                               common::ObIArray<ObRawExpr *> &exp1_arr, // equivalent to expressions in the query items
@@ -144,7 +145,7 @@ int ObGroupByChecker::check_group_by(const ParamStore *param_store,
 int ObGroupByChecker::add_pc_const_param_info(ObExprEqualCheckContext &check_ctx)
 {
   int ret = OB_SUCCESS;
-  // If it is oracle mode, group by expression constants will be parameterized
+  // Group-by expression constants will be parameterized:
   // select a + 1 from t group by a + 1 => select a + ? from t group by a + ?
   // Originally it was to extract a constraint, the constants corresponding to the two question marks must both be 1, used for subsequent plan matching
   // But now it has been changed to extract the constraint of two question marks being equal
@@ -203,8 +204,8 @@ bool ObGroupByChecker::find_in_rollup(ObRawExpr &expr)
     }
     if (OB_SUCCESS == check_ctx.err_code_ && !found && is_top_select_stmt()) {
       for (int64_t nth_rollup = 0; !found_same_structure && nth_rollup < rollup_cnt; ++nth_rollup) {
-        //in oracle mode, only non static const expr will be replaced later in replace_group_by_exprs
-        if (is_mysql_mode() || !rollup_exprs_->at(nth_rollup)->is_static_const_expr()) {
+        // Only non-static const exprs are replaced later in replace_group_by_exprs.
+        {
           check_ctx.reset();
           check_ctx.ignore_param_ = true;
           check_ctx.override_const_compare_ = true;
@@ -345,10 +346,8 @@ int ObGroupByChecker::colref_belongs_to_check_stmt(ObColumnRefRawExpr &expr, boo
 int ObGroupByChecker::visit(ObConstRawExpr &expr)
 {
   int ret = OB_SUCCESS;
-  if (is_mysql_mode()) {
-    if (find_in_group_by(expr) || find_in_rollup(expr)) {
-      set_skip_expr(&expr);
-    }
+  if (find_in_group_by(expr) || find_in_rollup(expr)) {
+    set_skip_expr(&expr);
   }
   return ret;
 }
@@ -488,12 +487,6 @@ int ObGroupByChecker::visit(ObColumnRefRawExpr &expr)
     LOG_WARN("failed to get belongs to stmt", K(ret));
   } else if (!belongs_to) {
   } else if (find_in_group_by(expr) || find_in_rollup(expr)) {
-  } else if (NULL != dblink_groupby_expr_) {
-    if (OB_FAIL(dblink_groupby_expr_->push_back(static_cast<oceanbase::sql::ObRawExpr *>(&expr)))) {
-      LOG_WARN("failed to push checked_expr into group_by_exprs", K(ret));
-    } else {
-      LOG_DEBUG("succ to push checked_expr into group_by_exprs", K(expr));
-    }
   } else {
     ret = OB_ERR_WRONG_FIELD_WITH_GROUP;
     ObString column_name = concat_qualified_name(expr.get_database_name(),
@@ -634,8 +627,7 @@ int ObGroupByChecker::visit(ObPseudoColumnRawExpr &expr)
   } else if (belongs_to) {
     if (find_in_group_by(expr) || find_in_rollup(expr)) {
       set_skip_expr(&expr);
-    } else if (T_ORA_ROWSCN != expr.get_expr_type() &&
-               NULL == dblink_groupby_expr_){
+    } else if (T_ORA_ROWSCN != expr.get_expr_type()) {
       ret = OB_ERR_WRONG_FIELD_WITH_GROUP;
       //LOG_USER_ERROR(ret, column_name.length(), column_name.ptr());
       LOG_DEBUG("pseudo column not in group by", K(*group_by_exprs_), K(expr));

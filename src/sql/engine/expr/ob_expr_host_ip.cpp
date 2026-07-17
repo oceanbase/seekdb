@@ -44,7 +44,7 @@ int ObExprHostIP::calc_result_type0(ObExprResType &type, ObExprTypeCtx &type_ctx
   type.set_length(MAX_IP_ADDR_LENGTH);
   const ObLengthSemantics default_length_semantics =
     (OB_NOT_NULL(type_ctx.get_session()) ?
-      type_ctx.get_session()->get_actual_nls_length_semantics() : LS_BYTE);
+      type_ctx.get_session()->get_actual_length_semantics() : LS_BYTE);
   type.set_length_semantics(default_length_semantics);
   type.set_default_collation_type();
   type.set_collation_level(CS_LEVEL_SYSCONST);

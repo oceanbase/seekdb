@@ -39,9 +39,8 @@ int ObTenantDataVersionMgr::init(bool enable_compatible_monotonic)
 
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
-  } else if (OB_FAIL(map_.create(TENANT_DATA_VERSION_BUCKET_NUM, lib::ObLabel("TenantDVMap")))) {
-    COMMON_LOG(WARN, "fail to create TenantDataVersionMgr map", K(ret));
   } else {
+    version_ = nullptr;
     is_inited_ = true;
     mock_data_version_ = 0;
     enable_compatible_monotonic_ = enable_compatible_monotonic;
@@ -51,7 +50,7 @@ int ObTenantDataVersionMgr::init(bool enable_compatible_monotonic)
   return ret;
 }
 
-int ObTenantDataVersionMgr::get(const uint64_t tenant_id, uint64_t &data_version) const
+int ObTenantDataVersionMgr::get(uint64_t &data_version) const
 {
   int ret = OB_SUCCESS;
   ObTenantDataVersion *version = NULL;
@@ -59,26 +58,15 @@ int ObTenantDataVersionMgr::get(const uint64_t tenant_id, uint64_t &data_version
 
   if (OB_UNLIKELY(mock_data_version_ != 0)) {
     data_version = ATOMIC_LOAD(&mock_data_version_);
-    DV_TLOG("mock_data_version is set", K(tenant_id), KDV(data_version));
+    DV_TLOG("mock_data_version is set", KDV(data_version));
   } else if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    COMMON_LOG(WARN, "ObTenantDataVersionMgr doesn't init", K(ret), K(tenant_id));
-  } else if (OB_FAIL(map_.get_refactored(tenant_id, version))) {
-    if (OB_HASH_NOT_EXIST == ret) {
-      if (is_sys_tenant(tenant_id) || is_meta_tenant(tenant_id)) {
-        data_version = LAST_BARRIER_DATA_VERSION;
-        ret = OB_SUCCESS;
-        COMMON_LOG(WARN, "data_version fallback to LAST_BARRIER_DATA_VERSION",
-                   K(tenant_id), KDV(data_version));
-      } else {
-        ret = OB_ENTRY_NOT_EXIST;
-      }
-    } else {
-      COMMON_LOG(WARN, "fail to get data_version", K(ret), K(tenant_id));
-    }
+    COMMON_LOG(WARN, "ObTenantDataVersionMgr doesn't init", K(ret));
+  } else if (FALSE_IT(version = version_)) {
   } else if (NULL == version) {
-    ret = OB_ERR_UNEXPECTED;
-    COMMON_LOG(WARN, "data_version is NULL", K(ret));
+    data_version = LAST_BARRIER_DATA_VERSION;
+    ret = OB_SUCCESS;
+    COMMON_LOG(WARN, "data_version fallback to LAST_BARRIER_DATA_VERSION", KDV(data_version));
   } else if (version->is_removed()) {
     ret = OB_ENTRY_NOT_EXIST;
   } else {
@@ -88,7 +76,7 @@ int ObTenantDataVersionMgr::get(const uint64_t tenant_id, uint64_t &data_version
   return ret;
 }
 
-int ObTenantDataVersionMgr::set(const uint64_t tenant_id, const uint64_t data_version) 
+int ObTenantDataVersionMgr::set(const uint64_t data_version) 
 {
   int ret = OB_SUCCESS;
   ObTenantDataVersion *version = NULL;
@@ -96,21 +84,13 @@ int ObTenantDataVersionMgr::set(const uint64_t tenant_id, const uint64_t data_ve
 
   if (OB_UNLIKELY(mock_data_version_ != 0)) {
     // do nothing
-    DV_TLOG("mock_data_version is set", K(tenant_id), KDV(data_version), K(mock_data_version_));
+    DV_TLOG("mock_data_version is set", KDV(data_version), K(mock_data_version_));
   } else if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    COMMON_LOG(WARN, "ObTenantDataVersionMgr doesn't init", K(ret),
-               K(tenant_id));
-  } else if (OB_FAIL(map_.get_refactored(tenant_id, version))) {
-    if (OB_HASH_NOT_EXIST == ret) {
-      need_to_set = true;
-      ret = OB_SUCCESS;
-    } else {
-      COMMON_LOG(WARN, "fail to get data_version", K(ret), K(tenant_id));
-    }
+    COMMON_LOG(WARN, "ObTenantDataVersionMgr doesn't init", K(ret));
+  } else if (FALSE_IT(version = version_)) {
   } else if (NULL == version) {
-    ret = OB_ERR_UNEXPECTED;
-    COMMON_LOG(WARN, "data_version is NULL", K(ret));
+    need_to_set = true;
   } else if (version->is_removed() || data_version <= version->get_version()) {
     // if the tenant is dropped or the new data_version is smaller, then
     // no need to set
@@ -120,15 +100,15 @@ int ObTenantDataVersionMgr::set(const uint64_t tenant_id, const uint64_t data_ve
 
   if (OB_SUCC(ret) && need_to_set) {
     SpinWLockGuard guard(lock_);
-    if (OB_FAIL(set_(tenant_id, data_version))) {
-      COMMON_LOG(WARN, "fail to set data_version", K(ret), K(tenant_id), KDV(data_version));
+    if (OB_FAIL(set_(data_version))) {
+      COMMON_LOG(WARN, "fail to set data_version", K(ret), KDV(data_version));
     }
   }
 
   return ret;
 }
 
-int ObTenantDataVersionMgr::remove(const uint64_t tenant_id)
+int ObTenantDataVersionMgr::remove()
 {
   int ret = OB_SUCCESS;
   ObTenantDataVersion *version = NULL;
@@ -138,23 +118,17 @@ int ObTenantDataVersionMgr::remove(const uint64_t tenant_id)
 
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    COMMON_LOG(WARN, "ObTenantDataVersionMgr doesn't init", K(ret), K(tenant_id));
-  } else if (OB_FAIL(map_.get_refactored(tenant_id, version))) {
-    if (OB_ENTRY_NOT_EXIST == ret) {
-      ret = OB_SUCCESS;
-    } else {
-      COMMON_LOG(WARN, "fail to get data_version", K(ret), K(tenant_id));
-    }
+    COMMON_LOG(WARN, "ObTenantDataVersionMgr doesn't init", K(ret));
+  } else if (FALSE_IT(version = version_)) {
   } else if (NULL == version) {
-    ret = OB_ERR_UNEXPECTED;
-    COMMON_LOG(WARN, "data_version is NULL", K(ret));
+    // not exist, nothing to remove
   } else if (version->is_removed()) {
     // already removed
-  } else if (OB_FAIL(remove_and_dump_to_file_(tenant_id, remove_ts))) {
-    COMMON_LOG(WARN, "fail to dump data_version file", K(ret), K(tenant_id));
+  } else if (OB_FAIL(remove_and_dump_to_file_(remove_ts))) {
+    COMMON_LOG(WARN, "fail to dump data_version file", K(ret));
   } else {
     version->set_removed(true, remove_ts);
-    DV_ILOG_F("Tenant DATA_VERSION is removed", K(ret), K(tenant_id), K(remove_ts), K(*version));
+    DV_ILOG_F("Tenant DATA_VERSION is removed", K(ret), K(remove_ts), K(*version));
   }
 
   return ret;
@@ -240,32 +214,22 @@ int ObTenantDataVersionMgr::load_from_file()
     }
   }
 
-  COMMON_LOG(INFO, "[DATA_VERSION] load data_version file", K(ret), K(map_.size()));
+  COMMON_LOG(INFO, "[DATA_VERSION] load data_version file", K(ret), KP(version_));
 
   return ret;
 }
 
-int ObTenantDataVersionMgr::set_(const uint64_t tenant_id,
-                                 const uint64_t data_version) 
+int ObTenantDataVersionMgr::set_(const uint64_t data_version) 
 {
   int ret = OB_SUCCESS;
   ObTenantDataVersion *version = NULL;
   bool need_to_insert = false;
   uint64_t old_version = 0;
 
-  if (OB_FAIL(map_.get_refactored(tenant_id, version))) {
-    if (OB_HASH_NOT_EXIST == ret) {
-      need_to_insert = true;
-      version = NULL;
-      old_version = 0;
-      ret = OB_SUCCESS;
-    } else {
-      COMMON_LOG(WARN, "fail to get result from data_version_map", K(ret),
-                 K(tenant_id), KDV(data_version));
-    }
+  if (FALSE_IT(version = version_)) {
   } else if (NULL == version) {
-    ret = OB_ERR_UNEXPECTED;
-    COMMON_LOG(WARN, "data_version is NULL", K(ret));
+    need_to_insert = true;
+    old_version = 0;
   } else {
     old_version = version->get_version();
   }
@@ -274,29 +238,29 @@ int ObTenantDataVersionMgr::set_(const uint64_t tenant_id,
     if (OB_NOT_NULL(version) && (version->is_removed() || data_version <= old_version)) {
       COMMON_LOG(INFO,
                  "tenant is removed or new data_version is not bigger than old "
-                 "value, no need to update tenant data_version", K(tenant_id), 
+                 "value, no need to update tenant data_version", 
                  "is_removed", version->is_removed(),
                  "old_version", old_version,
                  "new_version", data_version);
-    } else if (OB_FAIL(set_and_dump_to_file_(tenant_id, data_version, need_to_insert))) {
-      COMMON_LOG(WARN, "fail to dump data_version file", K(ret), K(tenant_id));
+    } else if (OB_FAIL(set_and_dump_to_file_(data_version, need_to_insert))) {
+      COMMON_LOG(WARN, "fail to dump data_version file", K(ret));
     } else {
       if (need_to_insert) {
         void *version_buf = NULL;
         if (OB_ISNULL(version_buf = allocator_.alloc(sizeof(ObTenantDataVersion)))) {
           ret = OB_ALLOCATE_MEMORY_FAILED;
-          COMMON_LOG(ERROR, "fail to alloc buf", K(ret), K(tenant_id),
+          COMMON_LOG(ERROR, "fail to alloc buf", K(ret),
                      K(sizeof(ObTenantDataVersion)));
         } else if (FALSE_IT(version = new (version_buf) ObTenantDataVersion(data_version))) {
 
-        } else if (OB_FAIL(map_.set_refactored(tenant_id, version))) {
-          COMMON_LOG(WARN, "fail to set data_version", K(ret), K(tenant_id));
+        } else {
+          version_ = version;
         }
       } else {
         version->set_version(data_version);
       }
 
-      DV_ILOG_F("Tenant DATA_VERSION is changed", K(ret), K(tenant_id), 
+      DV_ILOG_F("Tenant DATA_VERSION is changed", K(ret), 
                 "old_version", DVP(old_version),
                 "new_version", DVP(data_version));
     }
@@ -305,115 +269,70 @@ int ObTenantDataVersionMgr::set_(const uint64_t tenant_id,
   return ret;
 }
 
-int ObTenantDataVersionMgr::set_and_dump_to_file_(const uint64_t tenant_id,
-                                                  const uint64_t data_version,
+int ObTenantDataVersionMgr::set_and_dump_to_file_(const uint64_t data_version,
                                                   const bool need_to_insert) {
   int ret = OB_SUCCESS;
   ObRecordHeader header;
   int64_t header_length = header.get_serialize_size();
   char *dump_buf = NULL;
   // we may need to insert a new entry to the map, so map_size + 1 to ensure the memory is enough
-  int64_t buf_length = header_length + (map_.size() + 1) * ObTenantDataVersion::MAX_DUMP_BUF_SIZE;
+  int64_t buf_length = header_length + ObTenantDataVersion::MAX_DUMP_BUF_SIZE;
   PageArena<> pa;
+  UNUSED(need_to_insert);
 
   if (OB_ISNULL(dump_buf = pa.alloc(buf_length))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    COMMON_LOG(ERROR, "fail to alloc buf", K(ret), K(tenant_id), K(buf_length));
+    COMMON_LOG(ERROR, "fail to alloc buf", K(ret), K(buf_length));
   } else {
     MEMSET(dump_buf, 0, buf_length);
     int64_t pos = 0;
     const int64_t data_pos = pos + header_length;
     pos += header_length;
-    ObTenantDataVersionMap::const_iterator it = map_.begin();
-    for (; it != map_.end() && OB_SUCC(ret); ++it) {
-      const uint64_t iter_tenant_id = it->first;
-      const ObTenantDataVersion *iter_version = it->second;
-      if (OB_ISNULL(iter_version)) {
-        ret = OB_ERR_UNEXPECTED;
-        COMMON_LOG(WARN, "iter_version is null", K(iter_tenant_id));
-      } else if (iter_tenant_id == tenant_id) {
-        if (OB_FAIL(dump_data_version_(
-                dump_buf, buf_length, pos, iter_tenant_id,
-                iter_version->is_removed(),
-                iter_version->get_remove_timestamp(), 
-                data_version))) {
-          COMMON_LOG(WARN, "fail to dump data_version", K(ret),
-                     K(iter_tenant_id), KDV(data_version), K(*iter_version));
-        }
-      } else {
-        if (OB_FAIL(dump_data_version_(dump_buf, buf_length, pos, iter_tenant_id,
-                                       iter_version->is_removed(),
-                                       iter_version->get_remove_timestamp(),
-                                       iter_version->get_version()))) {
-          COMMON_LOG(WARN, "fail to dump data_version", K(ret),
-                     K(iter_tenant_id), K(*iter_version));
-        }
-      }
-    }
-    if (OB_SUCC(ret) && need_to_insert) {
-      if (OB_FAIL(dump_data_version_(dump_buf, buf_length, pos, tenant_id,
-                                     false /*removed*/, 0 /*remove_ts*/,
-                                     data_version))) {
-        COMMON_LOG(WARN, "fail to dump data_version", K(ret), K(tenant_id), KDV(data_version));
-      }
+    // dump the only entry with the new data_version
+    const bool removed = (OB_NOT_NULL(version_) ? version_->is_removed() : false);
+    const int64_t remove_ts = (OB_NOT_NULL(version_) ? version_->get_remove_timestamp() : 0);
+    if (OB_FAIL(dump_data_version_(dump_buf, buf_length, pos, removed, remove_ts, data_version))) {
+      COMMON_LOG(WARN, "fail to dump data_version", K(ret), KDV(data_version));
     }
     if (OB_FAIL(ret)) {
 
     } else if (OB_FAIL(write_to_file_(dump_buf, buf_length, pos - data_pos))) {
-      COMMON_LOG(WARN, "fail to write data_version file", K(ret), K(tenant_id));
+      COMMON_LOG(WARN, "fail to write data_version file", K(ret));
     }
   }
 
   return ret;
 }
 
-int ObTenantDataVersionMgr::remove_and_dump_to_file_(const uint64_t tenant_id,
-                                                     const int64_t remove_ts) {
+int ObTenantDataVersionMgr::remove_and_dump_to_file_(const int64_t remove_ts) {
   int ret = OB_SUCCESS;
   ObRecordHeader header;
   int64_t header_length = header.get_serialize_size();
   char *dump_buf = NULL;
-  int64_t buf_length = header_length + map_.size() * ObTenantDataVersion::MAX_DUMP_BUF_SIZE;
+  int64_t buf_length = header_length + ObTenantDataVersion::MAX_DUMP_BUF_SIZE;
   PageArena<> pa;
 
   if (OB_ISNULL(dump_buf = pa.alloc(buf_length))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    COMMON_LOG(ERROR, "fail to alloc buf", K(ret), K(tenant_id), K(buf_length));
+    COMMON_LOG(ERROR, "fail to alloc buf", K(ret), K(buf_length));
+  } else if (OB_ISNULL(version_)) {
+    ret = OB_ERR_UNEXPECTED;
+    COMMON_LOG(WARN, "version_ is null", K(ret));
   } else {
     MEMSET(dump_buf, 0, buf_length);
     int64_t pos = 0;
     const int64_t data_pos = pos + header_length;
     pos += header_length;
-    ObTenantDataVersionMap::const_iterator it = map_.begin();
-    for (; it != map_.end() && OB_SUCC(ret); ++it) {
-      const uint64_t iter_tenant_id = it->first;
-      const ObTenantDataVersion *iter_version = it->second;
-      if (OB_ISNULL(iter_version)) {
-        ret = OB_ERR_UNEXPECTED;
-        COMMON_LOG(WARN, "iter_version is null", K(iter_tenant_id));
-      } else if (iter_tenant_id == tenant_id) {
-        if (OB_FAIL(dump_data_version_(dump_buf, buf_length, pos, iter_tenant_id,
-                                       true /*removed*/, 
-                                       remove_ts,
-                                       iter_version->get_version()))) {
-          COMMON_LOG(WARN, "fail to dump data_version", K(ret),
-                     K(iter_tenant_id), K(remove_ts), K(*iter_version));
-        }
-      } else {
-        if (OB_FAIL(dump_data_version_(dump_buf, buf_length, pos,
-                                       iter_tenant_id,
-                                       iter_version->is_removed(),
-                                       iter_version->get_remove_timestamp(),
-                                       iter_version->get_version()))) {
-          COMMON_LOG(WARN, "fail to dump data_version", K(ret),
-                     K(iter_tenant_id), K(*iter_version));
-        }
-      }
+    // dump the only entry as removed
+    if (OB_FAIL(dump_data_version_(dump_buf, buf_length, pos,
+                                   true /*removed*/, remove_ts,
+                                   version_->get_version()))) {
+      COMMON_LOG(WARN, "fail to dump data_version", K(ret), K(remove_ts));
     }
     if (OB_FAIL(ret)) {
 
     } else if (OB_FAIL(write_to_file_(dump_buf, buf_length, pos - data_pos))) {
-      COMMON_LOG(WARN, "fail to write data_version file", K(ret), K(tenant_id));
+      COMMON_LOG(WARN, "fail to write data_version file", K(ret));
     }
   }
 
@@ -422,7 +341,6 @@ int ObTenantDataVersionMgr::remove_and_dump_to_file_(const uint64_t tenant_id,
 
 
 int ObTenantDataVersionMgr::dump_data_version_(char *buf, int64_t buf_length, int64_t &pos,
-                                               const uint64_t tenant_id,
                                                const bool removed,
                                                const int64_t remove_ts,
                                                const uint64_t data_version) {
@@ -436,11 +354,11 @@ int ObTenantDataVersionMgr::dump_data_version_(char *buf, int64_t buf_length, in
     COMMON_LOG(WARN, "fail to print data_version str", K(ret), KDV(data_version));
   } else if (OB_FAIL(databuff_printf(
                  buf, buf_length, pos, ObTenantDataVersion::DUMP_BUF_FORMAT,
-                 tenant_id, version_str, data_version, removed, remove_ts))) {
-    COMMON_LOG(WARN, "fail to printf", K(ret), K(tenant_id), K(buf_length), K(pos));
+                 version_str, data_version, removed, remove_ts))) {
+    COMMON_LOG(WARN, "fail to printf", K(ret), K(buf_length), K(pos));
   } else if (pos >= buf_length) {
     ret = OB_SIZE_OVERFLOW;
-    COMMON_LOG(WARN, "buffer size overflow", K(ret), K(tenant_id), K(buf_length), K(pos));
+    COMMON_LOG(WARN, "buffer size overflow", K(ret), K(buf_length), K(pos));
   } else {
     // we use '\n' as the separator of tenant, we'll use STRTOK to parse this
     buf[pos] = '\n';
@@ -453,13 +371,12 @@ int ObTenantDataVersionMgr::dump_data_version_(char *buf, int64_t buf_length, in
 int ObTenantDataVersionMgr::load_data_version_(char *buf, int64_t &pos) {
   int ret = OB_SUCCESS;
   ObTenantDataVersion *version = NULL;
-  uint64_t tenant_id = 0;
   int removed = false;
   uint64_t remove_timestamp = 0;
   uint64_t version_val = 0;
   char version_str[OB_SERVER_VERSION_LENGTH]{0};
   int res = 0;
-  const int expected_item_size = 5;
+  const int expected_item_size = 4;
   char *saveptr = NULL;
   char *token = NULL;
 
@@ -469,16 +386,16 @@ int ObTenantDataVersionMgr::load_data_version_(char *buf, int64_t &pos) {
   } else if (NULL == (token = STRTOK_R(buf + pos, "\n", &saveptr))) {
     ret = OB_ITER_END;
   } else {
-    res = sscanf(token, ObTenantDataVersion::DUMP_BUF_FORMAT, &tenant_id,
+    res = sscanf(token, ObTenantDataVersion::DUMP_BUF_FORMAT,
                  version_str, &version_val, &removed, &remove_timestamp);
     if (res != expected_item_size) {
       ret = OB_INVALID_DATA;
       COMMON_LOG(ERROR, "fail to parse data_version", K(ret), K(res), K(pos),
-                 K(token), K(tenant_id), K(version_val), K(version_str),
+                 K(token), K(version_val), K(version_str),
                  K(removed), K(remove_timestamp));
     } else {
       COMMON_LOG(INFO, "[DATA_VERSION] successfully parse data_version",
-                 K(tenant_id), K(version_val), K(version_str), K(removed),
+                 K(version_val), K(version_str), K(removed),
                  K(remove_timestamp), K(pos));
       void *version_buf = NULL;
       if (OB_ISNULL(version_buf =
@@ -488,9 +405,8 @@ int ObTenantDataVersionMgr::load_data_version_(char *buf, int64_t &pos) {
       } else if (FALSE_IT(version = new (version_buf) ObTenantDataVersion(
                               removed, remove_timestamp, version_val))) {
 
-      } else if (OB_FAIL(map_.set_refactored(tenant_id, version))) {
-        COMMON_LOG(WARN, "fail to set data_version", K(ret), K(tenant_id), K(version));
       } else {
+        version_ = version;
         pos += (saveptr - token);
       }
     }
@@ -564,7 +480,7 @@ int ObTenantDataVersionMgr::write_to_file_(char *buf, int64_t buf_length, int64_
       if (OB_SUCC(ret)) {
         if (0 != ::rename(file_path, hist_path) && errno != ENOENT) {
           // it's OK to continue if we fail to backup history file, so we ignore the err ret here
-          COMMON_LOG(WARN, "fail to backup history config file", KERRMSG, K(ret));
+          COMMON_LOG(ERROR, "fail to backup history config file", KERRMSG, K(ret));
         }
         // When running to here, a power outage may occur, resulting in no conf file, requiring the DBA to manually copy the tmp file here
         if (0 != ::rename(tmp_path, file_path)) {

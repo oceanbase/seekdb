@@ -21,7 +21,6 @@
 #include "pl/ob_pl.h"
 #include "lib/string/ob_sql_string.h"
 #include "lib/string/ob_string.h"
-#include "share/resource_manager/ob_resource_manager.h"
 
 namespace oceanbase
 {
@@ -32,7 +31,6 @@ namespace pl
 {
 
 int ObPLRecompileTaskHelper::check_job_exists(ObMySQLTransaction &trans,
-                                                        const uint64_t tenant_id,
                                                         const ObString &job_name,
                                                         bool &is_job_exists)
 {
@@ -41,13 +39,13 @@ int ObPLRecompileTaskHelper::check_job_exists(ObMySQLTransaction &trans,
   ObSqlString select_sql;
   int64_t row_count = 0;
   if (OB_FAIL(select_sql.append_fmt("SELECT count(*) FROM %s WHERE job_name = '%.*s';",
-                                    share::OB_ALL_TENANT_SCHEDULER_JOB_TNAME,
+                                    share::OB_ALL_SCHEDULER_JOB_TNAME,
                                     job_name.length(), job_name.ptr()))) {
     LOG_WARN("failed to append fmt", K(ret));
   } else {
     SMART_VAR(ObMySQLProxy::MySQLResult, proxy_result) {
       sqlclient::ObMySQLResult *client_result = NULL;
-      if (OB_FAIL(trans.read(proxy_result, tenant_id, select_sql.ptr()))) {
+      if (OB_FAIL(trans.read(proxy_result, select_sql.ptr()))) {
         LOG_WARN("failed to execute sql", K(ret), K(select_sql));
       } else if (OB_ISNULL(client_result = proxy_result.get_result())) {
         ret = OB_ERR_UNEXPECTED;
@@ -82,70 +80,12 @@ int ObPLRecompileTaskHelper::check_job_exists(ObMySQLTransaction &trans,
 }                          
 
 int ObPLRecompileTaskHelper::init_tenant_recompile_job(const share::schema::ObSysVariableSchema &sys_variable,
-                                       uint64_t tenant_id,
                                        ObMySQLTransaction &trans)
 {
-    int ret = OB_SUCCESS;
-    ObDMLSqlSplicer dml;
-    ObDMLExecHelper exec(trans, tenant_id);
-    bool is_job_exists = false;
-    ObString job_action("dbms_utility.POLLING_ASK_JOB()");
-    bool is_oracle_mode = false;
-    char buf[OB_MAX_PROC_ENV_LENGTH] = {0};
-    int64_t pos = 0;
-    int64_t job_id = OB_INVALID_INDEX;
-    const int64_t latency = 30 * 60 * 1000000LL;
-    int64_t current_time = ObTimeUtility::current_time() + latency;
-    ObString job_name("POLLING_ASK_JOB_FOR_PL_RECOMPILE");
-    if (OB_FAIL(sys_variable.get_oracle_mode(is_oracle_mode))) {
-        LOG_WARN("failed to get oracle mode", KR(ret));
-    } else if (is_oracle_mode) {
-        if (OB_FAIL(check_job_exists(trans, tenant_id, job_name, is_job_exists))) {
-            LOG_WARN("fail to check ncomp dll job", K(ret));
-        } else if (is_job_exists) {
-            // do nothing
-            LOG_WARN("job has existed", KR(ret), K(tenant_id), K(is_job_exists), K(job_name));
-        } else if (OB_FAIL(sql::ObExecEnv::gen_exec_env(sys_variable, buf, OB_MAX_PROC_ENV_LENGTH, pos))) {
-            LOG_WARN("failed to gen exec env", KR(ret));
-        } else if (OB_FAIL(dbms_scheduler::ObDBMSSchedJobUtils::generate_job_id(
-                          tenant_id, job_id))) {
-            LOG_WARN("get new job_id failed", KR(ret), K(tenant_id));
-        } else {
-            ObString exec_env(pos, buf);
-            HEAP_VAR(dbms_scheduler::ObDBMSSchedJobInfo, job_info) {
-                job_info.tenant_id_ = tenant_id;
-                job_info.job_ = job_id;
-                job_info.job_name_ = job_name;
-                job_info.job_action_ = job_action;
-                job_info.lowner_ = is_oracle_mode ? ObString("SYS") : ObString("root@%");
-                job_info.powner_ = is_oracle_mode ? ObString("SYS") : ObString("root@%");
-                job_info.cowner_ = is_oracle_mode ? ObString("SYS") :  ObString("oceanbase");
-                job_info.job_style_ = ObString("regular");
-                job_info.job_type_ = ObString("STORED_PROCEDURE");
-                job_info.job_class_ = ObString("DEFAULT_JOB_CLASS");
-                job_info.start_date_ = current_time;
-                job_info.end_date_ = 64060560000000000;
-                job_info.repeat_interval_ = ObString("FREQ=MINUTELY; INTERVAL=30");
-                job_info.enabled_ = true;
-                job_info.auto_drop_ = false;
-                job_info.max_run_duration_ = SECS_PER_HOUR * 2;
-                job_info.exec_env_ = exec_env;
-                job_info.comments_ = ObString("used to check if need create pl recompile job");
-                job_info.func_type_ = dbms_scheduler::ObDBMSSchedFuncType::POLLING_ASK_JOB_FOR_PL_RECOMPILE;
-                if (OB_FAIL(dbms_scheduler::ObDBMSSchedJobUtils::create_dbms_sched_job(trans,
-                                                                                        tenant_id,
-                                                                                        job_id,
-                                                                                        job_info))) {
-                    LOG_WARN("[PLRECOMPILE]: failed to create pl background recomp task", KR(ret), K(job_action));
-                } else {
-                    LOG_INFO("[PLRECOMPILE]: finish create pl background recomp task", K(ret), K(tenant_id),
-                        K(job_id), K(exec_env), K(current_time), K(job_action));
-                }
-            }
-        } 
-  } else {
-    // TODO: mysql mode 
-  }
+  int ret = OB_SUCCESS;
+  // TODO: mysql mode
+  UNUSED(sys_variable);
+  UNUSED(trans);
   return ret;
 }
 #define SET_ITERATE_END_RET \
@@ -160,16 +100,15 @@ do { \
 
 int ObPLRecompileTaskHelper::construct_select_dep_table_sql(ObSqlString& query_inner_sql,
                                     common::hash::ObHashMap<int64_t, std::pair<ObString, int64_t>>& ddl_drop_obj_map,
-                                    ObIArray<int64_t>& ddl_alter_obj_infos,
-                                    uint64_t tenant_id)
+                                    ObIArray<int64_t>& ddl_alter_obj_infos)
 {
   int ret = OB_SUCCESS;
   static constexpr char get_dep_objs_info[] =
     "SELECT * FROM %s where dep_obj_id > 300000 "
     " and ref_obj_id in ( " ;
   
-  OZ (query_inner_sql.assign_fmt(get_dep_objs_info, 
-                                       OB_ALL_VIRTUAL_DEPENDENCY_TNAME));
+  OZ (query_inner_sql.assign_fmt(get_dep_objs_info,
+                                       OB_ALL_DEPENDENCY_TNAME));
   if (OB_SUCC(ret)) {
     common::hash::ObHashMap<int64_t, std::pair<ObString, int64_t>>::iterator iter = ddl_drop_obj_map.begin();
     int64_t map_size = ddl_drop_obj_map.size();
@@ -196,7 +135,6 @@ int ObPLRecompileTaskHelper::construct_select_dep_table_sql(ObSqlString& query_i
 }
 
 int ObPLRecompileTaskHelper::collect_delta_error_data(common::ObMySQLProxy* sql_proxy,
-                                                    uint64_t tenant_id,
                                                     int64_t last_max_schema_version,
                                                     ObIAllocator& allocator,
                                                     ObIArray<ObPLRecompileInfo>& dep_objs)
@@ -208,8 +146,8 @@ int ObPLRecompileTaskHelper::collect_delta_error_data(common::ObMySQLProxy* sql_
     OZ (query_inner_sql.assign_fmt(
             "SELECT * FROM %s WHERE OBJ_ID > 300000 and schema_version > %ld "
             " and ERROR_NUMBER in (-5055, -5019, -5543, -5544, -5201, -5733, -5559) ", 
-             OB_ALL_VIRTUAL_ERROR_TNAME, last_max_schema_version));
-    OZ (sql_proxy->read(res, OB_SYS_TENANT_ID, query_inner_sql.ptr()));
+             OB_ALL_ERROR_TNAME, last_max_schema_version));
+    OZ (sql_proxy->read(res, query_inner_sql.ptr()));
     CK (OB_NOT_NULL(result = res.get_result()));
     if (OB_SUCC(ret)) {
         while (OB_SUCC(result->next())) {
@@ -255,7 +193,6 @@ int ObPLRecompileTaskHelper::collect_delta_error_data(common::ObMySQLProxy* sql_
 
 int ObPLRecompileTaskHelper::collect_delta_ddl_operation_data(
                                       common::ObMySQLProxy* sql_proxy,
-                                      uint64_t tenant_id,
                                       ObIArray<ObPLRecompileInfo>& dep_objs,
                                       ObArray<int64_t>& ddl_alter_obj_infos,
                                       common::hash::ObHashMap<int64_t, std::pair<ObString, int64_t>>& ddl_drop_obj_map)
@@ -265,8 +202,8 @@ int ObPLRecompileTaskHelper::collect_delta_ddl_operation_data(
   common::sqlclient::ObMySQLResult *result = NULL;
   SMART_VAR(common::ObMySQLProxy::MySQLResult, res) {
     if (!ddl_drop_obj_map.empty() || !ddl_alter_obj_infos.empty()) {
-      OZ (construct_select_dep_table_sql(query_inner_sql, ddl_drop_obj_map, ddl_alter_obj_infos, tenant_id));
-      OZ (sql_proxy->read(res, OB_SYS_TENANT_ID, query_inner_sql.ptr()));
+      OZ (construct_select_dep_table_sql(query_inner_sql, ddl_drop_obj_map, ddl_alter_obj_infos));
+      OZ (sql_proxy->read(res, query_inner_sql.ptr()));
       CK (OB_NOT_NULL(result = res.get_result()));
       if (OB_SUCC(ret)) {
         while (OB_SUCC(result->next())) {
@@ -303,7 +240,6 @@ int ObPLRecompileTaskHelper::collect_delta_ddl_operation_data(
 }
 
 int ObPLRecompileTaskHelper::collect_delta_recompile_obj_data(common::ObMySQLProxy* sql_proxy,
-                                                    uint64_t tenant_id,
                                                     ObIAllocator& allocator,
                                                     int64_t& max_schema_version)
 {
@@ -332,7 +268,7 @@ int ObPLRecompileTaskHelper::collect_delta_recompile_obj_data(common::ObMySQLPro
     SMART_VAR(common::ObMySQLProxy::MySQLResult, res) {
       // step1 : get last max_schema_version from dummy column
       OZ (query_inner_sql.assign_fmt(get_dummy_schema_version, Dummy.length(), Dummy.ptr()));
-      OZ (sql_proxy->read(res, tenant_id, query_inner_sql.ptr()));
+      OZ (sql_proxy->read(res, query_inner_sql.ptr()));
       CK (OB_NOT_NULL(result = res.get_result()));
       if (OB_SUCC(ret)) {
         while (OB_SUCC(result->next())) {
@@ -344,9 +280,9 @@ int ObPLRecompileTaskHelper::collect_delta_recompile_obj_data(common::ObMySQLPro
 
       // step2 : get delta ddl operation 
       OZ (query_inner_sql.assign_fmt(get_delta_ddl_operation,
-          OB_ALL_VIRTUAL_DDL_OPERATION_TNAME, last_max_schema_version));
+          OB_ALL_DDL_OPERATION_TNAME, last_max_schema_version));
       // user tenant can not get real table data  
-      OZ (sql_proxy->read(res, OB_SYS_TENANT_ID, query_inner_sql.ptr()));
+      OZ (sql_proxy->read(res, query_inner_sql.ptr()));
       CK (OB_NOT_NULL(result = res.get_result()));
       if (OB_SUCC(ret)) {
         while (OB_SUCC(result->next())) {
@@ -379,12 +315,12 @@ int ObPLRecompileTaskHelper::collect_delta_recompile_obj_data(common::ObMySQLPro
         SET_ITERATE_END_RET;
       }
       // step3 : get delta recompile pl obj info from ddl operation
-      OZ (collect_delta_ddl_operation_data(sql_proxy, tenant_id, dep_objs, ddl_alter_obj_infos, ddl_drop_obj_map));
+      OZ (collect_delta_ddl_operation_data(sql_proxy, dep_objs, ddl_alter_obj_infos, ddl_drop_obj_map));
       // step4 : get delta recompile pl obj info from resolve error
-      OZ (collect_delta_error_data(sql_proxy, tenant_id, last_max_schema_version, 
+      OZ (collect_delta_error_data(sql_proxy, last_max_schema_version, 
                               allocator, dep_objs));
       // step5 : write delta recompile pl obj into __all_pl_recompile_objinfo
-      OZ (batch_insert_recompile_obj_info(sql_proxy, tenant_id, cur_max_schema_version, dep_objs));
+      OZ (batch_insert_recompile_obj_info(sql_proxy, cur_max_schema_version, dep_objs));
     }
   }
   OX (max_schema_version = cur_max_schema_version);
@@ -395,7 +331,6 @@ int ObPLRecompileTaskHelper::collect_delta_recompile_obj_data(common::ObMySQLPro
 }
 
 int ObPLRecompileTaskHelper::batch_insert_recompile_obj_info(common::ObMySQLProxy* sql_proxy,
-                                                          uint64_t tenant_id,
                                                           int64_t cur_max_schema_version,
                                                           ObIArray<ObPLRecompileInfo>& dep_objs)
 {
@@ -427,7 +362,7 @@ int ObPLRecompileTaskHelper::batch_insert_recompile_obj_info(common::ObMySQLProx
                                   Dummy.length(),
                                   Dummy.ptr(),
                                   cur_max_schema_version));
-    OZ (sql_proxy->write(tenant_id, query_inner_sql.ptr(), affected_rows), query_inner_sql);
+    OZ (sql_proxy->write(query_inner_sql.ptr(), affected_rows), query_inner_sql);
     
     LOG_TRACE("[PLRECOMPILE]: Insert into __all_pl_recompile_objinfo", K(ret), K(affected_rows), 
                 K(dep_objs), K(query_inner_sql), K(cur_max_schema_version));
@@ -436,8 +371,7 @@ int ObPLRecompileTaskHelper::batch_insert_recompile_obj_info(common::ObMySQLProx
 }
 
 int ObPLRecompileTaskHelper::update_dropped_obj(common::hash::ObHashMap<ObString, int64_t>& dropped_ref_objs,
-                                          common::ObMySQLProxy* sql_proxy,
-                                          uint64_t tenant_id)
+                                          common::ObMySQLProxy* sql_proxy)
 {
   int ret = OB_SUCCESS;
   ObSqlString query_inner_sql;
@@ -450,11 +384,11 @@ int ObPLRecompileTaskHelper::update_dropped_obj(common::hash::ObHashMap<ObString
       int64_t dropped_obj_schema_version = iter->second;
       OZ (query_inner_sql.assign_fmt("SELECT * FROM %s where ddl_stmt_str != '' "
                                     " and  table_name = UPPER('%.*s') and schema_version > %ld "
-                                    " and operation_type in (4, 21, 902, 1202, 1252, 1312, 1322, 1952 ) ;", 
-                                    OB_ALL_VIRTUAL_DDL_OPERATION_TNAME,
+                                    " and operation_type in (4, 21, 902, 1202, 1252, 1312, 1322, 1952 ) ;",
+                                    OB_ALL_DDL_OPERATION_TNAME,
                                     dropped_obj_name.length(), dropped_obj_name.ptr(),
                                     dropped_obj_schema_version));
-      OZ (sql_proxy->read(res, OB_SYS_TENANT_ID, query_inner_sql.ptr()));
+      OZ (sql_proxy->read(res, query_inner_sql.ptr()));
       CK (OB_NOT_NULL(result = res.get_result()));
       if (OB_SUCC(ret)) {
         while (OB_SUCC(result->next())) {
@@ -474,7 +408,6 @@ int ObPLRecompileTaskHelper::update_dropped_obj(common::hash::ObHashMap<ObString
 
 int ObPLRecompileTaskHelper::update_recomp_table(ObIArray<ObPLRecompileInfo>& dep_objs,
                                 common::ObMySQLProxy* sql_proxy,
-                                uint64_t tenant_id,
                                 int64_t last_max_schema_version,
                                 int64_t start,
                                 int64_t end)
@@ -493,7 +426,7 @@ int ObPLRecompileTaskHelper::update_recomp_table(ObIArray<ObPLRecompileInfo>& de
                   OB_ALL_NCOMP_DLL_V2_TNAME, last_max_schema_version));
     if (OB_SUCC(ret)) {
       SMART_VAR(ObMySQLProxy::MySQLResult, res) {
-        OZ (sql_proxy->read(res, tenant_id, query_inner_sql.ptr()));
+        OZ (sql_proxy->read(res, query_inner_sql.ptr()));
         CK (OB_NOT_NULL(result = res.get_result()));
         if (OB_SUCC(ret)) {
           while (OB_SUCC(result->next())) {
@@ -527,11 +460,11 @@ int ObPLRecompileTaskHelper::update_recomp_table(ObIArray<ObPLRecompileInfo>& de
     }
     if (need_comma) {
       OZ (query_inner_sql.append_fmt(")"));
-      OZ (sql_proxy->write(tenant_id, query_inner_sql.ptr(), affected_rows));
+      OZ (sql_proxy->write(query_inner_sql.ptr(), affected_rows));
     }
     if (update_need_comma) {
       OZ (update_sql.append_fmt(")"));
-      OZ (sql_proxy->write(tenant_id, update_sql.ptr(), affected_rows));
+      OZ (sql_proxy->write(update_sql.ptr(), affected_rows));
     }
     if (in_disk_cache_obj.created()) {
       in_disk_cache_obj.destroy();
@@ -541,15 +474,14 @@ int ObPLRecompileTaskHelper::update_recomp_table(ObIArray<ObPLRecompileInfo>& de
 }                         
 
 int ObPLRecompileTaskHelper::recompile_single_obj(ObPLRecompileInfo& obj_info,
-                                ObISQLConnection *connection,
-                                uint64_t tenant_id)
+                                ObISQLConnection *connection)
 {
   int ret = OB_SUCCESS;
   int64_t affected_rows = 0;
   ObSqlString sql;
   OZ (sql.assign_fmt("begin dbms_utility.VALIDATE(%ld, true); end ", obj_info.recompile_obj_id_)); 
   if (OB_SUCC(ret)) {
-    int tmp_ret = connection->execute_write(tenant_id, sql.string(), affected_rows);
+    int tmp_ret = connection->execute_write(sql.string(), affected_rows);
     LOG_TRACE("[PLRECOMPILE] recompile single obj using inner sql!", K(tmp_ret), K(sql), K(obj_info.recompile_obj_id_));
   }
   return ret;
@@ -558,7 +490,6 @@ int ObPLRecompileTaskHelper::recompile_single_obj(ObPLRecompileInfo& obj_info,
 int ObPLRecompileTaskHelper::get_recompile_pl_objs(common::ObMySQLProxy* sql_proxy,
                                       common::hash::ObHashMap<ObString, int64_t>& dropped_ref_objs,
                                       ObIArray<ObPLRecompileInfo>& dep_objs,
-                                      uint64_t tenant_id,
                                       ObIAllocator& allocator)
 {
   int ret = OB_SUCCESS;
@@ -566,7 +497,7 @@ int ObPLRecompileTaskHelper::get_recompile_pl_objs(common::ObMySQLProxy* sql_pro
   common::sqlclient::ObMySQLResult *result = NULL;
   SMART_VAR(common::ObMySQLProxy::MySQLResult, res) {
     OZ (query_inner_sql.assign_fmt("SELECT * FROM %s where fail_count < 3 and recompile_obj_id > 300000", OB_ALL_PL_RECOMPILE_OBJINFO_TNAME));
-    OZ (sql_proxy->read(res, tenant_id, query_inner_sql.ptr()));
+    OZ (sql_proxy->read(res, query_inner_sql.ptr()));
     CK (OB_NOT_NULL(result = res.get_result()));
     if (OB_SUCC(ret)) {
       while (OB_SUCC(result->next())) {
@@ -595,7 +526,6 @@ int ObPLRecompileTaskHelper::get_recompile_pl_objs(common::ObMySQLProxy* sql_pro
 #undef SET_ITERATE_END_RET                                 
 
 int ObPLRecompileTaskHelper::batch_recompile_obj(common::ObMySQLProxy* sql_proxy,
-                                              uint64_t tenant_id,
                                               int64_t max_schema_version,
                                               ObISQLConnection *connection,
                                               ObIArray<ObPLRecompileInfo>& dep_objs,
@@ -623,13 +553,13 @@ int ObPLRecompileTaskHelper::batch_recompile_obj(common::ObMySQLProxy* sql_proxy
         if (dropped_schema_version != 0) {
           // do nothing
         } else if (dep_objs.at(start).fail_cnt_ < 3) {
-          OZ (recompile_single_obj(dep_objs.at(start), connection, tenant_id));
+          OZ (recompile_single_obj(dep_objs.at(start), connection));
         }
       } else {
         LOG_WARN("[PLRECOMPILE]: Unexpected error!", K(ret));
       }
     }
-    int tmp_ret = update_recomp_table(dep_objs, sql_proxy, tenant_id, max_schema_version, i, start);
+    int tmp_ret = update_recomp_table(dep_objs, sql_proxy, max_schema_version, i, start);
     ret = OB_SUCCESS == ret ? tmp_ret : ret;
   }
   return ret;

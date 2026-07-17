@@ -30,7 +30,7 @@ class ObStringHolder
 {
   static constexpr int64_t TINY_STR_SIZE = 32;// no need count '\0'
 public:
-  ObStringHolder(const lib::ObMemAttr &attr=lib::ObMemAttr(OB_SERVER_TENANT_ID, "VSStr"))
+  ObStringHolder(const lib::ObMemAttr &attr=lib::ObMemAttr("VSStr"))
     : buffer_(nullptr), len_(0), attr_(attr) {}
   ~ObStringHolder() { reset(); }
   void reset() {

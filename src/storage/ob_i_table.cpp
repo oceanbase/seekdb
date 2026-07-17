@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX STORAGE
 #include "ob_i_table.h"
+#include "share/rc/ob_module_provider.h"
 #include "storage/meta_mem/ob_tenant_meta_mem_mgr.h"
 #include "storage/tablelock/ob_lock_memtable.h"
 #include "storage/tx_table/ob_tx_ctx_memtable.h"
@@ -33,7 +34,6 @@ ObITable::TableKey::TableKey()
   :
     tablet_id_(),
     scn_range_(),
-    column_group_idx_(0),
     table_type_(ObITable::MAX_TABLE_TYPE),
     slice_range_()
 {
@@ -44,7 +44,6 @@ void ObITable::TableKey::reset()
 {
   tablet_id_.reset();
   scn_range_.reset();
-  column_group_idx_ = 0;
   table_type_ = ObITable::MAX_TABLE_TYPE;
   slice_range_.reset();
 }
@@ -68,37 +67,19 @@ const char* ObITable::table_type_name_[] =
   "DDL_DUMP",
   "REMOTE_LOGICAL_MINOR",
   "DDL_MEM",
-  "COL_ORIENTED",
-  "NORMAL_COL_GROUP",
-  "ROWKEY_COL_GROUP",
-  "COL_ORIENTED_META",
-  "DDL_MERGE_CO",
-  "DDL_MERGE_CG",
-  "DDL_MEM_CO",
-  "DDL_MEM_CG",
   "DDL_MEM_MINI_SSTABLE",
   "MDS_MINI",
   "MDS_MINOR",
   "MICRO_MINI_SSTABLE",
   "INC_MAJOR_SSTABLE",
-  "INC_COLUMN_ORIENTED_SSTABLE",
-  "INC_NORMAL_COLUMN_GROUP_SSTABLE",
-  "INC_ROWKEY_COLUMN_GROUP_SSTABLE",
   "INC_MAJOR_DDL_DUMP",
-  "INC_MAJOR_DDL_MERGE_CO",
-  "INC_MAJOR_DDL_MERGE_CG",
-  "INC_MAJOR_DDL_MEM_CO",
-  "INC_MAJOR_DDL_MEM_CG",
-  "INC_MAJOR_DDL_MEM",
-  "INC_MAJOR_DDL_AGGREGATE_CO",
-  "INC_MAJOR_DDL_AGGREGATE_CG"
+  "INC_MAJOR_DDL_MEM"
 };
 
 uint64_t ObITable::TableKey::hash() const
 {
   uint64_t hash_value = 0;
   hash_value = common::murmurhash(&table_type_, sizeof(table_type_), hash_value);
-  hash_value = common::murmurhash(&column_group_idx_, sizeof(table_type_), hash_value);
   hash_value = common::murmurhash(&slice_range_, sizeof(slice_range_), hash_value);
   hash_value += tablet_id_.hash();
   if (is_table_with_scn_range()) {
@@ -118,7 +99,6 @@ OB_SERIALIZE_MEMBER(
     ObITable::TableKey,
     tablet_id_,
     scn_range_,
-    column_group_idx_,
     table_type_,
     slice_range_);
 
@@ -525,17 +505,6 @@ ObTablesHandleArray::ObTablesHandleArray()
 {
 }
 
-ObTablesHandleArray::ObTablesHandleArray(const uint64_t tenant_id)
-  : tablet_id_(),
-    handles_array_()
-{
-  int64_t ctx_id = share::is_reserve_mode()
-                 ? ObCtxIds::MERGE_RESERVE_CTX_ID
-                 : ObCtxIds::DEFAULT_CTX_ID;
-
-  handles_array_.set_attr(lib::ObMemAttr(tenant_id, "TableHdArray", ctx_id));
-}
-
 ObTablesHandleArray::~ObTablesHandleArray()
 {
   reset();
@@ -556,7 +525,7 @@ int ObTablesHandleArray::add_memtable(ObITable *table)
     LOG_WARN("get invalid arguments", K(ret), KP(table));
   } else if (OB_FAIL(tablet_id_check(table->get_key().get_tablet_id()))) {
     LOG_WARN("failed to check tablet id", K(ret), KPC(table));
-  } else if (OB_FAIL(handle.set_table(table, MTL(ObTenantMetaMemMgr *), table->get_key().table_type_))) {
+  } else if (OB_FAIL(handle.set_table(table, share::g_mp->tenant_meta_mem_mgr(), table->get_key().table_type_))) {
     LOG_WARN("failed to set table to handle", K(ret));
   } else if (OB_FAIL(handles_array_.push_back(handle))) {
     LOG_WARN("failed to add table handle", K(ret), K(handle));
@@ -601,12 +570,10 @@ int ObTablesHandleArray::add_sstable(ObITable *table, const ObStorageMetaHandle 
     } else {
       // FIXME: this reload logic looks weird here, should remove after resolve dependencies
       ObStorageMetaCache &meta_cache = OB_STORE_CACHE.get_storage_meta_cache();
-      ObStorageMetaKey meta_key(MTL_ID(), addr);
+      ObStorageMetaKey meta_key(addr);
       ObStorageMetaHandle handle;
       ObSSTable *sstable = nullptr;
-      ObStorageMetaValue::MetaType meta_type = table->is_co_sstable()
-                                             ? ObStorageMetaValue::MetaType::CO_SSTABLE
-                                             : ObStorageMetaValue::MetaType::SSTABLE;
+      ObStorageMetaValue::MetaType meta_type = ObStorageMetaValue::MetaType::SSTABLE;
 
       if (OB_FAIL(meta_cache.get_meta(meta_type, meta_key, handle, nullptr))) {
         LOG_WARN("fail to get sstable from meta cache", K(ret), K(addr));

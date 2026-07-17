@@ -54,7 +54,7 @@ int ObLobMetaScanIter::open_remote(ObLobAccessParam &param)
   cur_pos_ = 0;
   cur_byte_pos_ = 0;
   is_remote_ = true;
-  if (OB_FAIL(ObLobRemoteUtil::query(param, ObLobQueryArg::QueryType::READ, param.addr_, remote_ctx_))) {
+  if (OB_FAIL(ObLobRemoteUtil::query(param, obcall::ObLobQueryArg::QueryType::READ, param.addr_, remote_ctx_))) {
     LOG_WARN("fail to init remote query ctx", K(ret));
   }
   return ret;
@@ -193,7 +193,7 @@ int ObLobMetaScanIter::get_next_row_remote(ObString &data)
   if (OB_ISNULL(remote_ctx_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("remote ctx is null", K(ret));
-  } else if (OB_FAIL(remote_ctx_->remote_reader_.get_next_block(remote_ctx_->rpc_buffer_, remote_ctx_->handle_, data))) {
+  } else if (OB_FAIL(remote_ctx_->get_next_block(data))) {
     if (ret != OB_ITER_END) {
       LOG_WARN("failed to get next lob query block", K(ret));
     }

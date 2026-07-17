@@ -19,12 +19,12 @@
 
 #include "common/object/ob_object.h"
 #include "common/ob_zerofill_info.h"
-#include "lib/timezone/ob_timezone_info.h"
-#include "lib/timezone/ob_time_convert.h"
+#include "common/timezone/ob_timezone_info.h"
+#include "common/timezone/ob_time_convert.h"
 #include "sql/session/ob_sql_session_info.h"
 #include "lib/charset/ob_charset.h"
 #include "share/ob_errno.h"
-#include "share/datum/ob_datum.h"
+#include "common/datum/ob_datum.h"
 #include "share/object/ob_obj_cast.h"
 #include "sql/engine/expr/ob_expr.h"
 #include "sql/engine/expr/ob_expr_lob_utils.h"
@@ -33,6 +33,9 @@ namespace oceanbase
 {
 namespace sql
 {
+// demoted from common::ObObjCaster::get_zero_value: builds a zero-value ObObj for a type(uses this file's SET_RES macro)
+int get_obj_zero_value(const common::ObObjType expect_type, common::ObCollationType expect_cs_type, common::ObObj &zero_obj);
+
 class ObPhysicalPlanCtx;
 struct ObUserLoggingCtx;
 
@@ -263,7 +266,7 @@ int ob_datum_to_ob_time_with_date(const T &datum,
     case ObStringTC: {
       ObScale res_scale = -1;
       ObArenaAllocator lob_allocator(ObModIds::OB_LOB_ACCESS_BUFFER,
-                                     OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID());
+                                     OB_MALLOC_NORMAL_BLOCK_SIZE);
       ObString str = datum.get_string();
       if (OB_FAIL(ObTextStringHelper::read_real_string_data(
               &lob_allocator, type, CS_TYPE_BINARY, has_lob_header, str))) {
@@ -368,7 +371,7 @@ int ob_datum_to_ob_time_without_date(const T &datum,
     }
     case ObTextTC: // TODO@hanhui texttc share with the stringtc temporarily
     case ObStringTC: {
-      ObArenaAllocator lob_allocator(ObModIds::OB_LOB_ACCESS_BUFFER, OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID());
+      ObArenaAllocator lob_allocator(ObModIds::OB_LOB_ACCESS_BUFFER, OB_MALLOC_NORMAL_BLOCK_SIZE);
       ObString str = datum.get_string();
       if (OB_FAIL(ObTextStringHelper::read_real_string_data(
               &lob_allocator, type, CS_TYPE_BINARY, has_lob_header, str))) {

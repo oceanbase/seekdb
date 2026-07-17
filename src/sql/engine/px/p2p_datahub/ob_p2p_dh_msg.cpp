@@ -28,44 +28,38 @@ DEFINE_ENUM_FUNC(ObP2PDatahubMsgBase::ObP2PDatahubMsgType, p2p_datahub_msg_type,
 
 OB_SERIALIZE_MEMBER(ObP2PDatahubMsgBase,
     trace_id_, p2p_datahub_id_, px_sequence_id_,
-    task_id_, tenant_id_, timeout_ts_, msg_type_,
+    task_id_, timeout_ts_, msg_type_,
     msg_receive_cur_cnt_, msg_receive_expect_cnt_,
     is_active_, is_empty_);
 
 int ObP2PDatahubMsgBase::broadcast(
-    ObIArray<ObAddr> &target_addrs,
-    obrpc::ObP2PDhRpcProxy &p2p_dh_proxy)
+    ObIArray<ObAddr> &target_addrs)
 {
   int ret = OB_SUCCESS;
-  ObPxP2PDatahubArg arg;
-  arg.msg_ = this;
+  // Single-replica seekdb: all targets are loopback. Deliver in-process by
+  // mirroring ObPxP2pDhMsgP::process (PX_P2P_DH.process_msg deep-copies the msg).
   for (int i = 0; i < target_addrs.count() && OB_SUCC(ret); ++i) {
-    if (OB_FAIL(p2p_dh_proxy.
-        to(target_addrs.at(i)).
-        by(tenant_id_).
-        timeout(timeout_ts_).
-        send_p2p_dh_message(arg, nullptr))) {
-      LOG_WARN("fail to send p2p2 dh msg", K(ret));
+    if (OB_FAIL(PX_P2P_DH.process_msg(*this))) {
+      LOG_WARN("fail to process p2p dh msg locally", K(ret));
     }
   }
   return ret;
 }
 
 int ObP2PDatahubMsgBase::init(int64_t p2p_dh_id,
-    int64_t px_sequence_id, int64_t task_id,
-    int64_t tenant_id, int64_t timeout_ts)
+    int64_t px_sequence_id, int64_t task_id, int64_t timeout_ts)
 {
   int ret = OB_SUCCESS;
   trace_id_ = *ObCurTraceId::get_trace_id();
   p2p_datahub_id_ = p2p_dh_id;
   px_sequence_id_ = px_sequence_id;
   task_id_ = task_id;
-  tenant_id_ = tenant_id;
+  
   timeout_ts_ = timeout_ts;
   is_active_ = true;
   is_ready_ = false;
   is_empty_ = true;
-  allocator_.set_tenant_id(tenant_id);
+  
   allocator_.set_label("ObP2PDHMsg");
   return ret;
 }
@@ -77,7 +71,7 @@ int ObP2PDatahubMsgBase::assign(const ObP2PDatahubMsgBase &msg)
   p2p_datahub_id_ = msg.get_p2p_datahub_id();
   px_sequence_id_ = msg.get_px_seq_id();
   task_id_ = msg.get_task_id();
-  tenant_id_ = msg.get_tenant_id();
+  
   timeout_ts_ = msg.get_timeout_ts();
   msg_type_ = msg.get_msg_type();
   is_active_ = msg.is_active();
@@ -85,7 +79,7 @@ int ObP2PDatahubMsgBase::assign(const ObP2PDatahubMsgBase &msg)
   is_empty_ = msg.is_empty();
   msg_receive_cur_cnt_ = msg.get_msg_receive_cur_cnt();
   msg_receive_expect_cnt_ = msg.get_msg_receive_expect_cnt();
-  allocator_.set_tenant_id(tenant_id_);
+  
   allocator_.set_label("ObP2PDHMsg");
   return ret;
 }

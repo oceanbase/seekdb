@@ -111,7 +111,6 @@ ObPushDownTopNFilterMsg::ObPushDownTopNFilterMsg()
 {}
 
 int ObPushDownTopNFilterMsg::init(const ObPushDownTopNFilterInfo *pd_topn_filter_info,
-                                  uint64_t tenant_id,
                                   const ObIArray<ObSortFieldCollation> *sort_collations,
                                   ObExecContext *exec_ctx,
                                   int64_t px_seq_id,
@@ -129,8 +128,7 @@ int ObPushDownTopNFilterMsg::init(const ObPushDownTopNFilterInfo *pd_topn_filter
     task_id = exec_ctx->get_px_task_id();
   }
   if (OB_FAIL(ObP2PDatahubMsgBase::init(
-          pd_topn_filter_info->p2p_dh_id_, px_seq_id, task_id,
-          tenant_id, timeout_ts))) {
+          pd_topn_filter_info->p2p_dh_id_, px_seq_id, task_id, timeout_ts))) {
     LOG_WARN("fail to init basic p2p msg", K(ret));
   } else if (FALSE_IT(total_sk_cnt_ = pd_topn_filter_info->total_sk_cnt_)) {
   } else if (OB_FAIL(heap_top_datums_.prepare_allocate(effective_sk_cnt))) {
@@ -203,7 +201,7 @@ int ObPushDownTopNFilterMsg::deep_copy_msg(ObP2PDatahubMsgBase *&dest_msg)
 {
   int ret = OB_SUCCESS;
   ObPushDownTopNFilterMsg *new_topn_msg = nullptr;
-  ObMemAttr attr(tenant_id_, "TOPNVECMSG");
+  ObMemAttr attr("TOPNVECMSG");
   if (OB_FAIL(PX_P2P_DH.alloc_msg<ObPushDownTopNFilterMsg>(attr, new_topn_msg))) {
     LOG_WARN("fail to alloc msg", K(ret));
   } else if (OB_FAIL(new_topn_msg->assign(*this))) {

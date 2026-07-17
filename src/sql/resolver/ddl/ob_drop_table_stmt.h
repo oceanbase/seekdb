@@ -31,8 +31,8 @@ public:
   ObDropTableStmt();
   virtual ~ObDropTableStmt();
 
-  const obrpc::ObDropTableArg &get_drop_table_arg() const { return drop_table_arg_; }
-  obrpc::ObDropTableArg &get_drop_table_arg() { return drop_table_arg_; }
+  const obcall::ObDropTableArg &get_drop_table_arg() const { return drop_table_arg_; }
+  obcall::ObDropTableArg &get_drop_table_arg() { return drop_table_arg_; }
   virtual bool cause_implicit_commit() const {
     //return share::schema::TMP_TABLE != drop_table_arg_.table_type_;
     /*
@@ -55,14 +55,14 @@ public:
      */
     return true;
   }
-  int add_table_item(const obrpc::ObTableItem &table_item);
-  virtual obrpc::ObDDLArg &get_ddl_arg() { return drop_table_arg_; }
+  int add_table_item(const obcall::ObTableItem &table_item);
+  virtual obcall::ObDDLArg &get_ddl_arg() { return drop_table_arg_; }
   bool is_view_stmt() const { return is_view_stmt_; }
   void set_is_view_stmt(const bool is_view_stmt) { is_view_stmt_ = is_view_stmt; }
 
   TO_STRING_KV(K_(stmt_type),K_(drop_table_arg));
 private:
-  obrpc::ObDropTableArg drop_table_arg_;
+  obcall::ObDropTableArg drop_table_arg_;
   bool is_view_stmt_;
   DISALLOW_COPY_AND_ASSIGN(ObDropTableStmt);
 };

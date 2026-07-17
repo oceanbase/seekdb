@@ -17,7 +17,7 @@
 #ifndef OCEANBASE_SQL_ENGINE_EXPR_RESULT_TYPE_UTIL_
 #define OCEANBASE_SQL_ENGINE_EXPR_RESULT_TYPE_UTIL_
 
-#include "lib/timezone/ob_timezone_info.h"
+#include "common/timezone/ob_timezone_info.h"
 #include "lib/container/ob_bit_set.h"
 #include "common/object/ob_obj_type.h"
 #include "common/expression/ob_expr_string_buf.h"
@@ -152,11 +152,11 @@ public:
                                  const common::ObObjType type1,
                                  const common::ObObjType type2,
                                  const ObArithResultTypeMap::OP oper);
-  static int deduce_max_string_length_oracle(const common::ObDataTypeCastParams &dtc_params,
-                                             const ObExprResType &orig_type,
-                                             const ObExprResType &target_type,
-                                             common::ObLength &length,
-                                             const int16_t calc_ls = common::LS_INVALIED);
+  static int deduce_max_string_length_extended(const common::ObDataTypeCastParams &dtc_params,
+                                               const ObExprResType &orig_type,
+                                               const ObExprResType &target_type,
+                                               common::ObLength &length,
+                                               const int16_t calc_ls = common::LS_INVALIED);
   OB_INLINE static int get_add_calc_type(common::ObObjType &calc_type,
                                          common::ObObjType &calc_ob1_type,
                                          common::ObObjType &calc_ob2_type,

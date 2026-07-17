@@ -38,8 +38,7 @@ public:
     sql_mem_processor_.unregister_profile_if_necessary();
   }
 
-  int init(const uint64_t tenant_id,
-           ObEvalCtx *eval_ctx,
+  int init(ObEvalCtx *eval_ctx,
            ObExecContext *exec_ctx,
            ObIOEventObserver *observer,
            const int64_t default_block_size = ObChunkDatumStore::BLOCK_SIZE);
@@ -107,7 +106,7 @@ private:
   friend class ObValues;
   bool inited_;
   bool got_first_row_;
-  int64_t tenant_id_;
+  
   ObExecContext *exec_ctx_;
   lib::MemoryContext mem_context_;
   ObChunkDatumStore datum_store_;

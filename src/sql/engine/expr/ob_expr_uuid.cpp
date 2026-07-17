@@ -37,6 +37,7 @@
 #endif
 #include "sql/engine/expr/ob_expr_uuid.h"
 #include "sql/engine/ob_exec_context.h"
+#include "lib/time/ob_time_utility.h"
 using namespace oceanbase::common;
 using namespace oceanbase::sql;
 
@@ -118,7 +119,7 @@ int ObUUIDNode::init()
   struct ifaddrs *ifaddrs_list = nullptr;
   struct ifaddrs *ifa = nullptr;
   bool mac_addr_found = false;
-
+  
   if (getifaddrs(&ifaddrs_list) != 0) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("getifaddrs failed", K(ret), K(errno));
@@ -140,7 +141,7 @@ int ObUUIDNode::init()
       }
     }
     freeifaddrs(ifaddrs_list);
-
+    
     if (OB_FAIL(ret)) {
       // Error already logged
     } else if (!mac_addr_found) {
@@ -270,6 +271,9 @@ int ObUUIDTime::get_time(uint64_t &time, uint16_t &seq)
 int ObUUIDTime::time_now(uint64_t &now)
 {
   int ret = OB_SUCCESS;
+#ifdef _WIN32
+  now = static_cast<uint64_t>(ObTimeUtility::current_time_ns());
+#else
   struct timespec ts;
   int tmpret = clock_gettime(CLOCK_REALTIME, &ts);
   if (tmpret != 0) {
@@ -278,6 +282,7 @@ int ObUUIDTime::time_now(uint64_t &now)
   } else {
     now = uint64_t(ts.tv_sec) * uint64_t(1000000000) + uint64_t(ts.tv_nsec);
   }
+#endif
   return ret;
 }
 

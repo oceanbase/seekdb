@@ -111,7 +111,6 @@ public:
   }
 
   int init(const int64_t mem_limit,
-           const uint64_t tenant_id = common::OB_SERVER_TENANT_ID,
            const int64_t mem_ctx_id = common::ObCtxIds::DEFAULT_CTX_ID,
            const char *label = common::ObModIds::OB_SQL_ROW_STORE,
            const bool enable_dump = true,
@@ -122,10 +121,10 @@ public:
   {
     int ret = OB_SUCCESS;
     if (is_compact_) {
-      ret = compact_store_.init(mem_limit, tenant_id, mem_ctx_id, label, enable_dump, row_extra_size,
+      ret = compact_store_.init(mem_limit, mem_ctx_id, label, enable_dump, row_extra_size,
                           enable_truncate, compress_type, exprs);
     } else {
-      ret = datum_store_.init(mem_limit, tenant_id, mem_ctx_id, label, enable_dump, row_extra_size);
+      ret = datum_store_.init(mem_limit, mem_ctx_id, label, enable_dump, row_extra_size);
     }
     return ret;
   }
@@ -257,8 +256,7 @@ public:
   virtual ~ObSortOpImpl();
 
   // if rewind id not needed, we will release the resource after iterate end.
-  int init(const uint64_t tenant_id,
-      const ObIArray<ObSortFieldCollation> *sort_collations,
+  int init(const ObIArray<ObSortFieldCollation> *sort_collations,
       const ObIArray<ObSortCmpFunc> *sort_cmp_funs,
       ObEvalCtx *eval_ctx,
       ObExecContext *exec_ctx,
@@ -829,7 +827,7 @@ protected:
   ModulePageAllocator page_allocator_;
   lib::MemoryContext mem_context_;
   MemEntifyFreeGuard mem_entify_guard_;
-  int64_t tenant_id_;
+  
   const ObIArray<ObSortFieldCollation> *sort_collations_;
   const ObIArray<ObSortCmpFunc> *sort_cmp_funs_;
   ObEvalCtx *eval_ctx_;
@@ -898,8 +896,7 @@ public:
     reset();
   }
   // init && start fetch %op rows
-  int init(const int64_t tenant_id,
-      const int64_t prefix_pos,
+  int init(const int64_t prefix_pos,
       const common::ObIArray<ObExpr *> &all_exprs,
       const ObIArray<ObSortFieldCollation> *sort_collations,
       const ObIArray<ObSortCmpFunc> *sort_cmp_funs,
@@ -985,16 +982,14 @@ public:
     free_prev_row();
   }
 
-  int init(const uint64_t tenant_id,
-      const ObIArray<ObSortFieldCollation> *sort_collations,
+  int init(const ObIArray<ObSortFieldCollation> *sort_collations,
       const ObIArray<ObSortCmpFunc> *sort_cmp_funs,
       ObEvalCtx *eval_ctx,
       ObExecContext *exec_ctx,
       const bool need_rewind,
       const int64_t default_block_size = ObChunkDatumStore::BLOCK_SIZE)
   {
-    return ObSortOpImpl::init(tenant_id,
-        sort_collations,
+    return ObSortOpImpl::init(sort_collations,
         sort_cmp_funs,
         eval_ctx,
         exec_ctx,

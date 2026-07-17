@@ -81,6 +81,16 @@ public:
                 ParseResult &parse_result,
                 const bool no_throw_parser_error);
 
+private:
+  int parse_(const common::ObString &stmt,
+                    ParseResult &parse_result,
+                    ParseMode mode=STD_MODE,
+                    const bool is_batched_multi_stmt_split_on = false,
+                    const bool no_throw_parser_error = false,
+                    const bool is_pl_inner_parse = false,
+                    const bool is_dbms_sql = false,
+                    const bool is_parser_dynamic_sql = false);
+public:
   virtual int parse(const common::ObString &stmt,
                     ParseResult &parse_result,
                     ParseMode mode=STD_MODE,

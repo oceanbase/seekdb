@@ -219,8 +219,8 @@ Outputs & filters:
   1 - output([update_with_global_lookup.c1], [update_with_global_lookup.c3], [WORD_SEGMENT(update_with_global_lookup.c3)], [WORD_COUNT(update_with_global_lookup.c3)],
        [DOC_LENGTH(update_with_global_lookup.c3)], [update_with_global_lookup.c2], [update_with_global_lookup.__doc_id_*]), filter(nil), rowset=16
       access([update_with_global_lookup.c1], [update_with_global_lookup.c3], [update_with_global_lookup.c2], [update_with_global_lookup.__doc_id_*]), partitions(p0)
-      is_index_back=true, is_global_index=true, with_domain_id(doc_id),
-      range_key([update_with_global_lookup.c2], [update_with_global_lookup.c1]), range(2,MIN ; 2,MAX),
+      is_index_back=true, is_global_index=true, with_domain_id(doc_id), 
+      range_key([update_with_global_lookup.c2], [update_with_global_lookup.c1]), range(2,MIN ; 2,MAX), 
       range_cond([update_with_global_lookup.c2 = 2])
 UPDATE update_with_global_lookup SET c3 = 'cccc' where c2 = 2;
 SELECT * FROM update_with_global_lookup;
@@ -490,7 +490,7 @@ partition `p5`,
 partition `p6`,
 partition `p7`,
 partition `p8`);
-INSERT INTO bug2024111900105177241 (c1, c2, c3, c4, c5, c6, c7, c8, c9, c10, c11, c12, c13, c14, c15, c16, c17, c18, c19, c20, c21, c22, c23, c24, c25, c26, c27, c28, c29, c30, c31, c32, c33) VALUES
+INSERT INTO bug2024111900105177241 (c1, c2, c3, c4, c5, c6, c7, c8, c9, c10, c11, c12, c13, c14, c15, c16, c17, c18, c19, c20, c21, c22, c23, c24, c25, c26, c27, c28, c29, c30, c31, c32, c33) VALUES 
 (NULL, 'sCQSxYSFaeyEpscltWxEpNroEOKl abc def11370205', '11370205', 'zqijCuJJzuOIyYqIctNLCiyXejshOnAbkOgVxXWoWnKyZA abc d11370205', NULL, NULL, NULL, '11370205', '1993-08-22 05:32:48.0000', 814, 'IdfrAXJtNMtLAwpOUGSZfeVyWNKrdXbNQqKcszIcPMAdqHNpRpYVLAfijDKLBlryIEMLoGEkrxtBKwwAYlUduahdGerjomP STU VWX11370205', NULL, '11370205', 'cjfuOwLtTkxQLjkhrIGDVhHMrNAoCAwAHwjRqDNWCoLpgFzxHdSTU VWX 11370205', NULL, '11370205', 9615, '11370205', 2024, 'yTBRHreEsywEvGbJRNyuALqWwWlZdbMloXaBSSApnGpFrRylqr stu v11370205', '11370205', NULL, 2090, 'IFBXmqCBLfhwKaXMktBnZAkCIoWvQhMUH STU VWX', '11370205', 'rXo11370205', '11370205', '2011-04-27 00:00:00', 2125, NULL, 'SJxMbNPKRDjimEUBHSPqTEvCiwDmdEVhGugfImuzKTDsB pqr stu11370205', '2013-06-18', 'HXnkSpivqZu vwx yz11370205'),
 (NULL, 'NGRVdnJQVWX YZA 56161745', '56161745', 'YCBlarUSXIGcJUgZPfuHgbLOExeqszGYIjYdlMAPXAbAhTZU VWX YZA56161745', NULL, NULL, NULL, '56161745', '1993-08-22 05:32:48.0000', 814, 'LjrgmdQBvyMDzDBpvRlFBELyhbZBPVZqXAlRvcYwIWByqjzUZSqAhYHABC DEF 56161745', NULL, '56161745', 'OTLJHzkkIqpOBHdGBqqliSzzMRdSzmfTU VWX Y56161745', NULL, '56161745', 9615, '56161745', 2024, 'wO56161745', '56161745', NULL, 2090, 'IFBXmqCBLfhwKaXMktBnZAkCIoWvQhMUH STU VWX', '56161745', 'diTJQDMtbJHPakoNLLTmno pqr 56161745', '56161745', '2011-04-27 00:00:00', 2125, NULL, 'XUoxjshpsGhyhqVXKwIKmRjNHYSWvqNJwPemFnZJlZiJOoHnpNspghi jkl 56161745', '2013-06-18', 'zUjS56161745'),
 (NULL, 'h35454912', '35454912', 'BzjjCKyzBEYhnzNDdRWsZoposWRxapNJeCP YZA abc35454912', NULL, NULL, NULL, '35454912', '1993-08-22 05:32:48.0000', 814, 'YmuouHYDsfmSbWelHPfhuWNWVAzQClGcBWeiNApDDkaxVDBwNnreEQaCiDUPSuBVunRhdlyvmKVKuLnxXlSeNFFnEunmStcJKL MNO 35454912', NULL, '35454912', 'CFcOvzfFbIzuzEjgNXMEaAkMbqYqJw YZA abc35454912', NULL, '35454912', 9615, '35454912', 2024, 'TiPUfhJPigpqkJcIuIyVtR STU VW35454912', '35454912', NULL, 2090, 'IFBXmqCBLfhwKaXMktBnZAkCIoWvQhMUH STU VWX', '35454912', 'psFWFJoxtoTEfGBlSfjRWpbDALPMkarUDqJmno pqr 35454912', '35454912', '2011-04-27 00:00:00', 2125, NULL, 'PlZiDaTvquCBUrORHaBihubKlomfIMoEUBYvBLOMJzTcDhCeTXTEFEGzfFKsgPmLQAb ghi jkl35454912', '2013-06-18', 'FnyGFoFpemyKTZuXDswaXllzeOMuUgwOGISCuLepnkfAFPcOztVgVlYjbuDjISxvYzFTEamOwlwUJTfNxvDF GHI JK35454912'),

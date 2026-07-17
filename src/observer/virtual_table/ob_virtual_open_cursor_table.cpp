@@ -133,8 +133,7 @@ bool ObVirtualOpenCursorTable::FillScanner::operator()(sql::ObSQLSessionMgr::Key
   } else {
     ObServer &server = ObServer::get_instance();
     uint64_t cell_idx = 0;
-    omt::ObTenantConfigGuard tenant_config(TENANT_CONF(MTL_ID()));
-    bool display_non_session_cursor = tenant_config.is_valid() ? tenant_config->_display_non_session_cursor : false;
+    bool display_non_session_cursor = true ? GCONF._display_non_session_cursor : false;
     char ip_buf[common::OB_IP_STR_BUFF];
     char peer_buf[common::OB_IP_PORT_STR_BUFF];
     char sql_id[common::OB_MAX_SQL_ID_LENGTH + 1];
@@ -144,9 +143,7 @@ bool ObVirtualOpenCursorTable::FillScanner::operator()(sql::ObSQLSessionMgr::Key
     //Otherwise, you can show only your own threads.
     if (sess_info->is_shadow()) {
       //this session info is logical free, shouldn't be added to scanner
-    } else if ((OB_SYS_TENANT_ID == my_session_->get_priv_tenant_id())
-        || (sess_info->get_priv_tenant_id() == my_session_->get_priv_tenant_id()
-            && my_session_->get_user_id() == sess_info->get_user_id())) {
+    } else {
       ObSQLSessionInfo::LockGuard lock_guard(sess_info->get_thread_data_lock());
       OZ (fill_cur_plan_cell(*sess_info));
       for (sql::ObSQLSessionInfo::CursorCache::CursorMap::iterator iter = 
@@ -249,7 +246,7 @@ int ObVirtualOpenCursorTable::FillScanner::fill_cursor_cell(ObSQLSessionInfo &se
         addr.append_fmt("%lx", reinterpret_cast<uint64_t>(&sess_info));
         OZ (ob_write_string(*allocator_, addr.string(), tmp_saddr));
         if (OB_SUCC(ret)) {
-          // get last 8 char, for oracle compatiable
+          // Get the last 8 characters for compatible SADDR formatting.
           int64_t offset = tmp_saddr.length() > 8 ? tmp_saddr.length() - 8 : 0;
           // if tmp_saddr.length() - offset > 8, offset is 0
           // the length make sure (tmp_saddr.ptr() + offset) do not have out-of-bounds access
@@ -361,7 +358,7 @@ int ObVirtualOpenCursorTable::FillScanner::fill_cur_plan_cell(ObSQLSessionInfo &
         ObString tmp_saddr;
         addr.append_fmt("%lx", reinterpret_cast<uint64_t>(&sess_info));
         OZ (ob_write_string(*allocator_, addr.string(), tmp_saddr));
-        // get last 8 char, for oracle compatiable
+        // Get the last 8 characters for compatible SADDR formatting.
         int64_t offset = tmp_saddr.length() > 8 ? tmp_saddr.length() - 8 : 0;
         // if tmp_saddr.length() - offset > 8, offset is 0
         // the length make sure (tmp_saddr.ptr() + offset) do not have out-of-bounds access
@@ -393,8 +390,7 @@ int ObVirtualOpenCursorTable::FillScanner::fill_cur_plan_cell(ObSQLSessionInfo &
       case SQL_ID: {
         if (obmysql::COM_QUERY == sess_info.get_mysql_cmd() ||
             obmysql::COM_STMT_EXECUTE == sess_info.get_mysql_cmd() ||
-            obmysql::COM_STMT_PREPARE == sess_info.get_mysql_cmd() ||
-            obmysql::COM_STMT_PREXECUTE == sess_info.get_mysql_cmd()) {
+            obmysql::COM_STMT_PREPARE == sess_info.get_mysql_cmd()) {
           sess_info.get_cur_sql_id(sql_id, OB_MAX_SQL_ID_LENGTH + 1);
         } else {
           sql_id[0] = '\0';

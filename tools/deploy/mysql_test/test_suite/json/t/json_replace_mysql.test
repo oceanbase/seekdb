@@ -65,7 +65,7 @@ insert into json_test values(1, '{ "a" : "foo", "b" : [ 1, 2, 3 ] }');
 update json_test set data = json_replace(data, '$.a', 'woo');
 select * from json_test;
 
-set log_row_value_options="partial_json";
+set log_row_value_options="partial_json"; 
 update json_test set data = json_replace(data, '$.a', 'xoo') where id = 1;
 select * from json_test;
 
@@ -75,6 +75,7 @@ select * from json_test where id=2;
 update json_test set data = json_replace(json_replace(data, '$.a', 'boo'), '$.c', 100) where id = 2;
 select * from json_test where id=2;
 
-set log_row_value_options="";
+set log_row_value_options=""; 
 
 drop table json_test;
+

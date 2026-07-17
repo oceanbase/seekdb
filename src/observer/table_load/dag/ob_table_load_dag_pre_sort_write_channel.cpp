@@ -40,9 +40,9 @@ using namespace storage;
 ObTableLoadDagPreSortWriteChannel::ObTableLoadDagPreSortWriteChannel()
   : op_(nullptr), finish_add_closed_chunk_(false), no_more_closed_chunk_(false)
 {
-  chunk_nodes_.set_tenant_id(MTL_ID());
-  closed_chunks_.set_tenant_id(MTL_ID());
-  sort_chunk_tasks_.set_tenant_id(MTL_ID());
+  
+  
+  
 }
 
 ObTableLoadDagPreSortWriteChannel::~ObTableLoadDagPreSortWriteChannel()

@@ -16,7 +16,7 @@
 
 #include <gtest/gtest.h>
 #define private public
-#include "logservice/rcservice/ob_role_change_handler.h"
+#include "logservice/localservice/ob_local_log_handler_set.h"
 #undef private
 
 namespace oceanbase
@@ -24,34 +24,24 @@ namespace oceanbase
 using namespace logservice;
 namespace unittest
 {
-class MockRoleChangeHandler : public ObIRoleChangeSubHandler
+class MockRoleChangeHandler : public ObILocalLogHandler
 {
 public:
-  void switch_to_follower_forcedly() override final
+  void deactivate() override final
   {}
-  int switch_to_leader() override final
-  {
-    return OB_SUCCESS;
-  }
-  int switch_to_follower_gracefully() override final
-  {
-    return OB_SUCCESS;
-  }
-  int resume_leader() override final
+  int activate() override final
   {
     return OB_SUCCESS;
   }
 };
 TEST(TestRoleChangeHander, test_basic_func)
 {
-  ObRoleChangeHandler handler;
+  ObLocalLogHandlerSet handler;
   ObLogBaseType type = ObLogBaseType::TRANS_SERVICE_LOG_BASE_TYPE;
   MockRoleChangeHandler mock_handler;
-  RCDiagnoseInfo unused_diagnose_info;
-  handler.register_handler(type, &mock_handler);
-  handler.switch_to_leader(unused_diagnose_info);
-  handler.switch_to_follower_forcedly();
-  handler.switch_to_follower_gracefully();
+  ASSERT_EQ(OB_SUCCESS, handler.register_handler(type, &mock_handler));
+  ASSERT_EQ(OB_SUCCESS, handler.activate());
+  handler.deactivate();
 }
 } // end namespace unittest
 } // end namespace oceanbase

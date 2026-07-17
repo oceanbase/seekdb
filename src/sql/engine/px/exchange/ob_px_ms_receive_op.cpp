@@ -86,8 +86,7 @@ int ObPxMSReceiveOp::init_merge_sort_input(int64_t n_channel)
           ret = OB_ALLOCATE_MEMORY_FAILED;
           LOG_WARN("create merge sort input fail", K(idx), K(ret));
         } else {
-          MergeSortInput *msi = new (buf) GlobalOrderInput(
-            ctx_.get_my_session()->get_effective_tenant_id());
+          MergeSortInput *msi = new (buf) GlobalOrderInput{};
           msi->alloc_ = &mem_context_->get_malloc_allocator();
           msi->sql_mem_processor_ = &sql_mem_processor_;
           msi->io_event_observer_ = &io_event_observer_;
@@ -109,8 +108,7 @@ int ObPxMSReceiveOp::inner_open()
 {
   int ret = OB_SUCCESS;
   lib::ContextParam param;
-  param.set_mem_attr(ctx_.get_my_session()->get_effective_tenant_id(),
-        "PxMsReceiveOp",
+  param.set_mem_attr("PxMsReceiveOp",
         ObCtxIds::WORK_AREA);
   if (OB_FAIL(ObPxReceiveOp::inner_open())) {
     LOG_WARN("initialize operator context failed", K(ret));
@@ -126,7 +124,6 @@ int ObPxMSReceiveOp::inner_open()
       LOG_WARN("failed to get px size", K(ret));
     } else if (OB_FAIL(sql_mem_processor_.init(
         &mem_context_->get_malloc_allocator(),
-        ctx_.get_my_session()->get_effective_tenant_id(),
         row_count * MY_SPEC.width_, MY_SPEC.type_, MY_SPEC.id_, &ctx_))) {
       LOG_WARN("failed to init sql memory manager processor", K(ret));
     }
@@ -498,7 +495,7 @@ void ObPxMSReceiveOp::GlobalOrderInput::destroy()
 }
 
 int ObPxMSReceiveOp::GlobalOrderInput::create_chunk_datum_store(
-  ObExecContext &ctx, uint64_t tenant_id, ObChunkDatumStore *&row_store)
+  ObExecContext &ctx, ObChunkDatumStore *&row_store)
 {
   int ret = OB_SUCCESS;
   void *buf = ctx.get_allocator().alloc(sizeof(ObChunkDatumStore));
@@ -517,7 +514,6 @@ int ObPxMSReceiveOp::GlobalOrderInput::create_chunk_datum_store(
     row_store->set_callback(sql_mem_processor_);
     row_store->set_io_event_observer(io_event_observer_);
     if (OB_FAIL(row_store->init(mem_limit,
-                              tenant_id,
                               ObCtxIds::WORK_AREA,
                               "PxMSRecvGlobal",
                               true))) {
@@ -539,7 +535,7 @@ int ObPxMSReceiveOp::GlobalOrderInput::add_row(
   int ret = OB_SUCCESS;
   if (OB_ISNULL(add_row_store_)) {
     ObChunkDatumStore *row_store = nullptr;
-    if (OB_FAIL(create_chunk_datum_store(ctx, tenant_id_, row_store))) {
+    if (OB_FAIL(create_chunk_datum_store(ctx, row_store))) {
       LOG_WARN("failed to create row store", K(ret));
     } else {
       add_row_store_ = row_store;
@@ -565,7 +561,6 @@ int ObPxMSReceiveOp::GlobalOrderInput::add_row(
         add_row_store_->reset();
         if (OB_FAIL(add_row_store_->init(
           mem_limit,
-          tenant_id_,
           ObCtxIds::WORK_AREA,
           "PxMSRecvGlobal",
           true))) {
@@ -714,7 +709,6 @@ int ObPxMSReceiveOp::new_local_order_input(MergeSortInput *&out_msi)
     local_input->datum_store_.set_callback(&sql_mem_processor_);
     local_input->datum_store_.set_io_event_observer(&io_event_observer_);
     if (OB_FAIL(local_input->datum_store_.init(0,
-                              ctx_.get_my_session()->get_effective_tenant_id(),
                               ObCtxIds::WORK_AREA,
                               "PxMSRecvLocal",
                               true))) {

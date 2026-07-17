@@ -16,29 +16,30 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 #include "ob_expr_ai_rerank.h"
+#include "share/rc/ob_module_provider.h"
 #include "lib/utility/utility.h"
-#include "lib/json_type/ob_json_common.h"
+#include "common/json_type/ob_json_common.h"
 #include "observer/omt/ob_tenant_ai_service.h"
-
+ 
 using namespace oceanbase::common;
 using namespace oceanbase::sql;
 
-namespace oceanbase
+namespace oceanbase 
 {
-namespace sql
+namespace sql 
 {
 
 ObExprAIRerank::ObExprAIRerank(common::ObIAllocator &alloc)
-: ObFuncExprOperator(alloc,
-                    T_FUN_SYS_AI_RERANK,
-                    N_AI_RERANK,
+: ObFuncExprOperator(alloc, 
+                    T_FUN_SYS_AI_RERANK, 
+                    N_AI_RERANK, 
                     MORE_THAN_ZERO,
-                    NOT_VALID_FOR_GENERATED_COL,
-                    NOT_ROW_DIMENSION)
+                    NOT_VALID_FOR_GENERATED_COL, 
+                    NOT_ROW_DIMENSION) 
 {
 }
 
-ObExprAIRerank::~ObExprAIRerank()
+ObExprAIRerank::~ObExprAIRerank() 
 {
 }
 
@@ -82,7 +83,7 @@ int ObExprAIRerank::calc_result_typeN(ObExprResType &type,
       } else if (doc_key_type == ObJsonType) {
       } else if (ob_is_string_type(doc_key_type)) {
         types_stack[DOC_KEY_IDX].set_calc_collation_type(CS_TYPE_UTF8MB4_BIN);
-      } else {
+      } else {  
         ret = OB_INVALID_ARGUMENT;
         LOG_WARN("invalid param type", K(ret), K(types_stack[DOC_KEY_IDX]));
         LOG_USER_ERROR(OB_INVALID_ARGUMENT, "ai_rerank, doc key must be string type");
@@ -97,7 +98,7 @@ int ObExprAIRerank::calc_result_typeN(ObExprResType &type,
   return ret;
 }
 
-int ObExprAIRerank::eval_ai_rerank(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
+int ObExprAIRerank::eval_ai_rerank(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res) 
 {
   INIT_SUCC(ret);
   ObDatum *arg_model_id = nullptr;
@@ -113,12 +114,12 @@ int ObExprAIRerank::eval_ai_rerank(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &
     res.set_null();
   } else {
     ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
-    uint64_t tenant_id = ObMultiModeExprHelper::get_tenant_id(ctx.exec_ctx_.get_my_session());
-    MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator(), expr.type_, tenant_id, ret);
-    lib::ObMallocHookAttrGuard malloc_guard(lib::ObMemAttr(tenant_id, N_AI_RERANK));
+    
+    MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator(), expr.type_, ret);
+    lib::ObMallocHookAttrGuard malloc_guard(lib::ObMemAttr(N_AI_RERANK));
     ObAIFuncExprInfo *info = nullptr;
     omt::ObAiServiceGuard ai_service_guard;
-    omt::ObTenantAiService *ai_service = MTL(omt::ObTenantAiService*);
+    omt::ObTenantAiService *ai_service = share::g_mp->tenant_ai_service();
     const share::ObAiModelEndpointInfo *endpoint_info = nullptr;
     ObString model_id = arg_model_id->get_string();
     ObString query = arg_query->get_string();
@@ -162,7 +163,7 @@ int ObExprAIRerank::eval_ai_rerank(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &
         }
       }
     }
-
+    
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(ObAIFuncUtils::get_ai_func_info(temp_allocator, model_id, info))) {
       LOG_WARN("fail to get ai func info", K(ret));
@@ -176,7 +177,7 @@ int ObExprAIRerank::eval_ai_rerank(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &
     } else if (OB_ISNULL(endpoint_info)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("endpoint info is null", K(ret));
-    }
+    } 
 
     if (OB_FAIL(ret)) {
     } else if (OB_NOT_NULL(arg_doc_key)) {
@@ -234,10 +235,10 @@ int ObExprAIRerank::eval_ai_rerank(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &
   return ret;
 }
 
-int ObExprAIRerank::eval_ai_rerank_with_doc_key(const ObExpr &expr, ObEvalCtx &ctx, ObIAllocator &allocator,
+int ObExprAIRerank::eval_ai_rerank_with_doc_key(const ObExpr &expr, ObEvalCtx &ctx, ObIAllocator &allocator, 
                                                 ObString& model_id, ObString& query, ObJsonArray *document_array,
                                                 ObString& doc_key, const ObAIFuncExprInfo &info,
-                                                const ObAiModelEndpointInfo &endpoint_info, ObDatum &res)
+                                                const ObAiModelEndpointInfo &endpoint_info, ObDatum &res) 
 {
   INIT_SUCC(ret);
   ObJsonArray *doc_array = nullptr;
@@ -251,7 +252,7 @@ int ObExprAIRerank::eval_ai_rerank_with_doc_key(const ObExpr &expr, ObEvalCtx &c
       LOG_WARN("fail to call rerank", K(ret));
     } else if (OB_FAIL(sort_document_array_by_model_result(allocator, document_array, result_array, sorted_document_array))) {
       LOG_WARN("fail to sort document array", K(ret));
-    }
+    } 
   }
   if (OB_SUCC(ret)) {
     ObString raw_str;
@@ -379,12 +380,12 @@ int ObExprAIRerank::construct_batch_document_array(ObIAllocator &allocator, ObJs
   return ret;
 }
 
-int ObExprAIRerank::inner_eval_ai_rerank(ObIAllocator &allocator,
-                                          const ObAIFuncExprInfo &info,
+int ObExprAIRerank::inner_eval_ai_rerank(ObIAllocator &allocator, 
+                                          const ObAIFuncExprInfo &info, 
                                           const ObAiModelEndpointInfo &endpoint_info,
-                                          ObArray<ObString> &header_array,
-                                          ObString &query,
-                                          ObJsonArray *document_array,
+                                          ObArray<ObString> &header_array, 
+                                          ObString &query, 
+                                          ObJsonArray *document_array, 
                                           ObJsonArray *&result_array)
 {
   INIT_SUCC(ret);
@@ -527,9 +528,9 @@ int ObExprAIRerank::construct_config_json(ObIAllocator &allocator, int64_t top_n
   return ret;
 }
 
-int ObExprAIRerank::cg_expr(ObExprCGCtx &expr_cg_ctx,
+int ObExprAIRerank::cg_expr(ObExprCGCtx &expr_cg_ctx, 
                         const ObRawExpr &raw_expr,
-                        ObExpr &rt_expr) const
+                        ObExpr &rt_expr) const 
 {
   int ret = OB_SUCCESS;
   // TODO: support schema version match in plan cache for ai func

@@ -19,7 +19,7 @@
 
 #include "share/ob_define.h"
 #include "lib/container/ob_se_array.h"
-#include "share/ob_virtual_table_iterator.h"
+#include "observer/virtual_table/ob_virtual_table_iterator.h"
 #include "share/config/ob_server_config.h"
 #include "sql/engine/table/ob_i_virtual_table_iterator_factory.h"
 
@@ -54,8 +54,7 @@ public:
       config_(config)
   {}
   virtual ~ObVTIterCreator() {}
-  int get_latest_expected_schema(const uint64_t tenant_id,
-                                 const uint64_t table_id,
+  int get_latest_expected_schema(const uint64_t table_id,
                                  const int64_t table_version,
                                  share::schema::ObSchemaGetterGuard &schema_guard,
                                  const share::schema::ObTableSchema *&t_schema);

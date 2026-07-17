@@ -22,9 +22,8 @@
 #include "rpc/obmysql/ob_mysql_request_utils.h"
 #include "lib/allocator/ob_allocator.h"
 #include "lib/objectpool/ob_tc_factory.h"
-#include "lib/allocator/ob_mod_define.h"
+#include "lib/utility/ob_mod_define.h"
 #include "storage/tx/ob_trans_result.h"
-#include "rpc/obmysql/ob_2_0_protocol_utils.h"
 #include "observer/mysql/obmp_packet_sender.h"
 
 

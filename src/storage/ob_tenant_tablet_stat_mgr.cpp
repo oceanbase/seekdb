@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX STORAGE
 
 #include "ob_tenant_tablet_stat_mgr.h"
+#include "share/rc/ob_module_provider.h"
 #include "share/schema/ob_tenant_schema_service.h"
 #include "observer/ob_server.h"
 
@@ -46,18 +47,14 @@ void ObTransNodeDMLStat::atomic_inc(const ObTransNodeDMLStat &other)
 
 /************************************* ObTabletStatKey *************************************/
 ObTabletStatKey::ObTabletStatKey(
-  const int64_t ls_id,
   const uint64_t tablet_id)
-  : ls_id_(ls_id),
-    tablet_id_(tablet_id)
+  : tablet_id_(tablet_id)
 {
 }
 
 ObTabletStatKey::ObTabletStatKey(
-  const share::ObLSID ls_id,
   const ObTabletID tablet_id)
-  : ls_id_(ls_id),
-    tablet_id_(tablet_id)
+  : tablet_id_(tablet_id)
 {
 }
 
@@ -67,15 +64,13 @@ ObTabletStatKey::~ObTabletStatKey()
 
 void ObTabletStatKey::reset()
 {
-  ls_id_.reset();
   tablet_id_.reset();
 }
 
 uint64_t ObTabletStatKey::hash() const
 {
   uint64_t hash_val = 0;
-  hash_val += ls_id_.hash();
-  hash_val += tablet_id_.hash();
+  hash_val = tablet_id_.hash();
   return hash_val;
 }
 
@@ -87,14 +82,14 @@ int ObTabletStatKey::hash(uint64_t &hash_val) const
 
 bool ObTabletStatKey::is_valid() const
 {
-  return ls_id_.is_valid() && tablet_id_.is_valid();
+  return tablet_id_.is_valid();
 }
 
 bool ObTabletStatKey::operator==(const ObTabletStatKey &other) const
 {
   bool bret = true;
   if (this == &other) {
-  } else if (ls_id_ != other.ls_id_ || tablet_id_ != other.tablet_id_) {
+  } else if (tablet_id_ != other.tablet_id_) {
     bret = false;
   }
   return bret;
@@ -105,7 +100,7 @@ bool ObTabletStatKey::operator==(const ObTabletStatKey &other) const
 /************************************* ObTabletStat *************************************/
 bool ObTabletStat::is_valid() const
 {
-  return ls_id_ > 0 && tablet_id_ > 0;
+  return tablet_id_ > 0;
 }
 
 bool ObTabletStat::check_need_report() const
@@ -148,7 +143,6 @@ ObTabletStat& ObTabletStat::operator=(const ObTabletStat &other)
 ObTabletStat& ObTabletStat::operator+=(const ObTabletStat &other)
 {
   if (other.is_valid()) {
-    ls_id_ = other.ls_id_;
     tablet_id_ = other.tablet_id_;
     query_cnt_ += other.query_cnt_;
     merge_cnt_ += other.merge_cnt_;
@@ -293,16 +287,16 @@ bool ObTenantSysStat::is_small_tenant() const
   return bret;
 }
 
-int ObTenantSysStat::refresh(const uint64_t tenant_id, const bool force_refresh /*=false*/)
+int ObTenantSysStat::refresh(const bool force_refresh /*=false*/)
 {
   int ret = OB_SUCCESS;
 
   if (!REACH_THREAD_TIME_INTERVAL(300_s) && !force_refresh) {
-  } else if (OB_FAIL(GCTX.omt_->get_tenant_cpu(tenant_id, min_cpu_cnt_, max_cpu_cnt_))) {
+  } else if (OB_FAIL(GCTX.omt_->get_tenant_cpu(min_cpu_cnt_, max_cpu_cnt_))) {
     LOG_WARN("failed to get tenant cpu count", K(ret));
   } else {
-    memory_hold_ = lib::get_tenant_memory_hold(tenant_id);
-    memory_limit_ = lib::get_tenant_memory_limit(tenant_id);
+    memory_hold_ = lib::get_tenant_memory_hold();
+    memory_limit_ = lib::get_tenant_memory_limit();
   }
   return ret;
 }
@@ -340,11 +334,10 @@ void ObTabletStream::clear_stat()
 void ObTabletStream::add_stat(const ObTabletStat &stat)
 {
   if (!key_.is_valid()) {
-    key_.ls_id_ = stat.ls_id_;
     key_.tablet_id_ = stat.tablet_id_;
   }
 
-  if (key_.ls_id_.id() == stat.ls_id_ && key_.tablet_id_.id() == stat.tablet_id_) {
+  if (key_.tablet_id_.id() == stat.tablet_id_) {
     curr_buckets_.add(stat);
     total_stat_ += stat;
   }
@@ -376,8 +369,8 @@ int ObTabletStream::get_all_tablet_stat(common::ObIArray<ObTabletStat> &tablet_s
 
 /************************************* ObTabletStreamPool *************************************/
 ObTabletStreamPool::ObTabletStreamPool()
-  : dynamic_allocator_(MTL_ID()),
-    free_list_allocator_(ObMemAttr(MTL_ID(), "FreeTbltStream")),
+  : dynamic_allocator_{},
+    free_list_allocator_(ObMemAttr("FreeTbltStream")),
     free_list_(),
     lru_list_(),
     max_free_list_num_(0),
@@ -437,7 +430,7 @@ int ObTabletStreamPool::init(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("get invalid argument", K(ret), K(max_free_list_num), K(max_dynamic_node_num));
   } else if (OB_FAIL(dynamic_allocator_.init(ObMallocAllocator::get_instance(), OB_MALLOC_NORMAL_BLOCK_SIZE,
-                                             ObMemAttr(MTL_ID(), LABEL)))) {
+                                             ObMemAttr(LABEL)))) {
     LOG_WARN("failed to init fifo allocator", K(ret));
   } else if (OB_FAIL(free_list_.init(max_free_list_num, &free_list_allocator_))) {
     LOG_WARN("failed to init free list", K(ret), K(max_free_list_num));
@@ -555,8 +548,8 @@ void ObTenantSysLoadShedder::refresh_sys_load()
     double max_cpu_cnt = 0;
     double min_cpu_cnt = 0;
 
-    if (OB_TMP_FAIL(GCTX.omt_->get_tenant_cpu(MTL_ID(), min_cpu_cnt, max_cpu_cnt))) {
-      LOG_WARN_RET(tmp_ret, "failed to get tennant cpu cnt", "tenant_id", MTL_ID());
+    if (OB_TMP_FAIL(GCTX.omt_->get_tenant_cpu(min_cpu_cnt, max_cpu_cnt))) {
+      LOG_WARN_RET(tmp_ret, "failed to get tennant cpu cnt");
     } else {
       min_cpu_cnt_ = min_cpu_cnt;
       max_cpu_cnt_ = max_cpu_cnt;
@@ -575,7 +568,7 @@ int ObTenantSysLoadShedder::refresh_cpu_utility()
   int64_t inc_cpu_time = 0;
   int64_t physical_cpu_utility = 0;
 
-  if (OB_FAIL(GCTX.omt_->get_tenant_cpu_time(MTL_ID(), curr_cpu_time))) {
+  if (OB_FAIL(GCTX.omt_->get_tenant_cpu_time(curr_cpu_time))) {
     LOG_WARN("failed to get tennant cpu cnt", K(ret));
   } else {
     const int64_t curr_sample_time = ObTimeUtility::fast_current_time();
@@ -614,7 +607,7 @@ ObTenantTabletStatMgr::ObTenantTabletStatMgr()
     sys_stat_(),
     report_cursor_(0),
     pending_cursor_(0),
-    report_tg_id_(-1),
+    report_timer_(),
     extreme_tablet_cnt_(0),
     is_inited_(false)
 {
@@ -625,7 +618,7 @@ ObTenantTabletStatMgr::~ObTenantTabletStatMgr()
   destroy();
 }
 
-int ObTenantTabletStatMgr::init(const int64_t tenant_id)
+int ObTenantTabletStatMgr::init()
 {
   int ret = OB_SUCCESS;
   const bool repeat = true;
@@ -636,17 +629,16 @@ int ObTenantTabletStatMgr::init(const int64_t tenant_id)
     LOG_WARN("ObTenantTabletStatMgr init twice", K(ret));
   } else if (OB_FAIL(stream_pool_.init(DEFAULT_MAX_FREE_STREAM_CNT, DEFAULT_UP_LIMIT_STREAM_CNT))) {
     LOG_WARN("failed to init tablet stream pool", K(ret));
-  } else if (OB_FAIL(stream_map_.create(DEFAULT_BUCKET_NUM, ObMemAttr(tenant_id, "TabletStats")))) {
+  } else if (OB_FAIL(stream_map_.create(DEFAULT_BUCKET_NUM, ObMemAttr("TabletStats")))) {
     LOG_WARN("failed to create TabletStats", K(ret));
   } else if (FALSE_IT(bucket_num = stream_map_.bucket_count())) {
   } else if (OB_FAIL(bucket_lock_.init(bucket_num, ObLatchIds::DEFAULT_BUCKET_LOCK,
-                                       ObMemAttr(tenant_id, "TabStatMgrLock")))) {
+                                       ObMemAttr("TabStatMgrLock")))) {
     LOG_WARN("failed to init bucket lock", K(ret));
-  } else if (OB_FAIL(TG_CREATE_TENANT(lib::TGDefIDs::TabletStatRpt, report_tg_id_))) {
-    LOG_WARN("failed to create TabletStatRpt thread", K(ret));
-  } else if (OB_FAIL(TG_START(report_tg_id_))) {
-    LOG_WARN("failed to start stat TabletStatRpt thread", K(ret));
-  } else if (OB_FAIL(TG_SCHEDULE(report_tg_id_, report_stat_task_, TABLET_STAT_PROCESS_INTERVAL, repeat))) {
+  } else if (OB_FAIL(report_timer_.init(
+      "TabletStatRpt", ObMemAttr("TabletStatRpt")))) {
+    LOG_WARN("failed to init TabletStatRpt timer", K(ret));
+  } else if (OB_FAIL(report_timer_.schedule(report_stat_task_, TABLET_STAT_PROCESS_INTERVAL, repeat))) {
     LOG_WARN("failed to schedule tablet stat update task", K(ret));
   } else {
     refresh_sys_stat();
@@ -661,22 +653,26 @@ int ObTenantTabletStatMgr::init(const int64_t tenant_id)
 int ObTenantTabletStatMgr::mtl_init(ObTenantTabletStatMgr* &tablet_stat_mgr)
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(tablet_stat_mgr->init(MTL_ID()))) {
-    LOG_WARN("failed to init tablet stat mgr", K(ret), K(MTL_ID()));
+  if (OB_FAIL(tablet_stat_mgr->init())) {
+    LOG_WARN("failed to init tablet stat mgr", K(ret));
   } else {
-    LOG_INFO("success to init ObTenantTabletStatMgr", K(MTL_ID()));
+    LOG_INFO("success to init ObTenantTabletStatMgr");
   }
   return ret;
 }
 
 void ObTenantTabletStatMgr::wait()
 {
-  TG_WAIT(report_tg_id_);
+  if (report_timer_.inited()) {
+    report_timer_.wait();
+  }
 }
 
 void ObTenantTabletStatMgr::stop()
 {
-  TG_STOP(report_tg_id_);
+  if (report_timer_.inited()) {
+    report_timer_.stop();
+  }
 }
 
 void ObTenantTabletStatMgr::destroy()
@@ -690,14 +686,13 @@ void ObTenantTabletStatMgr::reset()
 {
   stop();
   wait();
-  TG_DESTROY(report_tg_id_);
+  report_timer_.destroy();
   {
     ObBucketWLockAllGuard lock_guard(bucket_lock_);
     stream_map_.destroy();
     stream_pool_.destroy();
     report_cursor_ = 0;
     pending_cursor_ = 0;
-    report_tg_id_ = -1;
     is_inited_ = false;
   }
   bucket_lock_.destroy();
@@ -741,7 +736,6 @@ int ObTenantTabletStatMgr::report_stat(
 }
 
 int ObTenantTabletStatMgr::get_latest_tablet_stat(
-    const share::ObLSID &ls_id,
     const common::ObTabletID &tablet_id,
     ObTabletStat &tablet_stat,
     ObTabletStat &total_tablet_stat,
@@ -749,16 +743,15 @@ int ObTenantTabletStatMgr::get_latest_tablet_stat(
 {
   int ret = OB_SUCCESS;
   tablet_stat.reset();
-  tablet_stat.ls_id_ = ls_id.id();
   tablet_stat.tablet_id_ = tablet_id.id();
-  const ObTabletStatKey key(ls_id, tablet_id);
+  const ObTabletStatKey key(tablet_id);
 
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     LOG_WARN("ObTenantTabletStatMgr not inited", K(ret));
   } else if (OB_UNLIKELY(!key.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("get invalid arguments", K(ret), K(ls_id), K(tablet_id));
+    LOG_WARN("get invalid arguments", K(ret), K(tablet_id));
   } else {
     ObTabletStreamNode *stream_node = nullptr;
     ObBucketHashRLockGuard lock_guard(bucket_lock_, key.hash());
@@ -776,18 +769,17 @@ int ObTenantTabletStatMgr::get_latest_tablet_stat(
 }
 
 int ObTenantTabletStatMgr::clear_tablet_stat(
-    const share::ObLSID &ls_id,
     const common::ObTabletID &tablet_id)
 {
   int ret = OB_SUCCESS;
-  const ObTabletStatKey key(ls_id, tablet_id);
+  const ObTabletStatKey key(tablet_id);
 
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     LOG_WARN("ObTenantTabletStatMgr not inited", K(ret));
   } else if (OB_UNLIKELY(!key.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("get invalid arguments", K(ret), K(ls_id), K(tablet_id));
+    LOG_WARN("get invalid arguments", K(ret), K(tablet_id));
   } else {
     ObBucketHashWLockGuard lock_guard(bucket_lock_, key.hash());
     if (OB_FAIL(inner_clear_tablet_stat(key))) {
@@ -795,7 +787,7 @@ int ObTenantTabletStatMgr::clear_tablet_stat(
     }
   }
   if (OB_SUCC(ret)) {
-    FLOG_INFO("clear tablet stat", K(ret), K(ls_id), K(tablet_id));
+    FLOG_INFO("clear tablet stat", K(ret), K(tablet_id));
   }
   return ret;
 }
@@ -828,15 +820,14 @@ int ObTenantTabletStatMgr::get_all_tablet_stats(
 
 
 int ObTenantTabletStatMgr::get_tablet_analyzer(
-    const share::ObLSID &ls_id,
     const common::ObTabletID &tablet_id,
     ObTabletStatAnalyzer &analyzer)
 {
   int ret = OB_SUCCESS;
 
-  if (OB_FAIL(get_latest_tablet_stat(ls_id, tablet_id, analyzer.tablet_stat_, analyzer.total_tablet_stat_, analyzer.mode_))) {
+  if (OB_FAIL(get_latest_tablet_stat(tablet_id, analyzer.tablet_stat_, analyzer.total_tablet_stat_, analyzer.mode_))) {
     if (OB_HASH_NOT_EXIST != ret) {
-      LOG_WARN("failed to get latest tablet stat", K(ret), K(ls_id), K(tablet_id));
+      LOG_WARN("failed to get latest tablet stat", K(ret), K(tablet_id));
     }
   } else {
     const ObTableQueuingModeCfg &queuing_cfg = ObTableQueuingModeCfg::get_basic_config(analyzer.mode_);
@@ -864,7 +855,6 @@ int ObTenantTabletStatMgr::inner_clear_tablet_stat(const ObTabletStatKey &key)
 }
 
 int ObTenantTabletStatMgr::batch_clear_tablet_stat(
-    const share::ObLSID &ls_id,
     const ObIArray<ObTabletID> &tablet_ids)
 {
   int ret = OB_SUCCESS;
@@ -878,7 +868,6 @@ int ObTenantTabletStatMgr::batch_clear_tablet_stat(
     LOG_TRACE("tablet_ids empty, no need to clear");
   } else {
     ObTabletStatKey key;
-    key.ls_id_ = ls_id;
     ObBucketWLockAllGuard lock_guard(bucket_lock_);
     for (int64_t idx = 0; idx < tablet_cnt; idx++) {
       key.tablet_id_ = tablet_ids.at(idx);
@@ -892,7 +881,7 @@ int ObTenantTabletStatMgr::batch_clear_tablet_stat(
       }
     }
     if (OB_SUCC(ret)) {
-      FLOG_INFO("batch clear tablet stat in ls", K(ret), K(ls_id), K(tablet_cnt), K(clear_cnt));
+      FLOG_INFO("batch clear tablet stat", K(ret), K(tablet_cnt), K(clear_cnt));
     }
   }
   return ret;
@@ -902,7 +891,7 @@ int ObTenantTabletStatMgr::update_tablet_stream(const ObTabletStat &report_stat)
 {
   int ret = OB_SUCCESS;
   ObTabletStreamNode *stream_node = nullptr;
-  ObTabletStatKey key(report_stat.ls_id_, report_stat.tablet_id_);
+  ObTabletStatKey key(report_stat.tablet_id_);
   {
     ObBucketHashRLockGuard lock_guard(bucket_lock_, key.hash());
     ret = stream_map_.get_refactored(key, stream_node);
@@ -986,7 +975,7 @@ void ObTenantTabletStatMgr::process_stats()
       if (OB_UNLIKELY(!cur_stat.is_valid())) {
         // allow dirty read
       } else if (OB_FAIL(update_tablet_stream(cur_stat))) {
-        LOG_WARN_RET(ret, "failed to update tablet stat", K(ret), K(cur_stat));
+        LOG_ERROR_RET(ret, "failed to update tablet stat", K(ret), K(cur_stat));
       }
     }
     report_cursor_ = pending_cur; // only TabletStatUpdater update this value.
@@ -1007,7 +996,7 @@ void ObTenantTabletStatMgr::refresh_all(const int64_t step)
 
 void ObTenantTabletStatMgr::refresh_sys_stat()
 {
-  (void) sys_stat_.refresh(MTL_ID());
+  (void) sys_stat_.refresh();
   load_shedder_.refresh_sys_load();
 }
 
@@ -1019,8 +1008,8 @@ void ObTenantTabletStatMgr::refresh_queuing_mode()
   int64_t stream_cnt = 0;
   int64_t update_schema_cnt = 0;
   int64_t tenant_schema_version = OB_INVALID_VERSION;
-  const int64_t tenant_id = MTL_ID();
-  ObMultiVersionSchemaService *schema_service = MTL(ObTenantSchemaService *)->get_schema_service();
+  
+  ObMultiVersionSchemaService *schema_service = share::g_mp->tenant_schema_service()->get_schema_service();
   ObSchemaGetterGuard schema_guard;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
@@ -1028,10 +1017,10 @@ void ObTenantTabletStatMgr::refresh_queuing_mode()
   } else if (OB_ISNULL(schema_service)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("failed to get get schema service", K(ret));
-  } else if (OB_FAIL(schema_service->get_tenant_schema_guard(tenant_id, schema_guard))) {
-    LOG_WARN("failed to get schema guard", K(ret), K(tenant_id));
-  } else if (OB_FAIL(schema_guard.get_schema_version(tenant_id, tenant_schema_version))) {
-    LOG_WARN("failed to get tenant schema version", K(ret), K(tenant_id));
+  } else if (OB_FAIL(schema_service->get_tenant_schema_guard(schema_guard))) {
+    LOG_WARN("failed to get schema guard", K(ret));
+  } else if (OB_FAIL(schema_guard.get_schema_version(tenant_schema_version))) {
+    LOG_WARN("failed to get tenant schema version", K(ret));
   } else {
     ObBucketWLockAllGuard lock_guard(bucket_lock_);
     stream_cnt = stream_map_.size();
@@ -1050,12 +1039,12 @@ void ObTenantTabletStatMgr::refresh_queuing_mode()
       }
 
       // TODO(chengkong): basical implement, can optimize it
-      if (FAILEDx(schema_service->get_tablet_to_table_history(tenant_id, tablet_ids, tenant_schema_version, table_ids))) {
-        LOG_WARN("failed to get table ids according to tablet ids", K(ret), K(tenant_id), K(tenant_schema_version));
+      if (FAILEDx(schema_service->get_tablet_to_table_history(tablet_ids, tenant_schema_version, table_ids))) {
+        LOG_WARN("failed to get table ids according to tablet ids", K(ret), K(tenant_schema_version));
       } else if (OB_UNLIKELY(tablet_ids.count() != stream_cnt || table_ids.count() != stream_cnt)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("get unexpected tablet ids or table ids", K(ret), K(tablet_ids), K(table_ids));
-      } else if (OB_FAIL(table_mode_map.create(DEFAULT_BUCKET_NUM, ObMemAttr(tenant_id, "TabStatModeMap")))) {
+      } else if (OB_FAIL(table_mode_map.create(DEFAULT_BUCKET_NUM, ObMemAttr("TabStatModeMap")))) {
         LOG_WARN("failed to init table_mode_map", K(ret));
       } else {
         iter = stream_map_.begin();
@@ -1074,10 +1063,10 @@ void ObTenantTabletStatMgr::refresh_queuing_mode()
             LOG_WARN("key mismatch with tablet id", K(ret), K(key), K(tablet_ids.at(idx)));
           } else if (OB_FAIL(table_mode_map.get_refactored(table_id, tmp_mode_flag))) {
             if (OB_HASH_NOT_EXIST == ret) {
-              if (OB_FAIL(schema_guard.get_simple_table_schema(tenant_id, table_id, table_schema))) {
-                LOG_WARN("failed to get table schema", K(ret), K(tenant_id), K(table_id));
+              if (OB_FAIL(schema_guard.get_simple_table_schema( table_id, table_schema))) {
+                LOG_WARN("failed to get table schema", K(ret), K(table_id));
               } else if (OB_ISNULL(table_schema)) {
-                LOG_WARN("get nullptr table schema, skip this tablet", K(tenant_id), K(table_id));
+                LOG_WARN("get nullptr table schema, skip this tablet", K(table_id));
               } else if (FALSE_IT(tmp_mode_flag = table_schema->get_table_mode_flag())) {
               } else if (FALSE_IT(stream_node->mode_ = tmp_mode_flag)) {
               } else if (FALSE_IT(update_schema_cnt++)) {
@@ -1097,8 +1086,8 @@ void ObTenantTabletStatMgr::refresh_queuing_mode()
           // prevent hunging schema memory too long
           if (OB_SUCC(ret) && (idx+1) % MAX_SCHEMA_GUARD_REFRESH_CNT == 0) {
             schema_guard.reset();
-            if (OB_FAIL(schema_service->get_tenant_schema_guard(tenant_id, schema_guard))) {
-              LOG_WARN("fail to get schema guard", K(ret), K(tenant_id));
+            if (OB_FAIL(schema_service->get_tenant_schema_guard(schema_guard))) {
+              LOG_WARN("fail to get schema guard", K(ret));
             }
           }
         }
@@ -1107,22 +1096,21 @@ void ObTenantTabletStatMgr::refresh_queuing_mode()
     extreme_tablet_cnt_ = cur_extreme_table_cnt; // replace udpate, prevent merge schedule thread see 0
   }
   cost_time = common::ObTimeUtility::current_time() - cost_time;
-  LOG_INFO("refresh queuing mode", K(ret), K(tenant_id), K(stream_cnt), K(update_schema_cnt), K_(extreme_tablet_cnt), K(cost_time));
+  LOG_INFO("refresh queuing mode", K(ret), K(stream_cnt), K(update_schema_cnt), K_(extreme_tablet_cnt), K(cost_time));
 }
 
 int ObTenantTabletStatMgr::get_queuing_cfg(
-    const share::ObLSID &ls_id,
     const common::ObTabletID &tablet_id,
     ObTableQueuingModeCfg& queuing_cfg) 
 {
   int ret = OB_SUCCESS;
-  const ObTabletStatKey key(ls_id, tablet_id);
+  const ObTabletStatKey key(tablet_id);
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     LOG_WARN("ObTenantTabletStatMgr not inited", K(ret));
   } else if (OB_UNLIKELY(!key.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("get invalid arguments", K(ret), K(ls_id), K(tablet_id));
+    LOG_WARN("get invalid arguments", K(ret), K(tablet_id));
   } else {
     ObTabletStreamNode *stream_node = nullptr;
     ObBucketHashRLockGuard lock_guard(bucket_lock_, key.hash());
@@ -1134,7 +1122,7 @@ int ObTenantTabletStatMgr::get_queuing_cfg(
       }
     } else {
       queuing_cfg = ObTableQueuingModeCfg::get_basic_config(stream_node->mode_);
-      LOG_DEBUG("success get queuing cfg", K(ret), K(ls_id), K(tablet_id), K(queuing_cfg));
+      LOG_DEBUG("success get queuing cfg", K(ret), K(tablet_id), K(queuing_cfg));
     }
   }
   return ret;
@@ -1144,7 +1132,7 @@ void ObTenantTabletStatMgr::TabletStatUpdater::runTimerTask()
 {
   mgr_.process_stats();
   mgr_.refresh_sys_stat();
-  ObGlobalIteratorPool *global_iter_pool = MTL(ObGlobalIteratorPool*);
+  ObGlobalIteratorPool *global_iter_pool = share::g_mp->global_iterator_pool();
   if (nullptr != global_iter_pool && global_iter_pool->is_valid()) {
     global_iter_pool->wash();
   }
@@ -1157,6 +1145,6 @@ void ObTenantTabletStatMgr::TabletStatUpdater::runTimerTask()
     mgr_.refresh_all(interval_step);
     mgr_.refresh_queuing_mode();
     last_update_time_ = ObTimeUtility::current_time();
-    FLOG_INFO("TenantTabletStatMgr refresh all tablet stream", K(MTL_ID()), K(interval_step), KPC(global_iter_pool));
+    FLOG_INFO("TenantTabletStatMgr refresh all tablet stream", K(interval_step), KPC(global_iter_pool));
   }
 }

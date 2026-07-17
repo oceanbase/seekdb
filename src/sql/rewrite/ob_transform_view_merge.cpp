@@ -373,7 +373,7 @@ int ObTransformViewMerge::check_semi_right_table_can_be_merged(ObDMLStmt *stmt,
              || ref_query->is_contains_assignment()
              || ref_query->has_sequence()
              || ref_query->has_ora_rowscn()
-             || (lib::is_mysql_mode() && ref_query->has_for_update())) {
+             || (ref_query->has_for_update())) {
     can_be = false;
   } else {
     can_be = true;

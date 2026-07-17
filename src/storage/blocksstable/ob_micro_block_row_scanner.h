@@ -22,9 +22,8 @@
 #include "storage/blocksstable/ob_sstable.h"
 #include "storage/blocksstable/ob_micro_block_reader.h"
 #include "storage/blocksstable/encoding/ob_micro_block_decoder.h"
-#include "storage/blocksstable/cs_encoding/ob_micro_block_cs_decoder.h"
 #include "storage/access/ob_index_sstable_estimator.h"
-#include "storage/column_store/ob_cg_bitmap.h"
+#include "storage/ob_row_bitmap.h"
 
 namespace oceanbase
 {
@@ -66,10 +65,6 @@ public:
       const ObMicroBlockData &block_data,
       const bool is_left_border,
       const bool is_right_border);
-  int open_column_block(
-      const MacroBlockId &macro_id,
-      const ObMicroBlockData &block_data,
-      const ObCSRange &range);
   virtual int get_next_row(const ObDatumRow *&row);
   virtual int get_next_rows();
   virtual int apply_filter(const bool can_blockscan);
@@ -77,12 +72,6 @@ public:
   int end_of_block() const;
   OB_INLINE int get_access_cnt() const { return reverse_scan_ ? (current_ - last_ + 1) : (last_ - current_ + 1);}
   int filter_micro_block_in_blockscan(sql::PushdownFilterInfo &pd_filter_info);
-  int filter_micro_block_in_cg(
-      sql::ObPushdownFilterExecutor *parent,
-      sql::PushdownFilterInfo &pd_filter_info,
-      const ObCGBitmap *parent_bitmap,
-      const ObCSRowId micro_start_id,
-      int64_t &access_count);
   int filter_pushdown_filter(
       sql::ObPushdownFilterExecutor *parent,
       sql::ObPushdownFilterExecutor *filter,
@@ -163,10 +152,6 @@ public:
   { return is_filter_applied_; }
   void reset_blockscan()
   { can_blockscan_ = false; is_filter_applied_ = false; }
-  int check_and_revert_non_border_rowkey(
-      const ObDatumRowkey &border_rowkey, 
-      const ObDatumRow &deleted_row, 
-      ObCSRowId &co_current);
   int skip_to_range(
       const int64_t begin,
       const int64_t end,
@@ -202,7 +187,7 @@ protected:
   { return row.row_flag_.is_not_exist(); }
   int get_filter_result(ObFilterResult &res);
   bool is_di_bitmap_valid() const;
-  int init_bitmap(ObCGBitmap *&bitmap, bool is_all_true);
+  int init_bitmap(storage::ObRowBitmap *&bitmap, bool is_all_true);
   int inner_get_next_row_blockscan(const ObDatumRow *&row);
 private:
   int apply_black_filter_batch(
@@ -232,17 +217,16 @@ protected:
   ObMicroBlockReader *flat_reader_;
   ObIMicroBlockDecoder *decoder_;
   ObMicroBlockDecoder *pax_decoder_;
-  ObMicroBlockCSDecoder *cs_decoder_;
   memtable::ObMemtableBlockReader *memtable_reader_;
   const storage::ObTableIterParam *param_;
   storage::ObTableAccessContext *context_;
   ObIAllocator &allocator_;
   storage::ObBlockRowStore *block_row_store_;
-  ObCGBitmap *di_bitmap_;
-  ObCGBitmap *filter_bitmap_;
+  storage::ObRowBitmap *di_bitmap_;
+  storage::ObRowBitmap *filter_bitmap_;
 };
 
-// tablet split ddl task scan bared row without multi-merge.
+// Scan bare rows without multi-version merging.
 class ObMicroBlockRowDirectScanner final : public ObIMicroBlockRowScanner
 {
 public:
@@ -334,7 +318,7 @@ public:
         finish_scanning_cur_rowkey_(true),
         is_last_multi_version_row_(true),
         read_row_direct_flag_(false),
-        cell_allocator_(common::ObModIds::OB_SSTABLE_READER, OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID()),
+        cell_allocator_(common::ObModIds::OB_SSTABLE_READER, OB_MALLOC_NORMAL_BLOCK_SIZE),
         reserved_pos_(ObIMicroBlockReaderInfo::INVALID_ROW_INDEX),
         trans_version_col_idx_(-1),
         sql_sequence_col_idx_(-1),

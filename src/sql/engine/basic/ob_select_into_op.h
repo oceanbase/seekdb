@@ -18,13 +18,8 @@
 #define SRC_SQL_ENGINE_BASIC_OB_SELECT_INTO_OP_H_
 
 #include "sql/engine/ob_operator.h"
-#ifndef OB_BUILD_EMBED_MODE
-#include "sql/engine/basic/ob_arrow_basic.h"
-#include <parquet/api/writer.h>
-#endif
 #include "lib/file/ob_file.h"
-#include "share/backup/ob_backup_struct.h"
-#include "sql/engine/table/ob_external_table_access_service.h"
+#include "share/io/ob_backup_storage_info.h"
 #include "sql/engine/cmd/ob_load_data_parser.h"
 #include "sql/engine/basic/ob_select_into_basic.h"
 #include "sql/engine/basic/ob_external_file_writer.h"
@@ -84,8 +79,7 @@ public:
       buffer_size_(DEFAULT_BUFFER_SIZE),
       is_overwrite_(false),
       external_properties_(alloc),
-      external_partition_(alloc),
-      alias_names_(alloc)
+      external_partition_(alloc)
   {
   }
 
@@ -108,7 +102,6 @@ public:
   bool is_overwrite_;
   ObExternalFileFormat::StringData external_properties_;
   ObExternalFileFormat::StringData external_partition_;
-  ObExternalFileFormat::StringList alias_names_;
   static const int64_t DEFAULT_MAX_FILE_SIZE = 256LL * 1024 * 1024;
   static const int64_t DEFAULT_BUFFER_SIZE = 1LL * 1024 * 1024;
 };
@@ -148,15 +141,8 @@ public:
       curr_partition_num_(0),
       external_properties_(),
       format_type_(ObExternalFileFormat::FormatType::CSV_FORMAT),
-      is_odps_cpp_table_(false),
-      is_odps_java_table_(false),
       block_id_(0),
       need_commit_(true)
-#ifndef OB_BUILD_EMBED_MODE
-      ,
-      arrow_alloc_(),
-      parquet_writer_schema_(nullptr)
-#endif
   {
   }
 
@@ -229,10 +215,6 @@ private:
   int init_csv_env();
   void set_csv_format_options();
 
-  int decimal_to_string(const ObDatum &datum,
-                        const ObDatumMeta &datum_meta,
-                        std::string &res,
-                        ObIAllocator &allocator);
   int get_row_str(const int64_t buf_len, bool is_first_row, char *buf, int64_t &pos);
   int into_dumpfile(ObExternalFileWriter *data_writer);
   int into_outfile(ObExternalFileWriter *data_writer);
@@ -297,56 +279,7 @@ private:
   char *get_shared_buf() { return shared_buf_; }
   int64_t get_shared_buf_len() { return shared_buf_len_; }
 
-  // methods for handling parquet
-#ifndef OB_BUILD_EMBED_MODE
-  int init_parquet_env();
-  int get_parquet_logical_type(
-      std::shared_ptr<const parquet::LogicalType> &logical_type,
-      const ObObjType &obj_type, const int32_t precision, const int32_t scale);
-  int get_parquet_physical_type(parquet::Type::type &physical_type, const ObObjType &obj_type);
-  int calc_parquet_decimal_length(int precision);
-  int setup_parquet_schema();
-  int into_outfile_batch_parquet(const ObBatchRows &brs_, ObExternalFileWriter *data_writer);
-  int check_parquet_file_size(ObParquetFileWriter &data_writer);
-  int build_parquet_cell(parquet::RowGroupWriter* rg_writer,
-                         const ObDatumMeta &datum_meta,
-                         const ObObjMeta &obj_meta,
-                         const common::ObIVector* expr_vector,
-                         int64_t col_idx,
-                         int64_t row_idx,
-                         int64_t row_offset,
-                         int64_t &value_offset,
-                         int16_t* definition_levels,
-                         ObIAllocator &allocator,
-                         void* value_batch,
-                         const bool is_strict_mode,
-                         const ObDateSqlMode date_sql_mode);
-  int calc_parquet_decimal_array(const common::ObIVector* expr_vector,
-                                 int row_idx,
-                                 const ObDatumMeta &datum_meta,
-                                 int parquet_decimal_length,
-                                 uint8_t* parquet_flba_ptr);
-  int oracle_timestamp_to_int96(const common::ObIVector* expr_vector,
-                                int64_t row_idx,
-                                const ObDatumMeta &datum_meta,
-                                parquet::Int96 &res);
-#endif // OB_BUILD_EMBED_MODE
-  int calc_byte_array(const common::ObIVector* expr_vector,
-                      int row_idx,
-                      const ObDatumMeta &datum_meta,
-                      const ObObjMeta &obj_meta,
-                      ObIAllocator &allocator,
-                      char* &buf,
-                      uint32_t &res_len);
-  int get_data_from_expr_vector(const common::ObIVector* expr_vector,
-                                int row_idx,
-                                ObObjType type,
-                                int64_t &value,
-                                const bool is_strict_mode,
-                                const ObDateSqlMode date_sql_mode);
   bool file_need_split(int64_t file_size);
-  int check_oracle_number(ObObjType obj_type, int16_t &precision, int8_t scale);
-  static bool day_number_checker(int32_t days);
 
 private:
   int64_t top_limit_cnt_;
@@ -382,18 +315,10 @@ private:
   int curr_partition_num_;
   ObExternalFileFormat external_properties_;
   ObExternalFileFormat::FormatType format_type_;
-  bool is_odps_cpp_table_;
-  bool is_odps_java_table_;
   uint32_t block_id_;
   bool need_commit_;
-  // Handle parquet variables
-#ifndef OB_BUILD_EMBED_MODE
-  ObArrowMemPool arrow_alloc_;
-  std::shared_ptr<parquet::schema::GroupNode> parquet_writer_schema_;
-#endif
   static const int64_t SHARED_BUFFER_SIZE = 2LL * 1024 * 1024;
   static const int64_t MAX_OSS_FILE_SIZE = 5LL * 1024 * 1024 * 1024;
-  static const int32_t ODPS_DATE_MIN_VAL = -719162; // '0001-1-1'
 
 };
 

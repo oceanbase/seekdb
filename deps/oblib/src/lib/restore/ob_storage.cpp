@@ -16,7 +16,7 @@
 
 #include "ob_storage.h"
 #include "lib/restore/ob_object_device.h"
-#include "common/storage/ob_device_common.h"
+#include "lib/restore/ob_device_common.h"
 #include "lib/utility/ob_sort.h"
 #include "lib/stat/ob_diagnostic_info_guard.h"
 #include "lib/string/ob_sensitive_string.h"
@@ -2506,7 +2506,7 @@ int ObStorageAppender::repeatable_pwrite_(const char *buf, const int64_t size, c
     STORAGE_LOG(WARN, "failed to pread", K(ret));
   } else if (0 != MEMCMP(buf, read_buffer, read_buf_size)) {
     ret = OB_OBJECT_STORAGE_PWRITE_CONTENT_NOT_MATCH;
-    STORAGE_LOG(WARN, "data inconsistent", K(ret));
+    STORAGE_LOG(ERROR, "data inconsistent", K(ret));
   } else if (offset + size > reader->get_length()) {
     if (OB_FAIL(appender_->pwrite(buf + actual_write_offset, size - actual_write_offset, reader->get_length()))) {
       if (OB_OBJECT_STORAGE_PWRITE_OFFSET_NOT_MATCH == ret) {
@@ -3111,11 +3111,10 @@ int64_t ObStorageDirectMultiPartWriter::get_length() const
 }
 
 int ObStorageDirectMultiPartWriter::buf_append_part(
-    const char *buf, const int64_t size, const uint64_t tenant_id, bool &is_full)
+    const char *buf, const int64_t size, bool &is_full)
 {
   UNUSED(buf);
   UNUSED(size);
-  UNUSED(tenant_id);
 
   int ret = OB_SUCCESS;
   is_full = false;
@@ -3244,7 +3243,7 @@ int ObStorageBufferedMultiPartWriter::upload_part(
 }
 
 int ObStorageBufferedMultiPartWriter::buf_append_part(
-    const char *buf, const int64_t size, const uint64_t tenant_id, bool &is_full)
+    const char *buf, const int64_t size, bool &is_full)
 {
   int ret = OB_SUCCESS;
   is_full = false;
@@ -3254,14 +3253,14 @@ int ObStorageBufferedMultiPartWriter::buf_append_part(
   } else if (ObStorageGlobalIns::get_instance().is_io_prohibited()) {
     ret = OB_BACKUP_IO_PROHIBITED;
     STORAGE_LOG(WARN, "current observer object storage io is prohibited", K(ret), K_(uri));
-  } else if (OB_ISNULL(buf) || OB_UNLIKELY(size <= 0 || !is_valid_tenant_id(tenant_id))) {
+  } else if (OB_ISNULL(buf) || OB_UNLIKELY(size <= 0)) {
     ret = OB_INVALID_ARGUMENT;
-    STORAGE_LOG(WARN, "invalid arguments", K(ret), KP(buf), K(size), K(tenant_id));
+    STORAGE_LOG(WARN, "invalid arguments", K(ret), KP(buf), K(size));
   } else {
     SpinWLockGuard guard(lock_);
-    if (OB_FAIL(append_buf_(buf, size, tenant_id))) {
+    if (OB_FAIL(append_buf_(buf, size))) {
       STORAGE_LOG(WARN, "fail to append data into cur buf",
-          K(ret), K_(cur_buf_pos), K(size), K(tenant_id));
+          K(ret), K_(cur_buf_pos), K(size));
     } else {
       is_full = (cur_buf_pos_ >= PART_SIZE_THRESHOLD);
     }
@@ -3270,20 +3269,20 @@ int ObStorageBufferedMultiPartWriter::buf_append_part(
 }
 
 int ObStorageBufferedMultiPartWriter::append_buf_(
-    const char *buf, const int64_t size, const uint64_t tenant_id)
+    const char *buf, const int64_t size)
 {
   int ret = OB_SUCCESS;
   char *tmp_buf = nullptr;
   int64_t final_size = cur_buf_pos_ + size;
-  ObMemAttr attr(tenant_id, ALLOC_TAG);
+  ObMemAttr attr(ALLOC_TAG);
 
-  if (OB_ISNULL(buf) || OB_UNLIKELY(size <= 0 || !is_valid_tenant_id(tenant_id))) {
+  if (OB_ISNULL(buf) || OB_UNLIKELY(size <= 0)) {
     ret = OB_INVALID_ARGUMENT;
-    STORAGE_LOG(WARN, "invalid arguments", K(ret), KP(buf), K(size), K(tenant_id));
+    STORAGE_LOG(WARN, "invalid arguments", K(ret), KP(buf), K(size));
   } else if (OB_ISNULL(tmp_buf = static_cast<char *>(ob_malloc(final_size, attr)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     STORAGE_LOG(WARN, "fail to realloc buf",
-        K(ret), K_(cur_buf_pos), K(size), K(final_size), K(tenant_id));
+        K(ret), K_(cur_buf_pos), K(size), K(final_size));
   } else {
     MEMCPY(tmp_buf + cur_buf_pos_, buf, size);
     if (OB_NOT_NULL(cur_buf_)) {

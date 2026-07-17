@@ -66,8 +66,6 @@ typedef void (*ser_eval_vector_function)(ObEvalVectorFuncTag &);
   OB_SFA_RELATION_EXPR_EVAL_STR,                 \
   OB_SFA_DATUM_CMP,                              \
   OB_SFA_DATUM_CMP_STR,                          \
-  OB_SFA_DATUM_CAST_ORACLE_IMPLICIT,             \
-  OB_SFA_DATUM_CAST_ORACLE_EXPLICIT,             \
   OB_SFA_DATUM_CAST_MYSQL_IMPLICIT,              \
   OB_SFA_DATUM_CAST_MYSQL_ENUMSET_IMPLICIT,      \
   OB_SFA_SQL_EXPR_EVAL,                          \
@@ -190,7 +188,6 @@ public:
   static_assert(id >= 0 && id < OB_SFA_MAX, "too big id" #id); \
   bool g_reg_ser_func_##id = ObFuncSerialization::reg_func_array( \
       id, reinterpret_cast<void **>(array), size);
-
 } // end namespace sql
 
 namespace common

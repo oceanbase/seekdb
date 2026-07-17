@@ -49,11 +49,11 @@ ObDirectLoadDagTabletSliceRowIterator::ObDirectLoadDagTabletSliceRowIterator()
     is_delete_full_row_(false),
     is_inited_(false)
 {
-  allocator_.set_tenant_id(MTL_ID());
+  
   row_iters_.set_block_allocator(ModulePageAllocator(allocator_));
 }
 
-ObDirectLoadDagTabletSliceRowIterator::~ObDirectLoadDagTabletSliceRowIterator()
+ObDirectLoadDagTabletSliceRowIterator::~ObDirectLoadDagTabletSliceRowIterator() 
 {
   for (int64_t i = 0; i < row_iters_.count(); ++i) {
     ObDirectLoadIStoreRowIterator *row_iter = row_iters_.at(i);
@@ -64,7 +64,7 @@ ObDirectLoadDagTabletSliceRowIterator::~ObDirectLoadDagTabletSliceRowIterator()
     }
   }
   row_iters_.reset();
-  allocator_.reset();
+  allocator_.reset();  
 }
 
 int ObDirectLoadDagTabletSliceRowIterator::init(

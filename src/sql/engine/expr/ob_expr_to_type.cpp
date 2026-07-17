@@ -31,8 +31,7 @@ ObExprToType::ObExprToType(ObIAllocator &alloc)
                                              1,
                                              VALID_FOR_GENERATED_COL,
                                              NOT_ROW_DIMENSION,
-                                             INTERNAL_IN_MYSQL_MODE,
-                                             INTERNAL_IN_ORACLE_MODE),
+                                             INTERNAL_IN_MYSQL_MODE),
       expect_type_(ObMaxType),
       cast_mode_(CM_NONE)
 {
@@ -108,7 +107,7 @@ int ObExprToType::calc_result_type_for_literal(ObExprResType &type, ObExprResTyp
       } else {
         cast_coll_type = type_ctx.get_coll_type();
       }
-    } else if (lib::is_mysql_mode() && ob_is_json(expect_type_)) {
+    } else if (ob_is_json(expect_type_)) {
       cast_coll_type = CS_TYPE_UTF8MB4_BIN;
     }
 
@@ -151,12 +150,6 @@ int ObExprToType::calc_result_type_for_column(ObExprResType &type,
 {
   int ret = OB_SUCCESS;
   type.set_type(expect_type_);
-  //deduce collation now.
-  //get_compatibility_mode will not return OCEANBASE_MODE forever, so remove it.
-//if (OCEANBASE_MODE == get_compatibility_mode()) {
-//  ret = OB_INVALID_ARGUMENT;
-//  LOG_WARN("compatibility mode should not be oceanbase", K(ret));
-//} else {
   if (OB_ISNULL(type_ctx.get_session())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("Invalid argument.", K(ret), K(type_ctx.get_session()));
@@ -168,7 +161,7 @@ int ObExprToType::calc_result_type_for_column(ObExprResType &type,
     } else if (ob_is_string_or_lob_type(expect_type_)) {
       type.set_collation_level(type1.get_collation_level());
       type.set_collation_type(type1.get_collation_type());
-    } else if (lib::is_mysql_mode() && ob_is_json(expect_type_)) {
+    } else if (ob_is_json(expect_type_)) {
       type.set_collation_level(type1.get_collation_level());
       type.set_collation_type(CS_TYPE_UTF8MB4_BIN);
     } else {
@@ -176,7 +169,7 @@ int ObExprToType::calc_result_type_for_column(ObExprResType &type,
       type.set_collation_level(CS_LEVEL_NUMERIC);
     }
 
-    type.set_accuracy(ObAccuracy::MAX_ACCURACY2[get_compatibility_mode()][expect_type_]);
+    type.set_accuracy(ObAccuracy::MAX_ACCURACY2[MYSQL_MODE][expect_type_]);
 
     if (ob_is_enumset_tc(type1.get_type())) {
       // There is no need to check whether it is enumset with subschema
@@ -209,11 +202,9 @@ int ObExprToType::cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_expr,
 
 DEF_SET_LOCAL_SESSION_VARS(ObExprToType, raw_expr) {
   int ret = OB_SUCCESS;
-  if (is_mysql_mode()) {
-    SET_LOCAL_SYSVAR_CAPACITY(2);
-    EXPR_ADD_LOCAL_SYSVAR(share::SYS_VAR_SQL_MODE);
-    EXPR_ADD_LOCAL_SYSVAR(share::SYS_VAR_COLLATION_CONNECTION);
-  }
+  SET_LOCAL_SYSVAR_CAPACITY(2);
+  EXPR_ADD_LOCAL_SYSVAR(share::SYS_VAR_SQL_MODE);
+  EXPR_ADD_LOCAL_SYSVAR(share::SYS_VAR_COLLATION_CONNECTION);
   return ret;
 }
 

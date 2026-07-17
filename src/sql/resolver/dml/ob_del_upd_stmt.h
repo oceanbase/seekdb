@@ -93,7 +93,6 @@ ObDmlTableInfo(ObDmlTableType table_type)
     check_constraint_exprs_(),
     view_check_exprs_(),
     part_ids_(),
-    is_link_table_(false),
     need_filter_null_(false)
   {}
   virtual ~ObDmlTableInfo() {}
@@ -141,7 +140,6 @@ ObDmlTableInfo(ObDmlTableType table_type)
   common::ObSEArray<ObRawExpr*, 8, common::ModulePageAllocator, true> view_check_exprs_;
   //partition used for base table
   common::ObSEArray<ObObjectID, 1, common::ModulePageAllocator, true> part_ids_;
-  bool is_link_table_;
   bool need_filter_null_;
 };
 
@@ -444,7 +442,6 @@ public:
   int check_dml_source_from_join();
   bool is_pdml_disabled() const { return pdml_disabled_; }
   void set_pdml_disabled() { pdml_disabled_ = true; }
-  int get_modified_materialized_view_id(uint64_t &mview_id) const;
 protected:
   common::ObSEArray<ObRawExpr*, common::OB_PREALLOCATED_NUM, common::ModulePageAllocator, true> returning_exprs_;
   common::ObSEArray<ObRawExpr*, common::OB_PREALLOCATED_NUM, common::ModulePageAllocator, true> returning_into_exprs_;

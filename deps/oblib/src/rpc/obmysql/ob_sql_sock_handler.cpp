@@ -99,7 +99,7 @@ int handle_sql_req_inplace(void* udata)
   pm->set_tenant_ctx(OB_SERVER_TENANT_ID, ObCtxIds::DEFAULT_CTX_ID);
   lib::ContextTLOptGuard guard(true);
   lib::ContextParam param;
-  param.set_mem_attr(OB_SERVER_TENANT_ID, ObModIds::OB_SQL_EXECUTOR, ObCtxIds::DEFAULT_CTX_ID)
+  param.set_mem_attr(ObModIds::OB_SQL_EXECUTOR, ObCtxIds::DEFAULT_CTX_ID)
       .set_properties(lib::USE_TL_PAGE_OPTIONAL)
       .set_ablock_size(lib::INTACT_MIDDLE_AOBJECT_SIZE);
   CREATE_WITH_TEMP_CONTEXT(param) {

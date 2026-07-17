@@ -42,7 +42,7 @@ int ObExprRandstr::calc_result_type2(ObExprResType &type,
 	int ret = OB_SUCCESS;
 	len.set_calc_type(ObIntType);
   seed.set_calc_type(ObIntType);
-  if (lib::is_mysql_mode()) {
+  {
     int64_t mbmaxlen = 0;
     if (OB_FAIL(ObCharset::get_mbmaxlen_by_coll(
                 common::ObCharset::get_default_collation(common::ObCharset::get_default_charset()), mbmaxlen))) {
@@ -57,12 +57,6 @@ int ObExprRandstr::calc_result_type2(ObExprResType &type,
       // otherwise create table as select would fail with randstr() function
       type.set_length(OB_MAX_VARCHAR_LENGTH / mbmaxlen);
     }
-  } else {
-    type.set_collation_type(type_ctx.get_coll_type());
-    type.set_collation_level(CS_LEVEL_IMPLICIT);
-    type.set_length_semantics(LS_CHAR);
-    type.set_type(ObVarcharType);
-    type.set_length(OB_MAX_ORACLE_VARCHAR_LENGTH);
   }
   type.set_collation_level(common::CS_LEVEL_IMPLICIT);
   type.set_collation_type(common::ObCharset::get_default_collation(common::ObCharset::get_default_charset()));

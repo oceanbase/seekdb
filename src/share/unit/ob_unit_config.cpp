@@ -18,7 +18,7 @@
 
 
 #include "ob_unit_config.h"
-#include "observer/ob_server_struct.h"      // GCTX
+#include "share/ob_server_struct.h"      // GCTX
 
 namespace oceanbase
 {

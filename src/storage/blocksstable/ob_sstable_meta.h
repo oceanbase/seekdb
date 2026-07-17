@@ -89,9 +89,6 @@ private:
   DISALLOW_COPY_AND_ASSIGN(ObTxContext);
 };
 
-//For compatibility, the variables in this struct MUST NOT be deleted or moved.
-//You should ONLY add variables at the end.
-//Note that if you use complex structure as variables, the complex structure should also keep compatibility.
 struct ObSSTableBasicMeta final
 {
 public:
@@ -126,7 +123,6 @@ public:
   OB_INLINE int16_t get_sstable_seq() const { return sstable_logic_seq_; }
   OB_INLINE common::ObCompressorType get_compressor_type() const { return compressor_type_; }
   OB_INLINE common::ObRowStoreType get_latest_row_store_type() const { return latest_row_store_type_; }
-  OB_INLINE int64_t get_co_base_snapshot_version() const { return co_base_snapshot_version_; }
   int decode_for_compat(const char *buf, const int64_t data_len, int64_t &pos);
 
   void set_upper_trans_version(const int64_t upper_trans_version);
@@ -154,7 +150,7 @@ public:
       K(ddl_scn_), K(filled_tx_scn_),
       K(contain_uncommitted_row_), K(status_), K_(root_row_store_type), K_(compressor_type),
       K_(encrypt_id), K_(master_key_id), K_(sstable_logic_seq), KPHEX_(encrypt_key, sizeof(encrypt_key_)),
-      K_(latest_row_store_type), K_(table_backup_flag), K_(table_shared_flag), K_(root_macro_seq), K_(co_base_snapshot_version));
+      K_(latest_row_store_type), K_(table_backup_flag), K_(table_shared_flag), K_(root_macro_seq));
 
 public:
   int32_t version_;
@@ -198,7 +194,6 @@ public:
   storage::ObTableSharedFlag table_shared_flag_;
   int64_t root_macro_seq_;
   share::SCN tx_data_recycle_scn_;
-  int64_t co_base_snapshot_version_;
   //Add new variable need consider ObSSTableMetaChecker
 };
 
@@ -210,15 +205,9 @@ public:
   int init(
       const storage::ObTabletCreateSSTableParam &param, 
       common::ObArenaAllocator &allocator);
-  int fill_cg_sstables(
-      common::ObArenaAllocator &allocator,
-      const common::ObIArray<ObITable *> &cg_tables,
-      const int64_t new_progressive_merge_step);
   void reset();
   OB_INLINE bool is_valid() const { return is_inited_; }
   OB_INLINE bool contain_uncommitted_row() const { return basic_meta_.contain_uncommitted_row_; }
-  OB_INLINE ObSSTableArray &get_cg_sstables() { return cg_sstables_; }
-  OB_INLINE const ObSSTableArray &get_cg_sstables() const { return cg_sstables_; }
   OB_INLINE bool is_empty() const {
     return 0 == basic_meta_.data_macro_block_count_;
   }
@@ -291,7 +280,6 @@ public:
   OB_INLINE int64_t get_schema_version() const { return basic_meta_.schema_version_; }
   OB_INLINE int64_t get_progressive_merge_round() const { return basic_meta_.progressive_merge_round_; }
   OB_INLINE int64_t get_progressive_merge_step() const { return basic_meta_.progressive_merge_step_; }
-  OB_INLINE int64_t get_co_base_snapshot_version() const { return basic_meta_.co_base_snapshot_version_; }
   OB_INLINE const ObRootBlockInfo &get_root_info() const { return data_root_info_; }
   OB_INLINE const ObSSTableMacroInfo &get_macro_info() const { return macro_info_; }
   OB_INLINE const ObTableBackupFlag &get_table_backup_flag() const { return basic_meta_.table_backup_flag_; }
@@ -320,7 +308,7 @@ public:
       ObSSTableMeta *&dest) const;
   int get_column_checksums(common::ObIArray<int64_t> &column_checksums) const;
   bool is_shared_table() const;
-  TO_STRING_KV(K_(basic_meta), K_(column_ckm_struct), K_(data_root_info), K_(macro_info), K_(cg_sstables), K_(tx_ctx), K_(is_inited));
+  TO_STRING_KV(K_(basic_meta), K_(column_ckm_struct), K_(data_root_info), K_(macro_info), K_(tx_ctx), K_(is_inited));
 private:
   int fsync_block(const ObTabletCreateSSTableParam &param);
   bool check_meta() const;
@@ -344,7 +332,6 @@ private:
   ObSSTableBasicMeta basic_meta_;
   ObRootBlockInfo data_root_info_;
   ObSSTableMacroInfo macro_info_;
-  ObSSTableArray cg_sstables_;
   ObColumnCkmStruct column_ckm_struct_;
   ObTxContext tx_ctx_;  // abandon meta !!!
   // The following fields don't to persist
@@ -352,62 +339,35 @@ private:
   DISALLOW_COPY_AND_ASSIGN(ObSSTableMeta);
 };
 
-class ObMigrationSSTableParam final
+class ObForkSSTableParam final
 {
 public:
-  ObMigrationSSTableParam();
-  ~ObMigrationSSTableParam();
+  ObForkSSTableParam();
+  ~ObForkSSTableParam();
   bool is_valid() const;
   void reset();
-  int assign(const ObMigrationSSTableParam &param);
-  bool is_empty_sstable() const;
-  bool is_shared_sstable() const;
-  bool is_shared_macro_blocks_sstable() const;
-  bool is_only_shared_macro_blocks_sstable() const;
-  int get_merge_res(blocksstable::ObSSTableMergeRes &res) const;
-  TO_STRING_KV(K_(basic_meta), 
-               K(column_checksums_.count()), 
+  TO_STRING_KV(K_(basic_meta),
+               K(column_checksums_.count()),
                K_(column_checksums),
-               K_(table_key),
-               K(column_default_checksums_.count()),
-               K_(column_default_checksums),  
-               K_(is_small_sstable),
-               K_(is_empty_cg_sstables),
-               K_(column_group_cnt), 
-               K_(full_column_cnt), 
-               K_(co_base_type),
                K_(root_block_addr), 
                KP_(root_block_buf),
                K_(data_block_macro_meta_addr), 
                KP_(data_block_macro_meta_buf),
                K_(is_meta_root));
 private:
-  int addr_serialize(const ObMetaDiskAddr &addr, const char *addr_buf, char *buf, const int64_t buf_len, int64_t &pos) const;
-  int addr_deserialize(const char *buf, const int64_t data_len, int64_t &pos, ObMetaDiskAddr &addr, char *&root__buf);
-  int64_t addr_get_serialize_size(const ObMetaDiskAddr &addr) const;
-  static const int64_t MIGRATION_SSTABLE_PARAM_VERSION = 1;
   typedef common::ObSEArray<int64_t, common::OB_ROW_DEFAULT_COLUMNS_COUNT> ColChecksumArray;
 public:
   common::ObArenaAllocator allocator_;
   ObSSTableBasicMeta basic_meta_;
   ColChecksumArray column_checksums_;
-  storage::ObITable::TableKey table_key_;
-  ColChecksumArray column_default_checksums_;
-  bool is_small_sstable_;
-  // The following two members are used only for co sstable
-  bool is_empty_cg_sstables_;
-  int32_t column_group_cnt_;
-  int32_t full_column_cnt_;
-  int32_t co_base_type_;
   // for shared data
   ObMetaDiskAddr root_block_addr_;
   char *root_block_buf_;
   ObMetaDiskAddr data_block_macro_meta_addr_;
   char *data_block_macro_meta_buf_;
   bool is_meta_root_;
-  OB_UNIS_VERSION(MIGRATION_SSTABLE_PARAM_VERSION);
 private:
-  DISALLOW_COPY_AND_ASSIGN(ObMigrationSSTableParam);
+  DISALLOW_COPY_AND_ASSIGN(ObForkSSTableParam);
 };
 
 class ObSSTableMetaChecker
@@ -419,9 +379,6 @@ public:
       const ObSSTableMeta &new_sstable_meta);
   static int check_sstable_meta(
       const ObSSTableMeta &old_sstable_meta,
-      const ObSSTableMeta &new_sstable_meta);
-  static int check_sstable_meta(
-      const ObMigrationSSTableParam &migration_param,
       const ObSSTableMeta &new_sstable_meta);
   static int check_sstable_basic_meta(
       const ObSSTableBasicMeta &old_sstable_basic_meta,

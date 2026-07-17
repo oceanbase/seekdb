@@ -16,30 +16,30 @@
 
  #define USING_LOG_PREFIX SERVER
  #include "observer/virtual_table/ob_show_create_location.h"
- #include "share/schema/ob_schema_printer.h"
+ #include "sql/printer/ob_schema_printer.h"
  #include "sql/session/ob_sql_session_info.h"
-
+ 
  using namespace oceanbase::common;
  using namespace oceanbase::share::schema;
  namespace oceanbase
  {
  namespace observer
  {
-
+ 
  ObShowCreateLocation::ObShowCreateLocation()
      : ObVirtualTableScannerIterator()
  {
  }
-
+ 
  ObShowCreateLocation::~ObShowCreateLocation()
  {
  }
-
+ 
  void ObShowCreateLocation::reset()
  {
    ObVirtualTableScannerIterator::reset();
  }
-
+ 
  int ObShowCreateLocation::inner_get_next_row(common::ObNewRow *&row)
  {
    int ret = OB_SUCCESS;
@@ -55,9 +55,8 @@
        } else if (OB_UNLIKELY(OB_INVALID_ID == show_location_id)) {
          ret = OB_NOT_SUPPORTED;
          LOG_USER_ERROR(OB_NOT_SUPPORTED, "select a table which is used for show clause");
-       } else if (OB_FAIL(schema_guard_->get_location_schema_by_id(effective_tenant_id_,
-                  show_location_id, location_schema))) {
-         LOG_WARN("failed to get location_schema", K(ret), K_(effective_tenant_id), K(show_location_id));
+       } else if (OB_FAIL(schema_guard_->get_location_schema_by_id(show_location_id, location_schema))) {
+         LOG_WARN("failed to get location_schema", K(ret), K(show_location_id));
        } else if (OB_UNLIKELY(NULL == location_schema)) {
          ret = OB_ERR_UNEXPECTED;
          LOG_WARN("location_schema is null", K(ret), K(show_location_id));
@@ -85,7 +84,7 @@
    }
    return ret;
  }
-
+ 
  int ObShowCreateLocation::calc_show_location_id(uint64_t &show_location_id)
  {
    int ret = OB_SUCCESS;
@@ -107,7 +106,7 @@
    }
    return ret;
  }
-
+ 
  int ObShowCreateLocation::fill_row_cells(uint64_t show_location_id,
                                           const ObString &location_name)
  {
@@ -161,13 +160,13 @@
            // create_location
            ObSchemaPrinter schema_printer(*schema_guard_, strict_mode, sql_quote_show_create, ansi_quotes);
            int64_t pos = 0;
-           if (OB_FAIL(schema_printer.print_location_definiton(effective_tenant_id_,
+           if (OB_FAIL(schema_printer.print_location_definiton(
                                                                show_location_id,
                                                                loc_def_buf,
                                                                loc_def_buf_size,
                                                                pos))) {
              LOG_WARN("Generate location definition failed",
-                      K(ret), K(effective_tenant_id_), K(show_location_id));
+                      K(ret), K(show_location_id));
            } else {
              ObString value_str(static_cast<int32_t>(loc_def_buf_size),
                                 static_cast<int32_t>(pos), loc_def_buf);
@@ -191,6 +190,7 @@
    }
    return ret;
  }
-
+ 
  }/* ns observer*/
  }/* ns oceanbase */
+ 

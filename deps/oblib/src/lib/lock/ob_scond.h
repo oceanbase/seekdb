@@ -20,7 +20,6 @@
 #include "lib/thread_local/ob_tsi_utils.h"
 #include "lib/lock/ob_futex.h"
 #include "lib/wait_event/ob_wait_event.h"
-#include "lib/stat/ob_diagnose_info.h"
 
 namespace oceanbase
 {
@@ -39,7 +38,6 @@ public:
     int ret = OB_SUCCESS;
     if (timeout > 0 && get_key() == key) {
       if (ObWaitEventIds::DEFAULT_COND_WAIT != event_no_) {
-        ObWaitEventGuard guard(event_no_, timeout / 1000, reinterpret_cast<int64_t>(this), 0, 0, true);
         ATOMIC_FAA(&n_waiters_, 1);
         ret = futex_.wait(key, timeout);
         ATOMIC_FAA(&n_waiters_, -1);

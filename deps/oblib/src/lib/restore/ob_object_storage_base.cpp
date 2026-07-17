@@ -21,27 +21,18 @@ namespace oceanbase
 namespace common
 {
 
-thread_local uint64_t ObObjectStorageTenantGuard::tl_tenant_id_ = OB_SERVER_TENANT_ID;
 thread_local int64_t ObObjectStorageTenantGuard::tl_timeout_us_ = OB_STORAGE_MAX_IO_TIMEOUT_US;
 
 ObObjectStorageTenantGuard::ObObjectStorageTenantGuard(
-    const uint64_t tenant_id, const int64_t timeout_us)
-    : old_tenant_id_(tl_tenant_id_),
-      old_timeout_us_(tl_timeout_us_)
+    const int64_t timeout_us)
+    : old_timeout_us_(tl_timeout_us_)
 {
-  tl_tenant_id_ = tenant_id;
   tl_timeout_us_ = timeout_us;
 }
 
 ObObjectStorageTenantGuard::~ObObjectStorageTenantGuard()
 {
-  tl_tenant_id_ = old_tenant_id_;
   tl_timeout_us_ = old_timeout_us_;
-}
-
-uint64_t ObObjectStorageTenantGuard::get_tenant_id()
-{
-  return tl_tenant_id_;
 }
 
 int64_t ObObjectStorageTenantGuard::get_timeout_us()

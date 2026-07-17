@@ -34,15 +34,15 @@ int ObAiModelSqlService::create_ai_model(const ObAiModelSchema &new_schema,
   ObDMLSqlSplicer sql;
   ObSqlString buffer;
   int ret = OB_SUCCESS;
-  const uint64_t tenant_id = new_schema.get_tenant_id();
-  const uint64_t exec_tenant_id = ObSchemaUtils::get_exec_tenant_id(tenant_id);
+  
+  
   int64_t affected_rows = 0;
 
   if (!new_schema.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(new_schema));
   } else if (OB_FAIL(sql.add_pk_column("model_id", new_schema.get_ai_model_id()))) {
-    LOG_WARN("failed to add column", K(ret), K(new_schema), K(tenant_id));
+    LOG_WARN("failed to add column", K(ret), K(new_schema));
   } else if (OB_FAIL(sql.add_column("name", ObHexEscapeSqlStr(new_schema.get_name())))) {
     LOG_WARN("failed to add column", K(ret), K(new_schema));
   } else if (OB_FAIL(sql.add_column("type", static_cast<int64_t>(new_schema.get_type())))) {
@@ -51,7 +51,7 @@ int ObAiModelSqlService::create_ai_model(const ObAiModelSchema &new_schema,
     LOG_WARN("failed to add column", K(ret), K(new_schema));
   } else if (OB_FAIL(sql.splice_insert_sql(OB_ALL_AI_MODEL_TNAME, buffer))) {
     LOG_WARN("failed to splice_insert_sql", K(ret));
-  } else if (OB_FAIL(sql_client.write(tenant_id, buffer.ptr(), affected_rows))) {
+  } else if (OB_FAIL(sql_client.write(buffer.ptr(), affected_rows))) {
     LOG_WARN("failed to execute write", K(ret), K(buffer));
   } else if (!is_single_row(affected_rows)) {
     ret = OB_ERR_UNEXPECTED;
@@ -63,14 +63,14 @@ int ObAiModelSqlService::create_ai_model(const ObAiModelSchema &new_schema,
   } else if (FALSE_IT(buffer.reuse())) {
   } else if (OB_FAIL(sql.splice_insert_sql(OB_ALL_AI_MODEL_HISTORY_TNAME, buffer))) {
     LOG_WARN("failed to splice_insert_sql", K(ret));
-  } else if (OB_FAIL(sql_client.write(exec_tenant_id, buffer.ptr(), affected_rows))) {
+  } else if (OB_FAIL(sql_client.write(buffer.ptr(), affected_rows))) {
     LOG_WARN("failed to execute write", K(ret), K(buffer));
   } else if (!is_single_row(affected_rows)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected value", K(affected_rows), K(buffer), K(ret));
   } else {
     ObSchemaOperation opt;
-    opt.tenant_id_ = new_schema.get_tenant_id();
+    
     opt.ai_model_id_ = new_schema.get_ai_model_id();
     opt.op_type_ = OB_DDL_CREATE_AI_MODEL;
     opt.schema_version_ = new_schema.get_schema_version();
@@ -93,8 +93,8 @@ int ObAiModelSqlService::drop_ai_model(const ObAiModelSchema &schema,
   ObDMLSqlSplicer sql;
   ObSqlString buffer;
   int64_t affected_rows = 0;
-  const uint64_t tenant_id = schema.get_tenant_id();
-  const uint64_t exec_tenant_id = ObSchemaUtils::get_exec_tenant_id(tenant_id);
+  
+  
 
   if (!schema.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
@@ -103,7 +103,7 @@ int ObAiModelSqlService::drop_ai_model(const ObAiModelSchema &schema,
     LOG_WARN("failed to add column", K(ret), K(schema));
   } else if (OB_FAIL(sql.splice_delete_sql(OB_ALL_AI_MODEL_TNAME, buffer))) {
     LOG_WARN("failed to splice_delete_sql", K(ret));
-  } else if (OB_FAIL(sql_client.write(schema.get_tenant_id(), buffer.ptr(), affected_rows))) {
+  } else if (OB_FAIL(sql_client.write(buffer.ptr(), affected_rows))) {
     LOG_WARN("failed to execute write", K(ret), K(buffer));
   } else if (!is_single_row(affected_rows)) {
     ret = OB_ERR_UNEXPECTED;
@@ -112,7 +112,7 @@ int ObAiModelSqlService::drop_ai_model(const ObAiModelSchema &schema,
     buffer.reuse();
     sql.reuse();
     if (OB_FAIL(sql.add_pk_column("model_id", schema.get_ai_model_id()))) {
-      LOG_WARN("failed to add column", K(ret), K(schema), K(tenant_id));
+      LOG_WARN("failed to add column", K(ret), K(schema));
     } else if (OB_FAIL(sql.add_pk_column("schema_version", new_schema_version))) {
       LOG_WARN("failed to add column", K(ret), K(new_schema_version));
     } else if (OB_FAIL(sql.add_column("is_deleted", 1))) {
@@ -125,7 +125,7 @@ int ObAiModelSqlService::drop_ai_model(const ObAiModelSchema &schema,
       LOG_WARN("failed to add column", K(ret), K(schema));
     } else if (OB_FAIL(sql.splice_insert_sql(OB_ALL_AI_MODEL_HISTORY_TNAME, buffer))) {
       LOG_WARN("failed to splice_insert_sql", K(ret));
-    } else if (OB_FAIL(sql_client.write(schema.get_tenant_id(), buffer.ptr(), affected_rows))) {
+    } else if (OB_FAIL(sql_client.write(buffer.ptr(), affected_rows))) {
       LOG_WARN("failed to execute write", K(ret), K(buffer));
     } else if (!is_single_row(affected_rows)) {
       ret = OB_ERR_UNEXPECTED;
@@ -135,7 +135,7 @@ int ObAiModelSqlService::drop_ai_model(const ObAiModelSchema &schema,
 
   if (OB_SUCC(ret)) {
     ObSchemaOperation opt;
-    opt.tenant_id_ = schema.get_tenant_id();
+    
     opt.ai_model_id_ = schema.get_ai_model_id();
     opt.op_type_ = OB_DDL_DROP_AI_MODEL;
     opt.schema_version_ = new_schema_version;

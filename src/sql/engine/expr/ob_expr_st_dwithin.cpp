@@ -15,7 +15,7 @@
  */
 
 #define USING_LOG_PREFIX SQL_ENG
-#include "lib/geo/ob_geo_func_register.h"
+#include "share/geo/ob_geo_func_register.h"
 #include "sql/engine/expr/ob_expr_st_dwithin.h"
 #include "sql/engine/expr/ob_geo_expr_utils.h"
 
@@ -87,8 +87,8 @@ int ObExprPrivSTDWithin::eval_st_dwithin_common(ObEvalCtx &ctx,
   omt::ObSrsCacheGuard srs_guard;
   const ObSrsItem *srs = NULL;
   temp_allocator.set_baseline_size(wkb1.length() + wkb2.length());
-  uint64_t tenant_id = ObMultiModeExprHelper::get_tenant_id(ctx.exec_ctx_.get_my_session());
-  ObGeoBoostAllocGuard guard(tenant_id);
+  
+  ObGeoBoostAllocGuard guard{};
   lib::MemoryContext *mem_ctx = nullptr;
 
   if (distance_tolerance < 0.0) {
@@ -178,8 +178,8 @@ int ObExprPrivSTDWithin::eval_st_dwithin(const ObExpr &expr, ObEvalCtx &ctx, ObD
   bool is_null_res = false;
 
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
-  uint64_t tenant_id = ObMultiModeExprHelper::get_tenant_id(ctx.exec_ctx_.get_my_session());
-  MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator(), expr.type_, tenant_id, ret, N_PRIV_ST_DWITHIN);
+  
+  MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator(), expr.type_, ret, N_PRIV_ST_DWITHIN);
   if (OB_FAIL(temp_allocator.eval_arg(gis_arg1, ctx, gis_datum1)) || OB_FAIL(temp_allocator.eval_arg(gis_arg2, ctx, gis_datum2))
       || OB_FAIL(temp_allocator.eval_arg(gis_arg3, ctx, gis_datum3))) {
     LOG_WARN("eval geo args failed", K(ret), KP(gis_datum1),KP(gis_datum2),KP(gis_datum3));

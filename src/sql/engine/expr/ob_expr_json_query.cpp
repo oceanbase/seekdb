@@ -19,7 +19,7 @@
 #include "ob_expr_json_query.h"
 #include "src/sql/resolver/ob_resolver_utils.h"
 #include "ob_expr_json_value.h"
-#include "lib/xml/ob_binary_aggregate.h"
+#include "common/xml/ob_binary_aggregate.h"
 #include "sql/engine/expr/ob_expr_xml_func_helper.h"
 
 // from sql_parser_base.h
@@ -212,9 +212,9 @@ int ObExprJsonQuery::eval_json_query(const ObExpr &expr, ObEvalCtx &ctx, ObDatum
   bool is_null_result = false;
   uint8_t is_type_mismatch = 0;
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
-  uint64_t tenant_id = ObMultiModeExprHelper::get_tenant_id(ctx.exec_ctx_.get_my_session());
-  MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator(), expr.type_, tenant_id, ret);
-  lib::ObMallocHookAttrGuard malloc_guard(lib::ObMemAttr(tenant_id, "JSONModule"));
+  
+  MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator(), expr.type_, ret);
+  lib::ObMallocHookAttrGuard malloc_guard(lib::ObMemAttr("JSONModule"));
   ObJsonBin st_json(&temp_allocator);
   ObIJsonBase *j_base = &st_json;
   ObIJsonBase *jb_empty = NULL;
@@ -504,7 +504,7 @@ int ObExprJsonQuery::set_multivalue_result(bool is_result_array,
 
     // 2. do sort
     if (OB_SUCC(ret) && is_result_array && OB_NOT_NULL(obj_array)) {
-      lib::ObMallocHookAttrGuard malloc_guard(lib::ObMemAttr(ObXMLExprHelper::get_tenant_id(ctx.exec_ctx_.get_my_session()), "JSONMultivalue"));
+      lib::ObMallocHookAttrGuard malloc_guard(lib::ObMemAttr("JSONMultivalue"));
       ObJsonObjectCompare cmp;
       lib::ob_sort(obj_array, obj_array + element_count, cmp);
     }
@@ -786,7 +786,7 @@ int ObExprJsonQuery::get_clause_param_value(const ObExpr &expr,
   if (val_type == ObNullType) {
     if (ob_is_string_type(type) || json_param->json_path_->is_last_func()) {
       json_param->dst_type_ = ObVarcharType;
-      json_param->accuracy_.set_full_length(VARCHAR2_DEFAULT_LEN, 1, false);
+      json_param->accuracy_.set_full_length(VARCHAR2_DEFAULT_LEN, 1);
     } else {
       json_param->dst_type_ = ObJsonType;
       json_param->accuracy_.set_length(0);

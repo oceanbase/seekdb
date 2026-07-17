@@ -46,9 +46,8 @@ int ObLobAccessParam::assign(const ObLobAccessParam& other)
   this->sql_mode_ = other.sql_mode_;
   this->dml_base_param_ = other.dml_base_param_;
 
-  this->tenant_id_ = other.tenant_id_;
-  this->src_tenant_id_ = other.src_tenant_id_;
-  this->ls_id_ = other.ls_id_;
+  
+  
   this->tablet_id_ = other.tablet_id_;
   this->lob_meta_tablet_id_ = other.lob_meta_tablet_id_;
   this->lob_piece_tablet_id_ = other.lob_piece_tablet_id_;
@@ -194,7 +193,7 @@ bool ObLobAccessParam::has_single_chunk() const
   int ret = OB_SUCCESS;
   bool res = false;
   int64_t chunk_size = 0;
-  if (! lib::is_mysql_mode() || byte_size_ <= 0) {
+  if (byte_size_ <= 0) {
     // skip
   } else if (OB_FAIL(get_store_chunk_size(chunk_size))) {
     LOG_WARN("get_store_chunk_size fail", K(ret), KPC(this));
@@ -207,11 +206,10 @@ bool ObLobAccessParam::has_single_chunk() const
 bool ObLobAccessParam::enable_block_cache() const
 {
   bool res = false;
-  omt::ObTenantConfigGuard tenant_config(TENANT_CONF(tenant_id_));
-  if (!tenant_config.is_valid()) {
+  if (!true) {
     res = false;
   } else {
-    res = byte_size_ <= tenant_config->lob_enable_block_cache_threshold;
+    res = byte_size_ <= GCONF.lob_enable_block_cache_threshold;
   }
   return res;
 }
@@ -219,7 +217,7 @@ bool ObLobAccessParam::enable_block_cache() const
 // 1. from rpc can not remote again
 // 2. lob from other tenant also should read by rpc
 bool ObLobAccessParam::is_remote() const  { return (! from_rpc_ || enable_remote_retry_) && addr_.is_valid() && (MYADDR != addr_ || is_across_tenant()); }
-bool ObLobAccessParam::is_across_tenant() const { return MTL_ID() != tenant_id_; }
+bool ObLobAccessParam::is_across_tenant() const { return false; }
 
 int ObLobAccessParam::check_handle_size() const
 {
@@ -486,7 +484,7 @@ int ObLobAccessParam::get_tx_read_snapshot(ObLobLocatorV2 &locator, transaction:
     } else if (OB_FAIL(locator.get_location_info(location_info))) {
       LOG_WARN("failed to get location info", K(ret), K(locator));
     } else if (OB_FAIL(read_snapshot.build_snapshot_for_lob(
-        tx_info->snapshot_version_, tx_info->snapshot_tx_id_, tx_info->snapshot_seq_, share::ObLSID(location_info->ls_id_)))) {
+        tx_info->snapshot_version_, tx_info->snapshot_tx_id_, tx_info->snapshot_seq_))) {
       LOG_WARN("build_snapshot_for_lob fail", K(ret), KPC(tx_info), KPC(location_info), K(locator));
     }
   } else {

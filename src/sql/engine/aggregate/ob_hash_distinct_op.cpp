@@ -72,7 +72,7 @@ int ObHashDistinctOp::inner_open()
     LOG_WARN("failed to init mem context", K(ret));
   } else {
     first_got_row_ = true;
-    tenant_id_ = ctx_.get_my_session()->get_effective_tenant_id();
+    
     if (MY_SPEC.is_block_mode_) {
       get_next_row_func_ = &ObHashDistinctOp::do_block_distinct;
       get_next_batch_func_ = &ObHashDistinctOp::do_block_distinct_for_batch;
@@ -155,13 +155,12 @@ int ObHashDistinctOp::init_hash_partition_infras()
     LOG_WARN("failed to get px size", K(ret));
   } else if (OB_FAIL(sql_mem_processor_.init(
                   &mem_context_->get_malloc_allocator(),
-                  tenant_id_,
                   est_rows * MY_SPEC.width_,
                   MY_SPEC.type_,
                   MY_SPEC.id_,
                   &ctx_))) {
     LOG_WARN("failed to init sql mem processor", K(ret));
-  } else if (OB_FAIL(hp_infras_.init(tenant_id_,
+  } else if (OB_FAIL(hp_infras_.init(
       enable_sql_dumped_,
       true, true, 2, &sql_mem_processor_))) {
     LOG_WARN("failed to init hash partition infrastructure", K(ret));
@@ -796,8 +795,7 @@ int ObHashDistinctOp::init_mem_context()
   int ret = OB_SUCCESS;
   if (NULL == mem_context_) {
     lib::ContextParam param;
-    param.set_mem_attr(ctx_.get_my_session()->get_effective_tenant_id(),
-        "ObHashDistRows",
+    param.set_mem_attr("ObHashDistRows",
         ObCtxIds::WORK_AREA);
     if (OB_FAIL(CURRENT_CONTEXT->CREATE_CONTEXT(mem_context_, param))) {
       LOG_WARN("memory entity create failed", K(ret));

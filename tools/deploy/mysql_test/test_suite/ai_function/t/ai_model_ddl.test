@@ -20,28 +20,28 @@ call DBMS_AI_SERVICE.CREATE_AI_MODEL(
     "model_name": "text-embedding-v1"
   }');
 
-select NAME, TYPE, MODEL_NAME from oceanbase.DBA_OB_AI_MODELS where NAME = 'my_ai_model_1';
+select NAME, TYPE, MODEL_NAME from oceanbase.DBA_OB_AI_MODELS where NAME = 'my_ai_model_1';  
 
 call DBMS_AI_SERVICE.CREATE_AI_MODEL(
   'my_ai_model_2', '{
     "type": "sparse_embedding",
     "model_name": "text-embedding-v4"
   }');
-select NAME, TYPE, MODEL_NAME from oceanbase.DBA_OB_AI_MODELS where NAME = 'my_ai_model_2';
+select NAME, TYPE, MODEL_NAME from oceanbase.DBA_OB_AI_MODELS where NAME = 'my_ai_model_2';  
 
 call DBMS_AI_SERVICE.CREATE_AI_MODEL(
   'my_ai_model_3', '{
     "type": "completion",
     "model_name": "hunyuan-t1-20250711"
   }');
-select NAME, TYPE, MODEL_NAME from oceanbase.DBA_OB_AI_MODELS where NAME = 'my_ai_model_3';
+select NAME, TYPE, MODEL_NAME from oceanbase.DBA_OB_AI_MODELS where NAME = 'my_ai_model_3';  
 
 call DBMS_AI_SERVICE.CREATE_AI_MODEL(
   'my_ai_model_4', '{
     "type": "rerank",
     "model_name": "Qwen/Qwen3-Reranker-0.6B"
   }');
-select NAME, TYPE, MODEL_NAME from oceanbase.DBA_OB_AI_MODELS where NAME = 'my_ai_model_4';
+select NAME, TYPE, MODEL_NAME from oceanbase.DBA_OB_AI_MODELS where NAME = 'my_ai_model_4';  
 
 call DBMS_AI_SERVICE.DROP_AI_MODEL('my_ai_model_1');
 call DBMS_AI_SERVICE.DROP_AI_MODEL('my_ai_model_2');
@@ -96,7 +96,7 @@ call DBMS_AI_SERVICE.CREATE_AI_MODEL(
 --error 11114
 call DBMS_AI_SERVICE.DROP_AI_MODEL('');
 
-### test cdb view
+### test cdb view  
 connect (sys_conn,$OBMYSQL_MS0,root,,oceanbase,$OBMYSQL_PORT);
 connection sys_conn;
 --error 0,11118
@@ -108,7 +108,7 @@ call DBMS_AI_SERVICE.CREATE_AI_MODEL(
     "model_name": "hunyuan-t1-20250711"
   }');
 
-select NAME, TYPE, MODEL_NAME from oceanbase.CDB_OB_AI_MODELS WHERE NAME in ('my_ai_model_3', 'my_ai_model_4');
+select NAME, TYPE, MODEL_NAME from oceanbase.DBA_OB_AI_MODELS WHERE NAME in ('my_ai_model_3', 'my_ai_model_4');
 
 call DBMS_AI_SERVICE.DROP_AI_MODEL('my_ai_model_3');
 select user_id, database_id, database_name, tablegroup_id, table_name, operation_type, ddl_stmt_str from oceanbase.__all_ddl_operation where operation_type >= 2154 and operation_type <= 2157 order by gmt_create desc limit 2;

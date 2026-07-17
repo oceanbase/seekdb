@@ -228,7 +228,7 @@ class ObDtlLinkedBuffer
   OB_UNIS_VERSION(1);
 public:
   ObDtlLinkedBuffer()
-      : buf_(), size_(), pos_(), is_data_msg_(false), seq_no_(0), tenant_id_(0),
+      : buf_(), size_(), pos_(), is_data_msg_(false), seq_no_(0),
         allocated_chid_(0), is_eof_(false), timeout_ts_(0), msg_type_(ObDtlMsgType::MAX),
         flags_(0), dfo_key_(), use_interm_result_(false), batch_id_(0), batch_info_valid_(false),
         rows_cnt_(0), batch_info_(),
@@ -239,7 +239,7 @@ public:
         op_info_()
   {}
   ObDtlLinkedBuffer(char * buf, int64_t size)
-      : buf_(buf), size_(size), pos_(), is_data_msg_(false), seq_no_(0), tenant_id_(0),
+      : buf_(buf), size_(size), pos_(), is_data_msg_(false), seq_no_(0),
         allocated_chid_(0), is_eof_(false), timeout_ts_(0), msg_type_(ObDtlMsgType::MAX),
         flags_(0), dfo_key_(), use_interm_result_(false), batch_id_(0), batch_info_valid_(false),
         rows_cnt_(0), batch_info_(),
@@ -249,7 +249,7 @@ public:
         row_meta_(),
         op_info_()
   {}
-  TO_STRING_KV(K_(size), K_(pos), K_(is_data_msg), K_(seq_no), K_(tenant_id), K_(allocated_chid),
+  TO_STRING_KV(K_(size), K_(pos), K_(is_data_msg), K_(seq_no), K_(allocated_chid),
       K_(is_eof), K_(timeout_ts), K(msg_type_), K_(flags), K(is_bcast()), K_(rows_cnt), K_(enable_channel_sync),
       K_(dfo_key), K_(op_info));
 
@@ -313,14 +313,6 @@ public:
     return seq_no_;
   }
 
-  OB_INLINE uint64_t tenant_id() const {
-    return tenant_id_;
-  }
-
-  OB_INLINE uint64_t &tenant_id() {
-    return tenant_id_;
-  }
-
   OB_INLINE bool is_eof() const {
     return is_eof_;
   }
@@ -377,7 +369,7 @@ public:
     dst->size_ = src.size_;
     dst->is_data_msg_ = src.is_data_msg_;
     dst->seq_no_ = src.seq_no_;
-    dst->tenant_id_ = src.tenant_id_;
+    
     dst->is_eof_ = src.is_eof_;
     dst->timeout_ts_ = src.timeout_ts_;
     dst->pos_ = src.pos_;
@@ -400,7 +392,7 @@ public:
     size_ = src.size_;
     is_data_msg_ = src.is_data_msg_;
     seq_no_ = src.seq_no_;
-    tenant_id_ = src.tenant_id_;
+    
     is_eof_ = src.is_eof_;
     timeout_ts_ = src.timeout_ts_;
     pos_ = src.pos_;
@@ -571,7 +563,7 @@ The memory layout is as below:
   mutable int64_t pos_;
   bool is_data_msg_;
   int64_t seq_no_;
-  uint64_t tenant_id_;
+  
   int64_t allocated_chid_;
   bool is_eof_;
   int64_t timeout_ts_;

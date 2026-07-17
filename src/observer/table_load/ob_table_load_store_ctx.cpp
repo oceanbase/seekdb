@@ -83,10 +83,10 @@ ObTableLoadStoreCtx::ObTableLoadStoreCtx(ObTableLoadTableCtx *ctx)
     last_heart_beat_ts_(ObTimeUtil::current_time()),
     is_inited_(false)
 {
-  allocator_.set_tenant_id(MTL_ID());
+  
   index_store_table_ctxs_.set_block_allocator(ModulePageAllocator(allocator_));
-  merge_op_allocator_.set_tenant_id(MTL_ID());
-  committed_trans_store_array_.set_tenant_id(MTL_ID());
+  
+  
 }
 
 ObTableLoadStoreCtx::~ObTableLoadStoreCtx()
@@ -208,8 +208,8 @@ void ObTableLoadStoreCtx::destroy()
 }
 
 int ObTableLoadStoreCtx::init(
-  const ObTableLoadArray<ObTableLoadLSIdAndPartitionId> &partition_id_array,
-  const ObTableLoadArray<ObTableLoadLSIdAndPartitionId> &target_partition_id_array)
+  const ObTableLoadArray<ObTableLoadTabletId> &partition_id_array,
+  const ObTableLoadArray<ObTableLoadTabletId> &target_partition_id_array)
 {
   int ret = OB_SUCCESS;
   if (IS_INIT) {
@@ -220,21 +220,21 @@ int ObTableLoadStoreCtx::init(
     LOG_WARN("invalid args", KR(ret), K(partition_id_array), K(target_partition_id_array));
   }
   // init trans_allocator_
-  else if (OB_FAIL(trans_allocator_.init("TLD_STransPool", ctx_->param_.tenant_id_))) {
+  else if (OB_FAIL(trans_allocator_.init("TLD_STransPool"))) {
     LOG_WARN("fail to init trans allocator", KR(ret));
   }
   // init trans_map_
   else if (OB_FAIL(
-             trans_map_.create(1024, "TLD_STransMap", "TLD_STransMap", ctx_->param_.tenant_id_))) {
+             trans_map_.create(1024, "TLD_STransMap", "TLD_STransMap"))) {
     LOG_WARN("fail to create trans map", KR(ret));
   }
   // init trans_ctx_map_
   else if (OB_FAIL(
-             trans_ctx_map_.create(1024, "TLD_TCtxMap", "TLD_TCtxMap", ctx_->param_.tenant_id_))) {
+             trans_ctx_map_.create(1024, "TLD_TCtxMap", "TLD_TCtxMap"))) {
     LOG_WARN("fail to create trans ctx map", KR(ret));
   }
   // init segment_trans_ctx_map_
-  else if (OB_FAIL(segment_ctx_map_.init("TLD_SegCtxMap", ctx_->param_.tenant_id_))) {
+  else if (OB_FAIL(segment_ctx_map_.init("TLD_SegCtxMap"))) {
     LOG_WARN("fail to init segment ctx map", KR(ret));
   }
   else if (FALSE_IT(thread_cnt_ = ctx_->param_.session_count_)) {
@@ -270,7 +270,7 @@ int ObTableLoadStoreCtx::init(
   else if (OB_ISNULL(tmp_file_mgr_ = OB_NEWx(ObDirectLoadTmpFileManager, (&allocator_)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("fail to new ObDirectLoadTmpFileManager", KR(ret));
-  } else if (OB_FAIL(tmp_file_mgr_->init(ctx_->param_.tenant_id_))) {
+  } else if (OB_FAIL(tmp_file_mgr_->init())) {
     LOG_WARN("fail to init tmp file manager", KR(ret));
   }
   // init table_mgr_
@@ -470,8 +470,8 @@ int ObTableLoadStoreCtx::init_trans_param(storage::ObDirectLoadTransParam &trans
 }
 
 int ObTableLoadStoreCtx::init_store_table_ctxs(
-  const ObTableLoadArray<ObTableLoadLSIdAndPartitionId> &partition_id_array,
-  const ObTableLoadArray<ObTableLoadLSIdAndPartitionId> &target_partition_id_array)
+  const ObTableLoadArray<ObTableLoadTabletId> &partition_id_array,
+  const ObTableLoadArray<ObTableLoadTabletId> &target_partition_id_array)
 {
   int ret = OB_SUCCESS;
   // init data store_table_ctx_
@@ -524,13 +524,8 @@ int ObTableLoadStoreCtx::init_sort_param()
   basic_table_data_desc_.sstable_data_block_size_ = ObDirectLoadSSTableDataBlock::DEFAULT_DATA_BLOCK_SIZE;
   basic_table_data_desc_.extra_buf_size_ = ObDirectLoadTableDataDesc::DEFAULT_EXTRA_BUF_SIZE;
   basic_table_data_desc_.compressor_type_ = ctx_->param_.compressor_type_;
-  if (!GCTX.is_shared_storage_mode()) {
-    basic_table_data_desc_.sample_mode_ = ObDirectLoadSampleMode::ROW_SAMPLE;
-    basic_table_data_desc_.num_per_sample_ = ObDirectLoadTableDataDesc::DEFAULT_ROWS_PER_SAMPLE;
-  } else {
-    basic_table_data_desc_.sample_mode_ = ObDirectLoadSampleMode::DATA_BLOCK_SAMPLE;
-    basic_table_data_desc_.num_per_sample_ = ObDirectLoadSSTableIndexBlock::get_entries_per_block(basic_table_data_desc_.sstable_index_block_size_);
-  }
+  basic_table_data_desc_.sample_mode_ = ObDirectLoadSampleMode::ROW_SAMPLE;
+  basic_table_data_desc_.num_per_sample_ = ObDirectLoadTableDataDesc::DEFAULT_ROWS_PER_SAMPLE;
   // sort params
   int64_t wa_mem_limit = 0;
   if (ctx_->param_.exe_mode_ == ObTableLoadExeMode::MAX_TYPE) {
@@ -573,7 +568,6 @@ int ObTableLoadStoreCtx::init_write_ctx()
     LOG_WARN("ObTableLoadStoreCtx not init", KR(ret));
   } else {
     static const int64_t MACRO_BLOCK_WRITER_MEM_SIZE = 10 * 1024LL * 1024LL;
-    static const int64_t cg_chunk_mem_limit = 64 * 1024L; // 64K
     // table_data_desc_
     write_ctx_.table_data_desc_ = basic_table_data_desc_;
     write_ctx_.table_data_desc_.rowkey_column_num_ =
@@ -614,7 +608,7 @@ int ObTableLoadStoreCtx::init_write_ctx()
         break;
       // No resource control
       case ObTableLoadExeMode::MAX_TYPE: {
-        const int64_t part_cnt = data_store_table_ctx_->ls_partition_ids_.count();
+        const int64_t part_cnt = data_store_table_ctx_->partition_ids_.count();
         int64_t wa_mem_limit = 0;
         if (OB_FAIL(ObTableLoadService::get_memory_limit(wa_mem_limit))) {
           LOG_WARN("fail to get memory limit", KR(ret));
@@ -622,15 +616,7 @@ int ObTableLoadStoreCtx::init_write_ctx()
           ret = OB_INVALID_ARGUMENT;
           LOG_WARN("wa_mem_limit is too small", KR(ret), K(wa_mem_limit));
         } else if (data_store_table_ctx_->schema_->is_table_without_pk_) {
-          int64_t part_mem_size = 0;
-          if (!data_store_table_ctx_->schema_->is_column_store() ||
-              ObDirectLoadMethod::is_incremental(ctx_->param_.method_)) {
-            // row storage
-            part_mem_size = MACRO_BLOCK_WRITER_MEM_SIZE;
-          } else {
-            // column store
-            part_mem_size = data_store_table_ctx_->schema_->cg_cnt_ * cg_chunk_mem_limit * 10;
-          }
+          const int64_t part_mem_size = MACRO_BLOCK_WRITER_MEM_SIZE;
           const int64_t bucket_cnt = MAX(1, wa_mem_limit / (thread_cnt_ * part_mem_size));
           if (part_cnt <= bucket_cnt || !ctx_->param_.need_sort_) {
             // Fast write to heap table
@@ -673,14 +659,14 @@ int ObTableLoadStoreCtx::init_write_ctx()
       ObSchemaGetterGuard schema_guard;
       const ObTableSchema *table_schema = nullptr;
       ObArray<ObColDesc> col_descs;
-      if (OB_FAIL(ObTableLoadSchema::get_table_schema(ctx_->param_.tenant_id_,
+      if (OB_FAIL(ObTableLoadSchema::get_table_schema(
                                                       ctx_->param_.table_id_,
                                                       schema_guard,
                                                       table_schema))) {
         LOG_WARN("fail to get table schema", KR(ret), K(ctx_->param_));
       }
       // In MySQL mode, the SQL execution plan will include virtual generated columns
-      else if (OB_FAIL(table_schema->get_column_ids(col_descs, lib::is_oracle_mode()/*no_virtual*/))) {
+      else if (OB_FAIL(table_schema->get_column_ids(col_descs, false/*no_virtual*/))) {
         LOG_WARN("fail to get column ids", KR(ret));
       } else if (OB_FAIL(ObTableLoadSchema::prepare_col_descs(table_schema, col_descs))) {
         LOG_WARN("fail to prepare col descs", KR(ret), KPC(table_schema), K(col_descs));
@@ -725,23 +711,22 @@ int ObTableLoadStoreCtx::init_write_ctx()
       }
     }
     if (OB_SUCC(ret) && ctx_->param_.px_mode_) {
-      const ObArray<ObTableLoadLSIdAndPartitionId> &ls_partition_ids =
-        data_store_table_ctx_->ls_partition_ids_;
-      write_ctx_.is_single_part_ = (1 == ls_partition_ids.count());
+      const ObArray<ObTableLoadTabletId> &partition_ids =
+        data_store_table_ctx_->partition_ids_;
+      write_ctx_.is_single_part_ = (1 == partition_ids.count());
       if (write_ctx_.is_single_part_) {
-        write_ctx_.single_tablet_id_ = ls_partition_ids[0].part_tablet_id_.tablet_id_;
+        write_ctx_.single_tablet_id_ = partition_ids[0].part_tablet_id_.tablet_id_;
         if (OB_FAIL(ObDirectLoadVectorUtils::make_const_tablet_id_vector(write_ctx_.single_tablet_id_,
                                                                          allocator_,
                                                                          write_ctx_.single_tablet_id_vector_))) {
           LOG_WARN("fail to make const tablet id vector", KR(ret), K(write_ctx_.single_tablet_id_));
         }
       } else {
-        if (OB_FAIL(write_ctx_.tablet_idx_map_.create(1024, "TLD_TbtIdxMap", "TLD_TbtIdxMap",
-                                                      MTL_ID()))) {
+        if (OB_FAIL(write_ctx_.tablet_idx_map_.create(1024, "TLD_TbtIdxMap", "TLD_TbtIdxMap"))) {
           LOG_WARN("fail to create hashmap", KR(ret));
         } else {
-          for (int64_t i = 0; OB_SUCC(ret) && i < ls_partition_ids.count(); ++i) {
-            const ObTabletID &tablet_id = ls_partition_ids[i].part_tablet_id_.tablet_id_;
+          for (int64_t i = 0; OB_SUCC(ret) && i < partition_ids.count(); ++i) {
+            const ObTabletID &tablet_id = partition_ids[i].part_tablet_id_.tablet_id_;
             if (OB_FAIL(write_ctx_.tablet_idx_map_.set_refactored(tablet_id.id(), i))) {
               LOG_WARN("fail to set refactored", KR(ret), K(tablet_id));
               if (OB_HASH_EXIST == ret) {
@@ -779,7 +764,6 @@ int ObTableLoadStoreCtx::init_write_ctx_for_dag()
 {
   int ret = OB_SUCCESS;
   static const int64_t MACRO_BLOCK_WRITER_MEM_SIZE = 10 * 1024LL * 1024LL;
-  static const int64_t cg_chunk_mem_limit = 64 * 1024L; // 64K
   // is_fast_heap_table_, is_multiple_mode_
   switch (ctx_->param_.exe_mode_) {
     // Fast heap table write
@@ -797,7 +781,7 @@ int ObTableLoadStoreCtx::init_write_ctx_for_dag()
       break;
     // No resource control
     case ObTableLoadExeMode::MAX_TYPE: {
-      const int64_t part_cnt = data_store_table_ctx_->ls_partition_ids_.count();
+      const int64_t part_cnt = data_store_table_ctx_->partition_ids_.count();
       int64_t wa_mem_limit = 0;
       if (OB_FAIL(ObTableLoadService::get_memory_limit(wa_mem_limit))) {
         LOG_WARN("fail to get memory limit", KR(ret));
@@ -805,15 +789,7 @@ int ObTableLoadStoreCtx::init_write_ctx_for_dag()
         ret = OB_INVALID_ARGUMENT;
         LOG_WARN("wa_mem_limit is too small", KR(ret), K(wa_mem_limit));
       } else if (data_store_table_ctx_->schema_->is_table_without_pk_) {
-        int64_t part_mem_size = 0;
-        if (!data_store_table_ctx_->schema_->is_column_store() ||
-            ObDirectLoadMethod::is_incremental(ctx_->param_.method_)) {
-          // Row storage
-          part_mem_size = MACRO_BLOCK_WRITER_MEM_SIZE;
-        } else {
-          // Column storage
-          part_mem_size = data_store_table_ctx_->schema_->cg_cnt_ * cg_chunk_mem_limit * 10;
-        }
+        const int64_t part_mem_size = MACRO_BLOCK_WRITER_MEM_SIZE;
         const int64_t bucket_cnt = MAX(1, wa_mem_limit / (thread_cnt_ * part_mem_size));
         if (part_cnt <= bucket_cnt || !ctx_->param_.need_sort_) {
           // Fast heap table write
@@ -845,13 +821,13 @@ int ObTableLoadStoreCtx::init_write_ctx_for_dag()
     ObSchemaGetterGuard schema_guard;
     const ObTableSchema *table_schema = nullptr;
     ObArray<ObColDesc> col_descs;
-    if (OB_FAIL(ObTableLoadSchema::get_table_schema(ctx_->param_.tenant_id_, ctx_->param_.table_id_,
+    if (OB_FAIL(ObTableLoadSchema::get_table_schema( ctx_->param_.table_id_,
                                                     schema_guard, table_schema))) {
       LOG_WARN("fail to get table schema", KR(ret), K(ctx_->param_));
     }
     // In MySQL mode, SQL execution plan includes virtual generated columns
     else if (OB_FAIL(
-               table_schema->get_column_ids(col_descs, lib::is_oracle_mode() /*no_virtual*/))) {
+               table_schema->get_column_ids(col_descs, false /*no_virtual*/))) {
       LOG_WARN("fail to get column ids", KR(ret));
     } else if (OB_FAIL(ObTableLoadSchema::prepare_col_descs(table_schema, col_descs))) {
       LOG_WARN("fail to prepare col descs", KR(ret), KPC(table_schema), K(col_descs));
@@ -896,22 +872,22 @@ int ObTableLoadStoreCtx::init_write_ctx_for_dag()
     }
   }
   if (OB_SUCC(ret) && ctx_->param_.px_mode_) {
-    const ObArray<ObTableLoadLSIdAndPartitionId> &ls_partition_ids =
-      data_store_table_ctx_->ls_partition_ids_;
-    write_ctx_.is_single_part_ = (1 == ls_partition_ids.count());
+    const ObArray<ObTableLoadTabletId> &partition_ids =
+      data_store_table_ctx_->partition_ids_;
+    write_ctx_.is_single_part_ = (1 == partition_ids.count());
     if (write_ctx_.is_single_part_) {
-      write_ctx_.single_tablet_id_ = ls_partition_ids[0].part_tablet_id_.tablet_id_;
+      write_ctx_.single_tablet_id_ = partition_ids[0].part_tablet_id_.tablet_id_;
       if (OB_FAIL(ObDirectLoadVectorUtils::make_const_tablet_id_vector(
             write_ctx_.single_tablet_id_, allocator_, write_ctx_.single_tablet_id_vector_))) {
         LOG_WARN("fail to make const tablet id vector", KR(ret), K(write_ctx_.single_tablet_id_));
       }
     } else {
       if (OB_FAIL(
-            write_ctx_.tablet_idx_map_.create(1024, "TLD_TbtIdxMap", "TLD_TbtIdxMap", MTL_ID()))) {
+            write_ctx_.tablet_idx_map_.create(1024, "TLD_TbtIdxMap", "TLD_TbtIdxMap"))) {
         LOG_WARN("fail to create hashmap", KR(ret));
       } else {
-        for (int64_t i = 0; OB_SUCC(ret) && i < ls_partition_ids.count(); ++i) {
-          const ObTabletID &tablet_id = ls_partition_ids[i].part_tablet_id_.tablet_id_;
+        for (int64_t i = 0; OB_SUCC(ret) && i < partition_ids.count(); ++i) {
+          const ObTabletID &tablet_id = partition_ids[i].part_tablet_id_.tablet_id_;
           if (OB_FAIL(write_ctx_.tablet_idx_map_.set_refactored(tablet_id.id(), i))) {
             LOG_WARN("fail to set refactored", KR(ret), K(tablet_id));
             if (OB_HASH_EXIST == ret) {
@@ -955,14 +931,14 @@ int ObTableLoadStoreCtx::generate_autoinc_params(AutoincParam &autoinc_param)
   int ret = OB_SUCCESS;
   ObSchemaGetterGuard schema_guard;
   const ObTableSchema *table_schema = nullptr;
-  if (OB_FAIL(ObTableLoadSchema::get_table_schema(ctx_->param_.tenant_id_,
+  if (OB_FAIL(ObTableLoadSchema::get_table_schema(
                                                   ctx_->param_.table_id_,
                                                   schema_guard, table_schema))) {
-    LOG_WARN("fail to get table schema", KR(ret), K(ctx_->param_.tenant_id_),
+    LOG_WARN("fail to get table schema", KR(ret),
                                          K(ctx_->param_.table_id_));
   } else if (OB_ISNULL(table_schema)) {
     ret = OB_TABLE_NOT_EXIST;
-    LOG_WARN("table not exist", KR(ret), K(ctx_->param_.tenant_id_), K(ctx_->param_.table_id_));
+    LOG_WARN("table not exist", KR(ret), K(ctx_->param_.table_id_));
   } else {
     //ddl for auto increment synchronizes the auto-increment value last, and the initialization of the autoinc_param parameter should use the table schema of the original table's table id
     ObColumnSchemaV2 *autoinc_column_schema = nullptr;
@@ -986,7 +962,7 @@ int ObTableLoadStoreCtx::generate_autoinc_params(AutoincParam &autoinc_param)
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("unexpected null autoinc column schema", KR(ret), KP(autoinc_column_schema));
       } else {
-        autoinc_param.tenant_id_ = ctx_->param_.tenant_id_;
+        
         autoinc_param.autoinc_table_id_ = ctx_->param_.table_id_;
         autoinc_param.autoinc_first_part_num_ = table_schema->get_first_part_num();
         autoinc_param.autoinc_table_part_num_ = table_schema->get_all_part_num();
@@ -1015,16 +991,16 @@ int ObTableLoadStoreCtx::generate_autoinc_params(AutoincParam &autoinc_param)
 int ObTableLoadStoreCtx::init_sequence()
 {
   int ret = OB_SUCCESS;
-  const uint64_t tenant_id = ctx_->param_.tenant_id_;
+  
   const uint64_t table_id = ctx_->ddl_param_.dest_table_id_;
   ObSchemaGetterGuard table_schema_guard;
   ObSchemaGetterGuard sequence_schema_guard;
   const ObSequenceSchema *sequence_schema = nullptr;
   const ObTableSchema *target_table_schema = nullptr;
   uint64_t sequence_id = OB_INVALID_ID;
-  if (OB_FAIL(ObTableLoadSchema::get_table_schema(tenant_id, table_id, table_schema_guard,
+  if (OB_FAIL(ObTableLoadSchema::get_table_schema( table_id, table_schema_guard,
                                                   target_table_schema))) {
-    LOG_WARN("fail to get table schema", KR(ret), K(tenant_id), K(table_id));
+    LOG_WARN("fail to get table schema", KR(ret), K(table_id));
   } else {
     //ddl for identity is to synchronize the auto-increment value when creating a table, for sequence parameter initialization must use the hidden table's table schema of table id
     for (ObTableSchema::const_column_iterator iter = target_table_schema->column_begin();
@@ -1047,11 +1023,9 @@ int ObTableLoadStoreCtx::init_sequence()
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("schema service is null", KR(ret));
   } else if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(
-                     tenant_id,
                      sequence_schema_guard))) {
     LOG_WARN("get schema guard failed", KR(ret));
   } else if (OB_FAIL(sequence_schema_guard.get_sequence_schema(
-                     tenant_id,
                      sequence_id,
                      sequence_schema))) {
     LOG_WARN("fail get sequence schema", K(sequence_id), KR(ret));
@@ -1059,7 +1033,7 @@ int ObTableLoadStoreCtx::init_sequence()
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("null unexpected", KR(ret));
   } else if (OB_FAIL(sequence_schema_.assign(*sequence_schema))) {
-    LOG_WARN("cache sequence_schema fail", K(tenant_id), K(sequence_id), KR(ret));
+    LOG_WARN("cache sequence_schema fail", K(sequence_id), KR(ret));
   }
   return ret;
 }
@@ -1562,9 +1536,9 @@ int ObTableLoadStoreCtx::init_collection_subschema()
   ObSchemaGetterGuard schema_guard;
   const ObTableSchema *table_schema = nullptr;
   sql::ObExecContext *exec_ctx = ctx_->exec_ctx_;
-  if (OB_FAIL(ObTableLoadSchema::get_table_schema(ctx_->param_.tenant_id_, ctx_->param_.table_id_,
+  if (OB_FAIL(ObTableLoadSchema::get_table_schema( ctx_->param_.table_id_,
                                                   schema_guard, table_schema))) {
-    LOG_WARN("fail to get database and table schema", K(ret), K(ctx_->param_.tenant_id_));
+    LOG_WARN("fail to get database and table schema", K(ret));
   }
   for (ObTableSchema::const_column_iterator iter = table_schema->column_begin();
        OB_SUCC(ret) && iter != table_schema->column_end(); ++iter) {

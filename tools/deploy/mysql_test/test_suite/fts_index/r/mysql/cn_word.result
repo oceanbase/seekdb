@@ -124,9 +124,9 @@ tokenize("一二三四五 六七八", "ngram2", '[{"additional_args": [{"min_ngr
 select tokenize('123 4567890', 'ngram2', '[{"additional_arg": [{"min_ngram_size": 16}]}]');
 ERROR HY000: Incorrect arguments to config: additional_arg
 DROP TABLE cn_word_table;
-drop table if exists beng_ft_table_utf8_unicode_ci;
+drop table if exists beng_ft_table_utf8mb4_general_ci;
 Warnings:
-Note	1051	Unknown table 'test.beng_ft_table_utf8_unicode_ci'
-CREATE TABLE beng_ft_table_utf8_unicode_ci ( id INT AUTO_INCREMENT PRIMARY KEY, title VARCHAR(255) NOT NULL, content TEXT NOT NULL, FULLTEXT (title, content) with parser beng ) DEFAULT charset utf8 collate utf8_unicode_ci;
-INSERT INTO beng_ft_table_utf8_unicode_ci (title, content) VALUES ('MySQL全文搜索简介', UNHEX('617474616368656400206174746163686564c2a0'));
-drop table beng_ft_table_utf8_unicode_ci;
+Note	1051	Unknown table 'test.beng_ft_table_utf8mb4_general_ci'
+CREATE TABLE beng_ft_table_utf8mb4_general_ci ( id INT AUTO_INCREMENT PRIMARY KEY, title VARCHAR(255) NOT NULL, content TEXT NOT NULL, FULLTEXT (title, content) with parser beng ) DEFAULT charset utf8mb4 collate utf8mb4_general_ci;
+INSERT INTO beng_ft_table_utf8mb4_general_ci (title, content) VALUES ('MySQL全文搜索简介', UNHEX('617474616368656400206174746163686564c2a0'));
+drop table beng_ft_table_utf8mb4_general_ci;

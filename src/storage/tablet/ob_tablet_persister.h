@@ -37,7 +37,6 @@ namespace storage
 {
 struct ObBlockInfoSet;
 class ObTabletMacroInfo;
-class ObCOSSTableV2;
 
 struct ObSharedBlockIndex final
 {
@@ -82,9 +81,7 @@ public:
                K_(table_store_addr),
                K_(storage_schema_addr),
                K_(tablet_macro_info_addr),
-               KP_(tablet_macro_info_ptr),
-               K_(is_row_store),
-               K_(is_tablet_referenced_by_collect_mv));
+               KP_(tablet_macro_info_ptr));
 public:
   const ObRowkeyReadInfo *rowkey_read_info_ptr_;
   const ObTabletMacroInfo *tablet_macro_info_ptr_;
@@ -92,8 +89,6 @@ public:
   ObMetaDiskAddr table_store_addr_;
   ObMetaDiskAddr storage_schema_addr_;
   ObMetaDiskAddr tablet_macro_info_addr_;
-  bool is_row_store_;
-  bool is_tablet_referenced_by_collect_mv_;
   ObDDLKV **ddl_kvs_;
   int64_t ddl_kv_count_;
   ObIMemtable *memtables_[MAX_MEMSTORE_CNT];
@@ -125,7 +120,6 @@ public:
   virtual ~ObITabletMetaModifier() = default;
   virtual int modify_tablet_meta(ObTabletMeta &meta) = 0;
 };
-
 
 class ObMultiTimeStats
 {
@@ -174,11 +168,9 @@ struct ObTabletPersisterParam final
 public:
   // private tablet meta persistence
   ObTabletPersisterParam(
-      const share::ObLSID ls_id,
       const int64_t ls_epoch,
-      const ObTabletID tablet_id,
-      const int64_t tablet_transfer_seq)
-    : ls_id_(ls_id), ls_epoch_(ls_epoch), tablet_id_(tablet_id), tablet_transfer_seq_(tablet_transfer_seq),
+      const ObTabletID tablet_id)
+    : ls_epoch_(ls_epoch), tablet_id_(tablet_id),
       snapshot_version_(0), start_macro_seq_(0),
       ddl_redo_callback_(nullptr), ddl_finish_callback_(nullptr)
     {}
@@ -186,12 +178,11 @@ public:
   // shared tablet meta persistence
   ObTabletPersisterParam(
       const ObTabletID tablet_id,
-      const int64_t tablet_transfer_seq,
       const int64_t snapshot_version,
       const int64_t start_macro_seq,
       blocksstable::ObIMacroBlockFlushCallback *ddl_redo_callback = nullptr,
       blocksstable::ObIMacroBlockFlushCallback *ddl_finish_callback = nullptr)
-  : ls_id_(), ls_epoch_(0), tablet_id_(tablet_id), tablet_transfer_seq_(tablet_transfer_seq),
+  : ls_epoch_(0), tablet_id_(tablet_id),
     snapshot_version_(snapshot_version), start_macro_seq_(start_macro_seq),
     ddl_redo_callback_(ddl_redo_callback), ddl_finish_callback_(ddl_finish_callback)
   {}
@@ -201,13 +192,11 @@ public:
 
   bool is_shared_object() const { return snapshot_version_ > 0; }
 
-  TO_STRING_KV(K_(ls_id), K_(ls_epoch), K_(tablet_id), K_(tablet_transfer_seq),
+  TO_STRING_KV(K_(ls_epoch), K_(tablet_id),
    K_(snapshot_version), K_(start_macro_seq), KP_(ddl_redo_callback), KP_(ddl_finish_callback));
 
-  share::ObLSID ls_id_;
   int64_t ls_epoch_;
   ObTabletID tablet_id_;
-  int64_t tablet_transfer_seq_;
   int64_t snapshot_version_;
   int64_t start_macro_seq_;
   blocksstable::ObIMacroBlockFlushCallback *ddl_redo_callback_;
@@ -237,19 +226,16 @@ private: // hide constructor
   public:
     ObSSTablePersistCtx(ObBlockInfoSet &block_info_set,
                                  ObIArray<ObSharedObjectsWriteCtx> &sstable_meta_write_ctxs):
-      is_inited_(false), total_tablet_meta_size_(0), cg_sstable_cnt_(0), large_co_sstable_cnt_(0), small_co_sstable_cnt_(0),
+      is_inited_(false), total_tablet_meta_size_(0),
       normal_sstable_cnt_(0), block_info_set_(block_info_set), sstable_meta_write_ctxs_(sstable_meta_write_ctxs)
       {}
     ~ObSSTablePersistCtx() = default;
     int init(const int64_t ctx_id);
     bool is_inited() const { return is_inited_; };
-    TO_STRING_KV(K_(is_inited), K_(total_tablet_meta_size), K_(cg_sstable_cnt), K_(large_co_sstable_cnt), K_(small_co_sstable_cnt),
+    TO_STRING_KV(K_(is_inited), K_(total_tablet_meta_size),
       K_(normal_sstable_cnt), K_(tables), K_(write_infos), K_(sstable_meta_write_ctxs));
     bool is_inited_;
     int64_t total_tablet_meta_size_;
-    int64_t cg_sstable_cnt_;
-    int64_t large_co_sstable_cnt_;
-    int64_t small_co_sstable_cnt_;
     int64_t normal_sstable_cnt_;
     SharedMacroMap shared_macro_map_;
     common::ObSArray<ObITable *> tables_;
@@ -266,12 +252,6 @@ public:
       const ObTabletPersisterParam &param,
       const ObTablet &old_tablet,
       ObTabletHandle &new_handle);
-#ifdef OB_BUILD_SHARED_STORAGE
-  static int persist_and_transform_shared_tablet(
-    const ObTabletPersisterParam &param,
-    const ObTablet &old_tablet,
-    ObTabletHandle &new_handle);
-#endif
   static int persist_and_transform_only_tablet_meta(
       const ObTabletPersisterParam &param,
       const ObTablet &old_tablet,
@@ -305,13 +285,6 @@ public:
       ObBlockInfoSet &block_info_set);
   static int transform_empty_shell(const ObTabletPersisterParam &param, const ObTablet &old_tablet, ObTabletHandle &new_handle);
 private:
-#ifdef OB_BUILD_SHARED_STORAGE
-  int delete_blocks_(
-    const common::ObIArray<ObSharedObjectsWriteCtx> &total_write_ctxs);
-  static int check_macro_seq_isolation_(
-        const ObTabletPersisterParam &param,
-        const ObTablet &old_tablet);
-#endif
   void build_async_write_start_opt_(blocksstable::ObStorageObjectOpt &start_opt) const;
   void sync_cur_macro_seq_from_opt_(const blocksstable::ObStorageObjectOpt &curr_opt);
   static int inner_persist_and_transform_shared_tablet(
@@ -383,14 +356,7 @@ private:
       common::ObIArray<ObSharedObjectsWriteCtx> &meta_write_ctxs,
       int64_t &total_tablet_meta_size,
       ObBlockInfoSet &block_info_set);
-  int record_cg_sstables_macro(
-      const ObITable *table,
-      ObSSTablePersistCtx &sstable_persist_ctx);
-  int fetch_and_persist_large_co_sstable(
-      common::ObArenaAllocator &allocator,
-      ObITable *table,
-      ObSSTablePersistCtx &sstable_persist_ctx);
-  int fetch_and_persist_normal_co_and_normal_sstable(
+  int fetch_and_persist_normal_sstable(
     ObArenaAllocator &allocator,
     ObITable *table,
     ObSSTablePersistCtx &sstable_persist_ctx);

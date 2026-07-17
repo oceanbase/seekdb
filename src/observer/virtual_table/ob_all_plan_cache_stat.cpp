@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SERVER
 
 #include "observer/virtual_table/ob_all_plan_cache_stat.h"
+#include "share/rc/ob_module_provider.h"
 
 #include "src/sql/plan_cache/ob_pcv_set.h"
 
@@ -30,8 +31,7 @@ namespace observer
 {
 ObAllPlanCacheBase::ObAllPlanCacheBase()
     : ObVirtualTableIterator(),
-      tenant_id_array_(),
-      tenant_id_array_idx_(0)
+      iter_end_(false)
 {
 
 }
@@ -43,8 +43,7 @@ ObAllPlanCacheBase::~ObAllPlanCacheBase()
 
 void ObAllPlanCacheBase::reset()
 {
-  tenant_id_array_.reset();
-  tenant_id_array_idx_ = 0;
+  iter_end_ = false;
 }
 
 int ObAllPlanCacheBase::inner_get_next_row(common::ObNewRow *&row)
@@ -291,44 +290,21 @@ int ObAllPlanCacheStat::fill_cells(ObPlanCache &plan_cache)
 #undef SET_REF_HANDLE_COL
 }
 
-int ObAllPlanCacheStatI1::get_all_tenant_ids(ObIArray<uint64_t> &tenant_ids)
+int ObAllPlanCacheStatI1::get_all_ids(ObIArray<uint64_t> &batch_ids)
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(set_tenant_ids(key_ranges_))) {
+  if (OB_FAIL(set_ids(key_ranges_, batch_ids))) {
     LOG_WARN("set tenant ids failed", K(ret));
-  }
-
-  for (int64_t i = 0; OB_SUCC(ret) && i < tenant_ids_.count(); i++) {
-    // to keep the save interface
-    if (common::OB_INVALID_TENANT_ID == tenant_ids_.at(i) 
-        || is_virtual_tenant_id(tenant_ids_.at(i))
-        || (!is_sys_tenant(effective_tenant_id_) && tenant_ids_.at(i) != effective_tenant_id_)) {
-      // skip
-    } else {
-      ret = tenant_ids.push_back(tenant_ids_.at(i));
-    }
   }
   return ret;
 }
 
-int ObAllPlanCacheStat::get_all_tenant_ids(ObIArray<uint64_t> &tenant_ids)
+int ObAllPlanCacheStat::get_all_ids(ObIArray<uint64_t> &batch_ids)
 {
   int ret = OB_SUCCESS;
-  // sys tenant show all tenant plan cache stat
-  if (common::OB_INVALID_TENANT_ID == effective_tenant_id_) {
-    ret = OB_ERR_UNEXPECTED;
-    SERVER_LOG(WARN, "invalid effective_tenant_id_", KR(ret), K(effective_tenant_id_));
-  } else if (is_sys_tenant(effective_tenant_id_)) {
-    if (OB_FAIL(GCTX.omt_->get_mtl_tenant_ids(tenant_id_array_))) {
-      SERVER_LOG(WARN, "failed to add tenant id", K(ret));
-    }
-  } else {
-    tenant_ids.reset();
-    // user tenant show self tenant stat
-    if (OB_FAIL(tenant_ids.push_back(effective_tenant_id_))) {
-      SERVER_LOG(WARN, "fail to push back effective_tenant_id_", KR(ret), K(effective_tenant_id_),
-          K(tenant_ids));
-    }
+  // single sys tenant
+  if (OB_FAIL(batch_ids.push_back(1UL))) {
+    SERVER_LOG(WARN, "failed to add tenant id", K(ret));
   }
   return ret;
 }
@@ -336,7 +312,9 @@ int ObAllPlanCacheStat::get_all_tenant_ids(ObIArray<uint64_t> &tenant_ids)
 int ObAllPlanCacheStat::inner_open()
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(get_all_tenant_ids(tenant_id_array_))) {
+  // Still drive I1 rowkey validation via get_all_tenants
+  ObSEArray<uint64_t, 16> batch_ids;
+  if (OB_FAIL(get_all_ids(batch_ids))) {
     SERVER_LOG(WARN, "fail get all tenant ids", K(ret));
   }
   return ret;
@@ -344,33 +322,29 @@ int ObAllPlanCacheStat::inner_open()
 int ObAllPlanCacheStat::get_row_from_tenants()
 {
   int ret = OB_SUCCESS;
-  if (tenant_id_array_idx_ < 0) {
-    ret = OB_ERR_UNEXPECTED;
-    SERVER_LOG(WARN, "invalid tenant_id_array index", K(ret), K(tenant_id_array_idx_));
-  } else if (tenant_id_array_idx_ >= tenant_id_array_.count()) {
+  if (iter_end_) {
     ret = OB_ITER_END;
   } else {
-    uint64_t tenant_id = tenant_id_array_.at(tenant_id_array_idx_);
-    MTL_SWITCH(tenant_id) {
-      ObPlanCache *plan_cache = MTL(ObPlanCache*); 
+    MOD_SCOPE {
+      ObPlanCache *plan_cache = share::g_mp->plan_cache(); 
       if (OB_FAIL(fill_cells(*plan_cache))) {
         SERVER_LOG(WARN, "fail to fill cells", K(ret), K(cur_row_));
       } else {
-        SERVER_LOG(DEBUG, "add plan cache", K(tenant_id));
+        SERVER_LOG(DEBUG, "add plan cache");
       }
-      ++tenant_id_array_idx_;
+      iter_end_ = true;
     }
   }
   return ret;
 }
 
-int ObAllPlanCacheStatI1::set_tenant_ids(const common::ObIArray<common::ObNewRange> &ranges)
+int ObAllPlanCacheStatI1::set_ids(const common::ObIArray<common::ObNewRange> &ranges, common::ObIArray<uint64_t> &batch_ids)
 {
   int ret = OB_SUCCESS;
   ObRowkey start_key;
   ObRowkey end_key;
   for (int64_t i = 0; OB_SUCC(ret) && i < ranges.count(); ++i) {
-    int64_t tenant_id = -1;
+    
     start_key.reset();
     end_key.reset();
     start_key = ranges.at(i).start_key_;
@@ -404,13 +378,10 @@ int ObAllPlanCacheStatI1::set_tenant_ids(const common::ObIArray<common::ObNewRan
                      "assert start_key_obj_ptr[0].get_type() == end_key_obj_ptr[0].get_type()",
                      K(ret));
         } else {
-          tenant_id = start_key_obj_ptr[0].get_int();
-          if (!(tenant_id >= 0)) {
-            ret = OB_ERR_UNEXPECTED;
-            SERVER_LOG(WARN, "assert tenant_id >= 0", K(ret));
-          } else if (OB_FAIL(add_var_to_array_no_dup(tenant_ids_,
-                                                     static_cast<uint64_t>(tenant_id)))) {
-            SERVER_LOG(WARN, "Failed to add tenant_id to array no duplicate", K(ret));
+          (void)(start_key_obj_ptr[0].get_int());
+          if (OB_FAIL(add_var_to_array_no_dup(batch_ids,
+                                                     static_cast<uint64_t>(1)))) {
+            SERVER_LOG(WARN, "Failed to add id to array no duplicate", K(ret));
           } else { }//do nothing
         }
       }

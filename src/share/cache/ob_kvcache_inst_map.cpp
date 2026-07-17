@@ -23,20 +23,19 @@ namespace oceanbase
 using namespace lib;
 namespace common
 {
-int ObTenantMBList::init(const uint64_t tenant_id)
+int ObTenantMBList::init()
 {
   int ret = OB_SUCCESS;
   if (inited_) {
     ret = OB_INIT_TWICE;
     COMMON_LOG(WARN, "init twice", K(ret));
   } else if (OB_FAIL(ObResourceMgr::get_instance().get_tenant_resource_mgr(
-      tenant_id, resource_mgr_))) {
-    COMMON_LOG(WARN, "get_tenant_resource_mgr failed", K(ret), K(tenant_id));
+      resource_mgr_))) {
+    COMMON_LOG(WARN, "get_tenant_resource_mgr failed", K(ret));
   } else {
     head_.reset();
     head_.prev_ = &head_;
     head_.next_ = &head_;
-    tenant_id_ = tenant_id;
     ref_cnt_ = 0;
     inited_ = true;
   }
@@ -119,6 +118,7 @@ ObKVCacheInstMap::ObKVCacheInstMap()
     inst_map_(),
     configs_(NULL),
     mem_limit_getter_(NULL),
+    node_allocator_(NULL),
     is_inited_(false)
 {
 }
@@ -129,16 +129,17 @@ ObKVCacheInstMap::~ObKVCacheInstMap()
 }
 
 int ObKVCacheInstMap::init(const int64_t max_entry_cnt, const ObKVCacheConfig *configs,
-                           const ObITenantMemLimitGetter &mem_limit_getter)
+                           const ObITenantMemLimitGetter &mem_limit_getter,
+                           ObLfFIFOAllocator *node_allocator)
 {
   int ret = OB_SUCCESS;
   char *buf = NULL;
   if (is_inited_) {
     ret = OB_INIT_TWICE;
     COMMON_LOG(WARN, "The ObKVCacheInstMap has been inited, ", K(ret));
-  } else if (max_entry_cnt <= 0 || NULL == configs) {
+  } else if (max_entry_cnt <= 0 || NULL == configs || NULL == node_allocator) {
     ret = OB_INVALID_ARGUMENT;
-    COMMON_LOG(WARN, "Invalid argument, ", K(max_entry_cnt), KP(configs), K(ret));
+    COMMON_LOG(WARN, "Invalid argument, ", K(max_entry_cnt), KP(configs), KP(node_allocator), K(ret));
   }
 
   if (OB_SUCC(ret)) {
@@ -150,6 +151,7 @@ int ObKVCacheInstMap::init(const int64_t max_entry_cnt, const ObKVCacheConfig *c
   if (OB_SUCC(ret)) {
     configs_ = configs;
     mem_limit_getter_ = &mem_limit_getter;
+    node_allocator_ = node_allocator;
     is_inited_ = true;
   }
 
@@ -163,6 +165,7 @@ void ObKVCacheInstMap::destroy()
 {
   inst_map_.destroy();
   configs_ = NULL;
+  node_allocator_ = NULL;
   is_inited_ = false;
 }
 
@@ -195,17 +198,15 @@ int ObKVCacheInstMap::get_cache_inst(
         //double check, success to get inst, add ref to return outside
         add_inst_ref(inst);
       } else if (OB_HASH_NOT_EXIST == ret) {
-        lib::ObMemAttr attr(OB_SYS_TENANT_ID, "CACHE_MAP_NODE");
-        inst = OB_NEW(ObKVCacheInst, ObMemAttr(OB_SYS_TENANT_ID, "CACHE_INST"));
+        inst = OB_NEW(ObKVCacheInst, ObMemAttr("CACHE_INST"));
         if (OB_ISNULL(inst)) {
           ret = OB_ALLOCATE_MEMORY_FAILED;
           COMMON_LOG(WARN, "Fail to alloc cache inst, ", K(ret));
-        } else if (OB_FAIL(inst->node_allocator_.init(OB_MALLOC_MIDDLE_BLOCK_SIZE, attr, 1))) {
-          COMMON_LOG(WARN, "Fail to init node allocator, ", K(ret));
         } else if (OB_FAIL(inst_map_.set_refactored(inst_key, inst))) {
           COMMON_LOG(WARN, "Fail to set inst to inst map, ", K(ret));
         } else {
           inst->cache_id_ = inst_key.cache_id_;
+          inst->node_allocator_ = node_allocator_;
           inst->status_.config_ = &configs_[inst_key.cache_id_];
           if (0 == STRNCMP(inst->status_.config_->cache_name_, "index_block_cache", MAX_CACHE_NAME_LENGTH)
             || 0 == STRNCMP(inst->status_.config_->cache_name_, "user_block_cache", MAX_CACHE_NAME_LENGTH)) {
@@ -240,16 +241,13 @@ int ObKVCacheInstMap::get_cache_inst(
   return ret;
 }
 
-int ObKVCacheInstMap::mark_tenant_delete(const uint64_t tenant_id)
+int ObKVCacheInstMap::mark_tenant_delete()
 {
   int ret = OB_SUCCESS;
 
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     COMMON_LOG(WARN, "The ObKVCacheInstMap has not been inited", K(ret));
-  } else if (OB_UNLIKELY(OB_SYS_TENANT_ID != tenant_id)) {
-    ret = OB_INVALID_ARGUMENT;
-    COMMON_LOG(WARN, "Invalid argument", K(ret), K(tenant_id));
   } else {
     ObKVCacheInst *inst = nullptr;
     DRWLock::WRLockGuard wr_guard(lock_);
@@ -261,22 +259,19 @@ int ObKVCacheInstMap::mark_tenant_delete(const uint64_t tenant_id)
         iter->second->try_mark_delete();
       }
     }
-    COMMON_LOG(INFO, "mark delete details", K(ret), K(tenant_id));
+    COMMON_LOG(INFO, "mark delete details", K(ret));
   }
 
   return ret;
 }
 
-int ObKVCacheInstMap::erase_tenant(const uint64_t tenant_id)
+int ObKVCacheInstMap::erase_tenant()
 {
   int ret = OB_SUCCESS;
 
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     COMMON_LOG(WARN, "The ObKVCacheInstMap has not been inited", K(ret));
-  } else if (OB_UNLIKELY(OB_SYS_TENANT_ID != tenant_id)) {
-    ret = OB_INVALID_ARGUMENT;
-    COMMON_LOG(WARN, "Invalid argument", K(ret), K(tenant_id));
   } else {
     ObSEArray<ObKVCacheInstKey, MAX_CACHE_NUM> erase_key_list;
     ObSEArray<ObKVCacheInst *, MAX_CACHE_NUM> erase_inst_list;
@@ -308,7 +303,7 @@ int ObKVCacheInstMap::erase_tenant(const uint64_t tenant_id)
       }
     }
   }
-  COMMON_LOG(INFO, "erase tenant cache inst details", K(ret), K(tenant_id));
+  COMMON_LOG(INFO, "erase tenant cache inst details", K(ret));
 
   return ret;
 }
@@ -368,7 +363,7 @@ void ObKVCacheInstMap::print_all_cache_info()
 
   if (OB_LIKELY(is_inited_)) {
     ContextParam param;
-    param.set_mem_attr(common::OB_SERVER_TENANT_ID, ObModIds::OB_TEMP_VARIABLES);
+    param.set_mem_attr(ObModIds::OB_TEMP_VARIABLES);
     CREATE_WITH_TEMP_CONTEXT(param) {
       static const int64_t BUFLEN = 1 << 17;
       char *buf = (char *)ctxalp(BUFLEN);
@@ -376,19 +371,36 @@ void ObKVCacheInstMap::print_all_cache_info()
         ret = OB_ALLOCATE_MEMORY_FAILED;
         COMMON_LOG(ERROR, "no memory", K(ret));
       } else {
+        int64_t total_map_size = 0;
+        int64_t total_kv_cnt = 0;
         int64_t ctx_pos = 0;
         {
           DRWLock::RDLockGuard rd_guard(lock_);
+          if (nullptr != node_allocator_) {
+            total_map_size = node_allocator_->allocated();
+          }
           for (KVCacheInstMap::iterator iter = inst_map_.begin(); iter != inst_map_.end(); ++iter) {
+            if (OB_NOT_NULL(iter->second)) {
+              total_kv_cnt += MAX(ATOMIC_LOAD(&iter->second->status_.kv_cnt_), 0);
+            }
+          }
+          for (KVCacheInstMap::iterator iter = inst_map_.begin(); iter != inst_map_.end(); ++iter) {
+            const int64_t inst_kv_cnt = MAX(ATOMIC_LOAD(&iter->second->status_.kv_cnt_), 0);
+            const int64_t cache_map_size = total_kv_cnt > 0
+                ? (total_map_size * inst_kv_cnt) / total_kv_cnt
+                : 0;
             ret = databuff_printf(buf, BUFLEN, ctx_pos,
                 "[CACHE] cache_name=%30s | cache_size=%12ld | cache_store_size=%12ld | cache_retired_size=%12ld | cache_map_size=%12ld | kv_cnt=%8ld\n",
                 iter->second->status_.config_->cache_name_,
-                iter->second->status_.store_size_ + iter->second->node_allocator_.allocated(),
+                iter->second->status_.store_size_ + cache_map_size,
                 iter->second->status_.store_size_,
                 iter->second->status_.retired_size_,
-                iter->second->node_allocator_.allocated(),
+                cache_map_size,
                 iter->second->status_.kv_cnt_);
           }
+          ret = databuff_printf(buf, BUFLEN, ctx_pos,
+              "[CACHE] shared_cache_map_size=%12ld | total_kv_cnt=%8ld\n",
+              total_map_size, total_kv_cnt);
         }
         _OB_LOG(INFO, "[CACHE] cache memory info: \n%s", buf);
       }

@@ -32,7 +32,7 @@ ObDirectLoadDatumRow::ObDirectLoadDatumRow()
     is_delete_(false),
     is_ack_(false)
 {
-  allocator_.set_tenant_id(MTL_ID());
+  
 }
 
 ObDirectLoadDatumRow::~ObDirectLoadDatumRow() {}

@@ -176,7 +176,7 @@ int ObExprConvertTZ::get_cvrt_tz_info(const ObString &tz_str,
   int ret_more = 0;
   int32_t offset = 0;
   if (OB_FAIL(ObTimeConverter::str_to_offset(tz_str, offset, ret_more,
-                              false /* oracle_mode */, true /* need_check_valid */))) {
+                              true /* need_check_valid */))) {
     LOG_WARN("get time zone failed", K(ret), K(tz_str));
     if (OB_LIKELY(OB_ERR_UNKNOWN_TIME_ZONE == ret)){
       const ObTimeZoneInfo *tz_info = NULL;
@@ -245,7 +245,7 @@ int ObExprConvertTZ::parse_string(int64_t &timestamp_data, const ObString &tz_st
     // Fallback to str_to_offset when timezone not found in table
     LOG_DEBUG("time zone not found in tz_info, try str_to_offset", K(tz_str));
     if (OB_FAIL(ObTimeConverter::str_to_offset(tz_str, offset, ret_more,
-                                false /* oracle_mode */, true /* need_check_valid */))) {
+                                true /* need_check_valid */))) {
       LOG_WARN("both time zone search and str_to_offset failed", K(ret), K(tz_str));
     } else if(OB_FAIL(ret_more)) {
       ret = ret_more;

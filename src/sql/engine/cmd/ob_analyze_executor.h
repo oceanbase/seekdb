@@ -18,7 +18,7 @@
 #define OCEANBASE_SQL_OB_ANALYZE_EXECUTOR_H_
 #include "lib/string/ob_sql_string.h"
 #include "sql/resolver/ddl/ob_analyze_stmt.h"
-#include "share/stat/ob_stat_define.h"
+#include "sql/optimizer/stat/ob_stat_define.h"
 namespace oceanbase
 {
 namespace share
@@ -28,7 +28,7 @@ namespace schema
 class ObTableSchema;
 }
 }
-namespace obrpc
+namespace obcall
 {
 struct ObUpdateStatCacheArg;
 }

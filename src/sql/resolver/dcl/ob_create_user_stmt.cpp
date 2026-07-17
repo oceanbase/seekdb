@@ -24,7 +24,6 @@ using namespace oceanbase::sql;
 
 ObCreateUserStmt::ObCreateUserStmt(ObIAllocator *name_pool)
     : ObDDLStmt(name_pool, stmt::T_CREATE_USER),
-      tenant_id_(OB_INVALID_ID),
       users_(),
       masked_sql_(),
       if_not_exist_(false),
@@ -36,7 +35,6 @@ ObCreateUserStmt::ObCreateUserStmt(ObIAllocator *name_pool)
 
 ObCreateUserStmt::ObCreateUserStmt()
     : ObDDLStmt(NULL, stmt::T_CREATE_USER),
-      tenant_id_(OB_INVALID_ID),
       users_(),
       masked_sql_(),
       if_not_exist_(false),

@@ -19,7 +19,7 @@
 
 #include "lib/ob_define.h"
 #include "lib/utility/ob_print_utils.h"
-#include "common/errsim_module/ob_errsim_module_type.h"
+#include "lib/errsim_module/ob_errsim_module_type.h"
 #include "lib/hash/ob_hashset.h"
 #include "lib/hash/ob_hashmap.h"
 #include "lib/lock/ob_bucket_lock.h"
@@ -38,10 +38,8 @@ public:
   ObTenantErrsimModuleMgr();
   virtual ~ObTenantErrsimModuleMgr();
   static int mtl_init(ObTenantErrsimModuleMgr *&errsim_module_mgr);
-  int init(const uint64_t tenant_id);
-  int build_tenant_moulde(
-      const uint64_t tenant_id,
-      const int64_t config_version,
+  int init();
+  int build_tenant_moulde(const int64_t config_version,
       const ModuleArray &module_array,
       const int64_t percentage);
   bool is_errsim_module(
@@ -52,7 +50,6 @@ private:
   typedef hash::ObHashSet<ObErrsimModuleType> ErrsimModuleSet;
   static const int64_t MAX_BUCKET_NUM = 128;
   bool is_inited_;
-  uint64_t tenant_id_;
   common::SpinRWLock lock_;
   int64_t config_version_;
   bool is_whole_module_;

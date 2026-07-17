@@ -20,6 +20,7 @@
 #include "lib/net/ob_addr.h"
 #include "share/ob_dml_sql_splicer.h"
 #include "share/storage/ob_rootservice_job_table_storage.h"
+#include "rootserver/ob_rs_job_type.h"  // enums have been made layer-neutral(conf L2), backfill
 
 namespace oceanbase
 {
@@ -38,36 +39,6 @@ class ObMySQLResult;
 namespace rootserver
 {
 // @note modify ObRsJobTableOperator::job_type_str if you modify ObRsJobType
-enum ObRsJobType
-{
-  JOB_TYPE_INVALID = 0,
-  JOB_TYPE_ALTER_TENANT_LOCALITY,
-  JOB_TYPE_ROLLBACK_ALTER_TENANT_LOCALITY, // deprecated in V4.2
-  JOB_TYPE_MIGRATE_UNIT,
-  JOB_TYPE_DELETE_SERVER,
-  JOB_TYPE_SHRINK_RESOURCE_TENANT_UNIT_NUM, // deprecated in V4.2
-  JOB_TYPE_RESTORE_TENANT,
-  JOB_TYPE_UPGRADE_STORAGE_FORMAT_VERSION,
-  JOB_TYPE_STOP_UPGRADE_STORAGE_FORMAT_VERSION,
-  JOB_TYPE_CREATE_INNER_SCHEMA,
-  JOB_TYPE_UPGRADE_POST_ACTION,
-  JOB_TYPE_UPGRADE_SYSTEM_VARIABLE,
-  JOB_TYPE_UPGRADE_SYSTEM_TABLE,
-  JOB_TYPE_UPGRADE_BEGIN,
-  JOB_TYPE_UPGRADE_VIRTUAL_SCHEMA,
-  JOB_TYPE_UPGRADE_SYSTEM_PACKAGE,
-  JOB_TYPE_UPGRADE_ALL_POST_ACTION,
-  JOB_TYPE_UPGRADE_INSPECTION,
-  JOB_TYPE_UPGRADE_END,
-  JOB_TYPE_UPGRADE_ALL,
-  JOB_TYPE_ALTER_RESOURCE_TENANT_UNIT_NUM,
-  JOB_TYPE_ALTER_TENANT_PRIMARY_ZONE,
-  JOB_TYPE_UPGRADE_FINISH,
-  JOB_TYPE_LOAD_MYSQL_SYS_PACKAGE,
-  JOB_TYPE_LOAD_ORACLE_SYS_PACKAGE,
-  JOB_TYPE_MAX
-};
-
 enum ObRsJobStatus
 {
   JOB_STATUS_INVALID = 0,

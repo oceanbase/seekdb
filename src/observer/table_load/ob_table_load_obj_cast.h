@@ -94,10 +94,6 @@ private:
                             common::ObObj &obj);
   static int to_type(const common::ObObjType &expect_type, const share::schema::ObColumnSchemaV2 *column_schema, ObTableLoadCastObjCtx &cast_obj_ctx,
                      const common::ObAccuracy &accuracy, const common::ObObj &src, common::ObObj &dst);
-  static int string_datetime_oracle(const common::ObObjType expect_type,
-                                    common::ObObjCastParams &params, const common::ObObj &in,
-                                    common::ObObj &out, const common::ObCastMode cast_mode,
-                                    const ObTableLoadTimeConverter &time_cvrt);
 
   // fast path for numbertype cast
   inline static int number_fast_from(const char *str, const int64_t length,
@@ -207,21 +203,12 @@ private:
 
     ObPrecision precision = accuracy.get_precision();
     ObScale scale = accuracy.get_scale();
-    if (lib::is_oracle_mode()) {
-      if (OB_MAX_NUMBER_PRECISION >= precision && precision >= OB_MIN_NUMBER_PRECISION &&
-          number::ObNumber::MAX_SCALE >= scale && scale >= number::ObNumber::MIN_SCALE) {
-        // do noting
-      } else {
-        return OB_EAGAIN;
-      }
+    if (precision >= scale && number::ObNumber::MAX_PRECISION >= precision &&
+        precision >= OB_MIN_DECIMAL_PRECISION && number::ObNumber::MAX_SCALE >= scale &&
+        scale >= 0) {
+      // do noting
     } else {
-      if (precision >= scale && number::ObNumber::MAX_PRECISION >= precision &&
-          precision >= OB_MIN_DECIMAL_PRECISION && number::ObNumber::MAX_SCALE >= scale &&
-          scale >= 0) {
-        // do noting
-      } else {
-        return OB_EAGAIN;
-      }
+      return OB_EAGAIN;
     }
 
     number::ObNumber nmb = obj.get_number();

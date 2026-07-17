@@ -36,6 +36,25 @@ namespace common
 {
 int light_backtrace(void **buffer, int size)
 {
+#ifdef _WIN32
+  // The frame-pointer walking implementation below assumes the System V
+  // x86_64 / AArch64 ABI in which RBP / X29 is a real frame pointer and each
+  // frame is laid out as [saved_fp][return_addr][...]. On Windows x64 (MS
+  // ABI) RBP is just an ordinary non-volatile register and can hold any
+  // value the compiler wants (often a base address into a stack object), so
+  // dereferencing it as a saved-FP chain reads arbitrary memory and crashes
+  // with AccessViolation as soon as the chased value lands outside the
+  // mapped stack region. Use the unwind-table based RtlCaptureStackBackTrace
+  // (the kernel-mode-safe Win32 API) instead.
+  if (OB_UNLIKELY(buffer == nullptr || size <= 0)) {
+    return 0;
+  }
+  USHORT frames = ::CaptureStackBackTrace(/*FramesToSkip=*/1,
+                                          static_cast<ULONG>(size),
+                                          buffer,
+                                          /*BackTraceHash=*/nullptr);
+  return static_cast<int>(frames);
+#else
   int64_t rbp = 0;
 #if defined(__x86_64__)
   asm("mov %%rbp, %0" : "=r"(rbp));
@@ -43,10 +62,19 @@ int light_backtrace(void **buffer, int size)
   asm("mov %0, x29" : "=r"(rbp));
 #endif
   return light_backtrace(buffer, size, rbp);
+#endif
 }
 
 int light_backtrace(void **buffer, int size, int64_t rbp)
 {
+#ifdef _WIN32
+  // The provided rbp is meaningless under the Windows x64 ABI; fall back to
+  // the same unwind-table based capture as the 2-arg overload. This keeps
+  // the signal-handler call site (which only fires on POSIX) compiling on
+  // Windows without exposing it to the broken frame-pointer walk.
+  (void)rbp;
+  return light_backtrace(buffer, size);
+#else
   int rv = 0;
   if (rv < size) {
     int (*fp)(void**, int, int64_t) = light_backtrace;
@@ -57,6 +85,13 @@ int light_backtrace(void **buffer, int size, int64_t rbp)
   if (OB_LIKELY(OB_SUCCESS == get_stackattr(stack_addr, stack_size))) {
 #define addr_in_stack(addr) (addr >= (int64_t)stack_addr && addr < (int64_t)stack_addr + stack_size)
     while (rbp != 0 && rv < size) {
+      // Validate rbp itself before dereferencing it -- otherwise a bogus
+      // saved-FP value silently chained from the previous iteration can
+      // point at unmapped memory and the deref below would crash before
+      // the addr_in_stack check on its loaded value can run.
+      if (!addr_in_stack(rbp)) {
+        break;
+      }
 #if defined(__aarch64__)
       if (!addr_in_stack(*(int64_t*)rbp) &&
           !FALSE_IT(rbp += 16) &&
@@ -71,57 +106,17 @@ int light_backtrace(void **buffer, int size, int64_t rbp)
         rbp = *(int64_t*)rbp;
       }
     }
+#undef addr_in_stack
   }
   return rv;
+#endif
 }
 
-bool read_min_max_addr(int64_t &min_addr, int64_t &max_addr)
+int64_t get_rel_offset(int64_t addr)
 {
-  bool bret = false;
-  FILE *fp = fopen("/proc/self/maps", "r");
-  if (!fp) return bret;
-  DEFER(fclose(fp));
-  char line[512];
-  min_addr = INT64_MAX;
-  max_addr = -1;
-  int64_t addr = (int64_t)__func__;
-  while (fgets(line, sizeof(line), fp) != NULL) {
-    int64_t start, end, inode, offset, major, minor;
-    char perms[8];
-    char path[256];
-    int n = sscanf(line,
-                   "%lx-%lx %4s %lx %lx:%lx %ld %255s",
-                   &start, &end, perms,
-                   &offset, &major, &minor, &inode, path);
-    if (n < 8) {
-      continue;
-    }
-    uint64_t dst_inode = inode;
-    if (start <= addr && addr < end) {
-      bret = true;
-      fseek(fp, 0, SEEK_SET);
-      while (fgets(line, sizeof(line), fp) != NULL) {
-        int n = sscanf(line,
-                       "%lx-%lx %4s %lx %lx:%lx %ld %255s",
-                       &start, &end, perms,
-                       &offset, &major, &minor, &inode, path);
-        if (n < 8) {
-          continue;
-        }
-        if (dst_inode != inode) {
-          continue;
-        }
-        if (start < min_addr) {
-          min_addr = start;
-        }
-        if (end > max_addr) {
-          max_addr = end;
-        }
-      }
-      break;
-    }
-  }
-  return bret;
+  // seekdb is built as a non-PIE (ET_EXEC) executable; backtrace addresses are
+  // link-time VMAs that addr2line accepts directly.
+  return addr;
 }
 
 bool g_enable_backtrace = true;
@@ -137,40 +132,6 @@ int _ob_backtrace(void** buffer, int size)
   return (int)frames;
 }
 #endif
-
-struct ProcMapInfo
-{
-  int64_t code_start_addr_;
-  int64_t code_end_addr_;
-  bool is_inited_;
-};
-
-ProcMapInfo g_proc_map_info{.code_start_addr_ = -1, .code_end_addr_ = -1, .is_inited_ = false};
-
-void init_proc_map_info()
-{
-  read_min_max_addr(g_proc_map_info.code_start_addr_, g_proc_map_info.code_end_addr_);
-  g_proc_map_info.is_inited_ = true;
-}
-
-int64_t get_rel_offset(int64_t addr)
-{
-  int64_t code_start_addr = -1;
-  int64_t code_end_addr = -1;
-  if (OB_UNLIKELY(!g_proc_map_info.is_inited_)) {
-    read_min_max_addr(code_start_addr, code_end_addr);
-  } else {
-    code_start_addr = g_proc_map_info.code_start_addr_;
-    code_end_addr = g_proc_map_info.code_end_addr_;
-  }
-  if (code_start_addr != -1) {
-    if (OB_LIKELY(addr >= code_start_addr && addr < code_end_addr)) {
-      addr -= code_start_addr;
-    }
-  }
-  return addr;
-}
-
 
 constexpr int MAX_ADDRS_COUNT = 100;
 RLOCAL(ByteBuf<LBT_BUFFER_LENGTH>, buffer);

@@ -30,7 +30,7 @@ public:
   LogChecksum();
   virtual ~LogChecksum() {}
 public:
-  int init(const int64_t id, const int64_t accum_checksum);
+  int init(const int64_t accum_checksum);
   void destroy();
   virtual int acquire_accum_checksum(const int64_t data_checksum,
                                      int64_t &accum_checksum);
@@ -45,7 +45,6 @@ public:
   virtual int rollback_accum_checksum(const int64_t curr_accum_checksum);
 private:
   bool is_inited_;
-  int64_t palf_id_;
   int64_t prev_accum_checksum_;
   int64_t accum_checksum_;
   int64_t verify_checksum_;

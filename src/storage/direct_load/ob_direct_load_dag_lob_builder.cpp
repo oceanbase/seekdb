@@ -38,12 +38,12 @@ ObDirectLoadDagLobBuilder::ObDirectLoadDagLobBuilder()
     lob_allocator_("TLD_LobAlloc"),
     is_inited_(false)
 {
-  lob_allocator_.set_tenant_id(MTL_ID());
+  
 }
 
 ObDirectLoadDagLobBuilder::~ObDirectLoadDagLobBuilder()
 {
-  OB_DELETE(ObLobMacroBlockWriter, ObMemAttr(MTL_ID(), "lob_writer"), lob_writer_);
+  OB_DELETE(ObLobMacroBlockWriter, ObMemAttr("lob_writer"), lob_writer_);
 }
 
 int ObDirectLoadDagLobBuilder::init(ObDirectLoadInsertTabletContext *insert_tablet_ctx)
@@ -75,13 +75,13 @@ int ObDirectLoadDagLobBuilder::switch_slice(const int64_t slice_idx)
     if (nullptr != lob_writer_ && OB_FAIL(lob_writer_->close())) {
       LOG_WARN("fail to close lob writer", KR(ret));
     } else if (OB_FAIL(ObDDLUtil::fill_writer_param(insert_tablet_ctx_->get_tablet_id(), slice_idx,
-                                                    -1 /*cg_idx*/, insert_tablet_ctx_->get_dag(),
+                                                    insert_tablet_ctx_->get_dag(),
                                                     0 /*max_batch_size*/, write_param_))) {
       LOG_WARN("fail to fill writer param", K(ret));
     } else {
       slice_idx_ = slice_idx;
       // 清理上一轮的lob_writer_
-      OB_DELETE(ObLobMacroBlockWriter, ObMemAttr(MTL_ID(), "lob_writer"), lob_writer_);
+      OB_DELETE(ObLobMacroBlockWriter, ObMemAttr("lob_writer"), lob_writer_);
     }
   }
   return ret;

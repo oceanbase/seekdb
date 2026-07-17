@@ -19,9 +19,9 @@
 #include "sql/engine/expr/ob_expr_vec_ivf_center_id.h"
 #include "sql/engine/expr/ob_expr_calc_partition_id.h"
 #include "sql/engine/expr/ob_array_expr_utils.h"
-#include "share/vector_index/ob_vector_index_util.h"
-#include "share/vector_index/ob_plugin_vector_index_service.h"
-#include "share/vector_type/ob_vector_common_util.h"
+#include "observer/vector_index/ob_vector_index_util.h"
+#include "observer/vector_index/ob_plugin_vector_index_service.h"
+#include "storage/vector_type/ob_vector_common_util.h"
 
 namespace oceanbase
 {
@@ -87,7 +87,7 @@ int ObExprVecIVFCenterID::calc_center_id(
     char *buf = expr.get_str_res_mem(eval_ctx, buf_len);
     ObString str(buf_len, 0, buf);
     ObCenterId center_id(1, 0);
-    if (OB_FAIL(ObVectorClusterHelper::set_center_id_to_string(center_id, str))) {
+    if (OB_FAIL(ObVectorKmeansClusterHelper::set_center_id_to_string(center_id, str))) {
       LOG_WARN("failed to set center_id to string", K(ret), K(center_id), K(str));
     } else {
       expr_datum.set_string(str);
@@ -96,7 +96,7 @@ int ObExprVecIVFCenterID::calc_center_id(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", K(ret), K(expr), KP(expr.args_));
   } else {;
-    common::ObArenaAllocator tmp_allocator("IVFExprCID", OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID());
+    common::ObArenaAllocator tmp_allocator("IVFExprCID", OB_MALLOC_NORMAL_BLOCK_SIZE);
     ObTableID table_id;
     ObTabletID tablet_id;
     ObVectorIndexDistAlgorithm dis_algo = VIDA_MAX;
@@ -111,7 +111,7 @@ int ObExprVecIVFCenterID::calc_center_id(
     } else if (contain_null) {
       // do nothing
     } else {
-      ObVectorClusterHelper helper;
+      ObVectorKmeansClusterHelper helper;
       ObVectorNormalizeInfo norm_info;
       if (OB_FAIL(helper.get_nearest_probe_centers(
           reinterpret_cast<float*>(arr->get_data()),
@@ -130,7 +130,7 @@ int ObExprVecIVFCenterID::calc_center_id(
       char *buf = expr.get_str_res_mem(eval_ctx, buf_len);
       ObString str(buf_len, 0, buf);
       ObCenterId center_id(center_prefix, center_idx);
-      if (OB_FAIL(ObVectorClusterHelper::set_center_id_to_string(center_id, str))) {
+      if (OB_FAIL(ObVectorKmeansClusterHelper::set_center_id_to_string(center_id, str))) {
         LOG_WARN("failed to set center_id to string", K(ret), K(center_id), K(str));
       } else {
         expr_datum.set_string(str);

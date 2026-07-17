@@ -26,10 +26,6 @@
 
 namespace oceanbase
 {
-namespace share
-{
-class ObLSID;
-}
 namespace rpc
 {
 
@@ -123,8 +119,7 @@ struct ObLockWaitNode: public common::SpHashNode
            const uint32_t client_sid,
            const uint32_t holder_sess_id,
            int64_t tx_id,
-           int64_t holder_tx_id,
-           const share::ObLSID &ls_id);
+           int64_t holder_tx_id);
   void change_hash(const int64_t hash, const int64_t lock_seq);
   void update_run_ts(const int64_t run_ts) { run_ts_ = run_ts; }
   int64_t get_run_ts() const { return run_ts_; }
@@ -205,5 +200,4 @@ struct ObLockWaitNode: public common::SpHashNode
 } // namespace oceanbase
 
 #endif // OCEANBASE_RPC_OB_LOCK_WAIT_NODE_
-
 

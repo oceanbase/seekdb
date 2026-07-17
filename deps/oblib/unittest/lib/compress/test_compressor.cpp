@@ -23,7 +23,7 @@
 using namespace oceanbase::obsys;
 using namespace oceanbase::common;
 using namespace oceanbase::common::hash;
-using namespace oceanbase::common::zstd;
+using namespace oceanbase::common::zstd_1_3_8;
 
 namespace oceanbase
 {
@@ -197,7 +197,7 @@ void TestCompressorStress::run1()
 class ObCompressorTest : public testing::Test
 {
 public:
-  ObCompressorTest() : zstd_compressor(alloc) {}
+  ObCompressorTest() : alloc(), zstd_compressor_(alloc) {}
   static void SetUpTestCase()
   {
     memset(const_cast<char *>(compress_buffer), '\0', 100);
@@ -216,10 +216,7 @@ public:
   static int64_t dst_data_size;
   ObMalloc alloc;
   ObNoneCompressor none_compressor;
-  ObLZ4Compressor lz4_compressor;
-  ObSnappyCompressor snappy_compressor;
-  ObZlibCompressor zlib_compressor;
-  ObZstdCompressor zstd_compressor;
+  ObZstdCompressor_1_3_8 zstd_compressor_;
 };
 
 const char *ObCompressorTest::src_data =
@@ -337,45 +334,16 @@ TEST_F(ObCompressorTest, test_none)
   ASSERT_EQ(static_cast<int64_t>(strlen(compress_buffer)), dst_data_size);
 }
 
-TEST_F(ObCompressorTest, test_zlib)
-{
-  //test invalid argument
-  test_invalid_argument(zlib_compressor);
-
-  //test overflow size
-  test_overflow_size(zlib_compressor);
-
-  //test normal
-  test_normal(zlib_compressor);
-}
-
-TEST_F(ObCompressorTest, test_snappy)
-{
-  //test invalid argument
-  test_invalid_argument(snappy_compressor);
-
-  //test overflow size
-  test_overflow_size(snappy_compressor);
-
-  //test normal
-  test_normal(snappy_compressor);
-}
-
-TEST_F(ObCompressorTest, test_lz4)
-{
-  test_normal(lz4_compressor);
-}
-
 TEST_F(ObCompressorTest, test_zstd)
 {
   //test invalid argument
-  test_invalid_argument(zstd_compressor);
+  test_invalid_argument(zstd_compressor_);
 
   //test overflow size
-  test_overflow_size(zstd_compressor);
+  test_overflow_size(zstd_compressor_);
 
   //test normal
-  test_normal(zstd_compressor);
+  test_normal(zstd_compressor_);
 }
 
 TEST(ObCompressorStress, compress_stable)
@@ -384,7 +352,7 @@ TEST(ObCompressorStress, compress_stable)
   const int64_t sleep_sec = 1;
   TestCompressorStress cmp_stress;
   ObMalloc alloc;
-  ObZstdCompressor zstd_compressor(alloc);
+  ObZstdCompressor_1_3_8 zstd_compressor(alloc);
 
   ret = cmp_stress.init(30000, 100000, &zstd_compressor);
   ASSERT_EQ(OB_SUCCESS, ret);

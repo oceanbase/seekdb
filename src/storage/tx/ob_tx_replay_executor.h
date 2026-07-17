@@ -46,10 +46,10 @@ class ObStorageTableGuard;
 namespace transaction
 {
 class ObTxLogBlock;
-class ObPartTransCtx;
+class ObTxCtx;
 class ObTransService;
 
-typedef ObPartTransCtx ReplayTxCtx;
+typedef ObTxCtx ReplayTxCtx;
 
 class ObTxReplayExecutor {
 public:
@@ -60,14 +60,11 @@ public:
                      const int skip_pos,
                      const palf::LSN &lsn,
                      const share::SCN &log_timestamp,
-                     const logservice::ObLogBaseHeader &base_header,
-                     const share::ObLSID &ls_id);
+                     const logservice::ObLogBaseHeader &base_header);
 
 public:
   TO_STRING_KV(KP(ctx_),
                KP(ls_),
-               K(ls_id_),
-               K(tenant_id_),
                KP(ls_tx_srv_),
                KP(mt_ctx_),
                K(log_block_),
@@ -79,16 +76,12 @@ public:
 
 private:
   ObTxReplayExecutor(storage::ObLS *ls,
-                     const share::ObLSID &ls_id,
-                     const uint64_t tenant_id,
                      storage::ObLSTxService *ls_tx_srv,
                      const palf::LSN &lsn,
                      const share::SCN &log_timestamp,
                      const logservice::ObLogBaseHeader &base_header)
       : ctx_(nullptr),
         ls_(ls),
-        ls_id_(ls_id),
-        tenant_id_(tenant_id),
         ls_tx_srv_(ls_tx_srv),
         replay_queue_(0),
         replaying_log_entry_no_(0),
@@ -121,13 +114,10 @@ private:
   int replay_redo_();
   int replay_tx_log_(const ObTxLogType log_type);
   int replay_rollback_to_();
-  int replay_active_info_();
   int replay_commit_info_();
-  int replay_prepare_();
   int replay_commit_();
   int replay_abort_();
   int replay_clear_();
-  int replay_start_working_();
   int replay_multi_source_data_();
   int replay_record_();
   bool is_tx_log_replay_queue() const { return replay_queue_ == 0; }
@@ -142,7 +132,6 @@ private:
   int replay_lock_(storage::ObStoreCtx &store_ctx,
                    storage::ObTablet *tablet,
                    memtable::ObMemtableMutatorIterator *mmi_ptr);
-  int get_compat_mode_(const ObTabletID &tablet_id, lib::Worker::CompatMode &mode);
   bool can_replay() const;
 
   void rewrite_replay_retry_code_(int &ret_code);
@@ -152,8 +141,6 @@ private:
 
   ReplayTxCtx *ctx_;
   storage::ObLS *ls_;
-  share::ObLSID ls_id_;
-  uint64_t tenant_id_;
   storage::ObLSTxService *ls_tx_srv_;
 
   ObTxLogBlock log_block_;

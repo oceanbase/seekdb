@@ -52,7 +52,7 @@ struct ObPlParamInfo : public sql::ObParamInfo
                K_(scale),
                K_(type),
                K_(ext_real_type),
-               K_(is_oracle_null_value),
+               K_(is_typed_null_value),
                K_(col_type),
                K_(pl_type),
                K_(udt_id));
@@ -206,7 +206,7 @@ public:
   inline void set_tenant_schema_version(int64_t schema_version) { tenant_schema_version_ = schema_version; }
   inline int64_t get_tenant_schema_version() const { return tenant_schema_version_; }
   inline int64_t get_sys_schema_version() const { return sys_schema_version_; }
-  int set_tenant_sys_schema_version(share::schema::ObSchemaGetterGuard &schema_guard, int64_t tenant_id);
+  int set_tenant_sys_schema_version(share::schema::ObSchemaGetterGuard &schema_guard);
   inline int64_t get_dependency_table_size() const { return dependency_tables_.count(); }
   inline const sql::DependenyTableStore &get_dependency_table() const { return dependency_tables_; }
   int init_dependency_table_store(int64_t dependency_table_cnt) { return dependency_tables_.init(dependency_table_cnt); }

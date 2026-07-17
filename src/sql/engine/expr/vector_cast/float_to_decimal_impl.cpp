@@ -14,8 +14,8 @@
  * limitations under the License.
  */
 #include "lib/charset/ob_dtoa.h"
-#include "lib/wide_integer/ob_wide_integer.h"
-#include "lib/wide_integer/ob_wide_integer_helper.h"
+#include "common/wide_integer/ob_wide_integer.h"
+#include "common/wide_integer/ob_wide_integer_helper.h"
 #include "share/object/ob_obj_cast.h"
 #include "share/object/ob_obj_cast_util.h"
 #include "sql/engine/expr/ob_datum_cast.h"
@@ -44,21 +44,19 @@ namespace sql
     5. Cast the lx to decimal value with Steele & White's algorithm,
        which only generates the digits for rounding correctly.
 
-  Process for oracle mode:
-    1. - 3. are the same as mysql mode.
+  Precision-bounded process:
+    1. - 3. are the same as the general process.
     4. Generate max digits of type_precision and then fix them up.
  */
-int ObFloatToDecimal::float2decimal(double x, const bool is_oracle_mode, ob_gcvt_arg_type arg_type,
+int ObFloatToDecimal::float2decimal(double x, ob_gcvt_arg_type arg_type,
                                     const ObPrecision target_precision, const ObScale target_scale,
                                     const ObCastMode cast_mode, ObDecimalIntBuilder &dec_builder,
                                     const ObUserLoggingCtx *user_logging_ctx,
                                     ObDecimalInt *&decint){
   int ret = OB_SUCCESS;
   dec_builder.set_zero(sizeof(int512_t));
-  /* if is_oracle_mode and arg_type is OB_GCVT_ARG_FLOAT, type_precision is MAX_DIGITS_FLOAT
-    else type_precision is MAX_DIGITS_DOUBLE */
-  uint16_t type_precision = ((OB_GCVT_ARG_FLOAT == arg_type) && is_oracle_mode) ?
-                                  MAX_DIGITS_FLOAT : MAX_DIGITS_DOUBLE;
+  UNUSED(arg_type);
+  uint16_t type_precision = MAX_DIGITS_DOUBLE;
   bool is_column_convert = CM_IS_COLUMN_CONVERT(cast_mode);
   if (FLOAT80_PRECISION != std::numeric_limits<long double>::digits10) {
     ret = OB_ERR_UNEXPECTED;
@@ -163,7 +161,7 @@ int ObFloatToDecimal::float2decimal(double x, const bool is_oracle_mode, ob_gcvt
       /* scale represents the current scale of lx
          if scale = 1, means lx = x * 10^1 */
       ObScale scale = -decimal_cnt;
-      if (!is_oracle_mode) {
+      {
         bool low = false;
         bool high = false;
         long double low_calc = 0.0l;
@@ -208,25 +206,6 @@ int ObFloatToDecimal::float2decimal(double x, const bool is_oracle_mode, ob_gcvt
         } else {
           ret = OB_ERR_UNEXPECTED;
         }
-      } else { // if is_oracle_mode
-        eps *= get_scale_factor<long double>(type_precision - 1);
-        uint16_t item = 0;
-        for (int i = 1;; i++) {
-          item = static_cast<uint16_t>(lx);
-          res += item;
-          lx -= item;
-          if ((0 == lx) || (i == type_precision)) break;
-          res *= 10;
-          lx *= 10.0l;
-          ++scale;
-        }
-        if (lx > 0.5l + eps) {
-          res++;
-        } else if (lx < 0.5l - eps) {
-          // do nothing
-        } else{
-          ret = OB_ERR_UNEXPECTED;
-        }
       }
       if (OB_SUCC(ret)) {
         int512_t temp_res = 0;
@@ -240,7 +219,7 @@ int ObFloatToDecimal::float2decimal(double x, const bool is_oracle_mode, ob_gcvt
           }
         /* else we need to scale down the value and round it */
         } else {
-          if (!is_oracle_mode && is_column_convert) {
+          if (is_column_convert) {
             sql::ObDataTypeCastUtil::log_user_error_warning(user_logging_ctx, OB_ERR_DATA_TRUNCATED,
                                                             ObString(""), ObString(""), cast_mode);
           }

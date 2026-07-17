@@ -2057,12 +2057,12 @@ Outputs & filters:
       conds([t1.c3 != t2.c3]), nl_params_(nil), use_batch=false
   2 - output([t1.c1], [t1.c3], [t1.c2], [t1.c4]), filter(nil), rowset=256
       access([t1.c1], [t1.c3], [t1.c2], [t1.c4]), partitions(p0)
-      is_index_back=false, is_global_index=false,
+      is_index_back=false, is_global_index=false, 
       range_key([t1.c1]), range(MIN ; MAX)always true
   3 - output([t2.c1], [t2.c2], [t2.c3], [t2.c4]), filter(nil), rowset=256
   4 - output([t2.c1], [t2.c3], [t2.c2], [t2.c4]), filter(nil), rowset=256
       access([t2.c1], [t2.c3], [t2.c2], [t2.c4]), partitions(p0)
-      is_index_back=false, is_global_index=false,
+      is_index_back=false, is_global_index=false, 
       range_key([t2.c1]), range(MIN ; MAX)always true
 select /*+ query_timeout(100000000) */ * from t1,t2 where t1.c3<>t2.c3 order by t1.c1,t2.c1;
 c1	c2	c3	c4	c1	c2	c3	c4
@@ -2248,7 +2248,7 @@ CREATE TABLE `tbl_42` (
 PRIMARY KEY (`col_531`, `col_534`, `col_524`),
 UNIQUE KEY `idx_585` (`col_535`, `col_528`, `col_530`) BLOCK_SIZE 16384 GLOBAL,
 KEY `idx_92` (`col_532`) BLOCK_SIZE 16384 GLOBAL
-) DEFAULT CHARSET = gbk ROW_FORMAT = CONDENSED COMPRESSION = 'lz4_1.9.1' REPLICA_NUM = 1 BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0 WITH COLUMN GROUP(all columns, each column);
+) DEFAULT CHARSET = utf8mb4 ROW_FORMAT = CONDENSED COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = 1 BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0;
 drop table tbl_42;
 drop table if exists t,test,tt0,t2;
 create table test (id int, c1 VECTOR(3), c2 VECTOR(3), c3 vector(3)) partition by hash(id);
@@ -2279,7 +2279,7 @@ CREATE TABLE `test` (
 `c2` VECTOR(3) DEFAULT NULL,
 `c3` VECTOR(4) DEFAULT NULL,
 `c4` ARRAY(INT) DEFAULT NULL
-) DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0 WITH COLUMN GROUP(each column);
+) DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0;
 insert into test values ( 1,[1,-1,1],[1,2,-3],[1,2,3,4],[1,2,3]),
 ( 2,[2.2,2.3,2.4],[-1.5,2.566,3.44],[1,2,3,4],[1,2,3,4]),
 ( 3,[3.55,3.66,3.777],[1.123,2,3] ,[1,2,3,4],[1,NULL,3] ),
@@ -2306,13 +2306,13 @@ CREATE TABLE `t1` (
 `c13` longblob DEFAULT NULL,
 `f1` float DEFAULT NULL,
 `v1` VECTOR(3) DEFAULT NULL
-) DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0 WITH COLUMN GROUP(each column);
+) DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0;
 insert into t1 values ( 1,'[1.0,1,2]','[1.0,1,2]','[1.0,1,2]','[1.0,1,2]','[1.0,1,2]','[1.0,1,2]','[1.0,1,2]','[1.0,1,2]','[1.0,1,2]','[1.0,1,2]','[1.0,1,2]','[1.0,1,2]', 1.1,'[2,2,3]');
 CREATE TABLE `t` (
 `id` int(11) NOT NULL,
 `c1` VECTOR(3) DEFAULT NULL,
 PRIMARY KEY (`id`)
-) DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0 WITH COLUMN GROUP(each column);
+) DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0;
 insert into t values(1,[1,1,1]), (2,[2.2,3.3,4.4]), (3,[3.33,4.44,5.55]);
 create table t1_vector(c1 vector(3));
 insert into t1_vector values(null), (null), (null), (null), (null), (null), (null), (null), (null);
@@ -2389,8 +2389,8 @@ select * from t1;
 c1	c2
 desc t1;
 Field	Type	Null	Key	Default	Extra
-c1	ARRAY(INT)	YES		NULL
-c2	ARRAY(VARCHAR(0))	YES		NULL
+c1	ARRAY(INT)	YES		NULL	
+c2	ARRAY(VARCHAR(0))	YES		NULL	
 drop table t1;
 drop table if exists tt;
 create table tt(id int, arr_int int[], arr_dint array(array(int)), arr_vec array(vector(1)), arr_char array(varchar(10)));

@@ -304,6 +304,16 @@ public:
   {
     int ret = common::OB_SUCCESS;
     for (int64_t pos = 0; OB_SUCC(ret) && pos < BUCKETS_CNT; ++pos) {
+      // Dirty read without lock: skip empty buckets to avoid needless
+      // lock acquire/release overhead. Safe because a NULL read is always
+      // correct (bucket is empty); a concurrent insert may cause a false
+      // positive (non-null read, but bucket becomes empty by the time we
+      // acquire the lock), which is harmless -- we just pay one extra lock
+      // cycle. False negative is also safe: for_each has no snapshot
+      // guarantee, so missing a concurrent insert is acceptable.
+      if (NULL == buckets_[pos].next_) {
+        continue;
+      }
       ret = for_each_in_one_bucket(fn, pos);
     }
     return ret;
@@ -341,6 +351,10 @@ public:
 
     ValueArray array;
     for (int64_t pos = 0; pos < BUCKETS_CNT; ++pos) {
+      // Dirty read without lock: skip empty buckets. Same rationale as for_each.
+      if (NULL == buckets_[pos].next_) {
+        continue;
+      }
       array.reset();
       if (OB_FAIL(generate_value_arr_(pos, array))) {
         SHARE_LOG(WARN, "generate value array error", K(ret));

@@ -17,8 +17,8 @@
 #define USING_LOG_PREFIX SQL_EXE
 
 #include "ob_granule_util.h"
+#include "share/rc/ob_module_provider.h"
 #include "src/sql/engine/px/ob_dfo.h"
-#include "share/external_table/ob_external_table_utils.h"
 #include "sql/das/ob_das_simple_op.h"
 #include "src/sql/engine/px/ob_granule_iterator_op.h"
 
@@ -74,8 +74,6 @@ int ObGranuleUtil::use_partition_granule(ObGranulePumpArgs &args, bool &partitio
   } else if (OB_FAIL(session_info->get_sys_variable(share::SYS_VAR__PX_MIN_GRANULES_PER_SLAVE,
                                                     hash_partition_scan_hold))) {
     LOG_WARN("failed to get sys variable px min granule per slave", K(ret));
-  } else if (scan_ops.at(0)->is_external_table_) {
-    partition_granule = false;
   } else {
     partition_granule = ObGranuleUtil::use_partition_granule(args.tablet_arrays_.at(0).count(),
                                                              args.parallelism_, partition_scan_hold,
@@ -98,182 +96,6 @@ bool ObGranuleUtil::use_partition_granule(int64_t partition_count,
     partition_granule = partition_count >= partition_scan_hold * parallelism || 1 == parallelism;
   }
   return partition_granule;
-}
-
-int ObGranuleUtil::split_granule_by_partition_line(ObIAllocator &allocator, const ObIArray<ObDASTabletLoc *> &tablets,
-    const ObIArray<ObExternalFileInfo> &external_table_files, ObIArray<ObDASTabletLoc *> &granule_tablets,
-    ObIArray<ObNewRange> &granule_ranges, ObIArray<int64_t> &granule_idx)
-{
-  int ret = OB_SUCCESS;
-  int64_t task_idx = 0;
-  for (int64_t i = 0; OB_SUCC(ret) && i < external_table_files.count(); ++i) {
-    const ObExternalFileInfo &external_info = external_table_files.at(i);
-    ObNewRange new_range;
-    int64_t file_row_count = external_info.row_count_
-                                 ? external_info.row_count_
-                                 : (external_info.file_size_ > 0 ? external_info.file_size_ : INT64_MAX);
-    int64_t file_start = external_info.row_count_ ? external_info.row_start_ : 0;
-    if (OB_FAIL(ObExternalTableUtils::make_external_table_scan_range(external_info.file_url_,
-            external_info.file_id_,
-            external_info.part_id_,
-            file_start,
-            file_row_count,
-            ObString::make_empty_string(),
-            0,
-            0,
-            allocator,
-            new_range))) {
-      LOG_WARN("failed to make external table scan range", K(ret));
-    } else if ((OB_FAIL(granule_ranges.push_back(new_range)) || OB_FAIL(granule_idx.push_back(task_idx++)) ||
-                   OB_FAIL(granule_tablets.push_back(tablets.at(0))))) {
-      LOG_WARN("fail to push back", K(ret));
-    }
-  }
-  return ret;
-}
-
-int ObGranuleUtil::split_granule_by_total_byte(ObIAllocator &allocator, int64_t parallelism, const ObIArray<ObDASTabletLoc *> &tablets,
-    const ObIArray<ObExternalFileInfo> &external_table_files, ObIArray<ObDASTabletLoc *> &granule_tablets,
-    ObIArray<ObNewRange> &granule_ranges, ObIArray<int64_t> &granule_idx)
-{
-  int ret = OB_SUCCESS;
-  int64_t task_idx = 0;
-  for (int64_t i = 0; OB_SUCC(ret) && i < external_table_files.count(); ++i) {
-    ObString session_str = external_table_files.at(i).session_id_;
-    ObString part_str = external_table_files.at(i).file_url_;
-    int64_t start_split_idx = external_table_files.at(i).file_id_;
-    int64_t split_count = external_table_files.at(i).file_size_;
-    ObNewRange *range = NULL;
-    if (OB_ISNULL(range = OB_NEWx(ObNewRange, (&allocator)))) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("failed to new a ptr", K(ret));
-    } else if (OB_FAIL(ObExternalTableUtils::make_external_table_scan_range(part_str,  // file actually does not need
-                    0,  // external_info.part_id_ the original part id would exist in the column and could be decoded to get the partition column value, now it's not needed
-                    0,          // table id does not need to use the outer parameter
-                    0,          // start position this value is not used here
-                    INT64_MAX,  // to the end this value is not used here
-                    session_str,
-                    start_split_idx,  // split left-closed right-open
-                    start_split_idx + split_count,
-                    allocator,
-                    *range))) {
-      LOG_WARN("failed to make external table scan range", K(ret));
-    } else {
-      OZ(granule_ranges.push_back(*range));
-      OZ(granule_idx.push_back(task_idx++));
-      OZ(granule_tablets.push_back(tablets.at(0)));      
-    }
-  }
-  return ret;
-}
-
-int ObGranuleUtil::split_granule_by_total_row(ObIAllocator &allocator, int64_t parallelism, const ObIArray<ObDASTabletLoc *> &tablets,
-    const ObIArray<ObExternalFileInfo> &external_table_files, ObIArray<ObDASTabletLoc *> &granule_tablets,
-    ObIArray<ObNewRange> &granule_ranges, ObIArray<int64_t> &granule_idx)
-{
-  int ret = OB_SUCCESS;
-  int64_t task_idx = 0;
-  // split by rows
-  for (int64_t i = 0; OB_SUCC(ret) && i < external_table_files.count(); ++i) {
-    ObString session_str = external_table_files.at(i).session_id_;
-    ObString part_str = external_table_files.at(i).file_url_;
-    int64_t start_row_count = external_table_files.at(i).row_start_;
-    int64_t split_count = external_table_files.at(i).row_count_;
-    ObNewRange *range = NULL;
-    if (OB_FAIL(ret)) {
-    } else if (OB_ISNULL(range = OB_NEWx(ObNewRange, (&allocator)))) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("failed to new a ptr", K(ret));
-    } else if (OB_FAIL(ObExternalTableUtils::make_external_table_scan_range(part_str,  // session has kown partition
-                    0,  // external_info.part_id_ originally partid would exist in the column and could be decoded to get the partition column value, now it's not needed
-                    0,                // table id does not need to use outer parameters
-                    start_row_count,  // start index of all table
-                    split_count,        // number of records
-                    session_str,
-                    0,  // split by size won't use in this branch
-                    0,  // split by size won't use in this branch
-                    allocator,
-                    *range))) {
-      LOG_WARN("failed to make external table scan range", K(ret));
-    } else {
-      OZ(granule_ranges.push_back(*range));
-      OZ(granule_idx.push_back(task_idx++));
-      OZ(granule_tablets.push_back(tablets.at(0)));
-    }
-  }
-  return ret;
-}
-int ObGranuleUtil::split_granule_for_external_table(ObIAllocator &allocator,
-                                                    const ObTableScanSpec *tsc,
-                                                    const ObIArray<ObNewRange> &ranges,
-                                                    const ObIArray<ObDASTabletLoc *> &tablets,
-                                                    const ObIArray<ObExternalFileInfo> &external_table_files,
-                                                    int64_t parallelism,
-                                                    ObIArray<ObDASTabletLoc *> &granule_tablets,
-                                                    ObIArray<ObNewRange> &granule_ranges,
-                                                    ObIArray<int64_t> &granule_idx)
-{
-  UNUSED(tsc);
-  int ret = OB_SUCCESS;
-  sql::ObExternalFileFormat external_file_format;
-  if (ranges.count() < 1 || tablets.count() < 1 || OB_ISNULL(tsc)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("the invalid argument", K(ret), K(ranges.count()), K(tablets.count()));
-  } else if (OB_FAIL(external_file_format.load_from_string(tsc->tsc_ctdef_.scan_ctdef_.external_file_format_str_.str_, allocator))) {
-    LOG_WARN("failed to load from string", K(ret), K(tsc->tsc_ctdef_.scan_ctdef_.external_file_format_str_.str_));
-  } else if (external_table_files.count() == 1 &&
-             external_table_files.at(0).file_id_ == INT64_MAX) {
-    // dealing dummy file
-    ObNewRange new_range;
-    if (OB_FAIL(ObExternalTableUtils::convert_external_table_empty_range(
-                                                              external_table_files.at(0).file_url_,
-                                                              external_table_files.at(0).file_id_,
-                                                              0,
-                                                              allocator,
-                                                              new_range))) {
-      LOG_WARN("failed to convert external table empty range", K(ret));
-    } else if (OB_FAIL(granule_ranges.push_back(new_range)) ||
-               OB_FAIL(granule_idx.push_back(external_table_files.at(0).file_id_)) ||
-               OB_FAIL(granule_tablets.push_back(tablets.at(0)))) {
-      LOG_WARN("fail to push back", K(ret));
-    }
-  } else if (!external_table_files.empty() && 
-             ObExternalFileFormat::ODPS_FORMAT == external_file_format.format_type_) {
-    LOG_TRACE("odps external table granule switch", K(ret), K(external_table_files.count()), K(external_table_files));
-    if (!GCONF._use_odps_jni_connector) {
-    ret = OB_NOT_SUPPORTED;
-    LOG_USER_ERROR(OB_NOT_SUPPORTED, "external odps table");
-    LOG_WARN("not support odps table in opensource", K(ret));
-    } else {
-    ret = OB_NOT_SUPPORTED;
-    LOG_USER_ERROR(OB_NOT_SUPPORTED, "external odps table");
-    LOG_WARN("not support odps table in opensource", K(ret));
-    }
-
-  } else {
-    for (int64_t i = 0; OB_SUCC(ret) && i < ranges.count(); ++i) {
-      for (int64_t j = 0; OB_SUCC(ret) && j < external_table_files.count(); ++j) {
-        ObNewRange new_range;
-        bool is_valid = false;
-        if (OB_FAIL(ObExternalTableUtils::convert_external_table_new_range(
-                                                              external_table_files.at(j).file_url_,
-                                                              external_table_files.at(j).file_id_,
-                                                              external_table_files.at(j).part_id_,
-                                                              ranges.at(i),
-                                                              allocator,
-                                                              new_range,
-                                                              is_valid))) {
-          LOG_WARN("failed to convert external table new range", K(ret));
-        } else if (is_valid && (OB_FAIL(granule_ranges.push_back(new_range)) ||
-                                OB_FAIL(granule_idx.push_back(external_table_files.at(j).file_id_)) ||
-                                OB_FAIL(granule_tablets.push_back(tablets.at(0))))) {
-          LOG_WARN("fail to push back", K(ret));
-        }
-      }
-    }
-  }
-  LOG_DEBUG("check external split ranges", K(ranges), K(granule_ranges), K(external_table_files));
-  return ret;
 }
 
 int ObGranuleUtil::split_block_ranges(ObExecContext &exec_ctx,
@@ -384,7 +206,7 @@ int ObGranuleUtil::split_block_granule(ObExecContext &exec_ctx,
   //  5. calculate task ranges for each partition, and get the result
 
   int ret = OB_SUCCESS;
-  ObAccessService *access_service = MTL(ObAccessService *);
+  ObAccessService *access_service = share::g_mp->access_service();
   // 1. check the validity of input parameters
   if (input_ranges.count() < 1 || tablets.count() < 1 || parallelism < 1 || tablet_size < 1) {
     ret = OB_INVALID_ARGUMENT;
@@ -627,7 +449,7 @@ int ObGranuleUtil::get_tasks_for_partition(ObExecContext &exec_ctx,
                                            bool range_independent)
 {
   int ret = OB_SUCCESS;
-  ObAccessService *access_service = MTL(ObAccessService *);
+  ObAccessService *access_service = share::g_mp->access_service();
   ObArrayArray<ObStoreRange> multi_range_split_array;
   if (expected_task_cnt < 1) {
     ret = OB_INVALID_ARGUMENT;

@@ -17,12 +17,11 @@
 #define USING_LOG_PREFIX SERVER_OMT
 
 #include "ob_th_worker.h"
+#include "share/rc/ob_module_provider.h"
 #include "ob_tenant.h"
 #include "observer/ob_server.h"
 #include "storage/memtable/ob_lock_wait_mgr.h"
 #include "sql/executor/ob_memory_tracker.h"
-#include "lib/stat/ob_diagnostic_info_container.h"
-#include "lib/stat/ob_diagnostic_info_guard.h"
 #include "lib/thread/threads.h"
 
 using namespace oceanbase;
@@ -42,8 +41,7 @@ int create_worker(ObThWorker* &worker, ObTenant *tenant)
 {
   int ret = OB_SUCCESS;
   if (OB_ISNULL(worker = OB_NEW(ObThWorker,
-                                       ObMemAttr(0 == GET_TENANT_ID() ? OB_SERVER_TENANT_ID : GET_TENANT_ID(),
-                                       "OMT_Worker",
+                                       ObMemAttr("OMT_Worker",
                                        ObCtxIds::DEFAULT_CTX_ID, OB_NORMAL_ALLOC)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_ERROR("create worker fail", K(ret), K(tenant->id()));
@@ -54,10 +52,9 @@ int create_worker(ObThWorker* &worker, ObTenant *tenant)
   } else {
     worker->reset();
     worker->set_tenant(tenant);
-    worker->set_group_id_(0);
     worker->set_worker_level(0);
     worker->set_group(nullptr);
-    worker->set_numa_info(tenant->id(), GCONF._enable_numa_aware, -1);
+    worker->set_numa_info(GCONF._enable_numa_aware, -1);
     if (OB_FAIL(worker->start())) {
       ob_delete(worker);
       worker = nullptr;
@@ -92,7 +89,6 @@ ObThWorker::ObThWorker()
       pause_flag_(false), large_query_(false),
       query_start_time_(0), query_enqueue_time_(0), last_check_time_(0),
       can_retry_(true), need_retry_(false),
-      blocking_ts_(nullptr),
       idle_us_(0), is_doing_ddl_(nullptr)
 {
   module_name_[0] = '\0';
@@ -136,7 +132,7 @@ void ObThWorker::resume()
 }
 
 
-thread_local uint64_t ObThWorker::serving_tenant_id_;
+thread_local bool ObThWorker::thread_name_set_ = false;
 
 // Check only before user request starts
 ObThWorker::Status ObThWorker::check_qtime_throttle()
@@ -224,21 +220,17 @@ inline void ObThWorker::process_request(rpc::ObRequest &req)
   reset_sql_throttle_current_priority();
   set_req_flag(&req);
 
-  MTL(memtable::ObLockWaitMgr*)->setup(req.get_lock_wait_node(), req.get_receive_timestamp());
+  share::g_mp->lock_wait_mgr()->setup(req.get_lock_wait_node(), req.get_receive_timestamp());
   memtable::advance_tlocal_request_lock_wait_stat(rpc::RequestLockWaitStat::RequestStat::EXECUTE);
   if (OB_FAIL(procor_.process(req))) {
     LOG_WARN("process request fail", K(ret));
   }
-  bool wait_succ = MTL(memtable::ObLockWaitMgr*)->post_process(need_retry_, need_wait_lock);
+  bool wait_succ = share::g_mp->lock_wait_mgr()->post_process(need_retry_, need_wait_lock);
   if (OB_LIKELY(wait_succ)) {
     need_retry_ = false;
   }
   // need_retry_ can be set in procor_.process() via THIS_WORKER.set_need_retry()
   if (OB_UNLIKELY(need_retry_)) {
-    ObDiagnosticInfo *di = ObLocalDiagnosticInfo::get();
-    if (OB_NOT_NULL(di)) {
-      di->begin_wait_event(ObWaitEventIds::NETWORK_QUEUE_WAIT, 0, 0, 0, 0);
-    }
     int32_t retry_times = req.get_retry_times();
     req.set_retry_times(retry_times + 1);
     if (need_wait_lock) {
@@ -273,9 +265,6 @@ inline void ObThWorker::process_request(rpc::ObRequest &req)
     }
 
     if (OB_FAIL(ret)) {
-      if (OB_NOT_NULL(di)) {
-        di->end_wait_event(ObWaitEventIds::NETWORK_QUEUE_WAIT, false);
-      }
       can_retry_ = false;
       need_retry_ = false;
       if (OB_FAIL(procor_.process(req))) {
@@ -290,21 +279,19 @@ inline void ObThWorker::process_request(rpc::ObRequest &req)
 
 void ObThWorker::set_th_worker_thread_name()
 {
-  if (serving_tenant_id_ != tenant_->id()) {
-    serving_tenant_id_ = tenant_->id();
+  if (!thread_name_set_) {
+    thread_name_set_ = true;
     lib::set_thread_name("ReqWorker");
   }
 }
 
-void ObThWorker::worker(int64_t &tenant_id, int64_t &req_recv_timestamp, int32_t &worker_level)
+void ObThWorker::worker(int64_t &tid, int64_t &req_recv_timestamp, int32_t &worker_level)
 {
   int ret = OB_SUCCESS;
   Worker::set_worker_to_thread_local(static_cast<lib::Worker*>(this));
   int64_t wait_start_time = 0;
   int64_t wait_end_time = 0;
   procor_.th_created();
-  blocking_ts_ = &Thread::blocking_ts_;
-  ObDisableDiagnoseGuard disable_guard;
   is_doing_ddl_ = &Thread::is_doing_ddl_;
   static constexpr int64_t POLL_INTERVAL = 100 * 1000L;
   // Avoid adding and deleting entities from the root node for every request, the parameters are meaningless
@@ -315,28 +302,28 @@ void ObThWorker::worker(int64_t &tenant_id, int64_t &req_recv_timestamp, int32_t
     while (!has_set_stop()) {
       worker_level = get_worker_level();
       if (OB_NOT_NULL(tenant_)) {
-        tenant_id = tenant_->id();
+        tid = tenant_->id();
       }
       if (OB_NOT_NULL(pm)) {
         if (pm->get_used() != 0) {
           LOG_ERROR("page manager's used should be 0, unexpected!!!", KP(pm));
         } else {
           // Ignore the above warning
-          ret = pm->set_tenant_ctx(tenant_->id(), ObCtxIds::DEFAULT_CTX_ID);
+          ret = pm->set_tenant_ctx(ObCtxIds::DEFAULT_CTX_ID);
         }
       }
       CLEAR_INTERRUPTABLE();
       set_th_worker_thread_name();
       lib::ContextTLOptGuard guard(true);
       lib::ContextParam param;
-      param.set_mem_attr(tenant_->id(), ObModIds::OB_SQL_EXECUTOR, ObCtxIds::DEFAULT_CTX_ID)
+      param.set_mem_attr(ObModIds::OB_SQL_EXECUTOR, ObCtxIds::DEFAULT_CTX_ID)
         .set_page_size(OB_MALLOC_REQ_NORMAL_BLOCK_SIZE)
         .set_properties(lib::USE_TL_PAGE_OPTIONAL)
         .set_ablock_size(lib::INTACT_MIDDLE_AOBJECT_SIZE);
       CREATE_WITH_TEMP_CONTEXT(param) {
         MEM_TRACKER_GUARD(CURRENT_CONTEXT);
         const uint64_t owner_id =
-          (!is_virtual_tenant_id(tenant_->id()) || is_virtual_tenant_for_memory(tenant_->id())) ?
+          (!false || false) ?
           tenant_->id() : OB_SERVER_TENANT_ID;
         CREATE_WITH_TEMP_ENTITY(RESOURCE_OWNER, owner_id) {
           class AllocatorGuard {
@@ -371,22 +358,6 @@ void ObThWorker::worker(int64_t &tenant_id, int64_t &req_recv_timestamp, int32_t
                 if (expand) {
                   tenant_->try_expand_one(tenant_->min_worker_cnt());
                 }
-                ObEnableDiagnoseGuard enable_guard;
-                ObDiagnosticInfo *di =
-                    req->get_type() == ObRequest::OB_MYSQL
-                        ? reinterpret_cast<ObSMConnection *>(SQL_REQ_OP.get_sql_session(req))->get_diagnostic_info()
-                        : req->get_diagnostic_info();
-                ObDiagnosticInfoSwitchGuard guard(di);
-                if (di) {
-                  di->end_wait_event(ObWaitEventIds::NETWORK_QUEUE_WAIT, false);
-                }
-#ifdef ENABLE_DEBUG_LOG
-                if (OB_ISNULL(di)) {
-                  if (REACH_TIME_INTERVAL(60 * 1000 * 1000)) {
-                    LOG_TRACE("empty diagnostic info, disable it", KPC(req));
-                  }
-                }
-#endif
                 EVENT_INC(REQUEST_DEQUEUE_COUNT);
                 req_recv_timestamp = req->get_receive_timestamp();
                 EVENT_ADD(REQUEST_QUEUE_TIME, wait_end_time - req->get_enqueue_timestamp());
@@ -429,11 +400,10 @@ void ObThWorker::run(int64_t idx)
 {
   UNUSED(idx);
   // The information that needs to be printed in the backtrace is placed in the parameter
-  int64_t tenant_id = -1;
+  int64_t tid = -1;
   int64_t req_recv_timestamp = -1;
   int32_t worker_level = -1;
-  SET_GROUP_ID();
-  this->worker(tenant_id, req_recv_timestamp, worker_level);
+  this->worker(tid, req_recv_timestamp, worker_level);
 }
 
 int ObThWorker::check_large_query_quota()
@@ -463,7 +433,7 @@ int ObThWorker::check_large_query_quota()
       // large query retry is not supported when req is NULL (i.e. ret = OB_SUCCESS)
       // but, this situation is unexpected, so log it as ERROR
       LOG_ERROR("want to set large_retry_flag on request, but the req is NULL",
-          "tenant_id", tenant_->id(), K(ret));
+          K(ret));
     }
   }
   return ret;

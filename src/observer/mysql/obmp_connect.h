@@ -34,7 +34,6 @@ struct ObSMConnection;
 
 ObString extract_user_name(const ObString &in);
 int extract_user_tenant(const ObString &in, ObString &user_name, ObString &tenant_name);
-int extract_tenant_id(const ObString &tenant_name, uint64_t &tenant_id);
 
 class AuthSwitchResonseMemPool : public obmysql::ObICSMemPool
 {
@@ -67,77 +66,54 @@ protected:
   int load_privilege_info(sql::ObSQLSessionInfo &session);
 
 private:
-  int get_tenant_id(ObSMConnection &conn, uint64_t &tenant_id);
   int64_t get_user_id();
   int64_t get_database_id();
   int get_conn_id(uint32_t &conn_id) const;
-  int get_proxy_conn_id(uint64_t &conn_id) const;
-  int get_client_addr_port(int32_t &client_addr_port) const;
-  int get_client_conn_id(uint32_t &conn_id) const;
-  int get_client_create_time(int64_t &client_create_time) const;
-  int get_proxy_sess_create_time(int64_t &sess_create_time) const;
-  int get_proxy_capability(uint64_t &cap) const;
-  int get_proxy_scramble(ObString &proxy_scramble) const;
-  int get_client_ip(ObString &client_ip) const;
 
   int get_client_attribute_capability(uint64_t &cap) const;
 
   int get_user_tenant(ObSMConnection &conn);
-  int extract_real_scramble(const ObString &proxy_scramble);
 
   int check_client_property(ObSMConnection &conn);
-  int check_common_property(ObSMConnection &conn, obmysql::ObMySQLCapabilityFlags &client_cap);
-  int check_update_proxy_capability(ObSMConnection &conn) const;
   int check_update_client_capability(uint64_t &cap) const;
-  int check_user_cluster(const ObString &server_cluster, const int64_t server_cluster_id) const;
   int init_process_single_stmt(const sql::ObMultiStmtItem &multi_stmt_item,
                                sql::ObSQLSessionInfo &session,
                                bool has_more_result) const;
   int init_connect_process(common::ObString &init_sql,
                            sql::ObSQLSessionInfo &session) const;
-  int check_update_tenant_id(ObSMConnection &conn, uint64_t &tenant_id);
-  int verify_connection(const uint64_t tenant_id) const;
-  int verify_identify(ObSMConnection &conn, sql::ObSQLSessionInfo &session, const uint64_t tenant_id);
-  int verify_ip_white_list(const uint64_t tenant_id) const;
-  int convert_oracle_object_name(const uint64_t tenant_id, ObString &object_name);
+  int verify_connection() const;
+  int verify_identify(ObSMConnection &conn, sql::ObSQLSessionInfo &session);
+  int verify_ip_white_list() const;
 
-  int switch_lock_status_for_current_login_user(const uint64_t tenant_id, bool do_lock);
-  int switch_lock_status_for_user(const uint64_t tenant_id, const ObString &host_name,
+  int switch_lock_status_for_current_login_user(bool do_lock);
+  int switch_lock_status_for_user(const ObString &host_name,
                                   ObCompatibilityMode compat_mode, bool do_lock);
-  int get_last_failed_login_info(const uint64_t tenant_id,
-                                 const uint64_t user_id,
+  int get_last_failed_login_info(const uint64_t user_id,
                                  ObISQLClient &sql_client,
                                  int64_t &current_failed_login_num,
                                  int64_t &last_failed_timestamp);
 
-  int update_current_user_failed_login_num(const uint64_t tenant_id,
-                                           const uint64_t user_id,
+  int update_current_user_failed_login_num(const uint64_t user_id,
                                            ObISQLClient &sql_client,
                                            int64_t new_failed_login_num);
-  int clear_current_user_failed_login_num(const uint64_t tenant_id,
-                                          const uint64_t user_id,
+  int clear_current_user_failed_login_num(const uint64_t user_id,
                                           ObISQLClient &sql_client);
-  int update_login_stat_mysql(const uint64_t tenant_id,
-                              const bool is_login_succ,
+  int update_login_stat_mysql(const bool is_login_succ,
                               ObSchemaGetterGuard &schema_guard,
                               bool &is_unlocked_now);
-  int update_login_stat_in_trans_mysql(const uint64_t tenant_id,
-                                       const ObUserInfo &user_info,
+  int update_login_stat_in_trans_mysql(const ObUserInfo &user_info,
                                        const bool is_login_succ,
                                        bool &is_locked_now);
-  bool is_connection_control_enabled(const uint64_t tenant_id);
-  int get_connection_control_stat(const uint64_t tenant_id, const int64_t current_failed_login_num,
+  bool is_connection_control_enabled();
+  int get_connection_control_stat(const int64_t current_failed_login_num,
                                   const int64_t last_failed_login_timestamp,
                                   bool &need_lock, bool &is_locked);
 
-  int unlock_user_if_time_is_up_mysql(const uint64_t tenant_id,
-                                      const uint64_t user_id,
+  int unlock_user_if_time_is_up_mysql(const uint64_t user_id,
                                       share::schema::ObSchemaGetterGuard &schema_guard,
                                       bool &is_unlock);
-  int check_password_expired(const uint64_t tenant_id,
-                             share::schema::ObSchemaGetterGuard &schema_guard,
+  int check_password_expired(share::schema::ObSchemaGetterGuard &schema_guard,
                              sql::ObSQLSessionInfo &session);
-  int set_proxy_version(ObSMConnection &conn);
   int set_client_version(ObSMConnection &conn);
 private:
   DISALLOW_COPY_AND_ASSIGN(ObMPConnect);

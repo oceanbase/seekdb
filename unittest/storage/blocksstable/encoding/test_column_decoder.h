@@ -85,22 +85,16 @@ public:
       : is_retro_(false), tenant_ctx_(OB_SERVER_TENANT_ID)
   {
     share::ObTenantEnv::set_tenant(&tenant_ctx_);
-    encoder_.data_buffer_.allocator_.set_tenant_id(OB_SERVER_TENANT_ID);
-    encoder_.row_buf_holder_.allocator_.set_tenant_id(OB_SERVER_TENANT_ID);
   }
   TestColumnDecoder(ObColumnHeader::Type column_encoding_type)
       : is_retro_(false), column_encoding_type_(column_encoding_type), tenant_ctx_(OB_SERVER_TENANT_ID)
   {
     share::ObTenantEnv::set_tenant(&tenant_ctx_);
-    encoder_.data_buffer_.allocator_.set_tenant_id(OB_SERVER_TENANT_ID);
-    encoder_.row_buf_holder_.allocator_.set_tenant_id(OB_SERVER_TENANT_ID);
   }
   TestColumnDecoder(bool is_retro)
       : is_retro_(is_retro), tenant_ctx_(OB_SERVER_TENANT_ID)
  {
     share::ObTenantEnv::set_tenant(&tenant_ctx_);
-    encoder_.data_buffer_.allocator_.set_tenant_id(OB_SERVER_TENANT_ID);
-    encoder_.row_buf_holder_.allocator_.set_tenant_id(OB_SERVER_TENANT_ID);
   }
   virtual ~TestColumnDecoder() {}
 
@@ -304,7 +298,6 @@ void TestColumnDecoder::SetUp()
   ObTableSchema table;
   ObColumnSchemaV2 col;
   table.reset();
-  table.set_tenant_id(1);
   table.set_tablegroup_id(1);
   table.set_database_id(1);
   table.set_table_id(tid);
@@ -330,9 +323,7 @@ void TestColumnDecoder::SetUp()
         || ObTextType == type){
       col.set_collation_type(CS_TYPE_UTF8MB4_GENERAL_CI);
       if (ObCharType == type) {
-        const int64_t max_char_length = lib::is_oracle_mode()
-                                        ? OB_MAX_ORACLE_CHAR_LENGTH_BYTE
-                                        : OB_MAX_CHAR_LENGTH;
+        const int64_t max_char_length = OB_MAX_CHAR_LENGTH;
         col.set_data_length(max_char_length);
       }
     } else {
@@ -360,7 +351,6 @@ void TestColumnDecoder::SetUp()
       allocator_,
       table.get_column_count(),
       table.get_rowkey_column_num(),
-      lib::is_oracle_mode(),
       col_descs_));
 
   ctx_.micro_block_size_ = 64L << 11;
@@ -492,7 +482,7 @@ void TestColumnDecoder::init_in_filter(
 
   ObObjMeta obj_meta = filter_objs.at(0).get_meta();
   sql::ObExprBasicFuncs *basic_funcs = ObDatumFuncs::get_basic_func(
-    obj_meta.get_type(), obj_meta.get_collation_type(), obj_meta.get_scale(), false, obj_meta.has_lob_header());
+    obj_meta.get_type(), obj_meta.get_collation_type(), obj_meta.get_scale(), obj_meta.has_lob_header());
   ObDatumCmpFuncType cmp_func = get_datum_cmp_func(obj_meta, obj_meta);
 
   filter.filter_.expr_->args_[0]->type_ = T_REF_COLUMN;

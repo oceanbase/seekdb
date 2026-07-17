@@ -36,7 +36,7 @@ class ObExprSubQueryRef : public ObExprOperator
     ObExprSubQueryRefCtx() : ObExprOperatorCtx(), cursor_infos_(), session_info_(NULL) 
     {
       cursor_infos_.reset();
-      cursor_infos_.set_tenant_id(MTL_ID());
+      
     }
     virtual ~ObExprSubQueryRefCtx()
     {

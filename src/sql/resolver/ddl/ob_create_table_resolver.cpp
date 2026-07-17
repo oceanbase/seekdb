@@ -16,21 +16,21 @@
 
 #define USING_LOG_PREFIX SQL_RESV
 #include "sql/resolver/ddl/ob_create_table_resolver.h"
-#include "share/ob_fts_index_builder_util.h"
+#include "sql/resolver/ddl/ob_fts_index_builder_util.h"
 #include "sql/rewrite/ob_transform_utils.h"
 #include "sql/optimizer/ob_optimizer_util.h"
-#include "share/ob_index_builder_util.h"
+#include "sql/resolver/ddl/ob_index_builder_util.h"
 #include "observer/ob_server.h"
 #include "sql/resolver/cmd/ob_help_resolver.h"
 #include "sql/optimizer/ob_optimizer_util.h"
-#include "share/vector_index/ob_vector_index_util.h"
-#include "share/ob_vec_index_builder_util.h"
-
+#include "observer/vector_index/ob_vector_index_util.h"
+#include "sql/resolver/ddl/ob_vec_index_builder_util.h"
+#include "share/table/ob_ttl_util.h"
 
 namespace oceanbase
 {
 using namespace common;
-using namespace obrpc;
+using namespace obcall;
 using namespace share;
 using namespace share::schema;
 using namespace omt;
@@ -90,8 +90,8 @@ int ObCreateTableResolver::add_primary_key_part(const ObString &column_name,
   } else if (OB_FAIL(primary_keys_.push_back(col->get_column_id()))) {
     SQL_RESV_LOG(WARN, "push primary key to array failed", K(ret));
   } else {
-    // In mysql mode, when creating a table, if the primary key column is set null or set default value = null, an error should be reported
-    // oracle mode, when creating a table, if the primary key column is set null or set default value = null, no error will be reported, so skip the following check
+    // Primary key columns cannot be set null or default null; the following
+    // check enforces that rule during create table.
     ObColumnResolveStat *stat = NULL;
     for (int64_t i = 0; NULL == stat && OB_SUCC(ret) && i < stats.count(); ++i) {
       if (stats.at(i).column_id_ == col->get_column_id()) {
@@ -143,40 +143,6 @@ int ObCreateTableResolver::add_hidden_tablet_seq_col()
   return ret;
 }
 
-int ObCreateTableResolver::add_hidden_external_table_pk_col()
-{
-  int ret = OB_SUCCESS;
-  uint64_t COL_IDS[2] = {OB_HIDDEN_FILE_ID_COLUMN_ID, OB_HIDDEN_LINE_NUMBER_COLUMN_ID};
-  const char* COL_NAMES[2] = {OB_HIDDEN_FILE_ID_COLUMN_NAME, OB_HIDDEN_LINE_NUMBER_COLUMN_NAME};
-  if (OB_ISNULL(stmt_)) {
-    ret = OB_INVALID_ARGUMENT;
-    SQL_RESV_LOG(WARN, "stmt is NULL", K(stmt_), K(ret));
-  } else {
-    ObCreateTableStmt *create_table_stmt = static_cast<ObCreateTableStmt*>(stmt_);
-    ObTableSchema &table_schema = create_table_stmt->get_create_table_arg().schema_;
-    for (int i = 0; OB_SUCC(ret) && i < array_elements(COL_IDS); i++) {
-      ObColumnSchemaV2 hidden_pk;
-      hidden_pk.reset();
-      hidden_pk.set_column_id(COL_IDS[i]);
-      hidden_pk.set_data_type(ObIntType);
-      hidden_pk.set_nullable(false);
-      hidden_pk.set_is_hidden(true);
-      hidden_pk.set_charset_type(CHARSET_BINARY);
-      hidden_pk.set_collation_type(CS_TYPE_BINARY);
-      if (OB_FAIL(hidden_pk.set_column_name(COL_NAMES[i]))) {
-        SQL_RESV_LOG(WARN, "failed to set column name", K(ret));
-      } else if (OB_FAIL(primary_keys_.push_back(COL_IDS[i]))) {
-        SQL_RESV_LOG(WARN, "failed to push_back column_id", K(ret));
-      } else {
-        hidden_pk.set_rowkey_position(primary_keys_.count());
-        if (OB_FAIL(table_schema.add_column(hidden_pk))) {
-          SQL_RESV_LOG(WARN, "add column to table_schema failed", K(ret), K(hidden_pk));
-        }
-      }
-    }
-  }
-  return ret;
-}
 // Set additional information for the temporary table
 int ObCreateTableResolver::set_temp_table_info(ObTableSchema &table_schema, ParseNode *commit_option_node)
 {
@@ -190,7 +156,7 @@ int ObCreateTableResolver::set_temp_table_info(ObTableSchema &table_schema, Pars
     LOG_USER_ERROR(OB_NOT_SUPPORTED, "obproxy version is too old, create temporary table");
   } else {
     table_schema.set_table_type(TMP_TABLE);
-    table_schema.set_session_id(session_info_->get_sessid_for_table()); ////Set session_id and session creation time, used for judgment during cleanup, Oracle function is different and does not need to be set
+    table_schema.set_session_id(session_info_->get_sessid_for_table()); // Set session_id for cleanup judgment.
 
     table_schema.set_sess_active_time(ObTimeUtility::current_time());
   }
@@ -204,8 +170,6 @@ int ObCreateTableResolver::set_default_micro_index_clustered_(share::schema::ObT
   // set default value. If user_specified, it is modifed in resolve_table_option.
   if (OB_FAIL(ret)) {
     // error occurred
-  } else if (GCTX.is_shared_storage_mode()) {
-    table_schema.set_micro_index_clustered(true);
   } else { // shared_nothing
     table_schema.set_micro_index_clustered(false);
   }
@@ -222,18 +186,15 @@ ERRSIM_POINT_DEF(ERRSIM_SET_MERGE_ENGINE_DELETE_INSERT);
 int ObCreateTableResolver::set_default_merge_engine_type_(share::schema::ObTableSchema &table_schema)
 {
   int ret = OB_SUCCESS;
-  ObTenantConfigGuard tenant_config(TENANT_CONF(session_info_->get_effective_tenant_id()));
   if (ERRSIM_SET_MERGE_ENGINE_DELETE_INSERT) {
     table_schema.set_merge_engine_type(ObMergeEngineType::OB_MERGE_ENGINE_DELETE_INSERT);
-  } else if (OB_LIKELY(tenant_config.is_valid())) {
+  } else {
     const char *delete_insert = ObMergeEngineStoreFormat::get_merge_engine_type_name(ObMergeEngineType::OB_MERGE_ENGINE_DELETE_INSERT);
-    if (0 == tenant_config->default_table_merge_engine.case_compare(delete_insert)) {
+    if (0 == GCONF.default_table_merge_engine.case_compare(delete_insert)) {
       table_schema.set_merge_engine_type(ObMergeEngineType::OB_MERGE_ENGINE_DELETE_INSERT);
     } else {
       table_schema.set_merge_engine_type(ObMergeEngineType::OB_MERGE_ENGINE_PARTIAL_UPDATE);
     }
-  } else {
-    table_schema.set_merge_engine_type(ObMergeEngineType::OB_MERGE_ENGINE_PARTIAL_UPDATE);
   }
   return ret;
 }
@@ -242,7 +203,6 @@ int ObCreateTableResolver::resolve(const ParseNode &parse_tree)
 {
   int ret = OB_SUCCESS;
   bool is_temporary_table = false;
-  bool has_dblink_node = false;
   const bool is_mysql_mode = true;
   ParseNode *create_table_node = const_cast<ParseNode*>(&parse_tree);
   CHECK_COMPATIBILITY_MODE(session_info_);
@@ -256,13 +216,11 @@ int ObCreateTableResolver::resolve(const ParseNode &parse_tree)
   } else {
     ObCreateTableStmt *create_table_stmt = NULL;
     ObString table_name;
-    char *dblink_name_ptr = NULL;
-    int32_t dblink_name_len = 0;
     ObString database_name;
     uint64_t database_id = OB_INVALID_ID;
     ObSEArray<ObString, 8> pk_columns_name;
     bool is_create_as_sel = (CREATE_TABLE_AS_SEL_NUM_CHILD == create_table_node->num_child_);
-    const uint64_t tenant_id = session_info_->get_effective_tenant_id();
+    
     if (OB_ISNULL(create_table_stmt = create_stmt<ObCreateTableStmt>())) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
       SQL_RESV_LOG(ERROR, "failed to create select stmt", K(ret));
@@ -277,18 +235,11 @@ int ObCreateTableResolver::resolve(const ParseNode &parse_tree)
             case T_TEMPORARY:
               if (create_table_node->children_[5] != NULL) { // Temporary table does not support partitioning
                 ret = OB_ERR_TEMPORARY_TABLE_WITH_PARTITION;
-              } else if (lib::is_mysql_mode()) {
+              } else {
                 ret = OB_NOT_SUPPORTED;
                 LOG_USER_ERROR(OB_NOT_SUPPORTED, "MySQL compatible temporary table");
-              } else {
-                is_temporary_table = true;
               }
               break;
-            case T_EXTERNAL: {
-              create_table_stmt->get_create_table_arg().schema_.set_table_type(EXTERNAL_TABLE);
-              is_external_table_ = true;
-              break;
-            }
             default:
               ret = OB_INVALID_ARGUMENT;
               SQL_RESV_LOG(WARN, "invalid argument.",
@@ -317,14 +268,8 @@ int ObCreateTableResolver::resolve(const ParseNode &parse_tree)
         ret = OB_NOT_INIT;
         SQL_RESV_LOG(WARN, "session_info is null.", K(ret));
       } else if (OB_FAIL(resolve_table_relation_node(create_table_node->children_[2], table_name, database_name,
-                                                     false, false, &dblink_name_ptr, &dblink_name_len, &has_dblink_node))) {
+                                                     false))) {
         SQL_RESV_LOG(WARN, "failed to resolve table relation node!", K(ret));
-      } else if (has_dblink_node) { //don't care about dblink_name_len
-        // Check whether the child nodes of table_node have dblink ParseNode,
-        // If so, an error will be reported.
-        ret = OB_ERR_DDL_ON_REMOTE_DATABASE;
-        SQL_RESV_LOG(WARN, "create table on remote database by dblink.", K(ret));
-        LOG_USER_ERROR(OB_ERR_DDL_ON_REMOTE_DATABASE);
       } else if ((ObString(OB_RECYCLEBIN_SCHEMA_NAME) == database_name
                   && ObSQLSessionInfo::USER_SESSION == session_info_->get_session_type())
                  || ObString(OB_PUBLIC_SCHEMA_NAME) == database_name) {
@@ -332,7 +277,7 @@ int ObCreateTableResolver::resolve(const ParseNode &parse_tree)
         SQL_RESV_LOG(WARN, "create table in recyclebin database is not permitted", K(ret));
       } else if (OB_FAIL(set_table_name(table_name))) {
         SQL_RESV_LOG(WARN, "set table name failed", K(ret));
-      } else if (OB_FAIL(schema_checker_->get_database_id(tenant_id, database_name, database_id))) {
+      } else if (OB_FAIL(schema_checker_->get_database_id(database_name, database_id))) {
         if (OB_ERR_BAD_DATABASE == ret) {
           LOG_USER_ERROR(OB_ERR_BAD_DATABASE, database_name.length(), database_name.ptr());
         }
@@ -343,13 +288,13 @@ int ObCreateTableResolver::resolve(const ParseNode &parse_tree)
                   *allocator_, database_name, create_table_stmt->get_non_const_db_name()))) {
         SQL_RESV_LOG(WARN, "Failed to deep copy database name to stmt", K(ret));
       } else if (ObCharset::case_insensitive_equal(ObString(strlen(OB_SYS_DATABASE_NAME), OB_SYS_DATABASE_NAME), database_name)) {
-        uint64_t tenant_id = session_info_->get_effective_tenant_id();
+        
         uint64_t database_id = OB_INVALID_ID;
         if (OB_ISNULL(schema_checker_)) {
           ret = OB_ERR_UNEXPECTED;
           SQL_RESV_LOG(WARN, "schema_checker_ is null.", K(ret));
-        } else if (OB_FAIL(schema_checker_->get_database_id(tenant_id, database_name, database_id)))  {
-          SQL_RESV_LOG(WARN, "fail to get database_id.", K(ret), K(database_name), K(tenant_id));
+        } else if (OB_FAIL(schema_checker_->get_database_id(database_name, database_id)))  {
+          SQL_RESV_LOG(WARN, "fail to get database_id.", K(ret), K(database_name));
         } else {
           create_table_stmt->set_database_id(database_id);
         }
@@ -381,25 +326,16 @@ int ObCreateTableResolver::resolve(const ParseNode &parse_tree)
           // do nothing
         }
 
-        if (OB_SUCC(ret) && is_external_table_) {
-          //before resolve table elements
-          if (OB_FAIL(resolve_external_table_format_early(create_table_node->children_[4]))) {
-            LOG_WARN("fail to resolve external file format", K(ret));
-          }
-        }
-
         // 1、 resolve table_id first for check whether is inner_table
         if (OB_SUCC(ret) && OB_FAIL(resolve_table_id_pre(create_table_node->children_[4]))) {
           SQL_RESV_LOG(WARN, "resolve_table_id_pre failed", K(ret));
         }
 
-        ObTenantConfigGuard tenant_config(TENANT_CONF(tenant_id));
-
         // resolve table organizations before resolve table elements
         if (OB_FAIL(ret)) {
           //do nothing
         } else if (!is_inner_table(table_id_) &&
-                    OB_FAIL(resolve_table_organization(tenant_config, create_table_node->children_[4]))) {
+                    OB_FAIL(resolve_table_organization(&GCONF, create_table_node->children_[4]))) {
           SQL_RESV_LOG(WARN, "resolve table organization failed", K(ret));
         }
 
@@ -435,16 +371,16 @@ int ObCreateTableResolver::resolve(const ParseNode &parse_tree)
               table_mode_.pk_exists_ = 0 == get_primary_key_size() ? TOM_TABLE_WITHOUT_PK : TOM_TABLE_WITH_PK;
               table_mode_.pk_mode_ = TPKM_TABLET_SEQ_PK;
             }
-            if (OB_SUCC(ret) && OB_LIKELY(tenant_config.is_valid())) {
+            if (OB_SUCC(ret)) {
               const char *ptr = NULL;
-              if (OB_ISNULL(ptr = tenant_config->default_auto_increment_mode.get_value())) {
+              if (OB_ISNULL(ptr = GCONF.default_auto_increment_mode.get_value())) {
                 ret = OB_ERR_UNEXPECTED;
                 LOG_WARN("default auto increment mode ptr is null", K(ret));
               } else {
                 table_mode_.auto_increment_mode_ =
                   (0 == ObString::make_string("order").case_compare(ptr)) ?
                     ObTableAutoIncrementMode::ORDER : ObTableAutoIncrementMode::NOORDER;
-                table_mode_.rowid_mode_ = tenant_config->default_enable_extended_rowid ?
+                table_mode_.rowid_mode_ = GCONF.default_enable_extended_rowid ?
                     ObTableRowidMode::ROWID_EXTENDED : ObTableRowidMode::ROWID_NORMAL;
               }
             }
@@ -479,19 +415,6 @@ int ObCreateTableResolver::resolve(const ParseNode &parse_tree)
           }
         }
 
-        if (OB_SUCC(ret) && is_external_table_) {
-          //external table support check
-          ObTableSchema &table_schema = create_table_stmt->get_create_table_arg().schema_;
-          if (index_node_position_list.count() > 0
-              || foreign_key_node_position_list.count() > 0
-              || table_level_constraint_list.count() > 0
-              || table_schema.get_constraint_count() > 0
-              || is_create_as_sel) {
-            ret = OB_NOT_SUPPORTED;
-            LOG_USER_ERROR(OB_NOT_SUPPORTED, "operation on external table");
-          }
-        }
-
         // !!Attention!! resolve_partition_option should always call after resolve_table_options
         if (OB_SUCC(ret)) {
           ObTableSchema &table_schema = create_table_stmt->get_create_table_arg().schema_;
@@ -502,39 +425,14 @@ int ObCreateTableResolver::resolve(const ParseNode &parse_tree)
           }
         }
 
-        if (OB_SUCC(ret) && create_table_stmt->get_create_table_arg().schema_.is_external_table()) {
-          if (create_table_stmt->get_create_table_arg().schema_.get_part_level() == ObPartitionLevel::PARTITION_LEVEL_ONE) {
-            OZ (create_default_partition_for_table(create_table_stmt->get_create_table_arg().schema_));
-          }
-          /*
-          if (OB_FAIL(ret)) {
-          } else if (ObExternalFileFormat::FormatType::ODPS_FORMAT != external_table_format_type_ &&
-                     OB_FAIL(add_hidden_external_table_pk_col())) {
-            LOG_WARN("fail to add hidden pk col for external table", K(ret));
-          }
-          */
-          if (OB_FAIL(ret)) {
-          } else if (OB_FAIL(add_hidden_external_table_pk_col())) {
-            LOG_WARN("fail to add hidden pk col for external table", K(ret));
-          }
-        }
-
         // 4.0 new heap table has hidden primary key (tablet seq)
         if (OB_SUCC(ret) && (0 == get_primary_key_size() || is_organization_set_to_heap())
-            && !is_external_table_
             && (TOM_HEAP_ORGANIZED == table_mode_.table_organization_mode_ ||
               (TOM_INDEX_ORGANIZED == table_mode_.table_organization_mode_ &&
               TOM_TABLE_WITHOUT_PK == table_mode_.pk_exists_))) {
           ObTableSchema &table_schema = create_table_stmt->get_create_table_arg().schema_;
           if (OB_FAIL(add_hidden_tablet_seq_col())) {
             SQL_RESV_LOG(WARN, "failed to add hidden primary key tablet seq", K(ret));
-          }
-        }
-
-        // column group
-        if (OB_SUCC(ret)) {
-          if (OB_FAIL(resolve_column_group(create_table_node->children_[6]))) {
-            SQL_RESV_LOG(WARN, "fail to resolve column group", KR(ret));
           }
         }
 
@@ -580,40 +478,6 @@ int ObCreateTableResolver::resolve(const ParseNode &parse_tree)
           } else { /* do nothing */ }
         }
 
-        if (OB_SUCC(ret)) {
-          ObTableSchema &table_schema = create_table_stmt->get_create_table_arg().schema_;
-          ParseNode *partition_node = create_table_node->children_[5];
-          if (table_schema.is_user_table()) {
-            if (nullptr != partition_node) {
-              // acquire partition_node with similar logic like resolve_partition_option()
-              const bool is_partition_option_node_with_opt = !is_mysql_mode || 1 != create_table_node->reserved_;
-              if (!is_partition_option_node_with_opt) {
-                // current node is partition node
-              } else if (T_VERTICAL_COLUMNS_PARTITION == partition_node->type_) {
-                // no need to resolve, partition node doesn't exist
-                partition_node = nullptr;
-              } else if (T_PARTITION_OPTION != partition_node->type_) {
-                ret = OB_INVALID_ARGUMENT;
-                SQL_RESV_LOG(WARN, "node type is invalid.", K(ret), K(partition_node->type_));
-              } else if (OB_UNLIKELY(partition_node->num_child_ < 1 || partition_node->num_child_ > 2)) {
-                ret = OB_INVALID_ARGUMENT;
-                SQL_RESV_LOG(WARN, "node number is invalid.", K(ret), K(partition_node->num_child_));
-              } else if (OB_ISNULL(partition_node->children_[0])) {
-                ret = OB_ERR_UNEXPECTED;
-                SQL_RESV_LOG(WARN, "partition node is null.", K(ret));
-              } else {
-                partition_node = partition_node->children_[0];
-              }
-            }
-
-            if (FAILEDx(resolve_auto_partition_with_tenant_config(create_table_stmt,
-                                                                  partition_node,
-                                                                  table_schema))) {
-              LOG_WARN("fail to resolve auto partition with tenant config",
-                                                  KR(ret), KPC(create_table_stmt), K(create_table_node));
-            }
-          }
-        }
       }
     }
     if (OB_SUCC(ret)){
@@ -634,24 +498,10 @@ int ObCreateTableResolver::resolve(const ParseNode &parse_tree)
     if (OB_SUCC(ret) && GCTX.is_shared_storage_mode() && is_mysql_mode) {
       ObTableSchema &table_schema = create_table_stmt->get_create_table_arg().schema_;
       if (OB_FAIL(check_create_stmt_storage_cache_policy(table_schema.get_storage_cache_policy(), &table_schema))) {
-        LOG_WARN("fail to check storage cache policy", K(ret), K(table_schema.get_storage_cache_policy()));;
+        LOG_WARN("fail to check storage cache policy", K(ret), K(table_schema.get_storage_cache_policy()));
       }
     }
 
-    if (OB_SUCC(ret) && create_table_stmt->get_create_table_arg().schema_.is_external_table()) {
-      ObTableSchema &table_schema = create_table_stmt->get_create_table_arg().schema_;
-      if (OB_FAIL(ObSQLUtils::check_location_constraint(table_schema))) {
-        LOG_WARN("fail to check location constraint", K(ret), K(table_schema));
-      }
-    }
-
-    if (OB_SUCC(ret)) {
-      ObTableSchema &table_schema = create_table_stmt->get_create_table_arg().schema_;
-      if (!table_schema.get_kv_attributes().empty() &&
-          OB_FAIL(ObTTLUtil::check_kv_attributes(table_schema, params_.is_htable_))) {
-        LOG_WARN("fail to check kv attributes", K(ret));
-      }
-    }
   }
   return ret;
 }
@@ -667,134 +517,13 @@ int ObCreateTableResolver::resolve_partition_option(
   if (OB_FAIL(ObCreateTableResolverBase::resolve_partition_option(node, table_schema, is_partition_option_node_with_opt))) {
     LOG_WARN("fail to resolve partition option", KR(ret));
   }
-  if (OB_SUCC(ret) && (OB_NOT_NULL(node) || table_schema.is_external_table())) {
+  if (OB_SUCC(ret) && OB_NOT_NULL(node)) {
     if (OB_FAIL(check_generated_partition_column(table_schema))) {
       LOG_WARN("Failed to check generate partition column", KR(ret));
     } else if (OB_FAIL(table_schema.check_primary_key_cover_partition_column())) {
       SQL_RESV_LOG(WARN, "fail to check primary key cover partition column", KR(ret));
     }
   }
-  return ret;
-}
-
-int ObCreateTableResolver::create_default_partition_for_table(ObTableSchema &table_schema)
-{
-  int ret = OB_SUCCESS;
-  ObPartition partition;
-  ObRawExpr *maxvalue_expr = NULL;
-  ObConstRawExpr *c_expr = NULL;
-  ObOpRawExpr *row_expr = NULL;
-  if (OB_ISNULL(params_.allocator_)
-      || OB_ISNULL(c_expr = (ObConstRawExpr *) params_.allocator_->alloc(sizeof(ObConstRawExpr)))) {
-    ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("failed to allcoate memory", K(ret));
-  } else if (OB_ISNULL(params_.expr_factory_)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret));
-  } else if (OB_FAIL(params_.expr_factory_->create_raw_expr(T_OP_ROW, row_expr))) {
-    LOG_WARN("failed to create raw expr", K(ret));
-  } else if (OB_ISNULL(row_expr)) {
-    ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("failed to allcoate memory", K(ret));
-  } else {
-    c_expr = new(c_expr) ObConstRawExpr();
-    maxvalue_expr = c_expr;
-    maxvalue_expr->set_data_type(common::ObMaxType);
-    if (OB_FAIL(row_expr->set_param_expr(maxvalue_expr))) {
-      LOG_WARN("failed add param expr", K(ret));
-    }
-  }
-  ObDDLStmt::array_t list_values_exprs;
-  ObCreateTableStmt *create_table_stmt = static_cast<ObCreateTableStmt*>(stmt_);
-  if (OB_FAIL(ret)) {
-  } else if (OB_FAIL(partition.set_part_name("P_DEFAULT"))) {
-    LOG_WARN("set partition name failed", K(ret));
-  } else if (OB_FAIL(table_schema.add_partition(partition))) {
-    LOG_WARN("add partition failed", K(ret));
-  } else if (OB_FALSE_IT(table_schema.set_part_num(1))) {
-  } else if (OB_FAIL(list_values_exprs.push_back(row_expr))) {
-    LOG_WARN("push back failed", K(ret));
-  } else if (OB_FAIL(create_table_stmt->get_part_values_exprs().assign(list_values_exprs))) {
-    LOG_WARN("failed to assign list values exprs", K(ret));
-  }
-
-  return ret;
-}
-
-int ObCreateTableResolver::check_external_table_generated_partition_column_sanity(ObTableSchema &table_schema,
-                                                                       ObRawExpr *dependant_expr,
-                                                                       ObIArray<int64_t> &external_part_idx)
-{
-  int ret = OB_SUCCESS;
-  ObArray<ObRawExpr *> col_exprs;
-  bool is_odps_external_table = false;
-  if (OB_FAIL(ObSQLUtils::is_odps_external_table(&table_schema, is_odps_external_table))) {
-    LOG_WARN("failed to check is odps external table or not", K(ret));
-  } else if (is_odps_external_table) {
-    // do nothing
-  } else if (OB_ISNULL(dependant_expr)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("dependant expr is null", K(ret));
-  } else if (OB_FAIL(ObRawExprUtils::extract_column_exprs(dependant_expr, col_exprs, true/*extract pseudo column*/))) {
-    LOG_WARN("extract col exprs failed", K(ret));
-  } else if (table_schema.is_user_specified_partition_for_external_table()) {
-    bool found = false;
-    for (int64_t i = 0; OB_SUCC(ret) && i < col_exprs.count(); i++) {
-      if (OB_ISNULL(col_exprs.at(i))) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("col expr is null", K(ret));
-      } else if (col_exprs.at(i)->is_pseudo_column_expr()) {
-        if (col_exprs.at(i)->get_expr_type() != T_PSEUDO_PARTITION_LIST_COL ||
-            dependant_expr != col_exprs.at(i)) {
-          ret = OB_NOT_SUPPORTED;
-          LOG_USER_ERROR(OB_NOT_SUPPORTED, "user specified partition dependant expr is not metadata$external_partition pseudo column");
-          LOG_WARN("user specified partition col expr contains non external partition pseudo column is not supported", K(ret));
-        } else if (ObOptimizerUtil::find_item(external_part_idx, col_exprs.at(i)->get_column_idx())) {
-          ObSqlString tmp;
-          OZ (tmp.append(col_exprs.at(i)->get_expr_name()));
-          OZ (tmp.append(" redefinition"));
-          ret = OB_NOT_SUPPORTED;
-          ObCStringHelper helper;
-          LOG_USER_ERROR(OB_NOT_SUPPORTED, helper.convert(tmp.string()));
-          LOG_WARN("redefine the metadata$external_partition[i] column", K(ret));
-        } else {
-          OZ (external_part_idx.push_back(col_exprs.at(i)->get_column_idx()));
-          found = true;
-        }
-      }
-    }
-    if (OB_SUCC(ret)) {
-      if (!found) {
-        ret = OB_NOT_SUPPORTED;
-        LOG_USER_ERROR(OB_NOT_SUPPORTED, "user specified partition col expr contains no metadata$external_partition pseudo columns");
-        LOG_WARN("user specified partition col expr contains no external partition pseudo column is not supported", K(ret));
-      }
-    }
-  } else {
-    bool found = false;
-    for (int64_t i = 0; OB_SUCC(ret) && i < col_exprs.count(); i++) {
-      if (OB_ISNULL(col_exprs.at(i))) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("col expr is null", K(ret));
-      } else if (col_exprs.at(i)->is_pseudo_column_expr()) {
-        if (col_exprs.at(i)->get_expr_type() != T_PSEUDO_EXTERNAL_FILE_URL) {
-          ret = OB_NOT_SUPPORTED;
-          LOG_USER_ERROR(OB_NOT_SUPPORTED, "partition col expr contains non metadata$fileurl pseudo column");
-          LOG_WARN("partition col expr contains non metadata$fileurl pseudo column is not supported", K(ret));
-        } else {
-          found = true;
-        }
-      }
-    }
-    if (OB_SUCC(ret)) {
-      if (!found) {
-        ret = OB_NOT_SUPPORTED;
-        LOG_USER_ERROR(OB_NOT_SUPPORTED, "partition col expr contains no metadata$fileurl pseudo columns");
-        LOG_WARN("partition col expr contains no metadata$fileurln pseudo column is not supported", K(ret));
-      }
-    }
-  }
-
   return ret;
 }
 
@@ -806,7 +535,6 @@ int ObCreateTableResolver::check_generated_partition_column(ObTableSchema &table
   ObColumnSchemaV2 *column_schema = NULL;
   ObRawExpr *dependant_expr = NULL;
   ObString expr_def;
-  ObArray<int64_t> external_part_idx;
   for (int64_t idx = 0; OB_SUCC(ret) && idx < part_key_info.get_size(); ++idx) {
     if (OB_ISNULL(part_column = part_key_info.get_column(idx))) {
       ret = OB_ERR_UNEXPECTED;
@@ -825,19 +553,6 @@ int ObCreateTableResolver::check_generated_partition_column(ObTableSchema &table
                                                                      dependant_expr,
                                                                      schema_checker_))) {
         LOG_WARN("build generated column expr failed", K(ret));
-      } else if (table_schema.is_external_table()) {
-        if (table_schema.is_user_specified_partition_for_external_table()
-            && mocked_external_table_column_ids_.has_member(column_schema->get_column_id())) {
-          ObSqlString temp_str;
-          ObString new_gen_def;
-          OZ (temp_str.assign_fmt("%s%ld", N_PARTITION_LIST_COL, idx + 1));
-          CK (OB_NOT_NULL(allocator_));
-          OZ (ob_write_string(*allocator_, temp_str.string(), new_gen_def));
-          OX (column_schema->get_cur_default_value().set_varchar(new_gen_def));
-          OZ (external_part_idx.push_back(idx + 1));
-        } else {
-          OZ (check_external_table_generated_partition_column_sanity(table_schema, dependant_expr, external_part_idx));
-        }
       } /*
         if gc column is partition key, then this is no restriction
         else {
@@ -850,68 +565,6 @@ int ObCreateTableResolver::check_generated_partition_column(ObTableSchema &table
     } else { }//do nothing
   }
 
-  //to check external partition valid
-  if (OB_FAIL(ret)) {
-  } else if (table_schema.is_external_table()) {
-    if (table_schema.is_user_specified_partition_for_external_table()) {
-      if (external_part_idx.count() != part_key_info.get_size()) {
-        ret = OB_NOT_SUPPORTED;
-        LOG_USER_ERROR(OB_NOT_SUPPORTED, "partition key number not equal to generate column with metadata$partition_list_col");
-        LOG_WARN("partition key number not equal to generate column with metadata$partition_list_col is not supported", K(ret));
-      }
-      for (int64_t i = 0; OB_SUCC(ret) && i < external_part_idx.count(); i++) {
-        if (!ObOptimizerUtil::find_item(external_part_idx, i + 1)) {
-          ret = OB_NOT_SUPPORTED;
-          LOG_USER_ERROR(OB_NOT_SUPPORTED, "metadata$partition_list_col id is not continuously from 1");
-          LOG_WARN("metadata$partition_list_col id is not continuously from 1 is not supported", K(ret));
-        }
-      }
-    }
-    ObArray<uint64_t> column_ids;
-    ObArray<uint64_t> part_column_ids;
-    OZ (table_schema.get_column_ids(column_ids));
-    if (OB_SUCC(ret) && part_key_info.get_size() != 0) {
-      OZ (part_key_info.get_column_ids(part_column_ids));
-    }
-    OZ (ObOptimizerUtil::remove_item(column_ids, part_column_ids));
-    for (int64_t i = 0; OB_SUCC(ret) && i < column_ids.count(); i++) {
-      ObColumnSchemaV2 *column_schema = NULL;
-      if (OB_ISNULL(column_schema = table_schema.get_column_schema(column_ids.at(i)))) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("Failed to get column schema", K(ret), K(column_ids.at(i)));
-      } else if (column_schema->is_generated_column()) {
-        ObArray<ObRawExpr *> col_exprs;
-        if (OB_FAIL(column_schema->get_cur_default_value().get_string(expr_def))) {
-          LOG_WARN("get string from current default value failed", K(ret), K(column_schema->get_cur_default_value()));
-        } else if (OB_FAIL(ObRawExprUtils::build_generated_column_expr(NULL,
-                                                                      expr_def,
-                                                                      *params_.expr_factory_,
-                                                                      *params_.session_info_,
-                                                                      table_schema,
-                                                                      dependant_expr,
-                                                                      schema_checker_))) {
-          LOG_WARN("build generated column expr failed", K(ret));
-        } else if (OB_ISNULL(dependant_expr)) {
-          ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("dependant expr is null", K(ret));
-        } else if (OB_FAIL(ObRawExprUtils::extract_column_exprs(dependant_expr, col_exprs, true/*extract pseudo column*/))) {
-          LOG_WARN("extract col exprs failed", K(ret));
-        } else {
-          for (int64_t j = 0; OB_SUCC(ret) && j < col_exprs.count(); j++) {
-            if (col_exprs.at(j)->get_expr_type() == T_PSEUDO_PARTITION_LIST_COL) {
-              ObSqlString tmp;
-              OZ (tmp.append(col_exprs.at(j)->get_expr_name()));
-              OZ (tmp.append(" defined in not partition column"));
-              ret = OB_NOT_SUPPORTED;
-              ObCStringHelper helper;
-              LOG_USER_ERROR(OB_NOT_SUPPORTED, helper.convert(tmp.string()));
-              LOG_WARN("metadata$external_partition[i] column defined in normal column", K(ret));
-            }
-          }
-        }
-      }
-    }
-  }
   return ret;
 }
 
@@ -989,9 +642,6 @@ int ObCreateTableResolver::resolve_primary_key_node(const ParseNode &pk_node,
     ret = OB_ERR_UNEXPECTED;
     SQL_RESV_LOG(WARN, "the num_child of primary_node is wrong.",
                  K(ret), K(pk_node.num_child_), K(pk_node.children_));
-  } else if (is_external_table_) {
-    ret = OB_NOT_SUPPORTED;
-    LOG_USER_ERROR(OB_NOT_SUPPORTED, "Primary key constraint on external table");
   } else {
     ParseNode *column_list_node = pk_node.children_[0];
     if (OB_ISNULL(column_list_node)) {
@@ -1083,8 +733,6 @@ int ObCreateTableResolver::resolve_table_elements(const ParseNode *node,
                                                                           // Second parsing non-column
 {
   int ret = OB_SUCCESS;
-  bool is_oracle_mode = false;
-  const uint64_t tenant_id = session_info_->get_effective_tenant_id();
   if (OB_ISNULL(node)) {
    // do nothing, create table t as select ... will come here
   } else if (OB_ISNULL(stmt_)
@@ -1095,10 +743,6 @@ int ObCreateTableResolver::resolve_table_elements(const ParseNode *node,
     ret = OB_INVALID_ARGUMENT;
     SQL_RESV_LOG(WARN, "invalid argument",
                  K(ret), K(node->type_), K(node->num_child_));
-  } else if (static_cast<int64_t>(table_id_) > 0
-             && OB_FAIL(ObCompatModeGetter::check_is_oracle_mode_with_table_id(
-             session_info_->get_effective_tenant_id(), table_id_, is_oracle_mode))) {
-    LOG_WARN("fail to check oracle mode", KR(ret), K_(table_id));
   } else {
     ObSEArray<ObString, 4> gen_col_expr_arr;
     ParseNode *primary_node = NULL;
@@ -1109,7 +753,7 @@ int ObCreateTableResolver::resolve_table_elements(const ParseNode *node,
     int64_t row_data_length = 0;
     ObArray<ObColumnResolveStat> stats;
     ObTableSchema &table_schema = create_table_stmt->get_create_table_arg().schema_;
-    table_schema.set_tenant_id(tenant_id);
+    
     bool has_visible_col = false;
     bool primary_key_set_in_heap_table = false;
     // Store the column schema after resolve_column_definition in resolved_cols
@@ -1137,7 +781,7 @@ int ObCreateTableResolver::resolve_table_elements(const ParseNode *node,
         //continue
       } else if (OB_LIKELY(T_COLUMN_DEFINITION == element->type_)) {
         ObColumnSchemaV2 column;
-        column.set_tenant_id(tenant_id);
+        
         ObColumnResolveStat stat;
         common::ObString pk_name;
         if (OB_INVALID_ID == column.get_column_id()) {
@@ -1209,18 +853,18 @@ int ObCreateTableResolver::resolve_table_elements(const ParseNode *node,
             SQL_RESV_LOG(WARN, "failed to cast default value!", K(ret));
           } else if (column.is_string_type() || is_lob_storage(column.get_data_type())) {
             int64_t length = 0;
-            if (OB_FAIL(column.get_byte_length(length, is_oracle_mode, false))) {
-              SQL_RESV_LOG(WARN, "fail to get byte length of column", KR(ret), K(is_oracle_mode));
+            if (OB_FAIL(column.get_byte_length(length, false))) {
+              SQL_RESV_LOG(WARN, "fail to get byte length of column", KR(ret));
             } else if (ob_is_string_tc(column.get_data_type()) && length > OB_MAX_VARCHAR_LENGTH) {
               ret = OB_ERR_TOO_LONG_COLUMN_LENGTH;
               LOG_USER_ERROR(OB_ERR_TOO_LONG_COLUMN_LENGTH, column.get_column_name(), static_cast<int32_t>(OB_MAX_VARCHAR_LENGTH));
             } else if (is_lob_storage(column.get_data_type())) {
               ObLength max_length = 0;
-              max_length = ObAccuracy::MAX_ACCURACY2[is_oracle_mode][column.get_data_type()].get_length();
+              max_length = ObAccuracy::MAX_ACCURACY2[0][column.get_data_type()].get_length();
               if (length > max_length) {
                 ret = OB_ERR_TOO_LONG_COLUMN_LENGTH;
                 LOG_USER_ERROR(OB_ERR_TOO_LONG_COLUMN_LENGTH, column.get_column_name(),
-                    ObAccuracy::MAX_ACCURACY2[is_oracle_mode][column.get_data_type()].get_length());
+                    ObAccuracy::MAX_ACCURACY2[0][column.get_data_type()].get_length());
               } else {
                 // table lob inrow theshold has not been parsed, so use handle length check
                 // will recheck after parsing table lob inrow theshold
@@ -1240,7 +884,7 @@ int ObCreateTableResolver::resolve_table_elements(const ParseNode *node,
           if (OB_SUCC(ret)){
             stat.column_id_ = column.get_column_id();
             if (stat.is_primary_key_) {
-              if (!is_oracle_mode && is_organization_set_to_heap()) {
+              if (is_organization_set_to_heap()) {
                 primary_key_set_in_heap_table = true;
                 if (OB_FAIL(uk_or_heap_table_pk_add_to_index_list(index_node_position_list, i))) {
                   SQL_RESV_LOG(WARN, "add heap table pk to index list failed", K(ret));
@@ -1256,8 +900,8 @@ int ObCreateTableResolver::resolve_table_elements(const ParseNode *node,
                   ret = OB_ERR_PRIMARY_CANT_HAVE_NULL;
                 } else if (ob_is_string_tc(column.get_data_type()) && !column.is_string_lob()) {
                   int64_t length = 0;
-                  if (OB_FAIL(column.get_byte_length(length, is_oracle_mode, false))){
-                    SQL_RESV_LOG(WARN, "fail to get byte length of column", KR(ret), K(is_oracle_mode));
+                  if (OB_FAIL(column.get_byte_length(length, false))){
+                    SQL_RESV_LOG(WARN, "fail to get byte length of column", KR(ret));
                   } else if (pk_data_length += length > OB_MAX_VARCHAR_LENGTH_KEY) {
                     ret = OB_ERR_TOO_LONG_KEY_LENGTH;
                     LOG_USER_ERROR(OB_ERR_TOO_LONG_KEY_LENGTH, OB_MAX_VARCHAR_LENGTH_KEY);
@@ -1273,15 +917,6 @@ int ObCreateTableResolver::resolve_table_elements(const ParseNode *node,
                     SQL_RESV_LOG(WARN, "add primary key failed");
                   } else {
                     column.set_rowkey_position(get_primary_key_size());
-                    // Determine if it is oracle mode, a constraint name needs to be given to the primary key only in oracle mode
-                    if (session_info_->is_oracle_compatible()) {
-                      ObCreateTableStmt *create_table_stmt = static_cast<ObCreateTableStmt*>(stmt_);
-                      ObSEArray<ObConstraint, 4> &csts = create_table_stmt->get_create_table_arg().constraint_list_;
-                      // Add pk to cst_list inside
-                      if (OB_FAIL(resolve_pk_constraint_node(*element, pk_name, csts))) {
-                        SQL_RESV_LOG(WARN, "resolve constraint failed", K(ret));
-                      }
-                    }
                   }
                 }
               }
@@ -1291,19 +926,10 @@ int ObCreateTableResolver::resolve_table_elements(const ParseNode *node,
           }
 
           if (OB_SUCC(ret)) {
-            if (is_mysql_mode()) {
-              // In MySQL mode, when column definitions are provided in a CTAS,
-              // they are always complete (name,type,attri,...) and will ignore the deduced attributes from SELECT statement.
-              if (OB_FAIL(cols_with_nullable_specified_.push_back(column.get_column_name_str()))) {
-                SQL_RESV_LOG(WARN, "push back column with defination", K(ret));
-              }
-            } else if (is_oracle_mode) {
-              if (!stat.is_set_not_null_ && !stat.is_set_null_) {
-                // In Oracle mode, the column definitions provided in CTAS are incomplete (cannot specify column types).
-                // When column attributes are not explicitly specified, the values are derived from the SELECT statement.
-              } else if (OB_FAIL(cols_with_nullable_specified_.push_back(column.get_column_name_str()))) {
-                SQL_RESV_LOG(WARN, "push back column with defination", K(ret));
-              }
+            // In MySQL mode, when column definitions are provided in a CTAS,
+            // they are always complete (name,type,attri,...) and will ignore the deduced attributes from SELECT statement.
+            if (OB_FAIL(cols_with_nullable_specified_.push_back(column.get_column_name_str()))) {
+              SQL_RESV_LOG(WARN, "push back column with defination", K(ret));
             }
           }
 
@@ -1376,22 +1002,13 @@ int ObCreateTableResolver::resolve_table_elements(const ParseNode *node,
           ret = OB_ERR_PRIMARY_KEY_DUPLICATE;
           SQL_RESV_LOG(WARN, "multiple primary key defined");
         } else if (NULL == primary_node) {
-          if (!is_oracle_mode && is_organization_set_to_heap()) {
+          if (is_organization_set_to_heap()) {
             primary_node_in_heap_table = element;
             if (OB_FAIL(uk_or_heap_table_pk_add_to_index_list(index_node_position_list, i))) {
               SQL_RESV_LOG(WARN, "add heap table pk to index list failed", K(ret));
             }
           } else {
             primary_node = element;
-            if (session_info_->is_oracle_compatible()) {
-              ObCreateTableStmt *create_table_stmt = static_cast<ObCreateTableStmt*>(stmt_);
-              ObSEArray<ObConstraint, 4> &csts =
-                  create_table_stmt->get_create_table_arg().constraint_list_;
-              ObString pk_name;
-              if (OB_FAIL(resolve_pk_constraint_node(*element, pk_name, csts))) {
-                SQL_RESV_LOG(WARN, "resolve constraint failed", K(ret));
-              }
-            }
           }
         } else {
           ret = OB_ERR_PRIMARY_KEY_DUPLICATE;
@@ -1413,17 +1030,8 @@ int ObCreateTableResolver::resolve_table_elements(const ParseNode *node,
           SQL_RESV_LOG(WARN, "add foreign key node failed", K(ret));
         } else { /*do nothing*/ }
       } else if (T_CHECK_CONSTRAINT == element->type_) {
-        if (lib::is_mysql_mode()) {
-          // TODO:@xiaofeng.lby : do we also need to deal with constraints like this in oracle mode
-          if (OB_FAIL(table_level_constraint_list.push_back(i))) {
-            SQL_RESV_LOG(WARN, "add check constraint node failed", K(ret));
-          }
-        } else { // oracle mode
-          ObCreateTableStmt* create_table_stmt = static_cast<ObCreateTableStmt*>(stmt_);
-          ObSEArray<ObConstraint, 4>& csts = create_table_stmt->get_create_table_arg().constraint_list_;
-          if (OB_FAIL(resolve_check_constraint_node(*element, csts))) {
-            SQL_RESV_LOG(WARN, "resolve constraint failed", K(ret));
-          }
+        if (OB_FAIL(table_level_constraint_list.push_back(i))) {
+          SQL_RESV_LOG(WARN, "add check constraint node failed", K(ret));
         }
       } else if (T_EMPTY == element->type_) {
         // compatible with mysql 5.7 check (expr), do nothing
@@ -1466,23 +1074,8 @@ int ObCreateTableResolver::resolve_table_elements(const ParseNode *node,
       }
     }
 
-    if (OB_SUCC(ret) && table_schema.is_external_table()) {
-      bool all_virtual_column = true;
-      for (int64_t i = 0; OB_SUCC(ret) && i < table_schema.get_column_count(); ++i) {
-        const ObColumnSchemaV2 *column = table_schema.get_column_schema_by_idx(i);
-        CK (OB_NOT_NULL(column));
-        if (OB_SUCC(ret) && !column->is_generated_column()) {
-          all_virtual_column = false;
-          break;
-        }
-      }
-      if (OB_SUCC(ret) && !all_virtual_column) {
-        ret = OB_NOT_SUPPORTED; //[TODO EXTERNAL-TABLE]
-        LOG_USER_ERROR(OB_NOT_SUPPORTED, "normal columns");
-      }
-    }
     // MySQL mode, a table must have at least one non-hidden column
-    if (OB_SUCC(ret) && lib::is_mysql_mode()) {
+    if (OB_SUCC(ret)) {
       bool has_non_hidden_column = false;
       for (int64_t i = 0;
            OB_SUCC(ret) && !has_non_hidden_column && i < table_schema.get_column_count();
@@ -1498,7 +1091,6 @@ int ObCreateTableResolver::resolve_table_elements(const ParseNode *node,
         SQL_RESV_LOG(WARN, "table must have at least one column that is not hidden", K(ret));
       }
     }
-
 
     if (OB_SUCC(ret)) {
       if (OB_UNLIKELY(get_primary_key_size() > 0 && NULL != primary_node)) {
@@ -1546,7 +1138,7 @@ int ObCreateTableResolver::set_nullable_for_cta_column(ObSelectStmt *select_stmt
   if (OB_ISNULL(expr) || OB_ISNULL(select_stmt)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected null of expr and select stmt.", K(ret));
-  } else if (lib::is_mysql_mode()) {
+  } else {
     // scope set to FROM since it will not go deduce process with context,
     // such as null reject in where condition and having condition.
     // if is_not_null true, it will pass into full scope checking at next step.
@@ -1559,17 +1151,11 @@ int ObCreateTableResolver::set_nullable_for_cta_column(ObSelectStmt *select_stmt
                                                           NULL))) {
       LOG_WARN("failed to check expr not null", K(ret));
     }
-  } else if (expr->is_column_ref_expr()) {
-    is_not_null = expr->get_result_type().has_result_flag(HAS_NOT_NULL_VALIDATE_CONSTRAINT_FLAG);
   }
   if (OB_SUCC(ret) && is_not_null) {
     // deduce pre-condition: already not null
-    // oracle:
-    // 1. only deduce column not null, not for composed exprs(e.g, c1+c2) and const expr
-    // 2. column not null depends on HAS_NOT_NULL_VALIDATE_CONSTRAINT_FLAG, e.g, ctas from pk (NULL: YES)
-    // mysql:
-    // 1. supports composed expr not null deduce
-    // 2. column not null depends on NOT_NULL_FLAG, e.g, ctas from pk (NULL: NO)
+    // MySQL supports composed expression not-null deduction, and column
+    // not-null depends on NOT_NULL_FLAG, e.g. ctas from pk (NULL: NO).
     ObNotNullContext ctx(NULL, NULL, select_stmt, false);
     if (OB_FAIL(ctx.generate_stmt_context(NULLABLE_SCOPE::NS_TOP))) {
       LOG_WARN("failed to generate stmt context", K(ret));
@@ -1643,8 +1229,7 @@ int ObCreateTableResolver::resolve_table_elements_from_select(const ParseNode &p
                                                    T_TABLE_ELEMENT_LIST == parse_tree.children_[3]->type_;
   // select layer should not see the insert stmt's attributes from the upper layer, so the upper scope stmt should be empty
   select_resolver.set_parent_namespace_resolver(NULL);
-  if (lib::is_mysql_mode()
-        && OB_NOT_NULL(params_.query_ctx_)
+  if (OB_NOT_NULL(params_.query_ctx_)
         && 0 != params_.query_ctx_->question_marks_count_
         && !params_.is_prepare_protocol_) {
     ret = OB_ERR_PARSER_SYNTAX;
@@ -1668,7 +1253,7 @@ int ObCreateTableResolver::resolve_table_elements_from_select(const ParseNode &p
   } else {
     select_stmt = select_resolver.get_select_stmt();
     ObTableSchema &table_schema = create_table_stmt->get_create_table_arg().schema_;
-    table_schema.set_tenant_id(session_info_->get_effective_tenant_id());
+    
     LOG_DEBUG("resolve table select item begin", K(table_schema));
     if (OB_ISNULL(select_stmt)) {
       ret = OB_ERR_UNEXPECTED;
@@ -1734,10 +1319,10 @@ int ObCreateTableResolver::resolve_table_elements_from_select(const ParseNode &p
                 K(ret), K(column.get_column_name_str()));
             }
           }
-          if (OB_SUCC(ret) && is_mysql_mode()) {
+          if (OB_SUCC(ret)) {
             if (new_table_item != NULL && new_table_item->is_basic_table()) {
               if (base_table_schema == NULL &&
-                  OB_FAIL(schema_checker_->get_table_schema(session_info_->get_effective_tenant_id(),
+                  OB_FAIL(schema_checker_->get_table_schema(
                                                             new_table_item->ref_id_, base_table_schema))) {
                 LOG_WARN("get table schema failed", K(ret));
               } else if (OB_ISNULL(base_table_schema)) {
@@ -1794,10 +1379,10 @@ int ObCreateTableResolver::resolve_table_elements_from_select(const ParseNode &p
                 LOG_WARN("failed to fill column with subschema", K(ret));
               }
             }
-            if (OB_SUCC(ret) && lib::is_mysql_mode() && ob_is_geometry(expr->get_result_type().get_type())) {
+            if (OB_SUCC(ret) && ob_is_geometry(expr->get_result_type().get_type())) {
               column.set_geo_type(static_cast<uint64_t>(expr->get_geo_expr_result_type()));
             }
-            OZ (adjust_string_column_length_within_max(column, false));
+            OZ (adjust_string_column_length_within_max(column));
             LOG_DEBUG("column expr debug", K(*expr));
           }
           if (OB_FAIL(ret)) { // do nothing.
@@ -1859,7 +1444,7 @@ int ObCreateTableResolver::resolve_table_elements_from_select(const ParseNode &p
                   if (OB_FAIL(check_text_column_length_and_promote(column, table_id_, true))) {
                     LOG_WARN("fail to check text or blob column length", K(ret), K(column));
                   }
-                } else if (OB_FAIL(check_string_column_length(column, false, params_.is_prepare_stage_))) {
+                } else if (OB_FAIL(check_string_column_length(column, params_.is_prepare_stage_))) {
                   LOG_WARN("fail to check string column length", K(ret), K(column));
                 }
               }
@@ -1940,10 +1525,9 @@ int ObCreateTableResolver::generate_index_arg(const bool process_heap_table_prim
     SQL_RESV_LOG(WARN, "set storing column failed", K(ret));
   } else {
     ObIndexType type = INDEX_TYPE_IS_NOT;
-    //index default is global, if not specified, but oracle temporary table is internally converted, can only be local
+    // Index scope defaults to local when it is not specified.
     if (NOT_SPECIFIED == index_scope_) {
-      // MySQL default index mode is local,
-      // and Oracle default index mode is global
+      // MySQL default index mode is local.
       global_ = false;
     } else {
       global_ = (GLOBAL_INDEX == index_scope_);
@@ -1972,16 +1556,9 @@ int ObCreateTableResolver::generate_index_arg(const bool process_heap_table_prim
           type = INDEX_TYPE_SPATIAL_LOCAL;
         }
       } else if (VEC_KEY == index_keyname_) {
-        const int64_t tenant_id = session_info_->get_effective_tenant_id();
         if (global_) {
           ret = OB_NOT_SUPPORTED;
           LOG_WARN("not support global vec index now", K(ret));
-        } else if (!is_user_tenant(tenant_id)) {
-#ifndef OB_BUILD_SYS_VEC_IDX
-          ret = OB_NOT_SUPPORTED;
-          LOG_WARN("sys tenant vector index not supported ", K(ret), K(tenant_id));
-          LOG_USER_ERROR(OB_NOT_SUPPORTED, "not user tenant create vector index is");
-#endif
         }
         if (OB_SUCC(ret)) {
           type = INDEX_TYPE_VEC_DELTA_BUFFER_LOCAL; // Need to consider ivf, hnsw, spiv these three modes, where ivf index is divided into ivfflat, ivfsq8, ivfpq three categories
@@ -2027,7 +1604,7 @@ int ObCreateTableResolver::generate_index_arg(const bool process_heap_table_prim
       ObTableSchema &index_schema = index_arg_.index_schema_;
       index_schema.set_table_type(USER_INDEX);
       index_schema.set_index_type(index_arg_.index_type_);
-      index_schema.set_tenant_id(table_schema.get_tenant_id());
+      
       bool check_data_schema = false;
       if (OB_FAIL(share::ObIndexBuilderUtil::adjust_expr_index_args(
               index_arg_, table_schema, *allocator_, gen_columns))) {
@@ -2040,7 +1617,6 @@ int ObCreateTableResolver::generate_index_arg(const bool process_heap_table_prim
   }
   return ret;
 }
-
 
 int ObCreateTableResolver::set_index_name()
 {
@@ -2178,8 +1754,6 @@ int ObCreateTableResolver::resolve_index_node(const ParseNode *node)
 {
   int ret = OB_SUCCESS;
   ObString uk_name;
-  bool is_oracle_mode = false;
-  const uint64_t tenant_id = session_info_->get_effective_tenant_id();
   bool is_index_part_specified = false;
   if (OB_ISNULL(node)) {
     ret = OB_INVALID_ARGUMENT;
@@ -2195,10 +1769,6 @@ int ObCreateTableResolver::resolve_index_node(const ParseNode *node)
   } else if (OB_ISNULL(node->children_)) {
     ret = OB_ERR_UNEXPECTED;
     SQL_RESV_LOG(WARN, "node->children_ is null.", K(ret));
-  } else if (static_cast<int64_t>(table_id_) > 0
-             && OB_FAIL(ObCompatModeGetter::check_is_oracle_mode_with_table_id(
-             session_info_->get_effective_tenant_id(), table_id_, is_oracle_mode))) {
-    LOG_WARN("fail to check oracle mode", KR(ret), K_(table_id));
   } else {
     index_arg_.reset();
     ObColumnSortItem sort_item;
@@ -2240,12 +1810,6 @@ int ObCreateTableResolver::resolve_index_node(const ParseNode *node)
           ret = OB_NOT_SUPPORTED;
           LOG_WARN("multi column of vector index is not support yet", K(ret), K(index_column_list_node->num_child_));
           LOG_USER_ERROR(OB_NOT_SUPPORTED, "multi vector index column is");
-#ifdef OB_BUILD_SHARED_STORAGE
-        } else if (GCTX.is_shared_storage_mode() && is_vec_index) {
-          ret = OB_NOT_SUPPORTED;
-          LOG_WARN("vector index search index isn't supported in shared storage mode", K(ret));
-          LOG_USER_ERROR(OB_NOT_SUPPORTED, "vector index search index in shared storage mode is");
-#endif
         }
         for (int32_t i = 0; OB_SUCC(ret) && i < index_column_list_node->num_child_; ++i) {
           ObString &column_name = sort_item.column_name_;
@@ -2360,11 +1924,6 @@ int ObCreateTableResolver::resolve_index_node(const ParseNode *node)
                     LOG_WARN("add column name to map failed", K(column_schema->get_column_name_str()), K(ret));
                   }
                 }
-              } else if (is_oracle_mode) {
-                const ObColumnRefRawExpr *ref_expr = static_cast<const ObColumnRefRawExpr*>(expr);
-                sort_item.column_name_ = ref_expr->get_column_name();
-                sort_item.is_func_index_ = false;
-                column_schema = tbl_schema.get_column_schema(ref_expr->get_column_id());
               } else {
                 ret = OB_ERR_FUNCTIONAL_INDEX_ON_FIELD;
                 LOG_WARN("Functional index on a column is not supported.", K(ret), K(*expr));
@@ -2393,8 +1952,7 @@ int ObCreateTableResolver::resolve_index_node(const ParseNode *node)
               }  else if (sort_item.prefix_len_ > column_schema->get_data_length()) {
                 ret = OB_WRONG_SUB_KEY;
                 SQL_RESV_LOG(WARN, "prefix length is longer than column length", K(sort_item), K(column_schema->get_data_length()), K(ret));
-              } else if (!is_oracle_mode // oracle mode is not support vector column yet
-                  && ob_is_collection_sql_type(column_schema->get_data_type())
+              } else if (ob_is_collection_sql_type(column_schema->get_data_type())
                   && static_cast<int64_t>(INDEX_KEYNAME::VEC_KEY) != node->value_) {
                 ret = OB_NOT_SUPPORTED;
                 LOG_WARN("index column is vector column, but is not vector index is not supported", K(ret));
@@ -2409,7 +1967,7 @@ int ObCreateTableResolver::resolve_index_node(const ParseNode *node)
                   LOG_USER_ERROR(OB_ERR_WRONG_KEY_COLUMN, column_name.length(), column_name.ptr());
                 }
               } else if (OB_FAIL(resolve_spatial_index_constraint(*column_schema,
-                  index_column_list_node->num_child_, node->value_, is_oracle_mode,
+                  index_column_list_node->num_child_, node->value_, false/*false*/,
                   NULL != index_column_node->children_[2] && 1 != index_column_node->children_[2]->is_empty_))) {
                 SQL_RESV_LOG(WARN, "fail to resolve spatial index constraint", K(ret), K(column_name));
               } else if (OB_FAIL(resolve_vec_index_constraint(*column_schema,
@@ -2425,8 +1983,8 @@ int ObCreateTableResolver::resolve_index_node(const ParseNode *node)
 
               if (OB_SUCC(ret) && ob_is_string_type(column_schema->get_data_type()) && !column_schema->is_string_lob()) {
                 int64_t length = 0;
-                if (OB_FAIL(column_schema->get_byte_length(length, is_oracle_mode, false))) {
-                  SQL_RESV_LOG(WARN, "fail to get byte length of column", KR(ret), K(is_oracle_mode));
+                if (OB_FAIL(column_schema->get_byte_length(length, false))) {
+                  SQL_RESV_LOG(WARN, "fail to get byte length of column", KR(ret));
                 } else if (sort_item.prefix_len_ > 0) {
                   length = length * sort_item.prefix_len_ / column_schema->get_data_length();
                 } else { /*do nothing*/ }
@@ -2450,13 +2008,7 @@ int ObCreateTableResolver::resolve_index_node(const ParseNode *node)
             }
             if (OB_SUCC(ret)) {
               //column_order
-              if (is_oracle_mode && NULL != index_column_node->children_[2]
-                  && T_SORT_DESC == index_column_node->children_[2]->type_) {
-                // sort_item.order_type_ = common::ObOrderType::DESC;
-                ret = OB_NOT_SUPPORTED;
-                LOG_WARN("not support desc index now", K(ret));
-                LOG_USER_ERROR(OB_NOT_SUPPORTED, "desc index");
-              } else {
+              {
                 // Compatible with mysql5.7, descending index does not take effect and does not report an error
                 sort_item.order_type_ = common::ObOrderType::ASC;
               }
@@ -2495,7 +2047,7 @@ int ObCreateTableResolver::resolve_index_node(const ParseNode *node)
           first_column_name = ObString::make_string("functional_index");
         }
       }
-    } else if (is_organization_set_to_heap() && ObItemType::T_PRIMARY_KEY == node->type_ && !is_oracle_mode) {
+    } else if (is_organization_set_to_heap() && ObItemType::T_PRIMARY_KEY == node->type_) {
       if (OB_FAIL(resolve_single_column_primary_key_node(node->children_[0], tbl_schema, process_heap_table_primary_key, first_column_name))) {
         SQL_RESV_LOG(WARN, "failed to resolve the single column primary key node in the heap table", K(ret));
       }
@@ -2524,8 +2076,8 @@ int ObCreateTableResolver::resolve_index_node(const ParseNode *node)
               table_name_.length(), table_name_.ptr());
         } else if (ob_is_string_tc(column_schema->get_data_type()) && !column_schema->is_string_lob()) {
           int64_t length = 0;
-          if (OB_FAIL(column_schema->get_byte_length(length, is_oracle_mode, false))) {
-            SQL_RESV_LOG(WARN, "fail to get byte length of column", KR(ret), K(is_oracle_mode));
+          if (OB_FAIL(column_schema->get_byte_length(length, false))) {
+            SQL_RESV_LOG(WARN, "fail to get byte length of column", KR(ret));
           } else if (length > OB_MAX_USER_ROW_KEY_LENGTH) {
             ret = OB_ERR_TOO_LONG_KEY_LENGTH;
             LOG_USER_ERROR(OB_ERR_TOO_LONG_KEY_LENGTH, OB_MAX_USER_ROW_KEY_LENGTH);
@@ -2540,7 +2092,7 @@ int ObCreateTableResolver::resolve_index_node(const ParseNode *node)
           ParseNode *attrs_node = node->children_[2];
           bool has_pk = false;
           HEAP_VAR(ObCreateIndexStmt, create_index_stmt) {
-            ObSArray<obrpc::ObCreateIndexArg> &index_arg_list = create_table_stmt->get_index_arg_list();
+            ObSArray<obcall::ObCreateIndexArg> &index_arg_list = create_table_stmt->get_index_arg_list();
             for (int64_t i = 0; OB_SUCC(ret) && i < index_arg_list.size(); ++i) {
               ObCreateIndexArg &create_index_arg = index_arg_list.at(i);
               has_pk |= INDEX_TYPE_HEAP_ORGANIZED_TABLE_PRIMARY == create_index_arg.index_type_;
@@ -2577,7 +2129,7 @@ int ObCreateTableResolver::resolve_index_node(const ParseNode *node)
       } else if (ObItemType::T_INDEX == node->type_ && OB_FAIL(resolve_table_options(node->children_[2], true))) {
         SQL_RESV_LOG(WARN, "resolve index options failed", K(ret));
       }
-      if (OB_SUCC(ret) && lib::is_mysql_mode()) {
+      if (OB_SUCC(ret)) {
         if (ObItemType::T_INDEX == node->type_ && NULL != node->children_[4]) {
           if (1 != node->children_[4]->num_child_ || T_PARTITION_OPTION != node->children_[4]->type_) {
             ret = OB_NOT_SUPPORTED;
@@ -2592,23 +2144,6 @@ int ObCreateTableResolver::resolve_index_node(const ParseNode *node)
             index_scope_ = GLOBAL_INDEX;
           }
           is_index_part_specified = true;
-        }
-      }
-
-      // index column_group
-      if (OB_SUCC(ret) && lib::is_mysql_mode()) { //only mysql support create table with index
-        if (node->num_child_ < 6) {
-          // no cg, ignore
-        } else if (ObItemType::T_INDEX == node->type_ && NULL != node->children_[5]) {
-          if (T_COLUMN_GROUP != node->children_[5]->type_ || node->children_[5]->num_child_ <= 0) {
-            ret = OB_INVALID_ARGUMENT;
-            SQL_RESV_LOG(WARN, "invalid argument", KR(ret), K(node->type_), K(node->num_child_));
-          } else if (OB_ISNULL(node->children_[5]->children_[0])) {
-            ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("node is null", K(ret));
-          } else if (OB_FAIL(resolve_index_column_group(node->children_[5], index_arg_))) {
-            SQL_RESV_LOG(WARN, "resolve index column group failed", K(ret));
-          }
         }
       }
 
@@ -2629,7 +2164,7 @@ int ObCreateTableResolver::resolve_index_node(const ParseNode *node)
       HEAP_VARS_2((ObCreateIndexStmt, create_index_stmt), (ObPartitionResolveResult, resolve_result))  {
         ObCreateIndexArg &create_index_arg = create_index_stmt.get_create_index_arg();
         ObSArray<ObPartitionResolveResult> &resolve_results = create_table_stmt->get_index_partition_resolve_results();
-        ObSArray<obrpc::ObCreateIndexArg> &index_arg_list = create_table_stmt->get_index_arg_list();
+        ObSArray<obcall::ObCreateIndexArg> &index_arg_list = create_table_stmt->get_index_arg_list();
         index_arg_.index_key_ = static_cast<int64_t>(index_keyname_);
         if (OB_FAIL(create_index_arg.assign(index_arg_))) {
           LOG_WARN("fail to assign create index arg", K(ret));
@@ -2764,71 +2299,6 @@ int ObCreateTableResolver::resolve_index_name(
   return ret;
 }
 
-int ObCreateTableResolver::resolve_external_table_format_early(const ParseNode *node)
-{
-  int ret = OB_SUCCESS;
-  if (OB_ISNULL(node)) {
-    ret = OB_NOT_SUPPORTED;
-    LOG_USER_ERROR(OB_NOT_SUPPORTED, "format");
-  } else {
-    if (T_TABLE_OPTION_LIST != node->type_) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("invalid argument.", K(ret));
-    } else {
-      ParseNode *option_node = NULL;
-      int32_t num = node->num_child_;
-      bool is_format_exist = false;
-      bool have_external_file_format = false;
-      bool have_external_properties = false;
-      for (int32_t i = 0; OB_SUCC(ret) && i < num; ++i) {
-        option_node = node->children_[i];
-        if (OB_NOT_NULL(option_node) && (T_EXTERNAL_FILE_FORMAT == option_node->type_ || T_EXTERNAL_PROPERTIES == option_node->type_)) {
-          is_format_exist = true;
-          ObExternalFileFormat format;
-          have_external_file_format = T_EXTERNAL_FILE_FORMAT == option_node->type_;
-          have_external_properties = T_EXTERNAL_PROPERTIES == option_node->type_;
-          ObResolverUtils::FileFormatContext ff_ctx;
-          for (int32_t j = 0; OB_SUCC(ret) && j < option_node->num_child_; ++j) {
-            if (OB_NOT_NULL(option_node->children_[j])
-                && T_EXTERNAL_FILE_FORMAT_TYPE == option_node->children_[j]->type_) {
-              if (OB_FAIL(ObResolverUtils::resolve_file_format(option_node->children_[j], format, params_, ff_ctx))) {
-                LOG_WARN("fail to resolve file format", K(ret));
-              } else {
-                external_table_format_type_ = format.format_type_;
-              }
-            }
-          }
-          ff_ctx.reset();
-          for (int32_t j = 0; OB_SUCC(ret) && j < option_node->num_child_; ++j) {
-            if (OB_NOT_NULL(option_node->children_[j])
-                && T_COLUMN_INDEX_TYPE == option_node->children_[j]->type_) {
-              if (OB_FAIL(ObResolverUtils::resolve_file_format(option_node->children_[j], format, params_, ff_ctx))) {
-                LOG_WARN("fail to resolve file format", K(ret));
-              } else {
-                if (format.format_type_ == ObExternalFileFormat::FormatType::ORC_FORMAT) {
-                  ret = OB_NOT_SUPPORTED;
-                } else if (format.format_type_ == ObExternalFileFormat::FormatType::PARQUET_FORMAT) {
-                  column_index_type_ = format.parquet_format_.column_index_type_;
-                }
-              }
-            }
-          }
-        }
-      }
-      if (OB_SUCC(ret) && have_external_file_format && have_external_properties) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("FORMAT and PROPERTIES are mutually exclusive in external table", K(ret));
-        LOG_USER_ERROR(OB_ERR_UNEXPECTED, "FORMAT and PROPERTIES are mutually exclusive in external table");
-      }
-      if (OB_SUCC(ret) && !is_format_exist) {
-        ret = OB_EXTERNAL_TABLE_FORMAT_ERROR;
-        LOG_WARN("missing format in DDL", K(ret));
-      }
-    }
-  }
-  return ret;
-}
-
 int ObCreateTableResolver::resolve_table_charset_info(const ParseNode *node) {
   int ret = OB_SUCCESS;
   if (NULL != node) {
@@ -2861,13 +2331,13 @@ int ObCreateTableResolver::resolve_table_charset_info(const ParseNode *node) {
       // For CREATE TABLE statements, the database character set and collation are used as default
       // values for table definitions if the table character set and collation are not specified.
       // To override this, provide explicit CHARACTER SET and COLLATE table options.
-      const uint64_t tenant_id = session_info_->get_effective_tenant_id();
+      
       ObString database_name;
       uint64_t database_id = OB_INVALID_ID;
       const ObDatabaseSchema *database_schema = NULL;
-      if (OB_FAIL(schema_checker_->get_database_id(tenant_id, database_name_, database_id)))  {
-        SQL_RESV_LOG(WARN, "fail to get database_id.", K(ret), K(database_name_), K(tenant_id));
-      } else if (OB_FAIL(schema_checker_->get_database_schema(tenant_id, database_id, database_schema))) {
+      if (OB_FAIL(schema_checker_->get_database_id(database_name_, database_id)))  {
+        SQL_RESV_LOG(WARN, "fail to get database_id.", K(ret), K(database_name_));
+      } else if (OB_FAIL(schema_checker_->get_database_schema( database_id, database_schema))) {
         LOG_WARN("failed to get db schema", K(ret), K(database_id));
       } else if (OB_ISNULL(database_schema)) {
         ret = OB_ERR_UNEXPECTED;
@@ -2884,7 +2354,6 @@ int ObCreateTableResolver::resolve_table_charset_info(const ParseNode *node) {
   return ret;
 }
 
-
 int ObCreateTableResolver::check_max_row_data_length(const ObTableSchema &table_schema)
 {
   int ret = OB_SUCCESS;
@@ -2898,7 +2367,7 @@ int ObCreateTableResolver::check_max_row_data_length(const ObTableSchema &table_
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("column is null", K(ret), K(table_schema));
     } else if (! column->is_string_type() && ! is_lob_storage(column->get_data_type()) ) { // skip non string or lob storage type
-    } else if (OB_FAIL(column->get_byte_length(length, false, false))) {
+    } else if (OB_FAIL(column->get_byte_length(length, false))) {
       SQL_RESV_LOG(WARN, "fail to get byte length of column", KR(ret));
     } else if (ob_is_string_tc(column->get_data_type()) && length > OB_MAX_VARCHAR_LENGTH) {
       ret = OB_ERR_TOO_LONG_COLUMN_LENGTH;
@@ -2953,9 +2422,9 @@ int ObCreateTableResolver::check_building_domain_index_legal()
     LOG_WARN("fail to init index aux name set", K(ret));
   } else {
     ObCreateTableStmt *create_table_stmt = static_cast<ObCreateTableStmt*>(stmt_);
-    const ObSArray<obrpc::ObCreateIndexArg> &index_arg_list = create_table_stmt->get_index_arg_list();
+    const ObSArray<obcall::ObCreateIndexArg> &index_arg_list = create_table_stmt->get_index_arg_list();
     for (int64_t i = 0; OB_SUCC(ret) && i < index_arg_list.count(); ++i) {
-      const obrpc::ObCreateIndexArg &index_arg = index_arg_list.at(i);
+      const obcall::ObCreateIndexArg &index_arg = index_arg_list.at(i);
       ObIndexNameHashWrapper index_name_key(index_arg.index_name_);
       if (OB_FAIL(index_aux_name_set_.exist_refactored(index_name_key))) {
         if (OB_HASH_EXIST == ret) {
@@ -2990,9 +2459,6 @@ int ObCreateTableResolver::resolve_primary_key_node_in_heap_table(const ParseNod
     ret = OB_ERR_UNEXPECTED;
     SQL_RESV_LOG(WARN, "the num_child of the parse node is wrong.",
                  K(ret), K(element->num_child_), K(element->children_));
-  } else if (is_external_table_) {
-    ret = OB_NOT_SUPPORTED;
-    LOG_USER_ERROR(OB_NOT_SUPPORTED, "Primary key constraint on external table");
   } else {
     ParseNode *column_list_node = element->children_[0];
     if (OB_ISNULL(column_list_node)) {
@@ -3025,7 +2491,6 @@ int ObCreateTableResolver::resolve_primary_key_node_in_heap_table(const ParseNod
           int64_t length = 0;
           int64_t index_data_length = 0;
 
-          bool is_oracle_mode = false;
           if (OB_FAIL(ret)) {
           } else if (OB_ISNULL(create_table_stmt)) {
             ret = OB_NOT_INIT;
@@ -3033,10 +2498,6 @@ int ObCreateTableResolver::resolve_primary_key_node_in_heap_table(const ParseNod
           } else if (OB_ISNULL(session_info_)) {
             ret = OB_NOT_INIT;
             SQL_RESV_LOG(WARN, "session is null", KP(session_info_), K(ret));
-          } else if (static_cast<int64_t>(table_id_) > 0
-                    && OB_FAIL(ObCompatModeGetter::check_is_oracle_mode_with_table_id(
-                    session_info_->get_effective_tenant_id(), table_id_, is_oracle_mode))) {
-            LOG_WARN("fail to check oracle mode", KR(ret), K_(table_id));
           } else if (OB_ISNULL(col = table_schema.get_column_schema(column_name))) {
             ret = OB_ERR_KEY_COLUMN_DOES_NOT_EXITS;
             LOG_USER_ERROR(OB_ERR_KEY_COLUMN_DOES_NOT_EXITS, column_name.length(), column_name.ptr());
@@ -3055,7 +2516,7 @@ int ObCreateTableResolver::resolve_primary_key_node_in_heap_table(const ParseNod
                   || OB_FALSE_IT(col->set_rowkey_position(0))){
           } else if (col->is_string_lob() || !col->is_string_type()) {
             /* do nothing */
-          } else if (OB_FAIL(col->get_byte_length(length, false, false))) {
+          } else if (OB_FAIL(col->get_byte_length(length, false))) {
             SQL_RESV_LOG(WARN, "fail to get byte length of column", KR(ret));
           } else if ((index_data_length += length) > OB_MAX_USER_ROW_KEY_LENGTH) {
             ret = OB_ERR_TOO_LONG_KEY_LENGTH;
@@ -3138,8 +2599,8 @@ int ObCreateTableResolver::resolve_single_column_primary_key_node(const ParseNod
               table_name_.length(), table_name_.ptr());
         } else if (ob_is_string_tc(column_schema->get_data_type()) && !column_schema->is_string_lob()) {
           int64_t length = 0;
-          if (OB_FAIL(column_schema->get_byte_length(length, false, false))) {
-            SQL_RESV_LOG(WARN, "fail to get byte length of column", KR(ret), K(is_oracle_mode));
+          if (OB_FAIL(column_schema->get_byte_length(length, false))) {
+            SQL_RESV_LOG(WARN, "fail to get byte length of column", KR(ret));
           } else if (length > OB_MAX_USER_ROW_KEY_LENGTH) {
             ret = OB_ERR_TOO_LONG_KEY_LENGTH;
             LOG_USER_ERROR(OB_ERR_TOO_LONG_KEY_LENGTH, OB_MAX_USER_ROW_KEY_LENGTH);

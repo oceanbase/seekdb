@@ -139,7 +139,7 @@ int ObCreateTableLikeResolver::resolve(const ParseNode &parse_tree)
             create_table_like_stmt->set_new_db_name(new_database_name);
             create_table_like_stmt->set_origin_table_name(origin_table_name);
             create_table_like_stmt->set_origin_db_name(origin_database_name);
-            create_table_like_stmt->set_tenant_id(session_info_->get_effective_tenant_id());
+            
           }
         }
       } else {

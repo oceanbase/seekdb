@@ -52,7 +52,6 @@ OB_SERIALIZE_MEMBER(ObTaskExecutorCtx,
 
 ObTaskExecutorCtx::ObTaskExecutorCtx(ObExecContext &exec_context)
     : task_resp_handler_(NULL),
-      virtual_part_servers_(exec_context.get_allocator()),
       exec_ctx_(&exec_context),
       expected_worker_cnt_(0),
       minimal_worker_cnt_(0),
@@ -60,7 +59,6 @@ ObTaskExecutorCtx::ObTaskExecutorCtx(ObExecContext &exec_context)
       retry_times_(0),
       min_cluster_version_(ObExecutorRpcCtx::INVALID_CLUSTER_VERSION),
       sys_job_id_(-1),
-      rs_rpc_proxy_(nullptr),
       query_tenant_begin_schema_version_(-1),
       query_sys_begin_schema_version_(-1),
       schema_service_(GCTX.schema_service_)
@@ -72,10 +70,6 @@ ObTaskExecutorCtx::~ObTaskExecutorCtx()
   if (NULL != task_resp_handler_) {
     task_resp_handler_->~RemoteExecuteStreamHandle();
     task_resp_handler_ = NULL;
-  }
-  if (rs_rpc_proxy_ != nullptr) {
-    rs_rpc_proxy_->~ObCommonRpcProxy();
-    rs_rpc_proxy_ = nullptr;
   }
 }
 
@@ -154,50 +148,6 @@ int ObTaskExecutorCtxUtil::get_task_executor_rpc(
   return ret;
 }
 
-obrpc::ObCommonRpcProxy *ObTaskExecutorCtx::get_common_rpc()
-{
-  int ret = OB_SUCCESS;
-  obrpc::ObCommonRpcProxy *ret_pointer = NULL;
-  if (OB_FAIL(get_common_rpc(ret_pointer))) {
-    LOG_WARN("get common rpc problem ", K(ret));
-  }
-  return ret_pointer;
-}
-
-int ObTaskExecutorCtx::get_common_rpc(obrpc::ObCommonRpcProxy *&common_rpc_proxy)
-{
-  int ret = OB_SUCCESS;
-  if (OB_ISNULL(exec_ctx_)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_ERROR("null pointer", K_(exec_ctx), K(ret));
-  } else if (OB_ISNULL(exec_ctx_->get_physical_plan_ctx())) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("physical plan ctx is null", K(ret));
-  } else {
-    const int64_t timeout = exec_ctx_->get_physical_plan_ctx()->get_timeout_timestamp() -
-        ObTimeUtility::current_time();
-    if (rs_rpc_proxy_ == nullptr) {
-      void *buf = nullptr;
-      if (OB_ISNULL(buf = exec_ctx_->get_allocator().alloc(sizeof(ObCommonRpcProxy)))) {
-        ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("allocate rpc proxy memory failed", K(ret));
-      } else {
-        rs_rpc_proxy_ = new(buf) ObCommonRpcProxy();
-        *rs_rpc_proxy_ = *GCTX.rs_rpc_proxy_;
-      }
-    }
-    if (OB_SUCC(ret)) {
-      if (timeout <= 0) {
-        ret = OB_TIMEOUT;
-        LOG_WARN("execute task timeout", K(timeout), K(ret));
-      } else {
-        rs_rpc_proxy_->set_timeout(timeout);
-        common_rpc_proxy = rs_rpc_proxy_;
-      }
-    }
-  }
-  return ret;
-}
 
 int ObTaskExecutorCtx::reset_and_init_stream_handler()
 {
@@ -219,7 +169,7 @@ int ObTaskExecutorCtx::reset_and_init_stream_handler()
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("fail to alloc memory for RemoteExecuteStreamHandle", K(ret));
     } else {
-      task_resp_handler_ = new (buffer) RemoteExecuteStreamHandle("RemoteExecStream", MTL_ID());
+      task_resp_handler_ = new (buffer) RemoteExecuteStreamHandle("RemoteExecStream");
     }
   }
   return ret;

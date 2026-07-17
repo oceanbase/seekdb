@@ -244,7 +244,6 @@ int ObDCLResolver::check_dcl_on_inner_user(const ObItemType &type,
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("failed. get NULL ptr", K(ret), K(schema_checker_), K(params_.session_info_));
       } else if (OB_FAIL(schema_checker_->get_user_id(
-                                                  params_.session_info_->get_effective_tenant_id(),
                                                   user_name,
                                                   host_name,
                                                   user_id))) {
@@ -258,12 +257,12 @@ int ObDCLResolver::check_dcl_on_inner_user(const ObItemType &type,
       }
       if (OB_SUCC(ret)) {
         if (OB_SYS_USER_ID == user_id ||
-            OB_ORA_SYS_USER_ID == user_id ||
-            OB_ORA_AUDITOR_USER_ID == user_id ||
-            OB_ORA_LBACSYS_USER_ID == user_id) {
+            OB_EXTENDED_SYS_USER_ID == user_id ||
+            OB_AUDITOR_USER_ID == user_id ||
+            OB_LBACSYS_USER_ID == user_id) {
           if (session_user_id != user_id &&
               OB_SYS_USER_ID != session_user_id &&
-              OB_ORA_SYS_USER_ID != session_user_id) {
+              OB_EXTENDED_SYS_USER_ID != session_user_id) {
             is_valid = false;
           }
         }
@@ -299,12 +298,12 @@ int ObDCLResolver::check_dcl_on_inner_user(const ObItemType &type,
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("failed.invalid session user id/user id", K(ret), K(user_id), K(session_user_id));
       } else if (OB_SYS_USER_ID == user_id ||
-                 OB_ORA_SYS_USER_ID == user_id ||
-                 OB_ORA_AUDITOR_USER_ID == user_id ||
-                 OB_ORA_LBACSYS_USER_ID == user_id) {
+                 OB_EXTENDED_SYS_USER_ID == user_id ||
+                 OB_AUDITOR_USER_ID == user_id ||
+                 OB_LBACSYS_USER_ID == user_id) {
         if (session_user_id != user_id &&
             OB_SYS_USER_ID != session_user_id &&
-            OB_ORA_SYS_USER_ID != session_user_id) {
+            OB_EXTENDED_SYS_USER_ID != session_user_id) {
           is_valid = false;
         }
       }
@@ -350,8 +349,7 @@ int ObDCLResolver::resolve_user_list_node(ParseNode *user_node,
     }
     if (OB_FAIL(ret)) {
       LOG_WARN("failed to get user name", K(ret), K(user_name));
-    } else if (OB_FAIL(schema_checker_->get_user_info(params_.session_info_->get_effective_tenant_id(),
-                                                      user_name, host_name, user_info))) {
+    } else if (OB_FAIL(schema_checker_->get_user_info(user_name, host_name, user_info))) {
       LOG_WARN("failed to get user info", K(ret), K(user_name));
       if (OB_USER_NOT_EXIST == ret) {
         // Skip, RS handles uniformly, compatible with MySQL behavior
@@ -408,7 +406,7 @@ int ObDCLResolver::resolve_user_host(const ParseNode *user_pass,
       host_name.assign_ptr(user_pass->children_[3]->str_value_,
                            static_cast<int32_t>(user_pass->children_[3]->str_len_));
     }
-    if (OB_SUCC(ret) && lib::is_mysql_mode() && NULL != user_pass->children_[4]) {
+    if (OB_SUCC(ret) && NULL != user_pass->children_[4]) {
       /* here code is to mock a auth plugin check. */
       ObString auth_plugin(static_cast<int32_t>(user_pass->children_[4]->str_len_),
                             user_pass->children_[4]->str_value_);

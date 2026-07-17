@@ -87,7 +87,7 @@ TEST_F(ObDashscopeUtilsTest, test_rerank_get_body)
 
     ObJsonNode *input_node = body->get_value("input");
     ObJsonObject *input_obj = static_cast<ObJsonObject *>(input_node);
-
+    
     ObJsonNode *query_node = input_obj->get_value("query");
     ObStringBuffer query_buf(&allocator);
     query_node->print(query_buf, 0);
@@ -331,3 +331,4 @@ int main(int argc, char **argv)
     ::testing::InitGoogleTest(&argc,argv);
     return RUN_ALL_TESTS();
 }
+ 

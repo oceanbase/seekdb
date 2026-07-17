@@ -153,7 +153,7 @@ int ObDirectLoadDataBlockDecoder<Header>::realloc_decompress_buf(const int64_t s
       ob_free(decompress_buf_);
       decompress_buf_ = nullptr;
     }
-    decompress_buf_ = (char *)ob_malloc(size, ObMemAttr(MTL_ID(), "TLD_DBDecoder"));
+    decompress_buf_ = (char *)ob_malloc(size, ObMemAttr("TLD_DBDecoder"));
     if (decompress_buf_ == nullptr) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
       STORAGE_LOG(WARN, "fail to alloc mem", KR(ret), K(size));
@@ -197,7 +197,7 @@ int ObDirectLoadDataBlockDecoder<Header>::prepare_data_block(char *buf, int64_t 
       const int64_t checksum = ob_crc64_sse42(0, buf + pos_, header_.occupy_size_ - pos_);
       if (OB_UNLIKELY(checksum != header_.checksum_)) {
         ret = common::OB_CHECKSUM_ERROR;
-        STORAGE_LOG(WARN, "fail to valid checksum", KR(ret), K(header_), K(checksum));
+        STORAGE_LOG(ERROR, "fail to valid checksum", KR(ret), K(header_), K(checksum));
       }
     }
     // do decompress

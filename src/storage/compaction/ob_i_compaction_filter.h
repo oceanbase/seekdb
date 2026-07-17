@@ -18,7 +18,7 @@
 #define OB_STORAGE_COMPACTION_I_COMPACTION_FILTER_H_
 
 #include "lib/utility/ob_print_utils.h"
-#include "share/schema/ob_table_param.h"
+#include "storage/access/ob_table_param.h"
 namespace oceanbase
 {
 namespace blocksstable
@@ -65,7 +65,6 @@ public:
   {
     TX_DATA_MINOR,
     MDS_MINOR_FILTER_DATA,
-    MDS_MINOR_CROSS_LS,
     MDS_IN_MEDIUM_INFO,
     FILTER_TYPE_MAX
   };

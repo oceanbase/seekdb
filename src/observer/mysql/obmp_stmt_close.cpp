@@ -15,7 +15,9 @@
  */
 
 #define USING_LOG_PREFIX SERVER
+#include "lib/stat/ob_diagnostic_info_guard.h"
 #include "obmp_stmt_close.h"
+#include "lib/trace/ob_trace.h"
 #include "observer/omt/ob_tenant.h"
 
 namespace oceanbase
@@ -68,19 +70,11 @@ int ObMPStmtClose::process()
   } else {
     const ObMySQLRawPacket &pkt = reinterpret_cast<const ObMySQLRawPacket&>(req_->get_packet());
     ObSQLSessionInfo::LockGuard lock_guard(session->get_query_lock());
-    session->set_proxy_version(get_proxy_version());
     session->init_use_rich_format();
-    const bool enable_flt = session->get_control_info().is_valid();
     LOG_TRACE("close ps stmt or cursor", K_(stmt_id), K(session->get_server_sid()));
     if (OB_FAIL(session->check_tenant_status())) {
-      LOG_INFO("unit has been migrated, need deny new request", K(ret), K(MTL_ID()));
-    } else if (OB_FAIL(sql::ObFLTUtils::init_flt_info(
-                 pkt.get_extra_info(), *session,
-                 get_conn()->proxy_cap_flags_.is_full_link_trace_support(),
-                 enable_flt))) {
-      LOG_WARN("failed to init flt extra info", K(ret));
+      LOG_INFO("unit has been migrated, need deny new request", K(ret));
     }
-    FLTSpanGuardIfEnable(ps_close, enable_flt);
     if (OB_FAIL(ret)) {
     } else if (is_cursor_close()) {
       if (OB_FAIL(session->close_cursor(stmt_id_))) {
@@ -103,15 +97,8 @@ int ObMPStmtClose::process()
         ret = tmp_ret;
       }
     }
-    if (OB_SUCC(ret)) {
-      if (pkt.exist_trace_info()
-          && OB_FAIL(session->update_sys_variable(share::SYS_VAR_OB_TRACE_INFO,
-                                                  pkt.get_trace_info()))) {
-        LOG_WARN("fail to update trace info", K(ret));
-      }
-    }
   }
-  if (lib::is_diagnose_info_enabled()) {
+  {
     int64_t exec_end = ObTimeUtility::current_time();
     const int64_t time_cost = exec_end - get_receive_timestamp();
     EVENT_INC(SQL_PS_CLOSE_COUNT);

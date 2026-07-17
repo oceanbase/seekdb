@@ -57,8 +57,8 @@ ObDirectLoadDataWithOriginQuery::ObDirectLoadDataWithOriginQuery()
     origin_getter_(nullptr),
     is_inited_(false)
 {
-  allocator_.set_tenant_id(MTL_ID());
-  rowkey_allocator_.set_tenant_id(MTL_ID());
+  
+  
 }
 
 ObDirectLoadDataWithOriginQuery::~ObDirectLoadDataWithOriginQuery()

@@ -159,12 +159,10 @@ int ObExprDateFormat::calc_date_format_invalid(const ObExpr &expr, ObEvalCtx &ct
 
 DEF_SET_LOCAL_SESSION_VARS(ObExprDateFormat, raw_expr) {
   int ret = OB_SUCCESS;
-  if (is_mysql_mode()) {
-    SET_LOCAL_SYSVAR_CAPACITY(3);
-    EXPR_ADD_LOCAL_SYSVAR(SYS_VAR_SQL_MODE);
-    EXPR_ADD_LOCAL_SYSVAR(SYS_VAR_TIME_ZONE);
-    EXPR_ADD_LOCAL_SYSVAR(SYS_VAR_COLLATION_CONNECTION);
-  }
+  SET_LOCAL_SYSVAR_CAPACITY(3);
+  EXPR_ADD_LOCAL_SYSVAR(SYS_VAR_SQL_MODE);
+  EXPR_ADD_LOCAL_SYSVAR(SYS_VAR_TIME_ZONE);
+  EXPR_ADD_LOCAL_SYSVAR(SYS_VAR_COLLATION_CONNECTION);
   return ret;
 }
 
@@ -491,16 +489,11 @@ int ObExprDateFormat::get_day_month_names(ObString locale_name,
   const char ** locale_ab_daynames = locale_type_ab_day->type_names_;
   const char ** locale_monthnames = locale_type_mon->type_names_;
   const char ** locale_ab_monthnames = locale_type_ab_mon->type_names_;
-  if (lib::is_mysql_mode()) {
+  {
     day_name = locale_daynames;
     month_name = locale_monthnames;
     ab_day_name = locale_ab_daynames;
     ab_month_name = locale_ab_monthnames;
-  } else {
-    day_name = &(WDAY_NAMES+1)->ptr_;
-    month_name = &(MON_NAMES+1)->ptr_;
-    ab_day_name = &(WDAY_ABBR_NAMES+1)->ptr_;
-    ab_month_name = &(MON_ABBR_NAMES+1)->ptr_;
   }
   return ret;
 }

@@ -103,14 +103,6 @@ public:
   //              int(bool is_rollback, const ObPartitionArray &cur_stmt_all_participants,
   //              const transaction::ObPartitionEpochArray &epoch_arr,
   //              const ObPartitionArray &discard_participants, transaction::ObTransDesc &trans_desc));
-  // MOCK_METHOD3(start_participant,
-  //     int(transaction::ObTransDesc &trans_desc,
-  //     const common::ObPartitionArray &participants,
-  //     transaction::ObPartitionEpochArray &partition_epoch_arr));
-  // MOCK_METHOD4(end_participant, int(bool is_rollback,
-  //                                   transaction::ObTransDesc &trans_desc,
-  //                                   const common::ObPartitionArray &participants,
-  //                                   transaction::ObEndParticipantsRes &res));
   MOCK_METHOD2(table_scan,
                int(ObVTableScanParam &param, common::ObNewRowIterator *&result));
   MOCK_METHOD3(join_mv_scan, int(storage::ObTableScanParam &left_param,
@@ -137,7 +129,6 @@ public:
                int(const ObFrozenStatus &frozen_status,
                    const bool &force));
   MOCK_METHOD0(garbage_clean, void());
-  MOCK_METHOD0(get_rs_rpc_proxy, obrpc::ObCommonRpcProxy & ());
   MOCK_METHOD2(get_frozen_status,
                int(const int64_t major_version, ObFrozenStatus &frozen_status));
   MOCK_METHOD1(insert_frozen_status, int(const ObFrozenStatus &src));
@@ -146,7 +137,6 @@ public:
   MOCK_METHOD1(delete_frozen_status, int(const int64_t major_version));
   MOCK_METHOD0(admin_wash_ilog_cache, int());
   MOCK_METHOD1(set_zone_priority, void(const int64_t zone_priority));
-  MOCK_METHOD1(set_region, int(const common::ObRegion &region));
 };
 
 }  // namespace storage

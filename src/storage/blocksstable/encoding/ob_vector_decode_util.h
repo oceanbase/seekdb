@@ -1039,18 +1039,55 @@ ObLoadVarByteAlignedVecDataDispatcher<VectorType, ValueType, DataLocator> &ObLoa
   return ret;
 }
 
+// Per-group keyword: real definition in the owning ALONE TU (OB_VEC_INST_x), else extern template.
+#if defined(OB_VEC_DECODE_DO_INSTANTIATE) || defined(OB_VEC_INST_A)
+#define OB_VEC_KW_A template class
+#define OB_VEC_FNKW_A template
+#else
+#define OB_VEC_KW_A extern template class
+#define OB_VEC_FNKW_A extern template
+#endif
+#if defined(OB_VEC_DECODE_DO_INSTANTIATE) || defined(OB_VEC_INST_B)
+#define OB_VEC_KW_B template class
+#define OB_VEC_FNKW_B template
+#else
+#define OB_VEC_KW_B extern template class
+#define OB_VEC_FNKW_B extern template
+#endif
+#if defined(OB_VEC_DECODE_DO_INSTANTIATE) || defined(OB_VEC_INST_C)
+#define OB_VEC_KW_C template class
+#define OB_VEC_FNKW_C template
+#else
+#define OB_VEC_KW_C extern template class
+#define OB_VEC_FNKW_C extern template
+#endif
+#if defined(OB_VEC_DECODE_DO_INSTANTIATE) || defined(OB_VEC_INST_D)
+#define OB_VEC_KW_D template class
+#define OB_VEC_FNKW_D template
+#else
+#define OB_VEC_KW_D extern template class
+#define OB_VEC_FNKW_D extern template
+#endif
+#if defined(OB_VEC_DECODE_DO_INSTANTIATE) || defined(OB_VEC_INST_E)
+#define OB_VEC_KW_E template class
+#define OB_VEC_FNKW_E template
+#else
+#define OB_VEC_KW_E extern template class
+#define OB_VEC_FNKW_E extern template
+#endif
+
 #define DECLARE_INTEGER_VEC_DISPATCHER(c_type, locator_type) \
-template class ObLoadIntegerVecDataDispatcher<ObFixedLengthFormat<c_type>, c_type, locator_type>; \
-template class ObLoadIntegerVecDataDispatcher<ObUniformFormat<false>, c_type, locator_type>;
+OB_VEC_TMPL_KW ObLoadIntegerVecDataDispatcher<ObFixedLengthFormat<c_type>, c_type, locator_type>; \
+OB_VEC_TMPL_KW ObLoadIntegerVecDataDispatcher<ObUniformFormat<false>, c_type, locator_type>;
 
 #define DECLARE_BYTE_ALIGNED_FIXED_VEC_DISPATCHER(c_type, locator_type) \
-template class ObLoadFixByteAlignedVecDataDispatcher<ObFixedLengthFormat<c_type>, c_type, locator_type>; \
-template class ObLoadFixByteAlignedVecDataDispatcher<ObUniformFormat<false>, c_type, locator_type>;
+OB_VEC_TMPL_KW ObLoadFixByteAlignedVecDataDispatcher<ObFixedLengthFormat<c_type>, c_type, locator_type>; \
+OB_VEC_TMPL_KW ObLoadFixByteAlignedVecDataDispatcher<ObUniformFormat<false>, c_type, locator_type>;
 
 #define DECLARE_BYTE_ALIGNED_VAR_VEC_DISPATCHER(locator_type) \
-template class ObLoadVarByteAlignedVecDataDispatcher<ObUniformFormat<false>, char[0], locator_type>; \
-template class ObLoadVarByteAlignedVecDataDispatcher<ObContinuousFormat, char[0], locator_type>; \
-template class ObLoadVarByteAlignedVecDataDispatcher<ObDiscreteFormat, char[0], locator_type>;
+OB_VEC_TMPL_KW ObLoadVarByteAlignedVecDataDispatcher<ObUniformFormat<false>, char[0], locator_type>; \
+OB_VEC_TMPL_KW ObLoadVarByteAlignedVecDataDispatcher<ObContinuousFormat, char[0], locator_type>; \
+OB_VEC_TMPL_KW ObLoadVarByteAlignedVecDataDispatcher<ObDiscreteFormat, char[0], locator_type>;
 
 #define DECLARE_BYTE_ALIGNED_VEC_DATA_DISPATCHER_LOCATOR(locator_type) \
 DECLARE_INTEGER_VEC_DISPATCHER(uint64_t, locator_type) \
@@ -1065,24 +1102,40 @@ DECLARE_BYTE_ALIGNED_FIXED_VEC_DISPATCHER(int256_t, locator_type) \
 DECLARE_BYTE_ALIGNED_FIXED_VEC_DISPATCHER(int512_t, locator_type) \
 DECLARE_BYTE_ALIGNED_VAR_VEC_DISPATCHER(locator_type)
 
-DECLARE_BYTE_ALIGNED_VEC_DATA_DISPATCHER_LOCATOR(DataDiscreteLocator);
-DECLARE_BYTE_ALIGNED_VEC_DATA_DISPATCHER_LOCATOR(DataFixedLocator);
-DECLARE_BYTE_ALIGNED_VEC_DATA_DISPATCHER_LOCATOR(DataConstLoactor);
-DECLARE_BYTE_ALIGNED_VEC_DATA_DISPATCHER_LOCATOR(ObFixedDictDataLocator_T<uint8_t>);
-DECLARE_BYTE_ALIGNED_VEC_DATA_DISPATCHER_LOCATOR(ObFixedDictDataLocator_T<uint16_t>);
-
 typedef ObVarDictDataLocator_T<uint8_t, uint8_t> ObVarDictDataLocator_T_1_1;
 typedef ObVarDictDataLocator_T<uint8_t, uint16_t> ObVarDictDataLocator_T_1_2;
 typedef ObVarDictDataLocator_T<uint16_t, uint8_t> ObVarDictDataLocator_T_2_1;
 typedef ObVarDictDataLocator_T<uint16_t, uint16_t> ObVarDictDataLocator_T_2_2;
+
+// Group A
+#define OB_VEC_TMPL_KW OB_VEC_KW_A
+DECLARE_BYTE_ALIGNED_VEC_DATA_DISPATCHER_LOCATOR(DataDiscreteLocator);
+DECLARE_BYTE_ALIGNED_VEC_DATA_DISPATCHER_LOCATOR(ObFixedDictDataLocator_T<uint8_t>);
+#undef OB_VEC_TMPL_KW
+// Group B
+#define OB_VEC_TMPL_KW OB_VEC_KW_B
+DECLARE_BYTE_ALIGNED_VEC_DATA_DISPATCHER_LOCATOR(DataFixedLocator);
+DECLARE_BYTE_ALIGNED_VEC_DATA_DISPATCHER_LOCATOR(ObFixedDictDataLocator_T<uint16_t>);
+#undef OB_VEC_TMPL_KW
+// Group C
+#define OB_VEC_TMPL_KW OB_VEC_KW_C
+DECLARE_BYTE_ALIGNED_VEC_DATA_DISPATCHER_LOCATOR(DataConstLoactor);
+#undef OB_VEC_TMPL_KW
+// Group D
+#define OB_VEC_TMPL_KW OB_VEC_KW_D
 DECLARE_BYTE_ALIGNED_VAR_VEC_DISPATCHER(ObVarDictDataLocator_T_1_1);
 DECLARE_BYTE_ALIGNED_VAR_VEC_DISPATCHER(ObVarDictDataLocator_T_1_2);
+#undef OB_VEC_TMPL_KW
+// Group E
+#define OB_VEC_TMPL_KW OB_VEC_KW_E
 DECLARE_BYTE_ALIGNED_VAR_VEC_DISPATCHER(ObVarDictDataLocator_T_2_1);
 DECLARE_BYTE_ALIGNED_VAR_VEC_DISPATCHER(ObVarDictDataLocator_T_2_2);
+#undef OB_VEC_TMPL_KW
 
 #undef DECLARE_BYTE_ALIGNED_FIXED_VEC_DISPATCHER
 #undef DECLARE_BYTE_ALIGNED_VEC_DATA_DISPATCHER_LOCATOR
 #undef DECLARE_BYTE_ALIGNED_VAR_VEC_DISPATCHER
+#undef DECLARE_INTEGER_VEC_DISPATCHER
 
 
 template<typename VectorType, typename ValueType, typename DataLocator>
@@ -1403,6 +1456,48 @@ int ObVecDecodeUtils::load_byte_aligned_vector(
   }
   return ret;
 }
+
+// Same extern-template split for the top-level load_byte_aligned_vector() entry point.
+#define DECLARE_LOAD_BYTE_ALIGNED_VECTOR(locator_type) \
+OB_VEC_FN_TMPL_KW int ObVecDecodeUtils::load_byte_aligned_vector<locator_type>( \
+    const ObObjMeta, const ObObjType, const int64_t, const int, \
+    const locator_type &, const int64_t, const int64_t, sql::VectorHeader &);
+
+// Group A
+#define OB_VEC_FN_TMPL_KW OB_VEC_FNKW_A
+DECLARE_LOAD_BYTE_ALIGNED_VECTOR(DataDiscreteLocator)
+DECLARE_LOAD_BYTE_ALIGNED_VECTOR(ObFixedDictDataLocator_T<uint8_t>)
+#undef OB_VEC_FN_TMPL_KW
+// Group B
+#define OB_VEC_FN_TMPL_KW OB_VEC_FNKW_B
+DECLARE_LOAD_BYTE_ALIGNED_VECTOR(DataFixedLocator)
+DECLARE_LOAD_BYTE_ALIGNED_VECTOR(ObFixedDictDataLocator_T<uint16_t>)
+#undef OB_VEC_FN_TMPL_KW
+// Group C
+#define OB_VEC_FN_TMPL_KW OB_VEC_FNKW_C
+DECLARE_LOAD_BYTE_ALIGNED_VECTOR(DataConstLoactor)
+#undef OB_VEC_FN_TMPL_KW
+// Group D
+#define OB_VEC_FN_TMPL_KW OB_VEC_FNKW_D
+DECLARE_LOAD_BYTE_ALIGNED_VECTOR(ObVarDictDataLocator_T_1_1)
+DECLARE_LOAD_BYTE_ALIGNED_VECTOR(ObVarDictDataLocator_T_1_2)
+#undef OB_VEC_FN_TMPL_KW
+// Group E
+#define OB_VEC_FN_TMPL_KW OB_VEC_FNKW_E
+DECLARE_LOAD_BYTE_ALIGNED_VECTOR(ObVarDictDataLocator_T_2_1)
+DECLARE_LOAD_BYTE_ALIGNED_VECTOR(ObVarDictDataLocator_T_2_2)
+#undef OB_VEC_FN_TMPL_KW
+#undef DECLARE_LOAD_BYTE_ALIGNED_VECTOR
+#undef OB_VEC_KW_A
+#undef OB_VEC_KW_B
+#undef OB_VEC_KW_C
+#undef OB_VEC_KW_D
+#undef OB_VEC_KW_E
+#undef OB_VEC_FNKW_A
+#undef OB_VEC_FNKW_B
+#undef OB_VEC_FNKW_C
+#undef OB_VEC_FNKW_D
+#undef OB_VEC_FNKW_E
 
 } // namesapce blocksstable
 } // namespace oceanbase

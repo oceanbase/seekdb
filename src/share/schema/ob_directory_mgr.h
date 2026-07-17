@@ -33,11 +33,11 @@ class ObDirectoryNameHashKey
 {
 public:
   ObDirectoryNameHashKey()
-    : tenant_id_(common::OB_INVALID_TENANT_ID), directory_name_()
+    : directory_name_()
   {
   }
-  ObDirectoryNameHashKey(uint64_t tenant_id, common::ObString directory_name)
-    : tenant_id_(tenant_id), directory_name_(directory_name)
+  ObDirectoryNameHashKey(common::ObString directory_name)
+    : directory_name_(directory_name)
   {
   }
   ~ObDirectoryNameHashKey()
@@ -46,20 +46,18 @@ public:
   uint64_t hash() const
   {
     uint64_t hash_ret = 0;
-    hash_ret = common::murmurhash(&tenant_id_, sizeof(uint64_t), 0);
-    hash_ret = common::murmurhash(directory_name_.ptr(), directory_name_.length(), hash_ret);
+    hash_ret = common::murmurhash(directory_name_.ptr(), directory_name_.length(), 0);
     return hash_ret;
   }
   bool operator == (const ObDirectoryNameHashKey &rv) const
   {
-    return tenant_id_ == rv.tenant_id_ && directory_name_ == rv.directory_name_;
+    return directory_name_ == rv.directory_name_;
   }
-  void set_tenant_id(uint64_t tenant_id) { tenant_id_ = tenant_id; }
+  
   void set_directory_name(const common::ObString &directory_name) { directory_name_ = directory_name;}
-  uint64_t get_tenant_id() const { return tenant_id_; }
+  
   const common::ObString &get_directory_name() const { return directory_name_; }
 private:
-  uint64_t tenant_id_;
   common::ObString directory_name_;
 };
 
@@ -80,7 +78,7 @@ struct ObGetDirectoryKey<ObDirectoryNameHashKey, ObDirectorySchema *>
   {
     return OB_ISNULL(schema) ?
           ObDirectoryNameHashKey()
-        : ObDirectoryNameHashKey(schema->get_tenant_id(), schema->get_directory_name_str());
+        : ObDirectoryNameHashKey(schema->get_directory_name_str());
   }
 };
 
@@ -112,12 +110,9 @@ public:
   int del_directory(const ObTenantDirectoryId &id);
   int get_directory_schema_by_id(const uint64_t directory_id,
                                  const ObDirectorySchema *&schema) const;
-  int get_directory_schema_by_name(const uint64_t tenant_id,
-                                   const common::ObString &name,
+  int get_directory_schema_by_name(const common::ObString &name,
                                    const ObDirectorySchema *&schema) const;
-  int get_directory_schemas_in_tenant(const uint64_t tenant_id,
-                                      common::ObIArray<const ObDirectorySchema *> &schemas) const;
-  int del_directory_schemas_in_tenant(const uint64_t tenant_id);
+  int get_directory_schemas_in_tenant(common::ObIArray<const ObDirectorySchema *> &schemas) const;
   int get_directory_schema_count(int64_t &schema_count) const;
   int get_schema_statistics(ObSchemaStatisticsInfo &schema_info) const;
 private:
@@ -148,14 +143,12 @@ private:
 
 OB_INLINE bool ObDirectoryMgr::schema_compare(const ObDirectorySchema *lhs, const ObDirectorySchema *rhs)
 {
-  return lhs->get_tenant_id() != rhs->get_tenant_id()
-      ? lhs->get_tenant_id() < rhs->get_tenant_id()
-      : lhs->get_directory_id() < rhs->get_directory_id();
+  return lhs->get_directory_id() < rhs->get_directory_id();
 }
 
 OB_INLINE bool ObDirectoryMgr::schema_equal(const ObDirectorySchema *lhs, const ObDirectorySchema *rhs)
 {
-  return lhs->get_tenant_id() == rhs->get_tenant_id()
+  return true
       && lhs->get_directory_id() == rhs->get_directory_id();
 }
 

@@ -201,7 +201,7 @@ TEST_F(TestTruncateInfo, test_memleak)
 {
   ObStorageListRowValues src_values;
   ObStorageListRowValues dst_values;
-  lib::ObMemAttr attr(1, "TestListRowVal");
+  lib::ObMemAttr attr("TestListRowVal");
   ObFIFOAllocator tmp_allocator;
   ObFIFOAllocator tmp_allocator2;
   ASSERT_EQ(OB_SUCCESS, tmp_allocator.init(lib::ObMallocAllocator::get_instance(), OB_MALLOC_BIG_BLOCK_SIZE, attr));
@@ -290,7 +290,7 @@ TEST_F(TestTruncateInfo, test_null_list_val)
   ASSERT_TRUE(equal);
   ASSERT_EQ(0, tmp_obj.compare(tmp_obj2));
 
-  THIS_WORKER.set_compatibility_mode(lib::Worker::CompatMode::ORACLE);
+  THIS_WORKER.set_compatibility_mode(lib::Worker::CompatMode::MYSQL);
   ASSERT_EQ(OB_SUCCESS, truncate_part.compare(truncate_part2, equal));
   ASSERT_TRUE(equal);
   ASSERT_EQ(0, tmp_obj.compare(tmp_obj2));

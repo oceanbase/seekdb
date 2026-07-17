@@ -43,7 +43,7 @@ int ObUDFSqlService::insert_udf(const ObUDF &udf_info,
       LOG_WARN("failed to add udf", K(ret));
     } else {
       ObSchemaOperation opt;
-      opt.tenant_id_ = udf_info.get_tenant_id();
+      
       opt.op_type_ = OB_DDL_CREATE_UDF;
       opt.schema_version_ = udf_info.get_schema_version();
       opt.udf_name_ = udf_info.get_udf_name_str();
@@ -62,8 +62,7 @@ int ObUDFSqlService::insert_udf(const ObUDF &udf_info,
   return ret;
 }
 
-int ObUDFSqlService::delete_udf(const uint64_t tenant_id,
-                                const common::ObString &name,
+int ObUDFSqlService::delete_udf(const common::ObString &name,
                                 const int64_t new_schema_version,
                                 common::ObISQLClient *sql_client,
                                 const common::ObString *ddl_stmt_str)
@@ -72,7 +71,7 @@ int ObUDFSqlService::delete_udf(const uint64_t tenant_id,
   int64_t affected_rows = 0;
   ObSqlString sql;
   const int64_t IS_DELETED = 1;
-  const uint64_t exec_tenant_id = ObSchemaUtils::get_exec_tenant_id(tenant_id);
+  
 
   if (OB_ISNULL(sql_client)) {
     ret = OB_INVALID_ARGUMENT;
@@ -85,8 +84,8 @@ int ObUDFSqlService::delete_udf(const uint64_t tenant_id,
                    OB_ALL_FUNC_HISTORY_TNAME,
                    name.ptr(),
                    new_schema_version, IS_DELETED))) {
-      LOG_WARN("assign insert into all udf history fail", K(tenant_id), K(ret));
-    } else if (OB_FAIL(sql_client->write(exec_tenant_id, sql.ptr(), affected_rows))) {
+      LOG_WARN("assign insert into all udf history fail", K(ret));
+    } else if (OB_FAIL(sql_client->write(sql.ptr(), affected_rows))) {
       LOG_WARN("execute sql fail", K(sql), K(ret));
     } else if (1 != affected_rows) {
       ret = OB_ERR_UNEXPECTED;
@@ -98,8 +97,8 @@ int ObUDFSqlService::delete_udf(const uint64_t tenant_id,
                                OB_ALL_FUNC_TNAME,
                                name.ptr()))) {
       LOG_WARN("append_fmt failed", K(ret));
-    } else if (OB_FAIL(sql_client->write(exec_tenant_id, sql.ptr(), affected_rows))) {
-      LOG_WARN("fail to execute sql", K(tenant_id), K(sql), K(ret));
+    } else if (OB_FAIL(sql_client->write(sql.ptr(), affected_rows))) {
+      LOG_WARN("fail to execute sql", K(sql), K(ret));
     } else if (1 != affected_rows) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("no row deleted", K(sql), K(affected_rows), K(ret));
@@ -108,7 +107,7 @@ int ObUDFSqlService::delete_udf(const uint64_t tenant_id,
     // log operation
     if (OB_SUCC(ret)) {
       ObSchemaOperation opt;
-      opt.tenant_id_ = tenant_id;
+      
       opt.op_type_ = OB_DDL_DROP_UDF;
       opt.schema_version_ = new_schema_version;
       opt.udf_name_ = name;
@@ -139,7 +138,7 @@ int ObUDFSqlService::drop_udf(const ObUDF &udf_info,
   } else if (!udf_info.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid udf info in drop udf", K(udf_info.get_name_str()), K(ret));
-  } else if (OB_FAIL(delete_udf(udf_info.get_tenant_id(), udf_info.get_name(),
+  } else if (OB_FAIL(delete_udf(udf_info.get_name(),
                                 new_schema_version, sql_client, ddl_stmt_str))) {
     LOG_WARN("failed to delete udf", K(udf_info.get_name_str()), K(ret));
   } else {/*do nothing*/}
@@ -158,8 +157,8 @@ int ObUDFSqlService::add_udf(common::ObISQLClient &sql_client,
   ObSqlString values;
   const char *tname[] = {OB_ALL_FUNC_TNAME, OB_ALL_FUNC_HISTORY_TNAME};
   ObArenaAllocator allocator(ObModIds::OB_SCHEMA);
-  const uint64_t tenant_id = udf_info.get_tenant_id();
-  const uint64_t exec_tenant_id = ObSchemaUtils::get_exec_tenant_id(tenant_id);
+  
+  
   for (int64_t i = 0; OB_SUCC(ret) && i < ARRAYSIZEOF(tname); i++) {
     if (only_history && 0 == STRCMP(tname[i], OB_ALL_FUNC_TNAME)) {
       continue;
@@ -167,7 +166,7 @@ int ObUDFSqlService::add_udf(common::ObISQLClient &sql_client,
       STORAGE_LOG(WARN, "append table name failed, ", K(ret));
     } else {
       SQL_COL_APPEND_VALUE(sql, values, ObSchemaUtils::get_extract_schema_id(
-                                        exec_tenant_id, udf_info.get_udf_id()), "udf_id", "%lu");
+                                        udf_info.get_udf_id()), "udf_id", "%lu");
       SQL_COL_APPEND_ESCAPE_STR_VALUE(sql, values, udf_info.get_name(),
                                       udf_info.get_name_str().length(), "name");
       SQL_COL_APPEND_VALUE(sql, values, udf_info.get_ret(), "ret", "%d");
@@ -185,7 +184,7 @@ int ObUDFSqlService::add_udf(common::ObISQLClient &sql_client,
                                    static_cast<int32_t>(values.length()),
                                    values.ptr()))) {
           LOG_WARN("append sql failed, ", K(ret));
-        } else if (OB_FAIL(sql_client.write(exec_tenant_id, sql.ptr(), affected_rows))) {
+        } else if (OB_FAIL(sql_client.write(sql.ptr(), affected_rows))) {
           LOG_WARN("fail to execute sql", K(sql), K(ret));
         } else {
           if (!is_single_row(affected_rows)) {

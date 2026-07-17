@@ -45,8 +45,8 @@ ObDirectLoadLobMetaRowIter::ObDirectLoadLobMetaRowIter()
     lob_id_row_cnt_(0),
     is_inited_(false)
 {
-  allocator_.set_tenant_id(MTL_ID());
-  range_allocator_.set_tenant_id(MTL_ID());
+  
+  
 }
 
 ObDirectLoadLobMetaRowIter::~ObDirectLoadLobMetaRowIter()

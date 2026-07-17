@@ -61,7 +61,6 @@ OB_SERIALIZE_MEMBER(ObPxSqcMeta,
                     access_table_location_keys_,
                     adjoining_root_dfo_,
                     is_single_tsc_leaf_dfo_,
-                    access_external_table_files_,
                     p2p_dh_map_info_,
                     sqc_count_,
                     monitoring_info_,
@@ -188,16 +187,6 @@ int ObPxSqcMeta::assign(const ObPxSqcMeta &other)
     interrupt_by_dm_ = other.interrupt_by_dm_;
     sqc_count_ = other.sqc_count_;
     partition_random_affinitize_ = other.partition_random_affinitize_;
-  }
-  access_external_table_files_.reuse();
-  for (int i = 0; OB_SUCC(ret) && i < other.access_external_table_files_.count(); i++) {
-    const ObExternalFileInfo &other_file = other.access_external_table_files_.at(i);
-    ObExternalFileInfo temp_file;
-    if (OB_FAIL(temp_file.deep_copy(allocator_, other_file))) {
-      LOG_WARN("fail to deep copy ObExternalFileInfo", K(ret));
-    } else if (OB_FAIL(access_external_table_files_.push_back(temp_file))) {
-      LOG_WARN("fail to push back", K(ret));
-    }
   }
   return ret;
 }
@@ -597,12 +586,6 @@ int ObPxRpcInitSqcArgs::do_deserialize(int64_t &pos, const char *net_buf, int64_
       LOG_WARN("session is NULL", K(ret));
     }
     if (OB_SUCC(ret)) {
-      // Compact mode may not set while rpc argument deserialize, set it manually.
-      // See: 
-      lib::CompatModeGuard g(ORACLE_MODE == exec_ctx_->get_my_session()->get_compatibility_mode()
-          ? lib::Worker::CompatMode::ORACLE
-          : lib::Worker::CompatMode::MYSQL);
-
       LST_DO_CODE(OB_UNIS_DECODE, sqc_);
 
       LOG_TRACE("deserialize sqc", K_(sqc));

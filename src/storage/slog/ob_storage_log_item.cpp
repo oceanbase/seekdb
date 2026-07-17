@@ -71,7 +71,7 @@ int ObStorageLogItem::init(
 
   if (OB_SUCC(ret)) {
     if (nullptr == buf) {
-      const ObMemAttr attr(OB_SERVER_TENANT_ID, ObModIds::OB_SLOG_WRITER);
+      const ObMemAttr attr(ObModIds::OB_SLOG_WRITER);
       if (nullptr == (buf_ = reinterpret_cast<char *>(ob_malloc_align(align_size, buf_size, attr)))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
         STORAGE_REDO_LOG(WARN, "Fail to alloc local buf", K(ret), K(buf_size), K(attr));
@@ -119,6 +119,7 @@ void ObStorageLogItem::destroy()
   if (nullptr != local_offset_arr_ && local_offset_arr_ != offset_arr_) {
     ob_free(local_offset_arr_);
   }
+  local_offset_arr_ = nullptr;
 }
 
 int ObStorageLogItem::wait_flush_log(const uint64_t max_wait_time)
@@ -138,7 +139,7 @@ int ObStorageLogItem::wait_flush_log(const uint64_t max_wait_time)
           STORAGE_REDO_LOG(ERROR, "Fail to wait log flush (reach time-interval 30s)",
               K(ret), K(max_wait_time), K(*this));
         } else {
-          STORAGE_REDO_LOG(WARN, "Fail to wait log flush", K(ret), K(max_wait_time), K(*this));
+          STORAGE_REDO_LOG(ERROR, "Fail to wait log flush", K(ret), K(max_wait_time), K(*this));
         }
       }
     }

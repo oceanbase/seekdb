@@ -56,8 +56,6 @@ int ObTableLoadMergeDelLobOp::inner_init()
     }
   }
   inner_ctx_.merge_mode_ = ObDirectLoadMergeMode::MERGE_WITH_ORIGIN_QUERY_FOR_LOB;
-  inner_ctx_.use_batch_mode_ = false;
-  inner_ctx_.need_calc_range_ = false;
   inner_ctx_.need_close_insert_tablet_ctx_ = true;
   inner_ctx_.is_del_lob_ = true;
   merge_table_ctx_ = &inner_ctx_;

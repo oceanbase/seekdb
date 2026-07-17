@@ -16,33 +16,34 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 #include "ob_expr_ai_embed.h"
+#include "share/rc/ob_module_provider.h"
 #include "observer/omt/ob_tenant_ai_service.h"
 
 using namespace oceanbase::common;
 using namespace oceanbase::sql;
 
-namespace oceanbase
+namespace oceanbase 
 {
-namespace sql
+namespace sql 
 {
 ObExprAIEmbed::ObExprAIEmbed(common::ObIAllocator &alloc)
-    : ObFuncExprOperator(alloc,
-                        T_FUN_SYS_AI_EMBED,
-                        N_AI_EMBED,
+    : ObFuncExprOperator(alloc, 
+                        T_FUN_SYS_AI_EMBED, 
+                        N_AI_EMBED, 
                         MORE_THAN_ZERO,
-                        NOT_VALID_FOR_GENERATED_COL,
-                        NOT_ROW_DIMENSION)
+                        NOT_VALID_FOR_GENERATED_COL, 
+                        NOT_ROW_DIMENSION) 
 {
 }
 
-ObExprAIEmbed::~ObExprAIEmbed()
+ObExprAIEmbed::~ObExprAIEmbed() 
 {
 }
 
 int ObExprAIEmbed::calc_result_typeN(ObExprResType &type,
                                      ObExprResType *types_stack,
                                      int64_t param_num,
-                                     common::ObExprTypeCtx &type_ctx) const
+                                     common::ObExprTypeCtx &type_ctx) const 
 {
   UNUSED(type_ctx);
   UNUSED(types_stack);
@@ -74,7 +75,7 @@ int ObExprAIEmbed::calc_result_typeN(ObExprResType &type,
   return ret;
 }
 
-int ObExprAIEmbed::eval_ai_embed(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
+int ObExprAIEmbed::eval_ai_embed(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res) 
 {
   INIT_SUCC(ret);
   ObDatum *arg_model_id = nullptr;
@@ -90,12 +91,12 @@ int ObExprAIEmbed::eval_ai_embed(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &re
     res.set_null();
   } else {
     ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
-    uint64_t tenant_id = ObMultiModeExprHelper::get_tenant_id(ctx.exec_ctx_.get_my_session());
-    MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator(), expr.type_, tenant_id, ret);
-    lib::ObMallocHookAttrGuard malloc_guard(lib::ObMemAttr(tenant_id, N_AI_EMBED));
+    
+    MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator(), expr.type_, ret);
+    lib::ObMallocHookAttrGuard malloc_guard(lib::ObMemAttr(N_AI_EMBED));
     ObAIFuncExprInfo *info = nullptr;
     omt::ObAiServiceGuard ai_service_guard;
-    omt::ObTenantAiService *ai_service = MTL(omt::ObTenantAiService*);
+    omt::ObTenantAiService *ai_service = share::g_mp->tenant_ai_service();
     const share::ObAiModelEndpointInfo *endpoint_info = nullptr;
     ObString model_id = arg_model_id->get_string();
     ObString content = arg_content->get_string();
@@ -135,7 +136,7 @@ int ObExprAIEmbed::eval_ai_embed(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &re
     } else if (OB_FAIL(ai_service_guard.get_ai_endpoint_by_ai_model_name(model_id, endpoint_info))) {
       LOG_WARN("failed to get endpoint info", K(ret), K(model_id));
     } else if (OB_ISNULL(endpoint_info)) {
-      ret = OB_ERR_UNEXPECTED;
+      ret = OB_ERR_UNEXPECTED;  
       LOG_WARN("endpoint info is null", K(ret));
     } else {
       ObAIFuncModel model(temp_allocator, *info, *endpoint_info);
@@ -172,9 +173,9 @@ int ObExprAIEmbed::get_vector_params(const ObExpr &expr,
     ObIVector *res_vec = expr.get_vector(ctx);
     ObBitVector &eval_flags = expr.get_evaluated_flags(ctx);
     ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
-    uint64_t tenant_id = ObMultiModeExprHelper::get_tenant_id(ctx.exec_ctx_.get_my_session());
-    MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator(), expr.type_, tenant_id, ret);
-    lib::ObMallocHookAttrGuard malloc_guard(lib::ObMemAttr(tenant_id, N_AI_EMBED));
+    
+    MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator(), expr.type_, ret);
+    lib::ObMallocHookAttrGuard malloc_guard(lib::ObMemAttr(N_AI_EMBED));
     if (OB_FAIL(ObTextStringHelper::read_real_string_data(
           temp_allocator,
           model_vec,
@@ -220,14 +221,14 @@ int ObExprAIEmbed::get_vector_params(const ObExpr &expr,
   return ret;
 }
 
-int ObExprAIEmbed::pack_json_array_to_res_vector(const ObExpr &expr,
+int ObExprAIEmbed::pack_json_array_to_res_vector(const ObExpr &expr, 
                                                 ObEvalCtx &ctx,
                                                 ObIAllocator &allocator,
                                                 ObArray<ObJsonObject *> &responses,
                                                 const ObBitVector &skip,
                                                 const EvalBound &bound,
                                                 const ObAiModelEndpointInfo &endpoint_info,
-                                                ObIVector *res_vec)
+                                                ObIVector *res_vec) 
 {
   int ret = OB_SUCCESS;
   ObBitVector &eval_flags = expr.get_evaluated_flags(ctx);
@@ -294,19 +295,19 @@ int ObExprAIEmbed::eval_ai_embed_vector(const ObExpr &expr, ObEvalCtx &ctx,
     LOG_WARN("fail to get vector params", K(ret));
   } else {
     ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
-    uint64_t tenant_id = ObMultiModeExprHelper::get_tenant_id(ctx.exec_ctx_.get_my_session());
-    MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator(), expr.type_, tenant_id, ret);
-    lib::ObMallocHookAttrGuard malloc_guard(lib::ObMemAttr(tenant_id, N_AI_EMBED));
+    
+    MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator(), expr.type_, ret);
+    lib::ObMallocHookAttrGuard malloc_guard(lib::ObMemAttr(N_AI_EMBED));
     ObAIFuncExprInfo *info = nullptr;
     omt::ObAiServiceGuard ai_service_guard;
-    omt::ObTenantAiService *ai_service = MTL(omt::ObTenantAiService*);
+    omt::ObTenantAiService *ai_service = share::g_mp->tenant_ai_service();
     const share::ObAiModelEndpointInfo *endpoint_info = nullptr;
     ObArray<ObString> header_array;
     ObArray<ObJsonObject *> bodies;
     ObJsonObject *body = nullptr;
     ObJsonObject *config = nullptr;
     ObJsonInt *dim_json = nullptr;
-    ObArray<ObJsonObject *> responses;
+    ObArray<ObJsonObject *> responses;   
     ObAIFuncClient ai_client;
     if (dim > 0) {
       if (OB_FAIL(ObAIFuncJsonUtils::get_json_int(temp_allocator, dim, dim_json))) {
@@ -328,9 +329,9 @@ int ObExprAIEmbed::eval_ai_embed_vector(const ObExpr &expr, ObEvalCtx &ctx,
     } else if (OB_FAIL(ai_service_guard.get_ai_endpoint_by_ai_model_name(model_id, endpoint_info))) {
       LOG_WARN("failed to get endpoint info", K(ret), K(model_id));
     } else if (OB_ISNULL(endpoint_info)) {
-      ret = OB_ERR_UNEXPECTED;
+      ret = OB_ERR_UNEXPECTED;  
       LOG_WARN("endpoint info is null", K(ret));
-    } else if (!ObAIFuncUtils::is_dense_embedding_type(info)) {
+    } else if (!ObAIFuncUtils::is_dense_embedding_type(info)) { 
       ret = OB_INVALID_ARGUMENT;
       LOG_WARN("model type must be DENSE_EMBEDDING", K(ret));
       LOG_USER_ERROR(OB_INVALID_ARGUMENT, "ai_embed, model type must be DENSE_EMBEDDING");
@@ -374,12 +375,12 @@ int ObExprAIEmbed::eval_ai_embed_vector_v2(const ObExpr &expr, ObEvalCtx &ctx,
       LOG_WARN("fail to get vector params", K(ret));
     } else {
       ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
-      uint64_t tenant_id = ObMultiModeExprHelper::get_tenant_id(ctx.exec_ctx_.get_my_session());
-      MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator(), expr.type_, tenant_id, ret);
-      lib::ObMallocHookAttrGuard malloc_guard(lib::ObMemAttr(tenant_id, N_AI_EMBED));
+      
+      MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator(), expr.type_, ret);
+      lib::ObMallocHookAttrGuard malloc_guard(lib::ObMemAttr(N_AI_EMBED));
       ObAIFuncExprInfo *info = nullptr;
       omt::ObAiServiceGuard ai_service_guard;
-      omt::ObTenantAiService *ai_service = MTL(omt::ObTenantAiService*);
+      omt::ObTenantAiService *ai_service = share::g_mp->tenant_ai_service();
       const share::ObAiModelEndpointInfo *endpoint_info = nullptr;
       ObArray<ObString> header_array;
       ObJsonObject *body = nullptr;
@@ -407,7 +408,7 @@ int ObExprAIEmbed::eval_ai_embed_vector_v2(const ObExpr &expr, ObEvalCtx &ctx,
         } else if (OB_FAIL(ai_service_guard.get_ai_endpoint_by_ai_model_name(model_id, endpoint_info))) {
           LOG_WARN("failed to get endpoint info", K(ret), K(model_id));
         } else if (OB_ISNULL(endpoint_info)) {
-          ret = OB_ERR_UNEXPECTED;
+          ret = OB_ERR_UNEXPECTED;  
           LOG_WARN("endpoint info is null", K(ret));
         } else if (OB_FAIL(ObAIFuncUtils::check_info_type_dense_embedding(info))) {
           LOG_WARN("fail to check model type", K(ret));
@@ -426,14 +427,14 @@ int ObExprAIEmbed::eval_ai_embed_vector_v2(const ObExpr &expr, ObEvalCtx &ctx,
   return ret;
 }
 
-int ObExprAIEmbed::pack_json_object_to_res_vector(const ObExpr &expr,
+int ObExprAIEmbed::pack_json_object_to_res_vector(const ObExpr &expr, 
                                                 ObEvalCtx &ctx,
                                                 ObIAllocator &allocator,
                                                 ObJsonObject *response,
                                                 const ObBitVector &skip,
                                                 const EvalBound &bound,
                                                 const ObAiModelEndpointInfo &endpoint_info,
-                                                ObIVector *res_vec)
+                                                ObIVector *res_vec) 
 {
   int ret = OB_SUCCESS;
   if (OB_ISNULL(response)) {
@@ -450,9 +451,9 @@ int ObExprAIEmbed::pack_json_object_to_res_vector(const ObExpr &expr,
   return ret;
 }
 
-int ObExprAIEmbed::cg_expr(ObExprCGCtx &expr_cg_ctx,
+int ObExprAIEmbed::cg_expr(ObExprCGCtx &expr_cg_ctx, 
                            const ObRawExpr &raw_expr,
-                           ObExpr &rt_expr) const
+                           ObExpr &rt_expr) const 
 {
   int ret = OB_SUCCESS;
   // TODO: support schema version match in plan cache for ai func

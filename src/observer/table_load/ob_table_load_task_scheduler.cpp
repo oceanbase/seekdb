@@ -85,7 +85,7 @@ ObTableLoadTaskThreadPoolScheduler::ObTableLoadTaskThreadPoolScheduler(int64_t t
     state_(STATE_ZERO),
     is_inited_(false)
 {
-  allocator_.set_tenant_id(MTL_ID());
+  
   snprintf(name_, OB_THREAD_NAME_BUF_LEN, "TLD_%03ld_%s", table_id % 1000, label);
 }
 
@@ -115,7 +115,7 @@ int ObTableLoadTaskThreadPoolScheduler::init_worker_ctx_array()
       worker_ctx->worker_id_ = i;
       if (OB_FAIL(worker_ctx->cond_.init(1))) {
         LOG_WARN("fail to init thread cond", KR(ret));
-      } else if (OB_FAIL(worker_ctx->task_queue_.init(session_queue_size_, "TLD_Queue", MTL_ID()))) {
+      } else if (OB_FAIL(worker_ctx->task_queue_.init(session_queue_size_, "TLD_Queue"))) {
         LOG_WARN("fail to init task queue", KR(ret), K(i));
       }
     }
@@ -262,7 +262,6 @@ void ObTableLoadTaskThreadPoolScheduler::run(uint64_t thread_idx)
   share::ObTenantBase *tenant_base = MTL_CTX();
   lib::Worker::CompatMode mode = ((omt::ObTenant *)tenant_base)->get_compat_mode();
   lib::Worker::set_compatibility_mode(mode);
-  CONSUMER_GROUP_FUNC_GUARD(ObFunctionType::PRIO_IMPORT);
 
   LOG_INFO("table load task thread run", KP(this), "pid", get_tid_cache(), K(thread_idx));
 

@@ -99,7 +99,7 @@ public:
   virtual void print_need_reboot_config() const {/*do nothing*/};
   virtual ObServerRole get_server_type() const = 0;
   virtual bool is_debug_sync_enabled() const { return false; }
-  virtual uint64_t get_tenant_id() const { return common::OB_SYS_TENANT_ID; }
+  
 private:
   DISALLOW_COPY_AND_ASSIGN(ObCommonConfig);
   protected:

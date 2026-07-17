@@ -19,7 +19,7 @@
 
 #include "lib/hash/ob_hashmap.h"
 #include "storage/tx/ob_trans_service.h"
-#include "storage/tx/ob_trans_part_ctx.h"
+#include "storage/tx/ob_tx_ctx.h"
 #include "mockcontainer/mock_ob_iterator.h"
 
 namespace oceanbase

@@ -20,11 +20,6 @@
 #include "observer/mysql/obsm_conn_callback.h"
 #include "lib/resource/ob_affinity_ctrl.h"
 
-#include "share/ob_rpc_share.h"
-#include "observer/net/ob_rpc_reverse_keepalive.h"
-#include "storage/ob_locality_manager.h"
-#include "rpc/obrpc/ob_local_procedure_call.h"
-#include "storage/ob_locality_manager.h"
 
 using namespace oceanbase::rpc::frame;
 using namespace oceanbase::common;
@@ -38,17 +33,15 @@ ObSrvNetworkFrame::ObSrvNetworkFrame(ObGlobalContext &gctx)
       request_qhandler_(xlator_),
       deliver_(request_qhandler_, xlator_.get_session_handler(), gctx),
       ingress_service_(),
-      rpc_transport_(NULL),
-      high_prio_rpc_transport_(NULL),
-      mysql_transport_(NULL),
-      batch_rpc_transport_(NULL),
       last_ssl_info_hash_(UINT64_MAX),
       lock_(),
       standby_fetchlog_bw_limit_(0),
       standby_fetchlog_bytes_(0),
       standby_fetchlog_time_(0)
 {
-  oblpc::deliver = &deliver_;
+  // obcall local-procedure-call dispatch hook removed: no in-process obcall RPC
+  // is delivered through deliver_ anymore. deliver_ / the request queue handler /
+  // the MySQL listener remain (shared by the MySQL serving path).
 }
 
 ObSrvNetworkFrame::~ObSrvNetworkFrame()
@@ -121,11 +114,6 @@ int ObSrvNetworkFrame::init()
   } else if (OB_FAIL(reload_ssl_config())) {
     LOG_ERROR("load_ssl_config fail", K(ret));
   } else {
-    // Many other modules check whether rpc_transport_ is null during startup,
-    // but this structure is actually no longer used.
-    // To simplify the changes, a dummy structure is set to ensure a successful startup.
-    rpc_transport_ = OB_NEW(ObReqTransport, ObModIds::OB_RPC, NULL, NULL);
-    share::set_obrpc_transport(rpc_transport_);
     LOG_INFO("init rpc network frame successfully",
              "ssl_client_authentication", GCONF.ssl_client_authentication.str());
   }
@@ -142,6 +130,7 @@ void ObSrvNetworkFrame::destroy()
 int ObSrvNetworkFrame::start()
 {
   int ret = OB_SUCCESS;
+  const bool disable_tcp = gctx_.is_embedded_mode();
   obmysql::global_sql_nio_server =
       OB_NEW(obmysql::ObSqlNioServer, "SqlNio",
               obmysql::global_sm_conn_callback);
@@ -167,7 +156,7 @@ int ObSrvNetworkFrame::start()
     }
     if (OB_FAIL(obmysql::global_sql_nio_server->start(
             GCONF.mysql_port, &deliver_, sql_net_thread_count,
-            GCONF._enable_numa_aware))) {
+            GCONF._enable_numa_aware, disable_tcp))) {
       LOG_ERROR("sql nio server start failed", K(ret));
     }
   }
@@ -340,8 +329,6 @@ int ObSrvNetworkFrame::reload_ssl_config()
 {
   int ret = common::OB_SUCCESS;
   if (GCONF.ssl_client_authentication) {
-    ObString invited_nodes(GCONF._ob_ssl_invited_nodes.str());
-
     ObString ssl_config(GCONF.ssl_external_kms_info.str());
     bool file_exist = false;
     const char *intl_file[3] = {OB_SSL_CA_FILE, OB_SSL_CERT_FILE, OB_SSL_KEY_FILE};
@@ -355,10 +342,6 @@ int ObSrvNetworkFrame::reload_ssl_config()
       ret = OB_INVALID_CONFIG;
       LOG_WARN("ssl file not available", K(new_hash_value));
       LOG_USER_ERROR(OB_INVALID_CONFIG, "ssl file not available");
-    } else if (OB_ISNULL(gctx_.locality_manager_)) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_ERROR("locality manager should not be null", K(ret), KP(gctx_.locality_manager_));
-    } else if (FALSE_IT(gctx_.locality_manager_->set_ssl_invited_nodes(invited_nodes))) {
     } else if (last_ssl_info_hash_ == new_hash_value) {
       LOG_INFO("no need reload_ssl_config", K(new_hash_value));
     } else {
@@ -417,26 +400,6 @@ int ObSrvNetworkFrame::stop()
   return ret;
 }
 
-int ObSrvNetworkFrame::get_proxy(obrpc::ObRpcProxy &proxy)
-{
-  return proxy.init(rpc_transport_);
-}
-
-ObReqTransport *ObSrvNetworkFrame::get_req_transport()
-{
-  return rpc_transport_;
-}
-
-ObReqTransport *ObSrvNetworkFrame::get_high_prio_req_transport()
-{
-  return high_prio_rpc_transport_;
-}
-
-ObReqTransport *ObSrvNetworkFrame::get_batch_rpc_req_transport()
-{
-  return batch_rpc_transport_;
-}
-
 	
 void ObSrvNetworkFrame::sql_nio_stop()
 {
@@ -458,11 +421,8 @@ oceanbase::rootserver::ObIngressBWAllocService *ObSrvNetworkFrame::get_ingress_s
 int ObSrvNetworkFrame::net_endpoint_register(const ObNetEndpointKey &endpoint_key, int64_t expire_time)
 {
   int ret = OB_SUCCESS;
-  const uint64_t tenant_id = MTL_ID();
-  if (!is_sys_tenant(tenant_id)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("endpoint register is only valid in sys tenant", K(ret), K(endpoint_key));
-  } else if (ingress_service_.is_leader() && OB_FAIL(ingress_service_.register_endpoint(endpoint_key, expire_time))) {
+  
+  if (ingress_service_.is_leader() && OB_FAIL(ingress_service_.register_endpoint(endpoint_key, expire_time))) {
     LOG_WARN("net endpoint register failed", K(ret), K(endpoint_key));
   }
   return ret;
@@ -481,13 +441,3 @@ int ObSrvNetworkFrame::net_endpoint_set_ingress(const ObNetEndpointKey &endpoint
   LOG_WARN("net endpoint set ingress is not supported");
   return ret;
 }
-
-int ObSrvNetworkFrame::shared_storage_net_throt_set(const ObSharedDeviceResourceArray &assigned_resource)
-{
-  int ret = OB_SUCCESS;
-  if (OB_FAIL(OB_IO_MANAGER.get_tc().set_limit_v2(assigned_resource))) {
-    LOG_WARN("set failed", K(assigned_resource));
-  }
-  return ret;
-}
-

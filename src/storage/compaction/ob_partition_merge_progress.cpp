@@ -16,8 +16,8 @@
 
 #define USING_LOG_PREFIX STORAGE_COMPACTION
 #include "ob_partition_merge_progress.h"
+#include "share/rc/ob_module_provider.h"
 #include "ob_tenant_compaction_progress.h"
-#include "storage/column_store/ob_co_merge_dag.h"
 
 namespace oceanbase
 {
@@ -42,8 +42,6 @@ ObPartitionMergeProgress::ObPartitionMergeProgress(common::ObIAllocator &allocat
     latest_update_ts_(ObTimeUtility::fast_current_time()),
     estimated_finish_time_(0),
     pre_scanned_row_cnt_(0),
-    start_cg_idx_(0),
-    end_cg_idx_(0),
     is_updating_(false),
     is_empty_merge_(false),
     is_inited_(false)
@@ -70,12 +68,9 @@ void ObPartitionMergeProgress::reset()
   latest_update_ts_ = 0;
   estimated_finish_time_ = 0;
   pre_scanned_row_cnt_ = 0;
-  start_cg_idx_ = 0;
-  end_cg_idx_ = 0;
   concurrent_cnt_ = 0;
   is_updating_ = false;
 }
-
 
 int64_t ObPartitionMergeProgress::to_string(char *buf, const int64_t buf_len) const
 {
@@ -85,16 +80,14 @@ int64_t ObPartitionMergeProgress::to_string(char *buf, const int64_t buf_len) co
     J_OBJ_START();
     J_KV(K_(is_inited), K_(is_empty_merge), KP_(merge_dag), KP_(scanned_row_cnt_arr),
         K_(concurrent_cnt), K_(estimated_total_row_cnt),
-        K_(latest_update_ts), K_(estimated_finish_time), K_(start_cg_idx), K_(end_cg_idx));
+        K_(latest_update_ts), K_(estimated_finish_time));
     J_OBJ_END();
   }
   return pos;
 }
 
 int ObPartitionMergeProgress::init(ObBasicTabletMergeCtx *ctx,
-    ObTabletMergeDag *merge_dag,
-    const int64_t start_cg_idx,
-    const int64_t end_cg_idx)
+    ObTabletMergeDag *merge_dag)
 {
   int ret = OB_SUCCESS;
   int64_t *buf = NULL;
@@ -119,8 +112,6 @@ int ObPartitionMergeProgress::init(ObBasicTabletMergeCtx *ctx,
     concurrent_cnt_ = concurrent_cnt;
     ctx_ = ctx;
     merge_dag_ = merge_dag;
-    start_cg_idx_ = start_cg_idx;
-    end_cg_idx_ = end_cg_idx;
 
     if (OB_FAIL(inner_init_estimated_vals())) {
       LOG_WARN("failed to init estimated vals", K(ret), KPC(ctx));
@@ -170,10 +161,8 @@ int ObPartitionMergeProgress::estimate_sstables(
       // do nothing
     } else if (FALSE_IT(sstable = static_cast<const ObSSTable *>(table))) {
     } else {
-      if (sstable->is_major_sstable() && 0 == start_cg_idx_) {
-        /* the major sstable size has been accumulated in ObTenantCompactionProgressMgr::init_progress
-          * but for column store table:
-          * total data_size = (minor/mini + co_row_store_cg major) * batch execute dag number */
+      if (sstable->is_major_sstable()) {
+        // Major SSTable size is accumulated by ObTenantCompactionProgressMgr::init_progress.
       } else {
         estimated_total_size_ += sstable->get_occupy_size();
       }
@@ -362,7 +351,7 @@ int ObPartitionMajorMergeProgress::inner_update_progress_mgr(const int64_t total
   const int64_t scan_data_size_delta = (total_scanned_row_cnt - pre_scanned_row_cnt_) * avg_row_length_;
   const bool is_first_update = pre_scanned_row_cnt_ == 0;
 
-  if (OB_FAIL(MTL(ObTenantCompactionProgressMgr*)->update_progress(
+  if (OB_FAIL(share::g_mp->tenant_compaction_progress_mgr()->update_progress(
           ctx_->get_merge_version(),
           is_first_update ? estimated_total_size_ : 0,
           scan_data_size_delta,
@@ -376,19 +365,17 @@ int ObPartitionMajorMergeProgress::inner_update_progress_mgr(const int64_t total
 
 int ObPartitionMajorMergeProgress::finish_progress(
   const int64_t merge_version,
-  ObCompactionTimeGuard *time_guard,
-  const bool is_co_merge)
+  ObCompactionTimeGuard *time_guard)
 {
   int ret = OB_SUCCESS;
   estimated_finish_time_ = ObTimeUtility::fast_current_time();
-  if (OB_FAIL(MTL(ObTenantCompactionProgressMgr*)->update_progress(merge_version,
+  if (OB_FAIL(share::g_mp->tenant_compaction_progress_mgr()->update_progress(merge_version,
                                                                    0 == pre_scanned_row_cnt_ ? estimated_total_size_ : 0, // estimate_occupy_size_delta
                                                                    estimated_total_size_ - pre_scanned_row_cnt_ * avg_row_length_,// scanned_data_size_delta
                                                                    estimated_finish_time_,
                                                                    true/*finish_flag*/,
-                                                                   time_guard,
-                                                                   is_co_merge))) {
-    LOG_WARN("failed to update progress mgr", K(ret), K(merge_version), K(is_co_merge), KPC(this));
+                                                                   time_guard))) {
+    LOG_WARN("failed to update progress mgr", K(ret), K(merge_version), KPC(this));
   }
   return ret;
 }
@@ -405,67 +392,15 @@ int ObPartitionMajorMergeProgress::finish_merge_progress()
     LOG_WARN("ctx has unexpected type", K(ret), KPC_(ctx));
   } else if (FALSE_IT(ctx = static_cast<ObTabletMergeCtx *>(ctx_))) {
   } else if (OB_FAIL(finish_progress(ctx->get_merge_version(),
-                                     &ctx->info_collector_.time_guard_,
-                                     false/*is_co_merge*/))) {
+                                     &ctx->info_collector_.time_guard_))) {
     LOG_WARN("failed to update progress", K(ret), KPC(this));
-  } else if (OB_FAIL(MTL(ObTenantCompactionProgressMgr*)->update_compression_ratio(
+  } else if (OB_FAIL(share::g_mp->tenant_compaction_progress_mgr()->update_compression_ratio(
       ctx->get_merge_version(),
       ctx->get_merge_info().get_merge_history()))) {
     LOG_WARN("failed to update progress", K(ret));
   } else {
     LOG_DEBUG("finish() success to update progress", K(ret),
               "param", ctx->get_dag_param(), KPC(this));
-  }
-  return ret;
-}
-
-int ObCOMajorMergeProgress::finish_merge_progress()
-{
-  int ret = OB_SUCCESS;
-  if (IS_NOT_INIT) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("ObCOMajorMergeProgress not inited", K(ret));
-  } else if (OB_UNLIKELY(OB_ISNULL(merge_dag_) || typeid(*merge_dag_) != typeid(ObCOMergeBatchExeDag))) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("merge_dag has unexpected type", K(ret), KPC_(merge_dag));
-  } else if (OB_ISNULL(ctx_)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null ctx", K(ret), KPC_(ctx));
-  } else if (typeid(*ctx_) != typeid(ObCOTabletMergeCtx)) {
-    if (!GCTX.is_shared_storage_mode()) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("ctx has unexpected type", K(ret), KPC_(ctx));
-#ifdef OB_BUILD_SHARED_STORAGE
-    } else if (typeid(*ctx_) != typeid(ObCOTabletOutputMergeCtx)
-            && typeid(*ctx_) != typeid(ObCOTabletValidateMergeCtx)) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("ctx has unexpected type", K(ret), KPC_(ctx));
-#endif
-    }
-  }
-
-  if (OB_SUCC(ret)) {
-    ObCOMergeBatchExeDag *merge_dag = static_cast<ObCOMergeBatchExeDag*>(merge_dag_);
-    ObCOTabletMergeCtx *ctx = static_cast<ObCOTabletMergeCtx*>(ctx_);
-    if (OB_FAIL(finish_progress(ctx->get_merge_version(),
-                                &merge_dag->get_time_guard(),
-                                true/*co_merge*/))) {
-      LOG_WARN("failed to update progress", K(ret), KPC(this));
-    } else {
-      for (int64_t i = start_cg_idx_; OB_SUCC(ret) && i < end_cg_idx_; ++i) {
-        if (OB_UNLIKELY(OB_ISNULL(ctx->cg_merge_info_array_) || OB_ISNULL(ctx->cg_merge_info_array_[i]))) {
-          ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("merge_info is unexpected null", K(ret), KPC(ctx));
-        } else if (OB_FAIL(MTL(ObTenantCompactionProgressMgr*)->update_compression_ratio(
-          ctx->get_merge_version(),
-          ctx->cg_merge_info_array_[i]->get_merge_history()))) {
-          LOG_WARN("failed to update progress", K(ret));
-        }
-      }
-    }
-  }
-  if (OB_SUCC(ret)) {
-    LOG_INFO("finish merge progress", "param", ctx_->static_param_, KPC(this));
   }
   return ret;
 }

@@ -43,7 +43,7 @@ int ObExprAnd::calc_result_typeN(ObExprResType &type,
     for (int64_t i = 0; OB_SUCC(ret) && i < param_num; i++) {
       if (types_stack[i].is_ext()) {
         ret = OB_ERR_EXPRESSION_WRONG_TYPE;
-        LOG_WARN("PLS-00382: expression is of wrong type", K(ret), K(types_stack[i].get_type()));
+        LOG_WARN("expression is of wrong type", K(ret), K(types_stack[i].get_type()));
       }
     }
   }

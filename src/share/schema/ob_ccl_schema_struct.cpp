@@ -39,7 +39,7 @@ ObSimpleCCLRuleSchema &ObSimpleCCLRuleSchema::operator=(const ObSimpleCCLRuleSch
     reset();
     int ret = OB_SUCCESS;
     error_ret_ = other.error_ret_;
-    tenant_id_ = other.tenant_id_;
+    
     ccl_rule_id_ = other.ccl_rule_id_;
     schema_version_ = other.schema_version_;
 
@@ -69,7 +69,7 @@ int ObSimpleCCLRuleSchema::assign(const ObSimpleCCLRuleSchema &other) {
 
 bool ObSimpleCCLRuleSchema::is_valid() const {
   bool ret = true;
-  if (!ObSchema::is_valid() || !is_valid_tenant_id(tenant_id_) ||
+  if (!ObSchema::is_valid() ||
       ccl_rule_name_.empty()) {
     ret = false;
   }
@@ -77,7 +77,7 @@ bool ObSimpleCCLRuleSchema::is_valid() const {
 }
 
 void ObSimpleCCLRuleSchema::reset() {
-  tenant_id_ = OB_INVALID_ID;
+  
   ccl_rule_id_ = OB_INVALID_ID;
   ccl_rule_name_.reset();
   schema_version_ = OB_INVALID_VERSION;
@@ -93,7 +93,7 @@ int64_t ObSimpleCCLRuleSchema::get_convert_size() const {
   return convert_size;
 }
 
-OB_SERIALIZE_MEMBER(ObSimpleCCLRuleSchema, tenant_id_, ccl_rule_id_, ccl_rule_name_,
+OB_SERIALIZE_MEMBER(ObSimpleCCLRuleSchema, ccl_rule_id_, ccl_rule_name_,
                     schema_version_, affect_for_all_databases_,
                     affect_for_all_tables_, affect_dml_, name_case_mode_);
 

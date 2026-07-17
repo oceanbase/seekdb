@@ -3,7 +3,7 @@
 #owner group: sql1
 # tags: optimizer
 
-#bug:
+#bug: 
 
 --disable_query_log
 set @@session.explicit_defaults_for_timestamp=off;
@@ -25,3 +25,4 @@ select/*+ index(t1 u_idx)*/ c1 from t1 for update wait 1;
 --disable_warnings
 drop table t1;
 --enable_warnings
+

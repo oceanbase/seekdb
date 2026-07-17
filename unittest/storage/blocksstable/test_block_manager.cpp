@@ -42,6 +42,15 @@ static ObSimpleMemLimitGetter getter;
 
 namespace unittest
 {
+// Single-tenant seekdb: ObTenantBase module slots are gone; route the test's
+// ObTenantTmpFileManager through share::g_mp (ObIModuleProvider).
+class FakeModuleProvider : public share::ObIModuleProvider
+{
+public:
+  tmp_file::ObTenantTmpFileManager *tenant_tmp_file_manager() override { return tmp_file_mgr_; }
+  tmp_file::ObTenantTmpFileManager *tmp_file_mgr_ = nullptr;
+};
+
 class TestBlockManager : public blocksstable::TestDataFilePrepare
 {
 public:
@@ -151,7 +160,7 @@ TEST_F(TestBlockManager, test_mark_and_sweep)
 
   ASSERT_EQ(OB_SUCCESS, ObTimerService::get_instance().start());
 
-  static ObTenantBase tenant_ctx(OB_SYS_TENANT_ID);
+  static ObTenantBase tenant_ctx(OB_SERVER_TENANT_ID);
   ObTenantEnv::set_tenant(&tenant_ctx);
 
   ASSERT_EQ(OB_SUCCESS, tmp_file::ObTmpBlockCache::get_instance().init("tmp_block_cache"));
@@ -162,7 +171,9 @@ TEST_F(TestBlockManager, test_mark_and_sweep)
   EXPECT_EQ(OB_SUCCESS, tmp_file::ObTenantTmpFileManager::mtl_init(tf_mgr));
   tf_mgr->get_sn_file_manager().page_cache_controller_.write_buffer_pool_.default_wbp_memory_limit_ = 40*1024*1024;
   EXPECT_EQ(OB_SUCCESS, tf_mgr->start());
-  tenant_ctx.set(tf_mgr);
+  static FakeModuleProvider provider;
+  provider.tmp_file_mgr_ = tf_mgr;
+  share::g_mp = &provider;
   ObTenantEnv::set_tenant(&tenant_ctx);
   SERVER_STORAGE_META_SERVICE.is_started_ = true;
   ASSERT_EQ(0, OB_SERVER_BLOCK_MGR.block_map_.count());
@@ -185,7 +196,7 @@ TEST_F(TestBlockManager, test_mark_and_sweep)
   ASSERT_EQ(blk_cnt, OB_SERVER_BLOCK_MGR.block_map_.count());
 
   ObBlockManager::MacroBlkIdMap mark_info;
-  ret = mark_info.init(ObModIds::OB_STORAGE_FILE_BLOCK_REF, OB_SERVER_TENANT_ID);
+  ret = mark_info.init(ObModIds::OB_STORAGE_FILE_BLOCK_REF);
   ASSERT_EQ(OB_SUCCESS, ret);
 
   common::hash::ObHashSet<MacroBlockId, common::hash::NoPthreadDefendMode> macro_id_set;
@@ -249,7 +260,7 @@ TEST_F(TestBlockManager, test_mark_and_sweep_skip_mark)
   ASSERT_EQ(0, OB_SERVER_BLOCK_MGR.block_map_.count());
 
   ObBlockManager::MacroBlkIdMap mark_info;
-  ret = mark_info.init(ObModIds::OB_STORAGE_FILE_BLOCK_REF, OB_SERVER_TENANT_ID);
+  ret = mark_info.init(ObModIds::OB_STORAGE_FILE_BLOCK_REF);
   ASSERT_EQ(OB_SUCCESS, ret);
 
   common::hash::ObHashSet<MacroBlockId, common::hash::NoPthreadDefendMode> macro_id_set;

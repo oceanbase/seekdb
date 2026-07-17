@@ -15,6 +15,7 @@
  */
 
 #include <gtest/gtest.h>
+#include "lib/checksum/ob_crc64.h"
 
 #define private public
 #include "logservice/palf/palf_env_impl.h"
@@ -81,7 +82,6 @@ TEST_F(TestPalfThrottling, test_palf_options)
   wrapper.disk_opts_for_stopping_writing_.log_disk_usage_limit_size_ = total_disk_size;
   wrapper.disk_opts_for_stopping_writing_.log_disk_utilization_threshold_ = 80;
   wrapper.disk_opts_for_stopping_writing_.log_disk_utilization_limit_threshold_ = utilization_limit_threshold;
-  wrapper.disk_opts_for_stopping_writing_.log_writer_parallelism_ = 1;
   int64_t unrecyclable_size = 0;
   wrapper.set_cur_unrecyclable_log_disk_size(unrecyclable_size);
   ASSERT_EQ(false, wrapper.need_throttling());
@@ -410,4 +410,3 @@ int main(int argc, char **argv)
   ::testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();
 }
-

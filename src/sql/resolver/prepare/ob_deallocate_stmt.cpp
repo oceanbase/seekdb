@@ -15,7 +15,7 @@
  */
 
 #include "ob_deallocate_stmt.h"
-#include "deps/oblib/src/lib/container/ob_se_array.h"
+#include "lib/container/ob_se_array.h"
 
 using namespace oceanbase::common;
 using namespace oceanbase::sql;

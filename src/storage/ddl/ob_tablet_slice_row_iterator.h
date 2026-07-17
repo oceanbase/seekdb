@@ -82,3 +82,4 @@ public:
 }// namespace oceanbase
 
 #endif//_STORAGE_DDL_OB_TABLET_SLICE_ROW_ITERATOR_
+

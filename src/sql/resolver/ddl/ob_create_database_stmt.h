@@ -30,7 +30,6 @@ class ObCreateDatabaseStmt : public ObDDLStmt
     explicit ObCreateDatabaseStmt(common::ObIAllocator *name_pool);
     virtual ~ObCreateDatabaseStmt();
     void set_if_not_exists(bool if_not_exists);
-    void set_tenant_id(const uint64_t tenant_id);
     void set_database_id(const uint64_t database_id);
     int set_database_name(const common::ObString &database_name);
     void set_collation_type(const common::ObCollationType type);
@@ -40,9 +39,9 @@ class ObCreateDatabaseStmt : public ObDDLStmt
     const common::ObString &get_database_name() const;
     void set_read_only(const bool read_only);
     int set_default_tablegroup_name(const common::ObString &tablegroup_name);
-    obrpc::ObCreateDatabaseArg &get_create_database_arg();
+    obcall::ObCreateDatabaseArg &get_create_database_arg();
     virtual bool cause_implicit_commit() const { return true; }
-    virtual obrpc::ObDDLArg &get_ddl_arg() { return create_database_arg_; }
+    virtual obcall::ObDDLArg &get_ddl_arg() { return create_database_arg_; }
 
     TO_STRING_KV(K_(create_database_arg));
   private:
@@ -51,7 +50,7 @@ class ObCreateDatabaseStmt : public ObDDLStmt
     bool is_charset_specify_ __maybe_unused;
     bool is_collation_specify_ __maybe_unused;
     DISABLE_WARNING_GCC_POP
-    obrpc::ObCreateDatabaseArg create_database_arg_;
+    obcall::ObCreateDatabaseArg create_database_arg_;
   };
 }//namespace sql
 }//namespace oceanbase

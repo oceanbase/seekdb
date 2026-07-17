@@ -44,7 +44,7 @@ ObSqcCtx::ObSqcCtx(ObPxRpcInitSqcArgs &sqc_arg) : msg_loop_(),
       direct_load_mgr_handles_(nullptr),
       lob_direct_load_mgr_handles_(nullptr)
 {
-  arena_allocator_.set_attr(ObMemAttr(MTL_ID(),"DDL_DLM"));
+  arena_allocator_.set_attr(ObMemAttr("DDL_DLM"));
 }
 
 int ObSqcCtx::add_whole_msg_provider(uint64_t op_id, dtl::ObDtlMsgType msg_type, ObPxDatahubDataProvider &provider)

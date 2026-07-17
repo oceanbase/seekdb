@@ -23,7 +23,7 @@
 #include "lib/utility/ob_print_utils.h"
 #include "lib/list/ob_dlist.h"
 #include "common/row/ob_row.h"
-#include "share/datum/ob_datum.h"
+#include "common/datum/ob_datum.h"
 #include "sql/engine/expr/ob_expr.h"
 #include "sql/engine/basic/ob_sql_mem_callback.h"
 
@@ -346,7 +346,6 @@ public:
   virtual ~ObRADatumStore() { reset(); }
 
   int init(int64_t mem_limit,
-           uint64_t tenant_id,
            int64_t mem_ctx_id = common::ObCtxIds::DEFAULT_CTX_ID,
            const char *label = common::ObModIds::OB_SQL_ROW_STORE,
            uint32_t row_extend_size = 0);
@@ -381,7 +380,7 @@ public:
   // save_row_cnt_ is 0 means that there is no block switching and only one block in store.
   inline bool is_empty_save_row_cnt() const { return 0 == save_row_cnt_; }
 
-  void set_tenant_id(const uint64_t tenant_id) { tenant_id_ = tenant_id; }
+  
   void set_mem_ctx_id(const int64_t ctx_id) { ctx_id_ = ctx_id; }
   void set_mem_limit(const int64_t limit) { mem_limit_ = limit; }
 
@@ -397,7 +396,7 @@ public:
   void set_allocator(common::ObIAllocator &alloc) { allocator_ = &alloc; }
   void set_dir_id(int64_t dir_id) { dir_id_ = dir_id; }
 
-  TO_STRING_KV(K_(tenant_id), K_(label), K_(ctx_id),  K_(mem_limit), K_(mem_hold),
+  TO_STRING_KV(K_(label), K_(ctx_id),  K_(mem_limit), K_(mem_hold),
       K_(save_row_cnt), K_(row_cnt), K_(fd), K_(file_size), K(blk_mem_list_.get_size()));
 
 private:
@@ -436,7 +435,6 @@ private:
   inline bool has_index_block() const { return nullptr != idx_blk_; }
 private:
   bool inited_;
-  uint64_t tenant_id_;
   const char *label_;
   int64_t ctx_id_;
   int64_t mem_limit_;

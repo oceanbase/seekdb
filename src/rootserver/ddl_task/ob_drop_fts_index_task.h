@@ -42,7 +42,6 @@ public:
   virtual ~ObDropFTSIndexTask();
 
   int init(
-      const uint64_t tenant_id,
       const int64_t task_id,
       const uint64_t data_table_id,
       const share::ObDDLType ddl_type,
@@ -52,7 +51,6 @@ public:
       const ObFTSDDLChildTaskInfo &fts_doc_word,
       const ObString &ddl_stmt_str,
       const int64_t schema_version,
-      const int64_t consumer_group_id,
       const int64_t target_object_id);
   int init(const ObDDLTaskRecord &task_record);
   virtual int process() override;
@@ -61,7 +59,6 @@ public:
       const int64_t buf_size,
       int64_t &pos) const override;
   virtual int deserialize_params_from_message(
-      const uint64_t tenant_id,
       const char *buf,
       const int64_t buf_size,
       int64_t &pos) override;
@@ -78,9 +75,7 @@ private:
   int check_switch_succ();
   int prepare(const share::ObDDLTaskStatus &status);
   int check_and_wait_finish(const share::ObDDLTaskStatus &status);
-  int check_drop_index_finish(
-      const uint64_t tenant_id,
-      const int64_t task_id,
+  int check_drop_index_finish(const int64_t task_id,
       const int64_t table_id,
       bool &has_finished);
   int wait_drop_child_task_finish(
@@ -115,7 +110,7 @@ private:
   ObFTSDDLChildTaskInfo fts_doc_word_;
   bool drop_domain_index_finish_;
   bool drop_doc_word_index_finish_;
-  bool drop_doc_rowkey_index_finish_;
+  bool drop_doc_rowkey_index_finish_; 
   bool drop_rowkey_doc_index_finish_;
 };
 

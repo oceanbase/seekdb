@@ -26,10 +26,10 @@
 #include <setjmp.h>
 #ifdef SQL_PARSER_COMPILATION
 #include "ob_sql_mode.h"
-#include "ob_item_type.h"
+#include "sql/parser/ob_item_type.h"
 #else
 #include "common/sql_mode/ob_sql_mode.h"
-#include "objit/common/ob_item_type.h"
+#include "sql/parser/ob_item_type.h"
 #endif
 
 #ifdef __cplusplus
@@ -80,10 +80,10 @@ enum GrantParseOffset
 
 enum GrantParseSysOffset
 {
-  PARSE_GRANT_SYS_PRIV_ORACLE_LIST,
-  PARSE_GRANT_SYS_PRIV_ORACLE_GRANTEE,
-  PARSE_GRANT_SYS_PRIV_ORACLE_OPT_WITH,
-  PARSE_GRANT_SYS_PRIV_ORACLE_MAX_IDX
+  PARSE_GRANT_SYS_PRIV_LIST,
+  PARSE_GRANT_SYS_PRIV_GRANTEE,
+  PARSE_GRANT_SYS_PRIV_OPT_WITH,
+  PARSE_GRANT_SYS_PRIV_MAX_IDX
 };
 
 enum ParseMode
@@ -136,13 +136,13 @@ typedef struct _ParseNode
       uint32_t is_neg_ : 1;// Record whether the parent node of the constant node is a T_OP_NEG node, 1 indicates yes, 0 indicates no
       uint32_t is_hidden_const_ : 1; // 1 indicates that a certain constant can be recognized by normal parse but not by fast parse, 0 indicates that both can recognize it.
       uint32_t is_tree_not_param_ :1; //1 indicates that the node and its sub-nodes cannot be parameterized, 0 indicates no such restriction
-      uint32_t length_semantics_  :2; //2 for oracle [char|varbinary] (n b [bytes|char])
+      uint32_t length_semantics_  :2; // length semantics for char/varbinary declarations
       uint32_t is_val_paramed_item_idx_ :1; // Are the values of T_PROJECT_STRING indices in the select_item_param_infos array?
       uint32_t is_copy_raw_text_ : 1; // Whether to refill the raw_text_ of constant nodes, used for parameterization of constant parameters in select items
       uint32_t is_column_varchar_ : 1; // Is the projection column a constant string, used for select item constant parameterization
       uint32_t is_trans_from_minus_: 1; // Whether the negative constant node is transformed from a minus operation, e.g., 1 - 2, the lexical stage will generate a -2
       uint32_t is_assigned_from_child_: 1; // Is the constant node assigned from a child node, used for handling int64_min
-      uint32_t is_num_must_be_pos_: 1; //
+      uint32_t is_num_must_be_pos_: 1; // 
       uint32_t is_date_unit_ : 1; // 1 indicates it is a date unit constant, which needs to be reversed to a string during reverse parsing
       uint32_t is_literal_bool_ : 1; // indicate node is a literal TRUE/FALSE
       uint32_t is_empty_ : 1; // indicates whether the node is default, 1 means default, 0 means not default, used in opt_asc_desc node
@@ -300,7 +300,7 @@ typedef struct
   ObQuestionMarkCtx question_mark_ctx_;
   ObSQLMode sql_mode_;
   const struct ObCharsetInfo *charset_info_; //client charset
-  const struct ObCharsetInfo *charset_info_oracle_db_; //oracle DB charset
+  const struct ObCharsetInfo *charset_info_nls_db_; // NLS collation charset for identifier validation
   ParamList *param_nodes_;
   ParamList *tail_param_node_;
   struct {
@@ -326,7 +326,6 @@ typedef struct
     uint32_t is_external_table_                : 1;
     uint32_t is_returning_                     : 1;
     uint32_t is_into_cluster_                  : 1;
-    uint32_t is_oracle_compat_groupby_         : 1; // true if has rollup/cube/grouping sets in mysql mode
   };
 
   ParseNode *result_tree_;

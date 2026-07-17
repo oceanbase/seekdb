@@ -1185,98 +1185,28 @@ public:
       }
     }
 
-    // oracle
-    out << "======== ORACLE ========\n";
+    // number range
+    out << "======== NUMBER ========\n";
     for (int16_t precision = OB_MIN_NUMBER_PRECISION; precision <= OB_MAX_NUMBER_PRECISION; precision++) {
       for (int16_t scale = number::ObNumber::MIN_SCALE; scale <= number::ObNumber::MAX_SCALE; scale++) {
-        int16_t delta_scale = ObDecimalIntConstValue::oracle_delta_scale(scale);
+        int16_t delta_scale = ObDecimalIntConstValue::scale_offset(scale);
         const ObDecimalInt *decint = ObDecimalIntConstValue::get_min_value(precision);
         int32_t int_bytes = ObDecimalIntConstValue::get_int_bytes_by_precision(precision);
-        // oracle_min
+        // number_min
         ret = wide::to_string(decint, int_bytes, scale, buf, sizeof(buf), length);
         ASSERT_EQ(ret, 0);
-        out << "ORACLE_MIN (" << precision << ", " << scale << "): " << std::string(buf, length) << '\n';
+        out << "NUMBER_MIN (" << precision << ", " << scale << "): " << std::string(buf, length) << '\n';
         length = 0;
 
-        // oracle_max
+        // number_max
         decint = ObDecimalIntConstValue::get_max_value(precision);
         ret = wide::to_string(decint, int_bytes, scale, buf, sizeof(buf), length);
         ASSERT_EQ(ret, 0);
-        out << "ORACLE_MAX (" << precision << ", " << scale << "): " << std::string(buf, length) << '\n';
+        out << "NUMBER_MAX (" << precision << ", " << scale << "): " << std::string(buf, length) << '\n';
         length = 0;
       } // for end
     } // for end
     ASSERT_TRUE(is_equal_content("decimalint_const_val.out", "nmb_const_value.result"));
-  }
-
-  void test_oracle_to_string()
-  {
-    // TODO enrich test cases
-    const int128_t v0{3136633892082024446ULL,
-                      5421010862427522ULL}; // 99999999999999999999999999999999998
-    const int128_t v1{12919594847110692862ULL,
-                      54210108624275221ULL}; // 999999999999999999999999999999999998
-    const int256_t v2{4870020673419870206ULL,
-                      16114848830623546549ULL,
-                      293ULL,
-                      0}; // 99999999999999999999999999999999999999998
-    const ObDecimalInt *decint0 = reinterpret_cast<const ObDecimalInt *>(&v0);
-    int32_t int_bytes0 = sizeof(int128_t);
-    int16_t scale0 = 44;
-    const ObDecimalInt *decint1 = reinterpret_cast<const ObDecimalInt *>(&v1);
-    int32_t int_bytes1 = sizeof(int128_t);
-    int16_t scale1 = 45;
-    const ObDecimalInt *decint2 = reinterpret_cast<const ObDecimalInt *>(&v2);
-    int32_t int_bytes2 = sizeof(int256_t);
-    int16_t scale2 = 0;
-    int16_t scale3 = 2;
-    char buf[256] = {0};
-    int64_t length = 0;
-    lib::set_compat_mode(lib::Worker::CompatMode::ORACLE);
-    int ret = wide::to_string(decint0, int_bytes0, scale0, buf, sizeof(buf), length, true);
-    ASSERT_EQ(ret, 0);
-    ASSERT_EQ(std::string(buf, length), "9.9999999999999999999999999999999998E-10");
-    length = 0;
-    ret = wide::to_string(decint1, int_bytes1, scale1, buf, sizeof(buf), length, true);
-    ASSERT_EQ(ret, 0);
-    ASSERT_EQ(std::string(buf, length), "1.00000000000000000000000000000000000E-9");
-    length = 0;
-    ret = wide::to_string(decint2, int_bytes2, scale2, buf, sizeof(buf), length, true);
-    ASSERT_EQ(ret, 0);
-    ASSERT_EQ(std::string(buf, length), "1.0000000000000000000000000000000000E+41");
-    length = 0;
-    ret = wide::to_string(decint2, int_bytes2, scale3, buf, sizeof(buf), length, true);
-    ASSERT_EQ(ret, 0);
-    ASSERT_EQ(std::string(buf, length), "1.0000000000000000000000000000000000E+39");
-    length = 0;
-
-    ObDecimalInt *parsed_decint = nullptr;
-    int32_t parsed_int_bytes = 0;
-    MockAllocator mock_alloc;
-    std::string parse_str0("-.00012345");
-    std::string parse_str1("-1.2345e-3");
-    std::string parse_str2("1.2345e+18");
-    int32_t expected_neg_val = -12345;
-    int32_t expected_pos_val = 12345;
-    int16_t parsed_scale = 0, parsed_precision = 0;
-    ret = wide::from_string(parse_str0.c_str(), parse_str0.size(), mock_alloc, parsed_scale,
-                            parsed_precision, parsed_int_bytes, parsed_decint);
-    ASSERT_EQ(ret, 0);
-    ASSERT_EQ(parsed_int_bytes, 4);
-    ASSERT_EQ(parsed_scale, 8);
-    ASSERT_EQ(*(parsed_decint->int32_v_), expected_neg_val);
-
-    ret = wide::from_string(parse_str1.c_str(), parse_str1.size(), mock_alloc, parsed_scale, parsed_precision, parsed_int_bytes, parsed_decint);
-    ASSERT_EQ(ret, 0);
-    ASSERT_EQ(parsed_int_bytes, 4);
-    ASSERT_EQ(parsed_scale, 7);
-    ASSERT_EQ(*(parsed_decint->int32_v_), expected_neg_val);
-
-    ret = wide::from_string(parse_str2.c_str(), parse_str2.size(), mock_alloc, parsed_scale, parsed_precision, parsed_int_bytes, parsed_decint);
-    ASSERT_EQ(ret, 0);
-    ASSERT_EQ(parsed_int_bytes, 4);
-    ASSERT_EQ(parsed_scale, -14);
-    ASSERT_EQ(*(parsed_decint->int32_v_), expected_pos_val);
   }
 };
 
@@ -1370,7 +1300,6 @@ TEST(TestWideInteger, ALL) {
 #endif
   test.op_from_number();
   test.test_const_value();
-  test.test_oracle_to_string();
   test_small_decint_to_nmb();
 }
 

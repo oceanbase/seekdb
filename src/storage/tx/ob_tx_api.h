@@ -167,29 +167,6 @@ int get_read_snapshot(ObTxDesc &tx,
                       const int64_t expire_ts,
                       ObTxReadSnapshot &snapshot);
 
-/**
- * get_ls_read_snapshot - get a read snapshot which can be used to read
- *                        a consistency view of current state of data
- *                        of the specified local LogStream
- *
- * @tx:                   the tx in which snapshot stationed
- * @isolation_level:      the Isolation Level setting
- * @local_ls_id:          the local LogStream's id
- * @expire_ts:            microseconds of timestamp after which acquire
- *                        action timeout
- * @snapshot:             the snapshot acquired
- *
- * Return:
- * OB_SUCCESS    - OK
- * OB_NOT_MASTER - if local replica of @local_ls_id not leader
- * OB_TIMEOUT    - if expire_ts hit
- */
-int get_ls_read_snapshot(ObTxDesc &tx,
-                         const ObTxIsolationLevel isolation_level,
-                         const share::ObLSID &local_ls_id,
-                         const int64_t expire_ts,
-                         ObTxReadSnapshot &snapshot);
-
 // ------------------------------------------------------------------
 //  get snapshot version for out of transaction read special case
 // ------------------------------------------------------------------
@@ -210,24 +187,6 @@ int get_ls_read_snapshot(ObTxDesc &tx,
  */
 int get_read_snapshot_version(const int64_t expire_ts,
                               share::SCN &snapshot_version);
-
-/**
- * get_ls_read_snapshot_version - get a read snapshot of specified
- *                                local LogStream
- *
- * the snasphot can be used to read a consistency view of the state
- * of specified log stream
- *
- * @local_ls_id:                  the local LogStream's id
- * @expire_ts:                    microseconds of timestamp after
- *                                which acquire action timeout
- * @snapshot_version:             the snapshot acquired
- *
- * Return:
- * OB_SUCCESS    - OK
- * OB_NOT_MASTER - if local replica of @local_ls_id not leader
- * OB_TIMEOUT    - if expire_ts hit
- */
 /**
  * get_weak_read_snapshot_version - get snapshot version for weak read
  *
@@ -239,7 +198,6 @@ int get_read_snapshot_version(const int64_t expire_ts,
  * OB_REPLICA_NOT_READABLE - snapshot is too stale
  */
 int get_weak_read_snapshot_version(const int64_t max_read_stale_time,
-                                   const bool local_single_ls,
                                    share::SCN &snapshot_version);
 /**
  * refresh_read_snapshot_tx_state - update snapshot's tx state part
@@ -397,19 +355,19 @@ int create_explicit_savepoint(ObTxDesc &tx,
  * @tx:                             the target transaction's descriptor
  * @savepoint:                      the target savepoint
  * @expire_ts:                      microseconds after which timeouted
- * @extra_touched_ls:               indicate the LogStreams which may
- *                                  touched by this transaction after
- *                                  the savepoint but not sensed by this
- *                                  transaction for some reason
- *                                  (eg. network partition, OutOfMemory)
+	 * @touched_storage:                indicate storage may be touched by this
+	 *                                  transaction after the savepoint but not
+	 *                                  sensed by this transaction for some
+	 *                                  reason (eg. network partition,
+	 *                                  OutOfMemory)
  * @clean_policy:                   control how to process when transaction
  *                                  is wholly rollbacked, default is FAST_ROLLBACK
  *
  * When transaction wholly rollbacked, there are three policy:
- * - FAST_ROLLBACK: only rollback transaction, the participants maybe in dirty
+ * - FAST_ROLLBACK: only rollback transaction, the write state may be dirty
  *                  state if the rollback msg has not been received successfully
- * - KEEP:          do not rollback transaction, but rollback write-set on participants
- * - ROLLBACK:      clean write-set on participants and rollback transaction
+ * - KEEP:          do not rollback transaction, but rollback write-set on write state
+ * - ROLLBACK:      clean write-set on write state and rollback transaction
  *
  * Return:
  * OB_SUCCESS             - OK
@@ -418,11 +376,11 @@ int create_explicit_savepoint(ObTxDesc &tx,
  * OB_TRANS_NEED_ROLLBACK - transaction internal error, need user explicit
  *                          rollback
  */
-int rollback_to_implicit_savepoint(ObTxDesc &tx,
-                                   const ObTxSEQ savepoint,
-                                   const int64_t expire_ts,
-                                   const share::ObLSArray *extra_touched_ls,
-                                   const ObTxCleanPolicy = ObTxCleanPolicy::FAST_ROLLBACK);
+	int rollback_to_implicit_savepoint(ObTxDesc &tx,
+	                                   const ObTxSEQ savepoint,
+	                                   const int64_t expire_ts,
+	                                   const bool touched_storage,
+	                                   const ObTxCleanPolicy = ObTxCleanPolicy::FAST_ROLLBACK);
 
 /**
  * rollback_to_explicit_savepoint - rollback to a explicit savepoint
@@ -508,7 +466,7 @@ int create_stash_savepoint(ObTxDesc &tx, const ObString &name);
 int stash_pop_savepoints(ObTxDesc &tx, ObString &name);
 
 // ------------------------------------------------------------------
-// distributed transaction execution participant info collection
+// transaction write state info collection
 // ------------------------------------------------------------------
 
 /**
@@ -539,7 +497,7 @@ int merge_tx_state(ObTxDesc &to, const ObTxDesc &from);
 int get_tx_exec_result(ObTxDesc &tx, ObTxExecResult &exec_info);
 
 /**
- * add_tx_exec_result - report touched participant to transaction mananger
+ * add_tx_exec_result - report touched write state to transaction mananger
  *
  *
  * used in PX:
@@ -560,7 +518,7 @@ int get_tx_exec_result(ObTxDesc &tx, ObTxExecResult &exec_info);
  *    txs.add_tx_exec_result(session.tx_desc_, remoteResult.tx_exec_info)
  *
  * @tx:                the transaction descriptor
- * @exec_info:         the transaction participants information,
+ * @exec_info:         the transaction write state information,
  *                     generated by transaction manager during access
  *                     transactional storage, and gathered by calling:
  *                       get_tx_exec_result(tx, exec_info)

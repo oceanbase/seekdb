@@ -39,7 +39,6 @@ typedef common::ObBitSet<common::OB_DEFAULT_BITSET_SIZE_FOR_BASE_COLUMN> ObExprV
 class ObLoadEscapeSM {
 public:
   static const int64_t ESCAPE_CHAR_MYSQL = static_cast<int64_t>('\\');
-  static const int64_t ESCAPE_CHAR_ORACLE = static_cast<int64_t>('\'');
   ObLoadEscapeSM()
     : is_escaped_flag_(false), escape_char_(INT64_MAX), escaped_char_count(0) {}
   OB_INLINE void shift_by_input(char c)
@@ -303,7 +302,6 @@ struct ObLoadDataStat
 {
   ObLoadDataStat() : allocator_(ObModIds::OB_SQL_LOAD_DATA), 
                      ref_cnt_(0),
-                     tenant_id_(0),
                      job_id_(0),
                      job_type_("normal"),
                      table_name_(),
@@ -339,7 +337,7 @@ struct ObLoadDataStat
 
   common::ObArenaAllocator allocator_;
   volatile int64_t ref_cnt_;
-  int64_t tenant_id_;
+  
   int64_t job_id_;
   common::ObString job_type_; // normal / direct
   common::ObString table_name_;
@@ -405,7 +403,7 @@ struct ObLoadDataStat
   } store_;
   char message_[common::MAX_LOAD_DATA_MESSAGE_LENGTH]; 
 
-  TO_STRING_KV(K(tenant_id_), K(job_id_), K(job_type_),
+  TO_STRING_KV(K(job_id_), K(job_type_),
       K(table_name_), K(file_path_), K(table_column_), K(file_column_),
       K(batch_size_), K(parallel_), K(load_mode_),
       K(start_time_), K(estimated_remaining_time_),

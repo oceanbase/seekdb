@@ -47,11 +47,6 @@ private:
                                       ObEvalCtx &ctx,
                                       const ObBitVector &skip,
                                       const EvalBound &bound);
-  template <typename ArgVec, typename ResVec>
-  static int calc_oracle_length_vector_dispatch(const ObExpr &expr,
-                                      ObEvalCtx &ctx,
-                                      const ObBitVector &skip,
-                                      const EvalBound &bound);
   DISALLOW_COPY_AND_ASSIGN(ObExprLength);
 };
 }

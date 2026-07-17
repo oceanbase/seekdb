@@ -33,7 +33,6 @@ void ObVirtualChannelInfo::get_info(ObDtlChannel* dtl_ch)
   is_transmit_ = ch->belong_to_transmit_data();
   channel_id_ = ch->get_id();
   peer_id_ = ch->get_peer_id();;
-  tenant_id_ = ch->get_tenant_id();
   alloc_buffer_cnt_ = ch->get_alloc_buffer_cnt();
   free_buffer_cnt_ = ch->get_free_buffer_cnt();
   send_buffer_cnt_ = ch->get_send_buffer_cnt();

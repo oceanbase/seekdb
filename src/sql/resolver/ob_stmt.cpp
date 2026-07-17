@@ -93,7 +93,7 @@ int ObStmt::get_first_stmt(common::ObString &first_stmt)
   ObArenaAllocator allocator(ObModIds::OB_SQL_PARSER);
   ObSEArray<ObString, 1> queries;
   ObMPParseStat parse_stat;
-  ObParser parser(allocator, DEFAULT_OCEANBASE_MODE);
+  ObParser parser(allocator, DEFAULT_MYSQL_MODE);
   if (OB_ISNULL(query_ctx_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("query ctx is null", K(ret));

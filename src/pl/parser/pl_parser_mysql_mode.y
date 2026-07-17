@@ -1,4 +1,4 @@
-/*
+/* 
  * Copyright (c) 2025 OceanBase.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -128,7 +128,7 @@ int obpl_mysql_wrap_node_into_subquery(ObParseCtx *_parse_ctx, ParseNode *node) 
       parse_result.is_for_trigger_ = (1 == _parse_ctx->is_for_trigger_);
       parse_result.question_mark_ctx_ = _parse_ctx->question_mark_ctx_;
       parse_result.charset_info_ = _parse_ctx->charset_info_;
-      parse_result.charset_info_oracle_db_ = _parse_ctx->charset_info_oracle_db_;
+      parse_result.charset_info_nls_db_ = _parse_ctx->charset_info_nls_db_;
       parse_result.is_not_utf8_connection_ = _parse_ctx->is_not_utf8_connection_;
       parse_result.connection_collation_ = _parse_ctx->connection_collation_;
       parse_result.sql_mode_ = _parse_ctx->scanner_ctx_.sql_mode_;
@@ -247,7 +247,7 @@ void obpl_mysql_wrap_get_user_var_into_subquery(ObParseCtx *parse_ctx, ParseNode
 %type <node> create_procedure_stmt sp_proc_stmt expr expr_list procedure_body default_expr
 %type <node> create_function_stmt function_body
 %type <node> drop_procedure_stmt drop_function_stmt
-%type <node> alter_procedure_stmt alter_function_stmt opt_sp_alter_chistics sp_compile_clause
+%type <node> alter_procedure_stmt alter_function_stmt opt_sp_alter_chistics
 %type <node> sp_unlabeled_block
 %type <node> sp_block_content opt_sp_decls sp_proc_stmts sp_decl sp_decls
 %type <node> sp_labeled_block label_ident opt_sp_label
@@ -260,7 +260,7 @@ void obpl_mysql_wrap_get_user_var_into_subquery(ObParseCtx *parse_ctx, ParseNode
 %type <node> sp_param sp_fparam sp_alter_chistics
 %type <node> opt_sp_definer sp_create_chistics sp_create_chistic sp_chistic opt_parentheses user opt_host_name
 %type <node> param_type sp_cparams opt_sp_cparam_list cexpr sp_cparam opt_sp_cparam_with_assign
-%type <ival> opt_sp_inout opt_if_exists opt_if_not_exists opt_reuse_settings
+%type <ival> opt_sp_inout opt_if_exists opt_if_not_exists
 %type <node> call_sp_stmt do_sp_stmt
 %type <node> sp_cond sp_hcond_list sp_hcond
 %type <node> sp_unlabeled_control sp_labeled_control
@@ -1551,26 +1551,12 @@ alter_function_stmt:
     }
 ;
 
-sp_compile_clause:
-    COMPILE opt_reuse_settings
-    {
-      malloc_non_terminal_node($$, parse_ctx->mem_pool_, T_SP_COMPILE_CLAUSE, 1, NULL);
-      $$->int32_values_[1] = $2;
-    }
-;
-
-opt_reuse_settings:
-      /*EMPTY*/        { $$ = 0; }
-    | REUSE SETTINGS   { $$ = 1; }
-;
-
 opt_sp_alter_chistics:
     /* empty */ { $$ = NULL; }
   | sp_alter_chistics
     {
       merge_nodes($$, parse_ctx->mem_pool_, T_SP_CLAUSE_LIST, $1);
     }
-  | sp_compile_clause { $$ = $1; }
 ;
 
 sp_alter_chistics:
@@ -1859,7 +1845,7 @@ sp_decl:
       $5->str_value_ = parse_strndup(stmt_str, str_len, parse_ctx->mem_pool_);
       check_ptr($5->str_value_);
       $5->str_len_ = str_len;
-      malloc_non_terminal_node($$, parse_ctx->mem_pool_, T_SP_DECL_CURSOR, 4, $2, NULL, NULL, $5); //4参数和Oracle模式保持一致
+      malloc_non_terminal_node($$, parse_ctx->mem_pool_, T_SP_DECL_CURSOR, 4, $2, NULL, NULL, $5); // keep four-argument cursor layout
       copy_node_abs_location($$->stmt_loc_, @1);
     }
 ;
@@ -1907,7 +1893,7 @@ sqlstate:
 sp_proc_stmt_open:
     OPEN ident
     {
-      malloc_non_terminal_node($$, parse_ctx->mem_pool_, T_SP_PROC_OPEN, 3, $2, NULL, NULL, NULL); //4参数和Oracle模式保持一致
+      malloc_non_terminal_node($$, parse_ctx->mem_pool_, T_SP_PROC_OPEN, 3, $2, NULL, NULL, NULL); // keep cursor open placeholders
     }
 ;
 
@@ -3319,7 +3305,7 @@ ParseNode *obpl_mysql_read_sql_construct(ObParseCtx *parse_ctx, const char *pref
     //将pl_parser的question_mark_size赋值给sql_parser，使得parser sql的question mark能够接着pl_parser的index
     parse_result.question_mark_ctx_ = parse_ctx->question_mark_ctx_;
     parse_result.charset_info_ = parse_ctx->charset_info_;
-    parse_result.charset_info_oracle_db_ = parse_ctx->charset_info_oracle_db_;
+    parse_result.charset_info_nls_db_ = parse_ctx->charset_info_nls_db_;
     parse_result.is_not_utf8_connection_ = parse_ctx->is_not_utf8_connection_;
     parse_result.connection_collation_ = parse_ctx->connection_collation_;
     parse_result.sql_mode_ = parse_ctx->scanner_ctx_.sql_mode_;
@@ -3368,4 +3354,3 @@ void obpl_mysql_yyerror(YYLTYPE *yylloc, ObParseCtx *parse_ctx, char *s)
     }
   }
 }
-

@@ -44,7 +44,7 @@ private:
 struct RowStore
 {
 public:
-  RowStore(const int64_t tenant_id, ObIAllocator *store_alloc, ObIAllocator *arena_alloc, RowStores &store_set) :
+  RowStore(ObIAllocator *store_alloc, ObIAllocator *arena_alloc, RowStores &store_set) :
     store_set_(store_set),
     allocator_(arena_alloc),
     ra_rs_(store_alloc),

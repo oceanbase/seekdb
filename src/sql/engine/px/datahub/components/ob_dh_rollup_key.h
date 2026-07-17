@@ -94,9 +94,8 @@ public:
 class ObRollupKeyPieceMsgCtx : public ObPieceMsgCtx
 {
 public:
-  ObRollupKeyPieceMsgCtx(uint64_t op_id, int64_t task_cnt, int64_t timeout_ts, int64_t tenant_id)
-    : ObPieceMsgCtx(op_id, task_cnt, timeout_ts), received_(0),
-                    tenant_id_(tenant_id), whole_msg_(), received_msgs_() {}
+  ObRollupKeyPieceMsgCtx(uint64_t op_id, int64_t task_cnt, int64_t timeout_ts)
+    : ObPieceMsgCtx(op_id, task_cnt, timeout_ts), received_(0), whole_msg_(), received_msgs_() {}
   ~ObRollupKeyPieceMsgCtx() = default;
   virtual void destroy()
   {
@@ -116,7 +115,7 @@ public:
   static const int64_t FAR_GREATER_THAN_RATIO = 16;
 public:
   int64_t received_; // number of pieces already received
-  int64_t tenant_id_;
+  
   ObRollupKeyWholeMsg whole_msg_;
   ObSEArray<ObRollupKeyPieceMsg, 4> received_msgs_;
 private:

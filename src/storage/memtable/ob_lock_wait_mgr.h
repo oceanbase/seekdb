@@ -17,18 +17,17 @@
 #ifndef OCEANBASE_MEMTABLE_OB_LOCK_WAIT_MGR_H_
 #define OCEANBASE_MEMTABLE_OB_LOCK_WAIT_MGR_H_
 
-#include "lib/allocator/ob_mod_define.h"
+#include "lib/utility/ob_mod_define.h"
 #include "lib/allocator/ob_qsync.h"
 #include "lib/hash/ob_linear_hash_map.h"
 #include "lib/hash/ob_link_hashmap.h"
 #include "lib/oblog/ob_log_module.h"
-#include "lib/stat/ob_diagnose_info.h"
 #include "lib/utility/utility.h"
 #include "ob_memtable_key.h"
 #include "observer/ob_server_struct.h"
 #include "rpc/ob_lock_wait_node.h"
 #include "rpc/ob_request.h"
-#include "share/deadlock/ob_deadlock_detector_common_define.h"
+#include "storage/deadlock/ob_deadlock_detector_common_define.h"
 #include "share/ob_thread_pool.h"
 #include "sql/session/ob_sql_session_mgr.h"
 #include "storage/memtable/ob_memtable_context.h"
@@ -53,7 +52,7 @@ class RowHolderMapper {
 public:
   RowHolderMapper() = default;
   ~RowHolderMapper() { map_.destroy(); }
-  int init() { return map_.init("LockWaitMgr", MTL_ID()); }
+  int init() { return map_.init("LockWaitMgr"); }
   void set_hash_holder(const ObTabletID &tablet_id,
                        const memtable::ObMemtableKey &key,
                        const transaction::ObTransID &tx_id);
@@ -81,16 +80,13 @@ public:
     int ret = OB_SUCCESS;
     UserBinaryKey user_key;
     ObTransID trans_id;
-    ObAddr trans_scheduler;
     ObDependencyResource resource;
-    #define PRINT_WRAPPER KR(ret), K_(hash), K(trans_id), K(trans_scheduler)
+    #define PRINT_WRAPPER KR(ret), K_(hash), K(trans_id)
     if (OB_FAIL(mapper_.get_hash_holder(hash_, trans_id))) {
       DETECT_LOG(WARN, "get hash holder failed", PRINT_WRAPPER);
     } else if (OB_FAIL(user_key.set_user_key(trans_id))) {
       DETECT_LOG(WARN, "set user key failed", PRINT_WRAPPER);
-    } else if (OB_FAIL(ObTransDeadlockDetectorAdapter::get_conflict_trans_scheduler(trans_id, trans_scheduler))) {
-      DETECT_LOG(WARN, "get trans scheduler failed", PRINT_WRAPPER);
-    } else if (OB_FAIL(resource.set_args(trans_scheduler, user_key))) {
+    } else if (OB_FAIL(resource.set_args(GCTX.self_addr(), user_key))) {
       DETECT_LOG(WARN, "resource set args failed", PRINT_WRAPPER);
     } else if (OB_FAIL(resource_array.push_back(resource))) {
       DETECT_LOG(WARN, "fail to push resource to array", PRINT_WRAPPER);
@@ -244,7 +240,6 @@ public:
                 const uint32_t sess_id,
                 const transaction::ObTransID &tx_id,
                 const transaction::ObTransID &holder_tx_id,
-                const ObLSID &ls_id,
                 ObFunction<int(bool &, bool &)> &rechecker);
   int post_lock(const int tmp_ret,
                 const ObTabletID &tablet_id,
@@ -257,14 +252,12 @@ public:
                 const transaction::ObTransID &tx_id,
                 const transaction::ObTransID &holder_tx_id,
                 const transaction::tablelock::ObTableLockMode &lock_mode,
-                const ObLSID &ls_id,
                 ObFunction<int(bool &need_wait)> &check_need_wait);
-  // when removing the callbacks of uncommitted transaction, we need transfer
+  // when removing the callbacks of uncommitted transaction, we need move
   // the conflict dependency from rows to transactions
   int transform_row_lock_to_tx_lock(const ObTabletID &tablet_id,
                                     const Key &key,
-                                    const transaction::ObTransID &tx_id,
-                                    const ObAddr &tx_scheduler);
+                                    const transaction::ObTransID &tx_id);
   // wakeup the request waiting on the row
   void wakeup(const ObTabletID &tablet_id, const Key& key);
   // wakeup the request waiting on the transaction
@@ -316,12 +309,7 @@ private:
 
   bool is_hash_empty()
   {
-    bool is_empty = false;
-    {
-      CriticalGuard(get_qs());
-      is_empty = hash_.is_empty();
-    }
-    return is_empty;
+    return 0 == ATOMIC_LOAD(&total_wait_node_);
   }
 
   bool check_wakeup_seq(uint64_t hash, int64_t lock_seq, bool &standalone_task)

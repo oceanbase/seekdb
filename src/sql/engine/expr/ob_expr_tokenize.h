@@ -64,7 +64,7 @@ private:
 
     // check and reform parser properties to standard format
     int reform_parser_properties(const ObString &properties);
-    int try_load_dictionary_for_ik(const uint64_t tenant_id);
+    int try_load_dictionary_for_ik();
 
   public:
     // for property and tmp json string

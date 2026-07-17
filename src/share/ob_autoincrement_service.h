@@ -22,11 +22,9 @@
 #include "lib/hash/ob_hashmap.h"
 #include "lib/hash/ob_link_hashmap.h"
 #include "lib/allocator/ob_small_allocator.h"
-#include "lib/mysqlclient/ob_mysql_proxy.h"
+#include "common/mysqlclient/ob_mysql_proxy.h"
 #include "common/ob_timeout_ctx.h"
-#include "share/ob_srv_rpc_proxy.h"
 #include "share/ob_autoincrement_param.h"
-#include "share/ob_gais_client.h"
 #include "share/ob_i_global_autoincrement_service.h"
 #include "share/ob_rpc_struct.h"
 #include "share/schema/ob_multi_version_schema_service.h"
@@ -39,11 +37,8 @@ namespace schema
 {
 class ObTableSchema;
 }
-static const int64_t  TIME_SKEW = 100 * 1000;                 // 100ms, time skew
 static const int64_t  PRE_OP_TIMEOUT = 500 * 1000;            // 500ms, for prefetch or presync
-static const int64_t  SYNC_OP_TIMEOUT = 1000 * 1000;          // 1000ms, for first sync
 static const int      PRE_OP_THRESHOLD = 4;                   // for prefetch or presync
-static const int64_t  PARTITION_LOCATION_SET_BUCKET_NUM = 3;
 static const int64_t  FETCH_SEQ_NUM_ONCE = 1000;
 static const uint64_t AUTO_INC_DEFAULT_NB_MAX_BITS = 16;                                  // from MySQL
 static const uint64_t AUTO_INC_DEFAULT_NB_MAX = (1 << AUTO_INC_DEFAULT_NB_MAX_BITS) - 1;  // from MySQL
@@ -220,8 +215,7 @@ public:
 
   int get_autoinc_value(const AutoincKey &key, const int64_t &autoinc_version, uint64_t &seq_value, uint64_t &sync_value);
 
-  int get_autoinc_value_in_batch(const uint64_t tenant_id,
-                                 const common::ObIArray<AutoincKey> &keys,
+  int get_autoinc_value_in_batch(const common::ObIArray<AutoincKey> &keys,
                                  common::hash::ObHashMap<AutoincKey, uint64_t> &seq_values);
 
   int sync_autoinc_value(const AutoincKey &key,
@@ -273,7 +267,6 @@ public:
                                  uint64_t &sequence_value) override final;
 
   virtual int get_auto_increment_values(
-      const uint64_t tenant_id,
       const common::ObIArray<AutoincKey> &autoinc_keys,
       const common::ObIArray<int64_t> &autoinc_versions,
       common::hash::ObHashMap<AutoincKey, uint64_t> &seq_values) override final;
@@ -296,14 +289,11 @@ private:
   ObAutoIncInnerTableProxy inner_table_proxy_;
 };
 
-class ObRpcGlobalAutoIncrementService : public ObIGlobalAutoIncrementService
+class ObCallGlobalAutoIncrementService : public ObIGlobalAutoIncrementService
 {
 public:
-  ObRpcGlobalAutoIncrementService() : is_inited_(false), gais_request_rpc_proxy_(nullptr) {}
-  virtual ~ObRpcGlobalAutoIncrementService() = default;
-
-  int init(const common::ObAddr &addr,
-           rpc::frame::ObReqTransport *req_transport);
+  ObCallGlobalAutoIncrementService() = default;
+  virtual ~ObCallGlobalAutoIncrementService() = default;
 
   virtual int get_value(
       const AutoincKey &key,
@@ -323,7 +313,6 @@ public:
                                  uint64_t &sequence_value) override final;
 
   virtual int get_auto_increment_values(
-      const uint64_t tenant_id,
       const common::ObIArray<AutoincKey> &autoinc_keys,
       const common::ObIArray<int64_t> &autoinc_versions,
       common::hash::ObHashMap<AutoincKey, uint64_t> &seq_values) override final;
@@ -344,15 +333,9 @@ public:
                                            uint64_t &value) override final;
 
   int clear_global_autoinc_cache(const AutoincKey &key);
-  ObGAISRequestRpc *get_gais_request_rpc() { return &gais_request_rpc_; }
 
-  int get_sequence_next_value(const ObSequenceSchema &schema, ObSequenceValue &nextval);
+  int get_sequence_next_value(const schema::ObSequenceSchema &schema, ObSequenceValue &nextval);
 
-private:
-  bool is_inited_;
-  ObGAISClient gais_client_;
-  obrpc::ObGAISRpcProxy gais_request_rpc_proxy_;
-  ObGAISRequestRpc gais_request_rpc_;
 };
 
 class ObAutoincrementService
@@ -365,66 +348,46 @@ public:
   ObAutoincrementService();
   ~ObAutoincrementService();
   static ObAutoincrementService &get_instance();
-  int init(common::ObAddr &addr,
-           common::ObMySQLProxy *mysql_proxy,
-           obrpc::ObSrvRpcProxy *srv_proxy,
-           share::schema::ObMultiVersionSchemaService *schema_service,
-           rpc::frame::ObReqTransport *req_transport);
+  int init(common::ObMySQLProxy *mysql_proxy,
+           share::schema::ObMultiVersionSchemaService *schema_service);
   int get_handle(AutoincParam &param, CacheHandle *&handle);
-  int get_handle(const ObSequenceSchema &schema, ObSequenceValue &nextval);
+  int get_handle(const schema::ObSequenceSchema &schema, ObSequenceValue &nextval);
   void release_handle(CacheHandle *&handle);
 
   int sync_insert_value_global(AutoincParam &param);
 
   int sync_insert_value_local(AutoincParam &param);
 
-  int sync_auto_increment_all(const uint64_t tenant_id,
-                              const uint64_t table_id,
-                              const uint64_t column_id,
-                              const uint64_t sync_value);
-  // int sync_table_auto_increment(
-  //     uint64_t tenant_id,
-  //     AutoincKey &key,
-  //     uint64_t auto_increment);
-  int refresh_sync_value(const obrpc::ObAutoincSyncArg &arg);
+  int refresh_auto_increment_cache(const uint64_t table_id,
+                                   const uint64_t column_id,
+                                   const uint64_t sync_value);
+  int clear_autoinc_cache(const uint64_t table_id,
+                          const uint64_t column_id);
 
-  int clear_autoinc_cache_all(const uint64_t tenant_id,
-                              const uint64_t table_id,
-                              const uint64_t column_id,
-                              const bool autoinc_mode_is_order,
-                              const bool ignore_rpc_errors = true);
-  int clear_autoinc_cache(const obrpc::ObAutoincSyncArg &arg);
-
-  int get_sequence_value(const uint64_t tenant_id,
-                         const uint64_t table_id,
+  int get_sequence_value(const uint64_t table_id,
                          const uint64_t column_id,
                          const bool is_order,
                          const int64_t autoinc_version,
                          uint64_t &seq_value);
 
-  int get_sequence_values(const uint64_t tenant_id,
-                          const common::ObIArray<AutoincKey> &order_autokeys,
+  int get_sequence_values(const common::ObIArray<AutoincKey> &order_autokeys,
                           const common::ObIArray<AutoincKey> &noorder_autokeys,
                           const common::ObIArray<int64_t> &order_autoinc_versions,
                           const common::ObIArray<int64_t> &noorder_autoinc_versions,
                           common::hash::ObHashMap<AutoincKey, uint64_t> &seq_values);
-  int reinit_autoinc_row(const uint64_t &tenant_id,
-                         const uint64_t &table_id,
+  int reinit_autoinc_row(const uint64_t &table_id,
                          const uint64_t &column_id,
                          const int64_t &autoinc_version,
                          common::ObMySQLTransaction &trans);
-  int lock_autoinc_row(const uint64_t &tenant_id,
-                       const uint64_t &table_id,
+  int lock_autoinc_row(const uint64_t &table_id,
                        const uint64_t &column_id,
                        common::ObMySQLTransaction &trans);
-  int reset_autoinc_row(const uint64_t &tenant_id,
-                        const uint64_t &table_id,
+  int reset_autoinc_row(const uint64_t &table_id,
                         const uint64_t &column_id,
                         const int64_t &autoinc_version,
                         common::ObMySQLTransaction &trans);
   // for alter table autoinc to recognize old autoincrement value in inner table
-  int try_lock_autoinc_row(const uint64_t &tenant_id,
-                           const uint64_t &table_id,
+  int try_lock_autoinc_row(const uint64_t &table_id,
                            const uint64_t &column_id,
                            const int64_t &autoinc_version,
                            bool &need_update_inner_table,
@@ -444,8 +407,6 @@ public:
                              const uint64_t offset,
                              const uint64_t increment,
                              uint64_t &prev_value);
-  ObGAISRequestRpc* get_gais_request_rpc()
-  { return global_autoinc_service_.get_gais_request_rpc(); }
   static uint64_t get_max_value(const common::ObObjType type);
 
 private:
@@ -461,21 +422,15 @@ private:
   int fetch_table_node(const AutoincParam &param,
                        TableNode *table_node,
                        const bool fetch_prefetch = false);
-  int fetch_global_sync(const uint64_t tenant_id,
-                        const uint64_t table_id,
+  int fetch_global_sync(const uint64_t table_id,
                         const uint64_t column_id,
                         TableNode &table_node,
                         const bool sync_presync = false);
-  int get_server_set(const uint64_t tenant_id,
-                     const uint64_t table_id,
-                     common::hash::ObHashSet<common::ObAddr> &server_set,
-                     const bool get_follower = false);
-  int sync_value_to_other_servers(
-      AutoincParam &param,
-      uint64_t insert_value);
+  int refresh_sync_value_(const uint64_t table_id,
+                          const uint64_t column_id,
+                          const uint64_t sync_value);
 
   int try_periodic_refresh_global_sync_value(
-      uint64_t tenant_id,
       uint64_t table_id,
       uint64_t column_id,
       TableNode &table_node);
@@ -492,11 +447,9 @@ private:
 private:
   common::ObSmallAllocator node_allocator_;
   common::ObSmallAllocator handle_allocator_;
-  common::ObAddr           my_addr_;
   common::ObMySQLProxy     *mysql_proxy_;
-  obrpc::ObSrvRpcProxy     *srv_proxy_;
   share::schema::ObMultiVersionSchemaService *schema_service_;
-  ObRpcGlobalAutoIncrementService global_autoinc_service_;             // for order increment mode
+  ObCallGlobalAutoIncrementService global_autoinc_service_;             // for order increment mode
   ObInnerTableGlobalAutoIncrementService distributed_autoinc_service_; // for noorder increment mode
   lib::ObMutex             map_mutex_;
   //common::hash::ObHashMap<AutoincKey, TableNode*> node_map_;

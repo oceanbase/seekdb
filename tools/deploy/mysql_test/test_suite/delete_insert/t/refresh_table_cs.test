@@ -9,7 +9,6 @@ connect (syscon, $OBMYSQL_MS0,admin,$OBMYSQL_PWD,test,$OBMYSQL_PORT);
 connection syscon;
 set @@session.explicit_defaults_for_timestamp=off;
 set session ob_trx_timeout=100000000000;
-alter system set_tp tp_name = "EN_COMPACTION_DISABLE_ROW_COL_SWITCH", error_code = 4016, frequency = 1;
 set @@recyclebin = off;
 --enable_query_log
 
@@ -18,7 +17,7 @@ connection conn1;
 drop table if exists t1, t2;
 --enable_warnings
 
-create table t1(id int primary key auto_increment, a int DEFAULT NULL, b int DEFAULT NULL) merge_engine = delete_insert with column group(each column);
+create table t1(id int primary key auto_increment, a int DEFAULT NULL, b int DEFAULT NULL) merge_engine = delete_insert;
 
 --disable_query_log
 let $cnt = 1;
@@ -66,7 +65,6 @@ select * from t1 where a = 800;
 connection syscon;
 --error 0, 1210
 alter system set_tp tp_name = "ERRSIM_SET_NEED_REFRESH", error_code = 4016, frequency = 0;
-alter system set_tp tp_name = "EN_COMPACTION_DISABLE_ROW_COL_SWITCH", error_code = 4016, frequency = 0;
 set @@recyclebin = on;
 --enable_query_log
 

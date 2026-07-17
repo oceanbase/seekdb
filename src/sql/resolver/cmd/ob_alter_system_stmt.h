@@ -19,9 +19,8 @@
 
 #include "sql/resolver/cmd/ob_system_cmd_stmt.h"
 #include "share/ob_rpc_struct.h"
-#include "share/scheduler/ob_sys_task_stat.h"
-#include "share/backup/ob_backup_clean_struct.h"
-#include "share/table/ob_redis_importer.h"
+#include "observer/scheduler/ob_sys_task_stat.h"
+#include "sql/engine/cmd/ob_redis_importer.h"
 
 namespace oceanbase
 {
@@ -41,19 +40,15 @@ public:
       major_freeze_(false),
       freeze_all_flag_(0),
       opt_server_list_(),
-      opt_tenant_ids_(),
-      opt_tablet_id_(),
-      opt_ls_id_(share::ObLSID::INVALID_LS_ID),
-      rebuild_column_group_(false) {}
+      opt_tenant_count_(0),
+      opt_tablet_id_() {}
   ObFreezeStmt(common::ObIAllocator *name_pool)
     : ObSystemCmdStmt(name_pool, stmt::T_FREEZE),
       major_freeze_(false),
       freeze_all_flag_(0),
       opt_server_list_(),
-      opt_tenant_ids_(),
-      opt_tablet_id_(),
-      opt_ls_id_(share::ObLSID::INVALID_LS_ID),
-      rebuild_column_group_(false) {}
+      opt_tenant_count_(0),
+      opt_tablet_id_() {}
   virtual ~ObFreezeStmt() {}
 
   bool is_major_freeze() const { return major_freeze_; }
@@ -64,37 +59,34 @@ public:
   void set_freeze_all_user() { freeze_all_flag_ |= FREEZE_ALL_USER; }
   bool is_freeze_all_meta() const { return 0 != (freeze_all_flag_ & FREEZE_ALL_META); }
   void set_freeze_all_meta() { freeze_all_flag_ |= FREEZE_ALL_META; }
-  bool is_rebuild_column_group() const { return rebuild_column_group_; }
-  void set_rebuild_column_group(bool rebuild_column_group) { rebuild_column_group_ = rebuild_column_group; }
-  inline obrpc::ObServerList &get_ignore_server_list() { return opt_server_list_; }
-  inline obrpc::ObServerList &get_server_list() { return opt_server_list_; }
-  inline common::ObSArray<uint64_t> &get_tenant_ids() { return opt_tenant_ids_; }
+  inline obcall::ObServerList &get_ignore_server_list() { return opt_server_list_; }
+  inline obcall::ObServerList &get_server_list() { return opt_server_list_; }
+  inline int64_t get_tenant_count() const { return opt_tenant_count_; }
+  inline int64_t &tenant_count_ref() { return opt_tenant_count_; }
+  inline void inc_tenant_count() { ++opt_tenant_count_; }
+  inline void reset_tenant_count() { opt_tenant_count_ = 0; }
   inline common::ObZone &get_zone() { return opt_zone_; }
   inline common::ObTabletID &get_tablet_id() { return opt_tablet_id_; }
-  inline int64_t &get_ls_id() { return opt_ls_id_; }
   inline int push_server(const common::ObAddr& server) {
     return opt_server_list_.push_back(server);
   }
 
-  TO_STRING_KV(N_STMT_TYPE, ((int)stmt_type_), K_(major_freeze), K(freeze_all_flag_), 
-               K(opt_server_list_), K(opt_tenant_ids_), K(opt_tablet_id_), K(opt_ls_id_));
+  TO_STRING_KV(N_STMT_TYPE, ((int)stmt_type_), K_(major_freeze), K(freeze_all_flag_),
+               K(opt_server_list_), K(opt_tenant_count_), K(opt_tablet_id_));
 private:
   bool major_freeze_;
   // for major_freeze, it is ignore server list
   // for minor_freeze, it is candidate server list
   int freeze_all_flag_;
   // for major_freeze only
-  obrpc::ObServerList opt_server_list_;
+  obcall::ObServerList opt_server_list_;
   // for minor_freeze only,
-  common::ObSArray<uint64_t> opt_tenant_ids_;
+  int64_t opt_tenant_count_;
   // for minor_freeze only
   common::ObZone opt_zone_;
   
   // for minor_freeze only
   common::ObTabletID opt_tablet_id_;
-  int64_t opt_ls_id_;
-  // for major_freeze only
-  bool rebuild_column_group_;
 };
 
 class ObFlushCacheStmt : public ObSystemCmdStmt
@@ -108,7 +100,7 @@ public:
   virtual ~ObFlushCacheStmt() {}
   TO_STRING_KV(N_STMT_TYPE, ((int)stmt_type_), K_(flush_cache_arg));
 
-  obrpc::ObAdminFlushCacheArg flush_cache_arg_;
+  obcall::ObAdminFlushCacheArg flush_cache_arg_;
   bool is_global_;
 };
 
@@ -133,16 +125,6 @@ public:
   int32_t file_id_;
 };
 
-class ObFlushSSMicroCacheStmt : public ObSystemCmdStmt
-{
-public:
-  ObFlushSSMicroCacheStmt() : ObSystemCmdStmt(stmt::T_FLUSH_SS_MICRO_CACHE) {}
-  virtual ~ObFlushSSMicroCacheStmt() {}
-
-  TO_STRING_KV(N_STMT_TYPE, ((int)stmt_type_), K_(tenant_name));
-  common::ObFixedLengthString<common::OB_MAX_TENANT_NAME_LENGTH + 1> tenant_name_;
-};
-
 class ObFlushDagWarningsStmt : public ObSystemCmdStmt
 {
 public:
@@ -151,82 +133,17 @@ public:
   TO_STRING_KV(N_STMT_TYPE, ((int)stmt_type_));
 };
 
-class ObAdminServerStmt : public ObSystemCmdStmt
-{
-public:
-  ObAdminServerStmt()
-      : ObSystemCmdStmt(stmt::T_ADMIN_SERVER), op_(obrpc::ObAdminServerArg::ADD)
-  {
-  }
-
-  ObAdminServerStmt(common::ObIAllocator *name_pool)
-      : ObSystemCmdStmt(name_pool, stmt::T_ADMIN_SERVER)
-  {
-  }
-
-  virtual ~ObAdminServerStmt() {}
-
-  inline obrpc::ObServerList &get_server_list() { return server_list_; }
-  inline const common::ObZone &get_zone() const { return zone_; }
-  inline void set_zone(const common::ObZone &zone) { zone_ = zone; }
-  inline obrpc::ObAdminServerArg::AdminServerOp get_op() const { return op_; }
-  inline void set_op(const obrpc::ObAdminServerArg::AdminServerOp op) { op_ = op; }
-private:
-  obrpc::ObAdminServerArg::AdminServerOp op_;
-  obrpc::ObServerList server_list_;
-  common::ObZone zone_;
-};
-
 class ObAdminMergeStmt: public ObSystemCmdStmt
 {
 public:
   ObAdminMergeStmt() : ObSystemCmdStmt(stmt::T_ADMIN_MERGE) {}
   virtual ~ObAdminMergeStmt() {}
 
-  obrpc::ObAdminMergeArg &get_rpc_arg() { return rpc_arg_; }
+  obcall::ObAdminMergeArg &get_rpc_arg() { return rpc_arg_; }
 
   TO_STRING_KV(N_STMT_TYPE, ((int)stmt_type_), K_(rpc_arg));
 private:
-  obrpc::ObAdminMergeArg rpc_arg_;
-};
-
-class ObAdminRecoveryStmt: public ObSystemCmdStmt
-{
-public:
-  ObAdminRecoveryStmt() : ObSystemCmdStmt(stmt::T_ADMIN_RECOVERY) {}
-  virtual ~ObAdminRecoveryStmt() {}
-
-  obrpc::ObAdminRecoveryArg &get_rpc_arg() { return rpc_arg_; }
-
-  TO_STRING_KV(N_STMT_TYPE, ((int)stmt_type_), K_(rpc_arg));
-private:
-  obrpc::ObAdminRecoveryArg rpc_arg_;
-};
-
-class ObClearRoottableStmt : public ObSystemCmdStmt
-{
-public:
-  ObClearRoottableStmt() : ObSystemCmdStmt(stmt::T_CLEAR_ROOT_TABLE) {}
-  virtual ~ObClearRoottableStmt() {}
-
-  obrpc::ObAdminClearRoottableArg &get_rpc_arg() { return rpc_arg_; }
-
-  TO_STRING_KV(N_STMT_TYPE, ((int)stmt_type_), K_(rpc_arg));
-private:
-  obrpc::ObAdminClearRoottableArg rpc_arg_;
-};
-
-class ObRefreshSchemaStmt : public ObSystemCmdStmt
-{
-public:
-  ObRefreshSchemaStmt() : ObSystemCmdStmt(stmt::T_REFRESH_SCHEMA) {}
-  virtual ~ObRefreshSchemaStmt() {}
-
-  obrpc::ObAdminRefreshSchemaArg &get_rpc_arg() { return rpc_arg_; }
-
-  TO_STRING_KV(N_STMT_TYPE, ((int)stmt_type_), K_(rpc_arg));
-private:
-  obrpc::ObAdminRefreshSchemaArg rpc_arg_;
+  obcall::ObAdminMergeArg rpc_arg_;
 };
 
 class ObRefreshMemStatStmt : public ObSystemCmdStmt
@@ -235,24 +152,11 @@ public:
   ObRefreshMemStatStmt() : ObSystemCmdStmt(stmt::T_REFRESH_MEMORY_STAT) {}
   virtual ~ObRefreshMemStatStmt() {}
 
-  obrpc::ObAdminRefreshMemStatArg &get_rpc_arg() { return rpc_arg_; }
+  obcall::ObAdminRefreshMemStatArg &get_rpc_arg() { return rpc_arg_; }
 
   TO_STRING_KV(N_STMT_TYPE, ((int)stmt_type_), K_(rpc_arg));
 private:
-  obrpc::ObAdminRefreshMemStatArg rpc_arg_;
-};
-
-class ObWashMemFragmentationStmt : public ObSystemCmdStmt
-{
-public:
-  ObWashMemFragmentationStmt() : ObSystemCmdStmt(stmt::T_WASH_MEMORY_FRAGMENTATION) {}
-  virtual ~ObWashMemFragmentationStmt() {}
-
-  obrpc::ObAdminWashMemFragmentationArg &get_rpc_arg() { return rpc_arg_; }
-
-  TO_STRING_KV(N_STMT_TYPE, ((int)stmt_type_), K_(rpc_arg));
-private:
-  obrpc::ObAdminWashMemFragmentationArg rpc_arg_;
+  obcall::ObAdminRefreshMemStatArg rpc_arg_;
 };
 
 class ObRefreshIOCalibraitonStmt : public ObSystemCmdStmt
@@ -261,11 +165,11 @@ public:
   ObRefreshIOCalibraitonStmt() : ObSystemCmdStmt(stmt::T_REFRESH_IO_CALIBRATION) {}
   virtual ~ObRefreshIOCalibraitonStmt() {}
 
-  obrpc::ObAdminRefreshIOCalibrationArg &get_rpc_arg() { return rpc_arg_; }
+  obcall::ObAdminRefreshIOCalibrationArg &get_rpc_arg() { return rpc_arg_; }
 
   TO_STRING_KV(N_STMT_TYPE, ((int)stmt_type_), K_(rpc_arg));
 private:
-  obrpc::ObAdminRefreshIOCalibrationArg rpc_arg_;
+  obcall::ObAdminRefreshIOCalibrationArg rpc_arg_;
 };
 
 class ObSetConfigStmt : public ObSystemCmdStmt
@@ -274,24 +178,11 @@ public:
   ObSetConfigStmt() : ObSystemCmdStmt(stmt::T_ALTER_SYSTEM_SET_PARAMETER) {}
   virtual ~ObSetConfigStmt() {}
 
-  obrpc::ObAdminSetConfigArg &get_rpc_arg() { return rpc_arg_; }
+  obcall::ObAdminSetConfigArg &get_rpc_arg() { return rpc_arg_; }
   
   TO_STRING_KV(N_STMT_TYPE, ((int)stmt_type_), K_(rpc_arg));
 private:
-  obrpc::ObAdminSetConfigArg rpc_arg_;
-};
-
-class ObChangeExternalStorageDestStmt : public ObSystemCmdStmt
-{
-public:
-  ObChangeExternalStorageDestStmt() : ObSystemCmdStmt(stmt::T_CHANGE_EXTERNAL_STORAGE_DEST) {}
-  virtual ~ObChangeExternalStorageDestStmt() {}
-
-  obrpc::ObAdminSetConfigArg &get_rpc_arg() { return rpc_arg_; }
-
-  TO_STRING_KV(N_STMT_TYPE, ((int)stmt_type_), K_(rpc_arg));
-private:
-  obrpc::ObAdminSetConfigArg rpc_arg_;
+  obcall::ObAdminSetConfigArg rpc_arg_;
 };
 
 class ObSetTPStmt : public ObSystemCmdStmt
@@ -300,11 +191,11 @@ public:
   ObSetTPStmt() : ObSystemCmdStmt(stmt::T_ALTER_SYSTEM_SETTP) {}
   virtual ~ObSetTPStmt() {}
 
-  obrpc::ObAdminSetTPArg &get_rpc_arg() { return rpc_arg_; }
+  obcall::ObAdminSetTPArg &get_rpc_arg() { return rpc_arg_; }
 
   TO_STRING_KV(N_STMT_TYPE, ((int)stmt_type_), K_(rpc_arg));
 private:
-  obrpc::ObAdminSetTPArg rpc_arg_;
+  obcall::ObAdminSetTPArg rpc_arg_;
 };
 
 class ObClearMergeErrorStmt : public ObSystemCmdStmt
@@ -313,11 +204,11 @@ public:
   ObClearMergeErrorStmt() : ObSystemCmdStmt(stmt::T_CLEAR_MERGE_ERROR) {}
   virtual ~ObClearMergeErrorStmt() {}
 
-  obrpc::ObAdminMergeArg &get_rpc_arg() { return rpc_arg_; }
+  obcall::ObAdminMergeArg &get_rpc_arg() { return rpc_arg_; }
 
   TO_STRING_KV(N_STMT_TYPE, ((int)stmt_type_), K_(rpc_arg));
 private:
-  obrpc::ObAdminMergeArg rpc_arg_;
+  obcall::ObAdminMergeArg rpc_arg_;
 };
 
 class ObUpgradeVirtualSchemaStmt : public ObSystemCmdStmt
@@ -325,62 +216,6 @@ class ObUpgradeVirtualSchemaStmt : public ObSystemCmdStmt
 public:
   ObUpgradeVirtualSchemaStmt() : ObSystemCmdStmt(stmt::T_UPGRADE_VIRTUAL_SCHEMA) {}
   virtual ~ObUpgradeVirtualSchemaStmt() {}
-};
-
-class ObAdminUpgradeCmdStmt : public ObSystemCmdStmt
-{
-public:
-  enum AdminUpgradeOp
-  {
-    BEGIN = 1,
-    END = 2,
-  };
-  ObAdminUpgradeCmdStmt() : ObSystemCmdStmt(stmt::T_ADMIN_UPGRADE_CMD), op_(BEGIN) {}
-  virtual ~ObAdminUpgradeCmdStmt() {}
-
-  inline const AdminUpgradeOp &get_op() const { return op_; }
-  inline void set_op(const AdminUpgradeOp op) { op_ = op; }
-private:
-  AdminUpgradeOp op_;
-};
-
-class ObAdminRollingUpgradeCmdStmt : public ObSystemCmdStmt
-{
-public:
-  enum AdminUpgradeOp
-  {
-    BEGIN = 1,
-    END = 2,
-  };
-  ObAdminRollingUpgradeCmdStmt() : ObSystemCmdStmt(stmt::T_ADMIN_ROLLING_UPGRADE_CMD), op_(BEGIN) {}
-  virtual ~ObAdminRollingUpgradeCmdStmt() {}
-
-  inline const AdminUpgradeOp &get_op() const { return op_; }
-  inline void set_op(const AdminUpgradeOp op) { op_ = op; }
-private:
-  AdminUpgradeOp op_;
-};
-
-class ObRunUpgradeJobStmt : public ObSystemCmdStmt
-{
-public:
-  ObRunUpgradeJobStmt() : ObSystemCmdStmt(stmt::T_ADMIN_RUN_UPGRADE_JOB) {}
-  virtual ~ObRunUpgradeJobStmt() {}
-
-  obrpc::ObUpgradeJobArg &get_rpc_arg() { return rpc_arg_; }
-private:
-  obrpc::ObUpgradeJobArg rpc_arg_;
-};
-
-class ObStopUpgradeJobStmt : public ObSystemCmdStmt
-{
-public:
-  ObStopUpgradeJobStmt() : ObSystemCmdStmt(stmt::T_ADMIN_STOP_UPGRADE_JOB) {}
-  virtual ~ObStopUpgradeJobStmt() {}
-
-  obrpc::ObUpgradeJobArg &get_rpc_arg() { return rpc_arg_; }
-private:
-  obrpc::ObUpgradeJobArg rpc_arg_;
 };
 
 class ObCancelTaskStmt : public ObSystemCmdStmt
@@ -414,19 +249,6 @@ private:
   common::ObString task_id_;
 };
 
-class ObSetDiskValidStmt : public ObSystemCmdStmt
-{
-public:
-  ObSetDiskValidStmt():
-    ObSystemCmdStmt(stmt::T_SET_DISK_VALID),
-    server_()
-  {}
-  virtual ~ObSetDiskValidStmt() {}
-  TO_STRING_KV(N_STMT_TYPE, ((int)stmt_type_), K_(server));
-
-  common::ObAddr server_;
-};
-
 class ObAddDiskStmt : public ObSystemCmdStmt
 {
 public:
@@ -436,7 +258,7 @@ public:
   virtual ~ObAddDiskStmt() {}
   TO_STRING_KV(N_STMT_TYPE, ((int)stmt_type_), K_(arg));
 
-  obrpc::ObAdminAddDiskArg arg_;
+  obcall::ObAdminAddDiskArg arg_;
 };
 
 class ObDropDiskStmt : public ObSystemCmdStmt
@@ -448,7 +270,7 @@ public:
   virtual ~ObDropDiskStmt() {}
   TO_STRING_KV(N_STMT_TYPE, ((int)stmt_type_), K_(arg));
 
-  obrpc::ObAdminDropDiskArg arg_;
+  obcall::ObAdminDropDiskArg arg_;
 };
 
 class ObEnableSqlThrottleStmt
@@ -510,578 +332,15 @@ public:
     {}
 };
 
-class ObArchiveLogStmt : public ObSystemCmdStmt
-{
-public:
-  ObArchiveLogStmt()
-    : ObSystemCmdStmt(stmt::T_ARCHIVE_LOG),
-      enable_(true),
-      tenant_id_(OB_INVALID_TENANT_ID),
-      archive_tenant_ids_()
-  {
-  }
-  virtual ~ObArchiveLogStmt() {}
-  bool is_enable() const { return enable_; }
-  uint64_t get_tenant_id() const { return tenant_id_; }
-  const common::ObIArray<uint64_t> &get_archive_tenant_ids() const { return archive_tenant_ids_; }
-  int set_param(
-      const bool enable,
-      const uint64_t tenant_id,
-      const common::ObIArray<uint64_t> &archive_tenant_ids)
-  {
-    int ret = common::OB_SUCCESS;
-    if (OB_INVALID_ID == tenant_id) {
-      ret = OB_INVALID_ARGUMENT;
-      COMMON_LOG(WARN, "invalid args", K(tenant_id)); 
-    } else if (OB_FAIL(archive_tenant_ids_.assign(archive_tenant_ids))) {
-      COMMON_LOG(WARN, "failed to assign archive tenant ids", K(ret), K(archive_tenant_ids));
-    } else {
-      enable_ = enable;
-      tenant_id_ = tenant_id; 
-    }
-    return ret;
-  }
-  TO_STRING_KV(N_STMT_TYPE, ((int)stmt_type_), K_(enable), K_(tenant_id), K_(archive_tenant_ids));
-
-private:
-  bool enable_;
-  uint64_t tenant_id_;
-  common::ObArray<uint64_t> archive_tenant_ids_;
-};
-
-class ObBackupDatabaseStmt : public ObSystemCmdStmt
-{
-public:
-  ObBackupDatabaseStmt()
-    : ObSystemCmdStmt(stmt::T_BACKUP_DATABASE),
-      tenant_id_(OB_INVALID_ID),
-	    incremental_(false),
-      compl_log_(false),
-      backup_dest_(),
-      backup_description_(),
-      backup_tenant_ids_()
-  {
-  }
-  virtual ~ObBackupDatabaseStmt() {}
-  bool get_incremental() const { return incremental_; }
-  uint64_t get_tenant_id() const { return tenant_id_; }
-	bool get_compl_log() const { return compl_log_; }
-  const share::ObBackupPathString &get_backup_dest() const { return backup_dest_; }
-  const share::ObBackupDescription &get_backup_description() const { return backup_description_; }
-  const common::ObSArray<uint64_t> &get_backup_tenant_ids() const { return backup_tenant_ids_; }
-  int set_param(const uint64_t tenant_id, const int64_t incremental, const int64_t compl_log, 
-      const share::ObBackupPathString &backup_dest, const share::ObBackupDescription &backup_description,
-      const ObIArray<uint64_t> &backup_tenant_ids)
-  {
-    int ret = common::OB_SUCCESS;
-
-    if (tenant_id == OB_INVALID_ID
-	      || (0 != incremental && 1 != incremental)
-        || (0 != compl_log && 1 != compl_log)) {
-      ret = OB_INVALID_ARGUMENT;
-	    COMMON_LOG(WARN, "invalid args", K(tenant_id), K(incremental), K(compl_log));
-    } else if (OB_FAIL(backup_dest_.assign(backup_dest))) {
-      COMMON_LOG(WARN, "set backup dest failed", K(backup_dest));
-    } else if (OB_FAIL(append(backup_tenant_ids_, backup_tenant_ids))) {
-      COMMON_LOG(WARN, "append backup tenant ids failed", K(backup_tenant_ids));
-    } else if (OB_FAIL(backup_description_.assign(backup_description))) {
-      COMMON_LOG(WARN, "set backup description failed", K(backup_description));
-    } else {
-      incremental_ = incremental != 0;
-      tenant_id_ = tenant_id;
-      compl_log_ = compl_log!= 0;
-    }
-    return ret;
-  }
-	TO_STRING_KV(N_STMT_TYPE, ((int)stmt_type_), K_(tenant_id), K_(incremental), K_(backup_tenant_ids), 
-      K_(backup_description), K_(compl_log), K_(backup_dest));
-
-
-private:
-	uint64_t tenant_id_;
-  bool incremental_;
-  bool compl_log_;
-  share::ObBackupPathString backup_dest_;
-  share::ObBackupDescription backup_description_;
-  common::ObSArray<uint64_t> backup_tenant_ids_;
-};
-
-class ObCancelRestoreStmt : public ObSystemCmdStmt
-{
-public:
-  ObCancelRestoreStmt() 
-    : ObSystemCmdStmt(stmt::T_CANCEL_RESTORE),
-      drop_tenant_arg_() {}
-  virtual ~ObCancelRestoreStmt() {}
-  obrpc::ObDropTenantArg &get_drop_tenant_arg() { return drop_tenant_arg_; }
-	TO_STRING_KV(N_STMT_TYPE, ((int)stmt_type_), K_(drop_tenant_arg));
-private:
-  obrpc::ObDropTenantArg drop_tenant_arg_;
-};
-
-class ObBackupBackupsetStmt : public ObSystemCmdStmt
-{
-public:
-  ObBackupBackupsetStmt()
-    : ObSystemCmdStmt(stmt::T_BACKUP_BACKUPSET),
-      tenant_id_(OB_INVALID_ID),
-      backup_set_id_(-1),
-      max_backup_times_(-1)
-  {
-  }
-  virtual ~ObBackupBackupsetStmt() {}
-  uint64_t get_tenant_id() const { return tenant_id_; }
-  int64_t get_backup_set_id() const { return backup_set_id_; }
-  int64_t get_max_backup_times() const { return max_backup_times_; }
-  const ObString get_backup_backup_dest() const { return backup_backup_dest_; }
-
-  int set_param(
-      const uint64_t tenant_id,
-      int64_t backup_set_id,
-      const int64_t max_backup_times,
-      const common::ObString &backup_backup_dest)
-  {
-    int ret = common::OB_SUCCESS;
-    if (OB_INVALID_ID == tenant_id || backup_set_id < 0) {
-      ret = OB_INVALID_ARGUMENT;
-      COMMON_LOG(WARN, "invalid argument", KR(ret), K(tenant_id),
-          K(backup_set_id), K(backup_backup_dest));
-    } else if (OB_FAIL(databuff_printf(backup_backup_dest_, sizeof(backup_backup_dest_),
-        "%.*s", backup_backup_dest.length(), backup_backup_dest.ptr()))) {
-      COMMON_LOG(WARN, "failed to databuff printf", KR(ret));
-    } else {
-      tenant_id_ = tenant_id;
-      backup_set_id_ = backup_set_id;
-      max_backup_times_ = max_backup_times;
-    }
-    return ret;
-  }
-  TO_STRING_KV(N_STMT_TYPE, ((int)stmt_type_), K_(tenant_id),
-      K_(backup_set_id), K_(max_backup_times), K_(backup_backup_dest));
-private:
-  uint64_t tenant_id_;
-  int64_t backup_set_id_;
-  int64_t max_backup_times_;
-  char backup_backup_dest_[share::OB_MAX_BACKUP_DEST_LENGTH];
-};
-
-class ObBackupArchiveLogStmt : public ObSystemCmdStmt
-{
-public:
-  ObBackupArchiveLogStmt()
-    : ObSystemCmdStmt(stmt::T_BACKUP_ARCHIVELOG),
-      enable_(true)
-  {
-  }
-  virtual ~ObBackupArchiveLogStmt() {}
-  bool is_enable() const { return enable_; }
-  void set_is_enable(const bool enable) { enable_ = enable; }
-  TO_STRING_KV(N_STMT_TYPE, ((int)stmt_type_), K_(enable));
-
-private:
-  bool enable_;
-};
-
-class ObBackupBackupPieceStmt : public ObSystemCmdStmt
-{
-public:
-  ObBackupBackupPieceStmt()
-    : ObSystemCmdStmt(stmt::T_BACKUP_BACKUPPIECE),
-      tenant_id_(OB_INVALID_ID),
-      piece_id_(-1),
-      max_backup_times_(-1),
-      backup_all_(false),
-      backup_backup_dest_(""),
-      with_active_piece_(false)
-  {
-  }
-  virtual ~ObBackupBackupPieceStmt() {}
-  uint64_t get_tenant_id() const { return tenant_id_; }
-  int64_t get_piece_id() const { return piece_id_; }
-  int64_t get_max_backup_times() const { return max_backup_times_; }
-  bool is_backup_all() const { return backup_all_; }
-  const ObString get_backup_backup_dest() const { return backup_backup_dest_; }
-  bool with_active_piece() const { return with_active_piece_; }
-
-  int set_param(const uint64_t tenant_id, const int64_t piece_id,
-      const int64_t max_backup_times, const bool backup_all,
-      const bool with_active_piece, const common::ObString &backup_backup_dest)
-  {
-    int ret = common::OB_SUCCESS;
-    const int64_t MAX_BACKUP_TIMES = 2;
-    if (OB_INVALID_ID == tenant_id || piece_id < 0
-        || max_backup_times > MAX_BACKUP_TIMES) {
-      ret = OB_INVALID_ARGUMENT;
-      COMMON_LOG(WARN, "invalid argument", KR(ret), K(tenant_id), K(piece_id), K(max_backup_times));
-    } else if (OB_FAIL(databuff_printf(backup_backup_dest_, sizeof(backup_backup_dest_),
-        "%.*s", backup_backup_dest.length(), backup_backup_dest.ptr()))) {
-      COMMON_LOG(WARN, "failed to databuff printf", KR(ret));
-    } else {
-      tenant_id_ = tenant_id;
-      piece_id_ = piece_id;
-      max_backup_times_ = max_backup_times;
-      backup_all_ = backup_all;
-      with_active_piece_ = with_active_piece;
-    }
-    return ret;
-  }
-  TO_STRING_KV(N_STMT_TYPE, ((int)stmt_type_), K_(tenant_id), K_(piece_id),
-      K_(max_backup_times), K_(backup_all), K_(backup_backup_dest));
-private:
-  uint64_t tenant_id_;
-  int64_t piece_id_;
-  int64_t max_backup_times_;
-  bool backup_all_;
-  char backup_backup_dest_[share::OB_MAX_BACKUP_DEST_LENGTH];
-  bool with_active_piece_;
-};
-
-class ObBackupManageStmt : public ObSystemCmdStmt
-{
-public:
-  ObBackupManageStmt():
-      ObSystemCmdStmt(stmt::T_BACKUP_MANAGE),
-      tenant_id_(OB_INVALID_ID),
-      managed_tenant_ids_(),
-      type_(obrpc::ObBackupManageArg::MAX_TYPE),
-      value_(0),
-      copy_id_(0)
-  {
-  }
-  virtual ~ObBackupManageStmt() {}
-  obrpc::ObBackupManageArg::Type get_type() const { return type_; }
-  int64_t get_value() const { return value_; }
-  uint64_t get_tenant_id() const { return tenant_id_; }
-  int64_t get_copy_id() const { return copy_id_; }
-  const common::ObSArray<uint64_t> &get_managed_tenant_ids() const { return managed_tenant_ids_; }
-  int set_param(const uint64_t tenant_id, const int64_t type, const int64_t value, const int64_t copy_id,
-      common::ObIArray<uint64_t> &managed_tenant_ids)
-  {
-    int ret = common::OB_SUCCESS;
-
-    if (tenant_id == OB_INVALID_ID || type < 0 || type >= obrpc::ObBackupManageArg::MAX_TYPE
-        || value < 0) {
-      ret = OB_INVALID_ARGUMENT;
-      COMMON_LOG(WARN, "invalid args", K(tenant_id), K(type), K(value));
-    } else if (OB_FAIL(append(managed_tenant_ids_, managed_tenant_ids))) {
-      COMMON_LOG(WARN, "failed to append managed tenants", K(managed_tenant_ids));
-    } else {
-      type_ = static_cast<obrpc::ObBackupManageArg::Type>(type);
-      value_ = value;
-      tenant_id_ = tenant_id;
-      copy_id_ = copy_id;
-    }
-
-    return ret;
-  }
-  TO_STRING_KV(N_STMT_TYPE, ((int)stmt_type_), K_(tenant_id), K_(managed_tenant_ids), K_(type), K_(value), K_(copy_id));
-
-
-private:
-  uint64_t tenant_id_;
-  common::ObSArray<uint64_t> managed_tenant_ids_; 
-  obrpc::ObBackupManageArg::Type type_;
-  int64_t value_;
-  int64_t copy_id_;
-};
-
-class ObBackupCleanStmt : public ObSystemCmdStmt
-{
-public:
-  ObBackupCleanStmt():
-      ObSystemCmdStmt(stmt::T_BACKUP_CLEAN),
-      initiator_tenant_id_(OB_INVALID_TENANT_ID),
-      type_(share::ObNewBackupCleanType::MAX),
-      value_(0),
-      copy_id_(0),
-      description_(),
-      clean_tenant_ids_()
-  {
-  }
-  virtual ~ObBackupCleanStmt() {}
-  share::ObNewBackupCleanType::TYPE get_type() const { return type_; }
-  int64_t get_value() const { return value_; }
-  uint64_t get_tenant_id() const { return initiator_tenant_id_; }
-  int64_t get_copy_id() const { return copy_id_; }
-  const share::ObBackupDescription &get_description() const { return description_; }
-  const common::ObSArray<uint64_t> &get_clean_tenant_ids() const { return clean_tenant_ids_; }
-  int set_param(
-      const uint64_t tenant_id, 
-      const int64_t type, 
-      const int64_t value, 
-      const int64_t copy_id, 
-      const share::ObBackupDescription &description,
-      const ObSArray<uint64_t> &clean_tenant_ids)
-  {
-    int ret = common::OB_SUCCESS;
-
-    if (OB_INVALID_ID == tenant_id || type <= 0 || type >= share::ObNewBackupCleanType::MAX
-        || value < 0) {
-      ret = OB_INVALID_ARGUMENT;
-      COMMON_LOG(WARN, "invalid args", K(tenant_id), K(type), K(value));
-    } else if (OB_FAIL(description_.assign(description))) {
-      COMMON_LOG(WARN, "set description failed", K(description));
-    } else if (OB_FAIL(append(clean_tenant_ids_, clean_tenant_ids))) {
-      COMMON_LOG(WARN, "append clean tenant ids failed", K(clean_tenant_ids));
-    } else {
-      type_ = static_cast<share::ObNewBackupCleanType::TYPE>(type);
-      value_ = value;
-      initiator_tenant_id_ = tenant_id;
-      copy_id_ = copy_id;
-    }
-
-    return ret;
-  }
-
-  TO_STRING_KV(N_STMT_TYPE, ((int)stmt_type_), K_(initiator_tenant_id), K_(type), K_(value), K_(copy_id), K_(description), K_(clean_tenant_ids));
-
-private:
-  uint64_t initiator_tenant_id_;
-  share::ObNewBackupCleanType::TYPE type_;
-  int64_t value_;
-  int64_t copy_id_;
-  share::ObBackupDescription description_; 
-  common::ObSArray<uint64_t> clean_tenant_ids_; 
-};
-
-class ObDeletePolicyStmt : public ObSystemCmdStmt
-{
-public:
-  ObDeletePolicyStmt():
-      ObSystemCmdStmt(stmt::T_DELETE_POLICY),
-      initiator_tenant_id_(OB_INVALID_TENANT_ID),
-      type_(share::ObPolicyOperatorType::MAX),
-      policy_name_(),
-      recovery_window_(),
-      redundancy_(0),
-      backup_copies_(0),
-      clean_tenant_ids_()
-  {
-  }
-  virtual ~ObDeletePolicyStmt() {}
-  share::ObPolicyOperatorType get_type() const { return type_; }
-  uint64_t get_tenant_id() const { return initiator_tenant_id_; }
-  const char *get_policy_name() const { return policy_name_; }
-  const char *get_recovery_window() const { return recovery_window_; }
-  int64_t get_redundancy() const { return redundancy_; }
-  int64_t get_backup_copies() const { return backup_copies_; }
-
-  const common::ObSArray<uint64_t> &get_clean_tenant_ids() const { return clean_tenant_ids_; }
-  int set_param(
-      const uint64_t tenant_id, 
-      const int64_t type,
-      const ObString &policy_name,
-      const ObSArray<uint64_t> &clean_tenant_ids)
-  {
-    int ret = common::OB_SUCCESS;
-    if (!is_valid_tenant_id(tenant_id) || type < 0 || type >= share::ObPolicyOperatorType::MAX) {
-      ret = OB_INVALID_ARGUMENT;
-      COMMON_LOG(WARN, "invalid args", K(tenant_id), K(type));
-    } else if (OB_FAIL(databuff_printf(policy_name_, sizeof(policy_name_), "%s", policy_name.ptr()))) {
-      COMMON_LOG(WARN, "set policy name failed", K(policy_name));
-    } else if (OB_FAIL(append(clean_tenant_ids_, clean_tenant_ids))) {
-      COMMON_LOG(WARN, "append clean tenant ids failed", K(clean_tenant_ids));
-    } else {
-      type_ = static_cast<share::ObPolicyOperatorType>(type);
-      initiator_tenant_id_ = tenant_id;
-    }
-    return ret;
-  }
-  int set_delete_policy(
-      const ObString &recovery_window,
-      const int64_t redundancy,
-      const int64_t backup_copies)
-  {
-    int ret = common::OB_SUCCESS; 
-    if (OB_FAIL(databuff_printf(recovery_window_, sizeof(recovery_window_), "%s", recovery_window.ptr()))) {
-      COMMON_LOG(WARN, "set recovery window failed", K(recovery_window));
-    } else {
-      redundancy_ = redundancy; 
-      backup_copies_ = backup_copies;
-    }
-    return ret;
-  }
-
-  TO_STRING_KV(N_STMT_TYPE, ((int)stmt_type_), K_(initiator_tenant_id), K_(type), K_(policy_name), 
-      K_(recovery_window), K_(redundancy),  K_(backup_copies), K_(clean_tenant_ids));
-
-private:
-  uint64_t initiator_tenant_id_;
-  share::ObPolicyOperatorType type_;
-  char policy_name_[share::OB_BACKUP_DELETE_POLICY_NAME_LENGTH];
-  char recovery_window_[share::OB_BACKUP_RECOVERY_WINDOW_LENGTH];
-  int64_t redundancy_;
-  int64_t backup_copies_;
-  common::ObSArray<uint64_t> clean_tenant_ids_;
-  DISALLOW_COPY_AND_ASSIGN(ObDeletePolicyStmt);
-};
-
-class ObBackupClusterParamStmt : public ObSystemCmdStmt
-{
-public:
-  ObBackupClusterParamStmt()
-    : ObSystemCmdStmt(stmt::T_BACKUP_CLUSTER_PARAMETERS),
-      backup_dest_() {}
-  virtual ~ObBackupClusterParamStmt() {}
-  const share::ObBackupPathString &get_backup_dest() const { return backup_dest_; }
-  int set_param(const share::ObBackupPathString &backup_dest)
-  {
-    int ret = common::OB_SUCCESS;
-    if (OB_FAIL(backup_dest_.assign(backup_dest))) {
-      COMMON_LOG(WARN, "set backup dest failed", K(backup_dest));
-    }
-    return ret;
-  }
-
-  TO_STRING_KV(N_STMT_TYPE, ((int)stmt_type_), K_(backup_dest));
-
-private:
-  share::ObBackupPathString backup_dest_;
-};
-
-class ObTableTTLStmt : public ObSystemCmdStmt {
-public:
-  ObTableTTLStmt()
-    : ObSystemCmdStmt(stmt::T_TABLE_TTL),
-      type_(obrpc::ObTTLRequestArg::TTL_INVALID_TYPE),
-      opt_tenant_ids_(),
-      ttl_all_(false)
-  {}
-  virtual ~ObTableTTLStmt()
-  {}
-
-  obrpc::ObTTLRequestArg::TTLRequestType get_type() const
-  {
-    return type_;
-  }
-  int set_type(const int64_t type)
-  {
-    int ret = common::OB_SUCCESS;
-
-    if (type < 0 || type >= obrpc::ObTTLRequestArg::TTL_MOVE_TYPE) {
-      ret = OB_INVALID_ARGUMENT;
-      COMMON_LOG(WARN, "invalid args", K(type));
-    } else {
-      type_ = static_cast<obrpc::ObTTLRequestArg::TTLRequestType>(type);
-    }
-
-    return ret;
-  }
-  inline common::ObSArray<uint64_t> &get_tenant_ids() { return opt_tenant_ids_; }
-  bool is_ttl_all() const { return ttl_all_; }
-  void set_ttl_all(bool ttl_all) { ttl_all_ = ttl_all; }
-
-  TO_STRING_KV(N_STMT_TYPE, ((int)stmt_type_), K_(tenant_id), K_(type),
-               K_(opt_tenant_ids), K_(ttl_all));
-
-private:
-  uint64_t tenant_id_;
-  obrpc::ObTTLRequestArg::TTLRequestType type_;
-  common::ObSArray<uint64_t> opt_tenant_ids_;
-  bool ttl_all_;
-};
-
-class ObBackupSetEncryptionStmt : public ObSystemCmdStmt
-{
-public:
-  ObBackupSetEncryptionStmt();
-  virtual ~ObBackupSetEncryptionStmt() {}
-  share::ObBackupEncryptionMode::EncryptionMode get_mode() const { return mode_; }
-  const ObString get_passwd() const { return encrypted_passwd_; }
-  int set_param(const int64_t mode, const common::ObString &passwd);
-  TO_STRING_KV(N_STMT_TYPE,  ((int)stmt_type_),
-      "mode", share::ObBackupEncryptionMode::to_str(mode_), K_(encrypted_passwd));
-private:
-  share::ObBackupEncryptionMode::EncryptionMode mode_;
-  char passwd_buf_[OB_MAX_PASSWORD_LENGTH];
-  ObString encrypted_passwd_;
-};
-
-class ObBackupSetDecryptionStmt : public ObSystemCmdStmt
-{
-public:
-  ObBackupSetDecryptionStmt();
-  virtual ~ObBackupSetDecryptionStmt() {}
-  ObString get_passwd_array() const { return passwd_array_; }
-  int add_passwd(const ObString &passwd);
-  TO_STRING_KV(N_STMT_TYPE, ((int)stmt_type_), K_(pos), K_(passwd_array));
-private:
-  char passwd_array_[OB_MAX_PASSWORD_ARRAY_LENGTH];
-  int64_t pos_;
-};
-
-class ObAddRestoreSourceStmt : public ObSystemCmdStmt
-{
-public:
-  ObAddRestoreSourceStmt();
-  virtual ~ObAddRestoreSourceStmt() {}
-  const ObString get_restore_source_array() const { return restore_source_array_; }
-  int add_restore_source(const common::ObString &source);
-  TO_STRING_KV(N_STMT_TYPE, ((int)stmt_type_), K_(restore_source_array));
-private:
-  static const int64_t MAX_RESTORE_SOURCE_LENGTH = 365 * 10 * share::OB_MAX_BACKUP_DEST_LENGTH;
-  char restore_source_array_[MAX_RESTORE_SOURCE_LENGTH];
-  int64_t pos_;
-};
-
-class ObClearRestoreSourceStmt : public ObSystemCmdStmt
-{
-public:
-  ObClearRestoreSourceStmt() : ObSystemCmdStmt(stmt::T_CLEAR_RESTORE_SOURCE) {}
-  virtual ~ObClearRestoreSourceStmt() {}
-};
-
-class ObCheckpointSlogStmt : public ObSystemCmdStmt
-{
-public:
-  ObCheckpointSlogStmt()
-    : ObSystemCmdStmt(stmt::T_CHECKPOINT_SLOG),
-      tenant_id_(common::OB_INVALID_TENANT_ID),
-      server_()
-  {}
-  virtual ~ObCheckpointSlogStmt() {}
-  TO_STRING_KV(N_STMT_TYPE, ((int)stmt_type_), K_(tenant_id), K_(server));
-
-  uint64_t tenant_id_;
-  common::ObAddr server_;
-};
-
-class ObRecoverTableStmt : public ObSystemCmdStmt
-{
-public:
-  ObRecoverTableStmt()
-    : ObSystemCmdStmt(stmt::T_RECOVER_TABLE), rpc_arg_() {}
-  virtual ~ObRecoverTableStmt() {}
-  obrpc::ObRecoverTableArg &get_rpc_arg() { return rpc_arg_; }
-private:
-  obrpc::ObRecoverTableArg rpc_arg_;
-};
-
-
-
 class ObResetConfigStmt : public ObSystemCmdStmt
 {
 public:
   ObResetConfigStmt() : ObSystemCmdStmt(stmt::T_ALTER_SYSTEM_RESET_PARAMETER) {}
   virtual ~ObResetConfigStmt() {}
-  obrpc::ObAdminSetConfigArg &get_rpc_arg() { return rpc_arg_; }
+  obcall::ObAdminSetConfigArg &get_rpc_arg() { return rpc_arg_; }
   TO_STRING_KV(N_STMT_TYPE, ((int)stmt_type_), K_(rpc_arg));
 private:
-  obrpc::ObAdminSetConfigArg rpc_arg_;
-};
-
-class ObModuleDataStmt : public ObSystemCmdStmt
-{
-public:
-  ObModuleDataStmt() : ObSystemCmdStmt(stmt::T_MODULE_DATA), arg_() {}
-  virtual ~ObModuleDataStmt() {}
-
-  OB_INLINE table::ObModuleDataArg &get_arg() { return arg_; }
-  OB_INLINE const table::ObModuleDataArg &get_arg() const { return arg_; }
-  
-  TO_STRING_KV(N_STMT_TYPE, ((int)stmt_type_), K_(arg));
-private:
-  table::ObModuleDataArg arg_;
+  obcall::ObAdminSetConfigArg rpc_arg_;
 };
 
 } // end namespace sql

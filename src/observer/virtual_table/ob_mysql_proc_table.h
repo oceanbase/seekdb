@@ -17,7 +17,7 @@
 #ifndef OCEANBASE_SRC_OBSERVER_VIRTUAL_TABLE_OB_MYSQL_PROC_TABLE_H_
 #define OCEANBASE_SRC_OBSERVER_VIRTUAL_TABLE_OB_MYSQL_PROC_TABLE_H_
 
-#include "share/ob_virtual_table_scanner_iterator.h"
+#include "observer/virtual_table/ob_virtual_table_scanner_iterator.h"
 #include "sql/session/ob_basic_session_info.h"
 
 namespace oceanbase
@@ -60,13 +60,12 @@ public:
 
   virtual int inner_get_next_row(common::ObNewRow *&row);
   virtual void reset();
-  inline void set_tenant_id(const uint64_t tenant_id) { tenant_id_ = tenant_id; }
+  
   int get_info_from_all_routine(const uint64_t col_id,
                                 const share::schema::ObRoutineInfo *routine_info,
                                 int64_t &routine_time);
 
 private:
-  uint64_t tenant_id_;
 private:
   DISALLOW_COPY_AND_ASSIGN(ObMySQLProcTable);
 

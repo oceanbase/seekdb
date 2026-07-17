@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 #include "ob_physical_plan.h"
+#include "lib/utility/ob_smart_call.h"
 #include "sql/engine/ob_operator_factory.h"
 #include "share/ob_truncated_string.h"
 #include "sql/code_generator/ob_static_engine_cg.h"
@@ -65,7 +66,6 @@ ObPhysicalPlan::ObPhysicalPlan(MemoryContext &mem_context /* = CURRENT_CONTEXT *
     contain_table_scan_(false),
     has_nested_sql_(false),
     session_id_(0),
-    immediate_refresh_external_table_ids_(allocator_),
     concurrent_num_(0),
     max_concurrent_num_(ObMaxConcurrentParam::UNLIMITED),
     table_locations_(allocator_),
@@ -86,7 +86,6 @@ ObPhysicalPlan::ObPhysicalPlan(MemoryContext &mem_context /* = CURRENT_CONTEXT *
     is_dep_base_table_(false),
     is_insert_select_(false),
     is_plain_insert_(false),
-    flashback_query_items_(allocator_),
     contain_paramed_column_field_(false),
     first_array_index_(OB_INVALID_INDEX),
     need_consistent_snapshot_(true),
@@ -94,9 +93,7 @@ ObPhysicalPlan::ObPhysicalPlan(MemoryContext &mem_context /* = CURRENT_CONTEXT *
     is_new_engine_(false),
     use_pdml_(false),
     use_temp_table_(false),
-    has_link_table_(false),
     has_link_sfd_(false),
-    has_link_udf_(false),
     need_serial_exec_(false),
     temp_sql_can_prepare_(false),
     is_need_trans_(false),
@@ -121,7 +118,6 @@ ObPhysicalPlan::ObPhysicalPlan(MemoryContext &mem_context /* = CURRENT_CONTEXT *
     is_batch_params_execute_(false),
     all_local_session_vars_(&allocator_),
     udf_has_dml_stmt_(false),
-    mview_ids_(&allocator_),
     enable_inc_direct_load_(false),
     enable_replace_(false),
     insert_overwrite_(false),
@@ -131,7 +127,7 @@ ObPhysicalPlan::ObPhysicalPlan(MemoryContext &mem_context /* = CURRENT_CONTEXT *
     data_complement_gen_doc_id_(false),
     dml_table_ids_(&allocator_),
     direct_load_need_sort_(false),
-    insertup_can_do_gts_opt_(false),
+    insertup_can_use_snapshot_opt_(false),
     px_node_policy_(ObPxNodePolicy::INVALID),
     px_node_addrs_(&allocator_),
     px_node_count_(ObPxNodeHint::UNSET_PX_NODE_COUNT),
@@ -181,7 +177,6 @@ void ObPhysicalPlan::reset()
   contain_table_scan_ = false;
   has_nested_sql_ = false;
   session_id_ = 0;
-  immediate_refresh_external_table_ids_.reset();
   concurrent_num_ = 0;
   max_concurrent_num_ = ObMaxConcurrentParam::UNLIMITED;
   is_update_uniq_index_ = false;
@@ -195,7 +190,6 @@ void ObPhysicalPlan::reset()
   base_constraints_.reset();
   strict_constrinats_.reset();
   non_strict_constrinats_.reset();
-  flashback_query_items_.reset();
   contain_paramed_column_field_ = false;
   first_array_index_ = OB_INVALID_INDEX;
   need_consistent_snapshot_ = true;
@@ -207,7 +201,6 @@ void ObPhysicalPlan::reset()
 #endif
   use_pdml_ = false;
   use_temp_table_ = false;
-  has_link_table_ = false;
   has_link_sfd_ = false;
   need_serial_exec_ = false;
   batch_size_ = 0;
@@ -228,7 +221,6 @@ void ObPhysicalPlan::reset()
   udf_has_dml_stmt_ = false;
   is_inner_sql_ = false;
   is_batch_params_execute_ = false;
-  mview_ids_.reset();
   enable_inc_direct_load_ = false;
   enable_replace_ = false;
   insert_overwrite_ = false;
@@ -238,7 +230,7 @@ void ObPhysicalPlan::reset()
   data_complement_gen_doc_id_ = false;
   dml_table_ids_.reset();
   direct_load_need_sort_ = false;
-  insertup_can_do_gts_opt_ = false;
+  insertup_can_use_snapshot_opt_ = false;
   px_node_policy_ = ObPxNodePolicy::INVALID;
   px_node_count_ = ObPxNodeHint::UNSET_PX_NODE_COUNT;
   px_node_addrs_.reset();
@@ -754,9 +746,6 @@ int64_t ObPhysicalPlan::get_max_concurrent_num()
   return ATOMIC_LOAD(&max_concurrent_num_);
 }
 
-OB_SERIALIZE_MEMBER(FlashBackQueryItem,
-                    table_id_,
-                    time_val_);
 // Because we haven't seen the handling of force_trace_log for remote execution yet, so we will not serialize it temporarily
 OB_SERIALIZE_MEMBER(ObPhysicalPlan,
                     tenant_schema_version_, // this field is not used at runtime
@@ -783,7 +772,6 @@ OB_SERIALIZE_MEMBER(ObPhysicalPlan,
                     vars_,
                     px_dop_,
                     has_nested_sql_,
-                    flashback_query_items_,
                     stat_.enable_early_lock_release_,
                     use_pdml_,
                     is_new_engine_,
@@ -811,10 +799,8 @@ OB_SERIALIZE_MEMBER(ObPhysicalPlan,
                     disable_auto_memory_mgr_,
                     udf_has_dml_stmt_,
                     stat_.format_sql_id_,
-                    mview_ids_,
                     enable_inc_direct_load_,
                     enable_replace_,
-                    immediate_refresh_external_table_ids_,
                     insert_overwrite_,
                     online_sample_percent_,
                     need_switch_to_table_lock_worker_,
@@ -849,7 +835,7 @@ int ObPhysicalPlan::set_table_locations(const ObTablePartitionInfoArray &infos,
     } else if (OB_FAIL(table_locations_.push_back(tl))) {
       LOG_WARN("fail to push table location", K(ret), K(i));
     } else if (!is_external_object_id(tl.get_ref_table_id())) {
-      if (OB_FAIL(schema_guard.get_table_schema(MTL_ID(), tl.get_ref_table_id(), table_schema))) {
+      if (OB_FAIL(schema_guard.get_table_schema( tl.get_ref_table_id(), table_schema))) {
         LOG_WARN("get table schema failed", K(ret), K(tl.get_ref_table_id()));
       } else {
         contain_index_location_ |= table_schema->is_index_table();
@@ -1017,17 +1003,6 @@ bool ObPhysicalPlan::has_same_location_constraints(const ObPhysicalPlan &r) cons
   return is_same;
 }
 
-DEF_TO_STRING(FlashBackQueryItem)
-{
-  int64_t pos = 0;
-  J_OBJ_START();
-  J_KV(K_(table_id));
-  J_KV(K_(time_val));
-  J_OBJ_END();
-  return pos;
-}
-
-
 int ObPhysicalPlan::alloc_op_spec(const ObPhyOperatorType type,
                                   const int64_t child_cnt,
                                   ObOpSpec *&op,
@@ -1188,8 +1163,8 @@ int ObPhysicalPlan::set_minimal_worker_map(const common::hash::ObHashMap<ObAddr,
 int ObPhysicalPlan::assign_worker_map(ObPlanStat::AddrMap &worker_map, const common::hash::ObHashMap<ObAddr, int64_t> &c)
 {
   int ret = OB_SUCCESS;
-  ObMemAttr attr(tenant_id_, "WorkerMap");
-  ObMemAttr node_attr(tenant_id_, "WorkerMapNode");
+  ObMemAttr attr("WorkerMap");
+  ObMemAttr node_attr("WorkerMapNode");
   if (worker_map.created()) {
     worker_map.clear();
   } else if (OB_FAIL(worker_map.create(common::hash::cal_next_prime(100), attr, node_attr))){

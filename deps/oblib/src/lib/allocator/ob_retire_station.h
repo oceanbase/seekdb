@@ -21,7 +21,7 @@
 #include "lib/thread_local/ob_tsi_utils.h"
 #include "lib/time/ob_time_utility.h"
 #include "lib/oblog/ob_log.h"
-#include "common/ob_clock_generator.h"
+#include "lib/time/ob_clock_generator.h"
 
 namespace oceanbase
 {
@@ -30,7 +30,7 @@ namespace common
 class QClock
 {
 public:
-  enum { MAX_QCLOCK_SLOT_NUM = OB_MAX_CPU_NUM * 64 };
+  enum { MAX_QCLOCK_SLOT_NUM = OB_MAX_CPU_NUM * 4 };
   struct ClockSlot
   {
     ClockSlot(): clock_(UINT64_MAX) {}

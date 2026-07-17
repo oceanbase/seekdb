@@ -15,23 +15,20 @@
  */
 #define USING_LOG_PREFIX STORAGE_COMPACTION
 #include "share/compaction/ob_compaction_timer_task_mgr.h"
-#include "deps/oblib/src/lib/thread/thread_mgr.h"
 namespace oceanbase
 {
 namespace compaction
 {
 int ObCompactionTimerTask::restart_schedule_timer_task(
   const int64_t schedule_interval,
-  const int64_t tg_id,
-  common::ObTimerTask &timer_task)
+  common::ObTimer &timer,
+  common::ObTimerTask &timer_task,
+  const bool immediate)
 {
   int ret = OB_SUCCESS;
-  bool is_exist = false;
-  if (OB_FAIL(TG_TASK_EXIST(tg_id, timer_task, is_exist))) {
-    LOG_ERROR("failed to check merge schedule task exist", K(ret));
-  } else if (is_exist && OB_FAIL(TG_CANCEL_R(tg_id, timer_task))) {
+  if (timer.task_exist(timer_task) && OB_FAIL(timer.cancel(timer_task))) {
     LOG_WARN("failed to cancel task", K(ret));
-  } else if (OB_FAIL(TG_SCHEDULE(tg_id, timer_task, schedule_interval, true/*repeat*/))) {
+  } else if (OB_FAIL(timer.schedule(timer_task, schedule_interval, true/*repeat*/, immediate))) {
     LOG_WARN("Fail to schedule timer task", K(ret));
   }
   return ret;

@@ -17,7 +17,7 @@
 #define USING_LOG_PREFIX SQL_DAS
 #include "sql/das/ob_das_utils.h"
 #include "pl/ob_pl.h"
-#include "share/ob_tablet_autoincrement_service.h"
+#include "storage/ob_tablet_autoincrement_service.h"
 #include "sql/das/ob_das_vec_define.h"
 namespace oceanbase
 {
@@ -26,7 +26,7 @@ using namespace share;
 using namespace share::schema;
 namespace sql
 {
-void ObDASUtils::log_user_error_and_warn(const obrpc::ObRpcResultCode &rcode)
+void ObDASUtils::log_user_error_and_warn(const rpc::frame::ObResultCode &rcode)
 {
   if (OB_UNLIKELY(OB_SUCCESS != rcode.rcode_)) {
     FORWARD_USER_ERROR(rcode.rcode_, rcode.msg_);
@@ -72,11 +72,11 @@ int ObDASUtils::check_nested_sql_mutating(ObTableID ref_table_id, ObExecContext 
           && !table_loc->is_fk_check_ ) {
         ObSchemaGetterGuard schema_guard;
         const ObTableSchema *table_schema = NULL;
-        uint64_t tenant_id = exec_ctx.get_my_session()->get_effective_tenant_id();
-        if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(tenant_id, schema_guard))) {
+        
+        if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(schema_guard))) {
           LOG_WARN("get tenant schema guard failed", K(ret));
-        } else if (OB_FAIL(schema_guard.get_table_schema(tenant_id, ref_table_id, table_schema))) {
-          LOG_WARN("get table schema failed", K(ret), K(tenant_id), K(ref_table_id));
+        } else if (OB_FAIL(schema_guard.get_table_schema( ref_table_id, table_schema))) {
+          LOG_WARN("get table schema failed", K(ret), K(ref_table_id));
         } else if (table_schema != nullptr) {
           LOG_MYSQL_USER_ERROR(OB_ERR_MUTATING_TABLE_OPERATION, table_schema->get_table_name());
         }
@@ -196,7 +196,7 @@ int ObDASUtils::project_storage_row(const ObDASDMLBaseCtDef &dml_ctdef,
     } else if (FALSE_IT(storage_row.storage_datums_[i].shallow_copy_from_datum(dml_row.cells()[projector_idx]))) {
     } else if (storage_row.storage_datums_[i].is_null()) {
       //nothing to do
-    } else if (OB_FAIL(reshape_datum_value(col_type, col_accuracy, false, allocator, storage_row.storage_datums_[i]))) {
+    } else if (OB_FAIL(reshape_datum_value(col_type, col_accuracy, allocator, storage_row.storage_datums_[i]))) {
       LOG_WARN("reshape storage value failed", K(ret));
     } else if (col_type.is_lob_storage() && col_type.has_lob_header()) {
       storage_row.storage_datums_[i].set_has_lob_header();
@@ -271,7 +271,6 @@ int ObDASUtils::padding_fixed_string_value(int64_t max_len, ObIAllocator &alloca
 
 int ObDASUtils::reshape_datum_value(const ObObjMeta &col_type,
                                     const ObAccuracy &col_accuracy,
-                                    const bool enable_oracle_empty_char_reshape_to_null,
                                     ObIAllocator &allocator,
                                     blocksstable::ObStorageDatum &datum_value)
 {
@@ -292,10 +291,6 @@ int ObDASUtils::reshape_datum_value(const ObObjMeta &col_type,
         datum_value.set_string(ObString(binary_len, dest_str));
       }
     }
-  } else if (lib::is_oracle_mode() && enable_oracle_empty_char_reshape_to_null && col_type.is_character_type() && datum_value.len_ == 0) {
-    // Oracle compatibility mode: '' as null
-    LOG_DEBUG("reshape empty string to null", K(datum_value));
-    datum_value.set_null();
   } else if (col_type.is_fixed_len_char_type()) {
     const char *str = datum_value.ptr_;
     int32_t len = datum_value.len_;
@@ -354,32 +349,13 @@ int ObDASUtils::reshape_datum_vector_value(const ObObjMeta &col_type,
         ObDatum &datum = datum_vector.datums_[i];
         if (!datum.is_null()) {
           ObLength len = datum.len_;
-          if (lib::is_oracle_mode() && 0 == len) {
-            // Oracle compatibility mode: '' as null
-            LOG_DEBUG("reshape empty string to null", K(i));
-            datum.set_null();
-          } else {
-            const char *str = datum.ptr_;
-            for (; len >= space_pattern.length(); len -= space_pattern.length()) {
-              if (0 != MEMCMP(str + len - space_pattern.length(), space_pattern.ptr(), space_pattern.length())) {
-                break;
-              }
+          const char *str = datum.ptr_;
+          for (; len >= space_pattern.length(); len -= space_pattern.length()) {
+            if (0 != MEMCMP(str + len - space_pattern.length(), space_pattern.ptr(), space_pattern.length())) {
+              break;
             }
-            datum.len_ = len;
           }
-        }
-      }
-      if (OB_LIKELY(OB_ITER_END == ret)) {
-        ret = OB_SUCCESS;
-      }
-    } else if (lib::is_oracle_mode() && col_type.is_character_type()) {
-      // Oracle compatibility mode: '' as null
-      int64_t i = 0;
-      while (OB_SUCC(ret) && OB_SUCC(selector.get_next(i))) {
-        ObDatum &datum = datum_vector.datums_[i];
-        if (!datum.is_null() && 0 == datum.len_) {
-          LOG_DEBUG("reshape empty string to null", K(i));
-          datum.set_null();
+          datum.len_ = len;
         }
       }
       if (OB_LIKELY(OB_ITER_END == ret)) {
@@ -477,7 +453,6 @@ static int new_discrete_vector(VecValueTypeClass value_tc,
 
 int ObDASUtils::reshape_vector_value(const ObObjMeta &col_type,
                                      const ObAccuracy &col_accuracy,
-                                     const bool enable_oracle_empty_char_reshape_to_null,
                                      ObIAllocator &allocator,
                                      ObIVector *&vector,
                                      ObBatchSelector &selector)
@@ -651,12 +626,7 @@ int ObDASUtils::reshape_vector_value(const ObObjMeta &col_type,
             discrete_vec->set_null(i);
           } else {
             const ObLength length = offsets[i + 1] - offsets[i];
-            if (lib::is_oracle_mode() && enable_oracle_empty_char_reshape_to_null && 0 == length) {
-              // Oracle compatibility mode: '' as null
-              LOG_DEBUG("reshape empty string to null", K(i));
-              continuous_vec->set_null(i);
-              discrete_vec->set_null(i);
-            } else {
+            {
               ObLength len = length;
               char *str = data + offsets[i];
               for (; len >= space_pattern.length(); len -= space_pattern.length()) {
@@ -689,11 +659,7 @@ int ObDASUtils::reshape_vector_value(const ObObjMeta &col_type,
         while (OB_SUCC(ret) && OB_SUCC(selector.get_next(i))) {
           if (!discrete_vec->is_null(i)) {
             ObLength len = lens[i];
-            if (lib::is_oracle_mode() && enable_oracle_empty_char_reshape_to_null && 0 == len) {
-              // Oracle compatibility mode: '' as null
-              LOG_DEBUG("reshape empty string to null", K(i));
-              discrete_vec->set_null(i);
-            } else {
+            {
               const char *str = ptrs[i];
               for (; len >= space_pattern.length(); len -= space_pattern.length()) {
                 if (0 != MEMCMP(str + len - space_pattern.length(), space_pattern.ptr(), space_pattern.length())) {
@@ -718,11 +684,7 @@ int ObDASUtils::reshape_vector_value(const ObObjMeta &col_type,
           ObDatum &datum = datums[i];
           if (!datum.is_null()) {
             ObLength len = datum.len_;
-            if (lib::is_oracle_mode() && enable_oracle_empty_char_reshape_to_null && 0 == len) {
-              // Oracle compatibility mode: '' as null
-              LOG_DEBUG("reshape empty string to null", K(i));
-              datum.set_null();
-            } else {
+            {
               const char *str = datum.ptr_;
               for (; len >= space_pattern.length(); len -= space_pattern.length()) {
                 if (0 != MEMCMP(str + len - space_pattern.length(), space_pattern.ptr(), space_pattern.length())) {
@@ -744,11 +706,7 @@ int ObDASUtils::reshape_vector_value(const ObObjMeta &col_type,
         ObDatum &datum = uniform_vec->get_datums()[0];
         if (!datum.is_null()) {
           ObLength len = datum.len_;
-          if (lib::is_oracle_mode() && enable_oracle_empty_char_reshape_to_null && 0 == len) {
-            // Oracle compatibility mode: '' as null
-            LOG_DEBUG("reshape empty string to null");
-            datum.set_null();
-          } else {
+          {
             const char *str = datum.ptr_;
             for (; len >= space_pattern.length(); len -= space_pattern.length()) {
               if (0 != MEMCMP(str + len - space_pattern.length(), space_pattern.ptr(), space_pattern.length())) {
@@ -757,74 +715,6 @@ int ObDASUtils::reshape_vector_value(const ObObjMeta &col_type,
             }
             datum.len_ = len;
           }
-        }
-        break;
-      }
-      default:
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected fixed len char vector format", KR(ret), K(format), K(col_type));
-        break;
-    }
-  } else if (lib::is_oracle_mode() && col_type.is_character_type() && enable_oracle_empty_char_reshape_to_null) {
-    // Oracle compatibility mode: '' as null
-    const VectorFormat format = vector->get_format();
-    switch (format) {
-      case VEC_CONTINUOUS:
-      {
-        ObContinuousBase *continuous_vec = static_cast<ObContinuousBase *>(vector);
-        uint32_t *offsets = continuous_vec->get_offsets();
-        int64_t i = 0;
-        while (OB_SUCC(ret) && OB_SUCC(selector.get_next(i))) {
-          if (!continuous_vec->is_null(i) && offsets[i + 1] == offsets[i]) {
-            LOG_DEBUG("reshape empty string to null", K(i));
-            continuous_vec->set_null(i);
-          }
-        }
-        if (OB_ITER_END == ret) {
-          ret = OB_SUCCESS;
-        }
-        break;
-      }
-      case VEC_DISCRETE:
-      {
-        ObDiscreteBase *discrete_vec = static_cast<ObDiscreteBase *>(vector);
-        ObLength *lens =discrete_vec->get_lens();
-        int64_t i = 0;
-        while (OB_SUCC(ret) && OB_SUCC(selector.get_next(i))) {
-          if (!discrete_vec->is_null(i) && 0 == lens[i]) {
-            LOG_DEBUG("reshape empty string to null", K(i));
-            discrete_vec->set_null(i);
-          }
-        }
-        if (OB_ITER_END == ret) {
-          ret = OB_SUCCESS;
-        }
-        break;
-      }
-      case VEC_UNIFORM:
-      {
-        ObUniformBase *uniform_vec = static_cast<ObUniformBase *>(vector);
-        ObDatum *datums = uniform_vec->get_datums();
-        int64_t i = 0;
-        while (OB_SUCC(ret) && OB_SUCC(selector.get_next(i))) {
-          ObDatum &datum = datums[i];
-          if (!datum.is_null() && 0 == datum.len_) {
-            LOG_DEBUG("reshape empty string to null", K(i));
-            datum.set_null();
-          }
-        }
-        if (OB_ITER_END == ret) {
-          ret = OB_SUCCESS;
-        }
-        break;
-      }
-      case VEC_UNIFORM_CONST:
-      {
-        ObUniformBase *uniform_vec = static_cast<ObUniformBase *>(vector);
-        ObDatum &datum = uniform_vec->get_datums()[0];
-        if (!datum.is_null() && 0 == datum.len_) {
-          LOG_DEBUG("reshape empty string to null");
-          datum.set_null();
         }
         break;
       }
@@ -934,7 +824,7 @@ int ObDASUtils::find_child_das_rtdef(ObDASBaseRtDef *root_rtdef,
   return ret;
 }
 
-bool ObDASUtils::is_index_merge(const ObDASBaseCtDef *attach_ctdef)
+bool ObDASUtils::is_index_merge(const ObDASBaseCtDef *attach_ctdef) 
 {
   bool bret = false;
   if (attach_ctdef != nullptr) {
@@ -952,7 +842,7 @@ bool ObDASUtils::is_index_merge(const ObDASBaseCtDef *attach_ctdef)
   return bret;
 }
 
-bool ObDASUtils::is_func_lookup(const ObDASBaseCtDef *attach_ctdef)
+bool ObDASUtils::is_func_lookup(const ObDASBaseCtDef *attach_ctdef) 
 {
   int ret = OB_SUCCESS;
   bool bret = false;
@@ -967,7 +857,7 @@ bool ObDASUtils::is_func_lookup(const ObDASBaseCtDef *attach_ctdef)
   return bret;
 }
 
-bool ObDASUtils::is_vec_idx_scan(const ObDASBaseCtDef *attach_ctdef)
+bool ObDASUtils::is_vec_idx_scan(const ObDASBaseCtDef *attach_ctdef) 
 {
   int ret = OB_SUCCESS;
 
@@ -984,7 +874,7 @@ bool ObDASUtils::is_vec_idx_scan(const ObDASBaseCtDef *attach_ctdef)
   return bret;
 }
 
-bool ObDASUtils::is_fts_idx_scan(const ObDASBaseCtDef *attach_ctdef)
+bool ObDASUtils::is_fts_idx_scan(const ObDASBaseCtDef *attach_ctdef) 
 {
   int ret = OB_SUCCESS;
 
@@ -1017,66 +907,6 @@ bool ObDASUtils::is_es_match_scan(const ObDASBaseCtDef *attach_ctdef)
   }
 
   return bret;
-}
-
-int ObDASUtils::generate_mlog_row(const ObLSID &ls_id,
-                                  const ObTabletID &tablet_id,
-                                  const storage::ObDMLBaseParam &dml_param,
-                                  blocksstable::ObDatumRow &row,
-                                  ObDASOpType op_type,
-                                  bool is_old_row)
-{
-  int ret = OB_SUCCESS;
-  const uint64_t tenant_id = MTL_ID();
-  uint64_t autoinc_seq = 0;
-  ObTabletAutoincrementService &auto_inc = ObTabletAutoincrementService::get_instance();
-  if (OB_ISNULL(dml_param.table_param_)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("table param is null", KR(ret));
-  } else if (!dml_param.table_param_->get_data_table().is_mlog_table()) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("data table is not materialized view log",
-        KR(ret), K(dml_param.table_param_->get_data_table()));
-  } else if (row.count_ < 4) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("each mlog row should at least contain 4 columns", KR(ret), K(row.count_));
-  } else if (OB_FAIL(auto_inc.get_autoinc_seq_for_mlog(tenant_id, ls_id, tablet_id, autoinc_seq))) {
-    LOG_WARN("get_autoinc_seq fail", K(ret), K(tenant_id), K(ls_id), K(tablet_id));
-  } else {
-    // mlog_row = | base_table_rowkey_cols | partition key cols | sequence_col | ... | dmltype_col | old_new_col |
-    int sequence_col = 0;
-    int dmltype_col = row.count_ - 2;
-    int old_new_col = row.count_ - 1;
-    const ObTableDMLParam::ObColDescArray &col_descs = dml_param.table_param_->get_col_descs();
-    bool found_seq_col = false;
-    for (int64_t i = 0; !found_seq_col && (i < row.count_); ++i) {
-      if (OB_MLOG_SEQ_NO_COLUMN_ID == col_descs.at(i).col_id_) {
-        sequence_col = i; // sequence_no is the last rowkey
-        found_seq_col = true;
-      }
-    }
-
-    row.storage_datums_[sequence_col].reuse();
-    row.storage_datums_[dmltype_col].reuse();
-    row.storage_datums_[old_new_col].reuse();
-
-    row.storage_datums_[sequence_col].set_int(static_cast<int64_t>(autoinc_seq));
-    if (sql::DAS_OP_TABLE_DELETE == op_type) {
-      row.storage_datums_[dmltype_col].set_string(ObString("D"));
-      row.storage_datums_[old_new_col].set_string(ObString("O"));
-    } else if (sql::DAS_OP_TABLE_UPDATE == op_type) {
-      row.storage_datums_[dmltype_col].set_string(ObString("U"));
-      if (is_old_row) {
-        row.storage_datums_[old_new_col].set_string(ObString("O"));
-      } else {
-        row.storage_datums_[old_new_col].set_string(ObString("N"));
-      }
-    } else {
-      row.storage_datums_[dmltype_col].set_string(ObString("I"));
-      row.storage_datums_[old_new_col].set_string(ObString("N"));
-    }
-  }
-  return ret;
 }
 
 }  // namespace sql

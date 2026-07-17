@@ -16,10 +16,10 @@
 #define USING_LOG_PREFIX STORAGE
 
 #include "storage/direct_load/ob_direct_load_insert_table_ctx.h"
-#include "share/ob_tablet_autoincrement_service.h"
-#include "share/stat/ob_stat_item.h"
-#include "share/table/ob_table_load_dml_stat.h"
-#include "share/table/ob_table_load_sql_statistics.h"
+#include "storage/ob_tablet_autoincrement_service.h"
+#include "sql/optimizer/stat/ob_stat_item.h"
+#include "storage/direct_load/ob_table_load_dml_stat.h"
+#include "storage/direct_load/ob_table_load_sql_statistics.h"
 #include "storage/direct_load/ob_direct_load_origin_table.h"
 #include "storage/direct_load/ob_direct_load_row_iterator.h"
 #include "storage/direct_load/ob_direct_load_vector_utils.h"
@@ -94,7 +94,6 @@ bool ObDirectLoadInsertTableParam::is_valid() const
 ObDirectLoadInsertTabletContext::ObDirectLoadInsertTabletContext()
   : table_ctx_(nullptr),
     param_(nullptr),
-    ls_id_(),
     origin_tablet_id_(),
     tablet_id_(),
     pk_tablet_id_(),
@@ -105,7 +104,7 @@ ObDirectLoadInsertTabletContext::ObDirectLoadInsertTabletContext()
     row_count_(0),
     is_inited_(false)
 {
-  closed_slices_.set_tenant_id(MTL_ID());
+  
 }
 
 ObDirectLoadInsertTabletContext::~ObDirectLoadInsertTabletContext() {}
@@ -117,12 +116,12 @@ int ObDirectLoadInsertTabletContext::refresh_pk_cache(const ObTabletID &tablet_i
                                                       ObTabletCacheInterval &pk_cache)
 {
   int ret = OB_SUCCESS;
-  const uint64_t tenant_id = MTL_ID();
+  
   ObTabletAutoincrementService &auto_inc = ObTabletAutoincrementService::get_instance();
   pk_cache.tablet_id_ = tablet_id;
   pk_cache.cache_size_ = PK_CACHE_SIZE;
-  if (OB_FAIL(auto_inc.get_tablet_cache_interval(tenant_id, pk_cache))) {
-    LOG_WARN("get_autoinc_seq fail", K(ret), K(tenant_id), K(tablet_id));
+  if (OB_FAIL(auto_inc.get_tablet_cache_interval(pk_cache))) {
+    LOG_WARN("get_autoinc_seq fail", K(ret), K(tablet_id));
   } else if (OB_UNLIKELY(PK_CACHE_SIZE > pk_cache.count())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected autoincrement value count", K(ret), K(pk_cache));
@@ -255,7 +254,7 @@ ObDirectLoadInsertTableContext::ObDirectLoadInsertTableContext()
     seq_no_vector_(nullptr),
     is_inited_(false)
 {
-  allocator_.set_tenant_id(MTL_ID());
+  
 }
 
 ObDirectLoadInsertTableContext::~ObDirectLoadInsertTableContext()
@@ -275,7 +274,7 @@ ObDirectLoadInsertTableContext::~ObDirectLoadInsertTableContext()
 int ObDirectLoadInsertTableContext::inner_init()
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(tablet_ctx_map_.create(1024, "TLD_InsTabCtx", "TLD_InsTabCtx", MTL_ID()))) {
+  if (OB_FAIL(tablet_ctx_map_.create(1024, "TLD_InsTabCtx", "TLD_InsTabCtx"))) {
     LOG_WARN("fail to create tablet ctx map", KR(ret));
   } else if (param_.enable_dag_) {
     const int64_t trans_version = !param_.is_incremental_ ? param_.snapshot_version_ : INT64_MAX;

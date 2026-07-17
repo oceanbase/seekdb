@@ -21,7 +21,7 @@
 namespace oceanbase
 {
 using namespace common;
-using namespace obrpc;
+using namespace obcall;
 using namespace share;
 using namespace share::schema;
 namespace sql
@@ -65,7 +65,7 @@ int ObDropIndexResolver::resolve(const ParseNode &parse_tree)
       stmt_ = drop_index_stmt;
     }
 
-    if (OB_SUCC(ret) && lib::is_mysql_mode()) {
+    if (OB_SUCC(ret)) {
       index_node = parse_tree.children_[0];
       ParseNode *relation_node = parse_tree.children_[1];
       ObString table_name;
@@ -78,7 +78,7 @@ int ObDropIndexResolver::resolve(const ParseNode &parse_tree)
       } else {
         drop_index_stmt->set_table_name(table_name);
         drop_index_stmt->set_database_name(database_name);
-        drop_index_stmt->set_tenant_id(session_info_->get_effective_tenant_id());
+        
       }
     }
 
@@ -91,7 +91,7 @@ int ObDropIndexResolver::resolve(const ParseNode &parse_tree)
         ObString index_name(len, len, index_node->str_value_);
         // Check if the index is created on a foreign key column, if so, then do not allow the index to be deleted
         const ObTableSchema *table_schema = NULL;
-        if (OB_FAIL(schema_checker_->get_table_schema(session_info_->get_effective_tenant_id(),
+        if (OB_FAIL(schema_checker_->get_table_schema(
             drop_index_stmt->get_database_name(),
             drop_index_stmt->get_table_name(),
             false /* not index table */,
@@ -105,23 +105,6 @@ int ObDropIndexResolver::resolve(const ParseNode &parse_tree)
         } else if (OB_ISNULL(table_schema)) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("table schema is NULL", K(ret));
-        } else if (table_schema->is_materialized_view()) {
-          const uint64_t tenant_id = session_info_->get_effective_tenant_id();
-          const uint64_t mv_container_table_id = table_schema->get_data_table_id();
-          const ObTableSchema *mv_container_table_schema = nullptr;
-          ObString mv_container_table_name;
-          if (OB_FAIL(get_mv_container_table(tenant_id,
-                                             mv_container_table_id,
-                                             mv_container_table_schema,
-                                             mv_container_table_name))) {
-            LOG_WARN("fail to get mv container table", KR(ret), K(tenant_id), K(mv_container_table_id));
-            if (OB_TABLE_NOT_EXIST == ret) {
-              ret = OB_ERR_UNEXPECTED; // rewrite errno
-            }
-          } else {
-            drop_index_stmt->set_table_name(mv_container_table_name);
-            table_schema = mv_container_table_schema;
-          }
         }
         if (OB_FAIL(ret)) {
         } else if (table_schema->is_parent_table() || table_schema->is_child_table()) {
@@ -134,7 +117,7 @@ int ObDropIndexResolver::resolve(const ParseNode &parse_tree)
               index_name,
               index_table_name))) {
             LOG_WARN("build_index_table_name failed", K(table_schema->get_table_id()), K(index_name), K(ret));
-          } else if (OB_FAIL(schema_checker_->get_table_schema(session_info_->get_effective_tenant_id(),
+          } else if (OB_FAIL(schema_checker_->get_table_schema(
               drop_index_stmt->get_database_name(),
               index_table_name,
               true /* index table */,
@@ -148,7 +131,7 @@ int ObDropIndexResolver::resolve(const ParseNode &parse_tree)
                                                         *schema_checker_,
                                                         has_other_indexes_on_same_cols))) {
             LOG_WARN("check indexes on same cols failed", K(ret));
-          } else if (!has_other_indexes_on_same_cols && lib::is_mysql_mode()) {
+          } else if (!has_other_indexes_on_same_cols) {
             if (OB_FAIL(check_index_columns_equal_foreign_key(*table_schema, *index_table_schema))) {
               LOG_WARN("failed to check_index_columns_equal_foreign_key", K(ret), K(index_table_name));
             }
@@ -157,7 +140,7 @@ int ObDropIndexResolver::resolve(const ParseNode &parse_tree)
         // Foreign key column deletion index impact check ends here
         if (OB_SUCC(ret)) {
           drop_index_stmt->set_index_name(index_name);
-          obrpc::ObDropIndexArg &drop_index_arg = drop_index_stmt->get_drop_index_arg();
+          obcall::ObDropIndexArg &drop_index_arg = drop_index_stmt->get_drop_index_arg();
         }
       }
     }

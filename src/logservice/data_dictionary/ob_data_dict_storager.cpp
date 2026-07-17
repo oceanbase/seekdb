@@ -64,8 +64,7 @@ const char *ObDataDictStorage::DEFAULT_DDL_MDS_MSG = "ddl_trans commit";
 const int64_t ObDataDictStorage::DEFAULT_DDL_MDS_MSG_LEN = strlen(DEFAULT_DDL_MDS_MSG);
 
 ObDataDictStorage::ObDataDictStorage(ObIAllocator &allocator)
-  : tenant_id_(OB_INVALID_TENANT_ID),
-    allocator_(allocator),
+  : allocator_(allocator),
     snapshot_scn_(),
     start_lsn_(),
     end_lsn_(),
@@ -87,7 +86,6 @@ void ObDataDictStorage::reset()
 {
   reuse();
   reset_buf_();
-  tenant_id_ = OB_INVALID_TENANT_ID;
 }
 
 void ObDataDictStorage::reuse()
@@ -103,19 +101,18 @@ void ObDataDictStorage::reuse()
   total_dict_size_ = 0;
 }
 
-int ObDataDictStorage::init(const uint64_t tenant_id)
+int ObDataDictStorage::init()
 {
   int ret = OB_SUCCESS;
 
-  if (OB_UNLIKELY(OB_INVALID_TENANT_ID == tenant_id)) {
+  if (OB_UNLIKELY(false)) {
     ret = OB_INVALID_ARGUMENT;
-    DDLOG(WARN, "invalid tenant_id", KR(ret), K(tenant_id));
+    DDLOG(WARN, "invalid argument", KR(ret));
   } else if (OB_NOT_NULL(palf_buf_) || OB_NOT_NULL(dict_buf_)) {
     ret = OB_ERR_UNEXPECTED;
     DDLOG(WARN, "expect palf_buf and dict_buf NULL", KR(ret), KP_(palf_buf), KP_(dict_buf));
   } else {
-    tenant_id_ = tenant_id;
-    DDLOG(INFO, "data_dict_storager init success", K_(tenant_id));
+    DDLOG(INFO, "data_dict_storager init success");
   }
 
   return ret;
@@ -128,14 +125,14 @@ int ObDataDictStorage::prepare(const share::SCN &snapshot_scn, ObLogHandler *log
   if (OB_UNLIKELY(! snapshot_scn.is_valid())
       || OB_ISNULL(log_handler)) {
     ret = OB_INVALID_ARGUMENT;
-    DDLOG(WARN, "invalid log_handler", KR(ret), K_(tenant_id), K(snapshot_scn_));
+    DDLOG(WARN, "invalid log_handler", KR(ret), K(snapshot_scn_));
   } else if (OB_FAIL(prepare_buf_())) {
     DDLOG(WARN, "prepare_buf_ failed", KR(ret));
   } else {
     reuse();
     snapshot_scn_ = snapshot_scn;
     log_handler_ = log_handler;
-    DDLOG(INFO, "data_dict_storager prepare success", K_(tenant_id), K(snapshot_scn));
+    DDLOG(INFO, "data_dict_storager prepare success", K(snapshot_scn));
   }
 
   return ret;
@@ -210,7 +207,7 @@ int ObDataDictStorage::finish(
         || OB_UNLIKELY(! end_lsn_.is_valid())) {
       ret = OB_STATE_NOT_MATCH;
       DDLOG(WARN, "invalid start_lsn or end_lsn for data_dict_service", KR(ret),
-          K_(tenant_id), K_(snapshot_scn), K(start_lsn), K(end_lsn));
+          K_(snapshot_scn), K(start_lsn), K(end_lsn));
     } else {
       start_lsn = start_lsn_;
       end_lsn = end_lsn_;
@@ -305,7 +302,7 @@ int ObDataDictStorage::parse_dict_metas(
       || OB_UNLIKELY(pos < 0)) {
     ret = OB_INVALID_ARGUMENT;
     DDLOG(WARN, "invalid args", KR(ret), KP(buf), K(pos), K(buf_len));
-  } else if (OB_FAIL(iterator.init(OB_SERVER_TENANT_ID))) {
+  } else if (OB_FAIL(iterator.init())) {
     DDLOG(WARN, "iterator init failed", KR(ret), KP(buf), K(pos), K(buf_len));
   } else if (0 == strncmp(buf, DEFAULT_DDL_MDS_MSG, DEFAULT_DDL_MDS_MSG_LEN)) {
     // found DEFAULT_DDL_MDS_MSG, means ddl has no schema change.
@@ -382,19 +379,9 @@ int ObDataDictStorage::prepare_buf_()
 {
   int ret = OB_SUCCESS;
 
-  if (OB_UNLIKELY(OB_INVALID_TENANT_ID == tenant_id_ || ! is_user_tenant(tenant_id_))) {
-    ret = OB_STATE_NOT_MATCH;
-    DDLOG(WARN, "data_dict_service only work for user_tenant", KR(ret), K_(tenant_id));
-  } else if (OB_NOT_NULL(palf_buf_) || OB_NOT_NULL(dict_buf_)) {
-    ret = OB_ERR_UNEXPECTED;
-    DDLOG(WARN, "expect invalid palf_buf and dict_buf before prepare dump data_dict", KR(ret),
-        KP_(palf_buf), KP_(dict_buf));
-  } else {
-    palf_buf_len_ = DEFAULT_PALF_BUF_SIZE;
-    dict_buf_len_ = DEFAULT_DICT_BUF_SIZE;
-    palf_buf_ = static_cast<char*>(ob_dict_malloc(palf_buf_len_, tenant_id_));
-    dict_buf_ = static_cast<char*>(ob_dict_malloc(dict_buf_len_ , tenant_id_));
-  }
+  // data_dict dump is user-tenant only; lite has no user tenant -> not applicable (service also doesn't start in lite)
+  ret = OB_STATE_NOT_MATCH;
+  DDLOG(WARN, "data_dict_service only work for user_tenant", KR(ret));
 
   return ret;
 }
@@ -446,7 +433,7 @@ int ObDataDictStorage::prepare_dict_buf_(const int64_t required_size)
     ob_dict_free(dict_buf_);
     dict_buf_ = NULL;
 
-    if (OB_ISNULL(dict_buf_ = static_cast<char*>(ob_dict_malloc(alloc_size, tenant_id_)))) {
+    if (OB_ISNULL(dict_buf_ = static_cast<char*>(ob_dict_malloc(alloc_size)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
       DDLOG(WARN, "malloc data_dict_buf failed", KR(ret),
           K(alloc_size), K(required_size), K(block_cnt), K(block_size));
@@ -552,14 +539,12 @@ int ObDataDictStorage::segment_dict_buf_to_palf_(ObDictMetaHeader &header)
 int ObDataDictStorage::submit_to_palf_()
 {
   int ret = OB_SUCCESS;
-  bool is_leader = false;
   ObDataDictPersistCallback *callback = NULL;
   const SCN &ref_scn = snapshot_scn_; // ns
   const bool need_nonblock = false; // TODO Is non-block needed?
   const bool allow_compression = true;
   palf::LSN lsn;
   SCN submit_scn;
-  int64_t proposal_id = 0;
 
   if (OB_ISNULL(palf_buf_)
       || OB_ISNULL(log_handler_)
@@ -572,11 +557,6 @@ int ObDataDictStorage::submit_to_palf_()
     DDLOG(WARN, "log_handler_ is not valid", KR(ret));
   } else if (OB_UNLIKELY(palf_pos_ == 0)) {
     DDLOG(INFO, "empty palf_buf, do nothing", K_(palf_buf_len), K_(palf_pos));
-  } else if (OB_FAIL(check_ls_leader(log_handler_, is_leader, proposal_id))) {
-    DDLOG(WARN, "check_ls_leader failed", KR(ret), K(is_leader), K(proposal_id));
-  } else if (OB_UNLIKELY(! is_leader)) {
-    ret = OB_STATE_NOT_MATCH;
-    DDLOG(INFO, "do-nothing on non-leader logstream.", KR(ret), K(is_leader), K(proposal_id));
   } else if (OB_FAIL(alloc_palf_cb_(callback))) {
     DDLOG(WARN, "alloc_palf_cb_ failed", KR(ret));
   } else if (OB_FAIL(log_handler_->append(
@@ -707,7 +687,7 @@ int ObDataDictStorage::check_callback_list_(
   }
 
   if (is_all_invoked || need_print_cb_status) {
-    // log callback status, NOTICE: stop_flag may set if ls role change or tenant stop.
+    // log callback status, NOTICE: stop_flag may set if ls local lifecycle or tenant stop.
     DDLOG(INFO, "[STAT] callbacks_status", KR(ret), K(total_cb_count), K(not_invoked_cb_count), K(failed_cb_count),
         K(is_all_invoked), K(need_print_cb_status), K(stop_flag));
   }

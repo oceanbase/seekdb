@@ -16,7 +16,6 @@
 
 #ifndef OCEANBASE_SQL_ENGINE_CMD_OB_KILL_EXECUTOR_H__
 #define OCEANBASE_SQL_ENGINE_CMD_OB_KILL_EXECUTOR_H__
-#include "share/ob_srv_rpc_proxy.h"
 namespace oceanbase
 {
 namespace common
@@ -62,19 +61,6 @@ private:
                         ObExecContext &ctx);
 
   DISALLOW_COPY_AND_ASSIGN(ObKillExecutor);
-};
-
-class ObRpcKillSessionP : public obrpc::ObRpcProcessor<
-     obrpc::ObSrvRpcProxy::ObRpc<obrpc::OB_KILL_SESSION> >, public ObKillSession
-{
-public:
-  explicit ObRpcKillSessionP(const observer::ObGlobalContext &gctx) : gctx_(gctx)
-  {}
-  ~ObRpcKillSessionP() {}
-protected:
-  int process();
-private:
-  const observer::ObGlobalContext &gctx_;
 };
 }
 }

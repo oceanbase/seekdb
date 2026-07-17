@@ -6,7 +6,7 @@ set @@session.explicit_defaults_for_timestamp=off;
 #owner group: sql1
 # tags: optimizer
 
-## fix bug
+## fix bug 
 --disable_warnings
 drop table if exists t1, t2;
 --enable_warnings

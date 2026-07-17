@@ -111,7 +111,7 @@ public:
 
   // tx_elr_preparing will elr prepare all callbacks. And it will release the
   // lock after proposing the commit log and even before the commit log
-  // successfully synced for single ls txn.
+  // successfully synced for the transaction.
   int tx_elr_preparing();
 
   // tx_elr_revoke will clear elr flag on TransNode
@@ -206,7 +206,7 @@ public:
     checksum_scn_.inc_update(checksum_scn);
   }
   void inc_update_sync_scn(const share::SCN scn);
-  transaction::ObPartTransCtx *get_trans_ctx() const;
+  transaction::ObTxCtx *get_trans_ctx() const;
   bool pending_log_too_large(const int64_t limit) const
   {
     return ATOMIC_LOAD(&data_size_) - ATOMIC_LOAD(&logged_data_size_) > limit;

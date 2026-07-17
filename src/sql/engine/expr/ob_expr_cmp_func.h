@@ -42,7 +42,6 @@ public:
       const common::ObPrecision prec1,
       const common::ObPrecision prec2,
       const common::ObCmpOp cmp_op,
-      const bool is_oracle_mode,
       const common::ObCollationType cs_type,
       const bool has_lob_header);
 
@@ -54,7 +53,6 @@ public:
       const common::ObPrecision prec1,
       const common::ObPrecision prec2,
       const common::ObCmpOp cmp_op,
-      const bool is_oracle_mode,
       const common::ObCollationType cs_type,
       const bool has_lob_header);
 
@@ -65,7 +63,6 @@ public:
       const common::ObScale scale2,
       const common::ObPrecision prec1,
       const common::ObPrecision prec2,
-      const bool is_oracle_mode,
       const common::ObCollationType cs_type,
       const bool has_lob_header);
 };

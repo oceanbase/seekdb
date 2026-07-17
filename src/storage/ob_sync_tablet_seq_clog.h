@@ -20,7 +20,6 @@
 #include "common/ob_tablet_id.h"
 #include "logservice/palf/palf_callback.h"
 #include "logservice/ob_append_callback.h"
-#include "share/ob_ls_id.h"
 #include "share/ob_tablet_autoincrement_param.h"
 #include "storage/ddl/ob_ddl_clog.h"
 #include "storage/multi_data_source/mds_ctx.h"
@@ -59,7 +58,7 @@ public:
   ObSyncTabletSeqMdsLogCb();
   virtual ~ObSyncTabletSeqMdsLogCb() = default;
 
-  int init(const share::ObLSID &ls_id, const common::ObTabletID &tablet_id, const int64_t writer_id);
+  int init(const common::ObTabletID &tablet_id, const int64_t writer_id);
   virtual int on_success() override;
   virtual int on_failure() override;
   void try_release();

@@ -17,10 +17,12 @@
 #define USING_LOG_PREFIX SERVER
 
 #include "storage/direct_load/ob_direct_load_insert_data_table_ctx.h"
-#include "share/ob_tablet_autoincrement_service.h"
-#include "share/stat/ob_stat_item.h"
-#include "share/table/ob_table_load_dml_stat.h"
-#include "share/table/ob_table_load_sql_statistics.h"
+#include "storage/ddl/ob_ddl_storage_util.h"
+#include "storage/ob_tablet_autoincrement_service.h"
+#include "share/rc/ob_module_provider.h"
+#include "sql/optimizer/stat/ob_stat_item.h"
+#include "storage/direct_load/ob_table_load_dml_stat.h"
+#include "storage/direct_load/ob_table_load_sql_statistics.h"
 #include "storage/direct_load/ob_direct_load_batch_rows.h"
 #include "storage/direct_load/ob_direct_load_datum_row.h"
 #include "storage/direct_load/ob_direct_load_table_data_desc.h"
@@ -29,6 +31,7 @@
 #include "storage/tx_storage/ob_ls_service.h"
 #include "storage/ddl/ob_ddl_independent_dag.h"
 #include "storage/ddl/ob_direct_load_mgr_utils.h"
+#include "storage/tx/ob_ts_mgr.h"
 
 namespace oceanbase
 {
@@ -67,7 +70,6 @@ ObDirectLoadInsertDataTabletContext::~ObDirectLoadInsertDataTabletContext()
 }
 
 int ObDirectLoadInsertDataTabletContext::init(ObDirectLoadInsertDataTableContext *table_ctx,
-                                              const ObLSID &ls_id,
                                               const ObTabletID &origin_tablet_id,
                                               const ObTabletID &tablet_id)
 {
@@ -75,23 +77,21 @@ int ObDirectLoadInsertDataTabletContext::init(ObDirectLoadInsertDataTableContext
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
     LOG_WARN("ObDirectLoadInsertDataTabletContext init twice", KR(ret), KP(this));
-  } else if (OB_UNLIKELY(nullptr == table_ctx || !ls_id.is_valid() ||
-                         !origin_tablet_id.is_valid() || !tablet_id.is_valid())) {
+  } else if (OB_UNLIKELY(nullptr == table_ctx || !origin_tablet_id.is_valid() || !tablet_id.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid args", KR(ret), KP(table_ctx), K(ls_id), K(origin_tablet_id), K(tablet_id));
+    LOG_WARN("invalid args", KR(ret), KP(table_ctx), K(origin_tablet_id), K(tablet_id));
   } else {
     table_ctx_ = table_ctx;
     param_ = &table_ctx->param_;
     context_id_ = table_ctx->ddl_ctrl_.context_id_;
     direct_load_type_ = table_ctx->ddl_ctrl_.direct_load_type_;
-    ls_id_ = ls_id;
     origin_tablet_id_ = origin_tablet_id;
     tablet_id_ = tablet_id;
     pk_tablet_id_ = origin_tablet_id_; // Get from original table, DDL will help sync to hidden table
     if (param_->enable_dag_) {
       slice_idx_ = param_->reserved_parallel_;
     }
-    if (OB_FAIL(ObDDLUtil::init_macro_block_seq(param_->reserved_parallel_, start_seq_))) {
+    if (OB_FAIL(ObDDLStorageUtil::init_macro_block_seq(param_->reserved_parallel_, start_seq_))) {
       LOG_WARN("fail to init macro block seq", KR(ret), K(param_->reserved_parallel_));
     } else {
       is_inited_ = true;
@@ -127,7 +127,7 @@ int ObDirectLoadInsertDataTabletContext::open()
           if (OB_FAIL(create_tablet_direct_load())) {
             LOG_WARN("fail to create tablet direct load", KR(ret));
           } else if (OB_FAIL(open_tablet_direct_load())) {
-            LOG_WARN("fail to open tablet direct load", KR(ret));
+            LOG_ERROR("fail to open tablet direct load", KR(ret));
             if (ret == OB_EAGAIN || ret == OB_MINOR_FREEZE_NOT_ALLOW) {
               LOG_WARN("retry to open tablet context");
               ret = OB_SUCCESS;
@@ -172,16 +172,14 @@ int ObDirectLoadInsertDataTabletContext::create_tablet_direct_load()
   if (is_create_) {
     // do nothing
   } else {
-    ObTenantDirectLoadMgr *sstable_insert_mgr = MTL(ObTenantDirectLoadMgr *);
+    ObTenantDirectLoadMgr *sstable_insert_mgr = share::g_mp->tenant_direct_load_mgr();
     ObTabletDirectLoadInsertParam direct_load_param;
     direct_load_param.is_replay_ = false;
     direct_load_param.common_param_.direct_load_type_ = direct_load_type_;
     direct_load_param.common_param_.data_format_version_ = param_->data_version_;
     direct_load_param.common_param_.read_snapshot_ = param_->snapshot_version_;
-    direct_load_param.common_param_.ls_id_ = ls_id_;
     direct_load_param.common_param_.tablet_id_ = tablet_id_;
     direct_load_param.common_param_.is_no_logging_ = param_->is_no_logging_;
-    direct_load_param.common_param_.is_rescan_data_compl_dag_ = false; // unuse
     direct_load_param.runtime_only_param_.exec_ctx_ = nullptr;
     direct_load_param.runtime_only_param_.task_id_ = param_->ddl_task_id_;
     direct_load_param.runtime_only_param_.table_id_ = param_->table_id_;
@@ -193,7 +191,7 @@ int ObDirectLoadInsertDataTabletContext::create_tablet_direct_load()
     direct_load_param.runtime_only_param_.seq_no_ = param_->trans_param_.tx_seq_.cast_to_int();
     direct_load_param.runtime_only_param_.max_batch_size_ = param_->max_batch_size_;
     bool unused_major_exsist = false;
-    if (OB_FAIL(ObDirectLoadMgrAgent::create_tablet_direct_load_mgr(MTL_ID(), context_id_ /* execution_id */, context_id_,
+    if (OB_FAIL(ObDirectLoadMgrAgent::create_tablet_direct_load_mgr(context_id_ /* execution_id */, context_id_,
                                                                    direct_load_param, allocator_, unused_major_exsist, handle_, lob_handle_))) {
       LOG_WARN("failed to create tablet direct load mgr", K(ret), K(direct_load_param));
     } else {
@@ -210,14 +208,14 @@ int ObDirectLoadInsertDataTabletContext::open_tablet_direct_load()
     // do nothing
   } else {
     if (!is_idem_type(direct_load_type_)) {
-      ObTenantDirectLoadMgr *sstable_insert_mgr = MTL(ObTenantDirectLoadMgr *);
+      ObTenantDirectLoadMgr *sstable_insert_mgr = share::g_mp->tenant_direct_load_mgr();
       if (OB_ISNULL(sstable_insert_mgr)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("failed to get tenant direct load mgr", K(ret));
-      } else if (OB_FAIL(sstable_insert_mgr->open_tablet_direct_load(direct_load_type_, ls_id_, tablet_id_,
+      } else if (OB_FAIL(sstable_insert_mgr->open_tablet_direct_load(direct_load_type_, tablet_id_,
                                                               context_id_))) {
         LOG_WARN("fail to open tablet direct load", KR(ret), K(tablet_id_));
-      } else if (OB_FAIL(ddl_agent_.init(context_id_, ls_id_, tablet_id_, direct_load_type_))) {
+      } else if (OB_FAIL(ddl_agent_.init(context_id_, tablet_id_, direct_load_type_))) {
         LOG_WARN("init ddl agent failed", K(ret));
       }
     } else {
@@ -238,7 +236,7 @@ int ObDirectLoadInsertDataTabletContext::close_tablet_direct_load(bool commit)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ddl_agent_.close(context_id_, true /* need commit */, -1 /* execution id */))) {
-    LOG_WARN("fail to close tablet direct load", KR(ret), K(ls_id_), K(tablet_id_));
+    LOG_WARN("fail to close tablet direct load", KR(ret), K(tablet_id_));
   } else {
     is_closed_ = true;
   }
@@ -270,7 +268,6 @@ int ObDirectLoadInsertDataTabletContext::open_sstable_slice(const ObMacroDataSeq
     ObDirectLoadSliceInfo slice_info;
     slice_info.is_full_direct_load_ = !param_->is_incremental_;
     slice_info.is_lob_slice_ = false;
-    slice_info.ls_id_ = ls_id_;
     slice_info.data_tablet_id_ = tablet_id_;
     slice_info.slice_id_ = slice_id;
     slice_info.context_id_ = context_id_;
@@ -306,7 +303,6 @@ int ObDirectLoadInsertDataTabletContext::fill_sstable_slice(const int64_t &slice
     ObDirectLoadSliceInfo slice_info;
     slice_info.is_full_direct_load_ = !param_->is_incremental_;
     slice_info.is_lob_slice_ = false;
-    slice_info.ls_id_ = ls_id_;
     slice_info.data_tablet_id_ = tablet_id_;
     slice_info.slice_id_ = slice_id;
     slice_info.context_id_ = context_id_;
@@ -333,7 +329,6 @@ int ObDirectLoadInsertDataTabletContext::fill_sstable_slice(const int64_t &slice
     ObDirectLoadSliceInfo slice_info;
     slice_info.is_full_direct_load_ = !param_->is_incremental_;
     slice_info.is_lob_slice_ = false;
-    slice_info.ls_id_ = ls_id_;
     slice_info.data_tablet_id_ = tablet_id_;
     slice_info.slice_id_ = slice_id;
     slice_info.context_id_ = context_id_;
@@ -357,7 +352,6 @@ int ObDirectLoadInsertDataTabletContext::close_sstable_slice(const int64_t slice
     ObDirectLoadSliceInfo slice_info;
     slice_info.is_full_direct_load_ = !param_->is_incremental_;
     slice_info.is_lob_slice_ = false;
-    slice_info.ls_id_ = ls_id_;
     slice_info.data_tablet_id_ = tablet_id_;
     slice_info.slice_id_ = slice_id;
     slice_info.context_id_ = context_id_;
@@ -425,7 +419,6 @@ int ObDirectLoadInsertDataTabletContext::open_lob_sstable_slice(const ObMacroDat
     ObDirectLoadSliceInfo slice_info;
     slice_info.is_full_direct_load_ = !param_->is_incremental_;
     slice_info.is_lob_slice_ = true;
-    slice_info.ls_id_ = ls_id_;
     slice_info.data_tablet_id_ = tablet_id_;
     slice_info.slice_id_ = slice_id;
     slice_info.context_id_ = context_id_;
@@ -458,7 +451,6 @@ int ObDirectLoadInsertDataTabletContext::fill_lob_sstable_slice(ObIAllocator &al
     ObDirectLoadSliceInfo slice_info;
     slice_info.is_full_direct_load_ = !param_->is_incremental_;
     slice_info.is_lob_slice_ = true;
-    slice_info.ls_id_ = ls_id_;
     slice_info.data_tablet_id_ = tablet_id_;
     slice_info.slice_id_ = lob_slice_id;
     slice_info.context_id_ = context_id_;
@@ -486,7 +478,6 @@ int ObDirectLoadInsertDataTabletContext::fill_lob_sstable_slice(ObIAllocator &al
     ObDirectLoadSliceInfo slice_info;
     slice_info.is_full_direct_load_ = !param_->is_incremental_;
     slice_info.is_lob_slice_ = true;
-    slice_info.ls_id_ = ls_id_;
     slice_info.data_tablet_id_ = tablet_id_;
     slice_info.slice_id_ = lob_slice_id;
     slice_info.context_id_ = context_id_;
@@ -511,11 +502,10 @@ int ObDirectLoadInsertDataTabletContext::fill_lob_meta_sstable_slice(const int64
     LOG_WARN("task is cancel", KR(ret));
   } else {
     ObDirectLoadInsertTabletContext *tablet_ctx = nullptr;
-    ObTenantDirectLoadMgr *sstable_insert_mgr = MTL(ObTenantDirectLoadMgr *);
+    ObTenantDirectLoadMgr *sstable_insert_mgr = share::g_mp->tenant_direct_load_mgr();
     ObDirectLoadSliceInfo slice_info;
     slice_info.is_full_direct_load_ = !param_->is_incremental_;
     slice_info.is_lob_slice_ = true;
-    slice_info.ls_id_ = ls_id_;
     slice_info.data_tablet_id_ = tablet_id_;
     slice_info.slice_id_ = lob_slice_id;
     slice_info.context_id_ = context_id_;
@@ -538,51 +528,11 @@ int ObDirectLoadInsertDataTabletContext::close_lob_sstable_slice(const int64_t s
     ObDirectLoadSliceInfo slice_info;
     slice_info.is_full_direct_load_ = !param_->is_incremental_;
     slice_info.is_lob_slice_ = true;
-    slice_info.ls_id_ = ls_id_;
     slice_info.data_tablet_id_ = tablet_id_;
     slice_info.slice_id_ = slice_id;
     slice_info.context_id_ = context_id_;
     if (OB_FAIL(ddl_agent.close_sstable_slice(slice_info, nullptr /*insert_monitor*/, unused_seq))) {
       LOG_WARN("fail to close tablet direct load", KR(ret), K(slice_id), K(tablet_id_));
-    }
-  }
-  return ret;
-}
-
-//////////////////////// rescan interface ////////////////////////
-
-int ObDirectLoadInsertDataTabletContext::calc_range(const int64_t thread_cnt)
-{
-  int ret = OB_SUCCESS;
-  if (IS_NOT_INIT) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("ObDirectLoadInsertDataTabletContext not init", KR(ret), KP(this));
-  } else if (OB_UNLIKELY(is_cancel_)) {
-    ret = OB_CANCELED;
-    LOG_WARN("task is cancel", KR(ret));
-  } else {
-    if (OB_FAIL(ddl_agent_.calc_range(context_id_, thread_cnt))) {
-      LOG_WARN("fail to calc range", KR(ret), K(tablet_id_), K(context_id_), K(thread_cnt));
-    } else {
-      LOG_INFO("success to calc range", K(tablet_id_));
-    }
-  }
-  return ret;
-}
-
-int ObDirectLoadInsertDataTabletContext::fill_column_group(const int64_t thread_cnt,
-                                                           const int64_t thread_id)
-{
-  int ret = OB_SUCCESS;
-  if (IS_NOT_INIT) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("ObDirectLoadInsertDataTabletContext not init", KR(ret), KP(this));
-  } else if (OB_UNLIKELY(is_cancel_)) {
-    ret = OB_CANCELED;
-    LOG_WARN("task is cancel", KR(ret));
-  } else {
-    if (OB_FAIL(ddl_agent_.fill_column_group(thread_cnt, thread_id))) {
-      LOG_WARN("fail to fill column group", KR(ret), K(tablet_id_), K(thread_cnt), K(thread_id));
     }
   }
   return ret;
@@ -595,7 +545,7 @@ int ObDirectLoadInsertDataTabletContext::fill_column_group(const int64_t thread_
 ObDirectLoadInsertDataTableContext::ObDirectLoadInsertDataTableContext()
   : safe_allocator_(allocator_), lob_table_ctx_(nullptr)
 {
-  sql_stats_.set_tenant_id(MTL_ID());
+  
 }
 
 ObDirectLoadInsertDataTableContext::~ObDirectLoadInsertDataTableContext()
@@ -612,18 +562,18 @@ ObDirectLoadInsertDataTableContext::~ObDirectLoadInsertDataTableContext()
 
 int ObDirectLoadInsertDataTableContext::init(
   const ObDirectLoadInsertTableParam &param,
-  const ObIArray<ObTableLoadLSIdAndPartitionId> &ls_partition_ids,
-  const ObIArray<ObTableLoadLSIdAndPartitionId> &target_ls_partition_ids)
+  const ObIArray<ObTableLoadTabletId> &partition_ids,
+  const ObIArray<ObTableLoadTabletId> &target_partition_ids)
 {
   int ret = OB_SUCCESS;
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
     LOG_WARN("ObDirectLoadInsertDataTableContext init twice", KR(ret), KP(this));
-  } else if (OB_UNLIKELY(!param.is_valid() || ls_partition_ids.empty() ||
-                         target_ls_partition_ids.empty() ||
-                         ls_partition_ids.count() != target_ls_partition_ids.count())) {
+  } else if (OB_UNLIKELY(!param.is_valid() || partition_ids.empty() ||
+                         target_partition_ids.empty() ||
+                         partition_ids.count() != target_partition_ids.count())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid args", KR(ret), K(param), K(ls_partition_ids), K(target_ls_partition_ids));
+    LOG_WARN("invalid args", KR(ret), K(param), K(partition_ids), K(target_partition_ids));
   } else {
     param_ = param;
     if (OB_FAIL(inner_init())) {
@@ -631,18 +581,17 @@ int ObDirectLoadInsertDataTableContext::init(
     }
 
     ddl_ctrl_.direct_load_type_ = ObDirectLoadMgrAgent::load_data_get_direct_load_type(param.is_incremental_,
-                                                                                       param.data_version_ ,
-                                                                                       GCTX.is_shared_storage_mode());
+                                                                                       param.data_version_);
     if (OB_FAIL(ret)) {
-    } else if (OB_FAIL(MTL(ObTenantDirectLoadMgr *)->alloc_execution_context_id(ddl_ctrl_.context_id_))) {
+    } else if (OB_FAIL(share::g_mp->tenant_direct_load_mgr()->alloc_execution_context_id(ddl_ctrl_.context_id_))) {
       LOG_WARN("alloc execution context id failed", K(ret));
-    } else if (param_.enable_dag_ && OB_FAIL(init_dag(target_ls_partition_ids))) {
+    } else if (param_.enable_dag_ && OB_FAIL(init_dag(target_partition_ids))) {
       LOG_WARN("fail to init dag", KR(ret));
-    } else if (OB_FAIL(create_all_tablet_contexts(ls_partition_ids, target_ls_partition_ids))) {
-      LOG_WARN("fail to create all tablet contexts", KR(ret), K(ls_partition_ids),
-               K(target_ls_partition_ids));
+    } else if (OB_FAIL(create_all_tablet_contexts(partition_ids, target_partition_ids))) {
+      LOG_WARN("fail to create all tablet contexts", KR(ret), K(partition_ids),
+               K(target_partition_ids));
     } else if (param_.online_opt_stat_gather_ &&
-               OB_FAIL(sql_stat_map_.create(1024, "TLD_SqlStatMap", "TLD_SqlStatMap", MTL_ID()))) {
+               OB_FAIL(sql_stat_map_.create(1024, "TLD_SqlStatMap", "TLD_SqlStatMap"))) {
       LOG_WARN("fail to create sql stat map", KR(ret));
     } else {
       is_inited_ = true;
@@ -652,7 +601,7 @@ int ObDirectLoadInsertDataTableContext::init(
 }
 
 int ObDirectLoadInsertDataTableContext::init_dag(
-  const ObIArray<ObTableLoadLSIdAndPartitionId> &ls_partition_ids)
+  const ObIArray<ObTableLoadTabletId> &partition_ids)
 {
   int ret = OB_SUCCESS;
   ObDDLIndependentDagInitParam init_param;
@@ -670,8 +619,8 @@ int ObDirectLoadInsertDataTableContext::init_dag(
     // incremental direct load may generate multiple sstables,
     // the snapshot_version needs be updated each time to avoid duplicated MacroIds
     share::SCN current_scn;
-    if (OB_FAIL(share::ObShareUtil::get_tenant_gts(MTL_ID(), current_scn))) {
-      LOG_WARN("failed to get gts", KR(ret), K(MTL_ID()));
+    if (OB_FAIL(OB_TS_MGR.get_gts_sync(GCONF.rpc_timeout, current_scn))) {
+      LOG_WARN("failed to get gts", KR(ret));
     } else {
       init_param.ddl_task_param_.snapshot_version_ = current_scn.get_val_for_tx();
       init_param.tx_info_.tx_desc_ = param_.trans_param_.tx_desc_;
@@ -679,11 +628,10 @@ int ObDirectLoadInsertDataTableContext::init_dag(
       init_param.tx_info_.seq_no_ = param_.trans_param_.tx_seq_.cast_to_int();
     }
   }
-  for (int64_t i = 0; OB_SUCC(ret) && i < ls_partition_ids.count(); i++) {
+  for (int64_t i = 0; OB_SUCC(ret) && i < partition_ids.count(); i++) {
     if (OB_FAIL(add_var_to_array_no_dup(
-          init_param.ls_tablet_ids_,
-          std::make_pair(ls_partition_ids.at(i).ls_id_,
-                         ls_partition_ids.at(i).part_tablet_id_.tablet_id_)))) {
+          init_param.tablet_ids_,
+          partition_ids.at(i).part_tablet_id_.tablet_id_))) {
       LOG_WARN("add var to array no dup failed", K(ret));
     }
   }
@@ -696,19 +644,18 @@ int ObDirectLoadInsertDataTableContext::init_dag(
 }
 
 int ObDirectLoadInsertDataTableContext::create_all_tablet_contexts(
-  const ObIArray<ObTableLoadLSIdAndPartitionId> &ls_partition_ids,
-  const ObIArray<ObTableLoadLSIdAndPartitionId> &target_ls_partition_ids)
+  const ObIArray<ObTableLoadTabletId> &partition_ids,
+  const ObIArray<ObTableLoadTabletId> &target_partition_ids)
 {
   int ret = OB_SUCCESS;
-  for (int64_t i = 0; OB_SUCC(ret) && i < ls_partition_ids.count(); ++i) {
-    const ObTabletID &origin_tablet_id = ls_partition_ids.at(i).part_tablet_id_.tablet_id_;
-    const ObLSID &ls_id = target_ls_partition_ids.at(i).ls_id_;
-    const ObTabletID &tablet_id = target_ls_partition_ids.at(i).part_tablet_id_.tablet_id_;
+  for (int64_t i = 0; OB_SUCC(ret) && i < partition_ids.count(); ++i) {
+    const ObTabletID &origin_tablet_id = partition_ids.at(i).part_tablet_id_.tablet_id_;
+    const ObTabletID &tablet_id = target_partition_ids.at(i).part_tablet_id_.tablet_id_;
     ObDirectLoadInsertDataTabletContext *tablet_ctx = nullptr;
     if (OB_ISNULL(tablet_ctx = OB_NEWx(ObDirectLoadInsertDataTabletContext, (&allocator_)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("fail to new ObDirectLoadInsertDataTabletContext", KR(ret));
-    } else if (OB_FAIL(tablet_ctx->init(this, ls_id, origin_tablet_id, tablet_id))) {
+    } else if (OB_FAIL(tablet_ctx->init(this, origin_tablet_id, tablet_id))) {
       LOG_WARN("fail to init tablet ctx", KR(ret));
     } else if (OB_FAIL(tablet_ctx_map_.set_refactored(origin_tablet_id, tablet_ctx))) {
       LOG_WARN("fail to set tablet ctx map", KR(ret));
@@ -1092,7 +1039,7 @@ int ObDirectLoadInsertDataTableContext::collect_sql_stats(ObTableLoadDmlStat &dm
 int ObDirectLoadInsertDataTableContext::collect_dml_stat(ObTableLoadDmlStat &dml_stats)
 {
   int ret = OB_SUCCESS;
-  const uint64_t tenant_id = MTL_ID();
+  
   dml_stats.reset();
   FOREACH_X(iter, tablet_ctx_map_, OB_SUCC(ret))
   {
@@ -1101,7 +1048,7 @@ int ObDirectLoadInsertDataTableContext::collect_dml_stat(ObTableLoadDmlStat &dml
     if (OB_FAIL(dml_stats.allocate_dml_stat(dml_stat))) {
       LOG_WARN("fail to allocate table stat", KR(ret));
     } else {
-      dml_stat->tenant_id_ = tenant_id;
+      
       dml_stat->table_id_ = param_.table_id_;
       dml_stat->tablet_id_ = tablet_ctx->get_tablet_id().id();
       dml_stat->insert_row_count_ = tablet_ctx->get_row_count();
@@ -1223,7 +1170,7 @@ int ObDirectLoadInsertDataTabletContext::get_ddl_agent(ObDirectLoadMgrAgent &tmp
     }
   } else {  /* build tmp agent for previous version, which used by shared storage */
     /* TODO @zhuoran.zzr wait to remove it when ss mode ready */
-    if (OB_FAIL(tmp_agent.init(context_id_, ls_id_, tablet_id_, direct_load_type_))) {
+    if (OB_FAIL(tmp_agent.init(context_id_, tablet_id_, direct_load_type_))) {
       LOG_WARN("fail to init tmp agent", K(ret));
     }
   }

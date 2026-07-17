@@ -35,7 +35,7 @@ int ObAIServiceEndpointPrivUtil::check_ai_model_priv(ObIAllocator &allocator,
                                     bool &has_priv)
 {
   int ret = OB_SUCCESS;
-
+  
   has_priv = false;
   ObSchemaChecker schema_checker;
   if (OB_FAIL(schema_checker.init(schema_guard_))) {
@@ -55,14 +55,14 @@ int ObAIServiceEndpointPrivUtil::check_ai_model_priv(ObIAllocator &allocator,
         has_priv = false;
         ret = OB_SUCCESS;
       } else {
-        LOG_WARN("failed to check ai model privilege", K(ret),
+        LOG_WARN("failed to check ai model privilege", K(ret), 
                  K(ai_priv_type));
       }
     } else {
       has_priv = true;
     }
   }
-
+  
   return ret;
 }
 
@@ -71,7 +71,7 @@ int ObAIServiceEndpointPrivUtil::check_create_ai_model_priv(
     const share::schema::ObSessionPrivInfo &session_priv,
     bool &has_priv)
 {
-  return check_ai_model_priv(allocator, session_priv,
+  return check_ai_model_priv(allocator, session_priv, 
                                        AI_PRIV_CREATE, has_priv);
 }
 
@@ -80,7 +80,7 @@ int ObAIServiceEndpointPrivUtil::check_alter_ai_model_priv(
     const share::schema::ObSessionPrivInfo &session_priv,
     bool &has_priv)
 {
-  return check_ai_model_priv(allocator, session_priv,
+  return check_ai_model_priv(allocator, session_priv, 
                                        AI_PRIV_ALTER, has_priv);
 }
 
@@ -89,7 +89,7 @@ int ObAIServiceEndpointPrivUtil::check_drop_ai_model_priv(
     const share::schema::ObSessionPrivInfo &session_priv,
     bool &has_priv)
 {
-  return check_ai_model_priv(allocator, session_priv,
+  return check_ai_model_priv(allocator, session_priv, 
                                        AI_PRIV_DROP, has_priv);
 }
 
@@ -98,7 +98,7 @@ int ObAIServiceEndpointPrivUtil::check_access_ai_model_priv(
     const share::schema::ObSessionPrivInfo &session_priv,
     bool &has_priv)
 {
-  return check_ai_model_priv(allocator, session_priv,
+  return check_ai_model_priv(allocator, session_priv, 
                                        AI_PRIV_ACCESS, has_priv);
 }
 

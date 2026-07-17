@@ -29,8 +29,6 @@ const uint64_t ctx_id = 2;
 const int64_t limit = 1 << 30;
 const lib::ObLabel &label = "1";
 
-const uint64_t new_tenant_id = 101;
-
 static bool has_unfree = false;
 void has_unfree_callback(char *)
 {
@@ -42,13 +40,9 @@ public:
   virtual void SetUp()
   {
     ObMallocAllocator *ma = ObMallocAllocator::get_instance();
-    ASSERT_EQ(OB_SUCCESS, ma->create_and_add_tenant_allocator(tenant_id));
-    ASSERT_EQ(OB_SUCCESS, ma->set_tenant_limit(tenant_id, limit));
-    auto ta = ma->get_tenant_ctx_allocator(tenant_id, ctx_id);
-    ASSERT_TRUE(NULL != ta);
-
-    ASSERT_EQ(OB_SUCCESS, ma->create_and_add_tenant_allocator(new_tenant_id));
-    ta = ma->get_tenant_ctx_allocator(new_tenant_id, ctx_id);
+    ASSERT_EQ(OB_SUCCESS, ma->create_and_add_tenant_allocator());
+    ASSERT_EQ(OB_SUCCESS, ma->set_tenant_limit(limit));
+    auto ta = ma->get_tenant_ctx_allocator(ctx_id);
     ASSERT_TRUE(NULL != ta);
   }
   //virtual void TearDown();
@@ -58,8 +52,8 @@ public:
 TEST_F(TestAllocator, basic)
 {
   ObMallocAllocator *ma = ObMallocAllocator::get_instance();
-  auto ta = ma->get_tenant_ctx_allocator(tenant_id, ctx_id);
-  ObMemAttr attr(tenant_id, label, ctx_id);
+  auto ta = ma->get_tenant_ctx_allocator(ctx_id);
+  ObMemAttr attr(label, ctx_id);
   ObAllocator a(nullptr, attr);
   int64_t sz = 100;
 
@@ -108,8 +102,8 @@ TEST_F(TestAllocator, basic)
 TEST_F(TestAllocator, reveal_unfree)
 {
   ObMallocAllocator *ma = ObMallocAllocator::get_instance();
-  auto ta = ma->get_tenant_ctx_allocator(tenant_id, ctx_id);
-  ObMemAttr attr(tenant_id, label, ctx_id);
+  auto ta = ma->get_tenant_ctx_allocator(ctx_id);
+  ObMemAttr attr(label, ctx_id);
   has_unfree = false;
   // no unfree
   {
@@ -140,8 +134,8 @@ TEST_F(TestAllocator, reveal_unfree)
 TEST_F(TestAllocator, reset)
 {
   ObMallocAllocator *ma = ObMallocAllocator::get_instance();
-  auto ta = ma->get_tenant_ctx_allocator(tenant_id, ctx_id);
-  ObMemAttr attr(tenant_id, label, ctx_id);
+  auto ta = ma->get_tenant_ctx_allocator(ctx_id);
+  ObMemAttr attr(label, ctx_id);
   const int64_t hold = 0;
   ObAllocator a(nullptr, attr);
   void *ptr = a.alloc(100);
@@ -223,7 +217,7 @@ TEST_F(TestAllocator, pm_basic)
 TEST_F(TestAllocator, pm_reveal_unfree)
 {
   ObMallocAllocator *ma = ObMallocAllocator::get_instance();
-  auto ta = ma->get_tenant_ctx_allocator(tenant_id, ctx_id);
+  auto ta = ma->get_tenant_ctx_allocator(ctx_id);
   has_unfree = false;
   int64_t ps = 8L << 10;
   // no unfree

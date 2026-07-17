@@ -18,7 +18,7 @@
 #define _OB_TRANSFORM_MIX_MAX_H
 
 #include "sql/rewrite/ob_transform_rule.h"
-#include "objit/common/ob_item_type.h"
+#include "sql/parser/ob_item_type.h"
 namespace oceanbase
 {
 namespace common

@@ -39,17 +39,10 @@ public:
   virtual void TearDown() override;
   static void SetUpTestCase();
   static void TearDownTestCase();
-
-
-private:
-  const uint64_t tenant_id_;
-  ObTenantBase tenant_base_;
 };
 
 
 TestCompactionMemCtx::TestCompactionMemCtx()
-  : tenant_id_(1),
-    tenant_base_(tenant_id_)
 {
 }
 
@@ -65,16 +58,10 @@ void TestCompactionMemCtx::TearDownTestCase()
 
 void TestCompactionMemCtx::SetUp()
 {
-  int ret = OB_SUCCESS;
-
-  ObTenantEnv::set_tenant(&tenant_base_);
-  ASSERT_EQ(OB_SUCCESS, tenant_base_.init());
-  ASSERT_EQ(tenant_id_, MTL_ID());
 }
 
 void TestCompactionMemCtx::TearDown()
 {
-  ObTenantEnv::set_tenant(nullptr);
 }
 
 

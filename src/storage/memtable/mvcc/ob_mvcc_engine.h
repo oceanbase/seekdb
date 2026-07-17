@@ -69,16 +69,12 @@ public:
   // Return the ObMvccRow according to the memtable key or create the new one if
   // the memtable key is not exist.
   int create_kv(const ObMemtableKey *key,
-                const bool is_insert,
                 ObMemtableKey *stored_key,
                 ObMvccRow *&value);
   // Return the ObStoreRowkey and ObMvccRow pair according to the memtable key
   // or create all unexisted ones if some of the memtable key are not exist.
   int create_kvs(const ObMemtableSetArg &memtable_set_arg,
                  ObMemtableKeyGenerator &memtable_key_generator,
-                 // whether is normal insert and we can
-                 // optimize to alloc first in the case
-                 const bool is_normal_insert,
                  ObStoredKVs &kvs);
 
   // mvcc_write builds the ObMvccTransNode according to the arg and write
@@ -107,11 +103,6 @@ public:
   int mvcc_replay(const ObTxNodeArg &arg,
                   ObMvccReplayResult &res);
 
-  // ensure_kv is used to make sure b-tree is no longer broken by the deleted
-  // row.
-  int ensure_kv(const ObMemtableKey *stored_key,
-                ObMvccRow *value);
-
   // finish_kv is used to make tx_node visible to outer read
   void finish_kv(ObMvccWriteResult& res);
   void finish_kvs(ObMvccWriteResults& results);
@@ -120,14 +111,12 @@ public:
   int get(ObMvccAccessCtx &ctx,
           const ObQueryFlag &query_flag,
           const ObMemtableKey *parameter_key,
-          const share::ObLSID memtable_ls_id,
           ObMemtableKey *internal_key,
           ObMvccValueIterator &value_iter,
           storage::ObStoreRowLockState &lock_state);
   int scan(ObMvccAccessCtx &ctx,
            const ObQueryFlag &query_flag,
            const ObMvccScanRange &range,
-           const share::ObLSID memtable_ls_id,
            ObMvccRowIterator &row_iter);
   int scan(ObMvccAccessCtx &ctx,
            const ObMvccScanRange &range,
@@ -153,12 +142,10 @@ private:
   int init_tx_node_(const ObTxNodeArg &arg,
                     ObMvccTransNode *node);
 
-  int batch_alloc_kv_and_set_(const int64_t count,
-                              const int64_t key_data_size,
-                              const ObMemtableKeyGenerator &keys,
-                              ObStoredKVs &kvs,
-                              int64_t &finished_cnt);
-private:
+  int create_btree_kv_(const ObMemtableKey *key,
+                       ObMemtableKey *stored_key,
+                       ObMvccRow *&value);
+
   DISALLOW_COPY_AND_ASSIGN(ObMvccEngine);
   bool is_inited_;
   ObMTKVBuilder *kv_builder_;

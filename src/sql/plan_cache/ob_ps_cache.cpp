@@ -31,7 +31,6 @@ namespace sql
 ObPsCache::ObPsCache()
   : next_ps_stmt_id_(0),
     inited_(false),
-    tenant_id_(OB_INVALID_ID),
     host_(),
     stmt_id_map_(),
     stmt_info_map_(),
@@ -43,13 +42,13 @@ ObPsCache::ObPsCache()
     mutex_(common::ObLatchIds::PS_CACHE_EVICT_MUTEX_LOCK),
     mem_context_(NULL),
     inner_allocator_(NULL),
-    tg_id_(-1)
+    evict_timer_()
 {
 }
 
 void ObPsCache::destroy()
 {
-  TG_DESTROY(tg_id_);
+  evict_timer_.destroy();
   if (inited_) {
     // ps_stmt_id and ps_stmt_info will have their reference count incremented when created
     // Now PsCache is being destructed, decrement the reference count for all internal objects, if the reference count reaches 0, memory will be explicitly freed
@@ -60,21 +59,20 @@ void ObPsCache::destroy()
     DESTROY_CONTEXT(mem_context_);
     mem_context_ = NULL;
   }
-  tg_id_ = -1;
 }
 
 ObPsCache::~ObPsCache()
 {
   int ret = OB_SUCCESS;
   destroy();
-  LOG_INFO("release ps plan cache", "bt", lbt(), K(tenant_id_), K(ret));
+  LOG_INFO("release ps plan cache", "bt", lbt(), K(ret));
 }
 
 int ObPsCache::mtl_init(ObPsCache* &ps_cache)
 {
   int ret = OB_SUCCESS;
-  uint64_t tenant_id = lib::current_resource_owner_id();
-  int64_t mem_limit = lib::get_tenant_memory_limit(tenant_id);
+  
+  int64_t mem_limit = lib::get_tenant_memory_limit();
   ps_cache->inited_ = false;
   return ret;
 }
@@ -82,20 +80,19 @@ int ObPsCache::mtl_init(ObPsCache* &ps_cache)
 void ObPsCache::mtl_stop(ObPsCache * &ps_cache)
 {
   if (OB_LIKELY(nullptr != ps_cache && ps_cache->is_inited())) {
-    TG_CANCEL(ps_cache->tg_id_, ps_cache->evict_task_);
-    TG_STOP(ps_cache->tg_id_);
+    ps_cache->evict_timer_.cancel(ps_cache->evict_task_);
+    ps_cache->evict_timer_.stop();
   }
 }
 
-int ObPsCache::init(const int64_t hash_bucket,
-                    const uint64_t tenant_id)
+int ObPsCache::init(const int64_t hash_bucket)
 {
   int ret = OB_SUCCESS;
   lib::ObMutexGuard guard(mutex_);
   if (!inited_) {
     ObMemAttr attr;
     attr.label_ = ObModIds::OB_SQL_PS_CACHE;
-    attr.tenant_id_ = tenant_id;
+    
     lib::ContextParam param;
     param.set_properties(lib::ALLOC_THREAD_SAFE |
                         lib::RETURN_MALLOC_DEFAULT)
@@ -103,35 +100,31 @@ int ObPsCache::init(const int64_t hash_bucket,
     .set_mem_attr(attr);
     if (OB_FAIL(stmt_id_map_.create(hash::cal_next_prime(hash_bucket),
                                     ObModIds::OB_HASH_BUCKET_PS_CACHE,
-                                    ObModIds::OB_HASH_NODE_PS_CACHE,
-                                    tenant_id))) {
+                                    ObModIds::OB_HASH_NODE_PS_CACHE))) {
       LOG_WARN("failed to init sql_id_map", K(ret));
     } else if (OB_FAIL(stmt_info_map_.create(hash::cal_next_prime(hash_bucket),
                                              ObModIds::OB_HASH_BUCKET_PS_INFO,
-                                             ObModIds::OB_HASH_NODE_PS_INFO,
-                                             tenant_id))) {
+                                             ObModIds::OB_HASH_NODE_PS_INFO))) {
       LOG_WARN("FAILED TO INIT sql_plan_map", K(ret));
     } else if (OB_FAIL(ROOT_CONTEXT->CREATE_CONTEXT(
         mem_context_,
         param))) {
       LOG_WARN("create memory entity failed", K(ret));
-    } else if (OB_FAIL(TG_CREATE_TENANT(lib::TGDefIDs::PsCacheEvict, tg_id_))) {
-      LOG_WARN("failed to create tg", K(ret));
-    } else if (OB_FAIL(TG_START(tg_id_))) {
-      LOG_WARN("failed to start tg", K(ret));
-    } else if (OB_FAIL(TG_SCHEDULE(tg_id_, evict_task_, GCONF.plan_cache_evict_interval, true))) {
+    } else if (FALSE_IT(evict_task_.ps_cache_ = this)) {
+    } else if (OB_FAIL(evict_timer_.init("PsCacheEvict", ObMemAttr("PsCacheEvict")))) {
+      LOG_WARN("failed to init ps cache evict timer", K(ret));
+    } else if (OB_FAIL(evict_timer_.schedule(evict_task_, GCONF.plan_cache_evict_interval, true))) {
       LOG_WARN("failed to schedule refresh task", K(ret));
 
     } else if (OB_ISNULL(mem_context_)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("NULL memory entity returned", K(ret));
     } else {
-      evict_task_.ps_cache_ = this;
       inner_allocator_ = &mem_context_->get_allocator();
-      tenant_id_ = tenant_id;
+      
       host_ = const_cast<ObAddr &>(GCTX.self_addr());
       inited_ = true;
-      LOG_INFO("init ps cache success", K(GCTX.self_addr()), K(tenant_id), K(hash_bucket));
+      LOG_INFO("init ps cache success", K(GCTX.self_addr()), K(hash_bucket));
     }
   }
   return ret;
@@ -382,8 +375,8 @@ int ObPsCache::get_or_add_stmt_info(const PsCacheInfoCtx &info_ctx,
       uint64_t ps_stmt_checksum = ob_crc64(info_ctx.normalized_sql_.ptr(),
                                            info_ctx.normalized_sql_.length()); // actual is crc32
       tmp_stmt_info.set_ps_stmt_checksum(ps_stmt_checksum);
-      if (OB_FAIL(schema_guard.get_schema_version(tenant_id_, tenant_version))) {
-        LOG_WARN("fail to get tenant version", K(ret), K(tenant_id_));
+      if (OB_FAIL(schema_guard.get_schema_version(tenant_version))) {
+        LOG_WARN("fail to get tenant version", K(ret));
       } else if (FALSE_IT(tmp_stmt_info.set_tenant_version(tenant_version))) {
         // do nothing
       } else if (OB_FAIL(tmp_stmt_info.assign_no_param_sql(info_ctx.no_param_sql_))) {
@@ -514,7 +507,6 @@ int ObPsCache::fill_ps_stmt_info(const ObResultSet &result,
     }
   }
   if (OB_SUCC(ret)) {
-    ps_stmt_info.set_is_prexecute(sql_ctx->is_pre_execute_);
     ps_stmt_info.set_question_mark_count(param_cnt);
     // only used when returning into
     ps_stmt_info.set_num_of_returning_into(returning_into_parm_num);
@@ -730,7 +722,7 @@ int ObPsCache::inner_cache_evict(bool is_evict_all)
     } else if (OB_FAIL(op.get_callback_ret())) {
       LOG_WARN("traverse stmt_info_map_ failed", K(ret));
     } else {
-      LOG_INFO("ps cache evict", K_(tenant_id), K(stmt_id_map_.size()), K(stmt_info_map_.size()),
+      LOG_INFO("ps cache evict", K(stmt_id_map_.size()), K(stmt_info_map_.size()),
                                 K(op.get_used_size()), K(get_mem_high()), K(expired_stmt_ids.count()),
                                 K(closed_stmt_ids.count()));
       // evict expired ps
@@ -832,20 +824,19 @@ int ObPsCache::check_schema_version(ObSchemaGetterGuard &schema_guard,
   int ret = OB_SUCCESS;
   is_expired = false;
   int64_t new_tenant_version = OB_INVALID_VERSION;
-  if (OB_FAIL(schema_guard.get_schema_version(tenant_id_, new_tenant_version))) {
-    LOG_WARN("fail to get tenant version", K(ret), K(tenant_id_));
+  if (OB_FAIL(schema_guard.get_schema_version(new_tenant_version))) {
+    LOG_WARN("fail to get tenant version", K(ret));
   } else if (new_tenant_version != stmt_info.get_tenant_version()) {
-    LOG_TRACE("tenant version change", K(stmt_info), K(new_tenant_version), K(tenant_id_));
+    LOG_TRACE("tenant version change", K(stmt_info), K(new_tenant_version));
     for (int64_t i = 0; OB_SUCC(ret) && !is_expired && i < stmt_info.get_dep_objs_cnt(); i++) {
       ObSchemaObjVersion &obj_version = stmt_info.get_dep_objs()[i];
       int64_t new_version = OB_INVALID_VERSION;
       if (OB_FAIL(schema_guard.get_schema_version(obj_version.get_schema_type(),
-                                                  tenant_id_,
                                                   obj_version.object_id_,
                                                   new_version))) {
-        LOG_WARN("fail to get schema version", K(ret), K(tenant_id_), K(obj_version));
+        LOG_WARN("fail to get schema version", K(ret), K(1UL), K(obj_version));
       } else if (new_version != obj_version.version_) {
-        LOG_INFO("ps cache is expired", K(ret), K(stmt_info), K(tenant_id_),
+        LOG_INFO("ps cache is expired", K(ret), K(stmt_info), K(1UL),
                  K(new_version), K(obj_version), KP(&stmt_info));
         is_expired = true;
       }
@@ -880,14 +871,9 @@ int ObPsCache::update_memory_conf()
   ObArenaAllocator alloc;
   ObObj obj_val;
 
-  if (tenant_id_ > OB_SYS_TENANT_ID && tenant_id_ <= OB_MAX_RESERVED_TENANT_ID) {
-    // tenant id between (OB_SYS_TENANT_ID, OB_MAX_RESERVED_TENANT_ID) is a virtual tenant,
-    // virtual tenants do not have schema
-    // do nothing
-  } else {
+  {
     for (int32_t i = 0; i < 3 && OB_SUCC(ret); ++i) {
-    if (OB_FAIL(ObBasicSessionInfo::get_global_sys_variable(tenant_id_,
-                                                            alloc,
+    if (OB_FAIL(ObBasicSessionInfo::get_global_sys_variable(alloc,
                                                             ObDataTypeCastParams(),
                                                             ObString(conf_names[i]), obj_val))) {
       } else if (OB_FAIL(obj_val.get_int(*conf_values[i]))) {
@@ -908,8 +894,7 @@ int ObPsCache::update_memory_conf()
   LOG_TRACE("update plan cache memory config",
             "ob_plan_cache_percentage", pc_mem_conf.limit_pct_,
             "ob_plan_cache_evict_high_percentage", pc_mem_conf.high_pct_,
-            "ob_plan_cache_evict_low_percentage", pc_mem_conf.low_pct_,
-            "tenant_id", tenant_id_);
+            "ob_plan_cache_evict_low_percentage", pc_mem_conf.low_pct_);
 
   return ret;
 }

@@ -58,7 +58,7 @@ OB_SERIALIZE_MEMBER((ObExprObjAccess, ObExprOperator),
 
 ObExprObjAccess::ObExprObjAccess(ObIAllocator &alloc)
   : ObExprOperator(alloc, T_OBJ_ACCESS_REF, N_OBJ_ACCESS, PARAM_NUM_UNKNOWN, VALID_FOR_GENERATED_COL, NOT_ROW_DIMENSION,
-                   INTERNAL_IN_MYSQL_MODE, INTERNAL_IN_ORACLE_MODE),
+                   INTERNAL_IN_MYSQL_MODE),
     info_(alloc, T_OBJ_ACCESS_REF)
 {
 }
@@ -159,7 +159,7 @@ int ObExprObjAccess::assign(const ObExprOperator &other)
       } else if (obj.is_null()) { \
         if (!skip_check_error) {  \
           ret = OB_ERR_NUMERIC_OR_VALUE_ERROR; \
-          LOG_WARN("OBE-06502: PL/SQL: numeric or value error: NULL index table key value",\
+          LOG_WARN("PL/SQL: numeric or value error: NULL index table key value",\
                  K(ret), K(obj), K(i)); \
         } else {  \
           param_value = OB_INVALID_INDEX; \

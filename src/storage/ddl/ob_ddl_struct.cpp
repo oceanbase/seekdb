@@ -17,6 +17,8 @@
 #define USING_LOG_PREFIX STORAGE
 
 #include "ob_ddl_struct.h"
+#include "storage/ddl/ob_ddl_storage_util.h"
+#include "share/rc/ob_module_provider.h"
 #include "storage/ddl/ob_tablet_ddl_kv.h"
 #include "storage/ob_i_table.h"
 #include "storage/ddl/ob_direct_load_mgr_utils.h"
@@ -86,7 +88,6 @@ ObDDLMacroBlock::ObDDLMacroBlock()
     ddl_start_scn_(SCN::min_scn()),
     scn_(SCN::min_scn()),
     table_key_(),
-    end_row_id_(-1),
     trans_id_(),
     data_macro_meta_(nullptr),
     buf_(nullptr),
@@ -99,7 +100,6 @@ ObDDLMacroBlock::ObDDLMacroBlock()
 ObDDLMacroBlock::~ObDDLMacroBlock()
 {
 }
-
 
 int ObDDLMacroBlock::set_data_macro_meta(const MacroBlockId &macro_id, const char* macro_block_buf, const int64_t size, const ObDDLMacroBlockType &block_type,
                                          const bool force_set_macro_meta)
@@ -115,26 +115,8 @@ int ObDDLMacroBlock::set_data_macro_meta(const MacroBlockId &macro_id, const cha
     LOG_WARN("invalid argument", K(ret), KP(macro_block_buf), K(size));
   } else {
     /* shared nothing need macro_meta*/
-    if (GCTX.is_shared_storage_mode() && !force_set_macro_meta) {
-    } else if (OB_FAIL(ObIndexBlockRebuilder::get_macro_meta(macro_block_buf, size, macro_id, allocator_, data_macro_meta_))) {
+    if (OB_FAIL(ObIndexBlockRebuilder::get_macro_meta(macro_block_buf, size, macro_id, allocator_, data_macro_meta_))) {
       LOG_WARN("failed to set macro meta", K(ret),  K(macro_id), KP(macro_block_buf), K(size));
-    }
-  
-    /* shared nothing need buf*/
-    void *tmp_buf = nullptr;
-    if (OB_FAIL(ret)) {
-    } else if (ObDDLMacroBlockType::DDL_MB_INDEX_TYPE != block_type || !GCTX.is_shared_storage_mode()) {
-      /* skip only index need deep copy*/
-    } else if (nullptr != buf_) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("buf should be null when set maro meta", K(ret), K(ret));
-    } else if (OB_ISNULL(tmp_buf = static_cast<char*>(allocator_.alloc(size)))) {
-      ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("fail to allocate mem", K(ret), K(size));
-    } else {
-      memcpy(tmp_buf, macro_block_buf, size);
-      buf_ = static_cast<char*>(tmp_buf);
-      size_ = size;
     }
   }
   return ret;
@@ -146,15 +128,8 @@ bool ObDDLMacroBlock::is_valid() const
               && DDL_MB_INVALID_TYPE != block_type_
               && ddl_start_scn_.is_valid_and_not_min()
               && scn_.is_valid_and_not_min();
-  if (!GCTX.is_shared_storage_mode()) {
-    ret = ret && logic_id_.is_valid() && nullptr != data_macro_meta_ && data_macro_meta_->is_valid();
-  }
+  ret = ret && logic_id_.is_valid() && nullptr != data_macro_meta_ && data_macro_meta_->is_valid();
   return ret;
-}
-
-bool ObDDLMacroBlock::is_column_group_info_valid() const
-{
-  return table_key_.is_column_store_sstable() && end_row_id_ >= 0;
 }
 
 ObDDLKVHandle &ObDDLKVHandle::operator =(const ObDDLKVHandle &other)
@@ -240,7 +215,7 @@ void ObDDLKVHandle::reset()
           ddl_kv_->~ObDDLKV();
           allocator_->free(ddl_kv_);
         } else {
-          MTL(ObTenantMetaMemMgr *)->release_ddl_kv(ddl_kv_);
+          share::g_mp->tenant_meta_mem_mgr()->release_ddl_kv(ddl_kv_);
         }
       } else if (OB_UNLIKELY(ref_cnt < 0)) {
         LOG_ERROR_RET(OB_ERR_UNEXPECTED, "table ref cnt may be leaked", K(ref_cnt), KP(ddl_kv_));
@@ -385,13 +360,10 @@ ObDDLMacroBlockRedoInfo::ObDDLMacroBlockRedoInfo()
     block_type_(ObDDLMacroBlockType::DDL_MB_INVALID_TYPE),
     start_scn_(SCN::min_scn()),
     data_format_version_(0/*for compatibility*/),
-    end_row_id_(-1),
     type_(ObDirectLoadType::DIRECT_LOAD_DDL),
     trans_id_(),
-    with_cs_replica_(false),
     macro_block_id_(MacroBlockId::mock_valid_macro_id()),
     parallel_cnt_(0),
-    cg_cnt_(0),
     merge_slice_idx_(0),
     seq_no_()
 {
@@ -405,13 +377,10 @@ void ObDDLMacroBlockRedoInfo::reset()
   logic_id_.reset();
   start_scn_ = SCN::min_scn();
   data_format_version_ = 0;
-  end_row_id_ = -1;
   type_ = ObDirectLoadType::DIRECT_LOAD_DDL;
   trans_id_.reset();
-  with_cs_replica_ = false;
   macro_block_id_ = MacroBlockId::mock_valid_macro_id();
   parallel_cnt_ = 0;
-  cg_cnt_ = 0;
   merge_slice_idx_ = 0;
   seq_no_.reset();
 }
@@ -431,30 +400,10 @@ bool ObDDLMacroBlockRedoInfo::is_valid() const
     ret = ret && !((data_buffer_.ptr() == nullptr || data_buffer_.length() == 0));
   }
 
-  if (ret && !GCTX.is_shared_storage_mode()) {  /* for shared nothing */
+  if (ret) {  /* for shared nothing */
     ret = logic_id_.is_valid();
-  #ifdef OB_BUILD_SHARED_STORAGE  
-  } else if (ret && GCTX.is_shared_storage_mode()) { /* for shared storage*/
-    ret = ret && (parallel_cnt_ > 0 && cg_cnt_ >0);
-  #endif
   }
   return ret;
-}
-
-
-bool ObDDLMacroBlockRedoInfo::is_not_compat_cs_replica() const
-{
-  return !with_cs_replica_;
-}
-
-bool ObDDLMacroBlockRedoInfo::is_cs_replica_row_store() const
-{
-  return with_cs_replica_ && !table_key_.is_column_store_sstable();
-}
-
-bool ObDDLMacroBlockRedoInfo::is_cs_replica_column_store() const
-{
-  return with_cs_replica_ && table_key_.is_column_store_sstable();
 }
 
 OB_SERIALIZE_MEMBER(ObDDLMacroBlockRedoInfo,
@@ -464,13 +413,10 @@ OB_SERIALIZE_MEMBER(ObDDLMacroBlockRedoInfo,
                     logic_id_,
                     start_scn_,
                     data_format_version_,
-                    end_row_id_,
                     type_,
                     trans_id_,
-                    with_cs_replica_,
                     macro_block_id_,
                     parallel_cnt_,
-                    cg_cnt_,
                     merge_slice_idx_,
                     seq_no_);
 
@@ -497,7 +443,7 @@ int ObTabletDirectLoadMgrHandle::set_obj(ObBaseTabletDirectLoadMgr *mgr)
   return ret;
 }
 
-ObBaseTabletDirectLoadMgr* ObTabletDirectLoadMgrHandle::get_base_obj()
+ObBaseTabletDirectLoadMgr* ObTabletDirectLoadMgrHandle::get_base_obj() 
 {
   return tablet_mgr_;
 }
@@ -556,7 +502,7 @@ void ObTabletDirectLoadMgrHandle::reset()
         tablet_mgr_->~ObBaseTabletDirectLoadMgr();
       } else {
         tablet_mgr_->~ObBaseTabletDirectLoadMgr();
-        MTL(ObTenantDirectLoadMgr *)->get_allocator().free(tablet_mgr_);
+        share::g_mp->tenant_direct_load_mgr()->get_allocator().free(tablet_mgr_);
       }
     }
     tablet_mgr_ = nullptr;
@@ -574,46 +520,6 @@ int ObTabletDirectLoadMgrHandle::assign(const ObTabletDirectLoadMgrHandle &other
   }
   return ret;
 }
-
-#ifdef OB_BUILD_SHARED_STORAGE
-ObDDLFinishLogInfo::ObDDLFinishLogInfo()
- : ls_id_(), table_key_(), data_buffer_(), macro_block_id_()
-{
-}
-
-bool ObDDLFinishLogInfo::is_valid() const 
-{
-  return ls_id_.is_valid() && table_key_.is_valid() && data_buffer_.ptr() != nullptr
-         &&  macro_block_id_.is_valid() && data_format_version_ >= 0 ;
-}
-
-void ObDDLFinishLogInfo::reset()
-{
-  ls_id_.reset();
-  table_key_.reset();
-  data_buffer_.reset();
-  macro_block_id_.reset();
-  data_format_version_ = 0;
-}
-
-int ObDDLFinishLogInfo::assign(const ObDDLFinishLogInfo &other)
-{
-  int ret = OB_SUCCESS; 
-  if (!other.is_valid()) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(other));
-  } else {
-    ls_id_ = other.ls_id_;
-    table_key_ = other.table_key_;
-    macro_block_id_ = other.macro_block_id_;
-    data_buffer_ = other.data_buffer_;
-    data_format_version_ = other.data_format_version_;
-  }
-  return ret;
-}
-
-OB_SERIALIZE_MEMBER(ObDDLFinishLogInfo, ls_id_, table_key_, data_buffer_, macro_block_id_, data_format_version_);
-#endif
 
 ObDDLWriteStat::ObDDLWriteStat() : row_count_(0)
 { }
@@ -644,9 +550,7 @@ bool ObDDLWriteStat::operator!=(const ObDDLWriteStat &other)
 }
 OB_SERIALIZE_MEMBER(ObDDLWriteStat, row_count_);
 
-int ObDDLTableSchema::fill_vector_index_schema_item(
-    const uint64_t tenant_id,
-    ObSchemaGetterGuard &schema_guard,
+int ObDDLTableSchema::fill_vector_index_schema_item(ObSchemaGetterGuard &schema_guard,
     const ObTableSchema *table_schema,
     ObArenaAllocator &allocator,
     const ObIArray<ObColDesc> &column_descs,
@@ -671,11 +575,11 @@ int ObDDLTableSchema::fill_vector_index_schema_item(
   }
   const ObTableSchema *with_param_table_schema = nullptr;
   // get data schema
-  if (OB_FAIL(schema_guard.get_table_schema(tenant_id, table_schema->get_data_table_id(), data_table_schema))) {
-    LOG_WARN("get table schema failed", K(ret), K(tenant_id), K(table_schema->get_data_table_id()));
+  if (OB_FAIL(schema_guard.get_table_schema( table_schema->get_data_table_id(), data_table_schema))) {
+    LOG_WARN("get table schema failed", K(ret), K(table_schema->get_data_table_id()));
   } else if (OB_ISNULL(data_table_schema)) {
     ret = OB_TABLE_NOT_EXIST;
-    LOG_WARN("table not exist", K(ret), K(tenant_id), K(table_schema->get_data_table_id()));
+    LOG_WARN("table not exist", K(ret), K(table_schema->get_data_table_id()));
   } else if (OB_FAIL(ObVectorIndexUtil::get_vector_index_column_id(*data_table_schema, *table_schema, col_ids))) {
     LOG_WARN("fail to get vector index id", K(ret));
   } else if (col_ids.count() != 1) {
@@ -706,11 +610,11 @@ int ObDDLTableSchema::fill_vector_index_schema_item(
   }
 
   if (OB_FAIL(ret)) {
-  } else if (OB_FAIL(schema_guard.get_table_schema(tenant_id, with_param_table_tid, with_param_table_schema))) {
-    LOG_WARN("get table schema failed", K(ret), K(tenant_id), K(with_param_table_tid));
+  } else if (OB_FAIL(schema_guard.get_table_schema( with_param_table_tid, with_param_table_schema))) {
+    LOG_WARN("get table schema failed", K(ret), K(with_param_table_tid));
   } else if (OB_ISNULL(with_param_table_schema)) {
     ret = OB_TABLE_NOT_EXIST;
-    LOG_WARN("table not exist", K(ret), K(tenant_id), K(with_param_table_tid));
+    LOG_WARN("table not exist", K(ret), K(with_param_table_tid));
   } else if (OB_FAIL(ObVectorIndexUtil::get_vector_index_column_dim(*with_param_table_schema, *data_table_schema, schema_item.vec_dim_))) {
     LOG_WARN("fail to get vector col dim", K(ret));
   } else if (schema_item.vec_dim_ == 0) {
@@ -740,9 +644,7 @@ int ObDDLTableSchema::fill_vector_index_schema_item(
   return ret;
 }
 
-int ObDDLTableSchema::fill_ddl_table_schema(
-    const uint64_t tenant_id,
-    const uint64_t table_id,
+int ObDDLTableSchema::fill_ddl_table_schema(const uint64_t table_id,
     ObArenaAllocator &allocator,
     ObDDLTableSchema &ddl_table_schema)
 {
@@ -751,20 +653,18 @@ int ObDDLTableSchema::fill_ddl_table_schema(
   ObSchemaGetterGuard schema_guard;
   const ObTableSchema *table_schema = nullptr;
   bool is_vector_data_complement = false;
-  if (OB_UNLIKELY(OB_INVALID_TENANT_ID == tenant_id || OB_INVALID_ID == table_id)) {
+  if (OB_UNLIKELY(false || OB_INVALID_ID == table_id)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(ret), K(tenant_id), K(table_id));
-  } else if (OB_FAIL(ObMultiVersionSchemaService::get_instance().get_tenant_schema_guard(tenant_id, schema_guard))) {
-    LOG_WARN("get tenant schema failed", K(ret), K(tenant_id));
-  } else if (OB_FAIL(schema_guard.get_table_schema(tenant_id, table_id, table_schema))) {
-    LOG_WARN("get table schema failed", K(ret), K(tenant_id), K(table_id));
+    LOG_WARN("invalid arguments", K(ret), K(table_id));
+  } else if (OB_FAIL(ObMultiVersionSchemaService::get_instance().get_tenant_schema_guard(schema_guard))) {
+    LOG_WARN("get tenant schema failed", K(ret));
+  } else if (OB_FAIL(schema_guard.get_table_schema( table_id, table_schema))) {
+    LOG_WARN("get table schema failed", K(ret), K(table_id));
   } else if (OB_ISNULL(table_schema)) {
     ret = OB_TABLE_NOT_EXIST;
-    LOG_WARN("table not exist", K(ret), K(tenant_id), K(table_id));
+    LOG_WARN("table not exist", K(ret), K(table_id));
   } else if (OB_FAIL(table_schema->get_multi_version_column_descs(column_descs))) {
     LOG_WARN("get column desc array failed", K(ret));
-  } else if (OB_FAIL(table_schema->get_is_column_store(ddl_table_schema.table_item_.is_column_store_))) {
-    LOG_WARN("fail to get is column store", K(ret));
   } else {
     ddl_table_schema.table_id_ = table_id;
     ddl_table_schema.table_item_.is_index_table_ = table_schema->is_index_table();
@@ -776,17 +676,17 @@ int ObDDLTableSchema::fill_ddl_table_schema(
 
     if (OB_FAIL(ddl_table_schema.column_descs_.assign(column_descs))) {
       LOG_WARN("assign column descs failed", K(ret));
-    } else if (OB_FAIL(ObDDLUtil::convert_to_storage_schema(table_schema, allocator, ddl_table_schema.storage_schema_))) {
+    } else if (OB_FAIL(ObDDLStorageUtil::convert_to_storage_schema(table_schema, allocator, ddl_table_schema.storage_schema_))) {
       LOG_WARN("fail to convert to storage schema", KR(ret), KPC(table_schema));
     } else if (OB_INVALID_ID != table_schema->get_aux_lob_meta_tid()) {
       const uint64_t lob_meta_table_id = table_schema->get_aux_lob_meta_tid();
       const ObTableSchema *lob_meta_table_schema = nullptr;
-      if (OB_FAIL(schema_guard.get_table_schema(tenant_id, lob_meta_table_id, lob_meta_table_schema))) {
-        LOG_WARN("get table schema failed", K(ret), K(tenant_id), K(lob_meta_table_id));
+      if (OB_FAIL(schema_guard.get_table_schema( lob_meta_table_id, lob_meta_table_schema))) {
+        LOG_WARN("get table schema failed", K(ret), K(lob_meta_table_id));
       } else if (OB_ISNULL(lob_meta_table_schema)) {
         ret = OB_TABLE_NOT_EXIST;
-        LOG_WARN("table not exist", K(ret), K(tenant_id), K(lob_meta_table_id));
-      } else if (OB_FAIL(ObDDLUtil::convert_to_storage_schema(lob_meta_table_schema, allocator, ddl_table_schema.lob_meta_storage_schema_))) {
+        LOG_WARN("table not exist", K(ret), K(lob_meta_table_id));
+      } else if (OB_FAIL(ObDDLStorageUtil::convert_to_storage_schema(lob_meta_table_schema, allocator, ddl_table_schema.lob_meta_storage_schema_))) {
         LOG_WARN("fail to convert to storage schema", KR(ret), KPC(lob_meta_table_schema));
       }
     }
@@ -833,8 +733,7 @@ int ObDDLTableSchema::fill_ddl_table_schema(
     }
     if (OB_SUCC(ret)) {
       if (FALSE_IT(is_vector_data_complement = ObDDLUtil::is_vector_index_complement(table_schema->get_index_type()))) {
-      } else if (is_vector_data_complement && OB_FAIL(fill_vector_index_schema_item(tenant_id,
-          schema_guard,
+      } else if (is_vector_data_complement && OB_FAIL(fill_vector_index_schema_item(schema_guard,
           table_schema,
           allocator,
           column_descs,

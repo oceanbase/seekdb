@@ -268,16 +268,6 @@ public:
   }
   static int get_das_retry_func(int err, sql::ObDASRetryCtrl::retry_func &retry_func);
 
-  // processors for ASH and wait event
-  static bool can_start_retry_wait_event(const ObQueryRetryType& retry_type);
-  static void start_schema_error_retry_wait_event(sql::ObSQLSessionInfo &session, const int error_code);
-  static void start_location_error_retry_wait_event(sql::ObSQLSessionInfo &session, const int error_code);
-  static void start_rowlock_retry_wait_event(sql::ObSQLSessionInfo &session);
-  static void start_px_worker_insufficient_retry_wait_event(sql::ObSQLSessionInfo &session, const sql::ObSqlCtx& sql_ctx);
-  static void start_gts_not_ready_retry_wait_event(sql::ObSQLSessionInfo &session, const int error_code);
-  static void start_log_cb_not_ready_retry_wait_event(sql::ObSQLSessionInfo &session, const int error_code);
-  static void start_replica_not_readable_retry_wait_event(sql::ObSQLSessionInfo &session);
-  static void start_other_retry_wait_event(sql::ObSQLSessionInfo &session, const int error_code);
 public:
   // The error of schema type will be retried at most 5 times in this thread.
   // 5 is a gut feeling decision, and will be modified based on feedback from statistical data. TODO qianfu.zpf
@@ -319,7 +309,6 @@ private:
   static void short_wait_retry_proc(ObRetryParam &v);
   static void force_local_retry_proc(ObRetryParam &v);
   static void batch_execute_opt_retry_proc(ObRetryParam &v);
-  static void switch_consumer_group_retry_proc(ObRetryParam &v);
   static void timeout_proc(ObRetryParam &v);
   static void autoinc_cache_not_equal_retry_proc(ObRetryParam &v);
 

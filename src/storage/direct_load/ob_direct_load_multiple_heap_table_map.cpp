@@ -28,7 +28,7 @@ ObDirectLoadMultipleHeapTableMap::ObDirectLoadMultipleHeapTableMap(int64_t mem_l
   allocator_("TLD_HT_map"),
   mem_limit_(mem_limit)
 {
-  allocator_.set_tenant_id(MTL_ID());
+  
 }
 
 void ObDirectLoadMultipleHeapTableMap::reuse()

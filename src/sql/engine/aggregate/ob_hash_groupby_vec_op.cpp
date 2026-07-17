@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SQL_ENG
 
 #include "sql/engine/aggregate/ob_hash_groupby_vec_op.h"
+#include "share/rc/ob_module_provider.h"
 #include "sql/engine/px/ob_px_util.h"
 
 namespace oceanbase
@@ -85,8 +86,8 @@ int ObHashGroupByVecOp::inner_open()
   int ret = OB_SUCCESS;
   reset(false);
   void *store_row_buf = nullptr;
-  ObMemAttr bucket_attr(MTL_ID(), "GbyPMapBkt");
-  ObMemAttr node_attr(MTL_ID(), "GbyPMapBktNod");
+  ObMemAttr bucket_attr("GbyPMapBkt");
+  ObMemAttr node_attr("GbyPMapBktNod");
   if (OB_FAIL(BaseClass::inner_open())) {
     LOG_WARN("failed to inner_open", K(ret));
   } else if (OB_FAIL(init_mem_context())) {
@@ -102,8 +103,7 @@ int ObHashGroupByVecOp::inner_open()
     int64_t init_size = 0;
     bool nullable = true;
     bool all_int64 = false;
-    ObMemAttr attr(ctx_.get_my_session()->get_effective_tenant_id(),
-                   ObModIds::OB_HASH_NODE_GROUP_ROWS,
+    ObMemAttr attr(ObModIds::OB_HASH_NODE_GROUP_ROWS,
                    ObCtxIds::WORK_AREA);
     if (OB_SUCC(ret) && MY_SPEC.group_exprs_.count() <= 2) {
       use_sstr_aggr_ = true;
@@ -118,7 +118,6 @@ int ObHashGroupByVecOp::inner_open()
       }
     }
     if (OB_FAIL(local_group_rows_.prepare_hash_table(max_row_size,
-                                                     attr.tenant_id_,
                                                      mem_context_->get_arena_allocator()))) {
        LOG_WARN("failed to prepare hash table", K(ret));
     } else if (OB_FAIL(ObPxEstimateSizeUtil::get_px_size(&ctx_,
@@ -129,7 +128,6 @@ int ObHashGroupByVecOp::inner_open()
     } else if (FALSE_IT(est_hash_mem_size = estimate_hash_bucket_size(est_group_cnt))) {
     } else if (FALSE_IT(estimate_mem_size = est_hash_mem_size + MY_SPEC.width_ * est_group_cnt)) {
     } else if (OB_FAIL(sql_mem_processor_.init(&mem_context_->get_malloc_allocator(),
-                                               ctx_.get_my_session()->get_effective_tenant_id(),
                                                estimate_mem_size,
                                                MY_SPEC.type_,
                                                MY_SPEC.id_,
@@ -191,14 +189,7 @@ int ObHashGroupByVecOp::inner_open()
       op_monitor_info_.otherstat_1_id_ = ObSqlMonitorStatIds::HASH_INIT_BUCKET_COUNT;
       op_monitor_info_.otherstat_4_value_ = 0;
       op_monitor_info_.otherstat_4_id_ = ObSqlMonitorStatIds::HASH_POPULAR_MAP_SIZE;
-      omt::ObTenantConfigGuard tenant_config(TENANT_CONF(
-                                        ctx_.get_my_session()->get_effective_tenant_id()));
-      if (tenant_config.is_valid()) {
-        force_dump_ = tenant_config->_force_hash_groupby_dump;
-      } else {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("invalid tenant config", K(ret));
-      }
+      force_dump_ = GCONF._force_hash_groupby_dump;
       LOG_TRACE("trace init hash table", K(MY_SPEC.id_), K(init_size), K(MY_SPEC.est_group_cnt_), K(est_group_cnt),
         K(est_hash_mem_size), K(estimate_mem_size),
         K(profile_.get_expect_size()),
@@ -373,8 +364,7 @@ int ObHashGroupByVecOp::init_mem_context()
   int ret = OB_SUCCESS;
   if (NULL == mem_context_) {
     lib::ContextParam param;
-    param.set_mem_attr(ctx_.get_my_session()->get_effective_tenant_id(),
-        ObModIds::OB_HASH_NODE_GROUP_ROWS,
+    param.set_mem_attr(ObModIds::OB_HASH_NODE_GROUP_ROWS,
         ObCtxIds::WORK_AREA);
     if (OB_FAIL(CURRENT_CONTEXT->CREATE_CONTEXT(mem_context_, param))) {
       LOG_WARN("memory entity create failed", K(ret));
@@ -528,13 +518,12 @@ int ObHashGroupByVecOp::init_distinct_info(bool is_part)
     is_part ? distinct_data_set_.get_cur_part_row_cnt(InputSide::LEFT) : MY_SPEC.rows_;
   int64_t est_size = is_part ? distinct_data_set_.get_cur_part_file_size(InputSide::LEFT) :
                                est_rows * MY_SPEC.width_;
-  int64_t tenant_id = ctx_.get_my_session()->get_effective_tenant_id();
+  
   if (!is_part
       && OB_FAIL(ObPxEstimateSizeUtil::get_px_size(&ctx_, MY_SPEC.px_est_size_factor_, est_rows,
                                                    est_rows))) {
     LOG_WARN("failed to get px size", K(ret));
-  } else if (OB_FAIL(distinct_sql_mem_processor_.init(&mem_context_->get_malloc_allocator(),
-                                                      tenant_id, est_size, MY_SPEC.type_,
+  } else if (OB_FAIL(distinct_sql_mem_processor_.init(&mem_context_->get_malloc_allocator(), est_size, MY_SPEC.type_,
                                                       MY_SPEC.id_, &ctx_))) {
     LOG_WARN("failed to init sql mem processor", K(ret));
   } else if (is_part) {
@@ -544,7 +533,7 @@ int ObHashGroupByVecOp::init_distinct_info(bool is_part)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected status: distinct origin exprs is empty", K(ret));
   } else if (OB_FAIL(distinct_data_set_.init(
-               tenant_id, GCONF.is_sql_operator_dump_enabled(), true, true, 1,
+               GCONF.is_sql_operator_dump_enabled(), true, true, 1,
                MY_SPEC.max_batch_size_, distinct_origin_exprs_, &distinct_sql_mem_processor_,
                MY_SPEC.compress_type_))) {
     LOG_WARN("failed to init hash partition infrastructure", K(ret));
@@ -809,7 +798,6 @@ int ObHashGroupByVecOp::setup_dump_env(const int64_t part_id, const int64_t inpu
     if (OB_SUCC(ret) && NULL == bloom_filter) {
       ModulePageAllocator mod_alloc(
           ObModIds::OB_HASH_NODE_GROUP_ROWS,
-          ctx_.get_my_session()->get_effective_tenant_id(),
           ObCtxIds::WORK_AREA);
       mod_alloc.set_allocator(&mem_context_->get_malloc_allocator());
       void *mem = mem_context_->get_malloc_allocator().alloc(sizeof(ObGbyBloomFilterVec));
@@ -842,7 +830,7 @@ int ObHashGroupByVecOp::setup_dump_env(const int64_t part_id, const int64_t inpu
         parts[i]->part_id_ = part_id + 1;
         parts[i]->part_shift_ = part_shift_;
         const int64_t extra_size = sizeof(uint64_t); // for hash value
-        ObMemAttr attr(ctx_.get_my_session()->get_effective_tenant_id(), ObModIds::OB_HASH_NODE_GROUP_ROWS, ObCtxIds::WORK_AREA);
+        ObMemAttr attr(ObModIds::OB_HASH_NODE_GROUP_ROWS, ObCtxIds::WORK_AREA);
         if (OB_FAIL(parts[i]->row_store_.init(child_->get_spec().output_,
                                               MY_SPEC.max_batch_size_,
                                               attr,
@@ -1548,7 +1536,6 @@ int ObHashGroupByVecOp::switch_part(DatumStoreLinkPartition *&cur_part,
                 &mem_context_->get_malloc_allocator(), max(2, input_rows)))) {
       LOG_WARN("failed to reuse extended hash table", K(ret));
     } else if (OB_FAIL(sql_mem_processor_.init(&mem_context_->get_malloc_allocator(),
-                                               ctx_.get_my_session()->get_effective_tenant_id(),
                                                input_size,
                                                MY_SPEC.type_,
                                                MY_SPEC.id_,
@@ -2532,7 +2519,7 @@ int ObHashGroupByVecOp::check_llc_ndv()
   bool ndv_ratio_is_small_enough = false;
   bool has_enough_mem_for_deduplication = false;
   ObTenantSqlMemoryManager * tenant_sql_mem_manager = NULL;
-  tenant_sql_mem_manager = MTL(ObTenantSqlMemoryManager*);
+  tenant_sql_mem_manager = share::g_mp->tenant_sql_memory_manager();
   ObExprEstimateNdv::llc_estimate_ndv(ndv, llc_est_.llc_map_);
   if (0 == llc_est_.est_cnt_) {
     ret = OB_ERR_UNEXPECTED;
@@ -2540,11 +2527,8 @@ int ObHashGroupByVecOp::check_llc_ndv()
   } else if (FALSE_IT(ndv_ratio_is_small_enough = (ndv * 1.0 / llc_est_.est_cnt_) < LlcEstimate::LLC_NDV_RATIO_)) {
   } else if (FALSE_IT(llc_est_.last_est_cnt_ = llc_est_.est_cnt_)) {
   } else if (OB_ISNULL(tenant_sql_mem_manager)) {
-     uint64_t tenant_id  = MTL_ID();
-     if (OB_MAX_RESERVED_TENANT_ID <  tenant_id) {
-       ret = OB_ERR_UNEXPECTED;
-       LOG_WARN("unexpect null ptr", K(ret));
-     } else if (ndv_ratio_is_small_enough) {
+     
+     if (ndv_ratio_is_small_enough) {
        bypass_ctrl_.bypass_rebackto_insert(ndv);
        llc_est_.enabled_  = false;
      }

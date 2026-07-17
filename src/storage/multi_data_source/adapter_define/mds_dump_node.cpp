@@ -480,20 +480,8 @@ int MdsDumpNode::deserialize(common::ObIAllocator &allocator, const char *buf, c
               version,
               mds_table_id_,
               mds_unit_id_,
-              writer_id_);
-
-
-  if (OB_FAIL(ret)) {
-  } else if (UNIS_VERSION_V1 == version) {
-    int64_t seq_no = 0;
-    LST_DO_CODE(OB_UNIS_DECODE, seq_no);
-    if (OB_SUCC(ret)) {
-      // compat logic, seq_no can be 0 or -1(transfer tablet status committed node) in 431
-      seq_no_ = ((0 == seq_no || -1 == seq_no) ? ObTxSEQ::MIN_VAL() : ObTxSEQ::mk_v0(seq_no));
-    }
-  } else {
-    LST_DO_CODE(OB_UNIS_DECODE, seq_no_);
-  }
+              writer_id_,
+              seq_no_);
 
   LST_DO_CODE(OB_UNIS_DECODE,
               redo_scn_,
@@ -514,13 +502,6 @@ int MdsDumpNode::deserialize(common::ObIAllocator &allocator, const char *buf, c
     } else {
       MEMCPY(buffer, user_data.ptr(), len);
       user_data_.assign(buffer, len);
-    }
-  }
-
-  if (OB_FAIL(ret)) {
-  } else if (UNIS_VERSION_V1 == version) {
-    if (seq_no_.is_min()) {
-      crc_check_number_ = generate_hash();
     }
   }
 

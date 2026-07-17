@@ -18,14 +18,14 @@
 
 #include <gtest/gtest.h>
 #include <gmock/gmock.h>
-#include "lib/stat/ob_session_stat.h"
+#include "lib/stat/ob_diagnose_info.h"
 #define private public
 #include "rootserver/ob_major_freeze_launcher.h"
 #undef private
 #include "../share/schema/db_initializer.h"
 #include "rpc/mock_ob_common_rpc_proxy.h"
 #include "lib/container/ob_array_iterator.h"
-#include "rootserver/ob_freeze_info_manager.h"
+#include "share/ob_freeze_info_manager.h"
 
 using ::testing::_;
 using ::testing::Assign;
@@ -35,7 +35,7 @@ using ::testing::SetArgReferee;
 namespace oceanbase
 {
 using namespace common;
-using namespace obrpc;
+using namespace obcall;
 using namespace share;
 using namespace share::schema;
 namespace rootserver

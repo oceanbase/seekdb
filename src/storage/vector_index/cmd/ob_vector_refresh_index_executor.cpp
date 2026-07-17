@@ -19,13 +19,13 @@
 #include "storage/vector_index/cmd/ob_vector_refresh_index_executor.h"
 #include "storage/vector_index/ob_vector_index_refresh.h"
 #include "pl/ob_pl.h"
-#include "share/ob_vec_index_builder_util.h"
+#include "sql/resolver/ddl/ob_vec_index_builder_util.h"
 
 namespace oceanbase {
 namespace storage {
 
 ObVectorRefreshIndexExecutor::ObVectorRefreshIndexExecutor()
-  : ctx_(nullptr), session_info_(nullptr), tenant_id_(OB_INVALID_TENANT_ID) {}
+  : ctx_(nullptr), session_info_(nullptr) {}
 
 ObVectorRefreshIndexExecutor::~ObVectorRefreshIndexExecutor() {}
 
@@ -41,7 +41,7 @@ int ObVectorRefreshIndexExecutor::execute_refresh(
   OV(OB_LIKELY(arg.is_valid()), OB_INVALID_ARGUMENT, arg);
   OZ(schema_checker_.init(*(ctx_->get_sql_ctx()->schema_guard_),
                           session_info_->get_server_sid()));
-  OX(tenant_id_ = session_info_->get_effective_tenant_id());
+  OX();
   OZ(resolve_refresh_arg(arg));
 
   if (OB_FAIL(ret)) {
@@ -65,7 +65,7 @@ int ObVectorRefreshIndexExecutor::execute_refresh_inner(
   OV(OB_LIKELY(arg.is_valid()), OB_INVALID_ARGUMENT, arg);
   OZ(schema_checker_.init(*(ctx_->get_sql_ctx()->schema_guard_),
                           session_info_->get_server_sid()));
-  OX(tenant_id_ = session_info_->get_effective_tenant_id());
+  OX();
   OZ(resolve_refresh_inner_arg(arg, in_recycle_bin));
 
   if (OB_FAIL(ret)) {
@@ -90,7 +90,7 @@ int ObVectorRefreshIndexExecutor::execute_rebuild(
   OV(OB_LIKELY(arg.is_valid()), OB_INVALID_ARGUMENT, arg);
   OZ(schema_checker_.init(*(ctx_->get_sql_ctx()->schema_guard_),
                           session_info_->get_server_sid()));
-  OX(tenant_id_ = session_info_->get_effective_tenant_id());
+  OX();
   OZ(resolve_rebuild_arg(arg));
 
   if (OB_FAIL(ret)) {
@@ -114,7 +114,7 @@ int ObVectorRefreshIndexExecutor::execute_rebuild_inner(
   OV(OB_LIKELY(arg.is_valid()), OB_INVALID_ARGUMENT, arg);
   OZ(schema_checker_.init(*(ctx_->get_sql_ctx()->schema_guard_),
                           session_info_->get_server_sid()));
-  OX(tenant_id_ = session_info_->get_effective_tenant_id());
+  OX();
   OZ(resolve_rebuild_inner_arg(arg, in_recycle_bin));
 
   if (OB_FAIL(ret)) {
@@ -128,19 +128,16 @@ int ObVectorRefreshIndexExecutor::execute_rebuild_inner(
 }
 
 void ObVectorRefreshIndexExecutor::upper_db_table_name(
-    const ObNameCaseMode case_mode, const bool is_oracle_mode, ObString &name) {
-  if (is_oracle_mode) {
-    str_toupper(name.ptr(), name.length());
-  } else {
-    if (OB_LOWERCASE_AND_INSENSITIVE == case_mode) {
-      str_tolower(name.ptr(), name.length());
-    }
+    const ObNameCaseMode case_mode, ObString &name) {
+  // MySQL mode
+  if (OB_LOWERCASE_AND_INSENSITIVE == case_mode) {
+    str_tolower(name.ptr(), name.length());
   }
 }
 
 int ObVectorRefreshIndexExecutor::resolve_table_name(
     const ObCollationType cs_type, const ObNameCaseMode case_mode,
-    const bool is_oracle_mode, const ObString &name, ObString &database_name,
+    const ObString &name, ObString &database_name,
     ObString &table_name) {
   int ret = OB_SUCCESS;
   static const char split_character = '.';
@@ -165,17 +162,16 @@ int ObVectorRefreshIndexExecutor::resolve_table_name(
     }
     if (OB_SUCC(ret)) {
       const bool preserve_lettercase =
-          is_oracle_mode ? true : (case_mode != OB_LOWERCASE_AND_INSENSITIVE);
-      upper_db_table_name(case_mode, is_oracle_mode, database_name);
-      upper_db_table_name(case_mode, is_oracle_mode, table_name);
+          (case_mode != OB_LOWERCASE_AND_INSENSITIVE);
+      upper_db_table_name(case_mode, database_name);
+      upper_db_table_name(case_mode, table_name);
       if (!database_name.empty() &&
           OB_FAIL(ObSQLUtils::check_and_convert_db_name(
               cs_type, preserve_lettercase, database_name))) {
         LOG_WARN("fail to check and convert database name", KR(ret),
                  K(database_name));
       } else if (OB_FAIL(ObSQLUtils::check_and_convert_table_name(
-                     cs_type, preserve_lettercase, table_name,
-                     is_oracle_mode))) {
+                     cs_type, preserve_lettercase, table_name))) {
         LOG_WARN("fail to check and convert table name", KR(ret), K(cs_type),
                  K(preserve_lettercase), K(table_name));
       }
@@ -318,7 +314,7 @@ int ObVectorRefreshIndexExecutor::resolve_and_check_table_valid(
     uint64_t base_table_id = -1;
     ObString base_vector_index_col_name;
     if (OB_FAIL(ObVectorRefreshIndexExecutor::resolve_table_name(
-            cs_type, case_mode, lib::is_oracle_mode(), arg_base_name,
+            cs_type, case_mode, arg_base_name,
             base_db_name, base_name))) {
       LOG_WARN("fail to resolve table name", KR(ret), K(cs_type), K(case_mode),
               K(arg_base_name));
@@ -326,7 +322,7 @@ int ObVectorRefreshIndexExecutor::resolve_and_check_table_valid(
                     static_cast<int>(arg_base_name.length()),
                     arg_base_name.ptr());
     } else if (OB_FAIL(ObVectorRefreshIndexExecutor::resolve_table_name(
-                  cs_type, case_mode, lib::is_oracle_mode(), arg_idx_name,
+                  cs_type, case_mode, arg_idx_name,
                   index_db_name, index_name))) {
       LOG_WARN("fail to resolve table name", KR(ret), K(cs_type), K(case_mode),
               K(arg_idx_name));
@@ -342,8 +338,7 @@ int ObVectorRefreshIndexExecutor::resolve_and_check_table_valid(
     } else if (OB_UNLIKELY(base_db_name != index_db_name)) {
       ret = OB_INVALID_ARGUMENT;
       LOG_WARN("different db name is not supported.");
-    } else if (OB_FAIL(schema_checker_.get_table_schema_with_synonym(
-                  tenant_id_, base_db_name, base_name, false /*is_index_table*/,
+    } else if (OB_FAIL(schema_checker_.get_table_schema_with_synonym(base_db_name, base_name, false /*is_index_table*/,
                   has_synonym, new_base_db_name, new_base_name,
                   base_table_schema))) {
       ret = OB_INVALID_ARGUMENT;
@@ -361,8 +356,7 @@ int ObVectorRefreshIndexExecutor::resolve_and_check_table_valid(
                   domain_index_table_name))) {
       LOG_WARN("fail to generate delta buf index table name", KR(ret),
               K(base_table_id), K(index_name));
-    } else if (OB_FAIL(schema_checker_.get_table_schema(
-                  tenant_id_, index_db_name, domain_index_table_name, true,
+    } else if (OB_FAIL(schema_checker_.get_table_schema( index_db_name, domain_index_table_name, true,
                   domain_table_schema))) {
       ret = OB_INVALID_ARGUMENT;
       LOG_WARN("fail to get table schema", KR(ret), K(index_db_name),
@@ -385,7 +379,7 @@ int ObVectorRefreshIndexExecutor::resolve_and_check_table_valid(
                   base_table_id, index_name, index_id_table_name))) {
         LOG_WARN("fail to generate index id index table name", KR(ret),
                 K(base_table_id), K(index_name));
-      } else if (OB_FAIL(schema_checker_.get_table_schema(tenant_id_, index_db_name,
+      } else if (OB_FAIL(schema_checker_.get_table_schema( index_db_name,
                                                           index_id_table_name, true,
                                                           index_id_table_schema,
                                                           false, /*with_hidden_flag*/
@@ -438,7 +432,7 @@ int ObVectorRefreshIndexExecutor::resolve_table_id_and_check_table_valid(
     LOG_WARN("fail to get name case mode", KR(ret));
   } else if (OB_FAIL(session_info_->get_collation_connection(cs_type))) {
     LOG_WARN("fail to get collation_connection", KR(ret));
-  } else if (OB_FAIL(schema_checker_.get_table_schema(tenant_id_, idx_table_id, domain_table_schema))) {
+  } else if (OB_FAIL(schema_checker_.get_table_schema( idx_table_id, domain_table_schema))) {
     LOG_WARN("fail to get index id table table schema", KR(ret), K(idx_table_id));
   } else if (OB_ISNULL(domain_table_schema)) {
     ret = OB_ERR_UNEXPECTED;
@@ -449,13 +443,13 @@ int ObVectorRefreshIndexExecutor::resolve_table_id_and_check_table_valid(
   } else if (OB_UNLIKELY(!domain_table_schema->is_vec_domain_index())) {
     ret = OB_NOT_SUPPORTED;
     LOG_WARN("invalid index table type", KR(ret), K(domain_table_schema->is_vec_domain_index()));
-  } else if (OB_FAIL(schema_checker_.get_table_schema(tenant_id_, domain_table_schema->get_data_table_id(), base_table_schema))) {
+  } else if (OB_FAIL(schema_checker_.get_table_schema( domain_table_schema->get_data_table_id(), base_table_schema))) {
     LOG_WARN("fail to get base table schema", KR(ret), K(idx_table_id));
   } else if (OB_ISNULL(base_table_schema)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("table_schema is null", K(ret), KP(base_table_schema));
-  } else if (OB_FAIL(schema_checker_.get_database_schema(tenant_id_, domain_table_schema->get_database_id(), database_schema))) {
-    LOG_WARN("fail to get database schema", KR(ret), K(tenant_id_), K(domain_table_schema->get_database_id()));
+  } else if (OB_FAIL(schema_checker_.get_database_schema( domain_table_schema->get_database_id(), database_schema))) {
+    LOG_WARN("fail to get database schema", KR(ret), K(domain_table_schema->get_database_id()));
   } else if (OB_ISNULL(database_schema)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("database_schema is null", K(ret), KP(database_schema));
@@ -470,7 +464,7 @@ int ObVectorRefreshIndexExecutor::resolve_table_id_and_check_table_valid(
                      user_index_name, index_id_table_name))) {
     LOG_WARN("fail to generate index id index table name", KR(ret),
               K(domain_table_schema->get_data_table_id()), K(user_index_name));
-  } else if (OB_FAIL(schema_checker_.get_table_schema(tenant_id_, database_schema->get_database_name_str(),
+  } else if (OB_FAIL(schema_checker_.get_table_schema( database_schema->get_database_name_str(),
                                                       index_id_table_name, true,
                                                       index_id_table_schema,
                                                       false, /*with_hidden_flag*/
@@ -774,7 +768,7 @@ int ObVectorRefreshIndexExecutor::resolve_rebuild_inner_arg(const ObVectorRebuil
 int ObVectorRefreshIndexExecutor::do_refresh() {
   int ret = OB_SUCCESS;
   ObVectorRefreshIndexCtx refresh_ctx;
-  refresh_ctx.tenant_id_ = tenant_id_;
+  
   refresh_ctx.base_tb_id_ = base_tb_id_;
   refresh_ctx.domain_tb_id_ = domain_tb_id_;
   refresh_ctx.index_id_tb_id_ = index_id_tb_id_;
@@ -796,7 +790,7 @@ int ObVectorRefreshIndexExecutor::do_refresh() {
   if (trans.is_started()) {
     int tmp_ret = OB_SUCCESS;
     if (OB_SUCCESS != (tmp_ret = trans.end(OB_SUCC(ret)))) {
-      LOG_WARN("failed to commit trans", KR(ret), KR(tmp_ret));
+      LOG_ERROR("failed to commit trans", KR(ret), KR(tmp_ret));
       ret = COVER_SUCC(tmp_ret);
     }
   }
@@ -811,7 +805,7 @@ int ObVectorRefreshIndexExecutor::do_refresh_with_retry()
 {
   int ret = OB_SUCCESS;
   ObVectorRefreshIndexCtx refresh_ctx;
-  refresh_ctx.tenant_id_ = tenant_id_;
+  
   refresh_ctx.base_tb_id_ = base_tb_id_;
   refresh_ctx.domain_tb_id_ = domain_tb_id_;
   refresh_ctx.index_id_tb_id_ = index_id_tb_id_;
@@ -834,7 +828,7 @@ int ObVectorRefreshIndexExecutor::do_refresh_with_retry()
     if (trans.is_started()) {
       int tmp_ret = OB_SUCCESS;
       if (OB_SUCCESS != (tmp_ret = trans.end(OB_SUCC(ret)))) {
-        LOG_WARN("failed to commit trans", KR(ret), KR(tmp_ret));
+        LOG_ERROR("failed to commit trans", KR(ret), KR(tmp_ret));
         ret = COVER_SUCC(tmp_ret);
       }
     }
@@ -856,7 +850,7 @@ int ObVectorRefreshIndexExecutor::do_refresh_with_retry()
 int ObVectorRefreshIndexExecutor::do_rebuild() {
   int ret = OB_SUCCESS;
   ObVectorRefreshIndexCtx refresh_ctx;
-  refresh_ctx.tenant_id_ = tenant_id_;
+  
   refresh_ctx.base_tb_id_ = base_tb_id_;
   refresh_ctx.domain_tb_id_ = domain_tb_id_;
   refresh_ctx.index_id_tb_id_ = index_id_tb_id_;
@@ -882,7 +876,7 @@ int ObVectorRefreshIndexExecutor::do_rebuild() {
   if (trans.is_started()) {
     int tmp_ret = OB_SUCCESS;
     if (OB_SUCCESS != (tmp_ret = trans.end(OB_SUCC(ret)))) {
-      LOG_WARN("failed to commit trans", KR(ret), KR(tmp_ret));
+      LOG_ERROR("failed to commit trans", KR(ret), KR(tmp_ret));
       ret = COVER_SUCC(tmp_ret);
     }
   }
@@ -897,7 +891,7 @@ int ObVectorRefreshIndexExecutor::do_rebuild_with_retry()
 {
   int ret = OB_SUCCESS;
   ObVectorRefreshIndexCtx refresh_ctx;
-  refresh_ctx.tenant_id_ = tenant_id_;
+  
   refresh_ctx.base_tb_id_ = base_tb_id_;
   refresh_ctx.domain_tb_id_ = domain_tb_id_;
   refresh_ctx.index_id_tb_id_ = index_id_tb_id_;
@@ -924,7 +918,7 @@ int ObVectorRefreshIndexExecutor::do_rebuild_with_retry()
     if (trans.is_started()) {
       int tmp_ret = OB_SUCCESS;
       if (OB_SUCCESS != (tmp_ret = trans.end(OB_SUCC(ret)))) {
-        LOG_WARN("failed to commit trans", KR(ret), KR(tmp_ret));
+        LOG_ERROR("failed to commit trans", KR(ret), KR(tmp_ret));
         ret = COVER_SUCC(tmp_ret);
       }
     }

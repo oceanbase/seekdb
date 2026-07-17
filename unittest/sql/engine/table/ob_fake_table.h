@@ -20,7 +20,7 @@
 #include "share/object/ob_obj_cast.h"
 #include "common/row/ob_row_store.h"
 #include "lib/time/ob_time_utility.h"
-#include "lib/timezone/ob_time_convert.h"
+#include "common/timezone/ob_time_convert.h"
 #include "sql/engine/ob_no_children_phy_operator.h"
 #include "sql/engine/ob_exec_context.h"
 #include "lib/allocator/ob_allocator.h"

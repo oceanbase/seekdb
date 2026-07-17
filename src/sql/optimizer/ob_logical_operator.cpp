@@ -400,7 +400,6 @@ ObLogicalOperator::ObLogicalOperator(ObLogPlan &plan)
     location_type_(ObPhyPlanType::OB_PHY_PLAN_UNINITIALIZED),
     is_partition_wise_(false),
     px_est_size_factor_(),
-    dblink_id_(OB_INVALID_ID),   // OB_INVALID_ID represent local cluster.
     plan_depth_(0),
     contain_fake_cte_(false),
     contain_pw_merge_op_(false),
@@ -2612,8 +2611,6 @@ int ObLogicalOperator::gen_location_constraint(void *ctx)
           LOG_WARN("failed to push back location constraint", K(ret));
         } else if (OB_FAIL(loc_cons_ctx->base_table_constraints_.push_back(loc_cons))) {
           LOG_WARN("failed to push back location constraint", K(ret));
-        } else if (EXTERNAL_TABLE == log_scan_op->get_table_type()) {
-          // do not add pwj constraints for external table
         } else if (OB_FAIL(strict_pwj_constraint_.push_back(
                     loc_cons_ctx->base_table_constraints_.count() - 1))) {
           LOG_WARN("failed to push back location constraint offset", K(ret));
@@ -3574,7 +3571,6 @@ int ObLogicalOperator::set_plan_root_output_exprs()
     LOG_WARN("get unexpected null", K(stmt), K(ret));
   } else if (stmt->is_select_stmt()) {
     const ObSelectStmt *sel_stmt = static_cast<const ObSelectStmt*>(get_stmt());
-    uint64_t min_cluster_version = GET_MIN_CLUSTER_VERSION();
     if (!sel_stmt->has_select_into() && OB_FAIL(sel_stmt->get_select_exprs(output_exprs_))) {
       LOG_WARN("failed to get select exprs", K(ret));
     } else { /*do nothing*/ }
@@ -3592,7 +3588,6 @@ int ObLogicalOperator::check_stmt_can_be_packed(const ObDMLStmt *stmt, bool &nee
 {
   int ret = OB_SUCCESS;
   need_pack = false;
-  #ifndef OB_BUILD_EMBED_MODE
   ObSQLSessionInfo *session_info = NULL;
   if (OB_ISNULL(stmt) || OB_ISNULL(get_plan()) ||
       OB_ISNULL(session_info = get_plan()->get_optimizer_context().get_session_info())) {
@@ -3600,11 +3595,9 @@ int ObLogicalOperator::check_stmt_can_be_packed(const ObDMLStmt *stmt, bool &nee
     LOG_WARN("get unexpected null", K(ret));
   } else {
     bool has_var_assign = get_plan()->get_optimizer_context().has_var_assign();
-    bool is_var_assign_only_in_root = get_plan()->get_optimizer_context().is_var_assign_only_in_root_stmt();
     need_pack = stmt->is_select_stmt() && (!session_info->is_inner()) && LOG_EXCHANGE == type_
                  && (ObPhyPlanType::OB_PHY_PLAN_DISTRIBUTED == get_phy_plan_type()) && !has_var_assign;
   }
-  #endif
   return ret;
 }
 
@@ -3785,33 +3778,8 @@ int ObLogicalOperator::explain_print_partitions(ObTablePartitionInfo &table_part
       OZ(part_infos.push_back(part_info));
     } else {
       const ObTabletID &tablet_id = part_loc.get_tablet_id();
-      if (table_schema->is_external_table()) {
-        for (int64_t j = 0; OB_SUCC(ret) && j < table_schema->get_partition_num(); j++) {
-          if (OB_ISNULL(table_schema->get_part_array())) {
-            ret = OB_INVALID_ARGUMENT;
-            LOG_WARN("table shcema is invalid", K(ret));
-          } else {
-            ObPartition *partition = table_schema->get_part_array()[j];
-            if (OB_ISNULL(partition)) {
-              ret = OB_ERR_UNEXPECTED;
-              LOG_WARN("unexpected error", K(ret));
-            } else if (partition->get_part_id() == part_loc.get_partition_id()) {
-              part_info.part_id_ = j;
-            }
-            LOG_TRACE("show external table partition", K(tablet_id), KPC(partition), K(partitions.at(i)), K(part_info));
-          }
-        }
-        OZ(part_infos.push_back(part_info));
-      } else {
-        OZ(table_schema->get_part_idx_by_tablet(tablet_id, part_info.part_id_, part_info.subpart_id_));
-        OZ(part_infos.push_back(part_info));
-      }
-      // if (OB_FAIL(ret) || part_info.part_id_ == OB_INVALID_INDEX) {
-      //   //do nothing
-      // } else if (!table_schema->is_external_table() || common::ObTabletID::INVALID_TABLET_ID == tablet_id.id()) {
-      //   //do nothing
-      // } else {
-      // }
+      OZ(table_schema->get_part_idx_by_tablet(tablet_id, part_info.part_id_, part_info.subpart_id_));
+      OZ(part_infos.push_back(part_info));
       LOG_TRACE("explain print partition", K(tablet_id), K(part_info), K(ref_table_id));
     }
   }
@@ -4216,16 +4184,6 @@ int ObLogicalOperator::allocate_granule_nodes_above(AllocGIContext &ctx)
       } else if (ctx.is_in_partition_wise_state()) {
         gi_op->add_flag(GI_PARTITION_WISE);
       } else { /*do nothing*/ }
-
-      if (OB_SUCC(ret) && LOG_TABLE_SCAN == get_type()
-          && EXTERNAL_TABLE == static_cast<ObLogTableScan *>(this)->get_table_type()) {
-        if (ctx.force_partition()) {
-          ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("external table do not support partition GI", K(ret));
-        } else {
-          gi_op->set_used_by_external_table();
-        }
-      }
 
       if (OB_SUCC(ret)) {
         partition_granule = gi_op->is_partition_gi();
@@ -5412,8 +5370,7 @@ int ObLogicalOperator::allocate_partition_join_filter(const ObIArray<JoinFilterI
         join_filter_create->set_tablet_id_expr(info.calc_part_id_expr_);
       }
       OZ(join_filter_create->compute_property());
-      OZ(bf_info.init(get_plan()->get_optimizer_context().get_session_info()->get_effective_tenant_id(),
-          filter_id, GCTX.get_server_id(),
+      OZ(bf_info.init(filter_id, GCTX.get_server_id(),
           join_filter_create->is_shared_join_filter(),
           info.skip_subpart_,
           join_filter_create->get_p2p_sequence_ids().at(0),
@@ -5559,11 +5516,6 @@ int ObLogicalOperator::allocate_normal_join_filter(const ObIArray<JoinFilterInfo
                                                            node, info))) {
           LOG_WARN("failed to prepare_rf_query_range_info");
         }
-        if (OB_SUCC(ret) && LOG_TABLE_SCAN == node->get_type()) {
-          ObLogTableScan *scan = static_cast<ObLogTableScan*>(node);
-          scan->set_use_column_store(info.use_column_store_);
-        }
-
         if (OB_SUCC(ret) && can_join_filter_material) {
           valied_join_filter_count++;
           last_valid_join_filter_info_idx = i;

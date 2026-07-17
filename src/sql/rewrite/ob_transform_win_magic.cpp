@@ -22,7 +22,7 @@
 #include "sql/optimizer/ob_optimizer_util.h"
 #include "sql/ob_sql_context.h"
 #include "sql/rewrite/ob_stmt_comparer.h"
-#include "common/ob_smart_call.h"
+#include "lib/utility/ob_smart_call.h"
 #include "sql/rewrite/ob_equal_analysis.h"
 
 using namespace oceanbase::sql;

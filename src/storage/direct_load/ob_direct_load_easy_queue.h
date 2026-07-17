@@ -30,7 +30,7 @@ template<class T>
 class ObDirectLoadEasyQueue // A queue with very poor performance, mainly for convenience of use
 {
 public:
-  ObDirectLoadEasyQueue() : malloc_(ObMemAttr(MTL_ID(), "TLD_EasyQueue")), queue_(malloc_) {}
+  ObDirectLoadEasyQueue() : malloc_(ObMemAttr("TLD_EasyQueue")), queue_(malloc_) {}
 
   int push(const T &e) {
     int ret = OB_SUCCESS;

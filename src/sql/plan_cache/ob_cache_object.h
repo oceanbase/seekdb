@@ -20,7 +20,7 @@
 #include "lib/container/ob_2d_array.h"
 #include "lib/allocator/page_arena.h"
 #include "lib/list/ob_dlist.h"
-#include "lib/allocator/ob_mod_define.h"
+#include "lib/utility/ob_mod_define.h"
 #include "lib/utility/ob_print_utils.h"
 #include "lib/container/ob_fixed_array.h"
 #include "share/schema/ob_schema_struct.h"
@@ -63,18 +63,16 @@ public:
 
 struct AllocCacheObjInfo {
   uint64_t obj_id_;
-  uint64_t tenant_id_;
   int64_t log_del_time_;
   int64_t real_del_time_;
   int64_t ref_count_;
   int64_t mem_used_;
   bool added_to_lc_;
 
-  AllocCacheObjInfo(uint64_t obj_id, uint64_t tenant_id,
+  AllocCacheObjInfo(uint64_t obj_id,
                     int64_t log_del_time, int64_t real_del_time,
                     int64_t ref_count, int64_t mem_used, bool added_to_pc)
       : obj_id_(obj_id),
-        tenant_id_(tenant_id),
         log_del_time_(log_del_time),
         real_del_time_(real_del_time),
         ref_count_(ref_count),
@@ -83,14 +81,13 @@ struct AllocCacheObjInfo {
 
   AllocCacheObjInfo()
       : obj_id_(common::OB_INVALID_ID),
-        tenant_id_(common::OB_INVALID_ID),
         log_del_time_(INT64_MAX),
         real_del_time_(INT64_MAX),
         ref_count_(0),
         mem_used_(0),
         added_to_lc_(false) {}
 
-  TO_STRING_KV(K_(obj_id), K_(tenant_id), K_(log_del_time),
+  TO_STRING_KV(K_(obj_id), K_(log_del_time),
                K_(real_del_time), K_(ref_count), K_(added_to_lc),
                K_(mem_used));
 };
@@ -111,7 +108,7 @@ struct ObParamInfo
   : scale_(0),
     type_(common::ObNullType),
     ext_real_type_(common::ObNullType),
-    is_oracle_null_value_(false),
+    is_typed_null_value_(false),
     col_type_(common::CS_TYPE_INVALID),
     precision_(PRECISION_UNKNOWN_YET)
   {}
@@ -122,7 +119,7 @@ struct ObParamInfo
                K_(scale),
                K_(type),
                K_(ext_real_type),
-               K_(is_oracle_null_value),
+               K_(is_typed_null_value),
                K_(col_type),
                K_(precision));
 
@@ -132,8 +129,8 @@ struct ObParamInfo
   common::ObScale scale_;
   common::ObObjType type_;
   common::ObObjType ext_real_type_; // use as high 4 bytes of udt id if type is sql udt
-  // Process Oracle mode type null value matching in plan_cache
-  bool is_oracle_null_value_;
+  // Process typed null value matching in plan cache.
+  bool is_typed_null_value_;
   common::ObCollationType col_type_;
   common::ObPrecision precision_;
 

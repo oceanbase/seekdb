@@ -111,7 +111,7 @@ OB_DEF_DESERIALIZE(ObDASIRScanCtDef)
   LST_DO_CODE(OB_UNIS_DECODE,
     flags_,
     search_text_,
-    inv_scan_domain_id_col_, // FARM COMPAT WHITELIST
+    inv_scan_domain_id_col_, // FARM COMPAT WHITELIST 
     inv_scan_doc_length_col_,
     match_filter_,
     relevance_expr_,

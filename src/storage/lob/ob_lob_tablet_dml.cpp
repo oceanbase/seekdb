@@ -17,12 +17,14 @@
 #define USING_LOG_PREFIX STORAGE
 
 #include "ob_lob_tablet_dml.h"
-#include "share/schema/ob_table_dml_param.h"
+#include "storage/ob_table_dml_param.h"
+#include "share/rc/ob_module_provider.h"
+#include "storage/ob_table_dml_param.h"
 #include "storage/lob/ob_lob_manager.h"
 #include "storage/lob/ob_lob_locator_struct.h"
 #include "storage/ob_dml_running_ctx.h"
 #include "storage/memtable/ob_memtable_context.h"
-#include "share/schema/ob_table_dml_param.h"
+#include "storage/ob_table_dml_param.h"
 
 namespace oceanbase
 {
@@ -53,11 +55,8 @@ int ObLobTabletDmlHelper::build_common_lob_param_for_dml(
   lob_param.tx_desc_ = run_ctx.store_ctx_.mvcc_acc_ctx_.tx_desc_;
   lob_param.parent_seq_no_ = run_ctx.store_ctx_.mvcc_acc_ctx_.tx_scn_;
   lob_param.tx_id_ = lob_param.tx_desc_->get_tx_id();
-  lob_param.is_mlog_ = run_ctx.dml_param_.table_param_->get_data_table().is_mlog_table();
-
   lob_param.sql_mode_ = run_ctx.dml_param_.sql_mode_;
   lob_param.is_total_quantity_log_ = run_ctx.dml_param_.is_total_quantity_log_;
-  lob_param.ls_id_ = run_ctx.store_ctx_.ls_id_;
   lob_param.tablet_id_ = run_ctx.relative_table_.get_tablet_id();
   lob_param.lob_meta_tablet_id_ = run_ctx.lob_dml_ctx_.lob_meta_tablet_id_;
   lob_param.lob_piece_tablet_id_ = run_ctx.lob_dml_ctx_.lob_piece_tablet_id_;
@@ -66,7 +65,6 @@ int ObLobTabletDmlHelper::build_common_lob_param_for_dml(
   lob_param.timeout_ = run_ctx.dml_param_.timeout_;
   lob_param.scan_backward_ = false;
   lob_param.offset_ = 0;
-  lob_param.data_row_ = &data_row;
   lob_param.is_index_table_ = run_ctx.relative_table_.is_index_table();
   lob_param.main_table_rowkey_col_ = run_ctx.is_main_table_rowkey_col(col_idx) ||
     (!run_ctx.relative_table_.is_index_table() && col_idx < run_ctx.relative_table_.get_rowkey_column_num());
@@ -78,8 +76,7 @@ int ObLobTabletDmlHelper::build_common_lob_param_for_dml(
     // NOTE:
     // lob_insert need table_scan, the snapshot already generated in
     // run_ctx.store_ctx, use it as an LS ReadSnapshot
-    lob_param.snapshot_.init_ls_read(run_ctx.store_ctx_.ls_id_,
-                                      run_ctx.store_ctx_.mvcc_acc_ctx_.snapshot_);
+    lob_param.snapshot_.init_ls_read(run_ctx.store_ctx_.mvcc_acc_ctx_.snapshot_);
   }
   return ret;
 }
@@ -244,7 +241,7 @@ int ObLobTabletDmlHelper::insert_lob_col(
     const bool try_flush_redo)
 {
   int ret = OB_SUCCESS;
-  ObLobManager *lob_mngr = MTL(ObLobManager*);
+  ObLobManager *lob_mngr = share::g_mp->lob_manager();
   ObLobAccessParam lob_param;
   const ObColDesc &column = run_ctx.col_descs_->at(col_idx);
   if (OB_ISNULL(lob_mngr)) {
@@ -297,7 +294,7 @@ int ObLobTabletDmlHelper::delete_lob_col(
     const bool try_flush_redo)
 {
   int ret = OB_SUCCESS;
-  ObLobManager *lob_mngr = MTL(ObLobManager*);
+  ObLobManager *lob_mngr = share::g_mp->lob_manager();
   const ObColDesc &column = run_ctx.col_descs_->at(col_idx);
   if (OB_ISNULL(lob_mngr)) {
     ret = OB_ERR_UNEXPECTED;
@@ -377,7 +374,7 @@ int ObLobTabletDmlHelper::process_delta_lob(
     blocksstable::ObStorageDatum &datum)
 {
   int ret = OB_SUCCESS;
-  ObLobManager *lob_mngr = MTL(ObLobManager*);
+  ObLobManager *lob_mngr = share::g_mp->lob_manager();
   const ObColDesc &column = run_ctx.col_descs_->at(col_idx);
   if (OB_ISNULL(lob_mngr)) {
     ret = OB_ERR_UNEXPECTED;
@@ -427,7 +424,7 @@ int ObLobTabletDmlHelper::prepare_lob_write(
   if (is_sys_table(run_ctx.relative_table_.get_table_id())) {
     // sys table just write
     need_do_write = true;
-  } else if (OB_FAIL(GET_MIN_DATA_VERSION(MTL_ID(), data_version))) {
+  } else if (OB_FAIL(GET_MIN_DATA_VERSION(data_version))) {
     LOG_WARN("failed to get data version", K(ret));
   } else {
     ObString raw_data = (new_datum.is_null() || new_datum.is_nop_value())
@@ -437,7 +434,7 @@ int ObLobTabletDmlHelper::prepare_lob_write(
     bool is_outrow = false;
     ObLobAccessParam lob_param;
     ObLobDataInsertTask info;
-    ObLobManager *lob_mngr = MTL(ObLobManager*);
+    ObLobManager *lob_mngr = share::g_mp->lob_manager();
     info.src_data_locator_ = src_data_locator;
     bool skip_task = run_ctx.relative_table_.is_index_table() || col_idx < run_ctx.relative_table_.get_rowkey_column_num();
     if (OB_FAIL(build_common_lob_param_for_dml(run_ctx, data_row, col_idx, old_disk_locator, lob_param))) {

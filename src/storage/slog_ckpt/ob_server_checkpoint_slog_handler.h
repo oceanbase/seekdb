@@ -54,8 +54,6 @@ public:
     ObServerCheckpointSlogHandler *handler_;
   };
 
-  typedef common::hash::ObHashMap<uint64_t, omt::ObTenantMeta> TENANT_META_MAP;
-
   ObServerCheckpointSlogHandler();
   ~ObServerCheckpointSlogHandler() = default;
   ObServerCheckpointSlogHandler(const ObServerCheckpointSlogHandler &) = delete;
@@ -63,7 +61,9 @@ public:
 
   int init(ObStorageLogger *server_slogger);
   int start();
-  int start_replay(TENANT_META_MAP &tenant_meta_map);
+  int start_replay();
+  // fetch the single replayed sys tenant meta; valid=false means no tenant replayed
+  void get_replay_result(omt::ObTenantMeta &tenant_meta, bool &is_valid) const;
   int do_post_replay_work();
   void stop();
   void wait();
@@ -79,7 +79,6 @@ public:
 private:
   virtual int parse(const int32_t cmd, const char *buf, const int64_t len, FILE *stream) override;
 
-  int try_write_checkpoint_for_compat();
   int read_checkpoint(const ObServerSuperBlock &super_block);
   int replay_and_apply_server_slog(const common::ObLogCursor &replay_start_point);
   int replay_server_slog(const common::ObLogCursor &replay_start_point, common::ObLogCursor &replay_finish_point);
@@ -96,6 +95,11 @@ private:
 
   int set_meta_block_list(common::ObIArray<blocksstable::MacroBlockId> &meta_block_list);
 
+  // Single sys slot replacing tenant_meta_map
+  // get: returns OB_HASH_NOT_EXIST when slot not yet set (preserve map semantics)
+  int get_replay_tenant_meta_(omt::ObTenantMeta &meta) const;
+  int set_replay_tenant_meta_(const omt::ObTenantMeta &meta);
+
 private:
   bool is_inited_;
   bool is_writing_checkpoint_;
@@ -104,7 +108,8 @@ private:
   ObMetaBlockListHandle server_meta_block_handle_;
   ObWriteCheckpointTask write_ckpt_task_;
   common::ObTimer task_timer_;
-  TENANT_META_MAP *tenant_meta_map_for_replay_; // only used when replay
+  omt::ObTenantMeta tenant_meta_for_replay_;
+  bool tenant_meta_valid_for_replay_;
 };
 
 }  // end namespace storage

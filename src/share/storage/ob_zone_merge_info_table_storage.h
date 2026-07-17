@@ -39,13 +39,13 @@ public:
   int insert_or_update(const ObZoneMergeInfo &zone_merge_info);
 
   // Get zone merge info
-  int get(const uint64_t tenant_id, ObZoneMergeInfo &zone_merge_info);
+  int get(ObZoneMergeInfo &zone_merge_info);
 
   // Get all zone merge infos for a tenant
-  int get_all(const uint64_t tenant_id, ObIArray<ObZoneMergeInfo> &zone_merge_infos);
+  int get_all(ObIArray<ObZoneMergeInfo> &zone_merge_infos);
 
-  // Remove zone merge info by tenant_id
-  int remove(const uint64_t tenant_id);
+  // Remove zone merge info by tenant
+  int remove();
 
 private:
   int create_table_if_not_exists();
@@ -58,3 +58,4 @@ private:
 } // namespace oceanbase
 
 #endif // OCEANBASE_SHARE_STORAGE_OB_ZONE_MERGE_INFO_TABLE_STORAGE_H_
+

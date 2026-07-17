@@ -38,8 +38,7 @@ int64_t ObKeepAliveLogBody::get_max_serialize_size()
   return max_log_body.get_serialize_size();
 }
 
-int ObKeepAliveLSHandler::init(const int64_t tenant_id, const ObLSID &ls_id,
-                               logservice::ObLogHandler *log_handler_ptr)
+int ObKeepAliveLSHandler::init(logservice::ObLogHandler *log_handler_ptr)
 {
   int ret = OB_SUCCESS;
   logservice::ObLogBaseHeader base_header(ObLogBaseType::KEEP_ALIVE_LOG_BASE_TYPE,
@@ -47,19 +46,17 @@ int ObKeepAliveLSHandler::init(const int64_t tenant_id, const ObLSID &ls_id,
   submit_buf_len_ = base_header.get_serialize_size() + ObKeepAliveLogBody::get_max_serialize_size();
   submit_buf_pos_ = 0;
 
-  if (OB_ISNULL(log_handler_ptr) || !ls_id.is_valid()) {
+  if (OB_ISNULL(log_handler_ptr)) {
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_NOT_NULL(log_handler_ptr_)) {
     ret = OB_INIT_TWICE;
   } else if (OB_ISNULL(submit_buf_ =
-                       static_cast<char *>(ob_malloc(submit_buf_len_, ObMemAttr(tenant_id, "KeepAliveBuf"))))) {
+                       static_cast<char *>(ob_malloc(submit_buf_len_, ObMemAttr("KeepAliveBuf"))))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     TRANS_LOG(WARN, "[Keep Alive] submit_buf alloc failed", K(ret), KP(submit_buf_),
               K(base_header));
   } else {
-    ls_id_ = ls_id;
     is_busy_ = false;
-    is_master_ = false;
     is_stopped_ = false;
     log_handler_ptr_ = log_handler_ptr;
     stat_info_.reset();
@@ -86,11 +83,8 @@ void ObKeepAliveLSHandler::reset()
   submit_buf_pos_ = 0;
   log_handler_ptr_ = nullptr;
   is_busy_ = false;
-  is_master_ = false;
   is_stopped_ = false;
   last_gts_.set_min();
-  sys_ls_end_scn_.set_min();
-  ls_id_.reset();
   tmp_keep_alive_info_.reset();
   durable_keep_alive_info_.reset();
   stat_info_.reset();
@@ -99,7 +93,7 @@ void ObKeepAliveLSHandler::reset()
 void ObKeepAliveLSHandler::clear_keep_alive_smaller_scn_info()
 {
   SpinWLockGuard guard(lock_);
-  FLOG_INFO("[Keep Alive] clear keep alive ls info", K(ls_id_), K(tmp_keep_alive_info_), K(durable_keep_alive_info_));
+  FLOG_INFO("[Keep Alive] clear keep alive info", K(tmp_keep_alive_info_), K(durable_keep_alive_info_));
   tmp_keep_alive_info_.reset();
   durable_keep_alive_info_.reset();
 }
@@ -115,9 +109,6 @@ int ObKeepAliveLSHandler::try_submit_log(const SCN &min_start_scn, MinStartScnSt
   if (OB_ISNULL(log_handler_ptr_)) {
     stat_info_.other_error_cnt += 1;
     ret = OB_NOT_INIT;
-  } else if (!ATOMIC_LOAD(&is_master_)) {
-    stat_info_.not_master_cnt += 1;
-    // ret = OB_NOT_MASTER;
   } else if (ATOMIC_LOAD(&is_busy_)) {
     stat_info_.cb_busy_cnt += 1;
     // ret = OB_TX_NOLOGCB;
@@ -126,25 +117,25 @@ int ObKeepAliveLSHandler::try_submit_log(const SCN &min_start_scn, MinStartScnSt
     // ret = OB_OP_NOT_ALLOW;
   } else {
     ATOMIC_STORE(&is_busy_, true);
-    share::SCN ref_scn = get_ref_scn_();
+    const share::SCN ref_scn = last_gts_;
     if (ATOMIC_LOAD(&is_stopped_)) {
       ATOMIC_STORE(&is_busy_, false);
       TRANS_LOG(INFO, "ls hash stopped", K(ret));
     } else if (OB_FAIL(serialize_keep_alive_log_(min_start_scn, min_start_status))) {
       ATOMIC_STORE(&is_busy_, false);
-      TRANS_LOG(WARN, "[Keep Alive] serialize keep alive log failed", K(ret), K(ls_id_));
+      TRANS_LOG(WARN, "[Keep Alive] serialize keep alive log failed", K(ret));
     } else if (OB_FAIL(log_handler_ptr_->append(submit_buf_, submit_buf_pos_, ref_scn, true,
                                                 false/*allow_compression*/, this, lsn, scn))) {
       stat_info_.other_error_cnt += 1;
       ATOMIC_STORE(&is_busy_, false);
-      TRANS_LOG(WARN, "[Keep Alive] submit keep alive log failed", K(ret), K(ls_id_));
+      TRANS_LOG(WARN, "[Keep Alive] submit keep alive log failed", K(ret));
     } else {
       stat_info_.submit_succ_cnt += 1;
       tmp_keep_alive_info_.loop_job_succ_scn_ = scn;
       tmp_keep_alive_info_.lsn_ = lsn;
       tmp_keep_alive_info_.min_start_status_ = min_start_status;
       tmp_keep_alive_info_.min_start_scn_ = min_start_scn;
-      TRANS_LOG(DEBUG, "[Keep Alive] submit keep alive log success", K(ret), K(ls_id_),
+      TRANS_LOG(DEBUG, "[Keep Alive] submit keep alive log success", K(ret),
                 K(tmp_keep_alive_info_), K(min_start_scn), K(min_start_status));
     }
   }
@@ -212,9 +203,7 @@ void ObKeepAliveLSHandler::print_stat_info()
 {
   SpinRLockGuard guard(lock_);
   ObCStringHelper helper;
-  TRANS_LOG(INFO, "[Keep Alive Stat] LS Keep Alive Info", "tenant_id",          MTL_ID(),
-                                                          "LS_ID",              ls_id_,
-                                                          "Not_Master_Cnt",     stat_info_.not_master_cnt,
+  TRANS_LOG(INFO, "[Keep Alive Stat] Keep Alive Info",
                                                           "Near_To_GTS_Cnt",    stat_info_.near_to_gts_cnt,
                                                           "Other_Error_Cnt",    stat_info_.other_error_cnt,
                                                           "Submit_Succ_Cnt",    stat_info_.submit_succ_cnt,
@@ -222,8 +211,7 @@ void ObKeepAliveLSHandler::print_stat_info()
                                                           "last_lsn",           stat_info_.stat_keepalive_info_.lsn_,
                                                           "last_gts",           last_gts_,
                                                           "min_start_scn",      helper.convert(stat_info_.stat_keepalive_info_.min_start_scn_),
-                                                          "min_start_status",   stat_info_.stat_keepalive_info_.min_start_status_,
-                                                          "sys_ls_end_scn",     sys_ls_end_scn_);
+                                                          "min_start_status",   stat_info_.stat_keepalive_info_.min_start_status_);
   stat_info_.clear_cnt();
 }
 
@@ -243,24 +231,16 @@ bool ObKeepAliveLSHandler::check_gts_()
   bool need_submit = true;
   SCN gts;
   SCN max_scn;
-  SCN end_scn;
   int ret = OB_SUCCESS;
-  SCN sys_ls_end_scn = sys_ls_end_scn_.atomic_load();
   if (OB_ISNULL(log_handler_ptr_)) {
     ret = OB_INVALID_ARGUMENT;
     TRANS_LOG(WARN, "invalid arguments", K(ret), KP(log_handler_ptr_));
-  } else if (OB_FAIL(OB_TS_MGR.get_gts(MTL_ID(), nullptr, gts))) {
+  } else if (OB_FAIL(OB_TS_MGR.get_gts(gts))) {
     TRANS_LOG(WARN, "get gts error", K(ret));
   } else if (OB_FAIL(log_handler_ptr_->get_max_scn(max_scn))) {
     TRANS_LOG(WARN, "get max log_ts failed", K(ret));
-  } else if (OB_FAIL(log_handler_ptr_->get_end_scn(end_scn))) {
-    TRANS_LOG(WARN, "get end scn failed", K(ret));
   } else if (!last_gts_.is_valid_and_not_min()
       || last_gts_ == gts) {
-    need_submit = true;
-  } else if (end_scn.is_valid_and_not_min()
-      && sys_ls_end_scn.is_valid_and_not_min()
-      && end_scn < sys_ls_end_scn) {
     need_submit = true;
   } else if (gts.convert_to_ts() < max_scn.convert_to_ts() + KEEP_ALIVE_GTS_INTERVAL) {
     need_submit = false;
@@ -273,21 +253,11 @@ bool ObKeepAliveLSHandler::check_gts_()
   return need_submit;
 }
 
-share::SCN ObKeepAliveLSHandler::get_ref_scn_()
-{
-  share::SCN ref_scn = last_gts_;
-  share::SCN sys_ls_end_scn = sys_ls_end_scn_.atomic_load();
-  if (ref_scn.is_valid_and_not_min() && sys_ls_end_scn.is_valid_and_not_min()) {
-    ref_scn = sys_ls_end_scn > ref_scn ? sys_ls_end_scn : ref_scn;
-  }
-  return ref_scn;
-}
-
 int ObKeepAliveLSHandler::serialize_keep_alive_log_(const SCN &min_start_scn, MinStartScnStatus status)
 {
   int ret = OB_SUCCESS;
 
-  const int64_t replay_hint = ls_id_.hash();
+  const int64_t replay_hint = 0;
   logservice::ObLogBaseHeader base_header(ObLogBaseType::KEEP_ALIVE_LOG_BASE_TYPE,
                                           ObReplayBarrierType::NO_NEED_BARRIER, replay_hint);
   ObKeepAliveLogBody log_body(1, min_start_scn, status);
@@ -305,7 +275,7 @@ int ObKeepAliveLSHandler::serialize_keep_alive_log_(const SCN &min_start_scn, Mi
               K(log_body.get_serialize_size()), K(submit_buf_len_), K(submit_buf_pos_));
   }
 
-  TRANS_LOG(DEBUG, "[Keep Alive] serialize keep alive log", K(ret), K(ls_id_), K(log_body));
+  TRANS_LOG(DEBUG, "[Keep Alive] serialize keep alive log", K(ret), K(log_body));
   return ret;
 }
 

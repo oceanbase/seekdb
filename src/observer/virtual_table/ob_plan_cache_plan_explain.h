@@ -18,7 +18,7 @@
 #define OCEANBASE_OBSERVER_VIRTUAL_TABLE_OB_PLAN_CACHE_PLAN_EXPLAIN_
 
 
-#include "share/ob_virtual_table_scanner_iterator.h"
+#include "observer/virtual_table/ob_virtual_table_scanner_iterator.h"
 #include "sql/engine/ob_operator.h"
 #include "src/sql/plan_cache/ob_cache_object_factory.h"
 
@@ -39,7 +39,6 @@ public:
   : output_column_ids_(output_column_ids),
     cur_row_(cur_row),
     scanner_(scanner),
-    tenant_id_(common::OB_INVALID_ID),
     plan_id_(common::OB_INVALID_ID),
     allocator_() {}
 
@@ -52,15 +51,14 @@ public:
   template<class Op>
   int get_property(const Op &cur_op, common::ObString &property);
 
-  void set_effective_tenant_id(int64_t effective_tenant_id)
+  void set_row_mem_attr()
   {
-    allocator_.set_attr(lib::ObMemAttr(effective_tenant_id, lib::ObLabel("RowMemAlloc")));
+    allocator_.set_attr(lib::ObMemAttr(lib::ObLabel("RowMemAlloc")));
   }
 
-  int init(const uint64_t tenant_id,
-           const uint64_t plan_id)
+  int init(const uint64_t plan_id)
   {
-    tenant_id_ = tenant_id;
+    
     plan_id_ = plan_id;
     return OB_SUCCESS;
   }
@@ -71,7 +69,7 @@ protected:
   common::ObIArray<uint64_t> &output_column_ids_;
   common::ObNewRow &cur_row_;
   common::ObScanner &scanner_;
-  int64_t tenant_id_;
+  
   int64_t plan_id_;
   common::ObArenaAllocator allocator_;
   DISALLOW_COPY_AND_ASSIGN(ObExpVisitor);
@@ -85,10 +83,9 @@ public:
                      common::ObScanner &scanner)
     : ObExpVisitor(output_column_ids, cur_row, scanner) {}
   virtual ~ObOpSpecExpVisitor() {}
-  int init(const uint64_t tenant_id,
-           const uint64_t plan_id)
+  int init(const uint64_t plan_id)
   {
-    return ObExpVisitor::init(tenant_id, plan_id);
+    return ObExpVisitor::init(plan_id);
   }
   int add_row(const sql::ObOpSpec &spec);
   virtual int pre_visit(const sql::ObOpSpec &spec) override
@@ -107,18 +104,18 @@ private:
 class ObCacheObjIterator
 {
   public:
-    ObCacheObjIterator(common::ObSEArray<uint64_t, 16> &tenant_id_array):
-    tenant_id_array_(tenant_id_array),
-    tenant_id_array_idx_(-1),
+    ObCacheObjIterator(common::ObSEArray<uint64_t, 16> &id_array):
+    id_arr_(id_array),
+    id_arr_idx_(-1),
     plan_id_array_()
     {}
 
     int operator()(common::hash::HashMapPair<sql::ObCacheObjID, sql::ObILibCacheObject *> &entry);
 
-    int next(int64_t &tenant_id, sql::ObCacheObjGuard &guard);
+    int next(sql::ObCacheObjGuard &guard);
 
-    common::ObSEArray<uint64_t, 16> &tenant_id_array_;
-    int64_t tenant_id_array_idx_;
+    common::ObSEArray<uint64_t, 16> &id_arr_;
+    int64_t id_arr_idx_;
     common::ObSEArray<uint64_t, 16> plan_id_array_;
 };
 
@@ -136,12 +133,11 @@ public:
     PLAN_LINE_ID_COL,
   };
   ObPlanCachePlanExplain()
-    : tenant_id_(common::OB_INVALID_INDEX),
-      plan_id_(common::OB_INVALID_INDEX),
+    : plan_id_(common::OB_INVALID_INDEX),
       scan_all_plan_(true),
-      tenant_id_array_(),
-      tenant_id_array_idx_(0),
-      cache_obj_iterator_(tenant_id_array_),
+      id_arr_(),
+      id_arr_idx_(0),
+      cache_obj_iterator_(id_arr_),
       iter_end_(false),
       static_engine_exp_visitor_(output_column_ids_,
                                  cur_row_,
@@ -152,11 +148,11 @@ public:
   virtual int inner_get_next_row(common::ObNewRow *&row);
 private:
   int set_tenant_plan_id(const common::ObIArray<common::ObNewRange> &ranges);
-  int64_t tenant_id_;
+  
   int64_t plan_id_;
   bool scan_all_plan_;
-  common::ObSEArray<uint64_t, 16> tenant_id_array_;
-  int64_t tenant_id_array_idx_;
+  common::ObSEArray<uint64_t, 16> id_arr_;
+  int64_t id_arr_idx_;
   ObCacheObjIterator cache_obj_iterator_;
   bool iter_end_;
   ObOpSpecExpVisitor static_engine_exp_visitor_;

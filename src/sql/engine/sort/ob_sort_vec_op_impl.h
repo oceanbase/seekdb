@@ -30,7 +30,7 @@
 #include "sql/engine/sort/ob_sort_vec_op_eager_filter.h"
 #include "sql/engine/sort/ob_sort_vec_op_store_row_factory.h"
 #include "sql/engine/expr/ob_array_expr_utils.h"
-#include "observer/omt/ob_tenant_config_mgr.h"
+#include "share/config/ob_tenant_config_mgr.h"
 #include "sql/engine/sort/ob_pd_topn_sort_filter.h"
 
 namespace oceanbase {
@@ -51,9 +51,9 @@ class ObSortVecOpImpl : public ObISortVecOpImpl
 
 public:
   explicit ObSortVecOpImpl(ObMonitorNode &op_monitor_info, lib::MemoryContext &mem_context) :
-    ObISortVecOpImpl(op_monitor_info, mem_context), flag_(0), tenant_id_(OB_INVALID_ID),
+    ObISortVecOpImpl(op_monitor_info, mem_context), flag_(0),
     allocator_(mem_context->get_malloc_allocator()),
-    page_allocator_("PartSortBucket", MTL_ID(), ObCtxIds::WORK_AREA), sk_collations_(nullptr),
+    page_allocator_("PartSortBucket", ObCtxIds::WORK_AREA), sk_collations_(nullptr),
     addon_collations_(nullptr), cmp_sort_collations_(nullptr), sk_row_meta_(nullptr),
     addon_row_meta_(nullptr), sk_exprs_(nullptr), addon_exprs_(nullptr), cmp_sk_exprs_(nullptr),
     all_exprs_(allocator_), sk_vec_ptrs_(allocator_), addon_vec_ptrs_(allocator_),
@@ -440,7 +440,7 @@ protected:
     };
     uint32_t flag_;
   };
-  int64_t tenant_id_;
+  
   ObIAllocator &allocator_;
   ModulePageAllocator page_allocator_;
   const ObIArray<ObSortFieldCollation> *sk_collations_;

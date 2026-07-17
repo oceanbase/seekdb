@@ -229,11 +229,7 @@ public:
   }
   virtual bool no_data_to_read() const override
   {
-    return is_empty() && !is_ddl_merge_sstable();
-  }
-  virtual bool is_ddl_merge_empty_sstable() const override
-  {
-    return is_empty() && is_ddl_merge_sstable();
+    return is_empty();
   }
   int set_addr(const ObMetaDiskAddr &addr);
   OB_INLINE const ObMetaDiskAddr &get_addr() const { return addr_; }
@@ -281,7 +277,6 @@ public:
   int persist_linked_block_if_need(
       ObArenaAllocator &allocator,
       const ObTabletID &tablet_id,
-      const int64_t tablet_transfer_seq,
       const int64_t snapshot_version,
       blocksstable::ObIMacroBlockFlushCallback *ddl_redo_cb,
       int64_t &macro_start_seq,
@@ -299,7 +294,7 @@ public:
       common::ObIAllocator &allocator,
       ObDatumRowkey &endkey);
 
-  int deep_copy(common::ObIAllocator &allocator, ObSSTable *&dst, const bool transfer_macro_ref = false) const;
+  int deep_copy(common::ObIAllocator &allocator, ObSSTable *&dst, const bool move_macro_ref = false) const;
   virtual int deep_copy(char *buf, const int64_t buf_len, ObIStorageMetaObj *&value) const override;
   virtual int64_t get_deep_copy_size() const override
   {
@@ -309,12 +304,6 @@ public:
     }
     return size;
   }
-
-  int get_cs_range(
-      const ObDatumRange &range,
-      const ObITableReadInfo &index_read_info,
-      ObIAllocator &allocator,
-      ObDatumRange &cs_range);
 
   /*
    * Attention! this func will update TableKey::snapshot_version_ & ObSSTableBasicMeta::root_macro_seq_

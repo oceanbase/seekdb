@@ -102,7 +102,6 @@ public:
     : is_inited_(false),
     ctx_(NULL),
     value_(NULL),
-    memtable_ls_id_(),
     version_iter_(NULL)
   {
   }
@@ -111,7 +110,6 @@ public:
   int init(ObMvccAccessCtx &ctx,
            const ObMemtableKey *key,
            ObMvccRow *value,
-           const share::ObLSID memtable_ls_id,
            const ObQueryFlag &query_flag);
   OB_INLINE bool is_exist()
   {
@@ -123,7 +121,6 @@ public:
     is_inited_ = false;
     ctx_ = NULL;
     value_ = NULL;
-    memtable_ls_id_.reset();
     version_iter_ = NULL;
   }
   const transaction::ObTransID get_trans_id() const { return ctx_->get_tx_id(); }
@@ -145,7 +142,7 @@ public:
   transaction::ObTransID get_snapshot_tx_id() const { return ctx_->snapshot_.tx_id_; }
   int64_t get_major_snapshot() const { return ctx_->major_snapshot_; }
 
-  TO_STRING_KV(KPC_(value), KPC_(version_iter), KPC_(ctx), K_(memtable_ls_id), K(get_major_snapshot()));
+  TO_STRING_KV(KPC_(value), KPC_(version_iter), KPC_(ctx), K(get_major_snapshot()));
 
 private:
   int lock_for_read_(const ObQueryFlag &flag);
@@ -160,7 +157,6 @@ private:
   bool is_inited_;
   ObMvccAccessCtx *ctx_;
   ObMvccRow *value_;
-  share::ObLSID memtable_ls_id_;
   ObMvccTransNode *version_iter_;
 };
 
@@ -175,7 +171,6 @@ public:
   int init(ObQueryEngine &query_engine,
            ObMvccAccessCtx &ctx,
            const ObMvccScanRange &range,
-           const share::ObLSID memtable_ls_id,
            const ObQueryFlag &query_flag);
   int get_next_row(const ObMemtableKey *&key,
                    ObMvccValueIterator *&value_iter,
@@ -188,7 +183,6 @@ private:
 private:
   bool is_inited_;
   ObMvccAccessCtx *ctx_;
-  share::ObLSID memtable_ls_id_;
   ObQueryFlag query_flag_;
   ObMvccValueIterator value_iter_;
   ObQueryEngine *query_engine_;

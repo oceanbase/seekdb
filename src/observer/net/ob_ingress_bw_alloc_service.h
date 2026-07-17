@@ -18,8 +18,10 @@
 #define OCEANBASE_ROOTSERVER_OB_INGRESS_BW_ALLOC_SERVICE_H
 
 #include "share/ob_define.h"
-#include "logservice/ob_log_base_type.h"  //ObIRoleChangeSubHandler ObICheckpointSubHandler ObIReplaySubHandler
-#include "observer/net/ob_net_endpoint_ingress_rpc_proxy.h"
+#include "lib/task/ob_timer.h"
+#include "logservice/ob_log_base_type.h"  //ObILocalLogHandler ObICheckpointSubHandler ObIReplaySubHandler
+#include "observer/net/ob_net_endpoint_ingress_rpc_struct.h"
+#include "observer/ob_server_struct.h"
 
 namespace oceanbase
 {
@@ -34,22 +36,22 @@ public:
   int init();
   void reset();
   void destroy();
-  int register_endpoint(const obrpc::ObNetEndpointKey &endpoint_key, const int64_t expire_time);
-  int collect_predict_bw(obrpc::ObNetEndpointKVArray &update_kvs);
-  int update_ingress_plan(obrpc::ObNetEndpointKVArray &update_kvs);
-  int commit_bw_limit_plan(obrpc::ObNetEndpointKVArray &update_kvs);
+  int register_endpoint(const obcall::ObNetEndpointKey &endpoint_key, const int64_t expire_time);
+  int collect_predict_bw(obcall::ObNetEndpointKVArray &update_kvs);
+  int update_ingress_plan(obcall::ObNetEndpointKVArray &update_kvs);
+  int commit_bw_limit_plan(obcall::ObNetEndpointKVArray &update_kvs);
   int set_total_bw_limit(int64_t total_bw_limit);
   int64_t get_map_size();
 
 private:
-  typedef common::hash::ObHashMap<obrpc::ObNetEndpointKey, obrpc::ObNetEndpointValue *> ObIngressPlanMap;
+  typedef common::hash::ObHashMap<obcall::ObNetEndpointKey, obcall::ObNetEndpointValue *> ObIngressPlanMap;
   ObIngressPlanMap ingress_plan_map_;
   int64_t total_bw_limit_;
   ObSpinLock lock_;
   DISALLOW_COPY_AND_ASSIGN(ObNetEndpointIngressManager);
 };
 class ObIngressBWAllocService : public common::ObTimerTask,
-                                public logservice::ObIRoleChangeSubHandler,
+                                public logservice::ObILocalLogHandler,
                                 public logservice::ObICheckpointSubHandler,
                                 public logservice::ObIReplaySubHandler
 {
@@ -58,11 +60,9 @@ public:
       : is_inited_(false),
         is_leader_(false),
         is_stop_(true),
-        tg_id_(-1),
         cluster_id_(OB_INVALID_CLUSTER_ID),
         expire_time_(0),
-        ingress_manager_(),
-        endpoint_ingress_rpc_proxy_()
+        ingress_manager_()
   {}
   virtual ~ObIngressBWAllocService()
   {
@@ -71,7 +71,7 @@ public:
   void wait();
   void destroy();
   virtual void runTimerTask() override;
-  int register_endpoint(const obrpc::ObNetEndpointKey &endpoint_key, const int64_t expire_time);
+  int register_endpoint(const obcall::ObNetEndpointKey &endpoint_key, const int64_t expire_time);
   void follower_task();
   void leader_task();
   bool is_leader()
@@ -104,20 +104,16 @@ public:
   }
 
   // for role change
-  void switch_to_follower_forcedly() override final;
-  int switch_to_leader() override final;
-  int switch_to_follower_gracefully() override final;
-  int resume_leader() override final;
+  void deactivate() override final;
+  int activate() override final;
 
 private:
   bool is_inited_;
   bool is_leader_;
   bool is_stop_;
-  int tg_id_;
   uint64_t cluster_id_;
   int64_t expire_time_;
   ObNetEndpointIngressManager ingress_manager_;
-  obrpc::ObNetEndpointIngressRpcProxy endpoint_ingress_rpc_proxy_;
   const int64_t INGRESS_SERVICE_INTERVAL_US = 3L * 1000L * 1000L;                  // 3s
   const int64_t ENDPOINT_REGISTER_INTERVAL_US = 3L * 1000L * 1000L;                // 3s
   const int64_t ENDPOINT_EXPIRE_INTERVAL_US = 10 * ENDPOINT_REGISTER_INTERVAL_US;  // 30s

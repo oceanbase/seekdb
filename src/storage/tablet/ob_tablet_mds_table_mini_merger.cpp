@@ -31,7 +31,7 @@ namespace storage
 ObMdsMergeMultiVersionRowStore::ObMdsMergeMultiVersionRowStore()
   : data_store_desc_(nullptr),
     macro_writer_(nullptr),
-    row_queue_allocator_(common::ObMemAttr(MTL_ID(), "MdsMVRowStore")),
+    row_queue_allocator_(common::ObMemAttr("MdsMVRowStore")),
     shadow_row_(),
     cur_key_(),
     last_key_(),
@@ -231,7 +231,7 @@ int ObMdsMergeMultiVersionRowStore::dump_shadow_row()
 ObMdsMiniMergeOperator::ObMdsMiniMergeOperator()
   : is_inited_(false),
     row_store_(),
-    cur_allocator_(common::ObMemAttr(MTL_ID(), "MdsMiniOP")),
+    cur_allocator_(common::ObMemAttr("MdsMiniOP")),
     cur_row_()
 {
 }
@@ -285,43 +285,6 @@ int ObTabletDumpMds2MiniOperator::operator()(const mds::MdsDumpKV &kv)
   return ret;
 }
 
-ObCrossLSMdsMiniMergeOperator::ObCrossLSMdsMiniMergeOperator(const share::SCN &scan_end_scn)
-  : ObMdsMiniMergeOperator(),
-    scan_end_scn_(scan_end_scn)
-{
-}
-
-int ObCrossLSMdsMiniMergeOperator::operator()(const mds::MdsDumpKV &kv)
-{
-  int ret = OB_SUCCESS;
-  constexpr uint8_t tablet_status_mds_unit_id = mds::TupleTypeIdx<mds::NormalMdsTable,
-                                                                  mds::MdsUnit<mds::DummyKey,
-                                                                               ObTabletCreateDeleteMdsUserData>>::value;
-
-  if (OB_UNLIKELY(!is_inited_)) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("not inited", K(ret), K_(is_inited));
-  } else if (tablet_status_mds_unit_id == kv.k_.mds_unit_id_) {
-    // filter tablet status mds kv
-    LOG_INFO("meet tablet status mds row, should skip", K(ret), K(tablet_status_mds_unit_id));
-  } else if (kv.v_.end_scn_ > scan_end_scn_) {
-    LOG_INFO("node end scn is beyond scan end scn, should skip", K(ret), K_(scan_end_scn), K(kv));
-  } else {
-    cur_row_.reuse();
-    cur_allocator_.reuse();
-    mds::MdsDumpKVStorageAdapter adapter(kv);
-    if (OB_FAIL(adapter.convert_to_mds_row(cur_allocator_, cur_row_))) {
-      LOG_WARN("fail to convert MdsDumpKVStorageAdapter to row", K(ret), K(adapter), K(cur_row_));
-    } else if (OB_FAIL(row_store_.put_row_into_queue(cur_row_))) {
-      LOG_WARN("fail to put row into queue", K(ret));
-    } else {
-      LOG_INFO("cross ls mds op succeed to add row", K(ret), K(adapter), K(cur_row_));
-    }
-  }
-
-  return ret;
-}
-
 int ObTabletDumpMediumMds2MiniOperator::operator()(const mds::MdsDumpKV &kv)
 {
   int ret = OB_SUCCESS;
@@ -351,7 +314,7 @@ int ObTabletDumpMediumMds2MiniOperator::operator()(const mds::MdsDumpKV &kv)
 ------------------------------------------ObMdsTableMiniMerger-----------------------------------
 */
 ObMdsTableMiniMerger::ObMdsTableMiniMerger()
-  : allocator_(common::ObMemAttr(MTL_ID(), "MdsMiniMerger")),
+  : allocator_(common::ObMemAttr("MdsMiniMerger")),
     data_desc_(),
     macro_writer_(),
     sstable_builder_(false/*not use double buffer*/),
@@ -379,14 +342,13 @@ int ObMdsTableMiniMerger::init(compaction::ObTabletMergeCtx &ctx, ObMdsMiniMerge
     ret = OB_INIT_TWICE;
     MDS_LOG(WARN, "init twice", K(ret));
   } else {
-    const share::ObLSID &ls_id = ctx.get_ls_id();
     const common::ObTabletID &tablet_id = ctx.get_tablet_id();
     const ObStorageSchema *storage_schema = ObMdsSchemaHelper::get_instance().get_storage_schema();
     uint64_t data_version = 0;
     ObMacroDataSeq macro_start_seq(0);
     ObMacroSeqParam macro_seq_param;
     macro_seq_param.seq_type_ = ObMacroSeqParam::SEQ_TYPE_INC;
-    if (OB_FAIL(GET_MIN_DATA_VERSION(MTL_ID(), data_version))) {
+    if (OB_FAIL(GET_MIN_DATA_VERSION(data_version))) {
       if (OB_ENTRY_NOT_EXIST == ret) {
         ret = OB_EAGAIN;
       } else {
@@ -402,11 +364,11 @@ int ObMdsTableMiniMerger::init(compaction::ObTabletMergeCtx &ctx, ObMdsMiniMerge
     } else if (OB_UNLIKELY(!storage_schema->is_valid())) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("mds storage schema is invalid", K(ret), KP(storage_schema), KPC(storage_schema));
-    } else if (OB_FAIL(data_desc_.init(false/*is ddl*/, *storage_schema, ls_id, tablet_id,
+    } else if (OB_FAIL(data_desc_.init(false/*is ddl*/, *storage_schema, tablet_id,
         ctx.get_merge_type(), ctx.get_snapshot(), data_version, ctx.static_desc_.micro_index_clustered_,
-        ctx.static_desc_.tablet_transfer_seq_, ctx.get_concurrent_cnt(), ctx.static_param_.scn_range_.end_scn_,
-        nullptr/*cg_schema*/, 0/*table_cg_idx*/, ctx.get_exec_mode()))) {
-      LOG_WARN("fail to init whole desc", KR(ret), K(ctx), K(ls_id), K(tablet_id));
+        ctx.get_concurrent_cnt(), ctx.static_param_.scn_range_.end_scn_,
+        ctx.get_exec_mode()))) {
+      LOG_WARN("fail to init whole desc", KR(ret), K(ctx), K(tablet_id));
     } else if (OB_FAIL(macro_start_seq.set_parallel_degree(0))) {
       LOG_WARN("Failed to set parallel degree to macro start seq", K(ret));
     } else if (OB_FAIL(macro_start_seq.set_sstable_seq(ctx.static_param_.sstable_logic_seq_))) {
@@ -452,9 +414,9 @@ int ObMdsTableMiniMerger::generate_mds_mini_sstable(
       } else if (OB_FAIL(sstable_builder_.close(res))) {
         LOG_WARN("fail to close sstable builder", K(ret), K(sstable_builder_));
       } else if (CLICK_FAIL(param.init_for_mds(*ctx_, res, *storage_schema_))) {
-        LOG_WARN("fail to create sstable param for mds", K(ret));
+        LOG_ERROR("fail to create sstable param for mds", K(ret));
       } else if (CLICK_FAIL(ObTabletCreateDeleteHelper::create_sstable(param, allocator, table_handle))) {
-        LOG_WARN("fail to create sstable", K(ret), K(param));
+        LOG_ERROR("fail to create sstable", K(ret), K(param));
         CTX_SET_DIAGNOSE_LOCATION(*ctx_);
       } else {
         // need macro block count for try schedule mds minor after mds mini
@@ -465,66 +427,9 @@ int ObMdsTableMiniMerger::generate_mds_mini_sstable(
   if (OB_FAIL(ret)) {
     FLOG_WARN("fail to generate mds mini sstable", K(ret));
   } else {
-    const share::ObLSID &ls_id = ctx_->get_ls_id();
     const common::ObTabletID &tablet_id = ctx_->get_tablet_id();
     const blocksstable::ObSSTable *sstable = static_cast<blocksstable::ObSSTable*>(table_handle.get_table());
-    LOG_TRACE("succeed to generate mds mini sstable", K(ret), K(ls_id), K(tablet_id), KPC(sstable));
-  }
-  return ret;
-}
-
-int ObMdsDataCompatHelper::generate_mds_mini_sstable(
-    const ObMigrationTabletParam &mig_param,
-    common::ObArenaAllocator &allocator,
-    ObTableHandleV2 &table_handle)
-{
-  int ret = OB_SUCCESS;
-  TIMEGUARD_INIT(STORAGE, 10_ms);
-  compaction::ObTabletMergeDagParam param;
-  const share::ObLSID &ls_id = mig_param.ls_id_;
-  const common::ObTabletID &tablet_id = mig_param.tablet_id_;
-  compaction::ObTabletMergeCtx *ctx = nullptr;
-  void *buf = nullptr;
-  if (OB_UNLIKELY(!mig_param.is_valid())) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid migration tablet param", K(ret), K(mig_param));
-  } else if (OB_ISNULL((buf = allocator.alloc(sizeof(compaction::ObTabletMergeCtx))))) {
-    ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("fail to alloc ObTabletMergeCtx", K(ret), K(allocator));
-  } else {
-    // (start_scn, enc_scn] set (1, tablet_mds_checkpoint_scn], which means contains all mds data.
-    // After we set in this way, next mini merge, next mds sstable start scn will be tablet_mds_checkpoint_scn, sstables will be continuous.
-    param.ls_id_ = ls_id;
-    param.tablet_id_ = tablet_id;
-    param.merge_type_ = compaction::ObMergeType::MDS_MINI_MERGE;
-    param.merge_version_ = 0;
-    ctx = new (buf) compaction::ObTabletMergeCtx(param, allocator);
-    ctx->static_param_.start_time_ = common::ObTimeUtility::fast_current_time();
-    ctx->static_param_.scn_range_.start_scn_ = share::SCN::plus(share::SCN::min_scn(), 1);
-    ctx->static_param_.scn_range_.end_scn_ = mig_param.mds_checkpoint_scn_;
-    ctx->static_param_.version_range_.snapshot_version_ = mig_param.mds_checkpoint_scn_.get_val_for_tx();
-    ctx->static_param_.pre_warm_param_.type_ = ObPreWarmerType::MEM_PRE_WARM;
-    ctx->static_desc_.tablet_transfer_seq_ = 0;
-    ctx->parallel_merge_ctx_.init_serial_merge(); // only use concurrent_cnt for small sstable temp space optimization
-  }
-
-  if (OB_FAIL(ret)) {
-  } else {
-    SMART_VARS_2((ObMdsTableMiniMerger, mds_mini_merger), (ObTabletDumpMds2MiniOperator, op)) {
-      if (OB_FAIL(mds_mini_merger.init(*ctx, op))) {
-        LOG_WARN("fail to init mds mini merger", K(ret), KPC(ctx), K(ls_id), K(tablet_id));
-      } else if (CLICK_FAIL((mig_param.mds_data_.scan_all_mds_data_with_op(mig_param.mds_checkpoint_scn_, op)))) {
-        LOG_WARN("failed to handle full memory mds data", K(ret),
-            K(ls_id), K(tablet_id), "mds_checkpoint_scn", mig_param.mds_checkpoint_scn_);
-      } else if (OB_FAIL(mds_mini_merger.generate_mds_mini_sstable(allocator, table_handle))) {
-        LOG_WARN("fail to generate mds mini sstable with mini merger", K(ret), K(mds_mini_merger));
-      }
-    }
-  }
-
-  // always destruct merge ctx
-  if (OB_NOT_NULL(ctx)) {
-    ctx->~ObTabletMergeCtx();
+    LOG_TRACE("succeed to generate mds mini sstable", K(ret), K(tablet_id), KPC(sstable));
   }
   return ret;
 }
@@ -538,12 +443,11 @@ int ObMdsDataCompatHelper::generate_mds_mini_sstable(
   int ret = OB_SUCCESS;
   TIMEGUARD_INIT(STORAGE, 10_ms);
   compaction::ObTabletMergeDagParam param;
-  const share::ObLSID &ls_id = tablet.get_ls_id();
   const common::ObTabletID &tablet_id = tablet.get_tablet_id();
   void *buf = nullptr;
   if (tablet.is_ls_inner_tablet()) {
     ret = OB_NO_NEED_UPDATE;
-    LOG_INFO("no need to generate mds sstable for ls inner tablet", K(ret), K(ls_id), K(tablet_id));
+    LOG_INFO("no need to generate mds sstable for ls inner tablet", K(ret), K(tablet_id));
   } else if (OB_ISNULL(buf = allocator.alloc(sizeof(compaction::ObTabletMergeCtx)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("fail to alloc ObTabletMergeCtx", K(ret), K(allocator));
@@ -551,7 +455,6 @@ int ObMdsDataCompatHelper::generate_mds_mini_sstable(
     ObTabletFullMemoryMdsData data;
     // (start_scn, enc_scn] set (1, tablet_mds_checkpoint_scn], which means contains all mds data.
     // After we set in this way, next mini merge, next mds sstable start scn will be tablet_mds_checkpoint_scn, sstables will be continuous.
-    param.ls_id_ = ls_id;
     param.tablet_id_ = tablet_id;
     param.merge_type_ = compaction::ObMergeType::MDS_MINI_MERGE;
     param.merge_version_ = 0;
@@ -561,7 +464,6 @@ int ObMdsDataCompatHelper::generate_mds_mini_sstable(
     ctx->static_param_.scn_range_.end_scn_ = tablet.get_mds_checkpoint_scn();
     ctx->static_param_.version_range_.snapshot_version_ = tablet.get_mds_checkpoint_scn().get_val_for_tx();
     ctx->static_param_.pre_warm_param_.type_ = ObPreWarmerType::MEM_PRE_WARM;
-    ctx->static_desc_.tablet_transfer_seq_ = tablet.get_transfer_seq();
     ctx->parallel_merge_ctx_.init_serial_merge(); // only use concurrent_cnt for small sstable temp space optimization
 
     if (CLICK_FAIL(tablet.build_full_memory_mds_data(allocator, data))) {
@@ -569,15 +471,14 @@ int ObMdsDataCompatHelper::generate_mds_mini_sstable(
     } else {
       SMART_VARS_2((ObMdsTableMiniMerger, mds_mini_merger), (ObTabletDumpMds2MiniOperator, op)) {
         if (CLICK_FAIL(mds_mini_merger.init(*ctx, op))) {
-          LOG_WARN("fail to init mds mini merger", K(ret), KPC(ctx), K(ls_id), K(tablet_id));
+          LOG_ERROR("fail to init mds mini merger", K(ret), KPC(ctx), K(tablet_id));
         } else if (CLICK_FAIL((data.scan_all_mds_data_with_op(tablet.get_mds_checkpoint_scn(), op)))) {
-          LOG_WARN("failed to handle full memory mds data", K(ret),
-              K(ls_id), K(tablet_id), "mds_checkpoint_scn", tablet.get_mds_checkpoint_scn());
+          LOG_WARN("failed to handle full memory mds data", K(ret), K(tablet_id), "mds_checkpoint_scn", tablet.get_mds_checkpoint_scn());
         } else if (CLICK_FAIL(mds_mini_merger.generate_mds_mini_sstable(allocator, table_handle))) {
-          LOG_WARN("fail to generate mds mini sstable with mini merger", K(ret), K(mds_mini_merger));
+          LOG_ERROR("fail to generate mds mini sstable with mini merger", K(ret), K(mds_mini_merger));
         } else {
           has_tablet_status = !data.tablet_status_committed_kv_.v_.user_data_.empty() ? true : false;
-          LOG_INFO("succeed to generate mds mini sstable for compat", K(ret), K(ls_id), K(tablet_id), K(has_tablet_status), K(data));
+          LOG_INFO("succeed to generate mds mini sstable for compat", K(ret), K(tablet_id), K(has_tablet_status), K(data));
         }
       }
     }

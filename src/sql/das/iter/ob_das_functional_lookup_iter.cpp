@@ -52,7 +52,7 @@ int ObDASFuncLookupIter::inner_init(ObDASIterParam &param)
     trans_desc_ = lookup_param.trans_desc_;
     snapshot_ = lookup_param.snapshot_;
     lib::ContextParam param;
-    param.set_mem_attr(MTL_ID(), ObModIds::OB_SQL_TABLE_LOOKUP, ObCtxIds::DEFAULT_CTX_ID)
+    param.set_mem_attr(ObModIds::OB_SQL_TABLE_LOOKUP, ObCtxIds::DEFAULT_CTX_ID)
          .set_properties(lib::USE_TL_PAGE_OPTIONAL);
     if (OB_FAIL(CURRENT_CONTEXT->CREATE_CONTEXT(lookup_memctx_, param))) {
       LOG_WARN("failed to create lookup memctx", K(ret));
@@ -175,7 +175,7 @@ int ObDASFuncLookupIter::inner_get_next_row()
   }
   if (OB_SUCC(ret)) {
     data_scan_read_rowsize_ += 1;
-  }
+  } 
   if (OB_ITER_END == ret && !(index_scan_rowsize_ == data_scan_read_rowsize_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected count", K(index_scan_rowsize_), K(data_scan_read_rowsize_));
@@ -203,7 +203,7 @@ int ObDASFuncLookupIter::inner_get_next_rows(int64_t &count, int64_t capacity)
   }
   if (OB_SUCC(ret) || OB_ITER_END == ret) {
     data_scan_read_rowsize_ += count;
-  }
+  } 
   if (OB_ITER_END == ret && !(index_scan_rowsize_ == data_scan_read_rowsize_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected count", K(index_scan_rowsize_), K(data_scan_read_rowsize_), K(count));

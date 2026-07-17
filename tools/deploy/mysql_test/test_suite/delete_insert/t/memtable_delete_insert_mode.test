@@ -1,6 +1,6 @@
 # owner: gengli.wzy
 # owner group: transaction
-# description:
+# description: 
 
 --disable_query_log
 set @@session.explicit_defaults_for_timestamp=off;
@@ -40,14 +40,14 @@ create sequence s1 cache 1000000 noorder;
 create sequence s2 cache 1000000 noorder;
 
 # 构造数据
-INSERT INTO memtable_delete_insert_test_t SELECT
+INSERT INTO memtable_delete_insert_test_t SELECT 
   s1.nextval col_0,
   s2.nextval col_1,
   zipf(1, 100, random(269381)) col_2,
   normal(0, 1, random(269381)) col_3,
   uniform(1, 100, random(269381)) col_4,
   randstr(1+zipf(1, 20, random(269381)), random(269381)) col_5
-FROM
+FROM 
   table(generator(500));
 
 # 查询纯insert数据

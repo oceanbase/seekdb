@@ -17,7 +17,7 @@
 #ifndef _OCEANBASE_STORAGE_DDL_OB_DDL_INDEPENDENT_DAG_
 #define _OCEANBASE_STORAGE_DDL_OB_DDL_INDEPENDENT_DAG_
 
-#include "share/scheduler/ob_independent_dag.h"
+#include "observer/scheduler/ob_independent_dag.h"
 #include "storage/ddl/ob_ddl_struct.h"
 #include "storage/ddl/ob_pipeline.h"
 
@@ -41,7 +41,7 @@ public:
         ddl_thread_count_(other.ddl_thread_count_),
         ddl_task_param_(other.ddl_task_param_),
         tx_info_(other.tx_info_),
-        ls_tablet_ids_(other.ls_tablet_ids_),
+        tablet_ids_(other.tablet_ids_),
         is_inc_major_log_(other.is_inc_major_log_) {}
   virtual bool is_valid() const override
   {
@@ -49,16 +49,16 @@ public:
            ddl_thread_count_ > 0 &&
            ddl_task_param_.is_valid() &&
            (!is_incremental_direct_load(direct_load_type_) || tx_info_.is_valid()) &&
-           ls_tablet_ids_.count() > 0;
+           tablet_ids_.count() > 0;
   }
-  VIRTUAL_TO_STRING_KV(K(direct_load_type_), K(ddl_thread_count_), K(ddl_task_param_), K(ls_tablet_ids_), K(is_inc_major_log_));
+  VIRTUAL_TO_STRING_KV(K(direct_load_type_), K(ddl_thread_count_), K(ddl_task_param_), K(tablet_ids_), K(is_inc_major_log_));
 
 public:
   ObDirectLoadType direct_load_type_;
   int64_t ddl_thread_count_;
   ObDDLTaskParam ddl_task_param_;
   ObDirectLoadTxInfo tx_info_;
-  ObArray<std::pair<share::ObLSID, ObTabletID>> ls_tablet_ids_;
+  ObArray<ObTabletID> tablet_ids_;
   bool is_inc_major_log_;
 };
 
@@ -75,7 +75,7 @@ public:
   const ObDDLTaskParam &get_ddl_task_param() const { return ddl_task_param_; }
   const ObDDLTableSchema &get_ddl_table_schema() const { return ddl_table_schema_; }
   const ObDirectLoadTxInfo &get_tx_info() const { return tx_info_; }
-  const ObIArray<std::pair<share::ObLSID, ObTabletID>> &get_ls_tablet_ids() { return ls_tablet_ids_; }
+  const ObIArray<ObTabletID> &get_tablet_ids() { return tablet_ids_; }
   int64_t get_pipeline_count() const { return ATOMIC_LOAD(&pipeline_count_); }
   void inc_pipeline_count() { ATOMIC_INC(&pipeline_count_); }
   void dec_pipeline_count() { ATOMIC_DEC(&pipeline_count_); }
@@ -97,7 +97,7 @@ public:
 protected:
   int alloc_vector_index_write_and_build_pipeline(
       const ObIndexType &index_type,
-      const ObIArray<std::pair<share::ObLSID, ObTabletID>> &ls_tablet_ids,
+      const ObIArray<ObTabletID> &tablet_ids,
       ObIArray<share::ObITask *> &vector_index_task_array);
 private:
   int init_ddl_table_schema();
@@ -128,7 +128,7 @@ protected:
   ObDDLTaskParam ddl_task_param_;
   ObDDLTableSchema ddl_table_schema_;
   ObDirectLoadTxInfo tx_info_;
-  ObArray<std::pair<share::ObLSID, ObTabletID>> ls_tablet_ids_;
+  ObArray<ObTabletID> tablet_ids_;
   hash::ObHashMap<ObTabletID, ObDDLTabletContext *> tablet_context_map_;
   int64_t pipeline_count_;
   int ret_code_;

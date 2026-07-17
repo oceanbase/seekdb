@@ -37,9 +37,9 @@ ObString 的内存由外部传入，内部保存三个成员变量：
 ```cpp
 /**
  * 构造函数
- *
+ * 
  * 构造字符串的buffer数据和有效数据长度
- *
+ * 
  * 还有一些衍生的构造函数，比如省略buffer长度（buffer长度与数据长度一致）
  */
 ObString(const obstr_size_t size, const obstr_size_t length, char *ptr);
@@ -434,25 +434,25 @@ class ObHashMap;
  * ObHashMap的构造函数并不做什么事情。必须调用 create 才会进行真正的初始化。
  * create 函数的参数主要是 桶的个数 (bucket_num)和内存分配器的参数。
  * 合理的给出桶的个数，可以让hashmap运行的更加高效又不至于浪费太多内存。
- *
+ * 
  * 通过下面几个接口可以看到，可以提供两个内存分配器，一个是bucket数组的分配器，
  * 一个是元素节点的分配器
  */
-int create(int64_t bucket_num,
+int create(int64_t bucket_num, 
            const ObMemAttr &bucket_attr,
            const ObMemAttr &node_attr);
 int create(int64_t bucket_num, const ObMemAttr &bucket_attr);
-int create(int64_t bucket_num,
+int create(int64_t bucket_num, 
            const lib::ObLabel &bucket_label,
-           const lib::ObLabel &node_label = ObModIds::OB_HASH_NODE,
+           const lib::ObLabel &node_label = ObModIds::OB_HASH_NODE, 
            uint64_t tenant_id = OB_SERVER_TENANT_ID,
            uint64_t ctx_id = ObCtxIds::DEFAULT_CTX_ID);
-int create(int64_t bucket_num,
-           _allocer *allocer,
+int create(int64_t bucket_num, 
+           _allocer *allocer, 
            const lib::ObLabel &bucket_label,
            const lib::ObLabel &node_label = ObModIds::OB_HASH_NODE);
-int create(int64_t bucket_num,
-           _allocer *allocer,
+int create(int64_t bucket_num, 
+           _allocer *allocer, 
            _bucket_allocer *bucket_allocer);
 
 /// 直接销毁当前对象
@@ -480,13 +480,13 @@ int get_refactored(const _key_type &key, _value_type &value, const int64_t timeo
  * @param callback：插入或更新成功后，可以使用callback对值做一些额外操作
  */
 template <typename _callback = void>
-int set_refactored(const _key_type &key,
+int set_refactored(const _key_type &key, 
                    const _value_type &value,
                    int flag = 0,
-                   int broadcast = 0,
-                   int overwrite_key = 0,
+                   int broadcast = 0, 
+                   int overwrite_key = 0, 
                    _callback *callback = nullptr);
-
+                 
 /**
  * 遍历所有元素
  * @note

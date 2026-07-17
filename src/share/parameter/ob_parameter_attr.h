@@ -31,7 +31,7 @@ namespace common {
   DECL_EVAL_MACRO(M, Session, NO, YES);                                                \
   DECL_EVAL_MACRO(M, VisibleLevel, SYS, COMMON, INVISIBLE);                            \
   DECL_EVAL_MACRO(M, EditLevel, READONLY, STATIC_EFFECTIVE, DYNAMIC_EFFECTIVE);        \
-  DECL_EVAL_MACRO(M, CompatMode, MYSQL, ORACLE, COMMON);
+  DECL_EVAL_MACRO(M, CompatMode, MYSQL, COMMON);
 
 #define _ENUM_EXP(arg) arg
 

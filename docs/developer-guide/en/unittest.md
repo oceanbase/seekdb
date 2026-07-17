@@ -33,7 +33,7 @@ find . -name "test_chunk_row_store"
 
 ## How to Write Unit Tests
 
-As a C++ project, [OceanBase seekdb](https://github.com/oceanbase/seekdb) uses [Google Test](https://github.com/google/googletest) as the unit test framework.
+As a C++ project, [OceanBase seekdb](https://github.com/oceanbase/seekdb) uses [Google Test](https://github.com/google/googletest) as the unit test framework. 
 
 seekdb uses `test_xxx.cpp` as the unit test file name. Create a `test_xxx.cpp` file and add the file name to the specific `CMakeLists.txt` file.
 

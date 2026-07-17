@@ -19,10 +19,10 @@
 
 #include "sql/engine/ob_operator.h"
 #include "lib/charset/ob_charset.h"
-#include "lib/json_type/ob_json_tree.h"
-#include "lib/json_type/ob_json_base.h"
-#include "lib/json_type/ob_json_path.h"
-#include "lib/json_type/ob_json_bin.h"
+#include "common/json_type/ob_json_tree.h"
+#include "common/json_type/ob_json_base.h"
+#include "common/json_type/ob_json_path.h"
+#include "common/json_type/ob_json_bin.h"
 #include "sql/resolver/dml/ob_dml_stmt.h"
 #include "sql/engine/ob_exec_context.h"
 #include "sql/engine/expr/ob_expr.h"
@@ -521,11 +521,6 @@ public:
                                 const ObObjType expect_type,
                                 const ObCollationType expect_cs_type,
                                 const bool is_explicit_cast);
-  static int check_default_value_oracle(JtScanCtx* ctx, ObJtColInfo &col_info, ObExpr* expr);
-  static int check_default_value_inner_oracle(JtScanCtx* ctx,
-                                              ObJtColInfo &col_info,
-                                              ObExpr* col_expr,
-                                              ObExpr* default_expr);
   static int check_item_method_json(ObRegCol &col_node, JtScanCtx* ctx);
   static int check_default_value_inner_mysql(JtScanCtx* ctx,
                                              ObRegCol &col_node,

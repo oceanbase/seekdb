@@ -25,7 +25,7 @@ using namespace common;
 namespace observer
 {
 ObAllVirtualSysParameterStat::ObAllVirtualSysParameterStat()
-    : ObVirtualTableIterator(), sys_iter_(), tenant_config_(), tenant_iter_()
+    : ObVirtualTableIterator(), sys_iter_(), tenant_iter_()
 {
 }
 
@@ -38,25 +38,14 @@ int ObAllVirtualSysParameterStat::inner_open()
 {
   int ret = OB_SUCCESS;
   sys_iter_ = GCONF.get_container().begin();
-  tenant_config_.set_config(TENANT_CONF(OB_SYS_TENANT_ID));
-  if (tenant_config_.is_valid()) {
-    tenant_iter_ = tenant_config_->get_container().begin();
-  } else {
-    ret = OB_ERR_UNEXPECTED;
-    SERVER_LOG(ERROR, "failed to get tenant config", K(ret));
-  }
+  tenant_iter_ = tenant_config_->get_container().begin();
   return ret;
 }
 
 void ObAllVirtualSysParameterStat::reset()
 {
   sys_iter_ = GCONF.get_container().begin();
-  tenant_config_.set_config(TENANT_CONF(OB_SYS_TENANT_ID));
-  if (tenant_config_.is_valid()) {
-    tenant_iter_ = tenant_config_->get_container().begin();
-  } else {
-    SERVER_LOG_RET(ERROR, OB_ERR_UNEXPECTED, "failed to get tenant config");
-  }
+  tenant_iter_ = tenant_config_->get_container().begin();
 }
 
 int ObAllVirtualSysParameterStat::inner_get_next_row(ObNewRow *&row)

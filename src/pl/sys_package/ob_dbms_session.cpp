@@ -17,7 +17,6 @@
 #define USING_LOG_PREFIX PL
 #include "ob_dbms_session.h"
 #include "pl/ob_pl.h"
-#include "sql/monitor/flt/ob_flt_control_info_mgr.h"
 
 namespace oceanbase
 {
@@ -71,18 +70,6 @@ int ObDBMSSession::set_identifier(sql::ObExecContext &ctx,
     LOG_WARN("failed to set client id", K(ret));
   }
 
-  if (OB_FAIL(ret)) {
-    // do nothing
-  } else {
-    ObFLTControlInfoManager mgr(GET_MY_SESSION(ctx)->get_effective_tenant_id());
-    if (OB_FAIL(mgr.init())) {
-      LOG_WARN("failed to init full link trace info manager", K(ret));
-    } else if (OB_FAIL(mgr.find_appropriate_con_info(*session))) {
-      LOG_WARN("failed to get control info for client info", K(ret));
-    } else {
-      // do nothing
-    }
-  }
   return ret;
 }
 
@@ -181,8 +168,8 @@ int ObDBMSSession::check_privileges(pl::ObPLContext *pl_ctx,
   int ret = OB_SUCCESS;
   ObPLExecState *frame = NULL;
   bool trusted = false;
-  // ob store sys package in oceanbase schema, to compat with oracle
-  // we rewrite SYS to OCEANBASE
+  // System packages are stored in the OCEANBASE schema.
+  // Rewrite SYS to OCEANBASE for this package.
   ObString real_schema_name = (0 == schema_name.case_compare("SYS") 
                                && 0 == package_name.case_compare("DBMS_SESSION"))
                                ? "OCEANBASE" : schema_name;

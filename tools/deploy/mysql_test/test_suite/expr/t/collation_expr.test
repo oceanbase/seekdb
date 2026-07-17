@@ -11,7 +11,7 @@ set @@session.explicit_defaults_for_timestamp=off;
 --disable_warnings
 drop table if exists coll_test;
 --enable_warnings
-create table coll_test(pk bigint primary key, uc varchar(10) collate utf8_general_ci, ub varchar(10) collate utf8_bin, b varbinary(10));
+create table coll_test(pk bigint primary key, uc varchar(10) collate utf8mb4_general_ci, ub varchar(10) collate utf8mb4_bin, b varbinary(10));
 --source mysql_test/include/show_create_table_old_version.inc
 --source mysql_test/include/show_create_table_old_version_replica2.inc
 show create table coll_test;
@@ -151,8 +151,8 @@ select cmp_meta(locate(b, b)) from coll_test;
 select cmp_meta(locate(b, pk)) from coll_test;
 
 # instr
-select cmp_meta(instr('abc' collate utf8_bin, 'B' collate utf8_bin));
-select cmp_meta(instr('abc' collate utf8_general_ci, 'B' collate utf8_general_ci));
+select cmp_meta(instr('abc' collate utf8mb4_bin, 'B' collate utf8mb4_bin));
+select cmp_meta(instr('abc' collate utf8mb4_general_ci, 'B' collate utf8mb4_general_ci));
 select cmp_meta(instr('abc', 'B'));
 
 # current_user
@@ -173,10 +173,6 @@ select collation(bin(uc)) from coll_test;
 select collation(bin(pk))  from coll_test;
 select collation(bin(b))  from coll_test;
 
-# effective_tenant
-select collation(effective_tenant());
-select coercibility(effective_tenant());
-
 # like
 select collation(uc like b) from coll_test;
 select cmp_meta(uc like b) from coll_test;
@@ -188,7 +184,7 @@ select cmp_meta(uc like b) from coll_test;
 select collation(cast(uc as binary)) from coll_test;
 select collation(cast(pk as char)) from coll_test;
 select uc, collation(binary uc) from coll_test;
-select collation(binary binary uc collate utf8_bin) from coll_test;
+select collation(binary binary uc collate utf8mb4_bin) from coll_test;
 
 # user
 select collation(user());
@@ -268,11 +264,11 @@ select CAST('Ab123人' AS char CHAR SET binary);
 SELECT collation(CAST('Ab123人' AS char CHAR SET binary));
 SELECT length(CAST('Ab123人' AS char CHAR SET binary));
 
-select CAST('Ab123人' AS char CHAR SET gbk);
-SELECT collation(CAST('Ab123人' AS char CHAR SET gbk));
-SELECT length(CAST('Ab123人' AS char CHAR SET gbk));
+select CAST('Ab123人' AS char CHAR SET utf8mb4);
+SELECT collation(CAST('Ab123人' AS char CHAR SET utf8mb4));
+SELECT length(CAST('Ab123人' AS char CHAR SET utf8mb4));
 
-create table coll_test(c1 char(10) collate utf8mb4_bin, c2 char(10) collate gbk_bin, c3 char(10) char set binary);
+create table coll_test(c1 char(10) collate utf8mb4_bin, c2 char(10) collate utf8mb4_bin, c3 char(10) char set binary);
 insert into coll_test values('Ab123人', 'Ab123人', 'Ab123人');
 select cast(c1 as char(20)), cast(c2 as char(20)), cast(c3 as char(20)) from coll_test;
 select collation(cast(c1 as char(20))), collation(cast(c2 as char(20))), collation(cast(c3 as char(20))) from coll_test;

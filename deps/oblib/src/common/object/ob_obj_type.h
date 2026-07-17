@@ -88,11 +88,11 @@ enum ObObjType
   ObRoaringBitmapType  = 43, // Roaring Bitmap Type
   ObMaxType,                 // invalid type, or count of obj type
                             //
-  ObTimestampLTZType  = 47, // timestamp with local time zone for oracle
-  ObTimestampNanoType = 48, // timestamp nanosecond for oracle
+  ObTimestampLTZType  = 47, // timestamp with local time zone
+  ObTimestampNanoType = 48, // timestamp nanosecond
 };
 
-//Oracle type
+// Extended object type
 enum ObObjOType
 {
   ObONotSupport       = 0,
@@ -228,9 +228,9 @@ enum ObObjTypeClass
   ObEnumSetInnerTC  = 16,
   ObOTimestampTC    = 17, //timestamp with time zone
   ObRawTC       = 18,   // raw
-  ObIntervalTC      = 19, //oracle interval type class include interval year to month and interval day to second
-  ObRowIDTC         = 20, // oracle rowid typeclass, includes urowid and rowid
-  ObLobTC           = 21, //oracle lob typeclass
+  ObIntervalTC      = 19, // interval type class includes interval year to month and interval day to second
+  ObRowIDTC         = 20, // rowid typeclass, includes urowid and rowid
+  ObLobTC           = 21, // lob typeclass
   ObJsonTC          = 22, // json type class
   ObGeometryTC      = 23, // geometry type class
   ObUserDefinedSQLTC = 24, // user defined type class in SQL
@@ -344,7 +344,7 @@ const ObObjType OBJ_DEFAULT_TYPE[ObActualMaxTC] =
   ObMaxType,        // righttype
 };
 
-//plz check if OB_OBJ_IMPLICIT_CAST_DIRECTION_FOR_ORACLE is also need to be modified after you modify this one
+// Keep the implicit cast direction table below consistent with this type-class mapping.
 static ObObjTypeClass OBJ_O_TYPE_TO_CLASS[ObOMaxType + 1] =
 {
   ObMaxTC,        //ObONotSupport = 1
@@ -392,7 +392,7 @@ enum ImplicitCastDirection {
 /*
  * Datetime > double > float > number > int/smallint > char/varchar > others
  */
-static ImplicitCastDirection OB_OBJ_IMPLICIT_CAST_DIRECTION_FOR_ORACLE[ObObjOType::ObOMaxType][ObObjOType::ObOMaxType] =
+static ImplicitCastDirection OB_OBJ_IMPLICIT_CAST_DIRECTION_EXTENDED[ObObjOType::ObOMaxType][ObObjOType::ObOMaxType] =
 {   /*A->B*/
   {/*ObONotSupport->XXX*/
     IC_NOT_SUPPORT,  /*ObONotSupport*/
@@ -701,7 +701,7 @@ static ImplicitCastDirection OB_OBJ_IMPLICIT_CAST_DIRECTION_FOR_ORACLE[ObObjOTyp
     IC_B_TO_A,  /*Varchar*/
     IC_B_TO_A,  /*Date*/
     IC_NO_CAST,  /*TimestampTZ*/
-    IC_B_TO_A,  /*TimestampLTZ*/  //oracle called internal_function(TimestampLTZ) when cmp with TimestampTZ
+    IC_B_TO_A,  /*TimestampLTZ*/  // prefer TimestampLTZ when comparing with TimestampTZ
     IC_B_TO_A,  /*Timestamp*/
     IC_NOT_SUPPORT,  /*IntervalYM*/
     IC_NOT_SUPPORT,  /*IntervalDS*/
@@ -727,7 +727,7 @@ static ImplicitCastDirection OB_OBJ_IMPLICIT_CAST_DIRECTION_FOR_ORACLE[ObObjOTyp
     IC_B_TO_A, /*Char*/
     IC_B_TO_A, /*Varchar*/
     IC_B_TO_A, /*Date*/
-    IC_A_TO_B, /*TimestampTZ*/ //oracle called internal_function(TimestampLTZ) when cmp with TimestampTZ
+    IC_A_TO_B, /*TimestampTZ*/ // prefer TimestampLTZ when comparing with TimestampTZ
     IC_NO_CAST, /*TimestampLTZ*/
     IC_B_TO_A, /*Timestamp*/
     IC_NOT_SUPPORT, /*IntervalYM*/
@@ -1100,31 +1100,31 @@ OB_INLINE bool is_valid_obj_type(const ObObjType type)
   return ObNullType <= type && type < ObMaxType;
 }
 
-OB_INLINE bool is_valid_oracle_type(const ObObjOType otype)
+OB_INLINE bool is_valid_extended_type(const ObObjOType otype)
 {
   //not include ObONotSupport
   return ObONotSupport < otype && otype < ObOMaxType;
 }
 
-OB_INLINE ObObjOType ob_obj_type_to_oracle_type(const ObObjType type)
+OB_INLINE ObObjOType ob_obj_type_to_extended_type(const ObObjType type)
 {
   return type < ObMaxType ? OBJ_TYPE_TO_O_TYPE[type] : ObOMaxType;
 }
 
-OB_INLINE ObObjTypeClass ob_oracle_type_class(const ObObjType type)
+OB_INLINE ObObjTypeClass ob_extended_type_class(const ObObjType type)
 {
   return type < ObMaxType ? OBJ_O_TYPE_TO_CLASS[OBJ_TYPE_TO_O_TYPE[type]] : ObMaxTC;
 }
 
-OB_INLINE ObObjTypeClass ob_oracle_type_class(const ObObjOType oType)
+OB_INLINE ObObjTypeClass ob_extended_type_class(const ObObjOType oType)
 {
   return oType < ObOMaxType ? OBJ_O_TYPE_TO_CLASS[oType] : ObMaxTC;
 }
 
-OB_INLINE ImplicitCastDirection ob_oracle_implict_cast_direction(const ObObjOType aType, const ObObjOType bType)
+OB_INLINE ImplicitCastDirection ob_extended_implict_cast_direction(const ObObjOType aType, const ObObjOType bType)
 {
   if (aType < ObOMaxType && bType < ObOMaxType) {
-    return OB_OBJ_IMPLICIT_CAST_DIRECTION_FOR_ORACLE[aType][bType];
+    return OB_OBJ_IMPLICIT_CAST_DIRECTION_EXTENDED[aType][bType];
   } else {
     return ImplicitCastDirection::IC_NOT_SUPPORT;
   }
@@ -1446,16 +1446,11 @@ inline void convert_unsigned_type_to_signed(ObObjType &type)
   }
 }
 
-inline bool ob_is_oracle_numeric_type(ObObjType type)
-{
-  return ObIntType == type || ob_is_number_tc(type) || ObFloatType == type || ObDoubleType == type
-         || ObDecimalIntType == type;
-}
 inline bool ob_is_number_or_decimal_int_tc(ObObjType type)
 {
   return ob_is_number_tc(type) || ob_is_decimal_int_tc(type);
 }
-inline bool ob_is_oracle_temporal_type(ObObjType type)
+inline bool ob_is_extended_temporal_type(ObObjType type)
 {
   return ObDateTimeType == type || ob_is_otimestampe_tc(type);
 }
@@ -1516,7 +1511,7 @@ inline bool ob_is_clob(const ObObjType type, const ObCollationType cs_type) { re
 inline bool ob_is_blob(const ObObjType type, const ObCollationType cs_type) { return ObTextTC == ob_obj_type_class(type) && CS_TYPE_BINARY == cs_type; }
 inline bool ob_is_text(const ObObjType type, const ObCollationType cs_type) { return ObTextTC == ob_obj_type_class(type) && CS_TYPE_BINARY != cs_type; }
 inline bool ob_is_null(const ObObjType type) { return ObNullType == type; }
-inline bool ob_is_oracle_datetime_tc(ObObjType type) { return ob_is_otimestampe_tc(type) || ob_is_datetime_tc(type); }
+inline bool ob_is_extended_datetime_tc(ObObjType type) { return ob_is_otimestampe_tc(type) || ob_is_datetime_tc(type); }
 inline bool ob_is_enumset_tc(ObObjType type) { return ObEnumSetTC == ob_obj_type_class(type); }
 inline bool ob_is_enumset_inner_tc(ObObjType type) { return ObEnumSetInnerTC == ob_obj_type_class(type); }
 inline bool ob_is_extend(const ObObjType type) { return ObExtendType == type; }

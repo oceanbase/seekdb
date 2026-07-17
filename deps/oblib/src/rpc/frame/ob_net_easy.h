@@ -19,11 +19,15 @@
 
 #include "rpc/frame/ob_req_handler.h"
 #include "rpc/frame/ob_req_transport.h"
-#include "rpc/obrpc/ob_listener.h"
-#include "rpc/obrpc/ob_net_keepalive.h"
 #include "lib/ssl/ob_ssl_config.h"
+#include "rpc/frame/ob_req_packet_code.h"
 
-using namespace oceanbase::obrpc;
+// Load-bearing: downstream headers (e.g. observer/ob_srv_network_frame.h) use
+// obcall data structs (ObNetEndpointKey, ObSharedDeviceResourceArray) unqualified
+// and rely on this directive arriving transitively via net_easy.h. The obcall
+// namespace is declared via thread.h -> ob_req_packet_code.h.
+using namespace oceanbase::obcall;
+
 namespace oceanbase
 {
 namespace common

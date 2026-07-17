@@ -28,7 +28,6 @@ class ObCheckConstraintValidationTask : public share::ObAsyncTask
 {
 public:
   ObCheckConstraintValidationTask(
-      const uint64_t tenant_id,
       const int64_t data_table_id,
       const int64_t constraint_id,
       const int64_t target_object_id,
@@ -36,13 +35,12 @@ public:
       const common::ObCurTraceId::TraceId &trace_id,
       const int64_t task_id,
       const bool check_table_empty,
-      const obrpc::ObAlterTableArg::AlterConstraintType alter_constraint_type);
+      const obcall::ObAlterTableArg::AlterConstraintType alter_constraint_type);
   virtual ~ObCheckConstraintValidationTask() = default;
   virtual int process() override;
   virtual int64_t get_deep_copy_size() const override { return sizeof(*this); }
   virtual ObAsyncTask *deep_copy(char *buf, const int64_t buf_size) const override;
 private:
-  uint64_t tenant_id_;
   int64_t data_table_id_;
   int64_t constraint_id_;
   int64_t target_object_id_;
@@ -50,14 +48,13 @@ private:
   common::ObCurTraceId::TraceId trace_id_;
   int64_t task_id_;
   const bool check_table_empty_;
-  obrpc::ObAlterTableArg::AlterConstraintType alter_constraint_type_;
+  obcall::ObAlterTableArg::AlterConstraintType alter_constraint_type_;
 };
 
 class ObForeignKeyConstraintValidationTask : public share::ObAsyncTask
 {
 public:
   ObForeignKeyConstraintValidationTask(
-      const uint64_t tenant_id,
       const int64_t data_table_id,
       const int64_t foregin_key_id,
       const int64_t schema_version,
@@ -78,10 +75,8 @@ private:
       const share::schema::ObDatabaseSchema &child_database_schema,
       const share::schema::ObTableSchema &parent_table_schema,
       const share::schema::ObDatabaseSchema &parent_database_schema,
-      const share::schema::ObForeignKeyInfo &fk_info,
-      const bool is_oracle_mode) const;
+      const share::schema::ObForeignKeyInfo &fk_info) const;
 private:
-  uint64_t tenant_id_;
   int64_t data_table_id_;
   int64_t foregin_key_id_;
   int64_t schema_version_;
@@ -100,8 +95,7 @@ public:
       const int64_t object_id,
       const share::ObDDLType ddl_type,
       const int64_t schema_version,
-      const obrpc::ObAlterTableArg &alter_table_arg,
-      const int64_t consumer_group_id,
+      const obcall::ObAlterTableArg &alter_table_arg,
       const int32_t sub_task_trace_id,
       const int64_t parent_task_id = 0,
       const int64_t status = share::ObDDLTaskStatus::WAIT_TRANS_END,
@@ -110,7 +104,7 @@ public:
   virtual int process() override;
   int update_check_constraint_finish(const int ret_code);
   virtual int serialize_params_to_message(char *buf, const int64_t buf_size, int64_t &pos) const override;
-  virtual int deserialize_params_from_message(const uint64_t tenant_id, const char *buf, const int64_t buf_size, int64_t &pos) override;
+  virtual int deserialize_params_from_message(const char *buf, const int64_t buf_size, int64_t &pos) override;
   virtual int64_t get_serialize_param_size() const override;
 private:
   int hold_snapshot(common::ObMySQLTransaction &trans, const int64_t snapshot_version);
@@ -136,13 +130,13 @@ private:
   int rollback_failed_foregin_key();
   int rollback_failed_add_not_null_columns();
   int set_drop_constraint_ddl_stmt_str(
-      obrpc::ObAlterTableArg &alter_table_arg,
+      obcall::ObAlterTableArg &alter_table_arg,
       common::ObIAllocator &allocator);
   int set_alter_constraint_ddl_stmt_str_for_check(
-      obrpc::ObAlterTableArg &alter_table_arg,
+      obcall::ObAlterTableArg &alter_table_arg,
       common::ObIAllocator &allocator);
   int set_alter_constraint_ddl_stmt_str_for_fk(
-      obrpc::ObAlterTableArg &alter_table_arg,
+      obcall::ObAlterTableArg &alter_table_arg,
       common::ObIAllocator &allocator);
   int check_replica_end(bool &is_end);
   int check_health();
@@ -150,7 +144,7 @@ private:
 private:
   static const int64_t OB_CONSTRAINT_TASK_VERSION = 1;
   common::TCRWLock lock_;
-  obrpc::ObAlterTableArg alter_table_arg_;
+  obcall::ObAlterTableArg alter_table_arg_;
   common::ObArenaAllocator allocator_;
   ObRootService *root_service_;
   int64_t check_job_ret_code_;

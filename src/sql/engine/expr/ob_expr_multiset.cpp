@@ -331,16 +331,16 @@ int ObExprMultiSet::calc_ms_all_impl(common::ObIAllocator *coll_allocator,
           }\
         } while(0)
 
-        /* The except ALL keyword instructs Oracle to return all elements in nested_table1 that are
-          not in nested_table2. For example, if a particular element occurs m times in
-          nested_table1 and n times in nested_table2, then the result will have (m-n)
-          occurrences of the element if m >n and 0 occurrences if m<=n.
+        /* EXCEPT ALL returns all elements in nested_table1 that are not in
+          nested_table2. For example, if a particular element occurs m times in
+          nested_table1 and n times in nested_table2, then the result will have
+          (m-n) occurrences of the element if m > n and 0 occurrences if m <= n.
         */
-        /* The intersect ALL keyword instructs Oracle to return all common occurrences of elements
-          that are in the two input nested tables, including duplicate common values and
-          duplicate common NULL occurrences. For example, if a particular value occurs m
-          times in nested_table1 and n times in nested_table2, then the result would
-          contain the element min(m,n) times.
+        /* INTERSECT ALL returns all common occurrences of elements that are in
+          the two input nested tables, including duplicate common values and
+          duplicate common NULL occurrences. For example, if a particular value
+          occurs m times in nested_table1 and n times in nested_table2, then the
+          result contains the element min(m, n) times.
         */
             if (allow_dup) {
               dup_cnt = const_cast<int64_t *>(dmap_c2.get(*elem));
@@ -471,10 +471,10 @@ int ObExprMultiSet::eval_composite_relative_anonymous_block(ObExecContext &exec_
   if (OB_SUCC(ret)) {
     bool is_inner_mock_backup = false;
     bool is_ps_backup = exec_ctx.get_sql_ctx()->is_prepare_protocol_;
-    bool is_pre_exec_backup = exec_ctx.get_sql_ctx()->is_pre_execute_;
+    bool is_mock_prepare_backup = exec_ctx.get_sql_ctx()->is_mock_prepare_;
 
     exec_ctx.get_sql_ctx()->is_prepare_protocol_ = true;
-    exec_ctx.get_sql_ctx()->is_pre_execute_ = true;
+    exec_ctx.get_sql_ctx()->is_mock_prepare_ = true;
 
     if (OB_NOT_NULL(exec_ctx.get_pl_stack_ctx())) {
       is_inner_mock_backup = exec_ctx.get_pl_stack_ctx()->get_is_inner_mock();
@@ -482,13 +482,12 @@ int ObExprMultiSet::eval_composite_relative_anonymous_block(ObExecContext &exec_
     }
 
     DEFER(exec_ctx.get_sql_ctx()->is_prepare_protocol_ = is_ps_backup);
-    DEFER(exec_ctx.get_sql_ctx()->is_pre_execute_ = is_pre_exec_backup);
+    DEFER(exec_ctx.get_sql_ctx()->is_mock_prepare_ = is_mock_prepare_backup);
     DEFER(if (OB_NOT_NULL(exec_ctx.get_pl_stack_ctx())) { exec_ctx.get_pl_stack_ctx()->set_is_inner_mock(is_inner_mock_backup); });
 
     out_args.reuse();
 
-    CREATE_WITH_TEMP_CONTEXT(lib::ContextParam().set_mem_attr(MTL_ID(),
-                                                              GET_PL_MOD_STRING(pl::OB_PL_MULTISET),
+    CREATE_WITH_TEMP_CONTEXT(lib::ContextParam().set_mem_attr(GET_PL_MOD_STRING(pl::OB_PL_MULTISET),
                                                               ObCtxIds::DEFAULT_CTX_ID)) {
       char old_sql_id[common::OB_MAX_SQL_ID_LENGTH + 1];
       MEMCPY(old_sql_id, exec_ctx.get_sql_ctx()->sql_id_, (int32_t)sizeof(exec_ctx.get_sql_ctx()->sql_id_));

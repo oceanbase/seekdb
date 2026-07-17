@@ -53,7 +53,6 @@ class ObOptStatManager;
 namespace sql
 {
 struct ObStmtPrepareResult;
-struct ObPCResourceMapRule;
 class ObSPIService;
 class ObIVirtualTableIteratorFactory;
 struct ObSqlCtx;
@@ -69,7 +68,6 @@ class ObSql
 public:
   /// init SQL module
   int init(common::ObOptStatManager *opt_stat_mgr,
-           rpc::frame::ObReqTransport *transport,
            common::ObITabletScan *vt_partition_service,
            common::ObAddr &addr);
   void destroy();
@@ -129,12 +127,12 @@ public:
   // Get plan cache by tenant id
   // if not exist, create a new plan cacha object
   //
-  // @param tenant_id [in]
+  // @param tenant [in]
   //
-  ObPsCache* get_ps_cache(const uint64_t tenant_id, const ObPCMemPctConf &pc_mem_conf);
+  ObPsCache* get_ps_cache(const ObPCMemPctConf &pc_mem_conf);
   int get_plan_retry(ObPlanCache &plan_cache, ObPlanCacheCtx &pc_ctx, ObCacheObjGuard &guard);
 
-  int revert_plan_cache(uint64_t tenant_id);
+  int revert_plan_cache();
 
   int64_t get_execution_id() { return ATOMIC_AAF(&execution_id_, 1); }
   int64_t get_px_sequence_id() { return ATOMIC_AAF(&px_sequence_id_, 1); }
@@ -210,7 +208,6 @@ public:
   ObSql()
   : inited_(false),
     opt_stat_mgr_(NULL),
-    transport_(NULL),
     vt_partition_service_(NULL),
     execution_id_(0),
     px_sequence_id_(0)
@@ -460,7 +457,6 @@ private:
                              ParamStore &fixed_param_store);
 
   int handle_text_execute(const ObStmt *basic_stmt, ObSqlCtx &sql_ctx, ObResultSet &result);
-  int check_need_reroute(ObPlanCacheCtx &pc_ctx, ObSQLSessionInfo &session, ObPhysicalPlan *plan, bool &need_reroute);
   int check_read_only_privilege(ParseResult &parse_result,
                                 ObExecContext &exec_ctx,
                                 ObSchemaGetterGuard &schema_guard,
@@ -471,7 +467,6 @@ private:
                    ObResultSet &result,
                    bool is_enable_pc,
                    bool &add_plan_to_pc);
-  typedef hash::ObHashMap<uint64_t, ObPlanCache*> PlanCacheMap;
   friend class ::test::TestOptimizerUtils;
 
 public:
@@ -483,7 +478,6 @@ private:
   bool inited_;
   // BEGIN global singleton dependency interface
   common::ObOptStatManager *opt_stat_mgr_;
-  rpc::frame::ObReqTransport *transport_;
   common::ObITabletScan *vt_partition_service_;
   // END global singleton dependency interface
 

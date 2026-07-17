@@ -104,7 +104,7 @@ ObGroupByCellBase::ObGroupByCellBase(const int64_t batch_size, common::ObIAlloca
     group_by_col_expr_(nullptr),
     group_by_col_param_(nullptr),
     distinct_projector_buf_(nullptr),
-    padding_allocator_("GroupByPad", OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID()),
+    padding_allocator_("GroupByPad", OB_MALLOC_NORMAL_BLOCK_SIZE),
     allocator_(allocator),
     group_by_col_offset_(-1),
     need_extract_distinct_(false),
@@ -174,13 +174,13 @@ ObPushdownAggContext::ObPushdownAggContext(
   common::ObIAllocator &allocator)
   : agg_infos_(allocator),
     cols_offset_map_(allocator),
-    agg_ctx_(eval_ctx, MTL_ID(), agg_infos_, pd_agg_label),
+    agg_ctx_(eval_ctx, agg_infos_, pd_agg_label),
     rows_(nullptr),
     row_meta_(&allocator),
     batch_rows_(),
     agg_row_num_(0),
     allocator_(allocator),
-    row_allocator_("PDAggRow", OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID())
+    row_allocator_("PDAggRow", OB_MALLOC_NORMAL_BLOCK_SIZE)
 {
   batch_rows_.skip_ = skip_bit;
   batch_rows_.size_ = batch_size;
@@ -327,9 +327,8 @@ OB_INLINE void ObPushdownAggContext::setup_agg_row(share::aggregate::AggrRowPtr 
       char *cell = nullptr;
       int32_t cell_len = 0;
       agg_ctx_.row_meta().locate_cell_payload(col_id, row, cell, cell_len);
-      // oracle mode use ObNumber as result type for count aggregation
-      // we use int64_t as result type for count aggregation in aggregate row
-      // and cast int64_t to ObNumber during `collect_group_result`
+      // Count aggregation stores int64_t in the aggregate row and casts it
+      // to ObNumber during `collect_group_result` when needed.
       if (res_tc == VEC_TC_NUMBER) {
         ObNumberDesc &d = *reinterpret_cast<ObNumberDesc *>(cell);
         // set zero number

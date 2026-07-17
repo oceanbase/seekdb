@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SQL_MONITOR
 #include "ob_exec_stat_collector.h"
 #include "sql/monitor/ob_phy_plan_monitor_info.h"
+#include "sql/engine/ob_physical_plan.h"
 using namespace oceanbase::common;
 using namespace oceanbase::observer;
 namespace oceanbase

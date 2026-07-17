@@ -25,7 +25,7 @@
 #include "common/object/ob_object.h"
 #include "sql/executor/ob_slice_id.h"
 #include "share/schema/ob_table_schema.h"
-#include "share/ob_scanner.h"
+#include "sql/ob_scanner.h"
 #include "sql/ob_sql_trans_util.h"
 #include "share/rpc/ob_batch_proxy.h"
 #include "storage/tx/ob_trans_define.h"
@@ -35,6 +35,20 @@ namespace oceanbase
 namespace sql
 {
 struct ObEvalCtx;
+
+// Relocated from the deleted ob_executor_rpc_proxy.h. Used by temp-table
+// transformation ops to describe interm-result ids for erase (the remote
+// erase RPC itself is removed on single-replica seekdb).
+struct ObEraseDtlIntermResultArg
+{
+  OB_UNIS_VERSION(1);
+public:
+  ObEraseDtlIntermResultArg() {}
+
+  ObSEArray<uint64_t, 4> interm_result_ids_;
+
+  TO_STRING_KV(K_(interm_result_ids));
+};
 // Due to calling the rpc asynchronous callback interface, this interface does not call the destructor of the parameters,
 // Therefore the following classes should be designed not to rely on the destructor for memory release
 
@@ -170,12 +184,10 @@ public:
       : task_result_(common::ObModIds::OB_NEW_SCANNER,
                      nullptr,
                      common::ObScanner::DEFAULT_MAX_SERIALIZE_SIZE,
-                     common::OB_SERVER_TENANT_ID,
                      use_compact_row),
       extend_result_(common::ObModIds::OB_NEW_SCANNER,
                        nullptr,
                        common::ObScanner::DEFAULT_MAX_SERIALIZE_SIZE,
-                       common::OB_SERVER_TENANT_ID,
                        use_compact_row)
   {
   }
@@ -183,22 +195,17 @@ public:
       : task_result_(allocator,
                      common::ObModIds::OB_NEW_SCANNER,
                      common::ObScanner::DEFAULT_MAX_SERIALIZE_SIZE,
-                     common::OB_SERVER_TENANT_ID,
                      use_compact_row),
         extend_result_(allocator,
                        common::ObModIds::OB_NEW_SCANNER,
                        common::ObScanner::DEFAULT_MAX_SERIALIZE_SIZE,
-                       common::OB_SERVER_TENANT_ID,
                        use_compact_row)
   {
   }
   ~ObMiniTaskResult()
   {
   }
-  void set_tenant_id(uint64_t tenant_id) {
-    task_result_.set_tenant_id(tenant_id);
-    extend_result_.set_tenant_id(tenant_id);
-  }
+  
   int init()
   {
     int ret = common::OB_SUCCESS;
@@ -311,7 +318,7 @@ private:
   DISALLOW_COPY_AND_ASSIGN(ObMiniTaskRetryInfo);
 };
 
-class ObRemoteResult : public obrpc::ObIFill
+class ObRemoteResult : public obcall::ObIFill
 {
   OB_UNIS_VERSION(1);
 public:

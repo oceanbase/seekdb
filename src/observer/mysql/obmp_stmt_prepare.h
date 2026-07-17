@@ -60,8 +60,7 @@ private:
                            bool has_more_result,
                            bool fore_sync_resp,
                            bool &async_resp_used);
-  int check_and_refresh_schema(uint64_t login_tenant_id,
-                               uint64_t effective_tenant_id);
+  int check_and_refresh_schema();
   int response_result(ObMySQLResultSet &result,
                       sql::ObSQLSessionInfo &session,
                       bool force_sync_resp,

@@ -25,10 +25,10 @@ namespace oceanbase
 namespace blocksstable
 {
 
-ObMicroBlockBareIterator::ObMicroBlockBareIterator(const uint64_t tenant_id)
-  : allocator_(ObMemAttr(tenant_id, "MicroBlkBareItr")),
+ObMicroBlockBareIterator::ObMicroBlockBareIterator()
+  : allocator_(ObMemAttr("MicroBlkBareItr")),
     macro_block_buf_(nullptr), macro_block_buf_size_(0),
-    macro_reader_(tenant_id), index_reader_(tenant_id), common_header_(),
+    macro_reader_{}, index_reader_{}, common_header_(),
     macro_block_header_(), reader_(nullptr), micro_reader_helper_(),
     index_rowkey_cnt_(0), column_cnt_(0),
     begin_idx_(0), end_idx_(0), iter_idx_(0), read_pos_(0),
@@ -759,7 +759,7 @@ int ObMicroBlockBareIterator::check_macro_block_data_integrity(
   int32_t payload_checksum = static_cast<int32_t>(ob_crc64(payload_buf, payload_size));
   if (OB_UNLIKELY(payload_checksum != common_header_.get_payload_checksum())) {
     ret = OB_INVALID_DATA;
-    LOG_WARN("macro block checksum inconsistant", K(ret), K(payload_checksum), K_(common_header));
+    LOG_ERROR("macro block checksum inconsistant", K(ret), K(payload_checksum), K_(common_header));
   }
   return ret;
 }
@@ -820,8 +820,8 @@ int ObMicroBlockBareIterator::set_reader(const ObRowStoreType store_type)
   return ret;
 }
 
-ObMacroBlockRowBareIterator::ObMacroBlockRowBareIterator(common::ObIAllocator &allocator, const uint64_t tenant_id)
-  : row_(tenant_id), micro_iter_(tenant_id), column_types_(nullptr), column_checksums_(nullptr),
+ObMacroBlockRowBareIterator::ObMacroBlockRowBareIterator(common::ObIAllocator &allocator)
+  : row_{}, micro_iter_{}, column_types_(nullptr), column_checksums_(nullptr),
     rowkey_descs_(allocator), allocator_(&allocator), micro_reader_(nullptr),
     curr_micro_block_data_(), curr_block_row_idx_(-1), curr_block_row_cnt_(0), is_inited_(false)
 {
@@ -879,17 +879,15 @@ int ObMacroBlockRowBareIterator::open(
   } else {
     column_types_ = macro_header.column_types_;
     column_checksums_ = macro_header.column_checksum_;
-    if (!macro_header.is_normal_cg_) {
-      if (OB_FAIL(rowkey_descs_.init(macro_header.fixed_header_.rowkey_column_count_))) {
-        LOG_WARN("fail to init rowkey descs", K(ret), K(macro_header));
-      } else {
-        share::schema::ObColDesc col_desc;
-        for (int64_t i = 0; OB_SUCC(ret) && i < macro_header.fixed_header_.rowkey_column_count_; ++i) {
-          col_desc.col_id_ = common::OB_APP_MIN_COLUMN_ID + i;
-          col_desc.col_type_ = column_types_[i];
-          if (OB_FAIL(rowkey_descs_.push_back(col_desc))) {
-            LOG_WARN("Fail to push col desc to columns", K(ret));
-          }
+    if (OB_FAIL(rowkey_descs_.init(macro_header.fixed_header_.rowkey_column_count_))) {
+      LOG_WARN("fail to init rowkey descs", K(ret), K(macro_header));
+    } else {
+      share::schema::ObColDesc col_desc;
+      for (int64_t i = 0; OB_SUCC(ret) && i < macro_header.fixed_header_.rowkey_column_count_; ++i) {
+        col_desc.col_id_ = common::OB_APP_MIN_COLUMN_ID + i;
+        col_desc.col_type_ = column_types_[i];
+        if (OB_FAIL(rowkey_descs_.push_back(col_desc))) {
+          LOG_WARN("Fail to push col desc to columns", K(ret));
         }
       }
     }
@@ -1047,13 +1045,6 @@ int ObMacroBlockRowBareIterator::init_micro_reader(const ObRowStoreType store_ty
       if (OB_ISNULL(micro_reader_ = OB_NEWx(ObMicroBlockDecoder, allocator_))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
         LOG_WARN("Fail to new micro block decoder", K(ret));
-      }
-      break;
-    }
-    case CS_ENCODING_ROW_STORE: {
-      if (OB_ISNULL(micro_reader_ = OB_NEWx(ObMicroBlockCSDecoder, allocator_))) {
-        ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("Fail to new micro block cs decoder", KR(ret));
       }
       break;
     }

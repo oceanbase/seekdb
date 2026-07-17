@@ -18,7 +18,7 @@
 
 #include "sql/engine/expr/ob_expr_doc_id.h"
 #include "sql/engine/ob_exec_context.h"
-#include "share/ob_tablet_autoincrement_service.h"
+#include "storage/ob_tablet_autoincrement_service.h"
 #include "share/ob_ddl_common.h"
 
 namespace oceanbase
@@ -105,7 +105,7 @@ int ObExprDocID::cg_expr(
                                                       eval_ctx.exec_ctx_.get_slice_row_idx());
       } else {
         share::ObTabletAutoincrementService &auto_inc = share::ObTabletAutoincrementService::get_instance();
-        if (OB_FAIL(auto_inc.get_autoinc_seq(MTL_ID(), tablet_id, seq_id))) {
+        if (OB_FAIL(auto_inc.get_autoinc_seq(tablet_id, seq_id))) {
           LOG_WARN("fail to get tablet autoinc seq", K(ret), K(tablet_id));
         }
       }

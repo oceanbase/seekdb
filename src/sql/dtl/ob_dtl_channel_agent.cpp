@@ -139,50 +139,10 @@ int ObDtlBcastService::send_message(ObDtlLinkedBuffer *&bcast_buf, bool drain)
   }
   if (OB_SUCC(ret)) {
     if (0 == send_count_ && active_chs_count_ != 0) {
-      ObDtlBCSendArgs args;
-      ObDtlLinkedBuffer empty_dtl_buf;
-      ObDtlRpcChannel::SendBCMsgCB cb(*cur_trace_id);
-      args.bc_buffer_.shallow_copy(*bcast_buf_);
-      int64_t timeout_us = args.bc_buffer_.timeout_ts() - ObTimeUtility::current_time();
-      if (timeout_us <= 0) {
-        ret = OB_TIMEOUT;
-        LOG_WARN("send message timeout", K(ret), K(args.bc_buffer_.timeout_ts()));
-      } else if (OB_FAIL(cb.assign_resp(resps_))) {
-        LOG_WARN("failed to assign resp", K(ret));
-      }
-      for (int64_t i = 0; OB_SUCC(ret) && i < peer_ids_.count(); ++i) {
-        if (OB_FAIL(args.args_.push_back(ObDtlSendArgs{peer_ids_.at(i), empty_dtl_buf}))) {
-          LOG_WARN("failed to push back send arg", K(ret));
-        }
-      }
-      // set msg response in process
-      for (int64_t i = 0; i < resps_.count() && OB_SUCC(ret); ++i) {
-        if (OB_FAIL(resps_.at(i)->start())) {
-          LOG_WARN("start message process fail", K(ret));
-        }
-      }
-      if (OB_SUCC(ret)) {
-        if (OB_FAIL(DTL.get_rpc_proxy()
-                       .to(server_addr_)
-                       .group_id(share::OBCG_DTL)
-                       .by(tenant_id_)
-                       .timeout(timeout_us)
-                       .ap_send_bc_message(args, &cb))) {
-          LOG_WARN("failed to seed message", K(ret));
-        } else {
-          // all rpc channel in this service has send this msg. this buffer will be release in agent.
-          bcast_buf_ = nullptr;
-        }
-      }
-      // if start or rpc failed, we reset response.
-      if (OB_FAIL(ret)) {
-        for (int64_t i = 0; i < resps_.count(); ++i) {
-          int tmp_ret = resps_.at(i)->on_start_fail();
-          if (OB_SUCCESS != tmp_ret) {
-            LOG_WARN("set start fail failed", K(tmp_ret));
-          }
-        }
-      }
+      // single-replica: broadcast via rpc no longer exists. All dtl channels are
+      // local, so no bcast service is ever created and this path is unreachable.
+      ret = OB_ERR_UNEXPECTED;
+      LOG_ERROR("dtl rpc broadcast is not supported in single-replica", K(ret));
     } else if (0 == active_chs_count_) {
       bcast_buf_ = nullptr;
     }
@@ -195,13 +155,12 @@ int ObDtlBcastService::send_message(ObDtlLinkedBuffer *&bcast_buf, bool drain)
 int ObDtlChanAgent::init(dtl::ObDtlFlowControl &dfc,
                          ObPxTaskChSet &task_ch_set,
                          ObIArray<ObDtlChannel *> &channels,
-                         int64_t tenant_id,
                          int64_t time_ts)
 {
   int ret = OB_SUCCESS;
-  dtl_buf_allocator_.set_tenant_id(tenant_id);
+  
   dtl_buf_allocator_.set_timeout_ts(time_ts);
-  dtl_buf_encoder_.set_tenant_id(tenant_id);
+  
   sys_dtl_buf_size_ = GCONF.dtl_buffer_size;
   dfo_key_ = dfc.get_dfo_key();
 
@@ -221,53 +180,8 @@ int ObDtlChanAgent::init(dtl::ObDtlFlowControl &dfc,
       LOG_WARN("failed to get channel info", K(ret));
     }
     dtl_buf_allocator_.set_sys_buffer_size(sys_buffer_size);
+    UNUSED(find_bc_service);
     if (OB_FAIL(ret)) {
-    } else if (ObDtlChannel::DtlChannelType::RPC_CHANNEL == data_ch->get_channel_type()) {
-      if (OB_FAIL(rpc_channels_.push_back((ObDtlRpcChannel *)data_ch))) {
-        LOG_WARN("failed to push back rpc channels", K(ret));
-      }
-      for (int64_t i = 0; i < bc_services_.count() && OB_SUCC(ret); ++i) {
-        if (ch_info.peer_ == bc_services_.at(i)->server_addr_) {
-          bc_services_.at(i)->bcast_ch_count_++;
-          bc_services_.at(i)->active_chs_count_++;
-          data_ch->set_bc_service(bc_services_.at(i));
-          if (OB_FAIL(bc_services_.at(i)->ch_infos_.push_back(ch_info))) {
-            LOG_WARN("failed to push channel info", K(ret));
-          } else if (OB_FAIL(bc_services_.at(i)->peer_ids_.push_back(data_ch->get_peer_id()))) {
-            LOG_WARN("failed to push peer id", K(ret));
-          } else if (OB_FAIL(bc_services_.at(i)->resps_.push_back(data_ch->get_msg_response()))) {
-            LOG_WARN("failed to push resp", K(ret));
-          } else {
-            data_ch->set_bc_service(bc_services_.at(i));
-          }
-          find_bc_service = true;
-          break;
-        }
-      }
-      if (!find_bc_service && OB_SUCC(ret)) {
-        ObDtlBcastService *bc_service = nullptr;
-        void *buf = allocator_.alloc(sizeof(ObDtlBcastService));
-        if (nullptr == buf) {
-          ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("no momery", K(ret));
-        } else {
-          bc_service = new(buf) ObDtlBcastService(tenant_id, data_ch->send_by_tenant());
-          bc_service->bcast_ch_count_++;
-          bc_service->active_chs_count_++;
-          bc_service->server_addr_ = data_ch->peer_;
-          if (OB_FAIL(bc_service->ch_infos_.push_back(ch_info))) {
-            LOG_WARN("failed to push channel info", K(ret));
-          } else if (OB_FAIL(bc_service->peer_ids_.push_back(data_ch->get_peer_id()))) {
-            LOG_WARN("failed to push peer id", K(ret));
-          } else if (OB_FAIL(bc_service->resps_.push_back(data_ch->get_msg_response()))) {
-            LOG_WARN("failed to push resp", K(ret));
-          } else if (OB_FAIL(bc_services_.push_back(bc_service))) {
-            LOG_WARN("failed to push bc service", K(ret));
-          } else {
-            data_ch->set_bc_service(bc_service);
-          }
-        }
-      }
     } else if (ObDtlChannel::DtlChannelType::LOCAL_CHANNEL == data_ch->get_channel_type()) {
       if (OB_FAIL(local_channels_.push_back((ObDtlLocalChannel *)data_ch))) {
         LOG_WARN("failed to push back server_ch", K(ret));
@@ -282,12 +196,10 @@ int ObDtlChanAgent::init(dtl::ObDtlFlowControl &dfc,
   if (OB_SUCC(ret)) {
     if (!local_channels_.empty()) {
       bcast_channel_ = local_channels_.at(BROADCAST_CH_IDX);
-    } else if (!rpc_channels_.empty()) {
-      bcast_channel_ = rpc_channels_.at(BROADCAST_CH_IDX);
     }
   }
 
-  LOG_TRACE("use shared broadcast msg optimizer", K(bc_services_), K(local_channels_.count()), K(rpc_channels_.count()), KP(bcast_channel_->get_id()));
+  LOG_TRACE("use shared broadcast msg optimizer", K(bc_services_), K(local_channels_.count()), KP(bcast_channel_->get_id()));
   return ret;
 }
 
@@ -401,7 +313,6 @@ int ObDtlChanAgent::send_last_buffer(ObDtlLinkedBuffer *&last_buffer)
 {
   int ret = OB_SUCCESS;
   ObDtlBasicChannel *ch = nullptr;
-  ObDtlRpcChannel *rpc_ch = nullptr;
   last_buffer->set_dfo_key(dfo_key_);
   ObDtlBasicChannel *bcast_ch = bcast_channel_;
   const int64_t size = last_buffer->pos(); // yes, it is pos()
@@ -428,18 +339,6 @@ int ObDtlChanAgent::send_last_buffer(ObDtlLinkedBuffer *&last_buffer)
     }
   }
 
-  for (int64_t i = 0; i < rpc_channels_.count() && OB_SUCC(ret); ++i) {
-    rpc_ch = rpc_channels_.at(i);
-    last_buffer->size() = size;
-    last_buffer->pos() = pos;
-    ObDtlLinkedBuffer *current_ptr = last_buffer;
-    if (OB_FAIL(rpc_ch->send_buffer(last_buffer))) {
-      rpc_ch->clean_broadcast_buffer();
-      LOG_WARN("failed to send buffer", K(ret));
-    }
-    last_buffer = current_ptr;
-  }
-
   if (nullptr != last_buffer) {
     if (last_buffer == current_buffer_) {
       current_buffer_ = nullptr;
@@ -457,12 +356,6 @@ int ObDtlChanAgent::destroy()
   }
   for (int64_t i = 0; i < local_channels_.count(); ++i) {
     int temp_ret = local_channels_.at(i)->wait_response();
-    if (OB_SUCCESS != temp_ret) {
-      ret = temp_ret;
-    }
-  }
-  for (int64_t i = 0; i < rpc_channels_.count(); ++i) {
-    int temp_ret = rpc_channels_.at(i)->wait_response();
     if (OB_SUCCESS != temp_ret) {
       ret = temp_ret;
     }

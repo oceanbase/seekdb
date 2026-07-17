@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX STORAGE
 
 #include "storage/tx_storage/ob_tenant_freezer.h"          // ObTenantFreezer
+#include "share/rc/ob_module_provider.h"
 #include "storage/tx_storage/ob_tenant_memory_printer.h"
 
 namespace oceanbase
@@ -38,15 +39,12 @@ ObTenantMemoryPrinter &ObTenantMemoryPrinter::get_instance()
   return instance_;
 }
 
-int ObTenantMemoryPrinter::register_timer_task(int tg_id)
+int ObTenantMemoryPrinter::register_timer_task(common::ObTimer &timer)
 {
   int ret = OB_SUCCESS;
   const bool is_repeated = true;
   const int64_t print_delay = 10 * 1000000; // 10s
-  if (OB_FAIL(TG_SCHEDULE(tg_id,
-                          print_task_,
-                          print_delay,
-                          is_repeated))) {
+  if (OB_FAIL(timer.schedule(print_task_, print_delay, is_repeated))) {
     LOG_WARN("fail to schedule print task of tenant manager", K(ret));
   }
   return ret;
@@ -60,7 +58,6 @@ int ObTenantMemoryPrinter::print_tenant_usage()
   char print_buf[BUF_LEN] = "";
   int64_t pos = 0;
   omt::ObMultiTenant *omt = GCTX.omt_;
-  common::ObSEArray<uint64_t, 8> mtl_tenant_ids;
   if (OB_FAIL(print_mutex_.trylock())) {
     // Guaranteed serial printing
     // do-nothing
@@ -68,25 +65,15 @@ int ObTenantMemoryPrinter::print_tenant_usage()
     if (OB_FAIL(databuff_printf(print_buf, BUF_LEN, pos,
                                 "=== TENANTS MEMORY INFO ===\n"
                                 "unmanaged_memory_size=% '15ld\n",
-                                get_unmanaged_memory_size()))) {
+                                lib::get_unmanaged_memory_size()))) {
       LOG_WARN("print failed", K(ret));
-    } else if (OB_FAIL(ObVirtualTenantManager::get_instance().print_tenant_usage(print_buf,
-                                                                                 BUF_LEN,
-                                                                                 pos))) {
-      LOG_WARN("print virtual tenant memory info failed.", K(ret));
     } else if (OB_ISNULL(omt)) {
       // do nothing
-    } else if (OB_FAIL(omt->get_mtl_tenant_ids(mtl_tenant_ids))) {
-      LOG_WARN("get mtl tenant ids failed", K(ret));
     } else {
-      for (int i = 0; i < mtl_tenant_ids.count(); ++i) {
-        uint64_t tenant_id = mtl_tenant_ids[i];
-        if (OB_SUCCESS != (tmp_ret = print_tenant_usage_(tenant_id,
-                                                         print_buf,
-                                                         BUF_LEN,
-                                                         pos))) {
-          LOG_WARN("print mtl tenant usage failed", K(tmp_ret), K(tenant_id));
-        }
+      if (OB_SUCCESS != (tmp_ret = print_tenant_usage_(print_buf,
+                                                       BUF_LEN,
+                                                       pos))) {
+        LOG_WARN("print mtl tenant usage failed", K(tmp_ret));
       }
     }
 
@@ -100,32 +87,27 @@ int ObTenantMemoryPrinter::print_tenant_usage()
       _STORAGE_LOG(INFO, "====== tenants memory info ======\n%s", print_buf);
     }
 
-    // print global chunk freelist
-    int64_t pos = CHUNK_MGR.to_string(print_buf, BUF_LEN);
-    _STORAGE_LOG(INFO, "%.*s", static_cast<int>(pos), print_buf);
-    ObMallocTimeMonitor::get_instance().print();
     print_mutex_.unlock();
   }
   return ret;
 }
 
 int ObTenantMemoryPrinter::print_tenant_usage_(
-    const uint64_t tenant_id,
     char *print_buf,
     int64_t buf_len,
     int64_t &pos)
 {
   int ret = OB_SUCCESS;
-  MTL_SWITCH(tenant_id) {
+  MOD_SCOPE {
     storage::ObTenantFreezer *freezer = nullptr;
-    if (FALSE_IT(freezer = MTL(storage::ObTenantFreezer *))) {
+    if (FALSE_IT(freezer = share::g_mp->tenant_freezer())) {
     } else if (OB_ISNULL(freezer)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("freezer is null", K(ret), K(tenant_id));
+      LOG_WARN("freezer is null", K(ret));
     } else if (OB_FAIL(freezer->print_tenant_usage(print_buf,
                                                    buf_len,
                                                    pos))) {
-      LOG_WARN("print tenant usage failed", K(ret), K(tenant_id));
+      LOG_WARN("print tenant usage failed", K(ret));
     } else {
       // do nothing
     }

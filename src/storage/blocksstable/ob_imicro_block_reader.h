@@ -22,7 +22,7 @@
 #include "lib/utility/ob_print_utils.h"
 #include "common/ob_store_format.h"
 #include "common/ob_store_range.h"
-#include "share/schema/ob_table_param.h"
+#include "storage/access/ob_table_param.h"
 #include "storage/access/ob_table_read_info.h"
 #include "ob_block_sstable_struct.h"
 #include "ob_datum_range.h"
@@ -326,7 +326,6 @@ public:
     return OB_NOT_SUPPORTED;
   }
   virtual int64_t get_column_count() const { return OB_NOT_SUPPORTED; }
-  // For column store
   virtual int find_bound(const ObDatumRowkey &key,
                  const bool lower_bound,
                  const int64_t begin_idx,
@@ -495,7 +494,7 @@ class ObBlockReaderAllocator
 {
 public:
   ObBlockReaderAllocator(const lib::ObLabel &label, bool reserve_memory = false)
-    : inner_allocator_(label, OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID()),
+    : inner_allocator_(label, OB_MALLOC_NORMAL_BLOCK_SIZE),
       reserve_memory_ (reserve_memory)
   {
   }

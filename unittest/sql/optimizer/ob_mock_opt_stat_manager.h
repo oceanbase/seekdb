@@ -16,15 +16,15 @@
 
 #ifndef _OB_OPT_MOCK_STAT_MANAGER_H
 #define _OB_OPT_MOCK_STAT_MANAGER_H
-#include "share/stat/ob_opt_column_stat_cache.h"
-#include "share/stat/ob_opt_stat_manager.h"
-#include "share/stat/ob_opt_stat_service.h"
-#include "share/stat/ob_opt_table_stat.h"
+#include "sql/optimizer/stat/ob_opt_column_stat_cache.h"
+#include "sql/optimizer/stat/ob_opt_stat_manager.h"
+#include "sql/optimizer/stat/ob_opt_stat_service.h"
+#include "sql/optimizer/stat/ob_opt_table_stat.h"
 
 #include "sql/resolver/ob_schema_checker.h"
 
 #include "sql/optimizer/ob_opt_default_stat.h"
-#include "lib/timezone/ob_time_convert.h"
+#include "common/timezone/ob_time_convert.h"
 
 namespace test
 {
@@ -430,7 +430,7 @@ class MockOptStatManager : public oceanbase::common::ObOptStatManager
   }
 
   // virtual int get_table_stat(const ObOptTableStat::Key &key, ObOptTableStat &tstat);
-  virtual int add_refresh_stat_task(const oceanbase::obrpc::ObUpdateStatCacheArg &analyze_arg) 
+  virtual int add_refresh_stat_task(const oceanbase::obcall::ObUpdateStatCacheArg &analyze_arg) 
   {
     UNUSED(analyze_arg);
     return OB_SUCCESS;

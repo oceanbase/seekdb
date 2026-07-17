@@ -263,8 +263,7 @@ int ObSubQueryIterator::prepare_init_plan()
   if (!inited_) {
     if (!store_.is_inited()) {
       // TODO bin.lb: use auto memory management
-      OZ(store_.init(1L << 20,  // 1MB memory limit
-                     GET_MY_SESSION(op_.get_exec_ctx())->get_effective_tenant_id()));
+      OZ(store_.init(1L << 20));
       OZ(store_.alloc_dir_id());
     }
     if (op_.is_vectorized()) {
@@ -302,8 +301,7 @@ int ObSubQueryIterator::init_mem_entity()
 {
   int ret = OB_SUCCESS;
   lib::ContextParam param;
-  param.set_mem_attr(ObMemAttr(op_.get_exec_ctx().get_my_session()->get_effective_tenant_id(),
-        "SqlSQIterator",
+  param.set_mem_attr(ObMemAttr("SqlSQIterator",
         ObCtxIds::DEFAULT_CTX_ID));
   param.set_properties(lib::USE_TL_PAGE_OPTIONAL);
   if (OB_FAIL(CURRENT_CONTEXT->CREATE_CONTEXT(mem_entity_, param))) {
@@ -735,10 +733,9 @@ int ObSubPlanFilterOp::inner_open()
       (enable_left_px_batch_ || MY_SPEC.enable_das_group_rescan_) &&
       OB_ISNULL(last_store_row_mem_)) {
     ObSQLSessionInfo *session = ctx_.get_my_session();
-    uint64_t tenant_id =session->get_effective_tenant_id();
+    
     lib::ContextParam param;
-    param.set_mem_attr(tenant_id,
-                       "ObSBFCache",
+    param.set_mem_attr("ObSBFCache",
                        ObCtxIds::WORK_AREA)
       .set_properties(lib::USE_TL_PAGE_OPTIONAL);
     if (OB_FAIL(CURRENT_CONTEXT->CREATE_CONTEXT(last_store_row_mem_, param))) {
@@ -746,7 +743,7 @@ int ObSubPlanFilterOp::inner_open()
     } else if (OB_ISNULL(last_store_row_mem_)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("null memory entity returned", K(ret));
-    } else if (OB_FAIL(left_rows_.init(MAX_DUMP_SIZE, tenant_id, ObCtxIds::WORK_AREA))) {
+    } else if (OB_FAIL(left_rows_.init(MAX_DUMP_SIZE, ObCtxIds::WORK_AREA))) {
       LOG_WARN("init row store failed", K(ret));
     } else if (OB_FAIL(left_rows_.alloc_dir_id())) {
       LOG_WARN("alloc dir id for left rows failed", K(ret));
@@ -1393,8 +1390,7 @@ int ObSubPlanFilterOp::handle_update_set()
   const int64_t extra_size = 0;
   if (NULL == update_set_mem_) {
     lib::ContextParam param;
-    param.set_mem_attr(ctx_.get_my_session()->get_effective_tenant_id(),
-                       "SubplanFilterOp", ObCtxIds::WORK_AREA)
+    param.set_mem_attr("SubplanFilterOp", ObCtxIds::WORK_AREA)
       .set_properties(lib::USE_TL_PAGE_OPTIONAL);
     if (OB_FAIL(CURRENT_CONTEXT->CREATE_CONTEXT(update_set_mem_, param))) {
       LOG_WARN("create memory entity failed", K(ret));

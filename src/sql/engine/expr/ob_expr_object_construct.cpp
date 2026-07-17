@@ -28,8 +28,7 @@ namespace sql
 OB_SERIALIZE_MEMBER((ObExprObjectConstruct, ObFuncExprOperator), rowsize_, elem_types_, udt_id_);
 
 ObExprObjectConstruct::ObExprObjectConstruct(common::ObIAllocator &alloc)
-    : ObFuncExprOperator(alloc, T_FUN_PL_OBJECT_CONSTRUCT, N_PL_OBJECT_CONSTRUCT, PARAM_NUM_UNKNOWN, VALID_FOR_GENERATED_COL, NOT_ROW_DIMENSION,
-                         false, INTERNAL_IN_ORACLE_MODE),
+    : ObFuncExprOperator(alloc, T_FUN_PL_OBJECT_CONSTRUCT, N_PL_OBJECT_CONSTRUCT, PARAM_NUM_UNKNOWN, VALID_FOR_GENERATED_COL, NOT_ROW_DIMENSION, false),
       rowsize_(0),
       udt_id_(OB_INVALID_ID),
       elem_types_(OB_MALLOC_NORMAL_BLOCK_SIZE, ModulePageAllocator(alloc)) {}
@@ -79,7 +78,7 @@ int ObExprObjectConstruct::newx(ObEvalCtx &ctx, ObObj &result, uint64_t udt_id, 
   int ret = OB_SUCCESS;
   ObSQLSessionInfo *session = ctx.exec_ctx_.get_my_session();
   ObExecContext &exec_ctx = ctx.exec_ctx_;
-  pl::ObPLPackageGuard package_guard(session->get_effective_tenant_id());
+  pl::ObPLPackageGuard package_guard{};
   ObSchemaGetterGuard *schema_guard_ptr = NULL;
   ObSchemaGetterGuard schema_guard;
   ObArenaAllocator tmp_alloc;
@@ -87,7 +86,7 @@ int ObExprObjectConstruct::newx(ObEvalCtx &ctx, ObObj &result, uint64_t udt_id, 
   if (OB_SUCC(ret)) {
     // if called by check_default_value in ddl resolver, no sql ctx, get guard from session cache
     if (OB_ISNULL(exec_ctx.get_sql_ctx()) || OB_ISNULL(exec_ctx.get_sql_ctx()->schema_guard_)) {
-      if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(session->get_effective_tenant_id(), schema_guard))) {
+      if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(schema_guard))) {
         LOG_WARN("fail to get schema guard", K(ret));
       } else {
         schema_guard_ptr = &schema_guard;

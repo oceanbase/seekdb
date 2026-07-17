@@ -62,15 +62,12 @@ public:
    *    next_inclusive_start, next_inclusive_end
    *  3. Update the sequence_object table
    */
-  int next_batch(const uint64_t tenant_id,
-                 const uint64_t sequence_id,
+  int next_batch(const uint64_t sequence_id,
                  const int64_t schema_version,
                  const share::ObSequenceOption &option,
                  SequenceCacheNode &cache_range,
                  ObSequenceCacheItem &old_cache);
-  int prefetch_next_batch(
-      const uint64_t tenant_id,
-      const uint64_t sequence_id,
+  int prefetch_next_batch(const uint64_t sequence_id,
       const int64_t schema_version,
       const share::ObSequenceOption &option,
       SequenceCacheNode &cache_range,
@@ -82,7 +79,6 @@ private:
       common::ObMySQLTransaction &trans,
       common::ObSQLClientRetryWeak &sql_client_retry_weak,
       common::ObIAllocator &allocator,
-      uint64_t tenant_id,
       uint64_t sequence_id,
       const ObSequenceOption &option,
       common::number::ObNumber &next_value);

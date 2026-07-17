@@ -22,11 +22,10 @@
 #include "observer/table_load/ob_table_load_struct.h"
 #include "share/table/ob_table_load_array.h"
 #include "share/table/ob_table_load_define.h"
-#include "share/table/ob_table_load_dml_stat.h"
-#include "share/table/ob_table_load_sql_statistics.h"
-#include "share/table/ob_table_load_row_array.h"
-#include "observer/table_load/resource/ob_table_load_resource_rpc_struct.h"
-#include "observer/table_load/resource/ob_table_load_resource_rpc_proxy.h"
+#include "storage/direct_load/ob_table_load_dml_stat.h"
+#include "storage/direct_load/ob_table_load_sql_statistics.h"
+#include "observer/table_load/ob_table_load_row_array.h"
+#include "observer/table_load/resource/ob_table_load_resource_struct.h"
 #include "observer/table_load/resource/ob_table_load_resource_service.h"
 #include "observer/table_load/ob_table_load_assigned_memory_manager.h"
 #include "observer/table_load/ob_table_load_partition_location.h"
@@ -49,7 +48,6 @@ class ObTableLoadCoordinator
   static const int64_t RESOURCE_OP_WAIT_INTERVAL_US = 5 * 1000LL * 1000LL; // 5s
   static const int64_t SSTABLE_BUFFER_SIZE = 68 * 1024LL;;  // 64K + 4K
   static const int64_t MACROBLOCK_BUFFER_SIZE = 10 * 1024LL * 1024LL;  // 10MB
-  static const int64_t CG_BUFFER_SIZE = 64LL * 1024; // 64K
   static const int64_t MIN_THREAD_COUNT = 2;
 public:
   ObTableLoadCoordinator(ObTableLoadTableCtx *ctx);
@@ -75,7 +73,7 @@ private:
   int check_need_sort_for_lob_or_index(bool &need_sort) const;
   int calc_session_count(const int64_t total_session_count,
                          const int64_t max_session_count,
-                         const table::ObTableLoadArray<observer::ObTableLoadPartitionLocation::LeaderInfo> all_leader_info_array,
+                         const observer::ObTableLoadPartitionLocation::LocalInfo &local_info,
                          ObArray<int64_t> &partitions,
                          ObDirectLoadResourceApplyArg &apply_arg,
                          int64_t &coord_session_count,
@@ -148,10 +146,9 @@ public:
             const table::ObTableLoadObjRowArray &obj_rows);
   // for client
   int flush(ObTableLoadCoordinatorTrans *trans);
-  // Only write to the leader node
-  int write_peer_leader(const table::ObTableLoadTransId &trans_id, int32_t session_id,
-                        uint64_t sequence_no, const table::ObTableLoadTabletObjRowArray &tablet_obj_rows,
-                        const common::ObAddr &addr);
+  int write_local(const table::ObTableLoadTransId &trans_id, int32_t session_id,
+                  uint64_t sequence_no,
+                  const table::ObTableLoadTabletObjRowArray &tablet_obj_rows);
 private:
   class WriteTaskProcessor;
   class WriteTaskCallback;

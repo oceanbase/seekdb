@@ -21,17 +21,11 @@ namespace oceanbase
 namespace common
 {
 ObCompressorPool::ObCompressorPool()
-    :allocator_(ObMemAttr(OB_SERVER_TENANT_ID, "Compressor"), OB_MALLOC_BIG_BLOCK_SIZE),
+    :allocator_(ObMemAttr("Compressor"), OB_MALLOC_BIG_BLOCK_SIZE),
      none_compressor(),
-     lz4_compressor(),
-     lz4_compressor_1_9_1(),
-     snappy_compressor(),
-     zlib_compressor(),
-     zstd_compressor(allocator_),
      zstd_compressor_1_3_8(allocator_),
-     lz4_stream_compressor(),
-     zstd_stream_compressor(allocator_),
-     zstd_stream_compressor_1_3_8(allocator_)
+     zstd_stream_compressor_1_3_8(allocator_),
+     zlib_compressor()
 {
   allocator_.set_nway(32);
 }
@@ -66,23 +60,11 @@ int ObCompressorPool::get_compressor(const ObCompressorType &compressor_type,
     case NONE_COMPRESSOR:
       compressor = &none_compressor;
       break;
-    case LZ4_191_COMPRESSOR:
-      compressor = &lz4_compressor_1_9_1;
-      break;
-    case LZ4_COMPRESSOR:
-      compressor = &lz4_compressor;
-      break;
-    case SNAPPY_COMPRESSOR:
-      compressor = &snappy_compressor;
+    case ZSTD_1_3_8_COMPRESSOR:
+      compressor = &zstd_compressor_1_3_8;
       break;
     case ZLIB_COMPRESSOR:
       compressor = &zlib_compressor;
-      break;
-    case ZSTD_COMPRESSOR:
-      compressor = &zstd_compressor;
-      break;
-    case ZSTD_1_3_8_COMPRESSOR:
-      compressor = &zstd_compressor_1_3_8;
       break;
     default:
       compressor = NULL;
@@ -101,26 +83,21 @@ int ObCompressorPool::get_compressor_type(const char *compressor_name,
     LIB_LOG(WARN, "invalid compressor name argument, ", K(ret), KP(compressor_name));
   } else if (!STRCASECMP(compressor_name, "none")) {
     compressor_type = NONE_COMPRESSOR;
-  } else if (!STRCASECMP(compressor_name, "lz4_1.0")) {
-    compressor_type = LZ4_COMPRESSOR;
-  } else if (!STRCASECMP(compressor_name, "snappy_1.0")) {
-    compressor_type = SNAPPY_COMPRESSOR;
-  } else if (!STRCASECMP(compressor_name, "zlib_1.0")) {
-    compressor_type = ZLIB_COMPRESSOR;
-  } else if (!STRCASECMP(compressor_name, "zstd_1.0")) {
-    compressor_type = ZSTD_COMPRESSOR;
   } else if (!STRCASECMP(compressor_name, "zstd_1.3.8")) {
     compressor_type = ZSTD_1_3_8_COMPRESSOR;
-  } else if (!STRCASECMP(compressor_name, "lz4_1.9.1")) {
-    compressor_type = LZ4_191_COMPRESSOR;
-  } else if (!STRCASECMP(compressor_name, "stream_lz4_1.0")) {
-    compressor_type = STREAM_LZ4_COMPRESSOR;
-  } else if (!STRCASECMP(compressor_name, "stream_zstd_1.0")) {
-    compressor_type = STREAM_ZSTD_COMPRESSOR;
   } else if (!STRCASECMP(compressor_name, "stream_zstd_1.3.8")) {
     compressor_type = STREAM_ZSTD_1_3_8_COMPRESSOR;
-  }
-  else {
+  } else if (!STRCASECMP(compressor_name, "zlib_1.0")) {
+    compressor_type = ZLIB_COMPRESSOR;
+  } else if (!STRCASECMP(compressor_name, "lz4_1.0")
+             || !STRCASECMP(compressor_name, "lz4_1.9.1")
+             || !STRCASECMP(compressor_name, "snappy_1.0")
+             || !STRCASECMP(compressor_name, "zstd_1.0")) {
+    compressor_type = ZSTD_1_3_8_COMPRESSOR;
+  } else if (!STRCASECMP(compressor_name, "stream_lz4_1.0")
+             || !STRCASECMP(compressor_name, "stream_zstd_1.0")) {
+    compressor_type = STREAM_ZSTD_1_3_8_COMPRESSOR;
+  } else {
     ret = OB_NOT_SUPPORTED;
     LIB_LOG(WARN, "no support compressor type, ", K(ret), KCSTRING(compressor_name));
   }
@@ -167,12 +144,6 @@ int ObCompressorPool::get_stream_compressor(const ObCompressorType &compressor_t
 {
   int ret = OB_SUCCESS;
   switch(compressor_type) {
-    case STREAM_LZ4_COMPRESSOR:
-      stream_compressor = &lz4_stream_compressor;
-      break;
-    case STREAM_ZSTD_COMPRESSOR:
-      stream_compressor = &zstd_stream_compressor;
-      break;
     case STREAM_ZSTD_1_3_8_COMPRESSOR:
       stream_compressor = &zstd_stream_compressor_1_3_8;
       break;

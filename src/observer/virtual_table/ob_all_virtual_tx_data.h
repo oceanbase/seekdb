@@ -17,8 +17,7 @@
 #ifndef OB_ALL_VIRTUAL_TX_DATA_H_
 #define OB_ALL_VIRTUAL_TX_DATA_H_
 
-#include "share/ob_virtual_table_scanner_iterator.h"
-#include "observer/omt/ob_multi_tenant_operator.h"
+#include "observer/virtual_table/ob_virtual_table_scanner_iterator.h"
 
 namespace oceanbase
 {
@@ -63,23 +62,17 @@ private:
 
 
 public:
-  ObAllVirtualTxData() : addr_(), tenant_id_(0), tx_id_(0) {}
+  ObAllVirtualTxData() : tx_id_(0) {}
   ~ObAllVirtualTxData() {}
 
-  TO_STRING_KV(K(MTL_ID()), K_(tenant_id), K_(tx_id));
+  TO_STRING_KV(K_(tx_id));
 
 public:
   virtual int inner_get_next_row(common::ObNewRow *&row);
   virtual void reset()
   {
-    addr_.reset();
-    tenant_id_ = 0;
+    ObVirtualTableScannerIterator::reset();
     tx_id_.reset();
-    memset(ip_buf_, 0, sizeof(ip_buf_));
-  }
-  inline void set_addr(common::ObAddr &addr)
-  {
-    addr_ = addr;
   }
 
 private:
@@ -89,10 +82,7 @@ private:
   int fill_in_row_(const VirtualTxDataRow &row_data, common::ObNewRow *&row);
 
 private:
-  common::ObAddr addr_;
-  uint64_t tenant_id_;
   transaction::ObTransID tx_id_;
-  char ip_buf_[common::OB_IP_STR_BUFF];
 
   VirtualTxDataRow tx_data_row_;
 

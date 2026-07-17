@@ -133,7 +133,7 @@ int ObDASIndexMergeIter::MergeResultBuffer::init(int64_t max_size,
   if (OB_UNLIKELY(max_size <= 0) || OB_ISNULL(eval_ctx) || OB_ISNULL(exprs)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(max_size), K(eval_ctx), K(exprs), K(ret));
-  } else if (OB_FAIL(result_store_.init(UINT64_MAX, MTL_ID(), ObCtxIds::DEFAULT_CTX_ID, "DASIndexMerge"))) {
+  } else if (OB_FAIL(result_store_.init(UINT64_MAX, ObCtxIds::DEFAULT_CTX_ID, "DASIndexMerge"))) {
     LOG_WARN("failed to init result store", K(ret));
   } else {
     result_store_.set_allocator(alloc);
@@ -199,7 +199,7 @@ int ObDASIndexMergeIter::inner_init(ObDASIterParam &param)
     is_reverse_ = index_merge_param.is_reverse_;
     
     lib::ContextParam context_param;
-    context_param.set_mem_attr(MTL_ID(), "DASIndexMerge", ObCtxIds::DEFAULT_CTX_ID)
+    context_param.set_mem_attr("DASIndexMerge", ObCtxIds::DEFAULT_CTX_ID)
         .set_properties(lib::USE_TL_PAGE_OPTIONAL);
     if (OB_UNLIKELY(merge_type_ != INDEX_MERGE_UNION)) {
       ret = OB_INVALID_ARGUMENT;
@@ -264,8 +264,7 @@ int ObDASIndexMergeIter::inner_init(ObDASIterParam &param)
   return ret;
 }
 
-int ObDASIndexMergeIter::init_scan_param(const share::ObLSID &ls_id,
-                                         const common::ObTabletID &tablet_id,
+int ObDASIndexMergeIter::init_scan_param(const common::ObTabletID &tablet_id,
                                          const sql::ObDASScanCtDef *ctdef,
                                          sql::ObDASScanRtDef *rtdef,
                                          ObTableScanParam &scan_param)
@@ -273,12 +272,12 @@ int ObDASIndexMergeIter::init_scan_param(const share::ObLSID &ls_id,
   int ret = OB_SUCCESS;
   if (OB_ISNULL(ctdef) || OB_ISNULL(rtdef)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), KPC(ctdef), KPC(rtdef), K(ls_id), K(tablet_id));
+    LOG_WARN("invalid argument", K(ret), KPC(ctdef), KPC(rtdef), K(tablet_id));
   } else {
-    uint64_t tenant_id = MTL_ID();
-    scan_param.tenant_id_ = tenant_id;
-    scan_param.key_ranges_.set_attr(ObMemAttr(tenant_id, "ScanParamKR"));
-    scan_param.ss_key_ranges_.set_attr(ObMemAttr(tenant_id, "ScanParamSSKR"));
+    
+    
+    scan_param.key_ranges_.set_attr(ObMemAttr("ScanParamKR"));
+    scan_param.ss_key_ranges_.set_attr(ObMemAttr("ScanParamSSKR"));
     scan_param.tx_lock_timeout_ = rtdef->tx_lock_timeout_;
     scan_param.index_id_ = ctdef->ref_table_id_;
     scan_param.is_get_ = ctdef->is_get_;
@@ -303,8 +302,6 @@ int ObDASIndexMergeIter::init_scan_param(const share::ObLSID &ls_id,
     scan_param.need_scn_ = rtdef->need_scn_;
     scan_param.pd_storage_flag_ = ctdef->pd_expr_spec_.pd_storage_flag_.pd_flag_;
     scan_param.fb_snapshot_ = rtdef->fb_snapshot_;
-    scan_param.fb_read_tx_uncommitted_ = rtdef->fb_read_tx_uncommitted_;
-    scan_param.ls_id_ = ls_id;
     scan_param.tablet_id_ = tablet_id;
     if (!ctdef->pd_expr_spec_.pushdown_filters_.empty()) {
       scan_param.op_filters_ = &ctdef->pd_expr_spec_.pushdown_filters_;
@@ -426,7 +423,7 @@ int ObDASIndexMergeIter::do_table_scan()
       if (OB_ISNULL(scan_ctdef) || OB_ISNULL(scan_param)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("unexpected nullptr child scan info", K(scan_ctdef), K(scan_param), K(ret));
-      } else if (OB_FAIL(init_scan_param(ls_id_, child_tablet_ids_.at(i), scan_ctdef, scan_rtdef, *scan_param))) {
+      } else if (OB_FAIL(init_scan_param(child_tablet_ids_.at(i), scan_ctdef, scan_rtdef, *scan_param))) {
         LOG_WARN("failed to init child scan param", K(ret));
       } else if (OB_FAIL(iter->do_table_scan())) {
         LOG_WARN("child iter failed to do table scan", K(ret));
@@ -455,7 +452,6 @@ int ObDASIndexMergeIter::rescan()
         LOG_WARN("unexpected nullptr child scan info", K(scan_ctdef), K(scan_param), K(ret));
       } else {
         scan_param->tablet_id_ = child_tablet_ids_.at(scan_ctdef->index_merge_idx_);
-        scan_param->ls_id_ = ls_id_;
         if (OB_FAIL(prepare_scan_ranges(*scan_param, scan_rtdef))) {
           LOG_WARN("failed to prepare scan ranges", K(ret));
         } else if (OB_FAIL(iter->rescan())) {
@@ -478,10 +474,9 @@ void ObDASIndexMergeIter::clear_evaluated_flag()
   }
 }
 
-int ObDASIndexMergeIter::set_ls_tablet_ids(const ObLSID &ls_id, const ObDASRelatedTabletID &related_tablet_ids)
+int ObDASIndexMergeIter::set_tablet_ids(const ObDASRelatedTabletID &related_tablet_ids)
 {
   int ret = OB_SUCCESS;
-  ls_id_ = ls_id;
   const ObIArray<ObTabletID> &index_merge_tablet_ids = related_tablet_ids.index_merge_tablet_ids_;
   for (int64_t i = 0; OB_SUCC(ret) && i < child_scan_rtdefs_.count(); ++i) {
     ObDASScanRtDef *scan_rtdef = child_scan_rtdefs_.at(i);

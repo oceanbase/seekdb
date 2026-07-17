@@ -71,10 +71,11 @@
 #include "lib/oblog/ob_log_module.h"
 #include "lib/oblog/ob_log_level.h"
 #include "lib/oblog/ob_async_log_struct.h"
+#include "lib/oblog/ob_ringbuf_log_writer.h"
 #include "lib/utility/ob_defer.h"
 #include "lib/oblog/ob_syslog_rate_limiter.h"
 #include "lib/signal/ob_signal_handlers.h"
-#include "common/ob_common_utility.h"
+#include "lib/utility/ob_common_utility.h"
 #include "lib/oblog/ob_log_dba_event.h"
 
 // Undefine Windows min/max macros to avoid conflicts with std::min/std::max
@@ -109,7 +110,6 @@ namespace oceanbase
 {
 namespace common
 {
-class ObVSliceAlloc;
 class ObPLogItem;
 class ObLogCompressor;
 
@@ -309,10 +309,10 @@ enum class ProbeAction
 //
 //This class is changed from the class 'CLogger' in tblog.h which was written by the God
 //named DuoLong.
-class ObLogger : public ObBaseLogWriter
+class ObLogger : public ObRingBufLogWriter
 {
 private:
-  static constexpr int LOG_ITEM_SIZE = sizeof(ObPLogItem);
+  static const int64_t LOG_ITEM_SIZE = sizeof(ObPLogItem);
 public:
   static const int64_t DEFAULT_MAX_FILE_SIZE = 256 * 1024 * 1024; // default max log file size
   //check whether disk storing log-file has no space every 2s
@@ -330,12 +330,12 @@ public:
   static const int32_t MAX_LOG_FILE_COUNT = 10 * 1024;
 
   static const int64_t MAX_LOG_HEAD_SIZE = 256;
-  static const int64_t BASE_LOG_SIZE = 4 * 1024; //4kb
+  static const int64_t BASE_LOG_SIZE = 1 * 1024; //1kb
   static const int64_t MAX_LOG_SIZE = 64 * 1024; //64kb
 
   static const int64_t GROUP_COMMIT_MAX_WAIT_US = 500*1000;//0.5s
   static const int64_t GROUP_COMMIT_MIN_ITEM_COUNT = 1;
-  static const int64_t GROUP_COMMIT_MAX_ITEM_COUNT = 4;
+  static const int64_t GROUP_COMMIT_MAX_ITEM_COUNT = 64;
   static const char *PERF_LEVEL;
   static const int64_t NORMAL_LOG_SIZE = 1 << 10;
 
@@ -390,15 +390,15 @@ private:
 
 public:
   ObLogger();
-  virtual ~ObLogger();
-  virtual int init(const ObBaseLogWriterCfg &log_cfg,
-                   const bool is_arb_replica);
-  virtual void stop();
-  virtual void wait();
-  virtual void destroy();
+  ~ObLogger();
+  int init(const ObBaseLogWriterCfg &log_cfg,
+           const bool is_arb_replica);
+  void stop();
+  void wait();
+  void destroy();
 
 protected:
-  virtual void process_log_items(ObIBaseLogItem **items, const int64_t item_cnt, int64_t &finish_cnt);
+  void process_batch(char **entries, int64_t *lens, int64_t count) override;
 
 public:
   int set_probe(char *str);
@@ -427,6 +427,9 @@ public:
   int64_t get_dropped_debug_log_count() const { return dropped_log_count_[OB_LOG_LEVEL_DEBUG]; }
 
   int64_t get_async_flush_log_speed() const { return last_async_flush_count_per_sec_; }
+  int64_t get_alloc_wait_count() const { return alloc_wait_count_; }
+  int64_t get_alloc_drop_count() const { return alloc_drop_count_; }
+  int64_t get_alloc_success_count() const { return alloc_success_count_; }
   bool enable_async_log() const { return enable_async_log_; }
   void set_enable_async_log(const bool flag) { enable_async_log_ = flag; }
   void set_stop_append_log() { stop_append_log_ = true; }
@@ -848,7 +851,6 @@ private:
       bool& disable);
 
   int log_new_file_info(const ObPLogFileStruct &log_file);
-  void drop_log_items(ObIBaseLogItem **items, const int64_t item_cnt) override;
   void unlink_if_need(const char *file);
 private:
   static constexpr const char *const errstr_[] = {"ERROR", "WARN", "INFO", "EDIAG", "WDIAG", "TRACE", "DEBUG"};
@@ -895,11 +897,13 @@ private:
   //used for statistics
   int64_t dropped_log_count_[OB_LOG_LEVEL_MAX];
   int64_t last_async_flush_count_per_sec_;
+  int64_t alloc_wait_count_;
+  int64_t alloc_drop_count_;
+  int64_t alloc_success_count_;
 
   int64_t dropped_count_[MAX_TASK_LOG_TYPE + 1];//last one is force allow count
   int64_t written_count_[MAX_TASK_LOG_TYPE + 1];
   int64_t current_written_count_[MAX_TASK_LOG_TYPE + 1];
-  ObVSliceAlloc *log_allocator_;
   ObLogCompressor* log_compressor_;
   // juse use it for test promise log print
   bool enable_log_limit_;
@@ -1279,14 +1283,16 @@ inline void ObLogger::do_log_message(const bool is_async,
     inc_dropped_log_count(level);
   } else {
     ++curr_logging_seq_;
-    const int64_t buf_len_array[] = {BASE_LOG_SIZE, MAX_LOG_SIZE};
-    for (int i = 0; OB_SUCC(ret) && i < ARRAYSIZEOF(buf_len_array); ++i) {
-      const int64_t buf_len = buf_len_array[i];
+    constexpr uint64_t TAIL_MAGIC = 0xDEADBEEFBAADF00DULL;
+    const int64_t alloc_len_array[] = {BASE_LOG_SIZE, MAX_LOG_SIZE};
+    for (int i = 0; OB_SUCC(ret) && i < ARRAYSIZEOF(alloc_len_array); ++i) {
+      const int64_t alloc_len = alloc_len_array[i];
+      const int64_t buf_len = alloc_len - sizeof(TAIL_MAGIC);
       if (NULL != log_item ) {
         free_log_item(log_item);
         log_item = NULL;
       }
-      if (OB_FAIL(alloc_log_item(level, LOG_ITEM_SIZE + buf_len, log_item))) {
+      if (OB_FAIL(alloc_log_item(level, LOG_ITEM_SIZE + alloc_len, log_item))) {
         LOG_STDERR("alloc_log_item error, ret=%d\n", ret);
       } else {
         // format to local buf
@@ -1298,6 +1304,8 @@ inline void ObLogger::do_log_message(const bool is_async,
         log_item->set_fd_type(fd_type);
         char *buf = log_item->get_buf();
         int64_t pos = 0;
+        uint64_t *guard = reinterpret_cast<uint64_t *>(buf + buf_len);
+        *guard = TAIL_MAGIC;
         if (with_head && OB_FAIL(log_head(start_ts, mod_name, dba_event, level,
               file, line, function, errcode, buf, buf_len, pos))) {
           LOG_STDERR("log_header error ret = %d\n", ret);
@@ -1307,7 +1315,7 @@ inline void ObLogger::do_log_message(const bool is_async,
           if (allow) {
             if (OB_FAIL(log_data_func(buf, buf_len, pos))) {
               if (OB_SIZE_OVERFLOW == ret) {
-                if (buf_len != MAX_LOG_SIZE) {
+                if (i + 1 < ARRAYSIZEOF(alloc_len_array)) {
                   // do-nothing
                 } else {
                   if (pos < buf_len - 2) {
@@ -1334,6 +1342,7 @@ inline void ObLogger::do_log_message(const bool is_async,
             }
           }
         }
+        abort_unless(*guard == TAIL_MAGIC);
         if (OB_SIZE_OVERFLOW == ret) {
           log_item->set_size_overflow();
           ret = OB_SUCCESS;
@@ -1350,16 +1359,13 @@ inline void ObLogger::do_log_message(const bool is_async,
       const bool is_async = is_async_log_used();
       if (is_async) {
         const int32_t tl_type = log_item->get_tl_type();
-        if (OB_FAIL(append_log(*log_item))) {
-          LOG_STDERR("append_log error ret = %d\n", ret);
-        } else {
-          // can't access log_item after append_log
-          if (tl_type >= 0 && tl_type < MAX_TASK_LOG_TYPE) {
-            (void)ATOMIC_AAF(current_written_count_ + tl_type, 1);
-          }
-          last_logging_seq_ = curr_logging_seq_;
-          BASIC_TIME_GUARD_CLICK("APPEND_END");
+        commit(log_item->get_ring_offset());
+        // can't access log_item after commit
+        if (tl_type >= 0 && tl_type < MAX_TASK_LOG_TYPE) {
+          (void)ATOMIC_AAF(current_written_count_ + tl_type, 1);
         }
+        last_logging_seq_ = curr_logging_seq_;
+        BASIC_TIME_GUARD_CLICK("APPEND_END");
       } else {
         flush_logs_to_file(&log_item, 1);
         BASIC_TIME_GUARD_CLICK("FLUSH_END");

@@ -19,7 +19,7 @@ namespace oceanbase
 {
 using namespace common;
 using common::hash::ObPlacementHashSet;
-using obrpc::ObTableItem;
+using obcall::ObTableItem;
 namespace sql
 {
 ObDropTableResolver::ObDropTableResolver(ObResolverParams &params)
@@ -48,7 +48,7 @@ int ObDropTableResolver::resolve(const ParseNode &parse_tree)
     drop_table_stmt->set_is_view_stmt(T_DROP_VIEW == parse_tree.type_);
   }
   if (OB_SUCC(ret)) {
-    obrpc::ObDropTableArg &drop_table_arg = drop_table_stmt->get_drop_table_arg();
+    obcall::ObDropTableArg &drop_table_arg = drop_table_stmt->get_drop_table_arg();
     ObObj is_recyclebin_open;
     if (OB_ISNULL(parse_tree.children_[TABLE_LIST_NODE]) ||
         parse_tree.children_[TABLE_LIST_NODE]->num_child_ <= 0){
@@ -58,14 +58,14 @@ int ObDropTableResolver::resolve(const ParseNode &parse_tree)
       SQL_RESV_LOG(WARN, "get sys variable failed", K(ret));
     } else {
       drop_table_arg.if_exist_ = (NULL != parse_tree.children_[IF_EXIST_NODE]) ? true : false;
-      drop_table_arg.tenant_id_ = session_info_->get_effective_tenant_id();
+      
       drop_table_arg.to_recyclebin_ = is_recyclebin_open.get_bool();
     }
 
     if (OB_FAIL(ret)) {
     } else if (T_DROP_TABLE == parse_tree.type_) {
-      if (NULL != parse_tree.children_[MATERIALIZED_NODE]
-          && T_TEMPORARY == parse_tree.children_[MATERIALIZED_NODE]->type_) {
+      if (NULL != parse_tree.children_[TEMPORARY_NODE]
+          && T_TEMPORARY == parse_tree.children_[TEMPORARY_NODE]->type_) {
         // mysql temporary table special usage
         drop_table_arg.table_type_ = share::schema::TMP_TABLE;
       } else {
@@ -73,10 +73,6 @@ int ObDropTableResolver::resolve(const ParseNode &parse_tree)
       }
     } else if (T_DROP_VIEW == parse_tree.type_) {
       drop_table_arg.table_type_ = share::schema::USER_VIEW; //xiyu@TODO: SYSTEM_VIEW???
-      if (parse_tree.children_[MATERIALIZED_NODE]) {
-        // transfer to materiaized view, RS will drop such view table
-        drop_table_arg.table_type_ = share::schema::MATERIALIZED_VIEW;
-      }
     } else {
       ret = OB_ERR_UNEXPECTED;
       SQL_RESV_LOG(WARN, "Unknown parse tree type", K_(parse_tree.type), K(ret));
@@ -92,7 +88,7 @@ int ObDropTableResolver::resolve(const ParseNode &parse_tree)
       table_item_set = new(tmp_ptr) ObPlacementHashSet<ObTableItem>();
       ObString db_name;
       ObString table_name;
-      obrpc::ObTableItem table_item;
+      obcall::ObTableItem table_item;
       ParseNode *table_node = NULL;
       int64_t i = 0;
       int64_t max_table_num = 0;

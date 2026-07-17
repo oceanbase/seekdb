@@ -28,35 +28,25 @@ class ObStorageObjectOpt;
 namespace storage
 {
 class ObTenantSuperBlock;
-class ObLSItem;
 class ObTenantStorageMetaPersister;
 class ObTenantCheckpointSlogHandler;
 class ObTenantStorageMetaReplayer
 {
 public:
   ObTenantStorageMetaReplayer()
-    : is_inited_(false),
-      is_shared_storage_(false) {}
+    : is_inited_(false) {}
   ObTenantStorageMetaReplayer(const ObTenantStorageMetaReplayer &) = delete;
   ObTenantStorageMetaReplayer &operator=(const ObTenantStorageMetaReplayer &) = delete;
       
-  int init(const bool is_share_storage,
-           ObTenantStorageMetaPersister &persister,
+  int init(ObTenantStorageMetaPersister &persister,
            ObTenantCheckpointSlogHandler &ckpt_slog_handler);
   void destroy();
   int start_replay(const ObTenantSuperBlock &super_block);
   
 private:
-#ifdef OB_BUILD_SHARED_STORAGE
-  int ss_start_replay_(const ObTenantSuperBlock &super_block);
-  int ss_replay_create_ls_(ObArenaAllocator &allocator, const ObLSItem &item);
-  int ss_replay_ls_tablets_for_trans_info_tmp_(ObArenaAllocator &allocator, const ObLSItem &item);
-  int ss_recover_ls_pending_free_list_(ObArenaAllocator &allocator, const ObLSItem &item);
-#endif 
 
 private:
   bool is_inited_;
-  bool is_shared_storage_;
   ObTenantStorageMetaPersister *persister_;
   ObTenantCheckpointSlogHandler *ckpt_slog_handler_;
 };

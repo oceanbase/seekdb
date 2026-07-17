@@ -37,7 +37,6 @@ public:
   int init(
       mds::BufferCtx &user_ctx,
       const share::SCN &scn,
-      const bool for_old_mds,
       const ObTabletCreateDeleteMdsUserData &user_data);
 
 protected:
@@ -56,7 +55,6 @@ protected:
 private:
   mds::BufferCtx *user_ctx_;
   share::SCN scn_;
-  bool for_old_mds_;
   const ObTabletCreateDeleteMdsUserData *user_data_;
 };
 } // namespace storage

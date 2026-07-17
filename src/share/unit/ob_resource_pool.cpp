@@ -34,7 +34,7 @@ void ObResourcePool::reset()
   unit_count_ = 0;
   unit_config_id_ = OB_INVALID_ID;
   zone_list_.reset();
-  tenant_id_ = OB_INVALID_ID;
+  
   replica_type_ = REPLICA_TYPE_FULL;
 }
 
@@ -53,7 +53,7 @@ int ObResourcePool::assign(const ObResourcePool &other)
   if (OB_FAIL(copy_assign(zone_list_, other.zone_list_))) {
    SHARE_LOG(WARN, "failed to assign zone_list_", KR(ret));
   }
-  tenant_id_ = other.tenant_id_;
+  
   replica_type_ = other.replica_type_;
   return ret;
 }
@@ -67,7 +67,6 @@ DEF_TO_STRING(ObResourcePool)
        K_(unit_count),
        K_(unit_config_id),
        K_(zone_list),
-       K_(tenant_id),
        K_(replica_type));
   J_OBJ_END();
   return pos;
@@ -79,7 +78,6 @@ OB_SERIALIZE_MEMBER(ObResourcePool,
                     unit_count_,
                     unit_config_id_,
                     zone_list_,
-                    tenant_id_,
                     replica_type_);
 
 }//end namespace share

@@ -45,18 +45,17 @@ int ObCatalogResolver::resolve(const ParseNode &parse_tree)
   int ret = OB_SUCCESS;
   ObCatalogStmt *stmt = NULL;
   stmt::StmtType stmt_type = stmt::T_NONE;
-  uint64_t tenant_id = OB_INVALID_ID; 
+   
   if (OB_ISNULL(session_info_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected null", K(ret));
-  } else if (FALSE_IT(tenant_id = session_info_->get_effective_tenant_id())) {
   } else if (OB_ISNULL(stmt = create_stmt<ObCatalogStmt>())) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_ERROR("failed to create create_catalog_stmt", K(ret));
   } else {
-    obrpc::ObCatalogDDLArg &arg = stmt->get_ddl_arg();
-    // tenant_id, user_id
-    arg.schema_.set_tenant_id(session_info_->get_effective_tenant_id());
+    obcall::ObCatalogDDLArg &arg = stmt->get_ddl_arg();
+    // tenant, user_id
+    
     arg.user_id_ = session_info_->get_user_id();
     // stmt_type
     switch (parse_tree.type_) {
@@ -91,7 +90,7 @@ int ObCatalogResolver::resolve(const ParseNode &parse_tree)
   return ret;
 }
 
-int ObCatalogResolver::resolve_create_catalog(const ParseNode &parse_tree, obrpc::ObCatalogDDLArg &arg)
+int ObCatalogResolver::resolve_create_catalog(const ParseNode &parse_tree, obcall::ObCatalogDDLArg &arg)
 {
   int ret = OB_SUCCESS;
   ParseNode *name_node = NULL;
@@ -111,7 +110,7 @@ int ObCatalogResolver::resolve_create_catalog(const ParseNode &parse_tree, obrpc
   return ret;
 }
 
-int ObCatalogResolver::resolve_drop_catalog(const ParseNode &parse_tree, obrpc::ObCatalogDDLArg &arg)
+int ObCatalogResolver::resolve_drop_catalog(const ParseNode &parse_tree, obcall::ObCatalogDDLArg &arg)
 {
   int ret = OB_SUCCESS;
   ParseNode *name_node = NULL;
@@ -128,8 +127,7 @@ int ObCatalogResolver::resolve_drop_catalog(const ParseNode &parse_tree, obrpc::
   }
   OZ(resolve_catalog_name(*name_node, arg));
   catalog_name = arg.schema_.get_catalog_name_str();
-  OZ(schema_checker_->get_catalog_id_name(session_info_->get_effective_tenant_id(),
-                                          catalog_name,
+  OZ(schema_checker_->get_catalog_id_name(catalog_name,
                                           catalog_id,
                                           NULL,
                                           arg.if_exist_));
@@ -138,7 +136,7 @@ int ObCatalogResolver::resolve_drop_catalog(const ParseNode &parse_tree, obrpc::
   return ret;
 }
 
-int ObCatalogResolver::resolve_set_catalog(const ParseNode &parse_tree, obrpc::ObCatalogDDLArg &arg)
+int ObCatalogResolver::resolve_set_catalog(const ParseNode &parse_tree, obcall::ObCatalogDDLArg &arg)
 {
   int ret = OB_SUCCESS;
   ParseNode *name_node = NULL;
@@ -159,8 +157,7 @@ int ObCatalogResolver::resolve_set_catalog(const ParseNode &parse_tree, obrpc::O
   OZ(resolve_catalog_name(*name_node, arg));
   if (arg.schema_.get_catalog_id() != OB_INTERNAL_CATALOG_ID) {
     catalog_name = arg.schema_.get_catalog_name_str();
-    OZ(schema_checker_->get_catalog_id_name(session_info_->get_effective_tenant_id(),
-                                            catalog_name,
+    OZ(schema_checker_->get_catalog_id_name(catalog_name,
                                             catalog_id));
     OX(arg.schema_.set_catalog_id(catalog_id));
     OZ(arg.schema_.set_catalog_name(catalog_name));
@@ -170,7 +167,7 @@ int ObCatalogResolver::resolve_set_catalog(const ParseNode &parse_tree, obrpc::O
   return ret;
 }
 
-int ObCatalogResolver::resolve_catalog_name(const ParseNode &name_node, obrpc::ObCatalogDDLArg &arg)
+int ObCatalogResolver::resolve_catalog_name(const ParseNode &name_node, obcall::ObCatalogDDLArg &arg)
 {
   int ret = OB_SUCCESS;
   ObString catalog_name;
@@ -186,7 +183,7 @@ int ObCatalogResolver::resolve_catalog_name(const ParseNode &name_node, obrpc::O
     LOG_WARN("failed to convert sql text", K(ret), K(catalog_name));
   } else if (OB_FAIL(session_info_->get_name_case_mode(case_mode))) {
     LOG_WARN("failed to get name case mode", K(ret));
-  } else if (is_mysql_mode() && OB_LOWERCASE_AND_INSENSITIVE == case_mode
+  } else if (OB_LOWERCASE_AND_INSENSITIVE == case_mode
              && OB_FAIL(ObCharset::tolower(cs_type, catalog_name, catalog_name, *allocator_))) {
     LOG_WARN("failed to lower string", K(ret));
   } else if (OB_FAIL(arg.schema_.set_catalog_name(catalog_name))) {
@@ -203,7 +200,7 @@ int ObCatalogResolver::resolve_catalog_name(const ParseNode &name_node, obrpc::O
   return ret;
 }
 
-int ObCatalogResolver::resolve_catalog_properties(const ParseNode &properties_node, obrpc::ObCatalogDDLArg &arg)
+int ObCatalogResolver::resolve_catalog_properties(const ParseNode &properties_node, obcall::ObCatalogDDLArg &arg)
 {
   int ret = OB_SUCCESS;
   ObCatalogProperties::CatalogType type;
@@ -211,7 +208,7 @@ int ObCatalogResolver::resolve_catalog_properties(const ParseNode &properties_no
   if (OB_ISNULL(allocator_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected null", K(ret));
-  } else if (OB_FAIL(ObCatalogProperties::resolve_catalog_type(properties_node, type))) {
+  } else if (OB_FAIL(resolve_catalog_type(properties_node, type))) {
     LOG_WARN("failed to resolve catalog type", K(ret));
   } else {
     switch (type)
@@ -237,3 +234,41 @@ int ObCatalogResolver::resolve_catalog_properties(const ParseNode &properties_no
 
 } //end namespace sql
 } //end namespace oceanbase
+
+// from share::ObCatalogProperties demoted(parses ParseNode->CatalogType, A-set)
+namespace oceanbase
+{
+namespace sql
+{
+int ObCatalogResolver::resolve_catalog_type(const ParseNode &node, ObCatalogProperties::CatalogType &type)
+{
+  int ret = OB_SUCCESS;
+  type = ObCatalogProperties::CatalogType::INVALID_TYPE;
+  const ParseNode *type_node = NULL;
+  bool is_type_set = false;
+  for (int32_t i = 0; OB_SUCC(ret) && !is_type_set && i < node.num_child_; ++i) {
+    if (OB_NOT_NULL(node.children_[i]) && T_EXTERNAL_FILE_FORMAT_TYPE == node.children_[i]->type_) {
+      type_node = node.children_[i];
+      if (type_node->num_child_ != 1 || OB_ISNULL(type_node->children_[0])) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("unexpected parse node", K(ret));
+      } else {
+        ObString string_v = ObString(type_node->children_[0]->str_len_, type_node->children_[0]->str_value_).trim_space_only();
+        for (int i = 0; !is_type_set && i < static_cast<int>(ObCatalogProperties::CatalogType::MAX_TYPE); i++) {
+          if (0 == string_v.case_compare(ObCatalogProperties::CATALOG_TYPE_STR[i])) {
+            type = static_cast<ObCatalogProperties::CatalogType>(i);
+            is_type_set = true;
+          }
+        }
+        if (ObCatalogProperties::CatalogType::INVALID_TYPE == type) {
+          ret = OB_NOT_SUPPORTED;
+          LOG_USER_ERROR(OB_NOT_SUPPORTED, "this catalog type");
+          LOG_WARN("catalog type is not supported yet", K(ret), K(string_v));
+        }
+      }
+    }
+  }
+  return ret;
+}
+}  // namespace sql
+}  // namespace oceanbase

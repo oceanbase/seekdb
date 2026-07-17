@@ -17,8 +17,7 @@
 #define USING_LOG_PREFIX SHARE
 #include "ob_sequence_dml_proxy.h"
 #include "share/sequence/ob_sequence_cache.h"
-#include "share/schema/ob_schema_service_sql_impl.h"
-#include "observer/ob_sql_client_decorator.h"
+#include "share/ob_sql_client_decorator.h"
 
 using namespace oceanbase::common;
 using namespace oceanbase::common::number;
@@ -81,7 +80,6 @@ int ObSequenceDMLProxy::set_pre_op_timeout(common::ObTimeoutCtx &ctx)
 // update OB_ALL_SEQUENCE_OBJECT_TNAME set next_value = cache_inclusive_end;
 // commit;
 int ObSequenceDMLProxy::next_batch(
-    const uint64_t tenant_id,
     const uint64_t sequence_id,
     const int64_t schema_version,
     const share::ObSequenceOption &option,
@@ -121,7 +119,7 @@ int ObSequenceDMLProxy::next_batch(
   } else if (!inited_) {
     ret = OB_NOT_INIT;
     LOG_WARN("proxy not init", K(ret));
-  } else if (OB_FAIL(trans.start(sql_proxy_, tenant_id, with_snap_shot))) {
+  } else if (OB_FAIL(trans.start(sql_proxy_, with_snap_shot))) {
     LOG_WARN("fail start trans", K(ret));
   }
   //
@@ -134,7 +132,7 @@ int ObSequenceDMLProxy::next_batch(
   // Will throw an error: connection still be referred by previous sql result
   ObISQLClient *sql_client = &trans;
   ObSQLClientRetryWeak sql_client_retry_weak(sql_client,
-                                             tenant_id,
+                                             false,
                                              OB_ALL_SEQUENCE_VALUE_TID);
   if (OB_SUCC(ret)) {
     SMART_VAR(ObMySQLProxy::MySQLResult, res) {
@@ -145,17 +143,17 @@ int ObSequenceDMLProxy::next_batch(
                   "WHERE SEQUENCE_ID = %lu FOR UPDATE",
                   tname, sequence_id))) {
         STORAGE_LOG(WARN, "fail format sql", K(ret));
-      } else if (OB_FAIL(sql_client_retry_weak.read(res, tenant_id, sql.ptr()))) {
+      } else if (OB_FAIL(sql_client_retry_weak.read(res, sql.ptr()))) {
         LOG_WARN("fail to execute sql", K(sql), K(ret));
       } else if (NULL == (result = res.get_result())) {
         ret = OB_ENTRY_NOT_EXIST;
-        LOG_WARN("can't find sequence", K(tname), K(tenant_id), K(sequence_id));
+        LOG_WARN("can't find sequence", K(tname), K(sequence_id));
       } else if (OB_SUCCESS != (ret = result->next())) {
         if (OB_ITER_END == ret) {
           need_init_sequence_value_table = true;
           ret = OB_SUCCESS;
         } else {
-          LOG_WARN("fail get next row", K(ret), K(tname), K(tenant_id), K(sequence_id));
+          LOG_WARN("fail get next row", K(ret), K(tname), K(sequence_id));
         }
       } else {
         EXTRACT_NUMBER_FIELD_MYSQL(*result, NEXT_VALUE, tmp);
@@ -185,14 +183,14 @@ int ObSequenceDMLProxy::next_batch(
       if (OB_FAIL(sql.assign_fmt("SELECT schema_version "
                                  "FROM %s WHERE sequence_id=%lu",
                                  OB_ALL_SEQUENCE_OBJECT_TNAME, sequence_id))) {
-        LOG_WARN("fail to assign sql", KR(ret), K(tenant_id), K(sequence_id));
-      } else if (OB_FAIL(sql_client->read(res, tenant_id, sql.ptr()))) {
-        LOG_WARN("fail to read", KR(ret), K(tenant_id), K(sql));
+        LOG_WARN("fail to assign sql", KR(ret), K(sequence_id));
+      } else if (OB_FAIL(sql_client->read(res, sql.ptr()))) {
+        LOG_WARN("fail to read", KR(ret), K(sql));
       } else if (NULL == (result = res.get_result())) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("fail to get sql result", K(ret));
       } else if (OB_FAIL((*result).get_int("schema_version", curr_version))) {
-        LOG_WARN("fail to get schema_version", K(ret), K(tenant_id), K(sql));
+        LOG_WARN("fail to get schema_version", K(ret), K(sql));
       } else if (schema_version != curr_version) {
         ret = OB_AUTOINC_CACHE_NOT_EQUAL;
         LOG_WARN("schema is not up to date, need retry", K(ret));
@@ -206,7 +204,6 @@ int ObSequenceDMLProxy::next_batch(
     if (OB_FAIL(init_sequence_value_table(trans,
                                           sql_client_retry_weak,
                                           allocator,
-                                          tenant_id,
                                           sequence_id,
                                           option,
                                           next_value))) {
@@ -297,7 +294,7 @@ int ObSequenceDMLProxy::next_batch(
                 "WHERE SEQUENCE_ID = %lu",
                 tname, next_value.format(), sequence_id))) {
       LOG_WARN("format update sql fail", K(ret));
-    } else if (OB_FAIL(trans.write(tenant_id, sql.ptr(), affected_rows))) {
+    } else if (OB_FAIL(trans.write(sql.ptr(), affected_rows))) {
       LOG_WARN("fail to execute sql", K(sql), K(ret));
     } else {
       if (!is_single_row(affected_rows)) {
@@ -311,7 +308,7 @@ int ObSequenceDMLProxy::next_batch(
     int temp_ret = OB_SUCCESS;
     bool is_commit = (OB_SUCCESS == ret);
     if (OB_SUCCESS != (temp_ret = trans.end(is_commit))) {
-      LOG_WARN("trans end failed", "is_commit", is_commit, K(temp_ret));
+      LOG_ERROR("trans end failed", "is_commit", is_commit, K(temp_ret));
       ret = (OB_SUCC(ret)) ? temp_ret : ret;
     }
   }
@@ -324,7 +321,6 @@ int ObSequenceDMLProxy::next_batch(
       OZ(cache_range.set_start(cache_inclusive_start));
       OZ(cache_range.set_end(cache_exclusive_end));
       LOG_INFO("get next sequence batch success",
-              K(tenant_id),
               K(sequence_id),
               "cache_inclusive_start", cache_inclusive_start.format(),
               "cache_exclusive_end", cache_exclusive_end.format(),
@@ -337,9 +333,7 @@ int ObSequenceDMLProxy::next_batch(
   return ret;
 }
 
-int ObSequenceDMLProxy::prefetch_next_batch(
-    const uint64_t tenant_id,
-    const uint64_t sequence_id,
+int ObSequenceDMLProxy::prefetch_next_batch(const uint64_t sequence_id,
     const int64_t schema_version,
     const share::ObSequenceOption &option,
     SequenceCacheNode &cache_range,
@@ -350,14 +344,13 @@ int ObSequenceDMLProxy::prefetch_next_batch(
   ObTimeoutCtx ctx;
   if (OB_FAIL(set_pre_op_timeout(ctx))) {
     LOG_WARN("failed to set timeout", K(ret));
-  } else if (OB_FAIL(next_batch(tenant_id,
-                                sequence_id,
+  } else if (OB_FAIL(next_batch(sequence_id,
                                 schema_version,
                                 option,
                                 cache_range,
                                 old_cache))) {
     LOG_WARN("fail prefetch sequence batch",
-             K(tenant_id), K(sequence_id), K(option), K(ret));
+             K(sequence_id), K(option), K(ret));
   }
   return ret;
 }
@@ -367,7 +360,6 @@ int ObSequenceDMLProxy::init_sequence_value_table(
     common::ObMySQLTransaction &trans,
     ObSQLClientRetryWeak &sql_client_retry_weak,
     ObIAllocator &allocator,
-    uint64_t tenant_id,
     uint64_t sequence_id,
     const ObSequenceOption &option,
     ObNumber &next_value)
@@ -397,7 +389,7 @@ int ObSequenceDMLProxy::init_sequence_value_table(
                                  static_cast<int32_t>(values.length()),
                                  values.ptr()))) {
         LOG_WARN("append sql failed, ", K(ret));
-      } else if (OB_FAIL(trans.write(tenant_id,
+      } else if (OB_FAIL(trans.write(
                                      sql.ptr(),
                                      affected_rows))) {
         if (OB_ERR_PRIMARY_KEY_DUPLICATE == ret) {
@@ -429,14 +421,14 @@ int ObSequenceDMLProxy::init_sequence_value_table(
                   "WHERE SEQUENCE_ID = %lu FOR UPDATE",
                   tname, sequence_id))) {
         STORAGE_LOG(WARN, "fail format sql", K(ret));
-      } else if (OB_FAIL(sql_client_retry_weak.read(res, tenant_id, sql.ptr()))) {
+      } else if (OB_FAIL(sql_client_retry_weak.read(res, sql.ptr()))) {
         LOG_WARN("fail to execute sql", K(sql), K(ret));
       } else if (NULL == (result = res.get_result())) {
         ret = OB_ENTRY_NOT_EXIST;
-        LOG_WARN("can't find sequence", K(tname), K(tenant_id), K(sequence_id));
+        LOG_WARN("can't find sequence", K(tname), K(sequence_id));
       } else if (OB_SUCCESS != (ret = result->next())) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("fail get next row", K(ret), K(tname), K(tenant_id), K(sequence_id));
+        LOG_WARN("fail get next row", K(ret), K(tname), K(sequence_id));
       } else {
         EXTRACT_NUMBER_FIELD_MYSQL(*result, NEXT_VALUE, tmp);
         if (OB_FAIL(ret)) {

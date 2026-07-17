@@ -19,7 +19,7 @@
 
 #include "share/scn.h"
 #include "storage/meta_mem/ob_tablet_handle.h"
-#include "share/scheduler/ob_tenant_dag_scheduler.h"
+#include "observer/scheduler/ob_tenant_dag_scheduler.h"
 #include "storage/blocksstable/index_block/ob_index_block_builder.h"
 #include "storage/blocksstable/ob_macro_block_struct.h"
 #include "storage/ddl/ob_ddl_struct.h"
@@ -38,12 +38,11 @@ class ObIncMinDDLMergeHelper: public ObIDDLMergeHelper
 public:
   int process_prepare_task(ObIDag *dag,
                            ObDDLTabletMergeDagParamV2 &ddl_merge_param,
-                           ObIArray<ObTuple<int64_t, int64_t, int64_t>> &cg_slices) override;
-  int merge_cg_slice(ObIDag* dag,
-                     ObDDLTabletMergeDagParamV2 &merge_param,
-                     const int64_t cg_idx,
-                     const int64_t start_slice,
-                     const int64_t end_slice) override;
+                           ObIArray<ObDDLSliceRange> &slice_ranges) override;
+  int merge_slice(ObIDag* dag,
+                  ObDDLTabletMergeDagParamV2 &merge_param,
+                  const int64_t start_slice,
+                  const int64_t end_slice) override;
   int assemble_sstable(ObDDLTabletMergeDagParamV2 &param) override;
   int get_rec_scn(ObDDLTabletMergeDagParamV2 &merge_param) override;
 private:

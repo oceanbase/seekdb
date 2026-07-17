@@ -15,6 +15,7 @@
  */
 
 #include "observer/virtual_table/ob_all_virtual_activity_metrics.h"
+#include "share/rc/ob_module_provider.h"
 
 using namespace oceanbase::common;
 namespace oceanbase
@@ -25,9 +26,7 @@ namespace observer
 ObAllVirtualActivityMetric::ObAllVirtualActivityMetric()
     : ObVirtualTableScannerIterator(),
       current_pos_(0),
-      length_(0),
-      addr_(),
-      ip_buffer_()
+      length_(0)
 {
 }
 
@@ -40,41 +39,13 @@ void ObAllVirtualActivityMetric::reset()
 {
   current_pos_ = 0;
   length_ = 0;
-  addr_.reset();
-  ip_buffer_[0] = '\0';
-  omt::ObMultiTenantOperator::reset();
   ObVirtualTableScannerIterator::reset();
-}
-
-bool ObAllVirtualActivityMetric::is_need_process(uint64_t tenant_id)
-{
-  if (!is_virtual_tenant_id(tenant_id) &&
-      (is_sys_tenant(effective_tenant_id_) || tenant_id == effective_tenant_id_)) {
-    return true;
-  }
-  return false;
-}
-
-void ObAllVirtualActivityMetric::release_last_tenant()
-{
-  current_pos_ = 0;
-  length_ = 0;
-  ip_buffer_[0] = '\0';
-}
-
-int ObAllVirtualActivityMetric::inner_get_next_row(ObNewRow *&row)
-{
-  int ret = OB_SUCCESS;
-  if (OB_FAIL(execute(row))) {
-    SERVER_LOG(WARN, "execute fail", K(ret));
-  }
-  return ret;
 }
 
 int ObAllVirtualActivityMetric::get_next_freezer_stat_(ObTenantFreezerStat& stat)
 {
   int ret = OB_SUCCESS;
-  storage::ObTenantFreezer *freezer = MTL(storage::ObTenantFreezer *);
+  storage::ObTenantFreezer *freezer = share::g_mp->tenant_freezer();
 
   if (current_pos_ < length_) {
     (void)freezer->get_freezer_stat_from_history(current_pos_, stat);
@@ -89,7 +60,7 @@ int ObAllVirtualActivityMetric::get_next_freezer_stat_(ObTenantFreezerStat& stat
 int ObAllVirtualActivityMetric::prepare_start_to_read_()
 {
   int ret = OB_SUCCESS;
-  storage::ObTenantFreezer *freezer = MTL(storage::ObTenantFreezer *);
+  storage::ObTenantFreezer *freezer = share::g_mp->tenant_freezer();
 
   (void)freezer->get_freezer_stat_history_snapshot(length_);
   current_pos_ = 0;
@@ -98,7 +69,7 @@ int ObAllVirtualActivityMetric::prepare_start_to_read_()
   return ret;
 }
 
-int ObAllVirtualActivityMetric::process_curr_tenant(ObNewRow *&row)
+int ObAllVirtualActivityMetric::inner_get_next_row(ObNewRow *&row)
 {
   int ret = OB_SUCCESS;
   ObTenantFreezerStat stat;

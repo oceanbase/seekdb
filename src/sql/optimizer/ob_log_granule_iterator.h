@@ -39,7 +39,6 @@ public:
   bf_info_(),
   tablet_id_expr_(NULL),
   repartition_ref_table_id_(OB_INVALID_ID),
-  used_by_external_table_(false),
   px_rf_info_(),
   enable_adaptive_task_splitting_(false),
   controlled_tsc_(nullptr)
@@ -90,8 +89,6 @@ public:
                                 ObSqlPlanItem &plan_item) override;
   virtual int allocate_expr_post(ObAllocExprContext &ctx) override;
 
-  void set_used_by_external_table() { used_by_external_table_ = true; }
-  bool is_used_by_external_table() const { return used_by_external_table_; }
   bool is_rescanable();
   void set_enable_adaptive_task_splitting(bool value) { enable_adaptive_task_splitting_ = value; }
   bool enable_adaptive_task_splitting() const { return enable_adaptive_task_splitting_; }
@@ -108,7 +105,6 @@ private:
   ObPxBFStaticInfo bf_info_; // for join partition filter
   ObOpPseudoColumnRawExpr *tablet_id_expr_;
   int64_t repartition_ref_table_id_;
-  bool used_by_external_table_;
   ObPxRFStaticInfo px_rf_info_; // for runtime filter extract query range
   bool enable_adaptive_task_splitting_;
   ObLogicalOperator *controlled_tsc_; // only when gi is directly add above tsc.

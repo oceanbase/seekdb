@@ -18,8 +18,7 @@
 #define OCEABASE_SERVER_OB_STARTUP_ACCEL_TASK_HANDLER_H_
 
 #include "lib/ob_define.h"
-#include "lib/thread/thread_mgr.h"
-#include "lib/thread/thread_mgr_interface.h"
+#include "lib/thread/ob_simple_thread_pool.h"
 #include "lib/allocator/ob_fifo_allocator.h"
 
 namespace oceanbase
@@ -41,7 +40,7 @@ enum ObStartupAccelType
   TENANT_ACCEL = 2,
 };
 
-class ObStartupAccelTaskHandler : public lib::TGTaskHandler
+class ObStartupAccelTaskHandler : public common::ObSimpleThreadPool
 {
 public:
   static const int64_t MAX_QUEUED_TASK_NUM;
@@ -54,15 +53,16 @@ public:
   void stop();
   void wait();
   void destroy();
-  void handle(void *task) override;
   ObIAllocator &get_task_allocator() { return task_allocator_; }
   int push_task(ObStartupAccelTask *task);
   int64_t get_thread_cnt();
 
+protected:
+  void handle(void *task) override;
+
 private:
   bool is_inited_;
   ObStartupAccelType accel_type_;
-  int tg_id_;
   common::ObFIFOAllocator task_allocator_;
 };
 

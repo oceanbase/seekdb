@@ -34,8 +34,8 @@ public:
   virtual ~ObAnalyzeStmtResolver();
   virtual int resolve(const ParseNode &parse_tree);
 private:
-  int resolve_oracle_analyze(const ParseNode &parse_node,
-                             ObAnalyzeStmt &analyze_stmt);
+  int resolve_analyze_table(const ParseNode &parse_node,
+                            ObAnalyzeStmt &analyze_stmt);
   int resolve_mysql_update_histogram(const ParseNode &parse_node,
                                      ObAnalyzeStmt &analyze_stmt);
   int resolve_mysql_delete_histogram(const ParseNode &parse_node,
@@ -50,7 +50,6 @@ private:
   int resolve_partition_info(const ParseNode *part_node,
                              ObAnalyzeStmt &analyze_stmt);
   int inner_resolve_partition_info(const ParseNode *part_node,
-                                  const uint64_t tenant_id,
                                   ObAnalyzeTableInfo &table_info);
   int resolve_statistic_info(const ParseNode *statistic_node,
                              ObAnalyzeStmt &analyze_stmt);

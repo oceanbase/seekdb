@@ -77,7 +77,6 @@ void TestMicroBlockReader::SetUp()
   //init table schema
   table_schema.reset();
   ASSERT_EQ(OB_SUCCESS, table_schema.set_table_name("test_row_reader"));
-  table_schema.set_tenant_id(1);
   table_schema.set_tablegroup_id(1);
   table_schema.set_database_id(1);
   table_schema.set_table_id(table_id);
@@ -136,8 +135,6 @@ TEST_F(TestMicroBlockReader, test_success)
   ObDatumRow multi_version_row;
   ASSERT_EQ(OB_SUCCESS, multi_version_row.init(allocator_, column_num +2));
   ObMicroBlockWriter writer;
-  writer.data_buffer_.allocator_.set_tenant_id(500);
-  writer.index_buffer_.allocator_.set_tenant_id(500);
   ret = writer.init(macro_block_size, rowkey_column_count, column_num + 2);
   ASSERT_EQ(OB_SUCCESS, ret);
   for(int64_t i = 0; i < test_row_num; ++i){
@@ -154,7 +151,7 @@ TEST_F(TestMicroBlockReader, test_success)
   ObArray<ObColDesc> columns;
   ASSERT_EQ(OB_SUCCESS, row_generate_.get_schema().get_column_ids(columns));
   ASSERT_EQ(OB_SUCCESS, read_info_.init(
-          allocator_, 16000, row_generate_.get_schema().get_rowkey_column_num(), lib::is_oracle_mode(), columns, nullptr/*storage_cols_index*/));
+          allocator_, 16000, row_generate_.get_schema().get_rowkey_column_num(), columns, nullptr/*storage_cols_index*/));
   /*** init reader ***/
   ObMicroBlockReader reader;
   ObMicroBlockData block(buf, size);

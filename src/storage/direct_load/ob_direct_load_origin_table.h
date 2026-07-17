@@ -15,7 +15,7 @@
  */
 #pragma once
 
-#include "share/schema/ob_table_dml_param.h"
+#include "storage/ob_table_dml_param.h"
 #include "storage/access/ob_multiple_scan_merge.h"
 #include "storage/access/ob_single_merge.h"
 #include "storage/direct_load/ob_direct_load_datum_row.h"
@@ -37,13 +37,11 @@ public:
   bool is_valid() const;
   TO_STRING_KV(K_(table_id),
                K_(tablet_id),
-               K_(ls_id),
                K_(tx_id),
                K_(tx_seq));
 public:
   uint64_t table_id_;
   common::ObTabletID tablet_id_;
-  share::ObLSID ls_id_;
   transaction::ObTransID tx_id_;
   transaction::ObTxSEQ tx_seq_;
 };
@@ -56,13 +54,11 @@ public:
   void reset();
   TO_STRING_KV(K_(table_id),
                K_(tablet_id),
-               K_(ls_id),
                K_(tx_id),
                K_(tx_seq));
 public:
   uint64_t table_id_;
   common::ObTabletID tablet_id_;
-  share::ObLSID ls_id_;
   transaction::ObTransID tx_id_;
   transaction::ObTxSEQ tx_seq_;
 };

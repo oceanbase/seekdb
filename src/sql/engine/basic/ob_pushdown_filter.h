@@ -22,7 +22,7 @@
 #include "lib/container/ob_se_array.h"
 #include "lib/hash/ob_hashset.h"
 #include "common/object/ob_obj_compare.h"
-#include "share/datum/ob_datum.h"
+#include "common/datum/ob_datum.h"
 #include "share/datum/ob_datum_funcs.h"
 #include "share/semistruct/ob_sub_column_path.h"
 #include "sql/engine/expr/ob_expr.h"
@@ -210,17 +210,15 @@ public:
   OB_INLINE void set_filter_reorder(const bool filter_reorder) { pd_filter_reorder_ = filter_reorder; }
   OB_INLINE void set_enable_skip_index(const bool skip_index) { enable_skip_index_ = skip_index; }
   OB_INLINE void set_use_stmt_iter_pool(const bool use_pool) { use_stmt_iter_pool_ = use_pool; }
-  OB_INLINE void set_use_column_store(const bool use_cs) { use_column_store_ = use_cs; }
   OB_INLINE void set_enable_prefetch_limiting(const bool enable_limit) { enable_prefetch_limiting_ = enable_limit; }
   OB_INLINE void set_use_global_iter_pool(const bool use_iter_mgr) { use_global_iter_pool_ = use_iter_mgr; }
   OB_INLINE void set_flags(const bool block_scan, const bool filter, const bool skip_index,
-                           const bool use_cs, const bool enable_limit, const bool filter_reorder = false)
+                           const bool enable_limit, const bool filter_reorder = false)
   {
     set_blockscan_pushdown(block_scan);
     set_filter_pushdown(filter);
     set_filter_reorder(filter_reorder);
     set_enable_skip_index(skip_index);
-    set_use_column_store(use_cs);
     set_enable_prefetch_limiting(enable_limit);
   }
 
@@ -231,7 +229,6 @@ public:
   OB_INLINE bool is_filter_reorder() const { return pd_filter_reorder_; }
   OB_INLINE bool is_apply_skip_index() const { return enable_skip_index_; }
   OB_INLINE bool is_use_stmt_iter_pool() const { return use_stmt_iter_pool_; }
-  OB_INLINE bool is_use_column_store() const { return use_column_store_; }
   OB_INLINE bool is_enable_prefetch_limiting() const { return enable_prefetch_limiting_; }
   OB_INLINE bool is_use_global_iter_pool() const { return use_global_iter_pool_; }
   TO_STRING_KV(K_(pd_flag));
@@ -245,7 +242,7 @@ public:
       int32_t pd_filter_reorder_ : 1;
       int32_t enable_skip_index_ : 1;
       int32_t use_stmt_iter_pool_:1;
-      int32_t use_column_store_:1;
+      int32_t reserved_1_:1;
       int32_t enable_prefetch_limiting_ : 1;
       int32_t use_global_iter_pool_:1;
       int32_t reserved_ : 22;
@@ -555,9 +552,8 @@ public:
   ObPushdownFilterConstructor(common::ObIAllocator *alloc,
                               ObStaticEngineCG &static_cg,
                               const ObLogTableScan *op,
-                              bool use_column_store,
                               bool enable_semistruct_pushdown = false)
-      : alloc_(alloc), factory_(alloc), static_cg_(static_cg), op_(op), use_column_store_(use_column_store),
+      : alloc_(alloc), factory_(alloc), static_cg_(static_cg), op_(op),
         enable_semistruct_pushdown_(enable_semistruct_pushdown)
   {}
   int apply(common::ObIArray<ObRawExpr*> &exprs, ObPushdownFilterNode *&filter_tree);
@@ -592,7 +588,6 @@ private:
   ObPushdownFilterFactory factory_;
   ObStaticEngineCG &static_cg_;
   const ObLogTableScan *op_;
-  bool use_column_store_;
   bool enable_semistruct_pushdown_;
 };
 
@@ -666,8 +661,6 @@ private:
     uint64_t skip_index_skip_mb_cnt_; // # of micro block skipped by skip index.
   };
 public:
-  static const int64_t INVALID_CG_ITER_IDX = -1;
-public:
   ObPushdownFilterExecutor(common::ObIAllocator &alloc,
                            ObPushdownOperator &op,
                            PushdownExecutorType type = PushdownExecutorType::MAX_EXECUTOR_TYPE);
@@ -729,24 +722,12 @@ public:
   virtual common::ObIArray<uint64_t> &get_col_ids() = 0;
   OB_INLINE int64_t get_col_count() const { return n_cols_; }
   OB_INLINE virtual ObPushdownOperator & get_op() { return op_; }
-  OB_INLINE const common::ObIArray<int32_t> &get_col_offsets(const bool is_cg = false) const
-  {
-    return is_cg ? cg_col_offsets_ : col_offsets_;
-  }
+  OB_INLINE const common::ObIArray<int32_t> &get_col_offsets() const { return col_offsets_; }
   OB_INLINE const ColumnParamFixedArray &get_col_params() const { return col_params_; }
   OB_INLINE const common::ObFixedArray<blocksstable::ObStorageDatum, common::ObIAllocator> &get_default_datums() const
   { return default_datums_; }
-  OB_INLINE const common::ObIArray<uint32_t> &get_cg_idxs() const { return cg_idxs_; }
-  virtual const common::ObIArray<ObExpr *> *get_cg_col_exprs() const
-  { return cg_col_exprs_.empty() ? nullptr : &cg_col_exprs_; }
-  OB_INLINE bool is_cg_param_valid() const
-  { return !cg_idxs_.empty() && cg_col_exprs_.count() <= cg_idxs_.count(); }
+  virtual const common::ObIArray<ObExpr *> *get_column_exprs() const { return nullptr; }
   OB_INLINE uint32_t get_child_count() const { return n_child_; }
-  OB_INLINE int64_t get_cg_iter_idx() const { return cg_iter_idx_; }
-  OB_INLINE void set_cg_iter_idx(const int64_t cg_iter_idx)
-  {
-    cg_iter_idx_ = cg_iter_idx;
-  }
   OB_INLINE bool is_filter_always_true() const { return filter_bool_mask_.is_always_true(); }
   OB_INLINE bool is_filter_always_false() const { return filter_bool_mask_.is_always_false(); }
   OB_INLINE bool is_filter_constant() const { return !filter_bool_mask_.is_uncertain(); }
@@ -801,8 +782,6 @@ public:
       const common::ObIArray<share::schema::ObColumnParam *> &col_params,
       const common::ObIArray<int32_t> &output_projector,
       const bool need_padding);
-  int init_co_filter_param(const storage::ObTableIterParam &iter_param, const bool need_padding);
-  int set_cg_param(const common::ObIArray<uint32_t> &cg_idxs, const common::ObIArray<ObExpr *> &exprs);
   int pull_up_common_node(
       const common::ObIArray<uint32_t> &filter_indexes,
       ObPushdownFilterExecutor *&common_filter_executor);
@@ -845,16 +824,12 @@ protected:
   ObCommonFilterTreeStatus filter_tree_status_;
   int64_t n_cols_;
   uint32_t n_child_;
-  int64_t cg_iter_idx_;
   mutable int64_t skipped_rows_;
   ObPushdownFilterExecutor **childs_;
   common::ObBitmap *filter_bitmap_;
   ColumnParamFixedArray col_params_;
   common::ObFixedArray<int32_t, common::ObIAllocator> col_offsets_;
-  common::ObFixedArray<int32_t, common::ObIAllocator> cg_col_offsets_;
   common::ObFixedArray<blocksstable::ObStorageDatum, common::ObIAllocator> default_datums_;
-  common::ObFixedArray<uint32_t, common::ObIAllocator> cg_idxs_;
-  common::ObFixedArray<ObExpr *, common::ObIAllocator> cg_col_exprs_;
   common::ObIAllocator &allocator_;
   ObPushdownOperator &op_;
   bool is_padding_mode_;
@@ -909,7 +884,7 @@ public:
   OB_INLINE ObPushdownBlackFilterNode &get_filter_node() { return filter_; }
   OB_INLINE virtual common::ObIArray<uint64_t> &get_col_ids() override
   { return filter_.get_col_ids(); }
-  virtual const common::ObIArray<ObExpr *> *get_cg_col_exprs() const override { return &filter_.column_exprs_; }
+  virtual const common::ObIArray<ObExpr *> *get_column_exprs() const override { return &filter_.column_exprs_; }
   OB_INLINE bool can_vectorized();
   int filter_batch(ObPushdownFilterExecutor *parent,
                    const int64_t start,
@@ -1007,7 +982,7 @@ public:
   }
   inline int create(int param_num)
   {
-    ObMemAttr attr(MTL_ID(), common::ObModIds::OB_HASH_BUCKET);
+    ObMemAttr attr(common::ObModIds::OB_HASH_BUCKET);
     return set_.create(param_num, attr);
   }
   inline int64_t count() const
@@ -1065,7 +1040,7 @@ public:
   inline int create(int param_num, const ObExprHashFuncType hash_func)
   {
     hash_func_ = hash_func;
-    return set_.init(param_num, MTL_ID());
+    return set_.init(param_num);
   }
   inline int64_t count() const
   {
@@ -1118,7 +1093,7 @@ public:
   OB_INLINE const ObPushdownWhiteFilterNode &get_filter_node() const  { return filter_; }
   OB_INLINE virtual common::ObIArray<uint64_t> &get_col_ids() override
   { return filter_.get_col_ids(); }
-  virtual const common::ObIArray<ObExpr *> *get_cg_col_exprs() const override { return &filter_.column_exprs_; }
+  virtual const common::ObIArray<ObExpr *> *get_column_exprs() const override { return &filter_.column_exprs_; }
   virtual int init_evaluated_datums(bool &is_valid) override;
   OB_INLINE const common::ObIArray<common::ObDatum> &get_datums() const
   { return datum_params_; }
@@ -1372,9 +1347,6 @@ public:
   ExprFixedArray ext_file_column_exprs_;
   ExprFixedArray ext_column_convert_exprs_;
   ObExpr *trans_info_expr_;
-  uint64_t auto_split_filter_type_;
-  ObExpr *auto_split_expr_;
-  ExprFixedArray auto_split_params_;
   int64_t ext_tbl_filter_pd_level_;
 };
 // Push down expression execution dependent op ctx
@@ -1445,7 +1417,6 @@ struct PushdownFilterInfo
   PushdownFilterInfo() :
       is_inited_(false),
       is_pd_filter_(false),
-      is_pd_to_cg_(false),
       orig_filter_is_null_(false),
       start_(-1),
       count_(-1),
@@ -1515,13 +1486,12 @@ struct PushdownFilterInfo
     common::ObIAllocator *allocator_;
   };
 
-  TO_STRING_KV(K_(is_pd_filter), K_(is_pd_to_cg), K_(orig_filter_is_null), K_(start), K_(count), K_(col_capacity), K_(batch_size),
+  TO_STRING_KV(K_(is_pd_filter), K_(orig_filter_is_null), K_(start), K_(count), K_(col_capacity), K_(batch_size),
                KP_(datum_buf), KP_(filter), KP_(cell_data_ptrs), KP_(row_ids), KP_(ref_bitmap),
                KP_(param), KP_(context), KP_(skip_bit));
 
   bool is_inited_;
   bool is_pd_filter_;
-  bool is_pd_to_cg_;
   bool orig_filter_is_null_;
   int64_t start_; // inclusive
   int64_t count_;

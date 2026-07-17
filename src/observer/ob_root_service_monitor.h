@@ -19,7 +19,7 @@
 
 #include "share/ob_define.h"
 #include "share/ob_thread_pool.h"
-#include "lib/task/ob_timer_service.h"
+#include "lib/task/ob_timer.h"
 
 namespace oceanbase
 {
@@ -66,6 +66,7 @@ private:
   rootserver::ObRootService &root_service_;
   int64_t fail_count_;
 
+  common::ObTimer timer_;
   TimerTask timer_task_;
 private:
   DISALLOW_COPY_AND_ASSIGN(ObRootServiceMonitor);

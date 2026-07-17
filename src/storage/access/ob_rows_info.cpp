@@ -81,7 +81,6 @@ int ObRowsInfo::ExistHelper::init(const ObRelativeTable &table,
       table_iter_param_.table_id_ = table.get_table_id();
       table_iter_param_.tablet_id_ = table.get_tablet_id();
       if (nullptr != table.tablet_iter_.get_tablet()) {
-        table_iter_param_.ls_id_ = table.tablet_iter_.get_tablet()->get_tablet_meta().ls_id_;
       }
       table_iter_param_.out_cols_project_ = NULL;
       table_iter_param_.read_info_ = &rowkey_read_info;
@@ -93,9 +92,9 @@ int ObRowsInfo::ExistHelper::init(const ObRelativeTable &table,
 }
 
 ObRowsInfo::ObRowsInfo()
-  : scan_mem_allocator_(ObMemAttr(MTL_ID(), common::ObModIds::OB_STORE_ROW_EXISTER), OB_MALLOC_NORMAL_BLOCK_SIZE),
-    exist_allocator_(ObMemAttr(MTL_ID(), common::ObModIds::OB_STORE_ROW_EXISTER), OB_MALLOC_NORMAL_BLOCK_SIZE),
-    key_allocator_(ObMemAttr(MTL_ID(), common::ObModIds::OB_STORE_ROW_EXISTER), OB_MALLOC_NORMAL_BLOCK_SIZE),
+  : scan_mem_allocator_(ObMemAttr(common::ObModIds::OB_STORE_ROW_EXISTER), OB_MALLOC_NORMAL_BLOCK_SIZE),
+    exist_allocator_(ObMemAttr(common::ObModIds::OB_STORE_ROW_EXISTER), OB_MALLOC_NORMAL_BLOCK_SIZE),
+    key_allocator_(ObMemAttr(common::ObModIds::OB_STORE_ROW_EXISTER), OB_MALLOC_NORMAL_BLOCK_SIZE),
     rowkeys_(),
     permutation_(),
     rows_(nullptr),
@@ -338,7 +337,7 @@ int ObRowsInfo::refine_rowkeys()
   if (!is_valid()) {
     ret = OB_ERR_UNEXPECTED;
     STORAGE_LOG(WARN, "Unexpected not init rowsinfo", K_(delete_count), KP_(rows), K(ret));
-  } else if (OB_FAIL(exist_helper_.table_access_context_.alloc_iter_pool(false))) {
+  } else if (OB_FAIL(exist_helper_.table_access_context_.alloc_iter_pool())) {
     STORAGE_LOG(WARN, "Failed to alloc exist iter pool", K(ret));
   } else {
     for (int64_t i = 0; i < rowkeys_.count(); ++i) {

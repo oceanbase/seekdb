@@ -93,27 +93,19 @@ WAIT_EVENT_DEF(BUILD_INDEX_SCHEDULER_COND_WAIT, 15126, "build index scheduler co
 WAIT_EVENT_DEF(DAG_WORKER_COND_WAIT, 15132, "dag worker condition wait", "address", "", "", CONCURRENCY, false, true)
 WAIT_EVENT_DEF(IO_CALLBACK_QUEUE_LOCK_WAIT, 15134, "io callback queue condition wait", "address", "", "", CONCURRENCY, true, true)
 WAIT_EVENT_DEF(IO_CHANNEL_COND_WAIT, 15135, "io channel condition wait", "address", "", "", CONCURRENCY, true, true)
-WAIT_EVENT_DEF(LS_BACKUP_CTX_COND_WAIT, 15155, "ls backup ctx condition wait", "address", "", "", CONCURRENCY, true, true)
-WAIT_EVENT_DEF(SSTABLE_META_BACKUP_READER_COND_WAIT, 15156, "sstable meta backup reader condition wait", "address", "", "", CONCURRENCY, true, true)
-WAIT_EVENT_DEF(BACKUP_MACRO_BLOCK_TASK_COND_WAIT, 15157, "backup macro blcok task condition wait", "address", "", "", CONCURRENCY, true, true)
-WAIT_EVENT_DEF(BACKUP_TASK_SCHEDULER_COND_WAIT, 15158, "backup scheduler condition wait", "address", "", "", CONCURRENCY, true, true)
-WAIT_EVENT_DEF(BACKUP_DATA_SERVICE_COND_WAIT, 15248, "backup data service condition wait", "address", "", "", CONCURRENCY, true, true)
-WAIT_EVENT_DEF(BACKUP_CLEAN_SERVICE_COND_WAIT, 15249, "backup clean service condition wait", "address", "", "", CONCURRENCY, true, true)
-WAIT_EVENT_DEF(BACKUP_ARCHIVE_SERVICE_COND_WAIT, 15250, "backup archive service condition wait", "address", "", "", CONCURRENCY, true, true)
+// 15155 - 15158 and 15248 - 15250 were used by removed backup/archive services. Do not reuse.
 WAIT_EVENT_DEF(SQL_WF_PARTICIPATOR_COND_WAIT, 15256, "window function participator cond wait", "address", "", "", CONCURRENCY, true, true)
 WAIT_EVENT_DEF(HA_SERVICE_COND_WAIT, 15159, "ha service condition wait", "address", "", "", CONCURRENCY, false, true)
 WAIT_EVENT_DEF(PX_LOOP_COND_WAIT, 15160, "px loop condition wait", "address", "", "", NETWORK, true, true)
 WAIT_EVENT_DEF(SQL_SHARED_HJ_COND_WAIT, 15165, "shared hash join cond wait", "address", "", "", CONCURRENCY, true, true)
 WAIT_EVENT_DEF(RESOURCE_SERVICE_LOCK_WAIT, 15263, "latch: resource_service lock wait", "address", "number", "tries", CONCURRENCY, true, true)
-WAIT_EVENT_DEF(COLUMN_STORE_DDL_RESCAN_LOCK_WAIT, 15265, "latch: column store ddl rescan lock wait", "address", "number", "tries", CONCURRENCY, true, true)
+WAIT_EVENT_DEF(DIRECT_LOAD_RESCAN_LOCK_WAIT, 15265, "latch: direct load rescan lock wait", "address", "number", "tries", CONCURRENCY, true, true)
 WAIT_EVENT_DEF(TABLET_DIRECT_LOAD_MGR_SCHEMA_WAIT, 15266, "latch: tablet direct load mgr schema wait", "address", "number", "tries", CONCURRENCY, true, true)
 WAIT_EVENT_DEF(TENANT_SNAPSHOT_SERVICE_COND_WAIT, 15267, "tenant snapshot service condition wait", "address", "", "", CONCURRENCY, true, true)
 WAIT_EVENT_DEF(ASYNC_COMMITTING_WAIT, 16018, "tx commiting wait", "", "", "", COMMIT, false, true)
 WAIT_EVENT_DEF(OBCDC_PART_MGR_SCHEMA_VERSION_WAIT, 18000, "oblog part mgr schema version wait", "", "", "", CONCURRENCY, true, true)
 WAIT_EVENT_DEF(BACKUP_TMP_FILE_WAIT, 18001, "backup tmp file wait", "", "", "", CONCURRENCY, true, true)
 WAIT_EVENT_DEF(BACKUP_TMP_FILE_QUEUE_WAIT, 18002, "backup tmp file queue wait", "", "", "", CONCURRENCY, true, true)
-WAIT_EVENT_DEF(CG_ROW_TMP_FILE_WAIT, 18003, "cg row file wait", "", "", "", CONCURRENCY, true, true)
-WAIT_EVENT_DEF(CG_BLOCK_TMP_FILE_WAIT, 18004, "cg block file wait", "", "", "", CONCURRENCY, true, true)
 WAIT_EVENT_DEF(SYNC_GET_GTS_WAIT, 18101, "sync get gts timestamp wait", "address", "", "", NETWORK, true, true)
 WAIT_EVENT_DEF(LOCK_FOR_READ_WAIT, 18102, "sleep: lock for read need wait for concurrency control", "sleep_interval", "", "", CONCURRENCY, true, true)
 WAIT_EVENT_DEF(DEADLOCK_MGR_BUCKET_LOCK, 18103, "latch: deadlock manager bucket access wait", "spin count", "", "", CONCURRENCY, true, true)
@@ -122,7 +114,7 @@ WAIT_EVENT_DEF(LS_REPLAY_CTRL_LOCK, 18105, "latch: logstream replay control wait
 WAIT_EVENT_DEF(INDEPENDENT_DAG_COND_WAIT, 18106, "independent dag condition wait", "address", "", "", CONCURRENCY, true, true)
 WAIT_EVENT_DEF(TMP_FILE_FLUSH_COND_WAIT, 18107, "tmp file flush condition wait", "address", "", "", CONCURRENCY, true, true)
 WAIT_EVENT_DEF(MACRO_BLOOM_FILTER_COND_WAIT, 18108, "macro block bloom filter condition wait", "address", "", "", CONCURRENCY, true, true)
-WAIT_EVENT_DEF(LS_BACKUP_COND_WAIT, 18109, "logstream backup condition wait", "address", "", "", CONCURRENCY, true, true)
+// 18109 was used by removed backup service waits. Do not reuse.
 WAIT_EVENT_DEF(TMP_FILE_COND_WAIT, 18110, "tmp file condition wait", "address", "", "", CONCURRENCY, true, true)
 
 //sleep
@@ -179,7 +171,7 @@ WAIT_EVENT_DEF(WAIT_EVENT_DEF_END, 99999, "event end", "", "", "", OTHER, false,
 #define OB_WAIT_EVENT_DEFINE_H_
 
 #include "lib/ob_errno.h"
-#include "lib/alloc/alloc_assist.h"
+#include "lib/utility/alloc_assist.h"
 #include "lib/wait_event/ob_wait_class.h"
 #include <type_traits>
 

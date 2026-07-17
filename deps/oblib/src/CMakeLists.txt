@@ -19,15 +19,14 @@ endif()
 
 target_include_directories(
   oblib_base_without_pass INTERFACE
-  ${CMAKE_SOURCE_DIR}
-  ${CMAKE_SOURCE_DIR}/src
-  ${CMAKE_SOURCE_DIR}/src/plugin/include
+  # oblib exposes no src-reachable -I -- not even the repo root ${CMAKE_SOURCE_DIR}.
+  # So any include of src from oblib lib+unittests at compile time (both share/.. and full src/.. spellings)
+  # is file-not-found. oblib itself needs no repo root: 0 src/.. ; 2 deps/.. resolved via same-directory.
+  # src's repo root and src are provided by src's own base (see src/CMakeLists.txt); the grep guard becomes a redundant backstop.
   ${CMAKE_SOURCE_DIR}/deps/easy/src
   ${CMAKE_SOURCE_DIR}/deps/oblib/src
   ${CMAKE_SOURCE_DIR}/deps/oblib/src/common
   ${CMAKE_SOURCE_DIR}/deps/easy/src/include
-  ${CMAKE_SOURCE_DIR}/src/objit/include
-  ${CMAKE_SOURCE_DIR}/src/objit/src
   ${DEP_DIR}/include
   ${DEP_DIR}/include/libxml2
   $<$<NOT:$<PLATFORM_ID:Darwin>>:${SYS_INCLUDE_DIR}>
@@ -48,7 +47,6 @@ target_include_directories(
   ${DEP_DIR}/include/apr-1/
   ${DEP_DIR}/include/icu
   ${DEP_DIR}/include/icu/common
-  $<$<NOT:$<BOOL:${BUILD_EMBED_MODE}>>:${DEP_DIR}/include/apache-arrow>
   ${DEP_DIR}/include/fast_float
   ${USSL_INCLUDE_DIRS}
 )
@@ -57,12 +55,6 @@ target_include_directories(
   oblib_base_without_pass INTERFACE
   ${DEP_DIR}/include/mariadb
   )
-
-if(OB_BUILD_OBSERVER_LITE)
-  target_include_directories(
-    oblib_base_without_pass INTERFACE
-  )
-endif()
 
 # -Wno-vla-cxx-extension is Clang 18+ only; GCC and older Clang use -Wno-vla-extension
 include(CheckCXXCompilerFlag)
@@ -222,7 +214,7 @@ if(APPLE OR ANDROID)
   set(_LIB_PATH "${DEP_DIR}/lib/")
   # macOS and Android don't have libaio
   set(LIBAIO_LINK_OPTION "")
-  # On macOS, arrow/parquet are in lib/, but s2/protoc/protobuf/lz4/zstd are in lib64/
+  # On macOS, s2/protoc/protobuf/lz4/zstd are in lib64/
   if(APPLE)
     set(_LIB_PATH_EXTRA "${DEP_DIR}/lib64/")
   else()
@@ -313,16 +305,6 @@ if(WIN32)
     ${VCPKG_LIB_DIR}/icudt.lib
     ${VCPKG_LIB_DIR}/icuuc.lib
     ${VCPKG_LIB_DIR}/protobuf-c.lib
-    ${VCPKG_LIB_DIR}/arrow.lib
-    ${VCPKG_LIB_DIR}/parquet.lib
-    ${VCPKG_LIB_DIR}/utf8proc.lib
-    ${VCPKG_LIB_DIR}/thriftmd.lib
-    ${VCPKG_LIB_DIR}/re2.lib
-    ${VCPKG_LIB_DIR}/brotlicommon.lib
-    ${VCPKG_LIB_DIR}/brotlienc.lib
-    ${VCPKG_LIB_DIR}/brotlidec.lib
-    ${VCPKG_LIB_DIR}/bz2.lib
-
     ${VCPKG_LIB_DIR}/sqlite3.lib
     ${VCPKG_LIB_DIR}/pthreadVC3.lib
     ws2_32 crypt32 bcrypt userenv wldap32 advapi32
@@ -346,10 +328,6 @@ else()
     ${DEP_DIR}/lib/libicustubdata.a
     ${DEP_DIR}/lib/libicuuc.a
     ${DEP_DIR}/lib/libprotobuf-c.a
-    $<$<NOT:$<BOOL:${BUILD_EMBED_MODE}>>:${_LIB_PATH}/libarrow.a>
-    $<$<NOT:$<BOOL:${BUILD_EMBED_MODE}>>:${_LIB_PATH}/libparquet.a>
-    $<$<AND:$<NOT:$<BOOL:${BUILD_EMBED_MODE}>>,$<NOT:$<PLATFORM_ID:Darwin>>>:${_LIB_PATH}/libarrow_bundled_dependencies.a>
-    $<$<AND:$<NOT:$<BOOL:${BUILD_EMBED_MODE}>>,$<PLATFORM_ID:Darwin>>:-L/opt/homebrew/lib -lutf8proc -lthrift -lre2 -lbrotlicommon -lbrotlienc -lbrotlidec -lbz2 -llz4 -lzstd>
     $<$<PLATFORM_ID:Linux>:-L${DEP_DIR}/var/usr/lib64 -L${DEP_DIR}/var/usr/lib -L${DEP_3RD_DIR}/usr/lib -L${DEP_3RD_DIR}/usr/lib64>
     ${LIBAIO_LINK_OPTION} $<$<NOT:$<BOOL:${ANDROID}>>:-lpthread> -ldl
     $<$<BOOL:${ANDROID}>:-llog>
@@ -380,7 +358,6 @@ set(oblib_extra_objects "" CACHE INTERNAL oblib_extra_objects)
 add_subdirectory(lib)
 add_subdirectory(common)
 add_subdirectory(rpc)
-add_subdirectory(grpc)
 
 # Define static library which contains previous object libraries.
 message(STATUS "oblib_extra_objects ${oblib_extra_objects}")

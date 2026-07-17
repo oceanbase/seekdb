@@ -27,7 +27,6 @@ namespace sql
 
 OB_SERIALIZE_MEMBER(ObKillSessionArg,
                     sess_id_,
-                    tenant_id_,
                     user_id_,
                     is_query_,
                     has_user_super_privilege_);
@@ -42,7 +41,6 @@ int ObKillSessionArg::init(ObExecContext &ctx, const ObKillStmt &stmt)
   } else if (OB_FAIL(calculate_sessid(ctx, stmt))) {
     LOG_WARN("fail to calculate sessid", K(ret), K(ctx), K(stmt));
   } else {
-    tenant_id_ = session->get_priv_tenant_id();
     user_id_ = session->get_user_id();
     is_query_ = stmt.is_query();
     has_user_super_privilege_ = session->has_user_super_privilege();
@@ -70,8 +68,7 @@ int ObKillSessionArg::calculate_sessid(ObExecContext &ctx, const ObKillStmt &stm
       LOG_WARN("data member from ObExecContext is Null", K(ret), K(my_session), K(plan_ctx));
     } else {
       ObArenaAllocator allocator(common::ObModIds::OB_SQL_EXPR_CALC,
-                                 OB_MALLOC_NORMAL_BLOCK_SIZE,
-                                 my_session->get_effective_tenant_id());
+                                 OB_MALLOC_NORMAL_BLOCK_SIZE);
       ObSqlExpression sql_expr(allocator, 0);
       const int64_t cur_time = plan_ctx->has_cur_time() ?
           plan_ctx->get_cur_time().get_timestamp() : ObTimeUtility::current_time();
@@ -130,9 +127,7 @@ int ObKillSessionArg::calculate_sessid(ObExecContext &ctx, const ObKillStmt &stm
 
 int ObKillSessionArg::check_auth_for_kill(uint64_t kill_tid, uint64_t kill_uid) const {
   int ret = OB_SUCCESS;
-  if (!((OB_SYS_TENANT_ID == tenant_id_)
-             || ((tenant_id_ == kill_tid)
-                 && (has_user_super_privilege_ || user_id_ == kill_uid)))) {
+  if (!(true)) {
     ret = OB_ERR_KILL_DENIED;
  }
   return ret;

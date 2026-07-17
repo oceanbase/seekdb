@@ -19,6 +19,7 @@
 #include "lib/ob_define.h"
 #include "lib/utility/ob_template_utils.h"
 #include "lib/allocator/ob_allocator.h"
+#include <zlib.h>
 
 namespace oceanbase
 {
@@ -26,17 +27,11 @@ namespace common
 {
 enum ObCompressorType : uint8_t
 {
-  INVALID_COMPRESSOR             = 0 ,
+  INVALID_COMPRESSOR             = 0,
   NONE_COMPRESSOR                = 1,
-  LZ4_COMPRESSOR                 = 2,
-  SNAPPY_COMPRESSOR              = 3,
+  ZSTD_1_3_8_COMPRESSOR          = 2,
+  STREAM_ZSTD_1_3_8_COMPRESSOR   = 3,
   ZLIB_COMPRESSOR                = 4,
-  ZSTD_COMPRESSOR                = 5,
-  ZSTD_1_3_8_COMPRESSOR          = 6,
-  LZ4_191_COMPRESSOR             = 7,
-  STREAM_LZ4_COMPRESSOR          = 8,//used for clog rpc compress
-  STREAM_ZSTD_COMPRESSOR         = 9,//used for clog rpc compress
-  STREAM_ZSTD_1_3_8_COMPRESSOR   = 10,//used for clog rpc compress
 
   MAX_COMPRESSOR
 };
@@ -45,27 +40,19 @@ const char *const all_compressor_name[] =
 {
   "",
   "none",
-  "lz4_1.0",
-  "snappy_1.0",
-  "zlib_1.0",
-  "zstd_1.0",
   "zstd_1.3.8",
-  "lz4_1.9.1",
-  "stream_lz4_1.0",
-  "stream_zstd_1.0",
   "stream_zstd_1.3.8",
+  "zlib_1.0",
 };
 
 STATIC_ASSERT(ARRAYSIZEOF(all_compressor_name) == ObCompressorType::MAX_COMPRESSOR, "compressor count mismatch");
 
-#define DISABLED_ZLIB_1_COMPRESS_IDX 3
-
 const char *const compress_funcs[] =
 {
-  "lz4_1.0",
   "none",
+  "lz4_1.0",
   "snappy_1.0",
-  "zlib_1.0", // temporarily disable zlib_1.0
+  "zlib_1.0",
   "zstd_1.0",
   "zstd_1.3.8",
   "lz4_1.9.1",
@@ -73,15 +60,12 @@ const char *const compress_funcs[] =
 
 const char *const perf_compress_funcs[] =
 {
-  "lz4_1.0",
-  "zstd_1.0",
   "zstd_1.3.8",
 };
 
 const char *const syslog_compress_funcs[] =
 {
   "none",
-  "zstd_1.0",
   "zstd_1.3.8",
 };
 
@@ -89,9 +73,6 @@ const char *const sql_temp_store_compress_funcs[] =
 {
   "none",
   "zstd",
-  "lz4",
-  "snappy",
-  "zlib"
 };
 
 } /* namespace common */

@@ -27,7 +27,10 @@ create user root@'127.0.1.1' identified by 'rootWang@123';
 create user root@'127.1.1.1' identified by 'rootWang@123';
 select count(*) from oceanbase.__all_user where user_name='root';
 
-call dbms_stats.gather_schema_stats('oceanbase');
+call dbms_stats.gather_table_stats('oceanbase', '__all_virtual_core_all_table');
+call dbms_stats.gather_table_stats('oceanbase', '__all_virtual_core_column_table');
+call dbms_stats.gather_table_stats('oceanbase', '__all_table');
+call dbms_stats.gather_table_stats('oceanbase', '__all_column');
 select OWNER, TABLE_NAME, NUM_ROWS from OCEANBASE.DBA_TAB_STATISTICS where table_name='__all_core_table' and NUM_ROWS > 0;
 select OWNER, TABLE_NAME, NUM_ROWS from OCEANBASE.DBA_TAB_STATISTICS where table_name='__ALL_VIRTUAL_CORE_ALL_TABLE' and NUM_ROWS > 0;
 select OWNER, TABLE_NAME, NUM_ROWS from OCEANBASE.DBA_TAB_STATISTICS where table_name='__ALL_VIRTUAL_CORE_COLUMN_TABLE' and NUM_ROWS > 0;
@@ -161,7 +164,7 @@ select TABLE_NAME, partition_name, subpartition_name, OBJECT_TYPE, NUM_ROWS, AVG
 
 --sorted_result
 select TABLE_OWNER,TABLE_NAME,PARTITION_NAME,SUBPARTITION_NAME,INSERTS,UPDATES,DELETES from oceanbase.dba_tab_modifications where TABLE_OWNER='TEST' and table_name in ('T1','T_PART','T_SUBPART');
-select DATEDIFF(next_date, start_date) from oceanbase.__all_tenant_scheduler_job where (this_date is not null or last_date is not null) and JOB_NAME in ('FRIDAY_WINDOW','MONDAY_WINDOW','OPT_STATS_HISTORY_MANAGER','SATURDAY_WINDOW','SUNDAY_WINDOW','THURSDAY_WINDOW','TUESDAY_WINDOW','WEDNESDAY_WINDOW');
+select DATEDIFF(next_date, start_date) from oceanbase.__all_scheduler_job where (this_date is not null or last_date is not null) and JOB_NAME in ('FRIDAY_WINDOW','MONDAY_WINDOW','OPT_STATS_HISTORY_MANAGER','SATURDAY_WINDOW','SUNDAY_WINDOW','THURSDAY_WINDOW','TUESDAY_WINDOW','WEDNESDAY_WINDOW');
 drop table t1;
 drop table t_part;
 drop table t_subpart;

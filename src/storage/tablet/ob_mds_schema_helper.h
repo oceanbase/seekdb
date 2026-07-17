@@ -60,9 +60,7 @@ public:
   const ObRowkeyReadInfo *get_rowkey_read_info() const;
 public:
 private:
-  static int build_table_schema(
-      const uint64_t tenant_id,
-      const int64_t database_id,
+  static int build_table_schema(const int64_t database_id,
       const uint64_t table_id,
       const char *table_name,
       share::schema::ObTableSchema &table_schema);
@@ -70,9 +68,7 @@ private:
       common::ObIAllocator &allocator,
       const ObStorageSchema &storage_schema,
       ObRowkeyReadInfo &rowkey_read_info);
-  static int build_column_schema(
-      const uint64_t tenant_id,
-      const uint64_t table_id,
+  static int build_column_schema(const uint64_t table_id,
       const uint64_t column_id,
       const char *column_name,
       const int64_t schema_version,

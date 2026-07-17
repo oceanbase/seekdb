@@ -19,31 +19,31 @@
  #include "sql/engine/expr/ob_expr_operator.h"
  #include "sql/session/ob_sql_session_info.h"
  #include "sql/engine/ob_exec_context.h"
- #include "share/vector_index/ob_vector_index_util.h"
- #include "objit/include/objit/common/ob_item_type.h"
+ #include "observer/vector_index/ob_vector_index_util.h"
+ #include "sql/parser/ob_item_type.h"
  #include "sql/engine/expr/ob_array_expr_utils.h"
- #include "share/vector_type/ob_vector_l2_distance.h"
- #include "share/vector_type/ob_vector_cosine_distance.h"
- #include "share/vector_type/ob_vector_ip_distance.h"
- #include "share/vector_type/ob_vector_l1_distance.h"
-
+ #include "storage/vector_type/ob_vector_l2_distance.h"
+ #include "storage/vector_type/ob_vector_cosine_distance.h"
+ #include "storage/vector_type/ob_vector_ip_distance.h"
+ #include "storage/vector_type/ob_vector_l1_distance.h"
+ 
  namespace oceanbase
  {
  namespace sql
  {
-
+ 
  ObExprSemanticDistance::ObExprSemanticDistance(common::ObIAllocator &alloc)
-     : ObFuncExprOperator(alloc, T_FUN_SYS_SEMANTIC_DISTANCE, N_SEMANTIC_DISTANCE, 2, VALID_FOR_GENERATED_COL, NOT_ROW_DIMENSION)
+     : ObFuncExprOperator(alloc, T_FUN_SYS_SEMANTIC_DISTANCE, N_SEMANTIC_DISTANCE, 2, NOT_VALID_FOR_GENERATED_COL, NOT_ROW_DIMENSION)
  {
  }
-
+ 
  int ObExprSemanticDistance::calc_result_type2(ObExprResType &type,
                                                ObExprResType &type1,
                                                ObExprResType &type2,
                                                common::ObExprTypeCtx &type_ctx) const
  {
    int ret = OB_SUCCESS;
-
+   
    UNUSED(type1);
    UNUSED(type2);
 
@@ -55,23 +55,23 @@
    } else {
     type.set_double();
     type.set_precision(PRECISION_UNKNOWN_YET);
-    type.set_scale(ORA_NUMBER_SCALE_UNKNOWN_YET);
+    type.set_scale(FLOATING_NUMBER_SCALE_UNKNOWN_YET);
    }
    return ret;
  }
-
+ 
  int ObExprSemanticDistance::calc_semantic_distance(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum)
  {
-   // no need to support, this expr is only used for parser
+   // no need to support, this expr is only used for parser 
    return OB_NOT_SUPPORTED;
  }
-
+ 
  int ObExprSemanticDistance::cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_expr, ObExpr &rt_expr) const
  {
    int ret = OB_SUCCESS;
-
+   
    rt_expr.eval_func_ = calc_semantic_distance;
-
+   
    return ret;
  }
 
@@ -79,7 +79,7 @@
      : ObExprVectorDistance(alloc, T_FUN_SYS_SEMANTIC_VECTOR_DISTANCE, N_SEMANTIC_VECTOR_DISTANCE, TWO_OR_THREE, NOT_ROW_DIMENSION)
  {
  }
-
+ 
  int ObExprSemanticVectorDistance::calc_result_typeN(ObExprResType &type,
                                                      ObExprResType *types_stack,
                                                      int64_t param_num,
@@ -106,13 +106,13 @@
    }
    return ret;
  }
-
-
+ 
+ 
  int ObExprSemanticVectorDistance::calc_semantic_vector_distance(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum)
  {
    int ret = OB_SUCCESS;
    ObExprVectorDistance::ObVecDisType dis_type = ObExprVectorDistance::ObVecDisType::MAX_TYPE;
-
+   
    if (3 != expr.arg_cnt_) {
      ret = OB_NOT_SUPPORTED;
      LOG_WARN("unexpected argument count", K(ret), K(expr.arg_cnt_));
@@ -127,24 +127,35 @@
        dis_type = static_cast<ObExprVectorDistance::ObVecDisType>(datum->get_int());
      }
    }
-
+   
    if (OB_SUCC(ret)) {
      if (OB_FAIL(ObExprVectorDistance::calc_distance(expr, ctx, res_datum, dis_type))) {
       LOG_WARN("failed to calc distance", K(ret), K(dis_type));
      }
    }
-
+   
    return ret;
  }
-
+ 
  int ObExprSemanticVectorDistance::cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_expr, ObExpr &rt_expr) const
  {
    int ret = OB_SUCCESS;
-
+   
    rt_expr.eval_func_ = calc_semantic_vector_distance;
-
+   
    return ret;
  }
-
+ 
+ int ObExprSemanticVectorDistance::is_valid_for_generated_column(
+     const ObRawExpr *expr,
+     const common::ObIArray<ObRawExpr *> &exprs,
+     bool &is_valid) const
+ {
+   UNUSED(expr);
+   UNUSED(exprs);
+   is_valid = false;
+   return OB_SUCCESS;
+ }
+ 
  } // namespace sql
- } // namespace oceanbase
+ } // namespace oceanbase 

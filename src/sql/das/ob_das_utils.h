@@ -17,12 +17,11 @@
 #ifndef DEV_SRC_SQL_DAS_OB_DAS_UTILS_H_
 #define DEV_SRC_SQL_DAS_OB_DAS_UTILS_H_
 #include "share/ob_define.h"
-#include "share/ob_ls_id.h"
 #include "share/location_cache/ob_location_struct.h"
 #include "common/ob_tablet_id.h"
 #include "sql/dtl/ob_dtl_task.h"
 #include "sql/ob_phy_table_location.h"
-#include "rpc/obrpc/ob_rpc_result_code.h"
+#include "rpc/frame/ob_result_code.h"
 #include "sql/das/ob_das_define.h"
 #include "sql/das/ob_das_dml_ctx_define.h"
 #include "sql/das/ob_das_def_reg.h"
@@ -34,7 +33,7 @@ namespace sql
 class ObDASUtils
 {
 public:
-  static void log_user_error_and_warn(const obrpc::ObRpcResultCode &rcode);
+  static void log_user_error_and_warn(const rpc::frame::ObResultCode &rcode);
   static int get_tablet_loc_by_id(const ObTabletID &tablet_id,
                                   ObDASTableLoc &table_loc,
                                   ObDASTabletLoc *&tablet_loc);
@@ -64,7 +63,6 @@ public:
                                    common::ObObj &value);
   static int reshape_datum_value(const ObObjMeta &col_type,
                                  const ObAccuracy &col_accuracy,
-                                 const bool enable_oracle_empty_char_reshape_to_null,
                                  ObIAllocator &allocator,
                                  blocksstable::ObStorageDatum &datum_value);
   static int reshape_datum_vector_value(const ObObjMeta &col_type,
@@ -74,7 +72,6 @@ public:
                                         share::ObBatchSelector &selector);
   static int reshape_vector_value(const ObObjMeta &col_type,
                                   const ObAccuracy &col_accuracy,
-                                  const bool enable_oracle_empty_char_reshape_to_null,
                                   ObIAllocator &allocator,
                                   common::ObIVector *&vector,
                                   share::ObBatchSelector &selector);
@@ -134,12 +131,6 @@ public:
     }
     return ret;
   }
-  static int generate_mlog_row(const share::ObLSID &ls_id,
-                               const common::ObTabletID &tablet_id,
-                               const storage::ObDMLBaseParam &dml_param,
-                               blocksstable::ObDatumRow &row,
-                               ObDASOpType op_type,
-                               bool is_old_row);
 };
 }  // namespace sql
 }  // namespace oceanbase

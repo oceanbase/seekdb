@@ -36,12 +36,12 @@ create table test_commit_after_minor_merge_t(c1 int primary key, c2 int);
 let $__freeze_table_name__ = 'test_commit_after_minor_merge_t';
 
 connection conn0;
-let $__tenant_id__=query_get_value(select /*+QUERY_TIMEOUT(10000000)*/ tenant_id from oceanbase.__all_virtual_table where table_name= 'test_commit_after_minor_merge_t', tenant_id, 1);
-let $__table_id__=query_get_value(select /*+QUERY_TIMEOUT(10000000)*/ table_id from oceanbase.__all_virtual_table where table_name= 'test_commit_after_minor_merge_t', table_id, 1);
+let $__tenant_id__=1;
+let $__table_id__=query_get_value(select /*+QUERY_TIMEOUT(10000000)*/ table_id from oceanbase.__all_table where table_name= 'test_commit_after_minor_merge_t', table_id, 1);
 
 # prepare data, minor merge with dirty trx but committed in sstable
 connection conn1;
-let $__tablet_id__=query_get_value(select /*+QUERY_TIMEOUT(10000000)*/ tablet_id from oceanbase.__all_tablet_to_ls where table_id = $__table_id__, tablet_id, 1);
+let $__tablet_id__=query_get_value(select /*+QUERY_TIMEOUT(10000000)*/ tablet_id from oceanbase.__all_tablet_to_table where table_id = $__table_id__, tablet_id, 1);
 
 insert into test_commit_after_minor_merge_t values (0,0);
 begin;
@@ -54,7 +54,7 @@ connection conn1;
 commit;
 select * from test_commit_after_minor_merge_t;
 
-let $count = query_get_value(select count(1) as c from oceanbase.__all_virtual_table_mgr where tablet_id = $__tablet_id__ and table_type != 26 and table_type != 27 and size > 0 limit 1, c, 1);
+let $count = query_get_value(select count(1) as c from oceanbase.__all_virtual_table_mgr where tablet_id = $__tablet_id__ and table_type != 18 and table_type != 19 and size > 0 limit 1, c, 1);
 # one minor sstable
 echo $count;
 
@@ -71,7 +71,7 @@ insert into test_commit_after_minor_merge_t values (2,2);
 connection conn1;
 commit;
 
-let $count = query_get_value(select count(1) as c from oceanbase.__all_virtual_table_mgr where tablet_id = $__tablet_id__ and table_type != 26 and table_type != 27 and size > 0  limit 1, c, 1);
+let $count = query_get_value(select count(1) as c from oceanbase.__all_virtual_table_mgr where tablet_id = $__tablet_id__ and table_type != 18 and table_type != 19 and size > 0  limit 1, c, 1);
 # two minor sstable
 echo $count;
 
@@ -103,7 +103,7 @@ connection conn0;
 alter system major freeze tenant = sys;
 alter system major freeze tenant = all_user;
 alter system major freeze tenant = all_meta;
-let $major_snapshot  = query_get_value(select frozen_scn from __all_virtual_freeze_info order by frozen_scn desc limit 1, frozen_scn, 1);
+let $major_snapshot  = query_get_value(select frozen_scn from __all_freeze_info order by frozen_scn desc limit 1, frozen_scn, 1);
 --source mysql_test/include/wait_daily_merge.inc
 
 connection conn1;

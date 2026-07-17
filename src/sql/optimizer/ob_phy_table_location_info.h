@@ -19,7 +19,7 @@
 
 #include "sql/ob_phy_table_location.h"
 #include "sql/ob_sql_define.h"
-#include "sql/optimizer/ob_route_policy.h"
+#include "share/location_cache/ob_location_struct.h"
 namespace oceanbase
 {
 namespace sql
@@ -28,22 +28,16 @@ class DASRelatedTabletMap;
 class ObOptTabletLoc
 {
   OB_UNIS_VERSION(1);
-  //friend class ObPartitionReplicaLocation;
 public:
-  typedef common::ObSEArray<ObRoutePolicy::CandidateReplica,
-                            common::OB_MAX_MEMBER_NUMBER, common::ModulePageAllocator,
-                            true> ObSmartReplicaLocationArray;
-
   ObOptTabletLoc();
   virtual ~ObOptTabletLoc();
 
   void reset();
   int assign(const ObOptTabletLoc &partition_location);
-  int assign_with_only_readable_replica(const ObObjectID &partition_id,
-                                        const ObObjectID &first_level_part_id,
-                                        const common::ObTabletID &tablet_id,
-                                        const share::ObLSLocation &partition_location,
-                                        const ObRoutePolicyType route_policy);
+  int assign_local_replica(const ObObjectID &partition_id,
+                           const ObObjectID &first_level_part_id,
+                           const common::ObTabletID &tablet_id,
+                           const share::ObLSReplicaLocation &replica);
 
   bool is_valid() const;
   bool operator==(const ObOptTabletLoc &other) const;
@@ -66,24 +60,19 @@ public:
 
   inline common::ObTabletID get_tablet_id() const { return tablet_id_; }
 
-  inline const share::ObLSID &get_ls_id() const { return ls_id_; }
-
-  inline const common::ObIArray<ObRoutePolicy::CandidateReplica> &get_replica_locations() const { return replica_locations_; }
-
-  inline common::ObIArray<ObRoutePolicy::CandidateReplica> &get_replica_locations() { return replica_locations_; }
+  inline const share::ObLSReplicaLocation &get_local_replica() const { return local_replica_; }
+  inline share::ObLSReplicaLocation &get_local_replica() { return local_replica_; }
 
   TO_STRING_KV(K_(partition_id),
                K_(tablet_id),
-               K_(ls_id),
-               K_(replica_locations));
+               K_(local_replica));
 
 private:
   int64_t partition_id_;
   // first level part id, only valid for subpartitioned table
   int64_t first_level_part_id_;
   common::ObTabletID tablet_id_;
-  share::ObLSID ls_id_;
-  ObSmartReplicaLocationArray replica_locations_;
+  share::ObLSReplicaLocation local_replica_;
 };
 
 class ObCandiTabletLoc
@@ -94,35 +83,18 @@ public:
 
   int assign(const ObCandiTabletLoc &other);
 
-  int set_selected_replica_idx(int64_t selected_replica_idx);
-  int set_selected_replica_idx_with_priority();
-  int add_priority_replica_idx(int64_t priority_replica_idx);
-  int64_t get_selected_replica_idx() const { return selected_replica_idx_; }
-  bool has_selected_replica() const { return common::OB_INVALID_INDEX != selected_replica_idx_; }
-  const share::ObLSID &get_ls_id() const { return opt_tablet_loc_.get_ls_id(); }
   int get_selected_replica(share::ObLSReplicaLocation &replica_loc) const;
-  int get_selected_replica(ObRoutePolicy::CandidateReplica &replica_loc) const;
-  int get_priority_replica(int64_t idx, share::ObLSReplicaLocation &replica_loc) const;
-  int get_priority_replica(int64_t idx, ObRoutePolicy::CandidateReplica &replica_loc) const;
-  template<class T>
-  int get_priority_replica_base(int64_t selected_replica_idx, T &replica_loc) const;
-  int set_part_loc_with_only_readable_replica(const ObObjectID &partition_id,
-                                              const ObObjectID &first_level_part_id,
-                                              const common::ObTabletID &tablet_id,
-                                              const share::ObLSLocation &partition_location,
-                                              const ObRoutePolicyType route_policy);
+  int set_local_tablet_loc(const ObObjectID &partition_id,
+                           const ObObjectID &first_level_part_id,
+                           const common::ObTabletID &tablet_id,
+                           const share::ObLSReplicaLocation &replica);
   const ObOptTabletLoc &get_partition_location() const { return opt_tablet_loc_; }
   ObOptTabletLoc &get_partition_location() { return opt_tablet_loc_; }
-  const common::ObIArray<int64_t> &get_priority_replica_idxs() const { return priority_replica_idxs_; }
-  bool is_server_in_replica(const common::ObAddr &server, int64_t &idx) const;
-  TO_STRING_KV(K_(opt_tablet_loc), K_(selected_replica_idx), K_(priority_replica_idxs));
+  bool is_local_server(const common::ObAddr &server) const;
+  TO_STRING_KV(K_(opt_tablet_loc));
 
 private:
   ObOptTabletLoc opt_tablet_loc_;
-  // The result after computing the intersection of all partitions is the index of the finally selected replica
-  int64_t selected_replica_idx_;
-  // After priority judgment of all replicas for the current partition, store the replica index with the highest priority here
-  common::ObSEArray<int64_t, 2, common::ModulePageAllocator, true> priority_replica_idxs_;
 private:
   DISALLOW_COPY_AND_ASSIGN(ObCandiTabletLoc);
 };

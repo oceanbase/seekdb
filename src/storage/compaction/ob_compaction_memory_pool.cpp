@@ -17,8 +17,8 @@
 #define USING_LOG_PREFIX STORAGE
 
 #include "ob_compaction_memory_pool.h"
+#include "share/rc/ob_module_provider.h"
 #include "share/ob_force_print_log.h"
-#include "share/ob_thread_mgr.h"
 #include "storage/compaction/ob_compaction_memory_context.h"
 
 using namespace oceanbase;
@@ -193,13 +193,13 @@ int ObCompactionBufferChunk::free_block(ObCompactionBufferBlock &block)
 int ObTenantCompactionMemPool::mtl_init(ObTenantCompactionMemPool* &mem_pool)
 {
   int ret = OB_SUCCESS;
-  const uint64_t tenant_id = MTL_ID();
+  
   ObMallocAllocator *malloc_allocator = nullptr;
 
   if (OB_FAIL(mem_pool->init())) {
-    LOG_WARN("failed to init compaction memory pool", K(ret), K(tenant_id));
+    LOG_WARN("failed to init compaction memory pool", K(ret));
   } else {
-    LOG_INFO("success to init ObTenantCompactionMemPool", K(tenant_id));
+    LOG_INFO("success to init ObTenantCompactionMemPool");
   }
   return ret;
 }
@@ -215,7 +215,7 @@ ObTenantCompactionMemPool::ObTenantCompactionMemPool()
     total_block_num_(0),
     used_block_num_(0),
     mem_mode_(NORMAL_MODE),
-    tg_id_(0),
+    shrink_timer_(),
     is_inited_(false)
 {
 }
@@ -227,12 +227,12 @@ ObTenantCompactionMemPool::~ObTenantCompactionMemPool()
 
 void ObTenantCompactionMemPool::wait()
 {
-  TG_WAIT(tg_id_);
+  shrink_timer_.wait();
 }
 
 void ObTenantCompactionMemPool::stop()
 {
-  TG_STOP(tg_id_);
+  shrink_timer_.stop();
 }
 
 void ObTenantCompactionMemPool::destroy()
@@ -246,8 +246,7 @@ void ObTenantCompactionMemPool::reset()
 {
   stop();
   wait();
-  TG_DESTROY(tg_id_);
-  tg_id_ = -1;
+  shrink_timer_.destroy();
   {
     ObSpinLockGuard guard(chunk_lock_);
 
@@ -283,15 +282,13 @@ int ObTenantCompactionMemPool::init()
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
     LOG_WARN("ObTenantCompactionMemPool has been inited", K(ret));
-  } else if (OB_FAIL(TG_CREATE_TENANT(lib::TGDefIDs::MergeMemPool, tg_id_))) {
-    LOG_WARN("failed to create MergeMemPool thread", K(ret));
-  } else if (OB_FAIL(TG_START(tg_id_))) {
-    LOG_WARN("failed to start stat MergeMemPool thread", K(ret));
-  } else if (OB_FAIL(TG_SCHEDULE(tg_id_, mem_shrink_task_, CHECK_SHRINK_INTERVAL, repeat))) {
+  } else if (OB_FAIL(shrink_timer_.init("MergeMemPool", ObMemAttr("MergeMemPool")))) {
+    LOG_WARN("failed to init MergeMemPool timer", K(ret));
+  } else if (OB_FAIL(shrink_timer_.schedule(mem_shrink_task_, CHECK_SHRINK_INTERVAL, repeat))) {
     LOG_WARN("failed to schedule tablet stat update task", K(ret));
   } else {
-    chunk_allocator_.set_tenant_id(MTL_ID());
-    piece_allocator_.set_tenant_id(MTL_ID());
+    
+    
     max_block_num_ = MTL_IS_MINI_MODE()
                    ? MINI_MODE_CHUNK_MEMORY_LIMIT / ObCompactionBufferChunk::DEFAULT_BLOCK_SIZE
                    : CHUNK_MEMORY_LIMIT / ObCompactionBufferChunk::DEFAULT_BLOCK_SIZE;
@@ -521,7 +518,7 @@ void ObTenantCompactionMemPool::MemPoolShrinkTask::runTimerTask()
   int ret = OB_SUCCESS;
   int64_t compaction_dag_cnt = 0;
 
-  if (OB_FAIL(MTL(share::ObTenantDagScheduler *)->get_compaction_dag_count(compaction_dag_cnt))) {
+  if (OB_FAIL(share::g_mp->tenant_dag_scheduler()->get_compaction_dag_count(compaction_dag_cnt))) {
     LOG_WARN("failed to get compaction dag count", K(ret));
   } else if (0 == compaction_dag_cnt && 0 == last_check_dag_cnt_) {
     if (OB_FAIL(mem_pool_.try_shrink())) {
@@ -661,7 +658,7 @@ int ObCompactionBufferWriter::alloc_block(
 {
   int ret = OB_SUCCESS;
 
-  if (use_mem_pool_ && OB_FAIL(MTL(ObTenantCompactionMemPool *)->alloc(size, block))) {
+  if (use_mem_pool_ && OB_FAIL(share::g_mp->tenant_compaction_mem_pool()->alloc(size, block))) {
     LOG_WARN("failed to alloc mem for new block", K(ret), K(size));
   } else if (!use_mem_pool_) {
     void *buf = nullptr;
@@ -688,7 +685,7 @@ void ObCompactionBufferWriter::free_block()
     mtl_free(block_.get_buffer());
     block_.reset();
   } else {
-    ObTenantCompactionMemPool * mem_pool = MTL(ObTenantCompactionMemPool *);
+    ObTenantCompactionMemPool * mem_pool = share::g_mp->tenant_compaction_mem_pool();
     if (OB_NOT_NULL(mem_pool)) {
       mem_pool->free(block_);
     } else {

@@ -19,7 +19,7 @@
 
 #include "lib/hash/ob_hashtable.h"
 #include "lib/hash/ob_hashutils.h"
-#include "lib/mysqlclient/ob_mysql_result.h"
+#include "common/mysqlclient/ob_mysql_result.h"
 #include "lib/string/ob_string.h"
 #include "sql/engine/ob_exec_context.h"
 #include "sql/ob_result_set.h"
@@ -90,8 +90,6 @@ public:
   sql::ObSqlCtx &sql_ctx() { return sql_ctx_; }
 
   sql::ObResultSet &result_set() { OB_ASSERT(result_set_ != nullptr); return *result_set_; }
-  sql::ObRemoteResultSet &remote_result_set()
-  { OB_ASSERT(remote_result_set_ != nullptr); return *remote_result_set_; }
 
   bool has_tenant_resource() const { return has_tenant_resource_; }
   void set_has_tenant_resource(bool has_tenant_resource)
@@ -159,7 +157,6 @@ private:
   char buf_[sizeof(sql::ObResultSet)] __attribute__ ((aligned (16)));
   sql::ObSQLSessionInfo &session_;
   sql::ObResultSet *result_set_;
-  sql::ObRemoteResultSet *remote_result_set_; // for inner sql with rpc transmit
   const common::ObNewRow *row_;
   int64_t execute_start_ts_;
   int64_t execute_end_ts_;

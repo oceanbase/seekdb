@@ -19,7 +19,7 @@
 
 #include "lib/allocator/page_arena.h"
 #include "lib/list/ob_dlist.h"
-#include "lib/mysqlclient/ob_isql_connection_pool.h"
+#include "common/mysqlclient/ob_isql_connection_pool.h"
 #include "lib/lock/ob_thread_cond.h"
 #include "ob_inner_sql_connection.h"
 
@@ -79,20 +79,19 @@ public:
       char *to, const int64_t to_size, int64_t &out_size);
 
   // acquired connection must be released
-  virtual int acquire(const uint64_t tenant_id, common::sqlclient::ObISQLConnection *&conn, ObISQLClient *client_addr, const int32_t group_id) override;
+  virtual int acquire(common::sqlclient::ObISQLConnection *&conn, ObISQLClient *client_addr, const int32_t group_id) override;
   virtual int release(common::sqlclient::ObISQLConnection *conn, const bool success);
   int acquire_spi_conn(sql::ObSQLSessionInfo *session_info, observer::ObInnerSQLConnection *&conn);
   int acquire(sql::ObSQLSessionInfo *session_info,
-      common::sqlclient::ObISQLConnection *&conn,
-      const bool is_oracle_mode = false);
+      common::sqlclient::ObISQLConnection *&conn);
 
   virtual int on_client_inactive(common::ObISQLClient *client_addr) override;
   virtual common::sqlclient::ObSQLConnPoolType get_type() override { return common::sqlclient::INNER_POOL; }
   void dump_used_conn_list();
 
-  // Dozens of connections may acquired by one worker in oracle mode, because all sys tables
-  // implemented by agent virtual table which need inner connection. Too many connections
-  // warning may be triggered by parallel execution complicate sys table queries.
+  // Dozens of connections may be acquired by one worker because agent virtual
+  // tables need inner connections. Too many connections warning may be
+  // triggered by parallel execution of complicated sys table queries.
   //
   // 100000 = 50 connections * 2000 workers.
   const static int64_t WARNNING_CONNECTION_CNT = 100000;

@@ -26,21 +26,6 @@ namespace observer
 using namespace common;
 using namespace table;
 
-int ObTableLoadBucket::init(const ObAddr &leader_addr) {
-  int ret = OB_SUCCESS;
-  if (is_inited_) {
-    ret = OB_INIT_TWICE;
-    LOG_WARN("init twice", KR(ret));
-  } else if (!leader_addr.is_valid()) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid addr", KR(ret), K(leader_addr));
-  } else {
-    leader_addr_ = leader_addr;
-    is_inited_ = true;
-  }
-  return ret;
-}
-
 int ObTableLoadBucket::add_row(const ObTabletID &tablet_id,
                                const ObTableLoadObjRow &obj_row,
                                int64_t batch_size,

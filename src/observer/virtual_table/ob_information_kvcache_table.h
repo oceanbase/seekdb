@@ -17,9 +17,8 @@
 #ifndef OCEANBASE_OBSERVER_VIRTUAL_TABLE_OB_INFORMATION_KVCACHE_TABLE_
 #define OCEANBASE_OBSERVER_VIRTUAL_TABLE_OB_INFORMATION_KVCACHE_TABLE_
 
-#include "share/ob_virtual_table_scanner_iterator.h"
+#include "observer/virtual_table/ob_virtual_table_scanner_iterator.h"
 #include "share/cache/ob_kv_storecache.h"
-#include "lib/stat/ob_di_cache.h"
 
 
 namespace oceanbase
@@ -44,9 +43,7 @@ public:
 private:
   virtual int set_ip();
   virtual int inner_open() override;
-  int get_tenant_info();
-  int get_handles(ObKVCacheInst *&inst, ObDiagnoseTenantInfo *& tenant_info);
-  int set_diagnose_info(ObKVCacheInst *inst, ObDiagnoseTenantInfo *tenant_info);
+  int get_next_inst(ObKVCacheInst *&inst);
   int process_row(const ObKVCacheInst *inst);
 
 private:
@@ -68,12 +65,10 @@ private:
   int16_t cache_iter_;
   common::ObStringBuf str_buf_;
   common::ObObj cells_[common::OB_ROW_MAX_COLUMNS_COUNT];
-  common::ObArenaAllocator arenallocator_;
-  common::ObDiagnoseTenantInfo tenant_di_info_;
-  common::ObArray<std::pair<uint64_t, common::ObDiagnoseTenantInfo*> > tenant_dis_;
   DISALLOW_COPY_AND_ASSIGN(ObInfoSchemaKvCacheTable);
 };
 
 }
 }
 #endif /* OCEANBASE_OBSERVER_VIRTUAL_TABLE_OB_INFORMATION_KVCACHE_TABLE */
+

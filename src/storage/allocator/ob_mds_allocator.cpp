@@ -1,0 +1,147 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+
+#include "ob_mds_allocator.h"
+#include "share/rc/ob_module_provider.h"
+#include "storage/allocator/ob_shared_memory_allocator_mgr.h"
+
+using namespace oceanbase::storage::mds;
+
+namespace oceanbase {
+namespace share {
+
+int64_t ObTenantMdsAllocator::resource_unit_size()
+{
+  static const int64_t MDS_RESOURCE_UNIT_SIZE = OB_MALLOC_NORMAL_BLOCK_SIZE; /* 8KB */
+  return MDS_RESOURCE_UNIT_SIZE;
+}
+
+void ObTenantMdsAllocator::init_throttle_config(int64_t &resource_limit, int64_t &trigger_percentage, int64_t &max_duration)
+{
+  // define some default value
+  const int64_t MDS_LIMIT_PERCENTAGE = 5;
+  const int64_t MDS_THROTTLE_TRIGGER_PERCENTAGE = 60;
+  const int64_t MDS_THROTTLE_MAX_DURATION = 2LL * 60LL * 60LL * 1000LL * 1000LL;  // 2 hours
+
+  int64_t total_memory = lib::get_tenant_memory_limit();
+
+  // Use tenant config to init throttle config
+  omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
+  if (tenant_config.is_valid()) {
+    resource_limit = total_memory * tenant_config->_mds_memory_limit_percentage / 100LL;
+    trigger_percentage = tenant_config->writing_throttling_trigger_percentage;
+    max_duration = tenant_config->writing_throttling_maximum_duration;
+  } else {
+    SHARE_LOG_RET(WARN, OB_INVALID_CONFIG, "init throttle config with default value");
+    resource_limit = total_memory * MDS_LIMIT_PERCENTAGE / 100;
+    trigger_percentage = MDS_THROTTLE_TRIGGER_PERCENTAGE;
+    max_duration = MDS_THROTTLE_MAX_DURATION;
+  }
+}
+void ObTenantMdsAllocator::adaptive_update_limit(const int64_t holding_size,
+                                                 const int64_t config_specify_resource_limit,
+                                                 int64_t &resource_limit,
+                                                 int64_t &last_update_limit_ts,
+                                                 bool &is_updated)
+{
+  // do nothing
+}
+
+// moved definition to storage mds_tenant_service.cpp(storage real user)
+
+// moved definition to storage mds_tenant_service.cpp(MDS service-record real user)
+
+// moved definition to storage mds_tenant_service.cpp(MDS service-record real user)
+
+// moved definition to storage mds_tenant_service.cpp(MDS service-record real user)
+
+// moved definition to storage mds_tenant_service.cpp(MDS service-record real user)
+
+// moved definition to storage mds_tenant_service.cpp(MDS service-record real user)
+
+// moved definition to storage mds_tenant_service.cpp(MDS service-record real user)
+
+// moved definition to storage mds_tenant_service.cpp(MDS service-record real user)
+
+// moved definition to storage mds_tenant_service.cpp(MDS service-record real user)
+
+ObMdsThrottleGuard::ObMdsThrottleGuard(const bool for_replay, const int64_t abs_expire_time)
+    : for_replay_(for_replay), abs_expire_time_(abs_expire_time)
+{
+  throttle_tool_ = &(share::g_mp->shared_mem_alloc_mgr()->share_resource_throttle_tool());
+  if (0 == abs_expire_time) {
+    abs_expire_time_ =
+        ObClockGenerator::getClock() + ObThrottleUnit<ObMdsThrottleGuard>::DEFAULT_MAX_THROTTLE_TIME;
+  }
+  share::mds_throttled_alloc() = 0;
+}
+
+// moved definition to the upper-layer owner cpp(real upper-layer symbol user, declaration remains in the header, transitional state)
+
+
+void *ObTenantMdsAllocator::alloc(const int64_t size)
+{
+  int64_t abs_expire_time = THIS_WORKER.get_timeout_ts();
+  return alloc(size, abs_expire_time);
+}
+
+void *ObTenantMdsAllocator::alloc(const int64_t size, const ObMemAttr &attr)
+{
+  UNUSED(attr);
+  void *obj = alloc(size);
+  MDS_LOG_RET(WARN, OB_INVALID_ARGUMENT, "VSLICE Allocator not support mark attr", KP(obj), K(size), K(attr));
+  return obj;
+}
+
+void *ObTenantMdsAllocator::alloc(const int64_t size, const int64_t abs_expire_time)
+{
+  bool is_throttled = false;
+  // record alloc resource in throttle tool, but do not throttle immediately
+  // ObMdsThrottleGuard calls the real throttle logic
+  (void)throttle_tool_->alloc_resource<ObTenantMdsAllocator>(size, abs_expire_time, is_throttled);
+  if (OB_UNLIKELY(is_throttled)) {
+    share::mds_throttled_alloc() += size;
+  }
+  void *obj = allocator_.alloc(size);
+  MDS_LOG(DEBUG, "mds alloc ", K(size), KP(obj), K(abs_expire_time));
+  return obj;
+}
+
+void ObTenantMdsAllocator::free(void *ptr)
+{
+  allocator_.free(ptr);
+}
+
+void ObTenantMdsAllocator::set_attr(const ObMemAttr &attr) { allocator_.set_attr(attr); }
+
+void *ObTenantBufferCtxAllocator::alloc(const int64_t size)
+{
+  return share::mtl_malloc(size, ObMemAttr("MDS_CTX_DEFAULT", ObCtxIds::MDS_CTX_ID));
+}
+
+void *ObTenantBufferCtxAllocator::alloc(const int64_t size, const ObMemAttr &attr)
+{
+  return share::mtl_malloc(size, attr);
+}
+
+void ObTenantBufferCtxAllocator::free(void *ptr)
+{
+  share::mtl_free(ptr);
+}
+
+}  // namespace share
+}  // namespace oceanbase

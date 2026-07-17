@@ -63,8 +63,6 @@ protected:
   { return ObMPBase::send_eof_packet(session, result); }
   virtual int response_packet(obmysql::ObMySQLPacket &pkt, sql::ObSQLSessionInfo* session)
   { return ObMPBase::response_packet(pkt, session); }
-  virtual bool need_send_extra_ok_packet()
-  { return OB_NOT_NULL(get_conn()) && get_conn()->need_send_extra_ok_packet(); }
 private:
   int do_process(sql::ObSQLSessionInfo &session);
   int response_result(sql::ObSQLSessionInfo &session);

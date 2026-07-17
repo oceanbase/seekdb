@@ -18,7 +18,7 @@
 #define OB_STORAGE_OB_INDEX_TREE_PREFETCHER_H_
 
 #include "share/schema/ob_column_schema.h"
-#include "share/schema/ob_table_param.h"
+#include "storage/access/ob_table_param.h"
 #include "storage/access/ob_store_row_iterator.h"
 #include "storage/access/ob_table_access_context.h"
 #include "storage/blocksstable/index_block/ob_index_block_row_struct.h"
@@ -27,9 +27,6 @@
 #include "storage/blocksstable/ob_sstable.h"
 #include "storage/access/ob_micro_block_handle_mgr.h"
 #include "storage/access/ob_rows_info.h"
-#ifdef OB_BUILD_SHARED_STORAGE
-#include "storage/shared_storage/ob_file_manager.h"
-#endif
 
 namespace oceanbase {
 using namespace blocksstable;
@@ -593,11 +590,6 @@ public:
   int check_row_lock(
       const blocksstable::ObMicroIndexInfo &index_info,
       bool &is_prefetch_end);
-  // For columnar store.
-  OB_INLINE virtual bool switch_to_columnar_scan()
-  {
-    return false;
-  };
   OB_INLINE const blocksstable::ObDatumRowkey& get_border_rowkey()
   {
     return border_rowkey_;
@@ -797,49 +789,6 @@ protected:
       OB_ASSERT(0 <= fetch_idx_);
       return index_block_read_handles_[fetch_idx_ % INDEX_TREE_PREFETCH_DEPTH];
     }
-#ifdef OB_BUILD_SHARED_STORAGE
-    OB_INLINE int try_prefetch_data_macro_block(
-        const int64_t level,
-        const ObIndexTreeMultiPassPrefetcher &prefetcher,
-        const ObMicroIndexInfo &index_info)
-    {
-      int ret = OB_SUCCESS;
-      MacroBlockId macro_id;
-      if (!GCTX.is_shared_storage_mode()
-          || !prefetcher.use_multi_block_prefetch_
-          || prefetcher.index_tree_height_ - 1 != level
-          || !index_info.has_valid_shared_macro_id()
-          || !prefetcher.sstable_->is_major_sstable()
-          || prefetcher.sstable_->is_small_sstable()
-          || !ObStoreRowIterator::is_scan(prefetcher.iter_type_)) {
-        // do nothing
-      } else if (FALSE_IT(macro_id = index_info.get_shared_data_macro_id())) {
-      } else if (OB_UNLIKELY(ObStorageObjectType::SHARED_MAJOR_DATA_MACRO != macro_id.storage_object_type()))  {
-        ret = OB_ERR_UNEXPECTED;
-        STORAGE_LOG(WARN, "macro id type is not SHARED_MAJOR_DATA_MACRO");
-      } else if (OB_FAIL(prefetch_macro_block(macro_id))) {
-        STORAGE_LOG(WARN, "fail to prefetch data macro block", K(ret), K(level));
-      } else {
-        STORAGE_LOG(DEBUG, "succeed to prefetch data macro block", K(level), K(macro_id));
-      }
-      return ret;
-    }
-
-    OB_INLINE int prefetch_macro_block(const MacroBlockId &macro_id)
-    {
-      int ret = OB_SUCCESS;
-      const ObStorageObjectType object_type = macro_id.storage_object_type();
-      if (!GCTX.is_shared_storage_mode()) {
-        // do nothing
-      } else if (OB_UNLIKELY(!macro_id.is_valid())) {
-        ret = OB_ERR_UNEXPECTED;
-        STORAGE_LOG(WARN, "get unexpected invalid macro id", K(ret), K(macro_id));
-      } else if (OB_FAIL(MTL(ObTenantFileManager*)->get_preread_cache_mgr().push_file_id_to_lru(macro_id))) {
-        STORAGE_LOG(WARN, "fail to push macro id into lru read cache", K(ret), K(macro_id));
-      }
-      return ret;
-    }
-#endif
     int prefetch(
         const int64_t level,
         ObIndexTreeMultiPassPrefetcher &prefetcher);

@@ -45,7 +45,7 @@ int ObCreateCCLRuleResolver::resolve(const ParseNode &parse_tree)
   int ret = OB_SUCCESS;
   ParseNode *node = const_cast<ParseNode*>(&parse_tree);
   ObCreateCCLRuleStmt *create_ccl_rule_stmt = NULL;
-  uint64_t tenant_id = OB_INVALID_ID;
+  
   if (OB_ISNULL(node)
       || OB_UNLIKELY(node->type_ != T_CREATE_CCL_RULE)) {
     ret = OB_ERR_UNEXPECTED;
@@ -56,7 +56,6 @@ int ObCreateCCLRuleResolver::resolve(const ParseNode &parse_tree)
   } else if (OB_ISNULL(node->children_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid node children", K(node), K(node->children_));
-  } else if (FALSE_IT(tenant_id = session_info_->get_effective_tenant_id())) {
   } else {
     ObNameCaseMode mode = OB_NAME_CASE_INVALID;
     bool perserve_lettercase = false;
@@ -76,11 +75,11 @@ int ObCreateCCLRuleResolver::resolve(const ParseNode &parse_tree)
       LOG_ERROR("failed to create create_database_stmt", K(ret));
     } else {
       stmt_ = create_ccl_rule_stmt;
-      create_ccl_rule_stmt->set_tenant_id(session_info_->get_effective_tenant_id());
+      
     }
 
     // 1.resolve if not exists and ccl name
-    if (OB_SUCC(ret) && lib::is_mysql_mode()) {
+    if (OB_SUCC(ret)) {
       if (node->children_[IF_NOT_EXIST] != NULL) {
         if (node->children_[IF_NOT_EXIST]->type_ != T_IF_NOT_EXISTS) {
           ret = OB_ERR_UNEXPECTED;

@@ -31,10 +31,9 @@
 #include "storage/compaction/ob_compaction_util.h"
 #include "storage/compaction/ob_medium_compaction_mgr.h"
 #include "storage/ddl/ob_ddl_struct.h"
-#include "storage/high_availability/ob_tablet_ha_status.h"
+#include "storage/ob_tablet_restore_state.h"
 #include "storage/blocksstable/ob_major_checksum_info.h"
 #include "storage/meta_mem/ob_tablet_handle.h"
-#include "storage/column_store/ob_column_store_replica_ddl_helper.h"
 
 namespace oceanbase
 {
@@ -51,16 +50,12 @@ struct ObDiagnoseLocation;
 namespace storage
 {
 class ObStorageSchema;
-struct ObMigrationTabletParam;
 
 typedef common::ObSEArray<common::ObStoreRowkey, common::OB_DEFAULT_MULTI_GET_ROWKEY_NUM> GetRowkeyArray;
 typedef common::ObSEArray<common::ObStoreRange, common::OB_DEFAULT_MULTI_GET_ROWKEY_NUM> ScanRangeArray;
 
 static const int64_t EXIST_READ_SNAPSHOT_VERSION = share::OB_MAX_SCN_TS_NS - 1;
 static const int64_t MERGE_READ_SNAPSHOT_VERSION = share::OB_MAX_SCN_TS_NS - 2;
-// static const int64_t MV_LEFT_MERGE_READ_SNAPSHOT_VERSION = INT64_MAX - 3;
-// static const int64_t MV_RIGHT_MERGE_READ_SNAPSHOT_VERSION = INT64_MAX - 4;
-// static const int64_t MV_MERGE_READ_SNAPSHOT_VERSION = INT64_MAX - 5;
 // static const int64_t BUILD_INDEX_READ_SNAPSHOT_VERSION = INT64_MAX - 6;
 // static const int64_t WARM_UP_READ_SNAPSHOT_VERSION = INT64_MAX - 7;
 static const int64_t GET_BATCH_ROWS_READ_SNAPSHOT_VERSION = share::OB_MAX_SCN_TS_NS - 8;
@@ -91,11 +86,11 @@ public:
   TYPE type_;
 };
 
-class ObErrsimTransferBackfillPoint final
+class ObErrsimBackfillPoint final
 {
 public:
-  ObErrsimTransferBackfillPoint();
-  virtual ~ObErrsimTransferBackfillPoint();
+  ObErrsimBackfillPoint();
+  virtual ~ObErrsimBackfillPoint();
   bool is_valid() const;
   void reset();
   int set_point_type(const ObErrsimBackfillPointType &point_type);
@@ -140,57 +135,13 @@ inline bool is_migrate_status_in_service(const ObMigrateStatus migrate_status)
       ||  OB_MIGRATE_STATUS_COPY_LOCAL_INDEX == migrate_status;
 }
 
-enum ObReplicaOpType
-{
-  ADD_REPLICA_OP = 1,
-  MIGRATE_REPLICA_OP = 2,
-  REBUILD_REPLICA_OP = 3,
-  CHANGE_REPLICA_OP = 4,
-  REMOVE_REPLICA_OP = 5,
-  RESTORE_REPLICA_OP = 6,
-  COPY_GLOBAL_INDEX_OP = 7,
-  COPY_LOCAL_INDEX_OP = 8,
-  RESTORE_FOLLOWER_REPLICA_OP = 9,
-  BACKUP_REPLICA_OP = 10,
-  RESTORE_STANDBY_OP = 11,
-  VALIDATE_BACKUP_OP = 12,
-  FAST_MIGRATE_REPLICA_OP = 13,
-  LINK_SHARE_MAJOR_OP = 14, //share major only for read-only replica in ofs-mode.
-  BACKUP_BACKUPSET_OP = 15,
-  BACKUP_ARCHIVELOG_OP = 16,
-  UNKNOWN_REPLICA_OP,
-};
-
-inline bool is_replica_op_valid(const ObReplicaOpType replica_op)
-{
-  return replica_op >= ADD_REPLICA_OP && replica_op < UNKNOWN_REPLICA_OP;
-}
-
-inline bool need_copy_split_state(const ObReplicaOpType replica_op)
-{
-  return COPY_GLOBAL_INDEX_OP != replica_op && COPY_LOCAL_INDEX_OP != replica_op;
-}
-
-inline bool need_migrate_trans_table(const ObReplicaOpType replica_op)
-{
-  return REBUILD_REPLICA_OP == replica_op
-      || CHANGE_REPLICA_OP == replica_op
-      || ADD_REPLICA_OP == replica_op
-      || MIGRATE_REPLICA_OP == replica_op
-      || FAST_MIGRATE_REPLICA_OP == replica_op
-      || RESTORE_REPLICA_OP == replica_op
-      || RESTORE_FOLLOWER_REPLICA_OP == replica_op
-      || RESTORE_STANDBY_OP == replica_op;
-}
-
 struct ObTabletReportStatus
 {
   ObTabletReportStatus()
     : merge_snapshot_version_(0),
       cur_report_version_(0),
       data_checksum_(0),
-      row_count_(0),
-      found_cg_checksum_error_(false)
+      row_count_(0)
   {
   }
   ~ObTabletReportStatus() { };
@@ -201,14 +152,12 @@ struct ObTabletReportStatus
     data_checksum_ = 0;
     row_count_ = 0;
   }
-  bool need_report() const { return merge_snapshot_version_ > cur_report_version_ && INVALID_VAL != cur_report_version_; }
-  TO_STRING_KV(K_(merge_snapshot_version), K_(cur_report_version), K_(data_checksum), K_(row_count), K_(found_cg_checksum_error));
-  static constexpr int64_t INVALID_VAL = INT64_MIN;
+  bool need_report() const { return merge_snapshot_version_ > cur_report_version_; }
+  TO_STRING_KV(K_(merge_snapshot_version), K_(cur_report_version), K_(data_checksum), K_(row_count));
   int64_t merge_snapshot_version_;
   int64_t cur_report_version_;
   int64_t data_checksum_;
   int64_t row_count_;
-  bool found_cg_checksum_error_;
   OB_UNIS_VERSION(1);
 };
 
@@ -318,7 +267,6 @@ struct ObGetMergeTablesResult
   //for backfill
   bool is_backfill_;
   share::SCN backfill_scn_;
-  int64_t transfer_seq_; // is_used for write_macro_block in ss, used for all compaction.
   ObGetMergeTablesResult();
   bool is_valid() const;
   void reset_handle_and_range();
@@ -328,7 +276,7 @@ struct ObGetMergeTablesResult
   int copy_basic_info(const ObGetMergeTablesResult &src);
   share::SCN get_merge_scn() const;
   TO_STRING_KV(K_(version_range), K_(scn_range), K_(merge_version), K_(is_simplified),
-      K_(handle), K_(update_tablet_directly), K_(schedule_major), K_(is_backfill), K_(backfill_scn), K_(transfer_seq));
+      K_(handle), K_(update_tablet_directly), K_(schedule_major), K_(is_backfill), K_(backfill_scn));
 };
 
 OB_INLINE bool is_valid_migrate_status(const ObMigrateStatus &status)
@@ -345,7 +293,7 @@ public:
                K_(ddl_start_scn), K_(ddl_commit_scn), K_(ddl_checkpoint_scn),
                K_(ddl_snapshot_version), K_(ddl_execution_id),
                K_(data_format_version), KP_(ddl_redo_callback),
-               KP_(ddl_finish_callback), K_(ddl_replay_status), K_(slice_sstables));
+               KP_(ddl_finish_callback), K(slice_sstables_.count()));
 
 public:
   bool keep_old_ddl_sstable_;
@@ -358,8 +306,6 @@ public:
   int64_t data_format_version_;
   blocksstable::ObIMacroBlockFlushCallback *ddl_redo_callback_;
   blocksstable::ObIMacroBlockFlushCallback *ddl_finish_callback_;
-  // used to decide storage type for replaying ddl clog in cs replica, see ObTabletMeta::ddl_replay_status_ for more detail
-  ObCSReplicaDDLReplayStatus ddl_replay_status_;
   ObArray<const blocksstable::ObSSTable *> slice_sstables_;
 };
 
@@ -420,7 +366,6 @@ struct ObUpdateTableStoreParam
     const int64_t snapshot_version,
     const int64_t multi_version_start,
     const ObStorageSchema *storage_schema,
-    const int64_t rebuild_seq,
     const blocksstable::ObSSTable *sstable = NULL,
     const bool allow_duplicate_sstable = false,
     const bool need_wait_check_flag = true);
@@ -428,7 +373,6 @@ struct ObUpdateTableStoreParam
     const int64_t snapshot_version,
     const int64_t multi_version_start,
     const ObStorageSchema *storage_schema,
-    const int64_t rebuild_seq,
     const UpdateUpperTransParam upper_trans_param);
   int init_with_compaction_info(
     const ObCompactionTableStoreParam &comp_param,
@@ -452,7 +396,7 @@ struct ObUpdateTableStoreParam
   #undef HA_PARAM_FUNC
   #undef PARAM_DEFINE_FUNC
   TO_STRING_KV(KP_(sstable), K_(snapshot_version), K_(multi_version_start),
-               KPC_(storage_schema), K_(rebuild_seq),
+               KPC_(storage_schema),
                K_(compaction_info), K_(ha_info),
                K_(ddl_info), K_(allow_duplicate_sstable), K_(upper_trans_param));
   ObCompactionTableStoreParam compaction_info_;
@@ -462,26 +406,9 @@ struct ObUpdateTableStoreParam
   int64_t snapshot_version_;
   int64_t multi_version_start_;
   const ObStorageSchema *storage_schema_;
-  int64_t rebuild_seq_;
   const blocksstable::ObSSTable *sstable_;
   bool allow_duplicate_sstable_;
   UpdateUpperTransParam upper_trans_param_; // set upper_trans_param_ only when update upper_trans_version
-};
-
-struct ObSplitTableStoreParam final
-{
-public:
-  ObSplitTableStoreParam();
-  ~ObSplitTableStoreParam();
-  bool is_valid() const;
-  void reset();
-  TO_STRING_KV(K_(snapshot_version), K_(multi_version_start), K_(merge_type), K_(skip_split_keys));
-
-public:
-  int64_t snapshot_version_;
-  int64_t multi_version_start_;
-  compaction::ObMergeType merge_type_;
-  ObSEArray<ObITable::TableKey, MAX_SSTABLE_CNT_IN_STORAGE> skip_split_keys_;
 };
 
 struct ObForkTableStoreParam final
@@ -508,22 +435,15 @@ struct ObBatchUpdateTableStoreParam final
   bool is_valid() const;
   void reset();
 
-  TO_STRING_KV(K_(tables_handle), K_(rebuild_seq), K_(is_transfer_replace),
-      K_(start_scn), KP_(tablet_meta), K_(restore_status), K_(tablet_split_param),
-      K_(tablet_fork_param), K_(need_replace_remote_sstable), K_(release_mds_scn));
+  TO_STRING_KV(K_(tables_handle),
+      KP_(storage_schema), K_(tablet_fork_param), K_(release_mds_scn));
 
   ObTablesHandleArray tables_handle_;
 #ifdef ERRSIM
-  ObErrsimTransferBackfillPoint errsim_point_info_;
+  ObErrsimBackfillPoint errsim_point_info_;
 #endif
-  int64_t rebuild_seq_;
-  bool is_transfer_replace_;
-  share::SCN start_scn_;
-  const ObMigrationTabletParam *tablet_meta_;
-  ObTabletRestoreStatus::STATUS restore_status_;
-  ObSplitTableStoreParam tablet_split_param_;
+  const ObStorageSchema *storage_schema_;
   ObForkTableStoreParam tablet_fork_param_;
-  bool need_replace_remote_sstable_;
   share::SCN release_mds_scn_;
 
   DISALLOW_COPY_AND_ASSIGN(ObBatchUpdateTableStoreParam);
@@ -624,35 +544,6 @@ public:
   // whether the partition is in rebuild
 private:
   transaction::ObLSTxCtxMgr& ls_tx_ctx_mgr_;
-};
-
-
-enum class ObTabletSplitType : int64_t {
-  RANGE,
-  NONE_RANGE,
-  MAX_TYPE,
-};
-
-struct ObTabletSplitTscInfo final
-{
-public:
-  ObTabletSplitTscInfo();
-  ~ObTabletSplitTscInfo() = default;
-
-  bool is_split_dst_with_partkey() const;
-  bool is_split_dst_without_partkey() const;
-  void reset();
-
-  TO_STRING_KV(K_(start_partkey), 
-    K_(end_partkey), K_(is_split_dst), K_(split_type), K_(split_cnt), K_(partkey_is_rowkey_prefix));
-
-public:
-  blocksstable::ObDatumRowkey start_partkey_;
-  blocksstable::ObDatumRowkey end_partkey_;
-  bool is_split_dst_;
-  int64_t split_cnt_;
-  ObTabletSplitType split_type_;
-  bool partkey_is_rowkey_prefix_;
 };
 
 

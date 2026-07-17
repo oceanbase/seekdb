@@ -45,7 +45,6 @@ ObInfoSchemaTablePrivilegesTable::StaticInit::StaticInit()
 
 ObInfoSchemaTablePrivilegesTable::ObInfoSchemaTablePrivilegesTable()
     : ObVirtualTableScannerIterator(),
-      tenant_id_(OB_INVALID_ID),
       user_id_(OB_INVALID_ID)
 {
 }
@@ -56,7 +55,6 @@ ObInfoSchemaTablePrivilegesTable::~ObInfoSchemaTablePrivilegesTable()
 
 void ObInfoSchemaTablePrivilegesTable::reset()
 {
-  tenant_id_ = OB_INVALID_ID;
   user_id_ = OB_INVALID_ID;
   session_ = NULL;
   ObVirtualTableScannerIterator::reset();
@@ -73,14 +71,14 @@ int ObInfoSchemaTablePrivilegesTable::inner_get_next_row(common::ObNewRow *&row)
     ret = OB_NOT_INIT;
     SERVER_LOG(WARN, "allocator is NULL", K(ret));
   } else if (OB_UNLIKELY(OB_ISNULL(allocator_) || OB_ISNULL(schema_guard_)
-      || OB_INVALID_ID == tenant_id_ || OB_INVALID_ID == user_id_)) {
+      || OB_INVALID_ID == user_id_)) {
     ret = OB_NOT_INIT;
     SERVER_LOG(WARN, "Invalid argument", K(allocator_), K(schema_guard_),
-        K(tenant_id_), K(user_id_), K(ret));
+        K(user_id_), K(ret));
   } else {
     if (!start_to_read_) {
       ObArray<const ObTablePriv *> table_priv_array;
-      if (OB_FAIL(get_table_privs(tenant_id_, user_id_, table_priv_array))) {
+      if (OB_FAIL(get_table_privs(user_id_, table_priv_array))) {
         SERVER_LOG(WARN, "Failed to get table privs", K(ret));
       } else {
         for (int64_t tp_id = 0; OB_SUCC(ret) && tp_id < table_priv_array.count(); ++tp_id) {
@@ -113,8 +111,7 @@ int ObInfoSchemaTablePrivilegesTable::inner_get_next_row(common::ObNewRow *&row)
 }
 
 
-int ObInfoSchemaTablePrivilegesTable::get_table_privs(const uint64_t tenant_id,
-                                                      const uint64_t user_id,
+int ObInfoSchemaTablePrivilegesTable::get_table_privs(const uint64_t user_id,
                                                       ObArray<const ObTablePriv *> &table_privs)
 {
   int ret = OB_SUCCESS;
@@ -124,18 +121,18 @@ int ObInfoSchemaTablePrivilegesTable::get_table_privs(const uint64_t tenant_id,
   } else {
     //const ObDBPriv *db_priv = NULL;
     ObPrivSet user_db_priv_set = session_->get_user_priv_set();
-    //ObOriginalDBKey db_key(tenant_id, user_id, ObString::make_string("mysql"));
+    //ObOriginalDBKey db_key(sys tenant, user_id, ObString::make_string("mysql"));
     ObPrivSet db_priv_set = OB_PRIV_SET_EMPTY;
-    if (OB_FAIL(schema_guard_->get_db_priv_set(tenant_id, user_id, ObString::make_string("mysql"), db_priv_set))) {
+    if (OB_FAIL(schema_guard_->get_db_priv_set(user_id, ObString::make_string("mysql"), db_priv_set))) {
       SERVER_LOG(WARN, "get db priv set failed", K(ret));
     } else {
       user_db_priv_set |= db_priv_set;
       if (OB_PRIV_HAS_ANY(user_db_priv_set, OB_PRIV_SELECT)) {
-        if (OB_FAIL(schema_guard_->get_table_priv_with_tenant_id(tenant_id_, table_privs))) {
+        if (OB_FAIL(schema_guard_->get_table_priv_by_id(table_privs))) {
           SERVER_LOG(WARN, "Get table priv with tenant id error", K(ret));
         }
       } else {
-        if (OB_FAIL(schema_guard_->get_table_priv_with_user_id(tenant_id_, user_id_, table_privs))) {
+        if (OB_FAIL(schema_guard_->get_table_priv_with_user_id(user_id_, table_privs))) {
           SERVER_LOG(WARN, "Get table priv with user id error", K(ret));
         }
       }
@@ -155,9 +152,7 @@ int ObInfoSchemaTablePrivilegesTable::get_user_name_from_table_priv(const ObTabl
     SERVER_LOG(WARN, "table_priv is null", K(ret));
   } else {
     const ObUserInfo *user_info = NULL;
-    if (OB_FAIL(schema_guard_->get_user_info(
-        table_priv->get_tenant_user_id().tenant_id_,
-        table_priv->get_tenant_user_id().user_id_,
+    if (OB_FAIL(schema_guard_->get_user_info(table_priv->get_tenant_user_id().user_id_,
         user_info))) {
       SERVER_LOG(WARN, "Failed to get userinfo with table priv", K(ret), K(table_priv->get_tenant_user_id()));
     } else if (NULL == user_info) {

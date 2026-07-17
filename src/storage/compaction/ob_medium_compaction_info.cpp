@@ -451,8 +451,8 @@ void ObMediumCompactionInfo::reset()
   contain_parallel_range_ = false;
   medium_merge_reason_ = ObAdaptiveMergePolicy::NONE;
   is_schema_changed_ = false;
-  tenant_id_ = 0;
-  co_major_merge_type_ = ObCOMajorMergePolicy::INVALID_CO_MAJOR_MERGE_TYPE;
+  
+  unused_co_major_merge_type_ = 0;
   is_skip_tenant_major_ = false;
   contain_mds_filter_info_ = false;
   reserved_ = 0;
@@ -504,12 +504,6 @@ int ObMediumCompactionInfo::gene_parallel_info(
 bool ObMediumCompactionInfo::contain_storage_schema() const
 {
   bool contain_schema = true;
-#ifdef OB_BUILD_SHARED_STORAGE
-  if (GCTX.is_shared_storage_mode() &&
-      ObAdaptiveMergePolicy::is_skip_merge_reason((ObAdaptiveMergePolicy::AdaptiveMergeReason)medium_merge_reason_)) {
-    contain_schema = false;
-  }
-#endif
   return contain_schema;
 }
 
@@ -662,9 +656,9 @@ int64_t ObMediumCompactionInfo::to_string(char* buf, const int64_t buf_len) cons
     J_OBJ_START();
     J_KV("compaction_type", ObMediumCompactionInfo::get_compaction_type_str((ObCompactionType)compaction_type_),
       "merge_reason", ObAdaptiveMergePolicy::merge_reason_to_str(medium_merge_reason_),
-      K_(medium_snapshot), K_(last_medium_snapshot), K_(tenant_id), K_(cluster_id),
+      K_(medium_snapshot), K_(last_medium_snapshot), K_(cluster_id),
       K_(medium_compat_version), K_(data_version), K_(is_schema_changed), K_(storage_schema),
-      "co_major_merge_type", ObCOMajorMergePolicy::co_major_merge_type_to_str(static_cast<ObCOMajorMergePolicy::ObCOMajorMergeType>(co_major_merge_type_)),
+      K_(unused_co_major_merge_type),
       K_(is_skip_tenant_major), K_(contain_parallel_range), K_(parallel_merge_info), K_(encoding_granularity));
     if (contain_mds_filter_info_) {
       J_COMMA();

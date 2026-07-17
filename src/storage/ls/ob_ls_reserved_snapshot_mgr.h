@@ -20,12 +20,10 @@
 #include "logservice/ob_append_callback.h"
 #include "lib/utility/ob_print_utils.h"
 #include "lib/hash/ob_hashset.h"
-#include "share/ob_ls_id.h"
 #include "common/ob_tablet_id.h"
 #include "lib/lock/ob_tc_rwlock.h"
 #include "storage/ob_storage_clog_recorder.h"
 #include "logservice/ob_log_base_header.h"
-#include "storage/tx_storage/ob_ls_handle.h"
 
 namespace oceanbase
 {
@@ -44,12 +42,10 @@ public:
   ObLSReservedSnapshotMgr();
   ~ObLSReservedSnapshotMgr();
 
-  int init(const int64_t tenant_id, storage::ObLS *ls, logservice::ObLogHandler *log_handler);
+  int init(storage::ObLS *ls, logservice::ObLogHandler *log_handler);
   virtual void destroy() override;
 
-  // for leader
   int try_sync_reserved_snapshot(const int64_t new_reserved_snapshot, const bool update_flag);
-  // follower
   int replay_reserved_snapshot_log(const share::SCN &scn, const char *buf, const int64_t size, int64_t &pos);
   // operate with write_lock
   int add_dependent_medium_tablet(const ObTabletID tablet_id);
@@ -58,7 +54,7 @@ public:
   int64_t get_min_reserved_snapshot();
 
 private:
-  int update_min_reserved_snapshot_for_leader(const int64_t new_reserved_snapshot);
+  int update_min_reserved_snapshot(const int64_t new_reserved_snapshot);
   int inner_update_reserved_snapshot(const int64_t reserved_snapshot);
 
   virtual int inner_replay_clog(
@@ -67,8 +63,8 @@ private:
       const char *buf,
       const int64_t size,
       int64_t &pos) override;
-  virtual int sync_clog_succ_for_leader(const int64_t update_version) override;
-  virtual void sync_clog_failed_for_leader() override
+  virtual int on_sync_clog_success(const int64_t update_version) override;
+  virtual void on_sync_clog_failure() override
   {
     // do nothing
   }
@@ -105,7 +101,6 @@ private:
   mutable common::TCRWLock snapshot_lock_;
   lib::ObMutex sync_clog_lock_;
   storage::ObLS *ls_;
-  ObLSHandle ls_handle_;
   common::hash::ObHashSet<uint64_t, hash::NoPthreadDefendMode> dependent_tablet_set_; // tablet_id
   ObStorageCLogCb clog_cb_;
   int64_t last_print_log_ts_;

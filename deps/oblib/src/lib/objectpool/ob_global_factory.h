@@ -66,7 +66,7 @@ private:
 inline ObTCBlock *ObTCBlock::new_block(int32_t obj_size, const lib::ObLabel &label)
 {
   ObTCBlock *blk_ret = NULL;
-  ObMemAttr memattr(OB_SERVER_TENANT_ID, label);
+  ObMemAttr memattr(label);
   void *ptr = ob_malloc(BLOCK_SIZE, memattr);
   if (OB_ISNULL(ptr)) {
     LIB_LOG_RET(WARN, common::OB_ALLOCATE_MEMORY_FAILED, "no memory");

@@ -17,7 +17,7 @@
  #define USING_LOG_PREFIX COMMON
 
  #include "sql/engine/expr/ob_expr_vec_chunk.h"
-
+ 
 namespace oceanbase
 {
 using namespace common;
@@ -28,7 +28,7 @@ ObExprVecChunk::ObExprVecChunk(ObIAllocator &allocator)
 {
    need_charset_convert_ = false;
 }
-
+ 
 int ObExprVecChunk::calc_result_typeN(ObExprResType &type,
                                        ObExprResType *types,
                                        int64_t param_num,
@@ -45,7 +45,7 @@ int ObExprVecChunk::calc_result_typeN(ObExprResType &type,
   }
   return ret;
 }
-
+ 
 int ObExprVecChunk::calc_resultN(ObObj &result,
                                   const ObObj *objs_array,
                                   int64_t param_num,
@@ -53,7 +53,7 @@ int ObExprVecChunk::calc_resultN(ObObj &result,
 {
    return OB_NOT_SUPPORTED;
 }
-
+ 
 int ObExprVecChunk::cg_expr(
     ObExprCGCtx &expr_cg_ctx,
     const ObRawExpr &raw_expr,
@@ -93,3 +93,4 @@ int ObExprVecChunk::generate_vec_chunk(
 
 }  // namespace sql
 }  // namespace oceanbase
+ 

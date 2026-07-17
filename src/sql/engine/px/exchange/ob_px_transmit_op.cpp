@@ -313,8 +313,7 @@ int ObPxTransmitOp::init_dfc(ObDtlDfoKey &parent_key, ObDtlSqcInfo &child_info)
 {
   int ret = OB_SUCCESS;
   ObPhysicalPlanCtx *phy_plan_ctx = GET_PHY_PLAN_CTX(ctx_);
-  if (OB_FAIL(dfc_.init(ctx_.get_my_session()->get_effective_tenant_id(),
-                        task_ch_set_.count()))) {
+  if (OB_FAIL(dfc_.init(task_ch_set_.count()))) {
     LOG_WARN("Fail to init dfc", K(ret));
   } else {
     dfc_.set_timeout_ts(phy_plan_ctx->get_timeout_timestamp());
@@ -358,10 +357,10 @@ int ObPxTransmitOp::init_channel(ObPxTransmitOpInput &trans_input)
     LOG_WARN("fail to init channels block info", K(ret));
   } else {
     uint64_t min_cluster_version = ctx_.get_physical_plan_ctx()->get_phy_plan()->get_min_cluster_version();
-    bool enable_audit = GCONF.enable_sql_audit && ctx_.get_my_session()->get_local_ob_enable_sql_audit();
+    bool enable_audit = true;
     metric_.init(enable_audit);
     common::ObIArray<dtl::ObDtlChannel*> &channels = task_channels_;
-    loop_.set_tenant_id(ctx_.get_my_session()->get_effective_tenant_id());
+    
     loop_.register_processor(dfc_unblock_msg_proc_)
         .register_interrupt_processor(interrupt_proc_);
     loop_.set_process_query_time(ctx_.get_my_session()->get_process_query_time());
@@ -1202,7 +1201,7 @@ int ObPxTransmitOp::send_eof_row()
     ObTransmitEofAsynSender eof_asyn_sender(task_channels_, ch_info_, true, phy_plan_ctx->get_timeout_timestamp(), &eval_ctx_, data_msg_type_);
     if (OB_FAIL(eof_asyn_sender.asyn_send())) {
       LOG_WARN("failed to asyn send drain", K(ret), K(lbt()));
-    } else if (GCONF.enable_sql_audit) {
+    } else {
       op_monitor_info_.otherstat_2_id_ = ObSqlMonitorStatIds::EXCHANGE_EOF_TIMESTAMP;
       op_monitor_info_.otherstat_2_value_ = oceanbase::common::ObClockGenerator::getClock();
       // It's the end time of sending all data
@@ -1236,7 +1235,8 @@ int ObPxTransmitOp::send_row(int64_t slice_idx,
         update_row(spec.tablet_id_expr_, tablet_id);
       }
       ObDtlBasicChannel *channel = static_cast<ObDtlBasicChannel *> (task_channels_.at(slice_idx));
-      bool is_rpc_channel = channel->get_channel_type() == ObDtlChannel::DtlChannelType::RPC_CHANNEL;
+      // single-replica: only local (in-process) channels exist, never an rpc channel.
+      const bool is_rpc_channel = false;
       switch (data_msg_type_) {
         case dtl::ObDtlMsgType::PX_VECTOR_FIXED: {
           ObDtlVectorFixedMsgWriter &fixed_writer = channel->get_vector_fixed_msg_writer();
@@ -1363,7 +1363,7 @@ int ObPxTransmitOp::broadcast_eof_row()
     LOG_WARN("unexpected NULL ptr", K(ret));
   } else if (OB_FAIL(chs_agent_.flush())) {
     LOG_WARN("fail flush row to slice channel", K(ret));
-  } else if (GCONF.enable_sql_audit) {
+  } else {
     op_monitor_info_.otherstat_2_id_ = ObSqlMonitorStatIds::EXCHANGE_EOF_TIMESTAMP;
     op_monitor_info_.otherstat_2_value_ = oceanbase::common::ObClockGenerator::getClock();
     // It's the end time of sending all data
@@ -1406,13 +1406,13 @@ int ObPxTransmitOp::link_ch_sets(ObPxTaskChSet &ch_set,
   dtl::ObDtlChannelInfo ci;
   int64_t hash_val = 0;
   int64_t offset = 0;
-  const int64_t DTL_CHANNEL_SIZE = sizeof(ObDtlRpcChannel) > sizeof(ObDtlLocalChannel) ? sizeof(ObDtlRpcChannel) : sizeof(ObDtlLocalChannel);
+  const int64_t DTL_CHANNEL_SIZE = sizeof(ObDtlLocalChannel);
   if (OB_FAIL(channels.reserve(ch_set.count()))) {
     LOG_WARN("fail reserve channels", K(ret), K(ch_set.count()));
   } else if (OB_FAIL(dfc->reserve(ch_set.count()))) {
     LOG_WARN("fail reserve dfc channels", K(ret), K(ch_set.count()));
   } else if (ch_set.count() > 0) {
-    ObMemAttr attr(ctx_.get_my_session()->get_effective_tenant_id(), "SqlDtlTxChan");
+    ObMemAttr attr("SqlDtlTxChan");
     void *buf = oceanbase::common::ob_malloc(DTL_CHANNEL_SIZE * ch_set.count(), attr);
     if (nullptr == buf) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
@@ -1441,14 +1441,16 @@ int ObPxTransmitOp::link_ch_sets(ObPxTaskChSet &ch_set,
         if (OB_FAIL(ch_set.get_channel_info(idx, ci))) {
           LOG_WARN("fail get channel info", K(idx), K(ret));
         } else if (nullptr != dfc && ci.type_ == DTL_CT_LOCAL) {
-          ch = new((char*)buf + offset) ObDtlLocalChannel(ci.tenant_id_, ci.chid_, ci.peer_, hash_val, ObDtlChannel::DtlChannelType::LOCAL_CHANNEL);
+          ch = new((char*)buf + offset) ObDtlLocalChannel(ci.chid_, ci.peer_, hash_val, ObDtlChannel::DtlChannelType::LOCAL_CHANNEL);
         } else {
-          ch = new((char*)buf + offset) ObDtlRpcChannel(ci.tenant_id_, ci.chid_, ci.peer_, hash_val, ObDtlChannel::DtlChannelType::RPC_CHANNEL);
+          // single-replica: only local (in-process) channels are supported.
+          ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("only local dtl channel is supported", K(ret), K(ci.type_));
         }
         if (OB_FAIL(ret)) {
         } else if (nullptr == ch) {
           ret = OB_ALLOCATE_MEMORY_FAILED;
-          LOG_WARN("create channel fail", K(ret), K(ci.tenant_id_), K(ci.chid_));
+          LOG_WARN("create channel fail", K(ret), K(ci.chid_));
         } else if (OB_FAIL(ObDtlChannelGroup::link_channel(ci, ch, dfc))) {
           LOG_WARN("fail link channel", K(ci), K(ret));
         } else if (OB_ISNULL(ch)) {

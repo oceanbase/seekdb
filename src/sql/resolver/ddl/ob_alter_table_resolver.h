@@ -58,13 +58,11 @@ public:
                              ObReducedVisibleColSet &drop_column_names_set,
                              bool &has_add_column,
                              bool &has_drop_column);
-  int resolve_index_options_oracle(const ParseNode &node);
+  int resolve_extended_index_options(const ParseNode &node);
   int resolve_index_options(const ParseNode &action_node_list, const ParseNode &node,
                             bool &is_add_index);
   int resolve_partition_options(const ParseNode &node);
   int resolve_constraint_options(const ParseNode &node, const bool is_multi_actions);
-  int resolve_modify_foreign_key_state(const ParseNode *node);
-  int resolve_modify_check_constraint_state_oracle(const ParseNode *node);
   int resolve_modify_check_constraint_state_mysql(const ParseNode* node);
   int resolve_tablegroup_options(const ParseNode &node);
   int resolve_convert_to_character(const ParseNode &node);
@@ -101,23 +99,22 @@ public:
   int resolve_set_interval(ObAlterTableStmt *stmt, const ParseNode &node);
 
 private:
-  int fill_high_bound_val_for_split_partition(const AlterTableSchema &alter_table_schema, ObPartition& split_part);
   int check_dup_foreign_keys_exist(
       share::schema::ObSchemaGetterGuard *schema_guard,
-      const obrpc::ObCreateForeignKeyArg &foreign_key_arg);
+      const obcall::ObCreateForeignKeyArg &foreign_key_arg);
   int resolve_alter_table_option_list(const ParseNode &node);
   int check_drop_column_is_partition_key(const ObTableSchema &table_schema, 
                                          const ObString &column_name);
 
   int set_column_collation(share::schema::AlterColumnSchema &alter_column_schema);
   int resolve_index_column_list(const ParseNode &node,
-                                obrpc::ObCreateIndexArg &index_arg,
+                                obcall::ObCreateIndexArg &index_arg,
                                 const int64_t index_name_value,
                                 ObIArray<ObString> &input_index_columns_name,
                                 bool &cnt_func_index);
 
-  int add_sort_column(const obrpc::ObColumnSortItem &sort_column,
-                      obrpc::ObCreateIndexArg &index_arg);
+  int add_sort_column(const obcall::ObColumnSortItem &sort_column,
+                      obcall::ObCreateIndexArg &index_arg);
 
   int process_timestamp_column(ObColumnResolveStat &stat, share::schema::AlterColumnSchema &alter_column_schema);
   int resolve_add_index(const ParseNode &node);
@@ -126,13 +123,13 @@ private:
   int resolve_alter_index(const ParseNode &node);
   int resolve_alter_index_storage_cache_policy(const ParseNode &node);
   int resolve_rename_index(const ParseNode &node);
-  int resolve_alter_index_parallel_oracle(const ParseNode &node);
+  int resolve_alter_index_parallel_extended(const ParseNode &node);
   int resolve_alter_index_parallel_mysql(const ParseNode &node);
   int check_is_drop_primary_key(const ParseNode &node, bool &is_drop_primary_key);
   int resolve_drop_primary(const ParseNode &action_node_list);
   int resolve_add_primary(const ParseNode &node);
   int resolve_alter_primary(const ParseNode &action_node_list, const ParseNode &node);
-  int generate_index_arg(obrpc::ObCreateIndexArg &index_arg, const bool is_unique_key);
+  int generate_index_arg(obcall::ObCreateIndexArg &index_arg, const bool is_unique_key);
   int resolve_alter_table_column_definition(share::schema::AlterColumnSchema &column,
                                             ParseNode *node, ObColumnResolveStat &stat,
                                             bool &is_modify_column_visibility,
@@ -188,23 +185,12 @@ private:
                           const bool is_sub_part,
                           ParseNode *&part_expr_node);
 
-  //only for external table
-  int resolve_external_partition_options(const ParseNode &node);
 
-  int resolve_drop_external_partition(const ParseNode &location_node);
-  int resolve_add_external_partition(const ParseNode &part_element, const ParseNode &location_element);
   int resolve_pos_column(const ParseNode *node, share::schema::AlterColumnSchema &alter_column_schema);
   int fill_column_schema_according_stat(const ObColumnResolveStat &stat,
                                         share::schema::AlterColumnSchema &alter_column_schema);
   int resolve_partitioned_partition(const ParseNode *node,
                                     const share::schema::ObTableSchema &origin_table_schema);
-  int resolve_reorganize_partition(const ParseNode *node,
-                                   const share::schema::ObTableSchema &origin_table_schema);
-  int resolve_split_partition(const ParseNode *node,
-                              const share::schema::ObTableSchema &origin_table_schema);
-  int fill_split_source_tablet_id(const ObString& source_part_name,
-                                  const share::schema::ObTableSchema &origin_table_schema,
-                                  share::schema::AlterTableSchema &alter_table_schema);
   virtual int get_table_schema_for_check(const share::schema::ObTableSchema *&table_schema) override;
   //int generate_new_schema(const share::schema::ObTableSchema &origin_table_schema,
   //                        share::schema::AlterTableSchema &new_table_schema);
@@ -221,9 +207,6 @@ private:
                                    const share::schema::ObColumnSchemaV2 &src_col_schema,
                                    const share::schema::ObColumnSchemaV2 &dst_col_schema,
                                    const bool is_part_key);
-  int resolve_column_group_for_column();
-  int resolve_alter_column_groups(const ParseNode &node);
-
   int check_alter_column_schemas_valid(ObAlterTableStmt &stmt);
 
   int check_mysql_rename_column(const share::schema::AlterColumnSchema &alter_column_schema,

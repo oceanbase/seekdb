@@ -18,6 +18,7 @@
 
 #include "ob_worker_processor.h"
 #include "lib/oblog/ob_warning_buffer.h"
+#include "sql/ob_sql_context.h"
 #include "rpc/obmysql/ob_mysql_packet.h"
 #include "rpc/frame/ob_req_translator.h"
 #include "rpc/frame/ob_req_processor.h"
@@ -27,7 +28,8 @@ using namespace oceanbase::common;
 using namespace oceanbase::omt;
 using namespace oceanbase::rpc;
 using namespace oceanbase::rpc::frame;
-using namespace oceanbase::obrpc;
+using namespace oceanbase::obcall;
+using oceanbase::sql::ObQueryRetryAshGuard;
 
 ObWorkerProcessor::ObWorkerProcessor(
     ObReqTranslator &xlator,
@@ -86,7 +88,7 @@ inline int ObWorkerProcessor::process_one(rpc::ObRequest &req)
     }
     translator_.release(processor);
     if (ObQueryRetryAshGuard::get_info_ptr() != nullptr) {
-      LOG_ERROR_RET(OB_ERR_UNEXPECTED, "retry info ptr is not null, maybe crash", K(ObLocalDiagnosticInfo::get()->get_ash_stat()));
+      LOG_ERROR_RET(OB_ERR_UNEXPECTED, "retry info ptr is not null, maybe crash");
     }
   }
 
@@ -106,39 +108,17 @@ int ObWorkerProcessor::process(rpc::ObRequest &req)
                OB_ID(receive_ts), req.get_receive_timestamp(),
                OB_ID(enqueue_ts), req.get_enqueue_timestamp());
   ObRequest::Type req_type = req.get_type(); // bugfix note: must be obtained in advance
-  ObDiagnosticInfo *di = ObLocalDiagnosticInfo::get();
-  if (di != nullptr && !di->get_ash_stat().has_user_module_) {
-    //di->get_ash_stat().has_user_module_ == true means these module and action specified by user, we can't rewrite it
-    ObLocalDiagnosticInfo::set_service_module(THIS_THWORKER.get_module_name());
-  }
   if (ObRequest::OB_RPC == req_type) {
-    // internal RPC request
-    const obrpc::ObRpcPacket &packet
-        = static_cast<const obrpc::ObRpcPacket&>(req.get_packet());
-    NG_TRACE_EXT(start_rpc, OB_ID(addr), RPC_REQ_OP.get_peer(&req), OB_ID(pcode), packet.get_pcode());
+    // obcall RPC transport removed (single-replica): OB_RPC requests are never
+    // delivered. Keep the branch as a dead no-op for type completeness.
+    NG_TRACE_EXT(start_rpc, OB_ID(addr), RPC_REQ_OP.get_peer(&req));
     ObCurTraceId::set(req.generate_trace_id(myaddr_));
-
-#ifdef ERRSIM
-    THIS_WORKER.set_module_type(packet.get_module_type());
-#endif
-
-    // Do not set thread local log level while log level upgrading (OB_LOGGER.is_info_as_wdiag)
-    if (OB_LOGGER.is_info_as_wdiag()) {
-      ObThreadLogLevelUtils::clear();
-    } else {
-      if (OB_LOG_LEVEL_NONE != packet.get_log_level()) {
-        ObThreadLogLevelUtils::init(packet.get_log_level());
-      }
-    }
   } else if (ObRequest::OB_MYSQL == req_type) {
     NG_TRACE_EXT(start_sql, OB_ID(addr), SQL_REQ_OP.get_peer(&req));
     // mysql command request
       const obmysql::ObMySQLRawPacket &pkt
           = static_cast<const obmysql::ObMySQLRawPacket &>(req.get_packet());
     ObCurTraceId::set(req.generate_trace_id(myaddr_));
-    if (OB_NOT_NULL(di) && !di->get_ash_stat().has_user_action_) {
-      ObLocalDiagnosticInfo::get()->get_ash_stat().mysql_cmd_ = static_cast<int64_t>(pkt.get_cmd());
-    }
   }
   // record trace id
   ObTraceIdAdaptor trace_id_adaptor;

@@ -73,10 +73,8 @@ public:
 public:
   ObRowStore(ObIAllocator &alloc,
              const lib::ObLabel &label = ObModIds::OB_SQL_ROW_STORE,
-             const uint64_t tenant_id = common::OB_SERVER_TENANT_ID,
              bool use_compact_row = true);
   ObRowStore(const lib::ObLabel &label = ObModIds::OB_SQL_ROW_STORE,
-             const uint64_t tenant_id = common::OB_SERVER_TENANT_ID,
              bool use_compact_row = true);
   ~ObRowStore();
   void set_label(const lib::ObLabel &label) { label_ = label; }
@@ -176,7 +174,7 @@ public:
   void dump() const;
 
   // set tenant id
-  void set_tenant_id(uint64_t tenant_id) { tenant_id_ = tenant_id; }
+  
 
   void set_use_compact(bool opt) { use_compact_row_ = opt; }
 
@@ -232,7 +230,7 @@ private:
   void del_block_list(BlockInfo *del_block);
   int adjust_row_cells_reference();
 private:
-  // xiyu@TODO: add control for tenant_id
+  // xiyu@TODO: add control for tenant
   DefaultPageAllocator inner_alloc_;
   ObFixedArray<int64_t, common::ObIAllocator> reserved_columns_;
   BlockList blocks_;  // ASSERT: all linked blocks has at least one row stored
@@ -242,7 +240,7 @@ private:
   int64_t col_count_;
   int64_t last_last_row_size_;  // for rollback & get_last_row
   int64_t last_row_size_;     // for get_last_row, -1 means invalid
-  uint64_t tenant_id_; // the tenant who owns the store
+   // the tenant who owns the store
   lib::ObLabel label_;
   int64_t ctx_id_;
   bool is_read_only_;

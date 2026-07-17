@@ -25,7 +25,7 @@ SubObjectMgr::SubObjectMgr(ObTenantCtxAllocator &ta,
                            const uint32_t ablock_size,
                            const bool enable_dirty_list,
                            IBlockMgr *blk_mgr)
-  : IBlockMgr(ta.get_tenant_id(), ta.get_ctx_id()),
+  : IBlockMgr(ta.get_ctx_id()),
     ta_(ta),
     mutex_(common::ObLatchIds::ALLOC_OBJECT_LOCK),
     normal_locker_(mutex_), no_log_locker_(mutex_),
@@ -54,11 +54,6 @@ void SubObjectMgr::free_object(AObject *object)
   os->free_object(object);
 }
 
-int64_t SubObjectMgr::sync_wash(int64_t wash_size)
-{
-  return bs_.sync_wash(wash_size);
-}
-
 void SubObjectMgr::free_block(ABlock *block)
 {
   abort_unless(block);
@@ -76,7 +71,7 @@ ObjectMgr::ObjectMgr(ObTenantCtxAllocator &ta,
                      int parallel,
                      bool enable_dirty_list,
                      IBlockMgr *blk_mgr)
-  : IBlockMgr(ta.get_tenant_id(), ta.get_ctx_id()),
+  : IBlockMgr(ta.get_ctx_id()),
     ta_(ta),
     enable_no_log_(enable_no_log),
     ablock_size_(ablock_size),
@@ -86,9 +81,7 @@ ObjectMgr::ObjectMgr(ObTenantCtxAllocator &ta,
     sub_cnt_(0),
     root_mgr_(ta, enable_no_log, ablock_size_,
               enable_dirty_list, blk_mgr_),
-    obj_mgr_v2_(parallel, this),
-    last_wash_ts_(0),
-    last_washed_size_(0)
+    obj_mgr_v2_(parallel, this)
 {
   MEMSET(sub_mgrs_, 0, sizeof(sub_mgrs_));
 }
@@ -261,11 +254,10 @@ SubObjectMgr *ObjectMgr::create_sub_mgr()
 {
   SubObjectMgr *sub_mgr = nullptr;
   ObMemAttr attr;
-  attr.tenant_id_ = OB_SYS_TENANT_ID;
+  
   attr.label_ = common::ObModIds::OB_TENANT_CTX_ALLOCATOR;
   attr.ctx_id_ = ObCtxIds::DEFAULT_CTX_ID;
-  auto ta = ObMallocAllocator::get_instance()->get_tenant_ctx_allocator(attr.tenant_id_,
-    attr.ctx_id_);
+  auto ta = ObMallocAllocator::get_instance()->get_tenant_ctx_allocator(attr.ctx_id_);
 
   class SubObjectMgrWrapper {
   public:
@@ -302,27 +294,6 @@ void ObjectMgr::destroy_sub_mgr(SubObjectMgr *sub_mgr)
   }
 }
 
-int64_t ObjectMgr::sync_wash(int64_t wash_size)
-{
-  int64_t washed_size = 0;
-  const uint64_t start = common::get_itid();
-  for (uint64_t i = 0; washed_size < wash_size && i < ATOMIC_LOAD(&sub_cnt_); i++) {
-    uint64_t idx = (start + i) % sub_cnt_;
-    auto sub_mgr = ATOMIC_LOAD(&sub_mgrs_[idx]);
-    if (OB_ISNULL(sub_mgr)) {
-      // do nothing
-    } else {
-      if (sub_mgr->trylock()) {
-        washed_size += sub_mgr->sync_wash(wash_size - washed_size);
-        sub_mgr->unlock();
-      }
-    }
-  }
-  UNUSED(ATOMIC_STORE(&last_washed_size_, washed_size));
-  UNUSED(ATOMIC_STORE(&last_wash_ts_, common::ObTimeUtility::current_time()));
-  return washed_size;
-}
-
 ObjectMgr::Stat ObjectMgr::get_stat()
 {
   int64_t hold, payload, used;
@@ -342,9 +313,7 @@ ObjectMgr::Stat ObjectMgr::get_stat()
   return Stat{
       .hold_ = hold,
       .payload_ = payload,
-      .used_ = used,
-      .last_washed_size_ = ATOMIC_LOAD(&last_washed_size_),
-      .last_wash_ts_ = ATOMIC_LOAD(&last_wash_ts_)
+      .used_ = used
       };
 }
 
@@ -383,7 +352,7 @@ bool ObjectMgr::check_has_unfree(char *first_label, char *first_bt)
 ObjectMgrV2::ObjectMgrV2(int parallel, IBlockMgr *blk_mgr)
   : parallel_(parallel)
 {
-  if (blk_mgr->get_tenant_id() == OB_SERVER_TENANT_ID &&
+  if (true &&
       blk_mgr->get_ctx_id() == ObCtxIds::GLIBC) {
     parallel_ = OBJECT_SET_CNT;
   }

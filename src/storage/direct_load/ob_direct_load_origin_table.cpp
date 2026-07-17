@@ -16,6 +16,7 @@
 #define USING_LOG_PREFIX STORAGE
 
 #include "storage/direct_load/ob_direct_load_origin_table.h"
+#include "share/rc/ob_module_provider.h"
 #include "storage/tx_storage/ob_ls_service.h"
 
 namespace oceanbase
@@ -43,7 +44,7 @@ ObDirectLoadOriginTableCreateParam::~ObDirectLoadOriginTableCreateParam()
 
 bool ObDirectLoadOriginTableCreateParam::is_valid() const
 {
-  return OB_INVALID_ID != table_id_ && tablet_id_.is_valid() && ls_id_.is_valid();
+  return OB_INVALID_ID != table_id_ && tablet_id_.is_valid();
 }
 
 /**
@@ -63,7 +64,6 @@ void ObDirectLoadOriginTableMeta::reset()
 {
   table_id_ = OB_INVALID_ID;
   tablet_id_.reset();
-  ls_id_.reset();
   tx_id_.reset();
   tx_seq_.reset();
 }
@@ -75,7 +75,7 @@ void ObDirectLoadOriginTableMeta::reset()
 ObDirectLoadOriginTable::ObDirectLoadOriginTable()
   : major_sstable_(nullptr), is_inited_(false)
 {
-  ddl_sstables_.set_tenant_id(MTL_ID());
+  
 }
 
 ObDirectLoadOriginTable::~ObDirectLoadOriginTable()
@@ -103,24 +103,14 @@ int ObDirectLoadOriginTable::init(const ObDirectLoadOriginTableCreateParam &para
     LOG_WARN("invalid args", KR(ret), K(param));
   } else {
     const ObTabletID &tablet_id = param.tablet_id_;
-    const ObLSID &ls_id = param.ls_id_;
-    ObLSService *ls_svr = nullptr;
-    ObLSHandle ls_handle;
-    ObLS *ls = nullptr;
-    if (OB_ISNULL(ls_svr = MTL(ObLSService *))) {
-      ret = OB_ERR_SYS;
-      LOG_WARN("MTL ObLSService is null", KR(ret), "tenant_id", MTL_ID());
-    } else if (OB_FAIL(ls_svr->get_ls(ls_id, ls_handle, ObLSGetMod::STORAGE_MOD))) {
-      LOG_WARN("fail to get ls", KR(ret), K(ls));
-    } else if (OB_ISNULL(ls = ls_handle.get_ls())) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected ls is nullptr", KR(ret));
-    } else if (OB_FAIL(ls->get_tablet(tablet_id, tablet_handle_))) {
+    ObLS *tenant_ls = nullptr;
+    if (OB_FAIL(share::g_mp->ls_service()->get_ls(tenant_ls))) {
+      LOG_WARN("fail to get ls", KR(ret));
+    } else if (OB_FAIL(tenant_ls->get_tablet(tablet_id, tablet_handle_))) {
       LOG_WARN("fail to get tablet", KR(ret), K(tablet_id));
     } else if (OB_FAIL(prepare_tables())) {
       LOG_WARN("fail to prepare tables", KR(ret));
     } else {
-      meta_.ls_id_ = param.ls_id_;
       meta_.table_id_ = param.table_id_;
       meta_.tablet_id_ = param.tablet_id_;
       meta_.tx_id_ = param.tx_id_;
@@ -138,7 +128,8 @@ int ObDirectLoadOriginTable::prepare_tables()
   table_iter_.reset();
   if (OB_FAIL(table_iter_.set_tablet_handle(tablet_handle_))) {
     LOG_WARN("Failed to set tablet handle to tablet table iter", K(ret));
-  } else if (OB_FAIL(table_iter_.refresh_read_tables_from_tablet(INT64_MAX, false /*allow_not_ready*/, false /*major_sstable_only*/, false /*need_split_src_table*/, false/*need_split_dst_table*/))) {
+  } else if (OB_FAIL(table_iter_.refresh_read_tables_from_tablet(
+      INT64_MAX, false /*allow_not_ready*/, false /*major_sstable_only*/))) {
     LOG_WARN("fail to get read tables", KR(ret), K(tablet_handle_));
   }
   // find major sstable or ddl sstables
@@ -265,9 +256,9 @@ ObDirectLoadOriginTableAccessor::ObDirectLoadOriginTableAccessor()
     schema_param_(stmt_allocator_), 
     is_inited_(false)
 {
-  allocator_.set_tenant_id(MTL_ID());
-  stmt_allocator_.set_tenant_id(MTL_ID());
-  col_ids_.set_tenant_id(MTL_ID());
+  
+  
+  
 }
 
 ObDirectLoadOriginTableAccessor::~ObDirectLoadOriginTableAccessor()
@@ -300,21 +291,20 @@ int ObDirectLoadOriginTableAccessor::inner_init(ObDirectLoadOriginTable *origin_
 int ObDirectLoadOriginTableAccessor::init_table_access_param()
 {
   int ret = OB_SUCCESS;
-  const uint64_t tenant_id = MTL_ID();
+  
   const uint64_t table_id = origin_table_->get_meta().table_id_;
   const ObTabletID &tablet_id = origin_table_->get_meta().tablet_id_;
   ObSchemaGetterGuard schema_guard;
   const ObTableSchema *table_schema = nullptr;
   ObRelativeTable relative_table;
   int64_t store_column_count = 0;
-  if (OB_FAIL(ObMultiVersionSchemaService::get_instance().get_tenant_schema_guard(tenant_id,
-                                                                                  schema_guard))) {
-    LOG_WARN("fail to get tenant schema guard", KR(ret), K(tenant_id));
-  } else if (OB_FAIL(schema_guard.get_table_schema(tenant_id, table_id, table_schema))) {
-    LOG_WARN("fail to get table schema", KR(ret), K(tenant_id), K(table_id));
+  if (OB_FAIL(ObMultiVersionSchemaService::get_instance().get_tenant_schema_guard(schema_guard))) {
+    LOG_WARN("fail to get tenant schema guard", KR(ret));
+  } else if (OB_FAIL(schema_guard.get_table_schema( table_id, table_schema))) {
+    LOG_WARN("fail to get table schema", KR(ret), K(table_id));
   } else if (OB_ISNULL(table_schema)) {
     ret = OB_TABLE_NOT_EXIST;
-    LOG_WARN("table not exist", KR(ret), K(tenant_id), K(table_id));
+    LOG_WARN("table not exist", KR(ret), K(table_id));
   } else if (OB_FAIL(schema_param_.convert(table_schema))) {
     LOG_WARN("fail to convert schema para", KR(ret));
   } else if (OB_FAIL(relative_table.init(&schema_param_, tablet_id))) {
@@ -342,9 +332,6 @@ int ObDirectLoadOriginTableAccessor::init_table_access_param()
                                                           schema_param_,
                                                           &col_ids_))) {
       LOG_WARN("fail to init merge param", KR(ret));
-    } else if (GCTX.is_shared_storage_mode()) {
-      table_access_param_.iter_param_.table_scan_opt_.io_read_batch_size_ = 1024L * 1024L * 2L; // 2M
-      table_access_param_.iter_param_.table_scan_opt_.io_read_gap_size_ = 0;
     }
   }
   return ret;
@@ -376,8 +363,7 @@ int ObDirectLoadOriginTableAccessor::init_table_access_ctx(bool skip_read_lob)
   share::SCN snapshot_scn;
   if (OB_FAIL(snapshot_scn.convert_for_tx(snapshot_version))) {
     LOG_WARN("fail to convert scn", KR(ret));
-  } else if (OB_FAIL(store_ctx_.init_for_read(origin_table_->get_meta().ls_id_,
-                                              tablet_id,
+  } else if (OB_FAIL(store_ctx_.init_for_read(tablet_id,
                                               INT64_MAX,
                                               -1,
                                               snapshot_scn))) {
@@ -403,9 +389,7 @@ int ObDirectLoadOriginTableAccessor::init_get_table_param()
     LOG_WARN("Failed to set tablet handle to tablet table iter", K(ret));
   } else if (OB_FAIL(get_table_param_.tablet_iter_.refresh_read_tables_from_tablet(INT64_MAX,
                                                                                    false /*allow_not_ready*/,
-                                                                                   false /*major_sstable_only*/,
-                                                                                   false /*need_split_src_table*/,
-                                                                                   false /*need_split_dst_table*/))) {
+                                                                                   false /*major_sstable_only*/))) {
     LOG_WARN("fail to copy table iter", KR(ret));
   }
   return ret;

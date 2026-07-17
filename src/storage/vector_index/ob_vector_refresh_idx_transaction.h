@@ -16,7 +16,7 @@
 
 #pragma once
 
-#include "lib/mysqlclient/ob_single_connection_proxy.h"
+#include "common/mysqlclient/ob_single_connection_proxy.h"
 #include "sql/session/ob_sql_session_info.h"
 
 namespace oceanbase {
@@ -36,12 +36,12 @@ public:
   sql::ObSQLSessionInfo *get_session_info() const { return session_info_; }
   ObCompatibilityMode get_compatibility_mode() const {
     return nullptr != session_info_ ? session_info_->get_compatibility_mode()
-                                    : ObCompatibilityMode::OCEANBASE_MODE;
+                                    : ObCompatibilityMode::MYSQL_MODE;
   }
 
 protected:
   int connect(sql::ObSQLSessionInfo *session_info, ObISQLClient *sql_client);
-  int start_transaction(uint64_t tenant_id);
+  int start_transaction();
   int end_transaction(const bool commit);
 
 protected:

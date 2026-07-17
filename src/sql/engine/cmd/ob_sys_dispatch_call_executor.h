@@ -44,11 +44,9 @@ public:
   int execute(ObExecContext &ctx, ObSysDispatchCallStmt &stmt);
 
 private:
-  int create_session(const uint64_t tenant_id,
-                     ObFreeSessionCtx &free_session_ctx,
+  int create_session(ObFreeSessionCtx &free_session_ctx,
                      ObSQLSessionInfo *&session_info);
   int init_session(ObSQLSessionInfo &session,
-                   const uint64_t tenant_id,
                    const ObString &tenant_name,
                    const ObCompatibilityMode compat_mode);
   int destroy_session(ObFreeSessionCtx &free_session_ctx, ObSQLSessionInfo *session_info);

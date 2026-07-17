@@ -1,0 +1,1774 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+#define USING_LOG_PREFIX SERVER
+#include "observer/vector_index/ob_plugin_vector_index_service.h"
+#include "share/rc/ob_module_provider.h"
+#include "observer/vector_index/ob_plugin_vector_index_utils.h"
+#include "sql/engine/expr/ob_expr_lob_utils.h"
+#include "sql/resolver/ddl/ob_vec_index_builder_util.h"
+#include "storage/allocator/ob_shared_memory_allocator_mgr.h"
+#include "storage/vector_type/ob_vector_common_util.h"
+#include "observer/vector_index/ob_vector_index_util.h"
+
+namespace oceanbase
+{
+namespace share
+{
+
+int ObAdapterMapFunc::operator()(const hash::HashMapPair<common::ObTabletID, ObPluginVectorIndexAdaptor*> &entry)
+{
+  int ret = OB_SUCCESS;
+  ObPluginVectorIndexAdaptor* adapter(entry.second);
+  ObTabletID tablet_id(entry.first);
+  if (OB_FAIL(array_.push_back(ObAdapterMapKeyValue(tablet_id, adapter)))) {
+    LOG_WARN("failed to push back adapter", K(ret), K(array_), K(adapter));
+  }
+  return ret;
+}
+
+ObPluginVectorIndexMgr::~ObPluginVectorIndexMgr()
+{
+  destroy();
+}
+
+void ObPluginVectorIndexMgr::destroy()
+{
+  if (IS_INIT) {
+    LOG_INFO("vector index manager destroy");
+    is_inited_ = false;
+    need_check_ = false;
+    release_all_adapters();
+    partial_index_adpt_map_.destroy();
+    complete_index_adpt_map_.destroy();
+    ivf_index_helper_map_.destroy();
+    ivf_cache_mgr_map_.destroy();
+    mem_sync_info_.destroy();
+    async_task_opt_.destroy();
+  }
+}
+
+void ObPluginVectorIndexMgr::release_all_adapters()
+{
+  int ret = OB_SUCCESS;
+  WLockGuard lock_guard(adapter_map_rwlock_);
+  FOREACH(iter, partial_index_adpt_map_) {
+    const ObTabletID &tablet_id = iter->first;
+    ObPluginVectorIndexAdaptor *adapter = iter->second;
+    if (OB_FAIL(ObPluginVectorIndexUtils::release_vector_index_adapter(adapter))) {
+      LOG_ERROR("fail to release vector index adapter", K(tablet_id), KR(ret));
+      ret = OB_SUCCESS; // continue release
+    }
+  }
+  FOREACH(iter, complete_index_adpt_map_) {
+    const ObTabletID &tablet_id = iter->first;
+    ObPluginVectorIndexAdaptor *adapter = iter->second;
+    if (OB_FAIL(ObPluginVectorIndexUtils::release_vector_index_adapter(adapter))) {
+      LOG_ERROR("fail to release vector index adapter", K(tablet_id), KR(ret));
+      ret = OB_SUCCESS; // continue release
+    }
+  }
+  FOREACH(iter, ivf_index_helper_map_) {
+    const ObIvfHelperKey &key = iter->first;
+    ObIvfBuildHelper *helper = iter->second;
+    if (OB_FAIL(ObPluginVectorIndexUtils::release_vector_index_build_helper(helper))) {
+      LOG_ERROR("fail to release vector index adapter", K(key), KR(ret));
+      ret = OB_SUCCESS; // continue release
+    }
+  }
+  FOREACH(iter, ivf_cache_mgr_map_) {
+    const ObTabletID &tablet_id = iter->first;
+    ObIvfCacheMgr *mgr = iter->second;
+    if (OB_FAIL(ObPluginVectorIndexUtils::release_ivf_cache_mgr(mgr))) {
+      LOG_ERROR("fail to release vector index ivf cache mgr", K(tablet_id), KR(ret), KPC(mgr));
+      ret = OB_SUCCESS; // continue release
+    }
+  }
+}
+
+int ObPluginVectorIndexMgr::init(lib::MemoryContext &memory_context,
+                                 uint64_t *all_vsag_use_mem)
+{
+  int ret = OB_SUCCESS;
+  int64_t hash_capacity = common::hash::cal_next_prime(DEFAULT_ADAPTER_HASH_SIZE);
+  if (OB_FAIL(complete_index_adpt_map_.create(hash_capacity, "VecIdxAdptMap", "VecIdxAdptMap"))) {
+    LOG_WARN("fail to create full index adapter map", KR(ret));
+  } else if (OB_FAIL(partial_index_adpt_map_.create(hash_capacity, "VecIdxAdptMap", "VecIdxAdptMap"))) {
+    LOG_WARN("fail to create partial index adapter map", KR(ret));
+  } else if (OB_FAIL(ivf_index_helper_map_.create(hash_capacity, "IvfIdxHpMap", "IvfIdxHpMap"))) {
+    LOG_WARN("fail to create ivf index build helper map", KR(ret));
+  } else if (OB_FAIL(ivf_cache_mgr_map_.create(hash_capacity, "IvfMgrMap", "IvfMgrMap"))) {
+    LOG_WARN("fail to create ivf mgr map", KR(ret));
+  } else if (OB_FAIL(mem_sync_info_.init(hash_capacity))) {
+    LOG_WARN("fail to create first mem sync set", KR(ret));
+  } else if (OB_FAIL(async_task_opt_.init(hash_capacity))) {
+    LOG_WARN("fail to create async task option", KR(ret));
+  } else {
+    task_ctx_.task_id_ = 0;
+    task_ctx_.non_memdata_task_cycle_ = 0;
+    task_ctx_.need_memdata_sync_ = false;
+    task_ctx_.state_ = OB_TTL_TASK_PREPARE;
+    need_check_ = false;
+
+    memory_context_ = memory_context;
+    all_vsag_use_mem_ = all_vsag_use_mem;
+    is_inited_ = true;
+  }
+  return ret;
+}
+
+int ObPluginVectorIndexMgr::set_complete_adapter_(ObTabletID tablet_id,
+                                                  ObPluginVectorIndexAdaptor *adapter_inst,
+                                                  int overwrite)
+{
+  int ret = OB_SUCCESS;
+  if (OB_FAIL(complete_index_adpt_map_.set_refactored(tablet_id, adapter_inst, overwrite))) {
+    LOG_WARN("failed to set complete vector index adapter", K(tablet_id), KR(ret));
+  } else {
+    adapter_inst->inc_ref();
+  }
+  return ret;
+}
+
+int ObPluginVectorIndexMgr::erase_complete_adapter(ObTabletID tablet_id)
+{
+  int ret = OB_SUCCESS;
+  ObPluginVectorIndexAdaptor *adapter_inst = nullptr;
+  if (OB_FAIL(complete_index_adpt_map_.erase_refactored(tablet_id, &adapter_inst))) {
+    if (ret != OB_HASH_NOT_EXIST) {
+      LOG_WARN("failed to erase partial vector index adapter", K(tablet_id), KR(ret));
+    }
+  } else if (OB_ISNULL(adapter_inst)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("adapter inst is null", K(tablet_id), KR(ret));
+  } else {
+    if (OB_FAIL(ObPluginVectorIndexUtils::release_vector_index_adapter(adapter_inst))) {
+      LOG_WARN("fail to release vector index adapter", K(tablet_id), KR(ret));
+    }
+  }
+  return ret;
+}
+
+int ObPluginVectorIndexMgr::set_partial_adapter_(ObTabletID tablet_id,
+                                                 ObPluginVectorIndexAdaptor *adapter_inst,
+                                                 int overwrite)
+{
+  int ret = OB_SUCCESS;
+  if (OB_FAIL(partial_index_adpt_map_.set_refactored(tablet_id, adapter_inst, overwrite))) {
+    LOG_WARN("failed to set partial vector index adapter", K(tablet_id), KR(ret));
+  } else {
+    adapter_inst->inc_ref();
+  }
+  return ret;
+}
+
+int ObPluginVectorIndexMgr::erase_partial_adapter_(ObTabletID tablet_id)
+{
+  int ret = OB_SUCCESS;
+  ObPluginVectorIndexAdaptor *adapter_inst = nullptr;
+  if (OB_FAIL(partial_index_adpt_map_.erase_refactored(tablet_id, &adapter_inst))) {
+    LOG_WARN("failed to erase partial vector index adapter", K(tablet_id), KR(ret));
+  } else if (OB_ISNULL(adapter_inst)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("adapter inst is null", K(tablet_id), KR(ret));
+  } else {
+    if (OB_FAIL(ObPluginVectorIndexUtils::release_vector_index_adapter(adapter_inst))) {
+      LOG_WARN("fail to release vector index adapter", K(tablet_id), KR(ret));
+    }
+  }
+  return ret;
+}
+
+int ObPluginVectorIndexMgr::erase_partial_adapter(ObTabletID tablet_id)
+{
+  return erase_partial_adapter_(tablet_id);
+}
+
+int ObPluginVectorIndexMgr::erase_ivf_build_helper(const ObIvfHelperKey &key)
+{
+  int ret = OB_SUCCESS;
+  ObIvfBuildHelper *helper_inst = nullptr;
+  if (OB_FAIL(ivf_index_helper_map_.erase_refactored(key, &helper_inst))) {
+    LOG_WARN("failed to erase ivf build helper", K(key), KR(ret));
+  } else if (OB_ISNULL(helper_inst)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("helper inst is null", K(key), KR(ret));
+  } else {
+    if (OB_FAIL(ObPluginVectorIndexUtils::release_vector_index_build_helper(helper_inst))) {
+      LOG_WARN("fail to release ivf build helper", K(key), KR(ret));
+    }
+  }
+  return ret;
+}
+
+int ObPluginVectorIndexMgr::get_adapter_inst_guard(ObTabletID tablet_id, ObPluginVectorIndexAdapterGuard &adpt_guard)
+{
+  int ret = OB_SUCCESS;
+  RLockGuard lock_guard(adapter_map_rwlock_);
+
+  ObPluginVectorIndexAdaptor *index_inst = nullptr;
+  if (OB_FAIL(get_adapter_inst_(tablet_id, index_inst))) {
+    LOG_WARN("failed to get adapter inst", K(tablet_id), KR(ret));
+  } else if (OB_FAIL(adpt_guard.set_adapter(index_inst))) {
+    LOG_WARN("failed to set adapter", K(tablet_id), KR(ret));
+  }
+  return ret;
+}
+
+int ObPluginVectorIndexMgr::get_adapter_inst_guard_in_lock(ObTabletID tablet_id, ObPluginVectorIndexAdapterGuard &adpt_guard)
+{
+  int ret = OB_SUCCESS;
+
+  ObPluginVectorIndexAdaptor *index_inst = nullptr;
+  if (OB_FAIL(get_adapter_inst_(tablet_id, index_inst))) {
+    LOG_WARN("failed to get adapter inst", K(tablet_id), KR(ret));
+  } else if (OB_FAIL(adpt_guard.set_adapter(index_inst))) {
+    LOG_WARN("failed to set adapter", K(tablet_id), KR(ret));
+  }
+  return ret;
+}
+
+int ObPluginVectorIndexMgr::get_adapter_inst_(ObTabletID tablet_id, ObPluginVectorIndexAdaptor *&index_inst)
+{
+  int ret = OB_SUCCESS;
+  index_inst = nullptr;
+
+  if (OB_FAIL(partial_index_adpt_map_.get_refactored(tablet_id, index_inst))) {
+    if (OB_HASH_NOT_EXIST != ret) {
+      LOG_WARN("failed to get temp vector index inst", K(tablet_id), KR(ret));
+    } else {
+      ret = OB_SUCCESS; // not in partial adapter, try to get complete adapter
+    }
+  } else if (OB_ISNULL(index_inst)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("get null temp vector index inst", K(tablet_id), KR(ret));
+  }
+
+  if (OB_FAIL(ret) || OB_NOT_NULL(index_inst)) {
+  } else if (OB_FAIL(complete_index_adpt_map_.get_refactored(tablet_id, index_inst))) {
+    if (OB_HASH_NOT_EXIST != ret) {
+      LOG_WARN("failed to get full vector index inst", K(tablet_id), KR(ret));
+    } else {
+      // ret is OB_HASH_NOT_EXIST not found,
+    }
+  } else if (OB_ISNULL(index_inst)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("get null full vector index inst", K(tablet_id), KR(ret));
+  }
+
+  return ret;
+}
+
+int ObPluginVectorIndexMgr::create_partial_adapter(ObTabletID idx_tablet_id,
+                                                   ObTabletID data_tablet_id,
+                                                   ObIndexType type,
+                                                   ObIAllocator &allocator,
+                                                   int64_t index_table_id,
+                                                  int64_t data_table_id,
+                                                   ObString *vec_index_param,
+                                                   int64_t dim)
+{
+  int ret = OB_SUCCESS;
+  ObPluginVectorIndexAdaptor *tmp_vec_idx_adpt = nullptr;
+
+  void *adpt_buff = allocator.alloc(sizeof(ObPluginVectorIndexAdaptor));
+  if (OB_ISNULL(adpt_buff)) {
+    ret = OB_ALLOCATE_MEMORY_FAILED;
+    LOG_WARN("failed to allocate memory for vector index adapter", KR(ret));
+  } else {
+    tmp_vec_idx_adpt = new(adpt_buff)ObPluginVectorIndexAdaptor(&allocator, memory_context_);
+    ObVectorIndexRecordType record_type = ObPluginVectorIndexUtils::index_type_to_record_type(type);
+    if (record_type >= VIRT_MAX) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("invalid index type", K(type), KR(ret));
+      // always init after construct
+    } else if ((OB_ISNULL(vec_index_param) || vec_index_param->empty())
+               && OB_FAIL(tmp_vec_idx_adpt->init(memory_context_, all_vsag_use_mem_))) {
+      LOG_WARN("failed to init adpt.", K(ret));
+      // need to handle dim and type
+    } else if ((OB_NOT_NULL(vec_index_param) && !vec_index_param->empty())
+               && OB_FAIL(tmp_vec_idx_adpt->init(*vec_index_param, dim, memory_context_, all_vsag_use_mem_))) {
+      LOG_WARN("failed to init adpt.", K(ret), K(*vec_index_param), K(dim));
+    } else if (OB_FAIL(tmp_vec_idx_adpt->set_tablet_id(record_type, idx_tablet_id))) {
+      LOG_WARN("failed to set tablet id", K(idx_tablet_id), K(type), KR(ret));
+    } else if (data_tablet_id.is_valid() // tmp adapter may not have data_tablet id
+               && OB_FAIL(tmp_vec_idx_adpt->set_tablet_id(VIRT_DATA, data_tablet_id))) {
+      LOG_WARN("failed to set data tablet id", K(idx_tablet_id), K(type), K(data_tablet_id), KR(ret));
+    } else if (OB_FAIL(tmp_vec_idx_adpt->set_table_id(record_type, index_table_id))) {
+      LOG_WARN("failed to set index table id", K(idx_tablet_id), K(type), K(index_table_id), KR(ret));
+    } else if (OB_INVALID_ID != data_table_id
+               && OB_FAIL(tmp_vec_idx_adpt->set_table_id(VIRT_DATA, data_table_id))) {
+      LOG_WARN("failed to set data table id", K(idx_tablet_id), K(type), K(data_table_id), KR(ret));
+    } else {
+      tmp_vec_idx_adpt->set_create_type(ObPluginVectorIndexUtils::index_type_to_create_type(type));
+    }
+    if (OB_SUCC(ret)) {
+      WLockGuard lock_guard(adapter_map_rwlock_);
+      if (OB_FAIL(set_partial_adapter_(idx_tablet_id, tmp_vec_idx_adpt))) {
+        LOG_WARN("set vector index adapter faild", K(idx_tablet_id), KR(ret));
+      } // other thread set already, need get again ?
+    }
+    if (OB_FAIL(ret) && OB_NOT_NULL(tmp_vec_idx_adpt)) {
+      tmp_vec_idx_adpt->~ObPluginVectorIndexAdaptor();
+      allocator.free(adpt_buff);
+      tmp_vec_idx_adpt = nullptr;
+      adpt_buff = nullptr;
+    }
+  }
+
+  return ret;
+}
+
+int ObPluginVectorIndexMgr::get_build_helper_inst_(const ObIvfHelperKey &key, ObIvfBuildHelper *&helper_inst)
+{
+  int ret = OB_SUCCESS;
+  helper_inst = nullptr;
+
+  if (OB_FAIL(ivf_index_helper_map_.get_refactored(key, helper_inst))) {
+    if (OB_HASH_NOT_EXIST != ret) {
+      LOG_WARN("failed to get ivf index build helper inst", K(key), KR(ret));
+    }
+  } else if (OB_ISNULL(helper_inst)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("get null ivf index build helper inst", K(key), KR(ret));
+  }
+
+  return ret;
+}
+
+int ObPluginVectorIndexMgr::get_build_helper_inst_guard(const ObIvfHelperKey &key, ObIvfBuildHelperGuard &helper_guard)
+{
+  int ret = OB_SUCCESS;
+  ObIvfBuildHelper *helper_inst = nullptr;
+  if (OB_FAIL(get_build_helper_inst_(key, helper_inst))) {
+    LOG_WARN("failed to get adapter inst", K(key), KR(ret));
+  } else if (OB_FAIL(helper_guard.set_helper(helper_inst))) {
+    LOG_WARN("failed to set adapter", K(key), KR(ret));
+  }
+  return ret;
+}
+
+int ObPluginVectorIndexMgr::create_ivf_build_helper(
+    const ObIvfHelperKey &key,
+    ObIndexType type,
+    ObString &vec_index_param,
+    ObIAllocator &allocator)
+{
+  int ret = OB_SUCCESS;
+  ObIvfBuildHelper *tmp_ivf_build_helper = nullptr;
+  void *helper_buff = nullptr;
+  if (INDEX_TYPE_VEC_IVFFLAT_CENTROID_LOCAL == type) {
+    if (OB_ISNULL(helper_buff = allocator.alloc(sizeof(ObIvfFlatBuildHelper)))) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+      LOG_WARN("failed to allocate memory for ivf index build helper", KR(ret));
+    } else {
+      tmp_ivf_build_helper = new(helper_buff)ObIvfFlatBuildHelper(&allocator);
+      if (OB_FAIL(tmp_ivf_build_helper->init(vec_index_param, memory_context_, all_vsag_use_mem_))) {
+        LOG_WARN("failed to init ivf build helper", K(ret));
+      }
+    }
+  } else if (INDEX_TYPE_VEC_IVFSQ8_META_LOCAL == type) {
+    if (OB_ISNULL(helper_buff = allocator.alloc(sizeof(ObIvfSq8BuildHelper)))) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+      LOG_WARN("failed to allocate memory for ivf index build helper", KR(ret));
+    } else {
+      tmp_ivf_build_helper = new(helper_buff)ObIvfSq8BuildHelper(&allocator);
+      if (OB_FAIL(tmp_ivf_build_helper->init(vec_index_param, memory_context_, all_vsag_use_mem_))) {
+        LOG_WARN("failed to init ivf build helper", K(ret), K(vec_index_param));
+      }
+    }
+  } else if (INDEX_TYPE_VEC_IVFPQ_PQ_CENTROID_LOCAL == type) {
+    if (OB_ISNULL(helper_buff = allocator.alloc(sizeof(ObIvfPqBuildHelper)))) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+      LOG_WARN("failed to allocate memory for ivf index build helper", KR(ret));
+    } else {
+      tmp_ivf_build_helper = new(helper_buff)ObIvfPqBuildHelper(&allocator);
+      if (OB_FAIL(tmp_ivf_build_helper->init(vec_index_param, memory_context_, all_vsag_use_mem_))) {
+        LOG_WARN("failed to init ivf build helper", K(ret), K(vec_index_param));
+      }
+    }
+  } else {
+    ret = OB_NOT_SUPPORTED;
+    LOG_WARN("not supported index type", K(ret), K(type));
+  }
+  if (OB_SUCC(ret)) {
+    if (OB_FAIL(set_ivf_build_helper_(key, tmp_ivf_build_helper))) {
+      LOG_WARN("set ivf index build helper faild", K(key), KR(ret));
+    }
+  }
+  if (OB_FAIL(ret) && OB_NOT_NULL(tmp_ivf_build_helper)) {
+    tmp_ivf_build_helper->~ObIvfBuildHelper();
+    allocator.free(helper_buff);
+    tmp_ivf_build_helper = nullptr;
+    helper_buff = nullptr;
+  }
+  return ret;
+}
+
+int ObPluginVectorIndexMgr::set_ivf_build_helper_(const ObIvfHelperKey &key, ObIvfBuildHelper *helper_inst)
+{
+  int ret = OB_SUCCESS;
+  if (OB_FAIL(ivf_index_helper_map_.set_refactored(key, helper_inst))) {
+    LOG_WARN("failed to set ivf build helper", K(key), KR(ret));
+  } else {
+    helper_inst->inc_ref();
+  }
+  return ret;
+}
+
+int ObPluginVectorIndexMgr::get_or_create_partial_adapter_(ObTabletID tablet_id,
+                                                           ObIndexType type,
+                                                           ObPluginVectorIndexAdapterGuard &adapter_guard,
+                                                           ObString *vec_index_param,
+                                                           int64_t dim,
+                                                           ObIAllocator &allocator)
+{
+  int ret = OB_SUCCESS;
+  if (OB_FAIL(get_adapter_inst_guard(tablet_id, adapter_guard))) {
+    if (OB_HASH_NOT_EXIST != ret) {
+      LOG_WARN("failed to get vector index adapter", K(tablet_id), KR(ret));
+    } else { // not exist create new
+      if (OB_FAIL(create_partial_adapter(tablet_id, ObTabletID(), type, allocator, OB_INVALID_ID, OB_INVALID_ID, vec_index_param, dim))) {
+        LOG_WARN("failed to create tmp vector index instance with ls", K(tablet_id), K(type), KR(ret));
+      }
+      if (OB_FAIL(ret) && (OB_HASH_EXIST != ret)) {
+      } else if (OB_FAIL(get_adapter_inst_guard(tablet_id, adapter_guard))) {
+        LOG_WARN("failed to get tmp vector index instance with ls", K(tablet_id), K(type), KR(ret));
+      } else {
+        LOG_INFO("create partial index adapter success", K(ret), KPC(adapter_guard.get_adatper()));
+      }
+    }
+  }
+  return ret;
+}
+
+int ObPluginVectorIndexMgr::get_adapter_inst_by_ctx(ObVectorIndexAcquireCtx &ctx,
+                                                    bool &need_merge,
+                                                    ObIAllocator &allocator,
+                                                    ObPluginVectorIndexAdapterGuard &adapter_guard,
+                                                    ObVectorIndexAdapterCandiate &candidate,
+                                                    ObString *vec_index_param,
+                                                    int64_t dim)
+{
+  int ret = OB_SUCCESS;
+  need_merge = true;
+
+  if (!ctx.inc_tablet_id_.is_valid()
+      || !ctx.snapshot_tablet_id_.is_valid()
+      || !ctx.vbitmap_tablet_id_.is_valid()) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument", K(ctx), KR(ret));
+  } else {
+    ObPluginVectorIndexAdaptor *adapter = nullptr;
+    bool is_hybrid = ctx.embedded_tablet_id_.is_valid();
+    // fast return if get complete adapter
+    if (OB_FAIL(get_or_create_partial_adapter_(ctx.inc_tablet_id_,
+                                               is_hybrid ? INDEX_TYPE_HYBRID_INDEX_LOG_LOCAL : INDEX_TYPE_VEC_DELTA_BUFFER_LOCAL,
+                                               candidate.inc_adatper_guard_,
+                                               vec_index_param,
+                                               dim,
+                                               allocator))) {
+      LOG_WARN("failed to get vector index adapter", K(ctx.inc_tablet_id_), KR(ret));
+    } else if (FALSE_IT(adapter = candidate.inc_adatper_guard_.get_adatper())) {
+    } else if (adapter->get_create_type() == CreateTypeFullPartial
+               || adapter->get_create_type() == CreateTypeComplete) {
+      if (OB_FAIL(adapter_guard.set_adapter(adapter))) {
+        LOG_WARN("failed to set adapter", K(adapter_guard), KR(ret));
+      } else {
+        need_merge = false;
+      }
+    }
+
+    if (OB_FAIL(ret) || need_merge == false) {
+      // do nothing
+    } else if (OB_FAIL(get_or_create_partial_adapter_(ctx.vbitmap_tablet_id_,
+                                                      INDEX_TYPE_VEC_INDEX_ID_LOCAL,
+                                                      candidate.bitmp_adatper_guard_,
+                                                      vec_index_param,
+                                                      dim,
+                                                      allocator))) {
+      LOG_WARN("failed to get vector index adapter", K(ctx.vbitmap_tablet_id_), KR(ret));
+    } else if (FALSE_IT(adapter = candidate.bitmp_adatper_guard_.get_adatper())) {
+    } else if (adapter->get_create_type() == CreateTypeFullPartial
+               || adapter->get_create_type() == CreateTypeComplete) {
+      if (OB_FAIL(adapter_guard.set_adapter(adapter))) {
+        LOG_WARN("failed to set adapter", K(adapter_guard), KR(ret));
+      } else {
+        need_merge = false;
+      }
+    }
+
+    if (OB_FAIL(ret) || need_merge == false) {
+      // do nothing
+    } else if (OB_FAIL(get_or_create_partial_adapter_(ctx.snapshot_tablet_id_,
+                                                      INDEX_TYPE_VEC_INDEX_SNAPSHOT_DATA_LOCAL,
+                                                      candidate.sn_adatper_guard_,
+                                                      vec_index_param,
+                                                      dim,
+                                                      allocator))) {
+      LOG_WARN("failed to get vector index adapter", K(ctx.snapshot_tablet_id_), KR(ret));
+    } else if (FALSE_IT(adapter = candidate.sn_adatper_guard_.get_adatper())) {
+    } else if (adapter->get_create_type() == CreateTypeFullPartial
+               || adapter->get_create_type() == CreateTypeComplete) {
+      if (OB_FAIL(adapter_guard.set_adapter(adapter))) {
+        LOG_WARN("failed to set adapter", K(adapter_guard), KR(ret));
+      } else {
+        need_merge = false;
+      }
+    }
+
+    if ((OB_FAIL(ret) || need_merge == false)) {
+      // do nothing
+    } else if (!is_hybrid) {
+      // do nothing
+    } else if (OB_FAIL(get_or_create_partial_adapter_(ctx.embedded_tablet_id_,
+                                                      INDEX_TYPE_HYBRID_INDEX_EMBEDDED_LOCAL,
+                                                      candidate.embedded_adatper_guard_,
+                                                      vec_index_param,
+                                                      dim,
+                                                      allocator))) {
+      LOG_WARN("failed to get vector index adapter", K(ctx.embedded_tablet_id_), KR(ret));
+    } else if (FALSE_IT(adapter = candidate.embedded_adatper_guard_.get_adatper())) {
+    } else if (adapter->get_create_type() == CreateTypeFullPartial
+               || adapter->get_create_type() == CreateTypeComplete) {
+      if (OB_FAIL(adapter_guard.set_adapter(adapter))) {
+        LOG_WARN("failed to set adapter", K(adapter_guard), KR(ret));
+      } else {
+        need_merge = false;
+      }
+    }
+  }
+  return ret;
+}
+
+int ObPluginVectorIndexMgr::get_and_merge_adapter(ObVectorIndexAcquireCtx &ctx,
+                                                  ObIAllocator &allocator,
+                                                  ObPluginVectorIndexAdapterGuard &adapter_guard,
+                                                  ObString *vec_index_param,
+                                                  int64_t dim)
+{
+  int ret = OB_SUCCESS;
+  bool need_merge = false;
+  ObVectorIndexAdapterCandiate candidate;
+  if (OB_FAIL(get_adapter_inst_by_ctx(ctx, need_merge, allocator, adapter_guard,
+                                      candidate, vec_index_param, dim))) {
+    LOG_WARN("failed to get and merge adapter", K(ctx), KR(ret));
+  }
+  if (OB_SUCC(ret)
+      && need_merge
+      && OB_FAIL(replace_with_full_partial_adapter(ctx, allocator, adapter_guard,
+                                                   vec_index_param, dim, &candidate))) {
+    LOG_WARN("failed to replace with full partial adapter", K(ctx), KR(ret));
+  }
+
+  return ret;
+}
+
+int ObPluginVectorIndexMgr::check_need_mem_data_sync_task(bool &need_sync)
+{
+  need_sync = false;
+  mem_sync_info_.check_and_switch_if_needed(need_sync, task_ctx_.all_finished_);
+  LOG_INFO("memdata sync check", K(need_sync), K(task_ctx_));
+  // both map empty, do nothing
+  return OB_SUCCESS;
+}
+
+int ObPluginVectorIndexService::acquire_adapter_guard(ObVectorIndexAcquireCtx &ctx,
+                                                      ObPluginVectorIndexAdapterGuard &adapter_guard,
+                                                      ObString *vec_index_param,
+                                                      int64_t dim)
+{
+  int ret = OB_SUCCESS;
+  ObPluginVectorIndexMgr *index_mgr = single_index_mgr_;
+
+  if (OB_FAIL(index_mgr->get_and_merge_adapter(ctx, allocator_, adapter_guard,
+                                                         vec_index_param, dim))) {
+    LOG_WARN("failed to get and merge adapter", K(ctx), KR(ret));
+  } else {
+    share::ObPluginVectorIndexAdaptor* adaptor = adapter_guard.get_adatper();
+    if (OB_NOT_NULL(adaptor) && !adaptor->validate_tablet_ids(ctx)) {
+      ret = OB_INVALID_ARGUMENT;
+      LOG_WARN("validate tablet ids failed", K(ret), K(ctx), K(adaptor));
+    }
+  }
+
+  return ret;
+}
+
+int ObPluginVectorIndexService::acquire_ivf_build_helper_guard(
+    const ObIvfHelperKey &key,
+    ObIndexType type,
+    ObIvfBuildHelperGuard &helper_guard,
+    ObString &vec_index_param)
+{
+  int ret = OB_SUCCESS;
+  ObPluginVectorIndexMgr *index_mgr = single_index_mgr_;
+  if (OB_FAIL(index_mgr->get_build_helper_inst_guard(key, helper_guard))) {
+    if (OB_HASH_NOT_EXIST != ret) {
+      LOG_WARN("failed to get ivf build helper", KR(ret), K(key));
+    } else { // not exist create new
+      if (OB_FAIL(index_mgr->create_ivf_build_helper(key, type, vec_index_param, allocator_))) {
+        LOG_WARN("failed to create tmp vector index instance with ls", KR(ret), K(key), K(type));
+      }
+      if (OB_FAIL(ret) && (OB_HASH_EXIST != ret)) {
+      } else if (OB_FAIL(index_mgr->get_build_helper_inst_guard(key, helper_guard))) {
+        LOG_WARN("failed to get tmp vector index instance with ls", KR(ret), K(key), K(type));
+      } else {
+        LOG_INFO("create partial index adapter success", K(ret), K(key), KPC(helper_guard.get_helper()));
+      }
+    }
+  } else {
+    // get from existed ls index mgr
+  }
+
+  return ret;
+}
+
+int ObPluginVectorIndexService::acquire_adapter_guard(ObTabletID tablet_id,
+                                                      ObIndexType type,
+                                                      ObPluginVectorIndexAdapterGuard &adapter_guard,
+                                                      ObString *vec_index_param,
+                                                      int64_t dim)
+{
+  int ret = OB_SUCCESS;
+  ObPluginVectorIndexMgr *index_mgr = single_index_mgr_;
+  if (OB_FAIL(index_mgr->get_adapter_inst_guard(tablet_id, adapter_guard))) {
+    if (OB_HASH_NOT_EXIST != ret) {
+      LOG_WARN("failed to get vector index adapter", K(tablet_id), KR(ret));
+    } else { // not exist create new
+      if (OB_FAIL(index_mgr->create_partial_adapter(tablet_id, ObTabletID(), type, allocator_, OB_INVALID_ID, OB_INVALID_ID, vec_index_param, dim))) {
+        LOG_WARN("failed to create tmp vector index instance with ls", K(tablet_id), K(type), KR(ret));
+      }
+      if (OB_FAIL(ret) && (OB_HASH_EXIST != ret)) {
+      } else if (OB_FAIL(index_mgr->get_adapter_inst_guard(tablet_id, adapter_guard))) {
+        LOG_WARN("failed to get tmp vector index instance with ls", K(tablet_id), K(type), KR(ret));
+      } else {
+        LOG_INFO("create partial index adapter success", K(ret), KP(adapter_guard.get_adatper()), KPC(adapter_guard.get_adatper()));
+      }
+    }
+  } else {
+    // get from existed ls index mgr
+  }
+  if (OB_SUCC(ret)
+      && OB_NOT_NULL(adapter_guard.get_adatper())
+      && adapter_guard.get_adatper()->get_index_type() >= ObVectorIndexAlgorithmType::VIAT_MAX) {
+    // check index param, if it is emtpy, may get partial adapter during maintenance
+    if (OB_NOT_NULL(vec_index_param)
+        && !vec_index_param->empty()
+        && OB_FAIL(adapter_guard.get_adatper()->set_param(*vec_index_param, dim))) {
+      LOG_WARN("failed to set param", K(ret), K(tablet_id), K(type), KPC(vec_index_param), K(dim));
+    }
+    LOG_INFO("may get get partial adapter during maintenance", KPC(adapter_guard.get_adatper()));
+  }
+
+  return ret;
+}
+
+int ObPluginVectorIndexMgr::check_and_merge_partial_inner(ObVecIdxSharedTableInfoMap &info_map,
+                                                          ObIAllocator &allocator)
+{
+  int ret = OB_SUCCESS;
+  typedef common::hash::ObHashMap<ObPluginVectorIndexIdentity, ObVectorIndexAdapterCandiate*> VectorIndexIdentityMap;
+  VectorIndexIdentityMap data_tablet_id_map;
+  ObArenaAllocator tmp_allocator("VectorAdptCandi", OB_MALLOC_NORMAL_BLOCK_SIZE);
+  if (OB_FAIL(data_tablet_id_map.create(DEFAULT_CANDIDATE_ADAPTER_HASH_SIZE, "VecIdxDataTID"))) {
+    LOG_WARN("fail to create hash map for data tablet id to vec index adapter", KR(ret));
+  } else {
+    // build candidate and save to data_tablet_id_map
+    // query process may merge adapters and delete partial adapters from hashmap,
+    // use lock here to avoid merge race condition for simple
+    RLockGuard lock_guard(adapter_map_rwlock_);
+
+    FOREACH_X(adpt_lt, get_partial_adapter_map(), OB_SUCC(ret)) {
+      ObTabletID index_tablet_id = adpt_lt->first;
+      ObPluginVectorIndexAdaptor *partial_adpt = adpt_lt->second;
+      ObTabletID data_tablet_id = partial_adpt->get_data_tablet_id();
+      ObVectorIndexAdapterCandiate *candidate = nullptr;
+      char *buff = nullptr;
+      ObPluginVectorIndexIdentity index_identity(data_tablet_id, partial_adpt->get_index_identity());
+      if (!index_identity.is_valid()) {
+        // skip, wait for next round
+      } else {
+        if (OB_FAIL(data_tablet_id_map.get_refactored(index_identity, candidate))) {
+          if (OB_HASH_NOT_EXIST != ret) {
+            LOG_WARN("failed to get candidate index adapter", K(index_identity), KR(ret));
+          } else {
+            buff = static_cast<char *>(tmp_allocator.alloc(sizeof(ObVectorIndexAdapterCandiate)));
+            if (OB_ISNULL(buff)) {
+              ret = OB_ALLOCATE_MEMORY_FAILED;
+              LOG_WARN("failed to allocate memory for vector index adapter", KR(ret));
+            } else {
+              candidate = new(buff)ObVectorIndexAdapterCandiate();
+              if (OB_FAIL(data_tablet_id_map.set_refactored(index_identity, candidate))) {
+                LOG_WARN("failed to set candidate index adapter", K(index_identity), KR(ret));
+              }
+            }
+          }
+        }
+
+        if (OB_FAIL(ret)) {
+        } else if (OB_ISNULL(candidate)) {
+          ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("get invalid candidate index adapter", KR(ret));
+        } else {
+          if (index_tablet_id == partial_adpt->get_inc_tablet_id()) {
+            if (candidate->inc_adatper_guard_.is_valid()) { // conflict maybe during rebuild
+              candidate->is_valid_ = false;
+            } else {
+              candidate->inc_adatper_guard_.set_adapter(partial_adpt);
+            }
+          } else if (index_tablet_id == partial_adpt->get_vbitmap_tablet_id()) {
+            if (candidate->bitmp_adatper_guard_.is_valid()) { // conflict maybe during rebuild
+              candidate->is_valid_ = false;
+            } else {
+              candidate->bitmp_adatper_guard_.set_adapter(partial_adpt);
+            }
+          } else if (index_tablet_id == partial_adpt->get_snap_tablet_id()) {
+            if (candidate->sn_adatper_guard_.is_valid()) { // conflict maybe during rebuild
+              candidate->is_valid_ = false;
+            } else {
+              candidate->sn_adatper_guard_.set_adapter(partial_adpt);
+            }
+          } else if (index_tablet_id == partial_adpt->get_embedded_tablet_id()) {
+            candidate->is_hybrid_ = true;
+            if (candidate->embedded_adatper_guard_.is_valid()) { // conflict maybe during rebuild
+              candidate->is_valid_ = false;
+            } else {
+              candidate->embedded_adatper_guard_.set_adapter(partial_adpt);
+            }
+          }
+        }
+      }
+    }
+  }
+
+  ret = OB_SUCCESS; // continue handle valid candidates
+  FOREACH_X(candidate_adpt_lt, data_tablet_id_map, OB_SUCC(ret)) {
+    ObVectorIndexAdapterCandiate *candidate = candidate_adpt_lt->second;
+    if (OB_ISNULL(candidate)) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("get invalid candidate index adapter", KR(ret), K(candidate_adpt_lt->first));
+    } else if (candidate->is_valid_ == false || (!candidate->is_complete())) {
+      // do nothing
+    } else if (OB_FAIL(replace_with_complete_adapter(candidate, info_map, allocator))) {
+      LOG_WARN("failed to replace adapter", KR(ret), K(candidate_adpt_lt->first));
+    }
+  }
+  // do clean up
+  FOREACH(candidate_adpt_lt, data_tablet_id_map) {
+    ObVectorIndexAdapterCandiate *candidate = candidate_adpt_lt->second;
+    if (OB_ISNULL(candidate)) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("get invalid candidate index adapter", KR(ret));
+    } else {
+      candidate->~ObVectorIndexAdapterCandiate();
+    }
+  }
+
+  data_tablet_id_map.reuse();
+  tmp_allocator.reset();
+
+  return ret;
+}
+
+int ObPluginVectorIndexService::check_and_merge_adapter(ObVecIdxSharedTableInfoMap &info_map)
+{
+  int ret = OB_SUCCESS;
+  if (!single_index_mgr_->get_partial_adapter_map().empty()) {
+    if (OB_FAIL(single_index_mgr_->check_and_merge_partial_inner(info_map, allocator_))) {
+      LOG_WARN("failed to check and merge partial adapter", KR(ret));
+    }
+
+  }
+
+  return ret;
+}
+
+int ObPluginVectorIndexService::get_adapter_inst_guard(ObTabletID tablet_id,
+                                                       ObPluginVectorIndexAdapterGuard &adpt_guard)
+{
+  int ret = OB_SUCCESS;
+  if (OB_FAIL(single_index_mgr_->get_adapter_inst_guard(tablet_id, adpt_guard))) {
+    LOG_WARN("failed to get vector index adapter", K(tablet_id), KR(ret));
+  }
+  return ret;
+}
+
+int ObPluginVectorIndexService::get_build_helper_inst_guard(
+    const ObIvfHelperKey &key,
+    ObIvfBuildHelperGuard &helper_guard)
+{
+  int ret = OB_SUCCESS;
+  if (OB_FAIL(single_index_mgr_->get_build_helper_inst_guard(key, helper_guard))) {
+    LOG_WARN("failed to get ivf build helper guard", KR(ret), K(key));
+  }
+  return ret;
+}
+
+int ObPluginVectorIndexService::create_partial_adapter(ObTabletID idx_tablet_id,
+                                                       ObTabletID data_tablet_id,
+                                                       ObIndexType type,
+                                                       int64_t index_table_id,
+                                                       int64_t data_table_id,
+                                                       ObString *vec_index_param,
+                                                       int64_t dim)
+{
+  int ret = OB_SUCCESS;
+  if (OB_FAIL(single_index_mgr_->create_partial_adapter(idx_tablet_id,
+                                                          data_tablet_id,
+                                                          type,
+                                                          allocator_,
+                                                          index_table_id,
+                                                          data_table_id,
+                                                          vec_index_param,
+                                                          dim))) {
+    LOG_WARN("set vector index adapter faild", K(idx_tablet_id), KR(ret));
+  }
+
+  return ret;
+}
+
+int ObPluginVectorIndexService::create_ivf_build_helper(
+    const ObIvfHelperKey &key,
+    ObIndexType type,
+    ObString &vec_index_param)
+{
+  int ret = OB_SUCCESS;
+  if (OB_FAIL(single_index_mgr_->create_ivf_build_helper(key,
+                                                           type,
+                                                           vec_index_param,
+                                                           allocator_))) {
+    LOG_WARN("failed to create ivf build helper", KR(ret), K(key), K(type), K(vec_index_param));
+  }
+
+  return ret;
+}
+
+int ObPluginVectorIndexService::erase_ivf_build_helper(const ObIvfHelperKey &key)
+{
+  int ret = OB_SUCCESS;
+  if (OB_FAIL(single_index_mgr_->erase_ivf_build_helper(key))) {
+    LOG_WARN("failed to create ivf build helper", KR(ret), K(key));
+  }
+
+  return ret;
+}
+
+ObPluginVectorIndexService::~ObPluginVectorIndexService()
+{
+  destroy();
+}
+
+void ObPluginVectorIndexService::destroy()
+{
+  if (IS_INIT) {
+    FLOG_INFO("destroy vector index service");
+    is_inited_ = false;
+    has_start_ = false;
+
+    is_ls_or_tablet_changed_ = false;
+    schema_service_ = NULL;
+    ls_service_ = NULL;
+    sql_proxy_ = NULL;
+
+    single_index_mgr_->destroy();
+    allocator_.free(single_index_mgr_);
+    single_index_mgr_ = nullptr;
+    allocator_.reset();
+    if (memory_context_ != nullptr) {
+      DESTROY_CONTEXT(memory_context_);
+      memory_context_ = nullptr;
+    }
+
+    // destroy vec async task
+    if (OB_NOT_NULL(tenant_vec_async_task_sched_)) {
+      tenant_vec_async_task_sched_->destroy();
+      ob_free(tenant_vec_async_task_sched_);
+      tenant_vec_async_task_sched_ = nullptr;
+    }
+
+  }
+}
+
+int ObPluginVectorIndexService::init(schema::ObMultiVersionSchemaService *schema_service,
+                                     ObLSService *ls_service)
+{
+  int ret = OB_SUCCESS;
+  lib::ObMemAttr mem_attr("VecIdxSrv");
+  if (IS_INIT) {
+    ret = OB_INIT_TWICE;
+    LOG_WARN("init twice", KR(ret));
+  } else if (OB_UNLIKELY(false)
+      || OB_ISNULL(schema_service)
+      || OB_ISNULL(ls_service)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument to init ObPluginVectorIndexService", KR(ret));
+  } else if (OB_FAIL(allocator_.init(nullptr, OB_MALLOC_MIDDLE_BLOCK_SIZE, mem_attr))) {
+    LOG_WARN("ObTenantSrs allocator init failed.", K(ret));
+  } else {
+    ObSharedMemAllocMgr *shared_mem_mgr = share::g_mp->shared_mem_alloc_mgr();
+    memory_context_ = shared_mem_mgr->vector_allocator().get_mem_context();
+    all_vsag_use_mem_ = shared_mem_mgr->vector_allocator().get_used_mem_ptr();
+
+    void *mgr_buf = allocator_.alloc(sizeof(ObPluginVectorIndexMgr));
+    if (OB_ISNULL(mgr_buf)) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+      LOG_WARN("failed to allocate vector index manager", KR(ret));
+    } else if (FALSE_IT(single_index_mgr_ = new(mgr_buf) ObPluginVectorIndexMgr(memory_context_))) {
+    } else if (OB_FAIL(single_index_mgr_->init(memory_context_, all_vsag_use_mem_))) {
+      LOG_WARN("failed to init vector index manager", KR(ret));
+    } else {
+      schema_service_ = schema_service;
+      ls_service_ = ls_service;
+      sql_proxy_ = GCTX.sql_proxy_;
+      is_inited_ = true;
+      LOG_INFO("plugin vector index service: init", KR(ret));
+    }
+    if (OB_FAIL(ret) && OB_NOT_NULL(single_index_mgr_)) {
+      single_index_mgr_->~ObPluginVectorIndexMgr();
+      allocator_.free(single_index_mgr_);
+      single_index_mgr_ = nullptr;
+    }
+  }
+  return ret;
+}
+
+int ObPluginVectorIndexService::activate()
+{
+  int ret = OB_SUCCESS;
+  int64_t start_time_us = ObTimeUtility::current_time();
+  FLOG_INFO("ObPluginVectorIndexService: start to switch_to_leader", K(start_time_us));
+  if (IS_NOT_INIT) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("ObPluginVectorIndexService is not inited", K(ret));
+  } else {
+    if (OB_ISNULL(tenant_vec_async_task_sched_)) {
+      if (OB_FAIL(alloc_tenant_vec_async_task_sched())) {
+        LOG_WARN("fail to alloc tenant_vec_async_task_sched_", K(ret));
+      }
+    }
+    if (OB_SUCC(ret)) {
+      if (!is_vec_async_task_started_) {
+        if (OB_FAIL(tenant_vec_async_task_sched_->start())) {
+          LOG_WARN("fail to start tenant_vec_async_task_sched_", K(ret));
+        } else {
+          is_vec_async_task_started_ = true;
+        }
+      } else {
+        tenant_vec_async_task_sched_->resume();
+      }
+    }
+  }
+  const int64_t cost_us = ObTimeUtility::current_time() - start_time_us;
+  FLOG_INFO("ObPluginVectorIndexService: finish switch_to_leader", KR(ret), K(cost_us), KP(tenant_vec_async_task_sched_));
+  return ret;
+}
+
+void ObPluginVectorIndexService::deactivate()
+{
+  inner_switch_to_follower();
+}
+
+void ObPluginVectorIndexService::inner_switch_to_follower()
+{
+  FLOG_INFO("ObPluginVectorIndexService: switch_to_follower");
+  const int64_t start_time_us = ObTimeUtility::current_time();
+  if (OB_NOT_NULL(tenant_vec_async_task_sched_)) {
+    tenant_vec_async_task_sched_->pause();
+  }
+  const int64_t cost_us = ObTimeUtility::current_time() - start_time_us;
+  FLOG_INFO("ObPluginVectorIndexService: switch_to_follower", K(cost_us), KP(tenant_vec_async_task_sched_));
+}
+
+int ObPluginVectorIndexService::alloc_tenant_vec_async_task_sched()
+{
+  int ret = OB_SUCCESS;
+  void *buf = nullptr;
+  int64_t len = sizeof(ObTenantVecAsyncTaskScheduler);
+  ObMemAttr attr("VecIdxAsyncTask");
+
+  if (IS_NOT_INIT) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("ObPluginVectorIndexService is not inited", K(ret));
+  } else if (OB_NOT_NULL(tenant_vec_async_task_sched_)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("tenant_vec_async_task_sched_ is not null", KR(ret), KP(tenant_vec_async_task_sched_));
+  } else if (OB_ISNULL(buf = ob_malloc(sizeof(ObTenantVecAsyncTaskScheduler), attr))) {
+    ret = OB_ALLOCATE_MEMORY_FAILED;
+    LOG_WARN("fail to alloc memory", KR(ret), K(len));
+  } else if (FALSE_IT(tenant_vec_async_task_sched_ = new(buf) ObTenantVecAsyncTaskScheduler())) {
+  } else if (OB_FAIL(tenant_vec_async_task_sched_->init(*GCTX.sql_proxy_))) {
+    LOG_WARN("fail to init tenant_vec_async_task_sched_", K(ret));
+  }
+  if (OB_FAIL(ret)) {
+    if (OB_NOT_NULL(tenant_vec_async_task_sched_)) {
+      tenant_vec_async_task_sched_->destroy();
+      ob_free(tenant_vec_async_task_sched_);
+      tenant_vec_async_task_sched_ = nullptr;
+    }
+  }
+  LOG_DEBUG("finish alloc_tenant_vec_async_task_sched", K(ret));
+  return ret;
+}
+
+int ObPluginVectorIndexService::mtl_init(ObPluginVectorIndexService *&service)
+{
+  int ret = OB_SUCCESS;
+  schema::ObMultiVersionSchemaService *schema_service = &GSCHEMASERVICE;
+  ObLSService *ls_service = share::g_mp->ls_service();
+
+  if (OB_FAIL(service->init(schema_service, ls_service))) {
+    LOG_WARN("fail to init plugin vector index service service", KR(ret));
+  }
+  return ret;
+}
+
+int ObPluginVectorIndexService::start()
+{
+  int ret = OB_SUCCESS;
+  if (IS_NOT_INIT) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("ObPluginVectorIndexService is not inited", KR(ret));
+  }
+  return ret;
+}
+
+void ObPluginVectorIndexService::stop()
+{
+  if (IS_INIT) {
+    LOG_INFO("stop vector index service", K_(is_inited));
+    if (OB_NOT_NULL(tenant_vec_async_task_sched_)) {
+      tenant_vec_async_task_sched_->stop();
+    }
+    get_vec_async_task_handle().stop();
+    kmeans_build_task_handler_.stop();
+    embedding_task_handler_.stop();
+  }
+}
+
+void ObPluginVectorIndexService::wait()
+{
+  if (IS_INIT) {
+    LOG_INFO("wait vector index service");
+    if (OB_NOT_NULL(tenant_vec_async_task_sched_)) {
+      tenant_vec_async_task_sched_->wait();
+    }
+    kmeans_build_task_handler_.wait();
+    embedding_task_handler_.wait();
+  }
+}
+
+// for debug
+void ObPluginVectorIndexMgr::dump_all_inst()
+{
+  int ret = OB_SUCCESS;
+  RLockGuard lock_guard(adapter_map_rwlock_);
+  FOREACH(iter, partial_index_adpt_map_) {
+    const ObTabletID &tablet_id = iter->first;
+    ObPluginVectorIndexAdaptor *adapter = iter->second;
+    ObVectorIndexParam *hnsw_param = (adapter == nullptr)? nullptr : (ObVectorIndexParam *)(adapter->get_algo_data());
+    LOG_INFO("dump partial index adapter", K(tablet_id), KP(adapter), KPC(adapter), KPC(hnsw_param));
+  }
+  FOREACH(iter, complete_index_adpt_map_) {
+    const ObTabletID &tablet_id = iter->first;
+    ObPluginVectorIndexAdaptor *adapter = iter->second;
+    ObVectorIndexParam *hnsw_param = (adapter == nullptr)? nullptr : (ObVectorIndexParam *)(adapter->get_algo_data());
+    LOG_INFO("dump complete index adapter", K(tablet_id), KP(adapter), KPC(adapter), KPC(hnsw_param));
+  }
+}
+
+int ObPluginVectorIndexMgr::get_cache_tablet_ids(ObIArray<ObTabletPair> &cache_tablet_ids)
+{
+  int ret = OB_SUCCESS;
+  ObTabletPair pair;
+  FOREACH_X(iter, ivf_cache_mgr_map_, OB_SUCC(ret))
+  {
+    pair.tablet_id_ = iter->first;
+    if (OB_FAIL(cache_tablet_ids.push_back(pair))) {
+      LOG_WARN("failed to push array", K(ret));
+    }
+  }
+  return ret;
+}
+
+int ObPluginVectorIndexMgr::get_snapshot_tablet_ids(
+    ObIArray<ObTabletPair> &complete_tablet_ids,
+    ObIArray<ObTabletPair> &partial_tablet_ids)
+{
+  int ret = OB_SUCCESS;
+  ObTabletPair pair;
+  RLockGuard lock_guard(adapter_map_rwlock_);
+  FOREACH_X(iter, partial_index_adpt_map_, OB_SUCC(ret)) {
+    const ObTabletID &tablet_id = iter->first;
+    pair.tablet_id_ = tablet_id;
+    if (OB_FAIL(partial_tablet_ids.push_back(pair))) {
+      LOG_WARN("failed to push array", K(ret));
+    }
+  }
+  FOREACH_X(iter, complete_index_adpt_map_, OB_SUCC(ret)) {
+    const ObTabletID &tablet_id = iter->first;
+    pair.tablet_id_ = tablet_id;
+    if (OB_FAIL(complete_tablet_ids.push_back(pair))) {
+      LOG_WARN("failed to push array", K(ret));
+    }
+  }
+  return ret;
+}
+
+int ObPluginVectorIndexService::get_snapshot_ids(
+    ObIArray<ObTabletPair> &complete_tablet_ids,
+    ObIArray<ObTabletPair> &partial_tablet_ids)
+{
+  int ret = OB_SUCCESS;
+  if (OB_FAIL(single_index_mgr_->get_snapshot_tablet_ids(complete_tablet_ids, partial_tablet_ids))) {
+    LOG_WARN("failed to get snapshot tablet ids", K(ret));
+  }
+  return ret;
+}
+
+int ObPluginVectorIndexService::get_cache_ids(ObIArray<ObTabletPair> &cache_tablet_ids)
+{
+  int ret = OB_SUCCESS;
+  if (OB_FAIL(single_index_mgr_->get_cache_tablet_ids(cache_tablet_ids))) {
+    LOG_WARN("failed to get cache tablet ids", K(ret));
+  }
+  return ret;
+}
+
+// for complete
+int ObPluginVectorIndexMgr::replace_with_complete_adapter(ObVectorIndexAdapterCandiate *candidate,
+                                                          ObVecIdxSharedTableInfoMap &info_map,
+                                                          ObIAllocator &allocator)
+{
+  int ret = OB_SUCCESS;
+  ObPluginVectorIndexAdapterGuard &inc_adapter_guard = candidate->inc_adatper_guard_;
+  ObPluginVectorIndexAdapterGuard &bitmap_adapter_guard = candidate->bitmp_adatper_guard_;
+  ObPluginVectorIndexAdapterGuard &sn_adapter_guard = candidate->sn_adatper_guard_;
+  ObPluginVectorIndexAdapterGuard &embedded_adapter_guard = candidate->embedded_adatper_guard_;
+  bool is_hybrid = embedded_adapter_guard.is_valid();
+  // create new adapter
+  ObPluginVectorIndexAdaptor *new_adapter = nullptr;
+  bool set_success = false;
+  void *adpt_buff = allocator.alloc(sizeof(ObPluginVectorIndexAdaptor));
+  if (OB_ISNULL(adpt_buff)) {
+    ret = OB_ALLOCATE_MEMORY_FAILED;
+    LOG_WARN("failed to allocate memory for vector index adapter", KR(ret));
+  } else {
+    new_adapter = new(adpt_buff)ObPluginVectorIndexAdaptor(&allocator, memory_context_);
+    new_adapter->set_create_type(CreateTypeComplete);
+    if (OB_FAIL(new_adapter->merge_parital_index_adapter(inc_adapter_guard.get_adatper()))) {
+      LOG_WARN("failed to merge inc index adapter", KPC(inc_adapter_guard.get_adatper()), KR(ret));
+    } else if (OB_FAIL(new_adapter->merge_parital_index_adapter(bitmap_adapter_guard.get_adatper()))) {
+      LOG_WARN("failed to merge bitmap index adapter", KPC(bitmap_adapter_guard.get_adatper()), KR(ret));
+    } else if (OB_FAIL(new_adapter->merge_parital_index_adapter(sn_adapter_guard.get_adatper()))) {
+      LOG_WARN("failed to merge snapshot index adapter", KPC(sn_adapter_guard.get_adatper()), KR(ret));
+    } else if (is_hybrid && OB_FAIL(new_adapter->merge_parital_index_adapter(embedded_adapter_guard.get_adatper()))) {
+      LOG_WARN("failed to merge embedded adapter", KPC(embedded_adapter_guard.get_adatper()), KR(ret));
+      // still call init to avoid not all 3 part of partial adapter called before merge
+    } else if (OB_FAIL(new_adapter->init(memory_context_, all_vsag_use_mem_))) {
+      LOG_WARN("failed to init adpt.", K(ret));
+    } else if (!new_adapter->is_vid_rowkey_info_valid()) {
+      ObVectorIndexSharedTableInfo info;
+      if (OB_FAIL(info_map.get_refactored(new_adapter->get_data_tablet_id(), info))) {
+        LOG_WARN("failed to get vector index shared table info",
+          K(new_adapter->get_data_tablet_id()), KR(ret));
+      } else {
+        if (info.rowkey_vid_table_id_ != OB_INVALID_ID) {
+          new_adapter->set_is_need_vid(true);
+          new_adapter->set_vid_rowkey_info(info);
+        } else {
+          new_adapter->set_is_need_vid(false);
+          new_adapter->set_data_table_id(info);
+        }
+      }
+    }
+    if (OB_FAIL(ret)) {
+    } else {
+      WLockGuard lock_guard(adapter_map_rwlock_);
+      int overwrite = 0;
+      // should not fail in followring process
+      if (OB_FAIL(set_complete_adapter_(new_adapter->get_inc_tablet_id(), new_adapter, overwrite))) {
+        LOG_WARN("failed to set new complete partial adapter", K(new_adapter->get_inc_tablet_id()), KR(ret));
+      } else if (OB_FAIL(set_complete_adapter_(new_adapter->get_vbitmap_tablet_id(), new_adapter, overwrite))) {
+        LOG_WARN("failed to set new complete partial adapter", K(new_adapter->get_vbitmap_tablet_id()), KR(ret));
+        if (OB_FAIL(erase_complete_adapter(new_adapter->get_inc_tablet_id()))) {
+          LOG_WARN("fail to release complete index adapter", K(new_adapter->get_inc_tablet_id()), KR(ret));
+        } else {
+          new_adapter = nullptr;
+        }
+      } else if (OB_FAIL(set_complete_adapter_(new_adapter->get_snap_tablet_id(), new_adapter, overwrite))) {
+        LOG_WARN("failed to set new full partial adapter", K(new_adapter->get_snap_tablet_id()), KR(ret));
+        if (OB_FAIL(erase_complete_adapter(new_adapter->get_inc_tablet_id()))) {
+          LOG_WARN("fail to release complete index adapter", K(new_adapter->get_inc_tablet_id()), KR(ret));
+        } else if (OB_FAIL(erase_complete_adapter(new_adapter->get_vbitmap_tablet_id()))) {
+          LOG_WARN("fail to release complete index adapter", K(new_adapter->get_vbitmap_tablet_id()), KR(ret));
+        } else {
+          new_adapter = nullptr;
+        }
+      } else if (is_hybrid && OB_FAIL(set_complete_adapter_(new_adapter->get_embedded_tablet_id(), new_adapter, overwrite))) {
+          LOG_WARN("failed to set new full partial adapter", K(new_adapter->get_embedded_tablet_id()), KR(ret));
+          if (OB_FAIL(erase_complete_adapter(new_adapter->get_inc_tablet_id()))) {
+          LOG_WARN("fail to release complete index adapter", K(new_adapter->get_inc_tablet_id()), KR(ret));
+          } else if (OB_FAIL(erase_complete_adapter(new_adapter->get_vbitmap_tablet_id()))) {
+            LOG_WARN("fail to release complete index adapter", K(new_adapter->get_vbitmap_tablet_id()), KR(ret));
+          } else if (OB_FAIL(erase_complete_adapter(new_adapter->get_snap_tablet_id()))) {
+            LOG_WARN("fail to release complete index adapter", K(new_adapter->get_snap_tablet_id()), KR(ret));
+          } else {
+            new_adapter = nullptr;
+          }
+      } else {
+        set_success = true;
+        if (OB_FAIL(erase_partial_adapter_(new_adapter->get_inc_tablet_id()))) {
+          LOG_WARN("fail to release partial index adapter", K(new_adapter->get_inc_tablet_id()), KR(ret));
+        } else if (OB_FAIL(erase_partial_adapter_(new_adapter->get_vbitmap_tablet_id()))) {
+          LOG_WARN("fail to release partial index adapter", K(new_adapter->get_vbitmap_tablet_id()), KR(ret));
+        } else if (OB_FAIL(erase_partial_adapter_(new_adapter->get_snap_tablet_id()))) {
+          LOG_WARN("fail to release partial index adapter", K(new_adapter->get_snap_tablet_id()), KR(ret));
+        } else if (is_hybrid && OB_FAIL(erase_partial_adapter_(new_adapter->get_embedded_tablet_id()))) {
+          LOG_WARN("fail to release partial index adapter", K(new_adapter->get_embedded_tablet_id()), KR(ret));
+        }
+      }
+    }
+  }
+  if (OB_FAIL(ret) && OB_NOT_NULL(new_adapter) && set_success == false) {
+    new_adapter->~ObPluginVectorIndexAdaptor();
+    allocator.free(adpt_buff);
+    new_adapter = nullptr;
+    adpt_buff = nullptr;
+  }
+  return ret;
+}
+
+int ObPluginVectorIndexMgr::replace_old_adapter(ObPluginVectorIndexAdaptor *new_adapter)
+{
+  int ret = 0;
+  if (OB_ISNULL(new_adapter)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("get null adapter", KR(ret));
+  } else {
+    int overwrite = 0;
+    ObPluginVectorIndexAdaptor *old_adapter = nullptr;
+    int tmp_ret = complete_index_adpt_map_.get_refactored(new_adapter->get_inc_tablet_id(), old_adapter);
+    if (OB_HASH_NOT_EXIST == tmp_ret) {
+      tmp_ret = OB_SUCCESS;
+      old_adapter = nullptr;
+    }
+    if (OB_FAIL(tmp_ret)) {
+      ret = tmp_ret;
+      LOG_WARN("failed to get old complete vector index adapter before replace", K(ret), KPC(new_adapter));
+    } else if (OB_NOT_NULL(old_adapter) && old_adapter != new_adapter &&
+               OB_FAIL(new_adapter->inherit_index_id_watermarks_from(*old_adapter))) {
+      LOG_WARN("failed to inherit adapter index id watermarks before replace",
+               K(ret), KPC(old_adapter), KPC(new_adapter));
+    }
+    // should not fail in following process
+    if (OB_FAIL(ret)) {
+    } else if (OB_FAIL(erase_complete_adapter(new_adapter->get_inc_tablet_id()))) {
+      LOG_WARN("failed to erase new complete partial adapter", K(new_adapter->get_inc_tablet_id()), KR(ret));
+    } else if (OB_FAIL(erase_complete_adapter(new_adapter->get_vbitmap_tablet_id()))) {
+      LOG_WARN("failed to erase new complete partial adapter", K(new_adapter->get_vbitmap_tablet_id()), KR(ret));
+    } else if (OB_FAIL(erase_complete_adapter(new_adapter->get_snap_tablet_id()))) {
+      LOG_WARN("failed to erase new complete partial adapter", K(new_adapter->get_snap_tablet_id()), KR(ret));
+    } else if (OB_FAIL(set_complete_adapter_(new_adapter->get_inc_tablet_id(), new_adapter, overwrite))) {
+      LOG_WARN("failed to set new complete partial adapter", K(new_adapter->get_inc_tablet_id()), KR(ret));
+    } else if (OB_FAIL(set_complete_adapter_(new_adapter->get_vbitmap_tablet_id(), new_adapter, overwrite))) {
+      LOG_WARN("failed to set new complete partial adapter", K(new_adapter->get_vbitmap_tablet_id()), KR(ret));
+    } else if (OB_FAIL(set_complete_adapter_(new_adapter->get_snap_tablet_id(), new_adapter, overwrite))) {
+      LOG_WARN("failed to set new complete partial adapter", K(new_adapter->get_snap_tablet_id()), KR(ret));
+    }
+
+    if (OB_SUCC(ret) && new_adapter->is_embedded_tablet_valid()) {
+      if (OB_FAIL(erase_complete_adapter(new_adapter->get_embedded_tablet_id()))) {
+        LOG_WARN("failed to erase new complete partial adapter", K(new_adapter->get_embedded_tablet_id()), KR(ret));
+      } else if (OB_FAIL(set_complete_adapter_(new_adapter->get_embedded_tablet_id(), new_adapter, overwrite))) {
+        LOG_WARN("failed to set new complete partial adapter", K(new_adapter->get_embedded_tablet_id()), KR(ret));
+      }
+    }
+  }
+  return ret;
+}
+
+// for full partial
+int ObPluginVectorIndexMgr::replace_with_full_partial_adapter(ObVectorIndexAcquireCtx &ctx,
+                                                              ObIAllocator &allocator,
+                                                              ObPluginVectorIndexAdapterGuard &adapter_guard,
+                                                              ObString *vec_index_param,
+                                                              int64_t dim,
+                                                              ObVectorIndexAdapterCandiate *candidate)
+{
+  int ret = OB_SUCCESS;
+  ObPluginVectorIndexAdapterGuard &inc_adapter_guard = candidate->inc_adatper_guard_;
+  ObPluginVectorIndexAdapterGuard &bitmap_adapter_guard = candidate->bitmp_adatper_guard_;
+  ObPluginVectorIndexAdapterGuard &sn_adapter_guard = candidate->sn_adatper_guard_;
+  ObPluginVectorIndexAdapterGuard &emdedded_adapter_guard = candidate->embedded_adatper_guard_;
+  // create new adapter
+  ObPluginVectorIndexAdaptor *new_adapter = nullptr;
+  bool set_success = false;
+  void *adpt_buff = allocator.alloc(sizeof(ObPluginVectorIndexAdaptor));
+  if (OB_ISNULL(adpt_buff)) {
+    ret = OB_ALLOCATE_MEMORY_FAILED;
+    LOG_WARN("failed to allocate memory for vector index adapter", KR(ret));
+  } else {
+    new_adapter = new(adpt_buff)ObPluginVectorIndexAdaptor(&allocator, memory_context_);
+    new_adapter->set_create_type(CreateTypeFullPartial);
+    if (OB_FAIL(new_adapter->set_tablet_id(VIRT_INC, ctx.inc_tablet_id_))) {
+      LOG_WARN("failed to set inc tablet id", K(ctx), KR(ret));
+    } else if (OB_FAIL(new_adapter->set_tablet_id(VIRT_BITMAP, ctx.vbitmap_tablet_id_))) {
+      LOG_WARN("failed to set snapshot bitmap tablet id", K(ctx), KR(ret));
+    } else if (OB_FAIL(new_adapter->set_tablet_id(VIRT_SNAP, ctx.snapshot_tablet_id_))) {
+      LOG_WARN("failed to set snapshot index tablet id", K(ctx), KR(ret));
+    } else if (OB_FAIL(new_adapter->set_tablet_id(VIRT_DATA, ctx.data_tablet_id_))) {
+      LOG_WARN("failed to set data tablet id", K(ctx), KR(ret));
+    } else if (ctx.embedded_tablet_id_.is_valid() && OB_FAIL(new_adapter->set_tablet_id(VIRT_EMBEDDED, ctx.embedded_tablet_id_))) {
+      LOG_WARN("failed to set embedded tablet id", K(ctx), KR(ret));
+    } else if (OB_FAIL(new_adapter->merge_parital_index_adapter(inc_adapter_guard.get_adatper()))) {
+      LOG_WARN("failed to merge inc index adapter",
+        K(ctx), KPC(inc_adapter_guard.get_adatper()), KR(ret));
+    } else if (OB_FAIL(new_adapter->merge_parital_index_adapter(bitmap_adapter_guard.get_adatper()))) {
+      LOG_WARN("failed to merge bitmap index adapter",
+        K(ctx), KPC(bitmap_adapter_guard.get_adatper()), KR(ret));
+    } else if (OB_FAIL(new_adapter->merge_parital_index_adapter(sn_adapter_guard.get_adatper()))) {
+      LOG_WARN("failed to merge snapshot index adapter",
+        K(ctx), KPC(sn_adapter_guard.get_adatper()), KR(ret));
+    } else if (ctx.embedded_tablet_id_.is_valid() && OB_FAIL(new_adapter->merge_parital_index_adapter(emdedded_adapter_guard.get_adatper()))) {
+      LOG_WARN("failed to merge emdedded adapter",
+        K(ctx), KPC(emdedded_adapter_guard.get_adatper()), KR(ret));
+      // still call init to avoid not all 3 part of partial adapter called before merge
+    } else if ((OB_NOT_NULL(vec_index_param) && !vec_index_param->empty())
+                && OB_FAIL(new_adapter->init(*vec_index_param, dim, memory_context_, all_vsag_use_mem_))) {
+      LOG_WARN("failed to init adpt.", K(ret), K(*vec_index_param), K(dim));
+    } else {
+      ObPluginVectorIndexAdapterGuard old_inc_adapter_guard;
+      ObPluginVectorIndexAdapterGuard old_bitmap_adapter_guard;
+      ObPluginVectorIndexAdapterGuard old_sn_adapter_guard;
+      ObPluginVectorIndexAdapterGuard old_emdedded_adapter_guard;
+      WLockGuard lock_guard(adapter_map_rwlock_);
+      int overwrite = 1;
+      // should not fail in followring process
+      if (OB_FAIL(get_adapter_inst_guard_in_lock(ctx.inc_tablet_id_, old_inc_adapter_guard))) {
+        LOG_WARN("failed to get adapter", K(ret), K(ctx.inc_tablet_id_));
+      } else if (OB_FAIL(get_adapter_inst_guard_in_lock(ctx.vbitmap_tablet_id_, old_bitmap_adapter_guard))) {
+        LOG_WARN("failed to get adapter", K(ret), K(ctx.vbitmap_tablet_id_));
+      } else if (OB_FAIL(get_adapter_inst_guard_in_lock(ctx.snapshot_tablet_id_, old_sn_adapter_guard))) {
+        LOG_WARN("failed to get adapter", K(ret), K(ctx.snapshot_tablet_id_));
+      } else if (ctx.embedded_tablet_id_.is_valid() && OB_FAIL(get_adapter_inst_guard_in_lock(ctx.embedded_tablet_id_, old_emdedded_adapter_guard))) {
+        LOG_WARN("failed to get adapter", K(ret), K(ctx.embedded_tablet_id_));
+      } else if (OB_FAIL(set_partial_adapter_(ctx.inc_tablet_id_, new_adapter, overwrite))) {
+        LOG_WARN("failed to set new full partial adapter", K(ctx.inc_tablet_id_), KR(ret));
+      } else if (OB_FAIL(set_partial_adapter_(ctx.vbitmap_tablet_id_, new_adapter, overwrite))) {
+        LOG_WARN("failed to set new full partial adapter", K(ctx.vbitmap_tablet_id_), KR(ret));
+      } else if (OB_FAIL(set_partial_adapter_(ctx.snapshot_tablet_id_, new_adapter, overwrite))) {
+        LOG_WARN("failed to set new full partial adapter", K(ctx.snapshot_tablet_id_), KR(ret));
+      } else if (OB_FAIL(ctx.embedded_tablet_id_.is_valid() && set_partial_adapter_(ctx.embedded_tablet_id_, new_adapter, overwrite))) {
+        LOG_WARN("failed to set new full partial adapter", K(ctx.embedded_tablet_id_), KR(ret));
+      } else if (OB_FAIL(adapter_guard.set_adapter(new_adapter))) {
+        LOG_WARN("failed to set adapter", K(ctx), KR(ret));
+      } else {
+        bool set_success = false;
+        // release because they are removed from hashmap
+        ObPluginVectorIndexAdaptor *inc_adapter = old_inc_adapter_guard.get_adatper();
+        ObPluginVectorIndexAdaptor *bitmap_adapter = old_bitmap_adapter_guard.get_adatper();
+        ObPluginVectorIndexAdaptor *sn_adapter = old_sn_adapter_guard.get_adatper();
+
+        if (OB_FAIL(ObPluginVectorIndexUtils::release_vector_index_adapter(inc_adapter))) {
+          LOG_WARN("fail to release vector index adapter",
+            K(ctx.inc_tablet_id_), KPC(inc_adapter), KR(ret));
+        } else if (OB_FAIL(ObPluginVectorIndexUtils::release_vector_index_adapter(bitmap_adapter))) {
+          LOG_WARN("fail to release vector index adapter",
+            K(ctx.vbitmap_tablet_id_), KPC(bitmap_adapter), KR(ret));
+        } else if (OB_FAIL(ObPluginVectorIndexUtils::release_vector_index_adapter(sn_adapter))) {
+          LOG_WARN("fail to release vector index adapter",
+            K(ctx.snapshot_tablet_id_), KPC(sn_adapter), KR(ret));
+        } else if (ctx.embedded_tablet_id_.is_valid()) {
+          ObPluginVectorIndexAdaptor *emdedded_adapter = old_emdedded_adapter_guard.get_adatper();
+          if (OB_FAIL(ObPluginVectorIndexUtils::release_vector_index_adapter(emdedded_adapter))) {
+            LOG_WARN("fail to release vector index adapter",
+              K(ctx.embedded_tablet_id_), KPC(emdedded_adapter), KR(ret));
+          }
+        }
+      }
+    }
+  }
+  if (OB_FAIL(ret) && set_success == false && OB_NOT_NULL(new_adapter)) {
+    new_adapter->~ObPluginVectorIndexAdaptor();
+    allocator.free(adpt_buff);
+    adpt_buff = nullptr;
+    new_adapter = nullptr;
+  }
+  return ret;
+
+}
+
+int ObPluginVectorIndexMgr::set_ivf_cache_mgr(const ObIvfCacheMgrKey &tablet_id,
+                                              ObIvfCacheMgr *cache_mgr,
+                                              int overwrite)
+{
+  int ret = OB_SUCCESS;
+  if (OB_FAIL(ivf_cache_mgr_map_.set_refactored(tablet_id, cache_mgr, overwrite))) {
+    LOG_WARN("failed to set vector index ivf cache mgr", K(tablet_id), KR(ret));
+  } else {
+    cache_mgr->inc_ref();
+  }
+  return ret;
+}
+
+int ObPluginVectorIndexMgr::erase_ivf_cache_mgr(const ObIvfCacheMgrKey &cachr_mgr_key)
+{
+  int ret = OB_SUCCESS;
+  ObIvfCacheMgr *cache_mgr = nullptr;
+  if (OB_FAIL(ivf_cache_mgr_map_.erase_refactored(cachr_mgr_key, &cache_mgr))) {
+    if (ret != OB_HASH_NOT_EXIST) {
+      LOG_WARN("failed to erase partial vector index ivf cache mgr", K(cachr_mgr_key), KR(ret));
+    }
+  } else if (OB_ISNULL(cache_mgr)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("ivf cache mgr inst is null", K(cachr_mgr_key), KR(ret));
+  } else {
+    if (OB_FAIL(ObPluginVectorIndexUtils::release_ivf_cache_mgr(cache_mgr))) {
+      LOG_WARN("fail to release vector index ivf cache mgr", K(cachr_mgr_key), KR(ret));
+    }
+  }
+  return ret;
+}
+
+int ObPluginVectorIndexMgr::get_ivf_cache_mgr(const ObIvfCacheMgrKey& cachr_mgr_key, ObIvfCacheMgr *&cache_mgr)
+{
+  int ret = OB_SUCCESS;
+  if (OB_FAIL(ivf_cache_mgr_map_.get_refactored(cachr_mgr_key, cache_mgr))) {
+    if (ret != OB_HASH_NOT_EXIST) {
+      LOG_WARN("fail to get cache mgr", K(ret), K(cachr_mgr_key));
+    } else {
+      LOG_INFO("cache mgr not exist", K(ret), K(cachr_mgr_key));
+    }
+  } else if (OB_ISNULL(cache_mgr)) {
+    ret = OB_ERR_NULL_VALUE;
+    LOG_WARN("ivf cache mgr inst is null", KR(ret), K(cachr_mgr_key));
+  }
+  return ret;
+}
+
+int ObPluginVectorIndexMgr::get_ivf_cache_mgr_guard(const ObIvfCacheMgrKey& cachr_mgr_key, ObIvfCacheMgrGuard &cache_mgr_guard)
+{
+  int ret = OB_SUCCESS;
+
+  ObIvfCacheMgr *cache_mgr = nullptr;
+  if (OB_FAIL(get_ivf_cache_mgr(cachr_mgr_key, cache_mgr))) {
+    if (ret != OB_HASH_NOT_EXIST) {
+      LOG_WARN("failed to get ivf cache mgr inst", KR(ret), K(cachr_mgr_key));
+    }
+  } else if (OB_FAIL(cache_mgr_guard.set_cache_mgr(cache_mgr))) {
+    LOG_WARN("failed to set ivf cache mgr", KR(ret), K(cachr_mgr_key));
+  }
+  return ret;
+}
+
+int ObPluginVectorIndexMgr::get_or_create_ivf_cache_mgr_guard(ObIAllocator &allocator,
+                                                              const ObIvfCacheMgrKey &key,
+                                                              const ObVectorIndexParam &vec_index_param,
+                                                              int64_t dim,
+                                                              int64_t table_id,
+                                                              ObIvfCacheMgrGuard &cache_mgr_guard)
+{
+  int ret = OB_SUCCESS;
+  if (OB_FAIL(get_ivf_cache_mgr_guard(key, cache_mgr_guard))) {
+    if (ret == OB_HASH_NOT_EXIST) {
+      if (OB_FAIL(create_ivf_cache_mgr(allocator, key, vec_index_param, dim, table_id))) {
+        LOG_WARN("failed to create ivf cache mgr", K(ret), K(key), K(vec_index_param));
+      } else if (OB_FAIL(get_ivf_cache_mgr_guard(key, cache_mgr_guard))) {
+        LOG_WARN("failed to get ivf cache mgr guard", K(ret), K(key));
+      }
+    } else {
+      LOG_WARN("fail to get ivf cache mgr guard", K(ret), K(key));
+    }
+  }
+  return ret;
+}
+
+int ObPluginVectorIndexMgr::create_ivf_cache_mgr(ObIAllocator &allocator,
+                                                 const ObIvfCacheMgrKey &key,
+                                                 const ObVectorIndexParam &vec_index_param,
+                                                 int64_t dim,
+                                                 int64_t table_id)
+{
+  int ret = OB_SUCCESS;
+  ObIvfCacheMgr *tmp_ivf_cache_mgr = nullptr;
+
+  void *mgr_buff = nullptr;
+  if (OB_ISNULL(mgr_buff = allocator.alloc(sizeof(ObIvfCacheMgr)))) {
+    ret = OB_ALLOCATE_MEMORY_FAILED;
+    LOG_WARN("failed to allocate memory for vector index ivf cache mgr", KR(ret));
+  } else {
+    tmp_ivf_cache_mgr = new(mgr_buff)ObIvfCacheMgr(allocator);
+    if (OB_FAIL(tmp_ivf_cache_mgr->init(memory_context_, vec_index_param, key, dim, table_id, all_vsag_use_mem_))) {
+      LOG_WARN("failed to init cache mgr.", K(ret));
+    } else {
+      if (OB_FAIL(set_ivf_cache_mgr(key, tmp_ivf_cache_mgr))) {
+        if (ret == OB_HASH_EXIST) {
+          LOG_INFO("vector index ivf cache mgr may created by other threads");
+          ret = OB_SUCCESS;
+        } else {
+          LOG_WARN("set vector index ivf cache mgr faild", KR(ret), K(key));
+        }
+      }
+    }
+
+    if (OB_FAIL(ret) && OB_NOT_NULL(tmp_ivf_cache_mgr)) {
+      tmp_ivf_cache_mgr->~ObIvfCacheMgr();
+      allocator.free(mgr_buff);
+      tmp_ivf_cache_mgr = nullptr;
+      mgr_buff = nullptr;
+    }
+  }
+
+  return ret;
+}
+
+int ObPluginVectorIndexService::get_ivf_aux_info(
+    const uint64_t table_id,
+    const ObTabletID tablet_id,
+    ObIAllocator &allocator,
+    bool is_pq_type,
+    ObIArray<float*> &aux_info,
+    uint64_t &center_prefix)
+{
+  int ret = OB_SUCCESS;
+  bool is_hidden_table = false;
+  ObSqlString sql_string;
+  center_prefix = 0;
+  if (IS_NOT_INIT) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("ObPluginVectorIndexService is not inited", KR(ret));
+  } else if (OB_FAIL(generate_get_aux_info_sql(table_id, tablet_id, is_hidden_table, sql_string))) {
+    LOG_WARN("failed to generate sql", K(ret), K(table_id));
+  } else {
+    ObSessionParam session_param;
+    session_param.sql_mode_ = nullptr;
+    session_param.tz_info_wrap_ = nullptr;
+    session_param.ddl_info_.set_is_dummy_ddl_for_inner_visibility(true);
+    session_param.ddl_info_.set_source_table_hidden(is_hidden_table);
+    session_param.ddl_info_.set_dest_table_hidden(false);
+    SMART_VAR(ObMySQLProxy::MySQLResult, res) {
+      sqlclient::ObMySQLResult *result = NULL;
+      if (OB_FAIL(sql_proxy_->read(res, sql_string.ptr(), &session_param))) {
+        LOG_WARN("failed to execute sql", K(ret), K(sql_string));
+      } else if (NULL == (result = res.get_result())) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("failed to execute sql", K(ret), K(sql_string));
+      } else {
+        while (OB_SUCC(ret) && OB_SUCC(result->next())) {
+          const int64_t cid_col_idx = 0;
+          const int64_t vec_col_idx = 1;
+          ObObj cid_obj;
+          ObObj vec_obj;
+          ObString blob_data;
+          uint64_t cid_prefix = 0;
+          if (OB_FAIL(result->get_obj(cid_col_idx, cid_obj))) {
+            LOG_WARN("failed to get center id", K(ret));
+          } else if (OB_FAIL(result->get_obj(vec_col_idx, vec_obj))) {
+            LOG_WARN("failed to get vid", K(ret));
+          } else if (FALSE_IT(blob_data = vec_obj.get_string())) {
+          } else if (OB_FAIL(sql::ObTextStringHelper::read_real_string_data(&allocator,
+                                                                        ObLongTextType,
+                                                                        CS_TYPE_BINARY,
+                                                                        true,
+                                                                        blob_data))) {
+            LOG_WARN("fail to get real data.", K(ret), K(blob_data));
+          } else if (OB_FALSE_IT(cid_prefix = ObVectorKmeansClusterHelper::get_center_prefix(cid_obj.get_string(), is_pq_type))) {
+          } else if (center_prefix == 0 && OB_FALSE_IT(center_prefix = cid_prefix)) {
+          } else if (center_prefix != cid_prefix) {
+            ret = OB_ERR_UNEXPECTED;
+            LOG_WARN("center prefix mismatch", K(ret), K(center_prefix), K(cid_prefix));
+          } else {
+            int64_t dim = blob_data.length() / sizeof(float);
+            float *data = nullptr;
+            if (OB_ISNULL(data = static_cast<float*>(allocator.alloc(sizeof(float) * dim)))) {
+              ret = OB_ALLOCATE_MEMORY_FAILED;
+              LOG_WARN("failed to alloc memory", K(ret));
+            } else if (FALSE_IT(MEMCPY(data, reinterpret_cast<float*>(blob_data.ptr()), sizeof(float) * dim))) {
+            } else if (OB_FAIL(aux_info.push_back(data))) {
+              LOG_WARN("failed to push back array", K(ret));
+            }
+          }
+        }
+        if (OB_ITER_END == ret) {
+          ret = OB_SUCCESS;
+        }
+      }
+    }
+  }
+  return ret;
+}
+
+// need partition key
+int ObPluginVectorIndexService::generate_get_aux_info_sql(
+    const uint64_t table_id,
+    const ObTabletID tablet_id,
+    bool &is_hidden_table,
+    ObSqlString &sql_string)
+{
+  int ret = OB_SUCCESS;
+  if (OB_UNLIKELY(OB_INVALID_ID == table_id || !tablet_id.is_valid())) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid arguments", K(ret), K(table_id));
+  } else {
+    const ObTableSchema *table_schema = nullptr;
+    const ObTableSchema *data_table_schema = nullptr;
+    ObString database_name;
+    schema::ObSchemaGetterGuard schema_guard;
+    if (OB_ISNULL(schema_service_)) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("schema_service is nullptr", K(ret));
+    } else if (OB_FAIL(schema_service_->get_tenant_schema_guard(schema_guard))) {
+      LOG_WARN("failed to get tenant schema guard", K(ret));
+    } else if (OB_FAIL(schema_guard.get_table_schema( table_id, table_schema))) {
+      LOG_WARN("failed to get table schema", K(ret), K(table_id));
+    } else if (OB_ISNULL(table_schema)) {
+      ret = OB_TABLE_NOT_EXIST;
+      LOG_WARN("failed to get table schema", K(ret), K(table_id));
+    } else if (!table_schema->is_vec_ivf_centroid_index() &&
+               !table_schema->is_vec_ivfsq8_meta_index() &&
+               !table_schema->is_vec_ivfpq_pq_centroid_index()) {
+      ret = OB_INVALID_ARGUMENT;
+      LOG_WARN("invalid table type", K(ret));
+    } else if (OB_FAIL(schema_guard.get_table_schema( table_schema->get_data_table_id(), data_table_schema))) {
+      LOG_WARN("failed to get table schema", K(ret), K(table_schema->get_data_table_id()));
+    } else if (OB_ISNULL(data_table_schema)) {
+      ret = OB_TABLE_NOT_EXIST;
+      LOG_WARN("failed to get table schema", K(ret), K(table_schema->get_data_table_id()));
+    } else {
+      const uint64_t database_id = table_schema->get_database_id();
+      const ObDatabaseSchema *db_schema = nullptr;
+      is_hidden_table = table_schema->is_user_hidden_table();
+      if (OB_FAIL(schema_guard.get_database_schema( database_id, db_schema))) {
+        LOG_WARN("fail to get database schema", K(ret), K(database_id));
+      } else if (OB_ISNULL(db_schema)) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("error unexpected, database schema must not be nullptr", K(ret));
+      } else {
+        database_name = db_schema->get_database_name_str();
+      }
+    }
+    const char* query_col = "";
+    const char* filter_col = "";
+    for (int64_t i = 0; OB_SUCC(ret) && i < table_schema->get_column_count(); ++i) {
+      const ObColumnSchemaV2 *data_col_schema = nullptr;
+      const ObColumnSchemaV2 *col_schema = nullptr;
+      if (OB_ISNULL(col_schema = table_schema->get_column_schema_by_idx(i))) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("unexpected col_schema, is nullptr", K(ret), K(i), K(table_schema));
+      } else if (OB_ISNULL(data_col_schema = data_table_schema->get_column_schema(col_schema->get_column_id()))) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("unexpected null column schema ptr", K(ret));
+      } else if (data_col_schema->is_vec_ivf_center_id_column()
+                  || data_col_schema->is_vec_ivf_meta_id_column()
+                  || data_col_schema->is_vec_ivf_pq_center_id_column()) {
+        filter_col = col_schema->get_column_name();
+      } else if (data_col_schema->is_vec_ivf_center_vector_column()
+                || data_col_schema->is_vec_ivf_meta_vector_column()) {
+        query_col = col_schema->get_column_name();
+      }
+    }
+    if (OB_SUCC(ret)) {
+      // get partition name by tablet_id
+      ObPartitionLevel part_level;
+      ObString partition_name;
+      if (OB_FAIL(ObVectorIndexUtil::get_partition_name_by_tablet(
+              *table_schema, *data_table_schema, tablet_id, part_level, partition_name))) {
+        LOG_WARN("failed to get partition name by tablet", K(ret), K(tablet_id));
+      } else {
+        if (0 == strlen(query_col) || 0 == strlen(filter_col)) {
+          ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("unexpected null col name", K(ret), K(query_col), K(filter_col));
+        } else {
+          const ObString &table_name = table_schema->get_table_name_str();
+          if (PARTITION_LEVEL_ZERO == part_level) {
+            // non-partitioned table, no PARTITION clause
+            if (OB_FAIL(sql_string.assign_fmt("SELECT %.*s, %.*s FROM `%.*s`.`%.*s`",
+                static_cast<int>(strlen(filter_col)), filter_col,
+                static_cast<int>(strlen(query_col)), query_col,
+                static_cast<int>(database_name.length()), database_name.ptr(),
+                static_cast<int>(table_name.length()), table_name.ptr()))) {
+              LOG_WARN("failed to assign sql string", K(ret));
+            }
+          } else {
+            // partitioned table, use PARTITION clause
+            if (OB_FAIL(sql_string.assign_fmt("SELECT %.*s, %.*s FROM `%.*s`.`%.*s` PARTITION (`%.*s`)",
+                static_cast<int>(strlen(filter_col)), filter_col,
+                static_cast<int>(strlen(query_col)), query_col,
+                static_cast<int>(database_name.length()), database_name.ptr(),
+                static_cast<int>(table_name.length()), table_name.ptr(),
+                static_cast<int>(partition_name.length()), partition_name.ptr()))) {
+              LOG_WARN("failed to assign sql string", K(ret));
+            }
+          }
+          if (OB_SUCC(ret)) {
+            LOG_INFO("success to generate sql string", K(ret), K(sql_string), K(table_id), K(tablet_id));
+          }
+        }
+      }
+    }
+  }
+  return ret;
+}
+int ObPluginVectorIndexService::acquire_ivf_cache_mgr_guard(
+    const ObIvfCacheMgrKey &key, ObIvfCacheMgrGuard &cache_mgr_guard)
+{
+  int ret = OB_SUCCESS;
+  ObPluginVectorIndexMgr *index_mgr = single_index_mgr_;
+
+  if (OB_FAIL(index_mgr->get_ivf_cache_mgr_guard(key, cache_mgr_guard))) {
+    LOG_WARN("fail to get ivf cache mgr guard", K(ret), K(key));
+  }
+  return ret;
+}
+
+int ObPluginVectorIndexService::acquire_ivf_cache_mgr_guard(const ObIvfCacheMgrKey &key,
+                                                            const ObVectorIndexParam &vec_index_param,
+                                                            int64_t dim,
+                                                            int64_t table_id,
+                                                            ObIvfCacheMgrGuard &cache_mgr_guard)
+{
+  int ret = OB_SUCCESS;
+  ObPluginVectorIndexMgr *index_mgr = single_index_mgr_;
+
+  if (IS_NOT_INIT) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("ObPluginVectorIndexService is not inited", KR(ret));
+  } else if (OB_FAIL(index_mgr->get_or_create_ivf_cache_mgr_guard(allocator_, key, vec_index_param, dim, table_id, cache_mgr_guard))) {
+    LOG_WARN("failed to get or create ivf cache mgr guard", KR(ret));
+  } else {
+    ObIvfCacheMgr* cache_mgr = cache_mgr_guard.get_ivf_cache_mgr();
+    if (OB_ISNULL(cache_mgr)) {
+      ret = OB_ERR_NULL_VALUE;
+      LOG_WARN("invalid null cache mgr", K(ret));
+    }
+  }
+
+  return ret;
+}
+
+int ObPluginVectorIndexService::get_embedding_task_handler(ObEmbeddingTaskHandler *&handler)
+{
+  int ret = OB_SUCCESS;
+  if (!embedding_task_handler_.is_inited() && OB_FAIL(embedding_task_handler_.init())) {
+    LOG_WARN("failed to init embedding task handler", KR(ret));
+  } else {
+    handler = &embedding_task_handler_;
+  }
+  return ret;
+}
+
+}
+}

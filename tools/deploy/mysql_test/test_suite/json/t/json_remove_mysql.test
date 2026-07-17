@@ -60,8 +60,8 @@ SELECT JSON_REMOVE
 SELECT JSON_REMOVE('[1, 2, [3, 4, 5]]', '$[2][1]', '$[2][1]') AS 'Result';
 
 drop table if exists json_test1;
-create table json_test1(
-c1 int primary key,
+create table json_test1( 
+c1 int primary key, 
 c2 json);
 insert into json_test1 values(2,'{
   "width":  "800",
@@ -181,18 +181,18 @@ SELECT j, JSON_TYPE(j->'$[0]') FROM t;
 
 drop table t;
 
-SELECT JSON_SEARCH('["abc"]', 'one', CAST('abc' AS CHAR CHARSET utf16));
-
+SELECT JSON_SEARCH('["abc"]', 'one', CAST('abc' AS CHAR charset utf8mb4));
+ 
 --disable_warnings
 drop table if exists json_test;
 create table json_test (id int primary key, data json);
 insert into json_test values(1, '{ "a" : "foo", "b" : [ 1, 2, 3 ] }');
 update json_test set data = json_remove(data, '$.a');
 select * from json_test;
-
-set log_row_value_options="partial_json";
+ 
+set log_row_value_options="partial_json"; 
 update json_test set data = json_remove(data, '$.b[1]');
 select * from json_test;
-set log_row_value_options="";
-
+set log_row_value_options=""; 
+ 
 drop table json_test;

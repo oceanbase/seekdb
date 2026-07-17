@@ -20,7 +20,34 @@
 #define protected public
 #define private public
 #include "storage/compaction/ob_tenant_tablet_scheduler.h"
-#include "share/scheduler/ob_dag_warning_history_mgr.h"
+#include "observer/scheduler/ob_dag_warning_history_mgr.h"
+#include "observer/scheduler/ob_tenant_dag_scheduler.h"
+#include "share/rc/ob_module_provider.h"
+
+namespace oceanbase
+{
+// MTL(T*) compatibility shim routed through share::g_mp (single-tenant seekdb).
+template <class T> T mtl_get_module();
+template <> inline share::ObTenantDagScheduler *mtl_get_module<share::ObTenantDagScheduler*>()
+{ return ::oceanbase::share::g_mp->tenant_dag_scheduler(); }
+template <> inline share::ObDagWarningHistoryManager *mtl_get_module<share::ObDagWarningHistoryManager*>()
+{ return ::oceanbase::share::g_mp->dag_warning_history_manager(); }
+class TestDagNetModuleProvider : public share::ObIModuleProvider
+{
+public:
+  TestDagNetModuleProvider() : dag_scheduler_(nullptr), dag_history_mgr_(nullptr), diagnose_mgr_(nullptr) {}
+  virtual share::ObTenantDagScheduler *tenant_dag_scheduler() override { return dag_scheduler_; }
+  virtual share::ObDagWarningHistoryManager *dag_warning_history_manager() override { return dag_history_mgr_; }
+  virtual compaction::ObDiagnoseTabletMgr *diagnose_tablet_mgr() override { return diagnose_mgr_; }
+  share::ObTenantDagScheduler *dag_scheduler_;
+  share::ObDagWarningHistoryManager *dag_history_mgr_;
+  compaction::ObDiagnoseTabletMgr *diagnose_mgr_;
+};
+} // namespace oceanbase
+
+#ifndef MTL
+#define MTL(TYPE) (::oceanbase::mtl_get_module<TYPE>())
+#endif
 
 int64_t dag_cnt = 1;
 int64_t stress_time= 1; // 100ms
@@ -77,41 +104,36 @@ public:
       tablet_scheduler_(nullptr),
       scheduler_(nullptr),
       dag_history_mgr_(nullptr),
-      tenant_base_(500)
+      diagnose_mgr_(nullptr),
+      old_mp_(nullptr)
   {}
   ~TestDagScheduler() {}
   void SetUp()
   {
     ObUnitInfoGetter::ObTenantConfig unit_config;
     unit_config.mode_ = lib::Worker::CompatMode::MYSQL;
-    unit_config.tenant_id_ = 0;
     TenantUnits units;
     ASSERT_EQ(OB_SUCCESS, units.push_back(unit_config));
 
-    ObTenantMetaMemMgr *t3m = OB_NEW(ObTenantMetaMemMgr, ObModIds::TEST, 500);
-    tenant_base_.set(t3m);
-
+    ObTenantMetaMemMgr *t3m = OB_NEW(ObTenantMetaMemMgr, ObModIds::TEST);
     tablet_scheduler_ = OB_NEW(compaction::ObTenantTabletScheduler, ObModIds::TEST);
-    tenant_base_.set(tablet_scheduler_);
-
     scheduler_ = OB_NEW(ObTenantDagScheduler, ObModIds::TEST);
-    tenant_base_.set(scheduler_);
-
     dag_history_mgr_ = OB_NEW(ObDagWarningHistoryManager, ObModIds::TEST);
-    tenant_base_.set(dag_history_mgr_);
-
     diagnose_mgr_ = OB_NEW(compaction::ObDiagnoseTabletMgr, ObModIds::TEST);
-    tenant_base_.set(diagnose_mgr_);
 
-    ObTenantEnv::set_tenant(&tenant_base_);
-    ASSERT_EQ(OB_SUCCESS, tenant_base_.init());
+    provider_.dag_scheduler_ = scheduler_;
+    provider_.dag_history_mgr_ = dag_history_mgr_;
+    provider_.diagnose_mgr_ = diagnose_mgr_;
+    old_mp_ = share::g_mp;
+    share::g_mp = &provider_;
 
     ObMallocAllocator *ma = ObMallocAllocator::get_instance();
-    ASSERT_EQ(OB_SUCCESS, ma->create_and_add_tenant_allocator(tenant_id_));
-    ASSERT_EQ(OB_SUCCESS, ma->set_tenant_limit(tenant_id_, 1LL << 30));
+    ASSERT_EQ(OB_SUCCESS, ma->create_and_add_tenant_allocator());
+    ASSERT_EQ(OB_SUCCESS, ma->set_tenant_limit(1LL << 30));
 
     ASSERT_EQ(OB_SUCCESS, t3m->init());
-    ASSERT_EQ(OB_SUCCESS, scheduler_->init(tenant_id_, time_slice, check_waiting_list_period, MAX_DAG_CNT));
+    ASSERT_EQ(OB_SUCCESS, scheduler_->init(time_slice, check_waiting_list_period, MAX_DAG_CNT));
+    ASSERT_EQ(OB_SUCCESS, diagnose_mgr_->init());
     ObAddr addr(1683068975,9999);
     if (OB_SUCCESS != (ObSysTaskStatMgr::get_instance().set_self_addr(addr))) {
       COMMON_LOG_RET(WARN, OB_ERROR, "failed to add sys task", K(addr));
@@ -127,8 +149,7 @@ public:
     dag_history_mgr_ = nullptr;
     diagnose_mgr_->destroy();
     diagnose_mgr_ = nullptr;
-    tenant_base_.destroy();
-    ObTenantEnv::set_tenant(nullptr);
+    share::g_mp = old_mp_;
   }
 private:
   const static int64_t MAX_DAG_CNT = 64;
@@ -137,7 +158,8 @@ private:
   ObTenantDagScheduler *scheduler_;
   ObDagWarningHistoryManager *dag_history_mgr_;
   compaction::ObDiagnoseTabletMgr *diagnose_mgr_;
-  ObTenantBase tenant_base_;
+  TestDagNetModuleProvider provider_;
+  share::ObIModuleProvider *old_mp_;
   DISALLOW_COPY_AND_ASSIGN(TestDagScheduler);
 };
 
@@ -189,8 +211,6 @@ public:
   virtual int fill_dag_key(char *buf,const int64_t size) const override { UNUSEDx(buf, size); return OB_SUCCESS; }
   virtual lib::Worker::CompatMode get_compat_mode() const override
   { return lib::Worker::CompatMode::MYSQL; }
-  virtual uint64_t get_consumer_group_id() const override 
-  { return consumer_group_id_; }  
   virtual bool is_ha_dag() const override { return false; }
 
   INHERIT_TO_STRING_KV("ObIDag", ObIDag, K_(is_inited), K_(type), K_(id), K(task_list_.get_size()), K_(dag_ret));
@@ -290,7 +310,7 @@ TEST_F(TestDagScheduler, test_task_wait_to_schedule)
   ASSERT_TRUE(nullptr != scheduler);
   ObDagWarningHistoryManager* manager = MTL(ObDagWarningHistoryManager *);
   ASSERT_TRUE(nullptr != manager);
-  EXPECT_EQ(OB_SUCCESS, MTL(ObDagWarningHistoryManager *)->init(true, MTL_ID(), "DagWarnHis"));
+  EXPECT_EQ(OB_SUCCESS, MTL(ObDagWarningHistoryManager *)->init(true, "DagWarnHis"));
 
   for (int i = 0; i < 10; ++i) {
     EXPECT_EQ(OB_SUCCESS, scheduler->create_and_add_dag<ObWaitDag>(nullptr));
@@ -459,7 +479,7 @@ TEST_F(TestDagScheduler, test_dag_retry)
   ASSERT_TRUE(nullptr != scheduler);
   ObDagWarningHistoryManager* manager = MTL(ObDagWarningHistoryManager *);
   ASSERT_TRUE(nullptr != manager);
-  EXPECT_EQ(OB_SUCCESS, MTL(ObDagWarningHistoryManager *)->init(true, MTL_ID(), "DagWarnHis"));
+  EXPECT_EQ(OB_SUCCESS, MTL(ObDagWarningHistoryManager *)->init(true, "DagWarnHis"));
 
   int ret = OB_SUCCESS;
   for (int i = 0; OB_SUCC(ret) && i < 5; ++i) {
@@ -522,7 +542,7 @@ TEST_F(TestDagScheduler, test_dag_retry_failed)
   ASSERT_TRUE(nullptr != scheduler);
   ObDagWarningHistoryManager* manager = MTL(ObDagWarningHistoryManager *);
   ASSERT_TRUE(nullptr != manager);
-  EXPECT_EQ(OB_SUCCESS, MTL(ObDagWarningHistoryManager *)->init(true, MTL_ID(), "DagWarnHis"));
+  EXPECT_EQ(OB_SUCCESS, MTL(ObDagWarningHistoryManager *)->init(true, "DagWarnHis"));
 
   int ret = OB_SUCCESS;
   for (int i = 0; OB_SUCC(ret) && i < 5; ++i) {
@@ -774,7 +794,7 @@ class ObFatherDagNet : public ObIDagNet
 {
 public:
   ObFatherDagNet() :
-    ObIDagNet(ObDagNetType::DAG_NET_TYPE_MIGRATION),
+    ObIDagNet(ObDagNetType::DAG_NET_TYPE_RESERVED_7),
     id_(ObTimeUtility::current_time() + random()),
     op_()
   {}
@@ -868,7 +888,7 @@ TEST_F(TestDagScheduler, test_basic_dag_net)
   ASSERT_TRUE(nullptr != scheduler);
   ObDagWarningHistoryManager* manager = MTL(ObDagWarningHistoryManager *);
   ASSERT_TRUE(nullptr != manager);
-  EXPECT_EQ(OB_SUCCESS, MTL(ObDagWarningHistoryManager *)->init(true, MTL_ID(), "DagWarnHis"));
+  EXPECT_EQ(OB_SUCCESS, MTL(ObDagWarningHistoryManager *)->init(true, "DagWarnHis"));
 
   for (int i = 0; i < 2; ++i) {
     EXPECT_EQ(OB_SUCCESS, scheduler->create_and_add_dag_net<ObFatherDagNet>(nullptr));
@@ -941,7 +961,7 @@ TEST_F(TestDagScheduler, test_basic_dag_net_with_one_retry_dag)
   ASSERT_TRUE(nullptr != scheduler);
   ObDagWarningHistoryManager* manager = MTL(ObDagWarningHistoryManager *);
   ASSERT_TRUE(nullptr != manager);
-  EXPECT_EQ(OB_SUCCESS, MTL(ObDagWarningHistoryManager *)->init(true, MTL_ID(), "DagWarnHis"));
+  EXPECT_EQ(OB_SUCCESS, MTL(ObDagWarningHistoryManager *)->init(true, "DagWarnHis"));
 
   for (int i = 0; i < 1; ++i) {
     EXPECT_EQ(OB_SUCCESS, scheduler->create_and_add_dag_net<ObFatherWithRetryDagNet>(nullptr));
@@ -1033,7 +1053,7 @@ TEST_F(TestDagScheduler, test_generage_task_failed)
   ASSERT_TRUE(nullptr != scheduler);
   ObDagWarningHistoryManager* manager = MTL(ObDagWarningHistoryManager *);
   ASSERT_TRUE(nullptr != manager);
-  ASSERT_EQ(OB_SUCCESS, MTL(ObDagWarningHistoryManager *)->init(true, MTL_ID(), "DagWarnHis"));
+  ASSERT_EQ(OB_SUCCESS, MTL(ObDagWarningHistoryManager *)->init(true, "DagWarnHis"));
 
   int ret = OB_SUCCESS;
   ObGenerateFailedDag *dag = nullptr;
@@ -1373,7 +1393,7 @@ TEST_F(TestDagScheduler, generate_next_dag)
   ASSERT_TRUE(nullptr != scheduler);
   ObDagWarningHistoryManager* manager = MTL(ObDagWarningHistoryManager *);
   ASSERT_TRUE(nullptr != manager);
-  EXPECT_EQ(OB_SUCCESS, MTL(ObDagWarningHistoryManager *)->init(true, MTL_ID(), "DagWarnHis"));
+  EXPECT_EQ(OB_SUCCESS, MTL(ObDagWarningHistoryManager *)->init(true, "DagWarnHis"));
 
   ObStartGenerateNextDag *dag = nullptr;
   EXPECT_EQ(OB_SUCCESS, scheduler->alloc_dag(dag));
@@ -1520,7 +1540,7 @@ TEST_F(TestDagScheduler, test_add_dag_failed_in_generate_dag_net)
   ASSERT_TRUE(nullptr != scheduler);
   ObDagWarningHistoryManager* manager = MTL(ObDagWarningHistoryManager *);
   ASSERT_TRUE(nullptr != manager);
-  ASSERT_EQ(OB_SUCCESS, MTL(ObDagWarningHistoryManager *)->init(true, MTL_ID(), "DagWarnHis"));
+  ASSERT_EQ(OB_SUCCESS, MTL(ObDagWarningHistoryManager *)->init(true, "DagWarnHis"));
 
   ASSERT_EQ(OB_SUCCESS, scheduler->create_and_add_dag_net<ObCreateDagNet>(nullptr));
 
@@ -1572,7 +1592,7 @@ TEST_F(TestDagScheduler, test_free_dag_func)
   ASSERT_TRUE(nullptr != scheduler);
   ObDagWarningHistoryManager* manager = MTL(ObDagWarningHistoryManager *);
   ASSERT_TRUE(nullptr != manager);
-  EXPECT_EQ(OB_SUCCESS, MTL(ObDagWarningHistoryManager *)->init(true, MTL_ID(), "DagWarnHis"));
+  EXPECT_EQ(OB_SUCCESS, MTL(ObDagWarningHistoryManager *)->init(true, "DagWarnHis"));
 
   EXPECT_EQ(OB_SUCCESS, scheduler->create_and_add_dag_net<ObFreeDagNet>(nullptr));
 
@@ -1642,7 +1662,7 @@ TEST_F(TestDagScheduler, test_cancel_dag_func)
   ASSERT_TRUE(nullptr != scheduler);
   ObDagWarningHistoryManager* manager = MTL(ObDagWarningHistoryManager *);
   ASSERT_TRUE(nullptr != manager);
-  EXPECT_EQ(OB_SUCCESS, MTL(ObDagWarningHistoryManager *)->init(true, MTL_ID(), "DagWarnHis"));
+  EXPECT_EQ(OB_SUCCESS, MTL(ObDagWarningHistoryManager *)->init(true, "DagWarnHis"));
 
   EXPECT_EQ(OB_SUCCESS, scheduler->create_and_add_dag_net<ObCancelDagNet>(nullptr));
   ObIDagNet *tmp_dag_net = nullptr;
@@ -1784,63 +1804,11 @@ TEST_F(TestDagScheduler, test_destroy_when_running) //TODO(renju.rj): fix it
 //  }
 //  #endif
 }
-/*
-do not add compaction dag in unittest, some module is not inited like LSService
-TEST_F(TestDagScheduler, test_add_multi_co_merge_dag_net)
-{
-  int ret = OB_SUCCESS;
-  ObTenantDagScheduler *scheduler = MTL(ObTenantDagScheduler*);
-  ASSERT_TRUE(nullptr != scheduler);
-
-  ObLSID ls_id(1001);
-  ObTabletID tablet_id(200001);
-  {
-    compaction::ObCOMergeDagParam param;
-    param.ls_id_ = ls_id;
-    param.tablet_id_ = tablet_id;
-    param.merge_type_ = compaction::ObMergeType::CONVERT_CO_MAJOR_MERGE;
-    param.compat_mode_ = lib::Worker::CompatMode::MYSQL;
-    ret = scheduler->create_and_add_dag_net<compaction::ObCOMergeDagNet>(&param);
-    EXPECT_EQ(OB_SUCCESS, ret);
-    COMMON_LOG(INFO, "Success to create and add co convert dag net", K(ret));
-  }
-  {
-    compaction::ObCOMergeDagParam param;
-    param.ls_id_ = ls_id;
-    param.tablet_id_ = tablet_id;
-    param.merge_type_ = compaction::ObMergeType::CONVERT_CO_MAJOR_MERGE;
-    param.compat_mode_ = lib::Worker::CompatMode::MYSQL;
-    ret = scheduler->create_and_add_dag_net<compaction::ObCOMergeDagNet>(&param);
-    EXPECT_EQ(OB_TASK_EXIST, ret);
-    COMMON_LOG(INFO, "Success to create and add co convert dag net", K(ret));
-  }
-  {
-    compaction::ObCOMergeDagParam param;
-    param.ls_id_ = ls_id;
-    param.tablet_id_ = tablet_id;
-    param.merge_type_ = compaction::ObMergeType::MAJOR_MERGE;
-    param.compat_mode_ = lib::Worker::CompatMode::MYSQL;
-    ret = scheduler->create_and_add_dag_net<compaction::ObCOMergeDagNet>(&param);
-    EXPECT_EQ(OB_SUCCESS, ret);
-    COMMON_LOG(INFO, "Success to create and add co major dag net", K(ret));
-  }  {
-    compaction::ObCOMergeDagParam param;
-    param.ls_id_ = ls_id;
-    param.tablet_id_ = tablet_id;
-    param.merge_type_ = compaction::ObMergeType::MEDIUM_MERGE;
-    param.compat_mode_ = lib::Worker::CompatMode::MYSQL;
-    ret = scheduler->create_and_add_dag_net<compaction::ObCOMergeDagNet>(&param);
-    EXPECT_EQ(OB_SUCCESS, ret);
-    COMMON_LOG(INFO, "Success to create and add co medium dag net", K(ret));
-  }
-}
-*/
-
 class ObLoopDagNet : public ObIDagNet
 {
 public:
   ObLoopDagNet() :
-    ObIDagNet(ObDagNetType::DAG_NET_TYPE_MIGRATION),
+    ObIDagNet(ObDagNetType::DAG_NET_TYPE_RESERVED_7),
     id_(ObTimeUtility::current_time() + random()),
     op_()
   {}

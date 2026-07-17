@@ -14,7 +14,9 @@
  * limitations under the License.
  */
 #include "ob_index_usage_info_mgr.h"
-#include "observer/ob_server_struct.h"
+#include "share/ob_dml_sql_splicer.h"
+#include "share/ob_server_struct.h"
+#include "share/config/ob_tenant_config_mgr.h"  // TENANT_CONF(this repository keeps it in share, so it is legal)
 
 #define USING_LOG_PREFIX SERVER
 
@@ -63,11 +65,11 @@ int ObIndexUsageReportTask::GetIndexUsageItemsFn::operator()(common::hash::HashM
   int ret = OB_SUCCESS;
   bool exist = true;
   const uint64_t index_table_id = entry.first.index_table_id_;
-  if (OB_ISNULL(schema_guard_) || OB_INVALID_TENANT_ID == tenant_id_) {
+  if (OB_ISNULL(schema_guard_) || false) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid argument", K(ret), KP(schema_guard_), K(tenant_id_));
-  } else if (OB_FAIL(schema_guard_->check_table_exist(tenant_id_, index_table_id, exist))) {
-    LOG_WARN("fail to check table exists", K(ret), K(tenant_id_), K(index_table_id));
+    LOG_WARN("invalid argument", K(ret), KP(schema_guard_));
+  } else if (OB_FAIL(schema_guard_->check_table_exist(index_table_id, exist))) {
+    LOG_WARN("fail to check table exists", K(ret), K(index_table_id));
   } else if (!exist) {
     if (OB_FAIL(remove_items_.push_back(entry.first))) {
       LOG_WARN("fail to push back remove key", K(ret), K(entry.first));
@@ -77,7 +79,7 @@ int ObIndexUsageReportTask::GetIndexUsageItemsFn::operator()(common::hash::HashM
       ObIndexUsagePair pair;
       pair.init(entry.first, entry.second);  // clear data
       if (OB_FAIL(dump_items_.push_back(pair))) {
-        LOG_WARN("fail to push back to list", K(ret), K(tenant_id_));
+        LOG_WARN("fail to push back to list", K(ret));
       } else if (++total_dump_count_ >= MAX_DUMP_ITEM_COUNT) {
         ret = OB_ITER_END;
         LOG_INFO("Reach index usage info dump limit", K(ret), K(total_dump_count_));
@@ -104,10 +106,10 @@ int ObIndexUsageReportTask::init(ObIndexUsageInfoMgr *mgr)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected null pointer", K(ret));
   } else {
-    const uint64_t tenant_id = MTL_ID();
-    const ObMemAttr attr(tenant_id, OB_INDEX_USAGE_REPORT_TASK);
+    
+    const ObMemAttr attr(OB_INDEX_USAGE_REPORT_TASK);
     if (OB_FAIL(deleted_map_.create(MAX_DELETE_HASHMAP_SIZE, attr))) {
-      LOG_WARN("fail to create deleted map", K(ret), K(tenant_id));
+      LOG_WARN("fail to create deleted map", K(ret));
     } else {
       set_sql_proxy(GCTX.sql_proxy_);
       set_mgr(mgr);
@@ -130,15 +132,15 @@ void ObIndexUsageReportTask::runTimerTask()
   int ret = OB_SUCCESS;
   if (!is_inited_) {
   } else if (OB_FAIL(dump())) {
-    LOG_WARN("dump index usage info failed", K(ret), K(MTL_ID()));
+    LOG_WARN("dump index usage info failed", K(ret));
   }
 }
 
 int ObIndexUsageReportTask::storage_index_usage(const ObIndexUsagePairList &info_list) 
 {
   int ret = OB_SUCCESS;
-  uint64_t tenant_id = MTL_ID();
-  uint64_t extract_tenant_id = ObSchemaUtils::get_extract_tenant_id(tenant_id, tenant_id);
+  
+  
 
   if (OB_ISNULL(sql_proxy_)) {
     ret = OB_ERR_UNEXPECTED;
@@ -175,11 +177,11 @@ int ObIndexUsageReportTask::storage_index_usage(const ObIndexUsagePairList &info
       insert_update_sql.set_length(insert_update_sql.length() - 1);
       if (OB_FAIL(insert_update_sql.append(INSERT_INDEX_USAGE_ON_DUPLICATE_END_SQL))) {
         LOG_WARN("fail to append sql string", K(ret));
-      } else if (OB_FAIL(sql_proxy_->write(tenant_id, insert_update_sql.ptr(), affected_rows))) {
-        LOG_WARN("insert update sql error", K(ret), K(tenant_id), K(insert_update_sql));
+      } else if (OB_FAIL(sql_proxy_->write(insert_update_sql.ptr(), affected_rows))) {
+        LOG_WARN("insert update sql error", K(ret), K(insert_update_sql));
       } else if (affected_rows < 0) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected affected rows", K(ret), K(tenant_id), K(affected_rows));
+        LOG_WARN("unexpected affected rows", K(ret), K(affected_rows));
       }
     }
   }
@@ -190,18 +192,18 @@ int ObIndexUsageReportTask::del_index_usage(const ObIndexUsageKey &key)
 {
   int ret = OB_SUCCESS;
   int64_t affected_rows = 0;
-  uint64_t tenant_id = MTL_ID();
-  uint64_t extract_tenant_id = ObSchemaUtils::get_extract_tenant_id(tenant_id, tenant_id);
+  
+  
   ObDMLSqlSplicer dml;
-  ObDMLExecHelper exec(*sql_proxy_, tenant_id);
+  ObDMLExecHelper exec(*sql_proxy_);
   
   if (OB_ISNULL(sql_proxy_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("sql_proxy is null", K(ret));
   } else if (OB_FAIL(dml.add_pk_column("object_id", key.index_table_id_))) {
-    LOG_WARN("dml add column failed", K(ret), K(tenant_id), K(extract_tenant_id));
+    LOG_WARN("dml add column failed", K(ret));
   } else if (OB_FAIL(exec.exec_delete(OB_ALL_INDEX_USAGE_INFO_TNAME, dml, affected_rows))) {
-    LOG_WARN("del sql exec error", K(ret), K(tenant_id), K(extract_tenant_id), K(key));
+    LOG_WARN("del sql exec error", K(ret), K(key));
   }
   return ret;
 }
@@ -267,9 +269,9 @@ int ObIndexUsageReportTask::dump()
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("index usage mgr not init", K(ret));
   } else {
-    const uint64_t tenant_id = MTL_ID();
+    
     mgr_->refresh_config();
-    GetIndexUsageItemsFn index_usage_items_fn(deleted_map_, tenant_id, mgr_->get_allocator());
+    GetIndexUsageItemsFn index_usage_items_fn(deleted_map_, mgr_->get_allocator());
     // dump batch
     for (int64_t i = 0; OB_SUCC(ret) && i < mgr_->get_hashmap_count() && 
       index_usage_items_fn.total_dump_count_ < MAX_DUMP_ITEM_COUNT; ++i) {
@@ -280,17 +282,17 @@ int ObIndexUsageReportTask::dump()
         if (OB_ISNULL(GCTX.schema_service_)) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("schema service null pointer", K(ret));
-        } else if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(tenant_id, schema_guard))) {
-          LOG_WARN("failed to get schema_guard", K(ret), K(tenant_id));
-        } else if (OB_FAIL(schema_guard.get_schema_version(tenant_id, schema_version))) {
-          LOG_WARN("failed to get schema version", K(ret), K(tenant_id));
+        } else if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(schema_guard))) {
+          LOG_WARN("failed to get schema_guard", K(ret));
+        } else if (OB_FAIL(schema_guard.get_schema_version(schema_version))) {
+          LOG_WARN("failed to get schema version", K(ret));
         } else if (!ObSchemaService::is_formal_version(schema_version)) {
           ret = OB_EAGAIN;
-          LOG_INFO("is not a formal_schema_version", K(ret), K(tenant_id), K(schema_version));
+          LOG_INFO("is not a formal_schema_version", K(ret), K(schema_version));
         } else if (OB_FALSE_IT(index_usage_items_fn.set_schema_guard(&schema_guard))) {
         } else if (OB_FAIL(hashmap->foreach_refactored(index_usage_items_fn))) {
           if (OB_ITER_END != ret) {
-            LOG_WARN("foreach refactored failed", K(ret), K(tenant_id));
+            LOG_WARN("foreach refactored failed", K(ret));
           } else {
             ret = OB_SUCCESS; // reach max dump count 
           }
@@ -306,11 +308,11 @@ int ObIndexUsageReportTask::dump()
           ObIndexUsagePair tmp_pair;
           tmp_pair.init(it->first, it->second);  // clear data
           if (OB_FAIL(tmp_list.push_back(tmp_pair))) {
-            LOG_WARN("fail to push back to list", K(ret), K(tenant_id));
+            LOG_WARN("fail to push back to list", K(ret));
           } else if (tmp_list.size() < DUMP_BATCH_SIZE && index < dump_item_count - 1) {
             // continue
           } else if (OB_FAIL(storage_index_usage(tmp_list))) {
-            LOG_WARN("flush index usage batch failed", K(ret), K(tenant_id));
+            LOG_WARN("flush index usage batch failed", K(ret));
           } else {
             tmp_list.reset();
           }
@@ -362,17 +364,16 @@ void ObIndexUsageRefreshConfTask::runTimerTask()
   } else if (!is_inited_) {
     // skip
   } else {
-    omt::ObTenantConfigGuard tenant_config(TENANT_CONF(mgr_->get_tenant_id()));
-    if (OB_LIKELY(tenant_config.is_valid())) {
-      mgr_->set_max_entries(tenant_config->_iut_max_entries.get());
-      mgr_->set_is_enabled(tenant_config->_iut_enable);
-      mgr_->set_is_sample_mode(tenant_config->_iut_stat_collection_type.get_value_string().case_compare("SAMPLED") == 0);
+    if (OB_LIKELY(true)) {
+      mgr_->set_max_entries(GCONF._iut_max_entries.get());
+      mgr_->set_is_enabled(GCONF._iut_enable);
+      mgr_->set_is_sample_mode(GCONF._iut_stat_collection_type.get_value_string().case_compare("SAMPLED") == 0);
       LOG_TRACE("success to refresh index usage config.", 
         K(mgr_->get_max_entries()), K(mgr_->get_is_enabled()), K(mgr_->get_is_sample_mode()));
     }
     // get data version
     uint64_t data_version = 0;
-    if (OB_FAIL(GET_MIN_DATA_VERSION(mgr_->get_tenant_id(), data_version))) {
+    if (OB_FAIL(oceanbase::common::ObClusterVersion::get_instance().get_tenant_data_version(data_version))) {
       LOG_WARN("failed to GET_MIN_DATA_VERSION", K(ret));
     } else {
       mgr_->set_min_tenant_data_version(data_version);

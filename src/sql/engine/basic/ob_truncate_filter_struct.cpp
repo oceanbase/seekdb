@@ -153,7 +153,7 @@ ObObjType ObTruncateWhiteFilterNode::get_filter_arg_obj_type(int64_t arg_idx) co
 
 // ------------------------------------------------- ObTruncateWhiteFilterExecutor -------------------------------------------------
 
-const ObIArray<ObExpr *> *ObTruncateWhiteFilterExecutor::get_cg_col_exprs() const
+const ObIArray<ObExpr *> *ObTruncateWhiteFilterExecutor::get_column_exprs() const
 {
   OB_ASSERT_MSG(false, "ObTruncateWhiteFilterExecutor dose not promise cg col exprs");
   return &filter_.column_exprs_;
@@ -389,7 +389,6 @@ int ObTruncateWhiteFilterExecutor::prepare_truncate_list_value(const ObStorageLi
       sql::ObExprBasicFuncs *basic_funcs = ObDatumFuncs::get_basic_func(node.obj_meta_.get_type(),
                                                                         node.obj_meta_.get_collation_type(),
                                                                         node.obj_meta_.get_scale(),
-                                                                        false,
                                                                         false,
                                                                         precision);
       param_set_.set_hash_and_cmp_func(basic_funcs->murmur_hash_v2_, basic_funcs->null_first_cmp_);
@@ -863,7 +862,7 @@ ObTruncateAndFilterExecutor::ObTruncateAndFilterExecutor(
     filter_(filter)
 {
   MEMSET(item_buffer_, 0, sizeof(item_buffer_));
-  ObMemAttr mem_attr(MTL_ID(), "TruncateExe");
+  ObMemAttr mem_attr("TruncateExe");
   truncate_filters_.set_attr(mem_attr);
   part_filter_buffer_.set_attr(mem_attr);
   subpart_filter_buffer_.set_attr(mem_attr);

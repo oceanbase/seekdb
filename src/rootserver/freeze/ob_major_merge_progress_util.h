@@ -17,7 +17,6 @@
 #define OB_ROOTSERVER_FREEZE_MAJOR_MERGE_PROGRESS_UTIL_H_
 #include "share/compaction/ob_compaction_time_guard.h"
 #include "share/ob_delegate.h"
-#include "share/ob_ls_id.h"
 #include "share/tablet/ob_tablet_info.h"
 namespace oceanbase
 {
@@ -96,7 +95,6 @@ public:
   Status status_;
   bool need_check_fts_;
 };
-
 
 struct ObBasicMergeProgress
 {
@@ -194,42 +192,6 @@ public:
   bool merge_finish_;
 };
 
-#ifdef OB_BUILD_SHARED_STORAGE
-struct ObLSMergeProgress : public compaction::ObBasicMergeProgress
-{
-public:
-  ObLSMergeProgress() { reset(); }
-  ~ObLSMergeProgress() { }
-  virtual bool is_merge_finished() const override
-  {
-    return ls_total_cnt_ == ls_refreshed_cnt_;
-  }
-  virtual bool is_merge_abnomal() const override
-  {
-    return ls_total_cnt_ < (ls_merging_cnt_ + ls_verified_cnt_ + ls_refreshed_cnt_);
-  }
-  bool is_verify_finished() const
-  {
-    // ls state can be IDLE when there is no tablet on ls
-    return ls_total_cnt_ == (ls_verified_cnt_ + ls_refreshed_cnt_ + ls_refreshing_cnt_);
-  }
-  void reset() {
-    ls_total_cnt_ = 0;
-    ls_merging_cnt_ = 0;
-    ls_verified_cnt_ = 0;
-    ls_refreshed_cnt_ = 0;
-    ls_refreshing_cnt_ = 0;
-  }
-  virtual int64_t to_string(char *buf, const int64_t buf_len) const override;
-public:
-  int64_t ls_total_cnt_;
-  int64_t ls_merging_cnt_;
-  int64_t ls_verified_cnt_;
-  int64_t ls_refreshed_cnt_;
-  int64_t ls_refreshing_cnt_;
-};
-#endif
-
 struct ObUnfinishTableIds
 {
   ObUnfinishTableIds()
@@ -268,7 +230,6 @@ struct ObUnfinishTableIds
 };
 
 typedef hash::ObHashMap<ObTabletID, ObTabletCompactionStatusEnum> ObTabletStatusMap;
-typedef common::ObArray<share::ObTabletLSPair> ObTabletLSPairArray;
 typedef hash::ObHashMap<uint64_t, ObTableCompactionInfo> ObTableCompactionInfoMap;
 
 struct ObCkmValidatorStatistics
@@ -291,37 +252,6 @@ struct ObCkmValidatorStatistics
   int64_t checker_validate_idx_cnt_;
 };
 
-// single thread operation
-struct ObTabletLSPairCache
-{
-public:
-  ObTabletLSPairCache();
-  ~ObTabletLSPairCache();
-  void set_tenant_id(const uint64_t tenant_id) { tenant_id_ = tenant_id; }
-  void reuse();
-  void destroy();
-  int try_refresh(const bool force_refresh = false);
-  int get_tablet_ls_pairs(
-    const uint64_t table_id,
-    const ObIArray<ObTabletID> &tablet_ids,
-    ObIArray<share::ObTabletLSPair> &pairs) const;
-  int get_tablet_ls_id(
-    const uint64_t table_id,
-    const ObTabletID tablet_id,
-    share::ObLSID &ls_id) const;
-  TO_STRING_KV(K_(tenant_id), K_(last_refresh_ts), "map_cnt", map_.size());
-private:
-  int refresh();
-  int rebuild_map_by_tablet_cnt();
-  const static int64_t RANGE_SIZE = 1000;
-  const static int64_t REFRESH_CACHE_TIME_INTERVAL = 60 * 1000 * 1000; // 1m
-  const static int64_t TABLET_LS_MAP_BUCKET_CNT = 3000;
-  const static int64_t TABLET_LS_MAP_BUCKET_MAX_CNT = 300000;
-  uint64_t tenant_id_;
-  int64_t last_refresh_ts_;
-  hash::ObHashMap<common::ObTabletID, share::ObLSID> map_;
-};
-
 struct ObUncompactInfo
 {
 public:
@@ -331,10 +261,7 @@ public:
   void add_table(const uint64_t table_id);
   void add_skip_verify_table(const uint64_t table_id);
   void add_tablet(const share::ObTabletReplica &replica);
-  void add_tablet(
-    const uint64_t tenant_id,
-    const share::ObLSID &ls_id,
-    const common::ObTabletID &tablet_id);
+  void add_tablet(const common::ObTabletID &tablet_id);
   int get_uncompact_info(
     common::ObIArray<share::ObTabletReplica> &input_tablets,
     common::ObIArray<uint64_t> &input_table_ids) const;
@@ -345,7 +272,6 @@ public:
   common::ObSEArray<uint64_t, DEBUG_INFO_CNT> table_ids_; // record for diagnose
   common::ObSEArray<uint64_t, SKIP_VERIFY_TABLE_CNT> skip_verify_tables_; // record for print
 };
-
 
 struct ObReplicaCkmItems
 {
@@ -365,7 +291,6 @@ struct ObReplicaCkmItems
   ObArray<share::ObTabletReplicaChecksumItem> array_;
   int64_t tablet_cnt_;
 };
-
 
 } // namespace compaction
 } // namespace oceanbase

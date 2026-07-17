@@ -18,11 +18,11 @@
 #include <random>
 #include <time.h>
 
-#include "share/vector/type_traits.h"
+#include "sql/engine/vector/type_traits.h"
 #include "lib/allocator/ob_allocator.h"
-#include "lib/number/ob_number_v2.h"
-#include "lib/wide_integer/ob_wide_integer.h"
-#include "lib/timezone/ob_timezone_info.h"
+#include "common/number/ob_number_v2.h"
+#include "common/wide_integer/ob_wide_integer.h"
+#include "common/timezone/ob_timezone_info.h"
 #include "sql/engine/expr/ob_expr.h"
 
 namespace oceanbase

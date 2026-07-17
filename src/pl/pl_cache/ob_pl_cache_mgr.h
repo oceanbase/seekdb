@@ -184,7 +184,6 @@ public:
   static int flush_pl_cache_by_sql(
                                   uint64_t key_id,
                                   uint64_t db_id,
-                                  uint64_t tenant_id,
                                   share::schema::ObMultiVersionSchemaService & schema_service);
   static int get_sys_var_in_pl_cache_str(ObBasicSessionInfo &session,
                                           ObIAllocator &allocator,

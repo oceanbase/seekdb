@@ -30,7 +30,7 @@ using namespace oceanbase::blocksstable;
 
 ObLinkedMacroBlockWriter::ObLinkedMacroBlockWriter()
   : is_inited_(false), write_ctx_(), handle_(), entry_block_id_(),
-    tablet_id_(0), tablet_transfer_seq_(0), snapshot_version_(0), cur_macro_seq_(-1)
+    tablet_id_(0), snapshot_version_(0), cur_macro_seq_(-1)
 {
 }
 
@@ -50,7 +50,6 @@ int ObLinkedMacroBlockWriter::init()
 
 int ObLinkedMacroBlockWriter::init_for_object(
   const uint64_t tablet_id,
-  const int64_t tablet_transfer_seq,
   const int64_t snapshot_version,
   const int64_t start_macro_seq)
 {
@@ -63,7 +62,6 @@ int ObLinkedMacroBlockWriter::init_for_object(
     LOG_WARN("invalid arguments", K(ret), K(tablet_id), K(snapshot_version), K(start_macro_seq));
   } else {
     tablet_id_ = tablet_id;
-    tablet_transfer_seq_ = tablet_transfer_seq;
     snapshot_version_ = snapshot_version;
     cur_macro_seq_ = start_macro_seq;
     is_inited_ = true;
@@ -81,20 +79,17 @@ int ObLinkedMacroBlockWriter::write_block(
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("ObLinkedMacroBlockWriter has not been inited", K(ret));
-  } else if (GCTX.is_shared_storage_mode() && 0 == tablet_id_) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("in shared_storage_mode, tablet_id should not be 0 (0 is default)", K(ret));
   } else if (OB_UNLIKELY(nullptr == buf || buf_len < 0)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), KP(buf), K(buf_len));
   } else {
     ObStorageObjectOpt opt;
     if (snapshot_version_ > 0) {
-      opt.set_ss_share_meta_macro_object_opt(tablet_id_, cur_macro_seq_++, 0);
+      opt.set_ss_share_meta_macro_object_opt(tablet_id_, cur_macro_seq_++);
     } else {
-      opt.set_private_meta_macro_object_opt(tablet_id_, tablet_transfer_seq_);
+      opt.set_private_meta_macro_object_opt(tablet_id_);
     }
-    const uint64_t tenant_id = MTL_ID();
+    
     ObStorageObjectWriteInfo write_info;
     write_info.size_ = buf_len;
     write_info.buffer_ = buf;
@@ -102,7 +97,7 @@ int ObLinkedMacroBlockWriter::write_block(
     write_info.io_desc_.set_sys_module_id(ObIOModule::LINKED_MACRO_BLOCK_IO);
     write_info.io_desc_.set_sealed();
     write_info.io_timeout_ms_ = GCONF._data_storage_io_timeout / 1000L;
-    write_info.mtl_tenant_id_ = is_valid_tenant_id(tenant_id) ? tenant_id : OB_SERVER_TENANT_ID;
+    
     write_info.offset_ = 0;
 
     MacroBlockId previous_block_id(0, MacroBlockId::EMPTY_ENTRY_BLOCK_INDEX, 0);
@@ -253,15 +248,14 @@ int ObLinkedMacroBlockItemWriter::init(const bool need_disk_addr, const ObMemAtt
 
 int ObLinkedMacroBlockItemWriter::init_for_object(
   const uint64_t tablet_id,
-  const int64_t tablet_transfer_seq,
   const int64_t snapshot_version,
   const int64_t start_macro_seq,
   ObIMacroBlockFlushCallback *write_callback)
 {
   int ret = OB_SUCCESS;
   const int64_t macro_block_size = OB_STORAGE_OBJECT_MGR.get_macro_block_size();
-  const uint64_t tenant_id = MTL_ID();
-  const ObMemAttr mem_attr(is_valid_tenant_id(tenant_id) ? tenant_id : OB_SERVER_TENANT_ID, "ObjLinkWriter");
+  
+  const ObMemAttr mem_attr("ObjLinkWriter");
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
     LOG_WARN("ObLinkedMacroBlockItemWriter has already been inited", K(ret));
@@ -269,7 +263,7 @@ int ObLinkedMacroBlockItemWriter::init_for_object(
   } else if (OB_UNLIKELY(0 == tablet_id || (snapshot_version > 0 && start_macro_seq < 0))) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", K(ret), K(tablet_id), K(snapshot_version), K(start_macro_seq));
-  } else if (OB_FAIL(block_writer_.init_for_object(tablet_id, tablet_transfer_seq, snapshot_version, start_macro_seq))) {
+  } else if (OB_FAIL(block_writer_.init_for_object(tablet_id, snapshot_version, start_macro_seq))) {
     LOG_WARN("fail to init meta block writer", K(ret));
   } else if (OB_ISNULL(io_buf_ = static_cast<char *>(allocator_.alloc(macro_block_size)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;

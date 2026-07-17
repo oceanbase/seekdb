@@ -52,7 +52,6 @@ int ObLobQueryBaseHandler::execute()
   int tmp_ret = OB_SUCCESS;
   int64_t retry_cnt = 0;
   bool is_continue = true;
-  oceanbase::lib::Thread::WaitGuard guard(oceanbase::lib::Thread::WAIT_FOR_LOCAL_RETRY);
   do {
     if (OB_FAIL(do_execute())) {
       LOG_WARN("do_execute fail, check need rerty", KR(ret), K(retry_cnt), K(param_));
@@ -97,7 +96,7 @@ int ObLobQueryIterHandler::do_execute()
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     LOG_WARN("handler not init", K(ret));
-  } else if (OB_ISNULL(result_ = OB_NEW(ObLobOutRowQueryIter, ObMemAttr(MTL_ID(), "LobQueryIter")))) {
+  } else if (OB_ISNULL(result_ = OB_NEW(ObLobOutRowQueryIter, ObMemAttr("LobQueryIter")))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("alloc lob meta scan iterator fail", K(ret));
   } else if (OB_FAIL(result_->open(param_, lob_meta_mngr_))) {

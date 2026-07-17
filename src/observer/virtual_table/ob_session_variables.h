@@ -16,12 +16,11 @@
 
 #ifndef OCEANBASE_OBSERVER_VIRTUAL_TABLE_OB_SESSION_VARIABLES_
 #define OCEANBASE_OBSERVER_VIRTUAL_TABLE_OB_SESSION_VARIABLES_
-#include "share/ob_virtual_table_scanner_iterator.h"
+#include "observer/virtual_table/ob_virtual_table_scanner_iterator.h"
 namespace oceanbase
 {
 namespace share
 {
-class ObBasicSysVar;
 namespace schema
 {
 class ObTenantSchema;
@@ -30,6 +29,7 @@ class ObTenantSchema;
 namespace sql
 {
 class ObSQLSessionInfo;
+class ObBasicSysVar;
 }
 namespace common
 {
@@ -49,7 +49,7 @@ public:
     sys_variable_schema_ = sys_variable_schema;
   }
 private:
-  int set_pc_conf(const share::ObBasicSysVar *sys_var, common::ObObj &cell);
+  int set_pc_conf(const sql::ObBasicSysVar *sys_var, common::ObObj &cell);
 private:
   const share::schema::ObSysVariableSchema *sys_variable_schema_;
   DISALLOW_COPY_AND_ASSIGN(ObSessionVariables);

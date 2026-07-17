@@ -17,7 +17,7 @@
 #define USING_LOG_PREFIX SHARE
 
 #include "share/ob_tenant_tablet_checksum_iterator.h"
-#include "lib/stat/ob_session_stat.h"
+#include "lib/stat/ob_diagnose_info.h"
 #include <gtest/gtest.h>
 #include "schema/db_initializer.h"
 

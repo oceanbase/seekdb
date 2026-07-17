@@ -13,15 +13,14 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 #define USING_LOG_PREFIX STORAGE
-
 #include "ob_lob_persistent_adaptor.h"
+#include "share/rc/ob_module_provider.h"
 #include "storage/access/ob_table_scan_iterator.h"
 #include "ob_lob_persistent_reader.h"
-#include "share/schema/ob_table_dml_param.h"
+#include "storage/ob_table_dml_param.h"
 #include "share/schema/ob_tenant_schema_service.h"
-#include "share/ob_tablet_autoincrement_service.h"
+#include "storage/ob_tablet_autoincrement_service.h"
 #include "storage/tx_storage/ob_ls_service.h"
 
 namespace oceanbase
@@ -36,7 +35,7 @@ ObPersistentLobApator::~ObPersistentLobApator()
 
 void ObPersistentLobApator::destroy()
 {
-  STORAGE_LOG(INFO, "[LOB] destroy lob persist", K(tenant_id_));
+  STORAGE_LOG(INFO, "[LOB] destroy lob persist");
   if (OB_NOT_NULL(meta_table_param_)) {
     meta_table_param_->reset();
     meta_table_param_->~ObTableParam();
@@ -103,7 +102,7 @@ int ObPersistentLobApator::get_meta_table_dml_param(const ObTableDMLParam *&tabl
 int ObPersistentLobApator::init_table_param()
 {
   int ret = OB_SUCCESS;
-  ObArenaAllocator tmp_allocator("TmpLobPersist", OB_MALLOC_NORMAL_BLOCK_SIZE, tenant_id_);
+  ObArenaAllocator tmp_allocator("TmpLobPersist", OB_MALLOC_NORMAL_BLOCK_SIZE);
   ObSEArray<uint64_t, 6> meta_column_ids;
   HEAP_VAR(ObTableSchema, meta_schema, &tmp_allocator) {
     if (ATOMIC_LOAD(&table_param_inited_)) {
@@ -158,7 +157,7 @@ int ObPersistentLobApator::get_lob_data(
 int ObPersistentLobApator::revert_scan_iter(ObLobMetaIterator *iter)
 {
   int ret = OB_SUCCESS;
-  ObAccessService *oas = MTL(ObAccessService*);
+  ObAccessService *oas = share::g_mp->access_service();
   if (OB_ISNULL(oas)) {
     ret = OB_ERR_INTERVAL_INVALID;
     LOG_WARN("get access service failed.", K(ret));
@@ -184,49 +183,14 @@ int ObPersistentLobApator::fetch_lob_id(ObLobAccessParam& param, uint64_t &lob_i
   if (OB_FAIL(prepare_lob_tablet_id(param))) {
     LOG_WARN("get lob tablet id failed.", K(ret), K(param));
   } else {
-    uint64_t tenant_id = param.tenant_id_;
+    
     share::ObTabletAutoincrementService &auto_inc = share::ObTabletAutoincrementService::get_instance();
-    if (OB_FAIL(auto_inc.get_autoinc_seq(tenant_id, param.lob_meta_tablet_id_, lob_id, share::ObTabletAutoincrementService::LOB_CACHE_SIZE))) {
-      LOG_WARN("get lob_id fail", K(ret), K(tenant_id), K(param));
+    if (OB_FAIL(auto_inc.get_autoinc_seq(param.lob_meta_tablet_id_, lob_id, share::ObTabletAutoincrementService::LOB_CACHE_SIZE))) {
+      LOG_WARN("get lob_id fail", K(ret), K(param));
     } else {
-      LOG_DEBUG("get lob_id succ", K(lob_id), K(tenant_id), K(param));
+      LOG_DEBUG("get lob_id succ", K(lob_id), K(param));
     }
 
-    if (OB_TABLET_IS_SPLIT_SRC == ret) {
-      if (OB_FAIL(fetch_lob_id_for_split_src(param, param.lob_meta_tablet_id_, lob_id))) {
-        LOG_WARN("get lob_id for split src fail", K(ret), K(tenant_id), K(param.lob_meta_tablet_id_));
-      }
-    }
-  }
-  return ret;
-}
-
-int ObPersistentLobApator::fetch_lob_id_for_split_src(const ObLobAccessParam& param, const ObTabletID &lob_tablet_id, uint64_t &lob_id)
-{
-  int ret = OB_SUCCESS;
-  const uint64_t tenant_id = param.tenant_id_;
-  ObLSHandle ls_handle;
-  ObTabletHandle tablet_handle;
-  ObTabletID dst_tablet_id;
-  share::ObTabletAutoincrementService &auto_inc = share::ObTabletAutoincrementService::get_instance();
-  if (OB_ISNULL(param.data_row_)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid data row", K(ret), K(lob_tablet_id));
-  } else if (OB_FAIL(MTL(ObLSService *)->get_ls(param.ls_id_, ls_handle, ObLSGetMod::STORAGE_MOD))) {
-    LOG_WARN("failed to get log stream", K(ret), K(param.ls_id_));
-  } else if (OB_ISNULL(ls_handle.get_ls())) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_ERROR("ls should not be null", K(ret));
-  } else if (OB_FAIL(ls_handle.get_ls()->get_tablet_with_timeout(lob_tablet_id,
-                                                                 tablet_handle,
-                                                                 param.timeout_,
-                                                                 ObMDSGetTabletMode::READ_ALL_COMMITED,
-                                                                 share::SCN::max_scn()))) {
-    LOG_WARN("fail to get tablet handle", K(ret), K(lob_tablet_id), K(param));
-  } else if (OB_FAIL(ObTabletSplitMdsHelper::calc_split_dst_lob(*ls_handle.get_ls(), *tablet_handle.get_obj(), *param.data_row_, param.timeout_, dst_tablet_id))) {
-    LOG_WARN("failed to calc split dst tablet", K(ret));
-  } else if (OB_FAIL(auto_inc.get_autoinc_seq(tenant_id, dst_tablet_id, lob_id, share::ObTabletAutoincrementService::LOB_CACHE_SIZE))) {
-    LOG_WARN("get lob_id fail", K(ret), K(tenant_id), K(dst_tablet_id));
   }
   return ret;
 }
@@ -257,9 +221,8 @@ int ObPersistentLobApator::prepare_lob_meta_dml(ObLobAccessParam& param)
 
   if (OB_SUCC(ret)) {
     param.dml_base_param_->store_ctx_guard_->reset();
-    ObAccessService *oas = MTL(ObAccessService *);
-    if (OB_FAIL(oas->get_write_store_ctx_guard(param.ls_id_,
-                                               param.timeout_,
+    ObAccessService *oas = share::g_mp->access_service();
+    if (OB_FAIL(oas->get_write_store_ctx_guard(param.timeout_,
                                                *param.tx_desc_,
                                                param.snapshot_,
                                                0,/*branch_id*/
@@ -284,7 +247,6 @@ int ObPersistentLobApator::build_lob_meta_table_dml(
   dml_base_param.tz_info_ = NULL;
   dml_base_param.sql_mode_ = SMO_DEFAULT;
   dml_base_param.check_schema_version_ = false; // lob tablet should not check schema version
-  dml_base_param.data_row_for_lob_ = param.data_row_;
   dml_base_param.schema_version_ = 0;
   dml_base_param.store_ctx_guard_ = store_ctx_guard;
   dml_base_param.write_flag_.reset();
@@ -349,7 +311,6 @@ int ObPersistentLobApator::build_common_scan_param(
   }
 
   if (OB_SUCC(ret)) {
-    scan_param.ls_id_ = param.ls_id_;
     scan_param.tablet_id_ = param.lob_meta_tablet_id_;
 
     scan_param.reserved_cell_count_ = scan_param.column_ids_.count();
@@ -409,14 +370,11 @@ int ObPersistentLobApator::inner_get_tablet(
     ObTabletHandle &handle)
 {
   int ret = OB_SUCCESS;
-  ObLSHandle ls_handle;
-  if (OB_FAIL(MTL(ObLSService *)->get_ls(param.ls_id_, ls_handle, ObLSGetMod::STORAGE_MOD))) {
-    LOG_WARN("failed to get log stream", K(ret), K(param.ls_id_));
-  } else if (OB_ISNULL(ls_handle.get_ls())) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_ERROR("ls should not be null", K(ret));
-  } else if (OB_FAIL(inner_get_tablet(param, tablet_id, ls_handle, handle))) {
-    LOG_WARN("failed to get tablet", K(ret), K(param.ls_id_), K(tablet_id));
+  ObLS *tenant_ls = nullptr;
+  if (OB_FAIL(share::g_mp->ls_service()->get_ls(tenant_ls))) {
+    LOG_WARN("failed to get log stream", K(ret));
+  } else if (OB_FAIL(inner_get_tablet(param, tablet_id, tenant_ls, handle))) {
+    LOG_WARN("failed to get tablet", K(ret), K(tablet_id));
   }
   return ret;
 }
@@ -424,26 +382,16 @@ int ObPersistentLobApator::inner_get_tablet(
 int ObPersistentLobApator::inner_get_tablet(
     const ObLobAccessParam &param,
     const common::ObTabletID &tablet_id,
-    ObLSHandle &ls_handle,
+    ObLS *tenant_ls,
     ObTabletHandle &handle)
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(ls_handle.get_ls()->get_tablet_with_timeout(tablet_id,
-                                                                 handle,
-                                                                 param.timeout_,
-                                                                 ObMDSGetTabletMode::READ_READABLE_COMMITED,
-                                                                 param.snapshot_.core_.version_))) {
-    if (OB_TABLET_IS_SPLIT_SRC == ret) {
-      if (OB_FAIL(ls_handle.get_ls()->get_tablet_with_timeout(tablet_id,
-                                                              handle,
-                                                              param.timeout_,
-                                                              ObMDSGetTabletMode::READ_ALL_COMMITED,
-                                                              share::SCN::max_scn()))) {
-        LOG_WARN("fail to get tablet handle", K(ret), K(tablet_id), K(param));
-      }
-    } else {
-      LOG_WARN("fail to get tablet handle", K(ret), K(tablet_id), K(param));
-    }
+  if (OB_FAIL(tenant_ls->get_tablet_with_timeout(tablet_id,
+                                                 handle,
+                                                 param.timeout_,
+                                                 ObMDSGetTabletMode::READ_READABLE_COMMITED,
+                                                 param.snapshot_.core_.version_))) {
+    LOG_WARN("fail to get tablet handle", K(ret), K(tablet_id), K(param));
   }
   return ret;
 }
@@ -506,7 +454,6 @@ int ObPersistentLobApator::scan_with_ctx(
   ObPersistLobReaderCacheKey key;
   ObLobMetaIterator *reader = nullptr;
   ObPersistLobReaderCache &cache = param.access_ctx_->reader_cache_;
-  key.ls_id_ = param.ls_id_;
   key.snapshot_ = param.snapshot_.core_.version_.get_val_for_tx();
   key.tablet_id_ = param.tablet_id_;
   key.is_get_ = param.has_single_chunk();
@@ -559,24 +506,21 @@ int ObPersistentLobApator::prepare_scan_param_schema_version(
 int ObPersistentLobApator::prepare_lob_tablet_id(ObLobAccessParam& param)
 {
   int ret = OB_SUCCESS;
-  ObLSHandle ls_handle;
+  ObLS *tenant_ls = nullptr;
   ObTabletHandle data_tablet;
   ObTabletBindingMdsUserData ddl_data;
   if (! param.tablet_id_.is_valid()) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("tablet_id of main table is invalid", K(ret), K(param));
   } else if (param.lob_meta_tablet_id_.is_valid() && param.lob_piece_tablet_id_.is_valid()) {
-  } else if (OB_FAIL(MTL(ObLSService *)->get_ls(param.ls_id_, ls_handle, ObLSGetMod::STORAGE_MOD))) {
-    LOG_WARN("failed to get log stream", K(ret), K(param.ls_id_));
-  } else if (OB_ISNULL(ls_handle.get_ls())) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("ls should not be null", K(ret));
-  } else if (OB_FAIL(inner_get_tablet(param, param.tablet_id_, ls_handle, data_tablet))) {
-    LOG_WARN("failed to get tablet", K(ret), K(param.ls_id_), K(param.tablet_id_));
+  } else if (OB_FAIL(share::g_mp->ls_service()->get_ls(tenant_ls))) {
+    LOG_WARN("failed to get log stream", K(ret));
+  } else if (OB_FAIL(inner_get_tablet(param, param.tablet_id_, tenant_ls, data_tablet))) {
+    LOG_WARN("failed to get tablet", K(ret), K(param.tablet_id_));
   } else if (OB_FAIL(data_tablet.get_obj()->ObITabletMdsInterface::get_ddl_data(share::SCN::max_scn(), ddl_data))) {
     LOG_WARN("failed to get ddl data from tablet", K(ret), K(data_tablet));
   } else if (OB_UNLIKELY(check_lob_tablet_id(param.tablet_id_, ddl_data.lob_meta_tablet_id_, ddl_data.lob_piece_tablet_id_))) {
-    if (ls_handle.get_ls()->is_offline()) {
+    if (tenant_ls->is_offline()) {
       ret = OB_LS_OFFLINE;
       LOG_WARN("ls is offline, can not get lob tablet id", K(ret), K(param), K(ddl_data.lob_meta_tablet_id_), K(ddl_data.lob_piece_tablet_id_));
     } else {
@@ -613,7 +557,7 @@ int ObPersistentLobApator::erase_lob_meta(ObLobAccessParam &param, ObDatumRowIte
 {
   int ret = OB_SUCCESS;
   int64_t affected_rows = 0;
-  ObAccessService *oas = MTL(ObAccessService*);
+  ObAccessService *oas = share::g_mp->access_service();
   if (OB_ISNULL(oas)) {
     ret = OB_ERR_INTERVAL_INVALID;
     LOG_WARN("get access service failed", K(ret), KP(oas));
@@ -632,9 +576,7 @@ int ObPersistentLobApator::erase_lob_meta(ObLobAccessParam &param, ObDatumRowIte
       }
     }
     if (OB_FAIL(ret)) {
-    } else if (OB_FAIL(oas->delete_rows(
-        param.ls_id_,
-        param.lob_meta_tablet_id_,
+    } else if (OB_FAIL(oas->delete_rows(param.lob_meta_tablet_id_,
         *param.tx_desc_,
         *param.dml_base_param_,
         column_ids,
@@ -650,7 +592,7 @@ int ObPersistentLobApator::write_lob_meta(ObLobAccessParam& param, ObDatumRowIte
 {
   int ret = OB_SUCCESS;
   int64_t affected_rows = 0;
-  ObAccessService *oas = MTL(ObAccessService*);
+  ObAccessService *oas = share::g_mp->access_service();
   if (OB_ISNULL(oas)) {
     ret = OB_ERR_INTERVAL_INVALID;
     LOG_WARN("get access service failed", K(ret), KP(oas));
@@ -669,9 +611,7 @@ int ObPersistentLobApator::write_lob_meta(ObLobAccessParam& param, ObDatumRowIte
       }
     }
     if (OB_FAIL(ret)) {
-    } else if (OB_FAIL(oas->insert_rows(
-        param.ls_id_,
-        param.lob_meta_tablet_id_,
+    } else if (OB_FAIL(oas->insert_rows(param.lob_meta_tablet_id_,
         *param.tx_desc_,
         *param.dml_base_param_,
         column_ids,
@@ -687,7 +627,7 @@ int ObPersistentLobApator::update_lob_meta(ObLobAccessParam& param, ObDatumRowIt
 {
   int ret = OB_SUCCESS;
   int64_t affected_rows = 0;
-  ObAccessService *oas = MTL(ObAccessService*);
+  ObAccessService *oas = share::g_mp->access_service();
   if (OB_ISNULL(oas)) {
     ret = OB_ERR_INTERVAL_INVALID;
     LOG_WARN("get access service failed", K(ret), KP(oas));
@@ -712,9 +652,7 @@ int ObPersistentLobApator::update_lob_meta(ObLobAccessParam& param, ObDatumRowIt
       }
     }
     if (OB_FAIL(ret)) {
-    } else if (OB_FAIL(oas->update_rows(
-        param.ls_id_,
-        param.lob_meta_tablet_id_,
+    } else if (OB_FAIL(oas->update_rows(param.lob_meta_tablet_id_,
         *param.tx_desc_,
         *param.dml_base_param_,
         column_ids,
@@ -778,7 +716,5 @@ int ObPersistentLobApator::update_lob_meta(ObLobAccessParam& param, ObLobMetaInf
   }
   return ret;
 }
-
 } // storage
 } // oceanbase
-

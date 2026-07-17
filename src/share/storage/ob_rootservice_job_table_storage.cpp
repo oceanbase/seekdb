@@ -248,3 +248,4 @@ int ObRootServiceJobTableStorage::find_job(const common::ObString &job_type, int
 
 } // namespace share
 } // namespace oceanbase
+

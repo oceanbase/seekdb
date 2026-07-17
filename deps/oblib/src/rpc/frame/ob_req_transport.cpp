@@ -20,11 +20,9 @@
 #include "ob_req_transport.h"
 #include "util/easy_mod_stat.h"
 #include "rpc/frame/ob_net_easy.h"
-#include "lib/stat/ob_diagnostic_info_guard.h"
 
 using namespace oceanbase::common;
 using namespace oceanbase::rpc;
-using namespace oceanbase::obrpc;
 using namespace oceanbase::rpc::frame;
 
 int ObReqTransport::AsyncCB::on_error(int)
@@ -37,11 +35,4 @@ int ObReqTransport::AsyncCB::on_error(int)
    * classes should overwrite this function and return OB_SUCCESS.
    */
   return OB_ERROR;
-}
-
-ObReqTransport::ObReqTransport(
-    easy_io_t *eio, easy_io_handler_pt *handler)
-    : eio_(eio), handler_(handler), sgid_(0), bucket_count_(0), ratelimit_enabled_(0)
-{
-  // empty
 }

@@ -25,11 +25,10 @@ using namespace oceanbase::rootserver;
 
 ObDropTablegroupHelper::ObDropTablegroupHelper(
   share::schema::ObMultiVersionSchemaService *schema_service,
-  const uint64_t tenant_id,
-  const obrpc::ObDropTablegroupArg &arg,
-  obrpc::ObParallelDDLRes &res,
+  const obcall::ObDropTablegroupArg &arg,
+  obcall::ObParallelDDLRes &res,
   ObDDLSQLTransaction *external_trans)
-  : ObDDLHelper(schema_service, tenant_id, "[paralle drop tablegroup]", external_trans),
+  : ObDDLHelper(schema_service, "[paralle drop tablegroup]", external_trans),
   arg_(arg),
   res_(res),
   tablegroup_schema_(nullptr),
@@ -71,11 +70,11 @@ int ObDropTablegroupHelper::lock_objects_()
   if (OB_FAIL(check_inner_stat_())) {
     LOG_WARN("fail to check inner stat", KR(ret));
   } else if (OB_FAIL(add_lock_object_by_tablegroup_name_(tablegroup_name, transaction::tablelock::EXCLUSIVE))) { // lock tablegroup name
-    LOG_WARN("fail to lock tablegroup by obj name", KR(ret), K_(tenant_id));
+    LOG_WARN("fail to lock tablegroup by obj name", KR(ret));
   } else if (OB_FAIL(lock_existed_objects_by_name_())) {
-    LOG_WARN("fail to lock objects by name", KR(ret), K_(tenant_id));
+    LOG_WARN("fail to lock objects by name", KR(ret));
   } else if (OB_FAIL(lock_tablegroup_by_obj_id_())) { // check tablegroup name
-    LOG_WARN("fail to lock tablegroup by obj id", KR(ret), K_(tenant_id));
+    LOG_WARN("fail to lock tablegroup by obj id", KR(ret));
   }
 
   return ret;
@@ -86,13 +85,13 @@ int ObDropTablegroupHelper::lock_tablegroup_by_obj_id_()
   int ret = OB_SUCCESS;
   const ObString &tablegroup_name = arg_.tablegroup_name_;
   if (OB_FAIL(schema_guard_wrapper_.get_tablegroup_id(tablegroup_name, tablegroup_id_))) {
-    LOG_WARN("fail to get database schema", KR(ret), K_(tenant_id), K(tablegroup_name));
+    LOG_WARN("fail to get database schema", KR(ret), K(tablegroup_name));
   } else if (tablegroup_id_ == OB_INVALID_ID) {
     ret = OB_TABLEGROUP_NOT_EXIST;
     LOG_INFO("tablegroup not exists", KR(ret), K(tablegroup_name));
   } else if (OB_FAIL(add_lock_object_by_id_(tablegroup_id_, share::schema::TABLEGROUP_SCHEMA,
                      transaction::tablelock::EXCLUSIVE))) {
-    LOG_WARN("failed to add lock object by tablegroup id", KR(ret), K_(tablegroup_id));
+    LOG_WARN("failed to add lock object by tablegroup id", KR(ret), K_(tablegroup_id));                      
   } else if (OB_FAIL(lock_existed_objects_by_id_())) {
     LOG_WARN("fail to lock objects by id", KR(ret));
   }
@@ -105,13 +104,13 @@ int ObDropTablegroupHelper::generate_schemas_()
 {
   int ret = OB_SUCCESS;
   ObArray<const ObTableSchema *> tables;
-  tables.set_attr(ObMemAttr(tenant_id_, "DropTGTblSches"));
+  tables.set_attr(ObMemAttr("DropTGTblSches"));
 
   // When tablegroup is dropped, there must not be table in tablegroup
   if (tablegroup_id_ == OB_INVALID_ID) {
     ret = OB_TABLEGROUP_NOT_EXIST;
   } else if (OB_FAIL(schema_guard_wrapper_.get_table_schemas_in_tablegroup(tablegroup_id_, tables))) {
-    LOG_WARN("failed to get table schemas in tablegroup", KR(ret), K_(tenant_id), K_(tablegroup_id));
+    LOG_WARN("failed to get table schemas in tablegroup", KR(ret), K_(tablegroup_id));
   } else if (tables.count() > 0) {
     ret = OB_TABLEGROUP_NOT_EMPTY;
     LOG_WARN("tables in tablegroup when drop tablegroup", KR(ret), K_(tablegroup_id), K(tables.count()));
@@ -134,14 +133,14 @@ int ObDropTablegroupHelper::generate_schemas_()
   // check tenants' default_tablegroup_id
   if (OB_SUCC(ret)) {
     const ObTenantSchema *tenant_schema = NULL;
-    if (OB_FAIL(schema_guard_wrapper_.get_tenant_schema(tenant_id_, tenant_schema))) {
-      LOG_WARN("failed to get tenant schema", KR(ret), K_(tenant_id));
+    if (OB_FAIL(schema_guard_wrapper_.get_tenant_schema( tenant_schema))) {
+      LOG_WARN("failed to get tenant schema", KR(ret));
     } else if (OB_ISNULL(tenant_schema)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("tenant schema is null", KR(ret), K_(tenant_id));
+      LOG_WARN("tenant schema is null", KR(ret));
     } else if (tablegroup_id_ == tenant_schema->get_default_tablegroup_id()) {
       ret = OB_TABLEGROUP_NOT_EMPTY;
-      LOG_WARN("tablegroup is database's default_tablegroup_id when drop tablegroup", KR(ret), K_(tablegroup_id), K_(tenant_id));
+      LOG_WARN("tablegroup is database's default_tablegroup_id when drop tablegroup", KR(ret), K_(tablegroup_id));
     }
 
   }
@@ -187,8 +186,8 @@ int ObDropTablegroupHelper::operate_schemas_()
   } else if (OB_ISNULL(schema_service_impl = schema_service_->get_schema_service())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("schema_service impl is null", KR(ret));
-  } else if (OB_FAIL(schema_service_->gen_new_schema_version(tenant_id_, new_schema_version))) {
-    LOG_WARN("fail to gen new schema version", KR(ret), K_(tenant_id));
+  } else if (OB_FAIL(schema_service_->gen_new_schema_version(new_schema_version))) {
+    LOG_WARN("fail to gen new schema version", KR(ret));
   } else if (OB_FAIL(schema_service_impl->get_tablegroup_sql_service().delete_tablegroup(
                                                                   *tablegroup_schema_,
                                                                   new_schema_version,
@@ -215,15 +214,15 @@ int ObDropTablegroupHelper::construct_and_adjust_result_(int &return_ret)
     if (arg_.if_exist_) {
       ret = OB_SUCCESS;
       LOG_USER_NOTE(OB_TABLEGROUP_NOT_EXIST);
-      LOG_INFO("tablegroup not exist, no need to delete it", KR(ret), K_(tenant_id),
+      LOG_INFO("tablegroup not exist, no need to delete it", KR(ret),
                "tablegroup_name", arg_.tablegroup_name_); 
     } else {
-      LOG_WARN("tablegroup not exist, can't delete it", KR(ret), K_(tenant_id),
+      LOG_WARN("tablegroup not exist, can't delete it", KR(ret),
                "tablegroup_name", arg_.tablegroup_name_); 
       LOG_USER_ERROR(OB_TABLEGROUP_NOT_EXIST);
     }
   } else if (OB_TABLEGROUP_NOT_EMPTY == ret) {
-    LOG_WARN("tablegroup not empty, can't delete it", KR(ret), K_(tenant_id),
+    LOG_WARN("tablegroup not empty, can't delete it", KR(ret),
               "tablegroup_name", arg_.tablegroup_name_); 
     LOG_USER_ERROR(OB_TABLEGROUP_NOT_EMPTY);
   }

@@ -34,7 +34,7 @@ bool ObRawExprTypeDemotion::type_can_demote(const ObExprResType &from, const ObE
   if (ObRelationalExprOperator::can_cmp_without_cast(from, to, CO_EQ)) {
     // No cast expr will added for comparison, no need to demote type.
   } else if (query_ctx_->enable_constant_type_demotion_) {
-    if (lib::is_mysql_mode()) {
+    {
       const ObObjType from_type = from.get_type();
       const ObObjType to_type = to.get_type();
       switch (ob_obj_type_class(to_type)) {
@@ -105,9 +105,7 @@ bool ObRawExprTypeDemotion::type_can_demote(const ObExprResType &from, const ObE
   if (!can_demote && (query_ctx_->non_standard_range_comparison_
                       || (query_ctx_->non_standard_equal_comparison_ && !is_range))) {
     // try to apply non-standard comparison rule to demote type.
-    if (lib::is_mysql_mode()) {
-      can_demote = ob_is_int_uint_tc(from.get_type()) && ob_is_string_tc(to.get_type());
-    }
+    can_demote = ob_is_int_uint_tc(from.get_type()) && ob_is_string_tc(to.get_type());
   }
   return can_demote;
 }
@@ -160,7 +158,7 @@ bool ObRawExprTypeDemotion::need_constraint(const ObObjType from_type, const ObO
   bool need_constraint = true;
   // Ensure that the type can be demoted before calling this function, it means that function
   // `type_can_demote` has been invoked.
-  if (lib::is_mysql_mode()) {
+  {
     if (ObTimeType == to_type) {
       if (ob_is_datetime_tc(from_type) || ob_is_date_tc(from_type)
           || ob_is_mysql_datetime_tc(from_type) || ob_is_mysql_date_tc(from_type)) {
@@ -199,14 +197,13 @@ int ObRawExprTypeDemotion::init_query_ctx_flags(bool &disabled)
   } else {
     query_ctx_->type_demotion_flag_ = 0;
     // check tenant configure.
-    const uint64_t effective_tenant_id = session_->get_effective_tenant_id();
-    omt::ObTenantConfigGuard tenant_config(TENANT_CONF(effective_tenant_id));
-    if (OB_LIKELY(tenant_config.is_valid())) {
-      query_ctx_->enable_constant_type_demotion_ = tenant_config->_enable_constant_type_demotion;
-      if (0 == tenant_config->_non_standard_comparison_level.case_compare("range")) {
+    
+    if (OB_LIKELY(true)) {
+      query_ctx_->enable_constant_type_demotion_ = GCONF._enable_constant_type_demotion;
+      if (0 == GCONF._non_standard_comparison_level.case_compare("range")) {
         query_ctx_->non_standard_equal_comparison_ = 1;
         query_ctx_->non_standard_range_comparison_ = 1;
-      } else if (0 == tenant_config->_non_standard_comparison_level.case_compare("equal")) {
+      } else if (0 == GCONF._non_standard_comparison_level.case_compare("equal")) {
         query_ctx_->non_standard_equal_comparison_ = 1;
       }
       query_ctx_->type_demotion_flag_inited_ = 1;

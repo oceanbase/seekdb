@@ -15,6 +15,7 @@
  */
 
 #include "observer/virtual_table/ob_all_virtual_table_mgr.h"
+#include "share/rc/ob_module_provider.h"
 #include "storage/tx_storage/ob_ls_service.h"
 
 using namespace oceanbase;
@@ -25,7 +26,6 @@ using namespace observer;
 
 ObAllVirtualTableMgr::ObAllVirtualTableMgr()
     : ObVirtualTableScannerIterator(),
-      addr_(),
       tablet_iter_(nullptr),
       tablet_allocator_("VTTable"),
       tablet_handle_(),
@@ -41,8 +41,13 @@ ObAllVirtualTableMgr::~ObAllVirtualTableMgr()
 
 void ObAllVirtualTableMgr::reset()
 {
-  omt::ObMultiTenantOperator::reset();
-  addr_.reset();
+  table_store_iter_.reset();
+  tablet_handle_.reset();
+  if (OB_NOT_NULL(tablet_iter_)) {
+    tablet_iter_->~ObTenantTabletIterator();
+    tablet_iter_ = nullptr;
+  }
+  tablet_allocator_.reset();
 
   if (OB_NOT_NULL(iter_buf_)) {
     allocator_->free(iter_buf_);
@@ -71,35 +76,6 @@ int ObAllVirtualTableMgr::init(common::ObIAllocator *allocator)
   return ret;
 }
 
-int ObAllVirtualTableMgr::inner_get_next_row(ObNewRow *&row)
-{
-  int ret = OB_SUCCESS;
-  if (OB_FAIL(execute(row))) {
-    SERVER_LOG(WARN, "fail to execute", K(ret));
-  }
-  return ret;
-}
-
-void ObAllVirtualTableMgr::release_last_tenant()
-{
-  table_store_iter_.reset();
-  tablet_handle_.reset();
-  if (OB_NOT_NULL(tablet_iter_)) {
-    tablet_iter_->~ObTenantTabletIterator();
-    tablet_iter_ = nullptr;
-  }
-  tablet_allocator_.reset();
-}
-
-bool ObAllVirtualTableMgr::is_need_process(uint64_t tenant_id)
-{
-  if (!is_virtual_tenant_id(tenant_id) &&
-      (is_sys_tenant(effective_tenant_id_) || tenant_id == effective_tenant_id_)){
-    return true;
-  }
-  return false;
-}
-
 int ObAllVirtualTableMgr::get_next_tablet()
 {
   int ret = OB_SUCCESS;
@@ -107,8 +83,8 @@ int ObAllVirtualTableMgr::get_next_tablet()
   tablet_handle_.reset();
   tablet_allocator_.reuse();
   if (nullptr == tablet_iter_) {
-    tablet_allocator_.set_tenant_id(MTL_ID());
-    ObTenantMetaMemMgr *t3m = MTL(ObTenantMetaMemMgr*);
+    
+    ObTenantMetaMemMgr *t3m = share::g_mp->tenant_meta_mem_mgr();
     if (OB_ISNULL(tablet_iter_ = new (iter_buf_) ObTenantTabletIterator(*t3m, tablet_allocator_, nullptr/*no op*/))) {
       ret = OB_ERR_UNEXPECTED;
       SERVER_LOG(WARN, "fail to new tablet_iter_", K(ret));
@@ -146,7 +122,7 @@ int ObAllVirtualTableMgr::get_next_table(ObITable *&table)
         } else if (OB_UNLIKELY(!tablet_handle_.is_valid())) {
           ret = OB_ERR_UNEXPECTED;
           SERVER_LOG(WARN, "unexpected invalid tablet", K(ret), K_(tablet_handle));
-        } else if (OB_FAIL(tablet_handle_.get_obj()->get_all_tables(table_store_iter_, true/*unpack_cg_table*/))) {
+        } else if (OB_FAIL(tablet_handle_.get_obj()->get_all_tables(table_store_iter_))) {
           SERVER_LOG(WARN, "fail to get all tables", K(ret), K_(tablet_handle), K_(table_store_iter));
         } else if (0 != table_store_iter_.count()) {
           break;
@@ -161,7 +137,7 @@ int ObAllVirtualTableMgr::get_next_table(ObITable *&table)
   return ret;
 }
 
-int ObAllVirtualTableMgr::process_curr_tenant(common::ObNewRow *&row)
+int ObAllVirtualTableMgr::inner_get_next_row(common::ObNewRow *&row)
 {
   // each get_next_row will switch to required tenant, and released guard later
   int ret = OB_SUCCESS;
@@ -276,15 +252,10 @@ int ObAllVirtualTableMgr::process_curr_tenant(common::ObNewRow *&row)
         case NESTED_SIZE:
           cur_row_.cells_[i].set_int(nested_size);
           break;
-        case CG_IDX:
-          cur_row_.cells_[i].set_int(table_key.get_column_group_id());
-          break;
         case DATA_CHECKSUM: {
           int64_t data_checksum = 0;
           if (table->is_memtable()) {
             // memtable has no data checksum, do nothing
-          } else if (table->is_co_sstable() && !static_cast<const ObCOSSTableV2 *>(table)->is_cgs_empty_co_table()) {
-            data_checksum = static_cast<storage::ObCOSSTableV2 *>(table)->get_cs_meta().data_checksum_;
           } else if (table->is_sstable()) {
             data_checksum = static_cast<blocksstable::ObSSTable *>(table)->get_data_checksum();
           }
@@ -298,15 +269,7 @@ int ObAllVirtualTableMgr::process_curr_tenant(common::ObNewRow *&row)
             if (OB_FAIL(static_cast<blocksstable::ObSSTable *>(table)->get_meta(sst_meta_hdl))) {
               SERVER_LOG(WARN, "fail to get sstable meta handle", K(ret));
             } else {
-#ifdef OB_BUILD_SHARED_STORAGE
-              if (!GCTX.is_shared_storage_mode()) {
-                flag = sst_meta_hdl.get_sstable_meta().get_table_backup_flag().get_flag();
-              } else {
-                flag = sst_meta_hdl.get_sstable_meta().get_table_shared_flag().get_flag();
-              }
-#else
               flag = sst_meta_hdl.get_sstable_meta().get_table_backup_flag().get_flag();
-#endif
             }
           }
           cur_row_.cells_[i].set_int(flag);
@@ -324,4 +287,3 @@ int ObAllVirtualTableMgr::process_curr_tenant(common::ObNewRow *&row)
   }
   return ret;
 }
-

@@ -16,8 +16,9 @@
 
 #define USING_LOG_PREFIX STORAGE
 #include "ob_ddl_pipeline.h"
-#include "share/vector_index/ob_plugin_vector_index_service.h"
-#include "share/vector_index/ob_plugin_vector_index_utils.h"
+#include "share/rc/ob_module_provider.h"
+#include "observer/vector_index/ob_plugin_vector_index_service.h"
+#include "observer/vector_index/ob_plugin_vector_index_utils.h"
 #include "storage/ddl/ob_ddl_tablet_context.h"
 #include "storage/ddl/ob_tablet_slice_writer.h"
 #include "storage/ddl/ob_direct_load_struct.h"
@@ -87,35 +88,32 @@ int ObIDDLPipeline::process()
 }
 
 ObVectorIndexTabletContext::ObVectorIndexTabletContext()
-    : row_cnt_(0), vec_dim_(0), tenant_id_(MTL_ID()), ls_id_(), tablet_id_(), vec_idx_param_(), ctx_(),
+    : row_cnt_(0), vec_dim_(0), tablet_id_(), vec_idx_param_(), ctx_(),
       vector_vid_col_idx_(-1), vector_col_idx_(-1), vector_key_col_idx_(-1), vector_data_col_idx_(-1), center_id_col_idx_(-1), center_vector_col_idx_(-1),
       meta_id_col_idx_(-1), meta_vector_col_idx_(-1), pq_center_id_col_idx_(-1), pq_center_vector_col_idx_(-1), extra_column_idx_types_(),
       lob_inrow_threshold_(0), rowkey_cnt_(0), column_cnt_(0), snapshot_version_(0), index_type_(share::VIAT_MAX), helper_(nullptr),
-      allocator_("VecIndexCtx", OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID()),
-      memory_context_(MTL(ObPluginVectorIndexService *)->get_memory_context()),
-      all_vsag_use_mem_(MTL(ObPluginVectorIndexService *)->get_all_vsag_use_mem())
+      allocator_("VecIndexCtx", OB_MALLOC_NORMAL_BLOCK_SIZE),
+      memory_context_(share::g_mp->plugin_vector_index_service()->get_memory_context()),
+      all_vsag_use_mem_(share::g_mp->plugin_vector_index_service()->get_all_vsag_use_mem())
 {
 
 }
 
 int ObVectorIndexTabletContext::init(
-    const ObLSID &ls_id,
     const ObTabletID &tablet_id,
     const ObIndexType &index_type,
     const int64_t snapshot_version,
     const ObDDLTableSchema &ddl_table_schema)
 {
   int ret = OB_SUCCESS;
-  if (!ls_id.is_valid() || !tablet_id.is_valid() || snapshot_version <= 0 || !(ddl_table_schema.table_item_.vec_dim_ > 0)) {
+  if (!tablet_id.is_valid() || snapshot_version <= 0 || !(ddl_table_schema.table_item_.vec_dim_ > 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(ret), K(ls_id), K(tablet_id), K(ddl_table_schema), K(snapshot_version));
+    LOG_WARN("invalid arguments", K(ret), K(tablet_id), K(ddl_table_schema), K(snapshot_version));
   } else {
     row_cnt_ = 0;
     vec_dim_ = ddl_table_schema.table_item_.vec_dim_;
-    ls_id_ = ls_id;
     tablet_id_ = tablet_id;
     vec_idx_param_ = ddl_table_schema.table_item_.vec_idx_param_;
-    ctx_.ls_id_ = ls_id_;
     lob_inrow_threshold_ = ddl_table_schema.table_item_.lob_inrow_threshold_;
     rowkey_cnt_ = ddl_table_schema.table_item_.rowkey_column_num_;
     column_cnt_ = ddl_table_schema.column_items_.count();
@@ -152,7 +150,7 @@ int ObVectorIndexTabletContext::init_hnsw_index(const ObDDLTableSchema &ddl_tabl
 {
   int ret = OB_SUCCESS;
   // get data tablet id and lob tablet id
-  ObLSHandle ls_handle;
+  ObLS *ls = nullptr;
   ObTabletHandle five_tablet_handle;
   ObTabletHandle data_tablet_handle;
   ObTabletBindingMdsUserData ddl_data;
@@ -165,15 +163,12 @@ int ObVectorIndexTabletContext::init_hnsw_index(const ObDDLTableSchema &ddl_tabl
   vector_data_col_idx_ = -1;
   int64_t pk_increment_col_idx = -1;
 
-  if (OB_FAIL(MTL(ObLSService *)->get_ls(ls_id_, ls_handle, ObLSGetMod::STORAGE_MOD))) {
-    LOG_WARN("failed to get log stream", K(ret), K(ls_id_));
-  } else if (OB_ISNULL(ls_handle.get_ls())) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_ERROR("ls should not be null", K(ret));
-  } else if (OB_FAIL(ls_handle.get_ls()->get_tablet(tablet_id_, five_tablet_handle))) {
+  if (OB_FAIL(share::g_mp->ls_service()->get_ls(ls))) {
+    LOG_WARN("failed to get log stream", K(ret));
+  } else if (OB_FAIL(ls->get_tablet(tablet_id_, five_tablet_handle))) {
     LOG_WARN("fail to get tablet handle", K(ret), K(tablet_id_));
   } else if (FALSE_IT(ctx_.data_tablet_id_ = five_tablet_handle.get_obj()->get_data_tablet_id())) {
-  } else if (OB_FAIL(ls_handle.get_ls()->get_tablet(ctx_.data_tablet_id_, data_tablet_handle))) {
+  } else if (OB_FAIL(ls->get_tablet(ctx_.data_tablet_id_, data_tablet_handle))) {
     LOG_WARN("fail to get tablet handle", K(ret), K(ctx_.data_tablet_id_));
   } else if (OB_FAIL(data_tablet_handle.get_obj()->get_ddl_data(ddl_data))) {
     LOG_WARN("failed to get ddl data from tablet", K(ret), K(data_tablet_handle));
@@ -344,7 +339,7 @@ int ObVectorIndexTabletContext::create_ivf_build_helper(
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("failed to allocate memory for ivf index build helper", KR(ret));
     } else {
-      tmp_ivf_build_helper = new(helper_buff)ObIvfFlatBuildHelper(&allocator_, tenant_id_);
+      tmp_ivf_build_helper = new(helper_buff)ObIvfFlatBuildHelper(&allocator_);
       if (OB_FAIL(tmp_ivf_build_helper->init(vec_index_param, memory_context_, all_vsag_use_mem_))) {
         LOG_WARN("failed to init ivf build helper", K(ret));
       }
@@ -354,7 +349,7 @@ int ObVectorIndexTabletContext::create_ivf_build_helper(
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("failed to allocate memory for ivf index build helper", KR(ret));
     } else {
-      tmp_ivf_build_helper = new(helper_buff)ObIvfSq8BuildHelper(&allocator_, tenant_id_);
+      tmp_ivf_build_helper = new(helper_buff)ObIvfSq8BuildHelper(&allocator_);
       if (OB_FAIL(tmp_ivf_build_helper->init(vec_index_param, memory_context_, all_vsag_use_mem_))) {
         LOG_WARN("failed to init ivf build helper", K(ret), K(vec_index_param));
       }
@@ -364,7 +359,7 @@ int ObVectorIndexTabletContext::create_ivf_build_helper(
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("failed to allocate memory for ivf index build helper", KR(ret));
     } else {
-      tmp_ivf_build_helper = new(helper_buff)ObIvfPqBuildHelper(&allocator_, tenant_id_);
+      tmp_ivf_build_helper = new(helper_buff)ObIvfPqBuildHelper(&allocator_);
       if (OB_FAIL(tmp_ivf_build_helper->init(vec_index_param, memory_context_, all_vsag_use_mem_))) {
         LOG_WARN("failed to init ivf build helper", K(ret), K(vec_index_param));
       }
@@ -496,7 +491,7 @@ int ObHNSWIndexRowIterator::get_next_row(
     } else if (index_type_ == VIAT_HNSW && OB_FAIL(databuff_printf(key_str, OB_VEC_IDX_SNAPSHOT_KEY_LENGTH, key_pos, "%lu_%ld_hnsw_data_part%05ld", tablet_id_.id(), snapshot_version_, cur_row_pos_))) {
       LOG_WARN("fail to build vec snapshot key str", K(ret), K_(index_type));
     } else if (index_type_ == VIAT_HGRAPH &&
-      OB_FAIL(databuff_printf(key_str, OB_VEC_IDX_SNAPSHOT_KEY_LENGTH, key_pos, "%lu_hgraph_data_part%05ld", tablet_id_.id(), cur_row_pos_))) {
+      OB_FAIL(databuff_printf(key_str, OB_VEC_IDX_SNAPSHOT_KEY_LENGTH, key_pos, "%lu_%ld_hgraph_data_part%05ld", tablet_id_.id(), snapshot_version_, cur_row_pos_))) {
       LOG_WARN("fail to build vec hgraph snapshot key str", K(ret), K_(index_type));
     } else if (index_type_ == VIAT_HNSW_SQ && OB_FAIL(databuff_printf(key_str, OB_VEC_IDX_SNAPSHOT_KEY_LENGTH, key_pos, "%lu_%ld_hnsw_sq_data_part%05ld", tablet_id_.id(), snapshot_version_, cur_row_pos_))) {
       LOG_WARN("fail to build sq vec snapshot key str", K(ret), K_(index_type));
@@ -606,11 +601,11 @@ int ObIVFCenterRowIterator::get_next_row(
       } else {
         ObString cid_str(buf_len, 0, buf);
         ObCenterId center_id(tablet_id_.id(), cur_row_pos_ + 1);
-        if (OB_FAIL(ObVectorClusterHelper::set_center_id_to_string(center_id, cid_str))) {
+        if (OB_FAIL(ObVectorKmeansClusterHelper::set_center_id_to_string(center_id, cid_str))) {
           LOG_WARN("failed to set center_id to string", K(ret), K(center_id), K(cid_str));
         } else if (vec_res.length() > lob_inrow_threshold_ || cid_str.length() > lob_inrow_threshold_) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("unexpected outrow datum in ivf vector index",
+          LOG_WARN("unexpected outrow datum in ivf vector index", 
                     K(ret), K(vec_res.length()), K(cid_str.length()), K(lob_inrow_threshold_));
         } else {
           for (int64_t idx = rowkey_cnt_ + extra_rowkey_cnt; idx < request_cnt; ++idx) {
@@ -694,11 +689,11 @@ int ObIVFSq8MetaRowIterator::get_next_row(
         ObString cid_str(buf_len, 0, buf);
         // reuse center_id encode, min: 1, max: 2, step: 3
         ObCenterId center_id(tablet_id_.id(), cur_row_pos_ + 1);
-        if (OB_FAIL(ObVectorClusterHelper::set_center_id_to_string(center_id, cid_str))) {
+        if (OB_FAIL(ObVectorKmeansClusterHelper::set_center_id_to_string(center_id, cid_str))) {
           LOG_WARN("failed to set center_id to string", K(ret), K(center_id), K(cid_str));
         } else if (vec_res.length() > lob_inrow_threshold_ || cid_str.length() > lob_inrow_threshold_) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("unexpected outrow datum in ivf vector index",
+          LOG_WARN("unexpected outrow datum in ivf vector index", 
                     K(ret), K(vec_res.length()), K(cid_str.length()), K(lob_inrow_threshold_));
         } else {
           for (int64_t i = 0; i < current_row_.get_column_count(); ++i) {
@@ -793,11 +788,11 @@ int ObIVFPqRowIterator::get_next_row(
         ObString pq_cid_str(buf_len, 0, buf);
         // row_i = pq_centers[m_id - 1][center_id - 1] since m_id and center_id start from 1
         ObPqCenterId pq_center_id(tablet_id_.id(), cur_row_pos_ / center_count_per_kmeans + 1, cur_row_pos_ % center_count_per_kmeans + 1);
-        if (OB_FAIL(ObVectorClusterHelper::set_pq_center_id_to_string(pq_center_id, pq_cid_str))) {
+        if (OB_FAIL(ObVectorKmeansClusterHelper::set_pq_center_id_to_string(pq_center_id, pq_cid_str))) {
           LOG_WARN("failed to set center_id to string", K(ret), K(pq_center_id), K(pq_cid_str));
         } else if (vec_res.length() > lob_inrow_threshold_ || pq_cid_str.length() > lob_inrow_threshold_) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("unexpected outrow datum in ivf vector index",
+          LOG_WARN("unexpected outrow datum in ivf vector index", 
                     K(ret), K(vec_res.length()), K(pq_cid_str.length()), K(lob_inrow_threshold_));
         } else {
           for (int64_t i = 0; i < current_row_.get_column_count(); ++i) {
@@ -825,8 +820,8 @@ int ObIVFPqRowIterator::get_next_row(
 
 ObVectorIndexBaseOperator::ObVectorIndexBaseOperator(ObPipeline *pipeline)
   : ObPipelineOperator(pipeline), is_inited_(false), tablet_id_(), slice_idx_(0),
-    op_allocator_("VecIndexOp", OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID()),
-    row_allocator_("VecIndexRow", OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID())
+    op_allocator_("VecIndexOp", OB_MALLOC_NORMAL_BLOCK_SIZE),
+    row_allocator_("VecIndexRow", OB_MALLOC_NORMAL_BLOCK_SIZE)
 {
 }
 
@@ -946,17 +941,15 @@ int ObHNSWIndexAppendBufferOperator::append_row(
   } else if (vec_str.length() == 0) {
     // do nothing
   } else {
-    ObPluginVectorIndexService *vec_index_service = MTL(ObPluginVectorIndexService *);
+    ObPluginVectorIndexService *vec_index_service = share::g_mp->plugin_vector_index_service();
     ObPluginVectorIndexAdapterGuard adaptor_guard;
     if (OB_ISNULL(vec_index_service)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("error unexpected, vector index service is nullptr", K(ret));
-    } else if (OB_FAIL(vec_index_service->acquire_adapter_guard(
-                   tablet_context->vector_index_ctx_->ls_id_, tablet_id_,
+    } else if (OB_FAIL(vec_index_service->acquire_adapter_guard(tablet_id_,
                    ObIndexType::INDEX_TYPE_VEC_INDEX_SNAPSHOT_DATA_LOCAL, adaptor_guard,
                    &tablet_context->vector_index_ctx_->vec_idx_param_, tablet_context->vector_index_ctx_->vec_dim_))) {
-      LOG_WARN("fail to get ObMockPluginVectorIndexAdapter", K(ret), K(tablet_context->vector_index_ctx_->ls_id_),
-               K(tablet_id_));
+      LOG_WARN("fail to get ObMockPluginVectorIndexAdapter", K(ret), K(tablet_id_));
     } else if (OB_NOT_NULL(adaptor_guard.get_adatper()) &&
                OB_FAIL(adaptor_guard.get_adatper()->get_extra_info_actual_size(extra_info_actual_size))) {
       LOG_WARN("failed to get extra info actual size.", K(ret));
@@ -992,7 +985,7 @@ int ObHNSWIndexAppendBufferOperator::append_row(
   return ret;
 }
 
-int ObHNSWIndexAppendBufferOperator::append_row_file(ObCGRowFile *row_file, ObDDLTabletContext *tablet_context)
+int ObHNSWIndexAppendBufferOperator::append_row_file(ObDDLRowFile *row_file, ObDDLTabletContext *tablet_context)
 {
   int ret = OB_SUCCESS;
   ObBatchDatumRows *datum_rows = nullptr;
@@ -1042,21 +1035,21 @@ int ObHNSWIndexAppendBufferOperator::execute(
       ret = OB_ERR_SYS;
       LOG_WARN("error sys, invalid vector index ctx", K(ret));
     } else {
-      if (OB_UNLIKELY(!input_chunk.is_valid() || !input_chunk.is_cg_row_tmp_files_type())) {
+      if (OB_UNLIKELY(!input_chunk.is_valid() || !input_chunk.is_ddl_row_tmp_files_type())) {
         ret = OB_INVALID_ARGUMENT;
         LOG_WARN("invalid arguments", K(ret), K(input_chunk));
       } else {
-        ObArray<ObCGRowFile *> *cg_row_file_arr = input_chunk.cg_row_file_arr_;
-        for (int64_t i = 0; OB_SUCC(ret) && i < cg_row_file_arr->count(); ++i) {
-          ObCGRowFile *&row_file = cg_row_file_arr->at(i);
+        ObArray<ObDDLRowFile *> *row_file_arr = input_chunk.row_file_arr_;
+        for (int64_t i = 0; OB_SUCC(ret) && i < row_file_arr->count(); ++i) {
+          ObDDLRowFile *&row_file = row_file_arr->at(i);
           if (OB_UNLIKELY(nullptr == row_file)) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("error unexpected, cg row file is nullptr", K(ret), K(*cg_row_file_arr));
+            LOG_WARN("error unexpected, cg row file is nullptr", K(ret), K(*row_file_arr));
           } else if (OB_FAIL(append_row_file(row_file, tablet_context))) {
             LOG_WARN("append row file failed", K(ret));
           }
           if (nullptr != row_file) {
-            row_file->~ObCGRowFile();
+            row_file->~ObDDLRowFile();
             ob_free(row_file);
             row_file = nullptr;
           }
@@ -1084,19 +1077,18 @@ int ObHNSWIndexBuildOperator::serialize_vector_index(
 {
   int ret = OB_SUCCESS;
   // first we do vsag serialize
-  ObPluginVectorIndexService *vec_index_service = MTL(ObPluginVectorIndexService *);
+  ObPluginVectorIndexService *vec_index_service = share::g_mp->plugin_vector_index_service();
   ObPluginVectorIndexAdapterGuard adaptor_guard;
   row_allocator_.reuse();
   if (OB_ISNULL(vec_index_service)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get null ObPluginVectorIndexService ptr", K(ret), K(MTL_ID()));
-  } else if (OB_FAIL(vec_index_service->acquire_adapter_guard(ctx.ls_id_,
-                                                              tablet_id_,
+    LOG_WARN("get null ObPluginVectorIndexService ptr", K(ret));
+  } else if (OB_FAIL(vec_index_service->acquire_adapter_guard(tablet_id_,
                                                               ObIndexType::INDEX_TYPE_VEC_INDEX_SNAPSHOT_DATA_LOCAL,
                                                               adaptor_guard,
                                                               &ctx.vec_idx_param_,
                                                               ctx.vec_dim_))) {
-    LOG_WARN("fail to get ObMockPluginVectorIndexAdapter", K(ret), K(ctx.ls_id_), K(tablet_id_));
+    LOG_WARN("fail to get ObMockPluginVectorIndexAdapter", K(ret), K(tablet_id_));
   } else {
     ObHNSWSerializeCallback callback;
     ObOStreamBuf::Callback cb = callback;
@@ -1107,13 +1099,13 @@ int ObHNSWIndexBuildOperator::serialize_vector_index(
     param.tmp_allocator_ = &row_allocator_;
     param.lob_inrow_threshold_ = lob_inrow_threshold;
     // build tx
-    oceanbase::transaction::ObTransService *txs = MTL(transaction::ObTransService*);
+    oceanbase::transaction::ObTransService *txs = share::g_mp->trans_service();
     oceanbase::transaction::ObTxReadSnapshot snapshot;
     int64_t timeout = ObTimeUtility::fast_current_time() + storage::ObInsertLobColumnHelper::LOB_TX_TIMEOUT;
     if (OB_ISNULL(tx_desc)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("fail to get tx desc, get nullptr", K(ret));
-    } else if (OB_FAIL(txs->get_ls_read_snapshot(*tx_desc, transaction::ObTxIsolationLevel::RC, ctx.ls_id_, timeout, snapshot))) {
+    } else if (OB_FAIL(txs->get_read_snapshot(*tx_desc, transaction::ObTxIsolationLevel::RC, timeout, snapshot))) {
       LOG_WARN("fail to get snapshot", K(ret));
     } else {
       param.timeout_ = timeout;
@@ -1137,12 +1129,11 @@ int ObHNSWIndexBuildOperator::serialize_vector_index(
         LOG_INFO("HgraphIndex finish vsag serialize for tablet", K(tablet_id_), K(ctx.ctx_.get_vals().count()), K(type));
       }
       if (OB_SUCC(ret)) {
-        omt::ObTenantConfigGuard tenant_config(TENANT_CONF(adp->get_tenant_id()));
-        if (!tenant_config.is_valid()) {
+        if (!true) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("fail get tenant_config", KR(ret), K(adp->get_tenant_id()));
+          LOG_WARN("fail get tenant_config", KR(ret));
         } else if (OB_FAIL(adp->renew_single_snap_index((type == VIAT_HNSW_BQ || type == VIAT_IPIVF)
-            || (tenant_config->vector_index_memory_saving_mode && (type == VIAT_HNSW || type == VIAT_HNSW_SQ || type == VIAT_HGRAPH))))) {
+            || (GCONF.vector_index_memory_saving_mode && (type == VIAT_HNSW || type == VIAT_HNSW_SQ || type == VIAT_HGRAPH))))) {
           LOG_WARN("fail to renew single snap index", K(ret));
         }
       }
@@ -1173,7 +1164,7 @@ int ObHNSWIndexBuildOperator::execute(
     ObVectorIndexAlgorithmType index_type = VIAT_MAX;
     const uint64_t timeout_us = ObTimeUtility::current_time() + storage::ObInsertLobColumnHelper::LOB_TX_TIMEOUT;
     transaction::ObTxDesc *tx_desc = nullptr;
-    if (OB_FAIL(ObInsertLobColumnHelper::start_trans(tablet_context->ls_id_, false/*is_for_read*/, timeout_us, tx_desc))) {
+    if (OB_FAIL(ObInsertLobColumnHelper::start_trans(false/*is_for_read*/, timeout_us, tx_desc))) {
       LOG_WARN("fail to get tx_desc", K(ret));
     } else if (OB_FAIL(serialize_vector_index(&op_allocator_, tx_desc, tablet_context->vector_index_ctx_->lob_inrow_threshold_, index_type, *tablet_context->vector_index_ctx_))) {
       LOG_WARN("serialize vector index failed", K(ret));
@@ -1222,7 +1213,7 @@ int ObVectorIndexWriteMacroBaseOperator::write(const ObChunk &input_chunk, ObVec
       } else if (OB_ISNULL(ddl_dag = static_cast<ObDDLIndependentDag *>(get_dag()))) {
         ret = OB_ERR_SYS;
         LOG_WARN("get dag failed", K(ret));
-      } else if (OB_FAIL(ObDDLUtil::fill_writer_param(tablet_id_, slice_idx_, -1/*cg_idx*/, ddl_dag, 0/*max_batch_size*/, write_param))) {
+      } else if (OB_FAIL(ObDDLUtil::fill_writer_param(tablet_id_, slice_idx_, ddl_dag, 0/*max_batch_size*/, write_param))) {
         LOG_WARN("fill writer param failed", K(ret));
       } else if (OB_FAIL(slice_writer->init(write_param))) {
         LOG_WARN("init macro block slice store failed", K(ret));
@@ -1282,7 +1273,7 @@ int ObHNSWIndexWriteMacroOperator::execute(
   return ret;
 }
 
-int ObIVFIndexAppendBufferBaseOperator::append_row_file(ObCGRowFile *row_file)
+int ObIVFIndexAppendBufferBaseOperator::append_row_file(ObDDLRowFile *row_file)
 {
   int ret = OB_SUCCESS;
   ObBatchDatumRows *datum_rows = nullptr;
@@ -1320,21 +1311,21 @@ int ObIVFIndexAppendBufferBaseOperator::execute(
   result_state = ObPipelineOperator::NEED_MORE_INPUT;
   if (input_chunk.is_end_chunk()) {
     // do nothing
-  } else if (OB_UNLIKELY(!input_chunk.is_valid() || !input_chunk.is_cg_row_tmp_files_type())) {
+  } else if (OB_UNLIKELY(!input_chunk.is_valid() || !input_chunk.is_ddl_row_tmp_files_type())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", K(ret), K(input_chunk));
   } else {
-    ObArray<ObCGRowFile *> *cg_row_file_arr = input_chunk.cg_row_file_arr_;
-    for (int64_t i = 0; OB_SUCC(ret) && i < cg_row_file_arr->count(); ++i) {
-      ObCGRowFile *&row_file = cg_row_file_arr->at(i);
+    ObArray<ObDDLRowFile *> *row_file_arr = input_chunk.row_file_arr_;
+    for (int64_t i = 0; OB_SUCC(ret) && i < row_file_arr->count(); ++i) {
+      ObDDLRowFile *&row_file = row_file_arr->at(i);
       if (OB_UNLIKELY(nullptr == row_file)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("error unexpected, cg row file is nullptr", K(ret), K(*cg_row_file_arr));
+        LOG_WARN("error unexpected, cg row file is nullptr", K(ret), K(*row_file_arr));
       } else if (OB_FAIL(append_row_file(row_file))) {
         LOG_WARN("append row file failed", K(ret));
       }
       if (nullptr != row_file) {
-        row_file->~ObCGRowFile();
+        row_file->~ObDDLRowFile();
         ob_free(row_file);
         row_file = nullptr;
       }
@@ -1714,7 +1705,7 @@ int ObHNSWEmbeddingOperator::init(const ObTabletID &tablet_id)
         LOG_WARN("failed to init embedding task manager", K(ret));
       } else {
         batch_size_ = 64; // TODO(fanfangyao.ffy): To be tuned
-        void *batch_buf = ob_malloc(sizeof(ObTaskBatchInfo), ObMemAttr(MTL_ID(), "TaskBatch"));
+        void *batch_buf = ob_malloc(sizeof(ObTaskBatchInfo), ObMemAttr("TaskBatch"));
         if (OB_ISNULL(batch_buf)) {
           ret = OB_ALLOCATE_MEMORY_FAILED;
           LOG_WARN("failed to allocate batch context", K(ret));
@@ -1727,7 +1718,7 @@ int ObHNSWEmbeddingOperator::init(const ObTabletID &tablet_id)
             current_batch_ = nullptr;
           }
         }
-
+        
         if (OB_SUCC(ret)) {
           is_inited_ = true;
           cur_file_idx_ = 0;
@@ -1829,7 +1820,7 @@ int ObHNSWEmbeddingOperator::get_ready_results(ObChunk &output_chunk, ResultStat
   } else {
     ObTaskBatchInfo *batch_info = nullptr;
     int ret_code = OB_SUCCESS;
-
+    
     if (OB_FAIL(embedmgr_->get_ready_batch_info(batch_info, ret_code))) {
       if (OB_ITER_END != ret) {
         LOG_WARN("fetch ready batch info failed", K(ret));
@@ -1855,15 +1846,15 @@ int ObHNSWEmbeddingOperator::get_ready_results(ObChunk &output_chunk, ResultStat
 int ObHNSWEmbeddingOperator::process_input_chunk(const ObChunk &input_chunk)
 {
   int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(!input_chunk.is_valid() || !input_chunk.is_cg_row_tmp_files_type())) {
+  if (OB_UNLIKELY(!input_chunk.is_valid() || !input_chunk.is_ddl_row_tmp_files_type())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", K(ret), K(input_chunk));
   } else if (OB_ISNULL(current_batch_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("current batch is null", K(ret));
   } else {
-    ObArray<ObCGRowFile *> *cg_row_file_arr = input_chunk.cg_row_file_arr_;
-    if (OB_ISNULL(cg_row_file_arr)) {
+    ObArray<ObDDLRowFile *> *row_file_arr = input_chunk.row_file_arr_;
+    if (OB_ISNULL(row_file_arr)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("cg row file array is null", K(ret));
     } else {
@@ -1879,7 +1870,7 @@ int ObHNSWEmbeddingOperator::process_input_chunk(const ObChunk &input_chunk)
               LOG_WARN("submit batch failed", K(ret), "batch_count", current_batch_->get_count());
             }
           }
-        } else if (OB_FAIL(get_next_row_from_tmp_files(cg_row_file_arr, text, extras, has_row))) {
+        } else if (OB_FAIL(get_next_row_from_tmp_files(row_file_arr, text, extras, has_row))) {
           LOG_WARN("get_next_row_from_tmp_files failed", K(ret));
         } else if (!has_row) {
           chunk_exhausted_ = true;
@@ -1894,19 +1885,19 @@ int ObHNSWEmbeddingOperator::process_input_chunk(const ObChunk &input_chunk)
   return ret;
 }
 
-int ObHNSWEmbeddingOperator::get_next_row_from_tmp_files(ObArray<ObCGRowFile *> *cg_row_file_arr,
+int ObHNSWEmbeddingOperator::get_next_row_from_tmp_files(ObArray<ObDDLRowFile *> *row_file_arr,
                                                           blocksstable::ObStorageDatum &text,
                                                           common::ObArray<blocksstable::ObStorageDatum> &extras,
                                                           bool &has_row)
 {
   int ret = OB_SUCCESS;
   has_row = false;
-  if (OB_ISNULL(cg_row_file_arr)) {
+  if (OB_ISNULL(row_file_arr)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid cg_row_file_arr", K(ret), K(cg_row_file_arr));
+    LOG_WARN("invalid row_file_arr", K(ret), K(row_file_arr));
   } else {
-    while (OB_SUCC(ret) && cur_file_idx_ < cg_row_file_arr->count() && !has_row) {
-      ObCGRowFile *&row_file = cg_row_file_arr->at(cur_file_idx_);
+    while (OB_SUCC(ret) && cur_file_idx_ < row_file_arr->count() && !has_row) {
+      ObDDLRowFile *&row_file = row_file_arr->at(cur_file_idx_);
       if (OB_ISNULL(row_file)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("row file null", K(ret), K(cur_file_idx_));
@@ -1952,7 +1943,7 @@ int ObHNSWEmbeddingOperator::get_next_row_from_tmp_files(ObArray<ObCGRowFile *> 
   return ret;
 }
 
-int ObHNSWEmbeddingOperator::get_next_batch_from_tmp_files(ObCGRowFile *&row_file)
+int ObHNSWEmbeddingOperator::get_next_batch_from_tmp_files(ObDDLRowFile *&row_file)
 {
   int ret = OB_SUCCESS;
   if (nullptr == cur_datum_rows_) { // current batch is empty, get next batch
@@ -1960,7 +1951,7 @@ int ObHNSWEmbeddingOperator::get_next_batch_from_tmp_files(ObCGRowFile *&row_fil
       if (OB_ITER_END == ret) {
         ret = OB_SUCCESS;
         // current file end, release file and switch to next file
-        row_file->~ObCGRowFile();
+        row_file->~ObDDLRowFile();
         ob_free(row_file);
         row_file = nullptr;
         cur_datum_rows_ = nullptr;
@@ -2024,7 +2015,7 @@ int ObHNSWEmbeddingOperator::flush_current_batch()
       }
     } else {
       // Create new batch for next round
-      void *batch_buf = ob_malloc(sizeof(ObTaskBatchInfo), ObMemAttr(MTL_ID(), "TaskBatch"));
+      void *batch_buf = ob_malloc(sizeof(ObTaskBatchInfo), ObMemAttr("TaskBatch"));
       if (OB_ISNULL(batch_buf)) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
         LOG_WARN("failed to allocate new batch context", K(ret));
@@ -2179,7 +2170,7 @@ int ObHNSWEmbeddingWriteMacroOperator::init(const ObTabletID &tablet_id, const i
     if (OB_ISNULL(ddl_dag = static_cast<ObDDLIndependentDag *>(get_dag()))) {
       ret = OB_ERR_SYS;
       LOG_WARN("get dag failed", K(ret));
-    } else if (OB_FAIL(ObDDLUtil::fill_writer_param(tablet_id_, slice_idx_, -1/*cg_idx*/, ddl_dag, 0/*max_batch_size*/, write_param))) {
+    } else if (OB_FAIL(ObDDLUtil::fill_writer_param(tablet_id_, slice_idx_, ddl_dag, 0/*max_batch_size*/, write_param))) {
       LOG_WARN("fill writer param failed", K(ret));
     } else if (OB_ISNULL(slice_writer_ = OB_NEWx(ObTabletSliceWriter, &op_allocator_))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
@@ -2189,14 +2180,14 @@ int ObHNSWEmbeddingWriteMacroOperator::init(const ObTabletID &tablet_id, const i
     } else {
       is_inited_ = true;
     }
-
+    
     if (OB_FAIL(ret) && OB_NOT_NULL(slice_writer_)) {
       slice_writer_->~ObTabletSliceWriter();
       op_allocator_.free(slice_writer_);
       slice_writer_ = nullptr;
     }
   }
-
+  
   return ret;
 }
 

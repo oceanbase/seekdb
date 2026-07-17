@@ -15,9 +15,10 @@
  */
 
 #include "storage/multi_data_source/ob_mds_table_merge_dag.h"
+#include "share/rc/ob_module_provider.h"
 #include "storage/multi_data_source/ob_mds_table_merge_task.h"
 #include "storage/multi_data_source/ob_mds_table_merge_dag_param.h"
-#include "share/scheduler/ob_dag_warning_history_mgr.h"
+#include "observer/scheduler/ob_dag_warning_history_mgr.h"
 #include "storage/tx_storage/ob_ls_service.h"
 #include "storage/tablet/ob_tablet.h"
 
@@ -83,13 +84,13 @@ int ObMdsTableMergeDag::fill_compat_mode_()
   // between mds table lock on ObTabletPointer and other mds component
   // inner locks. So here use no_lock to get tablet.
 
-  ObLSHandle tmp_ls_handle;
+  ObLS *tenant_ls = nullptr;
   ObTabletHandle tmp_tablet_handle;
-  if (OB_FAIL(MTL(ObLSService *)->get_ls(ls_id_, tmp_ls_handle, ObLSGetMod::COMPACT_MODE))) {
-    LOG_WARN("failed to get log stream", K(ret), K(ls_id_));
-  } else if (OB_FAIL(tmp_ls_handle.get_ls()->get_tablet_svr()->get_tablet(
+  if (OB_FAIL(share::g_mp->ls_service()->get_ls(tenant_ls))) {
+    LOG_WARN("failed to get log stream", K(ret));
+  } else if (OB_FAIL(tenant_ls->get_tablet_svr()->get_tablet(
       tablet_id_, tmp_tablet_handle, 0/*timeout_us*/, storage::ObMDSGetTabletMode::READ_WITHOUT_CHECK))) {
-    LOG_WARN("failed to get tablet", K(ret), K(ls_id_), K(tablet_id_));
+    LOG_WARN("failed to get tablet", K(ret), K(tablet_id_));
   } else {
     compat_mode_ = tmp_tablet_handle.get_obj()->get_tablet_meta().compat_mode_;
   }
@@ -126,7 +127,6 @@ int ObMdsTableMergeDag::fill_info_param(compaction::ObIBasicInfoParam *&out_para
     LOG_WARN("ls basic tablet merge dag do not init", K(ret));
   } else {
     if (OB_FAIL(ADD_DAG_WARN_INFO_PARAM(out_param, allocator, ObIDag::get_type(),
-        ls_id_.id(),
         static_cast<int64_t>(tablet_id_.id()),
         static_cast<int64_t>(flush_scn_.get_val_for_inner_table_field())))) {
       LOG_WARN("failed to fill info param", K(ret));
@@ -139,9 +139,9 @@ int ObMdsTableMergeDag::fill_dag_key(char *buf, const int64_t buf_len) const
 {
   int ret = OB_SUCCESS;
 
-  if (OB_FAIL(databuff_printf(buf, buf_len, "mds table merge task, ls_id=%ld, tablet_id=%ld, flush_scn=%ld",
-      ls_id_.id(), tablet_id_.id(), flush_scn_.get_val_for_inner_table_field()))) {
-    LOG_WARN("failed to fill dag key", K(ret), K_(ls_id), K_(tablet_id), K_(flush_scn));
+  if (OB_FAIL(databuff_printf(buf, buf_len, "mds table merge task, tablet_id=%ld, flush_scn=%ld",
+      tablet_id_.id(), flush_scn_.get_val_for_inner_table_field()))) {
+    LOG_WARN("failed to fill dag key", K(ret), K_(tablet_id), K_(flush_scn));
   }
 
   return ret;

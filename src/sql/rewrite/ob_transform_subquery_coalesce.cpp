@@ -66,7 +66,7 @@ int ObTransformSubqueryCoalesce::transform_one_stmt(common::ObIArray<ObParentDML
     }
   }
   if (OB_SUCC(ret)) {
-    /* Merge as much as possible, e.g.: select * from t1 where t1.c1 in (select 1 from t2 where t2.c2 = t1.c2)
+    /* Merge as much as possible, e.g.: select * from t1 where t1.c1 in (select 1 from t2 where t2.c2 = t1.c2) 
     * and c1 not in (select 1 from t2 where t2.c2 = t1.c2 and t2.c2 > 3) and c1 in (select 1 from t2 where t2.c2 = t1.c2);
     * Originally this statement could be false, but it may not be determined during the first merge, so a second merge is needed to determine it.
     */

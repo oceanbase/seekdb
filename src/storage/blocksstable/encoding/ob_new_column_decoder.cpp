@@ -18,6 +18,7 @@
 
 #include "ob_new_column_decoder.h"
 #include "storage/access/ob_aggregate_base.h"
+#include "storage/lob/ob_lob_manager.h"
 
 namespace oceanbase
 {

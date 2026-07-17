@@ -15,7 +15,7 @@
  */
 
 #define USING_LOG_PREFIX SHARE
-#include "lib/stat/ob_session_stat.h"
+#include "lib/stat/ob_diagnose_info.h"
 #include "share/ob_core_table_proxy.h"
 #include "share/ob_dml_sql_splicer.h"
 

@@ -62,8 +62,8 @@ int ObDropFuncResolver::resolve(const ParseNode &parse_tree)
   if (OB_SUCC(ret)) {
     bool exist = false;
     const share::schema::ObUDF *udf_info = nullptr;
-    uint64_t tenant_id = session_info_->get_effective_tenant_id();
-    if (OB_FAIL(schema_checker_->get_udf_info(tenant_id, lower_name, udf_info, exist))) {
+    
+    if (OB_FAIL(schema_checker_->get_udf_info( lower_name, udf_info, exist))) {
       LOG_WARN("failed to get udf info", K(ret));
     } else if (exist) {
       // dll udf
@@ -80,9 +80,10 @@ int ObDropFuncResolver::resolve(const ParseNode &parse_tree)
 
 
   if (OB_SUCC(ret)) {
-    const uint64_t tenant_id = session_info_->get_effective_tenant_id();
-    obrpc::ObDropUserDefinedFunctionArg &drop_func_arg = drop_func_stmt->get_drop_func_arg();
-    drop_func_arg.tenant_id_ = tenant_id;
+    
+    obcall::ObDropUserDefinedFunctionArg &drop_func_arg = drop_func_stmt->get_drop_func_arg();
+    
+    
     drop_func_arg.name_ = lower_name;
     drop_func_arg.if_exist_ =  (NULL != parse_tree.children_[0]);
   }

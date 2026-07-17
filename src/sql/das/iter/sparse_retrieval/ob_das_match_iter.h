@@ -96,7 +96,7 @@ public:
                              common::ObIAllocator &alloc,
                              int &minimum_should_match);
 
-  INHERIT_TO_STRING_KV("ObDASIter", ObDASIter, K_(ir_match_part_score_ctdef), K_(ir_match_part_score_rtdef), K_(eval_ctx), K_(domain_id_expr),
+  INHERIT_TO_STRING_KV("ObDASIter", ObDASIter, K_(ir_match_part_score_ctdef), K_(ir_match_part_score_rtdef), K_(eval_ctx), K_(domain_id_expr), 
     K_(children_relevance_exprs), K_(is_inited));
 protected:
   virtual int inner_init(ObDASIterParam &param) override;

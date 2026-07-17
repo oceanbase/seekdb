@@ -18,7 +18,7 @@
 #include <gtest/gtest.h>
 #define private public
 #define protected public
-#include "share/vector_index/ob_plugin_vector_index_serialize.h"
+#include "observer/vector_index/ob_plugin_vector_index_serialize.h"
 #undef private
 #undef protected
 

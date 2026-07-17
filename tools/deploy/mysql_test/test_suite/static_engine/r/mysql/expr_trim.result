@@ -1,7 +1,7 @@
 result_format: 4
 
 drop table if exists t1;
-create table t1 (c1 varchar(100) CHARACTER SET  utf8, c2 varchar(100) CHARACTER set  utf16);
+create table t1 (c1 varchar(100) CHARACTER SET  utf8, c2 varchar(100) CHARACTER SET  utf8mb4);
 insert into t1 (c1, c2) values ('            a               ', '                b                 ');
 insert into t1 (c1, c2) values (' ', '                b                 ');
 insert into t1 (c1, c2) values ('            a               ', ' ');
@@ -180,12 +180,12 @@ select collation(TRIM( BOTH _binary'a' FROM '+-ÃÃ·ï¹¢ï¹£Â±/= â¥â' 
 +-----------------------------------------------------------------------------+
 | utf8mb4_general_ci                                                          |
 +-----------------------------------------------------------------------------+
-select collation(TRIM( BOTH _binary'a' FROM _gbk'abc' )) ;
-+---------------------------------------------------+
-| collation(TRIM( BOTH _binary'a' FROM _gbk'abc' )) |
-+---------------------------------------------------+
-| gbk_chinese_ci                                    |
-+---------------------------------------------------+
+select collation(TRIM( BOTH _binary'a' FROM _utf8mb4'abc' )) ;
++-------------------------------------------------------+
+| collation(TRIM( BOTH _binary'a' FROM _utf8mb4'abc' )) |
++-------------------------------------------------------+
+| utf8mb4_general_ci                                    |
++-------------------------------------------------------+
 
 select TRIM(LEADING 'a' FROM TRIM(SUBSTR(REPEAT(NULL, 4 + 1), 1, LEAST(146, 20))));
 +-----------------------------------------------------------------------------+
@@ -253,4 +253,3 @@ select length(trim(both 'abcd' from c1)) from t1;
 |                                 2 |
 +-----------------------------------+
 drop table t1;
-

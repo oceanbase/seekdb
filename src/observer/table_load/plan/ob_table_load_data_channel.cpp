@@ -40,7 +40,7 @@ ObTableLoadTableChannel::ObTableLoadTableChannel(ObTableLoadTableOp *up_table_op
     is_closed_(false),
     is_inited_(false)
 {
-  allocator_.set_tenant_id(MTL_ID());
+  
 }
 
 ObTableLoadTableChannel::~ObTableLoadTableChannel()

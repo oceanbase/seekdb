@@ -26,9 +26,6 @@
 #include "storage/compaction/ob_tenant_medium_checker.h"
 #include "storage/compaction/ob_tablet_merge_ctx.h"
 #include "storage/compaction/ob_ckm_error_tablet_info.h"
-#ifdef OB_BUILD_SHARED_STORAGE
-#include "storage/compaction/ob_ls_compaction_list.h"
-#endif
 
 namespace oceanbase
 {
@@ -58,19 +55,7 @@ public:
   {}
   ~ObMediumCompactionScheduleFunc() {}
 
-  /*
-   * see 
-   * standby tenant should catch up broadcast scn when freeze info is recycled
-   */
-  static int decide_standy_tenant_schedule(
-      const ObLSID &ls_id,
-      const ObTabletID &tablet_id,
-      const ObMediumCompactionInfo::ObCompactionType &compaction_type,
-      const int64_t schedule_scn,
-      const int64_t major_frozen_snapshot,
-      const ObMediumCompactionInfoList &medium_list,
-      bool &schedule_flag);
-  static int is_election_leader(const share::ObLSID &ls_id, bool &ls_election_leader);
+
   static int get_max_sync_medium_scn(
     const ObTablet &tablet,
     const ObMediumCompactionInfoList &medium_list,
@@ -84,13 +69,13 @@ public:
     storage::ObStorageSchema &storage_schema,
     bool &is_skip_merge_index);
   static int batch_check_medium_finish(
-    ObIArray<ObTabletCheckInfo> &finish_tablet_ls_infos,
-    const ObIArray<ObTabletCheckInfo> &tablet_ls_infos,
+    ObIArray<ObTabletCheckInfo> &finish_tablet_infos,
+    const ObIArray<ObTabletCheckInfo> &tablet_check_infos,
     ObCompactionTimeGuard &time_guard);
   static int check_replica_checksum_items(
       const ObReplicaCkmArray &checksum_items,
       const bool is_medium_checker);
-  int schedule_next_medium_for_leader(
+  int schedule_next_medium(
     const int64_t major_snapshot,
     bool &medium_clog_submitted);
   static int get_table_id(
@@ -103,26 +88,10 @@ public:
     const ObStorageSchema &storage_schema,
     const uint64_t data_version,
     bool &is_schema_changed);
-#ifdef OB_BUILD_SHARED_STORAGE
-  // medium compaction is not considered
-  int prepare_ls_major_merge_info(
-    const int64_t merge_version,
-    ObAdaptiveMergePolicy::AdaptiveMergeReason &merge_reason,
-    bool &submit_clog_flag);
-  int check_tablet_inc_data(
-    ObTablet &tablet,
-    ObMediumCompactionInfo &medium_info,
-    bool &no_inc_data);
-  int check_progressive_merge(
-    const storage::ObTabletTableStore &table_store,
-    const storage::ObStorageSchema &storage_schema,
-    bool &is_progressive_merge);
-#endif
   int64_t to_string(char* buf, const int64_t buf_len) const;
 protected:
   int decide_medium_snapshot(bool &medium_clog_submitted);
   static int get_status_from_inner_table(
-      const ObLSID &ls_id,
       const ObTabletID &tablet_id,
       share::ObTabletCompactionScnInfo &ret_info);
   int prepare_medium_info(
@@ -130,20 +99,17 @@ protected:
     const int64_t schema_version,
     ObMediumCompactionInfo &medium_info);
   int choose_encoding_limit(ObMediumCompactionInfo &medium_info);
-  int init_parallel_range_and_schema_changed_and_co_merge_type(
+  int init_parallel_range_and_schema_changed(
       const ObGetMergeTablesResult &result,
       ObMediumCompactionInfo &medium_info);
   int check_if_schema_changed(ObMediumCompactionInfo &medium_info);
-  int init_co_major_merge_type(
-      const ObGetMergeTablesResult &result,
-      ObMediumCompactionInfo &medium_info);
   int prepare_iter(
       const ObGetMergeTablesResult &result,
       ObTableStoreIterator &table_iter);
   int submit_medium_clog(ObMediumCompactionInfo &medium_info);
   static int batch_check_medium_meta_table(
-      const ObIArray<ObTabletCheckInfo> &tablet_ls_infos,
-      ObIArray<ObTabletCheckInfo> &finish_tablet_ls,
+      const ObIArray<ObTabletCheckInfo> &tablet_check_infos,
+      ObIArray<ObTabletCheckInfo> &finish_tablet_infos,
       ObCompactionTimeGuard &time_guard);
   static int check_medium_meta_table(
       const int64_t medium_snapshot,
@@ -156,7 +122,7 @@ protected:
       const int64_t end_idx,
       const bool is_medium_checker,
       ObTabletDataChecksumChecker &data_checksum_checker,
-      ObIArray<ObCkmErrorTabletLSInfo> &error_pairs,
+      ObIArray<ObCkmErrorTabletInfo> &error_pairs,
       int &check_ret);
   int choose_medium_snapshot(
       const int64_t max_sync_medium_scn,

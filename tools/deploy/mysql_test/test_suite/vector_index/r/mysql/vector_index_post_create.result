@@ -1,3 +1,4 @@
+alter system set _enable_add_fulltext_index_to_existing_table = false;
 drop database if exists post_create_vec;
 create database post_create_vec;
 use post_create_vec;
@@ -10,8 +11,8 @@ id int primary key,
 c2 vector(10));
 alter system set ob_vector_memory_limit_percentage = 20;
 CREATE VECTOR INDEX VEC_IDX1 ON vec_table(c2) with (distance=l2, type=hnsw, lib=vsag);
-select operation_type, ddl_stmt_str from oceanbase.__all_ddl_operation
-where database_id = (select database_id from oceanbase.__all_database where database_name='post_create_vec')
+select operation_type, ddl_stmt_str from oceanbase.__all_ddl_operation 
+where database_id = (select database_id from oceanbase.__all_database where database_name='post_create_vec') 
 and ddl_stmt_str != '' order by schema_version;
 operation_type	ddl_stmt_str
 202	create database post_create_vec
@@ -355,7 +356,7 @@ c1	c2
 drop table t1;
 drop table if exists t1;
 CREATE TABLE t1 (c1 int primary key, c2 VARCHAR(30),c3 vector(3) ,c4 vector(3),
-VECTOR INDEX vector_idx_c3(c3)
+VECTOR INDEX vector_idx_c3(c3) 
 WITH (distance=l2, lib=vsag, type=hnsw, m=10, ef_construction=12, ef_search=40))
 PARTITION BY RANGE(c1) (
 PARTITION p0 VALUES less than(5),
@@ -374,7 +375,7 @@ insert into t1 values(1,'[1,1,2]','[2,2,3]','[1,3,2]');
 insert /*+ direct(true,100) enable_parallel_dml parallel(2) */ into t1 select c1+1, c2, c3, c4 from t1;
 create VECTOR index vector_idx1 on t1(c3) with (distance=l2, lib=vsag, type=hnsw, m=10, ef_construction=100, ef_search=40);
 drop table t1;
-create table t1(c1 int, c2 vector(3), c3 vector(5),
+create table t1(c1 int, c2 vector(3), c3 vector(5), 
 primary key(c1),
 vector index idx1(c2) with (distance=l2, type=hnsw, lib=vsag))
 PARTITION BY RANGE COLUMNS(c1)
@@ -394,86 +395,6 @@ call dbms_vector.refresh_index('idx1', 't1', 'c2', 1, 'FAST');
 call dbms_vector.rebuild_index('idx1','t1','c2');
 set @@binlog_row_image = 'FULL';
 drop table t1;
-drop table if exists t_vec;
-create table t_vec(c1 int, c2 vector(3), c3 varchar(20), j json, c4 sparsevector,primary key(c1));
-insert into t_vec values(1, '[1,2,1]', 'a', '{"key":[7,932,22]}', '{1:0.1,2:0.2, 3:0.3}');
-create vector index idx1 on t_vec(c2) with (distance=l2, type=hnsw) with column group(each column);
-ERROR 0A000: create vector/fulltext/multivalue index with column group not supported
-create vector index idx1 on t_vec(c2) with (distance=l2, type=hnsw) with column group(all columns);
-ERROR 0A000: create vector/fulltext/multivalue index with column group not supported
-create vector index idx1 on t_vec(c2) with (distance=l2, type=ivf_flat) with column group(each column);
-ERROR 0A000: create vector/fulltext/multivalue index with column group not supported
-create vector index idx1 on t_vec(c2) with (distance=l2, type=ivf_pq, m=1) with column group(each column);
-ERROR 0A000: create vector/fulltext/multivalue index with column group not supported
-create vector index idx1 on t_vec(c2) with (distance=l2, type=ivf_sq8) with column group(each column);
-ERROR 0A000: create vector/fulltext/multivalue index with column group not supported
-create fulltext index idx1 on t_vec(c3) with column group(each column);
-ERROR 0A000: create vector/fulltext/multivalue index with column group not supported
-create fulltext index idx1 on t_vec(c3) with column group(all columns);
-ERROR 0A000: create vector/fulltext/multivalue index with column group not supported
-create vector index idx1 on t_vec(c4) with (distance=inner_product) with column group(each column);
-ERROR 0A000: the vector index params of distance or type not set is not supported
-create vector index idx1 on t_vec(c4) with (distance=inner_product) with column group(all columns);
-ERROR 0A000: the vector index params of distance or type not set is not supported
-create index idx1 on t_vec((CAST(j->'$.key' AS UNSIGNED ARRAY))) with column group(each column);
-ERROR 0A000: build multivalue index afterward not supported
-create index idx1 on t_vec((CAST(j->'$.key' AS UNSIGNED ARRAY))) with column group(all columns);
-ERROR 0A000: build multivalue index afterward not supported
-drop table t_vec;
-CREATE TABLE t_vec (
-id BIGINT not null,
-modified  BIGINT not null,
-custinfo JSON,
-data JSON,
-primary key(id),
-INDEX zips1( (CAST(custinfo->'$.zipcode' AS UNSIGNED ARRAY)) ) with column group(each column),
-INDEX zips2( (CAST(data->'$.id' AS UNSIGNED ARRAY)) )
-);
-ERROR 0A000: create vector/fulltext/multivalue index with column group not supported
-CREATE TABLE t_vec (
-id BIGINT not null,
-modified  BIGINT not null,
-custinfo JSON,
-data JSON,
-primary key(id),
-INDEX zips1( (CAST(custinfo->'$.zipcode' AS UNSIGNED ARRAY)) ) with column group(all columns),
-INDEX zips2( (CAST(data->'$.id' AS UNSIGNED ARRAY)) )
-);
-ERROR 0A000: create vector/fulltext/multivalue index with column group not supported
-CREATE TABLE t_vec (
-c1 int primary key,
-c2 sparsevector,
-vector index idx1(c2) with (distance=inner_product) with column group(all columns)
-);
-ERROR 42000: You have an error in your SQL syntax; check the manual that corresponds to your OceanBase version for the right syntax to use near 'with column group(all columns)
-)' at line 4
-create table t_vec(c1 int, c2 vector(3), c3 varchar(20), j json, primary key(c1), vector index idx(c2) with (distance=l2, type=ivf_flat)) with column group(each column);
-ERROR 0A000: create ivf index on table with column store is not supported
-create table t_vec(c1 int, c2 vector(3), c3 varchar(20), j json, primary key(c1), vector index idx(c2) with (distance=l2, type=ivf_pq, m=3)) with column group(each column);
-ERROR 0A000: create ivf index on table with column store is not supported
-create table t_vec(c1 int, c2 vector(3), c3 varchar(20), j json, primary key(c1), vector index idx(c2) with (distance=l2, type=ivf_sq8)) with column group(each column);
-ERROR 0A000: create ivf index on table with column store is not supported
-create table t_vec(c1 int, c2 vector(3), c3 varchar(20), j json, primary key(c1), vector index idx(c2) with (distance=l2, type=ivf_flat)) with column group(all columns, each column);
-ERROR 0A000: create ivf index on table with column store is not supported
-create table t_vec(c1 int, c2 vector(3), c3 varchar(20), j json, primary key(c1), vector index idx(c2) with (distance=l2, type=ivf_pq, m=3)) with column group(all columns, each column);
-ERROR 0A000: create ivf index on table with column store is not supported
-create table t_vec(c1 int, c2 vector(3), c3 varchar(20), j json, primary key(c1), vector index idx(c2) with (distance=l2, type=ivf_sq8)) with column group(all columns, each column);
-ERROR 0A000: create ivf index on table with column store is not supported
-create table t_vec(c1 int, c2 vector(3), c3 varchar(20), j json, primary key(c1)) with column group(each column);
-create vector index idx1 on t_vec(c2) with (distance=l2, type=ivf_flat);
-ERROR 0A000: create ivf index on table with column store is not supported
-create vector index idx1 on t_vec(c2) with (distance=l2, type=ivf_pq, m=1);
-ERROR 0A000: create ivf index on table with column store is not supported
-create vector index idx1 on t_vec(c2) with (distance=l2, type=ivf_sq8);
-ERROR 0A000: create ivf index on table with column store is not supported
-drop table t_vec;
-create table t_vec(c1 int, c2 vector(3), c3 varchar(20), j json, primary key(c1));
-create vector index idx1 on t_vec(c2) with (distance=l2, type=ivf_flat);
-alter table t_vec add column group(each column);
-ERROR 0A000: Not supported feature or function
-alter table t_vec add column group(each column) delayed;
-ERROR 0A000: create ivf index on table with column store is not supported
-drop table t_vec;
 PURGE RECYCLEBIN;
 drop table if exists t1;
 drop database if exists post_create_vec;

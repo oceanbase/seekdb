@@ -62,10 +62,7 @@ public:
   {
     arg_.set_database_name(db_name);
   }
-  void set_tenant_id(uint64_t tenant_id)
-  {
-    arg_.set_tenant_id(tenant_id);
-  }
+  
   void set_is_system_generated()
   {
     arg_.set_is_system_generated();
@@ -74,11 +71,11 @@ public:
     arg_.set_ignore_exists_error(ignore_error);
   }
   share::ObSequenceOption &option() { return arg_.option(); }
-  virtual obrpc::ObDDLArg &get_ddl_arg() { return arg_; }
-  obrpc::ObSequenceDDLArg &get_arg() { return arg_; }
-  const obrpc::ObSequenceDDLArg &get_arg() const { return arg_; }
+  virtual obcall::ObDDLArg &get_ddl_arg() { return arg_; }
+  obcall::ObSequenceDDLArg &get_arg() { return arg_; }
+  const obcall::ObSequenceDDLArg &get_arg() const { return arg_; }
 private:
-  obrpc::ObSequenceDDLArg arg_;
+  obcall::ObSequenceDDLArg arg_;
   DISALLOW_COPY_AND_ASSIGN(ObSequenceDDLStmt);
 };
 

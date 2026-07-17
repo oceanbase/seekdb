@@ -33,11 +33,10 @@ ObDtlChannelLoop::ObDtlChannelLoop()
       last_msg_type_(static_cast<uint16_t>(ObDtlMsgType::MAX)),
       cond_(ObWaitEventIds::PX_LOOP_COND_WAIT),
       ignore_interrupt_(false),
-      tenant_id_(UINT64_MAX),
       timeout_(INT64_MAX),
       spin_lock_(common::ObLatchIds::DTL_CHANNEL_LIST_LOCK),
       mock_addr_(),
-      sentinel_node_(1, 0, mock_addr_, ObDtlChannel::DtlChannelType::LOCAL_CHANNEL),
+      sentinel_node_(0, mock_addr_, ObDtlChannel::DtlChannelType::LOCAL_CHANNEL),
       n_first_no_data_(0),
       op_monitor_info_(default_op_monitor_info_),
       first_data_get_(false),
@@ -63,11 +62,10 @@ ObDtlChannelLoop::ObDtlChannelLoop(ObMonitorNode &op_monitor_info)
       last_msg_type_(static_cast<uint16_t>(ObDtlMsgType::MAX)),
       cond_(ObWaitEventIds::PX_LOOP_COND_WAIT),
       ignore_interrupt_(false),
-      tenant_id_(UINT64_MAX),
       timeout_(INT64_MAX),
       spin_lock_(common::ObLatchIds::DTL_CHANNEL_LIST_LOCK),
       mock_addr_(),
-      sentinel_node_(1, 0, mock_addr_, ObDtlChannel::DtlChannelType::LOCAL_CHANNEL),
+      sentinel_node_(0, mock_addr_, ObDtlChannel::DtlChannelType::LOCAL_CHANNEL),
       n_first_no_data_(0),
       op_monitor_info_(op_monitor_info),
       first_data_get_(false),
@@ -222,15 +220,9 @@ int ObDtlChannelLoop::process_base(ObIDltChannelLoopPred *pred, int64_t &hinted_
       if (timeout > 0) {
         cond_.wait(wait_key, timeout);
       } else if (OB_UNLIKELY(INT64_MAX == timeout_)) {
-        ObTenantConfigGuard tenant_config(TENANT_CONF(tenant_id_));
-        if (tenant_config.is_valid()) {
-          timeout_ = tenant_config->_parallel_server_sleep_time * 1000;
-          cond_.wait(wait_key, timeout_);
-          LOG_DEBUG("channel loop polling time", K(timeout_), K(timeout), K(ret));
-        } else {
-          ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("failed to init tenant config", K(tenant_id_), K(ret));
-        }
+        timeout_ = GCONF._parallel_server_sleep_time * 1000;
+        cond_.wait(wait_key, timeout_);
+        LOG_DEBUG("channel loop polling time", K(timeout_), K(timeout), K(ret));
       } else {
         cond_.wait(wait_key, timeout_);
       }

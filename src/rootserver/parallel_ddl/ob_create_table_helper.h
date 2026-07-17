@@ -29,7 +29,7 @@ class ObMultiVersionSchemaService;
 class ObMockFKParentTableSchema;
 }
 }
-namespace obrpc
+namespace obcall
 {
 class ObCreateTableArg;
 class ObCreateTableRes;
@@ -63,9 +63,8 @@ private:
 public:
   ObCreateTableHelper(
     share::schema::ObMultiVersionSchemaService *schema_service,
-    const uint64_t tenant_id,
-    const obrpc::ObCreateTableArg &arg,
-    obrpc::ObCreateTableRes &res,
+    const obcall::ObCreateTableArg &arg,
+    obcall::ObCreateTableRes &res,
     ObDDLSQLTransaction *external_trans = nullptr,
     bool enable_ddl_parallel = true);
   virtual ~ObCreateTableHelper();
@@ -102,12 +101,12 @@ private:
   virtual int generate_foreign_keys_() override;
   virtual int generate_sequence_object_() override;
   int get_mock_fk_parent_table_info_(
-      const obrpc::ObCreateForeignKeyArg &foreign_key_arg,
+      const obcall::ObCreateForeignKeyArg &foreign_key_arg,
       share::schema::ObForeignKeyInfo &foreign_key_info,
       share::schema::ObMockFKParentTableSchema *&new_mock_fk_parent_table_schema);
 private:
-  const obrpc::ObCreateTableArg &arg_;
-  obrpc::ObCreateTableRes &res_;
+  const obcall::ObCreateTableArg &arg_;
+  obcall::ObCreateTableRes &res_;
   // replace_mock_fk_parent_table_id_ is valid if table name is same with existed mock fk parent table
   uint64_t replace_mock_fk_parent_table_id_;
   // new table schema for data/index/lob tables

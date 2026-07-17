@@ -239,3 +239,4 @@ drop table if exists t4_fork;
 drop table if exists t5;
 drop table if exists t5_fork;
 drop database if exists db_fork_partition;
+

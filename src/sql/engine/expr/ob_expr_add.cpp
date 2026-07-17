@@ -19,6 +19,7 @@
 #include "sql/engine/expr/ob_expr_result_type_util.h"
 #include "sql/engine/expr/ob_batch_eval_util.h"
 #include "sql/resolver/expr/ob_raw_expr_util.h"
+#include "rpc/obmysql/ob_mysql_util.h"
 
 
 namespace oceanbase
@@ -103,14 +104,14 @@ int ObExprAdd::calc_result_type2(ObExprResType &type,
     type.set_precision(PRECISION_UNKNOWN_YET);
   } else if (type1.get_type_class() == ObIntervalTC
             || type2.get_type_class() == ObIntervalTC) {
-    type.set_scale(ObAccuracy::MAX_ACCURACY2[ORACLE_MODE][type.get_type()].get_scale());
-    type.set_precision(ObAccuracy::MAX_ACCURACY2[ORACLE_MODE][type.get_type()].get_precision());
+    type.set_scale(ObAccuracy::MAX_ACCURACY2[MYSQL_MODE][type.get_type()].get_scale());
+    type.set_precision(ObAccuracy::MAX_ACCURACY2[MYSQL_MODE][type.get_type()].get_precision());
   } else {
     ObScale scale1 = static_cast<ObScale>(MAX(type1.get_scale(), 0));
     ObScale scale2 = static_cast<ObScale>(MAX(type2.get_scale(), 0));
     scale = MAX(scale1, scale2);
-    if (lib::is_mysql_mode() && type.is_double()) {
-      precision = ObMySQLUtil::float_length(scale);
+    if (type.is_double()) {
+      precision = obmysql::ObMySQLUtil::float_length(scale);
     } else if (type.has_result_flag(DECIMAL_INT_ADJUST_FLAG)) {
       precision = MAX(type1.get_precision(), type2.get_precision());
     } else {
@@ -397,7 +398,7 @@ int ObExprAdd::add_datetime(ObObj &res, const ObObj &left, const ObObj &right,
     ObTime ob_time;
     if (OB_UNLIKELY(res.get_datetime() > DATETIME_MAX_VAL || res.get_datetime() < DATETIME_MIN_VAL)
         || (OB_FAIL(ObTimeConverter::datetime_to_ob_time(res.get_datetime(), NULL, ob_time)))
-        || (OB_FAIL(ObTimeConverter::validate_oracle_date(ob_time)))) {
+        || (OB_FAIL(ObTimeConverter::validate_datetime_parts(ob_time)))) {
       char expr_str[OB_MAX_TWO_OPERATOR_EXPR_LENGTH];
       int64_t pos = 0;
       ret = OB_OPERATE_OVERFLOW;
@@ -492,16 +493,16 @@ int ObExprAdd::cg_expr(ObExprCGCtx &op_cg_ctx,
         if (ob_is_decimal_int(left_type) && ob_is_decimal_int(right_type)) {
           switch (get_decimalint_type(rt_expr.args_[0]->datum_meta_.precision_)) {
             case DECIMAL_INT_32:
-              SET_ADD_FUNC_PTR(add_decimalint32_oracle);
-              rt_expr.eval_vector_func_ = add_decimalint32_oracle_vector;
+              SET_ADD_FUNC_PTR(add_decimalint32_number_result);
+              rt_expr.eval_vector_func_ = add_decimalint32_number_result_vector;
               break;
             case DECIMAL_INT_64:
-              SET_ADD_FUNC_PTR(add_decimalint64_oracle);
-              rt_expr.eval_vector_func_ = add_decimalint64_oracle_vector;
+              SET_ADD_FUNC_PTR(add_decimalint64_number_result);
+              rt_expr.eval_vector_func_ = add_decimalint64_number_result_vector;
               break;
             case DECIMAL_INT_128:
-              SET_ADD_FUNC_PTR(add_decimalint128_oracle);
-              rt_expr.eval_vector_func_ = add_decimalint128_oracle_vector;
+              SET_ADD_FUNC_PTR(add_decimalint128_number_result);
+              rt_expr.eval_vector_func_ = add_decimalint128_number_result_vector;
               break;
             default:
               ret = OB_ERR_UNEXPECTED;
@@ -989,7 +990,7 @@ struct ObNumberDatetimeAddFunc
       if (OB_UNLIKELY(res.get_datetime() > DATETIME_MAX_VAL
         || res.get_datetime() < DATETIME_MIN_VAL)
         || (OB_FAIL(ObTimeConverter::datetime_to_ob_time(res.get_datetime(), NULL, ob_time)))
-        || (OB_FAIL(ObTimeConverter::validate_oracle_date(ob_time)))) {
+        || (OB_FAIL(ObTimeConverter::validate_datetime_parts(ob_time)))) {
         char expr_str[OB_MAX_TWO_OPERATOR_EXPR_LENGTH];
         int64_t pos = 0;
         ret = OB_OPERATE_OVERFLOW;
@@ -1041,7 +1042,7 @@ struct ObDatetimeDatetimeAddFunc
     if (OB_UNLIKELY(res.get_datetime() > DATETIME_MAX_VAL
         || res.get_datetime() < DATETIME_MIN_VAL)
         || (OB_FAIL(ObTimeConverter::datetime_to_ob_time(res.get_datetime(), NULL, ob_time)))
-        || (OB_FAIL(ObTimeConverter::validate_oracle_date(ob_time)))) {
+        || (OB_FAIL(ObTimeConverter::validate_datetime_parts(ob_time)))) {
       char expr_str[OB_MAX_TWO_OPERATOR_EXPR_LENGTH];
       int64_t pos = 0;
       ret = OB_OPERATE_OVERFLOW;
@@ -1141,7 +1142,7 @@ int ObExprAdd::add_decimalint512_with_check_vector(VECTOR_EVAL_FUNC_ARG_DECL)
 #undef DECINC_ADD_EVAL_FUNC_DECL
 
 template<typename T>
-struct ObDecimalOracleAddFunc
+struct ObDecimalNumberAddFunc
 {
   int operator()(ObDatum &res, const ObDatum &l, const ObDatum &r, const int64_t scale,
                  ObNumStackOnceAlloc &alloc) const
@@ -1160,7 +1161,7 @@ struct ObDecimalOracleAddFunc
 };
 
 template<typename T>
-struct ObDecimalOracleVectorAddFunc
+struct ObDecimalNumberVectorAddFunc
 {
   template <typename ResVector, typename LeftVector, typename RightVector>
   int operator()(ResVector &res_vec, const LeftVector &l_vec, const RightVector &r_vec,
@@ -1181,32 +1182,32 @@ struct ObDecimalOracleVectorAddFunc
 };
 
 
-#define DECINC_ADD_EVAL_FUNC_ORA_DECL(TYPE) \
-int ObExprAdd::add_decimal##TYPE##_oracle(EVAL_FUNC_ARG_DECL)      \
+#define DECINC_ADD_EVAL_FUNC_NUMBER_DECL(TYPE) \
+int ObExprAdd::add_decimal##TYPE##_number_result(EVAL_FUNC_ARG_DECL)      \
 {                                            \
   ObNumStackOnceAlloc tmp_alloc;                                \
   const int64_t scale = expr.args_[0]->datum_meta_.scale_;      \
-  return def_arith_eval_func<ObDecimalOracleAddFunc<TYPE##_t>>(EVAL_FUNC_ARG_LIST, scale, tmp_alloc); \
+  return def_arith_eval_func<ObDecimalNumberAddFunc<TYPE##_t>>(EVAL_FUNC_ARG_LIST, scale, tmp_alloc); \
 }                                            \
-int ObExprAdd::add_decimal##TYPE##_oracle_batch(BATCH_EVAL_FUNC_ARG_DECL)      \
+int ObExprAdd::add_decimal##TYPE##_number_result_batch(BATCH_EVAL_FUNC_ARG_DECL)      \
 {                                            \
   ObNumStackOnceAlloc tmp_alloc;                                \
   const int64_t scale = expr.args_[0]->datum_meta_.scale_;      \
-  return def_batch_arith_op_by_datum_func<ObDecimalOracleAddFunc<TYPE##_t>>(BATCH_EVAL_FUNC_ARG_LIST, scale, tmp_alloc); \
+  return def_batch_arith_op_by_datum_func<ObDecimalNumberAddFunc<TYPE##_t>>(BATCH_EVAL_FUNC_ARG_LIST, scale, tmp_alloc); \
 }                                            \
-int ObExprAdd::add_decimal##TYPE##_oracle_vector(VECTOR_EVAL_FUNC_ARG_DECL)      \
+int ObExprAdd::add_decimal##TYPE##_number_result_vector(VECTOR_EVAL_FUNC_ARG_DECL)      \
 {                                            \
   ObNumStackOnceAlloc tmp_alloc;                                \
   const int64_t scale = expr.args_[0]->datum_meta_.scale_;      \
-  return def_fixed_len_vector_arith_op_func<ObDecimalOracleVectorAddFunc<TYPE##_t>,\
+  return def_fixed_len_vector_arith_op_func<ObDecimalNumberVectorAddFunc<TYPE##_t>,\
                                             ObArithTypedBase<TYPE##_t, TYPE##_t, TYPE##_t>>(VECTOR_EVAL_FUNC_ARG_LIST, scale, tmp_alloc); \
 }
 
-DECINC_ADD_EVAL_FUNC_ORA_DECL(int32)
-DECINC_ADD_EVAL_FUNC_ORA_DECL(int64)
-DECINC_ADD_EVAL_FUNC_ORA_DECL(int128)
+DECINC_ADD_EVAL_FUNC_NUMBER_DECL(int32)
+DECINC_ADD_EVAL_FUNC_NUMBER_DECL(int64)
+DECINC_ADD_EVAL_FUNC_NUMBER_DECL(int128)
 
-#undef DECINC_ADD_EVAL_FUNC_ORA_DECL
+#undef DECINC_ADD_EVAL_FUNC_NUMBER_DECL
 
 template<typename T>
 struct ObArrayAddFunc : public ObNestedArithOpBaseFunc

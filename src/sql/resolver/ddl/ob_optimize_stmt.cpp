@@ -21,7 +21,7 @@
 namespace oceanbase
 {
 using namespace common;
-using obrpc::ObTableItem;
+using obcall::ObTableItem;
 namespace sql
 {
 ObOptimizeTableStmt::ObOptimizeTableStmt(ObIAllocator *name_pool)

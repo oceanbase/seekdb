@@ -28,9 +28,9 @@ namespace blocksstable
 class ObRowkeyVectorHelper
 {
 public:
-  OB_INLINE static bool can_use_non_datum_rowkey_vector(const bool is_cg, const ObTabletID &tablet_id)
+  OB_INLINE static bool can_use_non_datum_rowkey_vector(const ObTabletID &tablet_id)
   {
-    return !is_cg && !tablet_id.is_inner_tablet();
+    return !tablet_id.is_inner_tablet();
   }
 };
 
@@ -73,8 +73,7 @@ public:
       int64_t &begin,
       int64_t &end,
       const ObStorageDatum &key,
-      const ObStorageDatumCmpFunc &cmp_func,
-      const bool is_oracle_mode) const;
+      const ObStorageDatumCmpFunc &cmp_func) const;
   int fill_column_datum(
       char *buf,
       int64_t &pos,
@@ -95,8 +94,7 @@ public:
       int64_t &begin,
       int64_t &end,
       const ObStorageDatum &key,
-      const ObStorageDatumCmpFunc &cmp_func,
-      const bool is_oracle_mode) const;
+      const ObStorageDatumCmpFunc &cmp_func) const;
   template<typename T>
   int locate_integer_key(
       const bool need_upper_bound,
@@ -110,8 +108,7 @@ public:
       int64_t &begin,
       int64_t &end,
       T *data,
-      const ObRVIntegerCell<T> &cell,
-      const bool is_oracle_mode) const;
+      const ObRVIntegerCell<T> &cell) const;
   static int construct_column_vector(
       char *buf,
       int64_t &pos,
@@ -173,7 +170,6 @@ public:
       const ObDatumRange &range,
       const bool is_left_border,
       const bool is_right_border,
-      const bool is_normal_cg,
       const ObStorageDatumUtils &datum_utils,
       int64_t &endkey_begin_idx,
       int64_t &endkey_end_idx) const;
@@ -466,15 +462,14 @@ int ObColumnVector::locate_integer_key_with_null(
     int64_t &begin,
     int64_t &end,
     T *data,
-    const ObRVIntegerCell<T> &cell,
-    const bool is_oracle_mode) const
+    const ObRVIntegerCell<T> &cell) const
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(begin >= end || (!has_null_ && !cell.null_))) {
     ret = OB_INVALID_ARGUMENT;
     STORAGE_LOG(WARN, "Invalid argument", K(ret), K(begin), K(end), K(has_null_), K(cell));
   } else {
-    ObRVIntegerWithNullComparor<T> comparor(!is_oracle_mode);
+    ObRVIntegerWithNullComparor<T> comparor(true/*null_first, MySQL mode*/);
     const ObRVIntegerIterator<T> first(begin, data, nulls_);
     const ObRVIntegerIterator<T> last(end, data, nulls_);
     ObRVIntegerIterator<T> lb = std::lower_bound(first, last, cell, comparor);

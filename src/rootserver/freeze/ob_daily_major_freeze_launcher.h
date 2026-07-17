@@ -19,7 +19,7 @@
 
 #include "share/ob_define.h"
 #include "lib/net/ob_addr.h"
-#include "rootserver/freeze/ob_freeze_reentrant_thread.h"
+#include "lib/task/ob_timer.h"
 #include "share/scn.h"
 
 namespace oceanbase
@@ -29,28 +29,28 @@ namespace common
 class ObServerConfig;
 class ObMySQLProxy;
 }
-namespace obrpc
-{
-class ObCommonRpcProxy;
-}
 namespace rootserver
 {
 class ObMajorMergeInfoManager;
 // primary cluster: sys tenant, meta tenant, user tenant all have this launcher
 // standby cluster: only sys tenant, meta tenant have this launcher
-class ObDailyMajorFreezeLauncher : public ObFreezeReentrantThread
+class ObDailyMajorFreezeLauncher : public common::ObTimerTask
 {
 public:
-  ObDailyMajorFreezeLauncher(const uint64_t tenant_id);
-  virtual ~ObDailyMajorFreezeLauncher() {}
+  ObDailyMajorFreezeLauncher();
+  virtual ~ObDailyMajorFreezeLauncher();
   int init(common::ObServerConfig &config,
            common::ObMySQLProxy &proxy,
            ObMajorMergeInfoManager &merge_info_manager);
 
-  virtual void run3() override;
-  virtual int blocking_run() { BLOCKING_RUN_IMPLEMENT(); }
-  virtual int start() override;
-  virtual int64_t get_schedule_interval() const override;
+  virtual void runTimerTask() override;
+  int start();
+  void stop();
+  void wait();
+  int destroy();
+  void pause() { is_paused_ = true; }
+  void resume() { is_paused_ = false; }
+  bool is_paused() const { return is_paused_; }
 
 private:
   int try_launch_major_freeze();
@@ -70,12 +70,16 @@ private:
   static const int64_t TABLET_CKM_CHECK_INTERVAL_US = 30 * 60 * 1000 * 1000L; // 30 min
 
   bool is_inited_;
+  bool is_paused_;
   bool already_launch_;
+  common::ObMySQLProxy *sql_proxy_;
   common::ObServerConfig *config_;
   int64_t gc_freeze_info_last_timestamp_;
   ObMajorMergeInfoManager *merge_info_mgr_;
   int64_t last_check_tablet_ckm_us_;
   share::SCN tablet_ckm_gc_compaction_scn_;
+  volatile bool stop_;
+  common::ObTimer timer_;
 
   DISALLOW_COPY_AND_ASSIGN(ObDailyMajorFreezeLauncher);
 };

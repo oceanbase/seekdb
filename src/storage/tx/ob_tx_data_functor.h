@@ -186,21 +186,18 @@ public:
   LockForReadFunctor(const transaction::ObLockForReadArg &lock_for_read_arg,
                      bool &can_read,
                      share::SCN &trans_version,
-                     const share::ObLSID ls_id,
                      ObCleanoutOp &cleanout_op,
                      ObReCheckOp &recheck_op)
     : lock_for_read_arg_(lock_for_read_arg),
       can_read_(can_read),
       trans_version_(trans_version),
-      ls_id_(ls_id),
       cleanout_op_(cleanout_op),
       recheck_op_(recheck_op) {}
   virtual ~LockForReadFunctor() {}
   virtual int operator()(const ObTxData &tx_data, ObTxCCCtx *tx_cc_ctx = nullptr) override;
   virtual bool recheck() override;
-  int check_for_standby(const transaction::ObTransID &tx_id);
   INHERIT_TO_STRING_KV("ObITxDataCheckFunctor", ObITxDataCheckFunctor, K(lock_for_read_arg_),
-                       K(can_read_), K(trans_version_), K(ls_id_));
+                       K(can_read_), K(trans_version_));
 private:
   int inner_lock_for_read(const ObTxData &tx_data, ObTxCCCtx *tx_cc_ctx);
   int check_clog_disk_full_();
@@ -208,7 +205,6 @@ public:
   const transaction::ObLockForReadArg &lock_for_read_arg_;
   bool &can_read_;
   share::SCN &trans_version_;
-  share::ObLSID ls_id_;
   // Cleanout the tx node if necessary
   ObCleanoutOp &cleanout_op_;
   // ReCheck whether tx node is valid.

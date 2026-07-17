@@ -159,7 +159,7 @@ int ObSqlParameterization::transform_syntax_tree(ObIAllocator &allocator,
     ctx.collation_type_ = collation_connection;
     ctx.national_collation_type_ = session.get_nls_collation_nation();
     ctx.tz_info_ = session.get_timezone_info();
-    ctx.default_length_semantics_ = session.get_actual_nls_length_semantics();
+    ctx.default_length_semantics_ = session.get_actual_length_semantics();
     ctx.allocator_ = &allocator;
     ctx.tree_ = tree;
     ctx.top_node_ = tree;
@@ -297,8 +297,8 @@ bool ObSqlParameterization::is_tree_not_param(const ParseNode *tree)
     ret_bool = true;
   } else if (true == tree->is_tree_not_param_) {
     ret_bool = true;
-  } else if (lib::is_mysql_mode() && T_GROUPBY_CLAUSE == tree->type_) {
-    // In oracle mode, the syntax like select a from t group by 1 is prohibited, so the group by parameterization can be enabled
+  } else if (T_GROUPBY_CLAUSE == tree->type_) {
+    // select a from t group by 1 enables group by parameterization
     ret_bool = true;
   } else if (T_SORT_LIST == tree->type_) {
     // vector index query always use order by vec_func() approx limit, we should open Parameterization for this situation
@@ -337,8 +337,6 @@ bool ObSqlParameterization::is_tree_not_param(const ParseNode *tree)
   } else if (T_INTO_LINE_LIST == tree->type_) {
     ret_bool = true;
   } else if (T_INTO_FILE_LIST == tree->type_) {
-    ret_bool = true;
-  } else if (T_EXTERNAL_TABLE_PARTITION == tree->type_) {
     ret_bool = true;
   } else if (T_EXTERNAL_FILE_FORMAT == tree->type_) {
     ret_bool = true;
@@ -488,23 +486,6 @@ int ObSqlParameterization::transform_tree(TransformTreeCtx &ctx,
                        enable_mysql_compatible_dates))) {
     LOG_WARN("fail to check enable mysql compatible dates", K(ret));
   } else {
-    ParseNode *func_name_node = NULL;
-    if (T_WHERE_SCOPE == ctx.expr_scope_ && T_FUN_SYS == ctx.tree_->type_) {
-      if (OB_ISNULL(ctx.tree_->children_)) {
-        ret = OB_INVALID_ARGUMENT;
-        SQL_PC_LOG(WARN, "invalid argument", K(ctx.tree_->children_), K(ret));
-      } else if (NULL == (func_name_node = ctx.tree_->children_[0])) {
-        ret = OB_ERR_UNEXPECTED;
-        SQL_PC_LOG(ERROR, "function name node is NULL", K(ret));
-      } else {
-        ObString func_name(func_name_node->str_len_, func_name_node->str_value_);
-        ObString func_name_is_serving_tenant(N_IS_SERVING_TENANT);
-        if (func_name == func_name_is_serving_tenant) {
-          ret = OB_NOT_SUPPORTED;
-          LOG_WARN("is_serving_tenant is not supported", K(ret));
-        }
-      }
-    }
     bool enable_decimal_int = false;
     if (OB_FAIL(ret)) {
     } else if (T_PROJECT_STRING == ctx.tree_->type_
@@ -539,7 +520,7 @@ int ObSqlParameterization::transform_tree(TransformTreeCtx &ctx,
           bool fmt_int_or_ch_decint =
             (ctx.value_father_level_ < VALUE_VECTOR_LEVEL
              && ctx.assign_father_level_ < ASSIGN_ITEM_LEVEL)
-            && (lib::is_mysql_mode() && node->type_ == T_INT)
+            && (node->type_ == T_INT)
             && (ctx.parent_type_ == T_OP_DIV
                 || ctx.parent_type_ == T_OP_MUL
                 || ctx.parent_type_ == T_OP_ADD
@@ -754,7 +735,7 @@ int ObSqlParameterization::transform_tree(TransformTreeCtx &ctx,
     bool enable_contain_param = ctx.enable_contain_param_;
     ParseNode *root = ctx.tree_;
     // When type is T_QUESTIONMARK there is no need to consider parameterization of child nodes,
-    // For select '1' the T_VARCHAR and T_CHAR (oracle mode) node has the same T_VARCHAR child node,
+    // For select '1', T_VARCHAR and T_CHAR nodes can share the same T_VARCHAR child node.
     // Since the projection columns in select do not need to be parameterized, it will lead to the normal parse recognizing two constants,
     // And fast parse only recognizes one constant, so add a T_VARCHAR check here, making both parses recognize only one constant.
     bool not_param = ctx.not_param_;
@@ -2460,8 +2441,7 @@ int ObSqlParameterization::get_select_item_param_info(const common::ObIArray<ObP
   } else if (OB_FAIL(session.check_feature_enable(ObCompatFeatureType::PROJECT_NULL,
                                                   enable_modify_null_name))) {
     LOG_WARN("failed to check feature enable", K(ret));
-  } else if (is_mysql_mode() &&
-             1 == param_info.params_idx_.count() &&
+  } else if (1 == param_info.params_idx_.count() &&
              0 == ObString(param_info.name_len_, param_info.paramed_field_name_).compare("?") &&
              enable_modify_null_name) {
     int64_t idx = param_info.params_idx_.at(0);
@@ -2576,7 +2556,7 @@ int ObSqlParameterization::transform_minus_op(ObIAllocator &alloc, ParseNode *tr
     }
   } else if (T_OP_MUL == tree->children_[1]->type_ || T_OP_DIV == tree->children_[1]->type_
              || T_OP_INT_DIV == tree->children_[1]->type_
-             || (lib::is_mysql_mode() && T_OP_MOD == tree->children_[1]->type_)) {
+             || T_OP_MOD == tree->children_[1]->type_) {
     /*  '0 - 2 * 3' should be transformed to '0 + (-2) * 3' */
     /*  '0 - 2 / 3' should be transformed to '0 + (-2) / 3' */
     /*  '0 - 4 mod 3' should be transformed to '0 + (-4 mod 3)' */
@@ -2592,7 +2572,7 @@ int ObSqlParameterization::transform_minus_op(ObIAllocator &alloc, ParseNode *tr
     /*  so, we need to find the leftest leave node and change its value and str */
     /*  same for '%','*', mod */
     /*  */
-    /*  In oracle mode there is only the mod function, for example select 1 - mod(mod(3, 4), 2) from dual; */
+    /*  For mod(), for example select 1 - mod(mod(3, 4), 2) from dual; */
     /*  Syntax tree is: */
     /*       - */
     /*     /  \ */
@@ -2601,8 +2581,8 @@ int ObSqlParameterization::transform_minus_op(ObIAllocator &alloc, ParseNode *tr
     /*     mod    2 */
     /*    /  \ */
     /*   3    4 */
-    /*   This syntax tree is the same as the select 1 - 3%4%2 from dual in mysql mode, but - and 3 cannot be combined together in oracle mode */
-    /*   Otherwise quick parameterization and hard parsing get different constants (3 and -3), so T_OP_MOD cannot be converted to minus sign in Oracle mode */
+    /*   This syntax tree is the same as select 1 - 3%4%2 from dual, but - and 3 cannot be combined together here. */
+    /*   Otherwise quick parameterization and hard parsing get different constants (3 and -3), so T_OP_MOD cannot be converted to minus sign. */
     ParseNode *const_node = NULL;
     ParseNode *op_node = tree->children_[1];
     if (OB_FAIL(find_leftest_const_node(*op_node, const_node))) {

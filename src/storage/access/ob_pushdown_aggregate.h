@@ -107,7 +107,7 @@ public:
       blocksstable::ObIMicroBlockReader *reader,
       const int32_t *row_ids,
       const int64_t row_count);
-  virtual int eval_index_info(const blocksstable::ObMicroIndexInfo &index_info, const bool is_cg = false);
+  virtual int eval_index_info(const blocksstable::ObMicroIndexInfo &index_info);
   // For group by pushdown
   virtual int eval_batch_in_group_by(
       const common::ObDatum *datums,
@@ -120,7 +120,6 @@ public:
   virtual int copy_single_output_row(sql::ObEvalCtx &ctx);
   virtual int collect_result(sql::ObEvalCtx &ctx);
   virtual int collect_batch_result_in_group_by(const int64_t distinct_cnt);
-  virtual int can_use_index_info(const blocksstable::ObMicroIndexInfo &index_info, const bool is_cg, bool &can_agg);
   virtual bool need_access_data() const { return true; }
   virtual bool finished() const { return false; }
   virtual int reserve_group_by_buf(const int64_t size);
@@ -143,7 +142,7 @@ protected:
   int fill_default_if_need(blocksstable::ObStorageDatum &datum);
   int pad_column_if_need(blocksstable::ObStorageDatum &datum, common::ObIAllocator &padding_allocator, bool alloc_need_reuse = true);
   int deep_copy_datum(const blocksstable::ObStorageDatum &src, common::ObIAllocator &tmp_alloc);
-  int read_agg_datum(const blocksstable::ObMicroIndexInfo &index_info, const bool is_cg);
+  int read_agg_datum(const blocksstable::ObMicroIndexInfo &index_info);
   void clear_group_by_info();
   OB_INLINE common::ObDatum &get_group_by_result_datum(const int32_t datum_offset)
   {
@@ -191,7 +190,7 @@ public:
       blocksstable::ObIMicroBlockReader *reader,
       const int32_t *row_ids,
       const int64_t row_count) override;
-  virtual int eval_index_info(const blocksstable::ObMicroIndexInfo &index_info, const bool is_cg = false) override;
+  virtual int eval_index_info(const blocksstable::ObMicroIndexInfo &index_info) override;
   virtual int eval_batch_in_group_by(
       const common::ObDatum *datums,
       const int64_t count,
@@ -291,7 +290,7 @@ public:
       const int64_t row_count = 1,
       const int64_t agg_row_idx = 0) override;
   virtual int eval_batch(const common::ObDatum *datums, const int64_t count) override;
-  virtual int eval_index_info(const blocksstable::ObMicroIndexInfo &index_info, const bool is_cg = false) override
+  virtual int eval_index_info(const blocksstable::ObMicroIndexInfo &index_info) override
   { return OB_NOT_SUPPORTED; }
   virtual int eval_batch_in_group_by(
       const common::ObDatum *datums,
@@ -340,7 +339,7 @@ public:
       blocksstable::ObIMicroBlockReader *reader,
       const int32_t *row_ids,
       const int64_t row_count) override;
-  virtual int eval_index_info(const blocksstable::ObMicroIndexInfo &index_info, const bool is_cg = false);
+  virtual int eval_index_info(const blocksstable::ObMicroIndexInfo &index_info);
   virtual int eval_batch_in_group_by(
       const common::ObDatum *datums,
       const int64_t count,
@@ -395,7 +394,7 @@ public:
       const int64_t row_count = 1,
       const int64_t agg_row_idx = 0) override;
   virtual int eval_batch(const common::ObDatum *datums, const int64_t count) override;
-  virtual int eval_index_info(const blocksstable::ObMicroIndexInfo &index_info, const bool is_cg = false) override;
+  virtual int eval_index_info(const blocksstable::ObMicroIndexInfo &index_info) override;
   virtual int eval_batch_in_group_by(
       const common::ObDatum *datums,
       const int64_t count,
@@ -521,7 +520,7 @@ public:
       blocksstable::ObIMicroBlockReader *reader,
       const int32_t *row_ids,
       const int64_t row_count) override;
-  virtual int eval_index_info(const blocksstable::ObMicroIndexInfo &index_info, const bool is_cg = false) override;
+  virtual int eval_index_info(const blocksstable::ObMicroIndexInfo &index_info) override;
   virtual int eval_batch_in_group_by(
       const common::ObDatum *datums,
       const int64_t count,
@@ -545,8 +544,6 @@ public:
   virtual bool finished() const override { return aggregated_; }
   virtual int reserve_group_by_buf(const int64_t size) override;
   virtual int output_extra_group_by_result(const int64_t start, const int64_t count) override;
-  virtual int can_use_index_info(const blocksstable::ObMicroIndexInfo &index_info,
-    const bool is_cg, bool &can_agg) override;
   OB_INLINE void set_determined_value()
   {
     is_determined_value_ = true;
@@ -597,7 +594,7 @@ public:
   // agg_idx: aggregate index in 'agg_cells_'
   // is_group_by_col: true if current column is group by column
   // is_default_datum: true if current column is new added column
-  // ref_offset: for column store, may do 'eval_batch' multiple times for one batch
+  // ref_offset: start offset when a batch is evaluated in multiple pieces
   int eval_batch(
       common::ObDatum *datums,
       const int64_t count,
@@ -616,7 +613,6 @@ public:
   // for micro with bitmap, should extract distinct values according bitmap
   int extract_distinct() override;
   int output_extra_group_by_result(int64_t &count, const ObTableIterParam &iter_param) override;
-  // for column store, assign aggregate cells to column group scanner(ObCGGroupByScanner)
   int assign_agg_cells(const sql::ObExpr *col_expr, common::ObIArray<int32_t> &agg_idxs) override;
   OB_INLINE bool is_exceed_sql_batch() const override { return group_by_col_datum_buf_->is_use_extra_buf(); }
   OB_INLINE common::ObDatum *get_group_by_col_datums_to_fill() override
@@ -828,8 +824,7 @@ OB_INLINE int ObSumAggCell::eval_float_inner(const common::ObDatum &datum, const
   } else {
     float left_f = result_datum.get_float();
     float right_f = datum.get_float();
-    if (OB_UNLIKELY(sql::ObArithExprOperator::is_float_out_of_range(left_f + right_f))
-        && !lib::is_oracle_mode()) {
+    if (OB_UNLIKELY(sql::ObArithExprOperator::is_float_out_of_range(left_f + right_f))) {
       ret = OB_OPERATE_OVERFLOW;
       char expr_str[OB_MAX_TWO_OPERATOR_EXPR_LENGTH];
       int64_t pos = 0;

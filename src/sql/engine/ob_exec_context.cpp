@@ -145,7 +145,7 @@ ObExecContext::ObExecContext(ObIAllocator &allocator)
     expr_op_ctx_store_(NULL),
     task_executor_ctx_(*this),
     my_session_(NULL),
-    sql_proxy_(NULL),
+    exec_stat_collector_(NULL),
     stmt_factory_(NULL),
     expr_factory_(NULL),
     outline_params_wrapper_(NULL),
@@ -156,6 +156,7 @@ ObExecContext::ObExecContext(ObIAllocator &allocator)
     need_disconnect_(true),
     pl_ctx_(NULL),
     package_guard_(NULL),
+    pl_expr_allocator_(NULL),
     row_id_list_(nullptr),
     row_id_list_array_(),
     total_row_count_(0),
@@ -177,13 +178,12 @@ ObExecContext::ObExecContext(ObIAllocator &allocator)
     op_kit_store_(),
     convert_allocator_(nullptr),
     mem_context_(nullptr),
-    pwj_map_(nullptr),
     group_pwj_map_(nullptr),
     check_status_times_(0),
     vt_ift_(nullptr),
     px_batch_id_(0),
-    admission_version_(UINT64_MAX),
-    admission_addr_map_(),
+    admission_acquired_(false),
+    admission_addr_map_(NULL),
     use_temp_expr_ctx_cache_(false),
     temp_expr_ctx_map_(),
     dml_event_(ObDmlEventType::DE_INVALID),
@@ -197,7 +197,6 @@ ObExecContext::ObExecContext(ObIAllocator &allocator)
     tmp_alloc_used_(false),
     table_direct_insert_ctx_(),
     errcode_(OB_SUCCESS),
-    dblink_snapshot_map_(),
     user_logging_ctx_(),
     is_online_stats_gathering_(false),
     is_ddl_idempotent_auto_inc_(false),
@@ -209,7 +208,7 @@ ObExecContext::ObExecContext(ObIAllocator &allocator)
     auto_dop_map_(),
     force_local_plan_(false),
     diagnosis_manager_(),
-    deterministic_udf_cache_allocator_("UDFCACHE", OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID()),
+    deterministic_udf_cache_allocator_("UDFCACHE", OB_MALLOC_NORMAL_BLOCK_SIZE),
     current_granule_type_(OB_GRANULE_UNINITIALIZED)
 {
 }
@@ -219,6 +218,10 @@ ObExecContext::~ObExecContext()
   row_id_list_array_.reset();
   destroy_eval_allocator();
   reset_op_ctx();
+  if (OB_NOT_NULL(exec_stat_collector_)) {
+    exec_stat_collector_->~ObExecStatCollector();
+    exec_stat_collector_ = NULL;
+  }
   
   if (NULL != phy_plan_ctx_) {
     if (!THIS_WORKER.has_req_flag()) {
@@ -265,7 +268,7 @@ ObExecContext::~ObExecContext()
     DESTROY_CONTEXT(mem_context_);
     mem_context_ = NULL;
   }
-  admission_addr_map_.destroy();
+  release_admission_addr_map();
   if (!temp_expr_ctx_map_.created()) {
   // do nothing
   } else {
@@ -286,6 +289,16 @@ ObExecContext::~ObExecContext()
   auto_dop_map_.destroy();
 }
 
+void ObExecContext::release_admission_addr_map()
+{
+  if (OB_NOT_NULL(admission_addr_map_)) {
+    admission_addr_map_->destroy();
+    admission_addr_map_->~ObHashMap();
+    ob_free(admission_addr_map_);
+    admission_addr_map_ = NULL;
+  }
+}
+
 void ObExecContext::clean_resolve_ctx()
 {
   if (OB_NOT_NULL(expr_factory_)) {
@@ -303,6 +316,23 @@ void ObExecContext::clean_resolve_ctx()
 uint64_t ObExecContext::get_ser_version() const
 {
   return SER_VERSION_1;
+}
+
+int ObExecContext::get_exec_stat_collector(ObExecStatCollector *&collector)
+{
+  int ret = OB_SUCCESS;
+  collector = exec_stat_collector_;
+  if (OB_ISNULL(collector)) {
+    void *buf = allocator_.alloc(sizeof(ObExecStatCollector));
+    if (OB_ISNULL(buf)) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+      LOG_WARN("allocate execution stat collector failed", K(ret));
+    } else {
+      collector = new (buf) ObExecStatCollector();
+      exec_stat_collector_ = collector;
+    }
+  }
+  return ret;
 }
 
 void ObExecContext::reset_op_ctx()
@@ -399,7 +429,7 @@ int ObExecContext::get_temp_expr_eval_ctx(const ObTempExpr &temp_expr,
   int ret = OB_SUCCESS;
   if (use_temp_expr_ctx_cache_) {
     if (!temp_expr_ctx_map_.created()) {
-      OZ(temp_expr_ctx_map_.create(8, ObMemAttr(OB_SERVER_TENANT_ID, "TempExprCtx")));
+      OZ(temp_expr_ctx_map_.create(8, ObMemAttr("TempExprCtx")));
     }
     if (OB_SUCC(ret)) {
       int64_t ctx_ptr = 0;
@@ -474,13 +504,14 @@ ObIAllocator &ObExecContext::get_allocator()
 int ObExecContext::create_expr_op_ctx(uint64_t op_id, int64_t op_ctx_size, void *&op_ctx)
 {
   int ret = OB_SUCCESS;
+  ObIAllocator &allocator = OB_NOT_NULL(pl_expr_allocator_) ? *pl_expr_allocator_ : allocator_;
   if (OB_UNLIKELY(op_id >= expr_op_size_ || op_ctx_size <= 0 || OB_ISNULL(expr_op_ctx_store_))) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(op_id), K(op_ctx_size), K(expr_op_ctx_store_));
   } else if (OB_UNLIKELY(NULL != get_expr_op_ctx(op_id))) {
     ret = OB_INIT_TWICE;
     LOG_WARN("expr operator context has been created", K(op_id));
-  } else if (OB_ISNULL(op_ctx = allocator_.alloc(op_ctx_size))) {
+  } else if (OB_ISNULL(op_ctx = allocator.alloc(op_ctx_size))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_ERROR("allocate memory failed", K(ret), K(op_id), K(op_ctx_size));
   } else {
@@ -517,7 +548,7 @@ ObStmtFactory *ObExecContext::get_stmt_factory()
 {
   if (OB_ISNULL(stmt_factory_)) {
     if (OB_ISNULL(stmt_factory_ = OB_NEWx(ObStmtFactory, (&allocator_), allocator_))) {
-      LOG_WARN_RET(OB_ALLOCATE_MEMORY_FAILED, "fail to create log plan factory", K(stmt_factory_));
+      LOG_ERROR_RET(OB_ALLOCATE_MEMORY_FAILED, "fail to create log plan factory", K(stmt_factory_));
     }
   } else {
     // do nothing
@@ -529,7 +560,7 @@ ObRawExprFactory *ObExecContext::get_expr_factory()
 {
   if (OB_ISNULL(expr_factory_)) {
     if (OB_ISNULL(expr_factory_ = OB_NEWx(ObRawExprFactory, (&allocator_), allocator_))) {
-      LOG_WARN_RET(OB_ALLOCATE_MEMORY_FAILED, "fail to create log plan factory", K(expr_factory_));
+      LOG_ERROR_RET(OB_ALLOCATE_MEMORY_FAILED, "fail to create log plan factory", K(expr_factory_));
     }
   } else {
     // do nothing
@@ -673,8 +704,7 @@ int ObExecContext::get_convert_charset_allocator(ObArenaAllocator *&allocator)
     } else {
       lib::ContextParam param;
       param.set_properties(lib::USE_TL_PAGE_OPTIONAL)
-           .set_mem_attr(my_session_->get_effective_tenant_id(),
-                         common::ObModIds::OB_SQL_EXPR_CALC,
+           .set_mem_attr(common::ObModIds::OB_SQL_EXPR_CALC,
                          common::ObCtxIds::DEFAULT_CTX_ID);
       if (OB_FAIL(CURRENT_CONTEXT->CREATE_CONTEXT(convert_allocator_, param))) {
         SQL_ENG_LOG(WARN, "create entity failed", K(ret));
@@ -699,8 +729,7 @@ int ObExecContext::get_malloc_allocator(ObIAllocator *&allocator)
     } else {
       lib::ContextParam param;
       param.set_properties(lib::USE_TL_PAGE_OPTIONAL)
-           .set_mem_attr(my_session_->get_effective_tenant_id(),
-                         common::ObModIds::OB_SQL_EXPR_CALC,
+           .set_mem_attr(common::ObModIds::OB_SQL_EXPR_CALC,
                          common::ObCtxIds::DEFAULT_CTX_ID);
       if (OB_FAIL(CURRENT_CONTEXT->CREATE_CONTEXT(mem_context_, param))) {
         SQL_ENG_LOG(WARN, "create entity failed", K(ret));
@@ -797,7 +826,7 @@ int ObExecContext::init_physical_plan_ctx(const ObPhysicalPlan &plan)
     const ObPhyPlanHint &phy_plan_hint = plan.get_phy_plan_hint();
     ObConsistencyLevel consistency = INVALID_CONSISTENCY;
     my_session_->set_cur_phy_plan(const_cast<ObPhysicalPlan*>(&plan));
-    part_ranges_.set_tenant_id(my_session_->get_effective_tenant_id());
+    
     part_ranges_.set_label("PxTabletRangArr");
     if (OB_UNLIKELY(phy_plan_hint.query_timeout_ > 0)) {
       plan_timeout = phy_plan_hint.query_timeout_;
@@ -1011,8 +1040,7 @@ int ObExecContext::check_extra_status()
       if (OB_SUCCESS != (tmp_ret = it->check())) {
         SQL_ENG_LOG(WARN, "extra check failed", K(tmp_ret), "check_name", it->name(),
                     "query", my_session_->get_current_query_string(),
-                    "key", my_session_->get_server_sid(),
-                    "proxy_sessid", my_session_->get_proxy_sessid());
+                    "key", my_session_->get_server_sid());
         ret = OB_SUCC(ret) ? tmp_ret : ret;
       }
     }
@@ -1034,7 +1062,7 @@ pl::ObPLPackageGuard* ObExecContext::get_package_guard()
       LOG_WARN("failed to alloc memory for exec context`s package guard!", K(ret));
     } else {
       package_guard_ =
-        new(package_guard_)pl::ObPLPackageGuard(get_my_session()->get_effective_tenant_id());
+        new(package_guard_)pl::ObPLPackageGuard{};
       if (OB_ISNULL(package_guard_)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("failed to construct exec context`s package guard!", K(ret), K(package_guard_));
@@ -1071,9 +1099,6 @@ DEFINE_SERIALIZE(ObExecContext)
   } else {
     my_session_->reset_all_package_changed_info();
     phy_plan_ctx_->set_expr_op_size(ori_expr_op_size_ > 0 ? ori_expr_op_size_ : expr_op_size_);
-    if (ser_version == SER_VERSION_1) {
-      OB_UNIS_ENCODE(my_session_->get_login_tenant_id());
-    }
     OB_UNIS_ENCODE(phy_op_size_);
     OB_UNIS_ENCODE(*phy_plan_ctx_);
     OB_UNIS_ENCODE(*my_session_);
@@ -1103,9 +1128,6 @@ DEFINE_GET_SERIALIZE_SIZE(ObExecContext)
   if (is_valid() && OB_SUCCESS == my_session_->add_changed_package_info(*const_cast<ObExecContext *>(this))) {
     my_session_->reset_all_package_changed_info();
     phy_plan_ctx_->set_expr_op_size(ori_expr_op_size_ > 0 ? ori_expr_op_size_ : expr_op_size_);
-    if (ser_version == SER_VERSION_1) {
-      OB_UNIS_ADD_LEN(my_session_->get_login_tenant_id());
-    }
     OB_UNIS_ADD_LEN(phy_op_size_);
     OB_UNIS_ADD_LEN(*phy_plan_ctx_);
     OB_UNIS_ADD_LEN(*my_session_);

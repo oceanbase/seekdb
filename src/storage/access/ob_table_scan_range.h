@@ -33,7 +33,7 @@ struct ObTableScanRange
 public:
   ObTableScanRange();
   ~ObTableScanRange() { reset(); }
-  int init(ObTableScanParam &scan_param, const ObTablet &tablet, const bool is_tablet_spliting);
+  int init(ObTableScanParam &scan_param);
   int init(ObTableScanParam &scan_param,
            const common::ObSimpleBatch &simple_batch,
            common::ObIAllocator &allocator);
@@ -50,20 +50,14 @@ public:
   TO_STRING_KV(K_(rowkeys), K_(ranges), K_(status), K_(is_inited), K_(enable_new_false_range));
 private:
   int init_rowkeys(
-      const ObTablet &tablet,
-      const bool is_tablet_spliting,
       const common::ObIArray<common::ObNewRange> &ranges,
       const common::ObQueryFlag &scan_flag,
       const blocksstable::ObStorageDatumUtils *datum_utils);
   int init_ranges(
-      const ObTablet &tablet,
-      const bool is_tablet_spliting,
       const common::ObIArray<common::ObNewRange> &ranges,
       const common::ObQueryFlag &scan_flag,
       const blocksstable::ObStorageDatumUtils *datum_utils);
   int init_ranges_in_skip_scan(
-      const ObTablet &tablet,
-      const bool is_tablet_spliting,
       const common::ObIArray<common::ObNewRange> &ranges,
       const common::ObIArray<common::ObNewRange> &skip_scan_ranges,
       const common::ObQueryFlag &scan_flag,
@@ -71,10 +65,6 @@ private:
   int always_false(
       const common::ObNewRange &range, 
       bool &is_false);
-  int get_split_partition_rowkeys(
-      const ObTablet &tablet_handle,
-      const common::ObIArray<common::ObNewRange> &ranges,
-      const blocksstable::ObStorageDatumUtils *datum_utils);
 private:
   struct ObSkipScanWrappedRange
   {

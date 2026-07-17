@@ -49,7 +49,6 @@ struct ObMicroBlockDataHandle
   ObMicroBlockDataHandle();
   virtual ~ObMicroBlockDataHandle();
   void init(
-      const uint64_t tenant_id,
       const blocksstable::MacroBlockId &macro_id,
       const int64_t offset,
       const int64_t size,
@@ -72,9 +71,8 @@ struct ObMicroBlockDataHandle
   { return ObSSTableMicroBlockState::IN_BLOCK_CACHE == block_state_ || ObSSTableMicroBlockState::IN_BLOCK_IO == block_state_; }
   OB_INLINE bool need_multi_io() const
   { return ObSSTableMicroBlockState::NEED_MULTI_IO == block_state_; }
-  TO_STRING_KV(K_(tenant_id), K_(macro_block_id), K_(micro_info), K_(is_loaded_block),
+  TO_STRING_KV(K_(macro_block_id), K_(micro_info), K_(is_loaded_block),
                K_(block_state), K_(block_index), K_(cache_handle), K_(io_handle), K_(loaded_block_data), KP_(allocator));
-  uint64_t tenant_id_;
   blocksstable::MacroBlockId macro_block_id_;
   int32_t block_state_;
   int32_t block_index_;
@@ -199,7 +197,6 @@ public:
 
   int submit_async_io(
       blocksstable::ObIMicroBlockCache *cache, 
-      const uint64_t tenant_id, 
       const blocksstable::ObMicroIndexInfo &index_block_info,
       const bool is_data_block,
       const bool use_multi_block_prefetch,

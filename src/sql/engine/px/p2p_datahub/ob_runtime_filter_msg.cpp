@@ -16,9 +16,9 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 #include "sql/engine/px/p2p_datahub/ob_runtime_filter_msg.h"
-#include "sql/engine/px/p2p_datahub/ob_p2p_dh_rpc_process.h"
 #include "sql/engine/px/p2p_datahub/ob_p2p_dh_mgr.h"
 #include "sql/engine/join/hash_join/ob_hash_join_vec_op.h"
+#include "sql/engine/basic/ob_pushdown_filter.h"
 
 using namespace oceanbase::common;
 using namespace oceanbase::sql;
@@ -45,7 +45,7 @@ OB_DEF_DESERIALIZE(ObRFBloomFilterMsg)
 {
   int ret = OB_SUCCESS;
   BASE_DESER((ObRFBloomFilterMsg, ObP2PDatahubMsgBase));
-  bloom_filter_.allocator_.set_tenant_id(tenant_id_);
+  
   bloom_filter_.allocator_.set_label("ObPxBFDESER");
 
   LST_DO_CODE(OB_UNIS_DECODE,
@@ -360,10 +360,7 @@ int ObRFBloomFilterMsg::process_receive_count(ObP2PDatahubMsgBase &rf_msg)
     if (OB_FAIL(process_first_phase(bf_msg))) {
       LOG_WARN("fail to process first phase", K(ret));
     } else if (first_phase_end && !bf_msg.get_next_phase_addrs().empty()) {
-      obrpc::ObP2PDhRpcProxy &rpc_proxy = PX_P2P_DH.get_proxy();
-      ObPxP2PDatahubArg arg;
       ObRFBloomFilterMsg second_phase_msg;
-      arg.msg_ = &second_phase_msg;
       if (OB_FAIL(second_phase_msg.shadow_copy(*this))) {
         LOG_WARN("fail to shadow copy second phase msg", K(ret));
       } else {
@@ -372,14 +369,12 @@ int ObRFBloomFilterMsg::process_receive_count(ObP2PDatahubMsgBase &rf_msg)
         second_phase_msg.bloom_filter_.set_begin_idx(bf_msg.bloom_filter_.get_begin_idx());
         second_phase_msg.bloom_filter_.set_end_idx(bf_msg.bloom_filter_.get_end_idx());
       }
+      // Single-replica seekdb: next_phase_addrs that are not self are unreachable
+      // dead targets; deliver the (loopback) ones in-process via process_msg.
       for (int i = 0; OB_SUCC(ret) && i < bf_msg.get_next_phase_addrs().count(); ++i) {
         if (bf_msg.get_next_phase_addrs().at(i) != GCTX.self_addr()) {
-          if (OB_FAIL(rpc_proxy.to(bf_msg.get_next_phase_addrs().at(i))
-              .by(bf_msg.get_tenant_id())
-              .timeout(bf_msg.get_timeout_ts())
-              .compressed(ObCompressorType::LZ4_COMPRESSOR)
-              .send_p2p_dh_message(arg, NULL))) {
-            LOG_WARN("fail to send bloom filter", K(ret));
+          if (OB_FAIL(PX_P2P_DH.process_msg(second_phase_msg))) {
+            LOG_WARN("fail to process bloom filter locally", K(ret));
           }
         }
       }
@@ -397,7 +392,7 @@ int ObRFBloomFilterMsg::deep_copy_msg(ObP2PDatahubMsgBase *&new_msg_ptr)
 {
   int ret = OB_SUCCESS;
   ObRFBloomFilterMsg *bf_msg = nullptr;
-  ObMemAttr attr(tenant_id_, "PxBfMsg");
+  ObMemAttr attr("PxBfMsg");
   if (OB_FAIL(PX_P2P_DH.alloc_msg<ObRFBloomFilterMsg>(attr, bf_msg))) {
     LOG_WARN("fail to alloc rf msg", K(ret));
   } else if (OB_FAIL(bf_msg->assign(*this))) {
@@ -425,7 +420,7 @@ int ObRFBloomFilterMsg::assign(const ObP2PDatahubMsgBase &msg)
     LOG_WARN("failed to assign base data", K(ret));
   } else if (OB_FAIL(next_peer_addrs_.assign(other_msg.next_peer_addrs_))) {
     LOG_WARN("fail to assign bf msg", K(ret));
-  } else if (OB_FAIL(bloom_filter_.assign(other_msg.bloom_filter_, msg.get_tenant_id()))) {
+  } else if (OB_FAIL(bloom_filter_.assign(other_msg.bloom_filter_))) {
     LOG_WARN("fail to assign bf msg", K(ret));
   } else if (OB_FAIL(filter_indexes_.prepare_allocate(other_msg.filter_indexes_.count()))) {
     LOG_WARN("failed to prepare_allocate filter indexes", K(ret));
@@ -983,21 +978,11 @@ int ObRFBloomFilterMsg::calc_hash_value(
   return ret;
 }
 
-int ObRFBloomFilterMsg::broadcast(ObIArray<ObAddr> &target_addrs,
-    obrpc::ObP2PDhRpcProxy &p2p_dh_proxy)
+int ObRFBloomFilterMsg::broadcast(ObIArray<ObAddr> &target_addrs)
 {
   int ret = OB_SUCCESS;
-  int64_t start_time = ObTimeUtility::current_time();
   int64_t cur_idx = 0;
   ObRFBloomFilterMsg msg;
-  ObPxP2pDhMsgCB msg_cb(GCTX.self_addr(),
-      *ObCurTraceId::get_trace_id(),
-      ObTimeUtility::current_time(),
-      timeout_ts_,
-      p2p_datahub_id_);
-  ObPxP2PDatahubArg arg;
-
-  arg.msg_ = &msg;
   while (!create_finish_ && OB_SUCC(ret)) {
     if (OB_FAIL(THIS_WORKER.check_status())) {
       LOG_WARN("fail to check status", K(ret));
@@ -1028,12 +1013,9 @@ int ObRFBloomFilterMsg::broadcast(ObIArray<ObAddr> &target_addrs,
         } else if (addr_filter_idx.channel_id_ >= target_addrs.count()) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("unexpected channel id", K(addr_filter_idx.channel_id_), K(target_addrs.count()));
-        } else if (OB_FAIL(p2p_dh_proxy.to(target_addrs.at(addr_filter_idx.channel_id_))
-                  .by(tenant_id_)
-                  .timeout(timeout_ts_)
-                  .compressed(ObCompressorType::LZ4_COMPRESSOR)
-                  .send_p2p_dh_message(arg, &msg_cb))) {
-          LOG_WARN("fail to send bloom filter", K(ret));
+        } else if (OB_FAIL(PX_P2P_DH.process_msg(msg))) {
+          // Single-replica seekdb: target is loopback, deliver in-process.
+          LOG_WARN("fail to process bloom filter locally", K(ret));
         }
       }
     }
@@ -1052,7 +1034,7 @@ int ObRFBloomFilterMsg::generate_filter_indexes(
   int64_t start_idx = 0, end_idx = 0;
   int64_t group_addr_cnt = each_group_size > addr_cnt ?
         addr_cnt : each_group_size;
-  lib::ObMemAttr attr(tenant_id_, "TmpBFIdxAlloc");
+  lib::ObMemAttr attr("TmpBFIdxAlloc");
   common::ObArenaAllocator tmp_allocator(attr);
   BloomFilterIndex filter_index;
   ObSEArray<BloomFilterIndex *, 64> tmp_filter_indexes;
@@ -1176,7 +1158,7 @@ int ObRFRangeFilterMsg::deep_copy_msg(ObP2PDatahubMsgBase *&new_msg_ptr)
 {
   int ret = OB_SUCCESS;
   ObRFRangeFilterMsg *rf_msg = nullptr;
-  ObMemAttr attr(tenant_id_, "PxRangeMsg");
+  ObMemAttr attr("PxRangeMsg");
   if (OB_FAIL(PX_P2P_DH.alloc_msg<ObRFRangeFilterMsg>(attr, rf_msg))) {
     LOG_WARN("fail to alloc rf msg", K(ret));
   } else if (OB_FAIL(rf_msg->assign(*this))) {
@@ -1684,7 +1666,7 @@ int ObRFInFilterMsg::deep_copy_msg(ObP2PDatahubMsgBase *&new_msg_ptr)
   int ret = OB_SUCCESS;
   ObRFInFilterMsg *in_msg = nullptr;
   int64_t row_cnt = max(serial_rows_.count(), 1);
-  ObMemAttr attr(tenant_id_, "PxInMsg");
+  ObMemAttr attr("PxInMsg");
   if (OB_FAIL(PX_P2P_DH.alloc_msg<ObRFInFilterMsg>(attr, in_msg))) {
     LOG_WARN("fail to alloc rf msg", K(ret));
   } else if (OB_FAIL(in_msg->assign(*this))) {

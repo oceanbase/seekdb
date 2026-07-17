@@ -72,7 +72,7 @@ public:
   // Update last_lsn and log_timestamp
   // called when receive_log/append_disk_log is invoked
   int inc_update_last_log_info(const LSN &lsn, const int64_t log_id, const share::SCN &scn);
-  // inc update scn base, called by change access mode and to leader active
+  // Increase the SCN allocation base.
   int inc_update_scn_base(const share::SCN &scn);
   int truncate(const LSN &lsn, const int64_t log_id, const share::SCN &scn);
   // Get last_lsn and log_timestamp

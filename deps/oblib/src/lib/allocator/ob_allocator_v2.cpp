@@ -40,8 +40,7 @@ void *ObAllocator::alloc(const int64_t size, const ObMemAttr &attr)
     if (attr.label_.is_valid()) {
       inner_attr.label_ = attr.label_;
     }
-    auto ta = lib::ObMallocAllocator::get_instance()->get_tenant_ctx_allocator(inner_attr.tenant_id_,
-                                                                                inner_attr.ctx_id_);
+    auto ta = lib::ObMallocAllocator::get_instance()->get_tenant_ctx_allocator(inner_attr.ctx_id_);
     if (OB_LIKELY(NULL != ta)) {
       ptr = ObTenantCtxAllocator::common_realloc(NULL, size, inner_attr, *(ta.ref_allocator()), os_);
     }

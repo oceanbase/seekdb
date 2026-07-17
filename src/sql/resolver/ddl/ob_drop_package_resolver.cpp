@@ -51,8 +51,9 @@ int ObDropPackageResolver::resolve(const ParseNode &parse_tree)
     LOG_WARN("create drop package stmt failed");
   } else {
     bool is_drop_body = static_cast<bool>(parse_tree.value_);
-    obrpc::ObDropPackageArg &package_arg = package_stmt->get_drop_package_arg();
-    package_arg.tenant_id_ = session_info_->get_effective_tenant_id();
+    obcall::ObDropPackageArg &package_arg = package_stmt->get_drop_package_arg();
+    
+    
     package_arg.db_name_ = db_name;
     package_arg.package_name_ = package_name;
     if (is_drop_body) {

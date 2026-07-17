@@ -33,7 +33,6 @@ struct ObDASSPIVScanIterParam : public ObDASIterParam
 public:
   ObDASSPIVScanIterParam()
     : ObDASIterParam(ObDASIterType::DAS_ITER_SPIV_SCAN),
-      ls_id_(),
       tx_desc_(nullptr),
       snapshot_(nullptr),
       scan_iter_(nullptr),
@@ -44,14 +43,12 @@ public:
 
   virtual bool is_valid() const override
   {
-    return ls_id_.is_valid() &&
-           nullptr != tx_desc_ &&
+    return nullptr != tx_desc_ &&
            nullptr != snapshot_ && 
            nullptr != scan_iter_ && 
            dim_docid_value_tablet_id_.is_valid();    
   }
 
-  share::ObLSID ls_id_;
   transaction::ObTxDesc *tx_desc_;
   transaction::ObTxReadSnapshot *snapshot_;
 
@@ -68,7 +65,6 @@ public:
     ObDASSPIVScanIter()
     : ObDASIter(ObDASIterType::DAS_ITER_SPIV_SCAN),
       mem_context_(nullptr),
-      ls_id_(),
       tx_desc_(nullptr),
       snapshot_(nullptr),
       scan_iter_(nullptr),
@@ -89,12 +85,6 @@ public:
 
   int build_range(ObNewRange &range, uint64_t table_id);
 
-  void set_ls_tablet_id(const share::ObLSID &ls_id, const ObTabletID &related_tablet_id) 
-  {
-    ls_id_ = ls_id;
-    dim_docid_value_tablet_id_ = related_tablet_id;
-  }
-
 protected: 
   virtual int inner_init(ObDASIterParam &param) override;
   virtual int inner_reuse() override;
@@ -104,7 +94,6 @@ protected:
 
 private:
   lib::MemoryContext mem_context_;
-  share::ObLSID ls_id_;
   transaction::ObTxDesc *tx_desc_;
   transaction::ObTxReadSnapshot *snapshot_;
 

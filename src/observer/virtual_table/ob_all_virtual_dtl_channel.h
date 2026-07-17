@@ -19,7 +19,7 @@
 
 #include "sql/dtl/ob_dtl_channel.h"
 #include "lib/utility/ob_macro_utils.h"
-#include "share/ob_virtual_table_scanner_iterator.h"
+#include "observer/virtual_table/ob_virtual_table_scanner_iterator.h"
 #include "common/row/ob_row.h"
 
 namespace oceanbase
@@ -31,7 +31,7 @@ class ObVirtualChannelInfo
 {
 public:
   ObVirtualChannelInfo() :
-    is_local_(false), is_data_(false), is_transmit_(false), channel_id_(0), op_id_(-1), peer_id_(0), tenant_id_(0), alloc_buffer_cnt_(0),
+    is_local_(false), is_data_(false), is_transmit_(false), channel_id_(0), op_id_(-1), peer_id_(0), alloc_buffer_cnt_(0),
     free_buffer_cnt_(0), send_buffer_cnt_(0), recv_buffer_cnt_(0), processed_buffer_cnt_(0), send_buffer_size_(0),
     hash_val_(0), buffer_pool_id_(0), pins_(0), first_in_ts_(0), first_out_ts_(0), last_in_ts_(0), last_out_ts_(0),
     state_(0), thread_id_(0), owner_mod_(0), peer_(), eof_(false)
@@ -39,7 +39,7 @@ public:
 
   void get_info(sql::dtl::ObDtlChannel* ch);
 
-  TO_STRING_KV(K(channel_id_), K(op_id_), K(peer_id_), K(tenant_id_));
+  TO_STRING_KV(K(channel_id_), K(op_id_), K(peer_id_));
 public:
   bool is_local_;                 // 1
   bool is_data_;
@@ -47,7 +47,6 @@ public:
   uint64_t channel_id_;
   int64_t op_id_;                // 5
   int64_t peer_id_;
-  uint64_t tenant_id_;
   int64_t alloc_buffer_cnt_;
   int64_t free_buffer_cnt_;
   int64_t send_buffer_cnt_;       // 10

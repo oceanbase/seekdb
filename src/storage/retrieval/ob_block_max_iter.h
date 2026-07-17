@@ -183,7 +183,7 @@ private:
   int calc_domain_id_range(const ObDatumRow &agg_row, const ObDatumRowkey &endkey);
 private:
   typedef int (*CalcMaxScoreFunc)(const ObDatumRow &agg_row, ObIBlockMaxScoreCalc &scorer, double &max_score);
-  static constexpr int64_t MAX_SCORE_CALC_BUF_SIZE =
+  static constexpr int64_t MAX_SCORE_CALC_BUF_SIZE = 
       sizeof(ObBlockMaxScoreCalc<ObBlockMaxBM25RankingParam>) > sizeof(ObBlockMaxScoreCalc<ObBlockMaxIPRankingParam>) ?
       sizeof(ObBlockMaxScoreCalc<ObBlockMaxBM25RankingParam>) :
       sizeof(ObBlockMaxScoreCalc<ObBlockMaxIPRankingParam>);

@@ -16,13 +16,13 @@
 
 #define USING_LOG_PREFIX SQL_EXE
 
+#include "lib/stat/ob_diagnostic_info_guard.h"
 #include "ob_cmd_executor.h"
+#include "observer/scheduler/ob_tenant_ddl_count_guard.h"  // ObTenantDDLCountGuard (relocated L9)
 #include "share/ob_cluster_version.h"
 #include "sql/resolver/ddl/ob_drop_index_stmt.h"
 #include "sql/resolver/ddl/ob_drop_table_stmt.h"
 #include "sql/resolver/ddl/ob_drop_index_stmt.h"
-#include "sql/resolver/ddl/ob_create_mlog_stmt.h"
-#include "sql/resolver/ddl/ob_drop_mlog_stmt.h"
 #include "sql/resolver/ddl/ob_alter_database_stmt.h"
 #include "sql/resolver/ddl/ob_drop_database_stmt.h"
 #include "sql/resolver/ddl/ob_create_database_stmt.h"
@@ -36,7 +36,6 @@
 #include "sql/resolver/ddl/ob_drop_routine_stmt.h"
 #include "sql/resolver/ddl/ob_alter_routine_stmt.h"
 #include "sql/resolver/ddl/ob_create_package_stmt.h"
-#include "sql/resolver/ddl/ob_alter_package_stmt.h"
 #include "sql/resolver/ddl/ob_drop_package_stmt.h"
 #include "sql/resolver/ddl/ob_trigger_stmt.h"
 #include "sql/resolver/ddl/ob_rename_table_stmt.h"
@@ -44,7 +43,6 @@
 #include "sql/resolver/ddl/ob_create_table_like_stmt.h"
 #include "sql/resolver/ddl/ob_fork_table_stmt.h"
 #include "sql/resolver/ddl/ob_fork_database_stmt.h"
-#include "sql/resolver/ddl/ob_flashback_stmt.h"
 #include "sql/resolver/ddl/ob_purge_stmt.h"
 #include "sql/resolver/ddl/ob_lock_table_stmt.h"
 #include "sql/resolver/dcl/ob_create_user_stmt.h"
@@ -70,14 +68,12 @@
 #include "sql/resolver/ddl/ob_rename_table_stmt.h"
 #include "sql/resolver/ddl/ob_truncate_table_stmt.h"
 #include "sql/resolver/ddl/ob_create_table_like_stmt.h"
-#include "sql/resolver/ddl/ob_flashback_stmt.h"
+#include "sql/resolver/ddl/ob_recyclebin_restore_stmt.h"
 #include "sql/resolver/ddl/ob_purge_stmt.h"
 #include "sql/resolver/ddl/ob_create_func_stmt.h"
 #include "sql/resolver/ddl/ob_drop_func_stmt.h"
 #include "src/sql/resolver/ddl/ob_sequence_stmt.h"
 #include "sql/resolver/ddl/ob_optimize_stmt.h"
-#include "sql/resolver/cmd/ob_create_restore_point_stmt.h"
-#include "sql/resolver/cmd/ob_drop_restore_point_stmt.h"
 #include "sql/resolver/ddl/ob_create_directory_stmt.h"
 #include "sql/resolver/ddl/ob_drop_directory_stmt.h"
 #include "sql/resolver/ddl/ob_create_location_stmt.h"
@@ -96,7 +92,6 @@
 #include "sql/engine/cmd/ob_database_executor.h"
 #include "sql/engine/cmd/ob_table_executor.h"
 #include "sql/engine/cmd/ob_index_executor.h"
-#include "sql/engine/cmd/ob_mlog_executor.h"
 #include "sql/engine/cmd/ob_kill_executor.h"
 #include "sql/engine/cmd/ob_user_cmd_executor.h"
 #include "sql/engine/cmd/ob_outline_executor.h"
@@ -106,7 +101,6 @@
 #include "sql/engine/cmd/ob_analyze_executor.h"
 #include "sql/engine/cmd/ob_udf_executor.h"
 #include "sql/engine/cmd/ob_load_data_executor.h"
-#include "sql/engine/cmd/ob_location_utils_executor.h"
 #include "sql/engine/cmd/ob_sequence_executor.h"
 #include "sql/engine/cmd/ob_role_cmd_executor.h"
 #include "sql/engine/cmd/ob_xa_executor.h"
@@ -130,10 +124,6 @@
 #include "sql/engine/cmd/ob_ccl_rule_executor.h"
 #include "sql/resolver/ddl/ob_catalog_stmt.h"
 #include "sql/engine/cmd/ob_catalog_executor.h"
-#ifdef OB_BUILD_SHARED_STORAGE
-#include "sql/resolver/cmd/ob_trigger_storage_cache_stmt.h"
-#include "sql/engine/cmd/ob_trigger_storage_cache_executor.h"
-#endif
 #include "sql/resolver/cmd/ob_sys_dispatch_call_stmt.h"
 #include "sql/engine/cmd/ob_sys_dispatch_call_executor.h"
 #include "sql/resolver/cmd/ob_merge_table_stmt.h"
@@ -210,21 +200,19 @@ int ObCmdExecutor::execute(ObExecContext &ctx, ObICmd &cmd)
       }
     }
   }
-  uint64_t tenant_id = OB_INVALID_ID;
+  
   if (OB_FAIL(ret)) {
   } else if (OB_ISNULL(my_session)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("session is null", KR(ret));
   } else {
-    tenant_id = my_session->get_effective_tenant_id();
   }
-  ObTenantDDLCountGuard tenant_ddl_guard(tenant_id);
-  omt::ObTenantConfigGuard tenant_config(TENANT_CONF(tenant_id));
+  ObTenantDDLCountGuard tenant_ddl_guard{};
   if (OB_SUCC(ret)) {
-    if (tenant_config.is_valid() && tenant_config->_enable_ddl_worker_isolation
+    if (true && GCONF._enable_ddl_worker_isolation
         && ObStmt::is_ddl_stmt(static_cast<stmt::StmtType>(cmd.get_cmd_type()), true)) {
-      if (OB_FAIL(tenant_ddl_guard.try_inc_ddl_count(tenant_config->cpu_quota_concurrency))) {
-        LOG_WARN("fail to inc tenant ddl count", KR(ret), K(tenant_id));
+      if (OB_FAIL(tenant_ddl_guard.try_inc_ddl_count(GCONF.cpu_quota_concurrency))) {
+        LOG_WARN("fail to inc tenant ddl count", KR(ret));
       }
     }
   }
@@ -336,14 +324,6 @@ int ObCmdExecutor::execute(ObExecContext &ctx, ObICmd &cmd)
         DEFINE_EXECUTE_CMD(ObDropIndexStmt, ObDropIndexExecutor);
         break;
       }
-      case stmt::T_CREATE_MLOG: {
-        DEFINE_EXECUTE_CMD(ObCreateMLogStmt, ObCreateMLogExecutor);
-        break;
-      }
-      case stmt::T_DROP_MLOG: {
-        DEFINE_EXECUTE_CMD(ObDropMLogStmt, ObDropMLogExecutor);
-        break;
-      }
       case stmt::T_ALTER_VIEW: {
         break;
       }
@@ -363,20 +343,12 @@ int ObCmdExecutor::execute(ObExecContext &ctx, ObICmd &cmd)
         DEFINE_EXECUTE_CMD(ObMergeTableStmt, ObMergeTableExecutor);
         break;
       }
-      case stmt::T_FLASHBACK_TABLE_FROM_RECYCLEBIN: {
-        DEFINE_EXECUTE_CMD(ObFlashBackTableFromRecyclebinStmt, ObFlashBackTableFromRecyclebinExecutor);
+      case stmt::T_RECYCLEBIN_RESTORE_TABLE: {
+        DEFINE_EXECUTE_CMD(ObRecyclebinRestoreTableStmt, ObRecyclebinRestoreTableExecutor);
         break;
       }
-      case stmt::T_FLASHBACK_TABLE_TO_SCN: {
-        DEFINE_EXECUTE_CMD(ObFlashBackTableToScnStmt, ObFlashBackTableToScnExecutor);
-        break;
-      }
-      case stmt::T_FLASHBACK_INDEX: {
-        DEFINE_EXECUTE_CMD(ObFlashBackIndexStmt, ObFlashBackIndexExecutor);
-        break;
-      }
-      case stmt::T_FLASHBACK_DATABASE: {
-        DEFINE_EXECUTE_CMD(ObFlashBackDatabaseStmt, ObFlashBackDatabaseExecutor);
+      case stmt::T_RECYCLEBIN_RESTORE_DATABASE: {
+        DEFINE_EXECUTE_CMD(ObRecyclebinRestoreDatabaseStmt, ObRecyclebinRestoreDatabaseExecutor);
         break;
       }
       case stmt::T_PURGE_TABLE: {
@@ -472,12 +444,6 @@ int ObCmdExecutor::execute(ObExecContext &ctx, ObICmd &cmd)
       case stmt::T_SERVER_ACTION: {
         break;
       }
-#ifdef OB_BUILD_SHARED_STORAGE
-      case stmt::T_TRIGGER_STORAGE_CACHE: {
-        DEFINE_EXECUTE_CMD(ObTriggerStorageCacheStmt, ObTriggerStorageCacheExecutor);
-        break;
-      }
-#endif
       case stmt::T_FREEZE: {
         DEFINE_EXECUTE_CMD(ObFreezeStmt, ObFreezeExecutor);
         break;
@@ -492,10 +458,6 @@ int ObCmdExecutor::execute(ObExecContext &ctx, ObICmd &cmd)
       }
       case stmt::T_FLUSH_ILOGCACHE: {
         DEFINE_EXECUTE_CMD(ObFlushIlogCacheStmt, ObFlushIlogCacheExecutor);
-        break;
-      }
-      case stmt::T_FLUSH_SS_MICRO_CACHE: {
-        DEFINE_EXECUTE_CMD(ObFlushSSMicroCacheStmt, ObFlushSSMicroCacheExecutor);
         break;
       }
       case stmt::T_FLUSH_DAG_WARNINGS: {
@@ -529,24 +491,8 @@ int ObCmdExecutor::execute(ObExecContext &ctx, ObICmd &cmd)
         DEFINE_EXECUTE_CMD(ObAdminMergeStmt, ObAdminMergeExecutor);
         break;
       }
-      case stmt::T_ADMIN_RECOVERY: {
-        DEFINE_EXECUTE_CMD(ObAdminRecoveryStmt, ObAdminRecoveryExecutor);
-        break;
-      }
-      case stmt::T_CLEAR_ROOT_TABLE: {
-        DEFINE_EXECUTE_CMD(ObClearRoottableStmt, ObClearRoottableExecutor);
-        break;
-      }
-      case stmt::T_REFRESH_SCHEMA: {
-        DEFINE_EXECUTE_CMD(ObRefreshSchemaStmt, ObRefreshSchemaExecutor);
-        break;
-      }
       case stmt::T_REFRESH_MEMORY_STAT: {
         DEFINE_EXECUTE_CMD(ObRefreshMemStatStmt, ObRefreshMemStatExecutor);
-        break;
-      }
-      case stmt::T_WASH_MEMORY_FRAGMENTATION: {
-        DEFINE_EXECUTE_CMD(ObWashMemFragmentationStmt, ObWashMemFragmentationExecutor);
         break;
       }
       case stmt::T_REFRESH_IO_CALIBRATION: {
@@ -567,22 +513,6 @@ int ObCmdExecutor::execute(ObExecContext &ctx, ObICmd &cmd)
       }
       case stmt::T_UPGRADE_VIRTUAL_SCHEMA: {
         DEFINE_EXECUTE_CMD(ObUpgradeVirtualSchemaStmt, ObUpgradeVirtualSchemaExecutor);
-        break;
-      }
-      case stmt::T_ADMIN_UPGRADE_CMD: {
-        DEFINE_EXECUTE_CMD(ObAdminUpgradeCmdStmt, ObAdminUpgradeCmdExecutor);
-        break;
-      }
-      case stmt::T_ADMIN_ROLLING_UPGRADE_CMD: {
-        DEFINE_EXECUTE_CMD(ObAdminRollingUpgradeCmdStmt, ObAdminRollingUpgradeCmdExecutor);
-        break;
-      }
-      case stmt::T_ADMIN_RUN_UPGRADE_JOB: {
-        DEFINE_EXECUTE_CMD(ObRunUpgradeJobStmt, ObRunUpgradeJobExecutor);
-        break;
-      }
-      case stmt::T_ADMIN_STOP_UPGRADE_JOB: {
-        DEFINE_EXECUTE_CMD(ObStopUpgradeJobStmt, ObStopUpgradeJobExecutor);
         break;
       }
       case stmt::T_CANCEL_TASK: {
@@ -648,10 +578,6 @@ int ObCmdExecutor::execute(ObExecContext &ctx, ObICmd &cmd)
         DEFINE_EXECUTE_CMD(ObCreatePackageStmt, ObCreatePackageExecutor);
         break;
       }
-      case stmt::T_ALTER_PACKAGE: {
-        DEFINE_EXECUTE_CMD(ObAlterPackageStmt, ObAlterPackageExecutor);
-        break;
-      }
       case stmt::T_DROP_PACKAGE: {
         DEFINE_EXECUTE_CMD(ObDropPackageStmt, ObDropPackageExecutor);
         break;
@@ -666,10 +592,6 @@ int ObCmdExecutor::execute(ObExecContext &ctx, ObICmd &cmd)
       }
       case stmt::T_ALTER_TRIGGER: {
         DEFINE_EXECUTE_CMD(ObAlterTriggerStmt, ObAlterTriggerExecutor);
-        break;
-      }
-      case stmt::T_SET_DISK_VALID: {
-        DEFINE_EXECUTE_CMD(ObSetDiskValidStmt, ObSetDiskValidExecutor);
         break;
       }
       case stmt::T_ANALYZE: {
@@ -706,14 +628,14 @@ int ObCmdExecutor::execute(ObExecContext &ctx, ObICmd &cmd)
       case stmt::T_SET_TABLE_COMMENT:
       case stmt::T_SET_COLUMN_COMMENT: {
         ObAlterTableStmt &stmt = *(static_cast<ObAlterTableStmt*>(&cmd));
-        const uint64_t tenant_id = stmt.get_tenant_id();
+        
         uint64_t data_version = OB_INVALID_VERSION;
         bool is_parallel_ddl = true;
-        if (OB_FAIL(GET_MIN_DATA_VERSION(tenant_id, data_version))) {
-          LOG_WARN("fail to get data version", KR(ret), K(tenant_id));
+        if (OB_FAIL(GET_MIN_DATA_VERSION(data_version))) {
+          LOG_WARN("fail to get data version", KR(ret));
         } else if (OB_FAIL(ObParallelDDLControlMode::is_parallel_ddl_enable(
-                           ObParallelDDLControlMode::SET_COMMENT, tenant_id, is_parallel_ddl))) {
-          LOG_WARN("fail to get whether is parallel set comment", KR(ret), K(tenant_id));
+                           ObParallelDDLControlMode::SET_COMMENT, is_parallel_ddl))) {
+          LOG_WARN("fail to get whether is parallel set comment", KR(ret));
         } else if (!is_parallel_ddl) {
           DEFINE_EXECUTE_CMD(ObAlterTableStmt, ObAlterTableExecutor);
         } else {
@@ -761,80 +683,12 @@ int ObCmdExecutor::execute(ObExecContext &ctx, ObICmd &cmd)
         DEFINE_EXECUTE_CMD(ObAlterRoleStmt, ObAlterRoleExecutor);
         break;
       }
-      case stmt::T_ARCHIVE_LOG: {
-        DEFINE_EXECUTE_CMD(ObArchiveLogStmt, ObArchiveLogExecutor);
-        break;
-      }
-      case stmt::T_BACKUP_DATABASE: {
-        DEFINE_EXECUTE_CMD(ObBackupDatabaseStmt, ObBackupDatabaseExecutor);
-        break;
-      }
-      case stmt::T_CANCEL_RESTORE: {
-        DEFINE_EXECUTE_CMD(ObCancelRestoreStmt, ObCancelRestoreExecutor);
-        break;
-      }
-      case stmt::T_RECOVER_TABLE: {
-        DEFINE_EXECUTE_CMD(ObRecoverTableStmt, ObRecoverTableExecutor);
-        break;
-      }
-      case stmt::T_ACTIVATE_STANDBY: {
-        DEFINE_EXECUTE_CMD(ObSwitchRoleStmt, ObSwitchRoleExecutor);
-        break;
-      }
-      case stmt::T_SWITCHOVER_TO_STANDBY: {
-        DEFINE_EXECUTE_CMD(ObSwitchRoleStmt, ObSwitchRoleExecutor);
-        break;
-      }
-      case stmt::T_SWITCHOVER_TO_PRIMARY: {
-        DEFINE_EXECUTE_CMD(ObSwitchRoleStmt, ObSwitchRoleExecutor);
-        break;
-      }
-      case stmt::T_BACKUP_MANAGE: {
-        DEFINE_EXECUTE_CMD(ObBackupManageStmt, ObBackupManageExecutor);
-        break;
-      }
-      case stmt::T_BACKUP_CLEAN: {
-        DEFINE_EXECUTE_CMD(ObBackupCleanStmt, ObBackupCleanExecutor);
-        break;
-      }
-      case stmt::T_DELETE_POLICY: {
-        DEFINE_EXECUTE_CMD(ObDeletePolicyStmt, ObDeletePolicyExecutor);
-        break;
-      }
-      case stmt::T_BACKUP_CLUSTER_PARAMETERS: {
-        DEFINE_EXECUTE_CMD(ObBackupClusterParamStmt, ObBackupClusterParamExecutor);
-        break;
-      }
-      case stmt::T_BACKUP_BACKUPSET: {
-        DEFINE_EXECUTE_CMD(ObBackupBackupsetStmt, ObBackupBackupsetExecutor);
-        break;
-      }
-      case stmt::T_BACKUP_ARCHIVELOG: {
-        DEFINE_EXECUTE_CMD(ObBackupArchiveLogStmt, ObBackupArchiveLogExecutor);
-        break;
-      }
-      case stmt::T_BACKUP_SET_ENCRYPTION: {
-        DEFINE_EXECUTE_CMD(ObBackupSetEncryptionStmt, ObBackupSetEncryptionExecutor);
-        break;
-      }
-      case stmt::T_BACKUP_SET_DECRYPTION: {
-        DEFINE_EXECUTE_CMD(ObBackupSetDecryptionStmt, ObBackupSetDecryptionExecutor);
-        break;
-      }
       case stmt::T_ENABLE_SQL_THROTTLE: {
         DEFINE_EXECUTE_CMD(ObEnableSqlThrottleStmt, ObEnableSqlThrottleExecutor);
         break;
       }
       case stmt::T_DISABLE_SQL_THROTTLE: {
         DEFINE_EXECUTE_CMD(ObDisableSqlThrottleStmt, ObDisableSqlThrottleExecutor);
-        break;
-      }
-      case stmt::T_CREATE_RESTORE_POINT: {
-        DEFINE_EXECUTE_CMD(ObCreateRestorePointStmt, ObCreateRestorePointExecutor);
-        break;
-      }
-      case stmt::T_DROP_RESTORE_POINT: {
-        DEFINE_EXECUTE_CMD(ObDropRestorePointStmt, ObDropRestorePointExecutor);
         break;
       }
       case stmt::T_CREATE_DIRECTORY: {
@@ -854,22 +708,6 @@ int ObCmdExecutor::execute(ObExecContext &ctx, ObICmd &cmd)
         DEFINE_EXECUTE_CMD(ObDropLocationStmt, ObDropLocationExecutor);
         break;
       }
-      case stmt::T_LOCATION_UTILS: {
-        DEFINE_EXECUTE_CMD(ObLocationUtilsStmt, ObLocationUtilsExecutor);
-        break;
-      }
-      case stmt::T_BACKUP_BACKUPPIECE: {
-        DEFINE_EXECUTE_CMD(ObBackupBackupPieceStmt, ObBackupBackupPieceExecutor);
-        break;
-      }
-      case stmt::T_ADD_RESTORE_SOURCE: {
-        DEFINE_EXECUTE_CMD(ObAddRestoreSourceStmt, ObAddRestoreSourceExecutor);
-        break;
-      }
-      case stmt::T_CLEAR_RESTORE_SOURCE: {
-        DEFINE_EXECUTE_CMD(ObClearRestoreSourceStmt, ObClearRestoreSourceExecutor);
-        break;
-      }
       case stmt::T_CREATE_CONTEXT: {
         DEFINE_EXECUTE_CMD(ObCreateContextStmt, ObCreateContextExecutor);
         break;
@@ -878,28 +716,12 @@ int ObCmdExecutor::execute(ObExecContext &ctx, ObICmd &cmd)
         DEFINE_EXECUTE_CMD(ObDropContextStmt, ObDropContextExecutor);
         break;
       }
-      case stmt::T_CHECKPOINT_SLOG: {
-        DEFINE_EXECUTE_CMD(ObCheckpointSlogStmt, ObCheckpointSlogExecutor);
-        break;
-      }
-      case stmt::T_TABLE_TTL: {
-        DEFINE_EXECUTE_CMD(ObTableTTLStmt, ObTableTTLExecutor);
-        break;
-      }
       case stmt::T_ALTER_SYSTEM_RESET_PARAMETER: {
         DEFINE_EXECUTE_CMD(ObResetConfigStmt, ObResetConfigExecutor);
         break;
       }
-      case stmt::T_CHANGE_EXTERNAL_STORAGE_DEST: {
-        DEFINE_EXECUTE_CMD(ObChangeExternalStorageDestStmt, ObChangeExternalStorageDestExecutor);
-        break;
-      }
       case stmt::T_OLAP_ASYNC_JOB_CANCEL: {
         DEFINE_EXECUTE_CMD(ObOLAPAsyncCancelJobStmt, ObOLAPAsyncCancelJobExecutor);
-        break;
-      }
-      case stmt::T_MODULE_DATA: {
-        DEFINE_EXECUTE_CMD(ObModuleDataStmt, ObModuleDataExecutor);
         break;
       }
       case stmt::T_EVENT_JOB_CREATE: {
@@ -948,8 +770,7 @@ int ObCmdExecutor::execute(ObExecContext &ctx, ObICmd &cmd)
                      "cmd_type", cmd.get_cmd_type(),
                      "sql_text", ObHexEscapeSqlStr(ctx.get_sql_ctx()->is_sensitive_ ?
                                                    ObString(OB_MASKED_STR) : sql_text),
-                     "return_code", ret,
-                     "tenant_id", MTL_ID());
+                     "return_code", ret);
   }
 
   if (is_ddl_or_dcl_stmt) {
@@ -976,7 +797,6 @@ int ObCmdExecutor::execute(ObExecContext &ctx, ObICmd &cmd)
       LOG_WARN("set sys variable failed", K(ret),
                                           K(ori_trx_timeout_obj.get_int()));
     } else if (OB_FAIL(ctx.get_task_exec_ctx().schema_service_->get_tenant_schema_guard(
-                       my_session->get_effective_tenant_id(),
                        *(ctx.get_sql_ctx()->schema_guard_)))) {
       LOG_WARN("failed to get schema guard", K(ret));
     }
@@ -985,7 +805,6 @@ int ObCmdExecutor::execute(ObExecContext &ctx, ObICmd &cmd)
       ret = tmp_ret;
     }
   }
-
 
   return ret;
 }

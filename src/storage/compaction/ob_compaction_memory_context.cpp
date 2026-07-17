@@ -76,10 +76,10 @@ ObCompactionMemoryContext::ObCompactionMemoryContext(
     common::ObArenaAllocator &allocator)
   : arena_(allocator),
     ctx_id_(ObCtxIds::DEFAULT_CTX_ID),
-    inner_arena_("SafeArena", OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID(), ctx_id_),
+    inner_arena_("SafeArena", OB_MALLOC_NORMAL_BLOCK_SIZE, ctx_id_),
     safe_arena_(inner_arena_),
     free_lock_(),
-    free_alloc_("FreeAlloc", MTL_ID()),
+    free_alloc_("FreeAlloc"),
     mem_monitor_(),
     mem_peak_total_(0),
     is_reserve_mode_(false)
@@ -104,8 +104,8 @@ void ObCompactionMemoryContext::inner_init(const ObTabletMergeDagParam &param)
           ? ObCtxIds::MERGE_RESERVE_CTX_ID
           : ObCtxIds::MERGE_NORMAL_CTX_ID;
 
-  lib::ObMemAttr arena_attr(MTL_ID(), "MemCtx", ctx_id_);
-  lib::ObMemAttr free_attr(MTL_ID(), "FreeMemCtx", ctx_id_);
+  lib::ObMemAttr arena_attr("MemCtx", ctx_id_);
+  lib::ObMemAttr free_attr("FreeMemCtx", ctx_id_);
 
   if (is_mini_merge(param.merge_type_)) {
     arena_attr.label_ = "MiniSafeMemCtx";

@@ -286,7 +286,7 @@ int ObTableLoadDataToIndexTableChannel::handle_insert_delete_conflict(const ObTa
     }
   }
   return ret;
-}
+} 
 
 } // namespace observer
 } // namespace oceanbase

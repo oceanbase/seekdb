@@ -33,7 +33,6 @@ namespace storage
 {
 int ObMdsScanParamHelper::build_scan_param(
     common::ObIAllocator &allocator,
-    const share::ObLSID &ls_id,
     const common::ObTabletID &tablet_id,
     const uint64_t table_id,
     const uint8_t mds_unit_id,
@@ -47,8 +46,7 @@ int ObMdsScanParamHelper::build_scan_param(
   int ret = OB_SUCCESS;
   const share::schema::ObTableSchema *table_schema = ObMdsSchemaHelper::get_instance().get_table_schema();
 
-  scan_param.tenant_id_ = MTL_ID();
-  scan_param.ls_id_ = ls_id;
+  
   scan_param.tablet_id_ = tablet_id;
   scan_param.is_get_ = is_get;
   scan_param.is_for_foreign_check_ = false;
@@ -72,7 +70,7 @@ int ObMdsScanParamHelper::build_scan_param(
     if (OB_FAIL(tx_snapshot.version_.convert_for_tx(read_version_range.snapshot_version_))) {
       LOG_WARN("failed to convert for tx", KR(ret), K(read_version_range));
     } else {
-      scan_param.snapshot_.init_ls_read(ls_id, tx_snapshot);
+      scan_param.snapshot_.init_ls_read(tx_snapshot);
       scan_param.fb_snapshot_ = tx_snapshot.version_;
     }
   }

@@ -28,10 +28,6 @@
 
 namespace oceanbase
 {
-namespace obrpc
-{
-class ObCommonRpcProxy;
-}
 namespace common
 {
 class ObAddr;
@@ -52,7 +48,6 @@ class ObMajorMergeInfoManager
 public:
   ObMajorMergeInfoManager()
     : is_inited_(false),
-      tenant_id_(common::OB_INVALID_ID),
       zone_merge_mgr_(),
       freeze_info_mgr_(),
       lock_(common::ObLatchIds::OB_MAJOR_MERGE_INFO_MANAGER_LOCK)
@@ -60,8 +55,7 @@ public:
   virtual ~ObMajorMergeInfoManager() {}
   ObZoneMergeManager &get_zone_merge_mgr() { return zone_merge_mgr_; }
   share::ObFreezeInfoManager &get_freeze_info_mgr() { return freeze_info_mgr_; }
-  int init(uint64_t tenant_id,
-           common::ObMySQLProxy &sql_proxy);
+  int init(common::ObMySQLProxy &sql_proxy);
   int try_reload();
   int reload(const bool reload_zone_merge_info = false);
   void reset_info()
@@ -100,7 +94,7 @@ public:
 
 private:
   bool is_inited_;
-  int64_t tenant_id_;
+  
   ObZoneMergeManager zone_merge_mgr_;
   share::ObFreezeInfoManager freeze_info_mgr_;
   mutable common::ObRecursiveMutex lock_;

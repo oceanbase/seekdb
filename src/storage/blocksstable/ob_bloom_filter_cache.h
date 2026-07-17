@@ -71,18 +71,18 @@ private:
 class ObBloomFilterCacheKey : public common::ObIKVCacheKey
 {
 public:
-  ObBloomFilterCacheKey(const uint64_t tenant_id, const MacroBlockId &block_id, const int8_t prefix_rowkey_len);
+  ObBloomFilterCacheKey(const MacroBlockId &block_id, const int8_t prefix_rowkey_len);
   virtual ~ObBloomFilterCacheKey();
   virtual bool operator ==(const common::ObIKVCacheKey &other) const;
-  virtual uint64_t get_tenant_id() const;
+  
   virtual uint64_t hash() const;
   virtual int64_t size() const;
   virtual int deep_copy(char *buf, const int64_t buf_len, common::ObIKVCacheKey *&key) const;
   bool is_valid() const;
   inline int64_t get_prefix_rowkey_len() const { return prefix_rowkey_len_; }
-  TO_STRING_KV(K_(tenant_id), K_(macro_block_id), K_(prefix_rowkey_len) );
+  TO_STRING_KV(K_(macro_block_id), K_(prefix_rowkey_len) );
 private:
-  uint64_t tenant_id_;
+  
   MacroBlockId macro_block_id_;
   int8_t prefix_rowkey_len_;
 private:
@@ -149,31 +149,25 @@ public:
   void destroy();
   /**
    * put bloom filter to cache
-   * @param [in] tenant_id
    * @param [in] macro_block_id
    * @param [in] bloom_filter
    */
-  int put_bloom_filter(
-      const uint64_t tenant_id,
-      const MacroBlockId& macro_block_id,
+  int put_bloom_filter(const MacroBlockId& macro_block_id,
       const ObBloomFilterCacheValue &bloom_filter,
       const bool adaptive = false);
   /**
    * check if the macro block contains the rowkey
-   * @param [in] tenant_id
    * @param [in] macro_block_id
    * @param [in] rowkey
    * @param [out] is_contain
    * @return the error code
    */
   int may_contain(
-      const uint64_t tenant_id,
       const MacroBlockId &macro_block_id,
       const ObDatumRowkey &rowkey,
       const ObStorageDatumUtils &datum_utils,
       bool &is_contain);
   int may_contain(
-      const uint64_t tenant_id,
       const MacroBlockId &macro_block_id,
       const storage::ObRowsInfo *rows_info,
       const int64_t rowkey_begin_idx,
@@ -181,7 +175,6 @@ public:
       const ObStorageDatumUtils &datum_utils,
       bool &is_contain);
   int may_contain(
-      const uint64_t tenant_id,
       const MacroBlockId &macro_block_id,
       const storage::ObRowKeysInfo *rowkeys_info,
       const int64_t rowkey_begin_idx,
@@ -191,20 +184,17 @@ public:
   /**
    * inc empty read count of the macro block, then try build build bloom filter for it if it is
    * necessary
-   * @param [in] tenant_id
    * @param [in] macro_block_id
    * @param [in] macro_meta: meta of the macro block
    * @param [in] empty_read_prefix
    * @return the error code
    */
   int inc_empty_read(
-      const uint64_t tenant_id,
       const uint64_t table_id,
-      const share::ObLSID &ls_id,
       const storage::ObITable::TableKey &sstable_key,
       const MacroBlockId &macro_id,
       const int64_t empty_read_prefix,
-      const ObSSTableReadHandle * read_handle = nullptr,
+      const storage::ObSSTableReadHandle *read_handle = nullptr,
       const int64_t empty_read_cnt = 1);
   inline int set_bf_cache_miss_count_threshold(const int64_t threshold);
   inline void auto_bf_cache_miss_count_threshold(const int64_t qsize)

@@ -16,7 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_RESV
 #include "sql/resolver/cmd/ob_event_resolver.h"
-#include "lib/timezone/ob_time_convert.h"
+#include "common/timezone/ob_time_convert.h"
 #include "sql/parser/ob_parser.h"
 #include "sql/resolver/ob_resolver_utils.h"
 #include "lib/oblog/ob_log_module.h"
@@ -69,7 +69,6 @@ int ObEventResolver::resolve_create_event_stmt(const ParseNode &parse_node, ObEv
 
   OV (T_EVENT_JOB_CREATE == parse_node.type_, OB_ERR_UNEXPECTED, parse_node.type_);
   OV (8 == parse_node.num_child_, OB_ERR_UNEXPECTED, parse_node.num_child_);
-  OX (event_info.set_tenant_id(session_info_->get_effective_tenant_id()));
   
   OZ (resolve_event_definer(parse_node.children_[0], event_info));
   OZ (resolve_event_exist(parse_node.children_[1], event_info));
@@ -89,7 +88,6 @@ int ObEventResolver::resolve_alter_event_stmt(const ParseNode &parse_node, ObEve
   int ret = OB_SUCCESS;
   OV (T_EVENT_JOB_ALTER == parse_node.type_, OB_ERR_UNEXPECTED, parse_node.type_);
   OV (7 == parse_node.num_child_, OB_ERR_UNEXPECTED, parse_node.num_child_);
-  OX (event_info.set_tenant_id(session_info_->get_effective_tenant_id()));
   if (OB_NOT_NULL(parse_node.children_[0])) {
     OZ (resolve_event_definer(parse_node.children_[0], event_info));
   }
@@ -109,7 +107,6 @@ int ObEventResolver::resolve_drop_event_stmt(const ParseNode &parse_node, ObEven
   int ret = OB_SUCCESS;
   OV (T_EVENT_JOB_DROP == parse_node.type_, OB_ERR_UNEXPECTED, parse_node.type_);
   OV (2 == parse_node.num_child_, OB_ERR_UNEXPECTED, parse_node.num_child_);
-  OX (event_info.set_tenant_id(session_info_->get_effective_tenant_id()));  
   OZ (resolve_event_exist(parse_node.children_[0], event_info));
   OZ (resolve_event_name(parse_node.children_[1], event_info));
   return ret;
@@ -155,8 +152,7 @@ int ObEventResolver::resolve_event_definer(const ParseNode *parse_node, ObEventI
         if (OB_SUCC(ret)) {
           // Check if user@host is in the mysql.user table
           const ObUserInfo* user_info = nullptr;
-          if (OB_FAIL(schema_checker_->get_schema_guard()->get_user_info(session_info_->get_effective_tenant_id(),
-                                                                         user_name,
+          if (OB_FAIL(schema_checker_->get_schema_guard()->get_user_info(user_name,
                                                                          host_name,
                                                                          user_info))) {
             ret = OB_ERR_UNEXPECTED;
@@ -170,13 +166,13 @@ int ObEventResolver::resolve_event_definer(const ParseNode *parse_node, ObEventI
         }
       }
     }
-  } else if (lib::is_mysql_mode()) {
+  } else {
     // When definer is not specified, it defaults to the current user and host
     user_name = cur_user_name;
     host_name = cur_host_name;
     event_info.set_user_id(session_info_->get_user_id());
   }
-  if (OB_SUCC(ret) && lib::is_mysql_mode()) {
+  if (OB_SUCC(ret)) {
     // user@host as a whole is stored in the priv_user field
     char* tmp_buf = nullptr;
     if (OB_ISNULL(tmp_buf = static_cast<char*>(allocator_->alloc(OB_EVENT_DEFINER_MAX_LEN)))) {
@@ -524,7 +520,7 @@ int ObEventResolver::get_event_time_node_value(const ParseNode *parse_node, int6
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("time node is null", K(ret));
   } else if (T_VARCHAR == parse_node->type_) {
-    if(OB_FAIL(sql.assign_fmt("select TIME_TO_USEC (\'%.*s\') as time",  /* If input is a pure string, SQL parsing will remove ' need to add it back */
+    if(OB_FAIL(sql.assign_fmt("select TIME_TO_USEC (\'%.*s\') as time",  /* If input is a pure string, SQL parsing will remove ' need to add it back */ 
                                                                         (int)parse_node->str_len_, 
                                                                         parse_node->str_value_))) {
      LOG_WARN("time node is not vaild", K(ret));
@@ -536,7 +532,7 @@ int ObEventResolver::get_event_time_node_value(const ParseNode *parse_node, int6
   if (OB_SUCC(ret)) {
     SMART_VAR(ObMySQLProxy::MySQLResult, result) {
       time_us = OB_INVALID_TIMESTAMP;
-      if (OB_FAIL(GCTX.sql_proxy_->read(result, session_info_->get_effective_tenant_id(), sql.ptr()))) {
+      if (OB_FAIL(GCTX.sql_proxy_->read(result, sql.ptr()))) {
         ret = OB_ERR_WRONG_VALUE;
         LOG_USER_ERROR(OB_ERR_WRONG_VALUE, "AT", parse_node->str_value_);
         LOG_WARN("execute query failed", K(ret), K(sql), K(parse_node->type_));

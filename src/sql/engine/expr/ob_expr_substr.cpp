@@ -147,7 +147,7 @@ int ObExprSubstr::calc_result_typeN(ObExprResType &type,
   }
   OZ(aggregate_charsets_for_string_result(type, types_array, 1, type_ctx));
   if (OB_SUCC(ret)) {
-    if (is_mysql_mode() && (types_array[0].is_text() || types_array[0].is_blob())) {
+    if (types_array[0].is_text() || types_array[0].is_blob()) {
       // do nothing
     } else {
       types_array[0].set_calc_type(ObVarcharType);

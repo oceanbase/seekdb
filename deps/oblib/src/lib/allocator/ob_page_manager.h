@@ -50,17 +50,12 @@ public:
   ObPageManager();
   ~ObPageManager() {}
   static ObPageManager *thread_local_instance() { return tl_instance_; }
-  int set_tenant_ctx(const int64_t tenant_id, const int64_t ctx_id);
+  int set_tenant_ctx(const int64_t ctx_id);
   int64_t get_hold() const;
   int64_t get_tid() const { return tid_; }
   // IBlockMgr interface
   virtual ABlock *alloc_block(uint64_t size, const ObMemAttr &attr) override;
   virtual void free_block(ABlock *block) override;
-  virtual int64_t sync_wash(int64_t wash_size) override
-  {
-    UNUSED(wash_size);
-    return 0;
-  }
   int64_t get_used() const { return used_; }
   static void set_thread_local_instance(ObPageManager &instance) { tl_instance_ = &instance; }
 private:
@@ -86,10 +81,10 @@ inline ObPageManager::ObPageManager()
 {
 }
 
-inline int ObPageManager::set_tenant_ctx(const int64_t tenant_id, const int64_t ctx_id)
+inline int ObPageManager::set_tenant_ctx(const int64_t ctx_id)
 {
   int ret = OB_SUCCESS;
-  tenant_id_ = OB_SYS_TENANT_ID;
+  
   ctx_id_ = ctx_id;
   is_inited_ = false;
   if (OB_FAIL(init())) {
@@ -107,7 +102,7 @@ inline int ObPageManager::init()
   } else if (OB_ISNULL(ma)) {
     ret = OB_ERR_UNEXPECTED;
     OB_LOG(ERROR, "null ptr", K(ret));
-  } else if (OB_ISNULL(ta_ = ma->get_tenant_ctx_allocator(tenant_id_, ctx_id_))) {
+  } else if (OB_ISNULL(ta_ = ma->get_tenant_ctx_allocator(ctx_id_))) {
     ret = OB_ERR_UNEXPECTED;
     OB_LOG(ERROR, "null ptr", K(ret));
   } else {
@@ -134,12 +129,11 @@ inline ABlock *ObPageManager::alloc_block(uint64_t size, const ObMemAttr &attr)
   }
   if (OB_SUCC(ret)) {
     ObMemAttr inner_attr = attr;
-    inner_attr.tenant_id_ = tenant_id_;
+    
     inner_attr.ctx_id_ = ctx_id_;
     block = bs_.alloc_block(size, inner_attr);
     if (OB_UNLIKELY(nullptr == block)) {
-      _OB_LOG(WARN, "oops, alloc failed, tenant_id=%ld ctx_id=%ld hold=%ld limit=%ld",
-              tenant_id_,
+      _OB_LOG(WARN, "oops, alloc failed, ctx_id=%ld hold=%ld limit=%ld",
               ctx_id_,
               ta_->get_hold(),
               ta_->get_limit());

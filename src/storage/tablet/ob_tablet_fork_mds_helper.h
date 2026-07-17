@@ -19,15 +19,14 @@
 
 #include "common/ob_tablet_id.h"
 #include "lib/allocator/page_arena.h"
-#include "lib/mysqlclient/ob_mysql_transaction.h"
-#include "share/ob_ls_id.h"
+#include "common/mysqlclient/ob_mysql_transaction.h"
 #include "share/ob_rpc_struct.h"
 #include "share/ob_tablet_autoincrement_param.h"
 #include "rootserver/truncate_info/ob_truncate_tablet_arg.h"
 
 namespace oceanbase
 {
-namespace obrpc
+namespace obcall
 {
 struct ObBatchSetTabletAutoincSeqArg;
 }
@@ -48,21 +47,20 @@ struct BufferCtx;
 
 class ObTabletForkMdsArg final
 {
-OB_UNIS_VERSION(1);
+OB_UNIS_VERSION(2);
 public:
   ObTabletForkMdsArg();
   ~ObTabletForkMdsArg();
   bool is_valid() const;
   void reset();
-  int set_autoinc_seq_arg(const obrpc::ObBatchSetTabletAutoincSeqArg &arg);
+  int set_autoinc_seq_arg(const obcall::ObBatchSetTabletAutoincSeqArg &arg);
   int set_truncate_arg(const rootserver::ObTruncateTabletArg &arg);
 
-  TO_STRING_KV(K_(tenant_id), K_(ls_id), K_(autoinc_seq_arg), K_(truncate_arg));
+  TO_STRING_KV(K_(autoinc_seq_arg), K_(truncate_arg));
 
 public:
-  uint64_t tenant_id_;
-  share::ObLSID ls_id_;
-  obrpc::ObBatchSetTabletAutoincSeqArg autoinc_seq_arg_;
+  
+  obcall::ObBatchSetTabletAutoincSeqArg autoinc_seq_arg_;
   rootserver::ObTruncateTabletArg truncate_arg_;
 
 private:

@@ -15,10 +15,14 @@
  */
 
 #define USING_LOG_PREFIX RS
+#include "lib/stat/ob_diagnostic_info_guard.h"
+#include <vector>
+#include "share/ob_ex_rpc.h"
 #include "ob_ddl_single_replica_executor.h"
+#include "storage/ob_storage_rpc_arg.h"
 #include "rootserver/ob_root_service.h"
+#include "observer/ob_service.h"
 #include "share/ob_ddl_sim_point.h"
-#include "share/location_cache/ob_location_service.h"
 
 using namespace oceanbase::share;
 using namespace oceanbase::common;
@@ -33,11 +37,8 @@ int ObSingleReplicaBuildCtx::init(
     const int64_t src_schema_version,
     const int64_t dest_schema_version,
     const int64_t tablet_task_id,
-    const int64_t compaction_scn,
     const ObTabletID &src_tablet_id,
-    const ObTabletID &dest_tablet_id,
-    const bool can_reuse_macro_block,
-    const ObIArray<blocksstable::ObDatumRowkey> &parallel_datum_rowkey_list)
+    const ObTabletID &dest_tablet_id)
 {
   int ret = OB_SUCCESS;
   if (is_inited_) {
@@ -48,14 +49,10 @@ int ObSingleReplicaBuildCtx::init(
              dest_table_id == OB_INVALID_ID ||
              tablet_task_id == 0 ||
              !src_tablet_id.is_valid() ||
-             !dest_tablet_id.is_valid() ||
-             (is_tablet_split(ddl_type) && (compaction_scn == 0 || parallel_datum_rowkey_list.empty()))) {
+             !dest_tablet_id.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(addr), K(src_table_id), K(dest_table_id),
-                                 K(tablet_task_id), K(src_tablet_id), K(dest_tablet_id),
-                                 K(ddl_type), K(compaction_scn), K(parallel_datum_rowkey_list));
-  } else if (OB_FAIL(parallel_datum_rowkey_list_.assign(parallel_datum_rowkey_list))) { // shallow copy.
-    LOG_WARN("assign failed", K(ret), K(parallel_datum_rowkey_list));
+                                 K(tablet_task_id), K(src_tablet_id), K(dest_tablet_id), K(ddl_type));
   } else {
     addr_ = addr;
     ddl_type_ = ddl_type;
@@ -64,10 +61,8 @@ int ObSingleReplicaBuildCtx::init(
     src_schema_version_ = src_schema_version;
     dest_schema_version_ = dest_schema_version;
     tablet_task_id_ = tablet_task_id;
-    compaction_scn_ = compaction_scn;
     src_tablet_id_ = src_tablet_id;
     dest_tablet_id_ = dest_tablet_id;
-    can_reuse_macro_block_ = can_reuse_macro_block;
     reset_build_stat();
     is_inited_ = true;
   }
@@ -90,18 +85,13 @@ bool ObSingleReplicaBuildCtx::is_valid() const
                 dest_table_id_ != OB_INVALID_ID && src_schema_version_ != 0 &&
                 dest_schema_version_ != 0 && tablet_task_id_ != 0 &&
                 src_tablet_id_.is_valid() && dest_tablet_id_.is_valid();
-  if (is_tablet_split(ddl_type_)) {
-    valid &= (compaction_scn_ != 0 && !parallel_datum_rowkey_list_.empty());
-  }
   return valid;
 }
 
 int ObSingleReplicaBuildCtx::assign(const ObSingleReplicaBuildCtx &other)
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(parallel_datum_rowkey_list_.assign(other.parallel_datum_rowkey_list_))) {
-    LOG_WARN("assign failed", K(ret));
-  } else {
+  {
     is_inited_ = other.is_inited_;
     addr_ = other.addr_;
     ddl_type_ = other.ddl_type_;
@@ -110,9 +100,7 @@ int ObSingleReplicaBuildCtx::assign(const ObSingleReplicaBuildCtx &other)
     src_schema_version_ = other.src_schema_version_;
     dest_schema_version_ = other.dest_schema_version_;
     tablet_task_id_ = other.tablet_task_id_;
-    compaction_scn_ = other.compaction_scn_;
     src_tablet_id_ = other.src_tablet_id_;
-    can_reuse_macro_block_ = other.can_reuse_macro_block_;
     stat_ = other.stat_;
     ret_code_ = other.ret_code_;
     heart_beat_time_ = other.heart_beat_time_;
@@ -149,20 +137,17 @@ int ObDDLReplicaBuildExecutor::build(const ObDDLReplicaBuildExecutorParam &param
   if (OB_UNLIKELY(!param.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", K(ret), K(param));
-  } else if (OB_FAIL(DDL_SIM(param.tenant_id_, param.task_id_, SINGLE_REPLICA_EXECUTOR_BUILD_FAILED))) {
-    LOG_WARN("ddl sim failure", K(ret), K(param.tenant_id_), K(param.task_id_));
+  } else if (OB_FAIL(DDL_SIM(param.task_id_, SINGLE_REPLICA_EXECUTOR_BUILD_FAILED))) {
+    LOG_WARN("ddl sim failure", K(ret), K(param.task_id_));
   } else { // lock scope, keep construct_replica_build_ctxs() out of scope
     ObSpinLockGuard guard(lock_);
-    tenant_id_ = param.tenant_id_;
-    dest_tenant_id_ = param.dest_tenant_id_;
+    
     ddl_type_ = param.ddl_type_;
     ddl_task_id_ = param.task_id_;
     snapshot_version_ = param.snapshot_version_;
     parallelism_ = param.parallelism_;
     execution_id_ = param.execution_id_;
     data_format_version_ = param.data_format_version_;
-    consumer_group_id_ = param.consumer_group_id_;
-    min_split_start_scn_ = param.min_split_start_scn_;
     is_no_logging_ = param.is_no_logging_;
     ObArray<ObSingleReplicaBuildCtx> replica_build_ctxs;
     if (OB_FAIL(construct_replica_build_ctxs(param, replica_build_ctxs))) {
@@ -187,7 +172,7 @@ int ObDDLReplicaBuildExecutor::build(const ObDDLReplicaBuildExecutorParam &param
   // char table_id_buffer[256];
   // snprintf(table_id_buffer, sizeof(table_id_buffer), "dest_table_id:%ld, source_table_id:%ld", dest_table_id_, source_table_id_);
   // ROOTSERVICE_EVENT_ADD("ddl scheduler", "build single replica",
-  //   "tenant_id",tenant_id_,
+  //   "tenant",sys tenant,
   //   "ret", ret,
   //   "trace_id", *ObCurTraceId::get_trace_id(),
   //   K_(task_id),
@@ -211,20 +196,13 @@ int ObDDLReplicaBuildExecutor::build(const ObDDLReplicaBuildExecutorParam &param
 int ObDDLReplicaBuildExecutor::schedule_task()
 {
   int ret = OB_SUCCESS;
-  obrpc::ObSrvRpcProxy *rpc_proxy = GCTX.srv_rpc_proxy_;
-  const int64_t rpc_timeout = ObDDLUtil::get_default_ddl_rpc_timeout();
   if (!is_inited_) {
     ret = OB_NOT_INIT;
     LOG_WARN("replica build executor not init", K(ret));
-  } else if (OB_ISNULL(rpc_proxy)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(ret), KP(rpc_proxy));
-  } else if (OB_FAIL(DDL_SIM(dest_tenant_id_, ddl_task_id_, SINGLE_REPLICA_EXECUTOR_SCHEDULE_TASK_FAILED))) {
-    LOG_WARN("ddl sim failure", K(ret), K(dest_tenant_id_), K(ddl_task_id_));
+  } else if (OB_FAIL(DDL_SIM(ddl_task_id_, SINGLE_REPLICA_EXECUTOR_SCHEDULE_TASK_FAILED))) {
+    LOG_WARN("ddl sim failure", K(ret), K(ddl_task_id_));
   } else {
-    ObDDLBuildSingleReplicaRequestProxy proxy(*rpc_proxy,
-        &obrpc::ObSrvRpcProxy::build_ddl_single_replica_request);
-    ObArray<obrpc::ObDDLBuildSingleReplicaRequestArg> args;
+    ObArray<obcall::ObDDLBuildSingleReplicaRequestArg> args;
     ObArray<ObAddr> addrs;
     ObArray<ObTabletID> tablet_ids;
     { // lock scope
@@ -235,7 +213,7 @@ int ObDDLReplicaBuildExecutor::schedule_task()
         if (OB_FAIL(replica_build_ctx.check_need_schedule(need_schedule))) {
           LOG_WARN("failed to check need schedule", K(ret));
         } else if (need_schedule) {
-          obrpc::ObDDLBuildSingleReplicaRequestArg arg;
+          obcall::ObDDLBuildSingleReplicaRequestArg arg;
           if (OB_FAIL(construct_rpc_arg(replica_build_ctx, arg))) {
             LOG_WARN("failed to construct single replica request arg", K(ret));
           } else if (OB_FAIL(args.push_back(arg))) {
@@ -248,25 +226,39 @@ int ObDDLReplicaBuildExecutor::schedule_task()
         }
       }
     } // lock scope
-    // keep send rpc out of lock scope
+    // async_call preserves parallelism (replaces proxy.call + wait_all).
+    using H = std::shared_ptr<ex_rpc::AsyncHandle<obcall::ObDDLBuildSingleReplicaRequestResult>>;
+    std::vector<H> handles;
+    ObArray<int> ret_array;
+    ObArray<obcall::ObDDLBuildSingleReplicaRequestResult> results;
     for (int64_t i = 0; OB_SUCC(ret) && i < args.count(); ++i) {
-      const ObAddr &addr = addrs.at(i);
-      if (OB_FAIL(proxy.call(addr, rpc_timeout, dest_tenant_id_, args.at(i)))) {
-        LOG_WARN("failed to send rpc", K(ret), K(addr), K(rpc_timeout),
-            K(args.at(i)));
+      auto h = ex_rpc::async_call<obcall::ObDDLBuildSingleReplicaRequestResult>(args.at(i),
+          [](const obcall::ObDDLBuildSingleReplicaRequestArg &req,
+             obcall::ObDDLBuildSingleReplicaRequestResult &res) -> int {
+            return GCTX.ob_service_->build_ddl_single_replica_request(req, res);
+          });
+      if (OB_ISNULL(h)) {
+        ret = OB_ALLOCATE_MEMORY_FAILED;
       } else {
-        LOG_INFO("send build single replica request", K(addr), K(args.at(i)));
+        handles.push_back(h);
       }
     }
-    int tmp_ret = OB_SUCCESS;
-    common::ObArray<int> ret_array;
-    if (OB_SUCCESS != (tmp_ret = proxy.wait_all(ret_array))) {
-      LOG_WARN("rpc_proxy wait failed", K(ret), K(tmp_ret));
-      ret = (OB_SUCCESS == ret) ? tmp_ret : ret;
-    } else if (OB_SUCC(ret)) {
-      const ObIArray<const obrpc::ObDDLBuildSingleReplicaRequestResult *>
-        &result_array = proxy.get_results();
-      if (OB_FAIL(process_rpc_results(tablet_ids, addrs, result_array, ret_array))) {
+    for (int64_t i = 0; OB_SUCC(ret) && i < (int64_t)handles.size(); ++i) {
+      int call_ret = handles[i]->wait();
+      if (OB_FAIL(ret_array.push_back(call_ret))) {
+        LOG_WARN("push_back ret failed", K(ret));
+      } else if (OB_FAIL(results.push_back(handles[i]->result()))) {
+        LOG_WARN("push_back result failed", K(ret));
+      }
+    }
+    if (OB_SUCC(ret)) {
+      ObArray<const obcall::ObDDLBuildSingleReplicaRequestResult *> result_ptrs;
+      for (int64_t i = 0; OB_SUCC(ret) && i < results.count(); ++i) {
+        if (OB_FAIL(result_ptrs.push_back(&results.at(i)))) {
+          LOG_WARN("push_back result ptr failed", K(ret));
+        }
+      }
+      if (OB_SUCC(ret) && OB_FAIL(process_rpc_results(tablet_ids, addrs, result_ptrs, ret_array))) {
         LOG_WARN("failed to process result", K(ret));
       }
     }
@@ -282,29 +274,19 @@ int ObDDLReplicaBuildExecutor::check_build_end(const bool need_checksum, bool &i
   int ret = OB_SUCCESS;
   is_end = false;
   ret_code = OB_SUCCESS;
-  ObArray<ObTabletID> replica_tablet_ids;
-  ObArray<ObAddr> replica_addrs;
   int64_t succ_cnt = 0;
   int64_t failed_cnt = 0;
   int64_t reschedule_cnt = 0;
   int64_t waiting_cnt = 0;
   int64_t total_cnt = 0;
   int64_t dest_table_id = OB_INVALID_ID;
-  const bool send_to_all_replicas = is_tablet_split(ddl_type_);
-  // keep get replica addr out of lock scope
   if (!is_inited_) {
     ret = OB_NOT_INIT;
     LOG_WARN("replica build executor not init", K(ret));
-  } else if (OB_FAIL(get_refreshed_replica_addrs(send_to_all_replicas,
-          replica_tablet_ids, replica_addrs))) {
-    LOG_WARN("failed to get refreshed replica addrs", K(ret));
   }
   { // lock scope
     ObSpinLockGuard guard(lock_);
-    // first use refresh addrs to refresh build ctxs
     if (OB_FAIL(ret)) {
-    } else if (OB_FAIL(refresh_replica_build_ctxs(replica_tablet_ids, replica_addrs))) {
-      LOG_WARN("failed to refresh replica build ctxs", K(ret));
     } else if (!replica_build_ctxs_.empty()) {
       dest_table_id = replica_build_ctxs_.at(0).dest_table_id_;
     }
@@ -346,11 +328,10 @@ int ObDDLReplicaBuildExecutor::check_build_end(const bool need_checksum, bool &i
     is_end = true;
     ret_code = ret;
     LOG_INFO("all replica build finished", K(succ_cnt), K(total_cnt));
-    if (!share::is_tablet_split(ddl_type_) && need_checksum) {
-      if (OB_FAIL(ObCheckTabletDataComplementOp::check_finish_report_checksum(
-              dest_tenant_id_, dest_table_id, execution_id_, ddl_task_id_))) {
+    if (need_checksum) {
+      if (OB_FAIL(ObCheckTabletDataComplementOp::check_finish_report_checksum(dest_table_id, execution_id_, ddl_task_id_))) {
         LOG_WARN("fail to check sstable checksum_report_finish", 
-            K(ret), K(dest_tenant_id_), K(dest_table_id), K(execution_id_), K(ddl_task_id_));
+            K(ret), K(dest_table_id), K(execution_id_), K(ddl_task_id_));
       }
     }
   }
@@ -435,15 +416,9 @@ int ObDDLReplicaBuildExecutor::get_progress(int64_t &row_inserted, int64_t &phys
 // as caller, schedule_task() will hold lock
 int ObDDLReplicaBuildExecutor::construct_rpc_arg(
     const ObSingleReplicaBuildCtx &replica_build_ctx,
-    obrpc::ObDDLBuildSingleReplicaRequestArg &arg) const
+    obcall::ObDDLBuildSingleReplicaRequestArg &arg) const
 {
   int ret = OB_SUCCESS;
-  ObLSID ls_id;
-  ObLSID dest_ls_id;
-  share::ObLocationService *location_service = GCTX.location_service_;
-  bool is_cache_hit = false;
-  const bool force_renew = true;
-  const int64_t expire_renew_time = force_renew ? INT64_MAX : 0;
   if (!is_inited_) {
     ret = OB_NOT_INIT;
     LOG_WARN("replica build executor not init", K(ret));
@@ -451,8 +426,8 @@ int ObDDLReplicaBuildExecutor::construct_rpc_arg(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(replica_build_ctx));
   } else {
-    arg.tenant_id_ = tenant_id_;
-    arg.dest_tenant_id_ = dest_tenant_id_;
+    
+    
     arg.source_tablet_id_ = replica_build_ctx.src_tablet_id_;
     arg.dest_tablet_id_ = replica_build_ctx.dest_tablet_id_;
     arg.source_table_id_ = replica_build_ctx.src_table_id_;
@@ -465,35 +440,10 @@ int ObDDLReplicaBuildExecutor::construct_rpc_arg(
     arg.execution_id_ = execution_id_;
     arg.tablet_task_id_ = replica_build_ctx.tablet_task_id_;
     arg.data_format_version_ = data_format_version_;
-    arg.consumer_group_id_ = consumer_group_id_;
-    arg.compaction_scn_ = replica_build_ctx.compaction_scn_;
-    arg.can_reuse_macro_block_ = replica_build_ctx.can_reuse_macro_block_;
-    arg.min_split_start_scn_   = min_split_start_scn_;
-    /** handle OB_SESSION_NOT_FOUND(-4067) may lead to infinite retry of table recovery task.
-      * Due to the number limit(100) of blocked thread stream rpc receiver
-      * reduce table recovery retry parallelism. */
-    if (ObDDLType::DDL_TABLE_RESTORE == ddl_type_ && replica_build_ctx.sess_not_found_times_ > 0) {
-      arg.parallelism_ = MAX(1, parallelism_ >> replica_build_ctx.sess_not_found_times_);
-    } else {
-      arg.parallelism_ = parallelism_;
-    }
+    arg.parallelism_ = parallelism_;
     arg.is_no_logging_ = is_no_logging_;
     if (OB_FAIL(arg.lob_col_idxs_.assign(lob_col_idxs_))) {
       LOG_WARN("failed to assign to lob col idxs", K(ret));
-    } else if (OB_FAIL(arg.parallel_datum_rowkey_list_.assign(replica_build_ctx.parallel_datum_rowkey_list_))) {
-      LOG_WARN("failed to assign split ranges", K(ret));
-    } else if (OB_ISNULL(location_service)) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("location service is nullptr", K(ret));
-    } else if (OB_FAIL(location_service->get(tenant_id_, arg.source_tablet_id_,
-            expire_renew_time, is_cache_hit, ls_id))) {
-      LOG_WARN("get ls failed", K(ret), K(arg.source_tablet_id_));
-    } else if (OB_FAIL(location_service->get(dest_tenant_id_, arg.dest_tablet_id_,
-            expire_renew_time, is_cache_hit, dest_ls_id))) {
-      LOG_WARN("get dest ls failed", K(ret), K(arg));
-    } else {
-      arg.ls_id_ = ls_id;
-      arg.dest_ls_id_ = dest_ls_id;
     }
   }
   return ret;
@@ -502,7 +452,7 @@ int ObDDLReplicaBuildExecutor::construct_rpc_arg(
 int ObDDLReplicaBuildExecutor::process_rpc_results(
     const ObArray<ObTabletID> &tablet_ids,
     const ObArray<ObAddr> addrs,
-    const ObIArray<const obrpc::ObDDLBuildSingleReplicaRequestResult *> &result_array,
+    const ObIArray<const obcall::ObDDLBuildSingleReplicaRequestResult *> &result_array,
     const ObArray<int> &ret_array)
 {
   int ret = OB_SUCCESS;
@@ -546,7 +496,7 @@ int ObDDLReplicaBuildExecutor::process_rpc_results(
 // as caller, process_rpc_result() will hold lock
 int ObDDLReplicaBuildExecutor::update_build_ctx(
     ObSingleReplicaBuildCtx &build_ctx,
-    const oceanbase::obrpc::ObDDLBuildSingleReplicaRequestResult *result,
+    const oceanbase::obcall::ObDDLBuildSingleReplicaRequestResult *result,
     const int ret_code)
 {
   int ret = OB_SUCCESS;
@@ -567,23 +517,10 @@ int ObDDLReplicaBuildExecutor::construct_replica_build_ctxs(
     ObArray<ObSingleReplicaBuildCtx> &replica_build_ctxs) const
 {
   int ret = OB_SUCCESS;
-  ObArray<ObAddr> split_replica_addrs;
   replica_build_ctxs.reuse();
-  const bool send_to_all_replicas = is_tablet_split(param.ddl_type_);
-  const int64_t rpc_timeout = ObDDLUtil::get_default_ddl_rpc_timeout();
   if (!param.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(param));
-  } else if (send_to_all_replicas) {
-    ObLSID ls_id;
-    ObAddr unused_addr;
-    const ObTabletID &any_tablet_id = param.source_tablet_ids_.at(0);
-    if (OB_FAIL(ObDDLUtil::get_tablet_leader_addr(
-          GCTX.location_service_, param.tenant_id_, any_tablet_id, rpc_timeout, ls_id, unused_addr))) {
-      LOG_WARN("get ls id failed", K(ret), K(param.tenant_id_), K(any_tablet_id));
-    } else if (OB_FAIL(ObDDLUtil::get_split_replicas_addrs(param.tenant_id_, ls_id, split_replica_addrs))) {
-      LOG_WARN("get split replica addrs failed", K(ret), K(param.tenant_id_), K(ls_id));
-    }
   }
   if (OB_SUCC(ret)) {
     for (int64_t i = 0; OB_SUCC(ret) && i < param.source_tablet_ids_.count(); ++i) {
@@ -593,207 +530,22 @@ int ObDDLReplicaBuildExecutor::construct_replica_build_ctxs(
       const int64_t dest_table_id = param.dest_table_ids_.at(i);
       const int64_t src_schema_version = param.source_schema_versions_.at(i);
       const int64_t dest_schema_version = param.dest_schema_versions_.at(i);
-      int64_t tablet_task_id = i + 1;
-      int64_t compaction_scn = send_to_all_replicas ? param.compaction_scns_.at(i) : 0;
-      const bool can_reuse_macro_block = send_to_all_replicas ? param.can_reuse_macro_blocks_.at(i) : false;
-      ObSEArray<blocksstable::ObDatumRowkey, 8> unused_empty_rowkey_list; // placeholder only.
-      const ObIArray<blocksstable::ObDatumRowkey> &parallel_datum_rowkey_list = send_to_all_replicas ?
-          param.parallel_datum_rowkey_list_.at(i) : unused_empty_rowkey_list;
-      if (send_to_all_replicas) {
-        for (int64_t j = 0; OB_SUCC(ret) && j < split_replica_addrs.count(); ++j) {
-          ObSingleReplicaBuildCtx replica_build_ctx;
-          if (OB_FAIL(replica_build_ctx.init(split_replica_addrs.at(j), ddl_type_,
-                  src_table_id, dest_table_id, src_schema_version,
-                  dest_schema_version, tablet_task_id, compaction_scn,
-                  src_tablet_id, dest_tablet_id, can_reuse_macro_block, parallel_datum_rowkey_list))) {
-            LOG_WARN("failed to init replica build ctx", K(ret));
-          } else if (OB_FAIL(replica_build_ctxs.push_back(replica_build_ctx))) {
-            LOG_WARN("failed to push back replica build ctx", K(ret));
-          }
-        }
-      } else { // send to all leader only
-        ObLSID unused_ls_id;
-        ObAddr orig_leader_addr;
-        ObAddr dest_leader_addr;
-        const int64_t rpc_timeout = ObDDLUtil::get_default_ddl_rpc_timeout();
-        ObSingleReplicaBuildCtx replica_build_ctx;
-        if (OB_FAIL(ObDDLUtil::get_tablet_leader_addr(GCTX.location_service_,
-                param.tenant_id_, src_tablet_id, rpc_timeout, unused_ls_id, orig_leader_addr))) {
-          LOG_WARN("failed to get orig leader addr", K(ret), K(src_tablet_id));
-        } else if (OB_FAIL(ObDDLUtil::get_tablet_leader_addr(GCTX.location_service_,
-                param.dest_tenant_id_, dest_tablet_id, rpc_timeout, unused_ls_id,
-                dest_leader_addr))) {
-          LOG_WARN("failed to get dest leader addr", K(ret), K(dest_tablet_id));
-        } else if (ObDDLType::DDL_TABLE_RESTORE != ddl_type_ &&
-            orig_leader_addr != dest_leader_addr) {
-          ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("orig leader addr not equal dest leader addr", K(ret), K(orig_leader_addr),
-              K(dest_leader_addr));
-        } else if (OB_FAIL(replica_build_ctx.init(dest_leader_addr, ddl_type_,
-                src_table_id, dest_table_id, src_schema_version, dest_schema_version,
-                tablet_task_id, compaction_scn, src_tablet_id, dest_tablet_id, can_reuse_macro_block, parallel_datum_rowkey_list))) {
-          LOG_WARN("failed to init replica build ctx", K(ret), K(src_tablet_id));
-        } else if (OB_FAIL(replica_build_ctxs.push_back(replica_build_ctx))) {
-          LOG_WARN("failed to push back replica build ctx", K(ret));
-        }
-      }
-    }
-  }
-  return ret;
-}
-
-int ObDDLReplicaBuildExecutor::get_refreshed_replica_addrs(
-    const bool send_to_all_replicas,
-    ObArray<ObTabletID> &replica_tablet_ids,
-    ObArray<ObAddr> &replica_addrs) const
-{
-  int ret = OB_SUCCESS;
-  // TODO hanxuan optimization hold lock before refresh addrs (ObMemberListLockUtils)
-  replica_tablet_ids.reuse();
-  replica_addrs.reuse();
-  const int64_t rpc_timeout = ObDDLUtil::get_default_ddl_rpc_timeout();
-  if (!is_inited_) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("replica build executor not init", K(ret));
-  } else if (OB_UNLIKELY(src_tablet_ids_.empty())) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected err", K(ret), KPC(this));
-  } else if (send_to_all_replicas) {
-    ObLSID ls_id;
-    ObAddr unused_addr;
-    ObArray<ObAddr> split_replica_addrs;
-    const ObTabletID &any_tablet_id = src_tablet_ids_.at(0);
-    if (OB_FAIL(ObDDLUtil::get_tablet_leader_addr(
-          GCTX.location_service_, tenant_id_, any_tablet_id, rpc_timeout, ls_id, unused_addr))) {
-      LOG_WARN("get ls id failed", K(ret), K(tenant_id_), K(any_tablet_id));
-    } else if (OB_FAIL(ObDDLUtil::get_split_replicas_addrs(tenant_id_, ls_id, split_replica_addrs))) {
-      LOG_WARN("get split replica addrs failed", K(ret), K(tenant_id_), K(ls_id));
-    } else { // send to all replicas.
-      for (int64_t i = 0; OB_SUCC(ret) && i < src_tablet_ids_.count(); ++i) {
-        const ObTabletID &src_tablet_id = src_tablet_ids_.at(i);
-        for (int64_t j = 0; OB_SUCC(ret) && j < split_replica_addrs.count(); ++j) {
-          const ObAddr &addr = split_replica_addrs.at(j);
-          if (OB_FAIL(replica_tablet_ids.push_back(src_tablet_id))) {
-            LOG_WARN("failed to push back tablet id", K(ret));
-          } else if (OB_FAIL(replica_addrs.push_back(addr))) {
-            LOG_WARN("failed to push back addr", K(ret));
-          }
-        }
-      }
-    }
-  } else { // send to leader only.
-    for (int64_t i = 0; OB_SUCC(ret) && i < src_tablet_ids_.count(); ++i) {
-      ObLSID ls_id;
-      ObAddr orig_leader_addr;
-      ObAddr dest_leader_addr;
-      const ObTabletID &src_tablet_id = src_tablet_ids_.at(i);
-      const ObTabletID &dest_tablet_id = dest_tablet_ids_.at(i);
-      if (OB_FAIL(ObDDLUtil::get_tablet_leader_addr(GCTX.location_service_,
-              tenant_id_, src_tablet_id, rpc_timeout, ls_id, orig_leader_addr))) {
-        LOG_WARN("failed to get orig leader addr", K(ret), K(src_tablet_id));
-      } else if (OB_FAIL(ObDDLUtil::get_tablet_leader_addr(GCTX.location_service_,
-              dest_tenant_id_, dest_tablet_id, rpc_timeout, ls_id,
-              dest_leader_addr))) {
-        LOG_WARN("failed to get dest leader addr", K(ret), K(dest_tablet_id));
-      } else if (ObDDLType::DDL_TABLE_RESTORE != ddl_type_ &&
-          orig_leader_addr != dest_leader_addr) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("orig leader addr not equal dest leader addr", K(ret),
-            K(orig_leader_addr), K(dest_leader_addr));
-      } else {
-        if (OB_FAIL(replica_tablet_ids.push_back(src_tablet_id))) {
-          LOG_WARN("failed to push back tablet id", K(ret));
-        } else if (OB_FAIL(replica_addrs.push_back(dest_leader_addr))) {
-          LOG_WARN("failed to push back addr", K(ret));
-        }
-      }
-    }
-  }
-  return ret;
-}
-
-/* for each replica, check if there exists build ctx whose tablet id && addr matches
- *   - if exists, copy it to new replica build ctx with its build stat
- *   - otherwise, init a new build ctx whose build stat is BUILD_INIT
- *   NOTE as caller, check_build_end() will hold lock_
- */
-int ObDDLReplicaBuildExecutor::refresh_replica_build_ctxs(
-    const ObArray<ObTabletID> &replica_tablet_ids,
-    const ObArray<ObAddr> &replica_addrs)
-{
-  int ret = OB_SUCCESS;
-  if (!is_inited_) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("replica build executor not init", K(ret));
-  } else if (replica_tablet_ids.empty() || replica_addrs.empty() ||
-             replica_tablet_ids.count() != replica_addrs.count()) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(replica_tablet_ids.count()), K(replica_addrs.count()));
-  }
-  ObArray<ObSingleReplicaBuildCtx> new_replica_build_ctxs;
-  for (int64_t i = 0; OB_SUCC(ret) && i < replica_addrs.count(); ++i) {
-    const ObTabletID &tablet_id = replica_tablet_ids.at(i);
-    const ObAddr &replica_addr = replica_addrs.at(i);
-    bool is_found = false;
-    ObSingleReplicaBuildCtx *existing_ctx = nullptr;
-    if (OB_FAIL(get_replica_build_ctx(tablet_id, replica_addr,
-            existing_ctx, is_found))) {
-      LOG_WARN("failed to get replica build ctx", K(ret),
-          K(tablet_id), K(replica_addr));
-    } else if (is_found) {
-      if (OB_FAIL(new_replica_build_ctxs.push_back(*existing_ctx))) {
+      const int64_t tablet_task_id = i + 1;
+      ObSingleReplicaBuildCtx replica_build_ctx;
+      if (OB_FAIL(replica_build_ctx.init(GCTX.self_addr(), ddl_type_,
+              src_table_id, dest_table_id, src_schema_version, dest_schema_version,
+              tablet_task_id, src_tablet_id, dest_tablet_id))) {
+        LOG_WARN("failed to init replica build ctx", K(ret), K(src_tablet_id));
+      } else if (OB_FAIL(replica_build_ctxs.push_back(replica_build_ctx))) {
         LOG_WARN("failed to push back replica build ctx", K(ret));
       }
-    } else { // not found
-      ObSingleReplicaBuildCtx new_build_ctx;
-      bool ctx_partial_inited = false;
-      // 1. use existing replica build ctx to init new build ctx
-      // NOTE currently new build ctx's addr is an unrelated addr
-      for (int64_t j = 0; OB_SUCC(ret) && !ctx_partial_inited &&
-          j < replica_build_ctxs_.count(); ++j) {
-        // find corresponding tablet
-        if (replica_build_ctxs_.at(j).src_tablet_id_ == tablet_id) {
-          if (OB_FAIL(new_build_ctx.assign(replica_build_ctxs_.at(j)))) {
-            LOG_WARN("failed to assign to replica build ctx", K(ret));
-          } else {
-            // use correspoinding tablet's old replica ctx to init 
-            ctx_partial_inited = true;
-          }
-        }
-      }
-      // 2. overwrite with correct addr && reset build stat
-      if (OB_FAIL(ret)) {
-      } else if (!ctx_partial_inited) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("failed to setup new replica build ctx for refreshed replica addr",
-            K(ret), K(tablet_id), K(replica_addr));
-      } else if (FALSE_IT(new_build_ctx.addr_ = replica_addr)) {
-      } else if (FALSE_IT(new_build_ctx.reset_build_stat())) {
-      } else if (OB_FAIL(new_replica_build_ctxs.push_back(new_build_ctx))) {
-        LOG_WARN("failed to push back replica build ctx", K(ret));
-      }
-      if (OB_FAIL(ret)) {
-        LOG_WARN("failed to setup new replica build ctx for refreshed replica addr",
-            K(ret), K(tablet_id), K(replica_addr), K(new_build_ctx));
-      } else {
-        LOG_INFO("setup new replica build ctx for refreshed replica addr",
-            K(tablet_id), K(replica_addr), K(new_build_ctx));
-      }
     }
   }
-  if (OB_FAIL(ret)) {
-  } else if (OB_FAIL(replica_build_ctxs_.assign(new_replica_build_ctxs))) {
-    LOG_WARN("failed to assign to replica build ctxs", K(ret));
-  } else if (new_replica_build_ctxs.count() != replica_tablet_ids.count()) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("the size of replica build ctxs doesn't equal to the size of replica_tablet_ids", K(ret), K(replica_build_ctxs_.count()), K(replica_tablet_ids.count()));
-  } 
   return ret;
 }
 
 // look up repica build ctx by tablet id && addr
 // NOTE as caller, update_build_progress() process_rpc_results()
-//      refresh_replica_build_ctxs() will hold lock
 int ObDDLReplicaBuildExecutor::get_replica_build_ctx(
     const ObTabletID &tablet_id,
     const ObAddr &addr,

@@ -40,7 +40,7 @@ int ObRevokeResolver::resolve_revoke_role_inner(
     ObRevokeStmt *revoke_stmt)
 {
   int ret = OB_SUCCESS;
-  uint64_t tenant_id = OB_INVALID_ID;
+  
   ObSEArray<uint64_t, 4> role_id_array;
   ObArray<ObString> role_user_name;
   ObArray<ObString> role_host_name;
@@ -52,8 +52,7 @@ int ObRevokeResolver::resolve_revoke_role_inner(
   bool ignore_unknown_role = false;
   bool ignore_unknown_user = false;
   bool ignore_error = false;
-  tenant_id = revoke_stmt->get_tenant_id();
-  if (lib::is_mysql_mode() && 4 == revoke_role->num_child_) {
+  if (4 == revoke_role->num_child_) {
     ignore_unknown_role = NULL != revoke_role->children_[2];
     ignore_unknown_user = NULL != revoke_role->children_[3];
   }
@@ -71,8 +70,7 @@ int ObRevokeResolver::resolve_revoke_role_inner(
       ObString host_name(OB_DEFAULT_HOST_NAME);
       OZ (resolve_user_host(role, role_name, host_name));
 
-      OZ (params_.schema_checker_->get_user_info(tenant_id,
-                                                 role_name,
+      OZ (params_.schema_checker_->get_user_info(role_name,
                                                  host_name,
                                                  role_info), role_name, host_name);
       if (OB_USER_NOT_EXIST == ret || OB_ISNULL(role_info)) {
@@ -85,7 +83,7 @@ int ObRevokeResolver::resolve_revoke_role_inner(
       } else {
         role_id = role_info->get_user_id();
         if (OB_FAIL(revoke_stmt->add_role(role_id))) {
-          if (OB_PRIV_DUP == ret && lib::is_mysql_mode()) {
+          if (OB_PRIV_DUP == ret) {
             //ignored
             ret = OB_SUCCESS;
           } else {
@@ -123,7 +121,7 @@ int ObRevokeResolver::resolve_revoke_role_inner(
   for (int i = 0; OB_SUCC(ret) && i < user_name_array.count(); ++i) {
     const ObString &user_name = user_name_array.at(i);
     const ObString &host_name = host_name_array.at(i);
-    if (OB_FAIL(params_.schema_checker_->get_user_id(tenant_id, user_name, host_name, user_id))) {
+    if (OB_FAIL(params_.schema_checker_->get_user_id(user_name, host_name, user_id))) {
       if (OB_USER_NOT_EXIST == ret) {
         ret = OB_ERR_UNKNOWN_AUTHID;
         ignore_error = ignore_unknown_user;
@@ -140,7 +138,7 @@ int ObRevokeResolver::resolve_revoke_role_inner(
                K(session_info_->get_priv_user_id()), K(user_name));
     }
     OZ (revoke_stmt->add_grantee(user_name));
-    OZ (params_.schema_checker_->get_user_info(tenant_id, user_id, user_info), user_id);
+    OZ (params_.schema_checker_->get_user_info(user_id, user_info), user_id);
     OZ (revoke_stmt->add_user(user_id));
     //4. check user has roles
     if (OB_SUCC(ret)) {
@@ -197,13 +195,13 @@ int ObRevokeResolver::resolve_mysql(const ParseNode &parse_tree)
     } else {
       revoke_stmt->set_stmt_type(stmt::T_REVOKE);
       stmt_ = revoke_stmt;
-      uint64_t tenant_id = params_.session_info_->get_effective_tenant_id();
-      revoke_stmt->set_tenant_id(tenant_id);
+      
+      
       ParseNode *users_node =  NULL;
       ParseNode *privs_node = NULL;
       ObPrivLevel grant_level = OB_PRIV_INVALID_LEVEL;
       if (T_SYSTEM_REVOKE == node->type_ && REVOKE_ROLE_NUM_CHILD == node->num_child_) {
-        // resolve oracle revoke
+        // resolve role revoke
         // 0: role_list; 1: grantee
         ParseNode *revoke_role = node->children_[0];
         if (NULL == revoke_role) {
@@ -272,7 +270,6 @@ int ObRevokeResolver::resolve_mysql(const ParseNode &parse_tree)
                                                                              db,
                                                                              table,
                                                                              catalog,
-                                                                             tenant_id,
                                                                              allocator_,
                                                                              false))) {
               LOG_WARN("failed to resolve priv object", K(ret));
@@ -307,11 +304,11 @@ int ObRevokeResolver::resolve_mysql(const ParseNode &parse_tree)
         //resolve privileges
         if (OB_SUCC(ret) && (NULL != privs_node)) {
           ObPrivSet priv_set = 0;
-          const uint64_t tenant_id = params_.session_info_->get_effective_tenant_id();  
+            
           if (OB_ISNULL(allocator_)) {
             ret = OB_ERR_UNEXPECTED;
             LOG_WARN("unexpected error", K(ret));
-          } else if (OB_FAIL(ObGrantResolver::resolve_priv_set(tenant_id, privs_node, grant_level, priv_set, revoke_stmt, 
+          } else if (OB_FAIL(ObGrantResolver::resolve_priv_set(privs_node, grant_level, priv_set, revoke_stmt, 
                                                         params_.schema_checker_, params_.session_info_,
                                                         *allocator_))) {
             LOG_WARN("Resolve priv set error", K(ret));
@@ -368,7 +365,7 @@ int ObRevokeResolver::resolve_mysql(const ParseNode &parse_tree)
                 } else if (OB_FAIL(revoke_stmt->add_grantee(user_name))) {
                   SQL_RESV_LOG(WARN, "fail to add grantee", K(ret), K(user_name), K(host_name));
                 } else if (OB_FAIL(
-                    params_.schema_checker_->get_user_id(tenant_id, user_name, 
+                    params_.schema_checker_->get_user_id(user_name, 
                                                          host_name, user_id))) {
                   if (OB_USER_NOT_EXIST == ret) {
                      ignore_error = ignore_user_not_exist;

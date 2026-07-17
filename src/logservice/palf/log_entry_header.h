@@ -75,28 +75,16 @@ private:
                                const int64_t base_header_len,
                                const int64_t padding_data_len,
                                const share::SCN &scn);
-  int16_t get_version_() const;
-  int64_t get_padding_mask_() const;
-  int64_t get_header_checksum_mask_() const;
-  void reset_header_checksum_();
 private:
   static const int16_t LOG_ENTRY_HEADER_VERSION;
   static const int64_t PADDING_TYPE_MASK;
-  static const int16_t LOG_ENTRY_HEADER_VERSION2;
-  static const int64_t PADDING_TYPE_MASK_VERSION2;
   static const int64_t CRC16_MASK;
-  static const int64_t PARITY_MASK;
 private:
   int16_t magic_;
   int16_t version_;
   int32_t log_size_;
   share::SCN scn_;
   int64_t data_checksum_;
-  // The lowest bit is used for parity check.
-  // LOG_ENTRY_HEADER_VERSION
-  // | sign bit | 61 unused bit | PADDING bit | PARITY CHECKSUM bit |
-  //
-  // LOG_ENTRY_HEADER_VERSION2
   // | sign bit | PADDING bit | 46 unused bit | 16 crc16 bit |
   mutable int64_t flag_;
 };

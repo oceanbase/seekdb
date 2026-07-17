@@ -28,11 +28,6 @@ namespace storage
 class ObLobLocationUtil
 {
 public:
-  static int get_ls_leader(
-      ObLobAccessParam& param,
-      const uint64_t tenant_id,
-      const share::ObLSID &ls_id,
-      common::ObAddr &leader);
   static int is_remote(ObLobAccessParam& param, bool& is_remote, common::ObAddr& dst_addr);
   static int lob_check_tablet_not_exist(ObLobAccessParam &param, uint64_t table_id);
 

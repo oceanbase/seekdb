@@ -16,15 +16,14 @@
 
 #define USING_LOG_PREFIX BOOTSTRAP
 
+#include "lib/stat/ob_diagnostic_info_guard.h"
 #include "rootserver/ob_bootstrap.h"
+//(removed deleted node_balancer)  // previously hidden behind a transitive include, make the dependency explicit
+#include "share/rc/ob_module_provider.h"
 
 #include "share/ob_global_stat_proxy.h"
 #include "rootserver/ob_table_creator.h"
 #include "rootserver/ob_root_service.h"
-#ifdef OB_BUILD_SHARED_STORAGE
-#include "share/object_storage/ob_device_connectivity.h"
-#include "storage/shared_storage/ob_ss_format_util.h"
-#endif
 #include "share/inner_table/ob_load_inner_table_schema.h"
 #include "rootserver/ob_load_inner_table_schema_executor.h"
 #include "src/logservice/ob_server_log_block_mgr.h"
@@ -41,21 +40,19 @@ namespace oceanbase
 {
 
 using namespace common;
-using namespace obrpc;
+using namespace obcall;
 using namespace share;
 using namespace share::schema;
 using namespace storage;
 namespace rootserver
 {
 
-ObBaseBootstrap::ObBaseBootstrap(ObSrvRpcProxy &rpc_proxy,
+ObBaseBootstrap::ObBaseBootstrap(
                                  common::ObServerConfig &config)
     : step_id_(0),
-      rpc_proxy_(rpc_proxy),
       config_(config)
 {
 }
-
 
 int ObBaseBootstrap::check_inner_stat() const
 {
@@ -63,13 +60,10 @@ int ObBaseBootstrap::check_inner_stat() const
   return ret;
 }
 
-ObPreBootstrap::ObPreBootstrap(ObSrvRpcProxy &rpc_proxy,
-                               common::ObServerConfig &config,
-                               obrpc::ObCommonRpcProxy &rs_rpc_proxy)
-  : ObBaseBootstrap(rpc_proxy, config),
+ObPreBootstrap::ObPreBootstrap(common::ObServerConfig &config)
+  : ObBaseBootstrap(config),
     stop_(false),
-    begin_ts_(0),
-    common_proxy_(rs_rpc_proxy)
+    begin_ts_(0)
 {
 }
 
@@ -82,8 +76,6 @@ int ObPreBootstrap::prepare_bootstrap(ObAddr &master_rs)
     LOG_WARN("check_inner_stat failed", KR(ret));
   } else if (OB_FAIL(check_server_is_empty())) {
     LOG_WARN("failed to check bootstrap stat", KR(ret));
-  } else if (OB_FAIL(notify_sys_tenant_server_unit_resource())) {
-    LOG_WARN("fail to notify sys tenant server unit resource", KR(ret));
   } else if (OB_FAIL(notify_sys_tenant_config_())) {
     LOG_WARN("fail to notify sys tenant config", KR(ret));
   } else if (OB_FAIL(create_ls())) {
@@ -101,27 +93,15 @@ int ObPreBootstrap::prepare_bootstrap(ObAddr &master_rs)
   return ret;
 }
 
-int ObPreBootstrap::notify_sys_tenant_server_unit_resource()
-{
-  int ret = OB_SUCCESS;
-  int tmp_ret = OB_SUCCESS;
-  if (OB_TMP_FAIL(omt::ObTenantNodeBalancer::get_instance().notify_create_tenant())) {
-    LOG_WARN("fail to handle notify unit resource", KR(tmp_ret));
-  }
-  BOOTSTRAP_CHECK_SUCCESS();
-  return ret;
-}
-
 int ObPreBootstrap::notify_sys_tenant_config_()
 {
   int ret = OB_SUCCESS;
   common::ObConfigPairs config;
   common::ObSEArray<common::ObConfigPairs, 1> init_configs;
-  if (OB_FAIL(ObTenantDDLService::gen_tenant_init_config(
-      OB_SYS_TENANT_ID, DATA_CURRENT_VERSION, config))) {
+  if (OB_FAIL(ObTenantDDLService::gen_tenant_init_config(DATA_CURRENT_VERSION, config))) {
   } else if (OB_FAIL(init_configs.push_back(config))) {
     LOG_WARN("fail to push back config", KR(ret), K(config));
-  } else if (OB_FAIL(ObTenantDDLService::notify_init_tenant_config(rpc_proxy_, init_configs))) {
+  } else if (OB_FAIL(ObTenantDDLService::notify_init_tenant_config(init_configs))) {
     LOG_WARN("fail to notify init tenant config", KR(ret), K(init_configs));
   }
 
@@ -132,8 +112,8 @@ int ObPreBootstrap::notify_sys_tenant_config_()
 int ObPreBootstrap::create_ls()
 {
   int ret = OB_SUCCESS;
-  MTL_SWITCH(OB_SYS_TENANT_ID) {
-    ObLSService *ls_svr = MTL(ObLSService*);
+  MOD_SCOPE {
+    ObLSService *ls_svr = share::g_mp->ls_service();
     if (OB_FAIL(check_inner_stat())) {
       LOG_WARN("fail to check inner stat", KR(ret));
     } else if (OB_ISNULL(ls_svr)) {
@@ -210,17 +190,13 @@ bool ObBootstrap::TableIdCompare::operator() (const ObSimpleTableSchemaV2* left,
   return bret;
 }
 
-
 ObBootstrap::ObBootstrap(
-    ObSrvRpcProxy &rpc_proxy,
     ObDDLService &ddl_service,
     ObTenantDDLService &tenant_ddl_service,
-    ObServerConfig &config,
-    obrpc::ObCommonRpcProxy &rs_rpc_proxy)
-  : ObBaseBootstrap(rpc_proxy, config),
+    ObServerConfig &config)
+  : ObBaseBootstrap(config),
     ddl_service_(ddl_service),
     tenant_ddl_service_(tenant_ddl_service),
-    common_proxy_(rs_rpc_proxy),
     begin_ts_(0)
 {
 }
@@ -287,7 +263,7 @@ int ObBootstrap::execute_bootstrap()
                     DBA_STEP_INC_INFO(bootstrap),
                     "bootstrap refresh all schema begin.");
   }
-  if (FAILEDx(ddl_service_.refresh_schema(OB_SYS_TENANT_ID, true, nullptr, &table_schemas))) {
+  if (FAILEDx(ddl_service_.refresh_schema(true, nullptr, &table_schemas))) {
     LOG_WARN("failed to refresh_schema", K(ret));
     LOG_DBA_ERROR_V2(OB_BOOTSTRAP_REFRESH_ALL_SCHEMA_FAIL, ret,
                      DBA_STEP_INC_INFO(bootstrap),
@@ -302,12 +278,6 @@ int ObBootstrap::execute_bootstrap()
                     "bootstrap refresh all schema success.");
   }
   BOOTSTRAP_CHECK_SUCCESS_V2("refresh_schema");
-
-#ifdef OB_BUILD_SHARED_STORAGE
-  if (FAILEDx(write_shared_storage_args())) {
-    LOG_WARN("failed to init write shared storage args", KR(ret));
-  } else {}
-#endif
 
   ROOTSERVICE_EVENT_ADD("bootstrap", "bootstrap_succeed");
   BOOTSTRAP_CHECK_SUCCESS();
@@ -325,12 +295,11 @@ int ObBootstrap::load_all_schema(
                   DBA_STEP_INC_INFO(bootstrap),
                   "bootstrap create all schema begin.");
   ObLoadInnerTableSchemaExecutor executor;
-  if (OB_FAIL(executor.init(table_schemas, OB_SYS_TENANT_ID, get_cpu_count(), &rpc_proxy_))) {
+  if (OB_FAIL(executor.init(table_schemas, get_cpu_count()))) {
     LOG_WARN("failed to init executor", KR(ret));
   } else if (OB_FAIL(executor.execute())) {
     LOG_WARN("failed to execute load all schema", KR(ret));
-  } else if (OB_FAIL(ObLoadInnerTableSchemaExecutor::load_schema_version(
-          OB_SYS_TENANT_ID, ddl_service.get_sql_proxy(),
+  } else if (OB_FAIL(ObLoadInnerTableSchemaExecutor::load_schema_version(ddl_service.get_sql_proxy(),
           ObSchemaUtils::get_inner_table_core_schema_version(table_schemas),
           ObSchemaUtils::get_inner_table_sys_schema_version(table_schemas)))) {
       LOG_WARN("failed to load core schema version", KR(ret));
@@ -361,7 +330,7 @@ int ObBootstrap::generate_table_schema_array_for_create_partition(
   if (OB_FAIL(table_schema_array.push_back(tschema))) {
     LOG_WARN("fail to push back", KR(ret));
   } else if (OB_FAIL(ObSysTableChecker::append_sys_table_index_schemas(
-             OB_SYS_TENANT_ID, table_id, table_schema_array))) {
+             table_id, table_schema_array))) {
     LOG_WARN("fail to append sys table index schemas", KR(ret), K(table_id));
   } else if (OB_FAIL(add_sys_table_lob_aux_table(table_id, table_schema_array))) {
     LOG_WARN("fail to add lob table to sys table", KR(ret), K(table_id));
@@ -379,7 +348,6 @@ int ObBootstrap::prepare_create_partitions(
     LOG_WARN("check_inner_stat failed", KR(ret));
   } else if (tschema.has_partition()) {
     common::ObArray<const share::schema::ObTableSchema*> table_schema_ptrs;
-    common::ObArray<share::ObLSID> ls_id_array;
     common::ObArray<bool> need_create_empty_majors;
     ObArray<uint64_t> index_tids;
     uint64_t lob_meta_table_id = 0;
@@ -423,20 +391,14 @@ int ObBootstrap::prepare_create_partitions(
           }
         }
 
-        for (int64_t j = 0; OB_SUCC(ret) && j < tschema.get_all_part_num(); ++j) {
-          if (OB_FAIL(ls_id_array.push_back(share::ObLSID(SYS_LS)))) {
-            LOG_WARN("fail to push back ls id", KR(ret));
-          }
-        }
       }
     }
 
     if (OB_SUCC(ret) && OB_FAIL(creator.add_create_tablets_of_tables_arg(
         table_schema_ptrs,
-        ls_id_array,
         DATA_CURRENT_VERSION,
         need_create_empty_majors/*need_create_empty_major_sstable*/))) {
-      LOG_WARN("fail to add create tablet arg", KR(ret));
+      LOG_ERROR("fail to add create tablet arg", KR(ret));
     }
   }
 
@@ -467,7 +429,6 @@ int ObBootstrap::prepare_create_partition(
   } else if (tschema.has_partition()) {
     common::ObArray<share::schema::ObTableSchema> table_schema_array;
     common::ObArray<const share::schema::ObTableSchema*> table_schema_ptrs;
-    common::ObArray<share::ObLSID> ls_id_array;
     common::ObArray<bool> need_create_empty_majors;
     if (OB_FAIL(generate_table_schema_array_for_create_partition(tschema, table_schema_array))) {
       LOG_WARN("fail to generate table schema array", KR(ret));
@@ -484,18 +445,11 @@ int ObBootstrap::prepare_create_partition(
           LOG_WARN("fail to push back", KR(ret), K(table_schema_array));
         }
       }
-
-      for (int i = 0; i < tschema.get_all_part_num() && OB_SUCC(ret); ++i) {
-        if (OB_FAIL(ls_id_array.push_back(share::ObLSID(SYS_LS)))) {
-          LOG_WARN("fail to push back", KR(ret));
-        }
-      }
     }
 
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(creator.add_create_tablets_of_tables_arg(
             table_schema_ptrs,
-            ls_id_array,
             DATA_CURRENT_VERSION,
             need_create_empty_majors/*need_create_empty_major_sstable*/))) {
       LOG_WARN("fail to add create tablet arg", KR(ret));
@@ -521,10 +475,9 @@ int ObBootstrap::create_core_related_partitions()
   } else {
     ObMySQLTransaction trans;
     ObMySQLProxy &sql_proxy = ddl_service_.get_sql_proxy();
-    ObTableCreator table_creator(OB_SYS_TENANT_ID,
-                                 SCN::base_scn(),
+    ObTableCreator table_creator(SCN::base_scn(),
                                  trans);
-    if (OB_FAIL(trans.start(&sql_proxy, OB_SYS_TENANT_ID))) {
+    if (OB_FAIL(trans.start(&sql_proxy))) {
       LOG_WARN("fail to start trans", KR(ret));
     } else if (OB_FAIL(table_creator.init(false/*need_tablet_cnt_check*/))) {
       LOG_WARN("fail to init tablet creator", KR(ret));
@@ -549,7 +502,7 @@ int ObBootstrap::create_core_related_partitions()
       bool commit = OB_SUCC(ret);
       if (OB_SUCCESS != (temp_ret = trans.end(commit))) {
         ret = (OB_SUCC(ret)) ? temp_ret : ret;
-        LOG_WARN("trans end failed", K(commit), K(temp_ret));
+        LOG_ERROR("trans end failed", K(commit), K(temp_ret));
       }
     }
   }
@@ -592,10 +545,9 @@ int ObBootstrap::create_sys_table_partitions(const common::ObIArray<share::schem
   } else {
     ObMySQLTransaction trans;
     ObMySQLProxy &sql_proxy = ddl_service_.get_sql_proxy();
-    ObTableCreator table_creator(OB_SYS_TENANT_ID,
-                                 SCN::base_scn(),
+    ObTableCreator table_creator(SCN::base_scn(),
                                  trans);
-    if (OB_FAIL(trans.start(&sql_proxy, OB_SYS_TENANT_ID))) {
+    if (OB_FAIL(trans.start(&sql_proxy))) {
       LOG_WARN("fail to start trans", KR(ret));
     } else if (OB_FAIL(table_creator.init(false/*need_tablet_cnt_check*/))) {
       LOG_WARN("fail to init tablet creator", KR(ret));
@@ -657,7 +609,7 @@ int ObBootstrap::create_sys_table_partitions(const common::ObIArray<share::schem
       bool commit = OB_SUCC(ret);
       if (OB_SUCCESS != (temp_ret = trans.end(commit))) {
         ret = (OB_SUCC(ret)) ? temp_ret : ret;
-        LOG_WARN("trans end failed", K(commit), K(temp_ret));
+        LOG_ERROR("trans end failed", K(commit), K(temp_ret));
       }
     }
   }
@@ -693,8 +645,7 @@ int ObBootstrap::construct_all_schema(ObSArray<ObTableSchema> &table_schemas, Ob
   int ret = OB_SUCCESS;
   if (OB_FAIL(check_inner_stat())) {
     LOG_WARN("check_inner_stat failed", KR(ret));
-  } else if (OB_FAIL(ObSchemaUtils::construct_inner_table_schemas(OB_SYS_TENANT_ID,
-      table_schemas, allocator, true))) {
+  } else if (OB_FAIL(ObSchemaUtils::construct_inner_table_schemas(table_schemas, allocator, true))) {
     LOG_WARN("failed to construct inner table schemas", KR(ret));
   } else if (OB_FAIL(ObSchemaUtils::generate_hard_code_schema_version(table_schemas))) {
     LOG_WARN("failed to generate hard code schema version", KR(ret));
@@ -710,10 +661,10 @@ int ObBootstrap::broadcast_sys_schema(const ObSArray<ObTableSchema> &table_schem
   ObMultiVersionSchemaService &schema_service = ddl_service_.get_schema_service();
   if (OB_FAIL(check_inner_stat())) {
     LOG_WARN("failed to check_inner_stat", KR(ret));
-  } else if (OB_FAIL(schema_service.broadcast_tenant_schema(OB_SYS_TENANT_ID, table_schemas))) {
+  } else if (OB_FAIL(schema_service.broadcast_tenant_schema(table_schemas))) {
     LOG_WARN("failed to broadcast tenant schema", KR(ret));
   } else {
-    LOG_INFO("successfully broadcast sys schema", K(OB_SYS_TENANT_ID));
+    LOG_INFO("successfully broadcast sys schema");
   }
   BOOTSTRAP_CHECK_SUCCESS();
   return ret;
@@ -735,7 +686,6 @@ int ObBootstrap::batch_create_schema(ObDDLService &ddl_service,
         ddl_service.get_sql_proxy());
     int64_t refreshed_schema_version = 0;
     if (OB_FAIL(trans.start(&ddl_service.get_sql_proxy(),
-                            OB_SYS_TENANT_ID,
                             refreshed_schema_version))) {
       LOG_WARN("start transaction failed", KR(ret));
     } else {
@@ -804,9 +754,9 @@ int ObBootstrap::check_is_already_bootstrap(bool &is_bootstrap)
   ObSchemaGetterGuard guard;
   if (OB_FAIL(check_inner_stat())) {
     LOG_WARN("check_inner_stat failed", K(ret));
-  } else if (OB_FAIL(schema_service.get_tenant_schema_guard(OB_SYS_TENANT_ID, guard))) {
+  } else if (OB_FAIL(schema_service.get_tenant_schema_guard(guard))) {
     LOG_WARN("get_schema_manager failed", K(ret));
-  } else if (OB_FAIL(guard.get_schema_version(OB_SYS_TENANT_ID, schema_version))) {
+  } else if (OB_FAIL(guard.get_schema_version(schema_version))) {
     LOG_WARN("fail to get tenant schema version", K(ret));
   } else if (OB_CORE_SCHEMA_VERSION == schema_version) {
     is_bootstrap = false;
@@ -834,9 +784,9 @@ int ObBootstrap::init_global_stat()
     const SCN snapshot_gc_scn = SCN::min_scn();
     const int64_t snapshot_gc_timestamp = 0;
     const int64_t ddl_epoch = 0;
-    ObGlobalStatProxy global_stat_proxy(trans, OB_SYS_TENANT_ID);
+    ObGlobalStatProxy global_stat_proxy(trans);
     ObSchemaStatusProxy *schema_status_proxy = GCTX.schema_status_proxy_;
-    if (OB_FAIL(trans.start(&sql_proxy, OB_SYS_TENANT_ID))) {
+    if (OB_FAIL(trans.start(&sql_proxy))) {
       LOG_WARN("trans start failed", KR(ret));
     } else if (OB_ISNULL(schema_status_proxy)) {
       ret = OB_ERR_UNEXPECTED;
@@ -851,13 +801,13 @@ int ObBootstrap::init_global_stat()
 
     int temp_ret = OB_SUCCESS;
     if (OB_SUCCESS != (temp_ret = trans.end(OB_SUCCESS == ret))) {
-      LOG_WARN("trans end failed", "commit", OB_SUCCESS == ret, KR(temp_ret));
+      LOG_ERROR("trans end failed", "commit", OB_SUCCESS == ret, KR(temp_ret));
       ret = (OB_SUCCESS == ret) ? temp_ret : ret;
     }
 
     // Initializes a new state of refresh schema
     if (OB_SUCC(ret)) {
-      ObRefreshSchemaStatus tenant_status(OB_SYS_TENANT_ID, OB_INVALID_TIMESTAMP,
+      ObRefreshSchemaStatus tenant_status(OB_INVALID_TIMESTAMP,
           OB_INVALID_VERSION);
       if (OB_FAIL(schema_status_proxy->set_tenant_schema_status(tenant_status))) {
         LOG_WARN("fail to init create partition status", KR(ret), K(tenant_status));
@@ -876,9 +826,9 @@ int ObBootstrap::create_sys_tenant()
   if (OB_FAIL(check_inner_stat())) {
     LOG_WARN("check_inner_stat failed", K(ret));
   } else {
-    obrpc::ObCreateTenantArg arg;
+    obcall::ObCreateTenantArg arg;
     arg.name_case_mode_ = OB_LOWERCASE_AND_INSENSITIVE;
-    tenant.set_tenant_id(OB_SYS_TENANT_ID);
+    
     tenant.set_schema_version(OB_CORE_SCHEMA_VERSION);
 
     share::schema::ObSchemaGetterGuard dummy_schema_guard;
@@ -983,7 +933,6 @@ int ObBootstrap::set_in_bootstrap()
   }
   return ret;
 }
-
 
 } // end namespace rootserver
 } // end namespace oceanbase

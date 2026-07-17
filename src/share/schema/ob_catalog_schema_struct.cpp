@@ -56,7 +56,7 @@ ObCatalogSchema &ObCatalogSchema::operator =(const ObCatalogSchema &src_schema)
     reset();
     int ret = OB_SUCCESS;
     error_ret_ = src_schema.error_ret_;
-    set_tenant_id(src_schema.tenant_id_);
+    (void)0;
     set_catalog_id(src_schema.catalog_id_);
     set_schema_version(src_schema.schema_version_);
     set_name_case_mode(src_schema.name_case_mode_);
@@ -96,7 +96,6 @@ bool ObCatalogSchema::is_valid() const
 {
   bool ret = true;
   if (!ObSchema::is_valid()
-      || !is_valid_tenant_id(tenant_id_)
       || !is_valid_id(catalog_id_)
       || schema_version_ < 0
       || catalog_name_.empty()) {
@@ -107,7 +106,7 @@ bool ObCatalogSchema::is_valid() const
 
 void ObCatalogSchema::reset()
 {
-  tenant_id_ = OB_INVALID_ID;
+  
   catalog_id_ = OB_INVALID_ID;
   schema_version_ = OB_INVALID_VERSION;
   catalog_name_.reset();
@@ -120,7 +119,7 @@ void ObCatalogSchema::reset()
 ObCatalogSchema::ObCatalogSchema(bool is_mysql_mode)
   : ObSchema()
 {
-  tenant_id_ = OB_INVALID_ID;
+  
   catalog_id_ = OB_INTERNAL_CATALOG_ID;
   schema_version_ = OB_INVALID_VERSION;
   catalog_name_ = is_mysql_mode ? OB_INTERNAL_CATALOG_NAME : OB_INTERNAL_CATALOG_NAME_UPPER;
@@ -130,7 +129,6 @@ ObCatalogSchema::ObCatalogSchema(bool is_mysql_mode)
 }
 
 OB_SERIALIZE_MEMBER(ObCatalogSchema,
-                    tenant_id_,
                     catalog_id_,
                     schema_version_,
                     catalog_name_,

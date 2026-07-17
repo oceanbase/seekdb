@@ -19,7 +19,6 @@
 
 #include "observer/ob_uniq_task_queue.h"   // for ObIUniqTaskQueueTask
 #include "common/ob_tablet_id.h"           // for ObTablet
-#include "share/ob_ls_id.h"                // for ObLSID
 
 namespace oceanbase
 {
@@ -30,7 +29,6 @@ class ObTabletID;
 }
 namespace share
 {
-class ObLSID;
 class ObTabletReplica;
 class ObTabletTableOperator;
 struct ObTabletReplicaChecksumItem;
@@ -66,30 +64,23 @@ public:
 
   ObTabletTableUpdateTask()
       : need_diagnose_(false),
-        ls_id_(),
         tablet_id_(),
         add_timestamp_(OB_INVALID_TIMESTAMP),
         start_timestamp_(OB_INVALID_TIMESTAMP) {}
   explicit ObTabletTableUpdateTask(
-      const share::ObLSID &ls_id,
       const common::ObTabletID &tablet_id,
       const int64_t add_timestamp)
       : need_diagnose_(false),
-        ls_id_(ls_id),
         tablet_id_(tablet_id),
         add_timestamp_(add_timestamp),
         start_timestamp_(OB_INVALID_TIMESTAMP) {}
-  explicit ObTabletTableUpdateTask(
-      const share::ObLSID &ls_id,
-      const common::ObTabletID &tablet_id)
+  explicit ObTabletTableUpdateTask(const common::ObTabletID &tablet_id)
       : need_diagnose_(false),
-        ls_id_(ls_id),
         tablet_id_(tablet_id),
         add_timestamp_(OB_INVALID_TIMESTAMP),
         start_timestamp_(OB_INVALID_TIMESTAMP) {}
   virtual ~ObTabletTableUpdateTask();
   int init(
-      const share::ObLSID &ls_id,
       const common::ObTabletID &tablet_id,
       const int64_t add_timestamp,
       const bool need_diagnose = false);
@@ -104,13 +95,12 @@ public:
   virtual bool need_diagnose() const override { return need_diagnose_; }
 
   // get-related functions for member in ObTabletTableUpdateTask
-  inline const share::ObLSID &get_ls_id() const { return ls_id_; }
   inline const common::ObTabletID &get_tablet_id() const { return tablet_id_; }
   inline int64_t get_add_timestamp() const { return add_timestamp_; }
 
   // other functions
   bool need_process_alone() const { return false; }
-  uint64_t get_group_id() const { return ls_id_.id(); }
+  uint64_t get_group_id() const { return 0; }
   int64_t hash() const;
   int hash(uint64_t &hash_val) const { hash_val = hash(); return OB_SUCCESS; };
   bool compare_without_version(
@@ -118,11 +108,10 @@ public:
   // TODO: need to realize barrier related functions
   bool is_barrier() const;
 
-  TO_STRING_KV(K_(ls_id), K_(tablet_id), K_(need_diagnose), K_(add_timestamp), K_(start_timestamp));
+  TO_STRING_KV(K_(tablet_id), K_(need_diagnose), K_(add_timestamp), K_(start_timestamp));
 private:
   const int64_t TABLET_CHECK_INTERVAL = 2 * 3600 * 1000L * 1000L; //2 hour 
   bool need_diagnose_; // task for compaction need diagnose
-  share::ObLSID ls_id_;
   common::ObTabletID tablet_id_;
   int64_t add_timestamp_;
   int64_t start_timestamp_;
@@ -146,7 +135,6 @@ public:
   ObTabletTableUpdater()
       : is_inited_(false),
         is_stop_(true),
-        tenant_id_(OB_INVALID_TENANT_ID),
         update_queue_() {}
   virtual ~ObTabletTableUpdater() { destroy(); }
   static int mtl_init(ObTabletTableUpdater *&tablet_table_updater);
@@ -157,15 +145,12 @@ public:
   void destroy();
 
   int submit_tablet_update_task(
-      const share::ObLSID &ls_id,
       const ObTabletID &tablet_id,
       const bool need_diagnose = false);
 
   // async update tablets - add task to queue
-  // @param [in] ls_id, to report which ls
   // @param [in] tablet_id, to report which tablet
   int async_update(
-      const share::ObLSID &ls_id,
       const common::ObTabletID &tablet_id,
       const bool need_diagnose = false);
 
@@ -182,11 +167,9 @@ public:
   int set_thread_count();
   // for diagnose
   int check_exist(
-      const share::ObLSID &ls_id, 
       const ObTabletID &tablet_id, 
       bool &exist);
   int check_processing_exist(
-      const share::ObLSID &ls_id, 
       const ObTabletID &tablet_id,
       bool &exist);
   int diagnose_existing_task(
@@ -200,15 +183,15 @@ private:
 
   // generate_tasks_ - split batch_tasks into update_tasks and remove_tasks
   // @parma [in] batch_tasks, input tasks
-  // @parma [out] update_tablet_replicas, generated update replicas
-  // @parma [out] remove_tablet_replicas, generated remove replicas
+  // @parma [out] update_tablet_meta_rows, generated tablet meta rows to update
+  // @parma [out] remove_tablet_meta_rows, generated tablet meta rows to remove
   // @parma [out] update_tablet_checksums, generated update tablet checksums
   // @parma [out] update_tablet_tasks, generated update tasks
   // @parma [out] remove_tablet_tasks, generated remove tasks
   int generate_tasks_(
       const ObIArray<ObTabletTableUpdateTask> &batch_tasks,
-      ObArray<share::ObTabletReplica> &update_tablet_replicas,
-      ObArray<share::ObTabletReplica> &remove_tablet_replicas,
+      ObArray<share::ObTabletReplica> &update_tablet_meta_rows,
+      ObArray<share::ObTabletReplica> &remove_tablet_meta_rows,
       ObArray<share::ObTabletReplicaChecksumItem> &update_tablet_checksums,
       UpdateTaskList &update_tablet_tasks,
       RemoveTaskList &remove_tablet_tasks);
@@ -216,22 +199,22 @@ private:
   // do_batch_update - the real action to update a batch of tasks
   // @parma [in] start_time, the time to start this execution
   // @parma [in] tasks, batch of tasks to execute
-  // @parma [in] replicas, related replica to each task
+  // @parma [in] tablet_meta_rows, related tablet meta row to each task
   // @parma [in] checksums, related checksum to each task
   int do_batch_update_(
       const int64_t start_time,
       const ObIArray<ObTabletTableUpdateTask> &tasks,
-      const ObIArray<share::ObTabletReplica> &replicas,
+      const ObIArray<share::ObTabletReplica> &tablet_meta_rows,
       const ObIArray<share::ObTabletReplicaChecksumItem> &checksums);
 
   // do_batch_remove - the real action to remove a batch of tasks
   // @parma [in] start_time, the time to start this execution
   // @parma [in] tasks, batch of tasks to execute
-  // @parma [in] replicas, related replica to each task
+  // @parma [in] tablet_meta_rows, related tablet meta row to each task
   int do_batch_remove_(
       const int64_t start_time,
       const ObIArray<ObTabletTableUpdateTask> &tasks,
-      const ObIArray<share::ObTabletReplica> &replicas);
+      const ObIArray<share::ObTabletReplica> &tablet_meta_rows);
 
   // add_update_task - add a task to task_queue
   // @parma [in] task, task to add
@@ -249,16 +232,13 @@ private:
   int reput_to_queue_(
     const common::ObIArray<ObTabletTableUpdateTask> &tasks);
 
-  int check_tenant_status_(
-      const uint64_t tenant_id,
-      bool &tenant_dropped,
-      bool &schema_not_ready);
+  int check_tenant_status_(bool &schema_not_ready);
 
   // push_task_info_ - add update / remove task to array
   int push_task_info_(
       const ObTabletTableUpdateTask &task,
       const share::ObTabletReplica &replica,
-      ObArray<share::ObTabletReplica> &replicas,
+      ObArray<share::ObTabletReplica> &tablet_meta_rows,
       ObArray<ObTabletTableUpdateTask> &task_list);
 private:
   const int64_t MINI_MODE_UPDATE_TASK_THREAD_CNT = 1;
@@ -270,7 +250,6 @@ private:
   const int64_t DIAGNOSE_MAX_BATCH_COUNT = 3;
   bool is_inited_;
   bool is_stop_;
-  uint64_t tenant_id_;
   ObTabletTableUpdateTaskQueue update_queue_;
   DISALLOW_COPY_AND_ASSIGN(ObTabletTableUpdater);
 };

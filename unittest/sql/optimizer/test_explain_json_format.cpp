@@ -66,7 +66,7 @@ TEST_F(ObLogPlanTest, ob_explain_test)
 
   // create a plan
   ObSQLSessionInfo session_info;
-  ASSERT_EQ(OB_SUCCESS, session_info.test_init(0, 0, 0, NULL));
+  ASSERT_EQ(OB_SUCCESS, session_info.test_init(0, 0, NULL));
   ObArenaAllocator mempool(ObModIds::OB_SQL_COMPILE, OB_MALLOC_NORMAL_BLOCK_SIZE);
   ObExecContext exec_ctx(mempool);
   ObAddr addr;
@@ -75,7 +75,7 @@ TEST_F(ObLogPlanTest, ob_explain_test)
   ObLogPlanFactory log_plan_factory_(mempool);
   ObOptimizerContext ctx(&session_info, &exec_ctx, NULL, NULL,
                          static_cast<ObIAllocator &>(mempool),
-                         NULL, addr, NULL, global_hint, 
+                         NULL, addr, global_hint, 
                          expr_factory, NULL, false);
   ObSelectStmt *select_stmt = NULL;
 	ObSelectLogPlan plan(ctx, select_stmt);

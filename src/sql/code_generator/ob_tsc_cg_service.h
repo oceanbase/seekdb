@@ -47,10 +47,7 @@ public:
                                const ObIArray<ObRawExpr *> &access_exprs,
                                const log_op_def::ObLogOpType op_type,
                                const bool is_global_index_lookup,
-                               const bool use_column_store,
                                ObPushdownExprSpec &pd_spec);
-  int generate_ext_tbl_filter_pd_level(const ObLogTableScan &op, const ObDASScanCtDef &scan_ctdef,
-                                       ObPushdownExprSpec &pd_spec);
   int generate_table_loc_meta(uint64_t table_loc_id,
                               const ObDMLStmt &stmt,
                               const share::schema::ObTableSchema &table_schema,
@@ -155,6 +152,9 @@ private:
                                const DASScanCGCtx &cg_ctx,
                                ObDASScanCtDef &scan_ctdef,
                                common::ObIArray<ObRawExpr*> &access_exprs);
+  int prune_scan_pushdown_filters_by_table_columns(
+      const share::schema::ObTableSchema &scan_table_schema,
+      common::ObIArray<ObRawExpr*> &scan_pushdown_filters) const;
   //extract these column exprs need by TSC operator, these column will output by DAS scan
   int extract_tsc_access_columns(const ObLogTableScan &op, common::ObIArray<ObRawExpr*> &access_exprs);
   int extract_das_column_ids(const common::ObIArray<ObRawExpr*> &column_exprs, common::ObIArray<uint64_t> &column_ids);
@@ -327,7 +327,6 @@ private:
   int generate_das_sort_ctdef(const ObIArray<ObExpr *> &sort_keys,
                               ObDASBaseCtDef *child_ctdef,
                               ObDASSortCtDef *&sort_ctdef);
-  int generate_mr_mv_scan_flag(const ObLogTableScan &op, ObQueryFlag &query_flag) const;
   int generate_index_merge_ctdef(const ObLogTableScan &op, ObTableScanCtDef &tsc_ctdef, ObDASIndexMergeCtDef *&root_ctdef);
   int generate_index_merge_node_ctdef(const ObLogTableScan &op,
                                       ObTableScanCtDef &tsc_ctdef,

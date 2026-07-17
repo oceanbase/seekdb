@@ -22,7 +22,7 @@
 
 #include "lib/utility/ob_macro_utils.h"
 #include "lib/utility/ob_template_utils.h"
-#include "lib/alloc/alloc_assist.h"
+#include "lib/utility/alloc_assist.h"
 
 // Windows compatibility for GCC builtins
 #ifdef _WIN32

@@ -15,6 +15,7 @@
  */
 
 #include "ob_tablet_delete_mds_helper.h"
+#include "share/rc/ob_module_provider.h"
 #include "storage/tablet/ob_tablet_delete_replay_executor.h"
 #include "storage/tx_storage/ob_ls_service.h"
 
@@ -27,7 +28,7 @@ namespace oceanbase
 namespace storage
 {
 int ObTabletDeleteMdsHelper::register_process(
-    obrpc::ObBatchRemoveTabletArg &arg,
+    obcall::ObBatchRemoveTabletArg &arg,
     mds::BufferCtx &ctx)
 {
   MDS_TG(1_s);
@@ -35,22 +36,13 @@ int ObTabletDeleteMdsHelper::register_process(
 
   if (CLICK_FAIL(delete_tablets(arg, ctx))) {
     LOG_WARN("failed to delete tablets", K(ret), K(arg));
-  } else if (CLICK_FAIL(ObTabletCreateDeleteMdsUserData::set_tablet_empty_shell_trigger(arg.id_))) {
+  } else if (CLICK_FAIL(ObTabletCreateDeleteMdsUserData::set_tablet_empty_shell_trigger())) {
     LOG_WARN("failed to set_tablet_empty_shell_trigger", K(ret), K(arg));
   } else {
     LOG_INFO("delete tablet register", KR(ret), K(arg));
   }
 
   return ret;
-}
-
-int ObTabletDeleteMdsHelper::on_commit_for_old_mds(
-    const char* buf,
-    const int64_t len,
-    const transaction::ObMulSourceDataNotifyArg &notify_arg)
-{
-  mds::TLOCAL_MDS_INFO.reset();// disable runtime check
-  return ObTabletCreateDeleteHelper::process_for_old_mds<obrpc::ObBatchRemoveTabletArg, ObTabletDeleteMdsHelper>(buf, len, notify_arg);
 }
 
 int ObTabletDeleteMdsHelper::on_register(
@@ -60,7 +52,7 @@ int ObTabletDeleteMdsHelper::on_register(
 {
   MDS_TG(1_s);
   int ret = OB_SUCCESS;
-  obrpc::ObBatchRemoveTabletArg arg;
+  obcall::ObBatchRemoveTabletArg arg;
   int64_t pos = 0;
   bool exist = true;
 
@@ -69,9 +61,6 @@ int ObTabletDeleteMdsHelper::on_register(
     LOG_WARN("invalid args", K(ret), KP(buf), K(len));
   } else if (CLICK_FAIL(arg.deserialize(buf, len, pos))) {
     LOG_WARN("failed to deserialize", K(ret));
-  } else if (arg.is_old_mds_) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected error, arg is old mds", K(ret), K(arg));
   } else if (CLICK_FAIL(register_process(arg, ctx))) {
     LOG_WARN("failed to register_process", K(ret), K(arg));
   }
@@ -80,7 +69,7 @@ int ObTabletDeleteMdsHelper::on_register(
 }
 
 int ObTabletDeleteMdsHelper::replay_process(
-    obrpc::ObBatchRemoveTabletArg &arg,
+    obcall::ObBatchRemoveTabletArg &arg,
     const share::SCN &scn,
     mds::BufferCtx &ctx)
 {
@@ -89,7 +78,7 @@ int ObTabletDeleteMdsHelper::replay_process(
 
   if (CLICK_FAIL(replay_delete_tablets(arg, scn, ctx))) {
     LOG_WARN("failed to delete tablets", K(ret), K(arg), K(scn));
-  } else if (CLICK_FAIL(ObTabletCreateDeleteMdsUserData::set_tablet_empty_shell_trigger(arg.id_))) {
+  } else if (CLICK_FAIL(ObTabletCreateDeleteMdsUserData::set_tablet_empty_shell_trigger())) {
     LOG_WARN("failed to set_tablet_empty_shell_trigger", K(ret), K(arg));
   } else {
     LOG_INFO("delete tablet replay", KR(ret), K(scn), K(arg));
@@ -106,7 +95,7 @@ int ObTabletDeleteMdsHelper::on_replay(
 {
   MDS_TG(1_s);
   int ret = OB_SUCCESS;
-  obrpc::ObBatchRemoveTabletArg arg;
+  obcall::ObBatchRemoveTabletArg arg;
   int64_t pos = 0;
   bool exist = true;
 
@@ -115,8 +104,6 @@ int ObTabletDeleteMdsHelper::on_replay(
     LOG_WARN("invalid args", K(ret), KP(buf), K(len));
   } else if (CLICK_FAIL(arg.deserialize(buf, len, pos))) {
     LOG_WARN("failed to deserialize", K(ret));
-  } else if (arg.is_old_mds_) {
-    LOG_INFO("skip replay delete tablet for old mds", K(arg), K(scn));
   } else if (CLICK_FAIL(replay_process(arg, scn, ctx))) {
     LOG_WARN("failed to replay_process", K(ret), K(arg));
   }
@@ -125,24 +112,19 @@ int ObTabletDeleteMdsHelper::on_replay(
 }
 
 int ObTabletDeleteMdsHelper::delete_tablets(
-    const obrpc::ObBatchRemoveTabletArg &arg,
+    const obcall::ObBatchRemoveTabletArg &arg,
     mds::BufferCtx &ctx)
 {
   MDS_TG(1_s);
   int ret = OB_SUCCESS;
-  ObTenantMetaMemMgr *t3m = MTL(ObTenantMetaMemMgr*);
+  ObTenantMetaMemMgr *t3m = share::g_mp->tenant_meta_mem_mgr();
   bool exist = false;
   ObTabletHandle tablet_handle;
   ObTabletMapKey key;
-  key.ls_id_ = arg.id_;
 
-  ObLSService *ls_service = MTL(ObLSService*);
-  ObLSHandle ls_handle;
-  ObLS *ls = nullptr;
-  if (CLICK_FAIL(ls_service->get_ls(key.ls_id_, ls_handle, ObLSGetMod::MDS_TABLE_MOD))) {
-      LOG_WARN("failed to get ls", K(ret), K(key.ls_id_));
-  } else if (OB_ISNULL(ls = ls_handle.get_ls())) {
-    ret = OB_ERR_UNEXPECTED;
+  ObLS *tenant_ls = nullptr;
+  if (CLICK_FAIL(share::g_mp->ls_service()->get_ls(tenant_ls))) {
+      LOG_WARN("failed to get ls", K(ret));
   } else {
     CLICK();
     for (int64_t i = 0; OB_SUCC(ret) && i < arg.tablet_ids_.count(); ++i) {
@@ -165,8 +147,9 @@ int ObTabletDeleteMdsHelper::delete_tablets(
       } else if (!exist) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("tablet does not exist", K(ret), K(key));
-      } else if (CLICK_FAIL(set_tablet_deleted_status(ls->get_tablet_svr(), tablet_handle, ctx))) {
-        LOG_WARN("failed to set tablet deleted status", K(ret), K(key));
+      } else if (CLICK_FAIL(set_tablet_deleted_status(
+              tenant_ls->get_tablet_svr(), tablet_handle, ctx))) {
+        LOG_ERROR("failed to set tablet deleted status", K(ret), K(key));
       }
     }
   }
@@ -177,7 +160,7 @@ int ObTabletDeleteMdsHelper::delete_tablets(
 }
 
 int ObTabletDeleteMdsHelper::replay_delete_tablets(
-    const obrpc::ObBatchRemoveTabletArg &arg,
+    const obcall::ObBatchRemoveTabletArg &arg,
     const share::SCN &scn,
     mds::BufferCtx &ctx)
 {
@@ -185,21 +168,19 @@ int ObTabletDeleteMdsHelper::replay_delete_tablets(
   int ret = OB_SUCCESS;
   bool exist = false;
   ObRemoveTabletArg remove_tablet_arg;
-  remove_tablet_arg.ls_id_ = arg.id_;
-
   for (int64_t i = 0; OB_SUCC(ret) && i < arg.tablet_ids_.count(); ++i) {
     MDS_TG(10_ms);
     exist = true;
     remove_tablet_arg.tablet_id_ = arg.tablet_ids_.at(i);
     ObTabletDeleteReplayExecutor replayer;
-    if (CLICK_FAIL(replayer.init(ctx, scn, arg.is_old_mds_))) {
-      LOG_WARN("failed to init tablet delete replay executor", K(ret), K(remove_tablet_arg));
-    } else if (CLICK_FAIL(replayer.execute(scn, remove_tablet_arg.ls_id_, remove_tablet_arg.tablet_id_))) {
+    if (CLICK_FAIL(replayer.init(ctx, scn))) {
+      LOG_ERROR("failed to init tablet delete replay executor", K(ret), K(remove_tablet_arg));
+    } else if (CLICK_FAIL(replayer.execute(scn, remove_tablet_arg.tablet_id_))) {
       if (OB_TABLET_NOT_EXIST == ret) {
         exist = false;
         ret = OB_SUCCESS;
       } else {
-        LOG_WARN("failed to replay", K(ret), K(remove_tablet_arg), K(scn));
+        LOG_ERROR("failed to replay", K(ret), K(remove_tablet_arg), K(scn));
       }
     }
 

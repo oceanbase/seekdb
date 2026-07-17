@@ -106,7 +106,7 @@ int ObDatabaseResolver<T>::resolve_database_option(T *stmt, ParseNode *node, ObS
         } else {
           if (stmt::T_ALTER_DATABASE == stmt->get_stmt_type()) {
             if (OB_FAIL(alter_option_bitset_.add_member(
-                    obrpc::ObAlterDatabaseArg::REPLICA_NUM))) {
+                    obcall::ObAlterDatabaseArg::REPLICA_NUM))) {
               OB_LOG(WARN, "failed to add member to bitset!", K(ret));
             }
           }
@@ -165,7 +165,7 @@ int ObDatabaseResolver<T>::resolve_database_option(T *stmt, ParseNode *node, ObS
           collation_already_set_ = true;
           if (stmt::T_ALTER_DATABASE == stmt->get_stmt_type()) {
             if (OB_FAIL(alter_option_bitset_.add_member(
-                    obrpc::ObAlterDatabaseArg::COLLATION_TYPE))) {
+                    obcall::ObAlterDatabaseArg::COLLATION_TYPE))) {
               OB_LOG(WARN, "failed to add member to bitset!", K(ret));
             }
           }
@@ -187,7 +187,7 @@ int ObDatabaseResolver<T>::resolve_database_option(T *stmt, ParseNode *node, ObS
         }
         if (common::OB_SUCCESS == ret && stmt->get_stmt_type() == stmt::T_ALTER_DATABASE) {
           if (OB_FAIL(alter_option_bitset_.add_member(
-                  obrpc::ObAlterDatabaseArg::READ_ONLY))) {
+                  obcall::ObAlterDatabaseArg::READ_ONLY))) {
             OB_LOG(WARN, "failed to add member to bitset!", K(ret));
           }
         }
@@ -201,7 +201,7 @@ int ObDatabaseResolver<T>::resolve_database_option(T *stmt, ParseNode *node, ObS
 
         if (common::OB_SUCCESS == ret && stmt->get_stmt_type() == stmt::T_ALTER_DATABASE) {
           if (OB_FAIL(alter_option_bitset_.add_member(
-                  obrpc::ObAlterDatabaseArg::DEFAULT_TABLEGROUP))) {
+                  obcall::ObAlterDatabaseArg::DEFAULT_TABLEGROUP))) {
             OB_LOG(WARN, "failed to add member to bitset!", K(ret));
           }
         }

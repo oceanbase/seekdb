@@ -29,7 +29,6 @@ void ObTabletChecksumIterator::reset()
 {
   reuse();
   sql_proxy_ = nullptr;
-  tenant_id_ = OB_INVALID_TENANT_ID;
   is_inited_ = false;
 }
 
@@ -46,22 +45,22 @@ int ObTabletChecksumIterator::fetch_next_batch()
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", KR(ret), K_(tenant_id));
+    LOG_WARN("not init", KR(ret));
   } else {
-    ObTabletLSPair start_pair;
+    ObTabletID start_tablet_id;
     if (checksum_items_.count() > 0) {
       ObTabletChecksumItem tmp_item;
       if (OB_FAIL(checksum_items_.at(checksum_items_.count() - 1, tmp_item))) {
-        LOG_WARN("fail to fetch last checksum item", KR(ret), K_(tenant_id), K_(checksum_items));
-      } else if (OB_FAIL(start_pair.init(tmp_item.tablet_id_, tmp_item.ls_id_))) {
-        LOG_WARN("fail to init start tablet_ls_pair", KR(ret), K(tmp_item));
+        LOG_WARN("fail to fetch last checksum item", KR(ret), K_(checksum_items));
+      } else {
+        start_tablet_id = tmp_item.tablet_id_;
       }
     }
     if (OB_SUCC(ret)) {
       checksum_items_.reuse();
-      if (OB_FAIL(ObTabletChecksumOperator::load_tablet_checksum_items(*sql_proxy_, start_pair, 
-          BATCH_FETCH_COUNT, tenant_id_, compaction_scn_, checksum_items_))) {
-        LOG_WARN("fail to load tablet checksums", KR(ret), K_(tenant_id), K(start_pair), 
+      if (OB_FAIL(ObTabletChecksumOperator::load_tablet_checksum_items(*sql_proxy_, start_tablet_id,
+          BATCH_FETCH_COUNT, compaction_scn_, checksum_items_))) {
+        LOG_WARN("fail to load tablet checksums", KR(ret), K(start_tablet_id),
           K_(compaction_scn));
       } else if (OB_UNLIKELY(0 == checksum_items_.count())) {
         ret = OB_ITER_END;

@@ -32,9 +32,7 @@ public:
   inline void set_if_not_exists(bool if_not_exists) {
     create_ccl_rule_arg_.if_not_exist_ = if_not_exists;
   }
-  inline void set_tenant_id(uint64_t tenant_id) {
-    create_ccl_rule_arg_.ccl_rule_schema_.set_tenant_id(tenant_id);
-  }
+  
   inline void set_ccl_rule_name(const common::ObString &ccl_rule_name) {
     create_ccl_rule_arg_.ccl_rule_schema_.set_ccl_rule_name(ccl_rule_name);
   }
@@ -71,12 +69,12 @@ public:
     create_ccl_rule_arg_.ccl_rule_schema_.set_ccl_keywords(ccl_keyword);
   }
 
-  const obrpc::ObCreateCCLRuleArg &get_create_ccl_rule_arg() const { return create_ccl_rule_arg_; }
+  const obcall::ObCreateCCLRuleArg &get_create_ccl_rule_arg() const { return create_ccl_rule_arg_; }
   virtual bool cause_implicit_commit() const
   {
     return true;
   }
-  virtual obrpc::ObDDLArg &get_ddl_arg()
+  virtual obcall::ObDDLArg &get_ddl_arg()
   {
     return create_ccl_rule_arg_;
   }
@@ -84,7 +82,7 @@ public:
   TO_STRING_KV(K_(create_ccl_rule_arg));
 
 private:
-  obrpc::ObCreateCCLRuleArg create_ccl_rule_arg_;
+  obcall::ObCreateCCLRuleArg create_ccl_rule_arg_;
 };
 }//namespace sql
 }//namespace oceanbase

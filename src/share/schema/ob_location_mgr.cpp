@@ -158,8 +158,7 @@ int ObLocationMgr::add_location(const ObLocationSchema &schema, const ObNameCase
     LOG_WARN("failed to add location schema", K(ret));
   } else {
     int over_write = 1;
-    ObLocationNameHashKey hash_wrapper(new_schema->get_tenant_id(),
-                                       new_schema->get_name_case_mode(),
+    ObLocationNameHashKey hash_wrapper(new_schema->get_name_case_mode(), 
                                        new_schema->get_location_name_str());
     if (OB_FAIL(location_name_map_.set_refactored(hash_wrapper, new_schema, over_write))) {
       LOG_WARN("build location hash map failed", K(ret));
@@ -170,7 +169,7 @@ int ObLocationMgr::add_location(const ObLocationSchema &schema, const ObNameCase
   }
   if ((location_infos_.count() != location_name_map_.item_count()
       || location_infos_.count() != location_id_map_.item_count())) {
-    LOG_WARN("schema is inconsistent with its map", K(ret),
+    LOG_ERROR("schema is inconsistent with its map", K(ret),
             K(location_infos_.count()),
             K(location_name_map_.item_count()),
             K(location_id_map_.item_count()));
@@ -203,14 +202,13 @@ int ObLocationMgr::del_location(const ObTenantLocationId &id)
       ret = OB_SUCCESS;
       LOG_INFO("failed to remove location schema, item may not exist", K(ret));
     } else {
-      LOG_WARN("failed to remove location schema", K(ret));
+      LOG_ERROR("failed to remove location schema", K(ret));
     }
   } else if (OB_ISNULL(schema)) {
     // if item can be found, schema should not be null
     // defense code, should not happed
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("removed location schema return NULL, ",
-            "tenant_id", id.tenant_id_,
             "location_id", id.schema_id_,
             K(ret));
   }
@@ -227,7 +225,7 @@ int ObLocationMgr::del_location(const ObTenantLocationId &id)
   }
   if (OB_SUCC(ret) && OB_NOT_NULL(schema)) {
     if (OB_FAIL(location_name_map_.erase_refactored(
-        ObLocationNameHashKey(schema->get_tenant_id(), schema->get_name_case_mode(), schema->get_location_name_str())))) {
+        ObLocationNameHashKey(schema->get_name_case_mode(), schema->get_location_name_str())))) {
       if (OB_HASH_NOT_EXIST == ret) {
         ret = OB_SUCCESS;
         LOG_INFO("item does not exist, will igore it", K(ret),
@@ -281,8 +279,7 @@ int ObLocationMgr::get_location_schema_by_id(const uint64_t location_id,
   return ret;
 }
 
-int ObLocationMgr::get_location_schema_by_name(const uint64_t tenant_id,
-                                               const ObNameCaseMode mode,
+int ObLocationMgr::get_location_schema_by_name(const ObNameCaseMode mode,
                                                const common::ObString &name,
                                                const ObLocationSchema *&schema) const
 {
@@ -291,16 +288,16 @@ int ObLocationMgr::get_location_schema_by_name(const uint64_t tenant_id,
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
-  } else if (OB_UNLIKELY(OB_INVALID_ID == tenant_id) || OB_UNLIKELY(name.empty())) {
+  } else if (OB_UNLIKELY(name.empty())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(tenant_id), K(name));
+    LOG_WARN("invalid argument", K(ret), K(name));
   } else {
     ObLocationSchema *tmp_schema = NULL;
-    ObLocationNameHashKey hash_wrapper(tenant_id, mode, name);
+    ObLocationNameHashKey hash_wrapper(mode, name);
     if (OB_FAIL(location_name_map_.get_refactored(hash_wrapper, tmp_schema))) {
       if (OB_HASH_NOT_EXIST == ret) {
         ret = OB_SUCCESS;
-        LOG_INFO("schema is not exist", K(tenant_id), K(name), K(mode),
+        LOG_INFO("schema is not exist", K(name), K(mode),
                 "map_cnt", location_name_map_.item_count());
       }
     } else {
@@ -310,52 +307,21 @@ int ObLocationMgr::get_location_schema_by_name(const uint64_t tenant_id,
   return ret;
 }
 
-int ObLocationMgr::get_location_schemas_in_tenant(const uint64_t tenant_id,
-                                                    common::ObIArray<const ObLocationSchema *> &schemas) const
+int ObLocationMgr::get_location_schemas_in_tenant(common::ObIArray<const ObLocationSchema *> &schemas) const
 {
   int ret = OB_SUCCESS;
   schemas.reset();
-  ObTenantLocationId id(tenant_id, OB_MIN_ID);
+  ObTenantLocationId id(OB_MIN_ID);
   ConstLocationIter iter_begin =
       location_infos_.lower_bound(id, compare_with_tenant_location_id);
-  bool is_stop = false;
   for (ConstLocationIter iter = iter_begin;
-      OB_SUCC(ret) && iter != location_infos_.end() && !is_stop; ++iter) {
+      OB_SUCC(ret) && iter != location_infos_.end(); ++iter) {
     const ObLocationSchema *schema = NULL;
     if (OB_ISNULL(schema = *iter)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("NULL ptr", K(ret), K(schema));
-    } else if (tenant_id != schema->get_tenant_id()) {
-      is_stop = true;
     } else if (OB_FAIL(schemas.push_back(schema))) {
       LOG_WARN("push back location failed", K(ret));
-    }
-  }
-  return ret;
-}
-
-int ObLocationMgr::del_location_schemas_in_tenant(const uint64_t tenant_id)
-{
-  int ret = OB_SUCCESS;
-  if (OB_INVALID_ID == tenant_id) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(tenant_id));
-  } else {
-    ObArray<const ObLocationSchema *> schemas;
-    if (OB_FAIL(get_location_schemas_in_tenant(tenant_id, schemas))) {
-      LOG_WARN("get location schemas failed", K(ret), K(tenant_id));
-    } else {
-      FOREACH_CNT_X(schema, schemas, OB_SUCC(ret)) {
-        ObTenantLocationId id(tenant_id, (*schema)->get_location_id());
-        if (OB_FAIL(del_location(id))) {
-          LOG_WARN("del location failed",
-                  "tenant_id",
-                  id.tenant_id_,
-                  "location_id",
-                  id.schema_id_,
-                  K(ret));
-        }
-      }
     }
   }
   return ret;
@@ -415,8 +381,6 @@ int ObLocationMgr::rebuild_location_hashmap()
     if (OB_ISNULL(location_schema)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("location_schema is NULL", K(ret), K(location_schema));
-    } else if (FALSE_IT(hash_wrapper.set_tenant_id(location_schema->get_tenant_id()))) {
-      // do nothing
     } else if (FALSE_IT(hash_wrapper.set_location_name(location_schema->get_location_name()))) {
       // do nothing
     } else if (OB_FAIL(location_name_map_.set_refactored(hash_wrapper,

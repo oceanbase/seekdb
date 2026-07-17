@@ -55,13 +55,12 @@ void ObPushDownTopNFilter::destroy()
 int ObPushDownTopNFilter::init(const ObSortVecOpContext &ctx,
                                       lib::MemoryContext &mem_context)
 {
-  return init(ctx.is_fetch_with_ties_, ctx.pd_topn_filter_info_, ctx.tenant_id_, ctx.sk_collations_,
+  return init(ctx.is_fetch_with_ties_, ctx.pd_topn_filter_info_, ctx.sk_collations_,
               ctx.exec_ctx_, mem_context);
 }
 
 int ObPushDownTopNFilter::init(bool is_fetch_with_ties,
                                const ObPushDownTopNFilterInfo *pd_topn_filter_info,
-                               uint64_t tenant_id,
                                const ObIArray<ObSortFieldCollation> *sort_collations,
                                ObExecContext *exec_ctx, lib::MemoryContext &mem_context)
 {
@@ -88,7 +87,7 @@ int ObPushDownTopNFilter::init(bool is_fetch_with_ties,
                                   pd_topn_filter_info_->dh_msg_type_, p2p_msg))) {
     LOG_WARN("fail to alloc msg", K(ret));
   } else if (FALSE_IT(pd_topn_filter_msg = static_cast<ObPushDownTopNFilterMsg *>(p2p_msg))) {
-  } else if (OB_FAIL(pd_topn_filter_msg->init(pd_topn_filter_info, tenant_id, sort_collations,
+  } else if (OB_FAIL(pd_topn_filter_msg->init(pd_topn_filter_info, sort_collations,
                                               exec_ctx, px_seq_id, is_fetch_with_ties))) {
     LOG_WARN("failed to init pushdown topn filter msg");
   } else if (!pd_topn_filter_info_->is_shuffle_

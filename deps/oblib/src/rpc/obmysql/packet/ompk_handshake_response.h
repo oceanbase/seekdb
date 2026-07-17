@@ -48,9 +48,7 @@ public:
 
   inline const ObMySQLCapabilityFlags &get_capability_flags() const { return capability_; }
   inline void set_client_found_rows() {
-    // in oracle mode, update table set c1 = 1 where c1 = 1;
-    // this sql will change none,but oracle return affected with found rows
-    // we must set OB_CLIENT_FOUND_ROWS  == 1, in oracle mode
+    // Return affected rows using matched row semantics.
     capability_.cap_flags_.OB_CLIENT_FOUND_ROWS = 0x1;
   }
   inline uint32_t get_max_packet_size() const { return max_packet_size_; }
@@ -60,13 +58,6 @@ public:
   inline const ObString &get_database() const { return database_; }
   inline const ObString &get_auth_plugin_name() const { return auth_plugin_name_; }
   inline const common::ObIArray<ObStringKV> &get_connect_attrs() const { return connect_attrs_; }
-  bool is_obproxy_client_mode() const;
-  bool is_java_client_mode() const;
-  bool is_oci_client_mode() const;
-  bool is_jdbc_client_mode() const;
-  bool is_ob_client_jdbc() const;
-  bool is_ob_client_oci() const;
-  int64_t get_sql_request_level() const;
 
   inline void set_capability_flags(const ObMySQLCapabilityFlags &cap) { capability_ = cap; }
   inline void set_max_packet_size(const uint32_t max_size) { max_packet_size_ = max_size; }

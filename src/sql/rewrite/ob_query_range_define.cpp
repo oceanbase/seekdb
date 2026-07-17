@@ -1882,7 +1882,7 @@ int ObPreRangeGraph::set_general_nlj_range_extraction(const ObIArray<ObFastFinal
 
 
 // Notes:
-// Since Mysql and Oracle think 0x00 and null is different, they think null is equivalent to '\\'
+// LIKE escape treats NULL differently from 0x00: NULL is equivalent to '\\',
 // but 0x00 is just 0x00. Therefore, before use this interface, PLEASE MAKE SURE escape is not null.
 int ObPreRangeGraph::is_precise_like_range(const ObObjParam &pattern, char escape, bool &is_precise)
 {

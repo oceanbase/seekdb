@@ -19,7 +19,7 @@
 
 #include "share/schema/ob_schema_getter_guard.h"
 #include "share/schema/ob_latest_schema_guard.h"
-#include "rootserver/ob_ddl_service.h"
+namespace oceanbase { namespace rootserver { class ObDDLService; } }
 namespace oceanbase
 {
 namespace common
@@ -35,8 +35,7 @@ class ObSchemaGuardWrapper
 {
 public:
   ObSchemaGuardWrapper() = delete;
-  ObSchemaGuardWrapper(const uint64_t tenant_id,
-                       share::schema::ObMultiVersionSchemaService *schema_service,
+  ObSchemaGuardWrapper(share::schema::ObMultiVersionSchemaService *schema_service,
                        const bool is_local_guard);
   ~ObSchemaGuardWrapper();
   int init(rootserver::ObDDLService *ddl_service);
@@ -52,13 +51,6 @@ public:
                                   uint64_t &mock_fk_parent_table_id);
   int get_mock_fk_parent_table_schema(const uint64_t mock_fk_parent_table_id,
                                       const ObMockFKParentTableSchema *&mock_fk_parent_table_schema);
-  int check_oracle_object_exist(const uint64_t database_id,
-                                const uint64_t session_id,
-                                const ObString &object_name,
-                                const ObSchemaType &schema_type,
-                                const ObRoutineType &routine_type,
-                                const bool is_or_replace);
-
   int get_table_schema(const uint64_t table_id,
                        const ObTableSchema *&table_schema);
   int get_database_id(const common::ObString &database_name,
@@ -71,7 +63,7 @@ public:
                    uint64_t &table_id,
                    ObTableType &table_type,
                    int64_t &schema_version);
-  int get_tenant_schema(const uint64_t tenant_id,
+  int get_tenant_schema(
                         const ObTenantSchema *&tenant_schema);
   int get_tablegroup_id(const common::ObString &tablegroup_name,
                         uint64_t &tablegroup_id);
@@ -116,7 +108,7 @@ int get_trigger_info(const uint64_t trigger_id,
 private:
   int check_inner_stat_() const;
 private:
-  const uint64_t tenant_id_;
+  
   ObMultiVersionSchemaService *schema_service_;
   ObLatestSchemaGuard latest_schema_guard_;
   ObSchemaGetterGuard local_schema_guard_;

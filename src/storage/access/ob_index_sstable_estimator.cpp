@@ -45,9 +45,8 @@ int ObPartitionEst::add(const ObPartitionEst &pe)
 ObIndexBlockScanEstimator::ObIndexBlockScanEstimator(const ObIndexSSTableEstimateContext &context)
   : level_(0),
     context_(context),
-    allocator_("OB_STORAGE_EST", OB_MALLOC_MIDDLE_BLOCK_SIZE, MTL_ID())
+    allocator_("OB_STORAGE_EST", OB_MALLOC_MIDDLE_BLOCK_SIZE)
 {
-  tenant_id_ = MTL_ID();
 }
 
 ObIndexBlockScanEstimator::~ObIndexBlockScanEstimator()
@@ -92,13 +91,6 @@ int ObIndexBlockScanEstimator::init_index_scanner(ObSSTable &sstable)
   }
   if (FAILEDx(sstable.get_index_tree_root(root_index_block_))) {
     STORAGE_LOG(WARN, "Failed to get index tree root", K(ret));
-  } else if (sstable.is_ddl_merge_sstable()) {
-    if (OB_ISNULL(context_.tablet_handle_)) {
-      ret = OB_ERR_UNEXPECTED;
-      STORAGE_LOG(WARN, "Unexpected null tablet handle", K(ret), K(context_));
-    } else {
-      index_block_row_scanner_.set_iter_param(&sstable, context_.tablet_handle_->get_obj());
-    }
   }
   return ret;
 }
@@ -148,11 +140,7 @@ int ObIndexBlockScanEstimator::cal_total_estimate_result(
   int ret = OB_SUCCESS;
   // TODO remove this if we can get row_count_delta from sstable meta directly
   // result.total_row_count_ = context_.sstable_->get_meta().get_row_count();
-  if (sstable.is_ddl_merge_sstable() && context_.tablet_handle_ == nullptr) {
-    if (OB_FAIL(cal_total_estimate_result_for_ddl(sstable, datum_range, result))) {
-      STORAGE_LOG(WARN, "Failed to cal estimate result for ddl merge sstable", K(ret));
-    }
-  } else if (OB_FAIL(init_index_scanner(sstable))) {
+  if (OB_FAIL(init_index_scanner(sstable))) {
     STORAGE_LOG(WARN, "Failed to init index scanner", K(ret));
   } else {
     ObDatumRange whole_range;
@@ -208,41 +196,6 @@ int ObIndexBlockScanEstimator::cal_total_estimate_result(
       }
     }
   }
-  return ret;
-}
-
-int ObIndexBlockScanEstimator::cal_total_estimate_result_for_ddl(ObSSTable &sstable,
-                                                                 const blocksstable::ObDatumRange &datum_range,
-                                                                 ObEstimatedResult &result)
-{
-  int ret = OB_SUCCESS;
-
-  ObSSTableMetaHandle meta_handle;
-  if (OB_FAIL(sstable.get_meta(meta_handle))) {
-    STORAGE_LOG(WARN, "get sstable meta failed", K(ret));
-  } else {
-    int64_t factor = 1;
-    const ObSSTableBasicMeta &basic_meta = meta_handle.get_sstable_meta().get_basic_meta();
-    result.total_row_count_ = basic_meta.row_count_;
-    result.total_row_count_delta_ = 0;
-    result.macro_block_cnt_ = basic_meta.get_data_macro_block_count();
-    result.micro_block_cnt_ = basic_meta.get_data_micro_block_count();
-    if (OB_SUCC(ret) && result.total_row_count_ > 0) {
-      if (datum_range.is_whole_range()) {
-      } else {
-        if (!datum_range.get_start_key().is_min_rowkey()) {
-          factor = 10;
-        }
-        if (OB_SUCC(ret) && !datum_range.get_end_key().is_max_rowkey()) {
-          factor *= 2;
-        }
-        result.total_row_count_ = MAX(1, result.total_row_count_ / factor);
-        result.macro_block_cnt_ = MAX(1, result.macro_block_cnt_ / factor);
-        result.micro_block_cnt_ = MAX(1, result.micro_block_cnt_ / factor);
-      }
-    }
-  }
-
   return ret;
 }
 
@@ -398,7 +351,7 @@ int ObIndexBlockScanEstimator::prefetch_index_block_data(
   bool found = false;
   const MacroBlockId &macro_id = micro_index_info.get_macro_id();
   micro_handle.allocator_ = &allocator_;
-  ObMicroBlockCacheKey key(tenant_id_, micro_index_info);
+  ObMicroBlockCacheKey key(micro_index_info);
 
   ObIMicroBlockCache *cache = nullptr;
   if (micro_index_info.is_data_block()) {
@@ -422,11 +375,11 @@ int ObIndexBlockScanEstimator::prefetch_index_block_data(
   if (OB_SUCC(ret) && !found) {
     if (OB_FAIL(micro_index_info.row_header_->fill_micro_des_meta(true /* deep_copy_key */, micro_handle.des_meta_))) {
       STORAGE_LOG(WARN, "Failed to fill micro block deserialize meta", K(ret));
-    } else if (OB_FAIL(cache->prefetch(tenant_id_, macro_id, micro_index_info,
+    } else if (OB_FAIL(cache->prefetch(macro_id, micro_index_info,
             context_.query_flag_.is_use_block_cache(), micro_handle.io_handle_, &allocator_))) {
       STORAGE_LOG(WARN, "Failed to prefetch data micro block", K(ret), K(micro_index_info));
     } else if (ObSSTableMicroBlockState::UNKNOWN_STATE == micro_handle.block_state_) {
-      micro_handle.tenant_id_ = tenant_id_;
+      
       micro_handle.macro_block_id_ = micro_index_info.get_macro_id();
       micro_handle.block_state_ = ObSSTableMicroBlockState::IN_BLOCK_IO;
       micro_handle.micro_info_.set(micro_index_info.get_block_offset(),

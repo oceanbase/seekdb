@@ -64,7 +64,7 @@ int ObDriverRowBuffer::init(ObOperator *op,
     max_group_size_ = max_group_size;
     group_scan_size_ = group_scan_size;
     rescan_params_ = rescan_params;
-    ObMemAttr mem_attr(ctx_->get_my_session()->get_effective_tenant_id(), ObModIds::OB_SQL_NLJ_CACHE, ObCtxIds::WORK_AREA);
+    ObMemAttr mem_attr(ObModIds::OB_SQL_NLJ_CACHE, ObCtxIds::WORK_AREA);
     lib::ContextParam param;
     ObCompressorType compressor_type = ObCompressorType::NONE_COMPRESSOR;
     bool reorder_fixed_expr = false;
@@ -527,7 +527,7 @@ int ObDriverRowIterator::get_next_left_row()
       // get a new batch
       LOG_TRACE("start get next batch from left op");
       if (need_backup_left_ && OB_FAIL(left_batch_.restore())) {
-        LOG_WARN("failed to restore left batch rows", K(ret));
+        LOG_ERROR("failed to restore left batch rows", K(ret));
       } else if (OB_FAIL(get_next_left_batch(op_max_batch_size_, left_brs_))) {
         LOG_WARN("failed to get next left batch", K(ret));
       } else if (left_brs_->end_) {

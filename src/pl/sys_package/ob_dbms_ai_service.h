@@ -16,10 +16,10 @@
 
 #ifndef OCEANBASE_SRC_PL_SYS_PACKAGE_DBMS_AI_SERVICE_H_
 #define OCEANBASE_SRC_PL_SYS_PACKAGE_DBMS_AI_SERVICE_H_
-
-
+ 
+ 
 #include "sql/ob_sql_define.h"
-#include "lib/json_type/ob_json_base.h"
+#include "common/json_type/ob_json_base.h"
 #include "sql/privilege_check/ob_ai_model_priv_util.h"
 
 namespace oceanbase
@@ -54,5 +54,6 @@ private:
 
 } // namespace pl
 } // namespace oceanbase
-
+ 
 #endif // OCEANBASE_SRC_PL_SYS_PACKAGE_DBMS_AI_SERVICE_H_
+ 

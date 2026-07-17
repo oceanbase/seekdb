@@ -19,7 +19,7 @@
 #include "sql/resolver/expr/ob_raw_expr.h"
 #include "sql/resolver/expr/ob_raw_expr_type_demotion.h"
 #include "lib/container/ob_iarray.h"
-#include "lib/udt/ob_collection_type.h"
+#include "common/udt/ob_collection_type.h"
 #include "common/ob_accuracy.h"
 #include "share/ob_i_sql_expression.h"
 #include "ob_raw_expr_util.h"
@@ -219,7 +219,7 @@ int ObRawExprDeduceType::try_add_cast_expr(RawExprType &parent,
       if (T_FUN_UDF == parent.get_expr_type()
           && ObNumberTC == ori_tc
           && ObLobTC == expect_tc) {
-        // oracle mode can not cast number to text, but mysql mode can
+        // Number-to-text casts are not allowed for this path.
         ret = OB_ERR_INVALID_TYPE_FOR_OP;
         SQL_RESV_LOG(WARN, "cast to lob type not allowed", K(ret));
       }

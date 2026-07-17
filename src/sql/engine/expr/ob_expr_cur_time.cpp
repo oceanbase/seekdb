@@ -351,7 +351,7 @@ int ObExprSysdate::cg_expr(ObExprCGCtx &op_cg_ctx, const ObRawExpr &raw_expr,
 
 ObExprCurDate::ObExprCurDate(ObIAllocator &alloc)
     : ObFuncExprOperator(alloc, T_FUN_SYS_CUR_DATE, N_CUR_DATE, 0, NOT_VALID_FOR_GENERATED_COL, NOT_ROW_DIMENSION,
-                         INTERNAL_IN_MYSQL_MODE, INTERNAL_IN_ORACLE_MODE)
+                         INTERNAL_IN_MYSQL_MODE)
 {
 }
 ObExprCurDate::~ObExprCurDate()
@@ -361,14 +361,12 @@ ObExprCurDate::~ObExprCurDate()
 int ObExprCurDate::calc_result_type0(ObExprResType &type, ObExprTypeCtx &type_ctx) const
 {
   UNUSED(type_ctx);
-  if (lib::is_mysql_mode()) {
+  {
     if (type_ctx.enable_mysql_compatible_dates()) {
       type.set_mysql_date();
     } else {
       type.set_date();
     }
-  } else {
-    type.set_datetime();
   }
   if (type.get_scale() < MIN_SCALE_FOR_TEMPORAL) {
     type.set_scale(MIN_SCALE_FOR_TEMPORAL);

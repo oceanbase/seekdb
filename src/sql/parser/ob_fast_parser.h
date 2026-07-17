@@ -264,18 +264,6 @@ protected:
 		if (is_##CHARACTER_NAME(str[pos])) {																					 \
 			bool_ret = true;																														 \
 			byte_len = 1;																																 \
-		} else if (is_oracle_mode_																										 \
-			&& (CHARSET_UTF8MB4 == charset_type_ || CHARSET_UTF16 == charset_type_)) {	 \
-			if (pos + 3 < len && -1 != is_utf8_multi_byte_##CHARACTER_NAME(str, pos)) {	 \
-				bool_ret = true;																													 \
-				byte_len = 3;																															 \
-			}																																						 \
-		} else if (is_oracle_mode_																										 \
-			&& (ObCharset::is_gb_charset(charset_type_))) {		 													 \
-			if (pos + 2 < len && -1 != is_gbk_multi_byte_##CHARACTER_NAME(str, pos)) {	 \
-				bool_ret = true;																													 \
-				byte_len = 2;																															 \
-			}																																						 \
 		}																																							 \
 		return bool_ret;																															 \
 	}       
@@ -356,7 +344,7 @@ protected:
 	{
 		uint8_t ind = static_cast<uint8_t>(ch);
 		return is_valid_char(ch) &&
-		(is_oracle_mode_ ? ORACLE_IDENTIFIER_FALGS[ind] : MYSQL_IDENTIFIER_FALGS[ind]);
+		MYSQL_IDENTIFIER_FALGS[ind];
 	}
 	// [A-Za-z_]
 	inline bool is_sys_var_first_char(char ch)
@@ -371,10 +359,10 @@ protected:
 	// [`'\"A-Za-z0-9_\.$/%]
 	inline bool is_user_var_char(char ch)
 	{
-		bool is_oracle_user_var =
+		bool is_extended_user_var_char =
 		USER_VAR_CHAR[static_cast<uint8_t>(ch)] || '/' == ch || '%' == ch || '\"' == ch || '\'' == ch;
 		return is_valid_char(ch) &&
-		(is_oracle_mode_ ? is_oracle_user_var : (is_oracle_user_var || '`' == ch));
+		(is_extended_user_var_char || '`' == ch);
 	}
 	// [A-Za-z0-9_\.$]
 	inline bool is_user_var_char_without_quota(char ch)
@@ -477,14 +465,13 @@ protected:
 
 	inline bool is_normal_char(char ch)
 	{
-		return is_valid_char(ch) && (is_oracle_mode_ ?
-					 ORACLE_NORMAL_CHAR_FLAGS[static_cast<uint8_t>(ch)] :
-					 MYSQL_NORMAL_CHAR_FLAGS[static_cast<uint8_t>(ch)]);
+		return is_valid_char(ch) &&
+					 MYSQL_NORMAL_CHAR_FLAGS[static_cast<uint8_t>(ch)];
 	}
 	// [A-Za-z]
 	inline bool is_first_identifier_char(char ch)
 	{
-		return is_valid_char(ch) && ORACLE_FIRST_IDENTIFIER_FLAGS[static_cast<uint8_t>(ch)];
+		return is_valid_char(ch) && MYSQL_FIRST_IDENTIFIER_FLAGS[static_cast<uint8_t>(ch)];
 	}
 	/**
 	 * Used to parse [A-Za-z] or {UTF8_GB_CHAR}
@@ -576,7 +563,6 @@ protected:
 	 */
 
 	int process_insert_or_replace(const char *str, const int64_t size);
-	virtual int process_values(const char *str) = 0;
 
 	int get_one_insert_row_str(ObRawSql &raw_sql,
                              ObString &str,
@@ -613,7 +599,6 @@ protected:
 	char *no_param_sql_;
 	int64_t no_param_sql_len_;
 	int param_num_;
-	bool is_oracle_mode_;
 	bool is_batched_multi_stmt_split_on_;
 	int64_t cur_token_begin_pos_;
 	int64_t copy_begin_pos_;
@@ -652,18 +637,17 @@ public:
 		: ObFastParserBase(allocator, fp_ctx),
 			sql_mode_(fp_ctx.sql_mode_)
 	{
-		is_oracle_mode_ = false;
 		set_callback_func(
 		static_cast<ParseNextTokenFunc>(&ObFastParserMysql::parse_next_token),
 		static_cast<ProcessIdfFunc>(&ObFastParserMysql::process_identifier));
 	}
 	~ObFastParserMysql() {}
-	virtual int process_values(const char *str) override;
 	ObIArray<ObValuesTokenPos> &get_values_tokens() { return values_tokens_; }
 private:
 	ObSQLMode sql_mode_;
 	int parse_next_token();
 	int process_identifier(bool is_number_begin);
+	int process_values(const char *str);
 	/** 
 	 * In case of two adjacent string literal, such as " 'a' 'b' ", the two string will be
 	 * concatenate into 'ab'. However, the string 'a' will used as the column name if it appears
@@ -681,35 +665,6 @@ private:
 	DISALLOW_COPY_AND_ASSIGN(ObFastParserMysql);
 };
 
-class ObFastParserOracle final : public ObFastParserBase
-{
-public:
-	explicit ObFastParserOracle(
-		common::ObIAllocator &allocator,
-		const FPContext fp_ctx)
-		: ObFastParserBase(allocator, fp_ctx)
-	{
-		is_oracle_mode_ = true;
-		set_callback_func(
-		static_cast<ParseNextTokenFunc>(&ObFastParserOracle::parse_next_token),
-		static_cast<ProcessIdfFunc>(&ObFastParserOracle::process_identifier));
-	}
-	~ObFastParserOracle() {}
-	virtual int process_values(const char *str) override;
-private:
-	int parse_next_token();
-	int process_identifier(bool is_number_begin);
-	/**
-	 * @param [in] : if in_q_quote is true, means that the current token
-	 * starts with ("N"|"n")?("Q"|"q"){sqbegin}
-	 * else, means that the current token starts with ("N"|"n")?{sqbegin }
-	 */
-	int process_string(const bool in_q_quote);
-	int process_identifier_begin_with_n();
-
-private:
-	DISALLOW_COPY_AND_ASSIGN(ObFastParserOracle);
-};
 } // end namespace sql
 } // end namespace oceanbase
 

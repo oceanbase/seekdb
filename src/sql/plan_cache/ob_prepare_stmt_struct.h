@@ -196,9 +196,6 @@ public:
   inline bool can_direct_use_param() const { return can_direct_use_param_; }
   inline void set_can_direct_use_param(bool v) { can_direct_use_param_ = v; }
 
-  inline bool get_is_prexecute() const { return is_prexecute_; }
-  inline void set_is_prexecute(bool v) { is_prexecute_ = v; }
-
   inline void set_ps_stmt_checksum(uint64_t ps_checksum) { ps_stmt_checksum_ = ps_checksum; }
   inline uint64_t get_ps_stmt_checksum() const { return ps_stmt_checksum_; }
 
@@ -272,7 +269,6 @@ private:
 
   // for call procedure
   bool can_direct_use_param_;
-  bool is_prexecute_;
   int64_t item_and_info_size_; // mem_used_;
   int64_t last_closed_timestamp_; // Time when the reference count was last reduced to 1;
   ObSchemaObjVersion *dep_objs_;
@@ -354,7 +350,7 @@ typedef common::ObSEArray<bool, 16> ParamCastArray;
 class ObPsSessionInfo
 {
 public:
-  ObPsSessionInfo(const int64_t tenant_id, const int64_t num_of_params) :
+  ObPsSessionInfo(const int64_t num_of_params) :
     stmt_id_(common::OB_INVALID_STMT_ID),
     stmt_type_(stmt::T_NONE),
     num_of_params_(num_of_params),
@@ -363,8 +359,8 @@ public:
     inner_stmt_id_(0),
     num_of_returning_into_(common::OB_INVALID_STMT_ID) // num_of_returning_into_ init as -1
   {
-    param_types_.set_attr(ObMemAttr(tenant_id, "ParamTypes"));
-    param_type_infos_.set_attr(ObMemAttr(tenant_id, "ParamTypesInfo"));
+    param_types_.set_attr(ObMemAttr("ParamTypes"));
+    param_type_infos_.set_attr(ObMemAttr("ParamTypesInfo"));
     param_types_.reserve(num_of_params_);
   }
   //{ param_types_.set_label(common::ObModIds::OB_PS_SESSION_INFO_ARRAY); }

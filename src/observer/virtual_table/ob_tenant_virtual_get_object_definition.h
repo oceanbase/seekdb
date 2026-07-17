@@ -18,7 +18,7 @@
 #define OCEANBASE_OBSERVER_VIRTUAL_TABLE_OB_GET_OBJECT_DEFINITION_
 
 #include "lib/container/ob_se_array.h"
-#include "share/ob_virtual_table_scanner_iterator.h"
+#include "observer/virtual_table/ob_virtual_table_scanner_iterator.h"
 #include "common/ob_range.h"
 
 namespace oceanbase
@@ -106,7 +106,7 @@ private:
                                 const ObString &db_name,
                                 GetDDLObjectType object_type,
                                 bool is_role);
-  int get_database_id(uint64_t tenant_id, const ObString db_name,
+  int get_database_id(const ObString db_name,
                       uint64_t &database_id);
   int get_package_definition(ObString &ddl_str,
                                 const ObString &package_name,

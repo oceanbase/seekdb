@@ -21,10 +21,11 @@
 #include "lib/ob_errno.h"
 #include "lib/thread/thread.h"
 #include "lib/utility/ob_macro_utils.h"
-#include "lib/alloc/alloc_assist.h"
+#include "lib/utility/alloc_assist.h"
 #include "lib/lock/ob_spin_rwlock.h"
 
 extern int64_t global_thread_stack_size;
+extern const int64_t THREAD_STACK_RESERVED_SIZE;
 namespace oceanbase {
 namespace lib {
 class ObPThread;
@@ -67,18 +68,22 @@ public:
   int try_thread_recycle();
 
   int init();
-  // IRunWrapper is used to specify the tenant context when creating multi-tenant threads
-  // cgroup_ctrl and IRunWrapper work together to achieve CPU isolation for multi-tenant threads
+  // IRunWrapper is used to specify the tenant context when creating multi-tenant threads.
   void set_run_wrapper(IRunWrapper *run_wrapper)
   {
     run_wrapper_ = run_wrapper;
   }
+  static void set_default_run_wrapper(IRunWrapper *run_wrapper);
+  static IRunWrapper *get_default_run_wrapper();
   IRunWrapper * get_run_wrapper()
   {
     return run_wrapper_;
   }
-
-
+  IRunWrapper *get_effective_run_wrapper()
+  {
+    IRunWrapper *run_wrapper = run_wrapper_;
+    return OB_NOT_NULL(run_wrapper) ? run_wrapper : get_default_run_wrapper();
+  }
   struct NumaInfo {
   public:
     NumaInfo(): numa_node_(OB_NUMA_SHARED_INDEX), num_nodes_(UINT32_MAX), interleave_(false) {}
@@ -98,7 +103,7 @@ public:
   virtual void wait();
   void destroy();
   virtual void run(int64_t idx);
-   void set_numa_info(uint64_t tenant_id, bool enable_numa_aware, int32_t group_index);
+   void set_numa_info(bool enable_numa_aware, int32_t group_index);
 
 public:
   template <class Functor>

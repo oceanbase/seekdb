@@ -117,8 +117,8 @@ Outputs & filters:
   1 - output([t1.c1], [t1.c3], [t1.c2], [l2_distance(t1.c3, cast(array(cast(0.428146, DOUBLE(-1, -1)), cast(0.408760, DOUBLE(-1, -1)), cast(0.765300, DOUBLE(-1,
        -1))), ARRAY(18, -1)))]), filter(nil), rowset=256
       access([t1.c1], [t1.c3], [t1.c2]), partitions(p0)
-      is_index_back=true, is_global_index=false,
-      range_key([t1.c1]), range(NULL ; 100),
+      is_index_back=true, is_global_index=false, 
+      range_key([t1.c1]), range(NULL ; 100), 
       range_cond([t1.c1 < 100])
 explain select/*+index(t1 idx1)*/ * from t1 where c1 < 100 order by l2_distance(c3, [0.428146,0.408760,0.765300]) APPROXIMATE limit 10;
 Query Plan
@@ -136,7 +136,7 @@ Outputs & filters:
   1 - output([t1.c1], [t1.c3], [t1.c2], [l2_distance(t1.c3, cast(array(cast(0.428146, DOUBLE(-1, -1)), cast(0.408760, DOUBLE(-1, -1)), cast(0.765300, DOUBLE(-1,
        -1))), ARRAY(18, -1)))]), filter([t1.c1 < 100]), rowset=16
       access([t1.c1], [t1.c3], [t1.c2]), partitions(p0)
-      is_index_back=true, is_global_index=false, filter_before_indexback[true],
+      is_index_back=true, is_global_index=false, filter_before_indexback[true], 
       range_key([t1.c2], [t1.c1]), range(MIN,MIN ; MAX,MAX)always true
 explain select/*+index(t1 idxv)*/ * from t1 where c1 < 100 order by l2_distance(c3, [0.428146,0.408760,0.765300]) APPROXIMATE limit 10;
 Query Plan
@@ -154,7 +154,7 @@ Outputs & filters:
   1 - output([t1.c1], [t1.c3], [t1.c2], [l2_distance(t1.c3, cast(array(cast(0.428146, DOUBLE(-1, -1)), cast(0.408760, DOUBLE(-1, -1)), cast(0.765300, DOUBLE(-1,
        -1))), ARRAY(18, -1)))]), filter([t1.c1 < 100]), rowset=16
       access([t1.c1], [t1.c3], [t1.c2]), partitions(p0)
-      is_index_back=true, is_global_index=false, filter_before_indexback[false],
+      is_index_back=true, is_global_index=false, filter_before_indexback[false], 
       range_key([t1.__ivf_center_id_0_0]), range(MIN ; MAX)always true
 drop table if exists t1;
 create table t1(c1 int, c2 int, c3 vector(3), primary key(c1));
@@ -274,8 +274,8 @@ Outputs & filters:
   1 - output([t1.c1], [t1.c3], [t1.c2], [l2_distance(t1.c3, cast(array(cast(0.428146, DOUBLE(-1, -1)), cast(0.408760, DOUBLE(-1, -1)), cast(0.765300, DOUBLE(-1,
        -1))), ARRAY(18, -1)))]), filter(nil), rowset=256
       access([t1.c1], [t1.c3], [t1.c2]), partitions(p0)
-      is_index_back=true, is_global_index=false,
-      range_key([t1.c1]), range(NULL ; 100),
+      is_index_back=true, is_global_index=false, 
+      range_key([t1.c1]), range(NULL ; 100), 
       range_cond([t1.c1 < 100])
 explain select/*+index(t1 idx1)*/ * from t1 where c1 < 100 order by l2_distance(c3, [0.428146,0.408760,0.765300]) APPROXIMATE limit 10;
 Query Plan
@@ -293,7 +293,7 @@ Outputs & filters:
   1 - output([t1.c1], [t1.c3], [t1.c2], [l2_distance(t1.c3, cast(array(cast(0.428146, DOUBLE(-1, -1)), cast(0.408760, DOUBLE(-1, -1)), cast(0.765300, DOUBLE(-1,
        -1))), ARRAY(18, -1)))]), filter([t1.c1 < 100]), rowset=16
       access([t1.c1], [t1.c3], [t1.c2]), partitions(p0)
-      is_index_back=true, is_global_index=false, filter_before_indexback[true],
+      is_index_back=true, is_global_index=false, filter_before_indexback[true], 
       range_key([t1.c2], [t1.c1]), range(MIN,MIN ; MAX,MAX)always true
 explain select/*+index(t1 idxv)*/ * from t1 where c1 < 100 order by l2_distance(c3, [0.428146,0.408760,0.765300]) APPROXIMATE limit 10;
 Query Plan
@@ -311,7 +311,7 @@ Outputs & filters:
   1 - output([t1.c1], [t1.c3], [t1.c2], [l2_distance(t1.c3, cast(array(cast(0.428146, DOUBLE(-1, -1)), cast(0.408760, DOUBLE(-1, -1)), cast(0.765300, DOUBLE(-1,
        -1))), ARRAY(18, -1)))]), filter([t1.c1 < 100]), rowset=16
       access([t1.c1], [t1.c3], [t1.c2]), partitions(p0)
-      is_index_back=true, is_global_index=false, filter_before_indexback[false],
+      is_index_back=true, is_global_index=false, filter_before_indexback[false], 
       range_key([t1.__ivf_center_id_0_0]), range(MIN ; MAX)always true
 drop table if exists t1;
 create table t1(c1 int, c2 int, c3 int, v vector(3), primary key(c1));
@@ -379,8 +379,8 @@ Outputs & filters:
   1 - output([t1.c1], [t1.v], [t1.c2], [t1.c3], [l2_distance(t1.v, cast(array(cast(0.712338, DOUBLE(-1, -1)), cast(0.603321, DOUBLE(-1, -1)), cast(0.133444,
        DOUBLE(-1, -1))), ARRAY(18, -1)))]), filter([t1.c3 < 6]), rowset=16
       access([t1.c1], [t1.v], [t1.c2], [t1.c3]), partitions(p0)
-      is_index_back=true, is_global_index=false, filter_before_indexback[false],
-      range_key([t1.c2], [t1.c1]), range(5,MAX ; MAX,MAX),
+      is_index_back=true, is_global_index=false, filter_before_indexback[false], 
+      range_key([t1.c2], [t1.c1]), range(5,MAX ; MAX,MAX), 
       range_cond([t1.c2 > 5])
 explain select /*+index(t1 idx1) */ * from t1 where c2 > 5 and c3 < 6 order by l2_distance(v, [0.712338,0.603321,0.133444]) APPROXIMATE limit 5;
 Query Plan
@@ -398,8 +398,8 @@ Outputs & filters:
   1 - output([t1.c1], [t1.v], [t1.c2], [t1.c3], [l2_distance(t1.v, cast(array(cast(0.712338, DOUBLE(-1, -1)), cast(0.603321, DOUBLE(-1, -1)), cast(0.133444,
        DOUBLE(-1, -1))), ARRAY(18, -1)))]), filter([t1.c3 < 6]), rowset=16
       access([t1.c1], [t1.v], [t1.c2], [t1.c3]), partitions(p0)
-      is_index_back=true, is_global_index=false, filter_before_indexback[false],
-      range_key([t1.c2], [t1.c1]), range(5,MAX ; MAX,MAX),
+      is_index_back=true, is_global_index=false, filter_before_indexback[false], 
+      range_key([t1.c2], [t1.c1]), range(5,MAX ; MAX,MAX), 
       range_cond([t1.c2 > 5])
 explain select /*+index(t1 idx2) */ * from t1 where c2 > 5 and c3 < 6 order by l2_distance(v, [0.712338,0.603321,0.133444]) APPROXIMATE limit 5;
 Query Plan
@@ -417,8 +417,8 @@ Outputs & filters:
   1 - output([t1.c1], [t1.v], [t1.c2], [t1.c3], [l2_distance(t1.v, cast(array(cast(0.712338, DOUBLE(-1, -1)), cast(0.603321, DOUBLE(-1, -1)), cast(0.133444,
        DOUBLE(-1, -1))), ARRAY(18, -1)))]), filter([t1.c2 > 5]), rowset=16
       access([t1.c1], [t1.v], [t1.c2], [t1.c3]), partitions(p0)
-      is_index_back=true, is_global_index=false, filter_before_indexback[false],
-      range_key([t1.c3], [t1.c1]), range(NULL,MAX ; 6,MIN),
+      is_index_back=true, is_global_index=false, filter_before_indexback[false], 
+      range_key([t1.c3], [t1.c1]), range(NULL,MAX ; 6,MIN), 
       range_cond([t1.c3 < 6])
 explain select /*+index(t1 idx3) */ * from t1 where c2 > 5 and c3 < 6 order by l2_distance(v, [0.712338,0.603321,0.133444]) APPROXIMATE limit 5;
 Query Plan
@@ -436,7 +436,7 @@ Outputs & filters:
   1 - output([t1.c1], [t1.v], [t1.c2], [t1.c3], [l2_distance(t1.v, cast(array(cast(0.712338, DOUBLE(-1, -1)), cast(0.603321, DOUBLE(-1, -1)), cast(0.133444,
        DOUBLE(-1, -1))), ARRAY(18, -1)))]), filter([t1.c2 > 5], [t1.c3 < 6]), rowset=16
       access([t1.c1], [t1.v], [t1.c2], [t1.c3]), partitions(p0)
-      is_index_back=true, is_global_index=false, filter_before_indexback[false,false],
+      is_index_back=true, is_global_index=false, filter_before_indexback[false,false], 
       range_key([t1.__ivf_center_id_0_0]), range(MIN ; MAX)always true
 explain select * from t1 order by l2_distance(v, [0.712338,0.603321,0.133444]) APPROXIMATE limit 5;
 Query Plan
@@ -449,7 +449,7 @@ Outputs & filters:
 -------------------------------------
   0 - output([t1.c1], [t1.c2], [t1.c3], [t1.v]), filter(nil), rowset=16
       access([t1.c1], [t1.v], [t1.c2], [t1.c3]), partitions(p0)
-      is_index_back=true, is_global_index=false,
+      is_index_back=true, is_global_index=false, 
       range_key([t1.__ivf_center_id_0_0]), range(MIN ; MAX)always true
 drop table if exists t1;
 create table t1(c1 int, c2 int, c3 int, v vector(3), primary key(c1));
@@ -531,8 +531,8 @@ Outputs & filters:
   1 - output([t1.c1], [t1.v], [t1.c3], [t1.c2], [l2_distance(t1.v, cast(array(cast(0.712338, DOUBLE(-1, -1)), cast(0.603321, DOUBLE(-1, -1)), cast(0.133444,
        DOUBLE(-1, -1))), ARRAY(18, -1)))]), filter(nil), rowset=16
       access([t1.c1], [t1.v], [t1.c3], [t1.c2]), partitions(p0)
-      is_index_back=true, is_global_index=false,
-      range_key([t1.c3], [t1.c1]), range(NULL,MAX ; ob,MIN),
+      is_index_back=true, is_global_index=false, 
+      range_key([t1.c3], [t1.c1]), range(NULL,MAX ; ob,MIN), 
       range_cond([t1.c3 < 'ob'])
 select * from t1 where c3 < 'ob' and c2 > 3 order by l2_distance(v, [0.712338,0.603321,0.133444]) APPROXIMATE limit 5;
 c1	c2	c3	v
@@ -555,8 +555,8 @@ Outputs & filters:
   1 - output([t1.c1], [t1.v], [t1.c3], [t1.c2], [l2_distance(t1.v, cast(array(cast(0.712338, DOUBLE(-1, -1)), cast(0.603321, DOUBLE(-1, -1)), cast(0.133444,
        DOUBLE(-1, -1))), ARRAY(18, -1)))]), filter([t1.c2 > 3]), rowset=16
       access([t1.c1], [t1.v], [t1.c3], [t1.c2]), partitions(p0)
-      is_index_back=true, is_global_index=false, filter_before_indexback[false],
-      range_key([t1.c3], [t1.c1]), range(NULL,MAX ; ob,MIN),
+      is_index_back=true, is_global_index=false, filter_before_indexback[false], 
+      range_key([t1.c3], [t1.c1]), range(NULL,MAX ; ob,MIN), 
       range_cond([t1.c3 < 'ob'])
 select * from t1 where c3 < 'ob' or c2 > 3 order by l2_distance(v, [0.712338,0.603321,0.133444]) APPROXIMATE limit 5;
 c1	c2	c3	v
@@ -593,7 +593,7 @@ Outputs & filters:
   1 - output([t1.c1], [t1.c3], [t1.c2], [l2_distance(t1.c3, cast(array(cast(0.712338, DOUBLE(-1, -1)), cast(0.603321, DOUBLE(-1, -1)), cast(0.133444, DOUBLE(-1,
        -1))), ARRAY(18, -1)))]), filter([cast(t1.c1, DOUBLE(-1, -1)) > cast(1, DOUBLE(-1, -1))]), rowset=16
       access([t1.c1], [t1.c3], [t1.c2]), partitions(p0)
-      is_index_back=true, is_global_index=false, filter_before_indexback[false],
+      is_index_back=true, is_global_index=false, filter_before_indexback[false], 
       range_key([t1.__ivf_center_id_0_0]), range(MIN ; MAX)always true
 select * from t1  order by l2_distance(c3, [0.712338,0.603321,0.133444]) APPROXIMATE limit 1000;
 c1	c2	c3
@@ -611,7 +611,7 @@ Outputs & filters:
 -------------------------------------
   0 - output([t1.c1], [t1.c2], [t1.c3]), filter(nil), rowset=16
       access([t1.c1], [t1.c3], [t1.c2]), partitions(p0)
-      is_index_back=true, is_global_index=false,
+      is_index_back=true, is_global_index=false, 
       range_key([t1.__ivf_center_id_0_0]), range(MIN ; MAX)always true
 select * from t1  order by l2_distance(c3, [0.712338,0.603321,0.133444]) limit 1000;
 c1	c2	c3
@@ -634,7 +634,7 @@ Outputs & filters:
        -1))), ASC]), topn(1000)
   1 - output([t1.c1], [t1.c3], [t1.c2]), filter(nil), rowset=16
       access([t1.c1], [t1.c3], [t1.c2]), partitions(p0)
-      is_index_back=false, is_global_index=false,
+      is_index_back=false, is_global_index=false, 
       range_key([t1.c1]), range(MIN ; MAX)always true
 drop table if exists t1;
 alter system set ob_vector_memory_limit_percentage =0;

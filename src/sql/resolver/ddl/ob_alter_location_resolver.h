@@ -37,5 +37,6 @@ private:
 };
 } // end namespace sql
 } // end namespace oceanbase
-
+ 
 #endif // OCEANBASE_SQL_OB_ALTER_LOCATION_RESOLVER_H_
+

@@ -21,7 +21,7 @@
 
 #include "src/share/schema/ob_table_schema.h"
 #include "storage/test_schema_prepare.h"
-#include "mittest/mtlenv/mock_tenant_module_env.h"
+#include "mtlenv/mock_tenant_module_env.h"
 #include "storage/ob_storage_schema_util.h"
 
 namespace oceanbase
@@ -92,8 +92,7 @@ bool TestStorageSchema::judge_storage_schema_equal(ObStorageSchema &schema1, ObS
     equal = schema1.column_array_[i].meta_type_ == schema2.column_array_[i].meta_type_
         && schema1.column_array_[i].is_column_stored_in_sstable_ == schema2.column_array_[i].is_column_stored_in_sstable_;
   }
-  if (equal && schema1.version_ >= ObStorageSchema::STORAGE_SCHEMA_VERSION_V3
-    && schema2.version_ >= ObStorageSchema::STORAGE_SCHEMA_VERSION_V3) {
+  if (equal) {
     equal = schema1.skip_idx_attr_array_.count() == schema2.skip_idx_attr_array_.count();
     for (int i = 0; equal && i < schema1.skip_idx_attr_array_.count(); ++i) {
       equal = schema1.skip_idx_attr_array_[i].col_idx_ == schema2.skip_idx_attr_array_[i].col_idx_
@@ -246,7 +245,7 @@ TEST_F(TestStorageSchema, test_update_tablet_store_schema)
   storage_schema1.progressive_merge_round_ = 3;
   storage_schema2.progressive_merge_round_ = 2;
   storage_schema1.compressor_type_ = ObCompressorType::NONE_COMPRESSOR;
-  storage_schema2.compressor_type_ = ObCompressorType::LZ4_COMPRESSOR;
+  storage_schema2.compressor_type_ = ObCompressorType::ZSTD_1_3_8_COMPRESSOR;
 
   // schema 2 have large store column cnt
   ObStorageSchema *result_storage_schema = NULL;
@@ -282,7 +281,7 @@ TEST_F(TestStorageSchema, test_update_tablet_store_schema)
   ObStorageSchemaUtil::free_storage_schema(allocator_, result_storage_schema);
 }
 
-TEST_F(TestStorageSchema, test_clipped_schema_for_tablet_split)
+TEST_F(TestStorageSchema, test_clipped_schema_for_tablet_fork)
 {
   share::schema::ObTableSchema table_schema;
   ObStorageSchema storage_schema1;
@@ -319,23 +318,16 @@ TEST_F(TestStorageSchema, test_clipped_schema_for_tablet_split)
 
   const int64_t buf_len = 1024 * 1024;
   char buf[buf_len] = "\0";
-  const ObTabletID src_tablet_id(200001);
   for (int i = TestSchemaPrepare::TEST_ROWKEY_COLUMN_CNT; i <= stored_column_cnt; i++) {
     memset(buf, 0, sizeof(buf));
     int64_t ser_pos = 0;
     int64_t deser_pos = 0;
 
     ObStorageSchema storage_schema2; // clipped storage schema.
-    ObUpdateCSReplicaSchemaParam update_param;
-    ASSERT_EQ(OB_SUCCESS, update_param.init(src_tablet_id, 
-          i + ObMultiVersionRowkeyHelpper::get_extra_rowkey_col_cnt()/*major_column_cnt*/,
-          ObUpdateCSReplicaSchemaParam::UpdateType::TRUNCATE_COLUMN_ARRAY));
-    ASSERT_EQ(OB_SUCCESS, storage_schema2.init(allocator_, 
+    ASSERT_EQ(OB_SUCCESS, storage_schema2.init(allocator_,
             storage_schema1/*old_schema*/,
             false/*skip_column_info*/,
-            nullptr/*column_group_schema*/,
-            false/*generate_cs_replica_cg_array*/,
-            &update_param/*ObUpdateCSReplicaSchemaParam*/));
+            i/*stored_column_count*/));
     ASSERT_EQ(OB_SUCCESS, storage_schema2.serialize(buf, buf_len, ser_pos));
     ASSERT_EQ(ser_pos, storage_schema2.get_serialize_size());
 

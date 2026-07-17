@@ -5,11 +5,11 @@ set @@session.explicit_defaults_for_timestamp=off;
 #owner:link.zt
 #owner group: sql1
 # tags: optimizer
-## bug
+## bug 
 
 connect (obsys,$OBMYSQL_MS0,admin,$OBMYSQL_PWD,test,$OBMYSQL_PORT);
 connection obsys;
-## one key_v1, one key_v2
+## one key_v1, one key_v2 
 explain basic select /*+use_hash(o,t),leading(o,t)*/ * from oceanbase.__all_outline o, oceanbase.__all_database t;
 ## two key_v1, partition wise join
 explain basic select /*+use_hash(t,mt),leading(t,mt)*/ * from oceanbase.__all_table as t, oceanbase.__all_database as mt;

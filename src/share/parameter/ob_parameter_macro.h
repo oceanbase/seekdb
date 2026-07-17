@@ -191,9 +191,6 @@ public:                                                                         
   _DEF_PARAMETER_SCOPE_WORK_AREA_POLICY_EASY(String, name, SCOPE, def, __VA_ARGS__)
 #define _DEF_PARAM_MODE_WITH_PARSER(name, SCOPE, ...)                          \
   _DEF_PARAMETER_SCOPE_PARSER_EASY(Mode, name, SCOPE, __VA_ARGS__)
-#define _DEF_PARAM_LOG_ARCHIVE_OPTIONS_WITH_CHECKER(name, SCOPE, ...)          \
-  _DEF_PARAMETER_SCOPE_CHECKER_EASY(LogArchiveOptions, name, SCOPE, __VA_ARGS__)
-
 // Legacy macros for backward compatibility (reorder arguments: name first)
 #define DEF_INT(name, SCOPE, ...)                                               \
   _DEF_PARAMETER_SCOPE_RANGE_EASY(Int, name, SCOPE, __VA_ARGS__)
@@ -246,8 +243,6 @@ public:                                                                         
 #define DEF_MODE_WITH_PARSER(name, SCOPE, ...)                                 \
   _DEF_PARAMETER_SCOPE_PARSER_EASY(Mode, name, SCOPE, __VA_ARGS__)
 
-#define DEF_LOG_ARCHIVE_OPTIONS_WITH_CHECKER(name, SCOPE, ...)                 \
-  _DEF_PARAMETER_SCOPE_CHECKER_EASY(LogArchiveOptions, name, SCOPE, __VA_ARGS__)
 #define DEF_LOG_LEVEL(name, SCOPE, ...)                                       \
   _DEF_PARAMETER_SCOPE_LOG_LEVEL_EASY(String, name, SCOPE, __VA_ARGS__)
 
@@ -270,7 +265,6 @@ public:                                                                         
 #define DEPRECATED_DEF_MOMENT(args...)
 #define DEPRECATED_DEF_INT_LIST(args...)
 #define DEPRECATED_DEF_STR_LIST(args...)
-#define DEPRECATED_DEF_LOG_ARCHIVE_OPTIONS_WITH_CHECKER(args...)
 #define DEPRECATED_DEF_LOG_LEVEL(args...)
 #define DEPRECATED_DEF_WORK_AREA_POLICY(args...)
 // For configuration items used temporarily (to be deleted before official release), the following macro must be used to define.
@@ -320,8 +314,6 @@ public:                                                                         
 #define TEMP_DEF_STR_LIST(ver, args...)                                                  \
   _DEF_PARAMETER_SCOPE_EASY(StrList, args)
 
-#define TEMP_DEF_LOG_ARCHIVE_OPTIONS_WITH_CHECKER(ver, args...)                          \
-  _DEF_PARAMETER_SCOPE_CHECKER_EASY(LogArchiveOptions, args)
 #define TEMP_DEF_LOG_LEVEL(ver, args...)                                                 \
   _DEF_PARAMETER_SCOPE_LOG_LEVEL_EASY(String, args)
 

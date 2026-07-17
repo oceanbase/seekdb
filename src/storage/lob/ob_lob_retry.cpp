@@ -48,20 +48,7 @@ int ObLobRetryUtil::check_need_retry(ObLobAccessParam &param, const int error_co
   } else {
     need_retry = true;
     switch (error_code) {
-      case  OB_LS_NOT_EXIST: { // check if tenant has been dropped when ls not exist
-        int tmp_ret = OB_SUCCESS;
-        bool is_dropped = false;
-        share::schema::ObMultiVersionSchemaService *schema_service = GCTX.schema_service_;
-        if (OB_ISNULL(schema_service)) {
-          tmp_ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("schema_service is nullptr", "tmp_ret", tmp_ret);
-        } else if (OB_SUCCESS != (tmp_ret = schema_service->check_if_tenant_has_been_dropped(param.tenant_id_, is_dropped))) {
-          LOG_WARN("check if tenant has been dropped fail", "tmp_ret", tmp_ret);
-        } else if (is_dropped) {
-          ret = OB_TENANT_HAS_BEEN_DROPPED;
-          need_retry = false;
-        } // no need break
-      }
+      case  OB_LS_NOT_EXIST: // single tenant never drops tenant; fall through to refresh location
       case	OB_REPLICA_NOT_READABLE:
       case  OB_RPC_CONNECT_ERROR:
       case  OB_RPC_SEND_ERROR:

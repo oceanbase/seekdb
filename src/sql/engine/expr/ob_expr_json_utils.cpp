@@ -345,7 +345,7 @@ int ObJsonUtil::get_accuracy_internal(ObAccuracy &accuracy,
   if (ObStringTC == dest_tc) {
     // parser will abort all negative number
     // if length < 0 means DEFAULT_STR_LENGTH or OUT_OF_STR_LEN.
-    accuracy.set_full_length(node.int32_values_[1], length_semantics, false);
+    accuracy.set_full_length(node.int32_values_[1], length_semantics);
   } else if (ObRawTC == dest_tc) {
     accuracy.set_length(node.int32_values_[1]);
   } else if(ObTextTC == dest_tc || ObJsonTC == dest_tc) {
@@ -369,7 +369,7 @@ int ObJsonUtil::get_accuracy_internal(ObAccuracy &accuracy,
       } else if (OB_FAIL(ObSQLUtils::check_enable_decimalint(ctx.exec_ctx_.get_my_session(),
                                                              enable_decimalint))) {
         LOG_WARN("fail to check_enable_decimalint_type",
-            K(ret), K(ctx.exec_ctx_.get_my_session()->get_effective_tenant_id()));
+            K(ret));
       } else if (enable_decimalint) {
         dest_type = ObDecimalIntType;
       }
@@ -778,7 +778,7 @@ int cast_to_string(common::ObIAllocator *allocator,
       bool is_need_string_string_convert = ((CS_TYPE_BINARY == cast_param.dst_coll_type_) 
                           || (ObCharset::charset_type_by_coll(cast_param.in_coll_type_) != 
                               ObCharset::charset_type_by_coll(cast_param.dst_coll_type_)))
-                              && !(lib::is_mysql_mode() && temp_str_val.length() == 0);
+                              && !(temp_str_val.length() == 0);
       if (is_need_string_string_convert) {
         if (CS_TYPE_BINARY != cast_param.in_coll_type_
             && CS_TYPE_BINARY != cast_param.dst_coll_type_
@@ -803,7 +803,7 @@ int cast_to_string(common::ObIAllocator *allocator,
             // just copy string when in_cs_type or out_cs_type is binary
             const ObCharsetInfo *cs = NULL;
             int64_t align_offset = 0;
-            if (CS_TYPE_BINARY == cast_param.in_coll_type_ && lib::is_mysql_mode()
+            if (CS_TYPE_BINARY == cast_param.in_coll_type_
                 && (NULL != (cs = ObCharset::get_charset(cast_param.dst_coll_type_)))) {
               if (cs->mbminlen > 0 && temp_str_val.length() % cs->mbminlen != 0) {
                 align_offset = cs->mbminlen - temp_str_val.length() % cs->mbminlen;
@@ -978,7 +978,7 @@ int cast_to_timstamp(common::ObIAllocator *allocator,
         LOG_WARN("fail to timestamp_to_timestamp_tz", K(ret), K(val), K(cast_param.dst_type_));
       } else{
         ObScale scale = accuracy.get_scale();
-        if (OB_UNLIKELY(0 <= scale && scale < MAX_SCALE_FOR_ORACLE_TEMPORAL)) {
+        if (OB_UNLIKELY(0 <= scale && scale < MAX_SCALE_FOR_EXTENDED_TEMPORAL)) {
           ObOTimestampData ot_data = ObTimeConverter::round_otimestamp(scale, out_val);
           if (ObTimeConverter::is_valid_otimestamp(ot_data.time_us_,
               static_cast<int32_t>(ot_data.time_ctx_.tail_nsec_))) {
@@ -987,7 +987,7 @@ int cast_to_timstamp(common::ObIAllocator *allocator,
             ret = OB_ERR_UNEXPECTED;
             LOG_WARN("invalid otimestamp, set it null ", K(ot_data), K(scale), "orig_date", out_val);
           }
-        }
+        } 
       }
     }
     if (OB_SUCC(ret) && (!cast_param.is_only_check_)) {
@@ -1250,7 +1250,7 @@ int cast_to_float(common::ObIAllocator *allocator,
     LOG_WARN("wrapper to date failed.", K(ret), K(*j_base));
   } else {
     val = static_cast<float>(tmp_val);
-    if (lib::is_mysql_mode() && CAST_FAIL(real_range_check(cast_param.dst_type_, tmp_val, val))) {
+    if (CAST_FAIL(real_range_check(cast_param.dst_type_, tmp_val, val))) {
       LOG_WARN("real_range_check failed", K(ret), K(tmp_val));
     } else if (!cast_param.is_only_check_) {
       res.set_float(val);
@@ -1465,7 +1465,7 @@ int ObJsonUtil::cast_to_res(common::ObIAllocator *allocator,
   INIT_SUCC(ret);
   ObJsonUtil::ObJsonCastSqlScalar cast_func_ = get_json_cast_func(cast_param.dst_type_);
   if (OB_ISNULL(j_base)
-      || (lib::is_mysql_mode() && j_base->json_type() == common::ObJsonNodeType::J_NULL)) {
+      || (j_base->json_type() == common::ObJsonNodeType::J_NULL)) {
     res.set_null();
   } else if (OB_ISNULL(cast_func_)) {
     ret = OB_ERR_UNEXPECTED;
@@ -1593,11 +1593,11 @@ ObJsonUtil::ObJsonCastSqlScalar OB_JSON_CAST_SQL_EXPLICIT[ObMaxTC] =
   cast_to_timstamp,
   // ObRawTC       = 18,   // raw
   cast_to_string,
-  // ObIntervalTC      = 19, //oracle interval type class include interval year to month and interval day to second
+  // ObIntervalTC      = 19, // interval type class includes interval year-to-month and day-to-second
   cast_not_expected,
-  // ObRowIDTC         = 20, // oracle rowid typeclass, includes urowid and rowid
+  // ObRowIDTC         = 20, // rowid typeclass, includes urowid and rowid
   cast_not_expected,
-  // ObLobTC           = 21, //oracle lob typeclass ObLobType not use
+  // ObLobTC           = 21, // lob typeclass ObLobType not use
   cast_not_expected,
   // ObJsonTC          = 22, // json type class 
   cast_to_json,
@@ -1695,7 +1695,7 @@ int ObJsonUtil::get_json_doc(ObExpr *expr,
   } else if (val_type != ObJsonType && !ob_is_string_type(val_type)) {
     ret = OB_ERR_INVALID_TYPE_FOR_OP;
     LOG_WARN("input type error", K(val_type));
-  } else if (lib::is_mysql_mode() && OB_FAIL(ObJsonExprHelper::ensure_collation(val_type, cs_type))) {
+  } else if (OB_FAIL(ObJsonExprHelper::ensure_collation(val_type, cs_type))) {
     LOG_WARN("fail to ensure collation", K(ret), K(val_type), K(cs_type));
   } else {
     ObString j_str;
@@ -1897,7 +1897,7 @@ ObJsonUtil::ObItemMethodValid OB_JSON_VALUE_ITEM_METHOD_CAST_FUNC[ObMaxItemMetho
     cast_succ, // oid
     cast_succ, //rawhex
     cast_succ, // rawid
-    cast_succ, // oracledate
+    cast_succ, // compat_date
     cast_succ, // odate
     cast_succ, // otimestamp
     cast_succ, // otimestamptz
@@ -1930,7 +1930,7 @@ ObJsonUtil::ObItemMethodValid OB_JSON_VALUE_ITEM_METHOD_CAST_FUNC[ObMaxItemMetho
     set_null_result, // oid
     set_null_result, //rawhex
     set_null_result, // rawid
-    set_null_result, // oracledate
+    set_null_result, // compat_date
     set_null_result, // odate
     set_null_result, // otimestamp
     set_null_result, // otimestamptz
@@ -1963,7 +1963,7 @@ ObJsonUtil::ObItemMethodValid OB_JSON_VALUE_ITEM_METHOD_CAST_FUNC[ObMaxItemMetho
     func_path_syntax_fail, // oid
     func_path_syntax_fail, //rawhex
     func_path_syntax_fail, // rawid
-    func_path_syntax_fail, // oracledate
+    func_path_syntax_fail, // compat_date
     func_path_syntax_fail, // odate
     func_path_syntax_fail, // otimestamp
     func_path_syntax_fail, // otimestamptz
@@ -1996,7 +1996,7 @@ ObJsonUtil::ObItemMethodValid OB_JSON_VALUE_ITEM_METHOD_CAST_FUNC[ObMaxItemMetho
     cast_succ, // oid
     cast_succ, //rawhex
     cast_succ, // rawid
-    cast_succ, // oracledate
+    cast_succ, // compat_date
     cast_succ, // odate
     cast_succ, // otimestamp
     cast_succ, // otimestamptz
@@ -2029,7 +2029,7 @@ ObJsonUtil::ObItemMethodValid OB_JSON_VALUE_ITEM_METHOD_CAST_FUNC[ObMaxItemMetho
     cast_succ, // oid
     cast_succ, //rawhex
     cast_succ, // rawid
-    cast_succ, // oracledate
+    cast_succ, // compat_date
     cast_succ, // odate
     cast_succ, // otimestamp
     cast_succ, // otimestamptz
@@ -2062,7 +2062,7 @@ ObJsonUtil::ObItemMethodValid OB_JSON_VALUE_ITEM_METHOD_CAST_FUNC[ObMaxItemMetho
     func_conversion_fail, // oid
     func_conversion_fail, //rawhex
     func_conversion_fail, // rawid
-    func_conversion_fail, // oracledate
+    func_conversion_fail, // compat_date
     func_conversion_fail, // odate
     func_conversion_fail, // otimestamp
     func_conversion_fail, // otimestamptz
@@ -2095,7 +2095,7 @@ ObJsonUtil::ObItemMethodValid OB_JSON_VALUE_ITEM_METHOD_CAST_FUNC[ObMaxItemMetho
     cast_succ, // oid
     cast_succ, //rawhex
     cast_succ, // rawid
-    cast_succ, // oracledate
+    cast_succ, // compat_date
     cast_succ, // odate
     cast_succ, // otimestamp
     cast_succ, // otimestamptz
@@ -2128,7 +2128,7 @@ ObJsonUtil::ObItemMethodValid OB_JSON_VALUE_ITEM_METHOD_CAST_FUNC[ObMaxItemMetho
     cast_succ, // oid
     cast_succ, //rawhex
     cast_succ, // rawid
-    cast_succ, // oracledate
+    cast_succ, // compat_date
     cast_succ, // odate
     cast_succ, // otimestamp
     cast_succ, // otimestamptz
@@ -2161,7 +2161,7 @@ ObJsonUtil::ObItemMethodValid OB_JSON_VALUE_ITEM_METHOD_CAST_FUNC[ObMaxItemMetho
     cast_succ, // oid
     cast_succ, //rawhex
     cast_succ, // rawid
-    cast_succ, // oracledate
+    cast_succ, // compat_date
     cast_succ, // odate
     cast_succ, // otimestamp
     cast_succ, // otimestamptz
@@ -2194,7 +2194,7 @@ ObJsonUtil::ObItemMethodValid OB_JSON_VALUE_ITEM_METHOD_CAST_FUNC[ObMaxItemMetho
     cast_succ, // oid
     cast_succ, //rawhex
     cast_succ, // rawid
-    cast_succ, // oracledate
+    cast_succ, // compat_date
     cast_succ, // odate
     cast_succ, // otimestamp
     cast_succ, // otimestamptz
@@ -2227,7 +2227,7 @@ ObJsonUtil::ObItemMethodValid OB_JSON_VALUE_ITEM_METHOD_CAST_FUNC[ObMaxItemMetho
     cast_succ, // oid
     cast_succ, //rawhex
     cast_succ, // rawid
-    cast_succ, // oracledate
+    cast_succ, // compat_date
     cast_succ, // odate
     cast_succ, // otimestamp
     cast_succ, // otimestamptz
@@ -2260,7 +2260,7 @@ ObJsonUtil::ObItemMethodValid OB_JSON_VALUE_ITEM_METHOD_CAST_FUNC[ObMaxItemMetho
     cast_succ, // oid
     cast_succ, //rawhex
     cast_succ, // rawid
-    cast_succ, // oracledate
+    cast_succ, // compat_date
     cast_succ, // odate
     cast_succ, // otimestamp
     cast_succ, // otimestamptz
@@ -2293,7 +2293,7 @@ ObJsonUtil::ObItemMethodValid OB_JSON_VALUE_ITEM_METHOD_CAST_FUNC[ObMaxItemMetho
     cast_succ, // oid
     cast_succ, //rawhex
     cast_succ, // rawid
-    cast_succ, // oracledate
+    cast_succ, // compat_date
     cast_succ, // odate
     cast_succ, // otimestamp
     cast_succ, // otimestamptz
@@ -2326,7 +2326,7 @@ ObJsonUtil::ObItemMethodValid OB_JSON_VALUE_ITEM_METHOD_CAST_FUNC[ObMaxItemMetho
     cast_succ, // oid
     cast_succ, //rawhex
     cast_succ, // rawid
-    cast_succ, // oracledate
+    cast_succ, // compat_date
     cast_succ, // odate
     cast_succ, // otimestamp
     cast_succ, // otimestamptz
@@ -2359,7 +2359,7 @@ ObJsonUtil::ObItemMethodValid OB_JSON_VALUE_ITEM_METHOD_CAST_FUNC[ObMaxItemMetho
     cast_succ, // oid
     cast_succ, //rawhex
     cast_succ, // rawid
-    cast_succ, // oracledate
+    cast_succ, // compat_date
     cast_succ, // odate
     cast_succ, // otimestamp
     cast_succ, // otimestamptz
@@ -2392,7 +2392,7 @@ ObJsonUtil::ObItemMethodValid OB_JSON_VALUE_ITEM_METHOD_CAST_FUNC[ObMaxItemMetho
     cast_succ, // oid
     cast_succ, //rawhex
     cast_succ, // rawid
-    cast_succ, // oracledate
+    cast_succ, // compat_date
     cast_succ, // odate
     cast_succ, // otimestamp
     cast_succ, // otimestamptz
@@ -2425,7 +2425,7 @@ ObJsonUtil::ObItemMethodValid OB_JSON_VALUE_ITEM_METHOD_CAST_FUNC[ObMaxItemMetho
     cast_succ, // oid
     cast_succ, //rawhex
     cast_succ, // rawid
-    cast_succ, // oracledate
+    cast_succ, // compat_date
     cast_succ, // odate
     cast_succ, // otimestamp
     cast_succ, // otimestamptz
@@ -2464,7 +2464,7 @@ int OB_JSON_QUERY_ITEM_METHOD_NULL_OPTION[ObMaxItemMethod][ObMaxJsonType] =
     0, // oid
     0, //rawhex
     0, // rawid
-    0, // oracledate
+    0, // compat_date
     0, // odate
     0, // otimestamp
     0, // otimestamptz
@@ -2497,7 +2497,7 @@ int OB_JSON_QUERY_ITEM_METHOD_NULL_OPTION[ObMaxItemMethod][ObMaxJsonType] =
     0, // oid
     0, //rawhex
     0, // rawid
-    0, // oracledate
+    0, // compat_date
     0, // odate
     0, // otimestamp
     0, // otimestamptz
@@ -2530,7 +2530,7 @@ int OB_JSON_QUERY_ITEM_METHOD_NULL_OPTION[ObMaxItemMethod][ObMaxJsonType] =
     0, // oid
     0, //rawhex
     0, // rawid
-    0, // oracledate
+    0, // compat_date
     0, // odate
     0, // otimestamp
     0, // otimestamptz
@@ -2563,7 +2563,7 @@ int OB_JSON_QUERY_ITEM_METHOD_NULL_OPTION[ObMaxItemMethod][ObMaxJsonType] =
     0, // oid
     0, //rawhex
     0, // rawid
-    0, // oracledate
+    0, // compat_date
     0, // odate
     0, // otimestamp
     0, // otimestamptz
@@ -2596,7 +2596,7 @@ int OB_JSON_QUERY_ITEM_METHOD_NULL_OPTION[ObMaxItemMethod][ObMaxJsonType] =
     1, // oid
     1, //rawhex
     1, // rawid
-    0, // oracledate
+    0, // compat_date
     0, // odate
     0, // otimestamp
     0, // otimestamptz
@@ -2629,7 +2629,7 @@ int OB_JSON_QUERY_ITEM_METHOD_NULL_OPTION[ObMaxItemMethod][ObMaxJsonType] =
     1, // oid
     1, //rawhex
     1, // rawid
-    1, // oracledate
+    1, // compat_date
     1, // odate
     1, // otimestamp
     1, // otimestamptz
@@ -2662,7 +2662,7 @@ int OB_JSON_QUERY_ITEM_METHOD_NULL_OPTION[ObMaxItemMethod][ObMaxJsonType] =
     0, // oid
     0, //rawhex
     0, // rawid
-    0, // oracledate
+    0, // compat_date
     0, // odate
     0, // otimestamp
     0, // otimestamptz
@@ -2695,7 +2695,7 @@ int OB_JSON_QUERY_ITEM_METHOD_NULL_OPTION[ObMaxItemMethod][ObMaxJsonType] =
     1, // oid
     1, //rawhex
     1, // rawid
-    1, // oracledate
+    1, // compat_date
     1, // odate
     1, // otimestamp
     1, // otimestamptz
@@ -2728,7 +2728,7 @@ int OB_JSON_QUERY_ITEM_METHOD_NULL_OPTION[ObMaxItemMethod][ObMaxJsonType] =
     0, // oid
     0, //rawhex
     0, // rawid
-    0, // oracledate
+    0, // compat_date
     0, // odate
     0, // otimestamp
     0, // otimestamptz
@@ -2761,7 +2761,7 @@ int OB_JSON_QUERY_ITEM_METHOD_NULL_OPTION[ObMaxItemMethod][ObMaxJsonType] =
     1, // oid
     1, //rawhex
     1, // rawid
-    1, // oracledate
+    1, // compat_date
     1, // odate
     1, // otimestamp
     1, // otimestamptz
@@ -2794,7 +2794,7 @@ int OB_JSON_QUERY_ITEM_METHOD_NULL_OPTION[ObMaxItemMethod][ObMaxJsonType] =
     1, // oid
     1, //rawhex
     1, // rawid
-    1, // oracledate
+    1, // compat_date
     1, // odate
     1, // otimestamp
     1, // otimestamptz
@@ -2827,7 +2827,7 @@ int OB_JSON_QUERY_ITEM_METHOD_NULL_OPTION[ObMaxItemMethod][ObMaxJsonType] =
     0, // oid
     0, //rawhex
     0, // rawid
-    0, // oracledate
+    0, // compat_date
     0, // odate
     0, // otimestamp
     0, // otimestamptz
@@ -2860,7 +2860,7 @@ int OB_JSON_QUERY_ITEM_METHOD_NULL_OPTION[ObMaxItemMethod][ObMaxJsonType] =
     0, // oid
     0, //rawhex
     0, // rawid
-    0, // oracledate
+    0, // compat_date
     0, // odate
     0, // otimestamp
     0, // otimestamptz
@@ -2893,7 +2893,7 @@ int OB_JSON_QUERY_ITEM_METHOD_NULL_OPTION[ObMaxItemMethod][ObMaxJsonType] =
     0, // oid
     0, //rawhex
     0, // rawid
-    0, // oracledate
+    0, // compat_date
     0, // odate
     0, // otimestamp
     0, // otimestamptz
@@ -2926,7 +2926,7 @@ int OB_JSON_QUERY_ITEM_METHOD_NULL_OPTION[ObMaxItemMethod][ObMaxJsonType] =
     1, // oid
     1, //rawhex
     1, // rawid
-    0, // oracledate
+    0, // compat_date
     0, // odate
     0, // otimestamp
     0, // otimestamptz
@@ -2959,7 +2959,7 @@ int OB_JSON_QUERY_ITEM_METHOD_NULL_OPTION[ObMaxItemMethod][ObMaxJsonType] =
     0, // oid
     0, //rawhex
     0, // rawid
-    0, // oracledate
+    0, // compat_date
     0, // odate
     0, // otimestamp
     0, // otimestamptz
@@ -2992,7 +2992,7 @@ int OB_JSON_QUERY_ITEM_METHOD_NULL_OPTION[ObMaxItemMethod][ObMaxJsonType] =
     0, // oid
     0, //rawhex
     0, // rawid
-    0, // oracledate
+    0, // compat_date
     0, // odate
     0, // otimestamp
     0, // otimestamptz

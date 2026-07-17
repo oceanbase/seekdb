@@ -18,7 +18,7 @@
 
 #include "storage/fts/dict/ob_ft_dat_dict.h"
 
-#include "lib/alloc/alloc_assist.h"
+#include "lib/utility/alloc_assist.h"
 #include "lib/alloc/alloc_struct.h"
 #include "lib/allocator/ob_allocator.h"
 #include "lib/allocator/page_arena.h"
@@ -76,7 +76,7 @@ int ObFTDATBuilder<DATA_TYPE>::build_from_trie(ObFTTrie<DATA_TYPE> &trie)
     int32_t *base = reinterpret_cast<int32_t *>(dat_->buff + dat_->base_offset_);
     int32_t *check = reinterpret_cast<int32_t *>(dat_->buff + dat_->check_offset_);
     base[ObFTDAT::FIRST_INDEX] = 1;
-    ObArenaAllocator alloc(lib::ObMemAttr(MTL_ID(), "Tmp dfs"));
+    ObArenaAllocator alloc(lib::ObMemAttr("Tmp dfs"));
     ObList<ObFTTrieNode<DATA_TYPE> *, ObIAllocator> dfs_queue(alloc);
 
     // Start to build the DAT.

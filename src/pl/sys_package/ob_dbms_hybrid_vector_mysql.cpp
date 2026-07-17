@@ -16,7 +16,7 @@
 
 #define USING_LOG_PREFIX PL
 #include "ob_dbms_hybrid_vector_mysql.h"
-#include "src/share/hybrid_search/ob_hybrid_search_executor.h"
+#include "sql/hybrid_search/ob_hybrid_search_executor.h"
 
 namespace oceanbase {
 namespace pl {
@@ -28,7 +28,7 @@ FUNCTION SEARCH (IN table_name VARCHAR(65535),
                  IN search_params LONGTEXT)
 RETURN JSON;
 */
-int ObDBMSHybridVectorMySql::search(ObPLExecCtx &ctx, ParamStore &params, ObObj &result)
+int ObDBMSHybridVectorMySql::search(ObPLExecCtx &ctx, ParamStore &params, ObObj &result) 
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(params.count() != 2) || !params.at(0).is_varchar() ||
@@ -63,7 +63,7 @@ FUNCTION GET_SQL (IN table_name VARCHAR(65535),
                    IN search_params LONGTEXT)
 RETURN LONGTEXT;
 */
-int ObDBMSHybridVectorMySql::get_sql(ObPLExecCtx &ctx, ParamStore &params, ObObj &result)
+int ObDBMSHybridVectorMySql::get_sql(ObPLExecCtx &ctx, ParamStore &params, ObObj &result) 
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(params.count() != 2) || !params.at(0).is_varchar() ||

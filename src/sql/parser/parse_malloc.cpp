@@ -16,7 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_PARSER
 #include "parse_malloc.h"
-#include <lib/alloc/alloc_assist.h>
+#include <lib/utility/alloc_assist.h>
 #include "parse_node.h"
 #include "lib/charset/ob_ctype.h"
 #include "sql/parser/parse_define.h"
@@ -150,15 +150,15 @@ char *parse_strdup(const char *str, void *malloc_pool, int64_t *out_len)
   return out_str;
 }
 
-char *replace_invalid_character(const struct ObCharsetInfo* src_cs, const struct ObCharsetInfo* oracle_db_cs,
+char *replace_invalid_character(const struct ObCharsetInfo* src_cs, const struct ObCharsetInfo* nls_db_cs,
                                 const char *str, int64_t *out_len, void *malloc_pool, int *extra_errno)
 {
   char *out_str = NULL;
   if (OB_ISNULL(str) || OB_ISNULL(extra_errno) || OB_ISNULL(out_len)) {
-  } else if (NULL == src_cs || NULL == oracle_db_cs) {
+  } else if (NULL == src_cs || NULL == nls_db_cs) {
     out_str = const_cast<char *>(str);
   } else {
-    ob_wc_t replace_char = (!!(oracle_db_cs->state & OB_CS_UNICODE)) &&
+    ob_wc_t replace_char = (!!(nls_db_cs->state & OB_CS_UNICODE)) &&
                            (!!(src_cs->state & OB_CS_UNICODE))
                            ? 0xFFFD : '?';
     uint errors = 0;
@@ -168,12 +168,12 @@ char *replace_invalid_character(const struct ObCharsetInfo* src_cs, const struct
     if (OB_ISNULL(temp_str = static_cast<char *>(parse_malloc(temp_len + 1, malloc_pool)))) {
     } else {
       int64_t temp_res_len = static_cast<int64_t>(
-        ob_convert(temp_str, temp_len, oracle_db_cs, str, str_len, src_cs, false, replace_char, &errors));
+        ob_convert(temp_str, temp_len, nls_db_cs, str, str_len, src_cs, false, replace_char, &errors));
       size_t dst_len = temp_res_len * 4;
       if (OB_ISNULL(out_str = static_cast<char *>(parse_malloc(dst_len + 1, malloc_pool)))) {
       } else {
         *out_len = static_cast<int64_t>(
-          ob_convert(out_str, dst_len, src_cs, temp_str, temp_res_len, oracle_db_cs, false, replace_char, &errors));
+          ob_convert(out_str, dst_len, src_cs, temp_str, temp_res_len, nls_db_cs, false, replace_char, &errors));
         out_str[*out_len] = '\0';
       }
     }
@@ -269,37 +269,8 @@ char *parse_strdup_with_replace_multi_byte_char(const char *str, int *connection
     int64_t len = 0;
     int64_t dup_len = strlen(str);
     for (int64_t i = 0; i < dup_len; ++i) {
-      if (*connection_collation_ == 28/*CS_TYPE_GBK_CHINESE_CI*/
-       || *connection_collation_ == 87/*CS_TYPE_GBK_BIN*/
-       || *connection_collation_ == 248/*CS_TYPE_GB18030_CHINESE_CI*/
-       || *connection_collation_ == 249/*CS_TYPE_GB18030_BIN*/
-       || (*connection_collation_ >= 216/*CS_TYPE_GB18030_2022_BIN*/
-           && *connection_collation_ <= 222/*CS_TYPE_GB18030_2022_STROKE_CS*/)) {
-        if (i + 1 < dup_len) {
-          if (str[i] == (char)0xa1 && str[i+1] == (char)0xa1) {//gbk multi byte space
-            out_str[len++] = ' ';
-            ++i;
-          } else if (str[i] == (char)0xa3 && str[i+1] == (char)0xa8) {
-            //gbk multi byte left parenthesis
-            out_str[len++] = '(';
-            ++i;
-          } else if (str[i] == (char)0xa3 && str[i+1] == (char)0xa9) {
-            //gbk multi byte right parenthesis
-            out_str[len++] = ')';
-            ++i;
-          } else {
-            out_str[len++] = str[i];
-          }
-        } else {
-          out_str[len++] = str[i];
-        }
-      } else if (
-        *connection_collation_ == 45/*CS_TYPE_UTF8MB4_GENERAL_CI*/
-        || *connection_collation_ == 46/*CS_TYPE_UTF8MB4_BIN*/
-        || *connection_collation_ == 63/*CS_TYPE_BINARY*/
-        || *connection_collation_ == 255/*CS_TYPE_UTF8MB4_0900_AI_CI*/
-        || (*connection_collation_ >= 224/*CS_TYPE_UTF8MB4_UNICODE_CI*/
-        && *connection_collation_ <= 247/*CS_TYPE_UTF8MB4_VIETNAMESE_CI*/)) {
+      if (*connection_collation_ == 45/*CS_TYPE_UTF8MB4_GENERAL_CI*/
+          || *connection_collation_ == 46/*CS_TYPE_UTF8MB4_BIN*/) {
         if (i + 2 < dup_len) {
           if (str[i] == (char)0xe3 && str[i+1] == (char)0x80 && str[i+2] == (char)0x80) {
             //utf8 multi byte space
@@ -313,27 +284,6 @@ char *parse_strdup_with_replace_multi_byte_char(const char *str, int *connection
           //utf8 multi byte right parenthesis
             out_str[len++] = ')';
             i = i + 2;
-          } else {
-            out_str[len++] = str[i];
-          }
-        } else {
-          out_str[len++] = str[i];
-        }
-      } else if (
-        *connection_collation_ == 152
-        || *connection_collation_ == 153) {
-        if (i + 1 < dup_len) {
-          if (str[i] == (char)0xa1 && str[i+1] == (char)0x40) {//hkscs multi byte space
-            out_str[len++] = ' ';
-            ++i;
-          } else if (str[i] == (char)0xa1 && str[i+1] == (char)0x5d) {
-            //hkscs multi byte left parenthesis
-            out_str[len++] = '(';
-            ++i;
-          } else if (str[i] == (char)0xa1 && str[i+1] == (char)0x5e) {
-            //hkscs multi byte right parenthesis
-            out_str[len++] = ')';
-            ++i;
           } else {
             out_str[len++] = str[i];
           }

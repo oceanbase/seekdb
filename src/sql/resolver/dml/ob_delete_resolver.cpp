@@ -88,7 +88,7 @@ int ObDeleteResolver::resolve(const ParseNode &parse_tree)
 //    }
     if (OB_FAIL(resolve_outline_data_hints())) {
       LOG_WARN("resolve outline data hints failed", K(ret));
-    } else if (is_mysql_mode() && OB_FAIL(resolve_with_clause(parse_tree.children_[WITH_MYSQL]))) {
+    } else if (OB_FAIL(resolve_with_clause(parse_tree.children_[WITH_MYSQL]))) {
       LOG_WARN("resolve with clause failed", K(ret));
     } else if (OB_FAIL(resolve_table_list(*parse_tree.children_[TABLE], is_multi_table_delete))) {
       LOG_WARN("resolve table failed", K(ret));
@@ -243,7 +243,7 @@ int ObDeleteResolver::resolve_table_list(const ParseNode &table_list, bool &is_m
     if (OB_SUCC(ret)) {
       if (OB_FAIL(ObDMLResolver::resolve_table(*table_node, table_item))) {
         LOG_WARN("failed to resolve table", K(ret));
-      } else if (table_item->is_function_table() || table_item->is_json_table()) {//compatible with oracle behavior
+      } else if (table_item->is_function_table() || table_item->is_json_table()) { // invalid delete target
         ret = OB_WRONG_TABLE_NAME;
         LOG_WARN("invalid table name", K(ret));
       } else if (OB_FAIL(column_namespace_checker_.add_reference_table(table_item))) {
@@ -395,16 +395,14 @@ int ObDeleteResolver::generate_delete_table_info(const TableItem &table_item)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected null", K(schema_checker_), K(params_.session_info_),
         K(allocator_), K(delete_stmt), K(ret));
-  } else if (OB_FAIL(schema_checker_->get_table_schema(params_.session_info_->get_effective_tenant_id(),
+  } else if (OB_FAIL(schema_checker_->get_table_schema(
                                                        base_table_item.ref_id_,
-                                                       table_schema,
-                                                       base_table_item.is_link_table()))) {
+                                                       table_schema))) {
     LOG_WARN("failed to get table schema", K(ret));
   } else if (OB_ISNULL(table_schema)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected null", K(ret));
-  } else if (OB_FAIL(schema_checker_->get_can_write_index_array(params_.session_info_->get_effective_tenant_id(),
-                                                                base_table_item.ref_id_,
+  } else if (OB_FAIL(schema_checker_->get_can_write_index_array(base_table_item.ref_id_,
                                                                 index_tid, gindex_cnt, true))) {
     LOG_WARN("failed to get global index", K(ret));
   } else if (OB_FAIL(params_.session_info_->get_binlog_row_image(binlog_row_image))) {
@@ -435,7 +433,6 @@ int ObDeleteResolver::generate_delete_table_info(const TableItem &table_item)
         table_info->loc_table_id_ = base_table_item.table_id_;
         table_info->ref_table_id_ = base_table_item.ref_id_;
         table_info->table_name_ = table_schema->get_table_name_str();
-        table_info->is_link_table_ = base_table_item.is_link_table();
       }
     } else {
       uint64_t view_id = OB_INVALID_ID;
@@ -478,7 +475,7 @@ int ObDeleteResolver::check_view_deletable()
       LOG_WARN("ref query is NULL for generate table", K(ret));
     }
 
-    if (OB_SUCC(ret) && is_mysql_mode()) {
+    if (OB_SUCC(ret)) {
       if (OB_SUCC(ret)) {
         bool has_subquery = false;
         bool has_dependent_subquery = false;

@@ -19,9 +19,7 @@
 
 #include "lib/container/ob_tuple.h"
 #include "ob_tablet_id.h"
-#include "share/ob_virtual_table_scanner_iterator.h"
-#include "observer/omt/ob_multi_tenant_operator.h"
-#include "observer/omt/ob_multi_tenant.h"
+#include "observer/virtual_table/ob_virtual_table_scanner_iterator.h"
 namespace oceanbase
 {
 namespace storage
@@ -35,19 +33,14 @@ namespace observer
 {
 
 class ApplyOnTabletOp;
-class ApplyOnLSOp;
-class ApplyOnTenantOp;
 
 class ObAllVirtualMdsNodeStat : public common::ObVirtualTableScannerIterator
 {
   friend class ApplyOnTabletOp;
-  friend class ApplyOnLSOp;
-  friend class ApplyOnTenantOp;
-  static constexpr int64_t IP_BUFFER_SIZE = 65;  // >= MAX_IP_ADDR_LENGTH (e.g. INET6 on Windows)
 public:
-  explicit ObAllVirtualMdsNodeStat(omt::ObMultiTenant *omt) : omt_(omt) {}
+  ObAllVirtualMdsNodeStat() = default;
   virtual int inner_get_next_row(common::ObNewRow *&row) override;
-  TO_STRING_KV(K_(tenant_ranges), K_(tablet_ranges), K_(tablet_points))
+  TO_STRING_KV(K_(tablet_ranges), K_(tablet_points))
 private:
   int convert_node_info_to_row_(const storage::mds::MdsNodeInfoForVirtualTable &node_info,
                                 char *buffer,
@@ -70,9 +63,6 @@ private:
                             mds::MdsTableHandle &handle,
                             const bool create_if_not_exist);
   DISALLOW_COPY_AND_ASSIGN(ObAllVirtualMdsNodeStat);
-  omt::ObMultiTenant *omt_;
-  char ip_buffer_[IP_BUFFER_SIZE];
-  ObArray<ObTuple<uint64_t, uint64_t>> tenant_ranges_;
   ObArray<ObTuple<common::ObTabletID, common::ObTabletID>> tablet_ranges_;
   ObArray<common::ObTabletID> tablet_points_;
 };

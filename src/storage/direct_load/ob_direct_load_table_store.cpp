@@ -28,7 +28,7 @@ ObDirectLoadTableStore::ObDirectLoadTableStore()
     table_data_desc_(),
     table_type_(ObDirectLoadTableType::INVALID_TABLE_TYPE)
 {
-  allocator_.set_tenant_id(MTL_ID());
+  
 }
 
 ObDirectLoadTableStore::~ObDirectLoadTableStore()
@@ -65,7 +65,7 @@ int ObDirectLoadTableStore::init()
 {
   int ret = OB_SUCCESS;
   const int64_t bucket_num = 1024;
-  if (OB_FAIL(tablet_table_map_.create(bucket_num, "TLD_TableMap", "TLD_TableMap", MTL_ID()))) {
+  if (OB_FAIL(tablet_table_map_.create(bucket_num, "TLD_TableMap", "TLD_TableMap"))) {
     LOG_WARN("fail to init hash map", KR(ret));
   }
   return ret;

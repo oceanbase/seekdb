@@ -20,7 +20,7 @@
 #include "lib/ob_define.h"
 #include "lib/oblog/ob_log_module.h"
 #include "lib/utility/ob_print_utils.h"
-#include "lib/mysqlclient/ob_isql_client.h"
+#include "common/mysqlclient/ob_isql_client.h"
 #include "lib/container/ob_iarray.h"
 #include "lib/queue/ob_priority_queue.h"
 
@@ -48,7 +48,6 @@ class ObDBMSJobInfo
 {
 public:
   ObDBMSJobInfo() :
-    tenant_id_(common::OB_INVALID_ID),
     job_(common::OB_INVALID_ID),
     lowner_(),
     powner_(),
@@ -68,8 +67,7 @@ public:
     scheduler_flags_(0),
     exec_env_() {}
 
-  TO_STRING_KV(K(tenant_id_),
-               K(job_),
+  TO_STRING_KV(K(job_),
                K(lowner_),
                K(powner_),
                K(cowner_),
@@ -89,14 +87,14 @@ public:
 
   bool valid()
   {
-    return tenant_id_ != common::OB_INVALID_ID
+    return true
             && job_ != common::OB_INVALID_ID
             && !exec_env_.empty();
   }
 
-  uint64_t get_tenant_id() { return tenant_id_; }
+  
   uint64_t get_job_id() { return job_; }
-  uint64_t get_job_id_with_tenant() { return common::combine_two_ids(tenant_id_, job_); }
+  uint64_t get_job_id_with_tenant() { return job_; }
   int64_t  get_this_date() { return this_date_; }
   int64_t  get_next_date() { return next_date_; }
   int64_t  get_last_date() { return last_date_; }
@@ -116,7 +114,6 @@ public:
   int deep_copy(common::ObIAllocator &allocator, const ObDBMSJobInfo &other);
 
 public:
-  uint64_t tenant_id_;
   uint64_t job_;
   common::ObString lowner_;
   common::ObString powner_;
@@ -151,16 +148,15 @@ public:
   int init(common::ObISQLClient *sql_proxy) { sql_proxy_ = sql_proxy; return common::OB_SUCCESS; }
 
   int update_for_start(
-    uint64_t tenant_id, ObDBMSJobInfo &job_info, bool update_nextdate = true);
+    ObDBMSJobInfo &job_info, bool update_nextdate = true);
   int update_for_end(
-    uint64_t tenant_id, ObDBMSJobInfo &job_info, int err, const common::ObString &errmsg);
-  int update_nextdate(uint64_t tenant_id, ObDBMSJobInfo &job_info);
+    ObDBMSJobInfo &job_info, int err, const common::ObString &errmsg);
+  int update_nextdate(ObDBMSJobInfo &job_info);
 
   int get_dbms_job_info(
-    uint64_t tenant_id, uint64_t job_id,
+    uint64_t job_id,
     common::ObIAllocator &allocator, ObDBMSJobInfo &job_info);
   int get_dbms_job_infos_in_tenant(
-    uint64_t tenant_id,
     common::ObIAllocator &allocator, common::ObIArray<ObDBMSJobInfo> &job_infos);
 
   int extract_info(
@@ -170,7 +166,7 @@ public:
   int calc_execute_at(
     ObDBMSJobInfo &job_info, int64_t &execute_at, int64_t &delay, bool ignore_nextdate = false);
 
-  int check_job_can_running(int64_t tenant_id, bool &can_running);
+  int check_job_can_running(bool &can_running);
 
 private:
   DISALLOW_COPY_AND_ASSIGN(ObDBMSJobUtils);

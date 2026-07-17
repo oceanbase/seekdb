@@ -18,6 +18,7 @@
 
 #include "lib/container/ob_se_array.h"
 #include "storage/ob_i_table.h"
+#include "storage/meta_mem/ob_storage_meta_cache.h"
 
 namespace oceanbase
 {
@@ -35,13 +36,28 @@ class ObTabletTableStore;
 class ObTabletTablesSet;
 class ObTenantMetaMemMgr;
 class ObITableArray;
-class ObSSTableWrapper;
+
+class ObSSTableWrapper
+{
+public:
+  ObSSTableWrapper();
+  ~ObSSTableWrapper() { reset(); }
+  void reset();
+  bool is_valid() const { return sstable_ != nullptr; }
+  int set_sstable(blocksstable::ObSSTable *sstable, ObStorageMetaHandle *meta_handle = nullptr);
+  blocksstable::ObSSTable *get_sstable() const { return sstable_; }
+  const ObStorageMetaHandle &get_meta_handle() const { return meta_handle_; }
+  TO_STRING_KV(KP_(sstable), K_(meta_handle));
+private:
+  ObStorageMetaHandle meta_handle_;
+  blocksstable::ObSSTable *sstable_;
+};
 
 class ObSSTableArray
 {
 public:
   friend class ObTabletTableStore;
-  ObSSTableArray() : cnt_(0), sstable_array_(nullptr), serialize_table_type_(false), is_inited_(false) {}
+  ObSSTableArray() : cnt_(0), sstable_array_(nullptr), is_inited_(false) {}
   virtual ~ObSSTableArray() { reset(); }
 
   void reset();
@@ -59,11 +75,6 @@ public:
   int init(
       ObArenaAllocator &allocator,
       const ObSSTableArray &other);
-  // TODO use Arena allocator after creating SSTable by Arena Allocator
-  // Attention ! should only be called by COSSTable
-  int init_empty_array_for_cg(common::ObArenaAllocator &allocator, const int64_t count);
-  int add_tables_for_cg(common::ObArenaAllocator &allocator, const ObIArray<ObITable *> &tables);
-  int add_tables_for_cg_without_deep_copy(const ObIArray<ObITable *> &tables);
 
   int64_t get_deep_copy_size() const;
   int deep_copy(char *dst_buf, const int64_t buf_size, int64_t &pos, ObSSTableArray &dst_array) const;
@@ -74,12 +85,10 @@ public:
       ObArenaAllocator &allocator,
       const char *buf,
       const int64_t data_len,
-      int64_t &pos,
-      const bool is_compat_deserialize = false);
+      int64_t &pos);
   blocksstable::ObSSTable *operator[](const int64_t pos) const;
   blocksstable::ObSSTable *at(const int64_t pos) const;
   ObITable *get_boundary_table(const bool is_last) const;
-  int get_all_table_wrappers(ObIArray<ObSSTableWrapper> &tables, const bool need_unpack = false) const;
   int get_table(const ObITable::TableKey &table_key, ObSSTableWrapper &wrapper) const;
   int inc_macro_ref(bool &is_success) const;
   void dec_macro_ref() const;
@@ -90,13 +99,9 @@ public:
   }
   OB_INLINE int64_t count() const { return cnt_; }
   OB_INLINE bool empty() const { return 0 == cnt_; }
-  TO_STRING_KV(K_(cnt), KP_(sstable_array), K_(serialize_table_type), K_(is_inited));
+  TO_STRING_KV(K_(cnt), KP_(sstable_array), K_(is_inited));
 private:
   int get_all_tables(ObIArray<ObITable *> &tables) const;
-  // construct major_tables with old sstable array and input tables_array, but filter twin sstable of new_co_major
-  int replace_twin_majors_and_build_new(
-      const ObIArray<ObITable *> &tables_array,
-      ObIArray<ObITable *> &major_tables) const;
   int inc_meta_ref_cnt(bool &inc_success) const;
   int inc_data_ref_cnt(bool &inc_success) const;
   void dec_meta_ref_cnt() const;
@@ -108,7 +113,6 @@ private:
       const int64_t end_pos);
   int inner_deserialize_tables(
       ObArenaAllocator &allocator,
-      const bool serialize_table_type,
       const char *buf,
       const int64_t data_len,
       int64_t &pos);
@@ -122,7 +126,6 @@ private:
 private:
   int64_t cnt_;
   blocksstable::ObSSTable **sstable_array_;
-  bool serialize_table_type_;
   bool is_inited_;
 private:
   DISALLOW_COPY_AND_ASSIGN(ObSSTableArray);
@@ -250,7 +253,6 @@ struct ObTableStoreUtil
 
   static int sort_minor_tables(ObArray<ObITable *> &tables);
   static int sort_major_tables(ObSEArray<ObITable *, MAX_SSTABLE_CNT_IN_STORAGE> &tables);
-  static int sort_column_store_tables(ObSEArray<ObITable *, MAX_SSTABLE_CNT_IN_STORAGE> &tables);
 
   static bool check_include_by_scn_range(const ObITable &ltable, const ObITable &rtable);
   static bool check_intersect_by_scn_range(const ObITable &ltable, const ObITable &rtable);
@@ -265,7 +267,6 @@ public:
   // Load sstable with @addr, loaded object lifetime guaranteed by @handle
   static int load_sstable(
     const ObMetaDiskAddr &addr,
-    const bool load_co_sstable,
     ObStorageMetaHandle &handle);
 
   // load @orig_sstable on demand, return @loaded_sstable.

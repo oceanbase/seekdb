@@ -16,7 +16,6 @@
 
 #include "lib/thread/ob_thread_name.h"
 #include "lib/thread/ob_simple_thread_pool.h"
-#include "lib/ash/ob_active_session_guard.h"
 #ifdef __APPLE__
 #include <unistd.h>
 #elif defined(_WIN32)
@@ -48,20 +47,20 @@ ObSimpleThreadPoolBase<T>::~ObSimpleThreadPoolBase()
 template <class T>
 int ObSimpleThreadPoolBase<T>::init(
     const int64_t thread_num, const int64_t task_num_limit,
-    const char *name, const uint64_t tenant_id)
+    const char *name)
 {
   int ret = OB_SUCCESS;
   if (is_inited_) {
     ret = OB_INIT_TWICE;
   } else if (thread_num <= 0 || task_num_limit <= 0 || OB_ISNULL(name)) {
     ret = OB_INVALID_ARGUMENT;
-  } else if (OB_FAIL(queue_.init(task_num_limit, name, tenant_id))) {
+  } else if (OB_FAIL(queue_.init(task_num_limit, name))) {
     COMMON_LOG(WARN, "task queue init failed", K(ret), K(task_num_limit));
   } else {
     is_inited_ = true;
     stop_ = false;
     name_ = name;
-    tenant_id_ = tenant_id;
+    
     if (max_thread_cnt_ < 0) {
       max_thread_cnt_ = thread_num;
     }
@@ -151,22 +150,19 @@ bool ObSimpleThreadPoolBase<T>::do_add_worker()
       OB_DELETE(Worker, "QThWker", w);
       return false;
     }
-    // Prevent reap_workers() from deleting this worker before start():
-    // the Threads constructor sets stop_=true, but this worker is not
-    // actually stopping — it just hasn't started yet.
-    w->has_set_stop() = false;
-    if (!workers_.add_last(&w->worker_node_)) {
-      OB_DELETE(Worker, "QThWker", w);
-      return false;
-    }
   }
   // Start outside the lock: the new worker may call try_expand_one →
   // do_add_worker, which would deadlock if we held workers_lock_
   if (OB_SUCCESS != w->start()) {
-    lib::ObMutexGuard g(workers_lock_);
-    workers_.remove(&w->worker_node_);
     OB_DELETE(Worker, "QThWker", w);
     return false;
+  }
+  // Add to list only after successful start, so reap_workers() never
+  // sees a worker whose start() is still in flight.
+  {
+    lib::ObMutexGuard g(workers_lock_);
+    bool ok = workers_.add_last(&w->worker_node_);
+    abort_unless(ok);
   }
   return true;
 }

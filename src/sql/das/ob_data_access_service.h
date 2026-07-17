@@ -16,8 +16,8 @@
 
 #ifndef OBDEV_SRC_SQL_DAS_OB_DATA_ACCESS_SERVICE_H_
 #define OBDEV_SRC_SQL_DAS_OB_DATA_ACCESS_SERVICE_H_
+#include "lib/atomic/ob_atomic.h"
 #include "share/ob_define.h"
-#include "sql/das/ob_das_id_cache.h"
 #include "sql/das/ob_das_task_result.h"
 #include "sql/das/ob_das_ref.h"
 namespace oceanbase
@@ -36,8 +36,7 @@ public:
   ~ObDataAccessService() = default;
   static int mtl_init(ObDataAccessService *&das);
   static void mtl_destroy(ObDataAccessService *&das);
-  int init(rpc::frame::ObReqTransport *transport,
-           const common::ObAddr &self_addr);
+  int init(const common::ObAddr &self_addr);
   // Enable DAS Task partition related transaction control, and execute the op corresponding to the task
   int execute_das_task(ObDASRef &das_ref,
       ObDasAggregatedTask &task_ops, bool async = true);
@@ -69,7 +68,7 @@ private:
                                    ObDASBaseRtDef *attach_rtdef);
 private:
   common::ObAddr ctrl_addr_;
-  ObDASIDCache id_cache_;
+  int64_t next_das_id_ CACHE_ALIGNED;
   ObDASTaskResultMgr task_result_mgr_;
   int32_t das_concurrency_limit_;
 };

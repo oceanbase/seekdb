@@ -37,32 +37,10 @@ public:
 
 protected:
   int resolve_impl(
-    obrpc::ObCreateRoutineArg &crt_routine_arg,
+    obcall::ObCreateRoutineArg &crt_routine_arg,
     const share::schema::ObRoutineInfo &routine_info, const ParseNode &alter_clause_node);
-  int resolve_compile_clause(
-    obrpc::ObCreateRoutineArg &crt_routine_arg,
-    const share::schema::ObRoutineInfo &routine_info, const ParseNode &alter_clause_node);
-  int resolve_compile_parameters(
-    const ParseNode *compile_params_node,
-    ObIArray<std::pair<share::ObSysVarClassType, common::ObObj> > &params);
-  int resolve_compile_parameter(
-    const ParseNode *ident, const ParseNode *value,
-    ObIArray<std::pair<share::ObSysVarClassType, common::ObObj> > &params);
-  int parse_routine(
-    const ObString &source, const ParseNode *&parse_tree);
-  int resolve_routine(
-    obrpc::ObCreateRoutineArg &crt_routine_arg,
-    const share::schema::ObRoutineInfo &routine_info,
-    bool need_recreate, const ParseNode *source_tree);
   int resolve_clause_list(const ParseNode *node,
-                          obrpc::ObCreateRoutineArg &crt_routine_arg);
-  int register_debug_info(const share::schema::ObRoutineInfo &routine_info);
-
-private:
-  int mock_create_parse_node(const ParseNode *source_tree,
-                             const bool need_recreate,
-                             const bool is_noneditionable,
-                             ParseNode *&crt_tree);
+                          obcall::ObCreateRoutineArg &crt_routine_arg);
 };
 
 class ObAlterProcedureResolver: public ObAlterRoutineResolver

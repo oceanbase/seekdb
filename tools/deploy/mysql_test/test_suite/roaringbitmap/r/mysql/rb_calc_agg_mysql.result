@@ -254,8 +254,8 @@ Outputs & filters:
       group(nil), agg_func([T_FUN_SYS_RB_OR_AGG(T_FUN_SYS_RB_OR_AGG(t2.rb))])
   1 - output([T_FUN_SYS_RB_OR_AGG(t2.rb)]), filter(nil), rowset=16
       access([t2.rb]), partitions(p0)
-      is_index_back=false, is_global_index=false,
-      range_key([t2.id]), range(MIN ; MAX)always true,
+      is_index_back=false, is_global_index=false, 
+      range_key([t2.id]), range(MIN ; MAX)always true, 
       pushdown_aggregation([T_FUN_SYS_RB_OR_AGG(t2.rb)])
 select /*+ parallel(1) */ rb_to_string(rb_or_agg(rb)) from t2;
 rb_to_string(rb_or_agg(rb))
@@ -274,8 +274,8 @@ Outputs & filters:
       group(nil), agg_func([T_FUN_SYS_RB_AND_AGG(T_FUN_SYS_RB_AND_AGG(t2.rb))])
   1 - output([T_FUN_SYS_RB_AND_AGG(t2.rb)]), filter(nil), rowset=16
       access([t2.rb]), partitions(p0)
-      is_index_back=false, is_global_index=false,
-      range_key([t2.id]), range(MIN ; MAX)always true,
+      is_index_back=false, is_global_index=false, 
+      range_key([t2.id]), range(MIN ; MAX)always true, 
       pushdown_aggregation([T_FUN_SYS_RB_AND_AGG(t2.rb)])
 select /*+ parallel(1) */ rb_to_string(rb_and_agg(rb)) from t2;
 rb_to_string(rb_and_agg(rb))
@@ -309,7 +309,7 @@ Outputs & filters:
   6 - output([t2.k], [t2.rb]), filter(nil), rowset=16
   7 - output([t2.k], [t2.rb]), filter(nil), rowset=16
       access([t2.k], [t2.rb]), partitions(p0)
-      is_index_back=false, is_global_index=false,
+      is_index_back=false, is_global_index=false, 
       range_key([t2.id]), range(MIN ; MAX)always true
 select /*+ parallel(2) */ k, rb_to_string(rb_or_agg(rb)) from t2 group by k;
 k	rb_to_string(rb_or_agg(rb))
@@ -344,11 +344,11 @@ Outputs & filters:
   6 - output([t2.k], [t2.rb]), filter(nil), rowset=16
   7 - output([t2.k], [t2.rb]), filter(nil), rowset=16
       access([t2.k], [t2.rb]), partitions(p0)
-      is_index_back=false, is_global_index=false,
+      is_index_back=false, is_global_index=false, 
       range_key([t2.id]), range(MIN ; MAX)always true
 select /*+ parallel(2) */ k, rb_to_string(rb_and_agg(rb)) from t2 group by k;
 k	rb_to_string(rb_and_agg(rb))
-1
+1	
 2	1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33
 explain select /*+ parallel(2) NO_GBY_PUSHDOWN */ k, rb_to_string(rb_or_agg(rb)) from t2 group by k;
 Query Plan
@@ -376,7 +376,7 @@ Outputs & filters:
   5 - output([t2.k], [t2.rb]), filter(nil), rowset=16
   6 - output([t2.k], [t2.rb]), filter(nil), rowset=16
       access([t2.k], [t2.rb]), partitions(p0)
-      is_index_back=false, is_global_index=false,
+      is_index_back=false, is_global_index=false, 
       range_key([t2.id]), range(MIN ; MAX)always true
 select /*+ parallel(2) NO_GBY_PUSHDOWN */ k, rb_to_string(rb_or_agg(rb)) from t2 group by k;
 k	rb_to_string(rb_or_agg(rb))
@@ -408,11 +408,11 @@ Outputs & filters:
   5 - output([t2.k], [t2.rb]), filter(nil), rowset=16
   6 - output([t2.k], [t2.rb]), filter(nil), rowset=16
       access([t2.k], [t2.rb]), partitions(p0)
-      is_index_back=false, is_global_index=false,
+      is_index_back=false, is_global_index=false, 
       range_key([t2.id]), range(MIN ; MAX)always true
 select /*+ parallel(2) NO_GBY_PUSHDOWN */ k, rb_to_string(rb_and_agg(rb)) from t2 group by k;
 k	rb_to_string(rb_and_agg(rb))
-1
+1	
 2	1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33
 explain select /*+ parallel(2) GBY_PUSHDOWN */ rb_to_string(rb_or_agg(rb)) from t2;
 Query Plan
@@ -438,8 +438,8 @@ Outputs & filters:
   4 - output([T_FUN_SYS_RB_OR_AGG(t2.rb)]), filter(nil), rowset=16
   5 - output([T_FUN_SYS_RB_OR_AGG(t2.rb)]), filter(nil), rowset=16
       access([t2.rb]), partitions(p0)
-      is_index_back=false, is_global_index=false,
-      range_key([t2.id]), range(MIN ; MAX)always true,
+      is_index_back=false, is_global_index=false, 
+      range_key([t2.id]), range(MIN ; MAX)always true, 
       pushdown_aggregation([T_FUN_SYS_RB_OR_AGG(t2.rb)])
 select /*+ parallel(2) GBY_PUSHDOWN */ rb_to_string(rb_or_agg(rb)) from t2;
 rb_to_string(rb_or_agg(rb))
@@ -468,11 +468,11 @@ Outputs & filters:
   4 - output([t2.k], [t2.rb]), filter(nil), rowset=16
   5 - output([t2.k], [t2.rb]), filter(nil), rowset=16
       access([t2.k], [t2.rb]), partitions(p0)
-      is_index_back=false, is_global_index=false,
+      is_index_back=false, is_global_index=false, 
       range_key([t2.id]), range(MIN ; MAX)always true
 select /*+ parallel(2) GBY_PUSHDOWN*/ k, rb_to_string(rb_and_agg(rb)) from t2;
 k	rb_to_string(rb_and_agg(rb))
-1
+1	
 create table t3(id bigint primary key, c1 bigint, rb roaringbitmap) partition by key(id) partitions 8;
 insert into t3 select abs(random(0)), (abs(random(1))%500+455876444690), rb_from_string(cast(abs(random(1))%500+455876444690 as char(10000))) from table(generator(1000));
 select count(c1) from t3;
@@ -505,8 +505,8 @@ Outputs & filters:
   4 - output([T_FUN_SYS_RB_OR_AGG(t3.rb)]), filter(nil), rowset=256
   5 - output([T_FUN_SYS_RB_OR_AGG(t3.rb)]), filter(nil), rowset=256
       access([t3.rb]), partitions(p[0-7])
-      is_index_back=false, is_global_index=false,
-      range_key([t3.id]), range(MIN ; MAX)always true,
+      is_index_back=false, is_global_index=false, 
+      range_key([t3.id]), range(MIN ; MAX)always true, 
       pushdown_aggregation([T_FUN_SYS_RB_OR_AGG(t3.rb)])
 select /*+ parallel(2) */ rb_cardinality(rb_or_agg(rb)) from t3;
 rb_cardinality(rb_or_agg(rb))
@@ -535,8 +535,8 @@ Outputs & filters:
   4 - output([T_FUN_SYS_RB_AND_AGG(t3.rb)]), filter(nil), rowset=256
   5 - output([T_FUN_SYS_RB_AND_AGG(t3.rb)]), filter(nil), rowset=256
       access([t3.rb]), partitions(p[0-7])
-      is_index_back=false, is_global_index=false,
-      range_key([t3.id]), range(MIN ; MAX)always true,
+      is_index_back=false, is_global_index=false, 
+      range_key([t3.id]), range(MIN ; MAX)always true, 
       pushdown_aggregation([T_FUN_SYS_RB_AND_AGG(t3.rb)])
 select /*+ parallel(2) */ rb_cardinality(rb_and_agg(rb)) from t3;
 rb_cardinality(rb_and_agg(rb))
@@ -565,7 +565,7 @@ Outputs & filters:
   4 - output([t3.rb]), filter(nil), rowset=256
   5 - output([t3.rb]), filter(nil), rowset=256
       access([t3.rb]), partitions(p[0-7])
-      is_index_back=false, is_global_index=false,
+      is_index_back=false, is_global_index=false, 
       range_key([t3.id]), range(MIN ; MAX)always true
 select /*+ parallel(2) opt_param('pushdown_storage_level', 0) */ rb_cardinality(rb_or_agg(rb)) from t3;
 rb_cardinality(rb_or_agg(rb))
@@ -594,7 +594,7 @@ Outputs & filters:
   4 - output([t3.rb]), filter(nil), rowset=256
   5 - output([t3.rb]), filter(nil), rowset=256
       access([t3.rb]), partitions(p[0-7])
-      is_index_back=false, is_global_index=false,
+      is_index_back=false, is_global_index=false, 
       range_key([t3.id]), range(MIN ; MAX)always true
 select /*+ parallel(2) opt_param('pushdown_storage_level', 0) */ rb_cardinality(rb_and_agg(rb)) from t3;
 rb_cardinality(rb_and_agg(rb))

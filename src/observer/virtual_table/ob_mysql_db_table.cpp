@@ -25,8 +25,7 @@ namespace observer
 {
 
 ObMySQLDBTable::ObMySQLDBTable()
-    : ObVirtualTableScannerIterator(),
-      tenant_id_(OB_INVALID_ID)
+    : ObVirtualTableScannerIterator()
 {
 }
 
@@ -36,7 +35,6 @@ ObMySQLDBTable::~ObMySQLDBTable()
 
 void ObMySQLDBTable::reset()
 {
-  tenant_id_ = OB_INVALID_ID;
   ObVirtualTableScannerIterator::reset();
 }
 
@@ -49,9 +47,6 @@ int ObMySQLDBTable::inner_get_next_row(common::ObNewRow *&row)
   } else if (OB_ISNULL(schema_guard_)) {
     ret = OB_NOT_INIT;
     SERVER_LOG(WARN, "schema guard is NULL", K(ret));
-  } else if (OB_UNLIKELY(OB_INVALID_ID == tenant_id_)) {
-    ret = OB_NOT_INIT;
-    SERVER_LOG(WARN, "tenant_id is invalid", K(ret));
   } else {
     if (!start_to_read_) {
       ObObj *cells = NULL;
@@ -60,21 +55,21 @@ int ObMySQLDBTable::inner_get_next_row(common::ObNewRow *&row)
         SERVER_LOG(ERROR, "cur row cell is NULL", K(ret));
       } else {
         ObArray<const ObDBPriv *> db_array;
-        if (OB_FAIL(schema_guard_->get_db_priv_with_tenant_id(tenant_id_, db_array))) {
+        if (OB_FAIL(schema_guard_->get_db_priv_by_id(db_array))) {
           SERVER_LOG(WARN, "Get user info with tenant id error", K(ret));
         } else {
           ObString user_name;
           const ObUserInfo *user_info = NULL;
           for (int64_t row_idx = 0; OB_SUCC(ret) && row_idx < db_array.count(); ++row_idx) {
             const ObDBPriv *&db_priv = db_array.at(row_idx);
-            if ((ObString(ObString(OB_ORA_SYS_SCHEMA_NAME)) == db_priv->get_database_name_str())
-                || (ObString(ObString(OB_ORA_LBACSYS_NAME)) == db_priv->get_database_name_str())
-                || (ObString(ObString(OB_ORA_AUDITOR_NAME)) == db_priv->get_database_name_str())) {
-              // oracle db does not need to be displayed
+            if ((ObString(ObString(OB_EXTENDED_SYS_SCHEMA_NAME)) == db_priv->get_database_name_str())
+                || (ObString(ObString(OB_LBACSYS_SCHEMA_NAME)) == db_priv->get_database_name_str())
+                || (ObString(ObString(OB_AUDITOR_SCHEMA_NAME)) == db_priv->get_database_name_str())) {
+              // internal schemas do not need to be displayed
               continue;
             }
-            if (OB_FAIL(get_user_info(tenant_id_, db_priv->get_user_id(), user_info))) {
-              SERVER_LOG(WARN, "Failed to get user_info", K(ret), K_(tenant_id));
+            if (OB_FAIL(get_user_info(db_priv->get_user_id(), user_info))) {
+              SERVER_LOG(WARN, "Failed to get user_info", K(ret));
             } else {
               for (int64_t col_idx = 0; OB_SUCC(ret) && col_idx < output_column_ids_.count(); ++col_idx) {
                 const uint64_t col_id = output_column_ids_.at(col_idx);
@@ -167,15 +162,14 @@ int ObMySQLDBTable::inner_get_next_row(common::ObNewRow *&row)
   return ret;
 }
 
-int ObMySQLDBTable::get_user_info(const uint64_t tenant_id,
-                                  const uint64_t user_id,
+int ObMySQLDBTable::get_user_info(const uint64_t user_id,
                                   const share::schema::ObUserInfo *&user_info)
 {
   int ret = OB_SUCCESS;
   user_info = NULL;
-  if (OB_ISNULL(user_info = schema_guard_->get_user_info(tenant_id, user_id))) {
+  if (OB_ISNULL(user_info = schema_guard_->get_user_info(user_id))) {
     ret = OB_USER_NOT_EXIST;
-    SERVER_LOG(WARN, "Failed to get user_info", K(tenant_id), K(user_id), K(ret));
+    SERVER_LOG(WARN, "Failed to get user_info", K(user_id), K(ret));
   }
   return ret;
 }

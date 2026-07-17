@@ -1,5 +1,5 @@
 # gen_parser_win.ps1
-# PowerShell version: generates SQL parser on Windows only (FTS + MySQL mode), Oracle modules excluded.
+# PowerShell version: generates SQL parser on Windows only (FTS + MySQL mode).
 # Requires: WinFlexBison (win_bison, win_flex must be in PATH or devtools/bin)
 
 $ErrorActionPreference = "Stop"
@@ -131,7 +131,7 @@ $RequiredOutputs = @(
 function Get-ParserInputHash {
     $mysqlY = Join-Path $ParserDir "sql_parser_mysql_mode.y"
     $mysqlL = Join-Path $ParserDir "sql_parser_mysql_mode.l"
-    $obItemH = Join-Path $RepoRoot "src/objit/include/objit/common/ob_item_type.h"
+    $obItemH = Join-Path $RepoRoot "src/sql/parser/ob_item_type.h"
     $combined = [System.IO.File]::ReadAllText($mysqlY) + [System.IO.File]::ReadAllText($mysqlL)
     if (Test-Path $obItemH) { $combined += [System.IO.File]::ReadAllText($obItemH) }
     $bytes = [System.Text.Encoding]::UTF8.GetBytes($combined)
@@ -207,10 +207,10 @@ function Generate-Parser {
 
     # ---- type_name.c (PowerShell implementation, replaces gen_type_name.sh) ----
     Write-Host "Generating type_name.c..."
-    $obItemTypeH = Join-Path $RepoRoot "src/objit/include/objit/common/ob_item_type.h"
+    $obItemTypeH = Join-Path $RepoRoot "src/sql/parser/ob_item_type.h"
     $typeNameC = Join-Path $ParserDir "type_name.c"
     $lines = @(
-        '#include "objit/common/ob_item_type.h"',
+        '#include "sql/parser/ob_item_type.h"',
         "const char* get_type_name(int type)",
         "{",
         "`tswitch(type){"

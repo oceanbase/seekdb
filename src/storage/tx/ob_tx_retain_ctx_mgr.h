@@ -33,20 +33,19 @@ class ObLS;
 namespace transaction
 {
 
-class ObPartTransCtx;
+class ObTxCtx;
 class ObTxRetainCtxMgr;
 
 class ObAdvanceLSCkptTask : public ObTransTask
 {
 public:
-  ObAdvanceLSCkptTask(share::ObLSID ls_id, share::SCN target_ts);
+  explicit ObAdvanceLSCkptTask(share::SCN target_ts);
   ~ObAdvanceLSCkptTask() { reset(); }
   void reset();
 
   int try_advance_ls_ckpt_ts();
 
 private:
-  share::ObLSID ls_id_;
   share::SCN target_ckpt_ts_;
 };
 
@@ -60,7 +59,7 @@ class ObIRetainCtxCheckFunctor : public common::ObDLinkBase<ObIRetainCtxCheckFun
 public:
   ObIRetainCtxCheckFunctor();
   ~ObIRetainCtxCheckFunctor();
-  int init(ObPartTransCtx *ctx, RetainCause cause);
+  int init(ObTxCtx *ctx, RetainCause cause);
   // invoke before removed from retain ctx mgr
   // virtual int gc_retain_ctx() = 0;
   virtual int operator()(storage::ObLS *ls, ObTxRetainCtxMgr *retain_mgr) = 0;
@@ -68,13 +67,12 @@ public:
   virtual bool is_valid() { return OB_NOT_NULL(tx_ctx_) && cause_ != RetainCause::UNKOWN; }
   int del_retain_ctx();
 
-  TO_STRING_KV(K(cause_), K(tx_id_), K(ls_id_), KP(tx_ctx_));
+  TO_STRING_KV(K(cause_), K(tx_id_), KP(tx_ctx_));
 
 protected:
   RetainCause cause_;
-  ObPartTransCtx *tx_ctx_;
+  ObTxCtx *tx_ctx_;
   ObTransID tx_id_;
-  share::ObLSID ls_id_;
 };
 
 class ObMDSRetainCtxFunctor : public ObIRetainCtxCheckFunctor
@@ -84,7 +82,7 @@ public:
   {
     final_log_ts_.reset();
   }
-  int init(ObPartTransCtx *ctx,
+  int init(ObTxCtx *ctx,
            RetainCause cause,
            const share::SCN &final_log_ts);
 
@@ -116,14 +114,14 @@ public:
 
   int push_retain_ctx(ObIRetainCtxCheckFunctor *retain_func, int64_t timeout_us);
   int try_gc_retain_ctx(storage::ObLS *ls);
-  int print_retain_ctx_info(share::ObLSID ls_id);
+  int print_retain_ctx_info();
   int force_gc_retain_ctx();
 
   void set_max_ckpt_ts(share::SCN ckpt_ts) { max_wait_ckpt_ts_.inc_update(ckpt_ts); }
   // share::SCN get_max_ckpt_ts() { return ATOMIC_LOAD(&max_wait_ckpt_ts_); }
   int64_t get_retain_ctx_cnt() { return retain_ctx_list_.get_size(); }
 
-  void try_advance_retain_ctx_gc(share::ObLSID ls_id);
+  void try_advance_retain_ctx_gc();
 
   TO_STRING_KV(K(retain_ctx_list_.get_size()),
                K(max_wait_ckpt_ts_),

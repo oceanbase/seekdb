@@ -51,10 +51,7 @@ int ObAlterDatabaseStmt::set_default_tablegroup_name(const common::ObString &tab
   return alter_database_arg_.database_schema_.set_default_tablegroup_name(tablegroup_name);
 }
 
-void ObAlterDatabaseStmt::set_tenant_id(const uint64_t tenant_id)
-{
-  alter_database_arg_.database_schema_.set_tenant_id(tenant_id);
-}
+
 
 void ObAlterDatabaseStmt::set_database_id(const uint64_t database_id)
 {
@@ -88,7 +85,7 @@ common::ObCharsetType ObAlterDatabaseStmt::get_charset_type() const
   return alter_database_arg_.database_schema_.get_charset_type();
 }
 
-obrpc::ObAlterDatabaseArg& ObAlterDatabaseStmt::get_alter_database_arg()
+obcall::ObAlterDatabaseArg& ObAlterDatabaseStmt::get_alter_database_arg()
 {
   return alter_database_arg_;
 }

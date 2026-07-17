@@ -20,7 +20,6 @@
 #include "rootserver/ob_rs_job_table_operator.h"
 #include "share/ob_server_struct.h"
 #include "share/rc/ob_tenant_base.h"
-#include "lib/thread/thread_mgr.h" // for TG_SCHEDULE/TG_CANCEL_TASK/TG_WAIT_TASK/TG_TASK_EXIST
 
 namespace oceanbase
 {
@@ -35,15 +34,15 @@ ObSysTenantLoadSysPackageTask::ObSysTenantLoadSysPackageTask()
 {
 }
 
-int ObSysTenantLoadSysPackageTask::init(const uint64_t tenant_id)
+int ObSysTenantLoadSysPackageTask::init()
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(inited_)) {
     ret = OB_INIT_TWICE;
     LOG_WARN("init twice", KR(ret));
-  } else if (OB_UNLIKELY(!is_sys_tenant(tenant_id))) {
+  } else if (OB_UNLIKELY(!true)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("ObSysTenantLoadSysPackageTask should only run on sys tenant", KR(ret), K(tenant_id));
+    LOG_WARN("ObSysTenantLoadSysPackageTask should only run on sys tenant", KR(ret));
   } else {
     inited_ = true;
     fail_count_ = 0;
@@ -51,40 +50,36 @@ int ObSysTenantLoadSysPackageTask::init(const uint64_t tenant_id)
   return ret;
 }
 
-int ObSysTenantLoadSysPackageTask::start(const int tg_id)
+int ObSysTenantLoadSysPackageTask::start(common::ObTimer &timer)
 {
   int ret = OB_SUCCESS;
   const bool did_repeat = true;
   if (OB_UNLIKELY(!inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("task not inited", KR(ret), K_(inited));
-  } else if (OB_UNLIKELY(-1 == tg_id)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid tg id", KR(ret), K(tg_id));
   } else {
-    bool is_exist = false;
-    if (OB_FAIL(TG_TASK_EXIST(tg_id, *this, is_exist))) {
-      LOG_WARN("failed to check task existence", KR(ret), K(tg_id));
-    } else if (is_exist) {
+    if (timer.task_exist(*this)) {
       // ignore duplicate schedule
-      LOG_TRACE("timer task already exist", K(tg_id));
-    } else if (OB_FAIL(TG_SCHEDULE(tg_id, *this, SCHEDULE_INTERVAL_US, did_repeat))) {
-      LOG_WARN("failed to schedule timer task", KR(ret), K(tg_id), K(SCHEDULE_INTERVAL_US), K(did_repeat));
+      LOG_TRACE("timer task already exist");
+    } else if (OB_FAIL(timer.schedule(*this, SCHEDULE_INTERVAL_US, did_repeat))) {
+      LOG_WARN("failed to schedule timer task", KR(ret), K(SCHEDULE_INTERVAL_US), K(did_repeat));
     } else {
-      LOG_INFO("finish schedule timer task", K(tg_id), K(SCHEDULE_INTERVAL_US));
+      LOG_INFO("finish schedule timer task", K(SCHEDULE_INTERVAL_US));
     }
   }
   return ret;
 }
 
-void ObSysTenantLoadSysPackageTask::stop(const int tg_id)
+void ObSysTenantLoadSysPackageTask::stop(common::ObTimer &timer)
 {
-  int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(-1 == tg_id)) {
-    LOG_WARN("invalid tg id when cancel timer task", K(tg_id));
-  } else {
-    TG_CANCEL_TASK(tg_id, *this);
-    TG_WAIT_TASK(tg_id, *this);
+  if (timer.inited()) {
+    int ret = OB_SUCCESS;
+    if (OB_FAIL(timer.cancel_task(*this))) {
+      LOG_WARN("failed to cancel timer task", KR(ret));
+    }
+    if (OB_FAIL(timer.wait_task(*this))) {
+      LOG_WARN("failed to wait timer task", KR(ret));
+    }
   }
 }
 
@@ -173,8 +168,7 @@ int ObSysTenantLoadSysPackageTask::wait_sys_package_ready(
       LOG_WARN("wait sys package ready failed", KR(ret), K(mode));
     } else {
       inprogress_job_count = 0;
-      if (mode != ObCompatibilityMode::ORACLE_MODE
-          && OB_ENTRY_NOT_EXIST != (tmp_ret = RS_JOB_FIND(LOAD_MYSQL_SYS_PACKAGE, job_id))) {
+      if (OB_ENTRY_NOT_EXIST != (tmp_ret = RS_JOB_FIND(LOAD_MYSQL_SYS_PACKAGE, job_id))) {
         inprogress_job_count++;
       }
       if (inprogress_job_count == 0) {

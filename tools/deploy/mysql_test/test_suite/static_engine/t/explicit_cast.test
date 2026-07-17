@@ -78,9 +78,9 @@ insert into t1 values('11:11:11.123456');
 select cast(c1 as time), concat(c1, 'abc') from t1;
 
 drop table t1;
-create table t1(col_utf8  varchar(100) collate utf8_general_ci,
-                col_utf16 varchar(100) collate utf16_bin,
-                col_gbk   varchar(100) collate gbk_chinese_ci);
+create table t1(col_utf8  varchar(100) collate utf8mb4_general_ci,
+                col_utf16 varchar(100) collate utf8mb4_bin,
+                col_gbk   varchar(100) collate utf8mb4_general_ci);
 insert into t1 values('123.123', '123.123', '123.123');
 select cast(col_utf8 as char(10)), cast(col_utf16 as char(10)), cast(col_gbk as char(10)) from t1;
 select length(cast(col_utf8 as char(10))), length(cast(col_utf16 as char(10))), length(cast(col_gbk as char(10))) from t1;
@@ -147,7 +147,7 @@ select cast('-0' as float);
 --disable_warnings
 drop table if exists t1;
 --enable_warnings
-create table t1(a varchar(500) COLLATE utf8mb4_bin DEFAULT NULL) with column group (each column);
+create table t1(a varchar(500) COLLATE utf8mb4_bin DEFAULT NULL);
 insert into t1 values('d');
 insert into t1 values('3.4e39');
 insert into t1 values('3.4e308');
@@ -225,4 +225,3 @@ desc v2_unsigned;
 
 drop table t1, t2, t1_signed, t1_unsigned, t2_signed, t2_unsigned;
 drop view v1_signed, v1_unsigned, v2_signed, v2_unsigned;
-

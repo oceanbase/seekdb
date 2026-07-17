@@ -17,7 +17,8 @@
 #ifndef OCEANBASE_OBSERVER_OB_INNER_SQL_CONNECTION_H_
 #define OCEANBASE_OBSERVER_OB_INNER_SQL_CONNECTION_H_
 
-#include "lib/mysqlclient/ob_isql_connection.h"
+#include "common/mysqlclient/ob_isql_connection.h"
+#include "storage/tx/ob_multi_data_source.h"  // ObRegisterMdsFlag complete type(previously hidden behind the rpc_struct include chain)
 #include "lib/list/ob_dlist.h"
 #include "lib/container/ob_2d_array.h"
 #include "sql/session/ob_sql_session_info.h"
@@ -25,18 +26,13 @@
 #include "sql/monitor/ob_exec_stat.h"
 #include "observer/ob_restore_sql_modifier.h"
 #include "observer/mysql/ob_query_retry_ctrl.h"
-#include "observer/ob_inner_sql_rpc_proxy.h"
-#include "lib/mysqlclient/ob_isql_client.h"
-#include "share/location_cache/ob_location_service.h"
+#include "observer/ob_inner_sql_transmit_struct.h"
+#include "common/mysqlclient/ob_isql_client.h"
 #include "storage/tablelock/ob_table_lock_common.h"   //ObTableLockMode
 #include "sql/session/ob_sql_session_mgr.h"
 
 namespace oceanbase
 {
-namespace obrpc
-{
-class ObInnerSqlRpcP;
-}
 namespace common
 {
 class ObString;
@@ -100,7 +96,6 @@ class ObInnerSQLConnection
     : public common::sqlclient::ObISQLConnection,
       public common::ObDLinkBase<ObInnerSQLConnection>
 {
-  friend class obrpc::ObInnerSqlRpcP;
 public:
   static constexpr const char LABEL[] = "RPInnerSqlConn";
   class SavedValue
@@ -150,30 +145,21 @@ public:
            ObISQLClient *client_addr = NULL,
            ObRestoreSQLModifier *sql_modifer = NULL,
            const bool use_static_engine = false,
-           const bool is_oracle_mode = false,
            const int32_t group_id = 0,
            const bool is_resource_conn = false);
   int destroy(void);
   inline void reset() { destroy(); }
-  virtual int execute_read(const uint64_t tenant_id, const ObString &sql,
+  virtual int execute_read(const ObString &sql,
                            common::ObISQLClient::ReadResult &res, bool is_user_sql = false,
                            const common::ObAddr *sql_exec_addr = nullptr/* ddl inner sql execution addr */) override;
-  virtual int execute_read(const int64_t cluster_id, const uint64_t tenant_id, const ObString &sql,
+  virtual int execute_read(const int64_t cluster_id, const ObString &sql,
                            common::ObISQLClient::ReadResult &res, bool is_user_sql = false,
                            const common::ObAddr *sql_exec_addr = nullptr/* ddl inner sql execution addr */) override;
-  virtual int execute_write(const uint64_t tenant_id, const ObString &sql,
+  virtual int execute_write(const ObString &sql,
                             int64_t &affected_rows, bool is_user_sql = false,
                             const common::ObAddr *sql_exec_addr = nullptr) override;
 
-  // Prepared Statement API for embedded mode
-  int stmt_prepare(const uint64_t tenant_id, const ObString &sql,
-                   uint64_t &stmt_id, int64_t &param_count);
-  int stmt_execute(const uint64_t tenant_id, const uint64_t stmt_id,
-                   const ParamStore &params, int64_t &affected_rows);
-  int stmt_close(const uint64_t tenant_id, const uint64_t stmt_id);
-
-  virtual int execute_proc(const uint64_t tenant_id,
-                          ObIAllocator &allocator,
+  virtual int execute_proc(ObIAllocator &allocator,
                           ParamStore &params,
                           ObString &sql,
                           const share::schema::ObRoutineInfo &routine_info,
@@ -181,7 +167,7 @@ public:
                           const ObTimeZoneInfo *tz_info,
                           ObObj *result,
                           bool is_sql) override;
-  virtual int start_transaction(const uint64_t &tenant_id, bool with_snap_shot = false) override;
+  virtual int start_transaction(bool with_snap_shot = false) override;
   virtual sqlclient::ObCommonServerConnectionPool *get_common_server_pool() override;
   virtual int rollback() override;
   virtual int commit() override;
@@ -263,10 +249,9 @@ public:
 
   sql::ObSql *get_sql_engine() { return ob_sql_; }
 
-  virtual int execute(const uint64_t tenant_id, sqlclient::ObIExecutor &executor) override;
+  virtual int execute(sqlclient::ObIExecutor &executor) override;
 
-  int forward_request(const uint64_t tenant_id,
-                      const int64_t op_type,
+  int forward_request(const int64_t op_type,
                       const ObString &sql,
                       ObInnerSQLResult &res,
                       const int32_t group_id = 0);
@@ -284,8 +269,7 @@ public:
   int set_session_timeout(int64_t query_timeout, int64_t trx_timeout);
 
 public:// for mds
-  int register_multi_data_source(const uint64_t &tenant_id,
-                                 const share::ObLSID ls_id,
+  int register_multi_data_source(
                                  const transaction::ObTxDataSourceType type,
                                  const char *buf,
                                  const int64_t buf_len,
@@ -323,18 +307,15 @@ public:
 
   static int init_session_info(sql::ObSQLSessionInfo *session,
                                const bool is_extern_session,
-                               const bool is_oracle_mode,
                                const bool is_ddl);
 
   int64_t get_init_timestamp() const { return init_timestamp_; }
-  int switch_tenant(const uint64_t tenant_id);
-  bool is_local_execute(const int64_t cluster_id, const uint64_t tenant_id);
-  ObDiagnosticInfo *get_diagnostic_info() { return diagnostic_info_; }
+  int switch_tenant();
+  bool is_local_execute(const int64_t cluster_id);
 public:
   static const int64_t LOCK_RETRY_TIME = 1L * 1000 * 1000;
   static const int64_t TOO_MANY_REF_ALERT = 1024;
   static const uint32_t INNER_SQL_SESS_ID = 1;
-  static const uint32_t INNER_SQL_PROXY_SESS_ID = 1;
   static const int64_t MAX_BT_SIZE = 20;
   static const int64_t EXTRA_REFRESH_LOCATION_TIME = 1L * 1000 * 1000;
 private:
@@ -369,23 +350,16 @@ private:
 
   lib::Worker::CompatMode get_compat_mode() const;
 
-  int nonblock_get_leader(
-      const int64_t cluster_id,
-      const uint64_t tenant_id,
-      const share::ObLSID ls_id,
-      common::ObAddr &leader);
-
-  int execute_read_inner(const int64_t cluster_id, const uint64_t tenant_id, const ObString &sql,
+  int execute_read_inner(const int64_t cluster_id, const ObString &sql,
                          common::ObISQLClient::ReadResult &res, bool is_user_sql = false,
                          const common::ObAddr *sql_exec_addr = nullptr);
-  int execute_write_inner(const uint64_t tenant_id, const ObString &sql, int64_t &affected_rows,
+  int execute_write_inner(const ObString &sql, int64_t &affected_rows,
       bool is_user_sql = false, const common::ObAddr *sql_exec_addr = nullptr);
-  int start_transaction_inner(const uint64_t &tenant_id, bool with_snap_shot = false);
+  int start_transaction_inner(bool with_snap_shot = false);
   template <typename T>
-  int retry_while_no_tenant_resource(const int64_t cluster_id, const uint64_t &tenant_id, T function);
+  int retry_while_no_tenant_resource(const int64_t cluster_id, T function);
 
-  int forward_request_(const uint64_t tenant_id,
-                       const int64_t op_type,
+  int forward_request_(const int64_t op_type,
                        const ObString &sql,
                        ObInnerSQLResult &res,
                        const int32_t group_id = 0);
@@ -429,8 +403,8 @@ private:
    Why do we need this? 
    DDL needs to issue an "insert into select" sql to build the single replica, which will deal with user data.
    However, in the local-optimized path, the sql will be executed using a "fake user tenant session", whose 
-   login_tenant_id is actually sys tenant. This leads to unexpected privilege check result since privilege
-   check always uses login_tenant_id due to security. To solve this problem, we add this flag to force all
+   login identity is actually the sys identity. This leads to unexpected privilege check result since privilege
+   check always uses the login identity due to security. To solve this problem, we add this flag to force all
    "insert into select" inner sqls issued by DDL to use remote execution, where observer will create a real
    user session to execute the sql.
 
@@ -447,7 +421,6 @@ private:
   //support set user timeout of stream rpc but not depend on internal_sql_execute_timeout
   int64_t user_timeout_;
   sql::ObFreeSessionCtx free_session_ctx_;
-  ObDiagnosticInfo *diagnostic_info_;
   bool inner_sess_query_locked_;
   DISABLE_COPY_ASSIGN(ObInnerSQLConnection);
 };
@@ -465,7 +438,7 @@ private:
   bool need_record_;
   bool has_finish_switch_di_;
   int64_t prev_block_sessid_;
-  ObQueryRetryAshInfo *prev_info_;
+  sql::ObQueryRetryAshInfo *prev_info_;
 };
 
 class ObInnerSQLSessionGuard

@@ -15,7 +15,8 @@
  */
 
 #include "ob_tx_retain_ctx_mgr.h"
-#include "storage/tx/ob_trans_part_ctx.h"
+#include "share/rc/ob_module_provider.h"
+#include "storage/tx/ob_tx_ctx.h"
 #include "storage/tx/ob_trans_service.h"
 #include "storage/tx_storage/ob_ls_service.h"
 
@@ -26,17 +27,15 @@ using namespace share;
 namespace transaction
 {
 
-ObAdvanceLSCkptTask::ObAdvanceLSCkptTask(share::ObLSID ls_id, SCN ckpt_ts)
+ObAdvanceLSCkptTask::ObAdvanceLSCkptTask(SCN ckpt_ts)
 {
   ;
   task_type_ = ObTransRetryTaskType::ADVANCE_LS_CKPT_TASK;
-  ls_id_ = ls_id;
   target_ckpt_ts_ = ckpt_ts;
 }
 
 void ObAdvanceLSCkptTask::reset()
 {
-  ls_id_ = share::ObLSID::INVALID_LS_ID;
   target_ckpt_ts_.reset();
 }
 
@@ -44,29 +43,26 @@ int ObAdvanceLSCkptTask::try_advance_ls_ckpt_ts()
 {
   int ret = OB_SUCCESS;
 
-  storage::ObLSHandle ls_handle;
+  storage::ObLS *tenant_ls = nullptr;
 
-  if (OB_ISNULL(MTL(ObLSService *))
-      || OB_FAIL(MTL(ObLSService *)->get_ls(ls_id_, ls_handle, storage::ObLSGetMod::TRANS_MOD))
-      || !ls_handle.is_valid()) {
+  if (OB_ISNULL(share::g_mp->ls_service())
+      || OB_FAIL(share::g_mp->ls_service()->get_ls(tenant_ls))) {
     if (OB_SUCCESS == ret) {
       ret = OB_INVALID_ARGUMENT;
     }
-    TRANS_LOG(WARN, "get ls faild", K(ret), K(MTL(ObLSService *)));
-  } else if (OB_FAIL(ls_handle.get_ls()->advance_checkpoint_by_flush(
+    TRANS_LOG(WARN, "get ls faild", K(ret), K(share::g_mp->ls_service()));
+  } else if (OB_FAIL(tenant_ls->advance_checkpoint_by_flush(
                        target_ckpt_ts_,
                        INT64_MAX, /*timeout*/
                        false,     /*is_tenant_freeze*/
                        ObFreezeSourceFlag::GC_RETAIN_CTX))) {
-    TRANS_LOG(WARN, "advance checkpoint ts failed", K(ret), K(ls_id_), K(target_ckpt_ts_));
+    TRANS_LOG(WARN, "advance checkpoint ts failed", K(ret), K(target_ckpt_ts_));
   }
 
   if (OB_SUCC(ret)) {
-    TRANS_LOG(INFO, "[RetainCtxMgr] advance ls checkpoint ts success", K(ret), K(ls_id_),
-              K(target_ckpt_ts_));
+    TRANS_LOG(INFO, "[RetainCtxMgr] advance checkpoint ts success", K(ret), K(target_ckpt_ts_));
   } else {
-    TRANS_LOG(WARN, "[RetainCtxMgr] advance ls checkpoint ts failed", K(ret), K(ls_id_),
-              K(target_ckpt_ts_));
+    TRANS_LOG(WARN, "[RetainCtxMgr] advance checkpoint ts failed", K(ret), K(target_ckpt_ts_));
   }
 
   return ret;
@@ -84,7 +80,7 @@ ObIRetainCtxCheckFunctor::~ObIRetainCtxCheckFunctor()
   }
 }
 
-int ObIRetainCtxCheckFunctor::init(ObPartTransCtx *ctx, RetainCause cause)
+int ObIRetainCtxCheckFunctor::init(ObTxCtx *ctx, RetainCause cause)
 {
   int ret = OB_SUCCESS;
   if (ctx == nullptr || cause == RetainCause::UNKOWN) {
@@ -96,7 +92,6 @@ int ObIRetainCtxCheckFunctor::init(ObPartTransCtx *ctx, RetainCause cause)
     tx_ctx_ = ctx;
     tx_ctx_->set_retain_cause(cause);
     tx_id_ = tx_ctx_->get_trans_id();
-    ls_id_ = tx_ctx_->get_ls_id();
     // TRANS_LOG( INFO , "before inc retain ctx ref", K(ret),KPC(this),K(*tx_ctx_));
     // tx_ctx_->acquire_ctx_ref();
     // TRANS_LOG( INFO , "after inc retain ctx ref", K(ret),KPC(this),K(*tx_ctx_));
@@ -122,7 +117,7 @@ int ObIRetainCtxCheckFunctor::del_retain_ctx()
   return ret;
 }
 
-int ObMDSRetainCtxFunctor::init(ObPartTransCtx *ctx,
+int ObMDSRetainCtxFunctor::init(ObTxCtx *ctx,
                                 RetainCause cause,
                                 const SCN &final_log_ts)
 {
@@ -263,7 +258,7 @@ int ObTxRetainCtxMgr::force_gc_retain_ctx()
   return ret;
 }
 
-int ObTxRetainCtxMgr::print_retain_ctx_info(share::ObLSID ls_id)
+int ObTxRetainCtxMgr::print_retain_ctx_info()
 {
   int ret = OB_SUCCESS;
 
@@ -271,25 +266,20 @@ int ObTxRetainCtxMgr::print_retain_ctx_info(share::ObLSID ls_id)
   SpinRLockGuard guard(retain_ctx_lock_);
   tg.click();
   if (!retain_ctx_list_.is_empty()) {
-    TRANS_LOG(INFO, "[RetainCtxMgr] print retain ctx", K(ls_id), KPC(this),
+    TRANS_LOG(INFO, "[RetainCtxMgr] print retain ctx", KPC(this),
               KPC(retain_ctx_list_.get_first()), KPC(retain_ctx_list_.get_last()));
   }
   return ret;
 }
 
-void ObTxRetainCtxMgr::try_advance_retain_ctx_gc(share::ObLSID ls_id)
+void ObTxRetainCtxMgr::try_advance_retain_ctx_gc()
 {
   int ret = OB_SUCCESS;
 
-  const int64_t tenant_id = MTL_ID();
-  int64_t CUR_LS_CNT = MTL(ObLSService *)->get_ls_map()->get_ls_count();
-  if (CUR_LS_CNT == 0) {
-    CUR_LS_CNT = 1;
-  }
   const int64_t IDLE_GC_INTERVAL = 30 * 60 * 1000 * 1000; // 30 min
   // const int64_t MIN_RETAIN_CTX_GC_THRESHOLD = 1000;
-  const int64_t MIN_RETAIN_CTX_GC_THRESHOLD = ::oceanbase::lib::get_tenant_memory_limit(tenant_id)
-                                              / sizeof(ObPartTransCtx) / CUR_LS_CNT / 100;
+  const int64_t MIN_RETAIN_CTX_GC_THRESHOLD = ::oceanbase::lib::get_tenant_memory_limit()
+                                              / sizeof(ObTxCtx) / 100;
 
   ObTimeGuard tg(__func__, 1 * 1000 * 1000);
   SpinRLockGuard guard(retain_ctx_lock_);
@@ -301,7 +291,7 @@ void ObTxRetainCtxMgr::try_advance_retain_ctx_gc(share::ObLSID ls_id)
   if (retain_ctx_list_.get_size() <= 0) {
     // do nothing
   } else if (retain_ctx_list_.get_size()
-                 <= std::min(MAX_PART_CTX_COUNT / 10 / CUR_LS_CNT, MIN_RETAIN_CTX_GC_THRESHOLD)
+                 <= std::min(MAX_TX_CTX_COUNT / 10, MIN_RETAIN_CTX_GC_THRESHOLD)
              && (OB_INVALID_TIMESTAMP == last_push_gc_task_ts_
                  || (OB_INVALID_TIMESTAMP != last_push_gc_task_ts_
                      && cur_time - last_push_gc_task_ts_ <= IDLE_GC_INTERVAL))) {
@@ -310,14 +300,14 @@ void ObTxRetainCtxMgr::try_advance_retain_ctx_gc(share::ObLSID ls_id)
                            share::mtl_malloc(sizeof(ObAdvanceLSCkptTask), "ad_ckpt_task")))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     TRANS_LOG(WARN, "alloc ObAdvanceLSCkptTask failed", K(ret));
-  } else if (OB_FALSE_IT(new (task) ObAdvanceLSCkptTask(ls_id, max_wait_ckpt_ts_))) {
-  } else if (MTL(ObTransService *)->push(task)) {
+  } else if (OB_FALSE_IT(new (task) ObAdvanceLSCkptTask(max_wait_ckpt_ts_))) {
+  } else if (share::g_mp->trans_service()->push(task)) {
     TRANS_LOG(INFO, "[RetainCtxMgr] push ObAdvanceLSCkptTask failed", K(ret),
-              K(retain_ctx_list_.get_size()), K(last_push_gc_task_ts_), K(ls_id),
+              K(retain_ctx_list_.get_size()), K(last_push_gc_task_ts_),
               K(MIN_RETAIN_CTX_GC_THRESHOLD), KPC(this));
   } else {
     TRANS_LOG(INFO, "[RetainCtxMgr] push ObAdvanceLSCkptTask success", K(ret),
-              K(retain_ctx_list_.get_size()), K(last_push_gc_task_ts_), K(ls_id),
+              K(retain_ctx_list_.get_size()), K(last_push_gc_task_ts_),
               K(MIN_RETAIN_CTX_GC_THRESHOLD), KPC(this));
     last_push_gc_task_ts_ = cur_time;
   }

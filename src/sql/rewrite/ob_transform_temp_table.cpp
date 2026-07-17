@@ -2559,8 +2559,7 @@ int ObTransformTempTable::evaluate_cte_cost(ObDMLStmt &root_stmt,
     ObArray<ObParentDMLStmt> dummy;
     ObDMLStmt *copy_root_stmt = NULL;
     ObSEArray<ObSelectStmt*, 2> origin_stmts;
-    param.set_mem_attr(ctx_->session_info_->get_effective_tenant_id(),
-                       "TempTableCost",
+    param.set_mem_attr("TempTableCost",
                        ObCtxIds::DEFAULT_CTX_ID)
        .set_properties(lib::USE_TL_PAGE_OPTIONAL)
        .set_page_size(OB_MALLOC_NORMAL_BLOCK_SIZE);
@@ -2586,7 +2585,6 @@ int ObTransformTempTable::evaluate_cte_cost(ObDMLStmt &root_stmt,
                 CURRENT_CONTEXT->get_arena_allocator(),
                 &ctx_->exec_ctx_->get_physical_plan_ctx()->get_param_store(),
                 *ctx_->self_addr_,
-                GCTX.srv_rpc_proxy_,
                 root_stmt.get_query_ctx()->get_global_hint(),
                 tmp_expr_factory,
                 copy_root_stmt,
@@ -2761,8 +2759,7 @@ int ObTransformTempTable::evaluate_cte_cost_partially(ObDMLStmt *root_stmt,
     ObTransformerImpl trans(ctx_);
     bool trans_happended = false;
     uint64_t trans_rules = ALL_EXPR_LEVEL_HEURISTICS_RULES;
-    param.set_mem_attr(ctx_->session_info_->get_effective_tenant_id(),
-                       "TempTableCost",
+    param.set_mem_attr("TempTableCost",
                        ObCtxIds::DEFAULT_CTX_ID)
        .set_properties(lib::USE_TL_PAGE_OPTIONAL)
        .set_page_size(OB_MALLOC_NORMAL_BLOCK_SIZE);
@@ -2803,7 +2800,6 @@ int ObTransformTempTable::evaluate_cte_cost_partially(ObDMLStmt *root_stmt,
                 CURRENT_CONTEXT->get_arena_allocator(),
                 &ctx_->exec_ctx_->get_physical_plan_ctx()->get_param_store(),
                 *ctx_->self_addr_,
-                GCTX.srv_rpc_proxy_,
                 root_stmt->get_query_ctx()->get_global_hint(),
                 tmp_expr_factory,
                 root_stmt,
@@ -2862,8 +2858,7 @@ int ObTransformTempTable::evaluate_cte_cost_globally(ObDMLStmt *origin_root,
     ObTransformerImpl trans(ctx_);
     bool trans_happended = false;
     uint64_t trans_rules = ALL_HEURISTICS_RULES | (1L << TEMP_TABLE_OPTIMIZATION);
-    param.set_mem_attr(ctx_->session_info_->get_effective_tenant_id(),
-                       "TempTableCost",
+    param.set_mem_attr("TempTableCost",
                        ObCtxIds::DEFAULT_CTX_ID)
        .set_properties(lib::USE_TL_PAGE_OPTIONAL)
        .set_page_size(OB_MALLOC_NORMAL_BLOCK_SIZE);
@@ -2888,7 +2883,6 @@ int ObTransformTempTable::evaluate_cte_cost_globally(ObDMLStmt *origin_root,
                 CURRENT_CONTEXT->get_arena_allocator(),
                 &ctx_->exec_ctx_->get_physical_plan_ctx()->get_param_store(),
                 *ctx_->self_addr_,
-                GCTX.srv_rpc_proxy_,
                 root_stmt->get_query_ctx()->get_global_hint(),
                 tmp_expr_factory,
                 root_stmt,

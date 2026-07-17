@@ -123,11 +123,11 @@ int calc_to_temporal_expr(const ObExpr &expr,
                                                          ob_time,
                                                          scale));
       } else {
-        OZ (ObTimeConverter::str_to_ob_time_oracle_dfm(input_char->get_string(),
-                                                       time_cvrt_ctx,
-                                                       target_type,
-                                                       ob_time,
-                                                       scale));
+        OZ (ObTimeConverter::str_to_ob_time_by_format_model(input_char->get_string(),
+                                                            time_cvrt_ctx,
+                                                            target_type,
+                                                            ob_time,
+                                                            scale));
       }
     }
     if (OB_SUCC(ret)) {
@@ -157,7 +157,7 @@ int ObExprToTemporalBase::calc_result_typeN(ObExprResType &type,
                                              int64_t param_num,
                                              ObExprTypeCtx &type_ctx) const
 {
-  //https://docs.oracle.com/cd/B19306_01/server.102/b14200/functions193.htm
+  // Validate temporal conversion arguments.
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(param_num < 1) || OB_UNLIKELY(param_num > 3)) {
     ret = OB_INVALID_ARGUMENT_NUM;
@@ -176,7 +176,7 @@ int ObExprToTemporalBase::calc_result_typeN(ObExprResType &type,
           || input_char.is_datetime();
       if (OB_UNLIKELY(!accept_input_type)) {
         ret = OB_ERR_INVALID_TYPE_FOR_OP;
-        LOG_WARN("inconsistent type", K(ret), K(input_char));
+        LOG_ERROR("inconsistent type", K(ret), K(input_char));
       } else {
         input_char.set_calc_type(ObVarcharType);
         input_char.set_calc_collation_type(nls_collation);
@@ -188,7 +188,7 @@ int ObExprToTemporalBase::calc_result_typeN(ObExprResType &type,
       bool accept_fmt_type = fmt.is_null() || fmt.is_string_type();
       if (OB_UNLIKELY(!accept_fmt_type)) {
         ret = OB_ERR_INVALID_TYPE_FOR_OP;
-        LOG_WARN("inconsistent type", K(ret), K(fmt));
+        LOG_ERROR("inconsistent type", K(ret), K(fmt));
       } else {
         fmt.set_calc_type(ObVarcharType);
         fmt.set_calc_collation_type(nls_collation);
@@ -200,7 +200,7 @@ int ObExprToTemporalBase::calc_result_typeN(ObExprResType &type,
       bool accept_nlsparam_type = nlsparam.is_null() || nlsparam.is_string_type();
       if (OB_UNLIKELY(!accept_nlsparam_type)) {
         ret = OB_ERR_INVALID_TYPE_FOR_OP;
-        LOG_WARN("inconsistent type", K(ret), K(nlsparam));
+        LOG_ERROR("inconsistent type", K(ret), K(nlsparam));
       } else {
         nlsparam.set_calc_type(ObVarcharType);
         nlsparam.set_calc_collation_type(nls_collation);
@@ -214,7 +214,7 @@ int ObExprToTemporalBase::calc_result_typeN(ObExprResType &type,
     //result scale
     if (OB_SUCC(ret)) {
       ObScale max_scale =
-          ObAccuracy::MAX_ACCURACY2[ORACLE_MODE][get_my_target_obj_type()].get_scale();
+          ObAccuracy::MAX_ACCURACY2[MYSQL_MODE][get_my_target_obj_type()].get_scale();
       ObScale result_scale = 0;
       if (input_char.is_null()) {
         //do nothing

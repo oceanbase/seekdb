@@ -28,44 +28,38 @@ namespace common
 class ObSimpleMemLimitGetter : public ObITenantMemLimitGetter
 {
 public:
-  ObSimpleMemLimitGetter() : lock_(ObLatchIds::DEFAULT_SPIN_RWLOCK) {}
+  ObSimpleMemLimitGetter() : lock_(ObLatchIds::DEFAULT_SPIN_RWLOCK), has_tenant_value_(false) {}
   virtual ~ObSimpleMemLimitGetter() {}
-  int add_tenant(const uint64_t tenant_id,
-                 const int64_t lower_limit,
+  int add_tenant(const int64_t lower_limit,
                  const int64_t upper_limit);
-  bool has_tenant(const uint64_t tenant_id) const override;
-  int get_all_tenant_id(ObIArray<uint64_t> &tenant_ids) const override;
-  int get_tenant_mem_limit(const uint64_t tenant_id,
-                           int64_t &lower_limit,
+  bool has_tenant() const override;
+  int get_tenant_mem_limit(int64_t &lower_limit,
                            int64_t &upper_limit) const override;
   void reset();
 private:
-  bool has_tenant_(const uint64_t tenant_id) const;
+  bool has_tenant_() const;
 private:
   struct ObTenantInfo
   {
     ObTenantInfo()
-      : tenant_id_(common::OB_INVALID_ID),
-        mem_lower_limit_(-1),
+      : mem_lower_limit_(-1),
         mem_upper_limit_(-1) {}
 
-    ObTenantInfo(const uint64_t tenant_id,
-                 int64_t lower_limit,
+    ObTenantInfo(int64_t lower_limit,
                  int64_t upper_limit)
-      : tenant_id_(tenant_id),
-        mem_lower_limit_(lower_limit),
+      : mem_lower_limit_(lower_limit),
         mem_upper_limit_(upper_limit) {}
 
-    TO_STRING_KV(K_(tenant_id), K_(mem_lower_limit), K_(mem_upper_limit));
+    TO_STRING_KV(K_(mem_lower_limit), K_(mem_upper_limit));
 
-    uint64_t tenant_id_;
     int64_t mem_lower_limit_;
     int64_t mem_upper_limit_;
   };
 
 private:
   SpinRWLock lock_;
-  ObSEArray<ObTenantInfo, 10> tenant_infos_;
+  ObTenantInfo tenant_info_;
+  bool has_tenant_value_;
 };
 
 } // common

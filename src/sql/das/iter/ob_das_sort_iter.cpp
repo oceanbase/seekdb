@@ -32,7 +32,7 @@ int ObDASSortIter::inner_init(ObDASIterParam &param)
     LOG_WARN("inner init das iter with bad param type", K(param), K(ret));
   } else {
     lib::ContextParam context_param;
-    context_param.set_mem_attr(MTL_ID(), "DASSortIter", ObCtxIds::DEFAULT_CTX_ID)
+    context_param.set_mem_attr("DASSortIter", ObCtxIds::DEFAULT_CTX_ID)
         .set_properties(lib::USE_TL_PAGE_OPTIONAL);
     if (OB_FAIL(CURRENT_CONTEXT->CREATE_CONTEXT(sort_memctx_, context_param))) {
       LOG_WARN("failed to create lookup memctx", K(ret));
@@ -117,8 +117,7 @@ int ObDASSortIter::init_sort_impl()
       const bool top_k_overflow = INT64_MAX - limit_param_.offset_ < limit_param_.limit_;
       const int64_t top_k = (limit_param_.is_valid() && !top_k_overflow)
                           ? (limit_param_.limit_ + limit_param_.offset_) : INT64_MAX;
-      if (OB_FAIL(sort_impl_->init(MTL_ID(),
-                                        &sort_ctdef_->sort_collations_,
+      if (OB_FAIL(sort_impl_->init(&sort_ctdef_->sort_collations_,
                                         &sort_ctdef_->sort_cmp_funcs_,
                                         eval_ctx_,
                                         exec_ctx_,

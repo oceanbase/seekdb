@@ -21,7 +21,7 @@
 #include <stddef.h>
 
 #include "lib/alloc/alloc_struct.h"
-#include "lib/allocator/ob_mod_define.h"
+#include "lib/utility/ob_mod_define.h"
 #include "lib/lock/ob_futex.h"
 #include "lib/queue/ob_fixed_queue.h"
 
@@ -52,8 +52,7 @@ public:
   ObLightyQueue(): capacity_(0), n_cond_(0), data_(NULL), cond_(NULL), push_(0), pop_(0) {}
   ~ObLightyQueue() { destroy(); }
   int init(const uint64_t capacity,
-           const lib::ObLabel &label = ObModIds::OB_LIGHTY_QUEUE,
-           const uint64_t tenant_id = common::OB_SERVER_TENANT_ID);
+           const lib::ObLabel &label = ObModIds::OB_LIGHTY_QUEUE);
   void destroy();
   void reset() { clear(); }
   void clear();
@@ -96,8 +95,7 @@ public:
   ~LightyQueue() { destroy(); }
 public:
   int init(const uint64_t capacity,
-           const lib::ObLabel &label = ObModIds::OB_LIGHTY_QUEUE,
-           const uint64_t tenant_id = common::OB_SERVER_TENANT_ID);
+           const lib::ObLabel &label = ObModIds::OB_LIGHTY_QUEUE);
   void destroy() { queue_.destroy(); }
   int64_t size() const { return queue_.get_total(); }
   int64_t curr_size() const { return queue_.get_total(); }

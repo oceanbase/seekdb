@@ -92,17 +92,6 @@ void ObMember::reset_migrating()
   flag_ &= ~(1UL << MIGRATING_FLAG_BIT);
 }
 
-bool ObMember::is_columnstore() const
-{
-  return (flag_ >> COLUMNSTORE_FLAG_BIT) & 1U;
-}
-
-void ObMember::set_columnstore()
-{
-  flag_ |= (1UL << COLUMNSTORE_FLAG_BIT);
-}
-
-
 OB_SERIALIZE_MEMBER(ObMember, server_, timestamp_, flag_);
 
 bool ObReplicaMember::is_readonly_replica() const
@@ -125,9 +114,6 @@ int ObReplicaMember::init(
     server_ = server;
     timestamp_ = timestamp;
     replica_type_ = replica_type;
-    if (REPLICA_TYPE_COLUMNSTORE == replica_type) {
-      ObMember::set_columnstore();
-    }
   }
   return ret;
 }
@@ -162,11 +148,8 @@ void ObReplicaMember::reset()
 
 bool ObReplicaMember::is_valid() const
 {
-  // columnstore bit is 1 if and only if replica_type is C
-  bool is_flag_valid = (is_columnstore() == (REPLICA_TYPE_COLUMNSTORE == replica_type_));
   return ObMember::is_valid()
          && ObReplicaTypeCheck::is_replica_type_valid(replica_type_)
-         && is_flag_valid
          && memstore_percent_ <= 100
          && memstore_percent_ >= 0;
 }
@@ -182,12 +165,11 @@ ObReplicaMember &ObReplicaMember::operator=(const ObReplicaMember &rhs)
   timestamp_ = rhs.timestamp_;
   flag_ = rhs.flag_;
   replica_type_ = rhs.replica_type_;
-  region_ = rhs.region_;
   memstore_percent_ = rhs.memstore_percent_;
   return *this;
 }
 
-OB_SERIALIZE_MEMBER((ObReplicaMember, ObMember), replica_type_, region_, memstore_percent_);
+OB_SERIALIZE_MEMBER((ObReplicaMember, ObMember), replica_type_, memstore_percent_);
 
 } // namespace common
 } // namespace oceanbase

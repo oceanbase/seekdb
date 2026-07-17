@@ -39,7 +39,6 @@ inline int ObExprSpace::calc_result_type1(
   ObRawExpr * raw_expr = nullptr;
   ObRawExpr * child_raw_expr = nullptr;
   // space is mysql only expr
-  CK(lib::is_mysql_mode());
   ObObjType res_type = ObMaxType;
   if (type1.is_null()) {
     res_type = ObVarcharType;
@@ -170,7 +169,7 @@ int ObExprSpace::eval_space(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_da
 
 DEF_SET_LOCAL_SESSION_VARS(ObExprSpace, raw_expr) {
   int ret = OB_SUCCESS;
-  if (lib::is_mysql_mode()) {
+  {
     SET_LOCAL_SYSVAR_CAPACITY(4);
     EXPR_ADD_LOCAL_SYSVAR(SYS_VAR_COLLATION_CONNECTION);
     EXPR_ADD_LOCAL_SYSVAR(SYS_VAR_SQL_MODE);

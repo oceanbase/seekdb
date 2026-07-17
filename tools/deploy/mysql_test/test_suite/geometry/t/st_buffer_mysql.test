@@ -869,7 +869,7 @@ DROP TABLE t1;
 SELECT HEX(ST_BUFFER_STRATEGY('join_miter', 10));
 
 # ST_BUFFER_STRATEGY must work with any charset that ST_GEOMFROMTEXT() can work with
-SET names gb18030;
+SET NAMES utf8mb4;
 
 --replace_numeric_round 4
 SELECT ST_ASTEXT(ST_BUFFER(ST_GEOMFROMTEXT('LINESTRING(1 1, 3 9, 4 6)'), 1,

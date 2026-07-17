@@ -20,7 +20,7 @@
 #define protected public
 #define private public
 #include "share/scheduler/test_dag_common.h"
-#include "share/scheduler/ob_independent_dag.h"
+#include "observer/scheduler/ob_independent_dag.h"
 #include "lib/random/ob_random.h"
 
 const int64_t STRESS_ROUND_CNT = 32;
@@ -39,7 +39,7 @@ public:
     ObPriorityTask() : ObITask(ObITaskType::TASK_TYPE_UT), priority_(ObITask::TASK_PRIO_1) {}
     virtual int process() { return OB_SUCCESS; }
     virtual ObITaskPriority get_priority() override { return priority_; }
-    virtual void task_debug_info_to_string(char *buf, const int64_t buf_len, int64_t &pos) const override {
+    virtual void task_debug_info_to_string(char *buf, const int64_t buf_len, int64_t &pos) const override { 
       BUF_PRINTF("ObPriorityTask : prio: %d, 40 more chars: ", priority_);
       for (int i = 0; i < 40; i++) {
         BUF_PRINTF("%c", 'A' + i);
@@ -51,49 +51,48 @@ public:
     ObITaskPriority priority_;
   };
 public:
-  TestIndependentDag()
+  TestIndependentDag() 
     : tenant_id_(1001),
-      tenant_base_(1001),
       addr_(1683068975, 9999),
       allocator_("IndependentDag"),
       scheduler_(nullptr),
+      old_mp_(nullptr),
       is_inited_(false) {}
   virtual ~TestIndependentDag() {}
   void SetUp() override
   {
     if (!is_inited_) {
-      ObMallocAllocator::get_instance()->create_and_add_tenant_allocator(1001);
+      ObMallocAllocator::get_instance()->create_and_add_tenant_allocator();
       is_inited_ = true;
     }
     scheduler_ = OB_NEW(ObTenantDagScheduler, ObModIds::TEST);
-    tenant_base_.set(scheduler_);
-
-    ObTenantEnv::set_tenant(&tenant_base_);
-    ASSERT_EQ(OB_SUCCESS, tenant_base_.init());
+    provider_.dag_scheduler_ = scheduler_;
+    old_mp_ = share::g_mp;
+    share::g_mp = &provider_;
 
     ObMallocAllocator *ma = ObMallocAllocator::get_instance();
-    ASSERT_EQ(OB_SUCCESS, ma->set_tenant_limit(tenant_id_, 1LL << 30));
+    ASSERT_EQ(OB_SUCCESS, ma->set_tenant_limit(1LL << 30));
 
     ASSERT_EQ(OB_SUCCESS, ObSysTaskStatMgr::get_instance().set_self_addr(addr_));
-    ASSERT_EQ(OB_SUCCESS, scheduler_->init(MTL_ID(), 1000 /*check_period*/));
+    ASSERT_EQ(OB_SUCCESS, scheduler_->init( 1000 /*check_period*/));
     COMMON_LOG(INFO, "SetUp TestIndependentDag success");
   }
   void TearDown() override
   {
     scheduler_->destroy();
     scheduler_ = nullptr;
-    tenant_base_.destroy();
-    ObTenantEnv::set_tenant(nullptr);
+    share::g_mp = old_mp_;
   }
 public:
   void check_task_list_priority(ObIDag::TaskList &task_list);
   void alloc_and_add_priority_task(ObIDag *dag, const ObITask::ObITaskPriority priority);
 private:
   const uint64_t tenant_id_;
-  ObTenantBase tenant_base_;
   ObAddr addr_;
   ObArenaAllocator allocator_;
   ObTenantDagScheduler *scheduler_;
+  TestDagModuleProvider provider_;
+  share::ObIModuleProvider *old_mp_;
   bool is_inited_;
   DISALLOW_COPY_AND_ASSIGN(TestIndependentDag);
 };
@@ -153,7 +152,7 @@ public:
   ~ObIndependentInitParam() {}
   bool is_valid() const override
   {
-    return OB_NOT_NULL(result1_)
+    return OB_NOT_NULL(result1_) 
         && OB_NOT_NULL(result2_)
         && *result1_ == *result2_
         && x_ >= 0
@@ -172,7 +171,7 @@ public:
 class ObIndependentExampleDag : public ObTestIndependentBaseDag
 {
 public:
-  ObIndependentExampleDag()
+  ObIndependentExampleDag() 
     : ObTestIndependentBaseDag(),
       result1_(nullptr),
       result2_(nullptr),
@@ -280,7 +279,7 @@ private:
 class ObIndependentPowerTask : public ObITask
 {
 public:
-  ObIndependentPowerTask()
+  ObIndependentPowerTask() 
     : ObITask(ObITaskType::TASK_TYPE_UT),
       is_inited_(false),
       counter_(nullptr),
@@ -405,7 +404,7 @@ private:
 class ObHighConcurrencyPrepareTask : public ObITask
 {
 public:
-  ObHighConcurrencyPrepareTask()
+  ObHighConcurrencyPrepareTask() 
     : ObITask(ObITaskType::TASK_TYPE_UT),
       task_num_(0),
       task_generate_cnt_(0),
@@ -424,7 +423,7 @@ private:
 class ObHighConcurrencyFastLoopTask : public ObITask
 {
 public:
-  ObHighConcurrencyFastLoopTask()
+  ObHighConcurrencyFastLoopTask() 
     : ObITask(ObITaskType::TASK_TYPE_UT),
       counter_(nullptr),
       idx_(-1),
@@ -454,8 +453,8 @@ class ObHighConcurrencyFinsihTask : public ObITask
 public:
   ObHighConcurrencyFinsihTask() : ObITask(ObITaskType::TASK_TYPE_UT), expected_result_(0) {}
   ~ObHighConcurrencyFinsihTask() {}
-  int init(const int64_t expected_result) {
-    expected_result_ = expected_result;
+  int init(const int64_t expected_result) { 
+    expected_result_ = expected_result; 
     return OB_SUCCESS;
   }
   virtual int process() override;
@@ -760,13 +759,13 @@ int ObIndependentPowerPrepareTask::process()
         dag_->remove_task(*check_task);
         check_task = nullptr;
       }
-    }
+    } 
   }
   return ret;
 }
 
 int ObIndependentPowerTask::init(
-    int64_t *counter,
+    int64_t *counter, 
     int64_t layer)
 {
   int ret = OB_SUCCESS;
@@ -796,7 +795,7 @@ int ObIndependentPowerTask::process()
       old_val = ATOMIC_LOAD(counter_);
       new_val = old_val * 2;
     } while (ATOMIC_VCAS(counter_, old_val, new_val) != old_val);
-
+        
     if (OB_FAIL(generate_next_layer_task())) {
       COMMON_LOG(WARN, "failed to generate next layer task", K(ret), KPC(this));
     } else if (OB_FAIL(generate_next_layer_task())) {
@@ -890,7 +889,7 @@ int ObHighConcurrencyPrepareTask::process()
 }
 
 int ObHighConcurrencyFastLoopTask::init(
-    int64_t *counter,
+    int64_t *counter, 
     const int64_t idx,
     const int64_t seq,
     const int64_t task_cnt)
@@ -968,11 +967,11 @@ int ObHighConcurrencyFastLoopTask::post_generate_next_task(ObITask *&next_task)
   return ret;
 }
 
-int ObHighConcurrencyFinsihTask::process()
+int ObHighConcurrencyFinsihTask::process() 
 {
   int ret = OB_SUCCESS;
   ObIndependentPostGenerateDag *post_generate_dag = nullptr;
-  constexpr int64_t expected_result = ObIndependentPostGenerateDag::LOOP_TASK_NUM * ObIndependentPostGenerateDag::LOOP_TASK_POST_GENERATE_CNT;
+  constexpr int64_t expected_result = ObIndependentPostGenerateDag::LOOP_TASK_NUM * ObIndependentPostGenerateDag::LOOP_TASK_POST_GENERATE_CNT; 
   if (OB_ISNULL(post_generate_dag = static_cast<ObIndependentPostGenerateDag *>(dag_))) {
     ret = OB_ERR_UNEXPECTED;
     COMMON_LOG(WARN, "dag is null", K(ret));
@@ -981,7 +980,7 @@ int ObHighConcurrencyFinsihTask::process()
     COMMON_LOG(WARN, "unexpected counter", K(ret), K(expected_result), KPC(post_generate_dag));
   } else {
     COMMON_LOG(INFO, "ObHighConcurrencyFinsihTask check finished", K(ret));
-  }
+  } 
   return ret = OB_SUCCESS;
 }
 
@@ -990,7 +989,7 @@ int ObIndependentSuspendDag::init_by_param(const ObIDagInitParam *param)
 {
   int ret = OB_SUCCESS;
   const ObIndependentSuspendInitParam *init_param = nullptr;
-  if (OB_ISNULL(param) || OB_ISNULL(init_param = static_cast<const ObIndependentSuspendInitParam *>(param))
+  if (OB_ISNULL(param) || OB_ISNULL(init_param = static_cast<const ObIndependentSuspendInitParam *>(param)) 
       || OB_UNLIKELY(!init_param->is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     COMMON_LOG(WARN, "invalid arg to init ObIndependentSuspendDag", K(ret), KP(param), KPC(init_param));
@@ -1051,7 +1050,7 @@ int ObIndependentSuspendTask::process()
       cur_round_++;
       ret = OB_DAG_TASK_IS_SUSPENDED;
       COMMON_LOG(INFO, "suspend task", K(ret));
-    }
+    } 
   } else {
     ret = OB_SUCCESS;
     COMMON_LOG(INFO, "finish all rounds", K(*counter_));
@@ -1159,7 +1158,7 @@ void DagWorkerThreadPool::run1()
   } else if (OB_FAIL(dag_executor_->run())) {
     COMMON_LOG(WARN, "run dag failed", K(ret), KPC(dag_executor_));
   }
-  const int64_t elapsed_time = (ObTimeUtility::current_time() - start_time) / 1000;
+  const int64_t elapsed_time = (ObTimeUtility::current_time() - start_time) / 1000; 
   COMMON_LOG(INFO, "DagWorkerThread run finished", K(thread_id), K(elapsed_time));
 }
 
@@ -1200,7 +1199,7 @@ void PxWorkerSimulator::run1()
   } else if (OB_FAIL(dag_->process())) {
     COMMON_LOG(WARN, "process dag failed", K(ret), KPC(dag_));
   }
-  const int64_t elapsed_time = (ObTimeUtility::current_time() - start_time) / 1000;
+  const int64_t elapsed_time = (ObTimeUtility::current_time() - start_time) / 1000; 
   COMMON_LOG(INFO, "PxWorkerSimulator run finished", K(thread_id), K(elapsed_time));
 }
 
@@ -1259,7 +1258,7 @@ TEST_F(TestIndependentDag, test_pure_independent_dag)
   ObIndependentInitParam param(&res1, &res2, x, y);
   ASSERT_EQ(OB_SUCCESS, ObTenantDagScheduler::alloc_dag(allocator_,false /*is_ha_dag*/, dag));
   ASSERT_NE(nullptr, dag);
-
+  
   ASSERT_EQ(OB_SUCCESS, dag->init(&param, nullptr /*dag_id*/));
   ASSERT_EQ(true, dag->is_independent_);
 
@@ -1290,7 +1289,7 @@ TEST_F(TestIndependentDag, test_pure_independent_dag_stress)
       ObIndependentInitParam param(&res1, &res2, x, y, random_abort, generate_before_process);
       ASSERT_EQ(OB_SUCCESS, ObTenantDagScheduler::alloc_dag(allocator_, false /*is_ha_dag*/, dag));
       ASSERT_NE(nullptr, dag);
-
+      
       ASSERT_EQ(OB_SUCCESS, dag->init(&param, nullptr /*dag_id*/));
       ASSERT_EQ(true, dag->is_independent_);
 
@@ -1324,7 +1323,7 @@ TEST_F(TestIndependentDag, test_pure_power_dag)
   ObIndependentInitParam param(&res1, &res2, base, layer);
   ASSERT_EQ(OB_SUCCESS, ObTenantDagScheduler::alloc_dag(allocator_, false /*is_ha_dag*/, dag));
   ASSERT_NE(nullptr, dag);
-
+  
   ASSERT_EQ(OB_SUCCESS, dag->init(&param, nullptr /*dag_id*/));
   ASSERT_EQ(true, dag->is_independent_);
 
@@ -1349,7 +1348,7 @@ TEST_F(TestIndependentDag, test_pure_power_dag_stress)
       ObIndependentInitParam param(&res1, &res2, base, layer);
       ASSERT_EQ(OB_SUCCESS, ObTenantDagScheduler::alloc_dag(allocator_, false /*is_ha_dag*/, dag));
       ASSERT_NE(nullptr, dag);
-
+      
       ASSERT_EQ(OB_SUCCESS, dag->init(&param, nullptr /*dag_id*/));
       ASSERT_EQ(true, dag->is_independent_);
 
@@ -1389,7 +1388,7 @@ TEST_F(TestIndependentDag, test_increasing_add_task)
   ASSERT_NE(nullptr, dag);
   ASSERT_EQ(true, dag->is_independent_);
   ObIDag::TaskList task_list;
-
+  
   ObPriorityTask tasks[5];
   ObPriorityTask dag_tasks[5];
   tasks[0].priority_ = ObITask::TASK_PRIO_3;
@@ -1431,10 +1430,10 @@ TEST_F(TestIndependentDag, test_priority_task)
   ObIndependentInitParam param(&res1, &res2, x, y);
   ASSERT_EQ(OB_SUCCESS, ObTenantDagScheduler::alloc_dag(allocator_, false /*is_ha_dag*/, dag));
   ASSERT_NE(nullptr, dag);
-
+  
   ASSERT_EQ(OB_SUCCESS, dag->init(&param, nullptr /*dag_id*/));
   ASSERT_EQ(true, dag->is_independent_);
-
+  
   dag->clear_task_list(); // when init dag, the first task will be created
   ObSEArray<int64_t, ObITask::TASK_PRIO_MAX> priority_task_cnts;
   for (uint8_t prio = ObITask::TASK_PRIO_0; prio < ObITask::TASK_PRIO_MAX; prio++) {
@@ -1538,7 +1537,7 @@ TEST_F(TestIndependentDag, test_independent_dag_print)
   ObIndependentInitParam param(&res1, &res2, x, y);
   ASSERT_EQ(OB_SUCCESS, ObTenantDagScheduler::alloc_dag(allocator_, false /*is_ha_dag*/, dag));
   ASSERT_NE(nullptr, dag);
-
+  
   ASSERT_EQ(OB_SUCCESS, dag->init(&param, nullptr /*dag_id*/));
   ASSERT_EQ(true, dag->is_independent_);
   dag->clear_task_list(); // when init dag, the first task will be created

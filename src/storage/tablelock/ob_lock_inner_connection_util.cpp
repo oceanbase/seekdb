@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX TABLELOCK
 
 #include "ob_lock_inner_connection_util.h"
+#include "share/rc/ob_module_provider.h"
 #include "observer/ob_inner_sql_connection_pool.h"
 #include "observer/ob_inner_sql_result.h"
 #include "storage/tablelock/ob_table_lock_service.h"
@@ -24,7 +25,7 @@
 
 
 using namespace oceanbase::observer;
-using namespace oceanbase::obrpc;
+using namespace oceanbase::obcall;
 namespace oceanbase
 {
 namespace transaction
@@ -40,11 +41,11 @@ namespace tablelock
                                             arg.get_inner_sql().length(),              \
                                             pos))) {                                   \
       LOG_WARN("deserialize multi source data str failed", K(ret), K(arg), K(pos));    \
-     } else if (OB_FAIL(request_lock_(arg.get_tenant_id(),                             \
+     } else if (OB_FAIL(request_lock_(\
                                       lock_arg,                                        \
                                       operation_type,                                  \
                                       conn))) {                                        \
-      LOG_WARN("request lock failed", K(ret), K(arg.get_tenant_id()), K(lock_arg));    \
+      LOG_WARN("request lock failed", K(ret), K(lock_arg));    \
      }                                                                                 \
   }
 
@@ -56,14 +57,14 @@ namespace tablelock
   if (OB_FAIL(unlock_req.deserialize(buf, len, pos))) {                               \
     LOG_WARN("deserialize unlock_req in replace_req failed", K(ret), K(replace_req)); \
   } else if (FALSE_IT(replace_req.unlock_req_ = &unlock_req)) {                       \
-  } else if (OB_FAIL(replace_lock(arg.get_tenant_id(), replace_req, conn))) {         \
+  } else if (OB_FAIL(replace_lock(replace_req, conn))) {         \
     LOG_WARN("replace lock failed", K(ret), K(replace_req));                          \
   }                                                                                   \
   break;
 
 #define CONVERT_TYPE_AND_DO_LOCK(T, arg, tx_desc, tx_param)                    \
   const T lock_req = static_cast<const T &>(arg);                              \
-  if (OB_FAIL(MTL(ObTableLockService *)->lock(tx_desc, tx_param, lock_req))) { \
+  if (OB_FAIL(share::g_mp->table_lock_service()->lock(tx_desc, tx_param, lock_req))) { \
     LOG_WARN("lock failed", K(ret), K(lock_req));                              \
   }                                                                            \
   break;
@@ -72,7 +73,7 @@ namespace tablelock
   const T lock_req = static_cast<const T &>(arg);                                  \
   T &unlock_req = const_cast<T &>(lock_req);                                       \
   unlock_req.set_to_unlock_type();                                                 \
-  if (OB_FAIL(MTL(ObTableLockService *)->unlock(tx_desc, tx_param, unlock_req))) { \
+  if (OB_FAIL(share::g_mp->table_lock_service()->unlock(tx_desc, tx_param, unlock_req))) { \
     LOG_WARN("unlock failed", K(ret), K(unlock_req));                              \
   }                                                                                \
   break;
@@ -87,7 +88,7 @@ int ObInnerConnectionLockUtil::process_lock_rpc(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", KR(ret), K(arg), KP(conn));
   } else {
-    const obrpc::ObInnerSQLTransmitArg::InnerSQLOperationType operation_type = arg.get_operation_type();
+    const obcall::ObInnerSQLTransmitArg::InnerSQLOperationType operation_type = arg.get_operation_type();
     switch (operation_type) {
       case ObInnerSQLTransmitArg::OPERATION_TYPE_LOCK_TABLE: {
         if (OB_FAIL(process_lock_table_(operation_type,
@@ -176,7 +177,7 @@ int ObInnerConnectionLockUtil::process_lock_rpc(
 }
 
 int ObInnerConnectionLockUtil::process_lock_table_(
-    const obrpc::ObInnerSQLTransmitArg::InnerSQLOperationType operation_type,
+    const obcall::ObInnerSQLTransmitArg::InnerSQLOperationType operation_type,
     const ObInnerSQLTransmitArg &arg,
     observer::ObInnerSQLConnection *conn)
 {
@@ -190,7 +191,7 @@ int ObInnerConnectionLockUtil::process_lock_table_(
 }
 
 int ObInnerConnectionLockUtil::process_lock_tablet_(
-    const obrpc::ObInnerSQLTransmitArg::InnerSQLOperationType operation_type,
+    const obcall::ObInnerSQLTransmitArg::InnerSQLOperationType operation_type,
     const ObInnerSQLTransmitArg &arg,
     observer::ObInnerSQLConnection *conn)
 {
@@ -259,7 +260,7 @@ int ObInnerConnectionLockUtil::process_replace_all_locks_(
   int64_t pos = 0;
   if (OB_FAIL(replace_req.deserialize(buf, data_len, pos))) {
     LOG_WARN("deserialize and check header of ObReplaceLockRequest failed", K(ret), K(arg), K(pos));
-  } else if (OB_FAIL(replace_lock(arg.get_tenant_id(), replace_req, conn))) {
+  } else if (OB_FAIL(replace_lock(replace_req, conn))) {
     LOG_WARN("replace all locks failed", K(ret), K(replace_req));
   }
   replace_req.reset();
@@ -267,7 +268,6 @@ int ObInnerConnectionLockUtil::process_replace_all_locks_(
 }
 
 int ObInnerConnectionLockUtil::lock_table(
-    const uint64_t tenant_id,
     const uint64_t table_id,
     const ObTableLockMode lock_mode,
     const int64_t timeout_us,
@@ -284,23 +284,20 @@ int ObInnerConnectionLockUtil::lock_table(
   lock_arg.table_id_ = table_id;
   lock_arg.lock_priority_ = lock_priority;
 
-  ret = request_lock_(tenant_id,
-                      lock_arg,
+  ret = request_lock_(lock_arg,
                       ObInnerSQLTransmitArg::OPERATION_TYPE_LOCK_TABLE,
                       conn);
   return ret;
 }
 
 int ObInnerConnectionLockUtil::lock_table(
-    const uint64_t tenant_id,
     const ObLockTableRequest &arg,
     observer::ObInnerSQLConnection *conn)
 {
-  return request_lock_(tenant_id, arg, ObInnerSQLTransmitArg::OPERATION_TYPE_LOCK_TABLE, conn);
+  return request_lock_(arg, ObInnerSQLTransmitArg::OPERATION_TYPE_LOCK_TABLE, conn);
 }
 
 int ObInnerConnectionLockUtil::unlock_table(
-    const uint64_t tenant_id,
     const ObUnLockTableRequest &arg,
     observer::ObInnerSQLConnection *conn)
 {
@@ -309,7 +306,7 @@ int ObInnerConnectionLockUtil::unlock_table(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("only OUT_TRANS_LOCK should unlock.", K(ret), K(arg));
   } else {
-    ret = request_lock_(tenant_id, arg, ObInnerSQLTransmitArg::OPERATION_TYPE_UNLOCK_TABLE, conn);
+    ret = request_lock_(arg, ObInnerSQLTransmitArg::OPERATION_TYPE_UNLOCK_TABLE, conn);
   }
   return ret;
 }
@@ -319,7 +316,6 @@ int ObInnerConnectionLockUtil::unlock_table(
 
 
 int ObInnerConnectionLockUtil::lock_tablet(
-    const uint64_t tenant_id,
     const uint64_t table_id,
     const ObTabletID tablet_id,
     const ObTableLockMode lock_mode,
@@ -335,14 +331,13 @@ int ObInnerConnectionLockUtil::lock_tablet(
   lock_arg.table_id_ = table_id;
   if (OB_FAIL(lock_arg.tablet_ids_.push_back(tablet_id))) {
     LOG_WARN("add tablet id failed", K(ret), K(tablet_id));
-  } else if (OB_FAIL(request_lock_(tenant_id, lock_arg, ObInnerSQLTransmitArg::OPERATION_TYPE_LOCK_TABLET, conn))) {
+  } else if (OB_FAIL(request_lock_(lock_arg, ObInnerSQLTransmitArg::OPERATION_TYPE_LOCK_TABLET, conn))) {
     LOG_WARN("request lock for tablet failed", K(ret), K(lock_arg));
   }
   return ret;
 }
 
 int ObInnerConnectionLockUtil::lock_tablet(
-    const uint64_t tenant_id,
     const uint64_t table_id,
     const ObIArray<ObTabletID> &tablet_ids,
     const ObTableLockMode lock_mode,
@@ -359,7 +354,7 @@ int ObInnerConnectionLockUtil::lock_tablet(
 
   if (OB_FAIL(lock_arg.tablet_ids_.assign(tablet_ids))) {
     LOG_WARN("assign tablet id failed", K(ret), K(tablet_ids));
-  } else if (OB_FAIL(request_lock_(tenant_id, lock_arg, ObInnerSQLTransmitArg::OPERATION_TYPE_LOCK_TABLET, conn))) {
+  } else if (OB_FAIL(request_lock_(lock_arg, ObInnerSQLTransmitArg::OPERATION_TYPE_LOCK_TABLET, conn))) {
     LOG_WARN("request lock for tablets failed", K(ret), K(lock_arg));
   }
   return ret;
@@ -368,15 +363,13 @@ int ObInnerConnectionLockUtil::lock_tablet(
 
 
 int ObInnerConnectionLockUtil::lock_tablet(
-    const uint64_t tenant_id,
     const ObLockAloneTabletRequest &arg,
     observer::ObInnerSQLConnection *conn)
 {
-  return request_lock_(tenant_id, arg, ObInnerSQLTransmitArg::OPERATION_TYPE_LOCK_ALONE_TABLET, conn);
+  return request_lock_(arg, ObInnerSQLTransmitArg::OPERATION_TYPE_LOCK_ALONE_TABLET, conn);
 }
 
 int ObInnerConnectionLockUtil::unlock_tablet(
-    const uint64_t tenant_id,
     const ObUnLockAloneTabletRequest &arg,
     observer::ObInnerSQLConnection *conn)
 {
@@ -385,21 +378,19 @@ int ObInnerConnectionLockUtil::unlock_tablet(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("only OUT_TRANS_LOCK should unlock.", K(ret), K(arg));
   } else {
-    ret = request_lock_(tenant_id, arg, ObInnerSQLTransmitArg::OPERATION_TYPE_UNLOCK_ALONE_TABLET, conn);
+    ret = request_lock_(arg, ObInnerSQLTransmitArg::OPERATION_TYPE_UNLOCK_ALONE_TABLET, conn);
   }
   return ret;
 }
 
 int ObInnerConnectionLockUtil::lock_obj(
-    const uint64_t tenant_id,
     const ObLockObjRequest &arg,
     observer::ObInnerSQLConnection *conn)
 {
-  return request_lock_(tenant_id, arg, ObInnerSQLTransmitArg::OPERATION_TYPE_LOCK_OBJ, conn);
+  return request_lock_(arg, ObInnerSQLTransmitArg::OPERATION_TYPE_LOCK_OBJ, conn);
 }
 
 int ObInnerConnectionLockUtil::unlock_obj(
-    const uint64_t tenant_id,
     const ObUnLockObjRequest &arg,
     observer::ObInnerSQLConnection *conn)
 {
@@ -408,21 +399,19 @@ int ObInnerConnectionLockUtil::unlock_obj(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("only OUT_TRANS_LOCK should unlock.", K(ret), K(arg));
   } else {
-    ret = request_lock_(tenant_id, arg, ObInnerSQLTransmitArg::OPERATION_TYPE_UNLOCK_OBJ, conn);
+    ret = request_lock_(arg, ObInnerSQLTransmitArg::OPERATION_TYPE_UNLOCK_OBJ, conn);
   }
   return ret;
 }
 
 int ObInnerConnectionLockUtil::lock_obj(
-    const uint64_t tenant_id,
     const ObLockObjsRequest &arg,
     observer::ObInnerSQLConnection *conn)
 {
-  return request_lock_(tenant_id, arg, ObInnerSQLTransmitArg::OPERATION_TYPE_LOCK_OBJS, conn);
+  return request_lock_(arg, ObInnerSQLTransmitArg::OPERATION_TYPE_LOCK_OBJS, conn);
 }
 
 int ObInnerConnectionLockUtil::unlock_obj(
-    const uint64_t tenant_id,
     const ObUnLockObjsRequest &arg,
     observer::ObInnerSQLConnection *conn)
 {
@@ -431,32 +420,28 @@ int ObInnerConnectionLockUtil::unlock_obj(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("only OUT_TRANS_LOCK should unlock.", K(ret), K(arg));
   } else {
-    ret = request_lock_(tenant_id, arg, ObInnerSQLTransmitArg::OPERATION_TYPE_UNLOCK_OBJS, conn);
+    ret = request_lock_(arg, ObInnerSQLTransmitArg::OPERATION_TYPE_UNLOCK_OBJS, conn);
   }
   return ret;
 }
 
 int ObInnerConnectionLockUtil::replace_lock(
-      const uint64_t tenant_id,
       const ObReplaceLockRequest &req,
       observer::ObInnerSQLConnection *conn)
 {
   int ret = OB_SUCCESS;
   observer::ObReqTimeGuard req_timeinfo_guard;
 
-  const bool local_execute = conn->is_local_execute(GCONF.cluster_id, tenant_id);
+  const bool local_execute = conn->is_local_execute(GCONF.cluster_id);
 
-  SMART_VAR(ObInnerSQLResult, res, conn->get_session(), conn->is_inner_session(), conn->get_diagnostic_info())
+  SMART_VAR(ObInnerSQLResult, res, conn->get_session(), conn->is_inner_session(), nullptr)
   {
-    if (OB_INVALID_ID == tenant_id) {
-      ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("invalid argument", K(ret), K(tenant_id));
-    } else if (local_execute) {
-      if (OB_FAIL(conn->switch_tenant(tenant_id))) {
-        LOG_WARN("set system tenant id failed", K(ret), K(tenant_id));
+    if (local_execute) {
+      if (OB_FAIL(conn->switch_tenant())) {
+        LOG_WARN("set system tenant id failed", K(ret));
       }
     } else {
-      LOG_DEBUG("tenant not in server", K(ret), K(tenant_id));
+      LOG_DEBUG("tenant not in server", K(ret));
     }
 
     if (OB_SUCC(ret)) {
@@ -466,7 +451,7 @@ int ObInnerConnectionLockUtil::replace_lock(
       } else if (OB_FAIL(res.init(local_execute))) {
         LOG_WARN("init result set", K(ret), K(local_execute));
       } else if (local_execute) {
-        if (OB_FAIL(replace_lock_(tenant_id, req, conn, res))) {
+        if (OB_FAIL(replace_lock_(req, conn, res))) {
           LOG_WARN("replace lock failed", KR(ret), K(req));
         }
       } else {
@@ -480,7 +465,7 @@ int ObInnerConnectionLockUtil::replace_lock(
           LOG_WARN("serialize replace lock table arg failed", K(ret), K(req));
         } else {
           sql.assign_ptr(tmp_str, pos);
-          ret = conn->forward_request(tenant_id, obrpc::ObInnerSQLTransmitArg::OPERATION_TYPE_REPLACE_LOCK, sql, res);
+          ret = conn->forward_request(obcall::ObInnerSQLTransmitArg::OPERATION_TYPE_REPLACE_LOCK, sql, res);
         }
 
         if (OB_NOT_NULL(tmp_str)) {
@@ -493,26 +478,22 @@ int ObInnerConnectionLockUtil::replace_lock(
   return ret;
 }
 
-int ObInnerConnectionLockUtil::replace_lock(const uint64_t tenant_id,
-                                            const ObReplaceAllLocksRequest &req,
+int ObInnerConnectionLockUtil::replace_lock(const ObReplaceAllLocksRequest &req,
                                             observer::ObInnerSQLConnection *conn)
 {
   int ret = OB_SUCCESS;
   observer::ObReqTimeGuard req_timeinfo_guard;
 
-  const bool local_execute = conn->is_local_execute(GCONF.cluster_id, tenant_id);
+  const bool local_execute = conn->is_local_execute(GCONF.cluster_id);
 
-  SMART_VAR(ObInnerSQLResult, res, conn->get_session(), conn->is_inner_session(), conn->get_diagnostic_info())
+  SMART_VAR(ObInnerSQLResult, res, conn->get_session(), conn->is_inner_session(), nullptr)
   {
-    if (OB_INVALID_ID == tenant_id) {
-      ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("invalid argument", K(ret), K(tenant_id));
-    } else if (local_execute) {
-      if (OB_FAIL(conn->switch_tenant(tenant_id))) {
-        LOG_WARN("set system tenant id failed", K(ret), K(tenant_id));
+    if (local_execute) {
+      if (OB_FAIL(conn->switch_tenant())) {
+        LOG_WARN("set system tenant id failed", K(ret));
       }
     } else {
-      LOG_DEBUG("tenant not in server", K(ret), K(tenant_id));
+      LOG_DEBUG("tenant not in server", K(ret));
     }
 
     if (OB_SUCC(ret)) {
@@ -522,7 +503,7 @@ int ObInnerConnectionLockUtil::replace_lock(const uint64_t tenant_id,
       } else if (OB_FAIL(res.init(local_execute))) {
         LOG_WARN("init result set", K(ret), K(local_execute));
       } else if (local_execute) {
-        if (OB_FAIL(replace_lock_(tenant_id, req, conn, res))) {
+        if (OB_FAIL(replace_lock_(req, conn, res))) {
           LOG_WARN("replace lock failed", KR(ret), K(req));
         }
       } else {
@@ -536,7 +517,7 @@ int ObInnerConnectionLockUtil::replace_lock(const uint64_t tenant_id,
           LOG_WARN("serialize replace lock table arg failed", K(ret), K(req));
         } else {
           sql.assign_ptr(tmp_str, pos);
-          ret = conn->forward_request(tenant_id, obrpc::ObInnerSQLTransmitArg::OPERATION_TYPE_REPLACE_LOCKS, sql, res);
+          ret = conn->forward_request(obcall::ObInnerSQLTransmitArg::OPERATION_TYPE_REPLACE_LOCKS, sql, res);
         }
 
         if (OB_NOT_NULL(tmp_str)) {
@@ -548,9 +529,7 @@ int ObInnerConnectionLockUtil::replace_lock(const uint64_t tenant_id,
   return ret;
 }
 
-int ObInnerConnectionLockUtil::replace_lock_(
-    const uint64_t tenant_id,
-    const ObReplaceLockRequest &req,
+int ObInnerConnectionLockUtil::replace_lock_(const ObReplaceLockRequest &req,
     observer::ObInnerSQLConnection *conn,
     observer::ObInnerSQLResult &res)
 {
@@ -571,20 +550,18 @@ int ObInnerConnectionLockUtil::replace_lock_(
     conn->get_session().get_tx_timeout(tx_param.timeout_us_);
     tx_param.lock_timeout_us_ = conn->get_session().get_trx_lock_timeout();
 
-    MTL_SWITCH(tenant_id) {
-      if (OB_FAIL(MTL(ObTableLockService *)->replace_lock(*tx_desc, tx_param, req))) {
-        LOG_WARN("replace lock failed", K(ret), K(tenant_id), K(req));
+    MOD_SCOPE {
+      if (OB_FAIL(share::g_mp->table_lock_service()->replace_lock(*tx_desc, tx_param, req))) {
+        LOG_WARN("replace lock failed", K(ret), K(req));
       } else if (OB_FAIL(res.close())) {
-        LOG_WARN("close result set failed", K(ret), K(tenant_id));
+        LOG_WARN("close result set failed", K(ret));
       }
     }
   }
   return ret;
 }
 
-int ObInnerConnectionLockUtil::replace_lock_(
-    const uint64_t tenant_id,
-    const ObReplaceAllLocksRequest &req,
+int ObInnerConnectionLockUtil::replace_lock_(const ObReplaceAllLocksRequest &req,
     observer::ObInnerSQLConnection *conn,
     observer::ObInnerSQLResult &res)
 {
@@ -605,11 +582,11 @@ int ObInnerConnectionLockUtil::replace_lock_(
     conn->get_session().get_tx_timeout(tx_param.timeout_us_);
     tx_param.lock_timeout_us_ = conn->get_session().get_trx_lock_timeout();
 
-    MTL_SWITCH(tenant_id) {
-      if (OB_FAIL(MTL(ObTableLockService *)->replace_lock(*tx_desc, tx_param, req))) {
-        LOG_WARN("replace lock failed", K(ret), K(tenant_id), K(req));
+    MOD_SCOPE {
+      if (OB_FAIL(share::g_mp->table_lock_service()->replace_lock(*tx_desc, tx_param, req))) {
+        LOG_WARN("replace lock failed", K(ret), K(req));
       } else if (OB_FAIL(res.close())) {
-        LOG_WARN("close result set failed", K(ret), K(tenant_id));
+        LOG_WARN("close result set failed", K(ret));
       }
     }
   }
@@ -630,7 +607,6 @@ int ObInnerConnectionLockUtil::create_inner_conn(sql::ObSQLSessionInfo *session_
   observer::ObInnerSQLConnectionPool *pool = nullptr;
   common::sqlclient::ObISQLConnection *conn = nullptr;
 
-  lib::CompatModeGuard guard(lib::Worker::CompatMode::MYSQL);
   if (OB_ISNULL(session_info) || OB_ISNULL(sql_proxy)) {
     ret = OB_NOT_INIT;
     LOG_WARN("session or sql_proxy is NULL", KP(session_info), KP(sql_proxy));
@@ -641,32 +617,19 @@ int ObInnerConnectionLockUtil::create_inner_conn(sql::ObSQLSessionInfo *session_
     LOG_WARN("connection pool is NULL", K(ret));
   } else if (OB_FAIL(session_info->get_sys_variable(share::SYS_VAR_OB_COMPATIBILITY_MODE, current_mode))) {
     LOG_WARN("can not get the compat_mode", KPC(session_info));
-  } else if (current_mode != mysql_mode
-             && OB_FAIL(session_info->update_sys_variable(share::SYS_VAR_OB_COMPATIBILITY_MODE, mysql_mode))) {
-    LOG_WARN("update session_info to msyql_mode failed", KR(ret), KPC(session_info));
   } else if (common::sqlclient::INNER_POOL != pool->get_type()) {
     LOG_WARN("connection pool type is not inner", K(ret), K(pool->get_type()));
-    // NOTICE: although we can set is_oracle_mode here, internally it will prioritize referencing
-    // the system variables on the session, so this parameter actually has no effect
-  } else if (OB_FAIL(pool->acquire(session_info, conn, false /* is_oracle_mode */))) {
+    // NOTICE: the pool acquire no longer needs a compatibility-mode flag.
+  } else if (OB_FAIL(pool->acquire(session_info, conn))) {
     LOG_WARN("acquire connection from inner sql connection pool failed", KR(ret), KPC(session_info));
   } else if (OB_ISNULL(conn)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("acquire new connection but it's null", KR(ret), KPC(session_info));
   } else {
     inner_conn = static_cast<observer::ObInnerSQLConnection *>(conn);
-    // we must use mysql_mode connection to write inner_table
-    if (OB_UNLIKELY(inner_conn->is_oracle_compat_mode())) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_ERROR("create an oracle mode inner connection", K(ret));
-    }
   }
 
-  if (current_mode != mysql_mode && current_mode.get_int() != -1 && OB_NOT_NULL(session_info)
-      && OB_TMP_FAIL(session_info->update_sys_variable(share::SYS_VAR_OB_COMPATIBILITY_MODE, current_mode))) {
-    ret = OB_SUCCESS == ret ? tmp_ret : ret;
-    LOG_WARN("failed to update sys variable for compatibility mode", K(current_mode), KPC(session_info));
-  }
+  // seekdb is MySQL-only; no need to save/restore compatibility mode
 
   return ret;
 }
@@ -680,9 +643,8 @@ int ObInnerConnectionLockUtil::execute_write_sql(observer::ObInnerSQLConnection 
   bool need_reset_sess_mode = false;
   bool need_reset_conn_mode = false;
 
-  // NOTICE: This will be overwritten by the oracle_made_ field on connection,
-  // but for safety reason, we still set up a compat_guard here.
-  lib::CompatModeGuard guard(lib::Worker::CompatMode::MYSQL);
+  // NOTICE: The connection may overwrite compatibility mode internally, so keep
+  // a guard here for safety.
 
   if (OB_ISNULL(conn)) {
     ret = OB_ERR_UNEXPECTED;
@@ -690,7 +652,7 @@ int ObInnerConnectionLockUtil::execute_write_sql(observer::ObInnerSQLConnection 
   } else {
     if (OB_FAIL(set_to_mysql_compat_mode_(conn, need_reset_sess_mode, need_reset_conn_mode))) {
       LOG_WARN("set to mysql compat_mode failed", K(ret), K(sql));
-    } else if (OB_FAIL(conn->execute_write(MTL_ID(), sql.ptr(), affected_rows))) {
+    } else if (OB_FAIL(conn->execute_write(sql.ptr(), affected_rows))) {
       LOG_WARN("execute write sql failed", K(ret), K(sql));
     }
     if (OB_TMP_FAIL(reset_compat_mode_(conn, need_reset_sess_mode, need_reset_conn_mode))) {
@@ -710,9 +672,8 @@ int ObInnerConnectionLockUtil::execute_read_sql(observer::ObInnerSQLConnection *
   bool need_reset_sess_mode = false;
   bool need_reset_conn_mode = false;
 
-  // NOTICE: This will be overwritten by the oracle_made_ field on connection,
-  // but for safety reason, we still set up a compat_guard here.
-  lib::CompatModeGuard guard(lib::Worker::CompatMode::MYSQL);
+  // NOTICE: The connection may overwrite compatibility mode internally, so keep
+  // a guard here for safety.
 
   if (OB_ISNULL(conn)) {
     ret = OB_ERR_UNEXPECTED;
@@ -720,7 +681,7 @@ int ObInnerConnectionLockUtil::execute_read_sql(observer::ObInnerSQLConnection *
   } else {
     if (OB_FAIL(set_to_mysql_compat_mode_(conn, need_reset_sess_mode, need_reset_conn_mode))) {
       LOG_WARN("set to mysql compat_mode failed", K(ret), K(sql));
-    } else if (OB_FAIL(conn->execute_read(MTL_ID(), sql.ptr(), res))) {
+    } else if (OB_FAIL(conn->execute_read(sql.ptr(), res))) {
       LOG_WARN("execute read sql failed", K(ret), K(sql));
     }
     if (OB_TMP_FAIL(reset_compat_mode_(conn, need_reset_sess_mode, need_reset_conn_mode))) {
@@ -751,10 +712,8 @@ int ObInnerConnectionLockUtil::build_tx_param(sql::ObSQLSessionInfo *session_inf
   return ret;
 }
 
-int ObInnerConnectionLockUtil::do_obj_lock_(
-    const uint64_t tenant_id,
-    const ObLockRequest &arg,
-    const obrpc::ObInnerSQLTransmitArg::InnerSQLOperationType operation_type,
+int ObInnerConnectionLockUtil::do_obj_lock_(const ObLockRequest &arg,
+    const obcall::ObInnerSQLTransmitArg::InnerSQLOperationType operation_type,
     observer::ObInnerSQLConnection *conn,
     observer::ObInnerSQLResult &res)
 {
@@ -775,40 +734,35 @@ int ObInnerConnectionLockUtil::do_obj_lock_(
     conn->get_session().get_tx_timeout(tx_param.timeout_us_);
     tx_param.lock_timeout_us_ = conn->get_session().get_trx_lock_timeout();
 
-    MTL_SWITCH(tenant_id) {
+    MOD_SCOPE {
       if (OB_FAIL(handle_request_by_operation_type_(*tx_desc, tx_param, arg, operation_type))) {
         LOG_WARN("handle request by operation_type failed", K(tx_param), K(arg), K(operation_type));
       }
       if (OB_SUCC(ret) && OB_FAIL(res.close())) {
-        LOG_WARN("close result set failed", K(ret), K(tenant_id));
+        LOG_WARN("close result set failed", K(ret));
       }
     } // MTL_SWITCH
   } // else
   return ret;
 }
 
-int ObInnerConnectionLockUtil::request_lock_(
-    const uint64_t tenant_id,
-    const ObLockRequest &arg,
-    const obrpc::ObInnerSQLTransmitArg::InnerSQLOperationType operation_type,
+int ObInnerConnectionLockUtil::request_lock_(const ObLockRequest &arg,
+    const obcall::ObInnerSQLTransmitArg::InnerSQLOperationType operation_type,
     observer::ObInnerSQLConnection *conn)
 {
   int ret = OB_SUCCESS;
   observer::ObReqTimeGuard req_timeinfo_guard;
 
-  const bool local_execute = conn->is_local_execute(GCONF.cluster_id, tenant_id);
+  const bool local_execute = conn->is_local_execute(GCONF.cluster_id);
 
-  SMART_VAR(ObInnerSQLResult, res, conn->get_session(), conn->is_inner_session(), conn->get_diagnostic_info())
+  SMART_VAR(ObInnerSQLResult, res, conn->get_session(), conn->is_inner_session(), nullptr)
   {
-    if (OB_INVALID_ID == tenant_id) {
-      ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("invalid argument", K(ret), K(tenant_id));
-    } else if (local_execute) {
-      if (OB_FAIL(conn->switch_tenant(tenant_id))) {
-        LOG_WARN("set system tenant id failed", K(ret), K(tenant_id));
+    if (local_execute) {
+      if (OB_FAIL(conn->switch_tenant())) {
+        LOG_WARN("set system tenant id failed", K(ret));
       }
     } else {
-      LOG_DEBUG("tenant not in server", K(ret), K(tenant_id));
+      LOG_DEBUG("tenant not in server", K(ret));
     }
 
     if (OB_SUCC(ret)) {
@@ -818,7 +772,7 @@ int ObInnerConnectionLockUtil::request_lock_(
       } else if (OB_FAIL(res.init(local_execute))) {
         LOG_WARN("init result set", K(ret), K(local_execute));
       } else if (local_execute) {
-        if (OB_FAIL(do_obj_lock_(tenant_id, arg, operation_type, conn, res))) {
+        if (OB_FAIL(do_obj_lock_(arg, operation_type, conn, res))) {
           LOG_WARN("do obj lock failed", KR(ret), K(operation_type), K(arg));
         }
       } else {
@@ -832,13 +786,8 @@ int ObInnerConnectionLockUtil::request_lock_(
           LOG_WARN("serialize lock table arg failed", K(ret), K(arg));
         } else {
           int32_t group_id = 0;
-          if (arg.is_unlock_request()) {
-            group_id = share::OBCG_UNLOCK;
-          } else {
-            group_id = share::OBCG_LOCK;
-          }
           sql.assign_ptr(tmp_str, arg.get_serialize_size());
-          ret = conn->forward_request(tenant_id, operation_type, sql, res, group_id);
+          ret = conn->forward_request(operation_type, sql, res, group_id);
         }
 
         if (OB_NOT_NULL(tmp_str)) {
@@ -852,31 +801,26 @@ int ObInnerConnectionLockUtil::request_lock_(
 }
 
 // for version 4.0
-int ObInnerConnectionLockUtil::request_lock_(
-    const uint64_t tenant_id,
-    const uint64_t table_id, // as obj_id when lock_obj
+int ObInnerConnectionLockUtil::request_lock_(const uint64_t table_id, // as obj_id when lock_obj
     const ObTabletID tablet_id, //just used when lock_tablet
     const ObTableLockMode lock_mode,
     const int64_t timeout_us,
-    const obrpc::ObInnerSQLTransmitArg::InnerSQLOperationType operation_type,
+    const obcall::ObInnerSQLTransmitArg::InnerSQLOperationType operation_type,
     observer::ObInnerSQLConnection *conn)
 {
   int ret = OB_SUCCESS;
   observer::ObReqTimeGuard req_timeinfo_guard;
 
-  const bool local_execute = conn->is_local_execute(GCONF.cluster_id, tenant_id);
+  const bool local_execute = conn->is_local_execute(GCONF.cluster_id);
 
-  SMART_VAR(ObInnerSQLResult, res, conn->get_session(), conn->is_inner_session(), conn->get_diagnostic_info())
+  SMART_VAR(ObInnerSQLResult, res, conn->get_session(), conn->is_inner_session(), nullptr)
   {
-    if (OB_INVALID_ID == tenant_id) {
-      ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("invalid argument", K(ret), K(tenant_id));
-    } else if (local_execute) {
-      if (OB_FAIL(conn->switch_tenant(tenant_id))) {
-        LOG_WARN("set system tenant id failed", K(ret), K(tenant_id));
+    if (local_execute) {
+      if (OB_FAIL(conn->switch_tenant())) {
+        LOG_WARN("set system tenant id failed", K(ret));
       }
     } else {
-      LOG_DEBUG("tenant not in server", K(ret), K(tenant_id));
+      LOG_DEBUG("tenant not in server", K(ret));
     }
 
     if (OB_SUCC(ret)) {
@@ -914,8 +858,8 @@ int ObInnerConnectionLockUtil::request_lock_(
           LOG_WARN("operation_type is not expected", K(operation_type));
           ret = OB_ERR_UNEXPECTED;
         }
-        if (OB_SUCC(ret) && OB_FAIL(do_obj_lock_(tenant_id, *lock_arg, operation_type, conn, res))) {
-          LOG_WARN("close result set failed", K(ret), K(tenant_id));
+        if (OB_SUCC(ret) && OB_FAIL(do_obj_lock_(*lock_arg, operation_type, conn, res))) {
+          LOG_WARN("close result set failed", K(ret));
         }
       } else {
         char *tmp_str = nullptr;
@@ -960,7 +904,7 @@ int ObInnerConnectionLockUtil::request_lock_(
           ret = OB_ERR_UNEXPECTED;
         } // default
         } // switch
-        ret = conn->forward_request(tenant_id, operation_type, sql, res);
+        ret = conn->forward_request(operation_type, sql, res);
         if (OB_NOT_NULL(tmp_str)) {
           ob_free(tmp_str);
         }
@@ -975,7 +919,7 @@ int ObInnerConnectionLockUtil::handle_request_by_operation_type_(
   ObTxDesc &tx_desc,
   const ObTxParam &tx_param,
   const ObLockRequest &arg,
-  const obrpc::ObInnerSQLTransmitArg::InnerSQLOperationType operation_type)
+  const obcall::ObInnerSQLTransmitArg::InnerSQLOperationType operation_type)
 {
   int ret = OB_SUCCESS;
   switch (operation_type) {
@@ -1069,31 +1013,18 @@ int ObInnerConnectionLockUtil::set_to_mysql_compat_mode_(observer::ObInnerSQLCon
 
   if (OB_FAIL(conn->get_session().get_sys_variable(share::SYS_VAR_OB_COMPATIBILITY_MODE, current_mode))) {
     LOG_WARN("can not get the compat_mode", );
-  } else if (FALSE_IT(need_reset_sess_mode = (current_mode != mysql_mode))) {
-  } else if (need_reset_sess_mode
-             && OB_FAIL(conn->get_session().update_sys_variable(share::SYS_VAR_OB_COMPATIBILITY_MODE, mysql_mode))) {
-    LOG_WARN("update compat_mode to mysql_mode failed");
-  } else if (conn->is_oracle_compat_mode()) {
-    need_reset_conn_mode = true;
-    conn->set_mysql_compat_mode();
   }
+  // seekdb is MySQL-only; need_reset_sess_mode is always false
   return ret;
 }
 
 int ObInnerConnectionLockUtil::reset_compat_mode_(observer::ObInnerSQLConnection *conn, const bool need_reset_sess_mode, const bool need_reset_conn_mode)
 {
-  int ret = OB_SUCCESS;
-  ObObj oracle_mode;
-  oracle_mode.set_int(1);
-
-  if (need_reset_sess_mode
-      && OB_FAIL(conn->get_session().update_sys_variable(share::SYS_VAR_OB_COMPATIBILITY_MODE, oracle_mode))) {
-    LOG_WARN("failed to update sys variable for compatibility mode", K(ret));
-  }
-  if (need_reset_conn_mode) {
-    conn->set_oracle_compat_mode();
-  }
-  return ret;
+  // seekdb is MySQL-only; need_reset_sess_mode is always false, nothing to do
+  UNUSED(conn);
+  UNUSED(need_reset_sess_mode);
+  UNUSED(need_reset_conn_mode);
+  return OB_SUCCESS;
 }
 } // tablelock
 } // transaction

@@ -76,20 +76,6 @@ const static double VECTOR_ROW_STORE_PROJECT_COLUMN_RND_CHAR_COST = 0.0025971659
 const static double VECTOR_ROW_STORE_PROJECT_COLUMN_RND_LOB_COST = 24.3 * DEFAULT_CPU_SPEED;
 const static double VECTOR_ROW_STORE_PROJECT_COLUMN_RND_JSON_COST = 36.7 * DEFAULT_CPU_SPEED;
 const static double VECTOR_ROW_STORE_PROJECT_COLUMN_RND_GIS_COST = 32.4 * DEFAULT_CPU_SPEED;
-//column store
-const static double VECTOR_COLUMN_STORE_PROJECT_COLUMN_SEQ_INT_COST = 0.002314121667000 * DEFAULT_CPU_SPEED;
-const static double VECTOR_COLUMN_STORE_PROJECT_COLUMN_SEQ_NUMBER_COST = 0.0041602888420961 * DEFAULT_CPU_SPEED;
-const static double VECTOR_COLUMN_STORE_PROJECT_COLUMN_SEQ_CHAR_COST = 0.000128227202574 * DEFAULT_CPU_SPEED;
-const static double VECTOR_COLUMN_STORE_PROJECT_COLUMN_SEQ_LOB_COST = 6.5 * DEFAULT_CPU_SPEED;
-const static double VECTOR_COLUMN_STORE_PROJECT_COLUMN_SEQ_JSON_COST = 9.7 * DEFAULT_CPU_SPEED;
-const static double VECTOR_COLUMN_STORE_PROJECT_COLUMN_SEQ_GIS_COST = 8.9 * DEFAULT_CPU_SPEED;
-
-const static double VECTOR_COLUMN_STORE_PROJECT_COLUMN_RND_INT_COST = 0.08067736535000 * DEFAULT_CPU_SPEED;
-const static double VECTOR_COLUMN_STORE_PROJECT_COLUMN_RND_NUMBER_COST = 0.08806720526487 * DEFAULT_CPU_SPEED;
-const static double VECTOR_COLUMN_STORE_PROJECT_COLUMN_RND_CHAR_COST = 0.0025971659266159 * DEFAULT_CPU_SPEED;
-const static double VECTOR_COLUMN_STORE_PROJECT_COLUMN_RND_LOB_COST = 24.3 * DEFAULT_CPU_SPEED;
-const static double VECTOR_COLUMN_STORE_PROJECT_COLUMN_RND_JSON_COST = 36.7 * DEFAULT_CPU_SPEED;
-const static double VECTOR_COLUMN_STORE_PROJECT_COLUMN_RND_GIS_COST = 32.4 * DEFAULT_CPU_SPEED;
 
 //compare cost params
 const static double VECTOR_CMP_INT_COST = 0.0084782994043 * DEFAULT_CPU_SPEED;
@@ -176,9 +162,8 @@ const static double hash_params_vector[ObMaxTC+1] = {
   VECTOR_HASH_CHAR_COST,           // roaringbitmap
 };
 
-const static double project_params_vector[2][2][ObMaxTC+1] = {
-  {
-    {// row store sequence access
+const static double project_params_vector[2][ObMaxTC+1] = {
+    {// sequence access
       VECTOR_ROW_STORE_PROJECT_COLUMN_SEQ_INT_COST,            // null
       VECTOR_ROW_STORE_PROJECT_COLUMN_SEQ_INT_COST,            // int8, int16, int24, int32, int64.
       VECTOR_ROW_STORE_PROJECT_COLUMN_SEQ_INT_COST,            // uint8, uint16, uint24, uint32, uint64.
@@ -207,7 +192,7 @@ const static double project_params_vector[2][2][ObMaxTC+1] = {
       VECTOR_ROW_STORE_PROJECT_COLUMN_SEQ_NUMBER_COST,         // ObDecimalIntTC
       VECTOR_ROW_STORE_PROJECT_COLUMN_SEQ_LOB_COST,            // collection sql type
     },
-    {// row store random access
+    {// random access
       VECTOR_ROW_STORE_PROJECT_COLUMN_RND_INT_COST,            // null
       VECTOR_ROW_STORE_PROJECT_COLUMN_RND_INT_COST,            // int8, int16, int24, int32, int64.
       VECTOR_ROW_STORE_PROJECT_COLUMN_RND_INT_COST,            // uint8, uint16, uint24, uint32, uint64.
@@ -236,67 +221,6 @@ const static double project_params_vector[2][2][ObMaxTC+1] = {
       VECTOR_ROW_STORE_PROJECT_COLUMN_RND_NUMBER_COST,         // ObDecimalIntTC
       VECTOR_ROW_STORE_PROJECT_COLUMN_RND_LOB_COST,            // collection sql type
     }
-  },
-  {
-    {// column store sequence access
-      VECTOR_COLUMN_STORE_PROJECT_COLUMN_SEQ_INT_COST,            // null
-      VECTOR_COLUMN_STORE_PROJECT_COLUMN_SEQ_INT_COST,            // int8, int16, int24, int32, int64.
-      VECTOR_COLUMN_STORE_PROJECT_COLUMN_SEQ_INT_COST,            // uint8, uint16, uint24, uint32, uint64.
-      VECTOR_COLUMN_STORE_PROJECT_COLUMN_SEQ_INT_COST,            // float, ufloat.
-      VECTOR_COLUMN_STORE_PROJECT_COLUMN_SEQ_INT_COST,            // double, udouble.
-      VECTOR_COLUMN_STORE_PROJECT_COLUMN_SEQ_NUMBER_COST,         // number, unumber.
-      VECTOR_COLUMN_STORE_PROJECT_COLUMN_SEQ_NUMBER_COST,         // datetime, timestamp.
-      VECTOR_COLUMN_STORE_PROJECT_COLUMN_SEQ_NUMBER_COST,         // date
-      VECTOR_COLUMN_STORE_PROJECT_COLUMN_SEQ_NUMBER_COST,         // time
-      VECTOR_COLUMN_STORE_PROJECT_COLUMN_SEQ_NUMBER_COST,         // year
-      VECTOR_COLUMN_STORE_PROJECT_COLUMN_SEQ_CHAR_COST,           // varchar, char, varbinary, binary.
-      VECTOR_COLUMN_STORE_PROJECT_COLUMN_SEQ_CHAR_COST,           // extend
-      VECTOR_COLUMN_STORE_PROJECT_COLUMN_SEQ_CHAR_COST,           // unknown
-      VECTOR_COLUMN_STORE_PROJECT_COLUMN_SEQ_LOB_COST,            // TinyText,MediumText, Text ,LongText
-      VECTOR_COLUMN_STORE_PROJECT_COLUMN_SEQ_INT_COST,            // Bit
-      VECTOR_COLUMN_STORE_PROJECT_COLUMN_SEQ_INT_COST,            // enum, set
-      VECTOR_COLUMN_STORE_PROJECT_COLUMN_SEQ_INT_COST,            // ObEnumSetInnerTC
-      VECTOR_COLUMN_STORE_PROJECT_COLUMN_SEQ_NUMBER_COST,         // timestamp with time zone
-      VECTOR_COLUMN_STORE_PROJECT_COLUMN_SEQ_INT_COST,            // raw
-      VECTOR_COLUMN_STORE_PROJECT_COLUMN_SEQ_INT_COST,            // interval
-      VECTOR_COLUMN_STORE_PROJECT_COLUMN_SEQ_NUMBER_COST,         // rowid
-      VECTOR_COLUMN_STORE_PROJECT_COLUMN_SEQ_LOB_COST,            // lob
-      VECTOR_COLUMN_STORE_PROJECT_COLUMN_SEQ_JSON_COST,           // json
-      VECTOR_COLUMN_STORE_PROJECT_COLUMN_SEQ_GIS_COST,            // geometry
-      VECTOR_COLUMN_STORE_PROJECT_COLUMN_SEQ_INT_COST,            // user defined type
-      VECTOR_COLUMN_STORE_PROJECT_COLUMN_SEQ_NUMBER_COST,         // ObDecimalIntTC
-      VECTOR_COLUMN_STORE_PROJECT_COLUMN_SEQ_LOB_COST,            // collection sql type
-    },
-    {// column store random access
-      VECTOR_COLUMN_STORE_PROJECT_COLUMN_RND_INT_COST,            // null
-      VECTOR_COLUMN_STORE_PROJECT_COLUMN_RND_INT_COST,            // int8, int16, int24, int32, int64.
-      VECTOR_COLUMN_STORE_PROJECT_COLUMN_RND_INT_COST,            // uint8, uint16, uint24, uint32, uint64.
-      VECTOR_COLUMN_STORE_PROJECT_COLUMN_RND_INT_COST,            // float, ufloat.
-      VECTOR_COLUMN_STORE_PROJECT_COLUMN_RND_INT_COST,            // double, udouble.
-      VECTOR_COLUMN_STORE_PROJECT_COLUMN_RND_NUMBER_COST,         // number, unumber.
-      VECTOR_COLUMN_STORE_PROJECT_COLUMN_RND_NUMBER_COST,         // datetime, timestamp.
-      VECTOR_COLUMN_STORE_PROJECT_COLUMN_RND_NUMBER_COST,         // date
-      VECTOR_COLUMN_STORE_PROJECT_COLUMN_RND_NUMBER_COST,         // time
-      VECTOR_COLUMN_STORE_PROJECT_COLUMN_RND_NUMBER_COST,         // year
-      VECTOR_COLUMN_STORE_PROJECT_COLUMN_RND_CHAR_COST,           // varchar, char, varbinary, binary.
-      VECTOR_COLUMN_STORE_PROJECT_COLUMN_RND_CHAR_COST,           // extend
-      VECTOR_COLUMN_STORE_PROJECT_COLUMN_RND_CHAR_COST,           // unknown
-      VECTOR_COLUMN_STORE_PROJECT_COLUMN_RND_LOB_COST,            // TinyText,MediumText, Text ,LongText
-      VECTOR_COLUMN_STORE_PROJECT_COLUMN_RND_INT_COST,            // Bit
-      VECTOR_COLUMN_STORE_PROJECT_COLUMN_RND_INT_COST,            // enum, set
-      VECTOR_COLUMN_STORE_PROJECT_COLUMN_RND_INT_COST,            // ObEnumSetInnerTC
-      VECTOR_COLUMN_STORE_PROJECT_COLUMN_RND_NUMBER_COST,         // timestamp with time zone
-      VECTOR_COLUMN_STORE_PROJECT_COLUMN_RND_INT_COST,            // raw
-      VECTOR_COLUMN_STORE_PROJECT_COLUMN_RND_INT_COST,            // interval
-      VECTOR_COLUMN_STORE_PROJECT_COLUMN_RND_NUMBER_COST,         // rowid
-      VECTOR_COLUMN_STORE_PROJECT_COLUMN_RND_LOB_COST,            // lob
-      VECTOR_COLUMN_STORE_PROJECT_COLUMN_RND_JSON_COST,           // json
-      VECTOR_COLUMN_STORE_PROJECT_COLUMN_RND_GIS_COST,            // geometry
-      VECTOR_COLUMN_STORE_PROJECT_COLUMN_RND_INT_COST,            // user defined type
-      VECTOR_COLUMN_STORE_PROJECT_COLUMN_RND_NUMBER_COST,         // ObDecimalIntTC
-      VECTOR_COLUMN_STORE_PROJECT_COLUMN_RND_LOB_COST,            // collection sql type
-    }
-  }
 };
 
 const static ObOptCostModelParameter cost_params_vector(

@@ -52,7 +52,6 @@ int ObColumnSchemaV2::assign(const ObColumnSchemaV2 &src_schema)
   if (this != &src_schema) {
     ObColumnSchemaV2::reset();
     error_ret_ = src_schema.error_ret_;
-    tenant_id_ = src_schema.tenant_id_;
     table_id_ = src_schema.table_id_;
     column_id_ = src_schema.column_id_;
     schema_version_ = src_schema.schema_version_;
@@ -114,7 +113,7 @@ int ObColumnSchemaV2::assign(const ObColumnSchemaV2 &src_schema)
 
 bool ObColumnSchemaV2::operator==(const ObColumnSchemaV2 &r) const
 {
-  return (tenant_id_ == r.tenant_id_ && table_id_ == r.table_id_ && column_id_ == r.column_id_
+  return (table_id_ == r.table_id_ && column_id_ == r.column_id_
       && schema_version_ == r.schema_version_);
 }
 
@@ -167,7 +166,6 @@ bool ObColumnSchemaV2::is_func_idx_column() const
 
 void ObColumnSchemaV2::reset()
 {
-  tenant_id_ = OB_INVALID_ID;
   table_id_ = OB_INVALID_ID;
   column_id_ = OB_INVALID_ID;
   schema_version_ = 0;
@@ -209,7 +207,6 @@ OB_DEF_SERIALIZE(ObColumnSchemaV2)
   int ret = OB_SUCCESS;
   bool has_column_ref = (column_ref_idxs_ != NULL);
   LST_DO_CODE(OB_UNIS_ENCODE,
-              tenant_id_,
               table_id_,
               column_id_,
               schema_version_,
@@ -268,7 +265,6 @@ OB_DEF_DESERIALIZE(ObColumnSchemaV2)
   bool has_column_ref = false;
 
   LST_DO_CODE(OB_UNIS_DECODE,
-              tenant_id_,
               table_id_,
               column_id_,
               schema_version_,
@@ -331,7 +327,6 @@ OB_DEF_SERIALIZE_SIZE(ObColumnSchemaV2)
   int64_t len = 0;
   bool has_column_ref = (column_ref_idxs_ != NULL);
   LST_DO_CODE(OB_UNIS_ADD_LEN,
-              tenant_id_,
               table_id_,
               column_id_,
               schema_version_,
@@ -409,8 +404,7 @@ int64_t ObColumnSchemaV2::to_string(char *buf, const int64_t buf_len) const
   int64_t pos = 0;
 
   J_OBJ_START();
-  J_KV(K_(tenant_id),
-    K_(table_id),
+  J_KV(K_(table_id),
     K_(column_id),
     K_(schema_version),
     K_(rowkey_position),
@@ -448,7 +442,6 @@ int64_t ObColumnSchemaV2::to_string(char *buf, const int64_t buf_len) const
 
 int ObColumnSchemaV2::get_byte_length(
     int64_t &length,
-    const bool is_oracle_mode,
     const bool for_check_length) const
 {
   int ret = OB_SUCCESS;
@@ -465,17 +458,12 @@ int ObColumnSchemaV2::get_byte_length(
       length = get_data_length();
     }
   } else {
-    const ObLengthSemantics length_semantic = is_oracle_mode ? get_length_semantics() : LS_CHAR;
-    if (LS_CHAR == length_semantic) {
-      int64_t mbmaxlen = 0;
-      if (OB_FAIL(ObCharset::get_mbmaxlen_by_coll(get_collation_type(), mbmaxlen))) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("fail to get mbmaxlen", K(ret), K(get_collation_type()));
-      } else {
-        length = get_data_length() * mbmaxlen;
-      }
+    int64_t mbmaxlen = 0;
+    if (OB_FAIL(ObCharset::get_mbmaxlen_by_coll(get_collation_type(), mbmaxlen))) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("fail to get mbmaxlen", K(ret), K(get_collation_type()));
     } else {
-      length = get_data_length();
+      length = get_data_length() * mbmaxlen;
     }
   }
   return ret;
@@ -697,31 +685,6 @@ int ObColumnSchemaV2::set_geo_type(const int32_t type_val)
 
   return ret;
 }
-int ObColumnSchemaV2::get_each_column_group_name(ObString &cg_name) const {
-  int ret = OB_SUCCESS;
-  /* to avoid column_name_str not end with \0, write cg_name using ObString::write*/
-  char tmp_cg_name[OB_MAX_COLUMN_GROUP_NAME_LENGTH] = {'\0'};
-  int32_t write_len = snprintf(tmp_cg_name, OB_MAX_COLUMN_GROUP_NAME_LENGTH, "%.*s_%.*s", 
-                               static_cast<int>(sizeof(OB_COLUMN_GROUP_NAME_PREFIX)),
-                               OB_COLUMN_GROUP_NAME_PREFIX, column_name_.length(), column_name_.ptr());
-  if (write_len < 0) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("fail to format column group_name", K(ret), K(write_len));
-  } else if (write_len > OB_MAX_COLUMN_GROUP_NAME_LENGTH) {
-    ret = OB_ERR_TOO_LONG_IDENT;
-    LOG_WARN("too long column name to format column group name", K(ret), KPC(this), K(write_len));
-    LOG_USER_ERROR(OB_ERR_TOO_LONG_IDENT, column_name_.length(), column_name_.ptr());
-  }
-
-  if (OB_SUCC(ret)) {
-    if (cg_name.write(tmp_cg_name, write_len) != write_len) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("fail to write column group name to str", K(ret), K(cg_name), K(write_len));
-    }
-  } 
-  return ret;
-}
-
 int ObColumnSchemaV2::is_same_collection_column(const ObColumnSchemaV2 &other, bool &is_same) const
 {
   int ret = OB_SUCCESS;

@@ -19,7 +19,7 @@
 #include "lib/allocator/ob_allocator.h"
 #include "lib/ob_errno.h"
 #include "lib/ob_define.h"
-#include "lib/allocator/ob_mod_define.h"
+#include "lib/utility/ob_mod_define.h"
 #include "lib/atomic/ob_atomic.h"
 
 namespace oceanbase

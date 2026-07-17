@@ -20,7 +20,7 @@
 #include "sql/optimizer/ob_log_table_scan.h"
 #include "sql/optimizer/ob_log_exchange.h"
 #include "sql/optimizer/ob_log_join.h"
-#include "share/ob_fts_index_builder_util.h"
+#include "sql/resolver/ddl/ob_fts_index_builder_util.h"
 
 using namespace oceanbase;
 using namespace oceanbase::sql;
@@ -1169,7 +1169,7 @@ int ObLogDelUpd::generate_fk_lookup_part_id_expr(IndexDMLInfo &index_dml_info)
              OB_ISNULL(session_info = get_plan()->get_optimizer_context().get_session_info())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("failed to get schema guard", K(ret), K(schema_guard), K(session_info));
-  } else if (OB_FAIL(schema_guard->get_table_schema(session_info->get_effective_tenant_id(),
+  } else if (OB_FAIL(schema_guard->get_table_schema(
                                                     index_dml_info.ref_table_id_,
                                                     table_schema))) {
     LOG_WARN("failed to get table schema", K(index_dml_info.ref_table_id_), K(ret));
@@ -1195,7 +1195,7 @@ int ObLogDelUpd::generate_fk_lookup_part_id_expr(IndexDMLInfo &index_dml_info)
         const uint64_t parent_table_id = fk_info.parent_table_id_;
         const ObTableSchema *parent_table_schema = NULL;
         uint64_t scan_index_tid = OB_INVALID_ID;
-        if (OB_FAIL(schema_guard->get_table_schema(session_info->get_effective_tenant_id(),
+        if (OB_FAIL(schema_guard->get_table_schema(
                                                    parent_table_id,
                                                    parent_table_schema))) {
           LOG_WARN("failed to get table schema of parent table", K(ret), K(parent_table_id));
@@ -1210,7 +1210,7 @@ int ObLogDelUpd::generate_fk_lookup_part_id_expr(IndexDMLInfo &index_dml_info)
         } else {
           ObRawExpr* fk_look_up_part_id_expr = nullptr;
           const ObTableSchema* scan_table_schema = nullptr;
-          if (schema_guard->get_table_schema(session_info->get_effective_tenant_id(),
+          if (schema_guard->get_table_schema(
                                              scan_index_tid,
                                              scan_table_schema)) {
             LOG_WARN("failed to get scan table schema to perform foreign key check", K(ret), K(scan_index_tid));
@@ -1517,7 +1517,7 @@ int ObLogDelUpd::replace_dml_info_exprs(
         // just skip, nothing to do.
       } else if (expr->is_column_ref_expr() && static_cast<ObColumnRefRawExpr *>(expr)->is_vec_cid_column()) {
         const ObTableSchema *table_schema = NULL;
-        if (OB_FAIL(schema_guard->get_table_schema(MTL_ID(), index_dml_info->ref_table_id_, table_schema))) {
+        if (OB_FAIL(schema_guard->get_table_schema( index_dml_info->ref_table_id_, table_schema))) {
           LOG_WARN("failed to get table schema", K(ret));
         } else if (OB_NOT_NULL(table_schema)) {
           uint64_t rowkey_cid_tid = OB_INVALID_ID;
@@ -1532,7 +1532,7 @@ int ObLogDelUpd::replace_dml_info_exprs(
         // just skip, nothing to do.
       } else if (expr->is_column_ref_expr() && static_cast<ObColumnRefRawExpr *>(expr)->is_hybrid_embedded_vec_column()) {
         const ObTableSchema *table_schema = NULL;
-        if (OB_FAIL(schema_guard->get_table_schema(MTL_ID(), index_dml_info->ref_table_id_, table_schema))) {
+        if (OB_FAIL(schema_guard->get_table_schema( index_dml_info->ref_table_id_, table_schema))) {
           LOG_WARN("failed to get table schema", K(ret));
         } else if (OB_NOT_NULL(table_schema)) {
           uint64_t embedded_vec_tid = OB_INVALID_ID;

@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SQL_ENG
 
 #include "ob_all_virtual_sql_workarea_histogram.h"
+#include "share/rc/ob_module_provider.h"
 
 using namespace oceanbase::common;
 using namespace oceanbase::sql;
@@ -24,7 +25,7 @@ using namespace oceanbase::observer;
 using namespace oceanbase::share;
 
 ObSqlWorkareaHistogramIterator::ObSqlWorkareaHistogramIterator() :
-  wa_histograms_(), tenant_ids_(), cur_nth_wa_hist_(0), cur_nth_tenant_(0)
+  wa_histograms_(), cur_nth_wa_hist_(0), done_(false)
 {}
 
 void ObSqlWorkareaHistogramIterator::destroy()
@@ -35,23 +36,16 @@ void ObSqlWorkareaHistogramIterator::destroy()
 void ObSqlWorkareaHistogramIterator::reset()
 {
   wa_histograms_.reset();
-  tenant_ids_.reset();
   cur_nth_wa_hist_ = 0;
-  cur_nth_tenant_ = 0;
+  done_ = false;
 }
 
-int ObSqlWorkareaHistogramIterator::init(const uint64_t effective_tenant_id)
+int ObSqlWorkareaHistogramIterator::init()
 {
   int ret = OB_SUCCESS;
   if (OB_ISNULL(GCTX.omt_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected null of omt", KR(ret));
-  } else if (is_sys_tenant(effective_tenant_id)) {
-    if (OB_FAIL(GCTX.omt_->get_mtl_tenant_ids(tenant_ids_))) {
-      LOG_WARN("failed to get_mtl_tenant_ids", KR(ret));
-    }
-  } else if (OB_FAIL(tenant_ids_.push_back(effective_tenant_id))) {
-    LOG_WARN("failed to push back tenant_id", KR(ret), K(effective_tenant_id));
   }
   return ret;
 }
@@ -61,26 +55,25 @@ int ObSqlWorkareaHistogramIterator::get_next_batch_wa_histograms()
   int ret = OB_SUCCESS;
   cur_nth_wa_hist_ = 0;
   wa_histograms_.reset();
-  if (cur_nth_tenant_ >= tenant_ids_.count()) {
+  if (done_) {
     ret = OB_ITER_END;
   } else {
-    uint64_t tenant_id = tenant_ids_.at(cur_nth_tenant_);
-    MTL_SWITCH(tenant_id) {
+    
+    MOD_SCOPE {
       ObTenantSqlMemoryManager *sql_mem_mgr = nullptr;
-      sql_mem_mgr = MTL(ObTenantSqlMemoryManager*);
+      sql_mem_mgr = share::g_mp->tenant_sql_memory_manager();
       if (nullptr != sql_mem_mgr && OB_FAIL(sql_mem_mgr->get_workarea_histogram(wa_histograms_))) {
         LOG_WARN("failed to get workarea stat", K(ret));
       }
     }
-    ++cur_nth_tenant_;
-    LOG_TRACE("trace get histogram for next tenant", K(tenant_id), K(wa_histograms_.count()));
+    done_ = true;
+    LOG_TRACE("trace get histogram for next tenant", K(wa_histograms_.count()));
   }
   return ret;
 }
 
 int ObSqlWorkareaHistogramIterator::get_next_wa_histogram(
-  ObWorkareaHistogram *&wa_histogram,
-  uint64_t &tenant_id)
+  ObWorkareaHistogram *&wa_histogram)
 {
   int ret = OB_SUCCESS;
   if (0 > cur_nth_wa_hist_ || cur_nth_wa_hist_ > wa_histograms_.count()) {
@@ -94,7 +87,6 @@ int ObSqlWorkareaHistogramIterator::get_next_wa_histogram(
   }
   if (OB_SUCC(ret)) {
     wa_histogram = &wa_histograms_.at(cur_nth_wa_hist_);
-    tenant_id = tenant_ids_.at(cur_nth_tenant_ - 1);
     ++cur_nth_wa_hist_;
   }
   return ret;
@@ -138,7 +130,6 @@ int ObSqlWorkareaHistogram::get_server_ip_and_port()
 }
 
 int ObSqlWorkareaHistogram::fill_row(
-  uint64_t tenant_id,
   ObWorkareaHistogram &wa_histogram,
   common::ObNewRow *&row)
 {
@@ -187,7 +178,7 @@ int ObSqlWorkareaHistogram::inner_get_next_row(common::ObNewRow *&row)
 {
   int ret = OB_SUCCESS;
   if (!start_to_read_) {
-    if (OB_FAIL(iter_.init(effective_tenant_id_))) {
+    if (OB_FAIL(iter_.init())) {
       LOG_WARN("failed to init iterator", K(ret));
     } else {
       start_to_read_ = true;
@@ -197,14 +188,13 @@ int ObSqlWorkareaHistogram::inner_get_next_row(common::ObNewRow *&row)
     }
   }
   ObWorkareaHistogram *wa_histogram = nullptr;
-  uint64_t tenant_id = 0;
   if (OB_FAIL(ret)) {
     // do nothing
-  } else if (OB_FAIL(iter_.get_next_wa_histogram(wa_histogram, tenant_id))) {
+  } else if (OB_FAIL(iter_.get_next_wa_histogram(wa_histogram))) {
     if (OB_ITER_END != ret) {
       LOG_WARN("failed to get next channel", K(ret));
     }
-  } else if (OB_FAIL(fill_row(tenant_id, *wa_histogram, row))) {
+  } else if (OB_FAIL(fill_row(*wa_histogram, row))) {
     LOG_WARN("failed to get row from channel info", K(ret));
   }
   return ret;

@@ -86,7 +86,7 @@ int MdsCtx::inc_seq_no()
   if (OB_FAIL(ObSequence::get_and_inc_max_seq_no(0, seq))) {
     MDS_LOG(WARN, "fail to get and inc max seq no", K(ret), KPC(this));
   } else {
-    seq_no_ = transaction::ObTxSEQ::mk_v0(seq);
+    seq_no_ = transaction::ObTxSEQ(seq, 0);
   }
   return ret;
 }

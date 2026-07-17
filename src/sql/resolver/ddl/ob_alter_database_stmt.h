@@ -29,7 +29,6 @@ public:
   ObAlterDatabaseStmt();
   explicit ObAlterDatabaseStmt(common::ObIAllocator *name_pool);
   virtual ~ObAlterDatabaseStmt();
-  void set_tenant_id(const uint64_t tenant_id);
   void set_database_id(const uint64_t database_id);
   int set_database_name(const common::ObString &database_name);
   void set_collation_type(const common::ObCollationType type);
@@ -39,20 +38,20 @@ public:
   int set_default_tablegroup_name(const common::ObString &tablegroup_name);
   void set_alter_option_set(const common::ObBitSet<> &alter_option_set);
   common::ObBitSet<> &get_alter_option_set() { return alter_database_arg_.alter_option_bitset_; }
-  obrpc::ObAlterDatabaseArg &get_alter_database_arg();
+  obcall::ObAlterDatabaseArg &get_alter_database_arg();
   bool only_alter_primary_zone() const
   { return alter_database_arg_.only_alter_primary_zone(); }
   virtual bool cause_implicit_commit() const { return true; }
 
   inline const common::ObString &get_database_name() const;
-  virtual obrpc::ObDDLArg &get_ddl_arg() { return alter_database_arg_; }
+  virtual obcall::ObDDLArg &get_ddl_arg() { return alter_database_arg_; }
   common::ObCollationType get_collation_type() {
     return alter_database_arg_.database_schema_.get_collation_type();
   }
 
   TO_STRING_KV(K_(alter_database_arg));
 private:
-  obrpc::ObAlterDatabaseArg alter_database_arg_;
+  obcall::ObAlterDatabaseArg alter_database_arg_;
 };
 
 inline const common::ObString &ObAlterDatabaseStmt::get_database_name() const

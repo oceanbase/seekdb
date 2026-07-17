@@ -82,7 +82,6 @@ ALTER TABLE default_t1 ADD i1 int;
       "origin_table_name":"default_t1",
       "new_database_name":"defaultvalue",
       "origin_database_name":"defaultvalue",
-      "split_partition_name":"",
       "alter_table_schema": {
         "simple_table_schema": {
           "tenant_id":1,
@@ -228,7 +227,6 @@ ALTER TABLE default_t1 ADD i2 int not null;
       "origin_table_name":"default_t1",
       "new_database_name":"defaultvalue",
       "origin_database_name":"defaultvalue",
-      "split_partition_name":"",
       "alter_table_schema": {
         "simple_table_schema": {
           "tenant_id":1,
@@ -374,7 +372,6 @@ ALTER TABLE default_t1 ADD i3 int not null default 5;
       "origin_table_name":"default_t1",
       "new_database_name":"defaultvalue",
       "origin_database_name":"defaultvalue",
-      "split_partition_name":"",
       "alter_table_schema": {
         "simple_table_schema": {
           "tenant_id":1,
@@ -520,7 +517,6 @@ ALTER TABLE default_t1 ADD f1 float;
       "origin_table_name":"default_t1",
       "new_database_name":"defaultvalue",
       "origin_database_name":"defaultvalue",
-      "split_partition_name":"",
       "alter_table_schema": {
         "simple_table_schema": {
           "tenant_id":1,
@@ -666,7 +662,6 @@ ALTER TABLE default_t1 ADD f2 float not null;
       "origin_table_name":"default_t1",
       "new_database_name":"defaultvalue",
       "origin_database_name":"defaultvalue",
-      "split_partition_name":"",
       "alter_table_schema": {
         "simple_table_schema": {
           "tenant_id":1,
@@ -812,7 +807,6 @@ ALTER TABLE default_t1 ADD f3 float not null default 5.0;
       "origin_table_name":"default_t1",
       "new_database_name":"defaultvalue",
       "origin_database_name":"defaultvalue",
-      "split_partition_name":"",
       "alter_table_schema": {
         "simple_table_schema": {
           "tenant_id":1,
@@ -958,7 +952,6 @@ ALTER TABLE default_t1 ADD d1 double;
       "origin_table_name":"default_t1",
       "new_database_name":"defaultvalue",
       "origin_database_name":"defaultvalue",
-      "split_partition_name":"",
       "alter_table_schema": {
         "simple_table_schema": {
           "tenant_id":1,
@@ -1104,7 +1097,6 @@ ALTER TABLE default_t1 ADD d2 double not null;
       "origin_table_name":"default_t1",
       "new_database_name":"defaultvalue",
       "origin_database_name":"defaultvalue",
-      "split_partition_name":"",
       "alter_table_schema": {
         "simple_table_schema": {
           "tenant_id":1,
@@ -1250,7 +1242,6 @@ ALTER TABLE default_t1 ADD d3 double not null default 5.0000
       "origin_table_name":"default_t1",
       "new_database_name":"defaultvalue",
       "origin_database_name":"defaultvalue",
-      "split_partition_name":"",
       "alter_table_schema": {
         "simple_table_schema": {
           "tenant_id":1,
@@ -1396,7 +1387,6 @@ ALTER TABLE default_t1 ADD v1 varchar(500);
       "origin_table_name":"default_t1",
       "new_database_name":"defaultvalue",
       "origin_database_name":"defaultvalue",
-      "split_partition_name":"",
       "alter_table_schema": {
         "simple_table_schema": {
           "tenant_id":1,
@@ -1542,7 +1532,6 @@ ALTER TABLE default_t1 ADD v2 varchar(500) not null;
       "origin_table_name":"default_t1",
       "new_database_name":"defaultvalue",
       "origin_database_name":"defaultvalue",
-      "split_partition_name":"",
       "alter_table_schema": {
         "simple_table_schema": {
           "tenant_id":1,
@@ -1688,7 +1677,6 @@ ALTER TABLE default_t1 ADD v3 varchar(500) not null default 'xiyu@varchar500';
       "origin_table_name":"default_t1",
       "new_database_name":"defaultvalue",
       "origin_database_name":"defaultvalue",
-      "split_partition_name":"",
       "alter_table_schema": {
         "simple_table_schema": {
           "tenant_id":1,
@@ -1836,7 +1824,6 @@ ALTER TABLE default_t1 ADD ts3 timestamp not null default '2015-7-16';
       "origin_table_name":"default_t1",
       "new_database_name":"defaultvalue",
       "origin_database_name":"defaultvalue",
-      "split_partition_name":"",
       "alter_table_schema": {
         "simple_table_schema": {
           "tenant_id":1,
@@ -1982,7 +1969,6 @@ ALTER TABLE default_t1 ADD y1 year;
       "origin_table_name":"default_t1",
       "new_database_name":"defaultvalue",
       "origin_database_name":"defaultvalue",
-      "split_partition_name":"",
       "alter_table_schema": {
         "simple_table_schema": {
           "tenant_id":1,
@@ -2128,7 +2114,6 @@ ALTER TABLE default_t1 ADD y2 year not null;
       "origin_table_name":"default_t1",
       "new_database_name":"defaultvalue",
       "origin_database_name":"defaultvalue",
-      "split_partition_name":"",
       "alter_table_schema": {
         "simple_table_schema": {
           "tenant_id":1,
@@ -2274,7 +2259,6 @@ ALTER TABLE default_t1 ADD y3 year not null default 1983
       "origin_table_name":"default_t1",
       "new_database_name":"defaultvalue",
       "origin_database_name":"defaultvalue",
-      "split_partition_name":"",
       "alter_table_schema": {
         "simple_table_schema": {
           "tenant_id":1,
@@ -2420,7 +2404,6 @@ ALTER TABLE default_t1 ADD t1 time;
       "origin_table_name":"default_t1",
       "new_database_name":"defaultvalue",
       "origin_database_name":"defaultvalue",
-      "split_partition_name":"",
       "alter_table_schema": {
         "simple_table_schema": {
           "tenant_id":1,
@@ -2566,7 +2549,6 @@ ALTER TABLE default_t1 ADD t2 time not null;
       "origin_table_name":"default_t1",
       "new_database_name":"defaultvalue",
       "origin_database_name":"defaultvalue",
-      "split_partition_name":"",
       "alter_table_schema": {
         "simple_table_schema": {
           "tenant_id":1,
@@ -2712,7 +2694,6 @@ ALTER TABLE default_t1 ADD t3 time not null default 10;
       "origin_table_name":"default_t1",
       "new_database_name":"defaultvalue",
       "origin_database_name":"defaultvalue",
-      "split_partition_name":"",
       "alter_table_schema": {
         "simple_table_schema": {
           "tenant_id":1,
@@ -2858,7 +2839,6 @@ ALTER TABLE default_t1 ADD d1 date;
       "origin_table_name":"default_t1",
       "new_database_name":"defaultvalue",
       "origin_database_name":"defaultvalue",
-      "split_partition_name":"",
       "alter_table_schema": {
         "simple_table_schema": {
           "tenant_id":1,
@@ -3004,7 +2984,6 @@ ALTER TABLE default_t1 ADD d2 date not null;
       "origin_table_name":"default_t1",
       "new_database_name":"defaultvalue",
       "origin_database_name":"defaultvalue",
-      "split_partition_name":"",
       "alter_table_schema": {
         "simple_table_schema": {
           "tenant_id":1,
@@ -3150,7 +3129,6 @@ ALTER TABLE default_t1 ADD d3 date not null default '2015-07-16';
       "origin_table_name":"default_t1",
       "new_database_name":"defaultvalue",
       "origin_database_name":"defaultvalue",
-      "split_partition_name":"",
       "alter_table_schema": {
         "simple_table_schema": {
           "tenant_id":1,
@@ -3296,7 +3274,6 @@ ALTER TABLE default_t1 ADD dt1 datetime;
       "origin_table_name":"default_t1",
       "new_database_name":"defaultvalue",
       "origin_database_name":"defaultvalue",
-      "split_partition_name":"",
       "alter_table_schema": {
         "simple_table_schema": {
           "tenant_id":1,
@@ -3442,7 +3419,6 @@ ALTER TABLE default_t1 ADD dt2 datetime not null;
       "origin_table_name":"default_t1",
       "new_database_name":"defaultvalue",
       "origin_database_name":"defaultvalue",
-      "split_partition_name":"",
       "alter_table_schema": {
         "simple_table_schema": {
           "tenant_id":1,
@@ -3588,7 +3564,6 @@ ALTER TABLE default_t1 ADD dt3 datetime not null default '2015-07-16 10:10:30';
       "origin_table_name":"default_t1",
       "new_database_name":"defaultvalue",
       "origin_database_name":"defaultvalue",
-      "split_partition_name":"",
       "alter_table_schema": {
         "simple_table_schema": {
           "tenant_id":1,
@@ -3734,7 +3709,6 @@ ALTER TABLE default_t1 ADD n1 number;
       "origin_table_name":"default_t1",
       "new_database_name":"defaultvalue",
       "origin_database_name":"defaultvalue",
-      "split_partition_name":"",
       "alter_table_schema": {
         "simple_table_schema": {
           "tenant_id":1,
@@ -3880,7 +3854,6 @@ ALTER TABLE default_t1 ADD n2 number not null;
       "origin_table_name":"default_t1",
       "new_database_name":"defaultvalue",
       "origin_database_name":"defaultvalue",
-      "split_partition_name":"",
       "alter_table_schema": {
         "simple_table_schema": {
           "tenant_id":1,
@@ -4026,7 +3999,6 @@ ALTER TABLE default_t1 ADD n3 number not null default 1111;
       "origin_table_name":"default_t1",
       "new_database_name":"defaultvalue",
       "origin_database_name":"defaultvalue",
-      "split_partition_name":"",
       "alter_table_schema": {
         "simple_table_schema": {
           "tenant_id":1,
@@ -4172,7 +4144,6 @@ ALTER TABLE default_t1 ADD c1 char;
       "origin_table_name":"default_t1",
       "new_database_name":"defaultvalue",
       "origin_database_name":"defaultvalue",
-      "split_partition_name":"",
       "alter_table_schema": {
         "simple_table_schema": {
           "tenant_id":1,
@@ -4318,7 +4289,6 @@ ALTER TABLE default_t1 ADD c2 char not null;
       "origin_table_name":"default_t1",
       "new_database_name":"defaultvalue",
       "origin_database_name":"defaultvalue",
-      "split_partition_name":"",
       "alter_table_schema": {
         "simple_table_schema": {
           "tenant_id":1,
@@ -4464,7 +4434,6 @@ ALTER TABLE default_t1 ADD c3 char not null default 'x';
       "origin_table_name":"default_t1",
       "new_database_name":"defaultvalue",
       "origin_database_name":"defaultvalue",
-      "split_partition_name":"",
       "alter_table_schema": {
         "simple_table_schema": {
           "tenant_id":1,
@@ -4610,7 +4579,6 @@ ALTER TABLE default_t1 ADD b1 binary;
       "origin_table_name":"default_t1",
       "new_database_name":"defaultvalue",
       "origin_database_name":"defaultvalue",
-      "split_partition_name":"",
       "alter_table_schema": {
         "simple_table_schema": {
           "tenant_id":1,
@@ -4756,7 +4724,6 @@ ALTER TABLE default_t1 ADD b2 binary not null;
       "origin_table_name":"default_t1",
       "new_database_name":"defaultvalue",
       "origin_database_name":"defaultvalue",
-      "split_partition_name":"",
       "alter_table_schema": {
         "simple_table_schema": {
           "tenant_id":1,
@@ -4902,7 +4869,6 @@ ALTER TABLE default_t1 ADD b3 binary not null default 'xiyu@binary'
       "origin_table_name":"default_t1",
       "new_database_name":"defaultvalue",
       "origin_database_name":"defaultvalue",
-      "split_partition_name":"",
       "alter_table_schema": {
         "simple_table_schema": {
           "tenant_id":1,
@@ -5048,7 +5014,6 @@ ALTER TABLE default_t1 ADD vb1 varbinary(1000);
       "origin_table_name":"default_t1",
       "new_database_name":"defaultvalue",
       "origin_database_name":"defaultvalue",
-      "split_partition_name":"",
       "alter_table_schema": {
         "simple_table_schema": {
           "tenant_id":1,
@@ -5194,7 +5159,6 @@ ALTER TABLE default_t1 ADD vb2 varbinary(1000) not null;
       "origin_table_name":"default_t1",
       "new_database_name":"defaultvalue",
       "origin_database_name":"defaultvalue",
-      "split_partition_name":"",
       "alter_table_schema": {
         "simple_table_schema": {
           "tenant_id":1,
@@ -5340,7 +5304,6 @@ ALTER TABLE default_t1 ADD vb3 varbinary(1000) not null default 'xiyu@varbinary@
       "origin_table_name":"default_t1",
       "new_database_name":"defaultvalue",
       "origin_database_name":"defaultvalue",
-      "split_partition_name":"",
       "alter_table_schema": {
         "simple_table_schema": {
           "tenant_id":1,

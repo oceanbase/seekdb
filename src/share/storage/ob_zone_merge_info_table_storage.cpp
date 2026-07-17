@@ -116,17 +116,17 @@ int ObZoneMergeInfoTableStorage::insert_or_update(const ObZoneMergeInfo &zone_me
   return ret;
 }
 
-int ObZoneMergeInfoTableStorage::get(const uint64_t tenant_id, ObZoneMergeInfo &zone_merge_info)
+int ObZoneMergeInfoTableStorage::get(ObZoneMergeInfo &zone_merge_info)
 {
   int ret = OB_SUCCESS;
   if (!is_inited()) {
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
   } else {
-    // Reuse get_all since table is keyed only by tenant_id
+    // Reuse get_all since table is keyed only by tenant
     ObSEArray<ObZoneMergeInfo, 1> infos;
-    if (OB_FAIL(get_all(tenant_id, infos))) {
-      LOG_WARN("failed to get all zone merge infos", K(ret), K(tenant_id));
+    if (OB_FAIL(get_all(infos))) {
+      LOG_WARN("failed to get all zone merge infos", K(ret));
     } else if (infos.empty()) {
       ret = OB_ENTRY_NOT_EXIST;
     } else if (OB_FAIL(zone_merge_info.assign_value(infos.at(0)))) {
@@ -136,10 +136,9 @@ int ObZoneMergeInfoTableStorage::get(const uint64_t tenant_id, ObZoneMergeInfo &
   return ret;
 }
 
-int ObZoneMergeInfoTableStorage::get_all(const uint64_t tenant_id, ObIArray<ObZoneMergeInfo> &zone_merge_infos)
+int ObZoneMergeInfoTableStorage::get_all(ObIArray<ObZoneMergeInfo> &zone_merge_infos)
 {
   int ret = OB_SUCCESS;
-  UNUSED(tenant_id);
   zone_merge_infos.reset();
   if (!is_inited()) {
     ret = OB_NOT_INIT;
@@ -191,10 +190,9 @@ int ObZoneMergeInfoTableStorage::get_all(const uint64_t tenant_id, ObIArray<ObZo
   return ret;
 }
 
-int ObZoneMergeInfoTableStorage::remove(const uint64_t tenant_id)
+int ObZoneMergeInfoTableStorage::remove()
 {
   int ret = OB_SUCCESS;
-  UNUSED(tenant_id);
   if (!is_inited()) {
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));

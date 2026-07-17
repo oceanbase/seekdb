@@ -76,11 +76,11 @@ drop table if exists arr_t1;
 --enable_warnings
 create table arr_t1(c1 array(int), c2 array(bigint), c3 array(float), c4 array(double));
 select * from arr_t1;
-insert into arr_t1 values(array(1, 2, 3, 4, 5),
+insert into arr_t1 values(array(1, 2, 3, 4, 5), 
                           array(8589934592, 8592031744, 8592033792, 8592164864),
                           array(52314.234657, 5.123123, 0.0000000234, 10000),
                           array(52314.234657, 5.123123, 0.0000000234, 10000));
-insert into arr_t1 values(array(1.55, 2.23, 323.689, 4.88888, 5.0),
+insert into arr_t1 values(array(1.55, 2.23, 323.689, 4.88888, 5.0), 
                           array(1.55, 2.23, 323.689, 4.88888, 5.0),
                           array(8589934592, 8592031744, 8592033792, 8592164864),
                           array(1, 2, 3, 4, 5));
@@ -146,7 +146,7 @@ delete from arr_t1 where c1=2;
 select * from arr_t1;
 drop table arr_t1;
 
-# ctas
+# ctas 
 create table arr_t1(c1 int, arr1 array(int), vec1 vector(3), arr2 array(double));
 insert into arr_t1 values(1, [5, 2, null, 5], [2.1, 3.2, 4.3], [2.111144455, 3.444555666, null]);
 insert into arr_t1 values(2, [null, 2, 3, 5], [2.1, 3.2, 4.3], [null, 2.111144455, 3.444555666, null]);
@@ -207,23 +207,23 @@ CREATE TABLE arr_t1 (c1 int primary key, c2 int[],c3 float[],c4 varchar(25600000
 # nested array
 
 create table arr_t1(c1 int, c2 array(array(varchar(16))), c3 array(array(float)), c4 array(array(array(double))));
-insert into arr_t1 values(1, [["hello", "world"], [null, "hi"]],
+insert into arr_t1 values(1, [["hello", "world"], [null, "hi"]], 
                              [[5.55, 7.87, 44], [66, 123.67, null], [null, 3.1415, 289.33]],
                              [[[100, 3.1415926, 4.56, 7.88], [5.55, 7.87, 44]], [[null, 3.1415, 289.33],[2.111144455, 3.444555666, null]]]);
-insert into arr_t1 values(2, [null, [null, "hi"]],
+insert into arr_t1 values(2, [null, [null, "hi"]], 
                              [[5.55, 7.87, 44], null, [null, 3.1415, 289.33]],
                              [[[100, 3.1415926, 4.56, 7.88], [5.55, 7.87, 44]], null]);
-insert into arr_t1 values(3, [null, [null, null]],
+insert into arr_t1 values(3, [null, [null, null]], 
                              [null, null, [null, null, null]],
                              [[[null]]]);
-insert into arr_t1 values(3, [null, [null, null]],
+insert into arr_t1 values(3, [null, [null, null]], 
                              [null, null, [null, null, null]],
                              [[null,[null]]]);
 --error 7602
-insert into arr_t1 values(3, [null, [null, null]],
+insert into arr_t1 values(3, [null, [null, null]], 
                              [null, null, [null, null, null]],
                              [null]);
-insert into arr_t1 values(4, [["hello", "world"], [null, "hi"]],
+insert into arr_t1 values(4, [["hello", "world"], [null, "hi"]], 
                              [[5, 7, 44], [66, 123, null], [null, 31415, 28933]],
                              [[[100, 314, 456, 788], [555, 787, 44]], [[null, 31415, 28933],[2115, 3444, null]]]);
 
@@ -238,7 +238,7 @@ insert into arr_t1(c1, c2) values(5, [[5.55, 7.87, 44], [66, 123.67, null], [nul
 # cast array(string) to array(num) is allowed
 insert into arr_t1(c1, c3) values(6, [["5.55", "7.87", "44"], ["66", "123.67", null], [null, "3.1415", "289.33"]]);
 
-insert into arr_t1 values(7, "[[\"hello\", \"world\"], [null, \"hi\"]]",
+insert into arr_t1 values(7, "[[\"hello\", \"world\"], [null, \"hi\"]]", 
                              "[[5.55, 7.87, 44], [66, 123.67, null], [null, 3.1415, 289.33]]",
                              "[[[100, 3.1415926, 4.56, 7.88], [5.55, 7.87, 44]], [[null, 3.1415, 289.33],[2.111144455, 3.444555666, null]]]");
 
@@ -289,7 +289,6 @@ drop table arr_t1;
 
 --disable_warnings
 DROP TABLE if exists t1, t2;
-drop materialized view if exists mv1, mv2;
 --enable_warnings
 
 CREATE TABLE t1 (c1 int primary key, c2 vector(3),c3 vector(3) ,c4 vector(3));
@@ -298,12 +297,8 @@ insert into t1 values(2,'[1,0,3]','[1,0,3]','[2,3,2]');
 insert into t1 values(3,'[-1,2,2]','[-3,2,3]','[4,3,3]');
 insert into t1 values(4,'[-1,-2,-2]','[-4,2,3]',null);
 insert into t1 values(5,'[-1,-3,-2]',null,'[2,3,1]');
-create materialized view mv1  parallel 2 refresh complete on demand  as select * from t1;
 
-#select c1, c2 from mv1 union select c1,c2 from t1 order by c1;
-#select /*+parallel(2)*/c1, c2 from mv1 union select c1,c2 from t1 order by c1;
 drop table t1;
-drop materialized view mv1;
 
 CREATE TABLE t2 (c1 int primary key, c2 array(int),c3 array(int) ,c4 array(int));
 insert into t2 values(1,'[1,1,2]','[2,2,3]','[1,3,2]');
@@ -311,12 +306,9 @@ insert into t2 values(2,'[1,0,3]','[1,0,3]','[2,3,2]');
 insert into t2 values(3,'[-1,2,2]','[-3,2,3]','[4,3,3]');
 insert into t2 values(4,'[-1,-2,-2]','[-4,2,3]',null);
 insert into t2 values(5,'[-1,-3,-2]',null,'[2,3,1]');
-create materialized view mv2  parallel 2 refresh complete on demand  as select * from t2;
 
-#select c1, c2 from mv2 union select c1, c2 from t2 order by c1;
 #select /*+parallel(2)*/ c1, c2 from t2 union select c1, c2 from t2 order by c1;
 drop table t2;
-drop materialized view mv2;
 
 CREATE TABLE t1 (c1 int primary key, c2 vector(3),c3 vector(3) ,c4 vector(3));
 insert into t1 values(1,'[1,1,2]','[2,2,3]','[1,3,2]');
@@ -325,7 +317,7 @@ insert into t1 values(3,'[-1,2,2]','[-3,2,3]','[4,3,3]');
 select * from t1 order by l2_distance(c2,'[2,3,1.5]'),l2_distance(c3,'[2,10,2.5]');
 
 CREATE TABLE t2 (a1 int , a2 vector(3),a3 vector(3) ,a4 vector(3));
-insert into t2 select c1,c2,c3,c4 from t1;
+insert into t2 select c1,c2,c3,c4 from t1; 
 --error 5083
 select /*+NO_USE_HASH_SET(@"SET$1")*/* from t1 union  select * from t2 order by c1;
 update t1 set c4 = (select sum(c3) from t1), c3 = (select avg(c4) from t1)  where c1 = 3;

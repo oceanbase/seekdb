@@ -16,7 +16,8 @@
 
 #include <gtest/gtest.h>
 #define private public
-#include "lib/stat/ob_session_stat.h"
+#include "lib/stat/ob_diagnose_info.h"
+#include "lib/stat/ob_diagnostic_info_guard.h"   // ObDiagnosticInfo
 
 namespace oceanbase
 {

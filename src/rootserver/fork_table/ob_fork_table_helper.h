@@ -17,20 +17,22 @@
 #ifndef OCEANBASE_ROOTSERVER_OB_FORK_TABLE_HELPER_H_
 #define OCEANBASE_ROOTSERVER_OB_FORK_TABLE_HELPER_H_
 
+#include "share/ob_rpc_struct.h"
+#include "share/schema/ob_table_schema.h"
 #include "share/ob_autoincrement_service.h"
-#include "share/ob_fork_table_util.h"
+#include "rootserver/fork_table/ob_fork_table_util.h"
 #include "share/schema/ob_multi_version_schema_service.h"
 #include "share/schema/ob_schema_getter_guard.h"
 
 namespace oceanbase {
 namespace rootserver {
 
-int check_fork_table_supported(const ObTableSchema &src_table_schema,
-                               ObSchemaGetterGuard &schema_guard,
-                               const ObForkTableArg *fork_table_arg = nullptr);
+int check_fork_table_supported(const share::schema::ObTableSchema &src_table_schema,
+                               share::schema::ObSchemaGetterGuard &schema_guard,
+                               const obcall::ObForkTableArg *fork_table_arg = nullptr);
 
-int check_has_async_vector_index(const ObTableSchema &src_table_schema,
-                                 ObSchemaGetterGuard &schema_guard,
+int check_has_async_vector_index(const share::schema::ObTableSchema &src_table_schema,
+                                 share::schema::ObSchemaGetterGuard &schema_guard,
                                  bool &has_async_vec_index);
 
 // Helper class for fork table operations
@@ -41,11 +43,10 @@ public:
   ObForkTableHelper(
       share::schema::ObMultiVersionSchemaService &schema_service,
       common::ObMySQLProxy &sql_proxy, common::ObMySQLTransaction &trans,
-      share::schema::ObSchemaGetterGuard &schema_guard,
-      const uint64_t tenant_id, const share::ObForkTableInfo &fork_table_info,
+      share::schema::ObSchemaGetterGuard &schema_guard, const share::ObForkTableInfo &fork_table_info,
       const share::schema::ObTableSchema *dst_table_schema = nullptr)
       : schema_service_(schema_service), sql_proxy_(sql_proxy), trans_(trans),
-        schema_guard_(schema_guard), tenant_id_(tenant_id),
+        schema_guard_(schema_guard),
         fork_table_info_(fork_table_info), dst_table_schema_(dst_table_schema),
         src_table_schema_(nullptr), src_tablet_ids_(), dst_tablet_ids_(),
         inited_(false) {}
@@ -68,7 +69,6 @@ private:
   common::ObMySQLProxy &sql_proxy_;
   common::ObMySQLTransaction &trans_;
   share::schema::ObSchemaGetterGuard &schema_guard_;
-  const uint64_t tenant_id_;
   const share::ObForkTableInfo &fork_table_info_;
   const share::schema::ObTableSchema *dst_table_schema_;
   const share::schema::ObTableSchema *src_table_schema_;

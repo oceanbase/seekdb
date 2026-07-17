@@ -21,7 +21,7 @@
 #include "storage/blocksstable/ob_bloom_filter_cache.h"
 #include "storage/blocksstable/ob_datum_rowkey.h"
 #include "storage/blocksstable/ob_macro_block_id.h"
-#include "share/schema/ob_table_param.h"
+#include "storage/access/ob_table_param.h"
 #include "share/ob_encryption_util.h"
 #include "common/ob_store_format.h"
 #include "storage/blocksstable/ob_logic_macro_id.h"
@@ -63,7 +63,7 @@ public:
         K_(master_key_id), K_(encrypt_id), K_(encrypt_key), K_(row_store_type),
         K_(schema_version), K_(snapshot_version), K_(is_last_row_last_flag),
         K_(logic_id), K_(macro_id), K_(column_checksums), K_(has_string_out_row), K_(all_lob_in_row),
-        K_(agg_row_len), KP_(agg_row_buf), K_(ddl_end_row_offset), K_(macro_block_bf_size), KP_(macro_block_bf_buf));
+        K_(agg_row_len), KP_(agg_row_buf), K_(macro_block_bf_size), KP_(macro_block_bf_buf));
 
 private:
   DISALLOW_COPY_AND_ASSIGN(ObDataBlockMetaVal);
@@ -103,9 +103,6 @@ public:
   bool all_lob_in_row_;
   int64_t agg_row_len_; // size of agg_row_buf_
   const char *agg_row_buf_; // data buffer for pre aggregated row
-  // used for ddl sstable migration & backup rebuild sstable
-  // eg: if only one macro block with 100 rows, ddl_end_row_offset_ is 99.
-  int64_t ddl_end_row_offset_;
   /* -------------------------------- 4_3_5_1 -------------------------------- */
   int64_t macro_block_bf_size_;
   const char * macro_block_bf_buf_;

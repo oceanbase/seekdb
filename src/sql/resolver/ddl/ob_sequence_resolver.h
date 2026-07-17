@@ -45,7 +45,7 @@ public:
   }
   ~ObSequenceResolver() = default;
 public:
-  int resolve_sequence_options(uint64_t tenant_id, T *stmt, ParseNode *node);
+  int resolve_sequence_options(T *stmt, ParseNode *node);
 private:
   int resolve_sequence_option(T *stmt, ParseNode *node);
   int resolve_sequence_option_inner(ParseNode &option_node,
@@ -60,7 +60,7 @@ private:
 };
 
 template<class T>
-int ObSequenceResolver<T>::resolve_sequence_options(uint64_t tenant_id, T *stmt, ParseNode *node)
+int ObSequenceResolver<T>::resolve_sequence_options(T *stmt, ParseNode *node)
 {
   int ret = common::OB_SUCCESS;
   if (OB_LIKELY(node)) {

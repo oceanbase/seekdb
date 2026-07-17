@@ -28,7 +28,7 @@ class ObMemtableCtx;
 
 namespace transaction
 {
-class ObPartTransCtx;
+class ObTxCtx;
 
 enum TxELRState
 {
@@ -46,7 +46,7 @@ public:
   ObTxELRHandler() : elr_prepared_state_(ELR_INIT), mt_ctx_(NULL) {}
   void reset();
 
-  int check_and_early_lock_release(bool row_updated, ObPartTransCtx *ctx);
+  int check_and_early_lock_release(bool row_updated, ObTxCtx *ctx);
   void set_memtable_ctx(memtable::ObMemtableCtx *mt_ctx) { mt_ctx_ = mt_ctx; }
   memtable::ObMemtableCtx *get_memtable_ctx() const { return mt_ctx_; }
 

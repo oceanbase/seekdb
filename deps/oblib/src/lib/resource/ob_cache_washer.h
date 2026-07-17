@@ -33,9 +33,9 @@ public:
     ObCacheMemBlock *next_;
   };
 
-  virtual int sync_wash_mbs(const uint64_t tenant_id, const int64_t wash_size,
+  virtual int sync_wash_mbs(const int64_t wash_size,
                             ObCacheMemBlock *&wash_blocks) = 0;
-  virtual int erase_cache(const uint64_t tenant_id) = 0;
+  virtual int erase_cache() = 0;
 };
 
 class ObDefaultCacheWasher : public ObICacheWasher
@@ -43,17 +43,15 @@ class ObDefaultCacheWasher : public ObICacheWasher
   ObDefaultCacheWasher() {};
   virtual ~ObDefaultCacheWasher() {};
 
-  virtual int sync_wash_mbs(const uint64_t tenant_id, const int64_t wash_size,
+  virtual int sync_wash_mbs(const int64_t wash_size,
                             ObCacheMemBlock *&wash_blocks) override
   {
-    UNUSED(tenant_id);
     UNUSED(wash_size);
     UNUSED(wash_blocks);
     return common::OB_CACHE_FREE_BLOCK_NOT_ENOUGH;
   }
-  virtual int erase_cache(const uint64_t tenant_id) override
+  virtual int erase_cache() override
   {
-    UNUSED(tenant_id);
     return OB_SUCCESS;
   }
 };

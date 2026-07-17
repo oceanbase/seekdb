@@ -31,7 +31,7 @@ int ObPackageInfo::assign(const ObPackageInfo &package_info)
   int ret = OB_SUCCESS;
   if (this != &package_info) {
     reset();
-    set_tenant_id(package_info.get_tenant_id());
+    (void)0;
     database_id_ = package_info.database_id_;
     owner_id_ = package_info.owner_id_;
     package_id_ = package_info.package_id_;
@@ -63,7 +63,7 @@ bool ObPackageInfo::is_valid() const
   bool bret = false;
   bret = ObSchema::is_valid();
   if (bret) {
-    bret = tenant_id_ != OB_INVALID_ID
+    bret = true
         && !package_name_.empty()
         && type_ != INVALID_PACKAGE_TYPE
         && !source_.empty();
@@ -73,7 +73,6 @@ bool ObPackageInfo::is_valid() const
 
 void ObPackageInfo::reset()
 {
-  tenant_id_ = OB_INVALID_ID;
   database_id_ = OB_INVALID_ID;
   owner_id_ = OB_INVALID_ID;
   package_id_ = OB_INVALID_ID;
@@ -81,7 +80,7 @@ void ObPackageInfo::reset()
   schema_version_ = common::OB_INVALID_VERSION;
   type_ = INVALID_PACKAGE_TYPE;
   flag_ = 0;
-  comp_flag_ = 0;
+  comp_flag_ = COMPATIBLE_MYSQL_MODE;
   reset_string(exec_env_);
   reset_string(source_);
   reset_string(comment_);
@@ -112,7 +111,6 @@ OB_DEF_SERIALIZE(ObPackageInfo)
 {
   int ret = OB_SUCCESS;
   LST_DO_CODE(OB_UNIS_ENCODE,
-              tenant_id_,
               database_id_,
               owner_id_,
               package_id_,
@@ -131,7 +129,6 @@ OB_DEF_DESERIALIZE(ObPackageInfo)
 {
   int ret = OB_SUCCESS;
   LST_DO_CODE(OB_UNIS_DECODE,
-              tenant_id_,
               database_id_,
               owner_id_,
               package_id_,
@@ -150,7 +147,6 @@ OB_DEF_SERIALIZE_SIZE(ObPackageInfo)
 {
   int64_t len = 0;
   LST_DO_CODE(OB_UNIS_ADD_LEN,
-              tenant_id_,
               database_id_,
               owner_id_,
               package_id_,
@@ -167,7 +163,6 @@ OB_DEF_SERIALIZE_SIZE(ObPackageInfo)
 }  // namespace schema
 }  // namespace share
 }  // namespace oceanbase
-
 
 
 

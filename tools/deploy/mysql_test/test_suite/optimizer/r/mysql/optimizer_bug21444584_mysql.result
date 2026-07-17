@@ -45,7 +45,7 @@ Outputs & filters:
       asc
  10 - output([t1.a]), filter(nil), rowset=16
       access([t1.a]), partitions(p0)
-      is_index_back=false, is_global_index=false,
+      is_index_back=false, is_global_index=false, 
       range_key([t1.a], [t1.b], [t1.__pk_increment]), range(MIN,MIN,MIN ; MAX,MAX,MAX)always true
 select /*+parallel(4) index(t1 k1)*/ count(distinct a) from t1;
 +-------------------+
@@ -91,7 +91,7 @@ Outputs & filters:
   9 - output([t1.b]), filter(nil), rowset=16
  10 - output([t1.b]), filter(nil), rowset=16
       access([t1.b]), partitions(p0)
-      is_index_back=false, is_global_index=false,
+      is_index_back=false, is_global_index=false, 
       range_key([t1.a], [t1.b], [t1.__pk_increment]), range(MIN,MIN,MIN ; MAX,MAX,MAX)always true
 select /*+parallel(4) index(t1 k1)*/ count(distinct b) from t1;
 +-------------------+
@@ -139,7 +139,7 @@ Outputs & filters:
       asc
  10 - output([t1.a], [t1.b]), filter(nil), rowset=16
       access([t1.a], [t1.b]), partitions(p0)
-      is_index_back=false, is_global_index=false,
+      is_index_back=false, is_global_index=false, 
       range_key([t1.a], [t1.b], [t1.__pk_increment]), range(MIN,MIN,MIN ; MAX,MAX,MAX)always true
 select /*+parallel(4) index(t1 k1)*/ count(distinct a, b) from t1;
 +----------------------+
@@ -187,7 +187,7 @@ Outputs & filters:
       asc
  10 - output([t1.b], [t1.a]), filter(nil), rowset=16
       access([t1.b], [t1.a]), partitions(p0)
-      is_index_back=false, is_global_index=false,
+      is_index_back=false, is_global_index=false, 
       range_key([t1.a], [t1.b], [t1.__pk_increment]), range(MIN,MIN,MIN ; MAX,MAX,MAX)always true
 select /*+parallel(4) index(t1 k1)*/ count(distinct b, a) from t1;
 +----------------------+
@@ -233,7 +233,7 @@ Outputs & filters:
   9 - output([t1.a], [t1.b], [t1.c]), filter(nil), rowset=16
  10 - output([t1.a], [t1.b], [t1.c]), filter(nil), rowset=16
       access([t1.__pk_increment], [t1.a], [t1.b], [t1.c]), partitions(p0)
-      is_index_back=true, is_global_index=false,
+      is_index_back=true, is_global_index=false, 
       range_key([t1.a], [t1.b], [t1.__pk_increment]), range(MIN,MIN,MIN ; MAX,MAX,MAX)always true
 select /*+parallel(4) index(t1 k1)*/ count(distinct a, b, c) from t1;
 +-------------------------+
@@ -279,7 +279,7 @@ Outputs & filters:
   9 - output([t1.b], [t1.a], [t1.c]), filter(nil), rowset=16
  10 - output([t1.b], [t1.a], [t1.c]), filter(nil), rowset=16
       access([t1.__pk_increment], [t1.b], [t1.a], [t1.c]), partitions(p0)
-      is_index_back=true, is_global_index=false,
+      is_index_back=true, is_global_index=false, 
       range_key([t1.a], [t1.b], [t1.__pk_increment]), range(MIN,MIN,MIN ; MAX,MAX,MAX)always true
 select /*+parallel(4) index(t1 k1)*/ count(distinct b, a, c) from t1;
 +-------------------------+
@@ -319,7 +319,7 @@ Outputs & filters:
       distinct([t2.a])
   7 - output([t2.a]), filter(nil), rowset=16
       access([t2.a]), partitions(p[0-3])
-      is_index_back=false, is_global_index=false,
+      is_index_back=false, is_global_index=false, 
       range_key([t2.a], [t2.b], [t2.__pk_increment]), range(MIN,MIN,MIN ; MAX,MAX,MAX)always true
 select /*+index(t1 k1)*/ count(distinct a) from t2;
 +-------------------+
@@ -366,7 +366,7 @@ Outputs & filters:
       force partition granule
  10 - output([t2.b]), filter(nil), rowset=16
       access([t2.b]), partitions(p[0-3])
-      is_index_back=false, is_global_index=false,
+      is_index_back=false, is_global_index=false, 
       range_key([t2.a], [t2.b], [t2.__pk_increment]), range(MIN,MIN,MIN ; MAX,MAX,MAX)always true
 select /*+index(t1 k1)*/ count(distinct b) from t2;
 +-------------------+
@@ -405,7 +405,7 @@ Outputs & filters:
       distinct([t2.a], [t2.b])
   7 - output([t2.a], [t2.b]), filter(nil), rowset=16
       access([t2.a], [t2.b]), partitions(p[0-3])
-      is_index_back=false, is_global_index=false,
+      is_index_back=false, is_global_index=false, 
       range_key([t2.a], [t2.b], [t2.__pk_increment]), range(MIN,MIN,MIN ; MAX,MAX,MAX)always true
 select /*+index(t1 k1)*/ count(distinct a, b) from t2;
 +----------------------+
@@ -444,7 +444,7 @@ Outputs & filters:
       distinct([t2.a], [t2.b])
   7 - output([t2.a], [t2.b]), filter(nil), rowset=16
       access([t2.a], [t2.b]), partitions(p[0-3])
-      is_index_back=false, is_global_index=false,
+      is_index_back=false, is_global_index=false, 
       range_key([t2.a], [t2.b], [t2.__pk_increment]), range(MIN,MIN,MIN ; MAX,MAX,MAX)always true
 select /*+index(t1 k1)*/ count(distinct b, a) from t2;
 +----------------------+
@@ -483,7 +483,7 @@ Outputs & filters:
       distinct([t2.a], [t2.b], [t2.c])
   7 - output([t2.a], [t2.b], [t2.c]), filter(nil), rowset=16
       access([t2.a], [t2.b], [t2.c]), partitions(p[0-3])
-      is_index_back=false, is_global_index=false,
+      is_index_back=false, is_global_index=false, 
       range_key([t2.__pk_increment]), range(MIN ; MAX)always true
 select /*+index(t1 k1)*/ count(distinct a, b, c) from t2;
 +-------------------------+
@@ -522,7 +522,7 @@ Outputs & filters:
       distinct([t2.b], [t2.a], [t2.c])
   7 - output([t2.a], [t2.b], [t2.c]), filter(nil), rowset=16
       access([t2.a], [t2.b], [t2.c]), partitions(p[0-3])
-      is_index_back=false, is_global_index=false,
+      is_index_back=false, is_global_index=false, 
       range_key([t2.__pk_increment]), range(MIN ; MAX)always true
 select /*+index(t1 k1)*/ count(distinct b, a, c) from t2;
 +-------------------------+
@@ -546,7 +546,7 @@ Query Plan
 Outputs & filters:
 -------------------------------------
   0 - output(nil), filter(nil)
-      columns([{tmp: ({tmp: (tmp.__pk_increment, tmp.c1)})}]),
+      columns([{tmp: ({tmp: (tmp.__pk_increment, tmp.c1)})}]), 
       column_values([T_HIDDEN_PK], [column_conv(INT,PS:(11,0),NULL,__values.c1)])
   1 - output([__values.c1]), filter(nil)
       values({0}, {1}, {2}, {3}, {4}, {5}, {6}, {7}, {8}, {9})
@@ -566,8 +566,8 @@ Query Plan
 Outputs & filters:
 -------------------------------------
   0 - output(nil), filter(nil)
-      columns([{t: ({t: (t.__pk_increment, t.c1, t.c2)})}]), partitions(p[0-1]),
-      column_values([T_HIDDEN_PK], [column_conv(INT,PS:(11,0),NULL,cast(ANONYMOUS_VIEW1.t1.c1 + t2.c1, INT(-1, 0)))], [column_conv(INT,PS:(11,0),NULL,cast(ANONYMOUS_VIEW1.t2.c1
+      columns([{t: ({t: (t.__pk_increment, t.c1, t.c2)})}]), partitions(p[0-1]), 
+      column_values([T_HIDDEN_PK], [column_conv(INT,PS:(11,0),NULL,cast(ANONYMOUS_VIEW1.t1.c1 + t2.c1, INT(-1, 0)))], [column_conv(INT,PS:(11,0),NULL,cast(ANONYMOUS_VIEW1.t2.c1 
       + t1.c1, INT(-1, 0)))])
   1 - output([ANONYMOUS_VIEW1.t1.c1 + t2.c1], [ANONYMOUS_VIEW1.t2.c1 + t1.c1]), filter(nil), rowset=16
       access([ANONYMOUS_VIEW1.t1.c1 + t2.c1], [ANONYMOUS_VIEW1.t2.c1 + t1.c1])
@@ -575,12 +575,12 @@ Outputs & filters:
       conds(nil), nl_params_(nil), use_batch=false
   3 - output([t1.c1]), filter(nil), rowset=16
       access([t1.c1]), partitions(p0)
-      is_index_back=false, is_global_index=false,
+      is_index_back=false, is_global_index=false, 
       range_key([t1.__pk_increment]), range(MIN ; MAX)always true
   4 - output([t2.c1]), filter(nil), rowset=16
   5 - output([t2.c1]), filter(nil), rowset=16
       access([t2.c1]), partitions(p0)
-      is_index_back=false, is_global_index=false,
+      is_index_back=false, is_global_index=false, 
       range_key([t2.__pk_increment]), range(MIN ; MAX)always true
 insert into t select t1.c1 + t2.c1, t2.c1 + t1.c1 from tmp t1, tmp t2;
 alter system minor freeze;
@@ -625,7 +625,7 @@ Outputs & filters:
   9 - output([t.c2]), filter(nil), rowset=256
  10 - output([t.c2]), filter(nil), rowset=256
       access([t.c2]), partitions(p[0-1])
-      is_index_back=false, is_global_index=false,
+      is_index_back=false, is_global_index=false, 
       range_key([t.__pk_increment]), range(MIN ; MAX)always true
 select /*+parallel(8)*/ count(distinct c2) from t;
 +--------------------+
@@ -674,7 +674,7 @@ Outputs & filters:
  10 - output([t.c2]), filter(nil), rowset=256
  11 - output([t.c2]), filter(nil), rowset=256
       access([t.c2]), partitions(p[0-1])
-      is_index_back=false, is_global_index=false,
+      is_index_back=false, is_global_index=false, 
       range_key([t.__pk_increment]), range(MIN ; MAX)always true
 select /*+parallel(8)*/ count(distinct c2) from (select /*+no_merge*/ * from t) v;
 +--------------------+
@@ -727,7 +727,7 @@ Outputs & filters:
       distinct([t.c1], [t.c2])
  12 - output([t.c2], [t.c1]), filter(nil), rowset=256
       access([t.c2], [t.c1]), partitions(p[0-1])
-      is_index_back=false, is_global_index=false,
+      is_index_back=false, is_global_index=false, 
       range_key([t.c1], [t.c2], [t.__pk_increment]), range(MIN,MIN,MIN ; MAX,MAX,MAX)always true
 select /*+parallel(8)*/ count(distinct c2) from t group by c1;
 +--------------------+
@@ -777,8 +777,8 @@ Outputs & filters:
   4 - output([T_FUN_COUNT(t.c2)]), filter(nil), rowset=256
   5 - output([T_FUN_COUNT(t.c2)]), filter(nil), rowset=256
       access([t.c2]), partitions(p[0-1])
-      is_index_back=false, is_global_index=false,
-      range_key([t.__pk_increment]), range(MIN ; MAX)always true,
+      is_index_back=false, is_global_index=false, 
+      range_key([t.__pk_increment]), range(MIN ; MAX)always true, 
       pushdown_aggregation([T_FUN_COUNT(t.c2)])
 select /*+parallel(8)*/ count(c2) from t;
 +-----------+
@@ -816,7 +816,7 @@ Outputs & filters:
       group([t.c1]), agg_func([T_FUN_COUNT(t.c2)])
   7 - output([t.c2], [t.c1]), filter(nil), rowset=256
       access([t.c2], [t.c1]), partitions(p[0-1])
-      is_index_back=false, is_global_index=false,
+      is_index_back=false, is_global_index=false, 
       range_key([t.c1], [t.c2], [t.__pk_increment]), range(MIN,MIN,MIN ; MAX,MAX,MAX)always true
 select /*+parallel(8)*/ count(c2) from t group by c1;
 +-----------+
@@ -871,7 +871,7 @@ Outputs & filters:
   6 - output([t.c2], [t.c1 + 1]), filter(nil), rowset=256
   7 - output([t.c2], [t.c1 + 1]), filter(nil), rowset=256
       access([t.c2], [t.c1]), partitions(p[0-1])
-      is_index_back=false, is_global_index=false,
+      is_index_back=false, is_global_index=false, 
       range_key([t.__pk_increment]), range(MIN ; MAX)always true
 select /*+parallel(8)*/ count(c2) from t group by c1 + 1;
 +-----------+
@@ -937,7 +937,7 @@ Outputs & filters:
       distinct([t.c1])
  10 - output([t.c1]), filter(nil), rowset=256
       access([t.c1]), partitions(p[0-1])
-      is_index_back=false, is_global_index=false,
+      is_index_back=false, is_global_index=false, 
       range_key([t.c1], [t.c2], [t.__pk_increment]), range(MIN,MIN,MIN ; MAX,MAX,MAX)always true
 select /*+parallel(8)*/ count(distinct c1) from t;
 +--------------------+
@@ -975,7 +975,7 @@ Outputs & filters:
       group([t.c1]), agg_func(nil)
   7 - output([t.c1]), filter(nil), rowset=256
       access([t.c1]), partitions(p[0-1])
-      is_index_back=false, is_global_index=false,
+      is_index_back=false, is_global_index=false, 
       range_key([t.c1], [t.c2], [t.__pk_increment]), range(MIN,MIN,MIN ; MAX,MAX,MAX)always true
 select /*+parallel(8)*/ count(distinct c1) from t group by c1;
 +--------------------+
@@ -1025,8 +1025,8 @@ Outputs & filters:
   4 - output([T_FUN_COUNT(t.c1)]), filter(nil), rowset=256
   5 - output([T_FUN_COUNT(t.c1)]), filter(nil), rowset=256
       access([t.c1]), partitions(p[0-1])
-      is_index_back=false, is_global_index=false,
-      range_key([t.__pk_increment]), range(MIN ; MAX)always true,
+      is_index_back=false, is_global_index=false, 
+      range_key([t.__pk_increment]), range(MIN ; MAX)always true, 
       pushdown_aggregation([T_FUN_COUNT(t.c1)])
 select /*+parallel(8)*/ count(c1) from t;
 +-----------+
@@ -1064,7 +1064,7 @@ Outputs & filters:
       group([t.c1]), agg_func([T_FUN_COUNT(t.c1)])
   7 - output([t.c1]), filter(nil), rowset=256
       access([t.c1]), partitions(p[0-1])
-      is_index_back=false, is_global_index=false,
+      is_index_back=false, is_global_index=false, 
       range_key([t.c1], [t.c2], [t.__pk_increment]), range(MIN,MIN,MIN ; MAX,MAX,MAX)always true
 select /*+parallel(8)*/ count(c1) from t group by c1;
 +-----------+

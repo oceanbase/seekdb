@@ -41,12 +41,11 @@ void ObLightyCond::wait(const uint32_t cmp, const int64_t timeout)
 }
 
 int ObLightyQueue::init(const uint64_t capacity,
-                        const lib::ObLabel &label,
-                        const uint64_t tenant_id) {
+                        const lib::ObLabel &label) {
   int ret = OB_SUCCESS;
   uint64_t n_cond = calc_n_cond(capacity);
   ObMemAttr attr;
-  attr.tenant_id_ = tenant_id;
+  
   attr.label_ = label;
   if (is_inited()) {
     ret = OB_INIT_TWICE;
@@ -160,7 +159,6 @@ uint64_t ObLightyQueue::wait_push(uint64_t seq, int64_t timeout)
   uint32_t wait_id = get_cond(seq).get_seq();
   uint64_t push_idx = ATOMIC_LOAD(&push_);
   if (push_idx <= seq) {
-    ObBKGDSessInActiveGuard inactive_guard;
     get_cond(seq).wait(wait_id, timeout);
   }
   return push_idx;
@@ -201,9 +199,9 @@ void ObLightyQueue::store(uint64_t seq, void* p)
 
 static int64_t get_us() { return ::oceanbase::common::ObTimeUtility::current_time(); }
 
-int LightyQueue::init(const uint64_t capacity, const lib::ObLabel &label, const uint64_t tenant_id)
+int LightyQueue::init(const uint64_t capacity, const lib::ObLabel &label)
 {
-  ObMemAttr attr(tenant_id, label);
+  ObMemAttr attr(label);
   return queue_.init(capacity, global_default_allocator, attr);
 }
 

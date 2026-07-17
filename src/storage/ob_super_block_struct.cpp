@@ -30,8 +30,6 @@ using namespace oceanbase::share;
 
 const MacroBlockId ObServerSuperBlock::EMPTY_LIST_ENTRY_BLOCK(0, MacroBlockId::EMPTY_ENTRY_BLOCK_INDEX, 0);
 
-OB_SERIALIZE_MEMBER(ObTenantItem, tenant_id_, epoch_, status_);
-
 // ========================== ObServerSuperBlock ==============================
 
 ObServerSuperBlockHeader::ObServerSuperBlockHeader()
@@ -116,8 +114,6 @@ void ServerSuperBlockBody::reset()
   total_file_size_ = 0;
   replay_start_point_.reset();
   tenant_meta_entry_.reset();
-  auto_inc_tenant_epoch_ = 0;
-  tenant_cnt_ = 0;
 }
 
 OB_UNIS_SERIALIZE(ServerSuperBlockBody);                                         
@@ -128,8 +124,7 @@ int ServerSuperBlockBody::serialize_(char *buf, const int64_t buf_len, int64_t &
   int ret = OB_SUCCESS;
   LST_DO_CODE(OB_UNIS_ENCODE, create_timestamp_,
       modify_timestamp_, macro_block_size_, total_macro_block_count_, total_file_size_,
-      replay_start_point_, tenant_meta_entry_, auto_inc_tenant_epoch_);
-  OB_UNIS_ENCODE_ARRAY(tenant_item_arr_, tenant_cnt_);
+      replay_start_point_, tenant_meta_entry_);
   return ret;
 }
 int ServerSuperBlockBody::deserialize_(const char *buf, const int64_t data_len, int64_t &pos)
@@ -137,8 +132,7 @@ int ServerSuperBlockBody::deserialize_(const char *buf, const int64_t data_len, 
   int ret = OB_SUCCESS;
   LST_DO_CODE(OB_UNIS_DECODE, create_timestamp_,
       modify_timestamp_, macro_block_size_, total_macro_block_count_, total_file_size_,
-      replay_start_point_, tenant_meta_entry_, auto_inc_tenant_epoch_, tenant_cnt_);
-  OB_UNIS_DECODE_ARRAY(tenant_item_arr_, tenant_cnt_);
+      replay_start_point_, tenant_meta_entry_);
   return ret;
 }
 int64_t ServerSuperBlockBody::get_serialize_size_(void) const
@@ -146,8 +140,7 @@ int64_t ServerSuperBlockBody::get_serialize_size_(void) const
   int64_t len = 0;
   LST_DO_CODE(OB_UNIS_ADD_LEN, create_timestamp_,
       modify_timestamp_, macro_block_size_, total_macro_block_count_, total_file_size_,
-      replay_start_point_, tenant_meta_entry_, auto_inc_tenant_epoch_);
-  OB_UNIS_ADD_LEN_ARRAY(tenant_item_arr_, tenant_cnt_);
+      replay_start_point_, tenant_meta_entry_);
   return len;
 }
 
@@ -307,16 +300,14 @@ bool ObTenantSnapshotMeta::is_valid() const
 
 
 // ========================== ObTenantSuperBlock ==============================
-OB_SERIALIZE_MEMBER(ObLSItem, ls_id_, epoch_, status_, min_macro_seq_, max_macro_seq_);
-
 ObTenantSuperBlock::ObTenantSuperBlock()
 {
   reset();
 }
 
-ObTenantSuperBlock::ObTenantSuperBlock(const uint64_t tenant_id, const bool is_hidden)
-  : tenant_id_(tenant_id), is_hidden_(is_hidden), version_(TENANT_SUPER_BLOCK_VERSION),
-    snapshot_cnt_(0), auto_inc_ls_epoch_(0), ls_cnt_(0)
+ObTenantSuperBlock::ObTenantSuperBlock(const bool is_hidden)
+  : is_hidden_(is_hidden), version_(TENANT_SUPER_BLOCK_VERSION),
+    snapshot_cnt_(0), auto_inc_ls_epoch_(0)
 {
   SET_FIRST_VALID_SLOG_CURSOR(replay_start_point_);
   tablet_meta_entry_ = ObServerSuperBlock::EMPTY_LIST_ENTRY_BLOCK;
@@ -334,7 +325,7 @@ ObTenantSuperBlock::ObTenantSuperBlock(const ObTenantSuperBlock &other)
 
 void ObTenantSuperBlock::reset()
 {
-  tenant_id_ = OB_INVALID_TENANT_ID;
+  
   replay_start_point_.reset();
   ls_meta_entry_.reset();
   tablet_meta_entry_.reset();
@@ -343,7 +334,6 @@ void ObTenantSuperBlock::reset()
   snapshot_cnt_ = 0;
   preallocated_seqs_.reset();
   auto_inc_ls_epoch_ = 0;
-  ls_cnt_ = 0;
 }
 
 void ObTenantSuperBlock::copy_snapshots_from(const ObTenantSuperBlock &other)
@@ -356,15 +346,14 @@ void ObTenantSuperBlock::copy_snapshots_from(const ObTenantSuperBlock &other)
 
 bool ObTenantSuperBlock::is_valid() const
 {
-  bool is_valid = OB_INVALID_TENANT_ID != tenant_id_
+  bool is_valid = true
                   && replay_start_point_.is_valid()
                   && ls_meta_entry_.is_valid()
                   && tablet_meta_entry_.is_valid()
                   && version_ > MIN_SUPER_BLOCK_VERSION
-                  && (is_old_version() || IS_EMPTY_BLOCK_LIST(tablet_meta_entry_))
+                  && IS_EMPTY_BLOCK_LIST(tablet_meta_entry_)
                   && snapshot_cnt_ >= 0
-                  && auto_inc_ls_epoch_ >= 0
-                  && ls_cnt_ >= 0;
+                  && auto_inc_ls_epoch_ >= 0;
   return is_valid;
 }
 
@@ -468,7 +457,6 @@ int ObTenantSuperBlock::serialize_(char *buf, const int64_t buf_len, int64_t &po
 {
   int ret = OB_SUCCESS;
   LST_DO_CODE(OB_UNIS_ENCODE,
-      tenant_id_,
       replay_start_point_,
       ls_meta_entry_,
       tablet_meta_entry_,
@@ -476,9 +464,7 @@ int ObTenantSuperBlock::serialize_(char *buf, const int64_t buf_len, int64_t &po
       tenant_snapshots_,
       snapshot_cnt_,
       preallocated_seqs_,
-      auto_inc_ls_epoch_,
-      ls_item_arr_,
-      ls_cnt_);
+      auto_inc_ls_epoch_);
   return ret;
 }
 
@@ -489,7 +475,7 @@ int ObTenantSuperBlock::deserialize(const char *buf, const int64_t data_len, int
   OB_UNIS_DECODE(version_);
   OB_UNIS_DECODE(len);
   if (OB_SUCC(ret)) {
-    if (UNIS_VERSION < version_) {
+    if (UNIS_VERSION != version_) {
       ret = ::oceanbase::common::OB_NOT_SUPPORTED;
       LOG_WARN("ObTenantSuperBlock object version mismatch", K(ret), K_(version));
     } else if (len < 0) {
@@ -514,7 +500,7 @@ int ObTenantSuperBlock::deserialize_(const char *buf, const int64_t data_len, in
 {
   int ret = OB_SUCCESS;
   LST_DO_CODE(OB_UNIS_DECODE,
-      tenant_id_,
+      
       replay_start_point_,
       ls_meta_entry_,
       tablet_meta_entry_,
@@ -522,9 +508,7 @@ int ObTenantSuperBlock::deserialize_(const char *buf, const int64_t data_len, in
       tenant_snapshots_,
       snapshot_cnt_,
       preallocated_seqs_,
-      auto_inc_ls_epoch_,
-      ls_item_arr_,
-      ls_cnt_);
+      auto_inc_ls_epoch_);
   return ret;
 }
 
@@ -539,7 +523,6 @@ int64_t ObTenantSuperBlock::get_serialize_size_(void) const
 {
   int64_t len = 0;
   LST_DO_CODE(OB_UNIS_ADD_LEN,
-      tenant_id_,
       replay_start_point_,
       ls_meta_entry_,
       tablet_meta_entry_,
@@ -547,40 +530,10 @@ int64_t ObTenantSuperBlock::get_serialize_size_(void) const
       tenant_snapshots_,
       snapshot_cnt_,
       preallocated_seqs_,
-      auto_inc_ls_epoch_,
-      ls_item_arr_,
-      ls_cnt_);
+      auto_inc_ls_epoch_);
   return len;
 }
 
-
-OB_SERIALIZE_MEMBER(ObActiveTabletItem, tablet_id_,  union_id_);
-
-ObActiveTabletItem::ObActiveTabletItem() : 
-  tablet_id_(ObTabletID::INVALID_TABLET_ID), 
-  union_id_(0)
-{}
-ObActiveTabletItem::ObActiveTabletItem(const common::ObTabletID tablet_id, const int64_t union_id)
-  : tablet_id_(tablet_id), union_id_(union_id) {}
-
-
-
-OB_SERIALIZE_MEMBER(ObLSActiveTabletArray, items_);
-
-
-OB_SERIALIZE_MEMBER(ObPendingFreeTabletItem, tablet_id_, tablet_meta_version_, status_, free_time_, gc_type_, tablet_transfer_seq_);
-OB_SERIALIZE_MEMBER(ObLSPendingFreeTabletArray, items_);
-
-int ObLSPendingFreeTabletArray::assign(const ObLSPendingFreeTabletArray &other)
-{
-  int ret = OB_SUCCESS;
-  if (OB_FAIL(items_.assign(other.items_))) {
-    LOG_WARN("fail to assign items", K(ret));
-  }
-  return ret;
-}
-
-OB_SERIALIZE_MEMBER(ObPrivateTabletCurrentVersion, tablet_addr_);
 
 }  // end namespace storage
 }  // end namespace oceanbase

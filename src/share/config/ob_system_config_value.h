@@ -24,11 +24,13 @@ namespace oceanbase
 {
 namespace common
 {
-class ObSystemConfigValue
+class ObSystemConfigValue final
 {
 public:
   ObSystemConfigValue();
-  virtual ~ObSystemConfigValue() {}
+  ~ObSystemConfigValue() = default;
+
+  void reset();
 
   void set_value(const char *value);
   void set_value(const ObString &value);
@@ -60,6 +62,10 @@ private:
 };
 
 inline ObSystemConfigValue::ObSystemConfigValue()
+{
+  reset();
+}
+inline void ObSystemConfigValue::reset()
 {
   MEMSET(value_, 0, OB_MAX_CONFIG_VALUE_LEN);
   MEMSET(info_, 0, OB_MAX_CONFIG_INFO_LEN);

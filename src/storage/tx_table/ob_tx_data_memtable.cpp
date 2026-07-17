@@ -61,7 +61,6 @@ int ObTxDataMemtable::init(const ObITable::TableKey &table_key,
       occupied_size_[i] = 0;
       total_undo_node_cnt_[i] = 0;
     }
-    ls_id_ = freezer_->get_ls_id();
     construct_list_done_ = false;
     pre_process_done_ = false;
     do_recycle_ = false;
@@ -109,7 +108,7 @@ int ObTxDataMemtable::init_tx_data_map_(const int64_t buckets_cnt)
 void ObTxDataMemtable::init_arena_allocator_()
 {
   ObMemAttr attr;
-  attr.tenant_id_ = MTL_ID();
+  
   attr.label_ = "MEMTABLE_ARENA";
   attr.ctx_id_ = ObCtxIds::TX_DATA_TABLE;
   arena_allocator_.set_attr(attr);
@@ -148,7 +147,6 @@ void ObTxDataMemtable::reset()
   DEBUG_last_start_scn_ = SCN::min_scn();
   stat_change_ts_.reset();
   is_inited_ = false;
-  reset_trace_id();
 }
 
 int ObTxDataMemtable::insert(ObTxData *tx_data)
@@ -186,7 +184,6 @@ int ObTxDataMemtable::insert(ObTxData *tx_data)
       if (tx_data->op_guard_->get_undo_status_list().undo_node_cnt_ == 10 || tx_data->op_guard_->get_undo_status_list().undo_node_cnt_ % 100 == 0) {
         STORAGE_LOG(INFO,
                     "attention! this tx write too many rollback to savepoint log",
-                    "ls_id", get_ls_id(),
                     "tx_id", tx_data->tx_id_,
                     "state", ObTxData::get_state_string(tx_data->state_),
                     "undo_node_cnt", tx_data->op_guard_->get_undo_status_list().undo_node_cnt_,
@@ -272,7 +269,6 @@ int ObTxDataMemtable::pre_process_for_merge()
   STORAGE_LOG(INFO,
               "[TX DATA MERGE]pre process for merge done",
               KR(ret),
-              K(get_ls_id()),
               KP(this),
               K(tg),
               K(fake_tx_data_guard),
@@ -350,8 +346,7 @@ int ObTxDataMemtable::pre_process_commit_version_row_(ObTxData *fake_tx_data)
   } else {
     do_recycle_ = true;
   }
-  STORAGE_LOG(
-      INFO, "pre-process commit versions row", K(get_ls_id()), K(do_recycle_), K(current_time), K(prev_recycle_time));
+  STORAGE_LOG(INFO, "pre-process commit versions row", K(do_recycle_), K(current_time), K(prev_recycle_time));
 
   if (OB_FAIL(fill_in_cur_commit_versions_(cur_commit_versions)/*step 1*/)) {
     STORAGE_LOG(WARN, "periodical select commit version failed.", KR(ret));
@@ -502,7 +497,7 @@ int ObTxDataMemtable::get_past_commit_versions_(ObCommitVersionsArray &past_comm
       ObSSTable *tmp_sstable = nullptr;
       if (sstable->is_loaded()) {
         tmp_sstable = sstable;
-      } else if (OB_FAIL(ObCacheSSTableHelper::load_sstable(sstable->get_addr(), sstable->is_co_sstable(), sstable_handle))) {
+      } else if (OB_FAIL(ObCacheSSTableHelper::load_sstable(sstable->get_addr(), sstable_handle))) {
         STORAGE_LOG(WARN, "fail to load sstable", K(ret), KPC(sstable));
       } else if (OB_FAIL(sstable_handle.get_sstable(tmp_sstable))) {
         STORAGE_LOG(WARN, "fail to get sstable", K(ret), K(sstable_handle));
@@ -920,10 +915,10 @@ bool ObTxDataMemtable::ready_for_flush()
     bool_ret = true;
     STORAGE_LOG(INFO, "memtable is frozen yet.", KP(this));
   } else if (OB_FAIL(freezer_->get_max_consequent_callbacked_scn(max_consequent_callbacked_scn))) {
-    STORAGE_LOG(WARN, "get_max_consequent_callbacked_scn failed", K(ret), K(get_ls_id()));
+    STORAGE_LOG(WARN, "get_max_consequent_callbacked_scn failed", K(ret));
   } else if (max_consequent_callbacked_scn >= key_.scn_range_.end_scn_) {
     state_ = ObTxDataMemtable::State::FROZEN;
-    STORAGE_LOG(INFO, "[TX DATA MERGE]tx data memtable is frozen", K(get_ls_id()), KP(this));
+    STORAGE_LOG(INFO, "[TX DATA MERGE]tx data memtable is frozen", KP(this));
     set_snapshot_version(get_min_tx_scn());
     bool_ret = true;
     stat_change_ts_.ready_for_flush_time_ = ObTimeUtil::fast_current_time();
@@ -947,27 +942,22 @@ bool ObTxDataMemtable::ready_for_flush()
   return bool_ret;
 }
 
-int ObTxDataMemtable::flush(const int64_t trace_id)
+int ObTxDataMemtable::flush()
 {
   int ret = OB_SUCCESS;
   compaction::ObTabletMergeDagParam param;
-  param.ls_id_ = freezer_->get_ls_id();
   param.tablet_id_ = key_.tablet_id_;
   param.merge_type_ = compaction::MINI_MERGE;
   param.merge_version_ = ObVersionRange::MIN_VERSION;
-  set_trace_id(trace_id);
   if (OB_FAIL(compaction::ObScheduleDagFunc::schedule_tx_table_merge_dag(param, true /* is_emergency */))) {
     if (OB_EAGAIN != ret && OB_SIZE_OVERFLOW != ret) {
-      STORAGE_LOG(WARN, "failed to schedule tablet merge dag", K(ret));
+      STORAGE_LOG(ERROR, "failed to schedule tablet merge dag", K(ret));
     }
   } else {
-    REPORT_CHECKPOINT_DIAGNOSE_INFO(update_schedule_dag_info, this, get_rec_scn(), 
-        get_start_scn(), get_end_scn());
     stat_change_ts_.create_flush_dag_time_ = ObTimeUtil::fast_current_time();
     STORAGE_LOG(INFO,
                 "[TX DATA MERGE]schedule flush tx data memtable task done",
                 KR(ret),
-                K(get_ls_id()),
                 KP(this),
                 K(param),
                 KPC(this));
@@ -1092,11 +1082,6 @@ int ObTxDataMemtable::cmp_key_(const int64_t &lhs, const int64_t &rhs)
   return int_ret;
 }
 
-share::ObLSID ObTxDataMemtable::get_ls_id() const
-{
-  return OB_ISNULL(freezer_) ? share::ObLSID(ObLSID::INVALID_LS_ID) : freezer_->get_ls_id();
-}
-
 int ObTxDataMemtable::dump2text(const char *fname)
 {
   int ret = OB_SUCCESS;
@@ -1116,9 +1101,6 @@ int ObTxDataMemtable::dump2text(const char *fname)
     ret = OB_IO_ERROR;
     STORAGE_LOG(WARN, "open file fail:", K(fname));
   } else {
-    int64_t ls_id = freezer_->get_ls_id().id();
-    int64_t tenant_id = MTL_ID();
-    fprintf(fd, "tenant_id=%ld ls_id=%ld\n", tenant_id, ls_id);
     ObCStringHelper helper;
     const char *key_ptr = NULL;
     const char *min_tx_scn_ptr = NULL;
@@ -1225,8 +1207,7 @@ void ObTxDataMemtable::DEBUG_print_start_scn_list_(const char* fname)
     ret = OB_IO_ERROR;
     STORAGE_LOG(WARN, "open file fail:", K(real_fname));
   } else {
-    int64_t tenant_id = MTL_ID();
-    fprintf(fd, "tenant_id=%ld \n", tenant_id);
+    
     ObTxData *cur_node = get_sorted_list_head()->next_;
     while (OB_NOT_NULL(cur_node)) {
       ObTxData *tx_data = cur_node;
@@ -1266,8 +1247,7 @@ void ObTxDataMemtable::DEBUG_print_merged_commit_versions_(ObCommitVersionsArray
     ret = OB_IO_ERROR;
     STORAGE_LOG(WARN, "open file fail:", K(real_fname));
   } else {
-    int64_t tenant_id = MTL_ID();
-    fprintf(fd, "tenant_id=%ld \n", tenant_id);
+    
     for (int i = 0; i < array.count(); i++) {
       ObCStringHelper helper;
       fprintf(fd,

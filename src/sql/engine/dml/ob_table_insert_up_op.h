@@ -94,7 +94,7 @@ public:
                         MY_SPEC.conflict_checker_ctdef_),
       insert_up_row_store_("InsertUpRow"),
       is_ignore_(false),
-      gts_state_(WITHOUT_GTS_OPT_STATE),
+      snapshot_state_(WITHOUT_SNAPSHOT_OPT_STATE),
       has_guarantee_last_insert_id_(false)
   {
   }
@@ -245,7 +245,7 @@ protected:
   common::ObArrayWrap<ObInsertUpRtDef> insert_up_rtdefs_;
   ObChunkDatumStore insert_up_row_store_; // All the rows of insert_up collection
   bool is_ignore_; // temporarily record whether it is an ignore insert_up SQL statement
-  ObDmlGTSOptState gts_state_;
+  ObDmlSnapshotOptState snapshot_state_;
   bool has_guarantee_last_insert_id_;
 };
 } // end namespace sql

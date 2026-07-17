@@ -1233,21 +1233,18 @@ int ObNFMBase::process_fillmode(char *buf, const int64_t buf_len, int64_t &pos) 
   return ret;
 }
 
-int ObNFMBase::get_nls_currency(const ObSQLSessionInfo &session)
+int ObNFMBase::get_currency_symbol(const ObSQLSessionInfo &session)
 {
   int ret = OB_SUCCESS;
+  UNUSED(session);
+  static const ObString DEFAULT_ISO_CURRENCY_SYMBOL("USD");
+  static const ObString DEFAULT_CURRENCY_SYMBOL("$");
   if (ObNFMElem::has_type(NFM_C_FLAG, fmt_desc_.elem_flag_)) {
-    fmt_desc_.nls_currency_ = session.get_iso_nls_currency();
+    fmt_desc_.currency_symbol_ = DEFAULT_ISO_CURRENCY_SYMBOL;
   } else if (ObNFMElem::has_type(NFM_L_FLAG, fmt_desc_.elem_flag_)) {
-    if (OB_FAIL(session.get_sys_variable(share::SYS_VAR_NLS_CURRENCY,
-                fmt_desc_.nls_currency_))) {
-      LOG_WARN("fail to get sys variable", K(ret));
-    }
+    fmt_desc_.currency_symbol_ = DEFAULT_CURRENCY_SYMBOL;
   } else if (ObNFMElem::has_type(NFM_U_FLAG, fmt_desc_.elem_flag_)) {
-    if (OB_FAIL(session.get_sys_variable(share::SYS_VAR_NLS_DUAL_CURRENCY,
-                fmt_desc_.nls_currency_))) {
-      LOG_WARN("fail to get sys variable", K(ret));
-    }
+    fmt_desc_.currency_symbol_ = DEFAULT_CURRENCY_SYMBOL;
   }
   return ret;
 }
@@ -1255,10 +1252,9 @@ int ObNFMBase::get_nls_currency(const ObSQLSessionInfo &session)
 int ObNFMBase::get_iso_grouping(const ObSQLSessionInfo &session)
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(session.get_sys_variable(share::SYS_VAR_NLS_NUMERIC_CHARACTERS,
-                     fmt_desc_.iso_grouping_))) {
-    LOG_WARN("fail to get sys variable", K(ret));
-  }
+  UNUSED(session);
+  static const ObString DEFAULT_NUMERIC_CHARACTERS(".,");
+  fmt_desc_.iso_grouping_ = DEFAULT_NUMERIC_CHARACTERS;
   return ret;
 }
 
@@ -1486,7 +1482,7 @@ int ObNFMBase::cast_obj_to_num_str(
   }
   if (OB_SUCC(ret)) {
     num_str.assign_ptr(num_str_buf, static_cast<int32_t>(num_str_len));
-    // is if "-0", special treatment for compatible with oracle
+    // Preserve the negative sign when formatting negative zero.
     // eg: to_char(-0.4000,  '0000') --> -0000
     if (is_zero(num_str)) {
       int32_t pos = 0;
@@ -1865,7 +1861,7 @@ int ObNFMToChar::process_tm_format(const ObNFMObj &nfm_obj, const int64_t in_sca
         MEMCPY(buf, num_str_buf, num_str_len);
         pos += num_str_len;
       } else if (num_str_len > 64) {
-        if (lib::is_mysql_mode()) {
+        {
           // remove '0' before '.'
           if (num_str_len > 2 && 0 == MEMCMP(num_str_buf, "0.", 2)) {
             MEMMOVE(num_str_buf, num_str_buf + 1, num_str_len - 1);
@@ -1926,7 +1922,7 @@ int ObNFMToChar::process_tme_format(const ObNFMObj &nfm_obj, const int64_t in_sc
       LOG_WARN("invalid obj type", K(ret), K(obj_type));
     }
     if (OB_SUCC(ret)) {
-      if (lib::is_mysql_mode()) {
+      {
         // remove '0' before '.'
         if (num_str_len > 2 && 0 == MEMCMP(num_str_buf, "0.", 2)) {
           MEMMOVE(num_str_buf, num_str_buf + 1, num_str_len - 1);
@@ -2152,7 +2148,7 @@ int ObNFMToChar::process_output_fmt(const common::ObString &str,
         case ObNFMElem::NFM_L:
         case ObNFMElem::NFM_U:
           ret = databuff_printf(buf, buf_len, pos, "%.*s",
-                                fmt_desc_.nls_currency_.length(), fmt_desc_.nls_currency_.ptr());
+                                fmt_desc_.currency_symbol_.length(), fmt_desc_.currency_symbol_.ptr());
           if (OBNFMDesc::MIDDLE_POS == fmt_desc_.currency_appear_pos_) {
             // if the element('C', 'L', 'U') appears in the middle, it will be regarded as the
             // decimal point, so the iso currency symbol is used to replace the decimal point
@@ -2291,8 +2287,8 @@ int ObNFMToChar::process_fmt_conv(const ObSQLSessionInfo &session,
       }
       if (!is_overflow) {
         if (OB_SUCC(ret) && ObNFMElem::has_currency_group(fmt_desc_.elem_flag_)
-            && OB_FAIL(get_nls_currency(session))) {
-          LOG_WARN("fail to get nls currency", K(ret));
+            && OB_FAIL(get_currency_symbol(session))) {
+          LOG_WARN("fail to get currency symbol", K(ret));
         }
         if (OB_SUCC(ret) && ObNFMElem::has_iso_grouping_group(fmt_desc_.elem_flag_)
             && OB_FAIL(get_iso_grouping(session))) {
@@ -2741,9 +2737,9 @@ int ObNFMToNumber::process_output_fmt(const ObString &in_str,
               // do nothing
             } else {
               if ((str[str_pos] != '.'
-                  && (str_len - str_pos < fmt_desc_.nls_currency_.length()
-                  || (0 != strncasecmp(str + str_pos, fmt_desc_.nls_currency_.ptr(),
-                  fmt_desc_.nls_currency_.length()))))
+                  && (str_len - str_pos < fmt_desc_.currency_symbol_.length()
+                  || (0 != strncasecmp(str + str_pos, fmt_desc_.currency_symbol_.ptr(),
+                  fmt_desc_.currency_symbol_.length()))))
                   || (ObNFMElem::has_type(NFM_S_FLAG, fmt_desc_.elem_flag_)
                   && OBNFMDesc::LAST_POS == fmt_desc_.sign_appear_pos_)) {
                 // eg: to_number('23$00+', '99L99S') --> error 1722
@@ -2754,7 +2750,7 @@ int ObNFMToNumber::process_output_fmt(const ObString &in_str,
                 if (str[str_pos] == '.') {
                   ++str_pos;
                 } else {
-                  str_pos += fmt_desc_.nls_currency_.length();
+                  str_pos += fmt_desc_.currency_symbol_.length();
                 }
                 // if the element('C', 'L', 'U') appears in the middle, it will be regarded as the
                 // decimal point, so use decimal point to replace the iso currency
@@ -2762,14 +2758,14 @@ int ObNFMToNumber::process_output_fmt(const ObString &in_str,
               }
             }
           } else {
-            if (str_pos >= str_len || str_len - str_pos < fmt_desc_.nls_currency_.length()
-              || (0 != strncasecmp(str + str_pos, fmt_desc_.nls_currency_.ptr(),
-              fmt_desc_.nls_currency_.length()))) {
+            if (str_pos >= str_len || str_len - str_pos < fmt_desc_.currency_symbol_.length()
+              || (0 != strncasecmp(str + str_pos, fmt_desc_.currency_symbol_.ptr(),
+              fmt_desc_.currency_symbol_.length()))) {
               ret = OB_ERR_CAST_VARCHAR_TO_NUMBER;
               LOG_WARN("fmt does not match", K(ret), K(in_str), K_(fmt_str),
               K(str_pos), K(i));
             } else {
-              str_pos += fmt_desc_.nls_currency_.length();
+              str_pos += fmt_desc_.currency_symbol_.length();
             }
           }
           break;
@@ -2856,8 +2852,8 @@ int ObNFMToNumber::process_fmt_conv(const ObSQLSessionInfo &session,
     }
     if (OB_FAIL(ret)) {
     } else if (ObNFMElem::has_currency_group(fmt_desc_.elem_flag_)
-               && OB_FAIL(get_nls_currency(session))) {
-      LOG_WARN("fail to get nls currency", K(ret));
+               && OB_FAIL(get_currency_symbol(session))) {
+      LOG_WARN("fail to get currency symbol", K(ret));
     } else if (ObNFMElem::has_iso_grouping_group(fmt_desc_.elem_flag_)
                && OB_FAIL(get_iso_grouping(session))) {
       LOG_WARN("fail to get iso grouping", K(ret));

@@ -138,10 +138,6 @@ public:
   int get_next_macro_block(MacroBlockId &macro_block_id, int64_t &start_row_offset);
   int get_next_macro_block(blocksstable::ObMacroBlockDesc &block_desc) override;
   int get_next_idx_row(ObIAllocator &item_allocator, ObMicroIndexRowItem &macro_index_item, int64_t &row_offset, bool &reach_cursor_end);
-  int get_cs_range(
-      const ObITableReadInfo &rowkey_read_info,
-      const bool is_start,
-      ObCSRange &cs_range);
   bool is_iter_end() const { return is_iter_end_; }
   virtual const ObIArray<blocksstable::ObMicroIndexInfo> &get_micro_index_infos() const override
   {

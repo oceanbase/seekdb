@@ -21,6 +21,7 @@
 #include <vsag/logger.h>
 #include <vsag/iterator_context.h>
 #include <fstream>
+#include <string>
 #include "lib/allocator/page_arena.h"
 #include "lib/vector/ob_vsag_adaptor.h"
 
@@ -28,6 +29,8 @@ namespace oceanbase {
 namespace common {
 
 namespace obvectorutil {
+
+typedef obvsag::CreateIndexParam CreateIndexParam;
 
 class ObVsagLogger : public vsag::Logger {
     public:
@@ -61,6 +64,8 @@ int create_index(obvsag::VectorIndexPtr& index_handler, int index_type,
                  void* allocator = NULL, int extra_info_size = 0,
                  int16_t refine_type = 0, int16_t bq_bits_query = 32,
                  bool bq_use_fht = false);
+
+int validate_create_index(const CreateIndexParam &param, std::string &err_msg);
 
 int create_index(obvsag::VectorIndexPtr &index_handler, int index_type, const char *dtype, const char *metric,
     bool use_reorder, float doc_prune_ratio, int window_size, void *allocator = NULL, int extra_info_size = 0);

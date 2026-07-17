@@ -19,14 +19,12 @@ using namespace oceanbase::sql;
 using namespace oceanbase::common;
 
 ObDropUserStmt::ObDropUserStmt(ObIAllocator *name_pool)
-    : ObDDLStmt(name_pool, stmt::T_DROP_USER),
-      tenant_id_(OB_INVALID_ID)
+    : ObDDLStmt(name_pool, stmt::T_DROP_USER)
 {
 }
 
 ObDropUserStmt::ObDropUserStmt()
-    : ObDDLStmt(NULL, stmt::T_DROP_USER),
-      tenant_id_(OB_INVALID_ID)
+    : ObDDLStmt(NULL, stmt::T_DROP_USER)
 {
 }
 

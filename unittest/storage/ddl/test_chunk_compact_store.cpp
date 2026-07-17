@@ -44,6 +44,17 @@ int64_t RESULT_ADD[6] = {0,0,0,0,0,0};
 int64_t RESULT_BUILD[6] = {0,0,0,0,0,0};
 static ObSimpleMemLimitGetter getter;
 
+// Single-tenant seekdb: ObTenantBase module slots are gone; route the test's
+// ObTenantIOManager / ObTenantTmpFileManager through share::g_mp.
+class FakeModuleProvider : public share::ObIModuleProvider
+{
+public:
+  common::ObTenantIOManager *tenant_io_manager() override { return io_manager_; }
+  tmp_file::ObTenantTmpFileManager *tenant_tmp_file_manager() override { return tmp_file_mgr_; }
+  common::ObTenantIOManager *io_manager_ = nullptr;
+  tmp_file::ObTenantTmpFileManager *tmp_file_mgr_ = nullptr;
+};
+
 typedef ObChunkDatumStore::StoredRow StoredRow;
 //typedef ObChunkDatumStore::Block Block;
 typedef ObTempBlockStore::Block Block;
@@ -178,15 +189,10 @@ public:
   {
     int ret = OB_SUCCESS;
     ObAddr self;
-    obrpc::ObSrvRpcProxy rpc_proxy;
-    obrpc::ObCommonRpcProxy rs_rpc_proxy;
     self.set_ip_addr("127.0.0.1", 8086);
-    rpc::frame::ObReqTransport req_transport(NULL, NULL);
     const int64_t ulmt = 128LL << 30;
     const int64_t llmt = 128LL << 30;
-    ret = getter.add_tenant(OB_SYS_TENANT_ID, ulmt, llmt);
-    EXPECT_EQ(OB_SUCCESS, ret);
-    ret = getter.add_tenant(OB_SERVER_TENANT_ID, ulmt, llmt);
+    ret = getter.add_tenant(ulmt, llmt);
     EXPECT_EQ(OB_SUCCESS, ret);
     lib::set_memory_limit(128LL << 32);
     return ret;
@@ -203,8 +209,7 @@ void TestCompactChunk::SetUp()
   const int64_t max_cache_size = 1024 * 1024 * 1024;
   const int64_t block_size = common::OB_MALLOC_BIG_BLOCK_SIZE;
   TestDataFilePrepare::SetUp();
-  ret = getter.add_tenant(1,
-                          8LL * 1024 * 1024, 2LL * 1024 * 1024 * 1024);
+  ret = getter.add_tenant(8LL * 1024 * 1024, 2LL * 1024 * 1024 * 1024);
   ASSERT_EQ(OB_SUCCESS, ret);
   ret = ObKVGlobalCache::get_instance().init(&getter, bucket_num, max_cache_size, block_size);
   if (OB_INIT_TWICE == ret) {
@@ -221,20 +226,22 @@ void TestCompactChunk::SetUp()
   ASSERT_EQ(OB_SUCCESS, tmp_file::ObTmpPageCache::get_instance().init("sn_tmp_page_cache"));
   ASSERT_EQ(OB_SUCCESS, ObTimerService::get_instance().start());
 
-  static ObTenantBase tenant_ctx(OB_SYS_TENANT_ID);
+  static ObTenantBase tenant_ctx(OB_SERVER_TENANT_ID);
+  static FakeModuleProvider provider;
+  share::g_mp = &provider;
   ObTenantEnv::set_tenant(&tenant_ctx);
   ObTenantIOManager *io_service = nullptr;
   EXPECT_EQ(OB_SUCCESS, ObTenantIOManager::mtl_new(io_service));
   EXPECT_EQ(OB_SUCCESS, ObTenantIOManager::mtl_init(io_service));
   EXPECT_EQ(OB_SUCCESS, io_service->start());
-  tenant_ctx.set(io_service);
+  provider.io_manager_ = io_service;
 
   tmp_file::ObTenantTmpFileManager *tf_mgr = nullptr;
   EXPECT_EQ(OB_SUCCESS, mtl_new_default(tf_mgr));
   EXPECT_EQ(OB_SUCCESS, tmp_file::ObTenantTmpFileManager::mtl_init(tf_mgr));
   tf_mgr->get_sn_file_manager().page_cache_controller_.write_buffer_pool_.default_wbp_memory_limit_ = 40*1024*1024;
   EXPECT_EQ(OB_SUCCESS, tf_mgr->start());
-  tenant_ctx.set(tf_mgr);
+  provider.tmp_file_mgr_ = tf_mgr;
   SERVER_STORAGE_META_SERVICE.is_started_ = true;
   ObTenantEnv::set_tenant(&tenant_ctx);
 }
@@ -259,7 +266,7 @@ TEST_F(TestCompactChunk, test_read_writer_compact)
   int ret = OB_SUCCESS;
   ObCompactStore cs_chunk;
 
-  cs_chunk.init(1, 1,
+  cs_chunk.init(1,
         ObCtxIds::DEFAULT_CTX_ID, "SORT_CACHE_CTX", true, 0, true);
   ChunkRowMeta row_meta(allocator_);
   row_meta.col_cnt_ = COLUMN_CNT;
@@ -315,7 +322,7 @@ TEST_F(TestCompactChunk, test_read_writer_compact_vardata)
   int ret = OB_SUCCESS;
   ObCompactStore cs_chunk;
 
-  cs_chunk.init(1, 1,
+  cs_chunk.init(1,
         ObCtxIds::DEFAULT_CTX_ID, "SORT_CACHE_CTX", true, 0, true);
   ChunkRowMeta row_meta(allocator_);
   row_meta.col_cnt_ = COLUMN_CNT;
@@ -368,7 +375,7 @@ TEST_F(TestCompactChunk, test_rescan_get_last_row_compact)
 {
   int ret = OB_SUCCESS;
   ObCompactStore cs_chunk;
-  cs_chunk.init(1, 1,
+  cs_chunk.init(1,
         ObCtxIds::DEFAULT_CTX_ID, "SORT_CACHE_CTX", true, 0, false/*disable trunc*/);
   ChunkRowMeta row_meta(allocator_);
   row_meta.col_cnt_ = COLUMN_CNT;

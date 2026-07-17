@@ -81,7 +81,6 @@ int ObSelectStmtPrinter::print()
     } else if (select_stmt->is_set_stmt()) {
       if (select_stmt->is_recursive_union() &&
           !print_params_.print_origin_stmt_) {
-        // for dblink, print a embeded recursive union query block
         if (OB_FAIL(print_recursive_union_stmt())) {
           LOG_WARN("failed to print recursive union stmt", K(ret));
         }
@@ -318,9 +317,7 @@ int ObSelectStmtPrinter::print_select()
             } else {
               alias_string = select_item.expr_name_;
             }
-            /* In Oracle mode, due to some function aliases possibly appearing with double quotes "", which will cause errors during secondary parsing, it is necessary to remove these double quotes
-            *  
-            */
+            /* Function aliases may carry double quotes, which can break secondary parsing. */
             ObArenaAllocator arena_alloc;
             DATA_PRINTF(" AS ");
             PRINT_IDENT_WITH_QUOT(alias_string);
@@ -364,7 +361,7 @@ int ObSelectStmtPrinter::print_group_by()
       }
       // print rollup
       if (OB_SUCC(ret)) {
-        if (lib::is_mysql_mode() && rollup_exprs_size > 0) {
+        if (rollup_exprs_size > 0) {
           for (int64_t i = 0; OB_SUCC(ret) && i < rollup_exprs_size; ++i) {
             if (OB_FAIL(print_expr_except_const_number(rollup_exprs.at(i), T_GROUP_SCOPE))) {
               LOG_WARN("fail to print group expr", K(ret));
@@ -490,19 +487,9 @@ int ObSelectStmtPrinter::print_order_by()
           }
         } 
         if (OB_SUCC(ret)) {
-          if (lib::is_mysql_mode()) {
-            if (is_descending_direction(order_item.order_type_)) {
-              DATA_PRINTF(" desc");
-            }
-          } else if (order_item.order_type_ == NULLS_FIRST_ASC) {
-            DATA_PRINTF(" asc nulls first");
-          } else if (order_item.order_type_ == NULLS_LAST_ASC) {//use default value
-            /*do nothing*/
-          } else if (order_item.order_type_ == NULLS_FIRST_DESC) {//use default value
+          if (is_descending_direction(order_item.order_type_)) {
             DATA_PRINTF(" desc");
-          } else if (order_item.order_type_ == NULLS_LAST_DESC) {
-            DATA_PRINTF(" desc nulls last");
-          } else {/*do nothing*/}
+          }
           DATA_PRINTF(",");
         }
       }
@@ -561,7 +548,7 @@ int ObSelectStmtPrinter::print_with_check_option()
        * otherwise it may cause a syntax error when ViewResolver resolve definition of a view.
        * case: create view v as select * from t with check option.
        * if we print 'with check option' of a view here, definition of the view is
-       * 'select * from t with check option', which will cause a syntax error in both mysql and oracle mode.
+       * 'select * from t with check option', which will cause a syntax error during view resolving.
       */
     } else {
       ViewCheckOption view_check_option = select_stmt->get_check_option();

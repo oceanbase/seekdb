@@ -74,7 +74,7 @@ public:
   ObHashMap() : ht_()
   {
     // default
-    ObMemAttr attr(OB_SERVER_TENANT_ID, ObModIds::OB_HASH_BUCKET);
+    ObMemAttr attr(ObModIds::OB_HASH_BUCKET);
     bucket_allocer_.set_attr(attr);
   };
   ~ObHashMap()
@@ -189,18 +189,18 @@ public:
     return create(bucket_num, bucket_attr, bucket_attr);
   }
   int create(int64_t bucket_num, const lib::ObLabel &bucket_label,
-             const lib::ObLabel &node_label = ObModIds::OB_HASH_NODE, uint64_t tenant_id = OB_SERVER_TENANT_ID,
+             const lib::ObLabel &node_label = ObModIds::OB_HASH_NODE,
              uint64_t ctx_id = ObCtxIds::DEFAULT_CTX_ID)
   {
-    allocer_.set_attr(ObMemAttr(tenant_id, node_label, ctx_id));
-    bucket_allocer_.set_attr(ObMemAttr(tenant_id, bucket_label, ctx_id));
+    allocer_.set_attr(ObMemAttr(node_label, ctx_id));
+    bucket_allocer_.set_attr(ObMemAttr(bucket_label, ctx_id));
     return ht_.create(cal_next_prime(bucket_num), &allocer_, &bucket_allocer_);
   };
   int create(int64_t bucket_num, _allocer *allocer, const lib::ObLabel &bucket_label,
              const lib::ObLabel &node_label = ObModIds::OB_HASH_NODE)
   {
-    allocer_.set_attr(ObMemAttr(OB_SERVER_TENANT_ID, node_label));
-    bucket_allocer_.set_attr(ObMemAttr(OB_SERVER_TENANT_ID, bucket_label));
+    allocer_.set_attr(ObMemAttr(node_label));
+    bucket_allocer_.set_attr(ObMemAttr(bucket_label));
     return ht_.create(cal_next_prime(bucket_num), allocer, &bucket_allocer_);
   };
   int create(int64_t bucket_num, _allocer *allocer, _bucket_allocer *bucket_allocer)
@@ -292,6 +292,13 @@ public:
   int foreach_refactored(_callback &callback) const
   {
     return ht_.foreach_refactored(callback);
+  }
+  template<class _callback>
+  int foreach_refactored_range(_callback &callback,
+                               const int64_t start_bucket,
+                               const int64_t end_bucket) const
+  {
+    return ht_.foreach_refactored_range(callback, start_bucket, end_bucket);
   }
   int erase_refactored(const _key_type &key, _value_type *value = NULL)
   {

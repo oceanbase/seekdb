@@ -32,7 +32,6 @@
 #include "sql/optimizer/ob_log_operator_factory.h"
 #include "sql/optimizer/ob_table_partition_info.h"
 #include "sql/optimizer/ob_optimizer.h"
-#include "share/client_feedback/ob_feedback_int_struct.h"
 #include "sql/optimizer/ob_logical_operator.h"
 #include "sql/optimizer/ob_log_optimizer_stats_gathering.h"
 #include "sql/optimizer/ob_conflict_detector.h"
@@ -859,8 +858,7 @@ public:
                                        const ObSelectStmt &stmt,
                                        bool &can_pushdown);
 
-  int check_table_columns_can_storage_pushdown(const uint64_t tenant_id,
-                                               const uint64_t table_id,
+  int check_table_columns_can_storage_pushdown(const uint64_t table_id,
                                                const ObIArray<ObRawExpr *> &pushdown_groupby_columns,
                                                bool &can_push);
   
@@ -1451,12 +1449,6 @@ public:
                                       const ObIArray<ObRawExpr*> &right_join_conditions,
                                       ObIArray<JoinFilterInfo> &join_filter_infos);
 
-  int will_use_column_store(const uint64_t table_id,
-                            const uint64_t index_id,
-                            const uint64_t ref_table_id,
-                            bool &use_column_store,
-                            bool &use_row_store);
-
   int pushdown_join_filter_into_subquery(const ObDMLStmt *parent_stmt,
                                          ObLogicalOperator* child_op,
                                          uint64_t subquery_id,
@@ -1804,30 +1796,16 @@ private: // member functions
   static int strong_select_replicas(const common::ObAddr &local_server,
                                     common::ObIArray<ObCandiTableLoc*> &phy_tbl_loc_info_list,
                                     bool &is_hit_partition,
-                                    bool sess_in_retry,
-                                    bool is_dup_ls_modified);
+                                    bool sess_in_retry);
   static int weak_select_replicas(const common::ObAddr &local_server,
                                   ObRoutePolicyType route_type,
-                                  bool proxy_priority_hit_support,
-                                  uint64_t tenant_id,
                                   int64_t max_read_stale_time,
                                   common::ObIArray<ObCandiTableLoc*> &phy_tbl_loc_info_list,
-                                  bool &is_hit_partition,
-                                  share::ObFollowerFirstFeedbackType &follower_first_feedback,
-                                  int64_t &proxy_stat);
+                                  bool &is_hit_partition);
   static int calc_hit_partition_for_compat(const common::ObIArray<ObCandiTableLoc*> &phy_tbl_loc_info_list,
                                            const common::ObAddr &local_server,
                                            bool &is_hit_partition,
                                            ObAddrList &intersect_servers);
-  static int calc_follower_first_feedback(const common::ObIArray<ObCandiTableLoc*> &phy_tbl_loc_info_list,
-                                          const common::ObAddr &local_server,
-                                          const ObAddrList &intersect_servers,
-                                          share::ObFollowerFirstFeedbackType &follower_first_feedback);
-
-  static int calc_rwsplit_partition_feedback(const common::ObIArray<ObCandiTableLoc*> &phy_tbl_loc_info_list,
-                                             const common::ObAddr &local_server,
-                                             int64_t &proxy_stat);
-
   static int calc_intersect_servers(const ObIArray<ObCandiTableLoc*> &phy_tbl_loc_info_list,
                                     ObList<ObAddr, ObArenaAllocator> &candidate_server_list);
   int calc_and_set_exec_pwj_map(ObLocationConstraintContext &location_constraint) const;
@@ -1843,7 +1821,6 @@ private: // member functions
   int get_popular_values_hash(common::ObIAllocator &allocator,
                               ObOptColumnStatHandle &handle,
                               common::ObIArray<ObObj> &popular_values) const;
-  int adjust_expr_properties_for_external_table(ObRawExpr *col_expr, ObRawExpr *&expr) const;
 
   int compute_duplicate_table_replicas(ObLogicalOperator *op);
   int prepare_text_retrieval_info(const uint64_t ref_table_id,

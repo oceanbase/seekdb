@@ -41,8 +41,7 @@ friend class ObPlanCacheObject;
 friend class ObPlanCache;
 public:
   static int alloc(ObCacheObjGuard& guard,
-                   ObLibCacheNameSpace ns,
-                   uint64_t tenant_id = common::OB_SERVER_TENANT_ID);
+                   ObLibCacheNameSpace ns);
   static void inner_free(ObILibCacheObject *&cache_obj,
                          const CacheRefHandleID ref_handle);
   static void inner_free(ObPlanCache *pc,

@@ -39,7 +39,7 @@ public:
 
   int init()
   {
-    return map_.create(1024, "TLD_multi_map", "TLD_multi_map", MTL_ID());
+    return map_.create(1024, "TLD_multi_map", "TLD_multi_map");
   }
 
   virtual ~ObDirectLoadMultiMapNoLock()
@@ -60,8 +60,8 @@ public:
     ret = map_.get_refactored(key, bag);
     if (ret == common::OB_HASH_NOT_EXIST) {
       ret = OB_SUCCESS;
-      bag = OB_NEW(common::ObArray<Value>, ObMemAttr(MTL_ID(), "TLD_MM_bag"),
-                   OB_MALLOC_NORMAL_BLOCK_SIZE, ModulePageAllocator("TLD_MM_bagi", MTL_ID()));
+      bag = OB_NEW(common::ObArray<Value>, ObMemAttr("TLD_MM_bag"),
+                   OB_MALLOC_NORMAL_BLOCK_SIZE, ModulePageAllocator("TLD_MM_bagi"));
       if (OB_ISNULL(bag)) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
         STORAGE_LOG(WARN, "fail to new bag", KR(ret));

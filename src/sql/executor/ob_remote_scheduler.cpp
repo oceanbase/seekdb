@@ -148,7 +148,6 @@ int ObRemoteScheduler::build_remote_task(ObExecContext &ctx,
   ObPhysicalPlanCtx *plan_ctx = ctx.get_physical_plan_ctx();
   ObTaskExecutorCtx &task_exec_ctx = ctx.get_task_exec_ctx();
   ObSQLSessionInfo *session = nullptr;
-  share::ObLSArray task_ls_list;
   if (OB_FAIL(remote_task.assign_dependency_tables(dependency_tables))) {
     LOG_WARN("fail to assign dependency_tables", K(ret));
   }
@@ -160,21 +159,16 @@ int ObRemoteScheduler::build_remote_task(ObExecContext &ctx,
       K(task_exec_ctx.get_query_sys_begin_schema_version()));
   remote_task.set_remote_sql_info(&plan_ctx->get_remote_sql_info());
   ObDASTabletLoc *first_tablet_loc = nullptr;
-  if (OB_FAIL(ret)){
+  if (OB_FAIL(ret)) {
   } else if (OB_ISNULL(session = ctx.get_my_session())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("session is null", K(ret));
-  } else if (OB_FAIL(DAS_CTX(ctx).get_all_lsid(task_ls_list))) {
-    LOG_WARN("get ls ids failed", K(ret));
-  } else if(OB_FAIL(remote_task.assign_ls_list(task_ls_list))) {
-    LOG_WARN("fail to assign ls list", K(ret));
-  } else if (OB_FAIL(session->get_trans_result().add_touched_ls(task_ls_list))) {
-    LOG_WARN("add touched ls failed", K(ret));
   } else if (OB_ISNULL(DAS_CTX(ctx).get_table_loc_list().get_first()) ||
              OB_ISNULL(first_tablet_loc = DAS_CTX(ctx).get_table_loc_list().get_first()->get_first_tablet_loc())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected empty table loc list", K(ret), K(DAS_CTX(ctx).get_table_loc_list()));
   } else {
+    session->get_trans_result().mark_touched_storage();
     remote_task.set_runner_svr(first_tablet_loc->server_);
     ObTaskID task_id;
     task_id.set_execution_id(session->get_current_execution_id());
@@ -200,7 +194,6 @@ int ObRemoteScheduler::execute_with_sql(ObExecContext &ctx, ObPhysicalPlan *phy_
   ObQueryRetryInfo *retry_info = NULL;
   ObRemoteTask task;
   bool has_sent_task = false;
-  bool has_transfer_err = false;
 
   if (OB_ISNULL(phy_plan) || OB_ISNULL(session) || OB_ISNULL(plan_ctx)) {
     ret = OB_INVALID_ARGUMENT;
@@ -242,9 +235,8 @@ int ObRemoteScheduler::execute_with_sql(ObExecContext &ctx, ObPhysicalPlan *phy_
   }
   if (OB_SUCC(ret)) {
     ObScanner *scanner = NULL;
-    const int32_t group_id = OB_INVALID_ID == session->get_expect_group_id() ? 0 : session->get_expect_group_id();
-    ObExecutorRpcCtx rpc_ctx(session->get_rpc_tenant_id(),
-                             plan_ctx->get_timeout_timestamp(),
+    const int32_t group_id = 0;
+    ObExecutorRpcCtx rpc_ctx(plan_ctx->get_timeout_timestamp(),
                              ctx.get_task_exec_ctx().get_min_cluster_version(),
                              retry_info,
                              ctx.get_my_session(),
@@ -254,8 +246,7 @@ int ObRemoteScheduler::execute_with_sql(ObExecContext &ctx, ObPhysicalPlan *phy_
                                      task,
                                      task.get_runner_svr(),
                                      *handler,
-                                     has_sent_task,
-                                     has_transfer_err))) {
+                                     has_sent_task))) {
       LOG_WARN("task execute failed", K(ret));
     }
 
@@ -263,9 +254,9 @@ int ObRemoteScheduler::execute_with_sql(ObExecContext &ctx, ObPhysicalPlan *phy_
     int tmp_ret = ObRemoteTaskExecutor::handle_tx_after_rpc(handler->get_result(),
                                                             session,
                                                             has_sent_task,
-                                                            has_transfer_err,
                                                             phy_plan,
                                                             ctx);
+    ret = COVER_SUCC(tmp_ret);
     NG_TRACE_EXT(remote_task_completed, OB_ID(ret), ret,
                  OB_ID(runner_svr), task.get_runner_svr(), OB_ID(task), task);
     // Description: After this function returns, the final control will enter ObDirectReceive,

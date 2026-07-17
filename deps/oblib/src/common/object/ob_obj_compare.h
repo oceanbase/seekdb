@@ -17,18 +17,13 @@
 #ifndef OCEANBASE_COMMON_OB_OBJ_COMPARE_
 #define OCEANBASE_COMMON_OB_OBJ_COMPARE_
 
-#include "lib/timezone/ob_timezone_info.h"
+#include "common/timezone/ob_timezone_info.h"
 #include "common/object/ob_object.h"
 
 namespace oceanbase
 {
 namespace common
 {
-
-bool is_calc_with_end_space(ObObjType type1, ObObjType type2,
-                            bool is_oracle_mode,
-                            ObCollationType cs_type1,
-                            ObCollationType cs_type2);
 
 enum ObCmpOp
 {

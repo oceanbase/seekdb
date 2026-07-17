@@ -27,7 +27,7 @@ namespace sql
 ObDASMatchIter::ObDASMatchIter()
   : ObDASIter(ObDASIterType::DAS_ITER_ES_MATCH),
     mem_context_(nullptr),
-    myself_allocator_(lib::ObMemAttr(MTL_ID(), "MatchIterSelf"), OB_MALLOC_NORMAL_BLOCK_SIZE),
+    myself_allocator_(lib::ObMemAttr("MatchIterSelf"), OB_MALLOC_NORMAL_BLOCK_SIZE),
     ir_match_part_score_ctdef_(nullptr),
     ir_match_part_score_rtdef_(nullptr),
     eval_ctx_(nullptr),
@@ -63,7 +63,7 @@ int ObDASMatchIter::inner_init(ObDASIterParam &param)
     // do nothing
   } else {
     lib::ContextParam mem_param;
-    mem_param.set_mem_attr(MTL_ID(), "DasMatchIter", ObCtxIds::DEFAULT_CTX_ID);
+    mem_param.set_mem_attr("DasMatchIter", ObCtxIds::DEFAULT_CTX_ID);
     if (OB_FAIL(CURRENT_CONTEXT->CREATE_CONTEXT(mem_context_, mem_param))) {
       LOG_WARN("failed to create das match iterator memory context", K(ret));
     }
@@ -106,7 +106,7 @@ int ObDASMatchIter::inner_init(ObDASIterParam &param)
         relevance_collector_ = inner_product_relevance_collector;
       }
     }
-
+    
     if (OB_FAIL(ret)) {
     } else if (FALSE_IT(children_relevance_exprs_.set_allocator(&myself_allocator_))) {
     } else if (OB_FAIL(children_relevance_exprs_.init(match_param.children_relevance_exprs_.count()))) {
@@ -118,7 +118,7 @@ int ObDASMatchIter::inner_init(ObDASIterParam &param)
       LOG_WARN("failed to init children domain id exprs", K(ret));
     } else if (OB_FAIL(children_domain_id_exprs_.prepare_allocate(match_param.children_domain_id_exprs_.count()))) {
       LOG_WARN("failed to prepare allocate children domain id exprs", K(ret));
-    }
+    } 
     for (int64_t i = 0; OB_SUCC(ret) && i < match_param.children_relevance_exprs_.count(); ++i) {
       children_relevance_exprs_[i] = match_param.children_relevance_exprs_.at(i);
       children_domain_id_exprs_[i] = match_param.children_domain_id_exprs_.at(i);
@@ -483,7 +483,7 @@ int ObDASMatchIter::fill_merge_heap()
             max_query_score_ += max_query_score;
           }
         }
-        if (OB_FAIL(ret)) {
+        if (OB_FAIL(ret)) { 
         } else {
           const double query_boost = ir_match_part_score_rtdef_->match_boost_;
           item.relevance_ = item.relevance_ * query_boost;
@@ -498,7 +498,7 @@ int ObDASMatchIter::fill_merge_heap()
       } else if (OB_FAIL(merge_heap_->push(item))) {
         LOG_WARN("fail to push item to merge heap", K(ret), K(item));
       }
-    }
+    } 
   }
   if (OB_FAIL(ret)) {
   } else if (merge_heap_->empty()) {
@@ -621,7 +621,7 @@ int ObDASMatchIter::project_results(const int64_t count)
     }
   }
 
-
+  
   return ret;
 }
 
@@ -674,7 +674,7 @@ int ObDASMatchMergeCmp::init(ObDatumMeta id_meta, const ObFixedArray<ObDocIdExt,
   } else {
     iter_ids_ = iter_ids;
     sql::ObExprBasicFuncs *basic_funcs = ObDatumFuncs::get_basic_func(id_meta.type_, id_meta.cs_type_);
-    cmp_func_ = lib::is_oracle_mode() ? basic_funcs->null_last_cmp_ : basic_funcs->null_first_cmp_;
+    cmp_func_ = basic_funcs->null_first_cmp_;
     if (OB_ISNULL(cmp_func_)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("failed to init IRIterLoserTreeCmp", K(ret));

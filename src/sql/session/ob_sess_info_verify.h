@@ -21,29 +21,22 @@
 #include "share/system_variable/ob_sys_var_class_type.h"
 #include "lib/string/ob_string.h"
 #include "lib/atomic/ob_atomic.h"
-#include "rpc/obrpc/ob_rpc_proxy.h"
 #include "sql/session/ob_sql_session_mgr.h"
 #include "rpc/obmysql/packet/ompk_ok.h"
 #include "rpc/obmysql/ob_mysql_packet.h"
-#include "rpc/obmysql/ob_2_0_protocol_utils.h"
 #include "share/ob_rpc_struct.h"
-#include "share/ob_srv_rpc_proxy.h"
 
 
 namespace oceanbase
 {
 
-namespace obrpc
-{
-class ObSrvRpcProxy;
-}
 namespace share {
-  class ObBasicSysVar;
   enum ObSysVarClassType;
 }
 
 namespace sql
 {
+class ObBasicSysVar;
 
 
 // proxy -> server sess info verification.
@@ -105,7 +98,7 @@ public:
   static int sql_port_to_rpc_port(sql::ObSQLSessionInfo &sess,
                       SessionInfoVerifacation &sess_info_verification);
   static int create_tmp_sys_var(sql::ObSQLSessionInfo &sess,
-        share::ObSysVarClassType sys_var_id, share::ObBasicSysVar *&sys_var,
+        share::ObSysVarClassType sys_var_id, sql::ObBasicSysVar *&sys_var,
         common::ObIAllocator &allocator);
   static int sess_veri_control(obmysql::ObMySQLPacket &pkt, sql::ObSQLSessionInfo *&session);
 };

@@ -16,8 +16,8 @@
 
 #pragma once
 
-#include "share/vector/ob_fixed_length_base.h"
-#include "share/vector/ob_uniform_base.h"
+#include "sql/engine/vector/ob_fixed_length_base.h"
+#include "sql/engine/vector/ob_uniform_base.h"
 #include "storage/direct_load/ob_direct_load_vector.h"
 
 namespace oceanbase

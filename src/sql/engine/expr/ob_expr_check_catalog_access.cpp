@@ -63,14 +63,13 @@ int ObExprCheckCatalogAccess::eval_check_catalog_access(const ObExpr &expr,
   ObSchemaGetterGuard schema_guard;
   const ObSQLSessionInfo *session_info = NULL;
   share::schema::ObSessionPrivInfo session_priv;
-  uint64_t tenant_id = OB_INVALID_ID;
+  
   if (OB_ISNULL(session_info = ctx.exec_ctx_.get_my_session()) || OB_ISNULL(GCTX.schema_service_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected null", K(ret));
-  } else if (OB_FALSE_IT(tenant_id = session_info->get_effective_tenant_id())) {
   } else if (OB_FAIL(expr.eval_param_value(ctx, catalog))) {
     LOG_WARN("evaluate parameters failed", K(ret));
-  } else if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(tenant_id, schema_guard))) {
+  } else if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(schema_guard))) {
     LOG_WARN("failed to get tenant schema guard", K(ret));
   } else if (OB_FAIL(session_info->get_session_priv_info(session_priv))) {
     LOG_WARN("failed to get session priv info", K(ret));

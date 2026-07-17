@@ -42,7 +42,6 @@ public:
       query_ctx_(nullptr),
       has_nested_aggr_(false),
       is_check_order_by_(false),
-      dblink_groupby_expr_(NULL),
       only_need_contraints_(false),
       param_store_(param_store)
       
@@ -81,7 +80,6 @@ private:
   ObQueryCtx *query_ctx_;
   bool has_nested_aggr_;
   bool is_check_order_by_;
-  common::ObIArray<ObRawExpr*> *dblink_groupby_expr_;
   // if true, only add constraints for shared exprs which will be replaced in replace_stmt_expr_with_groupby_exprs
   bool only_need_contraints_;
   const ParamStore *param_store_;

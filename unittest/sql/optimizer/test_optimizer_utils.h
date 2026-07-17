@@ -54,14 +54,10 @@ namespace test
 
 class MockCacheObjectFactory {
 public:
-  static int alloc(ObILibCacheObject *&cache_obj, ObLibCacheNameSpace ns,
-                   uint64_t tenant_id = common::OB_SERVER_TENANT_ID);
-  static int alloc(ObPhysicalPlan *&plan,
-                   uint64_t tenant_id = common::OB_SERVER_TENANT_ID);
-  static int alloc(pl::ObPLFunction *&func, ObLibCacheNameSpace ns,
-                   uint64_t tenant_id = common::OB_SERVER_TENANT_ID);
-  static int alloc(pl::ObPLPackage *&package,
-                   uint64_t tenant_id = common::OB_SERVER_TENANT_ID);
+  static int alloc(ObILibCacheObject *&cache_obj, ObLibCacheNameSpace ns);
+  static int alloc(ObPhysicalPlan *&plan);
+  static int alloc(pl::ObPLFunction *&func, ObLibCacheNameSpace ns);
+  static int alloc(pl::ObPLPackage *&package);
   static void free(ObILibCacheObject *cache_obj);
 
 private:

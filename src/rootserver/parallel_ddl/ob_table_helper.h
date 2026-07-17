@@ -37,7 +37,6 @@ class ObTableHelper : public virtual ObDDLHelper
 public:
   ObTableHelper(
     share::schema::ObMultiVersionSchemaService *schema_service,
-    const uint64_t tenant_id,
     const char* parallel_ddl_type,
     ObDDLSQLTransaction *external_trans,
     bool enable_ddl_parallel);

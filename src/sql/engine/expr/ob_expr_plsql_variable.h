@@ -70,28 +70,12 @@ public:
   }
   common::ObString& get_plsql_variable() { return plsql_variable_; }
 
-  static int check_plsql_ccflags(
-    const common::ObString &v,
-    common::ObIArray<std::pair<common::ObString, common::ObObj> > *result = NULL);
-
-  static int add_to_array(
-    const common::ObString &key,
-    common::ObObj &val,
-    common::ObIArray<std::pair<common::ObString, common::ObObj> > &result);
-  static int check_value(
-    const common::ObString &val, common::ObObj &val_obj);
-  static int check_key(const common::ObString &key);
-
 private:
   static int get_plsql_unit(common::ObObj &result,
                             common::ObIAllocator &alloc,
                             ObSQLSessionInfo &session,
                             const ObExprResType &result_type,
                             const ObString &plsql_variable);
-  static int get_key_value(
-    const common::ObString &plsql_ccflags,
-    const common::ObString &key, common::ObObj &value);
-
 private:
   DISALLOW_COPY_AND_ASSIGN(ObExprPLSQLVariable);
 

@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX STORAGE
 #include "ob_sstable_row_whole_scanner.h"
+#include "share/rc/ob_module_provider.h"
 
 namespace oceanbase
 {
@@ -205,15 +206,7 @@ int ObSSTableRowWholeScanner::inner_open(
     prefetch_macro_cursor_ = 0;
     cur_macro_cursor_ = 0;
     last_mvcc_row_already_output_ = true;
-    const ObITableReadInfo *rowkey_read_info = nullptr;
-
-    if (table->is_normal_cg_sstable()) {
-      if (OB_FAIL(MTL(ObTenantCGReadInfoMgr *)->get_index_read_info(rowkey_read_info))) {
-        STORAGE_LOG(WARN, "unexpected null index read info", K(ret));
-      }
-    } else {
-      rowkey_read_info = iter_param.read_info_;
-    }
+    const ObITableReadInfo *rowkey_read_info = iter_param.read_info_;
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(init_micro_scanner(range))) {
       LOG_WARN("Failed to init micro scanner", K(ret));
@@ -296,7 +289,7 @@ int ObSSTableRowWholeScanner::open(
       read_info.io_desc_.set_sys_module_id(ObIOModule::SSTABLE_WHOLE_SCANNER_IO);
       read_info.buf_ = io_buf_[0].data();
       read_info.io_timeout_ms_ = std::max(GCONF._data_storage_io_timeout / 1000, DEFAULT_IO_WAIT_TIME_MS);
-      read_info.mtl_tenant_id_ = MTL_ID();
+      
 
       if (OB_FAIL(ret)) {
       } else if (OB_FAIL(ObObjectManager::async_read_object(read_info, scan_handle.macro_io_handle_))) {
@@ -448,7 +441,7 @@ int ObSSTableRowWholeScanner::prefetch()
       read_info.io_desc_.set_sys_module_id(ObIOModule::SSTABLE_WHOLE_SCANNER_IO);
       read_info.buf_ = io_buf_[io_index].data();
       read_info.io_timeout_ms_ = std::max(GCONF._data_storage_io_timeout / 1000, DEFAULT_IO_WAIT_TIME_MS);
-      read_info.mtl_tenant_id_ = MTL_ID();
+      
 
       if (OB_FAIL(ret)) {
       } else if (OB_FAIL(ObObjectManager::async_read_object(read_info, scan_handle.macro_io_handle_))) {
@@ -490,18 +483,13 @@ int ObSSTableRowWholeScanner::open_macro_block()
     } else {
       bool can_recycle = false;
       MacroScanHandle &scan_handle = scan_handles_[cur_macro_cursor_ % PREFETCH_DEPTH];
-      ObDatumRange range;
-      const bool is_need_trans_range = sstable_->is_normal_cg_sstable() && 0 != scan_handle.start_row_offset_;
       scan_handle.is_right_border_ = (cur_macro_cursor_ == prefetch_macro_cursor_ - 1);
       const ObITableReadInfo *rowkey_read_info = nullptr;
       micro_block_iter_.reset();
 
-      if (OB_FAIL(iter_param_->get_index_read_info(sstable_->is_normal_cg_sstable(), rowkey_read_info))) {
-        STORAGE_LOG(WARN, "unexpected null index read info", K(ret), K(sstable_->is_normal_cg_sstable()));
-      } else if (is_need_trans_range && OB_FAIL(rowkey_helper_.trans_to_cg_range(scan_handle.start_row_offset_, query_range_))) {
-        LOG_WARN("failed to trans cg range", K(ret), K(query_range_), K(scan_handle.start_row_offset_));
-      } else if (FALSE_IT(range = is_need_trans_range ? rowkey_helper_.get_result_range() : query_range_)) {
-      } else  if (access_ctx_->query_flag_.is_multi_version_minor_merge() &&
+      if (OB_FAIL(iter_param_->get_index_read_info(rowkey_read_info))) {
+        STORAGE_LOG(WARN, "unexpected null index read info", K(ret));
+      } else if (access_ctx_->query_flag_.is_multi_version_minor_merge() &&
           OB_FAIL(check_macro_block_recycle(scan_handle.macro_block_desc_, can_recycle))) {
         LOG_WARN("failed to check macro block recycle", K(ret), K(cur_macro_cursor_));
       } else if (can_recycle) {
@@ -513,7 +501,7 @@ int ObSSTableRowWholeScanner::open_macro_block()
       } else if (OB_FAIL(micro_block_iter_.open(
                   scan_handle.macro_io_handle_.get_buffer(),
                   scan_handle.macro_io_handle_.get_data_size(),
-                  range,
+                  query_range_,
                   *rowkey_read_info,
                   scan_handle.is_left_border_,
                   scan_handle.is_right_border_))) {
@@ -550,14 +538,9 @@ int ObSSTableRowWholeScanner::open_micro_block()
 {
   int ret = OB_SUCCESS;
 
-  if (sstable_->is_normal_cg_sstable()) {
-    if (OB_FAIL(open_cg_micro_block()) && OB_ITER_END != ret) {
-      STORAGE_LOG(WARN, "failed to open cg micro block", K(ret));
-    }
-  } else {
-    ObMicroBlockData block_data;
-    bool can_recycle = false;
-    while (OB_SUCC(ret)) {
+  ObMicroBlockData block_data;
+  bool can_recycle = false;
+  while (OB_SUCC(ret)) {
     MacroScanHandle &scan_handle = scan_handles_[cur_macro_cursor_ % PREFETCH_DEPTH];
     bool is_left_border = scan_handle.is_left_border_ && micro_block_iter_.is_left_border();
     bool is_right_border = scan_handle.is_right_border_ && micro_block_iter_.is_right_border();
@@ -593,7 +576,6 @@ int ObSSTableRowWholeScanner::open_micro_block()
       last_mvcc_row_already_output_ = micro_header->is_last_row_last_flag();
       break;
     }
-  }
   }
   return ret;
 }
@@ -634,75 +616,6 @@ int ObSSTableRowWholeScanner::recycle_last_rowkey_in_micro_block()
       }
     }
   }
-  return ret;
-}
-
-int ObSSTableRowWholeScanner::open_cg_micro_block()
-{
-  int ret = OB_SUCCESS;
-  ObMicroBlockData block_data;
-  int64_t micro_block_start_row_offset = -1;
-  const MacroScanHandle &scan_handle = scan_handles_[cur_macro_cursor_ % PREFETCH_DEPTH];
-  const bool is_left_border = scan_handle.is_left_border_ && micro_block_iter_.is_left_border();
-  const bool is_right_border = scan_handle.is_right_border_ && micro_block_iter_.is_right_border();
-
-  if (!query_range_.is_whole_range() && OB_FAIL(micro_block_iter_.get_curr_start_row_offset(micro_block_start_row_offset))) {
-    if (OB_UNLIKELY(OB_ITER_END != ret)) {
-      STORAGE_LOG(WARN, "failed to get prev row offset", K(ret), K(micro_block_iter_));
-    }
-  } else if (OB_FAIL(micro_block_iter_.get_next_micro_block_data(block_data))) {
-    if (OB_UNLIKELY(OB_ITER_END != ret)) {
-      LOG_WARN("Fail to get micro block count", K(ret), K(scan_handle.macro_io_handle_));
-    }
-  } else {
-    ObCSRange range;
-    if (OB_FAIL(get_cs_range(is_left_border, is_right_border,
-                              scan_handle.start_row_offset_, micro_block_start_row_offset, range))) {
-      STORAGE_LOG(WARN, "failed to get cs range", K(ret), K(scan_handle), K(micro_block_start_row_offset));
-    } else if (OB_UNLIKELY(!range.is_valid())) {
-      ret = OB_ERR_UNEXPECTED;
-      STORAGE_LOG(WARN, "invalid range", K(ret), K(range), K(is_left_border), K(is_right_border), K(scan_handle.start_row_offset_), K(micro_block_start_row_offset));
-    } else if (OB_FAIL(micro_scanner_->open_column_block(scan_handle.macro_io_handle_.get_macro_id(), block_data, range))) {
-      STORAGE_LOG(WARN, "failed to open column block", K(ret), K(scan_handle), K(block_data), K(range));
-    }
-  }
-
-  return ret;
-}
-
-int ObSSTableRowWholeScanner::get_cs_range(
-    const bool is_left_border,
-    const bool is_right_border,
-    const int64_t macro_block_start_row_offset,
-    const int64_t micro_block_start_row_offset,
-    ObCSRange &range)
-{
-  int ret = OB_SUCCESS;
-  range.start_row_id_ = 0;
-  range.end_row_id_ = INT64_MAX;
-
-  if (is_left_border && !query_range_.start_key_.is_min_rowkey()) {
-    if (OB_UNLIKELY(query_range_.start_key_.is_static_rowkey() || query_range_.start_key_.datum_cnt_ != 1)) {
-      ret = OB_ERR_UNEXPECTED;
-      STORAGE_LOG(WARN, "unexpcted query range", K(ret), K(query_range_));
-    } else {
-      const int64_t range_start_row_offset = query_range_.is_left_closed() ?
-                                           query_range_.start_key_.datums_[0].get_int() : query_range_.start_key_.datums_[0].get_int() + 1;
-      range.start_row_id_ = MAX(0, range_start_row_offset - macro_block_start_row_offset - micro_block_start_row_offset);
-    }
-  }
-
-  if (OB_SUCC(ret) && is_right_border && !query_range_.end_key_.is_max_rowkey()) {
-    if (OB_UNLIKELY(query_range_.end_key_.is_static_rowkey() || query_range_.end_key_.datum_cnt_ != 1)) {
-      ret = OB_ERR_UNEXPECTED;
-      STORAGE_LOG(WARN, "unexpcted query range", K(ret), K(query_range_));
-    } else {
-      const int64_t range_end_row_offset = query_range_.is_right_closed() ?
-                                           query_range_.end_key_.datums_[0].get_int() : query_range_.end_key_.datums_[0].get_int() - 1;
-      range.end_row_id_ =  range_end_row_offset - macro_block_start_row_offset - micro_block_start_row_offset;
-    }
-  }
-
   return ret;
 }
 

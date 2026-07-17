@@ -17,7 +17,7 @@
 #ifdef TEST_MDS_TRANSACTION
 #include "example_user_helper_define.h"
 #include "storage/multi_data_source/mds_table_handle.h"
-#include "deps/oblib/src/common/meta_programming/ob_type_traits.h"
+#include "common/meta_programming/ob_type_traits.h"
 
 namespace oceanbase {
 namespace unittest {

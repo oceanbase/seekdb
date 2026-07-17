@@ -1,0 +1,231 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef OCEANBASE_LIB_OB_GEO_FUNC_REGISTER_
+#define OCEANBASE_LIB_OB_GEO_FUNC_REGISTER_
+
+#include "share/geo/ob_geo_dispatcher.h"
+#include "share/geo/ob_geo_func_area.h"
+#include "share/geo/ob_geo_func_correct.h"
+#include "share/geo/ob_geo_func_intersects.h"
+#include "share/geo/ob_geo_func_difference.h"
+#include "share/geo/ob_geo_func_disjoint.h"
+#include "share/geo/ob_geo_func_union.h"
+#include "share/geo/ob_geo_func_transform.h"
+#include "share/geo/ob_geo_func_covered_by.h"
+#include "share/geo/ob_geo_func_box.h"
+#include "share/geo/ob_geo_func_buffer.h"
+#include "share/geo/ob_geo_func_distance.h"
+#include "share/geo/ob_geo_func_isvalid.h"
+#include "share/geo/ob_geo_func_distance_sphere.h"
+#include "share/geo/ob_geo_func_within.h"
+#include "share/geo/ob_geo_func_equals.h"
+#include "share/geo/ob_geo_func_touches.h"
+#include "share/geo/ob_geo_func_centroid.h"
+#include "share/geo/ob_geo_func_crosses.h"
+#include "share/geo/ob_geo_func_overlaps.h"
+#include "share/geo/ob_geo_func_length.h"
+#include "share/geo/ob_geo_func_symdifference.h"
+#include "share/geo/ob_geo_func_dissolve_polygon.h"
+
+namespace oceanbase
+{
+namespace common
+{
+
+// register geometry function adapters, only boost::geometry functions currently
+// Add a new adapter:
+// 1. implement adapter class and adapter ctx class
+// 2. register the adapter here.
+enum class ObGeoFuncType
+{
+  NotImplemented = 0,
+  Area = 1,
+  Correct = 2,
+  Intersects = 3,
+  Difference = 4,
+  Disjoint = 5,
+  Union = 6,
+  Transform = 7,
+  CoveredBy = 8,
+  Box = 9,
+  Buffer = 10,
+  Distance = 11,
+  IsValid = 12,
+  DistanceSphere = 13,
+  Within = 14,
+  Equals = 15,
+  Touches = 16,
+  Centroid = 17,
+  Crosses = 18,
+  Overlaps = 19,
+  Length = 20,
+  SymDifference = 21,
+  DissolvePolygon = 22,
+  ObGisFuncTypeMax
+};
+class ObGeoFuncNotImplemented
+{
+public:
+  ObGeoFuncNotImplemented();
+  virtual ~ObGeoFuncNotImplemented() = default;
+  static int eval(const common::ObGeoEvalCtx &gis_context, int32_t &result) {
+    UNUSEDx(gis_context, result);
+    return common::OB_ERR_GIS_INVALID_DATA;
+  };
+};
+
+template <ObGeoFuncType func_type>
+struct ObGeoFunc
+{
+  typedef ObGeoFuncNotImplemented geo_func;
+};
+
+template <>
+struct ObGeoFunc<ObGeoFuncType::Area>
+{
+  typedef ObGeoFuncArea geo_func;
+};
+
+template <>
+struct ObGeoFunc<ObGeoFuncType::Correct>
+{
+  typedef ObGeoFuncCorrect geo_func;
+};
+
+template <>
+struct ObGeoFunc<ObGeoFuncType::Intersects>
+{
+  typedef ObGeoFuncIntersects geo_func;
+};
+
+template <>
+struct ObGeoFunc<ObGeoFuncType::Difference>
+{
+  typedef ObGeoFuncDifference geo_func;
+};
+
+template <>
+struct ObGeoFunc<ObGeoFuncType::Disjoint>
+{
+  typedef ObGeoFuncDisjoint geo_func;
+};
+
+template <>
+struct ObGeoFunc<ObGeoFuncType::Union>
+{
+  typedef ObGeoFuncUnion geo_func;
+};
+
+template <>
+struct ObGeoFunc<ObGeoFuncType::Transform>
+{
+  typedef ObGeoFuncTransform geo_func;
+};
+
+template <>
+struct ObGeoFunc<ObGeoFuncType::CoveredBy>
+{
+  typedef ObGeoFuncCoveredBy geo_func;
+};
+
+template <>
+struct ObGeoFunc<ObGeoFuncType::Box>
+{
+  typedef ObGeoFuncBox geo_func;
+};
+
+template <>
+struct ObGeoFunc<ObGeoFuncType::Buffer>
+{
+  typedef ObGeoFuncBuffer geo_func;
+};
+
+template <>
+struct ObGeoFunc<ObGeoFuncType::Distance>
+{
+  typedef ObGeoFuncDistance geo_func;
+};
+
+template <>
+struct ObGeoFunc<ObGeoFuncType::IsValid>
+{
+  typedef ObGeoFuncIsValid geo_func;
+};
+
+template <>
+struct ObGeoFunc<ObGeoFuncType::DistanceSphere>
+{
+  typedef ObGeoFuncDistanceSphere gis_func;
+};
+
+template <>
+struct ObGeoFunc<ObGeoFuncType::Within>
+{
+  typedef ObGeoFuncWithin gis_func;
+};
+
+template <>
+struct ObGeoFunc<ObGeoFuncType::Equals>
+{
+  typedef ObGeoFuncEquals geo_func;
+};
+
+template <>
+struct ObGeoFunc<ObGeoFuncType::Touches>
+{
+  typedef ObGeoFuncTouches geo_func;
+};
+
+template <>
+struct ObGeoFunc<ObGeoFuncType::Centroid>
+{
+  typedef ObGeoFuncCentroid geo_func;
+};
+
+template <>
+struct ObGeoFunc<ObGeoFuncType::Crosses>
+{
+  typedef ObGeoFuncCrosses geo_func;
+};
+
+template <>
+struct ObGeoFunc<ObGeoFuncType::Overlaps>
+{
+  typedef ObGeoFuncOverlaps geo_func;
+};
+
+template <>
+struct ObGeoFunc<ObGeoFuncType::Length>
+{
+  typedef ObGeoFuncLength geo_func;
+};
+
+template <>
+struct ObGeoFunc<ObGeoFuncType::SymDifference>
+{
+  typedef ObGeoFuncSymDifference geo_func;
+};
+
+template <>
+struct ObGeoFunc<ObGeoFuncType::DissolvePolygon>
+{
+  typedef ObGeoFuncDissolvePolygon geo_func;
+};
+
+} // sql
+} // oceanbase
+#endif // OCEANBASE_LIB_OB_GEO_FUNC_REGISTER_

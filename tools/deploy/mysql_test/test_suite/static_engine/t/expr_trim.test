@@ -10,7 +10,7 @@ connection default;
 
 --disable_warnings
 drop table if exists t1;
-create table t1 (c1 varchar(100) CHARACTER SET  utf8, c2 varchar(100) CHARACTER set  utf16);
+create table t1 (c1 varchar(100) CHARACTER SET  utf8, c2 varchar(100) CHARACTER SET  utf8mb4);
 insert into t1 (c1, c2) values ('            a               ', '                b                 ');
 insert into t1 (c1, c2) values (' ', '                b                 ');
 insert into t1 (c1, c2) values ('            a               ', ' ');
@@ -66,7 +66,7 @@ drop table t1;
 
 select SUBSTRING( TRIM( BOTH CONVERT( 'a', BINARY( 0 ) ) FROM '+-ÃÃ·ï¹¢ï¹£Â±/= â¥â' ) , 1 ,20) ;
 select collation(TRIM( BOTH _binary'a' FROM '+-ÃÃ·ï¹¢ï¹£Â±/= â¥â' )) ;
-select collation(TRIM( BOTH _binary'a' FROM _gbk'abc' )) ;
+select collation(TRIM( BOTH _binary'a' FROM _utf8mb4'abc' )) ;
 
 select TRIM(LEADING 'a' FROM TRIM(SUBSTR(REPEAT(NULL, 4 + 1), 1, LEAST(146, 20))));
 
@@ -87,6 +87,5 @@ select length(trim(leading 'abcd' from c1)) from t1;
 select length(trim(trailing 'abcd' from c1)) from t1;
 select length(trim(both 'abcd' from c1)) from t1;
 drop table t1;
-
 connection syscon;
 --sleep 2

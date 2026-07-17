@@ -54,7 +54,6 @@ public:
   // Init the memtable mgr, we use logstream id to fetch the ls_ctx_mgr and t3m
   // to alloc the memtable.
   virtual int init(const common::ObTabletID &tablet_id,
-                   const share::ObLSID &ls_id,
                    ObFreezer *freezer,
                    ObTenantMetaMemMgr *t3m) override;
   virtual void destroy() override;
@@ -71,7 +70,6 @@ protected:
 
   int unregister_from_common_checkpoint_(const ObTxCtxMemtable *memtable);
 private:
-  share::ObLSID ls_id_;
   common::SpinRWLock lock_def_;
 };
 
@@ -79,4 +77,3 @@ private:
 } // namespace oceanbase
 
 #endif // OCEANBASE_STORAGE_OB_TX_CTX_MEMTABLE_MGR
-

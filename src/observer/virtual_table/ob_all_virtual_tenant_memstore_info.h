@@ -17,16 +17,12 @@
 #ifndef OB_ALL_VIRTUAL_TENANT_MEMSTORE_INFO_H_
 #define OB_ALL_VIRTUAL_TENANT_MEMSTORE_INFO_H_
 
-#include "share/ob_virtual_table_scanner_iterator.h"
-#include "share/ob_scanner.h"
+#include "observer/virtual_table/ob_virtual_table_scanner_iterator.h"
+#include "sql/ob_scanner.h"
 #include "common/row/ob_row.h"
 #include "share/ob_define.h"
 namespace oceanbase
 {
-namespace common
-{
-class ObAddr;
-}
 namespace observer
 {
 class ObAllVirtualTenantMemstoreInfo : public common::ObVirtualTableScannerIterator
@@ -44,10 +40,6 @@ public:
 public:
   virtual int inner_get_next_row(common::ObNewRow *&row);
   virtual void reset();
-  inline void set_addr(common::ObAddr &addr) { addr_ = addr; }
-private:
-  uint64_t current_pos_;
-  common::ObAddr addr_;
 private:
   DISALLOW_COPY_AND_ASSIGN(ObAllVirtualTenantMemstoreInfo);
 };

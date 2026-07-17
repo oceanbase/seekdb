@@ -27,9 +27,9 @@ namespace sql {
 /**
  *
  * DAS cannot unconditionally retry for the error of tablet_location or ls_location, like -4725, -4721,
- * and needs to determine whether the real cause of the error is due to DDL operations or transfer.
+ * and needs to determine whether the real cause of the error is due to DDL operations or stale location cache.
  * 1. When the table, partition or tenant was dropped, which is caused by DDL, das task cannot be retried.
- * 2. When a partition was transfered and tablet location cache is not updated, tablet location cache should
+ * 2. When tablet location cache is stale after metadata changes, tablet location cache should
  *    be updated and das task needs to be retried.
  *
  **/
@@ -51,11 +51,11 @@ void ObDASRetryCtrl::tablet_location_retry_proc(ObDASRef &das_ref,
   } else if (OB_ISNULL(GCTX.schema_service_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid schema service", K(ret));
-  } else if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(MTL_ID(), schema_guard))) {
+  } else if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(schema_guard))) {
     // tenant could be dropped
     task_op.set_errcode(ret);
-    LOG_WARN("get tenant schema guard fail", KR(ret), K(MTL_ID()));
-  } else if (OB_FAIL(schema_guard.get_table_schema(MTL_ID(), ref_table_id, table_schema))) {
+    LOG_WARN("get tenant schema guard fail", KR(ret));
+  } else if (OB_FAIL(schema_guard.get_table_schema( ref_table_id, table_schema))) {
     task_op.set_errcode(ret);
     LOG_WARN("failed to get table schema", KR(ret), K(ref_table_id));
   } else if (OB_ISNULL(table_schema)) {
@@ -75,14 +75,6 @@ void ObDASRetryCtrl::tablet_location_retry_proc(ObDASRef &das_ref,
   } else {
     loc_router.force_refresh_location_cache(true, task_op.get_errcode());
     need_retry = true;
-    ObDiagnosticInfo *di = ObLocalDiagnosticInfo::get();
-    if (OB_NOT_NULL(di) && di->get_ash_stat().can_start_das_retry() &&
-        OB_NOT_NULL(das_ref.get_exec_ctx().get_my_session())) {
-      di->get_ash_stat().record_cur_das_test_start_ts(
-          common::ObTimeUtility::current_time() - task_op.das_task_start_timestamp_, need_retry);
-      observer::ObQueryRetryCtrl::start_location_error_retry_wait_event(
-          *das_ref.get_exec_ctx().get_my_session(), task_op.errcode_);
-    }
     const ObDASTableLocMeta *loc_meta = tablet_loc->loc_meta_;
     LOG_INFO("[DAS RETRY] refresh tablet location cache and retry DAS task",
              "errcode", task_op.get_errcode(), KPC(loc_meta), KPC(tablet_loc));
@@ -95,14 +87,6 @@ void ObDASRetryCtrl::tablet_nothing_readable_proc(ObDASRef &das_ref, ObIDASTaskO
     need_retry = false;
   } else {
     need_retry = true;
-    ObDiagnosticInfo *di = ObLocalDiagnosticInfo::get();
-    if (OB_NOT_NULL(di) && di->get_ash_stat().can_start_das_retry() &&
-        OB_NOT_NULL(das_ref.get_exec_ctx().get_my_session())) {
-      di->get_ash_stat().record_cur_das_test_start_ts(
-          common::ObTimeUtility::current_time() - task_op.das_task_start_timestamp_, need_retry);
-      observer::ObQueryRetryCtrl::start_replica_not_readable_retry_wait_event(
-          *das_ref.get_exec_ctx().get_my_session());
-    }
   }
 }
 

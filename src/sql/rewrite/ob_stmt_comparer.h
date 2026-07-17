@@ -61,7 +61,6 @@ struct ObStmtMapInfo {
   bool is_select_item_equal_;
   bool is_distinct_equal_;
   bool is_qualify_filter_equal_;
-  bool left_can_be_replaced_; // used for mv rewrite
   // If from item is generated table, need to record ref query's select item map relationship
   // If it is a set stmt, each set query corresponding mapping relationship is also recorded in view_select_item_map_
   ObStmtMapInfo()
@@ -74,8 +73,7 @@ struct ObStmtMapInfo {
     is_order_equal_(false),
     is_select_item_equal_(false),
     is_distinct_equal_(false),
-    is_qualify_filter_equal_(false),
-    left_can_be_replaced_(true)
+    is_qualify_filter_equal_(false)
     {}
 
   void reset();
@@ -91,8 +89,7 @@ struct ObStmtMapInfo {
                K_(equal_param_map),
                K_(view_select_item_map),
                K_(is_order_equal),
-               K_(is_distinct_equal),
-               K_(left_can_be_replaced));
+               K_(is_distinct_equal));
 };
 
 struct StmtCompareHelper {
@@ -255,7 +252,6 @@ public:
                                     ObStmtMapInfo &map_info,
                                     QueryRelation &relation,
                                     bool is_strict_select_list = false,
-                                    bool need_check_select_items = true,
                                     bool is_in_same_stmt = true);
 
   static int compute_conditions_map(const ObDMLStmt *first,

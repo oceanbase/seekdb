@@ -90,7 +90,7 @@ int ObExprLeastGreatest::calc_result_typeN_mysql(ObExprResType &type,
       } else if (all_integer && ob_is_number_or_decimal_int_tc(type.get_type())) {
         // the args type is integer and result type is number/decimal, there are unsigned bigint in
         // args, set expr meta here.
-        type.set_accuracy(common::ObAccuracy::DDL_DEFAULT_ACCURACY2[0/*is_oracle*/][ObUInt64Type]);
+        type.set_accuracy(common::ObAccuracy::DDL_DEFAULT_ACCURACY2[0 /* mysql mode */][ObUInt64Type]);
       } else {
         for (int64_t i = 0; i < param_num; i++) {
           if (ob_is_enum_or_set_type(types[i].get_type())) {
@@ -261,11 +261,12 @@ int ObExprLeastGreatest::calc_mysql(const ObExpr &expr, ObEvalCtx &ctx,
   uint32_t param_num = expr.arg_cnt_;
   bool has_null = false;
   int64_t cmp_res_offset = 0;
-  // Here we need to process the parameters according to the required values, if a parameter value is null, we will no longer calculate the values of the subsequent parameters
+  // Stop evaluating after the first null to preserve warning behavior for arguments
+  // evaluated before that null.
   //create table t(c1 int, c2 varchar(10));
   //insert into t values(null, 'a');
-  // select least(c2, c1) from t; mysql will report warning, oracle will report error
-  // select least(c1, c2) from t; mysql will not report warning, oracle normally outputs null
+  // select least(c2, c1) from t; reports warning
+  // select least(c1, c2) from t; reports null without warning
   for (int i = 0; OB_SUCC(ret) && !has_null && i < param_num; ++i) {
     ObDatum *tmp_datum = NULL;
     if (OB_FAIL(expr.args_[i]->eval(ctx, tmp_datum))) {
@@ -344,11 +345,9 @@ int ObExprLeastGreatest::calc_mysql(const ObExpr &expr, ObEvalCtx &ctx,
 
 DEF_SET_LOCAL_SESSION_VARS(ObExprLeastGreatest, raw_expr) {
   int ret = OB_SUCCESS;
-  if (is_mysql_mode()) {
-    SET_LOCAL_SYSVAR_CAPACITY(2);
-    EXPR_ADD_LOCAL_SYSVAR(share::SYS_VAR_SQL_MODE);
-    EXPR_ADD_LOCAL_SYSVAR(share::SYS_VAR_COLLATION_CONNECTION);
-  }
+  SET_LOCAL_SYSVAR_CAPACITY(2);
+  EXPR_ADD_LOCAL_SYSVAR(share::SYS_VAR_SQL_MODE);
+  EXPR_ADD_LOCAL_SYSVAR(share::SYS_VAR_COLLATION_CONNECTION);
   return ret;
 }
 
@@ -370,4 +369,3 @@ int ObExprLeast::calc_least(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_da
 
 }
 }
-

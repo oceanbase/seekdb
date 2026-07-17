@@ -17,7 +17,7 @@
 #ifndef OCEANBASE_OBSERVER_VIRTUAL_TABLE_OB_SHOW_GRANTS_
 #define OCEANBASE_OBSERVER_VIRTUAL_TABLE_OB_SHOW_GRANTS_
 
-#include "share/ob_virtual_table_scanner_iterator.h"
+#include "observer/virtual_table/ob_virtual_table_scanner_iterator.h"
 #include "share/schema/ob_priv_type.h"
 #include "share/schema/ob_schema_struct.h"
 #include "common/ob_range.h"
@@ -99,7 +99,7 @@ public:
 
   virtual int inner_get_next_row(common::ObNewRow *&row);
   virtual void reset();
-  inline void set_tenant_id(uint64_t tenant_id) { tenant_id_ = tenant_id; }
+  
   inline void set_user_id(uint64_t user_id) { user_id_ = user_id; }
   inline void set_session_priv(share::schema::ObSessionPrivInfo session_priv)
   { session_priv_ = session_priv; }
@@ -147,7 +147,6 @@ private:
   int add_priv_map(PRIV_MAP &priv_map, PrivKey &priv_key, ObPrivSet added_priv);
 
 private:
-  uint64_t tenant_id_;
   uint64_t user_id_;
   EnableRoleIdArray enable_role_id_array_;
   share::schema::ObSessionPrivInfo session_priv_;

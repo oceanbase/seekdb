@@ -18,11 +18,10 @@
 #define  OCEANBASE_MEMTABLE_MVCC_OB_QUERY_ENGINE_
 
 #include "lib/container/ob_iarray.h"
+#include "lib/function/ob_function.h"
 #include "lib/oblog/ob_log_module.h"
-#include "lib/objectpool/ob_concurrency_objpool.h"
 #include "storage/memtable/mvcc/ob_keybtree.h"
 #include "storage/memtable/ob_memtable_key.h"
-#include "storage/memtable/ob_mt_hash.h"
 
 namespace oceanbase
 {
@@ -61,9 +60,7 @@ public:
   virtual void reset() = 0;
 };
 
-// ObQueryEngine consists of hashtable and btree. We will maintain key and value
-// into both of the hashtable and btree and use them to complete efficient
-// point select and range query operations
+// ObQueryEngine uses a btree for both point lookups and range queries
 class ObQueryEngine
 {
 public:
@@ -75,8 +72,8 @@ public:
   typedef keybtree::BtreeIterator<ObStoreRowkeyWrapper, ObMvccRow *> BtreeIterator;
   // Used only for estimation.
   typedef keybtree::BtreeRawIterator<ObStoreRowkeyWrapper, ObMvccRow *> BtreeRawIterator;
-  // hashtable for point select
-  typedef ObMtHash KeyHash;
+  // callback for creating btree kv
+  typedef ObFunction<int(const bool is_exist_key, ObStoreRowkeyWrapper &key, ObMvccRow *&row)> ObMvccRowCreator;
 
   // ObQueryEngine Iterator implements the iterator interface
   template <typename BtreeIterator>
@@ -132,18 +129,6 @@ public:
     ObMvccRow *value_;
   };
 
-  template <typename BtreeIterator>
-  class IteratorAlloc
-  {
-  public:
-    IteratorAlloc() {}
-    ~IteratorAlloc() {}
-    Iterator<BtreeIterator> *alloc() { return op_reclaim_alloc(Iterator<BtreeIterator>); }
-    void free(Iterator<BtreeIterator> *iter) { op_reclaim_free(iter); }
-  private:
-    DISALLOW_COPY_AND_ASSIGN(IteratorAlloc);
-  };
-
 public:
   enum {
     MAX_SAMPLE_ROW_COUNT = 500,
@@ -155,24 +140,17 @@ public:
     : is_inited_(false),
     memstore_allocator_(memstore_allocator),
     btree_allocator_(memstore_allocator_),
-    keybtree_(btree_allocator_),
-    keyhash_(memstore_allocator_) {}
+    keybtree_(btree_allocator_) {}
   ~ObQueryEngine() { destroy(); }
   int init();
   void destroy();
   void pre_batch_destroy_keybtree();
 
   // ===================== Ob Query Engine User Operation Interface =====================
-  // The concurrency control alogorithm of query engine is as following steps:
-  // 1. Firstly, we use the atomic hashtable to ensure that only one thread can
-  //    create the ObMvccRow and support efficient point select(through set())
-  // 2. Then we can operate the ObMvccRow according to the operation semantics
-  // 3. After above operation, we need atomically insert the ObMvccRow into the
-  //    btree to support the efficient range query(through ensure())
-  int set(const ObMemtableKey *key, ObMvccRow *value);
-  int ensure(const ObMemtableKey *key, ObMvccRow *value);
-  // get() will use the hashtable to support fast point select
+  // get() looks up directly in the btree
   int get(const ObMemtableKey *parameter_key, ObMvccRow *&row, ObMemtableKey *returned_key);
+  // create_btree_kv() atomically inserts or gets from btree using a callback
+  int create_btree_kv(const ObMemtableKey *parameter_key, const ObMvccRowCreator &row_creator, ObMvccRow *&row);
   // scan() will use the btree to support fast range query
   int scan(const ObMemtableKey *start_key, const bool start_exclude, const ObMemtableKey *end_key,
            const bool end_exclude, ObIQueryEngineIterator *&ret_iter);
@@ -202,12 +180,7 @@ public:
   void check_cleanout(bool &is_all_cleanout,
                       bool &is_all_delay_cleanout,
                       int64_t &count);
-  // Dump the hash table and btree to the file.
   void dump2text(FILE *fd);
-  int dump_keyhash(FILE *fd) const;
-  // Btree statistics used for virtual table
-  int64_t hash_size() const;
-  int64_t hash_alloc_memory() const;
   int64_t btree_size() const;
   int64_t btree_alloc_memory() const;
 private:
@@ -246,16 +219,11 @@ private:
   DISALLOW_COPY_AND_ASSIGN(ObQueryEngine);
 
   bool is_inited_;
-  // allocator for keyhash and btree
+  // allocator for btree
   ObIAllocator &memstore_allocator_;
   BtreeNodeAllocator btree_allocator_;
   // The btree optimized for fast range scan
   KeyBtree keybtree_;
-  // The hashtable optimized for fast point select
-  KeyHash keyhash_;
-  // Iterator allocator for read and estimation
-  IteratorAlloc<BtreeIterator> iter_alloc_;
-  IteratorAlloc<BtreeRawIterator> raw_iter_alloc_;
 };
 
 } // namespace memtable

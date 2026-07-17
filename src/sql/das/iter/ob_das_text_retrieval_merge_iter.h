@@ -115,9 +115,8 @@ public:
   virtual int do_table_scan() override;
   virtual int rescan() override;
   void set_domain_id_idx_tablet_id(const ObTabletID &tablet_id) { domain_id_idx_tablet_id_ = tablet_id; }
-  void set_ls_id(const share::ObLSID &ls_id) { ls_id_ = ls_id; }
   storage::ObTableScanParam &get_doc_agg_param() { return whole_doc_agg_param_; }
-  int set_related_tablet_ids(const share::ObLSID &ls_id, const ObDASFTSTabletID &related_tablet_ids);
+  int set_related_tablet_ids(const ObDASFTSTabletID &related_tablet_ids);
   virtual int set_merge_iters(const ObIArray<ObDASIter *> &retrieval_iters);
   const ObIArray<ObString> &get_query_tokens() { return query_tokens_; }
   bool is_taat_mode() { return RetrievalProcType::TAAT == processing_type_; }
@@ -163,7 +162,6 @@ protected:
   ObDASIRScanRtDef *ir_rtdef_;
   transaction::ObTxDesc *tx_desc_;
   transaction::ObTxReadSnapshot *snapshot_;
-  share::ObLSID ls_id_;
   common::ObTabletID domain_id_idx_tablet_id_;
   ObArray<ObString> query_tokens_;
   ObDASTokenRetrievalIterArray token_iters_;

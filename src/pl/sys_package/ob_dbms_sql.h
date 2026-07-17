@@ -34,8 +34,7 @@ typedef common::ParamStore ParamStore;
 class ObDbmsInfo
 {
   /*
-   * The initial purpose of extracting this structure was to
-   * investigate Oracle's behavior, and the dbms_sql param information is not strongly bound to dbms_cursor
+   * dbms_sql param information is not strongly bound to dbms_cursor.
    * Even if dbms_cursor is reopened or closed,
    * as long as the param information is not modified through methods like parse, bind_value, column_value,
    * the value of param will not change

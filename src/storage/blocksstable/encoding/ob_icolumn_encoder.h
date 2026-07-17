@@ -55,7 +55,7 @@ public:
 
   struct EncoderDesc
   {
-    bool need_data_store_; // need store data (column store/row store) outside meta
+    bool need_data_store_; // Whether column payload is stored outside metadata.
     bool is_var_data_; // is store var length data in row store
     bool has_null_;
     bool has_nope_;
@@ -155,7 +155,7 @@ public:
       const int64_t bits_size,
       Getter &getter);
   template <typename BitPackingValueGetter, typename FixDataSetter>
-  int fill_column_store(
+  int fill_fixed_data(
       ObBufferWriter &writer,
       const ObColDatums &datums,
       BitPackingValueGetter &getter,
@@ -232,7 +232,7 @@ int ObIColumnEncoder::store_fix_bits(
 }
 
 template <typename BitPackingValueGetter, typename FixDataSetter>
-int ObIColumnEncoder::fill_column_store(
+int ObIColumnEncoder::fill_fixed_data(
     ObBufferWriter &writer,
     const ObColDatums &datums,
     BitPackingValueGetter &getter,

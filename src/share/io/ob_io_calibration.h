@@ -18,13 +18,13 @@
 #define OCEANBASE_SHARE_IO_OB_IO_CALIBRATION_H
 
 #include "lib/allocator/ob_concurrent_fifo_allocator.h"
-#include "lib/thread/thread_mgr_interface.h"
+#include "storage/blocksstable/ob_macro_block_handle.h"  // by-value member real user(already conf L2)
+#include "lib/thread/threads.h"
 #include "lib/queue/ob_fixed_queue.h"
 #include "lib/container/ob_array_iterator.h"
 #include "lib/container/ob_array_wrap.h"
 #include "lib/lock/ob_drw_lock.h"
 #include "share/io/ob_io_define.h"
-#include "storage/blocksstable/ob_block_manager.h"
 
 namespace oceanbase
 {
@@ -83,7 +83,7 @@ private:
   
 };
 
-class ObIOBenchRunner : public lib::TGRunnable
+class ObIOBenchRunner : public lib::Threads
 {
 public:
   ObIOBenchRunner();
@@ -95,9 +95,9 @@ public:
 
 private:
   bool is_inited_;
+  bool thread_inited_;
   ObArray<blocksstable::ObMacroBlockHandle> block_handles_;
   ObIOBenchLoad load_;
-  int tg_id_;
   int64_t io_count_;
   int64_t rt_us_;
   char *write_buf_;
@@ -105,7 +105,7 @@ private:
   int64_t block_count_;
 };
 
-class ObIOBenchController : public lib::TGRunnable
+class ObIOBenchController : public lib::Threads
 {
 public:
   ObIOBenchController();
@@ -116,7 +116,7 @@ public:
   int64_t get_finish_timestamp();
   int get_ret_code();
 private:
-  int tg_id_;
+  bool thread_inited_;
   lib::ObMutex running_mutex_;
   int64_t start_ts_;
   int64_t finish_ts_;
@@ -137,8 +137,6 @@ public:
   int reset_io_ability();
   int get_io_ability(ObIOAbility &io_ability);
   void get_iops_scale(const ObIOMode mode, const int64_t size, double &iops_scale, bool &is_io_ability_valid);
-  int read_from_table();
-  int write_into_table(ObMySQLTransaction &trans, const ObAddr &addr, const ObIOAbility &io_ability);
   int refresh(const bool only_refresh, const ObIArray<ObIOBenchResult> &items);
   int execute_benchmark();
   int get_benchmark_status(int64_t &start_ts, int64_t &finish_ts, int &ret_code);

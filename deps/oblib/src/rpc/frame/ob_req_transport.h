@@ -22,8 +22,7 @@
 #include "lib/oblog/ob_log.h"
 #include "lib/utility/ob_print_utils.h"
 #include "lib/statistic_event/ob_stat_event.h"
-#include "lib/stat/ob_diagnose_info.h"
-#include "rpc/obrpc/ob_rpc_packet.h"
+#include "rpc/ob_packet.h"
 #include "lib/allocator/ob_malloc.h"
 
 namespace oceanbase
@@ -65,7 +64,7 @@ public:
   public:
     AsyncCB(int pcode)
         : low_level_cb_(NULL), gtid_(0), pkt_id_(0),
-          dst_(), timeout_(0), tenant_id_(0),
+          dst_(), timeout_(0),
           err_(0), pcode_(pcode), send_ts_(0), payload_(0)
     {}
     virtual ~AsyncCB() {}
@@ -82,7 +81,7 @@ public:
     // invoke when get a valid packet on protocol level, but can't decode it.
     virtual void on_invalid() {
       int ret = err_;
-      RPC_FRAME_LOG(ERROR, "rpc response decode failed, tenant oom or deserialization failed", K_(pcode), K_(tenant_id), K_(dst));
+      RPC_FRAME_LOG(ERROR, "rpc response decode failed, tenant oom or deserialization failed", K_(pcode), K_(dst));
     }
     // invoke when can't get a valid or completed packet.
     virtual void on_timeout() { RPC_FRAME_LOG(DEBUG, "packet timeout"); }
@@ -92,12 +91,12 @@ public:
 
     void set_dst(const ObAddr &dst) { dst_ = dst; }
     void set_timeout(int64_t timeout) { timeout_ = timeout; }
-    void set_tenant_id(uint64_t tenant_id) { tenant_id_ = tenant_id; }
+    
     void set_send_ts(const int64_t send_ts) { send_ts_ = send_ts; }
     int64_t get_send_ts() { return send_ts_; }
     void set_payload(const int64_t payload) { payload_ = payload; }
     int64_t get_payload() { return payload_; }
-    obrpc::ObRpcPacketCode get_pcode() const { return static_cast<obrpc::ObRpcPacketCode>(pcode_); }
+    int get_pcode() const { return pcode_; }
 
     void* low_level_cb_;
     uint64_t gtid_;
@@ -107,77 +106,13 @@ public:
   protected:
     ObAddr dst_;
     int64_t timeout_;
-    uint64_t tenant_id_;
+    
     int err_;
     int pcode_;
     int64_t send_ts_;
     int64_t payload_;
   };
 
-  class Request {
-    friend class ObReqTransport;
-
-  public:
-    Request() { reset(); }
-    ~Request() { if (s_ && !async_) { destroy(); } }
-    obrpc::ObRpcPacket *pkt() { return pkt_; }
-    const obrpc::ObRpcPacket &const_pkt() const { return *pkt_; }
-    char *buf() { return buf_; }
-    int64_t buf_len() const { return buf_len_; }
-    void set_cidx(int32_t cidx) { if (s_ != NULL) { s_->addr.cidx = cidx; } }
-    void set_async() { async_ = true; }
-    AsyncCB *cb() { return cb_; }
-    int64_t timeout() const { return s_ ? static_cast<int64_t>(s_->timeout) : 0; }
-    void destroy() {
-    }
-    void reset()
-    {
-      s_ = NULL;
-      pkt_ = NULL;
-      buf_  = NULL;
-      buf_len_ = 0;
-      async_ = false;
-      cb_ = NULL;
-    }
-
-    TO_STRING_KV("pkt", *pkt_);
-
-  public:
-    easy_session_t *s_;
-    obrpc::ObRpcPacket *pkt_;
-    AsyncCB *cb_;
-  private:
-    char *buf_;
-    int64_t buf_len_;
-    bool async_;
-  };
-
-  class Result {
-    friend class ObReqTransport;
-
-  public:
-    Result() : pkt_(NULL) {}
-
-    obrpc::ObRpcPacket *pkt() { return pkt_; }
-
-  private:
-    obrpc::ObRpcPacket *pkt_;
-  };
-
-public:
-  ObReqTransport(easy_io_t *eio,
-                 easy_io_handler_pt *handler);
-
-private:
-
-private:
-  static const int32_t OB_RPC_CONNECTION_COUNT_PER_THREAD = 1;
-private:
-  easy_io_t *eio_;
-  easy_io_handler_pt *handler_;
-  int32_t sgid_;
-  int32_t bucket_count_;//Control the number of buckets of batch_rpc_eio
-  int ratelimit_enabled_;
 }; // end of class ObReqTransport
 } // end of namespace frame
 } // end of namespace rpc

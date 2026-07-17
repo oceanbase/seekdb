@@ -19,7 +19,7 @@
 
 #include "rpc/frame/ob_net_easy.h"
 #include "rpc/frame/ob_req_handler.h"
-#include "rpc/obrpc/ob_rpc_proxy.h"
+#include "rpc/frame/ob_req_translator.h"
 #include "observer/ob_srv_xlator.h"
 #include "observer/ob_srv_deliver.h"
 #include "observer/ob_server_struct.h"
@@ -56,10 +56,6 @@ public:
   static int extract_expired_time(const char *const cert_file, int64_t &expired_time);
   static uint64_t get_ssl_file_hash(const char *intl_file[3], const char *sm_file[5], bool &file_exist);
   ObSrvDeliver& get_deliver() { return deliver_; }
-  int get_proxy(obrpc::ObRpcProxy &proxy);
-  rpc::frame::ObReqTransport *get_req_transport();
-  rpc::frame::ObReqTransport *get_high_prio_req_transport();
-  rpc::frame::ObReqTransport *get_batch_rpc_req_transport();
   inline rpc::frame::ObReqTranslator &get_xlator();
   int reload_sql_thread_config();
 
@@ -69,8 +65,6 @@ public:
   int net_endpoint_register(const ObNetEndpointKey &endpoint_key, int64_t expire_time);
   int net_endpoint_predict_ingress(const ObNetEndpointKey &endpoint_key, int64_t &predicted_bw);
   int net_endpoint_set_ingress(const ObNetEndpointKey &endpoint_key, int64_t assigned_bw);
-  // share storage net throt
-  int shared_storage_net_throt_set(const ObSharedDeviceResourceArray &assigned_resource);
 
 private:
   ObGlobalContext &gctx_;
@@ -82,10 +76,6 @@ private:
   ObSrvDeliver deliver_;
   rootserver::ObIngressBWAllocService ingress_service_;
 
-  rpc::frame::ObReqTransport *rpc_transport_;
-  rpc::frame::ObReqTransport *high_prio_rpc_transport_;
-  rpc::frame::ObReqTransport *mysql_transport_;
-  rpc::frame::ObReqTransport *batch_rpc_transport_;
   uint64_t last_ssl_info_hash_;
   ObSpinLock lock_;
   int64_t standby_fetchlog_bw_limit_;

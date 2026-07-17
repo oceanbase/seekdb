@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include "storage/tx/ob_trans_part_ctx.h"
+#include "storage/tx/ob_tx_ctx.h"
 #include "storage/tx/ob_tx_log_cb_define.h"
 
 namespace oceanbase
@@ -48,7 +48,7 @@ int ObTxLogCbGroup::init(const int64_t group_no)
   return ret;
 }
 
-int ObTxLogCbGroup::occupy_by_tx(ObPartTransCtx *tx_ctx)
+int ObTxLogCbGroup::occupy_by_tx(ObTxCtx *tx_ctx)
 {
   int ret = OB_SUCCESS;
 

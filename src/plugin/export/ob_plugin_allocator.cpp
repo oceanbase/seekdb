@@ -30,12 +30,12 @@ extern "C" {
 
 OBP_PUBLIC_API void *obp_malloc(int64_t size)
 {
-  return ob_malloc(size, ObMemAttr(MTL_ID(), default_plugin_memory_label));
+  return ob_malloc(size, ObMemAttr(default_plugin_memory_label));
 }
 
 OBP_PUBLIC_API void *obp_malloc_align(int64_t alignment, int64_t size)
 {
-  return ob_malloc_align(alignment, size, ObMemAttr(MTL_ID(), default_plugin_memory_label));
+  return ob_malloc_align(alignment, size, ObMemAttr(default_plugin_memory_label));
 }
 
 OBP_PUBLIC_API void obp_free(void *ptr)

@@ -17,7 +17,7 @@
 #ifndef OCEANBASE_OBSERVER_VIRTUAL_TABLE_OB_TENANT_SHOW_TABLES_
 #define OCEANBASE_OBSERVER_VIRTUAL_TABLE_OB_TENANT_SHOW_TABLES_
 
-#include "share/ob_virtual_table_iterator.h"
+#include "observer/virtual_table/ob_virtual_table_iterator.h"
 #include "common/ob_range.h"
 #include "lib/container/ob_se_array.h"
 #include "lib/ob_define.h"
@@ -55,15 +55,13 @@ public:
   virtual int inner_open();
   virtual int inner_get_next_row(common::ObNewRow *&row);
   virtual void reset();
-  inline void set_tenant_id(uint64_t tenant_id) { tenant_id_ = tenant_id; }
+  
 private:
   int inner_get_next_row();
-  int fetch_catalog_table_schemas_(const uint64_t tenant_id,
-                                   const uint64_t database_id,
+  int fetch_catalog_table_schemas_(const uint64_t database_id,
                                    common::ObString &database_name,
                                    common::ObIArray<const share::schema::ObSimpleTableSchemaV2 *> &table_schemas);
 private:
-  uint64_t tenant_id_;
   uint64_t database_id_;
   common::ObString database_name_;
   common::ObSEArray<const share::schema::ObSimpleTableSchemaV2 *, 128> table_schemas_;

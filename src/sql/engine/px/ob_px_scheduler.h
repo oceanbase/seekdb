@@ -19,7 +19,6 @@
 
 #include "sql/engine/px/exchange/ob_receive_op.h"
 #include "sql/engine/px/ob_dfo_mgr.h"
-#include "sql/engine/px/ob_px_rpc_proxy.h"
 #include "sql/engine/px/ob_px_data_ch_provider.h"
 #include "sql/engine/px/exchange/ob_row_heap.h"
 #include "sql/engine/px/ob_px_dtl_proc.h"
@@ -115,7 +114,6 @@ public:
                 dtl::ObDtlChannelLoop &msg_loop,
                 ObInterruptibleTaskID &interrupt_id)
   : dfo_mgr_(allocator),
-    rpc_proxy_(),
     all_threads_finish_(false),
     first_error_code_(common::OB_SUCCESS),
     msg_loop_(msg_loop),
@@ -164,7 +162,6 @@ public:
 public:
   ObDfoMgr dfo_mgr_;
   ObPieceMsgCtxMgr piece_msg_ctx_mgr_;
-  obrpc::ObPxRpcProxy rpc_proxy_;
   bool all_threads_finish_; // QC has already clearly known that all tasks have been executed and resources have been released
   int first_error_code_;
   dtl::ObDtlChannelLoop &msg_loop_;

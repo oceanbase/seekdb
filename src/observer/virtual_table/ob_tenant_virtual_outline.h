@@ -21,7 +21,7 @@
 #include "lib/container/ob_se_array.h"
 #include "lib/hash/ob_hashmap.h"
 #include "share/schema/ob_schema_struct.h"
-#include "share/ob_virtual_table_iterator.h"
+#include "observer/virtual_table/ob_virtual_table_iterator.h"
 
 using oceanbase::common::OB_APP_MIN_COLUMN_ID;
 namespace oceanbase
@@ -57,7 +57,6 @@ protected:
   };
 public:
   ObTenantVirtualOutlineBase():
-      tenant_id_(common::OB_INVALID_TENANT_ID),
       outline_info_idx_(common::OB_INVALID_INDEX),
       outline_infos_(),
       database_infos_()
@@ -65,12 +64,11 @@ public:
   ~ObTenantVirtualOutlineBase() {}
   virtual int inner_open();
   void reset();
-  inline void set_tenant_id(uint64_t tenant_id) { tenant_id_ = tenant_id; }
+  
 protected:
   int is_database_recycle(uint64_t database_id, bool &is_recycle);
   int set_database_infos_and_get_value(uint64_t database_id, bool &is_recycle);
 protected:
-  uint64_t tenant_id_;
   int64_t outline_info_idx_;
   common::ObSEArray<const share::schema::ObOutlineInfo*, 16> outline_infos_;
   common::hash::ObHashMap<uint64_t, DBInfo> database_infos_;

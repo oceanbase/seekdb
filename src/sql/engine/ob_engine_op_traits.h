@@ -25,7 +25,6 @@ namespace sql
 {
 class ObOpSpec;
 class ObTableScanSpec;
-class ObMVTableScanSpec;
 class ObTableInsertSpec;
 class ObTableModifySpec;
 class ObGranuleIteratorSpec;
@@ -38,7 +37,6 @@ struct ObEngineOpTraits<true>
 {
   typedef ObOpSpec Root;
   typedef ObTableScanSpec TSC;
-  typedef ObMVTableScanSpec MV_TSC;
   typedef ObTableModifySpec TableModify;
   typedef ObTableInsertSpec TableInsert;
   typedef ObGranuleIteratorSpec GI;

@@ -25,8 +25,7 @@ PL_MOD_DEF(OB_PL_DEBUG_MOD, "PlDebug")
 PL_MOD_DEF(OB_PL_DEBUG_SYS_MOD, "PlDebugSys")
 PL_MOD_DEF(OB_PL_ANY_DATA, "AnyData")
 PL_MOD_DEF(OB_PL_ANY_TYPE, "AnyType")
-PL_MOD_DEF(OB_PL_CODE_GEN, "PlCodeGen")
-PL_MOD_DEF(OB_PL_JIT, "PlJit")
+PL_MOD_DEF(OB_PL_BUILD, "PlBuild")
 PL_MOD_DEF(OB_PL_PROFILER, "PlProfiler")
 PL_MOD_DEF(OB_PL_ARENA, "PlArena")
 PL_MOD_DEF(OB_PL_INIT_SESSION_VAR, "PlInitSessVar")
@@ -89,7 +88,7 @@ class ObPLAllocator1 : public common::ObIAllocator
 public:
   ObPLAllocator1(PL_MOD_IDX idx, common::ObIAllocator *parent_alloc) :
     is_inited_(false),
-    memattr_(ObMemAttr(MTL_ID(), "PlTemp", ObCtxIds::DEFAULT_CTX_ID)),
+    memattr_(ObMemAttr("PlTemp", ObCtxIds::DEFAULT_CTX_ID)),
     parent_allocator_(parent_alloc),
     allocator_(nullptr),
     use_malloc_(false) {}

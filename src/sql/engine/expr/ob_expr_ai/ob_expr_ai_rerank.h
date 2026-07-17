@@ -16,18 +16,18 @@
 
 #ifndef OCEANBASE_SQL_OB_EXPR_AI_RERANK_H_
 #define OCEANBASE_SQL_OB_EXPR_AI_RERANK_H_
-
+ 
 #include "sql/engine/expr/ob_expr_operator.h"
 #include "sql/engine/ob_exec_context.h"
 #include "ob_ai_func_client.h"
 #include "ob_ai_func.h"
 #include "ob_ai_func_utils.h"
-
-namespace oceanbase
+ 
+namespace oceanbase 
 {
-namespace sql
+namespace sql 
 {
-class ObExprAIRerank : public ObFuncExprOperator
+class ObExprAIRerank : public ObFuncExprOperator 
 {
 public:
   explicit ObExprAIRerank(common::ObIAllocator &alloc);
@@ -40,16 +40,16 @@ public:
   virtual int cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_expr,
                       ObExpr &rt_expr) const override;
   virtual bool need_rt_ctx() const override { return true; }
-
+ 
 private:
-  static int inner_eval_ai_rerank(common::ObIAllocator &allocator,
-                                  const common::ObAIFuncExprInfo &info,
+  static int inner_eval_ai_rerank(common::ObIAllocator &allocator, 
+                                  const common::ObAIFuncExprInfo &info, 
                                   const share::ObAiModelEndpointInfo &endpoint_info,
-                                  common::ObArray<common::ObString> &header_array,
-                                  common::ObString &query,
-                                  common::ObJsonArray *document_array,
+                                  common::ObArray<common::ObString> &header_array, 
+                                  common::ObString &query, 
+                                  common::ObJsonArray *document_array, 
                                   common::ObJsonArray *&result_array);
-
+  
   static int eval_ai_rerank_with_doc_key(const ObExpr &expr, ObEvalCtx &ctx, common::ObIAllocator &allocator,
                                          common::ObString &model_id, common::ObString &query, common::ObJsonArray *document_array,
                                          common::ObString &doc_key, const common::ObAIFuncExprInfo &info, const share::ObAiModelEndpointInfo &endpoint_info, ObDatum &res);
@@ -72,3 +72,4 @@ private:
 } // namespace sql
 } // namespace oceanbase
 #endif // OCEANBASE_SQL_OB_EXPR_AI_RERANK_H_
+  

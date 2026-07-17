@@ -16,9 +16,9 @@
 
 #define USING_LOG_PREFIX SHARE
 #include "ob_time_zone_info_manager.h"
-#include "observer/ob_server.h"
-#include "observer/omt/ob_tenant_timezone_mgr.h"
-#include "observer/ob_sql_client_decorator.h"
+#include "lib/utility/ob_fast_convert.h"  // ObFastAtoi, previously hidden behind a transitive include(free within lib)
+#include "share/ob_tenant_timezone_mgr.h"
+#include "share/ob_sql_client_decorator.h"
 
 using namespace oceanbase::share;
 using namespace oceanbase::observer;
@@ -56,7 +56,7 @@ const char *ObTimeZoneInfoManager::FETCH_TENANT_TZ_INFO_SQL =
     "  USE_HASH(@\"SEL$0208448F\" \"oceanbase\".\"t3\"@\"SEL$2\") "
     "  USE_HASH(@\"SEL$0208448F\" \"oceanbase\".\"t2\"@\"SEL$2\") "
     "  PQ_DISTRIBUTE_WINDOW(@\"SEL$3\"  (0) NONE) "
-    "  FULL(@\"SEL$3\" \"oceanbase\".\"__all_tenant_time_zone_name\"@\"SEL$3\") "
+    "  FULL(@\"SEL$3\" \"oceanbase\".\"__all_time_zone_name\"@\"SEL$3\") "
     "  FULL(@\"SEL$0208448F\" \"t2\"@\"SEL$2\") "
     "  FULL(@\"SEL$0208448F\" \"t3\"@\"SEL$2\") "
     "  PRED_DEDUCE(@\"SEL$2\") "
@@ -68,12 +68,12 @@ const char *ObTimeZoneInfoManager::FETCH_TENANT_TZ_INFO_SQL =
     "t2.transition_type_id, t2.abbreviation, "
     "row_number() over (partition by t1.inner_tz_id, t3.transition_time order by t2.transition_type_id) as tran_row_number "
     "FROM (SELECT time_zone_id, row_number() over (order by time_zone_id) as inner_tz_id, name "
-    "      FROM oceanbase.__all_tenant_time_zone_name "
+    "      FROM oceanbase.__all_time_zone_name "
     "      ORDER BY time_zone_id "
     ") t1 "
-    "JOIN oceanbase.__all_tenant_time_zone_transition_type t2 "
+    "JOIN oceanbase.__all_time_zone_transition_type t2 "
     "ON t1.time_zone_id = t2.time_zone_id "
-    "LEFT JOIN oceanbase.__all_tenant_time_zone_transition t3 "
+    "LEFT JOIN oceanbase.__all_time_zone_transition t3 "
     "ON t2.time_zone_id = t3.time_zone_id "
     "  AND t2.transition_type_id=t3.transition_type_id "
     ") tz_info WHERE tz_info.tran_row_number = 1 "
@@ -89,11 +89,11 @@ int ObTimeZoneInfoManager::init()
     ret = OB_INIT_TWICE;
     LOG_WARN("init twice", K(ret));
   } else {
-    ObMemAttr attr(OB_SERVER_TENANT_ID, "TZInfoMgrMap");
+    ObMemAttr attr("TZInfoMgrMap");
     if (OB_FAIL(tz_info_map_buf_.init(attr))) {
-      LOG_WARN("init tz info map failed", K(ret), K(tenant_id_));
+      LOG_WARN("init tz info map failed", K(ret));
     } else if (OB_FAIL(tz_info_map_.init(attr))) {
-      LOG_WARN("init tz info map failed", K(ret), K(tenant_id_));
+      LOG_WARN("init tz info map failed", K(ret));
     } else {
       inited_ = true;
     }
@@ -154,11 +154,11 @@ int ObTimeZoneInfoManager::fetch_time_zone_info()
     LOG_WARN("init failed", K(ret));
   } else {
     int64_t current_tz_version = -1;
-    ObSQLClientRetryWeak sql_client_retry_weak(&sql_proxy_, tenant_id_, OB_ALL_SYS_STAT_TID);
+    ObSQLClientRetryWeak sql_client_retry_weak(&sql_proxy_, false, OB_ALL_SYS_STAT_TID);
     SMART_VAR(ObMySQLProxy::MySQLResult, res) {
       sqlclient::ObMySQLResult *result = NULL;
-      if (OB_FAIL(sql_client_retry_weak.read(res, tenant_id_, FETCH_LATEST_TZ_VERSION_SQL))) {
-        LOG_WARN("fail to execute sql", K(ret), K(tenant_id_));
+      if (OB_FAIL(sql_client_retry_weak.read(res, FETCH_LATEST_TZ_VERSION_SQL))) {
+        LOG_WARN("fail to execute sql", K(ret));
       } else if (OB_ISNULL(result = res.get_result())) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("fail to get result", K(result), K(ret));
@@ -197,12 +197,12 @@ int ObTimeZoneInfoManager::fetch_time_zone_info_from_tenant_table(const int64_t 
     // already latest
   } else if (current_tz_version < last_version_) {
     LOG_ERROR("current timezone version lower than local tz map version, wierd",
-      K(tenant_id_), K(current_tz_version), K(last_version_));
+      K(current_tz_version), K(last_version_));
   } else {
-    ObSQLClientRetryWeak sql_client_retry_weak(&sql_proxy_, tenant_id_, OB_ALL_TENANT_TIME_ZONE_NAME_TID);
+    ObSQLClientRetryWeak sql_client_retry_weak(&sql_proxy_, false, OB_ALL_TIME_ZONE_NAME_TID);
     SMART_VAR(ObMySQLProxy::MySQLResult, res) {
       sqlclient::ObMySQLResult *result = NULL;
-      if (OB_FAIL(sql_client_retry_weak.read(res, tenant_id_, FETCH_TENANT_TZ_INFO_SQL))){
+      if (OB_FAIL(sql_client_retry_weak.read(res, FETCH_TENANT_TZ_INFO_SQL))){
         LOG_WARN("fetch time zone data failed", K(ret));
       } else if (OB_ISNULL(result = res.get_result())) {
         ret = OB_ERR_UNEXPECTED;
@@ -214,11 +214,11 @@ int ObTimeZoneInfoManager::fetch_time_zone_info_from_tenant_table(const int64_t 
           SpinWLockGuard wlock_guard(sys_rwlock_);
           // the first tenant load timezone map into shared_tz_info_map_.
           // Other tenants load timezone map into tz_info_map_buf_ and then cmp with shared_tz_info_map_.
-          ObMemAttr attr(OB_SERVER_TENANT_ID, "TZInfoMgrMap");
+          ObMemAttr attr("TZInfoMgrMap");
           if (OB_FAIL(shared_tz_info_map_.init(attr))) {
             LOG_WARN("init share tz info map failed", K(ret));
-          } else if (OB_FAIL(fill_tz_info_map(*result, shared_tz_info_map_, tenant_id_))) {
-            LOG_ERROR("fail to fill tz_info_map for shared map", K(ret), K(tenant_id_));
+          } else if (OB_FAIL(fill_tz_info_map(*result, shared_tz_info_map_))) {
+            LOG_ERROR("fail to fill tz_info_map for shared map", K(ret));
           } else {
             tz_info_map_.id_map_ = shared_tz_info_map_.id_map_;
             tz_info_map_.name_map_ = shared_tz_info_map_.name_map_;
@@ -232,7 +232,7 @@ int ObTimeZoneInfoManager::fetch_time_zone_info_from_tenant_table(const int64_t 
           LOG_INFO("share tz info inited", K(ret), K(shared_tz_info_map_.id_map_),
                   K(shared_tz_info_map_.name_map_));
         } else {
-          if (OB_FAIL(fill_tz_info_map(*result, tz_info_map_buf_, tenant_id_))) {
+          if (OB_FAIL(fill_tz_info_map(*result, tz_info_map_buf_))) {
             LOG_ERROR("fail to fill tz_info_map", K(ret));
           } else {
             same_with_sys = cmp_tz_info_map(shared_tz_info_map_, tz_info_map_buf_);
@@ -245,7 +245,7 @@ int ObTimeZoneInfoManager::fetch_time_zone_info_from_tenant_table(const int64_t 
               // so ObTZInfoMap will not be used again. This is a defense code. 
               new (&tz_info_map_buf_) ObTZInfoMap();
               inited_ = false;
-              LOG_INFO("reset tz info map buf", K(tenant_id_), K(ret));
+              LOG_INFO("reset tz info map buf", K(ret));
               tz_info_map_.id_map_ = shared_tz_info_map_.id_map_;
               tz_info_map_.name_map_ = shared_tz_info_map_.name_map_;
               tz_info_map_.offset_map_ = shared_tz_info_map_.offset_map_;
@@ -263,7 +263,7 @@ int ObTimeZoneInfoManager::fetch_time_zone_info_from_tenant_table(const int64_t 
         }
         if (OB_SUCC(ret)) {
           last_version_ = current_tz_version;
-          LOG_INFO("success to fetch tz_info map", K(ret), K(last_version_), K(tenant_id_),
+          LOG_INFO("success to fetch tz_info map", K(ret), K(last_version_),
                     "new_last_version", current_tz_version, K(same_with_sys),
                     K(tz_info_map_.id_map_->size()), K(first_map));
         }
@@ -271,7 +271,7 @@ int ObTimeZoneInfoManager::fetch_time_zone_info_from_tenant_table(const int64_t 
     }
   }
   if (OB_SUCC(ret) &&
-      OB_UNLIKELY(OB_SYS_TENANT_ID == tenant_id_ && false == OTTZ_MGR.is_usable())) {
+      OB_UNLIKELY(true && false == OTTZ_MGR.is_usable())) {
     OTTZ_MGR.set_usable();
   }
 
@@ -286,7 +286,7 @@ int ObTimeZoneInfoManager::set_tz_info_map(ObTimeZoneInfoPos *&stored_tz_info,
   ObTimeZoneInfoPos *tz_pos_value = NULL;
   ObTZNameIDInfo *name_id_value = NULL;
   bool is_equal = false;
-  lib::ObMemAttr attr1(OB_SERVER_TENANT_ID, "TZInfoArray");
+  lib::ObMemAttr attr1("TZInfoArray");
   if (NULL == stored_tz_info) {
     if (OB_ISNULL(tz_pos_value = op_alloc(ObTimeZoneInfoPos))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
@@ -381,7 +381,7 @@ int ObTimeZoneInfoManager::calc_tz_info_offsets(ObTZInfoMap &tz_info_map)
     ret = OB_NOT_INIT;
     LOG_WARN("tz info map not init", K(ret));
   } else {
-    ObMemAttr attr(OB_SERVER_TENANT_ID, "TZInfoMgrMap");
+    ObMemAttr attr("TZInfoMgrMap");
     if (tz_info_map.offset_map_buf_.created()) {
       tz_info_map.offset_map_buf_.clear();
     } else if (OB_FAIL(tz_info_map.offset_map_buf_.create(ObTZInfoMap::TZ_OFFSET_BUCKET_NUM, attr))) {
@@ -432,8 +432,7 @@ int ObTimeZoneInfoManager::calc_tz_info_offsets(ObTZInfoMap &tz_info_map)
 }
 
 int ObTimeZoneInfoManager::fill_tz_info_map(sqlclient::ObMySQLResult &result,
-    ObTZInfoMap &tz_info_map,
-    uint64_t tenant_id)
+    ObTZInfoMap &tz_info_map)
 {
   int ret = OB_SUCCESS;
   ObString tz_name_str;
@@ -627,7 +626,7 @@ bool ObTimeZoneInfoManager::cmp_tz_info_map(ObTZInfoMap &map1, ObTZInfoMap &map2
   return same;
 }
 
-OB_SERIALIZE_MEMBER(ObRequestTZInfoArg, obs_addr_, tenant_id_);
+OB_SERIALIZE_MEMBER(ObRequestTZInfoArg, obs_addr_);
 
 
 OB_SERIALIZE_MEMBER(ObRequestTZInfoResult, last_version_, tz_array_);

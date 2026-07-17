@@ -18,7 +18,6 @@
 #define _OB_SQL_PX_SUB_CORRD_H_
 
 #include "sql/engine/px/ob_dfo.h"
-#include "sql/engine/px/ob_px_rpc_proxy.h"
 #include "sql/engine/px/ob_px_coord_msg_proc.h"
 #include "sql/engine/px/ob_px_data_ch_provider.h"
 #include "sql/engine/px/ob_granule_pump.h"
@@ -40,7 +39,7 @@ namespace oceanbase
 
 namespace storage
 {
-class ObColumnClusteredDag;
+class ObDDLInsertDag;
 }
 
 namespace sql
@@ -70,7 +69,7 @@ public:
   ObPxSQCProxy &get_sqc_proxy() { return sqc_ctx_.sqc_proxy_; }
   ObSqcCtx &get_sqc_ctx() { return sqc_ctx_; }
   const ObDDLCtrl &get_ddl_control() { return ddl_ctrl_; }
-  ObColumnClusteredDag *get_ddl_dag() { return ddl_dag_; }
+  ObDDLInsertDag *get_ddl_dag() { return ddl_dag_; }
   int set_tablets_info(ObIArray<ObPxTabletInfo> &tablets_info) {
     return sqc_ctx_.partitions_info_.assign(tablets_info);
   }
@@ -93,7 +92,7 @@ public:
   void set_is_single_tsc_leaf_dfo(bool flag) { is_single_tsc_leaf_dfo_ = flag; }
   int get_participants(ObPxSqcMeta &sqc,
                        const int64_t table_id,
-                       ObIArray<std::pair<share::ObLSID, ObTabletID>> &ls_tablet_ids) const;
+                       ObIArray<ObTabletID> &tablet_ids) const;
   void destroy_shared_rf_msgs();
 private:
   int setup_loop_proc(ObSqcCtx &sqc_ctx) const;
@@ -155,7 +154,7 @@ private:
   int64_t reserved_thread_count_;
   bool is_single_tsc_leaf_dfo_;
   ObArray<int64_t> all_shared_rf_msgs_; // for clear
-  storage::ObColumnClusteredDag *ddl_dag_;
+  storage::ObDDLInsertDag *ddl_dag_;
   storage::ObDDLDagThreadPool ddl_dag_threads_;
   DISALLOW_COPY_AND_ASSIGN(ObPxSubCoord);
 };

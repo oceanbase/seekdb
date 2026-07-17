@@ -44,21 +44,21 @@ public:
   // NOTE: ID is unique, but not monotonic.
   //
   //
-  // @param [in] tenant_id  target tenant id
+  // @param [in] tenant  target tenant id
   // @param [out] id        generated ID
   //
   // @return
-  //    - OB_INVALID_ARGUMENT  tenant_id is invalid or not matched with MTL_ID
-  static int gen_unique_id(const uint64_t tenant_id, share::ObCommonID &id);
+  //    - OB_INVALID_ARGUMENT  tenant is invalid or not matched with MTL_ID
+  static int gen_unique_id(share::ObCommonID &id);
 
-  // Send rpc to the leader of sys LS of target tenant to execute gen_unique_id.
+  // Send RPC to the target tenant log stream to execute gen_unique_id.
   //
   // Use this one when target tenant doesn't exist on current machine.
-  static int gen_unique_id_by_rpc(const uint64_t tenant_id, share::ObCommonID &id);
+  static int gen_unique_id_by_rpc(share::ObCommonID &id);
 
   // Use ObMaxIdFetcher to generate monotonically increasing ID for ObCommonID in target tenant
   //
-  // @param [in] tenant_id    target tenant id
+  // @param [in] tenant    target tenant id
   // @param [in] id_type      id type for ObMaxIdFetcher
   // @param [in] proxy        sql proxy
   // @param [out] id          generated monotonically increasing ID

@@ -43,14 +43,14 @@ public:
   using bucket_t = uint64_t;
   ~ObSmallHashSet() {}
 
-  int init(uint64_t capacity, int64_t tenant_id)
+  int init(uint64_t capacity)
   {
     int ret = OB_SUCCESS;
     if (inited_) {
       ret = OB_ERR_UNEXPECTED;
       COMMON_LOG(WARN, "init twice");
     } else {
-      alloc_.set_tenant_id(tenant_id);
+      
       alloc_.set_label("ObSmallHashSet");
       if (OB_FAIL(expand(capacity))) {
         COMMON_LOG(WARN, "failed to expand when init");
@@ -289,7 +289,7 @@ int ObSmallHashSet<_Accurate>::deserialize_(const char *buf, int64_t data_len, i
   OB_UNIS_DECODE(capacity);
   OB_UNIS_DECODE(size);
   if (OB_FAIL(ret)) {
-  } else if (OB_FAIL(init(capacity, ob_get_tenant_id()))) {
+  } else if (OB_FAIL(init(capacity))) {
     RPC_WARN("failed to init");
   }
   uint64_t hash = 0;

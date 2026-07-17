@@ -102,10 +102,6 @@ bool ObLogicMacroBlockId::operator<(const ObLogicMacroBlockId &other) const
     bool_ret = true;
   } else if (data_seq_.macro_data_seq_ > other.data_seq_.macro_data_seq_) {
     bool_ret = false;
-  } else if (column_group_idx_ < other.column_group_idx_) {
-    bool_ret = true;
-  } else if (column_group_idx_ > other.column_group_idx_) {
-    bool_ret = false;
   } else if (!is_mds_ && other.is_mds_) {
     bool_ret = true;
   } else if (is_mds_ && !other.is_mds_) {
@@ -128,10 +124,6 @@ bool ObLogicMacroBlockId::operator>(const ObLogicMacroBlockId &other) const
   } else if (data_seq_.macro_data_seq_ < other.data_seq_.macro_data_seq_) {
     bool_ret = false;
   } else if (data_seq_.macro_data_seq_ > other.data_seq_.macro_data_seq_) {
-    bool_ret = true;
-  } else if (column_group_idx_ < other.column_group_idx_) {
-    bool_ret = false;
-  } else if (column_group_idx_ > other.column_group_idx_) {
     bool_ret = true;
   } else if (!is_mds_ && other.is_mds_) {
     bool_ret = false;

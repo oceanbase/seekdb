@@ -35,19 +35,11 @@ int ObExprBM25::calc_result_typeN(
 {
   int ret = OB_SUCCESS;
   UNUSED(type_ctx);
-  const bool use_new_version = (GET_MIN_CLUSTER_VERSION() >= CLUSTER_VERSION_1_2_0_0);
-  int64_t expected_param_num = use_new_version ? 6 : 5;
+  const int64_t expected_param_num = 6;
 
   if (OB_UNLIKELY(param_num != expected_param_num)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("BM25 expr should have correct parameters", K(ret), K(param_num), K(expected_param_num), K(use_new_version));
-  } else if (!use_new_version) {
-    types[TOKEN_DOC_CNT_PARAM_IDX].set_calc_type(ObIntType);
-    types[TOTAL_DOC_CNT_PARAM_IDX].set_calc_type(ObIntType);
-    types[DOC_TOKEN_CNT_PARAM_IDX].set_calc_type(ObIntType);
-    types[AVG_DOC_CNT_PARAM_IDX_OLD].set_calc_type(ObDoubleType);
-    types[RELATED_TOKEN_CNT_PARAM_IDX_OLD].set_calc_type(ObUInt64Type);
-    result_type.set_double();
+    LOG_WARN("BM25 expr should have correct parameters", K(ret), K(param_num), K(expected_param_num));
   } else {
     types[TOKEN_DOC_CNT_PARAM_IDX].set_calc_type(ObIntType);
     types[TOTAL_DOC_CNT_PARAM_IDX].set_calc_type(ObIntType);
@@ -64,8 +56,7 @@ int ObExprBM25::cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_expr, ObE
 {
   int ret = OB_SUCCESS;
   UNUSED(expr_cg_ctx);
-  const int64_t expected_param_num = GET_MIN_CLUSTER_VERSION() >= CLUSTER_VERSION_1_2_0_0 ? 6 : 5;
-  CK(expected_param_num == raw_expr.get_param_count());
+  CK(6 == raw_expr.get_param_count());
   rt_expr.eval_func_ = eval_bm25_relevance_expr;
   rt_expr.eval_batch_func_ = eval_batch_bm25_relevance_expr;
   return ret;
@@ -73,7 +64,7 @@ int ObExprBM25::cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_expr, ObE
 
 int ObExprBM25::eval_bm25_relevance_expr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum)
 {
-  int ret = OB_SUCCESS;
+  int ret = OB_SUCCESS;  
   if (!use_new_version(expr)) {
     ObDatum *token_doc_cnt_datum = nullptr;
     ObDatum *total_doc_cnt_datum = nullptr;
@@ -151,7 +142,7 @@ int ObExprBM25::eval_bm25_relevance_expr(const ObExpr &expr, ObEvalCtx &ctx, ObD
 
 int ObExprBM25::eval_batch_bm25_relevance_expr(const ObExpr &expr, ObEvalCtx &ctx, const ObBitVector &skip, const int64_t size)
 {
-  int ret = OB_SUCCESS;
+  int ret = OB_SUCCESS;  
   if (!use_new_version(expr)) {
     ObDatumVector token_doc_cnt_datum;
     ObDatumVector total_doc_cnt_datum;

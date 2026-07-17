@@ -24,8 +24,7 @@ namespace common{
  * -----------------------------------------------------------ObKVCacheHazardNode-----------------------------------------------------------
  */
 ObKVCacheHazardNode::ObKVCacheHazardNode()
-    : tenant_id_(OB_INVALID_TENANT_ID),
-      hazard_next_(nullptr),
+    : hazard_next_(nullptr),
       version_(UINT64_MAX)
 {
 }
@@ -73,9 +72,9 @@ void ObKVCacheHazardSlot::delete_node(ObKVCacheHazardNode &node)
   ATOMIC_AAF(&waiting_nodes_count_, 1);
 }
 
-void ObKVCacheHazardSlot::retire(const uint64_t version, const uint64_t tenant_id)
+void ObKVCacheHazardSlot::retire(const uint64_t version)
 {
-  if (version > ATOMIC_LOAD(&last_retire_version_) || tenant_id != OB_INVALID_TENANT_ID) {
+  if (version > ATOMIC_LOAD(&last_retire_version_) || true) {
     while(!ATOMIC_BCAS(&is_retiring_, false, true)) {
       // wait until get retiring
       PAUSE();
@@ -96,7 +95,8 @@ void ObKVCacheHazardSlot::retire(const uint64_t version, const uint64_t tenant_i
       while (head != nullptr) {
         temp_node = head;
         head = head->get_next();
-        if (temp_node->get_version() < version || tenant_id == temp_node->tenant_id_) {
+        if (temp_node->get_version() < version ||
+            (true && true)) {
           temp_node->retire();
           temp_node = nullptr;
           ++retire_count;
@@ -143,7 +143,7 @@ ObKVCacheHazardStation::ObKVCacheHazardStation()
       waiting_node_threshold_(0),
       hazard_slots_(nullptr),
       slot_num_(0),
-      slot_allocator_("KVCACHE_HAZARD", OB_MALLOC_MIDDLE_BLOCK_SIZE, OB_SERVER_TENANT_ID),
+      slot_allocator_("KVCACHE_HAZARD", OB_MALLOC_MIDDLE_BLOCK_SIZE),
       inited_(false)
 {
 }
@@ -266,7 +266,7 @@ void ObKVCacheHazardStation::release(const int64_t slot_id)
     slot.release();
     if (slot.get_waiting_count() >= waiting_node_threshold_) {
       uint64_t min_version = get_min_version();
-      slot.retire(min_version, OB_INVALID_TENANT_ID);
+      slot.retire(min_version);
     }
   }
 
@@ -275,7 +275,7 @@ void ObKVCacheHazardStation::release(const int64_t slot_id)
   }
 }
 
-int ObKVCacheHazardStation::retire(const uint64_t tenant_id)
+int ObKVCacheHazardStation::retire()
 {
   int ret = OB_SUCCESS;
 
@@ -285,12 +285,12 @@ int ObKVCacheHazardStation::retire(const uint64_t tenant_id)
   } else {
     uint64_t min_version = get_min_version();
     for (int64_t i = 0 ; i < slot_num_ ; ++i) {
-      hazard_slots_[i].retire(min_version, tenant_id);
+      hazard_slots_[i].retire(min_version);
     }
   }
 
-  if (tenant_id != OB_INVALID_TENANT_ID) {
-    COMMON_LOG(INFO, "erase tenant hazard map node details", K(ret), K(tenant_id));
+  {
+    COMMON_LOG(INFO, "erase tenant hazard map node details", K(ret));
   }
 
   return ret;
@@ -306,7 +306,7 @@ int ObKVCacheHazardStation::print_current_status() const
     COMMON_LOG(WARN, "This hazard station is not inited", K(ret), K(inited_));
   } else {
     lib::ContextParam param;
-    param.set_mem_attr(common::OB_SERVER_TENANT_ID, ObModIds::OB_TEMP_VARIABLES);
+    param.set_mem_attr(ObModIds::OB_TEMP_VARIABLES);
     CREATE_WITH_TEMP_CONTEXT(param) {
       int64_t ctxpos = 0;
       int64_t total_nodes_num = 0;

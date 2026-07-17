@@ -3,7 +3,7 @@ set @@session.explicit_defaults_for_timestamp=off;
 --enable_query_log
 # owner: yuya.yu
 # owner group: OFS
-# description: query __all_virtual_load_data_stat while loading data
+# description: query __all_virtual_load_data_stat while loading data 
 
 --source mysql_test/include/copy_data_for_load.inc
 

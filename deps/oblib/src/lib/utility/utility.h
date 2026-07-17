@@ -45,7 +45,7 @@ inline int usleep(useconds_t usec) {
 #include "lib/oblog/ob_trace_log.h"
 #include "lib/container/ob_iarray.h"
 #include "lib/allocator/ob_malloc.h"
-#include "common/ob_clock_generator.h"
+#include "lib/time/ob_clock_generator.h"
 
 #ifdef __APPLE__
 #include <sys/types.h>  // includes BSD type definitions
@@ -205,26 +205,19 @@ template <oceanbase::common::ObWaitEventIds::ObWaitEventIdEnum event_id =
               oceanbase::common::ObWaitEventIds::DEFAULT_SLEEP>
 inline void ob_usleep(const useconds_t v)
 {
-  oceanbase::common::ObSleepEventGuard<event_id> wait_guard((int64_t)v);
   ::usleep(v);
 }
 
 template <oceanbase::common::ObWaitEventIds::ObWaitEventIdEnum event_id =
               oceanbase::common::ObWaitEventIds::DEFAULT_SLEEP>
-inline void ob_usleep(const useconds_t v, const bool is_idle_sleep)
+inline void ob_usleep(const useconds_t v, const bool /*is_idle_sleep*/)
 {
-  if (is_idle_sleep) {
-    ObBKGDSessInActiveGuard inactive_guard;
-    ob_usleep(v);
-  } else {
-    ob_usleep(v);
-  }
+  ob_usleep(v);
 
 }
 
 inline void ob_throttle_usleep(const useconds_t v, int errcode, int64_t p3 = 0)
 {
-  ObSleepEventGuard<ObWaitEventIds::TASK_THROTTLE_SLEEP> wait_guard((int64_t)v, (int64_t)v, (int64_t)errcode, p3);
   ::usleep(v);
 }
 
@@ -232,7 +225,9 @@ template <oceanbase::common::ObWaitEventIds::ObWaitEventIdEnum event_id =
               oceanbase::common::ObWaitEventIds::DEFAULT_SLEEP>
 inline void ob_usleep(const useconds_t v, const int64_t p1, const int64_t p2, const int64_t p3)
 {
-  oceanbase::common::ObSleepEventGuard<event_id> wait_guard((int64_t)v, p1, p2, p3);
+  UNUSED(p1);
+  UNUSED(p2);
+  UNUSED(p3);
   ::usleep(v);
 }
 
@@ -241,7 +236,6 @@ template <oceanbase::common::ObWaitEventIds::ObWaitEventIdEnum event_id =
 inline void ob_usleep(const useconds_t v, const int64_t p1, const int64_t p2, const int64_t p3, const bool is_idle_sleep)
 {
   if (is_idle_sleep) {
-    ObBKGDSessInActiveGuard inactive_guard;
     ob_usleep(v, p1, p2, p3);
   } else {
     ob_usleep(v, p1, p2, p3);
@@ -577,17 +571,6 @@ inline int64_t get_cpu_id()
 // ethernet speed: byte / second.
 int get_ethernet_speed(const char *devname, int64_t &speed);
 int get_ethernet_speed(const ObString &devname, int64_t &speed);
-inline int64_t get_cgroup_memory_limit()
-{
-  int64_t cgroup_memory_limit = INT64_MAX;
-  FILE *file = fopen("/sys/fs/cgroup/memory/memory.limit_in_bytes", "r");
-  if (NULL != file) {
-    fscanf(file, "%ld", &cgroup_memory_limit);
-    fclose(file);
-  }
-  return cgroup_memory_limit;
-}
-
 inline int64_t get_phy_mem_size()
 {
 #ifdef _WIN32
@@ -600,8 +583,7 @@ inline int64_t get_phy_mem_size()
 #else
   static int64_t page_size = sysconf(_SC_PAGE_SIZE);
   static int64_t phys_pages = sysconf(_SC_PHYS_PAGES);
-  static int64_t cgroup_memory_limit = get_cgroup_memory_limit();
-  return MIN(page_size * phys_pages, cgroup_memory_limit);
+  return page_size * phys_pages;
 #endif
 }
 
@@ -1378,8 +1360,6 @@ private:
   int64_t base_;
   int64_t end_;
 };
-
-void get_addr_by_proxy_sessid(const uint64_t session_id, ObAddr &addr);
 
 int ob_atoll(const char *str, int64_t &res);
 int ob_atoull(const char *str, uint64_t &res);

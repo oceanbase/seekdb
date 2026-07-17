@@ -96,7 +96,6 @@ public:  // ObTxDataMemtableMgr
   ObTxDataMemtableMgr();
   virtual ~ObTxDataMemtableMgr();
   int init(const common::ObTabletID &tablet_id,
-           const share::ObLSID &ls_id,
            ObFreezer *freezer,
            ObTenantMetaMemMgr *t3m) override;
   virtual void destroy() override;
@@ -146,7 +145,7 @@ public:  // ObTxDataMemtableMgr
   // ================ INHERITED FROM ObCommonCheckpoint ===============
   virtual share::SCN get_rec_scn() override;
 
-  virtual int flush(share::SCN recycle_scn, const int64_t trace_id, bool need_freeze = true) override;
+  virtual int flush(share::SCN recycle_scn, bool need_freeze = true) override;
 
   virtual ObTabletID get_tablet_id() const override;
 
@@ -155,7 +154,6 @@ public:  // ObTxDataMemtableMgr
   INHERIT_TO_STRING_KV("ObIMemtableMgr",
                        ObIMemtableMgr,
                        K_(is_freezing),
-                       K_(ls_id),
                        K_(mini_merge_recycle_commit_versions_ts),
                        KP_(tx_data_table),
                        KP_(ls_tablet_svr));
@@ -181,14 +179,12 @@ private:  // ObTxDataMemtableMgr
 
   int get_all_memtables_(ObTableHdlArray &handles);
 
-  int flush_all_frozen_memtables_(ObTableHdlArray &memtable_handles, 
-      const int64_t trace_id);
+  int flush_all_frozen_memtables_(ObTableHdlArray &memtable_handles);
 
   ObTxDataMemtable *get_tx_data_memtable_(const int64_t pos) const;
 
 private:  // ObTxDataMemtableMgr
   bool is_freezing_;
-  share::ObLSID ls_id_;
   int64_t mini_merge_recycle_commit_versions_ts_;
   ObTxDataTable *tx_data_table_;
   ObLSTabletService *ls_tablet_svr_;

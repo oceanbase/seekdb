@@ -35,6 +35,9 @@ ObTmpFileFlushManager::ObTmpFileFlushManager(ObTmpFilePageCacheController &pc_ct
     flush_priority_mgr_(pc_ctrl.get_flush_priority_mgr()),
     cur_flush_timer_idx_(0)
 {
+  for (int64_t i = 0; i < ObTmpFileGlobal::FLUSH_TIMER_CNT; ++i) {
+    flush_timers_[i] = nullptr;
+  }
 }
 
 int ObTmpFileFlushManager::init()
@@ -55,13 +58,16 @@ int ObTmpFileFlushManager::init()
 void ObTmpFileFlushManager::destroy()
 {
   is_inited_ = false;
+  for (int64_t i = 0; i < ObTmpFileGlobal::FLUSH_TIMER_CNT; ++i) {
+    flush_timers_[i] = nullptr;
+  }
   flush_ctx_.destroy();
 }
 
-void ObTmpFileFlushManager::set_flush_timer_tg_id(int* flush_timer_tg_id, const int64_t timer_cnt)
+void ObTmpFileFlushManager::set_flush_timers(common::ObTimer *flush_timers, const int64_t timer_cnt)
 {
   for (int64_t i = 0; i < timer_cnt && i < ObTmpFileGlobal::FLUSH_TIMER_CNT; ++i) {
-    flush_timer_tg_id_[i] = flush_timer_tg_id[i];
+    flush_timers_[i] = &flush_timers[i];
   }
 }
 
@@ -337,7 +343,7 @@ int ObTmpFileFlushManager::flush_by_watermark_(ObSpLinkQueue &flushing_queue,
       }
       if (OB_ALLOCATE_TMP_FILE_PAGE_FAILED == ret){
         if (flush_task->get_state() == FlushState::TFFT_INSERT_META_TREE) {
-          STORAGE_LOG(WARN, "fail to insert meta tree, generating fast_flush_meta task", KR(ret));
+          STORAGE_LOG(ERROR, "fail to insert meta tree, generating fast_flush_meta task", KR(ret));
           fast_flush_meta = true;   // set this flag generate fast_flush_tree_page_ task in the next loop
           ret = OB_SUCCESS;
         } else {
@@ -444,7 +450,7 @@ int ObTmpFileFlushManager::fill_block_buf_(ObTmpFileFlushTask &flush_task)
             && OB_FAIL(inner_fill_block_buf_(flush_task, flush_ctx_.get_state(),
                                              true/*is_meta*/, false/*flush_tail*/))) {
         if (OB_ITER_END != ret) {
-          STORAGE_LOG(WARN, "fail to generate flush meta task in flush policy f4", KR(ret), K(flush_task));
+          STORAGE_LOG(ERROR, "fail to generate flush meta task in flush policy f4", KR(ret), K(flush_task));
         }
       }
       advance_flush_level_(ret);
@@ -456,7 +462,7 @@ int ObTmpFileFlushManager::fill_block_buf_(ObTmpFileFlushTask &flush_task)
             && OB_FAIL(inner_fill_block_buf_(flush_task, flush_ctx_.get_state(),
                                              true/*is_meta*/, true/*flush_tail*/))) {
         if (OB_ITER_END != ret) {
-          STORAGE_LOG(WARN, "fail to generate flush meta task in flush policy f5", KR(ret), K(flush_task));
+          STORAGE_LOG(ERROR, "fail to generate flush meta task in flush policy f5", KR(ret), K(flush_task));
         }
       }
       advance_flush_level_(ret);
@@ -528,7 +534,7 @@ int ObTmpFileFlushManager::inner_fill_block_buf_(
           copy_flush_info_fail = true;
         } else if (is_meta && OB_FAIL(file.generate_meta_flush_info(flush_task, flush_infos.at(last_idx),
                                           file_flush_ctx.meta_ctx_, flush_ctx_.get_flush_sequence(), flush_tail))) {
-          STORAGE_LOG(WARN, "fail to generate flush meta info", KR(ret), K(flush_task),
+          STORAGE_LOG(ERROR, "fail to generate flush meta info", KR(ret), K(flush_task),
                       K(flush_stage), K(is_meta), K(flush_tail), K(file));
           copy_flush_info_fail = true;
         } else {
@@ -1022,8 +1028,12 @@ int ObTmpFileFlushManager::handle_async_write_(ObTmpFileFlushTask &flush_task, F
   if (OB_UNLIKELY(cur_flush_timer_idx_ < 0 || cur_flush_timer_idx_ >= ObTmpFileGlobal::FLUSH_TIMER_CNT)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("unexpected cur_flush_timer_idx_", KR(ret), K(cur_flush_timer_idx_));
-  } else if (OB_FAIL(TG_SCHEDULE(flush_timer_tg_id_[cur_flush_timer_idx_], flush_task.get_flush_write_block_task(), 0/*delay*/, false/*repeat*/))) {
-    LOG_WARN("TG_SCHEDULE tmp file write block task failed", KR(ret), K(flush_timer_tg_id_[cur_flush_timer_idx_]), K(cur_flush_timer_idx_), K(flush_task));
+  } else if (OB_ISNULL(flush_timers_[cur_flush_timer_idx_])) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("flush timer is null", KR(ret), K(cur_flush_timer_idx_), K(flush_task));
+  } else if (OB_FAIL(flush_timers_[cur_flush_timer_idx_]->schedule(
+      flush_task.get_flush_write_block_task(), 0/*delay*/, false/*repeat*/))) {
+    LOG_WARN("schedule tmp file write block task failed", KR(ret), K(cur_flush_timer_idx_), K(flush_task));
   } else {
     next_state = FlushState::TFFT_WAIT;
   }

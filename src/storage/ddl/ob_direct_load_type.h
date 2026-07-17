@@ -64,7 +64,7 @@ static inline bool is_full_direct_load(const ObDirectLoadType &type)
 {
   return ObDirectLoadType::DIRECT_LOAD_DDL == type
       || ObDirectLoadType::DIRECT_LOAD_LOAD_DATA == type
-      || ObDirectLoadType::DIRECT_LOAD_DDL_V2 == type
+      || ObDirectLoadType::DIRECT_LOAD_DDL_V2 == type 
       || ObDirectLoadType::DIRECT_LOAD_LOAD_DATA_V2 == type
       || ObDirectLoadType::SN_IDEM_DIRECT_LOAD_DDL == type
       || ObDirectLoadType::SN_IDEM_DIRECT_LOAD_DATA == type
@@ -99,12 +99,12 @@ static inline bool is_incremental_direct_load(const ObDirectLoadType &type)
 
 static inline bool is_shared_storage_dempotent_mode(const ObDirectLoadType &type)
 {
-  return ObDirectLoadType::DIRECT_LOAD_DDL_V2 == type ||
+  return ObDirectLoadType::DIRECT_LOAD_DDL_V2 == type || 
          ObDirectLoadType::DIRECT_LOAD_LOAD_DATA_V2 == type;
 }
 static inline bool is_idem_type(const ObDirectLoadType &type)
 {
-  return SN_IDEM_DIRECT_LOAD_DDL == type || SN_IDEM_DIRECT_LOAD_DATA == type ||
+  return SN_IDEM_DIRECT_LOAD_DDL == type || SN_IDEM_DIRECT_LOAD_DATA == type || 
          SS_IDEM_DIRECT_LOAD_DDL == type || SS_IDEM_DIRECT_LOAD_DATA == type ||
          DIRECT_LOAD_DDL_V2 == type      || DIRECT_LOAD_LOAD_DATA_V2 == type;
 }

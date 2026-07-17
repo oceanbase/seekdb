@@ -25,7 +25,7 @@
 // #include "sql/engine/expr/ob_expr_operator.h"
 #include "sql/engine/expr/ob_batch_eval_util.h"
 // #include "share/ob_lob_access_utils.h"
-#include "lib/udt/ob_array_type.h"
+#include "common/udt/ob_array_type.h"
 #include "sql/engine/ob_subschema_ctx.h"
 #include "sql/engine/expr/ob_array_expr_utils.h"
 
@@ -36,7 +36,6 @@ namespace sql
 using namespace common;
 
 #define IS_FIXED_DOUBLE                                         \
-  !is_oracle_mode &&                                            \
   ob_is_double_type(type1) && ob_is_double_type(type2) &&       \
   SCALE_UNKNOWN_YET < scale1 && SCALE_UNKNOWN_YET < scale2 &&   \
   MAX(scale1, scale2) <= OB_MAX_DOUBLE_FLOAT_SCALE              \
@@ -544,12 +543,7 @@ struct ObRelationalExtraFunc
 
   inline static int str_eval_batch(BATCH_EVAL_FUNC_ARG_DECL)
   {
-    bool with_end_space = is_calc_with_end_space(
-        expr.args_[0]->datum_meta_.type_,
-        expr.args_[1]->datum_meta_.type_,
-        false,
-        expr.args_[0]->datum_meta_.cs_type_,
-        expr.args_[1]->datum_meta_.cs_type_);
+    bool with_end_space = false;
     return def_relational_eval_batch_func<StrCmp>(BATCH_EVAL_FUNC_ARG_LIST,
                                                   expr.args_[0]->datum_meta_.cs_type_,
                                                   with_end_space);
@@ -563,7 +557,7 @@ struct ObRelationalExtraFunc
       int ret = OB_SUCCESS;
       ObString l_data;
       ObString r_data;
-      common::ObArenaAllocator allocator(ObModIds::OB_LOB_READER, OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID());
+      common::ObArenaAllocator allocator(ObModIds::OB_LOB_READER, OB_MALLOC_NORMAL_BLOCK_SIZE);
       ObTextStringIter l_instr_iter(ObLongTextType, cs_type, l.get_string(), true);
       ObTextStringIter r_instr_iter(ObLongTextType, cs_type, r.get_string(), true);
       if (OB_FAIL(l_instr_iter.init(0, NULL, &allocator))) {
@@ -585,12 +579,7 @@ struct ObRelationalExtraFunc
 
   inline static int text_eval_batch(BATCH_EVAL_FUNC_ARG_DECL)
   {
-    bool with_end_space = is_calc_with_end_space(
-        expr.args_[0]->datum_meta_.type_,
-        expr.args_[1]->datum_meta_.type_,
-        false,
-        expr.args_[0]->datum_meta_.cs_type_,
-        expr.args_[1]->datum_meta_.cs_type_);
+    bool with_end_space = false;
     return def_relational_eval_batch_func<TextCmp>(BATCH_EVAL_FUNC_ARG_LIST,
                                                    expr.args_[0]->datum_meta_.cs_type_,
                                                    with_end_space);
@@ -603,7 +592,7 @@ struct ObRelationalExtraFunc
     {
       int ret = OB_SUCCESS;
       ObString l_data;
-      common::ObArenaAllocator allocator(ObModIds::OB_LOB_READER, OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID());
+      common::ObArenaAllocator allocator(ObModIds::OB_LOB_READER, OB_MALLOC_NORMAL_BLOCK_SIZE);
       ObTextStringIter l_instr_iter(ObLongTextType, cs_type, l.get_string(), true);
       if (OB_FAIL(l_instr_iter.init(0, NULL, &allocator))) {
         COMMON_LOG(WARN, "Lob: init left text str iter failed", K(ret), K(cs_type), K(l));
@@ -620,12 +609,7 @@ struct ObRelationalExtraFunc
 
   inline static int text_str_eval_batch(BATCH_EVAL_FUNC_ARG_DECL)
   {
-    bool with_end_space = is_calc_with_end_space(
-        expr.args_[0]->datum_meta_.type_,
-        expr.args_[1]->datum_meta_.type_,
-        false,
-        expr.args_[0]->datum_meta_.cs_type_,
-        expr.args_[1]->datum_meta_.cs_type_);
+    bool with_end_space = false;
     return def_relational_eval_batch_func<TextStrCmp>(BATCH_EVAL_FUNC_ARG_LIST,
                                                       expr.args_[0]->datum_meta_.cs_type_,
                                                       with_end_space);
@@ -638,7 +622,7 @@ struct ObRelationalExtraFunc
     {
       int ret = OB_SUCCESS;
       ObString r_data;
-      common::ObArenaAllocator allocator(ObModIds::OB_LOB_READER, OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID());
+      common::ObArenaAllocator allocator(ObModIds::OB_LOB_READER, OB_MALLOC_NORMAL_BLOCK_SIZE);
       ObTextStringIter r_instr_iter(ObLongTextType, cs_type, r.get_string(), true);
       if (OB_FAIL(r_instr_iter.init(0, NULL, &allocator))) {
         COMMON_LOG(WARN, "Lob: init right text str iter failed", K(ret), K(ret), K(r));
@@ -655,12 +639,7 @@ struct ObRelationalExtraFunc
 
   inline static int str_text_eval_batch(BATCH_EVAL_FUNC_ARG_DECL)
   {
-    bool with_end_space = is_calc_with_end_space(
-        expr.args_[0]->datum_meta_.type_,
-        expr.args_[1]->datum_meta_.type_,
-        false,
-        expr.args_[0]->datum_meta_.cs_type_,
-        expr.args_[1]->datum_meta_.cs_type_);
+    bool with_end_space = false;
     return def_relational_eval_batch_func<StrTextCmp>(BATCH_EVAL_FUNC_ARG_LIST,
                                                       expr.args_[0]->datum_meta_.cs_type_,
                                                       with_end_space);

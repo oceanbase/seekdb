@@ -44,7 +44,7 @@ private:
 
 void TestIOCBPool::SetUp()
 {
-  const ObMemAttr mem_attr(OB_SYS_TENANT_ID, "test_iocb_pool");
+  const ObMemAttr mem_attr("test_iocb_pool");
   ASSERT_EQ(OB_SUCCESS, allocator_.init(lib::ObMallocAllocator::get_instance(), OB_MALLOC_MIDDLE_BLOCK_SIZE, mem_attr));
   ASSERT_EQ(OB_SUCCESS, iocb_pool_.init(allocator_));
 }

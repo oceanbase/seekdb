@@ -17,12 +17,12 @@
 #define USING_LOG_PREFIX STORAGE
 
 #include "storage/ob_dml_running_ctx.h"
-#include "share/schema/ob_table_dml_param.h"
+#include "storage/ob_table_dml_param.h"
 #include "share/schema/ob_schema_getter_guard.h"
 #include "share/vector_index/ob_vector_index_util.h"
 #include "storage/tablet/ob_tablet.h"
 #include "storage/memtable/ob_memtable_context.h"
-#include "storage/tx/ob_trans_part_ctx.h"
+#include "storage/tx/ob_tx_ctx.h"
 
 namespace oceanbase
 {
@@ -49,7 +49,7 @@ static int resolve_has_async_index_from_schema_(
     const share::schema::ObTableSchema *table_schema = nullptr;
     if (OB_FAIL(schema_service->get_tenant_schema_guard(tenant_id, guard))) {
       LOG_WARN("get tenant schema guard failed", KR(ret), K(tenant_id));
-    } else if (OB_FAIL(guard.get_table_schema(tenant_id, table_id, table_schema))) {
+    } else if (OB_FAIL(guard.get_table_schema(table_id, table_schema))) {
       LOG_WARN("get table schema failed", KR(ret), K(tenant_id), K(table_id));
     } else if (OB_ISNULL(table_schema) || !table_schema->is_user_table()) {
       // not a user data table
@@ -58,13 +58,20 @@ static int resolve_has_async_index_from_schema_(
           table_schema->get_simple_index_infos();
       for (int64_t i = 0; OB_SUCC(ret) && !has_async_index && i < index_infos.count(); ++i) {
         const share::schema::ObTableSchema *index_schema = nullptr;
-        if (OB_FAIL(guard.get_table_schema(tenant_id, index_infos.at(i).table_id_, index_schema))) {
+        if (OB_FAIL(guard.get_table_schema(index_infos.at(i).table_id_, index_schema))) {
           LOG_WARN("get index table schema failed", KR(ret), K(tenant_id), K(index_infos.at(i).table_id_));
         } else if (OB_NOT_NULL(index_schema)
-                   && share::schema::is_vec_index_id_type(index_schema->get_index_type())
-                   && share::ObVectorIndexUtil::is_sync_mode_async(
-                          index_schema->get_index_params(), true /* is_hnsw_heap_table */)) {
-          has_async_index = true;
+                   && !index_schema->get_index_params().empty()
+                   && index_schema->is_vec_delta_buffer_type()) {
+          share::ObVectorIndexParam vec_param;
+          if (OB_SUCC(share::ObVectorIndexUtil::parser_params_from_string(
+                  index_schema->get_index_params(),
+                  share::ObVectorIndexType::VIT_HNSW_INDEX,
+                  vec_param,
+                  true))
+              && vec_param.sync_mode_async_) {
+            has_async_index = true;
+          }
         }
       }
     }
@@ -123,13 +130,13 @@ int ObDMLRunningCtx::init(
     LOG_WARN("invalid argument", K(ret), K(store_ctx_),
         K(dml_param_), KP(schema_service));
   } else {
-    const uint64_t tenant_id = MTL_ID();
+    
     const uint64_t table_id = dml_param_.table_param_->get_data_table().get_table_id();
     const int64_t version = dml_param_.schema_version_;
     const int64_t tenant_schema_version = dml_param_.tenant_schema_version_;
-    if (dml_param_.check_schema_version_ && OB_FAIL(check_schema_version(*schema_service, tenant_id, table_id,
+    if (dml_param_.check_schema_version_ && OB_FAIL(check_schema_version(*schema_service, table_id,
         tenant_schema_version, version, tablet_handle))) {
-      LOG_WARN("failed to check schema version", K(ret), K(tenant_id), K(tenant_schema_version), K(table_id), K(version));
+      LOG_WARN("failed to check schema version", K(ret), K(tenant_schema_version), K(table_id), K(version));
     }
   }
 
@@ -157,7 +164,7 @@ int ObDMLRunningCtx::init(
       (void)resolve_has_async_index_from_schema_(schema_service, dml_param_, has_async_index);
     }
     if (OB_UNLIKELY(has_async_index)) {
-      transaction::ObPartTransCtx *tx_ctx = store_ctx_.mvcc_acc_ctx_.mem_ctx_->get_trans_ctx();
+      transaction::ObTxCtx *tx_ctx = store_ctx_.mvcc_acc_ctx_.mem_ctx_->get_trans_ctx();
       if (OB_NOT_NULL(tx_ctx)) {
         tx_ctx->set_has_async_index_redo();
       }
@@ -178,7 +185,6 @@ int ObDMLRunningCtx::prepare_relative_table(
     const SCN &read_snapshot)
 {
   int ret = OB_SUCCESS;
-  bool need_get_src_split_tables = false;
   is_delete_insert_table_ = false;
   if (OB_FAIL(relative_table_.init(&schema, tablet_handle.get_obj()->get_tablet_meta().tablet_id_,
       schema.is_storage_index_table() && !schema.can_read_index()))) {
@@ -190,9 +196,7 @@ int ObDMLRunningCtx::prepare_relative_table(
   } else if (OB_FAIL(relative_table_.tablet_iter_.refresh_read_tables_from_tablet(
       read_snapshot.get_val_for_tx(), 
       relative_table_.allow_not_ready(), 
-      false/*major_sstable_only*/,
-      true/*need_split_src_table*/,
-      false/*need_split_dst_table*/))) {
+      false/*major_sstable_only*/))) {
     LOG_WARN("failed to get relative table read tables", K(ret));
   } else if (schema.get_read_info().need_truncate_filter() &&
       OB_FAIL(relative_table_.prepare_truncate_part_filter(allocator_, read_snapshot.get_val_for_tx()))) {
@@ -255,7 +259,7 @@ int ObDMLRunningCtx::check_need_old_row_legitimacy()
     is_need_check_old_row_ = true;
     if ((relative_table_.is_index_table() && !relative_table_.can_read_index())
         || dml_param_.is_main_table_in_fts_ddl_ ) {
-      // We should not check old row because domain row may be generated instead of scanned
+      // We should not check old row because domain row may be generated instead of scanned 
       // from domain table when:
       // 1) index can not be read during building index
       // 2) or schema shows index ready, but fts ddl is on going when dml start snapshot
@@ -279,7 +283,6 @@ int ObDMLRunningCtx::init_cmp_funcs()
   } else if (OB_FAIL(cmp_funcs_.init(column_cnt, allocator_))) {
     STORAGE_LOG(WARN, "Failed to reserve cmp func array", K(ret));
   } else {
-    bool is_oracle_mode = lib::is_oracle_mode();
     ObCmpFunc cmp_func;
     for (int64_t i = 0; OB_SUCC(ret) && i < col_descs.count(); i++) {
       const share::schema::ObColDesc &col_desc = col_descs.at(i);
@@ -294,7 +297,6 @@ int ObDMLRunningCtx::init_cmp_funcs()
       sql::ObExprBasicFuncs *basic_funcs = ObDatumFuncs::get_basic_func(col_desc.col_type_.get_type(),
                                                                         col_desc.col_type_.get_collation_type(),
                                                                         col_desc.col_type_.get_scale(),
-                                                                        is_oracle_mode,
                                                                         has_lob_header,
                                                                         precision);
       if (OB_UNLIKELY(nullptr == basic_funcs || nullptr == basic_funcs->null_last_cmp_)) {
@@ -302,7 +304,7 @@ int ObDMLRunningCtx::init_cmp_funcs()
         STORAGE_LOG(ERROR, "Unexpected null basic funcs", K(ret), K(col_desc));
       } else {
         if (is_ascending) {
-          cmp_func.cmp_func_ = is_oracle_mode ? basic_funcs->null_last_cmp_ : basic_funcs->null_first_cmp_;
+          cmp_func.cmp_func_ = basic_funcs->null_first_cmp_;
           if (OB_FAIL(cmp_funcs_.push_back(ObStorageDatumCmpFunc(cmp_func)))) {
             STORAGE_LOG(WARN, "Failed to push back cmp func", K(ret), K(i), K(col_desc));
           }
@@ -318,7 +320,6 @@ int ObDMLRunningCtx::init_cmp_funcs()
 
 int ObDMLRunningCtx::check_schema_version(
     share::schema::ObMultiVersionSchemaService &schema_service,
-    const uint64_t tenant_id,
     const uint64_t table_id,
     const int64_t tenant_schema_version,
     const int64_t table_version,
@@ -327,36 +328,18 @@ int ObDMLRunningCtx::check_schema_version(
   int ret = OB_SUCCESS;
   const ObTableSchema *table_schema = nullptr;
   bool check_formal = !is_inner_table(table_id);
-  int tmp_ret = check_tenant_schema_version(schema_service, tenant_id, table_id, tenant_schema_version);
+  int tmp_ret = check_tenant_schema_version(schema_service, table_id, tenant_schema_version);
   if (OB_SUCCESS == tmp_ret) {
     // Check tenant schema first. If not pass, then check table level schema version
-  } else if (OB_FAIL(schema_service.get_tenant_schema_guard(tenant_id, schema_guard_))) {
-    LOG_WARN("failed to get tenant schema guard", K(ret), K(tenant_id));
+  } else if (OB_FAIL(schema_service.get_tenant_schema_guard(schema_guard_))) {
+    LOG_WARN("failed to get tenant schema guard", K(ret));
   } else if (check_formal && OB_FAIL(schema_guard_.check_formal_guard())) {
-    LOG_WARN("schema_guard is not formal", K(ret), K(tenant_id));
-  } else if (OB_FAIL(schema_guard_.get_table_schema(tenant_id, table_id, table_schema))) {
+    LOG_WARN("schema_guard is not formal", K(ret));
+  } else if (OB_FAIL(schema_guard_.get_table_schema( table_id, table_schema))) {
     LOG_WARN("failed to get table schema", K(ret));
   } else if (OB_ISNULL(table_schema)) {
     ret = OB_SCHEMA_ERROR;
     LOG_WARN("failed to get schema", K(ret));
-  } else if (table_schema->is_auto_partitioned_table()) {
-    // Online partition split allows dml with old schema to continue executing,
-    // so checkings must be done case by case.
-    if (table_version > table_schema->get_schema_version()) {
-      ret = OB_SCHEMA_EAGAIN;
-      LOG_WARN("table version mismatch", K(ret), K(table_id), K(table_version), K(table_schema->get_schema_version()));
-    } else if (table_version < table_schema->get_schema_version()) {
-      // 1. check for wait trans end's check_schema_version_elapsed
-      int64_t data_max_schema_version = 0;
-      if (OB_FAIL(tablet_handle.get_obj()->get_max_schema_version(data_max_schema_version))) {
-        LOG_WARN("failed to get max schema version", K(ret));
-      } else if (table_version < data_max_schema_version) {
-        ret = OB_SCHEMA_EAGAIN;
-        LOG_WARN("table version mismatch", K(ret), K(table_id), K(table_version), K(data_max_schema_version), K(table_schema->get_schema_version()));
-      } else {
-        FLOG_INFO("allow table version mismatch", K(table_id), K(table_version), K(data_max_schema_version), K(table_schema->get_schema_version()));
-      }
-    }
   } else if (table_version != table_schema->get_schema_version()) {
     ret = OB_SCHEMA_EAGAIN;
     LOG_WARN("table version mismatch", K(ret), K(table_id), K(table_version), K(table_schema->get_schema_version()));
@@ -371,7 +354,6 @@ int ObDMLRunningCtx::check_schema_version(
 
 int ObDMLRunningCtx::check_tenant_schema_version(
     share::schema::ObMultiVersionSchemaService &schema_service,
-    const uint64_t tenant_id,
     const uint64_t table_id,
     const int64_t tenant_schema_version)
 {
@@ -381,21 +363,21 @@ int ObDMLRunningCtx::check_tenant_schema_version(
     //inner table can't skip table schema check
     ret = OB_SCHEMA_EAGAIN;
   } else if (tenant_schema_version > 0
-             && OB_FAIL(schema_service.get_tenant_refreshed_schema_version(tenant_id, latest_tenant_version))) {
-    LOG_WARN("failed to get tenant schema version", K(ret), K(tenant_id), K(tenant_schema_version));
+             && OB_FAIL(schema_service.get_tenant_refreshed_schema_version(latest_tenant_version))) {
+    LOG_WARN("failed to get tenant schema version", K(ret), K(tenant_schema_version));
   } else if (tenant_schema_version < 0 || latest_tenant_version < 0) {
     ret = OB_SCHEMA_EAGAIN;
   } else if (!share::schema::ObSchemaService::is_formal_version(latest_tenant_version)) {
     ret = OB_SCHEMA_EAGAIN;
     LOG_INFO("local schema_version is not formal, try again", K(ret),
-             K(tenant_id), K(tenant_schema_version), K(latest_tenant_version));
+             K(tenant_schema_version), K(latest_tenant_version));
   } else if (latest_tenant_version > 0 && tenant_schema_version == latest_tenant_version) {
     // no schema change, do nothing
     ret = OB_SUCCESS;
   } else {
     ret = OB_SCHEMA_EAGAIN;
     LOG_INFO("need check table schema version", K(ret),
-             K(tenant_id), K(tenant_schema_version), K(latest_tenant_version));
+             K(tenant_schema_version), K(latest_tenant_version));
   }
   return ret;
 }

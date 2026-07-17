@@ -19,7 +19,7 @@ CREATE TABLE IF NOT EXISTS rpt_chenfeng_custid_shishi_000(
     custid varchar(124),
     impression varchar(124),
     PRIMARY KEY (custid,thedate,puttype,sourcetype)
-)  COMPRESSION='lz4_1.0' ;
+)  COMPRESSION='zstd_1.3.8' ;
 
 CREATE TABLE IF NOT EXISTS rpt_solar_feed_bidword_ob_000(
     bidwordid varchar(124),
@@ -49,7 +49,7 @@ CREATE TABLE IF NOT EXISTS rpt_solar_feed_bidword_ob_000(
     click varchar(124),
     ranksum varchar(124),
     PRIMARY KEY (custid,thedate,campaignid,adgroupid,bidwordid,feedid,network,matchscope)
-)  COMPRESSION='lz4_1.0' ;
+)  COMPRESSION='zstd_1.3.8' ;
 
 CREATE TABLE IF NOT EXISTS rpt_chenfeng_campaignid_lixian_000(
     thedate datetime(6),
@@ -61,7 +61,7 @@ CREATE TABLE IF NOT EXISTS rpt_chenfeng_campaignid_lixian_000(
     clickprice varchar(124),
     click varchar(124),
     PRIMARY KEY (custid,thedate,campaignid,puttype,sourcetype)
-)  COMPRESSION='lz4_1.0' ;
+)  COMPRESSION='zstd_1.3.8' ;
 
 CREATE TABLE IF NOT EXISTS rpt_bpp4p_bidword_ob_000(
     click varchar(124),
@@ -111,14 +111,14 @@ CREATE TABLE IF NOT EXISTS rpt_bpp4p_bidword_ob_000(
     bidwordid varchar(124),
     searchtype varchar(124),
     PRIMARY KEY (custid,thedate,campaignid,adgroupid,bidwordid,network,matchscope)
-)  COMPRESSION='lz4_1.0' ;
+)  COMPRESSION='zstd_1.3.8' ;
 
 CREATE TABLE IF NOT EXISTS rpt_bpp4p_adgroupplace_name_000(
     placeid varchar(124),
     placename varchar(100),
     thedate datetime(6),
     PRIMARY KEY (placeid)
-)  COMPRESSION='lz4_1.0' ;
+)  COMPRESSION='zstd_1.3.8' ;
 
 CREATE TABLE IF NOT EXISTS rpt_chenfeng_custid_shishi_accumulative_000(
     custid varchar(124),
@@ -129,13 +129,13 @@ CREATE TABLE IF NOT EXISTS rpt_chenfeng_custid_shishi_accumulative_000(
     clickprice varchar(124),
     click varchar(124),
     PRIMARY KEY (custid,thedate,puttype,sourcetype)
-)  COMPRESSION='lz4_1.0' ;
+)  COMPRESSION='zstd_1.3.8' ;
 
 CREATE TABLE IF NOT EXISTS rpt_bpp4p_querysession_ob_000(
     relword varchar(3000),
     originalword varchar(300),
     PRIMARY KEY (originalword)
-)  COMPRESSION='lz4_1.0' ;
+)  COMPRESSION='zstd_1.3.8' ;
 
 CREATE TABLE IF NOT EXISTS rpt_bpp4p_area_ob_000(
     onedirecttransaction varchar(124),
@@ -185,7 +185,7 @@ CREATE TABLE IF NOT EXISTS rpt_bpp4p_area_ob_000(
     onefavshoptotal varchar(124),
     mechanism varchar(124),
     PRIMARY KEY (custid,thedate,campaignid,traffictype,mechanism,provinceid,cityid,productline,productid,ext1,ext2)
-)  COMPRESSION='lz4_1.0' ;
+)  COMPRESSION='zstd_1.3.8' ;
 
 CREATE TABLE IF NOT EXISTS rpt_bpp4p_insight_bidword_area_000(
     indirecttransaction varchar(124),
@@ -207,7 +207,7 @@ CREATE TABLE IF NOT EXISTS rpt_bpp4p_insight_bidword_area_000(
     favshoptotal varchar(124),
     favitemtotal varchar(124),
     PRIMARY KEY (bidwordhash,thedate,area,network,mechanism,ext1,ext2,bidwordstr)
-)  COMPRESSION='lz4_1.0' ;
+)  COMPRESSION='zstd_1.3.8' ;
 
 CREATE TABLE IF NOT EXISTS rpt_solar_feed_name_000(
     gmt_created datetime default now(),
@@ -222,7 +222,7 @@ CREATE TABLE IF NOT EXISTS rpt_solar_feed_name_000(
     feedid varchar(124),
     campaignid varchar(124),
     PRIMARY KEY (custid,thedate,campaignid,adgroupid,feedid)
-)  COMPRESSION='lz4_1.0' ;
+)  COMPRESSION='zstd_1.3.8' ;
 
 CREATE TABLE IF NOT EXISTS rpt_chenfeng_custid_lixian_accumulative_000(
     clickprice varchar(124),
@@ -233,7 +233,7 @@ CREATE TABLE IF NOT EXISTS rpt_chenfeng_custid_lixian_accumulative_000(
     impression varchar(124),
     custid varchar(124),
     PRIMARY KEY (custid,thedate,puttype,sourcetype)
-)  COMPRESSION='lz4_1.0' ;
+)  COMPRESSION='zstd_1.3.8' ;
 
 CREATE TABLE IF NOT EXISTS rpt_bpp4p_creative_name_000(
     is_shop varchar(124),
@@ -247,21 +247,21 @@ CREATE TABLE IF NOT EXISTS rpt_bpp4p_creative_name_000(
     imgurl varchar(124),
     campaignid varchar(124),
     PRIMARY KEY (custid,thedate,campaignid,adgroupid,creativeid)
-)  COMPRESSION='lz4_1.0' ;
+)  COMPRESSION='zstd_1.3.8' ;
 
 CREATE TABLE IF NOT EXISTS rpt_bpp4p_demographic_name_000(
     name varchar(100),
     demographicid varchar(124),
     thedate datetime(6),
     PRIMARY KEY (demographicid)
-)  COMPRESSION='lz4_1.0' ;
+)  COMPRESSION='zstd_1.3.8' ;
 
 CREATE TABLE IF NOT EXISTS rpt_bpp4p_demographic_name_star_000(
     thedate datetime(6),
     demographicid varchar(124),
     name varchar(100),
     PRIMARY KEY (demographicid)
-)  COMPRESSION='lz4_1.0' ;
+)  COMPRESSION='zstd_1.3.8' ;
 
 CREATE TABLE IF NOT EXISTS rpt_solar_item_ob_000(
     indirecttransactionshipping varchar(124),
@@ -319,13 +319,13 @@ CREATE TABLE IF NOT EXISTS rpt_solar_item_ob_000(
     memberid varchar(124),
     adgroupid varchar(124),
     PRIMARY KEY (memberid,thedate,productlineid,campaignid,adgroupid,creativeid,areaid,entityid,entitytype,traffictype,searchtype,productid,ext1,ext2)
-)  COMPRESSION='lz4_1.0' ;
+)  COMPRESSION='zstd_1.3.8' ;
 
 CREATE TABLE IF NOT EXISTS rpt_p4p_bidword_normtoorigin_000(
     normalword varchar(300),
     originalword varchar(300),
     PRIMARY KEY (normalword)
-)  COMPRESSION='lz4_1.0' ;
+)  COMPRESSION='zstd_1.3.8' ;
 
 CREATE TABLE IF NOT EXISTS rpt_chenfeng_campaignid_lixian_accumulative_000(
     click varchar(124),
@@ -337,7 +337,7 @@ CREATE TABLE IF NOT EXISTS rpt_chenfeng_campaignid_lixian_accumulative_000(
     thedate datetime(6),
     sourcetype varchar(124),
     PRIMARY KEY (custid,thedate,campaignid,puttype,sourcetype)
-)  COMPRESSION='lz4_1.0' ;
+)  COMPRESSION='zstd_1.3.8' ;
 
 CREATE TABLE IF NOT EXISTS rpt_chenfeng_custid_lixian_000(
     custid varchar(124),
@@ -348,7 +348,7 @@ CREATE TABLE IF NOT EXISTS rpt_chenfeng_custid_lixian_000(
     click varchar(124),
     clickprice varchar(124),
     PRIMARY KEY (custid,thedate,puttype,sourcetype)
-)  COMPRESSION='lz4_1.0' ;
+)  COMPRESSION='zstd_1.3.8' ;
 
 CREATE TABLE IF NOT EXISTS rpt_chenfeng_campaignid_shishi_000(
     thedate datetime(6),
@@ -360,7 +360,7 @@ CREATE TABLE IF NOT EXISTS rpt_chenfeng_campaignid_shishi_000(
     click varchar(124),
     clickprice varchar(124),
     PRIMARY KEY (custid,thedate,campaignid,puttype,sourcetype)
-)  COMPRESSION='lz4_1.0' ;
+)  COMPRESSION='zstd_1.3.8' ;
 
 CREATE TABLE IF NOT EXISTS rpt_chenfeng_campaignid_shishi_accumulative_000(
     clickprice varchar(124),
@@ -372,7 +372,7 @@ CREATE TABLE IF NOT EXISTS rpt_chenfeng_campaignid_shishi_accumulative_000(
     sourcetype varchar(124),
     thedate datetime(6),
     PRIMARY KEY (custid,thedate,campaignid,puttype,sourcetype)
-)  COMPRESSION='lz4_1.0' ;
+)  COMPRESSION='zstd_1.3.8' ;
 
 CREATE TABLE IF NOT EXISTS rpt_bpp4p_custom_ob_000(
     oneindirecttransaction varchar(124),
@@ -414,14 +414,14 @@ CREATE TABLE IF NOT EXISTS rpt_bpp4p_custom_ob_000(
     custid varchar(124),
     click varchar(124),
     PRIMARY KEY (custid,thedate)
-)  COMPRESSION='lz4_1.0' ;
+)  COMPRESSION='zstd_1.3.8' ;
 
 CREATE TABLE IF NOT EXISTS rpt_bpp4p_demographic_name_purchase_000(
     demographicid varchar(124),
     thedate datetime(6),
     name varchar(100),
     PRIMARY KEY (demographicid)
-)  COMPRESSION='lz4_1.0' ;
+)  COMPRESSION='zstd_1.3.8' ;
 
 CREATE TABLE IF NOT EXISTS rpt_bpp4p_tag_000(
     name varchar(300),
@@ -430,7 +430,7 @@ CREATE TABLE IF NOT EXISTS rpt_bpp4p_tag_000(
     type varchar(124),
     gmt_modified datetime default now(),
     PRIMARY KEY (id)
-)  COMPRESSION='lz4_1.0' ;
+)  COMPRESSION='zstd_1.3.8' ;
 
 CREATE TABLE IF NOT EXISTS rpt_bpp4p_adgroup_ob_000(
     adgroupid varchar(124),
@@ -480,7 +480,7 @@ CREATE TABLE IF NOT EXISTS rpt_bpp4p_adgroup_ob_000(
     onedirecttransactionshipping varchar(124),
     sevenindirecttransaction varchar(124),
     PRIMARY KEY (custid,thedate,campaignid,adgroupid,creativeid,network,matchscope,searchtype)
-)  COMPRESSION='lz4_1.0' ;
+)  COMPRESSION='zstd_1.3.8' ;
 
 CREATE TABLE IF NOT EXISTS rpt_bpp4p_dim_000(
     gmt_modified datetime default now(),
@@ -488,7 +488,7 @@ CREATE TABLE IF NOT EXISTS rpt_bpp4p_dim_000(
     name varchar(300),
     gmt_created datetime default now(),
     PRIMARY KEY (id)
-)  COMPRESSION='lz4_1.0' ;
+)  COMPRESSION='zstd_1.3.8' ;
 
 CREATE TABLE IF NOT EXISTS rpt_bpp4p_adgroup_name_000(
     title varchar(124),
@@ -502,7 +502,7 @@ CREATE TABLE IF NOT EXISTS rpt_bpp4p_adgroup_name_000(
     isshop varchar(124),
     linkurl varchar(124),
     PRIMARY KEY (custid,thedate,campaignid,adgroupid)
-)  COMPRESSION='lz4_1.0' ;
+)  COMPRESSION='zstd_1.3.8' ;
 
 CREATE TABLE IF NOT EXISTS rpt_bpp4p_insight_bidword_price_000(
     indirecttransaction varchar(124),
@@ -524,7 +524,7 @@ CREATE TABLE IF NOT EXISTS rpt_bpp4p_insight_bidword_price_000(
     cost varchar(124),
     favitemtotal varchar(124),
     PRIMARY KEY (bidwordhash,thedate,pricedistribution,network,mechanism,ext1,ext2,bidwordstr)
-)  COMPRESSION='lz4_1.0' ;
+)  COMPRESSION='zstd_1.3.8' ;
 
 CREATE TABLE IF NOT EXISTS rpt_bpp4p_sexpowerstar_ob_000(
     directtransaction varchar(124),
@@ -569,7 +569,7 @@ CREATE TABLE IF NOT EXISTS rpt_bpp4p_sexpowerstar_ob_000(
     directtransactionshipping varchar(124),
     oneindirecttransactionshipping varchar(124),
     PRIMARY KEY (custid,thedate,campaignid,demographicsexid,demographicpurchaseid,demographicstarid)
-)  COMPRESSION='lz4_1.0' ;
+)  COMPRESSION='zstd_1.3.8' ;
 
 CREATE TABLE IF NOT EXISTS rpt_bpp4p_campaign_name_000(
     memeberid varchar(124),
@@ -579,7 +579,7 @@ CREATE TABLE IF NOT EXISTS rpt_bpp4p_campaign_name_000(
     custid varchar(124),
     campaigntype varchar(124),
     PRIMARY KEY (custid,thedate,campaignid)
-)  COMPRESSION='lz4_1.0' ;
+)  COMPRESSION='zstd_1.3.8' ;
 
 CREATE TABLE IF NOT EXISTS rpt_bpp4p_insight_bidword_000(
     mechanism varchar(124),
@@ -600,7 +600,7 @@ CREATE TABLE IF NOT EXISTS rpt_bpp4p_insight_bidword_000(
     cost varchar(124),
     favshoptotal varchar(124),
     PRIMARY KEY (bidwordhash,thedate,network,mechanism,ext1,ext2,bidwordstr)
-)  COMPRESSION='lz4_1.0' ;
+)  COMPRESSION='zstd_1.3.8' ;
 
 CREATE TABLE IF NOT EXISTS rpt_bpp4p_insight_bidword_category_000(
     click varchar(124),
@@ -622,14 +622,14 @@ CREATE TABLE IF NOT EXISTS rpt_bpp4p_insight_bidword_category_000(
     thedate datetime(6),
     category varchar(124),
     PRIMARY KEY (category,bidwordhash,thedate,network,mechanism,ext1,ext2,bidwordstr)
-)  COMPRESSION='lz4_1.0' ;
+)  COMPRESSION='zstd_1.3.8' ;
 
 CREATE TABLE IF NOT EXISTS rpt_bpp4p_demographic_name_sex_000(
     name varchar(100),
     thedate datetime(6),
     demographicid varchar(124),
     PRIMARY KEY (demographicid)
-)  COMPRESSION='lz4_1.0' ;
+)  COMPRESSION='zstd_1.3.8' ;
 
 CREATE TABLE IF NOT EXISTS rpt_bpp4p_pos_ob_000(
     threedirecttransactionshipping varchar(124),
@@ -676,7 +676,7 @@ CREATE TABLE IF NOT EXISTS rpt_bpp4p_pos_ob_000(
     click varchar(124),
     custid varchar(124),
     PRIMARY KEY (custid,thedate,campaignid,adgroupid,placeid)
-)  COMPRESSION='lz4_1.0' ;
+)  COMPRESSION='zstd_1.3.8' ;
 
 CREATE TABLE IF NOT EXISTS rpt_bpp4p_campaign_ob_000(
     searchtype varchar(124),
@@ -723,7 +723,7 @@ CREATE TABLE IF NOT EXISTS rpt_bpp4p_campaign_ob_000(
     custid varchar(124),
     click varchar(124),
     PRIMARY KEY (custid,thedate,campaignid,network,matchscope,searchtype,isshop)
-)  COMPRESSION='lz4_1.0' ;
+)  COMPRESSION='zstd_1.3.8' ;
 
 CREATE TABLE IF NOT EXISTS rpt_bpp4p_area_name_000(
     cityid varchar(124),
@@ -731,7 +731,7 @@ CREATE TABLE IF NOT EXISTS rpt_bpp4p_area_name_000(
     provinceid varchar(124),
     provincename varchar(100),
     PRIMARY KEY (provinceid,cityid)
-)  COMPRESSION='lz4_1.0' ;
+)  COMPRESSION='zstd_1.3.8' ;
 
 set @@recyclebin = off;
 drop database createvarchar;

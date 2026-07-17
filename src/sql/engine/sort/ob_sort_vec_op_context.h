@@ -26,16 +26,15 @@ struct ObPushDownTopNFilterInfo;
 struct ObSortVecOpContext
 {
   ObSortVecOpContext() :
-    tenant_id_(UINT64_MAX), sk_exprs_(nullptr), addon_exprs_(nullptr), sk_collations_(nullptr),
+    sk_exprs_(nullptr), addon_exprs_(nullptr), sk_collations_(nullptr),
     base_sk_collations_(nullptr), addon_collations_(nullptr), eval_ctx_(nullptr),
     exec_ctx_(nullptr), op_(nullptr), prefix_pos_(0), part_cnt_(0), topn_cnt_(INT64_MAX),
     sort_row_cnt_(nullptr), flag_(0), compress_type_(NONE_COMPRESSOR)
   {}
-  TO_STRING_KV(K_(tenant_id), KP_(sk_exprs), KP_(addon_exprs), KP_(sk_collations),
+  TO_STRING_KV(KP_(sk_exprs), KP_(addon_exprs), KP_(sk_collations),
                KP_(base_sk_collations), KP_(addon_collations), K_(prefix_pos), K_(part_cnt),
                K_(topn_cnt), KP_(sort_row_cnt), K_(flag), K_(compress_type));
 
-  uint64_t tenant_id_;
   const ObIArray<ObExpr *> *sk_exprs_;
   const ObIArray<ObExpr *> *addon_exprs_;
   const ObIArray<ObSortFieldCollation> *sk_collations_;

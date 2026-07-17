@@ -40,7 +40,7 @@ ObTableLoadDagHeapTableCompare::ObTableLoadDagHeapTableCompare() : result_code_(
 
 ObTableLoadDagHeapTableCompare::~ObTableLoadDagHeapTableCompare() {}
 
-bool ObTableLoadDagHeapTableCompare::operator()(const ObDirectLoadTableHandle lhs,
+bool ObTableLoadDagHeapTableCompare::operator()(const ObDirectLoadTableHandle lhs, 
                                              const ObDirectLoadTableHandle rhs)
 {
   int ret = OB_SUCCESS;
@@ -78,7 +78,7 @@ ObTableLoadDagParallelHeapTableCompactor::~ObTableLoadDagParallelHeapTableCompac
 {
 }
 
-int ObTableLoadDagParallelHeapTableCompactor::init(ObTableLoadStoreCtx *store_ctx,
+int ObTableLoadDagParallelHeapTableCompactor::init(ObTableLoadStoreCtx *store_ctx, 
                                                 ObTableLoadTableOpCtx *op_ctx)
 {
   int ret = OB_SUCCESS;

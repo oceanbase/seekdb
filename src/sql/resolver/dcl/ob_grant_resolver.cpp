@@ -101,7 +101,7 @@ int ObGrantResolver::resolve_grant_user(
     LOG_WARN("resolve grant_user error", K(ret));
   } else {
     if (grant_user->type_ == T_CREATE_USER_SPEC) {
-      if (OB_UNLIKELY(lib::is_mysql_mode() && 5 != grant_user->num_child_)) {
+      if (OB_UNLIKELY(5 != grant_user->num_child_)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("Parse node error in grentee ", K(ret));
       } else {
@@ -117,7 +117,7 @@ int ObGrantResolver::resolve_grant_user(
           host_name.assign_ptr(const_cast<char *>(grant_user->children_[3]->str_value_),
             static_cast<int32_t>(grant_user->children_[3]->str_len_));
         }
-        if (lib::is_mysql_mode() && NULL != grant_user->children_[4]) {
+        if (NULL != grant_user->children_[4]) {
           /* here code is to mock a auth plugin check. */
           ObString auth_plugin(static_cast<int32_t>(grant_user->children_[4]->str_len_),
                                 grant_user->children_[4]->str_value_);
@@ -174,9 +174,9 @@ int ObGrantResolver::resolve_grant_role_to_ur(
     ObSEArray<uint64_t, 4> role_id_array;
     ParseNode *grantee_clause = grant_role->children_[PARSE_GRANT_ROLE_GRANTEE];
     ParseNode *role_list = grant_role->children_[PARSE_GRANT_ROLE_LIST];
-    obrpc::ObGrantArg &args = static_cast<obrpc::ObGrantArg &>(grant_stmt->get_ddl_arg());
+    obcall::ObGrantArg &args = static_cast<obcall::ObGrantArg &>(grant_stmt->get_ddl_arg());
     ObSchemaChecker *schema_ck = params_.schema_checker_;
-    uint64_t tenant_id = params_.session_info_->get_effective_tenant_id();
+    
     ObArray<uint64_t> grantee_ids;
 
     CK (role_list != NULL);
@@ -196,7 +196,7 @@ int ObGrantResolver::resolve_grant_role_to_ur(
           const ObUserInfo *grantee_info = NULL;
           ObString &user_name = user_name_array.at(i);
           ObString &host_name = host_name_array.at(i);
-          OZ (schema_ck->get_user_info(tenant_id, user_name, host_name, grantee_info), user_name, host_name);
+          OZ (schema_ck->get_user_info(user_name, host_name, grantee_info), user_name, host_name);
           if (OB_USER_NOT_EXIST == ret || OB_ISNULL(grantee_info)) {
             ret = OB_ERR_UNKNOWN_AUTHID;
             LOG_USER_ERROR(OB_ERR_UNKNOWN_AUTHID,
@@ -234,7 +234,7 @@ int ObGrantResolver::resolve_grant_role_to_ur(
         ObString user_name;
         ObString host_name;
         OZ (resolve_user_host(cur_role, user_name, host_name));
-        OZ (schema_ck->get_user_info(tenant_id, user_name, host_name, role_info), user_name, host_name);
+        OZ (schema_ck->get_user_info(user_name, host_name, role_info), user_name, host_name);
         if (OB_USER_NOT_EXIST == ret || OB_ISNULL(role_info)) {
           ret = OB_ERR_UNKNOWN_AUTHID;
           LOG_USER_ERROR(OB_ERR_UNKNOWN_AUTHID,
@@ -333,8 +333,8 @@ int ObGrantResolver::resolve_mysql(const ParseNode &parse_tree)
   } else {
     grant_stmt->set_stmt_type(T_GRANT == node->type_ ? stmt::T_GRANT : stmt::T_SYSTEM_GRANT);
     stmt_ = grant_stmt;
-    uint64_t tenant_id = params_.session_info_->get_effective_tenant_id();
-    grant_stmt->set_tenant_id(tenant_id);
+    
+    
     if (T_GRANT_ROLE == node->type_) {
       if (OB_FAIL(resolve_grant_role_mysql(node, grant_stmt))) {
         LOG_WARN("resolve grant system privileges failed", K(ret));
@@ -386,7 +386,6 @@ int ObGrantResolver::resolve_mysql(const ParseNode &parse_tree)
                                                           db,
                                                           table,
                                                           catalog,
-                                                          tenant_id,
                                                           allocator_))) {
             LOG_WARN("failed to resolve priv object", K(ret));
           }
@@ -394,12 +393,12 @@ int ObGrantResolver::resolve_mysql(const ParseNode &parse_tree)
 
         //resolve privileges
         if (OB_SUCC(ret)) {
-          const uint64_t tenant_id = params_.session_info_->get_effective_tenant_id();  
+            
           ObPrivSet priv_set = 0;
           if (OB_ISNULL(allocator_)) {
             ret = OB_ERR_UNEXPECTED;
             LOG_WARN("unexpected error", K(ret));
-          } else if (OB_FAIL(resolve_priv_set(tenant_id, privs_node, grant_level, priv_set, grant_stmt, params_.schema_checker_,
+          } else if (OB_FAIL(resolve_priv_set(privs_node, grant_level, priv_set, grant_stmt, params_.schema_checker_,
                                                                                       params_.session_info_,
                                                                                       *allocator_))) {
             LOG_WARN("Resolve priv set error", K(ret));
@@ -418,7 +417,7 @@ int ObGrantResolver::resolve_mysql(const ParseNode &parse_tree)
             const ObString &db = grant_stmt->get_database_name();
             const ObString &table = grant_stmt->get_table_name();
             if (OB_FAIL(params_.schema_checker_->check_table_exists(
-                    tenant_id, db, table, is_index, false/*is_hidden*/, exist))) {
+                    db, table, is_index, false/*is_hidden*/, exist))) {
               LOG_WARN("Check table exist error", K(ret));
             } else if (!exist) {
               if (!(OB_PRIV_CREATE & grant_stmt->get_priv_set())
@@ -437,7 +436,7 @@ int ObGrantResolver::resolve_mysql(const ParseNode &parse_tree)
 
         //resolve users
         if (OB_SUCC(ret)) {
-          // In oracle mode during grant, if user does not exist, do not allow creating this user; fix #17900015
+          // Resolve whether GRANT should auto-create missing users; fix #17900015.
           bool need_create_user = false;
           CHECK_COMPATIBILITY_MODE(session_info_);
           need_create_user = !is_no_auto_create_user(params_.session_info_->get_sql_mode());
@@ -461,7 +460,7 @@ int ObGrantResolver::resolve_mysql(const ParseNode &parse_tree)
               if (OB_ISNULL(user_node)) {
                 ret = OB_ERR_PARSE_SQL;
                 LOG_WARN("Parse SQL error, user node should not be NULL", K(user_node), K(ret));
-              } else if (OB_UNLIKELY(lib::is_mysql_mode() && 5 != user_node->num_child_)) {
+              } else if (OB_UNLIKELY(5 != user_node->num_child_)) {
                 ret = OB_ERR_PARSE_SQL;
                 LOG_WARN("User specification's child node num error", K(ret));
               } else if (OB_ISNULL(user_node->children_[0])) {
@@ -485,7 +484,7 @@ int ObGrantResolver::resolve_mysql(const ParseNode &parse_tree)
                   host_name.assign_ptr(user_node->children_[3]->str_value_,
                       static_cast<int32_t>(user_node->children_[3]->str_len_));
                 }
-                if (lib::is_mysql_mode() && NULL != user_node->children_[4]) {
+                if (NULL != user_node->children_[4]) {
                   /* here code is to mock a auth plugin check. */
                   ObString auth_plugin(static_cast<int32_t>(user_node->children_[4]->str_len_),
                                       user_node->children_[4]->str_value_);

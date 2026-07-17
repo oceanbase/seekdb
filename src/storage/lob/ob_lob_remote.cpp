@@ -17,152 +17,128 @@
 #define USING_LOG_PREFIX STORAGE
 
 #include "ob_lob_remote.h"
+#include "share/rc/ob_module_provider.h"
 #include "storage/tx_storage/ob_ls_service.h"
+#include "storage/lob/ob_lob_manager.h"
+#include "storage/lob/ob_lob_iterator.h"
 
 namespace oceanbase
 {
 namespace storage
 {
 
+// cross-tenant LOB obcall RPC removed.
+// Previously the cross-tenant LOB read (is_across_tenant()) was issued as the OB_LOB_QUERY
+// streaming obcall RPC (obcall::ObStorageRpcProxy::lob_query) which looped back to this same
+// machine and was served by ObLobQueryP::process under MOD_SCOPE. We now run
+// the exact same local LOB query in-process: MTL_SWITCH to the lob's tenant, build the same
+// ObLobAccessParam (from_rpc_ = true), and drive the same ObLobQueryIter (READ) /
+// ObLobManager::getlength (GET_LENGTH). No network / SSHandle stream is involved.
 
-/**********ObLobQueryRemoteReader****************/
+/**********ObLobRemoteQueryCtx****************/
 
-int ObLobQueryRemoteReader::open(ObLobAccessParam& param, common::ObDataBuffer &rpc_buffer)
+ObLobRemoteQueryCtx::~ObLobRemoteQueryCtx()
 {
-  int ret = OB_SUCCESS;
-  char *buf = NULL;
-  int64_t buf_len = ObLobQueryArg::OB_LOB_QUERY_BUFFER_LEN;
-  if (NULL == (buf = reinterpret_cast<char*>(param.allocator_->alloc(buf_len)))) {
-    ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("failed to alloc buf", K(ret));
-  } else if (!rpc_buffer.set_data(buf, buf_len)) {
-    ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("failed to set rpc buffer", K(ret));
-  } else if (NULL == (buf = reinterpret_cast<char*>(param.allocator_->alloc(buf_len)))) {
-    ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("failed to alloc buf", K(ret));
-  } else {
-    data_buffer_.assign_buffer(buf, buf_len);
+  if (OB_NOT_NULL(query_iter_)) {
+    // the iterator was allocated under the lob's tenant; release it there too.
+    int ret = OB_SUCCESS;
+    MOD_SCOPE {
+      query_iter_->reset();
+      OB_DELETE(ObLobQueryIter, "unused", query_iter_);
+    }
+    query_iter_ = nullptr;
   }
-  return ret;
 }
 
-int ObLobQueryRemoteReader::get_next_block(common::ObDataBuffer &rpc_buffer,
-                                           obrpc::ObStorageRpcProxy::SSHandle<obrpc::OB_LOB_QUERY> &handle,
-                                           ObString &data)
+int ObLobRemoteQueryCtx::get_next_block(ObString &data)
 {
   int ret = OB_SUCCESS;
-  ObLobQueryBlock block;
-  if (OB_FAIL(do_fetch_rpc_buffer(rpc_buffer, handle))) {
-    if (OB_ITER_END != ret) {
-      LOG_WARN("failed to fetch next buffer if need", K(ret));
-    }
-  } else if (OB_FAIL(serialization::decode(rpc_buffer.get_data(),
-      rpc_buffer.get_position(),
-      rpc_buffer_pos_,
-      block))) {
-    STORAGE_LOG(WARN, "failed to decode macro block size", K(ret), K(rpc_buffer), K(rpc_buffer_pos_));
-  } else if (data_buffer_.set_length(0) != 0) {
-    LOG_WARN("failed to set data buffer pos", K(ret), K(data_buffer_));
+  if (qtype_ != ObLobQueryArg::QueryType::READ) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("get_next_block only valid for READ", K(ret), K(qtype_));
+  } else if (OB_ISNULL(query_iter_) || OB_ISNULL(read_buf_)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("query iter not inited", K(ret), KP(query_iter_), KP(read_buf_));
   } else {
-    while (OB_SUCC(ret)) {
-      if (data_buffer_.length() > block.size_) {
-        ret = OB_ERR_SYS;
-        LOG_WARN("data buffer must not larger than occupy size", K(ret), K(data_buffer_), K(block));
-      } else if (data_buffer_.length() == block.size_) {
-        data.assign_ptr(data_buffer_.ptr(), data_buffer_.length());
-        LOG_DEBUG("get_next_macro_block", K(rpc_buffer), K(rpc_buffer_pos_), K(block));
-        break;
-      } else if (OB_FAIL(do_fetch_rpc_buffer(rpc_buffer, handle))) {
-        LOG_WARN("failed to fetch next buffer if need", K(ret), K(block));
-      } else {
-        int64_t need_size = block.size_ - data_buffer_.length();
-        int64_t rpc_remain_size = rpc_buffer.get_position() - rpc_buffer_pos_;
-        int64_t copy_size = std::min(need_size, rpc_remain_size);
-        if (copy_size > data_buffer_.remain()) {
-          ret = OB_BUF_NOT_ENOUGH;
-          LOG_ERROR("data buffer is not enough, macro block data must not larger than data buffer",
-              K(ret), K(copy_size), K(data_buffer_), K(data_buffer_.remain()));
-        } else {
-          LOG_DEBUG("copy rpc to data buffer",
-              K(need_size), K(rpc_remain_size), K(copy_size), K(block), K(rpc_buffer), K(rpc_buffer_pos_));
-          if (data_buffer_.write(rpc_buffer.get_data() + rpc_buffer_pos_, copy_size) != copy_size) {
-            ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("fail to write data buffer", K(ret), K(data_buffer_.remain()), K(copy_size));
-          } else {
-            rpc_buffer_pos_ += copy_size;
-          }
+    // the iterator reads tenant storage, so it must run under the lob's tenant context.
+    MOD_SCOPE {
+      ObString out;
+      out.assign_buffer(read_buf_, read_buf_len_);
+      if (OB_FAIL(query_iter_->get_next_row(out))) {
+        if (OB_ITER_END != ret) {
+          LOG_WARN("failed to get next lob query block", K(ret));
         }
+      } else {
+        data.assign_ptr(out.ptr(), out.length());
       }
     }
   }
   return ret;
 }
 
-int ObLobQueryRemoteReader::do_fetch_rpc_buffer(
-                                                common::ObDataBuffer &rpc_buffer,
-                                                obrpc::ObStorageRpcProxy::SSHandle<obrpc::OB_LOB_QUERY> &handle)
-{
-  int ret = OB_SUCCESS;
-  if (rpc_buffer_pos_ < 0) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid args", K(ret), K(rpc_buffer_pos_));
-  } else if (rpc_buffer.get_position() - rpc_buffer_pos_ > 0) {
-    // do nothing
-    LOG_DEBUG("has left data, no need to get more", K(rpc_buffer), K(rpc_buffer_pos_));
-  } else {
-    rpc_buffer.get_position() = 0;
-    rpc_buffer_pos_ = 0;
-    if (handle.has_more()) {
-      if (OB_FAIL(handle.get_more(rpc_buffer))) {
-        LOG_WARN("get_more(send request) failed", K(ret), K(rpc_buffer_pos_));
-      } else if (rpc_buffer.get_position() < 0) {
-        ret = OB_ERR_SYS;
-        LOG_ERROR("rpc buffer has no data", K(ret), K(rpc_buffer));
-      } else if (0 == rpc_buffer.get_position()) {
-        if (!handle.has_more()) {
-          ret = OB_ITER_END;
-          LOG_DEBUG("empty rpc buffer, no more data", K(rpc_buffer), K(rpc_buffer_pos_));
-        } else {
-          ret = OB_ERR_SYS;
-          LOG_ERROR("rpc buffer has no data", K(ret), K(rpc_buffer));
-        }
-      } else {
-        LOG_DEBUG("get more data", K(rpc_buffer), K(rpc_buffer_pos_));
-      }
-    } else {
-      ret = OB_ITER_END;
-      LOG_DEBUG("no more data", K(rpc_buffer), K(rpc_buffer_pos_));
-    }
-  }
-  return ret;
-}
+/**********ObLobRemoteUtil****************/
 
 int ObLobRemoteUtil::query(ObLobAccessParam& param, const ObLobQueryArg::QueryType qtype, const ObAddr &dst_addr, ObLobRemoteQueryCtx *&remote_ctx)
 {
   int ret = OB_SUCCESS;
+  UNUSED(dst_addr);
   if (param.from_rpc_ && ! param.enable_remote_retry_) {
     ret = OB_NOT_MASTER;
-    LOG_WARN("call from rpc, but remote again", K(ret), K(dst_addr), K(MTL_ID()), K(param));
+    LOG_WARN("call from rpc, but remote again", K(ret), K(dst_addr), K(param));
   } else if (OB_FAIL(remote_query_init_ctx(param, qtype, remote_ctx))) {
     LOG_WARN("fail to init remote query ctx", K(ret));
   } else {
-    ObLSService *ls_service = (MTL(ObLSService *));
-    obrpc::ObStorageRpcProxy *svr_rpc_proxy = ls_service->get_storage_rpc_proxy();
-    int64_t timeout = param.timeout_ - ObTimeUtility::current_time();
-    if (timeout < ObStorageRpcProxy::STREAM_RPC_TIMEOUT) {
-      timeout = ObStorageRpcProxy::STREAM_RPC_TIMEOUT;
-    }
+    // cross-tenant LOB obcall RPC removed: run the same local LOB query the OB_LOB_QUERY
+    // processor (ObLobQueryP::process) ran, in-process under the lob's tenant.
     
-    if (OB_FAIL(svr_rpc_proxy->to(dst_addr).by(remote_ctx->query_arg_.tenant_id_)
-                    .dst_cluster_id(GCONF.cluster_id)
-                    .ratelimit(true).bg_flow(obrpc::ObRpcProxy::BACKGROUND_FLOW)
-                    .timeout(timeout)
-                    .lob_query(remote_ctx->query_arg_, remote_ctx->rpc_buffer_, remote_ctx->handle_))) {
-      LOG_WARN("call rpc fail", K(ret), K(dst_addr), K(param));
-    } else {
-      LOG_TRACE("remote query start", KPC(param.lob_data_), K(remote_ctx->rpc_buffer_), K(dst_addr), K(qtype), K(timeout), K(lbt()));
+    MOD_SCOPE {
+      ObLobManager *lob_mngr = share::g_mp->lob_manager();
+      if (OB_ISNULL(lob_mngr)) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("lob mngr is null", K(ret));
+      } else if (OB_ISNULL(param.lob_locator_) || !param.lob_locator_->is_valid()) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("lob locator is invalid", K(ret), KP(param.lob_locator_));
+      } else if (!param.lob_locator_->is_persist_lob()) {
+        ret = OB_NOT_SUPPORTED;
+        LOG_WARN("unsupport remote query non-persist lob.", K(ret), KPC(param.lob_locator_));
+      } else {
+        // build a fresh param exactly as the OB_LOB_QUERY processor did (from_rpc_ = true)
+        ObLobAccessParam query_param;
+        query_param.scan_backward_ = param.scan_backward_;
+        query_param.from_rpc_ = true;
+        query_param.enable_remote_retry_ = param.enable_remote_retry_;
+        const int64_t timeout = param.timeout_;
+        if (OB_FAIL(lob_mngr->build_lob_param(query_param, *param.allocator_, param.coll_type_,
+            param.offset_, param.len_, timeout, *param.lob_locator_))) {
+          LOG_WARN("failed to build lob param", K(ret));
+        } else if (qtype == ObLobQueryArg::QueryType::READ) {
+          ObLobQueryIter *iter = nullptr;
+          if (OB_FAIL(lob_mngr->query(query_param, iter))) {
+            LOG_WARN("failed to query lob.", K(ret), K(query_param));
+          } else {
+            remote_ctx->query_iter_ = iter;
+          }
+        } else if (qtype == ObLobQueryArg::QueryType::GET_LENGTH) {
+          uint64_t len = 0;
+          if (OB_FAIL(lob_mngr->getlength(query_param, len))) {
+            LOG_WARN("failed to getlength lob.", K(ret), K(query_param));
+          } else {
+            remote_ctx->length_ = len;
+          }
+        } else {
+          ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("invalid arg qtype.", K(ret), K(qtype));
+        }
+      }
     }
+    if (OB_SUCC(ret)) {
+      LOG_TRACE("remote(in-process) query start", KPC(param.lob_data_), K(dst_addr), K(qtype), K(lbt()));
+    }
+  }
+  if (OB_FAIL(ret) && OB_NOT_NULL(remote_ctx)) {
+    remote_ctx->~ObLobRemoteQueryCtx();
+    remote_ctx = nullptr;
   }
   return ret;
 }
@@ -183,26 +159,28 @@ int ObLobRemoteUtil::remote_query_init_ctx(ObLobAccessParam &param, const ObLobQ
   } else if (OB_ISNULL(remote_ctx = OB_NEWx(ObLobRemoteQueryCtx, param.allocator_))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("fail to alloc lob remote query ctx", K(ret), K(param));
-  } else if (OB_FAIL(remote_ctx->remote_reader_.open(param, remote_ctx->rpc_buffer_))) {
-    LOG_WARN("fail to open lob remote reader", K(ret), K(param));
   } else {
-    // build arg
-    remote_ctx->query_arg_.tenant_id_ = param.tenant_id_;
-    remote_ctx->query_arg_.offset_ = param.offset_;
-    remote_ctx->query_arg_.len_ = param.len_;
-    remote_ctx->query_arg_.cs_type_ = param.coll_type_;
-    remote_ctx->query_arg_.scan_backward_ = param.scan_backward_;
-    remote_ctx->query_arg_.qtype_ = qtype;
-    remote_ctx->query_arg_.lob_locator_.ptr_ = param.lob_locator_->ptr_;
-    remote_ctx->query_arg_.lob_locator_.size_ = param.lob_locator_->size_;
-    remote_ctx->query_arg_.lob_locator_.has_lob_header_ = param.lob_locator_->has_lob_header_;
-    remote_ctx->query_arg_.enable_remote_retry_ = param.is_across_tenant();
-    //set ctx ptr
-    ctx = remote_ctx;
+    
+    remote_ctx->qtype_ = qtype;
+    if (qtype == ObLobQueryArg::QueryType::READ) {
+      // output buffer for ObLobQueryIter::get_next_row, sized as the OB_LOB_QUERY processor did.
+      const int64_t buf_len = ObLobQueryArg::OB_LOB_QUERY_BUFFER_LEN - sizeof(ObLobQueryBlock);
+      char *buf = reinterpret_cast<char*>(param.allocator_->alloc(buf_len));
+      if (OB_ISNULL(buf)) {
+        ret = OB_ALLOCATE_MEMORY_FAILED;
+        LOG_WARN("fail to alloc read buffer", K(ret), K(buf_len));
+      } else {
+        remote_ctx->read_buf_ = buf;
+        remote_ctx->read_buf_len_ = buf_len;
+      }
+    }
+    if (OB_SUCC(ret)) {
+      ctx = remote_ctx;
+    }
   }
 
   if (OB_FAIL(ret) && OB_NOT_NULL(remote_ctx)) {
-    remote_ctx ->~ObLobRemoteQueryCtx();
+    remote_ctx->~ObLobRemoteQueryCtx();
     remote_ctx = nullptr;
   }
   return ret;

@@ -36,7 +36,7 @@ int ObExprLog::calc_result_type2(ObExprResType &type,
                                  ObExprTypeCtx &type_ctx) const
 {
   int ret = OB_SUCCESS;
-  if (lib::is_mysql_mode()) {
+  {
     if (NOT_ROW_DIMENSION != row_dimension_) {
       ret = OB_ERR_INVALID_TYPE_FOR_OP; // arithmetic not support row
     } else if (ObMaxType == type1.get_type() || ObMaxType == type2.get_type()) {
@@ -47,9 +47,7 @@ int ObExprLog::calc_result_type2(ObExprResType &type,
       type2.set_calc_type(type.get_type());
       ObExprOperator::calc_result_flag2(type, type1, type2);
     }
-  } else if (OB_FAIL(calc_trig_function_result_type2(type, type1, type2, type_ctx))) {
-    LOG_WARN("failed to calc_trig_function_result_type2", K(ret));
-  } else {/*do nothing*/}
+  }
   return ret;
 }
 
@@ -64,12 +62,12 @@ int calc_log_expr_double(const ObExpr &expr, ObEvalCtx &ctx,
     LOG_WARN("eval arg failed", K(ret), K(expr));
   } else if (base->is_null() || x->is_null()) {
     res_datum.set_null();
-  } else if (lib::is_mysql_mode() && (x->get_double() <= 0 || base->get_double() <= 0)) {
+  } else if (x->get_double() <= 0 || base->get_double() <= 0) {
     LOG_USER_WARN(OB_EER_INVALID_ARGUMENT_FOR_LOGARITHM);
     res_datum.set_null();
   } else if (OB_FAIL(ObExprPow::safe_set_double(res_datum,
           std::log(x->get_double()) / std::log(base->get_double())))) {
-    if (lib::is_mysql_mode() && OB_OPERATE_OVERFLOW == ret) {
+    if (OB_OPERATE_OVERFLOW == ret) {
       ret = OB_SUCCESS;
       LOG_USER_WARN(OB_EER_INVALID_ARGUMENT_FOR_LOGARITHM);
       res_datum.set_null();

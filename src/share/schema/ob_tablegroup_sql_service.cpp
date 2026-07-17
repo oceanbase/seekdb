@@ -48,7 +48,7 @@ int ObTablegroupSqlService::insert_tablegroup(const ObTablegroupSchema &tablegro
     // log operations
     if (OB_SUCC(ret)) {
       ObSchemaOperation create_tg_op;
-      create_tg_op.tenant_id_ = tablegroup_schema.get_tenant_id();
+      
       create_tg_op.database_id_ = 0;
       create_tg_op.tablegroup_id_ = tablegroup_schema.get_tablegroup_id();
       create_tg_op.table_id_ = 0;
@@ -70,11 +70,11 @@ int ObTablegroupSqlService::update_tablegroup(ObTablegroupSchema &new_schema,
                                               const ObString *ddl_stmt_str)
 {
   int ret = OB_SUCCESS;
-  const uint64_t tenant_id = new_schema.get_tenant_id();
-  const uint64_t exec_tenant_id = ObSchemaUtils::get_exec_tenant_id(tenant_id);
+  
+  
   ObDMLSqlSplicer dml;
   if (OB_FAIL(dml.add_pk_column("tablegroup_id", ObSchemaUtils::get_extract_schema_id(
-                                          exec_tenant_id, new_schema.get_tablegroup_id())))
+                                          new_schema.get_tablegroup_id())))
       || OB_FAIL(dml.add_column("comment", new_schema.get_comment()))
       || OB_FAIL(dml.add_column("schema_version", new_schema.get_schema_version()))
       || OB_FAIL(dml.add_column("sharding", new_schema.get_sharding()))
@@ -82,7 +82,7 @@ int ObTablegroupSqlService::update_tablegroup(ObTablegroupSchema &new_schema,
     LOG_WARN("fail to add pk column", K(ret), K(new_schema));
   }
   int64_t affected_rows = 0;
-  ObDMLExecHelper exec(sql_client, exec_tenant_id);                               
+  ObDMLExecHelper exec(sql_client);                               
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(exec.exec_update(OB_ALL_TABLEGROUP_TNAME, dml, affected_rows))) {
     LOG_WARN("fail to exec update", K(ret));
@@ -100,7 +100,7 @@ int ObTablegroupSqlService::update_tablegroup(ObTablegroupSchema &new_schema,
   if (OB_FAIL(ret)) {
   } else {
     ObSchemaOperation create_tg_op;
-    create_tg_op.tenant_id_ = new_schema.get_tenant_id();
+    
     create_tg_op.database_id_ = 0;
     create_tg_op.tablegroup_id_ = new_schema.get_tablegroup_id();
     create_tg_op.table_id_ = 0;
@@ -123,8 +123,8 @@ int ObTablegroupSqlService::delete_tablegroup(
   int ret = OB_SUCCESS;
   ObSqlString sql;
   int64_t affected_rows = 0;
-  const uint64_t tenant_id = tablegroup_schema.get_tenant_id();
-  const uint64_t exec_tenant_id = ObSchemaUtils::get_exec_tenant_id(tenant_id);
+  
+  
   const uint64_t tablegroup_id = tablegroup_schema.get_tablegroup_id();
   ObTablegroupSchema new_tablegroup_schema;
 
@@ -137,9 +137,9 @@ int ObTablegroupSqlService::delete_tablegroup(
   } else if (FALSE_IT(new_tablegroup_schema.set_schema_version(new_schema_version))) {
   } else if (OB_FAIL(sql.assign_fmt("DELETE FROM %s WHERE tablegroup_id = %lu",
                                      OB_ALL_TABLEGROUP_TNAME,
-                                     ObSchemaUtils::get_extract_schema_id(exec_tenant_id, tablegroup_id)))) {
+                                     ObSchemaUtils::get_extract_schema_id(tablegroup_id)))) {
     LOG_WARN("assign_fmt failed", K(ret));
-  } else if (OB_FAIL(sql_client.write(exec_tenant_id, sql.ptr(), affected_rows))) {
+  } else if (OB_FAIL(sql_client.write(sql.ptr(), affected_rows))) {
     LOG_WARN("execute sql failed", K(sql), K(ret));
   } else if (!is_single_row(affected_rows)) {
     ret = OB_ERR_UNEXPECTED;
@@ -152,10 +152,10 @@ int ObTablegroupSqlService::delete_tablegroup(
                       "INSERT INTO %s(tablegroup_id,schema_version, is_deleted) "
                       "VALUES(%lu,%ld, %ld)",
                       OB_ALL_TABLEGROUP_HISTORY_TNAME,
-                      ObSchemaUtils::get_extract_schema_id(exec_tenant_id, tablegroup_id),
+                      ObSchemaUtils::get_extract_schema_id(tablegroup_id),
                       new_tablegroup_schema.get_schema_version(), is_deleted))) {
         LOG_WARN("assign_fmt failed", K(ret));
-      } else if (OB_FAIL(sql_client.write(exec_tenant_id, sql.ptr(), affected_rows))) {
+      } else if (OB_FAIL(sql_client.write(sql.ptr(), affected_rows))) {
         LOG_WARN("execute sql failed", K(sql), K(ret));
       } else if (!is_single_row(affected_rows)) {
         ret = OB_ERR_UNEXPECTED;
@@ -180,16 +180,16 @@ int ObTablegroupSqlService::delete_tablegroup(
         continue;
       } else if (OB_FAIL(sql.assign_fmt("DELETE FROM %s WHERE table_id=%lu",
                                         tname[i],
-                                        ObSchemaUtils::get_extract_schema_id(exec_tenant_id, tablegroup_id)))) {
+                                        ObSchemaUtils::get_extract_schema_id(tablegroup_id)))) {
         LOG_WARN("append_fmt failed", K(ret));
-      } else if (OB_FAIL(sql_client.write(exec_tenant_id, sql.ptr(), affected_rows))) {
-        LOG_WARN("fail to execute sql", K(tenant_id), K(sql), K(ret));
+      } else if (OB_FAIL(sql_client.write(sql.ptr(), affected_rows))) {
+        LOG_WARN("fail to execute sql", K(sql), K(ret));
       } else {}
     }
     //insert delete record in __all_part_info_history, __all_part_history,
     //__all_subpart_history, __all_def_subpart_history
     const ObPartitionSchema *tg_schema = &new_tablegroup_schema;
-    ObDropPartInfoHelper part_helper(sql_client, tenant_id);
+    ObDropPartInfoHelper part_helper(sql_client);
     if (FAILEDx(part_helper.init(tg_schema))) {
       LOG_WARN("failed to init part_helper", KR(ret), KPC(tg_schema));
     } else if (OB_FAIL(part_helper.delete_partition_info())) {
@@ -200,7 +200,7 @@ int ObTablegroupSqlService::delete_tablegroup(
   // log operations
   if (OB_SUCC(ret)) {
     ObSchemaOperation delete_tg_op;
-    delete_tg_op.tenant_id_ = tenant_id;
+    
     delete_tg_op.database_id_ = 0;
     delete_tg_op.tablegroup_id_ = tablegroup_id;
     delete_tg_op.table_id_ = 0;
@@ -221,14 +221,14 @@ int ObTablegroupSqlService::add_tablegroup(
     const bool only_history)
 {
   int ret = OB_SUCCESS;
-  const uint64_t tenant_id = tablegroup.get_tenant_id();
-  const uint64_t exec_tenant_id = ObSchemaUtils::get_exec_tenant_id(tenant_id);
+  
+  
 
   ObDMLSqlSplicer dml;
-  if (OB_FAIL(gen_tablegroup_dml(exec_tenant_id, tablegroup, dml))) {
+  if (OB_FAIL(gen_tablegroup_dml(tablegroup, dml))) {
     LOG_WARN("gen tablegroup dml failed", K(ret));
   } else {
-    ObDMLExecHelper exec(sql_client, exec_tenant_id);
+    ObDMLExecHelper exec(sql_client);
     int64_t affected_rows = 0;
     if (!only_history) {
       if (OB_FAIL(exec.exec_insert(OB_ALL_TABLEGROUP_TNAME, dml, affected_rows))) {
@@ -254,7 +254,6 @@ int ObTablegroupSqlService::add_tablegroup(
 }
 
 int ObTablegroupSqlService::gen_tablegroup_dml(
-    const uint64_t exec_tenant_id,
     const ObTablegroupSchema &tablegroup_schema,
     ObDMLSqlSplicer &dml)
 {
@@ -263,7 +262,7 @@ int ObTablegroupSqlService::gen_tablegroup_dml(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("tablegroup_schema is invalid, ", K(ret), K(tablegroup_schema));
   } else {
-    uint64_t tenant_id = tablegroup_schema.get_tenant_id();
+    
     if (tablegroup_schema.get_sharding().empty()) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("tablegroup schema sharding can not be empty when data version is greater than 4.2", KR(ret), K(tablegroup_schema));
@@ -272,7 +271,7 @@ int ObTablegroupSqlService::gen_tablegroup_dml(
       const ObSubPartitionOption &sub_part_option = tablegroup_schema.get_sub_part_option();
 
       if (OB_FAIL(dml.add_pk_column("tablegroup_id", ObSchemaUtils::get_extract_schema_id(
-                                                        exec_tenant_id, tablegroup_schema.get_tablegroup_id())))
+                                                        tablegroup_schema.get_tablegroup_id())))
           || OB_FAIL(dml.add_column("tablegroup_name", ObHexEscapeSqlStr(tablegroup_schema.get_tablegroup_name_str())))
           || OB_FAIL(dml.add_column("comment", tablegroup_schema.get_comment()))
           || OB_FAIL(dml.add_column("part_level", tablegroup_schema.get_part_level()))

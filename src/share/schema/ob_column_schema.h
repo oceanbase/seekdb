@@ -17,6 +17,7 @@
 #ifndef OCEANBASE_SCHEMA_COLUMN_SCHEMA_H_
 #define OCEANBASE_SCHEMA_COLUMN_SCHEMA_H_
 #include "share/ob_define.h"
+#include "share/session/ob_local_session_var.h"
 #include "lib/string/ob_string.h"
 #include "lib/container/ob_array.h"
 #include "lib/hash/ob_hashmap.h"
@@ -66,7 +67,7 @@ bool operator!=(const ObColumnSchemaV2 &r) const;
 int assign(const ObColumnSchemaV2 &src_schema);
 
 //set methods
-  inline void set_tenant_id(const uint64_t id) { tenant_id_ = id; }
+  
   inline void set_table_id(const uint64_t id) { table_id_ = id; }
   inline void set_column_id(const uint64_t id) { column_id_ = id; }
   inline void set_schema_version(const int64_t schema_version) { schema_version_ = schema_version; }
@@ -160,7 +161,7 @@ int assign(const ObColumnSchemaV2 &src_schema);
   inline void set_skip_index_attr(const uint64_t attr_val) { skip_index_attr_.set_column_attr(attr_val); }
   inline void set_is_string_lob() { add_column_flag(STRING_LOB_COLUMN_FLAG); }
   //get methods
-  inline uint64_t get_tenant_id() const { return tenant_id_; }
+  
   inline uint64_t get_table_id() const { return table_id_; }
   inline uint64_t get_column_id() const { return column_id_; }
   inline uint64_t& get_column_id() { return column_id_; }
@@ -186,9 +187,8 @@ int assign(const ObColumnSchemaV2 &src_schema);
   inline uint32_t get_srid() const { return srs_info_.srid_; }
   inline common::ObGeoType get_geo_type() const { return static_cast<common::ObGeoType>(srs_info_.geo_type_); }
   inline const ObSkipIndexColumnAttr &get_skip_index_attr() const { return skip_index_attr_; }
-  // Be careful with this interface, is_nullable_ is set only in Mysql mode and
-  // for primary key and identity column in Oracle mode.
-	// is_nullable() is usually used in Mysql mode, also used when schema interacts with inner table.
+  // Be careful with this interface, is_nullable_ is usually used in MySQL mode
+  // and when schema interacts with inner table.
   // Following function is_not_null_for_read and is_not_null_for_write is more practical.
 	// More info: 
   inline bool is_nullable() const { return is_nullable_; }
@@ -333,8 +333,7 @@ int assign(const ObColumnSchemaV2 &src_schema);
   inline void add_column_flag(int64_t flag) { column_flags_ |= flag; }
   inline void del_column_flag(int64_t flag) { column_flags_ &= ~flag; }
   inline void add_or_del_column_flag(int64_t flag, bool is_add);
-  inline bool is_shadow_column() const { return (column_id_ > common::OB_MIN_SHADOW_COLUMN_ID)
-                                                && !is_mlog_special_column(column_id_); }
+  inline bool is_shadow_column() const { return column_id_ > common::OB_MIN_SHADOW_COLUMN_ID; }
   inline bool is_on_update_current_timestamp() const { return on_update_current_timestamp_; }
   inline bool is_enum_or_set() const { return meta_type_.is_enum_or_set(); }
 
@@ -354,7 +353,6 @@ int assign(const ObColumnSchemaV2 &src_schema);
   void reset();
   int get_byte_length(
       int64_t &length,
-      const bool is_oracle_mode,
       const bool for_check_length) const;
 
   int convert_column_id(const hash::ObHashMap<uint64_t, uint64_t> &column_id_map);
@@ -372,15 +370,13 @@ int assign(const ObColumnSchemaV2 &src_schema);
     return ret;
   }
 
-  int get_each_column_group_name(ObString &cg_name) const;
-  inline sql::ObLocalSessionVar &get_local_session_var() { return local_session_vars_; }
-  inline const sql::ObLocalSessionVar &get_local_session_var() const { return local_session_vars_; }
+  inline share::ObLocalSessionVar &get_local_session_var() { return local_session_vars_; }
+  inline const share::ObLocalSessionVar &get_local_session_var() const { return local_session_vars_; }
   int is_same_collection_column(const ObColumnSchemaV2 &other, bool &is_same) const;
   DECLARE_VIRTUAL_TO_STRING;
 private:
   int alloc_column_ref_set();
 private:
-  uint64_t tenant_id_;
   uint64_t table_id_;
   uint64_t column_id_;
   int64_t schema_version_;
@@ -428,7 +424,7 @@ private:
   uint64_t sub_type_;
   ObSkipIndexColumnAttr skip_index_attr_;
   int64_t lob_chunk_size_;
-  sql::ObLocalSessionVar local_session_vars_;
+  share::ObLocalSessionVar local_session_vars_;
 };
 
 inline int32_t ObColumnSchemaV2::get_data_length() const

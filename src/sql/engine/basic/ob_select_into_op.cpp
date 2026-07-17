@@ -16,29 +16,13 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 
-#include <cmath>
-#include <memory>
-
 #include "ob_select_into_op.h"
 #include "sql/engine/cmd/ob_variable_set_executor.h"
 #include "lib/charset/ob_charset_string_helper.h"
 #include "sql/engine/px/ob_px_sqc_handler.h"
 #include "sql/engine/expr/ob_expr_json_func_helper.h"
-#include "lib/udt/ob_collection_type.h"
+#include "common/udt/ob_collection_type.h"
 #include "share/config/ob_server_config.h"
-
-#ifndef OB_BUILD_EMBED_MODE
-#include <arrow/api.h>
-#include <arrow/io/file.h>
-#include <arrow/util/logging.h>
-#include <parquet/api/writer.h>
-#include <parquet/exception.h>
-#include <arrow/c/bridge.h>
-#include <arrow/array.h>
-
-#define ARROW_FAIL(statement) (OB_UNLIKELY(!(statement).ok()))
-
-#endif
 
 namespace oceanbase
 {
@@ -51,7 +35,7 @@ OB_SERIALIZE_MEMBER((ObSelectIntoSpec, ObOpSpec), into_type_, user_vars_, outfil
     field_str_, // FARM COMPAT WHITELIST FOR filed_str_: renamed
     line_str_, closed_cht_, is_optional_, select_exprs_, is_single_, max_file_size_,
     escaped_cht_, cs_type_, parallel_, file_partition_expr_, buffer_size_, is_overwrite_,
-    external_properties_, external_partition_, alias_names_);
+    external_properties_, external_partition_);
 
 
 int ObSelectIntoOp::inner_open()
@@ -84,26 +68,6 @@ int ObSelectIntoOp::inner_open()
         if (OB_FAIL(init_csv_env())) {
           LOG_WARN("failed to init csv env", K(ret));
         }
-        break;
-      }
-      case ObExternalFileFormat::FormatType::ODPS_FORMAT:
-      {
-        if (!GCONF._use_odps_jni_connector) {
-          ret = OB_NOT_SUPPORTED;
-          LOG_WARN("not support odps format", K(ret));
-        } else {
-          ret = OB_NOT_SUPPORTED;
-          LOG_WARN("not support odps format", K(ret));
-        }
-        break;
-      }
-      case ObExternalFileFormat::FormatType::PARQUET_FORMAT:
-      {
-#ifndef OB_BUILD_EMBED_MODE
-        if (OB_FAIL(init_parquet_env())) {
-          LOG_WARN("failed to init parquet env", K(ret));
-        }
-#endif
         break;
       }
       case ObExternalFileFormat::FormatType::ORC_FORMAT:
@@ -221,12 +185,8 @@ int ObSelectIntoOp::init_env_common()
     ret = OB_NOT_SUPPORTED;
     LOG_USER_ERROR(OB_NOT_SUPPORTED, "select array/map into variables");
   } else if (do_partition_
-             && OB_FAIL(partition_map_.create(128, ObLabel("SelectInto"), ObLabel("SelectInto"), MTL_ID()))) {
+             && OB_FAIL(partition_map_.create(128, ObLabel("SelectInto"), ObLabel("SelectInto")))) {
     LOG_WARN("failed to create hashmap", K(ret));
-  } else if (MY_SPEC.select_exprs_.count() != MY_SPEC.alias_names_.strs_.count()) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected column count", K(MY_SPEC.select_exprs_.count()),
-              K(MY_SPEC.alias_names_.strs_.count()), K(ret));
   }
   return ret;
 }
@@ -289,7 +249,7 @@ int ObSelectIntoOp::calc_url_and_set_access_info()
   }
   return ret;
 }
-// csv, odps supports batch and non-batch interfaces; parquet, orc only supports batch interface; non-batch interface will be discontinued later
+// CSV supports batch and non-batch interfaces; the non-batch interface will be discontinued later.
 int ObSelectIntoOp::inner_get_next_row()
 {
   int ret = 0 == top_limit_cnt_ ? OB_ITER_END : OB_SUCCESS;
@@ -297,8 +257,7 @@ int ObSelectIntoOp::inner_get_next_row()
   const ObItemType into_type = MY_SPEC.into_type_;
   ObPhysicalPlanCtx *phy_plan_ctx = NULL;
   ObExternalFileWriter *data_writer = NULL;
-  if (ObExternalFileFormat::FormatType::CSV_FORMAT != format_type_
-      && ObExternalFileFormat::FormatType::ODPS_FORMAT != format_type_) {
+  if (ObExternalFileFormat::FormatType::CSV_FORMAT != format_type_) {
     ret = OB_NOT_SUPPORTED;
     LOG_WARN("this type not supported in not batch interface", K(ret), K(format_type_));
     LOG_USER_ERROR(OB_NOT_SUPPORTED, "this upload type");
@@ -321,21 +280,7 @@ int ObSelectIntoOp::inner_get_next_row()
       }
     } else {
       ++row_count;
-      if (ObExternalFileFormat::FormatType::ODPS_FORMAT == format_type_) {
-        if (is_odps_cpp_table_ == is_odps_java_table_) {
-          ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("invalid table mode for odps table", K(ret),
-                   K(is_odps_cpp_table_), K(is_odps_java_table_));
-        } else if (is_odps_cpp_table_) {
-          ret = OB_NOT_SUPPORTED;
-          LOG_USER_ERROR(OB_NOT_SUPPORTED, "external odps cpp table");
-          LOG_WARN("use supported version", K(ret));
-        } else {
-          ret = OB_NOT_SUPPORTED;
-          LOG_USER_ERROR(OB_NOT_SUPPORTED, "external odps table");
-          LOG_WARN("not support jni odps single write", K(ret));
-        }
-      } else if (T_INTO_VARIABLES == into_type) {
+      if (T_INTO_VARIABLES == into_type) {
         if (OB_FAIL(into_varlist())) {
           LOG_WARN("into varlist failed", K(ret));
         }
@@ -383,9 +328,7 @@ int ObSelectIntoOp::inner_get_next_batch(const int64_t max_row_cnt)
   }
   //when do_partition is false, create the only data_writer here
   if (OB_SUCC(ret) && T_INTO_VARIABLES != into_type && !do_partition_
-      && (ObExternalFileFormat::FormatType::CSV_FORMAT == format_type_
-          || ObExternalFileFormat::FormatType::PARQUET_FORMAT == format_type_
-          )) {
+      && ObExternalFileFormat::FormatType::CSV_FORMAT == format_type_) {
     if (OB_FAIL(create_the_only_data_writer(data_writer))) {
       LOG_WARN("failed to create the only data writer", K(ret));
     } else if (OB_ISNULL(data_writer)) {
@@ -411,28 +354,11 @@ int ObSelectIntoOp::inner_get_next_batch(const int64_t max_row_cnt)
       if (brs_.size_ > 0) {
         brs_.skip_->deep_copy(*(child_brs->skip_), brs_.size_);
         row_count += brs_.size_ - brs_.skip_->accumulate_bit_cnt(brs_.size_);
-        if (ObExternalFileFormat::FormatType::ODPS_FORMAT == format_type_) {
-          if (!GCONF._use_odps_jni_connector) {
-            ret = OB_NOT_SUPPORTED;
-            LOG_WARN("odps cpp connector is not supported", K(ret));
-          } else {
-            ret = OB_NOT_SUPPORTED;
-            LOG_WARN("odps jni connector is not supported", K(ret));
-          }
-        } else if (T_INTO_OUTFILE == into_type) {
+        if (T_INTO_OUTFILE == into_type) {
           if (ObExternalFileFormat::FormatType::CSV_FORMAT == format_type_) {
             if (OB_FAIL(into_outfile_batch_csv(brs_, data_writer))) {
               LOG_WARN("csv into outfile batch failed", K(ret));
             }
-          } else if (ObExternalFileFormat::FormatType::PARQUET_FORMAT == format_type_) {
-#ifndef OB_BUILD_EMBED_MODE
-            if (OB_FAIL(into_outfile_batch_parquet(brs_, data_writer))) {
-              LOG_WARN("parquet into outfile batch failed", K(ret));
-            }
-#else
-            ret = OB_NOT_SUPPORTED;
-            LOG_WARN("parquet is not supported in embed mode", K(ret));
-#endif // OB_BUILD_EMBED_MODE
           } else if (ObExternalFileFormat::FormatType::ORC_FORMAT == format_type_) {
             ret = OB_NOT_SUPPORTED;
           } else {
@@ -490,15 +416,7 @@ int ObSelectIntoOp::inner_close()
   int ret = OB_SUCCESS;
   ObExternalFileWriter *data_writer = NULL;
   int64_t estimated_bytes = 0;
-  if (ObExternalFileFormat::FormatType::ODPS_FORMAT == format_type_) {
-    if (!GCONF._use_odps_jni_connector) {
-      ret = OB_NOT_SUPPORTED;
-      LOG_WARN("odps jni connector is not supported", K(ret));
-    } else {
-      ret = OB_NOT_SUPPORTED;
-      LOG_WARN("odps jni connector is not supported", K(ret));
-    }
-  } else if (do_partition_) {
+  if (do_partition_) {
     for (ObPartitionWriterMap::iterator iter = partition_map_.begin();
          OB_SUCC(ret) && iter != partition_map_.end(); iter++) {
       if (OB_ISNULL(data_writer = iter->second)) {
@@ -1181,7 +1099,7 @@ int ObSelectIntoOp::write_single_char_to_file(const char *wchar, ObCsvFileWriter
       data_writer.set_curr_pos(pos + 1);
     } else if (OB_FAIL(use_shared_buf(data_writer, buf, buf_len, pos))) {
       LOG_WARN("failed to use shared buffer", K(ret));
-    }
+    } 
   }
   if (OB_SUCC(ret) && use_shared_buf_) {
     if (pos < buf_len) {
@@ -1301,39 +1219,6 @@ int ObSelectIntoOp::into_outfile(ObExternalFileWriter *data_writer)
   return ret;
 }
 
-static OB_INLINE int get_cast_ret(const bool is_strict_mode, int ret)
-{
-  if (OB_SUCCESS != ret && !is_strict_mode) {
-    ret = OB_SUCCESS;
-  }
-  return ret;
-}
-
-#define CAST_FAIL(stmt) \
-  (OB_UNLIKELY((OB_SUCCESS != (ret = get_cast_ret((is_strict_mode), (stmt))))))
-
-
-int ObSelectIntoOp::decimal_to_string(const ObDatum &datum,
-                                      const ObDatumMeta &datum_meta,
-                                      std::string &res,
-                                      ObIAllocator &allocator)
-{
-  int ret = OB_SUCCESS;
-  char *buf = NULL;
-  int64_t pos = 0;
-  if (OB_ISNULL(buf = static_cast<char *>(allocator.alloc(OB_CAST_TO_VARCHAR_MAX_LENGTH)))) {
-    ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("failed to alloc memory", K(ret));
-  } else if (OB_FAIL(wide::to_string(datum.get_decimal_int(), datum.get_int_bytes(), datum_meta.scale_,
-                                     buf, OB_CAST_TO_VARCHAR_MAX_LENGTH, pos))) {
-    LOG_WARN("failed to get string", K(ret));
-  } else {
-    res.assign(buf, pos);
-  }
-  return ret;
-}
-
-
 int ObSelectIntoOp::into_outfile_batch_csv(const ObBatchRows &brs, ObExternalFileWriter *data_writer)
 {
   int ret = OB_SUCCESS;
@@ -1408,52 +1293,6 @@ int ObSelectIntoOp::into_outfile_batch_csv(const ObBatchRows &brs, ObExternalFil
   return ret;
 }
 
-int ObSelectIntoOp::get_data_from_expr_vector(const common::ObIVector* expr_vector,
-                                              int row_idx,
-                                              ObObjType type,
-                                              int64_t &value,
-                                              const bool is_strict_mode,
-                                              const ObDateSqlMode date_sql_mode)
-{
-  int ret = OB_SUCCESS;
-  int32_t date;
-  switch(type) {
-    case ObTinyIntType:
-      value = expr_vector->get_tinyint(row_idx);
-      break;
-    case ObSmallIntType:
-      value = expr_vector->get_smallint(row_idx);
-      break;
-    case ObMediumIntType:
-      value = expr_vector->get_mediumint(row_idx);
-      break;
-    case ObInt32Type:
-      value = expr_vector->get_int32(row_idx);
-      break;
-    case ObIntType:
-      value = expr_vector->get_int(row_idx);
-      break;
-    case ObYearType:
-      value = expr_vector->get_year(row_idx);
-      break;
-    case ObDateType:
-      value = expr_vector->get_date(row_idx);
-      break;
-    case ObMySQLDateType:
-      CAST_FAIL(
-        ObTimeConverter::mdate_to_date(expr_vector->get_mysql_date(row_idx), date, date_sql_mode));
-      value = date;
-      break;
-    case ObMySQLDateTimeType:
-      CAST_FAIL(ObTimeConverter::mdatetime_to_datetime(expr_vector->get_mysql_datetime(row_idx), value,
-                                             date_sql_mode));
-      break;
-    default:
-      ret = OB_OBJ_TYPE_ERROR;
-  }
-  return ret;
-}
-
 bool ObSelectIntoOp::file_need_split(int64_t file_size)
 {
   return (file_location_ == IntoFileLocation::SERVER_DISK
@@ -1462,591 +1301,6 @@ bool ObSelectIntoOp::file_need_split(int64_t file_size)
             && ((!MY_SPEC.is_single_ && file_size > min(MY_SPEC.max_file_size_, MAX_OSS_FILE_SIZE))
                 || (MY_SPEC.is_single_ && file_size > MAX_OSS_FILE_SIZE)));
 }
-
-int ObSelectIntoOp::check_oracle_number(ObObjType obj_type, int16_t &precision, int8_t scale)
-{
-  int ret = OB_SUCCESS;
-  return ret;
-}
-
-int ObSelectIntoOp::calc_byte_array(const common::ObIVector* expr_vector,
-                                    int row_idx,
-                                    const ObDatumMeta &datum_meta,
-                                    const ObObjMeta &obj_meta,
-                                    ObIAllocator &allocator,
-                                    char* &buf,
-                                    uint32_t &res_len)
-{
-  int ret = OB_SUCCESS;
-  ObString ob_str;
-  ObString res_str;
-  bool has_lob_header = obj_meta.has_lob_header();
-  res_len = 0;
-  buf = nullptr;
-  int64_t buf_size = 0;
-  if (OB_FAIL(ObTextStringHelper::read_real_string_data(allocator, expr_vector, datum_meta,
-                                                        has_lob_header, ob_str, row_idx))) {
-    LOG_WARN("failed to get string", K(ret));
-  } else if (ob_str.length() == 0 || CS_TYPE_BINARY == datum_meta.cs_type_
-             || CHARSET_UTF8MB4 == ObCharset::charset_type_by_coll(datum_meta.cs_type_)) {
-    if (OB_FAIL(ob_write_string(allocator, ob_str, res_str))) {
-      LOG_WARN("failed to write string", K(ret));
-    } else {
-      res_len = static_cast<uint32_t>(res_str.length());
-      buf = const_cast<char *>(res_str.ptr());
-    }
-  } else if (OB_FALSE_IT(buf_size = ob_str.length() * ObCharset::MAX_MB_LEN)) {
-  } else if (OB_ISNULL(buf = static_cast<char *>(allocator.alloc(buf_size)))) {
-    ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("failed to alloc memory", K(ret), K(buf_size));
-  } else if (OB_FAIL(ObCharset::charset_convert(datum_meta.cs_type_, ob_str.ptr(),
-                                                ob_str.length(), CS_TYPE_UTF8MB4_BIN,
-                                                buf, buf_size, res_len, false, false))) {
-    LOG_WARN("failed to convert charset", K(ret));
-  }
-  return ret;
-}
-
-#ifndef OB_BUILD_EMBED_MODE
-int ObSelectIntoOp::init_parquet_env()
-{
-  int ret = OB_SUCCESS;
-  arrow_alloc_.init(MTL_ID());
-  if (OB_FAIL(setup_parquet_schema())) {
-    LOG_WARN("failed to set up parquet schema", K(ret));
-  } else if (OB_FAIL(init_env_common())) {
-    LOG_WARN("failed to init env common", K(ret));
-  }
-  return ret;
-}
-
-int ObSelectIntoOp::get_parquet_logical_type(std::shared_ptr<const parquet::LogicalType> &logical_type,
-                                             const ObObjType &obj_type,
-                                             const int32_t precision,
-                                             const int32_t scale)
-{
-  int ret = OB_SUCCESS;
-  if (ObTinyIntType == obj_type) {
-    logical_type = parquet::LogicalType::Int(8, true);
-  } else if (ObSmallIntType == obj_type) {
-    logical_type = parquet::LogicalType::Int(16, true);
-  } else if (ObMediumIntType == obj_type || ObInt32Type == obj_type) {
-    logical_type = parquet::LogicalType::Int(32, true);
-  } else if (ObIntType == obj_type) {
-    logical_type = parquet::LogicalType::Int(64, true);
-  } else if (ObUTinyIntType == obj_type) {
-    logical_type = parquet::LogicalType::Int(8, false);
-  } else if (ObUSmallIntType == obj_type) {
-    logical_type = parquet::LogicalType::Int(16, false);
-  } else if (ObUMediumIntType == obj_type || ObUInt32Type == obj_type) {
-    logical_type = parquet::LogicalType::Int(32, false);
-  } else if (ObUInt64Type == obj_type) {
-    logical_type = parquet::LogicalType::Int(64, false);
-  } else if (ob_is_float_tc(obj_type) || ob_is_double_tc(obj_type)) { // float, ufloat, double, udouble
-    logical_type = parquet::LogicalType::None();
-  } else if (ob_is_number_or_decimal_int_tc(obj_type)) {
-    logical_type = parquet::LogicalType::Decimal(precision, scale);
-  } else if (ob_is_datetime_or_mysql_datetime(obj_type)) {
-    logical_type = parquet::LogicalType::Timestamp(false, parquet::LogicalType::TimeUnit::MICROS);
-  } else if (ObTimestampType == obj_type) {
-    logical_type = parquet::LogicalType::Timestamp(true, parquet::LogicalType::TimeUnit::MICROS);
-  } else if (ob_is_date_or_mysql_date(obj_type)) {
-    logical_type = parquet::LogicalType::Date();
-  } else if (ob_is_time_tc(obj_type)) {
-    logical_type = parquet::LogicalType::Time(false, parquet::LogicalType::TimeUnit::MICROS);
-  } else if (ob_is_year_tc(obj_type)) {
-    logical_type = parquet::LogicalType::Int(8, false);
-  } else if (ob_is_string_type(obj_type) || ObNullType == obj_type) {
-    logical_type = parquet::LogicalType::String();
-  } else if (ob_is_bit_tc(obj_type) /*uint64_t*/) {
-    logical_type = parquet::LogicalType::Int(64, false);
-  } else if (ob_is_enum_or_set_type(obj_type) /*uint64_t*/) {
-    logical_type = parquet::LogicalType::Enum();
-  } else {
-    // TODO(bitao): support json/bson/uuid/map/list
-    ret = OB_NOT_SUPPORTED;
-    LOG_USER_ERROR(OB_NOT_SUPPORTED, "convert this ob type to parquet type");
-    LOG_WARN("unsupported obj type", K(ret), K(obj_type));
-  }
-  return ret;
-}
-
-int ObSelectIntoOp::get_parquet_physical_type(parquet::Type::type &physical_type,
-                                              const ObObjType &obj_type)
-{
-  int ret = OB_SUCCESS;
-  if (ObTinyIntType == obj_type || ObSmallIntType == obj_type
-      || ObMediumIntType == obj_type || ObInt32Type == obj_type
-      || ObUTinyIntType == obj_type || ObUSmallIntType == obj_type
-      || ObUMediumIntType == obj_type || ObUInt32Type == obj_type
-      || ob_is_date_or_mysql_date(obj_type) || ob_is_year_tc(obj_type)) {
-    physical_type = parquet::Type::INT32;
-  } else if (ObIntType == obj_type || ObUInt64Type == obj_type
-             || ob_is_datetime_or_mysql_datetime_tc(obj_type)
-             || ob_is_time_tc(obj_type) || ob_is_bit_tc(obj_type)) {
-    physical_type = parquet::Type::INT64;
-  } else if (ob_is_float_tc(obj_type)) { // float, ufloat
-    physical_type = parquet::Type::FLOAT;
-  } else if (ob_is_double_tc(obj_type)) { // double, udouble
-    physical_type = parquet::Type::DOUBLE;
-  } else if (ob_is_number_or_decimal_int_tc(obj_type)) {
-    physical_type = parquet::Type::FIXED_LEN_BYTE_ARRAY;
-  } else if (ob_is_string_tc(obj_type) /*varchar,char,varbinary,binary*/
-             || ob_is_text_tc(obj_type) /*TinyText,MediumText,Text,LongText,TinyBLOB,MediumBLOB,BLOB,LongBLOB*/
-             || ob_is_enum_or_set_type(obj_type)
-             || ObNullType == obj_type) {
-    physical_type = parquet::Type::BYTE_ARRAY;
-  } else {
-    ret = OB_NOT_SUPPORTED;
-    LOG_USER_ERROR(OB_NOT_SUPPORTED, "convert this ob type to parquet type");
-    LOG_WARN("unsupported obj type", K(ret), K(obj_type));
-  }
-  return ret;
-}
-
-int ObSelectIntoOp::calc_parquet_decimal_length(int precision)
-{
-  // Put in utils?
-  return std::ceil((1 + precision / std::log10(2)) / 8);
-}
-
-int ObSelectIntoOp::setup_parquet_schema()
-{
-  int ret = OB_SUCCESS;
-  ObMallocHookAttrGuard guard(ObMemAttr(MTL_ID(), "IntoParquet"));
-  parquet::schema::NodeVector fields;
-  const ObIArray<ObExpr*> &select_exprs = MY_SPEC.select_exprs_;
-  std::shared_ptr<const parquet::LogicalType> logical_type;
-  parquet::Type::type physical_type;
-  parquet::schema::NodePtr node;
-  try {
-    for (int64_t i = 0; OB_SUCC(ret) && i < select_exprs.count(); ++i) {
-      ObDatumMeta meta = select_exprs.at(i)->datum_meta_;
-      ObObjType obj_type = meta.get_type();
-      ObString alias_name = MY_SPEC.alias_names_.strs_.at(i);
-      std::string column_name(alias_name.ptr(), alias_name.length());
-      int primitive_length = -1;
-      if (OB_FAIL(check_oracle_number(obj_type,
-                                      select_exprs.at(i)->datum_meta_.precision_,
-                                      select_exprs.at(i)->datum_meta_.scale_))) {
-        LOG_WARN("not support number type", K(ret));
-      } else if (OB_FAIL(get_parquet_logical_type(logical_type,
-                                                  obj_type,
-                                                  select_exprs.at(i)->datum_meta_.precision_,
-                                                  select_exprs.at(i)->datum_meta_.scale_))) {
-        LOG_WARN("failed to get related logical type", K(ret));
-      } else if (OB_FAIL(get_parquet_physical_type(physical_type, obj_type))) {
-        LOG_WARN("failed to get related physical type", K(ret));
-      } else if (ob_is_number_or_decimal_int_tc(obj_type)
-                && OB_FALSE_IT(primitive_length = calc_parquet_decimal_length(
-                                                      select_exprs.at(i)->datum_meta_.precision_))) {
-      } else {
-        //todo@linyi repetition level
-        node = parquet::schema::PrimitiveNode::Make(column_name, parquet::Repetition::OPTIONAL,
-                                                    logical_type, physical_type, primitive_length);
-        fields.push_back(node);
-      }
-    }
-    if (OB_SUCC(ret)) {
-      parquet_writer_schema_ = std::static_pointer_cast<parquet::schema::GroupNode>(
-          parquet::schema::GroupNode::Make("schema", parquet::Repetition::REQUIRED, fields));
-    }
-  } catch (const std::exception& ex) {
-    if (OB_SUCC(ret)) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("caught exception when setup parquet schema", K(ret), "Info", ex.what());
-      LOG_USER_ERROR(OB_ERR_UNEXPECTED, ex.what());
-    }
-  } catch (...) {
-    if (OB_SUCC(ret)) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("caught exception when setup parquet schema", K(ret));
-    }
-  }
-  return ret;
-}
-
-int ObSelectIntoOp::into_outfile_batch_parquet(const ObBatchRows &brs, ObExternalFileWriter *data_writer)
-{
-  int ret = OB_SUCCESS;
-  const ObIArray<ObExpr*> &select_exprs = MY_SPEC.select_exprs_;
-  ObArray<common::ObIVector*> expr_vectors;
-  common::ObIVector* partition_vector;
-  int64_t estimated_bytes = 0;
-  int64_t row_group_size = 0;
-  int64_t file_size = 0;
-  ObParquetFileWriter *parquet_data_writer = NULL;
-  ObSQLMode sql_mode = eval_ctx_.exec_ctx_.get_my_session()->get_sql_mode();
-  ObDateSqlMode date_sql_mode;
-  date_sql_mode.init(sql_mode);
-  bool is_strict_mode = common::is_strict_mode(sql_mode);
-  for (int64_t i = 0; OB_SUCC(ret) && i < select_exprs.count(); ++i) {
-    if (OB_ISNULL(select_exprs.at(i))) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get unexpected null", K(ret));
-    } else if (OB_FAIL(select_exprs.at(i)->eval_vector(eval_ctx_, brs))) {
-      LOG_WARN("failed to eval vector", K(ret));
-    } else if (OB_FAIL(expr_vectors.push_back(select_exprs.at(i)->get_vector(eval_ctx_)))) {
-      LOG_WARN("failed to push back vector", K(ret));
-    }
-  }
-  if (OB_SUCC(ret) && do_partition_) {
-    if (OB_FAIL(MY_SPEC.file_partition_expr_->eval_vector(eval_ctx_, brs))) {
-      LOG_WARN("failed to eval batch", K(ret));
-    } else if (OB_ISNULL(partition_vector = MY_SPEC.file_partition_expr_->get_vector(eval_ctx_))) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get unexpected null vector", K(ret));
-    }
-  }
-  for (int64_t row_idx = 0; OB_SUCC(ret) && row_idx < brs.size_; ++row_idx) {
-    if (brs.skip_->contain(row_idx)) {
-      // do nothing
-    } else if (do_partition_ && OB_FAIL(get_data_writer_for_partition(partition_vector->get_string(row_idx),
-                                                                      data_writer))) {
-      LOG_WARN("failed to set data writer for partition", K(ret));
-    } else if (OB_ISNULL(parquet_data_writer = static_cast<ObParquetFileWriter*>(data_writer))) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get unexpected null data writer", K(ret));
-    } else if (parquet_data_writer->is_file_writer_null()
-               && OB_FAIL(parquet_data_writer->open_parquet_file_writer(arrow_alloc_,
-                                                                        external_properties_.parquet_format_.row_group_size_,
-                                                                        external_properties_.parquet_format_.compress_type_index_,
-                                                                        brs.size_,
-                                                                        ctx_.get_allocator()))) {
-      LOG_WARN("failed to init parquet file writer", K(ret));
-    } else if (!parquet_data_writer->is_valid_to_write()) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get unexpected null", K(ret));
-    } else {
-      try {
-        for (int64_t col_idx = 0; OB_SUCC(ret) && col_idx < select_exprs.count(); col_idx++) {
-          if (OB_FAIL(build_parquet_cell(parquet_data_writer->get_row_group_writer(),
-                                         select_exprs.at(col_idx)->datum_meta_,
-                                         select_exprs.at(col_idx)->obj_meta_,
-                                         expr_vectors.at(col_idx),
-                                         col_idx,
-                                         row_idx,
-                                         parquet_data_writer->get_row_batch_offset(),
-                                         parquet_data_writer->get_parquet_value_offsets().at(col_idx),
-                                         parquet_data_writer->get_parquet_row_def_levels().at(col_idx),
-                                         parquet_data_writer->get_batch_allocator(),
-                                         parquet_data_writer->get_parquet_row_batch().at(col_idx),
-                                         is_strict_mode,
-                                         date_sql_mode))) {
-            LOG_WARN("failed to build parquet cell", K(ret));
-          }
-        }
-        parquet_data_writer->set_batch_written(false);
-        parquet_data_writer->increase_row_batch_offset();
-        if (OB_FAIL(ret)) {
-          // discard unwritten data if an error occurs
-          parquet_data_writer->set_batch_written(true);
-          parquet_data_writer->reset_row_batch_offset();
-          parquet_data_writer->reset_value_offsets();
-        } else if (parquet_data_writer->reach_batch_end()) {
-          if (OB_FAIL(parquet_data_writer->write_file())) {
-            LOG_WARN("failed to write parquet row batch", K(ret));
-          } else if (OB_FAIL(check_parquet_file_size(*parquet_data_writer))) {
-            LOG_WARN("failed to check parquet file size", K(ret));
-          }
-          parquet_data_writer->set_batch_written(true);
-          parquet_data_writer->reset_row_batch_offset();
-          parquet_data_writer->reset_value_offsets();
-        }
-      } catch (const std::exception& ex) {
-        if (OB_SUCC(ret)) {
-          ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("caught exception when write parquet file", K(ret), "Info", ex.what());
-          LOG_USER_ERROR(OB_ERR_UNEXPECTED, ex.what());
-        }
-      } catch (...) {
-        if (OB_SUCC(ret)) {
-          ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("caught exception when write parquet file", K(ret));
-        }
-      }
-    }
-  }
-  return ret;
-}
-
-int ObSelectIntoOp::oracle_timestamp_to_int96(const common::ObIVector* expr_vector,
-                                              int64_t row_idx,
-                                              const ObDatumMeta &datum_meta,
-                                              parquet::Int96 &res)
-{
-  int ret = OB_SUCCESS;
-  int64_t out_usec = 0;
-  int32_t tmp_offset = 0;
-  ObOTimestampData oracle_timestamp;
-  uint32_t julian_date_value = (out_usec / 86400000000LL) + 2440588;
-  uint64_t nsec_time_value = oracle_timestamp.time_ctx_.tail_nsec_ + std::abs(out_usec % 86400000000LL) * 1000;
-  res.value[2] = julian_date_value;
-  res.value[1] = nsec_time_value >> 32;
-  res.value[0] = nsec_time_value & UINT32_MAX;
-  return ret;
-}
-
-int ObSelectIntoOp::check_parquet_file_size(ObParquetFileWriter &data_writer)
-{
-  int ret = OB_SUCCESS;
-  int64_t row_group_size = data_writer.get_row_group_size();
-  int64_t file_size = data_writer.get_file_size();
-  if (file_need_split(file_size)) {
-    if (OB_FAIL(split_file(data_writer))) {
-      LOG_WARN("failed to split file", K(ret));
-    } else {
-      data_writer.set_write_bytes(0);
-    }
-  } else if (row_group_size > external_properties_.parquet_format_.row_group_size_) {
-    data_writer.get_row_group_writer()->Close();
-    data_writer.set_write_bytes(file_size);
-    data_writer.open_next_row_group_writer();
-  }
-  return ret;
-}
-
-int ObSelectIntoOp::build_parquet_cell(parquet::RowGroupWriter* rg_writer,
-                                       const ObDatumMeta &datum_meta,
-                                       const ObObjMeta &obj_meta,
-                                       const common::ObIVector* expr_vector,
-                                       int64_t col_idx,
-                                       int64_t row_idx,
-                                       int64_t row_offset,
-                                       int64_t &value_offset,
-                                       int16_t* definition_levels,
-                                       ObIAllocator &allocator,
-                                       void* value_batch,
-                                       const bool is_strict_mode,
-                                       const ObDateSqlMode date_sql_mode)
-{
-  int ret = OB_SUCCESS;
-  int16_t null_definition_level = 0;
-  int16_t normal_definition_level = 1;
-  std::shared_ptr<parquet::schema::PrimitiveNode> p_node;
-  parquet::ColumnWriter *col_writer = nullptr;
-  if (OB_ISNULL(expr_vector) || !parquet_writer_schema_ || OB_ISNULL(rg_writer)
-      || OB_ISNULL(col_writer = rg_writer->column(col_idx))
-      || OB_ISNULL(definition_levels) || OB_ISNULL(value_batch)
-      || !(p_node = std::static_pointer_cast<parquet::schema::PrimitiveNode>(parquet_writer_schema_->field(col_idx)))) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get null ptr", K(ret));
-  } else if (p_node->is_group()) {
-    ret = OB_NOT_SUPPORTED;
-    LOG_USER_ERROR(OB_NOT_SUPPORTED, "group type in parquet");
-    LOG_WARN("not support group type in parquet", K(ret));
-  } else {
-    switch (p_node->physical_type()) {
-      case parquet::Type::BYTE_ARRAY:
-      {
-        parquet::ByteArray* value = reinterpret_cast<parquet::ByteArray*>(value_batch);
-        value += value_offset;
-        char *buf = nullptr;
-        uint32_t res_len = 0;
-        if (expr_vector->is_null(row_idx)) {
-          definition_levels[row_offset] = null_definition_level;
-        } else if (OB_FAIL(calc_byte_array(expr_vector,
-                                           row_idx,
-                                           datum_meta,
-                                           obj_meta,
-                                           allocator,
-                                           buf,
-                                           res_len))) {
-          LOG_WARN("failed to calc parquet byte array", K(ret));
-        } else {
-          value->ptr = reinterpret_cast<const uint8_t *>(buf);
-          value->len = res_len;
-          value_offset++;
-          definition_levels[row_offset] = normal_definition_level;
-        }
-        break;
-      }
-      case parquet::Type::FIXED_LEN_BYTE_ARRAY:
-      {
-        parquet::FixedLenByteArray* value = reinterpret_cast<parquet::FixedLenByteArray*>(value_batch);
-        value += value_offset;
-        parquet::FixedLenByteArrayWriter *writer = static_cast<parquet::FixedLenByteArrayWriter *>(col_writer);
-        int parquet_decimal_length = writer->descr()->type_length();
-        ObArrayWrap<uint8> parquet_flba;
-        if (expr_vector->is_null(row_idx)) {
-          definition_levels[row_offset] = null_definition_level;
-        } else if (OB_FAIL(parquet_flba.allocate_array(allocator, parquet_decimal_length))) {
-          LOG_WARN("failed to allocate array", K(ret));
-        } else if (OB_FAIL(calc_parquet_decimal_array(expr_vector,
-                                                      row_idx,
-                                                      datum_meta,
-                                                      parquet_decimal_length,
-                                                      parquet_flba.get_data()))) {
-          LOG_WARN("failed to calc parquet decimal", K(ret));
-        } else {
-          value->ptr = parquet_flba.get_data();
-          value_offset++;
-          definition_levels[row_offset] = normal_definition_level;
-        }
-        break;
-      }
-      case parquet::Type::DOUBLE:
-      {
-        double* value = reinterpret_cast<double*>(value_batch);
-        value += value_offset;
-        if (expr_vector->is_null(row_idx)) {
-          definition_levels[row_offset] = null_definition_level;
-        } else {
-          *value = expr_vector->get_double(row_idx);
-          value_offset++;
-          definition_levels[row_offset] = normal_definition_level;
-        }
-        break;
-      }
-      case parquet::Type::FLOAT:
-      {
-        float* value = reinterpret_cast<float*>(value_batch);
-        value += value_offset;
-        if (expr_vector->is_null(row_idx)) {
-          definition_levels[row_offset] = null_definition_level;
-        } else {
-          *value = expr_vector->get_float(row_idx);
-          value_offset++;
-          definition_levels[row_offset] = normal_definition_level;
-        }
-        break;
-      }
-      case parquet::Type::INT32:
-      {
-        int32_t* value = reinterpret_cast<int32_t*>(value_batch);
-        value += value_offset;
-        if (expr_vector->is_null(row_idx)) {
-          definition_levels[row_offset] = null_definition_level;
-        } else if (ob_is_mysql_date_tc(datum_meta.type_)) {
-          ObMySQLDate mdate(expr_vector->get_int32(row_idx));
-          if (CAST_FAIL(ObTimeConverter::mdate_to_date(mdate, *value, date_sql_mode))) {
-            LOG_WARN("mdate_to_date fail", K(ret));
-          } else {
-            value_offset++;
-            definition_levels[row_offset] = normal_definition_level;
-          }
-        } else {
-          *value = expr_vector->get_int32(row_idx);
-          value_offset++;
-          definition_levels[row_offset] = normal_definition_level;
-        }
-        break;
-      }
-      case parquet::Type::INT64:
-      {
-        int64_t* value = reinterpret_cast<int64_t*>(value_batch);
-        value += value_offset;
-        if (expr_vector->is_null(row_idx)) {
-          definition_levels[row_offset] = null_definition_level;
-        } else if (ob_is_mysql_datetime(datum_meta.type_)) {
-          ObMySQLDateTime mdatetime(expr_vector->get_int(row_idx));
-          if (CAST_FAIL(ObTimeConverter::mdatetime_to_datetime(mdatetime, *value, date_sql_mode))) {
-            LOG_WARN("mdatetime_to_datetime fail", K(ret));
-          } else {
-            value_offset++;
-            definition_levels[row_offset] = normal_definition_level;
-          }
-        } else {
-          *value = expr_vector->get_int(row_idx);
-          value_offset++;
-          definition_levels[row_offset] = normal_definition_level;
-        }
-        break;
-      }
-      case parquet::Type::INT96:
-      {
-        parquet::Int96* value = reinterpret_cast<parquet::Int96*>(value_batch);
-        value += value_offset;
-        if (expr_vector->is_null(row_idx)) {
-          definition_levels[row_offset] = null_definition_level;
-        } else if (OB_FAIL(oracle_timestamp_to_int96(expr_vector, row_idx, datum_meta, *value))) {
-          LOG_WARN("failed to convert timestamp to int96", K(ret));
-        } else {
-          value_offset++;
-          definition_levels[row_offset] = normal_definition_level;
-        }
-        break;
-      }
-      default:
-      {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected type", K(p_node->physical_type()), K(ret));
-      }
-    }
-  }
-  return ret;
-}
-
-int ObSelectIntoOp::calc_parquet_decimal_array(const common::ObIVector* expr_vector,
-                                               int row_idx,
-                                               const ObDatumMeta &datum_meta,
-                                               int parquet_decimal_length,
-                                               uint8_t* parquet_flba_ptr)
-{
-  int ret = OB_SUCCESS;
-  const ObDecimalInt* ob_decimal;
-  const uint8_t* decimal_bytes;
-  ObDecimalIntBuilder tmp_dec_alloc;
-  ObDecimalInt* tmp_decimal;
-  int ob_decimal_length = wide::ObDecimalIntConstValue::get_int_bytes_by_precision(datum_meta.precision_);
-  if (ob_is_decimal_int_tc(datum_meta.get_type())) {
-    ob_decimal = expr_vector->get_decimal_int(row_idx);
-  } else if (ob_is_number_tc(datum_meta.get_type())) {
-    number::ObNumber number(expr_vector->get_number(row_idx));
-    if (OB_FAIL(wide::from_number_to_decimal_fixed_length(number, tmp_dec_alloc, datum_meta.scale_,
-                                                          ob_decimal_length, tmp_decimal))){
-      LOG_WARN("failed to case number to decimal int", K(ret));
-    } else {
-      ob_decimal = tmp_decimal;
-    }
-  } else {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected type", K(datum_meta.get_type()));
-  }
-  if (OB_FAIL(ret)) {
-  } else if (ob_decimal_length < parquet_decimal_length) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected decimal length", K(ob_decimal_length), K(parquet_decimal_length), K(ret));
-  } else {
-    switch (ob_decimal_length) {
-      case sizeof(int32_t):
-      {
-        decimal_bytes = reinterpret_cast<const uint8_t*>(ob_decimal->int32_v_);
-        break;
-      }
-      case sizeof(int64_t):
-      {
-        decimal_bytes = reinterpret_cast<const uint8_t*>(ob_decimal->int64_v_);
-        break;
-      }
-      case sizeof(int128_t):
-      {
-        decimal_bytes = reinterpret_cast<const uint8_t*>(ob_decimal->int128_v_);
-        break;
-      }
-      case sizeof(int256_t):
-      {
-        decimal_bytes = reinterpret_cast<const uint8_t*>(ob_decimal->int256_v_);
-        break;
-      }
-      case sizeof(int512_t):
-      {
-        decimal_bytes = reinterpret_cast<const uint8_t*>(ob_decimal->int512_v_);
-        break;
-      }
-      default:
-      {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected type", K(ob_decimal_length), K(ret));
-      }
-    }
-  }
-  for (int i = 0; OB_SUCC(ret) && i < parquet_decimal_length; i++) {
-    parquet_flba_ptr[i] = decimal_bytes[parquet_decimal_length - i - 1];
-  }
-  return ret;
-}
-#endif // !OB_BUILD_EMBED_MODE
 
 int ObSelectIntoOp::into_dumpfile(ObExternalFileWriter *data_writer)
 {
@@ -2084,7 +1338,7 @@ int ObSelectIntoOp::into_varlist()
   const ObIArray<ObExpr*> &select_exprs = (MY_SPEC.select_exprs_.empty()) ?
                                            MY_SPEC.output_ : MY_SPEC.select_exprs_;
   const ObIArray<ObString> &user_vars = MY_SPEC.user_vars_;
-  ObArenaAllocator lob_tmp_allocator("LobTmp", OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID());
+  ObArenaAllocator lob_tmp_allocator("LobTmp", OB_MALLOC_NORMAL_BLOCK_SIZE);
   if (select_exprs.count() != user_vars.count()) {
     ret = OB_ERR_COLUMN_SIZE;
     LOG_WARN("user vars count should be equal to select exprs count" , K(ret),
@@ -2224,7 +1478,7 @@ int ObSelectIntoOp::check_secure_file_path(ObString file_name)
   char *actual_path = nullptr;
   ObSqlString sql_str;
   ObString secure_file_priv;
-  int64_t tenant_id = MTL_ID();
+  
   if (OB_FAIL(sql_str.append(file_path.empty() ? "." : file_path))) {
     LOG_WARN("failed to append string", K(ret));
 #ifdef _WIN32
@@ -2234,11 +1488,10 @@ int ObSelectIntoOp::check_secure_file_path(ObString file_name)
 #endif
     ret = OB_FILE_NOT_EXIST;
     LOG_WARN("file not exist", K(ret), K(sql_str));
-  } else if (OB_FAIL(ObSchemaUtils::get_tenant_varchar_variable(tenant_id,
-                                                                SYS_VAR_SECURE_FILE_PRIV,
+  } else if (OB_FAIL(ObSchemaUtils::get_tenant_varchar_variable(SYS_VAR_SECURE_FILE_PRIV,
                                                                 ctx_.get_allocator(),
                                                                 secure_file_priv))) {
-    LOG_WARN("fail get tenant variable", K(tenant_id), K(secure_file_priv), K(ret));
+    LOG_WARN("fail get tenant variable", K(1UL), K(secure_file_priv), K(ret));
   } else if (OB_FAIL(ObResolverUtils::check_secure_path(secure_file_priv, actual_path))) {
     LOG_WARN("failed to check secure path", K(ret), K(secure_file_priv));
     if (OB_ERR_NO_PRIVILEGE == ret) {
@@ -2265,7 +1518,7 @@ int ObSelectIntoOp::get_data_writer_for_partition(const ObString &partition_str,
     }
   } else if (OB_UNLIKELY(OB_HASH_NOT_EXIST != ret)) {
     LOG_WARN("get unexpected error", K(ret));
-  } else if (curr_partition_num_ >= OB_MAX_PARTITION_NUM_ORACLE) {
+  } else if (curr_partition_num_ >= OB_MAX_EXTENDED_PARTITION_NUM) {
     ret = OB_TOO_MANY_PARTITIONS_ERROR;
     LOG_WARN("too many partitions", K(ret));
   } else {
@@ -2391,18 +1644,10 @@ void ObSelectIntoOp::destroy()
   } else if (OB_NOT_NULL(data_writer_)) {
     data_writer_->~ObExternalFileWriter();
   }
-#ifndef OB_BUILD_EMBED_MODE
-  {
-    ObMallocHookAttrGuard guard(ObMemAttr(MTL_ID(), "IntoParquet"));
-    parquet_writer_schema_.reset();
-  }
-#endif
   external_properties_.~ObExternalFileFormat();
   partition_map_.destroy();
   ObOperator::destroy();
 }
 
-#undef ARROW_FAIL
 }
 }
-#undef CAST_FAIL

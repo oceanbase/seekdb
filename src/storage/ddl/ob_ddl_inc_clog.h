@@ -18,7 +18,7 @@
 
  #include "lib/oblog/ob_log_print_kv.h"
  #include "common/ob_tablet_id.h"
-
+ 
  namespace oceanbase
  {
  namespace storage
@@ -50,7 +50,7 @@
    ObTabletID tablet_id_;
    ObTabletID lob_meta_tablet_id_;
  };
-
+ 
  class ObDDLIncStartLog final
  {
    OB_UNIS_VERSION_V(1);
@@ -64,7 +64,7 @@
  private:
    ObDDLIncLogBasic log_basic_;
  };
-
+ 
  class ObDDLIncCommitLog final
  {
    OB_UNIS_VERSION_V(1);
@@ -78,6 +78,7 @@
  private:
    ObDDLIncLogBasic log_basic_;
  };
-
+ 
  } // namespace storage
  } // namespace oceanbase
+ 

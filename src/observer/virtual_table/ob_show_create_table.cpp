@@ -16,7 +16,7 @@
 
 #define USING_LOG_PREFIX SERVER
 #include "observer/virtual_table/ob_show_create_table.h"
-#include "share/schema/ob_schema_printer.h"
+#include "sql/printer/ob_schema_printer.h"
 #include "sql/session/ob_sql_session_info.h"
 using namespace oceanbase::common;
 using namespace oceanbase::share;
@@ -54,20 +54,16 @@ int ObShowCreateTable::inner_get_next_row(common::ObNewRow *&row)
     } else if (OB_UNLIKELY(OB_INVALID_ID == show_table_id)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_USER_ERROR(OB_ERR_UNEXPECTED, "this table is used for show clause, can't be selected");
-    } else if (OB_FAIL(sql_schema_guard_.get_table_schema(effective_tenant_id_, show_table_id, table_schema))) {
-      SERVER_LOG(WARN, "fail to get table schema", K(ret), K(effective_tenant_id_), K(show_table_id));
+    } else if (OB_FAIL(sql_schema_guard_.get_table_schema( show_table_id, table_schema))) {
+      SERVER_LOG(WARN, "fail to get table schema", K(ret), K(show_table_id));
     } else if (OB_UNLIKELY(NULL == table_schema)) {
       ret = OB_TABLE_NOT_EXIST;
       SERVER_LOG(WARN, "fail to get table schema", K(ret), K(show_table_id));
-    } else if (OB_SYS_TENANT_ID != table_schema->get_tenant_id()
+    } else if (false
         && table_schema->is_vir_table()
         && is_restrict_access_virtual_table(table_schema->get_table_id())) {
       ret = OB_TABLE_NOT_EXIST;
       SERVER_LOG(WARN, "fail to get table schema", K(ret), K(show_table_id));
-    } else if (table_schema->is_mlog_table()) {
-      ret = OB_NOT_SUPPORTED;
-      SERVER_LOG(WARN, "show create table on materialized view log is not supported", KR(ret));
-      LOG_USER_ERROR(OB_NOT_SUPPORTED, "show create table on materialized view log is");
     } else {
       if (OB_FAIL(fill_row_cells_with_retry(show_table_id, *table_schema))) {
         SERVER_LOG(WARN, "fail to fill row cells", K(ret),
@@ -163,7 +159,6 @@ int ObShowCreateTable::fill_row_cells_inner(const uint64_t show_table_id,
   uint64_t cell_idx = 0;
 
   bool strict_mode = false;
-  bool is_oracle_mode = false;
   bool sql_quote_show_create = true;
   bool ansi_quotes = false;
   if (OB_UNLIKELY(NULL == schema_guard_
@@ -188,15 +183,11 @@ int ObShowCreateTable::fill_row_cells_inner(const uint64_t show_table_id,
   } else if (OB_ISNULL(table_def_buf)) {
     ret = OB_ERR_UNEXPECTED;
     SERVER_LOG(WARN, "table_def_buf is null", K(ret), K(table_def_buf_size));
-  } else if (OB_FAIL(table_schema.check_if_oracle_compat_mode(is_oracle_mode))) {
-    SERVER_LOG(WARN, "failed to check if oracle mode", K(ret));
   } else if (OB_FAIL(session_->get_show_ddl_in_compat_mode(strict_mode))) {
     SERVER_LOG(WARN, "failed to get _show_ddl_in_compat_mode", K(ret));
   } else if (OB_FAIL(session_->get_sql_quote_show_create(sql_quote_show_create))) {
     SERVER_LOG(WARN, "failed to get sql quote show create", K(ret));
   } else {
-    //_show_ddl_in_compat_mode do not support oracle mode now
-    strict_mode &= !is_oracle_mode;
     IS_ANSI_QUOTES(session_->get_sql_mode(), ansi_quotes);
     for (int64_t i = 0; OB_SUCC(ret) && i < output_column_ids_.count(); ++i) {
       uint64_t col_id = output_column_ids_.at(i);
@@ -218,21 +209,8 @@ int ObShowCreateTable::fill_row_cells_inner(const uint64_t show_table_id,
           ObSchemaPrinter schema_printer(*schema_guard_, strict_mode, sql_quote_show_create, ansi_quotes);
           schema_printer.set_sql_schema_guard(&sql_schema_guard_);
           int64_t pos = 0;
-          if (table_schema.is_materialized_view()) {
-            if (OB_FAIL(schema_printer.print_materialized_view_definition(effective_tenant_id_,
-                                                                         show_table_id,
-                                                                         table_def_buf,
-                                                                         table_def_buf_size,
-                                                                         pos,
-                                                                         TZ_INFO(session_),
-                                                                         false,
-                                                                         session_->get_sql_mode()))) {
-              SERVER_LOG(WARN, "Generate materialized view definition failed",
-                         KR(ret), K(effective_tenant_id_), K(show_table_id));
-            }
-          } else if (table_schema.is_view_table()) {
-            if (OB_FAIL(schema_printer.print_view_definiton(effective_tenant_id_,
-                                                            show_table_id,
+          if (table_schema.is_view_table()) {
+            if (OB_FAIL(schema_printer.print_view_definiton(show_table_id,
                                                             table_def_buf,
                                                             table_def_buf_size,
                                                             pos,
@@ -240,27 +218,25 @@ int ObShowCreateTable::fill_row_cells_inner(const uint64_t show_table_id,
                                                             false,
                                                             session_->get_sql_mode()))) {
               SERVER_LOG(WARN, "Generate view definition failed",
-                         KR(ret), K(effective_tenant_id_), K(show_table_id));
+                         KR(ret), K(show_table_id));
             }
           } else if (table_schema.is_index_table()) {
-            if (OB_FAIL(schema_printer.print_index_table_definition(effective_tenant_id_,
-                                                                    show_table_id,
+            if (OB_FAIL(schema_printer.print_index_table_definition(show_table_id,
                                                                     table_def_buf,
                                                                     table_def_buf_size,
                                                                     pos,
                                                                     TZ_INFO(session_),
                                                                     false))) {
               SERVER_LOG(WARN, "Generate index definition failed",
-                         KR(ret), K(effective_tenant_id_), K(show_table_id));
+                         KR(ret), K(show_table_id));
             }
           } else {
-            const ObLengthSemantics default_length_semantics = session_->get_local_nls_length_semantics();
+            const ObLengthSemantics default_length_semantics = session_->get_default_length_semantics();
             // get auto_increment from auto_increment service, not from table option
             ObCharsetType charset_type = CHARSET_INVALID;
             if (OB_FAIL(session_->get_character_set_results(charset_type))) {
               LOG_WARN("get character set results failed", K(ret));
-            } else if (OB_FAIL(schema_printer.print_table_definition(effective_tenant_id_,
-                                                              show_table_id,
+            } else if (OB_FAIL(schema_printer.print_table_definition(show_table_id,
                                                               table_def_buf,
                                                               table_def_buf_size,
                                                               pos,
@@ -270,7 +246,7 @@ int ObShowCreateTable::fill_row_cells_inner(const uint64_t show_table_id,
                                                               session_->get_sql_mode(),
                                                               charset_type))) {
               SERVER_LOG(WARN, "Generate table definition failed",
-                        KR(ret), K(effective_tenant_id_), K(show_table_id));
+                        KR(ret), K(show_table_id));
             }
           }
           if (OB_SUCC(ret)) {

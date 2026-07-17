@@ -21,7 +21,6 @@
 #include "lib/container/ob_fixed_array.h"
 #include "lib/allocator/ob_allocator.h"
 #include "lib/allocator/page_arena.h"
-#include "share/partition_table/ob_partition_location.h"
 #include "sql/optimizer/ob_table_partition_info.h"
 #include "sql/resolver/expr/ob_raw_expr.h"
 #include "sql/optimizer/ob_phy_table_location_info.h"
@@ -288,7 +287,7 @@ public:
     } else {
       ret = phy_table_location_info_->get_phy_part_loc_info_list().at(0)
                                       .get_partition_location()
-                                      .get_replica_locations().count() > 0;
+                                      .get_local_replica().is_valid();
     }
     return ret;
   }

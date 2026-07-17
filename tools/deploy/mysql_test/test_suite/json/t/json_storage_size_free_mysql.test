@@ -8,16 +8,16 @@
 --disable_warnings
 drop table if exists t1;
 --enable_warnings
-# TODO:adapt mysql error code
+# TODO:adapt mysql error code 
 --error 1582
 SELECT JSON_STORAGE_SIZE();
-# TODO:adapt mysql error code
+# TODO:adapt mysql error code 
 --error 1582
 SELECT JSON_STORAGE_FREE();
-# TODO:adapt mysql error code
+# TODO:adapt mysql error code 
 --error 1582
 SELECT JSON_STORAGE_SIZE('{}', '[]');
-# TODO:adapt mysql error code
+# TODO:adapt mysql error code 
 --error 1582
 SELECT JSON_STORAGE_FREE('{}', '[]');
 --error ER_INVALID_JSON_TEXT
@@ -102,7 +102,7 @@ INSERT INTO t2 VALUES
 (3, '{"b":"Z"}', 9);
 SELECT *, JSON_STORAGE_SIZE(j) ss,
           JSON_STORAGE_FREE(j) sf FROM t2 ORDER BY id;
-DROP TABLE t2;
+DROP TABLE t2; 
 
 CREATE TABLE IF NOT EXISTS t(j JSON);
 INSERT INTO t VALUES ('[1,2,3,4]'), ('["adef"]'), ('["cdef"]');
@@ -128,7 +128,7 @@ connect (obsys,$OBMYSQL_MS0,admin,$OBMYSQL_PWD,test,$OBMYSQL_PORT);
 connection obsys;
 #alter system set _enable_defensive_check = 1;
 connection default;
-set log_row_value_options="partial_json";
+set log_row_value_options="partial_json"; 
 set ob_default_lob_inrow_threshold = 4096;
 create table json_test(pk int, j json) JSON(j) STORE AS (CHUNK '1K');
 insert into json_test values(10 , json_object('name', 'zero', 'age', 100, 'position', 'software engineer', 'profile', repeat('x', 4096), 'like', json_array('a', 'b', 'c'), 'tags', json_array('sql boy', 'football', 'summer', 1), 'money' , json_object('RMB', 10000, 'Dollers', 20000, 'BTC', 100), 'nickname', 'noone'));
@@ -152,7 +152,7 @@ drop table if exists json_test;
 connection obsys;
 #alter system set _enable_defensive_check = 0;
 connection default;
-set log_row_value_options="";
+set log_row_value_options=""; 
 
 create table json_test(pk int, j json) JSON(j) STORE AS (CHUNK '1K');
 insert into json_test values(10 , json_object('name', 'zero', 'age', 100, 'position', 'software engineer', 'profile', repeat('x', 4096), 'like', json_array('a', 'b', 'c'), 'tags', json_array('sql boy', 'football', 'summer', 1), 'money' , json_object('RMB', 10000, 'Dollers', 20000, 'BTC', 100), 'nickname', 'noone'));

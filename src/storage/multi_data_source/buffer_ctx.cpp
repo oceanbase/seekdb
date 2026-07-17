@@ -15,6 +15,7 @@
  */
 
 #include "buffer_ctx.h"
+#include "share/rc/ob_module_provider.h"
 #include "storage/multi_data_source/compile_utility/compile_mapper.h"
 
 namespace oceanbase
@@ -27,7 +28,7 @@ namespace mds
 void BufferCtxNode::destroy_ctx() {
   if (OB_NOT_NULL(ctx_)) {
     ctx_->~BufferCtx();
-    MTL(mds::ObTenantMdsService*)->get_buffer_ctx_allocator().free(ctx_);
+    share::g_mp->tenant_mds_service()->get_buffer_ctx_allocator().free(ctx_);
     ctx_ = nullptr;
   }
 }
@@ -65,10 +66,8 @@ int deserialize_(BufferCtx *&ctx_, int64_t type_idx, const char *buf, const int6
   if (IDX == type_idx) {
     using ImplType = GET_CTX_TYPE_BY_TUPLE_IDX(IDX);
     ImplType *p_impl = nullptr;
-    set_mds_mem_check_thread_local_info(MdsWriter(WriterType::UNKNOWN_WRITER, 0), typeid(ImplType).name());
     if (OB_ISNULL(p_impl = (ImplType *)allocator.alloc(sizeof(ImplType),
-                                                       ObMemAttr(MTL_ID(),
-                                                       "MDS_CTX_DESE",
+                                                       ObMemAttr("MDS_CTX_DESE",
                                                        ObCtxIds::MDS_CTX_ID)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
       MDS_LOG(ERROR, "fail to alloc buffer ctx memory", KR(ret), K(type_idx), K(IDX));
@@ -80,15 +79,8 @@ int deserialize_(BufferCtx *&ctx_, int64_t type_idx, const char *buf, const int6
     } else {
       ctx_ = p_impl;
       ctx_->set_binding_type_id(type_idx);
-      MTL(ObTenantMdsService*)->update_mem_leak_debug_info(p_impl, [p_impl](const ObIntWarp &key,
-                                                                            ObMdsMemoryLeakDebugInfo &value) -> bool {
-        int64_t pos = 0;
-        databuff_printf(value.tag_str_, TAG_SIZE, pos, p_impl->get_writer());
-        return true;
-      });
       MDS_LOG(INFO, "deserialize ctx success", KR(ret), K(*p_impl), K(type_idx), K(IDX), K(buf_len), K(pos), K(lbt()));
     }
-    reset_mds_mem_check_thread_local_info();
   } else if (MDS_FAIL(deserialize_<IDX + 1>(ctx_, type_idx, buf, buf_len, pos, allocator))) {
     MDS_LOG(ERROR, "deserialzed from buffer failed", KR(ret), K(type_idx), K(IDX));
   }

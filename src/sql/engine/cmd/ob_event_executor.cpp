@@ -20,7 +20,7 @@
 #include <chrono>
 #include <ctime>
 #include <iomanip>
-#include "lib/mysqlclient/ob_mysql_transaction.h"
+#include "common/mysqlclient/ob_mysql_transaction.h"
 #include "lib/string/ob_sql_string.h"
 #include "sql/resolver/cmd/ob_event_stmt.h"
 #include "sql/engine/ob_exec_context.h"
@@ -28,7 +28,7 @@
 namespace oceanbase
 {
 using namespace common;
-using namespace obrpc;
+using namespace obcall;
 using namespace share::schema;
 namespace sql
 {
@@ -42,17 +42,14 @@ int ObCreateEventExecutor::execute(ObExecContext &ctx, ObCreateEventStmt &stmt)
     LOG_WARN("get task executor context failed");
   } else {
     int64_t job_id = OB_INVALID_ID;
-    if (OB_INVALID_TENANT_ID == stmt.get_event_info().get_tenant_id()) {
-      ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("invalid tenant id", KR(ret), K(stmt.get_event_info().get_tenant_id()));
-    } else if (OB_FAIL(dbms_scheduler::ObDBMSSchedJobUtils::generate_job_id(stmt.get_event_info().get_tenant_id(), job_id))) {
-      LOG_WARN("generate_job_id failed", KR(ret), K(stmt.get_event_info().get_tenant_id()));
+    if (OB_FAIL(dbms_scheduler::ObDBMSSchedJobUtils::generate_job_id(job_id))) {
+      LOG_WARN("generate_job_id failed", KR(ret));
     } else {
       int64_t start_date_us = stmt.get_event_info().get_start_time() == OB_INVALID_TIMESTAMP ? ObTimeUtility::current_time() : stmt.get_event_info().get_start_time();
       int64_t end_date_us = stmt.get_event_info().get_end_time() == OB_INVALID_TIMESTAMP ? dbms_scheduler::ObDBMSSchedJobInfo::DEFAULT_MAX_END_DATE : stmt.get_event_info().get_end_time(); // 4000-01-01
       HEAP_VAR(dbms_scheduler::ObDBMSSchedJobInfo, job_info) {
         job_info.func_type_ = dbms_scheduler::ObDBMSSchedFuncType::MYSQL_EVENT_JOB;
-        job_info.tenant_id_ = stmt.get_event_info().get_tenant_id();
+        
         job_info.user_id_ = stmt.get_event_info().get_user_id();
         job_info.database_id_ = stmt.get_event_info().get_database_id();
         job_info.job_ = job_id;
@@ -75,16 +72,16 @@ int ObCreateEventExecutor::execute(ObExecContext &ctx, ObCreateEventStmt &stmt)
         job_info.exec_env_ = stmt.get_event_info().get_exec_env();
         job_info.comments_ = stmt.get_event_info().get_event_comment();
         ObMySQLTransaction trans;
-        if (OB_FAIL(trans.start(GCTX.sql_proxy_, stmt.get_event_info().get_tenant_id()))) {
-          LOG_WARN("failed to start trans", KR(ret), K(stmt.get_event_info().get_tenant_id()));
+        if (OB_FAIL(trans.start(GCTX.sql_proxy_))) {
+          LOG_WARN("failed to start trans", KR(ret));
         } else if (OB_FAIL(dbms_scheduler::ObDBMSSchedJobUtils::create_dbms_sched_job(
-            trans, stmt.get_event_info().get_tenant_id(), job_id, job_info))) {
+            trans, job_id, job_info))) {
           LOG_WARN("failed to create dbms scheduler job", KR(ret), K(stmt.get_event_info().get_if_exist_or_if_not_exist()));
         }
         if (trans.is_started()) {
           int tmp_ret = OB_SUCCESS;
           if (OB_SUCCESS != (tmp_ret = trans.end(OB_SUCC(ret)))) {
-            LOG_WARN("failed to commit trans", KR(ret), KR(tmp_ret));
+            LOG_ERROR("failed to commit trans", KR(ret), KR(tmp_ret));
             ret = OB_SUCC(ret) ? tmp_ret : ret;
           }
         }
@@ -105,15 +102,13 @@ int ObCreateEventExecutor::execute(ObExecContext &ctx, ObCreateEventStmt &stmt)
 int ObAlterEventExecutor::execute(ObExecContext &ctx, ObAlterEventStmt &stmt)
 {
   int ret = OB_SUCCESS;
-  int64_t tenant_id = stmt.get_event_info().get_tenant_id();
+  
   ObArenaAllocator allocator;
   dbms_scheduler::ObDBMSSchedJobInfo job_info;
   ObMySQLTransaction trans;
-  if (OB_FAIL(trans.start(GCTX.sql_proxy_, tenant_id))) {
-    LOG_WARN("failed to start trans", KR(ret), K(stmt.get_event_info().get_tenant_id()));
-  } else if (OB_FAIL(dbms_scheduler::ObDBMSSchedJobUtils::get_dbms_sched_job_info(*GCTX.sql_proxy_, 
-                                                                              tenant_id, 
-                                                                              false, // is_oracle_tenant
+  if (OB_FAIL(trans.start(GCTX.sql_proxy_))) {
+    LOG_WARN("failed to start trans", KR(ret));
+  } else if (OB_FAIL(dbms_scheduler::ObDBMSSchedJobUtils::get_dbms_sched_job_info(*GCTX.sql_proxy_,
                                                                               stmt.get_event_info().get_event_name(),
                                                                               allocator,
                                                                               job_info))) {
@@ -122,7 +117,7 @@ int ObAlterEventExecutor::execute(ObExecContext &ctx, ObAlterEventStmt &stmt)
       ret = OB_ERR_EVENT_NOT_EXIST;
     }
   } else {
-    const uint64_t exec_tenant_id = ObSchemaUtils::get_exec_tenant_id(tenant_id);
+    
     if (OB_SUCC(ret) && !stmt.get_event_info().get_event_definer().empty()) {
       ObObj powner_obj, user_id_obj;
       powner_obj.set_char(stmt.get_event_info().get_event_definer());
@@ -203,7 +198,7 @@ int ObAlterEventExecutor::execute(ObExecContext &ctx, ObAlterEventStmt &stmt)
     if (trans.is_started()) {
       int tmp_ret = OB_SUCCESS;
       if (OB_SUCCESS != (tmp_ret = trans.end(OB_SUCC(ret)))) {
-        LOG_WARN("failed to commit trans", KR(ret), KR(tmp_ret));
+        LOG_ERROR("failed to commit trans", KR(ret), KR(tmp_ret));
         ret = OB_SUCC(ret) ? tmp_ret : ret;
       }
     }
@@ -215,20 +210,15 @@ int ObAlterEventExecutor::execute(ObExecContext &ctx, ObAlterEventStmt &stmt)
 int ObDropEventExecutor::execute(ObExecContext &ctx, ObDropEventStmt &stmt)
 {
   int ret = OB_SUCCESS;
-  ObTaskExecutorCtx *task_exec_ctx = NULL;
-  obrpc::ObCommonRpcProxy *common_rpc_proxy = NULL;
+  ObTaskExecutorCtx *task_exec_ctx = nullptr;
   if (OB_ISNULL(task_exec_ctx = GET_TASK_EXECUTOR_CTX(ctx))) {
     ret = OB_NOT_INIT;
     LOG_WARN("get task executor context failed");
-  } else if (OB_ISNULL(common_rpc_proxy = task_exec_ctx->get_common_rpc())) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("get common rpc proxy failed");
   } else {
-    uint64_t tenant_id = stmt.get_event_info().get_tenant_id();
-    const uint64_t exec_tenant_id = ObSchemaUtils::get_exec_tenant_id(tenant_id);
+    
+    
     if (OB_FAIL(dbms_scheduler::ObDBMSSchedJobUtils::remove_dbms_sched_job(
-        *GCTX.sql_proxy_,
-        stmt.get_event_info().get_tenant_id(), 
+        *GCTX.sql_proxy_, 
         stmt.get_event_info().get_event_name(), 
         stmt.get_event_info().get_if_exist_or_if_not_exist())
     )) {

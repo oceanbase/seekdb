@@ -39,12 +39,11 @@ public:
   {
     UNUSED(cb_impl);
   }
-  int update_end_lsn(int64_t id, const LSN &end_lsn, const int64_t proposal_id)
+  int update_end_lsn(const LSN &end_lsn, const share::SCN &end_scn)
   {
     int ret = OB_SUCCESS;
-    UNUSED(id);
     UNUSED(end_lsn);
-    UNUSED(proposal_id);
+    UNUSED(end_scn);
     return ret;
   }
 };

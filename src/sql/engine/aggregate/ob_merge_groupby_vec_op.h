@@ -128,7 +128,7 @@ public:
     group_batch_factor_(8), rollup_context_(), agg_row_meta_(&exec_ctx.get_allocator()),
     group_rows_(), output_stored_rows_(nullptr), output_rollup_ids_(nullptr),
     profile_(ObSqlWorkAreaType::HASH_WORK_AREA), sql_mem_processor_(profile_, op_monitor_info_),
-    hp_infras_mgr_(MTL_ID()), group_processor_()
+    hp_infras_mgr_{}, group_processor_()
   {}
   void reset();
   virtual int inner_open() override;

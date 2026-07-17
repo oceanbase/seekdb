@@ -308,8 +308,8 @@ int ObDirectLoadRangeSplitUtils::rowkey_adaptive_sample(
   ObArenaAllocator tmp_allocator1("MTL_MMRS_Tmp");
   ObArenaAllocator tmp_allocator2("MTL_MMRS_Tmp");
   ObArray<ObDatumRowkey> rowkey_array1, rowkey_array2;
-  tmp_allocator1.set_tenant_id(MTL_ID());
-  tmp_allocator2.set_tenant_id(MTL_ID());
+  
+  
   rowkey_array1.set_block_allocator(ModulePageAllocator(tmp_allocator1));
   rowkey_array2.set_block_allocator(ModulePageAllocator(tmp_allocator2));
   ObIAllocator *cur_allocator = &tmp_allocator1, *next_allocator = &tmp_allocator2;
@@ -555,7 +555,7 @@ int ObDirectLoadSampleInfo::calc_sample_info(const int64_t parallel, bool based_
 ObDirectLoadMergeRangeSplitter::ObDirectLoadMergeRangeSplitter()
   : allocator_("TLD_MegRGSplit"), max_range_count_(0), total_sample_count_(0), is_inited_(false)
 {
-  allocator_.set_tenant_id(MTL_ID());
+  
 }
 
 ObDirectLoadMergeRangeSplitter::~ObDirectLoadMergeRangeSplitter()
@@ -769,7 +769,7 @@ ObDirectLoadMultipleMergeRangeSplitter::ObDirectLoadMultipleMergeRangeSplitter()
     enable_reservoir_sample_(false),
     is_inited_(false)
 {
-  allocator_.set_tenant_id(MTL_ID());
+  
 }
 
 ObDirectLoadMultipleMergeRangeSplitter::~ObDirectLoadMultipleMergeRangeSplitter()
@@ -1013,7 +1013,7 @@ int ObDirectLoadMultipleMergeRangeSplitter::split_range(const ObTabletID &tablet
     ObArenaAllocator tmp_allocator("MTL_MMRS_Tmp");
     ObArray<ObDatumRowkey> origin_rowkey_array;
     ObArray<ObDatumRowkey> sstable_rowkey_array;
-    tmp_allocator.set_tenant_id(MTL_ID());
+    
     origin_rowkey_array.set_block_allocator(ModulePageAllocator(tmp_allocator));
     sstable_rowkey_array.set_block_allocator(ModulePageAllocator(tmp_allocator));
     if (sample_info_.origin_sample_num_ > 0) {
@@ -1117,7 +1117,7 @@ int ObDirectLoadMultipleMergeRangeSplitter::TabletRowkeyIter::get_next_rowkey(
 ObDirectLoadMultipleSSTableRangeSplitter::ObDirectLoadMultipleSSTableRangeSplitter()
   : allocator_("TLD_MulSSTRS"), is_inited_(false)
 {
-  allocator_.set_tenant_id(MTL_ID());
+  
 }
 
 ObDirectLoadMultipleSSTableRangeSplitter::~ObDirectLoadMultipleSSTableRangeSplitter()

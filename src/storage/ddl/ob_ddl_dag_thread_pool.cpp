@@ -15,7 +15,7 @@
  */
 
 #include "storage/ddl/ob_ddl_dag_thread_pool.h"
-#include "storage/ddl/ob_column_clustered_dag.h"
+#include "storage/ddl/ob_ddl_insert_dag.h"
 #include "sql/session/ob_sql_session_info.h"
 
 #define USING_LOG_PREFIX STORAGE
@@ -57,7 +57,6 @@ void ObDDLDagThreadPool::run1()
     snprintf(thread_name, OB_THREAD_NAME_BUF_LEN, "DDL_%ld", ddl_dag_->get_ddl_task_param().ddl_task_id_);
     lib::set_thread_name(thread_name);
     ObCurTraceId::set(ddl_dag_->get_dag_id());
-    CONSUMER_GROUP_FUNC_GUARD(ObFunctionType::PRIO_DDL);
     THIS_WORKER.set_session(session_info_);
     THIS_WORKER.set_compatibility_mode(ddl_dag_->get_compat_mode());
 
@@ -66,3 +65,4 @@ void ObDDLDagThreadPool::run1()
     FLOG_INFO("ddl dag thread stop", "thread_idx", get_thread_idx(), KPC(ddl_dag_));
   }
 }
+

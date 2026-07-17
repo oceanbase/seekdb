@@ -18,7 +18,7 @@
 
 #include "ob_table_lock_callback.h"
 #include "storage/tablelock/ob_lock_memtable.h"
-#include "storage/tx/ob_trans_part_ctx.h"
+#include "storage/tx/ob_tx_ctx.h"
 
 namespace oceanbase
 {

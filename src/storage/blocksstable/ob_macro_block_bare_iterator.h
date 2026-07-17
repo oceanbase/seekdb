@@ -31,7 +31,7 @@ namespace blocksstable
 class ObMicroBlockBareIterator
 {
 public:
-  ObMicroBlockBareIterator(const uint64_t tenant_id = MTL_ID());
+  ObMicroBlockBareIterator();
   virtual ~ObMicroBlockBareIterator();
   void reset();
   void reuse();
@@ -49,7 +49,7 @@ public:
       const char *macro_block_buf,
       const int64_t macro_block_buf_size,
       const bool need_deserialize);
-
+      
   // scan by range
   int open(
       const char *macro_block_buf,
@@ -138,7 +138,7 @@ private:
 class ObMacroBlockRowBareIterator
 {
 public:
-  ObMacroBlockRowBareIterator(common::ObIAllocator &allocator, const uint64_t tenant_id = MTL_ID());
+  ObMacroBlockRowBareIterator(common::ObIAllocator &allocator);
   virtual ~ObMacroBlockRowBareIterator();
   void reset();
   int open(

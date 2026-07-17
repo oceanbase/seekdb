@@ -69,17 +69,17 @@ let $wait_status= BUILD_DATA;
 connection obsys;
 --echo # 检查DDL任务状态
 --disable_query_log
---eval select ddl_type, status from oceanbase.__all_virtual_ddl_task_status where object_id = $table_a0_id and target_object_id = $table_b0_id and ddl_type = 10009 order by task_id desc
+--eval select ddl_type, status from oceanbase.__all_ddl_task_status where object_id = $table_a0_id and target_object_id = $table_b0_id and ddl_type = 10009 order by task_id desc
 --enable_query_log
 
 --echo # 检查__all_virtual_obj_lock中Fork相关的锁（源表A）
 --disable_query_log
---eval select count(*), lock_mode, owner_id, obj_type, owner_type from oceanbase.__all_virtual_obj_lock where obj_id = $table_a0_id or obj_id in (select tablet_id from oceanbase.__all_tablet_to_ls where table_id = $table_a0_id) group by lock_mode, owner_id, obj_type, owner_type order by 1, 2, 3, 4, 5
+--eval select count(*), lock_mode, owner_id, obj_type, owner_type from oceanbase.__all_virtual_obj_lock where obj_id = $table_a0_id or obj_id in (select tablet_id from oceanbase.__all_tablet_to_table where table_id = $table_a0_id) group by lock_mode, owner_id, obj_type, owner_type order by 1, 2, 3, 4, 5
 --enable_query_log
 
 --echo # 检查__all_virtual_obj_lock中Fork相关的锁（fork表B）
 --disable_query_log
---eval select count(*), lock_mode, owner_id, obj_type, owner_type from oceanbase.__all_virtual_obj_lock where obj_id = $table_b0_id or obj_id in (select tablet_id from oceanbase.__all_tablet_to_ls where table_id = $table_b0_id) group by lock_mode, owner_id, obj_type, owner_type order by 1, 2, 3, 4, 5
+--eval select count(*), lock_mode, owner_id, obj_type, owner_type from oceanbase.__all_virtual_obj_lock where obj_id = $table_b0_id or obj_id in (select tablet_id from oceanbase.__all_tablet_to_table where table_id = $table_b0_id) group by lock_mode, owner_id, obj_type, owner_type order by 1, 2, 3, 4, 5
 --enable_query_log
 
 --echo # 释放 fork A to B，让它继续执行
@@ -96,7 +96,7 @@ let $wait_dest_table_id= $table_b0_id;
 connection obsys;
 --echo # 确认Fork完成后任务状态
 --disable_query_log
---eval select count(*) as pending_fork_tasks from oceanbase.__all_virtual_ddl_task_status where ddl_type = 10009 and object_id = $table_a0_id and target_object_id = $table_b0_id
+--eval select count(*) as pending_fork_tasks from oceanbase.__all_ddl_task_status where ddl_type = 10009 and object_id = $table_a0_id and target_object_id = $table_b0_id
 --enable_query_log
 --echo # 确认Fork完成后锁已释放
 select count(*) as fork_locks from oceanbase.__all_virtual_obj_lock;
@@ -170,22 +170,22 @@ let $wait_status= WAIT_DATA_COMPLEMENT;
 connection obsys;
 --echo # 检查DDL任务状态
 --disable_query_log
---eval select ddl_type, status from oceanbase.__all_virtual_ddl_task_status where ((object_id = $table_a1_id and target_object_id = $table_b1_id) or (object_id = $table_a1_id and target_object_id = $table_c1_id)) and ddl_type = 10009 order by task_id desc
+--eval select ddl_type, status from oceanbase.__all_ddl_task_status where ((object_id = $table_a1_id and target_object_id = $table_b1_id) or (object_id = $table_a1_id and target_object_id = $table_c1_id)) and ddl_type = 10009 order by task_id desc
 --enable_query_log
 
 --echo # 检查__all_virtual_obj_lock中Fork相关的锁（源表A）
 --disable_query_log
---eval select count(*), lock_mode, owner_id, obj_type, owner_type from oceanbase.__all_virtual_obj_lock where obj_id = $table_a1_id or obj_id in (select tablet_id from oceanbase.__all_tablet_to_ls where table_id = $table_a1_id) group by lock_mode, owner_id, obj_type, owner_type order by 1, 2, 3, 4, 5
+--eval select count(*), lock_mode, owner_id, obj_type, owner_type from oceanbase.__all_virtual_obj_lock where obj_id = $table_a1_id or obj_id in (select tablet_id from oceanbase.__all_tablet_to_table where table_id = $table_a1_id) group by lock_mode, owner_id, obj_type, owner_type order by 1, 2, 3, 4, 5
 --enable_query_log
 
 --echo # 检查__all_virtual_obj_lock中Fork相关的锁（fork表B）
 --disable_query_log
---eval select count(*), lock_mode, owner_id, obj_type, owner_type from oceanbase.__all_virtual_obj_lock where obj_id = $table_b1_id or obj_id in (select tablet_id from oceanbase.__all_tablet_to_ls where table_id = $table_b1_id) group by lock_mode, owner_id, obj_type, owner_type order by 1, 2, 3, 4, 5
+--eval select count(*), lock_mode, owner_id, obj_type, owner_type from oceanbase.__all_virtual_obj_lock where obj_id = $table_b1_id or obj_id in (select tablet_id from oceanbase.__all_tablet_to_table where table_id = $table_b1_id) group by lock_mode, owner_id, obj_type, owner_type order by 1, 2, 3, 4, 5
 --enable_query_log
 
 --echo # 检查__all_virtual_obj_lock中Fork相关的锁（fork表C）
 --disable_query_log
---eval select count(*), lock_mode, owner_id, obj_type, owner_type from oceanbase.__all_virtual_obj_lock where obj_id = $table_c1_id or obj_id in (select tablet_id from oceanbase.__all_tablet_to_ls where table_id = $table_c1_id) group by lock_mode, owner_id, obj_type, owner_type order by 1, 2, 3, 4, 5
+--eval select count(*), lock_mode, owner_id, obj_type, owner_type from oceanbase.__all_virtual_obj_lock where obj_id = $table_c1_id or obj_id in (select tablet_id from oceanbase.__all_tablet_to_table where table_id = $table_c1_id) group by lock_mode, owner_id, obj_type, owner_type order by 1, 2, 3, 4, 5
 --enable_query_log
 
 --echo # 释放 fork A to C，让它先完成
@@ -202,17 +202,17 @@ connection obsys;
 --echo # 验证: fork A to C 完成后，源表A的锁应该还存在（因为fork A to B还在进行）
 --echo # 检查DDL任务状态
 --disable_query_log
---eval select ddl_type, status from oceanbase.__all_virtual_ddl_task_status where object_id = $table_a1_id and target_object_id = $table_b1_id and ddl_type = 10009 order by task_id desc
+--eval select ddl_type, status from oceanbase.__all_ddl_task_status where object_id = $table_a1_id and target_object_id = $table_b1_id and ddl_type = 10009 order by task_id desc
 --enable_query_log
 
 --echo # 检查__all_virtual_obj_lock中Fork相关的锁（源表A）
 --disable_query_log
---eval select count(*), lock_mode, owner_id, obj_type, owner_type from oceanbase.__all_virtual_obj_lock where obj_id = $table_a1_id or obj_id in (select tablet_id from oceanbase.__all_tablet_to_ls where table_id = $table_a1_id) group by lock_mode, owner_id, obj_type, owner_type order by 1, 2, 3, 4, 5
+--eval select count(*), lock_mode, owner_id, obj_type, owner_type from oceanbase.__all_virtual_obj_lock where obj_id = $table_a1_id or obj_id in (select tablet_id from oceanbase.__all_tablet_to_table where table_id = $table_a1_id) group by lock_mode, owner_id, obj_type, owner_type order by 1, 2, 3, 4, 5
 --enable_query_log
 
 --echo # 检查__all_virtual_obj_lock中Fork相关的锁（fork表B）
 --disable_query_log
---eval select count(*), lock_mode, owner_id, obj_type, owner_type from oceanbase.__all_virtual_obj_lock where obj_id = $table_b1_id or obj_id in (select tablet_id from oceanbase.__all_tablet_to_ls where table_id = $table_b1_id) group by lock_mode, owner_id, obj_type, owner_type order by 1, 2, 3, 4, 5
+--eval select count(*), lock_mode, owner_id, obj_type, owner_type from oceanbase.__all_virtual_obj_lock where obj_id = $table_b1_id or obj_id in (select tablet_id from oceanbase.__all_tablet_to_table where table_id = $table_b1_id) group by lock_mode, owner_id, obj_type, owner_type order by 1, 2, 3, 4, 5
 --enable_query_log
 
 --echo # 释放 fork A to B，让它继续执行
@@ -229,7 +229,7 @@ let $wait_dest_table_id= $table_b1_id;
 connection obsys;
 --echo # 确认Fork完成后任务状态
 --disable_query_log
---eval select count(*) as pending_fork_tasks from oceanbase.__all_virtual_ddl_task_status where ddl_type = 10009 and object_id = $table_a1_id and (target_object_id = $table_b1_id or target_object_id = $table_c1_id)
+--eval select count(*) as pending_fork_tasks from oceanbase.__all_ddl_task_status where ddl_type = 10009 and object_id = $table_a1_id and (target_object_id = $table_b1_id or target_object_id = $table_c1_id)
 --enable_query_log
 --echo # 确认Fork完成后锁已释放
 select count(*) as fork_locks from oceanbase.__all_virtual_obj_lock;
@@ -310,17 +310,17 @@ let $table_c2_id = query_get_value(select table_id from oceanbase.__all_table wh
 connection obsys;
 --echo # 检查DDL任务状态
 --disable_query_log
---eval select ddl_type, status from oceanbase.__all_virtual_ddl_task_status where ((object_id = $table_a2_id and target_object_id = $table_b2_id) or (object_id = $table_b2_id and target_object_id = $table_c2_id)) and ddl_type = 10009 order by task_id desc
+--eval select ddl_type, status from oceanbase.__all_ddl_task_status where ((object_id = $table_a2_id and target_object_id = $table_b2_id) or (object_id = $table_b2_id and target_object_id = $table_c2_id)) and ddl_type = 10009 order by task_id desc
 --enable_query_log
 
 --echo # 检查__all_virtual_obj_lock中Fork相关的锁（表B）
 --disable_query_log
---eval select count(*), lock_mode, owner_id, obj_type, owner_type from oceanbase.__all_virtual_obj_lock where obj_id = $table_b2_id or obj_id in (select tablet_id from oceanbase.__all_tablet_to_ls where table_id = $table_b2_id) group by lock_mode, owner_id, obj_type, owner_type order by 1, 2, 3, 4, 5
+--eval select count(*), lock_mode, owner_id, obj_type, owner_type from oceanbase.__all_virtual_obj_lock where obj_id = $table_b2_id or obj_id in (select tablet_id from oceanbase.__all_tablet_to_table where table_id = $table_b2_id) group by lock_mode, owner_id, obj_type, owner_type order by 1, 2, 3, 4, 5
 --enable_query_log
 
 --echo # 检查__all_virtual_obj_lock中Fork相关的锁（fork表C）
 --disable_query_log
---eval select count(*), lock_mode, owner_id, obj_type, owner_type from oceanbase.__all_virtual_obj_lock where obj_id = $table_c2_id or obj_id in (select tablet_id from oceanbase.__all_tablet_to_ls where table_id = $table_c2_id) group by lock_mode, owner_id, obj_type, owner_type order by 1, 2, 3, 4, 5
+--eval select count(*), lock_mode, owner_id, obj_type, owner_type from oceanbase.__all_virtual_obj_lock where obj_id = $table_c2_id or obj_id in (select tablet_id from oceanbase.__all_tablet_to_table where table_id = $table_c2_id) group by lock_mode, owner_id, obj_type, owner_type order by 1, 2, 3, 4, 5
 --enable_query_log
 
 --echo # 释放 fork B to C，让它先完成
@@ -337,17 +337,17 @@ connection obsys;
 --echo # 验证: fork B to C 完成后，表B的锁应该还存在（因为fork A to B还在进行）
 --echo # 检查DDL任务状态
 --disable_query_log
---eval select ddl_type, status from oceanbase.__all_virtual_ddl_task_status where object_id = $table_a2_id and target_object_id = $table_b2_id and ddl_type = 10009 order by task_id desc
+--eval select ddl_type, status from oceanbase.__all_ddl_task_status where object_id = $table_a2_id and target_object_id = $table_b2_id and ddl_type = 10009 order by task_id desc
 --enable_query_log
 
 --echo # 检查__all_virtual_obj_lock中Fork相关的锁（表B）
 --disable_query_log
---eval select count(*), lock_mode, owner_id, obj_type, owner_type from oceanbase.__all_virtual_obj_lock where obj_id = $table_b2_id or obj_id in (select tablet_id from oceanbase.__all_tablet_to_ls where table_id = $table_b2_id) group by lock_mode, owner_id, obj_type, owner_type order by 1, 2, 3, 4, 5
+--eval select count(*), lock_mode, owner_id, obj_type, owner_type from oceanbase.__all_virtual_obj_lock where obj_id = $table_b2_id or obj_id in (select tablet_id from oceanbase.__all_tablet_to_table where table_id = $table_b2_id) group by lock_mode, owner_id, obj_type, owner_type order by 1, 2, 3, 4, 5
 --enable_query_log
 
 --echo # 检查__all_virtual_obj_lock中Fork相关的锁（fork表C）
 --disable_query_log
---eval select count(*), lock_mode, owner_id, obj_type, owner_type from oceanbase.__all_virtual_obj_lock where obj_id = $table_c2_id or obj_id in (select tablet_id from oceanbase.__all_tablet_to_ls where table_id = $table_c2_id) group by lock_mode, owner_id, obj_type, owner_type order by 1, 2, 3, 4, 5
+--eval select count(*), lock_mode, owner_id, obj_type, owner_type from oceanbase.__all_virtual_obj_lock where obj_id = $table_c2_id or obj_id in (select tablet_id from oceanbase.__all_tablet_to_table where table_id = $table_c2_id) group by lock_mode, owner_id, obj_type, owner_type order by 1, 2, 3, 4, 5
 --enable_query_log
 
 --echo # 释放 fork A to B，让它完成
@@ -364,7 +364,7 @@ let $wait_dest_table_id= $table_b2_id;
 connection obsys;
 --echo # 确认Fork完成后任务状态
 --disable_query_log
---eval select count(*) as pending_fork_tasks from oceanbase.__all_virtual_ddl_task_status where ddl_type = 10009 and ((object_id = $table_a2_id and target_object_id = $table_b2_id) or (object_id = $table_b2_id and target_object_id = $table_c2_id))
+--eval select count(*) as pending_fork_tasks from oceanbase.__all_ddl_task_status where ddl_type = 10009 and ((object_id = $table_a2_id and target_object_id = $table_b2_id) or (object_id = $table_b2_id and target_object_id = $table_c2_id))
 --enable_query_log
 --echo # 确认Fork完成后锁已释放
 select count(*) as fork_locks from oceanbase.__all_virtual_obj_lock;
@@ -392,3 +392,4 @@ drop table if exists t_a2;
 drop table if exists t_b2;
 drop table if exists t_c2;
 drop database if exists db_fork_lock;
+

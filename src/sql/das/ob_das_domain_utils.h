@@ -19,7 +19,7 @@
 
 #include "lib/allocator/page_arena.h"
 #include "lib/hash/ob_hashset.h"
-#include "share/datum/ob_datum.h"
+#include "common/datum/ob_datum.h"
 #include "sql/das/ob_das_dml_ctx_define.h"
 #include "storage/fts/ob_fts_doc_word_iterator.h"
 #include "storage/fts/ob_fts_plugin_helper.h"
@@ -73,7 +73,6 @@ public:
   ObFTDocWordInfo()
     : table_id_(OB_INVALID_ID),
       doc_word_table_id_(OB_INVALID_ID),
-      doc_word_ls_id_(),
       doc_word_tablet_id_(),
       snapshot_(),
       doc_word_schema_version_(),
@@ -86,7 +85,6 @@ public:
     int ret = OB_SUCCESS;
     table_id_ = src.table_id_;
     doc_word_table_id_ = src.doc_word_table_id_;
-    doc_word_ls_id_ = src.doc_word_ls_id_;
     doc_word_tablet_id_ = src.doc_word_tablet_id_;
     doc_word_schema_version_ = src.doc_word_schema_version_;
     doc_word_found_ = src.doc_word_found_;
@@ -99,7 +97,6 @@ public:
 
   TO_STRING_KV(K_(table_id),
                K_(doc_word_table_id),
-               K_(doc_word_ls_id),
                K_(doc_word_tablet_id),
                K_(snapshot),
                K_(doc_word_schema_version),
@@ -107,7 +104,6 @@ public:
 public:
   uint64_t table_id_;
   uint64_t doc_word_table_id_;
-  share::ObLSID doc_word_ls_id_;
   common::ObTabletID doc_word_tablet_id_;
   transaction::ObTxReadSnapshot snapshot_;
   int64_t doc_word_schema_version_;
@@ -162,7 +158,6 @@ public:
   ~ObDASDomainUtils() = default;
 
   static int build_ft_doc_word_infos(
-      const share::ObLSID &ls_id,
       const transaction::ObTxDesc *trans_desc,
       const transaction::ObTxReadSnapshot *snapshot,
       const common::ObIArray<const ObDASBaseCtDef *> &related_ctdef,

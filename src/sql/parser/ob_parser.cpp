@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_PARSER
 #include "ob_parser.h"
+#include "lib/utility/ob_smart_call.h"
 #include "lib/oblog/ob_log.h"
 #include "parse_malloc.h"
 #include "parse_node.h"
@@ -78,7 +79,7 @@ bool ObParser::is_pl_stmt(const ObString &stmt, bool *is_create_func, bool *is_c
               state = S_C_COMMENT;
               p += 2;
             }
-          } else if ('#' == *p && lib::is_mysql_mode()) {
+          } else if ('#' == *p) {
             save_state = state;
             state = S_COMMENT;
             p += 1;
@@ -425,7 +426,7 @@ ObParser::State ObParser::transform_normal(
         } break;
         case S_CALL: {
           is_not_pl = false;
-          is_pl = lib::is_mysql_mode();
+          is_pl = true;
           if (is_call_procedure != NULL) {
             *is_call_procedure = true;
           }
@@ -642,12 +643,7 @@ int ObParser::split_multiple_stmt(const ObString &stmt,
     ObString query(stmt.length(), stmt.ptr());
     ret = queries.push_back(query);
   } else if (is_pl_stmt(stmt)) {
-    if (lib::is_mysql_mode()) {
-      ret = split_start_with_pl(stmt, queries, parse_stat);
-    } else {
-      ObString query(stmt.length(), stmt.ptr());
-      ret = queries.push_back(query);
-    }
+    ret = split_start_with_pl(stmt, queries, parse_stat);
   } else {
     ParseResult parse_result;
     ParseMode parse_mode = MULTI_MODE;
@@ -666,7 +662,7 @@ int ObParser::split_multiple_stmt(const ObString &stmt,
     }
     // Remove trailing spaces and semicolons
     while (remain > 0 && ((ISSPACE(stmt[remain - 1])) ||
-           (lib::is_mysql_mode() && stmt[remain - 1] == ';'))) {
+           (stmt[remain - 1] == ';'))) {
       if (stmt[remain - 1] == ';') {
         semicolon_offset = remain - 1;
       }
@@ -711,7 +707,7 @@ int ObParser::split_multiple_stmt(const ObString &stmt,
           ret = queries.push_back(first_query);
           need_continue = false; // only return the first stmt, so ignore the remaining stmts
         } else {
-          if (is_pl_stmt(part) && lib::is_mysql_mode()) {
+          if (is_pl_stmt(part)) {
             ObString query(remain, stmt.ptr() + offset);
             allocator_ = bak_allocator;
             ret = split_start_with_pl(query, queries, parse_stat);
@@ -837,7 +833,7 @@ void ObParser::get_single_sql(const common::ObString &stmt, int64_t offset, int6
       }
     } else if (in_string) {
       if (str_len + 1 >= remain) {
-      } else if (lib::is_mysql_mode() && !bt_flag && stmt[str_len + offset] == '\\') {
+      } else if (!bt_flag && stmt[str_len + offset] == '\\') {
         // in mysql mode, handle the escape char in '' and ""
         ++ str_len;
       } else if (sq_flag) {
@@ -870,7 +866,7 @@ int ObParser::parse_sql(const ObString &stmt,
   ObString stmt_str = stmt;
   if (OB_FAIL(sql_parser.parse(stmt.ptr(), stmt.length(), parse_result))) {
     // if is multi_values_parser opt not need retry
-    if (lib::is_mysql_mode() && !parse_result.is_multi_values_parser_) {
+    if (!parse_result.is_multi_values_parser_) {
       parse_result.enable_compatible_comment_ = false;
       parse_result.mysql_compatible_comment_ = false;
       if (OB_FAIL(sql_parser.parse(stmt.ptr(), stmt.length(), parse_result))) {
@@ -938,7 +934,7 @@ int ObParser::parse_sql(const ObString &stmt,
 
 
     if (OB_ERR_PARSE_SQL == ret) {
-      LOG_USER_ERROR(OB_ERR_PARSE_SQL, ob_errpkt_strerror(OB_ERR_PARSER_SYNTAX, false),
+      LOG_USER_ERROR(OB_ERR_PARSE_SQL, ob_errpkt_strerror(OB_ERR_PARSER_SYNTAX),
                      error_length,
                      stmt.empty() ? NULL : stmt.ptr() + error_offset,
                      parse_result.line_ + 1);
@@ -949,7 +945,7 @@ int ObParser::parse_sql(const ObString &stmt,
   return ret;
 }
 
-int ObParser::parse(const ObString &query,
+int ObParser::parse_(const ObString &query,
                     ParseResult &parse_result,
                     ParseMode parse_mode,
                     const bool is_batched_multi_stmt_split_on,
@@ -994,13 +990,13 @@ int ObParser::parse(const ObString &query,
         (ObCharset::charset_type_by_coll(charsets4parser_.string_collation_) != CHARSET_UTF8MB4) : false;
   parse_result.malloc_pool_ = allocator_;
   parse_result.semicolon_start_col_ = INT32_MAX;
-  parse_result.sql_mode_ = sql_mode_ & (~SMO_ORACLE);
+  parse_result.sql_mode_ = sql_mode_;
   parse_result.need_parameterize_ = (FP_MODE == parse_mode
                          || FP_PARAMERIZE_AND_FILTER_HINT_MODE == parse_mode);
   parse_result.minus_ctx_.pos_ = -1;
   parse_result.minus_ctx_.raw_sql_offset_ = -1;
   parse_result.charset_info_ = ObCharset::get_charset(charsets4parser_.string_collation_);
-  parse_result.charset_info_oracle_db_ = ObCharset::is_valid_collation(charsets4parser_.nls_collation_) ?
+  parse_result.charset_info_nls_db_ = ObCharset::is_valid_collation(charsets4parser_.nls_collation_) ?
         ObCharset::get_charset(charsets4parser_.nls_collation_) : NULL;
   parse_result.connection_collation_ = charsets4parser_.string_collation_;
   parse_result.mysql_compatible_comment_ = false;
@@ -1035,7 +1031,7 @@ int ObParser::parse(const ObString &query,
     }
   }
   //compatible mysql, mysql allow use the "--"
-  if (OB_SUCC(ret) && lib::is_mysql_mode() && stmt.case_compare("--") == 0) {
+  if (OB_SUCC(ret) && stmt.case_compare("--") == 0) {
     const char *line_str = "-- ";
     char *buf = (char *)parse_malloc(strlen(line_str), parse_result.malloc_pool_);
     if (OB_UNLIKELY(NULL == buf)) {
@@ -1063,7 +1059,7 @@ int ObParser::parse(const ObString &query,
 
     // check wether the stmt start with "/*!", if so, stmt should first go through pl parser.
     bool is_mysql_comment = false;
-    if (lib::is_mysql_mode()) {
+    {
       uint64_t pos = 0;
       while (pos < len &&
              (stmt[pos] == ' ' || stmt[pos] == '\t' || stmt[pos] == '\r' ||
@@ -1093,8 +1089,7 @@ int ObParser::parse(const ObString &query,
         // may create ddl func, try it.
         if ((OB_ERR_PARSE_SQL == ret
             && is_create_func
-            && is_single_stmt(stmt)
-            && lib::is_mysql_mode()) ||
+            && is_single_stmt(stmt)) ||
             (OB_ERR_PARSE_SQL == ret && is_mysql_comment)) {
           if (OB_FAIL(parse_sql(stmt, parse_result, no_throw_parser_error))) {
             if (!no_throw_parser_error) {
@@ -1109,6 +1104,26 @@ int ObParser::parse(const ObString &query,
   }
   return ret;
 }
+
+int ObParser::parse(const ObString &query,
+                    ParseResult &parse_result,
+                    ParseMode parse_mode,
+                    const bool is_batched_multi_stmt_split_on,
+                    const bool no_throw_parser_error,
+                    const bool is_pl_inner_parse,
+                    const bool is_dbms_sql,
+                    const bool is_parse_dynamic_sql)
+{
+  return SMART_CALL(parse_(query,
+                          parse_result,
+                          parse_mode,
+                          is_batched_multi_stmt_split_on,
+                          no_throw_parser_error,
+                          is_pl_inner_parse,
+                          is_dbms_sql,
+                          is_parse_dynamic_sql));
+}
+
 // Through parser for prepare interface, for spi_prepare call in mysql mode
 int ObParser::prepare_parse(const ObString &query, void *ns, ParseResult &parse_result)
 {
@@ -1168,7 +1183,7 @@ int ObParser::prepare_parse(const ObString &query, void *ns, ParseResult &parse_
                                                     stmt.length() - error_offset);
 
       if (OB_ERR_PARSE_SQL == ret) {
-        LOG_USER_ERROR(OB_ERR_PARSE_SQL, ob_errpkt_strerror(OB_ERR_PARSER_SYNTAX, false),
+        LOG_USER_ERROR(OB_ERR_PARSE_SQL, ob_errpkt_strerror(OB_ERR_PARSER_SYNTAX),
                        error_length,
                        stmt.empty() ? NULL : stmt.ptr() + error_offset,
                        parse_result.line_ + 1);

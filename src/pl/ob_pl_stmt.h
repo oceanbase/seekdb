@@ -21,6 +21,7 @@
 #include "pl/ob_pl_user_type.h"
 #include "sql/resolver/ob_stmt_type.h"
 #include "sql/session/ob_sql_session_info.h"
+#include "pl/ob_pl_object_id_util.h"
 
 namespace oceanbase {
 namespace sql {
@@ -35,20 +36,12 @@ static const int64_t FUNC_MAX_CURSORS = 128;
 static const int64_t LABEL_MAX_SIZE = 128;
 // static const int64_t PACKAGE_MAX_ROUTINES = 64;
 static const int64_t PL_CONSTRUCT_COLLECTION = INT_MAX64;
-static const int64_t OB_MAX_PL_IDENT_LENGTH = 128; // latest oracle ident max length is 128, before is 30
+static const int64_t OB_MAX_PL_IDENT_LENGTH = 128; // PL identifier max length
 static const int64_t OB_MAX_MYSQL_PL_IDENT_LENGTH = 64;
 
 static const ObString PL_IMPLICIT_SAVEPOINT = "PL/SQL@IMPLICIT_SAVEPOINT";
 static const ObString PL_INNER_EXPR_SAVEPOINT = "PL/SQL@EXPR_SAVEPOINT";
 
-OB_INLINE uint64_t get_tenant_id_by_object_id(uint64_t object_id)
-{
-  object_id = object_id & ~(OB_MOCK_TRIGGER_PACKAGE_ID_MASK);
-  object_id = object_id & ~(OB_MOCK_OBJECT_PACAKGE_ID_MASK);
-  object_id = object_id & ~(OB_MOCK_PACKAGE_BODY_ID_MASK);
-  object_id = object_id & ~(OB_MOCK_DBLINK_UDT_ID_MASK);
-  return is_inner_pl_object_id(object_id) ? OB_SYS_TENANT_ID : MTL_ID();
-}
 
 enum ObBlockNSScope {
   PL_NS_PACKAGE_SPEC,
@@ -385,7 +378,7 @@ public:
       stmt_id_(OB_INVALID_INDEX),
       signal_(false),
       duplicate_(false) {}
-  //Do not implement the destructor to avoid LLVM mapping trouble
+  // Do not implement the destructor to preserve the expected memory layout.
 
   static uint32_t type_offset_bits() { return offsetof(ObPLConditionValue, type_) * 8; }
   static uint32_t error_code_offset_bits() { return offsetof(ObPLConditionValue, error_code_) * 8; }
@@ -468,7 +461,6 @@ public:
     row_desc_(NULL),
     rowid_table_id_(OB_INVALID_ID),
     ps_sql_(),
-    is_link_table_(false),
     is_skip_locked_(false) {}
   virtual ~ObPLSql() {}
 
@@ -497,8 +489,6 @@ public:
   inline uint64_t get_rowid_table_id() const { return rowid_table_id_; }
   inline void set_rowid_table_id(uint64 table_id) { rowid_table_id_ = table_id; }
 
-  inline void set_link_table(bool is_link_table) { is_link_table_ = is_link_table; }
-  inline bool has_link_table() const { return is_link_table_; }
 
   inline void set_skip_locked(bool is_skip_locked) { is_skip_locked_ = is_skip_locked; }
   inline bool is_skip_locked() const { return is_skip_locked_; }
@@ -517,7 +507,6 @@ protected:
   const ObRecordType *row_desc_;
   uint64_t rowid_table_id_;
   common::ObString ps_sql_;
-  bool is_link_table_;
   bool is_skip_locked_;
 };
 
@@ -838,7 +827,6 @@ class ObPLRoutineInfo : public share::schema::ObIRoutineInfo
 public:
   ObPLRoutineInfo(common::ObIAllocator &allocator)
       : allocator_(allocator),
-        tenant_id_(OB_INVALID_ID),
         db_id_(OB_INVALID_ID),
         pkg_id_(OB_INVALID_ID),
         type_(INVALID_PROC_TYPE),
@@ -883,7 +871,7 @@ public:
   inline bool is_function() const { return type_ == STANDALONE_FUNCTION
                                         || type_ == PACKAGE_FUNCTION
                                         || UDT_FUNCTION == type_; }
-  inline uint64_t get_tenant_id() const { return tenant_id_; }
+  
   inline uint64_t get_db_id() const { return db_id_; }
 
   virtual uint64_t get_database_id() const { return db_id_; }
@@ -912,7 +900,7 @@ public:
   inline void set_parent_id(uint64_t id) { parent_id_ = id; }
   inline void set_id(uint64_t id) { id_ = id; }
   inline void set_md5(uint64_t md5) { md5_ = md5; }
-  inline void set_tenant_id(uint64_t tenant_id) { tenant_id_ = tenant_id; }
+  
   inline void set_db_id(uint64_t db_id) { db_id_ = db_id; }
   inline void set_pkg_id(uint64_t pkg_id) { pkg_id_ = pkg_id; }
   inline void set_type(ObProcType type) { type_ = type; }
@@ -1006,8 +994,7 @@ public:
 
   bool has_generic_type() const;
 
-  TO_STRING_KV(K_(tenant_id),
-               K_(db_id),
+  TO_STRING_KV(K_(db_id),
                K_(pkg_id),
                K_(type),
                K_(parent_id),
@@ -1028,7 +1015,6 @@ public:
                K_(analyze_flag));
 private:
   common::ObIAllocator &allocator_;
-  uint64_t tenant_id_;
   uint64_t db_id_;
   uint64_t pkg_id_;
   ObProcType type_;
@@ -1071,7 +1057,7 @@ private:
 };
 
 class ObPLFunctionAST;
-class ObPLCompileUnitAST;
+class ObPLAstUnit;
 class ObPLRoutineTable
 {
 public:
@@ -1153,7 +1139,6 @@ public:
     LOCAL_TYPE,         // local custom type
     PKG_TYPE,           // custom type in the package
     SELF_ATTRIBUTE,
-    DBLINK_PKG_NS,      // dblink package
     UDT_MEMBER_ROUTINE, //
     TRIGGER,            // Trigger
     SEQUENCE            // Sequence
@@ -1429,7 +1414,7 @@ public:
                             const sql::ObObjAccessIdent &access_ident,
                             ObSQLSessionInfo &session_info,
                             ObRawExprFactory &expr_factory,
-                            ObPLCompileUnitAST &func,
+                            ObPLAstUnit &func,
                             ObObjAccessIdx &access_idx,
                             ObPLDataType &data_type,
                             uint64_t &package_id,
@@ -1507,7 +1492,7 @@ class ObPLStmtVisitor;
 class ObPLStmtBlock;
 class ObPLSqlStmt;
 
-class ObPLCompileUnitAST
+class ObPLAstUnit
 {
 public:
   enum UnitType {
@@ -1517,7 +1502,7 @@ public:
     OBJECT_TYPE,
   };
 
-  ObPLCompileUnitAST(common::ObIAllocator &allocator, UnitType type)
+  ObPLAstUnit(common::ObIAllocator &allocator, UnitType type)
      : type_(type),
        body_(NULL),
        obj_access_exprs_(allocator),
@@ -1544,7 +1529,7 @@ public:
     CHAR_CARRAY_INIT(invoker_database_name_);
   }
 
-  virtual ~ObPLCompileUnitAST();
+  virtual ~ObPLAstUnit();
 
   inline UnitType get_type() const { return type_; }
   inline void set_type(UnitType type) { type_ = type; }
@@ -1667,7 +1652,7 @@ protected:
   ObPLSEArray<sql::ObRawExpr*> obj_access_exprs_; // Used ObjAccessRawExpr
   ObPLSEArray<sql::ObRawExpr*> exprs_; // the expressions used, in AST it is ObRawExpr, in ObPLFunction it is ObISqlExpression
   ObPLSEArray<ObPLStmtBlock*> continue_handler_desc_bodys_;
-  ObBitSet<> simple_calc_bitset_; //Indices of expressions that can be calculated using LLVM
+  ObBitSet<> simple_calc_bitset_; // Indices of expressions eligible for static-engine precomputation
   ObPLSEArray<ObPLSqlStmt*> sql_stmts_;
   sql::ObRawExprFactory expr_factory_;
   ObPLSymbolTable symbol_table_;
@@ -1700,14 +1685,14 @@ protected:
     };
   };
 private:
-  DISALLOW_COPY_AND_ASSIGN(ObPLCompileUnitAST);
+  DISALLOW_COPY_AND_ASSIGN(ObPLAstUnit);
 };
 
-class ObPLFunctionAST : public ObPLFunctionBase, public ObPLCompileUnitAST
+class ObPLFunctionAST : public ObPLFunctionBase, public ObPLAstUnit
 {
 public:
   ObPLFunctionAST(common::ObIAllocator &allocator)
-    : ObPLFunctionBase(), ObPLCompileUnitAST(allocator, ROUTINE_TYPE),
+    : ObPLFunctionBase(), ObPLAstUnit(allocator, ROUTINE_TYPE),
       id_(OB_INVALID_ID),
       subprogram_id_(OB_INVALID_ID),
       subprogram_path_(allocator),
@@ -1756,7 +1741,7 @@ public:
   inline void set_has_incomplete_rt_dep_error(bool has_incomplete_rt_dep_error) { has_incomplete_rt_dep_error_ = has_incomplete_rt_dep_error; }
   inline bool has_incomplete_rt_dep_error() { return has_incomplete_rt_dep_error_; }
 
-  INHERIT_TO_STRING_KV("compile", ObPLCompileUnitAST, K(NULL));
+  INHERIT_TO_STRING_KV("ast_unit", ObPLAstUnit, K(NULL));
 private:
   DISALLOW_COPY_AND_ASSIGN(ObPLFunctionAST);
 
@@ -2612,7 +2597,7 @@ public:
   inline void set_is_signal_null() { is_signal_null_ = true; }
   inline bool is_signal_null() const { return is_signal_null_; }
   inline int create_item_to_expr_idx(int64_t capacity) { 
-    return item_to_expr_idx_.create(capacity, "PlStmtHashMap", ObModIds::OB_HASH_NODE, MTL_ID());
+    return item_to_expr_idx_.create(capacity, "PlStmtHashMap", ObModIds::OB_HASH_NODE);
   }
   inline const int64_t *get_expr_idx(const int64_t item) const { return item_to_expr_idx_.get(item); }
   inline const hash::ObHashMap<int64_t, int64_t>& get_item_to_expr_idx() const 
@@ -2628,7 +2613,7 @@ private:
   ObPLConditionValue value_;
   hash::ObHashMap<int64_t, int64_t> item_to_expr_idx_;
   int ob_error_code_;
-  bool is_signal_null_; // In Oracle mode, RAISE; statement without specifying an exception name, in this case, the current exception needs to be thrown
+  bool is_signal_null_; // RAISE without specifying an exception name throws the current exception.
   bool is_resignal_stmt_;
 };
 
@@ -2644,8 +2629,7 @@ public:
         subprogram_path_(allocator),
         params_(allocator),
         nocopy_params_(allocator),
-        route_sql_(),
-        dblink_id_(common::OB_INVALID_ID) {}
+        route_sql_() {}
   virtual ~ObPLCallStmt() {}
 
   int accept(ObPLStmtVisitor &visitor) const;
@@ -2679,8 +2663,7 @@ public:
                K_(is_object_udf),
                K_(params),
                K_(nocopy_params),
-               K_(route_sql),
-               K_(dblink_id));
+               K_(route_sql));
 
 private:
   uint64_t invoker_id_;
@@ -2691,7 +2674,6 @@ private:
   ObPLSEArray<InOutParam> params_;
   ObPLSEArray<int64_t> nocopy_params_;
   common::ObString route_sql_;
-  uint64_t dblink_id_;
 };
 
 class ObPLInnerCallStmt : public ObPLStmt

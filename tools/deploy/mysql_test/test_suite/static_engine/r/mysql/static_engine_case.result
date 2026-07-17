@@ -6,7 +6,6 @@ explain_protocol: 2
 // Case3: 测试空串以及NULL的情况
 alter system flush plan cache global;
 set @@ob_enable_plan_cache = 0;
-alter system set default_table_store_format = "row";
 // Case1: normal test. 
 // 所有带参数的case表达式都被转为不带参数的case表达式
 EXPLAIN select case 1 when 1 then 'a' when 2 then 'b' else 'c' end from dual;
@@ -307,7 +306,7 @@ Warning	1292	Truncated incorrect DOUBLE value: 'here'
 
 // Case4: 测试不同字符集，大小写问题
 drop table t1;
-create table t1 (a varchar(100) collate utf8_general_ci, cond1 varchar(100) collate utf8_bin, cond2 varchar(100) collate utf8_general_ci);
+create table t1 (a varchar(100) collate utf8mb4_general_ci, cond1 varchar(100) collate utf8mb4_bin, cond2 varchar(100) collate utf8mb4_general_ci);
 EXPLAIN insert into t1 values('cond', 'COND', 'COND');
 Query Plan
 ==================================================
@@ -326,7 +325,7 @@ Outputs & filters:
       values({'cond', 'COND', 'COND'})
 insert into t1 values('cond', 'COND', 'COND');
 explain_protocol: 2
-// 返回Null，a和cond1以及a和cond2比较都会使用utf8_bin作为collation type(因为有aggregate collation的过程)
+// 返回Null，a和cond1以及a和cond2比较都会使用utf8mb4_bin作为collation type(因为有aggregate collation的过程)
 EXPLAIN select case a when cond1 then '1' when cond2 then '2' end from t1;
 Query Plan
 ===============================================
@@ -347,7 +346,7 @@ select case a when cond1 then '1' when cond2 then '2' end from t1;
 +----------------------------------------------------+
 | NULL                                               |
 +----------------------------------------------------+
-// 返回'neq', a和cond1比较使用的是utf8_bin
+// 返回'neq', a和cond1比较使用的是utf8mb4_bin
 EXPLAIN select case a when cond1 then 'eq' else 'neq' end from t1;
 Query Plan
 ===============================================
@@ -367,7 +366,7 @@ select case a when cond1 then 'eq' else 'neq' end from t1;
 +--------------------------------------------+
 | neq                                        |
 +--------------------------------------------+
-// 返回'eq', a和cond1比较使用的是utf8_general_ci
+// 返回'eq', a和cond1比较使用的是utf8mb4_general_ci
 EXPLAIN select case a when cond2 then 'eq' else 'neq' end from t1;
 Query Plan
 ===============================================
@@ -435,7 +434,7 @@ show create table t2;
 Table	Create Table
 t2	CREATE TABLE `t2` (
   `case case a when 'cond' then 'eq' else 'neq' end when 'eq' then 'ok' else 'not ok' end` varchar(6) NOT NULL
-) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 COMPRESSION = 'lz4_1.0' REPLICA_NUM = NUM BLOCK_SIZE = SIZE USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = SIZE PCTFREE = 10
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = NUM BLOCK_SIZE = SIZE USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = SIZE PCTFREE = 10
 
 drop table t1;
 drop table t2;

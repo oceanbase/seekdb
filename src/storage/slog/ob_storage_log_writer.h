@@ -22,13 +22,13 @@
 #include "lib/queue/ob_fixed_queue.h"
 #include "common/log/ob_log_generator.h"
 #include "common/log/ob_log_data_writer.h"
-#include "common/storage/ob_io_device.h"
+#include "lib/restore/ob_io_device.h"
 #include "share/redolog/ob_log_file_handler.h"
 #include "storage/slog/ob_storage_log_struct.h"
 #include "storage/slog/ob_storage_log_write_buffer.h"
 #include "storage/slog/ob_storage_log_nop_log.h"
 #include "storage/blocksstable/ob_log_file_spec.h"
-#include "lib/thread/thread_mgr_interface.h"
+#include "lib/thread/thread_pool.h"
 
 namespace oceanbase
 {
@@ -46,8 +46,7 @@ public:
       const char *log_dir,
       const int64_t log_file_size,
       const int64_t max_log_size,
-      const blocksstable::ObLogFileSpec &log_file_spec,
-      const uint64_t tenant_id);
+      const blocksstable::ObLogFileSpec &log_file_spec);
   virtual int start() override;
   virtual void wait() override;
   void destroy();
@@ -111,7 +110,7 @@ private:
   static int check_server_lease();
 
 private:
-  class ObSLogWriteRunner : public lib::TGRunnable
+  class ObSLogWriteRunner : public lib::ThreadPool
   {
   public:
     ObSLogWriteRunner();
@@ -126,7 +125,6 @@ private:
 
   private:
     ObStorageLogWriter *log_writer_;
-    int tg_id_;
     bool is_inited_;
   };
 

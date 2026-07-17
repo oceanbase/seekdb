@@ -20,6 +20,7 @@
 #include "sql/engine/expr/ob_expr_result_type_util.h"
 #include "sql/engine/expr/ob_batch_eval_util.h"
 #include "sql/resolver/expr/ob_raw_expr_util.h"
+#include "rpc/obmysql/ob_mysql_util.h"
 
 using namespace oceanbase::common;
 
@@ -72,7 +73,7 @@ int ObExprMul::calc_result_type2(ObExprResType &type,
     if (SCALE_UNKNOWN_YET == type1.get_scale() || SCALE_UNKNOWN_YET == type2.get_scale()) {
       type.set_scale(SCALE_UNKNOWN_YET);
     } else {
-      if (lib::is_mysql_mode() && type.is_double()) {
+      if (type.is_double()) {
         type.set_scale(MAX(scale1, scale2));
       } else {
         type.set_scale(MIN(static_cast<ObScale>(scale1 + scale2), OB_MAX_DECIMAL_SCALE));
@@ -85,8 +86,8 @@ int ObExprMul::calc_result_type2(ObExprResType &type,
       type.set_precision(PRECISION_UNKNOWN_YET);
     } else {
       // estimated precision
-      if (lib::is_mysql_mode() && type.is_double()) {
-        type.set_precision(ObMySQLUtil::float_length(type.get_scale()));
+      if (type.is_double()) {
+        type.set_precision(obmysql::ObMySQLUtil::float_length(type.get_scale()));
       } else if (type.has_result_flag(DECIMAL_INT_ADJUST_FLAG)) {
         ObPrecision precision = MAX(precision1, precision2);
         type.set_precision(precision);
@@ -973,7 +974,7 @@ int ObExprMul::mul_decimalint512_round_with_check_vector(VECTOR_EVAL_FUNC_ARG_DE
 }
 
 template<typename Res, typename Left, typename Righ>
-struct ObDecimalOracleMulFunc
+struct ObDecimalNumberMulFunc
 {
   int operator()(ObDatum &res, const ObDatum &l, const ObDatum &r, const int64_t scale,
                  ObNumStackOnceAlloc &alloc) const
@@ -993,7 +994,7 @@ struct ObDecimalOracleMulFunc
 };
 
 template<typename Res, typename Left, typename Righ>
-struct ObDecimalOracleVectorMulFunc
+struct ObDecimalNumberVectorMulFunc
 {
   template <typename ResVector, typename LeftVector, typename RightVector>
   int operator()(ResVector &res_vec, const LeftVector &l_vec, const RightVector &r_vec,
@@ -1013,54 +1014,54 @@ struct ObDecimalOracleVectorMulFunc
   }
 };
 
-#define DECINC_MUL_EVAL_FUNC_ORA_DECL(RES, L, R) \
-int ObExprMul::mul_decimal##RES##_##L##_##R##_oracle(EVAL_FUNC_ARG_DECL)      \
+#define DECINC_MUL_EVAL_FUNC_NUMBER_DECL(RES, L, R) \
+int ObExprMul::mul_decimal##RES##_##L##_##R##_number_result(EVAL_FUNC_ARG_DECL)      \
 {                                            \
   ObNumStackOnceAlloc tmp_alloc;                                \
   const int64_t scale = expr.args_[0]->datum_meta_.scale_ + expr.args_[1]->datum_meta_.scale_;      \
-  return def_arith_eval_func<ObDecimalOracleMulFunc<RES##_t, L##_t, R##_t>>(EVAL_FUNC_ARG_LIST, scale, tmp_alloc); \
+  return def_arith_eval_func<ObDecimalNumberMulFunc<RES##_t, L##_t, R##_t>>(EVAL_FUNC_ARG_LIST, scale, tmp_alloc); \
 }                                            \
-int ObExprMul::mul_decimal##RES##_##L##_##R##_oracle_batch(BATCH_EVAL_FUNC_ARG_DECL)      \
+int ObExprMul::mul_decimal##RES##_##L##_##R##_number_result_batch(BATCH_EVAL_FUNC_ARG_DECL)      \
 {                                            \
   ObNumStackOnceAlloc tmp_alloc;                                \
   const int64_t scale = expr.args_[0]->datum_meta_.scale_ + expr.args_[1]->datum_meta_.scale_;      \
-  return def_batch_arith_op_by_datum_func<ObDecimalOracleMulFunc<RES##_t, L##_t, R##_t>>(BATCH_EVAL_FUNC_ARG_LIST, scale, tmp_alloc); \
+  return def_batch_arith_op_by_datum_func<ObDecimalNumberMulFunc<RES##_t, L##_t, R##_t>>(BATCH_EVAL_FUNC_ARG_LIST, scale, tmp_alloc); \
 }                                            \
-int ObExprMul::mul_decimal##RES##_##L##_##R##_oracle_vector(VECTOR_EVAL_FUNC_ARG_DECL)      \
+int ObExprMul::mul_decimal##RES##_##L##_##R##_number_result_vector(VECTOR_EVAL_FUNC_ARG_DECL)      \
 {                                            \
   ObNumStackOnceAlloc tmp_alloc;                                \
   const int64_t scale = expr.args_[0]->datum_meta_.scale_ + expr.args_[1]->datum_meta_.scale_;      \
-  return def_fixed_len_vector_arith_op_func<ObDecimalOracleVectorMulFunc<RES##_t, L##_t, R##_t>,\
+  return def_fixed_len_vector_arith_op_func<ObDecimalNumberVectorMulFunc<RES##_t, L##_t, R##_t>,\
                                             ObArithTypedBase<L##_t, R##_t, RES##_t>>(VECTOR_EVAL_FUNC_ARG_LIST, scale, tmp_alloc); \
 }
 
-DECINC_MUL_EVAL_FUNC_ORA_DECL(int32, int32, int32)
-DECINC_MUL_EVAL_FUNC_ORA_DECL(int64, int32, int32)
-DECINC_MUL_EVAL_FUNC_ORA_DECL(int64, int32, int64)
-DECINC_MUL_EVAL_FUNC_ORA_DECL(int64, int64, int32)
-DECINC_MUL_EVAL_FUNC_ORA_DECL(int128, int32, int64)
-DECINC_MUL_EVAL_FUNC_ORA_DECL(int128, int64, int32)
-DECINC_MUL_EVAL_FUNC_ORA_DECL(int128, int32, int128)
-DECINC_MUL_EVAL_FUNC_ORA_DECL(int128, int128, int32)
-DECINC_MUL_EVAL_FUNC_ORA_DECL(int128, int64, int64)
-DECINC_MUL_EVAL_FUNC_ORA_DECL(int128, int64, int128)
-DECINC_MUL_EVAL_FUNC_ORA_DECL(int128, int128, int64)
-DECINC_MUL_EVAL_FUNC_ORA_DECL(int128, int128, int128)
+DECINC_MUL_EVAL_FUNC_NUMBER_DECL(int32, int32, int32)
+DECINC_MUL_EVAL_FUNC_NUMBER_DECL(int64, int32, int32)
+DECINC_MUL_EVAL_FUNC_NUMBER_DECL(int64, int32, int64)
+DECINC_MUL_EVAL_FUNC_NUMBER_DECL(int64, int64, int32)
+DECINC_MUL_EVAL_FUNC_NUMBER_DECL(int128, int32, int64)
+DECINC_MUL_EVAL_FUNC_NUMBER_DECL(int128, int64, int32)
+DECINC_MUL_EVAL_FUNC_NUMBER_DECL(int128, int32, int128)
+DECINC_MUL_EVAL_FUNC_NUMBER_DECL(int128, int128, int32)
+DECINC_MUL_EVAL_FUNC_NUMBER_DECL(int128, int64, int64)
+DECINC_MUL_EVAL_FUNC_NUMBER_DECL(int128, int64, int128)
+DECINC_MUL_EVAL_FUNC_NUMBER_DECL(int128, int128, int64)
+DECINC_MUL_EVAL_FUNC_NUMBER_DECL(int128, int128, int128)
 
-#undef DECINC_MUL_EVAL_FUNC_ORA_DECL
+#undef DECINC_MUL_EVAL_FUNC_NUMBER_DECL
 
 #define SET_MUL_FUNC_PTR(v) \
   rt_expr.eval_func_ = ObExprMul::v; \
   rt_expr.eval_batch_func_ = ObExprMul::v##_batch;
 
-int ObExprMul::set_decimal_int_eval_func(ObExpr &rt_expr, const bool is_oracle)
+int ObExprMul::set_decimal_int_eval_func(ObExpr &rt_expr, const bool use_number_result)
 {
   int ret = OB_SUCCESS;
 #define DECINT_FUNC_VAL(res, l, r) (res << 6) | (l << 3) | r
-#define DECINT_SWITCH_CASE_ORA(res, l, r) \
+#define DECINT_SWITCH_CASE_NUMBER_RESULT(res, l, r) \
   case DECINT_FUNC_VAL(DECIMAL_INT_##res, DECIMAL_INT_##l, DECIMAL_INT_##r): \
-    SET_MUL_FUNC_PTR(mul_decimalint##res##_int##l##_int##r##_oracle); \
-    rt_expr.eval_vector_func_ = mul_decimalint##res##_int##l##_int##r##_oracle_vector; \
+    SET_MUL_FUNC_PTR(mul_decimalint##res##_int##l##_int##r##_number_result); \
+    rt_expr.eval_vector_func_ = mul_decimalint##res##_int##l##_int##r##_number_result_vector; \
     break;
 #define DECINT_SWITCH_CASE(res, l, r) \
   case DECINT_FUNC_VAL(DECIMAL_INT_##res, DECIMAL_INT_##l, DECIMAL_INT_##r): \
@@ -1077,23 +1078,23 @@ int ObExprMul::set_decimal_int_eval_func(ObExpr &rt_expr, const bool is_oracle)
   const int16_t l_type = get_decimalint_type(lp);
   const int16_t r_type = get_decimalint_type(rp);
   const int16_t res_type = get_decimalint_type(res_p);
-  if (is_oracle) { // oracle
+  if (use_number_result) {
     switch (DECINT_FUNC_VAL(res_type, l_type, r_type)) {
-      DECINT_SWITCH_CASE_ORA(32, 32, 32)
-      DECINT_SWITCH_CASE_ORA(64, 32, 32)
-      DECINT_SWITCH_CASE_ORA(64, 32, 64)
-      DECINT_SWITCH_CASE_ORA(64, 64, 32)
-      DECINT_SWITCH_CASE_ORA(128, 32, 64)
-      DECINT_SWITCH_CASE_ORA(128, 64, 32)
-      DECINT_SWITCH_CASE_ORA(128, 32, 128)
-      DECINT_SWITCH_CASE_ORA(128, 128, 32)
-      DECINT_SWITCH_CASE_ORA(128, 64, 64)
-      DECINT_SWITCH_CASE_ORA(128, 64, 128)
-      DECINT_SWITCH_CASE_ORA(128, 128, 64)
-      DECINT_SWITCH_CASE_ORA(128, 128, 128)
+      DECINT_SWITCH_CASE_NUMBER_RESULT(32, 32, 32)
+      DECINT_SWITCH_CASE_NUMBER_RESULT(64, 32, 32)
+      DECINT_SWITCH_CASE_NUMBER_RESULT(64, 32, 64)
+      DECINT_SWITCH_CASE_NUMBER_RESULT(64, 64, 32)
+      DECINT_SWITCH_CASE_NUMBER_RESULT(128, 32, 64)
+      DECINT_SWITCH_CASE_NUMBER_RESULT(128, 64, 32)
+      DECINT_SWITCH_CASE_NUMBER_RESULT(128, 32, 128)
+      DECINT_SWITCH_CASE_NUMBER_RESULT(128, 128, 32)
+      DECINT_SWITCH_CASE_NUMBER_RESULT(128, 64, 64)
+      DECINT_SWITCH_CASE_NUMBER_RESULT(128, 64, 128)
+      DECINT_SWITCH_CASE_NUMBER_RESULT(128, 128, 64)
+      DECINT_SWITCH_CASE_NUMBER_RESULT(128, 128, 128)
       default:
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected precision in oracle", K(ret), K(lp), K(ls), K(rp), K(rs));
+        LOG_WARN("unexpected decimal integer precision", K(ret), K(lp), K(ls), K(rp), K(rs));
         break;
     }
   } else if (res_s <= OB_MAX_DECIMAL_SCALE && res_p <= MAX_PRECISION_DECIMAL_INT_256) { // mysql
@@ -1167,7 +1168,7 @@ int ObExprMul::set_decimal_int_eval_func(ObExpr &rt_expr, const bool is_oracle)
   }
 
 #undef DECINT_SWITCH_CASE
-#undef DECINT_SWITCH_CASE_ORA
+#undef DECINT_SWITCH_CASE_NUMBER_RESULT
 #undef DECINT_FUNC_VAL
   return ret;
 }
@@ -1227,7 +1228,7 @@ int ObExprMul::cg_expr(ObExprCGCtx &op_cg_ctx,
     case ObUNumberType:
     case ObNumberType: {
       if (ob_is_decimal_int(left) && ob_is_decimal_int(right)) {
-        set_decimal_int_eval_func(rt_expr, true /*is_oracle*/);
+        set_decimal_int_eval_func(rt_expr, true /*use_number_result*/);
       } else {
         SET_MUL_FUNC_PTR(mul_number);
         rt_expr.eval_vector_func_ = mul_number_vector;
@@ -1235,7 +1236,7 @@ int ObExprMul::cg_expr(ObExprCGCtx &op_cg_ctx,
       break;
     }
     case ObDecimalIntType: {
-      set_decimal_int_eval_func(rt_expr, false /*is_oracle*/);
+      set_decimal_int_eval_func(rt_expr, false /*use_number_result*/);
       break;
     }
     case ObCollectionSQLType: {

@@ -21,7 +21,7 @@
 #include "rootserver/ob_table_creator.h"
 #include "rootserver/freeze/ob_major_freeze_helper.h"
 #include "rootserver/ddl_task/ob_ddl_scheduler.h"
-#include "share/ob_index_builder_util.h"
+#include "sql/resolver/ddl/ob_index_builder_util.h"
 #include "share/ob_rpc_struct.h"
 #include "share/ob_debug_sync_point.h"
 #include "share/schema/ob_multi_version_schema_service.h"
@@ -37,11 +37,10 @@ using namespace oceanbase::rootserver;
 
 ObCreateIndexHelper::ObCreateIndexHelper(
     share::schema::ObMultiVersionSchemaService *schema_service,
-    const uint64_t tenant_id,
     rootserver::ObDDLService &ddl_service,
-    const obrpc::ObCreateIndexArg &arg,
-    obrpc::ObAlterTableRes &res)
-  : ObDDLHelper(schema_service, tenant_id, "[parallel create index]"),
+    const obcall::ObCreateIndexArg &arg,
+    obcall::ObAlterTableRes &res)
+  : ObDDLHelper(schema_service, "[parallel create index]"),
     arg_(arg),
     new_arg_(nullptr),
     res_(res),
@@ -75,11 +74,11 @@ int ObCreateIndexHelper::lock_objects_()
   } else if (OB_FAIL(lock_database_by_obj_name_())) {
     LOG_WARN("fail to lock databases by obj name", KR(ret));
   } else if (OB_FAIL(check_database_legitimacy_())) {
-    LOG_WARN("fail to prefech schemas", KR(ret), K_(tenant_id));
+    LOG_WARN("fail to prefech schemas", KR(ret));
   } else if (OB_FAIL(lock_objects_by_name_())) {
-    LOG_WARN("fail to prefech schemas", KR(ret), K_(tenant_id));
+    LOG_WARN("fail to prefech schemas", KR(ret));
   } else if (OB_FAIL(lock_objects_by_id_())) {
-    LOG_WARN("fail to lock objects by id", KR(ret), K_(tenant_id));
+    LOG_WARN("fail to lock objects by id", KR(ret));
   } else if (OB_FAIL(check_parallel_ddl_conflict_(arg_.based_schema_object_infos_))) {
     LOG_WARN("fail to check parallel ddl conflict", KR(ret));
   } else if (OB_ISNULL(orig_data_table_schema_)) {
@@ -90,7 +89,7 @@ int ObCreateIndexHelper::lock_objects_()
     LOG_WARN("database_id_ is not equal to table schema's databse_id",
              KR(ret), K_(database_id), K(orig_data_table_schema_->get_database_id()));
   } else if (OB_FAIL(schema_guard_wrapper_.get_database_schema(database_id_, database_schema))) {
-    LOG_WARN("fail to get database schema", KR(ret), K_(tenant_id), K_(database_id));
+    LOG_WARN("fail to get database schema", KR(ret), K_(database_id));
   } else if (OB_ISNULL(database_schema)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("databse_schema is null", KR(ret));
@@ -99,7 +98,7 @@ int ObCreateIndexHelper::lock_objects_()
     LOG_WARN("database_schema's database name not equal to arg",
              KR(ret), K(database_schema->get_database_name_str()), K_(arg_.database_name));
   } else if (OB_FAIL(schema_guard_wrapper_.get_sys_variable_schema(sysvar_schema))) {
-    LOG_WARN("fail to get sysvar schema", KR(ret), K_(tenant_id));
+    LOG_WARN("fail to get sysvar schema", KR(ret));
   } else if (OB_ISNULL(sysvar_schema)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("sysvar_schema is null", KR(ret));
@@ -126,9 +125,9 @@ int ObCreateIndexHelper::lock_database_by_obj_name_()
   if (OB_FAIL(check_inner_stat_())) {
     LOG_WARN("fail to check inner stat", KR(ret));
   } else if (OB_FAIL(add_lock_object_by_database_name_(database_name, transaction::tablelock::SHARE))) {
-    LOG_WARN("fail to lock database by name", KR(ret), K_(tenant_id), K(database_name));
+    LOG_WARN("fail to lock database by name", KR(ret), K(database_name));
   } else if (OB_FAIL(lock_databases_by_name_())) {
-    LOG_WARN("fail to lock databases by name", KR(ret), K_(tenant_id));
+    LOG_WARN("fail to lock databases by name", KR(ret));
   }
   return ret;
 }
@@ -137,26 +136,16 @@ int ObCreateIndexHelper::lock_database_by_obj_name_()
 int ObCreateIndexHelper::lock_objects_by_name_()
 {
   int ret = OB_SUCCESS;
-  bool is_oracle_mode = false;
   const ObString &database_name = arg_.database_name_;
   const ObString &table_name = arg_.table_name_;
   if (OB_FAIL(check_inner_stat_())) {
     LOG_WARN("fail to check inner stat", KR(ret));
-  } else if (OB_FAIL(ObCompatModeGetter::check_is_oracle_mode_with_tenant_id(
-             tenant_id_, is_oracle_mode))) {
-    LOG_WARN("fail to check is oracle mode", KR(ret));
   } else if (OB_FAIL(add_lock_object_by_name_(database_name, table_name,
     share::schema::TABLE_SCHEMA, transaction::tablelock::EXCLUSIVE))) {
-    LOG_WARN("fail to add lock object by name", KR(ret), K_(tenant_id), K(database_name), K(table_name));
-  } else if (is_oracle_mode) {
-    const ObString &index_name = arg_.index_name_;
-    if (OB_FAIL(add_lock_object_by_name_(database_name, index_name,
-        share::schema::TABLE_SCHEMA, transaction::tablelock::EXCLUSIVE))) {
-      LOG_WARN("fail to lock object by index name", KR(ret), K_(tenant_id), K(database_name), K(index_name));
-    }
+    LOG_WARN("fail to add lock object by name", KR(ret), K(database_name), K(table_name));
   }
   if (FAILEDx(lock_existed_objects_by_name_())) {
-    LOG_WARN("fail to lock objects by name", KR(ret), K_(tenant_id));
+    LOG_WARN("fail to lock objects by name", KR(ret));
   }
   return ret;
 }
@@ -185,7 +174,7 @@ int ObCreateIndexHelper::lock_objects_by_id_()
     LOG_WARN("fail to check inner stat", KR(ret));
   } else if (OB_UNLIKELY(OB_INVALID_ID == database_id_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("database is not exist", KR(ret), K_(tenant_id), K_(arg_.database_name));
+    LOG_WARN("database is not exist", KR(ret), K_(arg_.database_name));
   } else if (OB_FAIL(add_lock_object_by_id_(database_id_,
     share::schema::DATABASE_SCHEMA, transaction::tablelock::SHARE))) {
     LOG_WARN("fail to lock database id", KR(ret), K_(database_id));
@@ -196,7 +185,7 @@ int ObCreateIndexHelper::lock_objects_by_id_()
     LOG_WARN("table not exist", KR(ret), K_(database_id), K_(arg_.session_id), K_(arg_.table_name));
   } else if (OB_FAIL(add_lock_object_by_id_(table_id,
     share::schema::TABLE_SCHEMA, transaction::tablelock::EXCLUSIVE))) {
-    LOG_WARN("fail to lock table id", KR(ret), K_(tenant_id));
+    LOG_WARN("fail to lock table id", KR(ret));
   } else if (OB_FAIL(schema_guard_wrapper_.get_table_schema(table_id, orig_data_table_schema_))) {
     LOG_WARN("fail to get orig table schema", KR(ret), K(table_id));
   } else if (OB_ISNULL(orig_data_table_schema_)) {
@@ -216,7 +205,7 @@ int ObCreateIndexHelper::lock_objects_by_id_()
       if (related_table_id == table_id) {
       } else if (OB_FAIL(add_lock_object_by_id_(related_table_id,
         share::schema::TABLE_SCHEMA, transaction::tablelock::EXCLUSIVE))) {
-        LOG_WARN("fail to lock table id", KR(ret), K_(tenant_id));
+        LOG_WARN("fail to lock table id", KR(ret));
       }
     }
     if (OB_SUCC(ret)) {
@@ -229,7 +218,7 @@ int ObCreateIndexHelper::lock_objects_by_id_()
         } else if (OB_FAIL(add_lock_object_by_id_(info.schema_id_,
                                                   info.schema_type_,
                                                   transaction::tablelock::SHARE))) {
-          LOG_WARN("fail to lock based object schema id", KR(ret), K_(tenant_id));
+          LOG_WARN("fail to lock based object schema id", KR(ret));
         }
       }
     }
@@ -277,8 +266,6 @@ int ObCreateIndexHelper::check_table_legitimacy_()
     LOG_WARN("fail to check table udt exist", KR(ret));
   } else if (OB_FAIL(check_fk_related_table_ddl_(*orig_data_table_schema_, ObDDLType::DDL_CREATE_INDEX))) {
     LOG_WARN("check whether the forign key related table is executing ddl failed", KR(ret));
-  } else if (OB_FAIL(ObTTLUtil::check_htable_ddl_supported(*orig_data_table_schema_, false/*by_admin*/))) {
-    LOG_WARN("failed to check htable ddl supported", KR(ret));
   }
   RS_TRACE(check_schemas);
   return ret;
@@ -300,7 +287,7 @@ int ObCreateIndexHelper::is_local_generate_schema_(bool &is_local_generate)
   } else if (INDEX_TYPE_NORMAL_GLOBAL == arg_.index_type_
              || INDEX_TYPE_UNIQUE_GLOBAL == arg_.index_type_
              || INDEX_TYPE_SPATIAL_GLOBAL == arg_.index_type_) {
-    if (!orig_data_table_schema_->is_partitioned_table() && !arg_.index_schema_.is_partitioned_table() && !orig_data_table_schema_->is_auto_partitioned_table()) {
+    if (!orig_data_table_schema_->is_partitioned_table() && !arg_.index_schema_.is_partitioned_table()) {
       is_local_generate = true;
     } else {
       is_local_generate = false;
@@ -323,10 +310,10 @@ int ObCreateIndexHelper::generate_index_schema_()
   HEAP_VAR(ObTableSchema, tmp_index_schema){
   if (OB_FAIL(check_inner_stat_())) {
     LOG_WARN("fail to check inner stat", KR(ret));
-  } else if (OB_ISNULL(new_arg_ptr = allocator_.alloc(sizeof(obrpc::ObCreateIndexArg)))) {
+  } else if (OB_ISNULL(new_arg_ptr = allocator_.alloc(sizeof(obcall::ObCreateIndexArg)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("fail alloc memory", KR(ret), KP(new_arg_ptr));
-  } else if (FALSE_IT(new_arg_ = new (new_arg_ptr)obrpc::ObCreateIndexArg)) {
+  } else if (FALSE_IT(new_arg_ = new (new_arg_ptr)obcall::ObCreateIndexArg)) {
   } else if (OB_ISNULL(new_arg_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("new_arg_ is null", KR(ret));
@@ -341,7 +328,7 @@ int ObCreateIndexHelper::generate_index_schema_()
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("data table schema is nullptr", KR(ret));
   } else if (OB_FAIL(ObSchemaUtils::alloc_schema(allocator_, *orig_data_table_schema_, new_data_table_schema_))) {
-    LOG_WARN("fail to allocate new table schema", KR(ret), K_(tenant_id));
+    LOG_WARN("fail to allocate new table schema", KR(ret));
   } else if (OB_ISNULL(new_data_table_schema_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("new_data_table_schema_ is null", KR(ret));
@@ -381,13 +368,9 @@ int ObCreateIndexHelper::generate_index_schema_()
       LOG_WARN("fail to check create index on hidden primary key", KR(ret), KPC(index_schema));
     }
   }
-  bool is_oracle_mode = false;
-  if (FAILEDx(ObCompatModeGetter::check_is_oracle_mode_with_tenant_id(
-              tenant_id_, is_oracle_mode))) {
-    LOG_WARN("fail to check is oracle mode", KR(ret));
-  } else if (OB_FAIL(index_schema->generate_origin_index_name())) {
+  if (FAILEDx(index_schema->generate_origin_index_name())) {
     LOG_WARN("fail to generate origin index name", KR(ret), KPC(index_schema));
-  } else if (!is_oracle_mode) {
+  } else {
     ObIndexSchemaInfo index_info;
     if (OB_FAIL(schema_guard_wrapper_.get_coded_index_name_info_mysql(
                 allocator_,
@@ -403,21 +386,7 @@ int ObCreateIndexHelper::generate_index_schema_()
           res_.schema_version_ = index_info.get_schema_version();
       }
       ret = OB_ERR_KEY_NAME_DUPLICATE;
-      LOG_WARN("duplicate index name", KR(ret), K_(tenant_id),
-              "database_id", orig_data_table_schema_->get_database_id(),
-              "data_table_id", orig_data_table_schema_->get_table_id(),
-              "index_name", arg_.index_name_);
-    }
-  } else {
-    bool name_exist = false;
-    if (OB_FAIL(ddl_service_->get_index_name_checker().check_index_name_exist(tenant_id_,
-                                                                              index_schema->get_database_id(),
-                                                                              index_schema->get_table_name_str(),
-                                                                              name_exist))) {
-    LOG_WARN("fail to check index name exist", KR(ret), K_(tenant_id), K(index_schema->get_table_name_str()));
-    } else if (name_exist) {
-      ret = OB_ERR_KEY_NAME_DUPLICATE;
-      LOG_WARN("duplicate index name", KR(ret), K_(tenant_id),
+      LOG_WARN("duplicate index name", KR(ret),
               "database_id", orig_data_table_schema_->get_database_id(),
               "data_table_id", orig_data_table_schema_->get_table_id(),
               "index_name", arg_.index_name_);
@@ -430,13 +399,13 @@ int ObCreateIndexHelper::generate_index_schema_()
   } else if (OB_FAIL(gen_partition_object_and_tablet_ids_(index_schemas_))) {
     LOG_WARN("fail to gen partition object and tablet ids", KR(ret));
   } else if (OB_FAIL(gen_object_ids_(1/*object_cnt*/, id_generator))) {
-    LOG_WARN("fail to gen object ids", KR(ret), K_(tenant_id));
+    LOG_WARN("fail to gen object ids", KR(ret));
   } else if (OB_FAIL(id_generator.next(object_id))) {
     LOG_WARN("fail to get next object id", KR(ret));
   } else {
     index_schemas_.at(0).set_table_id(object_id);
   }
-  } // end heapvar
+  } // end HEAP_VAR
   RS_TRACE(generate_schemas);
   return ret;
 }
@@ -502,8 +471,8 @@ int ObCreateIndexHelper::operate_schemas_()
     ObDDLOperator ddl_operator(*schema_service_, *sql_proxy_);
     ObTableSchema &index_schema = index_schemas_.at(0);
     if (!gen_columns_.empty()) {
-      if (OB_FAIL(schema_service_->gen_new_schema_version(tenant_id_, new_schema_version))) {
-        LOG_WARN("fail to gen new schema_version", KR(ret), K_(tenant_id));
+      if (OB_FAIL(schema_service_->gen_new_schema_version(new_schema_version))) {
+        LOG_WARN("fail to gen new schema_version", KR(ret));
       }
       for (int64_t i = 0; OB_SUCC(ret) && i < gen_columns_.count(); ++i) {
         ObColumnSchemaV2 *new_column_schema = gen_columns_.at(i);
@@ -531,8 +500,8 @@ int ObCreateIndexHelper::operate_schemas_()
     } else if (OB_ISNULL(new_arg_)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("new arg is null", KR(ret));
-    } else if (OB_FAIL(GET_MIN_DATA_VERSION(tenant_id_, tenant_data_version))) {
-      LOG_WARN("fail to get data version", KR(ret), K_(tenant_id));
+    } else if (OB_FAIL(GET_MIN_DATA_VERSION(tenant_data_version))) {
+      LOG_WARN("fail to get data version", KR(ret));
     } else if (create_index_on_empty_table_opt_) {
       if (OB_FAIL(ObTabletBindingHelper::build_single_table_write_defensive(*new_data_table_schema_,
                                                                             index_schema.get_schema_version(),
@@ -546,7 +515,6 @@ int ObCreateIndexHelper::operate_schemas_()
                                                               nullptr/*del_data_tablet_ids*/,
                                                               &index_schema,
                                                               arg_.parallelism_,
-                                                              arg_.consumer_group_id_,
                                                               tenant_data_version,
                                                               allocator_,
                                                               task_record_))) {
@@ -582,8 +550,8 @@ int ObCreateIndexHelper::create_table_()
     } else if (OB_ISNULL(schema_service_impl)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("schema service must not by null", KR(ret));
-    } else if (OB_FAIL(schema_service_->gen_new_schema_version(tenant_id_, new_schema_version))) {
-      LOG_WARN("fail to gen new schema version", KR(ret), K_(tenant_id));
+    } else if (OB_FAIL(schema_service_->gen_new_schema_version(new_schema_version))) {
+      LOG_WARN("fail to gen new schema version", KR(ret));
     } else if (FALSE_IT(index_schema.set_schema_version(new_schema_version))) {
     } else if (OB_FAIL(schema_service_impl->get_table_sql_service().create_table(
               index_schema, get_trans_(),
@@ -592,12 +560,12 @@ int ObCreateIndexHelper::create_table_()
     } else if (OB_FAIL(schema_service_impl->get_table_sql_service().insert_temp_table_info(get_trans_(), index_schema))) {
       LOG_WARN("insert temp table info", KR(ret), K(index_schema));
     } else if (OB_FAIL(tsi_generator->get_current_version(last_schema_version))) {
-      LOG_WARN("fail to get end version", KR(ret), K_(tenant_id), K_(arg));
+      LOG_WARN("fail to get end version", KR(ret), K_(arg));
     } else if (OB_UNLIKELY(last_schema_version <= 0)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("last schema version is invalid", KR(ret), K_(tenant_id), K(last_schema_version));
-    } else if (OB_FAIL(ddl_operator.insert_ori_schema_version(get_trans_(), tenant_id_, index_schema.get_table_id(), last_schema_version))) {
-      LOG_WARN("fail to insert ori schema version", KR(ret), K_(tenant_id), K(new_schema_version));
+      LOG_WARN("last schema version is invalid", KR(ret), K(last_schema_version));
+    } else if (OB_FAIL(ddl_operator.insert_ori_schema_version(get_trans_(), index_schema.get_table_id(), last_schema_version))) {
+      LOG_WARN("fail to insert ori schema version", KR(ret), K(new_schema_version));
     }
   }
   RS_TRACE(create_schemas);
@@ -617,27 +585,24 @@ int ObCreateIndexHelper::create_tablets_()
   } else if (OB_ISNULL(orig_data_table_schema_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("orig_data_table_schema is null", KR(ret));
-  } else if(OB_FAIL(ObMajorFreezeHelper::get_frozen_scn(tenant_id_, frozen_scn))) {
-    LOG_WARN("fail to get frozen status for create tablet", KR(ret), K_(tenant_id));
-  } else if (OB_FAIL(schema_service_->get_tenant_schema_guard(tenant_id_, schema_guard))) {
-    LOG_WARN("fail to get tenant schema guard", KR(ret), K_(tenant_id));
-  } else if (create_index_on_empty_table_opt_
-             && OB_FAIL(ObCreateIndexOnEmptyTableHelper::get_major_frozen_scn(tenant_id_, frozen_scn))) {
+  } else if(OB_FAIL(ObMajorFreezeHelper::get_frozen_scn(frozen_scn))) {
+    LOG_WARN("fail to get frozen status for create tablet", KR(ret));
+  } else if (OB_FAIL(schema_service_->get_tenant_schema_guard(schema_guard))) {
+    LOG_WARN("fail to get tenant schema guard", KR(ret));
+  } else if (create_index_on_empty_table_opt_ 
+             && OB_FAIL(ObCreateIndexOnEmptyTableHelper::get_major_frozen_scn( frozen_scn))) {
     // we will create empty major when create index on empty table, so we need to get timestamp as major version to make sure data in the index table is consistent with the data table.
     LOG_WARN("fail to get wait major frozen scn", KR(ret));
   } else {
     ObTableSchema &index_schema = index_schemas_.at(0);
-    ObTableCreator table_creator(tenant_id_, frozen_scn, get_trans_());
-    common::ObArray<share::ObLSID> ls_id_array;
+    ObTableCreator table_creator(frozen_scn, get_trans_());
     const ObTablegroupSchema *data_tablegroup_schema = NULL; // keep NULL if no tablegroup
     ObSEArray<bool, 1> need_create_empty_majors;
     uint64_t tenant_data_version = 0;
     if (OB_FAIL(table_creator.init(true/*need_tablet_cnt_check*/))) {
       LOG_WARN("fail to init table craetor", KR(ret));
-    } else if (OB_FAIL(ls_id_array.push_back(ObLSID(SYS_LS)))) {
-      LOG_WARN("fail to push back sys ls", KR(ret));
-    } else if (OB_FAIL(GET_MIN_DATA_VERSION(tenant_id_, tenant_data_version))) {
-      LOG_WARN("fail to get data version", KR(ret), K_(tenant_id));
+    } else if (OB_FAIL(GET_MIN_DATA_VERSION(tenant_data_version))) {
+      LOG_WARN("fail to get data version", KR(ret));
     } else if (OB_INVALID_ID != orig_data_table_schema_->get_tablegroup_id()) {
       if (OB_FAIL(schema_guard_wrapper_.get_tablegroup_schema(
           orig_data_table_schema_->get_tablegroup_id(),
@@ -657,13 +622,12 @@ int ObCreateIndexHelper::create_tablets_()
       } else if (OB_FAIL(table_creator.add_create_tablets_of_local_aux_tables_arg(
                                        schemas,
                                        orig_data_table_schema_,
-                                       ls_id_array,
                                        tenant_data_version,
                                        need_create_empty_majors))) {
-        LOG_WARN("create table tablet failed", KR(ret), K(index_schema), K(ls_id_array));
+        LOG_WARN("create table tablet failed", KR(ret), K(index_schema));
       }
     } else {
-      if (OB_FAIL(table_creator.add_create_tablets_of_table_arg(index_schema, ls_id_array,
+      if (OB_FAIL(table_creator.add_create_tablets_of_table_arg(index_schema,
                                        tenant_data_version, create_index_on_empty_table_opt_/*need create major sstable*/))) {
         LOG_WARN("create table tablet failed", KR(ret), K(index_schema));
       }
@@ -703,9 +667,9 @@ int ObCreateIndexHelper::check_fk_related_table_ddl_(const share::schema::ObTabl
   int ret = OB_SUCCESS;
   if (OB_FAIL(check_inner_stat_())) {
     LOG_WARN("fail to check inner stat", KR(ret));
-  } else if (OB_UNLIKELY(OB_INVALID_ID == tenant_id_ || share::ObDDLType::DDL_INVALID == ddl_type)) {
+  } else if (OB_UNLIKELY(share::ObDDLType::DDL_INVALID == ddl_type)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arg", KR(ret), K_(tenant_id), K(ddl_type));
+    LOG_WARN("invalid arg", KR(ret), K(ddl_type));
   } else {
     const ObIArray<ObForeignKeyInfo> &foreign_key_infos = data_table_schema.get_foreign_key_infos();
     const ObCheckExistedDDLMode check_mode = is_double_table_long_running_ddl(ddl_type) ?
@@ -719,31 +683,30 @@ int ObCreateIndexHelper::check_fk_related_table_ddl_(const share::schema::ObTabl
       } else if (foreign_key_info.is_parent_table_mock_) {
         const ObMockFKParentTableSchema *related_schema = nullptr;
         if (OB_FAIL(schema_guard_wrapper_.get_mock_fk_parent_table_schema(related_table_id, related_schema))) {
-          LOG_WARN("fail to get related mock fk parent table schema", KR(ret), K_(tenant_id), K(related_table_id));
+          LOG_WARN("fail to get related mock fk parent table schema", KR(ret), K(related_table_id));
         } else if (OB_ISNULL(related_schema)) {
           ret = OB_ERR_PARALLEL_DDL_CONFLICT;
-          LOG_WARN("mock fk parent table schema is null ptr, may be dropped", KR(ret), K_(tenant_id), K(related_table_id), K(foreign_key_info));
+          LOG_WARN("mock fk parent table schema is null ptr, may be dropped", KR(ret), K(related_table_id), K(foreign_key_info));
         }
       } else {
         const ObTableSchema *related_schema = nullptr;
         bool has_long_running_ddl = false;
         if (OB_FAIL(schema_guard_wrapper_.get_table_schema(related_table_id, related_schema))) {
-          LOG_WARN("fail to get related table schema", KR(ret), K_(tenant_id), K(related_table_id));
+          LOG_WARN("fail to get related table schema", KR(ret), K(related_table_id));
         } else if (OB_ISNULL(related_schema)) {
           ret = OB_ERR_PARALLEL_DDL_CONFLICT;
-          LOG_WARN("related schema is null ptr, may be dropped", KR(ret), K_(tenant_id), K(related_table_id), K(foreign_key_info));
+          LOG_WARN("related schema is null ptr, may be dropped", KR(ret), K(related_table_id), K(foreign_key_info));
         } else if (!related_schema->check_can_do_ddl()) {
           ret = OB_OP_NOT_ALLOW;
           LOG_USER_ERROR(OB_OP_NOT_ALLOW, "execute ddl while foreign key related table is executing long running ddl");
         } else if (OB_FAIL(ObDDLTaskRecordOperator::check_has_long_running_ddl(sql_proxy_,
-                                                                              tenant_id_,
                                                                               related_table_id,
                                                                               check_mode,
                                                                               has_long_running_ddl))) {
-          LOG_WARN("check has long running ddl failed", KR(ret), K_(tenant_id), K(related_table_id));
+          LOG_WARN("check has long running ddl failed", KR(ret), K(related_table_id));
         } else if (has_long_running_ddl) {
           ret = OB_OP_NOT_ALLOW;
-          LOG_WARN("foreign key related table is executing offline ddl", KR(ret), K(check_mode), K_(tenant_id), K(related_table_id));
+          LOG_WARN("foreign key related table is executing offline ddl", KR(ret), K(check_mode), K(related_table_id));
           LOG_USER_ERROR(OB_OP_NOT_ALLOW, "execute ddl while foreign key related table is executing long running ddl");
         }
       }
@@ -784,8 +747,8 @@ int ObCreateIndexHelper::clean_on_fail_commit_()
   if (OB_ISNULL(ddl_service_)) {
     tmp_ret = OB_ERR_UNEXPECTED;
     LOG_WARN("ddl_service_ is null", KR(tmp_ret));
-  } else if (OB_TMP_FAIL(ddl_service_->get_index_name_checker().reset_cache(tenant_id_))) {
-    LOG_ERROR("fail to reset cache", KR(ret), KR(tmp_ret), K_(tenant_id));
+  } else if (OB_TMP_FAIL(ddl_service_->get_index_name_checker().reset_cache())) {
+    LOG_ERROR("fail to reset cache", KR(ret), KR(tmp_ret));
   }
   return ret;
 }

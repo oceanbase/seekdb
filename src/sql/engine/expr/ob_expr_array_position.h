@@ -17,8 +17,8 @@
 #ifndef OCEANBASE_SQL_OB_EXPR_ARRAY_POSITION
 #define OCEANBASE_SQL_OB_EXPR_ARRAY_POSITION
 
-#include "lib/geo/ob_geo_utils.h"
-#include "lib/udt/ob_array_type.h"
+#include "share/geo/ob_geo_utils.h"
+#include "common/udt/ob_array_type.h"
 #include "lib/utility/ob_macro_utils.h"
 #include "sql/engine/expr/ob_expr_operator.h"
 

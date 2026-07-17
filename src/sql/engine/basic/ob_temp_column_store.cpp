@@ -496,7 +496,7 @@ int ObTempColumnStore::init(const ObExprPtrIArray &exprs,
   col_cnt_ = exprs.count();
   max_batch_size_ = max_batch_size;
   ObTempBlockStore::set_inner_allocator_attr(mem_attr);
-  OZ(ObTempBlockStore::init(mem_limit, enable_dump, mem_attr.tenant_id_, mem_attr.ctx_id_,
+  OZ(ObTempBlockStore::init(mem_limit, enable_dump, mem_attr.ctx_id_,
                             mem_attr_.label_, compressor_type));
   reuse_vector_array_ = reuse_vector_array;
   inited_ = true;
@@ -515,7 +515,7 @@ int ObTempColumnStore::init(const IVectorPtrs &vectors,
   col_cnt_ = vectors.count();
   max_batch_size_ = max_batch_size;
   ObTempBlockStore::set_inner_allocator_attr(mem_attr);
-  OZ(ObTempBlockStore::init(mem_limit, enable_dump, mem_attr.tenant_id_, mem_attr.ctx_id_,
+  OZ(ObTempBlockStore::init(mem_limit, enable_dump, mem_attr.ctx_id_,
                             mem_attr_.label_, compressor_type));
   OZ(init_batch_ctx(vectors));
   reuse_vector_array_ = false;

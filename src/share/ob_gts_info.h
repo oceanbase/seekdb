@@ -17,7 +17,6 @@
 #ifndef OCEANBASE_COMMON_OB_GTS_INFO_H_
 #define OCEANBASE_COMMON_OB_GTS_INFO_H_
 
-#include "common/ob_region.h"
 #include "common/ob_member_list.h"
 #include "share/ob_gts_name.h"
 
@@ -35,13 +34,12 @@ public:
 public:
   uint64_t gts_id_;
   common::ObGtsName gts_name_;
-  common::ObRegion region_;
   int64_t epoch_id_;
   common::ObMemberList member_list_;
   common::ObAddr standby_;
   int64_t heartbeat_ts_;
 
-  TO_STRING_KV(K(gts_id_), K(gts_name_), K(region_), K(epoch_id_),
+  TO_STRING_KV(K(gts_id_), K(gts_name_), K(epoch_id_),
                K(member_list_), K(standby_), K(heartbeat_ts_));
 };
 
@@ -53,10 +51,9 @@ public:
   void reset();
 public:
   uint64_t gts_id_;
-  uint64_t tenant_id_;
   common::ObMemberList member_list_;
 
-  TO_STRING_KV(K(gts_id_), K(tenant_id_), K(member_list_));
+  TO_STRING_KV(K(gts_id_), K(member_list_));
 };
 } // namespace common
 } // namespace oceanbase

@@ -26,11 +26,6 @@ struct easy_addr_t;
 
 namespace oceanbase
 {
-namespace obrpc
-{
-class ObBatchPacket;
-class ObBatchP;
-};
 namespace common
 {
 class ObString;
@@ -150,8 +145,6 @@ public:
 private:
   // depercate:
   friend class  ObProposalID;
-  friend class oceanbase::obrpc::ObBatchPacket;
-  friend class oceanbase::obrpc::ObBatchP;
   int64_t get_ipv4_server_id() const;
   void set_ipv4_server_id(const int64_t ipv4_server_id);
   int compare_refactored(const ObAddr &rv) const;

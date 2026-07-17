@@ -53,8 +53,7 @@ int ObDiffTableResolver::resolve(const ParseNode &parse_tree)
   } else if (OB_FAIL(resolve_table_names_(parse_tree, cur_table_name, cur_db_name,
                                            inc_table_name, inc_db_name))) {
     LOG_WARN("failed to resolve table names", K(ret));
-  } else if (OB_FAIL(get_table_schemas_(session_info_->get_effective_tenant_id(),
-                                         cur_db_name, cur_table_name,
+  } else if (OB_FAIL(get_table_schemas_(cur_db_name, cur_table_name,
                                          inc_db_name, inc_table_name,
                                          cur_schema, inc_schema))) {
     LOG_WARN("failed to get table schemas", K(ret));
@@ -117,8 +116,7 @@ int ObDiffTableResolver::resolve_table_names_(const ParseNode &parse_tree,
   return ret;
 }
 
-int ObDiffTableResolver::get_table_schemas_(const uint64_t tenant_id,
-                                             const ObString &cur_db_name, const ObString &cur_table_name,
+int ObDiffTableResolver::get_table_schemas_(const ObString &cur_db_name, const ObString &cur_table_name,
                                              const ObString &inc_db_name, const ObString &inc_table_name,
                                              const ObTableSchema *&cur_schema,
                                              const ObTableSchema *&inc_schema)
@@ -127,13 +125,13 @@ int ObDiffTableResolver::get_table_schemas_(const uint64_t tenant_id,
   if (OB_ISNULL(schema_checker_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("schema_checker_ is null", K(ret));
-  } else if (OB_FAIL(schema_checker_->get_table_schema(tenant_id, cur_db_name, cur_table_name,
+  } else if (OB_FAIL(schema_checker_->get_table_schema( cur_db_name, cur_table_name,
                                                  false, cur_schema))) {
     LOG_WARN("failed to get current table schema", K(ret), K(cur_db_name), K(cur_table_name));
   } else if (OB_ISNULL(cur_schema)) {
     ret = OB_TABLE_NOT_EXIST;
     LOG_WARN("current table not exist", K(ret), K(cur_db_name), K(cur_table_name));
-  } else if (OB_FAIL(schema_checker_->get_table_schema(tenant_id, inc_db_name, inc_table_name,
+  } else if (OB_FAIL(schema_checker_->get_table_schema( inc_db_name, inc_table_name,
                                                         false, inc_schema))) {
     LOG_WARN("failed to get incoming table schema", K(ret), K(inc_db_name), K(inc_table_name));
   } else if (OB_ISNULL(inc_schema)) {

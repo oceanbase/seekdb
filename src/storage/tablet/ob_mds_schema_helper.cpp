@@ -56,13 +56,13 @@ int ObMdsSchemaHelper::init()
     ret = OB_INIT_TWICE;
     LOG_WARN("init twice", K(ret), K_(is_inited));
   } else {
-    const uint64_t tenant_id = 1; // mock
-    if (OB_FAIL(build_table_schema(tenant_id, DATABASE_ID, MDS_TABLE_ID, MDS_TABLE_NAME, table_schema_))) {
+     // mock
+    if (OB_FAIL(build_table_schema(DATABASE_ID, MDS_TABLE_ID, MDS_TABLE_NAME, table_schema_))) {
       LOG_WARN("fail to build table schema", K(ret));
     } else if (OB_UNLIKELY(!table_schema_.is_valid())) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("invalid table schema", K(ret), K_(table_schema));
-    } else if (OB_FAIL(storage_schema_.init(allocator_, table_schema_, lib::Worker::CompatMode::ORACLE))) {
+    } else if (OB_FAIL(storage_schema_.init(allocator_, table_schema_, lib::Worker::CompatMode::MYSQL))) {
       LOG_WARN("fail to init storage schema", K(ret));
     } else if (OB_UNLIKELY(!storage_schema_.is_valid())) {
       ret = OB_ERR_UNEXPECTED;
@@ -139,9 +139,7 @@ const ObRowkeyReadInfo *ObMdsSchemaHelper::get_rowkey_read_info() const
 }
 
 
-int ObMdsSchemaHelper::build_table_schema(
-    const uint64_t tenant_id,
-    const int64_t database_id,
+int ObMdsSchemaHelper::build_table_schema(const int64_t database_id,
     const uint64_t table_id,
     const char *table_name,
     share::schema::ObTableSchema &table_schema)
@@ -170,9 +168,7 @@ int ObMdsSchemaHelper::build_table_schema(
   ObColumnSchemaV2 meta_info_column_schema;
   ObColumnSchemaV2 user_data_column_schema;
 
-  if (OB_FAIL(build_column_schema(
-      tenant_id,
-      table_id,
+  if (OB_FAIL(build_column_schema(table_id,
       MDS_TYPE_COLUMN_ID,
       MDS_TYPE_COLUMN_NAME,
       COLUMN_SCHEMA_VERSION,
@@ -182,9 +178,7 @@ int ObMdsSchemaHelper::build_table_schema(
       MDS_TYPE_DATA_LENGTH,
       mds_type_column_schema))) {
     LOG_WARN("fail to build column schema", K(ret));
-  } else if (OB_FAIL(build_column_schema(
-      tenant_id,
-      table_id,
+  } else if (OB_FAIL(build_column_schema(table_id,
       UDF_KEY_COLUMN_ID,
       UDF_KEY_COLUMN_NAME,
       COLUMN_SCHEMA_VERSION,
@@ -194,9 +188,7 @@ int ObMdsSchemaHelper::build_table_schema(
       UDF_KEY_DATA_LENGTH,
       udf_key_column_schema))) {
     LOG_WARN("fail to build column schema", K(ret));
-  } else if (OB_FAIL(build_column_schema(
-      tenant_id,
-      table_id,
+  } else if (OB_FAIL(build_column_schema(table_id,
       META_INFO_COLUMN_ID,
       META_INFO_COLUMN_NAME,
       COLUMN_SCHEMA_VERSION,
@@ -206,9 +198,7 @@ int ObMdsSchemaHelper::build_table_schema(
       META_INFO_DATA_LENGTH,
       meta_info_column_schema))) {
     LOG_WARN("fail to build column schema", K(ret));
-  } else if (OB_FAIL(build_column_schema(
-      tenant_id,
-      table_id,
+  } else if (OB_FAIL(build_column_schema(table_id,
       USER_DATA_COLUMN_ID,
       USER_DATA_COLUMN_NAME,
       COLUMN_SCHEMA_VERSION,
@@ -221,7 +211,7 @@ int ObMdsSchemaHelper::build_table_schema(
   }
 
   if (OB_SUCC(ret)) {
-    table_schema.set_tenant_id(tenant_id);
+    
     table_schema.set_database_id(database_id);
     table_schema.set_table_id(table_id);
     table_schema.set_rowkey_column_num(ROWKEY_COLUMN_NUM);
@@ -268,20 +258,15 @@ int ObMdsSchemaHelper::build_rowkey_read_info(
       allocator,
       full_stored_col_cnt,
       storage_schema.get_rowkey_column_num(),
-      storage_schema.is_oracle_mode(),
       cols_desc,
-      false/*is_cg_sstable*/,
-      true/*use_default_compat_version*/,
-      false/*is_cs_replica_compat*/))) {
+      true/*use_default_compat_version*/))) {
     LOG_WARN("fail to init rowkey read info", K(ret));
   }
 
   return ret;
 }
 
-int ObMdsSchemaHelper::build_column_schema(
-    const uint64_t tenant_id,
-    const uint64_t table_id,
+int ObMdsSchemaHelper::build_column_schema(const uint64_t table_id,
     const uint64_t column_id,
     const char *column_name,
     const int64_t schema_version,
@@ -293,7 +278,7 @@ int ObMdsSchemaHelper::build_column_schema(
 {
   int ret = OB_SUCCESS;
 
-  column_schema.set_tenant_id(tenant_id);
+  
   column_schema.set_table_id(table_id);
   column_schema.set_column_id(column_id);
   column_schema.set_schema_version(schema_version);

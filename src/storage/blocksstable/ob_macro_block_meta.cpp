@@ -52,12 +52,11 @@ ObDataBlockMetaVal::ObDataBlockMetaVal()
     snapshot_version_(0),
     logic_id_(),
     macro_id_(),
-    column_checksums_(sizeof(int64_t), ModulePageAllocator("MacroMetaChksum", MTL_ID())),
+    column_checksums_(sizeof(int64_t), ModulePageAllocator("MacroMetaChksum")),
     has_string_out_row_(false),
     all_lob_in_row_(false),
     agg_row_len_(0),
     agg_row_buf_(nullptr),
-    ddl_end_row_offset_(-1),
     macro_block_bf_size_(0),
     macro_block_bf_buf_()
 {
@@ -143,7 +142,6 @@ void ObDataBlockMetaVal::reset()
   all_lob_in_row_ = false;
   agg_row_len_ = 0;
   agg_row_buf_ = nullptr;
-  ddl_end_row_offset_ = -1;
   macro_block_bf_size_ = 0;
   macro_block_bf_buf_ = nullptr;
 }
@@ -169,7 +167,6 @@ return (DATA_BLOCK_META_VAL_VERSION == version_ || DATA_BLOCK_META_VAL_VERSION_V
     && macro_id_.is_valid()
     && agg_row_len_ >= 0
     && ((0 == agg_row_len_ && nullptr == agg_row_buf_) || (0 < agg_row_len_ && nullptr != agg_row_buf_))
-    && (ddl_end_row_offset_ == -1 || (version_ >= DATA_BLOCK_META_VAL_VERSION_V2 && ddl_end_row_offset_ >= 0))
     && macro_block_bf_size_ >= 0
     && (0 == macro_block_bf_size_ || nullptr != macro_block_bf_buf_);
 }
@@ -217,7 +214,6 @@ int ObDataBlockMetaVal::assign(const ObDataBlockMetaVal &val)
     all_lob_in_row_ = val.all_lob_in_row_;
     agg_row_len_ = val.agg_row_len_;
     agg_row_buf_ = val.agg_row_buf_;
-    ddl_end_row_offset_ = val.ddl_end_row_offset_;
     macro_block_bf_size_ = val.macro_block_bf_size_;
     macro_block_bf_buf_ = val.macro_block_bf_buf_;
   }
@@ -311,9 +307,6 @@ int ObDataBlockMetaVal::serialize(char *buf,
       if (OB_SUCC(ret)) {
         MEMCPY(buf + pos, agg_row_buf_, agg_row_len_);
         pos += agg_row_len_;
-        if (version_ >= DATA_BLOCK_META_VAL_VERSION_V2) {
-          LST_DO_CODE(OB_UNIS_ENCODE, ddl_end_row_offset_);
-        }
         // Determine whether to serialize the macro block bloom filter based on the current cluster's data version.
         LST_DO_CODE(OB_UNIS_ENCODE, macro_block_bf_size_);
         if (macro_block_bf_size_ > 0) {
@@ -390,11 +383,6 @@ int ObDataBlockMetaVal::deserialize(const char *buf, const int64_t data_len, int
           agg_row_buf_ = buf + pos;
           pos += agg_row_len_;
         }
-        if (version_ >= DATA_BLOCK_META_VAL_VERSION_V2) {
-          LST_DO_CODE(OB_UNIS_DECODE, ddl_end_row_offset_);
-        } else {
-          ddl_end_row_offset_ = -1;
-        }
         // Deserialize macro block bloom filter.
         LST_DO_CODE(OB_UNIS_DECODE, macro_block_bf_size_);
         if (macro_block_bf_size_ > 0) {
@@ -467,9 +455,6 @@ int64_t ObDataBlockMetaVal::get_serialize_size(const int64_t data_version) const
               is_last_row_last_flag_,
               agg_row_len_);
   len += agg_row_len_;
-  if (version_ >= DATA_BLOCK_META_VAL_VERSION_V2) {
-    LST_DO_CODE(OB_UNIS_ADD_LEN, ddl_end_row_offset_);
-  }
   // Get macro block bloom filter serialize size.
   LST_DO_CODE(OB_UNIS_ADD_LEN, macro_block_bf_size_);
   if (macro_block_bf_size_ > 0) {

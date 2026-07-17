@@ -78,13 +78,13 @@ int ObUseDatabaseResolver::resolve(const ParseNode &parse_tree)
                                            db_name,
                                            allocator_));
         use_database_stmt->set_db_name(db_name);
-        uint64_t tenant_id = session_info_->get_effective_tenant_id();
+        
         share::schema::ObSessionPrivInfo session_priv;
         uint64_t database_id = OB_INVALID_ID;
         const share::schema::ObDatabaseSchema *db_schema = NULL;
         if (OB_FAIL(session_info_->get_session_priv_info(session_priv))) {
           LOG_WARN("faile to get session priv info", K(ret));
-        } else if (OB_FAIL(schema_checker_->get_database_id(tenant_id, catalog_id, db_name, database_id))) {
+        } else if (OB_FAIL(schema_checker_->get_database_id(catalog_id, db_name, database_id))) {
           LOG_USER_ERROR(OB_ERR_BAD_DATABASE, db_name.length(), db_name.ptr());
           LOG_WARN("invalid database name. ", K(catalog_id), K(db_name));
         } else if (OB_FAIL(schema_checker_->check_db_access(session_priv, session_info_->get_enable_role_array(), catalog_id, db_name))) {
@@ -95,7 +95,7 @@ int ObUseDatabaseResolver::resolve(const ParseNode &parse_tree)
           }
         }
         if (OB_SUCC(ret)) {
-          if (OB_FAIL(schema_checker_->get_database_schema(tenant_id, database_id, db_schema))) {
+          if (OB_FAIL(schema_checker_->get_database_schema( database_id, db_schema))) {
             LOG_WARN("failed to get db schema", K(ret), K(database_id));
           } else {
             use_database_stmt->set_catalog_id(catalog_id);

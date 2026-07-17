@@ -9,12 +9,14 @@ on:
   discussion_comment:
     types: [created, edited]
   pull_request_target:
+    branches: [master, develop]
     types: [opened, edited]
   pull_request_review_comment:
     types: [created, edited]
 
 jobs:
   translate:
+    if: ${{ github.event_name != 'pull_request_review_comment' || github.event.pull_request.base.ref == 'master' || github.event.pull_request.base.ref == 'develop' }}
     permissions:
       contents: read
       issues: write

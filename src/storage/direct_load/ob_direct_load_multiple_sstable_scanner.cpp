@@ -34,7 +34,7 @@ ObDirectLoadMultipleSSTableScanner::ObDirectLoadMultipleSSTableScanner()
     is_iter_end_(false),
     is_inited_(false)
 {
-  allocator_.set_tenant_id(MTL_ID());
+  
 }
 
 ObDirectLoadMultipleSSTableScanner::~ObDirectLoadMultipleSSTableScanner()

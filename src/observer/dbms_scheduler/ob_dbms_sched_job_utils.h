@@ -20,9 +20,9 @@
 #include "lib/ob_define.h"
 #include "lib/oblog/ob_log_module.h"
 #include "lib/utility/ob_print_utils.h"
-#include "lib/mysqlclient/ob_isql_client.h"
+#include "common/mysqlclient/ob_isql_client.h"
 #include "lib/container/ob_iarray.h"
-#include "lib/number/ob_number_v2.h"
+#include "common/number/ob_number_v2.h"
 
 namespace oceanbase
 {
@@ -101,7 +101,6 @@ class ObDBMSSchedJobInfo
 {
 public:
   ObDBMSSchedJobInfo() :
-    tenant_id_(common::OB_INVALID_ID),
     user_id_(common::OB_INVALID_ID),
     database_id_(common::OB_INVALID_ID),
     job_(common::OB_INVALID_ID),
@@ -143,15 +142,13 @@ public:
     credential_name_(),
     destination_name_(),
     interval_ts_(),
-    is_oracle_tenant_(true),
     max_failures_(0),
     func_type_(ObDBMSSchedFuncType::FUNCTION_TYPE_MAXNUM),
     this_exec_date_(0),
     this_exec_addr_(),
     this_exec_trace_id_() {}
 
-  TO_STRING_KV(K(tenant_id_),
-               K(user_id_),
+  TO_STRING_KV(K(user_id_),
                K(database_id_),
                K(job_),
                K(job_name_),
@@ -189,16 +186,16 @@ public:
 
   bool valid()
   {
-    return tenant_id_ != common::OB_INVALID_ID
+    return true
             && job_ != common::OB_INVALID_ID
             && !exec_env_.empty();
   }
 
-  uint64_t get_tenant_id() { return tenant_id_; }
+  
   uint64_t get_user_id() { return user_id_; }
   uint64_t get_database_id() { return database_id_; }
   uint64_t get_job_id() { return job_; }
-  uint64_t get_job_id_with_tenant() { return common::combine_two_ids(tenant_id_, job_); }
+  uint64_t get_job_id_with_tenant() { return job_; }
   int64_t  get_this_date() { return this_date_; }
   int64_t  get_next_date() { return next_date_; }
   int64_t  get_last_date() { return last_date_; }
@@ -233,20 +230,16 @@ public:
   common::ObString &get_this_exec_addr() { return this_exec_addr_; }
   common::ObString &get_this_exec_trace_id() { return this_exec_trace_id_; }
 
-  bool is_oracle_tenant() { return is_oracle_tenant_; }
   bool is_default_job_class() const { return (0 == job_class_.case_compare("DEFAULT_JOB_CLASS")); }
-  bool is_mview_job() const { return ObDBMSSchedFuncType::MVIEW_JOB == get_func_type(); }
   bool is_mysql_event_job() const { return ObDBMSSchedFuncType::MYSQL_EVENT_JOB == get_func_type(); }
   bool is_olap_async_job() const { return ObDBMSSchedFuncType::OLAP_ASYNC_JOB == get_func_type(); }
   bool is_stats_maintenance_job() const { return ObDBMSSchedFuncType::STAT_MAINTENANCE_JOB == get_func_type(); }
-  bool is_dynamic_partition_job() const {return ObDBMSSchedFuncType::DYNAMIC_PARTITION_MANAGE_JOB == get_func_type(); }
   bool is_user_job() const { return ObDBMSSchedFuncType::USER_JOB == get_func_type(); }
   bool is_shadow() const { return ObDBMSSchedFuncSet::instance_.is_shadow(get_func_type()); }
 
   int deep_copy(common::ObIAllocator &allocator, const ObDBMSSchedJobInfo &other);
 
 public:
-  uint64_t tenant_id_;
   uint64_t user_id_;
   uint64_t database_id_;
   uint64_t job_;
@@ -288,7 +281,6 @@ public:
   common::ObString credential_name_;
   common::ObString destination_name_;
   int64_t interval_ts_;
-  bool is_oracle_tenant_;
   int64_t max_failures_;
   ObDBMSSchedFuncType func_type_;
   int64_t this_exec_date_;
@@ -296,7 +288,6 @@ public:
   common::ObString this_exec_trace_id_;
 
 public:
-  static const int64_t JOB_SCHEDULER_FLAG_DATE_EXPRESSION_JOB_CLASS = 1;
   static const int64_t DEFAULT_MAX_END_DATE = 64060560000000000LL;
 };
 
@@ -304,44 +295,34 @@ class ObDBMSSchedJobClassInfo
 {
 public:
   ObDBMSSchedJobClassInfo() :
-    tenant_id_(common::OB_INVALID_ID),
     job_class_name_(),
-    resource_consumer_group_(),
     logging_level_(),
     log_history_(),
-    comments_(),
-    is_oracle_tenant_(true) {}
+    comments_() {}
 
-  TO_STRING_KV(K(tenant_id_),
-              K(job_class_name_),
+  TO_STRING_KV(K(job_class_name_),
               K(service_),
-              K(resource_consumer_group_),
               K(logging_level_),
               K(log_history_),
               K(comments_));
   bool valid()
   {
-    return tenant_id_ != common::OB_INVALID_ID
+    return true
             && !job_class_name_.empty();
   }
-  uint64_t get_tenant_id() { return tenant_id_; }
+  
   common::number::ObNumber &get_log_history() { return log_history_; }
   common::ObString &get_job_class_name() { return job_class_name_; }
   common::ObString &get_service() { return service_; }
-  common::ObString &get_resource_consumer_group() { return resource_consumer_group_; }
   common::ObString &get_logging_level() { return logging_level_; }
   common::ObString &get_comments() { return comments_; }
-  bool is_oracle_tenant() { return is_oracle_tenant_; }
   int deep_copy(common::ObIAllocator &allocator, const ObDBMSSchedJobClassInfo &other);
 public:
-  uint64_t tenant_id_;
   common::ObString job_class_name_;
   common::ObString service_;
-  common::ObString resource_consumer_group_;
   common::ObString logging_level_;
   common::number::ObNumber log_history_;
   common::ObString comments_;
-  bool is_oracle_tenant_;
 };
 
 class ObDBMSSchedJobUtils
@@ -412,11 +393,10 @@ public:
   */
   static int check_is_valid_max_run_duration(const int64_t max_run_duration);
   //TO DO DELETE continuous rain
-  static int generate_job_id(int64_t tenant_id, int64_t &max_job_id);
+  static int generate_job_id(int64_t &max_job_id);
   /**
    * @brief  Create a job
    * @param [in] sql_client
-   * @param [in] tenant_id  - tenant id
    * @param [in] job_id  - job id
    * @retval OB_SUCCESS execute success
    * @retval OB_ERR_UNEXPECTED unknown error
@@ -424,13 +404,11 @@ public:
    * @retval OB_ERR_NO_PRIVILEGE the user passed in for the current JOB does not have permission to modify
    */
   static int create_dbms_sched_job(common::ObISQLClient &sql_client,
-                                   const uint64_t tenant_id,
                                    const int64_t job_id,
                                    const ObDBMSSchedJobInfo &job_info);
   /**
    * @brief  Directly delete a job
    * @param [in] sql_client
-   * @param [in] tenant_id  - tenant id
    * @param [in] job_name  - job name
    * @param [in] if_exists  - if true (deleting a non-existent JOB will result in an error)
    * @retval OB_SUCCESS execute success
@@ -438,7 +416,6 @@ public:
    * @retval OB_INVALID_ARGUMENT current JOB does not exist
    */
   static int remove_dbms_sched_job(common::ObISQLClient &sql_client,
-                                   const uint64_t tenant_id,
                                    const common::ObString &job_name,
                                    const bool if_exists = false);
   /**
@@ -472,8 +449,6 @@ public:
                                         const bool from_pl_set_attr = false);
   /**
    * @brief  Get JOB information
-   * @param [in] tenant_id  - tenant id
-   * @param [in] is_oracle_tenant  - whether it is an oracle tenant, internal table does not have this value, determined by the caller
    * @param [in] job_name  - job name
    * @param [in] allocator  - reasonable allocator, to prevent job_info from becoming invalid
    * @param [in] job_info  - job information
@@ -482,8 +457,6 @@ public:
    * @retval OB_ENTRY_NOT_EXIST JOB does not exist
    */
   static int get_dbms_sched_job_info(common::ObISQLClient &sql_client,
-                                     const uint64_t tenant_id,
-                                     const bool is_oracle_tenant,
                                      const ObString &job_name,
                                      common::ObIAllocator &allocator,
                                      ObDBMSSchedJobInfo &job_info);
@@ -507,9 +480,9 @@ public:
    * @retval OB_INVALID_ARGUMENT invalid argument
    */
   static int calc_dbms_sched_repeat_expr(const ObDBMSSchedJobInfo &job_info, int64_t &next_run_time);
-  static int zone_check_impl(int64_t tenant_id, const ObString &zone);
-  static int job_class_check_impl(int64_t tenant_id, const ObString &job_class_name);
-  static int get_max_failures_value(int64_t tenant_id, const ObString &src_str, int64_t &value);
+  static int zone_check_impl(const ObString &zone);
+  static int job_class_check_impl(const ObString &job_class_name);
+  static int get_max_failures_value(const ObString &src_str, int64_t &value);
   static int reserve_user_with_minimun_id(ObIArray<const share::schema::ObUserInfo *> &user_infos); // TO DO Lianyu delete
 };
 }

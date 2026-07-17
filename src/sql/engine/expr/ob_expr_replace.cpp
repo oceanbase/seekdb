@@ -51,7 +51,7 @@ int ObExprReplace::calc_result_typeN(ObExprResType &type,
     LOG_WARN("Replace() should have three arguments in MySql Mode", K(ret), K(param_num));
   } else if (2 != param_num && 3 != param_num) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Replace() should have three arguments in Oracle Mode", K(ret), K(param_num));
+    LOG_WARN("Replace() should have two or three arguments", K(ret), K(param_num));
   } else if (OB_ISNULL(types_array) || OB_ISNULL(type_ctx.get_session())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected error. types_array or session null",
@@ -61,7 +61,7 @@ int ObExprReplace::calc_result_typeN(ObExprResType &type,
       type.set_type(ObLongTextType);
     } else {
       type.set_varchar();
-      type.set_length_semantics(type_ctx.get_session()->get_actual_nls_length_semantics());
+      type.set_length_semantics(type_ctx.get_session()->get_actual_length_semantics());
     }
     if (3 == param_num) {
       types_array[2].set_calc_type(ObVarcharType);
@@ -192,7 +192,7 @@ int ObExprReplace::eval_replace(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &exp
 {
   int ret = OB_SUCCESS;
   ObString res;
-  const bool is_mysql = lib::is_mysql_mode();
+  const bool is_mysql = true;
   ObExprStrResAlloc alloc(expr, ctx);
   ObDatum *text = NULL;
   ObDatum *from = NULL;

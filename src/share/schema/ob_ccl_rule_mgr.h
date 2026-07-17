@@ -40,11 +40,11 @@ class ObCCLRuleNameHashKey
 {
 public:
   ObCCLRuleNameHashKey()
-    : tenant_id_(common::OB_INVALID_TENANT_ID), name_case_mode_(common::OB_NAME_CASE_INVALID), ccl_rule_name_()
+    : name_case_mode_(common::OB_NAME_CASE_INVALID), ccl_rule_name_()
   {
   }
-  ObCCLRuleNameHashKey(uint64_t tenant_id, const common::ObNameCaseMode mode, common::ObString ccl_rule_name)
-    : tenant_id_(tenant_id), name_case_mode_(mode), ccl_rule_name_(ccl_rule_name)
+  ObCCLRuleNameHashKey(const common::ObNameCaseMode mode, common::ObString ccl_rule_name)
+    : name_case_mode_(mode), ccl_rule_name_(ccl_rule_name)
   {
   }
   ~ObCCLRuleNameHashKey()
@@ -53,24 +53,21 @@ public:
   uint64_t hash() const
   {
     uint64_t hash_ret = 0;
-    hash_ret = common::murmurhash(&tenant_id_, sizeof(uint64_t), 0);
     common::ObCollationType cs_type = ObSchema::get_cs_type_with_cmp_mode(name_case_mode_);
-    hash_ret = common::ObCharset::hash(cs_type, ccl_rule_name_, hash_ret);
+    hash_ret = common::ObCharset::hash(cs_type, ccl_rule_name_, 0);
     return hash_ret;
   }
   bool operator == (const ObCCLRuleNameHashKey &other) const
   {
-    ObCompareNameWithTenantID name_cmp(tenant_id_, name_case_mode_);
-    return (tenant_id_ == other.tenant_id_) &&
-           (name_case_mode_ == other.name_case_mode_) &&
+    ObCompareNameWithTenantID name_cmp(name_case_mode_);
+    return (name_case_mode_ == other.name_case_mode_) &&
            (0 == name_cmp.compare(ccl_rule_name_, other.ccl_rule_name_));
   }
-  void set_tenant_id(uint64_t tenant_id) { tenant_id_ = tenant_id; }
+  
   void set_ccl_rule_name(const common::ObString &ccl_rule_name) { ccl_rule_name_ = ccl_rule_name;}
-  uint64_t get_tenant_id() const { return tenant_id_; }
+  
   const common::ObString &get_ccl_rule_name() const { return ccl_rule_name_; }
 private:
-  uint64_t tenant_id_;
   common::ObNameCaseMode name_case_mode_;
   common::ObString ccl_rule_name_;
 };
@@ -92,8 +89,7 @@ struct ObGetCCLRuleKey<ObCCLRuleNameHashKey, ObSimpleCCLRuleSchema *>
   {
     return OB_ISNULL(schema) ?
           ObCCLRuleNameHashKey()
-        : ObCCLRuleNameHashKey(schema->get_tenant_id(),
-                               schema->get_name_case_mode(),
+        : ObCCLRuleNameHashKey(schema->get_name_case_mode(),
                                schema->get_ccl_rule_name());
   }
 };
@@ -132,8 +128,7 @@ public:
   int add_ccl_rule(const ObSimpleCCLRuleSchema &schema, const ObNameCaseMode mode);
   int get_schema_by_id(const uint64_t ccl_rule_id,
                        const ObSimpleCCLRuleSchema *&schema) const;
-  int get_schema_by_name(const uint64_t tenant_id,
-                         const ObNameCaseMode mode,
+  int get_schema_by_name(const ObNameCaseMode mode,
                          const common::ObString &name,
                          const ObSimpleCCLRuleSchema *&schema) const;
   inline int get_ccl_rule_count() const
@@ -145,12 +140,9 @@ public:
 
   CCLRuleInfos * get_ccl_rule_belong_ccl_rule_infos(CclRuleContainsInfo contians_info);
 
-  int get_schemas_in_tenant(const uint64_t tenant_id,
-                            common::ObIArray<const ObSimpleCCLRuleSchema *> &schemas) const;
-  int get_schemas_in_tenant(const uint64_t tenant_id,
-                            common::ObIArray<const ObSimpleCCLRuleSchema *> &schemas,
+  int get_schemas_in_tenant(common::ObIArray<const ObSimpleCCLRuleSchema *> &schemas) const;
+  int get_schemas_in_tenant(common::ObIArray<const ObSimpleCCLRuleSchema *> &schemas,
                             const CCLRuleInfos &ccl_rule_infos) const;
-  int del_schemas_in_tenant(const uint64_t tenant_id);
   int get_schema_count(int64_t &schema_count) const;
   int get_schema_statistics(ObSchemaStatisticsInfo &schema_info) const;
 

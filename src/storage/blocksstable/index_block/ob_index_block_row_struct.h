@@ -24,7 +24,7 @@
 #include "storage/blocksstable/ob_datum_row.h"
 #include "storage/blocksstable/ob_data_store_desc.h"
 #include "storage/blocksstable/index_block/ob_agg_row_struct.h"
-#include "storage/column_store/ob_column_store_util.h"
+#include "storage/ob_row_id_range.h"
 #include "sql/engine/basic/ob_pushdown_filter.h"
 #include "storage/access/ob_index_skip_scanner.h"
 
@@ -490,7 +490,7 @@ public:
       nested_offset_(0),
       rowkey_begin_idx_(0),
       rowkey_end_idx_(0),
-      cs_row_range_(),
+      row_id_range_(),
       skipping_filter_results_(),
       table_read_info_(nullptr),
       skip_state_()
@@ -509,7 +509,7 @@ public:
     range_idx_ = -1;
     parent_macro_id_.reset();
     nested_offset_ = 0;
-    cs_row_range_.reset();
+    row_id_range_.reset();
     skipping_filter_results_.reset();
     table_read_info_ = nullptr;
     skip_state_.reset();
@@ -722,9 +722,9 @@ public:
   {
     return static_cast<sql::ObBoolMaskType>(filter_constant_type_);
   }
-  OB_INLINE const ObCSRange &get_row_range() const
+  OB_INLINE const ObMicroBlockRowIdRange &get_row_range() const
   {
-    return cs_row_range_;
+    return row_id_range_;
   }
   OB_INLINE bool has_agg_data() const
   {
@@ -793,7 +793,7 @@ public:
   }
   TO_STRING_KV(KP_(query_range), KPC_(row_header), KPC_(minor_meta_info), K_(endkey), KP_(ps_node),
       KP_(agg_row_buf), K_(agg_buf_size), K_(flag), K_(range_idx), K_(parent_macro_id),
-      K_(nested_offset), K_(rowkey_begin_idx), K_(rowkey_end_idx), K_(cs_row_range),
+      K_(nested_offset), K_(rowkey_begin_idx), K_(rowkey_end_idx), K_(row_id_range),
       K_(skipping_filter_results), KP_(table_read_info), K_(skip_state));
 
 public:
@@ -832,7 +832,7 @@ public:
   // Note: rowkey_begin_idx_ and rowkey_end_idx_ are intentionally not reset in reset() method
   int64_t rowkey_begin_idx_;
   int64_t rowkey_end_idx_;
-  ObCSRange cs_row_range_;
+  ObMicroBlockRowIdRange row_id_range_;
   ObSkippingFilterResults skipping_filter_results_;
   const ObITableReadInfo *table_read_info_;
   ObIndexSkipState skip_state_;

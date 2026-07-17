@@ -92,7 +92,7 @@ int ObTransformSimplifyLimit::check_need_add_limit_to_semi_right_table(ObDMLStmt
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected null", K(ret), K(stmt), K(semi_info));
   } else if (!right_table->is_generated_table()) {
-    need_add = !right_table->is_link_type();
+    need_add = true;
   } else if (OB_ISNULL(ref_query = right_table->ref_query_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected null", K(ret), K(ref_query));

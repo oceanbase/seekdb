@@ -124,19 +124,6 @@ int ObTrivalSampleFilterExecutor::apply_sample_filter(
   }
   return ret;
 }
-int ObTrivalSampleFilterExecutor::apply_sample_filter(
-    const ObCSRange &range, 
-    common::ObBitmap &result_bitmap)
-{
-  int ret = OB_SUCCESS;
-  if (IS_NOT_INIT) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("The ObTrivalSampleFilter has not been inited", K(ret));
-  } else if (OB_FAIL(set_sample_bitmap(range.get_row_count(), result_bitmap))) {
-    LOG_WARN("Failed to set sample bitmap", K(ret), K(range));
-  }
-  return ret;
-}
 int ObTrivalSampleFilterExecutor::set_sample_bitmap(
     const int64_t row_count,
     ObBitmap &result_bitmap)
@@ -350,17 +337,12 @@ int ObHybridSampleFilterExecutor::update_row_num_after_blockscan()
   }
   return ret;
 }
-int ObHybridSampleFilterExecutor::update_pd_row_range(const int64_t start, const int64_t end, const bool in_cg)
+int ObHybridSampleFilterExecutor::update_pd_row_range(const int64_t start, const int64_t end)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_valid(start) || start > end)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("The prefetch filtered range is invalid", K(ret), K(start), K(end));
-  } else if (in_cg && is_reverse_scan_) {
-    if(!is_valid(pd_row_range_.end())) {
-      pd_row_range_.set_end(end);
-    }
-    pd_row_range_.set_begin(start);
   } else {
     if (!is_valid(pd_row_range_.begin())) {
         pd_row_range_.set_begin(start);
@@ -602,33 +584,6 @@ int ObHybridSampleFilterExecutor::apply_sample_filter(
     }
   } else if (OB_FAIL(set_sample_bitmap(row_num_, filter_info.count_, result_bitmap))) {
     LOG_WARN("Failed to set sample bitmap in non-major sstable", K(ret), K_(row_num), K(filter_info.count_));
-  }
-  return ret;
-}
-int ObHybridSampleFilterExecutor::apply_sample_filter(
-    const ObCSRange &range, 
-    common::ObBitmap &result_bitmap)
-{
-  int ret = OB_SUCCESS;
-  int64_t start_row_num = 0;
-  if (IS_NOT_INIT) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("The ObHybridSampleFilter has not been inited", K(ret));
-  } else if (OB_UNLIKELY(!range.is_valid())) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Invalid argument to apply sample filter in cg", K(ret), K(range));
-  } else if (OB_FAIL(update_pd_row_range(range.begin(), range.end(), true))) {
-    LOG_WARN("Failed to update read status", K(ret), K(range));
-  } else if (OB_UNLIKELY(!pd_row_range_.is_valid()
-                          || (is_reverse_scan_ && range.end() > pd_row_range_.end()) 
-                          || (!is_reverse_scan_ && range.begin() < pd_row_range_.begin()))) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("The first row id is invalid when apply sample filter in cg", K(ret), K_(is_reverse_scan), K_(pd_row_range), K(range));
-  } else {
-    start_row_num = is_reverse_scan_ ? row_num_ + (pd_row_range_.end() - range.end()) : row_num_ + (range.begin() - pd_row_range_.begin());
-    if (OB_FAIL(set_sample_bitmap(start_row_num, range.get_row_count(), result_bitmap))) {
-      LOG_WARN("Failed to set sample bitmap in cg", K(ret), K(start_row_num), K(range), K_(pd_row_range));
-    }
   }
   return ret;
 }

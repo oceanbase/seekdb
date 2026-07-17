@@ -23,14 +23,10 @@
 #include "storage/compaction/ob_compaction_memory_context.h"
 #include "common/ob_tablet_id.h"
 #include "common/ob_store_format.h"
-#include "share/ob_ls_id.h"
 #include "share/scn.h"
 
 namespace oceanbase
 {
-namespace storage {
-struct ObStorageColumnGroupSchema;
-}
 namespace share
 {
 namespace schema
@@ -45,13 +41,13 @@ class ObMergeSchema;
   ObDataStoreDesc : ObStaticDataStoreDesc & ObColDataStoreDesc ptr
   ObWholeDataStoreDesc : ObStaticDataStoreDesc & ObColDataStoreDesc object
 
-  for compaction, ObDataStoreDesc will record a common ObStaticDataStoreDesc ptr and a special ObColDataStoreDesc object for each table/cg
+  for compaction, ObDataStoreDesc records a common ObStaticDataStoreDesc ptr and a column description
   for other situation, use ObWholeDataStoreDesc instead of ObDataStoreDesc
 */
 namespace blocksstable {
 class ObSSTableIndexBuilder;
 struct ObSSTableBasicMeta;
-// same for all cg/all parallel merge task
+// Same for all parallel merge tasks.
 struct ObStaticDataStoreDesc
 {
 public:
@@ -60,9 +56,7 @@ public:
   int init(
     const bool is_ddl,
     const share::schema::ObMergeSchema &merge_schema,
-    const share::ObLSID &ls_id,
     const common::ObTabletID tablet_id,
-    const int64_t tablet_transfer_seq,
     const compaction::ObMergeType merge_type,
     const int64_t snapshot_version,
     const share::SCN &end_scn,
@@ -76,9 +70,7 @@ public:
   void reset();
   int assign(const ObStaticDataStoreDesc &desc);
   TO_STRING_KV(
-      K_(ls_id),
       K_(tablet_id),
-      K_(tablet_transfer_seq),
       K_(concurrent_cnt),
       "merge_type", merge_type_to_str(merge_type_),
       K_(snapshot_version),
@@ -106,15 +98,13 @@ private:
   OB_INLINE void init_block_size(const share::schema::ObMergeSchema &merge_schema);
   static const int64_t DEFAULT_RESERVE_PERCENT = 90;
   static const int64_t MIN_RESERVED_SIZE = 1024; //1KB;
-  static const ObCompressorType DEFAULT_MINOR_COMPRESSOR_TYPE = ObCompressorType::LZ4_COMPRESSOR;
+  static const ObCompressorType DEFAULT_MINOR_COMPRESSOR_TYPE = ObCompressorType::ZSTD_1_3_8_COMPRESSOR;
   bool operator==(const ObStaticDataStoreDesc &other) const; // for unittest
 public:
   bool is_ddl_; // only used to print ERROR or WARN log
   compaction::ObMergeType merge_type_;
   ObCompressorType compressor_type_;
-  share::ObLSID ls_id_;
   ObTabletID tablet_id_;
-  int64_t tablet_transfer_seq_;
   int64_t concurrent_cnt_;
   int64_t macro_block_size_;
   int64_t macro_store_size_; //macro_block_size_ * reserved_percent
@@ -133,16 +123,12 @@ public:
   compaction::ObExecMode exec_mode_;
   bool micro_index_clustered_;
   bool enable_macro_block_bloom_filter_;
-  // For ddl redo log for cs replica, leader write only macro block data in memory but do not flush to disk.
-  // indicate whether to submit io to write maroc block data to disk.
   bool need_submit_io_;
   bool is_delete_insert_table_;
   uint64_t encoding_granularity_;
   share::schema::ObSemiStructEncodingType semistruct_encoding_type_;
 };
 
-// ObColDataStoreDesc is same for every parallel task
-// but different for each column group
 struct ObColDataStoreDesc
 {
   ObColDataStoreDesc();
@@ -153,18 +139,12 @@ struct ObColDataStoreDesc
   int init(
     const bool is_major,
     const share::schema::ObMergeSchema &merge_schema,
-    const uint16_t table_cg_idx,
     const int64_t major_working_cluster_version);
-  int init(const bool is_major,
-          const share::schema::ObMergeSchema &merge_schema,
-          const storage::ObStorageColumnGroupSchema &cg_schema,
-          const uint16_t table_cg_idx,
-          const int64_t major_working_cluster_version);
   // be carefule to cal mock function
   int mock_valid_col_default_checksum_array(int64_t column_cnt);
   OB_INLINE int add_col_desc(const ObObjMeta meta, int64_t col_idx);
   OB_INLINE int add_binary_col_desc(int64_t col_idx);
-  TO_STRING_KV(K_(is_row_store), K_(table_cg_idx), K_(row_column_count),
+  TO_STRING_KV(K_(row_column_count),
                K_(rowkey_column_count), K_(schema_rowkey_col_cnt),
                K_(full_stored_col_cnt), K_(col_desc_array),
                K_(default_col_checksum_array_valid),
@@ -175,7 +155,6 @@ private:
   int generate_skip_index_meta(
       const bool is_major,
       const share::schema::ObMergeSchema &schema,
-      const storage::ObStorageColumnGroupSchema *cg_schema,
       const int64_t major_working_cluster_version);
   void fresh_col_meta(const share::schema::ObMergeSchema &merge_schema);
   int gene_col_default_checksum_array(
@@ -184,20 +163,8 @@ private:
       const share::schema::ObMergeSchema &merge_schema);
   int init_col_default_checksum_array(
       const int64_t column_cnt);
-  int generate_single_cg_skip_index_meta(
-    const ObSkipIndexColumnAttr &skip_idx_attr_by_user,
-    const storage::ObStorageColumnGroupSchema &cg_schema,
-    const int64_t major_working_cluster_version);
-  int add_col_desc_from_cg_schema(
-    const share::schema::ObMergeSchema &merge_schema,
-    const storage::ObStorageColumnGroupSchema &cg_schema);
-  static int get_compat_mode_from_schema(
-    const share::schema::ObMergeSchema &merge_schema,
-    bool &is_oracle_mode);
 public:
-  bool is_row_store_;
   bool default_col_checksum_array_valid_;
-  uint16_t table_cg_idx_;
   int64_t row_column_count_;
   int64_t rowkey_column_count_; // mv rowkey cnt
   int64_t schema_rowkey_col_cnt_;
@@ -254,7 +221,6 @@ public:
   {
     return is_major_or_meta_merge_type() ? get_snapshot_version() : get_end_scn().get_val_for_tx();
   }
-  bool is_cg() const { return !get_is_row_store(); }
   const common::ObIArray<share::schema::ObColDesc> &get_rowkey_col_descs() const
   {
     return col_desc_->col_desc_array_;
@@ -292,9 +258,7 @@ public:
   STATIC_DESC_FUNC(int64_t, macro_store_size);
   STATIC_DESC_FUNC(int64_t, micro_block_size_limit);
   STATIC_DESC_FUNC(compaction::ObMergeType, merge_type);
-  STATIC_DESC_FUNC(const share::ObLSID&, ls_id);
   STATIC_DESC_FUNC(const ObTabletID&, tablet_id);
-  STATIC_DESC_FUNC(int64_t, tablet_transfer_seq);
   STATIC_DESC_FUNC(int64_t, progressive_merge_round);
   STATIC_DESC_FUNC(int64_t, schema_version);
   STATIC_DESC_FUNC(int64_t, snapshot_version);
@@ -309,8 +273,6 @@ public:
   STATIC_DESC_FUNC(bool, need_submit_io);
   STATIC_DESC_FUNC(int64_t, concurrent_cnt);
   STATIC_DESC_FUNC(bool, is_delete_insert_table);
-  COL_DESC_FUNC(bool, is_row_store);
-  COL_DESC_FUNC(uint16_t, table_cg_idx);
   COL_DESC_FUNC(int64_t, row_column_count);
   COL_DESC_FUNC(int64_t, rowkey_column_count);
   COL_DESC_FUNC(int64_t, schema_rowkey_col_cnt);
@@ -384,23 +346,17 @@ struct ObWholeDataStoreDesc
   }
   int init(
     const ObStaticDataStoreDesc &static_desc,
-    const share::schema::ObMergeSchema &merge_schema,
-    const storage::ObStorageColumnGroupSchema *cg_schema = nullptr,
-    const uint16_t table_cg_idx = 0);
+    const share::schema::ObMergeSchema &merge_schema);
   int init(
     const bool is_ddl,
     const share::schema::ObMergeSchema &merge_schema,
-    const share::ObLSID &ls_id,
     const common::ObTabletID tablet_id,
     const compaction::ObMergeType merge_type,
     const int64_t snapshot_version,
     const int64_t cluster_version,
     const bool micro_index_clustered,
-    const int64_t tablet_transfer_seq,
     const int64_t concurrent_cnt,
     const share::SCN &end_scn = share::SCN::invalid_scn(),
-    const storage::ObStorageColumnGroupSchema *cg_schema = nullptr,
-    const uint16_t table_cg_idx = 0,
     const compaction::ObExecMode exec_mode = compaction::ObExecMode::EXEC_MODE_LOCAL,
     const bool need_submit_io = true);
   int gen_index_store_desc(const ObDataStoreDesc &data_desc);
@@ -418,10 +374,7 @@ struct ObWholeDataStoreDesc
   }
   TO_STRING_KV(K_(desc));
 private:
-  int inner_init(
-    const share::schema::ObMergeSchema &merge_schema,
-    const storage::ObStorageColumnGroupSchema *cg_schema,
-    const uint16_t table_cg_idx);
+  int inner_init(const share::schema::ObMergeSchema &merge_schema);
   ObStaticDataStoreDesc static_desc_;
   ObColDataStoreDesc col_desc_;
   ObDataStoreDesc desc_;

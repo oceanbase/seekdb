@@ -22,7 +22,7 @@
 namespace oceanbase
 {
 using namespace common;
-using namespace obrpc;
+using namespace obcall;
 using namespace share::schema;
 namespace sql
 {
@@ -70,7 +70,7 @@ int ObCreateContextResolver::resolve(const ParseNode &parse_tree)
     ObContextDDLArg &create_arg = stmt->get_arg();
     ObContextSchema &ctx_schema = create_arg.ctx_schema_;
     create_arg.or_replace_ = NULL != parse_tree.children_[OR_REPLACE_NODE];
-    ctx_schema.set_tenant_id(session_info_->get_effective_tenant_id());
+    
     //ctx_schema.set_database_id(session_info_->get_database_id());
     // check accessed type
     ctx_schema.set_context_type(static_cast<ObContextType>

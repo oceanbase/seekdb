@@ -183,11 +183,7 @@ int ObSchema2DDLSql::type2str(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(column_schema), KP(str_buf), K(buf_size), K(ret));
   } else {
-    bool is_oracle_mode = false;
-    if (OB_FAIL(share::ObCompatModeGetter::check_is_oracle_mode_with_table_id(
-        column_schema.get_tenant_id(), column_schema.get_table_id(), is_oracle_mode))) {
-      LOG_WARN("fail to check is oracle mode", K(ret));
-    } else {
+    {
       switch (column_schema.get_data_type()) {
         case ObTinyIntType: {
           n = snprintf(str_buf, buf_size, "tinyint");
@@ -207,27 +203,18 @@ int ObSchema2DDLSql::type2str(
           if (0 == STRCMP(column_schema.get_column_name(), "view_definition")) {
             max_varchar_length = 8192;
           }
-          if (is_oracle_mode) {
-            if (is_oracle_byte_length(is_oracle_mode, column_schema.get_length_semantics())) {
-              n = snprintf(str_buf, buf_size, "varchar2(%d %s)",
-                  std::min(column_schema.get_data_length(), static_cast<int32_t>(max_varchar_length)),
-                  get_length_semantics_str(column_schema.get_length_semantics()));
-            } else {
-              n = snprintf(str_buf, buf_size, "varchar2(%d)",
-                  std::min(column_schema.get_data_length(), static_cast<int32_t>(max_varchar_length)));
-            }
-          } else {
+          {
             n = snprintf(str_buf, buf_size, "varchar(%d)",
                 std::min(column_schema.get_data_length(), static_cast<int32_t>(max_varchar_length)));
           }
           break;
         }
         case ObFloatType: {
-          n = snprintf(str_buf, buf_size, is_oracle_mode ? "binary_float" : "float");
+          n = snprintf(str_buf, buf_size, "float");
           break;
         }
         case ObDoubleType: {
-          n = snprintf(str_buf, buf_size, is_oracle_mode ? "binary_double" : "double");
+          n = snprintf(str_buf, buf_size, "double");
           break;
         }
         case ObUInt64Type: {

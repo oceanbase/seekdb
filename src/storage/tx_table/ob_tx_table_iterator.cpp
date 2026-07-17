@@ -16,7 +16,7 @@
 
 
 #include "ob_tx_table_iterator.h"
-#include "storage/tx/ob_trans_part_ctx.h"
+#include "storage/tx/ob_tx_ctx.h"
 #include "src/storage/ls/ob_ls.h"
 
 namespace oceanbase
@@ -533,7 +533,7 @@ int ObTxDataSingleRowGetter::get_row_from_sstables_(blocksstable::ObDatumRowkey 
       ret = OB_ERR_SYS;
       STORAGE_LOG(ERROR, "Unexpected null table", KR(ret), K(i), K(sstables));
     } else if (table->is_loaded()) {
-    } else if (OB_FAIL(ObCacheSSTableHelper::load_sstable(table->get_addr(), table->is_co_sstable(), sstable_handle))) {
+    } else if (OB_FAIL(ObCacheSSTableHelper::load_sstable(table->get_addr(), sstable_handle))) {
       STORAGE_LOG(WARN, "fail to load sstable", K(ret), KPC(table));
     } else if (OB_FAIL(sstable_handle.get_sstable(table))) {
       STORAGE_LOG(WARN, "fail to get sstable", K(ret), K(sstable_handle));
@@ -703,7 +703,7 @@ int ObTxCtxMemtableScanIterator::init(ObTxCtxMemtable *tx_ctx_memtable)
 
 int ObTxCtxMemtableScanIterator::serialize_next_tx_ctx_(ObTxLocalBuffer &buffer,
                                                         int64_t &serialize_size,
-                                                        transaction::ObPartTransCtx *&tx_ctx)
+                                                        transaction::ObTxCtx *&tx_ctx)
 {
   int ret = OB_SUCCESS;
   bool need_retry = true;
@@ -733,7 +733,7 @@ int ObTxCtxMemtableScanIterator::inner_get_next_row(const ObDatumRow *&row)
   int ret = OB_SUCCESS;
 
   ObTxCtxTableMeta curr_meta;
-  transaction::ObPartTransCtx *tx_ctx = NULL;
+  transaction::ObTxCtx *tx_ctx = NULL;
   char *row_buf = NULL;
   int64_t need_merge_length = 0;
   int64_t cur_merge_length = 0;
@@ -758,7 +758,6 @@ int ObTxCtxMemtableScanIterator::inner_get_next_row(const ObDatumRow *&row)
       }
     } else {
       (void)curr_meta.init(tx_ctx->get_trans_id(),
-                           tx_ctx->get_ls_id(),
                            serialize_size,
                            (serialize_size + MAX_VALUE_LENGTH_ - 1) / MAX_VALUE_LENGTH_ /* row_num */,
                            0 /* row_idx */);

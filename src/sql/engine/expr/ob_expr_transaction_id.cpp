@@ -58,9 +58,9 @@ int ObExprTransactionId::eval_transaction_id(const ObExpr &expr, ObEvalCtx &ctx,
   } else {
     const transaction::ObTxDesc *txdesc = session_info->get_tx_desc();
     const int64_t tx_id = txdesc ? txdesc->get_tx_id().get_id() : 0;
-    if (ObUInt64Type == expr.datum_meta_.type_) { // mysql mode
+    if (ObUInt64Type == expr.datum_meta_.type_) { // unsigned integer result
       expr_datum.set_uint(tx_id);
-    } else { // oracle mode
+    } else { // numeric result
       ObNumStackOnceAlloc tmp_alloc;
       number::ObNumber num;
       if (OB_FAIL(num.from(tx_id, tmp_alloc))) {

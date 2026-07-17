@@ -26,7 +26,6 @@ namespace sql
 ObMaterialOpImpl::ObMaterialOpImpl(ObMonitorNode &op_monitor_info)
 : inited_(false),
   got_first_row_(false),
-  tenant_id_(OB_INVALID_ID),
   exec_ctx_(nullptr),
   mem_context_(nullptr),
   datum_store_(ObModIds::OB_HASH_NODE_GROUP_ROWS),
@@ -60,8 +59,7 @@ void ObMaterialOpImpl::reset()
   // can not destroy mem_entify here, the memory may hold by %iter_ or %datum_store_
 }
 
-int ObMaterialOpImpl::init(const uint64_t tenant_id,
-                          ObEvalCtx *eval_ctx,
+int ObMaterialOpImpl::init(ObEvalCtx *eval_ctx,
                           ObExecContext *exec_ctx,
                           ObIOEventObserver *observer,
                           const int64_t default_block_size)
@@ -70,20 +68,17 @@ int ObMaterialOpImpl::init(const uint64_t tenant_id,
   if (inited_) {
     ret = OB_INIT_TWICE;
     LOG_WARN("init twice");
-  } else if (OB_INVALID_ID == tenant_id) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(tenant_id));
   } else if (OB_ISNULL(eval_ctx) || OB_ISNULL(exec_ctx)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("get null argument", K(eval_ctx), K(exec_ctx));
   } else {
-    tenant_id_ = tenant_id;
+    
     eval_ctx_ = eval_ctx;
     exec_ctx_ = exec_ctx;
     io_event_observer_ = observer;
     if (OB_ISNULL(mem_context_)) {
       lib::ContextParam param;
-      param.set_mem_attr(tenant_id, ObModIds::OB_SQL_SORT_ROW, ObCtxIds::WORK_AREA)
+      param.set_mem_attr(ObModIds::OB_SQL_SORT_ROW, ObCtxIds::WORK_AREA)
         .set_properties(lib::USE_TL_PAGE_OPTIONAL);
       if (OB_FAIL(CURRENT_CONTEXT->CREATE_CONTEXT(mem_context_, param))) {
         LOG_WARN("create entity failed");
@@ -94,7 +89,7 @@ int ObMaterialOpImpl::init(const uint64_t tenant_id,
     }
     
     if (OB_FAIL(ret)) {
-    } else if (OB_FAIL(datum_store_.init(UINT64_MAX, tenant_id_, ObCtxIds::WORK_AREA))) {
+    } else if (OB_FAIL(datum_store_.init(UINT64_MAX, ObCtxIds::WORK_AREA))) {
       LOG_WARN("init row store failed");
     } else {
       datum_store_.set_allocator(mem_context_->get_malloc_allocator());
@@ -189,8 +184,7 @@ int ObMaterialOpImpl::before_add_row()
     LOG_WARN("not init");
   } else if (OB_UNLIKELY(!got_first_row_)) {
     int64_t size = OB_INVALID_ID == input_rows_ ? 0 : input_rows_ * input_width_;
-    if (OB_FAIL(sql_mem_processor_.init(&mem_context_->get_malloc_allocator(),
-                                        tenant_id_, size, op_type_,
+    if (OB_FAIL(sql_mem_processor_.init(&mem_context_->get_malloc_allocator(), size, op_type_,
                                         op_id_, exec_ctx_))) {
       LOG_WARN("failed to init sql memory manager processor", K(ret));
     } else {

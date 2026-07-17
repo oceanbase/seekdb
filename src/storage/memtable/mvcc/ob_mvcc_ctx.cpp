@@ -15,7 +15,8 @@
  */
 
 #include "ob_mvcc_ctx.h"
-#include "storage/tx/ob_trans_part_ctx.h"
+#include "storage/tx/ob_tx_ctx.h"
+#include "storage/ls/ob_freezer.h"
 namespace oceanbase
 {
 using namespace common;
@@ -359,14 +360,14 @@ int ObIMvccCtx::register_ext_info_commit_cb(
 }
 
 #include "storage/tx/ob_trans_service.h"
-#include "storage/tx/ob_trans_part_ctx.h"
+#include "storage/tx/ob_tx_ctx.h"
 namespace oceanbase {
 namespace memtable {
 ObMvccWriteGuard::~ObMvccWriteGuard()
 {
   if (NULL != ctx_) {
     int ret = OB_SUCCESS;
-    transaction::ObPartTransCtx *tx_ctx = ctx_->get_trans_ctx();
+    transaction::ObTxCtx *tx_ctx = ctx_->get_trans_ctx();
     ctx_->write_done();
 
     if (OB_NOT_NULL(memtable_)
@@ -388,7 +389,7 @@ ObMvccWriteGuard::~ObMvccWriteGuard()
       ret = tx_ctx->submit_redo_after_write(is_freeze/*force*/, write_seq_no_);
       if (OB_FAIL(ret)) {
         if (REACH_TIME_INTERVAL(100 * 1000)) {
-          TRANS_LOG(WARN, "failed to submit log if neccesary", K(ret), K(is_freeze), KPC(tx_ctx));
+          TRANS_LOG(ERROR, "failed to submit log if neccesary", K(ret), K(is_freeze), KPC(tx_ctx));
         }
         if (is_freeze && OB_BLOCK_FROZEN != ret) {
           memtable_->get_freezer()->set_need_resubmit_log(true);

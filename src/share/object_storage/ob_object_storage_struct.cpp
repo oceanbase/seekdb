@@ -16,10 +16,6 @@
 
 #define USING_LOG_PREFIX SHARE
 #include "ob_object_storage_struct.h"
-#include "rootserver/ob_root_service.h"
-#ifdef OB_BUILD_SHARED_STORAGE
-#include "storage/shared_storage/ob_ss_format_util.h"
-#endif
 
 using namespace oceanbase;
 using namespace lib;

@@ -77,7 +77,7 @@ private:
 template <typename K, typename T>
 ObMdsRangeQueryIterator<K, T>::ObMdsRangeQueryIterator()
   : is_inited_(false),
-    allocator_(lib::ObMemAttr(MTL_ID(), "MdsRangeQuery")),
+    allocator_(lib::ObMemAttr("MdsRangeQuery")),
     cur_finished_(false),
     src_finished_(false),
     cur_kv_(nullptr),
@@ -125,16 +125,14 @@ int ObMdsRangeQueryIterator<K, T>::init(
     
     ObTableScanParam *src_scan_param = nullptr;
     char *buf = nullptr;
-    ObLSID ls_id;
     ObTabletID tablet_id;
     if (OB_ISNULL(buf = static_cast<char*>(scan_param.allocator_->alloc(sizeof(ObTableScanParam))))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
       MDS_LOG(WARN, "allocate mem failed", K(ret), KP(buf));
     } else if (FALSE_IT(src_scan_param = new(buf) ObTableScanParam())) {
-    } else if (OB_FAIL(ObMdsRangeQueryIteratorHelper::get_tablet_ls_id_and_tablet_id(src_tablet_handle, ls_id, tablet_id))) {
-      MDS_LOG(WARN, "failed to get ls_id and tablet_id", K(ret), KPC(src_tablet_handle.get_obj()));
+    } else if (OB_FAIL(ObMdsRangeQueryIteratorHelper::get_tablet_id(src_tablet_handle, tablet_id))) {
+      MDS_LOG(WARN, "failed to get tablet_id", K(ret), KPC(src_tablet_handle.get_obj()));
     } else if (OB_FAIL((ObMdsScanParamHelper::build_customized_scan_param<K, T>(*scan_param.allocator_,
-                                                                               ls_id,
                                                                                tablet_id,
                                                                                scan_param.read_version_range_,
                                                                                *scan_param.mds_collector_,
@@ -243,7 +241,7 @@ int ObMdsRangeQueryIterator<K, T>::get_next_mds_kv(
       MDS_LOG(WARN, "fail to advance mds sstable iter", K(ret));
     } else {
       int tmp_ret = OB_ERR_UNEXPECTED;
-      MDS_LOG(WARN, "dest_tablet and src_tablet in a transfer progress should not have the same Key", K(tmp_ret), KPC(kv), KPC(cur_kv_), KPC(src_kv_), K(lbt()));
+      MDS_LOG(WARN, "current tablet and source tablet should not have the same Key", K(tmp_ret), KPC(kv), KPC(cur_kv_), KPC(src_kv_), K(lbt()));
     }
   } else {
     if (OB_FAIL(kv->assign(*cur_kv_, allocator))) {

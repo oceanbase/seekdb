@@ -17,11 +17,9 @@
 
 #include "block_set.h"
 #include "lib/alloc/ob_tenant_ctx_allocator.h"
+#include "lib/time/ob_time_utility.h"
 #ifdef _WIN32
 #include <windows.h>
-#ifndef MADV_DONTNEED
-#define MADV_DONTNEED 4
-#endif
 #endif
 
 // macOS sys/param.h defines isset macro which conflicts with method calls
@@ -32,13 +30,61 @@
 using namespace oceanbase;
 using namespace oceanbase::lib;
 
+namespace
+{
+
+// Ordinary wash is driven opportunistically by alloc/free paths, not by a
+// background timer. Keep each round bounded so the caller pays a predictable
+// amount of work.
+static const int64_t ORDINARY_WASH_BUDGET = 4L << 20;
+static const int64_t ORDINARY_WASH_MIN_INTERVAL_US = 1000L * 1000L;
+static const int64_t ORDINARY_WASH_DELAY_US = 1000L * 1000L;
+static const int64_t ORDINARY_WASH_MAX_BLOCKS = 64;
+
+#ifdef _WIN32
+inline int ob_wash_memory(void *addr, size_t length, int &error_code)
+{
+  int result = 0;
+  error_code = 0;
+  if (length > 0) {
+    // Use MEM_RESET instead of MEM_DECOMMIT: MEM_DECOMMIT truly decommits pages,
+    // causing ACCESS_VIOLATION on subsequent access. MEM_RESET keeps pages
+    // committed but lets the OS reclaim contents, matching MADV_DONTNEED.
+    if (NULL == ::VirtualAlloc(addr, length, MEM_RESET, PAGE_READWRITE)) {
+      result = -1;
+      error_code = static_cast<int>(::GetLastError());
+    }
+  }
+  return result;
+}
+
+#elif defined(MADV_DONTNEED)
+
+inline int ob_wash_memory(void *addr, size_t length, int &error_code)
+{
+  int result = 0;
+  error_code = 0;
+  if (length > 0) {
+    do {
+      result = ::madvise(addr, length, MADV_DONTNEED);
+    } while (result == -1 && errno == EAGAIN);
+    if (-1 == result) {
+      error_code = errno;
+    }
+  }
+  return result;
+}
+#endif // MADVICE
+} // namespace
+
 BlockSet::BlockSet()
     : tallocator_(NULL),
       locker_(NULL),
       chunk_mgr_(NULL),
       clist_(NULL),
       avail_bm_(BLOCKS_PER_CHUNK+1, avail_bm_buf_),
-      total_hold_(0), total_payload_(0), total_used_(0)
+      total_hold_(0), total_payload_(0), total_used_(0),
+      last_ordinary_wash_ts_(0)
 {
 }
 
@@ -60,6 +106,7 @@ void BlockSet::reset()
   //MEMSET(block_list_, 0, sizeof(block_list_));
   clist_ = nullptr;
   avail_bm_.clear();
+  last_ordinary_wash_ts_ = 0;
 }
 
 void BlockSet::set_tenant_ctx_allocator(ObTenantCtxAllocator &allocator)
@@ -67,7 +114,7 @@ void BlockSet::set_tenant_ctx_allocator(ObTenantCtxAllocator &allocator)
   if (&allocator != tallocator_) {
     reset();
     tallocator_ = &allocator;
-    attr_ = ObMemAttr(allocator.get_tenant_id(), nullptr, allocator.get_ctx_id());
+    attr_ = ObMemAttr(nullptr, allocator.get_ctx_id());
   }
 }
 
@@ -105,6 +152,9 @@ ABlock *BlockSet::alloc_block(const uint64_t size, const ObMemAttr &attr)
     uint64_t payload = 0;
     block->hold(&payload);
     UNUSED(ATOMIC_FAA(&total_used_, payload));
+    if (!block->is_large_) {
+      maybe_ordinary_wash();
+    }
   }
 
   return block;
@@ -154,27 +204,28 @@ void BlockSet::free_block(ABlock *const block)
       // head won't been NULL,
       if (head != NULL) {
         head->in_use_ = false;
-        // copy a temp
         if (0 == chunk->using_cnt_) {
-          if (0 != chunk->washed_size_) {
-            int offset = 0;
-            do {
-              ABlock *unused_block = chunk->offset2blk(offset);
-              int next_offset = -1;
-              bool is_last = chunk->is_last_blk_offset(offset, &next_offset);
-              abort_unless(!unused_block->in_use_);
-              // don't allow to take off head twice
-              if (!unused_block->is_washed_ && head != unused_block) {
-                take_off_free_block(unused_block, chunk->blk_nblocks(unused_block), chunk);
-              }
-              if (is_last) break;
-              offset = next_offset;
-            } while (true);
-          }
+          // The whole chunk is leaving BlockSet. Remove dirty free-list
+          // references first. Washed spans are no longer reusable and are not
+          // linked in BlockSet lists.
+          int offset = 0;
+          do {
+            ABlock *unused_block = chunk->offset2blk(offset);
+            int next_offset = -1;
+            bool is_last = chunk->is_last_blk_offset(offset, &next_offset);
+            abort_unless(!unused_block->in_use_);
+            // head is the newly formed free span and has not been inserted yet.
+            if (!unused_block->is_washed_ && head != unused_block) {
+              take_off_free_block(unused_block, chunk->blk_nblocks(unused_block), chunk);
+            }
+            if (is_last) break;
+            offset = next_offset;
+          } while (true);
           free_chunk(chunk);
         } else {
           int head_nblocks = chunk->blk_nblocks(head);
           add_free_block(head, head_nblocks, chunk);
+          maybe_ordinary_wash();
         }
       }
     }
@@ -186,6 +237,7 @@ void BlockSet::add_free_block(ABlock *block, int nblocks, AChunk *chunk)
   abort_unless(NULL != block && !block->in_use_ && !block->is_washed_);
   int offset = chunk->blk_offset(block);
   chunk->mark_blk_offset_bit(offset);
+  block->free_time_us_ = common::ObTimeUtility::fast_current_time();
 
 #if MEMCHK_LEVEL >= 1
   int expect_nblocks = chunk->blk_nblocks(block);
@@ -212,14 +264,7 @@ ABlock* BlockSet::get_free_block(const int cls, const ObMemAttr &attr)
   if (ffs >= 0) {
     if (NULL != block_list_[ffs]) {  // exist
       block = block_list_[ffs];
-      if (block->next_ != block) {  // not the only one
-        block->prev_->next_ = block->next_;
-        block->next_->prev_ = block->prev_;
-        block_list_[ffs] = block->next_;
-      } else {
-        avail_bm_.unset(ffs);
-        block_list_[ffs] = NULL;
-      }
+      take_off_free_block(block, ffs, block->chunk());
       block->in_use_ = true;
     }
   }
@@ -242,7 +287,7 @@ ABlock* BlockSet::get_free_block(const int cls, const ObMemAttr &attr)
 
 void BlockSet::take_off_free_block(ABlock *block, int nblocks, AChunk *chunk)
 {
-  abort_unless(NULL != block && !block->in_use_);
+  abort_unless(NULL != block && !block->in_use_ && !block->is_washed_);
 
 #if MEMCHK_LEVEL >= 1
   int expect_nblocks = chunk->blk_nblocks(block);
@@ -323,46 +368,49 @@ void BlockSet::free_chunk(AChunk *const chunk)
     if (chunk->washed_size_ != 0) {
       tallocator_->update_wash_stat(-1, -chunk->washed_blks_, -chunk->washed_size_);
     }
+    // The chunk manager only caches or frees whole chunks. Cached chunks are
+    // outside BlockSet, so they will not receive block-level wash later.
     chunk_mgr_->free_chunk(chunk, attr_);
   }
 }
 
-#ifdef _WIN32
-inline int ob_madvise(void* addr, size_t length, int advice) {
-  // Use MEM_RESET instead of MEM_DECOMMIT: MEM_DECOMMIT truly decommits pages,
-  // causing ACCESS_VIOLATION on subsequent access. MEM_RESET keeps pages committed
-  // but tells the OS their contents are no longer needed — matching Linux
-  // madvise(MADV_DONTNEED) semantics where pages remain accessible.
-  if (advice == MADV_DONTNEED) {
-      return ::VirtualAlloc(addr, length, MEM_RESET, PAGE_READWRITE) != NULL ? 0 : -1;
-  }
-  return 0;
-}
-#endif
-
-int64_t BlockSet::sync_wash(int64_t wash_size)
+int64_t BlockSet::wash_free_blocks(const int64_t wash_size,
+    const int64_t delay_us,
+    const int64_t max_blocks_per_round)
 {
-#if !defined(MADV_DONTNEED)
-  return 0;
-#endif
   const ssize_t ps = get_page_size();
-  bool has_ignore = false;
   int64_t washed_size = 0;
   int64_t washed_blks = 0;
+  int64_t scanned_blks = 0;
   int64_t related_chunks = 0;
+  const int64_t now = delay_us > 0 ? common::ObTimeUtility::fast_current_time() : 0;
   int cls = avail_bm_.nbits() - 1;
-  while (washed_size < wash_size && cls >=1 && (cls = avail_bm_.find_first_most_significant(cls)) != -1) {
+  // Walk the existing dirty free lists by size class. This avoids scanning
+  // every 8K block in every chunk during ordinary allocation/free flows.
+  while (washed_size < wash_size && scanned_blks < max_blocks_per_round &&
+         cls >= 1 && (cls = avail_bm_.find_first_most_significant(cls)) != -1) {
+    const int64_t len = cls * ABLOCK_SIZE;
+    if (len < ps) {
+      break;
+    } else if (washed_size + len > wash_size) {
+      cls--;
+      continue;
+    }
     ABlock *head = block_list_[cls];
-    if (nullptr == head) {
-    } else {
+    if (OB_NOT_NULL(head)) {
       ABlock *block = head;
-      ABlock *next = block->next_;
-      do {
-        block = next;
+      ABlock *tail = head->prev_;
+      int64_t scan_cnt = 0;
+      while (OB_NOT_NULL(block) &&
+             washed_size < wash_size && scanned_blks < max_blocks_per_round &&
+             scan_cnt++ < BLOCKS_PER_CHUNK) {
+        // Capture the successor before unlinking this block; nullptr means
+        // this pass has reached the original free-list tail.
+        ABlock *next = block == tail ? nullptr : block->next_;
+        scanned_blks++;
         AChunk *chunk = block->chunk();
         if (chunk->is_hugetlb_) {
           _OB_LOG(DEBUG, "cannot be applied to Huge TLB pages");
-          has_ignore = true;
         } else {
         #if MEMCHK_LEVEL >= 1
           abort_unless(!block->in_use_ && !block->is_washed_);
@@ -370,47 +418,36 @@ int64_t BlockSet::sync_wash(int64_t wash_size)
           abort_unless(nblocks == cls);
         #endif
           char *data = chunk->blk_data(block);
-          int64_t len = cls * ABLOCK_SIZE;
           if ((reinterpret_cast<uint64_t>(data) & (ps - 1)) != 0 ||
               (len & (ps - 1)) != 0) {
             _OB_LOG(DEBUG, "cannot be applied to non-multiple of page-size, page_size: %zd", ps);
-            has_ignore = true;
+          } else if (delay_us > 0 && now - block->free_time_us_ < delay_us) {
           } else {
-            int result = 0;
-            do {
-#ifndef _WIN32
-              result = ::madvise(data, len, MADV_DONTNEED);
-#else
-              result = ob_madvise(data, len, MADV_DONTNEED);
-#endif
-            } while (result == -1 && errno == EAGAIN);
+            int error_code = 0;
+            int result = ob_wash_memory(data, len, error_code);
             if (-1 == result) {
-              _OB_LOG_RET(WARN, OB_ERR_SYS, "madvise failed, errno: %d", errno);
-              has_ignore = true;
+              _OB_LOG_RET(WARN, OB_ERR_SYS, "page wash failed, error_code: %d", error_code);
             } else {
               take_off_free_block(block, cls, chunk);
               block->is_washed_ = true;
+              // Washed spans stay in chunk metadata only; BlockSet never
+              // reuses them after page wash.
               if (0 == chunk->washed_blks_) {
                 abort_unless(0 == chunk->washed_size_);
                 related_chunks++;
               }
               chunk->washed_size_ += len;
               chunk->washed_blks_++;
-              washed_blks += 1;
+              washed_blks++;
               washed_size += len;
             }
           }
         }
-        next = next->next_;
-      } while (washed_size < wash_size && block != head);
+        block = next;
+      }
     }
     cls--;
   }
-#if MEMCHK_LEVEL >= 1
-  if (wash_size == INT64_MAX && !has_ignore) {
-    abort_unless(-1 == avail_bm_.find_first_significant(1));
-  }
-#endif
   if (washed_size > 0) {
     UNUSED(ATOMIC_FAA(&total_hold_, -washed_size));
     UNUSED(ATOMIC_FAA(&total_payload_, -washed_size));
@@ -423,4 +460,18 @@ int64_t BlockSet::sync_wash(int64_t wash_size)
   }
 #endif
   return washed_size;
+}
+
+void BlockSet::maybe_ordinary_wash()
+{
+#if defined(_WIN32) || defined(MADV_DONTNEED)
+  const int64_t now = common::ObTimeUtility::fast_current_time();
+  const int64_t last_ts = last_ordinary_wash_ts_;
+  if (now - last_ts >= ORDINARY_WASH_MIN_INTERVAL_US) {
+    last_ordinary_wash_ts_ = now;
+    (void)wash_free_blocks(ORDINARY_WASH_BUDGET,
+        ORDINARY_WASH_DELAY_US,
+        ORDINARY_WASH_MAX_BLOCKS);
+  }
+#endif
 }

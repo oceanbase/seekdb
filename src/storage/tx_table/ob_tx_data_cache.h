@@ -31,41 +31,36 @@ namespace storage {
 
 class ObTxDataCacheKey : public common::ObIKVCacheKey {
 public:
-  ObTxDataCacheKey() : tenant_id_(0), ls_id_(0), tx_id_(0) {}
-  ObTxDataCacheKey(int64_t tenant_id, share::ObLSID ls_id, transaction::ObTransID tx_id)
-      : tenant_id_(tenant_id), ls_id_(ls_id), tx_id_(tx_id) {}
+  ObTxDataCacheKey() : tx_id_(0) {}
+  explicit ObTxDataCacheKey(transaction::ObTransID tx_id) : tx_id_(tx_id) {}
   ~ObTxDataCacheKey() {}
 
   bool is_valid() const
   {
-    bool is_valid = common::is_valid_tenant_id(tenant_id_) && ls_id_.is_valid() && tx_id_.is_valid();
+    bool is_valid = tx_id_.is_valid();
     return is_valid;
   }
 
-  share::ObLSID get_ls_id() const { return ls_id_; }
-
   transaction::ObTransID get_tx_id() const { return tx_id_; }
 
-  TO_STRING_KV(K_(tenant_id), K_(ls_id), K_(tx_id));
+  TO_STRING_KV(K_(tx_id));
 
 public:  // derived from ObIKVCacheKey
   virtual bool operator==(const ObIKVCacheKey &other) const
   {
     const ObTxDataCacheKey &rhs = static_cast<const ObTxDataCacheKey&>(other);
-    bool equal = (tenant_id_ == rhs.get_tenant_id() && ls_id_ == rhs.get_ls_id() && tx_id_ == rhs.get_tx_id());
+    bool equal = tx_id_ == rhs.get_tx_id();
     return equal;
   }
 
   virtual uint64_t hash() const
   {
     uint64_t hash_code = 0;
-    hash_code = murmurhash(&tenant_id_, sizeof(tenant_id_), hash_code);
-    hash_code = murmurhash(&ls_id_, sizeof(ls_id_), hash_code);
     hash_code = murmurhash(&tx_id_, sizeof(tx_id_), hash_code);
     return hash_code;
   }
 
-  virtual uint64_t get_tenant_id() const { return tenant_id_; }
+  
 
   virtual int64_t size() const { return sizeof(*this); }
 
@@ -76,7 +71,7 @@ public:  // derived from ObIKVCacheKey
       ret = OB_INVALID_ARGUMENT;
       STORAGE_LOG(WARN, "invalid argument", KR(ret), K(buf_len), K(size()));
     } else {
-      ObTxDataCacheKey *new_key = new (buf) ObTxDataCacheKey(tenant_id_, ls_id_, tx_id_);
+      ObTxDataCacheKey *new_key = new (buf) ObTxDataCacheKey(tx_id_);
       if (OB_ISNULL(new_key)) {
         ret = OB_ERR_UNEXPECTED;
         STORAGE_LOG(WARN, "new key ptr is null", KR(ret), KPC(this));
@@ -88,8 +83,7 @@ public:  // derived from ObIKVCacheKey
   }
 
 private:
-  int64_t tenant_id_;
-  share::ObLSID ls_id_;
+  
   transaction::ObTransID tx_id_;
 };
 

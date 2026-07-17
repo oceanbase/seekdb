@@ -252,7 +252,7 @@ int ObIndexBlockRowHeader::fill_micro_des_meta(
 
 ObIndexBlockRowBuilder::ObIndexBlockRowBuilder()
   : allocator_(nullptr),
-    index_data_allocator_(ObModIds::OB_BLOCK_INDEX_INTERMEDIATE, OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID()),
+    index_data_allocator_(ObModIds::OB_BLOCK_INDEX_INTERMEDIATE, OB_MALLOC_NORMAL_BLOCK_SIZE),
     data_desc_(nullptr),
     row_(),
     rowkey_column_count_(0),
@@ -470,7 +470,7 @@ int ObIndexBlockRowBuilder::append_header_and_meta(const ObIndexBlockRowDesc &de
     } else {
       if (!desc.macro_id_.is_valid()) {
         ret = OB_INVALID_ARGUMENT;
-        LOG_WARN("macro id should be valid", K(ret), K(desc.macro_id_), K(desc.is_secondary_meta_),
+        LOG_WARN("macro id should be valid", K(ret), K(desc.macro_id_), K(desc.is_secondary_meta_), 
                                             K(desc.is_clustered_index_), K(lbt()));
       } else if (OB_FAIL(header_->set_macro_id(desc.macro_id_))) {
         LOG_WARN("fail to set macro id", K(ret), K(desc), K(buf_size));

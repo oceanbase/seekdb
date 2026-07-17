@@ -35,7 +35,7 @@ extern "C" {
 #define SMO_NO_UNSIGNED_SUBTRACTION (1ULL << 6) /* support */
 #define SMO_NO_DIR_IN_CREATE (1ULL << 7)      /* support but not used */
 #define SMO_POSTGRESQL (1ULL << 8) /*not support*/
-#define SMO_ORACLE (1ULL << 9) /*not support*/
+/* bit 9 was retired with compatibility-mode cleanup */
 #define SMO_MSSQL (1ULL << 10) /*not support*/
 #define SMO_DB2 (1ULL << 11) /*not support*/
 #define MODE_MAXDB (1ULL << 12) /*not support*/
@@ -91,7 +91,6 @@ extern "C" {
 #define STR_DB2 "DB2"
 #define STR_MAXDB "MAXDB"
 #define STR_MSSQL "MSSQL"
-#define STR_ORACLE "ORACLE"
 #define STR_POSTGRESQL "POSTGRESQL"
 #define STR_MYSQL323 "MYSQL323"
 #define STR_MYSQL40 "MYSQL40"
@@ -110,34 +109,24 @@ extern "C" {
 #define COMBINE_SMO_MSSQL (SMO_PIPES_AS_CONCAT | SMO_ANSI_QUOTES | SMO_IGNORE_SPACE | SMO_NO_KEY_OPTIONS | \
                            SMO_NO_TABLE_OPTIONS | SMO_NO_FIELD_OPTIONS | \
                            SMO_MSSQL)
-#define COMBINE_SMO_ORACLE (SMO_PIPES_AS_CONCAT | SMO_ANSI_QUOTES | SMO_IGNORE_SPACE | SMO_NO_KEY_OPTIONS | \
-                            SMO_NO_TABLE_OPTIONS | SMO_NO_FIELD_OPTIONS | SMO_NO_AUTO_CREATE_USER | \
-                            SMO_ORACLE)
 #define COMBINE_SMO_POSTGRESQL (SMO_PIPES_AS_CONCAT |  SMO_ANSI_QUOTES | SMO_IGNORE_SPACE | SMO_NO_KEY_OPTIONS | \
                                 SMO_NO_TABLE_OPTIONS | SMO_NO_FIELD_OPTIONS | \
                                 SMO_POSTGRESQL)
 #define COMBINE_SMO_MYSQL323 (SMO_HIGH_NOT_PRECEDENCE | SMO_MYSQL323)
 #define COMBINE_SMO_MYSQL40 (SMO_HIGH_NOT_PRECEDENCE | SMO_MYSQL40)
 
-#define ALL_SMO_COMPACT_MODE (SMO_POSTGRESQL | SMO_ORACLE | SMO_MSSQL | SMO_DB2)
+#define ALL_SMO_COMPACT_MODE (SMO_POSTGRESQL | SMO_MSSQL | SMO_DB2)
 
 #define SMO_DEFAULT (SMO_TRADITIONAL|SMO_ONLY_FULL_GROUP_BY)
 typedef uint64_t ObSQLMode;
 
-#define STR_OCEANBASE_MODE  "OCEANBASE_MODE"
 #define STR_MYSQL_MODE  "MYSQL_MODE"
-#define STR_ORACLE_MODE  "ORACLE_MODE"
-#define DEFAULT_OCEANBASE_MODE (SMO_STRICT_ALL_TABLES)
-#define STR_DEFAULT_OCEANBASE_MODE "STRICT_ALL_TABLES"
 #define STR_DEFAULT_MYSQL_MODE "STRICT_ALL_TABLES"
 #define DEFAULT_MYSQL_MODE (SMO_STRICT_ALL_TABLES)
-#define DEFAULT_ORACLE_MODE (SMO_STRICT_ALL_TABLES | SMO_PIPES_AS_CONCAT | SMO_PAD_CHAR_TO_FULL_LENGTH)
 #define IS_PIPES_AS_CONCAT(mode, is_as)\
 {\
   is_as = (SMO_PIPES_AS_CONCAT & mode);\
 }\
-
-#define SMO_IS_ORACLE_MODE(mode)   (SMO_ORACLE & (mode))
 
 #define IS_HIGH_NOT_PRECEDENCE(mode, is_true)\
 {\

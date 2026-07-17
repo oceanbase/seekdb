@@ -33,8 +33,8 @@ class ObLobMetaWriteIter;
 class ObLobMetaScanIter;
 class ObLobMetaManager {
 public:
-  explicit ObLobMetaManager(const uint64_t tenant_id) : 
-    persistent_lob_adapter_(tenant_id)
+  explicit ObLobMetaManager() : 
+    persistent_lob_adapter_{}
   {}
   ~ObLobMetaManager() {}
   // write one lob meta row

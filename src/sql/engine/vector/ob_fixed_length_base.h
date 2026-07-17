@@ -1,0 +1,104 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+#ifndef OCEANBASE_SHARE_VECTOR_OB_FIXED_LENGTH_BASE_H_
+#define OCEANBASE_SHARE_VECTOR_OB_FIXED_LENGTH_BASE_H_
+
+#include "sql/engine/vector/ob_bitmap_null_vector_base.h"
+
+namespace oceanbase
+{
+
+namespace sql {
+  struct ObCompactRow;
+  struct RowMeta;
+}
+namespace common
+{
+
+class ObFixedLengthBase: public ObBitmapNullVectorBase
+{
+public:
+  ObFixedLengthBase(sql::ObBitVector *nulls, ObLength len, char *data)
+    : ObBitmapNullVectorBase(nulls), len_(len), data_(data)
+  {}
+
+  static const VectorFormat FORMAT = VEC_FIXED;
+  DECLARE_TO_STRING;
+  inline char *get_data() { return data_; };
+  OB_INLINE void set_data(char *data) { data_ = data; }
+  inline const char *get_data() const { return data_; };
+  inline ObLength get_length() const { return len_; };
+  // For coding convenience
+  inline ObLength get_length(const int64_t idx) const override {
+    UNUSED(idx);
+    return len_;
+  }
+  inline void from_fixed_vector(const bool has_null, const sql::ObBitVector &nulls,
+                         const int64_t fixed_len, const int64_t start_idx,
+                         const int64_t read_rows, char *data)
+  {
+    UNUSED(has_null);
+    has_null_ = false;
+    nulls_->reset(read_rows);
+    for (int64_t i = 0; i < read_rows; ++i) {
+      if (nulls.at(start_idx + i)) {
+        nulls_->set(i);
+        has_null_ = true;
+      }
+    }
+    len_ = static_cast<int32_t> (fixed_len);
+    data_ = data + (fixed_len * start_idx);
+  }
+  void set_datum(const int64_t idx, const ObDatum &datum) {
+    if (datum.is_null()) {
+      set_null(idx);
+    } else {
+      set_payload(idx, datum.ptr_, datum.len_);
+    }
+  }
+  virtual int to_rows(const sql::RowMeta &row_meta,
+                       sql::ObCompactRow **stored_rows,
+                       const uint16_t selector[],
+                       const int64_t size,
+                       const int64_t col_idx) const override final;
+
+  virtual int to_rows(const sql::RowMeta &row_meta, sql::ObCompactRow **stored_rows,
+                       const int64_t size, const int64_t col_idx) const override final;
+
+  inline void from(ObLength len, char *data)
+  {
+    len_ = len;
+    data_ = data;
+  }
+
+  // only used in ob_fixed_length_base.cpp
+  template<int len>
+  void set_fixed_cell_payloads(const sql::RowMeta &row_meta, sql::ObCompactRow **stored_rows,
+      const uint16_t selector[], const int64_t size, const int64_t col_idx, const int64_t offset) const;
+
+  // only used in ob_fixed_length_base.cpp
+  template<int len>
+  void set_fixed_cell_payloads(const sql::RowMeta &row_meta, sql::ObCompactRow **stored_rows,
+      const int64_t size, const int64_t col_idx, const int64_t offset) const;
+
+protected:
+  ObLength len_; // each cell value length
+  char *data_;
+};
+
+}
+}
+#endif // OCEANBASE_SHARE_VECTOR_OB_FIXED_LENGTH_BASE_H_

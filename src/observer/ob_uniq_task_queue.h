@@ -23,7 +23,7 @@
 #include "lib/list/ob_dlink_node.h"
 #include "lib/thread/ob_thread_name.h"
 #include "lib/list/ob_dlist.h"
-#include "lib/queue/ob_dedup_queue.h"
+#include "lib/thread/ob_dedup_queue.h"
 #include "lib/lock/ob_thread_cond.h"
 #include "lib/utility/ob_tracepoint.h"
 #include "lib/stat/ob_diagnostic_info_guard.h"
@@ -110,15 +110,14 @@ public:
   virtual ~ObUniqTaskQueue() { }
 
   int init(Process *process, const int64_t thread_num, const int64_t queue_size,
-           const char *thread_name = nullptr, const uint64_t tenant_id = OB_SERVER_TENANT_ID);
+           const char *thread_name = nullptr);
   // init() will trigger start(), we only want to init and start later in some cases
   int start() override;
   int init_only(
       Process *process,
       const int64_t thread_num,
       const int64_t queue_size,
-      const char* thread_name = nullptr,
-      const uint64_t tenant_id = OB_SERVER_TENANT_ID);
+      const char* thread_name = nullptr);
 
   // Add task to queue, never block
   // return value:
@@ -202,13 +201,12 @@ private:
 // TODO: init should not trigger start(), have to remove start() out of init()
 template <typename Task, typename Process>
 int ObUniqTaskQueue<Task, Process>::init(Process *updater, const int64_t thread_num,
-                                         const int64_t queue_size, const char *thread_name,
-                                         const uint64_t tenant_id/*OB_SERVER_TENANT_ID*/)
+                                         const int64_t queue_size, const char *thread_name/*OB_SERVER_TENANT_ID*/)
 {
   int ret = common::OB_SUCCESS;
-  if (OB_FAIL(init_only(updater, thread_num, queue_size, thread_name, tenant_id))) {
+  if (OB_FAIL(init_only(updater, thread_num, queue_size, thread_name))) {
     SERVER_LOG(WARN, "fail to init only", K(ret), K(thread_num), K(queue_size));
-  } else if (OB_SERVER_TENANT_ID != tenant_id && FALSE_IT(share::ObThreadPool::set_run_wrapper(MTL_CTX()))) {
+  } else if (FALSE_IT(share::ObThreadPool::set_run_wrapper(MTL_CTX()))) {  // seekdb: always set (was 500!=1)
   } else if (OB_FAIL(start())) {
     inited_ = false;
     SERVER_LOG(WARN, "start thread failed", K(ret), K(thread_num));
@@ -220,11 +218,10 @@ int ObUniqTaskQueue<Task, Process>::init(Process *updater, const int64_t thread_
 
 template <typename Task, typename Process>
 int ObUniqTaskQueue<Task, Process>::init_only(Process *updater, const int64_t thread_num,
-                                              const int64_t queue_size, const char *thread_name,
-                                              const uint64_t tenant_id/*OB_SERVER_TENANT_ID*/)
+                                              const int64_t queue_size, const char *thread_name/*OB_SERVER_TENANT_ID*/)
 {
   int ret = common::OB_SUCCESS;
-  ObMemAttr attr(tenant_id, common::ObModIds::OB_PARTITION_TABLE_TASK);
+  ObMemAttr attr(common::ObModIds::OB_PARTITION_TABLE_TASK);
   SET_USE_500(attr);
   const int64_t group_count = 128;
   if (inited_) {
@@ -463,11 +460,9 @@ void ObUniqTaskQueue<Task, Process>::run1()
             }
           }
         } else {
-          common::ObBKGDSessInActiveGuard inactive_guard;
           cond_.wait(QUEUE_WAIT_INTERVAL_MS);
         }
       } else {//end cond_
-        ObBKGDSessInActiveGuard guard;
         ob_usleep(QUEUE_WAIT_INTERVAL_MS * 1000);
       }
       if (common::OB_SUCCESS == ret && tasks.count() > 0) {

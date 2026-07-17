@@ -33,6 +33,7 @@ struct iocb {
 struct io_event { void *data; struct iocb *obj; long res; long res2; };
 #endif
 #include "ob_local_device.h"
+#include "share/ob_io_device_helper.h"  // ObIODeviceLocalFileOp/BlockFileAttr, previously hidden behind the storage include chain(free within share)
 #ifndef _WIN32
 #include <sys/statvfs.h>
 #include <unistd.h>
@@ -204,9 +205,6 @@ static inline int io_getevents(io_context_t ctx, long min_nr, long nr, struct io
 }
 #endif
 #include "share/ob_resource_limit.h"
-#include "storage/slog/ob_storage_logger_manager.h"
-#include "lib/ash/ob_active_session_guard.h"
-#include "storage/meta_store/ob_server_storage_meta_service.h"
 
 using namespace oceanbase::common;
 
@@ -300,7 +298,7 @@ ObLocalDevice::~ObLocalDevice()
 int ObLocalDevice::init(const common::ObIODOpts &opts)
 {
   int ret = OB_SUCCESS;
-  const ObMemAttr mem_attr = ObMemAttr(OB_SYS_TENANT_ID, "LDIOSetup");
+  const ObMemAttr mem_attr = ObMemAttr("LDIOSetup");
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
     SHARE_LOG(WARN, "The local device has been inited, ", K(ret));
@@ -978,7 +976,7 @@ int ObLocalDevice::pwrite(
       ret = OB_INVALID_ARGUMENT;
       SHARE_LOG(WARN, "super block write offset must be 0", K(ret), K(offset));
     } else if (OB_FAIL(ObIODeviceLocalFileOp::pwrite_impl(block_fd_, buf, size, 0, write_size))) {
-        SHARE_LOG(WARN, "Fail to write main superblock, try backup", K(ret), K(write_size), K(offset), K(size), KP(buf));
+        SHARE_LOG(ERROR, "Fail to write main superblock, try backup", K(ret), K(write_size), K(offset), K(size), KP(buf));
         if (OB_FAIL(ObIODeviceLocalFileOp::pwrite_impl(block_fd_, buf, size, block_size_, write_size))) {
           SHARE_LOG(WARN, "Neither main nor backup superblock write success!!!", K(ret), K(write_size), K(offset), K(size), KP(buf));
         }
@@ -1059,13 +1057,11 @@ int ObLocalDevice::buf_append_part(
     const ObIOFd &fd,
     const char *buf,
     const int64_t size,
-    const uint64_t tenant_id,
     bool &is_full)
 {
   UNUSED(fd);
   UNUSED(buf);
   UNUSED(size);
-  UNUSED(tenant_id);
   UNUSED(is_full);
   return OB_NOT_SUPPORTED;
 }
@@ -1332,8 +1328,6 @@ int ObLocalDevice::io_getevents(
   } else {
     int sys_ret = 0;
     {
-      oceanbase::lib::Thread::WaitGuard guard(oceanbase::lib::Thread::WAIT_FOR_IO_EVENT);
-      common::ObBKGDSessInActiveGuard inactive_guard;
       while ((sys_ret = ::io_getevents(
           local_io_context->io_context_,
           min_nr,
@@ -1352,9 +1346,8 @@ int ObLocalDevice::io_getevents(
   return ret;
 }
 
-common::ObIOCB* ObLocalDevice::alloc_iocb(const uint64_t tenant_id)
+common::ObIOCB* ObLocalDevice::alloc_iocb()
 {
-  UNUSED(tenant_id);
   ObLocalIOCB *iocb = nullptr;
   ObLocalIOCB *buf = nullptr;
   if (OB_LIKELY(is_inited_)) {
@@ -1513,40 +1506,14 @@ int ObLocalDevice::check_write_limited() const
   return ret;
 }
 
-int ObLocalDevice::get_data_disk_used_percentage_(
-    const int64_t required_size,
-    int64_t &percent) const
-{
-  int ret = OB_SUCCESS;
-  int64_t reserved_size = ObStorageLoggerManager::RESERVED_DISK_SIZE;
-
-  if (OB_UNLIKELY(!is_marked_)) {
-    ret = OB_NOT_INIT;
-    SHARE_LOG(WARN, "The ObLocalDevice has not been marked", K(ret));
-  } else if (OB_UNLIKELY(required_size < 0)) {
-    ret = OB_INVALID_ARGUMENT;
-    SHARE_LOG(WARN, "invalid argument", K(ret), K(required_size));
-  } else if (OB_FAIL(SERVER_STORAGE_META_SERVICE.get_reserved_size(reserved_size))) {
-    SHARE_LOG(WARN, "Fail to get reserved size", K(ret));
-  } else {
-    int64_t max_block_cnt = get_max_block_count(reserved_size);
-    int64_t actual_free_block_cnt = free_block_cnt_;
-    if (max_block_cnt > total_block_cnt_) {  // auto extend is on
-      actual_free_block_cnt = max_block_cnt - total_block_cnt_ + free_block_cnt_;
-    }
-    const int64_t required_count = required_size / block_size_;
-    const int64_t free_count = actual_free_block_cnt - required_count;
-    percent = 100 - 100 * free_count / total_block_cnt_;
-  }
-  return ret;
-}
+// moved definition to the upper-layer owner cpp(real upper-layer symbol user, declaration remains in the header, transitional state)
 
 int ObLocalDevice::resize_block_file(const int64_t new_size)
 {
   // copy free block info to new_free_block_array
   int ret = OB_SUCCESS;
   int sys_ret = 0;
-  const ObMemAttr mem_attr = ObMemAttr(OB_SYS_TENANT_ID, "LDBlockBitMap");
+  const ObMemAttr mem_attr = ObMemAttr("LDBlockBitMap");
   int64_t new_total_block_cnt = new_size / block_size_;
   int64_t *new_free_block_array = nullptr;
   bool *new_block_bitmap = nullptr;
@@ -1605,7 +1572,7 @@ int ObLocalDevice::resize_block_file(const int64_t new_size)
     }
 #endif
   }
-
+  
   if (OB_SUCC(ret)) {
     if (OB_ISNULL(new_free_block_array
         = (int64_t *) ob_malloc(sizeof(int64_t) * new_total_block_cnt, mem_attr))) {

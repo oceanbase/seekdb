@@ -18,7 +18,7 @@
 
 #include "sql/engine/expr/ob_expr_vec_vid.h"
 #include "sql/engine/ob_exec_context.h"
-#include "share/ob_tablet_autoincrement_service.h"
+#include "storage/ob_tablet_autoincrement_service.h"
 
 namespace oceanbase
 {
@@ -89,7 +89,7 @@ int ObExprVecVid::cg_expr(
     } else {
       share::ObTabletAutoincrementService &auto_inc = share::ObTabletAutoincrementService::get_instance();
       uint64_t seq_id = 0;
-      if (OB_FAIL(auto_inc.get_autoinc_seq(MTL_ID(), tablet_id, seq_id))) {
+      if (OB_FAIL(auto_inc.get_autoinc_seq(tablet_id, seq_id))) {
         LOG_WARN("fail to get tablet autoinc seq", K(ret), K(tablet_id));
       } else {
         expr_datum.set_int(seq_id);

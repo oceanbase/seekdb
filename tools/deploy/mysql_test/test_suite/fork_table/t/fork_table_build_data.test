@@ -119,3 +119,4 @@ drop table if exists t1_fork;
 drop table if exists t2;
 drop table if exists t2_fork;
 drop database if exists db_fork_data;
+

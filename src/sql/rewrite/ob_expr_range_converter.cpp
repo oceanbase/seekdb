@@ -17,14 +17,14 @@
 #define USING_LOG_PREFIX SQL_REWRITE
 #include "sql/rewrite/ob_expr_range_converter.h"
 #include "sql/rewrite/ob_range_graph_generator.h"
-#include "lib/timezone/ob_time_convert.h"
+#include "common/timezone/ob_time_convert.h"
 #include "lib/container/ob_array_serialization.h"
-#include "lib/geo/ob_geo_utils.h"
+#include "share/geo/ob_geo_utils.h"
 #include "lib/rc/ob_rc.h"
 #include "sql/resolver/dml/ob_dml_stmt.h"
 #include "sql/engine/expr/ob_expr_result_type_util.h"
 #include "sql/engine/expr/ob_expr_like.h"
-#include "common/ob_smart_call.h"
+#include "lib/utility/ob_smart_call.h"
 #include "sql/optimizer/ob_optimizer_util.h"
 #include "sql/engine/expr/ob_geo_expr_utils.h"
 #include "sql/ob_sql_utils.h"
@@ -1203,7 +1203,7 @@ int ObExprRangeConverter::get_row_in_range_ndoe(const ObRawExpr &l_expr,
 
   // 3. get all valid in param
   if (OB_SUCC(ret) && key_idxs.count() > 0) {
-    ObArenaAllocator alloc("ExprRangeAlloc", OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID());
+    ObArenaAllocator alloc("ExprRangeAlloc", OB_MALLOC_NORMAL_BLOCK_SIZE);
     ObSEArray<const ObRawExpr*, 4> cur_val_exprs;
     ObSEArray<TmpExprArray*, 4> all_val_exprs;
     const int64_t row_dimension = l_expr.get_param_count();
@@ -1215,7 +1215,7 @@ int ObExprRangeConverter::get_row_in_range_ndoe(const ObRawExpr &l_expr,
         LOG_WARN("failed to allocate memory for se array");
       } else {
         TmpExprArray *val_exprs = new(ptr)TmpExprArray();
-        val_exprs->set_attr(ObMemAttr(MTL_ID(), "ExprRangeCvt"));
+        val_exprs->set_attr(ObMemAttr("ExprRangeCvt"));
         ret = all_val_exprs.push_back(val_exprs);
       }
     }

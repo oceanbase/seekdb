@@ -96,7 +96,7 @@ function get_os_release() {
       return 0
     fi
   fi
-
+  
   if [[ "${OS_ARCH}x" == "x86_64x" ]]; then
     case "$ID" in
       rhel)
@@ -404,10 +404,10 @@ do
         pkg=${line%%\ *}
         target_name="default"
         temp=$(echo "$line" | grep -Eo "target=(\S*)")
-
+        
         [[ "$temp" != "" ]] && target_name=${temp#*=}
        
-	# Adapt to OB artifact repository download URL
+       	# Adapt to OB artifact repository download URL
         pkg_path=${pkg}
         # 在 targets_sections 中查找对应的 repo
         repo=""

@@ -46,7 +46,7 @@ int ObResourceInnerSQLConnectionPool::init(ObMultiVersionSchemaService *schema_s
   int ret = OB_SUCCESS;
   ObLatchWGuard guard(lock_, ObLatchIds::INNER_CONN_POOL_LOCK);
 
-  ObMemAttr attr(OB_SERVER_TENANT_ID, "IdConnMap");
+  ObMemAttr attr("IdConnMap");
   SET_USE_500(attr);
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
@@ -85,7 +85,7 @@ int ObResourceInnerSQLConnectionPool::fetch_max_conn_id(uint64_t &max_conn_id)
 }
 
 int ObResourceInnerSQLConnectionPool::acquire(
-    const uint64_t conn_id, const bool is_oracle_mode, const bool kill_using_conn,
+    const uint64_t conn_id, const bool kill_using_conn,
     common::sqlclient::ObISQLConnection *&conn, sql::ObSQLSessionInfo *session_info)
 {
   int ret = OB_SUCCESS;
@@ -97,9 +97,9 @@ int ObResourceInnerSQLConnectionPool::acquire(
     LOG_WARN("ObResourceInnerSQLConnectionPool has not been inited", K(ret));
   } else if (OB_INVALID_ID == conn_id) {
     if (NULL != session_info) {
-      session_info->set_compatibility_mode(is_oracle_mode ? ObCompatibilityMode::ORACLE_MODE : ObCompatibilityMode::MYSQL_MODE);
+      session_info->set_compatibility_mode(ObCompatibilityMode::MYSQL_MODE);
     }
-    if (OB_FAIL(inner_sql_conn_pool_.acquire(session_info, conn, is_oracle_mode))) {
+    if (OB_FAIL(inner_sql_conn_pool_.acquire(session_info, conn))) {
       LOG_WARN("failed to acquire inner connection", K(ret));
     } else if (FALSE_IT(inner_conn = static_cast<ObInnerSQLConnection *>(conn))) {
     } else if (OB_ISNULL(inner_conn)) {

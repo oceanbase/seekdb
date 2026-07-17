@@ -65,7 +65,6 @@ OB_SERIALIZE_MEMBER(ObTableBackupFlag, flag_);
 
 ObTableSharedFlag::ObTableSharedFlag()
   : shared_flag_(PRIVATE),
-    is_split_sstable_(0),
     reserved_(0)
 {
 }
@@ -91,4 +90,3 @@ OB_SERIALIZE_MEMBER(ObTableSharedFlag, flag_);
 
 }
 }
-

@@ -45,16 +45,14 @@ ObExprAutoincNextval::ObExprAutoincNextval(
     int32_t param_num,
     ObValidForGeneratedColFlag valid_for_generated_col,
     int32_t dimension,
-    bool is_internal_for_mysql/* = false */,
-    bool is_internal_for_oracle/* = false */)
+    bool is_internal_for_mysql/* = false */)
   : ObFuncExprOperator(alloc,
                        type,
                        name,
                        param_num,
                        valid_for_generated_col,
                        dimension,
-                       is_internal_for_mysql,
-                       is_internal_for_oracle)
+                       is_internal_for_mysql)
 {
   disable_operand_auto_cast();
 }

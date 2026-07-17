@@ -15,7 +15,7 @@
  */
 
 #include "ob_redo_log_generator.h"
-#include "storage/tx/ob_trans_part_ctx.h"
+#include "storage/tx/ob_tx_ctx.h"
 
 namespace oceanbase
 {

@@ -35,10 +35,9 @@ public:
   typedef common::hash::ObHashMap<ObCacheObjID, ObILibCacheObject*> IdCacheObjectMap;
 
   ObLCObjectManager() : object_id_(0) {}
-  int init(int64_t hash_bucket, uint64_t tenant_id);
+  int init(int64_t hash_bucket);
   int alloc(ObCacheObjGuard& guard,
             ObLibCacheNameSpace ns,
-            uint64_t tenant_id,
             lib::MemoryContext &parent_context);
   int destroy_cache_obj(const bool is_leaked,
                         const uint64_t object_id);
@@ -64,8 +63,7 @@ public:
   template<typename ClassT>
   static int alloc(lib::MemoryContext &mem_ctx,
                    ObILibCacheObject *&obj,
-                   CacheRefHandleID ref_handle,
-                   uint64_t tenant_id);
+                   CacheRefHandleID ref_handle);
 
 private:
   void inner_free(ObILibCacheObject *obj);
@@ -140,8 +138,7 @@ int ObLCObjectManager::atomic_get_alloc_cache_obj(ObCacheObjID id, _callback &ca
 template<typename ClassT>
 int ObLCObjectManager::alloc(lib::MemoryContext &mem_ctx,
                              ObILibCacheObject *&cache_obj,
-                             CacheRefHandleID ref_handle,
-                             uint64_t tenant_id)
+                             CacheRefHandleID ref_handle)
 {
   int ret = OB_SUCCESS;
   void *ptr = NULL;
@@ -151,7 +148,7 @@ int ObLCObjectManager::alloc(lib::MemoryContext &mem_ctx,
     OB_LOG(WARN, "failed to allocate memory for lib cache node", K(ret));
   } else {
     cache_obj = new(ptr)ClassT(mem_ctx);
-    cache_obj->set_tenant_id(tenant_id);
+    
     cache_obj->inc_ref_count(ref_handle);
   }
   return ret;

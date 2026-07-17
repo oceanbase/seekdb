@@ -19,10 +19,10 @@
 
 #include "sql/das/iter/ob_das_iter.h"
 #include "sql/das/iter/ob_das_scan_iter.h"
-#include "src/share/vector_index/ob_plugin_vector_index_service.h"
+#include "observer/vector_index/ob_plugin_vector_index_service.h"
 #include "sql/engine/expr/ob_expr_vector.h"
 #include "sql/das/iter/ob_das_vec_scan_utils.h"
-#include "src/share/vector_index/ob_vector_index_util.h"
+#include "observer/vector_index/ob_vector_index_util.h"
 
 namespace oceanbase
 {
@@ -54,7 +54,6 @@ struct ObDASHNSWScanIterParam : public ObDASIterParam
 public:
   ObDASHNSWScanIterParam()
     : ObDASIterParam(ObDASIterType::DAS_ITER_HNSW_SCAN),
-      ls_id_(),
       tx_desc_(nullptr),
       snapshot_(nullptr),
       inv_idx_scan_iter_(nullptr),
@@ -91,8 +90,7 @@ public:
     // skip_delta_buffer_: HNSW+heap+async has no delta_buffer table, delta_buf_iter_ is not created.
     // When skip_delta_buffer_=false, delta_buf_iter_ must be initialized.
     bool delta_buf_ready = skip_delta_buffer_ ? true : (nullptr != delta_buf_iter_);
-    bool valid = ls_id_.is_valid() &&
-           nullptr != tx_desc_ &&
+    bool valid = nullptr != tx_desc_ &&
            nullptr != snapshot_ &&
            delta_buf_ready &&
            nullptr != index_id_iter_ &&
@@ -124,7 +122,6 @@ public:
                K_(can_extract_range),
                K_(is_primary_index));
 
-  share::ObLSID ls_id_;
   transaction::ObTxDesc *tx_desc_;
   transaction::ObTxReadSnapshot *snapshot_;
 
@@ -239,9 +236,8 @@ public:
     ObDASHNSWScanIter()
     : ObDASIter(ObDASIterType::DAS_ITER_HNSW_SCAN),
       mem_context_(nullptr),
-      vec_op_alloc_("HNSW", OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID()),
-      hnsw_iter_alloc_("HNSWITER", OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID()),
-      ls_id_(),
+      vec_op_alloc_("HNSW", OB_MALLOC_NORMAL_BLOCK_SIZE),
+      hnsw_iter_alloc_("HNSWITER", OB_MALLOC_NORMAL_BLOCK_SIZE),
       tx_desc_(nullptr),
       snapshot_(nullptr),
       inv_idx_scan_iter_(nullptr),
@@ -314,7 +310,7 @@ public:
       is_hybrid_(false),
       distance_threshold_(FLT_MAX),
       skip_delta_buffer_(false) {
-        extra_in_rowkey_idxs_.set_attr(ObMemAttr(MTL_ID(), "ExtraIdx"));
+        extra_in_rowkey_idxs_.set_attr(ObMemAttr("ExtraIdx"));
       }
   
   virtual ~ObDASHNSWScanIter() {}
@@ -339,7 +335,6 @@ public:
     rowkey_doc_tablet_id_ = related_tablet_ids.rowkey_doc_tablet_id_;
   }
 
-  void set_ls_id(const share::ObLSID &ls_id) { ls_id_ = ls_id; }
   uint64_t adjust_batch_count(bool is_vectored, uint64_t batch_count);
   bool enable_using_simplified_scan() { return need_save_distance_result(); }
   inline bool has_func_lookup() {return OB_NOT_NULL(func_lookup_iter_) && OB_NOT_NULL(func_lookup_ctdef_) && OB_NOT_NULL(func_lookup_rtdef_);}
@@ -426,11 +421,11 @@ private:
                                    ObTabletID &tablet_id,
                                    bool is_get = false);
   int do_aux_table_scan(bool &first_scan, ObTableScanParam &scan_param, const ObDASScanCtDef *ctdef, ObDASScanRtDef *rtdef, ObDASScanIter *iter, ObTabletID &tablet_id);
-  int reuse_vid_rowkey_iter() { return ObDasVecScanUtils::reuse_iter(ls_id_, vid_rowkey_iter_, vid_rowkey_scan_param_, vid_rowkey_tablet_id_); };
-  int reuse_rowkey_vid_iter() { return ObDasVecScanUtils::reuse_iter(ls_id_, rowkey_vid_iter_, rowkey_vid_scan_param_, rowkey_vid_tablet_id_); };
-  int reuse_com_aux_vec_iter() { return ObDasVecScanUtils::reuse_iter(ls_id_, com_aux_vec_iter_, com_aux_vec_scan_param_, com_aux_vec_tablet_id_); };
-  int reuse_embedded_table_iter() { return ObDasVecScanUtils::reuse_iter(ls_id_, embedded_table_iter_, embedded_table_scan_param_, embedded_tablet_id_); };
-  int reuse_filter_data_table_iter() { return ObDasVecScanUtils::reuse_iter(ls_id_, data_filter_iter_, data_filter_scan_param_, com_aux_vec_tablet_id_); };
+  int reuse_vid_rowkey_iter() { return ObDasVecScanUtils::reuse_iter(vid_rowkey_iter_, vid_rowkey_scan_param_, vid_rowkey_tablet_id_); };
+  int reuse_rowkey_vid_iter() { return ObDasVecScanUtils::reuse_iter(rowkey_vid_iter_, rowkey_vid_scan_param_, rowkey_vid_tablet_id_); };
+  int reuse_com_aux_vec_iter() { return ObDasVecScanUtils::reuse_iter(com_aux_vec_iter_, com_aux_vec_scan_param_, com_aux_vec_tablet_id_); };
+  int reuse_embedded_table_iter() { return ObDasVecScanUtils::reuse_iter(embedded_table_iter_, embedded_table_scan_param_, embedded_tablet_id_); };
+  int reuse_filter_data_table_iter() { return ObDasVecScanUtils::reuse_iter(data_filter_iter_, data_filter_scan_param_, com_aux_vec_tablet_id_); };
   int reuse_func_lookup_iter();
 
   int get_ctdef_with_rowkey_exprs(const ObDASScanCtDef *&ctdef, ObDASScanRtDef *&rtdef);
@@ -476,7 +471,7 @@ private:
                                 vec_idx_try_path_ == ObVecIdxAdaTryPath::VEC_INDEX_ITERATIVE_FILTER));
   }
   inline bool check_if_can_retry() { return is_adaptive_filter() && (vec_idx_try_path_ == ObVecIdxAdaTryPath::VEC_INDEX_ITERATIVE_FILTER 
-                                                                 || vec_idx_try_path_ == ObVecIdxAdaTryPath::VEC_INDEX_PRE_FILTER)
+                                                                 || vec_idx_try_path_ == ObVecIdxAdaTryPath::VEC_INDEX_PRE_FILTER) 
                                                                  && vec_aux_ctdef_->relevance_col_cnt_ == 0;}
   bool is_parallel_with_block_granule();
   bool check_need_force_switch_run_path();
@@ -516,7 +511,6 @@ private:
   lib::MemoryContext mem_context_;
   ObArenaAllocator vec_op_alloc_;
   ObArenaAllocator hnsw_iter_alloc_; //  lifetime is same with hnsw iter
-  share::ObLSID ls_id_;
   transaction::ObTxDesc *tx_desc_;
   transaction::ObTxReadSnapshot *snapshot_;
 

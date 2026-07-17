@@ -276,7 +276,7 @@ int ObInListResolver::get_inlist_rewrite_info(const ParseNode &in_list,
           rewrite_info.param_types_.at(col_idx) = cur_param_type;
         } else {
           rewrite_info.is_valid_as_values_table_ = false;
-          LOG_WARN("get inconsistent param types in big inlist", K(column_cnt), K(row_cnt), K(i),
+          LOG_ERROR("get inconsistent param types in big inlist", K(column_cnt), K(row_cnt), K(i),
                    K(col_idx), K(cur_param_type), K(rewrite_info.param_types_.at(col_idx)));
         }
       }
@@ -446,7 +446,7 @@ int ObInListResolver::resolve_access_param_values_table(const ParseNode &in_list
         } else if (OB_FAIL(tmp_res_types.push_back(res_type))) {
           LOG_WARN("failed to push back res type", K(ret));
         } else if (OB_FAIL(dummy_op.aggregate_result_type_for_merge(new_res_type,
-                           &tmp_res_types.at(0), 2, false, type_ctx,
+                           &tmp_res_types.at(0), 2, type_ctx,
                            true, false, is_called_in_sql))) {
           LOG_WARN("failed to aggregate result type for merge", K(ret));
         } else {
@@ -501,7 +501,7 @@ int ObInListResolver::resolve_access_obj_values_table(const ParseNode &in_list,
                        enable_mysql_compatible_dates))) {
     LOG_WARN("fail to check enable mysql compatible dates", K(ret));
   } else {
-    length_semantics = session_info->get_actual_nls_length_semantics();
+    length_semantics = session_info->get_actual_length_semantics();
     timezone_info = session_info->get_timezone_info();
     stmt_type = stmt::T_NONE;
     nchar_collation = session_info->get_nls_collation_nation();
@@ -559,7 +559,7 @@ int ObInListResolver::resolve_access_obj_values_table(const ParseNode &in_list,
           } else if (OB_FAIL(tmp_res_types.push_back(res_type))) {
             LOG_WARN("failed to push back res type", K(ret));
           } else if (OB_FAIL(dummy_op.aggregate_result_type_for_merge(new_res_type,
-                            &tmp_res_types.at(0), 2, false,
+                            &tmp_res_types.at(0), 2,
                             type_ctx, true, false, is_called_in_sql))) {
             LOG_WARN("failed to aggregate result type for merge", K(ret));
           } else {

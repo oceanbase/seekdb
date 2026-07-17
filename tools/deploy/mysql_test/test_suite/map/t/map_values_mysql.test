@@ -139,22 +139,22 @@ select /*+ OPT_PARAM('enable_rich_vector_format', 'FALSE') */ map_values(m) from
 select map_values(m) from t5;
 
 # DML
-CREATE TABLE output_test (
+CREATE TABLE output_test ( 
 pk bigint not null AUTO_INCREMENT,
-s_1   Array(varchar(64)),
+s_1   Array(varchar(64)), 
 i_1   Array(BigInt),
 f_1   Array(float),
 d_1   Array(double),
 i_2   Array(BigInt)
 );
 
-insert into output_test(i_1)
-select map_values(m)
+insert into output_test(i_1) 
+select map_values(m) 
 from t1;
 select pk, i_1 from output_test;
 select * from output_test;
 
-insert into output_test(i_2)
+insert into output_test(i_2) 
 values (map_values(map(1,2)));
 select * from output_test;
 

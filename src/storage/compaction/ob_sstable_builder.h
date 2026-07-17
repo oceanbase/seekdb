@@ -39,7 +39,7 @@ public:
     const ObIArray<blocksstable::MacroBlockId> &macro_id_array,
     const ObITableReadInfo &index_read_info)
     : allocator_("RebuildIter"),
-      io_allocator_("SSRMB_IOUB", OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID()),
+      io_allocator_("SSRMB_IOUB", OB_MALLOC_NORMAL_BLOCK_SIZE),
       macro_id_array_(macro_id_array),
       index_read_info_(index_read_info),
       mirco_block_iter_(),

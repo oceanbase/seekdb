@@ -30,7 +30,7 @@ using namespace table;
 ObDirectLoadExternalRow::ObDirectLoadExternalRow()
   : allocator_("TLD_ExtRow"), is_delete_(false), is_ack_(false), buf_size_(0), buf_(nullptr)
 {
-  allocator_.set_tenant_id(MTL_ID());
+  
 }
 
 void ObDirectLoadExternalRow::reset()

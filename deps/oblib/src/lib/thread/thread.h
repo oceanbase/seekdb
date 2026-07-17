@@ -22,7 +22,8 @@
 #include "lib/utility/ob_macro_utils.h"
 #include "lib/lock/ob_latch.h"
 #include "lib/net/ob_addr.h"
-#include "rpc/obrpc/ob_rpc_packet.h"
+#include "io/easy_io_struct.h"   // easy_addr_t (RpcGuard); formerly via ob_call_packet.h
+namespace oceanbase { namespace obcall {} }  // fwd obcall ns (reduce deps; replaces rpc/frame header)
 
 // Windows PThreads4W: pthread_t is a struct, not an integer
 #ifdef _WIN32
@@ -92,7 +93,7 @@ public:
   static Thread &current();
 
   bool has_set_stop() const;
-  uint64_t get_tenant_id() const;
+  
   using ThreadListNode = common::ObDLinkNode<lib::Thread *>;
   ThreadListNode *get_thread_list_node() { return &thread_list_node_; }
   int get_cpu_time_inc(int64_t &cpu_time_inc);
@@ -100,95 +101,18 @@ public:
 
   OB_INLINE static int64_t update_loop_ts(int64_t t)
   {
-    int64_t ret = loop_ts_;
-    loop_ts_ = t;
+    UNUSED(t);
     ObLatch::clear_lock();
-    return ret;
+    return 0;
   }
 
   OB_INLINE static int64_t update_loop_ts()
   {
-    return update_loop_ts(common::ObTimeUtility::fast_current_time());
+    ObLatch::clear_lock();
+    return 0;
   }
   OB_INLINE static void set_doing_ddl(const bool v) { is_doing_ddl_ = v; }
 public:
-  class BaseWaitGuard
-  {
-  public:
-    OB_INLINE explicit BaseWaitGuard() : last_ts_(blocking_ts_)
-    {
-      if (0 == last_ts_) {
-        loop_ts_ = blocking_ts_ = common::ObTimeUtility::fast_current_time();
-      }
-    }
-    ~BaseWaitGuard()
-    {
-      if (0 == last_ts_) {
-        blocking_ts_ = 0;
-      }
-    }
-  private:
-    int64_t last_ts_;
-  };
-  class WaitGuard : public BaseWaitGuard
-  {
-  public:
-    OB_INLINE explicit WaitGuard(uint8_t type) : type_(type)
-    {
-      wait_event_ |= type;
-    }
-    ~WaitGuard()
-    {
-      wait_event_ &= ~type_;
-    }
-  private:
-    uint8_t type_;
-  };
-  class JoinGuard : public BaseWaitGuard
-  {
-  public:
-    OB_INLINE explicit JoinGuard(pthread_t thread)
-    {
-      thread_joined_ = thread;
-    }
-    ~JoinGuard()
-    {
-      thread_joined_ = pthread_null();
-    }
-  };
-  class RpcGuard : public BaseWaitGuard
-  {
-  public:
-    OB_INLINE explicit RpcGuard(const easy_addr_t& addr, obrpc::ObRpcPacketCode pcode)
-    {
-      IGNORE_RETURN new (&rpc_dest_addr_) ObAddr(addr);
-      pcode_ = pcode;
-    }
-    OB_INLINE explicit RpcGuard(const ObAddr& addr, obrpc::ObRpcPacketCode pcode)
-    {
-      IGNORE_RETURN new (&rpc_dest_addr_) ObAddr(addr);
-      pcode_ = pcode;
-    }
-    ~RpcGuard()
-    {
-      rpc_dest_addr_.reset();
-      pcode_ = obrpc::ObRpcPacketCode::OB_INVALID_RPC_CODE;
-    }
-  };
-
-  static constexpr uint8_t WAIT                 = (1 << 0);
-  static constexpr uint8_t WAIT_IN_TENANT_QUEUE = (1 << 1);
-  static constexpr uint8_t WAIT_FOR_IO_EVENT    = (1 << 2);
-  static constexpr uint8_t WAIT_FOR_LOCAL_RETRY = (1 << 3); //Statistics of local retry waiting time for dynamically increasing threads.
-  static constexpr uint8_t WAIT_FOR_PX_MSG      = (1 << 4);
-  // for thread diagnose, maybe replace it with union later.
-  static thread_local int64_t loop_ts_;
-  static thread_local pthread_t thread_joined_;
-  static thread_local int64_t sleep_us_;
-  static thread_local int64_t blocking_ts_;
-  static thread_local ObAddr rpc_dest_addr_;
-  static thread_local obrpc::ObRpcPacketCode pcode_;
-  static thread_local uint8_t wait_event_;
   static thread_local bool is_doing_ddl_;
 private:
   static void* __th_start(void *th);

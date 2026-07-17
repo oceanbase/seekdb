@@ -31,7 +31,7 @@ ObBloomFilterMacroBlockReader::ObBloomFilterMacroBlockReader(const bool is_sys_r
     common_header_(),
     bf_macro_header_(nullptr),
     is_sys_read_(is_sys_read),
-    io_allocator_("BFR_IOUB", OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID()),
+    io_allocator_("BFR_IOUB", OB_MALLOC_NORMAL_BLOCK_SIZE),
     io_buf_(nullptr)
 {
 }
@@ -91,7 +91,7 @@ int ObBloomFilterMacroBlockReader::read_macro_block(const MacroBlockId &macro_id
     macro_read_info.offset_ = 0;
     macro_read_info.size_ = OB_STORAGE_OBJECT_MGR.get_macro_block_size();
     macro_read_info.io_timeout_ms_ = std::max(GCONF._data_storage_io_timeout / 1000, DEFAULT_IO_WAIT_TIME_MS);
-    macro_read_info.mtl_tenant_id_ = MTL_ID();
+    
 
     if (OB_ISNULL(io_buf_) && OB_ISNULL(io_buf_ =
         reinterpret_cast<char*>(io_allocator_.alloc(OB_DEFAULT_MACRO_BLOCK_SIZE)))) {

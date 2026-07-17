@@ -19,8 +19,6 @@
 
 #include "common/ob_tablet_id.h" // ObTabletID
 #include "lib/net/ob_addr.h" // ObAddr
-#include "share/ob_ls_id.h" // ObLSID
-#include "share/transfer/ob_transfer_info.h" // OB_INVALID_TRANSFER_SEQ
 
 namespace oceanbase
 {
@@ -31,9 +29,7 @@ class ObTabletReplicaFilter;
 enum class ObDataChecksumType : uint8_t
 {
   DATA_CHECKSUM_NORMAL = 0,
-  DATA_CHECKSUM_COLUMN_STORE = 1, // for column store replica data checksum
-  DATA_CHECKSUM_NORMAL_WITH_NORMAL_COLUMN = 2, // with hex column checksums
-  DATA_CHECKSUM_COLUMN_STORE_WITH_NORMAL_COLUMN = 3,
+  DATA_CHECKSUM_NORMAL_WITH_NORMAL_COLUMN = 1, // with hex column checksums
   DATA_CHECKSUM_MAX
 };
 
@@ -45,14 +41,7 @@ inline bool is_valid_data_checksum_type(const ObDataChecksumType &type)
 
 inline bool is_normal_column_checksum_type(const ObDataChecksumType &type)
 {
-  return type == ObDataChecksumType::DATA_CHECKSUM_NORMAL_WITH_NORMAL_COLUMN
-     || type == ObDataChecksumType::DATA_CHECKSUM_COLUMN_STORE_WITH_NORMAL_COLUMN;;
-}
-
-inline bool is_column_store_data_checksum_type(const ObDataChecksumType &type)
-{
-  return type == ObDataChecksumType::DATA_CHECKSUM_COLUMN_STORE
-     || type == ObDataChecksumType::DATA_CHECKSUM_COLUMN_STORE_WITH_NORMAL_COLUMN;
+  return type == ObDataChecksumType::DATA_CHECKSUM_NORMAL_WITH_NORMAL_COLUMN;
 }
 
 
@@ -71,8 +60,7 @@ public:
   void reset();
   inline bool is_valid() const
   {
-    return tablet_id_.is_valid_with_tenant(tenant_id_)
-        && ls_id_.is_valid_with_tenant(tenant_id_)
+    return tablet_id_.is_valid_with_tenant()
         && server_.is_valid()
         && snapshot_version_ >= 0
         && data_size_ >= 0
@@ -82,43 +70,34 @@ public:
   }
   inline bool primary_keys_are_valid() const
   {
-    return tablet_id_.is_valid_with_tenant(tenant_id_)
-        && server_.is_valid()
-        && ls_id_.is_valid_with_tenant(tenant_id_);
+    return tablet_id_.is_valid_with_tenant()
+        && server_.is_valid();
   }
   int assign(const ObTabletReplica &other);
-  inline uint64_t get_tenant_id() const { return tenant_id_; }
+  
   inline const common::ObTabletID &get_tablet_id() const { return tablet_id_; }
   inline const common::ObAddr &get_server() const { return server_; }
-  inline const share::ObLSID &get_ls_id() const { return ls_id_; }
   inline int64_t get_snapshot_version() const { return snapshot_version_; }
   inline int64_t get_data_size() const { return data_size_; }
   inline int64_t get_required_size() const { return required_size_; }
   inline int64_t get_report_scn() const { return report_scn_; }
   inline ScnStatus get_status() const { return status_; }
   int init(
-      const uint64_t tenant_id,
       const common::ObTabletID &tablet_id,
-      const share::ObLSID &ls_id,
       const common::ObAddr &server,
       const int64_t snapshot_version,
       const int64_t data_size,
       const int64_t required_size,
       const int64_t report_scn,
       const ScnStatus status);
-  void fake_for_diagnose(
-    const uint64_t tenant_id,
-    const share::ObLSID &ls_id,
-    const common::ObTabletID &tablet_id);
+  void fake_for_diagnose(const common::ObTabletID &tablet_id);
   bool is_equal_for_report(const ObTabletReplica &other) const;
   static bool is_status_valid(const ScnStatus status)
   {
     return status >= SCN_STATUS_IDLE && status < SCN_STATUS_MAX;
   }
   TO_STRING_KV(
-      K_(tenant_id),
       K_(tablet_id),
-      K_(ls_id),
       K_(server),
       K_(snapshot_version),
       K_(data_size),
@@ -126,9 +105,7 @@ public:
       K_(report_scn),
       K_(status));
 private:
-  uint64_t tenant_id_;
   common::ObTabletID tablet_id_;
-  share::ObLSID ls_id_;
   common::ObAddr server_;
   int64_t snapshot_version_;
   int64_t data_size_; // load balancing releated
@@ -142,98 +119,38 @@ class ObTabletInfo
 {
 public:
   ObTabletInfo();
+  explicit ObTabletInfo(const common::ObTabletID &tablet_id);
   explicit ObTabletInfo(
-      const uint64_t tenant_id,
       const common::ObTabletID &tablet_id,
-      const ObLSID &ls_id,
-      const ObArray<ObTabletReplica> &replicas);
+      const ObTabletReplica &replica);
   virtual ~ObTabletInfo();
   void reset();
   inline bool is_valid() const
   {
-    return OB_INVALID_TENANT_ID != tenant_id_
-        && tablet_id_.is_valid_with_tenant(tenant_id_)
-        && ls_id_.is_valid_with_tenant(tenant_id_)
-        && replicas_.count() > 0;
+    return true
+        && tablet_id_.is_valid_with_tenant()
+        && has_replica_
+        && replica_.is_valid();
   }
   int assign(const ObTabletInfo &other);
-  inline uint64_t get_tenant_id() const { return tenant_id_; }
+  
   inline const common::ObTabletID &get_tablet_id() const { return tablet_id_; }
-  inline const ObLSID &get_ls_id() const { return ls_id_; }
-  inline const common::ObArray<ObTabletReplica> &get_replicas() const { return replicas_; }
-  int64_t replica_count() const { return replicas_.count(); }
-  int init(const uint64_t tenant_id,
-           const common::ObTabletID &tablet_id,
-           const ObLSID &ls_id,
-           const common::ObIArray<ObTabletReplica> &replicas);
+  inline bool has_replica() const { return has_replica_; }
+  inline const ObTabletReplica &get_replica() const { return replica_; }
+  int64_t replica_count() const { return has_replica_ ? 1 : 0; }
+  int init_empty(const common::ObTabletID &tablet_id);
+  int init(const common::ObTabletID &tablet_id,
+           const ObTabletReplica &replica);
   int init_by_replica(const ObTabletReplica &replica);
-  int add_replica(const ObTabletReplica &replica);
+  int set_replica(const ObTabletReplica &replica);
   bool is_self_replica(const ObTabletReplica &replica) const;
   int filter(const ObTabletReplicaFilter &filter);
-  TO_STRING_KV(K_(tenant_id), K_(tablet_id), K_(replicas));
+  TO_STRING_KV(K_(tablet_id), K_(has_replica), K_(replica));
 private:
-  int find_replica_idx_(const ObTabletReplica &replica, int64_t &idx) const;
-
-  uint64_t tenant_id_;
   common::ObTabletID tablet_id_;
-  ObLSID ls_id_;
-  common::ObArray<ObTabletReplica> replicas_;
+  bool has_replica_;
+  ObTabletReplica replica_;
   DISALLOW_COPY_AND_ASSIGN(ObTabletInfo);
-};
-
-// ObTabletToLSInfo is used to store info for __all_tablet_to_ls.
-// Structure: <tablet_id, ls_id, table_id, transfer_seq>
-class ObTabletToLSInfo
-{
-public:
-  ObTabletToLSInfo()
-      : tablet_id_(), ls_id_(), table_id_(OB_INVALID_ID), transfer_seq_(OB_INVALID_TRANSFER_SEQ) {}
-  explicit ObTabletToLSInfo(
-      const common::ObTabletID &tablet_id,
-      const ObLSID &ls_id,
-      const uint64_t table_id,
-      const int64_t transfer_seq)
-      : tablet_id_(tablet_id), ls_id_(ls_id), table_id_(table_id), transfer_seq_(transfer_seq)
-  {
-  }
-  ~ObTabletToLSInfo() { reset(); }
-  inline void reset()
-  {
-    tablet_id_.reset();
-    ls_id_.reset();
-    table_id_ = OB_INVALID_ID;
-    transfer_seq_ = OB_INVALID_TRANSFER_SEQ;
-  }
-  inline bool is_valid() const
-  {
-    return tablet_id_.is_valid()
-        && ls_id_.is_valid()
-        && OB_INVALID_ID != table_id_
-        && transfer_seq_ > OB_INVALID_TRANSFER_SEQ;
-  }
-  inline bool operator==(const ObTabletToLSInfo &other) const
-  {
-    return other.tablet_id_ == tablet_id_
-        && other.ls_id_ == ls_id_
-        && other.table_id_ == table_id_
-        && other.transfer_seq_ == transfer_seq_;
-  }
-  inline const common::ObTabletID &get_tablet_id() const { return tablet_id_; }
-  inline const ObLSID &get_ls_id() const { return ls_id_; }
-  inline uint64_t get_table_id() const { return table_id_; }
-  inline int64_t get_transfer_seq() const { return transfer_seq_; }
-  int init(
-      const common::ObTabletID &tablet_id,
-      const ObLSID &ls_id,
-      const uint64_t table_id,
-      const int64_t transfer_seq);
-  int assign(const ObTabletToLSInfo &other);
-  TO_STRING_KV(K_(tablet_id), K_(ls_id), K_(table_id), K_(transfer_seq));
-private:
-  common::ObTabletID tablet_id_;
-  ObLSID ls_id_;
-  uint64_t table_id_;
-  int64_t transfer_seq_;
 };
 
 class ObTabletTablePair
@@ -243,7 +160,9 @@ public:
   ObTabletTablePair(const common::ObTabletID &tablet_id, const uint64_t table_id);
   ~ObTabletTablePair();
 
+  void reset();
   int init(const ObTabletID &tablet_id, const uint64_t table_id);
+  int assign(const ObTabletTablePair &other);
   bool is_valid() const;
   const ObTabletID &get_tablet_id() const { return tablet_id_; }
   uint64_t get_table_id() const { return table_id_; }
@@ -251,30 +170,6 @@ public:
 private:
   common::ObTabletID tablet_id_;
   uint64_t table_id_;
-};
-
-class ObTabletLSPair
-{
-public:
-  ObTabletLSPair() {}
-  explicit ObTabletLSPair(const common::ObTabletID &tablet_id, const ObLSID &ls_id)
-      : tablet_id_(tablet_id), ls_id_(ls_id) {}
-  explicit ObTabletLSPair(const int64_t tablet_id, const int64_t ls_id)
-      : tablet_id_(tablet_id), ls_id_(ls_id) {}
-  ~ObTabletLSPair() {}
-  int init(const ObTabletID &tablet_id, const ObLSID &ls_id);
-  int assign(const ObTabletLSPair &other);
-  void reset();
-  bool is_valid() const;
-  uint64_t hash() const;
-  int hash(uint64_t &hash_val) const { hash_val = hash(); return OB_SUCCESS; }
-  const ObTabletID &get_tablet_id() const { return tablet_id_; }
-  const ObLSID &get_ls_id() const { return ls_id_; }
-  bool operator==(const ObTabletLSPair &other) const;
-  TO_STRING_KV(K_(tablet_id), K_(ls_id));
-private:
-  common::ObTabletID tablet_id_;
-  ObLSID ls_id_;
 };
 
 } // end namespace share

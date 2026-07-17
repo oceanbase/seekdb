@@ -2,7 +2,7 @@
 #owner group: sql1
 # tags: optimizer
 #tag: opimizer
-#bug:
+#bug: 
 
 --disable_query_log
 set @@session.explicit_defaults_for_timestamp=off;
@@ -55,3 +55,4 @@ select /*+ index(a obright_part1) */ * from obright_part a order by row_id;
 --disable_warnings
 drop table obright_part;
 --enable_warnings
+

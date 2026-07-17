@@ -51,7 +51,6 @@ public:
   virtual int init_all_dfo_channel(ObExecContext &ctx) const;
   virtual int on_sqc_threads_inited(ObExecContext &ctx, ObDfo &dfo) const;
   virtual int dispatch_root_dfo_channel_info(ObExecContext &ctx, ObDfo &child, ObDfo &parent) const;
-  int get_tenant_id(ObExecContext &ctx, uint64_t &tenant_id) const;
   int prepare_schedule_info(ObExecContext &ctx);
 private:
   DISALLOW_COPY_AND_ASSIGN(ObDfoSchedulerBasic);
@@ -75,8 +74,7 @@ private:
   struct CleanDtlIntermRes
   {
     ObPxCoordInfo &coord_info_;
-    uint64_t tenant_id_;
-    CleanDtlIntermRes(ObPxCoordInfo &coord_info, const uint64_t &tenant_id) : coord_info_(coord_info), tenant_id_(tenant_id) {}
+    CleanDtlIntermRes(ObPxCoordInfo &coord_info) : coord_info_(coord_info) {}
     bool operator()(const ObAddr &attr, ObPxCleanDtlIntermResArgs *arg);
   };
   int build_transmit_recieve_channel(ObExecContext &ctx, ObDfo *dfo) const;
@@ -84,6 +82,8 @@ private:
   int init_data_xchg_ch(ObExecContext &ctx, ObDfo *dfo) const;
   int dispatch_sqcs(ObExecContext &exec_ctx, ObDfo &dfo, ObIArray<ObPxSqcMeta> &sqcs) const;
   int do_schedule_dfo(ObExecContext &ctx, ObDfo &dfo) const;
+  // in-process DTL interm result cleanup (single-replica, self target)
+  static int clean_dtl_interm_result_local(ObPxCleanDtlIntermResArgs &arg);
 private:
   DISALLOW_COPY_AND_ASSIGN(ObSerialDfoScheduler);
 };
@@ -109,8 +109,7 @@ struct ObPxNodePool {
     px_node_selection_mode_ = selection_mode;
   }
 
-  static int get_tenant_config_px_node_policy(int64_t tenant_id,
-                                          ObPxNodePolicy &px_node_policy);
+  static int get_tenant_config_px_node_policy(ObPxNodePolicy &px_node_policy);
 
   // It represents the candidate pool of execution nodes,
   // prioritizing nodes that contain the data

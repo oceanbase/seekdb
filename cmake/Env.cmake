@@ -17,7 +17,11 @@ ob_define(DEVTOOLS_DIR "${CMAKE_SOURCE_DIR}/deps/3rd/usr/local/oceanbase/devtool
 ob_define(DEP_DIR "${CMAKE_SOURCE_DIR}/deps/3rd/usr/local/oceanbase/deps/devel")
 
 ob_define(BUILD_CDC_ONLY OFF)
+# Deprecated no-op retained for compatibility with existing build invocations.
 ob_define(BUILD_EMBED_MODE OFF)
+if(BUILD_EMBED_MODE)
+  message(STATUS "BUILD_EMBED_MODE is deprecated and has no effect")
+endif()
 ob_define(OB_USE_CLANG ON)
 ob_define(OB_ERRSIM OFF)
 ob_define(BUILD_NUMBER 1)
@@ -37,8 +41,7 @@ ob_define(NEED_PARSER_CACHE ON)
 ob_define(OB_CC "")
 ob_define(OB_CXX "")
 ob_define(OB_BUILD_STANDALONE OFF)
-ob_define(OB_BUILD_LITE ON)
-ob_define(DEFAULT_LOG_LEVEL OB_LOG_LEVEL_WARN)
+ob_define(DEFAULT_LOG_LEVEL OB_LOG_LEVEL_ERROR)
 ob_define(DEFAULT_LOG_FILE_SIZE_MB 256)
 
 # 'ENABLE_PERF_MODE' use for offline system insight performance test
@@ -53,7 +56,7 @@ ob_define(OB_ENABLE_UNITY ON)
 
 ob_define(OB_DISABLE_LSE OFF)
 
-ob_define(OB_DISABLE_PIE OFF)
+ob_define(OB_DISABLE_PIE ON)
 
 ob_define(OB_ENABLE_MCMODEL OFF)
 
@@ -77,11 +80,8 @@ endif()
 message(STATUS "ARCHITECTURE: ${ARCHITECTURE}")
 
 if(WITH_COVERAGE)
-  # -ftest-coverage to generate .gcno file
-  # -fprofile-arcs to generate .gcda file
-  # -DDBUILD_COVERAGE marco use to mark 'coverage build type' and to handle some special case
-  set(CMAKE_COVERAGE_COMPILE_OPTIONS -ftest-coverage -fprofile-arcs -Xclang -coverage-version=408R -DBUILD_COVERAGE)
-  set(CMAKE_COVERAGE_EXE_LINKER_OPTIONS "-ftest-coverage -fprofile-arcs")
+  set(CMAKE_COVERAGE_COMPILE_OPTIONS -fprofile-instr-generate -fcoverage-mapping -mllvm -runtime-counter-relocation -DWITH_COVERAGE)
+  set(CMAKE_COVERAGE_EXE_LINKER_OPTIONS "-fprofile-instr-generate -Wl,-u,__llvm_profile_reset_counters -Wl,-u,__llvm_profile_set_filename -Wl,-u,__llvm_profile_write_file")
 
   add_compile_options(${CMAKE_COVERAGE_COMPILE_OPTIONS})
   set(DEBUG_PREFIX "")
@@ -95,6 +95,7 @@ if(ENABLE_AUTO_FDO)
   elseif( ${ARCHITECTURE} STREQUAL "aarch64" )
     set(AUTO_FDO_PATH "${CMAKE_SOURCE_DIR}/profile/observer-aarch64.prof")
   endif()
+  # observer-<arch>.prof is a placeholder with no real samples; replace it to enable AutoFDO.
   set(AUTO_FDO_OPT "-finline-functions -fprofile-sample-use=${AUTO_FDO_PATH}")
   message(STATUS "auto fdo path: " ${AUTO_FDO_PATH})
 endif()
@@ -121,17 +122,9 @@ if(ENABLE_HOTFUNC)
   elseif( ${ARCHITECTURE} STREQUAL "aarch64" )
     set(HOTFUNC_PATH "${CMAKE_SOURCE_DIR}/profile/hotfuncs-aarch64.txt")
   endif()
+  # hotfuncs-<arch>.txt is a placeholder with one unused symbol; replace it to enable ordering.
   set(HOTFUNC_OPT "-Wl,--no-warn-symbol-ordering,--symbol-ordering-file,${HOTFUNC_PATH}")
   message(STATUS "hotfunc path: " ${HOTFUNC_PATH})
-endif()
-
-set(BOLT_OPT "")
-if((NOT APPLE) AND (ENABLE_BOLT OR (NOT DEFINED ENABLE_BOLT AND ENABLE_BOLT_AUTO)) AND NOT OB_BUILD_OPENSOURCE)
-  if( ${ARCHITECTURE} STREQUAL "x86_64" )
-    message(STATUS "build with bolt opt (x86_64)")
-    set(BOLT_OPT "-Wl,--emit-relocs")
-    ob_define(OB_ENABLE_BOLT ON)
-  endif()
 endif()
 
 message(STATUS "Using C++20 standard")
@@ -170,23 +163,12 @@ set(ob_close_deps_static_name "")
 
 set(OB_BUILD_CLOSE_MODULES OFF)
 
-# observer lite
-ob_define(OB_BUILD_OBSERVER_LITE ON)
-
 if(OB_BUILD_STANDALONE)
   add_definitions(-DOB_BUILD_STANDALONE)
 endif()
 
 if (OB_USE_TEST_PUBKEY)
   add_definitions(-DOB_USE_TEST_PUBKEY)
-endif()
-
-if(OB_BUILD_LITE)
-  add_definitions(-DOB_BUILD_LITE)
-endif()
-
-if(OB_BUILD_OBSERVER_LITE)
-  add_definitions(-DOB_BUILD_OBSERVER_LITE)
 endif()
 
 if (OB_BUILD_SYS_VEC_IDX)
@@ -196,14 +178,6 @@ endif()
 # should not use initial-exec for tls-model if building OBCDC.
 if(BUILD_CDC_ONLY)
   add_definitions(-DOB_BUILD_CDC_DISABLE_VSAG)
-else()
-  if(NOT BUILD_EMBED_MODE)
-    add_definitions(-DENABLE_INITIAL_EXEC_TLS_MODEL)
-  endif()
-endif()
-
-if(BUILD_EMBED_MODE)
-  add_definitions(-DOB_BUILD_EMBED_MODE)
 endif()
 
 # Find objcopy - on macOS it may be installed via Homebrew or available as llvm-objcopy
@@ -400,7 +374,7 @@ if (OB_USE_CLANG)
     elseif(UNIX)
       set(LD_OPT "-fuse-ld=${DEVTOOLS_DIR}/bin/ld.lld -Wno-unused-command-line-argument")
       set(REORDER_COMP_OPT "-ffunction-sections -fdata-sections -fdebug-info-for-profiling")
-      set(REORDER_LINK_OPT "-Wl,--no-rosegment,--build-id=sha1,--gc-sections,--icf=safe ${HOTFUNC_OPT}")
+      set(REORDER_LINK_OPT "-Wl,--no-rosegment,--build-id=sha1,--gc-sections,--icf=all ${HOTFUNC_OPT}")
       set(OB_LD_BIN "${DEVTOOLS_DIR}/bin/ld.lld")
     endif()
   endif()
@@ -480,7 +454,6 @@ if(${ARCHITECTURE} STREQUAL "amd64")
 elseif(${ARCHITECTURE} STREQUAL "x86_64")
   set(MTUNE_CFLAGS -mtune=core2)
   set(ARCH_LDFLAGS "")
-  set(OCI_DEVEL_INC "${DEP_3RD_DIR}/usr/include/oracle/12.2/client64")
 else()
   if (${OB_DISABLE_LSE})
     message(STATUS "build with no-lse")
@@ -500,7 +473,6 @@ else()
   else()
     set(ARCH_LDFLAGS "-l:libatomic.a")
   endif()
-  set(OCI_DEVEL_INC "${DEP_3RD_DIR}/usr/include/oracle/19.10/client64")
 endif()
 
 # AIO library detection for Ubuntu >= 24.04 and Debian >= 13

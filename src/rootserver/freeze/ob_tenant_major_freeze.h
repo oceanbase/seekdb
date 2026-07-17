@@ -45,7 +45,7 @@ namespace rootserver
 class ObTenantMajorFreeze
 {
 public:
-  ObTenantMajorFreeze(const uint64_t tenant_id);
+  ObTenantMajorFreeze();
   virtual ~ObTenantMajorFreeze();
   int init(const bool is_primary_service,
            common::ObMySQLProxy &sql_proxy,
@@ -63,7 +63,7 @@ public:
 
   bool is_paused() const;
 
-  uint64_t get_tenant_id() const { return tenant_id_; }
+  
   int launch_major_freeze(const ObMajorFreezeReason freeze_reason);
 
   int suspend_merge();
@@ -86,11 +86,8 @@ private:
   int set_freeze_info(const ObMajorFreezeReason freeze_reason);
 
   bool is_primary_service() const { return is_primary_service_; }
-  int try_schedule_minor_before_major_();
-
 private:
   bool is_inited_;
-  uint64_t tenant_id_;
   bool is_primary_service_;  // identify ObMajorFreezeServiceType::SERVICE_TYPE_PRIMARY
 
   ObMajorMergeInfoManager major_merge_info_mgr_;

@@ -124,7 +124,6 @@ private:
   int generate_updated_column_ids(const ObLogDelUpd &log_op,
                                   const ObAssignments &assigns,
                                   const common::ObIArray<uint64_t> &column_ids,
-                                  const ObDASDMLBaseCtDef &das_ctdef,
                                   common::ObIArray<uint64_t> &updated_column_ids);
   int convert_dml_column_info(common::ObTableID index_tid,
                               bool only_rowkey,
@@ -244,7 +243,6 @@ private:
   int fill_multivalue_extra_info_on_table_param(
                             share::schema::ObSchemaGetterGuard *guard,
                             const ObTableSchema *index_schema,
-                            uint64_t tenant_id,
                             ObDASDMLBaseCtDef &das_dml_ctdef);
 
   int get_table_schema_version(const ObLogicalOperator &op, uint64_t table_id, int64_t &schema_version);

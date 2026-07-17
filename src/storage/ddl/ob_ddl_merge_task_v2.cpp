@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX STORAGE_COMPACTION
 #include "storage/ddl/ob_ddl_merge_task.h"
+#include "share/rc/ob_module_provider.h"
 #include "storage/ddl/ob_ddl_merge_task_utils.h"
 #include "storage/ddl/ob_ddl_merge_task_v2.h"
 #include "share/ob_ddl_checksum.h"
@@ -43,7 +44,7 @@ int ObDDLMergeGuardTask::init(const bool for_replay, const ObTabletID &tablet_id
 {
   int ret = OB_SUCCESS;
   char* buf = nullptr;
-  ObDDLMergeBucketLock *mtl_bucket_lock = MTL(ObDDLMergeBucketLock*);
+  ObDDLMergeBucketLock *mtl_bucket_lock = share::g_mp->ddl_merge_bucket_lock();
   if (!tablet_id.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(tablet_id));
@@ -52,13 +53,13 @@ int ObDDLMergeGuardTask::init(const bool for_replay, const ObTabletID &tablet_id
     LOG_WARN("bucket lock should not be null", K(ret));
   } else if (OB_FAIL(mtl_bucket_lock->lock(tablet_id))) {
     if (OB_EAGAIN == ret && !for_replay) {
-      LOG_WARN("failed to lock tablet, but execute again", K(ret), K(tablet_id));
+      LOG_ERROR("failed to lock tablet, but execute again", K(ret), K(tablet_id));
       ret = OB_DAG_TASK_IS_SUSPENDED;
     } else {
       LOG_WARN("failed to lock tablet", K(ret), K(tablet_id));
     }
   }
-
+  
   if (OB_FAIL(ret)) {
   } else {
     tablet_id_ = tablet_id;
@@ -71,7 +72,7 @@ int ObDDLMergeGuardTask::init(const bool for_replay, const ObTabletID &tablet_id
 int ObDDLMergeGuardTask::process()
 {
   int ret = OB_SUCCESS;
-  ObDDLMergeBucketLock *mtl_bucket_lock = MTL(ObDDLMergeBucketLock*);
+  ObDDLMergeBucketLock *mtl_bucket_lock = share::g_mp->ddl_merge_bucket_lock();
   if (!tablet_id_.is_valid()) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected tablet id val", K(ret));
@@ -84,13 +85,13 @@ int ObDDLMergeGuardTask::process()
     FLOG_INFO("[DDL_MERGE_TASK] success to finish guard task", K(ret), K(tablet_id_));
     tablet_id_.reset();
   }
-  return ret;
+  return ret; 
 }
 
 ObDDLMergeGuardTask::~ObDDLMergeGuardTask()
 {
   int ret = OB_SUCCESS;
-  ObDDLMergeBucketLock *mtl_bucket_lock = MTL(ObDDLMergeBucketLock*);
+  ObDDLMergeBucketLock *mtl_bucket_lock = share::g_mp->ddl_merge_bucket_lock();
    if (OB_ISNULL(mtl_bucket_lock)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("bucket lock should not be null", K(ret));
@@ -141,8 +142,7 @@ int ObDDLMergePrepareTask::inner_process()
   ObDDLMergeAssembleTask *assemble_task = nullptr;
 
   int64_t merge_slice_idx = 0;
-  ObArray<ObTuple<int64_t, int64_t, int64_t>> cg_slices; /* <cg_idx, start_slice_idx, end_slice_idx> */
-  ObLSID ls_id;
+  ObArray<ObDDLSliceRange> slice_ranges;
   ObTabletID tablet_id;
   ObWriteTabletParam *tablet_param = nullptr;
 
@@ -155,7 +155,7 @@ int ObDDLMergePrepareTask::inner_process()
   if (OB_ISNULL(dag)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("dag should not be null", K(ret));
-  } else if (OB_FAIL(merge_param_.get_tablet_param(ls_id, tablet_id, tablet_param))) {
+  } else if (OB_FAIL(merge_param_.get_tablet_param(tablet_id, tablet_param))) {
     LOG_WARN("failed to get tablet param", K(ret));
   } else if (OB_ISNULL(tablet_param)) {
     ret = OB_ERR_UNEXPECTED;
@@ -167,8 +167,8 @@ int ObDDLMergePrepareTask::inner_process()
     LOG_INFO("guard task has been created", K(ret), K(merge_param_));
   } else if (OB_FAIL(dag->alloc_task(guard_task_))) {
     LOG_WARN("failed to alloc task", K(ret));
-  }
-
+  } 
+  
   if (OB_FAIL(ret)) {
   } else if (guard_task_->is_inited_) {
     LOG_INFO("gaurd task already init", K(tablet_id));
@@ -179,7 +179,7 @@ int ObDDLMergePrepareTask::inner_process()
   } else if (OB_FAIL(add_child(*guard_task_))) {
     LOG_WARN("failed to add child to prepare task", K(ret));
   }
-
+  
   /* pre-check before merge */
   bool need_merge = true;
   ObIDDLMergeHelper *merge_helper = nullptr;
@@ -193,12 +193,12 @@ int ObDDLMergePrepareTask::inner_process()
     LOG_WARN("failed to check need merge", KR(ret));
   }
 
-  /*
-   * 1. calculate merge_cg_slice_task count
-   * 2. get_rec_scn for release ddl kvs
+  /* 
+   * 1. calculate merge slice task count
+   * 2. get_rec_scn for release ddl kvs 
   */
   if (OB_FAIL(ret) || !need_merge) {
-  } else if (OB_FAIL(merge_helper->process_prepare_task(dag, merge_param_, cg_slices))) {
+  } else if (OB_FAIL(merge_helper->process_prepare_task(dag, merge_param_, slice_ranges))) {
     LOG_WARN("failed to process prepare task", KR(ret), K(merge_param_));
   } else if (OB_FAIL(merge_helper->get_rec_scn(merge_param_))) {
     LOG_WARN("failed to get rec scn", K(ret));
@@ -218,14 +218,13 @@ int ObDDLMergePrepareTask::inner_process()
   } else if (OB_FAIL(::ObITask::add_child(*assemble_task))) {
     LOG_WARN("failed to add assemble task to prepare task", K(ret));
   } else {
-    for (int64_t i = 0; OB_SUCC(ret) && i < cg_slices.count(); i++ ) {
-      ObDDLMergeCgSliceTask *merge_slice_task = nullptr;
-      int64_t cg_idx          = cg_slices.at(i).element<0>();
-      int64_t start_slice_idx = cg_slices.at(i).element<1>();
-      int64_t end_slice_idx   = cg_slices.at(i).element<2>();
+    for (int64_t i = 0; OB_SUCC(ret) && i < slice_ranges.count(); i++ ) {
+      ObDDLMergeSliceTask *merge_slice_task = nullptr;
+      const ObDDLSliceRange &slice_range = slice_ranges.at(i);
       if (OB_FAIL(dag->alloc_task(merge_slice_task))) {
         LOG_WARN("failed to alloc merge slice task", K(ret));
-      } else if (OB_FAIL(merge_slice_task->init(merge_param_, cg_idx, start_slice_idx, end_slice_idx))) {
+      } else if (OB_FAIL(merge_slice_task->init(
+          merge_param_, slice_range.start_slice_idx_, slice_range.end_slice_idx_))) {
         LOG_WARN("failed to init merge slice task", K(ret));
       } else if (OB_FAIL(merge_slice_task->add_child(*assemble_task))) {
         LOG_WARN("failed add child for merge slice task", K(ret));
@@ -267,7 +266,6 @@ int ObDDLMergePrepareTask::process()
 {
   int ret = OB_SUCCESS;
   bool has_lob = false;
-  ObLSID target_ls_id;
   ObTabletID target_tablet_id;
   ObWriteTabletParam *tablet_param = nullptr;
   if (!is_inited_) {
@@ -275,7 +273,7 @@ int ObDDLMergePrepareTask::process()
     LOG_WARN("task is not inited", K(ret), KPC(this));
   } else if (OB_FAIL(inner_process())) {
     LOG_WARN("failed to inner process prepare task", K(ret));
-  } else if (OB_FAIL(merge_param_.get_tablet_param(target_ls_id, target_tablet_id, tablet_param))) {
+  } else if (OB_FAIL(merge_param_.get_tablet_param(target_tablet_id, tablet_param))) {
     LOG_WARN("failed to get tablet param", K(ret));
   }
 
@@ -285,50 +283,46 @@ int ObDDLMergePrepareTask::process()
 
 void ObDDLMergePrepareTask::task_debug_info_to_string(char *buf, const int64_t buf_len, int64_t &pos) const
 {
-  ObLSID ls_id;
   ObTabletID tablet_id;
   ObWriteTabletParam *tablet_param = nullptr;
-  if (OB_SUCCESS == merge_param_.get_tablet_param(ls_id, tablet_id, tablet_param)) {
-    BUF_PRINTF("DDL Merge Prepare Task: ls_id=%ld, tablet_id=%ld, is_inited=%s",
-               ls_id.id(), tablet_id.id(), is_inited_ ? "true" : "false");
+  if (OB_SUCCESS == merge_param_.get_tablet_param(tablet_id, tablet_param)) {
+    BUF_PRINTF("DDL Merge Prepare Task: tablet_id=%ld, is_inited=%s",
+               tablet_id.id(), is_inited_ ? "true" : "false");
   } else {
     BUF_PRINTF("DDL Merge Prepare Task: is_inited=%s", is_inited_ ? "true" : "false");
   }
 }
 
-ObDDLMergeCgSliceTask::ObDDLMergeCgSliceTask():
-ObITask(ObITaskType::TASK_TYPE_DDL_MERGE_CG_SLICE), merge_param_(), cg_idx_(-1), start_slice_idx_(-1), end_slice_idx_(-1)
+ObDDLMergeSliceTask::ObDDLMergeSliceTask():
+ObITask(ObITaskType::TASK_TYPE_DDL_MERGE_SLICE), merge_param_(), start_slice_idx_(-1), end_slice_idx_(-1), is_inited_(false)
 {}
 
-int ObDDLMergeCgSliceTask::init(const ObDDLTabletMergeDagParamV2 &merge_param,
-                                const int64_t cg_idx,
-                                const int64_t start_slice_idx,
-                                const int64_t end_slice_idx)
+int ObDDLMergeSliceTask::init(const ObDDLTabletMergeDagParamV2 &merge_param,
+                              const int64_t start_slice_idx,
+                              const int64_t end_slice_idx)
 {
   int ret = OB_SUCCESS;
-  ObLSID target_ls_id;
-  ObTabletID target_tablet_id;
-  if (!merge_param.is_valid() || cg_idx < 0 || start_slice_idx < 0 || end_slice_idx < 0) {
+  if (!merge_param.is_valid() || start_slice_idx < 0 || end_slice_idx < start_slice_idx) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid merge param", K(ret), K(merge_param), K(cg_idx), K(start_slice_idx), K(end_slice_idx));
+    LOG_WARN("invalid merge param", K(ret), K(merge_param), K(start_slice_idx), K(end_slice_idx));
   } else {
     merge_param_     = merge_param;
-    cg_idx_          = cg_idx;
     start_slice_idx_ = start_slice_idx;
     end_slice_idx_   = end_slice_idx;
+    is_inited_       = true;
   }
-  FLOG_INFO("[DDL_MERGE_TASK]  create ddl slice merge task,", K(ret), K(cg_idx_), K(start_slice_idx_), K(end_slice_idx_), K(merge_param_.for_replay_));
+  FLOG_INFO("[DDL_MERGE_TASK] create ddl slice merge task", K(ret), K(start_slice_idx_), K(end_slice_idx_), K(merge_param_.for_replay_));
 
   return ret;
 }
 
-int ObDDLMergeCgSliceTask::process()
+int ObDDLMergeSliceTask::process()
 {
   int ret = OB_SUCCESS;
   ObIDag *dag = get_dag();
   ObArenaAllocator allocator("MergeSlice");
   ObIDDLMergeHelper *merge_helper = nullptr;
-
+  
   if (OB_ISNULL(dag)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("dag should not be null", K(ret));
@@ -338,25 +332,24 @@ int ObDDLMergeCgSliceTask::process()
   } else if (OB_ISNULL(merge_helper)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("merge helper should not be null", K(ret), K(merge_param_));
-  } else if (OB_FAIL(merge_helper->merge_cg_slice(dag, merge_param_, cg_idx_, start_slice_idx_, end_slice_idx_))) {
-    LOG_WARN("failed merge_cg_slice", K(ret));
+  } else if (OB_FAIL(merge_helper->merge_slice(dag, merge_param_, start_slice_idx_, end_slice_idx_))) {
+    LOG_WARN("failed to merge slice", K(ret));
   }
 
-  FLOG_INFO("[DDL_MERGE_TASK] finish mrege cg slice", K(ret), K(cg_idx_), K(start_slice_idx_), K(end_slice_idx_), K(merge_param_));
+  FLOG_INFO("[DDL_MERGE_TASK] finish merge slice", K(ret), K(start_slice_idx_), K(end_slice_idx_), K(merge_param_));
   return ret;
 }
 
-void ObDDLMergeCgSliceTask::task_debug_info_to_string(char *buf, const int64_t buf_len, int64_t &pos) const
+void ObDDLMergeSliceTask::task_debug_info_to_string(char *buf, const int64_t buf_len, int64_t &pos) const
 {
-  ObLSID ls_id;
   ObTabletID tablet_id;
   ObWriteTabletParam *tablet_param = nullptr;
-  if (OB_SUCCESS == merge_param_.get_tablet_param(ls_id, tablet_id, tablet_param)) {
-    BUF_PRINTF("DDL Merge CG Slice Task: ls_id=%ld, tablet_id=%ld, cg_idx=%ld, start_slice=%ld, end_slice=%ld",
-               ls_id.id(), tablet_id.id(), cg_idx_, start_slice_idx_, end_slice_idx_);
+  if (OB_SUCCESS == merge_param_.get_tablet_param(tablet_id, tablet_param)) {
+    BUF_PRINTF("DDL Merge Slice Task: tablet_id=%ld, start_slice=%ld, end_slice=%ld",
+               tablet_id.id(), start_slice_idx_, end_slice_idx_);
   } else {
-    BUF_PRINTF("DDL Merge CG Slice Task: cg_idx=%ld, start_slice=%ld, end_slice=%ld",
-               cg_idx_, start_slice_idx_, end_slice_idx_);
+    BUF_PRINTF("DDL Merge Slice Task: start_slice=%ld, end_slice=%ld",
+               start_slice_idx_, end_slice_idx_);
   }
 }
 
@@ -384,17 +377,15 @@ int ObDDLMergeAssembleTask::process()
 {
   int ret = OB_SUCCESS;
   ObIDDLMergeHelper *merge_helper = nullptr;
-  ObArenaAllocator allocator(ObMemAttr(MTL_ID(),"Ddl_Assm_Task"));
-  ObLSID target_ls_id;
+  ObArenaAllocator allocator(ObMemAttr("Ddl_Assm_Task"));
   ObTabletID target_tablet_id;
   ObWriteTabletParam *tablet_param = nullptr;
   ObTabletHandle tablet_handle;
-  bool is_column_store_table = false;
 
   if (!is_inited_) {
     ret = OB_NOT_INIT;
     LOG_WARN("assemble task has not been init", K(ret), KPC(this));
-  } else if (OB_FAIL(merge_param_.get_tablet_param(target_ls_id, target_tablet_id, tablet_param))) {
+  } else if (OB_FAIL(merge_param_.get_tablet_param(target_tablet_id, tablet_param))) {
     LOG_WARN("failed to get tablet param", K(ret));
   } else if (OB_FAIL(merge_param_.get_merge_helper(merge_helper))) {
     LOG_WARN("failed to get merge helper", K(ret), K(merge_param_));
@@ -412,12 +403,11 @@ int ObDDLMergeAssembleTask::process()
 
 void ObDDLMergeAssembleTask::task_debug_info_to_string(char *buf, const int64_t buf_len, int64_t &pos) const
 {
-  ObLSID ls_id;
   ObTabletID tablet_id;
   ObWriteTabletParam *tablet_param = nullptr;
-  if (OB_SUCCESS == merge_param_.get_tablet_param(ls_id, tablet_id, tablet_param)) {
-    BUF_PRINTF("DDL Merge Assemble Task: ls_id=%ld, tablet_id=%ld, is_inited=%s",
-               ls_id.id(), tablet_id.id(), is_inited_ ? "true" : "false");
+  if (OB_SUCCESS == merge_param_.get_tablet_param(tablet_id, tablet_param)) {
+    BUF_PRINTF("DDL Merge Assemble Task: tablet_id=%ld, is_inited=%s",
+               tablet_id.id(), is_inited_ ? "true" : "false");
   } else {
     BUF_PRINTF("DDL Merge Assemble Task: is_inited=%s", is_inited_ ? "true" : "false");
   }

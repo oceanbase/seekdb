@@ -15,12 +15,13 @@
  */
 
 #define USING_LOG_PREFIX SERVER
+#include "lib/stat/ob_diagnostic_info_guard.h"
 #include "observer/mysql/obmp_stmt_fetch.h"
 #include "observer/mysql/obsm_utils.h"
 #include "sql/ob_sql.h"
 #include "observer/omt/ob_tenant.h"
 #include "observer/mysql/ob_sync_plan_driver.h"
-#include "deps/oblib/src/rpc/obmysql/packet/ompk_eof.h"
+#include "rpc/obmysql/packet/ompk_eof.h"
 #include "observer/mysql/obmp_stmt_send_piece_data.h"
 #include "sql/plan_cache/ob_ps_cache.h"
 
@@ -68,43 +69,8 @@ int ObMPStmtFetch::before_process()
     ObMySQLUtil::get_int4(pos, fetch_rows);
     fetch_rows_ = fetch_rows;
     if (pkt.get_clen() > FETCH_PACKET_SIZE_WITHOUT_OFFSET) {
-      if (lib::is_mysql_mode()) {
-        ret = OB_NOT_SUPPORTED;
-        LOG_WARN("not support offset type in mysql mode.", K(ret), K(cursor_id));
-      } else {
-        ObMySQLUtil::get_int2(pos, offset_type_);
-        ObMySQLUtil::get_int4(pos, offset_);
-        if (pkt.get_clen() > FETCH_PACKET_SIZE_WITH_OFFSET) {
-          ObMySQLUtil::get_int4(pos, extend_flag_);
-          if (has_long_data()) {
-            ObSQLSessionInfo *session = NULL;
-            if (OB_FAIL(ret)) {
-            } else if (OB_FAIL(get_session(session))) {
-              LOG_WARN("get session failed");
-            } else if (OB_ISNULL(session)) {
-              ret = OB_ERR_UNEXPECTED;
-              LOG_WARN("session is NULL or invalid", K(ret), K(session));
-            } else if (OB_NOT_NULL(session->get_dbms_cursor(cursor_id_))) {
-              int64_t column_count = session->get_dbms_cursor(cursor_id_)
-                                            ->get_field_columns().count();
-              int64_t len = (column_count + 7) / 8;
-              column_flag_ = static_cast<char*>(THIS_WORKER.get_sql_arena_allocator()
-                                                            .alloc(len + 1));
-              MEMSET(column_flag_, 0, len+1);
-              MEMCPY(column_flag_, pos, len);
-              pos += len;
-            } else {
-              ret = OB_ERR_FETCH_OUT_SEQUENCE;
-              LOG_WARN("cursor not found", K(cursor_id_), K(ret));
-            }
-            if (session != NULL) {
-              revert_session(session);
-            }
-          }
-        } else {
-          extend_flag_ = 0;
-        }
-      }
+      ret = OB_NOT_SUPPORTED;
+      LOG_WARN("not support offset type in mysql mode.", K(ret), K(cursor_id));
     } else {
       offset_type_ = OB_OCI_DEFAULT;
       offset_ = 0;
@@ -114,7 +80,7 @@ int ObMPStmtFetch::before_process()
     send_error_packet(ret, NULL);
     if (OB_ERR_PREPARE_STMT_CHECKSUM == ret) {
       force_disconnect();
-      LOG_WARN("prepare stmt checksum error, disconnect connection", K(ret));
+      LOG_ERROR("prepare stmt checksum error, disconnect connection", K(ret));
     }
     flush_buffer(true);
   }
@@ -140,9 +106,6 @@ int ObMPStmtFetch::do_process(ObSQLSessionInfo &session,
   ObAuditRecordData &audit_record = session.get_raw_audit_record();
   ObExecutingSqlStatRecord sqlstat_record;
   audit_record.try_cnt_++;
-  const bool enable_perf_event = lib::is_diagnose_info_enabled();
-  const bool enable_sql_audit = GCONF.enable_sql_audit
-                                && session.get_local_ob_enable_sql_audit();
   const bool enable_sqlstat = session.is_sqlstat_enabled();
   single_process_timestamp_ = ObTimeUtility::current_time();
   ObPLCursorInfo *cursor = session.get_cursor(cursor_id_);
@@ -152,17 +115,13 @@ int ObMPStmtFetch::do_process(ObSQLSessionInfo &session,
     //If a cursor is not found during the fetch process for any reason, immediately disconnect and let the application handle the fault tolerance
     //disconnect();
   } else {
-    ObWaitEventStat total_wait_desc;
     int64_t fetch_limit = OB_INVALID_COUNT == fetch_rows_ ? INT64_MAX : fetch_rows_;
     int64_t true_row_num = 0;
     {
       //Record the execution wait time of sql_audit, which depends on the end of the lifecycle of max_wait_guard and total_wait_guard,
       //Therefore, the destructor of total_wait_guard should be called before the audit record statistics logic
       int64_t execution_id = 0;
-      ObMaxWaitGuard max_wait_guard(
-          enable_perf_event ? &audit_record.exec_record_.max_wait_event_ : nullptr);
-      ObTotalWaitGuard total_wait_guard(enable_perf_event ? &total_wait_desc : nullptr);
-      if (enable_perf_event) {
+      {
         audit_record.exec_record_.record_start();
       }
       if (enable_sqlstat) {
@@ -187,16 +146,9 @@ int ObMPStmtFetch::do_process(ObSQLSessionInfo &session,
         // No need to handle the error response packet additionally
         session.set_current_execution_id(execution_id);
         OX(need_response_error = false);
-        if (0 == fetch_limit && !cursor->is_streaming() && cursor->is_ps_cursor()
-            && lib::is_oracle_mode() && OB_NOT_NULL(cursor->get_spi_cursor())
-            && cursor->get_spi_cursor()->row_store_.get_row_cnt() > 0) {
-          set_close_cursor();
-        } else {
-          OZ(response_result(*cursor, session, fetch_limit, true_row_num));
-        }
+        OZ(response_result(*cursor, session, fetch_limit, true_row_num));
         if (OB_READ_NOTHING == ret) {
           LOG_WARN("nothing to read", K(ret));
-          // oracle return success when read nothing
           ret = OB_SUCCESS;
         }
         OX(need_response_error = true);
@@ -210,12 +162,10 @@ int ObMPStmtFetch::do_process(ObSQLSessionInfo &session,
     ObExecStatUtils::record_exec_timestamp(*this, first_record, audit_record.exec_timestamp_);
     audit_record.exec_timestamp_.update_stage_time();
 
-    if (enable_perf_event) {
+    {
       audit_record.exec_record_.record_end();
       record_stat(stmt::T_EXECUTE, exec_end_timestamp_);
       audit_record.stmt_type_ = stmt::T_EXECUTE;
-      audit_record.exec_record_.wait_time_end_ = total_wait_desc.time_waited_;
-      audit_record.exec_record_.wait_count_end_ = total_wait_desc.total_waits_;
       audit_record.update_event_stage_state();
     }
 
@@ -238,33 +188,10 @@ int ObMPStmtFetch::do_process(ObSQLSessionInfo &session,
       }
       sqlstat_record.move_to_sqlstat_cache(session, sql);
     }
-    if (enable_sql_audit) {
-      audit_record.affected_rows_ = fetch_limit;
-      audit_record.return_rows_ = true_row_num;
-      audit_record.ps_stmt_id_ = cursor_id_;
-      audit_record.is_perf_event_closed_ = !lib::is_diagnose_info_enabled();
-      if (OB_NOT_NULL(cursor)
-          && cursor->is_ps_cursor()) {
-        ObPsStmtInfoGuard guard;
-        ObPsStmtInfo *ps_info = NULL;
-        ObPsStmtId inner_stmt_id = OB_INVALID_ID;
-        if (OB_SUCC(session.get_inner_ps_stmt_id(cursor_id_, inner_stmt_id))
-              && OB_SUCC(session.get_ps_cache()->get_stmt_info_guard(inner_stmt_id, guard))
-              && OB_NOT_NULL(ps_info = guard.get_stmt_info())) {
-          audit_record.ps_inner_stmt_id_ = inner_stmt_id;
-          audit_record.sql_ = const_cast<char *>(ps_info->get_ps_sql().ptr());
-          audit_record.sql_len_ = min(ps_info->get_ps_sql().length(), OB_MAX_SQL_LENGTH);
-        } else {
-          LOG_WARN("get sql fail in fetch", K(ret), K(cursor_id_), K(cursor->get_id()));
-        }
-      }
-    }
     session.partition_hit().freeze();
     session.set_show_warnings_buf(ret); // TODO: Move this to a better place, reduce some wb copy
 
     clear_wb_content(session);
-    // Stream audit information is handled by dbms_cursor
-    ObSQLUtils::handle_audit_record(false/*no need retry*/, EXECUTE_PS_FETCH, session);
   }
   return ret;
 }
@@ -282,20 +209,17 @@ int ObMPStmtFetch::response_query_header(ObSQLSessionInfo &session,
                            session,
                            retry_ctrl,
                            *this,
-                           false,
                            OB_INVALID_COUNT);
   if (NULL == fields) {
     ret = OB_ERR_UNEXPECTED;
-  } else if (OB_FAIL(drv.response_query_header(*fields,
-                                               has_ok_packet(),
-                                               false))) {
+  } else if (OB_FAIL(drv.response_query_header(*fields, false, false))) {
     LOG_WARN("fail to get autocommit", K(ret));
   }
   return ret;
 }
 
 /* fetch protocol sends result set to the reverse client
- * Protocol notes: Oracle protocol needs to send a head packet before returning each result set, MySQL does not require special handling
+ * Protocol notes: MySQL does not require a head packet before returning each result set
  * Memory usage notes: When obtaining rows to be returned by fetch, note that you need to switch to the allocator where the cursor is located
  * Cursor fetch is completed through methods in dbms_cursor
  * Offset functionality implementation: achieved by manipulating the current offset
@@ -343,11 +267,6 @@ int ObMPStmtFetch::response_result(pl::ObPLCursorInfo &cursor,
           } else {
             fields = &static_cast<pl::ObDbmsCursorInfo&>(cursor).get_field_columns();
           }
-          if (OB_SUCC(ret) && lib::is_oracle_mode()) {
-            // oracle mode always needs to return head packet
-            // mysql mode compatible with mysql protocol, do not return headpacket
-            OZ (response_query_header(session, fields));
-          }
           if (OB_SUCC(ret)) {
             // offset type
             // TODO: Streaming can only roll forward, so it can only be compatible with next, default, relative (offset greater than 0), absolute (actual position greater than current position)
@@ -369,8 +288,7 @@ int ObMPStmtFetch::response_result(pl::ObPLCursorInfo &cursor,
               }
             } else {
               tmp_exec_ctx.set_my_session(&session);
-              tmp_exec_ctx.set_mem_attr(ObMemAttr(session.get_effective_tenant_id(),
-                                                  ObModIds::OB_SQL_EXEC_CONTEXT,
+              tmp_exec_ctx.set_mem_attr(ObMemAttr(ObModIds::OB_SQL_EXEC_CONTEXT,
                                                   ObCtxIds::EXECUTE_CTX_ID));
               exec_ctx = &tmp_exec_ctx;
               if (OB_ISNULL(cursor.get_spi_cursor())) {
@@ -454,9 +372,9 @@ int ObMPStmtFetch::response_result(pl::ObPLCursorInfo &cursor,
                   }
                 }
                 if (OB_SUCC(ret) && (cur >= max_count || cur < 0 || max_count <= 0)) {
-                  // during the fetch process, except for the OB_ITER_END error indicating the end of the result set which is suppressed, all other errors will disconnect the connection
-                  // in oracle, if the scan exceeds the range, the connection will not be broken, and an OCI_NO_DATA error will be reported
-                  // To be compatible with this behavior, set the OB_ITER_END error code when out of range, do not report an error and do not return data, let the driver generate the OCI_NO_DATA error code
+                  // During fetch, all errors except OB_ITER_END disconnect the connection.
+                  // If the scan exceeds the range, set OB_ITER_END, report no error,
+                  // and return no data.
                   need_fetch = false;
                   ret = OB_ITER_END;
                 }
@@ -469,8 +387,8 @@ int ObMPStmtFetch::response_result(pl::ObPLCursorInfo &cursor,
           }
           if (OB_FAIL(ret)) {
             // do nothing
-          } else if (OB_FAIL(gctx_.schema_service_->get_tenant_schema_guard(session.get_effective_tenant_id(), schema_guard))) {
-            LOG_WARN("get tenant schema guard failed ", K(ret), K(session.get_effective_tenant_id()));
+          } else if (OB_FAIL(gctx_.schema_service_->get_tenant_schema_guard(schema_guard))) {
+            LOG_WARN("get tenant schema guard failed ", K(ret));
           } else if (!need_fetch && NULL != row) {
             if (has_long_data()) {
               OZ (response_row(session, *(const_cast<common::ObNewRow*>(row)), 
@@ -543,7 +461,7 @@ int ObMPStmtFetch::response_result(pl::ObPLCursorInfo &cursor,
         flags.status_flags_.OB_SERVER_STATUS_IN_TRANS
           = (session.is_server_status_in_transaction() ? 1 : 0);
         flags.status_flags_.OB_SERVER_STATUS_AUTOCOMMIT = (ac ? 1 : 0);
-        flags.status_flags_.OB_SERVER_MORE_RESULTS_EXISTS = has_ok_packet() ? true : false; /*no more result*/
+        flags.status_flags_.OB_SERVER_MORE_RESULTS_EXISTS = false; /*no more result*/
         flags.status_flags_.OB_SERVER_STATUS_CURSOR_EXISTS = !last_row ? 1 : 0;
         if ((!cursor.is_streaming()
              && max_count == cursor.get_current_position() + 1)
@@ -552,53 +470,19 @@ int ObMPStmtFetch::response_result(pl::ObPLCursorInfo &cursor,
         } else {
           flags.status_flags_.OB_SERVER_STATUS_LAST_ROW_SENT = 0;
         }
-        if (!session.is_obproxy_mode()) {
+        {
           // in java client or others, use slow query bit to indicate partition hit or not
           flags.status_flags_.OB_SERVER_QUERY_WAS_SLOW = !session.partition_hit().get_bool();
         }
         eofp.set_server_status(flags);
-        // for proxy
-        // in multi-stmt, send extra ok packet in the last stmt(has no more result)
         if (OB_SUCC(ret)) {
           if (OB_FAIL(packet_sender_.alloc_ezbuf())) {
             LOG_WARN("failed to alloc easy buf", K(ret));
-          } else if (!has_ok_packet() && OB_FAIL(update_last_pkt_pos())) {
-            LOG_WARN("failed to update last packet pos", K(ret));
-          } else if (last_row && !cursor.is_scrollable() 
-                              && !cursor.is_streaming()
-                              && cursor.is_ps_cursor()
-                              && lib::is_oracle_mode() 
-                              && OB_NOT_NULL(cursor.get_spi_cursor())
-                              && cursor.get_spi_cursor()->row_store_.get_row_cnt() > 0) {
-            set_close_cursor();
           }
         }
-        // for obproxy
         if (OB_SUCC(ret)) {
-          // in multi-stmt, send extra ok packet in the last stmt(has no more result)
-          if (need_send_extra_ok_packet() || has_ok_packet()) {
-            ObOKPParam ok_param;
-            if (has_ok_packet()) {
-              ok_param.affected_rows_ = last_row ? max_count : cursor.get_current_position() + 1;
-            } else {
-              ok_param.affected_rows_ = 0;
-            }
-            if ((!cursor.is_streaming()
-                 && max_count == cursor.get_current_position() + 1)
-                || last_row) {
-              ok_param.send_last_row_ = true;
-            } else {
-              ok_param.send_last_row_ = false;
-            }
-            ok_param.is_partition_hit_ = session.partition_hit().get_bool();
-            ok_param.has_more_result_ = false;
-            if (OB_FAIL(send_ok_packet(session, ok_param, &eofp))) {
-              LOG_WARN("fail to send ok packt", K(ok_param), K(ret));
-            }
-          } else {
-            if (OB_FAIL(response_packet(eofp, &session))) {
-              LOG_WARN("response packet fail", K(ret));
-            }
+          if (OB_FAIL(response_packet(eofp, &session))) {
+            LOG_WARN("response packet fail", K(ret));
           }
         }
       }
@@ -626,8 +510,7 @@ int ObMPStmtFetch::process_fetch_stmt(ObSQLSessionInfo &session,
   ObThreadLogLevelUtils::init(session.get_log_id_level_map());
   // obproxy may use 'SET @@last_schema_version = xxxx' to set newest schema,
   // observer will force refresh schema if local_schema_version < last_schema_version;
-  if (OB_FAIL(check_and_refresh_schema(session.get_login_tenant_id(),
-                                       session.get_effective_tenant_id()))) {
+  if (OB_FAIL(check_and_refresh_schema())) {
     LOG_WARN("failed to check_and_refresh_schema", K(ret));
   } else {
     //Each execution of different SQL requires an update
@@ -695,7 +578,6 @@ int ObMPStmtFetch::process()
     session.set_current_trace_id(ObCurTraceId::get_trace_id());
     session.init_use_rich_format();
     session.get_raw_audit_record().request_memory_used_ = 0;
-    session.set_proxy_version(get_proxy_version());
     observer::ObProcessMallocCallback pmcb(0,
           session.get_raw_audit_record().request_memory_used_);
     lib::ObMallocCallbackGuard guard(pmcb);
@@ -709,7 +591,7 @@ int ObMPStmtFetch::process()
       //session has been killed some moment ago
       ret = OB_ERR_SESSION_INTERRUPTED;
       LOG_WARN("session has been killed", K(session.get_session_state()), K_(cursor_id),
-               K(session.get_server_sid()), "proxy_sessid", session.get_proxy_sessid(), K(ret));
+               K(session.get_server_sid()), K(ret));
     } else if (OB_UNLIKELY(packet_len > session.get_max_packet_size())) {
       //packet size check with session variable max_allowd_packet or net_buffer_length
       ret = OB_ERR_NET_PACKET_TOO_LARGE;
@@ -717,16 +599,14 @@ int ObMPStmtFetch::process()
     } else if (OB_FAIL(session.get_query_timeout(query_timeout))) {
       LOG_WARN("fail to get query timeout", K(ret));
     } else if (OB_FAIL(gctx_.schema_service_->get_tenant_received_broadcast_version(
-                session.get_effective_tenant_id(), tenant_version))) {
+                tenant_version))) {
       LOG_WARN("fail get tenant broadcast version", K(ret));
     } else if (OB_FAIL(gctx_.schema_service_->get_tenant_received_broadcast_version(
-                OB_SYS_TENANT_ID, sys_version))) {
+                sys_version))) {
       LOG_WARN("fail get tenant broadcast version", K(ret));
-    } else if (OB_FAIL(process_extra_info(session, pkt, need_response_error))) {
-      LOG_WARN("fail get process extra info", K(ret));
     } else if (OB_FAIL(session.check_tenant_status())) {
       need_disconnect = false;
-      LOG_INFO("unit has been migrated, need deny new request", K(ret), K(MTL_ID()));
+      LOG_INFO("unit has been migrated, need deny new request", K(ret));
     } else {
       need_disconnect = false;
       ObPLCursorInfo *cursor = NULL;
@@ -774,7 +654,7 @@ int ObMPStmtFetch::process()
 void ObMPStmtFetch::record_stat(const stmt::StmtType type, const int64_t end_time) const
 {
   UNUSED(type);
-  if (lib::is_diagnose_info_enabled()) {
+  {
     const int64_t time_cost = end_time - get_receive_timestamp();
     EVENT_INC(SQL_OTHER_COUNT);
     EVENT_ADD(SQL_OTHER_TIME, time_cost);
@@ -910,4 +790,3 @@ int ObMPStmtFetch::response_row(ObSQLSessionInfo &session,
 
 } //end of namespace observer
 } //end of namespace oceanbase
-

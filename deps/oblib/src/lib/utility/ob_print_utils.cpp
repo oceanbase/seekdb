@@ -17,7 +17,7 @@
 #define USING_LOG_PREFIX LIB
 #include "lib/utility/ob_print_utils.h"
 #include "lib/utility/ob_tracepoint.h" // ERRSIM_POINT_DEF
-#include "deps/oblib/src/lib/allocator/ob_malloc.h"
+#include "lib/allocator/ob_malloc.h"
 namespace oceanbase
 {
 namespace common
@@ -315,7 +315,7 @@ int64_t to_string<uint64_t>(const uint64_t &v, char *buffer, const int64_t buffe
   } else {}
   return pos;
 }
-#ifdef __APPLE__
+#if defined(__APPLE__) || defined(_WIN32)
 template <>
 int64_t to_string<long>(const long &v, char *buffer, const int64_t buffer_size)
 {
@@ -484,8 +484,21 @@ int databuff_vprintf(char *buf, const int64_t buf_len, int64_t &pos, const char 
           while (*src == '-' || *src == '+' || *src == ' ' || *src == '#' || *src == '0' || *src == '\'') {
             if (*src == '\'') { src++; } else { *dst++ = *src++; }
           }
-          while (*src >= '0' && *src <= '9') { *dst++ = *src++; }
-          if (*src == '.') { *dst++ = *src++; while (*src >= '0' && *src <= '9') { *dst++ = *src++; } }
+          // width: either '*' or digits
+          if (*src == '*') {
+            *dst++ = *src++;
+          } else {
+            while (*src >= '0' && *src <= '9') { *dst++ = *src++; }
+          }
+          // precision: '.' followed by '*' or digits
+          if (*src == '.') {
+            *dst++ = *src++;
+            if (*src == '*') {
+              *dst++ = *src++;
+            } else {
+              while (*src >= '0' && *src <= '9') { *dst++ = *src++; }
+            }
+          }
           if (*src == 'l' && *(src+1) == 'l') {
             *dst++ = *src++; *dst++ = *src++;
           } else if (*src == 'l' && (*(src+1) == 'd' || *(src+1) == 'i' || *(src+1) == 'o' ||

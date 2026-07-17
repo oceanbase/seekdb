@@ -35,7 +35,7 @@ OB_SERIALIZE_MEMBER((ObMergeSetSpec, ObSetSpec));
 ObMergeSetOp::ObMergeSetOp(ObExecContext &exec_ctx, const ObOpSpec &spec, ObOpInput *input)
   : ObOperator(exec_ctx, spec, input),
     alloc_(ObModIds::OB_SQL_MERGE_GROUPBY,
-      OB_MALLOC_NORMAL_BLOCK_SIZE, exec_ctx.get_my_session()->get_effective_tenant_id(), ObCtxIds::WORK_AREA),
+      OB_MALLOC_NORMAL_BLOCK_SIZE, ObCtxIds::WORK_AREA),
     last_row_(alloc_),
     cmp_(),
     need_skip_init_row_(false),

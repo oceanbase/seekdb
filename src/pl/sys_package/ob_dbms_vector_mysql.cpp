@@ -287,7 +287,7 @@ int ObDBMSVectorMySql::index_vector_memory_estimate(ObPLExecCtx &ctx, ParamStore
     } else if (OB_FAIL(session_info->get_collation_connection(cs_type))) {
       LOG_WARN("fail to get collation_connection", KR(ret));
     } else if (OB_FAIL(ObVectorRefreshIndexExecutor::resolve_table_name(
-                  cs_type, case_mode, false, param_table_name,
+                  cs_type, case_mode, param_table_name,
                   database_name, table_name))) {
       LOG_WARN("fail to resolve table name", KR(ret), K(cs_type), K(case_mode), K(param_table_name));
     } else if (database_name.empty() && FALSE_IT(database_name = session_info->get_database_name())) {
@@ -295,7 +295,6 @@ int ObDBMSVectorMySql::index_vector_memory_estimate(ObPLExecCtx &ctx, ParamStore
       ret = OB_ERR_NO_DB_SELECTED;
       LOG_WARN("No database selected", KR(ret));
     } else if (OB_FAIL(schema_guard->get_table_id(
-                  exec_ctx->get_my_session()->get_effective_tenant_id(),
                   database_name,
                   table_name,
                   false, /*is_index*/
@@ -307,7 +306,6 @@ int ObDBMSVectorMySql::index_vector_memory_estimate(ObPLExecCtx &ctx, ParamStore
       ObCStringHelper helper;
       LOG_USER_ERROR(OB_TABLE_NOT_EXIST, helper.convert(database_name), helper.convert(table_name));
     } else if (OB_FAIL(schema_guard->get_column_schema(
-                   exec_ctx->get_my_session()->get_effective_tenant_id(),
                    table_id,
                    column_name,
                    col_schema))) {
@@ -323,20 +321,20 @@ int ObDBMSVectorMySql::index_vector_memory_estimate(ObPLExecCtx &ctx, ParamStore
       const int64_t max_pos = 1;
       ObObj sum_result_obj;
       ObObj max_result_obj;
-      const uint64_t tenant_id = exec_ctx->get_my_session()->get_effective_tenant_id();
+      
       SMART_VAR(ObMySQLProxy::MySQLResult, res) {
         ObSqlString query_string;
         sqlclient::ObMySQLResult *result = NULL;
         if (OB_FAIL(query_string.assign_fmt("SELECT cast(sum(table_rows) as unsigned) as sum, max(table_rows) as max from information_schema.PARTITIONS WHERE table_schema='%.*s' and table_name='%.*s'",
                 database_name.length(), database_name.ptr(), table_name.length(), table_name.ptr()))) {
           LOG_WARN("assign sql string failed", K(ret), K(database_name), K(table_name), K(column_name));
-        } else if (OB_FAIL(GCTX.sql_proxy_->read(res, tenant_id, query_string.ptr()))) {
-          LOG_WARN("read record failed", K(ret), K(tenant_id), K(query_string));
+        } else if (OB_FAIL(GCTX.sql_proxy_->read(res, query_string.ptr()))) {
+          LOG_WARN("read record failed", K(ret), K(query_string));
         } else if (OB_ISNULL(result = res.get_result())) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("fail to get sql result", K(ret), K(tenant_id), K(query_string));
+          LOG_WARN("fail to get sql result", K(ret), K(query_string));
         } else if (OB_FAIL(result->next())) {
-          LOG_WARN("get next result failed", K(ret), K(tenant_id), K(query_string));
+          LOG_WARN("get next result failed", K(ret), K(query_string));
         } else if (OB_FAIL(result->get_obj(sum_pos, sum_result_obj))) {
           LOG_WARN("failed to get object", K(ret));
         } else if (OB_FAIL(result->get_obj(max_pos, max_result_obj))) {
@@ -516,7 +514,7 @@ int ObDBMSVectorMySql::get_estimate_memory_str(ObVectorIndexParam index_param,
       }
       break;
     }
-    case ObVectorIndexAlgorithmType::VIAT_SPIV:
+    case ObVectorIndexAlgorithmType::VIAT_SPIV: 
     {
       ret = OB_NOT_SUPPORTED;
       LOG_USER_ERROR(OB_NOT_SUPPORTED, "esitamte sparse vector memory is");

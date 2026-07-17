@@ -16,7 +16,7 @@
 
 #include "observer/virtual_table/ob_mysql_proc_table.h"
 
-#include "share/schema/ob_schema_printer.h"
+#include "sql/printer/ob_schema_printer.h"
 #include "sql/session/ob_sql_session_info.h"
 
 using namespace oceanbase::common;
@@ -27,8 +27,7 @@ namespace observer
 {
 
 ObMySQLProcTable::ObMySQLProcTable()
-    : ObVirtualTableScannerIterator(),
-      tenant_id_(OB_INVALID_ID)
+    : ObVirtualTableScannerIterator()
 {
 }
 
@@ -38,7 +37,6 @@ ObMySQLProcTable::~ObMySQLProcTable()
 
 void ObMySQLProcTable::reset()
 {
-  tenant_id_ = OB_INVALID_ID;
   ObVirtualTableScannerIterator::reset();
 }
 
@@ -48,9 +46,6 @@ int ObMySQLProcTable::inner_get_next_row(common::ObNewRow *&row)
   if (OB_ISNULL(allocator_) || OB_ISNULL(schema_guard_) || OB_ISNULL(session_)) {
     ret = OB_NOT_INIT;
     SERVER_LOG(WARN, "argument is NULL", K(allocator_), K(schema_guard_), K(session_), K(ret));
-  } else if (OB_UNLIKELY(OB_INVALID_ID == tenant_id_)) {
-    ret = OB_NOT_INIT;
-    SERVER_LOG(WARN, "tenant_id is invalid", K(ret));
   } else {
     if (!start_to_read_) {
       ObObj *cells = NULL;
@@ -59,7 +54,7 @@ int ObMySQLProcTable::inner_get_next_row(common::ObNewRow *&row)
         SERVER_LOG(ERROR, "cur row cell is NULL", K(ret));
       }  else {
         ObArray<const ObRoutineInfo *> routine_array;
-        if (OB_FAIL(schema_guard_->get_routine_infos_in_tenant(tenant_id_, routine_array))) {
+        if (OB_FAIL(schema_guard_->get_routine_infos_in_tenant( routine_array))) {
           SERVER_LOG(WARN, "Get user info with tenant id error", K(ret));
         } else {
           const ObRoutineInfo *routine_info = NULL;
@@ -72,11 +67,11 @@ int ObMySQLProcTable::inner_get_next_row(common::ObNewRow *&row)
               SERVER_LOG(WARN, "User info should not be NULL", K(ret));
             } else if (ROUTINE_PACKAGE_TYPE == routine_info->get_routine_type()
                        || ROUTINE_UDT_TYPE == routine_info->get_routine_type()) {
-              // mysql compatible view, ignore oracle system package/udt routine
+              // MySQL-compatible view ignores package and UDT routines.
               continue;
-            } else if (OB_FAIL(schema_guard_->get_database_schema(tenant_id_,
+            } else if (OB_FAIL(schema_guard_->get_database_schema(
                         routine_info->get_database_id(), db_schema))) {
-              SERVER_LOG(WARN, "Failed to get database schema", K_(tenant_id), K(routine_info->get_database_id()), K(ret));
+              SERVER_LOG(WARN, "Failed to get database schema", K(routine_info->get_database_id()), K(ret));
             } else if (OB_ISNULL(db_schema)) {
               ret = OB_ERR_UNEXPECTED;
               SERVER_LOG(WARN, "Database schema should not be NULL", K(ret));
@@ -418,7 +413,6 @@ int ObMySQLProcTable::extract_create_node_from_routine_info(ObIAllocator &alloc,
   ParseResult parse_result;
   ObString routine_stmt;
   ObSQLMode sql_mode = exec_env.get_sql_mode();
-  sql_mode &= ~SMO_ORACLE;
   pl::ObPLParser parser(alloc, sql::ObCharsets4Parser(), sql_mode);
   const ObString &routine_body = routine_info.get_routine_body();
   const char prefix[] = "CREATE\n";
@@ -466,7 +460,7 @@ int ObMySQLProcTable::get_info_from_all_routine(const uint64_t col_id,
   if (OB_NOT_NULL(routine_info)) {
     SMART_VAR(ObMySQLProxy::MySQLResult, res) {
       common::sqlclient::ObMySQLResult *result = NULL;
-      const uint64_t exec_tenant_id = tenant_id_;
+      
       ObString col_name = col_id == CREATED ? "GMT_CREATE" : "GMT_MODIFIED";
       const char *sql_str = "select %.*s from oceanbase.__all_routine where "
                             " database_id = %ld and package_id = %ld "
@@ -482,7 +476,7 @@ int ObMySQLProcTable::get_info_from_all_routine(const uint64_t col_id,
       } else if (OB_ISNULL(sql_proxy)) {
         ret = OB_ERR_UNEXPECTED;
         SERVER_LOG(WARN, "data member is not init", K(ret));
-      } else if (OB_FAIL(sql_proxy->read(res, exec_tenant_id, sql.ptr()))) {
+      } else if (OB_FAIL(sql_proxy->read(res, sql.ptr()))) {
         SERVER_LOG(WARN, "fail to read result", K(ret), K(sql));
       } else if (OB_ISNULL(result = res.get_result())) {
         ret = OB_ERR_UNEXPECTED;
@@ -506,5 +500,4 @@ int ObMySQLProcTable::get_info_from_all_routine(const uint64_t col_id,
 
 }
 }
-
 

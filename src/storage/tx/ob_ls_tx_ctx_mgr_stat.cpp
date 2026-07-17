@@ -28,28 +28,28 @@ namespace transaction
 void ObLSTxCtxMgrStat::reset()
 {
   addr_.reset();
-  ls_id_.reset();
-  is_master_ = false;
   is_stopped_ = false;
-  state_ = -1;
+  block_tx_ = false;
+  block_normal_tx_ = false;
+  block_all_ = false;
   total_tx_ctx_count_ = 0;
   mgr_addr_ = 0;
 }
 
 //don't valid input arguments
 
-int ObLSTxCtxMgrStat::init(const common::ObAddr &addr, const share::ObLSID &ls_id,
-    const bool is_master, const bool is_stopped,
-    const int64_t state,
+int ObLSTxCtxMgrStat::init(const common::ObAddr &addr,
+    const bool is_stopped, const bool block_tx,
+    const bool block_normal_tx, const bool block_all,
     const int64_t total_tx_ctx_count, const int64_t mgr_addr)
 {
   int ret = OB_SUCCESS;
 
   addr_ = addr;
-  ls_id_ = ls_id;
-  is_master_ = is_master;
   is_stopped_ = is_stopped;
-  state_ = state;
+  block_tx_ = block_tx;
+  block_normal_tx_ = block_normal_tx;
+  block_all_ = block_all;
   total_tx_ctx_count_ = total_tx_ctx_count;
   mgr_addr_ = mgr_addr;
 

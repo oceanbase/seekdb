@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX STORAGE
 
 #include "sql/engine/expr/ob_expr_bm25.h"
+#include "share/rc/ob_module_provider.h"
 #include "sql/engine/ob_exec_context.h"
 #include "sql/das/iter/ob_das_scan_iter.h"
 #include "ob_block_stat_iter.h"
@@ -39,7 +40,7 @@ int ObTextAvgDocLenEstimator::estimate_avg_doc_len(
   number::ObNumber zero_num;
   zero_num.set_zero();
   tmp_result.set_number(zero_num);
-  if (OB_FAIL(MTL(ObAccessService *)->scan_block_stat(doc_length_est_param_, stat_iter))) {
+  if (OB_FAIL(share::g_mp->access_service()->scan_block_stat(doc_length_est_param_, stat_iter))) {
     LOG_WARN("failed to scan block stat", K(ret));
   }
   sql::ObNumStackAllocator<2> tmp_alloc;
@@ -92,7 +93,7 @@ int ObTextAvgDocLenEstimator::estimate_avg_doc_len(
     } else if (OB_FAIL(cast_number_to_double(result_num, avg_doc_token_cnt))) {
       LOG_WARN("failed to cast number to double", K(ret), K(result_num));
     }
-
+    
     if (OB_SUCC(ret)) {
       const double default_avg_doc_token_cnt = sql::ObExprBM25::DEFAULT_AVG_DOC_TOKEN_CNT;
       result = avg_doc_token_cnt > default_avg_doc_token_cnt ? avg_doc_token_cnt : default_avg_doc_token_cnt;
@@ -111,8 +112,8 @@ int ObTextAvgDocLenEstimator::cast_number_to_double(const number::ObNumber &num,
   result = 0.0;
   ObObj src_obj, dest_obj;
   src_obj.set_number(num);
-
-  ObArenaAllocator alloc("TxtNum2Dbl", OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID());
+  
+  ObArenaAllocator alloc("TxtNum2Dbl", OB_MALLOC_NORMAL_BLOCK_SIZE);
   ObCastCtx cast_ctx(&alloc, nullptr, CM_NONE, ObCharset::get_system_collation());
   if (OB_FAIL(ObObjCaster::to_type(ObDoubleType, cast_ctx, src_obj, dest_obj))) {
     LOG_WARN("failed to cast number to double", K(ret));

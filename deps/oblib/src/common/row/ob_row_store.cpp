@@ -421,8 +421,7 @@ int ObRowStore::Iterator::next_iter_pos(const BlockInfo *&iter_block, int64_t &i
 
 ////////////////////////////////////////////////////////////////
 ObRowStore::ObRowStore(ObIAllocator &alloc,
-                       const lib::ObLabel &label/*=ObModIds::OB_SQL_ROW_STORE*/,
-                       const uint64_t tenant_id/*=OB_INVALID_TENANT_ID*/,
+                       const lib::ObLabel &label/*=OB_INVALID_TENANT_ID*/,
                        bool use_compact_row /*= true*/)
 :   inner_alloc_(),
     reserved_columns_(alloc),
@@ -433,7 +432,6 @@ ObRowStore::ObRowStore(ObIAllocator &alloc,
     col_count_(0),
     last_last_row_size_(-1),
     last_row_size_(-1),
-    tenant_id_(tenant_id),
     label_(label),
     ctx_id_(ObCtxIds::DEFAULT_CTX_ID),
     is_read_only_(false),
@@ -445,8 +443,7 @@ ObRowStore::ObRowStore(ObIAllocator &alloc,
 {
   inner_alloc_.set_label(label);
 }
-ObRowStore::ObRowStore(const lib::ObLabel &label/*=ObModIds::OB_SQL_ROW_STORE*/,
-                       const uint64_t tenant_id/*=OB_INVALID_TENANT_ID*/,
+ObRowStore::ObRowStore(const lib::ObLabel &label/*=OB_INVALID_TENANT_ID*/,
                        bool use_compact_row /*= true*/)
 :   inner_alloc_(),
     reserved_columns_(inner_alloc_),
@@ -457,7 +454,6 @@ ObRowStore::ObRowStore(const lib::ObLabel &label/*=ObModIds::OB_SQL_ROW_STORE*/,
     col_count_(0),
     last_last_row_size_(-1),
     last_row_size_(-1),
-    tenant_id_(tenant_id),
     label_(label),
     ctx_id_(ObCtxIds::DEFAULT_CTX_ID),
     is_read_only_(false),
@@ -527,7 +523,7 @@ ObRowStore::BlockInfo* ObRowStore::new_block(int64_t block_size)
     block_size = NORMAL_BLOCK_SIZE;
   }
   // make sure all memory allocated under the right tenant
-  ObMemAttr attr(tenant_id_, label_, ctx_id_);
+  ObMemAttr attr(label_, ctx_id_);
   block = static_cast<BlockInfo *>(alloc_.alloc(block_size, attr));
   if (OB_ISNULL(block)) {
     OB_LOG_RET(WARN, common::OB_ERR_UNEXPECTED, "no memory");
@@ -701,7 +697,7 @@ int ObRowStore::init_pre_project_row(int64_t count)
       ret = OB_INVALID_ARGUMENT;
       OB_LOG(WARN, "invalid count", K(count), K(ret));
     } else {
-      ObMemAttr attr(tenant_id_, label_, ctx_id_);
+      ObMemAttr attr(label_, ctx_id_);
       pre_project_buf_ = static_cast<ObObj *>(
           alloc_.alloc(count * sizeof(ObObj), attr));
       if (OB_UNLIKELY(NULL == pre_project_buf_)) {
@@ -782,7 +778,7 @@ void ObRowStore::dump() const
   row.cells_ = inline_objs;
   char *buf = NULL;
   if (INLINE_OBJS_SIZE < col_count_) {
-    ObMemAttr attr(tenant_id_, label_);
+    ObMemAttr attr(label_);
     buf = static_cast<char *>(ob_malloc(sizeof(ObObj) * col_count_, attr));
     if (OB_ISNULL(buf)) {
       OB_LOG(WARN, "failed to alloc memory for objs");
@@ -816,7 +812,7 @@ int ObRowStore::assign(const ObRowStore &other_store)
   int64_t col_count = other_store.get_col_count();
   ObObj *cell = NULL;
   clear_rows();
-  tenant_id_ = other_store.tenant_id_;
+  
   use_compact_row_ = other_store.use_compact_row_;
 
   if (OB_FAIL(set_col_count(col_count))) {
@@ -910,7 +906,6 @@ DEFINE_SERIALIZE(ObRowStore)
   OB_UNIS_ENCODE(col_count_);
   OB_UNIS_ENCODE(is_read_only_);
   OB_UNIS_ENCODE(last_row_size_);
-  OB_UNIS_ENCODE(tenant_id_);
   OB_UNIS_ENCODE(use_compact_row_);
   return ret;
 }
@@ -961,7 +956,6 @@ DEFINE_DESERIALIZE(ObRowStore)
   OB_UNIS_DECODE(col_count_);
   OB_UNIS_DECODE(is_read_only_);
   OB_UNIS_DECODE(last_row_size_);
-  OB_UNIS_DECODE(tenant_id_);
   OB_UNIS_DECODE(use_compact_row_);
   if (OB_SUCC(ret)) {
     if (OB_FAIL(adjust_row_cells_reference())) {
@@ -989,7 +983,6 @@ DEFINE_GET_SERIALIZE_SIZE(ObRowStore)
   OB_UNIS_ADD_LEN(col_count_);
   OB_UNIS_ADD_LEN(is_read_only_);
   OB_UNIS_ADD_LEN(last_row_size_);
-  OB_UNIS_ADD_LEN(tenant_id_);
   OB_UNIS_ADD_LEN(use_compact_row_);
   return len;
 }

@@ -17,7 +17,7 @@
 #ifndef _OB_ENGINE_EXPR_EXPR_UTIL_H_
 #define _OB_ENGINE_EXPR_EXPR_UTIL_H_
 
-#include "lib/number/ob_number_v2.h"
+#include "common/number/ob_number_v2.h"
 #include "sql/engine/expr/ob_expr_operator.h"
 
 namespace oceanbase
@@ -110,15 +110,14 @@ public:
   {
     return round_num2int64(common::number::ObNumber(datum.get_number()), v);
   }
-  // Get integer value from integer parameter which type is ObIntType in mysql
-  // or ObNumberType in oracle.
+  // Get integer value from integer parameter.
   //
   // Keep %int_val unchanged if datum is NULL or datum->is_null().
   static int get_int_param_val(common::ObDatum *datum, bool is_decint, int64_t &int_val);
 
   // Set the ASCII string to expression result.
   // e.g.:
-  //   dump() need result is NLS_CHARACTERSET, but we can only generate ASCII string in code,
+  //   dump() needs database charset output, but we can only generate ASCII string in code,
   //   this function is used to convert the result characterset.
   static int set_expr_asscii_result(const ObExpr &expr,
                                       ObEvalCtx &ctx,
@@ -210,7 +209,7 @@ int calc_##tritype##_expr(const ObExpr &expr, ObEvalCtx &ctx,                 \
   if (OB_FAIL(expr.args_[0]->eval(ctx, radian))) {                            \
     LOG_WARN("eval radian arg failed", K(ret), K(expr));                      \
   } else if (radian->is_null()) {                                             \
-    /* radian is already be cast to number type, no need to is_null_oracle */ \
+    /* radian is already cast to number type, no extra null check is needed */ \
     res_datum.set_null();                                                     \
   } else if (ObNumberType == expr.args_[0]->datum_meta_.type_) {              \
     number::ObNumber res_nmb;                                                 \

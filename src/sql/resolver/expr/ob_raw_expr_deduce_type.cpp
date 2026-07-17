@@ -22,6 +22,7 @@
 #include "sql/engine/expr/ob_expr_between.h"
 #include "sql/engine/expr/ob_array_expr_utils.h"
 #include "sql/parser/ob_parser.h"
+#include "rpc/obmysql/ob_mysql_util.h"
 
 namespace oceanbase
 {
@@ -364,7 +365,6 @@ int ObRawExprDeduceType::push_back_types(const ObRawExpr *param_expr, ObIExprRes
     LOG_WARN("push back param type failed", K(ret));
   } else {
     const int64_t idx = types.count() - 1;
-    const bool is_mysql_mode = lib::is_mysql_mode();
     const char *p_normal_start = nullptr;
     bool is_explain_stmt =
       (my_session_ != NULL && my_session_->get_cur_exec_ctx() != NULL
@@ -395,26 +395,17 @@ int ObRawExprDeduceType::push_back_types(const ObRawExpr *param_expr, ObIExprRes
     //
     //  explain stmt does not proceduce questionmark exprs, special processing is needed in order to
     //  print precise sql plan.
-    if (is_mysql_mode && ob_is_int_uint_tc(types.at(idx).get_type())
+    if (ob_is_int_uint_tc(types.at(idx).get_type())
         && (param_expr->is_column_ref_expr())) {
       ObPrecision max_prec =
         ObAccuracy::MAX_ACCURACY2[0 /*mysql*/][types.at(idx).get_type()].get_precision();
       const ObPrecision prec = MAX(types.at(idx).get_precision(), max_prec);
       types.at(idx).set_precision(prec);
       types.at(idx).set_scale(0);
-    } else if (is_mysql_mode && ob_is_decimal_int_tc(types.at(idx).get_type())) {
+    } else if (ob_is_decimal_int_tc(types.at(idx).get_type())) {
       // for decimal int type in mysql, reset calc accuracy to itself to avoid accuracy reuse
       // during type deduce
       types.at(idx).set_calc_accuracy(types.at(idx).get_accuracy());
-    } else if (!is_mysql_mode && (is_ddl_stmt || is_show_stmt) && types.at(idx).is_decimal_int()
-               && param_expr->is_column_ref_expr()) {
-      // If c1 and c2 are both ObDecimalIntType columns, result type of c1 + c2 is ObDecimalIntType.
-      // However, result type of `c1 + c2` in ddl stmt needs to be ObNumberType for oracle compatiblity's sake.
-      // Hence, we change ObDecimalIntType to ObNumberType heere.
-      // same as:
-      // create view v as select c1 + c2 from t;
-      // desc v;
-      types.at(idx).set_number();
     }
     // since param is not stored in ObRawExpr any longer, we need set param for ObConstRawExpr to
     // make the result type compatible with orale/mysql
@@ -519,7 +510,7 @@ int ObRawExprDeduceType::calc_result_type(ObNonTerminalRawExpr &expr,
     // demands that we set the calculation type here.
     for (int64_t i = 0; i < types.count() && OB_SUCC(ret); ++i) {
       types.at(i).set_calc_meta(types.at(i));
-      if (lib::is_mysql_mode() && ob_is_double_type(types.at(i).get_type())) {
+      if (ob_is_double_type(types.at(i).get_type())) {
         const ObPrecision p = types.at(i).get_precision();
         const ObScale s = types.at(i).get_scale();
         // check whether the precision and scale is valid
@@ -612,7 +603,7 @@ int ObRawExprDeduceType::calc_result_type(ObNonTerminalRawExpr &expr,
     }
     if (OB_SUCC(ret)) {
       // refine result type precision and scale here
-      if (lib::is_mysql_mode() && result_type.is_decimal_int()) {
+      if (result_type.is_decimal_int()) {
         result_type.set_precision(MIN(result_type.get_precision(),
                                       OB_MAX_DECIMAL_POSSIBLE_PRECISION));
       }
@@ -630,11 +621,11 @@ int ObRawExprDeduceType::calc_result_type(ObNonTerminalRawExpr &expr,
         const ObObjType to = types.at(i).get_calc_type();
         const ObCollationType to_cs_type = types.at(i).get_calc_collation_type();
         LOG_DEBUG("check parameters can cast to expected type", K(ret), K(i), K(from), K(to));
-        // for most exprs in oracle mode, do not allow bool type param
+        // Most expressions do not allow bool-like extended type parameters.
         if (ObExtendType == from && ob_is_character_type(to, to_cs_type) && !op->is_called_in_sql()) {
           ret = OB_ERR_CALL_WRONG_ARG;
           LOG_USER_ERROR(OB_ERR_CALL_WRONG_ARG, static_cast<int>(strlen(op->get_name())), op->get_name());
-          LOG_WARN("PLS-00306: wrong number or types of arguments in call",
+          LOG_WARN("wrong number or types of arguments in call",
                    K(ret), K(from), K(to), K(op->get_name()), K(op->is_called_in_sql()));
         }
 
@@ -649,7 +640,7 @@ int ObRawExprDeduceType::calc_result_type(ObNonTerminalRawExpr &expr,
 
     LOG_DEBUG("debug for expr params calc meta", K(types));
     // Here is a validation:
-    // New framework oracle mode string type result's character set is consistent with the charset defined on the session
+    // String result character set should be consistent with the charset defined on the session.
     // Inconsistency may be due to a problem with expression derivation
     // reference
     //
@@ -763,17 +754,6 @@ int ObRawExprDeduceType::visit(ObOpRawExpr &expr)
     }
 
     expr.set_result_type(result_type);
-  } else if (T_OP_ORACLE_OUTER_JOIN_SYMBOL == expr.get_expr_type()) {
-    ObRawExpr *param_expr = NULL;
-    if (OB_UNLIKELY(1 != expr.get_param_count())) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("Failed to get expr", K(ret));
-    } else if (OB_ISNULL(param_expr = expr.get_param_expr(0))) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("NULL param expr", K(ret));
-    } else {
-      expr.set_result_type(param_expr->get_result_type());
-    }
   } else if (T_OP_MULTISET == expr.get_expr_type()) {
     ObRawExpr *left = expr.get_param_expr(0);
     ObRawExpr *right = expr.get_param_expr(1);
@@ -931,7 +911,8 @@ int ObRawExprDeduceType::check_expr_param(ObOpRawExpr &expr)
       int64_t right_output_column = 0;
       ObQueryRefRawExpr *left_ref = static_cast<ObQueryRefRawExpr *>(left_expr);
       int64_t left_output_column = left_ref->get_output_column();
-      //oracle mode not allow: select 1 from dual where (select 1,2 from dual) in (1,2)
+      // Disallow mismatched row widths, for example:
+      // select 1 where (select 1,2) in (1,2)
       if (expr.get_param_expr(1)->get_expr_type() == T_OP_ROW) {
         // If it is a vector, then the number of columns in the right output is the number of vector expressions
         for (int64_t i = 0; OB_SUCC(ret) && i < expr.get_param_expr(1)->get_param_count(); i++) {
@@ -1090,8 +1071,8 @@ int ObRawExprDeduceType::visit_right_param(ObOpRawExpr &expr)
     // If it is a vector, then the number of columns output on the left is the number of vector expressions
     left_output_column = expr.get_param_expr(0)->get_param_count();
   } else if (expr.get_param_expr(0)->has_flag(IS_SUB_QUERY)) {
-    //oracle mode not allow:
-    //  select 1 from dual where (select 1,2 from dual) in (select 1,2 from dual)
+    // Disallow mismatched row widths, for example:
+    // select 1 where (select 1,2) in (select 1,2)
     left_output_column = get_expr_output_column(*expr.get_param_expr(0));
   } else {
     left_output_column = 1;
@@ -1372,7 +1353,7 @@ int ObRawExprDeduceType::set_json_agg_result_type(ObAggFunRawExpr &expr, ObExprR
           if (ob_is_string_type(obj_type) && !is_json_type) {
             result_type.set_type(obj_type);
             result_type.set_length(OB_MAX_SQL_LENGTH);
-            result_type.set_length_semantics(my_session_->get_actual_nls_length_semantics());
+            result_type.set_length_semantics(my_session_->get_actual_length_semantics());
             if (ob_is_blob(obj_type, result_type.get_collation_type())) {
               result_type.set_collation_type(CS_TYPE_BINARY);
               result_type.set_calc_collation_type(CS_TYPE_BINARY);
@@ -1421,8 +1402,7 @@ int ObRawExprDeduceType::visit(ObAggFunRawExpr &expr)
       case T_FUN_APPROX_COUNT_DISTINCT:
       case T_FUN_KEEP_COUNT:
       case T_FUN_SUM_OPNSIZE: {
-        //mysql does not currently support approx_count_distinct, here we also support it in mysql mode, return type
-        // and count function returns the same, ob's oracle mode then keeps compatible with oracle, as decimal type.
+        // APPROX_COUNT_DISTINCT uses the same integer result type as COUNT.
         expr.set_data_type(ObIntType);
         expr.set_scale(0);
         expr.set_precision(MAX_BIGINT_WIDTH);
@@ -1436,7 +1416,7 @@ int ObRawExprDeduceType::visit(ObAggFunRawExpr &expr)
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("get unexpected NULL", K(param_expr), K(my_session_), K(ret));
         } else {
-          // for oracle lob
+          // LOB variant is not implemented in this path.
           ret = OB_NOT_IMPLEMENT;
           LOG_WARN("not implement", K(ret));
         }
@@ -1502,7 +1482,7 @@ int ObRawExprDeduceType::visit(ObAggFunRawExpr &expr)
           result_type.set_calc_type(ob_is_unsigned_type(child_expr->get_data_type()) ?
             ObUInt64Type : ObIntType);
           override_calc_meta = false;
-          result_type.set_accuracy(ObAccuracy::MAX_ACCURACY2[0/*is_oracle*/][ObUInt64Type]);
+          result_type.set_accuracy(ObAccuracy::MAX_ACCURACY2[0/*mysql*/][ObUInt64Type]);
           expr.set_result_type(result_type);
           ObObjTypeClass from_tc = child_expr->get_type_class();
           need_add_cast = (ObUIntTC != from_tc && ObIntTC != from_tc && ObBitTC != from_tc);
@@ -1595,7 +1575,7 @@ int ObRawExprDeduceType::visit(ObAggFunRawExpr &expr)
                   static_cast<ObPrecision>(result_type.get_precision() + scale_increment));
               } else {
                 result_type.set_precision(
-                  static_cast<ObPrecision>(ObMySQLUtil::float_length(result_type.get_scale())));
+                  static_cast<ObPrecision>(obmysql::ObMySQLUtil::float_length(result_type.get_scale())));
               }
             }
             // recheck precision and scale overflow
@@ -1735,13 +1715,7 @@ int ObRawExprDeduceType::visit(ObAggFunRawExpr &expr)
             LOG_WARN("unexpected mysql mode", K(ret));
           }
           if (OB_SUCC(ret)) {
-            ObObjType to_type = keep_from_type ? from_type
-                                      : ((T_FUN_GROUP_PERCENTILE_DISC == expr.get_expr_type()
-                                            && !ob_is_decimal_int(from_type))
-                                              ? ObLongTextType : ObNumberType);
-            if (is_mysql_mode()) {
-              to_type = keep_from_type ? from_type: ObDoubleType;
-            }
+            ObObjType to_type = keep_from_type ? from_type : ObDoubleType;
             const ObCollationType to_cs_type = keep_from_type ? from_cs_type
                                       : ((T_FUN_GROUP_PERCENTILE_DISC == expr.get_expr_type()
                                             && !ob_is_decimal_int(from_type))
@@ -1786,7 +1760,7 @@ int ObRawExprDeduceType::visit(ObAggFunRawExpr &expr)
       case T_FUN_REGR_SXX:
       case T_FUN_REGR_SYY:
       case T_FUN_REGR_SXY:
-        need_add_cast = true;//compatible with oracle behavior, covar_pop/covar_samp do not need to add cast
+        need_add_cast = true; // CORR and selected REGR_* variants need casts; covar_pop/covar_samp do not.
       case T_FUN_REGR_AVGX:
       case T_FUN_REGR_AVGY:
       case T_FUN_COVAR_POP:
@@ -1842,9 +1816,9 @@ int ObRawExprDeduceType::visit(ObAggFunRawExpr &expr)
         } else {
           result_type.set_type(ObNumberType);
           result_type.set_scale(
-            ObAccuracy::DDL_DEFAULT_ACCURACY2[ORACLE_MODE][ObNumberType].get_scale());
+            ObAccuracy::DDL_DEFAULT_ACCURACY2[MYSQL_MODE][ObNumberType].get_scale());
           result_type.set_precision(
-            ObAccuracy::DDL_DEFAULT_ACCURACY2[ORACLE_MODE][ObNumberType].get_precision());
+            ObAccuracy::DDL_DEFAULT_ACCURACY2[MYSQL_MODE][ObNumberType].get_precision());
           expr.set_result_type(result_type);
           //group-related rank comparison is special, new engine needs separate cast determination
           ObCastMode def_cast_mode = CM_NONE;
@@ -1903,9 +1877,9 @@ int ObRawExprDeduceType::visit(ObAggFunRawExpr &expr)
           expr.set_result_type(udf_expr->get_result_type());
           if (result_type.is_character_type() && result_type.get_length() < 0) {
             if (result_type.is_char()) {
-              result_type.set_length(OB_MAX_ORACLE_PL_CHAR_LENGTH_BYTE);
+              result_type.set_length(OB_MAX_EXTENDED_PL_CHAR_LENGTH_BYTE);
             } else if (result_type.is_varchar()) {
-              result_type.set_length(OB_MAX_ORACLE_VARCHAR_LENGTH);
+              result_type.set_length(OB_MAX_EXTENDED_VARCHAR_LENGTH);
             }
           }
           expr.set_result_type(result_type);
@@ -2273,7 +2247,7 @@ int ObRawExprDeduceType::adjust_cast_as_signed_unsigned(ObSysFunRawExpr &expr)
     LOG_WARN("unexpected cast expr", K(ret));
   } else if (expr.has_flag(IS_INNER_ADDED_EXPR)) {
     /*do nothing*/
-  } else if (lib::is_mysql_mode() && !is_ddl_stmt) {
+  } else if (!is_ddl_stmt) {
     // For non-DDL scenarios in mysql, such as select or DML statement, there is no need to adjust
     // the signed/unsigned type. Otherwise, such as CTAS statement, need to make the type
     // adjustments. For example:
@@ -2515,9 +2489,8 @@ int ObRawExprDeduceType::visit(ObWinFunRawExpr &expr)
     result_type.set_int();
     result_type.set_accuracy(ObAccuracy::MAX_ACCURACY[ObIntType]);
     expr.set_result_type(result_type);
-    if (OB_UNLIKELY(lib::is_mysql_mode() &&
-                           (!func_params.at(0)->is_const_expr() ||
-                            !func_params.at(0)->get_result_type().is_integer_type()))) {
+    if (OB_UNLIKELY(!func_params.at(0)->is_const_expr() ||
+                            !func_params.at(0)->get_result_type().is_integer_type())) {
       // nile(N), N cannot be NULL, and must be an integer in the range 0 to 2^63, inclusive, in any of the following forms:
       // - an unsigned integer constant literal
       // - a positional parameter marker (?) (in ps protocol)
@@ -2554,7 +2527,7 @@ int ObRawExprDeduceType::visit(ObWinFunRawExpr &expr)
     }
   } else if (T_WIN_FUN_LEAD == expr.get_func_type()
              || T_WIN_FUN_LAG == expr.get_func_type()) {
-    if (is_mysql_mode() && func_params.count() == 3) { //compatiable with mysql
+    if (func_params.count() == 3) { //compatiable with mysql
       ObExprResType res_type;
       ObSEArray<ObExprResType, 2> types;
       ObCollationType coll_type = CS_TYPE_INVALID;
@@ -2567,7 +2540,6 @@ int ObRawExprDeduceType::visit(ObWinFunRawExpr &expr)
       } else if (OB_FAIL(ObExprOperator::aggregate_result_type_for_merge(res_type,
                                                                   &types.at(0),
                                                                   types.count(),
-                                                                  false,
                                                                   type_ctx))) {
         LOG_WARN("fail to aggregate_result_type_for_merge", K(ret), K(types));
       } else {
@@ -2668,7 +2640,6 @@ int ObRawExprDeduceType::visit(ObWinFunRawExpr &expr)
       LOG_WARN("interval is not numberic", K(ret), KPC(expr.lower_.interval_expr_));
     }
     if (OB_SUCC(ret) &&
-        lib::is_mysql_mode() &&
         expr.get_window_type() == WINDOW_RANGE &&
         (expr.upper_.interval_expr_ != NULL || expr.lower_.interval_expr_ != NULL)) {
       if (expr.get_order_items().empty()) {
@@ -2711,7 +2682,7 @@ int ObRawExprDeduceType::visit(ObWinFunRawExpr &expr)
     ObRawExpr *order_expr = expr.get_order_items().at(0).expr_;
     const ObObjType &order_res_type = order_expr->get_data_type();
     const ObItemType &item_type = order_expr->get_expr_type();
-    if (lib::is_mysql_mode() && item_type == T_INT) {
+    if (item_type == T_INT) {
       ret = OB_ERR_WINDOW_ILLEGAL_ORDER_BY;
       LOG_WARN("int not expected in window function's orderby ", K(ret));
     }
@@ -3118,10 +3089,12 @@ int ObRawExprDeduceType::set_agg_regr_result_type(ObAggFunRawExpr &expr, ObExprR
     ObCollationType from_cs_type1 = expr.get_param_expr(0)->get_result_type().get_collation_type();
     ObCollationType from_cs_type2 = expr.get_param_expr(1)->get_result_type().get_collation_type();
     if (expr.get_expr_type() == T_FUN_REGR_SXX ||
-        expr.get_expr_type() == T_FUN_REGR_AVGX) {//Here according to function characteristics, compatibility with Oracle behavior is set}
+        expr.get_expr_type() == T_FUN_REGR_AVGX) {
+      // These functions calculate on the first argument as NUMBER.
       from_type1 = ObNumberType;
     } else if (expr.get_expr_type() == T_FUN_REGR_SYY ||
-                expr.get_expr_type() == T_FUN_REGR_AVGY) {//Here according to function characteristics, Oracle behavior is compatible and set}
+                expr.get_expr_type() == T_FUN_REGR_AVGY) {
+      // These functions calculate on the second argument as NUMBER.
       from_type2 = ObNumberType;
     }
     ObObjType to_type = ObNumberType;
@@ -3147,9 +3120,9 @@ int ObRawExprDeduceType::set_agg_regr_result_type(ObAggFunRawExpr &expr, ObExprR
     } else {
       result_type.set_type(to_type);
       result_type.set_scale(
-        ObAccuracy::DDL_DEFAULT_ACCURACY2[ORACLE_MODE][to_type].get_scale());
+        ObAccuracy::DDL_DEFAULT_ACCURACY2[MYSQL_MODE][to_type].get_scale());
       result_type.set_precision(
-        ObAccuracy::DDL_DEFAULT_ACCURACY2[ORACLE_MODE][to_type].get_precision());
+        ObAccuracy::DDL_DEFAULT_ACCURACY2[MYSQL_MODE][to_type].get_precision());
       expr.set_result_type(result_type);
     }
     }
@@ -3511,7 +3484,8 @@ int ObRawExprDeduceType::add_implicit_cast(ObAggFunRawExpr &parent,
     ObRawExpr *&child_ptr = real_param_exprs.at(i);
     if (skip_cast_expr(parent, i)) {
       // do nothing
-    // Compatible with Oracle behavior, regr_sxx and regr_syy only need to add cast to the calculated parameters, regr_sxy behavior is consistent with regr_syy, which is quite strange, temporarily compatible
+    // regr_sxx and regr_syy only need casts on the calculated parameters;
+    // regr_sxy follows the regr_syy casting direction.
     } else if ((parent.get_expr_type() == T_FUN_JSON_OBJECTAGG ||
                 parent.get_expr_type() == T_FUN_JSON_ARRAYAGG) &&
                 child_ptr->get_result_type().is_enum_set_with_subschema()) {
@@ -3543,7 +3517,7 @@ int ObRawExprDeduceType::add_implicit_cast(ObAggFunRawExpr &parent,
                  parent.get_expr_type() == T_FUN_AVG ||
                  parent.get_expr_type() == T_FUN_COUNT) &&
                  child_ptr->get_expr_type() == T_FUN_SYS_OP_OPNSIZE) ||
-                (lib::is_mysql_mode() &&
+                (
                  (T_FUN_VARIANCE == parent.get_expr_type() ||
                   T_FUN_STDDEV == parent.get_expr_type() ||
                   T_FUN_STDDEV_POP == parent.get_expr_type() ||
@@ -3596,8 +3570,7 @@ int ObRawExprDeduceType::try_add_cast_expr_above_for_deduce_type(ObRawExpr &expr
   cast_dst_type.set_result_flag(child_res_type.get_result_flag());
   cast_dst_type.set_accuracy(dst_type.get_calc_accuracy());
   cast_dst_type.add_decimal_int_cast_mode(dst_type.get_cast_mode());
-  if (lib::is_mysql_mode()
-      && (dst_type.get_calc_meta().is_number()
+  if ((dst_type.get_calc_meta().is_number()
           || dst_type.get_calc_meta().is_unumber()
           || ob_is_decimal_int_tc(dst_type.get_calc_meta().get_type()))
       && dst_type.get_calc_scale() == -1) {
@@ -3609,13 +3582,12 @@ int ObRawExprDeduceType::try_add_cast_expr_above_for_deduce_type(ObRawExpr &expr
   } else if (ob_is_decimal_int_tc(dst_type.get_calc_meta().get_type()) &&
               dst_type.get_calc_scale() != SCALE_UNKNOWN_YET) {
     cast_dst_type.set_accuracy(dst_type.get_calc_accuracy());
-  } else if (lib::is_mysql_mode()
-             && (ObDateTimeTC == child_res_type.get_type_class()
+  } else if ((ObDateTimeTC == child_res_type.get_type_class()
                 || ObMySQLDateTimeTC == child_res_type.get_type_class())
              && (ObDateTimeTC == dst_type.get_calc_meta().get_type_class()
                 || ObMySQLDateTimeTC == dst_type.get_calc_meta().get_type_class())) {
     cast_dst_type.set_accuracy(child_res_type.get_accuracy());
-  } else if (lib::is_mysql_mode() && ObDoubleTC == dst_type.get_calc_meta().get_type_class()) {
+  } else if (ObDoubleTC == dst_type.get_calc_meta().get_type_class()) {
     if (ob_is_numeric_tc(child_res_type.get_type_class())) {
       // passing scale and precision when casting float/double/decimal to double
       ObScale s = child_res_type.get_calc_accuracy().get_scale();
@@ -3646,7 +3618,7 @@ int ObRawExprDeduceType::try_add_cast_expr_above_for_deduce_type(ObRawExpr &expr
     cast_dst_type.set_udt_id(udt_id);
   }
   // Here only set the accuracy for some cases, other cases' accuracy information is left to be set by cast type inference
-  if (lib::is_mysql_mode() && cast_dst_type.is_string_type() &&
+  if (cast_dst_type.is_string_type() &&
       cast_dst_type.has_result_flag(ZEROFILL_FLAG)) {
     // get_length() must be manually called, there will be code inside that sets the length based on int precision
     cast_dst_type.set_length(child_res_type.get_length());

@@ -19,7 +19,6 @@
 
 #include "lib/ob_define.h"
 #include "lib/atomic/ob_atomic.h"
-#include "lib/stat/ob_diagnose_info.h"
 
 #ifdef _WIN32
 #include <windows.h>
@@ -137,7 +136,6 @@ public:
     }
     if (!locked) {
       if (event_no > 0) {
-        ObWaitEventGuard wait_guard(event_no, 0, MaxSpin, 0, 0);
         while (false == try_lock()) {
           // Sleep when it exceeds spin limit.
           if (MaxSpin <= (cnt++)) {

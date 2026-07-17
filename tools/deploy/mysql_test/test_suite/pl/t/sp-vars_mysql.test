@@ -1167,7 +1167,7 @@ CALL p1(_UTF8 't');
 
 
 CALL p2('t');
-## CALL p2(_LATIN1 't');
+## CALL p2(_utf8mb4 't');
 
 #
 # Cleanup.

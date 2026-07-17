@@ -21,7 +21,7 @@
 #include "storage/slog/ob_storage_log_item.h"
 #include "storage/slog/ob_storage_log_replayer.h"
 #include "storage/slog/ob_storage_log_writer.h"
-#include "share/ob_thread_mgr.h"
+#include "lib/thread/ob_thread_name.h"
 
 namespace oceanbase
 {
@@ -49,8 +49,7 @@ int ObStorageLogWriter::init(
     const char *log_dir,
     const int64_t log_file_size,
     const int64_t max_log_size,
-    const blocksstable::ObLogFileSpec &log_file_spec,
-    const uint64_t tenant_id)
+    const blocksstable::ObLogFileSpec &log_file_spec)
 {
   int ret = OB_SUCCESS;
 
@@ -71,7 +70,7 @@ int ObStorageLogWriter::init(
     ret = OB_INVALID_ARGUMENT;
     STORAGE_REDO_LOG(WARN, "Invalid arguments", K(ret), KP(log_dir),
         K(log_file_size), K(max_log_size));
-  } else if (OB_FAIL(ObBaseLogWriter::init(log_cfg, thread_name, tenant_id))) {
+  } else if (OB_FAIL(ObBaseLogWriter::init(log_cfg, thread_name))) {
     STORAGE_REDO_LOG(WARN, "Fail to init ObBaseLogWriter", K(ret));
   } else if (OB_FAIL(ObLogPolicyParser::parse_retry_write_policy(log_file_spec.retry_write_policy_,
       retry_write_policy_))) {
@@ -80,14 +79,14 @@ int ObStorageLogWriter::init(
   } else if (OB_FAIL(ObLogPolicyParser::parse_log_write_policy(log_file_spec.log_write_policy_,
       log_write_policy_))) {
     ret = OB_INVALID_ARGUMENT;
-    STORAGE_REDO_LOG(WARN, "Fail to parse log write policy", K(ret), K(log_file_spec));
-  } else if (OB_FAIL(nop_log_.init(tenant_id, ObLogConstants::LOG_FILE_ALIGN_SIZE))) {
+    STORAGE_REDO_LOG(ERROR, "Fail to parse log write policy", K(ret), K(log_file_spec));
+  } else if (OB_FAIL(nop_log_.init(ObLogConstants::LOG_FILE_ALIGN_SIZE))) {
     STORAGE_REDO_LOG(WARN, "Fail to init nop log", K(ret));
-  } else if (OB_FAIL(batch_write_buf_.init(ObLogConstants::LOG_FILE_ALIGN_SIZE, buf_size, tenant_id))) {
+  } else if (OB_FAIL(batch_write_buf_.init(ObLogConstants::LOG_FILE_ALIGN_SIZE, buf_size))) {
     STORAGE_REDO_LOG(WARN, "Fail to init batch write buf", K(ret), K(buf_size));
-  } else if (OB_FAIL(file_handler_.init(log_dir, log_file_size, tenant_id))) {
+  } else if (OB_FAIL(file_handler_.init(log_dir, log_file_size))) {
     STORAGE_REDO_LOG(WARN, "Fail to create file handler", K(ret), KP(log_dir));
-  } else if (OB_SERVER_TENANT_ID != tenant_id && OB_FAIL(slog_write_runner_.init(this))) {
+  } else if (OB_FAIL(slog_write_runner_.init(this))) {  // seekdb: always init (was 500!=1)
     STORAGE_REDO_LOG(WARN, "Fail to init slog write runner.", K(ret));
   } else {
     is_inited_ = true;
@@ -626,7 +625,7 @@ int ObStorageLogWriter::update_log_item_cursor(
 }
 
 ObStorageLogWriter::ObSLogWriteRunner::ObSLogWriteRunner()
-  : log_writer_(nullptr), tg_id_(-1), is_inited_(false)
+  : lib::ThreadPool(1), log_writer_(nullptr), is_inited_(false)
 {
 }
 
@@ -644,13 +643,11 @@ int ObStorageLogWriter::ObSLogWriteRunner::init(ObStorageLogWriter *log_writer)
   } else if (OB_ISNULL(log_writer)) {
     ret = OB_INVALID_ARGUMENT;
     STORAGE_REDO_LOG(WARN, "Log_writer is nullptr.", K(ret), KP(log_writer));
+  } else if (OB_FAIL(lib::ThreadPool::init())) {
+    STORAGE_REDO_LOG(WARN, "Fail to init log writer thread.", K(ret));
   } else {
     log_writer_ = log_writer;
-    if (OB_FAIL(TG_CREATE_TENANT(lib::TGDefIDs::StorageLogWriter, tg_id_))) {
-      STORAGE_REDO_LOG(WARN, "Fail to create thread for log writer.", K(ret), K(tg_id_));
-    } else {
-      is_inited_ = true;
-    }
+    is_inited_ = true;
   }
   return ret;
 }
@@ -661,8 +658,8 @@ int ObStorageLogWriter::ObSLogWriteRunner::start()
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     STORAGE_REDO_LOG(WARN, "ObSLogWriteRunner hasn't been inited.", K(ret), K(is_inited_));
-  } else if (OB_FAIL(TG_SET_RUNNABLE_AND_START(tg_id_, *this))) {
-    STORAGE_REDO_LOG(WARN, "Fail to start log writer thread.", K(ret), K(tg_id_));
+  } else if (OB_FAIL(lib::ThreadPool::start())) {
+    STORAGE_REDO_LOG(WARN, "Fail to start log writer thread.", K(ret));
   }
   return ret;
 }
@@ -670,24 +667,30 @@ int ObStorageLogWriter::ObSLogWriteRunner::start()
 void ObStorageLogWriter::ObSLogWriteRunner::destroy()
 {
   if (is_inited_) {
-    TG_DESTROY(tg_id_);
+    stop();
+    wait();
     is_inited_ = false;
   }
 }
 
 void ObStorageLogWriter::ObSLogWriteRunner::stop()
 {
-  TG_STOP(tg_id_);
+  if (is_inited_) {
+    lib::ThreadPool::stop();
+  }
 }
 
 void ObStorageLogWriter::ObSLogWriteRunner::wait()
 {
-  TG_WAIT(tg_id_);
+  if (is_inited_) {
+    lib::ThreadPool::wait();
+    lib::ThreadPool::destroy();
+  }
 }
 
 void ObStorageLogWriter::ObSLogWriteRunner::run1()
 {
-  STORAGE_REDO_LOG(INFO, "ObSLogWriteRunner run", K(tg_id_), K(is_inited_));
+  STORAGE_REDO_LOG(INFO, "ObSLogWriteRunner run", K(is_inited_));
   lib::set_thread_name(log_writer_->get_thread_name());
   log_writer_->flush_log();
 }

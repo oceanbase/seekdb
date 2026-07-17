@@ -35,17 +35,13 @@ class ObFreeSessionCtx
 public:
   ObFreeSessionCtx() :
     has_inc_active_num_(false),
-    tenant_id_(common::OB_INVALID_ID),
-    sessid_(0),
-    proxy_sessid_(0)
+    sessid_(0)
   {
   }
   ~ObFreeSessionCtx() {}
-  VIRTUAL_TO_STRING_KV(K_(has_inc_active_num), K_(tenant_id), K_(sessid), K_(proxy_sessid));
+  VIRTUAL_TO_STRING_KV(K_(has_inc_active_num), K_(sessid));
   bool has_inc_active_num_;
-  uint64_t tenant_id_;
   uint32_t sessid_;
-  uint64_t proxy_sessid_;
 };
 
 class ObSQLSessionMgr : public common::ObTimerTask
@@ -54,8 +50,6 @@ public:
   static const int64_t SCHEDULE_PERIOD = 1000*1000*5; //5s
   static const uint32_t NON_DURABLE_VALUE = 0;
   static const uint32_t MAX_VERSION = UINT8_MAX;//255
-  static const uint32_t SERVER_SESSID_TAG = 1ULL << 31;
-  static const uint32_t LOCAL_SESSID_TAG = 0; // used for sessions overflow
   static const int64_t BUCKET_COUNT = 1024;
   static const uint32_t TRAVERSE_MAX_TIMES = 6; // 6 * 5s
   static const uint64_t CLEAN_KILL_CLIENT_SESSION_TIME = 28800000000; // 8h
@@ -68,9 +62,7 @@ public:
   explicit ObSQLSessionMgr():
       //null_callback_(),
       sessinfo_map_(),
-      sessid_sequence_(),
-      first_seq_(NON_DURABLE_VALUE),
-      increment_sessid_(NON_DURABLE_VALUE),
+      next_sessid_(1),
       traverse_times_(NON_DURABLE_VALUE)
       // CLEAN_KILL_CLIENT_SESSION_TIME(28800000000)
   {
@@ -86,9 +78,9 @@ public:
    */
   void destroy();
   int create_session(observer::ObSMConnection *conn, ObSQLSessionInfo *&sess_info);
-  // create session by session id and proxy session id.
+  // create session by session id.
   // need call revert_session if return success.
-  int create_session(const uint64_t tenant_id, const uint32_t sessid, const uint64_t proxy_sessid,
+  int create_session(const uint32_t sessid,
     const int64_t create_time, ObSQLSessionInfo *&session_info,
     const uint32_t client_sessid = INVALID_SESSID,
     const int64_t client_create_time = 0);
@@ -135,7 +127,7 @@ public:
   int disconnect_session(ObSQLSessionInfo &session);
 
   // kill all sessions from this tenant.
-  int kill_tenant(const uint64_t tenant_id, bool force_kill);
+  int kill_tenant(bool force_kill);
 
   /**
    * @brief timing clean time out session
@@ -147,21 +139,13 @@ public:
   int get_min_active_snapshot_version(share::SCN &snapshot_version);
 
   //used for guarantee the unique sessid when observer generates sessid
-  static uint64_t extract_server_index(uint32_t sessid);
-  static bool is_server_sessid(uint32_t sessid) {return SERVER_SESSID_TAG & sessid;}
-  static int is_need_clear_sessid(const observer::ObSMConnection *conn, bool &is_need);
-  int fetch_first_sessid();
-  //  in_mgr = false means fail back to local session allocating, avoid remote/distribute executing fail
-  int create_sessid(uint32_t &sessid, bool in_mgr = true);
-  int mark_sessid_unused(uint32_t sess_id);
+  int create_sessid(uint32_t &sessid);
   //inline ObNullEndTransCallback &get_null_callback() { return null_callback_; }
   SessionMap &get_sess_hold_map() { return sess_hold_map_; }
   ClientSessionMap &get_client_sess_map() { return client_sess_map_; }
   KillClientSessMap &get_kill_client_sess_map() { return kill_client_sess_map_; }
 private:
   int check_session_leak();
-  int get_avaiable_local_seq(uint32_t &local_seq);
-  int set_first_seq(int64_t first_seq);
 
   class ValueAlloc
   {
@@ -171,8 +155,8 @@ private:
         free_total_count_(0)
     {}
     ~ValueAlloc() {}
-    int clean_tenant(uint64_t tenant_id);
-    ObSQLSessionInfo* alloc_value(uint64_t tenant_id);
+    int clean_tenant();
+    ObSQLSessionInfo* alloc_value();
     void free_value(ObSQLSessionInfo *sess);
     SessionInfoHashNode* alloc_node(ObSQLSessionInfo* value)
     {
@@ -257,8 +241,8 @@ private:
   class KillTenant
   {
   public:
-    KillTenant(ObSQLSessionMgr *mgr, const uint64_t tenant_id, bool force_kill) :
-      ret_(common::OB_SUCCESS), mgr_(mgr), tenant_id_(tenant_id), force_kill_(force_kill)
+    KillTenant(ObSQLSessionMgr *mgr, bool force_kill) :
+      ret_(common::OB_SUCCESS), mgr_(mgr), force_kill_(force_kill)
     {}
     bool operator()(sql::ObSQLSessionMgr::Key key, ObSQLSessionInfo *sess_info);
     int get_ret_code()
@@ -269,7 +253,6 @@ private:
   private:
     int ret_;
     ObSQLSessionMgr *mgr_;
-    const uint64_t tenant_id_;
     const bool force_kill_;
   };
 
@@ -289,21 +272,8 @@ private:
   //ObNullEndTransCallback null_callback_;
   // used for manage ObSQLSessionInfo
   HashMap sessinfo_map_;
-  // design doc: 
-  // |<---------------------------------32bit---------------------------->|
-  // 31b 30b   29b                18b  16b                              0b
-  // +----+------------------------------+--------------------------------+
-  // |Mask|resvd|    Server Id     |    Local Seq = 16 + 2                |
-  // +----+------------------------------+--------------------------------+
-  static const uint16_t LOCAL_SEQ_LEN = 18;
-  static const uint16_t RESERVED_SERVER_INDEX_LEN = 1;
-  static const uint16_t SERVER_INDEX_LEN = 13 - RESERVED_SERVER_INDEX_LEN;
-  static const uint32_t MAX_LOCAL_SEQ = (1ULL << LOCAL_SEQ_LEN) - 1;
-  // MAX_SERVER_INDEX cannot be larger than MAX_SERVER_COUNT
-  static const uint64_t MAX_SERVER_INDEX = (1ULL << SERVER_INDEX_LEN) - 1;
-  common::ObFixedQueue<void> sessid_sequence_;
-  uint32_t first_seq_;
-  uint32_t increment_sessid_;
+  // Monotonically increasing session id allocator. Wraps around at UINT32_MAX, skips 0.
+  uint32_t next_sessid_ CACHE_ALIGNED;
   SessionMap sess_hold_map_;
   // client session id -> session
   ClientSessionMap client_sess_map_;
@@ -381,7 +351,7 @@ private:
 class ObTenantSQLSessionMgr
 {
 public:
-  explicit ObTenantSQLSessionMgr(const int64_t tenant_id);
+  explicit ObTenantSQLSessionMgr();
   ~ObTenantSQLSessionMgr();
 
   int init();
@@ -412,9 +382,8 @@ private:
     ObSQLSessionInfo *session_array_[POOL_CAPACIPY];
     common::ObFixedQueue<ObSQLSessionInfo> session_pool_;
   };
-  bool is_valid_tenant_id(uint64_t tenant_id) const;
 private:
-  const int64_t tenant_id_;
+  
   SessionPool session_pool_;
   int64_t count_;
   ObFixedClassAllocator<ObSQLSessionInfo> session_allocator_;

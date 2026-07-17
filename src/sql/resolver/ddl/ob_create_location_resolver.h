@@ -30,7 +30,7 @@ class ObCreateLocationResolver: public ObDDLResolver
   static const int64_t LOCATION_URL = 2;
   static const int64_t LOCATION_CREDENTIAL = 3;
   static const int64_t LOCATION_NODE_COUNT = 4;
-
+  
 public:
   explicit ObCreateLocationResolver(ObResolverParams &params);
   virtual ~ObCreateLocationResolver();
@@ -40,5 +40,6 @@ private:
 };
 } // end namespace sql
 } // end namespace oceanbase
-
+ 
 #endif // OCEANBASE_SQL_OB_CREATE_LOCATION_RESOLVER_H_
+

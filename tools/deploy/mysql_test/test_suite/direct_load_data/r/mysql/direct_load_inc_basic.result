@@ -64,6 +64,7 @@ insert into t2_pqTly6tEb1 values(40, 'kkk1');
 insert into t1_pqTly6tEb1 values(1,'hello'), (2, 'world'), (3, 'maybe very long text longer than ten chars'), (4, 'kkk');
 insert /*+ enable_parallel_dml parallel(2) direct(true, 0, 'inc_replace') */ into t2_pqTly6tEb1 select * from t1_pqTly6tEb1;
 ERROR 22001: Data too long for column 'c2' at row 0
+rollback;
 insert into t2_pqTly6tEb1 values(4, 'kkk');
 select * from t2_pqTly6tEb1;
 c1	c2

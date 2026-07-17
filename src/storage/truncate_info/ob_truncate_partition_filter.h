@@ -56,7 +56,6 @@ public:
   // for query and dml
   int init(
       ObTablet &tablet,
-      const common::ObIArray<ObTabletHandle> *split_extra_tablet_handles,
       const common::ObIArray<share::schema::ObColDesc> &cols_desc,
       const common::ObIArray<share::schema::ObColumnParam *> *cols_param,
       const common::ObVersionRange &read_version_range,
@@ -71,7 +70,6 @@ public:
       const ObMdsInfoDistinctMgr &mds_info_mgr);
   int switch_info(
       ObTablet &tablet,
-      const common::ObIArray<ObTabletHandle> *split_extra_tablet_handles,
       const common::ObIArray<share::schema::ObColDesc> &cols_desc,
       const common::ObIArray<share::schema::ObColumnParam *> *cols_param,
       const common::ObVersionRange &read_version_range,
@@ -161,7 +159,6 @@ struct ObTruncatePartitionFilterFactory
 {
   static int build_truncate_partition_filter(
       ObTablet &tablet,
-      const common::ObIArray<ObTabletHandle> *split_extra_tablet_handles,
       const common::ObIArray<share::schema::ObColDesc> &cols_desc,
       const common::ObIArray<share::schema::ObColumnParam *> *cols_param,
       const common::ObVersionRange &read_version_range,

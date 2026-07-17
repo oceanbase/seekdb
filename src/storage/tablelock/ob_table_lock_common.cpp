@@ -435,30 +435,15 @@ int ObTableLockOwnerID::get_data_version_(uint64_t &data_version) const
   const static int64_t CACHE_REFRESH_INTERVAL = 1_s;
   RLOCAL_INIT(int64_t, last_check_timestamp, 0);
   RLOCAL_INIT(uint64_t, last_result, 0);
-  RLOCAL_INIT(uint64_t, last_tenant_id, 0);
-  uint64_t tenant_id = MTL_ID();
+  
   int64_t current_time = ObClockGenerator::getClock();
   uint64_t tmp_data_version = 0;
-  if (OB_UNLIKELY(!(is_user_tenant(tenant_id)
-                    || is_meta_tenant(tenant_id)
-                    || is_sys_tenant(tenant_id)))) {
-    // internal process use sys tenant's data version
-    // ob admin use OB_SERVER_TENANT_ID
-    // create tenant use T0
-    FLOG_INFO("internal process use data version of sys tenant", K(tenant_id));
-    tenant_id = OB_SYS_TENANT_ID;
-  }
-  if (last_tenant_id != tenant_id) {
-    FLOG_INFO("refresh the data version because of tenant changed", K(tenant_id), K(last_tenant_id));
-  }
-  if (current_time - last_check_timestamp < CACHE_REFRESH_INTERVAL
-      && last_tenant_id == tenant_id) {
-  } else if (OB_FAIL(GET_MIN_DATA_VERSION(tenant_id, tmp_data_version))) {
-    LOG_WARN("get data version failed", K(ret), K(tenant_id));
+  if (current_time - last_check_timestamp < CACHE_REFRESH_INTERVAL) {
+  } else if (OB_FAIL(GET_MIN_DATA_VERSION(tmp_data_version))) {
+    LOG_WARN("get data version failed", K(ret));
   } else {
     last_result = tmp_data_version;
     last_check_timestamp = current_time;
-    last_tenant_id = tenant_id;
   }
   data_version = last_result;
   return ret;
@@ -518,9 +503,7 @@ void ObTableLockOp::set(
 bool ObTableLockOp::is_valid() const
 {
   bool is_valid = false;
-  if (TABLET_SPLIT == op_type_) {
-    is_valid = commit_scn_.is_valid() && !commit_scn_.is_min() && lock_id_.is_valid();
-  } else if (is_out_trans_lock_op() && owner_id_.id() == 0) {
+  if (is_out_trans_lock_op() && owner_id_.id() == 0) {
     is_valid = false;
     LOG_ERROR_RET(OB_INVALID_ARGUMENT, "owner_id should not be 0 in out_trans lock", K_(owner_id));
   } else {

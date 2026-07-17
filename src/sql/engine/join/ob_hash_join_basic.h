@@ -162,7 +162,6 @@ public:
   ObHashJoinBatch(
       common::ObIAllocator &alloc,
       ObHashJoinBufMgr *buf_mgr,
-      uint64_t tenant_id,
       int32_t part_level,
       int64_t part_shift,
       int64_t batchno)
@@ -172,7 +171,6 @@ public:
     part_shift_(part_shift),
     batchno_(batchno),
     buf_mgr_(buf_mgr),
-    tenant_id_(tenant_id),
     n_get_rows_(0),
     n_add_rows_(0),
     pre_total_size_(0),
@@ -265,7 +263,6 @@ private:
   int64_t part_shift_;
   int64_t batchno_; // high: batch_round low: part_id
   ObHashJoinBufMgr *buf_mgr_;
-  uint64_t tenant_id_;
   int64_t n_get_rows_;
   int64_t n_add_rows_;
 
@@ -284,11 +281,10 @@ struct ObHashJoinBatchPair
 
 class ObHashJoinBatchMgr {
 public:
-  ObHashJoinBatchMgr(common::ObIAllocator &alloc, ObHashJoinBufMgr *buf_mgr, uint64_t tenant_id) :
+  ObHashJoinBatchMgr(common::ObIAllocator &alloc, ObHashJoinBufMgr *buf_mgr) :
     total_dump_count_(0),
     total_dump_size_(0),
     batch_count_(0),
-    tenant_id_(tenant_id),
     alloc_(alloc),
     batch_list_(alloc),
     buf_mgr_(buf_mgr)
@@ -327,7 +323,6 @@ public:
 
 private:
   static const int64_t PARTITION_IDX_MASK = 0x00000000FFFFFFFF;
-  uint64_t tenant_id_;
   common::ObIAllocator &alloc_;
   hj_batch_pair_list_type batch_list_;
   ObHashJoinBufMgr *buf_mgr_;

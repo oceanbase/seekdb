@@ -54,7 +54,6 @@ void TestSchemaUtils::prepare_data_schema(share::schema::ObTableSchema &table_sc
   ret = table_schema.set_table_name("test_ls_tablet_service_data_table");
   ASSERT_EQ(common::OB_SUCCESS, ret);
   table_schema.set_schema_version(100);
-  table_schema.set_tenant_id(TEST_TENANT_ID);
   table_schema.set_tablegroup_id(1);
   table_schema.set_database_id(1);
   table_schema.set_table_id(table_id);
@@ -105,7 +104,6 @@ void TestSchemaUtils::prepare_index_schema(share::schema::ObTableSchema &index_s
   index_schema.reset();
   ret = index_schema.set_table_name("test_ls_tablet_service_index_table");
   ASSERT_EQ(common::OB_SUCCESS, ret);
-  index_schema.set_tenant_id(TEST_TENANT_ID);
   index_schema.set_tablegroup_id(1);
   index_schema.set_database_id(1);
   index_schema.set_table_id(index_table_id);

@@ -296,7 +296,7 @@ int ObDirectLoadDataFuse::get_next_row(const ObDirectLoadDatumRow *&datum_row)
 ObDirectLoadSSTableDataFuse::ObDirectLoadSSTableDataFuse()
   : allocator_("TLD_DataFuse"), origin_scanner_(nullptr), is_inited_(false)
 {
-  allocator_.set_tenant_id(MTL_ID());
+  
 }
 
 ObDirectLoadSSTableDataFuse::~ObDirectLoadSSTableDataFuse()
@@ -328,7 +328,7 @@ int ObDirectLoadSSTableDataFuse::get_next_row(const ObDirectLoadDatumRow *&datum
 ObDirectLoadMultipleSSTableDataFuse::ObDirectLoadMultipleSSTableDataFuse()
   : allocator_("TLD_DataFuse"), origin_scanner_(nullptr), is_inited_(false)
 {
-  allocator_.set_tenant_id(MTL_ID());
+  
 }
 
 ObDirectLoadMultipleSSTableDataFuse::~ObDirectLoadMultipleSSTableDataFuse()

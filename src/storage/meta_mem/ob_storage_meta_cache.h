@@ -49,19 +49,18 @@ class ObStorageMetaKey final : public common::ObIKVCacheKey
 public:
   ObStorageMetaKey();
   ObStorageMetaKey(
-      const uint64_t tenant_id,
       const ObMetaDiskAddr &phy_addr);
   virtual ~ObStorageMetaKey();
   virtual bool operator ==(const ObIKVCacheKey &other) const override;
-  virtual uint64_t get_tenant_id() const override;
+  
   virtual uint64_t hash() const override;
   virtual int64_t size() const override;
   virtual int deep_copy(char *buf, const int64_t buf_len, ObIKVCacheKey *&key) const override;
   bool is_valid() const;
   const ObMetaDiskAddr &get_meta_addr() const;
-  TO_STRING_KV(K_(tenant_id), K_(phy_addr));
+  TO_STRING_KV(K_(phy_addr));
 private:
-  uint64_t tenant_id_;
+  
   ObMetaDiskAddr phy_addr_;
 };
 
@@ -71,9 +70,8 @@ public:
   enum MetaType : uint16_t
   {
     SSTABLE         = 0,
-    CO_SSTABLE      = 1,
-    TABLE_STORE     = 2,
-    MAX             = 3,
+    TABLE_STORE     = 1,
+    MAX             = 2,
   };
 public:
   ObStorageMetaValue();
@@ -94,12 +92,6 @@ public:
     obj_ = nullptr;
   }
   static int process_sstable(
-      ObStorageMetaValueHandle &handle,
-      const ObStorageMetaKey &key,
-      const char *buf,
-      const int64_t size,
-      const ObTablet *tablet);
-  static int process_co_sstable(
       ObStorageMetaValueHandle &handle,
       const ObStorageMetaKey &key,
       const char *buf,
@@ -284,7 +276,7 @@ int ObStorageMetaValue::bypass_process_storage_meta(
     const int64_t size)
 {
   int ret = OB_SUCCESS;
-  ObArenaAllocator tmp_allocator(common::ObMemAttr(MTL_ID(), "ProcMetaVaule"));
+  ObArenaAllocator tmp_allocator(common::ObMemAttr("ProcMetaVaule"));
   int64_t pos = 0;
   T t;
   char *buffer = nullptr;
@@ -316,4 +308,3 @@ int ObStorageMetaValue::bypass_process_storage_meta(
 } // end oceanbase
 
 #endif /* OCEANBASE_STORAGE_OB_STORAGE_META_CACHE_H_ */
-

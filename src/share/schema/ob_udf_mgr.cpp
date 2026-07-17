@@ -29,7 +29,7 @@ using namespace common;
 using namespace common::hash;
 
 ObSimpleUDFSchema::ObSimpleUDFSchema()
-  : ObSchema(), tenant_id_(common::OB_INVALID_ID), udf_id_(common::OB_INVALID_ID), udf_name_(),
+  : ObSchema(), udf_id_(common::OB_INVALID_ID), udf_name_(),
     ret_(ObUDF::UDFRetType::UDF_RET_UNINITIAL), dl_(), type_(ObUDF::UDFType::UDF_TYPE_UNINITIAL),
     schema_version_(common::OB_INVALID_VERSION)
 {
@@ -37,7 +37,7 @@ ObSimpleUDFSchema::ObSimpleUDFSchema()
 }
 
 ObSimpleUDFSchema::ObSimpleUDFSchema(ObIAllocator *allocator)
-  : ObSchema(allocator), tenant_id_(common::OB_INVALID_ID), udf_id_(common::OB_INVALID_ID), udf_name_(),
+  : ObSchema(allocator), udf_id_(common::OB_INVALID_ID), udf_name_(),
     ret_(ObUDF::UDFRetType::UDF_RET_UNINITIAL), dl_(), type_(ObUDF::UDFType::UDF_TYPE_UNINITIAL),
     schema_version_(common::OB_INVALID_VERSION)
 {
@@ -45,7 +45,7 @@ ObSimpleUDFSchema::ObSimpleUDFSchema(ObIAllocator *allocator)
 }
 
 ObSimpleUDFSchema::ObSimpleUDFSchema(const ObSimpleUDFSchema &other)
-  : ObSchema(), tenant_id_(common::OB_INVALID_ID), udf_id_(common::OB_INVALID_ID), udf_name_(),
+  : ObSchema(), udf_id_(common::OB_INVALID_ID), udf_name_(),
     ret_(ObUDF::UDFRetType::UDF_RET_UNINITIAL), dl_(), type_(ObUDF::UDFType::UDF_TYPE_UNINITIAL),
     schema_version_(common::OB_INVALID_VERSION)
 {
@@ -60,7 +60,7 @@ ObSimpleUDFSchema::~ObSimpleUDFSchema()
 void ObSimpleUDFSchema::reset()
 {
   ObSchema::reset();
-  tenant_id_ = OB_INVALID_ID;
+  
   schema_version_ = OB_INVALID_VERSION;
   udf_id_ = OB_INVALID_ID;
   udf_name_.reset();
@@ -69,8 +69,7 @@ void ObSimpleUDFSchema::reset()
 bool ObSimpleUDFSchema::is_valid() const
 {
   bool ret = true;
-  if (OB_INVALID_ID == tenant_id_ ||
-      schema_version_ < 0 ||
+  if (schema_version_ < 0 ||
       udf_name_.empty()) {
     ret = false;
   }
@@ -94,7 +93,7 @@ ObSimpleUDFSchema &ObSimpleUDFSchema::operator =(const ObSimpleUDFSchema &other)
     reset();
     int ret = OB_SUCCESS;
     error_ret_ = other.error_ret_;
-    tenant_id_ = other.tenant_id_;
+    
     udf_id_ = other.udf_id_;
     schema_version_ = other.schema_version_;
     ret_ = other.ret_;
@@ -201,8 +200,7 @@ int ObUDFMgr::deep_copy(const ObUDFMgr &other)
   return ret;
 }
 
-int ObUDFMgr::get_udf_schema_with_name(const uint64_t tenant_id,
-                                       const common::ObString &name,
+int ObUDFMgr::get_udf_schema_with_name(const common::ObString &name,
                                        const ObSimpleUDFSchema *&udf_schema) const
 {
   int ret = OB_SUCCESS;
@@ -210,17 +208,16 @@ int ObUDFMgr::get_udf_schema_with_name(const uint64_t tenant_id,
   if (!is_inited_) {
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
-  } else if (OB_INVALID_ID == tenant_id
-             || name.empty()) {
+  } else if (name.empty()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(tenant_id), K(name));
+    LOG_WARN("invalid argument", K(ret), K(name));
   } else {
     ObSimpleUDFSchema *tmp_schema = NULL;
-    ObUDFHashWrapper hash_wrap(tenant_id, name);
+    ObUDFHashWrapper hash_wrap(name);
     if (OB_FAIL(udf_map_.get_refactored(hash_wrap, tmp_schema))) {
       if (OB_HASH_NOT_EXIST == ret) {
         ret = OB_SUCCESS;
-        LOG_DEBUG("udf is not exist", K(tenant_id), K(name));
+        LOG_DEBUG("udf is not exist", K(name));
       }
     } else {
       udf_schema = tmp_schema;
@@ -254,8 +251,7 @@ int ObUDFMgr::add_udf(const ObSimpleUDFSchema &udf_schema)
                                         replaced_udf))) {
       LOG_WARN("failed to add udf schema", K(ret));
   } else {
-    ObUDFHashWrapper hash_wrapper(new_udf_schema->get_tenant_id(),
-                                  new_udf_schema->get_udf_name());
+    ObUDFHashWrapper hash_wrapper(new_udf_schema->get_udf_name());
     if (OB_FAIL(udf_map_.set_refactored(hash_wrapper, new_udf_schema, overwrite))) {
       LOG_WARN("build udf hash map failed", K(ret));
     }
@@ -285,36 +281,9 @@ int ObUDFMgr::rebuild_udf_hashmap(const UDFInfos &udf_infos, ObUDFMap& udf_map)
       LOG_WARN("udf schema is NULL", K(udf_schema), K(ret));
     } else {
       bool overwrite = true;
-      ObUDFHashWrapper hash_wrapper(udf_schema->get_tenant_id(),
-                                    udf_schema->get_udf_name());
+      ObUDFHashWrapper hash_wrapper(udf_schema->get_udf_name());
       if (OB_FAIL(udf_map.set_refactored(hash_wrapper, udf_schema, overwrite))) {
         LOG_WARN("build udf hash map failed", K(ret));
-      }
-    }
-  }
-  return ret;
-}
-
-int ObUDFMgr::del_schemas_in_tenant(const uint64_t tenant_id)
-{
-  int ret = OB_SUCCESS;
-  if (OB_INVALID_ID == tenant_id) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(tenant_id));
-  } else {
-    ObArray<const ObSimpleUDFSchema *> schemas;
-    if (OB_FAIL(get_udf_schemas_in_tenant(tenant_id, schemas))) {
-      LOG_WARN("get udf schemas failed", K(ret), K(tenant_id));
-    } else {
-      FOREACH_CNT_X(schema, schemas, OB_SUCC(ret)) {
-        ObTenantUDFId tenant_udf_id(tenant_id,
-                                    (*schema)->get_udf_name());
-        if (OB_FAIL(del_udf(tenant_udf_id))) {
-          LOG_WARN("del udf failed",
-                   "tenant_id", tenant_udf_id.tenant_id_,
-                   "udf_name", tenant_udf_id.udf_name_,
-                   K(ret));
-        }
       }
     }
   }
@@ -346,25 +315,21 @@ int ObUDFMgr::del_udf(const ObTenantUDFId &udf)
                                           equal_to_tenant_udf_id,
                                           schema_to_del))) {
     LOG_WARN("failed to remove udf schema, ",
-             "tenant id", udf.tenant_id_,
              "udf name", udf.udf_name_,
              K(ret));
   } else if (OB_ISNULL(schema_to_del)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("removed udf schema return NULL, ",
-             "tenant id", udf.tenant_id_,
              "udf name", udf.udf_name_,
              K(ret));
   } else {
-    ObUDFHashWrapper udf_wrapper(schema_to_del->get_tenant_id(),
-                                 schema_to_del->get_udf_name());
+    ObUDFHashWrapper udf_wrapper(schema_to_del->get_udf_name());
     hash_ret = udf_map_.erase_refactored(udf_wrapper);
     if (OB_SUCCESS != hash_ret) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("failed delete udf from udf hashmap, ",
                K(ret),
                K(hash_ret),
-               "tenant_id", schema_to_del->get_tenant_id(),
                "name", schema_to_del->get_udf_name());
     }
   }
@@ -394,8 +359,7 @@ bool ObUDFMgr::equal_to_tenant_udf_id(const ObSimpleUDFSchema *lhs,
 }
 
 
-int ObUDFMgr::get_udf_schemas_in_tenant(const uint64_t tenant_id,
-    ObIArray<const ObSimpleUDFSchema *> &udf_schemas) const
+int ObUDFMgr::get_udf_schemas_in_tenant(ObIArray<const ObSimpleUDFSchema *> &udf_schemas) const
 {
   int ret = OB_SUCCESS;
   udf_schemas.reset();
@@ -407,8 +371,6 @@ int ObUDFMgr::get_udf_schemas_in_tenant(const uint64_t tenant_id,
     if (OB_ISNULL(udf = *iter)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("NULL ptr", K(ret), K(udf));
-    } else if (tenant_id != udf->get_tenant_id()) {
-      //do nothing
     } else if (OB_FAIL(udf_schemas.push_back(udf))) {
       LOG_WARN("push back udf failed", K(ret));
     }

@@ -36,13 +36,9 @@
 #include "observer/omt/ob_th_worker.h"
 #include "ob_retry_queue.h"
 #include "lib/utility/ob_query_rate_limiter.h"
-#include "share/resource_manager/ob_cgroup_ctrl.h"
 #include "observer/omt/ob_tenant_meta.h"
 #include "lib/thread/ob_adaptive_worker_pool.h"
 #include "lib/lock/ob_tc_rwlock.h"      // TCRWLock
-
-struct lua_State;
-int select_dump_tenant_info(lua_State*);
 
 namespace oceanbase
 {
@@ -64,17 +60,15 @@ class ObPxPool
 public:
 	class Task;
   ObPxPool() :
-      tenant_id_(common::OB_INVALID_ID),
       group_id_(0),
       is_inited_(false),
       concurrency_(0),
       active_threads_(0)
   {}
   virtual void stop();
-  void set_tenant_id(uint64_t tenant_id) { tenant_id_ = tenant_id; }
+  
   void set_group_id(uint64_t group_id)
   {
-    GET_DIAGNOSTIC_INFO->get_ash_stat().group_id_ = THIS_WORKER.get_group_id();
     group_id_ = group_id;
   }
   int64_t get_pool_size() const { return get_thread_count(); }
@@ -93,7 +87,6 @@ private:
     IGNORE_RETURN recycle_lock_.unlock();
   }
 private:
-  uint64_t tenant_id_;
   uint64_t group_id_;
 	common::ObPriorityQueue2<0, 1> queue_;
   bool is_inited_;
@@ -140,8 +133,8 @@ public:
   static int mtl_init(ObPxPools *&pools)
   {
     int ret = common::OB_SUCCESS;
-    uint64_t tenant_id = MTL_ID();
-    if (OB_FAIL(pools->init(tenant_id))) {
+    
+    if (OB_FAIL(pools->init())) {
     }
     return ret;
   }
@@ -152,20 +145,18 @@ public:
     pools = nullptr;
   }
 public:
-  ObPxPools() : tenant_id_(common::OB_INVALID_ID)
-  {}
+  ObPxPools() {}
   ~ObPxPools()
   {
     destroy();
   }
-  int init(uint64_t tenant_id);
+  int init();
   int get_or_create(int64_t group_id, ObPxPool *&pool);
   int thread_recycle();
 private:
   void destroy();
   int create_pool(int64_t group_id, ObPxPool *&pool);
 private:
-  uint64_t tenant_id_;
   common::SpinRWLock lock_;
   common::hash::ObHashMap<int64_t, ObPxPool *> pool_map_;
 };
@@ -214,7 +205,6 @@ class ObTenant : public share::ObTenantBase,
                  public lib::ObAdaptiveWorkerPool<ObTenant>
 {
   friend class observer::ObAllVirtualDumpTenantInfo;
-  friend int ::select_dump_tenant_info(lua_State*);
   friend int create_worker(ObThWorker* &worker, ObTenant *tenant);
   friend int destroy_worker(ObThWorker *worker);
   friend class ObThWorker;
@@ -224,10 +214,8 @@ class ObTenant : public share::ObTenantBase,
 public:
   static constexpr int64_t KEEP_ALIVE_TIMEOUT = 10 * 1000 * 1000L;  // 10s
 
-  ObTenant(const int64_t id,
-           const int64_t epoch,
-           const int64_t times_of_workers,
-           share::ObCgroupCtrl &cgroup_ctrl);
+  ObTenant(const int64_t epoch,
+           const int64_t times_of_workers);
   virtual ~ObTenant();
 
   ObTenant(const ObTenant &) = delete;
@@ -272,6 +260,7 @@ public:
   int try_rdlock();
   int try_wrlock();
   virtual int unlock() override;
+  virtual void on_schema_publish() override;
 
   // get request from request queue, waiting at most TIMEOUT us.
   // if IN_HIGH_PRIORITY is set, get request from hp queue.
@@ -281,14 +270,11 @@ public:
   int recv_request(rpc::ObRequest &req);
   int push_retry_queue(rpc::ObRequest &req, const uint64_t idx);
   void handle_retry_req(bool need_clear = false);
-  void update_queue_size();
+  void set_queue_limit(int64_t limit) { req_queue_.set_limit(limit); }
 
   int timeup();
-  int get_default_group_throttled_time(int64_t &default_group_throttled_time);
-  void print_throttled_time();
-  void regist_threads_to_cgroup();
 
-  TO_STRING_KV(K_(id),
+  TO_STRING_KV("id", id(),
                K_(tenant_meta),
                K_(unit_min_cpu), K_(unit_max_cpu),
                "total_worker_cnt", worker_count(),
@@ -307,13 +293,13 @@ public:
 public:
   static bool equal(const ObTenant *t1, const ObTenant *t2)
   {
-    return (!OB_ISNULL(t1) && !OB_ISNULL(t2) && t1->id_ == t2->id_);
+    return (!OB_ISNULL(t1) && !OB_ISNULL(t2) && t1->id() == t2->id());
   }
 
   OB_INLINE void disable_user_sched() { disable_user_sched_ = true; }
   OB_INLINE bool user_sched_enabled() const { return !disable_user_sched_; }
-  OB_INLINE double get_token_usage() const { return token_usage_; }
-  OB_INLINE int64_t get_worker_time() const { return ATOMIC_LOAD(&worker_us_); }
+  OB_INLINE double get_token_usage() const { return 0; }
+  OB_INLINE int64_t get_worker_time() const { return 0; }
   int64_t get_cpu_time() const;
   // sql throttle
   void update_sql_throttle_metrics(const ObSqlThrottleMetrics &metrics)
@@ -346,8 +332,6 @@ public:
 private:
   static void sleep_and_warn(ObTenant* tenant);
   static void* wait(void* tenant);
-  // update CPU usage
-  void update_token_usage();
   // acquire workers if tenant doesn't have sufficient worker.
   void check_worker_count();
 
@@ -402,12 +386,8 @@ public:
 
   lib::ObMutex workers_lock_;
 
-  share::ObCgroupCtrl &cgroup_ctrl_;
-
   bool disable_user_sched_;
 
-  double token_usage_;
-  int64_t token_usage_check_ts_;
   int64_t token_change_ts_ CACHE_ALIGNED;
   std::atomic<int64_t> completion_cnt_;
 
@@ -415,8 +395,6 @@ public:
 
   ObSqlThrottleMetrics st_metrics_;
   lib::ObQueryRateLimiter sql_limiter_;
-  // idle time between two checkpoints
-  int64_t worker_us_;
   int64_t default_group_throttled_time_us_;
 }; // end of class ObTenant
 

@@ -19,7 +19,7 @@
 
 namespace oceanbase
 {
-using namespace oceanbase::obrpc;
+using namespace oceanbase::obcall;
 using namespace oceanbase::common;
 namespace sql
 {

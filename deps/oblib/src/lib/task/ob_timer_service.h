@@ -124,16 +124,16 @@ private:
   static constexpr int64_t INITIAL_ELEMENT_NUM = 1024L;
   using TokenAlloc = hash::SimpleAllocer<TaskToken, INITIAL_ELEMENT_NUM>;
 public:
-  explicit ObTimerService(uint64_t tenant_id = OB_SERVER_TENANT_ID);
+  explicit ObTimerService();
   ~ObTimerService();
   static ObTimerService& get_instance()
   {
-    static ObTimerService ts(OB_SERVER_TENANT_ID);
+    static ObTimerService ts{};
     return ts;
   }
   ObTimerService(const ObTimerService &) = delete;
   ObTimerService &operator=(const ObTimerService &) = delete;
-  TO_STRING_KV(KP(this), K(tenant_id_),
+  TO_STRING_KV(KP(this),
       K(priority_task_queue_.size()),
       K(running_task_set_.size()),
       K(uncanceled_task_set_.size()),
@@ -152,7 +152,7 @@ public:
   int cancel_task(const ObTimer *timer, const ObTimerTask *task);
   int wait_task(const ObTimer *timer, const ObTimerTask *task);
   bool task_exist(const ObTimer *timer, const ObTimerTask &task);
-  inline uint64_t get_tenant_id() const { return tenant_id_; }
+  
   bool is_never_started() const { return is_never_started_; }
   bool is_stopped() const { return is_stopped_; }
 private:
@@ -168,7 +168,6 @@ private:
       const TaskToken *token,
       const ObTimer *timer,
       const ObTimerTask *task);
-  static void check_clock();
   int new_token(
       TaskToken *&token,
       const ObTimer *timer,
@@ -180,10 +179,11 @@ private:
 private:
   bool is_never_started_;
   bool is_stopped_;
-  uint64_t tenant_id_;
+  bool is_destroyed_;
+  
   obutil::ObMonitor<obutil::Mutex> monitor_;
   TokenAlloc token_alloc_;
-  ObSortedVector<TaskToken *> priority_task_queue_;
+  ObVector<TaskToken *> priority_task_queue_;
   ObSortedVector<TaskToken *> running_task_set_;
   ObSortedVector<TaskToken *> uncanceled_task_set_;
   ObTimerTaskThreadPool worker_thread_pool_;
@@ -194,11 +194,10 @@ private:
   static constexpr int64_t MIN_WORKER_THREAD_NUM = 4L;
   static constexpr int64_t MAX_WORKER_THREAD_NUM = 128L;
   static constexpr int64_t TASK_NUM_LIMIT = 10000L;
-  static constexpr int64_t CLOCK_SKEW_DELTA = 20L * 1000L;          // 20ms
-  static constexpr int64_t CLOCK_ERROR_DELTA = 500L * 1000L;        // 500ms
   static constexpr int64_t DUMP_INTERVAL = 60L * 1000L * 1000L;     // 60s
   static constexpr int64_t ALARM_INTERVAL = 60L * 1000L * 1000L;    // 1min
-  using VecIter = ObSortedVector<TaskToken *>::iterator;
+  static constexpr int64_t TOKEN_DISPATCHED = INT64_MAX;             // marker: token dispatched, stays in queue
+  using VecIter = ObVector<TaskToken *>::iterator;
 public:
   static constexpr int64_t DELAY_IN_PRI_QUEUE_THREASHOLD = 1L * 1000L * 1000L; // 1s
 };

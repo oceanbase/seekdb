@@ -75,7 +75,7 @@ int ObLinkedMacroBlockReader::get_meta_blocks(const MacroBlockId &entry_block)
   read_info.io_desc_.set_wait_event(ObWaitEventIds::DB_FILE_DATA_READ);
   read_info.io_timeout_ms_ = GCONF._data_storage_io_timeout / 1000L;
   read_info.io_desc_.set_sys_module_id(ObIOModule::LINKED_MACRO_BLOCK_IO);
-  read_info.mtl_tenant_id_ = MTL_ID();
+  
 
   if (entry_block.second_id() >= 0) {
     read_info.macro_block_id_ = entry_block;
@@ -134,7 +134,7 @@ int ObLinkedMacroBlockReader::prefetch_block()
     read_info.io_desc_.set_sys_module_id(ObIOModule::LINKED_MACRO_BLOCK_IO);
     read_info.macro_block_id_ = macros_handle_.at(prefetch_macro_block_idx_);
     read_info.io_timeout_ms_ = GCONF._data_storage_io_timeout / 1000L;
-    read_info.mtl_tenant_id_ = MTL_ID();
+    
     handles_[handle_pos_].reset();
     read_info.buf_ = io_buf_[handle_pos_];
     if (OB_FAIL(ObObjectManager::async_read_object(read_info, handles_[handle_pos_]))) {
@@ -180,7 +180,7 @@ int ObLinkedMacroBlockReader::pread_block(const ObMetaDiskAddr &addr, ObStorageO
   read_info.io_timeout_ms_ = GCONF._data_storage_io_timeout / 1000L;
   read_info.buf_ = item_buf;
   read_info.io_desc_.set_sys_module_id(ObIOModule::LINKED_MACRO_BLOCK_IO);
-  read_info.mtl_tenant_id_ = MTL_ID();
+  
   if (OB_FAIL(addr.get_block_addr(read_info.macro_block_id_, read_info.offset_, read_info.size_))) {
     LOG_WARN("fail to get block address", K(ret), K(addr));
   } else if (OB_FAIL(ObObjectManager::async_read_object(read_info, handler))) {
@@ -205,7 +205,7 @@ int ObLinkedMacroBlockReader::read_block_by_id(
   read_info.macro_block_id_ = block_id;
   read_info.io_timeout_ms_ = GCONF._data_storage_io_timeout / 1000L;
   read_info.buf_ = io_buf;
-  read_info.mtl_tenant_id_ = MTL_ID();
+  
   handler.reset();
   if (OB_FAIL(ObObjectManager::async_read_object(read_info, handler))) {
     LOG_WARN("fail to async read block", K(ret), K(read_info));
@@ -231,7 +231,7 @@ int ObLinkedMacroBlockReader::check_data_checksum(const char *buf, const int64_t
       ob_crc64(buf + sizeof(ObMacroBlockCommonHeader), common_header->get_payload_size());
     if (expected_payload_checksum != calc_payload_checksum) {
       ret = OB_CHECKSUM_ERROR;
-      LOG_WARN("common header checksum error", K(ret), KPC(common_header),
+      LOG_ERROR("common header checksum error", K(ret), KPC(common_header),
         K(expected_payload_checksum), K(calc_payload_checksum));
     }
   }
@@ -449,7 +449,7 @@ int ObLinkedMacroBlockItemReader::check_item_crc(
   const int32_t calc_item_crc = static_cast<int32_t>(ob_crc64(item_buf, item_buf_len));
   if (crc != calc_item_crc) {
     ret = OB_CHECKSUM_ERROR;
-    LOG_WARN("item checksum error", K(ret), K(crc), K(calc_item_crc));
+    LOG_ERROR("item checksum error", K(ret), K(crc), K(calc_item_crc));
   }
   return ret;
 }

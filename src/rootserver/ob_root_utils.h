@@ -23,7 +23,6 @@
 #include "lib/container/ob_array_iterator.h"
 #include "lib/hash/ob_hashmap.h"
 #include "share/ob_define.h"
-#include "share/ob_common_rpc_proxy.h"
 #include "rootserver/ob_replica_addr.h"
 #include "share/ob_cluster_role.h"
 #include "share/ob_rpc_struct.h"
@@ -94,9 +93,6 @@ public:
 class ObTenantUtils
 {
 public:
-  static int get_tenant_ids(
-      share::schema::ObMultiVersionSchemaService *schema_service,
-      common::ObIArray<uint64_t> &tenant_ids);
 private:
 
 };
@@ -113,8 +109,6 @@ class ObRootUtils
 public:
   ObRootUtils() {}
   virtual ~ObRootUtils() {}
-
-  static int get_rs_default_timeout_ctx(ObTimeoutCtx &ctx);
 
   template<class T>
       static bool is_subset(const common::ObIArray<T> &superset_array,

@@ -16,6 +16,7 @@
 #define USING_LOG_PREFIX STORAGE
 
 #include "storage/direct_load/ob_direct_load_partition_merge_task.h"
+#include "storage/ddl/ob_ddl_storage_util.h"
 #include "observer/table_load/ob_table_load_table_ctx.h"
 #include "storage/direct_load/ob_direct_load_compare.h"
 #include "storage/direct_load/ob_direct_load_conflict_check.h"
@@ -90,7 +91,7 @@ int ObDirectLoadPartitionMergeTask::process()
     ObMacroDataSeq block_start_seq;
     ObArenaAllocator allocator("TLD_MergeExec");
     ObArray<ObDirectLoadIStoreRowIterator *> row_iters;
-    allocator.set_tenant_id(MTL_ID());
+    
     row_iters.set_block_allocator(ModulePageAllocator(allocator));
     ObDirectLoadMgrAgent ddl_agent;
     if (OB_FAIL(merge_param_->insert_table_ctx_->get_tablet_context(tablet_id, insert_tablet_ctx_))) {
@@ -104,7 +105,7 @@ int ObDirectLoadPartitionMergeTask::process()
       LOG_WARN("ddl agent should not be null", K(ret));
     }
     // For full import, regardless of whether a partition has data or not, a ddl object needs to be created to create a major sstable for that partition
-    else if (OB_FAIL(ObDDLUtil::init_macro_block_seq(parallel_idx_, block_start_seq))) {
+    else if (OB_FAIL(ObDDLStorageUtil::init_macro_block_seq(parallel_idx_, block_start_seq))) {
       LOG_WARN("fail to set parallel degree", KR(ret), K(parallel_idx_));
     } else if (OB_FAIL(insert_tablet_ctx_->open_sstable_slice(block_start_seq, parallel_idx_/*slice_idx*/, slice_id, ddl_agent))) {
       LOG_WARN("fail to open sstable slice ", KR(ret), K(block_start_seq));
@@ -113,23 +114,13 @@ int ObDirectLoadPartitionMergeTask::process()
       LOG_INFO("skip empty sstable slice", K(tablet_id), K(parallel_idx_), K(block_start_seq),
                K(slice_id));
     } else {
-      const bool use_batch_mode = merge_param_->use_batch_mode_;
       LOG_INFO("add sstable slice begin", K(tablet_id), K(parallel_idx_), K(block_start_seq),
-               K(slice_id), K(row_iters.count()), K(use_batch_mode));
+               K(slice_id), K(row_iters.count()));
       if (OB_UNLIKELY(is_stop_)) {
         ret = OB_CANCELED;
         LOG_WARN("merge task canceled", KR(ret));
-      } else {
-        // batch mode does not support writing insert and delete lines simultaneously
-        if (use_batch_mode) {
-          if (OB_FAIL(fill_sstable_slice_batch(slice_id, row_iters))) {
-            LOG_WARN("fail to fill sstable slice batch", KR(ret), K(slice_id));
-          }
-        } else {
-          if (OB_FAIL(fill_sstable_slice(slice_id, row_iters, ddl_agent))) {
-            LOG_WARN("fail to fill sstable slice", KR(ret), K(slice_id), K(ddl_agent));
-          }
-        }
+      } else if (OB_FAIL(fill_sstable_slice(slice_id, row_iters, ddl_agent))) {
+        LOG_WARN("fail to fill sstable slice", KR(ret), K(slice_id), K(ddl_agent));
       }
       LOG_INFO("add sstable slice end", KR(ret), K(tablet_id), K(parallel_idx_), K(affected_rows_));
     }
@@ -171,37 +162,6 @@ int ObDirectLoadPartitionMergeTask::fill_sstable_slice(
   return ret;
 }
 
-int ObDirectLoadPartitionMergeTask::fill_sstable_slice_batch(
-  const int64_t slice_id,
-  const ObIArray<ObDirectLoadIStoreRowIterator *> &row_iters)
-{
-  int ret = OB_SUCCESS;
-  ObDirectLoadInsertTableBatchRowStoreWriter batch_writer;
-  ObDirectLoadInsertTableRowInfo row_info;
-  if (OB_FAIL(insert_tablet_ctx_->get_row_info(row_info))) {
-    LOG_WARN("fail to get row info", KR(ret));
-  } else if (OB_FAIL(batch_writer.init(insert_tablet_ctx_,
-                                       row_info,
-                                       slice_id,
-                                       need_handle_dml_row_ ? merge_param_->dml_row_handler_ : nullptr,
-                                       ctx_->job_stat_))) {
-    LOG_WARN("fail to init buffer writer", KR(ret));
-  }
-  for (int64_t i = 0; OB_SUCC(ret) && i < row_iters.count(); ++i) {
-    ObDirectLoadIStoreRowIterator *row_iter = row_iters.at(i);
-    if (OB_FAIL(batch_writer.write(row_iter))) {
-      LOG_WARN("fail to write", KR(ret));
-    }
-  }
-  if (OB_FAIL(ret)) {
-  } else if (OB_FAIL(batch_writer.close())) {
-    LOG_WARN("fail to close writer", KR(ret));
-  } else {
-    affected_rows_ = batch_writer.get_row_count();
-  }
-  return ret;
-}
-
 void ObDirectLoadPartitionMergeTask::stop()
 {
   is_stop_ = true;
@@ -219,7 +179,7 @@ int ObDirectLoadPartitionMergeTask::init_iterator(ObITabletSliceRowIterator *&ro
   } else {
     row_iterator = nullptr;
     ObDirectLoadDagInsertTableRowIterator *iter = nullptr;
-    ObMemAttr attr(MTL_ID(), "TLD_SliceIter");
+    ObMemAttr attr("TLD_SliceIter");
     if (OB_ISNULL(iter = OB_NEW(ObDirectLoadDagInsertTableRowIterator, attr))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("fail to alloc memory", KR(ret));
@@ -370,7 +330,7 @@ int ObDirectLoadPartitionOriginDataUnrescanMergeTask::process()
     ObDirectLoadInsertTableBatchRowDirectWriter direct_writer;
     ObDirectLoadInsertTableRowInfo row_info;
     ObArenaAllocator allocator("TLD_UODMerge");
-    allocator.set_tenant_id(MTL_ID());
+    
     ObDirectLoadOriginTableScanner *row_iter = nullptr;
     if (OB_FAIL(origin_table_->scan(*range_, allocator, row_iter, false /*skip_read_lob*/))) {
       LOG_WARN("fail to scan origin table", KR(ret));

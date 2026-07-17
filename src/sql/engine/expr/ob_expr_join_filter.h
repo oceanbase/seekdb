@@ -19,10 +19,12 @@
 #include "sql/engine/expr/ob_expr_operator.h"
 #include "sql/engine/px/ob_px_bloom_filter.h"
 #include "sql/engine/px/p2p_datahub/ob_p2p_dh_share_info.h"
+#include "sql/ob_sql_define.h"  // ObTMArray
 namespace oceanbase
 {
 namespace sql
 {
+class ObDynamicFilterExecutor;
 
 class ObP2PDatahubMsgBase;
 struct ObRowWithHash;
@@ -54,7 +56,7 @@ public:
           n_times_(0), ready_ts_(0), by_pass_count_before_ready_(0), slide_window_(total_count_), flag_(0), max_wait_time_ms_(0),
           cur_row_(), cur_row_with_hash_(nullptr), skip_vector_(nullptr)
         {
-          cur_row_.set_attr(ObMemAttr(MTL_ID(), "RfCurRow"));
+          cur_row_.set_attr(ObMemAttr("RfCurRow"));
           need_wait_rf_ = true;
           need_check_ready_ = true;
           is_first_ = true;

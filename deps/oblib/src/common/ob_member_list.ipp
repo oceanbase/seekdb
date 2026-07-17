@@ -337,11 +337,10 @@ int ObMemberListBase<MAX_MEMBER_NUM>::truncate(const int64_t count)
 }
 
 // New serialize macro. It doesn't support array serialization now.
-// OB_MAX_MEMBER_NUMBER = 7. It is ugly but it works.
+// OB_MAX_MEMBER_NUMBER = 1. It is ugly but it works.
 
 OB_SERIALIZE_MEMBER_TEMP(template <int64_t MAX_MEMBER_NUM>, ObMemberListBase<MAX_MEMBER_NUM>, member_number_,
-                    member_[0], member_[1], member_[2], member_[3], member_[4],
-                    member_[5], member_[6]);
+                    member_[0]);
 
 } // namespace common
 } // namespace oceanbase

@@ -111,11 +111,10 @@ int ObGITaskReBalancer::trigger_rebalance(ObGranuleIteratorOp *gi_op, bool &need
   // record the version before trigger rebalance
   int64_t record_pump_version = gi_op->pump_arg()->get_pump_version();
   int64_t cur_timestamp =  ObTimeUtil::current_time();
-  omt::ObTenantConfigGuard tenant_config(TENANT_CONF(MTL_ID()));
   int64_t trigger_time = 10 * 1000UL;
-  if (tenant_config.is_valid()) {
-    trigger_time = (tenant_config->_px_task_rebalance_trigger_time);
-  }
+
+  trigger_time = (GCONF._px_task_rebalance_trigger_time);
+
   //+1 in case of cur_timestamp == wait_until_time;
   int64_t wait_until_time = cur_timestamp + 1 + max(trigger_time, split_gi_task_cost_);
   bool maybe_has_new_task = false;
@@ -766,7 +765,7 @@ int ObGranuleIteratorOp::inner_open()
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected null ptr");
     } else if (OB_FAIL(scan_resume_point_.init(
-                   MY_INPUT.task_balancer_->get_worker_paused_flag(worker_id_), MTL_ID()))) {
+                   MY_INPUT.task_balancer_->get_worker_paused_flag(worker_id_)))) {
       LOG_WARN("failed to init pause status");
     } else {
       MY_INPUT.task_balancer_->set_thread_id(worker_id_, GETTID());
@@ -1647,19 +1646,17 @@ int ObGranuleIteratorOp::try_build_tablet2part_id_map()
   } else {
     const ObTableSchema *table_schema = NULL;
     int64_t index_table_id = MY_SPEC.index_table_id_;
-    if (OB_FAIL(ctx_.get_sql_ctx()->schema_guard_->get_table_schema(
-        MTL_ID(), index_table_id, table_schema))) {
+    if (OB_FAIL(ctx_.get_sql_ctx()->schema_guard_->get_table_schema( index_table_id, table_schema))) {
       LOG_WARN("fail to get table schema", K(ret));
     } else if (OB_ISNULL(table_schema)) {
       ret = OB_SCHEMA_ERROR;
-      LOG_WARN("null table schema", K(MTL_ID()), K(index_table_id));
+      LOG_WARN("null table schema", K(index_table_id));
     } else if (PARTITION_LEVEL_TWO != table_schema->get_part_level()) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected part level", K(ret));
     } else if (OB_FAIL(tablet2part_id_map_.create(max(1, table_schema->get_all_part_num()),
                                                   "GITabletMap",
-                                                  ObModIds::OB_HASH_NODE,
-                                                  MTL_ID()))) {
+                                                  ObModIds::OB_HASH_NODE))) {
       LOG_WARN("fail create hashmap", K(ret));
     } else {
       ObPartitionSchemaIter iter(*table_schema, CHECK_PARTITION_MODE_NORMAL);
@@ -1949,7 +1946,7 @@ int ObGranuleIteratorOp::init_rescan_tasks_info()
       // no use optimization if parallelism_ is greater than tablet count.
       rescan_tasks_info_.use_opt_ = false;
     } else {
-      const ObMemAttr attr(MTL_ID(), "GIRescanTaskMap");
+      const ObMemAttr attr("GIRescanTaskMap");
       int64_t bucket_num = tablet_cnt / parallelism_ * 2;
       if (OB_FAIL(rescan_tasks_info_.rescan_tasks_map_.create(bucket_num, attr))) {
         LOG_WARN("init map failed", K(ret));

@@ -23,7 +23,7 @@
 #include "lib/lock/ob_spin_lock.h"
 #include "lib/lock/ob_small_spin_lock.h"
 #include "lib/utility/ob_macro_utils.h"
-#include "ob_clock_generator.h"
+#include "lib/time/ob_clock_generator.h"
 #include "share/ob_define.h"
 #include "storage/ob_memtable_ctx_obj_pool.h"
 #include "storage/memtable/ob_memtable_interface.h"
@@ -162,10 +162,10 @@ public:
     }
     ATOMIC_STORE(&is_inited_, false);
   }
-  int init(const uint64_t tenant_id)
+  int init()
   {
     int ret = OB_SUCCESS;
-    ObMemAttr attr(tenant_id, ObModIds::OB_QUERY_ALLOCATOR);
+    ObMemAttr attr(ObModIds::OB_QUERY_ALLOCATOR);
     if (OB_UNLIKELY(free_count_ != alloc_count_)) {
       TRANS_LOG(ERROR, "query allocator leak found", K(alloc_count_), K(free_count_), K(alloc_size_));
     }
@@ -173,7 +173,7 @@ public:
       if (OB_FAIL(allocator_.init(NULL, //use default allocator in fifo_allocator
                                   common::OB_MALLOC_NORMAL_BLOCK_SIZE,
                                   attr))) {
-        TRANS_LOG(ERROR, "query allocator init failed", K(ret), K(lbt()), K(tenant_id));
+        TRANS_LOG(ERROR, "query allocator init failed", K(ret), K(lbt()));
       } else {
         ATOMIC_STORE(&is_inited_, true);
       }
@@ -252,10 +252,10 @@ public:
     ATOMIC_STORE(&is_inited_, false);
   }
   // FIFOAllocator doesn't support double init, even after reset, so is_inited_ is handled specially here.
-  int init(const uint64_t tenant_id)
+  int init()
   {
     int ret = OB_SUCCESS;
-    ObMemAttr attr(tenant_id, ObModIds::OB_MEMTABLE_CALLBACK, ObCtxIds::TX_CALLBACK_CTX_ID);
+    ObMemAttr attr(ObModIds::OB_MEMTABLE_CALLBACK, ObCtxIds::TX_CALLBACK_CTX_ID);
     if (OB_UNLIKELY(free_count_ != alloc_count_)) {
       TRANS_LOG(ERROR, "callback memory leak found", K(alloc_count_), K(free_count_), K(alloc_size_));
     }
@@ -263,7 +263,7 @@ public:
       if (OB_FAIL(allocator_.init(NULL,
                                   common::OB_MALLOC_NORMAL_BLOCK_SIZE,
                                   attr))) {
-        TRANS_LOG(ERROR, "callback allocator init failed", K(ret), K(lbt()), K(tenant_id));
+        TRANS_LOG(ERROR, "callback allocator init failed", K(ret), K(lbt()));
       } else {
         ATOMIC_STORE(&is_inited_, true);
       }
@@ -340,7 +340,7 @@ public:
   virtual ~ObMemtableCtx();
   virtual void reset();
 public:
-  int init(const uint64_t tenant_id);
+  int init();
   virtual void *old_row_alloc(const int64_t size) override;
   virtual void old_row_free(void *row) override;
   virtual common::ObIAllocator &get_query_allocator();
@@ -349,7 +349,7 @@ public:
   // transaction context, and carries it back after execution, for dead lock detect use
   virtual int add_conflict_trans_id(const transaction::ObTransID conflict_trans_id);
   void reset_conflict_trans_ids();
-  int get_conflict_trans_ids(common::ObIArray<transaction::ObTransIDAndAddr> &array);
+  int get_conflict_trans_ids(common::ObIArray<transaction::ObTransID> &array);
   virtual int read_lock_yield()
   {
     return ATOMIC_LOAD(&end_code_);
@@ -407,14 +407,14 @@ public:
   int log_submitted(const ObRedoLogSubmitHelper &helper);
   int sync_log_succ(const share::SCN scn, const ObCallbackScopeArray &callbacks);
   void sync_log_fail(const ObCallbackScopeArray &callbacks, const share::SCN &max_applied_scn);
-  virtual void set_trans_ctx(transaction::ObPartTransCtx *ctx);
-  virtual transaction::ObPartTransCtx *get_trans_ctx() const { return ctx_; }
+  virtual void set_trans_ctx(transaction::ObTxCtx *ctx);
+  virtual transaction::ObTxCtx *get_trans_ctx() const { return ctx_; }
   virtual void inc_truncate_cnt() override { truncate_cnt_++; }
   int get_memtable_key_arr(transaction::ObMemtableKeyArray &memtable_key_arr);
   uint64_t get_lock_for_read_retry_count() const { return lock_for_read_retry_count_; }
   virtual void add_trans_mem_total_size(const int64_t size);
   int64_t get_ref() const { return ATOMIC_LOAD(&ref_); }
-  uint64_t get_tenant_id() const;
+  
   inline bool has_row_updated() const { return has_row_updated_; }
   inline void set_row_updated() { has_row_updated_ = true; }
   int remove_callbacks_for_fast_commit(const ObCallbackScopeArray &callbacks);
@@ -531,10 +531,8 @@ public:
   // used by the replay process of multi data source.
   int replay_lock(const transaction::tablelock::ObTableLockOp &lock_op,
                   const share::SCN &scn);
-  int recover_from_table_lock_durable_info(const ObTableLockInfo &table_lock_info,
-                                           const bool transfer_merge = false);
+  int recover_from_table_lock_durable_info(const ObTableLockInfo &table_lock_info);
   int get_table_lock_store_info(ObTableLockInfo &table_lock_info);
-  int get_table_lock_for_transfer(ObTableLockInfo &table_lock_info, const ObIArray<common::ObTabletID> &tablet_list);
   // for deadlock detect.
   void set_table_lock_killed() { lock_mem_ctx_.set_killed(); }
   bool is_table_lock_killed() const { return lock_mem_ctx_.is_killed(); }
@@ -593,7 +591,7 @@ private:
   ObMemtableCtxCbAllocator ctx_cb_allocator_;
   ObRedoLogGenerator log_gen_;
   RetryInfo retry_info_;
-  transaction::ObPartTransCtx *ctx_;
+  transaction::ObTxCtx *ctx_;
   int64_t truncate_cnt_;
   // the retry count of lock for read
   uint64_t lock_for_read_retry_count_;

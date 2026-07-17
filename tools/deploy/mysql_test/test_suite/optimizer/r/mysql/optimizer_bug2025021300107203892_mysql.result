@@ -64,7 +64,7 @@ Outputs & filters:
       dop=10
   2 - output(nil), filter(nil), rowset=16
       columns([{temp_table_1: ({temp_table_1: (temp_table_1.c1, temp_table_1.c2, temp_table_1.c3, temp_table_1.c4, temp_table_1.c5)})}]), partitions(p[0-9]),
-
+       
       column_values([column_conv(INT,PS:(11,0),NOT NULL,ANONYMOUS_VIEW1.c1)], [column_conv(INT,PS:(11,0),NULL,ANONYMOUS_VIEW1.c2)], [column_conv(INT,PS:(11,
       0),NULL,ANONYMOUS_VIEW1.c3)], [column_conv(VARCHAR,utf8mb4_general_ci,length:100,NULL,ANONYMOUS_VIEW1.c4)], [column_conv(TEXT,utf8mb4_general_ci,length:65535,
       NULL,ANONYMOUS_VIEW1.c5)])
@@ -78,7 +78,7 @@ Outputs & filters:
   6 - output([t6.c1], [t6.c2], [t6.c3], [t6.c4], [t6.c5]), filter(nil), rowset=16
   7 - output([t6.c1], [t6.c2], [t6.c3], [t6.c4], [t6.c5]), filter(nil), rowset=16
       access([t6.c1], [t6.c2], [t6.c3], [t6.c4], [t6.c5]), partitions(p[0-9])
-      is_index_back=false, is_global_index=false,
+      is_index_back=false, is_global_index=false, 
       range_key([t6.c1]), range(MIN ; MAX)always true
 insert /*+ direct(true,0,'full') enable_parallel_dml parallel(10) */ into temp_table_1 select * from t6;
 

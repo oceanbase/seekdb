@@ -70,7 +70,6 @@ public:
 public:
   int init(const int64_t fixed_count = DEFAULT_FIXED_COUNT,
            const lib::ObLabel &label = ObModIds::OB_SMALL_OBJ_POOL,
-           const uint64_t tenant_id = OB_SERVER_TENANT_ID,
            const int64_t block_size = OB_MALLOC_NORMAL_BLOCK_SIZE);
   void destroy();
 
@@ -107,21 +106,20 @@ ObSmallObjPool<T>::~ObSmallObjPool()
 template <class T>
 int ObSmallObjPool<T>::init(const int64_t fixed_count,
     const lib::ObLabel &label,
-    const uint64_t tenant_id,
     const int64_t block_size)
 {
   int ret = OB_SUCCESS;
   int64_t obj_size = sizeof(ObjItem);
-  lib::ObMemAttr attr(tenant_id, label);
+  lib::ObMemAttr attr(label);
   if (OB_UNLIKELY(inited_)) {
     LIB_LOG(ERROR, "small obj pool has been initialized");
     ret = OB_INIT_TWICE;
   } else if (OB_UNLIKELY(fixed_count <= 0)) {
     LIB_LOG(ERROR, "invalid argument", K(fixed_count));
     ret = OB_INVALID_ARGUMENT;
-  } else if (OB_FAIL(allocator_.init(obj_size, label, tenant_id, block_size))) {
+  } else if (OB_FAIL(allocator_.init(obj_size, label, block_size))) {
     LIB_LOG(ERROR, "init small allocator fail", K(ret), K(obj_size), K(label),
-        K(tenant_id), K(block_size));
+        K(block_size));
   } else if (OB_FAIL(free_list_.init("SmallObjPool", 0))) {
     LIB_LOG(ERROR, "init free list fail", K(fixed_count));
   } else {

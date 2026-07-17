@@ -1,0 +1,82 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef OCEANBASE_ALLOCATOR_OB_MDS_ALLOCATOR_H_
+#define OCEANBASE_ALLOCATOR_OB_MDS_ALLOCATOR_H_
+
+#include "lib/allocator/ob_vslice_alloc.h"
+#include "storage/throttle/ob_share_throttle_define.h"
+
+namespace oceanbase {
+namespace share {
+
+OB_INLINE int64_t &mds_throttled_alloc()
+{
+  RLOCAL_INLINE(int64_t, mds_throttled_alloc);
+  return mds_throttled_alloc;
+}
+
+class ObTenantMdsAllocator : public ObIAllocator {
+private:
+  static const int64_t MDS_ALLOC_CONCURRENCY = 32;
+public:
+  DEFINE_CUSTOM_FUNC_FOR_THROTTLE(Mds);
+
+public:
+  ObTenantMdsAllocator() : is_inited_(false), throttle_tool_(nullptr), block_alloc_(), allocator_() {}
+
+  int init();
+  void destroy() { is_inited_ = false; }
+  void *alloc(const int64_t size, const int64_t expire_ts);
+  virtual void *alloc(const int64_t size) override;
+  virtual void *alloc(const int64_t size, const ObMemAttr &attr) override;
+  virtual void free(void *ptr) override;
+  virtual void set_attr(const ObMemAttr &attr) override;
+  int64_t hold() { return allocator_.hold(); }
+  TO_STRING_KV(K(is_inited_), KP(this), KP(throttle_tool_), KP(&block_alloc_), KP(&allocator_));
+
+private:
+  bool is_inited_;
+  share::TxShareThrottleTool *throttle_tool_;
+  common::ObBlockAllocMgr block_alloc_;
+  common::ObVSliceAlloc allocator_;
+
+};
+
+struct ObTenantBufferCtxAllocator : public ObIAllocator// for now, it is just a wrapper of mtl_malloc
+{
+  virtual void *alloc(const int64_t size) override;
+  virtual void *alloc(const int64_t size, const ObMemAttr &attr) override;
+  virtual void free(void *ptr) override;
+  virtual void set_attr(const ObMemAttr &) override {}
+};
+
+class ObMdsThrottleGuard
+{
+public:
+  ObMdsThrottleGuard(const bool for_replay, const int64_t abs_expire_time);
+  ~ObMdsThrottleGuard();
+
+private:
+  bool for_replay_;
+  int64_t abs_expire_time_;
+  share::TxShareThrottleTool *throttle_tool_;
+};
+
+}  // namespace share
+}  // namespace oceanbase
+
+#endif

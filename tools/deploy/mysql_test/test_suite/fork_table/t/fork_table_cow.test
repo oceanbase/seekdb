@@ -900,3 +900,4 @@ drop table if exists t17_fork;
 drop table if exists t18;
 drop table if exists t18_fork;
 drop database if exists db_fork_cow;
+

@@ -17,7 +17,6 @@
 #include "object_set.h"
 #include "lib/rc/context.h"
 #include "lib/utility/ob_tracepoint.h"
-#include "lib/alloc/ob_malloc_time_monitor.h"
 
 // macOS sys/param.h defines isset macro which conflicts with method calls
 #ifdef isset
@@ -275,7 +274,7 @@ void ObjectSet::free_normal_object(AObject *obj)
 
   AObject *newobj = merge_obj(obj);
   auto ctx_id = blk_mgr_->get_ctx_id();
-  auto tenant_id = blk_mgr_->get_tenant_id();
+  
   if (newobj->nobjs_ == cells_per_block_) {
     normal_hold_bytes_ -= ablock_size_;
     free_block(newobj->block());
@@ -566,7 +565,7 @@ bool ObjectSet::build_free_lists()
 {
   abort_unless(NULL == bm_ && NULL == free_lists_);
   ObMemAttr attr;
-  attr.tenant_id_ = blk_mgr_->get_tenant_id();
+  
   attr.ctx_id_ = blk_mgr_->get_ctx_id();
   attr.label_ = common::ObModIds::OB_OBJ_FREELISTS;
   ABlock *new_block = alloc_block(sizeof (FreeList) * (cells_per_block_ + 1) +
@@ -913,8 +912,6 @@ void ObjectSetV2::do_free_object(AObject *obj, ABlock *block)
 
 ABlock *ObjectSetV2::alloc_block(const uint64_t size, const ObMemAttr &attr)
 {
-  BASIC_TIME_GUARD(time_guard, "ALLOC_BLOCK");
-  DEFER(ObMallocTimeMonitor::get_instance().record_malloc_time(time_guard, size, attr));
   ABlock *block = blk_mgr_->alloc_block(size, attr);
   if (OB_LIKELY(block != NULL)) {
     block->obj_set_v2_ = this;

@@ -30,11 +30,11 @@ namespace blocksstable
 
 class ObIndexBlockRowParser;
 
-ObMacroBlockReader::ObMacroBlockReader(const uint64_t tenant_id)
+ObMacroBlockReader::ObMacroBlockReader()
     :compressor_(NULL),
      uncomp_buf_(NULL),
      uncomp_buf_size_(0),
-     allocator_(ObModIds::OB_CS_SSTABLE_READER, OB_MALLOC_NORMAL_BLOCK_SIZE, tenant_id)
+     allocator_(ObModIds::OB_CS_SSTABLE_READER, OB_MALLOC_NORMAL_BLOCK_SIZE)
 {
   if (share::is_reserve_mode()) {
     allocator_.set_ctx_id(ObCtxIds::MERGE_RESERVE_CTX_ID);
@@ -370,58 +370,6 @@ int ObMacroBlockReader::do_decrypt_and_decompress_data(
   return ret;
 }
 
-int ObMacroBlockReader::decrypt_and_full_transform_data(
-    const ObMicroBlockHeader &header,
-    const ObMicroBlockDesMeta &block_des_meta,
-    const char *src_buf,
-    const int64_t src_buf_size,
-    const char *&dst_buf,
-    int64_t &dst_buf_size,
-    ObIAllocator *ext_allocator)
-{
-  int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(!ObStoreFormat::is_row_store_type_with_cs_encoding(static_cast<ObRowStoreType>(header.row_store_type_)))) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("only do full transform for cs_encoding", K(ret), K(header));
-  } else if (OB_UNLIKELY(src_buf_size < header.header_size_)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid src buf size", K(ret), K(src_buf_size), K(header));
-  } else {
-    const char *payload_buf = src_buf + header.header_size_;
-    int64_t payload_size = src_buf_size - header.header_size_;
-    bool is_compressed = header.is_compressed_data();
-    if (OB_FAIL(ret)) {
-    } else if (OB_UNLIKELY(is_compressed)) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("cs encoding must has no block-level compression", K(ret), K(header));
-    } else {
-      int64_t pos = 0;
-      ObCSMicroBlockTransformer transformer;
-      char *ext_dst_buf = nullptr;
-      if (OB_FAIL(transformer.init(&header, payload_buf, payload_size))) {
-        LOG_WARN("fail to init cs micro block transformer", K(ret), K(header));
-      } else if (OB_FAIL(transformer.calc_full_transform_size(dst_buf_size))) {
-        LOG_WARN("fail to calc transformed size", K(ret), K(transformer));
-      } else if (nullptr != ext_allocator && OB_FAIL(alloc_buf(*ext_allocator, dst_buf_size, ext_dst_buf))) {
-        LOG_WARN("fail to alloc_buf", K(ret), K(dst_buf_size), KP(ext_allocator));
-      } else if (nullptr == ext_allocator && OB_FAIL(alloc_buf(dst_buf_size, uncomp_buf_, uncomp_buf_size_))) {
-        LOG_WARN("fail to alloc_buf", K(ret), K(dst_buf_size));
-      } else if (OB_FAIL(transformer.full_transform(ext_dst_buf ? ext_dst_buf : uncomp_buf_, dst_buf_size, pos))) {
-        LOG_WARN("fail to transfrom cs encoding mirco blcok", K(ret));
-      } else if (OB_UNLIKELY(pos != dst_buf_size)) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("pos should equal to buf_size", K(ret), K(pos), K(dst_buf_size));
-      } else {
-        dst_buf = ext_dst_buf ? ext_dst_buf : uncomp_buf_;
-      }
-      if (OB_FAIL(ret) && nullptr != ext_allocator && nullptr != ext_dst_buf) {
-        ext_allocator->free(ext_dst_buf);
-      }
-    }
-  }
-
-  return ret;
-}
 
 ObSSTableDataBlockReader::ObSSTableDataBlockReader()
   : data_(NULL), size_(0), common_header_(), macro_header_(), linked_header_(),
@@ -604,7 +552,7 @@ int ObSSTableDataBlockReader::check_macro_crc_(const char *data, const int64_t s
     const int32_t calculated_checksum = static_cast<int32_t>(ob_crc64(payload_buf, payload_size));
     if (OB_UNLIKELY(calculated_checksum != common_header_.get_payload_checksum())) {
       ret = OB_INVALID_DATA;
-      LOG_WARN("macro block checksum inconsistant", K(ret), K(calculated_checksum), K_(common_header));
+      LOG_ERROR("macro block checksum inconsistant", K(ret), K(calculated_checksum), K_(common_header));
     }
   }
   return ret;
@@ -701,13 +649,6 @@ int ObSSTableDataBlockReader::dump_sstable_micro_header(
       const ObColumnHeader *encode_col_header = reinterpret_cast<const ObColumnHeader *>(micro_block_buf + pos);
       for (int64_t i = 0; i < macro_header_.fixed_header_.column_count_; ++i) {
         printer_.print_encoding_column_header(&encode_col_header[i], i);
-      }
-    } else if (ObStoreFormat::is_row_store_type_with_cs_encoding(row_store_type)) {
-      ObCSMicroBlockTransformer transformer;
-      if (OB_FAIL(transformer.init(&micro_block_header, micro_block_buf + pos, micro_block_size - pos, true/*is_part_tranform*/))) {
-        LOG_ERROR("fail to init transformer", KR(ret), K(pos), K(micro_block_size), K(micro_block_header));
-      } else {
-        transformer.dump_cs_encoding_info(hex_print_buf_, OB_DEFAULT_MACRO_BLOCK_SIZE);
       }
     } else {
       ret = OB_NOT_SUPPORTED;

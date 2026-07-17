@@ -196,7 +196,6 @@ int ObIMicroBlockDecoder::find_bound(const ObDatumRange &range, const int64_t be
   return ret;
 }
 
-// for column store
 int ObIMicroBlockDecoder::find_bound(const ObDatumRowkey &key, const bool lower_bound,
   const int64_t begin_idx, const int64_t end_idx, int64_t &row_idx, bool &equal)
 {

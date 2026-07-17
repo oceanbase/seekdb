@@ -18,7 +18,7 @@
 #define OCEANBASE_ROOTSERVER_OB_DDL_RETRY_TASK_H
 
 #include "rootserver/ddl_task/ob_ddl_task.h"
-#include "rpc/obrpc/ob_rpc_result_code.h"
+#include "rpc/frame/ob_result_code.h"
 
 namespace oceanbase
 {
@@ -32,24 +32,21 @@ public:
   ObDDLRetryTask();
   virtual ~ObDDLRetryTask();
   int init(
-      const uint64_t tenant_id,
       const int64_t task_id,
       const uint64_t object_id,
       const int64_t schema_version,
-      const int64_t consumer_group_id,
       const int32_t sub_task_trace_id,
       const share::ObDDLType &type,
-      const obrpc::ObDDLArg *ddl_arg,
+      const obcall::ObDDLArg *ddl_arg,
       const int64_t task_status = share::ObDDLTaskStatus::PREPARE);
   int init(const ObDDLTaskRecord &task_record);
   virtual int process() override;
   virtual bool is_valid() const override;
   virtual int serialize_params_to_message(char *buf, const int64_t buf_size, int64_t &pos) const override;
-  virtual int deserialize_params_from_message(const uint64_t tenant_id, const char *buf, const int64_t buf_size, int64_t &pos) override;
+  virtual int deserialize_params_from_message(const char *buf, const int64_t buf_size, int64_t &pos) override;
   virtual int64_t get_serialize_param_size() const override;
   static int update_task_status_wait_child_task_finish(
         common::ObMySQLTransaction &trans,
-        const uint64_t tenant_id,
         const int64_t task_id);
 private:
   int check_health();
@@ -59,9 +56,9 @@ private:
   int succ();
   int fail();
   virtual int cleanup_impl() override;
-  int deep_copy_ddl_arg(common::ObIAllocator &allocator, const share::ObDDLType &ddl_type, const obrpc::ObDDLArg *source_arg);
-  int init_compat_mode(const share::ObDDLType &ddl_type, const obrpc::ObDDLArg *source_arg);
-  int get_forward_user_message(const obrpc::ObRpcResultCode &rcode);
+  int deep_copy_ddl_arg(common::ObIAllocator &allocator, const share::ObDDLType &ddl_type, const obcall::ObDDLArg *source_arg);
+  int init_compat_mode(const share::ObDDLType &ddl_type, const obcall::ObDDLArg *source_arg);
+  int get_forward_user_message(const rpc::frame::ObResultCode &rcode);
   int check_schema_change_done();
   virtual bool is_error_need_retry(const int ret_code) override
   {
@@ -69,12 +66,12 @@ private:
   }
 private:
   static const int64_t OB_DDL_RETRY_TASK_VERSION = 1L;
-  obrpc::ObDDLArg *ddl_arg_;
+  obcall::ObDDLArg *ddl_arg_;
   ObRootService *root_service_;
   int64_t affected_rows_;
   common::ObString forward_user_message_;
   common::ObArenaAllocator allocator_;
-  obrpc::ObAlterTableRes alter_table_res_; // in memory
+  obcall::ObAlterTableRes alter_table_res_; // in memory
   bool is_schema_change_done_;
 };
 

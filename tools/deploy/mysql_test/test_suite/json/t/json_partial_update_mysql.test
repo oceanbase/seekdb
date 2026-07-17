@@ -7,7 +7,7 @@ connect (obsys,$OBMYSQL_MS0,admin,$OBMYSQL_PWD,test,$OBMYSQL_PORT);
 connection obsys;
 #alter system set _enable_defensive_check = 1;
 connection default;
-set log_row_value_options="partial_json";
+set log_row_value_options="partial_json"; 
 set ob_default_lob_inrow_threshold = 4096;
 set GLOBAL max_allowed_packet=1073741824;
 set ob_query_timeout=100000000000;
@@ -25,12 +25,12 @@ drop table json_test;
 
 # out row for object
 create table json_test(pk int primary key, j json);
-insert into json_test values(1, concat('{"name": "John", "content": "', repeat('x',81920), '"}'));
+insert into json_test values(1, concat('{"name": "John", "content": "', repeat('x',81920), '"}'));  
 update json_test set j = json_replace(j, '$.name', 'ab') where pk=1;
 update json_test set j = json_replace(j, '$.name', 'abcdefg') where pk=1;
 select pk, md5(j) as md5 from json_test where pk = 1;
 
-insert into json_test values(2, concat('{ "a" : "foo", "b" : [ 1, 2, 3 ], "content": "', repeat('x',81920), '"}'));
+insert into json_test values(2, concat('{ "a" : "foo", "b" : [ 1, 2, 3 ], "content": "', repeat('x',81920), '"}'));  
 select pk, md5(j) as md5 from json_test where pk = 2;
 update json_test set j = json_replace(j, '$.a', 'woo') where pk=2;
 select pk, md5(j) as md5 from json_test where pk = 2;
@@ -47,7 +47,7 @@ drop table json_test;
 
 # chinese test
 create table json_test(pk int primary key, j json);
-insert into json_test values(1, concat('{"name": "蚂蚁", "content": "', repeat('x',81920), '"}'));
+insert into json_test values(1, concat('{"name": "蚂蚁", "content": "', repeat('x',81920), '"}'));  
 select json_extract(j, '$.name') from json_test;
 update json_test set j = json_replace(j, '$.name', '淘宝') where pk=1;
 select json_extract(j, '$.name') from json_test;
@@ -65,7 +65,7 @@ drop table json_test;
 
 # multi json col
 create table json_test(pk int primary key, j1 json, j2 json ) json(j1) store as (chunk '4k') json(j2) store as (chunk '4k') ;
-insert into json_test values(1, concat('{"name": "John", "content": "', repeat('x', 8000), '"}'), concat('["name", "John", {"age": "30"}, {"padding": "', repeat('x',81920), '"}]'));
+insert into json_test values(1, concat('{"name": "John", "content": "', repeat('x', 8000), '"}'), concat('["name", "John", {"age": "30"}, {"padding": "', repeat('x',81920), '"}]')); 
 update json_test set j1 = json_replace(j1, '$.name', 'ab'), j2 = json_replace(j2, '$[0]', 'abcd') where pk=1;
 select pk, md5(j1), md5(j2) as md5 from json_test;
 update json_test set j1 = json_replace(j2, '$[0]', 'xyz'), j2 = json_replace(j2, '$[0]', 'xyz') where pk=1;
@@ -75,7 +75,7 @@ select pk, md5(j1), md5(j2) as md5 from json_test;
 drop table json_test;
 
 create table json_test(pk int primary key, j json) json(j) store as (chunk '4k');
-insert into json_test values(1, concat('{"name": "John", "like" : "music", "content": "', repeat('x', 8127), '"}'));
+insert into json_test values(1, concat('{"name": "John", "like" : "music", "content": "', repeat('x', 8127), '"}')); 
 select json_extract(j, '$.name', '$.like') from json_test where pk=1;
 update json_test set j = json_replace(j, '$.name', 'xxxxxxxxxxxx', '$.like', 'yyyyyyyyyyyyyyyyy') where pk =1;
 select json_extract(j, '$.name', '$.like') from json_test where pk=1;
@@ -136,7 +136,7 @@ insert into json_test values(3, concat('{ "a" : "foo", "b" : [ 1, 2, 3 ] , "c" :
 select pk, md5(j) as md5 from json_test where pk = 3;
 
 alter table json_test add (j2 json) json(j2) store as (CHUNK '1k');
-insert into json_test values(2, concat('{"name": "John", "content": "', repeat('x',81920), '"}'), concat('["name", "John", {"age": "30"}, {"padding": "', repeat('x',81920), '"}]'));
+insert into json_test values(2, concat('{"name": "John", "content": "', repeat('x',81920), '"}'), concat('["name", "John", {"age": "30"}, {"padding": "', repeat('x',81920), '"}]')); 
 select pk, md5(j) as md5 from json_test where pk = 2;
 
 update json_test set j = json_replace(j, '$.a', 'xoo') where pk = 3;
@@ -354,7 +354,7 @@ select md5(j), length(json_extract(j, '$.name5'))from json_test;
 drop table if exists json_test;
 
 create table json_test (j json) json(j) store as (chunk '1k');
-insert into json_test values(concat('{"level0" : {}, "key":"', repeat('x',8192), '"}'));
+insert into json_test values(concat('{"level0" : {}, "key":"', repeat('x',8192), '"}')); 
 update json_test set j = json_set(j, '$.level0.key_1', 1, '$.level0.key_2', 2);
 select json_extract(j, '$.level0') from json_test;
 drop table if exists json_test;
@@ -413,8 +413,8 @@ select md5(j), json_extract(j, '$.name1', '$.name2')  from json_test;
 drop table if exists json_test;
 
 create table json_test(pk int primary key, c2 varchar(100), j json) json(j) store as (chunk '2k');
-insert into json_test values(1, '2222', concat('{"k1": 1, "k2":"', repeat('t', 4200), '", "k3": 2, "k4": 3}'));
-insert into json_test values(2, '2222', concat('{"name": "John", "like" : "music", "content": "', repeat('x', 4200), '"}'));
+insert into json_test values(1, '2222', concat('{"k1": 1, "k2":"', repeat('t', 4200), '", "k3": 2, "k4": 3}')); 
+insert into json_test values(2, '2222', concat('{"name": "John", "like" : "music", "content": "', repeat('x', 4200), '"}')); 
 select pk, md5(j) as md5 from json_test;
 alter table json_test drop column c2;
 update json_test set j = json_set(j, '$.k2', repeat('x', 4201)) where pk = 1;
@@ -427,7 +427,7 @@ drop table json_test;
 
 create table json_test(pk int primary key, c2 varchar(100), j json chunk '4k');
 # chunk size is 4k
-insert into json_test values(1, '2222', concat('{"k1": 1, "k2":"', repeat('t', 4200), '", "k3": 2, "k4": 3}'));
+insert into json_test values(1, '2222', concat('{"k1": 1, "k2":"', repeat('t', 4200), '", "k3": 2, "k4": 3}')); 
 select pk, md5(j) from json_test;
 # change chunk size to 2k
 alter table json_test modify j json chunk '2k';
@@ -464,7 +464,7 @@ select pk, md5(j), length(json_extract(j, '$.k2')), json_extract(j, '$.k4') from
 drop table json_test;
 
 create table json_test(pk int primary key, j json chunk '1k');
-insert into json_test values(1, concat('{"k1": 1, "k2":"', repeat('t', 4200), '", "k3": 2, "k4": 3}'));
+insert into json_test values(1, concat('{"k1": 1, "k2":"', repeat('t', 4200), '", "k3": 2, "k4": 3}')); 
 alter table json_test add `col_gen_1` varchar(1538) GENERATED ALWAYS AS (JSON_EXTRACT(j, '$.k4')) VIRTUAL;
 alter table json_test add  index `gen_idx_1` (`col_gen_1`) LOCAL;
 select /*+ index(gen_idx_1) */ col_gen_1 from json_test;
@@ -502,7 +502,7 @@ delete from json_test;
 drop table json_test;
 
 create table json_test(pk int primary key, j json);
-insert into json_test values(1, concat('{"name": "John", "content": "', repeat('x',81920), '"}'));
+insert into json_test values(1, concat('{"name": "John", "content": "', repeat('x',81920), '"}'));  
 select md5(j), json_extract(j, '$.name') from json_test;
 update json_test set j = json_replace(j, '$.name', 'abc'), pk = 2 where pk=1;
 select md5(j), json_extract(j, '$.name') from json_test;
@@ -512,5 +512,5 @@ drop table json_test;
 connection obsys;
 #alter system set _enable_defensive_check = 0;
 connection default;
-set log_row_value_options="";
+set log_row_value_options=""; 
 set global max_allowed_packet=default;

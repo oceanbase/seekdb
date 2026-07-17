@@ -114,15 +114,6 @@ execute_process(
 set(CPACK_FULL_PACKAGE_NAME 
   "${CPACK_PACKAGE_NAME}-${CPACK_PACKAGE_VERSION}-${CPACK_RPM_PACKAGE_RELEASE}${RPM_DIST}.${ARCHITECTURE}.rpm")
 
-configure_file(${CMAKE_CURRENT_SOURCE_DIR}/tools/ocp/software_package.template
-              ${CMAKE_CURRENT_SOURCE_DIR}/tools/ocp/software_package
-              @ONLY)
-
-install(FILES
-  tools/ocp/software_package
-  DESTINATION usr/share/seekdb/software_package
-  COMPONENT server)
-
 message(STATUS "Cpack Components:${CPACK_COMPONENTS_ALL}")
 
 # refs https://stackoverflow.com/questions/48711342/what-does-the-cpack-preinstall-target-do

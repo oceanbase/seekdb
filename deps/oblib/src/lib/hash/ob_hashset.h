@@ -117,10 +117,10 @@ public:
   {
     return ht_.create(cal_next_prime(bucket_num), allocer, bucket_allocer);
   }
-  int create(int64_t bucket_num, const char *bucket_label, const char *node_label, uint64_t tenant_id = OB_SERVER_TENANT_ID)
+  int create(int64_t bucket_num, const char *bucket_label, const char *node_label)
   {
-    allocer_.set_attr(ObMemAttr(tenant_id, node_label));
-    bucket_allocer_.set_attr(ObMemAttr(tenant_id, bucket_label));
+    allocer_.set_attr(ObMemAttr(node_label));
+    bucket_allocer_.set_attr(ObMemAttr(bucket_label));
     return ht_.create(cal_next_prime(bucket_num), &allocer_, &bucket_allocer_);
   }
   int create(int64_t bucket_num, _allocer *allocer)

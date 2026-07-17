@@ -33,7 +33,6 @@ class ObExprField;
 class ObExprStrcmp;
 class ObExprAbs;
 class ObExprArgCase;
-class ObExprOracleDecode;
 class ObSubQueryRelationalExpr;
 class ObExprRand;
 class ObExprRandom;
@@ -112,7 +111,6 @@ private:
   inline int visit_in_expr(ObOpRawExpr &expr, ObExprInOrNotIn *&in_op);
   inline int visit_like_expr(ObOpRawExpr &expr, ObExprLike *&like_op);
   inline int visit_field_expr(ObNonTerminalRawExpr &expr, ObExprField *field_op);
-  inline int visit_decode_expr(ObNonTerminalRawExpr &expr, ObExprOracleDecode *decode_op);
   inline int visit_relational_expr(ObNonTerminalRawExpr &expr, ObRelationalExprOperator *relational_op);
   inline int visit_minmax_expr(ObNonTerminalRawExpr &expr, ObMinMaxExprOperator *minmax_op);
   inline int visit_maybe_row_expr(ObOpRawExpr &expr, ObExprOperator *&op);

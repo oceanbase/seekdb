@@ -22,39 +22,6 @@
 #include "storage/blocksstable/ob_block_sstable_struct.h"
 namespace test
 {
-class MockLocationService : public share::ObLocationService
-{
-public:
-  MockLocationService()
-  {}
-  virtual ~MockLocationService()
-  {}
-
-  virtual int nonblock_get(const uint64_t tenant_id, const ObTabletID &tablet_id, ObLSID &ls_id)
-  {
-    ls_id = ObLSID::SYS_LS_ID;
-    return OB_SUCCESS;
-  }
-
-  virtual int nonblock_get(const int64_t cluster_id, const uint64_t tenant_id, const ObLSID &ls_id,
-                           ObLSLocation &location)
-  {
-    int ret = OB_SUCCESS;
-
-    ObAddr add;
-    ObReplicaProperty relica_pro;
-    ObLSRestoreStatus ls_restore_sta;
-    add.set_ip_addr("1.1.1.1", 8888);
-    ObLSReplicaLocation ls_replica_loc;
-
-    if (OB_FAIL(location.init(1, 1, ls_id, 1))) {
-    } else if (OB_FAIL(ls_replica_loc.init(add, LEADER, 100, REPLICA_TYPE_FULL, relica_pro, ls_restore_sta, 100))) {
-    } else {
-      location.add_replica_location(ls_replica_loc);
-    }
-    return ret;
-  }
-};
 class TestOpEngine : public TestOptimizerUtils
 {
 public:
@@ -102,7 +69,6 @@ protected:
   std::vector<std::vector<std::string>> temp_cmp_data_;
 
   ObTenantBase tbase_;
-  MockLocationService mock_location_service_;
   //
   std::string test_config_file_;
   std::string env_dir_;

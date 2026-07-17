@@ -388,7 +388,7 @@ drop function f1;
 
 CREATE FUNCTION f1() RETURNS VARCHAR(65525) RETURN 'Hello';
 
-SET collation_connection='gbk_bin';
+SET collation_connection='utf8mb4_bin';
 
 --error 0,1051
 drop table if exists t1;

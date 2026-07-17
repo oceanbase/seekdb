@@ -28,12 +28,12 @@ namespace storage {
 struct ObVectorRefreshIndexCtx {
 public:
   ObVectorRefreshIndexCtx()
-      : allocator_("VecRefCtx"), tenant_id_(OB_INVALID_TENANT_ID),
+      : allocator_("VecRefCtx"),
         base_tb_id_(OB_INVALID_ID), domain_tb_id_(OB_INVALID_ID),
         index_id_tb_id_(OB_INVALID_ID), trans_(nullptr),
         refresh_method_(share::schema::ObVectorRefreshMethod::MAX) {}
   bool is_valid() const {
-    return OB_INVALID_TENANT_ID != tenant_id_ &&
+    return true &&
            OB_INVALID_ID != domain_tb_id_ && OB_INVALID_ID != base_tb_id_ &&
            OB_INVALID_ID != index_id_tb_id_ && OB_NOT_NULL(trans_) &&
            share::schema::ObVectorRefreshMethod::MAX != refresh_method_;
@@ -42,13 +42,12 @@ public:
     trans_ = nullptr;
     allocator_.reuse();
   }
-  TO_STRING_KV(K_(tenant_id), K_(base_tb_id), K_(domain_tb_id),
+  TO_STRING_KV(K_(base_tb_id), K_(domain_tb_id),
                K_(index_id_tb_id), K_(refresh_method), K_(delta_rate_threshold),
                K_(refresh_threshold), K_(idx_parameters));
 
 public:
   ObArenaAllocator allocator_;
-  uint64_t tenant_id_;
   uint64_t base_tb_id_;
   uint64_t domain_tb_id_;
   uint64_t index_id_tb_id_;
@@ -78,7 +77,6 @@ public:
 private:
   static int get_current_scn(share::SCN &current_scn);
   static int lock_domain_tb(ObVectorRefreshIdxTransaction &trans,
-                               const uint64_t tenant_id,
                                const uint64_t domain_tb_id,
                                const bool try_lock = false);
   int get_table_row_count(const ObString &db_name, const ObString &table_name,

@@ -18,14 +18,10 @@
 #define OCEANBASE_STORAGE_COMPACTION_OB_SCHEDULE_DAG_FUNC_H_
 #include "lib/container/ob_iarray.h"
 #include "storage/compaction/ob_compaction_util.h"
-#include "share/scheduler/ob_tenant_dag_scheduler.h"
+#include "observer/scheduler/ob_tenant_dag_scheduler.h"
 
 namespace oceanbase
 {
-namespace share
-{
-class ObLSID;
-}
 namespace storage
 {
 namespace mds
@@ -33,11 +29,7 @@ namespace mds
 class ObMdsTableMergeDagParam;
 }
 struct ObDDLTableMergeDagParam;
-struct ObTabletSplitParam;
-struct ObLobSplitParam;
 struct ObTabletForkParam;
-class ObTabletSplitDag;
-class ObTabletLobSplitDag;
 class ObComplementDataDag;
 class ObTablet;
 }
@@ -49,14 +41,8 @@ class ObTenantDagScheduler;
 namespace compaction
 {
 struct ObTabletMergeDagParam;
-struct ObCOMergeDagParam;
 struct ObTabletSchedulePair;
 struct ObBatchFreezeTabletsParam;
-#ifdef OB_BUILD_SHARED_STORAGE
-struct ObTabletsRefreshSSTableParam;
-struct ObVerifyCkmParam;
-struct ObUpdateSkipMajorParam;
-#endif
 
 class ObScheduleDagFunc final
 {
@@ -70,22 +56,6 @@ public:
   static int schedule_ddl_table_merge_dag(
       storage::ObDDLTableMergeDagParam &param,
       const bool is_emergency = false);
-  static int schedule_tablet_split_dag(
-      storage::ObTabletSplitParam &param,
-      const bool is_emergency = false);
-  static int schedule_and_get_tablet_split_dag(
-      storage::ObTabletSplitParam &param,
-      storage::ObTabletSplitDag *&dag,
-      const bool is_emergency = false);
-  static int schedule_lob_tablet_split_dag(
-      storage::ObLobSplitParam &param,
-      const bool is_emergency = false);
-  static int schedule_tablet_co_merge_dag_net(
-      ObCOMergeDagParam &param);
-  static int schedule_and_get_lob_tablet_split_dag(
-      storage::ObLobSplitParam &param,
-      storage::ObTabletLobSplitDag *&dag,
-      const bool is_emergency = false);
   static int schedule_tablet_fork_dag(
       storage::ObTabletForkParam &param,
       const bool is_emergency = false);
@@ -94,28 +64,12 @@ public:
       const bool is_emergency = false);
   static int schedule_batch_freeze_dag(
     const ObBatchFreezeTabletsParam &freeze_param);
-#ifdef OB_BUILD_SHARED_STORAGE
-  static int schedule_tablet_refresh_dag(
-      ObTabletsRefreshSSTableParam &param,
-      const bool is_emergency = false);
-  static int schedule_verify_ckm_dag(ObVerifyCkmParam &param);
-  static int schedule_update_skip_major_tablet_dag(const ObUpdateSkipMajorParam &param);
-#endif
 };
 
 class ObDagParamFunc final
 {
 public:
   static int fill_param(
-    const share::ObLSID &ls_id,
-    const storage::ObTablet &tablet,
-    const ObMergeType merge_type,
-    const int64_t &merge_snapshot_version,
-    const ObExecMode exec_mode,
-    const share::ObDagId *dag_net_id,
-    ObCOMergeDagParam &param);
-  static int fill_param(
-    const share::ObLSID &ls_id,
     const storage::ObTablet &tablet,
     const ObMergeType merge_type,
     const int64_t &merge_snapshot_version,

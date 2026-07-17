@@ -40,7 +40,7 @@ int ObAllVirtualTabletCompactionProgress::init()
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
     SERVER_LOG(WARN, "ObAllVirtualTabletCompactionProgress has been inited", K(ret));
-  } else if (OB_FAIL(progress_iter_.open(effective_tenant_id_))) {
+  } else if (OB_FAIL(progress_iter_.open())) {
     SERVER_LOG(WARN, "Fail to open suggestion iter", K(ret));
   } else {
     is_inited_ = true;
@@ -118,12 +118,6 @@ int ObAllVirtualTabletCompactionProgress::fill_cells()
       break;
     case ESTIMATED_FINISH_TIME:
       cells[i].set_timestamp(progress_.estimated_finish_time_);
-      break;
-    case START_CG_ID:
-      cells[i].set_int(progress_.start_cg_idx_);
-      break;
-    case END_CG_ID:
-      cells[i].set_int(progress_.end_cg_idx_);
       break;
     default:
       ret = OB_ERR_UNEXPECTED;

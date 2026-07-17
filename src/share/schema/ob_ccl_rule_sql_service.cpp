@@ -36,8 +36,8 @@ int ObCCLRuleSqlService::insert_ccl_rule(const ObCCLRuleSchema &ccl_rule_schema,
   ObSqlString sql;
   ObSqlString values;
   int64_t affected_rows = 0;
-  uint64_t tenant_id = ccl_rule_schema.get_tenant_id();
-  const uint64_t exec_tenant_id = ObSchemaUtils::get_exec_tenant_id(tenant_id);
+  
+  
   if (OB_UNLIKELY(!ccl_rule_schema.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     SHARE_SCHEMA_LOG(WARN, "ccl_rule is invalid", K(ccl_rule_schema), K(ret));
@@ -56,7 +56,7 @@ int ObCCLRuleSqlService::insert_ccl_rule(const ObCCLRuleSchema &ccl_rule_schema,
                                  static_cast<int32_t>(values.length()),
                                  values.ptr()))) {
         LOG_WARN("append sql failed, ", K(ret));
-      } else if (OB_FAIL(sql_client.write(exec_tenant_id, sql.ptr(), affected_rows))) {
+      } else if (OB_FAIL(sql_client.write(sql.ptr(), affected_rows))) {
         LOG_WARN("fail to execute sql", K(sql), K(ret));
       } else if (!is_single_row(affected_rows)) {
         ret = OB_ERR_UNEXPECTED;
@@ -69,7 +69,7 @@ int ObCCLRuleSqlService::insert_ccl_rule(const ObCCLRuleSchema &ccl_rule_schema,
 
   if (OB_SUCC(ret)) {
     ObSchemaOperation opt;
-    opt.tenant_id_ = ccl_rule_schema.get_tenant_id();
+    
     opt.ccl_rule_id_ = ccl_rule_schema.get_ccl_rule_id();
     opt.op_type_ = OB_DDL_CREATE_CCL_RULE;
     opt.schema_version_ = ccl_rule_schema.get_schema_version();
@@ -86,10 +86,10 @@ int ObCCLRuleSqlService::gen_sql(ObSqlString &sql, ObSqlString &values,
                                         const ObCCLRuleSchema &ccl_rule_schema)
 {
   int ret = OB_SUCCESS;
-  uint64_t tenant_id = ccl_rule_schema.get_tenant_id();
-  const uint64_t exec_tenant_id = ObSchemaUtils::get_exec_tenant_id(tenant_id);
+  
+  
   SQL_COL_APPEND_VALUE(
-    sql, values, ObSchemaUtils::get_extract_schema_id(exec_tenant_id, ccl_rule_schema.get_ccl_rule_id()),
+    sql, values, ObSchemaUtils::get_extract_schema_id(ccl_rule_schema.get_ccl_rule_id()),
     "ccl_rule_id", "%lu");
   SQL_COL_APPEND_ESCAPE_STR_VALUE(sql, values, ccl_rule_schema.get_ccl_rule_name().ptr(),
                                   ccl_rule_schema.get_ccl_rule_name().length(), "ccl_rule_name");
@@ -129,8 +129,8 @@ int ObCCLRuleSqlService::delete_ccl_rule(const ObCCLRuleSchema &ccl_rule_schema,
   ObSqlString sql;
   ObSqlString values;
   int64_t affected_rows = 0;
-  uint64_t tenant_id = ccl_rule_schema.get_tenant_id();
-  const uint64_t exec_tenant_id = ObSchemaUtils::get_exec_tenant_id(tenant_id);
+  
+  
   if (OB_UNLIKELY(!ccl_rule_schema.is_valid())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid input argument", K(ret), K(ccl_rule_schema));
@@ -139,9 +139,9 @@ int ObCCLRuleSqlService::delete_ccl_rule(const ObCCLRuleSchema &ccl_rule_schema,
     if (OB_FAIL(sql.assign_fmt(
           "DELETE FROM %s WHERE ccl_rule_id = %lu",
           CCL_RULE_TABLES[THE_SYS_TABLE_IDX],
-          ObSchemaUtils::get_extract_schema_id(exec_tenant_id, ccl_rule_schema.get_ccl_rule_id())))) {
+          ObSchemaUtils::get_extract_schema_id(ccl_rule_schema.get_ccl_rule_id())))) {
       LOG_WARN("fail to assign sql format", K(ret));
-    } else if (OB_FAIL(sql_client.write(exec_tenant_id, sql.ptr(), affected_rows))) {
+    } else if (OB_FAIL(sql_client.write(sql.ptr(), affected_rows))) {
       LOG_WARN("fail to execute sql", K(sql), K(ret));
     } else if (!is_single_row(affected_rows)) {
       ret = OB_ERR_UNEXPECTED;
@@ -161,7 +161,7 @@ int ObCCLRuleSqlService::delete_ccl_rule(const ObCCLRuleSchema &ccl_rule_schema,
       if (OB_FAIL(sql.append_fmt(", gmt_modified) VALUES (%.*s, now(6))",
                                  static_cast<int32_t>(values.length()), values.ptr()))) {
         LOG_WARN("append sql failed, ", K(ret));
-      } else if (OB_FAIL(sql_client.write(exec_tenant_id, sql.ptr(), affected_rows))) {
+      } else if (OB_FAIL(sql_client.write(sql.ptr(), affected_rows))) {
         LOG_WARN("fail to execute sql", K(sql), K(ret));
       } else if (!is_single_row(affected_rows)) {
         ret = OB_ERR_UNEXPECTED;
@@ -173,7 +173,7 @@ int ObCCLRuleSqlService::delete_ccl_rule(const ObCCLRuleSchema &ccl_rule_schema,
 
   if (OB_SUCC(ret)) {
     ObSchemaOperation opt;
-    opt.tenant_id_ = ccl_rule_schema.get_tenant_id();
+    
     opt.ccl_rule_id_ = ccl_rule_schema.get_ccl_rule_id();
     opt.op_type_ = OB_DDL_DROP_CCL_RULE;
     opt.schema_version_ = new_schema_version;

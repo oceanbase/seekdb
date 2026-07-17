@@ -17,13 +17,12 @@
 #ifndef OCEANBASE_BLOCKSSTABLE_OB_BLOCK_MANAGER_H_
 #define OCEANBASE_BLOCKSSTABLE_OB_BLOCK_MANAGER_H_
 
-#include "common/storage/ob_io_device.h"
+#include "lib/restore/ob_io_device.h"
 #include "share/io/ob_io_struct.h"
 #include "lib/atomic/ob_atomic.h"
 #include "lib/hash/ob_hashset.h"
 #include "lib/hash/ob_linear_hash_map.h"
 #include "lib/lock/ob_bucket_lock.h"
-#include "share/ob_thread_mgr.h"
 #include "storage/blocksstable/ob_block_sstable_struct.h"
 #include "storage/blocksstable/ob_macro_block_checker.h"
 #include "storage/blocksstable/ob_super_block_buffer_holder.h"

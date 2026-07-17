@@ -166,15 +166,6 @@ function Invoke-GenerateParser {
     # WinBison copies action verbatim; the .y source has "{ $$ = NULL }" missing a semicolon (GCC accepts, clang rejects)
     Patch-File $tabC '(yyval.node) = NULL }' '(yyval.node) = NULL; }'
 
-    $oracleFiles = @(
-        (Join-Path $ScriptDir "pl_parser_oracle_mode_lex.c"),
-        (Join-Path $ScriptDir "pl_parser_oracle_mode_tab.c"),
-        (Join-Path $ScriptDir "pl_parser_oracle_mode_tab.h")
-    )
-    foreach ($f in $oracleFiles) {
-        if (Test-Path -LiteralPath $f) { Remove-Item -LiteralPath $f -Force }
-    }
-
     Set-Content -LiteralPath $CACHE_MD5_FILE -Value $md5Hash
 }
 

@@ -15,6 +15,8 @@
  */
 
 #include "observer/virtual_table/ob_all_virtual_transaction_checkpoint.h"
+#include "share/rc/ob_module_provider.h"
+#include "storage/ls/ob_ls.h"
 #include "storage/tx_storage/ob_ls_service.h"
 
 using namespace oceanbase::common;
@@ -27,8 +29,7 @@ namespace observer
 
 ObAllVirtualTransCheckpointInfo::ObAllVirtualTransCheckpointInfo()
     : ObVirtualTableScannerIterator(),
-      addr_(),
-      ls_iter_guard_()
+      ls_(nullptr)
 {
 }
 
@@ -39,48 +40,30 @@ ObAllVirtualTransCheckpointInfo::~ObAllVirtualTransCheckpointInfo()
 
 void ObAllVirtualTransCheckpointInfo::reset()
 {
-  omt::ObMultiTenantOperator::reset();
-  addr_.reset();
+  ls_ = nullptr;
+  ob_common_checkpoint_iter_.reset();
   ObVirtualTableScannerIterator::reset();
-}
-
-int ObAllVirtualTransCheckpointInfo::get_next_ls_(ObLS *&ls)
-{
-  int ret = OB_SUCCESS;
-
-  if (ls_iter_guard_.get_ptr() == nullptr
-      && OB_FAIL(MTL(ObLSService*)->get_ls_iter(ls_iter_guard_, ObLSGetMod::OBSERVER_MOD))) {
-    SERVER_LOG(WARN, "get_ls_iter fail", K(ret));
-  } else if (OB_FAIL(ls_iter_guard_->get_next(ls))) {
-    if (OB_ITER_END != ret) {
-      SERVER_LOG(WARN, "get_next_ls failed", K(ret));
-    }
-  }
-
-  return ret;
 }
 
 int ObAllVirtualTransCheckpointInfo::prepare_to_read_()
 {
   int ret = OB_SUCCESS;
-  ObLS *ls = nullptr;
   ObArray<ObCommonCheckpointVTInfo> infos;
   ob_common_checkpoint_iter_.reset();
-  if (OB_FAIL(get_next_ls_(ls))) {
-    if (OB_ITER_END != ret) {
-      SERVER_LOG(WARN, "get_next_ls failed", K(ret));
-    }
-  } else if (NULL == ls) {
+  ObLSService *ls_service = share::g_mp->ls_service();
+  if (OB_ISNULL(ls_service)) {
     ret = OB_ERR_UNEXPECTED;
-    SERVER_LOG(WARN, "ls shouldn't NULL here", K(ret), K(ls));
+    SERVER_LOG(WARN, "ls service is null", K(ret));
+  } else if (OB_FAIL(ls_service->get_ls(ls_))) {
+    SERVER_LOG(WARN, "get log stream failed", K(ret));
   } else if (FALSE_IT(infos.reset())) {
-  } else if (OB_FAIL(ls->get_common_checkpoint_info(infos))) {
-    SERVER_LOG(WARN, "get commoncheckpoint info failed", K(ret), KPC(ls));
+  } else if (OB_FAIL(ls_->get_common_checkpoint_info(infos))) {
+    SERVER_LOG(WARN, "get commoncheckpoint info failed", K(ret), KPC(ls_));
   } else {
     int64_t idx = 0;
     for (; idx < infos.count() && OB_SUCC(ret); ++idx) {
       if (OB_FAIL(ob_common_checkpoint_iter_.push(infos.at(idx)))) {
-        SERVER_LOG(ERROR, "ob_common_checkpoint_iter push failed", K(ret), KPC(ls));
+        SERVER_LOG(ERROR, "ob_common_checkpoint_iter push failed", K(ret), KPC(ls_));
       }
     }
   }
@@ -99,53 +82,17 @@ int ObAllVirtualTransCheckpointInfo::prepare_to_read_()
 int ObAllVirtualTransCheckpointInfo::get_next_(ObCommonCheckpointVTInfo &common_checkpoint)
 {
   int ret = OB_SUCCESS;
-  // ensure inner_get_next_row can get new data
-  bool need_retry = true;
-  while (need_retry) {
-    if (!ob_common_checkpoint_iter_.is_ready() && OB_FAIL(prepare_to_read_())) {
-      if (OB_ITER_END == ret) {
-        SERVER_LOG(DEBUG, "iterate commoncheckpoint info iter end", K(ret));
-      } else {
-        SERVER_LOG(WARN, "prepare data failed", K(ret));
-      }
-    } else if (OB_FAIL(ob_common_checkpoint_iter_.get_next(common_checkpoint))) {
-      if (OB_ITER_END == ret) {
-        ob_common_checkpoint_iter_.reset();
-        SERVER_LOG(DEBUG, "iterate commoncheckpoint info iter in the ls end", K(ret));
-        continue;
-      } else {
-        SERVER_LOG(WARN, "get next commoncheckpoint info error.", K(ret));
-      }
+  if (!ob_common_checkpoint_iter_.is_ready() && OB_FAIL(prepare_to_read_())) {
+    SERVER_LOG(WARN, "prepare data failed", K(ret));
+  } else if (OB_FAIL(ob_common_checkpoint_iter_.get_next(common_checkpoint))) {
+    if (OB_ITER_END != ret) {
+      SERVER_LOG(WARN, "get next commoncheckpoint info error.", K(ret));
     }
-    need_retry = false;
   }
   return ret;
-}
-
-bool ObAllVirtualTransCheckpointInfo::is_need_process(uint64_t tenant_id)
-{
-  if (is_sys_tenant(effective_tenant_id_) || tenant_id == effective_tenant_id_) {
-    return true;
-  }
-  return false;
-}
-
-void ObAllVirtualTransCheckpointInfo::release_last_tenant()
-{
-  ls_iter_guard_.reset();
-  ob_common_checkpoint_iter_.reset();
 }
 
 int ObAllVirtualTransCheckpointInfo::inner_get_next_row(ObNewRow *&row)
-{
-  int ret = OB_SUCCESS;
-  if (OB_FAIL(execute(row))) {
-    SERVER_LOG(WARN, "execute fail", K(ret));
-  }
-  return ret;
-}
-
-int ObAllVirtualTransCheckpointInfo::process_curr_tenant(ObNewRow *&row)
 {
   int ret = OB_SUCCESS;
   ObCommonCheckpointVTInfo common_checkpoint;

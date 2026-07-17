@@ -130,3 +130,4 @@ drop table if exists t2_fork;
 drop table if exists t3;
 drop table if exists t3_fork;
 drop database if exists db_fork_constraints;
+

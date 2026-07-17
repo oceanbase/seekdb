@@ -58,12 +58,10 @@ public:
                                        ObDASSortRtDef *sort_rtdef,
                                        ObString &hybrid_search_vec,
                                        ObExpr *&distance_calc);
-  static int reuse_iter(const share::ObLSID &ls_id,
-                        ObDASScanIter *iter,
+  static int reuse_iter(ObDASScanIter *iter,
                         ObTableScanParam &scan_param,
                         const ObTabletID tablet_id);
-  static int init_scan_param(const share::ObLSID &ls_id,
-                             const common::ObTabletID &tablet_id,
+  static int init_scan_param(const common::ObTabletID &tablet_id,
                              const ObDASScanCtDef *ctdef,
                              ObDASScanRtDef *rtdef,
                              transaction::ObTxDesc *tx_desc,
@@ -71,8 +69,7 @@ public:
                              ObTableScanParam &scan_param,
                              bool is_get = true,
                              ObIAllocator *allocator = nullptr);
-  static int init_vec_aux_scan_param(const share::ObLSID &ls_id,
-                                      const common::ObTabletID &tablet_id,
+  static int init_vec_aux_scan_param(const common::ObTabletID &tablet_id,
                                       const sql::ObDASScanCtDef *ctdef,
                                       sql::ObDASScanRtDef *rtdef,
                                       transaction::ObTxDesc *tx_desc,
@@ -82,8 +79,8 @@ public:
                                       ObIAllocator *scan_allocator = nullptr);
   static int get_rowkey(ObIAllocator &allocator, const ObDASScanCtDef * ctdef, ObDASScanRtDef *rtdef, ObRowkey *&rowkey);
   
-  static int get_distance_threshold_hnsw(ObExpr &expr,
-                                         float &similarity_threshold,
+  static int get_distance_threshold_hnsw(ObExpr &expr, 
+                                         float &similarity_threshold, 
                                          float &distance_threshold);
   static int check_ivf_support_similarity_threshold(ObExpr &expr);
 };

@@ -32,7 +32,6 @@
  */
 #define SYS_DISPATCH_CALL_WHITELIST(V)      \
   V(DBMS_SCHEDULER, *)                      \
-  V(DBMS_PARTITION, *)                      \
   V(DBMS_BALANCE, *)                        \
   V(DBMS_STATS, RESET_PARAM_DEFAULTS)       \
   V(DBMS_STATS, SET_PARAM)                  \

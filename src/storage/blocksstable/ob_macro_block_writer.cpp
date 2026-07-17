@@ -17,14 +17,10 @@
 #define USING_LOG_PREFIX STORAGE
 
 #include "ob_macro_block_writer.h"
+#include "share/rc/ob_module_provider.h"
 #include "src/storage/blocksstable/index_block/ob_sstable_sec_meta_iterator.h"
-#include "storage/blocksstable/cs_encoding/ob_micro_block_cs_encoder.h"
 #include "src/storage/ddl/ob_ddl_clog.h"
-#include "storage/backup/ob_backup_data_struct.h"
 #include "share/ob_io_device_helper.h"
-#ifdef OB_BUILD_SHARED_STORAGE
-#include "storage/compaction/ob_major_pre_warmer.h"
-#endif
 namespace oceanbase
 {
 using namespace common;
@@ -56,10 +52,6 @@ int ObMicroBlockBufferHelper::open(
   if (OB_UNLIKELY(!data_store_desc.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     STORAGE_LOG(WARN, "invalid input argument.", K(ret), K(data_store_desc));
-  } else if (ObStoreFormat::is_row_store_type_with_cs_encoding(data_store_desc.get_row_store_type())) {
-    if (OB_FAIL(compressor_.init(data_store_desc.get_micro_block_size(), ObCompressorType::NONE_COMPRESSOR))) {
-      STORAGE_LOG(WARN, "Fail to init micro block compressor, ", K(ret), K(data_store_desc));
-    }
   } else if (OB_FAIL(compressor_.init(data_store_desc.get_micro_block_size(), data_store_desc.get_compressor_type()))) {
     STORAGE_LOG(WARN, "Fail to init micro block compressor, ", K(ret), K(data_store_desc));
   }
@@ -396,24 +388,15 @@ int ObMacroBlockWriter::ObDefaultMacroBlockFlusher::write_disk(ObMacroBlock& mac
     ret = OB_ERR_UNEXPECTED;
     STORAGE_LOG(WARN, "unexpected null macro_handle_", K(ret), KP_(macro_handle), KP_(macro_block_writer));
   }
-  const bool need_flush_macro = is_flush_macro_exec_mode(macro_block_writer_->data_store_desc_->get_exec_mode())
+  const bool need_flush_macro = is_flush_macro_exec_mode(macro_block_writer_->data_store_desc_->get_exec_mode()) 
                                     && macro_block_writer_->data_store_desc_->get_need_submit_io();
   if (OB_SUCC(ret) && need_flush_macro) {
     ObStorageObjectWriteInfo object_info;
     object_info.buffer_ = macro_block.get_data_buf();
     object_info.offset_ = 0;
     const int64_t data_buf_size = upper_align(macro_block.get_data_size(), DIO_ALIGN_SIZE);
-    if (GCTX.is_shared_storage_mode() && OB_LIKELY(data_buf_size > macro_block.get_data_size())) {
-      // set padding to 0 for idempotence
-      MEMSET(macro_block.get_data_buf() + macro_block.get_data_size(), 0, data_buf_size - macro_block.get_data_size());
-    }
     {
-      if (backup::ObBackupDeviceMacroBlockId::is_backup_block_file(macro_handle_->get_macro_id().first_id())) {
-        object_info.size_ = macro_block.get_data_capacity();
-      } else {
-        object_info.size_ = data_buf_size;
-      }
-      object_info.mtl_tenant_id_ = MTL_ID();
+      object_info.size_ = data_buf_size;
       object_info.io_desc_.set_wait_event(ObWaitEventIds::DB_FILE_COMPACT_WRITE);
       object_info.io_desc_.set_sealed();
       object_info.io_desc_.set_sys_module_id(ObIOModule::SSTABLE_MACRO_BLOCK_WRITE_IO);
@@ -421,7 +404,7 @@ int ObMacroBlockWriter::ObDefaultMacroBlockFlusher::write_disk(ObMacroBlock& mac
       object_info.device_handle_ = device_handle_;
       object_info.has_backup_device_handle_ = OB_NOT_NULL(device_handle_);
     }
-
+    
     if (OB_FAIL(macro_handle_->async_write(object_info))) {
       STORAGE_LOG(WARN, "Fail to async write block", K(ret), K(macro_handle_), K(object_info));
     }
@@ -479,7 +462,7 @@ int ObMacroBlockWriter::ObSmallSStableMacroBlockFlusher::write_disk(ObMacroBlock
 {
   int ret = OB_SUCCESS;
   UNUSED(is_close_flush);
-  ObSharedMacroBlockMgr *shared_block_mgr = MTL(ObSharedMacroBlockMgr*);
+  ObSharedMacroBlockMgr *shared_block_mgr = share::g_mp->shared_macro_block_mgr();
   const int64_t data_buf_size = upper_align(macro_block.get_data_size(), DIO_ALIGN_SIZE);
   if (OB_UNLIKELY(OB_ISNULL(block_write_ctx_) || block_info_.is_valid())) {
     ret = OB_ERR_UNEXPECTED;
@@ -533,7 +516,6 @@ ObMacroBlockWriter::ObMacroBlockWriter(const bool is_need_macro_buffer)
     object_cleaner_(nullptr),
     io_buf_(nullptr),
     validator_(NULL),
-    is_cs_encoding_writer_(false),
     default_macro_flusher_(),
     small_sstable_macro_flusher_()
 {
@@ -610,7 +592,6 @@ void ObMacroBlockWriter::inner_reset()
   }
   io_buf_ = nullptr;
   validator_ = nullptr;
-  is_cs_encoding_writer_ = false;
   custom_macro_flusher_ = nullptr;
   default_macro_flusher_.reset();
   small_sstable_macro_flusher_.reset();
@@ -704,9 +685,6 @@ int ObMacroBlockWriter::inner_init(
     validator_ = validator;
     device_handle_ = device_handle;
     data_store_desc_ = &data_store_desc;
-    if (data_store_desc.is_cg()) {
-      last_key_.set_min_rowkey(); // used to protect cg sstable
-    }
 
     if (OB_FAIL(init_macro_seq_generator(macro_seq_param))) {
       LOG_WARN("init macro_seq_param failed", K(ret));
@@ -726,7 +704,6 @@ int ObMacroBlockWriter::inner_init(
     } else if (OB_FAIL(init_pre_agg_util(data_store_desc))) {
       STORAGE_LOG(WARN, "Failed to init pre aggregate utilities", K(ret));
     } else {
-      is_cs_encoding_writer_ = data_store_desc_->encoding_enabled() && ObStoreFormat::is_row_store_type_with_cs_encoding(data_store_desc_->get_row_store_type());
       const bool is_use_adaptive = true;
       if (OB_FAIL(micro_block_adaptive_splitter_.init(data_store_desc.get_macro_store_size(), 0/*min_micro_row_count*/, is_use_adaptive))) {
         STORAGE_LOG(WARN, "Failed to init micro block adaptive split", K(ret),
@@ -815,23 +792,12 @@ int ObMacroBlockWriter::append_batch(const ObBatchDatumRows &datum_rows,
 {
   int ret = OB_SUCCESS;
   ObBlockWriterConcurrentGuard guard(concurrent_lock_);
-  if (!is_cs_encoding_writer_) {
-    ObDatumRow &row = datum_row_;
-    for (int64_t i = 0; OB_SUCC(ret) && i < datum_rows.row_count_; i ++) {
-      if (OB_FAIL(datum_rows.to_datum_row(i, row))) {
-        LOG_WARN("fail to to datum row", KR(ret), K(i));
-      } else if (OB_FAIL(append_row_inner(row, curr_macro_desc))) {
-        LOG_WARN("fail to append row", K(row), KR(ret));
-      }
-    }
-  } else {
-    if (OB_UNLIKELY(nullptr == data_store_desc_)) {
-      ret = OB_NOT_INIT;
-      STORAGE_LOG(WARN, "The ObMacroBlockWriter has not been opened", K(ret));
-    } else if (OB_FAIL(append_batch(datum_rows, data_store_desc_->get_micro_block_size()))) {
-      STORAGE_LOG(WARN, "Fail to append row", K(ret));
-    } else if (OB_FAIL(try_active_flush_macro_block())) {
-      STORAGE_LOG(WARN, "Fail to try_active_flush_macro_block", K(ret));
+  ObDatumRow &row = datum_row_;
+  for (int64_t i = 0; OB_SUCC(ret) && i < datum_rows.row_count_; i ++) {
+    if (OB_FAIL(datum_rows.to_datum_row(i, row))) {
+      LOG_WARN("fail to to datum row", KR(ret), K(i));
+    } else if (OB_FAIL(append_row_inner(row, curr_macro_desc))) {
+      LOG_WARN("fail to append row", K(row), KR(ret));
     }
   }
 
@@ -876,7 +842,7 @@ int ObMacroBlockWriter::append(const ObDataMacroBlockMeta &macro_meta,
     merge_block_info_.occupy_size_ += macro_meta.val_.occupy_size_;
   }
 
-  if (OB_SUCC(ret) && !data_store_desc_->is_cg()) {
+  if (OB_SUCC(ret)) {
     ObDatumRowkey rowkey;
     if (OB_FAIL(macro_meta.get_rowkey(rowkey))) {
       LOG_WARN("Fail to assign rowkey", K(ret), K(macro_meta));
@@ -891,7 +857,6 @@ int ObMacroBlockWriter::append(const ObDataMacroBlockMeta &macro_meta,
   }
   return ret;
 }
-
 
 int ObMacroBlockWriter::append(const ObBatchDatumRows &datum_rows, const int64_t start, const int64_t write_row_count)
 {
@@ -966,7 +931,6 @@ int ObMacroBlockWriter::append(const ObDatumRow &row)
   return ret;
 }
 
-
 int ObMacroBlockWriter::data_aggregator_eval(const ObBatchDatumRows &datum_rows, const int64_t start, const int64_t write_row_count)
 {
 
@@ -1018,7 +982,7 @@ int ObMacroBlockWriter::append_row(const ObDatumRow &row, const int64_t split_si
   } else if (OB_UNLIKELY(split_size < data_store_desc_->get_micro_block_size())) {
     ret = OB_INVALID_ARGUMENT;
     STORAGE_LOG(WARN, "invalid split_size", K(ret), K(split_size));
-  } else if (!data_store_desc_->is_cg() && OB_FAIL(check_order(row))) {
+  } else if (OB_FAIL(check_order(row))) {
     STORAGE_LOG(WARN, "macro block writer fail to check order", K(row), KPC(data_store_desc_));
   }
 
@@ -1211,7 +1175,7 @@ int ObMacroBlockWriter::check_meta_macro_block_need_rewrite(bool &need_rewrite) 
   return ret;
 }
 
-int ObMacroBlockWriter::close(ObDagSliceMacroFlusher *macro_block_flusher)
+int ObMacroBlockWriter::close()
 {
   int ret = OB_SUCCESS;
   ObBlockWriterConcurrentGuard guard(concurrent_lock_);
@@ -1219,12 +1183,12 @@ int ObMacroBlockWriter::close(ObDagSliceMacroFlusher *macro_block_flusher)
     ret = OB_ERR_UNEXPECTED;
     STORAGE_LOG(WARN, "exceptional situation", K(ret), K_(data_store_desc), K_(micro_writer));
   } else if (micro_writer_->get_row_count() > 0 && OB_FAIL(build_micro_block())) {
-    STORAGE_LOG(WARN, "macro block writer fail to build current micro block.", K(ret));
+    STORAGE_LOG(ERROR, "macro block writer fail to build current micro block.", K(ret));
   } else {
     ObMacroBlock &current_block = macro_blocks_[current_index_];
     if (OB_SUCC(ret) && current_block.is_dirty()) {
       int32_t row_count = current_block.get_row_count();
-      if (OB_FAIL(flush_macro_block(current_block, true/*is_close_flush*/, macro_block_flusher))) {
+      if (OB_FAIL(flush_macro_block(current_block, true/*is_close_flush*/))) {
         STORAGE_LOG(WARN, "macro block writer fail to flush macro block.", K(ret),
             K_(current_index));
       }
@@ -1256,11 +1220,6 @@ int ObMacroBlockWriter::close(ObDagSliceMacroFlusher *macro_block_flusher)
     if (OB_SUCC(ret) && (NULL != pre_warmer_) && OB_FAIL(pre_warmer_->close())) {
       STORAGE_LOG(WARN, "failed to close pre warmer", KR(ret), KPC_(pre_warmer));
     }
-#ifdef OB_BUILD_SHARED_STORAGE
-    if (OB_NOT_NULL(validator_)) {
-      validator_->close();
-    }
-#endif
     if (OB_SUCC(ret)) {
       micro_block_bf_.reset();
     }
@@ -1389,7 +1348,7 @@ int ObMacroBlockWriter::update_micro_commit_info(const ObBatchDatumRows &datum_r
   bool is_ghost_row_flag = false;
   if (OB_FAIL(blocksstable::ObGhostRowUtil::is_ghost_row(datum_rows.mvcc_row_flag_, is_ghost_row_flag))) {
     STORAGE_LOG(ERROR, "failed to check ghost row", K(ret), K(datum_rows));
-  } else if (data_store_desc_->is_cg() || is_ghost_row_flag) { //skip cg block & ghost row
+  } else if (is_ghost_row_flag) {
   } else if (datum_rows.mvcc_row_flag_.is_uncommitted_row()) {
     micro_writer_->set_contain_uncommitted_row();
     LOG_TRACE("meet uncommited trans row", K(datum_rows));
@@ -1428,7 +1387,7 @@ int ObMacroBlockWriter::update_micro_commit_info(const ObDatumRow &row)
   bool is_ghost_row_flag = false;
   if (OB_FAIL(blocksstable::ObGhostRowUtil::is_ghost_row(row.mvcc_row_flag_, is_ghost_row_flag))) {
     STORAGE_LOG(ERROR, "failed to check ghost row", K(ret), K(row));
-  } else if (data_store_desc_->is_cg() || is_ghost_row_flag) { //skip cg block & ghost row
+  } else if (is_ghost_row_flag) {
   } else if (row.mvcc_row_flag_.is_uncommitted_row()) {
     micro_writer_->set_contain_uncommitted_row();
     LOG_TRACE("meet uncommited trans row", K(row));
@@ -1857,10 +1816,10 @@ int ObMacroBlockWriter::try_active_flush_macro_block()
   const int64_t estimate_macro_remain_size = macro_remain_size - index_and_meta_block_size;
   if (!is_need_macro_buffer_ && micro_writer_->get_row_count() != 0) {
     if (is_try_full_fill_macro_block_) {
-      if (estimate_macro_remain_size < DEFAULT_MINIMUM_CS_ENCODING_BLOCK_SIZE) {
+      if (estimate_macro_remain_size < DEFAULT_MINIMUM_ENCODING_BLOCK_SIZE) {
         if (OB_UNLIKELY(current_index_ != 0)) {
           STORAGE_LOG(WARN, "unexpected current index", K(ret));
-        } else if (OB_FAIL(flush_macro_block(macro_block, false/*is_close_flush*/, nullptr))) {
+        } else if (OB_FAIL(flush_macro_block(macro_block, false/*is_close_flush*/))) {
           STORAGE_LOG(WARN, "macro block writer fail to flush macro block.", K(ret));
         }
       } else if (estimate_macro_remain_size < data_store_desc_->get_micro_block_size()) {
@@ -1871,9 +1830,9 @@ int ObMacroBlockWriter::try_active_flush_macro_block()
       if (estimate_macro_remain_size < micro_size) {
         if (OB_UNLIKELY(current_index_ != 0)) {
           STORAGE_LOG(WARN, "unexpected current index", K(ret));
-        } else if (OB_FAIL(flush_macro_block(macro_block, false/*is_close_flush*/, nullptr))) {
+        } else if (OB_FAIL(flush_macro_block(macro_block, false/*is_close_flush*/))) {
           STORAGE_LOG(WARN, "macro block writer fail to flush macro block.", K(ret));
-        }
+        } 
       }
     }
   }
@@ -1905,7 +1864,7 @@ int ObMacroBlockWriter::prewarm_and_cluster_micro_blocks(const ObMacroBlock &mac
         specifically for this uncompressed micro-block.
         1.1 Although the header and payload of a data micro-block before compression are not required to be in contiguous
         memory, we still uniformly store them in a single contiguous memory block for consistency.
-        1.2 The micro block header in ObMicroBlockDesc has not been deserialized yet. At this point,
+        1.2 The micro block header in ObMicroBlockDesc has not been deserialized yet. At this point, 
         the column_checksums_ pointer in ObMicroBlockHeader is invalid, and should not be accessed.
     2.  micro-blocks stored within the macro block (maybe not compressed) are used for executing prewarm->add() and
         generating clustered index rows, and do not require the header and payload to be in contiguous memory.
@@ -1942,7 +1901,7 @@ int ObMacroBlockWriter::prewarm_and_cluster_micro_blocks(const ObMacroBlock &mac
           gen_logic_macro_id(cur_logic_id);
           micro_block_desc.logic_micro_id_.init(micro_block_desc.block_offset_, cur_logic_id);
         }
-
+        
         bool reserve_succ_flag = false;
         if (need_pre_warm && current_micro_block_need_prewarm) {
           IGNORE_RETURN pre_warmer_->reserve(uncompressed_micro_block_desc, reserve_succ_flag);
@@ -1960,7 +1919,7 @@ int ObMacroBlockWriter::prewarm_and_cluster_micro_blocks(const ObMacroBlock &mac
       micro_block_idx++;
     }
     //do some check and write clustered micro block
-    if (FAILEDx(macro_block.get_pre_warm_list_count() != micro_block_idx ||
+    if (FAILEDx(macro_block.get_pre_warm_list_count() != micro_block_idx || 
         macro_block.get_micro_block_count() != micro_block_idx)) {
       ret = OB_ERR_UNEXPECTED;
       STORAGE_LOG(WARN, "micro block count not equal.", K(macro_block.get_pre_warm_list_count()),
@@ -1976,19 +1935,17 @@ bool ObMacroBlockWriter::is_alloc_block_needed() const
 {
   // Allocate a macro block ID in the following situations:
   //  1. need to flush macro block
-  //  2. column store replica do not submit macro block io, but need ddl redo callback
+  //  2. a writer does not submit macro block io, but still needs a DDL redo callback
   //  3. shared storage mode
   //  4. pre_alloc for index macro block & meta macro block
   return (is_flush_macro_exec_mode(data_store_desc_->get_exec_mode()) && data_store_desc_->get_need_submit_io())
         || (!data_store_desc_->get_need_submit_io() && OB_NOT_NULL(callback_))
-        || GCTX.is_shared_storage_mode()
         || is_pre_alloc();
 }
 
 bool ObMacroBlockWriter::check_can_flush_small_sstable(const bool is_flush_for_last_block) const
 {
   const ObMacroBlock &macro_block = macro_blocks_[current_index_];
-  const int32_t row_count = macro_block.get_row_count();
   const int64_t macro_size = macro_block.get_data_size();
   const int64_t align_macro_size = upper_align(macro_size, DIO_READ_ALIGN_SIZE);
   ObSSTableIndexBuilder *sstable_index_builder = OB_ISNULL(data_store_desc_) ? nullptr : data_store_desc_->sstable_index_builder_;
@@ -2001,33 +1958,29 @@ bool ObMacroBlockWriter::check_can_flush_small_sstable(const bool is_flush_for_l
         && align_macro_size < blocksstable::SMALL_SSTABLE_THRESHOLD
         && ObSSTableIndexBuilder::satisfies_small_sstable_pre_requisites(sstable_index_builder->get_optimization_mode(),
                                                                          data_store_desc_->get_concurrent_cnt(),
-                                                                         data_store_desc_->is_cg(),
-                                                                         row_count,
                                                                          device_handle_);
 }
 
-int ObMacroBlockWriter::flush_macro_block(ObMacroBlock &macro_block, const bool is_close_flush, ObDagSliceMacroFlusher *macro_block_flusher)
+int ObMacroBlockWriter::flush_macro_block(ObMacroBlock &macro_block, const bool is_close_flush)
 {
   int ret = OB_SUCCESS;
 
   ObStorageObjectHandle &macro_handle = macro_handles_[current_index_];
   ObStorageObjectHandle &prev_handle = macro_handles_[(current_index_ + 1) % 2];
   ObMacroBlock *prev_macro_block = is_need_macro_buffer_ ? &macro_blocks_[(current_index_ + 1) % 2] : nullptr;
-
+  
   if (OB_UNLIKELY(!macro_block.is_dirty())) {
     ret = OB_ERR_UNEXPECTED;
     STORAGE_LOG(WARN, "empty macro block do not require disk write operations.", K(ret), K(current_index_));
   } else if (is_need_macro_buffer_ && OB_FAIL(wait_io_finish(prev_handle, prev_macro_block))) {
     STORAGE_LOG(WARN, "Fail to wait io finish, ", K(ret));
   }
-  const int64_t ddl_start_row_offset = callback_ == nullptr ? -1 : callback_->get_ddl_start_row_offset();
-  /* callback will set offset in wait io finish, keep it after wait io finish */
   ObIMacroBlockFlusher *final_flusher = nullptr;
   if (OB_FAIL(ret)) {
   } else if (OB_NOT_NULL(builder_)
-      && OB_FAIL(builder_->generate_macro_row(macro_block, ddl_start_row_offset, need_write_macro_meta()))) {
+      && OB_FAIL(builder_->generate_macro_row(macro_block, need_write_macro_meta()))) {
     STORAGE_LOG(WARN, "fail to generate macro row", K(ret), "current_macro_seq", macro_seq_generator_->get_current());
-  } else if (OB_FAIL(choose_macro_block_flusher(macro_block_flusher, is_close_flush, final_flusher))) {
+  } else if (OB_FAIL(choose_macro_block_flusher(is_close_flush, final_flusher))) {
     STORAGE_LOG(WARN, "fail to choose macro block flusher", K(ret));
   } else if (OB_UNLIKELY(OB_ISNULL(final_flusher))) {
     ret = OB_ERR_UNEXPECTED;
@@ -2043,24 +1996,16 @@ int ObMacroBlockWriter::flush_macro_block(ObMacroBlock &macro_block, const bool 
   return ret;
 }
 
-int ObMacroBlockWriter::choose_macro_block_flusher(ObDagSliceMacroFlusher *external_block_flusher,
-                                                   const bool is_close_flush,
+int ObMacroBlockWriter::choose_macro_block_flusher(const bool is_close_flush,
                                                    ObIMacroBlockFlusher *&final_flusher)
 {
   int ret = OB_SUCCESS;
-  if (OB_NOT_NULL(external_block_flusher)) {
-    if (OB_UNLIKELY(merge_block_info_.macro_block_count_ != 0 || !is_close_flush)) {
-      ret = OB_ERR_UNEXPECTED;
-      STORAGE_LOG(WARN, "unexpected macro block count or is not close flush", K(ret), K(merge_block_info_.macro_block_count_), K(is_close_flush));
-    } else {
-      final_flusher = static_cast<ObIMacroBlockFlusher *>(external_block_flusher);
-    }
-  } else if (OB_NOT_NULL(custom_macro_flusher_)) {
+  if (OB_NOT_NULL(custom_macro_flusher_)) {
     final_flusher = custom_macro_flusher_;
   } else {
     if (OB_UNLIKELY(OB_NOT_NULL(builder_) && !need_write_macro_meta())) {
-      // When builder_ is not null, it must be data macro block type.
-      // If ObDefaultMacroBlockFlusher and its subclasses will be used later, macro block meta must be written.
+      // When builder_ is not null, it must be data macro block type. 
+      // If ObDefaultMacroBlockFlusher and its subclasses will be used later, macro block meta must be written. 
       ret = OB_ERR_UNEXPECTED;
       STORAGE_LOG(WARN, "unexpected builder and need not write macro meta", K(ret), K(need_write_macro_meta()));
     } else if (check_can_flush_small_sstable(is_close_flush)) {
@@ -2103,7 +2048,7 @@ int ObMacroBlockWriter::prepare_default_macro_block_flusher(const bool is_close_
     ret = OB_ERR_UNEXPECTED;
     STORAGE_LOG(WARN, "macro_id must be invalid when is_pre_alloc is false.", K(ret), K(is_pre_alloc()), K(macro_handle.get_macro_id()));
   }
-
+  
   if (OB_SUCC(ret)) {
     default_macro_flusher_.set_writer_and_handles(*this, &macro_handle, device_handle_);
   }
@@ -2122,7 +2067,7 @@ int ObMacroBlockWriter::post_flush_small_sstable_data_macro_block(const ObBlockI
   } else if (OB_UNLIKELY(micro_index_clustered() || is_validate_exec_mode(data_store_desc_->get_exec_mode()))) {
     //clustered micro index and validator are only used in ss mode, but small sstable is not supported in ss mode
     ret = OB_NOT_SUPPORTED;
-    STORAGE_LOG(WARN, "small sstable is not supported for ss mode", K(ret), K(GCTX.is_shared_storage_mode()),
+    STORAGE_LOG(WARN, "small sstable is not supported for ss mode", K(ret),
                                                                     K(micro_index_clustered()), K(data_store_desc_->get_exec_mode()));
   } else if (OB_FAIL(builder_->append_meta_row_to_dumper(macro_block_id))) {
     STORAGE_LOG(WARN, "fail to append macro meta", K(ret));
@@ -2147,13 +2092,6 @@ int ObMacroBlockWriter::post_flush_normal_macro_block(const ObMacroBlock &macro_
     STORAGE_LOG(WARN, "fail to add macro id", K(ret), "macro id", macro_block_id);
   } else if (OB_FAIL(prewarm_and_cluster_micro_blocks(macro_block, macro_block_id))) {
     STORAGE_LOG(WARN, "fail to prewarm and cluster micro blocks.", K(ret));
-#ifdef OB_BUILD_SHARED_STORAGE
-  } else if (is_validate_exec_mode(data_store_desc_->get_exec_mode())) { // need serialize header to dump macro
-    if (OB_NOT_NULL(validator_)) {
-      // need compare macro checksum & dump macro for different ckm
-      validator_->validate_and_dump(macro_block);
-    }
-#endif
   }
   return ret;
 }
@@ -2180,17 +2118,14 @@ int ObMacroBlockWriter::flush_reuse_macro_block(const ObDataMacroBlockMeta &macr
 {
   int ret = OB_SUCCESS;
   const MacroBlockId &macro_id = macro_meta.get_macro_id();
-  const bool is_normal_cg = data_store_desc_->is_cg();
-  const uint16_t table_cg_idx = data_store_desc_->get_table_cg_idx();
   if (OB_FAIL(block_write_ctx_.add_macro_block_id(macro_id))) {
     LOG_WARN("failed to add macro block meta", K(ret), K(macro_id));
   } else {
     block_write_ctx_.increment_old_block_count();
-    FLOG_INFO("Async reuse macro block", K(macro_meta.end_key_), "macro_block_id", macro_id, K(is_normal_cg), K(macro_meta), K(table_cg_idx));
+    FLOG_INFO("Async reuse macro block", K(macro_meta.end_key_), "macro_block_id", macro_id, K(macro_meta));
   }
   return ret;
 }
-
 
 int ObMacroBlockWriter::try_switch_macro_block()
 {
@@ -2198,7 +2133,7 @@ int ObMacroBlockWriter::try_switch_macro_block()
   ObMacroBlock &macro_block = macro_blocks_[current_index_];
   if (macro_block.is_dirty()) {
     int32_t row_count = macro_block.get_row_count();
-    if (OB_FAIL(flush_macro_block(macro_block, false/*is_close_flush*/, nullptr))) {
+    if (OB_FAIL(flush_macro_block(macro_block, false/*is_close_flush*/))) {
       STORAGE_LOG(WARN, "macro block writer fail to flush macro block.", K(ret), K_(current_index));
     } else if (is_need_macro_buffer_) {
       current_index_ = (current_index_ + 1) % 2;
@@ -2220,7 +2155,7 @@ int ObMacroBlockWriter::check_write_complete(const MacroBlockId &macro_block_id)
   read_info.io_desc_.set_sys_module_id(ObIOModule::SSTABLE_MACRO_BLOCK_WRITE_IO);
   read_info.io_timeout_ms_ = std::max(GCONF._data_storage_io_timeout / 1000, DEFAULT_IO_WAIT_TIME_MS);
   read_info.macro_block_id_ = macro_block_id;
-  read_info.mtl_tenant_id_ = MTL_ID();
+  
 
   ObStorageObjectHandle read_handle;
   if (OB_ISNULL(io_buf_) && OB_ISNULL(io_buf_ =
@@ -2231,7 +2166,7 @@ int ObMacroBlockWriter::check_write_complete(const MacroBlockId &macro_block_id)
     read_info.buf_ = io_buf_;
   }
   if (OB_FAIL(ret)) {
-  } else if (!GCTX.is_shared_storage_mode() && OB_FAIL(LOCAL_DEVICE_INSTANCE.fsync_block())) {
+  } else if (OB_FAIL(LOCAL_DEVICE_INSTANCE.fsync_block())) {
     LOG_WARN("fail to fsync_block", K(ret));
   } else if (OB_FAIL(ObObjectManager::async_read_object(read_info, read_handle))) {
     STORAGE_LOG(WARN, "fail to async read macro block", K(ret), K(read_info));
@@ -2255,7 +2190,6 @@ int ObMacroBlockWriter::wait_io_finish(ObStorageObjectHandle &macro_handle, ObMa
 {
   // wait prev_handle io finish
   int ret = OB_SUCCESS;
-  const bool is_normal_cg = data_store_desc_->is_cg();
   if (OB_FAIL(macro_handle.wait())) {
     STORAGE_LOG(WARN, "macro block writer fail to wait io finish", K(ret));
   } else if ((nullptr != macro_block) != is_need_macro_buffer_) { /* when use buffer macor block must not null, otherwise null*/
@@ -2287,7 +2221,7 @@ int ObMacroBlockWriter::wait_io_finish(ObStorageObjectHandle &macro_handle, ObMa
         LOG_WARN("failed to exec callback func", K(ret), K(macro_handle));
       }
     } else if (!data_store_desc_->get_need_submit_io() && OB_NOT_NULL(callback_)) {
-      // column store replica do not submit macro block io, but need ddl redo callback
+      // The callback still needs the in-memory macro block when IO submission is disabled.
       if (OB_FAIL(exec_callback(macro_handle, macro_block))) {
         LOG_WARN("failed to exec callback func", K(ret), K(macro_handle));
       }
@@ -2369,21 +2303,17 @@ int ObMacroBlockWriter::alloc_block()
     if (data_store_desc_->is_for_index_or_meta()) {
       storage_opt.set_ss_share_meta_macro_object_opt(
         data_store_desc_->get_tablet_id().id(),
-        macro_seq_generator_->get_current(),
-        data_store_desc_->get_table_cg_idx());
+        macro_seq_generator_->get_current());
     } else {
       storage_opt.set_ss_share_data_macro_object_opt(
         data_store_desc_->get_tablet_id().id(),
-        macro_seq_generator_->get_current(),
-        data_store_desc_->get_table_cg_idx());
+        macro_seq_generator_->get_current());
     }
   } else {
     if (data_store_desc_->is_for_index_or_meta()) {
-      storage_opt.set_private_meta_macro_object_opt(data_store_desc_->get_tablet_id().id(),
-                                                    data_store_desc_->get_tablet_transfer_seq());
+      storage_opt.set_private_meta_macro_object_opt(data_store_desc_->get_tablet_id().id());
     } else {
-      storage_opt.set_private_object_opt(data_store_desc_->get_tablet_id().id(),
-                                         data_store_desc_->get_tablet_transfer_seq());
+      storage_opt.set_private_object_opt(data_store_desc_->get_tablet_id().id());
     }
   }
   if (macro_handle.get_macro_id().is_valid()) {
@@ -2544,9 +2474,7 @@ int ObMacroBlockWriter::save_last_key(const ObDatumRow &row)
 {
   int ret = OB_SUCCESS;
   ObDatumRowkey rowkey;
-  if (data_store_desc_->is_cg()) {
-    //skip save last key for cg
-  } else if (OB_FAIL(rowkey.assign(row.storage_datums_, data_store_desc_->get_rowkey_column_count()))) {
+  if (OB_FAIL(rowkey.assign(row.storage_datums_, data_store_desc_->get_rowkey_column_count()))) {
     STORAGE_LOG(WARN, "Failed to assign rowkey", K(ret));
   } else if (OB_FAIL(save_last_key(rowkey))) {
     STORAGE_LOG(WARN, "Fail to save last rowkey, ", K(ret), K(rowkey));
@@ -2560,9 +2488,7 @@ int ObMacroBlockWriter::save_last_key(const ObDatumRowkey &last_key)
   int ret = OB_SUCCESS;
   last_key_.reset();
   rowkey_allocator_.reuse();
-  if (data_store_desc_->is_cg()) {
-    last_key_.set_min_rowkey(); // used to protect cg sstable
-  } else if (OB_FAIL(last_key.deep_copy(last_key_, rowkey_allocator_))) {
+  if (OB_FAIL(last_key.deep_copy(last_key_, rowkey_allocator_))) {
     STORAGE_LOG(WARN, "Fail to copy last key", K(ret), K(last_key));
   } else {
     STORAGE_LOG(DEBUG, "save last key", K(last_key_));
@@ -2603,7 +2529,6 @@ int ObMacroBlockWriter::build_micro_writer(const ObDataStoreDesc *data_store_des
   int ret = OB_SUCCESS;
   void *buf = nullptr;
   ObMicroBlockEncoder *encoding_writer = nullptr;
-  ObMicroBlockCSEncoder *cs_encoding_writer = nullptr;
   ObMicroBlockWriter *flat_writer = nullptr;
   if (data_store_desc->encoding_enabled()) {
     ObMicroBlockEncodingCtx encoding_ctx;
@@ -2638,19 +2563,6 @@ int ObMacroBlockWriter::build_micro_writer(const ObDataStoreDesc *data_store_des
         encoding_writer->set_micro_block_merge_verify_level(verify_level);
         micro_writer = encoding_writer;
       }
-    } else if (ObStoreFormat::is_row_store_type_with_cs_encoding(data_store_desc->get_row_store_type())) {
-      if (OB_ISNULL(buf = allocator.alloc(sizeof(ObMicroBlockCSEncoder)))) {
-        ret = OB_ALLOCATE_MEMORY_FAILED;
-        STORAGE_LOG(WARN, "fail to alloc memory", K(ret));
-      } else if (OB_ISNULL(cs_encoding_writer = new (buf) ObMicroBlockCSEncoder())) {
-        ret = OB_ERR_UNEXPECTED;
-        STORAGE_LOG(WARN, "fail to cs encoding writer", K(ret));
-      } else if (OB_FAIL(cs_encoding_writer->init(encoding_ctx))) {
-        STORAGE_LOG(WARN, "Fail to init micro block encoder, ", K(ret));
-      } else {
-        cs_encoding_writer->set_micro_block_merge_verify_level(verify_level);
-        micro_writer = cs_encoding_writer;
-      }
     } else {
       ret = OB_INNER_STAT_ERROR;
       LOG_WARN("unknow row store type", K(ret), K(data_store_desc->get_row_store_type()));
@@ -2674,11 +2586,6 @@ int ObMacroBlockWriter::build_micro_writer(const ObDataStoreDesc *data_store_des
       encoding_writer->~ObMicroBlockEncoder();
       allocator.free(encoding_writer);
       encoding_writer = nullptr;
-    }
-    if (OB_NOT_NULL(cs_encoding_writer)) {
-      cs_encoding_writer->~ObMicroBlockCSEncoder();
-      allocator.free(cs_encoding_writer);
-      cs_encoding_writer = nullptr;
     }
     if (OB_NOT_NULL(flat_writer)) {
       flat_writer->~ObMicroBlockWriter();
@@ -2852,26 +2759,11 @@ int ObMacroBlockWriter::init_pre_warmer(const share::ObPreWarmerParam &pre_warm_
   } else if (PRE_WARM_TYPE_NONE == tmp_type) {
     // do nothing
   } else if (MEM_PRE_WARM == tmp_type) {
-    if (GCTX.is_shared_storage_mode()) {
-      // no need to pre warm for shared storage mode
-    } else if (OB_FAIL(create_pre_warmer(MEM_PRE_WARM, pre_warm_param))) {
+    if (OB_FAIL(create_pre_warmer(MEM_PRE_WARM, pre_warm_param))) {
       LOG_WARN("fail to create pre warmer", KR(tmp_ret), K(pre_warm_param));
     }
   } else if (MEM_AND_FILE_PRE_WARM == tmp_type) {
-#ifdef OB_BUILD_SHARED_STORAGE
-    const ObMajorPreWarmerParam *param = static_cast<const ObMajorPreWarmerParam *>(&pre_warm_param);
-    if ((ObSSMajorPrewarmLevel::PREWARM_NONE_LEVEL == param->pre_warm_level_)
-        || ((ObSSMajorPrewarmLevel::PREWARM_ONLY_META_LEVEL == param->pre_warm_level_)
-            && !data_store_desc_->is_for_index())) {
-      // if (OB_FAIL(create_pre_warmer(MEM_PRE_WARM, pre_warm_param))) {
-      //   LOG_WARN("fail to create pre warmer", KR(tmp_ret), K(pre_warm_param));
-      // }
-    } else if (OB_FAIL(create_pre_warmer(MEM_AND_FILE_PRE_WARM, pre_warm_param))) {
-      LOG_WARN("fail to create pre warmer", KR(ret), K(pre_warm_param));
-    }
-#else
     ret = OB_NOT_SUPPORTED;
-#endif
   }
   if (OB_SUCC(ret) && OB_NOT_NULL(pre_warmer_) && OB_FAIL(pre_warmer_->init(nullptr))) {
     LOG_WARN("fail to init pre warmer", KR(ret));
@@ -2893,9 +2785,7 @@ int ObMacroBlockWriter::create_pre_warmer(
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("data store desc should not be null", K(ret));
   } else if (ObPreWarmerType::MEM_PRE_WARM == pre_warmer_type) {
-    if (GCTX.is_shared_storage_mode()) {
-      pre_warmer_ = nullptr; // do nothing
-    } else if (data_store_desc_->is_for_index()) {
+    if (data_store_desc_->is_for_index()) {
       if (OB_ISNULL(pre_warmer_ = OB_NEWx(ObIndexBlockCachePreWarmer, &allocator_, pre_warm_param.fixed_percentage_))) {
         int tmp_ret = OB_ALLOCATE_MEMORY_FAILED; // use tmp_ret, allow not pre warm mem block cache
         LOG_WARN("fail to new mem pre warmer", KR(tmp_ret));
@@ -2907,25 +2797,8 @@ int ObMacroBlockWriter::create_pre_warmer(
       }
     }
   } else if (ObPreWarmerType::MEM_AND_FILE_PRE_WARM == pre_warmer_type) {
-#ifdef OB_BUILD_SHARED_STORAGE
-    const ObMajorPreWarmerParam *param = static_cast<const ObMajorPreWarmerParam *>(&pre_warm_param);
-    if (data_store_desc_->is_for_index()) {
-      if (OB_ISNULL(pre_warmer_ = OB_NEWx(ObMajorPreWarmer<ObIndexBlockCachePreWarmer>, &allocator_,
-                                          param->pre_warm_writer_.meta_writer_))) {
-        ret = OB_ALLOCATE_MEMORY_FAILED; // use ret, must pre warm disk micro cache
-        LOG_WARN("fail to new major pre warmer", KR(ret));
-      }
-    } else if (ObPreWarmerType::MEM_AND_FILE_PRE_WARM == pre_warmer_type) {
-      if (OB_ISNULL(pre_warmer_ = OB_NEWx(ObMajorPreWarmer<ObDataBlockCachePreWarmer>, &allocator_,
-                                          param->pre_warm_writer_.data_writer_))) {
-        ret = OB_ALLOCATE_MEMORY_FAILED; // use ret, must pre warm disk micro cache
-        LOG_WARN("fail to new major pre warmer", KR(ret));
-      }
-    }
-#else
     ret = OB_NOT_SUPPORTED;
     LOG_WARN("do not support create mem and file pre warmer", KR(ret));
-#endif
   }
   return ret;
 }
@@ -2943,7 +2816,6 @@ bool ObMacroBlockWriter::is_pre_alloc() const
 void ObMacroBlockWriter::gen_logic_macro_id(ObLogicMacroBlockId &logic_macro_id)
 {
   logic_macro_id.logic_version_ = data_store_desc_->get_logical_version();
-  logic_macro_id.column_group_idx_ = data_store_desc_->get_table_cg_idx();
   logic_macro_id.data_seq_.macro_data_seq_ = macro_seq_generator_->get_current();
   logic_macro_id.tablet_id_ = data_store_desc_->get_tablet_id().id();
 }

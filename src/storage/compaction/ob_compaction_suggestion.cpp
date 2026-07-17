@@ -15,7 +15,7 @@
  */
 
 #include "ob_compaction_suggestion.h"
-#include "src/storage/tx_storage/ob_ls_map.h"
+#include "share/rc/ob_module_provider.h"
 
 namespace oceanbase
 {
@@ -215,10 +215,6 @@ int64_t ObCompactionDagStatus::to_string(char *buf, const int64_t buf_len) const
     J_TMP_STRING(ObDagType::DAG_TYPE_MERGE_EXECUTE);
     // major
     J_TMP_STRING(ObDagType::DAG_TYPE_MAJOR_MERGE);
-    J_TMP_STRING(ObDagType::DAG_TYPE_CO_MERGE_PREPARE);
-    J_TMP_STRING(ObDagType::DAG_TYPE_CO_MERGE_SCHEDULE);
-    J_TMP_STRING(ObDagType::DAG_TYPE_CO_MERGE_BATCH_EXECUTE);
-    J_TMP_STRING(ObDagType::DAG_TYPE_CO_MERGE_FINISH);
     J_OBJ_END();
   }
   #undef J_TMP_STRING
@@ -281,16 +277,17 @@ const char* ObCompactionSuggestionMgr::get_suggestion_reason(const int64_t reaso
   return str;
 }
 
+// Indexed by ObDagPrio::ObDagPrioEnum value. HA_MID/HA_LOW were removed and are
+// now aliases of HA_HIGH, so the priorities after HA_HIGH shifted down by two.
 const char *ObCompactionSuggestionMgr::ObAddWorkerThreadSuggestion[share::ObDagPrio::DAG_PRIO_MAX] =
 {
-  "increase compaction_high_thread_score",
-  "",
-  "increase compaction_mid_thread_score",
-  "",
-  "increase compaction_low_thread_score",
-  "",
-  "",
-  ""
+  "increase compaction_high_thread_score", // COMPACTION_HIGH
+  "",                                       // HA_HIGH
+  "increase compaction_mid_thread_score",  // COMPACTION_MID
+  "increase compaction_low_thread_score",  // COMPACTION_LOW
+  "",                                       // DDL
+  "",                                       // DDL_HIGH
+  ""                                        // TTL
 };
 
 const char* ObCompactionSuggestionMgr::get_add_thread_suggestion(const int64_t priority)
@@ -402,10 +399,6 @@ int ObCompactionSuggestionMgr::analyze_for_suggestion(
     ADD_COMPACTION_DAG_INFO_PARAM(ObDagType::ObDagTypeEnum::DAG_TYPE_MERGE_EXECUTE);
   } else if (share::ObDagPrio::DAG_PRIO_COMPACTION_LOW == priority) {
     ADD_COMPACTION_DAG_INFO_PARAM(ObDagType::ObDagTypeEnum::DAG_TYPE_MAJOR_MERGE);
-    ADD_COMPACTION_DAG_INFO_PARAM(ObDagType::ObDagTypeEnum::DAG_TYPE_CO_MERGE_PREPARE);
-    ADD_COMPACTION_DAG_INFO_PARAM(ObDagType::ObDagTypeEnum::DAG_TYPE_CO_MERGE_SCHEDULE);
-    ADD_COMPACTION_DAG_INFO_PARAM(ObDagType::ObDagTypeEnum::DAG_TYPE_CO_MERGE_BATCH_EXECUTE);
-    ADD_COMPACTION_DAG_INFO_PARAM(ObDagType::ObDagTypeEnum::DAG_TYPE_CO_MERGE_FINISH);
   }
   if (strlen(buf) > 0) {
     suggestion.merge_type_ =  INVALID_MERGE_TYPE;
@@ -416,8 +409,7 @@ int ObCompactionSuggestionMgr::analyze_for_suggestion(
     } else if (ObDagPrio::DAG_PRIO_COMPACTION_LOW == priority) {
       suggestion.merge_type_ = MEDIUM_MERGE;
     }
-    suggestion.tenant_id_ = MTL_ID();
-    suggestion.ls_id_ = UNKNOW_LS_ID.id();
+    
     suggestion.tablet_id_ = UNKNOW_TABLET_ID.id();
     suggestion.merge_start_time_ = common::ObTimeUtility::fast_current_time();
     suggestion.merge_finish_time_ = suggestion.merge_start_time_;
@@ -561,7 +553,6 @@ int ObCompactionSuggestionMgr::analyze_merge_info(
 
     if (strlen(buf) > 0) {
       suggestion.merge_type_ = static_info.merge_type_;
-      suggestion.ls_id_ = static_info.ls_id_.id();
       suggestion.tablet_id_ = static_info.tablet_id_.id();
       suggestion.merge_start_time_ = running_info.merge_start_time_;
       suggestion.merge_finish_time_ = running_info.merge_finish_time_;
@@ -573,32 +564,25 @@ int ObCompactionSuggestionMgr::analyze_merge_info(
   return ret;
 }
 
-int ObCompactionSuggestionIterator::open(const int64_t tenant_id)
+int ObCompactionSuggestionIterator::open()
 {
   int ret = OB_SUCCESS;
-  omt::TenantIdList all_tenants;
-  all_tenants.set_label(ObModIds::OB_TENANT_ID_LIST);
   if (is_opened_) {
     ret = OB_INIT_TWICE;
     STORAGE_LOG(WARN, "The ObCompactionSuggestionIterator has been opened", K(ret));
-  } else if (!::is_valid_tenant_id(tenant_id)) {
+  } else if (!true) {
     ret = OB_INVALID_ARGUMENT;
-    STORAGE_LOG(WARN, "invalid argument", K(ret), K(tenant_id));
-  } else if (OB_SYS_TENANT_ID == tenant_id) { // sys tenant can get all tenants' info
-    GCTX.omt_->get_tenant_ids(all_tenants);
-  } else if (OB_FAIL(all_tenants.push_back(tenant_id))) {
-    STORAGE_LOG(WARN, "failed to push back tenant_id", K(ret), K(tenant_id));
+    STORAGE_LOG(WARN, "invalid argument", K(ret));
   }
-  for (int64_t i = 0; OB_SUCC(ret) && i < all_tenants.size(); ++i) {
-    uint64_t tenant_id = all_tenants[i];
-    if (!is_virtual_tenant_id(tenant_id)) { // skip virtual tenant
-      MTL_SWITCH(tenant_id) {
-        if (OB_FAIL(MTL(ObCompactionSuggestionMgr *)->get_suggestion_list(suggestion_array_))) {
+  if (OB_SUCC(ret)) {
+    { // skip virtual tenant
+      MOD_SCOPE {
+        if (OB_FAIL(share::g_mp->compaction_suggestion_mgr()->get_suggestion_list(suggestion_array_))) {
           STORAGE_LOG(WARN, "failed to get suggestion list", K(ret));
         }
       } else {
         if (OB_TENANT_NOT_IN_SERVER != ret) {
-          STORAGE_LOG(WARN, "switch tenant failed", K(ret), K(tenant_id));
+          STORAGE_LOG(WARN, "switch tenant failed", K(ret));
         } else {
           ret = OB_SUCCESS;
         }

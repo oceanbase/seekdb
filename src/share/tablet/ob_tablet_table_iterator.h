@@ -28,7 +28,7 @@ class ObISQLClient;
 }
 namespace share
 {
-class ObTabletToLSTableOperator;
+class ObTabletMappingTableOperator;
 class ObTabletTableOperator;
 class ObTabletInfo;
 
@@ -41,12 +41,12 @@ public:
   virtual int next(ObTabletInfo &tablet_info);
 protected:
   int inner_init(
-    const uint64_t tenant_id);
+    );
   virtual int prefetch() = 0;
 protected:
   bool is_inited_;
   int64_t prefetch_tablet_idx_;
-  uint64_t tenant_id_;
+  
   common::ObArray<ObTabletInfo> prefetched_tablets_;
   ObTabletReplicaFilterHolder filters_;
 };
@@ -59,7 +59,6 @@ public:
     const int64_t compaction_scn);
   ~ObCompactionTabletMetaIterator() { reset(); }
   int init(
-    const uint64_t tenant_id,
     const int64_t batch_size);
   virtual void reset() override;
   virtual int next(ObTabletInfo &tablet_info) override;
@@ -79,8 +78,7 @@ class ObTenantTabletMetaIterator : public ObTabletMetaIterator
 public:
   ObTenantTabletMetaIterator();
   virtual ~ObTenantTabletMetaIterator();
-  int init(common::ObISQLClient &sql_proxy,
-           const uint64_t tenant_id);
+  int init(common::ObISQLClient &sql_proxy);
   virtual void reset() override;
   void set_batch_size(int64_t batch_size) {tablet_table_operator_.set_batch_size(batch_size);}
 
@@ -94,8 +92,7 @@ private:
 private:
   bool first_prefetch_;
   common::ObISQLClient *sql_proxy_;
-  int64_t valid_tablet_ls_pairs_idx_;
-  common::ObArray<ObTabletLSPair> valid_tablet_ls_pairs_;
+  common::ObArray<ObTabletID> valid_tablet_ids_;
   ObTabletTableOperator tablet_table_operator_;
 private:
   DISALLOW_COPY_AND_ASSIGN(ObTenantTabletMetaIterator);
@@ -109,14 +106,14 @@ class ObTenantTabletTableIterator
 public:
   ObTenantTabletTableIterator();
   virtual ~ObTenantTabletTableIterator() {}
-  int init(ObTabletTableOperator &tt_operator, const uint64_t tenant_id);
+  int init(ObTabletTableOperator &tt_operator);
   int next(ObTabletInfo &tablet_info);
   ObTabletReplicaFilterHolder &get_filters() { return filters_; }
 private:
   int prefetch_();
 
   bool inited_;
-  uint64_t tenant_id_;
+  
   int64_t inner_idx_;
   ObTabletTableOperator *tt_operator_;
   common::ObArray<ObTabletInfo> inner_tablet_infos_;

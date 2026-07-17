@@ -30,8 +30,8 @@ class AccessPath;
 struct ObBatchEstTasks
 {
   ObAddr addr_;
-  obrpc::ObEstPartArg arg_;
-  obrpc::ObEstPartRes res_;
+  obcall::ObEstPartArg arg_;
+  obcall::ObEstPartRes res_;
   ObArray<AccessPath *> paths_;
   ObArray<int64_t> range_idx_;
 
@@ -187,7 +187,6 @@ private:
                                    const ObAddr &local_addr,
                                    EstimatedPartition &best_partition);
 
-  static int process_external_table_default_estimation(AccessPath *path);
   static int process_vtable_default_estimation(AccessPath *path);
 
   static int process_table_force_default_estimation(AccessPath *path);
@@ -328,7 +327,6 @@ private:
 
   static int estimate_full_table_rowcount_by_meta_table(ObOptimizerContext &ctx,
                                                         const ObIArray<ObTabletID> &all_tablet_ids,
-                                                        const ObIArray<ObLSID> &all_ls_ids,
                                                         ObTableMetaInfo &meta);
 
   static int get_need_dynamic_sampling_columns(const ObLogPlan* log_plan,

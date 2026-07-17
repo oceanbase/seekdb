@@ -36,7 +36,6 @@ int ObExprSoundex::calc_result_type1(
     ObExprTypeCtx &type_ctx) const
 {
   int ret = OB_SUCCESS;
-  const int64_t oracle_result_length = 4;
   const ObSQLSessionInfo *session = NULL;
   ObObjType param_calc_type = type1.get_type();
   ObCollationType param_calc_cs_type = type1.get_collation_type();

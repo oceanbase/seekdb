@@ -31,7 +31,7 @@ class ObDtlChannelMemManager;
 class ObDtlTenantMemManager
 {
 public:
-  ObDtlTenantMemManager(uint64_t tenant_id);
+  ObDtlTenantMemManager();
   virtual ~ObDtlTenantMemManager() { destroy(); }
 
   int init();
@@ -57,7 +57,6 @@ private:
 private:
   // Through 128 hash processes concurrency
   static const int64_t HASH_CNT = 128;
-  uint64_t tenant_id_;
   common::ObSEArray<ObDtlChannelMemManager*, HASH_CNT> mem_mgrs_;
 private:
   common::ObSEArray<int64_t, HASH_CNT> times_;

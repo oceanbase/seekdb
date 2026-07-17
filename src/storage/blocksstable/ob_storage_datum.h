@@ -19,7 +19,7 @@
 
 #include "common/ob_common_types.h"
 #include "common/ob_tablet_id.h"
-#include "share/datum/ob_datum.h"
+#include "common/datum/ob_datum.h"
 #include "share/datum/ob_datum_funcs.h"
 #include "storage/meta_mem/ob_fixed_meta_obj_array.h"
 #include "storage/tx/ob_trans_define.h"
@@ -56,7 +56,7 @@ struct ObStorageDatum : public common::ObDatum
   OB_INLINE void set_min() { set_ext_value(common::ObObj::MIN_OBJECT_VALUE); }
   OB_INLINE void set_max() { set_ext_value(common::ObObj::MAX_OBJECT_VALUE); }
   OB_INLINE bool is_nop_value() const { return is_nop(); } // temp solution
-  // transfer section
+  // conversion section
   OB_INLINE bool is_local_buf() const { return ptr_ == buf_; }
   OB_INLINE int from_buf_enhance(const char *buf, const int64_t buf_len);
   OB_INLINE int from_obj_enhance(const common::ObObj &obj);
@@ -101,13 +101,11 @@ public:
   // init with array memory from allocator
   int init(const common::ObIArray<share::schema::ObColDesc> &col_descs,
            const int64_t schema_rowkey_cnt,
-           const bool is_oracle_mode,
            common::ObIAllocator &allocator,
-           const bool is_column_store = false);
+           const bool skip_multi_version_cols = false);
   // init with array memory on fixed size memory buffer
   int init(const common::ObIArray<share::schema::ObColDesc> &col_descs,
            const int64_t schema_rowkey_cnt,
-           const bool is_oracle_mode,
            const int64_t arr_buf_len,
            char *arr_buf);
   int assign(const ObStorageDatumUtils &other_utils, common::ObIAllocator &allocator);
@@ -116,13 +114,12 @@ public:
   {
     return is_inited_ && cmp_funcs_.count() >= rowkey_cnt_ && hash_funcs_.count() >= rowkey_cnt_;
   }
-  OB_INLINE bool is_oracle_mode() const { return is_oracle_mode_; }
   OB_INLINE int64_t get_rowkey_count() const { return rowkey_cnt_; }
   OB_INLINE const ObStoreCmpFuncs &get_cmp_funcs() const { return cmp_funcs_; }
   OB_INLINE const ObStoreHashFuncs &get_hash_funcs() const { return hash_funcs_; }
   OB_INLINE const common::ObHashFunc &get_ext_hash_funcs() const { return ext_hash_func_; }
   int64_t get_deep_copy_size() const;
-  TO_STRING_KV(K_(is_oracle_mode), K_(rowkey_cnt), K_(is_inited), K_(is_oracle_mode));
+  TO_STRING_KV(K_(rowkey_cnt), K_(is_inited));
 private:
   //TODO to be removed by @hanhui
   int transform_multi_version_col_desc(const common::ObIArray<share::schema::ObColDesc> &col_descs,
@@ -130,14 +127,12 @@ private:
                                        common::ObIArray<share::schema::ObColDesc> &mv_col_descs);
   int inner_init(
       const common::ObIArray<share::schema::ObColDesc> &mv_col_descs,
-      const int64_t mv_rowkey_col_cnt,
-      const bool is_oracle_mode);
+      const int64_t mv_rowkey_col_cnt);
 private:
   int32_t rowkey_cnt_;  // multi version rowkey
   ObStoreCmpFuncs cmp_funcs_; // multi version rowkey cmp funcs
   ObStoreHashFuncs hash_funcs_;  // multi version rowkey cmp funcs
   common::ObHashFunc ext_hash_func_;
-  bool is_oracle_mode_;
   bool is_inited_;
   DISALLOW_COPY_AND_ASSIGN(ObStorageDatumUtils);
 };

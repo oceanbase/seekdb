@@ -15,12 +15,13 @@
  */
 
 #define USING_LOG_PREFIX SERVER_OMT
+#include "lib/stat/ob_diagnostic_info_guard.h"
 #include "ob_tenant_srs.h"
-#include "ob_tenant_srs.h"
-#include "observer/ob_sql_client_decorator.h"
+#include "share/ob_sql_client_decorator.h"
 #include "src/share/ob_server_struct.h"
-#include "share/ob_srs_importer.h"
-#include "lib/geo/ob_geo_utils.h"
+#include "sql/engine/cmd/ob_srs_importer.h"
+#include "share/ob_internal_table_change_notifier.h"
+#include "share/geo/ob_geo_utils.h"
 
 using namespace oceanbase::share;
 using namespace oceanbase::common;
@@ -40,38 +41,19 @@ int ObTenantSrs::mtl_init(ObTenantSrs* &tenant_srs)
   return ret;
 }
 
-int ObTenantSrs::start()
-{
-  int ret = OB_SUCCESS;
-  if (!inited_) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("tenant srs isn't inited", K(ret));
-  } else if (OB_FAIL(TG_SCHEDULE(MTL(omt::ObSharedTimer*)->get_tg_id(), srs_update_periodic_task_, 0, false))) {
-    LOG_WARN("failed to schedule tenant srs update task", K(ret));
-  }
-  return ret;
-}
-
-void ObTenantSrs::stop()
-{
-  if (OB_LIKELY(inited_)) {
-    TG_CANCEL_TASK(MTL(omt::ObSharedTimer*)->get_tg_id(), srs_update_periodic_task_);
-  }
-}
-
-void ObTenantSrs::wait()
-{
-  if (OB_LIKELY(inited_)) {
-    TG_WAIT_TASK(MTL(omt::ObSharedTimer*)->get_tg_id(), srs_update_periodic_task_);
-  }
-}
+int ObTenantSrs::start() { return OB_SUCCESS; }
+void ObTenantSrs::stop() {}
+void ObTenantSrs::wait() {}
 
 void ObTenantSrs::destroy()
 {
   if (OB_LIKELY(inited_)) {
-    cancle_update_task();
     recycle_old_snapshots();
-    recycle_last_snapshots();
+    if (OB_NOT_NULL(last_sys_snapshot_)) {
+      last_sys_snapshot_->~ObSrsCacheSnapShot();
+      allocator_.free(last_sys_snapshot_);
+      last_sys_snapshot_ = NULL;
+    }
     allocator_.~ObFIFOAllocator();
   }
 }
@@ -80,27 +62,31 @@ int ObTenantSrs::init()
 {
   int ret = OB_SUCCESS;
   sql_proxy_ = GCTX.sql_proxy_;
-  lib::ObMemAttr mem_attr(MTL_ID(), "TenantSrs");
+  lib::ObMemAttr mem_attr("TenantSrs");
   if (inited_) {
     ret = OB_INIT_TWICE;
     LOG_WARN("ObTenantSrs init twice.", K(ret));
-  } else if (FALSE_IT(alloc_.set_tenant_id(MTL_ID()))) {
   } else if (OB_FAIL(allocator_.init(&alloc_, OB_MALLOC_MIDDLE_BLOCK_SIZE, mem_attr))) {
     LOG_WARN("ObTenantSrs allocator init failed.", K(ret));
   } else {
     page_allocator_.set_allocator(&allocator_);
     page_allocator_.set_attr(mem_attr);
     mode_arena_.init(DEFAULT_PAGE_SIZE, page_allocator_);
-    if (OB_FAIL(srs_update_periodic_task_.init(this))) {
-      LOG_WARN("failed to init srs update task", K(ret));
-    } else {
-      inited_ = true;
-      infinite_plane_.minX_ = INT32_MIN;
-      infinite_plane_.minY_ = INT32_MIN;
-      infinite_plane_.maxX_ = INT32_MAX;
-      infinite_plane_.maxY_ = INT32_MAX;
-    }
-  } 
+    inited_ = true;
+  }
+  if (OB_SUCC(ret)) {
+    infinite_plane_.minX_ = INT32_MIN;
+    infinite_plane_.minY_ = INT32_MIN;
+    infinite_plane_.maxX_ = INT32_MAX;
+    infinite_plane_.maxY_ = INT32_MAX;
+    share::ObInternalTableChangeNotifier::get_instance().register_module(
+        table::ObModuleDataArg::GIS,
+        []() -> int {
+          OTSRS_MGR->mark_stale();
+          LOG_INFO("[SRS] marked stale by notifier");
+          return OB_SUCCESS;
+        });
+  }
   return ret;
 }
 
@@ -116,9 +102,6 @@ int ObSrsCacheGuard::get_srs_item(uint64_t original_srs_id, const ObSrsItem *&sr
   int ret = OB_SUCCESS;
   const ObSrsItem *tmp_srs_item = NULL;
   uint64_t srs_id = original_srs_id;
-  if (lib::is_oracle_mode() && srs_id == 8307) {
-    srs_id = 4326;
-  }
   if (OB_ISNULL(srs_cache_)) {
     ret = OB_ERR_NULL_VALUE;
     LOG_WARN("srs_cache is null", K(ret));
@@ -141,16 +124,21 @@ int ObTenantSrs::get_tenant_srs_guard(ObSrsCacheGuard &srs_guard)
 {
   int ret = OB_SUCCESS;
   if (!srs_guard.empty()) {
-    // do nothing
-    LOG_TRACE("guard isn't empty");
-  } else if (OB_FAIL(try_get_last_snapshot(srs_guard))) {
-    if (ret == OB_ERR_EMPTY_QUERY) {
-      ret = OB_ERR_SRS_EMPTY;
-      LOG_WARN("srs table might be empty", K(ret), K(MTL_ID()));
-      LOG_USER_ERROR(OB_ERR_SRS_EMPTY);
-    } else {
-      LOG_WARN("failed to get tenant srs", K(ret), K(MTL_ID()));
-    }
+    return ret;
+  }
+  lib::ObMutexGuard guard(srs_load_lock_);
+  if (!ATOMIC_LOAD(&srs_stale_) && OB_NOT_NULL(last_sys_snapshot_)) {
+    last_sys_snapshot_->inc_ref_count();
+    srs_guard.set_srs_snapshot(last_sys_snapshot_);
+  } else if (OB_FAIL(refresh_sys_srs())) {
+    ATOMIC_STORE(&srs_stale_, false);
+    ret = OB_ERR_SRS_EMPTY;
+    LOG_WARN("srs data not available", K(ret));
+    LOG_USER_ERROR(OB_ERR_SRS_EMPTY);
+  } else {
+    ATOMIC_STORE(&srs_stale_, false);
+    last_sys_snapshot_->inc_ref_count();
+    srs_guard.set_srs_snapshot(last_sys_snapshot_);
   }
   return ret;
 }
@@ -165,7 +153,7 @@ int ObTenantSrs::get_srs_bounds(uint64_t srid, const ObSrsItem *srs_item, const 
     LOG_ERROR("srs item is null", K(ret));
   } else {
     const ObSrsBoundsItem *tmp_bounds = srs_item->get_bounds();
-    if (isnan(tmp_bounds->minX_) || isnan(tmp_bounds->minY_) 
+    if (isnan(tmp_bounds->minX_) || isnan(tmp_bounds->minY_)
         || isnan(tmp_bounds->maxX_) || isnan(tmp_bounds->maxY_)) {
       ret = OB_INVALID_ARGUMENT;
       LOG_WARN("invalid bounds info", K(ret), K(srid), K(srs_item->get_srid()), K(*tmp_bounds));
@@ -176,215 +164,59 @@ int ObTenantSrs::get_srs_bounds(uint64_t srid, const ObSrsItem *srs_item, const 
   return ret;
 }
 
-int ObTenantSrs::get_last_sys_snapshot(ObSrsCacheSnapShot *&sys_cache)
-{
-  int ret = OB_SUCCESS;
-  if (OB_ISNULL(last_sys_snapshot_)) {
-    ret = OB_ERR_EMPTY_QUERY;
-    LOG_WARN("last sys snapshot is null", K(ret), K(local_sys_srs_version_), K(remote_sys_srs_version_));
-  } else {
-    sys_cache = last_sys_snapshot_;
-    last_sys_snapshot_->inc_ref_count();
-  }
-  return ret;
-}
-
-
-int ObTenantSrs::try_get_last_snapshot(ObSrsCacheGuard &srs_guard)
-{
-  int ret = OB_SUCCESS;
-  if (OB_FAIL(get_last_snapshot(srs_guard))) {
-    if (ret == OB_ERR_EMPTY_QUERY) {
-      int8_t retry_cnt = RETRY_TIMES;
-      int64_t start_time = ::oceanbase::common::ObTimeUtility::current_time();
-      while (true) {
-        usleep(RETRY_INTERVAL_US);
-        if (OB_SUCC(get_last_snapshot(srs_guard))) {
-          break;
-        } else if (ret != OB_ERR_EMPTY_QUERY || (--retry_cnt) <= 0) {
-          LOG_WARN("failed to get srs snapshot", K(ret), K(retry_cnt));
-          break;
-        } else {
-          // do nothing
-        }
-      }
-      LOG_WARN("wait loop time cost : ", K(::oceanbase::common::ObTimeUtility::current_time() - start_time));
-    } else {
-      LOG_WARN("failed to get last srs snapshot", K(ret));
-    }
-  }
-  return ret;
-}
-
-int ObTenantSrs::get_last_snapshot(ObSrsCacheGuard &srs_guard)
-{
-  int ret = OB_SUCCESS;
-  ObSrsCacheSnapShot *sys_cache = NULL;
-  TCRLockGuard guard(lock_);
-  if (OB_FAIL(get_last_sys_snapshot(sys_cache))) {
-    LOG_WARN("failed to get last sys snapshot", K(ret));
-  } else {
-    srs_guard.set_srs_snapshot(sys_cache);
-  }
-  return ret;
-}
-
-int ObTenantSrs::refresh_srs(bool is_sys)
+int ObTenantSrs::refresh_sys_srs()
 {
   int ret = OB_SUCCESS;
   ObSrsCacheSnapShot *srs = NULL;
-  const uint64_t tenant_id = MTL_ID();
-  if (OB_FAIL(fetch_all_srs(srs, is_sys))) {
-    if (ret == OB_ERR_EMPTY_QUERY ) {
-      LOG_DEBUG("srs table is empty", K(is_sys));
+  
+  if (OB_FAIL(fetch_all_srs(srs))) {
+    if (ret == OB_ERR_EMPTY_QUERY) {
+      LOG_DEBUG("srs table is empty");
     } else {
-      LOG_WARN("failed to fetch ObSrsCacheSnapShot", K(ret), K(is_sys));
+      LOG_WARN("failed to fetch srs snapshot", K(ret));
     }
   } else {
-    TCWLockGuard guard(lock_);
-    ObSrsCacheSnapShot *&last_snapshot = is_sys ? last_sys_snapshot_ : last_user_snapshot_;
-    uint64_t &local_version = is_sys ?  local_sys_srs_version_ : local_user_srs_version_;
-    uint64_t &remote_version = is_sys ?  remote_sys_srs_version_ : remote_user_srs_version_;
-    if (last_snapshot != NULL) {
-      if (last_snapshot->get_ref_count() > 0
-          && OB_FAIL(srs_old_snapshots_.push_back(last_snapshot))) {
-        LOG_WARN("failed to push last_snapshot to recycle queue", K(ret), K(tenant_id), K(is_sys));
-      } else {
-        last_snapshot->~ObSrsCacheSnapShot();
-        allocator_.free(last_snapshot);
+    if (last_sys_snapshot_ != NULL) {
+      if (last_sys_snapshot_->get_ref_count() > 0) {
+        if (OB_FAIL(srs_old_snapshots_.push_back(last_sys_snapshot_))) {
+          LOG_WARN("failed to push last_snapshot to recycle queue", K(ret));
+        }
+      }
+      if (OB_SUCC(ret)) {
+        // ref_count > 0: already pushed to old queue; == 0: safe to free
+        if (last_sys_snapshot_->get_ref_count() <= 0) {
+          last_sys_snapshot_->~ObSrsCacheSnapShot();
+          allocator_.free(last_sys_snapshot_);
+        }
       }
     }
-    last_snapshot = srs;
-    local_version = srs->get_srs_version();
-    LOG_INFO("fetch srs cache snapshot success", K(local_version), K(remote_version),
-             K(srs->get_srs_count()), K(srs_old_snapshots_.size()), K(tenant_id), K(is_sys));     
+    if (OB_SUCC(ret)) {
+      last_sys_snapshot_ = srs;
+      for (int64_t i = srs_old_snapshots_.size() - 1; i >= 0; i--) {
+        ObSrsCacheSnapShot *snap = srs_old_snapshots_[i];
+        if (OB_NOT_NULL(snap) && snap->get_ref_count() <= 0) {
+          srs_old_snapshots_.remove(i);
+          snap->~ObSrsCacheSnapShot();
+          allocator_.free(snap);
+        }
+      }
+      LOG_INFO("[SRS] refresh succeeded", K(srs->get_srs_count()),
+               K(srs_old_snapshots_.size()));
+    }
   }
   return ret;
 }
-
-int ObTenantSrs::refresh_sys_srs()
-{
-  return refresh_srs(true);
-}
-
-
-int ObTenantSrs::TenantSrsUpdatePeriodicTask::init(ObTenantSrs *srs)
-{
-  tenant_srs_ = srs;
-  return OB_SUCCESS;
-}
-
-
-void ObTenantSrs::recycle_last_snapshots()
-{
-  TCWLockGuard guard(lock_);
-  if (OB_NOT_NULL(last_sys_snapshot_) &&
-      last_sys_snapshot_->get_ref_count() <= 0) {
-    last_sys_snapshot_->~ObSrsCacheSnapShot();
-    allocator_.free(last_sys_snapshot_);
-    last_sys_snapshot_ = NULL;
-  } else if (OB_NOT_NULL(last_sys_snapshot_)) {
-    LOG_INFO("unexpected srs snapshot ref count", K(last_sys_snapshot_->get_ref_count()));
-  }
-  if (OB_NOT_NULL(last_user_snapshot_) &&
-      last_user_snapshot_->get_ref_count() <= 0) {
-    last_user_snapshot_->~ObSrsCacheSnapShot();
-    allocator_.free(last_user_snapshot_);
-    last_user_snapshot_ = NULL;
-  } else if (OB_NOT_NULL(last_user_snapshot_)) {
-    LOG_INFO("unexpected srs snapshot ref count", K(last_user_snapshot_->get_ref_count()));
-  }
-}
-
 
 void ObTenantSrs::recycle_old_snapshots()
 {
-  int ret = OB_SUCCESS;
-  TCWLockGuard guard(lock_);
-  uint32_t i = 0;
-  for (; i < srs_old_snapshots_.size(); i++) {
+  for (int64_t i = srs_old_snapshots_.size() - 1; i >= 0; i--) {
     ObSrsCacheSnapShot *snap = srs_old_snapshots_[i];
-    if (snap->get_ref_count() <= 0) {
-      if (OB_FAIL(srs_old_snapshots_.remove(i)))  {
-        LOG_WARN("failed to remove old snapshot", K(ret));
-      } else {
-        snap->~ObSrsCacheSnapShot();
-        allocator_.free(snap);
-      }
+    if (OB_NOT_NULL(snap)) {
+      srs_old_snapshots_.remove(i);
+      snap->~ObSrsCacheSnapShot();
+      allocator_.free(snap);
     }
   }
-}
-
-void ObTenantSrs::TenantSrsUpdateTask::runTimerTask()
-{
-  int ret = OB_SUCCESS;
-  if (OB_ISNULL(tenant_srs_)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("failed to do srs update task. tenant_srs is null", K(ret));
-  } else if (OB_FAIL(tenant_srs_->refresh_sys_srs())) {
-    if (ret != OB_ERR_EMPTY_QUERY) {
-      LOG_WARN("failed to refresh sys srs", K(ret), K(tenant_srs_->remote_sys_srs_version_),
-              K(tenant_srs_->local_sys_srs_version_));
-    }
-  }
-}
-
-void ObTenantSrs::TenantSrsUpdatePeriodicTask::runTimerTask()
-{
-  int ret = OB_SUCCESS;
-  ObMultiVersionSchemaService *schema_service = nullptr;
-  const uint64_t tenant_id = MTL_ID();
-  bool is_sys_overdue = false;
-  bool is_user_overdue = false;
-  uint32_t delay = SLEEP_USECONDS;
-
-
-  if ((tenant_id == OB_SYS_TENANT_ID && !GSCHEMASERVICE.is_sys_full_schema()) ||
-      (tenant_id != OB_SYS_TENANT_ID && !GSCHEMASERVICE.is_tenant_full_schema(tenant_id))) {
-    delay = BOOTSTRAP_PERIOD;
-  } else {
-    uint32_t old_snapshot_size = 0;
-    {
-      TCRLockGuard guard(tenant_srs_->lock_);
-      is_sys_overdue = tenant_srs_->local_sys_srs_version_ < tenant_srs_->remote_sys_srs_version_;
-      is_user_overdue = tenant_srs_->local_user_srs_version_ < tenant_srs_->remote_user_srs_version_;
-      old_snapshot_size = tenant_srs_->srs_old_snapshots_.size();
-    }
-
-    if ((is_sys_overdue || tenant_srs_->last_sys_snapshot_ == NULL)
-        && OB_FAIL(tenant_srs_->refresh_sys_srs())) {
-      if (ret != OB_ERR_EMPTY_QUERY) {
-        LOG_WARN("failed to refresh sys srs", K(ret), K(tenant_srs_->remote_sys_srs_version_),
-                 K(tenant_srs_->local_sys_srs_version_));
-      } else {
-        delay = BOOTSTRAP_PERIOD;
-      }
-    }
-    if (is_user_overdue) {
-      // to do:user srs refresh
-    } 
-    if (old_snapshot_size > 0) {
-      tenant_srs_->recycle_old_snapshots();
-    }
-  }
-  // timer task, ignore error code 
-  if (OB_FAIL(TG_SCHEDULE(MTL(omt::ObSharedTimer*)->get_tg_id(), *this, delay, false))) {
-    LOG_WARN("schedule srs update task failed", K(ret));
-  }
-}
-
-int ObTenantSrs::cancle_update_task()
-{
-  int ret = OB_SUCCESS;
-  bool is_exist = true;
-  if (OB_FAIL(TG_TASK_EXIST(MTL(omt::ObSharedTimer*)->get_tg_id(), srs_update_periodic_task_, is_exist))) {
-    LOG_WARN("failed to check tenant srs update task", K(ret));
-  } else if (is_exist) {
-    if (OB_FAIL(TG_CANCEL_R(MTL(omt::ObSharedTimer*)->get_tg_id(), srs_update_periodic_task_))) {
-      LOG_WARN("failed to cancel tenant srs update task", K(ret));
-    }
-  }
-  return ret;
 }
 
 int ObSrsCacheSnapShot::get_srs_item(uint64_t srid, const ObSrsItem *&srs_item)
@@ -397,44 +229,33 @@ int ObSrsCacheSnapShot::get_srs_item(uint64_t srid, const ObSrsItem *&srs_item)
   return ret;
 }
 
-
-int ObTenantSrs::fetch_all_srs(ObSrsCacheSnapShot *&srs_snapshot, bool is_sys_srs)
+int ObTenantSrs::fetch_all_srs(ObSrsCacheSnapShot *&srs_snapshot)
 {
   int ret = OB_SUCCESS;
-  uint64_t srs_version = 0;
-  ObSrsCacheType snapshot_type;
   ObSrsCacheSnapShot *snapshot = NULL;
   uint32_t res_count = 0;
-  const uint64_t tenant_id = MTL_ID();
+  
   int64_t srs_cnt = 0;
   const int TOTAL_SRS_CNT = 5152;
 
-  if (OB_FAIL(table::ObSRSImporter::get_srs_cnt(sql_proxy_, tenant_id, srs_cnt))) {
+  if (OB_FAIL(table::ObSRSImporter::get_srs_cnt(sql_proxy_, srs_cnt))) {
     LOG_WARN("get srs cnt failed", K(ret));
   } else if (srs_cnt < TOTAL_SRS_CNT) {
     if (srs_cnt > 1) {
-      LOG_INFO("srs is importing, retry fetch later", K(srs_cnt), K(tenant_id));
+      LOG_INFO("srs is importing, retry fetch later", K(srs_cnt));
     }
     ret = OB_ERR_EMPTY_QUERY;
   } else {
     ObSqlString sql;
-    ObSQLClientRetryWeak sql_client_retry_weak(sql_proxy_, tenant_id, OB_ALL_SPATIAL_REFERENCE_SYSTEMS_TID);
+    ObSQLClientRetryWeak sql_client_retry_weak(sql_proxy_, true, OB_ALL_SPATIAL_REFERENCE_SYSTEMS_TID);
     SMART_VAR(ObMySQLProxy::MySQLResult, res) {
       ObASHSetInnerSqlWaitGuard ash_inner_sql_guard(ObInnerSqlWaitTypeId::OMT_FETCH_ALL_SRS);
       ObMySQLResult *result = NULL;
-      if (is_sys_srs) {
-        ret = sql.append_fmt("SELECT * FROM %s WHERE (SRS_ID < %d AND SRS_ID != 0) OR SRS_ID > %d",
-          OB_ALL_SPATIAL_REFERENCE_SYSTEMS_TNAME, USER_SRID_MIN, USER_SRID_MAX);
-        snapshot_type = ObSrsCacheType::SYSTEM_RESERVED;
-      } else {
-        ret = sql.append_fmt("SELECT * FROM %s WHERE SRS_ID >= %d AND SRS_ID <= %d",
-          OB_ALL_SPATIAL_REFERENCE_SYSTEMS_TNAME, USER_SRID_MIN, USER_SRID_MAX);
-        snapshot_type = ObSrsCacheType::USER_DEFINED;
-      }
-      if (OB_FAIL(ret)) {
+      if (OB_FAIL(sql.append_fmt("SELECT * FROM %s WHERE (SRS_ID < %d AND SRS_ID != 0) OR SRS_ID > %d",
+          OB_ALL_SPATIAL_REFERENCE_SYSTEMS_TNAME, USER_SRID_MIN, USER_SRID_MAX))) {
         LOG_WARN("append sql failed", K(ret));
-      } else if (OB_FAIL(sql_client_retry_weak.read(res, tenant_id, sql.ptr()))) {
-        LOG_WARN("execute sql failed", K(sql), K(ret), K(tenant_id));
+      } else if (OB_FAIL(sql_client_retry_weak.read(res, sql.ptr()))) {
+        LOG_WARN("execute sql failed", K(sql), K(ret));
       } else if (OB_UNLIKELY(NULL == (result = res.get_result()))) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("fail to get result. ", K(ret));
@@ -444,7 +265,7 @@ int ObTenantSrs::fetch_all_srs(ObSrsCacheSnapShot *&srs_snapshot, bool is_sys_sr
           const ObSrsItem *tmp = NULL;
           res_count++;
           if (OB_ISNULL(snapshot)) {
-            snapshot = OB_NEWx(ObSrsCacheSnapShot, &allocator_, snapshot_type);
+            snapshot = OB_NEWx(ObSrsCacheSnapShot, &allocator_);
             if (OB_ISNULL(snapshot)) {
               ret = OB_ALLOCATE_MEMORY_FAILED;
               LOG_WARN("failed to create ObSrsCacheSnapShot", K(ret));
@@ -453,7 +274,7 @@ int ObTenantSrs::fetch_all_srs(ObSrsCacheSnapShot *&srs_snapshot, bool is_sys_sr
             }
           }
           if (OB_FAIL(ret)) {
-          } else if (OB_FAIL(snapshot->parse_srs_item(result, srs_item, srs_version))) {
+          } else if (OB_FAIL(snapshot->parse_srs_item(result, srs_item))) {
             LOG_WARN("failed to parse srs item from sys_table", K(ret));
             result->print_info();
           } else if (OB_FAIL(snapshot->get_srs_item(srs_item->get_srid(), tmp))) {
@@ -470,9 +291,9 @@ int ObTenantSrs::fetch_all_srs(ObSrsCacheSnapShot *&srs_snapshot, bool is_sys_sr
             result->print_info();
           }
         }
-        
-        if (ret == OB_ITER_END) { // ob_success
-          if (res_count == 0) { // empty result
+
+        if (ret == OB_ITER_END) {
+          if (res_count == 0) {
             ret = OB_ERR_EMPTY_QUERY;
           } else {
             if (OB_FAIL(generate_pg_reserved_srs(snapshot))) {
@@ -480,7 +301,6 @@ int ObTenantSrs::fetch_all_srs(ObSrsCacheSnapShot *&srs_snapshot, bool is_sys_sr
               snapshot->~ObSrsCacheSnapShot();
               allocator_.free(snapshot);
             } else {
-              snapshot->set_srs_version(srs_version);
               srs_snapshot = snapshot;
             }
           }
@@ -525,7 +345,7 @@ int ObSrsCacheSnapShot::extract_bounds_numberic(ObMySQLResult *result, const cha
   return ret;
 }
 
-int ObSrsCacheSnapShot::parse_srs_item(ObMySQLResult *result, const ObSrsItem *&srs_item, uint64_t &srs_version)
+int ObSrsCacheSnapShot::parse_srs_item(ObMySQLResult *result, const ObSrsItem *&srs_item)
 {
   int ret = OB_SUCCESS;
   ObString srs_name, organization, definition, description, proj4text;
@@ -536,10 +356,9 @@ int ObSrsCacheSnapShot::parse_srs_item(ObMySQLResult *result, const ObSrsItem *&
   double max_x = NAN;
   double max_y = NAN;
   ObSpatialReferenceSystemBase *srs_info = NULL;
-  lib::ObMallocHookAttrGuard malloc_guard(lib::ObMemAttr(common::OB_SERVER_TENANT_ID, "SRSWKTParser"));
+  lib::ObMallocHookAttrGuard malloc_guard(lib::ObMemAttr("SRSWKTParser"));
 
   EXTRACT_UINT_FIELD_MYSQL(*result, "srs_id", srs_id, uint64_t);
-  EXTRACT_UINT_FIELD_MYSQL(*result, "srs_version", srs_version, uint64_t);
   EXTRACT_VARCHAR_FIELD_MYSQL(*result, "srs_name", srs_name);
   EXTRACT_VARCHAR_FIELD_MYSQL_SKIP_RET(*result, "organization", organization);
   EXTRACT_UINT_FIELD_MYSQL(*result, "organization_coordsys_id", organization_coordsys_id, uint64_t);
@@ -552,9 +371,9 @@ int ObSrsCacheSnapShot::parse_srs_item(ObMySQLResult *result, const ObSrsItem *&
   } else if (OB_FAIL(extract_bounds_numberic(result, "minY", min_y))) {
     LOG_WARN("failed to extract miny value", K(ret));
   } else if (OB_FAIL(extract_bounds_numberic(result, "maxX", max_x))) {
-    LOG_WARN("failed to extract maxx value", K(ret));    
+    LOG_WARN("failed to extract maxx value", K(ret));
   } else if (OB_FAIL(extract_bounds_numberic(result, "maxY", max_y))) {
-    LOG_WARN("failed to extract maxy value", K(ret));    
+    LOG_WARN("failed to extract maxy value", K(ret));
   } else if (OB_FAIL(ObSrsWktParser::parse_srs_wkt(allocator_, srs_id, definition, srs_info))) {
     LOG_WARN("failed to parse srs wkt from definition", K(ret), K(definition));
   } else {
@@ -580,7 +399,7 @@ int ObSrsCacheSnapShot::add_pg_reserved_srs_item(const ObString &pg_wkt, const u
   int ret = OB_SUCCESS;
   ObString proj4text;
   ObSpatialReferenceSystemBase *srs_info = NULL;
-  lib::ObMallocHookAttrGuard malloc_guard(lib::ObMemAttr(common::OB_SERVER_TENANT_ID, "SRSWKTParser"));
+  lib::ObMallocHookAttrGuard malloc_guard(lib::ObMemAttr("SRSWKTParser"));
 
   if (OB_FAIL(ObSrsWktParser::parse_srs_wkt(allocator_, srs_id, pg_wkt, srs_info))) {
     LOG_WARN("failed to parse pg reserved srs wkt", K(ret), K(srs_id), K(pg_wkt));
@@ -613,8 +432,7 @@ int ObTenantSrs::generate_pg_reserved_srs(ObSrsCacheSnapShot *&srs_snapshot)
   } else if (OB_FAIL(srs_snapshot->add_pg_reserved_srs_item(NORTH_LAMBERT_WKT, SRID_NORTH_LAMBERT_PG))) {
     LOG_WARN("failed to parse pg reserved srs item", K(ret), K(SRID_NORTH_LAMBERT_PG));
   }
- 
-  // "+proj=utm +zone=%d +south +ellps=WGS84 +datum=WGS84 +units=m +no_defs"
+
   for (int id = SRID_SOUTH_UTM_START_PG; id <= SRID_SOUTH_UTM_END_PG && OB_SUCC(ret); id++) {
     memset(wkt_buf, 0, MAX_WKT_LEN);
     int longitude = -177 + ((id - SRID_SOUTH_UTM_START_PG) * 6);
@@ -624,7 +442,6 @@ int ObTenantSrs::generate_pg_reserved_srs(ObSrsCacheSnapShot *&srs_snapshot)
       LOG_WARN("failed to parse pg reserved srs item", K(ret), K(id));
     }
   }
-  // +proj=utm +zone=%d +ellps=WGS84 +datum=WGS84 +units=m +no_defs
   for (int id = SRID_NORTH_UTM_START_PG; id <= SRID_NORTH_UTM_END_PG && OB_SUCC(ret); id++) {
     memset(wkt_buf, 0, MAX_WKT_LEN);
     int longitude = -177 + ((id - SRID_NORTH_UTM_START_PG) * 6);
@@ -635,7 +452,6 @@ int ObTenantSrs::generate_pg_reserved_srs(ObSrsCacheSnapShot *&srs_snapshot)
     }
   }
 
-  // +proj=laea +ellps=WGS84 +datum=WGS84 +lat_0=%g +lon_0=%g +units=m +no_defs
   for (int id = SRID_LAEA_START_PG; id < SRID_LAEA_END_PG && OB_SUCC(ret); id++) {
     int zone = id - SRID_LAEA_START_PG;
     int xzone = zone % 20;
@@ -652,7 +468,7 @@ int ObTenantSrs::generate_pg_reserved_srs(ObSrsCacheSnapShot *&srs_snapshot)
       ret = OB_INVALID_ARGUMENT;
       LOG_WARN("invalid pg srid", K(ret), K(id), K(xzone), K(yzone));
     }
-    
+
     if (OB_SUCC(ret)) {
       while (lon_0 > 180) {
         lon_0 -= 360;
@@ -674,3 +490,30 @@ int ObTenantSrs::generate_pg_reserved_srs(ObSrsCacheSnapShot *&srs_snapshot)
 
 }  // omt
 }  // oceanbase
+
+
+// ── share/object obj_cast SRS hook registration(see share/object/ob_obj_cast_hooks.h)──
+#include "share/object/ob_obj_cast_hooks.h"
+namespace oceanbase {
+namespace omt {
+static int obj_cast_get_srs_item_impl(uint64_t srid, const common::ObSrsItem *&srs,
+                                      common::ObSrsGuardErased &guard)
+{
+  int ret = common::OB_SUCCESS;
+  ObSrsCacheGuard *g = new (std::nothrow) ObSrsCacheGuard();
+  if (nullptr == g) {
+    ret = common::OB_ALLOCATE_MEMORY_FAILED;
+  } else if (common::OB_SUCCESS != (ret = OTSRS_MGR->get_tenant_srs_guard(*g))) {
+    delete g;
+  } else if (common::OB_SUCCESS != (ret = g->get_srs_item(srid, srs))) {
+    delete g;
+  } else {
+    guard.impl_ = g;
+    guard.release_ = [](void *p) { delete static_cast<ObSrsCacheGuard *>(p); };
+  }
+  return ret;
+}
+static const bool g_reg_obj_cast_srs_hook =
+    (common::g_obj_cast_get_srs_item = obj_cast_get_srs_item_impl, true);
+}  // namespace omt
+}  // namespace oceanbase

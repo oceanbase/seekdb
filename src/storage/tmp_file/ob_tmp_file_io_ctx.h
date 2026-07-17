@@ -116,17 +116,6 @@ public:
     total_uncached_page_read_cnt_ += page_num;
     uncached_page_read_hits_ += read_cnt;
   }
-  #ifdef OB_BUILD_SHARED_STORAGE
-  OB_INLINE void update_ss_read_uncached_page_stat(const int64_t page_num,
-                                                   const int64_t uncached_read_cnt,
-                                                   const int64_t aggregate_read_cnt)
-  {
-    total_uncached_page_read_cnt_ += page_num;
-    uncached_page_read_hits_ += uncached_read_cnt;
-    aggregate_read_io_cnt_ += aggregate_read_cnt;
-  }
-  OB_INLINE int64_t get_aggregate_read_io_cnt() const { return aggregate_read_io_cnt_; }
-  #endif
   OB_INLINE int64_t get_total_uncached_page_read_cnt() const { return total_uncached_page_read_cnt_; }
   OB_INLINE int64_t get_uncached_page_read_hits() const { return uncached_page_read_hits_; }
 

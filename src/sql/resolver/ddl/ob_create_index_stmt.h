@@ -36,15 +36,14 @@ public:
   ObCreateIndexStmt();
   virtual ~ObCreateIndexStmt();
 
-  obrpc::ObCreateIndexArg &get_create_index_arg();
+  obcall::ObCreateIndexArg &get_create_index_arg();
   int add_storing_column(const common::ObString &column_name);
   int add_hidden_storing_column(const common::ObString &column_name);
-  int add_sort_column(const obrpc::ObColumnSortItem &sort_column);
+  int add_sort_column(const obcall::ObColumnSortItem &sort_column);
   void set_comment(const common::ObString &comment);
   void set_storage_cache_policy(const common::ObString &storage_cache_policy);
   void set_index_name(const common::ObString &index_name);
-  uint64_t get_tenant_id() const { return create_index_arg_.tenant_id_; };
-  void set_tenant_id(const uint64_t tenant_id);
+  
   void set_index_dop(int64_t index_dop);
   int64_t get_index_dop();
   inline void set_database_name(const common::ObString &db_name);
@@ -77,9 +76,9 @@ public:
   inline uint64_t get_table_id() const;
 
   virtual bool cause_implicit_commit() const { return true; }
-  virtual obrpc::ObDDLArg &get_ddl_arg() { return create_index_arg_; }
+  virtual obcall::ObDDLArg &get_ddl_arg() { return create_index_arg_; }
 private:
-  obrpc::ObCreateIndexArg create_index_arg_;
+  obcall::ObCreateIndexArg create_index_arg_;
   uint64_t table_id_;
   DISALLOW_COPY_AND_ASSIGN(ObCreateIndexStmt);
 };
@@ -134,10 +133,7 @@ inline void ObCreateIndexStmt::set_name_generated_type(const ObNameGeneratedType
   create_index_arg_.index_schema_.set_name_generated_type(type);
 }
 
-inline void ObCreateIndexStmt::set_tenant_id(const uint64_t tenant_id)
-{
-  create_index_arg_.tenant_id_ = tenant_id;
-}
+
 
 inline const common::ObString &ObCreateIndexStmt::get_table_name() const
 {

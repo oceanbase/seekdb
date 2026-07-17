@@ -47,7 +47,7 @@ int ObSSTableRebuildMicroBlockIter::prefetch()
       read_info.io_timeout_ms_ = std::max(GCONF._data_storage_io_timeout / 1000, DEFAULT_IO_WAIT_TIME_MS);
       read_info.macro_block_id_ = macro_id_array_.at(prefetch_idx_);
       read_info.buf_ = io_buf_[io_index];
-      read_info.mtl_tenant_id_ = MTL_ID();
+      
 
       if (OB_FAIL(ObObjectManager::async_read_object(read_info, macro_io_handle))) {
         LOG_WARN("Fail to read macro block", K(ret), K(read_info));
@@ -118,12 +118,11 @@ int ObSSTableRebuildMicroBlockIter::get_next_micro_block(
   return ret;
 }
 
-
 /**
  * ---------------------------------------------------------ObSSTableBuilder--------------------------------------------------------------
  */
 ObSSTableBuilder::ObSSTableBuilder()
-  : allocator_(ObMemAttr(MTL_ID(), "sstBuilder")),
+  : allocator_(ObMemAttr("sstBuilder")),
     index_builder_(false /* not use buffer*/),
     data_store_desc_(),
     index_read_info_(NULL),
@@ -184,32 +183,16 @@ int ObSSTableBuilder::build_sstable_merge_res(
 {
   int ret = OB_SUCCESS;
   const int64_t input_macro_seq = macro_start_seq;
-  if (GCTX.is_shared_storage_mode() && is_major_merge_type(data_store_desc_.get_desc().get_merge_type())) {
-#ifdef OB_BUILD_SHARED_STORAGE
-    // no need to rebuild sstable in shared storage mode
-    if (OB_FAIL(index_builder_.close_with_macro_seq(
-      res, macro_start_seq, OB_DEFAULT_MACRO_BLOCK_SIZE/*nested_size*/, 0/*nested_offset*/, pre_warm_param))) {
-      STORAGE_LOG(WARN, "fail to close", K(ret), K(index_builder_));
-    } else {
-      const ObMergeBlockInfo &block_info_from_builder = index_builder_.get_merge_block_info();
-      block_info.add_index_block_info(block_info_from_builder);
-      STORAGE_LOG(INFO, "success to close index builder", KR(ret), K(macro_start_seq), K(input_macro_seq), K(block_info_from_builder));
-    }
-#else
-    ret = OB_NOT_SUPPORTED;
-#endif
-  } else {
-    // TODO temp solution, use different sstable builder in different mode
-    void *buf = NULL;
-    if (OB_ISNULL(buf = allocator_.alloc(sizeof(ObSSTableRebuilder)))) {
-      ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("failed to alloc sstable rebuilder", KR(ret));
-    } else if (FALSE_IT(rebuilder_ptr_ = new(buf) ObSSTableRebuilder(data_store_desc_, index_read_info_))) {
-    } else if (OB_FAIL(rebuilder_ptr_->build_res_with_rewrite_macros(
-              merge_param, pre_warm_param, input_macro_seq, index_builder_,
-              block_info, res))) {
-      LOG_WARN("failed to build res with rewrite macros", KR(ret));
-    }
+  // TODO temp solution, use different sstable builder in different mode
+  void *buf = NULL;
+  if (OB_ISNULL(buf = allocator_.alloc(sizeof(ObSSTableRebuilder)))) {
+    ret = OB_ALLOCATE_MEMORY_FAILED;
+    LOG_WARN("failed to alloc sstable rebuilder", KR(ret));
+  } else if (FALSE_IT(rebuilder_ptr_ = new(buf) ObSSTableRebuilder(data_store_desc_, index_read_info_))) {
+  } else if (OB_FAIL(rebuilder_ptr_->build_res_with_rewrite_macros(
+            merge_param, pre_warm_param, input_macro_seq, index_builder_,
+            block_info, res))) {
+    LOG_WARN("failed to build res with rewrite macros", KR(ret));
   }
   return ret;
 }
@@ -246,7 +229,7 @@ int ObSSTableRebuilder::build_res_with_rewrite_macros(
 {
   int ret = OB_SUCCESS;
   ObSEArray<MacroBlockId, DEFAULT_MACRO_ID_COUNT> macro_id_array;
-  macro_id_array.set_attr(ObMemAttr(MTL_ID(), "sstBuilder", ObCtxIds::MERGE_NORMAL_CTX_ID));
+  macro_id_array.set_attr(ObMemAttr("sstBuilder", ObCtxIds::MERGE_NORMAL_CTX_ID));
   ObLocalArena local_arena("MetaIter");
   blocksstable::ObSSTableIndexBuilder::ObMacroMetaIter iter;
   int64_t multiplexed_macro_block_count = 0;
@@ -264,7 +247,7 @@ int ObSSTableRebuilder::build_res_with_rewrite_macros(
   } else if (macro_id_array.count() != 0) {
     build_res_with_rebuild = true;
     iter.reuse();
-    STORAGE_LOG(INFO, "rebuild sstable merge", K(ret), K(data_store_desc_.get_desc().get_table_cg_idx()));
+    STORAGE_LOG(INFO, "rebuild sstable merge", K(ret));
     if (OB_FAIL(rebuild_macro_block(macro_id_array, iter))) {
       STORAGE_LOG(WARN, "fail to rebuild macro block", K(ret), K(macro_id_array));
     } else if (OB_FAIL(rebuild_index_builder_.close_with_macro_seq(
@@ -275,7 +258,7 @@ int ObSSTableRebuilder::build_res_with_rewrite_macros(
       block_info.macro_block_count_ = res.data_blocks_cnt_;
       const ObMergeBlockInfo &block_info_from_builder = rebuild_index_builder_.get_merge_block_info();
       block_info.add_index_block_info(block_info_from_builder);
-      STORAGE_LOG(INFO, "after rebuild sstable", K(ret), "cg_idx", data_store_desc_.get_desc().get_table_cg_idx(),
+      STORAGE_LOG(INFO, "after rebuild sstable", K(ret),
          "old_multiplexed_macro_block_count", block_info.multiplexed_macro_block_count_,
          "old_total_macro_count", block_info.macro_block_count_,
          "new_multiplexed_macro_block_count", multiplexed_macro_block_count,

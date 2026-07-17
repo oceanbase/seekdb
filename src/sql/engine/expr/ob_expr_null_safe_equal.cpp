@@ -83,7 +83,7 @@ int ObExprNullSafeEqual::cg_expr(
 
         if (OB_SUCC(ret)) {
           funcs[0] = (void *)ObExprCmpFuncsHelper::get_datum_expr_cmp_func(
-            l.type_, r.type_, l.scale_, r.scale_, l.precision_, r.precision_, false,
+            l.type_, r.type_, l.scale_, r.scale_, l.precision_, r.precision_,
             l.cs_type_, has_lob_header);
           CK(NULL != funcs[0]);
           rt_expr.inner_functions_ = funcs;

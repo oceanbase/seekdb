@@ -78,12 +78,11 @@ public:
   bool add_handle_ref(ObKVMemBlockHandle *mb_handle, const int64_t seq_num) const;
   int64_t de_handle_ref(ObKVMemBlockHandle *mb_handle, const bool do_retire = true);
 
-  int get_washable_size(const uint64_t tenant_id, int64_t &washable_size);
+  int get_washable_size(int64_t &washable_size);
   void flush_washable_mbs();
-  int flush_washable_mbs(const uint64_t tenant_id, const bool force_flush = false);
+  int flush_washable_mbs(const bool force_flush = false);
 
-  int sync_wash_mbs(const uint64_t tenant_id,
-                    const int64_t wash_size,
+  int sync_wash_mbs(const int64_t wash_size,
                     lib::ObICacheWasher::ObCacheMemBlock *&wash_blocks);
 
   virtual int alloc_mbhandle(const int64_t block_size,
@@ -98,7 +97,7 @@ public:
   virtual int free(ObKVMemBlockHandle *mb_handle);
   virtual ObKVMemBlockHandle *&get_curr_mb(const enum ObKVCachePolicy policy);
   virtual bool mb_status_match(const enum ObKVCachePolicy policy, ObKVMemBlockHandle *mb_handle);
-  int get_memblock_info(const uint64_t tenant_id, ObIArray<ObKVCacheStoreMemblockInfo> &memblock_infos);
+  int get_memblock_info(ObIArray<ObKVCacheStoreMemblockInfo> &memblock_infos);
   int print_tenant_memblock_info(ObDLink *link);
   static int64_t compute_mb_handle_num(const int64_t max_cache_size, const int64_t block_size)
   {
@@ -106,12 +105,12 @@ public:
   }
 
 private:
-  int try_flush_washable_mb(const uint64_t tenant_id, lib::ObICacheWasher::ObCacheMemBlock*& wash_blocks,
+  int try_flush_washable_mb(lib::ObICacheWasher::ObCacheMemBlock*& wash_blocks,
             const int64_t size_need_washed = INT64_MAX, const bool force_flush = false);
   int inner_flush_washable_mb(const int64_t size_to_wash, int64_t& size_washed,
     lib::ObICacheWasher::ObCacheMemBlock*& wash_blocks, bool force_flush);
-  void free_mbs(lib::ObTenantResourceMgrHandle& resource_handle, int64_t tenant_id, lib::ObICacheWasher::ObCacheMemBlock* wash_blocks);
-  int inner_push_memblock_info(const ObKVMemBlockHandle &handle, ObIArray<ObKVCacheStoreMemblockInfo> &memblock_infos, int64_t tenant_id);
+  void free_mbs(lib::ObTenantResourceMgrHandle& resource_handle, lib::ObICacheWasher::ObCacheMemBlock* wash_blocks);
+  int inner_push_memblock_info(const ObKVMemBlockHandle &handle, ObIArray<ObKVCacheStoreMemblockInfo> &memblock_infos);
   void purge_mb_handle_retire_station();
   int alloc_kvpair_without_retry(
       const int64_t key_size,
@@ -121,8 +120,8 @@ private:
       const enum ObKVCachePolicy policy);
 
   static const int64_t SYNC_WASH_MB_TIMEOUT_US = 100 * 1000; // 100ms
-  static const int64_t RETIRE_LIMIT = 8;
-  static const int64_t WASH_THREAD_RETIRE_LIMIT = 1024;
+  static const int64_t RETIRE_LIMIT = 2;
+  static const int64_t WASH_THREAD_RETIRE_LIMIT = 64;
   static const int64_t SUPPLY_MB_NUM_ONCE = 128;
   static const int64_t SAFE_COUNT = 5;
   static const int64_t MAX_SKIP_REFRESH_TIMES = 100; // max skip refresh_score times during free time
@@ -132,7 +131,6 @@ private:
   static const int64_t MAX_GLOBAL_WASH_THRESHOLD = 64L;  // 64 * 2M = 128M
   static const int64_t MIN_GLOBAL_WASH_THRESHOLD = 8L;  // 8 * 2M = 16M
   static const int64_t FLUSH_PRESERVE_TENANT_NUM = 10; // number preversed for flush
-  static const int64_t DEFAULT_TENANT_BUCKET_NUM = 64;
 #ifndef _WIN32
   static const int64_t DEFAULT_MAX_CACHE_SIZE = 1024LL * 1024LL * 1024LL * 1024LL;  //1T
 #else
@@ -155,13 +153,12 @@ struct WashCallBack {
 };
 struct SyncWashCallBack {
   SyncWashCallBack(ObKVCacheStore& store, HazardList& retire_list, lib::ObICacheWasher::ObCacheMemBlock*& wash_blocks,
-      int64_t& size_washed, const int64_t size_to_wash, const int64_t tenant_id)
+      int64_t& size_washed, const int64_t size_to_wash)
       : store_(store),
         retire_list_(retire_list),
         wash_blocks_(wash_blocks),
         size_washed_(size_washed),
-        size_to_wash_(size_to_wash),
-        tenant_id_(tenant_id)
+        size_to_wash_(size_to_wash)
   {}
   void operator()(ObKVMemBlockHandle *mb_handle);
   ObKVCacheStore& store_;
@@ -169,7 +166,7 @@ struct SyncWashCallBack {
   lib::ObICacheWasher::ObCacheMemBlock*& wash_blocks_;
   int64_t& size_washed_;
   const int64_t size_to_wash_;
-  const int64_t tenant_id_;
+  
 };
 
 struct StoreMBHandleCmp {
@@ -186,21 +183,6 @@ struct StoreMBHandleCmp {
     int64_t heap_size_;
     int64_t mb_cnt_;
   };
-  class MBHandlePointerWashPool {
-  public:
-    MBHandlePointerWashPool();
-    int init(const int64_t count, const char *label);
-    int alloc(const int64_t count, ObKVMemBlockHandle **&heap);
-    void reuse();
-    int destroy();
-  private:
-    bool inited_;
-    int64_t total_count_;
-    int64_t free_count_;
-    ObKVMemBlockHandle **buf_;
-    common::ObArenaAllocator allocator_;
-
-  };
 private:
   int alloc_mbhandle(
     const enum ObKVCachePolicy policy,
@@ -210,18 +192,15 @@ private:
   bool is_global_wash_valid(const int64_t total_global_wash_block_count, const int64_t global_cache_size);
   void wash_mb(ObKVMemBlockHandle *mb_handle);
   void wash_mbs(WashHeap &heap);
-  bool try_wash_mb(ObKVMemBlockHandle *mb_handle, const uint64_t tenant_id, void *&buf, int64_t &mb_size);
+  bool try_wash_mb(ObKVMemBlockHandle *mb_handle, void *&buf, int64_t &mb_size);
   int do_wash_mb(ObKVMemBlockHandle *mb_handle, void *&buf, int64_t &mb_size);
   int init_wash_heap(WashHeap &heap, const int64_t heap_size);
   int prepare_wash_structs();
-  void reuse_wash_structs();
   void destroy_wash_structs();
 
   void *alloc_mb(lib::ObTenantResourceMgrHandle &resource_handle,
-        const uint64_t tenant_id,
         const int64_t block_size);
-  void free_mb(lib::ObTenantResourceMgrHandle &resource_handle,
-        const uint64_t tenant_id, void *ptr);
+  void free_mb(lib::ObTenantResourceMgrHandle &resource_handle, void *ptr);
 
   static QClock &get_qclock()
   {
@@ -253,10 +232,10 @@ private:
   ObKVCacheStatus global_status_; // TODO rename me to status_
   ObTenantMBList mb_list_;
 
+  static constexpr int64_t WASH_HEAP_SIZE = 64;
   //data structures for wash
+  WashHeap wash_heap_;
   lib::ObMutex wash_out_lock_;
-  MBHandlePointerWashPool mb_ptr_pool_;
-  ObArenaAllocator washable_size_allocator_;
   ObWashableSizeInfo washbale_size_info_;
   ObWashableSizeInfo tmp_washbale_size_info_;
   double tenant_reserve_mem_ratio_;

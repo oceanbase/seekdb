@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_REWRITE
 #include "ob_transform_rule.h"
+#include "lib/utility/ob_smart_call.h"
 #include "sql/optimizer/ob_optimizer.h"
 #include "sql/optimizer/ob_optimizer_context.h"
 #include "sql/rewrite/ob_transformer_impl.h"
@@ -64,8 +65,6 @@ void ObTransformerCtx::reset()
   is_force_materialize_ = false;
   push_down_filters_.reset();
   iteration_level_ = 0;
-  mv_infos_.reset();
-  mv_stmt_gen_count_ = 0;
   cbqt_policy_ = TransPolicy::DISABLE_TRANS;
   complex_cbqt_table_num_ = 0;
   max_table_num_ = 0;
@@ -139,10 +138,8 @@ const char* ObTransformerCtx::get_trans_type_string(uint64_t trans_type)
     TRANS_TYPE_TO_STR(SIMPLIFY_ORDERBY)
     TRANS_TYPE_TO_STR(SIMPLIFY_WINFUNC)
     TRANS_TYPE_TO_STR(SELECT_EXPR_PULLUP)
-    TRANS_TYPE_TO_STR(PROCESS_DBLINK)
     TRANS_TYPE_TO_STR(DECORRELATE)
     TRANS_TYPE_TO_STR(CONDITIONAL_AGGR_COALESCE)
-    TRANS_TYPE_TO_STR(MV_REWRITE)
     TRANS_TYPE_TO_STR(LATE_MATERIALIZATION)
     TRANS_TYPE_TO_STR(DISTINCT_AGGREGATE)
     default:  return NULL;
@@ -157,7 +154,7 @@ int ObTransformRule::transform(ObDMLStmt *&stmt,
   if (OB_ISNULL(stmt)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret));
-  } else if (OB_FAIL(transform_stmt_recursively(parent_stmts, 0, stmt))) {
+  } else if (OB_FAIL(SMART_CALL(transform_stmt_recursively(parent_stmts, 0, stmt)))) {
     LOG_WARN("failed to transform stmt recursively", K(ret));
   } else if (OB_FAIL(adjust_transform_types(transform_types))) {
     LOG_WARN("failed to adjust transform types", K(ret));
@@ -415,8 +412,7 @@ int ObTransformRule::evaluate_cost(common::ObIArray<ObParentDMLStmt> &parent_stm
     lib::ContextParam param;
     ObTransformerImpl trans(ctx_);
     int64_t start_time_us = ObTimeUtil::current_time();
-    param.set_mem_attr(ctx_->session_info_->get_effective_tenant_id(),
-                       "CostBasedRewrit",
+    param.set_mem_attr("CostBasedRewrit",
                        ObCtxIds::DEFAULT_CTX_ID)
        .set_properties(lib::USE_TL_PAGE_OPTIONAL)
        .set_page_size(OB_MALLOC_NORMAL_BLOCK_SIZE);
@@ -439,7 +435,6 @@ int ObTransformRule::evaluate_cost(common::ObIArray<ObParentDMLStmt> &parent_stm
                 CURRENT_CONTEXT->get_arena_allocator(),
                 &ctx_->exec_ctx_->get_physical_plan_ctx()->get_param_store(),
                 *ctx_->self_addr_,
-                GCTX.srv_rpc_proxy_,
                 stmt->get_query_ctx()->get_global_hint(),
                 tmp_expr_factory,
                 root_stmt,
@@ -988,7 +983,7 @@ int ObTryTransHelper::recover(ObQueryCtx *query_ctx)
     LOG_WARN("failed to revover qb name info", K(ret));
   } else if (NULL != unique_key_provider_
              && OB_FAIL(unique_key_provider_->recover_useless_unique_for_temp_table())) {
-    LOG_WARN("failed to recover useless unique for temp table", K(ret));
+    LOG_ERROR("failed to recover useless unique for temp table", K(ret));
   } else {
     unique_key_provider_ = NULL;
     query_ctx->available_tb_id_ = available_tb_id_;

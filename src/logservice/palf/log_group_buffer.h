@@ -62,8 +62,7 @@ public:
   int check_log_buf_wrapped(const LSN &lsn, const int64_t log_len, bool &is_buf_wrapped) const;
   int64_t get_available_buffer_size() const;
   int64_t get_reserved_buffer_size() const;
-  int to_leader();
-  int to_follower();
+  int activate();
   // inc update readable_begin_lsn, used by append_disk_log().
   int inc_update_readable_begin_lsn(const LSN &new_lsn);
   // inc update reuse_lsn, used for flush log cb case.

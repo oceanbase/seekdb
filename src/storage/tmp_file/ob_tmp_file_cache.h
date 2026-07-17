@@ -35,20 +35,19 @@ class ObTmpBlockCacheKey final : public common::ObIKVCacheKey
 {
 public:
   ObTmpBlockCacheKey();
-  ObTmpBlockCacheKey(const int64_t block_id, const uint64_t tenant_id);
+  ObTmpBlockCacheKey(const int64_t block_id);
   ~ObTmpBlockCacheKey();
   bool operator ==(const ObIKVCacheKey &other) const override;
-  uint64_t get_tenant_id() const override;
+  
   uint64_t hash() const override;
   int64_t size() const override;
   int deep_copy(char *buf, const int64_t buf_len, ObIKVCacheKey *&key) const override;
   bool is_valid() const;
   int64_t get_block_id() const { return block_id_; }
-  TO_STRING_KV(K(block_id_), K(tenant_id_));
+  TO_STRING_KV(K(block_id_));
 
 private:
   int64_t block_id_;
-  uint64_t tenant_id_;
 };
 
 class ObTmpBlockCacheValue final : public common::ObIKVCacheValue
@@ -130,15 +129,14 @@ class ObTmpPageCacheKey final : public common::ObIKVCacheKey
 public:
   ObTmpPageCacheKey();
   // For Shared nothing mode
-  ObTmpPageCacheKey(const int64_t block_id, const int64_t page_id, const uint64_t tenant_id);
+  ObTmpPageCacheKey(const int64_t block_id, const int64_t page_id);
   // For Shared Storage mode
   ObTmpPageCacheKey(const int64_t tmp_file_id,
                     const uint64_t unfilled_page_length,
-                    const uint64_t virtual_page_id,
-                    const uint64_t tenant_id);
+                    const uint64_t virtual_page_id);
   ~ObTmpPageCacheKey();
   bool operator ==(const ObIKVCacheKey &other) const override;
-  uint64_t get_tenant_id() const override;
+  
   uint64_t hash() const override;
   int64_t size() const override;
   int deep_copy(char *buf, const int64_t buf_len, ObIKVCacheKey *&key) const override;
@@ -162,7 +160,7 @@ private:
       uint64_t virtual_page_id_      : PAGE_CACHE_KEY_VIRTUAL_PAGE_ID_BITS;
     };
   };
-  uint64_t tenant_id_;
+  
 
 };
 

@@ -198,11 +198,6 @@ int ObBaseIndexBlockDumper::check_order(const ObDatumRow &row)
     // skip
   } else if (OB_FAIL(cur_key.assign(row.storage_datums_, container_store_desc_->get_rowkey_column_count()))) {
     STORAGE_LOG(WARN, "Failed to assign cur key", K(ret));
-  } else if (index_store_desc_->is_cg()) {
-    if (OB_UNLIKELY(cur_key.get_datum(0).get_int() <= last_rowkey_.get_datum(0).get_int())) {
-      ret = OB_ROWKEY_ORDER_ERROR;
-      STORAGE_LOG(ERROR, "input rowkey is less then last rowkey.", K(cur_key), K(last_rowkey_), K(ret));
-    }
   } else {
     const ObStorageDatumUtils &datum_utils = container_store_desc_->get_datum_utils();
     int32_t compare_result = 0;
@@ -826,7 +821,7 @@ int ObIndexBlockLoader::prefetch()
       read_info.size_ = common::OB_DEFAULT_MACRO_BLOCK_SIZE;
       read_info.io_desc_.set_wait_event(ObWaitEventIds::DB_FILE_COMPACT_READ);
       read_info.buf_ = io_buf_[io_index];
-      read_info.mtl_tenant_id_ = MTL_ID();
+      
       if (OB_FAIL(blocksstable::ObObjectManager::async_read_object(read_info, macro_io_handle))) {
         STORAGE_LOG(WARN, "Fail to read macro block", K(ret), K(read_info));
       }

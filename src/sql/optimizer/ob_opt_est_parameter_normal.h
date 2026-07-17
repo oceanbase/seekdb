@@ -76,20 +76,6 @@ const static double NORMAL_ROW_STORE_PROJECT_COLUMN_RND_CHAR_COST = 0.0011495768
 const static double NORMAL_ROW_STORE_PROJECT_COLUMN_RND_LOB_COST = 24.3 * DEFAULT_CPU_SPEED;
 const static double NORMAL_ROW_STORE_PROJECT_COLUMN_RND_JSON_COST = 36.7 * DEFAULT_CPU_SPEED;
 const static double NORMAL_ROW_STORE_PROJECT_COLUMN_RND_GIS_COST = 32.4 * DEFAULT_CPU_SPEED;
-//column store
-const static double NORMAL_COLUMN_STORE_PROJECT_COLUMN_SEQ_INT_COST = 0.08879689693065789473684210526 * DEFAULT_CPU_SPEED;
-const static double NORMAL_COLUMN_STORE_PROJECT_COLUMN_SEQ_NUMBER_COST = 0.07463286534828947368421052632 * DEFAULT_CPU_SPEED;
-const static double NORMAL_COLUMN_STORE_PROJECT_COLUMN_SEQ_CHAR_COST = 0.002145698273026315789473684210 * DEFAULT_CPU_SPEED;
-const static double NORMAL_COLUMN_STORE_PROJECT_COLUMN_SEQ_LOB_COST = 6.5 * DEFAULT_CPU_SPEED;
-const static double NORMAL_COLUMN_STORE_PROJECT_COLUMN_SEQ_JSON_COST = 9.7 * DEFAULT_CPU_SPEED;
-const static double NORMAL_COLUMN_STORE_PROJECT_COLUMN_SEQ_GIS_COST = 8.9 * DEFAULT_CPU_SPEED;
-
-const static double NORMAL_COLUMN_STORE_PROJECT_COLUMN_RND_INT_COST = 0.08879689693065789473684210526 * DEFAULT_CPU_SPEED;
-const static double NORMAL_COLUMN_STORE_PROJECT_COLUMN_RND_NUMBER_COST = 0.07463286534828947368421052632 * DEFAULT_CPU_SPEED;
-const static double NORMAL_COLUMN_STORE_PROJECT_COLUMN_RND_CHAR_COST = 0.002145698273026315789473684210 * DEFAULT_CPU_SPEED;
-const static double NORMAL_COLUMN_STORE_PROJECT_COLUMN_RND_LOB_COST = 24.3 * DEFAULT_CPU_SPEED;
-const static double NORMAL_COLUMN_STORE_PROJECT_COLUMN_RND_JSON_COST = 36.7 * DEFAULT_CPU_SPEED;
-const static double NORMAL_COLUMN_STORE_PROJECT_COLUMN_RND_GIS_COST = 32.4 * DEFAULT_CPU_SPEED;
 
 //compare cost params
 const static double NORMAL_CMP_INT_COST = 0.0100087103407539 * DEFAULT_CPU_SPEED;
@@ -178,9 +164,8 @@ const static double hash_params_normal[ObMaxTC+1] = {
   NORMAL_HASH_CHAR_COST,           // roaringbitmap
 };
 
-const static double project_params_normal[2][2][ObMaxTC+1] = {
-  {
-    {// row store sequence access
+const static double project_params_normal[2][ObMaxTC+1] = {
+    {// sequence access
       NORMAL_ROW_STORE_PROJECT_COLUMN_SEQ_INT_COST,            // null
       NORMAL_ROW_STORE_PROJECT_COLUMN_SEQ_INT_COST,            // int8, int16, int24, int32, int64.
       NORMAL_ROW_STORE_PROJECT_COLUMN_SEQ_INT_COST,            // uint8, uint16, uint24, uint32, uint64.
@@ -209,7 +194,7 @@ const static double project_params_normal[2][2][ObMaxTC+1] = {
       NORMAL_ROW_STORE_PROJECT_COLUMN_SEQ_NUMBER_COST,         // ObDecimalIntTC
       NORMAL_ROW_STORE_PROJECT_COLUMN_SEQ_LOB_COST,            // collection sql type
     },
-    {// row store random access
+    {// random access
       NORMAL_ROW_STORE_PROJECT_COLUMN_RND_INT_COST,            // null
       NORMAL_ROW_STORE_PROJECT_COLUMN_RND_INT_COST,            // int8, int16, int24, int32, int64.
       NORMAL_ROW_STORE_PROJECT_COLUMN_RND_INT_COST,            // uint8, uint16, uint24, uint32, uint64.
@@ -238,67 +223,6 @@ const static double project_params_normal[2][2][ObMaxTC+1] = {
       NORMAL_ROW_STORE_PROJECT_COLUMN_RND_NUMBER_COST,         // ObDecimalIntTC
       NORMAL_ROW_STORE_PROJECT_COLUMN_RND_LOB_COST,            // collection sql type
     }
-  },
-  {
-    {// column store sequence access
-      NORMAL_COLUMN_STORE_PROJECT_COLUMN_SEQ_INT_COST,            // null
-      NORMAL_COLUMN_STORE_PROJECT_COLUMN_SEQ_INT_COST,            // int8, int16, int24, int32, int64.
-      NORMAL_COLUMN_STORE_PROJECT_COLUMN_SEQ_INT_COST,            // uint8, uint16, uint24, uint32, uint64.
-      NORMAL_COLUMN_STORE_PROJECT_COLUMN_SEQ_INT_COST,            // float, ufloat.
-      NORMAL_COLUMN_STORE_PROJECT_COLUMN_SEQ_INT_COST,            // double, udouble.
-      NORMAL_COLUMN_STORE_PROJECT_COLUMN_SEQ_NUMBER_COST,         // number, unumber.
-      NORMAL_COLUMN_STORE_PROJECT_COLUMN_SEQ_NUMBER_COST,         // datetime, timestamp.
-      NORMAL_COLUMN_STORE_PROJECT_COLUMN_SEQ_NUMBER_COST,         // date
-      NORMAL_COLUMN_STORE_PROJECT_COLUMN_SEQ_NUMBER_COST,         // time
-      NORMAL_COLUMN_STORE_PROJECT_COLUMN_SEQ_NUMBER_COST,         // year
-      NORMAL_COLUMN_STORE_PROJECT_COLUMN_SEQ_CHAR_COST,           // varchar, char, varbinary, binary.
-      NORMAL_COLUMN_STORE_PROJECT_COLUMN_SEQ_CHAR_COST,           // extend
-      NORMAL_COLUMN_STORE_PROJECT_COLUMN_SEQ_CHAR_COST,           // unknown
-      NORMAL_COLUMN_STORE_PROJECT_COLUMN_SEQ_LOB_COST,            // TinyText,MediumText, Text ,LongText
-      NORMAL_COLUMN_STORE_PROJECT_COLUMN_SEQ_INT_COST,            // Bit
-      NORMAL_COLUMN_STORE_PROJECT_COLUMN_SEQ_INT_COST,            // enum, set
-      NORMAL_COLUMN_STORE_PROJECT_COLUMN_SEQ_INT_COST,            // ObEnumSetInnerTC
-      NORMAL_COLUMN_STORE_PROJECT_COLUMN_SEQ_NUMBER_COST,         // timestamp with time zone
-      NORMAL_COLUMN_STORE_PROJECT_COLUMN_SEQ_INT_COST,            // raw
-      NORMAL_COLUMN_STORE_PROJECT_COLUMN_SEQ_INT_COST,            // interval
-      NORMAL_COLUMN_STORE_PROJECT_COLUMN_SEQ_NUMBER_COST,         // rowid
-      NORMAL_COLUMN_STORE_PROJECT_COLUMN_SEQ_LOB_COST,            // lob
-      NORMAL_COLUMN_STORE_PROJECT_COLUMN_SEQ_JSON_COST,           // json
-      NORMAL_COLUMN_STORE_PROJECT_COLUMN_SEQ_GIS_COST,            // geometry
-      NORMAL_COLUMN_STORE_PROJECT_COLUMN_SEQ_INT_COST,            // user defined type
-      NORMAL_COLUMN_STORE_PROJECT_COLUMN_SEQ_NUMBER_COST,         // ObDecimalIntTC
-      NORMAL_COLUMN_STORE_PROJECT_COLUMN_SEQ_LOB_COST,            // collection sql type
-    },
-    {// column store random access
-      NORMAL_COLUMN_STORE_PROJECT_COLUMN_RND_INT_COST,            // null
-      NORMAL_COLUMN_STORE_PROJECT_COLUMN_RND_INT_COST,            // int8, int16, int24, int32, int64.
-      NORMAL_COLUMN_STORE_PROJECT_COLUMN_RND_INT_COST,            // uint8, uint16, uint24, uint32, uint64.
-      NORMAL_COLUMN_STORE_PROJECT_COLUMN_RND_INT_COST,            // float, ufloat.
-      NORMAL_COLUMN_STORE_PROJECT_COLUMN_RND_INT_COST,            // double, udouble.
-      NORMAL_COLUMN_STORE_PROJECT_COLUMN_RND_NUMBER_COST,         // number, unumber.
-      NORMAL_COLUMN_STORE_PROJECT_COLUMN_RND_NUMBER_COST,         // datetime, timestamp.
-      NORMAL_COLUMN_STORE_PROJECT_COLUMN_RND_NUMBER_COST,         // date
-      NORMAL_COLUMN_STORE_PROJECT_COLUMN_RND_NUMBER_COST,         // time
-      NORMAL_COLUMN_STORE_PROJECT_COLUMN_RND_NUMBER_COST,         // year
-      NORMAL_COLUMN_STORE_PROJECT_COLUMN_RND_CHAR_COST,           // varchar, char, varbinary, binary.
-      NORMAL_COLUMN_STORE_PROJECT_COLUMN_RND_CHAR_COST,           // extend
-      NORMAL_COLUMN_STORE_PROJECT_COLUMN_RND_CHAR_COST,           // unknown
-      NORMAL_COLUMN_STORE_PROJECT_COLUMN_RND_LOB_COST,            // TinyText,MediumText, Text ,LongText
-      NORMAL_COLUMN_STORE_PROJECT_COLUMN_RND_INT_COST,            // Bit
-      NORMAL_COLUMN_STORE_PROJECT_COLUMN_RND_INT_COST,            // enum, set
-      NORMAL_COLUMN_STORE_PROJECT_COLUMN_RND_INT_COST,            // ObEnumSetInnerTC
-      NORMAL_COLUMN_STORE_PROJECT_COLUMN_RND_NUMBER_COST,         // timestamp with time zone
-      NORMAL_COLUMN_STORE_PROJECT_COLUMN_RND_INT_COST,            // raw
-      NORMAL_COLUMN_STORE_PROJECT_COLUMN_RND_INT_COST,            // interval
-      NORMAL_COLUMN_STORE_PROJECT_COLUMN_RND_NUMBER_COST,         // rowid
-      NORMAL_COLUMN_STORE_PROJECT_COLUMN_RND_LOB_COST,            // lob
-      NORMAL_COLUMN_STORE_PROJECT_COLUMN_RND_JSON_COST,           // json
-      NORMAL_COLUMN_STORE_PROJECT_COLUMN_RND_GIS_COST,            // geometry
-      NORMAL_COLUMN_STORE_PROJECT_COLUMN_RND_INT_COST,            // user defined type
-      NORMAL_COLUMN_STORE_PROJECT_COLUMN_RND_NUMBER_COST,         // ObDecimalIntTC
-      NORMAL_COLUMN_STORE_PROJECT_COLUMN_RND_LOB_COST,            // collection sql type
-    }
-  }
 };
 
 const static ObOptCostModelParameter cost_params_normal(

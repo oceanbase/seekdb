@@ -30,7 +30,7 @@ using namespace table;
 ObDirectLoadMultipleDatumRow::ObDirectLoadMultipleDatumRow()
   : allocator_("TLD_MDatumRow"), is_delete_(false), is_ack_(false), buf_size_(0), buf_(nullptr)
 {
-  allocator_.set_tenant_id(MTL_ID());
+  
 }
 
 ObDirectLoadMultipleDatumRow::~ObDirectLoadMultipleDatumRow()

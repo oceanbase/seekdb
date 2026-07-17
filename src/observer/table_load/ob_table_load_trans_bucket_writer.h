@@ -62,8 +62,6 @@ private:
   // partition table
   int write_for_partitioned(SessionContext &session_ctx,
                             const table::ObTableLoadObjRowArray &obj_rows);
-  int get_load_bucket(SessionContext &session_ctx, const table::ObTableLoadPartitionId &partition_id,
-                      ObTableLoadBucket *&load_bucket);
   int write_load_bucket(SessionContext &session_ctx, ObTableLoadBucket *load_bucket);
 private:
   static const int64_t WRITE_ROW_SIZE = 2LL * 1024 * 1024;
@@ -81,13 +79,8 @@ private:
     void reset();
     int32_t session_id_;
     // The following parameters are only accessed in the corresponding worker thread
-    common::ObArenaAllocator allocator_;
-    // for non-partitioned table
     table::ObTableLoadPartitionId partition_id_;
     ObTableLoadBucket load_bucket_;
-    // for partitioned table
-    common::hash::ObHashMap<common::ObAddr, ObTableLoadBucket *> load_bucket_map_;
-    common::ObArray<ObTableLoadBucket *> load_bucket_array_;
     // The following parameters are accessed with a lock
     lib::ObMutex mutex_;
     uint64_t last_receive_sequence_no_;

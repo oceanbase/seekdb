@@ -13,9 +13,9 @@ column_id	column_name
 16	id
 17	name
 18	__doc_id_*
-19	__word_segment_*_*
-20	__word_count_*_*
 21	__doc_length_*_*
+20	__word_count_*_*
+19	__word_segment_*_*
 ===== fts index aux tables =====
 table_name
 __idx_DATA_TABLE_ID_fts_rowkey_doc
@@ -33,15 +33,15 @@ column_id	column_name
 ===== f101 fts index cols ======
 column_id	column_name
 18	__doc_id_*
-19	__word_segment_*_*
-20	__word_count_*_*
 21	__doc_length_*_*
+20	__word_count_*_*
+19	__word_segment_*_*
 ===== f101 fts doc word cols ===
 column_id	column_name
 18	__doc_id_*
-19	__word_segment_*_*
-20	__word_count_*_*
 21	__doc_length_*_*
+20	__word_count_*_*
+19	__word_segment_*_*
 id	doc_id
 1	1
 2	2
@@ -68,25 +68,25 @@ content varchar(20),
 FULLTEXT INDEX f102(name));
 ===== fts_table_4 columns =============
 column_id	column_name
-1	__pk_increment
+18	content
 16	id
 17	name
-18	content
-19	__word_segment_*_*
-20	__word_count_*_*
 21	__doc_length_*_*
+1	__pk_increment
+20	__word_count_*_*
+19	__word_segment_*_*
 ===== fts_table_4 columns =============
 column_id	column_name
-1	__pk_increment
+18	content
 16	id
 17	name
-18	content
-19	__word_segment_*_*
-20	__word_count_*_*
 21	__doc_length_*_*
-22	__word_segment_*_*
-23	__word_count_*_*
 24	__doc_length_*_*
+1	__pk_increment
+20	__word_count_*_*
+23	__word_count_*_*
+19	__word_segment_*_*
+22	__word_segment_*_*
 ===== fts index aux tables =====
 table_name
 __idx_DATA_TABLE_ID_f102
@@ -95,28 +95,28 @@ __idx_DATA_TABLE_ID_f103
 __idx_DATA_TABLE_ID_f103_fts_doc_word
 ===== f102 fts index cols ======
 column_id	column_name
-1	__pk_increment
-19	__word_segment_*_*
-20	__word_count_*_*
 21	__doc_length_*_*
+1	__pk_increment
+20	__word_count_*_*
+19	__word_segment_*_*
 ===== f102 fts doc word cols ===
 column_id	column_name
-1	__pk_increment
-19	__word_segment_*_*
-20	__word_count_*_*
 21	__doc_length_*_*
+1	__pk_increment
+20	__word_count_*_*
+19	__word_segment_*_*
 ===== f103 fts index cols ======
 column_id	column_name
-1	__pk_increment
-22	__word_segment_*_*
-23	__word_count_*_*
 24	__doc_length_*_*
+1	__pk_increment
+23	__word_count_*_*
+22	__word_segment_*_*
 ===== f103 fts doc word cols ===
 column_id	column_name
-1	__pk_increment
-22	__word_segment_*_*
-23	__word_count_*_*
 24	__doc_length_*_*
+1	__pk_increment
+23	__word_count_*_*
+22	__word_segment_*_*
 ====================== basic test #3 =======================
 ========= create fts index afterward on partition table =========
 DROP TABLE IF EXISTS fts_test;
@@ -251,8 +251,8 @@ Outputs & filters:
       sort_keys([MATCH(fts_col_orders.b, fts_col_orders.c) AGAINST('aa'), DESC])
   1 - output([fts_col_orders.b], [fts_col_orders.c], [fts_col_orders.a], [MATCH(fts_col_orders.b, fts_col_orders.c) AGAINST('aa')]), filter(nil), rowset=16
       access([fts_col_orders.__pk_increment], [fts_col_orders.b], [fts_col_orders.c], [fts_col_orders.a]), partitions(p0)
-      is_index_back=true, is_global_index=false,
-      calc_relevance=true, match_expr(MATCH(fts_col_orders.b, fts_col_orders.c) AGAINST('aa')),
+      is_index_back=true, is_global_index=false, 
+      calc_relevance=true, match_expr(MATCH(fts_col_orders.b, fts_col_orders.c) AGAINST('aa')), 
       pushdown_match_filter(MATCH(fts_col_orders.b, fts_col_orders.c) AGAINST('aa'))
 
 EXPLAIN SELECT * FROM fts_col_orders WHERE MATCH(c,b) AGAINST("aa");
@@ -269,8 +269,8 @@ Outputs & filters:
       sort_keys([MATCH(fts_col_orders.c, fts_col_orders.b) AGAINST('aa'), DESC])
   1 - output([fts_col_orders.c], [fts_col_orders.b], [fts_col_orders.a], [MATCH(fts_col_orders.c, fts_col_orders.b) AGAINST('aa')]), filter(nil), rowset=16
       access([fts_col_orders.__pk_increment], [fts_col_orders.c], [fts_col_orders.b], [fts_col_orders.a]), partitions(p0)
-      is_index_back=true, is_global_index=false,
-      calc_relevance=true, match_expr(MATCH(fts_col_orders.c, fts_col_orders.b) AGAINST('aa')),
+      is_index_back=true, is_global_index=false, 
+      calc_relevance=true, match_expr(MATCH(fts_col_orders.c, fts_col_orders.b) AGAINST('aa')), 
       pushdown_match_filter(MATCH(fts_col_orders.c, fts_col_orders.b) AGAINST('aa'))
 
 ALTER TABLE fts_col_orders ADD FULLTEXT INDEX fts_b_c2(b, c);
@@ -343,3 +343,4 @@ create table fts_ik(seq_id int PRIMARY KEY, detail varchar(4096));
 CREATE FULLTEXT INDEX f200 on fts_ik(detail) WITH PARSER ik;
 
 DROP TABLE IF EXISTS fts_test;
+

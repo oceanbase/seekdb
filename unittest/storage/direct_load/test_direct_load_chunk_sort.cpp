@@ -20,7 +20,7 @@
 #include "../unittest/storage/blocksstable/ob_data_file_prepare.h"
 #include "../unittest/storage/blocksstable/ob_row_generate.h"
 #include "mtlenv/mock_tenant_module_env.h"
-#include "share/ob_order_perserving_encoder.h"
+#include "storage/ob_order_perserving_encoder.h"
 #include "storage/direct_load/ob_direct_load_compare.h"
 #include "storage/direct_load/ob_direct_load_datum_row.h"
 #include "storage/direct_load/ob_direct_load_external_multi_partition_row.h"
@@ -177,15 +177,10 @@ public:
   {
     int ret = OB_SUCCESS;
     ObAddr self;
-    obrpc::ObSrvRpcProxy rpc_proxy;
-    obrpc::ObCommonRpcProxy rs_rpc_proxy;
     self.set_ip_addr("127.0.0.1", 8086);
-    rpc::frame::ObReqTransport req_transport(NULL, NULL);
     const int64_t ulmt = 128LL << 30;
     const int64_t llmt = 128LL << 30;
-    ret = getter.add_tenant(OB_SYS_TENANT_ID, ulmt, llmt);
-    EXPECT_EQ(OB_SUCCESS, ret);
-    ret = getter.add_tenant(OB_SERVER_TENANT_ID, ulmt, llmt);
+    ret = getter.add_tenant(ulmt, llmt);
     EXPECT_EQ(OB_SUCCESS, ret);
     lib::set_memory_limit(128LL << 32);
     return ret;
@@ -208,7 +203,6 @@ int TestChunkSort::prepare_schecma(int64_t rowkey_count, int64_t column_num, int
   } else  if (OB_FAIL((table_schema.set_table_name("test_adaptive_aqs_sort")))) {
     STORAGE_LOG(WARN, "fail to set table name", KR(ret));
   } else {
-    table_schema.set_tenant_id(1);
     table_schema.set_tablegroup_id(1);
     table_schema.set_database_id(1);
     table_schema.set_table_id(table_id);
@@ -393,7 +387,7 @@ int TestChunkSort::prepare_utils(const ObTableSchema &table_schema,
   //prepare util
   if (OB_FAIL(table_schema.get_column_ids(col_descs))) {
     STORAGE_LOG(WARN, "fail to get column ids", KR(ret));
-  } else if (OB_FAIL(datum_util.init(col_descs, table_schema.get_rowkey_column_num(), false, allocator))) {
+  } else if (OB_FAIL(datum_util.init(col_descs, table_schema.get_rowkey_column_num(), allocator))) {
     STORAGE_LOG(WARN, "fail to init datum util", KR(ret));
   //prepare compare
   } else if (OB_FAIL(compare.init(datum_util, dup_action, ignore_seq_no))) {
@@ -417,7 +411,7 @@ void TestChunkSort::SetUp()
   const int64_t bucket_num = 1024;
   const int64_t max_cache_size = 1024 * 1024 * 1024;
   const int64_t block_size = common::OB_MALLOC_BIG_BLOCK_SIZE;
-  ASSERT_EQ(OB_SUCCESS, getter.add_tenant(1, 8LL * 1024 * 1024, 2LL * 1024 * 1024 * 1024));
+  ASSERT_EQ(OB_SUCCESS, getter.add_tenant(8LL * 1024 * 1024, 2LL * 1024 * 1024 * 1024));
   if (OB_FAIL(ObKVGlobalCache::get_instance().init(&getter, bucket_num, max_cache_size, block_size))) {
     ASSERT_EQ(OB_INIT_TWICE, ret);
     ret = OB_SUCCESS;
@@ -427,7 +421,7 @@ void TestChunkSort::SetUp()
   EXPECT_EQ(OB_SUCCESS, init_tenant_mgr());
   ASSERT_EQ(OB_SUCCESS, common::ObClockGenerator::init());
   ASSERT_EQ(OB_SUCCESS, ObTimerService::get_instance().start());
-  static ObTenantBase tenant_ctx(OB_SYS_TENANT_ID);
+  static ObTenantBase tenant_ctx(OB_SERVER_TENANT_ID);
   ObTenantEnv::set_tenant(&tenant_ctx);
   SERVER_STORAGE_META_SERVICE.is_started_ = true;
 }
@@ -454,7 +448,7 @@ int TestChunkSort::sort_test(int64_t test_row_num, RandomBase *rand,
     STORAGE_LOG(WARN, "fail to init row generate", KR(ret));
   } else {
     ChunkType chunk;
-    if (OB_FAIL(chunk.init(table_schema.get_tenant_id(), 512 * 1024LL * 1024LL))) {
+    if (OB_FAIL(chunk.init(512 * 1024LL * 1024LL))) {
       STORAGE_LOG(WARN, "fail to init chunk", KR(ret));
     } else {
       //prepare same row key prefix

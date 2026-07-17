@@ -15,7 +15,8 @@
  */
 
 #include "ob_tx_data_op.h"
-#include "share/allocator/ob_shared_memory_allocator_mgr.h"
+#include "storage/allocator/ob_shared_memory_allocator_mgr.h"
+#include "share/rc/ob_module_provider.h"
 
 using namespace oceanbase::share;
 using namespace oceanbase::transaction;
@@ -221,7 +222,7 @@ int ObTxDataOp::reserve_tx_op_space(int64_t count)
   return ret;
 }
 
-int ObTxDataOp::add_tx_op_batch(transaction::ObTransID tx_id, share::ObLSID ls_id, share::SCN op_scn, ObTxOpArray &tx_op_batch)
+int ObTxDataOp::add_tx_op_batch(transaction::ObTransID tx_id, share::SCN op_scn, ObTxOpArray &tx_op_batch)
 {
   int ret = OB_SUCCESS;
   SpinWLockGuard lock_guard(lock_);
@@ -236,11 +237,11 @@ int ObTxDataOp::add_tx_op_batch(transaction::ObTransID tx_id, share::ObLSID ls_i
     // !!! we must promise tx_op_batch atomic append into tx_op_list
     // otherwise tx_op replay filter with log_scn compare op_scn will cause serious problem
     if (OB_FAIL(ret)) {
-      STORAGE_LOG(ERROR, "tx_op_batch is not atomic append", K(tx_id), K(ls_id), K(tx_op_list_), K(tx_op_batch), K(op_scn));
+      STORAGE_LOG(ERROR, "tx_op_batch is not atomic append", K(tx_id), K(tx_op_list_), K(tx_op_batch), K(op_scn));
       ob_abort();
     }
   }
-  STORAGE_LOG(INFO, "add_tx_op", K(ret), K(tx_id), K(ls_id), K(op_scn), K(tx_op_batch.count()), K(tx_op_list_.get_count()), K(tx_op_batch));
+  STORAGE_LOG(INFO, "add_tx_op", K(ret), K(tx_id), K(op_scn), K(tx_op_batch.count()), K(tx_op_list_.get_count()), K(tx_op_batch));
   return ret;
 }
 
@@ -320,7 +321,7 @@ int ObTxOp::deserialize(const char *buf, const int64_t data_len, int64_t &pos, O
 
 void ObTxOp::release()
 {
-  ObIAllocator &allocator = MTL(ObSharedMemAllocMgr*)->tx_data_op_allocator();
+  ObIAllocator &allocator = share::g_mp->shared_mem_alloc_mgr()->tx_data_op_allocator();
   #define RELEASE_TX_OP_TMP(OP_CODE, OP_TYPE)                  \
   if (OB_NOT_NULL(op_val_) && op_code_ ==  OP_CODE             \
       && op_val_ != &DEFAULT_TX_DUMMY_OP) {                    \

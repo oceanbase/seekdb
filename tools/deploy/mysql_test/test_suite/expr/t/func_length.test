@@ -45,7 +45,7 @@ use db1;
 drop table if exists utf,tx,gbk;
 --enable_warnings
 
-create table utf(c1 int primary key, c2 char(10)) collate 'utf8mb4_bin';
+create table utf(c1 int primary key, c2 char(10)) collate utf8mb4_bin;
 insert into utf values(1, '好');
 select length(c2) from utf;
 
@@ -66,7 +66,7 @@ select length(s) from tx;
 
 drop table tx;
 
-#create table gbk(c1 int primary key, c2 char(10)) collate 'gbk_bin';
+#create table gbk(c1 int primary key, c2 char(10)) collate utf8mb4_bin;
 #insert into gbk values (1, '好');
 #select length(c2) from gbk;
 drop database db1;

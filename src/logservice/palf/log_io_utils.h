@@ -81,8 +81,6 @@ public:
   block_id_t get_min_block_id() const { return min_block_id_; }
   block_id_t get_max_block_id() const { return max_block_id_; }
 private:
-	int rename_flashback_to_normal_(const char *file_name);
-  int try_to_remove_block_(const int dir_fd, const char *file_name);
   const char *dir_;
   block_id_t min_block_id_;
   block_id_t max_block_id_;

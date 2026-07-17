@@ -42,13 +42,12 @@ struct ObTenantMBList
   ObTenantMBList() { reset(); }
   ~ObTenantMBList() { reset(); }
 
-  int init(const uint64_t tenant_id);
+  int init();
   void reset() {
     head_.reset();
     head_.prev_ = &head_;
     head_.next_ = &head_;
     resource_mgr_.reset();
-    tenant_id_ = common::OB_INVALID_ID;
     ref_cnt_ = 0;
     inited_ = false;
   }
@@ -59,7 +58,6 @@ struct ObTenantMBList
 
   ObKVMemBlockHandle head_;
   lib::ObTenantResourceMgrHandle resource_mgr_;
-  uint64_t tenant_id_;
   int64_t ref_cnt_;
   bool inited_;
 };
@@ -68,14 +66,14 @@ struct ObKVCacheInst
 {
   int64_t cache_id_;
   ObKVCacheStatus status_;
-  ObLfFIFOAllocator node_allocator_;
+  ObLfFIFOAllocator *node_allocator_;
   bool is_delete_;
   bool is_block_cache_;
   int64_t ref_cnt_;
   ObKVCacheInst()
     : cache_id_(0),
       status_(),
-      node_allocator_(),
+      node_allocator_(nullptr),
       is_delete_(false),
       is_block_cache_(false),
       ref_cnt_(0) {}
@@ -83,7 +81,7 @@ struct ObKVCacheInst
   void reset() {
     cache_id_ = 0;
     status_.reset();
-    node_allocator_.reset();
+    node_allocator_ = nullptr;
     is_delete_ = false;
     is_block_cache_ = false;
     ref_cnt_ = 0;
@@ -118,13 +116,14 @@ public:
   ObKVCacheInstMap();
   virtual ~ObKVCacheInstMap();
   int init(const int64_t max_entry_cnt, const ObKVCacheConfig *configs,
-           const ObITenantMemLimitGetter &mem_limit_getter);
+           const ObITenantMemLimitGetter &mem_limit_getter,
+           ObLfFIFOAllocator *node_allocator);
   void destroy();
   int get_cache_inst(
       const ObKVCacheInstKey &inst_key,
       ObKVCacheInstHandle &inst_handle);
-  int mark_tenant_delete(const uint64_t tenant_id);
-  int erase_tenant(const uint64_t tenant_id);
+  int mark_tenant_delete();
+  int erase_tenant();
   int refresh_score();
   int get_cache_info(ObIArray<ObKVCacheInstHandle> &inst_handles);
   void print_all_cache_info();
@@ -141,6 +140,7 @@ private:
   const ObKVCacheConfig *configs_;
 
   const ObITenantMemLimitGetter *mem_limit_getter_;
+  ObLfFIFOAllocator *node_allocator_;
 
   // used by erase tenant cache inst
   bool is_inited_;

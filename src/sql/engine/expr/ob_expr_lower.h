@@ -30,10 +30,10 @@ public:
   ObExprLowerUpper(common::ObIAllocator &alloc,
                    ObExprOperatorType type, const char *name, int32_t param_num);
   virtual ~ObExprLowerUpper() {}
-  // For lower/upper of mysql and oracle
+  // For lower/upper.
   virtual int calc_result_type1(ObExprResType &type, ObExprResType &text,
                                 common::ObExprTypeCtx &type_ctx) const;
-  // For oracle only nls_lower/nls_upper
+  // For nls_lower/nls_upper.
   virtual int calc_result_typeN(ObExprResType &type,
                               ObExprResType *texts,
                               int64_t param_num,

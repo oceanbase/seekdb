@@ -80,7 +80,7 @@ public:
   static constexpr int DOC_TOKEN_CNT_PARAM_IDX = 2;
   static constexpr int AVG_DOC_CNT_PARAM_IDX_OLD = 3;
   static constexpr int RELATED_TOKEN_CNT_PARAM_IDX_OLD = 4;
-
+  
   // New version (6 params, >= CLUSTER_VERSION_1_2_0_0)
   static constexpr int DOC_LENGTH_PARAM_IDX = 2;
   static constexpr int TOKEN_WEIGHT_PARAM_IDX = 3;

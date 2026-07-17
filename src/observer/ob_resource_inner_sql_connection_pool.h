@@ -21,7 +21,7 @@
 #include "lib/lock/ob_spin_lock.h"
 #include "lib/lock/ob_thread_cond.h"
 #include "observer/ob_inner_sql_connection_pool.h"
-#include "lib/mysqlclient/ob_isql_connection.h"
+#include "common/mysqlclient/ob_isql_connection.h"
 
 namespace oceanbase
 {
@@ -40,7 +40,7 @@ public:
            common::ObServerConfig *config = NULL,
            const bool is_ddl = false);
   bool is_inited() { return is_inited_; }
-  int acquire(const uint64_t conn_id, const bool is_oracle_mode, const bool kill_using_conn,
+  int acquire(const uint64_t conn_id, const bool kill_using_conn,
               common::sqlclient::ObISQLConnection *&conn, sql::ObSQLSessionInfo *session_info);
   int release(const bool reuse_conn, common::sqlclient::ObISQLConnection *&conn);
 

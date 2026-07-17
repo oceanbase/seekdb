@@ -24,7 +24,7 @@ namespace oceanbase
 {
 using namespace share;
 using namespace share::schema;
-using namespace mds;
+using namespace storage::mds;
 namespace storage
 {
 OB_SERIALIZE_MEMBER_SIMPLE(

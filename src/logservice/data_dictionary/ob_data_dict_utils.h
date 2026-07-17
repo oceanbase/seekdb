@@ -19,7 +19,7 @@
 
 #include "lib/string/ob_string.h"       // ObString
 #include "lib/time/ob_time_utility.h"   // ObTimeUtility
-#include "common/ob_clock_generator.h"
+#include "lib/time/ob_clock_generator.h"
 #include "share/ob_define.h"
 
 namespace oceanbase
@@ -91,7 +91,7 @@ const int64_t _HOUR_ = 60L * _MIN_;
 const int64_t _DAY_ = 24L * _HOUR_;
 const int64_t _YEAR_ = 365L * _DAY_;
 
-void *ob_dict_malloc(const int64_t nbyte, const uint64_t tenant_id);
+void *ob_dict_malloc(const int64_t nbyte);
 void ob_dict_free(void *ptr);
 
 OB_INLINE int64_t get_timestamp_ns()
@@ -124,8 +124,6 @@ OB_INLINE const char *extract_str(const ObString &str)
 {
   return str.empty() ? "" : str.ptr();
 }
-
-int check_ls_leader(logservice::ObLogHandler *handler, bool &is_leader, int64_t &proposal_id);
 
 } // namespace datadict
 } // namespace oceanbase

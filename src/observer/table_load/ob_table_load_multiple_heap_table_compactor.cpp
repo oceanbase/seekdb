@@ -274,7 +274,7 @@ ObTableLoadMultipleHeapTableCompactor::ObTableLoadMultipleHeapTableCompactor()
     allocator_("TLD_MemC"),
     is_inited_(false)
 {
-  allocator_.set_tenant_id(MTL_ID());
+  
 }
 
 ObTableLoadMultipleHeapTableCompactor::~ObTableLoadMultipleHeapTableCompactor() { reset(); }

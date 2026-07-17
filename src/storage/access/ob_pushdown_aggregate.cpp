@@ -19,6 +19,7 @@
 #include "sql/engine/aggregate/ob_aggregate_util.h"
 #include "sql/engine/expr/ob_datum_cast.h"
 #include "sql/engine/expr/ob_array_expr_utils.h"
+#include "storage/lob/ob_lob_manager.h"
 
 namespace oceanbase
 {
@@ -35,7 +36,7 @@ ObAggCell::ObAggCell(const ObAggCellBasicInfo &basic_info, common::ObIAllocator 
       col_datums_(nullptr),
       group_by_result_datum_buf_(nullptr),
       group_by_result_cnt_(0),
-      padding_allocator_("ObStorageAgg", OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID())
+      padding_allocator_("ObStorageAgg", OB_MALLOC_NORMAL_BLOCK_SIZE)
 {
   if (basic_info_.col_param_ != nullptr) {
     is_lob_col_ = basic_info_.col_param_->get_meta_type().is_lob_storage();
@@ -135,10 +136,10 @@ int ObAggCell::eval_micro_block(
   return ret;
 }
 
-int ObAggCell::eval_index_info(const blocksstable::ObMicroIndexInfo &index_info, const bool is_cg)
+int ObAggCell::eval_index_info(const blocksstable::ObMicroIndexInfo &index_info)
 {
   int ret = OB_SUCCESS;
-  if (!is_cg && (!index_info.can_blockscan() || index_info.is_left_border() || index_info.is_right_border())) {
+  if (!index_info.can_blockscan() || index_info.is_left_border() || index_info.is_right_border()) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("Unexpected, the micro index info must can blockscan and not border", K(ret), K(index_info));
   } else if (OB_UNLIKELY(skip_index_datum_.is_null() || skip_index_datum_is_prefix_)) {
@@ -332,24 +333,8 @@ int ObAggCell::deep_copy_datum(const blocksstable::ObStorageDatum &src, common::
   return ret;
 }
 
-int ObAggCell::can_use_index_info(const blocksstable::ObMicroIndexInfo &index_info,
-    const bool is_cg, bool &can_agg)
-{
-  int ret = OB_SUCCESS;
-  if (index_info.has_agg_data() && can_use_index_info()) {
-    if (OB_FAIL(read_agg_datum(index_info, is_cg))) {
-      LOG_WARN("fail to read agg datum", K(ret), K(is_cg), K(index_info));
-    } else {
-      can_agg = !skip_index_datum_.is_null() && !skip_index_datum_is_prefix_;
-    }
-  } else {
-    can_agg = false;
-  }
-  return ret;
-}
-
 int ObAggCell::read_agg_datum(
-    const blocksstable::ObMicroIndexInfo &index_info, const bool is_cg)
+    const blocksstable::ObMicroIndexInfo &index_info)
 {
   int ret = OB_SUCCESS;
   if (nullptr == agg_row_reader_) {
@@ -366,8 +351,7 @@ int ObAggCell::read_agg_datum(
     skip_index_datum_.set_null();
     skip_index_datum_is_prefix_ = false;
     blocksstable::ObSkipIndexColMeta meta;
-    // TODO: @baichangmin.bcm fix col_index in cg, use 0 temporarily
-    meta.col_idx_ = is_cg ? 0 : static_cast<uint32_t>(basic_info_.col_index_);
+    meta.col_idx_ = static_cast<uint32_t>(basic_info_.col_index_);
     switch (agg_type_) {
       case ObPDAggType::PD_SUM_OP_SIZE:
       case ObPDAggType::PD_COUNT: {
@@ -515,10 +499,10 @@ int ObCountAggCell::eval_micro_block(
   return ret;
 }
 
-int ObCountAggCell::eval_index_info(const blocksstable::ObMicroIndexInfo &index_info, const bool is_cg)
+int ObCountAggCell::eval_index_info(const blocksstable::ObMicroIndexInfo &index_info)
 {
   int ret = OB_SUCCESS;
-  if (!is_cg && (!index_info.can_blockscan() || index_info.is_left_border() || index_info.is_right_border())) {
+  if (!index_info.can_blockscan() || index_info.is_left_border() || index_info.is_right_border()) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("Unexpected, the micro index info must can blockscan and not border", K(ret));
   } else if (!exclude_null_) {
@@ -630,19 +614,8 @@ int ObCountAggCell::copy_output_rows(const int32_t start_offset, const int32_t e
   } else {
     common::ObDatum *result_datums = group_by_result_datum_buf_->get_basic_buf();
     if (exclude_null_) {
-      if (lib::is_oracle_mode()) {
-        for (int64_t i = start_offset; i < end_offset; i++) {
-          col_datums_[i].is_null() ? result_datums[i].set_number(common::number::ObNumber::get_zero()) :
-              result_datums[i].set_number(common::number::ObNumber::get_positive_one());
-        }
-      } else {
-        for (int64_t i = start_offset; i < end_offset; i++) {
-          col_datums_[i].is_null() ? result_datums[i].set_int(0) : result_datums[i].set_int(1);
-        }
-      }
-    } else if (lib::is_oracle_mode()) {
       for (int64_t i = start_offset; i < end_offset; i++) {
-        result_datums[i].set_number(common::number::ObNumber::get_positive_one());
+        col_datums_[i].is_null() ? result_datums[i].set_int(0) : result_datums[i].set_int(1);
       }
     } else {
       for (int64_t i = start_offset; i < end_offset; i++) {
@@ -667,13 +640,13 @@ int ObCountAggCell::copy_single_output_row(sql::ObEvalCtx &ctx)
     } else {
       sql::ObDatum &datum = basic_info_.agg_expr_->args_[0]->locate_expr_datum(ctx);
       if (!datum.is_null()) {
-        lib::is_oracle_mode() ? result_datum.set_number(common::number::ObNumber::get_positive_one()) : result_datum.set_int(1);
+        result_datum.set_int(1);
       } else {
-        lib::is_oracle_mode() ? result_datum.set_number(common::number::ObNumber::get_zero()) : result_datum.set_int(0);
+        result_datum.set_int(0);
       }
     }
   } else {
-    lib::is_oracle_mode() ? result_datum.set_number(common::number::ObNumber::get_positive_one()) : result_datum.set_int(1);
+    result_datum.set_int(1);
   }
   return ret;
 }
@@ -684,20 +657,6 @@ int ObCountAggCell::collect_batch_result_in_group_by(const int64_t distinct_cnt)
   if (OB_UNLIKELY(distinct_cnt > group_by_result_datum_buf_->get_capacity())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("Invalid argument", K(ret), K(distinct_cnt), KPC(group_by_result_datum_buf_));
-  } else if (lib::is_oracle_mode()) {
-    common::number::ObNumber result_num;
-    char local_buf[common::number::ObNumber::MAX_BYTE_LEN];
-    common::ObDataBuffer local_alloc(local_buf, common::number::ObNumber::MAX_BYTE_LEN);
-    for (int64_t i = 0; OB_SUCC(ret) && i < distinct_cnt; ++i) {
-      local_alloc.free();
-      common::ObDatum &result_datum = group_by_result_datum_buf_->at(i);
-      const int64_t row_count = result_datum.get_int();
-      if (OB_FAIL(result_num.from(row_count, local_alloc))) {
-        LOG_WARN("Failed to cons number from int", K(ret), K(row_count));
-      } else {
-        result_datum.set_number(result_num);
-      }
-    }
   }
   LOG_DEBUG("[GROUP BY PUSHDOWN]", K(ret), K(distinct_cnt));
   return ret;
@@ -708,20 +667,8 @@ int ObCountAggCell::collect_result(sql::ObEvalCtx &ctx)
   int ret = OB_SUCCESS;
   ObDatum &result = basic_info_.agg_expr_->locate_datum_for_write(ctx);
   sql::ObEvalInfo &eval_info = basic_info_.agg_expr_->get_eval_info(ctx);
-  if (lib::is_oracle_mode()) {
-    common::number::ObNumber result_num;
-    char local_buff[common::number::ObNumber::MAX_BYTE_LEN];
-    common::ObDataBuffer local_alloc(local_buff, common::number::ObNumber::MAX_BYTE_LEN);
-    if (OB_FAIL(result_num.from(row_count_, local_alloc))) {
-      LOG_WARN("Failed to cons number from int", K(ret), K(row_count_));
-    } else {
-      result.set_number(result_num);
-      eval_info.evaluated_ = true;
-    }
-  } else {
-    result.set_int(row_count_);
-    eval_info.evaluated_ = true;
-  }
+  result.set_int(row_count_);
+  eval_info.evaluated_ = true;
   LOG_DEBUG("collect_result", K(result), KPC(this));
   return ret;
 }
@@ -729,7 +676,7 @@ int ObCountAggCell::collect_result(sql::ObEvalCtx &ctx)
 ObMinAggCell::ObMinAggCell(const ObAggCellBasicInfo &basic_info, common::ObIAllocator &allocator)
     : ObAggCell(basic_info, allocator),
       group_by_ref_array_(nullptr),
-      datum_allocator_("ObStorageAgg", OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID())
+      datum_allocator_("ObStorageAgg", OB_MALLOC_NORMAL_BLOCK_SIZE)
 {
   agg_type_ =ObPDAggType::PD_MIN;
   result_datum_.set_null();
@@ -931,7 +878,7 @@ int ObMinAggCell::pad_column_in_group_by(const int64_t row_cap, common::ObIAlloc
 ObMaxAggCell::ObMaxAggCell(const ObAggCellBasicInfo &basic_info, common::ObIAllocator &allocator)
     : ObAggCell(basic_info, allocator),
       group_by_ref_array_(nullptr),
-      datum_allocator_("ObStorageAgg", OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID())
+      datum_allocator_("ObStorageAgg", OB_MALLOC_NORMAL_BLOCK_SIZE)
 {
   agg_type_ = ObPDAggType::PD_MAX;
   result_datum_.set_null();
@@ -1464,11 +1411,11 @@ int ObSumOpSizeAggCell::eval_micro_block(
   return ret;
 }
 
-int ObSumOpSizeAggCell::eval_index_info(const blocksstable::ObMicroIndexInfo &index_info, const bool is_cg)
+int ObSumOpSizeAggCell::eval_index_info(const blocksstable::ObMicroIndexInfo &index_info)
 {
   int ret = OB_SUCCESS;
   // consider the judge condition
-  if (!is_cg && (!index_info.can_blockscan() || index_info.is_left_border() || index_info.is_right_border())) {
+  if (!index_info.can_blockscan() || index_info.is_left_border() || index_info.is_right_border()) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("Unexpected, the micro index info must can blockscan and not border", K(ret));
   } else if (!exclude_null_) {
@@ -1492,17 +1439,7 @@ int ObSumOpSizeAggCell::collect_result(sql::ObEvalCtx &ctx)
   int ret = OB_SUCCESS;
   ObDatum &result = basic_info_.agg_expr_->locate_datum_for_write(ctx);
   sql::ObEvalInfo &eval_info = basic_info_.agg_expr_->get_eval_info(ctx);
-  if (lib::is_oracle_mode()) {
-    common::number::ObNumber result_num;
-    char local_buff[common::number::ObNumber::MAX_BYTE_LEN];
-    common::ObDataBuffer local_alloc(local_buff, common::number::ObNumber::MAX_BYTE_LEN);
-    if (OB_FAIL(result_num.from(total_size_, local_alloc))) {
-      LOG_WARN("Failed to cons number from uint", K(ret), K_(total_size));
-    } else {
-      result.set_number(result_num);
-      eval_info.evaluated_ = true;
-    }
-  } else {
+  {
     result.set_uint(total_size_);
     eval_info.evaluated_ = true;
   }
@@ -1524,7 +1461,7 @@ ObSumAggCell::ObSumAggCell(const ObAggCellBasicInfo &basic_info, common::ObIAllo
       cast_datum_(),
       sum_temp_buffer_(nullptr),
       cast_temp_buffer_(nullptr),
-      datum_allocator_("ObStorageAgg", OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID())
+      datum_allocator_("ObStorageAgg", OB_MALLOC_NORMAL_BLOCK_SIZE)
 {
   agg_type_ = ObPDAggType::PD_SUM;
   result_datum_.set_null();
@@ -1937,10 +1874,10 @@ int ObSumAggCell::eval_batch(const common::ObDatum *datums, const int64_t count)
   return ret;
 }
 
-int ObSumAggCell::eval_index_info(const blocksstable::ObMicroIndexInfo &index_info, const bool is_cg)
+int ObSumAggCell::eval_index_info(const blocksstable::ObMicroIndexInfo &index_info)
 {
   int ret = OB_SUCCESS;
-  if (!is_cg && (!index_info.can_blockscan() || index_info.is_left_border() || index_info.is_right_border())) {
+  if (!index_info.can_blockscan() || index_info.is_left_border() || index_info.is_right_border()) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("Unexpected, the micro index info must can blockscan and not border", K(ret), K(index_info));
   } else if (OB_UNLIKELY(skip_index_datum_.is_null() || skip_index_datum_is_prefix_)) {
@@ -1951,7 +1888,7 @@ int ObSumAggCell::eval_index_info(const blocksstable::ObMicroIndexInfo &index_in
   } else {
     aggregated_ = true;
     LOG_DEBUG("[SKIP INDEX] sum agg eval_index_info", K(ret), K(skip_index_datum_),
-        KPC(this), K(index_info), K(is_cg));
+        KPC(this), K(index_info));
   }
   return ret;
 }
@@ -2653,7 +2590,7 @@ ObFirstRowAggCell::ObFirstRowAggCell(const ObAggCellBasicInfo &basic_info, commo
       is_determined_value_(false),
       aggregated_flag_cnt_(0),
       aggregated_flag_buf_(),
-      datum_allocator_("ObStorageAgg", OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID())
+      datum_allocator_("ObStorageAgg", OB_MALLOC_NORMAL_BLOCK_SIZE)
 {
   agg_type_ = ObPDAggType::PD_FIRST_ROW;
 }
@@ -2764,22 +2701,14 @@ int ObFirstRowAggCell::eval_micro_block(
   return ret;
 }
 
-int ObFirstRowAggCell::eval_index_info(const blocksstable::ObMicroIndexInfo &index_info, const bool is_cg)
+int ObFirstRowAggCell::eval_index_info(const blocksstable::ObMicroIndexInfo &index_info)
 {
-  UNUSEDx(index_info, is_cg);
+  UNUSED(index_info);
   int ret = OB_SUCCESS;
   if (!aggregated_) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("Unexpected, must be aggregated in single/batch rows", K(ret));
   }
-  return ret;
-}
-
-int ObFirstRowAggCell::can_use_index_info(const blocksstable::ObMicroIndexInfo &index_info,
-    const bool is_cg, bool &can_agg)
-{
-  int ret = OB_SUCCESS;
-  can_agg = can_use_index_info();
   return ret;
 }
 

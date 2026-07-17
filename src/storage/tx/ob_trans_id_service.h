@@ -18,7 +18,6 @@
 #define OCEANBASE_TRANSACTION_OB_TRANS_ID_SERVICE_
 
 #include "ob_id_service.h"
-#include "ob_gti_rpc.h"
 
 namespace oceanbase
 {
@@ -35,7 +34,6 @@ public:
   static int mtl_init(ObTransIDService *&trans_id_service);
   void destroy() { reset(); }
   static const int64_t TRANS_ID_PREALLOCATED_RANGE = 1000000; // TransID default preallocated size
-  int handle_request(const ObGtiRequest &request, obrpc::ObGtiRpcResult &result);
 };
 
 }

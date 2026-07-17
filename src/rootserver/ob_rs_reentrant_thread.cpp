@@ -110,20 +110,5 @@ int64_t ObRsReentrantThread::get_last_run_timestamp() const
   return ATOMIC_LOAD(&last_run_timestamp_); 
 }
 
-CheckThreadSet::CheckThreadSet() 
-  : arr_(), rwlock_(ObLatchIds::THREAD_HANG_CHECKER_LOCK)
-{
-}
-
-CheckThreadSet::~CheckThreadSet() 
-{
-  arr_.reset();
-}
-
-
-
-
-
-
 }
 }

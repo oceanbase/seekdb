@@ -75,7 +75,6 @@ OB_SERIALIZE_MEMBER((ObOptimizerStatsGatheringSpec, ObOpSpec),
 
 ObOptimizerStatsGatheringOp::ObOptimizerStatsGatheringOp(ObExecContext &exec_ctx, const ObOpSpec &spec, ObOpInput *input)
   : ObOperator(exec_ctx, spec, input),
-    tenant_id_(OB_INVALID_ID),
     table_stats_map_(),
     osg_col_stats_map_(),
     part_map_(),
@@ -133,15 +132,14 @@ int ObOptimizerStatsGatheringOp::inner_open()
   if (OB_ISNULL(schema_guard) || OB_ISNULL(ctx_.get_my_session())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected null", K(ret));
-  } else if (OB_FALSE_IT(tenant_id_ = ctx_.get_my_session()->get_effective_tenant_id())) {
-  } else if (OB_FAIL(schema_guard->get_table_schema(tenant_id_, MY_SPEC.table_id_, tab_schema))) {
-    LOG_WARN("fail to get table schema", K(ret), K(tenant_id_), K(MY_SPEC.table_id_));
+  } else if (OB_FAIL(schema_guard->get_table_schema( MY_SPEC.table_id_, tab_schema))) {
+    LOG_WARN("fail to get table schema", K(ret), K(1UL), K(MY_SPEC.table_id_));
   } else if (OB_ISNULL(tab_schema)) {
     ret = OB_TABLE_NOT_EXIST;
     LOG_WARN("table not exist", K(ret));
   } else {
-    arena_.set_tenant_id(tenant_id_);
-    piece_msg_.set_tenant_id(tenant_id_);
+    
+    
     sample_helper_.init(MY_SPEC.online_sample_rate_);
     int64_t map_size = MY_SPEC.column_ids_.count();
     if (OB_FAIL(table_stats_map_.create(map_size,
@@ -339,7 +337,7 @@ int ObOptimizerStatsGatheringOp::calc_column_stats(ObExpr *expr, uint64_t column
   ObDatum *datum = NULL;
   int64_t col_len  = 0;
   ObOptOSGColumnStat *global_col_stat = NULL;
-  ObOptColumnStat::Key global_col_stats_key(tenant_id_, MY_SPEC.table_id_, MY_SPEC.table_id_, column_id);
+  ObOptColumnStat::Key global_col_stats_key(MY_SPEC.table_id_, MY_SPEC.table_id_, column_id);
   if (MY_SPEC.is_part_table()) {
     global_col_stats_key.partition_id_ = -1;
   }
@@ -399,7 +397,7 @@ int ObOptimizerStatsGatheringOp::calc_table_stats(int64_t &row_len, bool is_samp
 {
   int ret = OB_SUCCESS;
   ObOptTableStat *global_tab_stat = NULL;
-  ObOptTableStat::Key global_key(tenant_id_, MY_SPEC.table_id_, (int64_t)MY_SPEC.table_id_);
+  ObOptTableStat::Key global_key(MY_SPEC.table_id_, (int64_t)MY_SPEC.table_id_);
   if (MY_SPEC.is_part_table()) {
     global_key.partition_id_ = -1;
   }
@@ -443,7 +441,7 @@ int ObOptimizerStatsGatheringOp::merge_tab_stat(ObOptTableStat *src_tab_stat)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected null");
   } else {
-    ObOptTableStat::Key stat_key(tenant_id_, src_tab_stat->get_table_id(), src_tab_stat->get_partition_id());
+    ObOptTableStat::Key stat_key(src_tab_stat->get_table_id(), src_tab_stat->get_partition_id());
     if (OB_FAIL(table_stats_map_.get_refactored(stat_key, tab_stat))) {
       void *ptr = NULL;
       if (OB_UNLIKELY(OB_HASH_NOT_EXIST != ret)) {
@@ -480,8 +478,7 @@ int ObOptimizerStatsGatheringOp::merge_col_stat(ObOptColumnStat *src_col_stat)
   } else {
     ObOptColumnStat *col_stat = NULL;
     ObOptOSGColumnStat *osg_col_stat = NULL;
-    ObOptColumnStat::Key stat_key(tenant_id_,
-                                  src_col_stat->get_table_id(),
+    ObOptColumnStat::Key stat_key(src_col_stat->get_table_id(),
                                   src_col_stat->get_partition_id(),
                                   src_col_stat->get_column_id());
     if (OB_FAIL(osg_col_stats_map_.get_refactored(stat_key, osg_col_stat))) {
@@ -600,7 +597,7 @@ int ObOptimizerStatsGatheringOp::generate_stat_param(ObTableStatParam &param)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("fail to get schema guard", K(ret));
   } else {
-    param.tenant_id_ = tenant_id_;
+    
     param.table_id_ = MY_SPEC.table_id_;
     param.global_stat_param_.need_modify_ = true;
     param.part_level_ = MY_SPEC.part_level_;
@@ -619,11 +616,11 @@ int ObOptimizerStatsGatheringOp::generate_stat_param(ObTableStatParam &param)
       ObColumnStatParam col_param;
       col_param.column_id_ = MY_SPEC.column_ids_.at(i);
       const ObColumnSchemaV2 *col_schema =  nullptr;
-      if (OB_FAIL(schema_guard->get_column_schema(tenant_id_, MY_SPEC.table_id_, col_param.column_id_, col_schema))) {
-        LOG_WARN("can't get column schema", K(ret), K(tenant_id_), K(MY_SPEC.table_id_), K(col_param.column_id_));
+      if (OB_FAIL(schema_guard->get_column_schema( MY_SPEC.table_id_, col_param.column_id_, col_schema))) {
+        LOG_WARN("can't get column schema", K(ret), K(MY_SPEC.table_id_), K(col_param.column_id_));
       } else if (OB_ISNULL(col_schema)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("can't get column schema", K(ret), K(tenant_id_), K(MY_SPEC.table_id_), K(col_param.column_id_));
+        LOG_WARN("can't get column schema", K(ret), K(MY_SPEC.table_id_), K(col_param.column_id_));
       } else {
         col_param.cs_type_ = col_schema->get_collation_type();
       }

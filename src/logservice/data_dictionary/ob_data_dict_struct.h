@@ -18,7 +18,6 @@
 #define  OCEANBASE_DICT_SERVICE_META_DICT_STRUCT_
 
 #include "common/ob_tablet_id.h"
-#include "share/ob_ls_id.h" // share::ObLSID
 #include "share/schema/ob_schema_struct.h"
 #include "share/schema/ob_table_schema.h"
 #include "share/scn.h"
@@ -43,11 +42,6 @@ namespace schema
 class ObColumnSchemaV2;
 class ObTableSchema;
 }
-}
-
-namespace sql
-{
-class ObLocalSessionVar;
 }
 
 namespace datadict
@@ -128,12 +122,7 @@ public:
   ObDictTenantMeta &operator=(const ObDictTenantMeta &src_schema) = delete;
 
 public:
-  // For schema_service (without ls_info)
   int init(const share::schema::ObTenantSchema &tenant_schema);
-  // For data_dict_service
-  int init_with_ls_info(
-      const share::schema::ObTenantSchema &tenant_schema,
-      const share::ObLSArray &ls_array);
   // For incremental data update
   int incremental_data_update(const ObDictTenantMeta &new_tenant_meta);
 
@@ -141,15 +130,14 @@ public:
   // for user like OBCDC.
   OB_INLINE bool is_valid() const
   {
-    return OB_INVALID_TENANT_ID != tenant_id_
+    return true
         && OB_INVALID_VERSION != schema_version_
         && ! tenant_name_.empty();
   }
-  OB_INLINE uint64_t get_tenant_id() const { return tenant_id_; }
-  OB_INLINE void set_tenant_id(const uint64_t tenant_id) { tenant_id_ = tenant_id; }
+  
+  
   OB_INLINE const char *get_tenant_name() const { return extract_str(tenant_name_); }
   OB_INLINE int64_t get_schema_version() const { return schema_version_; }
-  OB_INLINE common::ObCompatibilityMode get_compatibility_mode() const { return compatibility_mode_; }
   OB_INLINE share::schema::ObTenantStatus get_status() const { return tenant_status_; }
   OB_INLINE bool is_normal() const { return share::schema::TENANT_STATUS_NORMAL == tenant_status_; }
   OB_INLINE bool is_creating() const { return share::schema::TENANT_STATUS_CREATING == tenant_status_; }
@@ -159,33 +147,28 @@ public:
   OB_INLINE common::ObCharsetType get_charset_type() const { return charset_type_; }
   OB_INLINE common::ObCollationType get_collation_type() const { return collation_type_; }
   OB_INLINE bool is_in_recyclebin() const { return in_recyclebin_; }
-  OB_INLINE const share::ObLSArray &get_ls_array() const { return ls_arr_; }
-
   NEED_SERIALIZE_AND_DESERIALIZE_DICT;
   TO_STRING_KV(
-      K_(tenant_id),
+      
       K_(schema_version),
       K_(tenant_name),
       K_(tenant_status),
-      K_(in_recyclebin),
-      K_(ls_arr));
+      K_(in_recyclebin));
 
 private:
   ObIAllocator *allocator_;
-  // Won't serialize tenant_id in dict.
-  // DATADICT of StandBy is the same with Promary tenant. However tenant_id of standby tenant may not consist with primary tenant
+  // Won't serialize tenant in dict.
+  // DATADICT of StandBy is the same with Promary tenant. However tenant of standby tenant may not consist with primary tenant
   //
-  // OBCDC will set tenant_id when consume and replay DATADICT
+  // OBCDC will set tenant when consume and replay DATADICT
   // Anyother consumer of DATADICT should also notice this feature.
-  uint64_t tenant_id_;
+  
   int64_t schema_version_;
   common::ObString tenant_name_;
-  common::ObCompatibilityMode compatibility_mode_; // cannot be modified after creation
   share::schema::ObTenantStatus tenant_status_;
   common::ObCharsetType charset_type_;
   common::ObCollationType collation_type_;
   bool in_recyclebin_;
-  share::ObLSArray ls_arr_;
 }; // end of ObDictTenantMeta
 
 class ObDictDatabaseMeta
@@ -208,8 +191,8 @@ public:
         && OB_INVALID_VERSION != schema_version_
         && ! database_name_.empty();
   }
-  OB_INLINE uint64_t get_tenant_id() const { return tenant_id_; }
-  OB_INLINE void set_tenant_id(const uint64_t tenant_id) { tenant_id_ = tenant_id; }
+  
+  
   OB_INLINE uint64_t get_database_id() const { return database_id_; }
   OB_INLINE int64_t get_schema_version() const { return schema_version_; }
   OB_INLINE const char *get_database_name() const { return extract_str(database_name_); }
@@ -221,7 +204,7 @@ public:
 
   NEED_SERIALIZE_AND_DESERIALIZE_DICT;
   TO_STRING_KV(
-      K_(tenant_id),
+      
       K_(database_id),
       K_(schema_version),
       K_(database_name),
@@ -233,12 +216,12 @@ private:
 
 private:
   ObIAllocator *allocator_;
-  // Won't serialize tenant_id in dict.
-  // DATADICT of StandBy is the same with Promary tenant. However tenant_id of standby tenant may not consist with primary tenant
+  // Won't serialize tenant in dict.
+  // DATADICT of StandBy is the same with Promary tenant. However tenant of standby tenant may not consist with primary tenant
   //
-  // OBCDC will set tenant_id when consume and replay DATADICT
+  // OBCDC will set tenant when consume and replay DATADICT
   // Anyother consumer of DATADICT should also notice this feature.
-  uint64_t tenant_id_;
+  
   uint64_t database_id_;
   int64_t schema_version_;
   // OB_MAX_DATABASE_NAME_LENGTH
@@ -296,16 +279,15 @@ public:
   OB_INLINE bool is_virtual_generated_column() const { return column_flags_ & VIRTUAL_GENERATED_COLUMN_FLAG; }
   OB_INLINE bool is_stored_generated_column() const { return column_flags_ & STORED_GENERATED_COLUMN_FLAG; }
   OB_INLINE bool is_generated_column() const { return is_virtual_generated_column() || is_stored_generated_column(); }
-  OB_INLINE bool is_shadow_column() const { return (column_id_ > common::OB_MIN_SHADOW_COLUMN_ID)
-                                                    && !is_mlog_special_column(column_id_); }
+  OB_INLINE bool is_shadow_column() const { return column_id_ > common::OB_MIN_SHADOW_COLUMN_ID; }
   OB_INLINE bool has_generated_column_deps() const { return column_flags_ & GENERATED_DEPS_CASCADE_FLAG; }
   int get_cascaded_column_ids(ObIArray<uint64_t> &column_ids) const;
 
   OB_INLINE uint64_t get_udt_set_id() const { return udt_set_id_; }
   OB_INLINE uint64_t get_sub_data_type() const { return sub_type_; }
   OB_INLINE uint64_t get_srs_id() const { return srs_id_; }
-  OB_INLINE sql::ObLocalSessionVar &get_local_session_var() { return local_session_vars_; }
-  OB_INLINE sql::ObLocalSessionVar const &get_local_session_var() const { return local_session_vars_; }
+  OB_INLINE share::ObLocalSessionVar &get_local_session_var() { return local_session_vars_; }
+  OB_INLINE share::ObLocalSessionVar const &get_local_session_var() const { return local_session_vars_; }
   OB_INLINE bool is_udt_column() const { return udt_set_id_ > 0 && OB_INVALID_ID != udt_set_id_; }
 
   OB_INLINE bool is_collection() const { return meta_type_.is_collection_sql_type(); }
@@ -372,7 +354,7 @@ private:
   uint64_t udt_set_id_;
   uint64_t sub_type_;
   uint64_t srs_id_;
-  sql::ObLocalSessionVar local_session_vars_;
+  share::ObLocalSessionVar local_session_vars_;
 }; // end of ObDictColumnMeta
 
 class ObDictTableMeta
@@ -389,8 +371,8 @@ public:
 
 public:
   // for user like OBCDC
-  OB_INLINE uint64_t get_tenant_id() const { return tenant_id_; }
-  OB_INLINE void set_tenant_id(const uint64_t tenant_id) { tenant_id_ = tenant_id; }
+  
+  
   OB_INLINE uint64_t get_database_id() const { return database_id_; }
   OB_INLINE uint64_t get_table_id() const { return table_id_; }
   OB_INLINE const char *get_table_name() const { return extract_str(table_name_); }
@@ -429,12 +411,10 @@ public:
   OB_INLINE bool is_view_table() const
   {
     return share::schema::ObTableType::USER_VIEW == table_type_
-        || share::schema::ObTableType::SYSTEM_VIEW == table_type_
-        || share::schema::ObTableType::MATERIALIZED_VIEW == table_type_;
+        || share::schema::ObTableType::SYSTEM_VIEW == table_type_;
   }
   OB_INLINE share::schema::ObIndexType get_index_type() const { return index_type_; }
   OB_INLINE bool is_index_table() const { return share::schema::is_index_table(table_type_); }
-  OB_INLINE bool is_mlog_table() const { return share::schema::is_mlog_table(table_type_); }
   OB_INLINE bool is_normal_index() const
   {
     return share::schema::INDEX_TYPE_NORMAL_LOCAL == index_type_
@@ -488,7 +468,7 @@ public:
 public:
   NEED_SERIALIZE_AND_DESERIALIZE_DICT;
   TO_STRING_KV(
-      K_(tenant_id),
+      
       K_(database_id),
       K_(table_id),
       K_(schema_version),
@@ -518,12 +498,12 @@ private:
 
 private:
   ObIAllocator *allocator_;
-  // Won't serialize tenant_id in dict.
-  // DATADICT of StandBy is the same with Promary tenant. However tenant_id of standby tenant may not consist with primary tenant
+  // Won't serialize tenant in dict.
+  // DATADICT of StandBy is the same with Promary tenant. However tenant of standby tenant may not consist with primary tenant
   //
-  // OBCDC will set tenant_id when consume and replay DATADICT
+  // OBCDC will set tenant when consume and replay DATADICT
   // Anyother consumer of DATADICT should also notice this feature.
-  uint64_t tenant_id_;
+  
   uint64_t database_id_;
   uint64_t table_id_;
   int64_t schema_version_;

@@ -48,7 +48,7 @@ public:
                      const ParseNode *ret_node,
                      const ParseNode *param_node,
                      const ParseNode *clause_list,
-                     obrpc::ObCreateRoutineArg *crt_routine_arg);
+                     obcall::ObCreateRoutineArg *crt_routine_arg);
   int resolve_impl(share::schema::ObRoutineType routine_type,
                    const ParseNode *sp_definer_node,
                    const ParseNode *name_node,
@@ -56,11 +56,11 @@ public:
                    const ParseNode *ret_node,
                    const ParseNode *param_node,
                    const ParseNode *clause_list,
-                   obrpc::ObCreateRoutineArg *crt_routine_arg,
+                   obcall::ObCreateRoutineArg *crt_routine_arg,
                    bool is_udt_udf = false);
   
   virtual int resolve(const ParseNode &parse_tree);
-  virtual int resolve_impl(const ParseNode &parse_tree, obrpc::ObCreateRoutineArg *crt_routine_arg) = 0;
+  virtual int resolve_impl(const ParseNode &parse_tree, obcall::ObCreateRoutineArg *crt_routine_arg) = 0;
 
 protected:
   int resolve_sp_body(const ParseNode *parse_node, share::schema::ObRoutineInfo &routine_info);
@@ -68,16 +68,16 @@ protected:
 private:
   int check_dup_routine_param(const common::ObIArray<share::schema::ObRoutineParam*> &params,
                               const common::ObString &param_name);
-  int create_routine_arg(obrpc::ObCreateRoutineArg *&crt_routine_arg);
+  int create_routine_arg(obcall::ObCreateRoutineArg *&crt_routine_arg);
   int set_routine_info(const share::schema::ObRoutineType &type,
                        share::schema::ObRoutineInfo &routine_info,
                        bool is_udt_udf = false);
-  int analyze_router_sql(obrpc::ObCreateRoutineArg *crt_routine_arg);
+  int analyze_router_sql(obcall::ObCreateRoutineArg *crt_routine_arg);
   int resolve_sp_definer(const ParseNode *parse_node, share::schema::ObRoutineInfo &routine_info);
-  int resolve_sp_name(const ParseNode *parse_node, obrpc::ObCreateRoutineArg *crt_routine_arg);
+  int resolve_sp_name(const ParseNode *parse_node, obcall::ObCreateRoutineArg *crt_routine_arg);
   int resolve_ret_type(const ParseNode *ret_type_node, share::schema::ObRoutineInfo &func_info);
   int analyze_expr_type(ObRawExpr *&expr, share::schema::ObRoutineInfo &routine_info);
-  int resolve_param_list(const ParseNode *param_list, obrpc::ObCreateRoutineArg &crt_routine_arg);
+  int resolve_param_list(const ParseNode *param_list, obcall::ObCreateRoutineArg &crt_routine_arg);
   int resolve_param_type(const ParseNode *type_node, const common::ObString &param_name,
                          ObSQLSessionInfo &session_info, share::schema::ObRoutineParam &routine_param);
   int resolve_clause_list(const ParseNode *clause_list, share::schema::ObRoutineInfo &func_info);
@@ -93,7 +93,7 @@ public:
   explicit ObCreateProcedureResolver(ObResolverParams &params) : ObCreateRoutineResolver(params) {}
   virtual ~ObCreateProcedureResolver() {}
 
-  virtual int resolve_impl(const ParseNode &parse_tree, obrpc::ObCreateRoutineArg *crt_routine_arg);
+  virtual int resolve_impl(const ParseNode &parse_tree, obcall::ObCreateRoutineArg *crt_routine_arg);
 private:
   DISALLOW_COPY_AND_ASSIGN(ObCreateProcedureResolver);
   // function members
@@ -108,7 +108,7 @@ public:
   explicit ObCreateFunctionResolver(ObResolverParams &params) : ObCreateRoutineResolver(params) {}
   virtual ~ObCreateFunctionResolver() { }
 
-  virtual int resolve_impl(const ParseNode &parse_tree, obrpc::ObCreateRoutineArg *crt_routine_arg);
+  virtual int resolve_impl(const ParseNode &parse_tree, obcall::ObCreateRoutineArg *crt_routine_arg);
 private:
   DISALLOW_COPY_AND_ASSIGN(ObCreateFunctionResolver);
   // function members

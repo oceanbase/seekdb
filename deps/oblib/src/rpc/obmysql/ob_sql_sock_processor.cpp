@@ -104,10 +104,6 @@ ObVirtualCSProtocolProcessor *ObSqlSockProcessor::get_protocol_processor(ObCSPro
       processor = &compress_processor_;
       break;
     }
-    case OB_2_0_CS_TYPE: {
-      processor = &ob_2_0_processor_;
-      break;
-    }
     default: {
       LOG_ERROR_RET(OB_ERR_UNEXPECTED, "invalid cs protocol type", K(type));
       break;
@@ -120,9 +116,6 @@ int ObSqlSockProcessor::build_sql_req(ObSqlSockSession& sess, rpc::ObPacket* pkt
 {
   int ret = OB_SUCCESS;
   ObRequest* ret_req = &sess.sql_req_;
-  if (OB_UNLIKELY(ret_req->get_diagnostic_info())) {
-    LOG_ERROR("diagnostic info not released for last mysql request", KPC(ret_req->get_diagnostic_info()));
-  }
   new(ret_req)ObRequest(ObRequest::OB_MYSQL, 1);
   ret_req->set_server_handle_context(&sess);
   ret_req->set_packet(pkt);

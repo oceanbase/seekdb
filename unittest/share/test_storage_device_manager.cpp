@@ -16,7 +16,7 @@
 
 #include <gtest/gtest.h>
 #include "share/io/ob_io_manager.h"
-#include "common/storage/ob_fd_simulator.h"
+#include "lib/restore/ob_fd_simulator.h"
 #define private public
 #include "share/ob_device_manager.h"
 #undef private

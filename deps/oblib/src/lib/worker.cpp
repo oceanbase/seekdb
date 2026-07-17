@@ -16,7 +16,7 @@
 
 #define USING_LOG_PREFIX LIB
 #include "worker.h"
-#include "rpc/obrpc/ob_rpc_proxy.h"
+namespace oceanbase { namespace rpc { extern common::ObAddr g_rpc_self_addr; } }  // fwd-decl (reduce deps)
 
 using namespace oceanbase::common;
 using namespace oceanbase::lib;
@@ -24,7 +24,7 @@ using namespace oceanbase::lib;
 OB_DEF_SERIALIZE(ObExtraRpcHeader)
 {
   int ret = OB_SUCCESS;
-  LST_DO_CODE(OB_UNIS_ENCODE, obrpc::ObRpcProxy::myaddr_);
+  LST_DO_CODE(OB_UNIS_ENCODE, rpc::g_rpc_self_addr);
   return ret;
 }
 OB_DEF_DESERIALIZE(ObExtraRpcHeader)
@@ -36,7 +36,7 @@ OB_DEF_DESERIALIZE(ObExtraRpcHeader)
 OB_DEF_SERIALIZE_SIZE(ObExtraRpcHeader)
 {
   int64_t len = 0;
-  LST_DO_CODE(OB_UNIS_ADD_LEN, obrpc::ObRpcProxy::myaddr_);
+  LST_DO_CODE(OB_UNIS_ADD_LEN, rpc::g_rpc_self_addr);
   return len;
 }
 
@@ -62,13 +62,6 @@ int OB_WEAK_SYMBOL common_yield()
   return OB_SUCCESS;
 }
 
-int OB_WEAK_SYMBOL SET_GROUP_ID(bool is_background)
-{
-  int ret = OB_SUCCESS;
-  UNUSED(is_background);
-  return ret;
-}
-
 }  // namespace lib
 }  // namespace oceanbase
 __thread Worker *Worker::self_;
@@ -82,11 +75,8 @@ Worker::Worker()
       worker_level_(INT32_MAX),
       curr_request_level_(0),
       is_th_worker_(false),
-      group_id_(0),
-      func_type_(0),
       timeout_ts_(INT64_MAX),
       ntp_offset_(0),
-      rpc_tenant_id_(0),
       disable_wait_(false)
 {
   worker_node_.get_data() = this;

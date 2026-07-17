@@ -100,10 +100,7 @@ mysql_compatible_comment_with_version \/\*\![0-9]{5}
 mysql_compatible_comment_without_version \/\*\!
 mysql_compatible_comment_end \*\/
 
-ColumnStorePattern  (WITH{whitespace}COLUMN{whitespace}GROUP)
-
 %%
-{ColumnStorePattern}                { REPUT_TOKEN_NEG_SIGN(WITH_COLUMN_GROUP); }
 INTERVAL {
 
   ParseResult *p = (ParseResult *)yyextra;
@@ -117,29 +114,7 @@ INTERVAL {
 _UTF8                         { REPUT_TOKEN_NEG_SIGN(_UTF8); }
 _UTF8MB4                      { REPUT_TOKEN_NEG_SIGN(_UTF8MB4); }
 _UTF8MB3                      { REPUT_TOKEN_NEG_SIGN(_UTF8MB3); }
-_GBK                          { REPUT_TOKEN_NEG_SIGN(_GBK); }
-_GB2312                       { REPUT_TOKEN_NEG_SIGN(_GB2312); }
-_GB18030                      { REPUT_TOKEN_NEG_SIGN(_GB18030); }
-_GB18030_2022                 { REPUT_TOKEN_NEG_SIGN(_GB18030_2022); }
-_LATIN1                       { REPUT_TOKEN_NEG_SIGN(_LATIN1); }
-_ASCII                       { REPUT_TOKEN_NEG_SIGN(_ASCII); }
-_TIS620                       { REPUT_TOKEN_NEG_SIGN(_TIS620); }
-_UJIS                         { REPUT_TOKEN_NEG_SIGN(_UJIS); }
-_EUCKR                        { REPUT_TOKEN_NEG_SIGN(_EUCKR);}
-_EUCJPMS                      { REPUT_TOKEN_NEG_SIGN(_EUCJPMS);}
-_CP932                        { REPUT_TOKEN_NEG_SIGN(_CP932);}
 _BINARY                       { REPUT_TOKEN_NEG_SIGN(_BINARY); }
-_UTF16                        { REPUT_TOKEN_NEG_SIGN(_UTF16); }
-_UTF16LE                      { REPUT_TOKEN_NEG_SIGN(_UTF16LE); }
-_SJIS                         { REPUT_TOKEN_NEG_SIGN(_SJIS); }
-_BIG5                         { REPUT_TOKEN_NEG_SIGN(_BIG5); }
-_HKSCS                      { REPUT_TOKEN_NEG_SIGN(_HKSCS); }
-_HKSCS31                     { REPUT_TOKEN_NEG_SIGN(_HKSCS31); }
-_DEC8                        { REPUT_TOKEN_NEG_SIGN(_DEC8); }
-_CP850                       { REPUT_TOKEN_NEG_SIGN(_CP850); }
-_HP8                         { REPUT_TOKEN_NEG_SIGN(_HP8); }
-_MACROMAN                    { REPUT_TOKEN_NEG_SIGN(_MACROMAN); }
-_SWE7                        { REPUT_TOKEN_NEG_SIGN(_SWE7); }
 NOT {
   int32_t token_ret = NOT; /*fast parameterize don't care NOT or NOT2*/
   if (!(IS_FAST_PARAMETERIZE)) {
@@ -1037,8 +1012,6 @@ Timestamp{whitespace}?\"[^\"]*\" {
 <hint>MONITOR  { return MONITOR; }
 <hint>AUTO { return AUTO; }
 <hint>FORCE { return FORCE; }
-<hint>USE_COLUMN_TABLE { return USE_COLUMN_STORE_HINT; }
-<hint>NO_USE_COLUMN_TABLE { return NO_USE_COLUMN_STORE_HINT; }
 <hint>[(),.@]  {
   ParseResult *p = (ParseResult *)yyextra;
   if (!p->is_ignore_token_) {
@@ -1058,8 +1031,6 @@ Timestamp{whitespace}?\"[^\"]*\" {
 <hint>LEADING  { return LEADING_HINT; }
 <hint>ORDERED  { return ORDERED; }
 <hint>NO_REWRITE { return NO_REWRITE; }
-<hint>MV_REWRITE { return MV_REWRITE; }
-<hint>NO_MV_REWRITE { return NO_MV_REWRITE; }
 <hint>FULL  { return FULL_HINT; }
 <hint>USE_MERGE  { return USE_MERGE; }
 <hint>NO_USE_MERGE  { return NO_USE_MERGE; }
@@ -1096,7 +1067,6 @@ Timestamp{whitespace}?\"[^\"]*\" {
 <hint>OPTIMIZER_FEATURES_ENABLE { return OPTIMIZER_FEATURES_ENABLE; }
 <hint>NO_QUERY_TRANSFORMATION { return NO_QUERY_TRANSFORMATION; }
 <hint>NO_COST_BASED_QUERY_TRANSFORMATION { return NO_COST_BASED_QUERY_TRANSFORMATION; }
-<hint>FLASHBACK_READ_TX_UNCOMMITTED { return FLASHBACK_READ_TX_UNCOMMITTED; }
 <hint>TRANS_PARAM { return TRANS_PARAM; }
 <hint>PQ_DISTRIBUTE { return PQ_DISTRIBUTE; }
 <hint>PQ_DISTRIBUTE_WINDOW { return PQ_DISTRIBUTE_WINDOW; }
@@ -1202,7 +1172,6 @@ Timestamp{whitespace}?\"[^\"]*\" {
 <hint>PUSHDOWN { return PUSHDOWN; }
 <hint>DECORRELATE { return DECORRELATE; }
 <hint>NO_DECORRELATE { return NO_DECORRELATE; }
-<hint>RESOURCE_GROUP { return RESOURCE_GROUP; }
 <hint>PQ_GBY { return PQ_GBY; }
 <hint>PQ_DISTINCT { return PQ_DISTINCT; }
 <hint>PX_NODE_POLICY {return PX_NODE_POLICY; }
@@ -1394,7 +1363,7 @@ Timestamp{whitespace}?\"[^\"]*\" {
     yylval->node->raw_text_ = parse_strndup(tmp_literal, yylval->node->str_len_ + 1, p->malloc_pool_);
     check_malloc(yylval->node->raw_text_);
     char *dup_value = NULL;
-    char *well_formed_str = replace_invalid_character(p->charset_info_, p->charset_info_oracle_db_, tmp_literal, &(yylval->node->str_len_), p->malloc_pool_, &(p->extra_errno_));
+    char *well_formed_str = replace_invalid_character(p->charset_info_, p->charset_info_nls_db_, tmp_literal, &(yylval->node->str_len_), p->malloc_pool_, &(p->extra_errno_));
     check_identifier_convert_result(p->extra_errno_);
     if (p->is_not_utf8_connection_) {
       dup_value = parse_str_convert_utf8(p->charset_info_, well_formed_str, p->malloc_pool_, &(yylval->node->str_len_), &(p->extra_errno_));

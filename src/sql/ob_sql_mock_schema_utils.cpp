@@ -95,7 +95,7 @@ int ObSQLMockSchemaUtils::mock_pseudo_columns_schema(share::schema::ObTableSchem
   if (is_virtual_table(table_schema.get_table_id())
       || table_schema.is_index_table()) {
     LOG_TRACE("do not mock rowid column", K(table_schema.get_table_name_str()),
-                                          K(lib::is_mysql_mode()),
+                                          K(true),
                                           K(table_schema.is_index_table()));
   } else {
     ObString part_id_column_name(OB_PART_ID_PSEUDO_COLUMN_NAME);
@@ -134,12 +134,12 @@ int ObSQLMockSchemaUtils::mock_partid_column(share::schema::ObTableSchema &table
     LOG_TRACE("do not mock rowid column", K(is_rowid_exists));
   } else {
     ObColumnSchemaV2 partid_schema;
-    const uint64_t tenant_id = table_schema.get_tenant_id();
+    
     const uint64_t table_id = table_schema.get_table_id();
     const int64_t schema_version = table_schema.get_schema_version();
     ObObj null_obj;
     null_obj.set_null();
-    partid_schema.set_tenant_id(tenant_id);
+    
     partid_schema.set_table_id(table_id);
     partid_schema.set_column_id(table_schema.get_column_count() + OB_APP_MIN_COLUMN_ID);
     partid_schema.set_rowkey_position(0);

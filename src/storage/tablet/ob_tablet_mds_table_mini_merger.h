@@ -91,18 +91,6 @@ protected:
 // last_rowkey same as cur_row | cur_row ...
 // last_rowkey not same as cur row | cur_row is First | last_row is Last
 
-class ObCrossLSMdsMiniMergeOperator : public ObMdsMiniMergeOperator
-{
-public:
-  explicit ObCrossLSMdsMiniMergeOperator(const share::SCN &scan_end_scn);
-  virtual ~ObCrossLSMdsMiniMergeOperator() = default;
-protected:
-  virtual bool for_flush() override { return false; }
-  virtual int operator()(const mds::MdsDumpKV &kv) override;
-private:
-  share::SCN scan_end_scn_;
-};
-
 // to query all medium mds info, and dump them to minor sstable.
 class ObTabletDumpMediumMds2MiniOperator : public ObMdsMiniMergeOperator
 {
@@ -140,10 +128,6 @@ private:
 class ObMdsDataCompatHelper
 {
 public:
-  static int generate_mds_mini_sstable(
-      const ObMigrationTabletParam &mig_param,
-      common::ObArenaAllocator &allocator,
-      ObTableHandleV2 &table_handle);
   static int generate_mds_mini_sstable(
       const ObTablet &tablet,
       common::ObArenaAllocator &allocator,

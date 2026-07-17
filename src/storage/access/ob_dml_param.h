@@ -21,7 +21,7 @@
 #include "lib/container/ob_iarray.h"
 #include "common/ob_common_types.h"
 #include "storage/meta_mem/ob_tablet_handle.h"
-#include "share/datum/ob_datum.h"
+#include "common/datum/ob_datum.h"
 #include "sql/engine/basic/ob_pushdown_filter.h"
 #include "storage/tx/ob_trans_define_v4.h"
 
@@ -128,7 +128,7 @@ private:
 class ScanResumePoint
 {
 public:
-  int init(bool *is_paused, int64_t tenant_id);
+  int init(bool *is_paused);
 
   void destroy()
   {
@@ -174,7 +174,6 @@ public:
       : common::ObVTableScanParam(),
         trans_desc_(NULL),
         snapshot_(),
-        fb_read_tx_uncommitted_(false),
         tx_id_(),
         tx_lock_timeout_(-1),
         table_param_(NULL),
@@ -196,7 +195,6 @@ public:
 public:
   transaction::ObTxDesc *trans_desc_;      // transaction handle
   transaction::ObTxReadSnapshot snapshot_;
-  bool fb_read_tx_uncommitted_;
   transaction::ObTransID tx_id_;           // used when read-latest
   int64_t tx_lock_timeout_;
   const share::schema::ObTableParam *table_param_;
@@ -210,9 +208,6 @@ public:
   }
   OB_INLINE bool use_index_skip_scan() const {
     return (1 == ss_key_ranges_.count()) && (!ss_key_ranges_.at(0).is_whole_range());
-  }
-  OB_INLINE bool is_mview_query() const {
-    return nullptr != op_filters_ && scan_flag_.is_mr_mview_query();
   }
   void destroy() override
   {
@@ -231,7 +226,7 @@ public:
   ObMdsReadInfoCollector *mds_collector_; // used for collect mds info when query mds sstable
   uint64_t *row_scan_cnt_;
   bool enable_new_false_range_;
-
+  
   DECLARE_VIRTUAL_TO_STRING;
 private:
   DISALLOW_COPY_AND_ASSIGN(ObTableScanParam);
@@ -242,7 +237,7 @@ struct ObDMLBaseParam
   ObDMLBaseParam()
       : timeout_(-1),
         schema_version_(-1),
-        sql_mode_(DEFAULT_OCEANBASE_MODE),
+        sql_mode_(DEFAULT_MYSQL_MODE),
         tz_info_(NULL),
         table_param_(NULL),
         tenant_schema_version_(OB_INVALID_VERSION),
@@ -259,8 +254,7 @@ struct ObDMLBaseParam
         write_flag_(),
         check_schema_version_(true),
         ddl_task_id_(0),
-        lob_allocator_(ObModIds::OB_LOB_ACCESS_BUFFER, OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID()),
-        data_row_for_lob_(nullptr),
+        lob_allocator_(ObModIds::OB_LOB_ACCESS_BUFFER, OB_MALLOC_NORMAL_BLOCK_SIZE),
         is_main_table_in_fts_ddl_(false),
         has_async_index_(false)
   {
@@ -295,10 +289,9 @@ struct ObDMLBaseParam
   bool check_schema_version_;
   int64_t ddl_task_id_;
   mutable ObArenaAllocator lob_allocator_;
-  const blocksstable::ObDatumRow *data_row_for_lob_; // for tablet split
   bool is_main_table_in_fts_ddl_; // whether the main table is in fts ddl when dml is executed
   // Set by DAS layer when the table has async-mode indexes (e.g. sync_mode=async HNSW).
-  // Propagated to ObPartTransCtx::has_async_index_redo_ -> ObTxLogBlockHeader::HAS_ASYNC_INDEX
+  // Propagated to ObTxCtx::has_async_index_redo_ -> ObTxLogBlockHeader::HAS_ASYNC_INDEX
   // for Change Stream fast filtering in the Fetcher.
   bool has_async_index_;
   bool is_valid() const { return (timeout_ > 0 && schema_version_ >= 0) && nullptr != store_ctx_guard_; }

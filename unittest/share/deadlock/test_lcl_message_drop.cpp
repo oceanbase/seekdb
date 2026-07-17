@@ -16,7 +16,7 @@
 #include <gmock/gmock.h>
 #define private public
 #define protected public
-#include "share/deadlock/ob_deadlock_detector_mgr.h"
+#include "storage/deadlock/ob_deadlock_detector_mgr.h"
 
 namespace oceanbase {
 namespace unittest {
@@ -30,7 +30,7 @@ class TestLCLMsgDrop : public ::testing::Test {
 public:
   TestLCLMsgDrop() {}
   ~TestLCLMsgDrop() {}
-  virtual void SetUp() { share::ObTenantEnv::get_tenant_local()->id_ = 1; }
+  virtual void SetUp() {}
   virtual void TearDown() {}
   static ObLCLBatchSenderThread batch_sender_;
   int port;

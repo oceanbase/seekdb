@@ -16,23 +16,27 @@
 
 #define USING_LOG_PREFIX SERVER
 
+#include "lib/stat/ob_diagnostic_info_guard.h"
 #include "observer/ob_srv_deliver.h"
+#include "lib/cpu/ob_cpu_topology.h"
+#include "lib/ob_running_mode.h"
+#include "share/rc/ob_module_provider.h"
 
 #include "util/easy_mod_stat.h"
 #include "lib/vtoa/ob_vtoa_util.h"
-#include "rpc/obrpc/ob_rpc_session_handler.h"
+#include "rpc/frame/ob_req_session_handler.h"
 #include "rpc/obmysql/packet/ompk_handshake_response.h"
 #include "rpc/obmysql/ob_sql_nio_server.h"
 #include "rpc/frame/ob_net_easy.h"
 #include "observer/omt/ob_tenant.h"
-#include "rootserver/ob_rs_rpc_processor.h"
-#include "lib/stat/ob_diagnostic_info_container.h"
+#include "lib/stat/ob_diagnostic_info_guard.h" // EVENT_INC, EVENT_ADD
+#include "lib/statistic_event/ob_stat_event.h"
 
 using namespace oceanbase::common;
 
 using namespace oceanbase::rpc;
 using namespace oceanbase::rpc::frame;
-using namespace oceanbase::obrpc;
+using namespace oceanbase::obcall;
 using namespace oceanbase::observer;
 using namespace oceanbase::omt;
 using namespace oceanbase::memtable;
@@ -43,8 +47,24 @@ namespace observer
 {
 ObString extract_user_name(const ObString &in);
 int extract_user_tenant(const ObString &in, ObString &user_name, ObString &tenant_name);
-int extract_tenant_id(const ObString &tenant_name, uint64_t &tenant_id);
 }  // namespace observer
+
+namespace
+{
+int64_t get_parallel_ddl_thread_cnt()
+{
+  const int64_t normal_thread_cnt = MIN(MAX(common::get_cpu_count() / 2, 1L), 24L);
+  return lib::is_mini_mode() ? 1 : normal_thread_cnt;
+}
+
+int64_t get_diagnose_thread_cnt()
+{
+  return lib::is_mini_mode()
+      ? observer::ObSrvDeliver::MINI_MODE_MYSQL_DIAG_TASK_THREAD_CNT
+      : observer::ObSrvDeliver::MYSQL_DIAG_TASK_THREAD_CNT;
+}
+} // namespace
+
 int get_endpoint_tenant(char *endpoint_tenant_mapping_buf, const int64_t vid, const ObAddr &vaddr, ObString &tenant_name)
 {
   int ret = OB_SUCCESS;
@@ -192,7 +212,7 @@ int get_user_tenant(ObRequest &req, char *user_name_buf, char *tenant_name_buf)
   } else if (!tenant_name.empty()) {
     // use this tenant_name
   } else {
-    if (OB_TMP_FAIL(ObVTOAUtility::get_virtual_addr(fd, is_slb, vid, vaddr))) {
+    if (OB_TMP_FAIL(lib::ObVTOAUtility::get_virtual_addr(fd, is_slb, vid, vaddr))) {
       LOG_WARN("failed to get virtual addr", K(tmp_ret), K(fd));
     }
     if (is_slb) {
@@ -238,29 +258,20 @@ int get_user_tenant(ObRequest &req, char *user_name_buf, char *tenant_name_buf)
   return ret;
 }
 
-static void set_sql_sock_mem_pool_tenant_id(ObRequest &req, int64_t tenant_id)
-{
-  if (req.get_nio_protocol() == ObRequest::TRANSPORT_PROTO_POC) {
-    obmysql::ObSqlSockSession* sess = (obmysql::ObSqlSockSession*)req.get_server_handle_context();
-    sess->pool_.set_tenant_id(tenant_id);
-  }
-}
-
 int dispatch_req(ObRequest &req)
 {
   int ret = OB_SUCCESS;
-  const uint64_t tenant_id = OB_SYS_TENANT_ID;
-  MTL_SWITCH(tenant_id) {
+  
+  MOD_SCOPE {
     ObTenant *tenant = static_cast<ObTenant *>(MTL_CTX());
     if (OB_ISNULL(tenant)) {
       ret = OB_TENANT_NOT_IN_SERVER;
-      LOG_WARN("tenant is NULL", K(ret), K(tenant_id));
+      LOG_WARN("tenant is NULL", K(ret));
     } else if (tenant->has_stopped()) {
       ret = OB_TENANT_NOT_IN_SERVER;
-      LOG_WARN("tenant is stopped", K(ret), K(tenant_id));
-    } else if (FALSE_IT(set_sql_sock_mem_pool_tenant_id(req, tenant_id))) {
+      LOG_WARN("tenant is stopped", K(ret));
     } else if (OB_FAIL(tenant->recv_request(req))) {
-      LOG_WARN("dispatch request fail", K(ret), K(tenant_id), K(req));
+      LOG_WARN("dispatch request fail", K(ret), K(req));
       if (OB_SIZE_OVERFLOW == ret) {
         LOG_DBA_ERROR_V2(OB_TENANT_REQUEST_QUEUE_FULL, ret,
           "deliver mysql request to tenant: ", tenant->id(), " queue failed, the queue is full. ",
@@ -269,7 +280,7 @@ int dispatch_req(ObRequest &req)
       }
     }
   } else {
-    LOG_WARN("cannot switch to tenant", K(ret), K(tenant_id));
+    LOG_WARN("cannot switch to tenant", K(ret));
   }
 
   return ret;
@@ -278,7 +289,7 @@ int dispatch_req(ObRequest &req)
 } // namespace oceanbase
 
 ObSrvDeliver::ObSrvDeliver(ObiReqQHandler &qhandler,
-                           ObRpcSessionHandler &session_handler,
+                           ObReqSessionHandler &session_handler,
                            ObGlobalContext &gctx)
     : ObReqQDeliver(qhandler),
       is_inited_(false),
@@ -317,15 +328,15 @@ void ObSrvDeliver::stop()
     ddl_queue_->wait();
   }
   if (NULL != ddl_parallel_queue_) {
-    TG_STOP(lib::TGDefIDs::DDLPQueueTh);
-    TG_WAIT(lib::TGDefIDs::DDLPQueueTh);
+    ddl_parallel_queue_->stop();
+    ddl_parallel_queue_->wait();
   }
 }
 
-int ObSrvDeliver::create_queue_thread(int tg_id, const char *thread_name, QueueThread *&qthread)
+int ObSrvDeliver::create_queue_thread(int64_t thread_cnt, const char *thread_name, QueueThread *&qthread)
 {
   int ret = OB_SUCCESS;
-  qthread = OB_NEW(QueueThread, ObModIds::OB_RPC, thread_name);
+  qthread = OB_NEW(QueueThread, ObModIds::OB_RPC, thread_name, thread_cnt);
   if (OB_ISNULL(qthread)) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
   } else if (OB_FAIL(qthread->init())) {
@@ -334,8 +345,7 @@ int ObSrvDeliver::create_queue_thread(int tg_id, const char *thread_name, QueueT
     qthread->queue_.set_qhandler(&qhandler_);
   }
   if (OB_SUCC(ret) && OB_NOT_NULL(qthread)) {
-    qthread->tg_id_ = tg_id;
-    ret = TG_SET_RUNNABLE_AND_START(tg_id, qthread->thread_);
+    ret = qthread->start();
   }
   return ret;
 }
@@ -345,203 +355,12 @@ int ObSrvDeliver::init_queue_threads()
   int ret = OB_SUCCESS;
 
   // TODO: fufeng, make it configurable
-  if (OB_FAIL(create_queue_thread(lib::TGDefIDs::DDLQueueTh, "DDLQueueTh", ddl_queue_))) {
-  } else if (OB_FAIL(create_queue_thread(lib::TGDefIDs::DDLPQueueTh, PARALLEL_DDL_THREAD_NAME, ddl_parallel_queue_))) {
-  } else if (OB_FAIL(create_queue_thread(lib::TGDefIDs::DiagnoseQueueTh,
+  if (OB_FAIL(create_queue_thread(DDL_TASK_THREAD_CNT, "DDLQueueTh", ddl_queue_))) {
+  } else if (OB_FAIL(create_queue_thread(get_parallel_ddl_thread_cnt(), PARALLEL_DDL_THREAD_NAME, ddl_parallel_queue_))) {
+  } else if (OB_FAIL(create_queue_thread(get_diagnose_thread_cnt(),
                                          "DiagnoseQueueTh", diagnose_queue_))) {
   } else {
     LOG_INFO("queue thread create successfully", K_(host));
-  }
-
-  return ret;
-}
-
-int ObSrvDeliver::acquire_diagnostic_info_object(int64_t tenant_id, int64_t group_id,
-    int64_t session_id, ObDiagnosticInfo *&di, bool using_cache)
-{
-  int ret = OB_SUCCESS;
-  if (oceanbase::lib::is_diagnose_info_enabled()) {
-    if (OB_INVALID_TENANT_ID == tenant_id || OB_DTL_TENANT_ID == tenant_id) {
-      ret = OB_ERROR;
-    } else {
-      MTL_SWITCH(tenant_id) {
-        if (OB_FAIL(
-                MTL(common::ObDiagnosticInfoContainer *)
-                    ->acquire_diagnostic_info(tenant_id, group_id, session_id, di, using_cache))) {
-          OB_ASSERT(di == nullptr);
-          LOG_WARN("failed to acquire diagnostic info", K(ret), K(tenant_id), K(group_id),
-              K(session_id));
-        } else {
-          OB_ASSERT(di != nullptr);
-        }
-      }
-    }
-  } else {
-    ret = OB_ERROR;
-  }
-  return ret;
-}
-
-int ObSrvDeliver::deliver_rpc_request(ObRequest &req)
-{
-  int ret = OB_SUCCESS;
-  ObReqQueue *queue = NULL;
-  ObTenant *tenant = NULL;
-  const obrpc::ObRpcPacket &pkt
-      = reinterpret_cast<const obrpc::ObRpcPacket &>(req.get_packet());
-
-  if (is_virtual_tenant_id(pkt.get_tenant_id()) && is_resource_manager_group(pkt.get_group_id())) {
-    if(REACH_TIME_INTERVAL(10 * 1000 * 1000L)) { // 10s
-      LOG_WARN("unexpected group id of virtual tenant", K(pkt.get_group_id()), K(pkt.get_tenant_id()));
-    }
-    req.set_group_id(OBCG_DEFAULT);
-  } else {
-    req.set_group_id(pkt.get_group_id());
-  }
-
-  const int64_t now = ObTimeUtility::current_time();
-  int64_t rpc_net_delay = req.get_receive_timestamp() - req.get_send_timestamp();
-  if (rpc_net_delay < 0) {
-    rpc_net_delay = 0;
-  }
-
-  const bool need_update_stat =
-      !req.is_retry_on_lock() && oceanbase::lib::is_diagnose_info_enabled();
-  const bool is_stream = pkt.is_stream();
-  const uint64_t tenant_id = pkt.get_tenant_id();
-  const uint64_t group_id = pkt.get_group_id();
-
-  if (stop_
-      || SS_STOPPING == GCTX.status_
-      || SS_STOPPED == GCTX.status_) {
-    ret = OB_SERVER_IS_STOPPING;
-    LOG_WARN("receive request when server is stopping",
-             K(req),
-             K(ret));
-  }
-
-  req.set_trace_point(ObRequest::OB_EASY_REQUEST_RPC_DELIVER);
-  if (!OB_SUCC(ret)) {
-
-  } else if (is_stream) {
-    if (!session_handler_.wakeup_next_thread(req)) {
-      ret = OB_SESSION_NOT_FOUND;
-      LOG_WARN("receive stream rpc packet but session not found",
-               K(pkt), K(req));
-    }
-  } else if (10 == pkt.get_priority()) {
-    if (rootserver::is_parallel_ddl(pkt.get_pcode())) {
-      queue = &ddl_parallel_queue_->queue_;
-    } else {
-      queue = &ddl_queue_->queue_;
-    }
-  } else {
-    const uint64_t priv_tenant_id = pkt.get_priv_tenant_id();
-    if (NULL != gctx_.omt_) {
-      tenant = NULL;
-      if (OB_FAIL(gctx_.omt_->get_tenant(tenant_id, tenant)) || NULL == tenant) {
-        if (OB_FAIL(gctx_.omt_->get_tenant(priv_tenant_id, tenant)) || NULL == tenant) {
-          ret = OB_TENANT_NOT_IN_SERVER;
-        }
-      }
-    } else {
-      ret = OB_NOT_INIT;
-      LOG_ERROR("gctx_.omt_ is NULL", K(gctx_));
-    }
-  }
-
-  if (!OB_SUCC(ret)) {
-
-  } else if (NULL != queue) {
-    SERVER_LOG(DEBUG, "deliver packet", K(queue));
-    if (need_update_stat) {
-      ObTenantDiagnosticInfoSummaryGuard guard(tenant_id, group_id);
-      EVENT_INC(RPC_PACKET_IN);
-      EVENT_ADD(RPC_PACKET_IN_BYTES,
-                pkt.get_encoded_size() + OB_NET_HEADER_LENGTH);
-      EVENT_ADD(RPC_NET_DELAY, rpc_net_delay);
-      EVENT_ADD(RPC_NET_FRAME_DELAY,
-                now - req.get_receive_timestamp());
-    }
-    // TODO(roland.qk): pass ObDiagnosticInfo to each queue.
-    if (!queue->push(&req, MAX_QUEUE_LEN)) {
-      ret = OB_QUEUE_OVERFLOW;
-    }
-  } else if (NULL != tenant) {
-    ObDiagnosticInfo *di = nullptr;
-    if (OB_UNLIKELY(req.get_diagnostic_info())) {
-      // possible repost
-      req.get_diagnostic_info()->inner_begin_wait_event(ObWaitEventIds::NETWORK_QUEUE_WAIT, 0, pkt.get_pcode(), pkt.get_request_level(), 0);
-    } else if (need_update_stat) {  // simplest way to check is_diagnose_info_enabled
-      // using_cache = true means session_id = 0
-      const bool using_cache =
-          ObDiagnosticInfoContainer::get_di_experimental_feature_flag().di_rpc_cache();
-      int64_t session_id = 0;
-      if (!using_cache) {
-        session_id = ObBackgroundSessionIdGenerator::get_instance().get_next_rpc_session_id();
-      }
-      if (OB_SUCCESS != acquire_diagnostic_info_object(tenant_id, group_id, session_id, di,
-                            using_cache)) {
-        // ignore diagnostic info error
-      } else {
-        di->get_ash_stat().pcode_ = pkt.get_pcode();
-        di->get_ash_stat().session_type_ = ObActiveSessionStatItem::SessionType::BACKGROUND;
-        snprintf(di->get_ash_stat().program_, ASH_PROGRAM_STR_LEN, "T%ld_RPC_REQUEST", tenant_id);
-        di->get_ash_stat().module_[0] = '\0';
-        di->get_ash_stat().action_[0] = '\0';
-        di->get_ash_stat().trace_id_ = req.generate_trace_id(GCTX.self_addr());
-        di->get_ash_stat().clear_basic_query_identifier(); //clear the last query identifier
-        if (OB_NOT_NULL(req.get_diagnostic_info())) {
-          LOG_ERROR("reuse diagnostic info wrongly.", K(&req), K(req.get_diagnostic_info()), K(di));
-        }
-        req.set_diagnostic_info(di);
-        di->inner_begin_wait_event(ObWaitEventIds::NETWORK_QUEUE_WAIT, 0, pkt.get_pcode(), pkt.get_request_level(), 0);
-      }
-    }
-    ObTenantDiagnosticInfoSummaryGuard g(nullptr == di ? nullptr : di->get_summary_slot());
-    if (need_update_stat) {
-      EVENT_INC(RPC_PACKET_IN);
-      EVENT_ADD(RPC_PACKET_IN_BYTES,
-                pkt.get_encoded_size() + OB_NET_HEADER_LENGTH);
-      EVENT_ADD(RPC_NET_DELAY, rpc_net_delay);
-      EVENT_ADD(RPC_NET_FRAME_DELAY,
-                now - req.get_receive_timestamp());
-    }
-
-    SERVER_LOG(DEBUG, "deliver tenant packet", K(queue), K(tenant->id()));
-    if (tenant->has_stopped()) {
-      ret = OB_TENANT_NOT_IN_SERVER;
-      LOG_WARN("tenant is stopped", K(ret), K(tenant->id()));
-      if (OB_NOT_NULL(di)) {
-        di->end_wait_event(ObWaitEventIds::NETWORK_QUEUE_WAIT, false);
-        // no need to process di ref in obrequest. it would be processed in
-        // ObRpcRequestOperator::response_result
-      }
-    } else if (OB_FAIL(tenant->recv_request(req))) {
-      if (REACH_TIME_INTERVAL(5 * 1000 * 1000)) {
-        LOG_WARN("tenant receive request fail", K(*tenant), K(req));
-      }
-      if (OB_NOT_NULL(di)) {
-        di->end_wait_event(ObWaitEventIds::NETWORK_QUEUE_WAIT, false);
-      }
-    }
-  } else if (!is_stream) {
-    LOG_WARN("not stream packet, should not reach here.");
-    ret = OB_ERR_UNEXPECTED;
-  }
-
-  // maybe tenant hasn't synced right now.
-  if (OB_TENANT_NOT_IN_SERVER == ret && SS_INIT == GCTX.status_) {
-    ret = OB_SERVER_IS_INIT;
-    LOG_WARN("server is initializing", K(pkt), K(ret));
-  }
-
-  if (!OB_SUCC(ret)) {
-    EVENT_INC(RPC_DELIVER_FAIL);
-    if (REACH_TIME_INTERVAL(5 * 1000 * 1000)) {
-      SERVER_LOG(WARN, "can't deliver request", K(req), K(ret));
-    }
-    on_translate_fail(&req, ret);
   }
 
   return ret;
@@ -566,15 +385,14 @@ int ObSrvDeliver::deliver_mysql_request(ObRequest &req)
 
   if (OB_SUCC(ret)) {
     const bool need_update_stat = (ObRequest::OB_MYSQL == req.get_type()) &&
-                                  !req.is_retry_on_lock() &&
-                                  oceanbase::lib::is_diagnose_info_enabled();
+                                  !req.is_retry_on_lock();
     // auth request
     if (NULL == tenant) {
       const obmysql::ObMySQLRawPacket &pkt
           = reinterpret_cast<const obmysql::ObMySQLRawPacket &>(req.get_packet());
       if (need_update_stat) {
-        EVENT_INC(MYSQL_PACKET_IN);
-        EVENT_ADD(MYSQL_PACKET_IN_BYTES, pkt.get_clen() + OB_MYSQL_HEADER_LENGTH);
+        EVENT_INC(common::ObStatEventIds::MYSQL_PACKET_IN);
+        EVENT_ADD(common::ObStatEventIds::MYSQL_PACKET_IN_BYTES, pkt.get_clen() + OB_MYSQL_HEADER_LENGTH);
         conn->connect_in_bytes_ = pkt.get_clen() + OB_MYSQL_HEADER_LENGTH;
       }
 
@@ -582,109 +400,50 @@ int ObSrvDeliver::deliver_mysql_request(ObRequest &req)
         LOG_INFO("receive login request from unix domain socket");
         if (!diagnose_queue_->queue_.push(&req, MAX_QUEUE_LEN)) {
           ret = OB_QUEUE_OVERFLOW;
-          EVENT_INC(MYSQL_DELIVER_FAIL);
+          EVENT_INC(common::ObStatEventIds::MYSQL_DELIVER_FAIL);
           LOG_ERROR("deliver request fail", K(req));
         }
       } else {
         char user_name_buf[OB_MAX_USER_NAME_BUF_LENGTH] = "";
         char tenant_name_buf[OB_MAX_TENANT_NAME_LENGTH + 1] = "";
-        uint64_t tenant_id = OB_INVALID_TENANT_ID;
-        ObDiagnosticInfo *di = nullptr;
         if (OB_FAIL(get_user_tenant(req, user_name_buf, tenant_name_buf))) {
           LOG_WARN("fail to get username and tenant name", K(ret), K(req));
         } else if (0 != STRLEN(user_name_buf)) {
           if (0 == STRCMP(tenant_name_buf, OB_DIAG_TENANT_NAME)) {
+            // tenant@diag logs in as root@tenant; this is independent from resource groups.
             MEMCPY(tenant_name_buf, user_name_buf, STRLEN(user_name_buf));
             tenant_name_buf[STRLEN(user_name_buf)] = '\0';
-            conn->group_id_ = share::OBCG_DIAG_TENANT;
+            MEMCPY(user_name_buf, OB_SYS_USER_NAME, STRLEN(OB_SYS_USER_NAME));
+            user_name_buf[STRLEN(OB_SYS_USER_NAME)] = '\0';
           }
           MEMCPY(conn->user_name_buf_, user_name_buf, STRLEN(user_name_buf));
           conn->user_name_buf_[STRLEN(user_name_buf)] = '\0';
           MEMCPY(conn->tenant_name_buf_, tenant_name_buf, STRLEN(tenant_name_buf));
           conn->tenant_name_buf_[STRLEN(tenant_name_buf)] = '\0';
-          ObString tenant_name(tenant_name_buf);
-          if (OB_FAIL(extract_tenant_id(tenant_name, tenant_id))) {
-            LOG_WARN("extract tenant_id fail", K(ret), K(tenant_name), K(tenant_id));
-            // ignore error and handle in ObMPConnect
-            ret = OB_SUCCESS;
-          } else {
-            conn->tenant_id_ = tenant_id;
-            conn->mysql_pkt_context_.set_tenant_id(tenant_id);
-            conn->proto20_pkt_context_.set_tenant_id(tenant_id);
-            if (OB_SUCCESS != acquire_diagnostic_info_object(tenant_id, conn->group_id_, conn->sessid_, di)) {
-              // ignore error.
-            } else {
-              di->get_ash_stat().session_type_ = ObActiveSessionStatItem::SessionType::FOREGROUND;
-              snprintf(di->get_ash_stat().program_, ASH_PROGRAM_STR_LEN, "T%ld_SQL_CMD", tenant_id);
-              conn->set_diagnostic_info(di);
-            }
-          }
         }
-        if (ObDiagnosticInfoContainer::get_di_experimental_feature_flag().mysql_obrequest_ref()) {
-          req.set_diagnostic_info(conn->get_diagnostic_info());
-        }
-        ObTenantDiagnosticInfoSummaryGuard g(di == nullptr ? nullptr : di->get_summary_slot());
         if (OB_SUCC(ret)) {
           if (OB_FAIL(dispatch_req(req))) {
-            LOG_ERROR("deliver request in dispatch_req fail", K(ret), K(tenant_id), K(req));
+            LOG_ERROR("deliver request in dispatch_req fail", K(ret), K(req));
           }
         }
       }
     } else {
       const obmysql::ObMySQLRawPacket &pkt
           = reinterpret_cast<const obmysql::ObMySQLRawPacket &>(req.get_packet());
-      ObTenantDiagnosticInfoSummaryGuard g(conn->get_diagnostic_info() == nullptr ? nullptr : conn->get_diagnostic_info()->get_summary_slot());
 
       if (need_update_stat) {
-        EVENT_INC(MYSQL_PACKET_IN);
-        EVENT_ADD(MYSQL_PACKET_IN_BYTES, pkt.get_clen() + OB_MYSQL_HEADER_LENGTH);
+        EVENT_INC(common::ObStatEventIds::MYSQL_PACKET_IN);
+        EVENT_ADD(common::ObStatEventIds::MYSQL_PACKET_IN_BYTES, pkt.get_clen() + OB_MYSQL_HEADER_LENGTH);
       }
       // The tenant check has been done in the recv_request method. For performance considerations, the check here is removed;
-      /*
-      const int64_t tenant_id = conn->tenant_id_;
-      if (NULL == gctx_.omt_) {
-        ret = OB_SERVER_IS_INIT;
-        LOG_ERROR("gctx is not valid", K(ret));
-      } else if (!gctx_.omt_->has_tenant(tenant_id)) {
-        ret = OB_TENANT_NOT_IN_SERVER;
-        LOG_WARN(
-            "receive mysql packet with tenant not in this server",
-            K(tenant_id), K(ret));
-      }*/
 
-      ObDiagnosticInfo *di = conn->get_diagnostic_info();
-      if (OB_NOT_NULL(di)) {
-        ObActiveSessionStat &ash_stat = di->get_ash_stat();
-        if (ObDiagnosticInfoContainer::get_di_experimental_feature_flag().mysql_obrequest_ref()) {
-          req.set_diagnostic_info(di);
-        }
-        ash_stat.trace_id_ = req.generate_trace_id(GCTX.self_addr());
-        if (!ash_stat.has_user_module_) {
-          ash_stat.module_[0] = '\0';
-        }
-        if (!ash_stat.has_user_action_) {
-          ash_stat.action_[0] = '\0';
-        }
-        if (need_update_stat) {
-          ash_stat.clear_basic_query_identifier(); //clear the last query identifier
-        }
-        di->inner_begin_wait_event(ObWaitEventIds::NETWORK_QUEUE_WAIT, 0, 0, 0, 0);
-      }
       if (OB_FAIL(ret)) {
             // do nothing
       } else if (tenant->has_stopped()) {
         ret = OB_TENANT_NOT_IN_SERVER;
         LOG_WARN("tenant is stopped", K(ret), K(tenant->id()));
-        if (OB_NOT_NULL(conn->get_diagnostic_info())) {
-          conn->get_diagnostic_info()->end_wait_event(ObWaitEventIds::NETWORK_QUEUE_WAIT, false);
-          req.reset_diagnostic_info();
-        }
       } else if (OB_FAIL(tenant->recv_request(req))) {
-        EVENT_INC(MYSQL_DELIVER_FAIL);
-        if (OB_NOT_NULL(conn->get_diagnostic_info())) {
-          conn->get_diagnostic_info()->end_wait_event(ObWaitEventIds::NETWORK_QUEUE_WAIT, false);
-          req.reset_diagnostic_info();
-        }
+        EVENT_INC(common::ObStatEventIds::MYSQL_DELIVER_FAIL);
         LOG_ERROR("deliver request fail", K(req), K(ret), K(*tenant));
         if (OB_SIZE_OVERFLOW == ret) {
           LOG_DBA_ERROR_V2(OB_TENANT_REQUEST_QUEUE_FULL, ret,
@@ -717,12 +476,12 @@ int ObSrvDeliver::deliver(rpc::ObRequest &req)
   }
   LOG_DEBUG("deliver ob_request:", K(req));
   if (ObRequest::OB_RPC == req.get_type()) {
-    if (OB_FAIL(deliver_rpc_request(req))) {
-      if (REACH_TIME_INTERVAL(5 * 1000 * 1000)) {
-        LOG_WARN("deliver rpc request fail", KP(&req), K(ret));
-      }
+    // obcall RPC transport removed (single-replica): no OB_RPC request path.
+    ret = OB_NOT_SUPPORTED;
+    if (REACH_TIME_INTERVAL(5 * 1000 * 1000)) {
+      LOG_WARN("OB_RPC request after rpc removal, dropping", KP(&req), K(ret));
     }
-    //LOG_INFO("yzfdebug deliver rpc", K(ret), "pkt", req.get_packet());
+    on_translate_fail(&req, ret);
   } else if (ObRequest::OB_MYSQL == req.get_type()) {
     if (OB_FAIL(deliver_mysql_request(req))) {
       LOG_WARN("deliver mysql request fail", K(req), K(ret));

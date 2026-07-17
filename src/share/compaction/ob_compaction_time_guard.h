@@ -42,7 +42,6 @@ public:
     RS_COMPACT_TIME_GUARD = 1,
     SCHEDULE_COMPACT_TIME_GUARD = 2,
     STORAGE_COMPACT_TIME_GUARD = 3,
-    CO_MERGE_TIME_GUARD = 4,
     MAX_COMPACT_TIME_GUARD
   };
 public:
@@ -113,7 +112,7 @@ public:
   virtual ~ObRSCompactionTimeGuard() {}
   enum CompactionEvent : uint16_t {
     PREPARE_UNFINISH_TABLE_IDS = 0,
-    GET_TABLET_LS_PAIRS,
+    GET_TABLET_IDS,
     GET_TABLET_META_TABLE,
     CKM_VERIFICATION,
     COMPACTION_EVENT_MAX,
@@ -194,7 +193,7 @@ public:
   {}
   virtual ~ObSSCompactionTimeGuard() {}
   enum CompactionEvent : uint16_t {
-    // ls merge scheduler
+    // tablet merge scheduler
     GET_SCHEDULE_TABLET,
     PREPARE_CLOG,
     UPDATE_TABLET_OBJ,
@@ -211,27 +210,6 @@ private:
   static const int64_t COMPACTION_SHOW_TIME_THRESHOLD = 1 * 1000L * 1000L; // 1s
 };
 
-struct ObCOMergeTimeGuard : public ObCompactionTimeGuard
-{
-public:
-  ObCOMergeTimeGuard()
-    : ObCompactionTimeGuard(CO_MERGE_TIME_GUARD, UINT64_MAX, "[CO_Merge] ")
-  {}
-  virtual ~ObCOMergeTimeGuard() {}
-  enum CompactionEvent : uint16_t {
-    MOVE_NEXT = 0,
-    COMPARE,
-    BUILD_LOG,
-    REPLAY_BASE_CG,
-    PERSIST_LOG,
-    REPLAY_LOG,
-    COMPACTION_EVENT_MAX
-  };
-  virtual int64_t to_string(char *buf, const int64_t buf_len) const override;
-private:
-  const static char *CompactionEventStr[];
-  static const char *get_comp_event_str(const enum CompactionEvent event);
-};
 } // namespace compaction
 } // namespace oceanbase
 

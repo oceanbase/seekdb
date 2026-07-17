@@ -16,66 +16,26 @@
 
 # define USING_LOG_PREFIX SERVER
 #include "ob_all_virtual_schema_memory.h"
-#include "observer/ob_server_struct.h"
 
 namespace oceanbase
 {
 namespace observer
 {
-int ObAllVirtualSchemaMemory::inner_open()
+int ObAllVirtualSchemaMemory::get_next_mem_info_(ObSchemaMemory &schema_mem)
 {
   int ret = OB_SUCCESS;
-  const ObAddr &addr = GCTX.self_addr();
 
-  if (false == addr.ip_to_string(ip_buffer_, sizeof(ip_buffer_))) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("fail to convert ip to string", KR(ret), K(addr));
-  } else if (OB_INVALID_TENANT_ID == effective_tenant_id_) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid tenant_id", KR(ret), K_(effective_tenant_id));
-  } else if (is_sys_tenant(effective_tenant_id_)) {
-    if (OB_FAIL(schema_service_.get_schema_store_tenants(tenant_ids_))) {
-      LOG_WARN("fail to get schema store tenants", KR(ret));
-    }
-  } else {
-    // user/meta tenant can see its own schema
-    if (schema_service_.check_schema_store_tenant_exist(effective_tenant_id_)) {
-      if (OB_FAIL(tenant_ids_.push_back(effective_tenant_id_))) {
-        LOG_WARN("fail to push back effective_tenant_id", KR(ret), K_(effective_tenant_id));
-      }
-    }
-  }
-  return ret;
-}
-
-int ObAllVirtualSchemaMemory::get_next_tenant_mem_info(ObSchemaMemory &schema_mem) {
-  int ret = OB_SUCCESS;
-  int tmp_ret = OB_SUCCESS;
-
-  if (mem_idx_ >= schema_mem_infos_.count()) {
-    do {
+  if (OB_INVALID_INDEX == mem_idx_) {
+    if (OB_FAIL(schema_service_.get_tenant_mem_info(1UL, schema_mem_infos_))) {
+      LOG_WARN("fail to get tenant mem info", KR(ret));
       schema_mem_infos_.reset();
-      if (++tenant_idx_ >= tenant_ids_.count()) {
-        ret = OB_ITER_END;
-      } else {
-        uint64_t tenant_id = tenant_ids_[tenant_idx_];
-        if (OB_INVALID_TENANT_ID == tenant_id) {
-          ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("invalid tenant_id", KR(ret), K(tenant_idx_));
-        //ignore single failture
-        } else if (OB_SUCCESS != (tmp_ret = schema_service_.get_tenant_mem_info(tenant_id, schema_mem_infos_))) {
-          LOG_WARN("fail to get tenant mem info", KR(tmp_ret), K(tenant_id));
-          schema_mem_infos_.reset();
-        } else {
-          mem_idx_ = 0;
-        }
-      }
-    } while (0 == schema_mem_infos_.count() && OB_SUCC(ret));
+    } else {
+      mem_idx_ = 0;
+    }
   }
   if (OB_SUCC(ret)) {
-    if (OB_UNLIKELY(mem_idx_ < 0 || mem_idx_ >= schema_mem_infos_.count())) {
-      ret = OB_ERROR_OUT_OF_RANGE;
-      LOG_WARN("mem_idx_ out of range", KR(ret), K(mem_idx_));
+    if (mem_idx_ >= schema_mem_infos_.count()) {
+      ret = OB_ITER_END;
     } else {
       schema_mem = schema_mem_infos_[mem_idx_++];
     }
@@ -88,14 +48,14 @@ int ObAllVirtualSchemaMemory::inner_get_next_row(common::ObNewRow *&row)
   int ret = OB_SUCCESS;
   ObSchemaMemory schema_mem;
 
-  if (OB_FAIL(get_next_tenant_mem_info(schema_mem))) {
+  if (OB_FAIL(get_next_mem_info_(schema_mem))) {
     if (OB_ITER_END != ret) {
       LOG_WARN("fail to get next tenant_mem_info", KR(ret));
     }
   }
   if (OB_SUCC(ret)) {
     const int64_t pos = schema_mem.get_pos();
-    const uint64_t tenant_id = schema_mem.get_tenant_id();
+    
     const int64_t used_schema_mgr_cnt = schema_mem.get_used_schema_mgr_cnt();
     const int64_t free_schema_mgr_cnt = schema_mem.get_free_schema_mgr_cnt();
     const int64_t mem_used = schema_mem.get_mem_used();

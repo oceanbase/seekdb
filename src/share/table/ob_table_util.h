@@ -33,8 +33,6 @@ namespace table
 class ObTableUtils 
 {
 public:
-  static const ObString &get_kv_normal_trace_info() { return KV_NORMAL_TRACE_INFO; } 
-  static const ObString &get_kv_ttl_trace_info() { return KV_TTL_TRACE_INFO; }
   static bool has_exist_in_columns(const ObIArray<ObString> &columns, const ObString &name);
 
 public:
@@ -61,9 +59,6 @@ public:
                                        int64_t &part_idx,
                                        int64_t &subpart_idx);
 
-private:
-  static const ObString KV_NORMAL_TRACE_INFO;
-  static const ObString KV_TTL_TRACE_INFO;
 };
 
 }  // namespace table

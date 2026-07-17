@@ -19,7 +19,6 @@
 
 #include "lib/list/ob_dlink_node.h"
 #include "lib/utility/ob_print_utils.h"
-#include "share/ob_ls_id.h"
 #include "common/ob_tablet_id.h"
 #include "share/scn.h"
 
@@ -99,7 +98,7 @@ public:
   void reset();
   virtual void remove_from_data_checkpoint();
   virtual share::SCN get_rec_scn() = 0;
-  virtual int flush(share::ObLSID ls_id) = 0;
+  virtual int flush() = 0;
   // judge rec_scn of the checkpoint unit won't get smaller
   // by comparing with max_consequent_callbacked_scn
   // a unit will only be moved once by rec_scn_stable_

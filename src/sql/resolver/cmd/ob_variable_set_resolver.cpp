@@ -77,7 +77,6 @@ int ObVariableSetResolver::resolve(const ParseNode &parse_tree)
     LOG_WARN("failed to check feature enable", K(ret));
   } else {
     stmt_ = variable_set_stmt;
-    variable_set_stmt->set_actual_tenant_id(session_info_->get_effective_tenant_id());
     ParseNode *set_node = NULL;
     ObVariableSetStmt::VariableSetNode var_node;
     for (int64_t i = 0; OB_SUCC(ret) && i < parse_tree.num_child_; ++i) {
@@ -119,7 +118,7 @@ int ObVariableSetResolver::resolve(const ParseNode &parse_tree)
           if (T_IDENT == var->type_) {
             var_node.is_system_variable_ = true; // PL's set statement is resolved in the PL resolver, so it won't reach here, thus anything reaching here must be the default writing of a system variable
             var_name.assign_ptr(var->str_value_, static_cast<int32_t>(var->str_len_));
-          } else if (T_OBJ_ACCESS_REF == var->type_) { //Oracle mode
+          } else if (T_OBJ_ACCESS_REF == var->type_) { // qualified variable reference
             const ParseNode *name_node = NULL;
             if (OB_ISNULL(name_node = var->children_[0])) {
               ret = OB_ERR_UNEXPECTED;
@@ -162,7 +161,7 @@ int ObVariableSetResolver::resolve(const ParseNode &parse_tree)
               } else {
                 MEMCPY(&value_node, set_node->children_[1], sizeof(ParseNode));
               }
-            } else if (T_OBJ_ACCESS_REF == set_node->children_[1]->type_) { //Oracle mode
+            } else if (T_OBJ_ACCESS_REF == set_node->children_[1]->type_) { // qualified variable value
               if (OB_ISNULL(set_node->children_[1]->children_[0]) || OB_UNLIKELY(set_node->children_[1]->children_[1] != NULL)) {
                 ret = OB_ERR_UNKNOWN_SET_OPTION;
                 LOG_WARN("unknown SET option", K(ret), K(set_node->children_[1]->children_[0]->type_));
@@ -202,7 +201,7 @@ int ObVariableSetResolver::resolve(const ParseNode &parse_tree)
               }
             }
           } else {
-            if (lib::is_mysql_mode() && check_var_name_length) {
+            if (check_var_name_length) {
               if (OB_FAIL(ObResolverUtils::check_user_variable_length(var_node.variable_name_.ptr(),
                                                                       var_node.variable_name_.length()))) {
                 LOG_WARN("check user variable length fail", K(ret));
@@ -297,12 +296,10 @@ int ObVariableSetResolver::resolve_value_expr(ParseNode &val_node, ObRawExpr *&v
         LOG_WARN("failed to formalize call expr", K(ret));
       }
     } else if (value_expr->has_flag(CNT_SUB_QUERY)) {
-      if (is_mysql_mode()) {
-        if (OB_FAIL(resolve_subquery_info(sub_query_info, value_expr))) {
-          LOG_WARN("failed to resolve subquery info", K(ret));
-        }
+      if (OB_FAIL(resolve_subquery_info(sub_query_info, value_expr))) {
+        LOG_WARN("failed to resolve subquery info", K(ret));
       }
-      LOG_TRACE("set user variable with subquery", K(sub_query_info.count()), K(is_mysql_mode()));
+      LOG_TRACE("set user variable with subquery", K(sub_query_info.count()));
     }
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(ObResolverUtils::resolve_columns_for_const_expr(value_expr, columns, params_))) {
@@ -374,7 +371,7 @@ ObAlterSessionSetResolver::~ObAlterSessionSetResolver()
 {
 }
 
-// for oracle mode grammer: alter session set sys_var = val
+// Resolve ALTER SESSION SET sys_var = val.
 int ObAlterSessionSetResolver::resolve(const ParseNode &parse_tree)
 {
   int ret = OB_SUCCESS;
@@ -391,7 +388,6 @@ int ObAlterSessionSetResolver::resolve(const ParseNode &parse_tree)
   } else {
     // start resolve
     stmt_ = variable_set_stmt;
-    variable_set_stmt->set_actual_tenant_id(session_info_->get_effective_tenant_id());
     ParseNode *set_clause_node = NULL;
     ParseNode *set_param_node = NULL;
     ObVariableSetStmt::VariableSetNode var_node;

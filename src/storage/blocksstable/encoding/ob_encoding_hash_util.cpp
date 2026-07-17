@@ -27,7 +27,7 @@ using namespace common;
 ObEncodingHashTable::ObEncodingHashTable() : is_created_(false), bucket_num_(0),
     node_num_(0), list_num_(0), node_cnt_(0), list_cnt_(0), buckets_(NULL), nodes_(NULL),
     lists_(NULL), skip_bit_(NULL), hash_val_(NULL),
-    alloc_(blocksstable::OB_ENCODING_LABEL_HASH_TABLE, OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID())
+    alloc_(blocksstable::OB_ENCODING_LABEL_HASH_TABLE, OB_MALLOC_NORMAL_BLOCK_SIZE)
   {
   MEMSET(&null_nodes_, 0, sizeof(null_nodes_));
   MEMSET(&nope_nodes_, 0, sizeof(nope_nodes_));
@@ -170,7 +170,7 @@ int ObEncodingHashTableBuilder::build(const ObColDatums &col_datums, const ObCol
     }
     sql::ObExprBasicFuncs *basic_funcs = ObDatumFuncs::get_basic_func(
         col_desc.col_type_.get_type(), col_desc.col_type_.get_collation_type(),
-        col_desc.col_type_.get_scale(), lib::is_oracle_mode(), has_lob_header, precision);
+        col_desc.col_type_.get_scale(), has_lob_header, precision);
     ObHashFunc hash_func;
     hash_func.hash_func_ = basic_funcs->murmur_hash_v2_;
     hash_func.batch_hash_func_ = basic_funcs->murmur_hash_v2_batch_;
@@ -295,7 +295,7 @@ ObEncodingHashTableFactory::ObEncodingHashTableFactory()
   : allocator_(OB_MALLOC_NORMAL_BLOCK_SIZE, ObMalloc(blocksstable::OB_ENCODING_LABEL_HT_FACTORY)),
     hashtables_()
 {
-  lib::ObMemAttr attr(MTL_ID(), blocksstable::OB_ENCODING_LABEL_HT_FACTORY);
+  lib::ObMemAttr attr(blocksstable::OB_ENCODING_LABEL_HT_FACTORY);
   allocator_.set_attr(attr);
   hashtables_.set_attr(attr);
 }

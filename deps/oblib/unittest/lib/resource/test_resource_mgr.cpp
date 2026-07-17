@@ -25,15 +25,12 @@ namespace lib
 {
 TEST(TestTenantMemoryMgr, basic)
 {
-  ObTenantMemoryMgr memory_mgr(1);
+  ObTenantMemoryMgr memory_mgr;
   const int64_t limit = 1 * 1024 * 1024 * 1024;
   memory_mgr.set_limit(limit);
   memory_mgr.set_hard_limit(limit);
   ASSERT_TRUE(NULL ==  memory_mgr.alloc_chunk(-1, ObMemAttr()));
   ObMemAttr attr;
-  attr.tenant_id_ = 2;
-  ASSERT_TRUE(NULL == memory_mgr.alloc_chunk(1024, attr));
-  attr.tenant_id_ = 1;
   attr.ctx_id_ = 0;
 
   // alloc, then free
@@ -43,7 +40,6 @@ TEST(TestTenantMemoryMgr, basic)
   ObArray<void *> chunks;
   for (int64_t i = 0; i < max_alloc_count; ++i) {
     ObMemAttr attr;
-    attr.tenant_id_ = 1;
     attr.ctx_id_ = (i % 2 == 0 ? 0 : 1);
     AChunk *chunk = NULL;
     chunk = memory_mgr.alloc_chunk(alloc_size, attr);
@@ -63,7 +59,6 @@ TEST(TestTenantMemoryMgr, basic)
   chunk = memory_mgr.alloc_chunk(alloc_size, attr);
   ASSERT_TRUE(NULL == chunk);
   for (int64_t i = 0; i < chunks.count(); ++i) {
-    attr.tenant_id_ = 1;
     attr.ctx_id_ = (i % 2 == 0 ? 0 : 1);
     memory_mgr.free_chunk((AChunk *)chunks.at(i), attr);
   }
@@ -78,7 +73,6 @@ TEST(TestTenantMemoryMgr, basic)
   // 10 cache alloc and free
   for (int64_t i = 0; i < max_alloc_count - 10; ++i) {
     ObMemAttr attr;
-    attr.tenant_id_ = 1;
     attr.ctx_id_ = (i % 2 == 0 ? 0 : 1);
     AChunk *chunk = NULL;
     chunk = memory_mgr.alloc_chunk(alloc_size, attr);
@@ -104,7 +98,6 @@ TEST(TestTenantMemoryMgr, basic)
   chunk = memory_mgr.alloc_chunk(alloc_size, attr);
   ASSERT_TRUE(NULL == chunk);
   for (int64_t i = 0; i < chunks.count(); ++i) {
-    attr.tenant_id_ = 1;
     attr.ctx_id_ = (i % 2 == 0 ? 0 : 1);
     memory_mgr.free_chunk((AChunk *)chunks.at(i), attr);
   }
@@ -124,13 +117,13 @@ TEST(TestTenantMemoryMgr, basic)
 class FakeCacheWasher : public ObICacheWasher
 {
 public:
-  FakeCacheWasher(const uint64_t tenant_id, const int64_t mb_size)
-    : tenant_id_(tenant_id), mb_size_(mb_size), mb_blocks_(NULL)
+  FakeCacheWasher(const int64_t mb_size)
+    : tenant_id_(OB_SERVER_TENANT_ID), mb_size_(mb_size), mb_blocks_(NULL)
   {
   }
   virtual ~FakeCacheWasher() {}
 
-  int erase_cache(const uint64_t ) override { return 0; }
+  int erase_cache() override { return 0; }
   int alloc_mb(ObTenantMemoryMgr &mgr)
   {
     int ret = OB_SUCCESS;
@@ -145,10 +138,9 @@ public:
     }
     return ret;
   }
-  int sync_wash_mbs(const uint64_t tenant_id, const int64_t wash_size,
+  int sync_wash_mbs(const int64_t wash_size,
                     ObCacheMemBlock *&wash_blocks)
   {
-    UNUSED(tenant_id);
     int ret = OB_SUCCESS;
     int64_t left_to_washed = wash_size;
     ObCacheMemBlock *washed_blocks = NULL;
@@ -189,8 +181,8 @@ TEST(TestTenantMemoryMgr, sync_wash)
   int ret = OB_SUCCESS;
   const int64_t limit = 2L * 1024L * 1024L * 1024L;
   oceanbase::lib::set_memory_limit(limit);
-  FakeCacheWasher washer(1, ACHUNK_SIZE);
-  ObTenantMemoryMgr memory_mgr(1);
+  FakeCacheWasher washer(ACHUNK_SIZE);
+  ObTenantMemoryMgr memory_mgr;
   ObArray<void *> chunks;
   chunks.reserve(512);
   const int64_t tenant_limit = 2 * limit;
@@ -210,7 +202,6 @@ TEST(TestTenantMemoryMgr, sync_wash)
   memory_mgr.set_cache_washer(washer);
   int64_t alloc_count = 0;
   ObMemAttr attr;
-  attr.tenant_id_ = 1;
   attr.ctx_id_ = 1;
   while (OB_SUCC(ret)) {
     void *ptr = NULL;
@@ -248,8 +239,8 @@ TEST(TestTenantMemoryMgr, DISABLED_large_sync_wash)
   const int64_t limit = 1L * 1024L * 1024L * 1024L;
   const int64_t aligned_size = CHUNK_MGR.aligned(ACHUNK_SIZE);
   oceanbase::lib::set_memory_limit(limit);
-  FakeCacheWasher washer(1, ACHUNK_SIZE);
-  ObTenantMemoryMgr memory_mgr(1);
+  FakeCacheWasher washer(ACHUNK_SIZE);
+  ObTenantMemoryMgr memory_mgr;
   ObArray<void *> chunks;
   chunks.reserve(512);
   const int64_t tenant_limit = 2 * limit;
@@ -263,7 +254,6 @@ TEST(TestTenantMemoryMgr, DISABLED_large_sync_wash)
   memory_mgr.set_cache_washer(washer);
   int64_t alloc_count = 0;
   ObMemAttr attr;
-  attr.tenant_id_ = 1;
   attr.ctx_id_ = 1;
   ASSERT_EQ(aligned_size * mb_count, memory_mgr.get_sum_hold());
   while (OB_SUCC(ret)) {
@@ -294,57 +284,6 @@ TEST(TestTenantMemoryMgr, DISABLED_large_sync_wash)
   ASSERT_EQ(0, memory_mgr.get_sum_hold());
 }
 
-TEST(TestResourceMgr, basic)
-{
-  ObResourceMgr mgr;
-  FakeCacheWasher washer(1, ACHUNK_SIZE);
-  ObTenantResourceMgrHandle tenant_mgr;
-  ObTenantResourceMgrHandle tenant_mgrs[ObResourceMgr::MAX_TENANT_COUNT];
-  ASSERT_EQ(OB_NOT_INIT, mgr.set_cache_washer(washer));
-  ASSERT_EQ(OB_NOT_INIT, mgr.get_tenant_resource_mgr(1, tenant_mgr));
-  ASSERT_EQ(OB_SUCCESS, mgr.init());
-
-  ASSERT_EQ(OB_INVALID_ARGUMENT, mgr.get_tenant_resource_mgr(OB_INVALID_ID, tenant_mgr));
-  ASSERT_EQ(OB_INIT_TWICE, mgr.init());
-
-  ASSERT_EQ(OB_SUCCESS, mgr.set_cache_washer(washer));
-  for (int64_t i = 0; i < ObResourceMgr::MAX_TENANT_COUNT; ++i) {
-    ASSERT_EQ(OB_SUCCESS, mgr.get_tenant_resource_mgr(i, tenant_mgrs[i]));
-    ASSERT_EQ(i, tenant_mgrs[i].get_memory_mgr()->get_tenant_id());
-  }
-
-  const int TEST_TENANT_CNT = 5;
-  ObArray<void *> mbs;
-  for (int64_t i = 0; i < TEST_TENANT_CNT; ++i) {
-    void *ptr = NULL;
-    ptr = tenant_mgrs[i].get_memory_mgr()->alloc_cache_mb(ACHUNK_SIZE);
-    ASSERT_TRUE(NULL != ptr);
-    ASSERT_EQ(OB_SUCCESS, mbs.push_back(ptr));
-  }
-
-  for (int64_t i = 0; i < TEST_TENANT_CNT; ++i) {
-    ASSERT_EQ(CHUNK_MGR.aligned(ACHUNK_SIZE), tenant_mgrs[i].get_memory_mgr()->get_cache_hold());
-    ASSERT_EQ(i, tenant_mgrs[i].get_memory_mgr()->get_tenant_id());
-  }
-  for (int64_t i = 0; i < TEST_TENANT_CNT; ++i) {
-    tenant_mgrs[i].get_memory_mgr()->free_cache_mb(mbs.at(i));
-  }
-
-  for (int64_t i = 0; i < ObResourceMgr::MAX_TENANT_COUNT; ++i) {
-    ObTenantResourceMgrHandle tenant_mgr;
-    ASSERT_EQ(OB_SUCCESS, mgr.get_tenant_resource_mgr(i, tenant_mgr));
-    ASSERT_EQ(0, tenant_mgr.get_memory_mgr()->get_cache_hold());
-  }
-  for (int64_t i = 0; i < ObResourceMgr::MAX_TENANT_COUNT; ++i) {
-    tenant_mgrs[i].reset();
-  }
-
-  for (int64_t i = 0; i < ObResourceMgr::MAX_TENANT_COUNT; ++i) {
-    ObTenantResourceMgr *resource_mgr = NULL;
-    ASSERT_EQ(OB_ENTRY_NOT_EXIST, mgr.get_tenant_resource_mgr_unsafe(i, resource_mgr));
-  }
-  mgr.destroy();
-}
 }//end namespace lib
 }//end namespace oceanbase
 

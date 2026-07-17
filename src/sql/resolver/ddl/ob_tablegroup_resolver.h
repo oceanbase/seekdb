@@ -175,7 +175,7 @@ int ObTableGroupResolver::resolve_tablegroup_option(T *stmt, ParseNode *node)
               SQL_LOG(WARN, "set_tablegroup_sharding", K(ret));
             }
           }
-          if (OB_SUCC(ret) && OB_FAIL(alter_option_bitset_.add_member(obrpc::ObAlterTablegroupArg::SHARDING))) {
+          if (OB_SUCC(ret) && OB_FAIL(alter_option_bitset_.add_member(obcall::ObAlterTablegroupArg::SHARDING))) {
             SQL_LOG(WARN, "fail to add member", K(ret));
           }
           break;

@@ -116,8 +116,8 @@ int ObCreateOutlineResolver::resolve(const ParseNode &parse_tree)
   } else if (OB_UNLIKELY(NULL == (create_outline_stmt = create_stmt<ObCreateOutlineStmt>()))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_ERROR("failed to create create_outline_stmt", K(ret));
-  } else if (OB_FAIL(GET_MIN_DATA_VERSION(MTL_ID(), compat_version))) {
-    LOG_WARN("fail to get data version", KR(ret), K(MTL_ID()));
+  } else if (OB_FAIL(GET_MIN_DATA_VERSION(compat_version))) {
+    LOG_WARN("fail to get data version", KR(ret));
   } else {
     stmt_ = create_outline_stmt;
     //set is_replace

@@ -119,7 +119,6 @@ int ObExprJsonValue::calc_result_typeN(ObExprResType& type,
 int ObExprJsonValue::calc_input_type(ObExprResType& types_stack, bool &is_json_input)
 {
   INIT_SUCC(ret);
-  const bool is_oracle_mode = false;
   ObObjType doc_type = types_stack.get_type();
   if (types_stack.get_type() == ObNullType) {
   } else if (!ObJsonExprHelper::is_convertible_to_json(doc_type)) {
@@ -175,9 +174,9 @@ int ObExprJsonValue::eval_json_value(const ObExpr &expr, ObEvalCtx &ctx, ObDatum
   uint8_t is_type_mismatch = 0;
   ObDatum *return_val = NULL;
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
-  uint64_t tenant_id = ObMultiModeExprHelper::get_tenant_id(ctx.exec_ctx_.get_my_session());
-  MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator(), expr.type_, tenant_id, ret);
-  lib::ObMallocHookAttrGuard malloc_guard(lib::ObMemAttr(tenant_id, "JSONModule"));
+  
+  MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator(), expr.type_, ret);
+  lib::ObMallocHookAttrGuard malloc_guard(lib::ObMemAttr("JSONModule"));
   ObJsonBin st_json(&temp_allocator);
   ObIJsonBase *j_base = &st_json;
   ObJsonSeekResult hits;
@@ -417,7 +416,7 @@ int ObExprJsonValue::get_default_empty_error_value(const ObExpr &expr,
     }
   }
   // parse error option
-  if (lib::is_mysql_mode() && OB_SUCC(ret) && json_param->error_type_ == JSN_VALUE_DEFAULT) { // always get error option for return default value on error
+  if (OB_SUCC(ret) && json_param->error_type_ == JSN_VALUE_DEFAULT) { // always get error option for return default value on error
     if (!json_param->is_error_default_const_ || OB_ISNULL(json_param->error_val_)) {
       if (OB_FAIL(get_default_value(expr.args_[JSN_VAL_ERROR + 1], ctx,
                json_param->accuracy_, &json_param->error_val_))) {
@@ -549,12 +548,9 @@ int ObExprJsonValue::check_default_val_accuracy(const ObAccuracy &accuracy,
       if (OB_SUCC(ret)) {
         if (max_accuracy_len == DEFAULT_STR_LENGTH) { // default string len
         } else if (max_accuracy_len <= 0 || str_len_char > max_accuracy_len) {
-          if (lib::is_mysql_mode()) {
+          {
             ret = OB_OPERATE_OVERFLOW;
             LOG_USER_ERROR(OB_OPERATE_OVERFLOW, "STRING", "json_value");
-          } else {
-            ret = OB_ERR_VALUE_EXCEEDED_MAX;
-            LOG_USER_ERROR(OB_ERR_VALUE_EXCEEDED_MAX, str_len_char, max_accuracy_len);
           }
         }
       }
@@ -875,7 +871,7 @@ int ObExprJsonValue::get_default_value(ObExpr *expr,
   INIT_SUCC(ret);
   ObObjType val_type = expr->datum_meta_.type_;
   ObDatum *json_datum = NULL;
-  if (lib::is_mysql_mode()) {
+  {
     expr->extra_ &= ~CM_WARN_ON_FAIL; // make cast return error when fail
     expr->extra_ &= ~CM_NO_RANGE_CHECK; // make cast check range
     expr->extra_ &= ~CM_STRING_INTEGER_TRUNC; // make cast check range when string to uint

@@ -15,6 +15,7 @@
  */
  
 #include <gmock/gmock.h>
+#include <thread>
 
 #define USING_LOG_PREFIX STORAGE
 #define protected public
@@ -42,15 +43,11 @@ public:
   void batch_report_stat(int64_t report_num);
 
 private:
-  const uint64_t tenant_id_;
-  ObTenantBase tenant_base_;
   ObTenantTabletStatMgr *stat_mgr_;
 };
 
 TestTenantTabletStatMgr::TestTenantTabletStatMgr()
-  : tenant_id_(1),
-    tenant_base_(tenant_id_),
-    stat_mgr_(nullptr)
+  : stat_mgr_(nullptr)
 {
 }
 
@@ -75,14 +72,8 @@ void TestTenantTabletStatMgr::SetUp()
 
   ASSERT_EQ(OB_SUCCESS, ObTimerService::get_instance().start());
   stat_mgr_ = OB_NEW(ObTenantTabletStatMgr, ObModIds::TEST);
-  ret = stat_mgr_->init(tenant_id_);
+  ret = stat_mgr_->init();
   ASSERT_EQ(OB_SUCCESS, ret);
-  tenant_base_.set(stat_mgr_);
-
-  ObTenantEnv::set_tenant(&tenant_base_);
-  ASSERT_EQ(OB_SUCCESS, tenant_base_.init());
-  ASSERT_EQ(tenant_id_, MTL_ID());
-  ASSERT_EQ(stat_mgr_, MTL(ObTenantTabletStatMgr *));
 }
 
 void TestTenantTabletStatMgr::TearDown()
@@ -91,7 +82,6 @@ void TestTenantTabletStatMgr::TearDown()
   ObTimerService::get_instance().stop();
   ObTimerService::get_instance().wait();
   ObTimerService::get_instance().destroy();
-  ObTenantEnv::set_tenant(nullptr);
 }
 
 void TestTenantTabletStatMgr::report(ObTenantTabletStatMgr *mgr, const ObTabletStat &stat)
@@ -110,7 +100,6 @@ void TestTenantTabletStatMgr::batch_report_stat(int64_t report_num)
   std::thread *threads = new std::thread[report_num];
   for (int64_t i = 0; i < report_num; ++i) {
     ObTabletStat curr_stat;
-    curr_stat.ls_id_ = 1;
     curr_stat.tablet_id_ = 300001 + i;
     curr_stat.query_cnt_ = 100 * (i + 1);
     curr_stat.scan_physical_row_cnt_ = 10000 + i;
@@ -127,17 +116,9 @@ void TestTenantTabletStatMgr::batch_report_stat(int64_t report_num)
 
 namespace unittest
 {
-TEST_F(TestTenantTabletStatMgr, basic)
-{
-  EXPECT_EQ(OB_SYS_TENANT_ID, MTL_ID());
-  ObTenantTabletStatMgr *stat_mgr = MTL(ObTenantTabletStatMgr *);
-  ASSERT_TRUE(NULL != stat_mgr);
-}
-
 TEST_F(TestTenantTabletStatMgr, basic_tablet_stat_bucket)
 {
   ObTabletStat tablet_stat;
-  tablet_stat.ls_id_ = 1;
   tablet_stat.tablet_id_ = 1;
   tablet_stat.query_cnt_ = 100;
   tablet_stat.scan_logical_row_cnt_ = 100;
@@ -201,7 +182,6 @@ TEST_F(TestTenantTabletStatMgr, basic_tablet_stat_bucket)
 TEST_F(TestTenantTabletStatMgr, basic_tablet_stream)
 {
   ObTabletStat tablet_stat;
-  tablet_stat.ls_id_ = 1;
   tablet_stat.tablet_id_ = 200123;
   tablet_stat.query_cnt_ = 100;
   tablet_stat.scan_logical_row_cnt_ = 1000000;
@@ -243,7 +223,6 @@ TEST_F(TestTenantTabletStatMgr, get_all_tablet_stat)
   int ret = OB_SUCCESS;
 
   ObTabletStat tablet_stat;
-  tablet_stat.ls_id_ = 1;
   tablet_stat.tablet_id_ = 1;
   tablet_stat.query_cnt_ = 100;
   tablet_stat.scan_logical_row_cnt_ = 100;
@@ -375,12 +354,10 @@ TEST_F(TestTenantTabletStatMgr, basic_tablet_stat_mgr)
 {
   int ret = OB_SUCCESS;
 
-  EXPECT_EQ(OB_SYS_TENANT_ID, MTL_ID());
-  ObTenantTabletStatMgr *stat_mgr = MTL(ObTenantTabletStatMgr *);
+  ObTenantTabletStatMgr *stat_mgr = stat_mgr_;
   ASSERT_TRUE(NULL != stat_mgr);
 
   ObTabletStat tablet_stat;
-  tablet_stat.ls_id_ = 1;
   tablet_stat.tablet_id_ = 200123;
   tablet_stat.query_cnt_ = 100;
   tablet_stat.scan_logical_row_cnt_ = 100000;
@@ -392,17 +369,16 @@ TEST_F(TestTenantTabletStatMgr, basic_tablet_stat_mgr)
   stat_mgr_->process_stats();
 
   ObTabletStat res;
-  share::ObLSID ls_id(1);
   common::ObTabletID tablet_id(200123);
   storage::ObTabletStat unused_tablet_stat;
   share::schema::ObTableModeFlag unused_mode;
-  ret = stat_mgr_->get_latest_tablet_stat(ls_id, tablet_id, res, unused_tablet_stat, unused_mode);
+  ret = stat_mgr_->get_latest_tablet_stat(tablet_id, res, unused_tablet_stat, unused_mode);
   ASSERT_EQ(OB_SUCCESS, ret);
   ASSERT_EQ(100, res.query_cnt_);
 
   ASSERT_EQ(1, stat_mgr_->stream_map_.size());
-  ASSERT_EQ(OB_SUCCESS, stat_mgr_->clear_tablet_stat(ls_id, tablet_id));
-  const ObTabletStatKey key(ls_id, tablet_id);
+  ASSERT_EQ(OB_SUCCESS, stat_mgr_->clear_tablet_stat(tablet_id));
+  const ObTabletStatKey key(tablet_id);
   ObTabletStreamNode *stream_node = nullptr;
   ASSERT_TRUE(key.is_valid());
   ASSERT_EQ(OB_SUCCESS, stat_mgr_->stream_map_.get_refactored(key, stream_node));
@@ -416,7 +392,7 @@ TEST_F(TestTenantTabletStatMgr, basic_tablet_stat_mgr)
   }
   stat_mgr_->process_stats();
   storage::ObTabletStat total_tablet_stat;
-  ret = stat_mgr_->get_latest_tablet_stat(ls_id, tablet_id, res, total_tablet_stat, unused_mode);
+  ret = stat_mgr_->get_latest_tablet_stat(tablet_id, res, total_tablet_stat, unused_mode);
   ASSERT_EQ(OB_SUCCESS, ret);
   ASSERT_EQ(100 * 1000, total_tablet_stat.query_cnt_);
   ASSERT_EQ(100000 * 1000, total_tablet_stat.scan_logical_row_cnt_);
@@ -426,8 +402,7 @@ TEST_F(TestTenantTabletStatMgr, basic_tablet_stat_mgr)
 
 TEST_F(TestTenantTabletStatMgr, multi_report_tablet_stat)
 {
-  EXPECT_EQ(OB_SYS_TENANT_ID, MTL_ID());
-  ObTenantTabletStatMgr *stat_mgr = MTL(ObTenantTabletStatMgr *);
+  ObTenantTabletStatMgr *stat_mgr = stat_mgr_;
   ASSERT_TRUE(NULL != stat_mgr);
   ASSERT_TRUE(stat_mgr->is_inited_);
 
@@ -445,8 +420,7 @@ TEST_F(TestTenantTabletStatMgr, multi_report_tablet_stat)
 
 TEST_F(TestTenantTabletStatMgr, bacth_clear_tablet_stat)
 {
-  EXPECT_EQ(OB_SYS_TENANT_ID, MTL_ID());
-  ObTenantTabletStatMgr *stat_mgr = MTL(ObTenantTabletStatMgr *);
+  ObTenantTabletStatMgr *stat_mgr = stat_mgr_;
   ASSERT_TRUE(NULL != stat_mgr);
   ASSERT_TRUE(stat_mgr->is_inited_);
 
@@ -454,13 +428,12 @@ TEST_F(TestTenantTabletStatMgr, bacth_clear_tablet_stat)
   batch_report_stat(report_num);
   stat_mgr_->process_stats();
   
-  ObLSID ls_id(1);
   ObSEArray<ObTabletID, 100> tablet_ids;
   for (int64_t i = 0; i < report_num; i++) {
     ASSERT_EQ(OB_SUCCESS, tablet_ids.push_back(ObTabletID(300001 + i)));
   }
   ASSERT_EQ(100, stat_mgr_->stream_map_.size());
-  ASSERT_EQ(OB_SUCCESS, stat_mgr->batch_clear_tablet_stat(ls_id, tablet_ids));
+  ASSERT_EQ(OB_SUCCESS, stat_mgr->batch_clear_tablet_stat(tablet_ids));
   ObTenantTabletStatMgr::TabletStreamMap::iterator iter = stat_mgr_->stream_map_.begin();
   for ( ; iter != stat_mgr_->stream_map_.end(); ++iter) {
     ASSERT_TRUE(iter->second->stream_.key_.is_valid());

@@ -20,7 +20,7 @@
 #include <stdint.h>
 #include <functional>
 #include "sql/engine/basic/ob_compact_row.h"
-#include "src/share/vector/ob_i_vector.h"
+#include "sql/engine/vector/ob_i_vector.h"
 
 namespace oceanbase {
 

@@ -233,15 +233,15 @@ insert into t_dim_table (seq, log) values
 set ob_enable_index_direct_select = 'ON';
 
 --disable_query_log
-let $data_table_id_single = query_get_value("SELECT table_id FROM oceanbase.__all_virtual_table A, oceanbase.__all_database B WHERE A.table_name = 't_ir_single_column' and A.database_id = B.database_id and database_name = 'fts'", table_id, 1);
-let $fts_index_table_name_single = query_get_value(SELECT table_name FROM oceanbase.__all_virtual_table WHERE index_type = 15 and data_table_id = $data_table_id_single, table_name, 1);
+let $data_table_id_single = query_get_value("SELECT table_id FROM oceanbase.__all_table A, oceanbase.__all_database B WHERE A.table_name = 't_ir_single_column' and A.database_id = B.database_id and database_name = 'fts'", table_id, 1);
+let $fts_index_table_name_single = query_get_value(SELECT table_name FROM oceanbase.__all_table WHERE index_type = 15 and data_table_id = $data_table_id_single, table_name, 1);
 let $__doc_id = query_get_value(SELECT column_name FROM oceanbase.__all_column_history WHERE table_id = $data_table_id_single and column_name like '__doc_id_%', column_name, 1);
 let $__word_segment_17 = query_get_value(SELECT column_name FROM oceanbase.__all_column_history WHERE table_id = $data_table_id_single and column_name like '__word_segment_%', column_name, 1);
 let $__word_count_17 = query_get_value(SELECT column_name FROM oceanbase.__all_column_history WHERE table_id = $data_table_id_single and column_name like '__word_count_%', column_name, 1);
 eval select /*+opt_param('hidden_column_visible','true')*/ __pk_increment as doc_id, $__word_segment_17 as word, $__word_count_17 as word_count from $fts_index_table_name_single;
 
-let $data_table_id_multi = query_get_value("SELECT table_id FROM oceanbase.__all_virtual_table A, oceanbase.__all_database B WHERE A.table_name = 't_ir_multi_column' and A.database_id = B.database_id and database_name = 'fts'", table_id, 1);
-let $fts_index_table_name_multi = query_get_value(SELECT table_name FROM oceanbase.__all_virtual_table WHERE index_type = 15 and data_table_id = $data_table_id_multi, table_name, 1);
+let $data_table_id_multi = query_get_value("SELECT table_id FROM oceanbase.__all_table A, oceanbase.__all_database B WHERE A.table_name = 't_ir_multi_column' and A.database_id = B.database_id and database_name = 'fts'", table_id, 1);
+let $fts_index_table_name_multi = query_get_value(SELECT table_name FROM oceanbase.__all_table WHERE index_type = 15 and data_table_id = $data_table_id_multi, table_name, 1);
 let $__doc_id = query_get_value(SELECT column_name FROM oceanbase.__all_column_history WHERE table_id = $data_table_id_multi and column_name like '__doc_id_%', column_name, 1);
 let $__word_segment_16_17 = query_get_value(SELECT column_name FROM oceanbase.__all_column_history WHERE table_id = $data_table_id_multi and column_name like '__word_segment_%', column_name, 1);
 let $__word_count_16_17 = query_get_value(SELECT column_name FROM oceanbase.__all_column_history WHERE table_id = $data_table_id_multi and column_name like '__word_count_%', column_name, 1);
@@ -627,11 +627,11 @@ select * from t_ir_multi_column_dml where match(detail, digest) against ('comput
 select * from t_ir_multi_column_dml;
 
 select digest, seq from t_ir_multi_column_dml;
-# explain update t_ir_multi_column_dml set seq =
+# explain update t_ir_multi_column_dml set seq = 
 #     (select sum(seq) from t_ir_multi_column_dml where match (detail, digest) against ('Hinton'))
 # where match (detail, digest) against ("Lecun");
 
-update t_ir_multi_column_dml set seq =
+update t_ir_multi_column_dml set seq = 
     (select sum(seq) from t_ir_multi_column_dml where match (detail, digest) against ('Hinton'))
 where match (detail, digest) against ("Lecun");
 select digest, seq from t_ir_multi_column_dml;
@@ -654,10 +654,10 @@ create table t_ngram_tokens(
 
 insert into t_ngram_tokens select * from t_ir_single_column;
 
-select digest, seq from t_ngram_tokens where match (detail) against ('OceanBase Database is a native, enterprise-level distributed database developed independently by the OceanBase team. It provides financial-grade high availability on commodity hardware and introduces a new city-level disaster recovery standard known as Five IDCs across Three Regions. As the worlds first distributed database to pass the TPC-C benchmark test, it can support over 1,500 nodes in a single cluster. Additionally, it features cloud-native architecture, strong consistency, and high compatibility with other popular databases such as Oracle and MySQL. ');
+select digest, seq from t_ngram_tokens where match (detail) against ('OceanBase Database is a native, enterprise-level distributed database developed independently by the OceanBase team. It provides financial-grade high availability on commodity hardware and introduces a new city-level disaster recovery standard known as Five IDCs across Three Regions. As the worlds first distributed database to pass the TPC-C benchmark test, it can support over 1,500 nodes in a single cluster. Additionally, it features cloud-native architecture, strong consistency, and high compatibility with other popular databases such as MariaDB and MySQL. ');
 
 #--error ER_NOT_SUPPORTED_YET
-select digest, seq from t_ngram_tokens where match (detail) against ('OceanBase Database is a native, enterprise-level distributed database developed independently by the OceanBase team. It provides financial-grade high availability on commodity hardware and introduces a new city-level disaster recovery standard known as Five IDCs across Three Regions. As the worlds first distributed database to pass the TPC-C benchmark test, it can support over 1,500 nodes in a single cluster. Additionally, it features cloud-native architecture, strong consistency, and high compatibility with other popular databases such as Oracle and MySQL.  OceanBase Database implements a unique disaster recovery solution with five IDCs across three regions, which sets forth a new standard for lossless disaster recovery in the financial industry. OceanBase Database supports multi-active IDCs deployed across multiple regions for zone- and geo-disaster recovery, which meets the Level 6 disaster recovery requirements of the financial industry with a recovery point objective (RPO) of 0 and a recovery time objective (RTO) of less than 8 seconds.');
+select digest, seq from t_ngram_tokens where match (detail) against ('OceanBase Database is a native, enterprise-level distributed database developed independently by the OceanBase team. It provides financial-grade high availability on commodity hardware and introduces a new city-level disaster recovery standard known as Five IDCs across Three Regions. As the worlds first distributed database to pass the TPC-C benchmark test, it can support over 1,500 nodes in a single cluster. Additionally, it features cloud-native architecture, strong consistency, and high compatibility with other popular databases such as MariaDB and MySQL.  OceanBase Database implements a unique disaster recovery solution with five IDCs across three regions, which sets forth a new standard for lossless disaster recovery in the financial industry. OceanBase Database supports multi-active IDCs deployed across multiple regions for zone- and geo-disaster recovery, which meets the Level 6 disaster recovery requirements of the financial industry with a recovery point objective (RPO) of 0 and a recovery time objective (RTO) of less than 8 seconds.');
 
 
 
@@ -724,7 +724,7 @@ while($loop > 0)
 }
 --enable_query_log
 select *, match (name) against ('and') from t_more_data where match (name) against ('and') order by name;
-select *, match (name) against ('and') from t_more_data where match (name) against ('and') limit 1 offset 2;
+select *, match (name) against ('and') from t_more_data where match (name) against ('and') limit 1 offset 2; 
 
 # test case 2025032600107780501
 create table batch_delete_test(
@@ -753,7 +753,7 @@ drop table if exists t_ir_multi_column_dml;
 drop table if exists t_ngram_tokens;
 drop table if exists t_estimate_doc_cnt;
 drop table if exists t_simple;
-drop table if exists t_more_data;
+drop table if exists t_more_data; 
 drop table if exists batch_delete_test;
 drop table if exists articles;
 --enable_warnings

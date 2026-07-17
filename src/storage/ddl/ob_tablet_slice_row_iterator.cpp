@@ -31,7 +31,7 @@ using namespace oceanbase::blocksstable;
 using namespace oceanbase::sql;
 
 ObTabletSliceRowIterator::ObTabletSliceRowIterator()
-  : is_inited_(false), arena_("slice_row_iter", OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID()), tablet_id_(), slice_idx_(-1), row_iter_(nullptr),
+  : is_inited_(false), arena_("slice_row_iter", OB_MALLOC_NORMAL_BLOCK_SIZE), tablet_id_(), slice_idx_(-1), row_iter_(nullptr),
     lob_writer_(nullptr)
 {
 
@@ -112,3 +112,4 @@ int ObTabletSliceRowIterator::get_next_batch(const ObBatchDatumRows *&datum_rows
   int ret = OB_NOT_SUPPORTED;
   return ret;
 }
+

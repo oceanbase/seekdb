@@ -44,16 +44,13 @@ ObTxCtxMemtable::~ObTxCtxMemtable()
 void ObTxCtxMemtable::reset()
 {
   ls_ctx_mgr_guard_.reset();
-  ls_id_.reset();
   ObITable::reset();
   is_frozen_ = false;
   max_end_scn_.set_min();
   is_inited_ = false;
-  reset_trace_id();
 }
 
-int ObTxCtxMemtable::init(const ObITable::TableKey &table_key,
-                          const ObLSID &ls_id)
+int ObTxCtxMemtable::init(const ObITable::TableKey &table_key)
 {
   int ret = OB_SUCCESS;
 
@@ -62,13 +59,12 @@ int ObTxCtxMemtable::init(const ObITable::TableKey &table_key,
     STORAGE_LOG(WARN, "init tx ctx memtable twice", KR(ret));
   } else if (OB_FAIL(ObITable::init(table_key))) {
     STORAGE_LOG(WARN, "ObITable::init fail");
-  } else if (OB_FAIL(ls_ctx_mgr_guard_.init(ls_id))) {
-    STORAGE_LOG(WARN, "ls ctx mgr guard acquire ref failed", K(ret), K(ls_id));
+  } else if (OB_FAIL(ls_ctx_mgr_guard_.init())) {
+    STORAGE_LOG(WARN, "ls ctx mgr guard acquire ref failed", K(ret));
   } else {
-    ls_id_ = ls_id;
     max_end_scn_.set_min();
     is_inited_ = true;
-    TRANS_LOG(INFO, "ob tx ctx memtable init successfully", K(ls_id), K(table_key));
+    TRANS_LOG(INFO, "ob tx ctx memtable init successfully", K(table_key));
   }
 
   return ret;
@@ -222,7 +218,7 @@ bool ObTxCtxMemtable::is_active_memtable()
   return !ATOMIC_LOAD(&is_frozen_);
 }
 
-int ObTxCtxMemtable::flush(SCN recycle_scn, const int64_t trace_id, bool need_freeze)
+int ObTxCtxMemtable::flush(SCN recycle_scn, bool need_freeze)
 {
   int ret = OB_SUCCESS;
   ObSpinLockGuard guard(flush_lock_);
@@ -249,18 +245,15 @@ int ObTxCtxMemtable::flush(SCN recycle_scn, const int64_t trace_id, bool need_fr
 
   if (OB_SUCC(ret) && is_frozen_memtable()) {
     compaction::ObTabletMergeDagParam param;
-    param.ls_id_ = ls_id_;
     param.tablet_id_ = LS_TX_CTX_TABLET;
     param.merge_type_ = compaction::MINI_MERGE;
     param.merge_version_ = ObVersionRange::MIN_VERSION;
-    set_trace_id(trace_id);
     if (OB_FAIL(compaction::ObScheduleDagFunc::schedule_tx_table_merge_dag(param))) {
       if (OB_EAGAIN != ret && OB_SIZE_OVERFLOW != ret) {
-          TRANS_LOG(WARN, "failed to schedule tablet merge dag", K(ret));
+          TRANS_LOG(ERROR, "failed to schedule tablet merge dag", K(ret));
       }
     } else {
-      REPORT_CHECKPOINT_DIAGNOSE_INFO(update_schedule_dag_info, this, get_rec_scn(), get_start_scn(), get_end_scn());
-      TRANS_LOG(INFO, "tx ctx memtable flush successfully", KPC(this), K(ls_id_));
+      TRANS_LOG(INFO, "tx ctx memtable flush successfully", KPC(this));
     }
   }
 

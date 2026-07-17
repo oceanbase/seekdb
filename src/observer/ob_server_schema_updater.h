@@ -18,7 +18,7 @@
 #define OB_SERVER_SCHEMA_UPDATER_H
 
 #include "share/ob_define.h"
-#include "lib/queue/ob_dedup_queue.h"
+#include "lib/thread/ob_dedup_queue.h"
 #include "lib/net/ob_addr.h"
 #include "share/schema/ob_schema_struct.h"
 #include "ob_uniq_task_queue.h"
@@ -61,7 +61,6 @@ public:
   explicit ObServerSchemaTask(TYPE type);
   // for async refresh
   explicit ObServerSchemaTask(TYPE type,
-                              const uint64_t tenant_id,
                               const int64_t schema_version);
   virtual ~ObServerSchemaTask() {}
 
@@ -78,7 +77,7 @@ public:
   virtual uint64_t get_group_id() const;
   virtual bool is_barrier() const;
 
-  uint64_t get_tenant_id() const { return schema_info_.get_tenant_id(); }
+  
   uint64_t get_schema_version() const { return schema_info_.get_schema_version(); }
 
   TO_STRING_KV(K_(type), K_(did_retry), K_(schema_info));
@@ -103,9 +102,7 @@ public:
   int try_reload_schema(const share::schema::ObRefreshSchemaInfo &schema_info,
                         const bool set_received_schema_version);
   int try_release_schema();
-  int async_refresh_schema(
-      const uint64_t tenant_id,
-      const int64_t schema_version);
+  int async_refresh_schema(const int64_t schema_version);
   int process_barrier(const ObServerSchemaTask &task, bool &stopped);
   int batch_process_tasks(const common::ObIArray<ObServerSchemaTask> &batch_tasks, bool &stopped);
 private:
@@ -113,7 +110,7 @@ private:
   int construct_tenants_to_refresh_schema_(
       const share::schema::ObRefreshSchemaInfo &local_schema_info,
       const share::schema::ObRefreshSchemaInfo &new_schema_info,
-      ObIArray<uint64_t> &tenant_ids,
+      ObIArray<uint64_t> &batch_ids,
       bool &skip_refresh);
   int process_release_task();
   int process_async_refresh_tasks(const common::ObIArray<ObServerSchemaTask> &tasks);

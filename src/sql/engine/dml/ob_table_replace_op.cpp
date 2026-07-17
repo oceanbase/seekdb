@@ -14,12 +14,11 @@
  * limitations under the License.
  */
 
-#include "share/ob_fts_index_builder_util.h"
+#include "sql/resolver/ddl/ob_fts_index_builder_util.h"
 #define USING_LOG_PREFIX SQL_ENG
 #include "sql/engine/dml/ob_table_replace_op.h"
 #include "sql/engine/dml/ob_dml_service.h"
 #include "sql/das/ob_das_insert_op.h"
-#include "share/ob_ls_id.h"
 
 namespace oceanbase
 {
@@ -152,7 +151,6 @@ int ObTableReplaceOp::inner_open()
   } else if (OB_UNLIKELY(iter_end_)) {
     //do nothing
   } else if (OB_FAIL(replace_row_store_.init(UINT64_MAX,
-                                             my_session->get_effective_tenant_id(),
                                              ObCtxIds::DEFAULT_CTX_ID,
                                              "replace_row_store",
                                              false/*enable_dump*/))) {
@@ -170,17 +168,17 @@ OB_INLINE int ObTableReplaceOp::inner_open_with_das()
   int ret = OB_SUCCESS;
   const ObExprFrameInfo *expr_frame_info = NULL;
   ObDASTableLoc *table_loc = nullptr;
-  bool use_partition_gts_opt = false;
+  bool use_response_snapshot = false;
   expr_frame_info = nullptr != MY_SPEC.expr_frame_info_
                                ? MY_SPEC.expr_frame_info_
                                : &MY_SPEC.plan_->get_expr_frame_info();
-  if (ctx_.get_das_ctx().get_use_gts_opt()) {
-    gts_state_ = MY_SPEC.has_global_unique_index_ == true ?
-        WITH_UNIQUE_GLOBAL_INDEX_STATE : USE_PARTITION_SNAPSHOT_STATE;
-    if (gts_state_ == USE_PARTITION_SNAPSHOT_STATE) {
-      dml_rtctx_.das_ref_.set_do_gts_opt(true);
-      replace_rtctx_.das_ref_.set_do_gts_opt(true);
-      use_partition_gts_opt = true;
+  if (ctx_.get_das_ctx().get_use_snapshot_opt()) {
+    snapshot_state_ = MY_SPEC.has_global_unique_index_ == true ?
+        USE_STMT_SNAPSHOT_STATE : USE_RESPONSE_SNAPSHOT_STATE;
+    if (snapshot_state_ == USE_RESPONSE_SNAPSHOT_STATE) {
+      dml_rtctx_.das_ref_.set_use_snapshot_opt(true);
+      replace_rtctx_.das_ref_.set_use_snapshot_opt(true);
+      use_response_snapshot = true;
     }
   }
   if (OB_FAIL(init_replace_rtdef())) {
@@ -190,13 +188,13 @@ OB_INLINE int ObTableReplaceOp::inner_open_with_das()
     LOG_WARN("table location is invalid", K(ret));
   } else if (OB_FAIL(conflict_checker_.init_conflict_checker(expr_frame_info,
                                                              table_loc,
-                                                             use_partition_gts_opt))) {
-    LOG_WARN("init conflict_checker fail", K(ret), K(use_partition_gts_opt));
+                                                             use_response_snapshot))) {
+    LOG_WARN("init conflict_checker fail", K(ret), K(use_response_snapshot));
   } else {
     // init update das_ref
     ObSQLSessionInfo *session = GET_MY_SESSION(ctx_);
     ObMemAttr mem_attr;
-    mem_attr.tenant_id_ = session->get_effective_tenant_id();
+    
     mem_attr.label_ = "SqlReplaceInto";
     replace_rtctx_.das_ref_.set_expr_frame_info(expr_frame_info);
     replace_rtctx_.das_ref_.set_mem_attr(mem_attr);
@@ -502,12 +500,12 @@ int ObTableReplaceOp::fetch_conflict_rowkey(int64_t replace_row_cnt)
   ret = (ret == OB_ITER_END ? OB_SUCCESS : ret);
 
   if (OB_FAIL(ret)) {
-  } else if (gts_state_ == USE_PARTITION_SNAPSHOT_STATE) {
+  } else if (snapshot_state_ == USE_RESPONSE_SNAPSHOT_STATE) {
     DASTaskIter task_iter = dml_rtctx_.das_ref_.begin_task_iter();
     while (OB_SUCC(ret) && !task_iter.is_end()) {
       ObDASInsertOp *ins_op = static_cast<ObDASInsertOp*>(*task_iter);
       const ObDASInsCtDef *ins_ctdef = static_cast<const ObDASInsCtDef*>(ins_op->get_ctdef());
-        transaction::ObTxReadSnapshot *snapshot = ins_op->get_das_gts_opt_info().get_response_snapshot();
+        transaction::ObTxReadSnapshot *snapshot = ins_op->get_das_snapshot_opt_info().get_response_snapshot();
         if (OB_ISNULL(snapshot)) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("unexpected null", K(ret));
@@ -518,31 +516,6 @@ int ObTableReplaceOp::fetch_conflict_rowkey(int64_t replace_row_cnt)
           LOG_WARN("fail to collect snapshot", K(ret), KPC(snapshot), KPC(ins_op));
         }
       ++task_iter;
-    }
-  } else if (gts_state_ == WITH_UNIQUE_GLOBAL_INDEX_STATE) {
-    bool refresh_snapshot = false;
-    share::ObLSID try_exec_ls_id;
-    share::ObLSID lookup_ls_id;
-    if (!dml_rtctx_.das_ref_.check_tasks_same_ls_and_is_local(try_exec_ls_id)) {
-      LOG_TRACE("tablets in different ls_id when try insert", K(ctx_.get_das_ctx().get_snapshot()));
-    } else if (!conflict_checker_.das_ref_.check_tasks_same_ls_and_is_local(lookup_ls_id)) {
-      refresh_snapshot = true;
-      LOG_TRACE("tablets in different ls_id when lookup get conflicted row", K(ctx_.get_das_ctx().get_snapshot()));
-    } else if ((OB_UNLIKELY(try_exec_ls_id != lookup_ls_id))) {
-      refresh_snapshot = true;
-      LOG_TRACE("tablets in ls_id of try execution are different with lookup", K(ctx_.get_das_ctx().get_snapshot()));
-    }
-    if (refresh_snapshot) {
-      ObSQLSessionInfo *my_session = GET_MY_SESSION(ctx_);
-      ObPhysicalPlanCtx *plan_ctx = GET_PHY_PLAN_CTX(ctx_);
-      if (OB_FAIL(ObSqlTransControl::get_read_snapshot(my_session,
-                                                       plan_ctx,
-                                                       ctx_.get_das_ctx().get_snapshot()))) {
-        LOG_WARN("fail to get global read snapshot", K(ret));
-      } else {
-        gts_state_ = GTE_GTS_STATE;
-        LOG_TRACE("get new snapshot", K(ctx_.get_das_ctx().get_snapshot()));
-      }
     }
   }
   return ret;
@@ -596,28 +569,15 @@ int ObTableReplaceOp::post_all_try_insert_das_task(ObDMLRtCtx &dml_rtctx)
   int ret = OB_SUCCESS;
   NG_TRACE_TIMES(2, replace_try_insert);
   if (dml_rtctx.das_ref_.has_task()) {
-    if (gts_state_ == WITH_UNIQUE_GLOBAL_INDEX_STATE) {
-      share::ObLSID ls_id;
+    if (snapshot_state_ == USE_STMT_SNAPSHOT_STATE) {
       ObSQLSessionInfo *my_session = GET_MY_SESSION(ctx_);
       ObPhysicalPlanCtx *plan_ctx = GET_PHY_PLAN_CTX(ctx_);
-      if (dml_rtctx.das_ref_.check_tasks_same_ls_and_is_local(ls_id)) {
-        if (OB_FAIL(ObSqlTransControl::get_ls_read_snapshot(my_session,
-                                                            plan_ctx,
-                                                            ls_id,
-                                                            ctx_.get_das_ctx().get_snapshot()))) {
-          LOG_WARN("fail to get ls read snapshot", K(ret));
-        } else {
-          LOG_TRACE("all tasks with same ls_id, get ls snapshot", K(ls_id), K(ctx_.get_das_ctx().get_snapshot()));
-        }
+      if (OB_FAIL(ObSqlTransControl::get_read_snapshot(my_session,
+                                                       plan_ctx,
+                                                       ctx_.get_das_ctx().get_snapshot()))) {
+        LOG_WARN("fail to get read snapshot", K(ret));
       } else {
-        if (OB_FAIL(ObSqlTransControl::get_read_snapshot(my_session,
-                                                         plan_ctx,
-                                                         ctx_.get_das_ctx().get_snapshot()))) {
-          LOG_WARN("fail to get global read snapshot", K(ret));
-        } else {
-          gts_state_ = GTE_GTS_STATE;
-          LOG_TRACE("task in different ls_id, get gts", K(ctx_.get_das_ctx().get_snapshot()));
-        }
+        LOG_TRACE("get read snapshot", K(ctx_.get_das_ctx().get_snapshot()));
       }
     }
 
@@ -636,7 +596,7 @@ int ObTableReplaceOp::post_all_dml_das_task(ObDMLRtCtx &dml_rtctx)
   NG_TRACE_TIMES(2, replace_final_write);
 
   if (dml_rtctx.das_ref_.has_task()) {
-    if (gts_state_ == USE_PARTITION_SNAPSHOT_STATE) {
+    if (snapshot_state_ == USE_RESPONSE_SNAPSHOT_STATE) {
       if (OB_FAIL(conflict_checker_.set_partition_snapshot_for_das_task(dml_rtctx.das_ref_))) {
         LOG_WARN("fail to set partition snapshot", K(ret));
       }
@@ -682,7 +642,6 @@ int ObTableReplaceOp::do_replace_into()
     } else if (!check_is_duplicated()) {
       LOG_DEBUG("try insert is not duplicated", K(ret));
     }
-    GET_DIAGNOSTIC_INFO->get_ash_stat().in_duplicate_conflict_resolve_=true;
     if (OB_FAIL(ret) || !check_is_duplicated()) {
     } else if (OB_FAIL(fetch_conflict_rowkey(replace_row_store_.get_row_cnt()))) {
       LOG_WARN("fail to fetch conflict row", K(ret));
@@ -703,7 +662,6 @@ int ObTableReplaceOp::do_replace_into()
     } else if (OB_FAIL(ObDMLService::handle_after_row_processing(this, &dml_modify_rows_))) {
       LOG_WARN("try insert is duplicated, failed to process foreign key handle", K(ret));
     }
-    GET_DIAGNOSTIC_INFO->get_ash_stat().in_duplicate_conflict_resolve_=false;
     if (OB_SUCC(ret) && !is_iter_end) {
       // Only need to do reuse if there is a next batch, if there is no next batch, memory will be released in close and destroy
       // The previous logic executed successfully, this batch successfully completed replace, reuse environment, prepare for the next batch

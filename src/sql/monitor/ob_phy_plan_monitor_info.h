@@ -20,7 +20,6 @@
 #include "lib/allocator/ob_concurrent_fifo_allocator.h"
 #include "sql/monitor/ob_phy_operator_monitor_info.h"
 #include "sql/monitor/ob_phy_plan_exec_info.h"
-#include "observer/mysql/ob_mysql_request_manager.h"
 #include "lib/trace/ob_trace_event.h"
 namespace oceanbase
 {

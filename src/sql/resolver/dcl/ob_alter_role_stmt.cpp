@@ -24,7 +24,6 @@ using namespace oceanbase::sql;
 
 ObAlterRoleStmt::ObAlterRoleStmt(ObIAllocator *name_pool)
     : ObDDLStmt(name_pool, stmt::T_ALTER_ROLE),
-      tenant_id_(OB_INVALID_ID),
       role_name_(),
       password_(),
       need_enc_(false),
@@ -35,7 +34,6 @@ ObAlterRoleStmt::ObAlterRoleStmt(ObIAllocator *name_pool)
 
 ObAlterRoleStmt::ObAlterRoleStmt()
     : ObDDLStmt(NULL, stmt::T_ALTER_ROLE),
-      tenant_id_(OB_INVALID_ID),
       role_name_(),
       password_(),
       need_enc_(false),

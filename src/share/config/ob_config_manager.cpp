@@ -18,8 +18,7 @@
 
 
 #include "ob_config_manager.h"
-#include "observer/ob_sql_client_decorator.h"
-#include "observer/ob_server.h"
+#include "share/ob_sql_client_decorator.h"
 
 namespace oceanbase
 {
@@ -66,17 +65,6 @@ int ObConfigManager::reload_config()
     LOG_WARN("Check configuration failed, can't reload", K(ret));
   } else if (OB_FAIL(reload_config_func_())) {
     LOG_WARN("Reload configuration failed.", K(ret));
-  } else if (OB_FAIL(OBSERVER.get_net_frame().reload_ssl_config())) {
-    LOG_WARN("reload ssl config for net frame fail", K(ret));
-
-  } else if (OB_FAIL(OBSERVER.get_net_frame().reload_sql_thread_config())) {
-    LOG_WARN("reload config for mysql login thread count failed", K(ret));
-  } else if (OB_FAIL(ObTdeEncryptEngineLoader::get_instance().reload_config())) {
-    LOG_WARN("reload config for tde encrypt engine fail", K(ret));
-  } else if (OB_FAIL(GCTX.omt_->update_hidden_sys_tenant())) {
-    LOG_WARN("update hidden sys tenant failed", K(ret));
-  } else {
-    g_enable_ob_error_msg_style = GCONF.enable_ob_error_msg_style;
   }
   return ret;
 }
@@ -142,7 +130,7 @@ int ObConfigManager::got_version()
   return ret;
 }
 
-int ObConfigManager::add_extra_config(const obrpc::ObTenantConfigArg &arg)
+int ObConfigManager::add_extra_config(const obcall::ObTenantConfigArg &arg)
 {
   int ret = OB_SUCCESS;
   if (!arg.is_valid()) {
@@ -155,7 +143,7 @@ int ObConfigManager::add_extra_config(const obrpc::ObTenantConfigArg &arg)
   return ret;
 }
 
-int ObConfigManager::init_tenant_config(const obrpc::ObTenantConfigArg &arg)
+int ObConfigManager::init_tenant_config(const obcall::ObTenantConfigArg &arg)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(add_extra_config(arg))) {

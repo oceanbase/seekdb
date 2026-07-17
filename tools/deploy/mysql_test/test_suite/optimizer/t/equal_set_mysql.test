@@ -4,7 +4,7 @@ set @@session.explicit_defaults_for_timestamp=off;
 #owner:yibo.tyf
 #owner group: sql1
 # tags: optimizer
-#equal set mainly has two advantages, the first one is to elimiate sort, the other one is to optimize partition_wise_join
+#equal set mainly has two advantages, the first one is to elimiate sort, the other one is to optimize partition_wise_join 
 
 #test equal set in elimiating sort
 --disable_warnings
@@ -38,39 +38,39 @@ explain select/*+index(t1 k1), index(t2 k2)*/ * from t1, t2 where t1.b = t2.b an
 explain select/*+index(t1 k1), index(t2 k2), NO_USE_HASH_AGGREGATION*/ * from t1, t2 where t1.b = t2.b and t1.c = t2.c group by t1.b, t2.b, t1.c, t2.c;
 
 # test three table inner join
-explain select/*+leading(t1,t2,t3), index(t1 k1), index(t2 k2), index(t3 k3)*/* from t1, t2, t3
+explain select/*+leading(t1,t2,t3), index(t1 k1), index(t2 k2), index(t3 k3)*/* from t1, t2, t3 
 where t1.b = t2.b and t1.c = t2.c and t1.b = t3.b and t1.c = t3.c order by t1.b, t1.c;
-explain select/*+leading(t1,t2,t3), index(t1 k1), index(t2 k2), index(t3 k3), NO_USE_HASH_AGGREGATION*/* from t1, t2, t3
+explain select/*+leading(t1,t2,t3), index(t1 k1), index(t2 k2), index(t3 k3), NO_USE_HASH_AGGREGATION*/* from t1, t2, t3 
 where t1.b = t2.b and t1.c = t2.c and t1.b = t3.b and t1.c = t3.c group by t1.b, t1.c;
 
-explain select/*+leading(t1,t2,t3), index(t1 k1), index(t2 k2), index(t3 k3)*/* from t1, t2, t3
+explain select/*+leading(t1,t2,t3), index(t1 k1), index(t2 k2), index(t3 k3)*/* from t1, t2, t3 
 where t1.b = t2.b and t1.c = t2.c and t1.b = t3.b and t1.c = t3.c order by t2.b, t2.c;
-explain select/*+leading(t1,t2,t3), index(t1 k1), index(t2 k2), index(t3 k3), NO_USE_HASH_AGGREGATION*/* from t1, t2, t3
+explain select/*+leading(t1,t2,t3), index(t1 k1), index(t2 k2), index(t3 k3), NO_USE_HASH_AGGREGATION*/* from t1, t2, t3 
 where t1.b = t2.b and t1.c = t2.c and t1.b = t3.b and t1.c = t3.c group by t2.b, t2.c;
 
-explain select/*+leading(t1,t2,t3), index(t1 k1), index(t2 k2), index(t3 k3)*/* from t1, t2, t3
+explain select/*+leading(t1,t2,t3), index(t1 k1), index(t2 k2), index(t3 k3)*/* from t1, t2, t3 
 where t1.b = t2.b and t1.c = t2.c and t1.b = t3.b and t1.c = t3.c order by t3.b, t3.c;
-explain select/*+leading(t1,t2,t3), index(t1 k1), index(t2 k2), index(t3 k3), NO_USE_HASH_AGGREGATION*/* from t1, t2, t3
+explain select/*+leading(t1,t2,t3), index(t1 k1), index(t2 k2), index(t3 k3), NO_USE_HASH_AGGREGATION*/* from t1, t2, t3 
 where t1.b = t2.b and t1.c = t2.c and t1.b = t3.b and t1.c = t3.c group by t3.b, t3.c;
 
-explain select/*+leading(t1,t2,t3), index(t1 k1), index(t2 k2), index(t3 k3)*/* from t1, t2, t3
+explain select/*+leading(t1,t2,t3), index(t1 k1), index(t2 k2), index(t3 k3)*/* from t1, t2, t3 
 where t1.b = t2.b and t1.c = t2.c and t1.b = t3.b and t1.c = t3.c order by t1.b, t1.c, t2.b, t2.c, t3.b, t3.c;
-explain select/*+leading(t1,t2,t3), index(t1 k1), index(t2 k2), index(t3 k3), NO_USE_HASH_AGGREGATION*/* from t1, t2, t3
+explain select/*+leading(t1,t2,t3), index(t1 k1), index(t2 k2), index(t3 k3), NO_USE_HASH_AGGREGATION*/* from t1, t2, t3 
 where t1.b = t2.b and t1.c = t2.c and t1.b = t3.b and t1.c = t3.c group by t1.b, t1.c, t2.b, t2.c, t3.b, t3.c;
 
-explain select/*+leading(t1,t2,t3), index(t1 k1), index(t2 k2), index(t3 k3)*/* from t1, t2, t3
+explain select/*+leading(t1,t2,t3), index(t1 k1), index(t2 k2), index(t3 k3)*/* from t1, t2, t3 
 where t1.b = t2.b and t1.c = t2.c and t2.b = t3.b and t2.c = t3.c order by t1.b, t1.c, t2.b, t2.c, t3.b, t3.c;
-explain select/*+leading(t1,t2,t3), index(t1 k1), index(t2 k2), index(t3 k3), NO_USE_HASH_AGGREGATION*/* from t1, t2, t3
+explain select/*+leading(t1,t2,t3), index(t1 k1), index(t2 k2), index(t3 k3), NO_USE_HASH_AGGREGATION*/* from t1, t2, t3 
 where t1.b = t2.b and t1.c = t2.c and t2.b = t3.b and t2.c = t3.c group by t1.b, t1.c, t2.b, t2.c, t3.b, t3.c;
 
-explain select/*+leading(t1,t2,t3), index(t1 k1), index(t2 k2), index(t3 k3)*/* from t1, t2, t3
+explain select/*+leading(t1,t2,t3), index(t1 k1), index(t2 k2), index(t3 k3)*/* from t1, t2, t3 
 where t1.b = t2.b and t1.c = t2.c and t1.b = t3.b and t1.c = t3.c order by t1.b, t2.b, t3.b, t1.c, t2.c, t3.c;
-explain select/*+leading(t1,t2,t3), index(t1 k1), index(t2 k2), index(t3 k3), NO_USE_HASH_AGGREGATION*/* from t1, t2, t3
+explain select/*+leading(t1,t2,t3), index(t1 k1), index(t2 k2), index(t3 k3), NO_USE_HASH_AGGREGATION*/* from t1, t2, t3 
 where t1.b = t2.b and t1.c = t2.c and t1.b = t3.b and t1.c = t3.c group by t1.b, t2.b, t3.b, t1.c, t2.c, t3.c;
 
-explain select/*+leading(t1,t2,t3), index(t1 k1), index(t2 k2), index(t3 k3)*/* from t1, t2, t3
+explain select/*+leading(t1,t2,t3), index(t1 k1), index(t2 k2), index(t3 k3)*/* from t1, t2, t3 
 where t1.b = t2.b and t1.c = t2.c and t2.b = t3.b and t2.c = t3.c order by t1.b, t2.b, t3.b, t1.c, t2.c, t3.c;
-explain select/*+leading(t1,t2,t3), index(t1 k1), index(t2 k2), index(t3 k3), NO_USE_HASH_AGGREGATION*/* from t1, t2, t3
+explain select/*+leading(t1,t2,t3), index(t1 k1), index(t2 k2), index(t3 k3), NO_USE_HASH_AGGREGATION*/* from t1, t2, t3 
 where t1.b = t2.b and t1.c = t2.c and t2.b = t3.b and t2.c = t3.c group by t1.b, t2.b, t3.b, t1.c, t2.c, t3.c;
 
 #test outer join
@@ -89,30 +89,30 @@ explain select/*+index(t1 k1), index(t2 k2)*/ * from t1 left join t2 on t1.b = t
 explain select/*+index(t1 k1), index(t2 k2)*, NO_USE_HASH_AGGREGATION*/ * from t1 left join t2 on t1.b = t2.b and t1.c = t2.c group by t1.b, t2.b, t1.c, t2.c;
 
 ##test three table outer join
-explain select/*+leading(t1,t2,t3),index(t1 k1), index(t2 k2), index(t3 k3)*/ *
+explain select/*+leading(t1,t2,t3),index(t1 k1), index(t2 k2), index(t3 k3)*/ * 
 from t1 left join t2 on t1.b = t2.b and t1.c = t2.c left join t3 on t1.b = t3.b and t1.c = t3.c order by t1.b, t1.c;
-explain select/*+leading(t1,t2,t3),index(t1 k1), index(t2 k2), index(t3 k3), NO_USE_HASH_AGGREGATION*/ *
+explain select/*+leading(t1,t2,t3),index(t1 k1), index(t2 k2), index(t3 k3), NO_USE_HASH_AGGREGATION*/ * 
 from t1 left join t2 on t1.b = t2.b and t1.c = t2.c left join t3 on t1.b = t3.b and t1.c = t3.c group by t1.b, t1.c;
 
-explain select/*+leading(t1,t2,t3),index(t1 k1), index(t2 k2), index(t3 k3)*/ *
+explain select/*+leading(t1,t2,t3),index(t1 k1), index(t2 k2), index(t3 k3)*/ * 
 from t1 left join t2 on t1.b = t2.b and t1.c = t2.c left join t3 on t1.b = t3.b and t1.c = t3.c order by t2.b, t2.c;
-explain select/*+leading(t1,t2,t3),index(t1 k1), index(t2 k2), index(t3 k3), NO_USE_HASH_AGGREGATION*/ *
+explain select/*+leading(t1,t2,t3),index(t1 k1), index(t2 k2), index(t3 k3), NO_USE_HASH_AGGREGATION*/ * 
 from t1 left join t2 on t1.b = t2.b and t1.c = t2.c left join t3 on t1.b = t3.b and t1.c = t3.c group by t2.b, t2.c;
 
-explain select/*+leading(t1,t2,t3),index(t1 k1), index(t2 k2), index(t3 k3)*/ *
+explain select/*+leading(t1,t2,t3),index(t1 k1), index(t2 k2), index(t3 k3)*/ * 
 from t1 left join t2 on t1.b = t2.b and t1.c = t2.c left join t3 on t1.b = t3.b and t1.c = t3.c order by t3.b, t3.c;
-explain select/*+leading(t1,t2,t3),index(t1 k1), index(t2 k2), index(t3 k3), NO_USE_HASH_AGGREGATION*/ *
+explain select/*+leading(t1,t2,t3),index(t1 k1), index(t2 k2), index(t3 k3), NO_USE_HASH_AGGREGATION*/ * 
 from t1 left join t2 on t1.b = t2.b and t1.c = t2.c left join t3 on t1.b = t3.b and t1.c = t3.c group by t3.b, t3.c;
 
 # the following two cases we can elimiate sort operator, but currently our equal set do not support, to be refined in future
-explain select/*+leading(t1,t2,t3),index(t1 k1), index(t2 k2), index(t3 k3)*/ *
+explain select/*+leading(t1,t2,t3),index(t1 k1), index(t2 k2), index(t3 k3)*/ * 
 from t1 left join t2 on t1.b = t2.b and t1.c = t2.c left join t3 on t1.b = t3.b and t1.c = t3.c order by t1.b, t1.c, t2.b, t2.c, t3.b, t3.c;
-explain select/*+leading(t1,t2,t3),index(t1 k1), index(t2 k2), index(t3 k3), NO_USE_HASH_AGGREGATION*/ *
+explain select/*+leading(t1,t2,t3),index(t1 k1), index(t2 k2), index(t3 k3), NO_USE_HASH_AGGREGATION*/ * 
 from t1 left join t2 on t1.b = t2.b and t1.c = t2.c left join t3 on t1.b = t3.b and t1.c = t3.c group by t1.b, t1.c, t2.b, t2.c, t3.b, t3.c;
 
-explain select/*+leading(t1,t2,t3),index(t1 k1), index(t2 k2), index(t3 k3)*/ *
+explain select/*+leading(t1,t2,t3),index(t1 k1), index(t2 k2), index(t3 k3)*/ * 
 from t1 left join t2 on t1.b = t2.b and t1.c = t2.c left join t3 on t1.b = t3.b and t1.c = t3.c order by t1.b, t2.b, t3.b, t2.c, t2.c, t3.c;
-explain select/*+leading(t1,t2,t3),index(t1 k1), index(t2 k2), index(t3 k3), NO_USE_HASH_AGGREGATION*/ *
+explain select/*+leading(t1,t2,t3),index(t1 k1), index(t2 k2), index(t3 k3), NO_USE_HASH_AGGREGATION*/ * 
 from t1 left join t2 on t1.b = t2.b and t1.c = t2.c left join t3 on t1.b = t3.b and t1.c = t3.c group by t1.b, t2.b, t3.b, t2.c, t2.c, t3.c;
 
 #test semi/anti join
@@ -211,7 +211,7 @@ create table t2(a int, b int) partition by range(a) (
 create table t3(a int, b int) partition by range(a) (
   partition p0 values less than (100),
   partition p1 values less than (200));
-
+  
 explain select/*+leading(t1,t2,t3)*/ * from t1, t2 where t1.a = t2.a;
 explain select/*+leading(t1,t2,t3)*/ * from t1, t2, t3 where t1.a = t2.a and t2.a = t3.a;
 explain select/*+leading(t1,t2,t3)*/ * from t1, t2, t3 where t1.a = t2.a and t1.a = t3.a;
@@ -256,7 +256,7 @@ create table t2(a datetime, b int) partition by range columns(a) (
 create table t3(a datetime, b int) partition by range columns(a) (
   partition p0 values less than ('2011-01-01'),
   partition p1 values less than ('2116-01-01'));
-
+  
 explain select/*+leading(t1,t2,t3)*/ * from t1, t2 where t1.a = t2.a;
 explain select/*+leading(t1,t2,t3)*/ * from t1, t2, t3 where t1.a = t2.a and t2.a = t3.a;
 explain select/*+leading(t1,t2,t3)*/ * from t1, t2, t3 where t1.a = t2.a and t1.a = t3.a;
@@ -291,23 +291,23 @@ explain select * from t1 where t1.a in (select t2.a from t2 where t2.a in (selec
 #test hash + range partitioning
 --disable_warnings
 drop table if exists t1, t2, t3;
---enable_warnings
-create table t1(a int, b datetime, primary key(a, b)) partition by hash(a)
-	subpartition by range columns(b)
+--enable_warnings 
+create table t1(a int, b datetime, primary key(a, b)) partition by hash(a) 
+	subpartition by range columns(b) 
 	subpartition template (
-			subpartition p0 values less than ('2016-10-10'),
+			subpartition p0 values less than ('2016-10-10'),  
 			subpartition p1 values less than ('2116-3-30')) partitions 2;
-create table t2(a int, b datetime, primary key(a, b)) partition by hash(a)
-	subpartition by range columns(b)
+create table t2(a int, b datetime, primary key(a, b)) partition by hash(a) 
+	subpartition by range columns(b) 
 	subpartition template (
-			subpartition p0 values less than ('2016-10-10'),
+			subpartition p0 values less than ('2016-10-10'),  
 			subpartition p1 values less than ('2116-3-30')) partitions 2;
-create table t3(a int, b datetime, primary key(a, b)) partition by hash(a)
-	subpartition by range columns(b)
+create table t3(a int, b datetime, primary key(a, b)) partition by hash(a) 
+	subpartition by range columns(b) 
 	subpartition template (
-			subpartition p0 values less than ('2016-10-10'),
+			subpartition p0 values less than ('2016-10-10'),  
 			subpartition p1 values less than ('2116-3-30')) partitions 2;
-
+			
 explain select/*+leading(t1,t2,t3)*/ * from t1, t2 where t1.a = t2.a and t1.b = t2.b;
 explain select/*+leading(t1,t2,t3)*/ * from t1, t2, t3 where t1.a = t2.a and t1.b = t2.b and t2.a = t3.a and t2.b = t3.b;
 explain select/*+leading(t1,t2,t3)*/ * from t1, t2, t3 where t1.a = t2.a and t1.b = t2.b and t1.a = t3.a and t1.b = t3.b;
@@ -342,9 +342,9 @@ explain select * from t1 where (t1.a, t1.b) in (select t2.a, t2.b from t2 where 
 #test range + hash partitioning
 --disable_warnings
 drop table if exists t1, t2, t3;
---enable_warnings
-create table t1(a int, b int, c int, d int, primary key(a, b, c))
-partition by range columns(a) subpartition by hash(b) subpartitions 5 (
+--enable_warnings 
+create table t1(a int, b int, c int, d int, primary key(a, b, c)) 
+partition by range columns(a) subpartition by hash(b) subpartitions 5 ( 
   partition p0 values less than (1),
   partition p1 values less than (2),
   partition p2 values less than (3),
@@ -352,7 +352,7 @@ partition by range columns(a) subpartition by hash(b) subpartitions 5 (
   partition p4 values less than (maxvalue)
 );
 create table t2(a int, b int, c int, d int, primary key(a, b, c))
-partition by range columns(a) subpartition by hash(b) subpartitions 5 (
+partition by range columns(a) subpartition by hash(b) subpartitions 5 ( 
   partition p0 values less than (1),
   partition p1 values less than (2),
   partition p2 values less than (3),
@@ -360,7 +360,7 @@ partition by range columns(a) subpartition by hash(b) subpartitions 5 (
   partition p4 values less than (maxvalue)
 );
 create table t3(a int, b int, c int, d int, primary key(a, b, c))
-partition by range columns(a) subpartition by hash(b) subpartitions 5 (
+partition by range columns(a) subpartition by hash(b) subpartitions 5 ( 
   partition p0 values less than (1),
   partition p1 values less than (2),
   partition p2 values less than (3),
@@ -399,17 +399,17 @@ explain select * from t1 where (t1.a, t1.b) in (select t2.a, t2.b from t2);
 explain select * from t1 where (t1.a, t1.b) in (select t2.a, t2.b from t2) and (t1.a, t1.b) in (select t3.a, t3.b from t3);
 explain select * from t1 where (t1.a, t1.b) in (select t2.a, t2.b from t2 where (t2.a, t2.b) in (select t3.a, t3.b from t3));
 
-##bug
+##bug 
 --disable_warnings
 drop table if exists t1, t2, t3;
---enable_warnings
+--enable_warnings 
 create table t1(a int, b int) partition by hash(a+1) partitions 5;
 create table t2(a int, b int) partition by hash(a+1) partitions 5;
 create table t3(a int, b int) partition by hash(a+2) partitions 5;
 explain select * from t1, t2 where t1.a = t2.a;
 explain select * from t1, t2 where t1.a + 1 = t2.a + 1;
 explain select * from t1, t3 where t1.a + 1 = t3.a + 2;
-explain select * from t1, t3 where t1.a = t3.a;
+explain select * from t1, t3 where t1.a = t3.a; 
 explain select * from t1, t2, t3 where t1.a + 1 = t2.a + 1 and t1.a + 1 = t3.a + 2;
 explain select * from t1, t2, t3 where t1.a + 1 = t2.a + 1 and t2.a + 1 = t3.a + 2;
 
@@ -542,4 +542,4 @@ explain select * from t1 full join (select 1 c1, 1 c2) t2 on t2.c1 = t1.a;
 
 --disable_warnings
 drop table if exists t1, t2, t3;
---enable_warnings
+--enable_warnings 

@@ -249,12 +249,7 @@ public:
   ObTriggerInfo &operator=(const ObTriggerInfo &trigger_info);
   int assign(const ObTriggerInfo &other);
 
-  virtual void set_tenant_id(uint64_t tenant_id)
-  {
-    tenant_id_ = tenant_id;
-    package_spec_info_.set_tenant_id(tenant_id);
-    package_body_info_.set_tenant_id(tenant_id);
-  }
+  
   virtual void set_trigger_id(uint64_t trigger_id)
   {
     trigger_id_ = trigger_id;
@@ -382,7 +377,6 @@ public:
   OB_INLINE int set_ref_trg_name(const common::ObString &ref_trg_name)
   { return deep_copy_str(ref_trg_name, ref_trg_name_); }
   OB_INLINE void set_action_order(int64_t action_order) { action_order_ = action_order; }
-//OB_INLINE uint64_t get_tenant_id() const { return tenant_id_; }
 //OB_INLINE uint64_t get_trigger_id() const { return trigger_id_; }
   OB_INLINE uint64_t get_owner_id() const { return owner_id_; }
 //OB_INLINE uint64_t get_database_id() const { return database_id_; }
@@ -477,14 +471,12 @@ public:
   OB_INLINE static uint64_t get_delete_event() { return ObTriggerEvents::get_delete_event(); }
   OB_INLINE TgTimingEvent get_timing_event() {
     TgTimingEvent t = TG_TIMING_EVENT_INVALID;
-    if (lib::is_mysql_mode()) {
-      if (has_before_row_point()) {
-        t = has_insert_event() ? TG_BEFORE_INSERT : (has_update_event() ? TG_BEFORE_UPDATE
-                                                                        : TG_BEFORE_DELETE);
-      } else {
-        t = has_insert_event() ? TG_AFTER_INSERT : (has_update_event() ? TG_AFTER_UPDATE
-                                                                       : TG_AFTER_DELETE);
-      }
+    if (has_before_row_point()) {
+      t = has_insert_event() ? TG_BEFORE_INSERT : (has_update_event() ? TG_BEFORE_UPDATE
+                                                                      : TG_BEFORE_DELETE);
+    } else {
+      t = has_insert_event() ? TG_AFTER_INSERT : (has_update_event() ? TG_AFTER_UPDATE
+                                                                     : TG_AFTER_DELETE);
     }
     return t;
   }
@@ -522,8 +514,7 @@ public:
     return left.get_timing_points() == right.get_timing_points()
            && left.get_trigger_events() == right.get_trigger_events();
   }
-  static int gen_package_source(const uint64_t tenant_id,
-                                const uint64_t tg_package_id,
+  static int gen_package_source(const uint64_t tg_package_id,
                                 common::ObString &source,
                                 bool is_header,
                                 share::schema::ObSchemaGetterGuard &schema_guard,
@@ -540,10 +531,8 @@ public:
   static int replace_table_name_in_body(ObTriggerInfo &trigger_info,
                                         common::ObIAllocator &alloc,
                                         const common::ObString &base_object_database,
-                                        const common::ObString &base_object_name,
-                                        bool is_oracle_mode);
-  TO_STRING_KV(K(tenant_id_),
-               K(trigger_id_),
+                                        const common::ObString &base_object_name);
+  TO_STRING_KV(K(trigger_id_),
                K(owner_id_),
                K(database_id_),
                K(schema_version_),
@@ -646,7 +635,7 @@ protected:
                                       int64_t buf_len,
                                       int64_t &pos);
 protected:
-//uint64_t tenant_id_;                            // set by user
+//// set by user
 //uint64_t trigger_id_;                           // set by sys
   uint64_t owner_id_;                             // set by sys
 //uint64_t database_id_;                          // set by sys

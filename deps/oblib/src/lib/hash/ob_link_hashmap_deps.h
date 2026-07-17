@@ -28,15 +28,12 @@ namespace common
 class DCArrayAlloc: public IAlloc
 {
 public:
-  DCArrayAlloc(): attr_(OB_SERVER_TENANT_ID, ObModIds::OB_CONCURRENT_HASH_MAP) {}
+  DCArrayAlloc(): attr_(ObModIds::OB_CONCURRENT_HASH_MAP) {}
   virtual ~DCArrayAlloc() {}
   int init(const lib::ObMemAttr &attr)
   {
     int ret = OB_SUCCESS;
-    if (!is_valid_tenant_id(attr.tenant_id_)) {
-      ret = OB_INVALID_ARGUMENT;
-      COMMON_LOG(WARN, "invalid argument", K(ret), K(attr));
-    } else {
+    {
       attr_ = attr;
     }
     return ret;

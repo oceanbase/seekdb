@@ -68,12 +68,12 @@ int futex_wait(volatile int *p, int val, const timespec *timeout)
   } else {
     timeout_us = 0; // infinite wait
   }
-
+  
   // Check if value has changed before waiting
   if (*p != val) {
     return EAGAIN;
   }
-
+  
   int ret = __ulock_wait(UL_COMPARE_AND_WAIT, (void*)p, (uint64_t)val, timeout_us);
   if (ret < 0) {
     if (errno == ETIMEDOUT) {
@@ -97,14 +97,8 @@ static struct timespec make_timespec(int64_t us)
 }
 
 extern "C" {
-#ifdef __linux__
-int OB_WEAK_SYMBOL futex_hook(uint32_t *uaddr, int futex_op, uint32_t val, const struct timespec* timeout)
-{
-  return syscall(SYS_futex, uaddr, futex_op, val, timeout);
-}
-#elif defined(__APPLE__)
-// macOS: futex_hook is not used directly, we use __ulock_* syscalls instead
-// Keep this stub for compatibility
+#if defined(__APPLE__) || defined(_WIN32)
+// futex_hook platform emulation is provided by ob_tenant_hook.cpp
 int OB_WEAK_SYMBOL futex_hook(uint32_t *uaddr, int futex_op, uint32_t val, const struct timespec* timeout)
 {
   (void)uaddr;

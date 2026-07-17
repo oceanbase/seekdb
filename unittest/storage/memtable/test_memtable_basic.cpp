@@ -28,13 +28,12 @@
 #include "storage/tx_storage/ob_tenant_freezer.h"
 #include "storage/blocksstable/ob_datum_row.h"
 #include "storage/memtable/ob_memtable_context.h"
-#include "storage/tx/ob_trans_part_ctx.h"
+#include "storage/tx/ob_tx_ctx.h"
 #include "storage/tx/ob_multi_data_source.h"
 #include "storage/tx/ob_trans_define_v4.h"
 #include "storage/memtable/mvcc/ob_mvcc_row.h"
 #include "share/scn.h"
 #include "storage/ls/ob_ls.h"
-#include "storage/tx_storage/ob_ls_map.h"
 #include "share/schema/ob_column_schema.h"
 #include "storage/ob_storage_schema.h"
 #include "storage/tablet/ob_tablet_multi_source_data.h"
@@ -161,10 +160,7 @@ public:
     table_key.scn_range_.end_scn_ = share::SCN::max_scn();
     int64_t schema_version  = 1;
     uint32_t freeze_clock = 0;
-    ObLSHandle ls_handle;
-    ls_handle.set_ls(ls_map_, ls_, ObLSGetMod::DATA_MEMTABLE_MOD);
-
-    return mt_table.init(table_key, ls_handle, &freezer_, &memtable_mgr_, schema_version, freeze_clock);
+    return mt_table.init(table_key, &ls_, &freezer_, &memtable_mgr_, schema_version, freeze_clock);
   }
   int mock_col_desc()
   {
@@ -208,7 +204,7 @@ public:
     // iter_param_.rowkey_cnt_ = rowkey_cnt_;
     iter_param_.tablet_id_ = tablet_id_;
     iter_param_.table_id_ = tablet_id_.id();
-    int ret = read_info_.init(allocator_, 16000, rowkey_cnt_, false, columns_, nullptr/*storage_cols_index*/);
+    int ret = read_info_.init(allocator_, 16000, rowkey_cnt_, columns_, nullptr/*storage_cols_index*/);
     iter_param_.read_info_ = &read_info_;
 
     return ret;
@@ -283,7 +279,6 @@ public:
   ObTableReadInfo read_info_;
   ObArenaAllocator allocator_;
   MemtableIDMap ctx_map_;
-  ObLSMap ls_map_;
 };
 
 class RunCtxGuard
@@ -403,7 +398,7 @@ public:
   }
 
   TestMemtable *tm_;
-  ObPartTransCtx trans_ctx_;
+  ObTxCtx trans_ctx_;
   ObMemtableCtx mem_ctx_;
   ObTxDesc tx_desc_;
 };

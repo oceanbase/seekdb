@@ -48,8 +48,7 @@ public:
     virtual int alter_udf(const ObUDFInfo &udf_info, 
     common::ObISQLClient *sql_client, 
     const common::ObString *ddl_stmt_str = NULL); */
-  virtual int delete_udf(const uint64_t tenant_id,
-                         const common::ObString &name,
+  virtual int delete_udf(const common::ObString &name,
                          const int64_t new_schema_version,
                          common::ObISQLClient *sql_client,
                          const common::ObString *ddl_stmt_str = NULL);

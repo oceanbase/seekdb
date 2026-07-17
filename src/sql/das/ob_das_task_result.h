@@ -16,6 +16,7 @@
 
 #ifndef OBDEV_SRC_SQL_DAS_OB_DAS_TASK_RESULT_H_
 #define OBDEV_SRC_SQL_DAS_OB_DAS_TASK_RESULT_H_
+#include "lib/task/ob_timer.h"
 #include "share/ob_define.h"
 #include "lib/hash/ob_link_hashmap.h"
 #include "lib/lock/ob_mutex.h"
@@ -157,9 +158,9 @@ public:
 class ObDASMemProfileInfo : public ObSqlMemoryCallback
 {
 public:
-  ObDASMemProfileInfo(const uint64_t tenant_id)
+  ObDASMemProfileInfo()
     : ref_count_(0), row_count_(0),
-      allocator_(tenant_id),
+      allocator_{},
       profile_(ObSqlWorkAreaType::HASH_WORK_AREA),
       sql_mem_processor_(profile_),
       mutex_(common::ObLatchIds::SQL_MEMORY_MGR_MUTEX_LOCK)
@@ -232,7 +233,7 @@ public:
   ObDASTaskResultGCRunner() {}
   ~ObDASTaskResultGCRunner() = default;
   static ObDASTaskResultGCRunner& get_instance();
-  static int schedule_timer_task();
+  static int schedule_timer_task(common::ObTimer &timer);
   void runTimerTask();
 public:
   const static int64_t REFRESH_INTERVAL = 10 * 1000L * 1000L; // 10s

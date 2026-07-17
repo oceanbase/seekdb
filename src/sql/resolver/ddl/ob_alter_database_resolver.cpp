@@ -60,7 +60,7 @@ int ObAlterDatabaseResolver::resolve(const ParseNode &parse_tree)
       LOG_ERROR("failed to create alter_database_stmt", K(ret));
     } else {
       stmt_ = alter_database_stmt;
-      alter_database_stmt->set_tenant_id(session_info_->get_effective_tenant_id());
+      
     }
     // resolve database name
     if (OB_SUCC(ret)) {
@@ -117,13 +117,13 @@ int ObAlterDatabaseResolver::resolve(const ParseNode &parse_tree)
                                                       session_info_))) {
           LOG_WARN("resolve database option failed", K(ret));
         } else {
-          if(resolver.get_alter_option_bitset().has_member(obrpc::ObAlterDatabaseArg::PRIMARY_ZONE)) {
+          if(resolver.get_alter_option_bitset().has_member(obcall::ObAlterDatabaseArg::PRIMARY_ZONE)) {
             bool is_sync_ddl_user = false;
             if (OB_FAIL(ObResolverUtils::check_sync_ddl_user(session_info_, is_sync_ddl_user))) {
               LOG_WARN("Failed to check sync_ddl_user", K(ret));
             } else if (is_sync_ddl_user) {
               ret = OB_IGNORE_SQL_IN_RESTORE;
-              LOG_WARN("Cannot support for sync ddl user to alter primary zone", K(ret), K(session_info_->get_user_name()));
+              LOG_ERROR("Cannot support for sync ddl user to alter primary zone", K(ret), K(session_info_->get_user_name()));
             }
           }
           if (OB_SUCC(ret)) {

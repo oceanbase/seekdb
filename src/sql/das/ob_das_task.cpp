@@ -50,7 +50,6 @@ OB_DEF_SERIALIZE_SIZE(ObDASRemoteInfo)
   }
   OB_UNIS_ADD_LEN(snapshot_);
   if (need_calc_expr_ || need_calc_udf_) {
-    OB_UNIS_ADD_LEN(session->get_effective_tenant_id());
     OB_UNIS_ADD_LEN(*session);
   }
   if (has_expr_) {
@@ -110,12 +109,12 @@ int ObIDASTaskOp::swizzling_remote_task(ObDASRemoteInfo *remote_info)
   int ret = OB_SUCCESS;
   if (remote_info != nullptr) {
     snapshot_ = &remote_info->snapshot_;
-    if (das_gts_opt_info_.use_specify_snapshot_) {
-      if (OB_ISNULL(das_gts_opt_info_.get_specify_snapshot())) {
+    if (das_snapshot_opt_info_.use_specify_snapshot_) {
+      if (OB_ISNULL(das_snapshot_opt_info_.get_specify_snapshot())) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("unexpected nullptr of specify_snapshot", K(ret));
       } else {
-        snapshot_ = das_gts_opt_info_.get_specify_snapshot();
+        snapshot_ = das_snapshot_opt_info_.get_specify_snapshot();
       }
     }
   }
@@ -173,32 +172,30 @@ int ObIDASTaskOp::end_das_task()
   return ret;
 }
 
-int ObIDASTaskOp::init_das_gts_opt_info(transaction::ObTxIsolationLevel isolation_level)
+int ObIDASTaskOp::init_das_snapshot_opt_info(transaction::ObTxIsolationLevel isolation_level)
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(get_das_gts_opt_info().init(isolation_level))) {
-    LOG_WARN("fail to init das gts opt", K(ret), K(isolation_level));
+  if (OB_FAIL(get_das_snapshot_opt_info().init(isolation_level))) {
+    LOG_WARN("fail to init das snapshot opt", K(ret), K(isolation_level));
   } else {
-    snapshot_ = get_das_gts_opt_info().get_specify_snapshot();
+    snapshot_ = get_das_snapshot_opt_info().get_specify_snapshot();
   }
   return ret;
 }
 
 OB_SERIALIZE_MEMBER(ObIDASTaskOp,
-                    tenant_id_,
                     task_id_,
                     task_flag_,
                     tablet_id_,
-                    ls_id_,
                     related_ctdefs_,
                     related_rtdefs_,
                     related_tablet_ids_,
                     attach_ctdef_,
                     attach_rtdef_,
-                    das_gts_opt_info_,
+                    das_snapshot_opt_info_,
                     plan_line_id_);
 
-OB_DEF_SERIALIZE(ObDASGTSOptInfo)
+OB_DEF_SERIALIZE(ObDASSnapshotOptInfo)
 {
   int ret = OB_SUCCESS;
   bool serialize_specify_snapshot = specify_snapshot_ == nullptr ? false : true;
@@ -212,7 +209,7 @@ OB_DEF_SERIALIZE(ObDASGTSOptInfo)
   return ret;
 }
 
-OB_DEF_DESERIALIZE(ObDASGTSOptInfo)
+OB_DEF_DESERIALIZE(ObDASSnapshotOptInfo)
 {
   int ret = OB_SUCCESS;
   bool serialize_specify_snapshot = false;
@@ -222,7 +219,7 @@ OB_DEF_DESERIALIZE(ObDASGTSOptInfo)
               serialize_specify_snapshot);
   if (serialize_specify_snapshot) {
     if (OB_FAIL(init(isolation_level_))) {
-      LOG_WARN("fail to init gts_opt_info", K(ret));
+      LOG_WARN("fail to init snapshot opt info", K(ret));
     } else {
       OB_UNIS_DECODE(*specify_snapshot_);
     }
@@ -230,7 +227,7 @@ OB_DEF_DESERIALIZE(ObDASGTSOptInfo)
   return ret;
 }
 
-OB_DEF_SERIALIZE_SIZE(ObDASGTSOptInfo)
+OB_DEF_SERIALIZE_SIZE(ObDASSnapshotOptInfo)
 {
   int64_t len = 0;
   bool serialize_specify_snapshot = specify_snapshot_ == nullptr ? false : true;
@@ -244,7 +241,7 @@ OB_DEF_SERIALIZE_SIZE(ObDASGTSOptInfo)
   return len;
 }
 
-int ObDASGTSOptInfo::init(transaction::ObTxIsolationLevel isolation_level)
+int ObDASSnapshotOptInfo::init(transaction::ObTxIsolationLevel isolation_level)
 {
   int ret = OB_SUCCESS;
   void *buf = nullptr;
@@ -353,7 +350,7 @@ int ObDASTaskResp::store_warning_msg(const ObWarningBuffer &wb)
     const ObWarningBuffer::WarningItem *item = wb.get_warning_item(idx);
     if (item != NULL) {
       if (OB_FAIL(rcode_.warnings_.push_back(*item))) {
-        RPC_OBRPC_LOG(WARN, "Failed to add warning", K(ret));
+        RPC_OBCALL_LOG(WARN, "Failed to add warning", K(ret));
       }
     } else {
       not_null = false;
@@ -438,27 +435,25 @@ int ObDASTaskResp::add_op_result(ObIDASTaskResult *op_result)
 
 OB_SERIALIZE_MEMBER(ObIDASTaskResult, task_id_);
 
-OB_SERIALIZE_MEMBER(ObDASDataFetchReq, tenant_id_, task_id_);
+OB_SERIALIZE_MEMBER(ObDASDataFetchReq, task_id_);
 
-int ObDASDataFetchReq::init(const uint64_t tenant_id, const int64_t task_id)
+int ObDASDataFetchReq::init(const int64_t task_id)
 {
-  tenant_id_ = tenant_id;
   task_id_ = task_id;
   return OB_SUCCESS;
 }
 
-OB_SERIALIZE_MEMBER(ObDASDataEraseReq, tenant_id_, task_id_);
+OB_SERIALIZE_MEMBER(ObDASDataEraseReq, task_id_);
 
-int ObDASDataEraseReq::init(const uint64_t tenant_id, const int64_t task_id)
+int ObDASDataEraseReq::init(const int64_t task_id)
 {
-  tenant_id_ = tenant_id;
   task_id_ = task_id;
   return OB_SUCCESS;
 }
 
 OB_SERIALIZE_MEMBER(ObDASDataFetchRes,
                     datum_store_,
-                    tenant_id_, task_id_, has_more_,
+                    task_id_, has_more_,
                     enable_rich_format_, vec_row_store_,
                     io_read_bytes_,
                     ssstore_read_bytes_,
@@ -467,7 +462,6 @@ OB_SERIALIZE_MEMBER(ObDASDataFetchRes,
 
 ObDASDataFetchRes::ObDASDataFetchRes()
         : datum_store_("DASDataFetch"),
-          tenant_id_(0),
           task_id_(0),
           has_more_(false),
           enable_rich_format_(false),
@@ -479,10 +473,9 @@ ObDASDataFetchRes::ObDASDataFetchRes()
 {
 }
 
-int ObDASDataFetchRes::init(const uint64_t tenant_id, const int64_t task_id)
+int ObDASDataFetchRes::init(const int64_t task_id)
 {
   int ret = OB_SUCCESS;
-  tenant_id_ = tenant_id;
   task_id_ = task_id;
   return ret;
 }

@@ -81,7 +81,7 @@ public:
                         MY_SPEC.conflict_checker_ctdef_),
       replace_row_store_("ReplaceRow"),
       replace_rtctx_(eval_ctx_, ctx, *this),
-      gts_state_(WITHOUT_GTS_OPT_STATE)
+      snapshot_state_(WITHOUT_SNAPSHOT_OPT_STATE)
   {}
   virtual ~ObTableReplaceOp() {}
 
@@ -173,7 +173,7 @@ protected:
   common::ObArrayWrap<ObReplaceRtDef> replace_rtdefs_;
   ObChunkDatumStore replace_row_store_; // All the rows of replace operations
   ObDMLRtCtx replace_rtctx_;
-  ObDmlGTSOptState gts_state_;
+  ObDmlSnapshotOptState snapshot_state_;
 };
 
 class ObTableReplaceOpInput : public ObTableModifyOpInput

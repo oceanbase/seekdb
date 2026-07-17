@@ -55,7 +55,7 @@ int ObStorageLogBatchHeader::check_data(const char *data)
     actual_checksum = cal_checksum(data, total_len_);
     if (actual_checksum != checksum_) {
       ret = OB_CHECKSUM_ERROR;
-      STORAGE_REDO_LOG(WARN, "checksum error, ", K(ret), K_(checksum),
+      STORAGE_REDO_LOG(ERROR, "checksum error, ", K(ret), K_(checksum),
           K(actual_checksum), KP(data), K(total_len_));
     }
   }

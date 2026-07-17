@@ -38,7 +38,7 @@ public:
   {}
   virtual void SetUp()
   {
-    tallocator_ = ObMallocAllocator::get_instance()->get_tenant_ctx_allocator(500, 0);
+    tallocator_ = ObMallocAllocator::get_instance()->get_tenant_ctx_allocator(0);
     tallocator_->set_limit(1000L << 20);
     cs_.set_chunk_mgr(&tallocator_->get_chunk_mgr());
     cs_.set_tenant_ctx_allocator(*tallocator_.ref_allocator());
@@ -182,6 +182,7 @@ TEST_F(TestBlockSet, BigBlockOrigin)
     ob_free(p);
   }
 }
+
 
 TEST_F(TestBlockSet, Single)
 {

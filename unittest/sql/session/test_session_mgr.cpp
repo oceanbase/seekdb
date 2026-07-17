@@ -77,11 +77,9 @@ TEST_F(DISABLED_TestSessionMgr, test_create)
   const uint32_t SESSION_COUNT = 100;
   for (uint32_t i = 1; i < SESSION_COUNT; ++i) {
     conn_.sessid_ = i;
-    conn_.proxy_sessid_ = i * 10;
     EXPECT_EQ(OB_SUCCESS, mgr_.create_session(&conn_, sess_info));
     EXPECT_TRUE(sess_info);
     EXPECT_EQ(i, sess_info->get_server_sid());
-    EXPECT_EQ(i * 10, sess_info->get_proxy_sessid());
     EXPECT_EQ(SESSION_INIT, sess_info->get_session_state());
     mgr_.revert_session(sess_info);
   }
@@ -90,13 +88,11 @@ TEST_F(DISABLED_TestSessionMgr, test_create)
     EXPECT_EQ(OB_SUCCESS, mgr_.get_session(i, sess_info));
     EXPECT_TRUE(sess_info);
     EXPECT_EQ(i, sess_info->get_server_sid());
-    EXPECT_EQ(i * 10, sess_info->get_proxy_sessid());
     EXPECT_EQ(SESSION_INIT, sess_info->get_session_state());
     mgr_.revert_session(sess_info);
     mgr_.get_session_count(sess_cnt);
     EXPECT_EQ(SESSION_COUNT - i, sess_cnt);
     ObFreeSessionCtx ctx;
-    ctx.tenant_id_ = OB_SYS_TENANT_ID;
     ctx.sessid_ = i;
     ctx.has_inc_active_num_ = false;
     EXPECT_EQ(OB_SUCCESS, mgr_.free_session(ctx));
@@ -135,12 +131,10 @@ TEST_F(DISABLED_TestSessionMgr, test_version)
   const uint32_t SESS_ID = 1;
   for (uint32_t i = 0; i < 100; ++i) {
     conn_.sessid_ = SESS_ID;
-    conn_.proxy_sessid_ = SESS_ID * 10;
     EXPECT_EQ(OB_SUCCESS, mgr_.create_session(&conn_, sess_info));
     EXPECT_TRUE(sess_info);
     EXPECT_EQ(SESSION_INIT, sess_info->get_session_state());
     EXPECT_EQ(SESS_ID, sess_info->get_server_sid());
-    EXPECT_EQ(SESS_ID * 10, sess_info->get_proxy_sessid());
     sess_info->set_shadow(true);
     mgr_.revert_session(sess_info);
   }
@@ -148,7 +142,6 @@ TEST_F(DISABLED_TestSessionMgr, test_version)
   for (uint32_t i = 0; i < 100; ++i) {
     EXPECT_EQ(OB_SUCCESS, mgr_.get_session(SESS_ID, sess_info));
     EXPECT_EQ(SESS_ID, sess_info->get_server_sid());
-    EXPECT_EQ(SESS_ID * 10, sess_info->get_proxy_sessid());
     EXPECT_EQ(true, sess_info->is_shadow());
     mgr_.revert_session(sess_info);
   }
@@ -183,13 +176,11 @@ public:
       err = mgr_->get_session(id, sess_info);
       if (OB_ENTRY_NOT_EXIST == err) {
         conn.sessid_ = id;
-        conn.proxy_sessid_ = id + 1;
         err = mgr_->create_session(&conn, sess_info);
         EXPECT_EQ(true, OB_SUCCESS == err || OB_SESSION_ENTRY_EXIST == err);
         if (OB_SUCCESS == err) {
           ATOMIC_AAF(&create_num, 1);
           EXPECT_EQ(id, sess_info->get_server_sid());
-          EXPECT_EQ(id + 1, sess_info->get_proxy_sessid());
           // ObSQLSessionInfo::LockGuard lock_guard(sess_info->get_thread_data_lock());
           // sess_info->set_query_start_time(id);
           mgr_->revert_session(sess_info);
@@ -288,7 +279,6 @@ void *thread_func_free_session(void *args)
   for (uint32_t i = 0; i < thd_args->sess_cnt_; ++i) {
     uint32_t id = static_cast<uint32_t>(ObRandom::rand(0, thd_args->sess_cnt_));
     ObFreeSessionCtx ctx;
-    ctx.tenant_id_ = OB_SYS_TENANT_ID;
     ctx.sessid_ = id;
     ctx.has_inc_active_num_ = false;
     ret = thd_args->mgr_->free_session(ctx);

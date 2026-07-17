@@ -144,7 +144,6 @@ public:
   ~ObColumnHashSet() {}
 
   int init(uint64_t capacity,
-           int64_t tenant_id,
            common::ObCollationType cs_type = CS_TYPE_INVALID,
            bool cmp_end_space = false)
   {
@@ -155,7 +154,7 @@ public:
       ret = OB_INIT_TWICE;
       COMMON_LOG(WARN, "init twice");
     } else {
-      alloc_.set_tenant_id(tenant_id);
+      
       alloc_.set_label("ObColumnHashSet");
       if (OB_FAIL(alloc_mem(capacity))) {
         COMMON_LOG(WARN, "failed to alloc when init");
@@ -328,7 +327,7 @@ const static int HASH_CMP_UNKNOWN = 1;
   }
   int create(int param_num)
   {
-    ObMemAttr attr(MTL_ID(), common::ObModIds::OB_HASH_BUCKET);
+    ObMemAttr attr(common::ObModIds::OB_HASH_BUCKET);
     return map_.create(param_num * 2, attr);
   }
   int set_refactored(const Row<T> &row);
@@ -637,7 +636,7 @@ public:
   inline void set_param_all_const(bool all_const);
   inline void set_param_all_same_type(bool all_same_type);
   inline void set_param_all_same_cs_type(bool all_same_cs_type);
-  inline void set_param_is_ext_type_oracle(bool all_is_ext);
+  inline void set_param_all_ext_type(bool all_is_ext);
   // for func visit_in_expr , when left param is subquery set true
   inline void set_param_is_subquery();
   // now only support ref_col IN (const, const, ...)
@@ -647,7 +646,7 @@ protected:
   inline bool is_param_all_const() const;
   inline bool is_param_all_same_type() const;
   inline bool is_param_all_same_cs_type() const;
-  inline bool is_param_is_ext_type_oracle() const;
+  inline bool is_param_all_ext_type() const;
   inline bool is_param_is_subquery() const;
   inline bool is_param_can_vectorized() const;
   // Get subquery row type information
@@ -677,7 +676,7 @@ protected:
   static const uint32_t IN_PARAM_ALL_CONST = 1U << 0;
   static const uint32_t IN_PARAM_ALL_SAME_TYPE = 1U << 1;
   static const uint32_t IN_PARAM_ALL_SAME_CS_TYPE = 1U << 2;
-  static const uint32_t IN_PARAM_IS_EXT_ORACLE = 1U << 3;
+  static const uint32_t IN_PARAM_ALL_EXT_TYPE = 1U << 3;
   static const uint32_t IN_PARAM_IS_SUBQUERY = 1u << 4;
   static const uint32_t IN_PARAM_CAN_VECTORIZED = 1u << 5;
   ObExprInParamFlag param_flags_;
@@ -736,12 +735,12 @@ inline void ObExprInOrNotIn::set_param_all_same_cs_type(bool all_same_cs_type)
     param_flags_ &= ~IN_PARAM_ALL_SAME_CS_TYPE;
   }
 }
-inline void ObExprInOrNotIn::set_param_is_ext_type_oracle(bool all_is_ext)
+inline void ObExprInOrNotIn::set_param_all_ext_type(bool all_is_ext)
 {
   if (all_is_ext) {
-    param_flags_ |= IN_PARAM_IS_EXT_ORACLE;
+    param_flags_ |= IN_PARAM_ALL_EXT_TYPE;
   } else {
-    param_flags_ &= ~IN_PARAM_IS_EXT_ORACLE;
+    param_flags_ &= ~IN_PARAM_ALL_EXT_TYPE;
   }
 }
 
@@ -769,9 +768,9 @@ inline bool ObExprInOrNotIn::is_param_all_same_cs_type() const
 {
   return param_flags_ & IN_PARAM_ALL_SAME_CS_TYPE;
 }
-inline bool ObExprInOrNotIn::is_param_is_ext_type_oracle() const
+inline bool ObExprInOrNotIn::is_param_all_ext_type() const
 {
-  return param_flags_ & IN_PARAM_IS_EXT_ORACLE;
+  return param_flags_ & IN_PARAM_ALL_EXT_TYPE;
 }
 
 inline bool ObExprInOrNotIn::is_param_is_subquery() const

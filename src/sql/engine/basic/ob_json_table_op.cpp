@@ -19,10 +19,10 @@
 #include "sql/engine/expr/ob_expr_multi_mode_func_helper.h"
 #include "sql/engine/expr/ob_expr_json_value.h"
 #include "sql/engine/expr/ob_expr_json_query.h"
-#include "lib/xml/ob_binary_aggregate.h"
+#include "common/xml/ob_binary_aggregate.h"
 #include "sql/engine/expr/ob_expr_rb_func_helper.h"
 #include "sql/engine/expr/ob_array_expr_utils.h"
-#include "lib/roaringbitmap/ob_rb_utils.h"
+#include "share/roaringbitmap/ob_rb_utils.h"
 
 namespace oceanbase
 {
@@ -680,7 +680,7 @@ int ObJsonTableOp::switch_iterator()
 int ObJsonTableOp::init()
 {
   INIT_SUCC(ret);
-  uint64_t tenant_id = -1;
+  
   if (!is_inited_) {
     const ObJsonTableSpec* spec_ptr = reinterpret_cast<const ObJsonTableSpec*>(&spec_);
     jt_ctx_.spec_ptr_ = const_cast<ObJsonTableSpec*>(spec_ptr);
@@ -692,12 +692,11 @@ int ObJsonTableOp::init()
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("session is NULL", K(ret));
       } else {
-        tenant_id = session->get_effective_tenant_id();
         is_inited_ = true;
         jt_ctx_.spec_ptr_ = const_cast<ObJsonTableSpec*>(spec_ptr);
         jt_ctx_.eval_ctx_ = &eval_ctx_;
         jt_ctx_.exec_ctx_ = &get_exec_ctx();
-        jt_ctx_.row_alloc_.set_tenant_id(tenant_id);
+        
         jt_ctx_.op_exec_alloc_ = allocator_;
         jt_ctx_.is_evaled_ = false;
         jt_ctx_.is_charset_converted_ = false;
@@ -892,10 +891,7 @@ int RegularCol::eval_exist_col(ObRegCol &col_node, JtScanCtx* ctx, ObExpr* col_e
   INIT_SUCC(ret);
   is_null = true;
   if (ob_is_string_type(col_node.col_info_.data_type_.get_obj_type())) {
-    ObString value("true");
-    if (lib::is_mysql_mode()) {
-      value.assign_ptr("1", 1);
-    }
+    ObString value("1");
     void* buf = ctx->row_alloc_.alloc(sizeof(ObJsonString));
     if (OB_ISNULL(buf)) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
@@ -1369,7 +1365,7 @@ int ObRegCol::eval_regular_col(void *in, JtScanCtx* ctx, bool& is_null_value)
   bool need_cast_res = true;
   bool enable_error = true;
 
-  if (lib::is_mysql_mode() && OB_ISNULL(in)) {
+  if (OB_ISNULL(in)) {
     is_null_value = true;
     need_cast_res = false;
     curr_ = nullptr;
@@ -1437,11 +1433,9 @@ int ObRegCol::eval_regular_col(void *in, JtScanCtx* ctx, bool& is_null_value)
       if (OB_FAIL(ctx->table_func_->set_on_empty(*this, ctx, need_cast_res, is_null_value))) {
         LOG_WARN("fail to process on empty", K(ret));
       }
-    } else if (ctx->is_json_table_func() 
-              && curr_ && NOT_DATUM == res_flag_ 
-              && static_cast<ObIJsonBase*>(curr_)->json_type() == ObJsonNodeType::J_NULL 
-              && (!static_cast<ObIJsonBase*>(curr_)->is_real_json_null(static_cast<ObIJsonBase*>(curr_))
-                  || lib::is_mysql_mode())) {
+    } else if (ctx->is_json_table_func()
+              && curr_ && NOT_DATUM == res_flag_
+              && static_cast<ObIJsonBase*>(curr_)->json_type() == ObJsonNodeType::J_NULL) {
       curr_ = nullptr;
     }
   }
@@ -1474,35 +1468,6 @@ int ObRegCol::eval_regular_col(void *in, JtScanCtx* ctx, bool& is_null_value)
     col_expr->get_eval_info(*ctx->eval_ctx_).evaluated_ = true;
   }
 
-  return ret;
-}
-
-int RegularCol::check_default_value_inner_oracle(JtScanCtx* ctx,
-                                                 ObJtColInfo &col_info,
-                                                 ObExpr* col_expr,
-                                                 ObExpr* default_expr)
-{
-  INIT_SUCC(ret);
-  ObString in_str;
-  ObDatum *emp_datum = nullptr;
-
-  if (OB_FAIL(default_expr->eval(*ctx->eval_ctx_, emp_datum))) {
-    LOG_WARN("failed do cast to returning type.", K(ret));
-  } else {
-    in_str.assign_ptr(emp_datum->ptr_, emp_datum->len_);
-  }
-  if (OB_FAIL(ret)) {
-  } else if (default_expr->datum_meta_.type_ == ObNullType && ob_is_string_type(col_info.data_type_.get_obj_type())) {
-    ret = OB_ERR_DEFAULT_VALUE_NOT_LITERAL;
-    LOG_WARN("default value not match returing type", K(ret));
-  } else if (OB_FAIL(ObJsonExprHelper::pre_default_value_check(col_expr->datum_meta_.type_, in_str, default_expr->datum_meta_.type_, col_info.data_type_.get_accuracy().get_length()))) {
-    LOG_WARN("default value pre check fail", K(ret), K(in_str));
-  } else {
-    if (ob_obj_type_class(col_expr->datum_meta_.type_) == ob_obj_type_class(default_expr->datum_meta_.type_)
-             && OB_FAIL(ObExprJsonValue::check_default_val_accuracy<ObDatum>(col_info.data_type_.get_accuracy(), default_expr->datum_meta_.type_, emp_datum))) {
-      LOG_WARN("fail to check accuracy", K(ret));
-    }
-  }
   return ret;
 }
 
@@ -1750,39 +1715,17 @@ int ObJsonTableOp::inner_get_next_row()
 int JsonTableFunc::col_res_type_check(ObRegCol &col_node, JtScanCtx* ctx)
 {
   INIT_SUCC(ret);
-  ObObjType obj_type = col_node.col_info_.data_type_.get_obj_type();
-  JtColType col_type = col_node.type();
-  if (lib::is_mysql_mode()) {
-  } else if (col_type == COL_TYPE_EXISTS) {
-    if (ob_is_string_type(obj_type) 
-        || ob_is_numeric_type(obj_type) 
-        || ob_is_integer_type(obj_type)) {
-      // do nothing
-    } else if (ob_is_json_tc(obj_type)) {
-      ret = OB_ERR_USAGE_KEYWORD;
-      LOG_WARN("invalid usage of keyword EXISTS", K(ret));
-    } else {
-      ret = OB_ERR_NON_NUMERIC_CHARACTER_VALUE;
-      SET_COVER_ERROR(ctx, ret);
-    }
-  } else if (col_type == COL_TYPE_QUERY ) {
-    // do nothing
-  }
+  UNUSED(col_node);
+  UNUSED(ctx);
   return ret;
 }
 
 int JsonTableFunc::check_default_value(JtScanCtx* ctx, ObRegCol &col_node, ObExpr* expr)
 {
   INIT_SUCC(ret);
-  if (lib::is_mysql_mode()) {
-    // in mysql mode, should check default value with parse json
-    if (OB_FAIL(RegularCol::check_default_value_mysql(col_node, ctx, expr))) {
-      LOG_WARN("fail to check default value in mysql", K(ret));
-    }
-  } else { // oracle mode can use datum as result
-    if (OB_FAIL(RegularCol::check_default_value_oracle(ctx, col_node.col_info_, expr))) {
-      LOG_WARN("fail to check default value in oracle", K(ret));
-    }
+  // in mysql mode, should check default value with parse json
+  if (OB_FAIL(RegularCol::check_default_value_mysql(col_node, ctx, expr))) {
+    LOG_WARN("fail to check default value in mysql", K(ret));
   }
   return ret;
 }
@@ -1878,26 +1821,6 @@ int RegularCol::check_default_value_inner_mysql(JtScanCtx* ctx,
   return ret;
 }                                                
 
-int RegularCol::check_default_value_oracle(JtScanCtx* ctx, ObJtColInfo &col_info, ObExpr* expr)
-{
-  INIT_SUCC(ret);
-  if (static_cast<JtColType>(col_info.col_type_) == COL_TYPE_VALUE) {
-    if (col_info.on_empty_ == JSN_VALUE_DEFAULT) {
-      ObExpr* default_expr = ctx->spec_ptr_->emp_default_exprs_.at(col_info.empty_expr_id_);
-      if (OB_FAIL(RegularCol::check_default_value_inner_oracle(ctx, col_info, expr, default_expr))) {
-        LOG_WARN("fail to check empty default value in oracle", K(ret));
-      }
-    }
-    if (OB_SUCC(ret) && col_info.on_error_ == JSN_VALUE_DEFAULT) {
-      ObExpr* default_expr = ctx->spec_ptr_->err_default_exprs_.at(col_info.error_expr_id_);
-      if (OB_FAIL(RegularCol::check_default_value_inner_oracle(ctx, col_info, expr, default_expr))) {
-        LOG_WARN("fail to check error default value in oracle", K(ret));
-      }
-    }
-  }
-  return ret;
-}
-
 int JsonTableFunc::set_expr_exec_param(ObRegCol& col_node, JtScanCtx* ctx)
 {
   INIT_SUCC(ret);
@@ -1938,7 +1861,8 @@ int JsonTableFunc::get_empty_option(int8_t option_on_empty, bool& res_val)
     // It turns out that error/false/true on empty behaves exactly the same in three cases:
     // a. The query result or json data is empty, and all three on empty clauses return false
     // b. The path expression is empty, and the three on empty clauses all return the error code when the path is empty
-    // Therefore, when implementing, follow the behavior of oracle, without distinguishing the three clauses, as long as there is no true result, it will return false
+    // Therefore, the implementation does not distinguish the three clauses:
+    // as long as there is no true result, it returns false.
     case OB_JSON_ERROR_ON_EMPTY:
     case OB_JSON_FALSE_ON_EMPTY: 
     case OB_JSON_TRUE_ON_EMPTY:
@@ -2094,10 +2018,7 @@ int JsonTableFunc::set_on_error(ObRegCol& col_node, JtScanCtx* ctx, int& ret)
       
       if (OB_FAIL(ret)) {
       } else if (ob_is_string_type(info.data_type_.get_obj_type())) {
-        ObString value = is_true ? ObString("true") : ObString("false");
-        if (lib::is_mysql_mode()) {
-          value = is_true ? ObString("1") : ObString("0");
-        }
+        ObString value = is_true ? ObString("1") : ObString("0");
         void* buf = ctx->row_alloc_.alloc(sizeof(ObJsonString));
         if (OB_ISNULL(buf)) {
           ret = OB_ALLOCATE_MEMORY_FAILED;
@@ -2106,7 +2027,7 @@ int JsonTableFunc::set_on_error(ObRegCol& col_node, JtScanCtx* ctx, int& ret)
           col_node.curr_ = static_cast<ObJsonString*>(new(buf)ObJsonString(value.ptr(), value.length()));
           is_null = false;
         }
-      } else if (ob_is_number_tc(info.data_type_.get_obj_type()) || lib::is_mysql_mode()) {
+      } else {
         void* buf = ctx->row_alloc_.alloc(sizeof(ObJsonInt));
         if (OB_ISNULL(buf)) {
           ret = OB_ALLOCATE_MEMORY_FAILED;
@@ -2114,13 +2035,6 @@ int JsonTableFunc::set_on_error(ObRegCol& col_node, JtScanCtx* ctx, int& ret)
         } else {
           col_node.curr_ = static_cast<ObJsonInt*>(new(buf)ObJsonInt(is_true));
           is_null = false;
-        }
-      } else {
-        if (col_node.col_info_.on_error_ != JSN_EXIST_ERROR) {
-          col_node.curr_ = nullptr;
-          is_null = true;
-        } else {
-          ret = OB_ERR_NON_NUMERIC_CHARACTER_VALUE;
         }
       }
     }
@@ -2240,14 +2154,12 @@ int JsonTableFunc::eval_seek_col(ObRegCol &col_node, void* in, JtScanCtx* ctx, b
   } else if (col_node.type() != COL_TYPE_QUERY && hit.size() == 1) {
     is_null_value = false;
     col_node.curr_ = hit[0];
-  } else if (col_node.type() == COL_TYPE_VALUE 
-             && !(lib::is_mysql_mode() 
-                   && ob_is_json(col_expr->datum_meta_.type_))) {
+  } else if (col_node.type() == COL_TYPE_VALUE
+             && !ob_is_json(col_expr->datum_meta_.type_)) {
     ret = OB_ERR_JSON_VALUE_NO_SCALAR;
     SET_COVER_ERROR(ctx, ret);
   } else if (col_node.type() == COL_TYPE_QUERY ||
-             (col_node.type() == COL_TYPE_VALUE 
-              && lib::is_mysql_mode() 
+             (col_node.type() == COL_TYPE_VALUE
               && ob_is_json(col_expr->datum_meta_.type_))) {
     void* js_arr_buf = ctx->row_alloc_.alloc(sizeof(ObJsonArray));
     ObIJsonBase* js_arr_ptr = nullptr;

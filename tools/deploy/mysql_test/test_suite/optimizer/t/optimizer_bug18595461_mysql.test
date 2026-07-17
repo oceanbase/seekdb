@@ -4,7 +4,7 @@ set @@session.explicit_defaults_for_timestamp=off;
 #owner:yibo.tyf
 #owner group: sql1
 # tags: optimizer
-#bug
+#bug 
 
 --disable_warnings
 drop table if exists test_conv_varchar;

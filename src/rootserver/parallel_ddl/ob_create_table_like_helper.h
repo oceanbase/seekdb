@@ -36,9 +36,8 @@ class ObCreateTableLikeHelper : public ObTableHelper
 {
 public:
   ObCreateTableLikeHelper(share::schema::ObMultiVersionSchemaService *schema_service,
-                          const uint64_t tenant_id,
-                          const obrpc::ObCreateTableLikeArg &arg,
-                          obrpc::ObCreateTableRes &res,
+                          const obcall::ObCreateTableLikeArg &arg,
+                          obcall::ObCreateTableRes &res,
                           bool enable_ddl_parallel,
                           ObDDLSQLTransaction *external_trans);
   virtual ~ObCreateTableLikeHelper();
@@ -57,8 +56,8 @@ public:
   virtual int generate_sequence_object_() override { return OB_SUCCESS; };
 
 private:
-  const obrpc::ObCreateTableLikeArg &arg_;
-  obrpc::ObCreateTableRes &res_;
+  const obcall::ObCreateTableLikeArg &arg_;
+  obcall::ObCreateTableRes &res_;
   uint64_t orig_table_id_;
   uint64_t replace_mock_fk_parent_table_id_;
   DISALLOW_COPY_AND_ASSIGN(ObCreateTableLikeHelper);

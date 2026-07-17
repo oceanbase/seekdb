@@ -233,7 +233,7 @@ OB_DEF_DESERIALIZE(ObExpr)
 
   if (OB_SUCC(ret)) {
     basic_funcs_ = ObDatumFuncs::get_basic_func(datum_meta_.type_, datum_meta_.cs_type_,
-                                                datum_meta_.scale_, false,
+                                                datum_meta_.scale_,
                                                 obj_meta_.has_lob_header(), datum_meta_.precision_);
     CK(NULL != basic_funcs_);
   }

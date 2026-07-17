@@ -20,12 +20,13 @@
 #include "ob_tablet_id.h"
 #include "share/scn.h"
 #include "runtime_utility/common_define.h"
-#include "deps/oblib/src/lib/allocator/page_arena.h"
+#include "lib/allocator/page_arena.h"
 #include "lib/ob_errno.h"
 #include "lib/utility/ob_print_utils.h"
 #include "meta_programming/ob_type_traits.h"
 #include "lib/hash/ob_linear_hash_map.h"
-#include "deps/oblib/src/lib/container/ob_array_iterator.h"
+#include "share/rc/ob_tenant_base.h"
+#include "lib/container/ob_array_iterator.h"
 #include "mds_for_each_map_flush_operation.h"
 #include <algorithm>
 #include <exception>
@@ -40,9 +41,8 @@ namespace mds
 struct MdsFlusherModulePageAllocator : public ModulePageAllocator {
   // just forward to parent
   MdsFlusherModulePageAllocator(const lib::ObLabel &label = "MdsFlusherArray",
-                                int64_t tenant_id = OB_SERVER_TENANT_ID,
                                 int64_t ctx_id = 0)
-  : ModulePageAllocator(ObMemAttr(tenant_id, label, ctx_id)) {}
+  : ModulePageAllocator(ObMemAttr(label, ctx_id)) {}
   MdsFlusherModulePageAllocator(const lib::ObMemAttr &attr) : ModulePageAllocator("MdsFlusherArray") {}
   explicit MdsFlusherModulePageAllocator(ObIAllocator &allocator,
                                          const lib::ObLabel &label = "MdsFlusherArray")

@@ -22,9 +22,7 @@
 #include "lib/container/ob_array.h"
 #include "lib/hash/ob_linear_hash_map.h"
 #include "common/ob_zone.h"
-#include "common/ob_region.h"
 #include "common/ob_zone_type.h"
-#include "common/ob_idc.h"
 #include "share/ob_server_status.h"
 
 namespace oceanbase
@@ -42,14 +40,10 @@ public:
            const int32_t svr_port,
            const common::ObZone &zone,
            const common::ObZoneType zone_type,
-           const common::ObIDC &idc,
-           const common::ObRegion &region,
            bool is_active);
   const common::ObAddr &get_addr() const { return addr_; }
   const common::ObZone &get_zone() const { return zone_; }
   const common::ObZoneType &get_zone_type() const { return zone_type_; }
-  const common::ObIDC &get_idc() const { return idc_; }
-  const common::ObRegion &get_region() const { return region_; }
   bool is_init() const { return inited_; }
   bool is_active() const { return is_active_; }
   void set_start_service_time(int64_t start_service_time) { start_service_time_ = start_service_time; }
@@ -62,8 +56,6 @@ public:
                K_(addr),
                K_(zone),
                K_(zone_type),
-               K_(idc),
-               K_(region),
                K_(is_active),
                K_(start_service_time),
                K_(server_stop_time),
@@ -75,8 +67,6 @@ private:
   common::ObAddr addr_;
   common::ObZone zone_;
   common::ObZoneType zone_type_;
-  common::ObIDC idc_;
-  common::ObRegion region_;
   int64_t start_service_time_;
   int64_t server_stop_time_;
   ObServerStatus::DisplayStatus server_status_;

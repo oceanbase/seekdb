@@ -2,7 +2,7 @@
 flashback table t1 to before drop;
 {
   "stmt_type":131,
-  "flashback_table_arg": {
+  "restore_table_arg": {
     "tenant_id":1,
     "origin_table_name":"t1",
     "new_db_name":"",
@@ -13,7 +13,7 @@ flashback table t1 to before drop;
 flashback table t1 to before drop rename to t2;
 {
   "stmt_type":131,
-  "flashback_table_arg": {
+  "restore_table_arg": {
     "tenant_id":1,
     "origin_table_name":"t1",
     "new_db_name":"rongxuan",
@@ -24,7 +24,7 @@ flashback table t1 to before drop rename to t2;
 flashback database db1 to before drop;
 {
   "stmt_type":130,
-  "flashback_db_arg": {
+  "restore_db_arg": {
     "tenant_id":1,
     "origin_db_name":"db1",
     "new_db_name":""
@@ -34,7 +34,7 @@ flashback database db1 to before drop;
 flashback database db1 to before drop rename to db2;
 {
   "stmt_type":130,
-  "flashback_db_arg": {
+  "restore_db_arg": {
     "tenant_id":1,
     "origin_db_name":"db1",
     "new_db_name":"db2"
@@ -44,7 +44,7 @@ flashback database db1 to before drop rename to db2;
 flashback schema db1 to before drop;
 {
   "stmt_type":130,
-  "flashback_db_arg": {
+  "restore_db_arg": {
     "tenant_id":1,
     "origin_db_name":"db1",
     "new_db_name":""
@@ -54,33 +54,13 @@ flashback schema db1 to before drop;
 flashback schema db1 to before drop rename to db2;
 {
   "stmt_type":130,
-  "flashback_db_arg": {
+  "restore_db_arg": {
     "tenant_id":1,
     "origin_db_name":"db1",
     "new_db_name":"db2"
   }
 }
 ***************   Case 7   ***************
-flashback tenant tenant1 to before drop;
-{
-  "stmt_type":129,
-  "flashback_tenant_arg": {
-    "tenant_id":1,
-    "origin_tenant_name":"tenant1",
-    "new_tenant_name":""
-  }
-}
-***************   Case 8   ***************
-flashback tenant tenant1 to before drop rename to tenant2;
-{
-  "stmt_type":129,
-  "flashback_tenant_arg": {
-    "tenant_id":1,
-    "origin_tenant_name":"tenant1",
-    "new_tenant_name":"tenant2"
-  }
-}
-***************   Case 9   ***************
 purge table t1;
 {
   "stmt_type":136,

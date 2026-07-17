@@ -59,7 +59,7 @@ int ObExprLowerUpper::calc_result_type1(ObExprResType &type, ObExprResType &text
     }
     text.set_calc_type(type.get_type());
     const common::ObLengthSemantics default_length_semantics = (OB_NOT_NULL(type_ctx.get_session())
-        ? type_ctx.get_session()->get_actual_nls_length_semantics()
+        ? type_ctx.get_session()->get_actual_length_semantics()
         : common::LS_BYTE);
     ret = aggregate_charsets_for_string_result(type, &text, 1, type_ctx);
     OX(text.set_calc_collation_type(type.get_collation_type()));
@@ -70,7 +70,7 @@ int ObExprLowerUpper::calc_result_type1(ObExprResType &type, ObExprResType &text
   return ret;
 }
 
-// For oracle only functions nls_lower/nls_upper
+// For NLS-aware lower/upper functions.
 int ObExprLowerUpper::calc_result_typeN(ObExprResType &type,
                                         ObExprResType *texts,
                                         int64_t param_num,
@@ -94,7 +94,7 @@ int ObExprLowerUpper::calc_result_typeN(ObExprResType &type,
     // Calculate based on the first parameter
     ObSEArray<ObExprResType*, 1, ObNullAllocator> param;
     OZ(param.push_back(&texts[0]));
-    OZ(aggregate_string_type_and_charset_oracle(*session, param, type));
+    OZ(aggregate_string_type_and_charset_extended(*session, param, type));
     OZ(deduce_string_param_calc_type_and_charset(*session, type, param));
     OX(type.set_length(texts[0].get_calc_length() * ObCharset::MAX_CASE_MULTIPLY));
   }

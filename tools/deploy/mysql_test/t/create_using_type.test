@@ -18,14 +18,14 @@ create table using_btree_t1 (c1 int, c2 int, primary key using btree (c1));
 
 connect (obsys,$OBMYSQL_MS0,admin,$OBMYSQL_PWD,test,$OBMYSQL_PORT);
 connection obsys;
-select t.table_name, t.index_using_type from oceanbase.__all_virtual_table t join oceanbase.__all_virtual_database d on t.database_id = d.database_id where t.table_name = 'using_hash_t1' and d.database_name = 'hualong';
-select t.table_name, t.index_using_type from oceanbase.__all_virtual_table t join oceanbase.__all_virtual_database d on t.database_id = d.database_id where t.table_name = 'using_btree_t1' and d.database_name = 'hualong';
+select t.table_name, t.index_using_type from oceanbase.__all_table t join oceanbase.__all_database d on t.database_id = d.database_id where t.table_name = 'using_hash_t1' and d.database_name = 'hualong';
+select t.table_name, t.index_using_type from oceanbase.__all_table t join oceanbase.__all_database d on t.database_id = d.database_id where t.table_name = 'using_btree_t1' and d.database_name = 'hualong';
 
 #show index with hash index
 select index_table.table_name as index_name, data_table.table_name as data_table_name, index_table.index_using_type
-  from oceanbase.__all_virtual_table index_table join oceanbase.__all_virtual_table data_table
+  from oceanbase.__all_table index_table join oceanbase.__all_table data_table
   on index_table.data_table_id = data_table.table_id
-  where index_table.index_using_type = 1 and index_table.tenant_id = 1 and index_table.tenant_id = data_table.tenant_id
+  where index_table.index_using_type = 1
   order by 1;
 connection default;
 drop database hualong;

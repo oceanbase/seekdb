@@ -29,7 +29,7 @@ namespace blocksstable
 class ObIndexBlockBareIterator : protected ObMicroBlockBareIterator
 {
 public:
-  ObIndexBlockBareIterator(const uint64_t tenant_id = MTL_ID());
+  ObIndexBlockBareIterator();
   virtual ~ObIndexBlockBareIterator();
   void reset();
 

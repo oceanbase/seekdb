@@ -25,14 +25,12 @@ namespace pl
 {
 /*INFLUENCE_PL sys var:
  *div_precision_increment only mysql mode
- *nls_length_semantics
  *ob_compatibility_version
  *_enable_old_charset_aggregation
 */
-static constexpr int64_t PL_CACHE_SYS_VAR_COUNT = 4;
+static constexpr int64_t PL_CACHE_SYS_VAR_COUNT = 3;
 static constexpr share::ObSysVarClassType InfluencePLMap[PL_CACHE_SYS_VAR_COUNT + 1] = {
   share::SYS_VAR_DIV_PRECISION_INCREMENT,
-  share::SYS_VAR_NLS_LENGTH_SEMANTICS,
   share::SYS_VAR_OB_COMPATIBILITY_VERSION,
   share::SYS_VAR__ENABLE_OLD_CHARSET_AGGREGATION,
   share::SYS_VAR_INVALID
@@ -98,11 +96,8 @@ int ObPLCacheMgr::get_sys_var_in_pl_cache_str(ObBasicSessionInfo &session,
 int ObPLCacheMgr::get_pl_object(ObPlanCache *lib_cache, ObILibCacheCtx &ctx, ObCacheObjGuard& guard)
 {
   int ret = OB_SUCCESS;
-  FLTSpanGuard(pc_get_pl_object);
-  ObArenaAllocator tmp_alloc(GET_PL_MOD_STRING(PL_MOD_IDX::OB_PL_ARENA), OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID());
+  ObArenaAllocator tmp_alloc(GET_PL_MOD_STRING(PL_MOD_IDX::OB_PL_ARENA), OB_MALLOC_NORMAL_BLOCK_SIZE);
   ObPLCacheCtx &pc_ctx = static_cast<ObPLCacheCtx&>(ctx);
-  FLT_SET_TAG(pl_cache_key_id, pc_ctx.key_.key_id_);
-  FLT_SET_TAG(pl_cache_key_name, pc_ctx.key_.name_);
   //guard.get_cache_obj() = NULL;
   ObGlobalReqTimeService::check_req_timeinfo();
   if (OB_ISNULL(lib_cache) || OB_ISNULL(pc_ctx.session_info_)) {
@@ -150,7 +145,6 @@ int ObPLCacheMgr::get_pl_object(ObPlanCache *lib_cache, ObILibCacheCtx &ctx, ObC
     }
     pc_ctx.key_.sys_vars_str_.reset();
   }
-  FLT_SET_TAG(pl_hit_pl_cache, (OB_NOT_NULL(guard.get_cache_obj()) && OB_SUCC(ret)));
   return ret;
 }
 
@@ -186,7 +180,7 @@ int ObPLCacheMgr::add_pl_object(ObPlanCache *lib_cache,
                                       ObILibCacheObject *cache_obj)
 {
   int ret = OB_SUCCESS;
-  ObArenaAllocator tmp_alloc(GET_PL_MOD_STRING(PL_MOD_IDX::OB_PL_ARENA), OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID());
+  ObArenaAllocator tmp_alloc(GET_PL_MOD_STRING(PL_MOD_IDX::OB_PL_ARENA), OB_MALLOC_NORMAL_BLOCK_SIZE);
   ObPLCacheCtx &pc_ctx = static_cast<ObPLCacheCtx&>(ctx);
   if (OB_ISNULL(cache_obj)) {
     ret = OB_INVALID_ARGUMENT;
@@ -222,9 +216,6 @@ int ObPLCacheMgr::add_pl_object(ObPlanCache *lib_cache,
 int ObPLCacheMgr::add_pl_cache(ObPlanCache *lib_cache, ObILibCacheObject *pl_object, ObPLCacheCtx &pc_ctx)
 {
   int ret = OB_SUCCESS;
-  FLTSpanGuard(pc_add_pl_object);
-  FLT_SET_TAG(pl_cache_key_id, pc_ctx.key_.key_id_);
-  FLT_SET_TAG(pl_cache_key_name, pc_ctx.key_.name_);
   ObGlobalReqTimeService::check_req_timeinfo();
   if (OB_ISNULL(lib_cache)) {
     ret = OB_ERR_UNEXPECTED;
@@ -272,17 +263,14 @@ int ObPLCacheMgr::add_pl_cache(ObPlanCache *lib_cache, ObILibCacheObject *pl_obj
       }
     } else {
       (void)lib_cache->inc_mem_used(pl_object->get_mem_size());
-      FLT_SET_TAG(pl_add_cache_object_size, pl_object->get_mem_size());
     }
   }
-  FLT_SET_TAG(pl_add_cache_plan, OB_SUCCESS == ret);
   return ret;
 }
 
 int ObPLCacheMgr::flush_pl_cache_by_sql(
                                   uint64_t key_id,
                                   uint64_t db_id,
-                                  uint64_t tenant_id,
                                   share::schema::ObMultiVersionSchemaService & schema_service)
 {
   int ret = OB_SUCCESS;
@@ -292,9 +280,9 @@ int ObPLCacheMgr::flush_pl_cache_by_sql(
   ObString db_name;
   ObString tenant_name;
   //get tenant name
-  if (OB_FAIL(schema_service.get_tenant_schema_guard(tenant_id, tenant_schema_guard))) {
-      LOG_WARN("failed to get tenant schema guard", KR(ret), K(tenant_id));
-  } else if (OB_FAIL(tenant_schema_guard.get_tenant_info(tenant_id, tenant))) {
+  if (OB_FAIL(schema_service.get_tenant_schema_guard(tenant_schema_guard))) {
+      LOG_WARN("failed to get tenant schema guard", KR(ret));
+  } else if (OB_FAIL(tenant_schema_guard.get_tenant_info(tenant))) {
     LOG_WARN("failed get tenant info", K(ret));
   } else if (OB_ISNULL(tenant)) {
     ret = OB_INVALID_ARGUMENT;
@@ -306,7 +294,7 @@ int ObPLCacheMgr::flush_pl_cache_by_sql(
   const ObSimpleDatabaseSchema *database_schema = NULL;
   if (OB_FAIL(ret)) {
     // do nothing
-  } else if (OB_FAIL(tenant_schema_guard.get_database_schema(tenant_id, db_id, database_schema))) {
+  } else if (OB_FAIL(tenant_schema_guard.get_database_schema( db_id, database_schema))) {
     LOG_WARN("failed get db schema", K(ret));
   } else if (OB_ISNULL(database_schema)) {
     ret = OB_INVALID_ARGUMENT;
@@ -318,7 +306,7 @@ int ObPLCacheMgr::flush_pl_cache_by_sql(
   share::ObTenantRole tenant_role;
   ObMySQLProxy *sql_proxy = nullptr;
   // system tenant execute global flush
-  const uint64_t exec_tenant_id = ObSchemaUtils::get_exec_tenant_id(OB_SYS_TENANT_ID);
+  
   ObSqlString sql;
   int64_t affected_rows = 0;
   if (OB_FAIL(ret)) {
@@ -330,11 +318,11 @@ int ObPLCacheMgr::flush_pl_cache_by_sql(
                                       db_name.length(), db_name.ptr(), tenant_name.length(), tenant_name.ptr()))) {
     LOG_WARN("alter system flush pl cache failed.", K(ret), K(key_id));
   } else {
-    if (OB_FAIL(sql_proxy->write(exec_tenant_id, sql.ptr(), affected_rows))) {
+    if (OB_FAIL(sql_proxy->write(sql.ptr(), affected_rows))) {
       LOG_WARN("execute query failed", K(ret), K(sql));
     } else {
       // do nothing
-      LOG_INFO("succ to flush pl cache", K(key_id), K(tenant_id), K(affected_rows));
+      LOG_INFO("succ to flush pl cache", K(key_id), K(affected_rows));
     }
   }
   return ret;

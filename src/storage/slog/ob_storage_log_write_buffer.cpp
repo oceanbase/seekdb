@@ -39,8 +39,7 @@ ObStorageLogWriteBuffer::~ObStorageLogWriteBuffer()
 
 int ObStorageLogWriteBuffer::init(
     const int64_t align_size,
-    const int64_t buf_size,
-    const int64_t tenant_id)
+    const int64_t buf_size)
 {
   int ret = OB_SUCCESS;
 
@@ -51,7 +50,7 @@ int ObStorageLogWriteBuffer::init(
     ret = OB_INVALID_ARGUMENT;
     STORAGE_REDO_LOG(WARN, "Invalid arguments", K(ret), K(align_size), K(buf_size));
   } else if (OB_ISNULL(buf_ = static_cast<char *>(ob_malloc_align(align_size,
-      buf_size, ObMemAttr(tenant_id, "SlogWriteBuffer"))))) {
+      buf_size, ObMemAttr("SlogWriteBuffer"))))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     STORAGE_REDO_LOG(WARN, "Fail to alloc write buffer",
         K(ret), KP_(buf), K(buf_size), K_(align_size));

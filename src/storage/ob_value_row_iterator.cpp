@@ -15,7 +15,9 @@
  */
 
 #define USING_LOG_PREFIX STORAGE
-#include "share/schema/ob_table_dml_param.h"
+#include "storage/ob_table_dml_param.h"
+#include "storage/ob_table_dml_param.h"
+#include "share/rc/ob_module_provider.h"
 #include "storage/ob_relative_table.h"
 #include "storage/access/ob_single_merge.h"
 #include "storage/access/ob_multiple_get_merge.h"
@@ -48,7 +50,7 @@ int ObValueRowIterator::init()
     ret = OB_INIT_TWICE;
     STORAGE_LOG(WARN, "ObValueRowIterator is already initialized", K(ret));
   } else {
-    allocator_.set_tenant_id(MTL_ID());
+    
     is_inited_ = true;
     cur_idx_ = 0;
   }
@@ -150,7 +152,7 @@ ObRowGetter::ObRowGetter(ObIAllocator &allocator, ObTablet &tablet)
     allocator_(allocator),
     cached_iter_node_(nullptr)
 {
-  output_projector_.set_attr(ObMemAttr(MTL_ID(), "RowGetter"));
+  output_projector_.set_attr(ObMemAttr("RowGetter"));
 }
 
 ObRowGetter::~ObRowGetter()
@@ -170,7 +172,7 @@ ObRowGetter::~ObRowGetter()
     multi_get_merge_ = nullptr;
   }
   if (nullptr != cached_iter_node_) {
-    ObGlobalIteratorPool *iter_pool = MTL(ObGlobalIteratorPool*);
+    ObGlobalIteratorPool *iter_pool = share::g_mp->global_iterator_pool();
     iter_pool->release(cached_iter_node_);
   }
 }
@@ -185,8 +187,8 @@ int ObRowGetter::init_dml_access_ctx(
   query_flag.scan_order_ = ObQueryFlag::Forward;
   query_flag.set_not_use_bloomfilter_cache();
   query_flag.read_latest_ = ObQueryFlag::OBSF_MASK_READ_LATEST;
-  if (store_ctx.mvcc_acc_ctx_.write_flag_.is_plain_insert_gts_opt()) {
-    query_flag.set_plain_insert_gts_opt();
+  if (store_ctx.mvcc_acc_ctx_.write_flag_.is_snapshot_opt()) {
+    query_flag.set_snapshot_opt();
   }
   if (skip_read_lob) {
     query_flag.skip_read_lob_ = ObQueryFlag::OBSF_MASK_SKIP_READ_LOB;
@@ -256,7 +258,7 @@ int ObRowGetter::prepare_cached_iter_node(const ObDMLBaseParam &dml_param,
     ret = OB_ERR_UNEXPECTED;
     STORAGE_LOG(WARN, "Unexpected not null cached iter node", K(ret), KP(cached_iter_node_));
   } else if (can_use_global_iter_pool(dml_param)) {
-    ObGlobalIteratorPool *iter_pool = MTL(ObGlobalIteratorPool*);
+    ObGlobalIteratorPool *iter_pool = share::g_mp->global_iterator_pool();
     if (OB_FAIL(iter_pool->get(iter_type_, cached_iter_node_))) {
       STORAGE_LOG(WARN, "Failed to get from iter pool", K(ret));
     } else if (nullptr != cached_iter_node_) {
@@ -370,7 +372,7 @@ bool ObRowGetter::can_use_global_iter_pool(const ObDMLBaseParam &dml_param) cons
   } else {
     const int64_t table_cnt = get_table_param_.tablet_iter_.table_iter()->count();
     const int64_t col_cnt = dml_param.table_param_->get_data_table().get_read_info().get_schema_column_count();
-    ObGlobalIteratorPool *iter_pool = MTL(ObGlobalIteratorPool*);
+    ObGlobalIteratorPool *iter_pool = share::g_mp->global_iterator_pool();
     if (OB_NOT_NULL(iter_pool)) {
       use_pool = iter_pool->can_use_iter_pool(table_cnt, col_cnt, iter_type_);
     }

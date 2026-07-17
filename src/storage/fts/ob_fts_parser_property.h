@@ -20,7 +20,7 @@
 #include "lib/allocator/ob_allocator.h"
 #include "lib/charset/ob_charset.h"
 #include "lib/json/ob_json.h"
-#include "lib/json_type/ob_json_base.h"
+#include "common/json_type/ob_json_base.h"
 #include "lib/oblog/ob_log_module.h"
 #include "lib/string/ob_string.h"
 #include "lib/utility/ob_macro_utils.h"

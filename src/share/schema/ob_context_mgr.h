@@ -37,36 +37,31 @@ class ObContextHashWrapper
 {
 public:
   ObContextHashWrapper()
-    : tenant_id_(common::OB_INVALID_ID),
-      ctx_namespace_() {}
-  ObContextHashWrapper(uint64_t tenant_id, const common::ObString &ctx_namespace)
-    : tenant_id_(tenant_id),
-      ctx_namespace_(ctx_namespace) {}
+    : ctx_namespace_() {}
+  ObContextHashWrapper(const common::ObString &ctx_namespace)
+    : ctx_namespace_(ctx_namespace) {}
   ~ObContextHashWrapper() {}
   inline uint64_t hash() const;
   inline bool operator==(const ObContextHashWrapper &rv) const;
-  inline void set_tenant_id(uint64_t tenant_id) { tenant_id_ = tenant_id; }
+  
   inline void set_context_namespace(const common::ObString &ctx_namespace) { ctx_namespace_ = ctx_namespace; }
-  inline uint64_t get_tenant_id() const { return tenant_id_; }
+  
   inline const common::ObString &get_context_namespace() const { return ctx_namespace_; }
-  TO_STRING_KV(K_(tenant_id), K_(ctx_namespace));
+  TO_STRING_KV(K_(ctx_namespace));
 
 private:
-  uint64_t tenant_id_;
   common::ObString ctx_namespace_;
 };
 
 inline bool ObContextHashWrapper::operator == (const ObContextHashWrapper &rv) const
 {
-  return (tenant_id_ == rv.get_tenant_id())
-      && (ctx_namespace_ == rv.get_context_namespace());
+  return (ctx_namespace_ == rv.get_context_namespace());
 }
 
 inline uint64_t ObContextHashWrapper::hash() const
 {
   uint64_t hash_ret = 0;
-  hash_ret = common::murmurhash(&tenant_id_, sizeof(uint64_t), 0);
-  hash_ret = common::murmurhash(ctx_namespace_.ptr(), ctx_namespace_.length(), hash_ret);
+  hash_ret = common::murmurhash(ctx_namespace_.ptr(), ctx_namespace_.length(), 0);
   return hash_ret;
 }
 
@@ -105,17 +100,13 @@ public:
   int add_contexts(const common::ObIArray<ObContextSchema> &context_schema);
   int del_context(const ObContextKey &context);
 
-  int get_context_schema(uint64_t tenant_id,
-                         uint64_t context_id,
+  int get_context_schema(uint64_t context_id,
                          const ObContextSchema *&context_schema) const;
 
-  int get_context_schemas_in_tenant(const uint64_t tenant_id,
-      common::ObIArray<const ObContextSchema *> &context_schemas) const;
-  int get_context_schema_with_name(const uint64_t tenant_id,
-                                const common::ObString &ctx_namespace,
+  int get_context_schemas_in_tenant(common::ObIArray<const ObContextSchema *> &context_schemas) const;
+  int get_context_schema_with_name(const common::ObString &ctx_namespace,
                                 const ObContextSchema *&context_schema) const;
 
-  int del_schemas_in_tenant(const uint64_t tenant_id);
   template<typename Filter, typename Acation, typename EarlyStopCondition>
   int for_each(Filter &filter, Acation &action, EarlyStopCondition &condition);
   static bool compare_context(const ObContextSchema *lhs,

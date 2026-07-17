@@ -19,7 +19,7 @@
 #include "lib/utility/ob_print_utils.h"
 #include "sql/parser/parse_node.h"
 #include "lib/ob_name_def.h"
-#include "common/ob_smart_call.h"
+#include "lib/utility/ob_smart_call.h"
 #include "lib/utility/ob_hang_fatal_error.h"
 #include "share/ob_errno.h"
 const char* get_type_name(int type);
@@ -153,7 +153,7 @@ struct ObCharsets4Parser
       nls_collation_(common::CS_TYPE_INVALID)
     {}
   common::ObCollationType string_collation_; //collation type for the string to parse
-  common::ObCollationType nls_collation_; //oracle database collation for validating identifiers
+  common::ObCollationType nls_collation_; // database NLS collation for validating identifiers
 };
 
 } // end namespace sql

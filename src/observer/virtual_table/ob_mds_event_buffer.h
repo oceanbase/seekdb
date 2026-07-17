@@ -23,7 +23,6 @@
 #include "lib/string/ob_string.h"
 #include "share/cache/ob_vtable_event_recycle_buffer.h"
 #include "common/ob_tablet_id.h"
-#include "share/ob_ls_id.h"
 #include "storage/multi_data_source/runtime_utility/common_define.h"
 #include "util/easy_time.h"
 #include "share/ob_task_define.h"
@@ -50,26 +49,20 @@ class ObAllVirtualMdsEventHistory;
 class ObMdsEventBuffer;
 struct MdsEventKey {
   MdsEventKey() = default;
-  MdsEventKey(uint64_t tenant_id, share::ObLSID ls_id, common::ObTabletID tablet_id)
-  : tenant_id_(tenant_id),
-  ls_id_(ls_id),
-  tablet_id_(tablet_id) {}
+  explicit MdsEventKey(common::ObTabletID tablet_id)
+  : tablet_id_(tablet_id) {}
   bool operator<(const MdsEventKey &rhs) {
-    return tenant_id_ < rhs.tenant_id_ && ls_id_ < rhs.ls_id_ && tablet_id_ < rhs.tablet_id_;
+    return tablet_id_ < rhs.tablet_id_;
   }
   bool operator==(const MdsEventKey &rhs) {
-    return tenant_id_ == rhs.tenant_id_ && ls_id_ == rhs.ls_id_ && tablet_id_ == rhs.tablet_id_;
+    return tablet_id_ == rhs.tablet_id_;
   }
   uint64_t hash() const {
     uint64_t hash = 0;
-    hash = murmurhash(&tenant_id_, sizeof(tenant_id_), hash);
-    hash = murmurhash(&tablet_id_, sizeof(tablet_id_), hash);
-    hash = murmurhash(&ls_id_, sizeof(ls_id_), hash);
+    hash = murmurhash(&tablet_id_, sizeof(tablet_id_), 0);
     return hash;
   }
-  TO_STRING_KV(K_(tenant_id), K_(ls_id), K_(tablet_id));
-  uint64_t tenant_id_;
-  share::ObLSID ls_id_;
+  TO_STRING_KV(K_(tablet_id));
   common::ObTabletID tablet_id_;
 };
 

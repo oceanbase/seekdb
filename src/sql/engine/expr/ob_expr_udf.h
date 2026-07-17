@@ -45,7 +45,7 @@ public:
   ObExprUDFInfo(common::ObIAllocator &alloc, ObExprOperatorType type)
       : ObIExprExtraInfo(alloc, type),
       subprogram_path_(alloc), params_type_(alloc), params_desc_(alloc), nocopy_params_(alloc),
-      dblink_id_(OB_INVALID_ID), is_result_cache_(false), is_deterministic_(false)
+      is_result_cache_(false), is_deterministic_(false)
   {
   }
 
@@ -67,7 +67,6 @@ public:
   uint64_t loc_;
   bool is_udt_cons_;
   bool is_called_in_sql_;
-  uint64_t dblink_id_;
   bool is_result_cache_;
   bool is_deterministic_;
 };
@@ -82,12 +81,12 @@ class ObExprUDF : public ObFuncExprOperator
     ObExprUDFCtx() :
     ObExprOperatorCtx(),
     param_store_buf_(nullptr),
-    params_(nullptr) {}
+    params_(nullptr),
+    ctx_allocator_("UDFCtxAlloc", OB_MALLOC_NORMAL_BLOCK_SIZE) {}
 
     ~ObExprUDFCtx() {}
 
-    int init_param_store(ObIAllocator &allocator,
-                         int param_num);
+    int init_param_store(int param_num);
     void reuse()
     {
       if (OB_NOT_NULL(params_)) {
@@ -101,6 +100,13 @@ class ObExprUDF : public ObFuncExprOperator
     private:
     void* param_store_buf_;
     ParamStore* params_;
+    // ctx-level allocator: the ParamStore is built once per udf_ctx lifetime and
+    // must NOT be allocated on exec_ctx.allocator_ (the outer SQL arena, freed only
+    // at query end). Because PL's reset_expr_op() wipes the cached udf_ctx on every
+    // PL call, build_udf_ctx() re-creates it and re-runs init_param_store() for each
+    // call; allocating on the outer arena would leak ~per-call within one long SQL.
+    // Using this member arena ties the ParamStore lifetime to the udf_ctx itself.
+    common::ObArenaAllocator ctx_allocator_;
   };
 
   OB_UNIS_VERSION(1);

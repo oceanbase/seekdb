@@ -481,14 +481,14 @@ int ObValuesTableCompression::resolve_params_for_values_clause(ObPlanCacheCtx &p
             } else {
               const ObObjParam &param = array_param_ptr->data_[k];
               ObExprResType res_type;
-              res_type.set_meta(ObSQLUtils::is_oracle_empty_string(param) ? param.get_param_meta() : param.get_meta());
+              res_type.set_meta(ObSQLUtils::is_empty_string_typed_null(param) ? param.get_param_meta() : param.get_meta());
               res_type.set_accuracy(param.get_accuracy());
               res_type.set_result_flag(param.get_result_flag());
               if (res_type.get_length() == -1) {
                 if (res_type.is_varchar()) {
-                  res_type.set_length(OB_MAX_ORACLE_VARCHAR_LENGTH);
+                  res_type.set_length(OB_MAX_EXTENDED_VARCHAR_LENGTH);
                 } else if (res_type.is_char()) {
-                  res_type.set_length(OB_MAX_ORACLE_CHAR_LENGTH_BYTE);
+                  res_type.set_length(OB_MAX_EXTENDED_CHAR_LENGTH_BYTE);
                 }
               }
               if (k == 0) {
@@ -519,7 +519,6 @@ int ObValuesTableCompression::resolve_params_for_values_clause(ObPlanCacheCtx &p
             if (OB_FAIL(dummy_op.aggregate_result_type_for_merge(new_res_type,
                                                                   &res_types.at(0),
                                                                   res_types.count(),
-                                                                  false,
                                                                   type_ctx))) {
               LOG_WARN("failed to aggregate result type for merge", K(ret));
             }
@@ -634,14 +633,14 @@ int ObValuesTableCompression::resolve_params_for_values_clause(ObPlanCacheCtx &p
             } else {
               const ObObjParam &param = array_param_ptr->data_[k];
               ObExprResType res_type;
-              res_type.set_meta(ObSQLUtils::is_oracle_empty_string(param) ? param.get_param_meta() : param.get_meta());
+              res_type.set_meta(ObSQLUtils::is_empty_string_typed_null(param) ? param.get_param_meta() : param.get_meta());
               res_type.set_accuracy(param.get_accuracy());
               res_type.set_result_flag(param.get_result_flag());
               if (res_type.get_length() == -1) {
                 if (res_type.is_varchar()) {
-                  res_type.set_length(OB_MAX_ORACLE_VARCHAR_LENGTH);
+                  res_type.set_length(OB_MAX_EXTENDED_VARCHAR_LENGTH);
                 } else if (res_type.is_char()) {
-                  res_type.set_length(OB_MAX_ORACLE_CHAR_LENGTH_BYTE);
+                  res_type.set_length(OB_MAX_EXTENDED_CHAR_LENGTH_BYTE);
                 }
               }
               if (k == 0) {
@@ -672,7 +671,6 @@ int ObValuesTableCompression::resolve_params_for_values_clause(ObPlanCacheCtx &p
             if (OB_FAIL(dummy_op.aggregate_result_type_for_merge(new_res_type,
                                                                         &res_types.at(0),
                                                                         res_types.count(),
-                                                                        false,
                                                                         type_ctx))) {
               LOG_WARN("failed to aggregate result type for merge", K(ret));
             } else {

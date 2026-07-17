@@ -16,11 +16,9 @@
 
 #ifndef OB_ALL_VIRTUAL_VECTOR_INDEX_INFO_H_
 #define OB_ALL_VIRTUAL_VECTOR_INDEX_INFO_H_
-#include "share/ob_virtual_table_scanner_iterator.h"
-#include "share/vector_index/ob_plugin_vector_index_adaptor.h"
-#include "observer/omt/ob_multi_tenant_operator.h"
+#include "observer/virtual_table/ob_virtual_table_scanner_iterator.h"
+#include "observer/vector_index/ob_plugin_vector_index_adaptor.h"
 #include "storage/tablet/ob_tablet_iterator.h"
-#include "storage/tx_storage/ob_ls_map.h"
 
 namespace oceanbase
 {
@@ -50,17 +48,16 @@ public:
 private:
   static const int64_t MAX_PTR_SET_VALUES = 32;
   common::ObArenaAllocator allocator_;
-  common::ObSEArray<ObLSTabletPair, ObTabletCommon::DEFAULT_ITERATOR_TABLET_ID_CNT> complete_tablet_ids_;
-  common::ObSEArray<ObLSTabletPair, ObTabletCommon::DEFAULT_ITERATOR_TABLET_ID_CNT> partial_tablet_ids_;
-  common::ObSEArray<ObLSTabletPair, ObTabletCommon::DEFAULT_ITERATOR_TABLET_ID_CNT> cache_tablet_ids_;
+  common::ObSEArray<ObTabletPair, ObTabletCommon::DEFAULT_ITERATOR_TABLET_ID_CNT> complete_tablet_ids_;
+  common::ObSEArray<ObTabletPair, ObTabletCommon::DEFAULT_ITERATOR_TABLET_ID_CNT> partial_tablet_ids_;
+  common::ObSEArray<ObTabletPair, ObTabletCommon::DEFAULT_ITERATOR_TABLET_ID_CNT> cache_tablet_ids_;
   common::hash::ObHashSet<int64_t> ptr_set_; // only for check // can't use elements
   int64_t index_idx_;
   int64_t cache_idx_;
   bool is_opened_;
 };
 
-class ObAllVirtualVectorIndexInfo : public common::ObVirtualTableScannerIterator,
-                                    public omt::ObMultiTenantOperator
+class ObAllVirtualVectorIndexInfo : public common::ObVirtualTableScannerIterator
 {
 public:
   enum COLUMN_ID_LIST
@@ -86,13 +83,6 @@ public:
   inline void set_addr(common::ObAddr &addr) { addr_ = addr; }
   virtual int inner_get_next_row(common::ObNewRow *&row);
   virtual void reset();
-private:
-  // whether a tenant is need return content.
-  virtual bool is_need_process(uint64_t tenant_id) override;
-  // deal with current tenant's row.
-  virtual int process_curr_tenant(common::ObNewRow *&row) override;
-  // release last tenant's resource.
-  virtual void release_last_tenant() override;
 private:
   common::ObAddr addr_;
   char ip_buf_[common::OB_IP_STR_BUFF];

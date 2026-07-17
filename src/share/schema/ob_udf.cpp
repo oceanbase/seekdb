@@ -29,14 +29,14 @@ namespace schema
 {
 
 ObUDF::ObUDF(common::ObIAllocator *allocator)
-    : ObSchema(allocator), tenant_id_(common::OB_INVALID_ID), udf_id_(common::OB_INVALID_ID), name_(), ret_(UDFRetType::UDF_RET_UNINITIAL),
+    : ObSchema(allocator), udf_id_(common::OB_INVALID_ID), name_(), ret_(UDFRetType::UDF_RET_UNINITIAL),
       dl_(), type_(UDFType::UDF_TYPE_UNINITIAL), schema_version_(common::OB_INVALID_VERSION)
 {
   reset();
 }
 
 ObUDF::ObUDF(const ObUDF &src_schema)
-    : ObSchema(), tenant_id_(common::OB_INVALID_ID), udf_id_(common::OB_INVALID_ID), name_(), ret_(UDFRetType::UDF_RET_UNINITIAL),
+    : ObSchema(), udf_id_(common::OB_INVALID_ID), name_(), ret_(UDFRetType::UDF_RET_UNINITIAL),
       dl_(), type_(UDFType::UDF_TYPE_UNINITIAL), schema_version_(common::OB_INVALID_VERSION)
 {
   reset();
@@ -52,7 +52,7 @@ ObUDF &ObUDF::operator = (const ObUDF &src_schema)
   if (this != &src_schema) {
     reset();
     error_ret_ = src_schema.error_ret_;
-    tenant_id_ = src_schema.tenant_id_;
+    
     ret_ = src_schema.ret_;
     type_ = src_schema.type_;
 
@@ -73,7 +73,7 @@ ObUDF &ObUDF::operator = (const ObUDF &src_schema)
 
 bool ObUDF::operator==(const ObUDF &r) const
 {
-  return (tenant_id_ == r.tenant_id_ && name_ == r.name_);
+  return (name_ == r.name_);
 }
 
 
@@ -87,7 +87,7 @@ int64_t ObUDF::get_convert_size() const
 
 void ObUDF::reset()
 {
-  tenant_id_ = OB_INVALID_ID;
+  
   name_.reset();
   ret_ = STRING;
   dl_.reset();
@@ -96,7 +96,6 @@ void ObUDF::reset()
 }
 
 OB_SERIALIZE_MEMBER(ObUDF,
-										tenant_id_,
 										name_,
 										ret_,
 										dl_,
@@ -105,7 +104,6 @@ OB_SERIALIZE_MEMBER(ObUDF,
 
 
 OB_SERIALIZE_MEMBER(ObUDFMeta,
-                    tenant_id_,
                     name_,
                     ret_,
                     dl_,

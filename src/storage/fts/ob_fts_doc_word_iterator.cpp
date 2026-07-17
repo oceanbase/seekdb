@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX STORAGE_FTS
 
 #include "storage/fts/ob_fts_doc_word_iterator.h"
+#include "share/rc/ob_module_provider.h"
 
 #include "storage/access/ob_table_scan_iterator.h"
 #include "storage/tx_storage/ob_access_service.h"
@@ -27,8 +28,8 @@ namespace storage
 {
 
 ObFTDocWordScanIterator::ObFTDocWordScanIterator()
-  : allocator_(lib::ObMemAttr(MTL_ID(), "FTDWAlloc")),
-    scan_allocator_(lib::ObMemAttr(MTL_ID(), "FTDWScanA")),
+  : allocator_(lib::ObMemAttr("FTDWAlloc")),
+    scan_allocator_(lib::ObMemAttr("FTDWScanA")),
     table_param_(allocator_),
     scan_param_(),
     doc_word_iter_(nullptr),
@@ -44,7 +45,6 @@ ObFTDocWordScanIterator::~ObFTDocWordScanIterator()
 
 int ObFTDocWordScanIterator::init(
     const uint64_t table_id,
-    const share::ObLSID &ls_id,
     const common::ObTabletID &tablet_id,
     const transaction::ObTxReadSnapshot *snapshot,
     const int64_t schema_version)
@@ -53,8 +53,8 @@ int ObFTDocWordScanIterator::init(
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
     LOG_WARN("init fulltext doc word scan iterator twice", K(ret), K(is_inited_));
-  } else if (OB_FAIL(init_scan_param(table_id, ls_id, tablet_id, snapshot, schema_version))) {
-    LOG_WARN("fail to init scan param", K(ret), K(table_id), K(ls_id), K(tablet_id), K(snapshot), K(schema_version));
+  } else if (OB_FAIL(init_scan_param(table_id, tablet_id, snapshot, schema_version))) {
+    LOG_WARN("fail to init scan param", K(ret), K(table_id), K(tablet_id), K(snapshot), K(schema_version));
   } else {
     is_inited_ = true;
   }
@@ -67,7 +67,7 @@ int ObFTDocWordScanIterator::init(
 void ObFTDocWordScanIterator::reset()
 {
   if (OB_NOT_NULL(doc_word_iter_)) {
-    MTL(ObAccessService *)->revert_scan_iter(doc_word_iter_);
+    share::g_mp->access_service()->revert_scan_iter(doc_word_iter_);
     doc_word_iter_ = nullptr;
   }
   table_param_.reset();
@@ -82,7 +82,7 @@ int ObFTDocWordScanIterator::reuse()
   if (OB_ISNULL(doc_word_iter_)) {
     ret = OB_ERR_UNDEFINED;
     LOG_WARN("unexpected error, doc word iter is nullptr", K(ret));
-  } else if (OB_FAIL(MTL(ObAccessService *)->reuse_scan_iter(false/*switch param*/, doc_word_iter_))) {
+  } else if (OB_FAIL(share::g_mp->access_service()->reuse_scan_iter(false/*switch param*/, doc_word_iter_))) {
     LOG_WARN("fail to reuse storage scan iter", K(ret));
   } else {
     scan_param_.key_ranges_.reuse();
@@ -102,7 +102,7 @@ int ObFTDocWordScanIterator::do_table_rescan()
   } else if (OB_ISNULL(doc_word_iter_)) {
     ret = OB_ERR_UNDEFINED;
     LOG_WARN("unexpected error, doc word iter is nullptr", K(ret));
-  } else if (OB_FAIL(MTL(ObAccessService *)->table_rescan(scan_param_, doc_word_iter_))) {
+  } else if (OB_FAIL(share::g_mp->access_service()->table_rescan(scan_param_, doc_word_iter_))) {
     LOG_WARN("fail to table rescan", K(ret));
   }
 #ifdef OB_BUILD_PACKAGE
@@ -154,7 +154,6 @@ int ObFTDocWordScanIterator::get_next_row(blocksstable::ObDatumRow *&datum_row)
 
 int ObFTDocWordScanIterator::init_scan_param(
     const uint64_t table_id,
-    const share::ObLSID &ls_id,
     const common::ObTabletID &tablet_id,
     const transaction::ObTxReadSnapshot *snapshot,
     const int64_t schema_version)
@@ -171,22 +170,20 @@ int ObFTDocWordScanIterator::init_scan_param(
                          false // read_latest
                         );
   if (OB_UNLIKELY(OB_INVALID_ID == table_id
-              || !ls_id.is_valid()
               || !tablet_id.is_valid()
               || nullptr == snapshot
               || schema_version < 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(ret), K(table_id), K(ls_id), K(tablet_id), KPC(snapshot), K(schema_version));
+    LOG_WARN("invalid arguments", K(ret), K(table_id), K(tablet_id), KPC(snapshot), K(schema_version));
   } else if (OB_FAIL(build_table_param(table_id, table_param_, scan_param_.column_ids_))) {
     LOG_WARN("fail to build table param", K(ret), K(table_id));
   } else {
-    scan_param_.ls_id_ = ls_id;
     scan_param_.tablet_id_ = tablet_id;
     scan_param_.schema_version_ = schema_version;
     scan_param_.is_get_ = false;
     scan_param_.scan_flag_.flag_ = query_flag.flag_;
-    scan_param_.key_ranges_.set_attr(ObMemAttr(MTL_ID(), "ScanParamKR"));
-    scan_param_.ss_key_ranges_.set_attr(ObMemAttr(MTL_ID(), "ScanParamSSKR"));
+    scan_param_.key_ranges_.set_attr(ObMemAttr("ScanParamKR"));
+    scan_param_.ss_key_ranges_.set_attr(ObMemAttr("ScanParamSSKR"));
     scan_param_.index_id_ = 0;
     scan_param_.timeout_ = THIS_WORKER.get_timeout_ts();
     scan_param_.reserved_cell_count_ = scan_param_.column_ids_.count();
@@ -223,7 +220,7 @@ int ObFTDocWordScanIterator::build_table_param(
     common::ObIArray<uint64_t> &column_ids)
 {
   int ret = OB_SUCCESS;
-  const uint64_t tenant_id = MTL_ID();
+  
   share::schema::ObSchemaGetterGuard schema_guard;
   const share::schema::ObTableSchema *table_schema = nullptr;
   uint64_t generated_doc_id_col = OB_INVALID_ID;
@@ -231,13 +228,13 @@ int ObFTDocWordScanIterator::build_table_param(
   if (OB_UNLIKELY(OB_INVALID_ID == table_id)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", K(ret), K(table_id));
-  } else if (OB_FAIL(ObMultiVersionSchemaService::get_instance().get_tenant_schema_guard(tenant_id, schema_guard))) {
-    LOG_WARN("fail to get tenant schema guard", K(ret), K(tenant_id));
-  } else if (OB_FAIL(schema_guard.get_table_schema(tenant_id, table_id, table_schema))) {
-    LOG_WARN("fail to get table scheam", K(ret), K(tenant_id), K(table_id));
+  } else if (OB_FAIL(ObMultiVersionSchemaService::get_instance().get_tenant_schema_guard(schema_guard))) {
+    LOG_WARN("fail to get tenant schema guard", K(ret));
+  } else if (OB_FAIL(schema_guard.get_table_schema( table_id, table_schema))) {
+    LOG_WARN("fail to get table scheam", K(ret), K(table_id));
   } else if (OB_ISNULL(table_schema)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected error, table scheam is nullptr", K(ret), K(tenant_id), K(table_id));
+    LOG_WARN("unexpected error, table scheam is nullptr", K(ret), K(table_id));
   } else if (OB_FAIL(table_schema->get_column_ids(column_ids))) {
     LOG_WARN("fail to get all column ids", K(ret), KPC(table_schema));
   } else if (OB_UNLIKELY(4 != column_ids.count())) {
@@ -303,7 +300,7 @@ int ObFTDocWordScanIterator::do_table_scan()
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("not inited", K(ret), K(is_inited_));
-  } else if (OB_FAIL(MTL(ObAccessService *)->table_scan(scan_param_, doc_word_iter_))) {
+  } else if (OB_FAIL(share::g_mp->access_service()->table_scan(scan_param_, doc_word_iter_))) {
     LOG_WARN("fail to do table scan", K(ret), K(scan_param_));
   }
 #ifdef OB_BUILD_PACKAGE

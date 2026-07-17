@@ -21,7 +21,7 @@ Outputs & filters:
       update([test_conv_varchar.c1=column_conv(VARCHAR,utf8mb4_general_ci,length:20,NULL,test_conv_varchar.c2)])
   1 - output([test_conv_varchar.__pk_increment], [test_conv_varchar.c1], [test_conv_varchar.c2]), filter([length(test_conv_varchar.c2) <= 20]), rowset=16
       access([test_conv_varchar.__pk_increment], [test_conv_varchar.c1], [test_conv_varchar.c2]), partitions(p0)
-      is_index_back=false, is_global_index=false, filter_before_indexback[false],
+      is_index_back=false, is_global_index=false, filter_before_indexback[false], 
       range_key([test_conv_varchar.__pk_increment]), range(MIN ; MAX)always true
 update test_conv_varchar set c1=c2 where length(c2)<=20;
 EXPLAIN update test_conv_varchar set c1=c2 where c1 in (select c1 from test_conv_varchar where length(c2)<=20);
@@ -46,10 +46,10 @@ Outputs & filters:
       access([VIEW1.c1])
   3 - output([test_conv_varchar.c1]), filter([length(test_conv_varchar.c2) <= 20]), rowset=16
       access([test_conv_varchar.c2], [test_conv_varchar.c1]), partitions(p0)
-      is_index_back=false, is_global_index=false, filter_before_indexback[false],
+      is_index_back=false, is_global_index=false, filter_before_indexback[false], 
       range_key([test_conv_varchar.__pk_increment]), range(MIN ; MAX)always true
   4 - output([test_conv_varchar.__pk_increment], [test_conv_varchar.c1], [test_conv_varchar.c2]), filter(nil), rowset=16
       access([test_conv_varchar.__pk_increment], [test_conv_varchar.c1], [test_conv_varchar.c2]), partitions(p0)
-      is_index_back=false, is_global_index=false,
+      is_index_back=false, is_global_index=false, 
       range_key([test_conv_varchar.__pk_increment]), range(MIN ; MAX)always true
 update test_conv_varchar set c1=c2 where c1 in (select c1 from test_conv_varchar where length(c2)<=20);

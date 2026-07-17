@@ -1,13 +1,12 @@
 # owner: zhuoran.zzr
 # owner group: storage
-# description: used to test dump ddl mem table in shared storage mode for build major
+# description: test row-store DDL memory table dumping in shared storage mode
 
 --result_format 4
 connect (obsys,$OBMYSQL_MS0,root@sys,,oceanbase,$OBMYSQL_PORT);
 connect (obsys2,$OBMYSQL_MS0,root@sys,,oceanbase,$OBMYSQL_PORT);
 
 connection obsys;
-
 
 alter system set debug_sync_timeout = '300s';
 alter system set _ob_ddl_timeout = '1000s';
@@ -37,11 +36,11 @@ connection obsys2;
 sleep 2;
 alter system minor freeze;
 sleep 2;
-select count(*) from __all_virtual_table_mgr where tablet_id = (select tablet_id from __all_virtual_table where table_name like concat('%', (select table_id from __all_virtual_table where table_name like "ddl_t1"), '%'))
+select count(*) from __all_virtual_table_mgr where tablet_id = (select tablet_id from __all_table where table_name like concat('%', (select table_id from __all_table where table_name like "ddl_t1"), '%'))
                                              and table_type = 14;
-select count(*) from __all_virtual_table_mgr where tablet_id = (select tablet_id from __all_virtual_table where table_name like concat('%', (select table_id from __all_virtual_table where table_name like "ddl_t1"), '%'))
+select count(*) from __all_virtual_table_mgr where tablet_id = (select tablet_id from __all_table where table_name like concat('%', (select table_id from __all_table where table_name like "ddl_t1"), '%'))
                                              and table_type = 21;
-select count(*) from __all_virtual_table_mgr where tablet_id = (select tablet_id from __all_virtual_table where table_name like concat('%', (select table_id from __all_virtual_table where table_name like "ddl_t1"), '%'))
+select count(*) from __all_virtual_table_mgr where tablet_id = (select tablet_id from __all_table where table_name like concat('%', (select table_id from __all_table where table_name like "ddl_t1"), '%'))
                                              and table_type = 22;
 
 set ob_global_debug_sync = 'now signal signal1';
@@ -51,28 +50,9 @@ select count(*) from ddl_t1;
 
 connection obsys;
 reap;
-
 set ob_global_debug_sync = 'reset';
-alter system set debug_sync_timeout = '10000000s';
-set ob_global_debug_sync = 'BEFORE_TABLET_FULL_DIRECT_LOAD_MGR_CLOSE wait_for signal1 execute 1000000000';
 
-
-send  alter table ddl_t1 add column group(all columns, each column);
-
-
-connection obsys2;
-sleep 2;
-alter system minor freeze;
-sleep 5;
-select count(*) from __all_virtual_table_mgr where tablet_id = (select tablet_id from __all_virtual_table where table_name like concat('%', (select table_id from __all_virtual_table where table_name like "ddl_t1"), '%'))
-                                             and table_type = 14;
-select count(*) from __all_virtual_table_mgr where tablet_id = (select tablet_id from __all_virtual_table where table_name like concat('%', (select table_id from __all_virtual_table where table_name like "ddl_t1"), '%'))
-                                             and table_type = 21;
-select count(*) from __all_virtual_table_mgr where tablet_id = (select tablet_id from __all_virtual_table where table_name like concat('%', (select table_id from __all_virtual_table where table_name like "ddl_t1"), '%'))
-                                             and table_type = 22;
-
-set ob_global_debug_sync = 'now signal signal1';
-set ob_global_debug_sync = 'BEFORE_TABLET_FULL_DIRECT_LOAD_MGR_CLOSE clear';
-connection obsys;
-reap;
-select count(*) from __all_virtual_column_group where table_id = (select table_id from __all_virtual_table where table_name like "ddl_t1");
+--disable_warnings
+drop table if exists ddl_t1;
+drop table if exists foo;
+--enable_warnings

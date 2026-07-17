@@ -36,7 +36,7 @@
 #include "sql/das/iter/ob_das_merge_iter.h"
 #include "sql/das/iter/ob_das_group_fold_iter.h"
 #include "sql/das/ob_das_domain_utils.h"
-#include "share/ob_fts_index_builder_util.h"
+#include "sql/resolver/ddl/ob_fts_index_builder_util.h"
 #include "sql/rewrite/ob_range_generator.h"
 
 namespace oceanbase
@@ -53,24 +53,21 @@ class ObTableScanOp;
 class ObDASScanOp;
 class ObGlobalIndexLookupOpImpl;
 
-struct FlashBackItem
+struct SnapshotScanItem
 {
 public:
-  FlashBackItem()
+  SnapshotScanItem()
     : need_scn_(false),
-      flashback_query_expr_(nullptr),
-      flashback_query_type_(TableItem::NOT_USING),
-      fq_read_tx_uncommitted_(false)
+      snapshot_query_expr_(nullptr),
+      snapshot_query_type_(TableItem::NOT_USING)
   { }
-  int set_flashback_query_info(ObEvalCtx &eval_ctx, ObDASScanRtDef &scan_rtdef) const;
+  int set_snapshot_query_info(ObEvalCtx &eval_ctx, ObDASScanRtDef &scan_rtdef) const;
   TO_STRING_KV(K_(need_scn),
-               KPC_(flashback_query_expr),
-               K_(flashback_query_type),
-               K_(fq_read_tx_uncommitted));
+               KPC_(snapshot_query_expr),
+               K_(snapshot_query_type));
   bool need_scn_;
-  ObExpr *flashback_query_expr_; //flashback query expr
-  TableItem::FlashBackQueryType flashback_query_type_; //flashback query type
-  bool fq_read_tx_uncommitted_; // whether read uncommitted changes in transaction
+  ObExpr *snapshot_query_expr_; //snapshot query expr
+  TableItem::SnapshotQueryType snapshot_query_type_; //snapshot query type
 };
 
 
@@ -131,7 +128,7 @@ struct ObTableScanCtDef
   OB_UNIS_VERSION(1);
 public:
   ObTableScanCtDef(common::ObIAllocator &allocator)
-    : flashback_item_(),
+    : snapshot_item_(),
       bnlj_param_idxs_(allocator),
       scan_flags_(),
       scan_ctdef_(allocator),
@@ -164,7 +161,7 @@ public:
   int allocate_dppr_table_loc();
   ObDASScanCtDef *get_lookup_ctdef();
   const ObDASScanCtDef *get_lookup_ctdef() const;
-  TO_STRING_KV(K_(flashback_item),
+  TO_STRING_KV(K_(snapshot_item),
                K_(bnlj_param_idxs),
                K_(scan_flags),
                K_(scan_ctdef),
@@ -177,7 +174,7 @@ public:
                K_(is_das_keep_order),
                K_(use_index_merge));
   //the query range of index scan/table scan
-  FlashBackItem flashback_item_;
+  SnapshotScanItem snapshot_item_;
   Int64FixedArray bnlj_param_idxs_;
   // read consistency, cache policy, result order
   common::ObQueryFlag scan_flags_;
@@ -426,7 +423,6 @@ public:
       uint64_t gi_above_                        : 1;
       uint64_t batch_scan_flag_                 : 1;
       uint64_t report_col_checksum_             : 1;
-      uint64_t has_tenant_id_col_               : 1;
       uint64_t is_spatial_ddl_                  : 1;
       uint64_t is_external_table_               : 1;
       uint64_t is_fts_ddl_                      : 1; // mark if ddl table is the fts index or fts doc word aux table.
@@ -436,10 +432,10 @@ public:
       uint64_t is_spiv_ddl_                     : 1;
       uint64_t is_scan_resumable_               : 1; // FARM COMPAT WHITELIST, compact with can_be_paused_
       uint64_t need_check_outrow_lob_           : 1; // mark if need check outrow lob
-      uint64_t reserved_                        : 49;
+      uint64_t reserved_                        : 50;
     };
   };
-  int64_t tenant_id_col_idx_;
+  int64_t id_col_idx_;
   int64_t partition_id_calc_type_;
 
   common::ObString parser_name_; // word segment for ddl.
@@ -641,7 +637,7 @@ protected:
   bool need_real_rescan();
   int check_need_real_rescan(bool &bret);
   inline void access_expr_sanity_check() {
-    if (OB_UNLIKELY(spec_.need_check_output_datum_ && !MY_SPEC.is_external_table_)) {
+    if (OB_UNLIKELY(spec_.need_check_output_datum_)) {
       const ObPushdownExprSpec &pd_expr_spec = MY_SPEC.tsc_ctdef_.scan_ctdef_.pd_expr_spec_;
       ObSQLUtils::access_expr_sanity_check(pd_expr_spec.access_exprs_,
                                eval_ctx_, pd_expr_spec.max_batch_size_);

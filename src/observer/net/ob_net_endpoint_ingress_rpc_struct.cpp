@@ -23,7 +23,7 @@ namespace oceanbase
 {
 using namespace common;
 
-namespace obrpc
+namespace obcall
 {
 
 OB_SERIALIZE_MEMBER(ObNetEndpointKey, addr_, group_id_);
@@ -56,5 +56,5 @@ int ObNetEndpointSetIngressArg::assign(const ObNetEndpointSetIngressArg &other)
 }
 
 OB_SERIALIZE_MEMBER(ObNetEndpointSetIngressRes, res_);
-}  // namespace obrpc
+}  // namespace obcall
 }  // namespace oceanbase

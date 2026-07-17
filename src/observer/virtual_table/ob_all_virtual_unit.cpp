@@ -15,6 +15,7 @@
  */
 
 #include "observer/virtual_table/ob_all_virtual_unit.h"
+#include "share/rc/ob_module_provider.h"
 #include "observer/ob_server.h"
 #include "observer/omt/ob_tenant.h"
 #include "logservice/ob_log_service.h"
@@ -28,9 +29,9 @@ using namespace oceanbase::logservice;
 
 ObAllVirtualUnit::ObAllVirtualUnit()
     : ObVirtualTableScannerIterator(),
-      addr_(),
-      tenant_idx_(0),
-      tenant_meta_arr_()
+      tenant_meta_(),
+      has_row_(false),
+      consumed_(false)
 {
 }
 
@@ -41,20 +42,19 @@ ObAllVirtualUnit::~ObAllVirtualUnit()
 
 void ObAllVirtualUnit::reset()
 {
-  addr_.reset();
-  tenant_meta_arr_.reset();
-  tenant_idx_ = 0;
+  tenant_meta_ = omt::ObTenantMeta();
+  has_row_ = false;
+  consumed_ = false;
   ObVirtualTableScannerIterator::reset();
 }
 
-int ObAllVirtualUnit::init(common::ObAddr &addr)
+int ObAllVirtualUnit::init()
 {
   int ret = OB_SUCCESS;
   if (start_to_read_) {
     ret = OB_INIT_TWICE;
     SERVER_LOG(WARN, "cannot init twice", K(ret));
   } else {
-    addr_ = addr;
     start_to_read_ = true;
   }
   return ret;
@@ -64,34 +64,17 @@ int ObAllVirtualUnit::inner_open()
 {
   int ret = OB_SUCCESS;
 
-  ObTenant *tenant = nullptr;
   if (OB_ISNULL(GCTX.omt_)) {
     ret = OB_ERR_UNEXPECTED;
     SERVER_LOG(WARN, "fail to get multi tenant from GCTX", K(ret));
-  } else if (OB_SYS_TENANT_ID == effective_tenant_id_) {
-    common::ObArray<omt::ObTenantMeta> tenant_meta_arr_tmp;
-    if (OB_FAIL(GCTX.omt_->get_tenant_metas(tenant_meta_arr_tmp))) {
-      SERVER_LOG(WARN, "fail to get tenant metas", K(ret));
+  } else {
+    bool exist = false;
+    if (OB_FAIL(GCTX.omt_->get_tenant_meta(tenant_meta_, exist))) {
+      SERVER_LOG(WARN, "fail to get tenant meta", K(ret));
     } else {
-      // output all tenants unit info: USER, SYS, META
-      for (int64_t i = 0; i < tenant_meta_arr_tmp.count() && OB_SUCC(ret); i++) {
-        const ObTenantMeta &tenant_meta = tenant_meta_arr_tmp.at(i);
-        if (OB_FAIL(tenant_meta_arr_.push_back(tenant_meta))) {
-          SERVER_LOG(WARN, "fail to push back tenant meta", K(ret), K(tenant_meta));
-        }
-      }
+      has_row_ = exist;
     }
-  } else if (OB_FAIL(GCTX.omt_->get_tenant(effective_tenant_id_, tenant))) { // not sys
-    if (OB_TENANT_NOT_IN_SERVER != ret) {
-      SERVER_LOG(WARN, "fail to get tenant handle", K(ret), K_(effective_tenant_id));
-    } else {
-      ret = OB_SUCCESS;
-    }
-  } else if (OB_FAIL(tenant_meta_arr_.push_back(tenant->get_tenant_meta()))) {
-    SERVER_LOG(WARN, "fail to push back tenant meta", K(ret));
   }
-  
-  tenant_idx_ = 0;
 
   return ret;
 }
@@ -106,60 +89,37 @@ int ObAllVirtualUnit::inner_get_next_row(ObNewRow *&row)
   } else if (NULL == cur_row_.cells_) {
     ret = OB_ERR_UNEXPECTED;
     SERVER_LOG(ERROR, "cur row cell is NULL", K(ret));
-  } else if (tenant_idx_ >= tenant_meta_arr_.count()) {
+  } else if (!has_row_ || consumed_) {
     ret = OB_ITER_END;
   } else {
-    const ObTenantMeta &tenant_meta = tenant_meta_arr_.at(tenant_idx_++);
+    const ObTenantMeta &tenant_meta = tenant_meta_;
+    consumed_ = true;
     const int64_t col_count = output_column_ids_.count();
-
-    // META tenant CPU and IOPS are shared with USER tenant
-    // So, show CPU and IOPS with value NULL to user
-    const bool is_meta_tnt = is_meta_tenant(tenant_meta.unit_.tenant_id_);
 
     for (int64_t i = 0; OB_SUCC(ret) && i < col_count; ++i) {
       uint64_t col_id = output_column_ids_.at(i);
       switch (col_id) {
         case MIN_CPU: {
-          if (is_meta_tnt) {
-            cur_row_.cells_[i].set_null();
-          } else {
-            cur_row_.cells_[i].set_double(tenant_meta.unit_.config_.min_cpu());
-          }
+          cur_row_.cells_[i].set_double(tenant_meta.unit_.config_.min_cpu());
           break;
         }
         case MAX_CPU: {
-          if (is_meta_tnt) {
-            cur_row_.cells_[i].set_null();
-          } else {
-            cur_row_.cells_[i].set_double(tenant_meta.unit_.config_.max_cpu());
-          }
+          cur_row_.cells_[i].set_double(tenant_meta.unit_.config_.max_cpu());
           break;
         }
         case MEMORY_SIZE:
           cur_row_.cells_[i].set_int(tenant_meta.unit_.config_.memory_size());
           break;
         case MIN_IOPS: {
-          if (is_meta_tnt) {
-            cur_row_.cells_[i].set_null();
-          } else {
-            cur_row_.cells_[i].set_int(tenant_meta.unit_.config_.min_iops());
-          }
+          cur_row_.cells_[i].set_int(tenant_meta.unit_.config_.min_iops());
           break;
         }
         case MAX_IOPS: {
-          if (is_meta_tnt) {
-            cur_row_.cells_[i].set_null();
-          } else {
-            cur_row_.cells_[i].set_int(tenant_meta.unit_.config_.max_iops());
-          }
+          cur_row_.cells_[i].set_int(tenant_meta.unit_.config_.max_iops());
           break;
         }
         case IOPS_WEIGHT: {
-          if (is_meta_tnt) {
-            cur_row_.cells_[i].set_null();
-          } else {
-            cur_row_.cells_[i].set_int(tenant_meta.unit_.config_.iops_weight());
-          }
+          cur_row_.cells_[i].set_int(tenant_meta.unit_.config_.iops_weight());
           break;
         }
         case LOG_DISK_SIZE:
@@ -167,8 +127,8 @@ int ObAllVirtualUnit::inner_get_next_row(ObNewRow *&row)
           break;
         case LOG_DISK_IN_USE: {
           int64_t clog_disk_in_use = 0;
-          const uint64_t tenant_id = tenant_meta.unit_.tenant_id_;
-          if (OB_FAIL(get_clog_disk_used_size_(tenant_id, clog_disk_in_use))) {
+          
+          if (OB_FAIL(get_clog_disk_used_size_( clog_disk_in_use))) {
             SERVER_LOG(WARN, "fail to get clog disk in use", K(ret), K(tenant_meta));
           } else {
             cur_row_.cells_[i].set_int(clog_disk_in_use);
@@ -176,36 +136,17 @@ int ObAllVirtualUnit::inner_get_next_row(ObNewRow *&row)
           break;
         }
         case DATA_DISK_SIZE: {
-          if (GCTX.is_shared_storage_mode()) {
-            cur_row_.cells_[i].set_int(tenant_meta.unit_.get_effective_actual_data_disk_size());
-          } else {
-            cur_row_.cells_[i].set_null();
-          }
+          cur_row_.cells_[i].set_null();
           break;
         }
         case DATA_DISK_IN_USE: {
           int64_t data_disk_in_use = 0;
-#ifdef OB_BUILD_SHARED_STORAGE
-          if (GCTX.is_shared_storage_mode()) {
-            // shared_storage mode
-            MTL_SWITCH(tenant_meta.unit_.tenant_id_) {
-              ObTenantDiskSpaceManager *disk_space_mgr = nullptr;
-              if (OB_ISNULL(disk_space_mgr = MTL(ObTenantDiskSpaceManager*))) {
-                ret = OB_ERR_UNEXPECTED;
-                SERVER_LOG(WARN, "tenant disk space manager is null", KR(ret), KP(disk_space_mgr));
-              } else if (OB_FAIL(disk_space_mgr->get_used_disk_size(data_disk_in_use))) {
-                SERVER_LOG(WARN, "fail to get used disk size", KR(ret), K(data_disk_in_use));
-              }
-            }
-          } else
-            // shared_nothing mode
-#endif
           {
             if (OB_ISNULL(GCTX.disk_reporter_)) {
               ret = OB_ERR_UNEXPECTED;
               SERVER_LOG(WARN, "disk_reporter_ is nullptr", KR(ret), KP(GCTX.disk_reporter_));
             } else if (OB_FAIL(static_cast<ObDiskUsageReportTask*>(GCTX.disk_reporter_)
-                               ->get_data_disk_used_size(tenant_meta.unit_.tenant_id_, data_disk_in_use))) {
+                               ->get_data_disk_used_size( data_disk_in_use))) {
               SERVER_LOG(WARN, "fail to get data disk in use", K(ret), K(tenant_meta));
             }
           }
@@ -215,19 +156,11 @@ int ObAllVirtualUnit::inner_get_next_row(ObNewRow *&row)
           break;
         }
         case MAX_NET_BANDWIDTH: {
-          if (is_meta_tnt) {
-            cur_row_.cells_[i].set_null();
-          } else {
-            cur_row_.cells_[i].set_int(tenant_meta.unit_.config_.max_net_bandwidth());
-          }
+          cur_row_.cells_[i].set_int(tenant_meta.unit_.config_.max_net_bandwidth());
           break;
         }
         case NET_BANDWIDTH_WEIGHT: {
-          if (is_meta_tnt) {
-            cur_row_.cells_[i].set_null();
-          } else {
-            cur_row_.cells_[i].set_int(tenant_meta.unit_.config_.net_bandwidth_weight());
-          }
+          cur_row_.cells_[i].set_int(tenant_meta.unit_.config_.net_bandwidth_weight());
           break;
         }
         case STATUS: {
@@ -253,24 +186,22 @@ int ObAllVirtualUnit::inner_get_next_row(ObNewRow *&row)
   return ret;
 }
 
-int ObAllVirtualUnit::get_clog_disk_used_size_(const uint64_t tenant_id,
-                                               int64_t &log_used_size)
+int ObAllVirtualUnit::get_clog_disk_used_size_(int64_t &log_used_size)
 {
   int ret = OB_SUCCESS;
   log_used_size = 0;
   MAKE_TENANT_SWITCH_SCOPE_GUARD(guard);
-  if (OB_SUCC(guard.switch_to(tenant_id))) {
-    ObLogService *log_service = MTL(ObLogService*);
+  if (OB_SUCC(guard.switch_to())) {
+    ObLogService *log_service = share::g_mp->log_service();
     int64_t unused_log_disk_total_size = 0;
     if (OB_ISNULL(log_service)) {
       ret = OB_ERR_UNEXPECTED;
-      SERVER_LOG(WARN, "ObLogService is nullptr", KP(log_service), K(tenant_id));
+      SERVER_LOG(WARN, "ObLogService is nullptr", KP(log_service));
     } else if (OB_FAIL(log_service->get_palf_stable_disk_usage(log_used_size,
                                                                unused_log_disk_total_size))) {
-      SERVER_LOG(WARN, "get_palf_stable_disk_usage failed", KP(log_service), K(tenant_id));
+      SERVER_LOG(WARN, "get_palf_stable_disk_usage failed", KP(log_service));
     }
   }
   // return OB_SUCCESS whatever.
   return OB_SUCCESS;
 }
-

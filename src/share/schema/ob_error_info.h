@@ -69,7 +69,7 @@ public:
 #define DEFINE_GETTER(ret_type, name) \
   OB_INLINE ret_type get_##name() const { return name##_; }
 
-  DEFINE_GETTER(uint64_t, tenant_id)
+  
   DEFINE_GETTER(uint64_t, obj_id)
   DEFINE_GETTER(uint64_t, obj_type)
   DEFINE_GETTER(uint64_t, obj_seq)
@@ -88,7 +88,7 @@ public:
 #define DEFINE_SETTER(name, type) \
   OB_INLINE void set_##name(type name) { name##_ = name; }
 
-  DEFINE_SETTER(tenant_id, uint64_t)
+  
   DEFINE_SETTER(obj_id, uint64_t)
   DEFINE_SETTER(obj_type, uint64_t)
   DEFINE_SETTER(obj_seq, uint64_t)
@@ -124,8 +124,7 @@ public:
   int delete_error(const IObErrorInfo *info,
                    const ObObjectType obj_type = ObObjectType::INVALID);
 
-  TO_STRING_KV(K_(tenant_id),
-               K_(obj_id),
+  TO_STRING_KV(K_(obj_id),
                K_(obj_type),
                K_(obj_seq),
                K_(line),
@@ -138,12 +137,10 @@ public:
                K_(schema_version),
                K_(error_status))
 private:
-  int gen_error_dml(const uint64_t exec_tenant_id, oceanbase::share::ObDMLSqlSplicer &dml);
-  uint64_t extract_tenant_id() const;
+  int gen_error_dml(oceanbase::share::ObDMLSqlSplicer &dml);
   uint64_t extract_obj_id() const;
 
 private:
-  uint64_t tenant_id_;
   uint64_t obj_id_;                 // errorinfo from which object. such as package etc.
   uint64_t obj_type_;
   uint64_t obj_seq_;

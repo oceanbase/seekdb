@@ -74,18 +74,11 @@ TEST(ObCompressorPool, test_invalid)
 TEST(ObCompressorPool, test_normal_compressor)
 {
   test_normal("none");
-  test_normal("lz4_1.0");
-  test_normal("snappy_1.0");
-  test_normal("zlib_1.0");
-  test_normal("zstd_1.0");
   test_normal("zstd_1.3.8");
-  test_normal("lz4_1.9.1");
 }
 
 TEST(ObCompressorPool, test_stream_compressor)
 {
-  test_stream("stream_lz4_1.0");
-  test_stream("stream_zstd_1.0");
   test_stream("stream_zstd_1.3.8");
 }
 }

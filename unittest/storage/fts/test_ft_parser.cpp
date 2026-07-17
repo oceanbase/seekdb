@@ -14,14 +14,12 @@
  * limitations under the License.
  */
 
-// put top to use macro tricks
 #include "mtlenv/mock_tenant_module_env.h"
-// put top to use macro tricks
 
 #include "lib/allocator/page_arena.h"
 #include "lib/charset/ob_charset.h"
 #include "lib/ob_errno.h"
-#include "share/ob_tenant_mem_limit_getter.h"
+#include "storage/tx_storage/ob_tenant_mem_limit_getter.h"
 #include "storage/fts/dict/ob_ft_cache.h"
 #include "storage/fts/dict/ob_ft_cache_dict.h"
 #include "storage/fts/dict/ob_ft_dat_dict.h"
@@ -117,13 +115,16 @@ protected:
         ret = OB_SUCCESS;
       }
     }
-    ObDictCache::get_instance().init("dict cache");
+    ASSERT_EQ(OB_SUCCESS, ret);
+    ret = ObDictCache::get_instance().init("dict cache");
+    if (OB_INIT_TWICE == ret) {
+      ret = OB_SUCCESS;
+    }
+    ASSERT_EQ(OB_SUCCESS, ret);
   }
   virtual void TearDown()
   {
     ObDictCache::get_instance().destroy();
-    ObKVGlobalCache::get_instance().destroy();
-    ObClockGenerator::destroy();
     ObTimerService::get_instance().stop();
     ObTimerService::get_instance().wait();
     ObTimerService::get_instance().destroy();
@@ -193,7 +194,7 @@ TEST_F(FTParserTest, test_cache)
   dat.mem_block_size_ = sizeof(ObFTDAT);
   ObFTDAT *ptr = &dat;
 
-  ObDictCacheKey key(1, 1, ObFTDictType::DICT_IK_MAIN, 0);
+  ObDictCacheKey key(1, ObFTDictType::DICT_IK_MAIN, 0);
   ObDictCacheValue value(ptr);
   ret = cache.put(key, value);
   ASSERT_EQ(OB_SUCCESS, ret);

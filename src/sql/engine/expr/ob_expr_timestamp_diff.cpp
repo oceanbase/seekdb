@@ -228,10 +228,8 @@ int ObExprTimeStampDiff::cg_expr(ObExprCGCtx &ctx, const ObRawExpr &raw_expr,
 
 DEF_SET_LOCAL_SESSION_VARS(ObExprTimeStampDiff, raw_expr) {
   int ret = OB_SUCCESS;
-  if (is_mysql_mode()) {
-    SET_LOCAL_SYSVAR_CAPACITY(1);
-    EXPR_ADD_LOCAL_SYSVAR(SYS_VAR_TIME_ZONE);
-  }
+  SET_LOCAL_SYSVAR_CAPACITY(1);
+  EXPR_ADD_LOCAL_SYSVAR(SYS_VAR_TIME_ZONE);
   return ret;
 }
 

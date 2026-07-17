@@ -149,7 +149,7 @@ const char *ob_sql_type_str(ObObjType type)
       ""
     }
   };
-  return sql_type_name[lib::is_oracle_mode()][OB_LIKELY(type < ObMaxType) ? type : ObMaxType];
+  return sql_type_name[0][OB_LIKELY(type < ObMaxType) ? type : ObMaxType];
 }
 
 typedef int (*ObSqlTypeStrFunc)(char *buff, int64_t buff_length, int64_t &pos, int64_t length, int64_t precision, int64_t scale, ObCollationType coll_type);
@@ -196,11 +196,7 @@ typedef int (*obSqlTypeStrWithoutAccuracyFunc)(char *buff, int64_t buff_length, 
     UNUSED(precision);                                                                                  \
     UNUSED(coll_type);                                                                                  \
     if (scale <= 0) {                                                                                   \
-      if (lib::is_oracle_mode()) {                                                                      \
-        ret = databuff_printf(buff, buff_length, pos, STYPE3 STYPE2);                                   \
-      } else {                                                                                          \
-        ret = databuff_printf(buff, buff_length, pos, STYPE1 STYPE2);                                   \
-      }                                                                                                 \
+      ret = databuff_printf(buff, buff_length, pos, STYPE1 STYPE2);                                     \
     } else {                                                                                            \
       ret = databuff_printf(buff, buff_length, pos, STYPE1 "(%ld)" STYPE2, scale);                      \
     }                                                                                                   \
@@ -230,22 +226,10 @@ typedef int (*obSqlTypeStrWithoutAccuracyFunc)(char *buff, int64_t buff_length, 
     int ret = OB_SUCCESS;                                                                                 \
     UNUSED(length);                                                                                       \
     UNUSED(coll_type);                                                                                    \
-    if (lib::is_oracle_mode()) {                                                                          \
-      if (precision < OB_MIN_NUMBER_PRECISION && scale < OB_MIN_NUMBER_SCALE) {                           \
-        ret = databuff_printf(buff, buff_length, pos, "%s", STYPE3);                                      \
-      } else if (precision < OB_MIN_NUMBER_PRECISION) {                                                   \
-        ret = databuff_printf(buff, buff_length, pos, "%s(*,%ld)", STYPE3, scale);                        \
-      } else if (scale == 0) {                                                                            \
-        ret = databuff_printf(buff, buff_length, pos, "%s(%ld)", STYPE3, precision);                      \
-      } else {                                                                                            \
-        ret = databuff_printf(buff, buff_length, pos, "%s(%ld,%ld)", STYPE3, precision, scale);           \
-      }                                                                                                   \
+    if (precision < 0 || scale < 0) {                                                                   \
+      ret = databuff_printf(buff, buff_length, pos, "%s%s", STYPE1, STYPE2);                              \
     } else {                                                                                              \
-      if (precision < 0 || scale < 0) {                                                                 \
-        ret = databuff_printf(buff, buff_length, pos, "%s%s", STYPE1, STYPE2);                            \
-      } else {                                                                                            \
-        ret = databuff_printf(buff, buff_length, pos, "%s(%ld,%ld)%s", STYPE1, precision, scale, STYPE2); \
-      }                                                                                                   \
+      ret = databuff_printf(buff, buff_length, pos, "%s(%ld,%ld)%s", STYPE1, precision, scale, STYPE2);   \
     }                                                                                                     \
     return ret;                                                                                           \
   }
@@ -261,20 +245,7 @@ typedef int (*obSqlTypeStrWithoutAccuracyFunc)(char *buff, int64_t buff_length, 
     if (CS_TYPE_BINARY == coll_type) {                                  \
       ret = databuff_printf(buff, buff_length, pos, STYPE2 "(%ld)", length); \
     } else {                                                            \
-      int16_t length_semantics = static_cast<int16_t>(precision);\
-      if (lib::is_oracle_mode()) { \
-        if (length <= 0) { \
-          ret = databuff_printf(buff, buff_length, pos, "%s", STYPE3); \
-        } else { \
-          if (LS_DEFAULT == length_semantics) { \
-            ret = databuff_printf(buff, buff_length, pos, "%s(%ld)", STYPE3, length); \
-          } else { \
-            ret = databuff_printf(buff, buff_length, pos, "%s(%ld %s)", STYPE3, length, get_length_semantics_str(length_semantics)); \
-          } \
-        } \
-      } else {\
-        ret = databuff_printf(buff, buff_length, pos, "%s(%ld)", STYPE1, length); \
-      }\
+      ret = databuff_printf(buff, buff_length, pos, "%s(%ld)", STYPE1, length); \
     }                                                                   \
     return ret;                                                         \
   }
@@ -329,11 +300,7 @@ typedef int (*obSqlTypeStrWithoutAccuracyFunc)(char *buff, int64_t buff_length, 
     int ret = OB_SUCCESS;                                                                               \
     UNUSED(coll_type);                                                                                  \
     int64_t pos = 0;                                                                                    \
-    if (lib::is_oracle_mode()) {                                                                        \
-      ret = databuff_printf(buff, buff_length, pos, STYPE2);                                            \
-    } else {                                                                                            \
-      ret = databuff_printf(buff, buff_length, pos, STYPE1);                                            \
-    }                                                                                                   \
+    ret = databuff_printf(buff, buff_length, pos, STYPE1);                                              \
     return ret;                                                                                         \
   }
 
@@ -372,12 +339,12 @@ DEF_TYPE_STR_FUNCS(unknown, "unknown", "");
 DEF_TYPE_TEXT_FUNCS_LENGTH(tinytext, "tinytext", "tinyblob");
 DEF_TYPE_TEXT_FUNCS_LENGTH(text, "text", "blob");
 DEF_TYPE_TEXT_FUNCS_LENGTH(mediumtext, "mediumtext", "mediumblob");
-DEF_TYPE_TEXT_FUNCS_LENGTH(longtext, (lib::is_oracle_mode() ? "clob" : "longtext"), (lib::is_oracle_mode() ? "blob" : "longblob"));
+DEF_TYPE_TEXT_FUNCS_LENGTH(longtext, "longtext", "longblob");
 DEF_TYPE_STR_FUNCS_PRECISION(bit, "bit", "");
 DEF_TYPE_STR_FUNCS(enum, "enum", "");
 DEF_TYPE_STR_FUNCS(set, "set", "");
 DEF_TYPE_STR_FUNCS_PRECISION(number_float, "float", "");
-DEF_TYPE_TEXT_FUNCS_LENGTH(lob, (lib::is_oracle_mode() ? "clob" : "longtext"), (lib::is_oracle_mode() ? "blob" : "longblob"));
+DEF_TYPE_TEXT_FUNCS_LENGTH(lob, "longtext", "longblob");
 DEF_TYPE_TEXT_FUNCS_LENGTH(json, "json", "json");
 DEF_TYPE_STR_FUNCS_PRECISION_SCALE(decimal_int, "decimal", "", "number");
 DEF_TYPE_TEXT_FUNCS_LENGTH(geometry, "geometry", "geometry");
@@ -397,11 +364,11 @@ DEF_TYPE_STR_FUNCS_WITHOUT_ACCURACY_FOR_NON_STRING(usmallint, "smallint", " unsi
 DEF_TYPE_STR_FUNCS_WITHOUT_ACCURACY_FOR_NON_STRING(umediumint, "mediumint", " unsigned");
 DEF_TYPE_STR_FUNCS_WITHOUT_ACCURACY_FOR_NON_STRING(uint, "int", " unsigned");
 DEF_TYPE_STR_FUNCS_WITHOUT_ACCURACY_FOR_NON_STRING(ubigint, "bigint", " unsigned");
-DEF_TYPE_STR_FUNCS_WITHOUT_ACCURACY_FOR_NON_STRING(float, (lib::is_oracle_mode() ? "binary_float" : "float"), "");
-DEF_TYPE_STR_FUNCS_WITHOUT_ACCURACY_FOR_NON_STRING(double, (lib::is_oracle_mode() ? "binary_double" : "double"), "");
+DEF_TYPE_STR_FUNCS_WITHOUT_ACCURACY_FOR_NON_STRING(float, "float", "");
+DEF_TYPE_STR_FUNCS_WITHOUT_ACCURACY_FOR_NON_STRING(double, "double", "");
 DEF_TYPE_STR_FUNCS_WITHOUT_ACCURACY_FOR_NON_STRING(ufloat, "float", " unsigned");
 DEF_TYPE_STR_FUNCS_WITHOUT_ACCURACY_FOR_NON_STRING(udouble, "double", " unsigned");
-DEF_TYPE_STR_FUNCS_WITHOUT_ACCURACY_FOR_NON_STRING(number, (lib::is_oracle_mode() ? "number" : "decimal"), "");
+DEF_TYPE_STR_FUNCS_WITHOUT_ACCURACY_FOR_NON_STRING(number, "decimal", "");
 DEF_TYPE_STR_FUNCS_WITHOUT_ACCURACY_FOR_NON_STRING(unumber, "decimal", " unsigned");
 DEF_TYPE_STR_FUNCS_WITHOUT_ACCURACY_FOR_ODATE(datetime, "datetime", "date");
 DEF_TYPE_STR_FUNCS_WITHOUT_ACCURACY_FOR_NON_STRING(timestamp, "timestamp", "");
@@ -411,7 +378,7 @@ DEF_TYPE_STR_FUNCS_WITHOUT_ACCURACY_FOR_NON_STRING(timestamp_nano, "timestamp", 
 DEF_TYPE_STR_FUNCS_WITHOUT_ACCURACY_FOR_NON_STRING(date, "date", "");
 DEF_TYPE_STR_FUNCS_WITHOUT_ACCURACY_FOR_NON_STRING(time, "time", "");
 DEF_TYPE_STR_FUNCS_WITHOUT_ACCURACY_FOR_NON_STRING(year, "year", "");
-DEF_TYPE_STR_FUNCS_WITHOUT_ACCURACY_FOR_STRING(varchar, (lib::is_oracle_mode() ? "varchar2" : "varchar"), "varbinary");
+DEF_TYPE_STR_FUNCS_WITHOUT_ACCURACY_FOR_STRING(varchar, "varchar", "varbinary");
 DEF_TYPE_STR_FUNCS_WITHOUT_ACCURACY_FOR_STRING(char, "char", "binary");
 DEF_TYPE_STR_FUNCS_WITHOUT_ACCURACY_FOR_STRING(hex_string, "hex_string", "hex_string");
 DEF_TYPE_STR_FUNCS_WITHOUT_ACCURACY_FOR_STRING(raw, "raw", "raw");
@@ -420,7 +387,7 @@ DEF_TYPE_STR_FUNCS_WITHOUT_ACCURACY_FOR_NON_STRING(unknown, "unknown", "");
 DEF_TYPE_STR_FUNCS_WITHOUT_ACCURACY_FOR_STRING(tinytext, "tinytext", "tinyblob");
 DEF_TYPE_STR_FUNCS_WITHOUT_ACCURACY_FOR_STRING(text, "text", "blob");
 DEF_TYPE_STR_FUNCS_WITHOUT_ACCURACY_FOR_STRING(mediumtext, "mediumtext", "mediumblob");
-DEF_TYPE_STR_FUNCS_WITHOUT_ACCURACY_FOR_STRING(longtext, (lib::is_oracle_mode() ? "clob" : "longtext"), (lib::is_oracle_mode() ? "blob" : "longblob"));
+DEF_TYPE_STR_FUNCS_WITHOUT_ACCURACY_FOR_STRING(longtext, "longtext", "longblob");
 DEF_TYPE_STR_FUNCS_WITHOUT_ACCURACY_FOR_NON_STRING(bit, "bit", "");
 DEF_TYPE_STR_FUNCS_WITHOUT_ACCURACY_FOR_NON_STRING(enum, "enum", "");
 DEF_TYPE_STR_FUNCS_WITHOUT_ACCURACY_FOR_NON_STRING(set, "set", "");
@@ -430,7 +397,7 @@ DEF_TYPE_STR_FUNCS_WITHOUT_ACCURACY_FOR_NON_STRING(number_float, "float", "");
 DEF_TYPE_STR_FUNCS_WITHOUT_ACCURACY_FOR_STRING(nvarchar2, "nvarchar2", "nvarchar2");
 DEF_TYPE_STR_FUNCS_WITHOUT_ACCURACY_FOR_STRING(nchar, "nchar", "nchar");
 DEF_TYPE_STR_FUNCS_WITHOUT_ACCURACY_FOR_NON_STRING(urowid, "urowid", "");
-DEF_TYPE_STR_FUNCS_WITHOUT_ACCURACY_FOR_STRING(lob, (lib::is_oracle_mode() ? "clob" : "longtext"), (lib::is_oracle_mode() ? "blob" : "longblob"));
+DEF_TYPE_STR_FUNCS_WITHOUT_ACCURACY_FOR_STRING(lob, "longtext", "longblob");
 DEF_TYPE_STR_FUNCS_WITHOUT_ACCURACY_FOR_STRING(json, "json", "json");
 DEF_TYPE_STR_FUNCS_WITHOUT_ACCURACY_FOR_NON_STRING(decimal_int, "decimal", "");
 DEF_TYPE_STR_FUNCS_WITHOUT_ACCURACY_FOR_STRING(geometry, "geometry", "geometry");
@@ -616,7 +583,7 @@ int ob_sql_type_str_with_coll(char *buff,
   int ret = OB_SUCCESS;
   if (OB_FAIL(ob_sql_type_str(buff, buff_length, pos, type, length, precision, scale, coll_type, type_info, sub_type, is_string_lob))) {
     LOG_WARN("fail to get data type str", K(ret), K(sub_type), K(buff), K(buff_length), K(pos));
-  } else if (lib::is_mysql_mode() && ob_is_string_type(type) && CS_TYPE_BINARY != coll_type) {
+  } else if (ob_is_string_type(type) && CS_TYPE_BINARY != coll_type) {
       if (ObCharset::is_default_collation(coll_type)) {
         if (OB_FAIL(databuff_printf(buff, buff_length, pos, " CHARSET %s", ObCharset::charset_name(coll_type)))) {
           LOG_WARN("fail to concat charset str", K(ret), K(sub_type), K(buff), K(buff_length), K(pos));
@@ -833,9 +800,7 @@ int ob_sql_type_str(const ObObjMeta &obj_meta,
   int ret = OB_SUCCESS;
   int16_t precision_or_length_semantics = accuracy.get_precision();
   LOG_DEBUG("ob_sql_type_str",K(ret), K(accuracy), K(precision_or_length_semantics), K(precision_or_length_semantics), K(is_string_lob), KCSTRING(common::lbt()));
-  if (lib::is_oracle_mode() && obj_meta.is_varchar_or_char() && precision_or_length_semantics == default_length_semantics) {
-    precision_or_length_semantics = LS_DEFAULT;
-  }
+  UNUSED(default_length_semantics);
   if (obj_meta.is_enum_or_set()) {
     if (OB_FAIL(ob_enum_or_set_str(obj_meta, type_info, buff, buff_length, pos))) {
       LOG_WARN("fail to get enum_or_set str", K(ret), K(obj_meta), K(accuracy), K(buff_length), K(pos));
@@ -852,12 +817,6 @@ int ob_sql_type_str(const ObObjMeta &obj_meta,
     ObObjType datatype = obj_meta.get_type();
     ObCollationType coll_type = obj_meta.get_collation_type();
     ObLength length = accuracy.get_length();
-    /* oracle has no null datatype, map to varchar2 */
-    if (lib::is_oracle_mode() && ObNullType == datatype) { 
-      datatype = ObVarcharType; 
-      coll_type = CS_TYPE_UTF8MB4_BIN;
-      length = 0;
-    }
     if (OB_FAIL(ob_sql_type_str(buff, buff_length, pos,
                                 datatype, length,
                                 precision_or_length_semantics, accuracy.get_scale(),

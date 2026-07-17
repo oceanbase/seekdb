@@ -158,7 +158,7 @@ private:
   int64_t total_block_num_;
   int64_t used_block_num_;
   MemoryMode mem_mode_;
-  int tg_id_;
+  common::ObTimer shrink_timer_;
   bool is_inited_;
 
   DISALLOW_COPY_AND_ASSIGN(ObTenantCompactionMemPool);

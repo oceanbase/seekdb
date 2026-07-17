@@ -27,7 +27,6 @@ namespace observer
 
 ObShowGrants::ObShowGrants()
     : ObVirtualTableScannerIterator(),
-      tenant_id_(OB_INVALID_ID),
       user_id_(OB_INVALID_ID),
       enable_role_id_array_(),
       session_priv_()
@@ -40,7 +39,6 @@ ObShowGrants::~ObShowGrants()
 
 void ObShowGrants::reset()
 {
-  tenant_id_ = OB_INVALID_ID;
   user_id_ = OB_INVALID_ID;
   ObVirtualTableScannerIterator::reset();
 }
@@ -71,12 +69,9 @@ int ObShowGrants::add_priv_map_recursively(uint64_t user_id, PRIV_MAP &priv_map,
   if (OB_ISNULL(schema_guard_)) {
     ret = OB_NOT_INIT;
     SERVER_LOG(WARN, "schema guard is NULL", K(ret));
-  } else if (OB_UNLIKELY(OB_INVALID_ID == tenant_id_)) {
-    ret = OB_NOT_INIT;
-    SERVER_LOG(WARN, "tenant_id is invalid", K(ret));
-  } else if (OB_ISNULL(user_info = schema_guard_->get_user_info(tenant_id_, user_id))) {
+  } else if (OB_ISNULL(user_info = schema_guard_->get_user_info(user_id))) {
     ret = OB_ERR_USER_NOT_EXIST;
-    SERVER_LOG(WARN, "User not exist", K(ret), K_(tenant_id));
+    SERVER_LOG(WARN, "User not exist", K(ret));
   } else {
     ObArray<const ObCatalogPriv *> catalog_priv_array;
     ObArray<const ObDBPriv *> db_priv_array;
@@ -86,12 +81,12 @@ int ObShowGrants::add_priv_map_recursively(uint64_t user_id, PRIV_MAP &priv_map,
     ObArray<const ObObjMysqlPriv *> obj_mysql_priv_array;
 
 
-    OZ (schema_guard_->get_catalog_priv_with_user_id(tenant_id_, user_id, catalog_priv_array));
-    OZ (schema_guard_->get_db_priv_with_user_id(tenant_id_, user_id, db_priv_array));
-    OZ (schema_guard_->get_table_priv_with_user_id(tenant_id_, user_id, table_priv_array));
-    OZ (schema_guard_->get_column_priv_with_user_id(tenant_id_, user_id, column_priv_array));
-    OZ (schema_guard_->get_routine_priv_with_user_id(tenant_id_, user_id, routine_priv_array));
-    OZ (schema_guard_->get_obj_mysql_priv_with_user_id(tenant_id_, user_id, obj_mysql_priv_array));
+    OZ (schema_guard_->get_catalog_priv_with_user_id(user_id, catalog_priv_array));
+    OZ (schema_guard_->get_db_priv_with_user_id(user_id, db_priv_array));
+    OZ (schema_guard_->get_table_priv_with_user_id(user_id, table_priv_array));
+    OZ (schema_guard_->get_column_priv_with_user_id(user_id, column_priv_array));
+    OZ (schema_guard_->get_routine_priv_with_user_id(user_id, routine_priv_array));
+    OZ (schema_guard_->get_obj_mysql_priv_with_user_id( user_id, obj_mysql_priv_array));
 
     //user_level
     if (OB_SUCC(ret)) {
@@ -173,9 +168,6 @@ int ObShowGrants::inner_get_next_row(common::ObNewRow *&row)
   } else if (OB_ISNULL(schema_guard_)) {
     ret = OB_NOT_INIT;
     SERVER_LOG(WARN, "schema guard is NULL", K(ret));
-  } else if (OB_UNLIKELY(OB_INVALID_ID == tenant_id_)) {
-    ret = OB_NOT_INIT;
-    SERVER_LOG(WARN, "tenant_id is invalid", K(ret));
   } else {
     if (!start_to_read_) {
       ObObj *cells = NULL;
@@ -211,34 +203,28 @@ int ObShowGrants::inner_get_next_row(common::ObNewRow *&row)
         ObString result;
         ObNeedPriv have_priv;
 
-        if (OB_ISNULL(user_info = schema_guard_->get_user_info(tenant_id_, show_user_id))) {
+        if (OB_ISNULL(user_info = schema_guard_->get_user_info(show_user_id))) {
           ret = OB_ERR_USER_NOT_EXIST;
-          SERVER_LOG(WARN, "User not exist", K(ret), K_(tenant_id));
-        } else if (OB_FAIL(schema_guard_->get_catalog_priv_with_user_id(tenant_id_,
-                                                                        show_user_id,
+          SERVER_LOG(WARN, "User not exist", K(ret));
+        } else if (OB_FAIL(schema_guard_->get_catalog_priv_with_user_id(show_user_id,
                                                                         catalog_priv_array))) {
           SERVER_LOG(WARN, "Get catalog priv with user id error", K(ret));
-        } else if (OB_FAIL(schema_guard_->get_db_priv_with_user_id(tenant_id_,
-                                                                   show_user_id,
+        } else if (OB_FAIL(schema_guard_->get_db_priv_with_user_id(show_user_id,
                                                                    db_priv_array))) {
           SERVER_LOG(WARN, "Get db priv with user id error", K(ret));
-        } else if (OB_FAIL(schema_guard_->get_table_priv_with_user_id(tenant_id_,
-                                                                      show_user_id,
+        } else if (OB_FAIL(schema_guard_->get_table_priv_with_user_id(show_user_id,
                                                                       table_priv_array))) {
           SERVER_LOG(WARN, "Get table priv with user id error", K(ret));
-        } else if (OB_FAIL(schema_guard_->get_routine_priv_with_user_id(tenant_id_,
-                                                                       show_user_id,
+        } else if (OB_FAIL(schema_guard_->get_routine_priv_with_user_id(show_user_id,
                                                                        routine_priv_array))) {
           SERVER_LOG(WARN, "Get routine priv with user id error", K(ret));
-        } else if (OB_FAIL(schema_guard_->get_column_priv_with_user_id(tenant_id_,
-                                                                      show_user_id,
+        } else if (OB_FAIL(schema_guard_->get_column_priv_with_user_id(show_user_id,
                                                                       column_priv_array))) {
           SERVER_LOG(WARN, "Get table priv with user id error", K(ret));
-        } else if (OB_FAIL(schema_guard_->get_obj_priv_with_grantee_id(tenant_id_,
-                                                                       show_user_id,
+        } else if (OB_FAIL(schema_guard_->get_obj_priv_with_grantee_id(show_user_id,
                                                                        obj_priv_array))) {
           SERVER_LOG(WARN, "Get table priv with user id error", K(ret));
-        } else if (OB_FAIL(schema_guard_->get_obj_mysql_priv_with_user_id(tenant_id_,
+        } else if (OB_FAIL(schema_guard_->get_obj_mysql_priv_with_user_id(
                                                                           show_user_id,
                                                                           obj_mysql_priv_array))) {
           SERVER_LOG(WARN, "Get obj mysql priv with user id error", K(ret));
@@ -247,7 +233,7 @@ int ObShowGrants::inner_get_next_row(common::ObNewRow *&row)
           host_name = user_info->get_host_name_str();
         }
 
-        if (OB_SUCC(ret) && lib::is_mysql_mode()) {
+        if (OB_SUCC(ret)) {
           OZ (priv_map.create(32, "GrantsMap"));
           OZ (add_priv_map_recursively(show_user_id, priv_map, false /*expand_roles*/));
           for (int i = 0; OB_SUCC(ret) && i < role_ids.count(); i++) {
@@ -258,7 +244,7 @@ int ObShowGrants::inner_get_next_row(common::ObNewRow *&row)
           for (PRIV_MAP::const_iterator iter = priv_map.begin(); OB_SUCC(ret) && iter != priv_map.end(); ++iter) {
             const PrivKey &priv_key = iter->first;
             const ObPrivSet &privs = iter->second;
-            if (priv_key.catalog_name_.empty()
+            if (priv_key.catalog_name_.empty() 
                 && priv_key.db_name_.empty()
                 && ObObjectType::INVALID == priv_key.obj_type_) {
               pos = 0;
@@ -663,9 +649,6 @@ int ObShowGrants::print_privs_to_buff(
                                                                             *priv_key_array, OB_PRIV_REFERENCES))) {
         LOG_WARN("print column privs to buff failed", K(ret));
       }
-      if ((priv_set & OB_PRIV_FLASHBACK) && OB_SUCCESS == ret) {
-        ret = BUF_PRINTF(" FLASHBACK,");
-      }
       if ((priv_set & OB_PRIV_READ) && OB_SUCCESS == ret) {
         ret = BUF_PRINTF(" READ,");
       }
@@ -777,20 +760,19 @@ int ObShowGrants::priv_level_printf(
     }
   } else if (OB_PRIV_CATALOG_LEVEL == have_priv.priv_level_) {
     if (OB_FAIL(databuff_printf(buf, buf_len, pos,
-                                lib::is_oracle_mode() ? " ON CATALOG \"%.*s\"" : " ON CATALOG `%.*s`",
+                                " ON CATALOG `%.*s`",
                                 have_priv.catalog_.length(), have_priv.catalog_.ptr()))) {
       SERVER_LOG(WARN, "Fill privs to buffer failed", K(ret));
     }
   } else if (OB_PRIV_DB_LEVEL == have_priv.priv_level_) {
     if (OB_FAIL(databuff_printf(buf, buf_len, pos,
-                                lib::is_oracle_mode() ? " ON \"%.*s\".*" : " ON `%.*s`.*",
+                                " ON `%.*s`.*",
                                 have_priv.db_.length(), have_priv.db_.ptr()))) {
       SERVER_LOG(WARN, "Fill privs to buffer failed", K(ret));
     }
   } else if (OB_PRIV_TABLE_LEVEL == have_priv.priv_level_) {
     if (OB_FAIL(databuff_printf(buf, buf_len, pos,
-                                lib::is_oracle_mode() ? " ON \"%.*s\".\"%.*s\"" : 
-                                                          " ON `%.*s`.`%.*s`",
+                                " ON `%.*s`.`%.*s`",
                                 have_priv.db_.length(), have_priv.db_.ptr(),
                                 have_priv.table_.length(), have_priv.table_.ptr()))) {
       SERVER_LOG(WARN, "Fill privs to buffer failed", K(ret));
@@ -977,8 +959,7 @@ int ObShowGrants::grant_role_to_buff(
   for (int i = 0; OB_SUCC(ret) && i < user_info.get_role_id_array().count(); i++) {
     if (user_info.get_admin_option(user_info.get_role_id_option_array().at(i)) == with_admin_option) {
       const ObUserInfo *role = NULL;
-      if (OB_ISNULL(role = schema_guard_->get_user_info(user_info.get_tenant_id(),
-                                                        user_info.get_role_id_array().at(i)))) {
+      if (OB_ISNULL(role = schema_guard_->get_user_info(user_info.get_role_id_array().at(i)))) {
         //ignore error
         LOG_WARN("role not exist", K(ret));
       } else {

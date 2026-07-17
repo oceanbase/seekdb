@@ -2,7 +2,7 @@
 alter system set ob_vector_memory_limit_percentage = 44;
 drop table if exists t1;
 CREATE TABLE t1 (c1 int primary key, c2 vector(3),c3 vector(3) ,c4 vector(3),
-VECTOR INDEX vector_idx(c3)
+VECTOR INDEX vector_idx(c3) 
 WITH (distance=l2, lib=vsag, type=hnsw, m=10, ef_construction=12, ef_search=40));
 create view v1 as select * from t1;
 replace into v1 values(1,'[1,1,2]','[2,2,3]','[1,3,2]');
@@ -18,7 +18,7 @@ drop table t1;
 drop table if exists t1;
 drop view if exists v1;
 CREATE TABLE t1 (c1 int primary key, c2 VARCHAR(30),c3 vector(3) ,c4 vector(3),
-VECTOR INDEX vector_idx(c3)
+VECTOR INDEX vector_idx(c3) 
 WITH (distance=l2, lib=vsag, type=hnsw, m=10, ef_construction=12, ef_search=40)) partition by list columns (c1)(
 PARTITION p0 VALUES in(10),
 PARTITION p1 VALUES in(50)
@@ -38,7 +38,7 @@ drop view v1;
 drop table t1;
 drop table if exists t1;
 CREATE TABLE t1 (c1 int primary key, c2 vector(3),c3 vector(3) ,c4 vector(3),
-VECTOR INDEX vector_idx(c3)
+VECTOR INDEX vector_idx(c3) 
 WITH (distance=l2, lib=vsag, type=hnsw, m=10, ef_construction=100, ef_search=40));
 insert into t1(c1,c2,c3,c4) values(1,'[1,1,2]','[2,2,3]','[1,3,2]');
 insert into t1(c1,c2,c3,c4) values(2,'[1,0,3]','[1,0,3]','[2,3,2]');
@@ -110,7 +110,7 @@ create vector index idx_2 on t(c6) with (distance=l2, type=hnsw);
 drop table t;
 drop table if exists t1;
 CREATE TABLE t1 (c1 int primary key, c2 vector(3),c3 vector(3) ,c4 vector(3),
-VECTOR INDEX vector_idx(c3)
+VECTOR INDEX vector_idx(c3) 
 WITH (distance=l2, lib=vsag, type=hnsw, m=10, ef_construction=12, ef_search=40));
 insert into t1 values(1,'[1,1,2]','[2,2,3]','[1,3,2]');
 insert into t1 values(2,'[1,0,3]','[1,0,3]','[2,3,2]');
@@ -145,7 +145,7 @@ NULL
 NULL
 drop table if exists t2;
 CREATE TABLE t2 (a1 int , a2 vector(3),a3 vector(3) ,a4 vector(3),
-VECTOR INDEX vector_idx(a3)
+VECTOR INDEX vector_idx(a3) 
 WITH (distance=l2, lib=vsag, type=hnsw, m=10, ef_construction=12, ef_search=40));
 insert into t2 select c1,c2,c3,c4 from t1;
 select * from t1 a join t2 b on c3=a3 order by l2_distance(c3, [1,2,3]) approximate limit 10;
@@ -185,7 +185,7 @@ drop table if exists t1;
 drop table if exists tt1;
 drop table if exists tt2;
 CREATE TABLE t1 (c1 int primary key, c2 varchar(30),c3 vector(3) ,c4 vector(3),
-VECTOR INDEX vector_idx(c3)
+VECTOR INDEX vector_idx(c3) 
 WITH (distance=l2, lib=vsag, type=hnsw))PARTITION BY KEY(c1) PARTITIONS 4;
 insert into t1(c1,c2,c3,c4) values(1,'[1,1,2]','[2,2,3]','[1,3,2]');
 insert into t1(c1,c2,c3,c4) values(2,'[1,0,3]','[1,0,3]','[2,3,2]');
@@ -250,9 +250,8 @@ drop table t1;
 drop table if exists t1;
 drop table if exists tt1;
 drop view if exists v1;
-drop materialized view if exists mv1;
 CREATE TABLE t1 (c1 int primary key, c2 varchar(30),c3 vector(3) ,c4 vector(3),
-VECTOR INDEX vector_idx(c3)
+VECTOR INDEX vector_idx(c3) 
 WITH (distance=l2, lib=vsag, type=hnsw, m=10, ef_construction=100, ef_search=40));
 insert into t1(c1,c2,c3,c4) values(1,'[1,1,2]','[2,2,3]','[1,3,2]');
 insert into t1(c1,c2,c3,c4) values(2,'[1,0,3]','[1,0,3]','[2,3,2]');
@@ -296,7 +295,7 @@ DROP TABLE rowkey_order_with_vid;
 drop table if exists t1;
 drop view if exists v1;
 CREATE TABLE t1 (c1 int primary key, c2 varchar(30),c3 vector(3) ,c4 vector(3),
-VECTOR INDEX vector_idx(c3)
+VECTOR INDEX vector_idx(c3) 
 WITH (distance=l2, lib=vsag, type=hnsw))PARTITION BY KEY(c1) PARTITIONS 4;
 insert into t1(c1,c2,c3,c4) values(1,'[1,1,2]','[2,2,3]','[1,3,2]');
 insert into t1(c1,c2,c3,c4) values(2,'[1,0,3]','[1,0,3]','[2,3,2]');
@@ -360,13 +359,13 @@ drop table vec;
 drop table if exists t1;
 drop table if exists t2;
 CREATE TABLE t1 (c1 int primary key, c2 varchar(30),c3 vector(3) ,c4 vector(3),
-VECTOR INDEX vector_idx(c3)
+VECTOR INDEX vector_idx(c3) 
 WITH (distance=l2, lib=vsag, type=hnsw, m=10, ef_construction=100, ef_search=40));
 insert into t1(c1,c2,c3,c4) values(1,'[1,1,2]','[2,2,3]','[1,3,2]');
 insert into t1(c1,c2,c3,c4) values(2,'[1,0,3]','[1,0,3]','[2,3,2]');
 insert into t1(c1,c2,c3,c4) values(3,'[-1,2,2]','[-3,2,3]','[4,3,3]');
 CREATE TABLE t2 (a1 int , a2 vector(3),a3 vector(3) ,a4 vector(3),
-VECTOR INDEX vector_idx(a3)
+VECTOR INDEX vector_idx(a3) 
 WITH (distance=l2, lib=vsag, type=hnsw, m=10, ef_construction=100, ef_search=40));
 insert into t2 select c1,c2,c3,c4 from t1;
 select * from t1,t2 where c3=a3 order by l2_distance(c3, [1,2,3]) APPROX limit 10;
@@ -402,7 +401,7 @@ drop table t;
 drop table if exists t1;
 drop table if exists t2;
 CREATE TABLE t1 (c1 int primary key, c2 vector(3),c3 vector(3) ,c4 vector(3),
-VECTOR INDEX vector_idx(c3)
+VECTOR INDEX vector_idx(c3) 
 WITH (distance=l2, lib=vsag, type=hnsw, m=10, ef_construction=100, ef_search=40))PARTITION BY KEY(c1) PARTITIONS 4;
 insert into t1(c1,c2,c3,c4) values(1,'[1,1,2]','[2,2,3]','[1,3,2]');
 insert into t1(c1,c2,c3,c4) values(2,'[1,0,3]','[1,0,3]','[2,3,2]');
@@ -410,7 +409,7 @@ insert into t1(c1,c2,c3,c4) values(3,'[-1,2,2]','[-3,2,3]','[4,3,3]');
 insert into t1(c1,c2,c3,c4) values(4,'[-1,-2,-2]','[-4,2,3]',null);
 insert into t1(c1,c2,c3,c4) values(5,'[-1,-2,-2]',null,'[2,3,-1]');
 CREATE TABLE t2 (a1 int , a2 vector(3),a3 vector(3) ,a4 vector(3),
-VECTOR INDEX vector_idx(a3)
+VECTOR INDEX vector_idx(a3) 
 WITH (distance=l2, lib=vsag, type=hnsw, m=10, ef_construction=100, ef_search=40));
 insert into t2 select c1,c2,c3,c4 from t1;
 select l2_distance(c3,'[1,1.456,2]')  from t1,t2 where c4 is not null and a4 is not null order by l2_distance(c3, [1,1,-1])  limit 1;
@@ -432,7 +431,7 @@ drop table if exists t2;
 drop view if exists v1;
 drop table if exists tt1;
 CREATE TABLE t1 (c1 int primary key, c2 vector(3),c3 vector(3) ,c4 vector(3),
-VECTOR INDEX vector_idx(c3)
+VECTOR INDEX vector_idx(c3) 
 WITH (distance=l2, lib=vsag, type=hnsw, m=10, ef_construction=100, ef_search=40));
 insert into t1 values(4,'[-1,-2,-2]','[-4,2,3]',null);
 insert into t1 values(5,'[-1,-3,-2]',null,'[2,3,1]');
@@ -459,7 +458,7 @@ drop table t1;
 drop table if exists t1;
 drop table if exists tt1;
 CREATE TABLE t1 (c1 int primary key, c2 varchar(30),c3 vector(3) ,c4 vector(3),
-VECTOR INDEX vector_idx(c3)
+VECTOR INDEX vector_idx(c3) 
 WITH (distance=l2, lib=vsag, type=hnsw, m=10, ef_construction=100, ef_search=40));
 insert into t1(c1,c2,c3,c4) values(1,'[1,1,2]','[2,2,3]','[1,3,2]');
 insert into t1(c1,c2,c3,c4) values(2,'[1,0,3]','[1,0,3]','[2,3,2]');
@@ -484,11 +483,11 @@ create table t1(c1 vector(3) primary key);
 ERROR 42000: The used storage engine can't index column 'c1'
 drop table if exists t1;
 create table t1(c1 vector(3), c2 vector(3), c3 int, c4 json, c5 char(10), c6 text, c7 longtext, c8 point);
-create index idx_1 on t1(c3) storing(c1) with column group(each column);
+create index idx_1 on t1(c3) storing(c1);
 ERROR 42000: The used storage engine can't index column 'c1'
-create index idx_1 on t1(c3) storing(c2) with column group(each column);
+create index idx_1 on t1(c3) storing(c2);
 ERROR 42000: The used storage engine can't index column 'c2'
-create index idx_1 on t1(c3) storing(c8) with column group(each column);
+create index idx_1 on t1(c3) storing(c8);
 ERROR 42000: The used storage engine can't index column 'c8'
 drop table t1;
 set ob_enable_plan_cache=1;
@@ -515,13 +514,13 @@ drop table if exists t_list_sjg3;
 CREATE TABLE `t_list_sjg3` (
 `c_5_xJI0c_5_48oY` VECTOR(1342) DEFAULT NULL,
 `col_auto_id` int(11) NOT NULL AUTO_INCREMENT,
-`c_3_WUwb` varchar(400) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'aEFGHI01',
+`c_3_WUwb` varchar(400) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT 'aEFGHI01',
 `c_2_ZDQP` bigint(20) NOT NULL DEFAULT '8',
 `c_5_yDegc_5_jog3` VECTOR(396) DEFAULT NULL,
-`c_1_8swR` varchar(400) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT 'abCDEFGHI01',
-`c_4_hIiB` varchar(400) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT 'abCDEFGHI01',
+`c_1_8swR` varchar(400) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT 'abCDEFGHI01',
+`c_4_hIiB` varchar(400) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT 'abCDEFGHI01',
 `c_5_yFS3c_5_bug5` VECTOR(1562) DEFAULT NULL,
-`c_0_kw4j` varchar(400) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT 'aEFGHI01',
+`c_0_kw4j` varchar(400) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT 'aEFGHI01',
 `c_5_hgIbc_5_j4us` VECTOR(1525) DEFAULT NULL,
 PRIMARY KEY (`col_auto_id`, `c_3_WUwb`, `c_2_ZDQP`),
 KEY `c_3_WUwb` (`c_3_WUwb`(8)) BLOCK_SIZE 16384 LOCAL,
@@ -538,7 +537,7 @@ KEY `i_SiYbCa` (`c_2_ZDQP`) BLOCK_SIZE 16384 GLOBAL,
 KEY `i_zPiABo` (`c_1_8swR`) BLOCK_SIZE 16384 LOCAL,
 KEY `i_HjUK14` (`c_4_hIiB`) BLOCK_SIZE 16384 GLOBAL,
 KEY `i_ALVUeE` (`c_0_kw4j`) BLOCK_SIZE 16384 LOCAL
-) AUTO_INCREMENT = 1 AUTO_INCREMENT_MODE = 'ORDER' DEFAULT CHARSET = utf8mb4 ROW_FORMAT = COMPRESSED COMPRESSION = 'lz4_1.0' REPLICA_NUM = 3 BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0 TABLE_MODE = 'QUEUING'
+) AUTO_INCREMENT = 1 AUTO_INCREMENT_MODE = 'ORDER' DEFAULT CHARSET = utf8mb4 ROW_FORMAT = COMPRESSED COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = 3 BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0 TABLE_MODE = 'QUEUING' 
 partition by list(col_auto_id)
 (partition `p_list6` values in (6763,6764,6765,6766,6767,6768,6769,6770,6771),
 partition `p_list0` values in (7420,7421,7422,7423,7424,7425,7426,7427,7428),
@@ -549,7 +548,7 @@ partition `p_list2` values in (22267,22268,22269,22270,22271,22272,22273,22274,2
 partition `p_list8` values in (43516,43517,43518,43519,43520,43521,43522,43523,43524),
 partition `p_list4` values in (46161,46162,46163,46164,46165,46166,46167,46168,46169),
 partition `p_list5` values in (51295,51296,51297,51298,51299,51300,51301,51302,51303),
-partition `p_list9` values in (65581,65601,65602,65603,65604,65605,65606,65607,65608)) WITH COLUMN GROUP(all columns, each column);
+partition `p_list9` values in (65581,65601,65602,65603,65604,65605,65606,65607,65608));
 delete /*+  ENABLE_PARALLEL_DML parallel(72) */   from t_list_sJg3;
 drop table t_list_sJg3;
 drop table if exists t;
@@ -574,7 +573,7 @@ create table tt1 as select * from t2;
 replace INTO tt1(c1,c2,c3,c4) SELECT c1,c2,c3,c4 FROM t2;
 replace INTO tt1(c1,c2,c3,c4) SELECT c1,c2,c3,c4 FROM t2;
 CREATE TABLE t1 (c1 int primary key, c2 varchar(30) ,c3 vector(3) ,c4 vector(3),c5 vector(3) AS ((c3*c2)) check(c5 = [2,2,6] or null ),c6 vector(3) AS ((c3*c4)) ,c7 vector(3) AS ((c3-c4)) ,c8 vector(3) AS ((c3+c4+c2)) ,
-VECTOR INDEX vector_idx(c3)
+VECTOR INDEX vector_idx(c3) 
 WITH (distance=l2, lib=vsag, type=hnsw, m=10, ef_construction=100, ef_search=40))PARTITION BY KEY(c1) PARTITIONS 4;
 insert into t1(c1,c2,c3,c4) values(1,'[1,1,2]','[2,2,3]','[1,3,2]');
 insert into t1(c1,c2,c3,c4) values(3,'[1,0,3]','[1,0,3]','[2,3,2]');
@@ -653,7 +652,7 @@ Outputs & filters:
 -------------------------------------
   0 - output([t1.c1], [t1.c2], [t1.c3], [t1.c4], [t1.c5], [t1.c6]), filter(nil), rowset=16
       access([t1.c1], [t1.c2], [t1.c3], [t1.c4], [t1.c5], [t1.c6]), partitions(p0)
-      is_index_back=true, is_global_index=false,
+      is_index_back=true, is_global_index=false, 
       range_key([t1.__vid_0], [t1.__type_0_0]), range(MIN,MIN ; MAX,MAX)always true
 explain select /*+ index(t1 idx_hnsw1) */ * from t1 order by l2_distance(c2, '[1,1,1]') approximate limit 1;
 Query Plan
@@ -666,7 +665,7 @@ Outputs & filters:
 -------------------------------------
   0 - output([t1.c1], [t1.c2], [t1.c3], [t1.c4], [t1.c5], [t1.c6]), filter(nil), rowset=16
       access([t1.c1], [t1.c2], [t1.c3], [t1.c4], [t1.c5], [t1.c6]), partitions(p0)
-      is_index_back=true, is_global_index=false,
+      is_index_back=true, is_global_index=false, 
       range_key([t1.__vid_0], [t1.__type_0_0]), range(MIN,MIN ; MAX,MAX)always true
 explain select /*+ index(t1 idx_hnsw1) */ * from t1 order by l2_distance(c3, '[1,1,1]') approximate limit 1;
 Query Plan
@@ -679,7 +678,7 @@ Outputs & filters:
 -------------------------------------
   0 - output([t1.c1], [t1.c2], [t1.c3], [t1.c4], [t1.c5], [t1.c6]), filter(nil), rowset=16
       access([t1.c1], [t1.c2], [t1.c3], [t1.c4], [t1.c5], [t1.c6]), partitions(p0)
-      is_index_back=true, is_global_index=false,
+      is_index_back=true, is_global_index=false, 
       range_key([t1.__vid_0], [t1.__type_0_0]), range(MIN,MIN ; MAX,MAX)always true
 explain select /*+ index(t1 idx_hnsw1) */ * from t1 order by l2_distance(c4, '[1,1,1]') approximate limit 1;
 Query Plan
@@ -692,7 +691,7 @@ Outputs & filters:
 -------------------------------------
   0 - output([t1.c1], [t1.c2], [t1.c3], [t1.c4], [t1.c5], [t1.c6]), filter(nil), rowset=16
       access([t1.c1], [t1.c2], [t1.c3], [t1.c4], [t1.c5], [t1.c6]), partitions(p0)
-      is_index_back=true, is_global_index=false,
+      is_index_back=true, is_global_index=false, 
       range_key([t1.__ivf_center_id_0_0]), range(MIN ; MAX)always true
 explain select /*+ index(t1 idx_ivf_pq) */ * from t1 order by l2_distance(c5, '[1,1,1]') approximate limit 1;
 Query Plan
@@ -705,7 +704,7 @@ Outputs & filters:
 -------------------------------------
   0 - output([t1.c1], [t1.c2], [t1.c3], [t1.c4], [t1.c5], [t1.c6]), filter(nil), rowset=16
       access([t1.c1], [t1.c2], [t1.c3], [t1.c4], [t1.c5], [t1.c6]), partitions(p0)
-      is_index_back=true, is_global_index=false,
+      is_index_back=true, is_global_index=false, 
       range_key([t1.__ivf_center_id_0_0]), range(MIN ; MAX)always true
 explain select /*+ index(t1 idx_ivf_pq) */ * from t1 order by l2_distance(c6, '[1,1,1]') approximate limit 1;
 Query Plan
@@ -718,7 +717,7 @@ Outputs & filters:
 -------------------------------------
   0 - output([t1.c1], [t1.c2], [t1.c3], [t1.c4], [t1.c5], [t1.c6]), filter(nil), rowset=16
       access([t1.c1], [t1.c2], [t1.c3], [t1.c4], [t1.c5], [t1.c6]), partitions(p0)
-      is_index_back=true, is_global_index=false,
+      is_index_back=true, is_global_index=false, 
       range_key([t1.__ivf_center_id_0_0]), range(MIN ; MAX)always true
 drop table t1;
 alter system set ob_vector_memory_limit_percentage = 0;

@@ -20,21 +20,20 @@ namespace oceanbase
 {
 namespace palf
 {
-BlockGCTimerTask::BlockGCTimerTask() : palf_env_impl_(NULL), tg_id_(-1), is_inited_(false) {}
+BlockGCTimerTask::BlockGCTimerTask() : palf_env_impl_(NULL), timer_(), is_inited_(false) {}
 
-BlockGCTimerTask::~BlockGCTimerTask() { palf_env_impl_ = NULL; tg_id_ = -1; is_inited_ = false; }
+BlockGCTimerTask::~BlockGCTimerTask() { palf_env_impl_ = NULL; is_inited_ = false; }
 
 int BlockGCTimerTask::init(PalfEnvImpl *palf_env_impl)
 {
   int ret = OB_SUCCESS;
-  int tg_id = lib::TGDefIDs::PalfBlockGC;
   if (NULL == palf_env_impl) {
     ret = OB_INVALID_ARGUMENT;
-  } else if (OB_FAIL(TG_CREATE_TENANT(tg_id, tg_id_))) {
-    PALF_LOG(ERROR, "BlockGCTimerTask create failed", K(ret));
+  } else if (OB_FAIL(timer_.init("PalfBlockGC", common::ObMemAttr("PalfBlockGC")))) {
+    PALF_LOG(ERROR, "BlockGCTimerTask timer init failed", K(ret));
   } else {
     palf_env_impl_ = palf_env_impl;
-    PALF_LOG(INFO, "BlockGCTimerTask init success", KPC(palf_env_impl), K(tg_id_), K(tg_id));
+    PALF_LOG(INFO, "BlockGCTimerTask init success", KPC(palf_env_impl));
     is_inited_ = true;
   }
   return ret;
@@ -45,42 +44,35 @@ int BlockGCTimerTask::start()
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-  } else if (OB_FAIL(TG_START(tg_id_))) {
-    PALF_LOG(WARN, "BlockGCTimerTask TG_START failed", K(ret));
-  } else if (OB_FAIL(TG_SCHEDULE(tg_id_, *this, BLOCK_GC_TIMER_INTERVAL_MS, true))) {
-    PALF_LOG(WARN, "BlockGCTimerTask TG_SCHEDULE failed", K(ret));
+  } else if (OB_FAIL(timer_.schedule(*this, BLOCK_GC_TIMER_INTERVAL_MS, true))) {
+    PALF_LOG(WARN, "BlockGCTimerTask schedule failed", K(ret));
   } else {
-    PALF_LOG(INFO, "BlockGCTimerTask start success", K(tg_id_), KPC(palf_env_impl_));
+    PALF_LOG(INFO, "BlockGCTimerTask start success", KPC(palf_env_impl_));
   }
   return ret;
 }
 
 void BlockGCTimerTask::stop()
 {
-  if (-1 != tg_id_) {
-    TG_STOP(tg_id_);
-    PALF_LOG(INFO, "BlockGCTimerTask stop finished", K(tg_id_), KPC(palf_env_impl_));
+  if (IS_INIT) {
+    timer_.stop();
+    PALF_LOG(INFO, "BlockGCTimerTask stop finished", KPC(palf_env_impl_));
   }
 }
 
 void BlockGCTimerTask::wait()
 {
-  if (-1 != tg_id_) {
-    TG_WAIT(tg_id_);
-    PALF_LOG(INFO, "BlockGCTimerTask wait finished", K(tg_id_), KPC(palf_env_impl_));
+  if (IS_INIT) {
+    timer_.wait();
+    PALF_LOG(INFO, "BlockGCTimerTask wait finished", KPC(palf_env_impl_));
   }
 }
 
 void BlockGCTimerTask::destroy()
 {
-  PALF_LOG(INFO, "BlockGCTimerTask destroy finished", K(tg_id_), KPC(palf_env_impl_));
+  PALF_LOG(INFO, "BlockGCTimerTask destroy finished", KPC(palf_env_impl_));
   is_inited_ = false;
-  if (-1 != tg_id_) {
-    TG_STOP(tg_id_);
-    TG_WAIT(tg_id_);
-    TG_DESTROY(tg_id_);
-  }
-  tg_id_ = -1;
+  timer_.destroy();
   palf_env_impl_ = NULL;
 }
 

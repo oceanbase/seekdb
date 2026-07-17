@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SQL_EXE
 
 #include "sql/engine/ob_exec_context.h"
+#include "share/rc/ob_module_provider.h"
 #include "sql/executor/ob_remote_task_executor.h"
 
 using namespace oceanbase::common;
@@ -40,7 +41,6 @@ int ObRemoteTaskExecutor::execute(ObExecContext &query_ctx, ObJob *job, ObTaskIn
   ObQueryRetryInfo *retry_info = NULL;
   ObTask task;
   bool has_sent_task = false;
-  bool has_transfer_err = false;
 
   if (OB_ISNULL(task_info)) {
     ret = OB_INVALID_ARGUMENT;
@@ -61,9 +61,8 @@ int ObRemoteTaskExecutor::execute(ObExecContext &query_ctx, ObJob *job, ObTaskIn
     } else {
       // Set task_info to OB_TASK_STATE_RUNNING state, which may be used for retries later
       task_info->set_state(OB_TASK_STATE_RUNNING);
-      const int32_t group_id = OB_INVALID_ID == session->get_expect_group_id() ? 0 : session->get_expect_group_id();
-      ObExecutorRpcCtx rpc_ctx(session->get_rpc_tenant_id(),
-                               plan_ctx->get_timeout_timestamp(),
+      const int32_t group_id = 0;
+      ObExecutorRpcCtx rpc_ctx(plan_ctx->get_timeout_timestamp(),
                                query_ctx.get_task_exec_ctx().get_min_cluster_version(),
                                retry_info,
                                query_ctx.get_my_session(),
@@ -73,8 +72,7 @@ int ObRemoteTaskExecutor::execute(ObExecContext &query_ctx, ObJob *job, ObTaskIn
                                     task,
                                     task_info->get_task_location().get_server(),
                                     *handler,
-                                    has_sent_task,
-                                    has_transfer_err))) {
+                                    has_sent_task))) {
         bool skip_failed_tasks = false;
         int check_ret = OB_SUCCESS;
         if (OB_SUCCESS != (check_ret = should_skip_failed_tasks(*task_info, skip_failed_tasks))) {
@@ -91,7 +89,7 @@ int ObRemoteTaskExecutor::execute(ObExecContext &query_ctx, ObJob *job, ObTaskIn
           ObCStringHelper helper;
           LOG_USER_WARN(OB_ERR_TASK_SKIPPED,
                         helper.convert(task_info->get_task_location().get_server()),
-                        common::ob_errpkt_errno(ret, false));
+                        common::ob_errpkt_errno(ret));
           handler->set_result_code(OB_ERR_TASK_SKIPPED);
           ret = OB_SUCCESS;
         } else {
@@ -105,7 +103,6 @@ int ObRemoteTaskExecutor::execute(ObExecContext &query_ctx, ObJob *job, ObTaskIn
         int tmp_ret = handle_tx_after_rpc(handler->get_result(),
                                         session,
                                         has_sent_task,
-                                        has_transfer_err,
                                         plan,
                                           query_ctx);
         ret = COVER_SUCC(tmp_ret);
@@ -153,7 +150,6 @@ int ObRemoteTaskExecutor::build_task(ObExecContext &query_ctx,
    */
   ObOpSpec *root_spec = NULL;
   const ObPhysicalPlan *phy_plan = NULL;
-  share::ObLSArray ls_list;
   
   if (OB_ISNULL(root_spec = job.get_root_spec())) {
     ret = OB_NOT_INIT;
@@ -163,11 +159,8 @@ int ObRemoteTaskExecutor::build_task(ObExecContext &query_ctx,
     LOG_WARN("physical plan is NULL", K(ret));
   } else if (OB_FAIL(build_task_op_input(query_ctx, task_info, *root_spec))) {
     LOG_WARN("fail build op inputs", K(ret));
-  } else if (OB_FAIL(DAS_CTX(query_ctx).get_all_lsid(ls_list))) {
-    LOG_WARN("get ls ids failed.", K(ret));
-  } else if (OB_FAIL(query_ctx.get_my_session()->get_trans_result().add_touched_ls(ls_list))) {
-    LOG_WARN("add touched ls failed.", K(ret));
   } else {
+    query_ctx.get_my_session()->get_trans_result().mark_touched_storage();
     const ObTaskInfo::ObRangeLocation &range_loc = task_info.get_range_location();
     for (int64_t i = 0; OB_SUCC(ret) && i < range_loc.part_locs_.count(); ++i) {
       if (OB_FAIL(task.assign_ranges(range_loc.part_locs_.at(i).scan_ranges_))) {
@@ -188,7 +181,6 @@ int ObRemoteTaskExecutor::build_task(ObExecContext &query_ctx,
 int ObRemoteTaskExecutor::handle_tx_after_rpc(ObScanner *scanner,
                                               ObSQLSessionInfo *session,
                                               const bool has_sent_task,
-                                              const bool has_transfer_err,
                                               const ObPhysicalPlan *phy_plan,
                                               ObExecContext &exec_ctx)
 {
@@ -201,11 +193,10 @@ int ObRemoteTaskExecutor::handle_tx_after_rpc(ObScanner *scanner,
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("dml need acquire transaction", K(ret), KPC(session));
   } else if (phy_plan->is_stmt_modify_trans() && has_sent_task) {
-    if (has_transfer_err) {
-    } else if (OB_ISNULL(scanner)) {
+    if (OB_ISNULL(scanner)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_ERROR("task result is NULL", K(ret));
-    } else if (OB_FAIL(MTL(transaction::ObTransService*)
+    } else if (OB_FAIL(share::g_mp->trans_service()
                        ->add_tx_exec_result(*tx_desc,
                                             scanner->get_trans_result()))) {
       LOG_WARN("fail to report tx result", K(ret),
@@ -216,27 +207,14 @@ int ObRemoteTaskExecutor::handle_tx_after_rpc(ObScanner *scanner,
                 "scanner_trans_result", scanner->get_trans_result(),
                 K(tx_desc));
     }
-    if (has_transfer_err || OB_FAIL(ret)) {
+    if (OB_FAIL(ret)) {
       if (exec_ctx.use_remote_sql()) {
         // ignore ret
-        LOG_WARN("remote execute use sql fail with transfer_error, tx will rollback", K(ret));
+        LOG_WARN("remote execute use sql fail with location_error, tx will rollback", K(ret));
         session->get_trans_result().set_incomplete();
       } else {
-        ObDASCtx &das_ctx = DAS_CTX(exec_ctx);
-        share::ObLSArray ls_ids;
-        int tmp_ret = OB_SUCCESS;
-        if (OB_TMP_FAIL(das_ctx.get_all_lsid(ls_ids))) {
-          LOG_WARN("get all ls_ids failed", K(tmp_ret));
-        } else if (OB_TMP_FAIL(session->get_trans_result().add_touched_ls(ls_ids))) {
-          LOG_WARN("add touched ls to txn failed", K(tmp_ret));
-        } else {
-         LOG_INFO("add touched ls succ", K(ls_ids));
-        }
-        if (OB_TMP_FAIL(tmp_ret)) {
-          LOG_WARN("remote execute use plan fail with transfer_error and try add touched ls failed, tx will rollback", K(tmp_ret));
-          session->get_trans_result().set_incomplete();
-          ret = COVER_SUCC(tmp_ret);
-        }
+        session->get_trans_result().mark_touched_storage();
+        LOG_INFO("mark transaction as having touched storage");
       }
     }
   }

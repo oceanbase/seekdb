@@ -36,10 +36,6 @@ namespace mds
 class BufferCtx;
 }
 }
-namespace transaction
-{
-  class ObMulSourceDataNotifyArg;
-}
 namespace common
 {
 namespace meta
@@ -139,7 +135,6 @@ REGISTER_FUNCTION_TRAIT(compare)
 REGISTER_FUNCTION_TRAIT(swap)
 REGISTER_FUNCTION_TRAIT(check_can_do_tx_end)
 REGISTER_FUNCTION_TRAIT(check_can_replay_commit)
-REGISTER_FUNCTION_TRAIT(on_commit_for_old_mds)
 REGISTER_FUNCTION_TRAIT(mds_serialize)
 REGISTER_FUNCTION_TRAIT(mds_deserialize)
 REGISTER_FUNCTION_TRAIT(mds_get_serialize_size)
@@ -333,13 +328,6 @@ typename std::enable_if<OB_TRAIT_HAS_CHECK_CAN_REPLAY_COMMIT(CLASS), bool>::type
 #define ENABLE_IF_NOT_HAS_CHECK_CAN_REPLAY_COMMIT(CLASS) \
 typename std::enable_if<!OB_TRAIT_HAS_CHECK_CAN_REPLAY_COMMIT(CLASS), bool>::type = true
 
-#define OB_TRAIT_MDS_COMMIT_FOR_OLD_MDS(CLASS) \
-::oceanbase::common::meta::has_on_commit_for_old_mds<DECAY(CLASS), int(const char *, const int64_t, const transaction::ObMulSourceDataNotifyArg &)>::value
-#define ENABLE_IF_MDS_COMMIT_FOR_OLD_MDS(CLASS) \
-typename std::enable_if<OB_TRAIT_MDS_COMMIT_FOR_OLD_MDS(CLASS), bool>::type = true
-#define ENABLE_IF_NOT_MDS_COMMIT_FOR_OLD_MDS(CLASS) \
-typename std::enable_if<!OB_TRAIT_MDS_COMMIT_FOR_OLD_MDS(CLASS), bool>::type = true
-
 #define OB_TRAIT_IS_SAME_CLASS(CLASS, DEST_CLASS) \
 std::is_same<DECAY(CLASS), DECAY(DEST_CLASS)>::value
 #define ENABLE_IF_IS_SAME_CLASS(CLASS, DEST_CLASS) \
@@ -380,18 +368,6 @@ struct MdsCheckCanReplayWrapper {
   template <typename CLASS = T, ENABLE_IF_NOT_HAS_CHECK_CAN_REPLAY_COMMIT(CLASS)>
   static bool check_can_replay_commit(const char *, const int64_t, const share::SCN &, storage::mds::BufferCtx &) {
     return true;
-  }
-};
-
-template <typename T>
-struct MdsCommitForOldMdsWrapper {
-  template <typename CLASS = T, ENABLE_IF_MDS_COMMIT_FOR_OLD_MDS(CLASS)>
-  static int on_commit_for_old_mds(const char *buf, const int64_t buf_len, const transaction::ObMulSourceDataNotifyArg &arg) {
-    return T::on_commit_for_old_mds(buf, buf_len, arg);
-  }
-  template <typename CLASS = T, ENABLE_IF_NOT_MDS_COMMIT_FOR_OLD_MDS(CLASS)>
-  static int on_commit_for_old_mds(const char *, const int64_t, const transaction::ObMulSourceDataNotifyArg &) {
-    return OB_SUCCESS;
   }
 };
 

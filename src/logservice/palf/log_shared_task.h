@@ -29,7 +29,6 @@ enum class LogSharedTaskType
 {
   LogHandleSubmitType = 1,
   LogFastRebuildType = 2,
-  LogFillCacheType = 3,
 };
 
 inline const char *shared_type_2_str(const LogSharedTaskType type)
@@ -39,7 +38,6 @@ inline const char *shared_type_2_str(const LogSharedTaskType type)
   {
     EXTRACT_SHARED_TYPE(LogHandleSubmitType);
     EXTRACT_SHARED_TYPE(LogFastRebuildType);
-    EXTRACT_SHARED_TYPE(LogFillCacheType);
     default:
       return "Invalid Type";
   }
@@ -49,7 +47,7 @@ inline const char *shared_type_2_str(const LogSharedTaskType type)
 class LogSharedTask
 {
 public:
-  LogSharedTask(const int64_t palf_id, const int64_t palf_epoch);
+  explicit LogSharedTask(const int64_t palf_epoch);
   virtual ~LogSharedTask();
   void destroy();
   void reset();
@@ -57,10 +55,8 @@ public:
   virtual void free_this(IPalfEnvImpl *palf_env_impl) = 0;
   virtual LogSharedTaskType get_shared_task_type() const = 0;
   VIRTUAL_TO_STRING_KV("BaseClass", "LogSharedTask",
-      "palf_id", palf_id_,
       "palf_epoch", palf_epoch_);
 protected:
-  int64_t palf_id_;
   int64_t palf_epoch_;
 private:
   DISALLOW_COPY_AND_ASSIGN(LogSharedTask);
@@ -69,7 +65,7 @@ private:
 class LogHandleSubmitTask : public LogSharedTask
 {
 public:
-  LogHandleSubmitTask(const int64_t palf_id, const int64_t palf_epoch);
+  explicit LogHandleSubmitTask(const int64_t palf_epoch);
   ~LogHandleSubmitTask() override;
   int do_task(IPalfEnvImpl *palf_env_impl) override;
   void free_this(IPalfEnvImpl *palf_env_impl) override;
@@ -77,23 +73,6 @@ public:
   INHERIT_TO_STRING_KV("LogSharedTask", LogSharedTask, "task type", shared_type_2_str(get_shared_task_type()));
 private:
   DISALLOW_COPY_AND_ASSIGN(LogHandleSubmitTask);
-};
-
-class LogFillCacheTask : public LogSharedTask
-{
-public:
-  LogFillCacheTask(const int64_t palf_id, const int64_t palf_epoch);
-  ~LogFillCacheTask() override;
-  int init(const LSN &begin_lsn, const int64_t size);
-  int do_task(IPalfEnvImpl *palf_env_impl) override;
-  void free_this(IPalfEnvImpl *palf_env_impl) override;
-  virtual LogSharedTaskType get_shared_task_type() const override { return LogSharedTaskType::LogFillCacheType; }
-  INHERIT_TO_STRING_KV("LogSharedTask", LogSharedTask, "task type", shared_type_2_str(get_shared_task_type()));
-private:
-  bool is_inited_;
-  LSN begin_lsn_;
-  int64_t size_;
-  DISALLOW_COPY_AND_ASSIGN(LogFillCacheTask);
 };
 
 } // end namespace palf

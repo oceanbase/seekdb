@@ -19,7 +19,7 @@
 #define private public
 #include "mock_ob_server.h"
 
-#include "share/ob_simple_mem_limit_getter.h"
+#include "storage/tx_storage/ob_tenant_mem_limit_getter.h"
 #include "share/ob_device_manager.h" 
 
 namespace oceanbase
@@ -31,7 +31,6 @@ using namespace blocksstable;
 namespace unittest
 {
 using namespace common;
-static ObSimpleMemLimitGetter getter;
 
 int MockObServer::init(const char *schema_file,
                        int64_t data_file_size,
@@ -176,15 +175,7 @@ int MockObServer::init(const char *schema_file,
 
   // init global kv cache
   if (OB_SUCC(ret)) {
-    ret = ObKVGlobalCache::get_instance().init(&getter);
-  }
-
-  if (OB_SUCC(ret)) {
-    if (OB_SUCCESS != (ret = init_tenant_mgr())) {
-      STORAGE_LOG(WARN, "init tenant mgr failed", K(ret));
-    } else {
-      STORAGE_LOG(INFO, "init tenant mgr success");
-    }
+    ret = ObKVGlobalCache::get_instance().init(&ObTenantMemLimitGetter::get_instance());
   }
 
   // init io
@@ -193,27 +184,6 @@ int MockObServer::init(const char *schema_file,
       STORAGE_LOG(WARN, "init device manager failed", K(ret));
     } else if (OB_FAIL(ObIOManager::get_instance().init())) {
       STORAGE_LOG(WARN, "io manager init failead", K(ret));
-    }
-  }
-
-  // init gts response rpc
-  if (OB_SUCC(ret)) {
-    if (OB_FAIL(gts_response_rpc_.init(net_frame_.get_req_transport(), self_addr_))) {
-      LOG_ERROR("gts response rpc init failed", K(ret));
-    } else {
-      LOG_INFO("gts response rpc init success");
-    }
-  }
-
-  //init gts local cache mgr
-  if (OB_SUCC(ret)) {
-    if (OB_SUCCESS != (ret = OB_TS_MGR.init(self_addr_,
-         *GCTX.schema_service_,
-         *GCTX.location_service_,
-         net_frame_.get_req_transport()))) {
-      STORAGE_LOG(WARN, "init gts local cache mgr failed", K(ret));
-    } else {
-      STORAGE_LOG(INFO, "init gts local cache mgr success");
     }
   }
 
@@ -249,48 +219,12 @@ int MockObServer::init_multi_tenant()
   return ret;
 }
 
-int MockObServer::init_tenant_mgr()
-{
-  int ret = OB_SUCCESS;
-  static const int64_t SYS_MEM_MIN = 8LL << 30;
-  static const int64_t SYS_MEM_MAX = 16LL << 30;
-  static const int64_t SERVER_TENANT_MEM_MIN = 8LL << 30;
-  static const int64_t SERVER_TENANT_MEM_MAX = 16LL << 30;
-  static const int64_t SERVER_MEM_MAX = 16LL << 30;
-  ObVirtualTenantManager &omti = ObVirtualTenantManager::get_instance();
-  obrpc::ObCommonRpcProxy common_rpc;
-  if (OB_SUCC(ret)) {
-    if (OB_FAIL(ObVirtualTenantManager::get_instance().init())) {
-      LOG_ERROR("Fail to init ObVirtualTenantManager, ", K(ret));
-    } else if (OB_FAIL(getter.add_tenant(common::OB_SYS_TENANT_ID,
-                                         SYS_MEM_MIN,
-                                         SYS_MEM_MAX))) {
-      LOG_ERROR("Fail to add sys tenant to mem limit getter, ", K(ret));
-    } else if (OB_FAIL(omti.add_tenant(common::OB_SERVER_TENANT_ID))) {
-      LOG_ERROR("Fail to add sys tenant to tenant manager, ", K(ret));
-    } else if (OB_SUCCESS != (ret = omti.set_tenant_mem_limit(
-                   OB_SERVER_TENANT_ID, SERVER_TENANT_MEM_MIN, SERVER_TENANT_MEM_MAX))) {
-
-      LOG_ERROR("Fail to set tenant mem limit", K(ret));
-    } else if (OB_FAIL(getter.add_tenant(common::OB_SERVER_TENANT_ID,
-                                         SERVER_TENANT_MEM_MIN,
-                                         SERVER_TENANT_MEM_MAX))) {
-      LOG_ERROR("Fail to add sys tenant to mem limit getter, ", K(ret));
-    } else {
-      lib::set_memory_limit(SERVER_MEM_MAX);
-    }
-  }
-  return ret;
-}
-
 void MockObServer::destroy()
 {
   ObKVGlobalCache::get_instance().destroy();
   STORAGE_LOG(INFO, "MockObServer::destroy().  destroy gloabal_cache\n");
   net_frame_.destroy();
   STORAGE_LOG(INFO, "MockObServer::destroy().  destroy net_frame\n");
-  ObVirtualTenantManager &omti = ObVirtualTenantManager::get_instance();
-  omti.destroy();
   multi_tenant_.destroy();
   ObIOManager::get_instance().destroy();
 }
@@ -304,8 +238,6 @@ int MockObServer::start()
     ret = OB_NOT_INIT;
   } else if (OB_SUCCESS != (ret = net_frame_.start())) {
     STORAGE_LOG(WARN, "net frame start error", K(ret));
-  } else if (OB_FAIL(OB_TS_MGR.start())) {
-    STORAGE_LOG(WARN, "start gts cache mgr error", K(ret));
   } else {
     STORAGE_LOG(INFO, "net frame start success");
   }
@@ -328,7 +260,6 @@ int MockObServer::stop()
   } else if (OB_SUCCESS != (ret = net_frame_.stop())) {
     STORAGE_LOG(WARN, "net frame stop error", K(ret));
   } else {
-    OB_TS_MGR.stop();
     STORAGE_LOG(INFO, "net frame stop success");
   }
   multi_tenant_.stop();
@@ -345,7 +276,6 @@ int MockObServer::wait()
   int ret = OB_SUCCESS;
   multi_tenant_.wait();
   net_frame_.wait();
-  (void)OB_TS_MGR.wait();
   if (OB_SUCC(ret)) {
     STORAGE_LOG(INFO, "ob server wait success");
   }

@@ -17,7 +17,7 @@
 #ifndef OCEANBASE_BLOCKSSTABLE_OB_INDEX_BLOCK_AGGREGATOR_
 #define OCEANBASE_BLOCKSSTABLE_OB_INDEX_BLOCK_AGGREGATOR_
 
-#include "share/schema/ob_table_param.h"
+#include "storage/access/ob_table_param.h"
 #include "ob_index_block_util.h"
 #include "ob_index_block_row_struct.h"
 
@@ -239,28 +239,22 @@ private:
 template <typename T, int64_t MAX_COUNT, int64_t BLOCK_SIZE>
 class ObPodFix2dArray;
 class ObEncodingHashTable;
-class ObDictEncodingHashTable;
 
 struct ObMicroDataPreAggParam
 {
   ObMicroDataPreAggParam() { reset(); }
   void reset() { memset(this, 0, sizeof(*this)); }
   bool use_encoding_ht() const { return is_pax_encoding_ && nullptr != encoding_ht_; }
-  bool use_cs_encoding_ht() const { return is_cs_encoding_ && nullptr != cs_encoding_ht_; }
   bool is_all_null_column() const { OB_ASSERT(nullptr != col_datums_); return null_cnt_ == col_datums_->count(); }
   TO_STRING_KV(KP_(col_datums), KP_(encoding_ht), K_(null_cnt), K_(min_integer), K_(max_integer),
-      K_(is_integer_aggregated), K_(is_cs_encoding), K_(is_pax_encoding));
+      K_(is_integer_aggregated), K_(is_pax_encoding));
 
   const ObPodFix2dArray<ObDatum, 1 << 20, common::OB_MALLOC_NORMAL_BLOCK_SIZE> *col_datums_;
-  union {
-    const ObEncodingHashTable *encoding_ht_;
-    const ObDictEncodingHashTable *cs_encoding_ht_;
-  };
+  const ObEncodingHashTable *encoding_ht_;
   uint64_t null_cnt_;
   uint64_t min_integer_;
   uint64_t max_integer_;
   bool is_integer_aggregated_;
-  bool is_cs_encoding_;
   bool is_pax_encoding_;
 };
 

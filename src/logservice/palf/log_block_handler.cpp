@@ -15,12 +15,12 @@
  */
 
 #include "log_block_handler.h"
-#include "lib/stat/ob_session_stat.h"         // Session
+#include "lib/stat/ob_diagnose_info.h"        // EVENT_*
+#include "lib/stat/ob_diagnostic_info_guard.h"
 #include "share/rc/ob_tenant_base.h"                    // mtl_malloc
 #include "log_writer_utils.h"                           // LogWriteBuf
 #include "log_io_utils.h"                               // close_with_ret
 #include "log_io_adapter.h"                             // LogIOAdapter
-#include "lib/stat/ob_diagnostic_info_guard.h"
 namespace oceanbase
 {
 using namespace common;
@@ -455,7 +455,7 @@ int LogBlockHandler::inner_write_impl_(const ObIOFd &io_fd, const char *buf, con
     }
   } while (OB_FAIL(ret));
   int64_t cost_ts = ObTimeUtility::fast_current_time() - start_ts;
-  EVENT_TENANT_INC(ObStatEventIds::PALF_WRITE_IO_COUNT, MTL_ID());
+  EVENT_TENANT_INC(ObStatEventIds::PALF_WRITE_IO_COUNT);
   EVENT_ADD(ObStatEventIds::PALF_WRITE_SIZE, count);
   EVENT_ADD(ObStatEventIds::PALF_WRITE_TIME, cost_ts);
   ATOMIC_AAF(&ob_pwrite_used_ts_, cost_ts);

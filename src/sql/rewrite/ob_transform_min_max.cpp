@@ -332,7 +332,7 @@ int ObTransformMinMax::is_valid_aggr_items(ObTransformerCtx &ctx,
   EqualSets &equal_sets = ctx.equal_sets_;
   ObSEArray<ObRawExpr *, 4> const_exprs;
   ObSEArray<const ObRawExpr *, 4> valid_col_exprs;
-  ObArenaAllocator alloc(ObMemAttr(MTL_ID(), "RewriteMinMax"));
+  ObArenaAllocator alloc(ObMemAttr("RewriteMinMax"));
   if (OB_FAIL(stmt.get_stmt_equal_sets(equal_sets, alloc, true))) {
     LOG_WARN("failed to get stmt equal sets", K(ret));
   } else if (OB_FAIL(ObOptimizerUtil::compute_const_exprs(stmt.get_condition_exprs(),

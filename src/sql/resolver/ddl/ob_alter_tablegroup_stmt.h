@@ -33,13 +33,12 @@ public:
   ObAlterTablegroupStmt();
   virtual ~ObAlterTablegroupStmt();
 
-  virtual void set_tenant_id(const uint64_t tenant_id) override;
 
   const common::ObString &get_tablegroup_name();
-  int add_table_item(const obrpc::ObTableItem &table_item);
+  int add_table_item(const obcall::ObTableItem &table_item);
   void set_tablegroup_name(const common::ObString &tablegroup_name);
-  obrpc::ObAlterTablegroupArg &get_alter_tablegroup_arg();
-  virtual obrpc::ObDDLArg &get_ddl_arg() { return alter_tablegroup_arg_; }
+  obcall::ObAlterTablegroupArg &get_alter_tablegroup_arg();
+  virtual obcall::ObDDLArg &get_ddl_arg() { return alter_tablegroup_arg_; }
   virtual int set_tablegroup_sharding(const common::ObString &sharding) override;
   inline void set_alter_option_set(const common::ObBitSet<> &alter_option_set);
   bool is_alter_partition() const { return alter_tablegroup_arg_.is_alter_partitions(); }
@@ -47,7 +46,7 @@ public:
 
   TO_STRING_KV(K_(alter_tablegroup_arg));
 private:
-  obrpc::ObAlterTablegroupArg alter_tablegroup_arg_;
+  obcall::ObAlterTablegroupArg alter_tablegroup_arg_;
   DISALLOW_COPY_AND_ASSIGN(ObAlterTablegroupStmt);
 };
 
@@ -59,14 +58,12 @@ inline int ObAlterTablegroupStmt::set_tablegroup_id(uint64_t tablegroup_id)
   return ret;
 }
 
-inline obrpc::ObAlterTablegroupArg &ObAlterTablegroupStmt::get_alter_tablegroup_arg()
+inline obcall::ObAlterTablegroupArg &ObAlterTablegroupStmt::get_alter_tablegroup_arg()
 {
   return alter_tablegroup_arg_;
 }
 
-inline void ObAlterTablegroupStmt::set_tenant_id(const uint64_t tenant_id) {
-  alter_tablegroup_arg_.tenant_id_ = tenant_id;
-}
+
 
 inline const common::ObString &ObAlterTablegroupStmt::get_tablegroup_name()
 {

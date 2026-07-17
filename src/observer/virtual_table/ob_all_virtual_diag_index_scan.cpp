@@ -70,20 +70,15 @@ int ObAllVirtualDiagIndexScan::set_index_ids(const common::ObIArray<common::ObNe
 int ObAllVirtualDiagIndexScan::get_server_sid_by_client_sid(sql::ObSQLSessionMgr* mgr, uint64_t &sid)
 {
   int ret = OB_SUCCESS;
-  int64_t client_sid = sid;
-  uint32_t SERVER_SESSID_TAG = 1ULL << 31;
+  uint32_t client_sid = static_cast<uint32_t>(sid);
   uint32_t server_sid = 0;
   if (OB_ISNULL(mgr)) {
     ret = OB_ERR_UNEXPECTED;
     SERVER_LOG(WARN, "session manager is NULL", K(ret));
-  } else if ((client_sid >> 32) == 0 && !((client_sid & SERVER_SESSID_TAG) >> 31)) {
-    if (OB_FAIL(mgr->get_client_sess_map().get_refactored(client_sid,
-                                                         server_sid))) {
-      SERVER_LOG(WARN, "failed to get session", K(ret), K(client_sid));
-    } else {
-      sid = server_sid;
-    }
+  } else if (OB_SUCCESS == mgr->get_client_sess_map().get_refactored(client_sid, server_sid)) {
+    sid = server_sid;
   }
+  // If not found in client_sess_map, keep sid as-is (it is already the server sessid)
   return ret;
 }
 

@@ -46,8 +46,7 @@ public:
   virtual int alter_context(const ObContextSchema &context_schema,
                                common::ObISQLClient *sql_client,
                                const common::ObString *ddl_stmt_str = NULL);
-  virtual int delete_context(const uint64_t tenant_id,
-                              const uint64_t context_id,
+  virtual int delete_context(const uint64_t context_id,
                               const ObString &ctx_namespace,
                               const int64_t new_schema_version,
                               const ObContextType &type,

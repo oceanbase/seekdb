@@ -21,7 +21,7 @@
 #include "lib/ob_define.h"
 #include "lib/rc/context.h"
 #include "lib/runtime.h"
-#include "common/errsim_module/ob_errsim_module_type.h"
+#include "lib/errsim_module/ob_errsim_module_type.h"
 
 namespace oceanbase
 {
@@ -36,7 +36,7 @@ enum class LogReductionMode {NONE = 0, REFINED, COMPRESSED};
 class Worker
 {
 public:
-  enum class CompatMode {INVALID = -1, MYSQL, ORACLE };
+  enum class CompatMode {INVALID = -1, MYSQL };
   enum Status { WS_NOWAIT, WS_INVALID, WS_OUT_OF_THROTTLE };
 
   Worker();
@@ -87,17 +87,9 @@ public:
   OB_INLINE void set_curr_request_level(const int32_t level) { curr_request_level_ = level; }
   OB_INLINE int32_t get_curr_request_level() const { return curr_request_level_; }
   OB_INLINE bool is_th_worker() const { return is_th_worker_; }
-  OB_INLINE void set_group_id_(const uint64_t group_id) { group_id_ = group_id;}
-
-  OB_INLINE uint64_t get_group_id() const { return group_id_; }
   OB_INLINE void set_group(void *group) { group_ = group; };
   OB_INLINE void *get_group() { return group_;};
   OB_INLINE bool is_group_worker() const { return OB_NOT_NULL(group_); }
-
-  //OB_INLINE void set_group_id(int32_t group_id) { group_id_ = group_id; }
-
-  OB_INLINE void set_func_type_(uint8_t func_type) { func_type_ = func_type; }
-  OB_INLINE uint8_t get_func_type() const { return func_type_; }
 
   OB_INLINE bool is_timeout_ts_valid() { return INT64_MAX != timeout_ts_;}
   OB_INLINE void set_timeout_ts(int64_t timeout_ts) { timeout_ts_ = timeout_ts; }
@@ -107,9 +99,8 @@ public:
   int64_t get_timeout_remain() const;
   bool is_timeout() const;
 
-  OB_INLINE void set_rpc_tenant(uint64_t tenant_id) { rpc_tenant_id_ = tenant_id; }
-  OB_INLINE void reset_rpc_tenant() { rpc_tenant_id_ = 0; }
-  OB_INLINE uint64_t get_rpc_tenant() const { return rpc_tenant_id_; }
+  OB_INLINE void set_rpc_tenant() {  }
+  OB_INLINE void reset_rpc_tenant() {  }
 
   // check wait is disabled if f is true
   void set_disable_wait_flag(bool f) { disable_wait_ = f; }
@@ -145,7 +136,7 @@ public:
   void *group_;
 protected:
   // Thread runtime memory is allocated from this allocator
-  // Initial tenant_id=500, in processing request, tenant_id is updated to the tenant id of the request
+  // Initial allocator memory state, updated while processing a request
   // You can specify ctx_id individually, this ctx_id remains unchanged
   ObIAllocator *allocator_;
   int64_t st_current_priority_;
@@ -156,15 +147,12 @@ private:
   int32_t worker_level_;
   int32_t curr_request_level_;
   bool is_th_worker_;
-  uint64_t group_id_;
-  uint8_t func_type_;
-
   int64_t timeout_ts_;
 
   //ingnore net time, equal to (receive_ts - send_ts).
   int64_t ntp_offset_;
 
-  uint64_t rpc_tenant_id_;
+  
 
   // Used to prevent the thread holding the lock from being suspended by check_wait
   bool disable_wait_;
@@ -203,72 +191,6 @@ inline Worker &this_worker()
 
 #define THIS_WORKER oceanbase::lib::Worker::self()
 
-#define GET_FUNC_TYPE() (THIS_WORKER.get_func_type())
-#define GET_GROUP_ID() (THIS_WORKER.get_group_id())
-
-int SET_GROUP_ID(bool is_background = false);
-
-
-class ConsumerGroupIdGuard
-{
-public:
-  ConsumerGroupIdGuard(uint64_t group_id)
-    : thread_group_id_(GET_GROUP_ID()), group_changed_(false), ret_(OB_SUCCESS)
-  {
-    group_changed_ = group_id != thread_group_id_;
-    if (is_resource_manager_group(thread_group_id_)) {
-      // has set group id. do nothing.
-    } else if (group_changed_) {
-      ret_ = SET_GROUP_ID();
-    }
-  }
-  ~ConsumerGroupIdGuard()
-  {
-    if (group_changed_) {
-      SET_GROUP_ID();
-    }
-  }
-  int get_ret()
-  {
-    return ret_;
-  }
-
-private:
-  uint64_t thread_group_id_;
-  bool group_changed_;
-  int ret_;
-};
-#define CONSUMER_GROUP_ID_GUARD(group_id) oceanbase::lib::ConsumerGroupIdGuard consumer_group_id_guard_(group_id)
-
-class ConsumerGroupFuncGuard
-{
-public:
-  ConsumerGroupFuncGuard(uint8_t func_type)
-    : thread_func_type_(GET_FUNC_TYPE()), ret_(OB_SUCCESS)
-  {
-    THIS_WORKER.set_func_type_(func_type);
-    group_changed_ = true;
-    ret_ = SET_GROUP_ID(true /* is_background */);
-  }
-  ~ConsumerGroupFuncGuard()
-  {
-    THIS_WORKER.set_func_type_(thread_func_type_);
-    if (group_changed_) {
-      SET_GROUP_ID();
-    }
-  }
-  int get_ret()
-  {
-    return ret_;
-  }
-
-private:
-  uint8_t thread_func_type_;
-  bool group_changed_;
-  int ret_;
-};
-#define CONSUMER_GROUP_FUNC_GUARD(func_type) oceanbase::lib::ConsumerGroupFuncGuard consumer_group_func_guard_(func_type)
-
 class DisableSchedInterGuard
 {
 public:
@@ -283,24 +205,6 @@ public:
   }
 private:
   bool last_flag_;
-};
-
-class CompatModeGuard
-{
-public:
-  CompatModeGuard(Worker::CompatMode mode)
-  {
-    last_compat_mode_ = THIS_WORKER.get_compatibility_mode();
-    THIS_WORKER.set_compatibility_mode(mode);
-  }
-
-  ~CompatModeGuard()
-  {
-    THIS_WORKER.set_compatibility_mode(last_compat_mode_);
-  }
-
-private:
-  Worker::CompatMode last_compat_mode_;
 };
 
 
@@ -381,15 +285,6 @@ inline Worker::CompatMode get_compat_mode()
 inline void set_compat_mode(Worker::CompatMode mode)
 {
   get_ob_runtime_context().compat_mode_ = mode;
-}
-
-inline bool is_oracle_mode()
-{
-  return get_compat_mode() == Worker::CompatMode::ORACLE;
-}
-inline bool is_mysql_mode()
-{
-  return get_compat_mode() == Worker::CompatMode::MYSQL;
 }
 
 OB_INLINE void Worker::set_compatibility_mode(Worker::CompatMode mode)

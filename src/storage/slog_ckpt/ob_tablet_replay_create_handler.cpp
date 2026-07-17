@@ -18,6 +18,7 @@
 #define USING_LOG_PREFIX STORAGE
 
 #include "ob_tablet_replay_create_handler.h"
+#include "share/rc/ob_module_provider.h"
 #include "observer/omt/ob_tenant.h"
 #include "storage/tx_storage/ob_ls_service.h"
 #include "storage/meta_store/ob_tenant_storage_meta_service.h"
@@ -72,7 +73,6 @@ int ObTabletReplayCreateTask::execute()
     ret = OB_NOT_INIT;
     LOG_WARN("task not init", K(ret), KPC(this));
   } else {
-    ObTenantSwitchGuard guard(tenant_base_);
     if (Type::DISCRETE == type_ &&
         OB_FAIL(handler_->replay_discrete_tablets(replay_item_range_arr_))) {
       LOG_WARN("fail to execute replay_discrete_tablets", K(ret), KPC(this));
@@ -137,7 +137,7 @@ bool ObTabletReplayItem::operator<(const ObTabletReplayItem &r) const
 //============================= ObTabletReplayCreateHandler ==============================//
 ObTabletReplayCreateHandler::ObTabletReplayCreateHandler()
   : is_inited_(false),
-    allocator_("TabletReplay", OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID()),
+    allocator_("TabletReplay", OB_MALLOC_NORMAL_BLOCK_SIZE),
     task_idx_(0),
     inflight_task_cnt_(0),
     finished_tablet_cnt_(0),
@@ -238,8 +238,6 @@ int ObTabletReplayCreateHandler::concurrent_replay(ObStartupAccelTaskHandler* st
   } else {
     int64_t tablet_cnt_in_block = 0;
     int64_t valid_size_in_block = 0;
-    const bool is_old_version = static_cast<omt::ObTenant*>(MTL_CTX())->get_super_block().is_old_version();
-
     // <1> ObMetaDiskAddr order is FILE < BLOCK < RAW_BLOCK, so handle FILE type addrs firstly
     int64_t i = 0;
     while (i < total_tablet_cnt_ && total_tablet_item_arr_[i].addr_.is_file()) {
@@ -259,7 +257,7 @@ int ObTabletReplayCreateHandler::concurrent_replay(ObStartupAccelTaskHandler* st
         valid_size_in_block += upper_align(total_tablet_item_arr_[i].addr_.size(), 4096);
       } else {
         ADD_ITEM_RANGE_TO_TASK(
-            startup_accel_handler, i - tablet_cnt_in_block, i, is_old_version); // [start_item_idx, end_item_idx)
+            startup_accel_handler, i - tablet_cnt_in_block, i, false); // [start_item_idx, end_item_idx)
         pre_block_id = curr_block_id;
         tablet_cnt_in_block = 1;
         valid_size_in_block = upper_align(total_tablet_item_arr_[i].addr_.size(), 4096);
@@ -267,7 +265,7 @@ int ObTabletReplayCreateHandler::concurrent_replay(ObStartupAccelTaskHandler* st
     }
     if (OB_SUCC(ret)) {  // handle last range
       ADD_ITEM_RANGE_TO_TASK(
-          startup_accel_handler, total_tablet_cnt_ - tablet_cnt_in_block, total_tablet_cnt_, is_old_version);
+          startup_accel_handler, total_tablet_cnt_ - tablet_cnt_in_block, total_tablet_cnt_, false);
     }
     // handle last task
     ADD_LAST_TASK(startup_accel_handler, aggrgate_task_);
@@ -358,20 +356,14 @@ int ObTabletReplayCreateHandler::add_task_(ObStartupAccelTaskHandler* startup_ac
 }
 
 int ObTabletReplayCreateHandler::get_tablet_svr_(
-    const ObLSID &ls_id,
     ObLSTabletService *&ls_tablet_svr,
-    ObLSHandle &ls_handle)
+    ObLS *&tenant_ls)
 {
   int ret = OB_SUCCESS;
-  ObLS *ls = nullptr;
-  if (OB_FAIL(MTL(ObLSService *)->get_ls(ls_id, ls_handle, ObLSGetMod::STORAGE_MOD))) {
-    LOG_WARN("fail to get ls handle", K(ret), K(ls_id));
-  } else if (OB_ISNULL(ls = ls_handle.get_ls())) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("ls is null", K(ret), K(ls_id));
-  } else if (OB_ISNULL(ls_tablet_svr = ls->get_tablet_svr())) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("tablet service is null", K(ret), K(ls_id));
+  if (OB_FAIL(share::g_mp->ls_service()->get_ls(tenant_ls))) {
+    LOG_WARN("fail to get ls", K(ret));
+  } else {
+    ls_tablet_svr = tenant_ls->get_tablet_svr();
   }
   return ret;
 }
@@ -381,7 +373,7 @@ int ObTabletReplayCreateHandler::replay_discrete_tablets(const ObIArray<ObTablet
   int ret = OB_SUCCESS;
   char *buf = nullptr;
   int64_t buf_len = 0;
-  ObArenaAllocator io_allocator("DiscreteRep", OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID());
+  ObArenaAllocator io_allocator("DiscreteRep", OB_MALLOC_NORMAL_BLOCK_SIZE);
 
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
@@ -397,12 +389,12 @@ int ObTabletReplayCreateHandler::replay_discrete_tablets(const ObIArray<ObTablet
         // io maybe timeout, so need retry
         int64_t max_retry_time = 5;
         do {
-          if (OB_FAIL(MTL(ObTenantStorageMetaService*)->read_from_disk(replay_item.addr_, 0 /* ls_epoch for share storage */, io_allocator, buf, buf_len))) {
+          if (OB_FAIL(share::g_mp->tenant_storage_meta_service()->read_from_disk(replay_item.addr_, 0 /* ls_epoch for share storage */, io_allocator, buf, buf_len))) {
             LOG_WARN("fail to read from disk", K(ret), K(replay_item), KP(buf), K(buf_len));
           }
         } while (OB_FAIL(ret) && OB_TIMEOUT == ret && max_retry_time-- > 0);
         if (OB_SUCC(ret) && OB_FAIL(do_replay(replay_item, buf, buf_len, io_allocator))) {
-          LOG_WARN("fail to do replay", K(ret), K(replay_item));
+          LOG_ERROR("fail to do replay", K(ret), K(replay_item));
         }
       }
     }
@@ -415,7 +407,7 @@ int ObTabletReplayCreateHandler::replay_aggregate_tablets(const ObIArray<ObTable
   int ret = OB_SUCCESS;
   char *buf = nullptr;
   int64_t buf_len = 0;
-  ObArenaAllocator io_allocator("AggregateRep", OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID());
+  ObArenaAllocator io_allocator("AggregateRep", OB_MALLOC_NORMAL_BLOCK_SIZE);
   char *io_buf = nullptr;
   const int64_t io_buf_size = OB_STORAGE_OBJECT_MGR.get_macro_block_size();
 
@@ -438,7 +430,7 @@ int ObTabletReplayCreateHandler::replay_aggregate_tablets(const ObIArray<ObTable
     read_info.io_desc_.set_wait_event(ObWaitEventIds::DB_FILE_COMPACT_READ);
     read_info.io_desc_.set_sys_module_id(ObIOModule::SHARED_BLOCK_RW_IO);
     read_info.macro_block_id_ = total_tablet_item_arr_[range_arr.at(i).first].addr_.block_id();
-    read_info.mtl_tenant_id_ = MTL_ID();
+    
     if (OB_FAIL(ObObjectManager::read_object(read_info, object_handle))) {
       LOG_WARN("fail to read block", K(ret), K(read_info));
     }
@@ -492,11 +484,11 @@ int ObTabletReplayCreateHandler::replay_create_tablet(const ObTabletReplayItem &
 {
   int ret = OB_SUCCESS;
   ObLSTabletService *ls_tablet_svr = nullptr;
-  ObLSHandle ls_handle;
+  ObLS *tenant_ls = nullptr;
   const ObTabletMapKey &key = replay_item.key_;
   const ObMetaDiskAddr &addr = replay_item.addr_;
 
-  if (OB_FAIL(get_tablet_svr_(key.ls_id_, ls_tablet_svr, ls_handle))) {
+  if (OB_FAIL(get_tablet_svr_(ls_tablet_svr, tenant_ls))) {
     LOG_WARN("fail to get ls tablet service", K(ret));
   } else if (OB_FAIL(ls_tablet_svr->replay_create_tablet(addr, buf, buf_len, key.tablet_id_))) {
     LOG_WARN("fail to create tablet for replay", K(ret), K(key), K(addr));
@@ -526,11 +518,11 @@ int ObTabletReplayCreateHandler::replay_clone_tablet(const ObTabletReplayItem &r
 {
   int ret = OB_SUCCESS;
   ObLSTabletService *ls_tablet_svr = nullptr;
-  ObLSHandle ls_handle;
+  ObLS *tenant_ls = nullptr;
   const ObTabletMapKey &key = replay_item.key_;
   const ObMetaDiskAddr &addr = replay_item.addr_;
   ObTabletHandle tablet_handle;
-  if (OB_FAIL(get_tablet_svr_(key.ls_id_, ls_tablet_svr, ls_handle))) {
+  if (OB_FAIL(get_tablet_svr_(ls_tablet_svr, tenant_ls))) {
     LOG_WARN("fail to get ls tablet service", K(ret));
   } else if (OB_FAIL(ls_tablet_svr->replay_create_tablet(addr, buf, buf_len, key.tablet_id_))) {
     LOG_WARN("fail to create tablet for replay", K(ret), K(key), K(addr));

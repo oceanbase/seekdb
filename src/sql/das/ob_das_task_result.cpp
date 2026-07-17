@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_DAS
 #include "ob_das_task_result.h"
+#include "share/rc/ob_module_provider.h"
 #include "sql/das/ob_data_access_service.h"
 #include "sql/engine/ob_exec_context.h"
 #include "sql/engine/px/ob_px_util.h"
@@ -97,7 +98,7 @@ int ObDASTCB::init(int64_t task_id, const ObDASScanRtDef *scan_rtdef,
     ObSqlMemMgrProcessor &sql_mem_processor = mem_profile_info->sql_mem_processor_;
 
     if (enable_rich_format_) {
-      ObMemAttr mem_attr(MTL_ID(), "DASTaskResMgr", common::ObCtxIds::WORK_AREA);
+      ObMemAttr mem_attr("DASTaskResMgr", common::ObCtxIds::WORK_AREA);
       if (OB_ISNULL(store_arr_buf = allocator.alloc(sizeof(ObCompactRow *) * max_batch_size_))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
         LOG_WARN("alloc stored row array failed", KR(ret));
@@ -132,7 +133,6 @@ int ObDASTCB::init(int64_t task_id, const ObDASScanRtDef *scan_rtdef,
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("construct datum store failed", K(ret));
       } else if (OB_FAIL(datum_store_->init(sql_mem_processor.is_auto_mgr() ? INT64_MAX : 4 * 1024 * 1024,
-                                            MTL_ID(),
                                             common::ObCtxIds::WORK_AREA,
                                             "DASTaskResMgr",
                                             true))) {
@@ -273,10 +273,9 @@ ObDASTaskResultMgr::~ObDASTaskResultMgr()
 int ObDASTaskResultMgr::init()
 {
   int ret = OB_SUCCESS;
-  uint64_t tenant_id = MTL_ID();
-  omt::ObTenantConfigGuard tenant_config(TENANT_CONF(tenant_id));
-  int64_t cpu_quota_concurrency = tenant_config->cpu_quota_concurrency;
-  ObMemAttr mem_profile_hash_buck_attr(tenant_id, "DASMemHashBuck");
+  
+  int64_t cpu_quota_concurrency = GCONF.cpu_quota_concurrency;
+  ObMemAttr mem_profile_hash_buck_attr("DASMemHashBuck");
 
   if (OB_FAIL(tcb_map_.init())) {
     LOG_WARN("init tcb map failed", KR(ret));
@@ -292,7 +291,7 @@ int ObDASTaskResultMgr::init()
 void ObDASTaskResultMgr::destory()
 {
   int ret = OB_SUCCESS;
-  LOG_INFO("[DAS TASK RESULT MGR] begin destory", K(MTL_ID()), K(mem_profile_map_.size()), K(tcb_map_.size()));
+  LOG_INFO("[DAS TASK RESULT MGR] begin destory", K(mem_profile_map_.size()), K(tcb_map_.size()));
   gc_.~ObDASTaskResultGC();
   ObDASTaskResultErase tcb_erase(this);
   while(OB_SUCC(ret) && tcb_map_.size() != 0) {
@@ -301,13 +300,13 @@ void ObDASTaskResultMgr::destory()
     } else if (tcb_erase.ret_ == OB_EAGAIN) {
       tcb_erase.ret_ = OB_SUCCESS;
       if (REACH_TIME_INTERVAL(5 * 1000 * 1000L)) {
-        LOG_INFO("[DAS TASK RESULT MGR] keep trying to clear the tcb map", K(tcb_map_.size()), K(mem_profile_map_.size()), K(MTL_ID()));
+        LOG_INFO("[DAS TASK RESULT MGR] keep trying to clear the tcb map", K(tcb_map_.size()), K(mem_profile_map_.size()));
       }
     } else if (tcb_erase.ret_ != OB_SUCCESS) {
       // an unexpected error occurs, may never be able to fully delete the tcb properly
       // exit the loop to force a memory cleanup
       ret = tcb_erase.ret_;
-      LOG_WARN("[DAS TASK RESULT MGR] unexpected error", K(ret), K(tcb_map_.size()), K(mem_profile_map_.size()), K(MTL_ID()));
+      LOG_WARN("[DAS TASK RESULT MGR] unexpected error", K(ret), K(tcb_map_.size()), K(mem_profile_map_.size()));
     }
   }
   tcb_map_.~DASTCBMap();
@@ -316,7 +315,7 @@ void ObDASTaskResultMgr::destory()
   if (!mem_profile_map_.empty()) {
     // expected mem_profile_map_ to be empty
     // if this occurs, force to clear the memory
-    LOG_WARN("[DAS TASK RESULT MGR] expect mem_profile_map_ is empty, but not", K(MTL_ID()), K(mem_profile_map_.size()));
+    LOG_WARN("[DAS TASK RESULT MGR] expect mem_profile_map_ is empty, but not", K(mem_profile_map_.size()));
     ret = OB_SUCCESS;
     bool it_end = false;
     int64_t mem_profile_map_size = mem_profile_map_.size();
@@ -355,7 +354,7 @@ void ObDASTaskResultMgr::destory()
     }
   }
   mem_profile_map_.destroy();
-  LOG_INFO("[DAS TASK RESULT MGR] end destory", K(MTL_ID()));
+  LOG_INFO("[DAS TASK RESULT MGR] end destory");
 }
 
 int ObDASTaskResultMgr:: check_mem_profile_key(ObDASTCBMemProfileKey &key) {
@@ -931,7 +930,6 @@ int ObDASTaskResultMgr::fetch_result_by_normal(ObDASTCB *tcb,
   int64_t task_id = res.get_task_id();
   ObChunkDatumStore &datum_store = res.get_datum_store();
   if (!datum_store.is_inited() && OB_FAIL(datum_store.init(INT64_MAX,
-                                                           MTL_ID(),
                                                            common::ObCtxIds::DEFAULT_CTX_ID,
                                                            "DASTaskResMgr",
                                                            false))) {
@@ -1029,7 +1027,7 @@ int ObDASTaskResultMgr::fetch_result_by_vector(ObDASTCB *tcb,
   int ret = OB_SUCCESS;
   int64_t task_id = res.get_task_id();
   ObTempRowStore &vec_row_store = res.get_vec_row_store();
-  ObMemAttr mem_attr(MTL_ID(), "DASTaskResMgr", ObCtxIds::DEFAULT_CTX_ID);
+  ObMemAttr mem_attr("DASTaskResMgr", ObCtxIds::DEFAULT_CTX_ID);
   if (!vec_row_store.is_inited() && OB_FAIL(vec_row_store.init(tcb->vec_row_store_->get_row_meta(),
                                             tcb->vec_row_store_->get_max_batch_size(),
                                             mem_attr,
@@ -1149,8 +1147,8 @@ int ObDASTaskResultMgr::init_mem_profile(ObDASTCBMemProfileKey &key, ObDASMemPro
       if (ret == OB_HASH_NOT_EXIST) {
         ret = OB_SUCCESS;
         void *info_buf = nullptr;
-        ObMemAttr mem_info_attr(MTL_ID(), "DASMemInfo", common::ObCtxIds::EXECUTE_CTX_ID);
-        ObMemAttr allocator_attr(MTL_ID(), "DASTaskResMgr", common::ObCtxIds::WORK_AREA);
+        ObMemAttr mem_info_attr("DASMemInfo", common::ObCtxIds::EXECUTE_CTX_ID);
+        ObMemAttr allocator_attr("DASTaskResMgr", common::ObCtxIds::WORK_AREA);
         int64_t op_id = scan_rtdef->scan_op_id_;
         int64_t cache_size = scan_rtdef->scan_rows_size_;
 
@@ -1172,7 +1170,7 @@ int ObDASTaskResultMgr::init_mem_profile(ObDASTCBMemProfileKey &key, ObDASMemPro
         if (OB_ISNULL(info_buf = ob_malloc(sizeof(ObDASMemProfileInfo), mem_info_attr))) {
           ret = OB_ALLOCATE_MEMORY_FAILED;
           LOG_WARN("fail to alloc mem_profile_info", K(ret));
-        } else if (OB_ISNULL(info = new(info_buf) ObDASMemProfileInfo(MTL_ID()))) {
+        } else if (OB_ISNULL(info = new(info_buf) ObDASMemProfileInfo{})) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("construct mem profile info failed", K(ret));  
         } else if (OB_FAIL(info->allocator_.init(lib::ObMallocAllocator::get_instance(),
@@ -1188,7 +1186,6 @@ int ObDASTaskResultMgr::init_mem_profile(ObDASTCBMemProfileKey &key, ObDASMemPro
           // the session in exec_ctx will be invalidated at this time
           profile_exec_info.reset_my_session();
           if (OB_FAIL(info->sql_mem_processor_.init(&info->allocator_,
-                                                    MTL_ID(),
                                                     cache_size,
                                                     PHY_TABLE_SCAN,
                                                     op_id,
@@ -1419,12 +1416,11 @@ ObDASTaskResultGCRunner& ObDASTaskResultGCRunner::get_instance()
   return gc_runner;
 }
 
-int ObDASTaskResultGCRunner::schedule_timer_task()
+int ObDASTaskResultGCRunner::schedule_timer_task(common::ObTimer &timer)
 {
   int ret = OB_SUCCESS;
   ObDASTaskResultGCRunner& gc_runner = get_instance();
-  if (OB_FAIL(TG_SCHEDULE(lib::TGDefIDs::ServerGTimer, gc_runner,
-                          ObDASTaskResultGCRunner::REFRESH_INTERVAL, true))) {
+  if (OB_FAIL(timer.schedule(gc_runner, ObDASTaskResultGCRunner::REFRESH_INTERVAL, true))) {
     LOG_WARN("schedule das task result gc runner failed", K(ret));
   }
   return ret;
@@ -1433,29 +1429,22 @@ int ObDASTaskResultGCRunner::schedule_timer_task()
 void ObDASTaskResultGCRunner::runTimerTask()
 {
   int ret = OB_SUCCESS;
-  omt::TenantIdList all_tenants;
-  GCTX.omt_->get_tenant_ids(all_tenants);
-  for (int i = 0; OB_SUCC(ret) && i < all_tenants.size(); ++i) {
-    uint64_t tenant_id = all_tenants[i];
-    if (is_virtual_tenant_id(tenant_id)) {
-      // skip virtual tenant
+  {
+    MAKE_TENANT_SWITCH_SCOPE_GUARD(guard);
+    if (OB_FAIL(guard.switch_to())) {
+      LOG_WARN("tenant switch failed during das task result gc", KR(ret), K(1UL));
     } else {
-      MAKE_TENANT_SWITCH_SCOPE_GUARD(guard);
-      if (OB_FAIL(guard.switch_to(tenant_id))) {
-        LOG_WARN("tenant switch failed during das task result gc", KR(ret), K(tenant_id));
-      } else {
-        ObDataAccessService * das = NULL;
-        if (OB_ISNULL(das = MTL(ObDataAccessService *))) {
-          ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("das is null", K(ret), KP(das));
-        } else if (OB_FAIL(das->get_task_res_mgr().remove_expired_results())) {
-          LOG_WARN("remove expired results failed", KR(ret), K(tenant_id));
-        }
+      ObDataAccessService * das = NULL;
+      if (OB_ISNULL(das = share::g_mp->data_access_service())) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("das is null", K(ret), KP(das));
+      } else if (OB_FAIL(das->get_task_res_mgr().remove_expired_results())) {
+        LOG_WARN("remove expired results failed", KR(ret), K(1UL));
       }
     }
-    // ignore error code
-    ret = OB_SUCCESS;
   }
+  // ignore error code
+  ret = OB_SUCCESS;
 }
 } // namespace sql
 } // namespace oceanbase

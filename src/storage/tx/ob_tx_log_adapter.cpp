@@ -97,8 +97,8 @@ int ObLSTxLogAdapter::submit_log(const char *buf,
         cb->set_lsn(lsn);
         cb->set_log_ts(scn);
         cb->set_submit_ts(cur_ts);
-        ObTransStatistic::get_instance().add_clog_submit_count(MTL_ID(), 1);
-        ObTransStatistic::get_instance().add_trans_log_total_size(MTL_ID(), size);
+        ObTransStatistic::get_instance().add_clog_submit_count( 1);
+        ObTransStatistic::get_instance().add_trans_log_total_size( size);
       }
       if (!need_nonblock) {
         // retries are not needed in block mode.
@@ -118,30 +118,6 @@ int ObLSTxLogAdapter::submit_log(const char *buf,
   return ret;
 }
 
-int ObLSTxLogAdapter::get_role(bool &is_leader, int64_t &epoch)
-{
-  int ret = OB_SUCCESS;
-
-  ObRole role = INVALID_ROLE;
-  if (OB_ISNULL(log_handler_)) {
-    ret = OB_INVALID_ARGUMENT;
-    TRANS_LOG(WARN, "invalid argument", KR(ret), KP(log_handler_));
-  } else if (OB_FAIL(log_handler_->get_role(role, epoch))) {
-    if (ret == OB_NOT_INIT || ret == OB_NOT_RUNNING) {
-      ret = OB_SUCCESS;
-      is_leader = false;
-    } else {
-      TRANS_LOG(WARN, "get role failed", K(ret));
-    }
-  } else if (LEADER == role) {
-    is_leader = true;
-  } else {
-    is_leader = false;
-  }
-
-  return ret;
-}
-
 int ObLSTxLogAdapter::get_max_decided_scn(SCN &scn)
 {
   int ret = OB_SUCCESS;
@@ -150,21 +126,6 @@ int ObLSTxLogAdapter::get_max_decided_scn(SCN &scn)
     TRANS_LOG(WARN, "invalid argument", K(ret), KP(log_handler_));
   } else {
     ret = log_handler_->get_max_decided_scn(scn);
-  }
-  return ret;
-}
-
-int ObLSTxLogAdapter::get_palf_committed_max_scn(share::SCN &scn) const
-{
-  int ret = OB_SUCCESS;
-  if (OB_ISNULL(log_handler_) || !log_handler_->is_valid()) {
-    ret = OB_INVALID_ARGUMENT;
-    TRANS_LOG(WARN, "invalid argument", K(ret), KP(log_handler_));
-  } else if (OB_FAIL(log_handler_->get_max_decided_scn_as_leader(scn))) {
-    TRANS_LOG(WARN, "get palf committed_max_scn fail", K(ret));
-  } else if (!scn.is_valid_and_not_min()) {
-    ret = OB_ERR_UNEXPECTED;
-    TRANS_LOG(ERROR, "get an invalid scn", K(ret), K(scn));
   }
   return ret;
 }

@@ -19,7 +19,7 @@ static const ObObjTypeClass DIV_TYPE_PROMOTION[ObMaxTC][ObMaxTC] =
     ObNullTC, /*bit*/
     ObNullTC, /*enum, set*/
     ObNullTC, /*inner_enum, inner_set*/
-    ObNullTC, /*oracle timestamp*/
+    ObNullTC, /*OTimestamp*/
     ObNullTC, /*raw*/
     ObNullTC, /*interval*/
     ObNullTC, /*rowid*/
@@ -43,7 +43,7 @@ static const ObObjTypeClass DIV_TYPE_PROMOTION[ObMaxTC][ObMaxTC] =
     ObMaxTC, /*bit*/
     ObMaxTC, /*enum, set*/
     ObMaxTC, /*inner_enum, inner_set*/
-    ObNumberTC, /*oracle timestamp*/
+    ObNumberTC, /*OTimestamp*/
     ObMaxTC, /*raw*/
     ObMaxTC, /*interval*/
     ObMaxTC, /*rowid*/
@@ -67,7 +67,7 @@ static const ObObjTypeClass DIV_TYPE_PROMOTION[ObMaxTC][ObMaxTC] =
     ObMaxTC, /*bit*/
     ObMaxTC, /*enum, set*/
     ObMaxTC, /*inner_enum, inner_set*/
-    ObNumberTC, /*oracle timestamp*/
+    ObNumberTC, /*OTimestamp*/
     ObMaxTC, /*raw*/
     ObMaxTC, /*interval*/
     ObMaxTC, /*rowid*/
@@ -91,7 +91,7 @@ static const ObObjTypeClass DIV_TYPE_PROMOTION[ObMaxTC][ObMaxTC] =
     ObMaxTC, /*bit*/
     ObMaxTC, /*enum, set*/
     ObMaxTC, /*inner_enum, inner_set*/
-    ObMaxTC, /*oracle timestamp*/
+    ObMaxTC, /*OTimestamp*/
     ObMaxTC, /*raw*/
     ObMaxTC, /*interval*/
     ObMaxTC, /*rowid*/
@@ -115,7 +115,7 @@ static const ObObjTypeClass DIV_TYPE_PROMOTION[ObMaxTC][ObMaxTC] =
     ObMaxTC, /*bit*/
     ObMaxTC, /*enum, set*/
     ObMaxTC, /*inner_enum, inner_set*/
-    ObMaxTC, /*oracle timestamp*/
+    ObMaxTC, /*OTimestamp*/
     ObMaxTC, /*raw*/
     ObMaxTC, /*interval*/
     ObMaxTC, /*rowid*/
@@ -139,7 +139,7 @@ static const ObObjTypeClass DIV_TYPE_PROMOTION[ObMaxTC][ObMaxTC] =
     ObMaxTC, /*bit*/
     ObMaxTC, /*enum, set*/
     ObMaxTC, /*inner_enum, inner_set*/
-    ObMaxTC, /*oracle timestamp*/
+    ObMaxTC, /*OTimestamp*/
     ObMaxTC, /*raw*/
     ObMaxTC, /*interval*/
     ObMaxTC, /*rowid*/
@@ -163,7 +163,7 @@ static const ObObjTypeClass DIV_TYPE_PROMOTION[ObMaxTC][ObMaxTC] =
     ObMaxTC, /*bit*/
     ObMaxTC, /*enum, set*/
     ObMaxTC, /*inner_enum, inner_set*/
-    ObMaxTC, /*oracle timestamp*/
+    ObMaxTC, /*OTimestamp*/
     ObMaxTC, /*raw*/
     ObMaxTC, /*interval*/
     ObMaxTC, /*rowid*/
@@ -187,7 +187,7 @@ static const ObObjTypeClass DIV_TYPE_PROMOTION[ObMaxTC][ObMaxTC] =
     ObMaxTC, /*bit*/
     ObMaxTC, /*enum, set*/
     ObMaxTC, /*inner_enum, inner_set*/
-    ObMaxTC, /*oracle timestamp*/
+    ObMaxTC, /*OTimestamp*/
     ObMaxTC, /*raw*/
     ObMaxTC, /*interval*/
     ObMaxTC, /*rowid*/
@@ -211,7 +211,7 @@ static const ObObjTypeClass DIV_TYPE_PROMOTION[ObMaxTC][ObMaxTC] =
     ObMaxTC, /*bit*/
     ObMaxTC, /*enum, set*/
     ObMaxTC, /*inner_enum, inner_set*/
-    ObMaxTC, /*oracle timestamp*/
+    ObMaxTC, /*OTimestamp*/
     ObMaxTC, /*raw*/
     ObMaxTC, /*interval*/
     ObMaxTC, /*rowid*/
@@ -235,7 +235,7 @@ static const ObObjTypeClass DIV_TYPE_PROMOTION[ObMaxTC][ObMaxTC] =
     ObMaxTC, /*bit*/
     ObMaxTC, /*enum, set*/
     ObMaxTC, /*inner_enum, inner_set*/
-    ObMaxTC, /*oracle timestamp*/
+    ObMaxTC, /*OTimestamp*/
     ObMaxTC, /*raw*/
     ObMaxTC, /*interval*/
     ObMaxTC, /*rowid*/
@@ -259,7 +259,7 @@ static const ObObjTypeClass DIV_TYPE_PROMOTION[ObMaxTC][ObMaxTC] =
     ObMaxTC, /*bit*/
     ObMaxTC, /*enum, set*/
     ObMaxTC, /*inner_enum, inner_set*/
-    ObMaxTC, /*oracle timestamp*/
+    ObMaxTC, /*OTimestamp*/
     ObMaxTC, /*raw*/
     ObMaxTC, /*interval*/
     ObMaxTC, /*rowid*/
@@ -283,7 +283,7 @@ static const ObObjTypeClass DIV_TYPE_PROMOTION[ObMaxTC][ObMaxTC] =
     ObMaxTC, /*bit*/
     ObMaxTC, /*enum, set*/
     ObMaxTC, /*inner_enum, inner_set*/
-    ObMaxTC, /*oracle timestamp*/
+    ObMaxTC, /*OTimestamp*/
     ObMaxTC, /*raw*/
     ObMaxTC, /*interval*/
     ObMaxTC, /*rowid*/
@@ -307,7 +307,7 @@ static const ObObjTypeClass DIV_TYPE_PROMOTION[ObMaxTC][ObMaxTC] =
     ObMaxTC, /*bit*/
     ObMaxTC, /*enum, set*/
     ObMaxTC, /*inner_enum, inner_set*/
-    ObMaxTC, /*oracle timestamp*/
+    ObMaxTC, /*OTimestamp*/
     ObMaxTC, /*raw*/
     ObMaxTC, /*interval*/
     ObMaxTC, /*rowid*/
@@ -331,7 +331,7 @@ static const ObObjTypeClass DIV_TYPE_PROMOTION[ObMaxTC][ObMaxTC] =
     ObMaxTC, /*bit*/
     ObMaxTC, /*enum, set*/
     ObMaxTC, /*inner_enum, inner_set*/
-    ObMaxTC, /*oracle timestamp*/
+    ObMaxTC, /*OTimestamp*/
     ObMaxTC, /*raw*/
     ObMaxTC, /*interval*/
     ObMaxTC, /*rowid*/
@@ -355,7 +355,7 @@ static const ObObjTypeClass DIV_TYPE_PROMOTION[ObMaxTC][ObMaxTC] =
     ObMaxTC, /*bit*/
     ObMaxTC, /*enum, set*/
     ObMaxTC, /*inner_enum, inner_set*/
-    ObMaxTC, /*oracle timestamp*/
+    ObMaxTC, /*OTimestamp*/
     ObMaxTC, /*raw*/
     ObMaxTC, /*interval*/
     ObMaxTC, /*rowid*/
@@ -379,7 +379,7 @@ static const ObObjTypeClass DIV_TYPE_PROMOTION[ObMaxTC][ObMaxTC] =
     ObMaxTC, /*bit*/
     ObMaxTC, /*enum, set*/
     ObMaxTC, /*inner_enum, inner_set*/
-    ObMaxTC, /*oracle timestamp*/
+    ObMaxTC, /*OTimestamp*/
     ObMaxTC, /*raw*/
     ObMaxTC, /*interval*/
     ObMaxTC, /*rowid*/
@@ -403,13 +403,13 @@ static const ObObjTypeClass DIV_TYPE_PROMOTION[ObMaxTC][ObMaxTC] =
     ObMaxTC, /*bit*/
     ObMaxTC, /*enum, set*/
     ObMaxTC, /*inner_enum, inner_set*/
-    ObMaxTC, /*oracle timestamp*/
+    ObMaxTC, /*OTimestamp*/
     ObMaxTC, /*raw*/
     ObMaxTC, /*interval*/
     ObMaxTC, /*rowid*/
   },
   {
-    /*oracle timestamp -> XXX*/
+    /*OTimestamp -> XXX*/
     ObNullTC,/*null*/
     ObNumberTC,/*int*/
     ObNumberTC,/*uint*/
@@ -427,7 +427,7 @@ static const ObObjTypeClass DIV_TYPE_PROMOTION[ObMaxTC][ObMaxTC] =
     ObMaxTC, /*bit*/
     ObMaxTC, /*enum, set*/
     ObMaxTC, /*inner_enum, inner_set*/
-    ObMaxTC, /*oracle timestamp*/
+    ObMaxTC, /*OTimestamp*/
     ObMaxTC, /*raw*/
     ObMaxTC, /*interval*/
     ObMaxTC, /*rowid*/
@@ -451,7 +451,7 @@ static const ObObjTypeClass DIV_TYPE_PROMOTION[ObMaxTC][ObMaxTC] =
     ObMaxTC, /*bit*/
     ObMaxTC, /*enum, set*/
     ObMaxTC, /*inner_enum, inner_set*/
-    ObMaxTC, /*oracle timestamp*/
+    ObMaxTC, /*OTimestamp*/
     ObMaxTC, /*raw*/
     ObMaxTC, /*interval*/
     ObMaxTC, /*rowid*/
@@ -475,7 +475,7 @@ static const ObObjTypeClass DIV_TYPE_PROMOTION[ObMaxTC][ObMaxTC] =
     ObMaxTC, /*bit*/
     ObMaxTC, /*enum, set*/
     ObMaxTC, /*inner_enum, inner_set*/
-    ObMaxTC, /*oracle timestamp*/
+    ObMaxTC, /*OTimestamp*/
     ObMaxTC, /*raw*/
     ObMaxTC, /*interval*/
     ObMaxTC, /*rowid*/
@@ -499,7 +499,7 @@ static const ObObjTypeClass DIV_TYPE_PROMOTION[ObMaxTC][ObMaxTC] =
     ObMaxTC, /*bit*/
     ObMaxTC, /*enum, set*/
     ObMaxTC, /*inner_enum, inner_set*/
-    ObMaxTC, /*oracle timestamp*/
+    ObMaxTC, /*OTimestamp*/
     ObMaxTC, /*raw*/
     ObMaxTC, /*interval*/
     ObMaxTC, /*rowid*/
@@ -526,7 +526,7 @@ static const ObObjTypeClass DIV_TYPE_PROMOTION[ObMaxTC][ObMaxTC] =
     ObNullTC, /*bit*/
     ObNullTC, /*enum, set*/
     ObNullTC, /*inner_enum, inner_set*/
-    ObNullTC, /*oracle timestamp*/
+    ObNullTC, /*OTimestamp*/
     ObNullTC, /*raw*/
     ObMaxTC, /*interval*/
     ObMaxTC, /*rowid*/
@@ -550,7 +550,7 @@ static const ObObjTypeClass DIV_TYPE_PROMOTION[ObMaxTC][ObMaxTC] =
     ObMaxTC, /*bit*/
     ObMaxTC, /*enum, set*/
     ObMaxTC, /*inner_enum, inner_set*/
-    ObMaxTC, /*oracle timestamp*/
+    ObMaxTC, /*OTimestamp*/
     ObMaxTC, /*raw*/
     ObMaxTC, /*interval*/
     ObMaxTC, /*rowid*/
@@ -574,7 +574,7 @@ static const ObObjTypeClass DIV_TYPE_PROMOTION[ObMaxTC][ObMaxTC] =
     ObMaxTC, /*bit*/
     ObMaxTC, /*enum, set*/
     ObMaxTC, /*inner_enum, inner_set*/
-    ObMaxTC, /*oracle timestamp*/
+    ObMaxTC, /*OTimestamp*/
     ObMaxTC, /*raw*/
     ObMaxTC, /*interval*/
     ObMaxTC, /*rowid*/
@@ -598,7 +598,7 @@ static const ObObjTypeClass DIV_TYPE_PROMOTION[ObMaxTC][ObMaxTC] =
     ObMaxTC, /*bit*/
     ObMaxTC, /*enum, set*/
     ObMaxTC, /*inner_enum, inner_set*/
-    ObMaxTC, /*oracle timestamp*/
+    ObMaxTC, /*OTimestamp*/
     ObMaxTC, /*raw*/
     ObMaxTC, /*interval*/
     ObMaxTC, /*rowid*/
@@ -622,7 +622,7 @@ static const ObObjTypeClass DIV_TYPE_PROMOTION[ObMaxTC][ObMaxTC] =
     ObMaxTC, /*bit*/
     ObMaxTC, /*enum, set*/
     ObMaxTC, /*inner_enum, inner_set*/
-    ObMaxTC, /*oracle timestamp*/
+    ObMaxTC, /*OTimestamp*/
     ObMaxTC, /*raw*/
     ObMaxTC, /*interval*/
     ObMaxTC, /*rowid*/
@@ -646,7 +646,7 @@ static const ObObjTypeClass DIV_TYPE_PROMOTION[ObMaxTC][ObMaxTC] =
     ObMaxTC, /*bit*/
     ObMaxTC, /*enum, set*/
     ObMaxTC, /*inner_enum, inner_set*/
-    ObMaxTC, /*oracle timestamp*/
+    ObMaxTC, /*OTimestamp*/
     ObMaxTC, /*raw*/
     ObMaxTC, /*interval*/
     ObMaxTC, /*rowid*/
@@ -670,7 +670,7 @@ static const ObObjTypeClass DIV_TYPE_PROMOTION[ObMaxTC][ObMaxTC] =
     ObMaxTC, /*bit*/
     ObMaxTC, /*enum, set*/
     ObMaxTC, /*inner_enum, inner_set*/
-    ObMaxTC, /*oracle timestamp*/
+    ObMaxTC, /*OTimestamp*/
     ObMaxTC, /*raw*/
     ObMaxTC, /*interval*/
     ObMaxTC, /*rowid*/
@@ -694,7 +694,7 @@ static const ObObjTypeClass DIV_TYPE_PROMOTION[ObMaxTC][ObMaxTC] =
     ObMaxTC, /*bit*/
     ObMaxTC, /*enum, set*/
     ObMaxTC, /*inner_enum, inner_set*/
-    ObMaxTC, /*oracle timestamp*/
+    ObMaxTC, /*OTimestamp*/
     ObMaxTC, /*raw*/
     ObMaxTC, /*interval*/
     ObMaxTC, /*rowid*/
@@ -718,7 +718,7 @@ static const ObObjTypeClass DIV_TYPE_PROMOTION[ObMaxTC][ObMaxTC] =
     ObMaxTC, /*bit*/
     ObMaxTC, /*enum, set*/
     ObMaxTC, /*inner_enum, inner_set*/
-    ObMaxTC, /*oracle timestamp*/
+    ObMaxTC, /*OTimestamp*/
     ObMaxTC, /*raw*/
     ObMaxTC, /*interval*/
     ObMaxTC, /*rowid*/
@@ -742,7 +742,7 @@ static const ObObjTypeClass DIV_TYPE_PROMOTION[ObMaxTC][ObMaxTC] =
     ObMaxTC, /*bit*/
     ObMaxTC, /*enum, set*/
     ObMaxTC, /*inner_enum, inner_set*/
-    ObMaxTC, /*oracle timestamp*/
+    ObMaxTC, /*OTimestamp*/
     ObMaxTC, /*raw*/
     ObMaxTC, /*interval*/
     ObMaxTC, /*rowid*/
@@ -766,7 +766,7 @@ static const ObObjTypeClass DIV_TYPE_PROMOTION[ObMaxTC][ObMaxTC] =
     ObMaxTC, /*bit*/
     ObMaxTC, /*enum, set*/
     ObMaxTC, /*inner_enum, inner_set*/
-    ObMaxTC, /*oracle timestamp*/
+    ObMaxTC, /*OTimestamp*/
     ObMaxTC, /*raw*/
     ObMaxTC, /*interval*/
     ObMaxTC, /*rowid*/
@@ -790,7 +790,7 @@ static const ObObjTypeClass DIV_TYPE_PROMOTION[ObMaxTC][ObMaxTC] =
     ObMaxTC, /*bit*/
     ObMaxTC, /*enum, set*/
     ObMaxTC, /*inner_enum, inner_set*/
-    ObMaxTC, /*oracle timestamp*/
+    ObMaxTC, /*OTimestamp*/
     ObMaxTC, /*raw*/
     ObMaxTC, /*interval*/
     ObMaxTC, /*rowid*/
@@ -814,7 +814,7 @@ static const ObObjTypeClass DIV_TYPE_PROMOTION[ObMaxTC][ObMaxTC] =
     ObMaxTC, /*bit*/
     ObMaxTC, /*enum, set*/
     ObMaxTC, /*inner_enum, inner_set*/
-    ObMaxTC, /*oracle timestamp*/
+    ObMaxTC, /*OTimestamp*/
     ObMaxTC, /*raw*/
     ObMaxTC, /*interval*/
     ObMaxTC, /*rowid*/
@@ -838,7 +838,7 @@ static const ObObjTypeClass DIV_TYPE_PROMOTION[ObMaxTC][ObMaxTC] =
     ObMaxTC, /*bit*/
     ObMaxTC, /*enum, set*/
     ObMaxTC, /*inner_enum, inner_set*/
-    ObMaxTC, /*oracle timestamp*/
+    ObMaxTC, /*OTimestamp*/
     ObMaxTC, /*raw*/
     ObMaxTC, /*interval*/
     ObMaxTC, /*rowid*/
@@ -862,7 +862,7 @@ static const ObObjTypeClass DIV_TYPE_PROMOTION[ObMaxTC][ObMaxTC] =
     ObMaxTC, /*bit*/
     ObMaxTC, /*enum, set*/
     ObMaxTC, /*inner_enum, inner_set*/
-    ObMaxTC, /*oracle timestamp*/
+    ObMaxTC, /*OTimestamp*/
     ObMaxTC, /*raw*/
     ObMaxTC, /*interval*/
     ObMaxTC, /*rowid*/
@@ -886,7 +886,7 @@ static const ObObjTypeClass DIV_TYPE_PROMOTION[ObMaxTC][ObMaxTC] =
     ObMaxTC, /*bit*/
     ObMaxTC, /*enum, set*/
     ObMaxTC, /*inner_enum, inner_set*/
-    ObMaxTC, /*oracle timestamp*/
+    ObMaxTC, /*OTimestamp*/
     ObMaxTC, /*raw*/
     ObMaxTC, /*interval*/
     ObMaxTC, /*rowid*/
@@ -910,13 +910,13 @@ static const ObObjTypeClass DIV_TYPE_PROMOTION[ObMaxTC][ObMaxTC] =
     ObMaxTC, /*bit*/
     ObMaxTC, /*enum, set*/
     ObMaxTC, /*inner_enum, inner_set*/
-    ObMaxTC, /*oracle timestamp*/
+    ObMaxTC, /*OTimestamp*/
     ObMaxTC, /*raw*/
     ObMaxTC, /*interval*/
     ObMaxTC, /*rowid*/
   },
   {
-    /*oracle timestamp -> XXX*/
+    /*OTimestamp -> XXX*/
     ObNullTC,/*null*/
     ObMaxTC,/*int*/
     ObMaxTC,/*uint*/
@@ -934,7 +934,7 @@ static const ObObjTypeClass DIV_TYPE_PROMOTION[ObMaxTC][ObMaxTC] =
     ObMaxTC, /*bit*/
     ObMaxTC, /*enum, set*/
     ObMaxTC, /*inner_enum, inner_set*/
-    ObMaxTC, /*oracle timestamp*/
+    ObMaxTC, /*OTimestamp*/
     ObMaxTC, /*raw*/
     ObMaxTC, /*interval*/
     ObMaxTC, /*rowid*/
@@ -958,7 +958,7 @@ static const ObObjTypeClass DIV_TYPE_PROMOTION[ObMaxTC][ObMaxTC] =
     ObMaxTC, /*bit*/
     ObMaxTC, /*enum, set*/
     ObMaxTC, /*inner_enum, inner_set*/
-    ObMaxTC, /*oracle timestamp*/
+    ObMaxTC, /*OTimestamp*/
     ObMaxTC, /*raw*/
     ObMaxTC, /*interval*/
     ObMaxTC, /*rowid*/
@@ -982,7 +982,7 @@ static const ObObjTypeClass DIV_TYPE_PROMOTION[ObMaxTC][ObMaxTC] =
     ObMaxTC, /*bit*/
     ObMaxTC, /*enum, set*/
     ObMaxTC, /*inner_enum, inner_set*/
-    ObMaxTC, /*oracle timestamp*/
+    ObMaxTC, /*OTimestamp*/
     ObMaxTC, /*raw*/
     ObMaxTC, /*interval*/
     ObMaxTC, /*rowid*/
@@ -1006,7 +1006,7 @@ static const ObObjTypeClass DIV_TYPE_PROMOTION[ObMaxTC][ObMaxTC] =
     ObMaxTC, /*bit*/
     ObMaxTC, /*enum, set*/
     ObMaxTC, /*inner_enum, inner_set*/
-    ObMaxTC, /*oracle timestamp*/
+    ObMaxTC, /*OTimestamp*/
     ObMaxTC, /*raw*/
     ObMaxTC, /*interval*/
     ObMaxTC, /*rowid*/

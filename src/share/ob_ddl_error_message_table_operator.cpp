@@ -17,7 +17,7 @@
 #define USING_LOG_PREFIX SHARE
 #include "ob_ddl_error_message_table_operator.h"
 #include "share/ob_dml_sql_splicer.h"
-#include "src/share/inner_table/ob_inner_table_schema_constants.h"
+#include "share/inner_table/ob_inner_table_schema_constants.h"
 #include "share/ob_ddl_sim_point.h"
 
 using namespace oceanbase::share;
@@ -81,15 +81,15 @@ int ObDDLErrorMessageTableOperator::get_index_task_info(
 {
   int ret = OB_SUCCESS;
   ObSqlString sql_string;
-  const uint64_t tenant_id = index_schema.get_tenant_id();
-  const uint64_t exec_tenant_id = ObSchemaUtils::get_exec_tenant_id(tenant_id);
+  
+  
   const uint64_t target_object_id = index_schema.get_table_id();
   SMART_VAR(ObMySQLProxy::MySQLResult, res) {
     sqlclient::ObMySQLResult *result = NULL;
     if (OB_FAIL(sql_string.assign_fmt("SELECT * FROM %s WHERE target_object_id = %lu",
         OB_ALL_DDL_TASK_STATUS_TNAME, target_object_id))) {
-      LOG_WARN("assign sql string failed", K(ret), K(exec_tenant_id), K(target_object_id));
-    } else if (OB_FAIL(sql_proxy.read(res, tenant_id, sql_string.ptr()))) {
+      LOG_WARN("assign sql string failed", K(ret), K(target_object_id));
+    } else if (OB_FAIL(sql_proxy.read(res, sql_string.ptr()))) {
       LOG_WARN("update status of ddl task record failed", K(ret), K(sql_string));
     } else if (OB_ISNULL(result = res.get_result())) {
       ret = OB_ERR_UNEXPECTED;
@@ -105,75 +105,33 @@ int ObDDLErrorMessageTableOperator::get_index_task_info(
   return ret;
 }
 
-int ObDDLErrorMessageTableOperator::extract_index_key(const ObTableSchema &index_schema,
-    const blocksstable::ObDatumRowkey &index_key, char *buffer, const int64_t buffer_len)
-{
-  int ret = OB_SUCCESS;
-  if (!index_schema.is_valid() || !index_key.is_valid() || OB_ISNULL(buffer) || buffer_len <= 0) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(index_schema), K(index_key), KP(buffer), K(buffer_len));
-  } else {
-    const int64_t index_size = index_schema.get_index_column_num();
-    int64_t pos = 0;
-    MEMSET(buffer, 0, buffer_len);
-    for (int64_t i = 0; OB_SUCC(ret) && i < index_size; i++) {
-      const ObRowkeyColumn *column = index_schema.get_index_info().get_column(i);
-      if (OB_ISNULL(column)) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("Failed to get index column description", K(i), K(ret));
-      } else if (IS_SHADOW_COLUMN(column->column_id_)) {
-        break;
-      } else {
-        const blocksstable::ObStorageDatum &datum = index_key.get_datum(i);
-        ObObj obj;
-        if (OB_FAIL(datum.to_obj(obj, column->get_meta_type()))) {
-          LOG_WARN("convert datum to obj failed", K(ret));
-        } else if (OB_FAIL(obj.print_plain_str_literal(buffer, buffer_len, pos))) {
-          LOG_WARN("fail to print_plain_str_literal", K(ret), KP(buffer));
-        } else if (OB_FAIL(databuff_printf(buffer,  buffer_len, pos, "-"))) {
-          LOG_WARN("databuff print failed", K(ret));
-        }
-      }
-    }
-    if (OB_SUCC(ret) && pos > 0) {
-      buffer[pos - 1] = '\0'; // overwrite the tail '-'
-    }
-    if (OB_SIZE_OVERFLOW == ret) {
-      buffer[buffer_len - 1] = '\0';
-      LOG_WARN("the index key length is larger than OB_TMP_BUF_SIZE_256", K(index_key), KP(buffer));
-      ret = OB_SUCCESS;
-    }
-  }
+// extract_index_key moved definition to storage/ddl/ob_ddl_common_storage_impl.cpp(accesses ObDatumRowkey/ObStorageDatum members)
 
-  return ret;
-}
-
-int ObDDLErrorMessageTableOperator::load_ddl_user_error(const uint64_t tenant_id,
-                                                        const int64_t task_id,
+int ObDDLErrorMessageTableOperator::load_ddl_user_error(const int64_t task_id,
                                                         const uint64_t table_id,
                                                         ObMySQLProxy &sql_proxy,
                                                         ObBuildDDLErrorMessage &error_message)
 {
   int ret = OB_SUCCESS;
   ObSqlString sql;
-  LOG_INFO("begin to load ddl user error", K(tenant_id), K(task_id), K(table_id));
+  LOG_INFO("begin to load ddl user error", K(task_id), K(table_id));
   SMART_VAR(ObMySQLProxy::MySQLResult, res) {
-    const uint64_t exec_tenant_id = ObSchemaUtils::get_exec_tenant_id(tenant_id);
+    
     sqlclient::ObMySQLResult *result = NULL;
-    if (OB_UNLIKELY(OB_INVALID_ID == tenant_id || task_id <= 0 || OB_INVALID_ID == table_id
+    if (OB_UNLIKELY(task_id <= 0 || OB_INVALID_ID == table_id
         || nullptr != error_message.user_message_)) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("invalid arguments", K(ret), K(tenant_id), K(task_id), K(table_id));
+      LOG_WARN("invalid arguments", K(ret), K(task_id), K(table_id));
     } else if (OB_FAIL(sql.assign_fmt(
         "SELECT ret_code, ddl_type, affected_rows, user_message, dba_message from %s WHERE "
         "task_id = %ld AND object_id = %ld", OB_ALL_DDL_ERROR_MESSAGE_TNAME,
-        task_id, ObSchemaUtils::get_extract_schema_id(exec_tenant_id, table_id)))) {
+        task_id, ObSchemaUtils::get_extract_schema_id(table_id)))) {
       LOG_WARN("fail to assign sql", K(ret));
-    } else if (OB_FAIL(DDL_SIM(tenant_id, task_id, DDL_ERR_MESSAGE_OPERATOR_LOAD_FAILED))) {
-      LOG_WARN("ddl sim failure", K(ret), K(tenant_id), K(task_id));
-    } else if (OB_FAIL(DDL_SIM(tenant_id, task_id, DDL_ERR_MESSAGE_OPERATOR_SLOW))) {
-      LOG_WARN("ddl sim failure", K(ret), K(tenant_id), K(task_id));
-    } else if (OB_FAIL(sql_proxy.read(res, tenant_id, sql.ptr()))) {
+    } else if (OB_FAIL(DDL_SIM(task_id, DDL_ERR_MESSAGE_OPERATOR_LOAD_FAILED))) {
+      LOG_WARN("ddl sim failure", K(ret), K(task_id));
+    } else if (OB_FAIL(DDL_SIM(task_id, DDL_ERR_MESSAGE_OPERATOR_SLOW))) {
+      LOG_WARN("ddl sim failure", K(ret), K(task_id));
+    } else if (OB_FAIL(sql_proxy.read(res, sql.ptr()))) {
       LOG_WARN("fail to execute sql", K(ret), K(sql));
     } else if (OB_ISNULL(result = res.get_result())) {
       ret = OB_ITER_END;
@@ -212,8 +170,7 @@ int ObDDLErrorMessageTableOperator::load_ddl_user_error(const uint64_t tenant_id
   return ret;
 }
 
-int ObDDLErrorMessageTableOperator::get_ddl_error_message(
-    const uint64_t tenant_id, const int64_t task_id, const int64_t target_object_id,
+int ObDDLErrorMessageTableOperator::get_ddl_error_message(const int64_t task_id, const int64_t target_object_id,
     const ObAddr &addr, const bool is_ddl_retry_task, ObMySQLProxy &sql_proxy, 
     ObBuildDDLErrorMessage &error_message, int64_t &forward_user_msg_len)
 {
@@ -221,12 +178,12 @@ int ObDDLErrorMessageTableOperator::get_ddl_error_message(
   ObSqlString sql;
   forward_user_msg_len = 0;
   SMART_VAR(ObMySQLProxy::MySQLResult, res) {
-    const uint64_t exec_tenant_id = ObSchemaUtils::get_exec_tenant_id(tenant_id);
+    
     sqlclient::ObMySQLResult *result = NULL;
     char ip[common::OB_MAX_SERVER_ADDR_SIZE] = "";
-    if (OB_UNLIKELY(OB_INVALID_ID == tenant_id || task_id <= 0 || target_object_id < -1)) {
+    if (OB_UNLIKELY(task_id <= 0 || target_object_id < -1)) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("invalid arguments", K(ret), K(tenant_id), K(task_id), K(target_object_id), K(addr));
+      LOG_WARN("invalid arguments", K(ret), K(task_id), K(target_object_id), K(addr));
     } else if (OB_FAIL(sql.append("SELECT ret_code, ddl_type, affected_rows, dba_message "))) {
       LOG_WARN("fail to append sql", KR(ret));
     } else if (OB_FAIL(sql.append(" ,consensus_schema_version "))) {
@@ -247,11 +204,11 @@ int ObDDLErrorMessageTableOperator::get_ddl_error_message(
       }
     }
     if (OB_FAIL(ret)) {
-    } else if (OB_FAIL(DDL_SIM(tenant_id, task_id, DDL_ERR_MESSAGE_OPERATOR_LOAD_FAILED))) {
-      LOG_WARN("ddl sim failure", K(ret), K(tenant_id), K(task_id));
-    } else if (OB_FAIL(DDL_SIM(tenant_id, task_id, DDL_ERR_MESSAGE_OPERATOR_SLOW))) {
-      LOG_WARN("ddl sim failure", K(ret), K(tenant_id), K(task_id));
-    } else if (OB_FAIL(sql_proxy.read(res, tenant_id, sql.ptr()))) {
+    } else if (OB_FAIL(DDL_SIM(task_id, DDL_ERR_MESSAGE_OPERATOR_LOAD_FAILED))) {
+      LOG_WARN("ddl sim failure", K(ret), K(task_id));
+    } else if (OB_FAIL(DDL_SIM(task_id, DDL_ERR_MESSAGE_OPERATOR_SLOW))) {
+      LOG_WARN("ddl sim failure", K(ret), K(task_id));
+    } else if (OB_FAIL(sql_proxy.read(res, sql.ptr()))) {
       LOG_WARN("fail to execute sql", K(ret), K(sql));
     } else if (OB_ISNULL(result = res.get_result())) {
       ret = OB_ERR_UNEXPECTED;
@@ -293,9 +250,7 @@ int ObDDLErrorMessageTableOperator::get_ddl_error_message(
   return ret;
 }
 
-int ObDDLErrorMessageTableOperator::get_ddl_error_message(
-    const uint64_t tenant_id,
-    const int64_t task_id,
+int ObDDLErrorMessageTableOperator::get_ddl_error_message(const int64_t task_id,
     const int64_t target_object_id,
     const int64_t object_id,
     common::ObMySQLProxy &sql_proxy,
@@ -306,19 +261,19 @@ int ObDDLErrorMessageTableOperator::get_ddl_error_message(
   ObSqlString sql;
   forward_user_msg_len = 0;
   SMART_VAR(ObMySQLProxy::MySQLResult, res) {
-    const uint64_t exec_tenant_id = ObSchemaUtils::get_exec_tenant_id(tenant_id);
+    
     sqlclient::ObMySQLResult *result = NULL;
     char ip[common::OB_MAX_SERVER_ADDR_SIZE] = "";
-    if (OB_UNLIKELY(OB_INVALID_ID == tenant_id || task_id <= 0 || object_id < -1)) {
+    if (OB_UNLIKELY(task_id <= 0 || object_id < -1)) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("invalid arguments", K(ret), K(tenant_id), K(task_id), K(object_id));
+      LOG_WARN("invalid arguments", K(ret), K(task_id), K(object_id));
     } else if (OB_FAIL(sql.assign_fmt(
         "SELECT ret_code, ddl_type, affected_rows, dba_message, user_message from %s "
         "WHERE task_id = %ld AND target_object_id = %ld AND object_id = %ld ",
         OB_ALL_DDL_ERROR_MESSAGE_TNAME,
         task_id, target_object_id, object_id))) {
       LOG_WARN("fail to assign sql", K(ret));
-    } else if (OB_FAIL(sql_proxy.read(res, tenant_id, sql.ptr()))) {
+    } else if (OB_FAIL(sql_proxy.read(res, sql.ptr()))) {
       LOG_WARN("fail to execute sql", K(ret), K(sql));
     } else if (OB_ISNULL(result = res.get_result())) {
       ret = OB_ERR_UNEXPECTED;
@@ -361,8 +316,7 @@ int ObDDLErrorMessageTableOperator::get_ddl_error_message(
 
 }
 
-int ObDDLErrorMessageTableOperator::report_ddl_error_message(const ObBuildDDLErrorMessage &error_message,
-    const uint64_t tenant_id, const ObCurTraceId::TraceId &trace_id, const int64_t task_id, const int64_t parent_task_id,
+int ObDDLErrorMessageTableOperator::report_ddl_error_message(const ObBuildDDLErrorMessage &error_message, const ObCurTraceId::TraceId &trace_id, const int64_t task_id, const int64_t parent_task_id,
     const uint64_t table_id, const int64_t schema_version, const int64_t object_id, const ObAddr &addr, ObMySQLProxy &sql_proxy)
 {
   int ret = OB_SUCCESS;
@@ -370,34 +324,33 @@ int ObDDLErrorMessageTableOperator::report_ddl_error_message(const ObBuildDDLErr
   if (OB_UNLIKELY(0 > trace_id.to_string(trace_id_str, sizeof(trace_id_str)))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get trace id string failed", K(ret), K(trace_id));
-  } else if (OB_FAIL(report_ddl_error_message(error_message, tenant_id, trace_id_str, task_id, parent_task_id, table_id, schema_version, object_id, addr, sql_proxy))) {
-    LOG_WARN("fail to report ddl error message", K(ret), K(tenant_id), K(table_id));
+  } else if (OB_FAIL(report_ddl_error_message(error_message, trace_id_str, task_id, parent_task_id, table_id, schema_version, object_id, addr, sql_proxy))) {
+    LOG_WARN("fail to report ddl error message", K(ret), K(table_id));
   }
   return ret;
 }
 
 //report the status of building index into __all_ddl_error_message
-int ObDDLErrorMessageTableOperator::report_ddl_error_message(const ObBuildDDLErrorMessage &error_message,
-    const uint64_t tenant_id, const char *trace_id, const int64_t task_id, const int64_t parent_task_id,
+int ObDDLErrorMessageTableOperator::report_ddl_error_message(const ObBuildDDLErrorMessage &error_message, const char *trace_id, const int64_t task_id, const int64_t parent_task_id,
     const uint64_t table_id, const int64_t schema_version, const int64_t object_id, const ObAddr &addr, ObMySQLProxy &sql_proxy)
 {
   int ret = OB_SUCCESS;
   int64_t unused_user_msg_len = 0;
   ObBuildDDLErrorMessage report_error_message;
   bool need_report = false;
-  if (OB_UNLIKELY(OB_INVALID_ID == tenant_id || task_id <= 0 || OB_INVALID_ID == table_id 
+  if (OB_UNLIKELY(task_id <= 0 || OB_INVALID_ID == table_id 
     || OB_INVALID_VERSION == schema_version || object_id < -1 || !addr.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(ret), K(tenant_id), K(task_id), K(table_id), K(schema_version), K(object_id), K(addr), K(error_message));
-  } else if (OB_FAIL(DDL_SIM(tenant_id, task_id, DDL_ERR_MESSAGE_OPERATOR_REPORT_FAILED))) {
-    LOG_WARN("ddl sim failure", K(ret), K(tenant_id), K(task_id));
-  } else if (OB_FAIL(get_ddl_error_message(tenant_id, task_id, object_id /*target_object_id*/, addr, false /* is_ddl_retry_task */, sql_proxy, 
+    LOG_WARN("invalid arguments", K(ret), K(task_id), K(table_id), K(schema_version), K(object_id), K(addr), K(error_message));
+  } else if (OB_FAIL(DDL_SIM(task_id, DDL_ERR_MESSAGE_OPERATOR_REPORT_FAILED))) {
+    LOG_WARN("ddl sim failure", K(ret), K(task_id));
+  } else if (OB_FAIL(get_ddl_error_message(task_id, object_id /*target_object_id*/, addr, false /* is_ddl_retry_task */, sql_proxy, 
     report_error_message, unused_user_msg_len))) {
     if (OB_ENTRY_NOT_EXIST == ret) {
       ret = OB_SUCCESS;
       need_report = true;
     } else {
-      LOG_WARN("fail to get ddl error message", K(ret), K(tenant_id), K(table_id), K(schema_version), K(object_id), K(addr));
+      LOG_WARN("fail to get ddl error message", K(ret), K(table_id), K(schema_version), K(object_id), K(addr));
     }
   } else {
     need_report = (report_error_message != error_message);
@@ -405,11 +358,11 @@ int ObDDLErrorMessageTableOperator::report_ddl_error_message(const ObBuildDDLErr
 
   if (!need_report) {
     LOG_INFO("process ddl error message has already been reported before", K(ret),
-        K(tenant_id), K(report_error_message), K(error_message), K(table_id), K(schema_version), K(object_id));
+        K(report_error_message), K(error_message), K(table_id), K(schema_version), K(object_id));
   }
 
   if (OB_SUCC(ret) && need_report) {
-    const uint64_t exec_tenant_id = ObSchemaUtils::get_exec_tenant_id(tenant_id);
+    
     int64_t affected_rows = 0;
     ObSqlString update_sql;
     char ip[OB_MAX_SERVER_ADDR_SIZE] = "";
@@ -420,8 +373,8 @@ int ObDDLErrorMessageTableOperator::report_ddl_error_message(const ObBuildDDLErr
       ObDMLSqlSplicer dml_splicer;
       if (OB_FAIL(dml_splicer.add_pk_column(K(task_id)))) {
         LOG_WARN("failed to add column task_id", KR(ret), K(task_id));
-      } else if (OB_FAIL(dml_splicer.add_pk_column("object_id", ObSchemaUtils::get_extract_schema_id(exec_tenant_id, table_id)))) {
-        LOG_WARN("failed to add column object_id", KR(ret), K(ObSchemaUtils::get_extract_schema_id(exec_tenant_id, table_id)));
+      } else if (OB_FAIL(dml_splicer.add_pk_column("object_id", ObSchemaUtils::get_extract_schema_id(table_id)))) {
+        LOG_WARN("failed to add column object_id", KR(ret), K(ObSchemaUtils::get_extract_schema_id(table_id)));
       } else if (OB_FAIL(dml_splicer.add_pk_column("target_object_id", object_id))) {
         LOG_WARN("failed to add column object_id", KR(ret), K(object_id));
       } else if (OB_FAIL(dml_splicer.add_pk_column(K(schema_version)))) {
@@ -448,10 +401,10 @@ int ObDDLErrorMessageTableOperator::report_ddl_error_message(const ObBuildDDLErr
       }
       if (OB_SUCC(ret)) {
         if (OB_FAIL(dml_splicer.splice_insert_update_sql(OB_ALL_DDL_ERROR_MESSAGE_TNAME, update_sql))) {
-          LOG_WARN("failed to generate insertion sql", KR(ret), K(tenant_id), K(update_sql));
-        } else if (OB_FAIL(DDL_SIM(tenant_id, task_id, DDL_ERR_MESSAGE_OPERATOR_SLOW))) {
-          LOG_WARN("ddl sim failure", K(ret), K(tenant_id), K(task_id));
-        } else if (OB_FAIL(sql_proxy.write(tenant_id, update_sql.ptr(), affected_rows))) {     //execute update sql
+          LOG_WARN("failed to generate insertion sql", KR(ret), K(update_sql));
+        } else if (OB_FAIL(DDL_SIM(task_id, DDL_ERR_MESSAGE_OPERATOR_SLOW))) {
+          LOG_WARN("ddl sim failure", K(ret), K(task_id));
+        } else if (OB_FAIL(sql_proxy.write(update_sql.ptr(), affected_rows))) {     //execute update sql
           LOG_WARN("fail to write sql", KR(ret), K(update_sql));
         } else if (affected_rows > 2) {
           ret = OB_ERR_UNEXPECTED;
@@ -468,7 +421,6 @@ int ObDDLErrorMessageTableOperator::report_ddl_error_message(const ObBuildDDLErr
 // generate error message based on input param
 int ObDDLErrorMessageTableOperator::build_ddl_error_message(
     const int ret_code,
-    const uint64_t tenant_id,
     const uint64_t table_id,
     ObBuildDDLErrorMessage &error_message,
     const ObString index_name,
@@ -479,24 +431,20 @@ int ObDDLErrorMessageTableOperator::build_ddl_error_message(
 {
   int ret = OB_SUCCESS;
   int tmp_ret_code = ret_code;
-  bool is_oracle_mode = false;
   const char *str_user_error = NULL;
   const char *str_error = NULL;
-  if (OB_INVALID_ID == tenant_id || OB_INVALID_ID == table_id || index_name.empty() || OB_INVALID_ID == index_id) {
+  if (OB_INVALID_ID == table_id || index_name.empty() || OB_INVALID_ID == index_id) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(ret), K(tenant_id), K(table_id), K(index_id), K(tmp_ret_code));
-  } else if (OB_FAIL(ObCompatModeGetter::check_is_oracle_mode_with_table_id(
-      tenant_id, table_id, is_oracle_mode))) {
-    LOG_WARN("fail to check whether is oracle mode", K(ret), K(tenant_id), K(table_id));
+    LOG_WARN("invalid arguments", K(ret), K(table_id), K(index_id), K(tmp_ret_code));
   } else {
     if (OB_ERR_PRIMARY_KEY_DUPLICATE == tmp_ret_code) {
-      tmp_ret_code = OB_ERR_DUPLICATED_UNIQUE_KEY;    //error message of OB_ERR_PRIMARY_KEY_DUPLICATE is not compatiable with oracle, so use a new error code
+      tmp_ret_code = OB_ERR_DUPLICATED_UNIQUE_KEY;    // use the dedicated duplicate-key code for unique index build failures
       report_ret_code = tmp_ret_code;
     }
     error_message.ret_code_ = tmp_ret_code;
     error_message.ddl_type_ = ddl_type;
-    str_user_error = ob_errpkt_str_user_error(tmp_ret_code, is_oracle_mode);
-    str_error = ob_errpkt_strerror(tmp_ret_code, is_oracle_mode);
+    str_user_error = ob_errpkt_str_user_error(tmp_ret_code);
+    str_error = ob_errpkt_strerror(tmp_ret_code);
     if (OB_SUCCESS == tmp_ret_code) {
       if (OB_FAIL(databuff_printf(error_message.dba_message_, OB_MAX_ERROR_MSG_LEN, "%s", "Successful ddl"))) {
         LOG_WARN("print to buffer failed", K(ret));
@@ -508,15 +456,9 @@ int ObDDLErrorMessageTableOperator::build_ddl_error_message(
           "Supported ddl error message type: create unique index, index_id = %ld", index_id))) {
         LOG_WARN("print to buffer failed", K(ret), K(table_id));
       } else {
-        if (is_oracle_mode) {
-          if (OB_FAIL(databuff_printf(error_message.user_message_, OB_MAX_ERROR_MSG_LEN, "%s", str_user_error))) {
-            LOG_WARN("print to buffer failed", K(ret), K(str_user_error), K(index_name));
-          }
-        } else {
-          if (OB_FAIL(databuff_printf(error_message.user_message_, OB_MAX_ERROR_MSG_LEN,
-              str_user_error, message, index_name.length(), index_name.ptr()))) {
-            LOG_WARN("print to buffer failed", K(ret), K(str_user_error), K(index_name));
-          }
+        if (OB_FAIL(databuff_printf(error_message.user_message_, OB_MAX_ERROR_MSG_LEN,
+            str_user_error, message, index_name.length(), index_name.ptr()))) {
+          LOG_WARN("print to buffer failed", K(ret), K(str_user_error), K(index_name));
         }
       }
     } else {
@@ -537,7 +479,7 @@ int ObDDLErrorMessageTableOperator::generate_index_ddl_error_message(const int r
   int ret = OB_SUCCESS;
   ObBuildDDLErrorMessage error_message;
   uint64_t tenant_data_format_version = 0;
-  const uint64_t tenant_id = index_schema.get_tenant_id();
+  
   const uint64_t data_table_id = index_schema.get_data_table_id();
   const uint64_t index_table_id = index_schema.get_table_id();
   const int64_t schema_version = index_schema.get_schema_version();
@@ -550,14 +492,13 @@ int ObDDLErrorMessageTableOperator::generate_index_ddl_error_message(const int r
   } else if (OB_FALSE_IT(memset(error_message.user_message_, 0, OB_MAX_ERROR_MSG_LEN))) {
   } else if (OB_FAIL(index_schema.get_index_name(index_name))) {        //get index name
     LOG_WARN("fail to get index name", K(ret), K(index_name), K(index_table_id));
-  } else if (OB_FAIL(ObShareUtil::fetch_current_data_version(sql_proxy, index_schema.get_tenant_id(), tenant_data_format_version))) {
-    LOG_WARN("get min data version failed", K(ret), K(index_schema.get_tenant_id()));
-  } else if (OB_FAIL(build_ddl_error_message(ret_code, index_schema.get_tenant_id(), data_table_id, error_message, index_name,
+  } else if (OB_FAIL(ObShareUtil::fetch_current_data_version(sql_proxy, tenant_data_format_version))) {
+    LOG_WARN("get min data version failed", K(ret));
+  } else if (OB_FAIL(build_ddl_error_message(ret_code, data_table_id, error_message, index_name,
       index_table_id, get_create_index_type(tenant_data_format_version, index_schema), index_key, report_ret_code))) {
     LOG_WARN("build ddl error message failed", K(ret), K(data_table_id), K(index_name));
-  } else if (OB_FAIL(report_ddl_error_message(error_message,    //report into __all_ddl_error_message
-      tenant_id, trace_id, task_id, parent_task_id, data_table_id, schema_version, object_id, addr, sql_proxy))) {
-    LOG_WARN("fail to report ddl error message", K(ret), K(tenant_id), K(data_table_id),
+  } else if (OB_FAIL(report_ddl_error_message(error_message, trace_id, task_id, parent_task_id, data_table_id, schema_version, object_id, addr, sql_proxy))) {
+    LOG_WARN("fail to report ddl error message", K(ret), K(1UL), K(data_table_id),
         K(schema_version), K(object_id), K(addr), K(index_table_id), K(trace_id));
   }
   return ret;

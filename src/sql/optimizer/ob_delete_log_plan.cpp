@@ -89,7 +89,7 @@ int ObDeleteLogPlan::generate_normal_raw_plan()
       }
     }
     
-    if (OB_SUCC(ret) && lib::is_mysql_mode() && delete_stmt->has_for_update()) {
+    if (OB_SUCC(ret) && delete_stmt->has_for_update()) {
       if (OB_FAIL(candi_allocate_for_update())) {
         LOG_WARN("failed to allocate for update operator", K(ret));
       }
@@ -141,7 +141,7 @@ int ObDeleteLogPlan::generate_normal_raw_plan()
     if (OB_SUCC(ret)) {
       if (OB_FAIL(candi_allocate_root_exchange())) {
         LOG_WARN("failed to allocate root exchange", K(ret));
-      } else if (lib::is_mysql_mode() && !delete_stmt->has_limit() &&
+      } else if (!delete_stmt->has_limit() &&
                  OB_FAIL(check_fullfill_safe_update_mode(get_plan_root()))) {
         LOG_WARN("failed to check fullfill safe update mode", K(ret));
       } else { /*do nothing*/ }
@@ -339,7 +339,7 @@ int ObDeleteLogPlan::prepare_table_dml_info_special(const ObDmlTableInfo& table_
     if (OB_ISNULL(index_dml_info)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("get unexpected null", K(i), K(ret));
-    } else if (OB_FAIL(schema_guard->get_table_schema(session_info->get_effective_tenant_id(),
+    } else if (OB_FAIL(schema_guard->get_table_schema(
                                                       index_dml_info->ref_table_id_,
                                                       index_schema))) {
       LOG_WARN("failed to get table schema", K(ret));

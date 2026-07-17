@@ -87,11 +87,10 @@ int ObPLRouter::check_error_in_resolve(int code)
     case OB_ERR_CANNOT_UPDATE_VIRTUAL_COL_IN_TRG:
     case OB_ERR_VIEW_SELECT_CONTAIN_QUESTIONMARK:
     case OB_ERR_VIEW_SELECT_CONTAIN_INTO: {
-      if (lib::is_mysql_mode()) {
+      {
         ret = code;
         break;
       }
-      // oracle mode go to default
     }
     default: {
       LOG_WARN("resolver error", K(ret), K(code));
@@ -103,7 +102,7 @@ int ObPLRouter::check_error_in_resolve(int code)
   return ret;
 }
 
-int ObPLRouter::analyze(ObString &route_sql, ObIArray<ObDependencyInfo> &dep_info, ObRoutineInfo &routine_info, obrpc::ObDDLArg *ddl_arg)
+int ObPLRouter::analyze(ObString &route_sql, ObIArray<ObDependencyInfo> &dep_info, ObRoutineInfo &routine_info, obcall::ObDDLArg *ddl_arg)
 {
   int ret = OB_SUCCESS;
   HEAP_VAR(ObPLFunctionAST, func_ast, inner_allocator_) {
@@ -225,7 +224,7 @@ int ObPLRouter::simple_resolve(ObPLFunctionAST &func_ast)
   //Resolver
   if (OB_SUCC(ret)) {
     const bool is_prepare_protocol = false;
-    ObPLPackageGuard package_guard(session_info_.get_effective_tenant_id());
+    ObPLPackageGuard package_guard{};
     ObPLResolver resolver(inner_allocator_,
                           session_info_,
                           schema_guard_,
@@ -246,7 +245,7 @@ int ObPLRouter::simple_resolve(ObPLFunctionAST &func_ast)
       LOG_WARN("failed to init resolver", K(routine_info_), K(ret));
     } else if (OB_FAIL(resolver.resolve(parse_tree, func_ast))) {
       LOG_WARN("failed to analyze pl body", K(routine_info_), K(ret));
-    } else if (lib::is_mysql_mode() && func_ast.is_function() && !func_ast.has_return()) {
+    } else if (func_ast.is_function() && !func_ast.has_return()) {
       ret = OB_ERR_NO_RETURN_IN_FUNCTION;
       LOG_WARN("mysql func need return. ", K(ret));
       LOG_USER_ERROR(OB_ERR_NO_RETURN_IN_FUNCTION, func_ast.get_name().length(), 

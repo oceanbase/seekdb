@@ -15,6 +15,8 @@
  */
 
 #include "ob_tx_data_functor.h"
+#include "logservice/ob_log_service.h"  // logservice::check_clog_disk_full_or_hang
+#include "share/rc/ob_module_provider.h"
 #include "storage/tx/ob_trans_service.h"
 #include "observer/virtual_table/ob_all_virtual_tx_data.h"
 
@@ -302,9 +304,9 @@ int LockForReadFunctor::inner_lock_for_read(const ObTxData &tx_data, ObTxCCCtx *
         // whether txn is prepared, because the state in exec_info will not be
         // updated as prepared until log is applied and the application is
         // asynchronous. So we need use version instead of state as judgement and
-        // mark it whenever we submit the commit/prepare log(using before_prepare)
+        // mark it whenever we submit the commit log(using before_prepare)
         if (tx_cc_ctx->prepare_version_.is_max()) {
-          // Case 2.2.1: data is not in 2pc state, so the prepare version and
+          // Case 2.2.1: data is not in prepared state, so the prepare version and
           // commit version of the data must be bigger than the read txn's
           // snapshot version, so we cannot read it and trans version is
           // unnecessary for the running txn
@@ -389,7 +391,7 @@ int LockForReadFunctor::operator()(const ObTxData &tx_data, ObTxCCCtx *tx_cc_ctx
     // rollback_to) and the data for this txn is already dumped as sstable. In
     // such cases, reads will experience exceptions that the txn is in a RUNNING
     // state without tx_ctx. Therefore, we need to tolerate this exception.
-    ret = OB_REPLICA_NOT_READABLE;
+    ret = OB_EAGAIN;
     STORAGE_LOG(WARN, "lock for read meet stale data", KR(ret));
   } else {
     for (int32_t i = 0; OB_ERR_SHARED_LOCK_CONFLICT == ret; i++) {
@@ -434,7 +436,7 @@ int LockForReadFunctor::check_clog_disk_full_()
   int ret = OB_SUCCESS;
   bool clog_is_full = false;
   bool clog_is_hang = false;
-  if (OB_FAIL(ObShareUtil::check_clog_disk_full_or_hang(clog_is_full, clog_is_hang))) {
+  if (OB_FAIL(logservice::check_clog_disk_full_or_hang(clog_is_full, clog_is_hang))) {
     TRANS_LOG(WARN, "fail to check clog disk status", KR(ret));
   } else if (clog_is_full) {
     ret = OB_LOG_OUTOF_DISK_SPACE;
@@ -442,19 +444,6 @@ int LockForReadFunctor::check_clog_disk_full_()
   } else if (clog_is_hang) {
     ret = OB_CLOG_DISK_HANG;
     TRANS_LOG(ERROR, "disk hang error", K(ret), KPC(this));
-  }
-  return ret;
-}
-
-int LockForReadFunctor::check_for_standby(const transaction::ObTransID &tx_id)
-{
-  int ret = OB_SUCCESS;
-  if (OB_SUCC(MTL(transaction::ObTransService *)->check_for_standby(ls_id_,
-                                                                    tx_id,
-                                                                    lock_for_read_arg_.mvcc_acc_ctx_.snapshot_.version_,
-                                                                    can_read_,
-                                                                    trans_version_))) {
-    lock_for_read_arg_.mvcc_acc_ctx_.is_standby_read_ = true;
   }
   return ret;
 }

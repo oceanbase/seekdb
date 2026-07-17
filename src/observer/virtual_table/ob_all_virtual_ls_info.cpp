@@ -15,6 +15,8 @@
  */
 
 #include "observer/virtual_table/ob_all_virtual_ls_info.h"
+#include "share/rc/ob_module_provider.h"
+#include "storage/ls/ob_ls.h"
 #include "storage/tx_storage/ob_ls_service.h"
 
 using namespace oceanbase::common;
@@ -26,8 +28,7 @@ namespace observer
 
 ObAllVirtualLSInfo::ObAllVirtualLSInfo()
     : ObVirtualTableScannerIterator(),
-      addr_(),
-      ls_iter_guard_()
+      ls_(nullptr)
 {
 }
 
@@ -38,154 +39,55 @@ ObAllVirtualLSInfo::~ObAllVirtualLSInfo()
 
 void ObAllVirtualLSInfo::reset()
 {
-  // Note that cross-tenant resources must be released by ObMultiTenantOperator, therefore it must be called first
-  omt::ObMultiTenantOperator::reset();
-  addr_.reset();
+  ls_ = nullptr;
   ObVirtualTableScannerIterator::reset();
 }
 
-void ObAllVirtualLSInfo::release_last_tenant()
-{
-  ls_iter_guard_.reset();
-}
-
 int ObAllVirtualLSInfo::inner_get_next_row(ObNewRow *&row)
-{
-  int ret = OB_SUCCESS;
-  if (OB_FAIL(execute(row))) {
-    if (OB_ITER_END != ret) {
-      SERVER_LOG(WARN, "execute fail", KR(ret));
-    }
-  }
-  return ret;
-}
-
-bool ObAllVirtualLSInfo::is_need_process(uint64_t tenant_id)
-{
-  if (is_sys_tenant(effective_tenant_id_) || tenant_id == effective_tenant_id_) {
-    return true;
-  }
-  return false;
-}
-
-int ObAllVirtualLSInfo::next_ls_info_(ObLSVTInfo &ls_info)
-{
-  int ret = OB_SUCCESS;
-  ObLS *ls = nullptr;
-  do {
-    if (OB_FAIL(ls_iter_guard_->get_next(ls))) {
-      if (OB_ITER_END != ret) {
-        SERVER_LOG(WARN, "get_next_ls failed", K(ret));
-      }
-    } else if (NULL == ls) {
-      SERVER_LOG(WARN, "ls shouldn't NULL here", K(ls));
-      // try another ls
-      ret = OB_EAGAIN;
-    } else if (OB_FAIL(ls->get_ls_info(ls_info))) {
-      SERVER_LOG(WARN, "get ls info failed", K(ret), KPC(ls));
-      // try another ls
-      ret = OB_EAGAIN;
-    }
-  } while (OB_EAGAIN == ret);
-  return ret;
-}
-
-int ObAllVirtualLSInfo::process_curr_tenant(ObNewRow *&row)
 {
   int ret = OB_SUCCESS;
   ObLSVTInfo ls_info;
   if (NULL == allocator_) {
     ret = OB_NOT_INIT;
     SERVER_LOG(WARN, "allocator_ shouldn't be NULL", K(allocator_), K(ret));
-  } else if (FALSE_IT(start_to_read_ = true)) {
-  } else if (ls_iter_guard_.get_ptr() == nullptr && OB_FAIL(MTL(ObLSService*)->get_ls_iter(ls_iter_guard_, ObLSGetMod::OBSERVER_MOD))) {
-    SERVER_LOG(WARN, "get_ls_iter fail", K(ret));
-  } else if (OB_FAIL(next_ls_info_(ls_info))) {
-    if (OB_ITER_END != ret) {
-      SERVER_LOG(WARN, "get next_ls_info failed", K(ret));
-    }
+  } else if (start_to_read_) {
+    ret = OB_ITER_END;
+  } else if (OB_ISNULL(share::g_mp->ls_service())) {
+    ret = OB_ERR_UNEXPECTED;
+    SERVER_LOG(WARN, "ls service is null", K(ret));
+  } else if (OB_FAIL(share::g_mp->ls_service()->get_ls(ls_))) {
+    SERVER_LOG(WARN, "get log stream failed", K(ret));
+  } else if (OB_FAIL(ls_->get_ls_info(ls_info))) {
+    SERVER_LOG(WARN, "get log stream info failed", K(ret));
   } else {
+    start_to_read_ = true;
     const int64_t col_count = output_column_ids_.count();
     for (int64_t i = 0; OB_SUCC(ret) && i < col_count; ++i) {
       uint64_t col_id = output_column_ids_.at(i);
       switch (col_id) {
-        case OB_APP_MIN_COLUMN_ID: {
-          // replica_type
-          cur_row_.cells_[i].set_varchar(ObShareUtil::replica_type_to_string(ls_info.replica_type_));
-          cur_row_.cells_[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
-          break;
-        }
-        case OB_APP_MIN_COLUMN_ID + 1: {
-          // ls_state
-          ObRole role;
-          int64_t unused_proposal_id = 0;
-          if (OB_FAIL(role_to_string(ls_info.ls_state_,
-                                     state_name_,
-                                     sizeof(state_name_)))) {
-            SERVER_LOG(WARN, "get state role name failed", K(ret), K(role));
-          } else {
-            state_name_[MAX_LS_STATE_LENGTH - 1] = '\0';
-            cur_row_.cells_[i].set_varchar(state_name_);
-            cur_row_.cells_[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
-          }
-          break;
-        }
-        case OB_APP_MIN_COLUMN_ID + 2:
+        case OB_APP_MIN_COLUMN_ID:
           // tablet_count
           cur_row_.cells_[i].set_int(ls_info.tablet_count_);
           break;
-        case OB_APP_MIN_COLUMN_ID + 3:
+        case OB_APP_MIN_COLUMN_ID + 1:
           // weak_read_timestamp
           cur_row_.cells_[i].set_uint64(ls_info.weak_read_scn_.get_val_for_inner_table_field());
           break;
-        case OB_APP_MIN_COLUMN_ID + 4:
-          // need_rebuild
-          cur_row_.cells_[i].set_varchar(ls_info.need_rebuild_ ? "YES" : "NO");
-          cur_row_.cells_[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
-          break;
-        case OB_APP_MIN_COLUMN_ID + 5:
+        case OB_APP_MIN_COLUMN_ID + 2:
           // clog_checkpoint_ts
           cur_row_.cells_[i].set_uint64(!ls_info.checkpoint_scn_.is_valid() ? 0 : ls_info.checkpoint_scn_.get_val_for_tx());
           break;
-        case OB_APP_MIN_COLUMN_ID + 6:
+        case OB_APP_MIN_COLUMN_ID + 3:
           // clog_checkpoint_lsn
           cur_row_.cells_[i].set_uint64(ls_info.checkpoint_lsn_ < 0 ? 0 : ls_info.checkpoint_lsn_);
           break;
-        case OB_APP_MIN_COLUMN_ID + 7:
-          // migrate_status
-          cur_row_.cells_[i].set_int(ls_info.migrate_status_);
-          break;
-        case OB_APP_MIN_COLUMN_ID + 8:
-          // rebuild_seq
-          cur_row_.cells_[i].set_int(ls_info.rebuild_seq_);
-          break;
-        case OB_APP_MIN_COLUMN_ID + 9:
+        case OB_APP_MIN_COLUMN_ID + 4:
           // tablet_change_checkpoint_scn
           cur_row_.cells_[i].set_uint64(!ls_info.tablet_change_checkpoint_scn_.is_valid() ? 0 : ls_info.tablet_change_checkpoint_scn_.get_val_for_inner_table_field());
           break;
-        case OB_APP_MIN_COLUMN_ID + 10:
-          // transfer_scn
-          cur_row_.cells_[i].set_uint64(!ls_info.transfer_scn_.is_valid() ? 0 : ls_info.transfer_scn_.get_val_for_inner_table_field());
-          break;
-        case OB_APP_MIN_COLUMN_ID + 11:
+        case OB_APP_MIN_COLUMN_ID + 5:
           // tx blocked
           cur_row_.cells_[i].set_int(ls_info.tx_blocked_);
-          break;
-        case OB_APP_MIN_COLUMN_ID + 12:
-          // required_data_disk_size
-          cur_row_.cells_[i].set_int(ls_info.required_data_disk_size_);
-          break;
-        case OB_APP_MIN_COLUMN_ID + 13:
-          // mv_major_merge_scn
-          cur_row_.cells_[i].set_uint64(!ls_info.mv_major_merge_scn_.is_valid() ? 0 : ls_info.mv_major_merge_scn_.get_val_for_inner_table_field());
-          break;
-        case OB_APP_MIN_COLUMN_ID + 14:
-          // mv_publish_scn
-          cur_row_.cells_[i].set_uint64(!ls_info.mv_publish_scn_.is_valid() ? 0 : ls_info.mv_publish_scn_.get_val_for_inner_table_field());
-          break;
-        case OB_APP_MIN_COLUMN_ID + 15:
-          // mv_publish_scn
-          cur_row_.cells_[i].set_uint64(!ls_info.mv_safe_scn_.is_valid() ? 0 : ls_info.mv_safe_scn_.get_val_for_inner_table_field());
           break;
         default:
           ret = OB_ERR_UNEXPECTED;

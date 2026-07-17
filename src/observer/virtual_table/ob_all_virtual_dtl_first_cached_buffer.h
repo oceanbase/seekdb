@@ -19,7 +19,7 @@
 
 #include "sql/dtl/ob_dtl_channel.h"
 #include "lib/utility/ob_macro_utils.h"
-#include "share/ob_virtual_table_scanner_iterator.h"
+#include "observer/virtual_table/ob_virtual_table_scanner_iterator.h"
 #include "common/row/ob_row.h"
 #include "sql/dtl/ob_dtl_fc_server.h"
 
@@ -34,13 +34,13 @@ class ObAllVirtualDtlFirstBufferInfo
 {
 public:
   ObAllVirtualDtlFirstBufferInfo() :
-    tenant_id_(0), channel_id_(0), calced_val_(0), buffer_pool_id_(0), timeout_ts_(0)
+    channel_id_(0), calced_val_(0), buffer_pool_id_(0), timeout_ts_(0)
   {}
 
-  TO_STRING_KV(K(tenant_id_), K(channel_id_));
+  TO_STRING_KV(K(channel_id_));
 
 public:
-  uint64_t tenant_id_;                // 1
+// 1
   int64_t channel_id_;
   int64_t calced_val_;
   int64_t buffer_pool_id_;
@@ -57,19 +57,18 @@ public:
   void reset();
 
   int init();
-  int get_tenant_ids();
+  int prepare_tenants();
   int get_next_tenant_buffer_infos();
-  int get_tenant_buffer_infos(uint64_t tenant_id);
+  int get_tenant_buffer_infos();
 
-  int get_all_first_cached_buffer(int64_t tenant_id, sql::dtl::ObTenantDfc *tenant_dfc);
-  int get_all_first_cached_buffer_old(int64_t tenant_id, sql::dtl::ObTenantDfc *tenant_dfc);
+  int get_all_first_cached_buffer(sql::dtl::ObTenantDfc *tenant_dfc);
+  int get_all_first_cached_buffer_old(sql::dtl::ObTenantDfc *tenant_dfc);
 
 private:
   static const int64_t MAX_BUFFER_CAPCITY = 1000;
-  int64_t cur_tenant_idx_;
+  bool done_;
   int64_t cur_buffer_idx_;
   common::ObArenaAllocator *iter_allocator_;
-  common::ObArray<uint64_t> tenant_ids_;
   common::ObArray<ObAllVirtualDtlFirstBufferInfo, common::ObWrapperAllocator> buffer_infos_;
 };
 

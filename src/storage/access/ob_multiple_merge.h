@@ -24,10 +24,9 @@
 #include "storage/ob_i_store.h"
 #include "storage/ob_row_fuse.h"
 #include "ob_store_row_iterator.h"
-#include "share/schema/ob_table_param.h"
+#include "storage/access/ob_table_param.h"
 #include "ob_table_scan_range.h"
 #include "storage/tablet/ob_table_store_util.h"
-#include "lib/stat/ob_diagnose_info.h"
 #include "ob_table_access_context.h"
 #include "storage/meta_mem/ob_tablet_handle.h"
 #include "storage/lob/ob_lob_data_reader.h"
@@ -71,7 +70,6 @@ public:
   virtual void reuse();
   // used for global cached query iterator
   virtual void reclaim();
-  // used for mview table scan
   virtual int open(ObTableScanRange &table_scan_range) { return OB_NOT_SUPPORTED; }
 
   void disable_padding() { need_padding_ = false; }
@@ -133,7 +131,9 @@ private:
   int project2output_exprs(blocksstable::ObDatumRow &unprojected_row, blocksstable::ObDatumRow &cur_row);
   int prepare_read_tables(bool refresh = false);
   int prepare_mds_tables(bool refresh);
-  int prepare_tables_from_iterator(ObTableStoreIterator &table_iter, const bool has_split_extra_tables, const common::SampleInfo *sample_info = nullptr);
+  int prepare_tables_from_iterator(
+      ObTableStoreIterator &table_iter,
+      const common::SampleInfo *sample_info = nullptr);
   int refresh_table_on_demand();
   int refresh_tablet_iter();
   OB_INLINE int check_need_refresh_table(bool &need_refresh);
@@ -153,7 +153,6 @@ private:
   void report_tablet_stat();
   int update_and_report_tablet_stat();
   void inner_reset();
-  int refresh_filter_params_on_demand(const bool is_open);
   int prepare_truncate_filter();
   void reset_extra_access_ctx();
 
@@ -176,8 +175,8 @@ protected:
   int64_t di_base_curr_scan_index_;
   int64_t major_table_version_;
   bool need_padding_;
-  bool need_fill_default_; // disabled by join mv scan
-  bool need_fill_virtual_columns_; // disabled by join mv scan
+  bool need_fill_default_;
+  bool need_fill_virtual_columns_;
   bool need_output_row_with_nop_; // for sampling increment data
   bool inited_;
   bool iter_del_row_;

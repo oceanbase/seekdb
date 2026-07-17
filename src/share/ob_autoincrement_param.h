@@ -35,26 +35,23 @@ struct AutoincKey
   OB_UNIS_VERSION(1);
 
 public:
-  AutoincKey(uint64_t tenant_id, uint64_t table_id, uint64_t column_id) :
-      tenant_id_(tenant_id), table_id_(table_id), column_id_(column_id) {}
-  AutoincKey() : tenant_id_(0), table_id_(0), column_id_(0) {}
+  AutoincKey(uint64_t table_id, uint64_t column_id) :
+      table_id_(table_id), column_id_(column_id) {}
+  AutoincKey() : table_id_(0), column_id_(0) {}
   void reset()
   {
-    tenant_id_ = 0;
     table_id_ = 0;
     column_id_ = 0;
   }
   bool operator==(const AutoincKey &other) const
   {
-    return other.tenant_id_    == tenant_id_
+    return true
            && other.table_id_  == table_id_
            && other.column_id_ == column_id_;
   }
 
   int compare(const AutoincKey &other) {
-    return (tenant_id_ < other.tenant_id_) ? -1 :
-           (tenant_id_ > other.tenant_id_) ?  1 :
-           (table_id_  < other.table_id_ ) ? -1 :
+    return (table_id_  < other.table_id_ ) ? -1 :
            (table_id_  > other.table_id_ ) ?  1 :
            (column_id_ < other.column_id_) ? -1 :
            (column_id_ > other.column_id_) ?  1 :
@@ -64,7 +61,6 @@ public:
   uint64_t hash() const
   {
     uint64_t hash_val = 0;
-    hash_val = common::murmurhash(&tenant_id_, sizeof(tenant_id_), hash_val);
     hash_val = common::murmurhash(&table_id_, sizeof(table_id_), hash_val);
     hash_val = common::murmurhash(&column_id_, sizeof(column_id_), hash_val);
     return hash_val;
@@ -72,9 +68,8 @@ public:
 
   int hash(uint64_t &hash_val) const { hash_val = hash(); return OB_SUCCESS; }
 
-  TO_STRING_KV(K_(tenant_id), K_(table_id), K_(column_id));
+  TO_STRING_KV(K_(table_id), K_(column_id));
 
-  uint64_t tenant_id_;
   uint64_t table_id_;
   uint64_t column_id_;
 };
@@ -83,8 +78,7 @@ struct CacheHandle;
 struct AutoincParam
 {
   AutoincParam()
-    : tenant_id_(0),
-      autoinc_table_id_(0),
+    : autoinc_table_id_(0),
       autoinc_first_part_num_(0),
       autoinc_table_part_num_(0),
       autoinc_col_id_(0),
@@ -109,8 +103,7 @@ struct AutoincParam
       autoinc_auto_increment_(1)
   {}
 
-  TO_STRING_KV("tenant_id"               , tenant_id_,
-               "autoinc_table_id"        , autoinc_table_id_,
+  TO_STRING_KV("autoinc_table_id"        , autoinc_table_id_,
                "autoinc_first_part_num"  , autoinc_first_part_num_,
                "autoinc_table_part_num"  , autoinc_table_part_num_,
                "autoinc_col_id"          , autoinc_col_id_,
@@ -135,7 +128,7 @@ struct AutoincParam
 
   inline bool with_order() const { return !part_value_no_order_; }
   // pay attention to schema changes
-  uint64_t          tenant_id_;
+  
   uint64_t          autoinc_table_id_;
   int64_t           autoinc_first_part_num_;
   int64_t           autoinc_table_part_num_;

@@ -42,7 +42,6 @@ int ObTabletMediumInfoReader::init(
     ObTableScanParam &scan_param)
 {
   int ret = OB_SUCCESS;
-  const share::ObLSID &ls_id = tablet.get_ls_id();
   const ObTabletID &tablet_id = tablet.get_tablet_id();
 
   if (OB_UNLIKELY(is_inited_)) {
@@ -51,7 +50,7 @@ int ObTabletMediumInfoReader::init(
   } else if (OB_FAIL((tablet.mds_range_query<ObMediumCompactionInfoKey, ObMediumCompactionInfo>(
       scan_param,
       iter_)))) {
-    LOG_WARN("fail to do build query range iter", K(ret), K(ls_id), K(tablet_id), K(scan_param));
+    LOG_WARN("fail to do build query range iter", K(ret), K(tablet_id), K(scan_param));
   } else {
     is_inited_ = true;
   }
@@ -156,7 +155,6 @@ int ObTabletMediumInfoReader::get_medium_info_with_merge_version(
 {
   int ret = OB_SUCCESS;
   medium_info = nullptr;
-  const share::ObLSID &ls_id = tablet.get_ls_id();
   const ObTabletID &tablet_id = tablet.get_tablet_id();
   ObMediumCompactionInfoKey medium_info_key(merge_version);
   if (OB_FAIL(ObTabletObjLoadHelper::alloc_and_new(allocator, medium_info))) {
@@ -166,12 +164,11 @@ int ObTabletMediumInfoReader::get_medium_info_with_merge_version(
     SMART_VARS_2((ObTableScanParam, scan_param), (ObTabletMediumInfoReader, medium_info_reader)) {
       if (OB_FAIL((ObMdsScanParamHelper::build_customized_scan_param<ObMediumCompactionInfoKey, ObMediumCompactionInfo>(
           allocator,
-          ls_id,
           tablet_id,
           ObMdsScanParamHelper::get_whole_read_version_range(),
           unused_collector,
           scan_param)))) {
-        LOG_WARN("fail to build scan param", K(ret), K(ls_id), K(tablet_id));
+        LOG_WARN("fail to build scan param", K(ret), K(tablet_id));
       } else if (OB_FAIL(medium_info_reader.init(tablet, scan_param))) {
         LOG_WARN("fail to init medium info reader", K(ret));
       } else if (OB_FAIL(medium_info_reader.get_specified_medium_info(allocator, medium_info_key, *medium_info))) {

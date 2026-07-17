@@ -36,7 +36,6 @@ struct ObSysVarFlag
   const static int64_t INFLUENCE_PLAN = (1LL << 6);
   const static int64_t NEED_SERIALIZE = (1LL << 7);
   const static int64_t QUERY_SENSITIVE = (1LL << 8);
-  const static int64_t ORACLE_ONLY = (1LL << 9);
   const static int64_t WITH_CREATE = (1LL << 10);
   const static int64_t WITH_UPGRADE = (1LL << 11);
   const static int64_t MYSQL_ONLY = (1LL << 12);
@@ -62,7 +61,7 @@ struct ObSysVarFromJson{
   common::ObString get_meta_type_func_;
   common::ObString session_special_update_func_;
 
-  ObSysVarFromJson():id_(SYS_VAR_INVALID), name_(""), data_type_(common::ObNullType), default_value_(""), base_value_(""), min_val_(""), max_val_(""), enum_names_(""), info_(""), flags_(ObSysVarFlag::NONE), alias_(""), base_class_(""), on_check_and_convert_func_(), on_update_func_(), to_select_obj_func_(), to_show_str_func_(), get_meta_type_func_(), session_special_update_func_() {}
+  ObSysVarFromJson():id_(SYS_VAR_INVALID), name_(""), data_type_(common::ObNullType), default_value_(""), base_value_(""), min_val_(""), max_val_(""), enum_names_(""), info_(""), flags_(ObSysVarFlag::NONE), alias_(""), base_class_(""), on_check_and_convert_func_(""), on_update_func_(""), to_select_obj_func_(""), to_show_str_func_(""), get_meta_type_func_(""), session_special_update_func_("") {}
 };
 
 class ObSysVariables
@@ -79,7 +78,6 @@ public:
   static common::ObString get_info(int64_t i);
   static int64_t get_flags(int64_t i);
   static bool need_serialize(int64_t i);
-  static bool is_oracle_only(int64_t i);
   static bool is_mysql_only(int64_t i);
   static common::ObString get_alias(int64_t i);
   static const common::ObObj &get_default_value(int64_t i);

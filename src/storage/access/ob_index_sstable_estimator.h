@@ -127,17 +127,12 @@ private:
       ObMicroBlockDataHandle &micro_handle,
       bool consider_multi_version,
        ObPartitionEst &est);
-  int cal_total_estimate_result_for_ddl(
-      blocksstable::ObSSTable &sstable,
-      const blocksstable::ObDatumRange &datum_range,
-      ObEstimatedResult &result);
   ObMicroBlockDataHandle &get_read_handle()
   {
     return micro_handles_[level_++ % DEFAULT_GET_MICRO_DATA_HANDLE_CNT];
   }
   static const int64_t DEFAULT_GET_MICRO_DATA_HANDLE_CNT = 2;
   static const int64_t RANGE_ROWS_IN_AND_BORDER_RATIO_THRESHOLD = 1000;
-  uint64_t tenant_id_;
   blocksstable::ObMicroBlockData root_index_block_;
   blocksstable::ObIndexBlockRowScanner index_block_row_scanner_;
   blocksstable::ObMacroBlockReader macro_reader_;

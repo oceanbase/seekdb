@@ -19,7 +19,7 @@
 
 #define private public
 #define protected public
-#include "deps/oblib/src/lib/ob_lib_config.h"
+#include "lib/ob_lib_config.h"
 #undef private
 #undef protected
 
@@ -30,7 +30,6 @@ namespace lib
 
 class ObUnitTestEnableDiagnoseGuard
 {
-  friend class common::ObBackGroundSessionGuard;
   friend class common::ObDiagnosticInfoSwitchGuard;
   friend bool is_diagnose_info_enabled();
   friend bool is_trace_log_enabled();

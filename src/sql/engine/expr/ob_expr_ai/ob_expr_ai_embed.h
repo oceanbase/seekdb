@@ -23,16 +23,16 @@
 #include "ob_ai_func.h"
 #include "ob_ai_func_utils.h"
 
-namespace oceanbase
+namespace oceanbase 
 {
-namespace sql
+namespace sql 
 {
-class ObExprAIEmbed : public ObFuncExprOperator
+class ObExprAIEmbed : public ObFuncExprOperator 
 {
 public:
   explicit ObExprAIEmbed(common::ObIAllocator &alloc);
   virtual ~ObExprAIEmbed();
-  virtual int calc_result_typeN(ObExprResType &type,
+  virtual int calc_result_typeN(ObExprResType &type, 
                                 ObExprResType *types_array,
                                 int64_t param_num,
                                 common::ObExprTypeCtx &type_ctx) const override;
@@ -43,7 +43,7 @@ public:
   // batch method2:json object,one requset contains batch contents
   static int eval_ai_embed_vector_v2(const ObExpr &expr, ObEvalCtx &ctx,
                                           const ObBitVector &skip, const EvalBound &bound);
-  virtual int cg_expr(ObExprCGCtx &expr_cg_ctx,
+  virtual int cg_expr(ObExprCGCtx &expr_cg_ctx, 
                       const ObRawExpr &raw_expr,
                       ObExpr &rt_expr) const override;
   virtual bool need_rt_ctx() const override { return true; }
@@ -55,7 +55,7 @@ private:
                               ObString &model_id,
                               ObArray<ObString> &contents,
                               int64_t &dim);
-  static int pack_json_array_to_res_vector(const ObExpr &expr,
+  static int pack_json_array_to_res_vector(const ObExpr &expr, 
                                           ObEvalCtx &ctx,
                                           ObIAllocator &allocator,
                                           ObArray<ObJsonObject *> &responses,
@@ -63,7 +63,7 @@ private:
                                           const EvalBound &bound,
                                           const ObAiModelEndpointInfo &endpoint_info,
                                           ObIVector *res_vec);
-  static int pack_json_object_to_res_vector(const ObExpr &expr,
+  static int pack_json_object_to_res_vector(const ObExpr &expr, 
                                             ObEvalCtx &ctx,
                                             ObIAllocator &allocator,
                                             ObJsonObject *response,

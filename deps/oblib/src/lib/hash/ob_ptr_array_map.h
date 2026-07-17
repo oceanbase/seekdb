@@ -42,7 +42,7 @@ public:
     int64_t end_;
     void* base_[0];
   };
-  ObLinkArray(): label_(nullptr), tenant_id_(0), seg_size_(0), head_(0, 0) {}
+  ObLinkArray(): label_(nullptr), seg_size_(0), head_(0, 0) {}
   ~ObLinkArray() { destroy(); }
   void destroy() {
     Seg* p = NULL;
@@ -51,13 +51,13 @@ public:
       destroy_seg(p);
     }
   }
-  int init(int64_t seg_size, const lib::ObLabel &label, int tenant_id) {
+  int init(int64_t seg_size, const lib::ObLabel &label) {
     int ret = OB_SUCCESS;
     if (seg_size * sizeof(void*) < sizeof(Seg) + sizeof(void*)) {
       ret = OB_INVALID_ARGUMENT;
     } else {
       label_ = label;
-      tenant_id_ = tenant_id;
+      
       seg_size_ = (seg_size * sizeof(void*)- sizeof(Seg))/sizeof(void*);
     }
     return ret;
@@ -120,7 +120,7 @@ private:
   }
 private:
   lib::ObLabel label_;
-  int tenant_id_;
+  
   int64_t seg_size_;
   Seg head_;
 };
@@ -186,8 +186,8 @@ public:
     memset(lock_, 0, sizeof(lock_));
   }
   ~ObPtrArrayWrapper() {}
-  int create(int64_t bucket_num, const char *bucket_label, int tenant_id) {
-    return array_.init(bucket_num * sizeof(void*), bucket_label, tenant_id);
+  int create(int64_t bucket_num, const char *bucket_label) {
+    return array_.init(bucket_num * sizeof(void*), bucket_label);
   }
   iterator begin() {
     Seg* seg = array_.head();

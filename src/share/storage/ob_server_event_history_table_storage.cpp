@@ -176,10 +176,10 @@ int ObServerEventHistoryTableStorage::insert_all(const ObIArray<ObServerEventHis
               }
             }
           }
-
+          
           // Finalize statement
           guard->finalize_execute(stmt);
-
+          
           // Commit or rollback transaction
           if (OB_FAIL(ret)) {
             int rollback_ret = guard->rollback();
@@ -231,3 +231,4 @@ int ObServerEventHistoryTableStorage::delete_expired(int64_t gmt_create_before, 
 
 } // namespace share
 } // namespace oceanbase
+

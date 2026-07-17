@@ -80,6 +80,20 @@ static int vsag_errcode2ob(vsag::ErrorType vsag_errcode)
   return ret;
 }
 
+static void fill_vsag_error_message(const vsag::Error &error, std::string &err_msg)
+{
+  err_msg = error.message;
+}
+
+static void adjust_create_index_max_degree(const IndexType index_type, int &max_degree)
+{
+  // hgraph of vsag needs to be multiplied by 2 so as to align recall with hnsw
+  if (HNSW_SQ_TYPE == index_type || HNSW_BQ_TYPE == index_type || HGRAPH_TYPE == index_type) {
+    max_degree *= 2;
+    LOG_INFO("change max_degree for hgraph", K(index_type), K(max_degree), K(lbt()));
+  }
+}
+
 class ObVasgFilter final : public vsag::Filter {
 public:
   ObVasgFilter(float valid_ratio,
@@ -326,7 +340,7 @@ int HnswIndexHandler::get_vid_bound(int64_t &min_vid, int64_t &max_vid)
 
 uint64_t HnswIndexHandler::estimate_memory(const uint64_t row_count, const bool is_build)
 {
-
+  
   uint64_t size = 0;
   if (IPIVF_TYPE == index_type_) {
     // TODO(ningxin.ning): use vsag EstimateMemory
@@ -700,7 +714,7 @@ int construct_vsag_create_param(
   return ret;
 }
 
-int construct_vsag_sindi_create_param(uint8_t create_type, const char *dtype, const char *metric,
+int construct_vsag_sindi_create_param(uint8_t create_type, const char *dtype, const char *metric, 
     void *allocator, int extra_info_size, bool use_reorder, float doc_prune_ratio, int window_size,
     char *result_param_str)
 {
@@ -790,7 +804,7 @@ int construct_vsag_search_param(uint8_t create_type,
   return ret;
 }
 
-int construct_vsag_sindi_search_param(float query_prune_ratio, uint64_t n_candidate,
+int construct_vsag_sindi_search_param(float query_prune_ratio, uint64_t n_candidate, 
                                 char *result_param_str)
 {
   int ret = OB_SUCCESS;
@@ -798,19 +812,19 @@ int construct_vsag_sindi_search_param(float query_prune_ratio, uint64_t n_candid
   int64_t pos = 0;
   int64_t buff_size = 0;
   int64_t buf_len = 1024;
-  if (OB_FAIL(databuff_printf(result_param_str,
-                        buf_len,
-                        pos,
+  if (OB_FAIL(databuff_printf(result_param_str, 
+                        buf_len, 
+                        pos, 
                         "{\"%s\":{", index_type_str))) {
     LOG_WARN("failed to fill result_param_str", K(ret), K(index_type_str));
-  } else if (OB_FAIL(databuff_printf(result_param_str,
-                        buf_len,
-                        pos,
+  } else if (OB_FAIL(databuff_printf(result_param_str, 
+                        buf_len, 
+                        pos, 
                         "\"query_prune_ratio\":%f", query_prune_ratio))) {
     LOG_WARN("failed to fill result_param_str", K(ret), K(index_type_str));
-  } else if (OB_FAIL(databuff_printf(result_param_str,
-                        buf_len,
-                        pos,
+  } else if (OB_FAIL(databuff_printf(result_param_str, 
+                        buf_len, 
+                        pos, 
                         ",\"n_candidate\":%lu}}", n_candidate))) {
     LOG_WARN("failed to fill result_param_str", K(ret), K(index_type_str));
   }
@@ -841,11 +855,7 @@ int create_index(VectorIndexPtr &index_handler,
       LOG_INFO("[OBVSAG] use caller allocator ", K(index_type), K(lbt()));
     }
   
-    // hgraph of vsag needs to be multiplied by 2 so as to align recall with hnsw
-    if (HNSW_SQ_TYPE == index_type || HNSW_BQ_TYPE == index_type || HGRAPH_TYPE == index_type) {
-      max_degree *= 2;
-      LOG_INFO("change max_degree for hgraph", K(index_type), K(max_degree), K(lbt()));
-    }
+    adjust_create_index_max_degree(index_type, max_degree);
 
     const char* index_type_str = get_index_type_str(index_type);
     char result_param_str[1024] = {0};
@@ -872,7 +882,64 @@ int create_index(VectorIndexPtr &index_handler,
         }
       } else {
         ret = vsag_errcode2ob(index.error().type);
-        LOG_WARN("[OBVSAG] create index error happend", K(ret), KCSTRING(result_param_str), K(index.error().type));
+        LOG_WARN("[OBVSAG] create index error happend",
+            K(ret), KCSTRING(result_param_str), K(index.error().type), KCSTRING(index.error().message.c_str()));
+      }
+    }
+  }
+  return ret;
+}
+
+int validate_create_index(const CreateIndexParam &param, std::string &err_msg)
+{
+  int ret = OB_SUCCESS;
+  err_msg.clear();
+  if (param.dtype_ == nullptr || param.metric_ == nullptr) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("[OBVSAG] null pointer", KP(param.dtype_), KP(param.metric_));
+  } else {
+    vsag::Allocator *vsag_allocator = nullptr;
+    if (param.allocator_ == nullptr) {
+      vsag_allocator = nullptr;
+      LOG_INFO("[OBVSAG] allocator is null , use default_allocator", K(param.index_type_), K(lbt()));
+    } else {
+      vsag_allocator = static_cast<vsag::Allocator *>(param.allocator_);
+      LOG_INFO("[OBVSAG] use caller allocator ", K(param.index_type_), K(lbt()));
+    }
+
+    const char *index_type_str = get_index_type_str(param.index_type_);
+    char result_param_str[1024] = {0};
+    if (param.is_sparse_) {
+      if (OB_FAIL(construct_vsag_sindi_create_param(uint8_t(param.index_type_),
+                                                    param.dtype_,
+                                                    param.metric_,
+                                                    param.allocator_,
+                                                    param.extra_info_size_,
+                                                    param.use_reorder_,
+                                                    param.doc_prune_ratio_,
+                                                    param.window_size_,
+                                                    result_param_str))) {
+        LOG_WARN("construct_vsag_sindi_create_param fail", K(ret), K(param.index_type_));
+      }
+    } else {
+      int max_degree = param.max_degree_;
+      adjust_create_index_max_degree(param.index_type_, max_degree);
+      if (OB_FAIL(construct_vsag_create_param(
+          uint8_t(param.index_type_), param.dtype_, param.metric_, param.dim_, max_degree,
+          param.ef_construction_, param.ef_search_, param.allocator_, param.extra_info_size_,
+          param.refine_type_, param.bq_bits_query_, param.bq_use_fht_, result_param_str))) {
+        LOG_WARN("construct_vsag_create_param fail", K(ret), K(param.index_type_));
+      }
+    }
+    if (OB_SUCC(ret)) {
+      const std::string input_json_str(result_param_str);
+      tl::expected<std::shared_ptr<Index>, Error> index =
+          vsag::Factory::CreateIndex(index_type_str, input_json_str, vsag_allocator);
+      if (!index.has_value()) {
+        ret = vsag_errcode2ob(index.error().type);
+        fill_vsag_error_message(index.error(), err_msg);
+        LOG_WARN("[OBVSAG] validate create index error",
+            K(ret), KCSTRING(result_param_str), K(index.error().type), KCSTRING(index.error().message.c_str()));
       }
     }
   }
@@ -1153,7 +1220,7 @@ int knn_search(VectorIndexPtr &index_handler, float *query_vector,
                int dim, int64_t topk, const float *&dist, const int64_t *&ids,
                int64_t &result_size, int ef_search, bool need_extra_info,
                const char *&extra_infos, void *invalid, bool reverse_filter,
-               bool use_extra_info_filter, void *allocator, float valid_ratio,
+               bool use_extra_info_filter, void *allocator, float valid_ratio, 
                float distance_threshold)
 {
   int ret = OB_SUCCESS;
@@ -1335,7 +1402,7 @@ int fdeserialize(VectorIndexPtr &index_handler,
         ef_construction, ef_search, hnsw->get_allocator(),
         extra_info_size, refine_type, bq_bits_query, bq_use_fht, result_param_str))) {
         LOG_WARN("construct_vsag_create_param fail", K(ret), K(index_type));
-      }
+      } 
     }
     if (OB_FAIL(ret)) {
     } else {

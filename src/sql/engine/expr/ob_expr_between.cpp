@@ -17,7 +17,7 @@
 #define USING_LOG_PREFIX SQL_EXE
 #include "sql/engine/expr/ob_expr_between.h"
 #include "sql/session/ob_sql_session_info.h"
-#include "share/vector/expr_cmp_func.h"
+#include "sql/engine/vector/expr_cmp_func.h"
 
 namespace oceanbase
 {
@@ -241,7 +241,6 @@ int ObExprBetween::cg_expr(ObExprCGCtx &expr_cg_ctx,
                                                         left_meta.type_, val_meta.type_,
                                                         left_meta.scale_, val_meta.scale_,
                                                         left_meta.precision_, val_meta.precision_,
-                                                        false,
                                                         cmp_cs_type,
                                                         has_lob_header1))) {
       ret = OB_ERR_UNEXPECTED;
@@ -250,7 +249,6 @@ int ObExprBetween::cg_expr(ObExprCGCtx &expr_cg_ctx,
                                                         val_meta.type_, right_meta.type_,
                                                         val_meta.scale_, right_meta.scale_,
                                                         val_meta.precision_, right_meta.precision_,
-                                                        false,
                                                         cmp_cs_type,
                                                         has_lob_header2))) {
       ret = OB_ERR_UNEXPECTED;

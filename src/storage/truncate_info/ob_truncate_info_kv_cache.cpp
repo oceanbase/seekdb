@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 #define USING_LOG_PREFIX STORAGE
+#include "lib/stat/ob_diagnostic_info_guard.h"
 #include "storage/truncate_info/ob_truncate_info_kv_cache.h"
 #include "storage/truncate_info/ob_truncate_info.h"
 #include "storage/truncate_info/ob_truncate_info_array.h"
@@ -28,12 +29,10 @@ namespace storage
 * ObTruncateInfoCacheKey
 * */
 ObTruncateInfoCacheKey::ObTruncateInfoCacheKey(
-  const uint64_t tenant_id,
   const ObTabletID &tablet_id,
   const int64_t schema_version,
   const int64_t last_major_snapshot)
-  : tenant_id_(tenant_id),
-    tablet_id_(tablet_id),
+  : tablet_id_(tablet_id),
     schema_version_(schema_version),
     last_major_snapshot_(last_major_snapshot)
 {
@@ -41,8 +40,7 @@ ObTruncateInfoCacheKey::ObTruncateInfoCacheKey(
 
 bool ObTruncateInfoCacheKey::is_valid() const
 {
-  return tenant_id_ > 0
-    && tablet_id_.is_valid()
+  return tablet_id_.is_valid()
     && schema_version_ > 0
     && last_major_snapshot_ > 0;
 }
@@ -55,7 +53,7 @@ int ObTruncateInfoCacheKey::equal(const ObIKVCacheKey &other, bool &equal) const
     ret = OB_INVALID_DATA;
     LOG_WARN("invalid data", KR(ret), KPC(this), K(other_key));
   } else {
-    equal = (tenant_id_ == other_key.tenant_id_
+    equal = (true
       && tablet_id_ == other_key.tablet_id_
       && schema_version_ == other_key.schema_version_
       && last_major_snapshot_ == other_key.last_major_snapshot_);
@@ -66,8 +64,7 @@ int ObTruncateInfoCacheKey::equal(const ObIKVCacheKey &other, bool &equal) const
 int ObTruncateInfoCacheKey::hash(uint64_t &hash_val) const
 {
   int ret = OB_SUCCESS;
-  hash_val = murmurhash(&tenant_id_, sizeof(tenant_id_), 0);
-  hash_val = murmurhash(&tablet_id_, sizeof(tablet_id_), hash_val);
+  hash_val = murmurhash(&tablet_id_, sizeof(tablet_id_), 0);
   hash_val = murmurhash(&schema_version_, sizeof(schema_version_), hash_val);
   hash_val = murmurhash(&last_major_snapshot_, sizeof(last_major_snapshot_), hash_val);
   return ret;
@@ -83,7 +80,7 @@ int ObTruncateInfoCacheKey::deep_copy(char *buf, const int64_t buf_len, ObIKVCac
     ret = OB_INVALID_DATA;
     LOG_WARN("invalid truncate info cache key", K(ret), K(*this));
   } else {
-    key = new (buf) ObTruncateInfoCacheKey(tenant_id_, tablet_id_, schema_version_, last_major_snapshot_);
+    key = new (buf) ObTruncateInfoCacheKey(tablet_id_, schema_version_, last_major_snapshot_);
   }
   return ret;
 }
@@ -231,7 +228,7 @@ int ObTruncateInfoKVCacheUtil::put_truncate_info_array(
     ObIArray<ObTruncateInfo *> &distinct_array)
 {
   int ret = OB_SUCCESS;
-  ObArenaAllocator temp_allocator(ObMemAttr(MTL_ID(), "CopyTrunValue"));
+  ObArenaAllocator temp_allocator(ObMemAttr("CopyTrunValue"));
   ObTruncateInfoCacheValue cache_value;
   if (OB_UNLIKELY(!cache_key.is_valid() || distinct_array.empty())) {
     ret = OB_INVALID_ARGUMENT;

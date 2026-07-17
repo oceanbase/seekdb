@@ -110,7 +110,7 @@ public:
   virtual void dump_deleted_log_info(const bool is_debug_log = true) const;
   virtual int check_need_add_cache_obj_stat(ObILibCacheCtx &ctx, bool &need_real_add);
 
-  //virtual obrpc::ObDDLArg &get_ddl_arg() { return ddl_arg_; }
+  //virtual obcall::ObDDLArg &get_ddl_arg() { return ddl_arg_; }
   TO_STRING_KV(K_(can_direct_use_param),
                K_(package_id),
                K_(routine_id),
@@ -137,8 +137,9 @@ private:
   ObSEArray<pl::ObPLDataType, 32> out_type_;
   ObSEArray<ObString, 32> out_type_name_;
   ObSEArray<ObString, 32> out_type_owner_;
-  /* MySQL mode does not return out parameters to non-standard drivers (obclient, opensource MySQL
-   * driver) unless the parameter is bound with "?" */
+  /* MySQL protocol exposes procedure OUT values to the client only for protocol-bound
+   * output parameters. User/system variable OUT parameters are written back into
+   * the variables and can be read by a following SELECT. */
   ObBitSet<> out_client_params_;
   ObSEArray<int64_t, 32> out_param_id_;
 
@@ -156,8 +157,7 @@ public:
   explicit ObCallProcedureStmt()
       : ObCMDStmt(NULL, stmt::T_CALL_PROCEDURE),
         call_proc_info_(NULL),
-        cache_call_info_guard_(MAX_HANDLE),
-        dblink_routine_info_(NULL)
+        cache_call_info_guard_(MAX_HANDLE)
   {
   }
 
@@ -170,12 +170,9 @@ public:
   }
   ObCallProcedureInfo *get_call_proc_info() { return call_proc_info_; }
   ObCacheObjGuard &get_cacheobj_guard() { return cache_call_info_guard_; }
-  void set_dblink_routine_info(const ObRoutineInfo *routine_info) { dblink_routine_info_ = routine_info; }
-  const ObRoutineInfo *get_dblink_routine_info() const { return dblink_routine_info_; }
 private:
   ObCallProcedureInfo *call_proc_info_;
   ObCacheObjGuard cache_call_info_guard_;
-  const ObRoutineInfo *dblink_routine_info_;
   DISALLOW_COPY_AND_ASSIGN(ObCallProcedureStmt);
 };
 

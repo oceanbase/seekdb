@@ -31,7 +31,7 @@
 
 namespace oceanbase
 {
-namespace obrpc
+namespace obcall
 {
 class ObPurgeRecycleBinArg;
 }
@@ -48,6 +48,9 @@ namespace share
 {
 namespace schema
 {
+
+// hook: observer side registers submit_async_refresh_schema_task, removes share/schema → observer dependency
+extern int (*g_submit_async_refresh_schema_task_fn)(const int64_t schema_version);
 
 static const int64_t MAX_CACHED_VERSION_NUM = 4;
 
@@ -133,8 +136,7 @@ public:
 
   int init(common::ObMySQLProxy *proxy,
       const common::ObCommonConfig *config,
-      const int64_t init_version_count,
-      const int64_t init_version_count_for_liboblog);
+      const int64_t init_version_count);
 
   void dump_schema_statistics();
 
@@ -150,31 +152,25 @@ public:
   // 1. tenant_schema_version is the schema_version of the corresponding tenant
   // 2. sys_schema_version is the schema_version of the system tenant. For system tenants,
   //  the value will be reset to tenant_schema_version
-  virtual int get_tenant_schema_guard(const uint64_t tenant_id,
-                                      ObSchemaGetterGuard &guard,
+  virtual int get_tenant_schema_guard(ObSchemaGetterGuard &guard,
                                       int64_t tenant_schema_version = common::OB_INVALID_VERSION,
                                       int64_t sys_schema_version = common::OB_INVALID_VERSION,
                                       const RefreshSchemaMode refresh_schema_mode = RefreshSchemaMode::NORMAL);
 
-  virtual int get_tenant_full_schema_guard(const uint64_t tenant_id,
-                                           ObSchemaGetterGuard &guard,
+  virtual int get_tenant_full_schema_guard(ObSchemaGetterGuard &guard,
                                            bool check_formal = true);
   // Get schema guard with version from __all_ddl_operation; on OB_SCHEMA_EAGAIN
   // refreshes schema and retries once. Used by DDL and Change Stream Fetcher.
   int get_tenant_schema_guard_with_version_in_inner_table(
-      const uint64_t tenant_id,
       ObSchemaGetterGuard &schema_guard);
   //retry get schema guard will retry 10 times, it's interval is 100ms
-  int retry_get_schema_guard(
-      const uint64_t tenant_id,
-      const int64_t schema_version,
+  int retry_get_schema_guard(const int64_t schema_version,
       const uint64_t table_id,
       ObSchemaGetterGuard &guard,
       int64_t &save_schema_version);
 
   /*------------- get/construct schema info ----------------*/
 
-  int get_tenant_ids(common::ObIArray<uint64_t> &tenant_ids);
 
   virtual int get_schema(const ObSchemaMgr *mgr,
                          const ObRefreshSchemaStatus &schema_status,
@@ -186,15 +182,14 @@ public:
 
   int get_latest_schema(common::ObIAllocator &allocator,
                         const ObSchemaType schema_type,
-                        const uint64_t tenant_id,
                         const uint64_t schema_id,
                         const ObSchema *&schema);
 
-  // Get pairs of tablet-table with specific tenant_id/schema_version.
+  // Get pairs of tablet-table with specific tenant/schema_version.
   // If local cache miss, this function will fetch pairs of tablet-table from __all_tablet_to_table_history.
   //
   // @param[in]:
-  // - tenant_id: tenant_id != 0.
+  // - tenant: tenant != 0.
   // - tablet_ids: tablet_ids.count() > 0. tablet_id in tablet_ids should be unique.
   // - schema_version: schema_version > 0. schema_version should be tenant level to raise cache hit rate
   //
@@ -202,9 +197,7 @@ public:
   // - table_ids: There is one-to-one correspondence between tablet_ids and table_ids.
   //              table_id is OB_INVALID_ID means that tablet-table history is recycled
   //              or tablet has been dropped.
-  int get_tablet_to_table_history(
-      const uint64_t tenant_id,
-      const common::ObIArray<ObTabletID> &tablet_ids,
+  int get_tablet_to_table_history(const common::ObIArray<ObTabletID> &tablet_ids,
       const int64_t schema_version,
       common::ObIArray<uint64_t> &table_ids);
 
@@ -212,141 +205,111 @@ public:
   // if core_schema_version = false, return user schema version
   // if core_schema_version = true, and user schema not inited, return core_schema_version
   virtual int get_tenant_refreshed_schema_version(
-              const uint64_t tenant_id,
               int64_t &schema_version,
               const bool core_schema_version = false) const;
-  virtual int get_tenant_received_broadcast_version(const uint64_t tenant_id, int64_t &schema_version, const bool core_schema_version = false) const;
+  virtual int get_tenant_received_broadcast_version(int64_t &schema_version, const bool core_schema_version = false) const;
   virtual int get_last_refreshed_schema_info(ObRefreshSchemaInfo &schema_info);
-  virtual int get_recycle_schema_version(const uint64_t tenant_id, int64_t &schema_version);
+  virtual int get_recycle_schema_version(int64_t &schema_version);
   int get_baseline_schema_version(
-      const uint64_t tenant_id,
       const bool auto_update,
       int64_t &baseline_schema_version);
-  int get_new_schema_version(uint64_t tenant_id, int64_t &schema_version);
-  int get_tenant_mem_info(const uint64_t &tenant_id, common::ObIArray<ObSchemaMemory> &tenant_mem_infos);
-  int get_tenant_slot_info(common::ObIAllocator &allocator, const uint64_t &tenant_id,
+  int get_new_schema_version(int64_t &schema_version);
+  int get_tenant_mem_info(const uint64_t &req_id, common::ObIArray<ObSchemaMemory> &tenant_mem_infos);
+  int get_tenant_slot_info(common::ObIAllocator &allocator, const uint64_t &req_id,
                            common::ObIArray<ObSchemaSlot> &tenant_slot_infos);
-  int get_schema_store_tenants(common::ObIArray<uint64_t> &tenant_ids);
-  bool check_schema_store_tenant_exist(const uint64_t &tenant_id);
 
-  int get_tenant_broadcast_consensus_version(const uint64_t tenant_id,
-                                             int64_t &consensus_version);
-  int set_tenant_broadcast_consensus_version(const uint64_t tenant_id,
-                                             const int64_t consensus_version);
-  virtual int set_tenant_received_broadcast_version(const uint64_t tenant_id, const int64_t version);
+  int get_tenant_broadcast_consensus_version(int64_t &consensus_version);
+  int set_tenant_broadcast_consensus_version(const int64_t consensus_version);
+  virtual int set_tenant_received_broadcast_version(const int64_t version);
   virtual int set_last_refreshed_schema_info(const ObRefreshSchemaInfo &schema_info);
-  int update_baseline_schema_version(const uint64_t tenant_id, const int64_t baseline_schema_version);
-  int gen_new_schema_version(uint64_t tenant_id, int64_t &schema_version);
+  int update_baseline_schema_version(const int64_t baseline_schema_version);
+  int gen_new_schema_version(int64_t &schema_version);
   // gen schema versions in [start_version, end_version] with specified schema version cnt.
   // @param[out]:
   //  - schema_version: end_version
-  int gen_batch_new_schema_versions(
-      const uint64_t tenant_id,
-      const int64_t version_cnt,
+  int gen_batch_new_schema_versions(const int64_t version_cnt,
       int64_t &schema_version);
-  int get_dropped_tenant_ids(common::ObIArray<uint64_t> &dropped_tenant_ids);
   /*----------- check schema interface -----------------*/
   bool is_sys_full_schema() const;
 
-  bool is_tenant_full_schema(const uint64_t tenant_id) const;
+  bool is_tenant_full_schema() const;
 
-  bool is_tenant_not_refreshed(const uint64_t tenant_id);
-  bool is_tenant_refreshed(const uint64_t tenant_id) const;
+  bool is_tenant_not_refreshed();
+  bool is_tenant_refreshed() const;
   int check_all_tenant_schema_refreshed(bool &all_refreshed);
 
   // sql should retry when tenant is normal but never refresh schema successfully.
   bool is_schema_error_need_retry(
-       ObSchemaGetterGuard *guard,
-       const uint64_t tenant_id);
+       ObSchemaGetterGuard *guard);
 
-  int check_table_exist(const uint64_t tenant_id,
-                        const uint64_t database_id,
+  int check_table_exist(const uint64_t database_id,
                         const common::ObString &table_name,
                         const bool is_index,
                         const int64_t table_schema_version,
                         bool &exist);
-  virtual int check_table_exist(const uint64_t tenant_id,
-                                const uint64_t table_id,
+  virtual int check_table_exist(const uint64_t table_id,
                                 const int64_t table_schema_version,
                                 bool &exist);
-  int check_database_exist(const uint64_t tenant_id, const common::ObString &database_name,
+  int check_database_exist(const common::ObString &database_name,
                            uint64_t &database_id, bool &exist);
-  int check_tablegroup_exist(const uint64_t tenant_id, const common::ObString &tablegroup_name,
+  int check_tablegroup_exist(const common::ObString &tablegroup_name,
                              uint64_t &tablegroup_id, bool &exist);
-  int check_if_tenant_has_been_dropped(
-      const uint64_t tenant_id,
-      bool &is_dropped);
-  // check user tenant and meta tenant both created by tenant_id, only used in creating tenant stage
-  int check_if_tenant_schema_has_been_refreshed(
-    const uint64_t tenant_id,
-    bool &is_refreshed);
-  int check_outline_exist_with_name(const uint64_t tenant_id,
-      const uint64_t database_id,
+  int check_if_tenant_has_been_dropped(bool &is_dropped);
+  // check user tenant and meta tenant both created by tenant, only used in creating tenant stage
+  int check_if_tenant_schema_has_been_refreshed(bool &is_refreshed);
+  int check_outline_exist_with_name(const uint64_t database_id,
       const common::ObString &outline_name,
       uint64_t &outline_id,
       bool is_format,
       bool &exist) ;
-  int check_outline_exist_with_sql(const uint64_t tenant_id,
-      const uint64_t database_id,
+  int check_outline_exist_with_sql(const uint64_t database_id,
       const common::ObString &paramlized_sql,
       bool is_format,
       bool &exist) ;
-  int check_udf_exist(const uint64_t tenant_id,
-      const common::ObString &name,
+  int check_udf_exist(const common::ObString &name,
       bool &exist,
       uint64_t &udf_id);
-  int check_outline_exist_with_sql_id(const uint64_t tenant_id,
-      const uint64_t database_id,
+  int check_outline_exist_with_sql_id(const uint64_t database_id,
       const common::ObString &sql_id,
       bool is_format,
       bool &exist) ;
 
-  int check_procedure_exist(uint64_t tenant_id, uint64_t database_id,
+  int check_procedure_exist(uint64_t database_id,
                             const common::ObString &proc_name, bool &exist);
 
-  int check_user_exist(const uint64_t tenant_id,
-                       const common::ObString &user_name,
+  int check_user_exist(const common::ObString &user_name,
                        const common::ObString &host_name,
                        bool &exist);
-  int check_user_exist(const uint64_t tenant_id,
-                       const common::ObString &user_name,
+  int check_user_exist(const common::ObString &user_name,
                        const common::ObString &host_name,
                        uint64_t &user_id,
                        bool &exist);
-  int check_user_exist(const uint64_t tenant_id,
-                       const uint64_t user_id,
+  int check_user_exist(const uint64_t user_id,
                        bool &exist);
 
   int check_tenant_is_restore(ObSchemaGetterGuard *schema_guard,
-                              const uint64_t tenant_id,
                               bool &is_restore);
-  int check_restore_tenant_exist(const common::ObIArray<uint64_t> &tenant_ids, bool &exist);
+  int check_restore_tenant_exist(bool &exist);
 
-  int get_tenant_name_case_mode(const uint64_t tenant_id, ObNameCaseMode &name_case_mode);
+  int get_tenant_name_case_mode(ObNameCaseMode &name_case_mode);
   /*------------- refresh schema interface -----------------*/
-  int broadcast_tenant_schema(
-      const uint64_t tenant_id,
-      const common::ObIArray<share::schema::ObTableSchema> &table_schemas);
+  int broadcast_tenant_schema(const common::ObIArray<share::schema::ObTableSchema> &table_schemas);
 
   // new schema refresh interface
-  int refresh_and_add_schema(const common::ObIArray<uint64_t> &tenant_ids,
-                             bool check_bootstrap = false,
+  int refresh_and_add_schema(bool check_bootstrap = false,
                              common::ObIArray<share::schema::ObTableSchema> *table_schemas = nullptr);
   // Trigger an asynchronous refresh task and wait for the refresh result
-  int async_refresh_schema(const uint64_t tenant_id,
-                           const int64_t schema_version);
-  int add_schema(const uint64_t tenant_id, const bool force_add = false);
+  int async_refresh_schema(const int64_t schema_version);
+  int add_schema(const bool force_add = false);
 
   int try_eliminate_schema_mgr();
 
-  /* new interface for liboblog */
   int get_schema_version_by_timestamp(
       const ObRefreshSchemaStatus &schema_status,
-      const uint64_t tenant_id,
       int64_t timestamp,
       int64_t &schema_version);
   int cal_purge_need_timeout(
-      const obrpc::ObPurgeRecycleBinArg &purge_recyclebin_arg,
+      const obcall::ObPurgeRecycleBinArg &purge_recyclebin_arg,
       int64_t &cal_timeout);
   ObDDLTransController &get_ddl_trans_controller() { return ddl_trans_controller_; }
   ObDDLEpochMgr &get_ddl_epoch_mgr() { return ddl_epoch_mgr_; }
@@ -363,8 +326,8 @@ protected:
   ObMultiVersionSchemaService();
   virtual ~ObMultiVersionSchemaService();
 
-  virtual int publish_schema(const uint64_t tenant_id) override;
-  virtual int init_multi_version_schema_struct(const uint64_t tenant_id) override;
+  virtual int publish_schema() override;
+  virtual int init_multi_version_schema_struct() override;
   virtual int update_schema_cache(common::ObIArray<ObTableSchema*> &schema_array) override;
   virtual int update_schema_cache(common::ObIArray<ObTableSchema> &schema_array) override;
   virtual int update_schema_cache(const common::ObIArray<ObTenantSchema> &schema_array) override;
@@ -377,44 +340,36 @@ private:
   int init_original_schema();
   int init_sys_tenant_user_schema();
 
-  int refresh_tenant_schema(const uint64_t tenant_id,
-                            common::ObIArray<share::schema::ObTableSchema> *table_schemas = nullptr);
+  int refresh_tenant_schema(common::ObIArray<share::schema::ObTableSchema> *table_schemas = nullptr);
 
   virtual int add_schema_mgr_info(
               ObSchemaGetterGuard &schema_guard,
               ObSchemaStore* schema_store,
               const ObRefreshSchemaStatus &schema_status,
-              const uint64_t tenant_id,
               const int64_t snapshot_version,
               const int64_t latest_local_version,
               const RefreshSchemaMode refresh_schema_mode = RefreshSchemaMode::NORMAL);
 
   // gc dropped tenant schema mgr
   int try_gc_tenant_schema_mgr();
-  int try_gc_tenant_schema_mgr(uint64_t tenant_id);
-  int try_gc_tenant_schema_mgr_for_refresh(uint64_t tenant_id);
-  int try_gc_tenant_schema_mgr_for_fallback(uint64_t tenant_id);
+  int try_gc_tenant_schema_mgr(uint64_t req_id);
+  int try_gc_tenant_schema_mgr_for_refresh();
+  int try_gc_tenant_schema_mgr_for_fallback();
   int try_gc_tenant_schema_mgr(ObSchemaMemMgr *&mem_mgr, ObSchemaMgrCache *&schema_mgr_cache);
-  int get_gc_candidates(common::hash::ObHashSet<uint64_t> &candidates);
   // gc existed tenant schema mgr
   int try_gc_existed_tenant_schema_mgr();
   // try release exist tenant's another allocator
-  int try_gc_another_allocator(const uint64_t tenant_id,
-                               ObSchemaMemMgr *&mem_mgr,
+  int try_gc_another_allocator(ObSchemaMemMgr *&mem_mgr,
                                ObSchemaMgrCache *&schema_mgr_cache);
   // try release slot's schema mgr which is in current allocator and without reference
-  int try_gc_current_allocator(const uint64_t tenant_id,
-                               ObSchemaMemMgr *&mem_mgr,
+  int try_gc_current_allocator(ObSchemaMemMgr *&mem_mgr,
                                ObSchemaMgrCache *&schema_mgr_cache);
 
   int get_schema_status(
       const common::ObArray<ObRefreshSchemaStatus> &schema_status_array,
-      const uint64_t tenant_id,
       ObRefreshSchemaStatus &schema_status);
 
-  int batch_fetch_tablet_to_table_history_(
-      const uint64_t tenant_id,
-      const common::ObIArray<ObTabletID> &tablet_ids,
+  int batch_fetch_tablet_to_table_history_(const common::ObIArray<ObTabletID> &tablet_ids,
       const int64_t schema_version,
       const common::ObIArray<int64_t> &tablet_idxs,
       const int64_t start_idx,
@@ -423,7 +378,7 @@ private:
 
   virtual int get_schema_version_history(
       const ObRefreshSchemaStatus &fetch_schema_status,
-      const uint64_t fetch_tenant_id,
+      const uint64_t req_id,
       const int64_t schema_version,
       const VersionHisKey &key,
       VersionHisVal &val,
@@ -432,21 +387,21 @@ private:
       ObTableSchema &table_schema,
       const ObTableType table_type) override;
 
-  //for liboblog
-  int fallback_schema_mgr_for_liboblog(const ObRefreshSchemaStatus &schema_status,
-                                       const int64_t target_version,
-                                       const int64_t latest_local_version,
-                                       const ObSchemaMgr *&schema_mgr,
-                                       ObSchemaMgrHandle &handle);
-  int put_fallback_liboblog_schema_to_slot(
-      ObSchemaMgrCache &schema_mgr_cache_for_liboblog,
-      ObSchemaMemMgr &mem_mgr_for_liboblog,
-      ObSchemaMgr *&target_mgr,
-      ObSchemaMgrHandle &handle);
   int put_fallback_schema_to_slot(ObSchemaMgr *&new_mgr,
                                   ObSchemaMgrCache &schema_mgr_cache,
                                   ObSchemaMemMgr &schema_mem_mgr,
                                   ObSchemaMgrHandle &handle);
+  // Reconstruct a historical schema_mgr that has aged out of the live cache, used by
+  // FORCE_FALLBACK consumers (data dictionary dump / change stream async index) that
+  // request a schema version which may be older than the oldest cached slot. Replays
+  // increment schema operations reversely from the nearest available mgr down to
+  // target_version and puts the result into the main schema_mgr_cache.
+  int construct_fallback_schema_mgr_(ObSchemaStore *schema_store,
+                                     const ObRefreshSchemaStatus &schema_status,
+                                     const int64_t target_version,
+                                     const int64_t latest_local_version,
+                                     const ObSchemaMgr *&schema_mgr,
+                                     ObSchemaMgrHandle &handle);
   int alloc_and_put_schema_mgr_(ObSchemaMemMgr &mem_mgr,
                                 ObSchemaMgr &latest_schema_mgr,
                                 ObSchemaMgrCache &schema_mgr_cache);
@@ -454,21 +409,17 @@ private:
                         ObSchemaMgr *&latest_schema_mgr);
   inline static bool compare_schema_mgr_info_(const ObSchemaMgr *lhs,
                                               const ObSchemaMgr *rhs);
-  int try_gc_allocator_when_add_schema_(const uint64_t tenant_id,
-                                        ObSchemaMemMgr *&mem_mgr,
+  int try_gc_allocator_when_add_schema_(ObSchemaMemMgr *&mem_mgr,
                                         ObSchemaMgrCache *&schema_mgr_cache);
-  int cal_purge_table_timeout_(const uint64_t &tenant_id,
-                               const uint64_t &table_id,
+  int cal_purge_table_timeout_(const uint64_t &table_id,
                                int64_t &cal_table_timeout,
                                int64_t &total_purge_count);
-  int cal_purge_database_timeout_(const uint64_t &tenant_id,
-                                  const uint64_t &database_id,
+  int cal_purge_database_timeout_(const uint64_t &database_id,
                                   int64_t &cal_database_timeout,
                                   int64_t &total_purge_count);
 
 private:
   static const int64_t MAX_VERSION_COUNT = 64;
-  static const int64_t MAX_VERSION_COUNT_FOR_LIBOBLOG = 6;
   static const int32_t MAX_RETRY_TIMES = 10;
   static const int64_t RETRY_INTERVAL_US = 1000 * 1000; //1s
   static const int64_t DEFAULT_TENANT_SET_SIZE = 64;
@@ -478,13 +429,11 @@ private:
   mutable lib::ObMutex schema_refresh_mutex_;//assert only one thread can refresh schema
   ObSchemaCache schema_cache_;
   ObSchemaMgrCache schema_mgr_cache_;
-  ObSchemaMgrCache schema_mgr_cache_for_liboblog_;
   ObSchemaFetcher schema_fetcher_;
   common::SpinRWLock schema_info_rwlock_;
   ObRefreshSchemaInfo last_refreshed_schema_info_;
   int64_t init_version_cnt_;
-  int64_t init_version_cnt_for_liboblog_;
-  ObSchemaStoreMap schema_store_map_;
+  ObSchemaStore schema_store_;
   ObDDLTransController ddl_trans_controller_;
   ObDDLEpochMgr ddl_epoch_mgr_;
 

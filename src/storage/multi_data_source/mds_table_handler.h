@@ -39,7 +39,6 @@ public:
   ObMdsTableHandler &operator=(const ObMdsTableHandler &);// value sematic for tablet ponter deep copy
   int get_mds_table_handle(mds::MdsTableHandle &handle,
                            const ObTabletID &tablet_id,
-                           const share::ObLSID &ls_id,
                            const share::SCN mds_ckpt_scn_from_tablet,// this is used to filter replayed nodes after removed action
                            const bool not_exist_create,
                            ObTabletPointer *pointer);

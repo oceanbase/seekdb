@@ -18,7 +18,7 @@
 
 #include "storage/tx_storage/ob_ls_freeze_thread.h"
 #include "storage/checkpoint/ob_data_checkpoint.h"
-#include "deps/oblib/src/lib/thread/thread_mgr.h"
+#include "lib/ob_running_mode.h"
 
 namespace oceanbase
 {
@@ -51,7 +51,7 @@ void ObLSFreezeTask::handle()
 }
 
 ObLSFreezeThread::ObLSFreezeThread()
-    : inited_(false), tg_id_(-1), available_index_(-1), lock_(common::ObLatchIds::THREAD_POOL_LOCK)
+    : inited_(false), available_index_(-1), lock_(common::ObLatchIds::THREAD_POOL_LOCK)
 {
   for (int64_t i = 0; i < MAX_FREE_TASK_NUM; i++) {
     task_array_[i] = NULL;
@@ -66,6 +66,10 @@ ObLSFreezeThread::~ObLSFreezeThread()
 void ObLSFreezeThread::destroy()
 {
   if (inited_) {
+    common::ObSimpleThreadPool::stop();
+    common::ObSimpleThreadPool::wait();
+    common::ObSimpleThreadPool::destroy();
+
     while (available_index_ >= 0) {
       task_array_[available_index_]->~ObLSFreezeTask();
       ob_free(task_array_[available_index_]);
@@ -74,23 +78,23 @@ void ObLSFreezeThread::destroy()
     }
 
     inited_ = false;
-    tg_id_ = -1;
     STORAGE_LOG(INFO, "ls freeze thread destroy", KP(this));
   }
 }
 
-int ObLSFreezeThread::init(const int64_t tenant_id, int tg_id)
+int ObLSFreezeThread::init()
 {
   int ret = OB_SUCCESS;
   if (inited_) {
     ret = OB_INIT_TWICE;
     STORAGE_LOG(WARN, "ObLSFreezeThread has already been inited", K(ret));
-  } else if (OB_FAIL(TG_CREATE_TENANT(tg_id, tg_id_))) {
-    STORAGE_LOG(WARN, "ObSimpleThreadPool tg create", K(ret));
-  } else if (OB_FAIL(TG_SET_HANDLER_AND_START(tg_id_, *this))) {
+  } else if (OB_FAIL(common::ObSimpleThreadPool::init(get_thread_num_(),
+                                                      MAX_FREE_TASK_NUM,
+                                                      "LSFreeze"))) {
     STORAGE_LOG(WARN, "ObSimpleThreadPool inited error.", K(ret));
   } else {
-    ObMemAttr memattr(tenant_id, "FreezeTask");
+    inited_ = true;
+    ObMemAttr memattr("FreezeTask");
     for (int64_t i = 0; OB_SUCC(ret) && i < MAX_FREE_TASK_NUM; i++) {
       ObLSFreezeTask *ptr
         = (ObLSFreezeTask *)ob_malloc(sizeof(ObLSFreezeTask), memattr);
@@ -100,15 +104,28 @@ int ObLSFreezeThread::init(const int64_t tenant_id, int tg_id)
         new (ptr) ObLSFreezeTask();
         task_array_[i] = ptr;
         available_index_ = i;
-        inited_ = true;
       }
     }
   }
-  if (OB_SUCCESS != ret && !inited_) {
+  if (OB_FAIL(ret)) {
     destroy();
   }
   STORAGE_LOG(INFO, "ObLSFreezeThread init finished", K(ret));
   return ret;
+}
+
+void ObLSFreezeThread::stop()
+{
+  if (inited_) {
+    common::ObSimpleThreadPool::stop();
+  }
+}
+
+void ObLSFreezeThread::wait()
+{
+  if (inited_) {
+    common::ObSimpleThreadPool::wait();
+  }
 }
 
 int ObLSFreezeThread::add_task(ObDataCheckpoint *data_checkpoint,
@@ -128,7 +145,7 @@ int ObLSFreezeThread::add_task(ObDataCheckpoint *data_checkpoint,
   }
   if (OB_SUCC(ret)) {
     task->set_task(this, data_checkpoint, rec_scn);
-    if (OB_FAIL(TG_PUSH_TASK(tg_id_, task))) {
+    if (OB_FAIL(common::ObSimpleThreadPool::push(task))) {
       STORAGE_LOG(WARN, "schedule timer task failed", K(ret));
     }
   }
@@ -156,6 +173,11 @@ int ObLSFreezeThread::push_back_(ObLSFreezeTask *task)
     task_array_[++available_index_] = task;
   }
   return ret;
+}
+
+int64_t ObLSFreezeThread::get_thread_num_() const
+{
+  return lib::is_mini_mode() ? MINI_MODE_QUEUE_THREAD_NUM : QUEUE_THREAD_NUM;
 }
 
 }  // namespace storage

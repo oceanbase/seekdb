@@ -36,7 +36,7 @@ public:
 
 void TestObjCast::SetUp()
 {
-  const lib::ObMemAttr attr(common::OB_SYS_TENANT_ID, ObModIds::OB_NUMBER);
+  const lib::ObMemAttr attr(ObModIds::OB_NUMBER);
   int ret = ObNumberConstValue::init(allocator_);
   ASSERT_EQ(OB_SUCCESS, ret);
 }
@@ -44,7 +44,6 @@ void TestObjCast::SetUp()
 TEST_F(TestObjCast, test_number_range_check_mysql_old)
 {
   int ret = OB_SUCCESS;
-  lib::CompatModeGuard tmp_mode(lib::Worker::CompatMode::MYSQL);
   ObNumber zero_number;
   zero_number.set_zero();
   ObObj obj1;
@@ -68,7 +67,6 @@ TEST_F(TestObjCast, test_number_range_check_mysql_old)
 TEST_F(TestObjCast, test_number_range_check_mysql_new)
 {
   int ret = OB_SUCCESS;
-  lib::CompatModeGuard tmp_mode(lib::Worker::CompatMode::MYSQL);
   ObNumber zero_number;
   zero_number.set_zero();
   ObObj obj1;

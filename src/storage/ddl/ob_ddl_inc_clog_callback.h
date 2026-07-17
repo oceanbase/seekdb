@@ -20,12 +20,12 @@
  #include "storage/ddl/ob_ddl_struct.h"
  #include "storage/ddl/ob_ddl_inc_clog.h"
  #include "storage/meta_mem/ob_tablet_handle.h"
-
+ 
  namespace oceanbase
  {
  namespace storage
  {
-
+ 
  class ObDDLIncClogCb : public logservice::AppendCb
  {
  public:
@@ -43,31 +43,29 @@
  protected:
    ObDDLClogCbStatus status_;
  };
-
+ 
  class ObDDLIncStartClogCb : public ObDDLIncClogCb
  {
  public:
    ObDDLIncStartClogCb();
    virtual ~ObDDLIncStartClogCb() = default;
-   int init(const share::ObLSID &ls_id, const ObDDLIncLogBasic &log_basic);
+   int init(const ObDDLIncLogBasic &log_basic);
    virtual int on_success() override;
    virtual int on_failure() override;
    virtual void try_release() override;
    const char *get_cb_name() const override { return "DDLIncStartClogCb"; }
-   INHERIT_TO_STRING_KV("ObDDLIncClogCb", ObDDLIncClogCb, K(is_inited_), K(ls_id_), K(log_basic_));
+   INHERIT_TO_STRING_KV("ObDDLIncClogCb", ObDDLIncClogCb, K(is_inited_), K(log_basic_));
  private:
    bool is_inited_;
-   share::ObLSID ls_id_;
    ObDDLIncLogBasic log_basic_;
  };
-
+ 
  class ObDDLIncRedoClogCb : public ObDDLIncClogCb
  {
  public:
    ObDDLIncRedoClogCb();
    virtual ~ObDDLIncRedoClogCb();
-   int init(const share::ObLSID &ls_id,
-            const storage::ObDDLMacroBlockRedoInfo &redo_info,
+   int init(const storage::ObDDLMacroBlockRedoInfo &redo_info,
             const blocksstable::MacroBlockId &macro_block_id,
             storage::ObTabletHandle &tablet_handle);
    virtual int on_success() override;
@@ -76,30 +74,29 @@
    const char *get_cb_name() const override { return "DDLIncRedoClogCb"; }
  private:
    bool is_inited_;
-   share::ObLSID ls_id_;
    storage::ObDDLMacroBlockRedoInfo redo_info_;
    blocksstable::MacroBlockId macro_block_id_;
    ObSpinLock data_buffer_lock_;
    bool is_data_buffer_freed_;
    storage::ObTabletHandle tablet_handle_;
  };
-
+ 
  class ObDDLIncCommitClogCb : public ObDDLIncClogCb
  {
  public:
    ObDDLIncCommitClogCb();
    virtual ~ObDDLIncCommitClogCb() = default;
-   int init(const share::ObLSID &ls_id, const ObDDLIncLogBasic &log_basic);
+   int init(const ObDDLIncLogBasic &log_basic);
    virtual int on_success() override;
    virtual int on_failure() override;
    virtual void try_release() override;
    const char *get_cb_name() const override { return "DDLIncCommitClogCb"; }
-   INHERIT_TO_STRING_KV("ObDDLIncClogCb", ObDDLIncClogCb, K(is_inited_), K(ls_id_), K(log_basic_));
+   INHERIT_TO_STRING_KV("ObDDLIncClogCb", ObDDLIncClogCb, K(is_inited_), K(log_basic_));
  private:
    bool is_inited_;
-   share::ObLSID ls_id_;
    ObDDLIncLogBasic log_basic_;
  };
-
+ 
  } // namespace storage
  } // namespace oceanbase
+ 

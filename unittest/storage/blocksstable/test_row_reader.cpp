@@ -22,6 +22,7 @@
 
 
 #include "ob_data_file_prepare.h"
+#include "storage/memtable/ob_nop_bitmap.h"
 #include "unittest/storage/mock_ob_table_read_info.h"
 
 #ifndef INT24_MIN
@@ -130,7 +131,6 @@ int TestNewRowReader::init_read_columns(
           allocator_,
           writer_row.count_,
           row_generate_.get_schema().get_rowkey_column_num(),
-          lib::is_oracle_mode(),
           cols_desc,
           &projector))) {
     STORAGE_LOG(WARN, "failed to init column map");
@@ -167,7 +167,7 @@ int TestNewRowReader::init_read_columns(
     ret = cols_desc.push_back(col_desc);
   }
   if (OB_FAIL(read_info_.init(allocator_, writer_row.count_,
-          row_generate_.get_schema().get_rowkey_column_num(), lib::is_oracle_mode(),
+          row_generate_.get_schema().get_rowkey_column_num(),
           cols_desc))) {
     STORAGE_LOG(WARN, "failed to init column map");
   }
@@ -188,7 +188,6 @@ void TestNewRowReader::SetUp()
   //init table schema
   table_schema_.reset();
   ASSERT_EQ(OB_SUCCESS, table_schema_.set_table_name("test_row_writer"));
-  table_schema_.set_tenant_id(1);
   table_schema_.set_tablegroup_id(1);
   table_schema_.set_database_id(1);
   table_schema_.set_table_id(table_id);
@@ -249,7 +248,7 @@ void TestNewRowReader::build_column_read_info(const int64_t rowkey_column_count,
     col_desc.col_id_ = i + common::OB_APP_MIN_COLUMN_ID;
     full_schema_cols_.push_back(col_desc);
   }
-  read_info_.init(allocator_,  writer_row.row_val_.count_, rowkey_column_count, lib::is_oracle_mode(), full_schema_cols_);
+  read_info_.init(allocator_,  writer_row.row_val_.count_, rowkey_column_count, full_schema_cols_);
 }
 
 void TestNewRowReader::build_column_read_info(const int64_t rowkey_column_count, const ObDatumRow &writer_row)
@@ -263,7 +262,7 @@ void TestNewRowReader::build_column_read_info(const int64_t rowkey_column_count,
     col_desc.col_id_ = i + common::OB_APP_MIN_COLUMN_ID;
     full_schema_cols_.push_back(col_desc);
   }
-  read_info_.init(allocator_,  writer_row.count_, rowkey_column_count, lib::is_oracle_mode(), full_schema_cols_);
+  read_info_.init(allocator_,  writer_row.count_, rowkey_column_count, full_schema_cols_);
 }
 
 void TestNewRowReader::check_read_datum_row(

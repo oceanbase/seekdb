@@ -26,10 +26,6 @@
 
 namespace oceanbase
 {
-namespace share
-{
-class ObLSID;
-}
 namespace blocksstable
 {
 struct ObMacroBlocksWriteCtx;
@@ -155,7 +151,6 @@ private:
       const ObTablet &tablet,
       const ObSSTableBasicMeta &basic_meta,
       const compaction::ObMergeType &merge_type,
-      const storage::ObITable::TableKey &table_key,
       const int64_t snapshot_version,
       const int64_t cluster_version,
       const share::SCN &end_scn,
@@ -202,7 +197,7 @@ private:
   lib::ObMutex blocks_mutex_; // protect block_used_size_
   ObLinearHashMap<MacroBlockId, int32_t> block_used_size_;
   ObBlockDefragmentationTask defragmentation_task_;
-  int tg_id_;
+  common::ObTimer defragment_timer_;
   bool need_defragment_;
   bool is_inited_;
 };

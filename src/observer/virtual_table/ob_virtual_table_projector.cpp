@@ -1,0 +1,141 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#define USING_LOG_PREFIX COMMON
+#include "observer/virtual_table/ob_virtual_table_projector.h"
+namespace oceanbase
+{
+namespace common
+{
+int ObVirtualTableProjector::project_row(const ObIArray<Column> &columns, ObNewRow &row, const bool full_columns)
+{
+  int ret = OB_SUCCESS;
+  if (columns.count() < 0) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("columns is empty", K(ret));
+  } else if (output_column_ids_.count() > row.count_) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("column num not match", KR(ret), K(row), K_(output_column_ids));
+  } else if (OB_ISNULL(row.cells_) && row.count_ != 0) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("row count is not valid", KR(ret), K(row));
+  } else if (OB_ISNULL(row.cells_)) {
+    // just skip, won't project row
+    // column not specified, eg: count(*)
+  } else {
+    int64_t cell_idx = 0;
+    FOREACH_CNT_X(column_id, output_column_ids_, OB_SUCCESS == ret) {
+      bool find = false;
+      ObObj column_value = ObObj::make_nop_obj();
+      FOREACH_CNT_X(column, columns, !find) {
+        if (*column_id == column->column_id_) {
+          column_value = column->column_value_;
+          find = true;
+        }
+      }
+      if (!find && full_columns) {
+        ret = OB_ENTRY_NOT_EXIST;
+        LOG_WARN("column not exist", "column_id", *column_id, K(ret));
+      } else {
+        row.cells_[cell_idx] = column_value;
+        ++cell_idx;
+      }
+    }
+  }
+  return ret;
+}
+
+int ObVirtualTableProjector::check_column_exist(const share::schema::ObTableSchema *table,
+                                                const char* column_name,
+                                                bool &exist) const
+{
+  int ret = OB_SUCCESS;
+  const share::schema::ObColumnSchemaV2 *column_schema = NULL;
+  exist = false;
+  if (OB_ISNULL(table) || OB_ISNULL(column_name)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument", KR(ret), K(table), K(column_name));
+  } else if (OB_ISNULL(column_schema = table->get_column_schema(column_name))) {
+    ret = OB_SCHEMA_ERROR;
+    LOG_WARN("fail to get column schema", KR(ret), K(column_name));
+  } else {
+    uint64_t table_column_id = column_schema->get_column_id();
+    FOREACH_CNT_X(column_id, output_column_ids_, OB_SUCCESS == ret) {
+      if (*column_id == table_column_id) {
+        exist = true;
+        break;
+      }
+    }
+  }
+  return ret;
+}
+////////////////////////////////////////////////////////////////
+ObSimpleVirtualTableIterator::ObSimpleVirtualTableIterator(uint64_t table_id)
+    :table_id_(table_id),
+     schema_guard_(share::schema::ObSchemaMgrItem::MOD_VIRTUAL_TABLE),
+     schema_service_(NULL),
+     table_schema_(NULL)
+{}
+
+
+int ObSimpleVirtualTableIterator::inner_open()
+{
+  int ret = OB_SUCCESS;
+  if (OB_UNLIKELY(NULL == schema_service_)) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("schema_service_ not init", K(ret));
+  } else if (OB_FAIL(schema_service_->get_tenant_schema_guard(schema_guard_))) {
+    LOG_WARN("fail to get schema guard", K(ret));
+  } else if (OB_FAIL(get_table_schema( table_id_))) {
+    LOG_WARN("fail to get table schema", K(ret));
+  } else if (OB_FAIL(init_all_data())) {
+    LOG_WARN("fail to init all data", K(ret));
+  }
+  return ret;
+}
+
+int ObSimpleVirtualTableIterator::get_table_schema( uint64_t table_id)
+{
+  int ret = OB_SUCCESS;
+  if (OB_FAIL(schema_guard_.get_table_schema( table_id, table_schema_))) {
+    LOG_WARN("fail to get table schema", K(table_id), K(ret));
+  } else if (NULL == table_schema_) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("table schema is null", K(ret), K(table_id));
+  } else {} // no more to do
+  return ret;
+}
+
+int ObSimpleVirtualTableIterator::inner_get_next_row(
+    common::ObNewRow *&row)
+{
+  int ret = OB_SUCCESS;
+  columns_.reuse();
+  if (OB_FAIL(get_next_full_row(table_schema_, columns_))) {
+    if (OB_ITER_END != ret) {
+      LOG_WARN("fail to get full row", K(ret));
+    }
+  } else if (OB_FAIL(project_row(columns_, cur_row_))) {
+    LOG_WARN("fail to project row", K(columns_), K(ret));
+  } else {
+    row = &cur_row_;
+  }
+  return ret;
+}
+
+
+}//end namespace common
+}//end namespace oceanbase

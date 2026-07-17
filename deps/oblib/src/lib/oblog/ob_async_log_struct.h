@@ -94,8 +94,11 @@ public:
   bool is_supported_file() const { return MAX_FD_FILE != fd_type_; }
   bool is_audit_file() const { return FD_AUDIT_FILE == fd_type_; }
   bool is_alert_file() const { return FD_ALERT_FILE == fd_type_; }
+  void set_ring_offset(int64_t off) { ring_offset_ = off; }
+  int64_t get_ring_offset() const { return ring_offset_; }
 
 private:
+  int64_t ring_offset_;
   ObPLogFDType fd_type_;
   int32_t log_level_;
   int32_t tl_type_;

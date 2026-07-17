@@ -9,7 +9,7 @@ In order to easily read the code of seekdb, we suggest using an IDE that can eas
 
 This document introduces how to set up `VSCode + ccls`, which is very convenient for reading the code of seekdb. [ccls](https://github.com/MaskRay/ccls) is based on [cquery](https://github.com/jacobdufault/cquery), which is one of C/C++/Objective-C [LSP](https://en.wikipedia.org/wiki/Language_Server_Protocol)s (In one word, LSP is used to provide programming language-specific features like code completion, syntax highlighting and marking of warnings and errors, as well as refactoring routines).
 
-The number of seekdb code is pretty huge and seekdb can't be compiled under Mac or Windows, so we recommend that download the code on the remote server, and start VSCode to access the code under the remote server.
+The number of seekdb code is pretty huge, so we recommend that download the code on the remote server, and start VSCode to access the code under the remote server.
 
 # Config ccls on Remote Server
 

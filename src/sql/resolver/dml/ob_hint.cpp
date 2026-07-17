@@ -59,26 +59,6 @@ int ObPhyPlanHint::deep_copy(const ObPhyPlanHint &other, ObIAllocator &allocator
   return ret;
 }
 
-int ObDBLinkHit::print(char *buf, int64_t &buf_len, int64_t &pos, const char* outline_indent) const {
-  int ret = OB_SUCCESS;
-  if (0 < tx_id_) {
-    if (OB_FAIL(BUF_PRINTF("%s%s(\'%s\' , %ld)", outline_indent, "DBLINK_INFO", "DBLINK_TX_ID", tx_id_))) {
-      LOG_WARN("failed to print hint", K(ret), K("DBLINK_INFO(%s , %ld)")); 
-    }
-  }
-  if (OB_SUCC(ret) &&  0 != tm_sessid_) {
-    if (OB_FAIL(BUF_PRINTF("%s%s(\'%s\' , %u)", outline_indent, "DBLINK_INFO", "DBLINK_TM_SESSID", tm_sessid_))) {
-      LOG_WARN("failed to print hint", K(ret), K("DBLINK_INFO(%s , %u)")); 
-    }
-  }
-  if (OB_SUCC(ret) &&  hint_xa_trans_stop_check_lock_) {
-    if (OB_FAIL(BUF_PRINTF("%s%s(\'%s\' , \'%s\')", outline_indent, "DBLINK_INFO", "DBLINK_XA_TRANS_STOP_CHECK_LOCK", "TRUE"))) {
-      LOG_WARN("failed to print hint", K(ret), K("DBLINK_INFO(%s , %s)")); 
-    }
-  }
-  return 0;
-}
-
 int ObGlobalHint::merge_alloc_op_hints(const ObIArray<ObAllocOpHint> &alloc_op_hints)
 {
   int ret = OB_SUCCESS;
@@ -204,7 +184,7 @@ void ObGlobalHint::merge_dynamic_sampling_hint(int64_t dynamic_sampling)
   if (dynamic_sampling != UNSET_DYNAMIC_SAMPLING) {
     if (UNSET_DYNAMIC_SAMPLING == dynamic_sampling_ || dynamic_sampling == dynamic_sampling_) {
       dynamic_sampling_ = dynamic_sampling;
-    } else {//conflict will cause reset origin state compatible Oracle.
+    } else {//conflict will reset the original state.
       dynamic_sampling_ = UNSET_DYNAMIC_SAMPLING;
     }
   }
@@ -312,17 +292,6 @@ void ObGlobalHint::merge_direct_load_hint(const ObDirectLoadHint &other)
   direct_load_hint_.merge(other);
 }
 
-// use the first resource group hint now.
-void ObGlobalHint::merge_resource_group_hint(const ObString &resource_group)
-{
-  int tmp_ret = OB_SUCCESS;
-  if (!resource_group_.empty() || resource_group.empty()) {
-    // do nothing
-  } else {
-    resource_group_.assign_ptr(resource_group.ptr(), resource_group.length());
-  }
-}
-
 // zhanyue todo: try remove this later
 bool ObGlobalHint::has_hint_exclude_concurrent() const
 {
@@ -331,7 +300,6 @@ bool ObGlobalHint::has_hint_exclude_concurrent() const
          || -1 != topk_precision_
          || 0 != sharding_minimum_row_count_
          || UNSET_QUERY_TIMEOUT != query_timeout_
-         || dblink_hints_.has_valid_hint()
          || common::INVALID_CONSISTENCY != read_consistency_
          || OB_USE_PLAN_CACHE_INVALID != plan_cache_policy_
          || false != force_trace_log_
@@ -353,9 +321,7 @@ bool ObGlobalHint::has_hint_exclude_concurrent() const
          || has_gather_opt_stat_hint()
          || false != has_dbms_stats_hint_
          || -1 != dynamic_sampling_
-         || flashback_read_tx_uncommitted_
          || has_direct_load()
-         || !resource_group_.empty()
          || ObParallelDASOption::NOT_SPECIFIED != parallel_das_dml_option_
          || !px_node_hint_.empty();
 }
@@ -386,12 +352,9 @@ void ObGlobalHint::reset()
   ob_ddl_schema_versions_.reuse();
   osg_hint_.flags_ = 0;
   has_dbms_stats_hint_ = false;
-  flashback_read_tx_uncommitted_ = false;
   dynamic_sampling_ = ObGlobalHint::UNSET_DYNAMIC_SAMPLING;
   alloc_op_hints_.reuse();
   direct_load_hint_.reset();
-  dblink_hints_.reset();
-  resource_group_.reset();
   parallel_das_dml_option_ = ObParallelDASOption::NOT_SPECIFIED;
   px_node_hint_.reset();
 }
@@ -419,12 +382,9 @@ int ObGlobalHint::merge_global_hint(const ObGlobalHint &other)
   disable_cost_based_transform_ |= other.disable_cost_based_transform_;
   osg_hint_.flags_ |= other.osg_hint_.flags_;
   has_dbms_stats_hint_ |= other.has_dbms_stats_hint_;
-  flashback_read_tx_uncommitted_ |= other.flashback_read_tx_uncommitted_;
-  dblink_hints_ = other.dblink_hints_;
   merge_parallel_das_dml_hint(other.parallel_das_dml_option_);
   merge_dynamic_sampling_hint(other.dynamic_sampling_);
   merge_direct_load_hint(other.direct_load_hint_);
-  merge_resource_group_hint(other.resource_group_);
   if (OB_FAIL(merge_alloc_op_hints(other.alloc_op_hints_))) {
     LOG_WARN("failed to merge alloc op hints", K(ret));
   } else if (OB_FAIL(merge_dop_hint(other.dops_))) {
@@ -455,7 +415,6 @@ int ObGlobalHint::print_global_hint(PlanText &plan_text) const
   int64_t &buf_len = plan_text.buf_len_;
   int64_t &pos = plan_text.pos_;
   const char* outline_indent = ObQueryHint::get_outline_indent(plan_text.is_oneline_);
-  const bool ignore_parallel_for_dblink = EXPLAIN_DBLINK_STMT == plan_text.type_;
 
   #define PRINT_GLOBAL_HINT_STR(hint_str)           \
   if (OB_FAIL(BUF_PRINTF("%s%s", outline_indent, hint_str))) {  \
@@ -481,7 +440,7 @@ int ObGlobalHint::print_global_hint(PlanText &plan_text) const
   }
 
   //DOP
-  if (OB_SUCC(ret) && !dops_.empty() && !ignore_parallel_for_dblink) {
+  if (OB_SUCC(ret) && !dops_.empty()) {
     for (int64_t i = 0; OB_SUCC(ret) && i < dops_.count(); ++i) {
       if (OB_FAIL(BUF_PRINTF("%sDOP(%lu, %lu)", outline_indent, dops_.at(i).dfo_, dops_.at(i).dop_))) {
         LOG_WARN("failed to print dop hint", K(ret));
@@ -506,9 +465,6 @@ int ObGlobalHint::print_global_hint(PlanText &plan_text) const
   }
   if (OB_SUCC(ret) && UNSET_QUERY_TIMEOUT != query_timeout_) { //QUERY_TIMEOUT
     PRINT_GLOBAL_HINT_NUM("QUERY_TIMEOUT", query_timeout_);
-  }
-  if (OB_SUCC(ret) && OB_FAIL(dblink_hints_.print(buf, buf_len, pos, outline_indent))) { // DBLINK_INFO
-    LOG_WARN("failed to print dblink hints", K(ret), K(dblink_hints_)); 
   }
   if (OB_SUCC(ret) && plan_cache_policy_ != OB_USE_PLAN_CACHE_INVALID) { //USE_PLAN_CACHE
     const char *plan_cache_policy = "INVALID";
@@ -535,7 +491,7 @@ int ObGlobalHint::print_global_hint(PlanText &plan_text) const
       LOG_WARN("failed to print log level hint", K(ret));
     }
   }
-  if (OB_SUCC(ret) && has_parallel_hint() && !ignore_parallel_for_dblink) { //PARALLEL
+  if (OB_SUCC(ret) && has_parallel_hint()) { //PARALLEL
     if (has_parallel_degree()) {
       PRINT_GLOBAL_HINT_NUM("PARALLEL", parallel_);
     } else if (enable_auto_dop()) {
@@ -544,7 +500,7 @@ int ObGlobalHint::print_global_hint(PlanText &plan_text) const
       PRINT_GLOBAL_HINT_STR("PARALLEL( MANUAL )");
     }
   }
-  if (OB_SUCC(ret) && has_dml_parallel_hint() && !ignore_parallel_for_dblink) { //DML_PARALLEL
+  if (OB_SUCC(ret) && has_dml_parallel_hint()) { //DML_PARALLEL
     PRINT_GLOBAL_HINT_NUM("DML_PARALLEL", dml_parallel_);
   }
   if (OB_SUCC(ret) && monitor_) { //MONITOR
@@ -552,9 +508,7 @@ int ObGlobalHint::print_global_hint(PlanText &plan_text) const
   }
   if (OB_SUCC(ret) && ObPDMLOption::NOT_SPECIFIED != pdml_option_) { //PDML
     if (ObPDMLOption::ENABLE == pdml_option_) {
-      if (!ignore_parallel_for_dblink) {
-        PRINT_GLOBAL_HINT_STR("ENABLE_PARALLEL_DML");
-      }
+      PRINT_GLOBAL_HINT_STR("ENABLE_PARALLEL_DML");
     } else if (ObPDMLOption::DISABLE == pdml_option_) {
       PRINT_GLOBAL_HINT_STR("DISABLE_PARALLEL_DML");
     } else {
@@ -564,9 +518,7 @@ int ObGlobalHint::print_global_hint(PlanText &plan_text) const
   }
   if (OB_SUCC(ret) && ObParallelDASOption::NOT_SPECIFIED != parallel_das_dml_option_) { //PDML
    if (ObParallelDASOption::ENABLE == parallel_das_dml_option_) {
-     if (!ignore_parallel_for_dblink) {
-       PRINT_GLOBAL_HINT_STR("ENABLE_PARALLEL_DAS_DML");
-     }
+     PRINT_GLOBAL_HINT_STR("ENABLE_PARALLEL_DAS_DML");
    } else if (ObParallelDASOption::DISABLE == parallel_das_dml_option_) {
      PRINT_GLOBAL_HINT_STR("DISABLE_PARALLEL_DAS_DML");
    } else {
@@ -619,17 +571,8 @@ int ObGlobalHint::print_global_hint(PlanText &plan_text) const
   if (OB_SUCC(ret) && has_dbms_stats_hint()) {
     PRINT_GLOBAL_HINT_STR("DBMS_STATS");
   }
-  if (OB_SUCC(ret) && get_flashback_read_tx_uncommitted()) {
-    PRINT_GLOBAL_HINT_STR("FLASHBACK_READ_TX_UNCOMMITTED");
-  }
   if (OB_SUCC(ret) && OB_FAIL(direct_load_hint_.print_direct_load_hint(plan_text))) {
     LOG_WARN("failed to print direct load hint", KR(ret));
-  }
-  if (OB_SUCC(ret) && !resource_group_.empty()) { //RESOURCE_GROUP
-    if (OB_FAIL(BUF_PRINTF("%sRESOURCE_GROUP(\"%.*s\")", outline_indent,
-                                    resource_group_.length(), resource_group_.ptr() ))) {
-      LOG_WARN("failed to print resource group hint", K(ret));
-    }
   }
   if (OB_SUCC(ret) && OB_FAIL(px_node_hint_.print_px_node_hint(plan_text))) {
     LOG_WARN("failed to print px node hint", K(ret));
@@ -934,16 +877,6 @@ bool ObOptParamHint::is_param_val_valid(const OptParamType param_type, const ObO
     case PARTITION_INDEX_DIVE_LIMIT:
       is_valid = val.is_int();
       break;
-    case OB_TABLE_ACCESS_POLICY: {
-      if (val.is_int()) {
-        is_valid = 0 <= val.get_int() && val.get_int() < static_cast<int64_t>(ObTableAccessPolicy::MAX);
-      } else if (val.is_varchar()) {
-        int64_t type = OB_INVALID_ID;
-        ObSysVarObTableAccessPolicy sv;
-        is_valid = (OB_SUCCESS == sv.find_type(val.get_varchar(), type));
-      }
-      break;
-    }
     case PARTITION_WISE_PLAN_ENABLED: {
       is_valid = val.is_varchar() && (0 == val.get_varchar().case_compare("true")
                                       || 0 == val.get_varchar().case_compare("false"));
@@ -1137,13 +1070,6 @@ int ObOptParamHint::get_enum_opt_param(const OptParamType param_type, int64_t &v
         }
         break;
       }
-      case OB_TABLE_ACCESS_POLICY: {
-        ObSysVarObTableAccessPolicy sv;
-        if (OB_FAIL(sv.find_type(obj.get_varchar(), val))) {
-          LOG_WARN("param obj is invalid", K(ret), K(obj));
-        }
-        break;
-      }
       case ENABLE_OPTIMIZER_ROWGOAL: {
         ObSysVarEnableOptimizerRowgoal sv;
         if (OB_FAIL(sv.find_type(obj.get_varchar(), val))) {
@@ -1271,13 +1197,11 @@ ObItemType ObHint::get_hint_type(ObItemType type)
     case T_NO_JOIN_FIRST_UNNEST:           return T_JOIN_FIRST_UNNEST;
     case T_NO_DECORRELATE :       return T_DECORRELATE;
     case T_NO_COALESCE_AGGR:      return T_COALESCE_AGGR;
-    case T_MV_NO_REWRITE:       return T_MV_REWRITE;
     case T_NO_USE_LATE_MATERIALIZATION: return T_USE_LATE_MATERIALIZATION;
     case T_NO_TRANSFORM_DISTINCT_AGG:     return T_TRANSFORM_DISTINCT_AGG;
 
     // optimize hint
     case T_NO_USE_DAS_HINT:     return T_USE_DAS_HINT;
-    case T_NO_USE_COLUMN_STORE_HINT:  return T_USE_COLUMN_STORE_HINT;
     case T_ORDERED:             return T_LEADING;
     case T_NO_USE_MERGE:        return T_USE_MERGE;
     case T_NO_USE_HASH:         return T_USE_HASH;
@@ -1332,7 +1256,6 @@ const char* ObHint::get_hint_name(ObItemType type, bool is_enable_hint /* defaul
     case T_JOIN_FIRST_UNNEST:           return is_enable_hint ? "JOIN_FIRST_UNNEST" : "NO_JOIN_FIRST_UNNEST";
     case T_DECORRELATE :        return is_enable_hint ? "DECORRELATE" : "NO_DECORRELATE";
     case T_COALESCE_AGGR:       return is_enable_hint ? "COALESCE_AGGR" : "NO_COALESCE_AGGR";
-    case T_MV_REWRITE:          return is_enable_hint ? "MV_REWRITE" : "NO_MV_REWRITE";
     case T_USE_LATE_MATERIALIZATION:
       return is_enable_hint ? "USE_LATE_MATERIALIZATION" : "NO_USE_LATE_MATERIALIZATION";
     case T_TRANSFORM_DISTINCT_AGG:
@@ -1343,7 +1266,6 @@ const char* ObHint::get_hint_name(ObItemType type, bool is_enable_hint /* defaul
     case T_NO_INDEX_HINT:       return "NO_INDEX";
     case T_USE_DAS_HINT:        return is_enable_hint ? "USE_DAS" : "NO_USE_DAS";
     case T_UNION_MERGE_HINT:    return "UNION_MERGE";
-    case T_USE_COLUMN_STORE_HINT: return is_enable_hint ? "USE_COLUMN_TABLE" : "NO_USE_COLUMN_TABLE";
     case T_INDEX_SS_HINT:       return "INDEX_SS";
     case T_INDEX_SS_ASC_HINT:   return "INDEX_SS_ASC";
     case T_INDEX_SS_DESC_HINT:  return "INDEX_SS_DESC";
@@ -2189,45 +2111,6 @@ bool ObCoalesceSqHint::has_qb_name_list(const ObIArray<ObString> & qb_names) con
 }
 
 
-int ObMVRewriteHint::print_hint_desc(PlanText &plan_text) const
-{
-  int ret = OB_SUCCESS;
-  if (!mv_list_.empty()) {
-    char *buf = plan_text.buf_;
-    int64_t &buf_len = plan_text.buf_len_;
-    int64_t &pos = plan_text.pos_;
-    for (int64_t i = 0; OB_SUCC(ret) && i < mv_list_.count(); ++i) {
-      if (i > 0 && OB_FAIL(BUF_PRINTF(", "))) {
-        LOG_WARN("fail to print comma", K(ret));
-      } else if (OB_FAIL(mv_list_.at(i).print_table_in_hint(plan_text, true))) {
-        LOG_WARN("fail to print mv table", K(ret));
-      }
-    }
-  }
-  return ret;
-}
-
-int ObMVRewriteHint::check_mv_match_hint(ObCollationType cs_type,
-                                         const ObTableSchema *mv_schema,
-                                         const ObDatabaseSchema *db_schema,
-                                         bool &is_match) const
-{
-  int ret = OB_SUCCESS;
-  is_match = false;
-  if (OB_ISNULL(mv_schema) || OB_ISNULL(db_schema)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret), K(mv_schema), K(db_schema));
-  } else if (mv_list_.empty()) {
-    is_match = true;
-  }
-  for (int64_t i = 0; OB_SUCC(ret) && !is_match && i < mv_list_.count(); ++i) {
-    const ObTableInHint &table_in_hint = mv_list_.at(i);
-    is_match = 0 == ObCharset::strcmp(cs_type, table_in_hint.table_name_, mv_schema->get_table_name()) &&
-    (table_in_hint.db_name_.empty() || 0 == ObCharset::strcmp(cs_type, table_in_hint.db_name_, db_schema->get_database_name_str()));
-  }
-  return ret;
-}
-
 int ObTableParallelHint::assign(const ObTableParallelHint &other)
 {
   int ret = OB_SUCCESS;
@@ -2279,8 +2162,7 @@ int ObIndexHint::print_hint_desc(PlanText &plan_text) const
   if (OB_FAIL(table_.print_table_in_hint(plan_text))) {
     LOG_WARN("fail to print table in hint", K(ret));
   } else if (T_FULL_HINT == hint_type_ || 
-             T_USE_DAS_HINT == hint_type_ ||
-             T_USE_COLUMN_STORE_HINT == hint_type_) {
+             T_USE_DAS_HINT == hint_type_) {
     /* do nothing */
   } else if (OB_FAIL(BUF_PRINTF(" \"%.*s\"", index_name_.length(), index_name_.ptr()))) {
     LOG_WARN("fail to print index name", K(ret));

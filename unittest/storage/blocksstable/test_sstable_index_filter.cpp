@@ -155,13 +155,13 @@ void TestSSTableIndexFilter::test_sstable_index_filter_init_1()
 {
   ObSSTableIndexFilter index_filter;
   ObPushdownFilterExecutor* filter = create_hybrid_filter_1(true);
-  OK(index_filter.init(false, &read_info_, *filter, &allocator_));
+  OK(index_filter.init(&read_info_, *filter, &allocator_));
 
   ASSERT_TRUE(index_filter.can_use_skipping_index());
 
   ObSSTableIndexFilter index_filter2;
   ObPushdownFilterExecutor* filter2 = create_hybrid_filter_3();
-  OK(index_filter2.init(false, &read_info_, *filter2, &allocator_));
+  OK(index_filter2.init(&read_info_, *filter2, &allocator_));
 
   ASSERT_FALSE(index_filter2.can_use_skipping_index());
 }
@@ -184,7 +184,7 @@ void TestSSTableIndexFilter::test_sstable_index_filter_check_range_1()
   childs[2] = create_physical_filter(false);
   filter->set_childs(3, childs);
 
-  OK(index_filter.init(false, &read_info_, *filter, &allocator_));
+  OK(index_filter.init(&read_info_, *filter, &allocator_));
   ASSERT_TRUE(index_filter.can_use_skipping_index());
   ASSERT_EQ(3, index_filter.skipping_filter_nodes_.count());
 
@@ -208,7 +208,7 @@ void TestSSTableIndexFilter::test_sstable_index_filter_check_range_1()
 
   childs[2] = create_lt_white_filter(100);
   ObSSTableIndexFilter index_filter2;
-  OK(index_filter2.init(false, &read_info_, *filter, &allocator_));
+  OK(index_filter2.init(&read_info_, *filter, &allocator_));
   ASSERT_TRUE(index_filter2.can_use_skipping_index());
   ASSERT_EQ(4, index_filter2.skipping_filter_nodes_.count());
   ObMicroIndexInfo index_info3;

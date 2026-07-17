@@ -50,7 +50,6 @@ public:
   void set_tenant_ctx_allocator(ObTenantCtxAllocator &allocator);
   void reset();
   void set_locker(ISetLocker *locker) { locker_ = locker; }
-  int64_t sync_wash(int64_t wash_size=INT64_MAX);
   bool check_has_unfree();
   ObTenantCtxAllocator *get_tenant_ctx_allocator() const { return  tallocator_; }
   void set_chunk_mgr(IChunkMgr *chunk_mgr) { chunk_mgr_ = chunk_mgr; }
@@ -61,6 +60,10 @@ private:
   void add_free_block(ABlock *block, int nblocks, AChunk *chunk);
   ABlock *get_free_block(const int cls, const ObMemAttr &attr);
   void take_off_free_block(ABlock *block, int nblocks, AChunk *chunk);
+  int64_t wash_free_blocks(const int64_t wash_size,
+      const int64_t delay_us,
+      const int64_t max_blocks_per_round);
+  void maybe_ordinary_wash();
   AChunk *alloc_chunk(const uint64_t size, const ObMemAttr &attr);
   bool add_chunk(const ObMemAttr &attr);
   void free_chunk(AChunk *const chunk);
@@ -80,6 +83,7 @@ private:
   uint64_t total_hold_;
   uint64_t total_payload_;
   uint64_t total_used_;
+  int64_t last_ordinary_wash_ts_;
 }; // end of class BlockSet
 
 void BlockSet::lock()

@@ -44,3 +44,4 @@ private:
 }  // namespace oceanbase
 
 #endif /* OCEANBASE_SQL_RESOLVER_DDL_OB_FORK_TABLE_RESOLVER_H_ */
+

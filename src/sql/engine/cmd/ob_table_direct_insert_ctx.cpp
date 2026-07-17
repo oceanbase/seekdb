@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SQL_ENG
 
 #include "ob_table_direct_insert_ctx.h"
+#include "observer/table_load/ob_table_load_struct.h"
 #include "observer/table_load/ob_table_load_instance.h"
 #include "observer/table_load/ob_table_load_table_ctx.h"
 #include "sql/engine/ob_physical_plan.h"
@@ -47,7 +48,7 @@ int ObTableDirectInsertCtx::init(
     const double online_sample_percent)
 {
   int ret = OB_SUCCESS;
-  const uint64_t tenant_id = MTL_ID();
+  
   ObSQLSessionInfo *session_info = nullptr;
   ObSchemaGetterGuard *schema_guard = nullptr;
   if (IS_INIT) {
@@ -65,9 +66,6 @@ int ObTableDirectInsertCtx::init(
   } else if (OB_ISNULL(schema_guard = exec_ctx->get_sql_ctx()->schema_guard_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected schema guard is null", KR(ret));
-  } else if (OB_UNLIKELY(session_info->get_ddl_info().is_mview_complete_refresh() && enable_inc_replace)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected mview complete refresh enable inc replace", KR(ret));
   } else if (OB_UNLIKELY(phy_plan.is_vectorized() &&
                          phy_plan.get_batch_size() > ObTableLoadParam::MAX_BATCH_SIZE)) {
     ret = OB_NOT_SUPPORTED;
@@ -88,7 +86,7 @@ int ObTableDirectInsertCtx::init(
       ObCompressorType compressor_type = ObCompressorType::NONE_COMPRESSOR;
       ObDirectLoadMethod::Type method = (is_incremental ? ObDirectLoadMethod::INCREMENTAL : ObDirectLoadMethod::FULL);
       ObDirectLoadInsertMode::Type insert_mode = ObDirectLoadInsertMode::INVALID_INSERT_MODE;
-      if (session_info->get_ddl_info().is_mview_complete_refresh() || is_insert_overwrite) {
+      if (is_insert_overwrite) {
         insert_mode = ObDirectLoadInsertMode::OVERWRITE;
       } else if (enable_inc_replace) {
         insert_mode = ObDirectLoadInsertMode::INC_REPLACE;
@@ -97,7 +95,7 @@ int ObTableDirectInsertCtx::init(
       }
       ObDirectLoadMode::Type load_mode = is_insert_overwrite ? ObDirectLoadMode::INSERT_OVERWRITE : ObDirectLoadMode::INSERT_INTO;
       ObArray<ObTabletID> tablet_ids;
-      if (OB_FAIL(ObTableLoadSchema::get_table_schema(*schema_guard, tenant_id, table_id, table_schema))) {
+      if (OB_FAIL(ObTableLoadSchema::get_table_schema(*schema_guard, table_id, table_schema))) {
         LOG_WARN("fail to get table schema", KR(ret));
       } else if (OB_FAIL(ObDDLUtil::get_temp_store_compress_type(table_schema,
                                                                  parallel,
@@ -109,7 +107,7 @@ int ObTableDirectInsertCtx::init(
         LOG_WARN("failed to get partition level tablet ids", KR(ret), K(phy_plan), KPC(table_schema));
       } else {
         ObTableLoadParam param;
-        param.tenant_id_ = MTL_ID();
+        
         param.table_id_ = table_id;
         param.parallel_ = parallel;
         param.session_count_ = parallel;

@@ -23,7 +23,6 @@
 #include "sql/engine/expr/ob_expr_strcmp.h"
 #include "sql/engine/expr/ob_expr_abs.h"
 #include "sql/engine/expr/ob_expr_arg_case.h"
-#include "sql/engine/expr/ob_expr_oracle_decode.h"
 #include "sql/engine/expr/ob_expr_to_type.h"
 #include "sql/engine/expr/ob_expr_rand.h"
 #include "sql/engine/expr/ob_expr_random.h"
@@ -552,11 +551,6 @@ int ObExprGeneratorImpl::visit_simple_op(ObNonTerminalRawExpr &expr)
       LOG_WARN("failed to add expr item", K(ret));
     } else {
       switch (expr.get_expr_type()) {
-        case T_FUN_SYS_ORA_DECODE: {
-          ObExprOracleDecode *decode_op = static_cast<ObExprOracleDecode*>(op);
-          ret = visit_decode_expr(expr, decode_op);
-          break;
-        }
         case T_FUN_SYS_GREATEST:
         case T_FUN_SYS_LEAST: {
           ObMinMaxExprOperator *minmax_op = static_cast<ObMinMaxExprOperator*>(op);
@@ -811,7 +805,7 @@ inline int ObExprGeneratorImpl::visit_in_expr(ObOpRawExpr &expr, ObExprInOrNotIn
       in_op->set_param_all_const(param_all_const);
       in_op->set_param_all_same_type(param_all_same_type);
       in_op->set_param_all_same_cs_type(param_all_same_cs_type &= param_all_same_cs_level);
-      in_op->set_param_is_ext_type_oracle(param_all_is_ext);
+      in_op->set_param_all_ext_type(param_all_is_ext);
     }
   } else {
     // like a in (1, 2, 3)
@@ -862,50 +856,11 @@ inline int ObExprGeneratorImpl::visit_in_expr(ObOpRawExpr &expr, ObExprInOrNotIn
       in_op->set_param_all_const(param_all_const);
       in_op->set_param_all_same_type(param_all_same_type);
       in_op->set_param_all_same_cs_type(param_all_same_cs_type &= param_all_same_cs_level);
-      in_op->set_param_is_ext_type_oracle(param_all_is_ext);
+      in_op->set_param_all_ext_type(param_all_is_ext);
       //now only support c1 in (1,2,3,4,5...) to vectorized
       if (param_all_can_vectorize && expr.get_param_expr(0)->is_vectorize_result()) {
         in_op->set_param_can_vectorized();
       }
-    }
-  }
-  return ret;
-}
-
-int ObExprGeneratorImpl::visit_decode_expr(ObNonTerminalRawExpr &expr, ObExprOracleDecode *decode_op)
-{
-  int ret = OB_SUCCESS;
-  if (OB_ISNULL(decode_op)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("decode expr op is null", K(ret));
-  } else {
-    // decode(col, cond1, val1, cond2, val2, ......, condN, valN, def_val)
-    // cmp type of decode is always equal to cond1, or varchar if cond1 is const null.
-    // res type of decode is always equal to val1, or varchar if val1 is const null.
-    bool cond_all_same_meta = true;
-    bool val_all_same_meta = true;
-    int64_t param_count = expr.get_param_count();
-    for (int i = 0; OB_SUCC(ret) && i < param_count; ++i) {
-      if (OB_ISNULL(expr.get_param_expr(i))) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("decode expr param is null", K(ret), K(i));
-      }
-    }
-    if (OB_SUCC(ret)) {
-      ObObjType cond_type = expr.get_param_expr(0)->get_data_type();
-      ObObjType val_type = expr.get_param_expr(param_count - 1)->get_data_type();
-      ObCollationType cond_cs_type = expr.get_param_expr(0)->get_collation_type();
-      ObCollationType val_cs_type = expr.get_param_expr(param_count - 1)->get_collation_type();
-      for (int i = 1; OB_SUCC(ret) && i < param_count - 1; i += 2) {
-        cond_all_same_meta = cond_all_same_meta
-                             && decode_op->can_compare_directly(cond_type, expr.get_param_expr(i)->get_data_type())
-                             && (cond_cs_type == expr.get_param_expr(i)->get_collation_type());
-        val_all_same_meta = val_all_same_meta
-                            && (val_type == expr.get_param_expr(i + 1)->get_data_type())
-                            && (val_cs_type == expr.get_param_expr(i + 1)->get_collation_type());
-      }
-      decode_op->set_cond_all_same_meta(cond_all_same_meta);
-      decode_op->set_val_all_same_meta(val_all_same_meta);
     }
   }
   return ret;

@@ -24,7 +24,6 @@ namespace oceanbase
 
 namespace common
 {
-class ObBackGroundSessionGuard;
 class ObDiagnosticInfoSwitchGuard;
 }
 
@@ -53,7 +52,6 @@ private:
 
 class ObPerfModeGuard
 {
-  friend class common::ObBackGroundSessionGuard;
   friend class common::ObDiagnosticInfoSwitchGuard;
   friend class ObEnableDiagnoseGuard;
   friend bool is_diagnose_info_enabled();
@@ -81,7 +79,6 @@ private:
 
 class ObEnableDiagnoseGuard
 {
-  friend class common::ObBackGroundSessionGuard;
   friend class common::ObDiagnosticInfoSwitchGuard;
   friend bool is_diagnose_info_enabled();
   friend bool is_trace_log_enabled();

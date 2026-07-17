@@ -37,7 +37,6 @@
 #include "sql/engine/ob_exec_feedback_info.h"
 #include "sql/das/ob_das_define.h"
 #include "lib/string/ob_strings.h"
-#include "share/external_table/ob_external_table_file_mgr.h"
 namespace oceanbase
 {
 
@@ -219,7 +218,6 @@ public:
               adjoining_root_dfo_(false),
               is_single_tsc_leaf_dfo_(false),
               allocator_("PxSqcMetaInner"),
-              access_external_table_files_(),
               interrupt_by_dm_(false),
               p2p_dh_map_info_(),
               sqc_order_gi_tasks_(false),
@@ -236,7 +234,6 @@ public:
   const dtl::ObDtlChannelInfo &get_sqc_channel_info_const() const { return sqc_ch_info_; }
   ObIArray<ObSqcTableLocationKey> &get_access_table_location_keys() { return access_table_location_keys_; }
   ObIArray<ObSqcTableLocationIndex> &get_access_table_location_indexes() { return access_table_location_indexes_; }
-  ObIArray<share::ObExternalFileInfo> &get_access_external_table_files() { return access_external_table_files_; }
   DASTabletLocIArray &get_access_table_locations_for_update() { return access_table_locations_; }
   const DASTabletLocIArray &get_access_table_locations() const { return access_table_locations_; }
   DASTabletLocIArray &get_extra_access_table_locations_for_update() { return extra_access_table_locations_; }
@@ -309,7 +306,6 @@ public:
     serial_receive_channels_.reset();
     rescan_batch_params_.reset();
     partition_pruning_table_locations_.reset();
-    access_external_table_files_.reset();
     allocator_.reset();
     monitoring_info_.reset();
   }
@@ -430,7 +426,6 @@ private:
   //for auto scale
   bool is_single_tsc_leaf_dfo_;
   ObArenaAllocator allocator_;
-  ObSEArray<share::ObExternalFileInfo, 8> access_external_table_files_;
   bool interrupt_by_dm_;
   // for p2p dh msg
   ObP2PDhMapInfo p2p_dh_map_info_;
@@ -494,7 +489,6 @@ public:
     total_task_cnt_(0),
     pkey_table_loc_id_(0),
     tsc_op_cnt_(0),
-    external_table_files_(),
     node_sequence_id_(0),
     p2p_dh_ids_(),
     p2p_dh_addrs_(),
@@ -503,8 +497,7 @@ public:
     p2p_dh_map_info_(),
     coord_info_ptr_(nullptr),
     force_bushy_(false),
-    query_sql_(),
-    has_into_odps_(false)
+    query_sql_()
   {
   }
 
@@ -550,8 +543,6 @@ public:
   inline bool has_need_branch_id_op() const { return has_need_branch_id_op_; }
   inline void set_temp_table_scan(bool has_scan) { has_temp_scan_ = has_scan; }
   inline bool has_temp_table_scan() const { return has_temp_scan_; }
-  inline void set_into_odps(bool has_into_odps) { has_into_odps_ = has_into_odps; }
-  inline bool has_into_odps() const { return has_into_odps_; }
   inline bool is_fast_dfo() const { return is_prealloc_receive_channel() || is_prealloc_transmit_channel(); }
   inline void set_in_slave_mapping_type(SlaveMappingType v) { in_slave_mapping_type_ = v; }
   inline void set_out_slave_mapping_type(SlaveMappingType v) { out_slave_mapping_type_ = v; }
@@ -658,7 +649,6 @@ public:
   void inc_tsc_op_cnt() { tsc_op_cnt_++; }
   bool is_leaf_dfo() { return child_dfos_.empty(); }
   bool is_single_tsc_leaf_dfo() { return is_leaf_dfo() && 1 == tsc_op_cnt_; }
-  common::ObIArray<share::ObExternalFileInfo> &get_external_table_files() { return external_table_files_; }
   int add_p2p_dh_ids(int64_t id) { return p2p_dh_ids_.push_back(id); }
   common::ObIArray<int64_t> &get_p2p_dh_ids() { return p2p_dh_ids_; }
   void set_p2p_dh_loc(ObDASTableLoc *p2p_dh_loc) { p2p_dh_loc_ = p2p_dh_loc; }
@@ -776,7 +766,6 @@ private:
   int64_t total_task_cnt_;      // the task total count of dfo start worker
   int64_t pkey_table_loc_id_; // record pkey table loc id for child dfo
   int64_t tsc_op_cnt_;
-  common::ObArray<share::ObExternalFileInfo> external_table_files_;
   // for dm
   uint64_t node_sequence_id_;
   // ---------------
@@ -791,7 +780,6 @@ private:
   bool force_bushy_;
   bool partition_random_affinitize_{true}; // whether do partition random in gi task split
   ObString query_sql_;
-  bool has_into_odps_;
 };
 
 
@@ -938,7 +926,7 @@ public:
       ssstore_read_row_count_(0),
       px_worker_execute_start_schema_version_(0)
   {
-    allocator_.set_tenant_id(MTL_ID());
+    
     allocator_.set_label("PxTaskArena");
   }
   ~ObPxTask() = default;

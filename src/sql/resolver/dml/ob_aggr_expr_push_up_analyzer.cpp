@@ -97,7 +97,7 @@ int ObAggrExprPushUpAnalyzer::analyze_and_push_up_aggr_expr(ObRawExprFactory &ex
  * @brief ObAggrExprPushUpAnalyzer::analyze_aggr_param_expr
  * @param param_expr
  * if a aggr expr does not use any values of the current stmt,
- * the aggr expr maybe pulled up into outer stmt (both Oracle and MySQL mode)
+ * the aggr expr maybe pulled up into outer stmt
  * @return
  */
 int ObAggrExprPushUpAnalyzer::analyze_aggr_param_expr(ObRawExpr *&param_expr,
@@ -241,21 +241,16 @@ ObSelectResolver *ObAggrExprPushUpAnalyzer::fetch_final_aggr_resolver(ObDMLResol
   ObSelectResolver *final_resolver = NULL;
   if (cur_resolver != NULL) {
     /*
-     * For mysql mode, it always pull subquery up to compute
-     * For oracle mode, if it is in having scope, it will pull subquery up to compute
-     * if it is in order scope (and subquery does not appear in where scope), it will pull subquery up to compute
+     * Pull subquery up to compute when it is in having scope, or in order scope
+     * when the subquery does not appear in where scope.
      */
     if (min_level_resolver != NULL && cur_resolver != min_level_resolver
-        && NULL != cur_resolver->get_parent_namespace_resolver()
-        && (lib::is_mysql_mode()
-            || T_HAVING_SCOPE == cur_resolver->get_parent_namespace_resolver()->get_current_scope())) {
+        && NULL != cur_resolver->get_parent_namespace_resolver()) {
       /*
         * bug fix: 
         *
-        * For mysql, aggr func belongs to the upper level, whether there is a "union" or not.
-        * 
-        * For oracle, aggr func not in "HAVING" belongs to the subquery, does not need to
-        * push up.
+        * Aggregate functions outside HAVING belong to the subquery and do not
+        * need to be pushed up.
         * 
         * SELECT (SELECT COUNT(t1.a) FROM dual) FROM t1 GROUP BY t1.a;
         *                  *
@@ -263,8 +258,7 @@ ObSelectResolver *ObAggrExprPushUpAnalyzer::fetch_final_aggr_resolver(ObDMLResol
         *                  *
         * SELECT 1 FROM t1 HAVING 1 in (SELECT MAX(t1.n1) FROM dual);
         *                                       *
-        * Here, for oracle mode, COUNT belongs to the subquery, but MAX belongs to the 
-        * upper query. 
+        * Here, COUNT belongs to the subquery, but MAX belongs to the upper query.
         */ 
       ObDMLResolver *next_resolver = cur_resolver->get_parent_namespace_resolver();
       final_resolver = fetch_final_aggr_resolver(next_resolver, min_level_resolver);
@@ -273,7 +267,7 @@ ObSelectResolver *ObAggrExprPushUpAnalyzer::fetch_final_aggr_resolver(ObDMLResol
       ObSelectResolver *select_resolver = static_cast<ObSelectResolver*>(cur_resolver);
       if (select_resolver->can_produce_aggr()) {
         final_resolver = select_resolver;
-      } else if (lib::is_mysql_mode() && min_level_resolver == NULL) {
+      } else if (min_level_resolver == NULL) {
         /* bugfix: 
         * in mysql, a const aggr_expr(e.g., count(const_expr)), belongs to the nearest legal level.
         * 

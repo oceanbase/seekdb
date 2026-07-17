@@ -123,7 +123,7 @@ int ObMajorChecksumInfo::init_from_merge_result(
       LOG_WARN("fail to assign column checksum array", K(ret), KPC(this), K(res));
     } else if (OB_UNLIKELY(!is_valid())) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("after init from merge result, major checksum info is not valid", KR(ret), KPC(this));
+      LOG_ERROR("after init from merge result, major checksum info is not valid", KR(ret), KPC(this));
     } else {
       LOG_INFO("success to init ckm info from merge result", KR(ret), KPC(this));
     }
@@ -138,6 +138,7 @@ int ObMajorChecksumInfo::init_from_sstable(
     const blocksstable::ObSSTable &sstable)
 {
   int ret = OB_SUCCESS;
+  UNUSED(storage_schema);
   if (OB_UNLIKELY(!sstable.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", KR(ret), K(sstable));
@@ -147,20 +148,15 @@ int ObMajorChecksumInfo::init_from_sstable(
     data_checksum_ = sstable.get_data_checksum();
     exec_mode_ = exec_mode;
     ObSEArray<int64_t, OB_ROW_DEFAULT_COLUMNS_COUNT> tmp_col_ckm_array;
-    tmp_col_ckm_array.set_attr(ObMemAttr(MTL_ID(), "MajorCkmInfo"));
-    if (sstable.is_co_sstable()) {
-      const ObCOSSTableV2 &co_sstable = static_cast<const ObCOSSTableV2 &>(sstable);
-      if (OB_FAIL(co_sstable.fill_column_ckm_array(storage_schema, tmp_col_ckm_array))) {
-        LOG_WARN("fail to fill column checksum array", K(ret), KPC(this), K(sstable));
-      }
-    } else if (OB_FAIL(sstable.fill_column_ckm_array(tmp_col_ckm_array))) {
+    tmp_col_ckm_array.set_attr(ObMemAttr("MajorCkmInfo"));
+    if (OB_FAIL(sstable.fill_column_ckm_array(tmp_col_ckm_array))) {
       LOG_WARN("fail to fill column checksum array", K(ret), KPC(this), K(sstable));
     }
     if (FAILEDx(column_ckm_struct_.assign(allocator, tmp_col_ckm_array))) {
       LOG_WARN("fail to assign column checksum array", K(ret), KPC(this), K(sstable));
     } else if (OB_UNLIKELY(!is_valid())) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("after init from sstable, major checksum info is not valid", KR(ret), KPC(this));
+      LOG_ERROR("after init from sstable, major checksum info is not valid", KR(ret), KPC(this));
     } else {
       LOG_INFO("success to init ckm info from sstable", KR(ret), KPC(this));
     }
@@ -221,28 +217,6 @@ void ObMajorChecksumInfo::gene_info(char* buf, const int64_t buf_len, int64_t &p
   }
 }
 
-int ObCOMajorChecksumInfo::prepare_column_ckm_array(
-  ObArenaAllocator &allocator,
-  const compaction::ObBasicTabletMergeCtx &ctx,
-  const blocksstable::ObSSTableMergeRes &res)
-{
-  int ret = OB_SUCCESS;
-  int64_t column_count = 0;
-  if (OB_UNLIKELY(!res.is_valid())) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), K(res));
-  } else if (OB_FAIL(ctx.get_schema()->get_stored_column_count_in_sstable(column_count))) {
-    LOG_WARN("failed to get column count", KR(ret), K(column_count));
-  } else if (OB_FAIL(column_ckm_struct_.reserve(allocator, column_count))) {
-    LOG_WARN("failed to reserve array", KR(ret), K(column_count));
-  } else {
-    compaction_scn_ = ctx.get_merge_version();
-    exec_mode_ = ctx.get_exec_mode();
-    row_count_ = res.row_count_;
-  }
-  return ret;
-}
-
 int64_t ObMajorChecksumInfo::to_string(char *buf, const int64_t buf_len) const
 {
   int64_t pos = 0;
@@ -261,47 +235,6 @@ int64_t ObMajorChecksumInfo::to_string(char *buf, const int64_t buf_len) const
   }
   return pos;
 }
-
-int ObCOMajorChecksumInfo::init_from_merge_result(
-    ObArenaAllocator &allocator,
-    const compaction::ObBasicTabletMergeCtx &ctx,
-    const storage::ObStorageColumnGroupSchema &cg_schema,
-    const blocksstable::ObSSTableMergeRes &res)
-{
-  int ret = OB_SUCCESS;
-  lib::ObMutexGuard guard(lock_);
-  if (is_empty() && OB_FAIL(prepare_column_ckm_array(allocator, ctx, res))) {
-    LOG_WARN("failed to prepare struct", KR(ret), K(ctx));
-  } else if (OB_UNLIKELY(!column_ckm_struct_.is_valid())) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("struct is invalid", KR(ret), K(column_ckm_struct_));
-  } else {
-    data_checksum_ += res.data_checksum_;
-  }
-
-  const bool is_build_row_store_merge = ctx.static_param_.is_build_row_store();
-  const int64_t loop_cnt = is_build_row_store_merge ? column_ckm_struct_.count_ : cg_schema.get_column_count();
-  for (int64_t j = 0; OB_SUCC(ret) && j < loop_cnt; ++j) {
-    const uint16_t column_idx = is_build_row_store_merge ? j : cg_schema.get_column_idx(j);
-    if (OB_UNLIKELY(column_idx >= column_ckm_struct_.count_)) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected column idx", K(ret), K(column_idx), KPC(this));
-    } else if (column_ckm_struct_.column_checksums_[column_idx] == 0) {
-      column_ckm_struct_.column_checksums_[column_idx] = res.data_column_checksums_[j];
-    } else if (OB_UNLIKELY(column_ckm_struct_.column_checksums_[column_idx] != res.data_column_checksums_[j])) {
-      ret = OB_CHECKSUM_ERROR;
-      LOG_ERROR("unexpected col_checksum, may have checksum error", K(ret),
-               K(column_ckm_struct_.column_checksums_[column_idx]),
-               K(res.data_column_checksums_[j]));
-    }
-  } // for
-  if (OB_SUCC(ret) && OB_UNLIKELY(!is_valid())) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("after init from merge result, major checksum info is not valid", KR(ret), KPC(this), K(res));
-  }
-  return ret;
-}
-
 
 } // namespace compaction
 } // namespace oceanbase

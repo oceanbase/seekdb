@@ -20,13 +20,11 @@
 #include "sql/resolver/expr/ob_raw_expr_resolver_impl.h"
 #include "sql/rewrite/ob_equal_analysis.h"
 #include "sql/optimizer/ob_optimizer_util.h"
-#include "sql/resolver/mv/ob_mv_provider.h"
-#include "sql/resolver/mv/ob_major_refresh_mjv_printer.h"
 #include "sql/resolver/dml/ob_select_resolver.h"
 #include "sql/rewrite/ob_transform_pre_process.h"
 #include "sql/rewrite/ob_expand_aggregate_utils.h"
 #include "sql/ob_sql_utils.h"
-#include "share/stat/ob_opt_stat_manager.h"
+#include "sql/optimizer/stat/ob_opt_stat_manager.h"
 
 
 namespace oceanbase {
@@ -434,7 +432,7 @@ int ObTransformUtils::is_columns_unique(const ObIArray<ObRawExpr *> &exprs,
   } else if (OB_ISNULL(session_info)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("session_info is null", K(ret));
-  } else if (OB_FAIL(schema_checker->get_table_schema(session_info->get_effective_tenant_id(), table_id, table_schema))){
+  } else if (OB_FAIL(schema_checker->get_table_schema( table_id, table_schema))){
     LOG_WARN("failed to get table schema", K(ret), K(table_id));
   } else if (OB_ISNULL(table_schema)) {
     ret = OB_ERR_UNEXPECTED;
@@ -463,7 +461,7 @@ int ObTransformUtils::is_columns_unique(const ObIArray<ObRawExpr *> &exprs,
           OB_SUCC(ret) && !is_unique && i < simple_index_infos.count();
           ++i) {
         const ObTableSchema *index_schema = NULL;
-        if (OB_FAIL(schema_checker->get_table_schema(table_schema->get_tenant_id(),
+        if (OB_FAIL(schema_checker->get_table_schema(
                     simple_index_infos.at(i).table_id_, index_schema))) {
           LOG_WARN("failed to get table schema", K(ret),
                    "index_id", simple_index_infos.at(i).table_id_);
@@ -1476,8 +1474,7 @@ int ObTransformUtils::update_table_id_for_pseudo_columns(const ObIArray<ObRawExp
           K(pseudo_columns.at(i)), K(ret));
     } else if (other_pseudo_columns.at(i)->get_expr_type() != pseudo_columns.at(i)->get_expr_type()) {
       /* do nothing */
-    } else if (T_ORA_ROWSCN == pseudo_columns.at(i)->get_expr_type()
-               || T_PSEUDO_OLD_NEW_COL == pseudo_columns.at(i)->get_expr_type()) {
+    } else if (T_ORA_ROWSCN == pseudo_columns.at(i)->get_expr_type()) {
       ObPseudoColumnRawExpr *pseudo_col1 = static_cast<ObPseudoColumnRawExpr*>(other_pseudo_columns.at(i));
       ObPseudoColumnRawExpr *pseudo_col2 = static_cast<ObPseudoColumnRawExpr*>(pseudo_columns.at(i));
       if (pseudo_col1->get_table_id() == old_table_id) {
@@ -1624,7 +1621,7 @@ int ObTransformUtils::is_column_nullable(const ObDMLStmt *stmt,
     LOG_WARN("failed to get table item", K(ret), K(col_expr->get_table_id()));
   } else if (table_item->is_basic_table()) {
     const ObColumnSchemaV2 *col_schema = NULL;
-    if (OB_FAIL(schema_checker->get_column_schema(session_info->get_effective_tenant_id(),
+    if (OB_FAIL(schema_checker->get_column_schema(
                                                   table_item->ref_id_,
                                                   col_expr->get_column_id(),
                                                   col_schema,
@@ -2150,8 +2147,7 @@ int ObTransformUtils::is_expr_not_null(ObNotNullContext &ctx,
                OB_FAIL(constraints->push_back(const_cast<ObRawExpr*>(expr)))) {
       LOG_WARN("failed to push back constraint expr", K(ret));
     }
-  } else if(is_mysql_mode() &&
-            expr->is_win_func_expr() &&
+  } else if(            expr->is_win_func_expr() &&
             expr->get_result_type().is_not_null_for_read()) {
     const ObWinFunRawExpr *win_expr = reinterpret_cast<const ObWinFunRawExpr*>(expr);
     if (T_WIN_FUN_RANK == win_expr->get_func_type() ||
@@ -2356,7 +2352,7 @@ int ObTransformUtils::is_general_expr_not_null(ObNotNullContext &ctx,
     const ObRawExprResType &res_type = expr->get_result_type();
     if (res_type.is_numeric_type()
         || res_type.is_string_or_lob_locator_type()
-        || res_type.is_oracle_temporal_type()) {
+        || res_type.is_extended_temporal_type()) {
       if (OB_FAIL(check_list.push_back(expr->get_param_expr(0)))) {
         LOG_WARN("failed to append check list", K(ret));
       }
@@ -3294,7 +3290,7 @@ int ObTransformUtils::get_valid_index_id(ObSqlSchemaGuard *schema_guard,
   if (OB_ISNULL(schema_guard) || OB_ISNULL(stmt) || OB_ISNULL(table_item)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected NULL", K(ret), K(schema_guard), K(stmt), K(table_item));
-  } else if (OB_FAIL(schema_guard->get_table_schema(table_item->ref_id_, table_schema, table_item->is_link_table()))) {
+  } else if (OB_FAIL(schema_guard->get_table_schema(table_item->ref_id_, table_schema))) {
     LOG_WARN("fail to get table schema", K(ret), K(table_item->ref_id_));
   } else if (OB_ISNULL(table_schema)) {
     ret = OB_ERR_UNEXPECTED;
@@ -3347,7 +3343,7 @@ int ObTransformUtils::check_index_extract_query_range(const ObDMLStmt *stmt,
   int ret = OB_SUCCESS;
   ObArray<ColumnItem> range_columns;
   ObRawExpr *condition_expr = NULL;
-  ObArenaAllocator alloc(ObMemAttr(MTL_ID(), "RewriteMinMax"));
+  ObArenaAllocator alloc(ObMemAttr("RewriteMinMax"));
   void *tmp_ptr = NULL;
   const ParamStore *params = NULL;
   ObQueryCtx *query_ctx = NULL;
@@ -3787,7 +3783,7 @@ int ObTransformUtils::check_foreign_primary_join(const TableItem *first_table,
   if (OB_ISNULL(schema_checker) || OB_ISNULL(session_info) ||OB_ISNULL(first_table) || OB_ISNULL(second_table)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("parameters have null", K(ret), K(schema_checker), K(first_table), K(second_table));
-  } else if (OB_FAIL(schema_checker->get_table_schema(session_info->get_effective_tenant_id(), first_table->ref_id_, table_schema, first_table->is_link_table()))){
+  } else if (OB_FAIL(schema_checker->get_table_schema( first_table->ref_id_, table_schema))){
     LOG_WARN("failed to get table schema", K(ret));
   } else if (OB_ISNULL(table_schema)) {
     ret = OB_ERR_UNEXPECTED;
@@ -3839,7 +3835,7 @@ int ObTransformUtils::check_foreign_primary_join(const TableItem *first_table,
   if (OB_ISNULL(schema_checker) || OB_ISNULL(first_table) || OB_ISNULL(second_table)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("parameters have null", K(ret), K(schema_checker), K(first_table), K(second_table));
-  } else if (OB_FAIL(schema_checker->get_table_schema(session_info->get_effective_tenant_id(), first_table->ref_id_, table_schema, first_table->is_link_table()))){
+  } else if (OB_FAIL(schema_checker->get_table_schema( first_table->ref_id_, table_schema))){
     LOG_WARN("failed to get table schema", K(ret));
   } else if (OB_ISNULL(table_schema)) {
     ret = OB_ERR_UNEXPECTED;
@@ -3980,15 +3976,6 @@ int ObTransformUtils::is_foreign_key_rely(ObSQLSessionInfo* session_info,
   if (OB_ISNULL(session_info) || OB_ISNULL(foreign_key_info)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("param has null", K(ret), K(session_info), K(foreign_key_info));
-  } else if (SMO_IS_ORACLE_MODE(session_info->get_sql_mode())) {
-    // In oracle mode, primary foreign key constraint check currently uses validate_flag_, to ensure rely_flag_ takes effect later, you can first determine rely_flag_
-    if (foreign_key_info->rely_flag_) {
-      is_rely = true;
-    } else if (foreign_key_info->is_validated()) {
-      is_rely = true;
-    } else {
-      is_rely = false;
-    }
   } else if (!foreign_key_info->is_parent_table_mock_
              && OB_FAIL(session_info->get_foreign_key_checks(foreign_key_checks))) {
     LOG_WARN("get var foreign_key_checks failed", K(ret));
@@ -4060,7 +4047,6 @@ int ObTransformUtils::check_exprs_unique_on_table_items(const ObDMLStmt *stmt,
     LOG_WARN("unexpected null", K(ret));
   } else {
     ObArenaAllocator alloc("CheckUnique", OB_MALLOC_NORMAL_BLOCK_SIZE,
-                           session_info->get_effective_tenant_id(),
                            ObCtxIds::DEFAULT_CTX_ID);
     ObFdItemFactory fd_item_factory(alloc);
     ObRawExprFactory expr_factory(alloc);
@@ -4179,7 +4165,6 @@ int ObTransformUtils::check_stmt_unique(const ObSelectStmt *stmt,
     /*do nothing*/
   } else {
     ObArenaAllocator alloc("CheckUnique", OB_MALLOC_NORMAL_BLOCK_SIZE,
-                           session_info->get_effective_tenant_id(),
                            ObCtxIds::DEFAULT_CTX_ID);
     ObFdItemFactory fd_item_factory(alloc);
     ObRawExprFactory expr_factory(alloc);
@@ -4732,7 +4717,6 @@ int ObTransformUtils::compute_basic_table_property(const ObDMLStmt *stmt,
   } else if (OB_FAIL(schema_guard->get_can_read_index_array(table->ref_id_,
                                                             index_tids,
                                                             index_count,
-                                                            false,
                                                             true  /*global index*/,
                                                             false /*domain index*/))) {
     LOG_WARN("failed to get can read index", K(ret), K(table->ref_id_));
@@ -5572,7 +5556,7 @@ int ObTransformUtils::generate_unique_key_for_basic_table(ObTransformerCtx *ctx,
   } else if (OB_UNLIKELY(!item->is_basic_table())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("table item is not expected basic table", K(*item));
-  } else if (OB_FAIL(ctx->schema_checker_->get_table_schema(ctx->session_info_->get_effective_tenant_id(), item->ref_id_, table_schema))) {
+  } else if (OB_FAIL(ctx->schema_checker_->get_table_schema( item->ref_id_, table_schema))) {
     LOG_WARN("failed to get table schema", K(ret));
   } else if (OB_ISNULL(table_schema)) {
     ret = OB_ERR_UNEXPECTED;
@@ -6375,10 +6359,10 @@ int ObTransformUtils::pushdown_group_by(ObSelectStmt *parent_stmt,
  * @brief ObTransformUtils::create_simple_view
  * When push_group_by is false, decompose stmt into two layers:
  * Inner layer does table scan, join, and filter, forming an SPJ query
- * Outer layer does distinct, group-by, order-by, window function, etc., non-SPJ operations
+ * Outer layer does distinct, group-by, order-by, window function, etc., non-SPJ operations 
  * let the view_stmt process some subqueries
  * push_group_by: move aggregate functions into the view for computation
- * what is more:
+ * what is more: 
  *   it need follow a basic 'select computing sequence' which when push_group_by is true,
  * then push_conditions need be true
  */
@@ -6551,8 +6535,7 @@ int ObTransformUtils::check_need_pushdown_pseudo_column(const ObRawExpr &expr,
   int ret = OB_SUCCESS;
   need_pushdown = false;
   switch (expr.get_expr_type()) {
-    case T_ORA_ROWSCN:
-    case T_PSEUDO_OLD_NEW_COL: {
+    case T_ORA_ROWSCN: {
       need_pushdown = true;
       break;
     }
@@ -8703,13 +8686,10 @@ int StmtUniqueKeyProvider::get_unique_keys_from_unique_stmt(const ObSelectStmt *
   unique_keys.reuse();
   added_unique_keys.reuse();
   ObConstRawExpr *expr = NULL;
-  const bool can_use_lob_as_unique_key = lib::is_mysql_mode();
   if (OB_ISNULL(select_stmt) || OB_ISNULL(expr_factory)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected null", K(ret), K(select_stmt), K(expr_factory));
-  } else if (can_use_lob_as_unique_key && OB_FAIL(select_stmt->get_select_exprs(unique_keys))) {
-    LOG_WARN("failed to get select exprs", K(ret));
-  } else if (!can_use_lob_as_unique_key && OB_FAIL(select_stmt->get_select_exprs_without_lob(unique_keys))) {
+  } else if (OB_FAIL(select_stmt->get_select_exprs(unique_keys))) {
     LOG_WARN("failed to get select exprs", K(ret));
   } else if (OB_LIKELY(!unique_keys.empty())) {
     /* do nothing */
@@ -9003,7 +8983,7 @@ int ObTransformUtils::get_base_column(const ObDMLStmt *stmt,
   } else if (OB_ISNULL(table = stmt->get_table_item_by_id(col->get_table_id()))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("table item is null", K(ret), K(table));
-  } else if (table->is_basic_table() || table->is_link_table()) {
+  } else if (table->is_basic_table()) {
     /*do nothing*/
   } else if (!table->is_generated_table() && !table->is_temp_table()) {
     ret = OB_ERR_UNEXPECTED;
@@ -9719,8 +9699,7 @@ int ObTransformUtils::replace_with_groupby_exprs(ObSelectStmt *select_stmt,
         if (OB_ISNULL(groupby_exprs.at(i))) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("got an unexpected null", K(ret));
-        } else if ((is_mysql_mode() || !expr->is_static_const_expr())
-                    && groupby_exprs.at(i)->same_as(*expr, &check_context)) {
+        } else if (groupby_exprs.at(i)->same_as(*expr, &check_context)) {
           expr = groupby_exprs.at(i);
           is_existed = true;
         } else { /*do nothing.*/ }
@@ -9729,8 +9708,7 @@ int ObTransformUtils::replace_with_groupby_exprs(ObSelectStmt *select_stmt,
         if (OB_ISNULL(rollup_exprs.at(i))) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("got an unexpected null", K(ret));
-        } else if ((lib::is_mysql_mode()|| !expr->is_static_const_expr())
-                    && rollup_exprs.at(i)->same_as(*expr, &check_context)) {
+        } else if (rollup_exprs.at(i)->same_as(*expr, &check_context)) {
           expr = rollup_exprs.at(i);
           is_existed = true;
         } else { /*do nothing.*/ }
@@ -12452,7 +12430,7 @@ int ObTransformUtils::check_is_json_constraint(ObTransformerCtx *ctx,
         }
       }
     }
-  } else if (OB_FAIL(ctx->schema_checker_->get_table_schema(ctx->session_info_->get_effective_tenant_id(),
+  } else if (OB_FAIL(ctx->schema_checker_->get_table_schema(
                                                             table->ref_id_, table_schema))) {
     ret = OB_TABLE_NOT_EXIST;
     LOG_WARN("get table schema failed", K_(table->table_name), K(table->ref_id_), K(ret));
@@ -12687,7 +12665,7 @@ int ObTransformUtils::get_column_node_from_table(ObTransformerCtx *ctx,
       }
       tab_item = const_cast<TableItem *>(tmp_table_item);
       
-      if (OB_FAIL(ctx->schema_checker_->get_table_schema(ctx->session_info_->get_effective_tenant_id(),
+      if (OB_FAIL(ctx->schema_checker_->get_table_schema(
                                                                 tmp_table_item->ref_id_, table_schema))) { // get table schema
         if ((tmp_table_item->is_generated_table() 
               || tmp_table_item->is_temp_table()) 
@@ -12835,7 +12813,7 @@ int ObTransformUtils::check_is_index_part_key(ObTransformerCtx &ctx,
       LOG_WARN("table is null", K(ret), K(*col));
     } else if (!table->is_basic_table()) {
 
-    } else if (OB_FAIL(ctx.schema_checker_->get_column_schema(session_info->get_effective_tenant_id(),
+    } else if (OB_FAIL(ctx.schema_checker_->get_column_schema(
                                                               table->ref_id_,
                                                               col->get_column_id(),
                                                               column_schema,
@@ -12846,14 +12824,13 @@ int ObTransformUtils::check_is_index_part_key(ObTransformerCtx &ctx,
       LOG_WARN("column schema is null", K(ret));
     } else if (column_schema->is_rowkey_column()) {
       is_valid = true;
-    } else if (OB_FAIL(ctx.schema_checker_->check_column_has_index(column_schema->get_tenant_id(),
-                                                                    table->ref_id_,
+    } else if (OB_FAIL(ctx.schema_checker_->check_column_has_index(table->ref_id_,
                                                                     col->get_column_id(),
                                                                     is_valid))) {
       LOG_WARN("failed to check column is a key", K(ret));
     } else if (is_valid) {
       // do nothing
-    } else if (ctx.schema_checker_->check_if_partition_key(session_info->get_effective_tenant_id(),
+    } else if (ctx.schema_checker_->check_if_partition_key(
                           table->ref_id_, col->get_column_id(), is_valid)) {
       LOG_WARN("failed to check if partition key", K(ret));
     }
@@ -13047,181 +13024,6 @@ int ObTransformUtils::inline_temp_table(ObTransformerCtx *ctx, ObDMLStmt::TempTa
         LOG_WARN("failed to push back qb name", K(ret));
       } else {
         table->ref_query_ = child_stmt;
-      }
-    }
-  }
-  return ret;
-}
-
-int ObTransformUtils::expand_mview_table(ObTransformerCtx *ctx, ObDMLStmt *upper_stmt, TableItem *rt_mv_table)
-{
-  int ret = OB_SUCCESS;
-  const ObTableSchema *mv_schema = NULL;
-  if (OB_ISNULL(ctx) || OB_ISNULL(upper_stmt) || OB_ISNULL(rt_mv_table)
-      || OB_ISNULL(ctx->allocator_)
-      || OB_UNLIKELY(!rt_mv_table->need_expand_rt_mv_)
-      || OB_UNLIKELY(!ctx->is_valid())) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpect null", K(ret), K(ctx), KPC(rt_mv_table));
-  } else {
-    ObString expand_view;
-    ObSelectStmt *view_stmt = NULL;
-    bool is_major_refresh_mview = false;
-    OPT_TRACE("expand real time materialized view: ", rt_mv_table->get_object_name());
-    OPT_TRACE_BEGIN_SECTION;
-    if (OB_FAIL(ObMVProvider::get_real_time_mv_expand_view(ctx->session_info_->get_effective_tenant_id(),
-                                                           rt_mv_table->mview_id_,
-                                                           ctx->session_info_,
-                                                           ctx->sql_schema_guard_->get_schema_guard(),
-                                                           *ctx->allocator_,
-                                                           expand_view,
-                                                           is_major_refresh_mview))) {
-      LOG_WARN("fail to get real time mv expand view", K(ret));
-    } else if (OB_FAIL(generate_view_stmt_from_query_string(expand_view, ctx, view_stmt))) {
-      LOG_WARN("fail to genearte real time mview stmt", K(ret), K(expand_view));
-    } else if (OB_FAIL(ctx->temp_table_ignore_stmts_.push_back(view_stmt))) {
-      LOG_WARN("failed to push back", K(ret));
-    } else if (OB_FAIL(set_expand_mview_flag(view_stmt))) {
-      LOG_WARN("fail to set expand mview flag", K(ret));
-    } else if (is_major_refresh_mview
-               && OB_FAIL(ObMajorRefreshMJVPrinter::set_real_time_table_scan_flag_for_mr_mv(*view_stmt))) {
-      LOG_WARN("fail to set table scan flag for major refresh mview", K(ret));
-    } else if (OB_FAIL(upper_stmt->generate_view_name(*ctx->allocator_,
-                                                      rt_mv_table->table_name_))) {
-      LOG_WARN("failed to generate view name", K(ret));
-    } else if (OB_FAIL(adjust_col_and_sel_for_expand_mview(ctx,
-                                                           upper_stmt->get_column_items(),
-                                                           view_stmt->get_select_items(),
-                                                           rt_mv_table->table_id_))) {
-      LOG_WARN("failed to adjust column items and select items", K(ret));
-    } else {
-      rt_mv_table->type_ = TableItem::GENERATED_TABLE;
-      rt_mv_table->ref_id_ = OB_INVALID_ID;
-      rt_mv_table->mview_id_ = OB_INVALID_ID;
-      rt_mv_table->database_name_ = ObString::make_string("");
-      rt_mv_table->ref_query_ = view_stmt;
-      rt_mv_table->table_type_ = MAX_TABLE_TYPE;
-      rt_mv_table->need_expand_rt_mv_ = false;
-    }
-    OPT_TRACE_END_SECTION;
-  }
-  return ret;
-}
-
-// remove mview hidden column from upper column items and add cast for view select items
-int ObTransformUtils::adjust_col_and_sel_for_expand_mview(ObTransformerCtx *ctx,
-                                                          ObIArray<ColumnItem> &uppper_col_items,
-                                                          ObIArray<SelectItem> &view_sel_items,
-                                                          uint64_t mv_table_id)
-{
-  int ret = OB_SUCCESS;
-  ObSEArray<ColumnItem, 8> new_col_items;
-  int64_t pos = OB_INVALID_ID;
-  if (OB_ISNULL(ctx) || OB_ISNULL(ctx->expr_factory_)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret), K(ctx));
-  }
-  for (int64_t i = 0; OB_SUCC(ret) && i < uppper_col_items.count(); ++i) {
-    if (OB_ISNULL(uppper_col_items.at(i).expr_)) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get unexpected null", K(ret));
-    } else if (uppper_col_items.at(i).table_id_ != mv_table_id) {
-      // not mview column
-      if (OB_FAIL(new_col_items.push_back(uppper_col_items.at(i)))) {
-        LOG_WARN("failed to push back column item", K(ret));
-      }
-    } else if (FALSE_IT(pos = uppper_col_items.at(i).expr_->get_column_id() - OB_APP_MIN_COLUMN_ID)) {
-    } else if (OB_UNLIKELY(pos >= view_sel_items.count())) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("invalid array pos", K(pos), K(view_sel_items.count()), K(ret));
-    } else if (pos < 0) {
-      // do nothing, it is hidden column of mview
-    } else if (OB_FAIL(new_col_items.push_back(uppper_col_items.at(i)))) {
-      LOG_WARN("failed to push back column item", K(ret));
-    } else if (OB_FAIL(ObTransformUtils::add_cast_for_replace_if_need(*ctx->expr_factory_,
-                                                                      new_col_items.at(new_col_items.count() - 1).expr_,
-                                                                      view_sel_items.at(pos).expr_,
-                                                                      ctx->session_info_))) {
-      LOG_WARN("try add cast expr above failed", K(ret));
-    } else {
-      new_col_items.at(new_col_items.count() - 1).expr_->set_is_rowkey_column(false);
-    }
-  }
-  if (OB_SUCC(ret) && OB_FAIL(uppper_col_items.assign(new_col_items))) {
-    LOG_WARN("failed to assign column items", K(ret));
-  }
-  return ret;
-}
-// 1. Do not parameterize
-// 2. No need to check permissions
-// 3. Add dependency table
-// 4. parser special path handling: batch multi stmt forbidden, values table
-int ObTransformUtils::generate_view_stmt_from_query_string(const ObString &query_str,
-                                                           ObTransformerCtx *ctx,
-                                                           ObSelectStmt *&view_stmt)
-{
-  int ret = OB_SUCCESS;
-  view_stmt = NULL;
-  ParseResult parse_result;
-  ParseNode *node = NULL;
-  ObParser parser(*ctx->allocator_, ctx->session_info_->get_sql_mode(), ctx->session_info_->get_charsets4parser());
-  ObResolverParams resolver_ctx;
-  resolver_ctx.is_for_rt_mv_ = true;
-  resolver_ctx.allocator_ = ctx->allocator_;
-  resolver_ctx.schema_checker_ = ctx->schema_checker_;
-  resolver_ctx.session_info_ = ctx->session_info_;
-  resolver_ctx.expr_factory_ = ctx->expr_factory_;
-  resolver_ctx.stmt_factory_ = ctx->stmt_factory_;
-  resolver_ctx.sql_proxy_ = GCTX.sql_proxy_;
-  resolver_ctx.query_ctx_ = ctx->stmt_factory_->get_query_ctx();
-  ObSelectResolver select_resolver(resolver_ctx);
-  ObTransformPreProcess trans(ctx);
-  trans.set_transformer_type(PRE_PROCESS);
-  uint64_t dummy_value = 0;
-  ObDMLStmt *dml_stmt = NULL;
-  ObQueryHint &query_hint = ctx->stmt_factory_->get_query_ctx()->get_query_hint_for_update();
-  const int64_t stmt_count = query_hint.stmt_id_map_.count();
-  if (OB_ISNULL(resolver_ctx.query_ctx_)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected null", K(ret), K(resolver_ctx.query_ctx_));
-  } else if (OB_FAIL(parser.parse(query_str, parse_result))) {
-    LOG_WARN("parse view definition failed", K(ret), K(query_str));
-  } else if (OB_ISNULL(node = parse_result.result_tree_->children_[0]) || OB_UNLIKELY(T_SELECT != node->type_)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid mv select node", K(ret), K(node), K(node->type_));
-  } else if (OB_FALSE_IT(resolver_ctx.query_ctx_->question_marks_count_ += static_cast<int64_t>(parse_result.question_mark_ctx_.count_))) {
-  } else if (OB_FAIL(select_resolver.resolve(*node))) {
-    LOG_WARN("resolve view definition failed", K(ret));
-  } else if (OB_ISNULL(dml_stmt = static_cast<ObDMLStmt*>(select_resolver.get_basic_stmt()))) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid mv stmt", K(ret), K(dml_stmt));
-  } else if (OB_FAIL(query_hint.generate_orig_stmt_qb_name(*ctx->allocator_, stmt_count))) {
-    LOG_WARN("failed to generate stmt name after resolve", K(ret));
-  } else if (OB_FAIL(query_hint.distribute_hint_to_orig_stmt(dml_stmt))) {
-    LOG_WARN("faild to distribute hint to orig stmt", K(ret));
-  } else if (OB_FAIL(trans.transform(dml_stmt, dummy_value))) {
-    LOG_WARN("failed to do transform pre processing", K(ret));
-  } else {
-    view_stmt = static_cast<ObSelectStmt*>(dml_stmt);
-    LOG_DEBUG("generate mv stmt", KPC(view_stmt));
-  }
-  return ret;
-}
-
-int ObTransformUtils::set_expand_mview_flag(ObSelectStmt *view_stmt)
-{
-  int ret = OB_SUCCESS;
-  ObSEArray<ObSelectStmt*, 4> child_stmts;
-  if (OB_ISNULL(view_stmt)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("view_stmt is null", K(ret));
-  } else if (OB_FAIL(view_stmt->get_child_stmts(child_stmts))) {
-    LOG_WARN("failed to get child stmts", K(ret));
-  } else {
-    view_stmt->set_expanded_mview(true);
-    for (int64_t i = 0; OB_SUCC(ret) && i < child_stmts.count(); ++i) {
-      if (OB_FAIL(SMART_CALL(set_expand_mview_flag(child_stmts.at(i))))) {
-        LOG_WARN("failed to set child expand mview flag", K(ret), K(i));
       }
     }
   }
@@ -13734,15 +13536,13 @@ int ObTransformUtils::calc_column_repeat_rate(ObTransformerCtx *ctx,
     LOG_WARN("get unexpected null", K(ret), K(ctx), K(table));
   } else if (!table->is_basic_table()) {
     // do nothing
-  } else if (OB_FAIL(ctx->schema_checker_->get_table_schema(
-                              ctx->session_info_->get_effective_tenant_id(), 
+  } else if (OB_FAIL(ctx->schema_checker_->get_table_schema( 
                               table->ref_id_, table_schema))) {
     LOG_WARN("get table schema failed", K(ret), KPC(table));
   } else if (OB_ISNULL(table_schema)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected null", K(ret));
-  } else if (OB_FAIL(ctx->opt_stat_mgr_->get_table_stat(ctx->session_info_->get_effective_tenant_id(),
-                                                        table->ref_id_,
+  } else if (OB_FAIL(ctx->opt_stat_mgr_->get_table_stat(table->ref_id_,
                                                         table_schema->is_partitioned_table() ? -1 : table->ref_id_,
                                                         1,
                                                         table_stat))) {
@@ -13750,8 +13550,7 @@ int ObTransformUtils::calc_column_repeat_rate(ObTransformerCtx *ctx,
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < column_ids.count(); ++i) {
       ObOptColumnStatHandle column_handle;
-      if (OB_FAIL(ctx->opt_stat_mgr_->get_column_stat(ctx->session_info_->get_effective_tenant_id(),
-                                                      table->ref_id_,
+      if (OB_FAIL(ctx->opt_stat_mgr_->get_column_stat(table->ref_id_,
                                                       table_schema->is_partitioned_table() ? -1 : table->ref_id_,
                                                       column_ids.at(i),
                                                       column_handle))) {
@@ -14755,7 +14554,7 @@ int ObTransformUtils::check_table_with_fts_or_multivalue_recursively(TableItem *
     }
   } else if (table->is_basic_table()) {
     const ObTableSchema* table_schema = NULL;
-    if (OB_FAIL(schema_checker->get_table_schema(session_info->get_effective_tenant_id(),
+    if (OB_FAIL(schema_checker->get_table_schema(
                                                  table->ref_id_,
                                                  table_schema))) {
       LOG_WARN("failed to get table schema", K(ret));
@@ -15318,7 +15117,7 @@ int ObTransformUtils::prepare_trans_any_all_as_exists(ObTransformerCtx *ctx,
   if (OB_ISNULL(right_hand) || OB_ISNULL(ctx) ||
       OB_ISNULL(trans_stmt = right_hand->get_ref_stmt())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("failed to prepare trans any all as exists", K(ret));
+    LOG_ERROR("failed to prepare trans any all as exists", K(ret));
   } else if (trans_stmt->is_spj()) {
   } else if (OB_FAIL(ObTransformUtils::create_stmt_with_generated_table(ctx,
                                                                         trans_stmt,

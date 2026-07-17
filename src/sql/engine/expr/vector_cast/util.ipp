@@ -182,7 +182,7 @@ void logging_truncated_decint(const ObExpr &expr, ObEvalCtx &ctx, const ObBitVec
                               const EvalBound &bound, const ObScale in_scale,
                               const ObScale out_scale)
 {
-  if (CM_IS_COLUMN_CONVERT(expr.extra_) && in_scale > out_scale && lib::is_mysql_mode()) {
+  if (CM_IS_COLUMN_CONVERT(expr.extra_) && in_scale > out_scale) {
     InputVec *input_vector = static_cast<InputVec *>(expr.args_[0]->get_vector(ctx));
     OutputVec *output_vector = static_cast<OutputVec *>(expr.get_vector(ctx));
     in_type sf = get_scale_factor<in_type>(in_scale - out_scale);
@@ -367,9 +367,9 @@ struct NumberRangeChecker
     Vector *res_vec_;
     const int64_t number_precision_;
   };
-  class NumberOracleCheck {
+  class NumberScaleCheck {
   public:
-    NumberOracleCheck(Vector* res_vec, ObScale scale)
+    NumberScaleCheck(Vector* res_vec, ObScale scale)
         : res_vec_(res_vec), scale_(scale) {}
 
     OB_INLINE int operator() (const ObExpr &expr, int idx)
@@ -727,8 +727,7 @@ struct StringRangeChecker
               }
             } else if (accuracy_length == text_length
                       || ObCharType != out_type
-                      || (lib::is_mysql_mode()
-                          && ob_is_char(out_type, expr.datum_meta_.cs_type_))) {
+                      || ob_is_char(out_type, expr.datum_meta_.cs_type_)) {
               // do not padding
               SQL_LOG(DEBUG, "no need to padding", K(ret), K(accuracy_length),
                                               K(text_length), K(text));
@@ -779,8 +778,7 @@ struct StringRangeChecker
     bool numchars_no_expanding = (CS_TYPE_UTF8MB4_BIN == out_cs_type ||
                                   CS_TYPE_BINARY == out_cs_type ||
                                   CS_TYPE_UTF8MB4_GENERAL_CI == out_cs_type);
-    return lib::is_mysql_mode() &&
-           no_padding && numchars_no_expanding;
+    return no_padding && numchars_no_expanding;
   }
 
   ///@brief string_length_check只针对于

@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SERVER
 
 #include "observer/ob_srv_xlator.h"
+#include "share/ob_ex_rpc.h"
 
 #include "sql/ob_sql_task.h"
 #include "observer/mysql/obmp_query.h"
@@ -31,9 +32,6 @@
 #include "observer/mysql/obmp_stmt_prepare.h"
 #include "observer/mysql/obmp_stmt_fetch.h"
 #include "observer/mysql/obmp_stmt_close.h"
-#include "observer/mysql/obmp_stmt_prexecute.h"
-#include "observer/mysql/obmp_stmt_send_piece_data.h"
-#include "observer/mysql/obmp_stmt_get_piece_data.h"
 #include "observer/mysql/obmp_stmt_send_long_data.h"
 #include "observer/mysql/obmp_stmt_reset.h"
 #include "observer/mysql/obmp_reset_connection.h"
@@ -44,7 +42,6 @@
 #include "observer/mysql/obmp_debug.h"
 #include "observer/mysql/obmp_refresh.h"
 
-#include "logservice/palf/log_rpc_processor.h"
 #include "sql/das/ob_das_parallel_handler.h"
 
 using namespace oceanbase::observer;
@@ -53,7 +50,6 @@ using namespace oceanbase::rpc;
 using namespace oceanbase::sql;
 using namespace oceanbase::common;
 using namespace oceanbase::transaction;
-using namespace oceanbase::obrpc;
 using namespace oceanbase::obmysql;
 
 #define PROCESSOR_BEGIN(pcode)                  \
@@ -85,56 +81,20 @@ using namespace oceanbase::obmysql;
     break;                                      \
   }
 
-void ObSrvRpcXlator::register_rpc_process_function(int pcode, RPCProcessFunc func) {
-  if(pcode >= MAX_PCODE || pcode < 0) {
-    SERVER_LOG_RET(ERROR, OB_ERROR, "(SHOULD NEVER HAPPEN) input pcode is out of range in server rpc xlator", K(pcode));
-    ob_abort();
-  } else if (funcs_[pcode] != nullptr) {
-    SERVER_LOG_RET(ERROR, OB_ERROR, "(SHOULD NEVER HAPPEN) duplicate pcode in server rpc xlator", K(pcode));
-    ob_abort();
-  } else {
-    funcs_[pcode] = func;
-  }
-}
+thread_local bool oceanbase::observer::g_in_sync_dispatch = false;
 
 ObIAllocator &oceanbase::observer::get_sql_arena_allocator() {
+  if (g_in_sync_dispatch) {
+    static thread_local common::ObArenaAllocator sync_arena(common::ObModIds::OB_RPC);
+    return sync_arena;
+  }
   return THIS_WORKER.get_sql_arena_allocator();
-}
-
-int ObSrvRpcXlator::translate(rpc::ObRequest &req, ObReqProcessor *&processor)
-{
-  int ret = OB_SUCCESS;
-  processor = NULL;
-  const ObRpcPacket &pkt
-      = reinterpret_cast<const ObRpcPacket&>(req.get_packet());
-  int pcode = pkt.get_pcode();
-
-  if (OB_UNLIKELY(pcode < 0 || pcode >= MAX_PCODE || funcs_[pcode] == nullptr)) {
-    ret = OB_NOT_SUPPORTED;
-    LOG_WARN("not support packet", K(pkt), K(ret), K(MAX_PCODE));
-  } else {
-    ret = funcs_[pcode](gctx_, processor, session_handler_);
-  }
-
-  if (OB_SUCC(ret) && NULL == processor) {
-    ret = OB_NOT_SUPPORTED;
-  }
-
-  if (!OB_SUCC(ret) && NULL != processor) {
-    ob_delete(processor);
-    processor = NULL;
-  }
-
-  return ret;
 }
 
 int ObSrvXlator::th_init()
 {
   int ret = common::OB_SUCCESS;
-
-  if (OB_FAIL(rpc_xlator_.th_init())) {
-    LOG_ERROR("init rpc translator for thread fail", K(ret));
-  } else if (OB_FAIL(mysql_xlator_.th_init())) {
+  if (OB_FAIL(mysql_xlator_.th_init())) {
     LOG_ERROR("init mysql translator for thread fail", K(ret));
   }
   return ret;
@@ -143,31 +103,24 @@ int ObSrvXlator::th_init()
 int ObSrvXlator::th_destroy()
 {
   int ret = common::OB_SUCCESS;
-  if (OB_FAIL(rpc_xlator_.th_destroy())) {
-    LOG_ERROR("destroy rpc translator for thread fail", K(ret));
-  } else if (OB_FAIL(mysql_xlator_.th_destroy())) {
+  if (OB_FAIL(mysql_xlator_.th_destroy())) {
     LOG_ERROR("destroy mysql translator for thread fail", K(ret));
   }
   return ret;
 }
 
-typedef union EP_RPCP_BUF {
-  char rpcp_buffer_[RPCP_BUF_SIZE]; // reserve memory for rpc processor 
-  char ep_buffer_[sizeof (ObErrorP) + sizeof (ObMPError)];
+typedef union EP_CALLP_BUF {
+  char rpcp_buffer_[CALLP_BUF_SIZE]; // reserve memory for rpc processor
+  char ep_buffer_[sizeof (ObMPError)];
   char obmp_query_buffer_[ObMPQuery::MAX_SELF_OBJ_SIZE];
-} EP_RPCP_BUF;
-// Make sure election rpc processor allocated successfully when OOM occurs
-STATIC_ASSERT(RPCP_BUF_SIZE >= sizeof(oceanbase::palf::ElectionPrepareRequestMsgP), "RPCP_BUF_SIZE should be big enough to allocate election processer");
-STATIC_ASSERT(RPCP_BUF_SIZE >= sizeof(oceanbase::palf::ElectionPrepareResponseMsgP), "RPCP_BUF_SIZE should be big enough to allocate election processer");
-STATIC_ASSERT(RPCP_BUF_SIZE >= sizeof(oceanbase::palf::ElectionAcceptRequestMsgP), "RPCP_BUF_SIZE should be big enough to allocate election processer");
-STATIC_ASSERT(RPCP_BUF_SIZE >= sizeof(oceanbase::palf::ElectionAcceptResponseMsgP), "RPCP_BUF_SIZE should be big enough to allocate election processer");
-STATIC_ASSERT(RPCP_BUF_SIZE >= sizeof(oceanbase::palf::ElectionChangeLeaderMsgP), "RPCP_BUF_SIZE should be big enough to allocate election processer");
+} EP_CALLP_BUF;
+// palf election rpc processors removed (single-replica seekdb): no buffer-size asserts needed.
 
 typedef struct {
   char buffer_[sizeof (ObMPStmtClose)];
 } CLOSEPBUF;
 
-_RLOCAL(EP_RPCP_BUF, co_ep_rpcp_buf) __attribute__((aligned(64)));
+_RLOCAL(EP_CALLP_BUF, co_ep_callp_buf) __attribute__((aligned(64)));
 _RLOCAL(CLOSEPBUF, co_closepbuf)  __attribute__((aligned(64)));
 
 int ObSrvMySQLXlator::translate(rpc::ObRequest &req, ObReqProcessor *&processor)
@@ -184,7 +137,7 @@ int ObSrvMySQLXlator::translate(rpc::ObRequest &req, ObReqProcessor *&processor)
     } else {
       const ObMySQLRawPacket &pkt = reinterpret_cast<const ObMySQLRawPacket &>(req.get_packet());
       if (pkt.get_cmd() == obmysql::COM_QUERY) {
-        char *buf = (&co_ep_rpcp_buf)->obmp_query_buffer_;
+        char *buf = (&co_ep_callp_buf)->obmp_query_buffer_;
         ObMPQuery *p = new (buf) ObMPQuery(gctx_);
         if (OB_ISNULL(p)) {
           ret = OB_ALLOCATE_MEMORY_FAILED;
@@ -200,10 +153,8 @@ int ObSrvMySQLXlator::translate(rpc::ObRequest &req, ObReqProcessor *&processor)
         if (OB_ISNULL(conn)) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("get unexpected null", K(conn), K(ret));
-        } else if (conn->is_proxy_ && conn->proxy_version_ < PROXY_VERSION_4_3_0_0) {
-          NEW_MYSQL_PROCESSOR(ObMPDefault, gctx_);
         } else {
-          char *buf = (&co_ep_rpcp_buf)->obmp_query_buffer_;
+          char *buf = (&co_ep_callp_buf)->obmp_query_buffer_;
           ObMPProcessInfo *p = new (buf) ObMPProcessInfo(gctx_);
           if (OB_ISNULL(p)) {
             ret = OB_ALLOCATE_MEMORY_FAILED;
@@ -220,10 +171,8 @@ int ObSrvMySQLXlator::translate(rpc::ObRequest &req, ObReqProcessor *&processor)
         if (OB_ISNULL(conn)) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("get unexpected null", K(conn), K(ret));
-        } else if (conn->is_proxy_ && conn->proxy_version_ < PROXY_VERSION_4_3_0_0) {
-          NEW_MYSQL_PROCESSOR(ObMPDefault, gctx_);
         } else {
-          char *buf = (&co_ep_rpcp_buf)->obmp_query_buffer_;
+          char *buf = (&co_ep_callp_buf)->obmp_query_buffer_;
           ObMPProcessKill *p = new (buf) ObMPProcessKill(gctx_);
           if (OB_ISNULL(p)) {
             ret = OB_ALLOCATE_MEMORY_FAILED;
@@ -247,9 +196,6 @@ int ObSrvMySQLXlator::translate(rpc::ObRequest &req, ObReqProcessor *&processor)
           MYSQL_PROCESSOR(ObMPStmtExecute, gctx_);
           MYSQL_PROCESSOR(ObMPStmtFetch, gctx_);
           MYSQL_PROCESSOR(ObMPStmtReset, gctx_);
-          MYSQL_PROCESSOR(ObMPStmtPrexecute, gctx_);
-          MYSQL_PROCESSOR(ObMPStmtSendPieceData, gctx_);
-          MYSQL_PROCESSOR(ObMPStmtGetPieceData, gctx_);
           MYSQL_PROCESSOR(ObMPStmtSendLongData, gctx_);
           MYSQL_PROCESSOR(ObMPResetConnection, gctx_);
           MYSQL_PROCESSOR(ObMPAuthResponse, gctx_);
@@ -271,29 +217,12 @@ int ObSrvMySQLXlator::translate(rpc::ObRequest &req, ObReqProcessor *&processor)
             break;
           }
           case obmysql::COM_FIELD_LIST: {
-          /*To adapt with proxy, for the support of COM_FIELD_LIST command, follow these principles:
-          * 1. If it is not in Proxy mode, return a normal query result packet
-          * 2. If it is in Proxy mode:
-          *   2.1. If there is a version number: return an unsupported error packet for versions below 1.7.6;
-          *                    return a normal query result for versions 1.7.6 and above;
-          *                    return an unsupported error packet for invalid version numbers
-          *   2.2. If there is no version number, return an unsupported error packet;
-          */
+            // obproxy support removed: COM_FIELD_LIST is served as a normal query
             ObSMConnection *conn = reinterpret_cast<ObSMConnection* >(
                 SQL_REQ_OP.get_sql_session(&req));
             if (OB_ISNULL(conn)) {
               ret = OB_ERR_UNEXPECTED;
               LOG_WARN("get unexpected null", K(conn), K(ret));
-            } else if (conn->is_proxy_) {
-              const char *sup_proxy_min_version = "1.7.6";
-              uint64_t min_proxy_version = 0;
-              if (OB_FAIL(ObClusterVersion::get_version(sup_proxy_min_version, min_proxy_version))) {
-                LOG_WARN("failed to get version", K(ret));
-              } else if (conn->proxy_version_ < min_proxy_version) {
-                NEW_MYSQL_PROCESSOR(ObMPDefault, gctx_);
-              } else {
-                NEW_MYSQL_PROCESSOR(ObMPQuery, gctx_);
-              }
             } else {
               NEW_MYSQL_PROCESSOR(ObMPQuery, gctx_);
             }
@@ -317,9 +246,6 @@ int ObSrvMySQLXlator::translate(rpc::ObRequest &req, ObReqProcessor *&processor)
         if (OB_ISNULL(conn) || OB_ISNULL(dynamic_cast<ObMPBase *>(processor))) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("get unexpected null", K(dynamic_cast<ObMPBase *>(processor)));
-        } else {
-          uint64_t proxy_version = conn->is_proxy_ ? conn->proxy_version_ : 0;
-          static_cast<ObMPBase *>(processor)->set_proxy_version(proxy_version);
         }
       }
     }
@@ -342,16 +268,7 @@ ObReqProcessor *ObSrvXlator::get_processor(ObRequest &req)
     ret = OB_WAITQUEUE_TIMEOUT;
   } else if (ObRequest::OB_MYSQL == req.get_type()) {
     ret = mysql_xlator_.translate(req, processor);
-  } else if (ObRequest::OB_RPC == req.get_type()) {
-    const obrpc::ObRpcPacket &pkt
-        = reinterpret_cast<const obrpc::ObRpcPacket &>(req.get_packet());
-    ret = rpc_xlator_.translate(req, processor);
-    if (OB_SUCC(ret)) {
-      THIS_WORKER.set_timeout_ts(req.get_receive_timestamp() + pkt.get_timeout());
-      THIS_WORKER.set_ntp_offset(req.get_receive_timestamp() - req.get_send_timestamp());
-    }
   } else if (ObRequest::OB_TASK == req.get_type() ||
-             ObRequest::OB_TS_TASK == req.get_type() ||
              ObRequest::OB_SQL_TASK == req.get_type() ||
              ObRequest::OB_DAS_PARALLEL_TASK == req.get_type()) {
     processor = &static_cast<ObSrvTask&>(req).get_processor();
@@ -367,9 +284,7 @@ ObReqProcessor *ObSrvXlator::get_processor(ObRequest &req)
   }
 
   if (OB_ISNULL(processor)) {
-    if (ObRequest::OB_RPC == req.get_type()) {
-      processor = get_error_rpc_processor(ret);
-    } else if (ObRequest::OB_MYSQL == req.get_type()) {
+    if (ObRequest::OB_MYSQL == req.get_type()) {
       processor = get_error_mysql_processor(ret);
       (static_cast<ObMPError*>(processor))->set_need_disconnect(true);
     }
@@ -382,10 +297,10 @@ ObReqProcessor *ObSrvXlator::get_processor(ObRequest &req)
 int ObSrvXlator::release(ObReqProcessor *processor)
 {
   int ret = OB_SUCCESS;
-  const char *epbuf = (&co_ep_rpcp_buf)->ep_buffer_;
+  const char *epbuf = (&co_ep_callp_buf)->ep_buffer_;
   const char *cpbuf = (&co_closepbuf)->buffer_;
-  const char *rpcpbuf = (&co_ep_rpcp_buf)->rpcp_buffer_;
-  const char *mp_query_buf = (&co_ep_rpcp_buf)->obmp_query_buffer_;
+  const char *rpcpbuf = (&co_ep_callp_buf)->rpcp_buffer_;
+  const char *mp_query_buf = (&co_ep_callp_buf)->obmp_query_buffer_;
   if (NULL == processor) {
     ret = OB_INVALID_ARGUMENT;
     LOG_ERROR("invalid argument", K(processor), K(ret));
@@ -413,11 +328,6 @@ int ObSrvXlator::release(ObReqProcessor *processor)
       //Deal with sqltask memory release
       ob_delete(req);
       req = NULL;
-    } else if (ObRequest::OB_TS_TASK == req_type) {
-      //Deal with the memory release of the transaction task
-      ObTsResponseTaskFactory::free(static_cast<ObTsResponseTask *>(req));
-      //op_reclaim_free(req);
-      req = NULL;
     } else if (ObRequest::OB_SQL_TASK == req_type) {
       ObSqlTaskFactory::get_instance().free(static_cast<ObSqlTask *>(req));
       req = NULL;
@@ -432,16 +342,9 @@ int ObSrvXlator::release(ObReqProcessor *processor)
   return ret;
 }
 
-ObReqProcessor *ObSrvXlator::get_error_rpc_processor(const int ret)
-{
-  char *epbuf = (&co_ep_rpcp_buf)->ep_buffer_;
-  ObErrorP *p = new (&epbuf[0]) ObErrorP(ret);
-  return p;
-}
-
 ObReqProcessor *ObSrvXlator::get_error_mysql_processor(const int ret)
 {
-  char *epbuf = (&co_ep_rpcp_buf)->ep_buffer_;
+  char *epbuf = (&co_ep_callp_buf)->ep_buffer_;
   ObMPError *p = new (&epbuf[0]) ObMPError(ret);
   return p;
 }

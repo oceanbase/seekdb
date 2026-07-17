@@ -17,11 +17,11 @@
 #ifndef OCEANBASE_SHARE_OB_DDL_CHECKSUM_H_
 #define OCEANBASE_SHARE_OB_DDL_CHECKSUM_H_
 
-#include "lib/mysqlclient/ob_mysql_proxy.h"
+#include "common/mysqlclient/ob_mysql_proxy.h"
 #include "lib/container/ob_array.h"
 #include "lib/hash/ob_hashmap.h"
 #include "share/ob_dml_sql_splicer.h"
-#include "share/schema/ob_table_param.h"
+#include "share/schema/ob_col_desc.h"  // table_param was previously included provider-style, use the pure header
 
 namespace oceanbase
 {
@@ -31,7 +31,7 @@ namespace share
 struct ObDDLChecksumItem
 {
   ObDDLChecksumItem()
-    : execution_id_(-1), tenant_id_(common::OB_INVALID_ID),
+    : execution_id_(-1),
       table_id_(common::OB_INVALID_ID), tablet_id_(common::OB_INVALID_ID), ddl_task_id_(0),
       column_id_(common::OB_INVALID_ID), task_id_(common::OB_INVALID_ID), checksum_(0)
   {}
@@ -39,18 +39,16 @@ struct ObDDLChecksumItem
   bool is_valid() const
   {
     return 0 <= execution_id_
-        && common::OB_INVALID_ID != tenant_id_
         && common::OB_INVALID_ID != table_id_
         && common::OB_INVALID_ID != tablet_id_
         && 0 < ddl_task_id_
         && common::OB_INVALID_ID != column_id_;
   }
-  TO_STRING_KV(K_(execution_id), K_(tenant_id), K_(table_id), K_(tablet_id),
+  TO_STRING_KV(K_(execution_id), K_(table_id), K_(tablet_id),
       K_(ddl_task_id), K_(column_id), K_(task_id), K_(checksum));
   static const int64_t PX_SQC_ID_OFFSET = 48;
   static const int64_t PX_TASK_ID_OFFSET = 32;
   int64_t execution_id_;
-  uint64_t tenant_id_;
   uint64_t table_id_;
   uint64_t tablet_id_;
   int64_t ddl_task_id_;
@@ -63,7 +61,6 @@ class ObDDLChecksumOperator
 {
 public:
   static int update_checksum(
-      const uint64_t tenant_id,
       const int64_t table_id,
       const int64_t tablet_id,
       const int64_t ddl_task_id,
@@ -77,38 +74,29 @@ public:
       const uint64_t data_format_version,
       const common::ObIArray<ObDDLChecksumItem> &checksum_items,
       common::ObMySQLProxy &sql_proxy);
-  static int get_table_column_checksum(
-      const uint64_t tenant_id,
-      const int64_t execution_id,
+  static int get_table_column_checksum(const int64_t execution_id,
       const uint64_t table_id,
       const int64_t ddl_task_id,
       const bool is_unique_index_checking,
       common::hash::ObHashMap<int64_t, int64_t> &column_checksums, common::ObMySQLProxy &sql_proxy);
-  static int get_table_column_checksum_without_execution_id(
-      const uint64_t tenant_id,
-      const uint64_t table_id,
+  static int get_table_column_checksum_without_execution_id(const uint64_t table_id,
       const uint64_t index_table_id,
       const int64_t ddl_task_id,
       const bool is_unique_index_checking,
       common::hash::ObHashMap<int64_t, int64_t> &column_checksums, common::ObMySQLProxy &sql_proxy);
-  static int get_tablet_checksum_record(
-      const uint64_t tenant_id,
-      const uint64_t execution_id,
+  static int get_tablet_checksum_record(const uint64_t execution_id,
       const uint64_t table_id,
       const int64_t ddl_task_id,
       const ObIArray<ObTabletID> &tablet_ids,
       ObMySQLProxy &sql_proxy,
       common::hash::ObHashMap<uint64_t, bool> &tablet_checksum_map);
-  static int get_local_index_tablet_finish_status(
-      const uint64_t tenant_id,
-      const uint64_t data_table_id,
+  static int get_local_index_tablet_finish_status(const uint64_t data_table_id,
       const uint64_t index_table_id,
       const int64_t ddl_task_id,
       const ObIArray<ObTabletID> &tablet_ids,
       ObMySQLProxy &sql_proxy,
       common::hash::ObHashMap<uint64_t, bool> &tablet_finished_map);
   static int check_column_checksum(
-      const uint64_t tenant_id,
       const int64_t execution_id,
       const uint64_t data_table_id,
       const uint64_t index_table_id,
@@ -117,18 +105,14 @@ public:
       const ObIArray<int64_t> &ignore_col_ids,
       bool &is_equal,
       common::ObMySQLProxy &sql_proxy);
-  static int check_column_checksum_without_execution_id(
-      const uint64_t tenant_id,
-      const uint64_t data_table_id,
+  static int check_column_checksum_without_execution_id(const uint64_t data_table_id,
       const uint64_t index_table_id,
       const int64_t ddl_task_id,
       const bool is_unique_index_checking,
       const ObIArray<int64_t> &ignore_col_ids,
       bool &is_equal,
       common::ObMySQLProxy &sql_proxy);
-  static int delete_checksum(
-      const uint64_t tenant_id,
-      const int64_t execution_id,
+  static int delete_checksum(const int64_t execution_id,
       const uint64_t source_table_id,
       const uint64_t dest_table_id,
       const int64_t ddl_task_id,
@@ -141,28 +125,22 @@ private:
       share::ObDMLSqlSplicer &dml);
   static int get_column_checksum(
       const common::ObSqlString &sql,
-      const uint64_t tenant_id,
       common::hash::ObHashMap<int64_t, int64_t> &column_checksum_map,
       common::ObMySQLProxy &sql_proxy);
-  static int get_part_column_checksum(
-      const uint64_t tenant_id,
-      const uint64_t table_id,
+  static int get_part_column_checksum(const uint64_t table_id,
       const uint64_t tablet_id,
       const uint64_t execution_id,
       const int64_t ddl_task_id,
       const bool is_unique_index_checking,
       common::ObMySQLProxy &sql_proxy,
       common::hash::ObHashMap<int64_t, int64_t> &column_checksum_map);
-  static int get_tablet_latest_execution_id(
-      const uint64_t tenant_id,
-      const uint64_t index_table_id,
+  static int get_tablet_latest_execution_id(const uint64_t index_table_id,
       const int64_t ddl_task_id,
       const int64_t tablet_id,
       common::ObMySQLProxy &sql_proxy,
       int64_t &execution_id);
   static int get_tablet_checksum_status(
-      const ObSqlString &sql, 
-      const uint64_t tenant_id,
+      const ObSqlString &sql,
       ObIArray<uint64_t> &batch_tablet_ids,
       common::ObMySQLProxy &sql_proxy,
       common::hash::ObHashMap<uint64_t, bool> &tablet_checksum_status_map);

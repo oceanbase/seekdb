@@ -33,7 +33,7 @@ int64_t ObTenantDDLSimContext::to_string(char* buf, const int64_t buf_len) const
       fixed_points[fixed_point_count++] = static_cast<ObDDLSimPointID>(i);
     }
   }
-  J_KV(K(tenant_id_), K(type_), K(seed_), K(trigger_percent_),
+  J_KV(K(type_), K(seed_), K(trigger_percent_),
       "fixed_points_", ObArrayWrap<ObDDLSimPointID>(fixed_points, fixed_point_count));
   J_OBJ_END();
   return pos;
@@ -105,18 +105,18 @@ int ObDDLSimPointMgr::generate_task_sim_map(const ObTenantDDLSimContext &tenant_
   } else if (OB_UNLIKELY(tenant_context.trigger_percent_ <= 0)) {
     // skip
   } else {
-    const uint64_t tenant_id = tenant_context.tenant_id_;
+    
     const int64_t seed = tenant_context.seed_;
     const int64_t trigger_percent = tenant_context.trigger_percent_;
     for (std::initializer_list<ObDDLSimPointID>::iterator it = point_ids.begin(); OB_SUCC(ret) && it != point_ids.end(); ++it) {
       ObDDLSimPointID point_id = *it;
       const ObDDLSimPoint &cur_sim_point = all_points_[point_id];
       if (cur_sim_point.is_valid() && (SIM_TYPE_ALL == tenant_context.type_ || tenant_context.type_ == cur_sim_point.type_)) {
-        srand(static_cast<int32_t>((tenant_id + seed) * current_task_id * point_id));
+        srand(static_cast<int32_t>((seed) * current_task_id * point_id));
         if (rand() % 100 < trigger_percent) {
-          if (OB_FAIL(task_sim_map_.set_refactored(TaskSimPoint(tenant_id, current_task_id, point_id), 0))) {
+          if (OB_FAIL(task_sim_map_.set_refactored(TaskSimPoint(current_task_id, point_id), 0))) {
             if (OB_HASH_EXIST != ret) {
-              LOG_WARN("set task sim point into map failed", K(ret), K(tenant_id), K(current_task_id), K(point_id));
+              LOG_WARN("set task sim point into map failed", K(ret), K(current_task_id), K(point_id));
             } else {
               ret = OB_SUCCESS;
             }

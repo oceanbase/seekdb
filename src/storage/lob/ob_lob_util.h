@@ -24,12 +24,13 @@
 #include "storage/tx/ob_trans_define_v4.h"
 #include "storage/access/ob_dml_param.h"
 #include "share/schema/ob_table_schema.h"
-#include "share/schema/ob_table_param.h"
+#include "storage/access/ob_table_param.h"
 #include "common/object/ob_object.h"
 #include "storage/lob/ob_lob_seq.h"
 #include "storage/lob/ob_ext_info_callback.h"
 #include "storage/lob/ob_lob_access_param.h"
 #include "lib/hash/ob_hashmap.h"
+#include "storage/lob/ob_lob_diff_struct.h"  // diff structs have been made layer-neutral(conf L2), backfill
 
 namespace oceanbase
 {
@@ -146,8 +147,7 @@ public:
   static const uint64_t LOB_ACCESS_TX_TIMEOUT = 60000000; // 60s
   static const uint64_t LOB_ALLOCATOR_RESET_CYCLE = 128;
 public:
-  static int start_trans(const share::ObLSID &ls_id,
-                         const bool is_for_read,
+  static int start_trans(const bool is_for_read,
                          const int64_t timeout_ts,
                          transaction::ObTxDesc *&tx_desc);
   static int end_trans(transaction::ObTxDesc *tx_desc,
@@ -155,17 +155,14 @@ public:
                        const int64_t timeout_ts);
 
   static int insert_lob_column(ObIAllocator &allocator,
-                               const share::ObLSID ls_id,
                                const common::ObTabletID tablet_id,
                                const ObObjType &obj_type,
                                const ObCollationType &cs_type,
                                const ObLobStorageParam &lob_storage_param,
                                blocksstable::ObStorageDatum &datum,
                                const int64_t timeout_ts,
-                               const bool has_lob_header,
-                               const uint64_t src_tenant_id);
+                               const bool has_lob_header);
   static int delete_lob_column(ObIAllocator &allocator,
-                               const share::ObLSID ls_id,
                                const common::ObTabletID tablet_id,
                                const ObCollationType& collation_type,
                                blocksstable::ObStorageDatum &datum,
@@ -180,7 +177,6 @@ public:
                                ObIAllocator &lob_allocator,
                                transaction::ObTxDesc *tx_desc,
                                share::ObTabletCacheInterval &lob_id_geneator,
-                               const share::ObLSID ls_id,
                                const common::ObTabletID tablet_id,
                                const common::ObTabletID lob_meta_tablet_id,
                                const ObObjType &obj_type,
@@ -189,70 +185,9 @@ public:
                                blocksstable::ObStorageDatum &datum,
                                const int64_t timeout_ts,
                                const bool has_lob_header,
-                               const uint64_t src_tenant_id,
                                ObLobMetaWriteIter &iter);
 };
 
-struct ObLobDiffFlags
-{
-  ObLobDiffFlags() : can_do_append_(0), reserve_(0)
-  {}
-  TO_STRING_KV(K_(can_do_append), K_(reserve));
-  uint64_t can_do_append_ : 1; // can do append in write situation
-  uint64_t reserve_ : 63;
-};
-
-struct ObLobDiff
-{
-  enum DiffType
-  {
-    INVALID = 0,
-    APPEND = 1,
-    WRITE = 2,
-    ERASE = 3,
-    ERASE_FILL_ZERO = 4,
-    WRITE_DIFF = 5,
-  };
-  ObLobDiff()
-    : type_(DiffType::INVALID), ori_offset_(0), ori_len_(0), offset_(0), byte_len_(0), dst_offset_(0), dst_len_(0),
-      flags_()
-  {}
-  TO_STRING_KV(K_(type), K_(ori_offset), K_(ori_len), K_(offset), K_(byte_len), K_(dst_offset), K_(dst_len),
-               K_(flags));
-  DiffType type_;
-  uint64_t ori_offset_;
-  uint64_t ori_len_; // for diff, char_len
-  uint64_t offset_;
-  uint64_t byte_len_; // byte len
-  uint64_t dst_offset_;
-  uint64_t dst_len_; // for diff, char_len
-  ObLobDiffFlags flags_;
-};
-
-struct ObLobDiffHeader
-{
-  ObLobDiffHeader()
-    : diff_cnt_(0), persist_loc_size_(0)
-  {}
-  ObLobCommon* get_persist_lob()
-  {
-    return reinterpret_cast<ObLobCommon*>(data_);
-  }
-  char* get_inline_data_ptr()
-  {
-    return data_ + persist_loc_size_ + sizeof(ObLobDiff) * diff_cnt_;
-  }
-  ObLobDiff *get_diff_ptr()
-  {
-    return reinterpret_cast<ObLobDiff*>(data_ + persist_loc_size_);
-  }
-
-  bool is_mutli_diff() { return diff_cnt_ > 0; }
-  TO_STRING_KV(K_(diff_cnt), K_(persist_loc_size));
-  uint32_t diff_cnt_;
-  uint32_t persist_loc_size_;
-  char data_[0];
-};
 
 
 class ObLobChunkIndex
@@ -337,5 +272,3 @@ public:
 } // oceanbase
 
 #endif
-
-

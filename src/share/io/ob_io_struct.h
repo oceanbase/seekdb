@@ -23,7 +23,7 @@
 #include "lib/allocator/ob_concurrent_fifo_allocator.h"
 #include "lib/lock/ob_mutex.h"
 #include "lib/lock/ob_drw_lock.h"
-#include "lib/thread/thread_mgr_interface.h"
+#include "lib/thread/threads.h"
 #include "lib/thread/ob_simple_thread_pool.h"
 #include "lib/queue/ob_link_queue.h"
 #include "lib/queue/ob_fixed_queue.h"
@@ -82,7 +82,6 @@ public:
       K(write_failure_detect_interval_),
       K(read_failure_black_list_interval_),
       K(data_storage_warning_tolerance_time_),
-      K(data_storage_error_tolerance_time_),
       K(disk_io_thread_count_),
       K(sync_io_thread_count_),
       K(data_storage_io_timeout_ms_));
@@ -97,7 +96,6 @@ public:
   int64_t write_failure_detect_interval_; // const literal
   int64_t read_failure_black_list_interval_; // const literal
   int64_t data_storage_warning_tolerance_time_;
-  int64_t data_storage_error_tolerance_time_;
   // resource related
   int64_t disk_io_thread_count_;
   int64_t sync_io_thread_count_;
@@ -126,7 +124,7 @@ class ObIOAllocator : public ObIAllocator
 public:
   ObIOAllocator();
   virtual ~ObIOAllocator();
-  int init(const uint64_t tenant_id, const int64_t memory_limit);
+  int init(const int64_t memory_limit);
   void destroy();
   int update_memory_limit(const int64_t memory_limit);
   int64_t get_allocated_size() const;
@@ -276,7 +274,7 @@ class ObIOUsage final
 public:
   ObIOUsage() : info_(), failed_req_info_(), group_throttled_time_us_(), lock_() {}
   ~ObIOUsage();
-  int init(const uint64_t tenant_id, const int64_t group_num);
+  int init(const int64_t group_num);
   int refresh_group_num (const int64_t group_num);
   void accumulate(ObIORequest &request);
   void calculate_io_usage();
@@ -305,7 +303,7 @@ private:
   int64_t last_ts_;
 };
 
-class ObIOTuner : public lib::TGRunnable
+class ObIOTuner : public lib::Threads
 {
 public:
   ObIOTuner();
@@ -357,7 +355,7 @@ protected:
 };
 
 
-class ObAsyncIOChannel : public ObIOChannel, public lib::TGRunnable
+class ObAsyncIOChannel : public ObIOChannel, public lib::Threads
 {
 public:
   ObAsyncIOChannel();
@@ -390,7 +388,7 @@ private:
   static const int64_t AIO_POLLING_TIMEOUT_NS = 1000L * 1000L * 1000L - 1L; // almost 1s, for timespec_valid check
 private:
   bool is_inited_;
-  int tg_id_; // thread group id
+  bool thread_inited_;
   ObIOContext *io_context_;
   ObIOEvents *io_events_;
   struct timespec polling_timeout_;
@@ -465,7 +463,7 @@ class ObIOCallbackManager final : public ObLinkQueueThreadPool
 public:
   ObIOCallbackManager();
   ~ObIOCallbackManager();
-  int init(const int64_t tenant_id, int64_t thread_count,
+  int init(int64_t thread_count,
            const int32_t queue_depth);
   void destroy();
 
@@ -531,33 +529,16 @@ private:
   ObIOMemStat sys_mem_stat_;
   ObIOMemStat mem_stat_;
 };
-struct ObIOFuncUsageByMode : ObIOGroupUsage
-{
-};
-typedef ObSEArray<ObIOFuncUsageByMode, static_cast<uint8_t>(ObIOGroupMode::MODECNT)> ObIOFuncUsage;
-typedef ObSEArray<ObIOFuncUsage, static_cast<uint8_t>(share::ObFunctionType::MAX_FUNCTION_NUM)> ObIOFuncUsageArr;
-struct ObIOFuncUsages
-{
-public:
-  ObIOFuncUsages();
-  ~ObIOFuncUsages() = default;
-  int init(const uint64_t tenant_id);
-  int accumulate(ObIORequest &req);
-  TO_STRING_KV(K(func_usages_));
-  ObIOFuncUsageArr func_usages_;
-};
-
 // Device Health status
 enum ObDeviceHealthStatus
 {
   DEVICE_HEALTH_NORMAL = 0,
-  DEVICE_HEALTH_WARNING,
-  DEVICE_HEALTH_ERROR
+  DEVICE_HEALTH_WARNING
 };
 
 const char *device_health_status_to_str(const ObDeviceHealthStatus dhs);
 
-class ObIOFaultDetector : public lib::TGTaskHandler
+class ObIOFaultDetector : public common::ObSimpleThreadPool
 {
 public:
   ObIOFaultDetector(const ObIOConfig &io_config);
@@ -567,7 +548,6 @@ public:
   int start();
   virtual void handle(void *task) override;
   int get_device_health_status(ObDeviceHealthStatus &dhs, int64_t &device_abnormal_time);
-  void reset_device_health();
   void record_io_error(const ObIOResult &result, const ObIORequest &req);
   void record_io_timeout(const ObIOResult &result, const ObIORequest &req);
   int record_timing_task(const int64_t first_id, const int64_t second_id);
@@ -576,23 +556,20 @@ private:
   int record_read_failure_(const ObIOResult &result, const ObIORequest &req);
   int record_write_failure();
   void set_device_warning();
-  void set_device_error();
   int set_detect_task_io_info_(ObIOInfo &io_info, const ObIOResult &result, const ObIORequest &req);
   // If executes the detect task in SS mode, checking if it's a read operation on the micro cache file.
   // In SN mode, always returns true.
   // In SS mode, returns true if fd == micro cache file fd.
-  bool is_supported_detect_read_(const uint64_t tenant_id, const ObIOFd &fd);
+  bool is_supported_detect_read_(const ObIOFd &fd);
 
 private:
   static const int64_t WRITE_FAILURE_DETECT_EVENT_COUNT = 100;
+  static const int64_t IO_HEALTH_QUEUE_DEPTH = 100;
   bool is_inited_;
   ObSpinLock lock_;
   const ObIOConfig &io_config_;
   bool is_device_warning_;
   int64_t last_device_warning_ts_;
-  bool is_device_error_;
-  int64_t begin_device_error_ts_;
-  int64_t last_device_error_ts_;
 };
 
 class ObIOTracer final
@@ -629,7 +606,7 @@ public:
   };
   ObIOTracer();
   ~ObIOTracer();
-  int init(const uint64_t tenant_id);
+  int init();
   void destroy();
   void reuse();
   int trace_request(const ObIORequest *req, const char *msg, const TraceType trace_type);
@@ -637,7 +614,6 @@ public:
   int64_t to_string(char *buf, const int64_t len) const;
 private:
   bool is_inited_;
-  uint64_t tenant_id_;
   hash::ObHashMap<int64_t /*request_ptr*/, TraceInfo> trace_map_;
 };
 

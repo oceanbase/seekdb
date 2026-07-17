@@ -30,10 +30,10 @@ ObDtlLinkedBuffer *ObDtlBufAllocator::alloc_buf(ObDtlBasicChannel &ch, const int
   int ret = OB_SUCCESS;
   ObDtlLinkedBuffer *buf = nullptr;
   int64_t alloc_size = max(sys_buffer_size_, payload_size);
-  ObDtlTenantMemManager *tenant_mem_mgr = DTL.get_dfc_server().get_tenant_mem_manager(tenant_id_);
+  ObDtlTenantMemManager *tenant_mem_mgr = DTL.get_dfc_server().get_tenant_mem_manager();
   if (nullptr == tenant_mem_mgr) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_ERROR("tenant_mem_mgr is null", K(ret), K(tenant_id_));
+    LOG_ERROR("tenant_mem_mgr is null", K(ret));
   } else {
     int64_t hash_val = ch.get_hash_val();
     buf = tenant_mem_mgr->alloc(hash_val, alloc_size);
@@ -51,12 +51,12 @@ ObDtlLinkedBuffer *ObDtlBufAllocator::alloc_buf(ObDtlBasicChannel &ch, const int
 void ObDtlBufAllocator::free_buf(ObDtlBasicChannel &ch, ObDtlLinkedBuffer *&buf)
 {
   int ret = OB_SUCCESS;
-  ObDtlTenantMemManager *tenant_mem_mgr = DTL.get_dfc_server().get_tenant_mem_manager(tenant_id_);
+  ObDtlTenantMemManager *tenant_mem_mgr = DTL.get_dfc_server().get_tenant_mem_manager();
   if (nullptr == tenant_mem_mgr) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_ERROR("tenant_mem_mgr is null", K(lbt()), K(tenant_id_), K(ret));
+    LOG_ERROR("tenant_mem_mgr is null", K(lbt()), K(ret));
   } else if (OB_FAIL(tenant_mem_mgr->free(buf))) {
-    LOG_WARN("failed to free buffer", K(ret), K(lbt()), K(tenant_id_));
+    LOG_WARN("failed to free buffer", K(ret), K(lbt()));
   } else if (nullptr != buf) {
     free_buffer_cnt_++;
     ch.free_buffer_count();

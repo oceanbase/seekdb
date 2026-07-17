@@ -47,7 +47,7 @@ public:
   ~ObTableLoadDagParallelHeapTableCompactor();
   int init(ObTableLoadStoreCtx *store_ctx, ObTableLoadTableOpCtx *op_ctx);
   int close();
-
+  
 public:
   ObTableLoadStoreCtx *store_ctx_;
   ObTableLoadTableOpCtx *op_ctx_;

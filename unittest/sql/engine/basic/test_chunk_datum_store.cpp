@@ -37,8 +37,7 @@ public:
     lib::ObMallocAllocator *malloc_allocator = lib::ObMallocAllocator::get_instance();
     //ret = malloc_allocator->create_tenant_ctx_allocator(OB_SYS_TENANT_ID);
     //ASSERT_EQ(OB_SUCCESS, ret);
-    ret = malloc_allocator->create_and_add_tenant_allocator(
-      OB_SYS_TENANT_ID);
+    ret = malloc_allocator->create_and_add_tenant_allocator();
     ASSERT_EQ(OB_SUCCESS, ret);
     int s = (int)time(NULL);
     SERVER_STORAGE_META_SERVICE.is_started_ = true;
@@ -80,11 +79,19 @@ struct MyAllocator : public DefaultPageAllocator
   int64_t total_ = 0;
 };
 
-class TestChunkDatumStore : public blocksstable::TestDataFilePrepare
+// The storage env (data dir, tmp caches, IO manager, ObTimerService,
+// ObTenantTmpFileManager, ...) is now owned by MockTenantModuleEnv with a
+// per-suite lifecycle: built once in SetUpTestCase, torn down once in
+// TearDownTestCase. Do NOT inherit blocksstable::TestDataFilePrepare: its member
+// util_ destructor tears the env down per fixture (i.e. per test case), so the
+// first test would destroy the env shared by the rest of the suite. (Before the
+// single-tenant refactor this fixture built AND destroyed its own env in
+// SetUp/TearDown, so the per-test teardown was balanced; the refactor moved env
+// setup to SetUpTestCase but left the per-test teardown, breaking the balance.)
+class TestChunkDatumStore : public ::testing::Test
 {
 public:
-  TestChunkDatumStore() : blocksstable::TestDataFilePrepare(&getter,
-                                                            "TestDisk_chunk_datum_store", 2<<20, 5000),
+  TestChunkDatumStore() :
   rs_("TEST"),
 	plan_ctx_(alloc_),
     exec_ctx_(alloc_),
@@ -118,9 +125,11 @@ public:
   static void SetUpTestCase()
   {
     ASSERT_EQ(OB_SUCCESS, ObTimerService::get_instance().start());
-  } 
+    ASSERT_EQ(OB_SUCCESS, MockTenantModuleEnv::get_instance().init());
+  }
   static void TearDownTestCase()
   {
+    MockTenantModuleEnv::get_instance().destroy();
     ObTimerService::get_instance().stop();
     ObTimerService::get_instance().wait();
     ObTimerService::get_instance().destroy();
@@ -168,29 +177,11 @@ public:
   {
     int ret = OB_SUCCESS;
     ASSERT_EQ(OB_SUCCESS, init_tenant_mgr());
-    blocksstable::TestDataFilePrepare::SetUp();
-    ASSERT_EQ(OB_SUCCESS, tmp_file::ObTmpBlockCache::get_instance().init("tmp_block_cache"));
-    ASSERT_EQ(OB_SUCCESS, tmp_file::ObTmpPageCache::get_instance().init("sn_tmp_page_cache"));
-    ASSERT_EQ(OB_SUCCESS, ObTimerService::get_instance().start());
-    if (!is_server_tenant(tenant_id_)) {
-      static ObTenantBase tenant_ctx(tenant_id_);
-      ObTenantEnv::set_tenant(&tenant_ctx);
-      ObTenantIOManager *io_service = nullptr;
-      EXPECT_EQ(OB_SUCCESS, ObTenantIOManager::mtl_new(io_service));
-      EXPECT_EQ(OB_SUCCESS, ObTenantIOManager::mtl_init(io_service));
-      EXPECT_EQ(OB_SUCCESS, io_service->start());
-      tenant_ctx.set(io_service);
-
-      tmp_file::ObTenantTmpFileManager *tf_mgr = nullptr;
-      EXPECT_EQ(OB_SUCCESS, mtl_new_default(tf_mgr));
-      EXPECT_EQ(OB_SUCCESS, tmp_file::ObTenantTmpFileManager::mtl_init(tf_mgr));
-      tf_mgr->get_sn_file_manager().page_cache_controller_.write_buffer_pool_.default_wbp_memory_limit_ = 40*1024*1024;
-      EXPECT_EQ(OB_SUCCESS, tf_mgr->start());
-      tenant_ctx.set(tf_mgr);
-
-      ObTenantEnv::set_tenant(&tenant_ctx);
-      SERVER_STORAGE_META_SERVICE.is_started_ = true;
-    }
+    // Single-tenant seekdb: MockTenantModuleEnv (installed in SetUpTestCase)
+    // owns the storage env / data dir, the tmp block/page caches and the
+    // ObTenantTmpFileManager / ObTenantIOManager module set, and switches the
+    // thread into OB_SERVER_TENANT_ID so g_mp / MTL lookups resolve. The former
+    // per-SetUp data-file + tmp-cache bootstrap is therefore redundant.
 
     cell_cnt_ = COLS;
     init_exprs();
@@ -204,7 +195,7 @@ public:
 
     //mem limit 1M
     rs_.set_allocator(rs_alloc_);
-    ret = rs_.init(1L << 20, tenant_id_, ctx_id_, label_);
+    ret = rs_.init(1L << 20, ctx_id_, label_);
     ASSERT_EQ(OB_SUCCESS, ret);
     ASSERT_EQ(OB_SUCCESS, rs_.alloc_dir_id());
 
@@ -223,12 +214,6 @@ public:
     rs_.reset();
     rs_.~ObChunkDatumStore();
 
-    tmp_file::ObTmpBlockCache::get_instance().destroy();
-    tmp_file::ObTmpPageCache::get_instance().destroy();
-    ObTimerService::get_instance().stop();
-    ObTimerService::get_instance().wait();
-    ObTimerService::get_instance().destroy();
-    blocksstable::TestDataFilePrepare::TearDown();
     LOG_INFO("TearDown finished", K_(rs));
   }
 
@@ -372,7 +357,7 @@ public:
     int64_t i;
     int64_t begin = ObTimeUtil::current_time();
     int ret = OB_SUCCESS;
-    ret = rs.init(0, tenant_id_, ctx_id_, label_);
+    ret = rs.init(0, ctx_id_, label_);
     ASSERT_EQ(OB_SUCCESS, ret);
     rs.set_block_size(block_size);
     begin = ObTimeUtil::current_time();
@@ -411,7 +396,7 @@ protected:
   int64_t batch_size_ = (64L << 10) * 5 / 256;
   ObBitVector *skip_;
 
-  int64_t tenant_id_ = OB_SYS_TENANT_ID;
+  int64_t tenant_id_ = OB_SERVER_TENANT_ID;
   int64_t ctx_id_ = ObCtxIds::WORK_AREA;
   const char *label_ = ObModIds::OB_SQL_ROW_STORE;
 
@@ -430,19 +415,10 @@ int TestChunkDatumStore::init_tenant_mgr()
 {
   int ret = OB_SUCCESS;
   ObAddr self;
-  oceanbase::rpc::frame::ObReqTransport req_transport(NULL, NULL);
-  oceanbase::obrpc::ObSrvRpcProxy rpc_proxy;
-  oceanbase::obrpc::ObCommonRpcProxy rs_rpc_proxy;
-  int64_t tenant_id = OB_SYS_TENANT_ID;
   self.set_ip_addr("127.0.0.1", 8086);
-  ret = getter.add_tenant(tenant_id,
-                          2LL * 1024 * 1024 * 1024, 4LL * 1024 * 1024 * 1024);
-  EXPECT_EQ(OB_SUCCESS, ret);
   const int64_t ulmt = 128LL << 30;
   const int64_t llmt = 128LL << 30;
-  ret = getter.add_tenant(OB_SERVER_TENANT_ID,
-                          ulmt,
-                          llmt);
+  ret = getter.add_tenant(ulmt, llmt);
   EXPECT_EQ(OB_SUCCESS, ret);
   oceanbase::lib::set_memory_limit(128LL << 32);
   return ret;
@@ -482,7 +458,7 @@ TEST_F(TestChunkDatumStore, basic)
 
   LOG_WARN("starting basic test: big row 20000 rows");
   enable_big_row_ = true;
-  ret = rs_.init(1L << 20, tenant_id_, ctx_id_, label_);
+  ret = rs_.init(1L << 20, ctx_id_, label_);
   ASSERT_EQ(OB_SUCCESS, ret);
   CALL(append_rows, 20000);
   LOG_WARN("mem before finish add", K(rs_.get_mem_hold()), K(rs_.get_mem_used()));
@@ -498,7 +474,7 @@ TEST_F(TestChunkDatumStore, basic)
 TEST_F(TestChunkDatumStore, has_next_bug)
 {
   rs_.reset();
-  int ret = rs_.init(1024, tenant_id_, ctx_id_, label_);
+  int ret = rs_.init(1024, ctx_id_, label_);
   rs_.set_allocator(rs_alloc_);
   ASSERT_EQ(OB_SUCCESS, ret);
   CALL(append_rows, 10000);
@@ -522,7 +498,7 @@ TEST_F(TestChunkDatumStore, has_next_bug)
 TEST_F(TestChunkDatumStore, iteration_age)
 {
   rs_.reset();
-  int ret = rs_.init(1024, tenant_id_, ctx_id_, label_);
+  int ret = rs_.init(1024, ctx_id_, label_);
   rs_.set_allocator(rs_alloc_);
   ASSERT_EQ(OB_SUCCESS, ret);
   CALL(append_rows, 20000);
@@ -579,7 +555,7 @@ TEST_F(TestChunkDatumStore, batch_basic)
   ASSERT_EQ(0, rs_alloc_.total_);
 
   enable_big_row_ = true;
-  int ret = rs_.init(1L << 20, tenant_id_, ctx_id_, label_);
+  int ret = rs_.init(1L << 20, ctx_id_, label_);
   ASSERT_EQ(OB_SUCCESS, ret);
   ASSERT_EQ(OB_SUCCESS, rs_.alloc_dir_id());
   CALL(batch_append_rows, 20000);
@@ -600,7 +576,7 @@ TEST_F(TestChunkDatumStore, multi_iter)
   int64_t j = 0;
   ObChunkDatumStore rs("TEST");
 
-  ret = rs.init(1 << 20, tenant_id_, ctx_id_, label_);
+  ret = rs.init(1 << 20, ctx_id_, label_);
   ASSERT_EQ(OB_SUCCESS, ret);
 
   LOG_WARN("starting basic test: append 3000 rows");
@@ -643,7 +619,7 @@ TEST_F(TestChunkDatumStore, basic2)
   ObChunkDatumStore rs("TEST");
   ObChunkDatumStore::Iterator it;
   //mem limit 5M
-  ret = rs.init(5L << 20, tenant_id_, ctx_id_, label_);
+  ret = rs.init(5L << 20, ctx_id_, label_);
   ASSERT_EQ(OB_SUCCESS, ret);
   ASSERT_EQ(OB_SUCCESS, rs.alloc_dir_id());
   CALL(append_rows, rs, 100000);
@@ -667,7 +643,7 @@ TEST_F(TestChunkDatumStore, test_copy_row)
   const ObChunkDatumStore::StoredRow *sr;
   LOG_WARN("starting mem_perf test: append rows", K(rows));
   int64_t begin = ObTimeUtil::current_time();
-  ret = rs.init(0, tenant_id_, ctx_id_, label_);
+  ret = rs.init(0, ctx_id_, label_);
   ASSERT_EQ(OB_SUCCESS, ret);
   CALL(append_rows, rs, rows);
   ASSERT_EQ(OB_SUCCESS, rs.begin(it));
@@ -682,7 +658,7 @@ TEST_F(TestChunkDatumStore, mem_perf)
   ObChunkDatumStore::Iterator it;
   LOG_WARN("starting mem_perf test: append rows", K(rows));
   int64_t begin = ObTimeUtil::current_time();
-  ret = rs.init(0, tenant_id_, ctx_id_, label_);
+  ret = rs.init(0, ctx_id_, label_);
   ASSERT_EQ(OB_SUCCESS, ret);
   CALL(append_rows, rs, rows);
   LOG_WARN("write time:", K(rows), K(ObTimeUtil::current_time() - begin));
@@ -705,7 +681,7 @@ TEST_F(TestChunkDatumStore, disk)
   LOG_INFO("starting write disk test: append rows", K(rows));
   ObChunkDatumStore rs("TEST");
   ObChunkDatumStore::Iterator it;
-  ASSERT_EQ(OB_SUCCESS, rs.init(0, tenant_id_, ctx_id_, label_));
+  ASSERT_EQ(OB_SUCCESS, rs.init(0, ctx_id_, label_));
   ASSERT_EQ(OB_SUCCESS, rs.alloc_dir_id());
   rs.set_mem_limit(100L << 20);
   for (int64_t i = 0; i < round; i++) {
@@ -743,7 +719,7 @@ TEST_F(TestChunkDatumStore, disk_with_chunk)
   LOG_INFO("starting write disk test: append rows", K(rows));
   ObChunkDatumStore rs("TEST");
   ObChunkDatumStore::Iterator it;
-  ASSERT_EQ(OB_SUCCESS, rs.init(0, tenant_id_, ctx_id_, label_));
+  ASSERT_EQ(OB_SUCCESS, rs.init(0, ctx_id_, label_));
   ASSERT_EQ(OB_SUCCESS, rs.alloc_dir_id());
   rs.set_mem_limit(1L << 20);
   for (int64_t i = 0; i < round; i++) {
@@ -817,7 +793,7 @@ TEST_F(TestChunkDatumStore, test_add_block)
   int64_t row_size = 0;
   ASSERT_EQ(OB_SUCCESS, ObChunkDatumStore::Block::row_store_size(cells_, eval_ctx_, row_size));
 
-  ret = rs.init(0, tenant_id_, ctx_id_, label_);
+  ret = rs.init(0, ctx_id_, label_);
   ASSERT_EQ(OB_SUCCESS, ret);
 
   int64_t min_size = rs.min_blk_size(row_size);
@@ -843,7 +819,7 @@ TEST_F(TestChunkDatumStore, test_add_block)
   //recv
   ObChunkDatumStore rs2("TEST");
   ObChunkDatumStore::Block *block2 = reinterpret_cast<ObChunkDatumStore::Block *>(mem2);
-  ret = rs2.init(0, tenant_id_, ctx_id_, label_);
+  ret = rs2.init(0, ctx_id_, label_);
   ASSERT_EQ(OB_SUCCESS, ret);
   ret = rs2.add_block(block2, true);
   ASSERT_EQ(OB_SUCCESS, ret);
@@ -869,7 +845,7 @@ TEST_F(TestChunkDatumStore, row_with_extend_size)
   LOG_INFO("starting write disk test: append rows", K(rows));
   ObChunkDatumStore rs("TEST");
   ObChunkDatumStore::Iterator it;
-  ASSERT_EQ(OB_SUCCESS, rs.init(0, tenant_id_, ctx_id_, label_, true, 8));
+  ASSERT_EQ(OB_SUCCESS, rs.init(0, ctx_id_, label_, true, 8));
   LOG_INFO("starting basic test: append 3000 rows");
   int64_t ret = OB_SUCCESS;
   int64_t base = rs.get_row_cnt();
@@ -917,7 +893,7 @@ TEST_F(TestChunkDatumStore, test_only_disk_data)
   LOG_INFO("starting write disk test: append rows", K(rows));
   ObChunkDatumStore rs("TEST");
   ObChunkDatumStore::Iterator it;
-  ASSERT_EQ(OB_SUCCESS, rs.init(0, tenant_id_, ctx_id_, label_));
+  ASSERT_EQ(OB_SUCCESS, rs.init(0, ctx_id_, label_));
   ASSERT_EQ(OB_SUCCESS, rs.alloc_dir_id());
   rs.set_mem_limit(1L << 30);
   // disk data
@@ -944,7 +920,7 @@ TEST_F(TestChunkDatumStore, test_only_disk_data1)
   LOG_INFO("starting write disk test: append rows", K(rows));
   ObChunkDatumStore rs("TEST");
   ObChunkDatumStore::Iterator it;
-  ASSERT_EQ(OB_SUCCESS, rs.init(0, tenant_id_, ctx_id_, label_));
+  ASSERT_EQ(OB_SUCCESS, rs.init(0, ctx_id_, label_));
   ASSERT_EQ(OB_SUCCESS, rs.alloc_dir_id());
   rs.set_mem_limit(1L << 30);
   // disk data
@@ -979,7 +955,7 @@ TEST_F(TestChunkDatumStore, test_append_block)
   int64_t row_size = 0;
   ASSERT_EQ(OB_SUCCESS, ObChunkDatumStore::Block::row_store_size(cells_, eval_ctx_, row_size));
 
-  ret = rs.init(0, tenant_id_, ctx_id_, label_);
+  ret = rs.init(0, ctx_id_, label_);
   ASSERT_EQ(OB_SUCCESS, ret);
 
   int64_t min_size = rs.min_blk_size(row_size);
@@ -1005,7 +981,7 @@ TEST_F(TestChunkDatumStore, test_append_block)
   //recv
   ObChunkDatumStore rs2("TEST");
   ObChunkDatumStore::Block *block2 = reinterpret_cast<ObChunkDatumStore::Block *>(mem2);
-  ret = rs2.init(0, tenant_id_, ctx_id_, label_);
+  ret = rs2.init(0, ctx_id_, label_);
   ASSERT_EQ(OB_SUCCESS, ret);
   ret = rs2.alloc_dir_id();
   ASSERT_EQ(OB_SUCCESS, ret);

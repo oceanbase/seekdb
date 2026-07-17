@@ -18,7 +18,7 @@
 #define OCEANBASE_OBSERVER_VIRTUAL_TABLE_OB_TABLE_COLUMNS_
 #include "lib/container/ob_se_array.h"
 #include "share/ob_define.h"
-#include "share/ob_virtual_table_scanner_iterator.h"
+#include "observer/virtual_table/ob_virtual_table_scanner_iterator.h"
 #include "common/ob_range.h"
 #include "share/schema/ob_table_schema.h"
 #include "share/schema/ob_schema_struct.h"
@@ -68,7 +68,7 @@ public:
   virtual ~ObTableColumns();
   virtual int inner_get_next_row(common::ObNewRow *&row);
   virtual void reset();
-  int init(uint64_t tenant_id);
+  int init();
   static int resolve_view_definition(
       common::ObIAllocator* allocator,
       sql::ObSQLSessionInfo *session,
@@ -80,15 +80,13 @@ public:
       bool throw_error);
   // skip inner added implicit cast and bool expr.
   static const sql::ObRawExpr *skip_inner_added_expr(const sql::ObRawExpr *expr);
-  static int set_col_attrs_according_binary_expr(const uint64_t tenant_id,
-                                                 const sql::ObSelectStmt *select_stmt,
+  static int set_col_attrs_according_binary_expr(const sql::ObSelectStmt *select_stmt,
                                                  const sql::ObRawExpr *expr,
                                                  share::schema::ObSchemaGetterGuard *schema_guard,
                                                  bool &nullable,
                                                  bool &has_default,
                                                  bool &is_string_lob);
-  static int deduce_column_attributes(const bool is_oracle_mode,
-                                      const ObTableSchema &table_schema,
+  static int deduce_column_attributes(const ObTableSchema &table_schema,
                                       const sql::ObSelectStmt *select_stmt,
                                       const sql::SelectItem &select_item,
                                       share::schema::ObSchemaGetterGuard *schema_guard,

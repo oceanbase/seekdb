@@ -34,7 +34,6 @@ namespace oceanbase
 {
 namespace common
 {
-void init_proc_map_info();
 extern bool g_enable_backtrace;
 const int64_t LBT_BUFFER_LENGTH = 1024;
 int light_backtrace(void **buffer, int size);

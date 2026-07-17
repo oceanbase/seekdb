@@ -42,7 +42,7 @@ int ObServerCheckpointReader::read_checkpoint(const ObServerSuperBlock &super_bl
 int ObServerCheckpointReader::read_tenant_meta_checkpoint(const MacroBlockId &entry_block)
 {
   int ret = OB_SUCCESS;
-  ObMemAttr mem_attr(OB_SERVER_TENANT_ID, ObModIds::OB_CHECKPOINT);
+  ObMemAttr mem_attr(ObModIds::OB_CHECKPOINT);
   if (OB_UNLIKELY(!entry_block.is_valid())) {
     LOG_INFO("has no tenant config checkpoint");
   } else if (OB_FAIL(tenant_meta_item_reader_.init(entry_block, mem_attr))) {
@@ -52,7 +52,6 @@ int ObServerCheckpointReader::read_tenant_meta_checkpoint(const MacroBlockId &en
     int64_t item_buf_len = 0;
     ObMetaDiskAddr addr;
     int ret = OB_SUCCESS;
-    int64_t idx = 0;
     while (OB_SUCC(ret)) {
       if (OB_FAIL(tenant_meta_item_reader_.get_next_item(item_buf, item_buf_len, addr))) {
         if (OB_ITER_END != ret) {
@@ -80,8 +79,10 @@ int ObServerCheckpointReader::deserialize_tenant_meta(const char *buf, const int
     LOG_WARN("invalid argument", K(ret));
   } else if (OB_FAIL(tenant_meta.deserialize(buf, buf_len, pos))) {
     LOG_WARN("fail to deserialize", K(ret));
-  } else if (OB_FAIL(tenant_meta_list_.push_back(tenant_meta))) {
-    LOG_WARN("fail to push back tenant meta", K(ret));
+  } else {
+    // Keep cover semantics (last item wins)
+    tenant_meta_ = tenant_meta;
+    tenant_meta_valid_ = true;
   }
 
   return ret;
@@ -92,17 +93,15 @@ ObIArray<MacroBlockId> &ObServerCheckpointReader::get_meta_block_list()
   return tenant_meta_item_reader_.get_meta_block_list();
 }
 
-int ObServerCheckpointReader::get_tenant_metas(hash::ObHashMap<uint64_t, omt::ObTenantMeta> &tenant_meta_map)
+int ObServerCheckpointReader::get_tenant_meta(omt::ObTenantMeta &tenant_meta, bool &is_valid)
 {
   int ret = OB_SUCCESS;
-  tenant_meta_map.clear();
-  for (int i = 0; OB_SUCC(ret) && i < tenant_meta_list_.count(); i++) {
-    if (OB_FAIL(tenant_meta_map.set_refactored(
-      tenant_meta_list_.at(i).super_block_.tenant_id_, tenant_meta_list_.at(i), 1))) {
-      LOG_WARN("fail to get tenant meta", K(ret));
-    }
+  // Checkpoint carries at most the single sys tenant meta;
+  // take the last one as the cover semantics of the previous map set_refactored(1UL,..,1)
+  is_valid = tenant_meta_valid_;
+  if (is_valid) {
+    tenant_meta = tenant_meta_;
   }
-
   return ret;
 }
 

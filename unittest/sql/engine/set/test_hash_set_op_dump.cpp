@@ -27,13 +27,13 @@
 #include "sql/engine/set/ob_merge_union_op.h"
 #include "sql/engine/set/ob_merge_intersect_op.h"
 #include "sql/engine/set/ob_merge_except_op.h"
-#include "share/system_variable/ob_system_variable.h"
+#include "sql/session/ob_system_variable.h"
 #include "storage/blocksstable/ob_data_file_prepare.h"
 #include "sql/engine/table/ob_fake_table.h"
 #include "set_data_op_generator.h"
 #include "sql/ob_sql_init.h"
 #include "share/ob_cluster_version.h"
-#include "observer/omt/ob_tenant_config_mgr.h"
+#include "share/config/ob_tenant_config_mgr.h"
 #include "share/datum/ob_datum_funcs.h"
 
 namespace oceanbase
@@ -259,7 +259,6 @@ public:
                                                                 field_collation.null_pos_,
                                                                 field_collation.cs_type_,
                                                                 SCALE_UNKNOWN_YET,
-                                                                lib::is_oracle_mode(),
                                                                 false);
         ObHashFunc hash_func;
         if (0 == i) {
@@ -358,7 +357,6 @@ public:
                                                               field_collation.null_pos_,
                                                               field_collation.cs_type_,
                                                               SCALE_UNKNOWN_YET,
-                                                              lib::is_oracle_mode(),
                                                               false);
       if (OB_FAIL(spec.sort_cmp_funs_.push_back(cmp_func))) {
         LOG_WARN("failed to push back sort function", K(ret));
@@ -439,7 +437,7 @@ int ObHashSetDumpTest::SetPlan::setup_plan(ObOperator *set_op)
   // setup context
   ObString tenant_name("test");
   if (OB_FAIL(ret)) {
-  } else if (OB_FAIL(session_.test_init(0, 0, 0, NULL))) {
+  } else if (OB_FAIL(session_.test_init(0, 0, NULL))) {
   } else if (OB_FAIL(ObPreProcessSysVars::init_sys_var())) {
   } else if (OB_FAIL(session_.load_default_sys_variable(false, true))) {
   } else if (OB_FAIL(session_.init_tenant(tenant_name, OB_SYS_TENANT_ID))) {
@@ -619,9 +617,6 @@ int ObHashSetDumpTest::init_tenant_mgr()
   int ret = OB_SUCCESS;
   ObTenantManager &tm = ObTenantManager::get_instance();
   ObAddr self;
-  oceanbase::rpc::frame::ObReqTransport req_transport(NULL, NULL);
-  oceanbase::obrpc::ObSrvRpcProxy rpc_proxy;
-  oceanbase::obrpc::ObCommonRpcProxy rs_rpc_proxy;
   uint64_t cluster_version = CLUSTER_VERSION_1_0_0_0;
   common::ObClusterVersion::get_instance().update_cluster_version(cluster_version);
   EXPECT_EQ(cluster_version, common::ObClusterVersion::get_instance().get_cluster_version());

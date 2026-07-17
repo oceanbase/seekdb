@@ -18,7 +18,7 @@ ObSchemaNameIdMap
 维护<NAME, id/version>的映射,每个NAME缓存Ｎ个版本的的id/version.
 此map set为全集，用refreshed_version表示已经刷到的版本。
 对于不同类型的NAME, 其内容不同，但均以id为前缀，以name结尾。
-倒如，对于TABLE, NAME为tenant_id/db_id/tbl_name。
+倒如，对于TABLE, NAME为db_id/tbl_name。
 
 查找时，根据NAME找到id/version的列表，找到max(version<=V)对应的id. 如果没找到，则需要从内部表构造。
 更新时，将NAME的id/version最小version替换
@@ -31,7 +31,7 @@ ObSchemaIdVersionMap
 每种schema_type用一个map
 维护<id, version>的映射,每个id缓存Ｎ个版本的的version.
 此map set为全集，在更新ObSchemaNameIdMap时，更新此map.
-此map的目的是解决仅通过id来获取schema的场景，例如 index_id -> index_schema / tenant_id -> tenant_schema 等。
+此map的目的是解决仅通过id来获取schema的场景，例如 index_id -> index_schema 等。
 
 
 ObMultiVersionSchemaCache
@@ -69,21 +69,21 @@ get_table_id(t_id, db_name, tbl_name) ==> 通过t_id/db_name 查hash转换成db
 * 内部表的访问
 － ddl后更新map
 以TABLE为例，
-select tenant_id, table_id, table_name, database_id from __all_table_history where xxx;
+select table_id, table_name, database_id from __all_table_history where xxx;
 
 - 根据name访问map
 map miss时 (此时snapshot已经设置)  version < 缓存的min_version, 需要根据 t_id/db_id/tbl_name/version更新
 以TABLE为例，
-select tenant_id, table_id, schema_version, table_name, database_id from __all_table_history where t_id/tbl_name/max(schema_version<version)/db_id;
+select table_id, schema_version, table_name, database_id from __all_table_history where t_id/tbl_name/max(schema_version<version)/db_id;
 
 - 根据snapshot_ver批量更新id_version_map
 以TABLE为例，
-select max(v), tenant_id, table_id __all_table_history where version <= snapshot_ver group by t_id/tbl_id;
+select max(v), table_id __all_table_history where version <= snapshot_ver group by t_id/tbl_id;
 将此结果替换__all_table中的id/version，得到snapshot的版本集。
 
 - 根据id/ver访问cache
 以TABLE为例，
-cache miss时，根据tenant_id/database_id/table_id/schema_version来构造schema
+cache miss时，根据database_id/table_id/schema_version来构造schema
 具体sql可参考老逻辑, 要老sql不同之处，只需要捞特写的一个表
 select xxx from __all_table_history;
 select yyy from __all_column_history;

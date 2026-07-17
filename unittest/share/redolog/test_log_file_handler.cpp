@@ -101,7 +101,7 @@ TEST_F(TestLogFileHandler, simple)
 {
   int ret = OB_SUCCESS;
   ObLogFileHandler file_handler;
-  file_handler.init(util_.get_storage_env().clog_dir_, TestLogFileHandler::LOG_FILE_SIZE, OB_SERVER_TENANT_ID);
+  file_handler.init(util_.get_storage_env().clog_dir_, TestLogFileHandler::LOG_FILE_SIZE);
   ASSERT_EQ(OB_SUCCESS, ret);
 
   ret = file_handler.open(1);
@@ -131,7 +131,7 @@ TEST_F(TestLogFileHandler, rd_wr)
   const char *log_dir = util_.get_storage_env().log_spec_.log_dir_;
 
   ObLogFileHandler file_handler;
-  file_handler.init(log_dir, TestLogFileHandler::LOG_FILE_SIZE, OB_SERVER_TENANT_ID);
+  file_handler.init(log_dir, TestLogFileHandler::LOG_FILE_SIZE);
   ASSERT_EQ(OB_SUCCESS, ret);
 
   ret = file_handler.open(1);
@@ -187,7 +187,7 @@ TEST_F(TestLogFileHandler, read_nothing)
   int64_t read_size = 0;
   int64_t count = TestLogFileHandler::DIO_WRITE_ALIGN_SIZE;
   ObLogFileHandler file_handler;
-  file_handler.init(util_.get_storage_env().clog_dir_, TestLogFileHandler::LOG_FILE_SIZE, OB_SERVER_TENANT_ID);
+  file_handler.init(util_.get_storage_env().clog_dir_, TestLogFileHandler::LOG_FILE_SIZE);
   ASSERT_EQ(OB_SUCCESS, ret);
 
   char file_path[MAX_PATH_SIZE] = { 0 };
@@ -237,7 +237,7 @@ TEST_F(TestLogFileHandler, file_read)
 {
   int ret = OB_SUCCESS;
   ObLogFileHandler file_handler;
-  file_handler.init(util_.get_storage_env().log_spec_.log_dir_, TestLogFileHandler::LOG_FILE_SIZE, OB_SERVER_TENANT_ID);
+  file_handler.init(util_.get_storage_env().log_spec_.log_dir_, TestLogFileHandler::LOG_FILE_SIZE);
   ASSERT_EQ(OB_SUCCESS, ret);
 
   ret = file_handler.open(1);
@@ -285,7 +285,7 @@ TEST_F(TestLogFileHandler, write_file_fd_read)
   int64_t count = TestLogFileHandler::DIO_WRITE_ALIGN_SIZE;
 
   ObLogFileHandler file_handler;
-  file_handler.init(util_.get_storage_env().log_spec_.log_dir_, TestLogFileHandler::LOG_FILE_SIZE, OB_SERVER_TENANT_ID);
+  file_handler.init(util_.get_storage_env().log_spec_.log_dir_, TestLogFileHandler::LOG_FILE_SIZE);
   ASSERT_EQ(OB_SUCCESS, ret);
 
   char *buf;
@@ -338,7 +338,7 @@ TEST_F(TestLogFileHandler, log_file_reader2)
   int64_t count = TestLogFileHandler::DIO_WRITE_ALIGN_SIZE;
 
   ObLogFileHandler file_handler;
-  file_handler.init(util_.get_storage_env().log_spec_.log_dir_, TestLogFileHandler::LOG_FILE_SIZE, OB_SERVER_TENANT_ID);
+  file_handler.init(util_.get_storage_env().log_spec_.log_dir_, TestLogFileHandler::LOG_FILE_SIZE);
   ASSERT_EQ(OB_SUCCESS, ret);
 
   char *buf;
@@ -398,7 +398,7 @@ TEST_F(TestLogFileHandler, delete_file)
   int ret = OB_SUCCESS;
 
   ObLogFileHandler file_handler;
-  file_handler.init(util_.get_storage_env().log_spec_.log_dir_, TestLogFileHandler::LOG_FILE_SIZE, OB_SERVER_TENANT_ID);
+  file_handler.init(util_.get_storage_env().log_spec_.log_dir_, TestLogFileHandler::LOG_FILE_SIZE);
   ASSERT_EQ(OB_SUCCESS, ret);
 
   ret = file_handler.open(1);
@@ -453,7 +453,7 @@ TEST_F(TestLogFileHandler, clean_tmp_files)
   }
 
   ObLogFileHandler file_handler;
-  ret = file_handler.init(log_dir, TestLogFileHandler::LOG_FILE_SIZE, OB_SERVER_TENANT_ID);
+  ret = file_handler.init(log_dir, TestLogFileHandler::LOG_FILE_SIZE);
   ASSERT_EQ(OB_SUCCESS, ret);
 
   // check files

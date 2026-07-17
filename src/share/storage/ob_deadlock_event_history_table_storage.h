@@ -29,7 +29,7 @@ namespace share
 
 struct ObDeadlockEventHistoryEntry
 {
-  int64_t tenant_id_;
+  
   uint64_t event_id_;
   common::ObAddr svr_addr_;
   uint64_t detector_id_;
@@ -52,8 +52,7 @@ struct ObDeadlockEventHistoryEntry
   common::ObString extra_value3_;
 
   ObDeadlockEventHistoryEntry()
-    : tenant_id_(0),
-      event_id_(0),
+    : event_id_(0),
       svr_addr_(),
       detector_id_(0),
       report_time_(0),
@@ -76,7 +75,7 @@ struct ObDeadlockEventHistoryEntry
   {}
 
   void reset() {
-    tenant_id_ = 0;
+    
     event_id_ = 0;
     svr_addr_.reset();
     detector_id_ = 0;
@@ -125,3 +124,4 @@ private:
 } // namespace oceanbase
 
 #endif // OCEANBASE_SHARE_STORAGE_OB_DEADLOCK_EVENT_HISTORY_TABLE_STORAGE_H_
+

@@ -28,7 +28,6 @@ void ObTransStat::reset()
   is_inited_ = false;
   addr_.reset();
   trans_id_.reset();
-  tenant_id_ = OB_INVALID_TENANT_ID;
   is_exiting_ = false;
   is_readonly_ = false;
   has_decided_ = false;
@@ -42,7 +41,6 @@ void ObTransStat::reset()
   state_ = static_cast<int64_t>(ObTxState::UNKNOWN);
   session_id_ = 0;
   proxy_session_id_ = 0;
-  trans_type_ = TransType::UNKNOWN_TRANS;
   part_trans_action_ = ObPartTransAction::UNKNOWN;
   lock_for_read_retry_count_ = 0;
   ctx_addr_ = 0;
@@ -60,7 +58,6 @@ void ObTransLockStat::reset()
 {
   is_inited_ = false;
   addr_.reset();
-  tenant_id_ = 0;
   memtable_key_.reset();
   session_id_ = 0;
   proxy_session_id_ = 0;

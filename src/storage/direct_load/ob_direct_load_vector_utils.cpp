@@ -17,11 +17,11 @@
 
 #include "storage/direct_load/ob_direct_load_vector_utils.h"
 #include "share/ob_tablet_autoincrement_param.h"
-#include "share/schema/ob_table_param.h"
-#include "share/vector/ob_continuous_vector.h"
-#include "share/vector/ob_discrete_vector.h"
-#include "share/vector/ob_fixed_length_vector.h"
-#include "share/vector/ob_uniform_vector.h"
+#include "storage/access/ob_table_param.h"
+#include "sql/engine/vector/ob_continuous_vector.h"
+#include "sql/engine/vector/ob_discrete_vector.h"
+#include "sql/engine/vector/ob_fixed_length_vector.h"
+#include "sql/engine/vector/ob_uniform_vector.h"
 #include "storage/blocksstable/ob_storage_datum.h"
 #include "storage/direct_load/ob_direct_load_batch_rows.h"
 
@@ -267,7 +267,7 @@ int ObDirectLoadVectorUtils::check_rowkey_length(const ObDirectLoadBatchRows &ba
       for (int64_t col_idx = 0; OB_SUCC(ret) && col_idx < rowkey_column_count; col_idx++) {
         ObDirectLoadVector *vector = batch_rows.get_vectors().at(col_idx);
         const share::schema::ObColDesc &col_desc = col_descs.at(col_idx);
-
+        
         if (col_desc.col_type_.is_lob_storage()) {
           // For LOB columns, use the new sum_lob_length method
           if (OB_FAIL(vector->sum_lob_length(rowkey_len, row_count))) {

@@ -19,7 +19,6 @@
 #include "lib/hash/ob_hashutils.h"
 #endif
 #include "lib/lock/ob_thread_cond.h"
-#include "lib/stat/ob_diagnose_info.h"
 
 namespace oceanbase
 {
@@ -85,15 +84,14 @@ int ObThreadCond::wait_us(const uint64_t time_us)
     ret = OB_NOT_INIT;
     COMMON_LOG(WARN, "The thread cond has not been inited, ", K(ret), KCSTRING(lbt()));
   } else {
-    ObWaitEventGuard guard(event_no_, time_us / 1000, reinterpret_cast<int64_t>(this), 0, 0, true);
     if (0 == time_us) {
-      if (OB_UNLIKELY(0 != (tmp_ret = ob_pthread_cond_wait(&cond_, &mutex_)))) {
+      if (OB_UNLIKELY(0 != (tmp_ret = pthread_cond_wait(&cond_, &mutex_)))) {
         ret = OB_ERR_SYS;
         COMMON_LOG(WARN, "Fail to cond wait, ", K(tmp_ret), K(ret));
       }
     } else {
 #ifdef __APPLE__
-      // On macOS, pthread_cond_timedwait uses gettimeofday internally and can have
+      // On macOS, pthread_cond_timedwait uses gettimeofday internally and can have 
       // high overhead. Use pthread_cond_timedwait_relative_np instead, which:
       // 1. Takes a relative timeout (no need for gettimeofday to compute absolute time)
       // 2. Uses efficient internal implementation without polling
@@ -101,7 +99,7 @@ int ObThreadCond::wait_us(const uint64_t time_us)
       struct timespec reltime;
       reltime.tv_sec = static_cast<time_t>(time_us / 1000000);
       reltime.tv_nsec = static_cast<long>((time_us % 1000000) * 1000);
-
+      
       tmp_ret = pthread_cond_timedwait_relative_np(&cond_, &mutex_, &reltime);
       if (tmp_ret != 0) {
         if (ETIMEDOUT != tmp_ret) {
@@ -132,7 +130,7 @@ int ObThreadCond::wait_us(const uint64_t time_us)
         abstime.tv_sec = static_cast<decltype(abstime.tv_sec)>(std::min(static_cast<uint64_t>(std::numeric_limits<decltype(abstime.tv_sec)>::max()),
                                                                         static_cast<uint64_t>(us / 1000000)));
         abstime.tv_nsec = static_cast<decltype(abstime.tv_nsec)>(us % static_cast<uint64_t>(1000000)) * 1000;
-        if (OB_UNLIKELY(0 != (tmp_ret = ob_pthread_cond_timedwait(&cond_, &mutex_, &abstime)))) {
+        if (OB_UNLIKELY(0 != (tmp_ret = pthread_cond_timedwait(&cond_, &mutex_, &abstime)))) {
           if (ETIMEDOUT != tmp_ret) {
             ret = OB_ERR_SYS;
             COMMON_LOG(WARN, "Fail to timed cond wait, ", K(time_us), K(tmp_ret), K(ret));

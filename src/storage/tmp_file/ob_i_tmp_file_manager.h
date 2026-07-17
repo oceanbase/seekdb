@@ -45,16 +45,16 @@ public:
   virtual int alloc_dir(int64_t &dir_id) = 0;
   virtual int open(int64_t &fd, const int64_t &dir_id, const char* const label) = 0;
   int remove(const int64_t fd);
-  int aio_read(const uint64_t tenant_id, const ObTmpFileIOInfo &io_info, ObTmpFileIOHandle &io_handle);
-  int aio_pread(const uint64_t tenant_id, const ObTmpFileIOInfo &io_info, const int64_t offset, ObTmpFileIOHandle &io_handle);
-  int read(const uint64_t tenant_id, const ObTmpFileIOInfo &io_info, ObTmpFileIOHandle &io_handle);
-  int pread(const uint64_t tenant_id, const ObTmpFileIOInfo &io_info, const int64_t offset, ObTmpFileIOHandle &io_handle);
+  int aio_read(const ObTmpFileIOInfo &io_info, ObTmpFileIOHandle &io_handle);
+  int aio_pread(const ObTmpFileIOInfo &io_info, const int64_t offset, ObTmpFileIOHandle &io_handle);
+  int read(const ObTmpFileIOInfo &io_info, ObTmpFileIOHandle &io_handle);
+  int pread(const ObTmpFileIOInfo &io_info, const int64_t offset, ObTmpFileIOHandle &io_handle);
   // NOTE:
   //   only support append write.
-  int aio_write(const uint64_t tenant_id, const ObTmpFileIOInfo &io_info, ObTmpFileIOHandle &io_handle);
+  int aio_write(const ObTmpFileIOInfo &io_info, ObTmpFileIOHandle &io_handle);
   // NOTE:
   //   only support append write.
-  int write(const uint64_t tenant_id, const ObTmpFileIOInfo &io_info);
+  int write(const ObTmpFileIOInfo &io_info);
   int truncate(const int64_t fd, const int64_t offset);
   int seal(const int64_t fd);
 
@@ -90,7 +90,7 @@ protected:
 protected:
   bool is_inited_;
   bool is_running_;
-  uint64_t tenant_id_;
+  
   common::ObConcurrentFIFOAllocator tmp_file_allocator_;
   common::ObFIFOAllocator callback_allocator_;
   common::ObFIFOAllocator wbp_index_cache_allocator_;

@@ -13,9 +13,6 @@ TINY = "tinyint"
 BOOL = "bool"
 NUMERIC  = "numeric"
 ENUM = "enum"
-# `ob_max_sys_var_id` indicates the maximum value of the pre-allocated system var id that can be used in the current version,
-# The system will pre-allocate the sys var id -> sys var mapping array based on the value of ob_max_sys_var_id, do not increase it arbitrarily,
-# If the sys var id of the system variables to be allocated must be greater than `ob_max_sys_var_id`, you need to increase `ob_max_sys_var_id`
 ob_max_sys_var_id = 20000
 
 flag_dict = {}
@@ -30,7 +27,6 @@ flag_dict["NULLABLE"] = "NULLABLE"
 flag_dict["INFLUENCE_PLAN"] = "INFLUENCE_PLAN"
 flag_dict["NEED_SERIALIZE"] = "NEED_SERIALIZE"
 flag_dict["QUERY_SENSITIVE"] = "QUERY_SENSITIVE"
-flag_dict["ORACLE_ONLY"] = "ORACLE_ONLY"
 flag_dict["WITH_CREATE"] = "WITH_CREATE"
 flag_dict["WITH_UPGRADE"] = "WITH_UPGRADE"
 flag_dict["MYSQL_ONLY"] = "MYSQL_ONLY"
@@ -47,7 +43,6 @@ flag_value_dict["NULLABLE"] = (1L << 5)
 flag_value_dict["INFLUENCE_PLAN"] = (1L << 6)
 flag_value_dict["NEED_SERIALIZE"] = (1L << 7)
 flag_value_dict["QUERY_SENSITIVE"] = (1L << 8)
-flag_value_dict["ORACLE_ONLY"] = (1L << 9)
 flag_value_dict["WITH_CREATE"] = (1L << 10)
 flag_value_dict["WITH_UPGRADE"] = (1L << 11)
 flag_value_dict["MYSQL_ONLY"] = (1L << 12)
@@ -59,16 +54,15 @@ type_dict["int"] = "ObIntType"
 type_dict["uint"] = "ObUInt64Type"
 type_dict["numeric"] = "ObNumberType"
 type_dict["varchar"] = "ObVarcharType"
-type_dict["bool"] = "ObIntType" # FIXME: tinyint?
+type_dict["bool"] = "ObIntType"
 type_dict["enum"] = "ObIntType"
-# This mapping is based on the assumption that the values of ObObjType do not change, if the values of ObObjType change, this should be modified accordingly
 type_value_dict = {}
 type_value_dict["tinyint"] = 1
 type_value_dict["int"] = 5
 type_value_dict["uint"] = 10
 type_value_dict["numeric"] = 15
 type_value_dict["varchar"] = 22
-type_value_dict["bool"] = 5 # FIXME: tinyint?
+type_value_dict["bool"] = 5
 type_value_dict["enum"] = 5
 
 required_attrs = ["publish_version", "info_cn", "background_cn", "ref_url"]
@@ -96,9 +90,6 @@ def parse_json(json_file_name):
   json_file = open(json_file_name,'r')
   all_the_vars = json_file.read( )
   json_Dict = json.loads(all_the_vars)
-  # add new attribute placeholder
-  # If placeholder is false, it means it is not a placeholder variable.
-  # If it is true, it means it is a placeholder variable.
   filtered_json = filter(lambda d: 'placeholder' not in d[1] or d[1]['placeholder'] is False, json_Dict.iteritems())
   filtered_dict = dict(filtered_json)
   list_sorted_by_name= sorted(filtered_dict.iteritems(), key=lambda d:d[0].lower())
@@ -163,7 +154,6 @@ def make_head_file(pdir, head_file_name, sorted_list):
   head_file.write("  const static int64_t INFLUENCE_PLAN = (1LL << 6);\n");
   head_file.write("  const static int64_t NEED_SERIALIZE = (1LL << 7);\n");
   head_file.write("  const static int64_t QUERY_SENSITIVE = (1LL << 8);\n");
-  head_file.write("  const static int64_t ORACLE_ONLY = (1LL << 9);\n");
   head_file.write("  const static int64_t WITH_CREATE = (1LL << 10);\n");
   head_file.write("  const static int64_t WITH_UPGRADE = (1LL << 11);\n");
   head_file.write("  const static int64_t MYSQL_ONLY = (1LL << 12);\n");
@@ -189,7 +179,7 @@ def make_head_file(pdir, head_file_name, sorted_list):
   head_file.write("  common::ObString get_meta_type_func_;\n");
   head_file.write("  common::ObString session_special_update_func_;\n");
   head_file.write("\n");
-  head_file.write("  ObSysVarFromJson():id_(SYS_VAR_INVALID), name_(\"\"), data_type_(common::ObNullType), default_value_(\"\"), base_value_(\"\"), min_val_(\"\"), max_val_(\"\"), enum_names_(\"\"), info_(\"\"), flags_(ObSysVarFlag::NONE), alias_(\"\"), base_class_(\"\"), on_check_and_convert_func_(""), on_update_func_(""), to_select_obj_func_(""), to_show_str_func_(""), get_meta_type_func_(""), session_special_update_func_("") {}\n");
+  head_file.write("  ObSysVarFromJson():id_(SYS_VAR_INVALID), name_(\"\"), data_type_(common::ObNullType), default_value_(\"\"), base_value_(\"\"), min_val_(\"\"), max_val_(\"\"), enum_names_(\"\"), info_(\"\"), flags_(ObSysVarFlag::NONE), alias_(\"\"), base_class_(\"\"), on_check_and_convert_func_(\"\"), on_update_func_(\"\"), to_select_obj_func_(\"\"), to_show_str_func_(\"\"), get_meta_type_func_(\"\"), session_special_update_func_(\"\") {}\n");
   head_file.write("};\n");
   head_file.write("\n");
   head_file.write("class ObSysVariables\n");
@@ -206,7 +196,6 @@ def make_head_file(pdir, head_file_name, sorted_list):
   head_file.write("  static common::ObString get_info(int64_t i);\n");
   head_file.write("  static int64_t get_flags(int64_t i);\n");
   head_file.write("  static bool need_serialize(int64_t i);\n");
-  head_file.write("  static bool is_oracle_only(int64_t i);\n");
   head_file.write("  static bool is_mysql_only(int64_t i);\n");
   head_file.write("  static common::ObString get_alias(int64_t i);\n");
   head_file.write("  static const common::ObObj &get_default_value(int64_t i);\n")
@@ -261,7 +250,7 @@ def make_cpp_file(pdir, cpp_file_name, sorted_list):
   cpp_file.write(file_head_annotation)
   cpp_file.write("#define USING_LOG_PREFIX SHARE\n")
   cpp_file.write("#include \"" + pdir + "/" + cpp_file_name.replace(".cpp", ".h") + "\"\n")
-  cpp_file.write("#include \"ob_system_variable_factory.h\"\n")
+  cpp_file.write("#include \"ob_sys_var_meta.h\"\n")
   cpp_file.write("#include \"share/object/ob_obj_cast.h\"\n")
   cpp_file.write("using namespace oceanbase::common;\n");
   cpp_file.write("\n")
@@ -269,12 +258,12 @@ def make_cpp_file(pdir, cpp_file_name, sorted_list):
   cpp_file.write("{\n");
   cpp_file.write("namespace share\n");
   cpp_file.write("{\n");
-  cpp_file.write("static ObSysVarFromJson ObSysVars[ObSysVarFactory::ALL_SYS_VARS_COUNT];\n")
-  cpp_file.write("static ObObj ObSysVarDefaultValues[ObSysVarFactory::ALL_SYS_VARS_COUNT];\n")
+  cpp_file.write("static ObSysVarFromJson ObSysVars[ObSysVarMeta::ALL_SYS_VARS_COUNT];\n")
+  cpp_file.write("static ObObj ObSysVarDefaultValues[ObSysVarMeta::ALL_SYS_VARS_COUNT];\n")
   cpp_file.write("static ObArenaAllocator ObSysVarAllocator(ObModIds::OB_COMMON_SYS_VAR_DEFAULT_VALUE);\n")
-  cpp_file.write("static ObObj ObSysVarBaseValues[ObSysVarFactory::ALL_SYS_VARS_COUNT];\n")
+  cpp_file.write("static ObObj ObSysVarBaseValues[ObSysVarMeta::ALL_SYS_VARS_COUNT];\n")
   cpp_file.write("static ObArenaAllocator ObBaseSysVarAllocator(ObModIds::OB_COMMON_SYS_VAR_DEFAULT_VALUE);\n")
-  cpp_file.write("static int64_t ObSysVarsIdToArrayIdx[ObSysVarFactory::OB_MAX_SYS_VAR_ID];\n")
+  cpp_file.write("static int64_t ObSysVarsIdToArrayIdx[ObSysVarMeta::OB_MAX_SYS_VAR_ID];\n")
   cpp_file.write("// In VarsInit, it is necessary to determine whether the id corresponding to the current maximum SysVars is greater than OB_MAX_SYS_VAR_ID\n")
   cpp_file.write("// If it is greater than OB_MAX_SYS_VAR_ID, it indicates that there are invalid SysVarsId\n")
   cpp_file.write("static bool HasInvalidSysVar = false;\n")
@@ -322,7 +311,7 @@ def make_cpp_file(pdir, cpp_file_name, sorted_list):
     var_num += 1
     cpp_file.write("    }();\n\n")
 
-  cpp_file.write("    if (cur_max_var_id >= ObSysVarFactory::OB_MAX_SYS_VAR_ID) { \n")
+  cpp_file.write("    if (cur_max_var_id >= ObSysVarMeta::OB_MAX_SYS_VAR_ID) { \n")
   cpp_file.write("      HasInvalidSysVar = true;\n")
   cpp_file.write("    }\n")
   cpp_file.write("  }\n")
@@ -330,7 +319,7 @@ def make_cpp_file(pdir, cpp_file_name, sorted_list):
   cpp_file.write("\n")
   cpp_file.write("static int64_t var_amount = " + str(var_num) + ";"  + "\n")
   cpp_file.write("\n")
-  cpp_file.write("int64_t ObSysVariables::get_all_sys_var_count(){ return ObSysVarFactory::ALL_SYS_VARS_COUNT;}\n")
+  cpp_file.write("int64_t ObSysVariables::get_all_sys_var_count(){ return ObSysVarMeta::ALL_SYS_VARS_COUNT;}\n")
   cpp_file.write("ObSysVarClassType ObSysVariables::get_sys_var_id(int64_t i){ return ObSysVars[i].id_;}\n")
   cpp_file.write("ObString ObSysVariables::get_name(int64_t i){ return ObSysVars[i].name_;}\n")
   cpp_file.write("ObObjType ObSysVariables::get_type(int64_t i){ return ObSysVars[i].data_type_;}\n")
@@ -341,7 +330,6 @@ def make_cpp_file(pdir, cpp_file_name, sorted_list):
   cpp_file.write("ObString ObSysVariables::get_info(int64_t i){ return ObSysVars[i].info_;}\n")
   cpp_file.write("int64_t ObSysVariables::get_flags(int64_t i){ return ObSysVars[i].flags_;}\n")
   cpp_file.write("bool ObSysVariables::need_serialize(int64_t i){ return ObSysVars[i].flags_ & ObSysVarFlag::NEED_SERIALIZE;}\n")
-  cpp_file.write("bool ObSysVariables::is_oracle_only(int64_t i){ return ObSysVars[i].flags_ & ObSysVarFlag::ORACLE_ONLY;}\n")
   cpp_file.write("bool ObSysVariables::is_mysql_only(int64_t i){ return ObSysVars[i].flags_ & ObSysVarFlag::MYSQL_ONLY;}\n")
   cpp_file.write("ObString ObSysVariables::get_alias(int64_t i){ return ObSysVars[i].alias_;}\n")
   cpp_file.write("const ObObj &ObSysVariables::get_default_value(int64_t i){ return ObSysVarDefaultValues[i];}\n")
@@ -472,6 +460,67 @@ def write_sys_var_class_types(wfile, sorted_list):
     wfile.write("  SYS_VAR_" + str(name).upper() + " = " + str(attributes['id']) + ",\n")
   wfile.write("};\n")
 
+def write_sys_var_meta_class(wfile, sorted_list):
+  mysql_sys_var_names_count = 0
+  ob_sys_var_names_count = 0
+  for (name, attributes) in sorted_list:
+    if attributes['id'] < 10000:
+      mysql_sys_var_names_count += 1
+    else:
+      ob_sys_var_names_count += 1
+  wfile.write("""
+class ObSysVarMeta
+{
+public:
+  const static int64_t MYSQL_SYS_VARS_COUNT = """ + str(mysql_sys_var_names_count) + """;
+  const static int64_t OB_SYS_VARS_COUNT = """ + str(ob_sys_var_names_count) + """;
+  const static int64_t ALL_SYS_VARS_COUNT = MYSQL_SYS_VARS_COUNT + OB_SYS_VARS_COUNT;
+  const static int64_t INVALID_MAX_READ_STALE_TIME = -1;
+
+  const static int16_t OB_SPECIFIC_SYS_VAR_ID_OFFSET = 10000;
+  // Represents the maximum value of sys var id that OB can currently use. Under normal circumstances, there is no need to apply for sys var id greater than OB_MAX_SYS_VAR_ID,
+  // If you need to apply for sys var id greater than OB_MAX_SYS_VAR_ID, you need to adjust the value of ob_max_sys_var_id first
+  const static int32_t OB_MAX_SYS_VAR_ID = """ + str(ob_max_sys_var_id) + """;
+
+  static ObSysVarClassType find_sys_var_id_by_name(const common::ObString &sys_var_name, bool is_from_sys_table = false); //binary search
+  static int calc_sys_var_store_idx(ObSysVarClassType sys_var_id, int64_t &store_idx);
+  static int calc_sys_var_store_idx_by_name(const common::ObString &sys_var_name, int64_t &store_idx);
+  static bool is_valid_sys_var_store_idx(int64_t store_idx);
+  static int get_sys_var_name_by_id(ObSysVarClassType sys_var_id, common::ObString &sys_var_name);
+  static const common::ObString get_sys_var_name_by_id(ObSysVarClassType sys_var_id);
+
+private:
+  static bool sys_var_name_case_cmp(const char *name1, const common::ObString &name2);
+  const static char *SYS_VAR_NAMES_SORTED_BY_NAME[ALL_SYS_VARS_COUNT];
+  const static ObSysVarClassType SYS_VAR_IDS_SORTED_BY_NAME[ALL_SYS_VARS_COUNT];
+  const static char *SYS_VAR_NAMES_SORTED_BY_ID[ALL_SYS_VARS_COUNT];
+};
+""")
+
+def write_sys_var_fac_runtime_class(wfile, sorted_list):
+  wfile.write("""
+class ObSysVarFactory
+{
+public:
+  ObSysVarFactory();
+  virtual ~ObSysVarFactory();
+  void destroy();
+  int create_sys_var(share::ObSysVarClassType sys_var_id, ObBasicSysVar *&sys_var, int64_t store_idx = -1);
+  int create_all_sys_vars();
+  int create_all_sys_vars_();
+  int free_sys_var(ObBasicSysVar *sys_var, int64_t sys_var_idx);
+  static int create_sys_var(common::ObIAllocator &allocator_, share::ObSysVarClassType sys_var_id, ObBasicSysVar *&sys_var_ptr);
+private:
+  int try_init_store_mem();
+
+private:
+  common::ObArenaAllocator allocator_;
+  ObBasicSysVar **store_;
+  ObBasicSysVar **store_buf_;
+  bool all_sys_vars_created_;
+};
+""")
+
 def write_sys_var_classes(wfile, sorted_list):
   idx = 0
   for (name, attributes) in sorted_list:
@@ -486,63 +535,6 @@ def write_sys_var_classes(wfile, sorted_list):
         attributes["get_meta_type_func"] if "get_meta_type_func" in attributes.keys() else None, \
         attributes["session_special_update_func"] if "session_special_update_func" in attributes.keys() else None)
     idx += 1
-
-def write_sys_var_fac_class(wfile, sorted_list):
-  mysql_sys_var_names_count = 0
-  ob_sys_var_names_count = 0
-  for (name, attributes) in sorted_list:
-    if attributes['id'] < 10000:
-      mysql_sys_var_names_count += 1
-    else:
-      ob_sys_var_names_count += 1
-  wfile.write("""
-class ObSysVarFactory
-{
-public:
-  ObSysVarFactory(const int64_t tenant_id = OB_SERVER_TENANT_ID);
-  virtual ~ObSysVarFactory();
-  void destroy();
-  int create_sys_var(ObSysVarClassType sys_var_id, ObBasicSysVar *&sys_var, int64_t store_idx = -1);
-  int create_all_sys_vars();
-  int free_sys_var(ObBasicSysVar *sys_var, int64_t sys_var_idx);
-  static int create_sys_var(ObIAllocator &allocator_, ObSysVarClassType sys_var_id, ObBasicSysVar *&sys_var_ptr);
-  static int calc_sys_var_store_idx(ObSysVarClassType sys_var_id, int64_t &store_idx);
-  static int calc_sys_var_store_idx_by_name(const common::ObString &sys_var_name, int64_t &store_idx);
-  static bool is_valid_sys_var_store_idx(int64_t store_idx);
-  static ObSysVarClassType find_sys_var_id_by_name(const common::ObString &sys_var_name, bool is_from_sys_table = false); //binary search
-  static int get_sys_var_name_by_id(ObSysVarClassType sys_var_id, common::ObString &sys_var_name);
-  static const common::ObString get_sys_var_name_by_id(ObSysVarClassType sys_var_id);
-private:
-  int try_init_store_mem();
-
-public:
-  const static int64_t MYSQL_SYS_VARS_COUNT = """)
-  wfile.write(str(mysql_sys_var_names_count) + ";")
-  wfile.write("""
-  const static int64_t OB_SYS_VARS_COUNT = """)
-  wfile.write(str(ob_sys_var_names_count) + ";")
-  wfile.write("""
-  const static int64_t ALL_SYS_VARS_COUNT = MYSQL_SYS_VARS_COUNT + OB_SYS_VARS_COUNT;
-  const static int64_t INVALID_MAX_READ_STALE_TIME = -1;
-
-  const static int16_t OB_SPECIFIC_SYS_VAR_ID_OFFSET = 10000;
-  // Represents the maximum value of sys var id that OB can currently use. Under normal circumstances, there is no need to apply for sys var id greater than OB_MAX_SYS_VAR_ID,
-  // If you need to apply for sys var id greater than OB_MAX_SYS_VAR_ID, you need to adjust the value of ob_max_sys_var_id first
-  const static int32_t OB_MAX_SYS_VAR_ID = """)
-  wfile.write(str(ob_max_sys_var_id) + ";")
-  wfile.write("""
-
-private:
-  static bool sys_var_name_case_cmp(const char *name1, const common::ObString &name2);
-  const static char *SYS_VAR_NAMES_SORTED_BY_NAME[ALL_SYS_VARS_COUNT];
-  const static ObSysVarClassType SYS_VAR_IDS_SORTED_BY_NAME[ALL_SYS_VARS_COUNT];
-  const static char *SYS_VAR_NAMES_SORTED_BY_ID[ALL_SYS_VARS_COUNT];
-  common::ObArenaAllocator allocator_;
-  ObBasicSysVar **store_;
-  ObBasicSysVar **store_buf_;
-  bool all_sys_vars_created_;
-};
-""")
 
 def write_sys_var_class(wfile, idx, sys_var_name, data_type, base_class, \
     on_check_and_convert_func, on_update_func, to_select_obj_func, \
@@ -619,8 +611,8 @@ def write_sys_var_class(wfile, idx, sys_var_name, data_type, base_class, \
         + ", " + ("NULL" if to_show_str_func is None else to_show_str_func) \
         + ", " + ("NULL" if get_meta_type_func is None else get_meta_type_func) \
         + ") {}\n")
-  wfile.write("  inline virtual ObSysVarClassType get_type() const { return SYS_VAR_" + sys_var_name.upper() + "; }\n")
-  wfile.write("  inline virtual const common::ObObj &get_global_default_value() const { return ObSysVariables::get_default_value(" + str(idx) + "); }\n")
+  wfile.write("  inline virtual share::ObSysVarClassType get_type() const { return share::SYS_VAR_" + sys_var_name.upper() + "; }\n")
+  wfile.write("  inline virtual const common::ObObj &get_global_default_value() const { return share::ObSysVariables::get_default_value(" + str(idx) + "); }\n")
   wfile.write("};\n");
 
 def make_sys_var_class_type_h(pdir, filename, sorted_list):
@@ -645,28 +637,24 @@ namespace share
   wfile.write("#endif //" + file_def_str)
   print("Generate " + str(filename) + " successfully!\n");
 
-def make_sys_var_h(pdir, filename, sorted_list):
+# ---- New: share metadata header (ObSysVarMeta) ----
+def make_sys_var_meta_h(pdir, filename, sorted_list):
   wfile = open(filename, 'w')
   wfile.write(file_head_annotation);
   suffix_idx = filename.find(".h")
   file_def_str = "OCEANBASE_" + pdir.replace("/", "_").upper() + "_" + filename[0 : suffix_idx].upper() + "_"
   wfile.write("#ifndef " + file_def_str + "\n")
   wfile.write("#define " + file_def_str + "\n")
-  wfile.write("#include \"common/object/ob_object.h\"\n")
-  wfile.write("#include \"share/system_variable/ob_system_variable.h\"\n")
+  wfile.write("#include \"share/system_variable/ob_sys_var_class_type.h\"\n")
   wfile.write("#include \"share/system_variable/ob_system_variable_init.h\"\n")
-  wfile.write("#include \"lib/allocator/page_arena.h\"\n")
-  wfile.write("#include \"lib/string/ob_string.h\"\n");
-  wfile.write("#include \"lib/container/ob_array.h\"\n")
+  wfile.write("#include \"lib/string/ob_string.h\"\n")
   wfile.write("""
 namespace oceanbase
 {
 namespace share
 {
 """)
-  write_sys_var_classes(wfile, sorted_list)
-  wfile.write("\n")
-  write_sys_var_fac_class(wfile, sorted_list)
+  write_sys_var_meta_class(wfile, sorted_list)
   wfile.write("""
 }
 }
@@ -674,17 +662,218 @@ namespace share
   wfile.write("#endif //" + file_def_str)
   print("Generate " + str(filename) + " successfully!\n");
 
-def make_sys_var_cpp(pdir, filename, list_sorted_by_name, list_sorted_by_id):
+# ---- New: sql factory header (per-var classes + ObSysVarFactory runtime) ----
+def make_sys_var_sql_h(pdir, filename, sorted_list):
+  import os
+  base_name = os.path.basename(filename)
   wfile = open(filename, 'w')
   wfile.write(file_head_annotation);
-  wfile.write("#define USING_LOG_PREFIX SQL_SESSION\n");
+  suffix_idx = base_name.find(".h")
+  file_def_str = "OCEANBASE_" + pdir.replace("/", "_").upper() + "_" + base_name[0 : suffix_idx].upper() + "_"
+  wfile.write("#ifndef " + file_def_str + "\n")
+  wfile.write("#define " + file_def_str + "\n")
+  wfile.write("#include \"common/object/ob_object.h\"\n")
+  wfile.write("#include \"sql/session/ob_system_variable.h\"\n")
+  wfile.write("#include \"share/system_variable/ob_system_variable_init.h\"\n")
+  wfile.write("#include \"lib/allocator/page_arena.h\"\n")
+  wfile.write("#include \"lib/string/ob_string.h\"\n");
+  wfile.write("#include \"lib/container/ob_array.h\"\n")
+  wfile.write("""
+namespace oceanbase
+{
+namespace sql
+{
+""")
+  write_sys_var_classes(wfile, sorted_list)
+  wfile.write("\n")
+  write_sys_var_fac_runtime_class(wfile, sorted_list)
+  wfile.write("""
+}
+}
+""")
+  wfile.write("#endif //" + file_def_str)
+  print("Generate " + str(filename) + " successfully!\n");
+
+# ---- New: share metadata cpp ----
+def make_sys_var_meta_cpp(pdir, filename, list_sorted_by_name, list_sorted_by_id):
+  wfile = open(filename, 'w')
+  wfile.write(file_head_annotation);
+  wfile.write("#define USING_LOG_PREFIX SHARE\n")
   wfile.write("#include \"" + pdir + "/" + filename.replace(".cpp", ".h") + "\"\n")
-  # wfile.write("#include \"share/system_variable/ob_system_variable_init.cpp\"\n")
+  wfile.write("#include \"share/system_variable/ob_system_variable_init.h\"\n")
+  wfile.write("#include \"lib/oblog/ob_log_module.h\"\n")
   wfile.write("using namespace oceanbase::common;\n");
   wfile.write("""
 namespace oceanbase
 {
 namespace share
+{
+""")
+
+  wfile.write("""
+const char *ObSysVarMeta::SYS_VAR_NAMES_SORTED_BY_NAME[] = {
+""")
+  idx = 0
+  for (name, attributes) in list_sorted_by_name:
+    if idx > 0:
+      wfile.write(",\n")
+    wfile.write("  \"" + name + "\"")
+    idx += 1
+  wfile.write("""
+};
+
+const ObSysVarClassType ObSysVarMeta::SYS_VAR_IDS_SORTED_BY_NAME[] = {
+""")
+  idx = 0
+  for (name, attributes) in list_sorted_by_name:
+    if idx > 0:
+      wfile.write(",\n")
+    wfile.write("  SYS_VAR_" + str(name).upper())
+    idx += 1
+  wfile.write("""
+};
+
+const char *ObSysVarMeta::SYS_VAR_NAMES_SORTED_BY_ID[] = {
+""")
+  idx = 0
+  for (name, attributes) in list_sorted_by_id:
+    if idx > 0:
+      wfile.write(",\n")
+    wfile.write("  \"" + name + "\"")
+    idx += 1
+  wfile.write("""
+};
+
+bool ObSysVarMeta::sys_var_name_case_cmp(const char *name1, const ObString &name2)
+{
+  return name2.case_compare(name1) > 0;
+}
+
+ObSysVarClassType ObSysVarMeta::find_sys_var_id_by_name(const ObString &sys_var_name,
+                                                           bool is_from_sys_table /*= false*/)
+{
+  int ret = OB_SUCCESS;
+  ObSysVarClassType sys_var_id = SYS_VAR_INVALID;
+  int64_t lower_idx = std::lower_bound(ObSysVarMeta::SYS_VAR_NAMES_SORTED_BY_NAME,
+      ObSysVarMeta::SYS_VAR_NAMES_SORTED_BY_NAME + ObSysVarMeta::ALL_SYS_VARS_COUNT,
+      sys_var_name, ObSysVarMeta::sys_var_name_case_cmp) -
+      ObSysVarMeta::SYS_VAR_NAMES_SORTED_BY_NAME;
+  if (OB_UNLIKELY(lower_idx < 0)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_ERROR("invalid lower index", K(ret), K(sys_var_name), K(lower_idx), K(lbt()));
+  } else if (OB_UNLIKELY(lower_idx > ObSysVarMeta::ALL_SYS_VARS_COUNT)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_ERROR("invalid lower index", K(ret), K(sys_var_name), K(lower_idx),
+              LITERAL_K(ObSysVarMeta::ALL_SYS_VARS_COUNT), K(lbt()));
+  } else if (OB_UNLIKELY(ObSysVarMeta::ALL_SYS_VARS_COUNT == lower_idx)) {
+    ret = OB_SEARCH_NOT_FOUND;
+  } else if (0 != sys_var_name.case_compare(
+      ObSysVarMeta::SYS_VAR_NAMES_SORTED_BY_NAME[lower_idx])) {
+    ret = OB_SEARCH_NOT_FOUND;
+  } else {
+    sys_var_id = ObSysVarMeta::SYS_VAR_IDS_SORTED_BY_NAME[lower_idx];
+  }
+  if (OB_UNLIKELY(OB_SEARCH_NOT_FOUND == ret)) {
+    if (is_from_sys_table) {
+      LOG_INFO("new system variable is added , so can not found; don't worry", K(sys_var_name),
+               K(lower_idx), LITERAL_K(ObSysVarMeta::ALL_SYS_VARS_COUNT), K(lbt()));
+    } else {
+      LOG_WARN("sys var name not found", K(sys_var_name), K(lower_idx),
+               LITERAL_K(ObSysVarMeta::ALL_SYS_VARS_COUNT), K(lbt()));
+    }
+  }
+  return sys_var_id;
+}
+
+int ObSysVarMeta::calc_sys_var_store_idx(ObSysVarClassType sys_var_id, int64_t &store_idx)
+{
+  int ret = OB_SUCCESS;
+  int64_t real_idx = -1;
+  int64_t var_id = static_cast<int64_t>(sys_var_id);
+  if (ObSysVarsToIdxMap::has_invalid_sys_var_id()) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_ERROR("has invalid sys var id", K(ret), K(ObSysVarsToIdxMap::has_invalid_sys_var_id()));
+  } else if (OB_UNLIKELY(var_id < 0)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_ERROR("invalid sys var id", K(ret), K(var_id));
+  } else {
+    real_idx = ObSysVarsToIdxMap::get_store_idx(var_id);
+    if (real_idx < 0) {
+      ret = OB_SYS_VARS_MAYBE_DIFF_VERSION;
+      LOG_WARN("invalid sys var id, maybe sys vars version is different", K(ret), K(var_id), K(real_idx),
+          LITERAL_K(ObSysVarMeta::OB_SPECIFIC_SYS_VAR_ID_OFFSET),
+          LITERAL_K(ObSysVarMeta::OB_SYS_VARS_COUNT));
+    }
+  }
+
+  if (OB_FAIL(ret)) {
+  } else {
+    store_idx = real_idx;
+  }
+  return ret;
+}
+
+int ObSysVarMeta::calc_sys_var_store_idx_by_name(const common::ObString &sys_var_name,
+                                                    int64_t &store_idx)
+{
+  int ret = OB_SUCCESS;
+  ObSysVarClassType sys_var_id = find_sys_var_id_by_name(sys_var_name);
+  if (OB_FAIL(calc_sys_var_store_idx(sys_var_id, store_idx))) {
+    LOG_WARN("fail to calc sys var store idx", K(ret), K(sys_var_name), K(lbt()));
+  }
+  return ret;
+}
+
+bool ObSysVarMeta::is_valid_sys_var_store_idx(int64_t store_idx)
+{
+  return 0 <= store_idx && store_idx < ObSysVarMeta::ALL_SYS_VARS_COUNT;
+}
+
+int ObSysVarMeta::get_sys_var_name_by_id(ObSysVarClassType sys_var_id, ObString &sys_var_name)
+{
+  int ret = OB_SUCCESS;
+  int64_t store_idx = -1;
+  if (OB_FAIL(calc_sys_var_store_idx(sys_var_id, store_idx))) {
+    LOG_WARN("fail to calc sys var store idx", K(ret), K(sys_var_id));
+  } else {
+    sys_var_name = ObString::make_string(ObSysVarMeta::SYS_VAR_NAMES_SORTED_BY_ID[store_idx]);
+  }
+  return ret;
+}
+
+const ObString ObSysVarMeta::get_sys_var_name_by_id(ObSysVarClassType sys_var_id)
+{
+  ObString sys_var_name;
+  int ret = OB_SUCCESS;
+  if (OB_FAIL(get_sys_var_name_by_id(sys_var_id, sys_var_name))) {
+    sys_var_name = ObString::make_string("invalid_sys_var_name");
+    LOG_WARN("invalid sys var id", K(ret), K(sys_var_id));
+  }
+  return sys_var_name;
+}
+""")
+  wfile.write("""
+}
+}
+""")
+  print("Generate " + str(filename) + " successfully!\n")
+
+# ---- New: sql factory cpp (runtime methods) ----
+def make_sys_var_sql_cpp(pdir, filename, list_sorted_by_name, list_sorted_by_id):
+  import os
+  base_name = os.path.basename(filename)
+  wfile = open(filename, 'w')
+  wfile.write(file_head_annotation);
+  wfile.write("#define USING_LOG_PREFIX SQL_SESSION\n");
+  wfile.write("#include \"" + pdir + "/" + base_name.replace(".cpp", ".h") + "\"\n")
+  wfile.write("#include \"lib/utility/ob_smart_call.h\"\n")
+  wfile.write("#include \"share/system_variable/ob_system_variable_init.h\"\n")
+  wfile.write("#include \"share/system_variable/ob_sys_var_meta.h\"\n")
+  wfile.write("using namespace oceanbase::common;\n");
+  wfile.write("""
+namespace oceanbase
+{
+namespace sql
 {
 """)
   for (name, attributes) in list_sorted_by_id:
@@ -705,153 +894,8 @@ namespace share
         wfile.write(",\n  0\n};\n")
 
   wfile.write("""
-const char *ObSysVarFactory::SYS_VAR_NAMES_SORTED_BY_NAME[] = {
-""")
-  idx = 0
-  for (name, attributes) in list_sorted_by_name:
-    if idx > 0:
-      wfile.write(",\n")
-    wfile.write("  \"" + name + "\"")
-    idx += 1
-  wfile.write("""
-};
-
-const ObSysVarClassType ObSysVarFactory::SYS_VAR_IDS_SORTED_BY_NAME[] = {
-""")
-  idx = 0
-  for (name, attributes) in list_sorted_by_name:
-    if idx > 0:
-      wfile.write(",\n")
-    wfile.write("  SYS_VAR_" + str(name).upper())
-    idx += 1
-  wfile.write("""
-};
-
-const char *ObSysVarFactory::SYS_VAR_NAMES_SORTED_BY_ID[] = {
-""")
-  idx = 0
-  for (name, attributes) in list_sorted_by_id:
-    if idx > 0:
-      wfile.write(",\n")
-    wfile.write("  \"" + name + "\"")
-    idx += 1
-  wfile.write("""
-};
-
-bool ObSysVarFactory::sys_var_name_case_cmp(const char *name1, const ObString &name2)
-{
-  return name2.case_compare(name1) > 0;
-}
-
-ObSysVarClassType ObSysVarFactory::find_sys_var_id_by_name(const ObString &sys_var_name,
-                                                           bool is_from_sys_table /*= false*/)
-{
-  int ret = OB_SUCCESS;
-  ObSysVarClassType sys_var_id = SYS_VAR_INVALID;
-  int64_t lower_idx = std::lower_bound(ObSysVarFactory::SYS_VAR_NAMES_SORTED_BY_NAME,
-      ObSysVarFactory::SYS_VAR_NAMES_SORTED_BY_NAME + ObSysVarFactory::ALL_SYS_VARS_COUNT,
-      sys_var_name, ObSysVarFactory::sys_var_name_case_cmp) -
-      ObSysVarFactory::SYS_VAR_NAMES_SORTED_BY_NAME;
-  if (OB_UNLIKELY(lower_idx < 0)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_ERROR("invalid lower index", K(ret), K(sys_var_name), K(lower_idx), K(lbt()));
-  } else if (OB_UNLIKELY(lower_idx > ObSysVarFactory::ALL_SYS_VARS_COUNT)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_ERROR("invalid lower index", K(ret), K(sys_var_name), K(lower_idx),
-              LITERAL_K(ObSysVarFactory::ALL_SYS_VARS_COUNT), K(lbt()));
-  } else if (OB_UNLIKELY(ObSysVarFactory::ALL_SYS_VARS_COUNT == lower_idx)) {
-    // std::lower_bound returns ObSysVarFactory::SYS_VAR_NAMES_SORTED_BY_NAME +
-    // The address of ObSysVarFactory::ALL_SYS_VARS_COUNT, which means not found, not an error
-    ret = OB_SEARCH_NOT_FOUND;
-  } else if (0 != sys_var_name.case_compare(
-      ObSysVarFactory::SYS_VAR_NAMES_SORTED_BY_NAME[lower_idx])) {
-    // not found
-    ret = OB_SEARCH_NOT_FOUND;
-  } else {
-    sys_var_id = ObSysVarFactory::SYS_VAR_IDS_SORTED_BY_NAME[lower_idx]; // found
-  }
-  if (OB_UNLIKELY(OB_SEARCH_NOT_FOUND == ret)) {
-    if (is_from_sys_table) {
-      LOG_INFO("new system variable is added , so can not found; don't worry", K(sys_var_name),
-               K(lower_idx), LITERAL_K(ObSysVarFactory::ALL_SYS_VARS_COUNT), K(lbt()));
-    } else {
-      LOG_WARN("sys var name not found", K(sys_var_name), K(lower_idx),
-               LITERAL_K(ObSysVarFactory::ALL_SYS_VARS_COUNT), K(lbt()));
-    }
-  }
-  return sys_var_id;
-}
-
-int ObSysVarFactory::calc_sys_var_store_idx(ObSysVarClassType sys_var_id, int64_t &store_idx)
-{
-  int ret = OB_SUCCESS;
-  int64_t real_idx = -1;
-  int64_t var_id = static_cast<int64_t>(sys_var_id);
-  if (ObSysVarsToIdxMap::has_invalid_sys_var_id()) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_ERROR("has invalid sys var id", K(ret), K(ObSysVarsToIdxMap::has_invalid_sys_var_id()));
-  } else if (OB_UNLIKELY(var_id < 0)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_ERROR("invalid sys var id", K(ret), K(var_id));
-  } else {
-    // Directly use ObSysVarsIdToArrayIdx index array to query the corresponding store idx
-    real_idx = ObSysVarsToIdxMap::get_store_idx(var_id);
-    if (real_idx < 0) {
-      ret = OB_SYS_VARS_MAYBE_DIFF_VERSION;
-      LOG_WARN("invalid sys var id, maybe sys vars version is different", K(ret), K(var_id), K(real_idx),
-          LITERAL_K(ObSysVarFactory::OB_SPECIFIC_SYS_VAR_ID_OFFSET),
-          LITERAL_K(ObSysVarFactory::OB_SYS_VARS_COUNT));
-    }
-  }
-
-  if (OB_FAIL(ret)) {
-  } else {
-    store_idx = real_idx;
-  }
-  return ret;
-}
-
-int ObSysVarFactory::calc_sys_var_store_idx_by_name(const common::ObString &sys_var_name,
-                                                    int64_t &store_idx)
-{
-  int ret = OB_SUCCESS;
-  ObSysVarClassType sys_var_id = find_sys_var_id_by_name(sys_var_name);
-  if (OB_FAIL(calc_sys_var_store_idx(sys_var_id, store_idx))) {
-    LOG_WARN("fail to calc sys var store idx", K(ret), K(sys_var_name), K(lbt()));
-  }
-  return ret;
-}
-
-bool ObSysVarFactory::is_valid_sys_var_store_idx(int64_t store_idx)
-{
-  return 0 <= store_idx && store_idx < ObSysVarFactory::ALL_SYS_VARS_COUNT;
-}
-
-int ObSysVarFactory::get_sys_var_name_by_id(ObSysVarClassType sys_var_id, ObString &sys_var_name)
-{
-  int ret = OB_SUCCESS;
-  int64_t store_idx = -1;
-  if (OB_FAIL(calc_sys_var_store_idx(sys_var_id, store_idx))) {
-    LOG_WARN("fail to calc sys var store idx", K(ret), K(sys_var_id));
-  } else {
-    sys_var_name = ObString::make_string(ObSysVarFactory::SYS_VAR_NAMES_SORTED_BY_ID[store_idx]);
-  }
-  return ret;
-}
-
-const ObString ObSysVarFactory::get_sys_var_name_by_id(ObSysVarClassType sys_var_id)
-{
-  ObString sys_var_name;
-  int ret = OB_SUCCESS;
-  if (OB_FAIL(get_sys_var_name_by_id(sys_var_id, sys_var_name))) {
-    sys_var_name = ObString::make_string("invalid_sys_var_name");
-    LOG_WARN("invalid sys var id", K(ret), K(sys_var_id));
-  }
-  return sys_var_name;
-}
-
-ObSysVarFactory::ObSysVarFactory(const int64_t tenant_id)
-  : allocator_(ObMemAttr(tenant_id, ObModIds::OB_COMMON_SYS_VAR_FAC)),
+ObSysVarFactory::ObSysVarFactory()
+  : allocator_(ObMemAttr(ObModIds::OB_COMMON_SYS_VAR_FAC)),
     store_(nullptr), store_buf_(nullptr), all_sys_vars_created_(false)
 {
 }
@@ -861,22 +905,22 @@ int ObSysVarFactory::try_init_store_mem()
   int ret = OB_SUCCESS;
   if (OB_ISNULL(store_)) {
     void *store_ptr = NULL;
-    if (OB_ISNULL(store_ptr = allocator_.alloc(sizeof(ObBasicSysVar *) * ALL_SYS_VARS_COUNT))) {
+    if (OB_ISNULL(store_ptr = allocator_.alloc(sizeof(ObBasicSysVar *) * share::ObSysVarMeta::ALL_SYS_VARS_COUNT))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("fail to alloc store_.", K(ret));
     } else {
       store_ = static_cast<ObBasicSysVar **>(store_ptr);
-      MEMSET(store_, 0, sizeof(ObBasicSysVar *) * ALL_SYS_VARS_COUNT);
+      MEMSET(store_, 0, sizeof(ObBasicSysVar *) * share::ObSysVarMeta::ALL_SYS_VARS_COUNT);
     }
   }
   if (OB_ISNULL(store_buf_)) {
     void *store_buf_ptr = NULL;
-    if (OB_ISNULL(store_buf_ptr = allocator_.alloc(sizeof(ObBasicSysVar *) * ALL_SYS_VARS_COUNT))) {
+    if (OB_ISNULL(store_buf_ptr = allocator_.alloc(sizeof(ObBasicSysVar *) * share::ObSysVarMeta::ALL_SYS_VARS_COUNT))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("fail to alloc store_buf_.", K(ret));
     } else {
       store_buf_ = static_cast<ObBasicSysVar **>(store_buf_ptr);
-      MEMSET(store_buf_, 0, sizeof(ObBasicSysVar *) * ALL_SYS_VARS_COUNT);
+      MEMSET(store_buf_, 0, sizeof(ObBasicSysVar *) * share::ObSysVarMeta::ALL_SYS_VARS_COUNT);
     }
   }
   return ret;
@@ -891,8 +935,8 @@ void ObSysVarFactory::destroy()
 {
   int ret = OB_SUCCESS;
   if (OB_NOT_NULL(store_)) {
-    for (int64_t i = 0; i < ALL_SYS_VARS_COUNT; ++i) {
-      if (OB_NOT_NULL(store_[i])) {  
+    for (int64_t i = 0; i < share::ObSysVarMeta::ALL_SYS_VARS_COUNT; ++i) {
+      if (OB_NOT_NULL(store_[i])) {
         store_[i]->~ObBasicSysVar();
         store_[i] = nullptr;
       }
@@ -900,7 +944,7 @@ void ObSysVarFactory::destroy()
     store_ = nullptr;
   }
   if (OB_NOT_NULL(store_buf_)) {
-    for (int64_t i = 0; i < ALL_SYS_VARS_COUNT; ++i) {
+    for (int64_t i = 0; i < share::ObSysVarMeta::ALL_SYS_VARS_COUNT; ++i) {
       if (OB_NOT_NULL(store_buf_[i])) {
         store_buf_[i]->~ObBasicSysVar();
         store_buf_[i] = nullptr;
@@ -917,7 +961,7 @@ int ObSysVarFactory::free_sys_var(ObBasicSysVar *sys_var, int64_t sys_var_idx)
   int ret = OB_SUCCESS;
   if (OB_NOT_NULL(store_) && OB_NOT_NULL(store_buf_)) {
     OV (OB_NOT_NULL(sys_var));
-    OV (is_valid_sys_var_store_idx(sys_var_idx));
+    OV (share::ObSysVarMeta::is_valid_sys_var_store_idx(sys_var_idx));
     OV (sys_var == store_[sys_var_idx], OB_ERR_UNEXPECTED, sys_var, sys_var_idx);
     if (OB_NOT_NULL(store_buf_[sys_var_idx])) {
       OX (store_buf_[sys_var_idx]->~ObBasicSysVar());
@@ -932,6 +976,11 @@ int ObSysVarFactory::free_sys_var(ObBasicSysVar *sys_var, int64_t sys_var_idx)
 }
 
 int ObSysVarFactory::create_all_sys_vars()
+{
+  return SMART_CALL(create_all_sys_vars_());
+}
+
+int ObSysVarFactory::create_all_sys_vars_()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(try_init_store_mem())) {
@@ -966,7 +1015,7 @@ int ObSysVarFactory::create_all_sys_vars()
     wfile.write("        ret = OB_ALLOCATE_MEMORY_FAILED;\n")
     wfile.write("        LOG_ERROR(\"fail to new " + sys_var_cls_name + "\", K(ret));\n")
     wfile.write("      } else {\n")
-    wfile.write("        store_buf_[ObSysVarsToIdxMap::get_store_idx(static_cast<int64_t>(SYS_VAR_" + name.upper()  + "))] = sys_var_ptr;\n")
+    wfile.write("        store_buf_[share::ObSysVarsToIdxMap::get_store_idx(static_cast<int64_t>(share::SYS_VAR_" + name.upper()  + "))] = sys_var_ptr;\n")
     wfile.write("        ptr = (void *)((char *)ptr + sizeof(" + sys_var_cls_name + "));\n")
     wfile.write("      }\n")
     wfile.write("    }\n")
@@ -976,7 +1025,22 @@ int ObSysVarFactory::create_all_sys_vars()
   return ret;
 }
 
-int ObSysVarFactory::create_sys_var(ObIAllocator &allocator_, ObSysVarClassType sys_var_id,
+template <typename T>
+static int create_one_sys_var(ObIAllocator &allocator_, ObBasicSysVar *&sys_var_ptr, const char *cls_name)
+{
+  int ret = OB_SUCCESS;
+  void *ptr = NULL;
+  if (OB_ISNULL(ptr = allocator_.alloc(sizeof(T)))) {
+    ret = OB_ALLOCATE_MEMORY_FAILED;
+    LOG_ERROR("fail to alloc sys var", K(ret), K(cls_name));
+  } else if (OB_ISNULL(sys_var_ptr = new (ptr)T())) {
+    ret = OB_ALLOCATE_MEMORY_FAILED;
+    LOG_ERROR("fail to new sys var", K(ret), K(cls_name));
+  }
+  return ret;
+}
+
+int ObSysVarFactory::create_sys_var(ObIAllocator &allocator_, share::ObSysVarClassType sys_var_id,
                                         ObBasicSysVar *&sys_var_ptr)
 {
   int ret = OB_SUCCESS;
@@ -987,15 +1051,8 @@ int ObSysVarFactory::create_sys_var(ObIAllocator &allocator_, ObSysVarClassType 
     sys_var_cls_name = "ObSysVar"
     for name_seg in name_segs:
       sys_var_cls_name += name_seg.capitalize()
-    wfile.write("    case SYS_VAR_" + str(name).upper() + ": {\n")
-    wfile.write("      void *ptr = NULL;\n")
-    wfile.write("      if (OB_ISNULL(ptr = allocator_.alloc(sizeof(" + sys_var_cls_name + ")))) {\n")
-    wfile.write("        ret = OB_ALLOCATE_MEMORY_FAILED;\n")
-    wfile.write("        LOG_ERROR(\"fail to alloc memory\", K(ret), K(sizeof(" + sys_var_cls_name + ")));\n")
-    wfile.write("      } else if (OB_ISNULL(sys_var_ptr = new (ptr)" + sys_var_cls_name + "())) {\n")
-    wfile.write("        ret = OB_ALLOCATE_MEMORY_FAILED;\n")
-    wfile.write("        LOG_ERROR(\"fail to new " + sys_var_cls_name + "\", K(ret));\n")
-    wfile.write("      }\n")
+    wfile.write("    case share::SYS_VAR_" + str(name).upper() + ": {\n")
+    wfile.write("      ret = create_one_sys_var<" + sys_var_cls_name + ">(allocator_, sys_var_ptr, \"" + sys_var_cls_name + "\");\n")
     wfile.write("      break;\n")
     wfile.write("    }\n")
   wfile.write("""
@@ -1008,15 +1065,15 @@ int ObSysVarFactory::create_sys_var(ObIAllocator &allocator_, ObSysVarClassType 
   return ret;
 }
 
-int ObSysVarFactory::create_sys_var(ObSysVarClassType sys_var_id, ObBasicSysVar *&sys_var, int64_t store_idx)
+int ObSysVarFactory::create_sys_var(share::ObSysVarClassType sys_var_id, ObBasicSysVar *&sys_var, int64_t store_idx)
 {
   int ret = OB_SUCCESS;
   ObBasicSysVar *sys_var_ptr = NULL;
   if (OB_FAIL(try_init_store_mem())) {
     LOG_WARN("fail to init", K(ret));
-  } else if (-1 == store_idx && OB_FAIL(calc_sys_var_store_idx(sys_var_id, store_idx))) {
+  } else if (-1 == store_idx && OB_FAIL(share::ObSysVarMeta::calc_sys_var_store_idx(sys_var_id, store_idx))) {
     LOG_WARN("fail to calc sys var store idx", K(ret), K(sys_var_id));
-  } else if (store_idx < 0 || store_idx >= ALL_SYS_VARS_COUNT) {
+  } else if (store_idx < 0 || store_idx >= share::ObSysVarMeta::ALL_SYS_VARS_COUNT) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected store idx", K(ret), K(store_idx), K(sys_var_id));
   } else if (OB_NOT_NULL(store_[store_idx])) {
@@ -1069,6 +1126,7 @@ def calc_flags_from_str(flags_str):
 def gen_sys_vars_dict_script_for_upgrade(filename, list_sorted_by_id):
   os.chmod(filename, stat.S_IRUSR + stat.S_IWUSR + stat.S_IRGRP + stat.S_IROTH)
   wfile = open(filename, 'w')
+  wfile.write(file_head_annotation)
   annotation_is_written = False
   wfile.write('#!/usr/bin/env python\n')
   wfile.write('# -*- coding: utf-8 -*-\n')
@@ -1081,64 +1139,44 @@ def gen_sys_vars_dict_script_for_upgrade(filename, list_sorted_by_id):
   os.chmod(filename, stat.S_IRUSR + stat.S_IRGRP + stat.S_IROTH)
   print("Generate " + str(filename) + " successfully!\n")
 
-def gen_upgrade_script():
-  print('\n=========run gen_upgrade_scripts.py, begin=========\n')
-  info = os.popen('cd ../../../tools/upgrade/; ./gen_upgrade_scripts.py;')
-  print(info.read())
-  print('\n=========run gen_upgrade_scripts.py, end=========\n')
-
 def generate_essential_sys_vars_in_init_cpp(cpp_filename, list_sorted_by_id):
-  """
-  Generate ESSENTIAL_SYS_VARS array in ob_system_variable_init.cpp which is used for inner session initialization,
-  including:
-  1. some essential vars (such as ob_compatibility_mode, sql_mode, ob_read_consistency)
-  2. all system vars with INFLUENCE_PLAN flag
-  """
-  # some essential vars
   essential_core_vars = [
     "ob_compatibility_mode",
     "sql_mode",
     "ob_read_consistency",
-    "lower_case_table_names",      # needed for table name resolution in SQL parsing
-    "collation_connection",        # needed for expression resolution in SQL parsing
-    "character_set_connection",     # needed for expression resolution in SQL parsing
+    "lower_case_table_names",
+    "collation_connection",
+    "character_set_connection",
     "ob_check_sys_variable",
     "ob_compatibility_version",
-    "ob_log_level",                # needed for process_session_variable_fast
-    "debug_sync",                   # needed for process_session_variable_fast
-    "ob_global_debug_sync",         # needed for process_session_variable_fast
-    "wait_timeout",                 # needed for process_session_variable_fast
+    "ob_log_level",
+    "debug_sync",
+    "ob_global_debug_sync",
+    "wait_timeout",
   ]
 
   essential_vars = []
   influence_plan_vars = []
 
-  # iterate all system vars
   for (name, attributes) in list_sorted_by_id:
     var_name_upper = "SYS_VAR_" + name.upper()
 
-    # check if it is an essential var
     if name in essential_core_vars:
       essential_vars.append((var_name_upper, name, "core"))
-    # check if it has INFLUENCE_PLAN flag
     elif "INFLUENCE_PLAN" in attributes["flags"]:
       influence_plan_vars.append((var_name_upper, name, "influence_plan"))
 
-  # sort the vars by the order of the original array: first core vars, then influence_plan vars
   essential_vars.extend(influence_plan_vars)
 
-  # read the existing cpp file
   import codecs
   with codecs.open(cpp_filename, 'r', encoding='utf-8') as rfile:
     content = rfile.read()
 
-  # generate ESSENTIAL_SYS_VARS array content
   essential_array_content = []
   essential_array_content.append('// Auto-generated ESSENTIAL_SYS_VARS array for inner session initialization')
   essential_array_content.append('// These variables are frequently used in session initialization, tenant processing, schema setting and other critical processes')
   essential_array_content.append('const ObSysVarClassType ESSENTIAL_SYS_VARS[] = {')
 
-  # write core vars comment
   core_vars_written = False
   influence_plan_vars_written = False
 
@@ -1151,7 +1189,6 @@ def generate_essential_sys_vars_in_init_cpp(cpp_filename, list_sorted_by_id):
       essential_array_content.append('  // all system vars with INFLUENCE_PLAN flag - affect execution plan generation')
       influence_plan_vars_written = True
 
-    # add variable comment
     comment = "  " + var_name_upper + ","
     if var_type == "influence_plan":
       comment += "        // " + name
@@ -1162,7 +1199,6 @@ def generate_essential_sys_vars_in_init_cpp(cpp_filename, list_sorted_by_id):
   essential_array_content.append('const int64_t ESSENTIAL_SYS_VARS_COUNT = sizeof(ESSENTIAL_SYS_VARS) / sizeof(ESSENTIAL_SYS_VARS[0]);')
   essential_array_content.append('')
 
-  # find the position to insert the array (after static variables but before VarsInit)
   lines = content.split('\n')
   insert_pos = -1
 
@@ -1174,10 +1210,8 @@ def generate_essential_sys_vars_in_init_cpp(cpp_filename, list_sorted_by_id):
   if insert_pos == -1:
     raise Exception("Could not find insertion point in ob_system_variable_init.cpp")
 
-  # insert the essential vars array
   lines[insert_pos:insert_pos] = [''] + essential_array_content
 
-  # write back to file
   os.chmod(cpp_filename, stat.S_IRUSR + stat.S_IWUSR + stat.S_IRGRP + stat.S_IROTH)
   with codecs.open(cpp_filename, 'w', encoding='utf-8') as wfile:
     wfile.write('\n'.join(lines))
@@ -1185,31 +1219,39 @@ def generate_essential_sys_vars_in_init_cpp(cpp_filename, list_sorted_by_id):
 
   print("Generate ESSENTIAL_SYS_VARS array in " + str(cpp_filename) + " successfully!")
   print("Generated " + str(len(essential_vars)) + " essential system variables:")
-  print("  - " + str(len([v for v in essential_vars if v[2] == 'core'])) + " core variables")
-  print("  - " + str(len([v for v in essential_vars if v[2] == 'influence_plan'])) + " INFLUENCE_PLAN variables")
 
 pdir = "share/system_variable"
+sql_pdir = "sql/session"
 json_file_name = "ob_system_variable_init.json"
 head_file_name = "ob_system_variable_init.h"
 cpp_file_name =  "ob_system_variable_init.cpp"
 alias_file_name ="ob_system_variable_alias.h"
 sys_var_class_type_head_file_name = "ob_sys_var_class_type.h"
-sys_var_fac_head_file_name = "ob_system_variable_factory.h"
-sys_var_fac_cpp_file_name = "ob_system_variable_factory.cpp"
+# New split output files
+sys_var_meta_head_file_name = "ob_sys_var_meta.h"
+sys_var_meta_cpp_file_name = "ob_sys_var_meta.cpp"
+sys_var_sql_head_file_name = "ob_system_variable_factory.h"
+sys_var_sql_cpp_file_name = "ob_system_variable_factory.cpp"
 #sys_vars_dict_script_file_name = "../../../tools/upgrade/sys_vars_dict.py"
 
 (json_Dict, list_sorted_by_name, list_sorted_by_id) = parse_json(json_file_name)
 
+# Generate share metadata files (unchanged from old generator)
 make_head_file(pdir, head_file_name, list_sorted_by_id)
 make_cpp_file(pdir, cpp_file_name, list_sorted_by_id)
 make_alias_file(pdir, alias_file_name, list_sorted_by_id)
-
 make_sys_var_class_type_h(pdir, sys_var_class_type_head_file_name, list_sorted_by_id)
-make_sys_var_h(pdir, sys_var_fac_head_file_name, list_sorted_by_id)
-make_sys_var_cpp(pdir, sys_var_fac_cpp_file_name, list_sorted_by_name, list_sorted_by_id)
 
-# generate ESSENTIAL_SYS_VARS array in ob_system_variable_init.cpp
+# Generate new split files
+# Share metadata: ObSysVarMeta (in same directory as other share files)
+make_sys_var_meta_h(pdir, sys_var_meta_head_file_name, list_sorted_by_id)
+make_sys_var_meta_cpp(pdir, sys_var_meta_cpp_file_name, list_sorted_by_name, list_sorted_by_id)
+
+# SQL behavior: per-var classes + ObSysVarFactory runtime (in sql/session/)
+make_sys_var_sql_h(sql_pdir, "../../" + sql_pdir + "/" + sys_var_sql_head_file_name, list_sorted_by_id)
+make_sys_var_sql_cpp(sql_pdir, "../../" + sql_pdir + "/" + sys_var_sql_cpp_file_name, list_sorted_by_name, list_sorted_by_id)
+
+# Generate ESSENTIAL_SYS_VARS array in ob_system_variable_init.cpp
 generate_essential_sys_vars_in_init_cpp(cpp_file_name, list_sorted_by_id)
 
 #gen_sys_vars_dict_script_for_upgrade(sys_vars_dict_script_file_name, list_sorted_by_id)
-#gen_upgrade_script()

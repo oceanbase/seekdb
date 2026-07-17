@@ -73,7 +73,7 @@ public:
   ObSharedObjectsWriteCtx()
     : addr_(), block_ids_(), next_opt_()
   {
-    block_ids_.set_attr(ObMemAttr(MTL_ID(), "SharedBlkWCtx"));
+    block_ids_.set_attr(ObMemAttr("SharedBlkWCtx"));
   }
   ~ObSharedObjectsWriteCtx();
   bool is_valid() const;
@@ -271,12 +271,11 @@ class ObSharedObjectReaderWriter final
 {
 private:
   struct ObSharedObjectWriteArgs;
+  struct ObSharedObjectWriteSession;
 public:
   ObSharedObjectReaderWriter();
   ~ObSharedObjectReaderWriter();
-  int init(
-      const bool need_align = true,
-      const bool need_cross = false);
+  int init();
   void reset();
   void get_cur_shared_block(blocksstable::MacroBlockId &macro_id);
   static int async_read(const ObSharedObjectReadInfo &read_info, ObSharedObjectReadHandle &shared_obj_handle);
@@ -299,34 +298,37 @@ public:
       ObSharedObjectLinkHandle &shared_obj_handle);
 private:
   int inner_async_write(
+      ObSharedObjectWriteSession &write_session,
       const ObSharedObjectWriteInfo &write_info,
       const ObSharedObjectWriteArgs &write_args,
       ObSharedObjectBaseHandle &shared_obj_handle,
       ObSharedObjectsWriteCtx &write_ctx);
   int write_block(
+      ObSharedObjectWriteSession &write_session,
       const ObSharedObjectWriteInfo &write_info,
       const ObSharedObjectWriteArgs &write_args,
       ObSharedObjectBaseHandle &shared_obj_handle,
-      ObSharedObjectsWriteCtx &write_ctx); // not cross
-  int write_cross_block(
-      const ObSharedObjectWriteInfo &write_info,
-      const ObSharedObjectWriteArgs &write_args,
-      ObSharedObjectBaseHandle &shared_obj_handle); // cross
+      ObSharedObjectsWriteCtx &write_ctx);
   int calc_store_size(
       const int64_t total_size,
       const bool need_align,
       int64_t &store_size,
       int64_t &align_store_size);
   int inner_write_block(
+      ObSharedObjectWriteSession &write_session,
       const ObSharedObjectHeader &header,
       const ObSharedObjectWriteInfo &write_info,
       const ObSharedObjectWriteArgs &write_args,
       ObSharedObjectBaseHandle &shared_obj_handle,
       ObSharedObjectsWriteCtx &write_ctx);
-  int switch_object(blocksstable::ObStorageObjectHandle &object_handle,
+  int switch_object(ObSharedObjectWriteSession &write_session,
+                    blocksstable::ObStorageObjectHandle &object_handle,
                     const blocksstable::ObStorageObjectOpt &next_opt);
-  int do_switch(const blocksstable::ObStorageObjectOpt &opt);
-  int reserve_header();
+  int do_switch(ObSharedObjectWriteSession &write_session,
+                const blocksstable::ObStorageObjectOpt &opt);
+  int reserve_header(ObSharedObjectWriteSession &write_session);
+  int ensure_data_buffer_for_write_(ObSharedObjectWriteSession &write_session);
+  int check_object_size_(const int64_t total_size, const bool need_align);
 private:
 struct ObSharedObjectWriteArgs final
 {
@@ -344,14 +346,11 @@ public:
 };
 private:
   lib::ObMutex mutex_;
-  blocksstable::ObSelfBufferWriter data_;
   blocksstable::ObStorageObjectHandle object_handle_;
   int64_t offset_;
   int64_t align_offset_;
   int64_t write_align_size_;
   bool hanging_;
-  bool need_align_;
-  bool need_cross_;
   bool is_inited_;
   DISALLOW_COPY_AND_ASSIGN(ObSharedObjectReaderWriter);
 };

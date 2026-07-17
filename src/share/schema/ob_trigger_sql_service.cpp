@@ -32,21 +32,21 @@ int ObTriggerSqlService::create_trigger(const ObTriggerInfo &trigger_info,
                                         const ObString *ddl_stmt_str)
 {
   int ret = OB_SUCCESS;
-  ObDMLExecHelper exec(sql_client, trigger_info.get_exec_tenant_id());
+  ObDMLExecHelper exec(sql_client);
   ObDMLSqlSplicer dml;
   int64_t affected_rows = 0;
   OV (trigger_info.is_valid(), OB_INVALID_ARGUMENT, trigger_info);
   // insert or update all_trigger.
   OZ (fill_dml_sql(trigger_info, trigger_info.get_schema_version(), dml));
   if (is_replace) {
-    OZ (exec.exec_update(OB_ALL_TENANT_TRIGGER_TNAME, dml, affected_rows));
+    OZ (exec.exec_update(OB_ALL_TRIGGER_TNAME, dml, affected_rows));
   } else {
-    OZ (exec.exec_insert(OB_ALL_TENANT_TRIGGER_TNAME, dml, affected_rows));
+    OZ (exec.exec_insert(OB_ALL_TRIGGER_TNAME, dml, affected_rows));
   }
   OV (is_single_row(affected_rows), OB_ERR_UNEXPECTED, affected_rows);
   // insert all_trigger_history.
   OZ (dml.add_column("is_deleted", 0));
-  OZ (exec.exec_insert(OB_ALL_TENANT_TRIGGER_HISTORY_TNAME, dml, affected_rows));
+  OZ (exec.exec_insert(OB_ALL_TRIGGER_HISTORY_TNAME, dml, affected_rows));
   OV (is_single_row(affected_rows), OB_ERR_UNEXPECTED, affected_rows);
   OZ (log_trigger_operation(trigger_info, trigger_info.get_schema_version(),
                             OB_DDL_CREATE_TRIGGER, ddl_stmt_str, sql_client));
@@ -60,7 +60,7 @@ int ObTriggerSqlService::drop_trigger(const ObTriggerInfo &trigger_info,
                                       const ObString *ddl_stmt_str)
 {
   int ret = OB_SUCCESS;
-  ObDMLExecHelper exec(sql_client, trigger_info.get_exec_tenant_id());
+  ObDMLExecHelper exec(sql_client);
   ObDMLSqlSplicer dml;
   int64_t affected_rows = 0;
   ObSchemaOperationType drop_type = OB_INVALID_DDL_OP;
@@ -68,16 +68,16 @@ int ObTriggerSqlService::drop_trigger(const ObTriggerInfo &trigger_info,
   OZ (fill_dml_sql(trigger_info, new_schema_version, dml));
   // update or delete all_trigger.
   if (drop_to_recyclebin) {
-    OZ (exec.exec_update(OB_ALL_TENANT_TRIGGER_TNAME, dml, affected_rows));
+    OZ (exec.exec_update(OB_ALL_TRIGGER_TNAME, dml, affected_rows));
     OX (drop_type = OB_DDL_DROP_TRIGGER_TO_RECYCLEBIN);
   } else {
-    OZ (exec.exec_delete(OB_ALL_TENANT_TRIGGER_TNAME, dml, affected_rows));
+    OZ (exec.exec_delete(OB_ALL_TRIGGER_TNAME, dml, affected_rows));
     OX (drop_type = OB_DDL_DROP_TRIGGER);
   }
   OV (is_single_row(affected_rows), OB_ERR_UNEXPECTED, affected_rows);
   // insert all_trigger_history.
   OZ (dml.add_column("is_deleted", drop_to_recyclebin ? 0 : 1));
-  OZ (exec.exec_insert(OB_ALL_TENANT_TRIGGER_HISTORY_TNAME, dml, affected_rows));
+  OZ (exec.exec_insert(OB_ALL_TRIGGER_HISTORY_TNAME, dml, affected_rows));
   OV (is_single_row(affected_rows), OB_ERR_UNEXPECTED, affected_rows);
   OZ (log_trigger_operation(trigger_info, new_schema_version,
                             drop_type, ddl_stmt_str, sql_client));
@@ -90,15 +90,15 @@ int ObTriggerSqlService::alter_trigger(const ObTriggerInfo &trigger_info,
                                        const ObString *ddl_stmt_str)
 {
   int ret = OB_SUCCESS;
-  ObDMLExecHelper exec(sql_client, trigger_info.get_exec_tenant_id());
+  ObDMLExecHelper exec(sql_client);
   ObDMLSqlSplicer dml;
   int64_t affected_rows = 0;
   OV (trigger_info.is_valid(), OB_INVALID_ARGUMENT, trigger_info);
   OZ (fill_dml_sql(trigger_info, new_schema_version, dml));
   // alter trigger disable/enable
-  OZ (exec.exec_update(OB_ALL_TENANT_TRIGGER_TNAME, dml, affected_rows));
+  OZ (exec.exec_update(OB_ALL_TRIGGER_TNAME, dml, affected_rows));
   OZ (dml.add_column("is_deleted", 0));
-  OZ (exec.exec_insert(OB_ALL_TENANT_TRIGGER_HISTORY_TNAME, dml, affected_rows));
+  OZ (exec.exec_insert(OB_ALL_TRIGGER_HISTORY_TNAME, dml, affected_rows));
   OV (is_single_row(affected_rows), OB_ERR_UNEXPECTED, affected_rows);
   OZ (log_trigger_operation(trigger_info, new_schema_version, OB_DDL_ALTER_TRIGGER, ddl_stmt_str,
                             sql_client));
@@ -106,13 +106,13 @@ int ObTriggerSqlService::alter_trigger(const ObTriggerInfo &trigger_info,
 }
 
 
-int ObTriggerSqlService::flashback_trigger(const ObTriggerInfo &trigger_info,
+int ObTriggerSqlService::restore_trigger(const ObTriggerInfo &trigger_info,
                                            int64_t new_schema_version,
                                            ObISQLClient &sql_client)
 {
   int ret = OB_SUCCESS;
   ObTriggerValues new_values;
-  ObDMLExecHelper exec(sql_client, trigger_info.get_exec_tenant_id());
+  ObDMLExecHelper exec(sql_client);
   ObDMLSqlSplicer dml;
   int64_t affected_rows = 0;
   OV (trigger_info.is_valid(), OB_INVALID_ARGUMENT, trigger_info);
@@ -120,14 +120,14 @@ int ObTriggerSqlService::flashback_trigger(const ObTriggerInfo &trigger_info,
   OX (new_values.set_trigger_name(trigger_info.get_trigger_name()));
   // update all_trigger.
   OZ (fill_dml_sql(trigger_info, new_values, new_schema_version, dml));
-  OZ (exec.exec_update(OB_ALL_TENANT_TRIGGER_TNAME, dml, affected_rows));
+  OZ (exec.exec_update(OB_ALL_TRIGGER_TNAME, dml, affected_rows));
   OV (is_single_row(affected_rows), OB_ERR_UNEXPECTED, affected_rows);
   // insert all_trigger_history.
   OZ (dml.add_column("is_deleted", 0));
-  OZ (exec.exec_insert(OB_ALL_TENANT_TRIGGER_HISTORY_TNAME, dml, affected_rows));
+  OZ (exec.exec_insert(OB_ALL_TRIGGER_HISTORY_TNAME, dml, affected_rows));
   OV (is_single_row(affected_rows), OB_ERR_UNEXPECTED, affected_rows);
   OZ (log_trigger_operation(trigger_info, new_schema_version,
-                            OB_DDL_FLASHBACK_TRIGGER, NULL, sql_client));
+                            OB_DDL_RESTORE_TRIGGER_FROM_RECYCLEBIN, NULL, sql_client));
   return ret;
 }
 
@@ -142,26 +142,22 @@ int ObTriggerSqlService::rebuild_trigger_on_rename(const ObTriggerInfo &trigger_
   ObString spec_source;
   ObString body_source;
   ObArenaAllocator inner_alloc;
-  ObDMLExecHelper exec(sql_client, trigger_info.get_exec_tenant_id());
+  ObDMLExecHelper exec(sql_client);
   ObDMLSqlSplicer dml;
   int64_t affected_rows = 0;
-  bool is_oracle_mode = false;
   ObTriggerInfo new_trigger_info(&inner_alloc);
   OV (trigger_info.is_valid(), OB_INVALID_ARGUMENT, trigger_info);
   OZ (new_trigger_info.deep_copy(trigger_info));
-  OZ (ObCompatModeGetter::check_is_oracle_mode_with_table_id(new_trigger_info.get_tenant_id(),
-                                                             new_trigger_info.get_base_object_id(),
-                                                             is_oracle_mode));
   OZ (ObTriggerInfo::replace_table_name_in_body(new_trigger_info, inner_alloc, base_object_database,
-                                                base_object_name, is_oracle_mode));
+                                                base_object_name));
 
   // update all_trigger.
   OZ (fill_dml_sql(new_trigger_info, new_schema_version, dml));
-  OZ (exec.exec_update(OB_ALL_TENANT_TRIGGER_TNAME, dml, affected_rows));
+  OZ (exec.exec_update(OB_ALL_TRIGGER_TNAME, dml, affected_rows));
   OV (is_single_row(affected_rows), OB_ERR_UNEXPECTED, affected_rows);
   // insert all_trigger_history.
   OZ (dml.add_column("is_deleted", 0));
-  OZ (exec.exec_insert(OB_ALL_TENANT_TRIGGER_HISTORY_TNAME, dml, affected_rows));
+  OZ (exec.exec_insert(OB_ALL_TRIGGER_HISTORY_TNAME, dml, affected_rows));
   OV (is_single_row(affected_rows), OB_ERR_UNEXPECTED, affected_rows);
   OZ (log_trigger_operation(new_trigger_info, new_schema_version,
                             op_type, NULL, sql_client));
@@ -198,17 +194,12 @@ int ObTriggerSqlService::fill_dml_sql(const ObTriggerInfo &trigger_info,
   const ObString &body_source = new_values.new_body_source() ?
                                   new_values.get_body_source() :
                                   trigger_info.get_package_body_source();
-  uint64_t exec_tenant_id = trigger_info.get_exec_tenant_id();
-  uint64_t pure_tenant_id = ObSchemaUtils::get_extract_tenant_id(exec_tenant_id,
-                                                                 trigger_info.get_tenant_id());
-  uint64_t pure_trigger_id = ObSchemaUtils::get_extract_schema_id(exec_tenant_id,
-                                                                  trigger_info.get_trigger_id());
-  uint64_t pure_owner_id = ObSchemaUtils::get_extract_schema_id(exec_tenant_id,
-                                                                trigger_info.get_owner_id());
-  uint64_t pure_database_id = ObSchemaUtils::get_extract_schema_id(exec_tenant_id,
-                                                                   database_id);
-  uint64_t pure_base_object_id = ObSchemaUtils::get_extract_schema_id(exec_tenant_id,
-                                                                      base_object_id);
+  
+  
+  uint64_t pure_trigger_id = ObSchemaUtils::get_extract_schema_id(trigger_info.get_trigger_id());
+  uint64_t pure_owner_id = ObSchemaUtils::get_extract_schema_id(trigger_info.get_owner_id());
+  uint64_t pure_database_id = ObSchemaUtils::get_extract_schema_id(database_id);
+  uint64_t pure_base_object_id = ObSchemaUtils::get_extract_schema_id(base_object_id);
   OZ (dml.add_pk_column("trigger_id", pure_trigger_id));
   OZ (dml.add_column("owner_id", pure_owner_id));
   OZ (dml.add_column("database_id", pure_database_id));
@@ -260,7 +251,6 @@ int ObTriggerSqlService::log_trigger_operation(const ObTriggerInfo &trigger_info
 {
   int ret = OB_SUCCESS;
   ObSchemaOperation opt;
-  OX (opt.tenant_id_ = trigger_info.get_tenant_id());
   OX (opt.database_id_ = trigger_info.get_database_id());
   OX (opt.table_id_ = trigger_info.get_trigger_id());
   OX (opt.schema_version_ = new_schema_version);

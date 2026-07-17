@@ -82,8 +82,8 @@ static int calc_or_expr2(const ObDatum &left, const ObDatum &right, ObDatum &res
 //    report OB_ERR_TRUNCATED_WRONG_VALUE_FOR_FIELD, but for compatibility with MySQL, special handling will be performed here,
 //    Overwrite the error code, and the result of or should be NULL rather than 0
 //
-// The special handling mentioned above for empty strings is specific to MySQL, because in Oracle mode both sub-nodes on either side of OR must be present
-// Boolean semantic expression, will not be an empty string directly
+// The special handling mentioned above applies when an empty string reaches OR
+// evaluation directly.
 int calc_or_exprN(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum)
 {
   int ret = OB_SUCCESS;
@@ -392,4 +392,3 @@ int ObExprOr::eval_or_vector(const ObExpr &expr,
 
 }
 }
-

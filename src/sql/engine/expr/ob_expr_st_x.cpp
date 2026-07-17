@@ -73,8 +73,8 @@ int ObExprSTCoordinate::eval_common(const ObExpr &expr,
   int num_args = expr.arg_cnt_;
   ObDatum *datum = NULL;
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
-  uint64_t tenant_id = ObMultiModeExprHelper::get_tenant_id(ctx.exec_ctx_.get_my_session());
-  MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator(), expr.type_, tenant_id, ret, func_name);
+  
+  MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator(), expr.type_, ret, func_name);
   ObIWkbPoint *point = NULL;
   omt::ObSrsCacheGuard srs_guard;
   const ObSrsItem *srs = NULL;

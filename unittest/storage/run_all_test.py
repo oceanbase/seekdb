@@ -40,7 +40,6 @@ quick_list = {
                           'test_range_iterator',
                          ),
                   '../clog/' : (
-                                # 'test_fetch_log_engine',
                                 'test_log_allocator',
                                 'test_log_callback_engine',
                                 'test_log_checksum_V2',

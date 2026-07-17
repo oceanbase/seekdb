@@ -141,7 +141,7 @@ int ObMacroBlockDataIterator::next_micro_block(ObMicroBlock &micro_block)
 
 ObIndexBlockMicroIterator::ObIndexBlockMicroIterator()
   : data_iter_(), range_(), micro_block_(),
-    macro_handle_(), allocator_("IBMI_IOUB", OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID()), is_inited_(false) {}
+    macro_handle_(), allocator_("IBMI_IOUB", OB_MALLOC_NORMAL_BLOCK_SIZE), is_inited_(false) {}
 
 void ObIndexBlockMicroIterator::reset()
 {
@@ -161,18 +161,14 @@ int ObIndexBlockMicroIterator::init(
     const ObSSTable *sstable)
 {
   int ret = OB_SUCCESS;
-  const bool is_normal_cg = sstable->is_normal_cg_sstable();
-
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
     LOG_WARN("Init twice", K(ret));
   } else if (OB_UNLIKELY(!table_read_info.is_valid() || !macro_desc.is_valid())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("Unexpected read info", K(ret), K(table_read_info), K(macro_desc));
-  } else if (is_normal_cg && OB_FAIL(rowkey_helper_.trans_to_cg_range(macro_desc.start_row_offset_, macro_desc.range_))) {
-      STORAGE_LOG(WARN, "failed to trans cg range", K(ret), K(macro_desc));
   } else {
-    range_ = is_normal_cg ? rowkey_helper_.get_result_range() : macro_desc.range_;
+    range_ = macro_desc.range_;
   }
 
   if (OB_FAIL(ret)) {
@@ -187,7 +183,7 @@ int ObIndexBlockMicroIterator::init(
     read_info.io_desc_.set_sys_module_id(ObIOModule::INDEX_BLOCK_MICRO_ITER_IO);
     read_info.io_timeout_ms_ = std::max(GCONF._data_storage_io_timeout / 1000, DEFAULT_IO_WAIT_TIME_MS);
     read_info.macro_block_id_ = macro_desc.macro_block_id_;
-    read_info.mtl_tenant_id_ = MTL_ID();
+    
 
     if (OB_ISNULL(read_info.buf_ = reinterpret_cast<char*>(allocator_.alloc(read_info.size_)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
@@ -201,11 +197,10 @@ int ObIndexBlockMicroIterator::init(
         // shared-storage mode write independent files which are 4KB alignment.
         // cannot check read size in shared-storage mode.
         // e.g., in shared-storage mode, one 100KB macro file, but try read 2MB, real-read-size is 100KB.
-        || (!GCTX.is_shared_storage_mode() && OB_UNLIKELY(macro_handle_.get_data_size() != read_info.size_))) {
+        || (OB_UNLIKELY(macro_handle_.get_data_size() != read_info.size_))) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("buf is null or buf size is too small, ",
           K(ret), K(macro_desc), KP(macro_handle_.get_buffer()),
-          "is_shared_storage_mode", GCTX.is_shared_storage_mode(),
           K(macro_handle_.get_data_size()), K(read_info.size_));
     } else if (OB_FAIL(data_iter_.init(
         macro_handle_.get_buffer(),

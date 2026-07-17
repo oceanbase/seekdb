@@ -39,8 +39,7 @@ int ObExprAtan::calc_result_typeN(ObExprResType &type,
                                    common::ObExprTypeCtx &type_ctx) const
 {
   int ret = OB_SUCCESS;
-  if (lib::is_mysql_mode()
-             && OB_UNLIKELY(NULL == types || type_num <= 0 || type_num > 2)) {
+  if (OB_UNLIKELY(NULL == types || type_num <= 0 || type_num > 2)) {
     ret = OB_ERR_PARAM_SIZE;
     LOG_WARN("Invalid argument.", K(ret), K(types), K(type_num));
   } else {
@@ -84,7 +83,7 @@ int calc_atan_expr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum)
     if (OB_FAIL(arg0->eval(ctx, y)) || OB_FAIL(arg1->eval(ctx, x))) {
       LOG_WARN("eval arg failed", K(ret), K(expr), KP(y), KP(x));
     } else if (y->is_null() || x->is_null()) {
-      /* arg is already be cast to number type, no need to is_null_oracle */
+      /* arg is already cast to number type, no extra null-type handling needed */
       res_datum.set_null();
     } else if (ObDoubleType == arg0->datum_meta_.type_
               && ObDoubleType == arg1->datum_meta_.type_) {
@@ -102,8 +101,7 @@ int ObExprAtan::cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_expr,
   int ret = OB_SUCCESS;
   UNUSED(expr_cg_ctx);
   UNUSED(raw_expr);
-  if (lib::is_mysql_mode()
-             && OB_UNLIKELY(1 != rt_expr.arg_cnt_ && 2 != rt_expr.arg_cnt_)) {
+  if (OB_UNLIKELY(1 != rt_expr.arg_cnt_ && 2 != rt_expr.arg_cnt_)) {
     ret = OB_ERR_PARAM_SIZE;
     LOG_WARN("invalid arg cnt of expr", K(ret), K(rt_expr));
   } else {

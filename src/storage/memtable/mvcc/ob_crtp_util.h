@@ -19,7 +19,7 @@
 
 #include "share/ob_define.h"
 #include "lib/objectpool/ob_resource_pool.h"
-#include "common/data_buffer.h"
+#include "lib/utility/data_buffer.h"
 
 namespace oceanbase
 {
@@ -50,7 +50,7 @@ public:
   common::ModuleArena &get_arena() { return arena_; }
   void set_allocator(common::ObIAllocator *allocator) { page_allocator_.set_allocator(allocator); }
   void set_label(const char *label) { page_allocator_.set_label(label); arena_.set_label(label); }
-  void set_tenant_id(uint64_t tenant_id) { page_allocator_.set_tenant_id(tenant_id); arena_.set_tenant_id(tenant_id); }
+  
 private:
   common::ModulePageAllocator page_allocator_;
   common::ModuleArena arena_;

@@ -593,7 +593,7 @@ int ObExpandAggregateUtils::expand_var_expr(ObAggFunRawExpr *aggr_expr,
       OB_ISNULL(parma_expr = aggr_expr->get_real_param_exprs().at(0))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected null", K(ret), K(aggr_expr));
-  } else if (lib::is_mysql_mode() && aggr_expr->get_expr_type() == T_FUN_VAR_POP) {
+  } else if (aggr_expr->get_expr_type() == T_FUN_VAR_POP) {
   // In mysql mode, VAR_POP() has the same implementation as VARIANCE()
     if (OB_FAIL(expand_mysql_variance_expr(aggr_expr,
                                            replace_expr,
@@ -630,11 +630,9 @@ int ObExpandAggregateUtils::expand_var_expr(ObAggFunRawExpr *aggr_expr,
       LOG_WARN("failed to build common aggr expr", K(ret));
     } else if (OB_FAIL(add_aggr_item(new_aggr_items, sum_expr))) {
       LOG_WARN("failed to push back aggr item", K(ret));
-    } else if (lib::is_mysql_mode() &&
-               OB_FAIL(add_cast_expr(sum_expr, dst_type, cast_sum_expr))) {
+    } else if (               OB_FAIL(add_cast_expr(sum_expr, dst_type, cast_sum_expr))) {
       LOG_WARN("failed to add cast expr", K(ret));
-    } else if (lib::is_mysql_mode() &&
-               OB_FAIL(ObRawExprUtils::build_common_binary_op_expr(expr_factory_,
+    } else if (               OB_FAIL(ObRawExprUtils::build_common_binary_op_expr(expr_factory_,
                                                                    T_OP_MUL,
                                                                    cast_sum_expr,
                                                                    cast_sum_expr,
@@ -648,8 +646,7 @@ int ObExpandAggregateUtils::expand_var_expr(ObAggFunRawExpr *aggr_expr,
       LOG_WARN("failed to build common aggr expr", K(ret));
     } else if (OB_FAIL(add_aggr_item(new_aggr_items, sum_product_expr))) {
       LOG_WARN("failed to push back aggr item");
-    } else if (lib::is_mysql_mode() &&
-               OB_FAIL(add_cast_expr(sum_product_expr, dst_type, cast_sum_product_expr))) {
+    } else if (               OB_FAIL(add_cast_expr(sum_product_expr, dst_type, cast_sum_product_expr))) {
       LOG_WARN("failed to add cast expr", K(ret));
     } else if (OB_FAIL(ObRawExprUtils::build_common_aggr_expr(expr_factory_,
                                                               session_info_,
@@ -665,8 +662,7 @@ int ObExpandAggregateUtils::expand_var_expr(ObAggFunRawExpr *aggr_expr,
                                                                    count_expr,
                                                                    div_expr))) {
         LOG_WARN("failed to build common binary op expr", K(ret));
-    } else if (lib::is_mysql_mode() &&
-               OB_FAIL(ObRawExprUtils::build_common_binary_op_expr(expr_factory_,
+    } else if (               OB_FAIL(ObRawExprUtils::build_common_binary_op_expr(expr_factory_,
                                                                    T_OP_MINUS,
                                                                    cast_sum_product_expr,
                                                                    div_expr,
@@ -1651,7 +1647,7 @@ int ObExpandAggregateUtils::expand_common_aggr_expr(ObAggFunRawExpr *aggr_expr,
       LOG_WARN("failed to expand stddev expr", K(ret));
     }
   } else if (aggr_expr->get_expr_type() == T_FUN_VARIANCE) {
-    if (lib::is_mysql_mode() && OB_FAIL(expand_mysql_variance_expr(aggr_expr,
+    if (OB_FAIL(expand_mysql_variance_expr(aggr_expr,
                                                                             replace_expr,
                                                                             new_aggr_items))) {
       LOG_WARN("failed to expand mysql variance expr", K(ret));
@@ -1724,7 +1720,7 @@ int ObExpandAggregateUtils::expand_avg_expr(ObAggFunRawExpr *aggr_expr,
         if (OB_FAIL(add_aggr_item(new_aggr_items, count_expr))) {
           LOG_WARN("failed to push back aggr item");
         } else if (OB_FAIL(ObRawExprUtils::build_common_binary_op_expr(expr_factory_,
-                                                                      expand_for_mv_ ? T_OP_DIV : T_OP_AGG_DIV,
+                                                                      T_OP_AGG_DIV,
                                                                       sum_expr,
                                                                       count_expr,
                                                                       div_expr))) {
@@ -1775,7 +1771,7 @@ int ObExpandAggregateUtils::expand_mysql_variance_expr(ObAggFunRawExpr *aggr_exp
     result_type.set_scale(ObAccuracy(PRECISION_UNKNOWN_YET, SCALE_UNKNOWN_YET).get_scale());
     result_type.set_precision(ObAccuracy(PRECISION_UNKNOWN_YET, SCALE_UNKNOWN_YET).get_precision());
     if (OB_FAIL(ObRawExprUtils::build_common_binary_op_expr(expr_factory_,
-                                                            expand_for_mv_ ? T_OP_MUL : T_OP_AGG_MUL,
+                                                            T_OP_AGG_MUL,
                                                             parma_expr,
                                                             parma_expr,
                                                             multi_expr))) {
@@ -1817,31 +1813,31 @@ int ObExpandAggregateUtils::expand_mysql_variance_expr(ObAggFunRawExpr *aggr_exp
     } else if (OB_FAIL(add_aggr_item(new_aggr_items, count_product_expr))) {
       LOG_WARN("failed to push back aggr item");
     } else if (OB_FAIL(ObRawExprUtils::build_common_binary_op_expr(expr_factory_,
-                                                            expand_for_mv_ ? T_OP_MUL : T_OP_AGG_MUL,
+                                                            T_OP_AGG_MUL,
                                                             cast_sum_expr,
                                                             cast_sum_expr,
                                                             multi_sum_expr))) {
       LOG_WARN("failed to build common binary op expr", K(ret));
     } else if (OB_FAIL(ObRawExprUtils::build_common_binary_op_expr(expr_factory_,
-                                                                   expand_for_mv_ ? T_OP_MUL : T_OP_AGG_MUL,
+                                                                   T_OP_AGG_MUL,
                                                                    count_expr,
                                                                    count_expr,
                                                                    multi_count_expr))) {
       LOG_WARN("failed to build common binary op expr", K(ret));
     } else if (OB_FAIL(ObRawExprUtils::build_common_binary_op_expr(expr_factory_,
-                                                                   expand_for_mv_ ? T_OP_DIV : T_OP_AGG_DIV,
+                                                                   T_OP_AGG_DIV,
                                                                    multi_sum_expr,
                                                                    multi_count_expr,
                                                                    div_expr))) {
       LOG_WARN("failed to build common binary op expr", K(ret));
     } else if (OB_FAIL(ObRawExprUtils::build_common_binary_op_expr(expr_factory_,
-                                                                   expand_for_mv_ ? T_OP_DIV : T_OP_AGG_DIV,
+                                                                   T_OP_AGG_DIV,
                                                                    cast_sum_product_expr,
                                                                    count_product_expr,
                                                                    div_multi_expr))) {
       LOG_WARN("failed to build common binary op expr", K(ret));
     } else if (OB_FAIL(ObRawExprUtils::build_common_binary_op_expr(expr_factory_,
-                                                                   expand_for_mv_ ? T_OP_MINUS : T_OP_AGG_MINUS,
+                                                                   T_OP_AGG_MINUS,
                                                                    div_multi_expr,
                                                                    div_expr,
                                                                    minus_expr))) {
@@ -1880,8 +1876,7 @@ int ObExpandAggregateUtils::expand_stddev_expr(ObAggFunRawExpr *aggr_expr,
       LOG_WARN("failed to build common aggr expr", K(ret));
     } else {
       variance_expr->set_param_distinct(aggr_expr->is_param_distinct());
-      if (lib::is_mysql_mode() &&
-                 OB_FAIL(expand_mysql_variance_expr(variance_expr,
+      if (                 OB_FAIL(expand_mysql_variance_expr(variance_expr,
                                                     sqrt_param_expr, new_aggr_items))) {
         LOG_WARN("fail to expand mysql variance expr", K(ret));
       } else if (OB_FAIL(expr_factory_.create_raw_expr(T_FUN_SYS_SQRT, sqrt_expr))) {
@@ -2169,4 +2164,3 @@ int ObExpandAggregateUtils::add_win_exprs(ObSelectStmt *select_stmt,
 
 } // namespace sql
 } // namespace oceanbase
-

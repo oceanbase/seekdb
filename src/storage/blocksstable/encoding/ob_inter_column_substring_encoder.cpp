@@ -35,8 +35,8 @@ ObInterColSubStrEncoder::ObInterColSubStrEncoder()
       fix_data_size_(-1), start_pos_byte_(0),
       val_len_byte_(0)
 {
-  start_pos_array_.set_attr(ObMemAttr(MTL_ID(), "IntColSubStrEnc"));
-  exc_row_ids_.set_attr(ObMemAttr(MTL_ID(), "IntColSubStrEnc"));
+  start_pos_array_.set_attr(ObMemAttr("IntColSubStrEnc"));
+  exc_row_ids_.set_attr(ObMemAttr("IntColSubStrEnc"));
 }
 
 ObInterColSubStrEncoder::~ObInterColSubStrEncoder()
@@ -392,8 +392,8 @@ int ObInterColSubStrEncoder::store_fix_data(ObBufferWriter &buf_writer)
   } else {
     EmptyGetter getter;
     ColumnDataSetter setter(*this);
-    if (OB_FAIL(fill_column_store(buf_writer, *ctx_->col_datums_, getter, setter))) {
-      LOG_WARN("fill inter column substr column store failed", K(ret));
+    if (OB_FAIL(fill_fixed_data(buf_writer, *ctx_->col_datums_, getter, setter))) {
+      LOG_WARN("fill fixed data failed", K(ret));
     }
   }
   return ret;

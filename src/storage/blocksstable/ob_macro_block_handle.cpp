@@ -18,8 +18,10 @@
 
 
 #include "ob_macro_block_handle.h"
+#include "storage/blocksstable/ob_block_manager.h"
 #include "share/ob_io_device_helper.h"
-#include "storage/backup/ob_backup_device_wrapper.h"
+#include "share/io/ob_io_manager.h"
+#include "share/rc/ob_tenant_base.h"
 
 namespace oceanbase
 {
@@ -110,27 +112,17 @@ int ObMacroBlockHandle::report_bad_block() const
   return ret;
 }
 
-uint64_t ObMacroBlockHandle::get_tenant_id()
-{
-  uint64_t tenant_id = MTL_ID();
-  if (is_virtual_tenant_id(tenant_id) || 0 == tenant_id) {
-    tenant_id = OB_SERVER_TENANT_ID; // use 500 tenant in io manager
-  }
-  return tenant_id;
-}
+
 
 int ObMacroBlockHandle::async_read(const ObMacroBlockReadInfo &read_info)
 {
   int ret = OB_SUCCESS;
-  int tmp_ret = OB_SUCCESS;
   if (OB_UNLIKELY(!read_info.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid io argument", K(ret), K(read_info), KCSTRING(lbt()));
   } else {
     reuse();
     ObIOInfo io_info;
-    backup::ObBackupWrapperIODevice *backup_device = nullptr;
-    io_info.tenant_id_ = get_tenant_id();
     io_info.offset_ = read_info.offset_;
     io_info.size_ = static_cast<int32_t>(read_info.size_);
     io_info.flag_ = read_info.io_desc_;
@@ -148,32 +140,15 @@ int ObMacroBlockHandle::async_read(const ObMacroBlockReadInfo &read_info)
 
     io_info.flag_.set_read();
     if (io_info.fd_.is_backup_block_file()) {
-      ObStorageIdMod mod;
-      mod.storage_used_mod_ = ObStorageUsedMod::STORAGE_USED_RESTORE;
-      if (OB_FAIL(backup::ObBackupDeviceHelper::get_device_and_fd(io_info.tenant_id_, 
-                                                                  io_info.fd_.first_id_, 
-                                                                  io_info.fd_.second_id_, 
-                                                                  io_info.fd_.third_id_, 
-                                                                  mod,
-                                                                  backup_device,
-                                                                  io_info.fd_))) {
-        LOG_WARN("failed to get backup device and fd", K(ret), K(read_info));
-      }
+      // Backup removed, backup-mode macro blocks cannot exist
+      ret = OB_NOT_SUPPORTED;
+      LOG_WARN("backup block file is not supported", K(ret), K(read_info));
     }
 
     if (FAILEDx(ObIOManager::get_instance().aio_read(io_info, io_handle_))) {
       LOG_WARN("Fail to aio_read", K(read_info), K(ret));
     } else if (OB_FAIL(set_macro_block_id(read_info.macro_block_id_))) {
       LOG_WARN("failed to set macro block id", K(ret));
-    }
-
-    if (OB_NOT_NULL(backup_device)) {
-      // fd ctx is hold by io request, close backup device and fd is safe here.
-      if (OB_TMP_FAIL(backup::ObBackupDeviceHelper::close_device_and_fd(backup_device, 
-                                                                        io_info.fd_))) {
-        LOG_ERROR("failed to close backup device and fd", K(ret), K(tmp_ret), K(read_info));
-        ret = COVER_SUCC(tmp_ret);
-      }
     }
   }
   return ret;
@@ -187,7 +162,7 @@ int ObMacroBlockHandle::async_write(const ObMacroBlockWriteInfo &write_info)
     LOG_WARN("Invalid argument", K(ret), K(write_info));
   } else {
     ObIOInfo io_info;
-    io_info.tenant_id_ = get_tenant_id();
+    
     io_info.offset_ = write_info.offset_;
     io_info.size_ = write_info.size_;
     io_info.buf_ = write_info.buffer_;
@@ -197,9 +172,6 @@ int ObMacroBlockHandle::async_write(const ObMacroBlockWriteInfo &write_info)
     io_info.fd_.second_id_ = macro_id_.second_id();
     io_info.fd_.third_id_ = macro_id_.third_id();
     io_info.fd_.device_handle_ = &LOCAL_DEVICE_INSTANCE;
-    if (OB_FAIL(write_info.fill_io_info_for_backup(macro_id_, io_info))) {
-      LOG_WARN("failed to fill io info for backup", K(ret), K_(macro_id));
-    }
     const int64_t real_timeout_ms = min(write_info.io_timeout_ms_, GCONF._data_storage_io_timeout / 1000L);
     io_info.timeout_us_ = real_timeout_ms * 1000L;
     io_info.flag_.set_sys_module_id(write_info.io_desc_.get_sys_module_id());
@@ -270,7 +242,7 @@ int ObMacroBlockHandle::set_macro_block_id(const MacroBlockId &macro_block_id)
 ObStorageObjectsHandle::ObStorageObjectsHandle()
   : macro_id_list_()
 {
-  macro_id_list_.set_attr(ObMemAttr(OB_SERVER_TENANT_ID, "MacroIdList"));
+  macro_id_list_.set_attr(ObMemAttr("MacroIdList"));
 }
 
 ObStorageObjectsHandle::~ObStorageObjectsHandle()

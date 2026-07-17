@@ -43,8 +43,7 @@ private:
   int resolve_table_names_(const ParseNode &parse_tree,
                            common::ObString &cur_table_name, common::ObString &cur_db_name,
                            common::ObString &inc_table_name, common::ObString &inc_db_name);
-  int get_table_schemas_(const uint64_t tenant_id,
-                         const common::ObString &cur_db_name, const common::ObString &cur_table_name,
+  int get_table_schemas_(const common::ObString &cur_db_name, const common::ObString &cur_table_name,
                          const common::ObString &inc_db_name, const common::ObString &inc_table_name,
                          const share::schema::ObTableSchema *&cur_schema,
                          const share::schema::ObTableSchema *&inc_schema);

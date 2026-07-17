@@ -13,14 +13,14 @@ seekdb 是一个 C++ 项目，需要特定的编译工具链。请根据你的�
 
 ## 支持的操作系统
 
-OceanBase seekdb 并不支持所有的操作系统，特别是 Windows 目前不支持。
+OceanBase seekdb 并不支持所有的操作系统。
 
 这是当前兼容的操作系统列表：
 
 ### Linux
 
-| 操作系统             | 版本                  | 架构             | 兼容性 | 安装包部署 | 二进制部署 | MySQLTest 测试 |
-| ------------------- | --------------------- | ---------------- | ------ | ---------- | ---------- | -------------- |
+| 操作系统             | 版本                  | 架构             | 是否兼容 | 安装包是否可部署 | 编译的二进制文件是否可部署 | 是否测试过 MYSQLTEST |
+| ------------------- | --------------------- | ---------------- | -------- | ---------------- | -------------------------- | -------------------- |
 | Alibaba Cloud Linux | 3                     | x86_64 / aarch64 | ✅     | ✅          | ✅          | ✅              |
 | CentOS              | 7 / 8 / 9             | x86_64 / aarch64 | ✅     | ✅          | ✅          | ✅              |
 | Debian              | 11 / 12 / 13          | x86_64 / aarch64 | ✅     | ✅          | ✅          | ✅              |
@@ -44,6 +44,17 @@ OceanBase seekdb 并不支持所有的操作系统，特别是 Windows 目前不
 > **注意**：
 >
 > - macOS 仅支持 **macOS 13 (Ventura) 及以上版本**，且仅支持 **Apple Silicon (M1/M2/M3/M4) 芯片**。不支持 Intel 芯片的 Mac。
+
+### Windows
+
+| 操作系统 | 版本 | 架构 | 支持 |
+| ------- | ---- | ---- | ---- |
+| Windows | 11   | x64  | ✅   |
+
+> **注意**：
+>
+> - Windows 平台的编译器、构建工具及第三方库均由 `build.ps1 init` 自动下载到 `deps/3rd`，无需手工安装。
+> - 用户仍需自行准备 Python 3.x 以及 Visual Studio 2022 Build Tools（详见下方安装步骤）。
 
 > **注意**:
 >
@@ -93,6 +104,31 @@ brew install zstd lz4 utf8proc thrift re2 brotli
 ```
 
 > **提示**：如果 Homebrew 下载速度较慢，请参阅 [Homebrew 优化配置](homebrew.md) 设置国内镜像加速。
+
+### Windows
+
+适用于：Windows 11 x64。
+
+**必备依赖**：
+
+- **Python 3.x**：从 [python.org](https://www.python.org/downloads/windows/) 下载安装，安装时勾选 "Add Python to PATH"。
+- **Visual Studio 2022 Build Tools**：从 [Visual Studio 下载页](https://visualstudio.microsoft.com/zh-hans/downloads/) 获取 Build Tools，安装时勾选 **"使用 C++ 的桌面开发"** 工作负载。该负载会一并安装 Windows 11 SDK，提供 `windows.h`、系统导入库以及 `signtool.exe`，是 Clang/LLD 编译 Windows 原生二进制所必需的。
+
+**可选依赖（仅打包时需要）**：
+
+- **.NET 8 SDK**：用于构建 seekdb Configurator 安装向导（WPF）。缺失时 `package` 流程会跳过向导。
+- **WiX v4**：用于生成 MSI 安装包，缺失时会回退到 ZIP 格式。
+  ```powershell
+  dotnet tool install --global wix
+  ```
+
+**自动下载（无需手工安装）**：
+
+CMake、Ninja、LLVM 18、win_flex_bison、OpenSSL 以及全部第三方依赖会在执行下面命令时自动下载到 `deps/3rd`：
+
+```powershell
+.\build.ps1 init
+```
 
 ## 验证安装
 

@@ -17,7 +17,7 @@
 #define USING_LOG_PREFIX SQL_RESV
 #include "sql/resolver/expr/ob_expr_relation_analyzer.h"
 #include "src/sql/resolver/expr/ob_raw_expr.h"
-#include "common/ob_smart_call.h"
+#include "lib/utility/ob_smart_call.h"
 namespace oceanbase
 {
 using namespace common;
@@ -55,8 +55,7 @@ int ObExprRelationAnalyzer::visit_expr(ObRawExpr &expr)
       T_PSEUDO_EXTERNAL_FILE_COL != expr.get_expr_type() &&
       T_PSEUDO_EXTERNAL_FILE_URL != expr.get_expr_type() &&
       T_PSEUDO_PARTITION_LIST_COL != expr.get_expr_type() &&
-      T_ORA_ROWSCN != expr.get_expr_type() &&
-      T_PSEUDO_OLD_NEW_COL != expr.get_expr_type()) {
+      T_ORA_ROWSCN != expr.get_expr_type()) {
     expr.get_relation_ids().reuse();
   }
   // not sure whether we should visit onetime exec param

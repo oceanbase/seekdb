@@ -20,7 +20,7 @@
 #include "sql/das/iter/ob_das_text_retrieval_eval_node.h"
 #include "lib/string/ob_string.h"
 #include <gtest/gtest.h>
-#include "lib/utility/ob_test_util.h"
+#include "lib/thread/ob_test_util.h"
 #include "../test_sql_utils.h"
 #include "lib/allocator/page_arena.h"
 #include <fstream>
@@ -154,7 +154,7 @@ TEST_F(TestFtsParser, create_node_test)
   ObArray<ObString> query_tokens;
   ObArray<oceanbase::sql::ObFtsEvalNode::FtsComputeFlag> child_flags_;
   const int64_t ft_word_bkt_cnt = MAX(strlen(query_str) / 10, 2);
-  ret = tokens_map.create(ft_word_bkt_cnt, common::ObMemAttr(MTL_ID(), "FTWordMapTest"));
+  ret = tokens_map.create(ft_word_bkt_cnt, common::ObMemAttr("FTWordMapTest"));
   ASSERT_EQ(OB_SUCCESS, ret);
   bool dummy_has_duplicate_tokens = false;
   ObFtsEvalNode::fts_boolean_node_create(parant_node, node, ObCollationType::CS_TYPE_UTF8MB4_GENERAL_CI, allocator_, query_tokens, tokens_map, dummy_has_duplicate_tokens);

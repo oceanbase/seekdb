@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 #include "ob_tx_callback_list.h"
-#include "storage/tx/ob_trans_part_ctx.h"
+#include "storage/tx/ob_tx_ctx.h"
 
 namespace oceanbase
 {
@@ -531,7 +531,7 @@ int ObTxCallbackList::remove_callbacks_for_rollback_to(const transaction::ObTxSE
     TRANS_LOG(ERROR, "remove callback by rollback wont report error", K(ret), K(functor));
   } else {
     int64_t removed = functor.get_remove_cnt();
-    if (to_seq.support_branch() && to_seq.get_branch()) {
+    if (to_seq.get_branch()) {
       branch_removed_ += removed;
     }
     callback_mgr_.add_rollback_to_callback_remove_cnt(removed);
@@ -887,7 +887,7 @@ void ObTxCallbackList::ensure_checksum_(const SCN scn)
   }
 }
 
-transaction::ObPartTransCtx *ObTxCallbackList::get_trans_ctx() const
+transaction::ObTxCtx *ObTxCallbackList::get_trans_ctx() const
 {
   return callback_mgr_.get_trans_ctx();
 }
@@ -895,14 +895,12 @@ transaction::ObPartTransCtx *ObTxCallbackList::get_trans_ctx() const
 DEF_TO_STRING(ObTxCallbackList)
 {
   int64_t pos = 0;
-  transaction::ObPartTransCtx *tx_ctx = get_trans_ctx();
+  transaction::ObTxCtx *tx_ctx = get_trans_ctx();
   const transaction::ObTransID tx_id = tx_ctx ? tx_ctx->get_trans_id() : transaction::ObTransID();
-  const share::ObLSID ls_id = tx_ctx ? tx_ctx->get_ls_id() : ObLSID();
   J_OBJ_START();
   J_KV(K_(id),
        KP(tx_ctx),
        K(tx_id),
-       K(ls_id),
        K_(appended),
        K_(length),
        K_(logged),

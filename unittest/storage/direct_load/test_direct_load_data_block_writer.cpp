@@ -34,6 +34,16 @@ using namespace table;
 
 static ObSimpleMemLimitGetter getter;
 
+// Single-tenant seekdb: route the test's ObTenantIOManager / ObTenantTmpFileManager through share::g_mp.
+class FakeModuleProvider : public share::ObIModuleProvider
+{
+public:
+  common::ObTenantIOManager *tenant_io_manager() override { return io_manager_; }
+  tmp_file::ObTenantTmpFileManager *tenant_tmp_file_manager() override { return tmp_file_mgr_; }
+  common::ObTenantIOManager *io_manager_ = nullptr;
+  tmp_file::ObTenantTmpFileManager *tmp_file_mgr_ = nullptr;
+};
+
 namespace unittest
 {
 class TestDataBlockWriter : public TestDataFilePrepare
@@ -83,15 +93,10 @@ public:
   {
     int ret = OB_SUCCESS;
     ObAddr self;
-    obrpc::ObSrvRpcProxy rpc_proxy;
-    obrpc::ObCommonRpcProxy rs_rpc_proxy;
     self.set_ip_addr("127.0.0.1", 8086);
-    rpc::frame::ObReqTransport req_transport(NULL, NULL);
     const int64_t ulmt = 128LL << 30;
     const int64_t llmt = 128LL << 30;
-    ret = getter.add_tenant(OB_SYS_TENANT_ID, ulmt, llmt);
-    EXPECT_EQ(OB_SUCCESS, ret);
-    ret = getter.add_tenant(OB_SERVER_TENANT_ID, ulmt, llmt);
+    ret = getter.add_tenant(ulmt, llmt);
     EXPECT_EQ(OB_SUCCESS, ret);
     lib::set_memory_limit(128LL << 32);
     return ret;
@@ -349,7 +354,7 @@ void TestDataBlockWriter::check_row(const ObDirectLoadDatumRow *next_row, const 
   ObArray<ObColDesc> col_descs;
   ObStorageDatumUtils datum_utils;
   ASSERT_EQ(OB_SUCCESS, table_schema_.get_column_ids(col_descs));
-  datum_utils.init(col_descs, rowkey_column_count, lib::is_oracle_mode(), allocator_);
+  datum_utils.init(col_descs, rowkey_column_count, allocator_);
   ASSERT_EQ(OB_SUCCESS, next_key.compare(curr_key, datum_utils, cmp_ret));
   ASSERT_TRUE(cmp_ret == 0);
 }
@@ -361,7 +366,6 @@ void TestDataBlockWriter::prepare_schema()
   // init table schema
   table_schema_.reset();
   ASSERT_EQ(OB_SUCCESS, table_schema_.set_table_name("test_macro_file"));
-  table_schema_.set_tenant_id(1);
   table_schema_.set_tablegroup_id(1);
   table_schema_.set_database_id(1);
   table_schema_.set_table_id(table_id);
@@ -409,7 +413,7 @@ void TestDataBlockWriter::SetUp()
   // init datum_utils_
   ObArray<ObColDesc> col_descs;
   ASSERT_EQ(OB_SUCCESS, table_schema_.get_column_ids(col_descs));
-  ASSERT_EQ(OB_SUCCESS, datum_utils_.init(col_descs, rowkey_column_count, lib::is_oracle_mode(), allocator_));
+  ASSERT_EQ(OB_SUCCESS, datum_utils_.init(col_descs, rowkey_column_count, allocator_));
   // init table_data_desc_
   table_data_desc_.rowkey_column_num_ = table_schema_.get_rowkey_column_num();
   table_data_desc_.column_count_ = column_num;
@@ -422,12 +426,12 @@ void TestDataBlockWriter::SetUp()
   ASSERT_EQ(OB_SUCCESS, row_generate_.init(table_schema_));
   // init file_mgr_
   ASSERT_NE(nullptr, file_mgr_ = OB_NEWx(ObDirectLoadTmpFileManager, (&allocator_)));
-  ASSERT_EQ(OB_SUCCESS, file_mgr_->init(table_schema_.get_tenant_id()));
+  ASSERT_EQ(OB_SUCCESS, file_mgr_->init());
   // init table_mgr_
   ASSERT_NE(nullptr, table_mgr_ = OB_NEWx(ObDirectLoadTableManager, (&allocator_)));
   ASSERT_EQ(OB_SUCCESS, table_mgr_->init());
 
-  ASSERT_EQ(OB_SUCCESS, getter.add_tenant(1, 8LL * 1024 * 1024, 2LL * 1024 * 1024 * 1024));
+  ASSERT_EQ(OB_SUCCESS, getter.add_tenant(8LL * 1024 * 1024, 2LL * 1024 * 1024 * 1024));
   if (OB_FAIL(ObKVGlobalCache::get_instance().init(&getter, bucket_num, max_cache_size, block_size))) {
     ASSERT_EQ(OB_INIT_TWICE, ret);
     ret = OB_SUCCESS;
@@ -440,20 +444,22 @@ void TestDataBlockWriter::SetUp()
   ASSERT_EQ(OB_SUCCESS, tmp_file::ObTmpPageCache::get_instance().init("sn_tmp_page_cache"));
   ASSERT_EQ(OB_SUCCESS, ObTimerService::get_instance().start());
 
-  static ObTenantBase tenant_ctx(OB_SYS_TENANT_ID);
+  static ObTenantBase tenant_ctx(OB_SERVER_TENANT_ID);
+  static FakeModuleProvider provider;
+  share::g_mp = &provider;
   ObTenantEnv::set_tenant(&tenant_ctx);
   ObTenantIOManager *io_service = nullptr;
   EXPECT_EQ(OB_SUCCESS, ObTenantIOManager::mtl_new(io_service));
   EXPECT_EQ(OB_SUCCESS, ObTenantIOManager::mtl_init(io_service));
   EXPECT_EQ(OB_SUCCESS, io_service->start());
-  tenant_ctx.set(io_service);
+  provider.io_manager_ = io_service;
 
   tmp_file::ObTenantTmpFileManager *tf_mgr = nullptr;
   EXPECT_EQ(OB_SUCCESS, mtl_new_default(tf_mgr));
   EXPECT_EQ(OB_SUCCESS, tmp_file::ObTenantTmpFileManager::mtl_init(tf_mgr));
   tf_mgr->get_sn_file_manager().page_cache_controller_.write_buffer_pool_.default_wbp_memory_limit_ = 40*1024*1024;
   EXPECT_EQ(OB_SUCCESS, tf_mgr->start());
-  tenant_ctx.set(tf_mgr);
+  provider.tmp_file_mgr_ = tf_mgr;
 
   ObTenantEnv::set_tenant(&tenant_ctx);
   SERVER_STORAGE_META_SERVICE.is_started_ = true;

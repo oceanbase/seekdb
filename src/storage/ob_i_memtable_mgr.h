@@ -21,7 +21,7 @@
 #include "lib/lock/ob_qsync_lock.h"
 #include "common/ob_tablet_id.h"
 #include "storage/ob_i_table.h"
-#include "storage/checkpoint/ob_checkpoint_diagnose.h"
+#include "storage/checkpoint/ob_common_checkpoint.h"
 
 namespace oceanbase
 {
@@ -233,13 +233,11 @@ public:
   virtual ~ObIMemtableMgr();
 
   int init(
-      const share::ObLSID &ls_id,
       const ObTabletID &tablet_id,
       const lib::Worker::CompatMode compat_mode);
 
   int init(
       const ObTabletID &tablet_id,
-      const share::ObLSID &ls_id,
       const int64_t max_saved_schema_version,
       const int64_t max_saved_medium_scn,
       const lib::Worker::CompatMode compat_mode,
@@ -291,14 +289,12 @@ public:
 
   virtual int init_storage_recorder(
       const ObTabletID &tablet_id,
-      const share::ObLSID &ls_id,
       const int64_t max_saved_schema_version,
       const int64_t max_saved_medium_scn,
       const lib::Worker::CompatMode compat_mode,
       logservice::ObLogHandler *log_handler)
   { // do nothing
     UNUSED(tablet_id);
-    UNUSED(ls_id);
     UNUSED(max_saved_schema_version);
     UNUSED(max_saved_medium_scn);
     UNUSED(compat_mode);
@@ -307,7 +303,7 @@ public:
   }
   virtual int reset_storage_recorder() { return common::OB_SUCCESS; }
   virtual int set_frozen_for_all_memtables() { return common::OB_SUCCESS; }
-  virtual int set_is_tablet_freeze_for_active_memtable(ObTableHandleV2 &handle, const int64_t trace_id = checkpoint::INVALID_TRACE_ID) { return OB_NOT_SUPPORTED; }
+  virtual int set_is_tablet_freeze_for_active_memtable(ObTableHandleV2 &handle) { return OB_NOT_SUPPORTED; }
   virtual int get_last_frozen_memtable(ObTableHandleV2 &handle) { return OB_NOT_SUPPORTED; }
   virtual int get_direct_load_memtables_for_write(ObTableHdlArray &handles) { return OB_NOT_SUPPORTED; }
   DECLARE_VIRTUAL_TO_STRING;
@@ -324,7 +320,6 @@ protected:
   void release_head_memtable();
   void release_tail_memtable();
   virtual int init(const ObTabletID &tablet_id,
-                   const share::ObLSID &ls_id,
                    ObFreezer *freezer,
                    ObTenantMetaMemMgr *t3m) = 0;
 protected:

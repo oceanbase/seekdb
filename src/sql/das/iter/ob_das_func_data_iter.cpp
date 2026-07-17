@@ -53,7 +53,6 @@ ObDASFuncDataIter::ObDASFuncDataIter()
     main_lookup_rtdef_(nullptr),
     main_lookup_iter_(nullptr),
     main_lookup_tablet_id_(0),
-    main_lookup_ls_id_(0),
     main_lookup_param_(),
     merge_memctx_(),
     doc_ids_(),
@@ -76,12 +75,11 @@ int ObDASFuncDataIter::do_table_scan()
     LOG_WARN("fail to build rowkey doc range", K(ret));
   } else {
     if (nullptr != main_lookup_iter_) {
-      if (OB_UNLIKELY(!main_lookup_tablet_id_.is_valid() || !main_lookup_ls_id_.is_valid())) {
+      if (OB_UNLIKELY(!main_lookup_tablet_id_.is_valid())) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected error, main lookup tablet id or ls id is invalid", K(ret), K(main_lookup_tablet_id_), K(main_lookup_ls_id_));
+        LOG_WARN("unexpected error, main lookup tablet id is invalid", K(ret), K(main_lookup_tablet_id_));
       } else {
         main_lookup_param_.tablet_id_ = main_lookup_tablet_id_;
-        main_lookup_param_.ls_id_ = main_lookup_ls_id_;
         if (OB_FAIL(main_lookup_iter_->do_table_scan())) {
           LOG_WARN("fail to do table scan for main lookup table", K(ret), KPC(main_lookup_iter_));
         }
@@ -168,7 +166,7 @@ int ObDASFuncDataIter::inner_init(ObDASIterParam &param)
   } else {
     ObDASFuncDataIterParam &merge_param = static_cast<ObDASFuncDataIterParam &>(param);
     lib::ContextParam param;
-    param.set_mem_attr(MTL_ID(), "FTSMerge", ObCtxIds::DEFAULT_CTX_ID).set_properties(lib::USE_TL_PAGE_OPTIONAL);
+    param.set_mem_attr("FTSMerge", ObCtxIds::DEFAULT_CTX_ID).set_properties(lib::USE_TL_PAGE_OPTIONAL);
     if (OB_FAIL(CURRENT_CONTEXT->CREATE_CONTEXT(merge_memctx_, param))) {
       LOG_WARN("failed to create merge memctx", K(ret));
     } else if (OB_ISNULL(merge_param.doc_id_expr_)) {
@@ -213,7 +211,6 @@ int ObDASFuncDataIter::inner_reuse()
       main_lookup_param_.need_switch_param_ = main_lookup_param_.need_switch_param_ ||
           ((old_tablet_id.is_valid() && old_tablet_id != main_lookup_tablet_id_) ? true : false);
       main_lookup_param_.tablet_id_ = main_lookup_tablet_id_;
-      main_lookup_param_.ls_id_ = main_lookup_ls_id_;
       if (!main_lookup_param_.key_ranges_.empty()) {
         main_lookup_param_.key_ranges_.reuse();
       }
@@ -397,10 +394,10 @@ int ObDASFuncDataIter::init_main_lookup_scan_param(
     transaction::ObTxReadSnapshot *snapshot)
 {
   int ret = OB_SUCCESS;
-  uint64_t tenant_id = MTL_ID();
-  param.tenant_id_ = tenant_id;
-  param.key_ranges_.set_attr(ObMemAttr(tenant_id, "SParamKR"));
-  param.ss_key_ranges_.set_attr(ObMemAttr(tenant_id, "SParamSSKR"));
+  
+  
+  param.key_ranges_.set_attr(ObMemAttr("SParamKR"));
+  param.ss_key_ranges_.set_attr(ObMemAttr("SParamSSKR"));
   if (OB_ISNULL(ctdef) || OB_ISNULL(rtdef)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected nullptr ctdef or rtdef", K(ret), KPC(ctdef), KPC(rtdef));
@@ -419,8 +416,6 @@ int ObDASFuncDataIter::init_main_lookup_scan_param(
     param.force_refresh_lc_ = rtdef->force_refresh_lc_;
     param.output_exprs_ = &(ctdef->pd_expr_spec_.access_exprs_);
     param.aggregate_exprs_ = &(ctdef->pd_expr_spec_.pd_storage_aggregate_output_);
-    param.ext_file_column_exprs_ = &(ctdef->pd_expr_spec_.ext_file_column_exprs_);
-    param.ext_column_convert_exprs_ = &(ctdef->pd_expr_spec_.ext_column_convert_exprs_);
     param.calc_exprs_ = &(ctdef->pd_expr_spec_.calc_exprs_);
     param.table_param_ = &(ctdef->table_param_);
     param.op_ = rtdef->p_pd_expr_op_;
@@ -431,7 +426,6 @@ int ObDASFuncDataIter::init_main_lookup_scan_param(
     param.need_scn_ = rtdef->need_scn_;
     param.pd_storage_flag_ = ctdef->pd_expr_spec_.pd_storage_flag_.pd_flag_;
     param.fb_snapshot_ = rtdef->fb_snapshot_;
-    param.fb_read_tx_uncommitted_ = rtdef->fb_read_tx_uncommitted_;
     if (rtdef->is_for_foreign_check_) {
       param.trans_desc_ = trans_desc;
     }

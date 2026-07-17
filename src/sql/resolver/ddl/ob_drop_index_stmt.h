@@ -36,9 +36,8 @@ public:
   void set_name_pool(common::ObIAllocator *name_pool);
   void set_index_name(const common::ObString &index_name);
   void set_table_name(const common::ObString &table_name);
-  void set_tenant_id(const uint64_t tenant_id);
   void set_database_name(const common::ObString &db_name);
-  uint64_t get_tenant_id() const { return drop_index_arg_.tenant_id_; };
+  
   uint64_t get_table_id() const { return table_id_; };
   void set_table_id(const uint64_t table_id);
 
@@ -46,16 +45,16 @@ public:
   inline const common::ObString &get_table_name() const;
   inline const common::ObString &get_index_name() const;
   inline common::ObString &get_table_name();
-  obrpc::ObDropIndexArg &get_drop_index_arg();
-  const obrpc::ObDropIndexArg &get_drop_index_arg() const;
+  obcall::ObDropIndexArg &get_drop_index_arg();
+  const obcall::ObDropIndexArg &get_drop_index_arg() const;
   virtual bool cause_implicit_commit() const { return true; }
-  virtual obrpc::ObDDLArg &get_ddl_arg() { return drop_index_arg_; }
+  virtual obcall::ObDDLArg &get_ddl_arg() { return drop_index_arg_; }
   TO_STRING_KV(K_(stmt_type), K_(drop_index_arg));
 protected:
   common::ObIAllocator *name_pool_;
 
 private:
-  obrpc::ObDropIndexArg drop_index_arg_;
+  obcall::ObDropIndexArg drop_index_arg_;
   uint64_t table_id_;
   DISALLOW_COPY_AND_ASSIGN(ObDropIndexStmt);
 };
@@ -65,12 +64,12 @@ inline void ObDropIndexStmt::set_name_pool(common::ObIAllocator *name_pool)
   name_pool_ = name_pool;
 }
 
-inline const obrpc::ObDropIndexArg &ObDropIndexStmt::get_drop_index_arg() const
+inline const obcall::ObDropIndexArg &ObDropIndexStmt::get_drop_index_arg() const
 {
   return drop_index_arg_;
 }
 
-inline obrpc::ObDropIndexArg &ObDropIndexStmt::get_drop_index_arg()
+inline obcall::ObDropIndexArg &ObDropIndexStmt::get_drop_index_arg()
 {
   return drop_index_arg_;
 }
@@ -110,10 +109,7 @@ inline const common::ObString &ObDropIndexStmt::get_index_name() const
   return drop_index_arg_.index_name_;
 }
 
-inline void ObDropIndexStmt::set_tenant_id(const uint64_t tenant_id)
-{
-  drop_index_arg_.tenant_id_ = tenant_id;
-}
+
 inline void ObDropIndexStmt::set_table_id(const uint64_t table_id)
 {
   table_id_ = table_id;

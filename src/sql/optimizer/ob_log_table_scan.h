@@ -23,7 +23,7 @@
 #include "sql/resolver/dml/ob_sql_hint.h"
 #include "sql/engine/px/p2p_datahub/ob_runtime_filter_query_range.h"
 #include "sql/optimizer/ob_log_set.h"
-#include "src/share/vector_index/ob_plugin_vector_index_adaptor.h"
+#include "observer/vector_index/ob_plugin_vector_index_adaptor.h"
 
 namespace oceanbase
 {
@@ -130,7 +130,7 @@ enum ObVectorSPIVColumnIdx
 /*
  * hybrid log table reuse delta table col's enum
  * hybrid embedded table has vid and vector col
- */
+ */ 
 static const int HNSW_HYBRID_COL_CNT = 2;
 
 enum ObVectorHNSWColumnIdx
@@ -271,7 +271,7 @@ struct ObVecIndexInfo
            vector_index_param_.type_ == ObVectorIndexAlgorithmType::VIAT_IPIVF;
   }
   inline bool is_ipivf_vec_scan() const
-  {
+  { 
     return vector_index_param_.type_ == ObVectorIndexAlgorithmType::VIAT_IPIVF;
   }
   inline bool is_spiv_scan() const { return vector_index_param_.type_ == ObVectorIndexAlgorithmType::VIAT_SPIV; }
@@ -375,7 +375,6 @@ public:
         diverse_path_count_(0),
         fq_expr_(NULL),
         fq_type_(TableItem::NOT_USING),
-        fq_read_tx_uncommitted_(false),
         bf_info_(),
         part_join_filter_allocated_(false),
         group_id_expr_(nullptr),
@@ -389,14 +388,11 @@ public:
         has_index_scan_filter_(false),
         has_index_lookup_filter_(false),
         table_type_(share::schema::MAX_TABLE_TYPE),
-        use_column_store_(false),
         doc_id_table_id_(common::OB_INVALID_ID),
         text_retrieval_info_(),
         vector_index_info_(),
         das_keep_ordering_(false),
         filter_monotonicity_(),
-        auto_split_filter_type_(OB_INVALID_ID),
-        auto_split_filter_(NULL),
         is_tsc_with_doc_id_(false),
         rowkey_doc_tid_(common::OB_INVALID_ID),
         is_skip_rowkey_doc_(false),
@@ -406,7 +402,6 @@ public:
         is_tsc_with_vid_(false),
         rowkey_vid_tid_(common::OB_INVALID_ID),
         index_prefix_(-1),
-        mr_mv_scan_(common::ObQueryFlag::NormalMode),
         is_scan_resumable_(false)
   {
   }
@@ -448,12 +443,6 @@ public:
 
   inline bool use_das() const
   { return use_das_; }
-
-  inline void set_use_column_store(bool use_column_store)
-  { use_column_store_ = use_column_store; }
-
-  inline bool use_column_store() const
-  { return use_column_store_; }
 
   /**
    *  Get index table id
@@ -619,12 +608,6 @@ public:
   inline const common::ObIArray<uint64_t> &get_ddl_output_column_ids() const
   { return ddl_output_column_ids_; }
 
-  inline common::ObIArray<ObRawExpr *> &get_ext_file_column_exprs()
-  { return ext_file_column_exprs_; }
-
-  inline common::ObIArray<ObRawExpr *> &get_ext_column_convert_exprs()
-  { return ext_column_convert_exprs_; }
-
   /**
    *  Get pushdown aggr expressions
    */
@@ -786,13 +769,11 @@ public:
   const common::ObIArray<ObRawExpr*> &get_range_conditions() const { return range_conds_; }
   inline void set_diverse_path_count(int64_t count) { diverse_path_count_ = count; }
   inline int64_t get_diverse_path_count() const { return diverse_path_count_; }
-  inline TableItem::FlashBackQueryType get_flashback_query_type() const {return fq_type_; }
-  inline void set_flashback_query_type(TableItem::FlashBackQueryType type) { fq_type_ = type; }
-  inline bool get_fq_read_tx_uncommitted() const { return fq_read_tx_uncommitted_; }
-  inline void set_fq_read_tx_uncommitted(bool v) { fq_read_tx_uncommitted_ = v; }
-  inline const ObRawExpr* get_flashback_query_expr() const { return fq_expr_; }
-  inline ObRawExpr* &get_flashback_query_expr() { return fq_expr_; }
-  inline void set_flashback_query_expr(ObRawExpr *expr) { fq_expr_ = expr; }
+  inline TableItem::SnapshotQueryType get_snapshot_query_type() const {return fq_type_; }
+  inline void set_snapshot_query_type(TableItem::SnapshotQueryType type) { fq_type_ = type; }
+  inline const ObRawExpr* get_snapshot_query_expr() const { return fq_expr_; }
+  inline ObRawExpr* &get_snapshot_query_expr() { return fq_expr_; }
+  inline void set_snapshot_query_expr(ObRawExpr *expr) { fq_expr_ = expr; }
   int get_phy_location_type(ObTableLocationType &location_type);
   virtual int generate_access_exprs();
   int copy_filter_before_index_back();
@@ -849,13 +830,6 @@ public:
                                       uint64_t scan_table_id);
   int adjust_print_access_info(ObIArray<ObRawExpr*> &access_exprs);
   static int replace_gen_column(ObLogPlan *plan, ObRawExpr *part_expr, ObRawExpr *&new_part_expr);
-  int extract_file_column_exprs_recursively(ObRawExpr *expr);
-  int generate_auto_split_filter();
-  int construct_table_split_range_filter(ObSQLSessionInfo *session, const int64_t filter_type);
-  int create_exec_param_for_auto_split(const ObRawExprResType &type, ObRawExpr *&expr);
-  uint64_t get_auto_split_filter_type() const { return auto_split_filter_type_; };
-  const ObRawExpr *get_auto_split_filter() const { return auto_split_filter_; };
-  const ObIArray<ObRawExpr *> &get_auto_split_params() const { return auto_split_params_; };
   bool is_tsc_with_doc_id() const;
   inline bool is_tsc_with_domain_id() const { return with_domain_types_.size() > 0; }
   inline bool is_text_retrieval_scan() const { return is_index_scan() && NULL != text_retrieval_info_.match_expr_; }
@@ -1053,18 +1027,6 @@ public:
                               const ObColumnRefRawExpr *col_expr,
                               PushdownFilterMonotonicity &mono,
                               ObIArray<ObRawExpr *> &assist_exprs) const;
-  void set_mr_mv_scan(const uint64_t mr_mv_flags)
-  {
-    if (mr_mv_flags & ObQueryFlag::MRMVScanMode::RefreshMode) {
-      mr_mv_scan_ = ObQueryFlag::MRMVScanMode::RefreshMode;
-    } else if (mr_mv_flags & ObQueryFlag::MRMVScanMode::RealTimeMode) {
-      mr_mv_scan_ = ObQueryFlag::MRMVScanMode::RealTimeMode;
-    } else {
-      mr_mv_scan_ = ObQueryFlag::MRMVScanMode::NormalMode;
-    }
-  }
-  common::ObQueryFlag::MRMVScanMode get_mr_mv_scan() const { return mr_mv_scan_; }
-
   bool use_index_merge() const;
   const ObIArray<ObRawExpr*> &get_full_filters() const { return full_filters_; }
   const ObIArray<ObRawExpr*> &get_index_range_conds(int64_t idx) const { return index_range_conds_.at(idx); }
@@ -1099,9 +1061,6 @@ private: // member functions
   int add_mapping_columns_for_vt(ObIArray<ObRawExpr*> &access_exprs);
   int get_mbr_column_exprs(const uint64_t table_id, ObIArray<ObRawExpr *> &mbr_exprs);
   int allocate_lookup_trans_info_expr();
-  static int check_need_table_split_range_filter(share::schema::ObSchemaGetterGuard &schema_guard,
-                                                 const share::schema::ObTableSchema &table_schema,
-                                                 bool &need_filter);
   int allocate_group_id_expr();
   int extract_vec_idx_access_expr(ObIArray<ObRawExpr *> &exprs);
   int get_vec_idx_calc_exprs(ObIArray<ObRawExpr *> &all_exprs);
@@ -1197,9 +1156,6 @@ protected: // memeber variables
   common::ObSEArray<ObRawExpr*, 4, common::ModulePageAllocator, true> spatial_exprs_;
   // columns required for accessing a domain index (fulltext and JSON multi-value index)
   common::ObSEArray<ObRawExpr*, 4, common::ModulePageAllocator, true> domain_exprs_;
-  //for external table
-  common::ObSEArray<ObRawExpr*, 4, common::ModulePageAllocator, true> ext_file_column_exprs_;
-  common::ObSEArray<ObRawExpr*, 4, common::ModulePageAllocator, true> ext_column_convert_exprs_;
   // for map access expr to a real column expr
   common::ObArray<std::pair<ObRawExpr *, ObRawExpr *>, common::ModulePageAllocator, true> real_expr_map_;
   // aggr func pushdwon to table scan
@@ -1208,11 +1164,7 @@ protected: // memeber variables
   common::ObSEArray<ObRawExpr*, 4, common::ModulePageAllocator, true> pushdown_groupby_columns_;
   // whether a filter can be evaluated before index back
   common::ObSEArray<bool, 4, common::ModulePageAllocator, true> filter_before_index_back_;
-// // removal these in cg layer, up to opt layer.
   common::ObSEArray<uint64_t, 4, common::ModulePageAllocator, true> ddl_output_column_ids_;
-  // auto split param
-  common::ObSEArray<ObRawExpr *, 4, common::ModulePageAllocator, true> auto_split_params_;
-// removal these in cg layer, up to opt layer end.
   // table partition locations
   ObTablePartitionInfo *table_partition_info_; //this member is not in copy_without_child,
                                                //because its used in EXCHANGE stage, and
@@ -1244,9 +1196,8 @@ protected: // memeber variables
 
   int64_t diverse_path_count_; // count of access path with diverse query ranges
 
-  ObRawExpr* fq_expr_; //flashback query expr
-  TableItem::FlashBackQueryType fq_type_; //flashback query type
-  bool fq_read_tx_uncommitted_; // whether flashback query read uncommitted changes in transaction
+  ObRawExpr* fq_expr_; //snapshot query expr
+  TableItem::SnapshotQueryType fq_type_; //snapshot query type
    // for join partition filter
   ObPxBFStaticInfo bf_info_;
   bool part_join_filter_allocated_;
@@ -1268,7 +1219,6 @@ protected: // memeber variables
   // end for global index lookup
 
   share::schema::ObTableType table_type_;
-  bool use_column_store_;
   // in the new fts version, doc_id_table_id_ may be invalid.
   uint64_t doc_id_table_id_; // used for rowkey lookup of fulltext, JSON multi-value and vector index
   // text retrieval as index scan
@@ -1286,8 +1236,6 @@ protected: // memeber variables
   typedef common::ObSEArray<ObRawFilterMonotonicity, 4, common::ModulePageAllocator, true> FilterMonotonicity;
   FilterMonotonicity filter_monotonicity_;
 
-  uint64_t auto_split_filter_type_;
-  ObRawExpr *auto_split_filter_;
   // begin for table scan with doc id
   bool is_tsc_with_doc_id_;
   uint64_t rowkey_doc_tid_;
@@ -1309,7 +1257,6 @@ protected: // memeber variables
   // end for table scan with domain id
 
   int64_t index_prefix_;
-  common::ObQueryFlag::MRMVScanMode mr_mv_scan_; // used for major refresh mview fast refresh and real-time mview
   bool is_scan_resumable_;
   common::ObSEArray<ObRawExpr*, 4, common::ModulePageAllocator, true> pseudo_columnref_exprs_;
 

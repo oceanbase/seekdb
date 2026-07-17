@@ -42,7 +42,7 @@ constexpr bool is_array_fully_initialized(const T (&arr)[col])
 }
 
 // following .map file depends on ns oceanbase::common;
-#include "sql/engine/expr/ob_expr_merge_result_type_oracle.map"
+#include "sql/engine/expr/ob_expr_merge_result_type.map"
 #include "sql/engine/expr/ob_expr_relational_result_type.map"
 #include "sql/engine/expr/ob_expr_abs_result_type.map"
 #include "sql/engine/expr/ob_expr_neg_result_type.map"
@@ -178,13 +178,12 @@ int ObExprResultTypeUtil::get_div_result_type(ObObjType &result_type,
     LOG_ERROR("the wrong type", K(type1),K(type2),K(ret));
   } else {
     result_type = DIV_RESULT_TYPE[type1][type2];
-    omt::ObTenantConfigGuard tenant_config(TENANT_CONF(MTL_ID()));
     // FIXME: @zuojiao.hzj : remove this after we can keep high division calc scale
     // using decimal int as division calc types
     bool can_use_decint_div = (ob_is_decimal_int(type1) || ob_is_integer_type(type1))
                            && (ob_is_decimal_int(type2) || ob_is_integer_type(type2))
-                           && tenant_config.is_valid()
-                           && tenant_config->_enable_decimal_int_type;
+                           && true
+                           && GCONF._enable_decimal_int_type;
     if (ob_is_decimal_int(result_type)) {
       result_type = ObNumberType;
     }
@@ -315,7 +314,7 @@ int ObExprResultTypeUtil::get_remainder_result_type(ObObjType &result_type,
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("the wrong type", K(type1),K(type2),K(ret));
   } else {
-    const ObArithRule &rule = ARITH_RESULT_TYPE_ORACLE.get_rule(type1, type2, ArithOp::MOD);
+    const ObArithRule &rule = MOD_RESULT_TYPE_MAP.get_rule(type1, type2, ArithOp::MOD);
     result_type = rule.result_type;
     result_ob1_type = (rule.param1_calc_type == ObMaxType ? (ObNullType == type1 ?
                                                 ObNullType : result_type) : rule.param1_calc_type);
@@ -457,7 +456,7 @@ int ObExprResultTypeUtil::get_arith_calc_type(ObObjType &calc_type,
   return get_arith_result_type(calc_type, calc_ob1_type, calc_ob2_type, type1, type2);
 }
 
-int CHECK_STRING_RES_TYPE_ORACLE(const ObExprResType &type)
+int check_string_res_type_extended(const ObExprResType &type)
 {
   int ret = OB_SUCCESS;
   if (!type.is_string_or_lob_locator_type()) {
@@ -480,29 +479,37 @@ int CHECK_STRING_RES_TYPE_ORACLE(const ObExprResType &type)
 }
 
 /**
- * @brief Oracle mode specific
- * In expression type inference, if the parameter needs to be implicitly converted to a string type, this function can be used to obtain the maximum length of the parameter after conversion to a string.
- * For example, if the parameter is a date, then different lengths can be inferred based on the different nls_date_format settings.
- * TODO: The length inference for constants still needs optimization; the current inference result is too long.
- * @param dtc_params Type conversion information, obtained through type_ctx.get_session()->get_dtc_params()
+ * @brief Infer the maximum string length after implicit conversion.
+ * In expression type inference, if the parameter needs to be implicitly converted
+ * to a string type, this function can be used to obtain the maximum length of
+ * the parameter after conversion to a string. For example, if the parameter is a
+ * date, then different lengths can be inferred based on the different
+ * nls_date_format settings.
+ * TODO: The length inference for constants still needs optimization; the current
+ * inference result is too long.
+ * @param dtc_params Type conversion information, obtained through
+ * type_ctx.get_session()->get_dtc_params()
  * @param orig_type The type of the parameter being converted
  * @param target_type The target type
- * @param length The inferred maximum length, with semantics matching the length semantics in target_type
- * @param calc_ls When the length semantics of the parameter need to differ from the result, it can be explicitly specified, for example, in replace, translate expressions
+ * @param length The inferred maximum length, with semantics matching the length
+ * semantics in target_type
+ * @param calc_ls When the length semantics of the parameter need to differ from
+ * the result, it can be explicitly specified, for example, in replace, translate
+ * expressions
  * @return ret
  */
-int ObExprResultTypeUtil::deduce_max_string_length_oracle(const ObDataTypeCastParams &dtc_params,
-                                                          const ObExprResType &orig_type,
-                                                          const ObExprResType &target_type,
-                                                          ObLength &length,
-                                                          const int16_t calc_ls)
+int ObExprResultTypeUtil::deduce_max_string_length_extended(const ObDataTypeCastParams &dtc_params,
+                                                            const ObExprResType &orig_type,
+                                                            const ObExprResType &target_type,
+                                                            ObLength &length,
+                                                            const int16_t calc_ls)
 {
   int ret = OB_SUCCESS;
   ObLengthSemantics length_semantics = target_type.get_length_semantics();
   if (target_type.is_varchar_or_char() && (LS_BYTE == calc_ls || LS_CHAR == calc_ls)) {
     length_semantics = calc_ls;
   }
-  if (OB_FAIL(CHECK_STRING_RES_TYPE_ORACLE(target_type))) {
+  if (OB_FAIL(check_string_res_type_extended(target_type))) {
     LOG_WARN("invalid target_type", K(ret));
   } else {
     if (orig_type.is_literal()) {
@@ -535,7 +542,7 @@ int ObExprResultTypeUtil::deduce_max_string_length_oracle(const ObDataTypeCastPa
         }
       }
     } else if (orig_type.is_string_or_lob_locator_type()) {
-      if (OB_FAIL(CHECK_STRING_RES_TYPE_ORACLE(orig_type))) {
+      if (OB_FAIL(check_string_res_type_extended(orig_type))) {
         LOG_WARN("invalid orig_type", K(ret), K(orig_type));
       } else if (orig_type.is_clob()) {
         if (target_type.is_clob()) {
@@ -543,10 +550,10 @@ int ObExprResultTypeUtil::deduce_max_string_length_oracle(const ObDataTypeCastPa
         } else if (LS_CHAR == length_semantics) {
           // clob to LS_CHAR
           int64_t mbminlen = ObCharset::get_charset(target_type.get_collation_type())->mbminlen;
-          length = OB_MAX_ORACLE_VARCHAR_LENGTH / mbminlen;
+          length = OB_MAX_EXTENDED_VARCHAR_LENGTH / mbminlen;
         } else {
           // clob to LS_BYTE
-          length = OB_MAX_ORACLE_VARCHAR_LENGTH;
+          length = OB_MAX_EXTENDED_VARCHAR_LENGTH;
         }
       } else {
         length = orig_type.get_length();
@@ -581,7 +588,7 @@ int ObExprResultTypeUtil::deduce_max_string_length_oracle(const ObDataTypeCastPa
         ascii_bytes = MAX_NUMBER_BUFFER_SIZE_IN_TYPE_UTIL;
       } else if (orig_type.is_datetime()) {
         // deduce by format
-        if (OB_FAIL(ObTimeConverter::deduce_max_len_from_oracle_dfm(
+        if (OB_FAIL(ObTimeConverter::deduce_max_len_from_datetime_format(
                       dtc_params.get_nls_format(orig_type.get_type()), ascii_bytes))) {
           LOG_WARN("fail to deduce max len from dfm format", K(ret));
         }

@@ -15,9 +15,8 @@
  */
 
 #include "observer/virtual_table/ob_all_virtual_server.h"
+#include "share/rc/ob_module_provider.h"
 
-#include "grpc/ob_grpc_context.h"
-#include "grpc/ob_grpc_server.h"
 #include "observer/ob_service.h"
 #include "observer/ob_server_struct.h"
 #include "share/config/ob_server_config.h"
@@ -25,7 +24,6 @@
 #include "share/ob_all_tenant_info.h"  // ObAllTenantInfoProxy
 #include "storage/ls/ob_ls.h"
 #include "storage/tx_storage/ob_ls_service.h"
-#include "storage/tx_storage/ob_ls_handle.h"
 
 using namespace oceanbase;
 using namespace oceanbase::observer;
@@ -134,18 +132,9 @@ int ObAllVirtualServer::inner_get_next_row(ObNewRow *&row)
     // Get sync_scn and readable_scn from LS in real-time
     uint64_t sync_scn_val = 0;
     uint64_t readable_scn_val = 0;
-    storage::ObLSHandle ls_handle;
-    share::ObLSID sys_ls_id(share::ObLSID::SYS_LS_ID);
-    storage::ObLSService *ls_svr = MTL(storage::ObLSService*);
-    storage::ObLS *ls = NULL;
-    if (OB_ISNULL(ls_svr)) {
-      ret = OB_ERR_UNEXPECTED;
-      SERVER_LOG(WARN, "unexpected", K(ret));
-    } else if (OB_FAIL(ls_svr->get_ls(sys_ls_id, ls_handle, storage::ObLSGetMod::OBSERVER_MOD))){
+    storage::ObLS *ls = nullptr;
+    if (OB_FAIL(share::g_mp->ls_service()->get_ls(ls))){
       SERVER_LOG(WARN, "get ls failed", K(ret));
-    } else if (OB_ISNULL(ls = ls_handle.get_ls())) {
-      ret = OB_ERR_UNEXPECTED;
-      SERVER_LOG(WARN, "ls is NULL", K(ret));
     } else {
       share::SCN sync_scn;
       share::SCN readable_scn;
@@ -202,11 +191,7 @@ int ObAllVirtualServer::inner_get_next_row(ObNewRow *&row)
           cur_row_.cells_[i].set_int(resource_info.data_disk_total_);
           break;
         case DATA_DISK_ASSIGNED:
-          if (GCTX.is_shared_storage_mode()) {
-            cur_row_.cells_[i].set_int(resource_info.report_data_disk_assigned_);
-          } else {
-            cur_row_.cells_[i].set_null();
-          }
+          cur_row_.cells_[i].set_null();
           break;
         case DATA_DISK_IN_USE:
           cur_row_.cells_[i].set_int(resource_info.data_disk_in_use_);
@@ -231,11 +216,10 @@ int ObAllVirtualServer::inner_get_next_row(ObNewRow *&row)
           cur_row_.cells_[i].set_int(resource_info.log_disk_in_use_);
           break;
         case RPC_CERT_EXPIRE_TIME:
-          cur_row_.cells_[i].set_int(obgrpc::get_rpc_cert_expire_time());
+          cur_row_.cells_[i].set_int(0);
           break;
         case RPC_TLS_ENABLED:
-          cur_row_.cells_[i].set_int(GCTX.grpc_server_ != nullptr &&
-                                      GCTX.grpc_server_->is_tls_enabled());
+          cur_row_.cells_[i].set_int(0);
           break;
         case MEMORY_LIMIT:
           cur_row_.cells_[i].set_int(GMEMCONF.get_server_memory_limit());

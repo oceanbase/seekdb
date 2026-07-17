@@ -27,7 +27,6 @@ using namespace oceanbase::rootserver;
 using namespace oceanbase::transaction::tablelock;
 
 int ObDDLHelperUtils::gen_task_id_and_schema_versions(ObDDLTransController *controller,
-                                                      const uint64_t tenant_id,
                                                       const uint64_t schema_version_cnt,
                                                       int64_t &task_id)
 {
@@ -39,13 +38,12 @@ int ObDDLHelperUtils::gen_task_id_and_schema_versions(ObDDLTransController *cont
   if (OB_ISNULL(controller)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("ddl tran controller is NULL", KR(ret));
-  } else if (OB_FAIL(controller->create_task_and_assign_schema_version(
-             tenant_id, schema_version_cnt, task_id, schema_versions))) {
-    LOG_WARN("fail to gen task id and schema_versions", KR(ret), K(tenant_id), K(schema_version_cnt));
+  } else if (OB_FAIL(controller->create_task_and_assign_schema_version(schema_version_cnt, task_id, schema_versions))) {
+    LOG_WARN("fail to gen task id and schema_versions", KR(ret), K(schema_version_cnt));
   } else if (OB_UNLIKELY(OB_INVALID_ID == task_id
              || schema_version_cnt != schema_versions.count())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("task_id or schema version cnt not match", KR(ret), K(tenant_id), K(task_id),
+    LOG_WARN("task_id or schema version cnt not match", KR(ret), K(task_id),
              K(schema_version_cnt), "schema_versions_cnt", schema_versions.count());
   } else if (OB_ISNULL(tsi_generator)) {
     ret = OB_ERR_UNEXPECTED;
@@ -54,7 +52,7 @@ int ObDDLHelperUtils::gen_task_id_and_schema_versions(ObDDLTransController *cont
     LOG_WARN("fail to get id cnt", KR(ret));
   } else if (OB_UNLIKELY(schema_version_cnt != version_cnt)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("schema version cnt not match", KR(ret), K(tenant_id), K(task_id),
+    LOG_WARN("schema version cnt not match", KR(ret), K(task_id),
              K(schema_version_cnt), K(version_cnt));
   }
   RS_TRACE(gen_task_id_and_versions);
@@ -62,7 +60,6 @@ int ObDDLHelperUtils::gen_task_id_and_schema_versions(ObDDLTransController *cont
 }
 
 int ObDDLHelperUtils::write_1503_ddl_operation(ObMultiVersionSchemaService *schema_service,
-                                               const uint64_t tenant_id,
                                                ObDDLSQLTransaction &trans)
 {
   int ret = OB_SUCCESS;
@@ -84,13 +81,13 @@ int ObDDLHelperUtils::write_1503_ddl_operation(ObMultiVersionSchemaService *sche
               || OB_ISNULL(schema_service_impl = schema_service->get_schema_service())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("ptr is null", KR(ret), KP(schema_service));
-  } else if (OB_FAIL(schema_service->gen_new_schema_version(tenant_id, boundary_schema_version))) {
-    LOG_WARN("fail to gen new schema version", KR(ret), K(tenant_id));
+  } else if (OB_FAIL(schema_service->gen_new_schema_version(boundary_schema_version))) {
+    LOG_WARN("fail to gen new schema version", KR(ret));
   } else {
     share::schema::ObDDLSqlService ddl_sql_service(*schema_service_impl);
-    obrpc::ObDDLNopOpreatorArg arg;
+    obcall::ObDDLNopOpreatorArg arg;
     arg.schema_operation_.op_type_ = OB_DDL_END_SIGN;
-    arg.schema_operation_.tenant_id_ = tenant_id;
+    
     if (OB_FAIL(ddl_sql_service.log_nop_operation(arg.schema_operation_,
                                                   boundary_schema_version,
                                                   NULL,
@@ -102,7 +99,6 @@ int ObDDLHelperUtils::write_1503_ddl_operation(ObMultiVersionSchemaService *sche
 }
 
 int ObDDLHelperUtils::wait_ddl_trans(ObDDLTransController *controller, 
-                                     const uint64_t tenant_id, 
                                      const int64_t task_id)
 {
   int ret = OB_SUCCESS;
@@ -113,8 +109,8 @@ int ObDDLHelperUtils::wait_ddl_trans(ObDDLTransController *controller,
     LOG_WARN("controller is null", KR(ret));
   } else if (OB_FAIL(ObShareUtil::set_default_timeout_ctx(ctx, DEFAULT_TS))) {
     LOG_WARN("fail to set default ts", KR(ret));
-  } else if (OB_FAIL(controller->wait_task_ready(tenant_id, task_id, ctx.get_timeout()))) {
-    LOG_WARN("fail to wait ddl trans", KR(ret), K(tenant_id), K(task_id));
+  } else if (OB_FAIL(controller->wait_task_ready(task_id, ctx.get_timeout()))) {
+    LOG_WARN("fail to wait ddl trans", KR(ret), K(task_id));
   }
   RS_TRACE(wait_ddl_trans);
   return ret;
@@ -122,28 +118,27 @@ int ObDDLHelperUtils::wait_ddl_trans(ObDDLTransController *controller,
 
 int ObDDLHelperUtils::end_ddl_trans(ObMultiVersionSchemaService *schema_service,
                                     ObDDLTransController *ddl_trans_controller, 
-                                    const uint64_t tenant_id, 
                                     const int return_ret, 
                                     const int64_t task_id, 
                                     ObDDLSQLTransaction &trans)
 {
   int ret = return_ret;
   // write 1503 ddl operation
-  if(FAILEDx(write_1503_ddl_operation(schema_service, tenant_id, trans))) {
-    LOG_WARN("fail to write 1503 ddl operation", KR(ret), K(tenant_id));
+  if(FAILEDx(write_1503_ddl_operation(schema_service, trans))) {
+    LOG_WARN("fail to write 1503 ddl operation", KR(ret));
   }
 
   if (trans.is_started()) {
     int tmp_ret = OB_SUCCESS;
     bool is_commit = OB_SUCC(ret);
     if (OB_TMP_FAIL(trans.end(is_commit))) {
-      LOG_WARN("trans end failed", KR(ret), KR(tmp_ret), K(is_commit));
+      LOG_ERROR("trans end failed", KR(ret), KR(tmp_ret), K(is_commit));
       ret = is_commit ? tmp_ret : ret;
     }
   }
 
   if (OB_NOT_NULL(ddl_trans_controller) && OB_INVALID_ID != task_id) {
-    ddl_trans_controller->remove_task(tenant_id, task_id);
+    ddl_trans_controller->remove_task(task_id);
   }
   RS_TRACE(end_ddl_trans);
   return ret;
@@ -172,19 +167,17 @@ int ObDDLHelperUtils::check_schema_version()
 int ObDDLHelperUtils::wait_and_end_ddl_trans(const int return_ret,
                                              ObMultiVersionSchemaService *schema_service,
                                              ObDDLTransController *ddl_trans_controller, 
-                                             const uint64_t tenant_id, 
                                              const int64_t task_id, 
                                              ObDDLSQLTransaction &trans,
                                              bool &need_clean_failed)
 {
   int ret = return_ret;
   need_clean_failed = false;
-  if (FAILEDx(wait_ddl_trans(ddl_trans_controller, tenant_id, task_id))) {
+  if (FAILEDx(wait_ddl_trans(ddl_trans_controller, task_id))) {
     LOG_WARN("fail to wait ddl trans", KR(ret));
   }
   bool commit = OB_SUCC(ret);
-  if (OB_FAIL(end_ddl_trans(schema_service, ddl_trans_controller, 
-        tenant_id, ret, task_id, trans))) { // won't overwrite ret
+  if (OB_FAIL(end_ddl_trans(schema_service, ddl_trans_controller, ret, task_id, trans))) { // won't overwrite ret
     LOG_WARN("fail to end ddl trans", KR(ret));
     need_clean_failed = commit; // need called clean_failed_on_commit
   } else if (OB_FAIL(check_schema_version())) {
@@ -239,7 +232,6 @@ bool ObDDLHelper::ObLockObjPair::less_than(
 
 ObDDLHelper::ObDDLHelper(
   share::schema::ObMultiVersionSchemaService *schema_service,
-  const uint64_t tenant_id,
   const char* parallel_ddl_type,
   ObDDLSQLTransaction *external_trans,
   bool enable_ddl_parallel)
@@ -248,7 +240,6 @@ ObDDLHelper::ObDDLHelper(
     ddl_service_(NULL),
     sql_proxy_(NULL),
     ddl_trans_controller_(NULL),
-    tenant_id_(tenant_id),
     task_id_(common::OB_INVALID_ID),
     schema_version_cnt_(0),
     object_id_cnt_(0),
@@ -258,7 +249,7 @@ ObDDLHelper::ObDDLHelper(
     lock_object_id_map_(),
     allocator_(),
     parallel_ddl_type_(parallel_ddl_type),
-    schema_guard_wrapper_(tenant_id, schema_service, !enable_ddl_parallel),
+    schema_guard_wrapper_(schema_service, !enable_ddl_parallel),
     enable_ddl_parallel_(enable_ddl_parallel),
     trans_(schema_service_,
            false, /*need_end_signal*/
@@ -352,9 +343,6 @@ int ObDDLHelper::check_inner_stat_()
     ret = OB_NOT_INIT;
     LOG_WARN("ptr is null", KR(ret), KP_(ddl_service), KP_(schema_service),
              KP_(sql_proxy), K_(ddl_trans_controller));
-  } else if (OB_UNLIKELY(OB_INVALID_TENANT_ID == tenant_id_)) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("invalid tenant_id", KR(ret), K_(tenant_id));
   }
   return ret;
 }
@@ -369,8 +357,8 @@ int ObDDLHelper::start_ddl_trans_()
   } else if (!trans_.is_enable_parallel()
     && OB_FAIL(schema_guard_wrapper_.get_local_schema_version(schema_version))) {
     LOG_WARN("fail to get local schema version", KR(ret));
-  } else if (OB_FAIL(trans_.start(sql_proxy_, tenant_id_, schema_version, with_snapshot))) {
-    LOG_WARN("fail to start trans", KR(ret), K_(tenant_id), K(schema_version), K(with_snapshot));
+  } else if (OB_FAIL(trans_.start(sql_proxy_, schema_version, with_snapshot))) {
+    LOG_WARN("fail to start trans", KR(ret), K(schema_version), K(with_snapshot));
   }
   RS_TRACE(start_ddl_trans);
   return ret;
@@ -381,8 +369,7 @@ int ObDDLHelper::gen_task_id_and_schema_versions_()
   int ret = OB_SUCCESS;
   if (OB_FAIL(check_inner_stat_())) {
     LOG_WARN("fail to check inner stat", KR(ret));
-  } else if (OB_FAIL(ObDDLHelperUtils::gen_task_id_and_schema_versions(ddl_trans_controller_, 
-              tenant_id_, schema_version_cnt_, task_id_))) {
+  } else if (OB_FAIL(ObDDLHelperUtils::gen_task_id_and_schema_versions(ddl_trans_controller_, schema_version_cnt_, task_id_))) {
     LOG_WARN("fail to gen task id and schema version cnt", KR(ret));
   }
   return ret;
@@ -401,7 +388,7 @@ int ObDDLHelper::serialize_inc_schema_dict_()
   } else if (OB_FAIL(tsi_generator->get_start_version(start_schema_version))) {
     LOG_WARN("fail to get start schema version", KR(ret));
   } else if (OB_FAIL(get_trans_().serialize_inc_schemas(start_schema_version  - 1))) {
-    LOG_WARN("fail to serialize inc schemas", KR(ret), K_(tenant_id),
+    LOG_WARN("fail to serialize inc schemas", KR(ret),
              "start_schema_version", start_schema_version - 1);
   }
   RS_TRACE(inc_schema_dict);
@@ -443,7 +430,7 @@ int ObDDLHelper::execute()
    */
   if (OB_FAIL(ret)) {
   } else if (OB_ISNULL(external_trans_) && OB_FAIL(start_ddl_trans_())) {
-    LOG_WARN("fail to start ddl trans", KR(ret));
+    LOG_ERROR("fail to start ddl trans", KR(ret));
   }
   /* ----------------------------------------------
    * 2. lock object by name/object_id
@@ -510,8 +497,7 @@ int ObDDLHelper::execute()
    */
   if (OB_ISNULL(external_trans_)) {
     bool need_clean_failed = false;
-    if (OB_FAIL(ObDDLHelperUtils::wait_and_end_ddl_trans(ret, schema_service_, ddl_trans_controller_,
-        tenant_id_, task_id_, get_trans_(), need_clean_failed))) { // won't overwrite ret
+    if (OB_FAIL(ObDDLHelperUtils::wait_and_end_ddl_trans(ret, schema_service_, ddl_trans_controller_, task_id_, get_trans_(), need_clean_failed))) { // won't overwrite ret
       LOG_WARN("fail to wait and end ddl trans", KR(ret));
       if (need_clean_failed) {
         int tmp_ret = OB_SUCCESS;
@@ -523,8 +509,8 @@ int ObDDLHelper::execute()
       // the old executor won't wait consensus schema version, so we need to publish schema here
       // the new executor will wait consensus schema version.
       if (OB_SUCC(ret) && !ObSchemaService::in_parallel_ddl_thread()) {
-        if (OB_FAIL(ddl_service_->publish_schema(tenant_id_))) {
-          LOG_WARN("fail to refresh schema", KR(ret), K_(tenant_id));
+        if (OB_FAIL(ddl_service_->publish_schema())) {
+          LOG_WARN("fail to refresh schema", KR(ret));
         }
       }
     }
@@ -636,8 +622,8 @@ int ObDDLHelper::lock_objects_in_map_(
           lock_arg.op_type_ = ObTableLockOpType::IN_TRANS_COMMON_LOCK;
           lock_arg.timeout_us_ = timeout;
           LOG_INFO("try lock object", KR(ret), K(lock_arg));
-          if (OB_FAIL(ObInnerConnectionLockUtil::lock_obj(tenant_id_, lock_arg, conn))) {
-            LOG_WARN("lock obj failed", KR(ret), K_(tenant_id), K(lock_arg));
+          if (OB_FAIL(ObInnerConnectionLockUtil::lock_obj(lock_arg, conn))) {
+            LOG_WARN("lock obj failed", KR(ret), K(lock_arg));
           }
         }
       } // end foreach
@@ -723,8 +709,7 @@ int ObDDLHelper::lock_existed_objects_by_id_()
   return lock_objects_in_map_(ObLockOBJType::OBJ_TYPE_COMMON_OBJ, lock_object_id_map_);
 }
 
-// 1. constraint name and foreign key name are in the same namespace in oracle tenant.
-// 2. constraint name and foreign key name are in different namespace in mysql tenant.
+// Constraint name and foreign key name are in different namespaces in MySQL mode.
 int ObDDLHelper::check_constraint_name_exist_(
     const share::schema::ObTableSchema &table_schema,
     const common::ObString &constraint_name,
@@ -732,31 +717,28 @@ int ObDDLHelper::check_constraint_name_exist_(
     bool &exist)
 {
   int ret = OB_SUCCESS;
-  bool is_oracle_mode = false;
   uint64_t constraint_id = OB_INVALID_ID;
   const uint64_t database_id = table_schema.get_database_id();
   exist = false;
   if (OB_FAIL(check_inner_stat_())) {
     LOG_WARN("fail to check inner stat", KR(ret));
-  } else if (OB_FAIL(table_schema.check_if_oracle_compat_mode(is_oracle_mode))) {
-    LOG_WARN("check if oracle compat mode failed", KR(ret), K_(tenant_id));
   } else {
-    const bool check_fk = (is_oracle_mode || is_foreign_key);
+    const bool check_fk = is_foreign_key;
     if (OB_SUCC(ret) && check_fk) {
       if (OB_FAIL(schema_guard_wrapper_.get_foreign_key_id(
           database_id, constraint_name, constraint_id))) {
-        LOG_WARN("fail to get foreign key id", KR(ret), K_(tenant_id), K(database_id), K(constraint_name));
+        LOG_WARN("fail to get foreign key id", KR(ret), K(database_id), K(constraint_name));
       } else if (OB_INVALID_ID != constraint_id) {
         exist = true;
       }
     }
-    const bool check_cst = (is_oracle_mode || !is_foreign_key);
+    const bool check_cst = !is_foreign_key;
     if (OB_SUCC(ret) && !exist && check_cst) {
       if (table_schema.is_mysql_tmp_table()) {
         // tmp table in mysql mode, do nothing
       } else if (OB_FAIL(schema_guard_wrapper_.get_constraint_id(
           database_id, constraint_name, constraint_id))) {
-        LOG_WARN("fail to get constraint id", KR(ret), K_(tenant_id), K(database_id), K(constraint_name));
+        LOG_WARN("fail to get constraint id", KR(ret), K(database_id), K(constraint_name));
       } else if (OB_INVALID_ID != constraint_id) {
         exist = true;
       }
@@ -772,10 +754,9 @@ int ObDDLHelper::gen_object_ids_(
   int ret = OB_SUCCESS;
   if (OB_FAIL(check_inner_stat_())) {
     LOG_WARN("fail to check inner stat", KR(ret));
-  } else if (OB_UNLIKELY(OB_INVALID_TENANT_ID == tenant_id_
-             || object_cnt < 0)) {
+  } else if (OB_UNLIKELY(object_cnt < 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid tenant_id or object_cnt", KR(ret), K_(tenant_id), K(object_cnt));
+    LOG_WARN("invalid object_cnt", KR(ret), K(object_cnt));
   } else if (0 == object_cnt) {
     // skip
   } else {
@@ -786,17 +767,17 @@ int ObDDLHelper::gen_object_ids_(
         || OB_ISNULL(schema_service_impl = schema_service_->get_schema_service())) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("ptr is null", KR(ret), KP_(schema_service));
-    } else if (OB_FAIL(schema_service_impl->fetch_new_object_ids(tenant_id_, object_cnt, max_object_id))) {
-      LOG_WARN("fail to fetch new object ids", KR(ret), K_(tenant_id), K(object_cnt));
+    } else if (OB_FAIL(schema_service_impl->fetch_new_object_ids(object_cnt, max_object_id))) {
+      LOG_WARN("fail to fetch new object ids", KR(ret), K(object_cnt));
     } else if (OB_UNLIKELY(OB_INVALID_ID == max_object_id)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("object_id is invalid", KR(ret), K_(tenant_id), K(object_cnt));
+      LOG_WARN("object_id is invalid", KR(ret), K(object_cnt));
     } else if (0 >= (min_object_id = max_object_id - object_cnt + 1)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("min_object_id should be greator than 0",
-               KR(ret), K_(tenant_id), K(min_object_id), K(max_object_id), K(object_cnt));
+               KR(ret), K(min_object_id), K(max_object_id), K(object_cnt));
     } else if (OB_FAIL(id_generator.init(1 /*step*/, min_object_id, max_object_id))) {
-      LOG_WARN("fail to init id generator", KR(ret), K_(tenant_id),
+      LOG_WARN("fail to init id generator", KR(ret),
                K(min_object_id), K(max_object_id), K(object_cnt));
     }
   }
@@ -819,17 +800,16 @@ int ObDDLHelper::gen_partition_object_and_tablet_ids_(
 
 int ObDDLHelper::obj_lock_database_name(
     ObDDLSQLTransaction &trans,
-    const uint64_t tenant_id,
     const ObString &name,
     const transaction::tablelock::ObTableLockMode lock_mode)
 {
   int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(OB_INVALID_ID == tenant_id || name.empty())) {
+  if (OB_UNLIKELY(name.empty())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("parallel ddl lock name is invalid", KR(ret), K(name));
   } else {
     uint64_t lock_obj_id = cast_database_name_to_id_(name);
-    if (OB_FAIL(obj_lock_with_lock_id_(trans, tenant_id, lock_obj_id, lock_mode, ObLockOBJType::OBJ_TYPE_DATABASE_NAME))) {
+    if (OB_FAIL(obj_lock_with_lock_id_(trans, lock_obj_id, lock_mode, ObLockOBJType::OBJ_TYPE_DATABASE_NAME))) {
       LOG_WARN("fail to lock id", KR(ret), K(lock_obj_id), K(lock_mode));
     }
   }
@@ -837,18 +817,17 @@ int ObDDLHelper::obj_lock_database_name(
 }
 int ObDDLHelper::obj_lock_obj_name(
     ObDDLSQLTransaction &trans,
-    const uint64_t tenant_id,
     const ObString &database_name,
     const ObString &obj_name,
     const transaction::tablelock::ObTableLockMode lock_mode)
 {
   int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(OB_INVALID_ID == tenant_id || database_name.empty() || obj_name.empty())) {
+  if (OB_UNLIKELY(database_name.empty() || obj_name.empty())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("parallel ddl lock name is invalid", KR(ret), K(database_name), K(obj_name));
   } else {
     uint64_t lock_obj_id = cast_obj_name_to_id_(database_name, obj_name);
-    if (OB_FAIL(obj_lock_with_lock_id_(trans, tenant_id, lock_obj_id, lock_mode, ObLockOBJType::OBJ_TYPE_OBJECT_NAME))) {
+    if (OB_FAIL(obj_lock_with_lock_id_(trans, lock_obj_id, lock_mode, ObLockOBJType::OBJ_TYPE_OBJECT_NAME))) {
       LOG_WARN("fail to lock id", KR(ret), K(lock_obj_id), K(lock_mode));
     }
   }
@@ -857,15 +836,14 @@ int ObDDLHelper::obj_lock_obj_name(
 
 int ObDDLHelper::obj_lock_obj_id(
     ObDDLSQLTransaction &trans,
-    const uint64_t tenant_id,
     const uint64_t obj_id,
     const transaction::tablelock::ObTableLockMode lock_mode)
 {
   int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(OB_INVALID_ID == tenant_id || OB_INVALID_ID == obj_id)) {
+  if (OB_UNLIKELY(OB_INVALID_ID == obj_id)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("parallel ddl lock name is invalid", KR(ret), K(obj_id));
-  } else if (OB_FAIL(obj_lock_with_lock_id_(trans, tenant_id, obj_id, lock_mode, ObLockOBJType::OBJ_TYPE_COMMON_OBJ))) {
+  } else if (OB_FAIL(obj_lock_with_lock_id_(trans, obj_id, lock_mode, ObLockOBJType::OBJ_TYPE_COMMON_OBJ))) {
     LOG_WARN("fail to lock id", KR(ret), K(obj_id), K(lock_mode));
   }
   return ret;
@@ -898,14 +876,13 @@ int ObDDLHelper::check_dep_objs_consistent(
 
 int ObDDLHelper::obj_lock_with_lock_id_(
     ObDDLSQLTransaction &trans,
-    const uint64_t tenant_id,
     const uint64_t obj_id,
     const transaction::tablelock::ObTableLockMode lock_mode,
     const ObLockOBJType obj_type)
 {
   int ret = OB_SUCCESS;
   observer::ObInnerSQLConnection *conn = nullptr;
-  if (OB_UNLIKELY(OB_INVALID_ID == tenant_id || OB_INVALID_ID == obj_id)) {
+  if (OB_UNLIKELY(OB_INVALID_ID == obj_id)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("parallel ddl lock name is invalid", KR(ret), K(obj_id));
   } else if (OB_ISNULL(conn = dynamic_cast<observer::ObInnerSQLConnection *>
@@ -923,8 +900,8 @@ int ObDDLHelper::obj_lock_with_lock_id_(
     if (OB_FAIL(ObShareUtil::set_default_timeout_ctx(ctx, GCONF.rpc_timeout))) {
       LOG_WARN("fail to set timeout ctx", KR(ret));
     } else if (FALSE_IT(lock_arg.timeout_us_ = ctx.get_timeout())) {
-    } else if (OB_FAIL(ObInnerConnectionLockUtil::lock_obj(tenant_id, lock_arg, conn))) {
-      LOG_WARN("lock obj failed", KR(ret), K(tenant_id), K(lock_arg));
+    } else if (OB_FAIL(ObInnerConnectionLockUtil::lock_obj(lock_arg, conn))) {
+      LOG_WARN("lock obj failed", KR(ret), K(lock_arg));
     }
   }
   return ret;
@@ -937,24 +914,24 @@ int ObDDLHelper::check_database_legitimacy_(const ObString &database_name, uint6
   if (OB_FAIL(check_inner_stat_())) {
     LOG_WARN("fail to check inner stat", KR(ret));
   } else if (OB_FAIL(schema_guard_wrapper_.get_database_id(database_name, database_id))) {
-    LOG_WARN("fail to get database id", KR(ret), K_(tenant_id), K(database_name));
+    LOG_WARN("fail to get database id", KR(ret), K(database_name));
   } else if (OB_UNLIKELY(OB_INVALID_ID == database_id)) {
     ret = OB_ERR_BAD_DATABASE;
-    LOG_WARN("database not exist",  KR(ret), K_(tenant_id), K(database_name));
+    LOG_WARN("database not exist",  KR(ret), K(database_name));
     LOG_USER_ERROR(OB_ERR_BAD_DATABASE, database_name.length(), database_name.ptr());
   } else if (OB_UNLIKELY(OB_RECYCLEBIN_SCHEMA_ID == database_id)) {
     ret = OB_ERR_OPERATION_ON_RECYCLE_OBJECT;
     LOG_WARN("can not do parallel ddl in recyclebin database" , KR(ret));
   } else if (OB_FAIL(schema_guard_wrapper_.get_database_schema(database_id, database_schema))) {
-    LOG_WARN("fail to get database schema", KR(ret), K_(tenant_id), K(database_id), K(database_name));
+    LOG_WARN("fail to get database schema", KR(ret), K(database_id), K(database_name));
   } else if (OB_ISNULL(database_schema)) {
     ret = OB_ERR_BAD_DATABASE;
-    LOG_WARN("database not exist", KR(ret), K_(tenant_id), K(database_id), K(database_name));
+    LOG_WARN("database not exist", KR(ret), K(database_id), K(database_name));
     LOG_USER_ERROR(OB_ERR_BAD_DATABASE, database_name.length(), database_name.ptr());
   } else if (OB_UNLIKELY(database_schema->is_in_recyclebin())) {
     ret = OB_ERR_OPERATION_ON_RECYCLE_OBJECT;
     LOG_WARN("can not do parallel ddl on table in database which is in recyclebin",
-             KR(ret), K_(tenant_id), K(database_id), K(database_name));
+             KR(ret), K(database_id), K(database_name));
   }
   return ret;
 }
@@ -969,8 +946,8 @@ int ObDDLHelper::check_parallel_ddl_conflict_(const common::ObIArray<share::sche
     ObArray<uint64_t> parent_table_ids;
     ObArray<uint64_t> mock_fk_parent_table_ids;
     ObSchemaGetterGuard local_guard;
-    if (OB_FAIL(schema_service_->get_tenant_schema_guard(tenant_id_, local_guard))) {
-      LOG_WARN("fail to get local guard", KR(ret), K_(tenant_id));
+    if (OB_FAIL(schema_service_->get_tenant_schema_guard(local_guard))) {
+      LOG_WARN("fail to get local guard", KR(ret));
     }
     // check schema object infos are all existed.
     for (int64_t i = 0; OB_SUCC(ret) && (i < based_schema_object_infos.count()); ++i) {
@@ -987,7 +964,7 @@ int ObDDLHelper::check_parallel_ddl_conflict_(const common::ObIArray<share::sche
         }
       } else {
         ret = OB_NOT_SUPPORTED;
-        LOG_WARN("not supported schema type", KR(ret), K_(tenant_id), K(info));
+        LOG_WARN("not supported schema type", KR(ret), K(info));
       }
     }// end for
 
@@ -1001,7 +978,7 @@ int ObDDLHelper::check_parallel_ddl_conflict_(const common::ObIArray<share::sche
       } else if (parent_table_ids.count() != parent_table_versions.count()) {
         ret = OB_ERR_PARALLEL_DDL_CONFLICT;
         LOG_WARN("parent table may be deleted, ddl need retry",
-                 KR(ret), K_(tenant_id), "base_objs_cnt", parent_table_ids.count(),
+                 KR(ret), "base_objs_cnt", parent_table_ids.count(),
                  "fetch_cnt", parent_table_versions.count());
       }
     }
@@ -1016,7 +993,7 @@ int ObDDLHelper::check_parallel_ddl_conflict_(const common::ObIArray<share::sche
       } else if (mock_fk_parent_table_ids.count() != mock_fk_parent_table_versions.count()) {
         ret = OB_ERR_PARALLEL_DDL_CONFLICT;
         LOG_WARN("mock fk parent table may be deleted, ddl need retry",
-                 KR(ret), K_(tenant_id), "base_objs_cnt", mock_fk_parent_table_ids.count(),
+                 KR(ret), "base_objs_cnt", mock_fk_parent_table_ids.count(),
                  "fetch_cnt", mock_fk_parent_table_versions.count());
       }
     }
@@ -1033,7 +1010,7 @@ int ObDDLHelper::check_parallel_ddl_conflict_(const common::ObIArray<share::sche
             if (version.get_schema_version() != info.schema_version_) {
               ret = OB_ERR_PARALLEL_DDL_CONFLICT;
               LOG_WARN("parent table may be changed, ddl need retry",
-                      KR(ret), K_(tenant_id), K(info), K(version));
+                      KR(ret), K(info), K(version));
             }
           }
         } // end for
@@ -1044,14 +1021,14 @@ int ObDDLHelper::check_parallel_ddl_conflict_(const common::ObIArray<share::sche
             if (version.get_schema_version() != info.schema_version_) {
               ret = OB_ERR_PARALLEL_DDL_CONFLICT;
               LOG_WARN("mock fk parent table may be changed, ddl need retry",
-                      KR(ret), K_(tenant_id), K(info), K(version));
+                      KR(ret), K(info), K(version));
             }
           }
         } // end for
         if (OB_SUCC(ret) && !find) {
           ret = OB_ERR_PARALLEL_DDL_CONFLICT;
           LOG_WARN("parent table may be deleted, ddl need retry",
-                  KR(ret), K_(tenant_id), K(info));
+                  KR(ret), K(info));
         }
       }
     } // end for
@@ -1068,7 +1045,7 @@ int ObDDLHelper::add_lock_table_udt_id_(const ObTableSchema &table_schema)
     ObTableSchema::const_column_iterator begin = table_schema.column_begin();
     ObTableSchema::const_column_iterator end = table_schema.column_end();
     ObSchemaGetterGuard guard;
-    if (OB_FAIL(schema_service_->get_tenant_schema_guard(OB_SYS_TENANT_ID, guard))) {
+    if (OB_FAIL(schema_service_->get_tenant_schema_guard(guard))) {
       LOG_WARN("fail to get schema guard", KR(ret));
     }
     for (; OB_SUCC(ret) && begin != end; begin++) {
@@ -1092,10 +1069,10 @@ int ObDDLHelper::check_table_udt_exist_(const ObTableSchema &table_schema)
     ObTableSchema::const_column_iterator end = table_schema.column_end();
     ObSchemaGetterGuard guard;
     ObSchemaGetterGuard local_guard;
-    if (OB_FAIL(schema_service_->get_tenant_schema_guard(OB_SYS_TENANT_ID, guard))) {
+    if (OB_FAIL(schema_service_->get_tenant_schema_guard(guard))) {
       LOG_WARN("fail to get schema guard", KR(ret));
-    } else if (OB_FAIL(schema_service_->get_tenant_schema_guard(tenant_id_, local_guard))) {
-      LOG_WARN("fail to get local guard", KR(ret), K_(tenant_id));
+    } else if (OB_FAIL(schema_service_->get_tenant_schema_guard(local_guard))) {
+      LOG_WARN("fail to get local guard", KR(ret));
     }
     for (; OB_SUCC(ret) && begin != end; begin++) {
       ObColumnSchemaV2 *col = (*begin);
@@ -1151,7 +1128,7 @@ int ObDDLHelper::add_lock_object_by_tablegroup_name_(
   ObString mock_database_name(OB_SYS_DATABASE_NAME);  // consider that tablegroup may across databases.
   if (OB_FAIL(add_lock_object_by_name_(mock_database_name, tablegroup_name,
       share::schema::TABLEGROUP_SCHEMA, lock_mode))) {
-    LOG_WARN("fail to add lock object by tablegroup name", KR(ret), K_(tenant_id), K(tablegroup_name));
+    LOG_WARN("fail to add lock object by tablegroup name", KR(ret), K(tablegroup_name));
   }
   return ret;
 }

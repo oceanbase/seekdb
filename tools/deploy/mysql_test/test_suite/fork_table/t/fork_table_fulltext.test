@@ -83,3 +83,4 @@ select id, title from t_fork where match(body) against ('fork') order by id;
 
 drop table if exists t_fork;
 drop database if exists db_fork_fts;
+

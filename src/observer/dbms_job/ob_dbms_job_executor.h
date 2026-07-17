@@ -17,8 +17,8 @@
 #ifndef SRC_OBSERVER_DBMS_JOB_EXECUTOR_H_
 #define SRC_OBSERVER_DBMS_JOB_EXECUTOR_H_
 
-#include "lib/mysqlclient/ob_mysql_proxy.h"
-#include "lib/allocator/ob_mod_define.h"
+#include "common/mysqlclient/ob_mysql_proxy.h"
+#include "lib/utility/ob_mod_define.h"
 #include "share/schema/ob_multi_version_schema_service.h"
 
 namespace oceanbase
@@ -44,14 +44,14 @@ public:
   int init_session(
     sql::ObSQLSessionInfo &session,
     share::schema::ObSchemaGetterGuard &schema_guard,
-    const common::ObString &tenant_name, uint64_t tenant_id,
+    const common::ObString &tenant_name,
     const common::ObString &database_name, uint64_t database_id,
     const share::schema::ObUserInfo* user_info,
     sql::ObExecEnv &exec_env);
 
 
-  int run_dbms_job(uint64_t tenant_id, uint64_t job_id);
-  int run_dbms_job(uint64_t tenant_id, ObDBMSJobInfo &job_info, ObIAllocator &allocator);
+  int run_dbms_job(uint64_t job_id);
+  int run_dbms_job(ObDBMSJobInfo &job_info, ObIAllocator &allocator);
 
 private:
   bool inited_;

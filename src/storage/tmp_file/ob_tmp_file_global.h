@@ -16,7 +16,7 @@
 
 #ifndef OCEANBASE_STORAGE_TMP_FILE_OB_TMP_FILE_GLOBAL_H_
 #define OCEANBASE_STORAGE_TMP_FILE_OB_TMP_FILE_GLOBAL_H_
-#include  "deps/oblib/src/lib/ob_define.h"
+#include  "lib/ob_define.h"
 
 namespace oceanbase
 {
@@ -71,21 +71,7 @@ struct ObTmpFileGlobal final
   };
   static int switch_data_list_level_to_flush_state(const FileList list_level, FlushCtxState &flush_state);
   static const int64_t TMP_FILE_STAT_FREQUENCY = 1 * 1000 * 1000; // 1s
-#ifdef OB_BUILD_SHARED_STORAGE
-  // SS_TMP_FILE
-  static const int64_t SHARE_STORAGE_DIR_ID = 1;
-  // Attention:
-  // SS_TMP_FILE_FLUSH_WAIT_TIMEOUT_MS is just a hint value.
-  // the real wait timeout period is also depend on GCONF._data_storage_io_timeout and tenant_config->_object_storage_io_timeout
-  static const int64_t SS_TMP_FILE_FLUSH_WAIT_TIMEOUT_MS = 30 * 1000;   // 30s
-  static constexpr double SS_TMP_FILE_FLUSH_PROP = 0.2;
-  static constexpr double SS_TMP_FILE_SAFE_WBP_PROP = 0.8;
-  static constexpr int64_t SS_BLOCK_SIZE = 2 << 20; // 2MB
-  static constexpr int64_t SS_BLOCK_PAGE_NUMS =
-                           SS_BLOCK_SIZE / ALLOC_PAGE_SIZE;   // 256 pages per macro block
-#endif
 };
-
 
 }  // end namespace tmp_file
 }  // end namespace oceanbase

@@ -1,0 +1,57 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+#define USING_LOG_PREFIX SHARE
+#include "ob_i_pre_warmer.h"
+#include "share/rc/ob_module_provider.h"
+#include "storage/ob_tenant_tablet_stat_mgr.h"
+namespace oceanbase
+{
+namespace share
+{
+
+int ObPreWarmerParam::init(const common::ObTabletID &tablet_id, const bool use_fixed_percentage)
+{
+  int ret = OB_SUCCESS;
+  int tmp_ret = OB_SUCCESS;
+  ObPreWarmerType tmp_type = PRE_WARM_TYPE_NONE;
+  if (tablet_id.is_user_tablet()) {
+    if (use_fixed_percentage) {
+
+      fixed_percentage_ = GCONF._compaction_prewarm_percentage;
+
+      if (fixed_percentage_ > 0) {
+        tmp_type = MEM_PRE_WARM;
+        LOG_INFO("use fixed percentage for prewarm", K(tablet_id), K_(fixed_percentage), K(tmp_type));
+      }
+    }
+    if (PRE_WARM_TYPE_NONE == tmp_type) {
+      storage::ObTabletStatAnalyzer tablet_analyzer;
+      if (OB_TMP_FAIL(share::g_mp->tenant_tablet_stat_mgr()
+                  ->get_tablet_analyzer(tablet_id, tablet_analyzer))) {
+        if (OB_HASH_NOT_EXIST != tmp_ret) {
+          LOG_WARN_RET(tmp_ret, "Failed to get tablet stat analyzer", K(tablet_id));
+        }
+      } else {
+        tmp_type = MEM_PRE_WARM;
+      }
+    }
+  }
+  type_ = tmp_type;
+  return ret;
+}
+
+} // namespace share
+} // namespace oceanbase

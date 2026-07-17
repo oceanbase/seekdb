@@ -26,7 +26,6 @@ namespace oceanbase
 {
 namespace common
 {
-const int SIG_STACK_SIZE = 16L<<10;
 uint64_t g_rlimit_core = 0;
 
 thread_local ObSqlInfo ObSqlInfoGuard::tl_sql_info;

@@ -21,7 +21,6 @@
 #include "lib/container/ob_se_array.h"
 #include "lib/utility/ob_print_utils.h"
 #include "common/ob_tablet_id.h"
-#include "share/ob_ls_id.h"
 #include "storage/tablet/ob_tablet_common.h"
 #include "storage/meta_mem/ob_tablet_pointer.h"
 
@@ -83,58 +82,6 @@ private:
   ObLSTabletService *ls_tablet_service_;
   common::ObSEArray<common::ObTabletID, ObTabletCommon::DEFAULT_ITERATOR_TABLET_ID_CNT> tablet_ids_;
   int64_t idx_;
-};
-
-class ObHALSTabletIDIterator final
-{
-  friend class ObLSTabletService;
-public:
-  ObHALSTabletIDIterator(
-      const share::ObLSID &ls_id,
-      const bool need_initial_state,
-      const bool need_sorted_tablet_id);
-  ~ObHALSTabletIDIterator();
-  ObHALSTabletIDIterator(const ObHALSTabletIDIterator&) = delete;
-  ObHALSTabletIDIterator &operator=(const ObHALSTabletIDIterator&) = delete;
-public:
-  int get_next_tablet_id(common::ObTabletID &tablet_id);
-
-  void reset();
-  bool is_valid() const;
-
-  TO_STRING_KV(K_(ls_id), K_(tablet_ids), K_(idx));
-
-private:
-  int sort_tablet_ids_if_need();
-
-private:
-  share::ObLSID ls_id_;
-  common::ObSEArray<common::ObTabletID, ObTabletCommon::DEFAULT_ITERATOR_TABLET_ID_CNT> tablet_ids_;
-  int64_t idx_;
-  const bool need_initial_state_;
-  const bool need_sorted_tablet_id_;
-};
-
-
-class ObHALSTabletIterator final
-{
-  friend class ObLSTabletService;
-public:
-  ObHALSTabletIterator(const share::ObLSID &ls_id,
-                       const bool need_initial_state,
-                       const bool need_sorted_tablet_id);
-  ~ObHALSTabletIterator();
-  ObHALSTabletIterator(const ObHALSTabletIterator&) = delete;
-  ObHALSTabletIterator &operator=(const ObHALSTabletIterator&) = delete;
-public:
-  int get_next_tablet(ObTabletHandle &handle);
-
-  void reset();
-
-  TO_STRING_KV(KP_(ls_tablet_service), K_(tablet_id_iter));
-private:
-  ObLSTabletService *ls_tablet_service_;
-  ObHALSTabletIDIterator tablet_id_iter_;
 };
 
 class ObLSTabletFastIter final

@@ -119,8 +119,8 @@ Outputs & filters:
       force partition granule
   3 - output([t2_fork.id], [t2_fork.name], [t2_fork.age], [t2_fork.email]), filter(nil), rowset=16
       access([t2_fork.id], [t2_fork.name], [t2_fork.age], [t2_fork.email]), partitions(p[0-1])
-      is_index_back=true, is_global_index=false,
-      range_key([t2_fork.name], [t2_fork.id]), range(Alice,MIN ; Alice,MAX),
+      is_index_back=true, is_global_index=false, 
+      range_key([t2_fork.name], [t2_fork.id]), range(Alice,MIN ; Alice,MAX), 
       range_cond([t2_fork.name = 'Alice'])
 explain select * from t2_fork where age = 30;
 Query Plan
@@ -141,8 +141,8 @@ Outputs & filters:
       force partition granule
   3 - output([t2_fork.id], [t2_fork.age], [t2_fork.name], [t2_fork.email]), filter(nil), rowset=16
       access([t2_fork.id], [t2_fork.age], [t2_fork.name], [t2_fork.email]), partitions(p[0-1])
-      is_index_back=true, is_global_index=false,
-      range_key([t2_fork.age], [t2_fork.id]), range(30,MIN ; 30,MAX),
+      is_index_back=true, is_global_index=false, 
+      range_key([t2_fork.age], [t2_fork.id]), range(30,MIN ; 30,MAX), 
       range_cond([t2_fork.age = 30])
 ============================================
 2.1 Fork Table with Index Building

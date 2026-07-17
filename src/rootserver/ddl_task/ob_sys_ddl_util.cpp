@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX RS
 
 #include "ob_sys_ddl_util.h"
+#include "share/rc/ob_module_provider.h"
 #include "rootserver/ob_ddl_service_launcher.h" // for ObDDLServiceLauncher
 #include "share/ob_ddl_common.h" // for ObDDLUtil
 namespace oceanbase
@@ -29,15 +30,15 @@ int ObSysDDLReplicaBuilderUtil::push_task(ObAsyncTask &task)
   if (OB_ISNULL(GCTX.omt_)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", KR(ret), KP(GCTX.omt_));
-  } else if (OB_UNLIKELY(!GCTX.omt_->has_tenant(OB_SYS_TENANT_ID))) {
+  } else if (OB_UNLIKELY(!GCTX.omt_->has_tenant())) {
     ret = OB_TENANT_NOT_EXIST;
     LOG_WARN("local server does not have SYS tenant resource", KR(ret));
   } else if (!ObDDLServiceLauncher::is_ddl_service_started()) {
     ret = OB_STATE_NOT_MATCH;
     LOG_WARN("ddl service not started", KR(ret));
   } else {
-    MTL_SWITCH(OB_SYS_TENANT_ID) {
-      rootserver::ObDDLScheduler* sys_ddl_scheduler = MTL(rootserver::ObDDLScheduler*);
+    MOD_SCOPE {
+      rootserver::ObDDLScheduler* sys_ddl_scheduler = share::g_mp->ddl_scheduler();
       if (OB_ISNULL(sys_ddl_scheduler)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("sys ddl scheduler service is null", KR(ret), KP(sys_ddl_scheduler));

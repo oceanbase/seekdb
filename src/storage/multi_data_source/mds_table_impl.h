@@ -24,7 +24,7 @@
 #include "lib/ob_define.h"
 #include "lib/utility/ob_macro_utils.h"
 #include "lib/utility/utility.h"
-#include "ob_clock_generator.h"
+#include "lib/time/ob_clock_generator.h"
 #include "ob_tablet_id.h"
 #include "share/ob_errno.h"
 #include "share/scn.h"
@@ -36,7 +36,6 @@
 #include "adapter_define/mds_dump_node.h"
 #include "mds_writer.h"
 #include "common/ob_tablet_id.h"
-#include "share/ob_ls_id.h"
 #include "mds_table_base.h"
 #include "compile_utility/map_type_index_in_tuple.h"
 #include "storage/multi_data_source/compile_utility/compile_mapper.h"
@@ -168,7 +167,7 @@ public:
                              const bool for_flush,
                              const ScanRowOrder scan_row_order,
                              const ScanNodeOrder scan_node_order);
-  TO_STRING_KV(KP(this), K_(ls_id), K_(tablet_id), K_(flushing_scn), K_(rec_scn), K_(max_aborted_scn),
+  TO_STRING_KV(KP(this), K_(tablet_id), K_(flushing_scn), K_(rec_scn), K_(max_aborted_scn),
                K_(last_inner_recycled_scn), K_(total_node_cnt), K_(construct_sequence), K_(debug_info));
   template <typename SCAN_OP>
   int for_each_scan_row(FowEachRowAction action_type, SCAN_OP &&op);

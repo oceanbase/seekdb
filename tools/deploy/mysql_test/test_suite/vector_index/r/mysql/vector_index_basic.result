@@ -281,15 +281,15 @@ create table t1(c1 int, c0 int, c2 vector(10), c3 vector(10), primary key(c1), v
 insert into t1 values(1, 1,'[0.203846,0.205289,0.880265,0.824340,0.615737,0.496899,0.983632,0.865571,0.248373,0.542833]', '[0.203846,0.205289,0.880265,0.824340,0.615737,0.496899,0.983632,0.865571,0.248373,0.542833]');
 insert into t1 values(2, 2, '[0.735541,0.670776,0.903237,0.447223,0.232028,0.659316,0.765661,0.226980,0.579658,0.933939]', '[0.213846,0.205289,0.880265,0.824340,0.615737,0.496899,0.983632,0.865571,0.248373,0.542833]');
 insert into t1 values(3, 3, '[0.327936,0.048756,0.084670,0.389642,0.970982,0.370915,0.181664,0.940780,0.013905,0.628127]', '[0.223846,0.205289,0.880265,0.824340,0.615737,0.496899,0.983632,0.865571,0.248373,0.542833]');
-select * from t1 where c0 = 2 order by l2_distance(c2, [0.712338,0.603321,0.133444,0.428146,0.876387,0.763293,0.408760,0.765300,0.560072,0.900498]) APPROXIMATE limit
+select * from t1 where c0 = 2 order by l2_distance(c2, [0.712338,0.603321,0.133444,0.428146,0.876387,0.763293,0.408760,0.765300,0.560072,0.900498]) APPROXIMATE limit 
 10;
 c1	c0	c2	c3
 2	2	[0.735541,0.670776,0.903237,0.447223,0.232028,0.659316,0.765661,0.22698,0.579658,0.933939]	[0.213846,0.205289,0.880265,0.82434,0.615737,0.496899,0.983632,0.865571,0.248373,0.542833]
-select * from t1 where c1 = 2 order by l2_distance(c2, [0.712338,0.603321,0.133444,0.428146,0.876387,0.763293,0.408760,0.765300,0.560072,0.900498]) APPROXIMATE limit
+select * from t1 where c1 = 2 order by l2_distance(c2, [0.712338,0.603321,0.133444,0.428146,0.876387,0.763293,0.408760,0.765300,0.560072,0.900498]) APPROXIMATE limit 
 10;
 c1	c0	c2	c3
 2	2	[0.735541,0.670776,0.903237,0.447223,0.232028,0.659316,0.765661,0.22698,0.579658,0.933939]	[0.213846,0.205289,0.880265,0.82434,0.615737,0.496899,0.983632,0.865571,0.248373,0.542833]
-select * from t1 where c1 = 2 order by l2_distance(c2, [0.712338,0.603321,0.133444,0.428146,0.876387,0.763293,0.408760,0.765300,0.560072,0.900498]) APPROXIMATE limit
+select * from t1 where c1 = 2 order by l2_distance(c2, [0.712338,0.603321,0.133444,0.428146,0.876387,0.763293,0.408760,0.765300,0.560072,0.900498]) APPROXIMATE limit 
 1;
 c1	c0	c2	c3
 2	2	[0.735541,0.670776,0.903237,0.447223,0.232028,0.659316,0.765661,0.22698,0.579658,0.933939]	[0.213846,0.205289,0.880265,0.82434,0.615737,0.496899,0.983632,0.865571,0.248373,0.542833]
@@ -461,7 +461,7 @@ drop table normal;
 drop view vec_view;
 drop table if exists t1;
 CREATE TABLE t1 (c1 int primary key, c2 vector(3),c3 vector(3) ,c4 vector(3),
-VECTOR INDEX vector_idx(c2)
+VECTOR INDEX vector_idx(c2) 
 WITH (distance=l2, lib=vsag, type=hnsw, m=10, ef_construction=12, ef_search=40));
 insert into t1 values(1,'[1,1,2]','[2,2,3]','[1,3,2]');
 insert into t1 values(2,'[1,0,3]','[1,0,3]','[2,3,2]');
@@ -493,7 +493,7 @@ select /*+ opt_param('rowsets_enabled', 'false') */ 567 from t1 for update;
 drop table t1;
 drop table if exists t1;
 create table t1(c1 int primary key, c2 vector(3),c3 vector(3) , c4 vector(3),
-VECTOR INDEX vector_idx(c4)
+VECTOR INDEX vector_idx(c4) 
 WITH (distance=l2, lib=vsag, type=hnsw, m=10, ef_construction=100, ef_search=40)) partition by hash(c1) partitions 4;
 replace into t1(c1, c2, c3) values(1,'[1,1,2]','[2,2,3]');
 replace into t1(c1, c2, c3) values(2,'[1,-1,3]','[1,0,3]');

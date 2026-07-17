@@ -42,8 +42,7 @@ void ObLockWaitNode::set(void *addr,
                          const uint32_t client_sid,
                          const uint32_t holder_sess_id,
                          int64_t tx_id,
-                         int64_t holder_tx_id,
-                         const share::ObLSID &ls_id)
+                         int64_t holder_tx_id)
 {
   hash_ = hash | 1;
   addr_ = addr;

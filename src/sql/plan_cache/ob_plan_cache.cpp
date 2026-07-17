@@ -186,9 +186,14 @@ struct ObNodeStatFilterOp : public ObKVEntryTraverseOp
 {
   ObNodeStatFilterOp(int64_t evict_num,
                      LCKeyValueArray *key_val_list,
-                     const CacheRefHandleID ref_handle)
+                     const CacheRefHandleID ref_handle,
+                     int64_t idle_threshold_us = 0,
+                     LCKeyValueArray *idle_list = NULL)
     : ObKVEntryTraverseOp(key_val_list, ref_handle),
-      evict_num_(evict_num)
+      evict_num_(evict_num),
+      idle_threshold_us_(idle_threshold_us),
+      idle_list_(idle_list),
+      now_(common::ObTimeUtility::current_time())
   {
   }
   virtual int operator()(LibCacheKVEntry &entry)
@@ -199,6 +204,22 @@ struct ObNodeStatFilterOp : public ObKVEntryTraverseOp
       SQL_PC_LOG(WARN, "invalid argument",
       K(key_value_list_), K(entry.first), K(entry.second), K(ret));
     } else {
+      // collect idle-expired nodes if configured
+      if (idle_threshold_us_ > 0 && OB_NOT_NULL(idle_list_)) {
+        const StmtStat *stat = entry.second->get_node_stat();
+        if (OB_NOT_NULL(stat) &&
+            stat->last_active_timestamp_ > 0 &&
+            now_ - stat->last_active_timestamp_ > idle_threshold_us_) {
+          ObLCKeyValue idle_kv(entry.first, entry.second);
+          if (OB_FAIL(idle_list_->push_back(idle_kv))) {
+            SQL_PC_LOG(WARN, "fail to push into idle_list", K(ret));
+          } else {
+            idle_kv.node_->inc_ref_count(ref_handle_);
+          }
+          return ret;
+        }
+      }
+
       ObLCKeyValue lc_kv(entry.first, entry.second);
       if (key_value_list_->count() < evict_num_) {
         if (OB_FAIL(key_value_list_->push_back(lc_kv))) {
@@ -234,11 +255,56 @@ struct ObNodeStatFilterOp : public ObKVEntryTraverseOp
   }
 
   int64_t evict_num_;
+  int64_t idle_threshold_us_;
+  LCKeyValueArray *idle_list_;
+  int64_t now_;
+};
+
+struct ObIdleEvictOp
+{
+  typedef common::hash::HashMapPair<ObILibCacheKey *, ObILibCacheNode *> LibCacheKVEntry;
+  int64_t now_;
+  int64_t idle_threshold_us_;
+  int64_t scanned_nodes_;
+  int64_t max_scan_nodes_;
+  LCKeyValueArray *to_evict_;
+  const CacheRefHandleID ref_handle_;
+
+  ObIdleEvictOp(int64_t now, int64_t idle_threshold_us,
+                int64_t max_scan_nodes, LCKeyValueArray *to_evict)
+    : now_(now), idle_threshold_us_(idle_threshold_us), scanned_nodes_(0),
+      max_scan_nodes_(max_scan_nodes), to_evict_(to_evict),
+      ref_handle_(PCV_EXPIRE_BY_MEM_HANDLE)
+  {}
+
+  int operator()(LibCacheKVEntry &entry)
+  {
+    int ret = common::OB_SUCCESS;
+    if (scanned_nodes_ >= max_scan_nodes_) {
+      ret = OB_ITER_END;
+    } else {
+      ++scanned_nodes_;
+      if (OB_ISNULL(entry.first) || OB_ISNULL(entry.second)) {
+        // skip
+      } else {
+        const StmtStat *stat = entry.second->get_node_stat();
+        if (OB_NOT_NULL(stat) &&
+            stat->last_active_timestamp_ > 0 &&
+            now_ - stat->last_active_timestamp_ > idle_threshold_us_) {
+          if (OB_FAIL(to_evict_->push_back(ObLCKeyValue(entry.first, entry.second)))) {
+            SQL_PC_LOG(WARN, "fail to push back idle evict entry", K(ret));
+          } else {
+            entry.second->inc_ref_count(ref_handle_);
+          }
+        }
+      }
+    }
+    return ret;
+  }
 };
 
 ObPlanCache::ObPlanCache()
   :inited_(false),
-   tenant_id_(OB_INVALID_TENANT_ID),
    mem_limit_pct_(OB_PLAN_CACHE_PERCENTAGE),
    mem_high_pct_(OB_PLAN_CACHE_EVICT_HIGH_PERCENTAGE),
    mem_low_pct_(OB_PLAN_CACHE_EVICT_LOW_PERCENTAGE),
@@ -246,9 +312,10 @@ ObPlanCache::ObPlanCache()
    bucket_num_(0),
    inner_allocator_(),
    ref_handle_mgr_(),
-   pcm_(NULL),
    destroy_(0),
-   tg_id_(-1)
+   evict_timer_(),
+   idle_scan_cursor_(0),
+   idle_evict_done_round_(false)
 {
 }
 
@@ -261,7 +328,7 @@ void ObPlanCache::destroy()
 {
   observer::ObReqTimeGuard req_timeinfo_guard;
   if (inited_) {
-    TG_DESTROY(tg_id_);
+    evict_timer_.destroy();
     if (OB_SUCCESS != (cache_evict_all_obj())) {
       SQL_PC_LOG_RET(WARN, OB_ERROR, "fail to evict all lib cache cache");
     }
@@ -273,42 +340,39 @@ void ObPlanCache::destroy()
   }
 }
 
-int ObPlanCache::init(int64_t hash_bucket, uint64_t tenant_id)
+int ObPlanCache::init(int64_t hash_bucket)
 {
   int ret = OB_SUCCESS;
   if (!inited_) {
     ObPCMemPctConf default_conf;
-    ObMemAttr attr(tenant_id, "PlanCache", ObCtxIds::PLAN_CACHE_CTX_ID);
+    ObMemAttr attr("PlanCache", ObCtxIds::PLAN_CACHE_CTX_ID);
     lib::ContextParam param;
     param.set_properties(lib::ADD_CHILD_THREAD_SAFE | lib::ALLOC_THREAD_SAFE)
       .set_mem_attr(attr);
     if (OB_FAIL(ROOT_CONTEXT->CREATE_CONTEXT(root_context_, param))) {
       SQL_PC_LOG(WARN, "failed to create context", K(ret));
-    } else if (OB_FAIL(co_mgr_.init(hash_bucket, tenant_id))) {
+    } else if (OB_FAIL(co_mgr_.init(hash_bucket))) {
       SQL_PC_LOG(WARN, "failed to init lib cache manager", K(ret));
     } else if (OB_FAIL(cache_key_node_map_.create(hash::cal_next_prime(hash_bucket),
                                                   ObModIds::OB_HASH_BUCKET_PLAN_CACHE,
-                                                  ObModIds::OB_HASH_NODE_PLAN_CACHE,
-                                                  tenant_id))) {
+                                                  ObModIds::OB_HASH_NODE_PLAN_CACHE))) {
       SQL_PC_LOG(WARN, "failed to init PlanCache", K(ret));
-    } else if (OB_FAIL(TG_CREATE_TENANT(lib::TGDefIDs::PlanCacheEvict, tg_id_))) {
-      LOG_WARN("failed to create tg", K(ret));
-    } else if (OB_FAIL(TG_START(tg_id_))) {
-      LOG_WARN("failed to start tg", K(ret));
-    } else if (OB_FAIL(TG_SCHEDULE(tg_id_, evict_task_, GCONF.plan_cache_evict_interval, true))) {
+    } else if (FALSE_IT(evict_task_.plan_cache_ = this)) {
+    } else if (OB_FAIL(evict_timer_.init("PlanCacheEvict", ObMemAttr("PlanCacheEvict")))) {
+      LOG_WARN("failed to init plan cache evict timer", K(ret));
+    } else if (OB_FAIL(evict_timer_.schedule(evict_task_, GCONF.plan_cache_evict_interval, true))) {
       LOG_WARN("failed to schedule refresh task", K(ret));
     } else if (OB_FAIL(set_mem_conf(default_conf))) {
       LOG_WARN("fail to set plan cache memory conf", K(ret));
     } else {
-      evict_task_.plan_cache_ = this;
       cn_factory_.set_lib_cache(this);
       ObMemAttr attr = get_mem_attr();
-      attr.tenant_id_ = tenant_id;
+      
       inner_allocator_.set_attr(attr);
       set_host(const_cast<ObAddr &>(GCTX.self_addr()));
       bucket_num_ = hash::cal_next_prime(hash_bucket);
-      tenant_id_ = tenant_id;
-      ref_handle_mgr_.set_tenant_id(tenant_id_);
+      
+      
       inited_ = true;
     }
     if (OB_FAIL(ret)) {
@@ -352,8 +416,6 @@ int ObPlanCache::check_after_get_plan(int tmp_ret,
 {
   int ret = tmp_ret;
   ObPhysicalPlan *plan = NULL;
-  bool need_late_compilation = false;
-  ObJITEnableMode jit_mode = ObJITEnableMode::OFF;
   ObPlanCacheCtx &pc_ctx = static_cast<ObPlanCacheCtx&>(ctx);
 
   if (cache_obj != NULL && ObLibCacheNameSpace::NS_CRSR == cache_obj->get_ns()) {
@@ -363,22 +425,10 @@ int ObPlanCache::check_after_get_plan(int tmp_ret,
     if (OB_ISNULL(pc_ctx.sql_ctx_.session_info_)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected null session info", K(ret));
-    } else if (OB_FAIL(pc_ctx.sql_ctx_.session_info_->get_jit_enabled_mode(jit_mode))) {
-      LOG_WARN("failed to get jit mode");
-    }
-  }
-  if (OB_SUCC(ret) && plan != NULL) {
-    if (ObJITEnableMode::AUTO == jit_mode && // only use late compilation when jit_mode is auto
-      OB_FAIL(need_late_compile(plan, need_late_compilation))) {
-      LOG_WARN("failed to check for late compilation", K(ret));
-    } else {
-      // set context's need_late_compile_ for upper layer to proceed
-      pc_ctx.sql_ctx_.need_late_compile_ = need_late_compilation;
     }
   }
   // if schema expired, update pcv set;
-  if (OB_OLD_SCHEMA_VERSION == ret
-    || need_late_compilation) {
+  if (OB_OLD_SCHEMA_VERSION == ret) {
       if (OB_FAIL(remove_cache_node(pc_ctx.key_))) {
         LOG_WARN("fail to remove pcv set when schema/plan expired", K(ret));
       } else {
@@ -433,8 +483,6 @@ int ObPlanCache::get_plan(common::ObIAllocator &allocator,
                           ObCacheObjGuard& guard)
 {
   int ret = OB_SUCCESS;
-
-  FLTSpanGuard(pc_get_plan);
   ObGlobalReqTimeService::check_req_timeinfo();
   pc_ctx.handle_id_ = guard.ref_handle_;
   if (OB_ISNULL(pc_ctx.sql_ctx_.session_info_)
@@ -477,12 +525,11 @@ int ObPlanCache::get_plan(common::ObIAllocator &allocator,
                plan->stat_.format_sql_id_.ptr(),
                plan->stat_.format_sql_id_.length());
         if (GCONF.enable_perf_event) {
-          uint64_t tenant_id = pc_ctx.sql_ctx_.session_info_->get_effective_tenant_id();
+          
           bool read_only = false;
           if (pc_ctx.sql_ctx_.session_info_->is_inner() && !pc_ctx.sql_ctx_.session_info_->is_user_session()) {
             // do nothing
-          } else if (OB_FAIL(pc_ctx.sql_ctx_.schema_guard_->get_tenant_read_only(tenant_id,
-                                                                                 read_only))) {
+          } else if (OB_FAIL(pc_ctx.sql_ctx_.schema_guard_->get_tenant_read_only(read_only))) {
             LOG_WARN("failed to check read_only privilege", K(ret));
           } else if (OB_FAIL(pc_ctx.sql_ctx_.session_info_->check_read_only_privilege(
                        read_only, pc_ctx.sql_traits_))) {
@@ -915,7 +962,6 @@ int ObPlanCache::check_can_do_insert_opt(common::ObIAllocator &allocator,
 int ObPlanCache::add_plan(ObPhysicalPlan *plan, ObPlanCacheCtx &pc_ctx)
 {
   int ret = OB_SUCCESS;
-  FLTSpanGuard(pc_add_plan);
   ObGlobalReqTimeService::check_req_timeinfo();
   if (OB_ISNULL(plan)) {
     ret = OB_INVALID_ARGUMENT;
@@ -924,7 +970,7 @@ int ObPlanCache::add_plan(ObPhysicalPlan *plan, ObPlanCacheCtx &pc_ctx)
     ret = OB_REACH_MEMORY_LIMIT;
     if (REACH_TIME_INTERVAL(1000000)) { //1s, when memory reaches the upper limit, this log print will be relatively frequent, so it is printed at an interval of 1s
       SQL_PC_LOG(WARN, "plan cache memory used reach limit",
-                        K_(tenant_id), K(get_mem_hold()), K(get_mem_limit()), K(ret));
+                        K(get_mem_hold()), K(get_mem_limit()), K(ret));
     }
   } else if (plan->get_mem_size() >= get_mem_high()) {
     // plan mem is too big, do not add plan
@@ -1015,9 +1061,6 @@ int ObPlanCache::add_cache_obj(ObILibCacheCtx &ctx,
   if (OB_ISNULL(key) || OB_ISNULL(cache_obj)) {
     ret = OB_INVALID_ARGUMENT;
     SQL_PC_LOG(WARN, "invalid null argument", K(ret), K(key), K(cache_obj));
-  } else if (get_tenant_id() != cache_obj->get_tenant_id()) {
-    ret = OB_ERR_UNEXPECTED;
-    SQL_PC_LOG(ERROR, "unmatched tenant_id", K(ret), K(get_tenant_id()), K(cache_obj->get_tenant_id()));
   } else if (OB_FAIL(get_value(key, cache_node, w_ref_lock /*write locked*/))) {
     SQL_PC_LOG(TRACE, "failed to get cache node from lib cache by key", K(ret));
   } else if (NULL == cache_node) {
@@ -1087,6 +1130,7 @@ int ObPlanCache::add_cache_obj(ObILibCacheCtx &ctx,
             cache_node->dec_ref_count(LC_NODE_HANDLE); //cache node dec ref in alloc
           }
         } else {
+          cache_node->inc_added_mem_size(cache_obj->get_mem_size());
           cache_node->unlock();
           cache_node->dec_ref_count(LC_NODE_HANDLE); //cache node dec ref in block
         }
@@ -1111,6 +1155,8 @@ int ObPlanCache::add_cache_obj(ObILibCacheCtx &ctx,
       SQL_PC_LOG(WARN, "failed to update node stat", K(ret));
     } else if (OB_FAIL(add_stat_for_cache_obj(ctx, cache_obj))) {
       LOG_WARN("failed to add stat", K(ret), K(ctx));
+    } else {
+      cache_node->inc_added_mem_size(cache_obj->get_mem_size());
     }
     if (OB_FAIL(ret)) {
       if (!ctx.need_destroy_node_ && ret != OB_SQL_PC_PLAN_DUPLICATE) {
@@ -1316,7 +1362,7 @@ int ObPlanCache::cache_evict()
   int64_t cache_evict_num = 0;
   ObGlobalReqTimeService::check_req_timeinfo();
   SQL_PC_LOG(INFO, "start lib cache evict",
-             K_(tenant_id),
+             
              "mem_hold", get_mem_hold(),
              "mem_limit", get_mem_limit(),
              "cache_obj_num", get_cache_obj_size(),
@@ -1325,14 +1371,33 @@ int ObPlanCache::cache_evict()
   if (get_mem_hold() > get_mem_high()) {
     if (calc_evict_num(cache_evict_num) && cache_evict_num > 0) {
       LCKeyValueArray to_evict_keys;
-      ObNodeStatFilterOp filter(cache_evict_num, &to_evict_keys, PCV_EXPIRE_BY_MEM_HANDLE);
+      LCKeyValueArray idle_evict_keys;
+      const int64_t idle_threshold_us = IDLE_EVICT_THRESHOLD_US;
+      ObNodeStatFilterOp filter(cache_evict_num, &to_evict_keys, PCV_EXPIRE_BY_MEM_HANDLE,
+                                idle_threshold_us, &idle_evict_keys);
       if (OB_FAIL(foreach_cache_evict(filter))) {
         SQL_PC_LOG(WARN, "failed to foreach cache evict", K(ret));
       }
+      // also evict idle-expired nodes collected during the same scan
+      if (OB_SUCC(ret) && idle_evict_keys.count() > 0) {
+        SQL_PC_LOG(INFO, "idle eviction during memory evict",
+                   "idle_evict_count", idle_evict_keys.count());
+        if (OB_FAIL(batch_remove_cache_node(idle_evict_keys))) {
+          SQL_PC_LOG(WARN, "failed to remove idle cache nodes", K(ret));
+        }
+        for (int64_t i = 0; i < idle_evict_keys.count(); i++) {
+          if (OB_NOT_NULL(idle_evict_keys.at(i).node_)) {
+            idle_evict_keys.at(i).node_->dec_ref_count(PCV_EXPIRE_BY_MEM_HANDLE);
+          }
+        }
+      }
+      // full scan done, reset idle cursor so cache_evict_by_idle can skip
+      idle_scan_cursor_ = 0;
+      idle_evict_done_round_ = true;
     }
   }
   SQL_PC_LOG(INFO, "end lib cache evict",
-             K_(tenant_id),
+             
              "cache_evict_num", cache_evict_num,
              "mem_hold", get_mem_hold(),
              "mem_limit", get_mem_limit(),
@@ -1355,7 +1420,7 @@ int ObPlanCache::cache_evict_by_glitch_node()
       int64_t N = co_list.count();
       int64_t mem_to_free = traverse_op.get_total_mem_used() / 2;
       SQL_PC_LOG(INFO, "cache evict plan by glitch node start",
-             K_(tenant_id),
+             
              "mem_hold", get_mem_hold(),
              "mem_high", get_mem_high(),
              "mem_to_free", mem_to_free,
@@ -1382,13 +1447,81 @@ int ObPlanCache::cache_evict_by_glitch_node()
         }
       }
       SQL_PC_LOG(INFO, "cache evict plan by glitch node end",
-             K_(tenant_id),
+             
              "cache_evict_num", cache_evict_num,
              "mem_hold", get_mem_hold(),
              "mem_high", get_mem_high(),
              "mem_low", get_mem_low(),
              "cache_obj_num", get_cache_obj_size(),
              "cache_node_num", cache_key_node_map_.size());
+    }
+  }
+  return ret;
+}
+
+// Plan cache only evicts plans when memory exceeds the high water mark,
+// so plans that are no longer accessed can stay cached indefinitely,
+// wasting memory until memory pressure triggers eviction.
+//
+// This function adds idle-based eviction: plans not accessed within
+// IDLE_EVICT_THRESHOLD_US (default 30s) are removed proactively.
+//
+// To avoid scanning all buckets and nodes in a single timer round
+// (which could be expensive with tens of thousands of buckets and
+// many nodes per bucket), the scan is rate-limited by two caps:
+//   - IDLE_SCAN_MAX_BUCKETS: max buckets scanned per round
+//   - IDLE_SCAN_MAX_NODES:   max nodes inspected per round
+// A cursor (idle_scan_cursor_) tracks progress across rounds so that
+// all buckets are eventually covered. Each node's existing
+// last_active_timestamp_ (already updated atomically on every access)
+// is checked against the threshold — no extra work on the hot path.
+int ObPlanCache::cache_evict_by_idle()
+{
+  int ret = OB_SUCCESS;
+  const int64_t idle_threshold_us = IDLE_EVICT_THRESHOLD_US;
+  if (idle_threshold_us <= 0) {
+    // idle eviction disabled
+  } else {
+    ObGlobalReqTimeService::check_req_timeinfo();
+    const int64_t now = ObTimeUtility::current_time();
+    const int64_t start_cursor = idle_scan_cursor_;
+    int64_t bucket_pos = start_cursor;
+    int64_t scanned_buckets = 0;
+    LCKeyValueArray to_evict;
+    ObIdleEvictOp op(now, idle_threshold_us, IDLE_SCAN_MAX_NODES, &to_evict);
+
+    while (OB_SUCC(ret)
+           && bucket_pos < bucket_num_
+           && scanned_buckets < IDLE_SCAN_MAX_BUCKETS
+           && op.scanned_nodes_ < IDLE_SCAN_MAX_NODES) {
+      int64_t batch_end = MIN(bucket_pos + 256, bucket_num_);
+      scanned_buckets += (batch_end - bucket_pos);
+      int tmp_ret = cache_key_node_map_.foreach_refactored_range(op, bucket_pos, batch_end);
+      if (OB_ITER_END == tmp_ret) {
+        break;
+      } else if (OB_FAIL(tmp_ret)) {
+        SQL_PC_LOG(WARN, "failed to scan buckets for idle eviction", K(ret), K(bucket_pos));
+      }
+      bucket_pos = batch_end;
+    }
+
+    idle_scan_cursor_ = (bucket_pos >= bucket_num_) ? 0 : bucket_pos;
+
+    if (to_evict.count() > 0) {
+      SQL_PC_LOG(INFO, "idle eviction collected plans",
+                 "idle_evict_count", to_evict.count(),
+                 "scanned_nodes", op.scanned_nodes_,
+                 "scanned_buckets", scanned_buckets,
+                 "start_cursor", start_cursor,
+                 "new_cursor", idle_scan_cursor_);
+      if (OB_FAIL(batch_remove_cache_node(to_evict))) {
+        SQL_PC_LOG(WARN, "failed to remove idle cache nodes", K(ret));
+      }
+      for (int64_t i = 0; i < to_evict.count(); i++) {
+        if (OB_NOT_NULL(to_evict.at(i).node_)) {
+          to_evict.at(i).node_->dec_ref_count(PCV_EXPIRE_BY_MEM_HANDLE);
+        }
+      }
     }
   }
   return ret;
@@ -1612,9 +1745,8 @@ int ObPlanCache::create_node_and_add_cache_obj(ObILibCacheKey *cache_key,
     SQL_PC_LOG(WARN, "invalid argument", K(ret), K(cache_key), K(cache_obj));
   } else if (OB_FAIL(cn_factory_.create_cache_node(cache_key->namespace_,
                                                    cache_node,
-                                                   tenant_id_,
                                                    root_context_))) {
-    SQL_PC_LOG(WARN, "failed to create cache node", K(ret), K_(cache_key->namespace), K_(tenant_id));
+    SQL_PC_LOG(WARN, "failed to create cache node", K(ret), K_(cache_key->namespace));
   } else {
     // reference count after constructing cache node
     cache_node->inc_ref_count(LC_NODE_HANDLE);
@@ -1684,14 +1816,9 @@ int ObPlanCache::update_memory_conf()
   ObArenaAllocator alloc;
   ObObj obj_val;
 
-  if (tenant_id_ > OB_SYS_TENANT_ID && tenant_id_ <= OB_MAX_RESERVED_TENANT_ID) {
-    // tenant id between (OB_SYS_TENANT_ID, OB_MAX_RESERVED_TENANT_ID) is a virtual tenant,
-    // virtual tenants do not have schema
-    // do nothing
-  } else {
+  {
     for (int32_t i = 0; i < 3 && OB_SUCC(ret); ++i) {
-    if (OB_FAIL(ObBasicSessionInfo::get_global_sys_variable(tenant_id_,
-                                                            alloc,
+    if (OB_FAIL(ObBasicSessionInfo::get_global_sys_variable(alloc,
                                                             ObDataTypeCastParams(),
                                                             ObString(conf_names[i]), obj_val))) {
       } else if (OB_FAIL(obj_val.get_int(*conf_values[i]))) {
@@ -1712,21 +1839,20 @@ int ObPlanCache::update_memory_conf()
   LOG_INFO("update plan cache memory config",
             "ob_plan_cache_percentage", pc_mem_conf.limit_pct_,
             "ob_plan_cache_evict_high_percentage", pc_mem_conf.high_pct_,
-            "ob_plan_cache_evict_low_percentage", pc_mem_conf.low_pct_,
-            "tenant_id", tenant_id_);
+            "ob_plan_cache_evict_low_percentage", pc_mem_conf.low_pct_);
 
   return ret;
 }
 
 int64_t ObPlanCache::get_mem_hold() const
 {
-  return get_tenant_memory_hold(tenant_id_, ObCtxIds::PLAN_CACHE_CTX_ID);
+  return get_tenant_memory_hold(ObCtxIds::PLAN_CACHE_CTX_ID);
 }
 
 int64_t ObPlanCache::get_label_hold(lib::ObLabel &label) const
 {
   common::ObLabelItem item;
-  get_tenant_label_memory(tenant_id_, label, item);
+  get_tenant_label_memory(label, item);
   return item.hold_;
 }
 // Add plan to plan cache
@@ -1895,10 +2021,9 @@ template int ObPlanCache::add_ps_plan<ObPLFunction>(ObPLFunction *plan, ObPlanCa
 //   }
 //   //check read only privilege
 //   if (OB_SUCC(ret) && GCONF.enable_perf_event) {
-//     uint64_t tenant_id = pc_ctx.sql_ctx_.session_info_->get_effective_tenant_id();
 //     bool read_only = false;
-//     if (OB_FAIL(pc_ctx.sql_ctx_.schema_guard_->get_tenant_read_only(tenant_id, read_only))) {
-//       SQL_PC_LOG(WARN, "fail to get tenant read only attribute", K(tenant_id), K(ret));
+//     if (OB_FAIL(pc_ctx.sql_ctx_.schema_guard_->get_tenant_read_only(read_only))) {
+//       SQL_PC_LOG(WARN, "fail to get tenant read only attribute", K(ret));
 //     } else if (OB_FAIL(pc_ctx.sql_ctx_.session_info_->check_read_only_privilege(read_only,
 //                                                                                 sql_traits))) {
 //       SQL_PC_LOG(WARN, "failed to check read_only privilege", K(ret));
@@ -1972,12 +2097,12 @@ int ObPlanCache::get_ps_plan(ObCacheObjGuard& guard,
   }
   //check read only privilege
   if (OB_SUCC(ret) && GCONF.enable_perf_event) {
-    uint64_t tenant_id = pc_ctx.sql_ctx_.session_info_->get_effective_tenant_id();
+    
     bool read_only = false;
     if (pc_ctx.sql_ctx_.session_info_->is_inner() && !pc_ctx.sql_ctx_.session_info_->is_user_session()) {
       // do nothing
-    } else if (OB_FAIL(pc_ctx.sql_ctx_.schema_guard_->get_tenant_read_only(tenant_id, read_only))) {
-      SQL_PC_LOG(WARN, "fail to get tenant read only attribute", K(tenant_id), K(ret));
+    } else if (OB_FAIL(pc_ctx.sql_ctx_.schema_guard_->get_tenant_read_only(read_only))) {
+      SQL_PC_LOG(WARN, "fail to get tenant read only attribute", K(ret));
     } else if (OB_FAIL(pc_ctx.sql_ctx_.session_info_->check_read_only_privilege(read_only,
                                                                                 pc_ctx.sql_traits_))) {
       SQL_PC_LOG(WARN, "failed to check read_only privilege", K(ret));
@@ -2038,29 +2163,6 @@ OB_INLINE int ObPlanCache::construct_plan_cache_key(ObSQLSessionInfo &session,
   return ret;
 }
 
-int ObPlanCache::need_late_compile(ObPhysicalPlan *plan,
-                                   bool &need_late_compilation)
-{
-  int ret = OB_SUCCESS;
-  need_late_compilation = false;
-  if (OB_ISNULL(plan)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(plan));
-  } else if (plan->is_use_jit()) {
-    // do nothing
-  } else if (plan->stat_.execute_times_ >= 10) { // after ten times of execution
-    uint64_t avg_exec_duration = plan->stat_.cpu_time_ / plan->stat_.execute_times_;
-    // for now, hard code the exec duration threshold to be 1s
-    if (avg_exec_duration > 1000000UL) {
-      need_late_compilation = true;
-    } else {
-      need_late_compilation = false;
-    }
-  }
-  LOG_TRACE("will use late compilation", K(need_late_compilation));
-  return ret;
-}
-
 int ObPlanCache::add_stat_for_cache_obj(ObILibCacheCtx &ctx, ObILibCacheObject *cache_obj)
 {
   int ret = OB_SUCCESS;
@@ -2076,10 +2178,10 @@ int ObPlanCache::add_stat_for_cache_obj(ObILibCacheCtx &ctx, ObILibCacheObject *
   return ret;
 }
 
-int ObPlanCache::alloc_cache_obj(ObCacheObjGuard& guard, ObLibCacheNameSpace ns, uint64_t tenant_id)
+int ObPlanCache::alloc_cache_obj(ObCacheObjGuard& guard, ObLibCacheNameSpace ns)
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(co_mgr_.alloc(guard, ns, tenant_id, root_context_))) {
+  if (OB_FAIL(co_mgr_.alloc(guard, ns, root_context_))) {
     LOG_WARN("failed to alloc cache obj", K(ret));
   }
   return ret;
@@ -2096,19 +2198,6 @@ int ObPlanCache::destroy_cache_obj(const bool is_leaked, const uint64_t object_i
   int ret = OB_SUCCESS;
   if (OB_FAIL(co_mgr_.destroy_cache_obj(is_leaked, object_id))) {
     LOG_WARN("failed to destroy cache obj", K(ret));
-  }
-  return ret;
-}
-
-int ObPlanCache::dump_all_objs() const
-{
-  int ret = OB_SUCCESS;
-  ObArray<AllocCacheObjInfo> alloc_obj_list;
-  ObDumpAllCacheObjOp get_all_objs_op(&alloc_obj_list, INT64_MAX);
-  if (OB_FAIL(co_mgr_.foreach_alloc_cache_obj(get_all_objs_op))) {
-    LOG_WARN("failed to traverse alloc cache obj map", K(ret));
-  } else {
-    LOG_INFO("Dumping All Cache Objs", K(alloc_obj_list.count()), K(alloc_obj_list));
   }
   return ret;
 }
@@ -2146,9 +2235,9 @@ template int ObPlanCache::dump_deleted_objs<DUMP_ALL>(ObIArray<AllocCacheObjInfo
 int ObPlanCache::mtl_init(ObPlanCache* &plan_cache)
 {
   int ret = OB_SUCCESS;
-  uint64_t tenant_id = lib::current_resource_owner_id();
+  
   if (OB_FAIL(plan_cache->init(common::calculate_scaled_value_by_memory(
-      common::OB_PLAN_CACHE_BUCKET_NUMBER_MIN, common::OB_PLAN_CACHE_BUCKET_NUMBER), tenant_id))) {
+      common::OB_PLAN_CACHE_BUCKET_NUMBER_MIN, common::OB_PLAN_CACHE_BUCKET_NUMBER)))) {
     LOG_WARN("failed to init request manager", K(ret));
   } else {
     // do nothing
@@ -2159,8 +2248,8 @@ int ObPlanCache::mtl_init(ObPlanCache* &plan_cache)
 void ObPlanCache::mtl_stop(ObPlanCache * &plan_cache)
 {
   if (OB_LIKELY(nullptr != plan_cache)) {
-    TG_CANCEL(plan_cache->tg_id_, plan_cache->evict_task_);
-    TG_STOP(plan_cache->tg_id_);
+    plan_cache->evict_timer_.cancel(plan_cache->evict_task_);
+    plan_cache->evict_timer_.stop();
   }
 }
 
@@ -2361,19 +2450,6 @@ int ObPlanCache::flush_pl_cache()
 
 const char *plan_cache_gc_confs[3] = { "OFF", "REPORT", "AUTO" };
 
-int ObPlanCache::get_plan_cache_gc_strategy()
-{
-  PlanCacheGCStrategy strategy = INVALID;
-  for (int i = 0; i < ARRAYSIZEOF(plan_cache_gc_confs) && strategy == INVALID; i++) {
-    if (0 == ObString::make_string(plan_cache_gc_confs[i])
-               .case_compare(GCONF._ob_plan_cache_gc_strategy)) {
-      strategy = static_cast<PlanCacheGCStrategy>(i);
-    }
-  }
-  return strategy;
-}
-
-
 void ObPlanCacheEliminationTask::runTimerTask()
 {
   int ret = OB_SUCCESS;
@@ -2392,11 +2468,6 @@ void ObPlanCacheEliminationTask::runTimerTask()
     SQL_PC_LOG(INFO, "schedule next cache evict task",
               "evict_interval", (int64_t)(GCONF.plan_cache_evict_interval));
   }
-  // free cache obj in deleted map
-  if (plan_cache_->get_plan_cache_gc_strategy() > 0) {
-    observer::ObReqTimeGuard req_timeinfo_guard;
-    run_free_cache_obj_task();
-  }
   SQL_PC_LOG(INFO, "schedule next cache evict task",
              "evict_interval", (int64_t)(GCONF.plan_cache_evict_interval));
 }
@@ -2413,38 +2484,13 @@ void ObPlanCacheEliminationTask::run_plan_cache_task()
   }  else if (OB_FAIL(plan_cache_->cache_evict_by_glitch_node())) {
     SQL_PC_LOG(ERROR, "Plan cache evict by glitch failed, please check", K(ret));
   }
-}
-
-void ObPlanCacheEliminationTask::run_free_cache_obj_task()
-{
-  int ret = OB_SUCCESS;
-  ObArray<AllocCacheObjInfo> deleted_objs;
-  int64_t safe_timestamp = INT64_MAX;
-  if (observer::ObGlobalReqTimeService::get_instance()
-                         .get_global_safe_timestamp(safe_timestamp)) {
-    // ignore ret
-    SQL_PC_LOG(ERROR, "failed to get global safe timestamp", K(ret));
-  } else if (OB_FAIL(plan_cache_->dump_deleted_objs<DUMP_ALL>(deleted_objs, safe_timestamp))) {
-    SQL_PC_LOG(WARN, "failed to traverse hashmap", K(ret));
-  } else {
-    int64_t tot_mem_used = 0;
-    for (int k = 0; k < deleted_objs.count(); k++) {
-      tot_mem_used += deleted_objs.at(k).mem_used_;
-    } // end for
-    if (tot_mem_used >= ((plan_cache_->get_mem_limit() / 100) * 30)) {
-      // ignore ret
-      LOG_ERROR("Cache Object Memory Leaked Much!!!", K(tot_mem_used),
-                K(plan_cache_->get_mem_limit()), K(deleted_objs), K(safe_timestamp));
-    } else if (deleted_objs.count() > 0) {
-      LOG_WARN("Cache Object Memory Leaked Much!!!", K(deleted_objs),
-               K(safe_timestamp), K(plan_cache_->get_mem_limit()));
-    }
-  }
-  if (OB_SUCC(ret) && OB_FAIL(plan_cache_->dump_all_objs())) {
-    LOG_WARN("failed to dump deleted map", K(ret));
+  // skip idle eviction if cache_evict() already did a full scan with idle collection
+  if (plan_cache_->idle_evict_done_round_) {
+    plan_cache_->idle_evict_done_round_ = false;
+  } else if (OB_FAIL(plan_cache_->cache_evict_by_idle())) {
+    SQL_PC_LOG(WARN, "Plan cache idle evict failed", K(ret));
   }
 }
 
 } // end of namespace sql
 } // end of namespace oceanbase
-

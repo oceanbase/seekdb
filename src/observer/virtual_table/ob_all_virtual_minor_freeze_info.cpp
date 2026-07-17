@@ -15,6 +15,8 @@
  */
 
 #include "observer/virtual_table/ob_all_virtual_minor_freeze_info.h"
+#include "share/rc/ob_module_provider.h"
+#include "storage/ls/ob_ls.h"
 #include "storage/tx_storage/ob_ls_service.h"
 
 using namespace oceanbase::common;
@@ -27,9 +29,7 @@ namespace observer
 
 ObAllVirtualMinorFreezeInfo::ObAllVirtualMinorFreezeInfo()
   : ObVirtualTableScannerIterator(),
-    ObMultiTenantOperator(),
-    addr_(),
-    ls_iter_guard_(),
+    ls_(nullptr),
     diagnose_info_(),
     memtables_info_()
 {
@@ -42,80 +42,28 @@ ObAllVirtualMinorFreezeInfo::~ObAllVirtualMinorFreezeInfo()
 
 void ObAllVirtualMinorFreezeInfo::reset()
 {
-  omt::ObMultiTenantOperator::reset();
-  addr_.reset();
-  ls_iter_guard_.reset();
+  ls_ = nullptr;
   diagnose_info_.reset();
   memtables_info_.reset();
-  memset(ip_buf_, 0, common::OB_IP_STR_BUFF);
   memset(memtables_info_string_, 0, OB_MAX_CHAR_LENGTH);
   ObVirtualTableScannerIterator::reset();
 }
 
-void ObAllVirtualMinorFreezeInfo::release_last_tenant()
-{
-  ls_iter_guard_.reset();
-  diagnose_info_.reset();
-  memtables_info_.reset();
-  memset(memtables_info_string_, 0, OB_MAX_CHAR_LENGTH);
-}
-
 int ObAllVirtualMinorFreezeInfo::inner_get_next_row(ObNewRow *&row)
-{
-  int ret = OB_SUCCESS;
-  if (OB_FAIL(execute(row))) {
-    SERVER_LOG(WARN, "execute fail", K(ret));
-  }
-  return ret;
-}
-
-bool ObAllVirtualMinorFreezeInfo::is_need_process(uint64_t tenant_id)
-{
-  if (!is_virtual_tenant_id(tenant_id) &&
-      (is_sys_tenant(effective_tenant_id_) || tenant_id == effective_tenant_id_)) {
-    return true;
-  }
-  return false;
-}
-
-int ObAllVirtualMinorFreezeInfo::get_next_ls(ObLS *&ls)
-{
-  int ret = OB_SUCCESS;
-
-  while (OB_SUCC(ret)) {
-    if (!ls_iter_guard_.get_ptr()
-        || OB_FAIL(ls_iter_guard_->get_next(ls))) {
-      if (OB_ITER_END != ret) {
-        SERVER_LOG(WARN, "fail to switch tenant", K(ret));
-      }
-      // switch to next tenant
-      ret = OB_ITER_END;
-    } else if (OB_ISNULL(ls)) {
-      ret = OB_ERR_UNEXPECTED;
-      SERVER_LOG(ERROR, "ls is null", K(ret));
-    } else {
-      break;
-    }
-  }
-
-  return ret;
-}
-
-int ObAllVirtualMinorFreezeInfo::process_curr_tenant(ObNewRow *&row)
 {
   int ret = OB_SUCCESS;
   ObFreezerStat freeze_stat;
   if (NULL == allocator_) {
     ret = OB_NOT_INIT;
     SERVER_LOG(WARN, "allocator_ shouldn't be NULL", K(allocator_), K(ret));
-  } else if (FALSE_IT(start_to_read_ = true)) {
-  } else if (ls_iter_guard_.get_ptr() == nullptr && OB_FAIL(MTL(ObLSService*)->get_ls_iter(ls_iter_guard_, ObLSGetMod::OBSERVER_MOD))) {
-    SERVER_LOG(WARN, "get_ls_iter fail", K(ret));
+  } else if (start_to_read_) {
+    ret = OB_ITER_END;
   } else if (OB_FAIL(get_next_freeze_stat(freeze_stat))) {
     if (OB_ITER_END != ret) {
       SERVER_LOG(WARN, "get_next_freeze_stat failed", K(ret));
     }
   } else {
+    start_to_read_ = true;
     int64_t freeze_clock = 0;
     const int64_t col_count = output_column_ids_.count();
     for (int64_t i = 0; OB_SUCC(ret) && i < col_count; ++i) {
@@ -210,29 +158,21 @@ int ObAllVirtualMinorFreezeInfo::process_curr_tenant(ObNewRow *&row)
 int ObAllVirtualMinorFreezeInfo::get_next_freeze_stat(ObFreezerStat &freeze_stat)
 {
   int ret = OB_SUCCESS;
-  ObLS *ls = nullptr;
   ObFreezer *freezer = nullptr;
 
-  while (OB_SUCC(ret)) {
-    if (OB_FAIL(get_next_ls(ls))) {
-      if (OB_ITER_END != ret) {
-        SERVER_LOG(WARN, "get_next_ls failed", K(ret));
-      }
-    } else if (OB_ISNULL(ls)) {
-      ret = OB_ERR_UNEXPECTED;
-      SERVER_LOG(WARN, "ls shouldn't NULL here", K(ret));
-    } else if (FALSE_IT(freezer = ls->get_freezer())) {
-    } else if (OB_ISNULL(freezer)) {
-      ret = OB_ERR_UNEXPECTED;
-      SERVER_LOG(WARN, "ls shouldn't NULL here", K(ret));
-    } else if (OB_FAIL(freezer->get_stat().deep_copy_to(freeze_stat))) {
-      SERVER_LOG(WARN, "fail to deep copy", K(ret));
-    } else if (!(freeze_stat.is_valid())) {
-      SERVER_LOG(WARN, "freeze_stat is invalid", KP(ls), KP(freezer));
-    } else {
-      // freeze_stat is valid
-      break;
-    }
+  ObLSService *ls_service = share::g_mp->ls_service();
+  if (OB_ISNULL(ls_service)) {
+    ret = OB_ERR_UNEXPECTED;
+    SERVER_LOG(WARN, "ls service is null", K(ret));
+  } else if (OB_FAIL(ls_service->get_ls(ls_))) {
+    SERVER_LOG(WARN, "get log stream failed", K(ret));
+  } else if (OB_ISNULL(freezer = ls_->get_freezer())) {
+    ret = OB_ERR_UNEXPECTED;
+    SERVER_LOG(WARN, "freezer is null", K(ret));
+  } else if (OB_FAIL(freezer->get_stat().deep_copy_to(freeze_stat))) {
+    SERVER_LOG(WARN, "fail to deep copy", K(ret));
+  } else if (!freeze_stat.is_valid()) {
+    ret = OB_ITER_END;
   }
 
   return ret;

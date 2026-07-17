@@ -39,7 +39,6 @@ int ObSPIVDaaTDimIter::init(const ObSPIVDimIterParam &iter_param)
   inv_idx_scan_rtdef_ = iter_param.inv_idx_scan_rtdef_;
   max_batch_size_ = OB_MAX(iter_param.eval_ctx_->max_batch_size_, 1);
   eval_ctx_ = iter_param.eval_ctx_;
-  ls_id_ = iter_param.ls_id_;
   dim_docid_value_tablet_id_ = iter_param.dim_docid_value_tablet_id_;
   dim_ = iter_param.dim_;
   cur_idx_ = -1;
@@ -61,7 +60,7 @@ int ObSPIVDaaTDimIter::init(const ObSPIVDimIterParam &iter_param)
   } else {
     sql::ObExprBasicFuncs *basic_funcs =
         ObDatumFuncs::get_basic_func(inv_scan_domain_id_expr_->datum_meta_.type_, CS_TYPE_BINARY);
-    cmp_func_ = lib::is_oracle_mode() ? basic_funcs->null_last_cmp_ : basic_funcs->null_first_cmp_;
+    cmp_func_ = basic_funcs->null_first_cmp_;
     if (OB_ISNULL(cmp_func_)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("cmp_func is NULL", K(ret));

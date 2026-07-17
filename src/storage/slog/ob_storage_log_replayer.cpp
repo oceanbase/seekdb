@@ -18,6 +18,7 @@
 
 #include "ob_storage_log_replayer.h"
 #include "storage/slog/ob_storage_log_reader.h"
+#include "share/ob_force_print_log.h"
 
 namespace oceanbase
 {
@@ -120,8 +121,7 @@ int ObStorageLogReplayer::unregister_redo_module(enum ObRedoLogMainType cmd_pref
 
 int ObStorageLogReplayer::replay(
     const common::ObLogCursor &replay_start_cursor,
-    common::ObLogCursor &finish_cursor,
-    const uint64_t tenant_id)
+    common::ObLogCursor &finish_cursor)
 {
   int ret = OB_SUCCESS;
   ObStorageLogReader slog_reader;
@@ -135,9 +135,9 @@ int ObStorageLogReplayer::replay(
   } else if (OB_UNLIKELY(!replay_start_cursor.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     STORAGE_REDO_LOG(WARN, "Invalid argument", K(ret), K(replay_start_cursor));
-  } else if (OB_FAIL(slog_reader.init(log_dir_, replay_start_cursor, log_file_spec_, tenant_id))) {
+  } else if (OB_FAIL(slog_reader.init(log_dir_, replay_start_cursor, log_file_spec_))) {
     STORAGE_REDO_LOG(WARN, "Fail to init slog reader", K(ret), K(log_dir_), K(replay_start_cursor));
-  } else if (OB_FAIL(check_empty_dir(is_empty_dir, tenant_id))) {
+  } else if (OB_FAIL(check_empty_dir(is_empty_dir))) {
     STORAGE_REDO_LOG(WARN, "Fail to check empty dir", K(ret), K(is_empty_dir));
   } else if (is_empty_dir) {
     ret = OB_SUCCESS;
@@ -246,7 +246,7 @@ int ObStorageLogReplayer::parse_log(
   if (OB_ISNULL(log_dir) || OB_ISNULL(stream) || OB_UNLIKELY(log_file_id <= 0)) {
     ret = OB_INVALID_ARGUMENT;
     STORAGE_REDO_LOG(WARN, "Invalid arguments.", K(ret), KP(log_dir), K(log_file_id), KP(stream));
-  } else if (OB_FAIL(slog_reader.init(log_dir, cursor, log_file_spec, OB_SERVER_TENANT_ID))) {
+  } else if (OB_FAIL(slog_reader.init(log_dir, cursor, log_file_spec))) {
     STORAGE_REDO_LOG(WARN, "Fail to init log_reader, ", K(ret), KP(log_dir), K(cursor));
   } else {
     ObMetaDiskAddr disk_addr;
@@ -318,14 +318,14 @@ int ObStorageLogReplayer::print_slog(
   return ret;
 }
 
-int ObStorageLogReplayer::check_empty_dir(bool &is_empty_dir, const uint64_t tenant_id)
+int ObStorageLogReplayer::check_empty_dir(bool &is_empty_dir)
 {
   int ret = OB_SUCCESS;
   ObLogFileHandler file_handler;
   int64_t min_log_id = 0;
   int64_t max_log_id = 0;
 
-  if (OB_FAIL(file_handler.init(log_dir_, 256 << 20/*file_size*/, tenant_id))) {
+  if (OB_FAIL(file_handler.init(log_dir_, 256 << 20))) {
     STORAGE_REDO_LOG(WARN, "Fail to init log file handler", K(ret));
   } else if (OB_FAIL(file_handler.get_file_id_range(min_log_id, max_log_id))
       && OB_ENTRY_NOT_EXIST != ret) {

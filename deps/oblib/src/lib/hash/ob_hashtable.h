@@ -1492,6 +1492,18 @@ public:
     } else {
       for (int64_t i = 0; OB_SUCC(ret) && i < bucket_num_; i++) {
         hashbucket &bucket = buckets_[i];
+        // Dirty-read bucket.node before acquiring rdlock: empty buckets are skipped
+        // without any locking overhead. The final check is done under the lock below.
+        // This is safe because:
+        //  - a bucket that appears empty but becomes non-empty concurrently is just a
+        //    missed iteration, which foreach_refactored (a non-snapshot scan) already
+        //    tolerates for concurrent inserts on already-scanned buckets.
+        //  - on x86-64 the aligned pointer load is hardware-atomic.
+        // The same dirty-read pattern is used by iterator::operator++, begin() and
+        // destroy() elsewhere in this file.
+        if (NULL == bucket.node) {
+          continue;
+        }
         bucket_lock_cond blc(bucket);
         readlocker locker(blc.lock());
         hashnode *node = bucket.node;
@@ -1499,6 +1511,43 @@ public:
           abort_unless(node->check_magic_code());
           if (OB_FAIL(callback(node->data))) {
             HASH_WRITE_LOG(HASH_WARNING, "fail to do call back, ret=%d", ret);
+          } else {
+            node = node->next;
+          }
+        }
+      }
+    }
+    return ret;
+  }
+
+  // iterate buckets in range [start_bucket, end_bucket) with per-bucket read lock
+  // callback returns OB_SUCCESS to continue, other to stop
+  template<class _callback>
+  int foreach_refactored_range(_callback &callback,
+                               const int64_t start_bucket,
+                               const int64_t end_bucket) const
+  {
+    int ret = OB_SUCCESS;
+    static_assert(std::is_same<decltype(callback(*(_value_type*)0)), int>::value,
+        "hash table foreach callback format error");
+    if (OB_UNLIKELY(!inited(buckets_)) || OB_UNLIKELY(NULL == allocer_)) {
+      HASH_WRITE_LOG(HASH_WARNING, "hashtable not init");
+      ret = OB_NOT_INIT;
+    } else {
+      const int64_t real_start = MAX(0, MIN(start_bucket, bucket_num_));
+      const int64_t real_end = MAX(0, MIN(end_bucket, bucket_num_));
+      for (int64_t i = real_start; OB_SUCC(ret) && i < real_end; i++) {
+        hashbucket &bucket = buckets_[i];
+        if (NULL == bucket.node) {
+          continue;
+        }
+        bucket_lock_cond blc(bucket);
+        readlocker locker(blc.lock());
+        hashnode *node = bucket.node;
+        while (OB_SUCC(ret) && NULL != node) {
+          abort_unless(node->check_magic_code());
+          if (OB_FAIL(callback(node->data))) {
+            // callback returned non-success, stop iteration
           } else {
             node = node->next;
           }

@@ -3,9 +3,9 @@ drop table if exists t1;
 set ob_enable_index_direct_select = 1;
 alter system set ob_vector_memory_limit_percentage = 25;
 alter system set vector_index_optimize_duty_time = '[00:00:00, 00:00:00]';
-CREATE TABLE t1(c1 INT, c3 vector(3), c4 vector(5),
+CREATE TABLE t1(c1 INT, c3 vector(3), c4 vector(5), 
 primary key(c1),
-vector index idx1(c3) with (distance=l2, type=hnsw, lib=vsag),
+vector index idx1(c3) with (distance=l2, type=hnsw, lib=vsag), 
 vector index idx2(c4) with (distance=l2, type=hnsw, lib=vsag))
 PARTITION BY RANGE COLUMNS(c1)
 (
@@ -191,7 +191,7 @@ select count(*) from (select * from t1 order by l2_distance(c3, [0.428146,0.4087
 count(*)
 8
 drop table t1;
-CREATE TABLE t1(c1 INT, c3 vector(3), c4 vector(5),
+CREATE TABLE t1(c1 INT, c3 vector(3), c4 vector(5), 
 primary key(c1))
 PARTITION BY RANGE COLUMNS(c1)
 (
@@ -372,7 +372,7 @@ select count(*) from (select * from t1 order by l2_distance(c3, [0.428146,0.4087
 count(*)
 8
 drop table t1;
-CREATE TABLE t1(c1 INT, c3 vector(3), c4 vector(5),
+CREATE TABLE t1(c1 INT, c3 vector(3), c4 vector(5), 
 primary key(c1))
 PARTITION BY RANGE COLUMNS(c1)
 (
@@ -553,9 +553,9 @@ select count(*) from (select * from t1 order by l2_distance(c3, [0.428146,0.4087
 count(*)
 8
 drop table t1;
-CREATE TABLE t1(c1 INT not null auto_increment, c2 INT, c3 vector(3), c4 vector(5),
+CREATE TABLE t1(c1 INT not null auto_increment, c2 INT, c3 vector(3), c4 vector(5), 
 primary key(c1,c2),
-vector index idx1(c3) with (distance=l2, type=hnsw, lib=vsag),
+vector index idx1(c3) with (distance=l2, type=hnsw, lib=vsag), 
 vector index idx2(c4) with (distance=l2, type=hnsw, lib=vsag))
 PARTITION BY RANGE COLUMNS(c1)
 SUBPARTITION BY LIST COLUMNS(c2)
@@ -749,7 +749,7 @@ select count(*) from (select * from t1 order by l2_distance(c3, [0.428146,0.4087
 count(*)
 8
 drop table t1;
-CREATE TABLE t1(c1 INT not null auto_increment, c2 INT, c3 vector(3), c4 vector(5),
+CREATE TABLE t1(c1 INT not null auto_increment, c2 INT, c3 vector(3), c4 vector(5), 
 primary key(c1,c2))
 PARTITION BY RANGE COLUMNS(c1)
 SUBPARTITION BY LIST COLUMNS(c2)
@@ -945,7 +945,7 @@ select count(*) from (select * from t1 order by l2_distance(c3, [0.428146,0.4087
 count(*)
 8
 drop table t1;
-CREATE TABLE t1(c1 INT not null auto_increment, c2 INT, c3 vector(3), c4 vector(5),
+CREATE TABLE t1(c1 INT not null auto_increment, c2 INT, c3 vector(3), c4 vector(5), 
 primary key(c1,c2))
 PARTITION BY RANGE COLUMNS(c1)
 SUBPARTITION BY LIST COLUMNS(c2)
@@ -1142,7 +1142,7 @@ count(*)
 8
 drop table t1;
 alter system set ob_vector_memory_limit_percentage = 0;
-select count(*) as count from oceanbase.__all_virtual_vector_index_info a, oceanbase.__all_virtual_table b  where a.data_table_id = b.table_id and b.table_name = 't1';
+select count(*) as count from oceanbase.__all_virtual_vector_index_info a, oceanbase.__all_table b  where a.data_table_id = b.table_id and b.table_name = 't1';
 count
 0
 PURGE RECYCLEBIN;

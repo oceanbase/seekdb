@@ -39,7 +39,7 @@ TEST_F(TestDagScheduler, test_error_handling)
 {
   ObTenantDagScheduler *scheduler = MTL(ObTenantDagScheduler*);
   ASSERT_TRUE(nullptr != scheduler);
-  ASSERT_EQ(OB_SUCCESS, scheduler->init(MTL_ID(), time_slice));
+  ASSERT_EQ(OB_SUCCESS, scheduler->init( time_slice));
 
   AtomicOperator op(0);
   TestDag *dag = NULL;
@@ -64,13 +64,13 @@ TEST_F(TestDagScheduler, test_error_handling)
   EXPECT_EQ(OB_SUCCESS, alloc_task(*dag, mul_task));
   EXPECT_EQ(OB_SUCCESS, mul_task->init(1, 1, op, 0, 1));
   EXPECT_EQ(OB_SUCCESS, alloc_task(*dag, inc_task));
-  EXPECT_EQ(OB_SUCCESS, inc_task->init(1, 10, op));
+  EXPECT_EQ(OB_SUCCESS, inc_task->init(1, 10, op));  
   EXPECT_EQ(OB_SUCCESS, alloc_task(*dag, inc_task2));
   EXPECT_EQ(OB_SUCCESS, inc_task2->init(1, 10, op));
-
+  
   EXPECT_EQ(OB_SUCCESS, inc_task->add_child(*mul_task));
   EXPECT_EQ(OB_SUCCESS, mul_task->add_child(*inc_task2));
-
+  
   EXPECT_EQ(OB_SUCCESS, dag->add_task(*inc_task));
   EXPECT_EQ(OB_SUCCESS, dag->add_task(*mul_task));
   EXPECT_EQ(OB_SUCCESS, dag->add_task(*inc_task2));

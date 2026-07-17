@@ -1,5 +1,5 @@
 drop table if exists coll_test;
-create table coll_test(pk bigint primary key, uc varchar(10) collate utf8_general_ci, ub varchar(10) collate utf8_bin, b varbinary(10));
+create table coll_test(pk bigint primary key, uc varchar(10) collate utf8mb4_general_ci, ub varchar(10) collate utf8mb4_bin, b varbinary(10));
 show create table coll_test;
 Table	Create Table
 coll_test	CREATE TABLE `coll_test` (
@@ -8,7 +8,7 @@ coll_test	CREATE TABLE `coll_test` (
   `ub` varchar(10) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL,
   `b` varbinary(10) DEFAULT NULL,
   PRIMARY KEY (`pk`)
-) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 COMPRESSION = 'lz4_1.0' REPLICA_NUM = NUM BLOCK_SIZE = SIZE USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = SIZE PCTFREE = 10
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = NUM BLOCK_SIZE = SIZE USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = SIZE PCTFREE = 10
 insert into coll_test values (1314, 'abc', 'def', 'xyz');
 select * from coll_test;
 pk	uc	ub	b
@@ -316,11 +316,11 @@ cmp_meta(locate(b, b))
 select cmp_meta(locate(b, pk)) from coll_test;
 cmp_meta(locate(b, pk))
 {type:"BIGINT", collation:"binary", coercibility:"NUMERIC"}
-select cmp_meta(instr('abc' collate utf8_bin, 'B' collate utf8_bin));
-cmp_meta(instr('abc' collate utf8_bin, 'B' collate utf8_bin))
+select cmp_meta(instr('abc' collate utf8mb4_bin, 'B' collate utf8mb4_bin));
+cmp_meta(instr('abc' collate utf8mb4_bin, 'B' collate utf8mb4_bin))
 {type:"BIGINT", collation:"binary", coercibility:"NUMERIC"}
-select cmp_meta(instr('abc' collate utf8_general_ci, 'B' collate utf8_general_ci));
-cmp_meta(instr('abc' collate utf8_general_ci, 'B' collate utf8_general_ci))
+select cmp_meta(instr('abc' collate utf8mb4_general_ci, 'B' collate utf8mb4_general_ci));
+cmp_meta(instr('abc' collate utf8mb4_general_ci, 'B' collate utf8mb4_general_ci))
 {type:"BIGINT", collation:"binary", coercibility:"NUMERIC"}
 select cmp_meta(instr('abc', 'B'));
 cmp_meta(instr('abc', 'B'))
@@ -355,12 +355,6 @@ utf8mb4_general_ci
 select collation(bin(b))  from coll_test;
 collation(bin(b))
 utf8mb4_general_ci
-select collation(effective_tenant());
-collation(effective_tenant())
-utf8mb4_general_ci
-select coercibility(effective_tenant());
-coercibility(effective_tenant())
-3
 select collation(uc like b) from coll_test;
 collation(uc like b)
 binary
@@ -385,8 +379,8 @@ utf8mb4_general_ci
 select uc, collation(binary uc) from coll_test;
 uc	collation(binary uc)
 abc	binary
-select collation(binary binary uc collate utf8_bin) from coll_test;
-collation(binary binary uc collate utf8_bin)
+select collation(binary binary uc collate utf8mb4_bin) from coll_test;
+collation(binary binary uc collate utf8mb4_bin)
 binary
 select collation(user());
 collation(user())
@@ -517,16 +511,16 @@ binary
 SELECT length(CAST('Ab123人' AS char CHAR SET binary));
 length(CAST('Ab123人' AS char CHAR SET binary))
 8
-select CAST('Ab123人' AS char CHAR SET gbk);
-CAST('Ab123人' AS char CHAR SET gbk)
+select CAST('Ab123人' AS char CHAR SET utf8mb4);
+CAST('Ab123人' AS char CHAR SET utf8mb4)
 Ab123人
-SELECT collation(CAST('Ab123人' AS char CHAR SET gbk));
-collation(CAST('Ab123人' AS char CHAR SET gbk))
-gbk_chinese_ci
-SELECT length(CAST('Ab123人' AS char CHAR SET gbk));
-length(CAST('Ab123人' AS char CHAR SET gbk))
-7
-create table coll_test(c1 char(10) collate utf8mb4_bin, c2 char(10) collate gbk_bin, c3 char(10) char set binary);
+SELECT collation(CAST('Ab123人' AS char CHAR SET utf8mb4));
+collation(CAST('Ab123人' AS char CHAR SET utf8mb4))
+utf8mb4_general_ci
+SELECT length(CAST('Ab123人' AS char CHAR SET utf8mb4));
+length(CAST('Ab123人' AS char CHAR SET utf8mb4))
+8
+create table coll_test(c1 char(10) collate utf8mb4_bin, c2 char(10) collate utf8mb4_bin, c3 char(10) char set binary);
 insert into coll_test values('Ab123人', 'Ab123人', 'Ab123人');
 select cast(c1 as char(20)), cast(c2 as char(20)), cast(c3 as char(20)) from coll_test;
 cast(c1 as char(20))	cast(c2 as char(20))	cast(c3 as char(20))

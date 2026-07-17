@@ -48,7 +48,6 @@ public:
   // The sql proxy of schema_service is used by default
   // If you want to get the schema of the current transaction, you can pass in a transaction
   ObLatestSchemaGuard(share::schema::ObMultiVersionSchemaService *schema_service,
-                      const uint64_t tenant_id,
                       common::ObISQLClient *sql_client = nullptr);
   ~ObLatestSchemaGuard();
 public:
@@ -57,7 +56,7 @@ public:
   // 1. won't cache tablegroup_id by name.
   //
   // @param[in]:
-  // - tablegroup_name : string comparsion is case sensitive in mysql/oracle tenant.
+  // - tablegroup_name : string comparison is case sensitive.
   // @param[out]:
   // - tablegroup_id : OB_INVALID_ID means tablegroup not exist
   int get_tablegroup_id(const ObString &tablegroup_name,
@@ -67,9 +66,8 @@ public:
   //
   // @param[in]:
   // - datasbase_name:
-  // 1) If database name is "oceanbase", string comparsion is case insensitive.
-  // 2) string comparsion is case sensitive in oracle tenant.
-  // 3) string comparsion is case insensitive in mysql tenant.
+  // 1) If database name is "oceanbase", string comparison is case insensitive.
+  // 2) Otherwise comparison follows tenant name-case mode.
   // @param[out]:
   // - database_id: OB_INVALID_ID means databse not exist
   int get_database_id(
@@ -87,7 +85,7 @@ public:
   // - 3.1. if session_id > 0, match table with specified session_id. (mysql tmp table or ctas table)
   // - 3.2. match table with session_id = 0.
   // - 3.3. if table name is inner table name (comparsion insensitive), match related inner table.
-  // - 3.4. string comparsion is case sensitive in oracle tenant and is case insensitive in mysql tenant.
+  // - 3.4. string comparison follows tenant name-case mode.
   //
   // 4. mock parent table is not visible in this interface.
   //
@@ -124,9 +122,7 @@ public:
       const ObString &table_name,
       uint64_t &mock_fk_parent_table_id);
 
-  // 1. constraint name comparsion:
-  // - case sensitive: oracle
-  // - case insensitive: mysql
+  // 1. constraint name comparison is case insensitive.
   // 2. won't cache id by name.
   //
   // @param[in]:
@@ -138,9 +134,7 @@ public:
                         const ObString &constraint_name,
                         uint64_t &constraint_id);
 
-  // 1. foreign key name comparsion:
-  // - case sensitive: oracle
-  // - case insensitive: mysql
+  // 1. foreign key name comparison is case insensitive.
   // 2. won't cache id by name.
   //
   // @param[in]:
@@ -166,9 +160,7 @@ public:
                       uint64_t &sequence_id,
                       bool &is_system_generated);
 
-  // 1. package name comparsion:
-  // - case sensitive: oracle
-  // - case insensitive: mysql
+  // 1. package name comparison is case insensitive.
   // 2. won't cache id by name.
   //
   // @param[in]:
@@ -184,9 +176,7 @@ public:
                      const int64_t compatible_mode,
                      uint64_t &package_id);
 
-  // 1. routine name comparsion:
-  // - case sensitive: oracle
-  // - case insensitive: mysql
+  // 1. routine name comparison is case insensitive.
   // 2. won't cache id by name.
   //
   // @param[in]:
@@ -203,9 +193,7 @@ public:
       const ObString &routine_name,
       common::ObIArray<std::pair<uint64_t, share::schema::ObRoutineType>> &routine_pairs);
 
-  // 1. udt name comparsion:
-  // - case sensitive: oracle
-  // - case insensitive: mysql
+  // 1. udt name comparison is case insensitive.
   // 2. won't cache id by name.
   //
   // @param[in]:
@@ -218,37 +206,7 @@ public:
 
   // 1. won't cache
   //
-  // https://docs.oracle.com/cd/E18283_01/server.112/e17118/sql_elements008.htm
   // Within a namespace, no two objects can have the same name.
-  // In oracle mode, the following schema objects share one namespace:
-  // Tables(create, rename, flashback)
-  // Views(create, create or replace, rename, flashback)
-  // Sequences(create, rename)
-  // Private synonyms(create, create or replace, rename)
-  // Stand-alone procedures(create, create or replace)
-  // Stand-alone stored functions(create, create or replace)
-  // Packages(create, create or replace)
-  // Materialized views (OB oracle mode is not supported now)
-  // User-defined types(create, create or replace)
-
-  // This function is used to check object name is duplicate in other different schemas in oracle mode.
-  // This function should be as a supplement to the original oracle detection logic of duplicate object name.
-  // @param [in] database_id
-  // @param [in] session_id : for temporary table
-  // @param [in] object_name
-  // @param [in] schema_type : schema type of object to be checked
-  // @param [in] routine_type : If schema_type is ROUTINE_SCHEMA, routine_type is used to
-  //                            distinguish whether object is procedure or function.
-  // @param [in] is_or_replace : distinguish whether create schema with create_or_replace option
-  //
-  // @return : return OB_ERR_EXIST_OBJECT when object name conflicts
-  int check_oracle_object_exist(
-      const uint64_t database_id,
-      const uint64_t session_id,
-      const ObString &object_name,
-      const ObSchemaType &schema_type,
-      const ObRoutineType &routine_type,
-      const bool is_or_replace);
 
   // get index info by index name, database_id, data_table_id in mysql mode
   // index name should be encoded and will be compared with CS_TYPE_UTF8MB4_GENERAL_CI (case insensitive)
@@ -343,11 +301,10 @@ int get_table_id_and_table_name_in_tablegroup(
 
   // 1. will cache tenant schema in guard
   // @param[in]:
-  // - tenant_id
+  // - tenant
   // @param[out]:
   // - tenant_schema: return NULL if tenant not exist
   int get_tenant_schema(
-      const uint64_t tenant_id,
       const ObTenantSchema *&tenant_schema);
 
   // 1. will cache udt schema in guard
@@ -383,31 +340,28 @@ private:
       const uint64_t tablegroup_id,
       const ObTablegroupSchema *&tablegroup_schema);
 
-  // For TENANT_SCHEMA, tenant_id should be OB_SYS_TENANT_ID;
-  // For SYS_VARIABLE_SCHEMA, tenant_id should be equal with schema_id;
+  // For TENANT_SCHEMA, tenant should be sys tenant;
+  // For SYS_VARIABLE_SCHEMA, tenant should be equal with schema_id;
   template<typename T>
   int get_schema_(
       const ObSchemaType schema_type,
-      const uint64_t tenant_id,
       const uint64_t schema_id,
       const T *&schema);
 
   template<typename T>
   int get_from_local_cache_(
       const ObSchemaType schema_type,
-      const uint64_t tenant_id,
       const uint64_t schema_id,
       const T *&schema);
 
   template<typename T>
   int put_to_local_cache_(
       const ObSchemaType schema_type,
-      const uint64_t tenant_id,
       const uint64_t schema_id,
       const T *&schema);
 private:
   ObMultiVersionSchemaService *schema_service_;
-  uint64_t tenant_id_;
+  
   common::ObArenaAllocator local_allocator_;
   SchemaObjs schema_objs_;
   common::ObISQLClient *sql_client_;

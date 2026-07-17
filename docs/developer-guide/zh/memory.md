@@ -112,7 +112,7 @@ SMART_VAR(Type, Name, Args...) {
 
 满足以下条件时从栈上分配，否则从堆上分配
 ```cpp
-sizeof(T) < 8K || (stack_used < 256K && stack_free > sizeof(T) + 64K)
+sizeof(T) < 8K || (stack_used < 256K && stack_free > sizeof(T) + 64K) 
 ```
 
 > SMART_VAR 的出现是为了解决历史问题。尽量减少大内存对象占用太多的栈内存。

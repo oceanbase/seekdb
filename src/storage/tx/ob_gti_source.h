@@ -17,30 +17,13 @@
 #ifndef OCEANBASE_TRANSACTION_OB_GTI_SOURCE_
 #define OCEANBASE_TRANSACTION_OB_GTI_SOURCE_
 
-#include "lib/net/ob_addr.h"
 #include "lib/lock/ob_latch.h"
 
 namespace oceanbase
 {
 
-namespace obrpc
-{
-class ObGtiRpcProxy;
-}
-
-namespace rpc
-{
-namespace frame
-{
-class ObReqTransport;
-}
-}
-
 namespace transaction
 {
-class ObGtiRequestRpc;
-class ObGtiErrResponse;
-
 struct IdCache
 {
   int64_t start_id;
@@ -64,21 +47,19 @@ class ObGtiSource : public ObIGtiSource
 public:
   ObGtiSource() { reset(); }
   ~ObGtiSource() { destroy(); }
-  int init(const common::ObAddr &server, rpc::frame::ObReqTransport *req_transport);
+  int init();
   virtual int start();
   virtual void stop();
   virtual void wait();
   virtual void destroy();
   virtual void reset();
-  int refresh_gti_location();
   int update_trans_id(const int64_t start_id, const int64_t end_id);
   virtual int get_trans_id(int64_t &trans_id);
 private:
   void update_preallocate_count_();
   int64_t get_preallocate_count_();
 public:
-  TO_STRING_KV(K_(is_inited), K_(is_running), K_(is_requesting),
-               K_(server), K_(gti_cache_leader));
+  TO_STRING_KV(K_(is_inited), K_(is_running), K_(is_requesting));
 public:
   static const int64_t MIN_PREALLOCATE_COUNT = 10000;
   static const int64_t MAX_PREALLOCATE_COUNT = 1000000;
@@ -96,10 +77,6 @@ private:
   IdCache id_cache_[MAX_CACHE_NUM];
   int64_t cur_idx_;
   int64_t cache_idx_;
-  common::ObAddr server_;
-  obrpc::ObGtiRpcProxy *gti_request_rpc_proxy_;
-  ObGtiRequestRpc *gti_request_rpc_;
-  common::ObAddr gti_cache_leader_;
   int64_t retry_request_cnt_;
   int64_t last_request_ts_;
   // lock for update trans id

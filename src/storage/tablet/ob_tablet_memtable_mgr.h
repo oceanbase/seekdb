@@ -25,7 +25,7 @@
 #include "storage/compaction/ob_medium_compaction_mgr.h"
 #include "storage/multi_data_source/mds_table_handle.h"
 #include "storage/multi_data_source/mds_table_mgr.h"
-#include "storage/checkpoint/ob_checkpoint_diagnose.h"
+#include "storage/checkpoint/ob_common_checkpoint.h"
 
 namespace oceanbase
 {
@@ -66,7 +66,6 @@ public:
 
 public: // derived from ObIMemtableMgr
   virtual int init(const common::ObTabletID &tablet_id,
-                   const share::ObLSID &ls_id,
                    ObFreezer *freezer,
                    ObTenantMetaMemMgr *t3m) override;
 
@@ -78,10 +77,8 @@ public: // derived from ObIMemtableMgr
   virtual int get_boundary_memtable(ObTableHandleV2 &handle) override;
   virtual int create_memtable(const CreateMemtableArg &arg) override;
   virtual int get_last_frozen_memtable(ObTableHandleV2 &handle) override;
-  virtual int set_is_tablet_freeze_for_active_memtable(ObTableHandleV2 &handle,
-                                                       const int64_t trace_id = checkpoint::INVALID_TRACE_ID);
+  virtual int set_is_tablet_freeze_for_active_memtable(ObTableHandleV2 &handle);
   virtual int init_storage_recorder(const ObTabletID &tablet_id,
-                                    const share::ObLSID &ls_id,
                                     const int64_t max_saved_schema_version,
                                     const int64_t max_saved_medium_scn,
                                     const lib::Worker::CompatMode compat_mode,
@@ -134,7 +131,7 @@ class ObTabletMemtableMgrPool
 {
 public:
   ObTabletMemtableMgrPool()
-    : allocator_(sizeof(ObTabletMemtableMgr), lib::ObMemAttr(MTL_ID(), "TltMemtablMgr")),
+    : allocator_(sizeof(ObTabletMemtableMgr), lib::ObMemAttr("TltMemtablMgr")),
       count_(0) {}
   static int mtl_init(ObTabletMemtableMgrPool* &m) { return OB_SUCCESS; }
   void destroy() {}

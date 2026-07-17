@@ -369,7 +369,7 @@ int ObBreadthFirstSearchBulkOp::init_mem_context()
 {
   int ret = OB_SUCCESS;
   lib::ContextParam param;
-  param.set_mem_attr(MTL_ID(), "CTESearchBulk", ObCtxIds::WORK_AREA);
+  param.set_mem_attr("CTESearchBulk", ObCtxIds::WORK_AREA);
   if (OB_FAIL(CURRENT_CONTEXT->CREATE_CONTEXT(mem_context_, param))) {
     LOG_WARN("create entity failed", K(ret));
   } else if (OB_ISNULL(mem_context_)) {

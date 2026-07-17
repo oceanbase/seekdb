@@ -36,20 +36,14 @@ class ObTxSEQ
 public:
   ObTxSEQ() : raw_val_(0) {}
   explicit ObTxSEQ(int64_t seq, int16_t branch):
-    branch_(branch), seq_(seq), n_format_(true), _sign_(0)
+    branch_(branch), seq_(seq), _sign_(0)
   {
-    OB_ASSERT(seq > 0 && seq >> 62 == 0);
+    OB_ASSERT(seq > 0 && seq >> 48 == 0);
     OB_ASSERT(branch >= 0);
   }
 private:
   explicit ObTxSEQ(int64_t raw_v): raw_val_(raw_v) {}
 public:
-  // old version builder
-  static ObTxSEQ mk_v0(int64_t seq_v)
-  {
-    OB_ASSERT(seq_v > 0);
-    return ObTxSEQ(seq_v);
-  }
   static const ObTxSEQ &INVL() { static ObTxSEQ v; return v; }
   static const ObTxSEQ &MIN_VAL() { static ObTxSEQ v(1, 0); return v; }
   static const ObTxSEQ &MAX_VAL() { static ObTxSEQ v(INT64_MAX); return v; }
@@ -60,20 +54,16 @@ public:
   ObTxSEQ clone_with_seq(int64_t seq_abs, int64_t seq_base) const
   {
     ObTxSEQ n = *this;
-    if (n_format_) {
-      n.seq_ = seq_abs - seq_base;
-    } else {
-      n.seq_v0_ = seq_abs;
-    }
+    n.seq_ = seq_abs - seq_base;
     return n;
   }
   bool operator>(const ObTxSEQ &b) const
   {
-    return n_format_ ? seq_ > b.seq_ : seq_v0_ > b.seq_v0_;
+    return seq_ > b.seq_;
   }
   bool operator>=(const ObTxSEQ &b) const
   {
-    return *this > b || (n_format_ ? (seq_ == b.seq_) : (seq_v0_ == b.seq_v0_));
+    return seq_ >= b.seq_;
   }
   bool operator<(const ObTxSEQ &b) const
   {
@@ -92,26 +82,23 @@ public:
     return !(*this == b);
   }
   ObTxSEQ &operator++() {
-    if (n_format_) { ++seq_; } else { ++seq_v0_; }
+    ++seq_;
     return *this;
   }
   ObTxSEQ operator+(int n) const {
-    int64_t s = n_format_ ? seq_ + n : seq_v0_ + n;
-    return n_format_ ? ObTxSEQ(s, branch_) : ObTxSEQ::mk_v0(s);
+    return ObTxSEQ(seq_ + n, branch_);
   }
   ObTxSEQ operator-(int n) const {
-    int64_t s = n_format_ ? seq_ - n : seq_v0_ - n;
-    return n_format_ ? ObTxSEQ(s, branch_) : ObTxSEQ::mk_v0(s);
+    return ObTxSEQ(seq_ - n, branch_);
   }
   uint64_t hash() const { return murmurhash(&raw_val_, sizeof(raw_val_), 0); }
   // atomic incremental update
   int64_t inc_update(const ObTxSEQ &b) { return common::inc_update(&raw_val_, b.raw_val_); }
   uint64_t cast_to_int() const { return raw_val_; }
   static ObTxSEQ cast_from_int(int64_t seq) { return ObTxSEQ(seq); }
-  bool support_branch() const { return n_format_; }
   // return sequence number
-  int64_t get_seq() const { return n_format_ ? seq_ : seq_v0_; }
-  int16_t get_branch() const { return n_format_ ? branch_ : 0; }
+  int64_t get_seq() const { return seq_; }
+  int16_t get_branch() const { return branch_; }
   ObTxSEQ &set_branch(int16_t branch) { branch_ = branch; return *this; }
   // atomic Load/Store
   void atomic_reset() { ATOMIC_SET(&raw_val_, 0); }
@@ -122,16 +109,10 @@ public:
 private:
   union {
     int64_t raw_val_;
-    union {
-      struct { // v0, old_version
-        uint64_t seq_v0_     :62;
-      };
-      struct { // new_version
-        uint64_t branch_     :15;
-        uint64_t seq_        :47;
-        uint64_t n_format_   :1;
-        uint64_t _sign_      :1;
-      };
+    struct {
+      uint64_t branch_     :15;
+      uint64_t seq_        :48;
+      uint64_t _sign_      :1;
     };
   };
 };
@@ -142,7 +123,7 @@ inline int64_t ObTxSEQ::to_string(char* buf, const int64_t buf_len) const
   int64_t pos = 0;
   if (raw_val_ == INT64_MAX) {
     BUF_PRINTF("MAX");
-  } else if (_sign_ == 0 && n_format_) {
+  } else if (is_valid()) {
     J_OBJ_START();
     J_KV(K_(branch), "seq", seq_);
     J_OBJ_END();

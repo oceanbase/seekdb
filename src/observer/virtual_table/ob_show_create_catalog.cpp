@@ -18,7 +18,7 @@
 #include "observer/virtual_table/ob_show_create_catalog.h"
 
 #include "share/schema/ob_schema_getter_guard.h"
-#include "share/schema/ob_schema_printer.h"
+#include "sql/printer/ob_schema_printer.h"
 #include "sql/session/ob_sql_session_info.h"
 
 using namespace oceanbase::common;
@@ -50,9 +50,9 @@ int ObShowCreateCatalog::inner_get_next_row(common::ObNewRow *&row)
       } else if (OB_UNLIKELY(OB_INVALID_ID == show_catalog_id)) {
         ret = OB_NOT_SUPPORTED;
         LOG_USER_ERROR(OB_NOT_SUPPORTED, "select a table which is used for show clause");
-      } else if (OB_FAIL(schema_guard_->get_catalog_schema_by_id(effective_tenant_id_,
+      } else if (OB_FAIL(schema_guard_->get_catalog_schema_by_id(
                  show_catalog_id, catalog_schema))) {
-        LOG_WARN("failed to get catalog_schema", K(ret), K_(effective_tenant_id), K(show_catalog_id));
+        LOG_WARN("failed to get catalog_schema", K(ret), K(show_catalog_id));
       } else if (OB_ISNULL(catalog_schema)) {
         ret = OB_CATALOG_NOT_EXIST;
         LOG_WARN("catalog not exist", K(ret));
@@ -142,13 +142,13 @@ int ObShowCreateCatalog::fill_row_cells(uint64_t show_catalog_id, const ObString
         case OB_APP_MIN_COLUMN_ID + 2: {
           // create_catalog
           int64_t pos = 0;
-          if (OB_FAIL(print_catalog_definition(effective_tenant_id_,
+          if (OB_FAIL(print_catalog_definition(
                                                show_catalog_id,
                                                catalog_def_buf,
                                                catalog_def_buf_size,
                                                pos))) {
             LOG_WARN("Generate catalog definition failed",
-                     K(ret), K(effective_tenant_id_), K(show_catalog_id));
+                     K(ret), K(show_catalog_id));
           } else {
             cur_row_.cells_[cell_idx].set_lob_value(ObLongTextType,
                                                     catalog_def_buf,
@@ -173,35 +173,31 @@ int ObShowCreateCatalog::fill_row_cells(uint64_t show_catalog_id, const ObString
   return ret;
 }
 
-int ObShowCreateCatalog::print_catalog_definition(const uint64_t tenant_id,
-                                                  const uint64_t catalog_id,
+int ObShowCreateCatalog::print_catalog_definition(const uint64_t catalog_id,
                                                   char *buf,
                                                   const int64_t &buf_len,
                                                   int64_t &pos) const
 {
   int ret = OB_SUCCESS;
   const ObCatalogSchema *catalog_schema = NULL;
-  bool is_oracle_mode = lib::is_oracle_mode();
   ObArenaAllocator allocator(ObModIds::OB_SCHEMA);
   ObSchemaPrinter schema_printer(*schema_guard_);
-  if (OB_FAIL(schema_guard_->get_catalog_schema_by_id(tenant_id, catalog_id, catalog_schema))) {
-    LOG_WARN("failed to get table schema", K(ret), K(tenant_id), K(catalog_id));
+  if (OB_FAIL(schema_guard_->get_catalog_schema_by_id( catalog_id, catalog_schema))) {
+    LOG_WARN("failed to get table schema", K(ret), K(catalog_id));
   } else if (OB_ISNULL(catalog_schema)) {
     ret = OB_CATALOG_NOT_EXIST;
     LOG_WARN("catalog not exists", K(ret), K(catalog_id));
   } else if (OB_FAIL(databuff_printf(buf,
                                      buf_len,
                                      pos,
-                                     is_oracle_mode ? "CREATE EXTERNAL CATALOG "
-                                                    : "CREATE EXTERNAL CATALOG IF NOT EXISTS "))) {
+                                     "CREATE EXTERNAL CATALOG IF NOT EXISTS "))) {
     LOG_WARN("failed to print create catalog prefix",
              K(ret),
              K(catalog_schema->get_catalog_name()));
   } else if (OB_FAIL(schema_printer.print_identifier(buf,
                                                      buf_len,
                                                      pos,
-                                                     catalog_schema->get_catalog_name(),
-                                                     is_oracle_mode))) {
+                                                     catalog_schema->get_catalog_name()))) {
     LOG_WARN("failed to print create catalog prefix",
              K(ret),
              K(catalog_schema->get_catalog_name()));

@@ -19,7 +19,7 @@
 #include "lib/ob_define.h"
 #include "lib/ob_errno.h"
 #include "lib/oblog/ob_log_module.h"
-#include "ob_clock_generator.h"
+#include "lib/time/ob_clock_generator.h"
 #include "lib/literals/ob_literals.h"
 #include "lib/utility/utility.h"
 #include "common_define.h"

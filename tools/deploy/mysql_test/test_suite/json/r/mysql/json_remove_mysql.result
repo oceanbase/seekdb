@@ -90,8 +90,8 @@ Result
 drop table if exists json_test1;
 Warnings:
 Note	1051	Unknown table 'test.json_test1'
-create table json_test1(
-c1 int primary key,
+create table json_test1( 
+c1 int primary key, 
 c2 json);
 insert into json_test1 values(2,'{
   "width":  "800",
@@ -195,8 +195,8 @@ SELECT j, JSON_TYPE(j->'$[0]') FROM t;
 j	JSON_TYPE(j->'$[0]')
 ["base64:type15:YWFh"]	BLOB
 drop table t;
-SELECT JSON_SEARCH('["abc"]', 'one', CAST('abc' AS CHAR CHARSET utf16));
-JSON_SEARCH('["abc"]', 'one', CAST('abc' AS CHAR CHARSET utf16))
+SELECT JSON_SEARCH('["abc"]', 'one', CAST('abc' AS CHAR charset utf8mb4));
+JSON_SEARCH('["abc"]', 'one', CAST('abc' AS CHAR charset utf8mb4))
 "$[0]"
 drop table if exists json_test;
 create table json_test (id int primary key, data json);

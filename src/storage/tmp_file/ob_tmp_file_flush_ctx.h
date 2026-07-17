@@ -30,7 +30,7 @@ namespace oceanbase
 {
 namespace tmp_file
 {
-class ObTmpFileFlushTG;
+class ObTmpFileFlushThread;
 
 class ObTmpFileWriteBlockTask : public common::ObTimerTask
 {

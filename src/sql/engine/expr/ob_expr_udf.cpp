@@ -34,7 +34,7 @@ OB_SERIALIZE_MEMBER((ObExprUDF, ObFuncExprOperator),
 
 ObExprUDF::ObExprUDF(common::ObIAllocator &alloc)
     : ObFuncExprOperator(alloc, T_FUN_UDF, N_UDF, PARAM_NUM_UNKNOWN, VALID_FOR_GENERATED_COL, NOT_ROW_DIMENSION,
-                         INTERNAL_IN_MYSQL_MODE, INTERNAL_IN_ORACLE_MODE),
+                         INTERNAL_IN_MYSQL_MODE),
       udf_id_(OB_INVALID_ID),
       udf_package_id_(OB_INVALID_ID),
       subprogram_path_(OB_MALLOC_NORMAL_BLOCK_SIZE, ModulePageAllocator(alloc)),
@@ -131,7 +131,7 @@ int ObExprUDF::calc_result_typeN(ObExprResType &type,
         type.set_length(result_type_.get_length());
       }
     }
-    if (OB_SUCC(ret) && lib::is_mysql_mode()) {
+    if (OB_SUCC(ret)) {
       type_ctx.set_cast_mode(type_ctx.get_cast_mode() & ~CM_WARN_ON_FAIL);
     }
   }
@@ -675,7 +675,6 @@ int ObExprUDF::before_calc_result(share::schema::ObSchemaGetterGuard &schema_gua
     sql::ObTaskExecutorCtx &task_ctx = exec_ctx.get_task_exec_ctx();
     const observer::ObGlobalContext &gctx = observer::ObServer::get_instance().get_gctx();
     if (OB_FAIL(gctx.schema_service_->get_tenant_schema_guard(
-                exec_ctx.get_my_session()->get_effective_tenant_id(),
                 schema_guard,
                 task_ctx.get_query_tenant_begin_schema_version(),
                 task_ctx.get_query_sys_begin_schema_version()))) {
@@ -724,16 +723,15 @@ int ObExprUDF::cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_expr, ObEx
   return ret;
 }
 
-int ObExprUDF::ObExprUDFCtx::init_param_store(ObIAllocator &allocator,
-                                              int param_num)
+int ObExprUDF::ObExprUDFCtx::init_param_store(int param_num)
 {
   int ret = OB_SUCCESS;
 
-  if (OB_ISNULL(param_store_buf_ = allocator.alloc(sizeof(ParamStore)))) {
+  if (OB_ISNULL(param_store_buf_ = ctx_allocator_.alloc(sizeof(ParamStore)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("failed to allocate memory", K(ret));
   } else {
-    params_ = new(param_store_buf_)ParamStore(ObWrapperAllocator(allocator));
+    params_ = new(param_store_buf_)ParamStore(ObWrapperAllocator(ctx_allocator_));
   }
   OZ (params_->prepare_allocate(param_num));
   OX (params_->reuse());
@@ -750,7 +748,7 @@ int ObExprUDF::build_udf_ctx(int64_t udf_ctx_id,
   if (OB_ISNULL(udf_ctx = static_cast<ObExprUDFCtx *>(exec_ctx.get_expr_op_ctx(udf_ctx_id)))) {
     if (OB_FAIL(exec_ctx.create_expr_op_ctx(udf_ctx_id, udf_ctx))) {
       LOG_WARN("failed to create operator ctx", K(ret));
-    } else if (OB_FAIL(udf_ctx->init_param_store(exec_ctx.get_allocator(), param_num))) {
+    } else if (OB_FAIL(udf_ctx->init_param_store(param_num))) {
       LOG_WARN("failed to init param", K(ret));
     }
   } else {
@@ -850,8 +848,7 @@ int ObExprUDF::eval_udf(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
                             false,
                             true,
                             info->loc_,
-                            info->is_called_in_sql_,
-                            info->dblink_id_))) {
+                            info->is_called_in_sql_))) {
         LOG_WARN("fail to execute udf", K(ret), K(info), K(package_id), K(tmp_result));
         if (info->is_called_in_sql_ && OB_NOT_NULL(ctx.exec_ctx_.get_pl_ctx())) {
           ctx.exec_ctx_.get_pl_ctx()->reset_obj_range_to_end(cur_obj_count);
@@ -1049,7 +1046,6 @@ int ObExprUDFInfo::deep_copy(common::ObIAllocator &allocator,
   other.loc_ = loc_;
   other.is_udt_cons_ = is_udt_cons_;
   other.is_called_in_sql_ = is_called_in_sql_;
-  other.dblink_id_ = dblink_id_;
   OZ(other.subprogram_path_.assign(subprogram_path_));
   OZ(other.params_type_.assign(params_type_));
   OZ(other.params_desc_.assign(params_desc_));
@@ -1076,7 +1072,6 @@ int ObExprUDFInfo::from_raw_expr(RE &raw_expr)
   is_udt_udf_ = udf_expr.get_is_udt_udf();
   loc_ = udf_expr.get_loc();
   is_udt_cons_ = udf_expr.get_is_udt_cons();
-  dblink_id_ = OB_INVALID_ID;
   return ret;
 }
 

@@ -152,10 +152,9 @@ int ObDictEncoder::build_dict()
       bool has_lob_header = is_lob_storage(column_type_.get_type());
       sql::ObExprBasicFuncs *basic_funcs = ObDatumFuncs::get_basic_func(
           column_type_.get_type(), column_type_.get_collation_type(), column_type_.get_scale(),
-          lib::is_oracle_mode(), has_lob_header, precision);
+          has_lob_header, precision);
       ObCmpFunc cmp_func;
-      cmp_func.cmp_func_ = lib::is_oracle_mode()
-          ? basic_funcs->null_last_cmp_ : basic_funcs->null_first_cmp_;
+      cmp_func.cmp_func_ = basic_funcs->null_first_cmp_;
       lib::ob_sort(ht_->begin(), ht_->end(), DictCmp(ret, cmp_func));
       // calc new dict_ref if dict is sorted
       int64_t i = 0;
@@ -349,13 +348,13 @@ bool ObDictEncoder::DictCmp::operator()(
   return res;
 }
 
-struct ObDictEncoder::ColumnStoreFiller
+struct ObDictEncoder::FixedDataFiller
 {
   struct {} INCLUDE_EXT_CELL[0]; // call filler with extend cells
-  STATIC_ASSERT(HAS_MEMBER(ColumnStoreFiller, INCLUDE_EXT_CELL),
+  STATIC_ASSERT(HAS_MEMBER(FixedDataFiller, INCLUDE_EXT_CELL),
       "dict column data filler should be called for extend value cell");
 
-  ColumnStoreFiller(ObDictEncoder &encoder) : enc_(encoder) {}
+  FixedDataFiller(ObDictEncoder &encoder) : enc_(encoder) {}
 
   // get bit packing value
   inline int operator()(const int64_t row_id, const common::ObDatum &, uint64_t &v)
@@ -394,9 +393,9 @@ int ObDictEncoder::store_fix_data(ObBufferWriter &buf_writer)
         ? desc_.bit_packing_length_
         : desc_.fix_data_length_);
 
-    ColumnStoreFiller filler(*this);
-    if (OB_FAIL(fill_column_store(buf_writer, *ctx_->col_datums_, filler, filler))) {
-      LOG_WARN("fill dict column store failed", K(ret));
+    FixedDataFiller filler(*this);
+    if (OB_FAIL(fill_fixed_data(buf_writer, *ctx_->col_datums_, filler, filler))) {
+      LOG_WARN("fill fixed data failed", K(ret));
     }
   }
   return ret;

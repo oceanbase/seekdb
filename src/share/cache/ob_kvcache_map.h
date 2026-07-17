@@ -18,6 +18,7 @@
 #define OCEANBASE_CACHE_OB_KVCACHE_MAP_H_
 
 #include "lib/allocator/ob_malloc.h"
+#include "lib/allocator/ob_lf_fifo_allocator.h"
 #include "lib/lock/ob_bucket_lock.h"
 #include "share/cache/ob_kvcache_struct.h"
 #include "share/cache/ob_kvcache_store.h"
@@ -49,8 +50,7 @@ public:
   void destroy();
   int erase_all();
   int erase_all(const int64_t cache_id);
-  int erase_tenant(const uint64_t tenant_id, const bool force_erase = false);
-  int erase_tenant_cache(const uint64_t tenant_id, const int64_t cache_id);
+  int erase_tenant(const bool force_erase = false);
   int clean_garbage_node(int64_t &start_pos, const int64_t clean_num);
   int replace_fragment_node(int64_t &start_pos, int64_t &replace_node_count, const int64_t replace_num);
   int put(
@@ -67,6 +67,7 @@ public:
   int erase(const int64_t cache_id, const ObIKVCacheKey &key);
   int get_batch_data_block_cache_key(const int bucket_count, ObIArray<blocksstable::ObMicroBlockCacheKey> &keys);
   OB_INLINE int64_t get_bucket_num() const { return bucket_num_; }
+  OB_INLINE ObLfFIFOAllocator *get_node_allocator() { return &node_allocator_; }
   void print_hazard_version_info();
 private:
   friend class ObKVCacheIterator;
@@ -122,6 +123,7 @@ private:
 
   bool is_inited_;
   ObMalloc bucket_allocator_;
+  ObLfFIFOAllocator node_allocator_;
   int64_t bucket_start_pos_;
   int64_t bucket_num_;
   int64_t bucket_size_;

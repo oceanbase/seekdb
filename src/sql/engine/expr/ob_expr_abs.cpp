@@ -20,6 +20,7 @@
 #include "share/datum/ob_datum_util.h"
 #include "sql/engine/expr/ob_expr_result_type_util.h"
 #include "sql/session/ob_sql_session_info.h"
+#include "rpc/obmysql/ob_mysql_util.h"
 
 namespace oceanbase
 {
@@ -645,11 +646,7 @@ struct AbsFuncIniter
 static bool abs_eval_func_init_ret = ObArrayConstIniter<ObMaxType, AbsFuncIniter>::init();
 
 static_assert(ObMaxType == sizeof(abs_funcs) / sizeof(void *), "unexpected size");
-
 static_assert(ObMaxType == sizeof(abs_vec_funcs) / sizeof(void *), "unexpected size");
-REG_SER_FUNC_ARRAY(OB_SFA_SQL_EXPR_ABS_EVAL, abs_funcs, ARRAYSIZEOF(abs_funcs));
-
-REG_SER_FUNC_ARRAY(OB_SFA_SQL_EXPR_ABS_EVAL_VEC, abs_vec_funcs, ARRAYSIZEOF(abs_vec_funcs));
 
 ObExprAbs::ObExprAbs(ObIAllocator &alloc)
     : ObExprOperator(alloc, T_OP_ABS, N_ABS, 1, VALID_FOR_GENERATED_COL, NOT_ROW_DIMENSION),
@@ -694,9 +691,9 @@ int ObExprAbs::calc_result_type1(ObExprResType &type, ObExprResType &type1,
 
     // collation
     // The result cannot be of character type, no need to set collation
-    if (lib::is_mysql_mode() && type.is_double() && type1.get_scale() != SCALE_UNKNOWN_YET) {
+    if (type.is_double() && type1.get_scale() != SCALE_UNKNOWN_YET) {
       type.set_scale(type1.get_scale());
-      type.set_precision(static_cast<ObPrecision>(ObMySQLUtil::float_length(type1.get_scale())));
+      type.set_precision(static_cast<ObPrecision>(obmysql::ObMySQLUtil::float_length(type1.get_scale())));
     } else {
       type.set_accuracy(type1.get_accuracy());
     }
@@ -739,7 +736,7 @@ int ObExprAbs::calc_result_type1(ObExprResType &type, ObExprResType &type1,
 
 //others. (datetime time varchar, etc)
 
-//others for oracle. (datetime time varchar, etc)
+//extended types. (datetime time varchar, etc)
 
 
 

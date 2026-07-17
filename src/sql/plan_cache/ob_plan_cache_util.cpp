@@ -19,6 +19,7 @@
 #include "ob_plan_cache_util.h"
 #include "sql/optimizer/ob_log_plan.h"
 #include "sql/optimizer/ob_direct_load_optimizer_ctx.h"
+#include "share/config/ob_config_helper.h"  // relocated-definition owner
 using namespace oceanbase::share;
 using namespace oceanbase::share::schema;
 using namespace oceanbase::omt;
@@ -111,7 +112,6 @@ int ObPhyLocationGetter::reselect_duplicate_table_best_replica(const ObIArray<Ob
   ObAddr normal_table_addr;
   ObAddr duplicate_table_addr;
   ObSEArray<ObAddr, 4> candi_addrs;
-  ObSEArray<int64_t, 8> new_replic_idxs;
   int64_t proj_cnt = phy_locations.count();
   ObLSReplicaLocation replica_location;
   for (int64_t i = 0; OB_SUCC(ret) && is_same && i < proj_cnt; ++i) {
@@ -136,12 +136,8 @@ int ObPhyLocationGetter::reselect_duplicate_table_best_replica(const ObIArray<Ob
       } else {
         // handle duplicate table
         if (!has_duplicate_tbl) {
-          const ObIArray<ObRoutePolicy::CandidateReplica> &replicas =
-              part_info.get_partition_location().get_replica_locations();
-          for (int64_t j = 0; OB_SUCC(ret) && j < replicas.count(); ++j) {
-            if (OB_FAIL(candi_addrs.push_back(replicas.at(j).get_server()))) {
-              LOG_WARN("failed to push back servers", K(ret));
-            }
+          if (OB_FAIL(candi_addrs.push_back(replica_location.get_server()))) {
+            LOG_WARN("failed to store local server", K(ret));
           }
           duplicate_table_addr = replica_location.get_server();
           has_duplicate_tbl = true;
@@ -179,9 +175,6 @@ int ObPhyLocationGetter::reselect_duplicate_table_best_replica(const ObIArray<Ob
   // If there is no replication table or the non-replication table cannot guarantee to be on the same server, it is a distributed plan, so there is no need to change the replica idx of the replication table here
   if (OB_SUCC(ret) && !candi_addrs.empty()) {
     is_same = false;
-    if (OB_FAIL(new_replic_idxs.prepare_allocate(proj_cnt))) {
-      SQL_PC_LOG(WARN, "failed to pre-alloc array space", K(ret), K(proj_cnt));
-    }
     for (int64_t i = 0; OB_SUCC(ret) && !is_same && i < candi_addrs.count(); ++i) {
       bool is_valid = true;
       const ObAddr &addr = candi_addrs.at(i);
@@ -189,18 +182,7 @@ int ObPhyLocationGetter::reselect_duplicate_table_best_replica(const ObIArray<Ob
       for (int64_t j = 0; OB_SUCC(ret) && is_valid && j < proj_cnt; ++j) {
         const ObCandiTableLoc &ptli = phy_locations.at(j);
         if (ptli.is_duplicate_table_not_in_dml()) {
-          is_valid = ptli.get_phy_part_loc_info_list().at(0).is_server_in_replica(
-                       addr, new_replic_idxs.at(j));
-        }
-      }
-      //b, all copy tables have a copy at addr, change them together
-      for (int64_t j = 0; OB_SUCC(ret) && is_valid && j < proj_cnt; ++j) {
-        ObCandiTableLoc &ptli = const_cast<ObCandiTableLoc&>(phy_locations.at(j));
-        if (!ptli.is_duplicate_table_not_in_dml()) {
-          // do nothing
-        } else if (OB_FAIL(ptli.get_phy_part_loc_info_list_for_update().at(0).
-                           set_selected_replica_idx(new_replic_idxs.at(j)))) {
-          SQL_PC_LOG(WARN, "failed to set selected replica idx", K(ret));
+          is_valid = ptli.get_phy_part_loc_info_list().at(0).is_local_server(addr);
         }
       }
       if (OB_SUCC(ret) && is_valid) {
@@ -242,8 +224,6 @@ int ObPhyLocationGetter::get_phy_locations(const ObIArray<ObTableLocation> &tabl
         const ObTableLocation &table_location = table_locations.at(i);
         ObCandiTableLoc &candi_table_loc = candi_table_locs.at(i);
         NG_TRACE(calc_partition_location_begin);
-        // Here it is assumed that the materialized view's replica table has a copy on each server,
-        // Therefore here we do not check if materialized view can be generated, it is guaranteed to be generated
         if (OB_FAIL(table_location.calculate_candi_tablet_locations(exec_ctx,
                                                                     params,
                                                                     candi_table_loc.get_phy_part_loc_info_list_for_update(),
@@ -272,26 +252,17 @@ int ObPhyLocationGetter::get_phy_locations(const ObIArray<ObTableLocation> &tabl
             LOG_INFO("Physical Location from Location Cache", K(candi_table_loc));
           }
         }
-        if (OB_SUCC(ret)) {
-          if (table_location.get_loc_meta().is_external_table_) {
-            need_check_on_same_server = false;
-          }
-        }
       } // for end
     }
 
     //Only check the on_same_server when has table location in the phy_plan.
-    bool is_dup_ls_modified = false;
-    if (OB_NOT_NULL(pc_ctx.sql_ctx_.session_info_)) {
-      is_dup_ls_modified = pc_ctx.sql_ctx_.session_info_->is_dup_ls_modified();
-    }
     if (OB_SUCC(ret) && N!=0 ) {
       if (OB_FAIL(ObLogPlan::select_replicas(exec_ctx, table_location_ptrs,
                                              exec_ctx.get_addr(),
                                              phy_location_info_ptrs))) {
         LOG_WARN("failed to select replicas", K(ret), K(table_locations),
                  K(exec_ctx.get_addr()), K(phy_location_info_ptrs));
-      } else if (is_dup_ls_modified || is_retrying) {
+      } else if (is_retrying) {
         // do nothing
       } else if (OB_FAIL(reselect_duplicate_table_best_replica(candi_table_locs,
                                                                on_same_server))) {
@@ -399,7 +370,6 @@ int ObConfigInfoInPC::load_influence_plan_config()
   int ret = OB_SUCCESS;
   // Note: if you need to add a tenant config please
   //        uncomment next line to retrive tenant config.
-  omt::ObTenantConfigGuard tenant_config(TENANT_CONF(tenant_id_));
 
   // For Cluster configs
   // here to add value of configs that can influence execution plan.
@@ -412,31 +382,31 @@ int ObConfigInfoInPC::load_influence_plan_config()
 
   // For Tenant configs
   // tenant config use tenant_config to get configs
-  if (tenant_config.is_valid()) {
-    pushdown_storage_level_ = tenant_config->_pushdown_storage_level;
-    rowsets_enabled_ = tenant_config->_rowsets_enabled;
-    enable_px_batch_rescan_ = tenant_config->_enable_px_batch_rescan;
-    bloom_filter_enabled_ = tenant_config->_bloom_filter_enabled;
-    px_join_skew_handling_ = tenant_config->_px_join_skew_handling;
-    px_join_skew_minfreq_ = static_cast<int8_t>(tenant_config->_px_join_skew_minfreq);
-    min_cluster_version_ = GET_MIN_CLUSTER_VERSION();
-    enable_spf_batch_rescan_ = tenant_config->_enable_spf_batch_rescan;
-    enable_var_assign_use_das_ = tenant_config->_enable_var_assign_use_das;
-    enable_das_keep_order_ = tenant_config->_enable_das_keep_order;
-    enable_index_merge_ = tenant_config->_enable_index_merge;
-    enable_parallel_das_dml_ = tenant_config->_enable_parallel_das_dml;
-    direct_load_allow_fallback_ = tenant_config->direct_load_allow_fallback;
-    default_load_mode_ = ObDefaultLoadMode::get_type_value(tenant_config->default_load_mode.get_value_string());
-    hash_rollup_policy_ = tenant_config->_use_hash_rollup.case_compare("auto") == 0 ?
-                            0 :
-                            (tenant_config->_use_hash_rollup.case_compare("forced") == 0 ? 1 : 2);
-    enable_nlj_spf_use_rich_format_ = tenant_config->_enable_nlj_spf_use_rich_format;
-    enable_distributed_das_scan_ = tenant_config->_enable_distributed_das_scan;
-    enable_das_batch_rescan_flag_ = tenant_config->_enable_das_batch_rescan_flag;
-    enable_topn_runtime_filter_ = tenant_config->_enable_topn_runtime_filter;
-    min_const_integer_precision_ = static_cast<int8_t>(tenant_config->_min_const_integer_precision);
-    enable_px_task_rebalance_ = tenant_config->_enable_px_task_rebalance;
-  }
+
+  pushdown_storage_level_ = GCONF._pushdown_storage_level;
+  rowsets_enabled_ = GCONF._rowsets_enabled;
+  enable_px_batch_rescan_ = GCONF._enable_px_batch_rescan;
+  bloom_filter_enabled_ = GCONF._bloom_filter_enabled;
+  px_join_skew_handling_ = GCONF._px_join_skew_handling;
+  px_join_skew_minfreq_ = static_cast<int8_t>(GCONF._px_join_skew_minfreq);
+  min_cluster_version_ = GET_MIN_CLUSTER_VERSION();
+  enable_spf_batch_rescan_ = GCONF._enable_spf_batch_rescan;
+  enable_var_assign_use_das_ = GCONF._enable_var_assign_use_das;
+  enable_das_keep_order_ = GCONF._enable_das_keep_order;
+  enable_index_merge_ = GCONF._enable_index_merge;
+  enable_parallel_das_dml_ = GCONF._enable_parallel_das_dml;
+  direct_load_allow_fallback_ = GCONF.direct_load_allow_fallback;
+  default_load_mode_ = ObDefaultLoadMode::get_type_value(GCONF.default_load_mode.get_value_string());
+  hash_rollup_policy_ = GCONF._use_hash_rollup.case_compare("auto") == 0 ?
+                          0 :
+                          (GCONF._use_hash_rollup.case_compare("forced") == 0 ? 1 : 2);
+  enable_nlj_spf_use_rich_format_ = GCONF._enable_nlj_spf_use_rich_format;
+  enable_distributed_das_scan_ = GCONF._enable_distributed_das_scan;
+  enable_das_batch_rescan_flag_ = GCONF._enable_das_batch_rescan_flag;
+  enable_topn_runtime_filter_ = GCONF._enable_topn_runtime_filter;
+  min_const_integer_precision_ = static_cast<int8_t>(GCONF._min_const_integer_precision);
+  enable_px_task_rebalance_ = GCONF._enable_px_task_rebalance;
+
 
   return ret;
 }
@@ -537,3 +507,23 @@ int ObConfigInfoInPC::serialize_configs(char *buf, int buf_len, int64_t &pos)
 
 }
 }
+
+// ===== definition moved from src/share/config/ob_config_helper.cpp =====
+namespace oceanbase
+{
+namespace common
+{
+
+bool ObConfigPlanCacheGCChecker::check(const ObConfigItem &t) const
+{
+  bool is_valid = false;
+  for (int i = 0; i < ARRAYSIZEOF(sql::plan_cache_gc_confs) && !is_valid; i++) {
+    if (0 == ObString::make_string(sql::plan_cache_gc_confs[i]).case_compare(t.str())) {
+      is_valid = true;
+    }
+  }
+  return is_valid;
+}
+
+}  // namespace common
+}  // namespace oceanbase

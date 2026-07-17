@@ -117,7 +117,7 @@ int ObTableGroupResolver::resolve_partition_hash_or_key(ObTablegroupStmt *stmt,
       }
       if (OB_SUCC(ret)) {
         if (tablegroup_schema.get_all_part_num() > 
-              ObResolverUtils::get_mysql_max_partition_num(session_info_->get_effective_tenant_id())) {
+              ObResolverUtils::get_mysql_max_partition_num()) {
           ret = OB_TOO_MANY_PARTITIONS_ERROR;
         }
       }
@@ -175,7 +175,7 @@ int ObTableGroupResolver::resolve_partition_range(ObTablegroupStmt *tablegroup_s
     }
     if (OB_SUCC(ret)) {
         if (tablegroup_schema.get_all_part_num() > 
-              sql::ObResolverUtils::get_mysql_max_partition_num(session_info_->get_effective_tenant_id())) {
+              sql::ObResolverUtils::get_mysql_max_partition_num()) {
         ret = OB_TOO_MANY_PARTITIONS_ERROR;
       }
     }
@@ -215,8 +215,7 @@ int ObTableGroupResolver::resolve_partition_range(ObTablegroupStmt *tablegroup_s
     }
 
     if (OB_SUCC(ret)) {
-      if (OB_FAIL(ObDDLResolver::check_partition_name_duplicate(node->children_[ObTableGroupResolver::RANGE_ELEMENTS_NODE],
-                                                                false))) {
+      if (OB_FAIL(ObDDLResolver::check_partition_name_duplicate(node->children_[ObTableGroupResolver::RANGE_ELEMENTS_NODE]))) {
         LOG_WARN("duplicate partition name", K(ret));
       }
     }
@@ -339,7 +338,7 @@ int ObTableGroupResolver::resolve_partition_list(ObTablegroupStmt *stmt,
     }
     if (OB_SUCC(ret)) {
         if (tablegroup_schema.get_all_part_num() > 
-              sql::ObResolverUtils::get_mysql_max_partition_num(session_info_->get_effective_tenant_id())) {
+              sql::ObResolverUtils::get_mysql_max_partition_num()) {
         ret = OB_TOO_MANY_PARTITIONS_ERROR;
       }
     }
@@ -379,8 +378,7 @@ int ObTableGroupResolver::resolve_partition_list(ObTablegroupStmt *tablegroup_st
     }
 
     if (OB_SUCC(ret)) {
-      if (OB_FAIL(ObDDLResolver::check_partition_name_duplicate(node->children_[ObTableGroupResolver::LIST_ELEMENTS_NODE],
-                                                                false))) {
+      if (OB_FAIL(ObDDLResolver::check_partition_name_duplicate(node->children_[ObTableGroupResolver::LIST_ELEMENTS_NODE]))) {
         LOG_WARN("duplicate partition name", K(ret));
       }
     }

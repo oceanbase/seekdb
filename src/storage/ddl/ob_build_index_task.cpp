@@ -15,12 +15,15 @@
  */
 
 #define USING_LOG_PREFIX STORAGE
+#include "lib/stat/ob_diagnostic_info_guard.h"
 #include "ob_build_index_task.h"
+#include "share/rc/ob_module_provider.h"
+#include "rootserver/ob_root_service.h"
 #include "share/ob_ddl_checksum.h"
 #include "share/ob_ddl_error_message_table_operator.h"
 #include "share/schema/ob_tenant_schema_service.h"
 #include "share/ob_ddl_sim_point.h"
-#include "share/scheduler/ob_dag_warning_history_mgr.h"
+#include "observer/scheduler/ob_dag_warning_history_mgr.h"
 #include "observer/ob_server_event_history_table_operator.h"
 #include "storage/tx_storage/ob_ls_service.h"
 
@@ -123,8 +126,8 @@ int ObUniqueIndexChecker::scan_table_with_column_checksum(
     if (OB_UNLIKELY(!param.is_valid())) {
       ret = OB_INVALID_ARGUMENT;
       STORAGE_LOG(WARN, "invalid arguments", K(ret), K(param));
-    } else if (OB_FAIL(DDL_SIM(param_->tenant_id_, param_->task_id_, UNIQUE_INDEX_CHECKER_SCAN_TABLE_WITH_CHECKSUM_FAILED))) {
-      LOG_WARN("ddl sim failure", K(ret), K(param_->tenant_id_), K(param_->task_id_));
+    } else if (OB_FAIL(DDL_SIM(param_->task_id_, UNIQUE_INDEX_CHECKER_SCAN_TABLE_WITH_CHECKSUM_FAILED))) {
+      LOG_WARN("ddl sim failure", K(ret), K(param_->task_id_));
     } else {
       ObTabletTableIterator iterator;
       ObQueryFlag query_flag(ObQueryFlag::Forward,
@@ -138,20 +141,15 @@ int ObUniqueIndexChecker::scan_table_with_column_checksum(
       query_flag.skip_read_lob_ = 1;
       bool allow_not_ready = false;
       ObArray<bool> need_reshape;
-      ObLSHandle ls_handle;
+      ObLS *ls = nullptr;
 
-      if (OB_FAIL(MTL(ObLSService *)->get_ls(param_->ls_id_, ls_handle, ObLSGetMod::DDL_MOD))) {
-        LOG_WARN("fail to get log stream", K(ret), K(param_->ls_id_));
-      } else if (OB_UNLIKELY(nullptr == ls_handle.get_ls())) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("error unexpected, ls must not be nullptr", K(ret));
-      } else if (OB_FAIL(ls_handle.get_ls()->get_tablet_svr()->get_read_tables(param_->tablet_id_,
+      if (OB_FAIL(share::g_mp->ls_service()->get_ls(ls))) {
+        LOG_WARN("fail to get log stream", K(ret));
+      } else if (OB_FAIL(ls->get_tablet_svr()->get_read_tables(param_->tablet_id_,
                                                                                ObTabletCommon::DEFAULT_GET_TABLET_DURATION_US,
                                                                                param.snapshot_version_,
                                                                                param.snapshot_version_,
-                                                                               iterator, allow_not_ready,
-                                                                               false/*need_split_src_table*/,
-                                                                               false/*need_split_dst_table*/))) {
+                                                                               iterator, allow_not_ready))) {
         if (OB_REPLICA_NOT_READABLE == ret) {
           ret = OB_EAGAIN;
         } else {
@@ -164,7 +162,7 @@ int ObUniqueIndexChecker::scan_table_with_column_checksum(
       } else if (param.task_id_ >= param_->ranges_.count() || 0 > param.task_id_ ) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("error unexpected, invalid task id", K(ret), K(param.task_id_), K(param_->ranges_.count()));
-      } else if (OB_FAIL(local_scan.table_scan(*param.data_table_schema_, param_->ls_id_, param_->tablet_id_, iterator, query_flag, param_->ranges_[param.task_id_]))) {
+      } else if (OB_FAIL(local_scan.table_scan(*param.data_table_schema_, param_->tablet_id_, iterator, query_flag, param_->ranges_[param.task_id_]))) {
         LOG_WARN("fail to table scan", K(ret));
       } else {
         const ObColDescIArray &out_cols = *param.org_col_ids_;
@@ -205,8 +203,8 @@ int ObUniqueIndexChecker::generate_index_output_param(
   if (OB_UNLIKELY(!data_table_schema.is_valid() || !index_schema.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     STORAGE_LOG(WARN, "invalid arguments", K(ret), K(data_table_schema), K(index_schema));
-  } else if (OB_FAIL(DDL_SIM(param_->tenant_id_, param_->task_id_, UNIQUE_INDEX_CHECKER_GENERATE_INDEX_OUTPUT_PARAM_FAILED))) {
-    LOG_WARN("ddl sim failure", K(ret), K(param_->tenant_id_), K(param_->task_id_));
+  } else if (OB_FAIL(DDL_SIM(param_->task_id_, UNIQUE_INDEX_CHECKER_GENERATE_INDEX_OUTPUT_PARAM_FAILED))) {
+    LOG_WARN("ddl sim failure", K(ret), K(param_->task_id_));
   } else {
     // add data table rowkey
     const ObRowkeyInfo &rowkey_info = data_table_schema.get_rowkey_info();
@@ -331,7 +329,7 @@ int ObUniqueIndexChecker::scan_main_table_with_column_checksum(
     param.output_projector_ = &output_projector;
     param.is_scan_index_ = false;
     param.task_id_ = task_id;
-
+    
     STORAGE_LOG(INFO, "scan main table column checksum", K(col_ids), K(org_col_ids));
     if (OB_FAIL(scan_table_with_column_checksum(param, column_checksum, row_count))) {
       STORAGE_LOG(WARN, "fail to scan table with column checksum", K(ret));
@@ -441,11 +439,11 @@ int ObUniqueIndexChecker::check_unique_index(ObIDag *dag, const int64_t task_id)
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", K(ret), KP(dag));
   } else {
-    MTL_SWITCH(param_->tenant_id_) {
-      ObLSHandle ls_handle;
-      if (OB_FAIL(MTL(ObLSService *)->get_ls(param_->ls_id_, ls_handle, ObLSGetMod::DDL_MOD))) {
-        LOG_WARN("fail to get log stream", K(ret), K(param_->ls_id_));
-      } else if (OB_FAIL(ObDDLUtil::ddl_get_tablet(ls_handle, param_->tablet_id_, tablet_handle_))) {
+    MOD_SCOPE {
+      ObLS *ls = nullptr;
+      if (OB_FAIL(share::g_mp->ls_service()->get_ls(ls))) {
+        LOG_WARN("fail to get log stream", K(ret));
+      } else if (OB_FAIL(ObDDLUtil::ddl_get_tablet(ls, param_->tablet_id_, tablet_handle_))) {
         LOG_WARN("fail to get tablet", K(ret), K(param_->tablet_id_), K(tablet_handle_));
       } else if (param_->index_schema_->is_fts_index() || param_->index_schema_->is_vec_index()) {
         STORAGE_LOG(INFO, "do not need to check unique for domain index", "index_id", param_->index_schema_->get_table_id());
@@ -469,7 +467,7 @@ int ObUniqueIndexChecker::check_unique_index(ObIDag *dag, const int64_t task_id)
     int report_ret_code = OB_SUCCESS;
     const ObAddr &self_addr = GCTX.self_addr();
     bool keep_report_err_msg = true;
-    LOG_INFO("begin to report build index status & ddl error message", K(param_->index_schema_->get_table_id()), K(*(param_->index_schema_)),
+    LOG_INFO("begin to report build index status & ddl error message", K(param_->index_schema_->get_table_id()), K(*(param_->index_schema_)), 
               K(param_->tablet_id_), K(task_id));
     while (!dag->has_set_stop() && keep_report_err_msg) {
       ObDDLErrorMessageTableOperator::ObDDLErrorInfo info;
@@ -493,21 +491,12 @@ int ObUniqueIndexChecker::check_unique_index(ObIDag *dag, const int64_t task_id)
         }
       } else {
         if (OB_ERR_PRIMARY_KEY_DUPLICATE == ret && OB_ERR_DUPLICATED_UNIQUE_KEY == report_ret_code) {
-          //error message of OB_ERR_PRIMARY_KEY_DUPLICATE is not compatiable with oracle, so use a new error code
+          // Report direct-load unique index conflicts with the dedicated duplicate-key code.
           ret = OB_ERR_DUPLICATED_UNIQUE_KEY;
         }
         keep_report_err_msg = false;
       }
 
-      if (OB_TMP_FAIL(tmp_ret) && keep_report_err_msg) {
-        bool is_tenant_dropped = false;
-        if (OB_TMP_FAIL(GSCHEMASERVICE.check_if_tenant_has_been_dropped(param_->tenant_id_, is_tenant_dropped))) {
-          LOG_WARN("check if tenant has been dropped failed", K(tmp_ret), K(param_->tenant_id_));
-        } else if (is_tenant_dropped) {
-          keep_report_err_msg = false;
-          LOG_INFO("break when tenant dropped", K(tmp_ret), KPC(param_->index_schema_), K(param_->tablet_id_), K(self_addr));
-        }
-      }
     }
   }
   return ret;
@@ -516,21 +505,21 @@ int ObUniqueIndexChecker::check_unique_index(ObIDag *dag, const int64_t task_id)
 int ObUniqueIndexChecker::wait_trans_end(ObIDag *dag)
 {
   int ret = OB_SUCCESS;
-  ObLSHandle ls_handle;
-  ObLSService *ls_service = MTL(ObLSService *);
+  ObLS *ls = nullptr;
+  ObLSService *ls_service = share::g_mp->ls_service();
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("ObUniqueIndexChecker has not been inited", K(ret));
-  } else if (OB_FAIL(DDL_SIM(param_->tenant_id_, param_->task_id_, UNIQUE_INDEX_CHECKER_WAIT_TRANS_END_FAILED))) {
-    LOG_WARN("ddl sim failure", K(ret), K(param_->tenant_id_), K(param_->task_id_));
-  } else if (OB_FAIL(ls_service->get_ls(ObLSID(param_->ls_id_), ls_handle, ObLSGetMod::DDL_MOD))) {
-    LOG_WARN("get ls failed", K(ret), K(param_->ls_id_));
+  } else if (OB_FAIL(DDL_SIM(param_->task_id_, UNIQUE_INDEX_CHECKER_WAIT_TRANS_END_FAILED))) {
+    LOG_WARN("ddl sim failure", K(ret), K(param_->task_id_));
+  } else if (OB_FAIL(ls_service->get_ls(ls))) {
+    LOG_WARN("get ls failed", K(ret));
   } else {
     const int64_t now = ObTimeUtility::current_time();
     const int64_t timeout_us = 1000L * 1000L * 60L; // 1 min
     while (OB_SUCC(ret) && !dag->has_set_stop()) {
       transaction::ObTransID pending_tx_id;
-      if (OB_FAIL(ls_handle.get_ls()->check_modify_time_elapsed(param_->tablet_id_, now, pending_tx_id))) {
+      if (OB_FAIL(ls->check_modify_time_elapsed(param_->tablet_id_, now, pending_tx_id))) {
         // when timeout with EAGAIN, ddl scheduler of root service will retry
         if (OB_EAGAIN == ret && ObTimeUtility::current_time() - now < timeout_us) {
           ret = OB_SUCCESS;
@@ -558,8 +547,6 @@ ObUniqueCheckingDag::ObUniqueCheckingDag()
 }
 
 int ObUniqueCheckingDag::init(
-    const uint64_t tenant_id,
-    const ObLSID &ls_id,
     const ObTabletID &tablet_id,
     const bool is_scan_index,
     const uint64_t index_table_id,
@@ -573,9 +560,9 @@ int ObUniqueCheckingDag::init(
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
     STORAGE_LOG(WARN, "ObUniqueCheckingDag has already been inited", K(ret));
-  } else if (OB_FAIL(param_.init(tenant_id, ls_id, tablet_id, is_scan_index, index_table_id,
+  } else if (OB_FAIL(param_.init(tablet_id, is_scan_index, index_table_id,
                      schema_version, task_id, execution_id, snapshot_version, user_parallelism))) {
-    STORAGE_LOG(WARN, "fail to init ObUniqueCheckingParam", KR(ret), K_(param));
+    STORAGE_LOG(WARN, "fail to init ObUniqueCheckingParam", KR(ret), K_(param));  
   } else if (OB_UNLIKELY(!param_.is_valid())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("error unexpected", K(ret), K(param_));
@@ -621,7 +608,7 @@ int ObUniqueCheckingDag::alloc_global_index_task_callback(
       ObModIds::OB_CS_BUILD_INDEX))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     STORAGE_LOG(WARN, "fail to allocate memory", K(ret));
-  } else if (OB_ISNULL(callback = new (buf) ObGlobalUniqueIndexCallback(param_.tenant_id_, tablet_id, index_id, data_table_id, schema_version, task_id))) {
+  } else if (OB_ISNULL(callback = new (buf) ObGlobalUniqueIndexCallback(tablet_id, index_id, data_table_id, schema_version, task_id))) {
     ret = OB_ERR_UNEXPECTED;
     STORAGE_LOG(WARN, "fail to placement new local index callback", K(ret));
   } else {
@@ -852,13 +839,11 @@ int ObSimpleUniqueCheckingTask::process()
   }
   if (OB_NOT_NULL(dag)) {
     SERVER_EVENT_ADD("ddl", "simple unique check task process",
-      "tenant_id", param_->tenant_id_,
       "ret", ret,
       "trace_id", *ObCurTraceId::get_trace_id(),
       "task_id", dag->get_task_id(),
       "snapshot_version", dag->get_snapshot_version(),
-      "tablet_id", param_->tablet_id_,
-      dag->get_ls_id());
+      "tablet_id", param_->tablet_id_);
   }
   LOG_INFO("simple unique check task process.", K(ret), "ddl_event_info", ObDDLEventInfo(), KPC(dag), K(task_id_));
   return ret;
@@ -949,8 +934,8 @@ int ObUniqueCheckingMergeTask::process()
       } else {
         ObDDLChecksumItem item;
         item.execution_id_ = param_->execution_id_;
-        item.tenant_id_ = param_->tenant_id_;
-        item.table_id_ = param_->is_scan_index_ ? param_->index_schema_->get_table_id() :
+        
+        item.table_id_ = param_->is_scan_index_ ? param_->index_schema_->get_table_id() : 
         param_->data_table_schema_->get_table_id();
         item.tablet_id_ = param_->tablet_id_.id();
         item.ddl_task_id_ = param_->task_id_;
@@ -967,7 +952,7 @@ int ObUniqueCheckingMergeTask::process()
       uint64_t data_format_version = 0;
       int64_t snapshot_version = 0;
       share::ObDDLTaskStatus unused_task_status = share::ObDDLTaskStatus::PREPARE;
-      if (OB_FAIL(ObDDLUtil::get_data_information(param_->tenant_id_, param_->task_id_, data_format_version, snapshot_version, unused_task_status))) {
+      if (OB_FAIL(ObDDLUtil::get_data_information(param_->task_id_, data_format_version, snapshot_version, unused_task_status))) {
         LOG_WARN("get ddl cluster version failed", K(ret));
       } else if (OB_FAIL(ObDDLChecksumOperator::update_checksum(data_format_version, checksum_items, *GCTX.sql_proxy_))) {
         LOG_WARN("fail to update checksum", K(ret));
@@ -987,15 +972,15 @@ int ObUniqueCheckingMergeTask::process()
 }
 
 ObGlobalUniqueIndexCallback::ObGlobalUniqueIndexCallback(
-    const uint64_t tenant_id, const common::ObTabletID &tablet_id, const uint64_t index_id, const uint64_t data_table_id, const int64_t schema_version, const int64_t task_id)
-  : tenant_id_(tenant_id), tablet_id_(tablet_id), index_id_(index_id), data_table_id_(data_table_id), schema_version_(schema_version), task_id_(task_id)
+    const common::ObTabletID &tablet_id, const uint64_t index_id, const uint64_t data_table_id, const int64_t schema_version, const int64_t task_id)
+  : tablet_id_(tablet_id), index_id_(index_id), data_table_id_(data_table_id), schema_version_(schema_version), task_id_(task_id)
 {
 }
 
 int ObGlobalUniqueIndexCallback::operator()(const int ret_code)
 {
   int ret = OB_SUCCESS;
-  obrpc::ObCalcColumnChecksumResponseArg arg;
+  obcall::ObCalcColumnChecksumResponseArg arg;
   ObAddr rs_addr = GCTX.self_addr();
   arg.tablet_id_ = tablet_id_;
   arg.target_table_id_ = index_id_;
@@ -1003,18 +988,15 @@ int ObGlobalUniqueIndexCallback::operator()(const int ret_code)
   arg.source_table_id_ = data_table_id_;
   arg.schema_version_ = schema_version_;
   arg.task_id_ = task_id_;
-  arg.tenant_id_ = tenant_id_;
+  
 #ifdef ERRSIM
     if (OB_SUCC(ret)) {
       ret = OB_E(EventTable::EN_DDL_REPORT_REPLICA_BUILD_STATUS_FAIL) OB_SUCCESS;
-      LOG_INFO("report replica build status errsim", K(ret));
+      LOG_INFO("report DDL build status errsim", K(ret));
     }
 #endif
   if (OB_FAIL(ret)) {
-  } else if (OB_ISNULL(GCTX.rs_rpc_proxy_)) {
-    ret = OB_ERR_SYS;
-    STORAGE_LOG(WARN, "innner system error, rootserver rpc proxy or rs mgr must not be NULL", K(ret), K(GCTX));
-  } else if (OB_FAIL(GCTX.rs_rpc_proxy_->to(rs_addr).calc_column_checksum_response(arg))) {
+  } else if (OB_FAIL(GCTX.root_service_->calc_column_checksum_repsonse(arg))) {
     STORAGE_LOG(WARN, "fail to check unique index response", K(ret), K(arg));
   } else {
     STORAGE_LOG(INFO, "send column checksum response", K(arg));
@@ -1035,8 +1017,6 @@ int ObLocalUniqueIndexCallback::operator()(const int ret_code)
 
 /* ObUniqueCheckingParam */
 int ObUniqueCheckingParam::init(
-  const uint64_t tenant_id,
-  const ObLSID &ls_id,
   const ObTabletID &tablet_id,
   const bool is_scan_index,
   const uint64_t index_table_id,
@@ -1051,37 +1031,34 @@ int ObUniqueCheckingParam::init(
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
     STORAGE_LOG(WARN, "ObUniqueCheckingParam has already been inited", K(ret));
-  } else if (OB_UNLIKELY(OB_INVALID_TENANT_ID == tenant_id || !ls_id.is_valid() || !tablet_id.is_valid()
+  } else if (OB_UNLIKELY(!tablet_id.is_valid()
       || OB_INVALID_ID == index_table_id || schema_version < 0 || task_id <= 0
       || execution_id < 0 || snapshot_version < 0)) {
     ret = OB_INVALID_ARGUMENT;
-    STORAGE_LOG(WARN, "invalid arguments", K(ret), K(tenant_id), K(ls_id), K(tablet_id),
+    STORAGE_LOG(WARN, "invalid arguments", K(ret), K(tablet_id),
         K(index_table_id), K(schema_version), K(task_id), K(execution_id), K(snapshot_version));
   } else {
-    MTL_SWITCH(tenant_id) {
-      if (OB_ISNULL(schema_service = MTL(ObTenantSchemaService *)->get_schema_service())) {
+    MOD_SCOPE {
+      if (OB_ISNULL(schema_service = share::g_mp->tenant_schema_service()->get_schema_service())) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("get schema service failed", K(ret));
-      } else if (OB_FAIL(schema_service->get_tenant_schema_guard(tenant_id, schema_guard_, schema_version))) {
+      } else if (OB_FAIL(schema_service->get_tenant_schema_guard(schema_guard_, schema_version))) {
         STORAGE_LOG(WARN, "fail to get schema guard", K(ret), K(schema_version));
       } else if (OB_FAIL(schema_guard_.check_formal_guard())) {
         LOG_WARN("schema_guard is not formal", K(ret), K(tablet_id));
-      } else if (OB_FAIL(schema_guard_.get_table_schema(tenant_id, index_table_id, index_schema_))) {
+      } else if (OB_FAIL(schema_guard_.get_table_schema( index_table_id, index_schema_))) {
         STORAGE_LOG(WARN, "fail to get table schema", K(ret));
       } else if (OB_ISNULL(index_schema_)) {
         ret = OB_TABLE_NOT_EXIST;
         STORAGE_LOG(WARN, "fail to get table schema", K(ret), K(index_table_id));
-      } else if (OB_FAIL(schema_guard_.get_table_schema(tenant_id, index_schema_->get_data_table_id(), data_table_schema_))) {
+      } else if (OB_FAIL(schema_guard_.get_table_schema( index_schema_->get_data_table_id(), data_table_schema_))) {
         STORAGE_LOG(WARN, "fail to get table schema", K(ret));
       } else if (OB_ISNULL(data_table_schema_)) {
         ret = OB_TABLE_NOT_EXIST;
         STORAGE_LOG(WARN, "data table not exist", K(ret));
-      } else if (OB_FAIL(ObCompatModeGetter::get_table_compat_mode(tenant_id, index_table_id, compat_mode_))) {
-        LOG_WARN("failed to get compat mode", K(ret), K(index_table_id));
       } else {
+        compat_mode_ = lib::Worker::CompatMode::MYSQL;
         is_inited_ = true;
-        tenant_id_ = tenant_id;
-        ls_id_ = ls_id;
         tablet_id_ = tablet_id;
         is_scan_index_ = is_scan_index;
         schema_service_ = schema_service;
@@ -1091,7 +1068,7 @@ int ObUniqueCheckingParam::init(
         user_parallelism_ = user_parallelism;
       }
     } else {
-      LOG_WARN("switch to tenant failed", K(ret), K(index_table_id), K(tenant_id));
+      LOG_WARN("switch to tenant failed", K(ret), K(index_table_id));
     }
   }
   return ret;
@@ -1103,7 +1080,7 @@ int ObUniqueCheckingParam::prepare_task_ranges()
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
-  } else if (OB_FAIL(ObDDLUtil::get_task_ranges(task_id_, ls_id_, tablet_id_, is_scan_index_ ? index_schema_->get_tablet_size()
+  } else if (OB_FAIL(ObDDLUtil::get_task_ranges(task_id_, tablet_id_, is_scan_index_ ? index_schema_->get_tablet_size()
                                                 : data_table_schema_->get_tablet_size(), user_parallelism_, allocator_, ranges_))) {
     LOG_WARN("get_task_ranges failed", K(ret), KPC(this));
   } else {

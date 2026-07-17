@@ -36,7 +36,6 @@
 #endif
 #include "lib/utility/ob_platform_utils.h"  // Platform compatibility layer
 #include "lib/file/file_directory_utils.h"
-#include "deps/oblib/src/common/ob_string_buf.h"
 #include "lib/string/ob_sql_string.h"
 #include "lib/stat/ob_diagnostic_info_guard.h"
 
@@ -611,45 +610,6 @@ int get_ethernet_speed(const ObString &devname, int64_t &speed)
   return ret;
 }
 
-int deep_copy_obj(ObIAllocator &allocator, const ObObj &src, ObObj &dst)
-{
-  int ret = OB_SUCCESS;
-  if (!src.need_deep_copy()) {
-    dst = src;
-  } else {
-    char *buf = NULL;
-    int64_t size = src.get_deep_copy_size();
-    int64_t pos = 0;
-    if (size > 0) {
-      if (NULL == (buf = static_cast<char *>(allocator.alloc(size)))) {
-        ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("Fail to allocate memory, ", K(size), K(ret));
-      } else if (OB_FAIL(dst.deep_copy(src, buf, size, pos))){
-        LOG_WARN("Fail to deep copy obj, ", K(ret));
-      } else { }//do nothing
-    } else {
-      dst = src;
-    }
-  }
-  return ret;
-}
-
-int deep_copy_objparam(ObIAllocator &allocator, const ObObjParam &src, ObObjParam &dst)
-{
-  int ret = OB_SUCCESS;
-  if (!src.need_deep_copy()) {
-    dst = src;
-  } else if (OB_FAIL(deep_copy_obj(allocator, src, dst))) {
-    LOG_WARN("failed to deep copy obj", K(ret));
-  } else {
-    dst.set_accuracy(src.get_accuracy());
-    dst.unset_result_flag(dst.get_result_flag());
-    dst.set_result_flag(src.get_result_flag());
-    dst.set_param_flag(src.get_param_flag());
-    dst.set_param_meta(src.get_param_meta());
-  }
-  return ret;
-}
 
 bool is_case_space_equal(const char *s1, int64_t s1_len, const char *s2, int64_t s2_len)
 {
@@ -999,7 +959,7 @@ uint64_t get_sort(uint count, ...)
   const char wild_prefix = '\\';
   va_list args;
   va_start(args,count);
-  ulong sort=0;
+  uint64_t sort = 0;
 
   // Should not use this function with more than 8 arguments for compare.
   if (count <= 8) {
@@ -1250,17 +1210,17 @@ static int use_daemon()
   if (OB_SUCC(ret)) {
     // 1. Remove background state from current thread using PRIO_DARWIN_THREAD
     int darwin_thread_ret = setpriority(PRIO_DARWIN_THREAD, 0, 0);
-
-    // 2. Remove background state from process using PRIO_DARWIN_PROCESS
+    
+    // 2. Remove background state from process using PRIO_DARWIN_PROCESS  
     int darwin_proc_ret = setpriority(PRIO_DARWIN_PROCESS, 0, 0);
-
+    
     // 3. Set thread QoS to USER_INITIATED using platform compatibility layer
     int qos_ret = lib::ob_set_thread_qos(lib::ObThreadQoS::USER_INITIATED);
-
+    
     // 4. Set normal process priority
     int prio_ret = setpriority(PRIO_PROCESS, 0, 0);
-
-    _LOG_INFO("macOS daemon priority setup: darwin_thread=%d, darwin_proc=%d, qos=%d, prio=%d",
+    
+    _LOG_INFO("macOS daemon priority setup: darwin_thread=%d, darwin_proc=%d, qos=%d, prio=%d", 
               darwin_thread_ret, darwin_proc_ret, qos_ret, prio_ret);
   }
 #endif
@@ -1774,13 +1734,6 @@ bool ez2ob_addr(ObAddr &addr, easy_addr_t& ez)
     LIB_LOG(WARN, "fail to set unix addr", K(addr));
   }
   return ret;
-}
-
-void get_addr_by_proxy_sessid(const uint64_t session_id, ObAddr &addr)
-{
-  const int32_t ip = static_cast<int32_t>((session_id >> 32) & 0xFFFFFFFF);
-  const int32_t port = static_cast<int32_t>((session_id >> 16) & 0xFFFF);
-  IGNORE_RETURN addr.set_ipv4_addr(ip, port);
 }
 
 int ob_strtoll(const char *str, char *&endptr, int64_t &res)

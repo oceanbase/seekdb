@@ -16,6 +16,8 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 #include "sql/engine/cmd/ob_dcl_executor.h"
+#include "rootserver/ob_rs_serial_call.h"
+#include "rootserver/ob_root_service.h"
 
 #include "lib/encrypt/ob_encrypted_helper.h"
 #include "sql/engine/ob_exec_context.h"
@@ -34,12 +36,11 @@ int ObGrantExecutor::execute(ObExecContext &ctx, ObGrantStmt &stmt)
 {
   int ret = OB_SUCCESS;
   ObTaskExecutorCtx *task_exec_ctx = NULL;
-  obrpc::ObCommonRpcProxy *common_rpc_proxy = NULL;
   ObSQLSessionInfo *session_info = NULL;
-  const uint64_t tenant_id = stmt.get_tenant_id();
+  
   const ObStrings &users = stmt.get_users();
   ObIAllocator &allocator = ctx.get_allocator();
-  obrpc::ObGrantArg &arg = static_cast<obrpc::ObGrantArg &>(stmt.get_ddl_arg());
+  obcall::ObGrantArg &arg = static_cast<obcall::ObGrantArg &>(stmt.get_ddl_arg());
   const bool is_role = arg.roles_.count() > 0;
   ObSchemaGetterGuard schema_guard;
   const ObUserInfo *user_info = NULL;
@@ -50,9 +51,6 @@ int ObGrantExecutor::execute(ObExecContext &ctx, ObGrantStmt &stmt)
   } else if (OB_ISNULL(session_info = ctx.get_my_session())) {
     ret = OB_NOT_INIT;
     LOG_WARN("Get my session error");
-  } else if (OB_ISNULL(common_rpc_proxy = task_exec_ctx->get_common_rpc())) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("get common rpc proxy failed", K(ret));
   } else if (OB_ISNULL(GCTX.schema_service_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("get schema service failed", K(ret));
@@ -117,7 +115,7 @@ int ObGrantExecutor::execute(ObExecContext &ctx, ObGrantStmt &stmt)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("query ctx is null", K(ret));
   } else {
-    arg.tenant_id_ = tenant_id;
+    
     arg.db_ = stmt.get_database_name();
     arg.table_ = stmt.get_table_name();
     arg.priv_set_ = stmt.get_priv_set();
@@ -136,11 +134,10 @@ int ObGrantExecutor::execute(ObExecContext &ctx, ObGrantStmt &stmt)
         || OB_FAIL(append(arg.upd_col_ids_, stmt.get_upd_col_ids()))
         || OB_FAIL(append(arg.ref_col_ids_, stmt.get_ref_col_ids()))) {
         LOG_WARN("append failed", K(ret));
-    } else if (lib::is_mysql_mode() && arg.object_type_ == ObObjectType::TABLE 
+    } else if (arg.object_type_ == ObObjectType::TABLE
                 && arg.column_names_priv_.count() > 0) {
       if (arg.object_id_ == OB_INVALID) {
-        //do nothing
-        //todo: oracle every object will use id, and should also record the schema version in future.
+        // No schema dependency can be recorded without an object id.
       } else if (stmt.get_table_schema_version() != 0 
                   && OB_FAIL(arg.based_schema_object_infos_.push_back(ObBasedSchemaObjectInfo(arg.object_id_,
                                                                             TABLE_SCHEMA,
@@ -149,10 +146,9 @@ int ObGrantExecutor::execute(ObExecContext &ctx, ObGrantStmt &stmt)
       }
     }
     if (OB_FAIL(ret)) {
-    } else if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(tenant_id, schema_guard))) {
+    } else if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(schema_guard))) {
       LOG_WARN("failed to get tenant schema guard", K(ret));
-    } else if (OB_FAIL(schema_guard.get_user_info(tenant_id,
-                                                  session_info->get_priv_user_id(),
+    } else if (OB_FAIL(schema_guard.get_user_info(session_info->get_priv_user_id(),
                                                   user_info))) {
       LOG_WARN("failed to get user info", K(ret));
     } else if (OB_ISNULL(user_info)) {
@@ -171,7 +167,7 @@ int ObGrantExecutor::execute(ObExecContext &ctx, ObGrantStmt &stmt)
       }
     }
     if (OB_FAIL(ret)) {
-    } else if (OB_FAIL(common_rpc_proxy->grant(arg))) {
+    } else if (OB_FAIL(rootserver::serial_call([&]{ return GCTX.root_service_->grant(arg); }))) {
       LOG_WARN("Grant privileges to user error", K(ret), K(arg));
     }
   }
@@ -182,50 +178,46 @@ int ObRevokeExecutor::execute(ObExecContext &ctx, ObRevokeStmt &stmt)
 {
   int ret = OB_SUCCESS;
   ObTaskExecutorCtx *task_exec_ctx = NULL;
-  obrpc::ObCommonRpcProxy *common_rpc_proxy = NULL;
 
   if (OB_ISNULL(task_exec_ctx = GET_TASK_EXECUTOR_CTX(ctx))) {
     ret = OB_NOT_INIT;
     LOG_WARN("get task executor context failed");
-  } else if (OB_ISNULL(common_rpc_proxy = task_exec_ctx->get_common_rpc())) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("get common rpc proxy failed");
   } else if (stmt.get_has_warning()) {
     //do nothing
   } else {
     switch (stmt.get_grant_level()) {
       case OB_PRIV_USER_LEVEL: {
-        if (OB_FAIL(revoke_user(common_rpc_proxy, stmt))) {
+        if (OB_FAIL(revoke_user(stmt))) {
           LOG_WARN("grant_revoke_user error", K(ret));
         }
         break;
       }
       case OB_PRIV_DB_LEVEL: {
-        if (OB_FAIL(revoke_db(common_rpc_proxy, stmt))) {
+        if (OB_FAIL(revoke_db(stmt))) {
           LOG_WARN("grant_revoke_db error", K(ret));
         }
         break;
       }
       case OB_PRIV_TABLE_LEVEL: {
-        if (OB_FAIL(revoke_table(common_rpc_proxy, stmt, ctx))) {
+        if (OB_FAIL(revoke_table(stmt, ctx))) {
           LOG_WARN("grant_revoke_table error", K(ret));
         }
         break;
       }
       case OB_PRIV_ROUTINE_LEVEL: {
-        if (OB_FAIL(revoke_routine(common_rpc_proxy, stmt, ctx))) {
+        if (OB_FAIL(revoke_routine(stmt, ctx))) {
           LOG_WARN("grant_revoke_routine error", K(ret));
         }
         break;
       }
       case OB_PRIV_CATALOG_LEVEL : {
-        if (OB_FAIL(revoke_catalog(common_rpc_proxy, stmt))) {
+        if (OB_FAIL(revoke_catalog(stmt))) {
           LOG_WARN("grant_revoke_catalog error", K(ret));
         }
         break;
       }
       case OB_PRIV_OBJECT_LEVEL: {
-        if (OB_FAIL(revoke_object(common_rpc_proxy, stmt, ctx))) {
+        if (OB_FAIL(revoke_object(stmt, ctx))) {
           LOG_WARN("grant_revoke_object error", K(ret));
         }
         break;
@@ -241,112 +233,96 @@ int ObRevokeExecutor::execute(ObExecContext &ctx, ObRevokeStmt &stmt)
   return ret;
 }
 
-int ObRevokeExecutor::revoke_user(obrpc::ObCommonRpcProxy *rpc_proxy, ObRevokeStmt &stmt)
+int ObRevokeExecutor::revoke_user(ObRevokeStmt &stmt)
 {
   int ret = OB_SUCCESS;
-  if (OB_ISNULL(rpc_proxy)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Input argument error", K(rpc_proxy), K(ret));
-  } else {
-    obrpc::ObRevokeUserArg &arg = static_cast<obrpc::ObRevokeUserArg &>(stmt.get_ddl_arg());
-    arg.tenant_id_ = stmt.get_tenant_id();
-    const ObIArray<uint64_t> &user_ids = stmt.get_users();
-    const bool is_role = arg.role_ids_.count() > 0;
-    if (is_role) {
-      for (int i = 0; OB_SUCC(ret) && i < user_ids.count(); ++i) {
-        arg.user_id_ = user_ids.at(i);
-        if (OB_FAIL(rpc_proxy->revoke_user(arg))) {
-          LOG_WARN("revoke user error", K(arg), K(ret));
-        }
-      }
-    } else if (0 == user_ids.count()) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("User ids is empty, resolver may be error", K(ret));
-    } else {
-      arg.revoke_all_ = stmt.get_revoke_all();
-      arg.priv_set_ = stmt.get_priv_set();
-      for (int i = 0; OB_SUCC(ret) && i < user_ids.count(); i++) {
-        arg.user_id_ = user_ids.at(i);
-        if (OB_FAIL(rpc_proxy->revoke_user(arg))) {
-          LOG_WARN("revoke user error", K(arg), K(ret));
-        }
+  obcall::ObRevokeUserArg &arg = static_cast<obcall::ObRevokeUserArg &>(stmt.get_ddl_arg());
+  
+  const ObIArray<uint64_t> &user_ids = stmt.get_users();
+  const bool is_role = arg.role_ids_.count() > 0;
+  if (is_role) {
+    for (int i = 0; OB_SUCC(ret) && i < user_ids.count(); ++i) {
+      arg.user_id_ = user_ids.at(i);
+      if (OB_FAIL(rootserver::serial_call([&]{ return GCTX.root_service_->revoke_user(arg); }))) {
+        LOG_WARN("revoke user error", K(arg), K(ret));
       }
     }
-  }
-  return ret;
-}
-
-int ObRevokeExecutor::revoke_catalog(obrpc::ObCommonRpcProxy *rpc_proxy, ObRevokeStmt &stmt)
-{
-  int ret = OB_SUCCESS;
-  if (OB_ISNULL(rpc_proxy)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Input argument error", K(rpc_proxy), K(ret));
+  } else if (0 == user_ids.count()) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("User ids is empty, resolver may be error", K(ret));
   } else {
-    obrpc::ObRevokeCatalogArg &arg = static_cast<obrpc::ObRevokeCatalogArg &>(stmt.get_ddl_arg());
-    arg.tenant_id_ = stmt.get_tenant_id();
+    arg.revoke_all_ = stmt.get_revoke_all();
     arg.priv_set_ = stmt.get_priv_set();
-    // arg.catalog_ has been set in resolve phase
-    const ObIArray<uint64_t> &user_ids = stmt.get_users();
-    if (0 == user_ids.count()) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("User ids is empty, resolver may be error", K(ret));
-    } else {
-      for (int i = 0; OB_SUCC(ret) && i < user_ids.count(); i++) {
-        arg.user_id_ = user_ids.at(i);
-        if (OB_FAIL(rpc_proxy->revoke_catalog(arg))) {
-          LOG_WARN("revoke user error", K(arg), K(ret));
-        }
+    for (int i = 0; OB_SUCC(ret) && i < user_ids.count(); i++) {
+      arg.user_id_ = user_ids.at(i);
+      if (OB_FAIL(rootserver::serial_call([&]{ return GCTX.root_service_->revoke_user(arg); }))) {
+        LOG_WARN("revoke user error", K(arg), K(ret));
       }
     }
   }
   return ret;
 }
 
-int ObRevokeExecutor::revoke_db(obrpc::ObCommonRpcProxy *rpc_proxy, ObRevokeStmt &stmt)
+int ObRevokeExecutor::revoke_catalog(ObRevokeStmt &stmt)
 {
   int ret = OB_SUCCESS;
-  if (OB_ISNULL(rpc_proxy)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Input argument error", K(rpc_proxy), K(ret));
+  obcall::ObRevokeCatalogArg &arg = static_cast<obcall::ObRevokeCatalogArg &>(stmt.get_ddl_arg());
+  
+  arg.priv_set_ = stmt.get_priv_set();
+  // arg.catalog_ has been set in resolve phase
+  const ObIArray<uint64_t> &user_ids = stmt.get_users();
+  if (0 == user_ids.count()) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("User ids is empty, resolver may be error", K(ret));
   } else {
-    obrpc::ObRevokeDBArg &arg = static_cast<obrpc::ObRevokeDBArg &>(stmt.get_ddl_arg());
-    arg.tenant_id_ = stmt.get_tenant_id();
-    arg.priv_set_ = stmt.get_priv_set();
-    arg.db_ = stmt.get_database_name();
-    const ObIArray<uint64_t> &user_ids = stmt.get_users();
-    if (0 == user_ids.count()) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("User ids is empty, resolver may be error", K(ret));
-    } else {
-      for (int i = 0; OB_SUCC(ret) && i < user_ids.count(); i++) {
-        arg.user_id_ = user_ids.at(i);
-        if (OB_FAIL(rpc_proxy->revoke_database(arg))) {
-          LOG_WARN("revoke user error", K(arg), K(ret));
-        }
+    for (int i = 0; OB_SUCC(ret) && i < user_ids.count(); i++) {
+      arg.user_id_ = user_ids.at(i);
+      if (OB_FAIL(rootserver::serial_call([&]{ return GCTX.root_service_->revoke_catalog(arg); }))) {
+        LOG_WARN("revoke user error", K(arg), K(ret));
       }
     }
   }
   return ret;
 }
 
-int ObRevokeExecutor::revoke_table(obrpc::ObCommonRpcProxy *rpc_proxy,
-                                   ObRevokeStmt &stmt,
+int ObRevokeExecutor::revoke_db(ObRevokeStmt &stmt)
+{
+  int ret = OB_SUCCESS;
+  obcall::ObRevokeDBArg &arg = static_cast<obcall::ObRevokeDBArg &>(stmt.get_ddl_arg());
+  
+  arg.priv_set_ = stmt.get_priv_set();
+  arg.db_ = stmt.get_database_name();
+  const ObIArray<uint64_t> &user_ids = stmt.get_users();
+  if (0 == user_ids.count()) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("User ids is empty, resolver may be error", K(ret));
+  } else {
+    for (int i = 0; OB_SUCC(ret) && i < user_ids.count(); i++) {
+      arg.user_id_ = user_ids.at(i);
+      if (OB_FAIL(rootserver::serial_call([&]{ return GCTX.root_service_->revoke_database(arg); }))) {
+        LOG_WARN("revoke user error", K(arg), K(ret));
+      }
+    }
+  }
+  return ret;
+}
+
+int ObRevokeExecutor::revoke_table(ObRevokeStmt &stmt,
                                    ObExecContext &ctx)
 {
   int ret = OB_SUCCESS;
   ObSQLSessionInfo *session_info = NULL;
   ObSchemaGetterGuard schema_guard;
   const ObUserInfo *user_info = NULL;
-  if (OB_ISNULL(rpc_proxy) || OB_ISNULL(GCTX.schema_service_)) {
+  if (OB_ISNULL(GCTX.schema_service_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Input argument error", K(rpc_proxy), K(ret));
+    LOG_WARN("Input argument error", K(ret));
   } else if (OB_ISNULL(session_info = ctx.get_my_session())) {
     ret = OB_NOT_INIT;
     LOG_WARN("Get my session error");
   } else {
-    obrpc::ObRevokeTableArg &arg = static_cast<obrpc::ObRevokeTableArg &>(stmt.get_ddl_arg());
-    arg.tenant_id_ = stmt.get_tenant_id();
+    obcall::ObRevokeTableArg &arg = static_cast<obcall::ObRevokeTableArg &>(stmt.get_ddl_arg());
+    
     arg.priv_set_ = stmt.get_priv_set();
     arg.db_ = stmt.get_database_name();
     arg.table_ = stmt.get_table_name();
@@ -360,9 +336,8 @@ int ObRevokeExecutor::revoke_table(obrpc::ObCommonRpcProxy *rpc_proxy,
     } else if (stmt.get_object_type() == ObObjectType::TABLE
             && (arg.column_names_priv_.count() > 0)) {
       if (arg.obj_id_ == OB_INVALID) {
-        //do nothing
-        //todo: oracle every object will use id, and should also record the schema version in future.
-      } else if (lib::is_mysql_mode() && stmt.get_table_schema_version()!= 0 && 
+        // No schema dependency can be recorded without an object id.
+      } else if (stmt.get_table_schema_version()!= 0 &&
                 OB_FAIL(arg.based_schema_object_infos_.push_back(ObBasedSchemaObjectInfo(arg.obj_id_,
                                                                             TABLE_SCHEMA,
                                                                             stmt.get_table_schema_version())))) {
@@ -372,10 +347,9 @@ int ObRevokeExecutor::revoke_table(obrpc::ObCommonRpcProxy *rpc_proxy,
       //todo: pl routine and others
     }
     if (OB_FAIL(ret)) {
-    } else if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(arg.tenant_id_, schema_guard))) {
+    } else if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(schema_guard))) {
       LOG_WARN("failed to get tenant schema guard", K(ret));
-    } else if (OB_FAIL(schema_guard.get_user_info(arg.tenant_id_,
-                                                  session_info->get_priv_user_id(),
+    } else if (OB_FAIL(schema_guard.get_user_info(session_info->get_priv_user_id(),
                                                   user_info))) {
       LOG_WARN("failed to get user info", K(ret));
     } else if (OB_ISNULL(user_info)) {
@@ -401,7 +375,7 @@ int ObRevokeExecutor::revoke_table(obrpc::ObCommonRpcProxy *rpc_proxy,
     } else {
       for (int i = 0; OB_SUCC(ret) && i < user_ids.count(); i++) {
         arg.user_id_ = user_ids.at(i);
-        if (OB_FAIL(rpc_proxy->revoke_table(arg))) {
+        if (OB_FAIL(rootserver::serial_call([&]{ return GCTX.root_service_->revoke_table(arg); }))) {
           LOG_WARN("revoke user error", K(arg), K(ret));
         }
       }
@@ -410,23 +384,19 @@ int ObRevokeExecutor::revoke_table(obrpc::ObCommonRpcProxy *rpc_proxy,
   return ret;
 }
 
-int ObRevokeExecutor::revoke_routine(obrpc::ObCommonRpcProxy *rpc_proxy,
-                                     ObRevokeStmt &stmt,
+int ObRevokeExecutor::revoke_routine(ObRevokeStmt &stmt,
                                      ObExecContext &ctx)
 {
   int ret = OB_SUCCESS;
   ObSQLSessionInfo *session_info = NULL;
   ObSchemaGetterGuard schema_guard;
   const ObUserInfo *user_info = NULL;
-  if (OB_ISNULL(rpc_proxy)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Input argument error", K(rpc_proxy), K(ret));
-  } else if (OB_ISNULL(session_info = ctx.get_my_session())) {
+  if (OB_ISNULL(session_info = ctx.get_my_session())) {
     ret = OB_NOT_INIT;
     LOG_WARN("Get my session error");
   } else {
-    obrpc::ObRevokeRoutineArg &arg = static_cast<obrpc::ObRevokeRoutineArg &>(stmt.get_ddl_arg());
-    arg.tenant_id_ = stmt.get_tenant_id();
+    obcall::ObRevokeRoutineArg &arg = static_cast<obcall::ObRevokeRoutineArg &>(stmt.get_ddl_arg());
+    
     arg.priv_set_ = stmt.get_priv_set();
     arg.db_ = stmt.get_database_name();
     arg.routine_ = stmt.get_table_name();
@@ -435,10 +405,9 @@ int ObRevokeExecutor::revoke_routine(obrpc::ObCommonRpcProxy *rpc_proxy,
     arg.grantor_id_ = stmt.get_grantor_id();
     arg.revoke_all_ora_ = stmt.get_revoke_all_ora();
     if (OB_FAIL(ret)) {
-    } else if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(arg.tenant_id_, schema_guard))) {
+    } else if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(schema_guard))) {
       LOG_WARN("failed to get tenant schema guard", K(ret));
-    } else if (OB_FAIL(schema_guard.get_user_info(arg.tenant_id_,
-                                                  session_info->get_priv_user_id(),
+    } else if (OB_FAIL(schema_guard.get_user_info(session_info->get_priv_user_id(),
                                                   user_info))) {
       LOG_WARN("failed to get user info", K(ret));
     } else if (OB_ISNULL(user_info)) {
@@ -464,7 +433,7 @@ int ObRevokeExecutor::revoke_routine(obrpc::ObCommonRpcProxy *rpc_proxy,
     } else {
       for (int i = 0; OB_SUCC(ret) && i < user_ids.count(); i++) {
         arg.user_id_ = user_ids.at(i);
-        if (OB_FAIL(rpc_proxy->revoke_routine(arg))) {
+        if (OB_FAIL(rootserver::serial_call([&]{ return GCTX.root_service_->revoke_routine(arg); }))) {
           LOG_WARN("revoke user error", K(arg), K(ret));
         }
       }
@@ -473,31 +442,26 @@ int ObRevokeExecutor::revoke_routine(obrpc::ObCommonRpcProxy *rpc_proxy,
   return ret;
 }
 
-int ObRevokeExecutor::revoke_object(obrpc::ObCommonRpcProxy *rpc_proxy,
-                                    ObRevokeStmt &stmt,
+int ObRevokeExecutor::revoke_object(ObRevokeStmt &stmt,
                                     ObExecContext &ctx)
 {
   int ret = OB_SUCCESS;
   ObSQLSessionInfo *session_info = NULL;
   ObSchemaGetterGuard schema_guard;
   const ObUserInfo *user_info = NULL;
-  if (OB_ISNULL(rpc_proxy)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Input argument error", K(rpc_proxy), K(ret));
-  } else if (OB_ISNULL(session_info = ctx.get_my_session())) {
+  if (OB_ISNULL(session_info = ctx.get_my_session())) {
     ret = OB_NOT_INIT;
     LOG_WARN("Get my session error");
   } else {
-    obrpc::ObRevokeObjMysqlArg &arg = static_cast<obrpc::ObRevokeObjMysqlArg &>(stmt.get_ddl_arg());
-    arg.tenant_id_ = stmt.get_tenant_id();
+    obcall::ObRevokeObjMysqlArg &arg = static_cast<obcall::ObRevokeObjMysqlArg &>(stmt.get_ddl_arg());
+    
     arg.priv_set_ = stmt.get_priv_set();
     arg.obj_name_ = stmt.get_table_name();
     arg.obj_type_ = static_cast<uint64_t>(stmt.get_object_type());
     if (OB_FAIL(ret)) {
-    } else if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(arg.tenant_id_, schema_guard))) {
+    } else if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(schema_guard))) {
       LOG_WARN("failed to get tenant schema guard", K(ret));
-    } else if (OB_FAIL(schema_guard.get_user_info(arg.tenant_id_,
-                  session_info->get_priv_user_id(),
+    } else if (OB_FAIL(schema_guard.get_user_info(session_info->get_priv_user_id(),
                   user_info))) {
       LOG_WARN("failed to get user info", K(ret));
     } else if (OB_ISNULL(user_info)) {
@@ -523,7 +487,7 @@ int ObRevokeExecutor::revoke_object(obrpc::ObCommonRpcProxy *rpc_proxy,
     } else {
       for (int i = 0; OB_SUCC(ret) && i < user_ids.count(); i++) {
         arg.user_id_ = user_ids.at(i);
-        if (OB_FAIL(rpc_proxy->revoke_object(arg))) {
+        if (OB_FAIL(rootserver::serial_call([&]{ return GCTX.root_service_->revoke_object(arg); }))) {
           LOG_WARN("revoke user error", K(arg), K(ret));
         }
       }

@@ -294,66 +294,6 @@ int LogBlockMgr::load_block_handler(const block_id_t block_id, const offset_t of
   return ret;
 }
 
-int LogBlockMgr::create_tmp_block_handler(const block_id_t block_id)
-{
-  int ret = OB_SUCCESS;
-	char tmp_block_path[OB_MAX_FILE_NAME_LENGTH] = {'\0'};
-	if (OB_FAIL(block_id_to_tmp_string(block_id, tmp_block_path, OB_MAX_FILE_NAME_LENGTH))) {
-		PALF_LOG(ERROR, "block_id_to_tmp_string failed", K(ret), KPC(this), K(block_id));
-	} else if (OB_FAIL(curr_writable_handler_.close())) {
-    PALF_LOG(ERROR, "curr_writable_handler_ close success");
-  } else if (FALSE_IT(curr_writable_handler_.destroy())) {
-  } else if (OB_FAIL(curr_writable_handler_.init(log_block_size_, align_size_, align_buf_size_, io_adapter_))) {
-    PALF_LOG(ERROR, "curr_writable_handler_ init failed", K(ret), KPC(this));
-  } else if (OB_FAIL(log_block_pool_->create_block_at(dir_fd_, tmp_block_path, log_block_size_))) {
-  } else if (OB_FAIL(construct_absolute_tmp_block_path(log_dir_, block_id, OB_MAX_FILE_NAME_LENGTH, tmp_block_path))) {
-    PALF_LOG(ERROR, "failed to construct absolute tmp block path", K(ret), KPC(this), K(block_id));
-  } else if (OB_FAIL(curr_writable_handler_.open(tmp_block_path))) {
-    PALF_LOG(ERROR, "create_tmp_block failed", K(ret), KPC(this), K(block_id));
-  } else {
-		curr_writable_block_id_ = block_id;
-		PALF_LOG(INFO, "create_tmp_block_handler success", K(ret), KPC(this), K(block_id));
-  }
-  return ret;
-}
-
-int LogBlockMgr::delete_block_from_back_to_front_until(const block_id_t block_id)
-{
-  return delete_block_from_back_to_front_until_(block_id);
-}
-
-int LogBlockMgr::rename_tmp_block_handler_to_normal(const block_id_t block_id)
-{
-  int ret = OB_SUCCESS;
-	// 1. rename "block_id.tmp" to "block_id.flashback"
-	// 2. delete "block_id", make sure each block has returned into BlockPool
-	// 3. rename "block_id.flashback" to "block_id"
-	// NB: for restart, the block which named 'block_id.flashback' must be renamed to 'block_id'
-	char tmp_block_path[OB_MAX_FILE_NAME_LENGTH] = {'\0'};
-	char block_path[OB_MAX_FILE_NAME_LENGTH] = {'\0'};
-	char flashback_block_path[OB_MAX_FILE_NAME_LENGTH] = {'\0'};
-  if (block_id != curr_writable_block_id_) {
-    ret = OB_ERR_UNEXPECTED;
-    PALF_LOG(ERROR, "block_id is not same as curr_writable_handler_, unexpected error",
-        K(ret), K(block_id), K(curr_writable_block_id_), KPC(this));
-  } else if (OB_FAIL(block_id_to_string(block_id, block_path, OB_MAX_FILE_NAME_LENGTH))) {
-		PALF_LOG(ERROR, "block_id_to_string failed", K(ret), K(block_id));
-  } else if (OB_FAIL(block_id_to_tmp_string(block_id, tmp_block_path, OB_MAX_FILE_NAME_LENGTH))) {
-		PALF_LOG(ERROR, "block_id_to_tmp_string failed", K(ret), K(block_id));
-  } else if (OB_FAIL(block_id_to_flashback_string(block_id, flashback_block_path, OB_MAX_FILE_NAME_LENGTH))) {
-		PALF_LOG(ERROR, "block_id_to_flashback_string failed", K(ret), K(block_id));
-	} else if (OB_FAIL(do_rename_and_fsync_(tmp_block_path, flashback_block_path))) {
-    PALF_LOG(ERROR, "do_rename_and_fsync_ failed", K(ret), KPC(this));
-	} else if(OB_FAIL(do_delete_block_(block_id))) {
-		PALF_LOG(ERROR, "do_delete_block_ failed", K(ret), KPC(this), K(block_id));
-	} else if (OB_FAIL(do_rename_and_fsync_(flashback_block_path, block_path))) {
-    PALF_LOG(ERROR, "do_rename_and_fsync_ failed", K(ret), KPC(this));
-  } else {
-    PALF_LOG(INFO, "rename_tmp_block_handler_to_normal success", K(ret), KPC(this));
-  }
-  return ret;
-}
-
 // step1: firstly, delete each block after lsn.block_id_;
 // step2: secondly, truncate data in curr_lsn_;
 // step3: keep last dio_aligned_buf_.

@@ -152,38 +152,23 @@ DEF_TO_STRING(ObTxSavePoint)
   J_OBJ_END();
   return pos;
 }
-OB_SERIALIZE_MEMBER(ObTxExecResult, incomplete_, parts_,
+OB_SERIALIZE_MEMBER(ObTxExecResult, incomplete_, has_write_state_, write_state_,
                     conflict_txs_,// FARM COMPAT WHITELIST for cflict_txs_
                     conflict_info_array_,
-                    touched_ls_list_);
+                    touched_storage_);
 OB_SERIALIZE_MEMBER(ObTxSnapshot, tx_id_, version_, scn_, elr_);
 OB_SERIALIZE_MEMBER(ObTxReadSnapshot,
                     valid_,
                     core_,
                     source_,
                     uncertain_bound_,
-                    snapshot_lsid_,
-                    parts_,
-                    snapshot_ls_role_,
-                    committed_,
-                    snapshot_acquire_addr_);
+                    has_write_state_,
+                    committed_);
 
-
-// for lob aux table tx read snapshot 
-#define PREPARE_LOB_PARTS(parts, ls_id)         \
-  ObSEArray<ObTxLSEpochPair, 1> parts;          \
-  ARRAY_FOREACH_NORET(parts_, i) {              \
-   if (parts_.at(i).left_ == ls_id) {           \
-     parts.push_back(parts_.at(i));             \
-     break;                                     \
-   }                                            \
-}                                               \
-
-int ObTxReadSnapshot::serialize_for_lob(const share::ObLSID &ls_id, const share::SCN &fb_snapshot, SERIAL_PARAMS) const
+int ObTxReadSnapshot::serialize_for_lob(const share::SCN &fb_snapshot, SERIAL_PARAMS) const
 {
   int ret = OB_SUCCESS;
-  PREPARE_LOB_PARTS(parts, ls_id);
-  LST_DO_CODE(OB_UNIS_ENCODE, core_, source_, snapshot_lsid_, snapshot_ls_role_, parts);
+  LST_DO_CODE(OB_UNIS_ENCODE, core_, source_, has_write_state_);
   OB_UNIS_ENCODE(fb_snapshot);
   return ret;
 }
@@ -191,7 +176,7 @@ int ObTxReadSnapshot::serialize_for_lob(const share::ObLSID &ls_id, const share:
 int ObTxReadSnapshot::deserialize_for_lob(share::SCN &fb_snapshot, DESERIAL_PARAMS)
 {
   int ret = OB_SUCCESS;
-  LST_DO_CODE(OB_UNIS_DECODE, core_, source_, snapshot_lsid_, snapshot_ls_role_, parts_);
+  LST_DO_CODE(OB_UNIS_DECODE, core_, source_, has_write_state_);
   OB_UNIS_DECODE(fb_snapshot);
   if (OB_SUCC(ret)) {
     valid_ = true;
@@ -199,30 +184,27 @@ int ObTxReadSnapshot::deserialize_for_lob(share::SCN &fb_snapshot, DESERIAL_PARA
   return ret;
 }
 
-int64_t ObTxReadSnapshot::get_serialize_size_for_lob(const share::ObLSID &ls_id, const share::SCN &fb_snapshot) const
+int64_t ObTxReadSnapshot::get_serialize_size_for_lob(const share::SCN &fb_snapshot) const
 {
   int64_t len = 0;
-  PREPARE_LOB_PARTS(parts, ls_id);
-  LST_DO_CODE(OB_UNIS_ADD_LEN, core_, source_, snapshot_lsid_, snapshot_ls_role_, parts);
+  LST_DO_CODE(OB_UNIS_ADD_LEN, core_, source_, has_write_state_);
   OB_UNIS_ADD_LEN(fb_snapshot);
   return len;
 }
 
-int ObTxReadSnapshot::build_snapshot_for_lob(const ObTxSnapshot &core, const share::ObLSID &ls_id)
+int ObTxReadSnapshot::build_snapshot_for_lob(const ObTxSnapshot &core)
 {
   int ret = OB_SUCCESS;
   core_ = core;
   valid_= true;
   source_ = ObTxReadSnapshot::SRC::LS;
-  snapshot_lsid_ = ls_id;
   return ret;
 }
 
 int ObTxReadSnapshot::build_snapshot_for_lob(
     const int64_t snapshot_version,
     const int64_t snapshot_tx_id,
-    const int64_t snapshot_seq,
-    const share::ObLSID &ls_id)
+    const int64_t snapshot_seq)
 {
   int ret = OB_SUCCESS;
   core_.version_.convert_for_tx(snapshot_version);
@@ -230,7 +212,6 @@ int ObTxReadSnapshot::build_snapshot_for_lob(
   core_.scn_ = ObTxSEQ::cast_from_int(snapshot_seq);
   valid_ = true;
   source_ = ObTxReadSnapshot::SRC::LS;
-  snapshot_lsid_ = ls_id;
   return ret;
 }
 
@@ -248,88 +229,30 @@ int ObTxReadSnapshot::refresh_seq_no(const int64_t tx_seq_base)
 
 void ObTxReadSnapshot::convert_to_out_tx()
 {
-  parts_.reset();
+  has_write_state_ = false;
   core_.tx_id_.reset();
   core_.scn_.reset();
 }
 
-OB_SERIALIZE_MEMBER(ObTxPart, id_, addr_, epoch_, first_scn_, last_scn_, flag_.flag_val_);
+OB_SERIALIZE_MEMBER(ObTxWriteState, first_scn_, last_scn_, flag_.flag_val_);
 
-DEFINE_SERIALIZE(ObTxDesc::FLAG::FOR_FIXED_SER_VAL)
+DEFINE_SERIALIZE(ObTxDesc::FLAG)
 {
   int ret = OB_SUCCESS;
   return serialization::encode_i64(buf, buf_len, pos, v_);
 }
-DEFINE_DESERIALIZE(ObTxDesc::FLAG::FOR_FIXED_SER_VAL)
+DEFINE_DESERIALIZE(ObTxDesc::FLAG)
 {
   int ret = OB_SUCCESS;
   return serialization::decode_i64(buf, data_len, pos, (int64_t*)&v_);
 }
-DEFINE_GET_SERIALIZE_SIZE(ObTxDesc::FLAG::FOR_FIXED_SER_VAL)
+DEFINE_GET_SERIALIZE_SIZE(ObTxDesc::FLAG)
 {
   return serialization::encoded_length_i64(v_);
 }
 
-uint64_t ObTxDesc::FLAG::COMPAT_FOR_EXEC::get_serialize_v_() const
-{
-  FLAG ret_flag;
-  FLAG this_flag;
-  this_flag.compat_for_exec_.v_ = v_;
-  ret_flag.compat_for_exec_.v_ = 0;
-#define _SET_FLAG_(x) ret_flag.x = this_flag.x
-  LST_DO(_SET_FLAG_, (;),
-         EXPLICIT_,
-         SHADOW_,
-         REPLICA_,
-         TRACING_);
-#undef _SET_FLAG_
-  return ret_flag.compat_for_exec_.v_;
-}
-
-uint64_t ObTxDesc::FLAG::COMPAT_FOR_TX_ROUTE::get_serialize_v_() const
-{
-  FLAG ret_flag;
-  FLAG this_flag;
-  this_flag.compat_for_tx_route_.v_ = v_;
-  ret_flag.compat_for_tx_route_.v_ = 0;
-#define _SET_FLAG_(x) ret_flag.x = this_flag.x
-  LST_DO(_SET_FLAG_, (;),
-         EXPLICIT_,
-         SHADOW_,
-         REPLICA_,
-         TRACING_,
-         RELEASED_,
-         PARTS_INCOMPLETE_,
-         PART_EPOCH_MISMATCH_,
-         WITH_TEMP_TABLE_,
-         DEFER_ABORT_);
-#undef _SET_FLAG_
-  return ret_flag.compat_for_tx_route_.v_;
-}
-
-#define DEF_SERIALIZE_COMPAT_FOR_TX_DESC_FLAG(THE_TYPE) \
-  DEFINE_SERIALIZE(ObTxDesc::FLAG::THE_TYPE)     \
-  {                                              \
-    int ret = OB_SUCCESS;                                               \
-    const uint64_t compat_v = get_serialize_v_();                       \
-    return serialization::encode_vi64(buf, buf_len, pos, compat_v);     \
-  }                                                                     \
-  DEFINE_DESERIALIZE(ObTxDesc::FLAG::THE_TYPE)                          \
-  {                                                                     \
-    int ret = OB_SUCCESS;                                               \
-    return serialization::decode_vi64(buf, data_len, pos, (int64_t*)&v_); \
-  }                                                                     \
-  DEFINE_GET_SERIALIZE_SIZE(ObTxDesc::FLAG::THE_TYPE)                   \
-  {                                                                     \
-    const uint64_t compat_v = get_serialize_v_();                       \
-    return serialization::encoded_length_vi64(compat_v);                \
-  }
-
-DEF_SERIALIZE_COMPAT_FOR_TX_DESC_FLAG(COMPAT_FOR_EXEC)
-DEF_SERIALIZE_COMPAT_FOR_TX_DESC_FLAG(COMPAT_FOR_TX_ROUTE)
-
 OB_SERIALIZE_MEMBER(ObTxDesc,
-                    tenant_id_,
+                    
                     cluster_id_,
                     cluster_version_,
                     sess_id_,
@@ -339,15 +262,15 @@ OB_SERIALIZE_MEMBER(ObTxDesc,
                     access_mode_,
                     op_sn_,
                     state_,
-                    flags_.compat_for_exec_,
+                    flags_,
                     expire_ts_,
                     active_ts_,
                     timeout_us_,
                     lock_timeout_us_,
                     active_scn_,
-                    parts_,
+                    has_write_state_,
+                    write_state_,
                     xid_,
-                    flags_.for_serialize_v_,
                     seq_base_,
                     client_sid_);
 OB_SERIALIZE_MEMBER(ObTxParam,
@@ -363,36 +286,8 @@ OB_SERIALIZE_MEMBER(ObTxSavePoint,
                     user_create_,
                     name_);
 
-OB_SERIALIZE_MEMBER(ObTxInfo,
-                    tenant_id_,
-                    cluster_id_,
-                    cluster_version_,
-                    addr_,
-                    tx_id_,
-                    isolation_,
-                    access_mode_,
-                    snapshot_version_,
-                    snapshot_uncertain_bound_,
-                    op_sn_,
-                    alloc_ts_,
-                    active_ts_,
-                    timeout_us_,
-                    expire_ts_,
-                    active_scn_,
-                    parts_,
-                    session_id_,
-                    savepoints_,
-                    seq_base_);
-OB_SERIALIZE_MEMBER(ObTxStmtInfo,
-                    tx_id_,
-                    op_sn_,
-                    parts_,
-                    state_,
-                    savepoints_);
-
 ObTxDesc::ObTxDesc()
-  : tenant_id_(0),
-    cluster_id_(-1),
+  : cluster_id_(-1),
     trace_info_(),
     cluster_version_(0),
     seq_base_(0),
@@ -409,7 +304,6 @@ ObTxDesc::ObTxDesc()
     sess_id_(0),
     assoc_sess_id_(0),
     client_sid_(0),
-    global_tx_type_(ObGlobalTxType::PLAIN),
     op_sn_(0),                          // default is from 0
     state_(State::INVL),
     flags_({ 0 }),
@@ -424,12 +318,11 @@ ObTxDesc::ObTxDesc()
     active_scn_(),
     min_implicit_savepoint_(),
     last_branch_id_(0),
-    parts_(),
-    savepoints_(),
-    conflict_txs_(),
-    coord_id_(),
-    commit_expire_ts_(0),
-    commit_parts_(),
+    has_write_state_(false),
+	    write_state_(),
+	    savepoints_(),
+	    conflict_txs_(),
+	    commit_expire_ts_(0),
     commit_version_(),
     commit_out_(-1),
     commit_times_(0),
@@ -440,8 +333,6 @@ ObTxDesc::ObTxDesc()
     commit_cb_(NULL),
     cb_tid_(-1),
     exec_info_reap_ts_(0),
-    brpc_mask_set_(),
-    rpc_cond_(),
     commit_task_()
 #ifdef ENABLE_DEBUG_LOG
   , alloc_link_()
@@ -472,10 +363,9 @@ int ObTxDesc::switch_to_idle()
   commit_ts_ = 0;
   finish_ts_ = 0;
   active_scn_.reset();
-  parts_.reset();
-  conflict_txs_.reset();
-  coord_id_.reset();
-  commit_parts_.reset();
+  has_write_state_ = false;
+	  write_state_ = ObTxWriteState();
+	  conflict_txs_.reset();
   commit_version_.reset();
   commit_out_ = 0;
   commit_times_ = 0;
@@ -493,9 +383,7 @@ int ObTxDesc::switch_to_idle()
 
 inline void ObTxDesc::FLAG::switch_to_idle_()
 {
-  const FLAG sv = *this;
   v_ = 0;
-  REPLICA_ = sv.REPLICA_;
 }
 
 // this function helper will update current flag with the given
@@ -520,7 +408,7 @@ void ObTxDesc::reset()
     FORCE_PRINT_TRACE(&tlog_, "[tx desc trace]");
   }
 #endif
-  tenant_id_ = 0;
+  
   cluster_id_ = -1;
   trace_info_.reset();
   cluster_version_ = 0;
@@ -529,7 +417,6 @@ void ObTxDesc::reset()
 
   addr_.reset();
   tx_id_.reset();
-  GET_DIAGNOSTIC_INFO->get_ash_stat().tx_id_ = 0;
   xid_.reset();
   isolation_ = ObTxIsolationLevel::INVALID;
   access_mode_ = ObTxAccessMode::INVL;
@@ -537,7 +424,6 @@ void ObTxDesc::reset()
   last_rc_snapshot_version_.set_min();
   snapshot_uncertain_bound_ = 0;
   snapshot_scn_.reset();
-  global_tx_type_ = ObGlobalTxType::PLAIN;
 
   op_sn_ = -1;
 
@@ -558,13 +444,12 @@ void ObTxDesc::reset()
   active_scn_.reset();
   min_implicit_savepoint_.reset();
   last_branch_id_ = 0;
-  parts_.reset();
-  savepoints_.reset();
-  conflict_txs_.reset();
+  has_write_state_ = false;
+  write_state_ = ObTxWriteState();
+	  savepoints_.reset();
+	  conflict_txs_.reset();
 
-  coord_id_.reset();
-  commit_expire_ts_ = -1;
-  commit_parts_.reset();
+	  commit_expire_ts_ = -1;
   commit_version_.reset();
   commit_out_ = -1;
   commit_times_ = 0;
@@ -574,8 +459,6 @@ void ObTxDesc::reset()
   commit_cb_ = NULL;
   cb_tid_ = -1;
   exec_info_reap_ts_ = 0;
-  brpc_mask_set_.reset();
-  rpc_cond_.reset();
   commit_task_.reset();
   tlog_.reset();
   modified_tables_.reset();
@@ -584,13 +467,11 @@ void ObTxDesc::reset()
 void ObTxDesc::set_tx_id(const ObTransID &tx_id)
 {
   tx_id_ = tx_id;
-  GET_DIAGNOSTIC_INFO->get_ash_stat().tx_id_ = tx_id.get_id();
 }
 
 void ObTxDesc::reset_tx_id()
 {
   tx_id_.reset();
-  GET_DIAGNOSTIC_INFO->get_ash_stat().tx_id_ = 0;
 }
 
 const ObString &ObTxDesc::get_tx_state_str() const {
@@ -700,44 +581,27 @@ bool ObTxDesc::contain_savepoint(const ObString &sp)
   return hit;
 }
 
-int ObTxDesc::update_part_(ObTxPart &a, const bool append, const bool check_only_if_exist)
+int ObTxDesc::merge_write_state_(ObTxWriteState &a, const bool append, const bool check_only_if_exist)
 {
   int ret = OB_SUCCESS;
-  bool hit = false;
+  const bool hit = has_write_state_;
   if (exec_info_reap_ts_ == 0) {
     exec_info_reap_ts_ = ObSequence::get_max_seq_no();
   }
-  ARRAY_FOREACH_NORET(parts_, i) {
-    ObTxPart &p = parts_[i];
-    if (p.id_ == a.id_) {
-      hit = true;
-      if (p.epoch_ == ObTxPart::EPOCH_DEAD) {
-        if (a.epoch_ > 0) { // unexpected: from dead to alive
-          flags_.PART_EPOCH_MISMATCH_ = true;
-          ret = OB_TRANS_NEED_ROLLBACK;
-          TRANS_LOG(WARN, "epoch missmatch", K(ret), K(a), K(p));
-        }
-      } else if (p.epoch_ <= 0) {
-        p.epoch_ = a.epoch_;
-      } else if (a.epoch_ > 0 && p.epoch_ != a.epoch_) {
-        flags_.PART_EPOCH_MISMATCH_ = true;
-        ret = OB_TRANS_NEED_ROLLBACK;
-        TRANS_LOG(WARN, "tx-part epoch changed", K(ret), K(a), K(p));
+
+  if (hit) {
+    ObTxWriteState &p = write_state_;
+    if (OB_SUCC(ret) && !check_only_if_exist) {
+      p.first_scn_ = MIN(a.first_scn_, p.first_scn_);
+      p.last_scn_ = p.last_scn_.is_max() ? a.last_scn_ : MAX(a.last_scn_, p.last_scn_);
+      p.last_touch_ts_ = exec_info_reap_ts_ + 1;
+      if (p.is_clean() && !a.is_clean()) {
+        p.flag_.set_dirty();
       }
-      if (OB_SUCC(ret) && !check_only_if_exist) {
-        if (a.addr_.is_valid()) { p.addr_ = a.addr_; }
-        p.first_scn_ = MIN(a.first_scn_, p.first_scn_);
-        p.last_scn_ = p.last_scn_.is_max() ? a.last_scn_ : MAX(a.last_scn_, p.last_scn_);
-        p.last_touch_ts_ = exec_info_reap_ts_ + 1;
-        if (p.is_clean() && !a.is_clean()) {
-          p.flag_.set_dirty();
-        }
-      }
-      break;
     }
   }
 
-  if (ObTxDesc::State::IMPLICIT_ACTIVE == state_ && !active_scn_.is_valid()) {
+  if (OB_SUCC(ret) && ObTxDesc::State::IMPLICIT_ACTIVE == state_ && !active_scn_.is_valid()) {
     /*
      * it is a first stmt's retry, we should set active scn
      * to enable recognizing it is first stmt
@@ -745,100 +609,74 @@ int ObTxDesc::update_part_(ObTxPart &a, const bool append, const bool check_only
     active_scn_ = get_tx_seq();
   }
 
-  if (!hit) {
+  if (OB_FAIL(ret)) {
+  } else if (!hit) {
     if (append) {
       a.last_touch_ts_ = exec_info_reap_ts_ + 1;
-      if (OB_FAIL(parts_.push_back(a))) {
-        flags_.PARTS_INCOMPLETE_ = true;
-        TRANS_LOG(WARN, "push fail, set incomplete", K(ret), K_(parts), K(a));
-      } else {
-        implicit_start_tx_();
-      }
+      write_state_ = a;
+      has_write_state_ = true;
+      implicit_start_tx_();
     } else {
       ret = OB_ENTRY_NOT_EXIST;
     }
   }
-  state_change_flags_.PARTS_CHANGED_ = true;
+  state_change_flags_.WRITE_STATE_CHANGED_ = true;
   return ret;
 }
 
-void ObTxDesc::post_rb_savepoint_(ObTxPartRefList &parts, const ObTxSEQ &savepoint)
+void ObTxDesc::finish_write_state_rollback_(ObTxWriteState *part, const ObTxSEQ &savepoint)
 {
-  ARRAY_FOREACH_NORET(parts, i) {
-    parts[i].last_scn_ = savepoint;
+  if (OB_NOT_NULL(part)) {
+    part->last_scn_ = savepoint;
   }
-  state_change_flags_.PARTS_CHANGED_ = true;
+  state_change_flags_.WRITE_STATE_CHANGED_ = true;
 }
 
-int ObTxDesc::update_clean_part(const share::ObLSID &id,
-                                const int64_t epoch,
-                                const ObAddr &addr)
+int ObTxDesc::update_clean_write_state()
 {
-  ObTxPart p;
-  p.id_ = id;
-  p.epoch_ = epoch;
-  p.addr_ = addr;
+  ObTxWriteState p;
   p.first_scn_ = ObTxSEQ::MAX_VAL();
   p.last_scn_ = get_tx_seq();
-  return update_part_(p, false);
+  return merge_write_state_(p, false);
 }
 
-int ObTxDesc::add_clean_part_if_absent(const share::ObLSID &id,
-                                          const int64_t epoch,
-                                          const ObAddr &addr,
-                                          const bool is_dup)
+int ObTxDesc::init_clean_write_state_if_absent()
 {
   int ret = OB_SUCCESS;
   ObTxSEQ cur_seq = get_tx_seq();
-  ObTxPart p;
-  p.id_ = id;
-  p.epoch_ = epoch;
-  p.addr_ = addr;
+  ObTxWriteState p;
   p.first_scn_ = cur_seq;
   p.last_scn_ = cur_seq;
   p.flag_.set_clean();
-  if (is_dup) {
-    p.flag_.set_dup_ls();
-  }
-  return update_part_(p, true, true);
+  return merge_write_state_(p, true, true);
 }
 
 /*
- * update_part - update txn participant info
+ * merge_write_state - update txn write state info
  *
  * if failed, txn was marked with PARTS_INCOMPLETE
  */
-int ObTxDesc::update_part(ObTxPart &p)
+int ObTxDesc::merge_write_state(ObTxWriteState &p)
 {
   ObSpinLockGuard guard(lock_);
-  return update_part_(p, true);
+  return merge_write_state_(p, true);
 }
 
-/*
- * update_parts - update txn participants info
- *
- * if failed, txn was marked with PARTS_INCOMPLETE
- */
-int ObTxDesc::update_parts(const share::ObLSArray &list)
+int ObTxDesc::mark_write()
 {
-  int ret = OB_SUCCESS, tmp_ret = ret;
-  ARRAY_FOREACH_NORET(list, i) {
-    const ObLSID &it = list[i];
-    ObTxPart n;
-    n.id_ = it;
-    n.epoch_ = ObTxPart::EPOCH_UNKNOWN;
-    n.first_scn_ = ObTxSEQ::MAX_VAL();
-    n.last_scn_ = ObTxSEQ::MAX_VAL();
-    if (OB_TMP_FAIL(update_part_(n))) {
-      ret = tmp_ret;
-    }
+  int ret = OB_SUCCESS;
+  ObTxWriteState part;
+  part.first_scn_ = ObTxSEQ::MAX_VAL();
+  part.last_scn_ = ObTxSEQ::MAX_VAL();
+  if (OB_FAIL(merge_write_state_(part))) {
+    TRANS_LOG(WARN, "update single transaction write state failed", K(ret));
   }
   return ret;
 }
 
 void ObTxDesc::implicit_start_tx_()
 {
-  if (parts_.count() > 0 && state_ == ObTxDesc::State::IDLE) {
+  if (has_write_state_ && state_ == ObTxDesc::State::IDLE) {
     state_ = ObTxDesc::State::IMPLICIT_ACTIVE;
     active_ts_ = ObClockGenerator::getClock();
     expire_ts_ = get_expire_ts();
@@ -863,36 +701,12 @@ int64_t ObTxDesc::get_expire_ts() const
   return ret;
 }
 
-bool ObTxDesc::is_dup_ls_modified() const 
-{
-  int ret = OB_SUCCESS; 
-  bool dup_ls_modified = false;
-  const bool self_locked = lock_.self_locked();
-  if (!self_locked && OB_FAIL(lock_.lock())) {
-    TRANS_LOG(ERROR, "lock tx_desc failed", K(ret), K_(tx_id));
-  } else {
-    ARRAY_FOREACH_NORET(parts_, i)
-    {
-     if(parts_[i].flag_.is_dup_ls())
-     {
-       dup_ls_modified = true;
-       break;
-     }
-    }
-    if (!self_locked) {
-      lock_.unlock();
-    }
-  }
-  return dup_ls_modified;
-}
-
-int ObTxDesc::update_parts_(const ObTxPartList &list)
+int ObTxDesc::merge_write_state_if_present_(const ObTxWriteState &part, const bool has_write_state)
 {
   int ret = OB_SUCCESS;
-  ARRAY_FOREACH(list, i) {
-    bool hit = false;
-    const ObTxPart &a = list[i];
-    ret = update_part_(const_cast<ObTxPart&>(a));
+  if (has_write_state) {
+    ObTxWriteState copied_part = part;
+    ret = merge_write_state_(copied_part);
   }
   return ret;
 }
@@ -901,11 +715,11 @@ int ObTxDesc::merge_exec_info_with(const ObTxDesc &src)
 {
   int ret = OB_SUCCESS;
   ObSpinLockGuard guard(lock_);
-  if (OB_FAIL(update_parts_(src.parts_))) {
-    TRANS_LOG(WARN, "update parts failed", K(ret), KPC(this), K(src));
+  if (OB_FAIL(merge_write_state_if_present_(src.write_state_, src.has_write_state_))) {
+    TRANS_LOG(WARN, "update write state failed", K(ret), KPC(this), K(src));
   }
-  if (src.flags_.PARTS_INCOMPLETE_) {
-    flags_.PARTS_INCOMPLETE_ = true;
+  if (src.flags_.WRITE_STATE_INCOMPLETE_) {
+    flags_.WRITE_STATE_INCOMPLETE_ = true;
     TRANS_LOG(WARN, "src is incomplete, set dest incomplete also", K(ret), K(src));
   }
   return ret;
@@ -916,16 +730,14 @@ int ObTxDesc::get_inc_exec_info(ObTxExecResult &exec_info)
   int ret = OB_SUCCESS;
   ObSpinLockGuard guard(lock_);
   if (exec_info_reap_ts_ >= 0) {
-    ARRAY_FOREACH(parts_, i) {
-      ObTxPart &p = parts_[i];
-      if (p.last_touch_ts_ > exec_info_reap_ts_ &&
-          OB_FAIL(exec_info.parts_.push_back(p))) {
-        TRANS_LOG(WARN, "push fail", K(ret), K(p), KPC(this), K(exec_info));
-      }
+    if (has_write_state_ &&
+        write_state_.last_touch_ts_ > exec_info_reap_ts_ &&
+        OB_FAIL(exec_info.set_write_state(write_state_))) {
+      TRANS_LOG(WARN, "set exec write state failed", K(ret), K_(write_state), KPC(this), K(exec_info));
     }
-    if (OB_FAIL(ret) || flags_.PARTS_INCOMPLETE_) {
+    if (OB_FAIL(ret) || flags_.WRITE_STATE_INCOMPLETE_) {
       exec_info.incomplete_ = true;
-      TRANS_LOG(WARN, "set incomplete", K(ret), K(flags_.PARTS_INCOMPLETE_));
+      TRANS_LOG(WARN, "set incomplete", K(ret), K(flags_.WRITE_STATE_INCOMPLETE_));
     }
     exec_info_reap_ts_ += 1;
   }
@@ -940,11 +752,11 @@ int ObTxDesc::add_exec_info(const ObTxExecResult &exec_info)
 {
   int ret = OB_SUCCESS;
   ObSpinLockGuard guard(lock_);
-  if (OB_FAIL(update_parts_(exec_info.parts_))) {
-    TRANS_LOG(WARN, "update parts failed", K(ret), KPC(this), K(exec_info));
+  if (OB_FAIL(merge_write_state_if_present_(exec_info.write_state_, exec_info.has_write_state_))) {
+    TRANS_LOG(WARN, "update write state failed", K(ret), KPC(this), K(exec_info));
   }
   if (exec_info.incomplete_) {
-    flags_.PARTS_INCOMPLETE_ = true;
+    flags_.WRITE_STATE_INCOMPLETE_ = true;
     TRANS_LOG(WARN, "exec_info is incomplete set incomplete also", K(ret), K(exec_info));
   }
   (void) merge_conflict_txs_(exec_info.conflict_txs_);
@@ -1020,7 +832,7 @@ bool ObTxDesc::execute_commit_cb()
    * pair with ObTransService::handle_tx_commit_result_
    */
   ATOMIC_LOAD_ACQ((int*)&state_);
-  if (is_tx_end() || is_xa_terminate_state_()) {
+  if (is_tx_end()) {
     ObTransID tx_id = tx_id_;
     ObITxCallback *cb = commit_cb_;
     int ret = OB_SUCCESS;
@@ -1076,13 +888,6 @@ ObITxCallback *ObTxDesc::cancel_commit_cb()
   return commit_cb;
 }
 
-bool ObTxDesc::is_xa_terminate_state_() const
-{
-  return state_ == State::SUB_PREPARED ||
-    state_ == State::SUB_COMMITTED ||
-    state_ == State::SUB_ROLLBACKED;
-}
-
 bool ObTxDesc::has_implicit_savepoint() const
 {
   return min_implicit_savepoint_.is_valid();
@@ -1110,7 +915,7 @@ void ObTxDesc::release_implicit_savepoint(const ObTxSEQ savepoint)
   }
 }
 
-int ObTxDesc::fetch_conflict_txs(ObIArray<ObTransIDAndAddr> &array)
+int ObTxDesc::fetch_conflict_txs(ObIArray<ObTransID> &array)
 {
   int ret = OB_SUCCESS;
   ObSpinLockGuard guard(lock_);
@@ -1121,12 +926,12 @@ int ObTxDesc::fetch_conflict_txs(ObIArray<ObTransIDAndAddr> &array)
   return ret;
 }
 
-int ObTxDesc::add_conflict_tx(const ObTransIDAndAddr conflict_tx) {
+int ObTxDesc::add_conflict_tx(const ObTransID conflict_tx) {
   ObSpinLockGuard guard(lock_);
   return add_conflict_tx_(conflict_tx);
 }
 
-int ObTxDesc::add_conflict_tx_(const ObTransIDAndAddr &conflict_tx) {
+int ObTxDesc::add_conflict_tx_(const ObTransID &conflict_tx) {
   int ret = OB_SUCCESS;
   if (conflict_txs_.count() >= MAX_RESERVED_CONFLICT_TX_NUM) {
     ret = OB_SIZE_OVERFLOW;
@@ -1140,13 +945,13 @@ int ObTxDesc::add_conflict_tx_(const ObTransIDAndAddr &conflict_tx) {
   return ret;
 }
 
-int ObTxDesc::merge_conflict_txs(const ObIArray<ObTransIDAndAddr> &conflict_txs)
+int ObTxDesc::merge_conflict_txs(const ObIArray<ObTransID> &conflict_txs)
 {
   ObSpinLockGuard guard(lock_);
   return merge_conflict_txs_(conflict_txs);
 }
 
-int ObTxDesc::merge_conflict_txs_(const ObIArray<ObTransIDAndAddr> &conflict_txs)
+int ObTxDesc::merge_conflict_txs_(const ObIArray<ObTransID> &conflict_txs)
 {
   int ret = OB_SUCCESS;
   int tmp_ret = OB_SUCCESS;
@@ -1162,23 +967,61 @@ int ObTxDesc::merge_conflict_txs_(const ObIArray<ObTransIDAndAddr> &conflict_txs
   return ret;
 }
 
-// get global trans type for session
-// 1. if xid is empty or xa_ctx is null, PLAIN is returned.
-// 2. if xid from session is equal to xid in desc and global_tx_type is DBLINK_TRANS,
-//    DBLINK_TRANS is returned.
-// 3. if xid from session is not equal to xid in desc and global_tx_type is DBLINK_TRANS,
-//    XA_TRANS is returned.
-ObGlobalTxType ObTxDesc::get_global_tx_type(const ObXATransID &xid) const
-{
-  ObGlobalTxType tx_type = ObGlobalTxType::PLAIN;
-  return tx_type;
-}
-int ObTxDesc::get_parts_copy(ObTxPartList &copy_parts)
+int ObTxDesc::get_write_state_copy(ObTxWriteState &write_state, bool &has_write_state) const
 {
   int ret = OB_SUCCESS;
   ObSpinLockGuard guard(lock_);
-  if (OB_FAIL(copy_parts.assign(parts_))) {
-    TRANS_LOG(WARN, "TxDesc get participants copy error", K(ret), KPC(this));
+  write_state = ObTxWriteState();
+  has_write_state = false;
+  if (has_write_state_) {
+    write_state = write_state_;
+    has_write_state = true;
+  }
+  return ret;
+}
+
+void ObTxDesc::reset_write_state()
+{
+  ObSpinLockGuard guard(lock_);
+  has_write_state_ = false;
+  write_state_ = ObTxWriteState();
+  state_change_flags_.WRITE_STATE_CHANGED_ = true;
+}
+
+int ObTxDesc::assign_write_state(const ObTxWriteState &participant)
+{
+  int ret = OB_SUCCESS;
+  ObSpinLockGuard guard(lock_);
+  write_state_ = participant;
+  has_write_state_ = true;
+  state_change_flags_.WRITE_STATE_CHANGED_ = true;
+  return ret;
+}
+
+int ObTxDesc::fill_read_snapshot_write_state(ObTxReadSnapshot &snapshot) const
+{
+  if (has_write_state_ && !write_state_.is_clean()) {
+    snapshot.mark_write_state();
+  }
+  return OB_SUCCESS;
+}
+
+int ObTxDesc::find_write_state_after(ObTxWriteState *&part, const ObTxSEQ scn)
+{
+  int ret = OB_SUCCESS;
+  part = NULL;
+  if (has_write_state_ && write_state_.last_scn_ > scn && !write_state_.is_clean()) {
+    part = &write_state_;
+  }
+  return ret;
+}
+
+int ObTxDesc::get_abort_write_state(const ObTxWriteState *&part) const
+{
+  int ret = OB_SUCCESS;
+  part = NULL;
+  if (has_write_state_) {
+    part = &write_state_;
   }
   return ret;
 }
@@ -1250,11 +1093,8 @@ ObTxReadSnapshot::ObTxReadSnapshot()
     committed_(false),
     core_(),
     source_(SRC::INVL),
-    snapshot_lsid_(),
-    snapshot_ls_role_(common::ObRole::INVALID_ROLE),
-    snapshot_acquire_addr_(),
     uncertain_bound_(0),
-    parts_()
+    has_write_state_(false)
 {}
 
 ObTxReadSnapshot::~ObTxReadSnapshot()
@@ -1262,8 +1102,6 @@ ObTxReadSnapshot::~ObTxReadSnapshot()
   valid_ = false;
   committed_ = false;
   source_ = SRC::INVL;
-  snapshot_ls_role_ = common::INVALID_ROLE;
-  snapshot_acquire_addr_.reset();
   uncertain_bound_ = 0;
 }
 
@@ -1273,11 +1111,8 @@ void ObTxReadSnapshot::reset()
   committed_ = false;
   core_.reset();
   source_ = SRC::INVL;
-  snapshot_lsid_.reset();
-  snapshot_ls_role_ = common::INVALID_ROLE;
-  snapshot_acquire_addr_.reset();
   uncertain_bound_ = 0;
-  parts_.reset();
+  has_write_state_ = false;
 }
 
 int ObTxReadSnapshot::assign(const ObTxReadSnapshot &from)
@@ -1287,14 +1122,14 @@ int ObTxReadSnapshot::assign(const ObTxReadSnapshot &from)
   committed_ = from.committed_;
   core_ = from.core_;
   source_ = from.source_;
-  snapshot_lsid_ = from.snapshot_lsid_;
-  snapshot_ls_role_ = from.snapshot_ls_role_;
-  snapshot_acquire_addr_ = from.snapshot_acquire_addr_;
   uncertain_bound_ = from.uncertain_bound_;
-  if (OB_FAIL(parts_.assign(from.parts_))) {
-   TRANS_LOG(WARN, "assign snapshot fail", K(ret), K(from));
-  }
+  has_write_state_ = from.has_write_state_;
   return ret;
+}
+
+void ObTxReadSnapshot::reset_write_state()
+{
+  has_write_state_ = false;
 }
 
 void ObTxReadSnapshot::init_weak_read(const SCN snapshot)
@@ -1304,16 +1139,15 @@ void ObTxReadSnapshot::init_weak_read(const SCN snapshot)
   core_.scn_.reset();
   core_.elr_ = false;
   source_ = SRC::WEAK_READ_SERVICE;
-  parts_.reset();
+  has_write_state_ = false;
   valid_ = true;
 }
 
 
-void ObTxReadSnapshot::init_ls_read(const share::ObLSID &ls_id, const ObTxSnapshot &core)
+void ObTxReadSnapshot::init_ls_read(const ObTxSnapshot &core)
 {
   core_ = core;
   source_ = SRC::LS;
-  snapshot_lsid_ = ls_id;
   valid_ = true;
 }
 
@@ -1325,7 +1159,7 @@ void ObTxReadSnapshot::specify_snapshot_scn(const share::SCN snapshot)
 
 void ObTxReadSnapshot::try_set_read_elr()
 {
-  const bool can_read_elr = (source_ == SRC::LS && snapshot_ls_role_ == common::ObRole::LEADER);
+  const bool can_read_elr = source_ == SRC::LS;
   core_.set_elr(can_read_elr);
 }
 
@@ -1336,22 +1170,12 @@ const char* ObTxReadSnapshot::get_source_name() const
   return SRC_NAME[(int)source_];
 }
 
-/* 
- * format snapshot info for sql audit display 
- * contains: src, ls_id, ls_role, parts
- * 1. local select: 
- *   "src:LOCAL;ls_id:1001;ls_role:LEADER;parts:[1001,1002]"
- * 2. glocal select, with no ls and ls_role: "src:GTS;parts[1001]"
- * 3. insert: "NONE"
- * 4. longer than 128 chars, with "..." in the end
- *   "src:GLOBAL;ls_id:1001;ls_role:LEADER;parts:[1001,1002,102..."
- */
-
 ObTxExecResult::ObTxExecResult()
-  : allocator_("TxExecResult", 0 == MTL_ID() ? OB_SERVER_TENANT_ID : MTL_ID()),
+  : allocator_("TxExecResult"),
     incomplete_(false),
-    touched_ls_list_(OB_MALLOC_NORMAL_BLOCK_SIZE, allocator_),
-    parts_(OB_MALLOC_NORMAL_BLOCK_SIZE, allocator_),
+    touched_storage_(false),
+    has_write_state_(false),
+    write_state_(),
     conflict_txs_(OB_MALLOC_NORMAL_BLOCK_SIZE, allocator_)
 {}
 
@@ -1363,35 +1187,27 @@ ObTxExecResult::~ObTxExecResult()
 void ObTxExecResult::reset()
 {
   incomplete_ = false;
-  touched_ls_list_.reset();
-  parts_.reset();
+  touched_storage_ = false;
+  has_write_state_ = false;
+  write_state_ = ObTxWriteState();
   conflict_txs_.reset();
   allocator_.reset();
 }
 
-int ObTxExecResult::add_touched_ls(const share::ObLSID ls)
+int ObTxExecResult::set_write_state(const ObTxWriteState &part)
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(common::add_var_to_array_no_dup(touched_ls_list_, ls))) {
-    incomplete_ = true;
-    TRANS_LOG(WARN, "add touched ls failed, set incomplete", K(ret), K(ls));
-  }
+  write_state_ = part;
+  has_write_state_ = true;
   return ret;
 }
 
-int ObTxExecResult::add_touched_ls(const ObIArray<share::ObLSID> &ls_list)
+int ObTxExecResult::merge_write_state(const ObTxWriteState &part, const bool has_write_state)
 {
   int ret = OB_SUCCESS;
-  int tmp_ret = OB_SUCCESS;
-  ARRAY_FOREACH_NORET(ls_list, i) {
-    if (OB_TMP_FAIL(add_touched_ls(ls_list.at(i)))) {
-      TRANS_LOG(WARN, "add fail", K(ret));
-      ret = tmp_ret;
-    }
-  }
-  if (OB_FAIL(ret)) {
+  if (has_write_state && OB_FAIL(set_write_state(part))) {
     incomplete_ = true;
-    TRANS_LOG(WARN, "add fail, set incomplete", K(ret), KPC(this));
+    TRANS_LOG(WARN, "merge exec write state failed", K(ret), K(part), KPC(this));
   }
   return ret;
 }
@@ -1411,13 +1227,11 @@ int ObTxExecResult::merge_result(const ObTxExecResult &r)
   int ret = OB_SUCCESS;
   TRANS_LOG(TRACE, "txExecResult.merge with.start", K(r), KPC(this), K(lbt()));
   incomplete_ |= r.incomplete_;
-  if (OB_FAIL(append_dedup(parts_, r.parts_))) {
+  if (OB_FAIL(merge_write_state(r.write_state_, r.has_write_state_))) {
     incomplete_ = true;
     TRANS_LOG(WARN, "merge fail, set incomplete", K(ret), KPC(this));
-  } else if (OB_FAIL(append_dedup(touched_ls_list_, r.touched_ls_list_))) {
-    incomplete_ = true;
-    TRANS_LOG(WARN, "merge touched_ls_list fail, set incomplete", K(ret), KPC(this));
   }
+  touched_storage_ |= r.touched_storage_;
   if (OB_SUCC(ret)) {
     ret = merge_cflict_txs(r.conflict_txs_);
   }
@@ -1429,7 +1243,7 @@ int ObTxExecResult::merge_result(const ObTxExecResult &r)
   return ret;
 }
 
-int ObTxExecResult::merge_cflict_txs(const common::ObIArray<transaction::ObTransIDAndAddr> &txs)
+int ObTxExecResult::merge_cflict_txs(const common::ObIArray<transaction::ObTransID> &txs)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(append_dedup(conflict_txs_, txs))) {
@@ -1442,32 +1256,28 @@ int ObTxExecResult::assign(const ObTxExecResult &r)
 {
   int ret = OB_SUCCESS;
   incomplete_ = r.incomplete_;
-  if (OB_FAIL(parts_.assign(r.parts_))) {
+  has_write_state_ = false;
+  write_state_ = ObTxWriteState();
+  if (OB_FAIL(merge_write_state(r.write_state_, r.has_write_state_))) {
     incomplete_ = true;
     TRANS_LOG(WARN, "assign fail, set incomplete", K(ret), KPC(this));
-  } else if (OB_FAIL(touched_ls_list_.assign(r.touched_ls_list_))) {
-    incomplete_ = true;
-    TRANS_LOG(WARN, "assign touched_ls_list fail, set incomplete", K(ret), KPC(this));
   }
+  touched_storage_ = r.touched_storage_;
   conflict_txs_.assign(r.conflict_txs_);
   conflict_info_array_.assign(r.conflict_info_array_);
   return ret;
 }
 
-ObTxPart::ObTxPart()
-  : id_(),
-    addr_(),
-    epoch_(-1),
-    first_scn_(),
+ObTxWriteState::ObTxWriteState()
+  : first_scn_(),
     last_scn_(),
     last_touch_ts_(0),
     flag_()
 {
 }
 
-ObTxPart::~ObTxPart()
+ObTxWriteState::~ObTxWriteState()
 {
-  epoch_ = -1;
   first_scn_.reset();
   last_scn_.reset();
   last_touch_ts_ = 0;
@@ -1724,43 +1534,6 @@ int ObTxDescMgr::iterate_tx_scheduler_stat(ObTxSchedulerStatIterator &tx_schedul
   return ret;
 }
 
-//           TAKEOVER REVOKE   RESUME SWITCH_GRACEFUL
-// LEADER    N        FOLLOWER N      FOLLOWER
-// FOLLOWER  LEADER   FOLLOWER LEADER FOLLOWER
-int TxCtxStateHelper::switch_state(const int64_t op)
-{
-  int ret = OB_SUCCESS;
-  static const int64_t N = TxCtxRoleState::INVALID;
-  static const int64_t STATE_MAP[TxCtxRoleState::MAX][TxCtxOps::MAX] = {
-      {N, TxCtxRoleState::FOLLOWER, N, TxCtxRoleState::FOLLOWER},
-      {TxCtxRoleState::LEADER, TxCtxRoleState::FOLLOWER, TxCtxRoleState::LEADER, TxCtxRoleState::FOLLOWER}};
-  if (OB_UNLIKELY(!TxCtxOps::is_valid(op))) {
-    ret = OB_INVALID_ARGUMENT;
-    TRANS_LOG(WARN, "invalid argument", KR(ret), K(op));
-  } else if (OB_UNLIKELY(!TxCtxRoleState::is_valid(state_))) {
-    ret = OB_ERR_UNEXPECTED;
-    TRANS_LOG(WARN, "unexpected state", K(state_));
-  } else {
-    const int64_t new_state = STATE_MAP[state_][op];
-    if (OB_UNLIKELY(!TxCtxRoleState::is_valid(new_state))) {
-      ret = OB_STATE_NOT_MATCH;
-    } else {
-      last_state_ = state_;
-      state_ = new_state;
-      is_switching_ = true;
-    }
-  }
-  return ret;
-}
-
-void TxCtxStateHelper::restore_state()
-{
-  if (is_switching_) {
-    is_switching_ = false;
-    state_ = last_state_;
-  }
-}
-
 int ObTxDesc::alloc_branch_id(const int64_t count, int16_t &branch_id)
 {
   int ret = OB_SUCCESS;
@@ -1774,31 +1547,13 @@ int ObTxDesc::alloc_branch_id(const int64_t count, int16_t &branch_id)
   }
   return ret;
 }
-void ObTxDesc::mark_part_abort(const ObTransID tx_id, const int abort_cause)
+void ObTxDesc::mark_write_state_aborted(const ObTransID tx_id, const int abort_cause)
 {
   ObSpinLockGuard guard(lock_);
-  if (tx_id == tx_id_ && state_ < State::IN_TERMINATE && !flags_.PART_ABORTED_) {
-    flags_.PART_ABORTED_ = true;
+  if (tx_id == tx_id_ && state_ < State::IN_TERMINATE && !flags_.WRITE_STATE_ABORTED_) {
+    flags_.WRITE_STATE_ABORTED_ = true;
     abort_cause_ = abort_cause;
   }
-}
-
-int64_t ObTxDesc::get_coord_epoch() const
-{
-  int64_t epoch = -1;
-
-  if (OB_UNLIKELY(!coord_id_.is_valid())) {
-    epoch = -1;
-  } else {
-    ARRAY_FOREACH_NORET(commit_parts_, i) {
-      const ObTxExecPart &part = commit_parts_[i];
-      if (coord_id_ == part.ls_id_) {
-        epoch = part.exec_epoch_;
-      }
-    }
-  }
-
-  return epoch;
 }
 
 // 1. clear transaction level snapshot
@@ -1865,22 +1620,16 @@ bool ObTxDesc::has_modify_table(const uint64_t table_id) const
   return is_contain(modified_tables_, table_id);
 }
 
-bool ObTxDesc::is_all_parts_clean() const
+bool ObTxDesc::is_write_state_clean() const
 {
-  bool bret = true;
-  ARRAY_FOREACH_X(parts_, i, cnt, bret) {
-    bret = parts_[i].is_without_ctx() || parts_[i].is_clean();
-  }
-  return bret;
+  return !has_write_state_ || write_state_.is_clean();
 }
 
-bool ObTxDesc::is_all_parts_without_valid_write() const
+bool ObTxDesc::is_write_state_without_valid_write() const
 {
-  bool bret = true;
-  ARRAY_FOREACH_X(parts_, i, cnt, bret) {
-    bret = parts_[i].is_without_ctx() || parts_[i].is_clean() || parts_[i].is_without_valid_write();
-  }
-  return bret;
+  return !has_write_state_
+         || write_state_.is_clean()
+         || write_state_.is_without_valid_write();
 }
 } // transaction
 } // oceanbase

@@ -26,23 +26,24 @@
 
 namespace oceanbase
 {
-using namespace obrpc;
+using namespace obcall;
 using namespace share;
 
 namespace rootserver
 {
 class ObDDLSQLTransaction;
 class ObDDLService;
+class ObDDLOperator;
 
 class ObPLDDLService
 {
 public:
   //----Functions for managing routine----
-  static int create_routine(const obrpc::ObCreateRoutineArg &arg,
-                            obrpc::ObRoutineDDLRes* res,
+  static int create_routine(const obcall::ObCreateRoutineArg &arg,
+                            obcall::ObRoutineDDLRes* res,
                             rootserver::ObDDLService &ddl_service);
-  static int alter_routine(const obrpc::ObCreateRoutineArg &arg,
-                           obrpc::ObRoutineDDLRes* res,
+  static int alter_routine(const obcall::ObCreateRoutineArg &arg,
+                           obcall::ObRoutineDDLRes* res,
                            rootserver::ObDDLService &ddl_service);
   static int drop_routine(const ObDropRoutineArg &arg,
                           rootserver::ObDDLService &ddl_service);
@@ -50,24 +51,21 @@ public:
 
 
   //----Functions for managing package----
-  static int create_package(const obrpc::ObCreatePackageArg &arg,
-                            obrpc::ObRoutineDDLRes *res,
+  static int create_package(const obcall::ObCreatePackageArg &arg,
+                            obcall::ObRoutineDDLRes *res,
                             rootserver::ObDDLService &ddl_service);
-  static int alter_package(const obrpc::ObAlterPackageArg &arg,
-                           obrpc::ObRoutineDDLRes *res,
-                           rootserver::ObDDLService &ddl_service);
-  static int drop_package(const obrpc::ObDropPackageArg &arg,
+  static int drop_package(const obcall::ObDropPackageArg &arg,
                           rootserver::ObDDLService &ddl_service);
   //----End of functions for managing package----
 
   //----Functions for managing trigger----
-  static int create_trigger(const obrpc::ObCreateTriggerArg &arg,
-                            obrpc::ObCreateTriggerRes *res,
+  static int create_trigger(const obcall::ObCreateTriggerArg &arg,
+                            obcall::ObCreateTriggerRes *res,
                             rootserver::ObDDLService &ddl_service);
-  static int alter_trigger(const obrpc::ObAlterTriggerArg &arg,
-                           obrpc::ObRoutineDDLRes *res,
+  static int alter_trigger(const obcall::ObAlterTriggerArg &arg,
+                           obcall::ObRoutineDDLRes *res,
                            rootserver::ObDDLService &ddl_service);
-  static int drop_trigger(const obrpc::ObDropTriggerArg &arg,
+  static int drop_trigger(const obcall::ObDropTriggerArg &arg,
                           rootserver::ObDDLService &ddl_service);
   static int drop_trigger_in_drop_table(ObMySQLTransaction &trans,
                                         rootserver::ObDDLOperator &ddl_operator,
@@ -77,9 +75,8 @@ public:
   static int drop_trigger_in_drop_user(ObMySQLTransaction &trans,
                                       rootserver::ObDDLOperator &ddl_operator,
                                       ObSchemaGetterGuard &schema_guard,
-                                      const uint64_t tenant_id,
                                       const uint64_t user_id);
-  static int rebuild_triggers_on_hidden_table(const obrpc::ObAlterTableArg &alter_table_arg,
+  static int rebuild_triggers_on_hidden_table(const obcall::ObAlterTableArg &alter_table_arg,
                                               const ObTableSchema &orig_table_schema,
                                               const ObTableSchema &hidden_table_schema,
                                               ObSchemaGetterGuard &src_tenant_schema_guard,
@@ -91,7 +88,6 @@ public:
                                        rootserver::ObDDLOperator &ddl_operator,
                                        ObMySQLTransaction &trans);
   static int rebuild_trigger_on_rename(share::schema::ObSchemaGetterGuard &schema_guard,
-                                       const uint64_t tenant_id,
                                        const common::ObIArray<uint64_t> &trigger_list,
                                        const common::ObString &database_name,
                                        const common::ObString &table_name,
@@ -102,7 +98,7 @@ public:
                                                share::schema::ObTableSchema &new_table_schema,
                                                rootserver::ObDDLOperator &ddl_operator,
                                                ObMySQLTransaction &trans);
-  static int flashback_trigger(const share::schema::ObTableSchema &table_schema,
+  static int restore_trigger(const share::schema::ObTableSchema &table_schema,
                                const uint64_t new_database_id,
                                const common::ObString &new_table_name,
                                share::schema::ObSchemaGetterGuard &schema_guard,
@@ -144,21 +140,15 @@ private:
                             ObIArray<ObDependencyInfo> &dep_infos,
                             const ObString *ddl_stmt_str,
                             rootserver::ObDDLService &ddl_service);
-  static int alter_package(ObSchemaGetterGuard &schema_guard,
-                           ObPackageInfo &package_info,
-                           ObIArray<ObRoutineInfo> &public_routine_infos,
-                           share::schema::ObErrorInfo &error_info,
-                           const ObString *ddl_stmt_str,
-                           rootserver::ObDDLService &ddl_service);
   static int drop_package(ObSchemaGetterGuard &schema_guard,
                           const ObPackageInfo &package_info,
                           ObErrorInfo &error_info,
                           const ObString *ddl_stmt_str,
                           rootserver::ObDDLService &ddl_service);
   //----Functions for managing trigger----
-  static int create_trigger(const obrpc::ObCreateTriggerArg &arg,
+  static int create_trigger(const obcall::ObCreateTriggerArg &arg,
                             ObSchemaGetterGuard &schema_guard,
-                            obrpc::ObCreateTriggerRes *res,
+                            obcall::ObCreateTriggerRes *res,
                             rootserver::ObDDLService &ddl_service);
   static int create_trigger_in_trans(share::schema::ObTriggerInfo &trigger_info,
                                       share::schema::ObErrorInfo &error_info,
@@ -194,7 +184,6 @@ private:
                                                 const ObString &create_trigger_name,
                                                 const ObString &generate_cyclic_name);
   static int get_object_info(ObSchemaGetterGuard &schema_guard,
-                             const uint64_t tenant_id,
                              const ObString &object_database,
                              const ObString &object_name,
                              ObSchemaType &object_type,
@@ -209,7 +198,7 @@ private:
   //  3. database of the trigger does no exist.
   //  4. same name trigger has existed.
   static int check_and_construct_restore_trigger_info(
-        const obrpc::ObAlterTableArg &alter_table_arg,
+        const obcall::ObAlterTableArg &alter_table_arg,
         ObSchemaGetterGuard &src_tenant_schema_guard,
         ObSchemaGetterGuard &dst_tenant_schema_guard,
         const ObTableSchema &orig_table_schema,

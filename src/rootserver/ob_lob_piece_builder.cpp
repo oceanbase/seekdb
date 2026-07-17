@@ -20,7 +20,7 @@
 namespace oceanbase
 {
 using namespace common;
-using namespace obrpc;
+using namespace obcall;
 using namespace share;
 using namespace share::schema;
 namespace rootserver
@@ -58,8 +58,8 @@ int ObLobPieceBuilder::generate_aux_lob_piece_schema(
     if (OB_FAIL(generate_schema(data_schema, aux_lob_piece_schema))) {
       LOG_WARN("generate_schema for aux vp table failed", K(data_schema), K(ret));
     } else if (OB_INVALID_ID == new_table_id
-               && OB_FAIL(schema_service->fetch_new_table_id(data_schema.get_tenant_id(), new_table_id))) {
-      LOG_WARN("failed to fetch_new_table_id", "tenant_id", data_schema.get_tenant_id(), K(ret));
+               && OB_FAIL(schema_service->fetch_new_table_id(new_table_id))) {
+      LOG_WARN("failed to fetch_new_table_id",  K(ret));
     } else if (OB_FAIL(generate_lob_piece_table_name(new_table_id, buf, buf_size, pos))) {
       LOG_WARN("failed to generate_lob_piece_table_name", K(ret), K(new_table_id));
     } else {
@@ -77,17 +77,15 @@ int ObLobPieceBuilder::generate_aux_lob_piece_schema(
             ret = OB_ERR_UNEXPECTED;
             LOG_WARN("column is null", K(ret));
           } else {
-            column->set_tenant_id(aux_lob_piece_schema.get_tenant_id());
+            
             column->set_table_id(aux_lob_piece_schema.get_table_id());
           }
         }
       }
     }
     if (OB_FAIL(ret)) {
-    } else if (OB_FAIL(set_lob_table_column_store_if_need(aux_lob_piece_schema))) {
-      LOG_WARN("fail to set lob column store if need", KR(ret));
-    } else if ((data_schema.is_partitioned_table() || data_schema.is_auto_partitioned_table())
-               && OB_FAIL(aux_lob_piece_schema.assign_partition_schema_without_auto_part_attr(data_schema))) {
+    } else if (data_schema.is_partitioned_table()
+               && OB_FAIL(aux_lob_piece_schema.assign_partition_schema(data_schema))) {
       LOG_WARN("fail to assign partition schema", K(aux_lob_piece_schema), K(ret));
     } else if (need_generate_id) {
       if (OB_FAIL(ddl_service_.generate_object_id_for_partition_schema(aux_lob_piece_schema))) {
@@ -137,7 +135,7 @@ int ObLobPieceBuilder::set_basic_infos(
   aux_lob_piece_schema.set_tablet_id(0);
 
   // priority same with data table schema
-  aux_lob_piece_schema.set_tenant_id(data_schema.get_tenant_id());
+  
   aux_lob_piece_schema.set_database_id(data_schema.get_database_id());
   if (is_inner_table(data_schema.get_table_id())) {
     aux_lob_piece_schema.set_tablegroup_id(data_schema.get_tablegroup_id());
@@ -187,18 +185,6 @@ int ObLobPieceBuilder::generate_lob_piece_table_name(
     LOG_WARN("buf is not large enough", K(ret), K(buf_size), K(new_table_id));
   }
 
-  return ret;
-}
-
-int ObLobPieceBuilder::set_lob_table_column_store_if_need(ObTableSchema &table_schema)
-{
-  int ret = OB_SUCCESS;
-  table_schema.set_column_store(true);
-  if (table_schema.get_column_group_count() == 0) {
-    if (OB_FAIL(table_schema.add_default_column_group())) {
-      LOG_WARN("fail to add default column group", KR(ret), "table_id", table_schema.get_table_id());
-    }
-  }
   return ret;
 }
 

@@ -17,7 +17,8 @@
 #ifndef OCEANBASE_MEMTABLE_OB_MEMTABLE_
 #define OCEANBASE_MEMTABLE_OB_MEMTABLE_
 
-#include "share/allocator/ob_memstore_allocator.h"
+#include "storage/allocator/ob_memstore_allocator.h"
+#include "share/rc/ob_module_provider.h"
 #include "share/ob_tenant_mgr.h"
 #include "share/ob_cluster_version.h"
 #include "lib/literals/ob_literals.h"
@@ -28,7 +29,6 @@
 #include "storage/memtable/mvcc/ob_mvcc_engine.h"
 #include "storage/memtable/mvcc/ob_query_engine.h"
 #include "storage/blocksstable/ob_sstable.h"
-#include "storage/checkpoint/ob_checkpoint_diagnose.h"
 #include "storage/blocksstable/ob_row_writer.h"
 
 namespace oceanbase
@@ -182,52 +182,6 @@ public:
 class ObMemtable : public ObITabletMemtable
 {
 public:
-struct TabletMemtableUpdateFreezeInfo
-{
-public:
-  TabletMemtableUpdateFreezeInfo(ObMemtable &memtable) : memtable_(memtable) {}
-  TabletMemtableUpdateFreezeInfo& operator=(const TabletMemtableUpdateFreezeInfo&) = delete;
-  void operator()(const checkpoint::ObCheckpointDiagnoseParam& param) const
-  {
-    checkpoint::ObCheckpointDiagnoseMgr *cdm = MTL(checkpoint::ObCheckpointDiagnoseMgr*);
-    if (OB_NOT_NULL(cdm)) {
-      cdm->update_freeze_info(param, memtable_.get_rec_scn(),
-       memtable_.get_start_scn(), memtable_.get_end_scn(), memtable_.get_btree_alloc_memory());
-    }
-  }
-private:
-  ObMemtable &memtable_;
-};
-
-struct UpdateMergeInfoForMemtable
-{
-public:
-  UpdateMergeInfoForMemtable(int64_t merge_start_time,
-    int64_t merge_finish_time,
-    int64_t occupy_size,
-    int64_t concurrent_cnt)
-    : merge_start_time_(merge_start_time),
-      merge_finish_time_(merge_finish_time),
-      occupy_size_(occupy_size),
-      concurrent_cnt_(concurrent_cnt)
-  {}
-  UpdateMergeInfoForMemtable& operator=(const UpdateMergeInfoForMemtable&) = delete;
-  void operator()(const checkpoint::ObCheckpointDiagnoseParam& param) const
-  {
-    checkpoint::ObCheckpointDiagnoseMgr *cdm = MTL(checkpoint::ObCheckpointDiagnoseMgr*);
-    if (OB_NOT_NULL(cdm)) {
-      cdm->update_merge_info_for_memtable(param, merge_start_time_, merge_finish_time_,
-          occupy_size_, concurrent_cnt_);
-    }
-  }
-private:
-  int64_t merge_start_time_;
-  int64_t merge_finish_time_;
-  int64_t occupy_size_;
-  int64_t concurrent_cnt_;
-};
-
-public:
   typedef share::ObMemstoreAllocator::AllocHandle ObSingleMemstoreAllocator;
 public:
   ObMemtable();
@@ -241,7 +195,7 @@ public: // derived from ObFreezeCheckpoint
 
 public: // derived from ObITabletMemtable
   virtual int init(const ObITable::TableKey &table_key,
-                   ObLSHandle &ls_handle,
+                   ObLS *tenant_ls,
                    storage::ObFreezer *freezer,
                    storage::ObTabletMemtableMgr *memtable_mgr,
                    const int64_t schema_version,
@@ -366,8 +320,6 @@ public:
   int row_compact(ObMvccRow *value,
                   const share::SCN snapshot_version,
                   const int64_t flag);
-  int64_t get_hash_item_count() const;
-  int64_t get_hash_alloc_memory() const;
   int64_t get_btree_item_count() const;
   int64_t get_btree_alloc_memory() const;
 
@@ -397,11 +349,10 @@ public:
   const ObMvccEngine &get_mvcc_engine() const { return mvcc_engine_; }
   void pre_batch_destroy_keybtree();
   static int batch_remove_unused_callback_for_uncommited_txn(
-    const share::ObLSID ls_id,
     const memtable::ObMemtableSet *memtable_set);
 
   /* freeze */
-  virtual int flush(share::ObLSID ls_id) override;
+  virtual int flush() override;
 
   bool is_empty() const override
   {
@@ -417,12 +368,12 @@ public:
   // recommend scn should belong to the tables before the memtable and the
   // memtable. And under exception case, user need guarantee all new data is
   // bigger than the recommend_scn.
-  inline void set_transfer_freeze(const share::SCN recommend_scn)
+  inline void set_recommend_snapshot_freeze(const share::SCN recommend_scn)
   {
     recommend_snapshot_version_.atomic_set(recommend_scn);
-    ATOMIC_STORE(&transfer_freeze_flag_, true);
+    ATOMIC_STORE(&recommend_snapshot_freeze_flag_, true);
   }
-  inline bool is_transfer_freeze() const { return ATOMIC_LOAD(&transfer_freeze_flag_); }
+  inline bool has_recommend_snapshot_freeze() const { return ATOMIC_LOAD(&recommend_snapshot_freeze_flag_); }
   virtual void set_delete_insert_flag(const bool rhs) override { is_delete_insert_table_ = rhs; }
   inline bool is_delete_insert_table() const { return is_delete_insert_table_; }
   virtual uint32_t get_freeze_flag() override;
@@ -450,8 +401,7 @@ public:
                        K_(contain_hotspot_row),
                        K_(snapshot_version),
                        K_(contain_hotspot_row),
-                       K_(ls_id),
-                       K_(transfer_freeze_flag),
+                       K_(recommend_snapshot_freeze_flag),
                        K_(recommend_snapshot_version),
                        K_(is_delete_insert_table));
 private:
@@ -549,11 +499,11 @@ private:
 private:
   DISALLOW_COPY_AND_ASSIGN(ObMemtable);
   bool is_inited_;
-  bool transfer_freeze_flag_;
+  bool recommend_snapshot_freeze_flag_;
   bool contain_hotspot_row_;
   bool is_delete_insert_table_;
 
-  storage::ObLSHandle ls_handle_;
+  storage::ObLS *ls_;
   ObSingleMemstoreAllocator local_allocator_;
   ObMTKVBuilder kv_builder_;
   ObQueryEngine query_engine_;

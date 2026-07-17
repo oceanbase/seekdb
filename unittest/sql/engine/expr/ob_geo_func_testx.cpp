@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include "lib/geo/ob_geo_dispatcher.h"
+#include "share/geo/ob_geo_dispatcher.h"
 #include "ob_geo_func_testx.h"
 #include "ob_geo_func_testy.h"
 

@@ -15,7 +15,7 @@
  */
 
 #include <gtest/gtest.h>
-#include "common/ob_smart_call.h"
+#include "lib/utility/ob_smart_call.h"
 #include "lib/utility/ob_hang_fatal_error.h"
 
 using namespace std;

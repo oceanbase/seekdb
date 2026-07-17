@@ -59,10 +59,7 @@ int ObExprInterval::calc_result_typeN(ObExprResType &type,
   UNUSED(type_ctx);
   int ret = OB_SUCCESS;
 
-  if (!is_mysql_mode()) {
-    ret = OB_ERR_FUNCTION_UNKNOWN;
-    LOG_WARN("interval expr only exists in mysql mode", K(ret));
-  } else if (OB_ISNULL(types) || param_num < 2) {
+  if (OB_ISNULL(types) || param_num < 2) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(types), K(param_num), K(ret));
   } else if (OB_LIKELY(NOT_ROW_DIMENSION == row_dimension_)) {
@@ -206,7 +203,7 @@ int ObExprInterval::cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_expr,
       // do not care NULL_FIRST or NULL_LAST, will ignore null in calc_interval_expr()
       rt_expr.inner_functions_[0] = reinterpret_cast<void*>(
           ObDatumFuncs::get_nullsafe_cmp_func(arg_type, arg_type, default_null_pos(),
-                                              CS_TYPE_BINARY, rt_expr.args_[0]->datum_meta_.scale_, false,
+                                              CS_TYPE_BINARY, rt_expr.args_[0]->datum_meta_.scale_,
                                               rt_expr.args_[0]->obj_meta_.has_lob_header(),
                                               rt_expr.args_[0]->datum_meta_.precision_,
                                               rt_expr.args_[0]->datum_meta_.precision_));

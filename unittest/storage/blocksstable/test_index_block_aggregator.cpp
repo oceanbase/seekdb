@@ -19,8 +19,8 @@
 #include <gtest/gtest.h>
 #define protected public
 #define private public
+#include "storage/blocksstable/ob_sstable.h"
 #include "storage/blocksstable/index_block/ob_index_block_aggregator.h"
-#include "storage/blocksstable/cs_encoding/ob_micro_block_cs_encoder.h"
 #include "storage/blocksstable/encoding/ob_micro_block_encoder.h"
 #include "storage/test_schema_prepare.h"
 #include "ob_row_generate.h"
@@ -45,7 +45,7 @@ public:
   virtual void SetUp() {}
   virtual void TearDown() {}
   void init_schema(const int64_t col_count, const int64_t rowkey_count, const ObObjType *col_obj_types);
-  void init_data_encoder(const ObRowStoreType row_store_type, ObIMicroBlockWriter *&micro_writer);
+  void init_data_encoder(ObIMicroBlockWriter *&micro_writer);
   void init_min_max_meta(const int64_t idx_col_count, const int64_t *min_max_col_idxs);
   void init_loose_min_max_meta(const int64_t idx_col_count, const int64_t *min_max_col_idxs);
   void init_sum_meta(const int64_t idx_col_count, const int64_t *sum_col_idxs);
@@ -102,7 +102,6 @@ void TestIndexBlockAggregator::init_schema(const int64_t col_count, const int64_
   col_obj_types_ = col_obj_types;
   ObColumnSchemaV2 col;
   schema_.reset();
-  schema_.set_tenant_id(1);
   schema_.set_tablegroup_id(1);
   schema_.set_database_id(1);
   schema_.set_table_id(200001);
@@ -136,9 +135,7 @@ void TestIndexBlockAggregator::init_schema(const int64_t col_count, const int64_
   full_column_count_ = col_descs_.count();
 }
 
-void TestIndexBlockAggregator::init_data_encoder(
-    const ObRowStoreType row_store_type,
-    ObIMicroBlockWriter *&micro_writer)
+void TestIndexBlockAggregator::init_data_encoder(ObIMicroBlockWriter *&micro_writer)
 {
   ctx_.micro_block_size_ = 1L << 20;  // 1MB, maximum micro block size;
   ctx_.macro_block_size_ = 2L << 20;
@@ -146,16 +143,11 @@ void TestIndexBlockAggregator::init_data_encoder(
   ctx_.column_cnt_ = full_column_count_;
   ctx_.col_descs_ = &col_descs_;
   ctx_.major_working_cluster_version_ = cal_version(1, 0, 0, 0);
-  ctx_.row_store_type_ = row_store_type;
+  ctx_.row_store_type_ = ObRowStoreType::ENCODING_ROW_STORE;
   ctx_.compressor_type_ = common::ObCompressorType::NONE_COMPRESSOR;
   ctx_.need_calc_column_chksum_ = true;
-  if (ObRowStoreType::CS_ENCODING_ROW_STORE == row_store_type) {
-    micro_writer = OB_NEWx(ObMicroBlockCSEncoder, &allocator_);
-    ASSERT_EQ(OB_SUCCESS, static_cast<ObMicroBlockCSEncoder *>(micro_writer)->init(ctx_));
-  } else if (ObRowStoreType::ENCODING_ROW_STORE == row_store_type) {
-    micro_writer = OB_NEWx(ObMicroBlockEncoder, &allocator_);
-    ASSERT_EQ(OB_SUCCESS, static_cast<ObMicroBlockEncoder *>(micro_writer)->init(ctx_));
-  }
+  micro_writer = OB_NEWx(ObMicroBlockEncoder, &allocator_);
+  ASSERT_EQ(OB_SUCCESS, static_cast<ObMicroBlockEncoder *>(micro_writer)->init(ctx_));
   ASSERT_NE(nullptr, micro_writer);
 }
 
@@ -227,11 +219,7 @@ void TestIndexBlockAggregator::init_inv_idx_schema_and_meta(const bool is_major)
 void TestIndexBlockAggregator::generate_row_by_seed(const int64_t seed, ObDatumRow &datum_row)
 {
   // if (0 == seed) {
-  if (false) {
-    for (int64_t i = 0; i < datum_row.get_column_count(); ++i) {
-      datum_row.storage_datums_[i].set_null();
-    }
-  } else {
+  {
     ASSERT_EQ(OB_SUCCESS, row_generate_.get_next_row(seed, datum_row));
   }
 }
@@ -497,7 +485,7 @@ void TestIndexBlockAggregator::get_cmp_func(const ObColDesc &col_desc, ObStorage
 {
   sql::ObExprBasicFuncs *basic_funcs = ObDatumFuncs::get_basic_func(
       col_desc.col_type_.get_type(), col_desc.col_type_.get_collation_type());
-  cmp_func.cmp_func_.cmp_func_ = lib::is_oracle_mode() ? basic_funcs->null_last_cmp_ : basic_funcs->null_first_cmp_;
+  cmp_func.cmp_func_.cmp_func_ = basic_funcs->null_first_cmp_;
 }
 
 void TestIndexBlockAggregator::str_datum_to_lob_data(const ObDatum &str_datum, ObDatum &lob_datum, ObIAllocator &alloc)
@@ -778,10 +766,8 @@ TEST_F(TestIndexBlockAggregator, min_max_agg_from_encoder)
   }
   init_schema(test_min_max_column_cnt, 1, col_obj_types);
   init_min_max_meta(test_min_max_column_cnt, min_max_agg_col_idxs);
-  ObIMicroBlockWriter *cs_encoder = nullptr;
-  init_data_encoder(ObRowStoreType::CS_ENCODING_ROW_STORE, cs_encoder);
   ObIMicroBlockWriter *encoder = nullptr;
-  init_data_encoder(ObRowStoreType::ENCODING_ROW_STORE, encoder);
+  init_data_encoder(encoder);
 
   ObSkipIndexDataAggregator aggregator;
   ObDatumRow agg_result;
@@ -791,27 +777,9 @@ TEST_F(TestIndexBlockAggregator, min_max_agg_from_encoder)
   const bool is_major = true;
   ASSERT_EQ(OB_SUCCESS, aggregator.init(is_major, full_agg_metas_, col_descs_, data_version_, allocator_));
 
-  // cs encoder min_max
-  aggregator.reuse();
-  reset_min_max_row();
   const ObSkipIndexAggResult *agg_row = nullptr;
   ObDatumRow generate_row;
   ASSERT_EQ(OB_SUCCESS, generate_row.init(full_column_count_));
-
-  cs_encoder->reuse();
-  for (int64_t i = 0; i < test_row_cnt; ++i) {
-    const int64_t seed = random() % test_row_cnt;
-    generate_row_by_seed(seed, generate_row);
-    ASSERT_EQ(OB_SUCCESS, cs_encoder->append_row(generate_row));
-    update_min_max_row(generate_row);
-  }
-  ASSERT_EQ(OB_ERR_UNEXPECTED, aggregator.eval(*cs_encoder));
-  ASSERT_EQ(OB_SUCCESS, cs_encoder->build_block(block_buf, block_size));
-  ASSERT_EQ(OB_SUCCESS, aggregator.eval(*cs_encoder));
-  ASSERT_EQ(OB_SUCCESS, aggregator.get_aggregated_row(agg_row));
-  validate_agg_row(*agg_row);
-
-  // encoder min_max
   aggregator.reuse();
   reset_min_max_row();
 
@@ -849,10 +817,8 @@ TEST_F(TestIndexBlockAggregator, sum_agg_from_encoder)
   ObObj sum_res[test_column_cnt + ObMultiVersionRowkeyHelpper::get_extra_rowkey_col_cnt()];
   init_sum_meta(test_column_cnt, sum_col_idxs);
 
-  ObIMicroBlockWriter *cs_encoder = nullptr;
-  init_data_encoder(ObRowStoreType::CS_ENCODING_ROW_STORE, cs_encoder);
   ObIMicroBlockWriter *encoder = nullptr;
-  init_data_encoder(ObRowStoreType::ENCODING_ROW_STORE, encoder);
+  init_data_encoder(encoder);
 
   ObSkipIndexDataAggregator aggregator;
   ObDatumRow agg_result;
@@ -862,26 +828,9 @@ TEST_F(TestIndexBlockAggregator, sum_agg_from_encoder)
   const bool is_major = true;
   ASSERT_EQ(OB_SUCCESS, aggregator.init(is_major, full_agg_metas_, col_descs_, data_version_, allocator_));
 
-  // cs encoder sum
-  aggregator.reuse();
   const ObSkipIndexAggResult *agg_row = nullptr;
   ObDatumRow generate_row;
   ASSERT_EQ(OB_SUCCESS, generate_row.init(full_column_count_));
-
-  cs_encoder->reuse();
-  for (int64_t i = 0; i < test_row_cnt; ++i) {
-    const int64_t seed = random() % test_row_cnt;
-    generate_row_by_seed(seed, generate_row);
-    ASSERT_EQ(OB_SUCCESS, cs_encoder->append_row(generate_row));
-    update_sum_row(generate_row, sum_res, data);
-  }
-  ASSERT_EQ(OB_ERR_UNEXPECTED, aggregator.eval(*cs_encoder));
-  ASSERT_EQ(OB_SUCCESS, cs_encoder->build_block(block_buf, block_size));
-  ASSERT_EQ(OB_SUCCESS, aggregator.eval(*cs_encoder));
-  ASSERT_EQ(OB_SUCCESS, aggregator.get_aggregated_row(agg_row));
-  validate_sum_agg_row(*agg_row, sum_res);
-
-  // encoder sum
   aggregator.reuse();
 
   for (int64_t i = 0; i < test_row_cnt; ++i) {
@@ -1081,11 +1030,9 @@ TEST_F(TestIndexBlockAggregator, test_loose_min_max_data_desc)
 
   ASSERT_EQ(OB_SUCCESS, storage_schema.init(arena, table_schema, lib::Worker::CompatMode::MYSQL));
 
-  ASSERT_EQ(OB_SUCCESS, major_static_desc.init(false, table_schema, ObLSID(1002), ObTabletID(200000),
-      0, compaction::MAJOR_MERGE, 10000, share::SCN::invalid_scn(),
+  ASSERT_EQ(OB_SUCCESS, major_static_desc.init(false, table_schema, ObTabletID(200000), compaction::MAJOR_MERGE, 10000, share::SCN::invalid_scn(),
       DATA_VERSION_1_0_0_0, compaction::EXEC_MODE_LOCAL, false, 0));
-  ASSERT_EQ(OB_SUCCESS, minor_static_desc.init(false, table_schema, ObLSID(1002), ObTabletID(200000),
-      0, compaction::MINI_MERGE, 1, share::SCN::base_scn(),
+  ASSERT_EQ(OB_SUCCESS, minor_static_desc.init(false, table_schema, ObTabletID(200000), compaction::MINI_MERGE, 1, share::SCN::base_scn(),
       DATA_VERSION_1_0_0_0, compaction::EXEC_MODE_LOCAL, false, 0));
 
   ASSERT_EQ(OB_SUCCESS, major_data_desc.init(major_static_desc, storage_schema));
@@ -1226,10 +1173,8 @@ TEST_F(TestIndexBlockAggregator, test_inv_idx_agg)
   ASSERT_EQ(OB_SUCCESS, data_aggregator.init(is_major, full_agg_metas_, col_descs_, data_version_, allocator_));
   ASSERT_EQ(OB_SUCCESS, index_aggregator.init(is_major, full_agg_metas_, col_descs_, data_version_, allocator_));
 
-  ObIMicroBlockWriter *cs_encoder = nullptr;
-  init_data_encoder(ObRowStoreType::CS_ENCODING_ROW_STORE, cs_encoder);
   ObIMicroBlockWriter *encoder = nullptr;
-  init_data_encoder(ObRowStoreType::ENCODING_ROW_STORE, encoder);
+  init_data_encoder(encoder);
 
   const ObSkipIndexAggResult *data_agg_row = nullptr;
   const ObSkipIndexAggResult *index_agg_row = nullptr;
@@ -1241,37 +1186,30 @@ TEST_F(TestIndexBlockAggregator, test_inv_idx_agg)
 
   generate_inv_idx_row(dim, 1, 1, 2, generate_row);
   ASSERT_EQ(OB_SUCCESS, data_aggregator.eval(generate_row));
-  ASSERT_EQ(OB_SUCCESS, cs_encoder->append_row(generate_row));
   ASSERT_EQ(OB_SUCCESS, encoder->append_row(generate_row));
 
   generate_inv_idx_row(dim, 2, 9, 10, generate_row);
   ASSERT_EQ(OB_SUCCESS, data_aggregator.eval(generate_row));
-  ASSERT_EQ(OB_SUCCESS, cs_encoder->append_row(generate_row));
   ASSERT_EQ(OB_SUCCESS, encoder->append_row(generate_row));
 
   generate_inv_idx_row(dim, 3, 99, 100, generate_row);
   ASSERT_EQ(OB_SUCCESS, data_aggregator.eval(generate_row));
-  ASSERT_EQ(OB_SUCCESS, cs_encoder->append_row(generate_row));
   ASSERT_EQ(OB_SUCCESS, encoder->append_row(generate_row));
 
   generate_inv_idx_row(dim, 4, 2, 10, generate_row);
   ASSERT_EQ(OB_SUCCESS, data_aggregator.eval(generate_row));
-  ASSERT_EQ(OB_SUCCESS, cs_encoder->append_row(generate_row));
   ASSERT_EQ(OB_SUCCESS, encoder->append_row(generate_row));
 
   generate_inv_idx_row(dim, 5, 3, 10, generate_row);
   ASSERT_EQ(OB_SUCCESS, data_aggregator.eval(generate_row));
-  ASSERT_EQ(OB_SUCCESS, cs_encoder->append_row(generate_row));
   ASSERT_EQ(OB_SUCCESS, encoder->append_row(generate_row));
 
   generate_inv_idx_row(dim, 6, 4, 10, generate_row);
   ASSERT_EQ(OB_SUCCESS, data_aggregator.eval(generate_row));
-  ASSERT_EQ(OB_SUCCESS, cs_encoder->append_row(generate_row));
   ASSERT_EQ(OB_SUCCESS, encoder->append_row(generate_row));
 
   generate_inv_idx_row(dim, 7, 5, 10, generate_row);
   ASSERT_EQ(OB_SUCCESS, data_aggregator.eval(generate_row));
-  ASSERT_EQ(OB_SUCCESS, cs_encoder->append_row(generate_row));
   ASSERT_EQ(OB_SUCCESS, encoder->append_row(generate_row));
 
   ASSERT_EQ(OB_SUCCESS, data_aggregator.get_aggregated_row(data_agg_row));
@@ -1303,15 +1241,7 @@ TEST_F(TestIndexBlockAggregator, test_inv_idx_agg)
 
   char *block_buf = nullptr;
   int64_t block_size = 0;
-  ASSERT_EQ(OB_SUCCESS, cs_encoder->build_block(block_buf, block_size));
   ASSERT_EQ(OB_SUCCESS, encoder->build_block(block_buf, block_size));
-
-  data_aggregator.reuse();
-  ASSERT_EQ(OB_SUCCESS, data_aggregator.eval(*cs_encoder));
-  ASSERT_EQ(OB_SUCCESS, data_aggregator.get_aggregated_row(data_agg_row));
-  ASSERT_TRUE(nullptr != data_agg_row);
-  ASSERT_EQ(data_agg_row->agg_row_.storage_datums_[token_freq_idx].get_int(), 99);
-  ASSERT_EQ(data_agg_row->agg_row_.storage_datums_[doc_len_idx].get_int(), 100);
 
   data_aggregator.reuse();
   ASSERT_EQ(OB_SUCCESS, data_aggregator.eval(*encoder));

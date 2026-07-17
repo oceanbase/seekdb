@@ -66,7 +66,7 @@ int ObGlobalVariables::inner_get_next_row(ObNewRow *&row)
       for (int64_t i = 0; OB_SUCC(ret) && i < sys_variable_schema_->get_sysvar_count(); ++i) {
         const ObSysVarSchema *sysvar_schema = sys_variable_schema_->get_sysvar_schema(i);
         if (sysvar_schema != NULL) {
-          ObSysVarClassType var_id = ObSysVarFactory::find_sys_var_id_by_name(sysvar_schema->get_name(), true);
+          ObSysVarClassType var_id = share::ObSysVarMeta::find_sys_var_id_by_name(sysvar_schema->get_name(), true);
           ObBasicSysVar *sysvar = NULL;
           ObObj value;
           const common::ObDataTypeCastParams dtc_params
@@ -89,10 +89,6 @@ int ObGlobalVariables::inner_get_next_row(ObNewRow *&row)
             //is invisible, skip it
           } else if (!sysvar->is_global_scope()) {
             //is global, skip it
-          } else if (sysvar->is_oracle_only() && !session_->is_oracle_compatible()) {
-            //is oracle only, skip it
-          } else if (sysvar->is_mysql_only() && session_->is_oracle_compatible()) {
-            //is mysql only, skip it
           } else {
             uint64_t cell_idx = 0;
             for (int64_t j = 0; OB_SUCC(ret) && j < col_count; ++j) {

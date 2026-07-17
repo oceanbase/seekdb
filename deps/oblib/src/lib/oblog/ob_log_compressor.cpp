@@ -31,7 +31,6 @@
 #endif
 
 #include "lib/oblog/ob_log_compressor.h"
-#include "lib/thread/thread_mgr.h"
 #include "lib/compress/ob_compressor_pool.h"
 
 using namespace oceanbase::lib;
@@ -48,7 +47,8 @@ ObLogCompressor::ObLogCompressor() :
   is_inited_(false), stopped_(true), loop_interval_(OB_SYSLOG_COMPRESS_LOOP_INTERVAL),
   max_disk_size_(0), min_uncompressed_count_(0), compress_func_(NONE_COMPRESSOR),
   compressor_(NULL), next_compressor_(NULL), oldest_files_(cmp_, NULL),
-  timer_task_(*this)
+  timer_task_(*this),
+  timer_()
 {
 #ifndef _WIN32
   memset(&regex_archive_, 0, sizeof(regex_archive_));
@@ -96,9 +96,9 @@ int ObLogCompressor::init()
   } else {
     strncpy(syslog_dir_, OB_SYSLOG_DIR, strlen(OB_SYSLOG_DIR));
     stopped_ = false;
-    if (OB_FAIL(TG_START(TGDefIDs::SYSLOG_COMPRESS))) {
+    if (OB_FAIL(timer_.init("SyslogCompress", ObMemAttr("SyslogCompress")))) {
       LOG_ERROR("failed to start log compression timer", K(ret));
-    } else if (OB_FAIL(TG_SCHEDULE(TGDefIDs::SYSLOG_COMPRESS, timer_task_, loop_interval_, true/*repeat*/, true/*immediate*/))) {
+    } else if (OB_FAIL(timer_.schedule(timer_task_, loop_interval_, true/*repeat*/, true/*immediate*/))) {
       LOG_WARN("failed to add timer for syslog compress", K(ret));
     }else {
       is_inited_ = true;
@@ -118,14 +118,14 @@ void ObLogCompressor::stop()
 {
   if (is_inited_) {
     stopped_ = true;
-    TG_STOP(TGDefIDs::SYSLOG_COMPRESS);
+    timer_.stop();
   }
 }
 
 void ObLogCompressor::wait()
 {
   if (is_inited_) {
-    TG_WAIT(TGDefIDs::SYSLOG_COMPRESS);
+    timer_.wait();
   }
 }
 
@@ -145,7 +145,7 @@ void ObLogCompressor::destroy()
     }
     stop();
     wait();
-    TG_DESTROY(TGDefIDs::SYSLOG_COMPRESS);
+    timer_.destroy();
     log_compress_cond_.destroy();
     max_disk_size_ = 0;
     compress_func_ = NONE_COMPRESSOR;
@@ -192,9 +192,7 @@ int ObLogCompressor::set_compress_func(const char *compress_func_ptr)
   } else if (OB_FAIL(ObCompressorPool::get_instance().get_compressor_type(compress_func_ptr, new_compress_func))) {
     // do nothing
   } else if (new_compress_func == NONE_COMPRESSOR
-             || new_compress_func == ZSTD_COMPRESSOR
              || new_compress_func == ZSTD_1_3_8_COMPRESSOR) {
-    // to do: support ZLIB_COMPRESSOR
     if (new_compress_func != compress_func_) {
       LOG_INFO("modify log compress func", K(compress_func_), K(new_compress_func));
       if (OB_FAIL(set_next_compressor_(new_compress_func))) {

@@ -17,7 +17,7 @@
 #ifndef SQL_ENGINE_AGGREGATE_OB_HASH_VARIANT
 #define SQL_ENGINE_AGGREGATE_OB_HASH_VARIANT
 #include "ob_exec_hash_struct_vec.h"
-#include "share/aggregate/processor.h"
+#include "sql/engine/aggregate/processor.h"
 #include <boost/variant/variant.hpp>
 
 namespace oceanbase
@@ -433,7 +433,7 @@ public:
     MAX 
   };
   ObAggrHashTableWapper() : hash_table_ptr_(), real_ptr_(nullptr), outline_ptr_(nullptr), inline_ptr_(nullptr), type_(Type::INVALID), inited_(false) {}
-  int prepare_hash_table(const int64_t item_size, const uint64_t tenant_id, common::ObIAllocator &alloc);
+  int prepare_hash_table(const int64_t item_size, common::ObIAllocator &alloc);
   void destroy();
   int64_t size() const
   {

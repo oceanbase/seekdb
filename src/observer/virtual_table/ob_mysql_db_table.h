@@ -17,7 +17,7 @@
 #ifndef OCEANBASE_OBSERVER_VIRTUAL_TABLE_OB_MYSQL_DB_TABLE_
 #define OCEANBASE_OBSERVER_VIRTUAL_TABLE_OB_MYSQL_DB_TABLE_
 
-#include "share/ob_virtual_table_scanner_iterator.h"
+#include "observer/virtual_table/ob_virtual_table_scanner_iterator.h"
 namespace oceanbase
 {
 namespace share
@@ -67,13 +67,11 @@ public:
   virtual int inner_get_next_row(common::ObNewRow *&row);
   virtual void reset();
 
-  inline void set_tenant_id(const uint64_t tenant_id) { tenant_id_ = tenant_id; }
+  
 
 private:
-  int get_user_info(const uint64_t tenant_id,
-                    const uint64_t user_id,
+  int get_user_info(const uint64_t user_id,
                     const share::schema::ObUserInfo *&user_info);
-  uint64_t tenant_id_;
 private:
   DISALLOW_COPY_AND_ASSIGN(ObMySQLDBTable);
 };

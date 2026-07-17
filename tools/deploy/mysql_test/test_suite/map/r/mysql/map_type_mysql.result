@@ -371,10 +371,10 @@ drop table t1;
 create table t1 as select map(1,1) as m1, map(1,1,2,2,3,3) as m2, map(1.1,1.11) as m3, map('a','b') as m4;
 desc t1;
 Field	Type	Null	Key	Default	Extra
-m1	MAP(BIGINT,BIGINT)	YES		NULL
-m2	MAP(BIGINT,BIGINT)	YES		NULL
-m3	MAP(DOUBLE,DOUBLE)	YES		NULL
-m4	MAP(VARCHAR(262144),VARCHAR(262144))	YES		NULL
+m1	MAP(BIGINT,BIGINT)	YES		NULL	
+m2	MAP(BIGINT,BIGINT)	YES		NULL	
+m3	MAP(DOUBLE,DOUBLE)	YES		NULL	
+m4	MAP(VARCHAR(262144),VARCHAR(262144))	YES		NULL	
 show create table t1;
 Table	Create Table
 t1	CREATE TABLE `t1` (
@@ -386,9 +386,9 @@ t1	CREATE TABLE `t1` (
 create table t2 as select map(1,1.11,2.2,'b') as m1, map(1,[1]) as m2, map(1,[['b']]) as m3;
 desc t2;
 Field	Type	Null	Key	Default	Extra
-m1	MAP(DOUBLE,VARCHAR(262144))	YES		NULL
-m2	MAP(BIGINT,ARRAY(BIGINT))	YES		NULL
-m3	MAP(BIGINT,ARRAY(ARRAY(VARCHAR(262144))))	YES		NULL
+m1	MAP(DOUBLE,VARCHAR(262144))	YES		NULL	
+m2	MAP(BIGINT,ARRAY(BIGINT))	YES		NULL	
+m3	MAP(BIGINT,ARRAY(ARRAY(VARCHAR(262144))))	YES		NULL	
 show create table t1;
 Table	Create Table
 t1	CREATE TABLE `t1` (
@@ -400,10 +400,10 @@ t1	CREATE TABLE `t1` (
 create table t3 as select m1, m2, m3, m4 from t1;
 desc t3;
 Field	Type	Null	Key	Default	Extra
-m1	MAP(BIGINT,BIGINT)	YES		NULL
-m2	MAP(BIGINT,BIGINT)	YES		NULL
-m3	MAP(DOUBLE,DOUBLE)	YES		NULL
-m4	MAP(VARCHAR(262144),VARCHAR(262144))	YES		NULL
+m1	MAP(BIGINT,BIGINT)	YES		NULL	
+m2	MAP(BIGINT,BIGINT)	YES		NULL	
+m3	MAP(DOUBLE,DOUBLE)	YES		NULL	
+m4	MAP(VARCHAR(262144),VARCHAR(262144))	YES		NULL	
 show create table t1;
 Table	Create Table
 t1	CREATE TABLE `t1` (
@@ -415,9 +415,9 @@ t1	CREATE TABLE `t1` (
 create table t4 as select m1, m2, m3 from t2;
 desc t4;
 Field	Type	Null	Key	Default	Extra
-m1	MAP(DOUBLE,VARCHAR(262144))	YES		NULL
-m2	MAP(BIGINT,ARRAY(BIGINT))	YES		NULL
-m3	MAP(BIGINT,ARRAY(ARRAY(VARCHAR(262144))))	YES		NULL
+m1	MAP(DOUBLE,VARCHAR(262144))	YES		NULL	
+m2	MAP(BIGINT,ARRAY(BIGINT))	YES		NULL	
+m3	MAP(BIGINT,ARRAY(ARRAY(VARCHAR(262144))))	YES		NULL	
 show create table t1;
 Table	Create Table
 t1	CREATE TABLE `t1` (
@@ -550,10 +550,6 @@ select max(m) from t1;
 ERROR HY000: Invalid argument
 select min(m) from t1;
 ERROR HY000: Invalid argument
-drop materialized view if exists mv1, mv2;
-create materialized view mv1 parallel 2 refresh complete on demand  as select * from t1;
-create materialized view mv2 parallel 2 refresh complete on demand  as select * from t2;
-drop materialized view mv1, mv2;
 drop table t1, t2, t3, t4;
 select map(1,1) =  1;
 ERROR 22000: Invalid data type for the operation
@@ -613,14 +609,14 @@ alter table t1 add c14 INT AUTO_INCREMENT;
 alter table t1 add c15 map(int, int) as (concat('{', id, ':', id, '}'));
 desc t1;
 Field	Type	Null	Key	Default	Extra
-c11	MAP(INT,ARRAY(INT))	YES		NULL
-id	int(11)	NO	PRI	NULL
-c1	ARRAY(INT)	YES		NULL
-c13	MAP(INT,ARRAY(INT))	YES		NULL
-c2	MAP(INT,INT)	YES		NULL
-c12	MAP(INT,ARRAY(INT))	YES		NULL
-c3	float	YES		NULL
-c4	json	YES		NULL
+c11	MAP(INT,ARRAY(INT))	YES		NULL	
+id	int(11)	NO	PRI	NULL	
+c1	ARRAY(INT)	YES		NULL	
+c13	MAP(INT,ARRAY(INT))	YES		NULL	
+c2	MAP(INT,INT)	YES		NULL	
+c12	MAP(INT,ARRAY(INT))	YES		NULL	
+c3	float	YES		NULL	
+c4	json	YES		NULL	
 c14	int(11)	NO		NULL	auto_increment
 c15	MAP(INT,INT)	YES		concat('{',`id`,':',`id`,'}')	VIRTUAL GENERATED
 insert into t1(c11,id,c1,c13,c2,c12,c3,c4,c14) values ('{1:[1]}', 4, [1], '{1:[1]}', '{1:1}', '{1:[1]}', 1.1, '{"1":1}', 1);
@@ -662,11 +658,11 @@ alter table t1 modify c2 map(int,int) not null;
 ERROR 22004: Invalid use of NULL value
 desc t1;
 Field	Type	Null	Key	Default	Extra
-id	int(11)	NO	PRI	NULL
-c1	ARRAY(INT)	YES		NULL
-c2	MAP(INT,INT)	YES		NULL
-c3	float	NO		NULL
-c4	json	YES		NULL
+id	int(11)	NO	PRI	NULL	
+c1	ARRAY(INT)	YES		NULL	
+c2	MAP(INT,INT)	YES		NULL	
+c3	float	NO		NULL	
+c4	json	YES		NULL	
 select * from t1;
 id	c1	c2	c3	c4
 1	[1,2]	{1:11,2:22}	1.1	{"1": 11, "2": 22}
@@ -680,11 +676,11 @@ id	c1	c2	c3	c4
 alter table t1 modify c3 bigint before c2;
 desc t1;
 Field	Type	Null	Key	Default	Extra
-id	int(11)	NO	PRI	NULL
-c1	ARRAY(INT)	YES		NULL
-c3	bigint(20)	YES		NULL
-c2	MAP(FLOAT,FLOAT)	YES		NULL
-c4	json	YES		NULL
+id	int(11)	NO	PRI	NULL	
+c1	ARRAY(INT)	YES		NULL	
+c3	bigint(20)	YES		NULL	
+c2	MAP(FLOAT,FLOAT)	YES		NULL	
+c4	json	YES		NULL	
 select * from t1;
 id	c1	c3	c2	c4
 1	[1,2]	1	{1:11,2:22}	{"1": 11, "2": 22}
@@ -693,11 +689,11 @@ alter table t1 modify id int before c3;
 alter table t1 modify c3 bigint first;
 desc t1;
 Field	Type	Null	Key	Default	Extra
-c3	bigint(20)	YES		NULL
-c1	ARRAY(INT)	YES		NULL
-id	int(11)	NO	PRI	NULL
-c2	MAP(FLOAT,FLOAT)	YES		NULL
-c4	json	YES		NULL
+c3	bigint(20)	YES		NULL	
+c1	ARRAY(INT)	YES		NULL	
+id	int(11)	NO	PRI	NULL	
+c2	MAP(FLOAT,FLOAT)	YES		NULL	
+c4	json	YES		NULL	
 select * from t1;
 c3	c1	id	c2	c4
 1	[1,2]	1	{1:11,2:22}	{"1": 11, "2": 22}
@@ -706,10 +702,10 @@ alter table t1 modify c3 int unsigned not null auto_increment;
 desc t1;
 Field	Type	Null	Key	Default	Extra
 c3	int(10) unsigned	NO		NULL	auto_increment
-c1	ARRAY(INT)	YES		NULL
-id	int(11)	NO	PRI	NULL
-c2	MAP(FLOAT,FLOAT)	YES		NULL
-c4	json	YES		NULL
+c1	ARRAY(INT)	YES		NULL	
+id	int(11)	NO	PRI	NULL	
+c2	MAP(FLOAT,FLOAT)	YES		NULL	
+c4	json	YES		NULL	
 select * from t1;
 c3	c1	id	c2	c4
 1	[1,2]	1	{1:11,2:22}	{"1": 11, "2": 22}
@@ -725,35 +721,35 @@ c3	c1	id	c2	c4
 alter table t1 change c3 c3 bigint;
 desc t1;
 Field	Type	Null	Key	Default	Extra
-c3	bigint(20)	YES		NULL
-c1	ARRAY(INT)	YES		NULL
-id	int(11)	NO	PRI	NULL
-c2	MAP(FLOAT,FLOAT)	YES		NULL
-c4	json	YES		NULL
+c3	bigint(20)	YES		NULL	
+c1	ARRAY(INT)	YES		NULL	
+id	int(11)	NO	PRI	NULL	
+c2	MAP(FLOAT,FLOAT)	YES		NULL	
+c4	json	YES		NULL	
 alter table t1 change id id varchar(128);
 desc t1;
 Field	Type	Null	Key	Default	Extra
-c3	bigint(20)	YES		NULL
-c1	ARRAY(INT)	YES		NULL
-id	varchar(128)	NO	PRI	NULL
-c2	MAP(FLOAT,FLOAT)	YES		NULL
-c4	json	YES		NULL
+c3	bigint(20)	YES		NULL	
+c1	ARRAY(INT)	YES		NULL	
+id	varchar(128)	NO	PRI	NULL	
+c2	MAP(FLOAT,FLOAT)	YES		NULL	
+c4	json	YES		NULL	
 alter table t1 change id id bigint before c3;
 desc t1;
 Field	Type	Null	Key	Default	Extra
-id	bigint(20)	NO	PRI	NULL
-c3	bigint(20)	YES		NULL
-c1	ARRAY(INT)	YES		NULL
-c2	MAP(FLOAT,FLOAT)	YES		NULL
-c4	json	YES		NULL
+id	bigint(20)	NO	PRI	NULL	
+c3	bigint(20)	YES		NULL	
+c1	ARRAY(INT)	YES		NULL	
+c2	MAP(FLOAT,FLOAT)	YES		NULL	
+c4	json	YES		NULL	
 alter table t1 change id id int after c4;
 desc t1;
 Field	Type	Null	Key	Default	Extra
-c3	bigint(20)	YES		NULL
-c1	ARRAY(INT)	YES		NULL
-c2	MAP(FLOAT,FLOAT)	YES		NULL
-c4	json	YES		NULL
-id	int(11)	NO	PRI	NULL
+c3	bigint(20)	YES		NULL	
+c1	ARRAY(INT)	YES		NULL	
+c2	MAP(FLOAT,FLOAT)	YES		NULL	
+c4	json	YES		NULL	
+id	int(11)	NO	PRI	NULL	
 drop table t1;
 create table t1(c1 int, c2 vector(3), c3 varchar(10), c4 int, primary key(c1), c5 map(int,int), c6 json) partition by range(c1) (partition p0 values less than (10), partition p1 values less than (100));
 insert into t1 value (1, [1,1,1], '1', 1, '{1:1}', '{"1":1}');
@@ -761,30 +757,30 @@ insert into t1 value (2, [2,2,2], '2', 2, '{2:2}', '{"2":2}');
 alter table t1 modify c1 tinyint;
 desc t1;
 Field	Type	Null	Key	Default	Extra
-c1	tinyint(4)	NO	PRI	NULL
-c2	VECTOR(3)	YES		NULL
-c3	varchar(10)	YES		NULL
-c4	int(11)	YES		NULL
-c5	MAP(INT,INT)	YES		NULL
-c6	json	YES		NULL
-alter table t1 modify c3 varchar(5) charset 'gbk';
+c1	tinyint(4)	NO	PRI	NULL	
+c2	VECTOR(3)	YES		NULL	
+c3	varchar(10)	YES		NULL	
+c4	int(11)	YES		NULL	
+c5	MAP(INT,INT)	YES		NULL	
+c6	json	YES		NULL	
+alter table t1 modify c3 varchar(5) charset 'utf8mb4';
 desc t1;
 Field	Type	Null	Key	Default	Extra
-c1	tinyint(4)	NO	PRI	NULL
-c2	VECTOR(3)	YES		NULL
-c3	varchar(5)	YES		NULL
-c4	int(11)	YES		NULL
-c5	MAP(INT,INT)	YES		NULL
-c6	json	YES		NULL
+c1	tinyint(4)	NO	PRI	NULL	
+c2	VECTOR(3)	YES		NULL	
+c3	varchar(5)	YES		NULL	
+c4	int(11)	YES		NULL	
+c5	MAP(INT,INT)	YES		NULL	
+c6	json	YES		NULL	
 alter table t1 modify c3 char(8) , add c7 int, drop column c6;
 desc t1;
 Field	Type	Null	Key	Default	Extra
-c1	tinyint(4)	NO	PRI	NULL
-c2	VECTOR(3)	YES		NULL
-c3	char(8)	YES		NULL
-c4	int(11)	YES		NULL
-c5	MAP(INT,INT)	YES		NULL
-c7	int(11)	YES		NULL
+c1	tinyint(4)	NO	PRI	NULL	
+c2	VECTOR(3)	YES		NULL	
+c3	char(8)	YES		NULL	
+c4	int(11)	YES		NULL	
+c5	MAP(INT,INT)	YES		NULL	
+c7	int(11)	YES		NULL	
 select * from t1;
 c1	c2	c3	c4	c5	c7
 1	[1,1,1]	1	1	{1:1}	NULL
@@ -796,24 +792,24 @@ insert into t1 values (2, '[]', '{}', 0, '{}');
 alter table t1 drop primary key;
 desc t1;
 Field	Type	Null	Key	Default	Extra
-id	int(11)	NO		NULL
-c1	ARRAY(INT)	YES		NULL
-c2	MAP(INT,INT)	YES		NULL
-c3	float	YES		NULL
-c4	json	YES		NULL
+id	int(11)	NO		NULL	
+c1	ARRAY(INT)	YES		NULL	
+c2	MAP(INT,INT)	YES		NULL	
+c3	float	YES		NULL	
+c4	json	YES		NULL	
 alter table t1 drop column c3;
 desc t1;
 Field	Type	Null	Key	Default	Extra
-id	int(11)	NO		NULL
-c1	ARRAY(INT)	YES		NULL
-c2	MAP(INT,INT)	YES		NULL
-c4	json	YES		NULL
+id	int(11)	NO		NULL	
+c1	ARRAY(INT)	YES		NULL	
+c2	MAP(INT,INT)	YES		NULL	
+c4	json	YES		NULL	
 alter table t1 drop column c2;
 desc t1;
 Field	Type	Null	Key	Default	Extra
-id	int(11)	NO		NULL
-c1	ARRAY(INT)	YES		NULL
-c4	json	YES		NULL
+id	int(11)	NO		NULL	
+c1	ARRAY(INT)	YES		NULL	
+c4	json	YES		NULL	
 select * from t1;
 id	c1	c4
 1	[1,2]	{"1": 11, "2": 22}
@@ -903,42 +899,11 @@ drop table t1;
 create table t1 (id int primary key, c1 array(int), c2 map(int,int), c3 float, c4 json);
 insert into t1 values (1, [1,2], '{1:11,2:22}', 1.1, '{"1":11,"2":22}');
 insert into t1 values (2, '[]', '{}', 0, '{}');
-create materialized view mv1 refresh complete on demand  as select id,c1,c2,c3,c4 from t1 ;
-CREATE INDEX idx ON mv1 (c3);
-CREATE INDEX idx ON mv1 (c2);
-ERROR 0A000: create index on vector or array column is not supported
-CREATE VECTOR INDEX idx ON mv1 (c2);
-ERROR 0A000: Not supported feature or function
-desc mv1;
-Field	Type	Null	Key	Default	Extra
-id	int(11)	YES		NULL
-c1	ARRAY(INT)	YES		NULL
-c2	MAP(INT,INT)	YES		NULL
-c3	float	YES	MUL	NULL
-c4	json	YES		NULL
-select * from mv1;
-id	c1	c2	c3	c4
-1	[1,2]	{1:11,2:22}	1.1	{"1": 11, "2": 22}
-2	[]	{}	0	{}
 drop table t1;
-drop  materialized view mv1;
 create table t1 (id int primary key, c1 array(int), c2 map(int,int), c3 float, c4 json);
 insert into t1 values (1, [1,2], '{1:11,2:22}', 1.1, '{"1":11,"2":22}');
 insert into t1 values (2, '[]', '{}', 0, '{}');
-create materialized view mv1(primary key(c2)) refresh complete on demand  as select c1,c2 from t1 ;
-ERROR 42000: The used storage engine can't index column 'c2'
-create materialized view mv1(primary key(id)) refresh complete on demand  as select id,c1,c2 from t1 ;
-desc mv1;
-Field	Type	Null	Key	Default	Extra
-id	int(11)	NO	PRI	NULL
-c1	ARRAY(INT)	YES		NULL
-c2	MAP(INT,INT)	YES		NULL
-select * from mv1;
-id	c1	c2
-1	[1,2]	{1:11,2:22}
-2	[]	{}
 drop table t1;
-drop  materialized view mv1;
 create table t1 (id int primary key, c1 array(int), c2 map(int,int), c3 float, c4 json);
 create view v1 as select * from t1;
 insert into v1 values (1, [1,2], '{1:11,2:22}', 1.1, '{"1":11,"2":22}');

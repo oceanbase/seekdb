@@ -46,7 +46,6 @@ public:
                K(has_acquired_memtable_),
                K(is_write_filtered_),
                K(for_replay_),
-               K(ls_id_),
                K(tablet_id_),
                K(ddl_redo_scn_),
                K(table_handle_),
@@ -55,14 +54,13 @@ public:
 private:
   void async_freeze_();
   int acquire_memtable_once_();
-  int do_create_memtable_(ObLSHandle &ls_handle);
-  int try_get_direct_load_memtable_for_write(ObLSHandle &ls_handle, bool &need_create_new_memtable);
+  int do_create_memtable_(ObLS *tenant_ls);
+  int try_get_direct_load_memtable_for_write(ObLS *tenant_ls, bool &need_create_new_memtable);
 
 private:
   bool has_acquired_memtable_;
   bool is_write_filtered_;
   const bool for_replay_;
-  share::ObLSID ls_id_;
   ObTabletID tablet_id_;
   const share::SCN &ddl_redo_scn_;
   ObTableHandleV2 table_handle_; 

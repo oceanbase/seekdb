@@ -33,7 +33,6 @@ class ObISQLClient;
 namespace share
 {
 
-// Simplified ObAllTenantInfo for single tenant/single LS scenario
 // tenant_role is persisted via config parameter (tenant_role), not in KV storage
 struct ObAllTenantInfo
 {
@@ -69,9 +68,7 @@ struct ObAllTenantInfo
   bool is_switching_to_primary_status() const { return switchover_status_.is_switching_to_primary_status(); }
   bool is_switching_to_standby_status() const { return switchover_status_.is_switching_to_standby_status(); }
   bool is_prepare_switching_to_standby_status() const { return switchover_status_.is_prepare_switching_to_standby_status(); }
-  bool is_prepare_flashback_for_failover_to_primary_status() const { return switchover_status_.is_prepare_flashback_for_failover_to_primary_status(); }
-  bool is_prepare_flashback_for_switch_to_primary_status() const { return switchover_status_.is_prepare_flashback_for_switch_to_primary_status(); }
-  bool is_flashback_status() const { return switchover_status_.is_flashback_status(); }
+  bool is_prepare_switching_to_primary_status() const { return switchover_status_.is_prepare_switching_to_primary_status(); }
 
   TO_STRING_KV(K_(tenant_role), K_(switchover_status));
 
@@ -81,7 +78,6 @@ struct ObAllTenantInfo
   OB_UNIS_VERSION(1);
 };
 
-// Simplified ObAllTenantInfoProxy for single tenant/single LS scenario
 // Uses KV storage instead of database table
 class ObAllTenantInfoProxy
 {

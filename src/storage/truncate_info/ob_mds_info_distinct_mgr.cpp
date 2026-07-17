@@ -33,13 +33,12 @@ ObMdsInfoDistinctMgr::ObMdsInfoDistinctMgr()
       distinct_array_(),
       is_inited_(false)
 {
-  distinct_array_.set_attr(ObMemAttr(MTL_ID(), "TrunDisArr"));
+  distinct_array_.set_attr(ObMemAttr("TrunDisArr"));
 }
 
 int ObMdsInfoDistinctMgr::init(
     ObArenaAllocator &allocator,
     storage::ObTablet &tablet,
-    const common::ObIArray<ObTabletHandle> *split_extra_tablet_handles,
     const ObVersionRange &read_version_range,
     const bool for_access)
 {
@@ -52,8 +51,6 @@ int ObMdsInfoDistinctMgr::init(
     LOG_WARN("invalid argument", KR(ret), K(read_version_range));
   } else if (OB_FAIL(tablet.read_truncate_info_array(allocator, read_version_range, for_access, array_))) {
     LOG_WARN("failed to read truncate info array", KR(ret), K(read_version_range));
-  } else if (OB_FAIL(read_split_truncate_info_array(split_extra_tablet_handles, read_version_range, for_access))) {
-    LOG_WARN("failed to read split extra truncate infos", K(ret), K(split_extra_tablet_handles));
   } else if (OB_FAIL(build_distinct_array(read_version_range, for_access))) {
     LOG_WARN("failed to build distinct array", KR(ret));
   } else {
@@ -63,7 +60,6 @@ int ObMdsInfoDistinctMgr::init(
       const ObTabletID &tablet_id = tablet.get_tablet_id();
       int tmp_ret = OB_SUCCESS;
       const ObTruncateInfoCacheKey cache_key(
-        MTL_ID(),
         tablet_id,
         distinct_array_.at(distinct_array_.count() - 1)->schema_version_,
         tablet.get_last_major_snapshot_version());
@@ -78,37 +74,6 @@ int ObMdsInfoDistinctMgr::init(
   }
   if (OB_FAIL(ret) && !is_inited_) {
     reset();
-  }
-  return ret;
-}
-
-int ObMdsInfoDistinctMgr::read_split_truncate_info_array(
-    const common::ObIArray<ObTabletHandle> *split_extra_tablet_handles,
-    const ObVersionRange &read_version_range,
-    const bool for_access)
-{
-  int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(nullptr != split_extra_tablet_handles)) {
-    ObArenaAllocator tmp_allocator("SplitTrunI");
-    ObTruncateInfoArray tmp_array;
-    for (int64_t i = 0; OB_SUCC(ret) && i < split_extra_tablet_handles->count(); i++) {
-      ObTablet *tablet = split_extra_tablet_handles->at(i).get_obj();
-      tmp_array.reset();
-      tmp_allocator.reuse();
-      if (OB_ISNULL(tablet)) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("invalid tablet handle", KR(ret));
-      } else if (OB_FAIL(tablet->read_truncate_info_array(tmp_allocator, read_version_range, for_access, tmp_array))) {
-        LOG_WARN("failed to read truncate info array", KR(ret), K(tablet->get_tablet_id()), K(read_version_range));
-      } else {
-        for (int64_t i = 0; OB_SUCC(ret) && i < tmp_array.count(); i++) {
-          const ObTruncateInfo &info = *tmp_array.at(i);
-          if (OB_FAIL(array_.append_with_deep_copy(info))) {
-            LOG_WARN("failed to append", K(ret), K(info));
-          }
-        }
-      }
-    }
   }
   return ret;
 }

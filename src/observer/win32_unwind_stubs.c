@@ -153,18 +153,10 @@ void _Unwind_Resume(struct _Unwind_Exception *exc) {
  */
 struct epoll_event;
 
-int ob_epoll_wait(int epfd, struct epoll_event *events, int maxevents, int timeout) {
-  (void)epfd; (void)events; (void)maxevents; (void)timeout;
-  return -1;
-}
 
 #include <stdint.h>
 struct timespec;
 
-int futex_hook(uint32_t *uaddr, int futex_op, uint32_t val, const struct timespec *timeout) {
-  (void)uaddr; (void)futex_op; (void)val; (void)timeout;
-  return -1;
-}
 
 /*
  * Override abort() to get diagnostics during static initialization crashes.

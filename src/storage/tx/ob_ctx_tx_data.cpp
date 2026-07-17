@@ -35,7 +35,7 @@ namespace transaction
     TRANS_LOG(WARN, "get tx table guard without check failed", KR(ret), K(*this));    \
   } else if (OB_ISNULL(tx_table = table_guard.get_tx_table())) {                      \
     ret = OB_ERR_UNEXPECTED;                                                          \
-    TRANS_LOG(WARN, "tx table is null", KR(ret), K(ctx_mgr_->get_ls_id()), K(*this)); \
+    TRANS_LOG(WARN, "tx table is null", KR(ret), K(*this)); \
   }
 
 int ObCtxTxData::init(const int64_t abs_expire_time, ObLSTxCtxMgr *ctx_mgr, int64_t tx_id)
@@ -52,12 +52,12 @@ int ObCtxTxData::init(const int64_t abs_expire_time, ObLSTxCtxMgr *ctx_mgr, int6
       TRANS_LOG(WARN, "ctx_mgr is null when get_tx_table", K(ret));
     } else if (OB_ISNULL(tx_table = ctx_mgr_->get_tx_table())) {
       ret = OB_ERR_UNEXPECTED;
-      TRANS_LOG(WARN, "tx table is null", KR(ret), K(ctx_mgr_->get_ls_id()), K(*this));
+      TRANS_LOG(WARN, "tx table is null", KR(ret), K(*this));
     } else if (OB_FAIL(tx_table->alloc_tx_data(tx_data_guard_, true, abs_expire_time))) {
-      TRANS_LOG(WARN, "get tx data failed", KR(ret), K(ctx_mgr_->get_ls_id()));
+      TRANS_LOG(WARN, "get tx data failed", KR(ret));
     } else if (OB_ISNULL(tx_data_guard_.tx_data())) {
       ret = OB_ERR_UNEXPECTED;
-      TRANS_LOG(WARN, "tx data is unexpected null", KR(ret), K(ctx_mgr_->get_ls_id()));
+      TRANS_LOG(WARN, "tx data is unexpected null", KR(ret));
     } else {
       tx_data_guard_.tx_data()->tx_id_ = tx_id;
     }

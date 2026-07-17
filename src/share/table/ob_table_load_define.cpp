@@ -42,8 +42,7 @@ OB_SERIALIZE_MEMBER(ObTableLoadPartitionId,
                     partition_id_,
                     tablet_id_);
 
-OB_SERIALIZE_MEMBER(ObTableLoadLSIdAndPartitionId,
-                    ls_id_,
+OB_SERIALIZE_MEMBER(ObTableLoadTabletId,
                     part_tablet_id_);
 
 OB_SERIALIZE_MEMBER(ObTableLoadResultInfo,

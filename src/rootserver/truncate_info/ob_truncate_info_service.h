@@ -21,7 +21,7 @@
 #include "sql/resolver/expr/ob_raw_expr.h"
 namespace oceanbase
 {
-namespace obrpc
+namespace obcall
 {
 struct ObAlterTableArg;
 }
@@ -50,7 +50,6 @@ struct ObTruncatePartKeyInfo final
   ~ObTruncatePartKeyInfo();
   int init(
     ObIAllocator &allocator,
-    const uint64_t tenant_id,
     const ObTableSchema &data_table_schema);
   bool is_valid() const
   {
@@ -70,8 +69,6 @@ struct ObTruncatePartKeyInfo final
   TO_STRING_KV(KPC_(part_expr), KPC_(subpart_expr), K_(ref_column_ids));
 private:
   int create_tmp_session(
-      const uint64_t tenant_id,
-      const bool is_oracle_mode,
       share::schema::ObSchemaGetterGuard &schema_guard,
       sql::ObFreeSessionCtx &free_session_ctx,
       sql::ObSQLSessionInfo *&session);
@@ -111,11 +108,11 @@ struct ObTruncateInfoService final
 {
 public:
   ObTruncateInfoService(
-    const obrpc::ObAlterTableArg &arg,
+    const obcall::ObAlterTableArg &arg,
     const share::schema::ObTableSchema &data_table_schema);
   int init(ObMySQLProxy &sql_proxy);
   int check_only_have_ref_columns(
-    const obrpc::ObAlterTableArg::AlterPartitionType &alter_type,
+    const obcall::ObAlterTableArg::AlterPartitionType &alter_type,
     bool &only_ref_columns);
   int check_stored_ref_columns_for_index(
     const share::schema::ObTableSchema &index_table_schema,
@@ -125,7 +122,7 @@ public:
     ObDDLOperator &ddl_operator,
     share::schema::ObTableSchema &index_table_schema);
 private:
-  uint64_t get_tenant_id() const;
+  
   static int gen_new_schema_version_for_index_(
     ObMySQLTransaction &trans,
     ObDDLOperator &ddl_operator,
@@ -142,20 +139,17 @@ private:
   int register_mds_(
     observer::ObInnerSQLConnection &conn,
     const ObTruncateTabletArg &arg);
-  int retry_register_mds_(
-    observer::ObInnerSQLConnection &conn,
-    const ObTruncateTabletArg &arg,
-    const char *buf,
-    const int64_t buf_len);
-  static bool need_retry_errno(const int ret);
-  static const int64_t SLEEP_INTERVAL = 100 * 1000L; // 100ms
+  int register_mds_(
+      observer::ObInnerSQLConnection &conn,
+      const ObTruncateTabletArg &arg,
+      const char *buf,
+      const int64_t buf_len);
 private:
   ObArenaAllocator allocator_; // for part_key_info_, only init once
   ObArenaAllocator loop_allocator_; // for loop index tablets
-  const obrpc::ObAlterTableArg &arg_;
+  const obcall::ObAlterTableArg &arg_;
   const share::schema::ObTableSchema &data_table_schema_;
   ObSEArray<ObTabletID, 8> index_tablet_array_;
-  ObSEArray<share::ObLSID, 8> ls_id_array_;
   ObTruncatePartKeyInfo part_key_info_;
   int64_t ddl_task_id_;
   bool is_inited_;

@@ -21,7 +21,6 @@
 #include "sql/das/iter/ob_das_scan_iter.h"
 #include "sql/das/iter/ob_das_text_retrieval_merge_iter.h"
 #include "common/ob_tablet_id.h"
-#include "share/ob_ls_id.h"
 #include "storage/access/ob_dml_param.h"
 
 namespace oceanbase
@@ -95,7 +94,6 @@ public:
   }
 
   void set_tablet_id(const ObTabletID &tablet_id) { main_lookup_tablet_id_ = tablet_id; }
-  void set_ls_id(const share::ObLSID &ls_id) { main_lookup_ls_id_ = ls_id; }
   bool has_main_lookup_iter() const { return nullptr != main_lookup_iter_; }
   ObTableScanParam &get_main_lookup_scan_param() { return main_lookup_param_; }
   const ObDASScanCtDef *get_main_lookup_ctdef() { return main_lookup_ctdef_; }
@@ -148,7 +146,6 @@ private:
   ObDASScanRtDef *main_lookup_rtdef_;
   ObDASIter *main_lookup_iter_;
   ObTabletID main_lookup_tablet_id_;
-  share::ObLSID main_lookup_ls_id_;
   storage::ObTableScanParam main_lookup_param_;
   lib::MemoryContext merge_memctx_;
   ObSEArray<std::pair<ObDocIdExt, int>, 4> doc_ids_;

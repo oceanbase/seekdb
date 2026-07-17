@@ -29,8 +29,6 @@
 #include "ob_expr_date_diff.h"
 #include "ob_expr_day_of_func.h"
 #include "ob_expr_div.h"
-#include "ob_expr_effective_tenant.h"
-#include "ob_expr_effective_tenant_id.h"
 #include "ob_expr_exists.h"
 #include "ob_expr_extract.h"
 #include "ob_expr_export_set.h"
@@ -75,7 +73,6 @@
 #include "ob_expr_func_dump.h"
 #include "ob_expr_func_part_hash.h"
 #include "ob_expr_autoinc_nextval.h"
-#include "ob_expr_is_serving_tenant.h"
 #include "ob_expr_sys_privilege_check.h"
 #include "ob_expr_field.h"
 #include "ob_expr_elt.h"
@@ -126,7 +123,6 @@
 #include "ob_expr_unix_timestamp.h"
 #include "ob_expr_symmetric_encrypt.h"
 #include "ob_expr_case.h"
-#include "ob_expr_oracle_decode.h"
 #include "ob_expr_remove_const.h"
 #include "ob_expr_wrapper_inner.h"
 #include "ob_expr_func_sleep.h"
@@ -274,7 +270,6 @@
 #include "ob_expr_extract_cert_expired_time.h"
 #include "ob_expr_transaction_id.h"
 #include "ob_expr_inner_row_cmp_val.h"
-#include "ob_expr_last_refresh_scn.h"
 #include "ob_expr_sql_udt_construct.h"
 #include "ob_expr_priv_st_numinteriorrings.h"
 #include "ob_expr_priv_st_iscollection.h"
@@ -383,7 +378,6 @@
 #include "ob_expr_map_keys.h"
 #include "ob_expr_current_catalog.h"
 #include "ob_expr_check_catalog_access.h"
-#include "ob_expr_oracle_to_char.h"
 #include "ob_expr_semantic_distance.h"
 #include "sql/engine/expr/ob_expr_ai/ob_expr_ai_complete.h"
 #include "sql/engine/expr/ob_expr_ai/ob_expr_ai_embed.h"
@@ -453,8 +447,6 @@ extern int calc_collation_expr(const ObExpr &, ObEvalCtx &, ObDatum &);
 extern int calc_coercibility_expr(const ObExpr &, ObEvalCtx &, ObDatum &);
 extern int calc_set_collation_expr(const ObExpr &, ObEvalCtx &, ObDatum &);
 extern int calc_cmp_meta_expr(const ObExpr &, ObEvalCtx &, ObDatum &);
-extern int calc_trunc_expr_datetime(const ObExpr &, ObEvalCtx &, ObDatum &);
-extern int calc_trunc_expr_numeric(const ObExpr &, ObEvalCtx &, ObDatum &);
 extern int calc_truncate_expr(const ObExpr &, ObEvalCtx &, ObDatum &);
 extern int calc_reverse_expr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum);
 extern int calc_convert_expr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum);
@@ -547,8 +539,8 @@ static ObExpr::EvalFunc g_expr_eval_functions[] = {
   ObExprDiv::div_number,                                              /* 67 */
   NULL,                                                               /* 68 */
   NULL,                                                               /* 69 */
-  ObExprEffectiveTenant::eval_effective_tenant,                       /* 70 */
-  ObExprEffectiveTenantId::eval_effective_tenant_id,                  /* 71 */
+  NULL,                       /* 70 */
+  NULL,                  /* 71 */
   ObExprExists::exists_eval,                                          /* 72 */
   calc_exp_expr_double,                                               /* 73 */
   calc_exp_expr_number,                                               /* 74 */
@@ -601,12 +593,12 @@ static ObExpr::EvalFunc g_expr_eval_functions[] = {
   ObExprLeast::calc_least,                                            /* 121 */
   calc_left_expr,                                                     /* 122 */
   ObExprLength::calc_null,                                            /* 123 */
-  NULL, // ObExprLength::calc_oracle_mode,                            /* 124 */
+  NULL, /* retired slot */                                           /* 124 */
   ObExprLength::calc_mysql_mode,                                      /* 125 */
   ObExprLike::like_varchar,                                           /* 126 */
   NULL, // calc_ln_expr_mysql,                                        /* 127 */
-  NULL, // calc_ln_expr_oracle_double,                                /* 128 */
-  NULL, // calc_ln_expr_oracle_number,                                /* 129 */
+  NULL, /* retired slot */                                           /* 128 */
+  NULL, /* retired slot */                                           /* 129 */
   calc_log10_expr,                                                    /* 130 */
   calc_log2_expr,                                                     /* 131 */
   calc_log_expr_double,                                               /* 132 */
@@ -615,7 +607,7 @@ static ObExpr::EvalFunc g_expr_eval_functions[] = {
   ObExprUpper::calc_upper,                                            /* 135 */
   ObExprMd5::calc_md5,                                                /* 136 */
   ObExprMinus::minus_datetime_datetime,                               /* 137 */
-  ObExprMinus::minus_datetime_datetime_oracle,                        /* 138 */
+  NULL, /* retired slot */                   /* 138 */
   NULL,                                                               /* 139 */
   NULL,                                                               /* 140 */
   ObExprMinus::minus_datetime_number,                                 /* 141 */
@@ -667,7 +659,7 @@ static ObExpr::EvalFunc g_expr_eval_functions[] = {
   ObRelationalExprOperator::row_eval,                                 /* 187 */
   calc_or_exprN,                                                      /* 188 */
   ObExprPow::calc_pow_expr,                                           /* 189 */
-  NULL, // calc_power_expr_oracle,                                    /* 190 */
+  NULL, /* retired slot */                                           /* 190 */
   ObExprRegexp::eval_regexp,                                          /* 191 */
   NULL,                                                               /* 192 */
   ObExprRegexpInstr::eval_regexp_instr,                               /* 193 */
@@ -682,7 +674,7 @@ static ObExpr::EvalFunc g_expr_eval_functions[] = {
   NULL,//ObExprFuncAddrToPartId::eval_addr_to_part_id is deleted      /* 202 */
   ObExprAutoincNextval::eval_nextval,                                 /* 203 */
   ObExprFuncLnnvl::eval_lnnvl,                                        /* 204 */
-  ObExprIsServingTenant::eval_is_serving_tenant,                      /* 205 */
+  NULL,                      /* 205 */
   ObExprSysPrivilegeCheck::eval_sys_privilege_check,                  /* 206 */
   ObExprField::eval_field,                                            /* 207 */
   ObExprElt::eval_elt,                                                /* 208 */
@@ -740,8 +732,8 @@ static ObExpr::EvalFunc g_expr_eval_functions[] = {
   calc_coercibility_expr,                                             /* 260 */
   calc_set_collation_expr,                                            /* 261 */
   calc_cmp_meta_expr,                                                 /* 262 */
-  calc_trunc_expr_datetime,                                           /* 263 */
-  calc_trunc_expr_numeric,                                            /* 264 */
+  NULL, /* calc_trunc_expr_datetime removed */                         /* 263 */
+  NULL, /* calc_trunc_expr_numeric removed */                          /* 264 */
   calc_truncate_expr,                                                 /* 265 */
   ObExprEstimateNdv::calc_estimate_ndv_expr,                          /* 266 */
   ObExprFindInSet::calc_find_in_set_expr,                             /* 267 */
@@ -803,14 +795,14 @@ static ObExpr::EvalFunc g_expr_eval_functions[] = {
   NULL, //ObExprToClob::calc_to_clob_expr,                            /* 323 */
   NULL, //ObExprUserEnv::calc_user_env_expr,                          /* 324 */
   NULL, // ObExprVsize::calc_vsize_expr,                              /* 325 */
-  NULL, //ObExprOracleLpad::calc_oracle_lpad_expr,                    /* 326 */
-  NULL, //ObExprOracleRpad::calc_oracle_rpad_expr,                    /* 327 */
+  NULL, /* retired slot */                                           /* 326 */
+  NULL, /* retired slot */                                           /* 327 */
   ObExprLpad::calc_mysql_lpad_expr,                                   /* 328 */
   ObExprRpad::calc_mysql_rpad_expr,                                   /* 329 */
   ObExprPad::calc_pad_expr,                                           /* 330 */
   ObExprFunValues::eval_values,                                       /* 331 */
   NULL,                                                               /* 332 */
-  ObExprOracleToChar::eval_oracle_to_char,                            /* 333 */
+  NULL, /* retired slot */                                           /* 333 */
   ObExprPartId::eval_part_id,                                         /* 334 */
   ObExprHex::eval_hex,                                                /* 335 */
   ObExprShadowUKProject::shadow_uk_project,                           /* 336 */
@@ -819,7 +811,7 @@ static ObExpr::EvalFunc g_expr_eval_functions[] = {
   ObExprAesDecrypt::eval_aes_decrypt,                                 /* 339 */
   ObExprAesEncrypt::eval_aes_encrypt,                                 /* 340 */
   ObExprCase::calc_case_expr,                                         /* 341 */
-  ObExprOracleDecode::eval_decode,                                    /* 342 */
+  NULL, /* retired slot */                                           /* 342 */
   ObExprRemoveConst::eval_remove_const,                               /* 343 */
   ObExprSleep::eval_sleep,                                            /* 344 */
   NULL,                                                               /* 345 */
@@ -827,7 +819,7 @@ static ObExpr::EvalFunc g_expr_eval_functions[] = {
   ObExprTimeStampDiff::eval_timestamp_diff,                           /* 347 */
   NULL, // ObExprFromTz::eval_from_tz,                                /* 348 */
   NULL, // ObExprTzOffset::eval_tz_offset,                            /* 349 */
-  NULL, // ObExprOrahash::eval_orahash,                               /* 350 */
+  NULL, /* retired slot */                                           /* 350 */
   ObExprGetUserVar::eval_get_user_var,                                /* 351 */
   NULL, //ObExprUtil::eval_generated_column,                          /* 352 */
   NULL, //ObExprCalcPartitionBase::calc_opt_route_hash_one            /* 353 */
@@ -846,7 +838,7 @@ static ObExpr::EvalFunc g_expr_eval_functions[] = {
   ObExprLastInsertID::eval_last_insert_id,                            /* 366 */
   ObExprPartIdPseudoColumn::eval_part_id,                             /* 367 */
   ObExprNullif::eval_nullif,                                          /* 368 */
-  NULL, // ObExprOracleNullif::eval_nullif,                            /* 369 */
+  NULL, /* retired slot */                                           /* 369 */
   NULL, // ObExprUserCanAccessObj::eval_user_can_access_obj,          /* 370 */
   NULL, // ObExprEmptyClob::eval_empty_clob,                          /* 371 */
   NULL, // ObExprEmptyBlob::eval_empty_blob,                          /* 372 */
@@ -862,13 +854,13 @@ static ObExpr::EvalFunc g_expr_eval_functions[] = {
   ObExprIs::calc_is_nan,                                              /* 382 */
   ObExprIsNot::calc_is_not_infinite,                                  /* 383 */
   ObExprIsNot::calc_is_not_nan,                                       /* 384 */
-  NULL, // ObExprOracleNullif::eval_nullif_not_null,                  /* 385 */
+  NULL, /* retired slot */                                           /* 385 */
   NULL, // ObExprNaNvl::eval_nanvl,                                   /* 386 */
   ObExprFormat::calc_format_expr,                                     /* 387 */
   NULL,                                                               /* 388 */
   ObExprQuarter::calc_quater,                                         /* 389 */
   ObExprBitLength::calc_bit_length,                                   /* 390 */
-  NULL, // ObExprConvertOracle::calc_convert_oracle_expr,             /* 391 */
+  NULL, /* retired slot */                                           /* 391 */
   NULL, // ObExprUnistr::calc_unistr_expr,                            /* 392 */
   NULL, // ObExprAsciistr::calc_asciistr_expr,                        /* 393 */
   NULL, // ObExprAtTimeZone::eval_at_time_zone,                       /* 394 */
@@ -1171,13 +1163,10 @@ static ObExpr::EvalFunc g_expr_eval_functions[] = {
   ObExprGTIDSubtract::eval_subtract,                                  /* 687 */
   ObExprWaitForExecutedGTIDSet::eval_wait_for_executed_gtid_set,      /* 688 */
   ObExprWaitUntilSQLThreadAfterGTIDs::eval_wait_until_sql_thread_after_gtids, /* 689 */
-  ObExprLastRefreshScn::eval_last_refresh_scn,                        /* 690 */
   ObExprDocLength::generate_doc_length,                               /* 691 */
   ObExprTopNFilter::eval_topn_filter,                                 /* 692 */
   ObExprIsEnabledRole::eval_is_enabled_role,                          /* 693 */
   ObExprCanAccessTrigger::can_access_trigger,                         /* 694 */
-  ObRelationalExprOperator::eval_min_max_compare,                     /* 695 */
-  ObRelationalExprOperator::min_max_row_eval,                         /* 696 */
   ObExprRbBuildEmpty::eval_rb_build_empty,                            /* 697 */
   ObExprRbIsEmpty::eval_rb_is_empty,                                  /* 698 */
   ObExprRbBuildVarbinary::eval_rb_build_varbinary,                    /* 699 */
@@ -1288,7 +1277,7 @@ static ObExpr::EvalFunc g_expr_eval_functions[] = {
   ObExprArrayCompact::eval_array_compact,                             /* 804 */
   ObExprArraySort::eval_array_sort,                                   /* 805 */
   ObExprKeyValue::calc_key_value_expr,                                /* 806 */
-  ObExprToChar::eval_to_char,                                         /* 807 */
+  NULL, /* ObExprToChar::eval_to_char removed */                       /* 807 */
   ObExprToPinyin::eval_to_pinyin,                                     /* 808 */
   ObExprArraySlice::eval_array_slice,                                 /* 809 */
   ObExprArraySortby::eval_array_sortby,                               /* 810 */
@@ -1383,7 +1372,7 @@ static ObExpr::EvalBatchFunc g_expr_eval_batch_functions[] = {
   ObExprAdd::add_uint_int_batch,                                      /* 26 */
   ObExprAdd::add_uint_uint_batch,                                     /* 27 */
   ObExprMinus::minus_datetime_datetime_batch,                         /* 28 */
-  ObExprMinus::minus_datetime_datetime_oracle_batch,                  /* 29 */
+  NULL, /* retired slot */             /* 29 */
   NULL,                                                               /* 30 */
   NULL,                                                               /* 31 */
   ObExprMinus::minus_datetime_number_batch,                           /* 32 */
@@ -1436,7 +1425,7 @@ static ObExpr::EvalBatchFunc g_expr_eval_batch_functions[] = {
   ObExprSubstr::eval_substr_batch,                                    /* 73 */
   ObExprJoinFilter::eval_bloom_filter_batch,                          /* 74 */
   NULL,                                                               /* 75 */
-  ObExprToCharCommon::eval_oracle_to_char_batch,                      /* 76 */
+  NULL, /* retired slot */                        /* 76 */
   NULL,                                                               /* 77 */
   ObExprExtract::calc_extract_mysql_batch,                            /* 78 */
   cast_eval_arg_batch,                                                /* 79 */
@@ -1491,7 +1480,6 @@ static ObExpr::EvalBatchFunc g_expr_eval_batch_functions[] = {
   ObBatchCast::implicit_batch_cast<ObDecimalIntTC, ObNumberTC>,       /* 128 */
   ObExprDecodeTraceId::calc_decode_trace_id_expr_batch,               /* 129 */
   ObExprTopNFilter::eval_topn_filter_batch,                           /* 130 */
-  ObRelationalExprOperator::eval_batch_min_max_compare,               /* 131 */
   ObExprBM25::eval_batch_bm25_relevance_expr,                  /* 132 */
   NULL,// ObExprAdd::add_vec_vec_batch,                               /* 133 */
   NULL,// ObExprMinus::minus_vec_vec_batch,                           /* 134 */
@@ -1552,9 +1540,9 @@ static ObExpr::EvalVectorFunc g_expr_eval_vector_functions[] = {
   ObExprAdd::add_uint_uint_vector,                              /* 7 */
   ObExprAdd::add_float_float_vector,                            /* 8 */
   ObExprAdd::add_double_double_vector,                          /* 9 */
-  ObExprAdd::add_decimalint32_oracle_vector,                    /* 10 */
-  ObExprAdd::add_decimalint64_oracle_vector,                    /* 11 */
-  ObExprAdd::add_decimalint128_oracle_vector,                   /* 12 */
+  NULL, /* retired slot */             /* 10 */
+  NULL, /* retired slot */             /* 11 */
+  NULL, /* retired slot */            /* 12 */
   ObExprAdd::add_number_number_vector,                          /* 13 */
   ObExprAdd::add_decimalint32_vector,                           /* 14 */
   ObExprAdd::add_decimalint64_vector,                           /* 15 */
@@ -1575,9 +1563,9 @@ static ObExpr::EvalVectorFunc g_expr_eval_vector_functions[] = {
   ObExprMinus::minus_decimalint256_vector,                      /* 30 */
   ObExprMinus::minus_decimalint512_vector,                      /* 31 */
   ObExprMinus::minus_decimalint512_with_check_vector,           /* 32 */
-  ObExprMinus::minus_decimalint32_oracle_vector,                /* 33 */
-  ObExprMinus::minus_decimalint64_oracle_vector,                /* 34 */
-  ObExprMinus::minus_decimalint128_oracle_vector,               /* 35 */
+  NULL, /* retired slot */           /* 33 */
+  NULL, /* retired slot */           /* 34 */
+  NULL, /* retired slot */          /* 35 */
   ObExprMul::mul_int_int_vector,                                /* 36 */
   ObExprMul::mul_int_uint_vector,                               /* 37 */
   ObExprMul::mul_uint_int_vector,                               /* 38 */
@@ -1615,18 +1603,18 @@ static ObExpr::EvalVectorFunc g_expr_eval_vector_functions[] = {
   ObExprMul::mul_decimalint256_round_vector,                    /* 70 */
   ObExprMul::mul_decimalint512_round_vector,                    /* 71 */
   ObExprMul::mul_decimalint512_round_with_check_vector,         /* 72 */
-  ObExprMul::mul_decimalint32_int32_int32_oracle_vector,        /* 73 */
-  ObExprMul::mul_decimalint64_int32_int32_oracle_vector,        /* 74 */
-  ObExprMul::mul_decimalint64_int32_int64_oracle_vector,        /* 75 */
-  ObExprMul::mul_decimalint64_int64_int32_oracle_vector,        /* 76 */
-  ObExprMul::mul_decimalint128_int32_int64_oracle_vector,       /* 77 */
-  ObExprMul::mul_decimalint128_int64_int32_oracle_vector,       /* 78 */
-  ObExprMul::mul_decimalint128_int32_int128_oracle_vector,      /* 79 */
-  ObExprMul::mul_decimalint128_int128_int32_oracle_vector,      /* 80 */
-  ObExprMul::mul_decimalint128_int64_int64_oracle_vector,       /* 81 */
-  ObExprMul::mul_decimalint128_int64_int128_oracle_vector,      /* 82 */
-  ObExprMul::mul_decimalint128_int128_int64_oracle_vector,      /* 83 */
-  ObExprMul::mul_decimalint128_int128_int128_oracle_vector,     /* 84 */
+  NULL, /* retired slot */ /* 73 */
+  NULL, /* retired slot */ /* 74 */
+  NULL, /* retired slot */ /* 75 */
+  NULL, /* retired slot */ /* 76 */
+  NULL, /* retired slot */ /* 77 */
+  NULL, /* retired slot */ /* 78 */
+  NULL, /* retired slot */ /* 79 */
+  NULL, /* retired slot */ /* 80 */
+  NULL, /* retired slot */ /* 81 */
+  NULL, /* retired slot */ /* 82 */
+  NULL, /* retired slot */ /* 83 */
+  NULL, /* retired slot */ /* 84 */
   ObExprDiv::div_float_vector,                                  /* 85 */
   ObExprDiv::div_double_vector,                                 /* 86 */
   ObExprDiv::div_number_vector,                                 /* 87 */
@@ -1655,7 +1643,6 @@ static ObExpr::EvalVectorFunc g_expr_eval_vector_functions[] = {
   ObExprInOrNotIn::eval_vector_in_without_row,                  /* 110 */
   NULL,//ObExprDecodeTraceId::calc_decode_trace_id_expr_vector  /* 111 */
   ObExprTopNFilter::eval_topn_filter_vector,                    /* 112 */
-  ObRelationalExprOperator::eval_vector_min_max_compare,        /* 113 */
   ObExprCeilFloor::calc_ceil_floor_vector,                      /* 114 */
   ObExprRepeat::eval_repeat_vector,                             /* 115 */
   ObExprRegexpReplace::eval_regexp_replace_vector,              /* 116 */
@@ -1727,8 +1714,8 @@ static ObExpr::EvalVectorFunc g_expr_eval_vector_functions[] = {
   ObExprArraySort::eval_array_sort_vector,                       /* 182 */
   ObExprSplitPart::calc_split_part_expr_vec,                             /* 183 */
   ObExprKeyValue::calc_key_value_expr_vector,                            /* 184 */
-  NULL, // ObExprLength::calc_oracle_length_vector,                      /* 185 */
-  ObExprToChar::eval_to_char_vector,                                     /* 186 */
+  NULL, /* retired slot */                                             /* 185 */
+  NULL, /* ObExprToChar::eval_to_char_vector removed */                   /* 186 */
   ObExprArrayPosition::eval_array_position_vector,                       /* 187 */
   ObExprArraySlice::eval_array_slice_vector,                             /* 188 */
   ObExprArrayLength::eval_array_length_vector,                           /* 189 */
@@ -1754,8 +1741,8 @@ static ObExpr::EvalVectorFunc g_expr_eval_vector_functions[] = {
   NULL, // ObExprConcat::eval_concat_vector,                             /* 209 */
   NULL, // ObExprLpad::calc_mysql_lpad_expr_vector,                      /* 210 */
   NULL, // ObExprRpad::calc_mysql_rpad_expr_vector,                      /* 211 */
-  NULL, // ObExprOracleLpad::calc_oracle_lpad_expr_vector,               /* 212 */
-  NULL, // ObExprOracleRpad::calc_oracle_rpad_expr_vector,               /* 213 */
+  NULL, /* retired slot */                                             /* 212 */
+  NULL, /* retired slot */                                             /* 213 */
   ObExprFindInSet::calc_find_in_set_vector,                              /* 214 */
   NULL, // ObExprSubstringIndex::eval_substring_index_vector,            /* 215 */
   NULL, // ObExprConcatWs::calc_concat_ws_expr_vector,                   /* 216 */
@@ -1766,25 +1753,13 @@ static ObExpr::EvalVectorFunc g_expr_eval_vector_functions[] = {
   NULL, // ObExprUDF::eval_udf_vector                                    /* 221 */
   NULL, // ObExprUDF::eval_external_udf_vector,                          /* 222 */
   NULL, // ObExprInstr::calc_mysql_instr_expr_vector,                    /* 223 */
-  NULL, // ObExprOracleInstr::calc_oracle_instr_expr_vector,             /* 224 */
+  NULL, /* retired slot */                                             /* 224 */
   NULL, // ObLocationExprOperator::calc_location_expr_vector,            /* 225 */
   ObExprConvertTZ::calc_convert_tz_vector,                               /* 226 */
   ObExprAIComplete::eval_ai_complete_vector,                             /* 227 */
   ObExprAIEmbed::eval_ai_embed_vector,                                   /* 228 */
   NULL, // ObExprAIRerank::eval_ai_rerank_vector,                        /* 229 */
 };
-
-REG_SER_FUNC_ARRAY(OB_SFA_SQL_EXPR_EVAL,
-                   g_expr_eval_functions,
-                   ARRAYSIZEOF(g_expr_eval_functions));
-
-REG_SER_FUNC_ARRAY(OB_SFA_SQL_EXPR_EVAL_BATCH,
-                   g_expr_eval_batch_functions,
-                   ARRAYSIZEOF(g_expr_eval_batch_functions));
-
-REG_SER_FUNC_ARRAY(OB_SFA_SQL_EXPR_EVAL_VECTOR,
-                   g_expr_eval_vector_functions,
-                   ARRAYSIZEOF(g_expr_eval_vector_functions));
 
 static ObExpr::EvalFunc g_decimal_int_eval_functions[] = {
   ObExprAdd::add_decimalint32,
@@ -1859,24 +1834,24 @@ static ObExpr::EvalFunc g_decimal_int_eval_functions[] = {
   ObExprDiv::div_decimalint_512_128_with_check,
   ObExprDiv::div_decimalint_512_256_with_check,
   ObExprDiv::div_decimalint_512_512_with_check,
-  ObExprAdd::add_decimalint32_oracle,
-  ObExprAdd::add_decimalint64_oracle,
-  ObExprAdd::add_decimalint128_oracle,
-  ObExprMinus::minus_decimalint32_oracle,
-  ObExprMinus::minus_decimalint64_oracle,
-  ObExprMinus::minus_decimalint128_oracle,
-  ObExprMul::mul_decimalint32_int32_int32_oracle,
-  ObExprMul::mul_decimalint64_int32_int32_oracle,
-  ObExprMul::mul_decimalint64_int32_int64_oracle,
-  ObExprMul::mul_decimalint64_int64_int32_oracle,
-  ObExprMul::mul_decimalint128_int32_int64_oracle,
-  ObExprMul::mul_decimalint128_int64_int32_oracle,
-  ObExprMul::mul_decimalint128_int32_int128_oracle,
-  ObExprMul::mul_decimalint128_int128_int32_oracle,
-  ObExprMul::mul_decimalint128_int64_int64_oracle,
-  ObExprMul::mul_decimalint128_int64_int128_oracle,
-  ObExprMul::mul_decimalint128_int128_int64_oracle,
-  ObExprMul::mul_decimalint128_int128_int128_oracle,
+  NULL, /* retired slot */
+  NULL, /* retired slot */
+  NULL, /* retired slot */
+  NULL, /* retired slot */
+  NULL, /* retired slot */
+  NULL, /* retired slot */
+  NULL, /* retired slot */
+  NULL, /* retired slot */
+  NULL, /* retired slot */
+  NULL, /* retired slot */
+  NULL, /* retired slot */
+  NULL, /* retired slot */
+  NULL, /* retired slot */
+  NULL, /* retired slot */
+  NULL, /* retired slot */
+  NULL, /* retired slot */
+  NULL, /* retired slot */
+  NULL, /* retired slot */
   // div functions of decimal int types in mysql mode
   ObExprDiv::decint_div_mysql_fn<int32_t, int32_t>,
   ObExprDiv::decint_div_mysql_fn<int64_t, int32_t>,
@@ -1969,24 +1944,24 @@ static ObExpr::EvalBatchFunc g_decimal_int_eval_batch_functions[] = {
   ObExprDiv::div_decimalint_512_128_with_check_batch,
   ObExprDiv::div_decimalint_512_256_with_check_batch,
   ObExprDiv::div_decimalint_512_512_with_check_batch,
-  ObExprAdd::add_decimalint32_oracle_batch,
-  ObExprAdd::add_decimalint64_oracle_batch,
-  ObExprAdd::add_decimalint128_oracle_batch,
-  ObExprMinus::minus_decimalint32_oracle_batch,
-  ObExprMinus::minus_decimalint64_oracle_batch,
-  ObExprMinus::minus_decimalint128_oracle_batch,
-  ObExprMul::mul_decimalint32_int32_int32_oracle_batch,
-  ObExprMul::mul_decimalint64_int32_int32_oracle_batch,
-  ObExprMul::mul_decimalint64_int32_int64_oracle_batch,
-  ObExprMul::mul_decimalint64_int64_int32_oracle_batch,
-  ObExprMul::mul_decimalint128_int32_int64_oracle_batch,
-  ObExprMul::mul_decimalint128_int64_int32_oracle_batch,
-  ObExprMul::mul_decimalint128_int32_int128_oracle_batch,
-  ObExprMul::mul_decimalint128_int128_int32_oracle_batch,
-  ObExprMul::mul_decimalint128_int64_int64_oracle_batch,
-  ObExprMul::mul_decimalint128_int64_int128_oracle_batch,
-  ObExprMul::mul_decimalint128_int128_int64_oracle_batch,
-  ObExprMul::mul_decimalint128_int128_int128_oracle_batch,
+  NULL, /* retired slot */
+  NULL, /* retired slot */
+  NULL, /* retired slot */
+  NULL, /* retired slot */
+  NULL, /* retired slot */
+  NULL, /* retired slot */
+  NULL, /* retired slot */
+  NULL, /* retired slot */
+  NULL, /* retired slot */
+  NULL, /* retired slot */
+  NULL, /* retired slot */
+  NULL, /* retired slot */
+  NULL, /* retired slot */
+  NULL, /* retired slot */
+  NULL, /* retired slot */
+  NULL, /* retired slot */
+  NULL, /* retired slot */
+  NULL, /* retired slot */
   // div functions of decimal int types in mysql mode
   ObExprDiv::decint_div_mysql_batch_fn<int32_t, int32_t>,
   ObExprDiv::decint_div_mysql_batch_fn<int64_t, int32_t>,
@@ -2004,14 +1979,6 @@ static ObExpr::EvalBatchFunc g_decimal_int_eval_batch_functions[] = {
   ObExprDiv::decint_div_mysql_batch_fn<int512_t, int256_t>,
   ObExprDiv::decint_div_mysql_batch_fn<int512_t, int512_t>,
 };
-
-REG_SER_FUNC_ARRAY(OB_SFA_DECIMAL_INT_EXPR_EVAL,
-                   g_decimal_int_eval_functions,
-                   ARRAYSIZEOF(g_decimal_int_eval_functions));
-
-REG_SER_FUNC_ARRAY(OB_SFA_DECIMAL_INT_EXPR_EVAL_BATCH,
-                   g_decimal_int_eval_batch_functions,
-                   ARRAYSIZEOF(g_decimal_int_eval_batch_functions));
 
 static ObExpr::EvalFunc g_collection_eval_functions[] = {
   ObExprAdd::add_collection_collection_int8_t,
@@ -2063,18 +2030,6 @@ static ObExpr::EvalVectorFunc g_collection_expr_eval_vector_functions[] = {
   ObExprAdd::add_collection_collection_uint64_t_vector,
   ObExprMinus::minus_collection_collection_uint64_t_vector,
 };
-
-REG_SER_FUNC_ARRAY(OB_SFA_COLLECTION_EXPR_EVAL,
-                   g_collection_eval_functions,
-                   ARRAYSIZEOF(g_collection_eval_functions));
-
-REG_SER_FUNC_ARRAY(OB_SFA_COLLECTION_EXPR_EVAL_BATCH,
-                   g_collection_eval_batch_functions,
-                   ARRAYSIZEOF(g_collection_eval_batch_functions));
-
-REG_SER_FUNC_ARRAY(OB_SFA_COLLECTION_EXPR_EVAL_VEC,
-                   g_collection_expr_eval_vector_functions,
-                   ARRAYSIZEOF(g_collection_expr_eval_vector_functions));
 
 } // end namespace sql
 } // end namespace oceanbase

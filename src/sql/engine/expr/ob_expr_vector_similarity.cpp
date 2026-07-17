@@ -17,8 +17,8 @@
 #define USING_LOG_PREFIX SQL_ENG
 #include "sql/engine/expr/ob_expr_vector_similarity.h"
 #include "sql/engine/expr/ob_array_expr_utils.h"
-#include "share/vector_type/ob_vector_norm.h"
-#include "share/vector_type/ob_vector_common_util.h"
+#include "storage/vector_type/ob_vector_norm.h"
+#include "storage/vector_type/ob_vector_common_util.h"
 
 namespace oceanbase
 {
@@ -32,7 +32,7 @@ ObExprVectorSimilarity::ObExprVectorSimilarity(
     ObIAllocator &alloc,
     ObExprOperatorType type,
     const char *name,
-    int32_t param_num,
+    int32_t param_num, 
     int32_t dimension)
       : ObExprVector(alloc, type, name, param_num, dimension)
 {}
@@ -118,7 +118,7 @@ int ObExprVectorSimilarity::calc_similarity(const ObExpr &expr, ObEvalCtx &ctx, 
         LOG_WARN("not support", K(ret), K(similarity_type));
     } else {
       float *data_l = reinterpret_cast<float*>(arr_l->get_data());
-      float *data_r = reinterpret_cast<float*>(arr_r->get_data());
+      float *data_r = reinterpret_cast<float*>(arr_r->get_data()); 
       const int64_t size = static_cast<int64_t>(arr_l->size());
 
       if (similarity_type == ObVecSimilarityType::COSINE || similarity_type == ObVecSimilarityType::DOT) {
@@ -130,7 +130,7 @@ int ObExprVectorSimilarity::calc_similarity(const ObExpr &expr, ObEvalCtx &ctx, 
         } else if (OB_ISNULL(data_norm_r = static_cast<float *>(tmp_allocator.alloc(size * sizeof(float))))) {
           ret = OB_ALLOCATE_MEMORY_FAILED;
           LOG_WARN("fail to alloc memory", K(ret));
-        } else if (OB_FAIL(share::ObVectorNormalize::L2_normalize_vector(size, data_l, data_norm_l)) ||
+        } else if (OB_FAIL(share::ObVectorNormalize::L2_normalize_vector(size, data_l, data_norm_l)) || 
             OB_FAIL(share::ObVectorNormalize::L2_normalize_vector(size, data_r, data_norm_r))) {
           LOG_WARN("fail to normalize vectors", K(ret));
         } else {
@@ -138,7 +138,7 @@ int ObExprVectorSimilarity::calc_similarity(const ObExpr &expr, ObEvalCtx &ctx, 
           data_r = data_norm_r;
         }
       }
-
+      
       if (OB_FAIL(ret)) {
       } else if (OB_FAIL(SimilarityFunc<float>::similarity_funcs[similarity_type](data_l, data_r, size, similarity))) {
         if (OB_ERR_NULL_VALUE == ret) {
@@ -152,7 +152,7 @@ int ObExprVectorSimilarity::calc_similarity(const ObExpr &expr, ObEvalCtx &ctx, 
       }
     }
   }
-
+  
   return ret;
 }
 
@@ -162,7 +162,7 @@ ObExprVectorL2Similarity::ObExprVectorL2Similarity(ObIAllocator &alloc)
 int ObExprVectorL2Similarity::cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_expr,
                                     ObExpr &rt_expr) const
 {
-    int ret = OB_SUCCESS;
+    int ret = OB_SUCCESS;  
     rt_expr.eval_func_ = ObExprVectorL2Similarity::calc_l2_similarity;
     return ret;
 }
@@ -178,7 +178,7 @@ ObExprVectorCosineSimilarity::ObExprVectorCosineSimilarity(ObIAllocator &alloc)
 int ObExprVectorCosineSimilarity::cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_expr,
                                     ObExpr &rt_expr) const
 {
-    int ret = OB_SUCCESS;
+    int ret = OB_SUCCESS;  
     rt_expr.eval_func_ = ObExprVectorCosineSimilarity::calc_cosine_similarity;
     return ret;
 }
@@ -194,7 +194,7 @@ ObExprVectorIPSimilarity::ObExprVectorIPSimilarity(ObIAllocator &alloc)
 int ObExprVectorIPSimilarity::cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_expr,
                                     ObExpr &rt_expr) const
 {
-    int ret = OB_SUCCESS;
+    int ret = OB_SUCCESS;  
     rt_expr.eval_func_ = ObExprVectorIPSimilarity::calc_ip_similarity;
     return ret;
 }
@@ -208,7 +208,7 @@ int ObExprVectorSimilarity::calc_similarity_from_distance(const ObExprVectorDist
 {
   int ret = OB_SUCCESS;
   switch (dis_type) {
-    case ObExprVectorDistance::ObVecDisType::EUCLIDEAN:
+    case ObExprVectorDistance::ObVecDisType::EUCLIDEAN: 
       // l2_similarity = 1 / (1 + l2_square_distance), ob use l2_distance
       similarity = 1 / (1 + distance * distance);
       break;
@@ -216,7 +216,7 @@ int ObExprVectorSimilarity::calc_similarity_from_distance(const ObExprVectorDist
     case ObExprVectorDistance::ObVecDisType::DOT:
       similarity = (1 + distance) / 2;
       break;
-      // case T_FUN_SYS_NEGATIVE_INNER_PRODUCT:
+      // case T_FUN_SYS_NEGATIVE_INNER_PRODUCT: 
     case ObExprVectorDistance::ObVecDisType::COSINE:
       // cosine_similarity = (1 + cosine) / 2, ob cosine_distance = 1 - cosine
       similarity = (2 - distance) / 2;

@@ -10,3 +10,4 @@ alter system set merger_check_interval = '10s' tenant sys;
 alter system set ob_compaction_schedule_interval = '3s' tenant sys;
 disconnect obsys_quick_major;
 connection default;
+

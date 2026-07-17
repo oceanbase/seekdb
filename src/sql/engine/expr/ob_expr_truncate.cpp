@@ -22,11 +22,7 @@
 #define GET_SCALE_FOR_CALC(scale) (scale < 0 ? max((-1) * OB_MAX_DECIMAL_PRECISION, scale) : \
                                    min(OB_MAX_DECIMAL_SCALE, scale))
 
-#define GET_SCALE_FOR_CALC_ORACLE(scale) (scale < 0 ? max((-1) * OB_MAX_NUMBER_PRECISION, scale) : \
-                                   min(OB_MAX_NUMBER_SCALE, scale))
-
 #define GET_SCALE_FOR_DEDUCE(scale) (scale < 0 ? 0 : min(OB_MAX_DECIMAL_SCALE, scale))
-#define GET_SCALE_FOR_DEDUCE_ORACLE(scale) (scale < 0 ? 0 : min(OB_MAX_NUMBER_SCALE, scale))
 
 namespace oceanbase
 {
@@ -120,7 +116,7 @@ int ObExprTruncate::calc_result_type2(ObExprResType &type,
               precision = 1;
             }
             type.set_precision(precision);
-            if (lib::is_mysql_mode() && ob_is_double_tc(type.get_type())) {
+            if (ob_is_double_tc(type.get_type())) {
               type.set_precision(PRECISION_UNKNOWN_YET);
               type.set_scale(SCALE_UNKNOWN_YET);
             }
@@ -385,12 +381,10 @@ int ObExprTruncate::cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_expr,
 
 DEF_SET_LOCAL_SESSION_VARS(ObExprTruncate, raw_expr) {
   int ret = OB_SUCCESS;
-  if (is_mysql_mode()) {
-    SET_LOCAL_SYSVAR_CAPACITY(3);
-    EXPR_ADD_LOCAL_SYSVAR(share::SYS_VAR_SQL_MODE);
-    EXPR_ADD_LOCAL_SYSVAR(share::SYS_VAR_TIME_ZONE);
-    EXPR_ADD_LOCAL_SYSVAR(share::SYS_VAR_COLLATION_CONNECTION);
-  }
+  SET_LOCAL_SYSVAR_CAPACITY(3);
+  EXPR_ADD_LOCAL_SYSVAR(share::SYS_VAR_SQL_MODE);
+  EXPR_ADD_LOCAL_SYSVAR(share::SYS_VAR_TIME_ZONE);
+  EXPR_ADD_LOCAL_SYSVAR(share::SYS_VAR_COLLATION_CONNECTION);
   return ret;
 }
 
@@ -398,6 +392,4 @@ DEF_SET_LOCAL_SESSION_VARS(ObExprTruncate, raw_expr) {
 } // namespace oceanbase
 
 #undef GET_SCALE_FOR_CALC
-#undef GET_SCALE_FOR_CALC_ORACLE
 #undef GET_SCALE_FOR_DEDUCE
-#undef GET_SCALE_FOR_DEDUCE_ORACLE

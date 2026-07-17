@@ -61,13 +61,11 @@ public:
 
   ObTenantSeqGenerator()
     : is_inited_(false),
-      is_shared_storage_(false),
-      tg_id_(-1),
       persister_(nullptr),
       curr_seqs_(),
       preallocated_seqs_() {}
 
-  int init(const bool is_shared_storage, ObTenantStorageMetaPersister &persister);
+  int init(ObTenantStorageMetaPersister &persister);
   int start();
   void stop();
   void destroy();
@@ -88,8 +86,6 @@ private:
 
 
   bool is_inited_;
-  bool is_shared_storage_;
-  int tg_id_;
   ObTenantStorageMetaPersister *persister_;
   ObTenantMonotonicIncSeqs curr_seqs_;
   ObTenantMonotonicIncSeqs preallocated_seqs_;

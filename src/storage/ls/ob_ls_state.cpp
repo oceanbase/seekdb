@@ -17,7 +17,6 @@
 #define USING_LOG_PREFIX STORAGE
 
 #include "storage/ls/ob_ls_state.h"
-#include "share/ob_ls_id.h"
 
 namespace oceanbase
 {
@@ -68,61 +67,61 @@ int ObLSRunningState::StateHelper::switch_state(const int64_t op)
     }
   }
   if (OB_SUCC(ret)) {
-    _LOG_INFO("ObLSRunningState switch state success(ls_id=%jd, %s ~> %s, op=%s)",
-              ls_id_.id(), State::state_str(last_state_), State::state_str(state_), Ops::op_str(op));
+    _LOG_INFO("ObLSRunningState switch state success(%s ~> %s, op=%s)",
+              State::state_str(last_state_), State::state_str(state_), Ops::op_str(op));
   } else {
-    _LOG_ERROR("ObLSRunningState switch state error(ret=%d, ls_id=%jd, state=%s, op=%s)",
-               ret, ls_id_.id(), State::state_str(state_), Ops::op_str(op));
+    _LOG_ERROR("ObLSRunningState switch state error(ret=%d, state=%s, op=%s)",
+               ret, State::state_str(state_), Ops::op_str(op));
   }
   return ret;
 }
 
-int ObLSRunningState::create_finish(const share::ObLSID &ls_id)
+int ObLSRunningState::create_finish()
 {
   int ret = OB_SUCCESS;
-  StateHelper state_helper(ls_id, state_);
+  StateHelper state_helper(state_);
   if (OB_FAIL(state_helper.switch_state(Ops::CREATE_FINISH))) {
-    LOG_WARN("create finish failed", K(ret), K(ls_id));
+    LOG_WARN("create finish failed", K(ret));
   }
   return ret;
 }
 
-int ObLSRunningState::online(const share::ObLSID &ls_id)
+int ObLSRunningState::online()
 {
   int ret = OB_SUCCESS;
-  StateHelper state_helper(ls_id, state_);
+  StateHelper state_helper(state_);
   if (OB_FAIL(state_helper.switch_state(Ops::ONLINE))) {
-    LOG_WARN("online failed", K(ret), K(ls_id));
+    LOG_WARN("online failed", K(ret));
   }
   return ret;
 }
 
-int ObLSRunningState::pre_offline(const share::ObLSID &ls_id)
+int ObLSRunningState::pre_offline()
 {
   int ret = OB_SUCCESS;
-  StateHelper state_helper(ls_id, state_);
+  StateHelper state_helper(state_);
   if (OB_FAIL(state_helper.switch_state(Ops::PRE_OFFLINE))) {
-    LOG_WARN("pre offline failed", K(ret), K(ls_id));
+    LOG_WARN("pre offline failed", K(ret));
   }
   return ret;
 }
 
-int ObLSRunningState::post_offline(const share::ObLSID &ls_id)
+int ObLSRunningState::post_offline()
 {
   int ret = OB_SUCCESS;
-  StateHelper state_helper(ls_id, state_);
+  StateHelper state_helper(state_);
   if (OB_FAIL(state_helper.switch_state(Ops::POST_OFFLINE))) {
-    LOG_WARN("post offline failed", K(ret), K(ls_id));
+    LOG_WARN("post offline failed", K(ret));
   }
   return ret;
 }
 
-int ObLSRunningState::stop(const share::ObLSID &ls_id)
+int ObLSRunningState::stop()
 {
   int ret = OB_SUCCESS;
-  StateHelper state_helper(ls_id, state_);
+  StateHelper state_helper(state_);
   if (OB_FAIL(state_helper.switch_state(Ops::STOP))) {
-    LOG_WARN("stop failed", K(ret), K(ls_id));
+    LOG_WARN("stop failed", K(ret));
   }
   return ret;
 }
@@ -142,13 +141,12 @@ ObLSPersistentState &ObLSPersistentState::operator=(const int64_t state)
 }
 
 // the state machine of ObLSPersistentState
-//STATE \ ACTION    START_WORK   START_HA    FINISH_HA      REMOVE
-//-------------------------------------------------------------------
-//INIT              NORMAL       HA          N              ZOMBIE
-//NORMAL            NORMAL       HA          N              ZOMBIE
-//CREATE_ABORTED    N            N           N              N
-//ZOMBIE            N            N           N              ZOMBIE
-//HA                N            HA          NORMAL         ZOMBIE
+//STATE \ ACTION    START_WORK   REMOVE
+//--------------------------------------
+//INIT              NORMAL       ZOMBIE
+//NORMAL            NORMAL       ZOMBIE
+//CREATE_ABORTED    N            N
+//ZOMBIE            N            ZOMBIE
 int ObLSPersistentState::StateHelper::switch_state(const int64_t op)
 {
   int ret = OB_SUCCESS;
@@ -157,15 +155,13 @@ int ObLSPersistentState::StateHelper::switch_state(const int64_t op)
   static const int64_t LS_NORMAL = State::LS_NORMAL;
   static const int64_t LS_CREATE_ABORTED = State::LS_CREATE_ABORTED;
   static const int64_t LS_ZOMBIE = State::LS_ZOMBIE;
-  static const int64_t LS_HA = State::LS_HA;
 
   static const int64_t STATE_MAP[State::MAX][Ops::MAX] = {
-          //         START_WORK      START_HA     FINISH_HA      REMOVE
-/* INIT */           {LS_NORMAL,     LS_HA,       N,             LS_ZOMBIE},
-/* NORMAL */         {LS_NORMAL,     LS_HA,       N,             LS_ZOMBIE},
-/* CREATE_ABORTED */ {N,             N,           N,             N},
-/* ZOMBIE */         {N,             N,           N,             LS_ZOMBIE},
-/* HA */             {N,             LS_HA,       LS_NORMAL,     LS_ZOMBIE},
+          //         START_WORK      REMOVE
+/* INIT */           {LS_NORMAL,     LS_ZOMBIE},
+/* NORMAL */         {LS_NORMAL,     LS_ZOMBIE},
+/* CREATE_ABORTED */ {N,             N},
+/* ZOMBIE */         {N,             LS_ZOMBIE},
   };
 
   if (OB_UNLIKELY(!Ops::is_valid(op))) {
@@ -184,51 +180,31 @@ int ObLSPersistentState::StateHelper::switch_state(const int64_t op)
     }
   }
   if (OB_SUCC(ret)) {
-    _LOG_INFO("ObLSPersistentState switch state success(ls_id=%jd, %s ~> %s, op=%s)",
-              ls_id_.id(), State::state_str(last_state_), State::state_str(state_), Ops::op_str(op));
+    _LOG_INFO("ObLSPersistentState switch state success(%s ~> %s, op=%s)",
+              State::state_str(last_state_), State::state_str(state_), Ops::op_str(op));
   } else {
-    _LOG_ERROR("ObLSPersistentState switch state error(ret=%d, ls_id=%jd, state=%s, op=%s)",
-               ret, ls_id_.id(), State::state_str(state_), Ops::op_str(op));
+    _LOG_ERROR("ObLSPersistentState switch state error(ret=%d, state=%s, op=%s)",
+               ret, State::state_str(state_), Ops::op_str(op));
   }
   return ret;
 }
 
-int ObLSPersistentState::start_work(const share::ObLSID &ls_id)
+int ObLSPersistentState::start_work()
 {
   int ret = OB_SUCCESS;
-  StateHelper state_helper(ls_id, state_);
+  StateHelper state_helper(state_);
   if (OB_FAIL(state_helper.switch_state(Ops::START_WORK))) {
-    LOG_WARN("start work failed", K(ret), K(ls_id));
+    LOG_WARN("start work failed", K(ret));
   }
   return ret;
 }
 
-int ObLSPersistentState::start_ha(const share::ObLSID &ls_id)
+int ObLSPersistentState::remove()
 {
   int ret = OB_SUCCESS;
-  StateHelper state_helper(ls_id, state_);
-  if (OB_FAIL(state_helper.switch_state(Ops::START_HA))) {
-    LOG_WARN("start ha failed", K(ret), K(ls_id));
-  }
-  return ret;
-}
-
-int ObLSPersistentState::finish_ha(const share::ObLSID &ls_id)
-{
-  int ret = OB_SUCCESS;
-  StateHelper state_helper(ls_id, state_);
-  if (OB_FAIL(state_helper.switch_state(Ops::FINISH_HA))) {
-    LOG_WARN("finish ha failed", K(ret), K(ls_id));
-  }
-  return ret;
-}
-
-int ObLSPersistentState::remove(const share::ObLSID &ls_id)
-{
-  int ret = OB_SUCCESS;
-  StateHelper state_helper(ls_id, state_);
+  StateHelper state_helper(state_);
   if (OB_FAIL(state_helper.switch_state(Ops::REMOVE))) {
-    LOG_WARN("remove failed", K(ret), K(ls_id));
+    LOG_WARN("remove failed", K(ret));
   }
   return ret;
 }

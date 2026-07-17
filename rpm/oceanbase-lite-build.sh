@@ -26,3 +26,4 @@ cd ${TOP_DIR}
 
 cd ${TOP_DIR}/build_rpm
 mv *.rpm $CURDIR || exit 2
+

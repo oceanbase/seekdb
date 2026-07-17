@@ -17,8 +17,7 @@
 #ifndef OCEANBASE_STORAGE_TABLELOCK_DEADLOCK_H_
 #define OCEANBASE_STORAGE_TABLELOCK_DEADLOCK_H_
 
-#include "share/deadlock/ob_deadlock_detector_common_define.h"
-#include "share/ob_ls_id.h"
+#include "storage/deadlock/ob_deadlock_detector_common_define.h"
 #include "storage/tablelock/ob_table_lock_common.h"
 #include "storage/tx/ob_trans_define.h"
 
@@ -86,12 +85,10 @@ public:
   int operator()(
       const common::ObIArray<share::detector::ObDetectorInnerReportInfo> &info,
       const int64_t self_idx);
-  int set(const ObTransLockPartID &lock_part_id,
-          const share::ObLSID &ls_id);
+  int set(const ObTransLockPartID &lock_part_id);
   void reset();
 private:
   ObTransLockPartID lock_part_id_;
-  share::ObLSID ls_id_;
 };
 
 class ObTxLockPartCollectCallBack
@@ -108,33 +105,19 @@ class ObTransLockPartBlockCallBack
 {
   OB_UNIS_VERSION(1);
 public:
-  ObTransLockPartBlockCallBack()
-    : ls_id_(),
-      lock_op_()
-  {}
-  ~ObTransLockPartBlockCallBack()
-  {
-    reset();
-  }
+  ObTransLockPartBlockCallBack() : lock_op_() {}
+  ~ObTransLockPartBlockCallBack() = default;
   // @param [out] depend_res, a dependency list.
   // @param [out] need_remove, shall the callback be removed.
   int operator()(common::ObIArray<share::detector::ObDependencyResource> &depend_res,
                  bool &need_remove);
-  int init(const share::ObLSID &ls_id,
-           const ObTableLockOp &lock_op);
+  int init(const ObTableLockOp &lock_op);
   bool is_valid() const
   {
-    return ls_id_.is_valid() && lock_op_.is_valid();
+    return lock_op_.is_valid();
   }
-  void reset()
-  {
-    ls_id_.reset();
-    // lock_op_.reset();
-  }
-  TO_STRING_KV(K_(ls_id), K_(lock_op));
+  TO_STRING_KV(K_(lock_op));
 private:
-  // we need ls id to tell which ls we will try to find the obj lock
-  share::ObLSID ls_id_;
   // contain the info of which trans want to lock which obj with which lock mode.
   // we can get all the trans that will block this operation.
   ObTableLockOp lock_op_;
@@ -150,7 +133,6 @@ public:
   //                    all the trans lock part of one trans parent should use
   //                    the same ObTxLockPartDeadLockCtx.
   static int register_trans_lock_part(const ObTransLockPartID &tx_lock_part_id,
-                                      const share::ObLSID &ls_id,
                                       const share::detector::ObDetectorPriority priority);
   // unregister a trans lock part
   // @param [in] tx_lock_part_id, which trans lock part will be removed.
@@ -164,10 +146,8 @@ public:
                         const ObTransID &parent_trans_id);
   // add the block dependency of trans lock part.
   // @param [in] tx_lock_part_id, whose dependency will be registered.
-  // @param [in] ls_id, which ls is the lock belong to.
   // @param [in] lock_op, the lock operation tx_lock_part_id wants to do.
   static int block(const ObTransLockPartID &tx_lock_part_id,
-                   const share::ObLSID &ls_id,
                    const ObTableLockOp &lock_op);
 };
 

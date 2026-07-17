@@ -17,9 +17,9 @@
 #define USING_LOG_PREFIX RPC_OBMYSQL
 
 #include "rpc/obmysql/ob_mysql_util.h"
-#include "lib/json_type/ob_json_bin.h"
-#include "lib/geo/ob_geo_bin.h"
-#include "lib/xml/ob_xml_util.h"
+#include "common/json_type/ob_json_bin.h"
+#include "lib/geometry/ob_geo_wkb_define.h"
+#include "common/xml/ob_xml_util.h"
 using namespace oceanbase::common;
 
 namespace oceanbase
@@ -110,26 +110,7 @@ int ObMySQLUtil::get_length(const char *&pos, uint64_t &length)
       get_uint3(pos, s4);
       length = s4;
     } else if (sentinel == 254) {
-      if (lib::is_oracle_mode()) {
-        get_uint8(pos, length);
-      } else {
-        /*
-          In our client-server protocol all numbers bigger than 2^24
-          stored as 8 bytes with uint8korr. Here we always know that
-          parameter length is less than 2^4 so we don't look at the second
-          4 bytes. But still we need to obey the protocol hence 9 in the
-          assignment below.
-          if (packet_left_len < 9) {
-            *header_len = 0;
-            return 0;
-          }
-          *header_len = 9;
-          return static_cast<ulong>(uint4korr(packet + 1));
-
-          OceanBase length parsing compatible with mysql, so we don't look at the second
-          4 bytes. But still we need to obey the protocol hence 9 in the
-          assignment below.
-        */
+      {
         get_uint4(pos, s4);
         length = s4;
         pos += 4;
@@ -783,31 +764,22 @@ int ObMySQLUtil::year_cell_str(
   return ret;
 }
 
-int ObMySQLUtil::varchar_cell_str(char *buf, const int64_t len, const ObString &val,
-    const bool is_oracle_raw, int64_t &pos)
+int ObMySQLUtil::varchar_cell_str(char *buf, const int64_t len, const ObString &val, int64_t &pos)
 {
   int ret = OB_SUCCESS;
   if (OB_ISNULL(buf)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid input args", K(ret), KP(buf));
   } else {
-    int64_t length = is_oracle_raw ? val.length() * 2 : val.length();
+    int64_t length = val.length();
 
     if (OB_LIKELY(length < len - pos)) {
       int64_t pos_bk = pos;
       if (OB_FAIL(ObMySQLUtil::store_length(buf, len, length, pos))) {
       } else {
         if (OB_LIKELY(length <= len - pos)) {
-          //TODO::@xiaofeng, delete it latter after obclient/obj support RAW
-          if (is_oracle_raw) {
-            if (OB_FAIL(hex_print(val.ptr(), val.length(), buf, len, pos))) {
-              pos = pos_bk;
-              LOG_WARN("fail to hex_print", K(ret), K(val));
-            }
-          } else {
-            MEMCPY(buf + pos, val.ptr(), length);
-            pos += length;
-          }
+          MEMCPY(buf + pos, val.ptr(), length);
+          pos += length;
         } else {
           pos = pos_bk;
           ret = OB_SIZE_OVERFLOW;
@@ -887,10 +859,6 @@ int ObMySQLUtil::double_cell_str(char *buf, const int64_t len, double val,
     LOG_WARN("invalid input", KP(buf), K(ret));
   } else {
     if (BINARY == type) {
-      if (lib::is_oracle_mode() && // only oracle mode need convert
-          std::fpclassify(val) == FP_ZERO && std::signbit(val)) {
-        val = val * -1; // if -0.0, change to 0.0
-      }
       if (len - pos > DBL_SIZE) {
         MEMCPY(buf + pos, &val, DBL_SIZE);
         pos += DBL_SIZE;
@@ -967,10 +935,10 @@ int ObMySQLUtil::bit_cell_str(
   return ret;
 }
 
-int ObMySQLUtil::sql_utd_cell_str(uint64_t tenant_id, char *buf, const int64_t len, const ObString &val, int64_t &pos)
+int ObMySQLUtil::sql_utd_cell_str(char *buf, const int64_t len, const ObString &val, int64_t &pos)
 {
   INIT_SUCC(ret);
-  lib::ObMemAttr mem_attr(tenant_id, "XMLModule");
+  lib::ObMemAttr mem_attr("XMLModule");
   lib::ObMallocHookAttrGuard malloc_guard(mem_attr);
   ObArenaAllocator allocator(mem_attr);
   ObMulModeNodeType node_type = M_MAX_TYPE;
@@ -1009,10 +977,10 @@ int ObMySQLUtil::sql_utd_cell_str(uint64_t tenant_id, char *buf, const int64_t l
   return ret;
 }
 
-int ObMySQLUtil::json_cell_str(uint64_t tenant_id, char *buf, const int64_t len, const ObString &val, int64_t &pos)
+int ObMySQLUtil::json_cell_str(char *buf, const int64_t len, const ObString &val, int64_t &pos)
 {
   int ret = OB_SUCCESS;
-  lib::ObMemAttr mem_attr(tenant_id, "JsonAlloc");
+  lib::ObMemAttr mem_attr("JsonAlloc");
   ObArenaAllocator allocator(mem_attr);
   ObJsonBin j_bin(val.ptr(), val.length(), &allocator);
   ObIJsonBase *j_base = &j_bin;

@@ -44,19 +44,16 @@ public:
   {
   }
 
-  void set_tenant_id(const int64_t tenant_id)
-  {
-    drop_database_arg_.tenant_id_ = tenant_id;
-  }
+  
 
   void set_if_exist(const bool if_exist)
   {
     drop_database_arg_.if_exist_ = if_exist;
   }
-  virtual obrpc::ObDDLArg &get_ddl_arg() { return drop_database_arg_; }
+  virtual obcall::ObDDLArg &get_ddl_arg() { return drop_database_arg_; }
 
   TO_STRING_KV(K_(drop_database_arg));
-  inline obrpc::ObDropDatabaseArg &get_drop_database_arg();
+  inline obcall::ObDropDatabaseArg &get_drop_database_arg();
   virtual bool cause_implicit_commit() const { return true; }
 
   inline void set_database_name(const common::ObString &database_name);
@@ -71,12 +68,12 @@ public:
   void set_to_recyclebin(const bool to_recyclebin)
   { drop_database_arg_.to_recyclebin_ = to_recyclebin; }
 private:
-  obrpc::ObDropDatabaseArg drop_database_arg_;
+  obcall::ObDropDatabaseArg drop_database_arg_;
   common::ObString server_charset_;
   common::ObString server_collation_;
 };
 
-inline obrpc::ObDropDatabaseArg &ObDropDatabaseStmt::get_drop_database_arg()
+inline obcall::ObDropDatabaseArg &ObDropDatabaseStmt::get_drop_database_arg()
 {
   return drop_database_arg_;
 }

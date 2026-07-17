@@ -59,8 +59,6 @@ public:
 
   ObTxTable *get_tx_table() const { return tx_table_; }
 
-  share::ObLSID get_ls_id() const;
-
   int64_t get_epoch() const { return epoch_; }
 
   ObTxDataMiniCache &get_mini_cache() { return mini_cache_; }
@@ -98,8 +96,6 @@ public: // dalegate functions
   int get_recycle_scn(share::SCN &recycle_scn);
 
   int self_freeze_task();
-
-  bool check_ls_offline();
 
   void reuse() { mini_cache_.reset(); }
 

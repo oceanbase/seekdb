@@ -176,7 +176,6 @@ public:
   virtual ~ObPartitionMergeHelper() { reset(); }
   int init(const ObMergeParameter &merge_param);
   virtual void reset();
-  virtual OB_INLINE bool is_co_major_helper() const { return false; }
   int find_rowkey_minimum_iters(MERGE_ITER_ARRAY &minimum_iters);
   static int move_iters_next(MERGE_ITER_ARRAY &merge_iters);
   int rebuild_rows_merger();
@@ -191,7 +190,6 @@ protected:
   virtual ObPartitionMergeIter *alloc_merge_iter(const ObMergeParameter &merge_param, const ObITable *table) = 0;
 private:
   int init_merge_iters(const ObMergeParameter &merge_param);
-  int init_mv_merge_iters(const ObMergeParameter &merge_param);
   int prepare_rows_merger();
   int build_rows_merger();
 

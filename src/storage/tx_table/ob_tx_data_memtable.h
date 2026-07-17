@@ -224,7 +224,6 @@ public:  // ObTxDataMemtable
 
   int get_iter_start_and_count(const transaction::ObTransID &tx_id, ObTxDataLinkNode *&start_node, int64_t &iterate_row_cnt);
 
-  share::ObLSID get_ls_id() const;
   int64_t get_total_undo_node_cnt() const;
 
   /**
@@ -317,7 +316,7 @@ public:  // checkpoint
     return get_min_tx_scn();
   }
 
-  int flush(const int64_t trace_id);
+  int flush();
   /**
    * @brief Because of the random order of clog callbacks, the tx data in a freezing tx data
    * memtable may not completed. We must wait until the max_consequent_callbacked_scn is larger

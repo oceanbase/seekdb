@@ -240,22 +240,18 @@ ob_default_lob_inrow_threshold	8192
 ob_early_lock_release	OFF
 ob_enable_aggregation_pushdown	ON
 ob_enable_index_direct_select	OFF
-ob_enable_jit	OFF
 ob_enable_parameter_anonymous_block	ON
 ob_enable_plan_cache	ON
 ob_enable_pl_cache	ON
 ob_enable_ps_parameter_anonymous_block	ON
 ob_enable_rich_error_msg	OFF
 ob_enable_show_trace	OFF
-ob_enable_sql_audit	ON
 ob_enable_transformation	ON
 ob_enable_transmission_checksum	ON
-ob_enable_truncate_flashback	ON
 ob_hnsw_ef_search	64
 ob_hnsw_extra_info_max_size	1024
 ob_interm_result_mem_limit	2147483648
 ob_ivf_nprobes	8
-ob_kv_mode	ALL
 ob_log_level	disabled
 ob_max_read_stale_time	-1
 ob_org_cluster_id	0
@@ -268,12 +264,10 @@ ob_read_consistency	STRONG
 ob_reserved_meta_memory_percentage	10
 ob_route_policy	READONLY_ZONE_FIRST
 ob_sparse_drop_ratio_search	0
-ob_sql_audit_percentage	1
 ob_sql_work_area_percentage	5
-ob_table_access_policy	AUTO
 ob_tcp_invited_nodes	%
 ob_temp_tablespace_size_percentage	0
-ob_trace_info
+ob_trace_info	
 ob_trx_idle_timeout	86400000000
 ob_trx_lock_timeout	-1
 ob_trx_timeout	86400000000
@@ -294,19 +288,15 @@ ob_default_lob_inrow_threshold	8192
 ob_early_lock_release	OFF
 ob_enable_aggregation_pushdown	ON
 ob_enable_index_direct_select	OFF
-ob_enable_jit	OFF
 ob_enable_parameter_anonymous_block	ON
 ob_enable_plan_cache	ON
 ob_enable_pl_cache	ON
 ob_enable_ps_parameter_anonymous_block	ON
 ob_enable_rich_error_msg	OFF
-ob_enable_sql_audit	ON
 ob_enable_transformation	ON
 ob_enable_transmission_checksum	ON
-ob_enable_truncate_flashback	ON
 ob_hnsw_extra_info_max_size	1024
 ob_interm_result_mem_limit	2147483648
-ob_kv_mode	ALL
 ob_log_level	disabled
 ob_max_read_stale_time	-1
 ob_plan_cache_evict_high_percentage	90
@@ -317,9 +307,7 @@ ob_query_timeout	10000000
 ob_read_consistency	STRONG
 ob_reserved_meta_memory_percentage	10
 ob_route_policy	READONLY_ZONE_FIRST
-ob_sql_audit_percentage	1
 ob_sql_work_area_percentage	5
-ob_table_access_policy	AUTO
 ob_tcp_invited_nodes	%
 ob_temp_tablespace_size_percentage	0
 ob_trx_idle_timeout	86400000000
@@ -340,12 +328,12 @@ set max_allowed_packet=8388608;
 ERROR HY000: SESSION variable 'max_allowed_packet' is read-only. Use SET GLOBAL to assign the value
 show columns from oceanbase.__all_core_table;
 Field	Type	Null	Key	Default	Extra
-gmt_create	timestamp(6)	YES		CURRENT_TIMESTAMP(6)
+gmt_create	timestamp(6)	YES		CURRENT_TIMESTAMP(6)	
 gmt_modified	timestamp(6)	YES		CURRENT_TIMESTAMP(6)	ON UPDATE CURRENT_TIMESTAMP(6)
-table_name	varchar(128)	NO	PRI	NULL
-row_id	bigint(20)	NO	PRI	NULL
-column_name	varchar(128)	NO	PRI	NULL
-column_value	varchar(65536)	YES		NULL
+table_name	varchar(128)	NO	PRI	NULL	
+row_id	bigint(20)	NO	PRI	NULL	
+column_name	varchar(128)	NO	PRI	NULL	
+column_value	varchar(65536)	YES		NULL	
 show index from oceanbase.__all_core_table;
 Table	Non_unique	Key_name	Seq_in_index	Column_name	Collation	Cardinality	Sub_part	Packed	Null	Index_type	Comment	Index_comment	Visible	Expression
 __all_core_table	0	PRIMARY	1	table_name	A	NULL	NULL	NULL		BTREE	available		YES	NULL
@@ -454,7 +442,7 @@ character_set_results	utf8mb4
 set character_set_results = NULL;
 show variables like 'character_set_results';
 Variable_name	Value
-character_set_results
+character_set_results	
 select @@session.character_set_results;
 @@session.character_set_results
 NULL

@@ -47,9 +47,9 @@ Outputs & filters:
       merge_directions([ASC])
   1 - output([t1.c1], [t1.c2]), filter([t1.c2 = t1.c1]), rowset=16
       access([t1.c1], [t1.c2]), partitions(p0)
-      is_index_back=false, is_global_index=false, filter_before_indexback[false],
+      is_index_back=false, is_global_index=false, filter_before_indexback[false], 
       range_key([t1.c1], [t1.c2]), range(MIN,MIN ; MAX,MAX)always true
   2 - output([t2.d1]), filter(nil), rowset=16
       access([t2.d1]), partitions(p0)
-      is_index_back=false, is_global_index=false,
+      is_index_back=false, is_global_index=false, 
       range_key([t2.d1]), range(MIN ; MAX)always true

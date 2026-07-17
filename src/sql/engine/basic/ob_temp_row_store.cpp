@@ -644,7 +644,7 @@ int ObTempRowStoreBase<RA>::init(const ObExprPtrIArray &exprs,
   col_cnt_ = exprs.count();
   max_batch_size_ = max_batch_size;
   ObTempBlockStore::set_inner_allocator_attr(mem_attr);
-  OZ(ObTempBlockStore::init(mem_limit, enable_dump, mem_attr.tenant_id_, mem_attr.ctx_id_, mem_attr_.label_,
+  OZ(ObTempBlockStore::init(mem_limit, enable_dump, mem_attr.ctx_id_, mem_attr_.label_,
                             compressor_type, enable_trunc));
   OZ(row_meta_.init(exprs, row_extra_size, reorder_fixed_expr));
   inited_ = true;
@@ -672,7 +672,7 @@ int ObTempRowStoreBase<RA>::init(const RowMeta &row_meta,
   } else if (OB_FAIL(row_meta_.deep_copy(row_meta, allocator_))) {
     LOG_WARN("deep copy row meta failed", K(ret));
   }
-  OZ(ObTempBlockStore::init(mem_limit, enable_dump, mem_attr.tenant_id_, mem_attr.ctx_id_, mem_attr_.label_,
+  OZ(ObTempBlockStore::init(mem_limit, enable_dump, mem_attr.ctx_id_, mem_attr_.label_,
                             compressor_type, enable_trunc));
   inited_ = true;
   return ret;
@@ -1048,7 +1048,7 @@ OB_DEF_DESERIALIZE(ObTempRowStoreBase<RA>, template <bool RA>)
 {
   int ret = ObTempBlockStore::deserialize(buf, data_len, pos);
   if (OB_SUCC(ret)) {
-    mem_attr_.tenant_id_ = get_tenant_id();
+    
     mem_attr_.label_ = "ObTempStoreDE";
     mem_attr_.ctx_id_ = get_mem_ctx_id();
   }

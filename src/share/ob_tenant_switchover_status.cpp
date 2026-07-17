@@ -17,7 +17,7 @@
 #define USING_LOG_PREFIX SHARE
 
 #include "share/ob_tenant_switchover_status.h"
-#include "deps/oblib/src/lib/json/ob_yson.h"
+#include "lib/json/ob_yson.h"
 
 using namespace oceanbase;
 using namespace oceanbase::common;
@@ -30,12 +30,9 @@ static const char* TENANT_SWITCHOVER_ARRAY[] =
   "INVALID",
   "NORMAL",
   "SWITCHING TO PRIMARY",
-  "PREPARE FLASHBACK",
-  "FLASHBACK",
   "PREPARE SWITCHING TO STANDBY",
   "SWITCHING TO STANDBY",
   "PREPARE SWITCHING TO PRIMARY",
-  "FLASHBACK AND STAY STANDBY",
 };
 
 OB_SERIALIZE_MEMBER(ObTenantSwitchoverStatus, value_);

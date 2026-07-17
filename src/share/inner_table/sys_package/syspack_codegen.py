@@ -11,14 +11,13 @@ NOTE:
 1. This script will be automatically called during the compilation phase (make stage) and complete the above three steps, generally no manual invocation is required. It can also be manually invoked using `python2 syspack_codegen.py [option]`.
 2. RD only needs to modify the `syspack_config` variable, which is a list where each element is a `SysPackConfig` object containing all information about a system package.
     The current format of the `SysPackConfig` object constructor parameters is:
-        `SysPackConfig(group, name, header_file, body_file, wrap_type, orc_build_req)`
+        `SysPackConfig(group, name, header_file, body_file, wrap_type)`
     Where:
         - group: The grouping of the system package, optional values are `SysPackGroup` enumeration type
         - name: The name of the system package, used to identify the system package in `syspack_source.cpp`
         - header_file: The header file of the system package, must be a `.sql` file
         - body_file: The implementation file of the system package, optional (can be filled with None), must be a `.sql` file
         - wrap_type: The obfuscation method of the system package, optional values are `WrapType` enumeration type, controlling whether the header and body of the system package need to be encrypted and obfuscated, default is `WrapType.NONE`, i.e., no obfuscation
-        - orc_build_req: Whether the system package needs to be compiled in the `OB_BUILD_ORACLE_PL` environment, default is False
 """
 
 import os
@@ -43,12 +42,9 @@ except ImportError:
 
 g_script_dir = os.path.dirname(os.path.abspath(__file__))
 g_verbose = False
-g_orc_build = False
 
 class SysPackGroup:
-    ORACLE         = "oracle"
     MYSQL          = "mysql"
-    ORACLE_SPECIAL = "oracle_special"
     MYSQL_SPECIAL  = "mysql_special"
 
 class WrapType:
@@ -59,7 +55,7 @@ class WrapType:
 
 class SysPackConfig:
     def __init__(self, group, name, header_file, body_file, **kwargs):
-        assert group in [SysPackGroup.ORACLE, SysPackGroup.MYSQL, SysPackGroup.ORACLE_SPECIAL, SysPackGroup.MYSQL_SPECIAL]
+        assert group in [SysPackGroup.MYSQL, SysPackGroup.MYSQL_SPECIAL]
         self.group = group
         assert isinstance(name, str)
         self.name = name
@@ -71,14 +67,10 @@ class SysPackConfig:
             self.body_file = body_file
 
         self.wrap = WrapType.NONE
-        self.orc_build_req = False
         for key, value in kwargs.items():
             if key == "wrap":
                 assert value in [WrapType.NONE, WrapType.HEADER_ONLY, WrapType.BODY_ONLY, WrapType.BOTH]
                 self.wrap = value
-            elif key == "orc_build_req":
-                assert isinstance(value, bool)
-                self.orc_build_req = value
             else:
                 assert False, "Unknown key: {}".format(key)
 
@@ -115,8 +107,7 @@ class SysPackConfig:
 def install_syspack_files(syspack_config, release_dir):
     file_to_install = []
     for config in syspack_config:
-        if not config.orc_build_req or g_orc_build:
-            file_to_install += config.export_release_file_list()
+        file_to_install += config.export_release_file_list()
     if g_verbose:
         print("installing syspack files to {}".format(release_dir))
         print("{} files to install: {}".format(len(file_to_install), file_to_install))
@@ -136,14 +127,10 @@ def wrap_syspack(syspack_config, wrap_bin_path):
 
 def embed_syspack(syspack_config):
     def gen_syspack_file_list(syspack_config, group):
-        orc_req_lst = []
         lst = []
         for config in syspack_config:
             if config.group == group:
-                if config.orc_build_req:
-                    orc_req_lst.append(config.export_source_file_config())
-                else:
-                    lst.append(config.export_source_file_config())
+                lst.append(config.export_source_file_config())
         return  "int {}_syspack_file_list_length = {};\n".format(group, len(lst)) \
                 + "ObSysPackageFile {}_syspack_file_list[] = {{\n".format(group) \
                 + "\n".join(lst) + "\n"\
@@ -163,9 +150,7 @@ def embed_syspack(syspack_config):
                 "  const char *const package_body_file_name;\n"
                 "};\n\n")
         # 2. write `xxx_syspack_file_list`
-        f.write(gen_syspack_file_list(syspack_config, SysPackGroup.ORACLE))
         f.write(gen_syspack_file_list(syspack_config, SysPackGroup.MYSQL))
-        f.write(gen_syspack_file_list(syspack_config, SysPackGroup.ORACLE_SPECIAL))
         f.write(gen_syspack_file_list(syspack_config, SysPackGroup.MYSQL_SPECIAL))
         # 3. write `syspack_source_count`
         release_files = []
@@ -210,26 +195,19 @@ syspack_config = [
     SysPackConfig(SysPackGroup.MYSQL, "dbms_xplan", "dbms_xplan_mysql.sql", "dbms_xplan_mysql_body.sql"),
     SysPackConfig(SysPackGroup.MYSQL, "dbms_udr", "dbms_udr_mysql.sql", "dbms_udr_body_mysql.sql"),
     SysPackConfig(SysPackGroup.MYSQL, "dbms_workload_repository", "dbms_workload_repository_mysql.sql", "dbms_workload_repository_body_mysql.sql"),
-    SysPackConfig(SysPackGroup.MYSQL, "dbms_mview", "dbms_mview_mysql.sql", "dbms_mview_body_mysql.sql"),
-    SysPackConfig(SysPackGroup.MYSQL, "dbms_mview_stats", "dbms_mview_stats_mysql.sql", "dbms_mview_stats_body_mysql.sql"),
     SysPackConfig(SysPackGroup.MYSQL, "dbms_trusted_certificate_manager", "dbms_trusted_certificate_manager_mysql.sql", "dbms_trusted_certificate_manager_body_mysql.sql"),
     SysPackConfig(SysPackGroup.MYSQL, "dbms_ob_limit_calculator", "dbms_ob_limit_calculator_mysql.sql", "dbms_ob_limit_calculator_body_mysql.sql"),
-    SysPackConfig(SysPackGroup.MYSQL, "dbms_external_table", "dbms_external_table_mysql.sql", "dbms_external_table_body_mysql.sql"),
-    SysPackConfig(SysPackGroup.MYSQL, "external_table_alert_log", "external_table_alert_log.sql", None),
     SysPackConfig(SysPackGroup.MYSQL, "dbms_vector", "dbms_vector_mysql.sql", "dbms_vector_body_mysql.sql"),
     SysPackConfig(SysPackGroup.MYSQL, "dbms_hybrid_search", "dbms_hybrid_vector_mysql.sql", "dbms_hybrid_vector_body_mysql.sql"),
     SysPackConfig(SysPackGroup.MYSQL, "dbms_space", "dbms_space_mysql.sql", "dbms_space_body_mysql.sql"),
-    SysPackConfig(SysPackGroup.MYSQL, "dbms_partition", "dbms_partition_mysql.sql", "dbms_partition_body_mysql.sql"),
     SysPackConfig(SysPackGroup.MYSQL, "dbms_ai_service", "dbms_ai_service_mysql.sql", "dbms_ai_service_body_mysql.sql"),
     SysPackConfig(SysPackGroup.MYSQL, "dbms_index_manager", "dbms_index_manager_mysql.sql", "dbms_index_manager_body_mysql.sql"),
-    # MySQL Special
-    SysPackConfig(SysPackGroup.MYSQL_SPECIAL, "__dbms_upgrade", "__dbms_upgrade_mysql.sql", "__dbms_upgrade_body_mysql.sql"),
 ]
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="System Package Config Center")
     parser.add_argument("-wp", "--wrap-bin-path", type=str, default=None,
-                        help="The path to the wrap binary. If empty, it indicates that OB_BUILD_ORACLE_PL is not set.")
+                        help="The path to the wrap binary. If empty, wrapping is skipped.")
     parser.add_argument("-rd", "--release-dir", type=str, default=None,
                         help="The path to the system package release directory. If empty, installation is not required.")
     parser.add_argument("-v", "--verbose", action="store_true", help="Print verbose information")
@@ -237,7 +215,6 @@ if __name__ == "__main__":
 
     wrap_bin_path = args.wrap_bin_path
     release_dir = args.release_dir
-    g_orc_build = wrap_bin_path is not None
     g_verbose = args.verbose
 
     # 1. wrap syspack files

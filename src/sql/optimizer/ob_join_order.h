@@ -29,8 +29,8 @@
 #include "sql/optimizer/ob_logical_operator.h"
 #include "sql/optimizer/ob_log_plan.h"
 #include "sql/rewrite/ob_query_range_define.h"
-#include "src/share/vector_index/ob_plugin_vector_index_adaptor.h"
-#include "share/vector_index/ob_vector_index_util.h"
+#include "observer/vector_index/ob_plugin_vector_index_adaptor.h"
+#include "observer/vector_index/ob_vector_index_util.h"
 
 using oceanbase::common::ObString;
 using oceanbase::share::ObVecIdxExtraInfo;
@@ -42,10 +42,6 @@ class TestJoinOrder_ob_join_order_src_Test;
 
 namespace oceanbase
 {
-namespace obrpc
-{
-class ObSrvRpcProxy;
-}
 namespace share
 {
 namespace schema
@@ -181,7 +177,6 @@ namespace sql
     pushdown_filter_table_(),
     in_current_dfo_(true),
     skip_subpart_(false),
-    use_column_store_(false),
     is_right_contain_pk_(false),
     is_right_union_pk_(false),
     right_origin_rows_(1.0) {}
@@ -204,7 +199,6 @@ namespace sql
     K_(force_part_filter),
     K_(in_current_dfo),
     K_(skip_subpart),
-    K_(use_column_store),
     K_(is_right_contain_pk),
     K_(is_right_union_pk),
     K_(right_origin_rows)
@@ -234,7 +228,6 @@ namespace sql
   // Indicates that part bf is only generated for the 1-level partition in the 2-level partition
   // If the table is a 1-level partition, this value is false.
   bool skip_subpart_;
-  bool use_column_store_;
   bool is_right_contain_pk_;
   bool is_right_union_pk_;
   double right_origin_rows_;
@@ -624,7 +617,6 @@ class Path
         domain_idx_info_(),
         for_update_(false),
         use_skip_scan_(OptSkipScanState::SS_UNSET),
-        use_column_store_(false),
         is_valid_inner_path_(false),
         index_prefix_(-1),
         can_batch_rescan_(false),
@@ -751,7 +743,6 @@ class Path
                  K_(for_update),
                  K_(use_das),
                  K_(use_skip_scan),
-                 K_(use_column_store),
                  K_(is_valid_inner_path),
                  K_(can_batch_rescan),
                  K_(can_das_dynamic_part_pruning),
@@ -780,7 +771,6 @@ class Path
     VecIndexAccessInfo vec_idx_info_;
     bool for_update_;
     OptSkipScanState use_skip_scan_;
-    bool use_column_store_;
     // mark this access path is inner path and contribute query range
     bool is_valid_inner_path_;
     int64_t index_prefix_;
@@ -1324,7 +1314,7 @@ class Path
 
     ObAddr addr_;
     ObBitSet<> path_id_set_;
-    obrpc::ObEstPartArg *est_arg_;
+    obcall::ObEstPartArg *est_arg_;
 
     TO_STRING_KV(K_(addr),
                  K_(path_id_set));
@@ -1556,9 +1546,9 @@ struct NullAwareAntiJoinInfo {
     int get_matched_inv_index_tid(ObMatchFunRawExpr *match_expr, 
                                   uint64_t ref_table_id,
                                   uint64_t &inv_idx_tid);
-    int get_matched_inv_index_tids(ObMatchFunRawExpr *match_expr,
+    int get_matched_inv_index_tids(ObMatchFunRawExpr *match_expr, 
                                    uint64_t ref_table_id,
-                                   ObIArray<uint64_t> &inv_idx_tids);
+                                   ObIArray<uint64_t> &inv_idx_tids); 
     int get_vector_index_tid_from_expr(ObSqlSchemaGuard *schema_guard,
                                       ObRawExpr *vector_expr,
                                       const uint64_t table_id,
@@ -1781,7 +1771,6 @@ struct NullAwareAntiJoinInfo {
                                PathHelper &helper,
                                AccessPath *&ap,
                                bool use_das,
-                               bool use_column_store,
                                OptSkipScanState use_skip_scan);
 
     int create_index_merge_access_paths(const uint64_t table_id,
@@ -1869,24 +1858,6 @@ struct NullAwareAntiJoinInfo {
                                          const TableItem *table_item);
 
     int init_filter_selectivity(ObCostTableScanInfo &est_cot_info);
-
-    int init_column_store_est_info(const uint64_t table_id, 
-                                   const uint64_t ref_id, 
-                                   ObCostTableScanInfo &est_cost_info);
-
-    int init_column_store_est_info_with_filter(const uint64_t table_id, 
-                                                    ObCostTableScanInfo &est_cost_info, 
-                                                    const OptTableMetas& table_opt_meta, 
-                                                    ObIArray<ObRawExpr*> &filters,
-                                                    ObIArray<ObCostColumnGroupInfo> &column_group_infos,
-                                                    ObSqlBitSet<> &used_column_ids,
-                                                    FilterCompare &filter_compare,
-                                                    const bool use_filter_sel);
-
-    int init_column_store_est_info_with_other_column(const uint64_t table_id, 
-                                                    ObCostTableScanInfo &est_cost_info, 
-                                                    const OptTableMetas& table_opt_meta, 
-                                                    ObSqlBitSet<> &used_column_ids);
 
     int will_use_das(const uint64_t table_id,
                      const uint64_t index_id,
@@ -2823,9 +2794,9 @@ struct NullAwareAntiJoinInfo {
     int add_valid_fts_index_ids_for_dml(const PathHelper &helper, 
                                         const uint64_t table_id,
                                         ObIArray<uint64_t> &valid_index_ids);
-    int add_valid_fts_index_ids_for_dml_and_es_match(const PathHelper &helper,
+    int add_valid_fts_index_ids_for_dml_and_es_match(const PathHelper &helper, 
                                          const uint64_t table_id,
-                                         ObIArray<uint64_t> &valid_index_ids);
+                                         ObIArray<uint64_t> &valid_index_ids);                   
     int add_valid_vec_index_ids(const ObDMLStmt &stmt,
                                 ObSqlSchemaGuard *schema_guard,
                                 const uint64_t table_id,

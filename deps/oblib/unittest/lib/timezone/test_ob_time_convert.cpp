@@ -15,7 +15,8 @@
  */
 
 #include <gtest/gtest.h>
-#include "lib/timezone/ob_timezone_info.h"
+#include "common/timezone/ob_timezone_info.h"
+#include "common/timezone/ob_time_convert.h"
 
 using namespace oceanbase;
 using namespace oceanbase::common;
@@ -196,7 +197,7 @@ TEST(ObTimeConvertTest, str_to_otimestamp)
   ObOTimestampData ot_data;
   int16_t scale = 0;
 
-  ObTime ob_time(DT_TYPE_ORACLE_TIMESTAMP);
+  ObTime ob_time(DT_TYPE_NANO_TIMESTAMP);
   ObTimeConvertCtx cvrt_ctx(&tz_info, false);
   strcpy(buf, "-8:00");
   str.assign(buf, static_cast<int32_t>(strlen(buf)));
@@ -204,7 +205,7 @@ TEST(ObTimeConvertTest, str_to_otimestamp)
 
   // NULL timezone
   cvrt_ctx.is_timestamp_ = false;
-  cvrt_ctx.oracle_nls_format_ = ObTimeConverter::COMPAT_OLD_NLS_DATE_FORMAT;
+  cvrt_ctx.nls_format_ = ObTimeConverter::COMPAT_OLD_NLS_DATE_FORMAT;
   strcpy(buf, "1000-1-1 0:0:0");
   str.assign(buf, static_cast<int32_t>(strlen(buf)));
   EXPECT_EQ(OB_SUCCESS, ObTimeConverter::str_to_datetime(str, cvrt_ctx, value, nullptr, 0));

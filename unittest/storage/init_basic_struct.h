@@ -20,6 +20,8 @@
 #include "share/schema/ob_table_schema.h"
 #include "logservice/palf/palf_base_info.h"
 #include "share/scn.h"
+#include "share/schema/ob_column_schema.h"
+#include "storage/tablet/ob_batch_create_tablet_arg.h"
 namespace oceanbase
 {
 namespace storage
@@ -28,10 +30,9 @@ namespace storage
 int __attribute__((weak))  build_test_schema(share::schema::ObTableSchema &table_schema, uint64_t table_id, const char* table_name)
 {
   int ret = OB_SUCCESS;
-  ObColumnSchemaV2 column;
+  share::schema::ObColumnSchemaV2 column;
   table_schema.reset();
   table_schema.set_table_name(table_name);
-  table_schema.set_tenant_id(1);
   table_schema.set_tablegroup_id(1);
   table_schema.set_database_id(1);
   table_schema.set_table_id(table_id);
@@ -57,15 +58,13 @@ int __attribute__((weak))  build_test_schema(share::schema::ObTableSchema &table
   return build_test_schema(table_schema, table_id, "test_merge");
 }
 
-int __attribute__((weak)) gen_create_tablet_arg(const int64_t tenant_id,
-    const share::ObLSID &ls_id,
-    const ObTabletID &tablet_id,
-    obrpc::ObBatchCreateTabletArg &arg,
+int __attribute__((weak)) gen_create_tablet_arg(const ObTabletID &tablet_id,
+    obcall::ObBatchCreateTabletArg &arg,
     const int64_t count = 1,
     share::schema::ObTableSchema *out_table_schema = nullptr)
 {
   int ret = OB_SUCCESS;
-  obrpc::ObCreateTabletInfo tablet_info;
+  obcall::ObCreateTabletInfo tablet_info;
   ObArray<common::ObTabletID> index_tablet_ids;
   ObArray<int64_t> index_tablet_schema_idxs;
   ObArray<int64_t> create_commit_versions;
@@ -98,12 +97,12 @@ int __attribute__((weak)) gen_create_tablet_arg(const int64_t tenant_id,
           index_tablet_schema_idxs,
           lib::Worker::CompatMode::MYSQL,
           false,
-          create_commit_versions,
-          false /*has_cs_replica*/))) {
+          create_commit_versions
+          ))) {
     STORAGE_LOG(WARN, "failed to init tablet info", KR(ret), K(index_tablet_ids),
         K(tablet_id), K(index_tablet_schema_idxs));
-  } else if (OB_FAIL(arg.init_create_tablet(ls_id, share::SCN::min_scn(), false/*need_check_tablet_cnt*/))) {
-    STORAGE_LOG(WARN, "failed to init create tablet", KR(ret), K(tenant_id), K(ls_id));
+  } else if (OB_FAIL(arg.init_create_tablet(share::SCN::min_scn(), false/*need_check_tablet_cnt*/))) {
+    STORAGE_LOG(WARN, "failed to init create tablet", KR(ret), K(OB_SERVER_TENANT_ID));
   } else if (OB_FAIL(arg.table_schemas_.push_back(table_schema))) {
     STORAGE_LOG(WARN, "failed to push back table schema", KR(ret), K(table_schema));
   } else if (OB_FAIL(arg.tablets_.push_back(tablet_info))) {

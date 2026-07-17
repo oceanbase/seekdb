@@ -59,11 +59,11 @@ public:
   {
     reset();
   }
-  int init(const int64_t tenant_id, const share::ObLSID ls_id, const ObTransID tx_id);
+  int init(const ObTransID tx_id);
   void reset();
   void destroy();
 
-  int alloc_mds_node(const ObPartTransCtx *tx_ctx,
+  int alloc_mds_node(const ObTxCtx *tx_ctx,
                      const char *buf,
                      const int64_t buf_len,
                      common::ObString &data,
@@ -76,7 +76,7 @@ public:
   int try_recover_max_register_no(const ObTxBufferNodeArray & node_array);
   int insert_mds_node(ObTxBufferNode &buf_node);
   int rollback_last_mds_node();
-  int fill_mds_log(ObPartTransCtx *ctx,
+  int fill_mds_log(ObTxCtx *ctx,
                    ObTxMultiDataSourceLog &mds_log,
                    ObTxMDSRange &mds_range,
                    logservice::ObReplayBarrierType &barrier_flag,
@@ -119,8 +119,6 @@ private:
   ObTxBufferNodeArray final_notify_array_; 
 
 #ifdef ENABLE_DEBUG_LOG
-  int64_t tenant_id_;
-  share::ObLSID ls_id_;
   ObTransID  tx_id_;
 
   int record_mem_ret_;
@@ -135,7 +133,7 @@ public:
   void reset();
   // void clear();
 
-  int init(ObPartTransCtx *tx_ctx);
+  int init(ObTxCtx *tx_ctx);
   int update_range(ObTxBufferNodeList::iterator iter);
 
   int move_from_cache_to_arr(ObTxMDSCache &mds_cache, ObTxBufferNodeArray &mds_durable_arr);
@@ -154,7 +152,7 @@ public:
 
 private:
   ObTxBufferNodeArray range_array_;
-  ObPartTransCtx *tx_ctx_;
+  ObTxCtx *tx_ctx_;
 
   // ObTxBufferNodeList *list_ptr_;
   // ObTxBufferNodeList::iterator start_iter_;

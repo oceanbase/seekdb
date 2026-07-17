@@ -14,10 +14,10 @@
  * limitations under the License.
  */
 
-
 #define USING_LOG_PREFIX STORAGE
 
 #include "ob_tenant_meta_mem_mgr.h"
+#include "share/rc/ob_module_provider.h"
 #include "storage/tablelock/ob_lock_memtable.h"
 #include "storage/tx_storage/ob_ls_service.h"
 #include "storage/ddl/ob_tablet_ddl_kv.h"
@@ -42,7 +42,6 @@ ObTenantMetaMemStatus::ObTenantMetaMemStatus()
 
 void ObTabletBufferInfo::reset()
 {
-  ls_id_.reset();
   tablet_id_.reset();
   tablet_buffer_ptr_ = nullptr;
   tablet_ = nullptr;
@@ -62,7 +61,6 @@ int ObTabletBufferInfo::fill_info(const ObTabletPoolType &pool_type, ObMetaObjBu
     tablet_ = reinterpret_cast<ObTablet *>(obj_buffer);
     const ObTabletMeta &tablet_meta = tablet_->get_tablet_meta();
     tablet_id_ = tablet_meta.tablet_id_;
-    ls_id_ = tablet_meta.ls_id_;
     tablet_buffer_ptr_ = reinterpret_cast<char *>(node);
     in_map_ = ObMetaObjBufferHelper::is_in_map(obj_buffer);
     pool_type_ = pool_type;
@@ -96,12 +94,11 @@ void ObTenantMetaMemMgr::RefreshConfigTask::runTimerTask()
 {
   ObDIActionGuard ag("RefreshConfigTask");
   int ret = OB_SUCCESS;
-  const uint64_t tenant_id = MTL_ID();
-  omt::ObTenantConfigGuard tenant_config(TENANT_CONF(tenant_id));
-  const int64_t mem_limit = tenant_config.is_valid()
-      ? tenant_config->_storage_meta_memory_limit_percentage : OB_DEFAULT_META_OBJ_PERCENTAGE_LIMIT;
-  if (OB_FAIL(lib::set_meta_obj_limit(tenant_id, mem_limit))) {
-    LOG_WARN("fail to set meta object memory limit", K(ret), K(tenant_id), K(mem_limit));
+  
+  const int64_t mem_limit = true
+      ? GCONF._storage_meta_memory_limit_percentage : OB_DEFAULT_META_OBJ_PERCENTAGE_LIMIT;
+  if (OB_FAIL(lib::set_meta_obj_limit(mem_limit))) {
+    LOG_WARN("fail to set meta object memory limit", K(ret), K(mem_limit));
   }
 }
 
@@ -158,30 +155,31 @@ int ObTenantMetaMemMgr::TabletGCQueue::push(ObTablet *tablet)
   return ret;
 }
 
-ObTenantMetaMemMgr::ObTenantMetaMemMgr(const uint64_t tenant_id)
+ObTenantMetaMemMgr::ObTenantMetaMemMgr()
   : wash_lock_(common::ObLatchIds::TENANT_META_MEM_MGR_LOCK),
     wash_func_(*this),
-    tenant_id_(tenant_id),
     bucket_lock_(),
     full_tablet_creator_(),
     tablet_map_(),
     flying_tablet_map_(FLYING_TABLET_THRESHOLD),
     external_tablet_cnt_map_(),
-    tg_id_(-1),
+    gc_timer_(),
     table_gc_task_(this),
     refresh_config_task_(),
     tablet_gc_task_(this),
     tablet_gc_queue_(),
     free_tables_queue_(),
     gc_queue_lock_(common::ObLatchIds::TENANT_META_MEM_MGR_LOCK),
-    memtable_pool_(tenant_id, get_default_memtable_pool_count(), "MemTblObj", ObCtxIds::DEFAULT_CTX_ID),
-    tablet_buffer_pool_(tenant_id, get_default_normal_tablet_pool_count(), "N_TabletPool", ObCtxIds::META_OBJ_CTX_ID, &wash_func_),
-    large_tablet_buffer_pool_(tenant_id, get_default_large_tablet_pool_count(), "L_TabletPool", ObCtxIds::META_OBJ_CTX_ID, &wash_func_, false/*allow_over_max_free_num*/),
-    ddl_kv_pool_(tenant_id, MAX_DDL_KV_IN_OBJ_POOL, "DDLKVObj", ObCtxIds::DEFAULT_CTX_ID),
-    tablet_ddl_kv_mgr_pool_(tenant_id, get_default_tablet_pool_count(), "DDLKvMgrObj", ObCtxIds::DEFAULT_CTX_ID),
-    tx_data_memtable_pool_(tenant_id, MAX_TX_DATA_MEMTABLE_CNT_IN_OBJ_POOL, "TxDataMemObj", ObCtxIds::DEFAULT_CTX_ID),
-    tx_ctx_memtable_pool_(tenant_id, MAX_TX_CTX_MEMTABLE_CNT_IN_OBJ_POOL, "TxCtxMemObj", ObCtxIds::DEFAULT_CTX_ID),
-    lock_memtable_pool_(tenant_id, MAX_LOCK_MEMTABLE_CNT_IN_OBJ_POOL, "LockMemObj", ObCtxIds::DEFAULT_CTX_ID),
+    gc_memtable_set_(nullptr),
+    gc_uninit_memtable_set_(nullptr),
+    memtable_pool_(get_default_memtable_pool_count(), "MemTblObj", ObCtxIds::DEFAULT_CTX_ID),
+    tablet_buffer_pool_(get_default_normal_tablet_pool_count(), "N_TabletPool", ObCtxIds::META_OBJ_CTX_ID, &wash_func_),
+    large_tablet_buffer_pool_(get_default_large_tablet_pool_count(), "L_TabletPool", ObCtxIds::META_OBJ_CTX_ID, &wash_func_, false/*allow_over_max_free_num*/),
+    ddl_kv_pool_(MAX_DDL_KV_IN_OBJ_POOL, "DDLKVObj", ObCtxIds::DEFAULT_CTX_ID),
+    tablet_ddl_kv_mgr_pool_(get_default_tablet_pool_count(), "DDLKvMgrObj", ObCtxIds::DEFAULT_CTX_ID),
+    tx_data_memtable_pool_(MAX_TX_DATA_MEMTABLE_CNT_IN_OBJ_POOL, "TxDataMemObj", ObCtxIds::DEFAULT_CTX_ID),
+    tx_ctx_memtable_pool_(MAX_TX_CTX_MEMTABLE_CNT_IN_OBJ_POOL, "TxCtxMemObj", ObCtxIds::DEFAULT_CTX_ID),
+    lock_memtable_pool_(MAX_LOCK_MEMTABLE_CNT_IN_OBJ_POOL, "LockMemObj", ObCtxIds::DEFAULT_CTX_ID),
     meta_cache_io_allocator_(),
     last_access_tenant_config_ts_(-1),
     t3m_limit_calculator_(*this),
@@ -202,11 +200,11 @@ int ObTenantMetaMemMgr::mtl_new(ObTenantMetaMemMgr *&meta_mem_mgr)
 {
   int ret = OB_SUCCESS;
 
-  const uint64_t tenant_id = MTL_ID();
-  meta_mem_mgr = OB_NEW(ObTenantMetaMemMgr, ObMemAttr(tenant_id, "MetaMemMgr"), tenant_id);
+  
+  meta_mem_mgr = OB_NEW(ObTenantMetaMemMgr, ObMemAttr("MetaMemMgr"));
   if (OB_ISNULL(meta_mem_mgr)) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("failed to alloc memory", K(ret), K(tenant_id));
+    LOG_WARN("failed to alloc memory", K(ret));
   }
   return ret;
 }
@@ -214,45 +212,41 @@ int ObTenantMetaMemMgr::mtl_new(ObTenantMetaMemMgr *&meta_mem_mgr)
 int ObTenantMetaMemMgr::init()
 {
   int ret = OB_SUCCESS;
-  const lib::ObMemAttr map_attr(tenant_id_, "TabletMap");
+  const lib::ObMemAttr map_attr("TabletMap");
   const int64_t mem_limit = 4 * 1024 * 1024 * 1024LL;
   const int64_t bucket_num = cal_adaptive_bucket_num();
   const int64_t pin_set_bucket_num = common::hash::cal_next_prime(DEFAULT_BUCKET_NUM);
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
     LOG_WARN("ObTenantMetaMemMgr has been initialized", K(ret));
-  } else if (OB_FAIL(bucket_lock_.init(bucket_num, ObLatchIds::BLOCK_MANAGER_LOCK, "T3MBucket",
-      tenant_id_))) {
+  } else if (OB_FAIL(bucket_lock_.init(bucket_num, ObLatchIds::BLOCK_MANAGER_LOCK, "T3MBucket"))) {
     LOG_WARN("fail to init bucket lock", K(ret));
-  } else if (OB_FAIL(full_tablet_creator_.init(tenant_id_))) {
-    LOG_WARN("fail to init full tablet creator", K(ret), K(tenant_id_));
+  } else if (OB_FAIL(full_tablet_creator_.init())) {
+    LOG_WARN("fail to init full tablet creator", K(ret));
   } else if (OB_FAIL(tablet_map_.init(bucket_num, map_attr, TOTAL_LIMIT, HOLD_LIMIT,
         common::OB_MALLOC_NORMAL_BLOCK_SIZE))) {
     LOG_WARN("fail to initialize tablet map", K(ret), K(bucket_num));
-  } else if (OB_FAIL(external_tablet_cnt_map_.init(193/*prime bucket_num*/, tenant_id_))) {
-    LOG_WARN("fail to initialize external tablet cnt map", K(ret), K(bucket_num), K(tenant_id_));
-  } else if (OB_FAIL(flying_tablet_map_.init(tenant_id_))) {
+  } else if (OB_FAIL(external_tablet_cnt_map_.init(193))) {
+    LOG_WARN("fail to initialize external tablet cnt map", K(ret), K(bucket_num));
+  } else if (OB_FAIL(flying_tablet_map_.init())) {
     LOG_WARN("fail to initialize tablet map", K(ret), K(bucket_num));
-  } else if (OB_FAIL(gc_memtable_map_.create(10, "GCMemtableMap", "GCMemtableMap", tenant_id_))) {
-    LOG_WARN("fail to initialize gc memtable map", K(ret));
-  } else if (OB_FAIL(TG_CREATE_TENANT(lib::TGDefIDs::TenantMetaMemMgr, tg_id_))) {
-    LOG_WARN("fail to create thread for t3m", K(ret));
-  } else if (OB_FAIL(meta_cache_io_allocator_.init(OB_MALLOC_MIDDLE_BLOCK_SIZE, "StorMetaCacheIO", tenant_id_, mem_limit))) {
-    LOG_WARN("fail to init storage meta cache io allocator", K(ret), K_(tenant_id), K(mem_limit));
+  } else if (OB_FAIL(meta_cache_io_allocator_.init(OB_MALLOC_MIDDLE_BLOCK_SIZE, "StorMetaCacheIO", mem_limit))) {
+    LOG_WARN("fail to init storage meta cache io allocator", K(ret), K(mem_limit));
   } else if (OB_FAIL(fetch_tenant_config())) {
     LOG_WARN("fail to fetch tenant config", K(ret));
   } else {
     init_pool_arr();
+  }
+
+  // Init for persistent bloom filter load thread.
+  if (OB_FAIL(ret)) {
+  } else if (OB_FAIL(bf_load_thread_.init())) {
+    LOG_WARN("fail to init bloom filter load thread", K(ret));
+  } else {
     is_inited_ = true;
   }
 
-  // Init for persistent bloom filter load tg.
-  if (OB_FAIL(ret)) {
-  } else if (OB_FAIL(bf_load_tg_.init())) {
-    LOG_WARN("fail to init bloom filter load tg", K(ret));
-  }
-
-  if (OB_UNLIKELY(!is_inited_)) {
+  if (OB_FAIL(ret) && !is_inited_) {
     destroy();
   }
   return ret;
@@ -261,26 +255,24 @@ int ObTenantMetaMemMgr::init()
 OB_WEAK_SYMBOL int ObTenantMetaMemMgr::fetch_tenant_config()
 {
   int ret = OB_SUCCESS;
-  omt::ObTenantConfigGuard tenant_config(TENANT_CONF(tenant_id_));
-  if (!tenant_config.is_valid()) {
+  if (!true) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid tenant config", K(ret), K(tenant_id_));
+    LOG_WARN("invalid tenant config", K(ret));
   } else {
-    is_tablet_leak_checker_enabled_ = tenant_config->_enable_trace_tablet_leak;
-    LOG_INFO("fetch tenant config", K(tenant_id_), K(is_tablet_leak_checker_enabled_));
+    is_tablet_leak_checker_enabled_ = GCONF._enable_trace_tablet_leak;
+    LOG_INFO("fetch tenant config", K(is_tablet_leak_checker_enabled_));
   }
   return ret;
 }
 
 int ObTenantMetaMemMgr::check_allow_tablet_gc(
     const ObTabletID &tablet_id, 
-    const int64_t transfer_seq, 
     bool &allow)
 {
   int ret = OB_SUCCESS;
   bool is_exist = false;
   allow = false;
-  ObDieingTabletMapKey key(tablet_id.id(), transfer_seq);
+  ObDieingTabletMapKey key(tablet_id.id());
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("ObTenantMetaMemMgr hasn't been inited", K(ret));
@@ -311,27 +303,25 @@ int ObTenantMetaMemMgr::start()
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("ObTenantMetaMemMgr hasn't been inited", K(ret));
-  } else if (OB_FAIL(TG_START(tg_id_))) {
-    LOG_WARN("fail to start thread for t3m", K(ret), K(tg_id_));
-  } else if (OB_FAIL(TG_SCHEDULE(tg_id_, table_gc_task_, TABLE_GC_INTERVAL_US, true/*repeat*/))) {
+  } else if (OB_FAIL(gc_timer_.init("TenantMetaMem", ObMemAttr("TenantMetaMem")))) {
+    LOG_WARN("fail to init timer for t3m", K(ret));
+  } else if (OB_FAIL(gc_timer_.schedule(table_gc_task_, TABLE_GC_INTERVAL_US, true/*repeat*/))) {
     LOG_WARN("fail to schedule itables gc task", K(ret));
-  } else if (OB_FAIL(TG_SCHEDULE(
-      tg_id_, refresh_config_task_, REFRESH_CONFIG_INTERVAL_US, true/*repeat*/))) {
+  } else if (OB_FAIL(gc_timer_.schedule(refresh_config_task_, REFRESH_CONFIG_INTERVAL_US, true/*repeat*/))) {
     LOG_WARN("fail to schedule refresh config task", K(ret));
-  } else if (OB_FAIL(TG_SCHEDULE(
-      tg_id_, tablet_gc_task_, TABLE_GC_INTERVAL_US, true/*repeat*/))) {
+  } else if (OB_FAIL(gc_timer_.schedule(tablet_gc_task_, TABLE_GC_INTERVAL_US, true/*repeat*/))) {
     LOG_WARN("fail to schedule tablet gc task", K(ret));
-  } else if (OB_FAIL(bf_load_tg_.start())) {
-    LOG_WARN("fail to lstart bloom filter load tg", K(ret));
+  } else if (OB_FAIL(bf_load_thread_.start())) {
+    LOG_WARN("fail to start bloom filter load thread", K(ret));
   } else {
-    LOG_INFO("successfully to start t3m's three tasks", K(ret), K(tg_id_));
+    LOG_INFO("successfully to start t3m's three tasks", K(ret));
   }
   return ret;
 }
 
 void ObTenantMetaMemMgr::stop()
 {
-  bf_load_tg_.stop();
+  bf_load_thread_.stop();
   // When the observer exits by kill -15, the release of meta is triggered by prepare_safe_destory
   // called by ObLSService::stop(), then the ObLSService::wait() infinitely check if all meta release completed,
   // so t3m can't stop gc thread until check_all_meta_mem_released is true in ObTenantMetaMemMgr::wait()
@@ -358,52 +348,34 @@ void ObTenantMetaMemMgr::wait()
       }
     }
 
-    TG_STOP(tg_id_);
+    gc_timer_.stop();
+    gc_timer_.wait();
 
-    TG_WAIT(tg_id_);
-
-    // Wait for bloom filter load tg.
-    bf_load_tg_.wait();
+    // Wait for bloom filter load thread.
+    bf_load_thread_.wait();
   }
 }
 
 void ObTenantMetaMemMgr::destroy()
 {
-  int ret = OB_SUCCESS;
-  if (tg_id_ != -1) {
-    TG_DESTROY(tg_id_);
-    tg_id_ = -1;
-  }
+  gc_timer_.destroy();
   full_tablet_creator_.reset(); // must reset after gc_tablets
   flying_tablet_map_.destroy();
   external_tablet_cnt_map_.destroy();
   tablet_map_.destroy();
-  for (common::hash::ObHashMap<share::ObLSID, memtable::ObMemtableSet*>::iterator iter = gc_memtable_map_.begin();
-      OB_SUCC(ret) && iter != gc_memtable_map_.end(); ++iter) {
-    memtable::ObMemtableSet *memtable_set = iter->second;
-    if (OB_NOT_NULL(memtable_set)) {
-      if (0 != memtable_set->size()) {
-        LOG_ERROR("leaked memtable", KPC(memtable_set));
-      }
-      if (OB_FAIL(memtable_set->destroy())) {
-        LOG_ERROR("memtable set destroy failed", K(ret));
-      }
-      ob_free(memtable_set);
-    }
-  }
-  gc_memtable_map_.destroy();
+  destroy_gc_memtable_set_(gc_memtable_set_);
+  destroy_gc_memtable_set_(gc_uninit_memtable_set_);
   bucket_lock_.destroy();
   for (int64_t i = 0; i <= ObITable::TableType::REMOTE_LOGICAL_MINOR_SSTABLE; i++) {
     pool_arr_[i] = nullptr;
   }
   meta_cache_io_allocator_.destroy();
 
-  // Destroy for bloom filter load tg.
-  bf_load_tg_.destroy();
+  // Destroy for bloom filter load thread.
+  bf_load_thread_.destroy();
 
   is_inited_ = false;
 }
-
 
 int ObTenantMetaMemMgr::print_old_chain(
     const ObTabletMapKey &key,
@@ -434,7 +406,7 @@ int ObTenantMetaMemMgr::push_table_into_gc_queue(ObITable *table, const ObITable
 {
   int ret = OB_SUCCESS;
   const int64_t size = sizeof(TableGCItem);
-  const ObMemAttr attr(tenant_id_, "TableGCItem");
+  const ObMemAttr attr("TableGCItem");
   TableGCItem *item = nullptr;
   static const int64_t SLEEP_TS = 100_ms;
   static const int64_t MAX_RETRY_TIMES = 1000; // about 100s
@@ -530,8 +502,8 @@ int ObTenantMetaMemMgr::gc_tables_in_queue(bool &all_table_cleaned)
             LOG_ERROR("the table type is invalid", K(ret), KP(item), KPC(item), KPC(table), K(table->get_key()));
           } else {
             if (ObITable::TableType::DATA_MEMTABLE == table_type) {
-              if (OB_FAIL(push_memtable_into_gc_map_(static_cast<memtable::ObMemtable *>(table)))) {
-                LOG_WARN("push memtable into gc map failed", K(ret));
+              if (OB_FAIL(push_memtable_into_gc_set_(static_cast<memtable::ObMemtable *>(table)))) {
+                LOG_WARN("push memtable into gc set failed", K(ret));
               }
             } else {
               pool_arr_[index]->free_obj(static_cast<void *>(table));
@@ -589,7 +561,7 @@ int ObTenantMetaMemMgr::gc_tables_in_queue(bool &all_table_cleaned)
     int64_t tablets_mem_limit = 0;
     ObMallocAllocator *alloc = ObMallocAllocator::get_instance();
     if (OB_NOT_NULL(alloc)) {
-      const ObTenantCtxAllocatorGuard &ag = alloc->get_tenant_ctx_allocator(MTL_ID(), ObCtxIds::META_OBJ_CTX_ID);
+      const ObTenantCtxAllocatorGuard &ag = alloc->get_tenant_ctx_allocator(ObCtxIds::META_OBJ_CTX_ID);
       if (OB_NOT_NULL(ag)) {
         tablets_mem_limit = ag->get_limit();
       }
@@ -622,145 +594,135 @@ void ObTenantMetaMemMgr::batch_destroy_memtable_(memtable::ObMemtableSet *memtab
   memtable::ObMemtableKeyBtree::batch_destroy();
 }
 
-void ObTenantMetaMemMgr::batch_gc_memtable_()
+void ObTenantMetaMemMgr::destroy_gc_memtable_set_(memtable::ObMemtableSet *&memtable_set)
 {
   int ret = OB_SUCCESS;
-  int tmp_ret = OB_SUCCESS;
-
-  for (common::hash::ObHashMap<share::ObLSID, memtable::ObMemtableSet*>::iterator iter = gc_memtable_map_.begin();
-       iter != gc_memtable_map_.end(); ++iter) {
-    const ObLSID &ls_id = iter->first;
-    memtable::ObMemtableSet *memtable_set = iter->second;
-    if (OB_NOT_NULL(memtable_set)
-        && 0 != memtable_set->size()) {
-      if (ls_id.id() != 0) {
-        if (OB_TMP_FAIL(ObMemtable::batch_remove_unused_callback_for_uncommited_txn(ls_id,
-                                                                                    memtable_set))) {
-          if (OB_NOT_RUNNING != tmp_ret) {
-            LOG_ERROR("batch remove memtable set failed", K(tmp_ret), KPC(memtable_set));
-          } else {
-            LOG_WARN("batch remove memtable set failed", K(tmp_ret), KPC(memtable_set));
-          }
-          for (common::hash::ObHashSet<uint64_t>::iterator set_iter = memtable_set->begin();
-               set_iter != memtable_set->end();
-               ++set_iter) {
-            if (OB_TMP_FAIL(push_table_into_gc_queue((ObITable *)(set_iter->first), ObITable::TableType::DATA_MEMTABLE))) {
-              LOG_ERROR("push table into gc queue failed, maybe there will be leak",
-                        K(tmp_ret), KPC(memtable_set));
-            }
-          }
-
-          LOG_INFO("batch gc memtable failed and push into gc queue again", K(memtable_set->size()));
-          while (OB_TMP_FAIL(memtable_set->clear())) {
-            LOG_ERROR("clear memtable set failed", K(tmp_ret), KPC(memtable_set));
-          }
-        } else {
-          (void)batch_destroy_memtable_(memtable_set);
-
-          int64_t batch_destroyed_occupy_size = 0;
-          for (common::hash::ObHashSet<uint64_t>::iterator set_iter = memtable_set->begin();
-               set_iter != memtable_set->end();
-               ++set_iter) {
-            batch_destroyed_occupy_size += ((ObMemtable *)(set_iter->first))->get_occupied_size();
-            pool_arr_[static_cast<int>(ObITable::TableType::DATA_MEMTABLE)]->free_obj((void *)(set_iter->first));
-          }
-
-          FLOG_INFO("batch gc memtable successfully", K(memtable_set->size()), K(batch_destroyed_occupy_size));
-          while (OB_TMP_FAIL(memtable_set->clear())) {
-            LOG_ERROR("clear memtable set failed", K(tmp_ret), KPC(memtable_set));
-          }
-        }
-      } else {
-        for (common::hash::ObHashSet<uint64_t>::iterator set_iter = memtable_set->begin();
-             set_iter != memtable_set->end();
-             ++set_iter) {
-          pool_arr_[static_cast<int>(ObITable::TableType::DATA_MEMTABLE)]->free_obj((void *)(set_iter->first));
-        }
-
-        LOG_INFO("batch gc memtable successfully", K(memtable_set->size()));
-        while (OB_TMP_FAIL(memtable_set->clear())) {
-          LOG_ERROR("clear memtable set failed", K(tmp_ret), KPC(memtable_set));
-        }
-      }
+  if (OB_NOT_NULL(memtable_set)) {
+    if (0 != memtable_set->size()) {
+      LOG_ERROR("leaked memtable", KPC(memtable_set));
     }
-  }
-
-  if (REACH_THREAD_TIME_INTERVAL(1_hour)) {
-    for (common::hash::ObHashMap<share::ObLSID, memtable::ObMemtableSet*>::iterator iter = gc_memtable_map_.begin();
-         iter != gc_memtable_map_.end(); ++iter) {
-      memtable::ObMemtableSet *memtable_set = iter->second;
-      if (OB_NOT_NULL(memtable_set)) {
-        if (0 != memtable_set->size()) {
-          LOG_ERROR("leaked memtable", KPC(memtable_set));
-        }
-        if (OB_FAIL(memtable_set->destroy())) {
-          LOG_ERROR("memtable set destroy failed", K(ret));
-        }
-        ob_free(memtable_set);
-      }
+    if (OB_FAIL(memtable_set->destroy())) {
+      LOG_ERROR("memtable set destroy failed", K(ret));
     }
-
-    if (OB_TMP_FAIL(gc_memtable_map_.clear())) {
-      LOG_ERROR("clear gc memtable map failed", K(tmp_ret));
-    }
+    ob_free(memtable_set);
+    memtable_set = nullptr;
   }
 }
 
-int ObTenantMetaMemMgr::push_memtable_into_gc_map_(memtable::ObMemtable *memtable)
+int ObTenantMetaMemMgr::prepare_gc_memtable_set_(memtable::ObMemtableSet *&memtable_set)
 {
   int ret = OB_SUCCESS;
-  share::ObLSID ls_id;
-  const ObMemAttr attr(tenant_id_, "memtable_set");
-  memtable::ObMemtableSet *memtable_set = nullptr;
-
-  if (OB_FAIL(memtable->get_ls_id(ls_id))) {
-    LOG_WARN("get memtable ls id failed", K(ret), KPC(memtable));
-    if (OB_NOT_INIT == ret) {
-      // special ls id for memtable which fail to init
-      ls_id = 0;
-      ret = OB_SUCCESS;
+  if (OB_ISNULL(memtable_set)) {
+    const ObMemAttr attr("memtable_set");
+    void *buf = nullptr;
+    memtable::ObMemtableSet *tmp_memtable_set = nullptr;
+    if (OB_ISNULL(buf = ob_malloc(sizeof(memtable::ObMemtableSet), attr))) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+      LOG_WARN("fail to allocate memory for memtable set", K(ret));
+    } else if (OB_ISNULL(tmp_memtable_set = new (buf) ObMemtableSet())) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+      LOG_WARN("fail to allocate memory for memtable set", K(ret));
+    } else if (OB_FAIL(tmp_memtable_set->create(1024,
+                                                "MemtableSetBkt",
+                                                "MemtableSetNode"))) {
+      LOG_WARN("fail to create", K(ret));
+    } else {
+      memtable_set = tmp_memtable_set;
     }
-  }
-
-  if (OB_FAIL(ret)) {
-  } else if (OB_FAIL(gc_memtable_map_.get_refactored(ls_id, memtable_set))) {
-    if (OB_HASH_NOT_EXIST == ret) {
-      ret = OB_SUCCESS;
-      memtable::ObMemtableSet *tmp_memtable_set;
-      void *buf = NULL;
-      if (OB_ISNULL(buf = ob_malloc(sizeof(memtable::ObMemtableSet), attr))) {
-        ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("fail to allocate memory for hash set", K(ret));
-      } else if (OB_ISNULL(tmp_memtable_set = new (buf) ObMemtableSet())) {
-        ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("fail to allocate memory for hash set", K(ret));
-      } else if (OB_FAIL(tmp_memtable_set->create(1024,
-                                                  "MemtableSetBkt",
-                                                  "MemtableSetNode",
-                                                  MTL_ID()))) {
-        LOG_WARN("fail to create", K(ret));
-      } else if (OB_FAIL(gc_memtable_map_.set_refactored(ls_id, tmp_memtable_set))) {
-        LOG_WARN("fail to set hash set", K(ret));
+    if (OB_FAIL(ret)) {
+      if (OB_NOT_NULL(tmp_memtable_set)) {
         int tmp_ret = OB_SUCCESS;
         if (OB_TMP_FAIL(tmp_memtable_set->destroy())) {
           LOG_ERROR("memtable set destroy failed", K(tmp_ret));
         }
-      } else {
-        memtable_set = tmp_memtable_set;
-      }
-
-      if (NULL != buf && OB_FAIL(ret)) {
         ob_free(tmp_memtable_set);
+      } else if (OB_NOT_NULL(buf)) {
+        ob_free(buf);
       }
-    } else {
-      LOG_WARN("map get failed", K(ret), KPC(memtable));
     }
   }
+  return ret;
+}
 
-  if (OB_SUCC(ret)) {
-    if (OB_FAIL(memtable_set->set_refactored((uint64_t)(memtable), 0/*flag, not overwrite*/))) {
-      LOG_WARN("map set failed", K(ret), KPC(memtable));
+void ObTenantMetaMemMgr::batch_gc_memtable_set_(
+    memtable::ObMemtableSet *memtable_set,
+    const bool remove_tx_callbacks)
+{
+  int ret = OB_SUCCESS;
+  int tmp_ret = OB_SUCCESS;
+  if (OB_NOT_NULL(memtable_set)
+      && 0 != memtable_set->size()) {
+    if (remove_tx_callbacks) {
+      if (OB_TMP_FAIL(ObMemtable::batch_remove_unused_callback_for_uncommited_txn(memtable_set))) {
+        if (OB_NOT_RUNNING != tmp_ret) {
+          LOG_ERROR("batch remove memtable set failed", K(tmp_ret), KPC(memtable_set));
+        } else {
+          LOG_WARN("batch remove memtable set failed", K(tmp_ret), KPC(memtable_set));
+        }
+        for (common::hash::ObHashSet<uint64_t>::iterator set_iter = memtable_set->begin();
+             set_iter != memtable_set->end();
+             ++set_iter) {
+          if (OB_TMP_FAIL(push_table_into_gc_queue((ObITable *)(set_iter->first), ObITable::TableType::DATA_MEMTABLE))) {
+            LOG_ERROR("push table into gc queue failed, maybe there will be leak",
+                      K(tmp_ret), KPC(memtable_set));
+          }
+        }
+
+        LOG_INFO("batch gc memtable failed and push into gc queue again", K(memtable_set->size()));
+        while (OB_TMP_FAIL(memtable_set->clear())) {
+          LOG_ERROR("clear memtable set failed", K(tmp_ret), KPC(memtable_set));
+        }
+      } else {
+        (void)batch_destroy_memtable_(memtable_set);
+
+        int64_t batch_destroyed_occupy_size = 0;
+        for (common::hash::ObHashSet<uint64_t>::iterator set_iter = memtable_set->begin();
+             set_iter != memtable_set->end();
+             ++set_iter) {
+          batch_destroyed_occupy_size += ((ObMemtable *)(set_iter->first))->get_occupied_size();
+          pool_arr_[static_cast<int>(ObITable::TableType::DATA_MEMTABLE)]->free_obj((void *)(set_iter->first));
+        }
+
+        FLOG_INFO("batch gc memtable successfully", K(memtable_set->size()), K(batch_destroyed_occupy_size));
+        while (OB_TMP_FAIL(memtable_set->clear())) {
+          LOG_ERROR("clear memtable set failed", K(tmp_ret), KPC(memtable_set));
+        }
+      }
+    } else {
+      for (common::hash::ObHashSet<uint64_t>::iterator set_iter = memtable_set->begin();
+           set_iter != memtable_set->end();
+           ++set_iter) {
+        pool_arr_[static_cast<int>(ObITable::TableType::DATA_MEMTABLE)]->free_obj((void *)(set_iter->first));
+      }
+
+      LOG_INFO("batch gc memtable successfully", K(memtable_set->size()));
+      while (OB_TMP_FAIL(memtable_set->clear())) {
+        LOG_ERROR("clear memtable set failed", K(tmp_ret), KPC(memtable_set));
+      }
     }
+  }
+}
+
+void ObTenantMetaMemMgr::batch_gc_memtable_()
+{
+  batch_gc_memtable_set_(gc_memtable_set_, true);
+  batch_gc_memtable_set_(gc_uninit_memtable_set_, false);
+  if (REACH_THREAD_TIME_INTERVAL(1_hour)) {
+    destroy_gc_memtable_set_(gc_memtable_set_);
+    destroy_gc_memtable_set_(gc_uninit_memtable_set_);
+  }
+}
+
+int ObTenantMetaMemMgr::push_memtable_into_gc_set_(memtable::ObMemtable *memtable)
+{
+  int ret = OB_SUCCESS;
+  if (OB_FAIL(prepare_gc_memtable_set_(gc_memtable_set_))) {
+    LOG_WARN("failed to prepare gc memtable set", K(ret), KPC(memtable));
+  } else if (OB_ISNULL(gc_memtable_set_)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("memtable set is null", K(ret), KPC(memtable));
+  } else if (OB_FAIL(gc_memtable_set_->set_refactored((uint64_t)(memtable), 0/*flag, not overwrite*/))) {
+    LOG_WARN("memtable set insert failed", K(ret), KPC(memtable));
   }
 
   return ret;
@@ -798,8 +760,8 @@ int ObTenantMetaMemMgr::push_tablet_into_gc_queue(ObTablet *tablet)
     release_tablet(tablet, false/*return tablet buffer ptr after release*/);
   } else {
     const ObTabletMeta &tablet_meta = tablet->get_tablet_meta();
-    const ObTabletMapKey key(tablet_meta.ls_id_, tablet_meta.tablet_id_);
-    const ObDieingTabletMapKey dieing_tablet_key(key, tablet->get_transfer_seq());
+    const ObTabletMapKey key(tablet_meta.tablet_id_);
+    const ObDieingTabletMapKey dieing_tablet_key(key);
     ObBucketHashWLockGuard lock_guard(bucket_lock_, key.hash());
 
     const ObTabletPointerHandle &ptr_handle = tablet->get_pointer_handle();
@@ -839,10 +801,6 @@ int ObTenantMetaMemMgr::gc_tablets_in_queue(bool &all_tablet_cleaned)
       if (OB_ISNULL(tablet = tablet_gc_queue_.pop())) {
         break; // tablet gc queue is empty.
       }
-#ifdef OB_BUILD_SHARED_STORAGE
-      const ObLSID &ls_id = tablet->get_ls_id();
-      const ObTabletID &tablet_id = tablet->get_tablet_id();
-#endif
       if (OB_UNLIKELY(tablet->get_ref() != 0)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("unexpected tablet in gc queue", K(ret), KPC(tablet));
@@ -857,11 +815,6 @@ int ObTenantMetaMemMgr::gc_tablets_in_queue(bool &all_tablet_cleaned)
         }
         ret = OB_SUCCESS; // continue to gc other tablet
       } else {
-#ifdef OB_BUILD_SHARED_STORAGE
-        if (GCTX.is_shared_storage_mode()) {
-          MTL(ObLSService *)->report_tablet_id_for_tablet_version_gc(ls_id, tablet_id);
-        }
-#endif
         ++gc_tablets_cnt;
         FLOG_INFO("succeed to gc tablet", K(ret), KP(tablet));
       }
@@ -920,7 +873,7 @@ int ObTenantMetaMemMgr::get_min_end_scn_for_ls(
     SCN &min_end_scn_from_old)
 {
   int ret = OB_SUCCESS;
-  ObArenaAllocator allocator(common::ObMemAttr(MTL_ID(), "GetMinScn"));
+  ObArenaAllocator allocator(common::ObMemAttr("GetMinScn"));
   ObTabletPointerHandle ptr_handle(tablet_map_);
   ObTabletHandle handle;
   min_end_scn_from_latest.set_max();
@@ -982,28 +935,14 @@ int ObTenantMetaMemMgr::get_min_end_scn_from_single_tablet(ObTablet *tablet,
     LOG_WARN("fail to fetch table store", K(ret));
   } else if (OB_FAIL(tablet->ObITabletMdsInterface::get_latest_tablet_status(user_data, writer, trans_stat, trans_version))) {
     if (OB_EMPTY_RESULT == ret) {
-      // When OB_EMPTY_RESULT is returned, there are two situations that need to be eaten, as follows:
-      // - The one is that transfer transaction is aborted.
-      // - The second is that the tablet is just been created and the tablet status has been also written.
-      //
-      // In the above two cases, the old version tablet is not allowed and will not exist, and it
-      // is not allowed to be read without being queried, so it is safe to return max scn here.
       min_end_scn.set_max();
       ret = OB_SUCCESS;
     } else {
       LOG_WARN("get tablet status failed", KR(ret), KP(tablet));
     }
-  } else if (ObTabletStatus::TRANSFER_IN == user_data.tablet_status_) {
-    /* when tablet transfer with active tx, dest_ls may recycle active transaction tx_data
-     * because no uncommitted data depend it, but src_ls's tablet may has uncommitted data depend this tx_data
-     * so we must concern src_ls's tablet boundary to stop recycle tx_data
-     */
-    if (!user_data.transfer_scn_.is_valid()) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("transfer_scn is invalid", K(ret), K(user_data));
-    } else {
-      min_end_scn = SCN::scn_dec(user_data.transfer_scn_);
-    }
+  } else if (ObTabletStatus::RESERVED_STATUS_5 == user_data.tablet_status_) {
+    ret = OB_NOT_SUPPORTED;
+    LOG_WARN("reserved tablet status is not supported", K(ret), K(user_data));
   } else {
     SCN cur_recycle_end_scn = SCN::max_scn();
     bool contain_uncommitted_row = false;
@@ -1041,7 +980,7 @@ int ObTenantMetaMemMgr::scan_all_version_tablets(const ObTabletMapKey &key, cons
 {
   int ret = OB_SUCCESS;
   ObTablet *cur_tablet = nullptr;
-  ObArenaAllocator allocator(common::ObMemAttr(MTL_ID(), "ScanTablets"));
+  ObArenaAllocator allocator(common::ObMemAttr("ScanTablets"));
   ObTabletPointerHandle ptr_handle(tablet_map_);
   ObTabletHandle handle;
 
@@ -1359,7 +1298,7 @@ int ObTenantMetaMemMgr::create_tmp_tablet(
     const WashTabletPriority &priority,
     const ObTabletMapKey &key,
     common::ObArenaAllocator &allocator,
-    ObLSHandle &ls_handle,
+    ObLS *tenant_ls,
     ObTabletHandle &tablet_handle)
 {
   int ret = OB_SUCCESS;
@@ -1386,7 +1325,7 @@ int ObTenantMetaMemMgr::create_tmp_tablet(
     } else if (is_exist) {
       ret = OB_ENTRY_EXIST;
       LOG_WARN("This tablet pointer has exist, and don't create again", K(ret), K(key), K(is_exist));
-    } else if (OB_FAIL(create_tablet(key, ls_handle, tablet_handle))) {
+    } else if (OB_FAIL(create_tablet(key, tenant_ls, tablet_handle))) {
       LOG_WARN("fail to create tablet in map", K(ret), K(key), K(tablet_handle));
     }
   }
@@ -1565,7 +1504,7 @@ int ObTenantMetaMemMgr::acquire_tmp_tablet(
 int ObTenantMetaMemMgr::create_msd_tablet(
     const WashTabletPriority &priority,
     const ObTabletMapKey &key,
-    ObLSHandle &ls_handle,
+    ObLS *tenant_ls,
     ObTabletHandle &tablet_handle)
 {
   int ret = OB_SUCCESS;
@@ -1590,7 +1529,7 @@ int ObTenantMetaMemMgr::create_msd_tablet(
     } else if (OB_UNLIKELY(is_exist)) {
       ret = OB_ENTRY_EXIST;
       LOG_WARN("This tablet pointer has exist, and don't create again", K(ret), K(key), K(is_exist));
-    } else if (OB_FAIL(create_tablet(key, ls_handle, tablet_handle))) {
+    } else if (OB_FAIL(create_tablet(key, tenant_ls, tablet_handle))) {
       LOG_WARN("fail to create tablet in map", K(ret), K(key), K(tablet_handle));
     }
   }
@@ -1602,34 +1541,33 @@ int ObTenantMetaMemMgr::create_msd_tablet(
 
 int ObTenantMetaMemMgr::create_tablet(
     const ObTabletMapKey &key,
-    ObLSHandle &ls_handle,
+    ObLS *tenant_ls,
     ObTabletHandle &tablet_handle)
 {
   int ret = OB_SUCCESS;
   ObMemtableMgrHandle memtable_mgr_hdl;
-  ObLS *ls = ls_handle.get_ls();
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("ObTenantMetaMemMgr hasn't been initialized", K(ret));
-  } else if (OB_UNLIKELY(!key.is_valid() || !ls_handle.is_valid() || !tablet_handle.is_valid())) {
+  } else if (OB_UNLIKELY(!key.is_valid() || OB_ISNULL(tenant_ls) || !tablet_handle.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(key), K(ls_handle), K(tablet_handle));
+    LOG_WARN("invalid argument", K(ret), K(key), KP(tenant_ls), K(tablet_handle));
   } else if (key.tablet_id_.is_ls_tx_data_tablet()) {
-    if (OB_FAIL(ls->get_tablet_svr()->get_tx_data_memtable_mgr(memtable_mgr_hdl))) {
+    if (OB_FAIL(tenant_ls->get_tablet_svr()->get_tx_data_memtable_mgr(memtable_mgr_hdl))) {
       LOG_WARN("fail to get tx data memtable mgr", K(ret));
     }
   } else if (key.tablet_id_.is_ls_tx_ctx_tablet()) {
-    if (OB_FAIL(ls->get_tablet_svr()->get_tx_ctx_memtable_mgr(memtable_mgr_hdl))) {
+    if (OB_FAIL(tenant_ls->get_tablet_svr()->get_tx_ctx_memtable_mgr(memtable_mgr_hdl))) {
       LOG_WARN("fail to get tx data memtable mgr", K(ret));
     }
   } else if (key.tablet_id_.is_ls_lock_tablet()) {
-    if (OB_FAIL(ls->get_tablet_svr()->get_lock_memtable_mgr(memtable_mgr_hdl))) {
+    if (OB_FAIL(tenant_ls->get_tablet_svr()->get_lock_memtable_mgr(memtable_mgr_hdl))) {
       LOG_WARN("fail to get lock memtable mgr", K(ret));
     }
   }
   if (OB_SUCC(ret)) {
     ObTabletPointerHandle ptr_handle(tablet_map_);
-    ObTabletPointer tablet_ptr(ls_handle, memtable_mgr_hdl);
+    ObTabletPointer tablet_ptr(tenant_ls, memtable_mgr_hdl);
     ObMetaDiskAddr addr;
     addr.set_none_addr();
     tablet_ptr.set_addr_with_reset_obj(addr);
@@ -1745,52 +1683,6 @@ int ObTenantMetaMemMgr::get_tablet_with_allocator(
   return ret;
 }
 
-int ObTenantMetaMemMgr::get_current_version_for_tablet(
-    const share::ObLSID &ls_id, 
-    const ObTabletID &tablet_id, 
-    int64_t &tablet_version, 
-    int64_t &tablet_transfer_seq,
-    bool &allow_tablet_version_gc)
-{
-  int ret = OB_SUCCESS;
-  const ObTabletMapKey key(ls_id, tablet_id);
-  if (OB_UNLIKELY(!is_inited_)) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("ObTenantMetaMemMgr hasn't been initialized", K(ret));
-  } else if (OB_UNLIKELY(!key.is_valid())) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(key));
-  } else {
-    ObBucketHashRLockGuard lock_guard(bucket_lock_, key.hash());
-    ObTabletPointer *tablet_ptr = nullptr; 
-    ObTabletPointerHandle ptr_handle(tablet_map_);
-    ObTabletHandle tablet_handle;
-    if (OB_FAIL(tablet_map_.get(key, ptr_handle))) {
-      LOG_WARN("failed to get ptr handle", K(ret), K(key));
-    } else if (OB_ISNULL(tablet_ptr = static_cast<ObTabletPointer*>(ptr_handle.get_resource_ptr()))) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("tablet ptr is NULL", K(ret), K(ptr_handle));
-    } else if (OB_FAIL(get_tablet(WashTabletPriority::WTP_HIGH, key, tablet_handle))) {
-      LOG_WARN("failed to get tablet_handle");
-    } else if (OB_ISNULL(tablet_handle.get_obj())) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("tablet is NULL", K(ret), K(tablet_handle));
-    } else {
-      const ObDieingTabletMapKey dieing_key(key, tablet_handle.get_obj()->get_transfer_seq());
-      bool exist_in_external = false;
-      if (OB_FAIL(external_tablet_cnt_map_.check_exist(dieing_key, exist_in_external))) {
-        LOG_WARN("fail to check ex_tablet exist or not", K(ret), K(dieing_key), K(exist_in_external));
-      } else {
-        tablet_version = tablet_ptr->get_addr().block_id().meta_version_id();
-        tablet_transfer_seq = tablet_ptr->get_addr().block_id().meta_transfer_seq();
-        allow_tablet_version_gc = tablet_ptr->is_old_version_chain_empty() && !exist_in_external;
-        FLOG_INFO("PRINT TABLET ADDRESS", K(ret), K(tablet_ptr->get_addr()), K(tablet_handle.get_obj()->get_tablet_addr()));
-      }
-    }
-  }
-  return ret;
-}
-
 int ObTenantMetaMemMgr::build_tablet_handle_for_mds_scan(
     ObTablet *tablet,
     ObTabletHandle &handle)
@@ -1824,7 +1716,6 @@ int ObTenantMetaMemMgr::build_tablet_handle_for_mds_scan(
   }
   return ret;
 }
-
 
 int ObTenantMetaMemMgr::get_tablet_buffer_infos(ObIArray<ObTabletBufferInfo> &buffer_infos)
 {
@@ -2009,7 +1900,7 @@ int ObTenantMetaMemMgr::get_meta_mem_status(common::ObIArray<ObTenantMetaMemStat
 int ObTenantMetaMemMgr::register_into_tb_map(const char *file, const int line,
                                              const char *func, int32_t &index) {
   int ret = OB_SUCCESS;
-  ObTenantMetaMemMgr *t3m = MTL(ObTenantMetaMemMgr*);
+  ObTenantMetaMemMgr *t3m = OB_NOT_NULL(share::g_mp) ? share::g_mp->tenant_meta_mem_mgr() : nullptr;
 
   if (OB_NOT_NULL(t3m) && !t3m->is_tablet_handle_leak_checker_enabled()) {
     // do nothing
@@ -2046,21 +1937,20 @@ int ObTenantMetaMemMgr::dec_ref_in_leak_checker(const int32_t index)
   return ret;
 }
 
-
-int ObTenantMetaMemMgr::inc_external_tablet_cnt(const uint64_t tablet_id, const int64_t tablet_transfer_seq)
+int ObTenantMetaMemMgr::inc_external_tablet_cnt(const uint64_t tablet_id)
 {
   int ret = OB_SUCCESS;
-  const ObDieingTabletMapKey dieing_key(tablet_id, tablet_transfer_seq);
+  const ObDieingTabletMapKey dieing_key(tablet_id);
   if (OB_FAIL(external_tablet_cnt_map_.reg_tablet(dieing_key))) {
     LOG_WARN("fail to inc external tablet cnt", K(ret), K(dieing_key));
   }
   return ret;
 }
 
-int ObTenantMetaMemMgr::dec_external_tablet_cnt(const uint64_t tablet_id, const int64_t tablet_transfer_seq)
+int ObTenantMetaMemMgr::dec_external_tablet_cnt(const uint64_t tablet_id)
 {
   int ret = OB_SUCCESS;
-  const ObDieingTabletMapKey dieing_key(tablet_id, tablet_transfer_seq);
+  const ObDieingTabletMapKey dieing_key(tablet_id);
   if (OB_FAIL(external_tablet_cnt_map_.unreg_tablet(dieing_key))) {
     LOG_WARN("fail to dec external tablet cnt", K(ret), K(dieing_key));
   }
@@ -2068,12 +1958,11 @@ int ObTenantMetaMemMgr::dec_external_tablet_cnt(const uint64_t tablet_id, const 
 }
 
 int ObTenantMetaMemMgr::schedule_load_bloomfilter(const storage::ObITable::TableKey &sstable_key,
-                                                  const share::ObLSID &ls_id,
                                                   const MacroBlockId &macro_id,
                                                   const ObDatumRowkey &rowkey)
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(bf_load_tg_.add_load_task(sstable_key, ls_id, macro_id, rowkey))) {
+  if (OB_FAIL(bf_load_thread_.add_load_task(sstable_key, macro_id, rowkey))) {
     LOG_WARN("fail to add bloom filter load task", K(ret), K(sstable_key), K(macro_id), K(rowkey));
   }
   return ret;
@@ -2088,7 +1977,6 @@ int ObTenantMetaMemMgr::push_tablet_pointer_to_fly_map_if_need_(
     const ObTabletMapKey &key)
 {
   int ret = OB_SUCCESS;
-  int64_t tablet_transfer_seq = -1;
   ObTabletPointer *tablet_ptr = nullptr;
   ObTabletPointerHandle tp_handle(tablet_map_);
   ObTabletHandle t_handle;
@@ -2106,7 +1994,7 @@ int ObTenantMetaMemMgr::push_tablet_pointer_to_fly_map_if_need_(
     LOG_WARN("tablet ptr is NULL", K(ret), K(tp_handle));
   } else  if (!tablet_ptr->need_push_to_flying_()) {
     LOG_INFO("need not push tablet_ptr to flying", K(ret), K(key), KPC(tablet_ptr));
-  } else if (OB_FAIL(get_tablet(WashTabletPriority::WTP_HIGH, key, t_handle))) { // for get tablet_transfer_seq
+  } else if (OB_FAIL(get_tablet(WashTabletPriority::WTP_HIGH, key, t_handle))) {
     if (OB_ITEM_NOT_SETTED == ret) {
       ret = OB_SUCCESS;
       LOG_INFO("tablet has not been persisted, need not push_to_fly", K(ret), K(key));
@@ -2118,8 +2006,7 @@ int ObTenantMetaMemMgr::push_tablet_pointer_to_fly_map_if_need_(
     LOG_WARN("invalid tablet_handle", K(ret), K(t_handle));
   } else { // need push tablet_ptr to flying map
     bool exist = false;
-    tablet_transfer_seq = t_handle.get_obj()->get_transfer_seq();
-    ObDieingTabletMapKey dieing_tablet_key(key, tablet_transfer_seq);
+    ObDieingTabletMapKey dieing_tablet_key(key);
 
     if (OB_FAIL(flying_tablet_map_.check_exist(dieing_tablet_key, exist))) {
       LOG_WARN("failed to check exist", K(ret), K(dieing_tablet_key));
@@ -2138,7 +2025,7 @@ int ObTenantMetaMemMgr::push_tablet_pointer_to_fly_map_if_need_(
   if (OB_FAIL(ret)) {
     if (OB_NOT_NULL(tablet_ptr)) {
       int tmp_ret = OB_SUCCESS;
-      ObDieingTabletMapKey dieing_tablet_key(key, tablet_transfer_seq);
+      ObDieingTabletMapKey dieing_tablet_key(key);
       if (OB_TMP_FAIL(flying_tablet_map_.erase(dieing_tablet_key))) {
         LOG_WARN("fail to erase tablet from tablet_pointer", K(tmp_ret), K(dieing_tablet_key));
       } else {
@@ -2215,7 +2102,7 @@ int ObTenantMetaMemMgr::compare_and_swap_tablet(
     if (CLICK_FAIL(tablet_map_.compare_and_swap_addr_and_object(key, old_handle, new_handle, update_pointer_param))) {
       LOG_WARN("fail to compare and swap tablet", K(ret), K(key), K(old_handle), K(new_handle), K(update_pointer_param));
     } else if (CLICK_FAIL(update_tablet_buffer_header(old_handle.get_obj(), new_handle.get_obj()))) {
-      LOG_WARN("fail to update tablet buffer header", K(ret), K(old_handle), K(new_handle));
+      LOG_ERROR("fail to update tablet buffer header", K(ret), K(old_handle), K(new_handle));
     } else if (old_handle.get_obj() != new_handle.get_obj()) { // skip first init, old_handle == new_handle
       // TODO yunshan.tys update min minor sstable by link
       const ObTabletPointerHandle &ptr_hdl = old_handle.get_obj()->get_pointer_handle();
@@ -2425,12 +2312,11 @@ int ObTenantMetaMemMgr::ObT3MResourceLimitCalculatorHandler::
 {
   int ret = OB_SUCCESS;
   // Get tenant config
-  omt::ObTenantConfigGuard tenant_config(TENANT_CONF(MTL_ID()));
-  const int64_t config_tablet_per_gb = tenant_config.is_valid() ?
-                                          tenant_config->_max_tablet_cnt_per_gb :
+  const int64_t config_tablet_per_gb = true ?
+                                          GCONF._max_tablet_cnt_per_gb :
                                           DEFAULT_TABLET_CNT_PER_GB;
-  const int64_t config_mem_percentage = tenant_config.is_valid() ?
-                                          tenant_config->_storage_meta_memory_limit_percentage :
+  const int64_t config_mem_percentage = true ?
+                                          GCONF._storage_meta_memory_limit_percentage :
                                           OB_DEFAULT_META_OBJ_PERCENTAGE_LIMIT;
   const int64_t hard_memory_limit = lib::get_hard_memory_limit();
   // Calculate config constraint : (tenant_mem / 1GB) * config_tablet_per_gb
@@ -2456,12 +2342,11 @@ int ObTenantMetaMemMgr::ObT3MResourceLimitCalculatorHandler::
   int ret = OB_SUCCESS;
   int64_t cal_num = num >= 0 ? num : 0;  // We treat unexpected negative input numbers as zero.
   // Get tenant memory
-  omt::ObTenantConfigGuard tenant_config(TENANT_CONF(MTL_ID()));
-  const int64_t config_tablet_per_gb = tenant_config.is_valid() ?
-                                          tenant_config->_max_tablet_cnt_per_gb :
+  const int64_t config_tablet_per_gb = true ?
+                                          GCONF._max_tablet_cnt_per_gb :
                                           DEFAULT_TABLET_CNT_PER_GB;
-  const int64_t config_mem_percentage = tenant_config.is_valid() ?
-                                          tenant_config->_storage_meta_memory_limit_percentage :
+  const int64_t config_mem_percentage = true ?
+                                          GCONF._storage_meta_memory_limit_percentage :
                                           OB_DEFAULT_META_OBJ_PERCENTAGE_LIMIT;
   // Inverse calculate through config formula and memory formula
   const int64_t memory_constraint_formula_inverse =
@@ -2543,13 +2428,12 @@ int ObTenantMetaMemMgr::get_wash_tablet_candidate(const std::type_info &type_inf
       if (curr->get_data().has_new_) {
         ObTablet *tablet = reinterpret_cast<ObTablet *>(ObMetaObjBufferHelper::get_obj_buffer(curr));
         const ObTabletMeta &tablet_meta = tablet->get_tablet_meta();
-        const ObTabletMapKey tablet_key(tablet_meta.ls_id_, tablet_meta.tablet_id_);
+        const ObTabletMapKey tablet_key(tablet_meta.tablet_id_);
         if (1 == tablet->get_ref() && ObMetaObjBufferHelper::is_in_map(reinterpret_cast<char*>(tablet))) {
           // While hope to wash normal buffer pool, we need to skip rebuild next tablet, which may be oversub macro ref cnt.
           const bool need_skip = type_info == typeid(ObNormalTabletBuffer) && tablet->get_next_tablet_guard().is_valid();
           // this tablet is only hold by tablet map.
           CandidateTabletInfo candidate;
-          candidate.ls_id_ = tablet_key.ls_id_.id();
           candidate.tablet_id_ = tablet_key.tablet_id_.id();
           candidate.wash_score_ = tablet->get_wash_score();
           LOG_DEBUG("get wash candidate", K(candidate));
@@ -2585,9 +2469,8 @@ int ObTenantMetaMemMgr::do_wash_candidate_tablet(
     void *&free_obj)
 {
   int ret = OB_SUCCESS;
-  const ObLSID ls_id(candidate.ls_id_);
   const ObTabletID tablet_id(candidate.tablet_id_);
-  const ObTabletMapKey key(ls_id, tablet_id);
+  const ObTabletMapKey key(tablet_id);
   ObTabletPointerHandle ptr_handle(tablet_map_);
   if (OB_UNLIKELY(!key.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
@@ -2619,10 +2502,6 @@ int ObTenantMetaMemMgr::try_wash_tablet_from_gc_queue(
       && OB_ISNULL(free_obj)
       && OB_SUCC(ret)
       && OB_NOT_NULL(tablet = tablet_gc_queue_.pop())) {
-#ifdef OB_BUILD_SHARED_STORAGE
-    const ObLSID &ls_id = tablet->get_ls_id();
-    const ObTabletID &tablet_id = tablet->get_tablet_id();
-#endif
     if (OB_UNLIKELY(tablet->get_ref() != 0)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected tablet in gc queue", K(ret), KPC(tablet));
@@ -2641,11 +2520,6 @@ int ObTenantMetaMemMgr::try_wash_tablet_from_gc_queue(
       }
       tablet = nullptr;
     } else {
-#ifdef OB_BUILD_SHARED_STORAGE
-      if (GCTX.is_shared_storage_mode()) {
-        MTL(ObLSService *)->report_tablet_id_for_tablet_version_gc(ls_id, tablet_id);
-      }
-#endif
     }
     ++loop_cnt;
   }
@@ -2694,7 +2568,7 @@ int ObTenantMetaMemMgr::try_wash_tablet(const std::type_info &type_info, void *&
     LOG_WARN("fail to acquire tablet", K(ret));
   } else {
     tablet_handle.set_wash_priority(WashTabletPriority::WTP_LOW);
-    ObArenaAllocator allocator(common::ObMemAttr(MTL_ID(), "WashTablet"));
+    ObArenaAllocator allocator(common::ObMemAttr("WashTablet"));
     CandidateTabletInfo info;
     time_guard.click("prepare");
     SpinWLockGuard guard(wash_lock_);
@@ -2727,23 +2601,6 @@ int ObTenantMetaMemMgr::try_wash_tablet(const std::type_info &type_info, void *&
   return ret;
 }
 
-ObTenantMetaMemMgr::MinMinorSSTableInfo::MinMinorSSTableInfo(
-    const share::ObLSID &ls_id,
-    const ObITable::TableKey &table_key,
-    const ObTableHandleV2 &sstable_handle)
-  : ls_id_(ls_id),
-    table_key_(table_key),
-    sstable_handle_(sstable_handle)
-{
-}
-
-ObTenantMetaMemMgr::MinMinorSSTableInfo::~MinMinorSSTableInfo()
-{
-  ls_id_.reset();
-  table_key_.reset();
-  sstable_handle_.reset();
-}
-
 ObT3mTabletMapIterator::ObT3mTabletMapIterator(ObTenantMetaMemMgr &t3m)
   : tablet_map_(t3m.tablet_map_),
     tablet_items_(),
@@ -2766,7 +2623,7 @@ void ObT3mTabletMapIterator::reset()
 int ObT3mTabletMapIterator::fetch_tablet_item()
 {
   int ret = OB_SUCCESS;
-  ObMemAttr attr = SET_USE_500(ObMemAttr(MTL_ID(), "TabletIterSE"));
+  ObMemAttr attr = SET_USE_500(ObMemAttr("TabletIterSE"));
   tablet_items_.set_attr(attr);
   FetchTabletItemOp fetch_op(tablet_map_, tablet_items_);
   if (OB_UNLIKELY(tablet_items_.count() > 0)) {

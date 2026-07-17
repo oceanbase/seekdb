@@ -66,14 +66,7 @@ int ObRowUtil::compare_row(const ObNewRow &lrow, const ObNewRow &rrow, int &cmp)
     int64_t min_cnt = lrow.get_count() < rrow.get_count() ? lrow.get_count() : rrow.get_count();
     for (int64_t i = 0; 0 == cmp && i < cmp_cnt; ++i) {
       if (i < min_cnt) {
-        //Oracle compatible range partition, the null value is only allowed to be inserted when the range partition defines maxvalue, so the null value is regarded as max
-        if (lib::is_oracle_mode() && lrow.get_cell(i).is_null() && !rrow.get_cell(i).is_max_value()) {
-          cmp = 1;
-        } else if (lib::is_oracle_mode() && rrow.get_cell(i).is_null() && !lrow.get_cell(i).is_max_value()) {
-          cmp = -1;
-        } else {
-          cmp = lrow.get_cell(i).compare(rrow.get_cell(i));
-        }
+        cmp = lrow.get_cell(i).compare(rrow.get_cell(i));
       } else if (i < lrow.get_count()) {
         cmp = lrow.get_cell(i).is_min_value() ? 0 : 1;
       } else {

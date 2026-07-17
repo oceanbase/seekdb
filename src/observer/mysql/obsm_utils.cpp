@@ -119,8 +119,7 @@ int ObSMUtils::cell_str(
     const ObDataTypeCastParams &dtc_params,
     const ObField *field,
     const sql::ObSQLSessionInfo &session,
-    ObSchemaGetterGuard *schema_guard,
-    uint64_t tenant_id)
+    ObSchemaGetterGuard *schema_guard)
 {
   int ret = OB_SUCCESS;
 
@@ -128,7 +127,6 @@ int ObSMUtils::cell_str(
   ObPrecision precision = 0;
   bool zerofill = false;
   int32_t zflength = 0;
-  bool is_oracle_raw = false;
   if (NULL == field) {
     if (OB_UNLIKELY(obj.is_invalid_type())) {
       ret = OB_INVALID_ARGUMENT;
@@ -184,17 +182,15 @@ int ObSMUtils::cell_str(
       // Also transmit the lob locator as varchar, first encode the LobLocator length, then encode the entire lob Locator
       case ObLobTC:
       case ObRoaringBitmapTC: {
-        ret = ObMySQLUtil::varchar_cell_str(buf, len, obj.get_string(), is_oracle_raw, pos);
+        ret = ObMySQLUtil::varchar_cell_str(buf, len, obj.get_string(), pos);
         break;
       }
       case ObJsonTC:{
-        ret = ObMySQLUtil::json_cell_str(MTL_ID(), buf, len, obj.get_string(), pos);
+        ret = ObMySQLUtil::json_cell_str(buf, len, obj.get_string(), pos);
         break;
       }
       case ObGeometryTC: {
-        if (lib::is_oracle_mode() && type == MYSQL_PROTOCOL_TYPE::TEXT) {
-          ret = OB_NOT_SUPPORTED;
-        } else {
+        {
           ret = ObMySQLUtil::geometry_cell_str(buf, len, obj.get_string(), pos);
         }
         break;
@@ -212,9 +208,9 @@ int ObSMUtils::cell_str(
       }
       case ObUserDefinedSQLTC: {
         if (obj.get_udt_subschema_id() == 0) { // xml
-          ret = ObMySQLUtil::sql_utd_cell_str(MTL_ID(), buf, len, obj.get_string(), pos);
+          ret = ObMySQLUtil::sql_utd_cell_str(buf, len, obj.get_string(), pos);
         } else if (type == MYSQL_PROTOCOL_TYPE::TEXT) { // common sql udt text protocal
-          ret = ObMySQLUtil::varchar_cell_str(buf, len, obj.get_string(), is_oracle_raw, pos);
+          ret = ObMySQLUtil::varchar_cell_str(buf, len, obj.get_string(), pos);
         } else {
           // ToDo: sql udt binary protocal (result should be the same as extend type)
           ret = OB_NOT_IMPLEMENT;
@@ -223,7 +219,7 @@ int ObSMUtils::cell_str(
         break;
       }
       case ObCollectionSQLTC: {
-        ret = ObMySQLUtil::varchar_cell_str(buf, len, obj.get_string(), is_oracle_raw, pos);
+        ret = ObMySQLUtil::varchar_cell_str(buf, len, obj.get_string(), pos);
         break;
       }
       case ObDecimalIntTC: {
@@ -309,9 +305,7 @@ int ObSMUtils::get_mysql_type(ObObjType ob_type, EMySQLFieldType &mysql_type,
       case EMySQLFieldType::MYSQL_TYPE_ORA_BLOB:
       case EMySQLFieldType::MYSQL_TYPE_ORA_CLOB:
         // for compatible with MySQL, ugly convention.
-        num_decimals = static_cast<ObScale>(lib::is_oracle_mode()
-        ? ORACLE_NOT_FIXED_DEC
-        : 0);
+        num_decimals = static_cast<ObScale>(0);
         break;
       case EMySQLFieldType::MYSQL_TYPE_OB_TIMESTAMP_WITH_TIME_ZONE:
       case EMySQLFieldType::MYSQL_TYPE_OB_TIMESTAMP_WITH_LOCAL_TIME_ZONE:
@@ -323,7 +317,7 @@ int ObSMUtils::get_mysql_type(ObObjType ob_type, EMySQLFieldType &mysql_type,
       case EMySQLFieldType::MYSQL_TYPE_DOUBLE:
       case EMySQLFieldType::MYSQL_TYPE_NEWDECIMAL:
         num_decimals = static_cast<ObScale>((num_decimals == -1)
-            ? (lib::is_oracle_mode() ? ORACLE_NOT_FIXED_DEC : NOT_FIXED_DEC)
+            ? NOT_FIXED_DEC
             : num_decimals);
         break;
       default:

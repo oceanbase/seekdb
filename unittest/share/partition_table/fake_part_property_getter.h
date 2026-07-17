@@ -18,7 +18,6 @@
 #define OCEANBASE_PARTITION_TABLE_FAKE_PART_PROPERTY_GETTER_H_
 
 #include "common/ob_zone.h"
-#include "common/ob_region.h"
 #include "share/config/ob_server_config.h"
 
 namespace oceanbase
@@ -67,10 +66,6 @@ const static common::ObZone ZONE3("zone3");
 const static common::ObZone ZONE4("zone4");
 const static common::ObZone ZONE5("zone5");
 const static common::ObZone ZONE6("zone6");
-
-const static common::ObRegion REGION1("region1");
-const static common::ObRegion REGION2("region2");
-const static common::ObRegion REGION3("region3");
 
 } // end nameapce host
 

@@ -31,17 +31,17 @@ public:
   explicit ObDropDirectoryStmt(common::ObIAllocator *name_pool);
   virtual ~ObDropDirectoryStmt();
 
-  virtual obrpc::ObDDLArg &get_ddl_arg() { return arg_; }
+  virtual obcall::ObDDLArg &get_ddl_arg() { return arg_; }
   virtual bool cause_implicit_commit() const { return true; }
 
-  obrpc::ObDropDirectoryArg &get_drop_directory_arg() { return arg_; }
+  obcall::ObDropDirectoryArg &get_drop_directory_arg() { return arg_; }
   
-  void set_tenant_id(const uint64_t id) { arg_.tenant_id_ = id; }
+  
   void set_directory_name(const common::ObString &name) { arg_.directory_name_ = name; }
 
   TO_STRING_KV(K_(arg));
 private:
-  obrpc::ObDropDirectoryArg arg_;
+  obcall::ObDropDirectoryArg arg_;
 private:
   DISALLOW_COPY_AND_ASSIGN(ObDropDirectoryStmt);
 };

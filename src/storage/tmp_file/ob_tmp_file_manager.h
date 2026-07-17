@@ -19,9 +19,6 @@
 
 #include "storage/tmp_file/ob_tmp_file_io_info.h"
 #include "storage/tmp_file/ob_tmp_file_io_handle.h"
-#ifdef OB_BUILD_SHARED_STORAGE
-#include "storage/tmp_file/ob_ss_tmp_file_manager.h"
-#endif
 #include "storage/tmp_file/ob_sn_tmp_file_manager.h"
 
 namespace oceanbase
@@ -36,9 +33,6 @@ public:
   virtual ~ObTenantTmpFileManager() { destroy(); }
   static int mtl_init(ObTenantTmpFileManager *&manager);
   virtual ObSNTenantTmpFileManager &get_sn_file_manager() { return sn_file_manager_; }
-#ifdef OB_BUILD_SHARED_STORAGE
-  ObSSTenantTmpFileManager &get_ss_file_manager() { return ss_file_manager_; }
-#endif
   virtual int init();
   int start();
   void stop();
@@ -50,18 +44,18 @@ public:
   int remove(const int64_t fd);
 
 public:
-  int aio_read(const uint64_t tenant_id, const ObTmpFileIOInfo &io_info, ObTmpFileIOHandle &io_handle);
-  int aio_pread(const uint64_t tenant_id, const ObTmpFileIOInfo &io_info,
+  int aio_read(const ObTmpFileIOInfo &io_info, ObTmpFileIOHandle &io_handle);
+  int aio_pread(const ObTmpFileIOInfo &io_info,
                 const int64_t offset, ObTmpFileIOHandle &io_handle);
-  int read(const uint64_t tenant_id, const ObTmpFileIOInfo &io_info, ObTmpFileIOHandle &io_handle);
-  int pread(const uint64_t tenant_id, const ObTmpFileIOInfo &io_info,
+  int read(const ObTmpFileIOInfo &io_info, ObTmpFileIOHandle &io_handle);
+  int pread(const ObTmpFileIOInfo &io_info,
             const int64_t offset, ObTmpFileIOHandle &io_handle);
   // NOTE:
   //   only support append write.
-  int aio_write(const uint64_t tenant_id, const ObTmpFileIOInfo &io_info, ObTmpFileIOHandle &io_handle);
+  int aio_write(const ObTmpFileIOInfo &io_info, ObTmpFileIOHandle &io_handle);
   // NOTE:
   //   only support append write.
-  int write(const uint64_t tenant_id, const ObTmpFileIOInfo &io_info);
+  int write(const ObTmpFileIOInfo &io_info);
   int truncate(const int64_t fd, const int64_t offset);
   int seal(const int64_t fd);
   int get_tmp_file_size(const int64_t fd, int64_t &file_size);
@@ -76,37 +70,33 @@ private:
   bool is_inited_;
   ObSNTenantTmpFileManager sn_file_manager_;
 
-#ifdef OB_BUILD_SHARED_STORAGE
-  ObSSTenantTmpFileManager ss_file_manager_;
-#endif
 };
 
 class ObTenantTmpFileManagerWithMTLSwitch final
 {
 public:
   static ObTenantTmpFileManagerWithMTLSwitch &get_instance();
-  int alloc_dir(const uint64_t tenant_id, int64_t &dir_id);
-  int open(const uint64_t tenant_id,
-           int64_t &fd,
+  int alloc_dir(int64_t &dir_id);
+  int open(int64_t &fd,
            const int64_t &dir_id,
            const char* const label = nullptr);
-  int remove(const uint64_t tenant_id, const int64_t fd);
+  int remove(const int64_t fd);
 
 public:
-  int aio_read(const uint64_t tenant_id, const ObTmpFileIOInfo &io_info, ObTmpFileIOHandle &io_handle);
-  int aio_pread(const uint64_t tenant_id, const ObTmpFileIOInfo &io_info, const int64_t offset, ObTmpFileIOHandle &io_handle);
-  int pread(const uint64_t tenant_id, const ObTmpFileIOInfo &io_info, const int64_t offset, ObTmpFileIOHandle &io_handle);
+  int aio_read(const ObTmpFileIOInfo &io_info, ObTmpFileIOHandle &io_handle);
+  int aio_pread(const ObTmpFileIOInfo &io_info, const int64_t offset, ObTmpFileIOHandle &io_handle);
+  int pread(const ObTmpFileIOInfo &io_info, const int64_t offset, ObTmpFileIOHandle &io_handle);
   // NOTE:
   //   only support append write.
-  int aio_write(const uint64_t tenant_id, const ObTmpFileIOInfo &io_info, ObTmpFileIOHandle &io_handle);
+  int aio_write(const ObTmpFileIOInfo &io_info, ObTmpFileIOHandle &io_handle);
   // NOTE:
   //   only support append write.
-  int write(const uint64_t tenant_id, const ObTmpFileIOInfo &io_info);
-  int truncate(const uint64_t tenant_id, const int64_t fd, const int64_t offset);
-  int seal(const uint64_t tenant_id, const int64_t fd);
-  int get_tmp_file_size(const uint64_t tenant_id, const int64_t fd, int64_t &file_size);
-  int get_tmp_file_fds(const uint64_t tenant_id, ObIArray<int64_t> &fd_arr);
-  int get_tmp_file_info(const uint64_t tenant_id, const int64_t fd, ObTmpFileInfo *tmp_file_info);
+  int write(const ObTmpFileIOInfo &io_info);
+  int truncate(const int64_t fd, const int64_t offset);
+  int seal(const int64_t fd);
+  int get_tmp_file_size(const int64_t fd, int64_t &file_size);
+  int get_tmp_file_fds(ObIArray<int64_t> &fd_arr);
+  int get_tmp_file_info(const int64_t fd, ObTmpFileInfo *tmp_file_info);
 };
 
 #define FILE_MANAGER_INSTANCE_WITH_MTL_SWITCH (::oceanbase::tmp_file::ObTenantTmpFileManagerWithMTLSwitch::get_instance())

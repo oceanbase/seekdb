@@ -48,7 +48,7 @@ public:
                         const storage::ObDirectLoadMultipleDatumRow *result_row) override;
   int handle_update_row(const ObTabletID &tablet_id, const storage::ObDirectLoadDatumRow &old_row,
                         const storage::ObDirectLoadDatumRow &new_row,
-                        const storage::ObDirectLoadDatumRow *result_row) override;
+                        const storage::ObDirectLoadDatumRow *result_row) override;  
   int handle_insert_delete_conflict(const ObTabletID &tablet_id,
                                     const storage::ObDirectLoadDatumRow &datum_row) override;
 private:

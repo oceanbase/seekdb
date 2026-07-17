@@ -19,9 +19,7 @@
 
 #include "lib/container/ob_tuple.h"
 #include "ob_tablet_id.h"
-#include "share/ob_virtual_table_scanner_iterator.h"
-#include "observer/omt/ob_multi_tenant_operator.h"
-#include "observer/omt/ob_multi_tenant.h"
+#include "observer/virtual_table/ob_virtual_table_scanner_iterator.h"
 #include "ob_mds_event_buffer.h"
 
 namespace oceanbase
@@ -38,11 +36,10 @@ namespace observer
 
 class ObAllVirtualMdsEventHistory : public common::ObVirtualTableScannerIterator
 {
-  static constexpr int64_t IP_BUFFER_SIZE = 65;  // >= MAX_IP_ADDR_LENGTH (e.g. INET6 on Windows)
 public:
-  explicit ObAllVirtualMdsEventHistory(omt::ObMultiTenant *omt) : omt_(omt) {}
+  ObAllVirtualMdsEventHistory() = default;
   virtual int inner_get_next_row(common::ObNewRow *&row) override;
-  TO_STRING_KV(K_(tenant_ranges), K_(tenant_points), K_(tablet_ranges), K_(tablet_points))
+  TO_STRING_KV(K_(tablet_ranges), K_(tablet_points))
 private:
   int convert_event_info_to_row_(const MdsEventKey &key,
                                  const MdsEvent &event,
@@ -54,10 +51,6 @@ private:
   int range_scan_(char *temp_buffer, int64_t buf_len);
   int point_read_(char *temp_buffer, int64_t buf_len);
   DISALLOW_COPY_AND_ASSIGN(ObAllVirtualMdsEventHistory);
-  omt::ObMultiTenant *omt_;
-  char ip_buffer_[IP_BUFFER_SIZE];
-  ObArray<ObTuple<uint64_t, uint64_t>> tenant_ranges_;
-  ObArray<uint64_t> tenant_points_;
   ObArray<ObTuple<common::ObTabletID, common::ObTabletID>> tablet_ranges_;
   ObArray<common::ObTabletID> tablet_points_;
 };

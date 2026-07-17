@@ -32,8 +32,8 @@ public:
   ObAlterRoleStmt();
   virtual ~ObAlterRoleStmt();
 
-  void set_tenant_id(const uint64_t tenant_id) { tenant_id_ = tenant_id; }
-  uint64_t get_tenant_id() { return tenant_id_; }
+  
+  
   void set_role_name(const common::ObString &role_name) { role_name_ = role_name; }
   const common::ObString &get_role_name() const { return role_name_; }
   void set_password(const common::ObString &password) { password_ = password; }
@@ -43,16 +43,15 @@ public:
   void set_masked_sql(const common::ObString &masked_sql) { masked_sql_ = masked_sql; }
   const common::ObString &get_masked_sql() const { return masked_sql_; }
   virtual bool cause_implicit_commit() const { return true; }
-  virtual obrpc::ObDDLArg &get_ddl_arg() { return alter_role_arg_; }
+  virtual obcall::ObDDLArg &get_ddl_arg() { return alter_role_arg_; }
   DECLARE_VIRTUAL_TO_STRING;
 private:
   // data members
-  uint64_t tenant_id_;
   common::ObString role_name_; 
   common::ObString password_; 
   bool need_enc_;
   common::ObString masked_sql_;
-  obrpc::ObAlterRoleArg alter_role_arg_;
+  obcall::ObAlterRoleArg alter_role_arg_;
 private:
   DISALLOW_COPY_AND_ASSIGN(ObAlterRoleStmt);
 };

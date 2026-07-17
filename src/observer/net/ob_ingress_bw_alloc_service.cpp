@@ -16,6 +16,7 @@
 
 #include "ob_ingress_bw_alloc_service.h"
 #include "observer/ob_srv_network_frame.h"
+#include "share/ob_ex_rpc.h"
 #define USING_LOG_PREFIX RS
 
 namespace oceanbase
@@ -87,9 +88,6 @@ int ObNetEndpointIngressManager::register_endpoint(const ObNetEndpointKey &endpo
 int ObNetEndpointIngressManager::collect_predict_bw(ObNetEndpointKVArray &update_kvs)
 {
   int ret = OB_SUCCESS;
-  ObNetEndpointPredictIngressProxy proxy_batch(
-      *GCTX.srv_rpc_proxy_, &obrpc::ObSrvRpcProxy::net_endpoint_predict_ingress);
-  const int64_t timeout_ts = GCONF.rpc_timeout;
   common::ObSEArray<ObNetEndpointKey, 16> delete_keys;
   const int64_t current_time = ObTimeUtility::current_time();
   {
@@ -120,47 +118,30 @@ int ObNetEndpointIngressManager::collect_predict_bw(ObNetEndpointKVArray &update
       }
     }
   }
-  for (int64_t i = 0; OB_SUCC(ret) && i < update_kvs.count(); i++) {
-    const ObNetEndpointKey &endpoint_key = update_kvs[i].key_;
-    obrpc::ObNetEndpointPredictIngressArg arg;
-    arg.endpoint_key_.assign(endpoint_key);
-    if (OB_FAIL(proxy_batch.call(endpoint_key.addr_, timeout_ts, arg))) {
-      LOG_WARN("fail to call async batch rpc", KR(ret), K(endpoint_key.addr_), K(arg));
-      ret = OB_SUCCESS;  // ignore error
-    }
-  }
-
-  ObArray<int> return_code_array;
-  int tmp_ret = OB_SUCCESS;
-  if (OB_TMP_FAIL(proxy_batch.wait_all(return_code_array))) {
-    LOG_WARN("wait batch result failed", KR(tmp_ret), K(ret));
-    ret = OB_SUCC(ret) ? tmp_ret : ret;
-  } else if (OB_FAIL(ret)) {
-  } else if (return_code_array.count() != update_kvs.count()) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("cnt not match", KR(ret),
-             "return_cnt", return_code_array.count(),
-             "kv_cnt", update_kvs.count());
-  } else if (OB_FAIL(proxy_batch.check_return_cnt(return_code_array.count()))) {
-    LOG_WARN("cnt not match", KR(ret),
-             "return_cnt", return_code_array.count(),
-             "server_cnt", ingress_plan_map_.size());
+  if (OB_ISNULL(GCTX.net_frame_)) {
+    LOG_WARN("net frame is null");  // ignore error
   } else {
+    ObSEArray<ex_rpc::HandleRef<int64_t>, 4> handles;
     for (int64_t i = 0; OB_SUCC(ret) && i < update_kvs.count(); i++) {
-      if (OB_FAIL(return_code_array.at(i))) {
-        const ObAddr &addr = proxy_batch.get_dests().at(i);
-        LOG_WARN("rpc execute failed", KR(ret), K(addr), K(update_kvs[i]));
-        ret = OB_SUCCESS;  // ignore error
+      const ObNetEndpointKey endpoint_key = update_kvs[i].key_;  // copy: outlives async run
+      ex_rpc::HandleRef<int64_t> handle =
+          ex_rpc::async_call<int64_t>([endpoint_key](int64_t &predicted_bw) -> int {
+            predicted_bw = -1;
+            return GCTX.net_frame_->net_endpoint_predict_ingress(endpoint_key, predicted_bw);
+          });
+      if (!handle) {
+        ret = OB_ALLOCATE_MEMORY_FAILED;
+        LOG_WARN("fail to dispatch predict ingress", K(ret), K(endpoint_key));
+      } else if (OB_FAIL(handles.push_back(handle))) {
+        LOG_WARN("fail to push handle", K(ret), K(endpoint_key));
+      }
+    }
+    for (int64_t i = 0; i < handles.count(); i++) {
+      int tmp_ret = handles.at(i)->wait();
+      if (OB_TMP_FAIL(tmp_ret)) {
+        LOG_WARN("fail to predict ingress bw", KR(tmp_ret), K(update_kvs[i].key_));  // ignore error
       } else {
-        const obrpc::ObNetEndpointPredictIngressRes *result = proxy_batch.get_results().at(i);
-        if (OB_ISNULL(result)) {
-          ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("result is null", KR(ret));
-          ret = OB_SUCCESS;  // ignore error
-        } else {
-          ObNetEndpointValue *endpoint_value = update_kvs[i].value_;
-          endpoint_value->predicted_bw_ = result->predicted_bw_;
-        }
+        update_kvs[i].value_->predicted_bw_ = handles.at(i)->result();
       }
     }
   }
@@ -242,42 +223,29 @@ int ObNetEndpointIngressManager::update_ingress_plan(ObNetEndpointKVArray &updat
 int ObNetEndpointIngressManager::commit_bw_limit_plan(ObNetEndpointKVArray &update_kvs)
 {
   int ret = OB_SUCCESS;
-  ObNetEndpointSetIngressProxy proxy_batch(*GCTX.srv_rpc_proxy_, &obrpc::ObSrvRpcProxy::net_endpoint_set_ingress);
 
-  for (int64_t i = 0; i < update_kvs.count(); i++) {
-    const ObNetEndpointKey &endpoint_key = update_kvs[i].key_;
-    ObNetEndpointValue *endpoint_value = update_kvs[i].value_;
-    obrpc::ObNetEndpointSetIngressArg arg;
-    arg.endpoint_key_.assign(endpoint_key);
-    arg.assigned_bw_ = endpoint_value->assigned_bw_;
-    const int64_t timeout_ts = GCONF.rpc_timeout;
-    if (OB_FAIL(proxy_batch.call(endpoint_key.addr_, timeout_ts, arg))) {
-      LOG_WARN("fail to call async batch rpc", KR(ret), K(endpoint_key.addr_), K(arg));
-      ret = OB_SUCCESS;  // ignore error
-    }
-  }
-
-  ObArray<int> return_code_array;
-  int tmp_ret = OB_SUCCESS;
-  if (OB_TMP_FAIL(proxy_batch.wait_all(return_code_array))) {
-    LOG_WARN("wait batch result failed", KR(ret));
-    ret = OB_SUCC(ret) ? tmp_ret : ret;
-  } else if (OB_FAIL(ret)) {
-  } else if (return_code_array.count() != update_kvs.count()) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("cnt not match", KR(ret),
-             "return_cnt", return_code_array.count(),
-             "kv_cnt", update_kvs.count());
-  } else if (OB_FAIL(proxy_batch.check_return_cnt(return_code_array.count()))) {
-    LOG_WARN("cnt not match", KR(ret),
-             "return_cnt", return_code_array.count(),
-             "server_cnt", ingress_plan_map_.size());
+  if (OB_ISNULL(GCTX.net_frame_)) {
+    LOG_WARN("net frame is null");  // ignore error
   } else {
-    for (int64_t i = 0; OB_SUCC(ret) && i < return_code_array.count(); i++) {
-      if (OB_FAIL(return_code_array.at(i))) {
-        const ObAddr &addr = proxy_batch.get_dests().at(i);
-        LOG_WARN("rpc execute failed", KR(ret), K(addr));
-        ret = OB_SUCCESS;  // ignore error
+    ObSEArray<ex_rpc::HandleRef<void>, 4> handles;
+    for (int64_t i = 0; OB_SUCC(ret) && i < update_kvs.count(); i++) {
+      const ObNetEndpointKey endpoint_key = update_kvs[i].key_;  // copy: outlives async run
+      const int64_t assigned_bw = update_kvs[i].value_->assigned_bw_;
+      ex_rpc::HandleRef<void> handle =
+          ex_rpc::async_call([endpoint_key, assigned_bw]() -> int {
+            return GCTX.net_frame_->net_endpoint_set_ingress(endpoint_key, assigned_bw);
+          });
+      if (!handle) {
+        ret = OB_ALLOCATE_MEMORY_FAILED;
+        LOG_WARN("fail to dispatch set ingress", K(ret), K(endpoint_key));
+      } else if (OB_FAIL(handles.push_back(handle))) {
+        LOG_WARN("fail to push handle", K(ret), K(endpoint_key));
+      }
+    }
+    for (int64_t i = 0; i < handles.count(); i++) {
+      int tmp_ret = handles.at(i)->wait();
+      if (OB_TMP_FAIL(tmp_ret)) {
+        LOG_WARN("fail to set ingress bw", KR(tmp_ret), K(update_kvs[i].key_));  // ignore error
       }
     }
   }
@@ -306,10 +274,7 @@ int64_t ObNetEndpointIngressManager::get_map_size()
 
 void ObIngressBWAllocService::wait()
 {
-  if (-1 != tg_id_) {
-    TG_WAIT(tg_id_);
-    LOG_INFO("[INGRESS_SERVICE] ObIngressBWAllocService wait success", K(tg_id_));
-  }
+  LOG_INFO("[INGRESS_SERVICE] ObIngressBWAllocService wait success");
 }
 
 void ObIngressBWAllocService::destroy()
@@ -317,17 +282,11 @@ void ObIngressBWAllocService::destroy()
   is_inited_ = false;
   ATOMIC_SET(&is_leader_, false);
   ATOMIC_SET(&is_stop_, true);
-  if (-1 != tg_id_) {
-    TG_STOP(tg_id_);
-    TG_WAIT(tg_id_);
-    TG_DESTROY(tg_id_);
-    tg_id_ = -1;
-    ingress_manager_.destroy();
-    LOG_INFO("[INGRESS_SERVICE] ObIngressBWAllocService destroy success", K(tg_id_));
-  }
+  ingress_manager_.destroy();
+  LOG_INFO("[INGRESS_SERVICE] ObIngressBWAllocService destroy success");
 }
 
-int ObIngressBWAllocService::register_endpoint(const obrpc::ObNetEndpointKey &endpoint_key, const int64_t expire_time)
+int ObIngressBWAllocService::register_endpoint(const obcall::ObNetEndpointKey &endpoint_key, const int64_t expire_time)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_leader())) {
@@ -379,30 +338,15 @@ void ObIngressBWAllocService::runTimerTask()
   }
 }
 
-void ObIngressBWAllocService::switch_to_follower_forcedly()
+void ObIngressBWAllocService::deactivate()
 {
   ATOMIC_STORE(&is_leader_, false);
 }
-int ObIngressBWAllocService::switch_to_leader()
+int ObIngressBWAllocService::activate()
 {
   int ret = OB_SUCCESS;
   ATOMIC_STORE(&is_leader_, true);
   return ret;
 }
-int ObIngressBWAllocService::switch_to_follower_gracefully()
-{
-  int ret = OB_SUCCESS;
-  ATOMIC_STORE(&is_leader_, false);
-  return ret;
-}
-int ObIngressBWAllocService::resume_leader()
-{
-  int ret = OB_SUCCESS;
-  if (!is_leader()) {
-    ATOMIC_STORE(&is_leader_, true);
-  }
-  return ret;
-}
-
 }  // namespace rootserver
 }  // namespace oceanbase

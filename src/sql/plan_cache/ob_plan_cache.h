@@ -20,6 +20,7 @@
 #include "lib/net/ob_addr.h"
 #include "lib/hash/ob_hashmap.h"
 #include "lib/alloc/alloc_func.h"
+#include "lib/task/ob_timer.h"
 #include "sql/plan_cache/ob_plan_cache_util.h"
 #include "sql/plan_cache/ob_id_manager_allocator.h"
 #include "sql/plan_cache/ob_sql_parameterization.h"
@@ -60,7 +61,6 @@ class ObPhysicalPlan;
 class ObLibCacheAtomicOp;
 class ObEvolutionPlan;
 
-typedef common::hash::ObHashMap<uint64_t, ObPlanCache *> PlanCacheMap;
 
 struct ObKVEntryTraverseOp
 {
@@ -130,7 +130,6 @@ struct ObDumpAllCacheObjOp
     } else if (should_dump(entry.second)
               && OB_FAIL(key_array_->push_back(AllocCacheObjInfo(
                   entry.second->get_object_id(),
-                  entry.second->get_tenant_id(),
                   entry.second->get_logical_del_time(),
                   safe_timestamp_,
                   entry.second->get_ref_count(),
@@ -216,8 +215,6 @@ public:
   void runTimerTask(void);
 private:
   void run_plan_cache_task();
-  //void run_ps_cache_task();
-  void run_free_cache_obj_task();
 public:
   ObPlanCache* plan_cache_;
   int64_t run_task_counter_;
@@ -242,7 +239,7 @@ public:
   virtual ~ObPlanCache();
   static int mtl_init(ObPlanCache* &plan_cache);
   static void mtl_stop(ObPlanCache * &plan_cache);
-  int init(int64_t hash_bucket, uint64_t tenant_id);
+  int init(int64_t hash_bucket);
   bool is_inited() { return inited_; }
 
   static int check_can_do_insert_opt(common::ObIAllocator &allocator,
@@ -325,7 +322,16 @@ public:
   uint64_t dec_mem_used(uint64_t mem_delta)
   {
     SQL_PC_LOG(DEBUG, "before dec mem_used, mem_used", K(mem_used_));
-    return ATOMIC_FAA((uint64_t *)&mem_used_, -mem_delta);
+    int64_t old_val = 0;
+    int64_t new_val = 0;
+    do {
+      old_val = ATOMIC_LOAD(&mem_used_);
+      if (old_val <= 0) {
+        return 0;
+      }
+      new_val = (static_cast<uint64_t>(old_val) > mem_delta) ? (old_val - static_cast<int64_t>(mem_delta)) : 0;
+    } while (!ATOMIC_BCAS(&mem_used_, old_val, new_val));
+    return static_cast<uint64_t>(old_val);
   };
 
   int64_t get_mem_used() const
@@ -354,6 +360,7 @@ public:
   //evict plan, adjust mem between hwm and lwm
   int cache_evict();
   int cache_evict_by_glitch_node();
+  int cache_evict_by_idle();
   int cache_evict_plan_by_sql_id(uint64_t db_id, common::ObString sql_id);
   int cache_evict_by_ns(ObLibCacheNameSpace ns);
   template<typename CallBack = ObKVEntryTraverseOp>
@@ -361,11 +368,11 @@ public:
   void destroy();
   common::ObAddr &get_host() { return host_; }
   void set_host(common::ObAddr &addr) { host_ = addr; }
-  int64_t get_tenant_id() const { return tenant_id_; }
+  
   int64_t get_tenant_memory() const {
-    return lib::get_tenant_memory_limit(tenant_id_);
+    return lib::get_tenant_memory_limit();
   }
-  void set_tenant_id(int64_t tenant_id) { tenant_id_ = tenant_id; }
+  
   common::ObIAllocator *get_pc_allocator() { return &inner_allocator_; }
   common::ObIAllocator &get_pc_allocator_ref() { return inner_allocator_; }
   int64_t get_cache_obj_size() const { return co_mgr_.get_cache_obj_size(); }
@@ -375,7 +382,7 @@ public:
   int remove_cache_node(ObILibCacheKey *key);
   ObLCObjectManager &get_cache_obj_mgr() { return co_mgr_; }
   ObLCNodeFactory &get_cache_node_factory() { return cn_factory_; }
-  int alloc_cache_obj(ObCacheObjGuard& guard, ObLibCacheNameSpace ns, uint64_t tenant_id);
+  int alloc_cache_obj(ObCacheObjGuard& guard, ObLibCacheNameSpace ns);
   void free_cache_obj(ObILibCacheObject *&cache_obj, const CacheRefHandleID ref_handle);
   int destroy_cache_obj(const bool is_leaked, const uint64_t object_id);
   static int construct_fast_parser_result(common::ObIAllocator &allocator,
@@ -384,7 +391,6 @@ public:
                                           ObFastParserResult &fp_result);
   static int construct_multi_stmt_fast_parser_result(common::ObIAllocator &allocator,
                                                      ObPlanCacheCtx &pc_ctx);
-  int dump_all_objs() const;
   int dump_deleted_objs_by_ns(ObIArray<AllocCacheObjInfo> &deleted_objs,
                               const int64_t safe_timestamp,
                               const ObLibCacheNameSpace ns);
@@ -399,12 +405,12 @@ public:
   common::ObMemAttr get_mem_attr() {
     common::ObMemAttr attr;
     attr.label_ = ObNewModIds::OB_SQL_PLAN_CACHE;
-    attr.tenant_id_ = tenant_id_;
+    
     attr.ctx_id_ = ObCtxIds::PLAN_CACHE_CTX_ID;
     return attr;
   }
 
-  TO_STRING_KV(K_(tenant_id),
+  TO_STRING_KV(
                K_(mem_limit_pct),
                K_(mem_high_pct),
                K_(mem_low_pct));
@@ -445,11 +451,6 @@ private:
                                       ObLibCacheNameSpace ns,
                                       ObPlanCacheKey &pc_key,
                                       bool is_weak);
-  /**
-   * @brief wether jit compilation is needed in this sql
-   *
-   */
-  int need_late_compile(ObPhysicalPlan *plan, bool &need_late_compilation);
   int add_stat_for_cache_obj(ObILibCacheCtx &ctx, ObILibCacheObject *cache_obj);
   int create_node_and_add_cache_obj(ObILibCacheKey *key,
                                     ObILibCacheCtx &ctx,
@@ -458,13 +459,11 @@ private:
   int check_after_get_plan(int tmp_ret, ObILibCacheCtx &ctx, ObILibCacheObject *cache_obj);
   int get_normalized_pattern_digest(const ObPlanCacheCtx &pc_ctx, uint64_t &pattern_digest);
 private:
-  enum PlanCacheGCStrategy { INVALID = -1, OFF = 0, REPORT = 1, AUTO = 2};
-  static int get_plan_cache_gc_strategy();
 private:
   const static int64_t SLICE_SIZE = 1024; //1k
 private:
   bool inited_;
-  int64_t tenant_id_;
+  
   int64_t mem_limit_pct_;
   int64_t mem_high_pct_;                     // high water mark percentage
   int64_t mem_low_pct_;                      // low water mark percentage
@@ -476,14 +475,18 @@ private:
   ObPlanCacheStat pc_stat_;
   // ref handle infos
   ObCacheRefHandleMgr ref_handle_mgr_;
-  PlanCacheMap* pcm_;
   // mark this Plan Cache whether is destroying.
   volatile int64_t destroy_;
   ObLCObjectManager co_mgr_;
   ObLCNodeFactory cn_factory_;
   CacheKeyNodeMap cache_key_node_map_;
   ObPlanCacheEliminationTask evict_task_;
-  int tg_id_;
+  common::ObTimer evict_timer_;
+  int64_t idle_scan_cursor_;
+  bool idle_evict_done_round_;
+  static const int64_t IDLE_SCAN_MAX_NODES = 1000;
+  static const int64_t IDLE_SCAN_MAX_BUCKETS = 5000;
+  static const int64_t IDLE_EVICT_THRESHOLD_US = 30L * 1000L * 1000L; // 30s
 };
 
 template<typename _callback>

@@ -407,7 +407,6 @@ bool ObStmtCompareContext::compare_query(const ObQueryRefRawExpr &first,
                                                             stmt_map_info,
                                                             relation,
                                                             true,
-                                                            true,
                                                             is_in_same_stmt_))) {
     LOG_WARN("failed to compute stmt relationship", K(ret));
     err_code_ = ret;
@@ -543,7 +542,6 @@ int ObStmtComparer::check_stmt_containment(const ObDMLStmt *first,
                                            ObStmtMapInfo &map_info,
                                            QueryRelation &relation,
                                            bool is_strict_select_list,
-                                           bool need_check_select_items,
                                            bool is_in_same_stmt)
 {
   int ret = OB_SUCCESS;
@@ -571,7 +569,7 @@ int ObStmtComparer::check_stmt_containment(const ObDMLStmt *first,
     }
   } else if (first_sel->is_set_stmt() || second_sel->is_set_stmt()) {
     /*do nothing*/
-  } else if (first_sel->get_from_item_size() != second_sel->get_from_item_size()) { // TODO for the further mv rewrite, from item size may be different
+  } else if (first_sel->get_from_item_size() != second_sel->get_from_item_size()) {
     LOG_TRACE("failed to compare, from item size not match", K(first_sel->get_from_item_size()), K(second_sel->get_from_item_size()));
   } else {
     // check from items
@@ -657,13 +655,7 @@ int ObStmtComparer::check_stmt_containment(const ObDMLStmt *first,
       int64_t first_rollup_count = first_sel->get_rollup_exprs().count();
       int64_t second_rollup_count = second_sel->get_rollup_exprs().count();
       QueryRelation this_relation;
-      if (second_count == 0 && first_rollup_count == 0 && second_rollup_count == 0
-            && (relation == QueryRelation::QUERY_LEFT_SUBSET || relation == QueryRelation::QUERY_EQUAL)
-            && !need_check_select_items) {
-        // for mv rewrite
-        relation = QueryRelation::QUERY_LEFT_SUBSET;
-        LOG_TRACE("succeed to check group by map", K(relation), K(map_info));
-      } else if ((first_sel->get_aggr_item_size() > 0 ||
+      if ((first_sel->get_aggr_item_size() > 0 ||
            second_sel->get_aggr_item_size() > 0)
            && relation != QueryRelation::QUERY_EQUAL) {
         relation = QueryRelation::QUERY_UNCOMPARABLE;
@@ -852,8 +844,7 @@ int ObStmtComparer::check_stmt_containment(const ObDMLStmt *first,
     }
 
     // compute map for select items output
-    if (OB_SUCC(ret) && need_check_select_items
-        && QueryRelation::QUERY_UNCOMPARABLE != relation) {
+    if (OB_SUCC(ret) && QueryRelation::QUERY_UNCOMPARABLE != relation) {
       ObSEArray<ObRawExpr*, 16> first_exprs;
       ObSEArray<ObRawExpr*, 16> second_exprs;
       QueryRelation this_relation;
@@ -1385,12 +1376,12 @@ int ObStmtComparer::compare_basic_table_item(const TableItem *first_table,
   if (OB_ISNULL(first_table) || OB_ISNULL(second_table)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("param has null", K(first_table), K(second_table));
-  } else if ((first_table->is_basic_table() || first_table->is_link_table())
-             && (second_table->is_basic_table() || second_table->is_link_table()) 
+  } else if ((first_table->is_basic_table())
+             && (second_table->is_basic_table()) 
              && first_table->ref_id_ == second_table->ref_id_
-             && first_table->flashback_query_type_ == second_table->flashback_query_type_
-             && (first_table->flashback_query_expr_ == second_table->flashback_query_expr_
-                 || first_table->flashback_query_expr_->same_as(*second_table->flashback_query_expr_))
+             && first_table->snapshot_query_type_ == second_table->snapshot_query_type_
+             && (first_table->snapshot_query_expr_ == second_table->snapshot_query_expr_
+                 || first_table->snapshot_query_expr_->same_as(*second_table->snapshot_query_expr_))
              && ((first_table->sample_info_ == NULL &&  second_table->sample_info_ == NULL) 
                  || (first_table->sample_info_ != NULL &&  second_table->sample_info_ != NULL 
                      && first_table->sample_info_->same_as(*second_table->sample_info_)))) {
@@ -1555,8 +1546,8 @@ int ObStmtComparer::compare_table_item(const ObDMLStmt *first,
     } else {
       relation = QueryRelation::QUERY_UNCOMPARABLE;
     }
-  } else if ((first_table->is_basic_table() || first_table->is_link_table()) && 
-            (second_table->is_basic_table() || second_table->is_link_table())) {
+  } else if ((first_table->is_basic_table()) && 
+            (second_table->is_basic_table())) {
     if (OB_FAIL(compare_basic_table_item(first_table, 
                                          second_table, 
                                          relation))) {
@@ -1571,7 +1562,7 @@ int ObStmtComparer::compare_table_item(const ObDMLStmt *first,
         map_info.table_map_.at(first_table_index - 1) = second_table_index - 1;
       }
     }
-  //TODO:jiangxiu.wt subsequent enable flashback query support for view and generated table, here needs to be handled
+  //TODO:jiangxiu.wt subsequent enable snapshot query support for view and generated table, here needs to be handled
   } else if ((first_table->is_generated_table() &&
              second_table->is_generated_table()) ||
              (first_table->is_lateral_table() &&
@@ -1587,7 +1578,6 @@ int ObStmtComparer::compare_table_item(const ObDMLStmt *first,
                                                          ref_query_map_info,
                                                          relation,
                                                          false,
-                                                         true,
                                                          is_in_same_stmt)))) {
       LOG_WARN("check stmt containment failed", K(ret));
     } else if (OB_FAIL(map_info.view_select_item_map_.at(first_table_index - 1).assign(ref_query_map_info.select_item_map_))) {
@@ -1663,7 +1653,6 @@ int ObStmtComparer::compare_set_stmt(const ObSelectStmt *first,
                                                     ref_query_map_info,
                                                     set_query_relation,
                                                     false,
-                                                    true,
                                                     is_in_same_stmt)))) {
         LOG_WARN("check stmt containment failed", K(ret));
       } else if (QueryRelation::QUERY_EQUAL == set_query_relation && ref_query_map_info.is_select_item_equal_) {

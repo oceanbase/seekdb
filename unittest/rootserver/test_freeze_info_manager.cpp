@@ -19,11 +19,11 @@
 #include "gtest/gtest.h"
 #include "gmock/gmock.h"
 #define private public
-#include "lib/stat/ob_session_stat.h"
+#include "lib/stat/ob_diagnose_info.h"
 #include "../share/schema/db_initializer.h"
 #include "lib/time/ob_time_utility.h"
 #include "lib/container/ob_array_iterator.h"
-#include "lib/mysqlclient/ob_mysql_transaction.h"
+#include "common/mysqlclient/ob_mysql_transaction.h"
 #include "share/ob_freeze_info_manager.h"
 #include "rootserver/freeze/ob_zone_merge_manager.h"
 #include "share/ob_zone_merge_table_operator.h"

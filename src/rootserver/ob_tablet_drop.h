@@ -17,13 +17,27 @@
 #ifndef OB_TABLE_DROP_H
 #define OB_TABLE_DROP_H
 
-#include "ob_rs_async_rpc_proxy.h" //async rpc
+#include "lib/container/ob_array.h"
+#include "lib/container/ob_iarray.h"
+#include "lib/allocator/ob_malloc.h"
+#include "common/mysqlclient/ob_mysql_transaction.h"
+#include "share/ob_define.h"
+#include "common/ob_tablet_id.h"
 
 namespace oceanbase
 {
+namespace share
+{
+namespace schema
+{
+class ObTableSchema;
+}
+
+}
+
 namespace rpc
 {
-  class ObBatchRemoveTabletArg;
+class ObBatchRemoveTabletArg;
 }
 namespace rootserver
 {
@@ -32,12 +46,11 @@ class ObTabletDrop
 {
 public:
   ObTabletDrop(
-      const uint64_t tenant_id,
       ObMySQLTransaction &trans,
       int64_t schema_version)
-                : tenant_id_(tenant_id),
-                  trans_(trans),
+                : trans_(trans),
                   allocator_("TbtDrop"),
+                  tablet_ids_(NULL),
                   schema_version_(schema_version),
                   inited_(false) {}
   virtual ~ObTabletDrop();
@@ -52,24 +65,18 @@ public:
   // 2. or all are local indexes of a table
   int add_drop_tablets_of_table_arg(
       const common::ObIArray<const share::schema::ObTableSchema*> &schemas);
-  int get_ls_from_table(const share::schema::ObTableSchema &table_schema,
-                        const bool is_include_hidden,
-                        common::ObIArray<share::ObLSID> &assign_ls_id_array);
 private:
   int drop_tablet_(
       const common::ObIArray<const share::schema::ObTableSchema *> &table_schema_ptr_array,
-      const share::ObLSID &ls_key,
       const int64_t i, 
       const int64_t j,
       const bool is_hidden);
 private:
-  const uint64_t tenant_id_;
   ObMySQLTransaction &trans_;
   ObArenaAllocator allocator_;
-  common::hash::ObHashMap<share::ObLSID, common::ObIArray<ObTabletID>*> args_map_;
+  common::ObIArray<ObTabletID> *tablet_ids_;
   int64_t schema_version_;
   bool inited_;
-  const int64_t MAP_BUCKET_NUM = 1024;
 };
 }
 }

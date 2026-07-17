@@ -27,8 +27,7 @@ namespace observer
 {
 
 ObInfoSchemaTableConstraintsTable::ObInfoSchemaTableConstraintsTable()
-    : ObVirtualTableScannerIterator(),
-      tenant_id_(OB_INVALID_ID)
+    : ObVirtualTableScannerIterator()
 {
 }
 
@@ -39,27 +38,23 @@ ObInfoSchemaTableConstraintsTable::~ObInfoSchemaTableConstraintsTable()
 
 void ObInfoSchemaTableConstraintsTable::reset()
 {
-  tenant_id_ = OB_INVALID_ID;
   ObVirtualTableScannerIterator::reset();
 }
 
 int ObInfoSchemaTableConstraintsTable::inner_get_next_row(common::ObNewRow *&row)
 {
   int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(NULL == allocator_ || NULL == schema_guard_ ||
-                  OB_INVALID_ID == tenant_id_)) {
+  if (OB_UNLIKELY(NULL == allocator_ || NULL == schema_guard_)) {
     ret = OB_NOT_INIT;
-    SERVER_LOG(WARN, "allocator or schema_guard is NULL or tenant_id is invalid!",
+    SERVER_LOG(WARN, "allocator or schema_guard is NULL!",
                K_(schema_guard),
                K_(allocator),
-               K_(tenant_id),
                K(ret));
   }
   if (OB_SUCC(ret) && !start_to_read_) {
     ObSArray<const ObDatabaseSchema *> database_schemas;
-    if (OB_FAIL(schema_guard_->get_database_schemas_in_tenant(tenant_id_,
-                                                                database_schemas))) {
-      SERVER_LOG(WARN, "failed to get database schema of tenant", K_(tenant_id));
+    if (OB_FAIL(schema_guard_->get_database_schemas_in_tenant(database_schemas))) {
+      SERVER_LOG(WARN, "failed to get database schema of tenant");
     } else {
       ObObj *cells = NULL;
       const int64_t col_count = output_column_ids_.count();
@@ -115,8 +110,7 @@ int ObInfoSchemaTableConstraintsTable::add_table_constraints(const ObDatabaseSch
   if (OB_ISNULL(schema_guard_)) {
     ret = OB_ERR_UNEXPECTED;
     SERVER_LOG(WARN, "schema guard should not be null", K(ret));
-  } else if (OB_FAIL(schema_guard_->get_table_schemas_in_database(tenant_id_,
-                                                             database_schema.get_database_id(),
+  } else if (OB_FAIL(schema_guard_->get_table_schemas_in_database(database_schema.get_database_id(),
                                                              table_schemas))) {
     SERVER_LOG(WARN, "failed to get table schema in database", K(ret));
   } else {
@@ -259,7 +253,6 @@ int ObInfoSchemaTableConstraintsTable::add_index_constraints(const ObTableSchema
   for (int64_t i = 0; OB_SUCC(ret) && i < simple_index_infos.count(); i++) {
     const ObTableSchema *index_schema = NULL;
     if (OB_FAIL(schema_guard_->get_table_schema(
-                table_schema.get_tenant_id(),
                 simple_index_infos.at(i).table_id_,
                 index_schema))) {
       SERVER_LOG(WARN, "get index schema failed",

@@ -17,7 +17,8 @@
 #define USING_LOG_PREFIX STORAGE
 
 #include "storage/direct_load/ob_direct_load_merge_ctx.h"
-#include "share/ob_tablet_autoincrement_service.h"
+#include "storage/ddl/ob_ddl_storage_util.h"
+#include "storage/ob_tablet_autoincrement_service.h"
 #include "storage/direct_load/ob_direct_load_external_multi_partition_table.h"
 #include "storage/direct_load/ob_direct_load_insert_lob_table_ctx.h"
 #include "storage/direct_load/ob_direct_load_insert_table_ctx.h"
@@ -25,7 +26,6 @@
 #include "storage/direct_load/ob_direct_load_multiple_sstable.h"
 #include "storage/direct_load/ob_direct_load_partition_del_lob_task.h"
 #include "storage/direct_load/ob_direct_load_partition_merge_task.h"
-#include "storage/direct_load/ob_direct_load_partition_rescan_task.h"
 #include "storage/direct_load/ob_direct_load_range_splitter.h"
 #include "storage/direct_load/ob_direct_load_table_store.h"
 #include "storage/direct_load/ob_direct_load_sstable.h"
@@ -78,8 +78,8 @@ bool ObDirectLoadMergeParam::is_valid() const
 
 ObDirectLoadMergeCtx::ObDirectLoadMergeCtx() : allocator_("TLD_MergeCtx"), is_inited_(false)
 {
-  allocator_.set_tenant_id(MTL_ID());
-  tablet_merge_ctx_array_.set_tenant_id(MTL_ID());
+  
+  
 }
 
 ObDirectLoadMergeCtx::~ObDirectLoadMergeCtx()
@@ -100,18 +100,18 @@ void ObDirectLoadMergeCtx::reset()
 }
 
 int ObDirectLoadMergeCtx::init(const ObDirectLoadMergeParam &param,
-                               const ObIArray<ObTableLoadLSIdAndPartitionId> &ls_partition_ids)
+                               const ObIArray<ObTableLoadTabletId> &partition_ids)
 {
   int ret = OB_SUCCESS;
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
     LOG_WARN("ObDirectLoadMerger init twice", KR(ret), KP(this));
-  } else if (OB_UNLIKELY(!param.is_valid() || ls_partition_ids.empty())) {
+  } else if (OB_UNLIKELY(!param.is_valid() || partition_ids.empty())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid args", KR(ret), K(param), K(ls_partition_ids));
+    LOG_WARN("invalid args", KR(ret), K(param), K(partition_ids));
   } else {
     param_ = param;
-    if (OB_FAIL(create_all_tablet_ctxs(ls_partition_ids))) {
+    if (OB_FAIL(create_all_tablet_ctxs(partition_ids))) {
       LOG_WARN("fail to create all tablet ctxs", KR(ret));
     } else {
       struct
@@ -131,17 +131,17 @@ int ObDirectLoadMergeCtx::init(const ObDirectLoadMergeParam &param,
 }
 
 int ObDirectLoadMergeCtx::create_all_tablet_ctxs(
-  const ObIArray<ObTableLoadLSIdAndPartitionId> &ls_partition_ids)
+  const ObIArray<ObTableLoadTabletId> &partition_ids)
 {
   int ret = OB_SUCCESS;
-  for (int64_t i = 0; OB_SUCC(ret) && i < ls_partition_ids.count(); ++i) {
-    const ObTableLoadLSIdAndPartitionId &ls_partition_id = ls_partition_ids.at(i);
+  for (int64_t i = 0; OB_SUCC(ret) && i < partition_ids.count(); ++i) {
+    const ObTableLoadTabletId &partition_id = partition_ids.at(i);
     ObDirectLoadTabletMergeCtx *tablet_ctx = nullptr;
     if (OB_ISNULL(tablet_ctx = OB_NEWx(ObDirectLoadTabletMergeCtx, (&allocator_)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("fail to new ObDirectLoadTabletMergeCtx", KR(ret));
-    } else if (OB_FAIL(tablet_ctx->init(this, ls_partition_id))) {
-      LOG_WARN("fail to init tablet ctx", KR(ret), K(ls_partition_id));
+    } else if (OB_FAIL(tablet_ctx->init(this, partition_id))) {
+      LOG_WARN("fail to init tablet ctx", KR(ret), K(partition_id));
     } else if (OB_FAIL(tablet_merge_ctx_array_.push_back(tablet_ctx))) {
       LOG_WARN("fail to push back", KR(ret));
     }
@@ -302,23 +302,6 @@ int ObDirectLoadMergeCtx::build_del_lob_task(ObDirectLoadTableStore &table_store
   return ret;
 }
 
-int ObDirectLoadMergeCtx::build_rescan_task(int64_t thread_cnt)
-{
-  int ret = OB_SUCCESS;
-  if (IS_NOT_INIT) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("ObDirectLoadMergeCtx not init", KR(ret), KP(this));
-  } else {
-    for (int64_t i = 0; OB_SUCC(ret) && i < tablet_merge_ctx_array_.count(); ++i) {
-      ObDirectLoadTabletMergeCtx *tablet_merge_ctx = tablet_merge_ctx_array_.at(i);
-      if (OB_FAIL(tablet_merge_ctx->build_rescan_task(thread_cnt))) {
-        LOG_WARN("fail to build rescan task", KR(ret));
-      }
-    }
-  }
-  return ret;
-}
-
 /**
  * ObDirectLoadTabletMergeCtx
  */
@@ -333,9 +316,9 @@ ObDirectLoadTabletMergeCtx::ObDirectLoadTabletMergeCtx()
     task_ret_code_(OB_SUCCESS),
     is_inited_(false)
 {
-  allocator_.set_tenant_id(MTL_ID());
-  range_array_.set_tenant_id(MTL_ID());
-  merge_task_array_.set_tenant_id(MTL_ID());
+  
+  
+  
 }
 
 ObDirectLoadTabletMergeCtx::~ObDirectLoadTabletMergeCtx() { reset(); }
@@ -362,26 +345,25 @@ void ObDirectLoadTabletMergeCtx::reset()
 }
 
 int ObDirectLoadTabletMergeCtx::init(ObDirectLoadMergeCtx *merge_ctx,
-                                     const ObTableLoadLSIdAndPartitionId &ls_partition_id)
+                                     const ObTableLoadTabletId &partition_id)
 
 {
   int ret = OB_SUCCESS;
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
     LOG_WARN("ObDirectLoadTabletMergeCtx init twice", KR(ret), KP(this));
-  } else if (OB_UNLIKELY(nullptr == merge_ctx || !ls_partition_id.is_valid())) {
+  } else if (OB_UNLIKELY(nullptr == merge_ctx || !partition_id.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid args", KR(ret), KP(merge_ctx), K(ls_partition_id));
+    LOG_WARN("invalid args", KR(ret), KP(merge_ctx), K(partition_id));
   } else {
     merge_ctx_ = merge_ctx;
     param_ = &merge_ctx->param_;
-    tablet_id_ = ls_partition_id.part_tablet_id_.tablet_id_;
+    tablet_id_ = partition_id.part_tablet_id_.tablet_id_;
     if (OB_FAIL(param_->insert_table_ctx_->get_tablet_context(tablet_id_, insert_tablet_ctx_))) {
       LOG_WARN("fail to get insert tablet ctx", KR(ret), K(tablet_id_));
     } else if (ObDirectLoadMergeMode::merge_need_origin_table(param_->merge_mode_)) {
       ObDirectLoadOriginTableCreateParam origin_table_param;
       origin_table_param.table_id_ = param_->table_id_;
-      origin_table_param.ls_id_ = ls_partition_id.ls_id_;
       origin_table_param.tablet_id_ = tablet_id_;
       origin_table_param.tx_id_ = param_->trans_param_.tx_id_;
       origin_table_param.tx_seq_ = param_->trans_param_.tx_seq_;
@@ -757,7 +739,7 @@ int ObDirectLoadTabletMergeCtx::build_del_lob_task(
     const ObLobId &min_insert_lob_id =
       static_cast<ObDirectLoadInsertLobTabletContext *>(insert_tablet_ctx_)
         ->get_min_insert_lob_id();
-    const int64_t last_parallel_idx = ObDDLUtil::get_parallel_idx(insert_tablet_ctx_->get_last_data_seq());
+    const int64_t last_parallel_idx = ObDDLStorageUtil::get_parallel_idx(insert_tablet_ctx_->get_last_data_seq());
     int64_t first_no_insert_front_idx = -1;
     if (OB_FAIL(range_splitter.split_range(tablet_id_, nullptr /*origin_table*/,
                                            max_parallel_degree, range_array_, allocator_))) {
@@ -820,12 +802,12 @@ int ObDirectLoadTabletMergeCtx::build_del_lob_task(
         parallel_idx = 0;
       }
       if (insert_front) {
-        if (OB_FAIL(ObDDLUtil::init_macro_block_seq(parallel_idx,
+        if (OB_FAIL(ObDDLStorageUtil::init_macro_block_seq(parallel_idx,
                                                     data_seq))) {
           LOG_WARN("fail to init macro block seq", KR(ret), K(parallel_idx));
         }
       } else {
-        if (OB_FAIL(ObDDLUtil::init_macro_block_seq(last_parallel_idx + parallel_idx + 1,
+        if (OB_FAIL(ObDDLStorageUtil::init_macro_block_seq(last_parallel_idx + parallel_idx + 1,
                                                     data_seq))) {
           LOG_WARN("fail to init macro block seq", KR(ret), K(last_parallel_idx), K(parallel_idx));
         }
@@ -880,7 +862,7 @@ int ObDirectLoadTabletMergeCtx::build_del_lob_task_for_dag(
     const ObDatumRange &range = range_array_.at(i);
     ObMacroDataSeq data_seq;
     ObDirectLoadPartitionDelLobTask *del_lob_task = nullptr;
-    if (OB_FAIL(ObDDLUtil::init_macro_block_seq(parallel_idx,
+    if (OB_FAIL(ObDDLStorageUtil::init_macro_block_seq(parallel_idx,
                                                 data_seq))) {
       LOG_WARN("fail to init macro block seq", KR(ret), K(parallel_idx));
     } else if (OB_ISNULL(del_lob_task =
@@ -905,37 +887,6 @@ int ObDirectLoadTabletMergeCtx::build_del_lob_task_for_dag(
   return ret;
 }
 
-int ObDirectLoadTabletMergeCtx::build_rescan_task(int64_t thread_cnt)
-{
-  int ret = OB_SUCCESS;
-  if (IS_NOT_INIT) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("ObDirectLoadTabletMergeCtx not init", KR(ret), KP(this));
-  } else if (OB_UNLIKELY(thread_cnt <= 0)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid args", KR(ret), K(thread_cnt));
-  }
-  for (int64_t i = 0; OB_SUCC(ret) && i < thread_cnt; ++i) {
-    ObDirectLoadPartitionRescanTask *rescan_task = nullptr;
-    if (OB_ISNULL(rescan_task = OB_NEWx(ObDirectLoadPartitionRescanTask, (&allocator_)))) {
-      ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("fail to new ObDirectLoadPartitionRescanTask", KR(ret));
-    } else if (OB_FAIL(rescan_task->init(this, thread_cnt, i))) {
-      LOG_WARN("fail to init merge task", KR(ret));
-    } else if (OB_FAIL(merge_task_array_.push_back(rescan_task))) {
-      LOG_WARN("fail to push back rescan task", KR(ret));
-    }
-    if (OB_FAIL(ret)) {
-      if (nullptr != rescan_task) {
-        rescan_task->~ObDirectLoadPartitionRescanTask();
-        allocator_.free(rescan_task);
-        rescan_task = nullptr;
-      }
-    }
-  }
-  return ret;
-}
-
 int ObDirectLoadTabletMergeCtx::get_autoincrement_value(uint64_t count,
                                                         ObTabletCacheInterval &interval)
 {
@@ -944,12 +895,12 @@ int ObDirectLoadTabletMergeCtx::get_autoincrement_value(uint64_t count,
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid args", KR(ret), K(count));
   } else {
-    const uint64_t tenant_id = MTL_ID();
+    
     ObTabletAutoincrementService &auto_inc = ObTabletAutoincrementService::get_instance();
     interval.tablet_id_ = tablet_id_;
     interval.cache_size_ = count;
-    if (OB_FAIL(auto_inc.get_tablet_cache_interval(tenant_id, interval))) {
-      LOG_WARN("fail to get tablet cache interval", K(ret), K(tenant_id), K_(tablet_id));
+    if (OB_FAIL(auto_inc.get_tablet_cache_interval(interval))) {
+      LOG_WARN("fail to get tablet cache interval", K(ret), K_(tablet_id));
     } else if (OB_UNLIKELY(count > interval.count())) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected autoincrement value count", K(ret), K(count), K(interval));

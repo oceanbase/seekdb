@@ -40,6 +40,7 @@ namespace sql
 {
 struct ObBoolMask;
 class ObBlackFilterExecutor;
+class ObDynamicFilterExecutor;
 }
 namespace blocksstable
 {
@@ -334,7 +335,6 @@ protected:
 inline static common::ObDatumCmpFuncType get_datum_cmp_func(const common::ObObjMeta &col_obj_type, const common::ObObjMeta &param_obj_type)
 {
   common::ObDatumCmpFuncType cmp_func = nullptr;
-  bool is_oracle_mode = lib::is_oracle_mode();
   // if compare lob with non-lob, should use get_nullsafe_cmp_func to get cmp_func
   // especially tinytext, beacause tinytext does not have lob header, but it's type class is TextTC.
   bool not_both_lob_storage = col_obj_type.is_lob_storage() ^ param_obj_type.is_lob_storage();
@@ -343,14 +343,14 @@ inline static common::ObDatumCmpFuncType get_datum_cmp_func(const common::ObObjM
     cmp_func = ObDatumFuncs::get_nullsafe_cmp_func(
         col_obj_type.get_type(),
         param_obj_type.get_type(),
-        is_oracle_mode ? NULL_LAST : NULL_FIRST,
+        NULL_FIRST,
         col_obj_type.get_collation_type(),
         col_obj_type.get_scale(),
-        is_oracle_mode,
+        false,
         col_obj_type.has_lob_header() || param_obj_type.has_lob_header());
   } else {
     sql::ObExprBasicFuncs *basic_funcs = ObDatumFuncs::get_basic_func(col_obj_type.get_type(), col_obj_type.get_collation_type());
-    cmp_func = is_oracle_mode ? basic_funcs->null_last_cmp_ : basic_funcs->null_first_cmp_;
+    cmp_func = basic_funcs->null_first_cmp_;
   }
   return cmp_func;
 }
@@ -454,77 +454,6 @@ inline int reverse_trans_version_val(common::ObDatum &datum)
 }
 int reverse_trans_version_val(common::ObDatum *datums, const int64_t count);
 int reverse_trans_version_val(ObIVector *vector, const int64_t count);
-
-enum class StorageScanType : int8_t
-{
-  NORMAL = 0,
-  MVIEW_FIRST_DELETE = 1,
-  MVIEW_LAST_INSERT = 2,
-  MVIEW_FINAL_ROW = 3,
-};
-OB_INLINE bool is_mview_scan_old_row(const StorageScanType type)
-{
-  return  StorageScanType::MVIEW_FIRST_DELETE == type;
-}
-OB_INLINE bool is_mview_scan_new_row(const StorageScanType type)
-{
-  return  StorageScanType::MVIEW_LAST_INSERT == type;
-}
-OB_INLINE bool is_mview_scan_final_row(const StorageScanType type)
-{
-  return  StorageScanType::MVIEW_FINAL_ROW == type;
-}
-OB_INLINE bool is_mview_table_scan(const StorageScanType type)
-{
-  return  StorageScanType::NORMAL < type && type <= StorageScanType::MVIEW_FINAL_ROW;
-}
-OB_INLINE bool is_mview_need_deleted_row(const StorageScanType type)
-{
-  return is_mview_scan_old_row(type) || is_mview_scan_final_row(type);
-}
-
-struct ObMviewScanInfo
-{
-  static const char *OLD_ROW;
-  static const char *NEW_ROW;
-  ObMviewScanInfo(ObIAllocator *alloc) : is_mv_refresh_query_(false),
-                                         scan_type_(StorageScanType::NORMAL),
-                                         begin_version_(-1),
-                                         end_version_(-1)
-  {
-  }
-  int init(
-      const bool is_mv_refresh_query,
-      const StorageScanType scan_type,
-      const int64_t begin_version,
-      const int64_t end_version);
-  OB_INLINE bool is_begin_valid() const { return -1 != begin_version_; }
-  OB_INLINE bool is_end_valid() const { return -1 != end_version_; }
-  OB_INLINE bool is_valid() const
-  {
-    return is_mview_table_scan(scan_type_) &&
-           is_begin_valid() &&
-           (!is_end_valid() || begin_version_ < end_version_);
-  }
-  int check_and_update_version_range(const int64_t multi_version_start, common::ObVersionRange &origin_range);
-  TO_STRING_KV(K_(is_mv_refresh_query), K_(scan_type), K_(begin_version), K_(end_version));
-  bool is_mv_refresh_query_;
-  StorageScanType scan_type_;
-  // (begin_version, end_version]
-  int64_t begin_version_;
-  int64_t end_version_;
-};
-int build_mview_scan_info_if_need(
-    const common::ObQueryFlag query_flag,
-    const sql::ObExprPtrIArray *op_filters,
-    sql::ObEvalCtx &eval_ctx,
-    common::ObIAllocator *alloc,
-    ObMviewScanInfo *&mview_scan_info);
-int get_query_begin_version_for_mlog(
-    const sql::ObExprPtrIArray &op_filters,
-    sql::ObEvalCtx &eval_ctx,
-    int64_t &begin_version);
-void release_mview_scan_info(common::ObIAllocator *alloc, ObMviewScanInfo *&mview_scan_info);
 
 }
 }

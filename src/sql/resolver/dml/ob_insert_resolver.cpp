@@ -65,7 +65,7 @@ int ObInsertResolver::resolve(const ParseNode &parse_tree)
   } else if (OB_ISNULL(parse_tree.children_[REPLACE_NODE])) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid node for is_replacement", K(parse_tree.children_[1]));
-  } else { // TODO:@webber.wb replace how oracle handles trigger
+  } else {
     insert_stmt->set_replace(parse_tree.children_[REPLACE_NODE]->type_ == T_REPLACE);
     session_info_->set_ignore_stmt(NULL != parse_tree.children_[IGNORE_NODE] ? true : false);
     insert_stmt->set_ignore(NULL != parse_tree.children_[IGNORE_NODE] ? true : false);
@@ -129,9 +129,6 @@ int ObInsertResolver::resolve(const ParseNode &parse_tree)
     if (OB_FAIL(check_view_insertable())) {
       LOG_WARN("view not insertable", K(ret));
     }
-  }
-  if (OB_SUCC(ret) && OB_FAIL(check_insert_into_external_table())) {
-    LOG_WARN("check insert into external table failed", K(ret));
   }
 
   return ret;
@@ -451,8 +448,8 @@ int ObInsertResolver::resolve_insert_field(const ParseNode &insert_into, TableIt
   ObSelectStmt *ref_stmt = NULL;
   CK(OB_NOT_NULL(insert_stmt));
   CK(OB_NOT_NULL(table_node = insert_into.children_[0]));
-  //resolve insert table
-  //oracle mode allow to use insert subquery... => eg:insert into (select * from t1)v values(1,2,3);
+  // Resolve insert table. The grammar may provide an insert subquery target,
+  // e.g. insert into (select * from t1) v values(1,2,3).
   const bool old_flag = session_info_->is_table_name_hidden();
   session_info_->set_table_name_hidden(session_info_->get_ddl_info().is_ddl()
                                         && session_info_->get_ddl_info().is_dest_table_hidden());
@@ -479,10 +476,9 @@ int ObInsertResolver::resolve_insert_field(const ParseNode &insert_into, TableIt
 
   if (OB_SUCC(ret)) {
     const ObTableSchema *table_schema = NULL;
-    OZ(schema_checker_->get_table_schema(session_info_->get_effective_tenant_id(),
+    OZ(schema_checker_->get_table_schema(
                                          table_item->get_base_table_item().ref_id_,
-                                         table_schema,
-                                         table_item->is_link_table()));
+                                         table_schema));
   }
 
   OZ(remove_dup_dep_cols_for_heap_table(insert_stmt->get_insert_table_info().part_generated_col_dep_cols_,
@@ -587,7 +583,7 @@ int ObInsertResolver::resolve_values(const ParseNode &value_node,
     LOG_WARN("allocate select buffer failed", K(ret), "size", sizeof(ObSelectResolver));
   } else {
     // value from sub-query(insert into table select ..)
-    is_mock_ = lib::is_mysql_mode() && value_node.reserved_;
+    is_mock_ = value_node.reserved_;
     ObSelectStmt *select_stmt = NULL;
     sub_select_resolver_ = new(select_buffer) ObSelectResolver(params_);
     //insert clause and select clause in insert into select belong to the same namespace level
@@ -959,7 +955,7 @@ int ObInsertResolver::check_insert_select_field(ObInsertStmt &insert_stmt,
                                                                    &insert_stmt,
                                                                    is_generated_column))) {
           LOG_WARN("check basic column generated failed", K(ret));
-    } else if (is_generated_column && schema::EXTERNAL_TABLE != insert_table->table_type_) {
+    } else if (is_generated_column) {
       if (select_stmt.get_table_size() == 1 &&
           select_stmt.get_table_item(0) != NULL &&
           select_stmt.get_table_item(0)->is_values_table()) {
@@ -1091,27 +1087,6 @@ int ObInsertResolver::replace_column_to_default(ObRawExpr *&origin)
         }
       }
     }
-  }
-  return ret;
-}
-
-int ObInsertResolver::check_insert_into_external_table()
-{
-  int ret = OB_SUCCESS;
-  ObInsertStmt *insert_stmt = get_insert_stmt();
-  TableItem *table = NULL;
-  if (OB_ISNULL(insert_stmt) || insert_stmt->get_table_items().empty()
-      || OB_ISNULL(table = insert_stmt->get_table_item(0))) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid stmt", K(ret), K(insert_stmt));
-  } else if (schema::EXTERNAL_TABLE != table->table_type_) {
-    // do nothing
-  } else if (!insert_stmt->value_from_select() || insert_stmt->is_replace()
-             || insert_stmt->is_ignore() || insert_stmt->is_returning()
-             || insert_stmt->is_insert_up()) {
-    ret = OB_NOT_SUPPORTED;
-    LOG_WARN("not support insert into external table with values, replace, ignore, returning, update", K(ret));
-    LOG_USER_ERROR(OB_NOT_SUPPORTED, "insert into external table with values, replace, ignore, returning, update");
   }
   return ret;
 }
@@ -1273,7 +1248,7 @@ int ObInsertResolver::check_view_insertable()
     LOG_WARN("stmt is NULL or table item is NULL", K(ret));
   }
   // uv_check_basic already checked
-  if (OB_SUCC(ret) && is_mysql_mode() &&
+  if (OB_SUCC(ret) &&
       (table->is_generated_table() || table->is_temp_table())) {
     // check duplicate base column and non column reference column.
     if (OB_SUCC(ret)) {

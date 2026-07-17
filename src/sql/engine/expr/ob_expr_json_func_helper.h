@@ -18,17 +18,18 @@
 #define OCEANBASE_SQL_OB_EXPR_JSON_FUNC_HELPER_H_
 
 #include "sql/engine/expr/ob_expr_util.h"
+#include "share/object/ob_obj_cast_util.h"  // ObJsonZeroVal moved down to
 #include "sql/engine/expr/ob_expr_lob_utils.h"
 #include "share/object/ob_obj_cast.h"
-#include "objit/common/ob_item_type.h"
+#include "sql/parser/ob_item_type.h"
 #include "sql/session/ob_sql_session_info.h"
-#include "lib/lob/ob_lob_base.h"
-#include "lib/json_type/ob_json_tree.h"
-#include "lib/json_type/ob_json_base.h"
-#include "lib/json_type/ob_json_bin.h"
-#include "lib/json_type/ob_json_parse.h"
-#include "lib/json_type/ob_json_schema.h"
-#include "lib/json_type/ob_json_diff.h"
+#include "common/lob/ob_lob_base.h"
+#include "common/json_type/ob_json_tree.h"
+#include "common/json_type/ob_json_base.h"
+#include "common/json_type/ob_json_bin.h"
+#include "common/json_type/ob_json_parse.h"
+#include "common/json_type/ob_json_schema.h"
+#include "common/json_type/ob_json_diff.h"
 #include "sql/engine/expr/ob_expr_result_type_util.h"
 #include "storage/lob/ob_lob_util.h"
 #include "sql/engine/expr/ob_expr_multi_mode_func_helper.h"
@@ -293,9 +294,9 @@ public:
                           ObObjType val_type,
                           ObCollationType &cs_type,
                           ObIJsonBase*& j_base, bool to_bin = false);
-  static int oracle_datum2_json_val(const ObDatum *json_datum,  ObObjMeta& data_meta, common::ObIAllocator *allocator,
-                                    ObBasicSessionInfo *session, ObIJsonBase*& j_base, bool is_bool_data_type,
-                                    bool format_json = false, bool is_strict = false, bool is_bin = false);
+  static int datum_to_json_val(const ObDatum *json_datum,  ObObjMeta& data_meta, common::ObIAllocator *allocator,
+                               ObBasicSessionInfo *session, ObIJsonBase*& j_base, bool is_bool_data_type,
+                               bool format_json = false, bool is_strict = false, bool is_bin = false);
   
  
   /*
@@ -543,16 +544,6 @@ protected:
   int64_t query_timeout_ts_;
 };
 
-struct ObJsonZeroVal
-{
-  static const int32_t OB_JSON_ZERO_VAL_LENGTH = sizeof(ObLobCommon) + 2;
-  ObJsonZeroVal() : header_(), json_bin_() {
-    json_bin_[0] = '\0';
-    json_bin_[1] = '\0';
-  }
-  ObLobCommon header_;
-  char json_bin_[4];
-};
 
 } // sql
 } // oceanbase

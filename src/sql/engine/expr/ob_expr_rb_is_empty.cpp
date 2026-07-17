@@ -17,7 +17,7 @@
 #define USING_LOG_PREFIX SQL_ENG
 #include "sql/engine/expr/ob_expr_rb_is_empty.h"
 #include "sql/engine/expr/ob_expr_rb_func_helper.h"
-#include "lib/roaringbitmap/ob_rb_utils.h"
+#include "share/roaringbitmap/ob_rb_utils.h"
 
 using namespace oceanbase::common;
 using namespace oceanbase::sql;
@@ -60,7 +60,7 @@ int ObExprRbIsEmpty::eval_rb_is_empty(const ObExpr &expr, ObEvalCtx &ctx, ObDatu
   INIT_SUCC(ret);
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
   common::ObArenaAllocator &tmp_allocator = tmp_alloc_g.get_allocator();
-  lib::ObMallocHookAttrGuard malloc_guard(lib::ObMemAttr(ObRbExprHelper::get_tenant_id(ctx.exec_ctx_.get_my_session()), "ROARINGBITMAP"));
+  lib::ObMallocHookAttrGuard malloc_guard(lib::ObMemAttr("ROARINGBITMAP"));
   ObExpr *rb_arg = expr.args_[0];
   bool is_rb_null = false;
   ObString rb_bin;

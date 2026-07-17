@@ -33,7 +33,7 @@ ObDirectLoadDagInsertTableRowHandler::ObDirectLoadDagInsertTableRowHandler()
 
 ObDirectLoadDagInsertTableRowHandler::~ObDirectLoadDagInsertTableRowHandler()
 {
-  OB_DELETE(ObDirectLoadDagLobBuilder, ObMemAttr(MTL_ID(), "TLD_LobBuilder"), lob_builder_);
+  OB_DELETE(ObDirectLoadDagLobBuilder, ObMemAttr("TLD_LobBuilder"), lob_builder_);
 }
 
 int ObDirectLoadDagInsertTableRowHandler::init(ObDirectLoadInsertTabletContext *insert_tablet_ctx)
@@ -55,7 +55,7 @@ int ObDirectLoadDagInsertTableRowHandler::init(ObDirectLoadInsertTabletContext *
     if (OB_SUCC(ret) && insert_tablet_ctx_->has_lob_storage() &&
         insert_tablet_ctx_->get_is_insert_lob()) {
       if (OB_ISNULL(lob_builder_ =
-                      OB_NEW(ObDirectLoadDagLobBuilder, ObMemAttr(MTL_ID(), "TLD_LobBuilder")))) {
+                      OB_NEW(ObDirectLoadDagLobBuilder, ObMemAttr("TLD_LobBuilder")))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
         LOG_WARN("fail to new ObDirectLoadDagLobBuilder", KR(ret));
       } else if (OB_FAIL(lob_builder_->init(insert_tablet_ctx_))) {

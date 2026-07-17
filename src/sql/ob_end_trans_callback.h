@@ -21,7 +21,7 @@
 #include "lib/utility/utility.h"
 #include "lib/allocator/ob_allocator.h"
 #include "lib/objectpool/ob_tc_factory.h"
-#include "lib/allocator/ob_mod_define.h"
+#include "lib/utility/ob_mod_define.h"
 #include "sql/ob_i_end_trans_callback.h"
 #include "storage/tx/ob_trans_result.h"
 #include "storage/tx/ob_trans_define.h"
@@ -100,14 +100,10 @@ public:
   {
     ObExclusiveEndTransCallback::reset();
     mysql_end_trans_cb_.reset();
-    reset_diagnostic_info();
   }
-  void set_diagnostic_info(common::ObDiagnosticInfo *diagnostic_info);
-  void reset_diagnostic_info();
 private:
   /* macro */
   observer::ObSqlEndTransCb mysql_end_trans_cb_;
-  common::ObDiagnosticInfo *diagnostic_info_;
   DISALLOW_COPY_AND_ASSIGN(ObEndTransAsyncCallback);
 };
 

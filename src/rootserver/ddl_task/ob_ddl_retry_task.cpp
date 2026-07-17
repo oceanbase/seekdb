@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX RS
 #include "ob_ddl_retry_task.h"
+#include "rootserver/ob_rs_serial_call.h"
 #include "rootserver/ob_ddl_service_launcher.h" // for ObDDLServiceLauncher
 #include "share/ob_ddl_sim_point.h"
 #include "sql/engine/cmd/ob_ddl_executor_util.h"
@@ -25,7 +26,7 @@ using namespace oceanbase::common;
 using namespace oceanbase::share;
 using namespace oceanbase::share::schema;
 using namespace oceanbase::rootserver;
-using namespace oceanbase::obrpc;
+using namespace oceanbase::obcall;
 
 ObDDLRetryTask::ObDDLRetryTask()
   : ObDDLTask(share::DDL_INVALID), ddl_arg_(nullptr), root_service_(nullptr), affected_rows_(0), 
@@ -63,25 +64,25 @@ int ObDDLRetryTask::deep_copy_ddl_arg(
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("allocate memory failed", K(ret), K(serialize_size));
     } else if (ObDDLType::DDL_DROP_DATABASE == ddl_type) {
-      if (OB_ISNULL(ddl_arg_buf = static_cast<char *>(allocator.alloc(sizeof(obrpc::ObDropDatabaseArg))))) {
+      if (OB_ISNULL(ddl_arg_buf = static_cast<char *>(allocator.alloc(sizeof(obcall::ObDropDatabaseArg))))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
         LOG_WARN("allocate memory failed", K(ret));
       } else {
-        ddl_arg_ = new(ddl_arg_buf)obrpc::ObDropDatabaseArg();
+        ddl_arg_ = new(ddl_arg_buf)obcall::ObDropDatabaseArg();
       }
     } else if (ObDDLType::DDL_DROP_TABLE == ddl_type) {
-      if (OB_ISNULL(ddl_arg_buf = static_cast<char *>(allocator.alloc(sizeof(obrpc::ObDropTableArg))))) {
+      if (OB_ISNULL(ddl_arg_buf = static_cast<char *>(allocator.alloc(sizeof(obcall::ObDropTableArg))))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
         LOG_WARN("allocate memory failed", K(ret));
       } else {
-        ddl_arg_ = new(ddl_arg_buf)obrpc::ObDropTableArg();
+        ddl_arg_ = new(ddl_arg_buf)obcall::ObDropTableArg();
       }
     } else if (ObDDLType::DDL_TRUNCATE_TABLE == ddl_type) {
-      if (OB_ISNULL(ddl_arg_buf = static_cast<char *>(allocator.alloc(sizeof(obrpc::ObTruncateTableArg))))) {
+      if (OB_ISNULL(ddl_arg_buf = static_cast<char *>(allocator.alloc(sizeof(obcall::ObTruncateTableArg))))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
         LOG_WARN("allocate memory failed", K(ret));
       } else {
-        ddl_arg_ = new(ddl_arg_buf)obrpc::ObTruncateTableArg();
+        ddl_arg_ = new(ddl_arg_buf)obcall::ObTruncateTableArg();
       }
     } else if (ObDDLType::DDL_DROP_PARTITION == ddl_type
             || ObDDLType::DDL_DROP_SUB_PARTITION == ddl_type
@@ -89,11 +90,11 @@ int ObDDLRetryTask::deep_copy_ddl_arg(
             || ObDDLType::DDL_TRUNCATE_SUB_PARTITION == ddl_type
             || ObDDLType::DDL_RENAME_PARTITION == ddl_type
             || ObDDLType::DDL_RENAME_SUB_PARTITION == ddl_type) {
-      if (OB_ISNULL(ddl_arg_buf = static_cast<char *>(allocator.alloc(sizeof(obrpc::ObAlterTableArg))))) {
+      if (OB_ISNULL(ddl_arg_buf = static_cast<char *>(allocator.alloc(sizeof(obcall::ObAlterTableArg))))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
         LOG_WARN("allocate memory failed", K(ret));
       } else {
-        ddl_arg_ = new(ddl_arg_buf)obrpc::ObAlterTableArg();
+        ddl_arg_ = new(ddl_arg_buf)obcall::ObAlterTableArg();
       }
     } else {
       ret = OB_ERR_UNEXPECTED;
@@ -130,48 +131,46 @@ int ObDDLRetryTask::deep_copy_ddl_arg(
 }
 
 int ObDDLRetryTask::init_compat_mode(const share::ObDDLType &ddl_type,
-                                     const obrpc::ObDDLArg *source_arg)
+                                     const obcall::ObDDLArg *source_arg)
 {
   int ret = OB_SUCCESS;
   if (OB_ISNULL(source_arg) || !is_drop_schema_block_concurrent_trans(ddl_type)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arg", K(ret), KP(source_arg), K(ddl_type));
   } else if (ObDDLType::DDL_DROP_DATABASE == ddl_type) {
-    compat_mode_ = static_cast<const obrpc::ObDropDatabaseArg *>(source_arg)->compat_mode_;
+    compat_mode_ = static_cast<const obcall::ObDropDatabaseArg *>(source_arg)->compat_mode_;
   } else if (ObDDLType::DDL_DROP_TABLE == ddl_type) {
-    compat_mode_ = static_cast<const obrpc::ObDropTableArg *>(source_arg)->compat_mode_;
+    compat_mode_ = static_cast<const obcall::ObDropTableArg *>(source_arg)->compat_mode_;
   } else if (ObDDLType::DDL_TRUNCATE_TABLE == ddl_type) {
-    compat_mode_ = static_cast<const obrpc::ObTruncateTableArg *>(source_arg)->compat_mode_;
+    compat_mode_ = static_cast<const obcall::ObTruncateTableArg *>(source_arg)->compat_mode_;
   } else if (ObDDLType::DDL_DROP_PARTITION == ddl_type
           || ObDDLType::DDL_DROP_SUB_PARTITION == ddl_type
           || ObDDLType::DDL_TRUNCATE_PARTITION == ddl_type
           || ObDDLType::DDL_TRUNCATE_SUB_PARTITION == ddl_type
           || ObDDLType::DDL_RENAME_PARTITION == ddl_type
           || ObDDLType::DDL_RENAME_SUB_PARTITION == ddl_type) {
-    compat_mode_ = static_cast<const obrpc::ObAlterTableArg *>(source_arg)->compat_mode_;
+    compat_mode_ = static_cast<const obcall::ObAlterTableArg *>(source_arg)->compat_mode_;
   }
   return ret;
 }
 
-int ObDDLRetryTask::init(const uint64_t tenant_id, 
-                         const int64_t task_id,
+int ObDDLRetryTask::init(const int64_t task_id,
                          const uint64_t object_id,
                          const int64_t schema_version,
-                         const int64_t consumer_group_id,
                          const int32_t sub_task_trace_id,
                          const share::ObDDLType &ddl_type,
-                         const obrpc::ObDDLArg *ddl_arg, 
+                         const obcall::ObDDLArg *ddl_arg, 
                          const int64_t task_status)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
     LOG_WARN("ObDDLRetryTask has already been inited", K(ret));
-  } else if (OB_UNLIKELY(OB_INVALID_ID == tenant_id || task_id <= 0 || OB_INVALID_ID == object_id
+  } else if (OB_UNLIKELY(task_id <= 0 || OB_INVALID_ID == object_id
     || schema_version <= 0 || !is_drop_schema_block_concurrent_trans(ddl_type) || nullptr == ddl_arg 
     || ObDDLTaskStatus::PREPARE != task_status)) {
       ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(ret), K(tenant_id), K(task_id), K(object_id),
+    LOG_WARN("invalid arguments", K(ret), K(task_id), K(object_id),
       K(schema_version), K(ddl_type), KP(ddl_arg), K(task_status));
   } else if (OB_ISNULL(root_service_ = GCTX.root_service_)) {
     ret = OB_ERR_SYS;
@@ -186,18 +185,16 @@ int ObDDLRetryTask::init(const uint64_t tenant_id,
     object_id_ = object_id;
     target_object_id_ = object_id;
     schema_version_ = schema_version;
-    consumer_group_id_ = consumer_group_id;
     sub_task_trace_id_ = sub_task_trace_id;
-    tenant_id_ = tenant_id;
+    
     task_id_ = task_id;
     task_type_ = ddl_type;
     task_version_ = OB_DDL_RETRY_TASK_VERSION;
     task_status_ = static_cast<ObDDLTaskStatus>(task_status);
     is_schema_change_done_ = false;
-    dst_tenant_id_ = tenant_id_;
+    
     dst_schema_version_ = schema_version_;
     is_inited_ = true;
-    ddl_tracing_.open();
   }
   return ret;
 }
@@ -208,13 +205,13 @@ int ObDDLRetryTask::init(const ObDDLTaskRecord &task_record)
   if (OB_UNLIKELY(!task_record.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(task_record));
-  } else if (OB_FAIL(DDL_SIM(task_record.tenant_id_, task_record.task_id_, DDL_TASK_INIT_BY_RECORD_FAILED))) {
-    LOG_WARN("ddl sim failure", K(task_record.tenant_id_), K(task_record.task_id_));
+  } else if (OB_FAIL(DDL_SIM(task_record.task_id_, DDL_TASK_INIT_BY_RECORD_FAILED))) {
+    LOG_WARN("ddl sim failure", K(task_record.task_id_));
   } else if (OB_ISNULL(root_service_ = GCTX.root_service_)) {
     ret = OB_ERR_SYS;
     LOG_WARN("error sys, root service is null", K(ret));
   } else {
-    tenant_id_ = task_record.tenant_id_;
+  
     object_id_ = task_record.object_id_;
     target_object_id_ = task_record.target_object_id_;
     schema_version_ = task_record.schema_version_;
@@ -225,11 +222,11 @@ int ObDDLRetryTask::init(const ObDDLTaskRecord &task_record)
     ret_code_ = task_record.ret_code_;
     task_status_ = static_cast<ObDDLTaskStatus>(task_record.task_status_);
     is_schema_change_done_ = false; // do not worry about it, check_schema_change_done will correct it.
-    dst_tenant_id_ = tenant_id_;
+    
     dst_schema_version_ = schema_version_;
     if (nullptr != task_record.message_) {
       int64_t pos = 0;
-      if (OB_FAIL(deserialize_params_from_message(task_record.tenant_id_, task_record.message_.ptr(), task_record.message_.length(), pos))) {
+      if (OB_FAIL(deserialize_params_from_message(task_record.message_.ptr(), task_record.message_.length(), pos))) {
         LOG_WARN("fail to deserialize params from message", K(ret));
       }
     }
@@ -239,9 +236,6 @@ int ObDDLRetryTask::init(const ObDDLTaskRecord &task_record)
     LOG_WARN("init compat mode failed", K(ret));
   } else {
     is_inited_ = true;
-
-    // set up span during recover task
-    ddl_tracing_.open_for_recovery();
   }
   return ret;
 }
@@ -258,7 +252,7 @@ int ObDDLRetryTask::prepare(const ObDDLTaskStatus next_task_status)
   return ret;
 }
 
-int ObDDLRetryTask::get_forward_user_message(const obrpc::ObRpcResultCode &rcode)
+int ObDDLRetryTask::get_forward_user_message(const rpc::frame::ObResultCode &rcode)
 {
   int ret = OB_SUCCESS;
   ObString src;
@@ -268,7 +262,7 @@ int ObDDLRetryTask::get_forward_user_message(const obrpc::ObRpcResultCode &rcode
   char *tmp_buf = nullptr;
   int64_t alloc_size = 0;
   const int64_t serialize_size = rcode.get_serialize_size();
-  // to check validity of ObRpcResultCode.
+  // to check validity of rpc::frame::ObResultCode.
   ObWarningBuffer warning_buffer;
   if (warning_buffer.get_buffer_size() < rcode.warnings_.count()
     || common::OB_MAX_ERROR_MSG_LEN < strlen(rcode.msg_)) {
@@ -312,8 +306,8 @@ int ObDDLRetryTask::check_schema_change_done()
   } else if (OB_ISNULL(GCTX.sql_proxy_)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", KR(ret), KP(GCTX.sql_proxy_));
-  } else if (OB_FAIL(DDL_SIM(tenant_id_, task_id_, RETRY_TASK_CHECK_SCHEMA_CHANGED_FAILED))) {
-    LOG_WARN("ddl sim failure", K(ret), K(tenant_id_), K(task_id_));
+  } else if (OB_FAIL(DDL_SIM(task_id_, RETRY_TASK_CHECK_SCHEMA_CHANGED_FAILED))) {
+    LOG_WARN("ddl sim failure", K(ret), K(task_id_));
   } else {
     common::ObMySQLProxy &proxy = *GCTX.sql_proxy_;
     SMART_VAR(ObMySQLProxy::MySQLResult, res) {
@@ -326,9 +320,9 @@ int ObDDLRetryTask::check_schema_change_done()
           " SELECT status FROM %s WHERE task_id = %lu",
           OB_ALL_DDL_TASK_STATUS_TNAME, task_id_))) {
         LOG_WARN("assign query string failed", K(ret), KPC(this));
-      } else if (OB_FAIL(DDL_SIM(tenant_id_, task_id_, RETRY_TASK_CHECK_SCHEMA_CHANGED_SLOW))) {
-        LOG_WARN("ddl sim failure", K(ret), K(tenant_id_), K(task_id_));
-      } else if (OB_FAIL(proxy.read(res, tenant_id_, query_string.ptr()))) {
+      } else if (OB_FAIL(DDL_SIM(task_id_, RETRY_TASK_CHECK_SCHEMA_CHANGED_SLOW))) {
+        LOG_WARN("ddl sim failure", K(ret), K(task_id_));
+      } else if (OB_FAIL(proxy.read(res, query_string.ptr()))) {
         LOG_WARN("read record failed", K(ret), K(query_string));
       } else if (OB_UNLIKELY(nullptr == (result = res.get_result()))) {
         ret = OB_ERR_UNEXPECTED;
@@ -352,32 +346,27 @@ int ObDDLRetryTask::drop_schema(const ObDDLTaskStatus next_task_status)
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("ObDDLRetryTask has not been inited", K(ret));
-  } else if (OB_ISNULL(GCTX.rs_rpc_proxy_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), KP(GCTX.rs_rpc_proxy_));
   } else if (OB_ISNULL(ddl_arg_) || lib::Worker::CompatMode::INVALID == compat_mode_) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected error", K(ret), KP(ddl_arg_), K(compat_mode_));
-  } else if (OB_FAIL(DDL_SIM(tenant_id_, task_id_, RETRY_TASK_DROP_SCHEMA_FAILED))) {
-    LOG_WARN("ddl sim failure", K(ret), K(tenant_id_), K(task_id_));
+  } else if (OB_FAIL(DDL_SIM(task_id_, RETRY_TASK_DROP_SCHEMA_FAILED))) {
+    LOG_WARN("ddl sim failure", K(ret), K(task_id_));
   } else if (OB_FAIL(check_schema_change_done())) {
     LOG_WARN("check task finished failed", K(ret));
   } else if (is_schema_change_done_) {
     // schema has already changed.
     new_status = next_task_status;
   } else {
-    lib::Worker::CompatMode save_compat_mode = THIS_WORKER.get_compatibility_mode();
-    THIS_WORKER.set_compatibility_mode(compat_mode_);
-    obrpc::ObCommonRpcProxy common_rpc_proxy = GCTX.rs_rpc_proxy_->to(GCTX.self_addr()).timeout(GCONF._ob_ddl_timeout);
     switch(task_type_) {
       case ObDDLType::DDL_DROP_DATABASE: {
         int64_t timeout_us = 0;
-        obrpc::ObDropDatabaseRes drop_database_res;
-        obrpc::ObDropDatabaseArg *arg = static_cast<obrpc::ObDropDatabaseArg *>(ddl_arg_);
+        obcall::ObDropDatabaseRes drop_database_res;
+        obcall::ObDropDatabaseArg *arg = static_cast<obcall::ObDropDatabaseArg *>(ddl_arg_);
         arg->is_add_to_scheduler_ = false;
         arg->task_id_ = task_id_;
-        ObDDLUtil::get_ddl_rpc_timeout_for_database(tenant_id_, object_id_, timeout_us);
-        if (OB_FAIL(common_rpc_proxy.timeout(timeout_us).drop_database(*arg, drop_database_res))) {
+        ObDDLUtil::get_ddl_rpc_timeout_for_database(object_id_, timeout_us);
+        if (OB_FAIL(rootserver::serial_call([&]{ return GCTX.root_service_->drop_database(*arg, drop_database_res); }))) {
           LOG_WARN("fail to drop database", K(ret));
         } else {
           affected_rows_ = drop_database_res.affected_row_;
@@ -385,21 +374,21 @@ int ObDDLRetryTask::drop_schema(const ObDDLTaskStatus next_task_status)
         break;
       }
       case ObDDLType::DDL_DROP_TABLE: {
-        obrpc::ObDDLRes res;
-        obrpc::ObDropTableArg *arg = static_cast<obrpc::ObDropTableArg *>(ddl_arg_);
+        obcall::ObDDLRes res;
+        obcall::ObDropTableArg *arg = static_cast<obcall::ObDropTableArg *>(ddl_arg_);
         arg->is_add_to_scheduler_ = false;
         arg->task_id_ = task_id_;
-        if (OB_FAIL(common_rpc_proxy.drop_table(*arg, res))) {
+        if (OB_FAIL(rootserver::serial_call([&]{ return GCTX.root_service_->drop_table(*arg, res); }))) {
           LOG_WARN("fail to drop table", K(ret));
         }
         break;
       }
       case ObDDLType::DDL_TRUNCATE_TABLE: {
-        obrpc::ObDDLRes res;
-        obrpc::ObTruncateTableArg *arg = static_cast<obrpc::ObTruncateTableArg *>(ddl_arg_);
+        obcall::ObDDLRes res;
+        obcall::ObTruncateTableArg *arg = static_cast<obcall::ObTruncateTableArg *>(ddl_arg_);
         arg->is_add_to_scheduler_ = false;
         arg->task_id_ = task_id_;
-        if (OB_FAIL(common_rpc_proxy.truncate_table(*arg, res))) {
+        if (OB_FAIL(rootserver::serial_call([&]{ return GCTX.root_service_->truncate_table(*arg, res); }))) {
           LOG_WARN("fail to truncate table", K(ret));
         }
         break;
@@ -410,10 +399,10 @@ int ObDDLRetryTask::drop_schema(const ObDDLTaskStatus next_task_status)
       case ObDDLType::DDL_RENAME_SUB_PARTITION:
       case ObDDLType::DDL_TRUNCATE_PARTITION:
       case ObDDLType::DDL_TRUNCATE_SUB_PARTITION: {
-        obrpc::ObAlterTableArg *arg = static_cast<obrpc::ObAlterTableArg *>(ddl_arg_);
+        obcall::ObAlterTableArg *arg = static_cast<obcall::ObAlterTableArg *>(ddl_arg_);
         arg->is_add_to_scheduler_ = false;
         arg->task_id_ = task_id_;
-        if (OB_FAIL(common_rpc_proxy.alter_table(*arg, alter_table_res_))) {
+        if (OB_FAIL(rootserver::serial_call([&]{ return GCTX.root_service_->alter_table(*arg, alter_table_res_); }))) {
           LOG_WARN("fail to alter table", K(ret));
         }
         break;
@@ -424,7 +413,6 @@ int ObDDLRetryTask::drop_schema(const ObDDLTaskStatus next_task_status)
         break;
       }
     }
-    THIS_WORKER.set_compatibility_mode(save_compat_mode);
     if (OB_TRY_LOCK_ROW_CONFLICT == ret) {
       ret = OB_SUCCESS;
     } else {
@@ -432,8 +420,11 @@ int ObDDLRetryTask::drop_schema(const ObDDLTaskStatus next_task_status)
         new_status = next_task_status;
       }
       int tmp_ret = OB_SUCCESS;
-      if (OB_SUCCESS != (tmp_ret = get_forward_user_message(common_rpc_proxy.get_result_code()))) {
-        LOG_WARN("get forward user message failed", K(ret), K(tmp_ret), K(forward_user_message_), K(common_rpc_proxy.get_result_code()));
+      {
+        rpc::frame::ObResultCode rcode; rcode.rcode_ = ret;
+        if (OB_SUCCESS != (tmp_ret = get_forward_user_message(rcode))) {
+          LOG_WARN("get forward user message failed", K(ret), K(tmp_ret), K(forward_user_message_));
+        }
       }
     }
   }
@@ -455,8 +446,8 @@ int ObDDLRetryTask::wait_alter_table(const ObDDLTaskStatus new_status)
   } else if (OB_ISNULL(ddl_arg_) || lib::Worker::CompatMode::INVALID == compat_mode_) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected error", K(ret), KP(ddl_arg_), K(compat_mode_));
-  } else if (OB_FAIL(DDL_SIM(tenant_id_, task_id_, RETRY_TASK_WAIT_ALTER_TABLE_FAILED))) {
-    LOG_WARN("ddl sim failure", K(ret), K(tenant_id_), K(task_id_));
+  } else if (OB_FAIL(DDL_SIM(task_id_, RETRY_TASK_WAIT_ALTER_TABLE_FAILED))) {
+    LOG_WARN("ddl sim failure", K(ret), K(task_id_));
   } else {
     switch (task_type_) {
     case ObDDLType::DDL_DROP_DATABASE:
@@ -471,14 +462,14 @@ int ObDDLRetryTask::wait_alter_table(const ObDDLTaskStatus new_status)
     case ObDDLType::DDL_RENAME_SUB_PARTITION:
     case ObDDLType::DDL_TRUNCATE_PARTITION:
     case ObDDLType::DDL_TRUNCATE_SUB_PARTITION: {
-      obrpc::ObAlterTableArg *arg = static_cast<obrpc::ObAlterTableArg *>(ddl_arg_);
-      const uint64_t tenant_id = arg->exec_tenant_id_;
+      obcall::ObAlterTableArg *arg = static_cast<obcall::ObAlterTableArg *>(ddl_arg_);
+      
       common::ObSArray<ObDDLRes> &res_array = alter_table_res_.ddl_res_array_;
       while (OB_SUCC(ret) && res_array.count() > 0) {
         const int64_t task_id = res_array.at(res_array.count() - 1).task_id_;
         bool is_finish = false;
-        if (OB_FAIL(sql::ObDDLExecutorUtil::wait_build_index_finish(tenant_id, task_id, is_finish))) {
-          LOG_WARN("wait build index finish failed", K(ret), K(tenant_id), K(task_id));
+        if (OB_FAIL(sql::ObDDLExecutorUtil::wait_build_index_finish( task_id, is_finish))) {
+          LOG_WARN("wait build index finish failed", K(ret), K(task_id));
         } else if (is_finish) {
           res_array.pop_back();
           LOG_INFO("index status is final", K(ret), K(task_id));
@@ -519,7 +510,7 @@ int ObDDLRetryTask::cleanup_impl()
     LOG_WARN("invalid argument", KR(ret), KP(GCTX.sql_proxy_));
   } else if (OB_FAIL(report_error_code(forward_user_message_, affected_rows_))) {
     LOG_WARN("fail to report error code", K(ret));
-  } else if (OB_FAIL(ObDDLTaskRecordOperator::delete_record(*GCTX.sql_proxy_, tenant_id_, task_id_))) {
+  } else if (OB_FAIL(ObDDLTaskRecordOperator::delete_record(*GCTX.sql_proxy_, task_id_))) {
     LOG_WARN("fail to delete record", K(ret), K(task_id_));
   } else {
     need_retry_ = false;
@@ -567,7 +558,6 @@ int ObDDLRetryTask::process()
   } else if (!need_retry()) {
     // task finish, do nothing.
   } else {
-    ddl_tracing_.restore_span_hierarchy();
     switch(task_status_) {
       case ObDDLTaskStatus::PREPARE: {
         if (OB_FAIL(prepare(ObDDLTaskStatus::DROP_SCHEMA))) {
@@ -605,7 +595,6 @@ int ObDDLRetryTask::process()
         break;
       }
     }
-    ddl_tracing_.release_span_hierarchy();
     if (OB_FAIL(ret)) {
       add_event_info("ddl retry task process fail");
       LOG_INFO("ddl retry task process fail", K(ret), K(snapshot_version_), K(object_id_), K(target_object_id_), K(schema_version_), "ddl_event_info", ObDDLEventInfo());
@@ -633,38 +622,32 @@ int ObDDLRetryTask::serialize_params_to_message(char *buf, const int64_t buf_siz
   return ret;
 }
 
-int ObDDLRetryTask::deserialize_params_from_message(const uint64_t tenant_id, const char *buf, const int64_t buf_size, int64_t &pos)
+int ObDDLRetryTask::deserialize_params_from_message(const char *buf, const int64_t buf_size, int64_t &pos)
 {
   int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(!is_valid_tenant_id(tenant_id) || nullptr == buf || buf_size <= 0)) {
+  if (OB_UNLIKELY(nullptr == buf || buf_size <= 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(ret), K(tenant_id), KP(buf), K(buf_size));
-  } else if (OB_FAIL(ObDDLTask::deserialize_params_from_message(tenant_id, buf, buf_size, pos))) {
+    LOG_WARN("invalid arguments", K(ret), KP(buf), K(buf_size));
+  } else if (OB_FAIL(ObDDLTask::deserialize_params_from_message(buf, buf_size, pos))) {
     LOG_WARN("fail to deserialize ObDDLTask", K(ret));
   } else if (ObDDLType::DDL_DROP_DATABASE == task_type_) {
-    obrpc::ObDropDatabaseArg tmp_arg;
+    obcall::ObDropDatabaseArg tmp_arg;
     if (OB_FAIL(tmp_arg.deserialize(buf, buf_size, pos))) {
       LOG_WARN("serialize table failed", K(ret));
-    } else if (OB_FAIL(ObDDLUtil::replace_user_tenant_id(tenant_id, tmp_arg))) {
-      LOG_WARN("replace user tenant id failed", K(ret), K(tenant_id), K(tmp_arg));
     } else if (OB_FAIL(deep_copy_ddl_arg(allocator_, task_type_, &tmp_arg))) {
       LOG_WARN("deep copy table arg failed", K(ret));
     }
   } else if (ObDDLType::DDL_DROP_TABLE == task_type_) {
-    obrpc::ObDropTableArg tmp_arg;
+    obcall::ObDropTableArg tmp_arg;
     if (OB_FAIL(tmp_arg.deserialize(buf, buf_size, pos))) {
       LOG_WARN("serialize table failed", K(ret));
-    } else if (OB_FAIL(ObDDLUtil::replace_user_tenant_id(tenant_id, tmp_arg))) {
-      LOG_WARN("replace user tenant id failed", K(ret), K(tenant_id), K(tmp_arg));
     } else if (OB_FAIL(deep_copy_ddl_arg(allocator_, task_type_, &tmp_arg))) {
       LOG_WARN("deep copy table arg failed", K(ret));
     }
   } else if (ObDDLType::DDL_TRUNCATE_TABLE == task_type_) {
-    obrpc::ObTruncateTableArg tmp_arg;
+    obcall::ObTruncateTableArg tmp_arg;
     if (OB_FAIL(tmp_arg.deserialize(buf, buf_size, pos))) {
       LOG_WARN("serialize table failed", K(ret));
-    } else if (OB_FAIL(ObDDLUtil::replace_user_tenant_id(tenant_id, tmp_arg))) {
-      LOG_WARN("replace user tenant id failed", K(ret), K(tenant_id), K(tmp_arg));
     } else if (OB_FAIL(deep_copy_ddl_arg(allocator_, task_type_, &tmp_arg))) {
       LOG_WARN("deep copy table arg failed", K(ret));
     }
@@ -674,11 +657,9 @@ int ObDDLRetryTask::deserialize_params_from_message(const uint64_t tenant_id, co
           || ObDDLType::DDL_TRUNCATE_SUB_PARTITION == task_type_
           || ObDDLType::DDL_RENAME_PARTITION == task_type_
           || ObDDLType::DDL_RENAME_SUB_PARTITION == task_type_) {
-    obrpc::ObAlterTableArg tmp_arg;
+    obcall::ObAlterTableArg tmp_arg;
     if (OB_FAIL(tmp_arg.deserialize(buf, buf_size, pos))) {
       LOG_WARN("serialize table failed", K(ret));
-    } else if (OB_FAIL(ObDDLUtil::replace_user_tenant_id(task_type_, tenant_id, tmp_arg))) {
-      LOG_WARN("replace user tenant id failed", K(ret), K(tenant_id), K(tmp_arg));
     } else if (OB_FAIL(deep_copy_ddl_arg(allocator_, task_type_, &tmp_arg))) {
       LOG_WARN("deep copy table arg failed", K(ret));
     }
@@ -697,7 +678,6 @@ int64_t ObDDLRetryTask::get_serialize_param_size() const
 
 int ObDDLRetryTask::update_task_status_wait_child_task_finish(
     common::ObMySQLTransaction &trans,
-    const uint64_t tenant_id,
     const int64_t task_id)
 {
   int ret = OB_SUCCESS;
@@ -708,18 +688,18 @@ int ObDDLRetryTask::update_task_status_wait_child_task_finish(
   int64_t ret_code = 0;
   const int64_t new_task_status = ObDDLTaskStatus::WAIT_CHILD_TASK_FINISH;
   int64_t unused_snapshot_ver = OB_INVALID_VERSION;
-  if (OB_UNLIKELY(OB_INVALID_ID == tenant_id || task_id <= 0)) {
+  if (OB_UNLIKELY(task_id <= 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(tenant_id), K(task_id));
-  } else if (OB_FAIL(DDL_SIM(tenant_id, task_id, RETRY_TASK_UPDATE_BY_CHILD_FAILED))) {
-    LOG_WARN("ddl sim failure", K(ret), K(tenant_id), K(task_id));
-  } else if (OB_FAIL(ObDDLTaskRecordOperator::select_for_update(trans, tenant_id, task_id, curr_task_status, 
+    LOG_WARN("invalid argument", K(ret), K(task_id));
+  } else if (OB_FAIL(DDL_SIM(task_id, RETRY_TASK_UPDATE_BY_CHILD_FAILED))) {
+    LOG_WARN("ddl sim failure", K(ret), K(task_id));
+  } else if (OB_FAIL(ObDDLTaskRecordOperator::select_for_update(trans, task_id, curr_task_status, 
       execution_id, ret_code, unused_snapshot_ver))) {
-    LOG_WARN("select for update failed", K(ret), K(tenant_id), K(task_id));
+    LOG_WARN("select for update failed", K(ret), K(task_id));
   } else if (OB_UNLIKELY(ObDDLTaskStatus::DROP_SCHEMA != curr_task_status)) {
     ret = OB_STATE_NOT_MATCH;
     LOG_WARN("task status updated", K(ret), K(task_id), K(curr_task_status));
-  } else if (OB_FAIL(ObDDLTaskRecordOperator::update_task_status(trans, tenant_id, task_id, new_task_status))) {
+  } else if (OB_FAIL(ObDDLTaskRecordOperator::update_task_status(trans, task_id, new_task_status))) {
     LOG_WARN("update task status failed", K(ret));
   } else {
     LOG_INFO("update task status to wait child task finish", K(ret));

@@ -13,7 +13,7 @@ create database fts_online_ddl;
 
 use fts_online_ddl;
 
-let $database_id = query_get_value(SELECT database_id FROM oceanbase.__all_virtual_database WHERE database_name = 'fts_online_ddl' AND tenant_id = 1, database_id, 1);
+let $database_id = query_get_value(SELECT database_id FROM oceanbase.__all_database WHERE database_name = 'fts_online_ddl', database_id, 1);
 
 --disable_warnings
 DROP TABLE IF EXISTS fts_table_1;
@@ -39,15 +39,13 @@ INSERT INTO fts_table_1 VALUES (1, 1, "name1", "title 1", "content1"),
 ALTER TABLE fts_table_1 RENAME INDEX f102 TO f101;
 SHOW INDEX FROM fts_table_1;
 let $data_table_id = query_get_value(SELECT table_id
-                                     FROM oceanbase.__all_virtual_table
-                                     WHERE table_name = 'fts_table_1'
-                                       AND tenant_id = 1 AND database_id = $database_id, table_id, 1);
+                                     FROM oceanbase.__all_table
+                                     WHERE table_name = 'fts_table_1' AND database_id = $database_id, table_id, 1);
 --disable_query_log
 --replace_regex /_[0-9]+/_*/
 eval SELECT table_name
-     FROM oceanbase.__all_virtual_table
-     WHERE data_table_id = $data_table_id
-       AND tenant_id = 1;
+     FROM oceanbase.__all_table
+     WHERE data_table_id = $data_table_id;
 --enable_query_log
 SELECT name FROM fts_table_1 WHERE MATCH (title) AGAINST ("title") order by name;
 
@@ -137,7 +135,7 @@ SELECT name FROM fts_table_2 WHERE MATCH (title) AGAINST ("title") order by name
 
 DROP TABLE fts_table_2;
 DROP TABLE fts_fk_table;
-
+ 
 # 4. table related ddl
 --disable_warnings
 DROP TABLE IF EXISTS fts_table_3;
@@ -156,7 +154,7 @@ ALTER TABLE fts_table_3 BLOCK_SIZE=2048;
 SHOW CREATE TABLE fts_table_3;
 SELECT name FROM fts_table_3 WHERE MATCH (titles) AGAINST ("title") order by name;
 
-ALTER TABLE fts_table_3 COMPRESSION='lz4_1.0';
+ALTER TABLE fts_table_3 COMPRESSION='zstd_1.3.8';
 --replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
 SHOW CREATE TABLE fts_table_3;
 SELECT name FROM fts_table_3 WHERE MATCH (titles) AGAINST ("title") order by name;
@@ -185,3 +183,4 @@ show create table fts_table;
 drop table fts_table;
 
 disconnect sys_conn;
+

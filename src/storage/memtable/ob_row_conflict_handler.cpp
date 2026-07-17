@@ -15,6 +15,7 @@
  */
 #define USING_LOG_PREFIX TRANS
 #include "ob_row_conflict_handler.h"
+#include "share/rc/ob_module_provider.h"
 #include "storage/memtable/ob_lock_wait_mgr.h"
 #include "storage/access/ob_rows_info.h"
 #include "storage/ddl/ob_tablet_ddl_kv.h"
@@ -49,7 +50,6 @@ int ObRowConflictHandler::check_row_locked(const storage::ObTableIterParam &para
                                  rowkey.get_store_rowkey(),
                                  lock_state,
                                  context.tablet_id_,
-                                 context.ls_id_,
                                  0,
                                  0, /* these two params get from mvcc_row, and for statistics, so we ignore them */
                                  lock_state.trans_scn_);
@@ -257,7 +257,6 @@ int ObRowConflictHandler::post_row_read_conflict(ObMvccAccessCtx &acc_ctx,
                                                  const ObStoreRowkey &row_key,
                                                  ObStoreRowLockState &lock_state,
                                                  const ObTabletID tablet_id,
-                                                 const share::ObLSID ls_id,
                                                  const int64_t last_compact_cnt,
                                                  const int64_t total_trans_node_cnt,
                                                  const share::SCN &trans_scn)
@@ -275,26 +274,13 @@ int ObRowConflictHandler::post_row_read_conflict(ObMvccAccessCtx &acc_ctx,
     ret = OB_ERR_EXCLUSIVE_LOCK_CONFLICT;
     TRANS_LOG(WARN, "exclusive lock conflict", K(ret), K(row_key),
               K(conflict_tx_id), K(acc_ctx), K(lock_wait_expire_ts));
-  } else if (OB_ISNULL(lock_wait_mgr = MTL_WITH_CHECK_TENANT(ObLockWaitMgr*,
-                                                  tx_desc->get_tenant_id()))) {
+  } else if (OB_ISNULL(lock_wait_mgr = MTL_WITH_CHECK(ObLockWaitMgr*))) {
     ret = OB_ERR_UNEXPECTED;
-    TRANS_LOG(WARN, "can not get tenant lock_wait_mgr MTL", K(tx_desc->get_tenant_id()));
+    TRANS_LOG(WARN, "can not get tenant lock_wait_mgr MTL");
   } else {
     int tmp_ret = OB_SUCCESS;
     ObTransID tx_id = acc_ctx.get_tx_id();
-    ObAddr conflict_scheduler_addr;
-    // register to deadlock detector
-    if (OB_FAIL(ObTransDeadlockDetectorAdapter::
-                get_trans_scheduler_info_on_participant(conflict_tx_id, ls_id, conflict_scheduler_addr))) {
-      TRANS_LOG(WARN, "get transaction scheduler info fail", K(ret), K(conflict_tx_id), K(tx_id), K(ls_id));
-    } else {
-      ObTransIDAndAddr conflict_tx(conflict_tx_id, conflict_scheduler_addr);
-      tx_desc->add_conflict_tx(conflict_tx);
-    }
-    // The addr in tx_desc is the scheduler_addr of current trans,
-    // and GCTX.self_addr() will return the addr where the row is stored
-    // (i.e. where the trans is executing)
-    bool remote_tx = tx_desc->get_addr() != GCTX.self_addr();
+    tx_desc->add_conflict_tx(conflict_tx_id);
     ObFunction<int(bool&, bool&)> recheck_func([&](bool &locked, bool &wait_on_row) -> int {
       int ret = OB_SUCCESS;
       lock_state.is_locked_ = false;
@@ -320,13 +306,12 @@ int ObRowConflictHandler::post_row_read_conflict(ObMvccAccessCtx &acc_ctx,
                                        tablet_id,
                                        row_key,
                                        lock_wait_expire_ts,
-                                       remote_tx,
+                                       false,
                                        last_compact_cnt,
                                        total_trans_node_cnt,
                                        tx_desc->get_assoc_session_id(),
                                        tx_id,
                                        conflict_tx_id,
-                                       ls_id,
                                        recheck_func);
     if (OB_SUCCESS != tmp_ret) {
       TRANS_LOG(WARN, "post_lock after tx conflict failed",

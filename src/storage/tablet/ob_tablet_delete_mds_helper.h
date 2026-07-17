@@ -27,7 +27,7 @@ namespace share
 class SCN;
 }
 
-namespace obrpc
+namespace obcall
 {
 struct ObBatchRemoveTabletArg;
 }
@@ -50,27 +50,23 @@ public:
       const int64_t len,
       mds::BufferCtx &ctx);
   static int register_process(
-      obrpc::ObBatchRemoveTabletArg &arg,
+      obcall::ObBatchRemoveTabletArg &arg,
       mds::BufferCtx &ctx);
-  static int on_commit_for_old_mds(
-      const char* buf,
-      const int64_t len,
-      const transaction::ObMulSourceDataNotifyArg &notify_arg);
   static int on_replay(
       const char* buf,
       const int64_t len,
       const share::SCN &scn,
       mds::BufferCtx &ctx);
   static int replay_process(
-      obrpc::ObBatchRemoveTabletArg &arg,
+      obcall::ObBatchRemoveTabletArg &arg,
       const share::SCN &scn,
       mds::BufferCtx &ctx);
 private:
   static int delete_tablets(
-      const obrpc::ObBatchRemoveTabletArg &arg,
+      const obcall::ObBatchRemoveTabletArg &arg,
       mds::BufferCtx &ctx);
   static int replay_delete_tablets(
-      const obrpc::ObBatchRemoveTabletArg &arg,
+      const obcall::ObBatchRemoveTabletArg &arg,
       const share::SCN &scn,
       mds::BufferCtx &ctx);
   static int set_tablet_deleted_status(

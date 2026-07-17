@@ -29,7 +29,7 @@ namespace share
 // Reserved snapshot entry structure
 struct ObReservedSnapshotEntry
 {
-  int64_t tenant_id_;
+  
   uint64_t snapshot_type_;
   common::ObAddr svr_addr_;
   uint64_t create_time_;
@@ -37,8 +37,7 @@ struct ObReservedSnapshotEntry
   uint64_t status_;
 
   ObReservedSnapshotEntry()
-    : tenant_id_(0),
-      snapshot_type_(0),
+    : snapshot_type_(0),
       svr_addr_(),
       create_time_(0),
       snapshot_version_(0),
@@ -49,7 +48,7 @@ struct ObReservedSnapshotEntry
 
   void reset()
   {
-    tenant_id_ = 0;
+    
     snapshot_type_ = 0;
     svr_addr_.reset();
     create_time_ = 0;
@@ -71,30 +70,24 @@ public:
 
   // Insert or update multiple snapshot entries (used for batch insert/update)
   int insert_or_update(
-      const uint64_t tenant_id,
       const ObIArray<ObReservedSnapshotEntry> &entries);
 
   // Update status for all entries of a tenant on a server
   int update_status(
-      const uint64_t tenant_id,
       const common::ObAddr &svr_addr,
       const uint64_t status);
 
   // Query one snapshot entry
   int get(
-      const uint64_t tenant_id,
       const uint64_t snapshot_type,
       const common::ObAddr &svr_addr,
       ObReservedSnapshotEntry &entry);
 
   // Query all snapshot entries for a tenant
-  int get_all(
-      const uint64_t tenant_id,
-      ObIArray<ObReservedSnapshotEntry> &entries);
+  int get_all(ObIArray<ObReservedSnapshotEntry> &entries);
 
   // Delete expired entries for a tenant on a server
   int delete_expired(
-      const uint64_t tenant_id,
       const common::ObAddr &svr_addr);
 
 private:
@@ -108,3 +101,4 @@ private:
 } // namespace oceanbase
 
 #endif // OCEANBASE_SHARE_STORAGE_OB_RESERVED_SNAPSHOT_TABLE_STORAGE_H_
+

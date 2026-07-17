@@ -27,6 +27,8 @@ namespace observer
 void ObGVTxCtxMgrStat::reset()
 {
   memstore_version_buffer_[0] = '\0';
+  tx_ctx_mgr_stat_.reset();
+  is_stat_outputted_ = false;
 
   ObVirtualTableScannerIterator::reset();
 }
@@ -35,6 +37,8 @@ void ObGVTxCtxMgrStat::destroy()
 {
   trans_service_ = NULL;
   memset(memstore_version_buffer_, 0, common::MAX_VERSION_LENGTH);
+  tx_ctx_mgr_stat_.reset();
+  is_stat_outputted_ = false;
 
   ObVirtualTableScannerIterator::reset();
 }
@@ -51,16 +55,10 @@ int ObGVTxCtxMgrStat::prepare_start_to_read_()
   } else if (NULL == (cells = cur_row_.cells_)) {
     ret = OB_ERR_UNEXPECTED;
     SERVER_LOG(ERROR, "cur row cell is NULL", K(ret));
-  } else if (OB_FAIL(trans_service_->iterate_tx_ctx_mgr_stat(tx_ctx_mgr_stat_iter_))) {
-    SERVER_LOG(WARN, "iterate_tx_ctx_mgr_stat error", K(ret));
-    if (OB_NOT_RUNNING == ret || OB_NOT_INIT == ret) {
-      ret = OB_SUCCESS;
-    }
+  } else if (OB_FAIL(trans_service_->get_tx_ctx_mgr_stat(tx_ctx_mgr_stat_))) {
+    SERVER_LOG(WARN, "get_tx_ctx_mgr_stat error", K(ret));
   }
-  if (OB_FAIL(ret)) {
-  } else if (OB_FAIL(tx_ctx_mgr_stat_iter_.set_ready())) {
-    TRANS_LOG(WARN, "tx_ctx_mgr_stat_iter set ready error", KR(ret));
-  } else {
+  if (OB_SUCC(ret)) {
     start_to_read_ = true;
   }
 
@@ -70,22 +68,17 @@ int ObGVTxCtxMgrStat::prepare_start_to_read_()
 int ObGVTxCtxMgrStat::inner_get_next_row(ObNewRow *&row)
 {
   int ret = OB_SUCCESS;
-  ObLSTxCtxMgrStat ls_tx_ctx_mgr_stat;
 
   if (!start_to_read_ && OB_SUCCESS != (ret = prepare_start_to_read_())) {
     SERVER_LOG(WARN, "prepare_start_to_read_ error", K(ret), K(start_to_read_));
-  } else if (OB_SUCCESS != (ret = tx_ctx_mgr_stat_iter_.get_next(ls_tx_ctx_mgr_stat))) {
-    if (OB_ITER_END != ret) {
-      SERVER_LOG(WARN, "tx_ctx_mgr_stat_iter_ get next error", K(ret));
-    } else {
-      SERVER_LOG(DEBUG, "tx_ctx_mgr_stat_iter_ end success");
-    }
+  } else if (is_stat_outputted_) {
+    ret = OB_ITER_END;
   } else {
     // Column order after removing svr_ip and svr_port:
-    // OB_APP_MIN_COLUMN_ID (16): is_master
-    // OB_APP_MIN_COLUMN_ID + 1 (17): is_stopped
-    // OB_APP_MIN_COLUMN_ID + 2 (18): state
-    // OB_APP_MIN_COLUMN_ID + 3 (19): state_str
+    // OB_APP_MIN_COLUMN_ID (16): is_stopped
+    // OB_APP_MIN_COLUMN_ID + 1 (17): block_tx
+    // OB_APP_MIN_COLUMN_ID + 2 (18): block_normal_tx
+    // OB_APP_MIN_COLUMN_ID + 3 (19): block_all
     // OB_APP_MIN_COLUMN_ID + 4 (20): total_trans_ctx_count
     // OB_APP_MIN_COLUMN_ID + 5 (21): mgr_addr
     const int64_t col_count = output_column_ids_.count();
@@ -93,31 +86,24 @@ int ObGVTxCtxMgrStat::inner_get_next_row(ObNewRow *&row)
       uint64_t col_id = output_column_ids_.at(i);
       switch (col_id) {
         case OB_APP_MIN_COLUMN_ID:
-           // is_master_
-          cur_row_.cells_[i].set_int(ls_tx_ctx_mgr_stat.is_master()? 1 : 0);
+          cur_row_.cells_[i].set_int(tx_ctx_mgr_stat_.is_stopped() ? 1 : 0);
           break;
         case OB_APP_MIN_COLUMN_ID + 1:
-          // is_stopped_
-          cur_row_.cells_[i].set_int(ls_tx_ctx_mgr_stat.is_stopped()? 1 : 0);
+          cur_row_.cells_[i].set_int(tx_ctx_mgr_stat_.is_tx_blocked() ? 1 : 0);
           break;
         case OB_APP_MIN_COLUMN_ID + 2:
-          // state_
-          cur_row_.cells_[i].set_int(ls_tx_ctx_mgr_stat.get_state());
+          cur_row_.cells_[i].set_int(
+              tx_ctx_mgr_stat_.is_normal_tx_blocked() ? 1 : 0);
           break;
-        case OB_APP_MIN_COLUMN_ID + 3: {
-          // state_str
-          ObCStringHelper helper;
-          int64_t state = ls_tx_ctx_mgr_stat.get_state();
-          cur_row_.cells_[i].set_varchar(helper.convert((ObTxLSStateMgr::TxLSStateContainer::StateVal*)&state));
-          cur_row_.cells_[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
+        case OB_APP_MIN_COLUMN_ID + 3:
+          cur_row_.cells_[i].set_int(tx_ctx_mgr_stat_.is_all_blocked() ? 1 : 0);
           break;
-        }
         case OB_APP_MIN_COLUMN_ID + 4:
           // total_tx_ctx_count
-          cur_row_.cells_[i].set_int(ls_tx_ctx_mgr_stat.get_total_tx_ctx_count());
+          cur_row_.cells_[i].set_int(tx_ctx_mgr_stat_.get_total_tx_ctx_count());
           break;
         case OB_APP_MIN_COLUMN_ID + 5:
-          cur_row_.cells_[i].set_int(ls_tx_ctx_mgr_stat.get_mgr_addr());
+          cur_row_.cells_[i].set_int(tx_ctx_mgr_stat_.get_mgr_addr());
           break;
         default:
           ret = OB_ERR_UNEXPECTED;
@@ -127,6 +113,7 @@ int ObGVTxCtxMgrStat::inner_get_next_row(ObNewRow *&row)
     }
   }
   if (OB_SUCC(ret)) {
+    is_stat_outputted_ = true;
     row = &cur_row_;
   }
 

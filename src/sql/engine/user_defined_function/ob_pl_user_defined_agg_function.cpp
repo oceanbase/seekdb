@@ -51,7 +51,7 @@ int ObPlAggUdfFunction::pick_routine(ObSEArray<const ObIRoutineInfo *, 4> &routi
       OZ (mock_exec_expr.push_back(c_expr));
     }
     if (OB_SUCC(ret)) {
-      pl::ObPLPackageGuard package_guard(session_info_->get_effective_tenant_id());
+      pl::ObPLPackageGuard package_guard{};
       pl::ObPLResolveCtx resolve_ctx(*allocator_,
                                   *session_info_,
                                   *exec_ctx_->get_sql_ctx()->schema_guard_,
@@ -235,7 +235,6 @@ int ObPlAggUdfFunction::process_calc_pl_agg_udf(ObObjParam &pl_obj,
     ObSEArray<ObExprResType, 4> all_params_type;
     //for pl agg udf, type member ODCIAggregateIterate() the first param must be self and is IN OUT,
     //the other param is IN, so we need rebuild relation infos.
-    //see oracle url:https://docs.oracle.com/cd/B28359_01/appdev.111/b28425/ext_agg_ref.htm#CACBJHHI
     ObExprResType param_type;
     param_type.set_ext();
     param_type.set_udt_id(type_id_);
@@ -304,7 +303,6 @@ int ObPlAggUdfFunction::process_get_pl_agg_udf_result(ObObjParam &pl_obj,
 
   //for pl agg udf, type member ODCIAggregateTerminate() the first param must be self and is IN,
   //the second param is OUT, the third param is number. so we need rebuild relation infos.
-  //see oracle url:https://docs.oracle.com/cd/B28359_01/appdev.111/b28425/ext_agg_ref.htm#CACBJHHI
   ObSEArray<ObUDFParamDesc, 4> params_desc;
   ObSEArray<ObUDFParamDesc, 4> all_params_desc;
   ObSEArray<ObExprResType, 4> params_type;

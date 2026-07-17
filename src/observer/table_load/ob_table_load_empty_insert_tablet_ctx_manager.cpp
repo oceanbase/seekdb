@@ -34,7 +34,6 @@ using namespace table;
 
 ObTableLoadEmptyInsertTabletCtxManager::ObTableLoadEmptyInsertTabletCtxManager()
   : thread_count_(0),
-    idx_(0),
     start_(0),
     is_inited_(false)
 {
@@ -58,10 +57,10 @@ int ObTableLoadEmptyInsertTabletCtxManager::init(
                                                                       partition_location_,
                                                                       target_partition_location_))) {
       LOG_WARN("fail to init partition location", KR(ret));
-    } else if (OB_FAIL(partition_location_.get_all_leader_info(all_leader_info_array_))) {
-      LOG_WARN("fail to get all origin leader info", KR(ret));
-    } else if (OB_FAIL(target_partition_location_.get_all_leader_info(target_all_leader_info_array_))) {
-      LOG_WARN("fail to get all target leader info", KR(ret));
+    } else if (OB_FAIL(partition_location_.get_local_info(local_info_))) {
+      LOG_WARN("get source local info failed", KR(ret));
+    } else if (OB_FAIL(target_partition_location_.get_local_info(target_local_info_))) {
+      LOG_WARN("get target local info failed", KR(ret));
     } 
   }
   if (OB_SUCC(ret)) {
@@ -72,8 +71,8 @@ int ObTableLoadEmptyInsertTabletCtxManager::init(
 
 int ObTableLoadEmptyInsertTabletCtxManager::get_next_task(
       ObAddr &addr,
-      ObIArray<table::ObTableLoadLSIdAndPartitionId> &partition_ids,
-      ObIArray<table::ObTableLoadLSIdAndPartitionId> &target_partition_ids)
+      ObIArray<table::ObTableLoadTabletId> &partition_ids,
+      ObIArray<table::ObTableLoadTabletId> &target_partition_ids)
 {
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
@@ -81,23 +80,17 @@ int ObTableLoadEmptyInsertTabletCtxManager::get_next_task(
     LOG_WARN("empty insert tablet ctx manager is not init", KR(ret));
   } else {
     ObMutexGuard guard(op_lock_);
-    if (all_leader_info_array_.count() == idx_) {
+    if (target_local_info_.partition_id_array_.count() == start_) {
       ret = OB_ITER_END;
     } else {
-      const LeaderInfo &leader_info = all_leader_info_array_.at(idx_);
-      const LeaderInfo &target_leader_info = target_all_leader_info_array_.at(idx_);
-      addr = target_leader_info.addr_;
-      for (; OB_SUCC(ret) && start_ < target_leader_info.partition_id_array_.count()
+      addr = target_local_info_.addr_;
+      for (; OB_SUCC(ret) && start_ < target_local_info_.partition_id_array_.count()
                           && partition_ids.count() < TABLET_COUNT_PER_TASK; ++start_) {
-        if (OB_FAIL(partition_ids.push_back(leader_info.partition_id_array_.at(start_)))) {
+        if (OB_FAIL(partition_ids.push_back(local_info_.partition_id_array_.at(start_)))) {
           LOG_WARN("fail to push back partition ids", KR(ret));
-        } else if (OB_FAIL(target_partition_ids.push_back(target_leader_info.partition_id_array_.at(start_)))) {
+        } else if (OB_FAIL(target_partition_ids.push_back(target_local_info_.partition_id_array_.at(start_)))) {
           LOG_WARN("fail to push back target partition ids", KR(ret));
         }
-      }
-      if (target_leader_info.partition_id_array_.count() == start_) {
-        start_ = 0;
-        ++idx_;
       }
     }
   }
@@ -137,14 +130,14 @@ int ObTableLoadEmptyInsertTabletCtxManager::handle_thread_finish(bool &is_finish
 int ObTableLoadEmptyInsertTabletCtxManager::execute(
       const uint64_t &table_id,
       const ObTableLoadDDLParam &ddl_param,
-      const ObIArray<table::ObTableLoadLSIdAndPartitionId> &ls_part_ids,
-      const ObIArray<table::ObTableLoadLSIdAndPartitionId> &target_ls_part_ids)
+      const ObIArray<table::ObTableLoadTabletId> &partition_ids,
+      const ObIArray<table::ObTableLoadTabletId> &target_partition_ids)
 {
   int ret = OB_SUCCESS;
   ObTableLoadSchema table_load_schema;
   ObDirectLoadInsertTableParam insert_table_param;
   ObDirectLoadInsertDataTableContext tmp_insert_table_ctx;
-  if (OB_FAIL(table_load_schema.init(MTL_ID(), table_id, ddl_param.schema_version_))) {
+  if (OB_FAIL(table_load_schema.init(table_id, ddl_param.schema_version_))) {
     LOG_WARN("fail to init table load schema", KR(ret));
   }
   insert_table_param.table_id_ = table_id;
@@ -174,8 +167,8 @@ int ObTableLoadEmptyInsertTabletCtxManager::execute(
   if (OB_FAIL(ret)) {
     // do nothing
   } else if (OB_FAIL(tmp_insert_table_ctx.init(insert_table_param,
-                                        ls_part_ids,
-                                        target_ls_part_ids))) {
+                                        partition_ids,
+                                        target_partition_ids))) {
     LOG_WARN("fail to init tmp insert table ctx", KR(ret));
   }
   FOREACH_X(it, tmp_insert_table_ctx.get_tablet_ctx_map(), OB_SUCC(ret)) {
@@ -207,12 +200,12 @@ int ObTableLoadEmptyInsertTabletCtxManager::execute(
 int ObTableLoadEmptyInsertTabletCtxManager::execute_for_dag(
   const uint64_t &table_id,
   const ObTableLoadDDLParam &ddl_param,
-  const ObIArray<ObTableLoadLSIdAndPartitionId> &ls_part_ids,
-  const ObIArray<ObTableLoadLSIdAndPartitionId> &target_ls_part_ids)
+  const ObIArray<ObTableLoadTabletId> &partition_ids,
+  const ObIArray<ObTableLoadTabletId> &target_partition_ids)
 {
   int ret = OB_SUCCESS;
   ObDirectLoadType direct_load_type = ObDirectLoadMgrAgent::load_data_get_direct_load_type(
-    false /*is_incremental*/, ddl_param.data_version_, GCTX.is_shared_storage_mode());
+    false /*is_incremental*/, ddl_param.data_version_);
   ObTableLoadEmptyInsertDagInitParam dag_init_param;
   dag_init_param.direct_load_type_ = direct_load_type;
   dag_init_param.ddl_thread_count_ = 1;
@@ -223,11 +216,10 @@ int ObTableLoadEmptyInsertTabletCtxManager::execute_for_dag(
   dag_init_param.ddl_task_param_.schema_version_ = ddl_param.schema_version_;
   dag_init_param.ddl_task_param_.is_no_logging_ = ddl_param.is_no_logging_;
   dag_init_param.ddl_task_param_.snapshot_version_ = ddl_param.snapshot_version_;
-  for (int64_t i = 0; OB_SUCC(ret) && i < target_ls_part_ids.count(); i++) {
+  for (int64_t i = 0; OB_SUCC(ret) && i < target_partition_ids.count(); i++) {
     if (OB_FAIL(add_var_to_array_no_dup(
-          dag_init_param.ls_tablet_ids_,
-          std::make_pair(target_ls_part_ids.at(i).ls_id_,
-                         target_ls_part_ids.at(i).part_tablet_id_.tablet_id_)))) {
+          dag_init_param.tablet_ids_,
+          target_partition_ids.at(i).part_tablet_id_.tablet_id_))) {
       LOG_WARN("add var to array no dup failed", KR(ret));
     }
   }
@@ -235,7 +227,7 @@ int ObTableLoadEmptyInsertTabletCtxManager::execute_for_dag(
     ObTableLoadEmptyInsertDag *dag = nullptr;
     const ObDagId *cur_dag_id = ObCurTraceId::get_trace_id();
     ObArenaAllocator allocator;
-    allocator.set_attr(ObMemAttr(MTL_ID(), "TLD_EI_Dag"));
+    allocator.set_attr(ObMemAttr("TLD_EI_Dag"));
     if (OB_FAIL(ObTenantDagScheduler::alloc_dag(allocator, false /*is_ha_dag*/, dag))) {
       LOG_WARN("alloc ddl dag failed", KR(ret));
     } else if (OB_FAIL(dag->init(&dag_init_param, cur_dag_id))) {

@@ -17,7 +17,8 @@
 #ifndef OCEANBASE_ROOTSERVER_FREEZE_OB_FREEZE_INFO_DETECTOR_
 #define OCEANBASE_ROOTSERVER_FREEZE_OB_FREEZE_INFO_DETECTOR_
 
-#include "rootserver/freeze/ob_freeze_reentrant_thread.h"
+#include "lib/task/ob_timer.h"
+#include "common/ob_role.h"
 
 namespace oceanbase
 {
@@ -30,21 +31,26 @@ namespace rootserver
 class ObMajorMergeInfoManager;
 class ObThreadIdling;
 
-class ObMajorMergeInfoDetector : public ObFreezeReentrantThread
+class ObMajorMergeInfoDetector : public common::ObTimerTask
 {
 public:
-  ObMajorMergeInfoDetector(const uint64_t tenant_id);
-  virtual ~ObMajorMergeInfoDetector() {}
+  ObMajorMergeInfoDetector();
+  virtual ~ObMajorMergeInfoDetector();
   int init(const bool is_primary_service,
            common::ObMySQLProxy &sql_proxy,
            ObMajorMergeInfoManager &major_merge_info_mgr,
            ObThreadIdling &major_scheduler_idling);
 
-  virtual void run3() override;
-  virtual int blocking_run() override { BLOCKING_RUN_IMPLEMENT(); }
-  virtual int64_t get_schedule_interval() const override;
+  virtual void runTimerTask() override;
+  int64_t get_schedule_interval() const;
 
-  virtual int start() override;
+  int start();
+  void stop();
+  void wait();
+  int destroy();
+  void pause() { is_paused_ = true; }
+  void resume() { is_paused_ = false; }
+  bool is_paused() const { return is_paused_; }
 
   int signal();
 
@@ -57,11 +63,12 @@ private:
 
   int can_start_work(bool &can_work);
   bool is_primary_service() { return is_primary_service_; }
-  int check_tenant_is_restore(const uint64_t tenant_id, bool &is_restore);
+  int check_tenant_is_restore(bool &is_restore);
   int try_reload_freeze_info();
   // adjust global_merge_info in memory to avoid useless major freezes on restore major_freeze_service
   int try_adjust_global_merge_info();
   int check_global_merge_info(bool &is_initial) const;
+  void update_last_run_timestamp_();
   // For backup-restore tenant that switchover to primary tenant, FreezeInfoDetector is not able to
   // has write access immediately when it starts. Thus, FreezeInfoDetector can not renew
   // snapshot_gc_scn immediately. Therefore, let FreezeInfoDetector to check snapshot_gc_scn
@@ -70,16 +77,21 @@ private:
   bool need_check_snapshot_gc_scn(const int64_t start_time_us);
 
 private:
-  static const int64_t FREEZE_INFO_DETECTOR_THREAD_CNT = 1;
   static const int64_t UPDATER_INTERVAL_US = 10 * 1000 * 1000; // 10s
 
   bool is_inited_;
+  bool is_paused_;
   bool is_primary_service_;  // identify ObMajorFreezeServiceType::SERVICE_TYPE_PRIMARY
   bool is_global_merge_info_adjusted_;
   bool is_gc_scn_inited_;
+  common::ObMySQLProxy *sql_proxy_;
   int64_t last_gc_timestamp_;
+  int64_t last_run_timestamp_;
   ObMajorMergeInfoManager *major_merge_info_mgr_;
   ObThreadIdling *major_scheduler_idling_;
+  int64_t last_schedule_ts_;
+  bool need_immediate_run_;
+  common::ObTimer timer_;
 
 private:
   DISALLOW_COPY_AND_ASSIGN(ObMajorMergeInfoDetector);

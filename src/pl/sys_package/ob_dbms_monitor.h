@@ -18,7 +18,7 @@
 #define OCEANBASE_SRC_PL_SYS_PACKAGE_DBMS_MONITOR_H_
 
 #include "sql/engine/ob_exec_context.h"
-#include "lib/number/ob_number_v2.h"
+#include "common/number/ob_number_v2.h"
 
 using namespace oceanbase::common::number;
 
@@ -65,7 +65,6 @@ public:
   // DBMS_MONITOR.OB_TENANT_TRACE_DISABLE(tenant_name  IN VARCHAR2 DEFAULT NULL);
   static int tenant_trace_disable(sql::ObExecContext &ctx, sql::ParamStore &params, common::ObObj &result);
 
-  static int resolve_control_info(FLTControlInfo &coninfo, ObNumber level, ObNumber sample_pct, ObString record_policy);
 };
 
 } // end of pl

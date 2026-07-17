@@ -18,10 +18,10 @@
 #include <boost/geometry.hpp>
 #include <boost/foreach.hpp>
 #define private public
-#include "lib/geo/ob_geo_tree_traits.h"
-#include "lib/geo/ob_geo_bin_traits.h"
-#include "lib/geo/ob_geo_box_clip_visitor.h"
-#include "lib/geo/ob_geo_to_wkt_visitor.h"
+#include "share/geo/ob_geo_tree_traits.h"
+#include "share/geo/ob_geo_bin_traits.h"
+#include "share/geo/ob_geo_box_clip_visitor.h"
+#include "share/geo/ob_geo_to_wkt_visitor.h"
 #include "sql/engine/expr/ob_geo_expr_utils.h"
 #undef private
 

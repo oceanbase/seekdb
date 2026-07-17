@@ -16,19 +16,17 @@
 
 #ifndef OB_ALL_VIRTUAL_TABLET_COMPACTION_HISTORY_H_
 #define OB_ALL_VIRTUAL_TABLET_COMPACTION_HISTORY_H_
-#include "share/ob_virtual_table_scanner_iterator.h"
+#include "observer/virtual_table/ob_virtual_table_scanner_iterator.h"
 #include "storage/compaction/ob_sstable_merge_info_mgr.h"
 #include "storage/compaction/ob_compaction_diagnose.h"
 #include "storage/compaction/ob_sstable_merge_history.h"
-#include "observer/omt/ob_multi_tenant_operator.h"
 
 namespace oceanbase
 {
 namespace observer
 {
 
-class ObAllVirtualTabletCompactionHistory : public common::ObVirtualTableScannerIterator,
-                                            public omt::ObMultiTenantOperator
+class ObAllVirtualTabletCompactionHistory : public common::ObVirtualTableScannerIterator
 {
 public:
   enum COLUMN_ID_LIST { // FARM COMPAT WHITELIST
@@ -54,8 +52,6 @@ public:
     PARTICIPANT_TABLE_INFO,
     MACRO_ID_LIST,
     COMMENT,
-    START_CG_ID,
-    END_CG_ID,
     KEPT_SNAPSHOT,
     MERGE_LEVEL,
     EXEC_MODE,
@@ -63,7 +59,6 @@ public:
     IO_COST_TIME_PERCENTAGE,
     MERGE_REASON,
     BASE_MAJOR_STATUS,
-    CO_MERGE_TYPE,
     MDS_FILTER_INFO,
     EXECUTE_TIME
   };
@@ -74,13 +69,6 @@ public:
 protected:
   int fill_cells(compaction::ObSSTableMergeHistory *merge_history);
 private:
-  virtual bool is_need_process(uint64_t tenant_id) override;
-  virtual int process_curr_tenant(common::ObNewRow *&row) override;
-  virtual void release_last_tenant() override
-  {
-    major_merge_info_iter_.reset();
-    minor_merge_info_iter_.reset();
-  }
 private:
   char ip_buf_[common::OB_IP_STR_BUFF];
   char parallel_merge_info_buf_[common::OB_PARALLEL_MERGE_INFO_LENGTH];

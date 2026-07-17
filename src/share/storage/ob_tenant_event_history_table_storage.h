@@ -29,7 +29,6 @@ namespace share
 
 struct ObTenantEventHistoryEntry
 {
-  uint64_t tenant_id_;
   int64_t gmt_create_;
   common::ObAddr svr_addr_;
   common::ObString module_;
@@ -53,8 +52,7 @@ struct ObTenantEventHistoryEntry
   common::ObString error_msg_;
 
   ObTenantEventHistoryEntry()
-    : tenant_id_(OB_INVALID_TENANT_ID),
-      gmt_create_(0),
+    : gmt_create_(0),
       svr_addr_(),
       module_(),
       event_(),
@@ -78,7 +76,6 @@ struct ObTenantEventHistoryEntry
   {}
 
   void reset() {
-    tenant_id_ = OB_INVALID_TENANT_ID;
     gmt_create_ = 0;
     svr_addr_.reset();
     module_.reset();
@@ -128,3 +125,4 @@ private:
 } // namespace oceanbase
 
 #endif // OCEANBASE_SHARE_STORAGE_OB_TENANT_EVENT_HISTORY_TABLE_STORAGE_H_
+

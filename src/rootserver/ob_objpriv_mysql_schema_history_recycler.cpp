@@ -140,12 +140,11 @@ uint64_t ObObjectPrivMysqlSchemaKey::hash() const
 }
 
 ObObjectPrivMysqlRecycleSchemaExecutor::ObObjectPrivMysqlRecycleSchemaExecutor(
-  const uint64_t tenant_id,
   const int64_t schema_version,
   const char* table_name,
   common::ObMySQLProxy *sql_proxy,
   ObSchemaHistoryRecycler *recycler)
-    : ObIRecycleSchemaExecutor(tenant_id, schema_version, table_name, sql_proxy, recycler),
+    : ObIRecycleSchemaExecutor(schema_version, table_name, sql_proxy, recycler),
       schema_history_map_()
 {
 }
@@ -156,17 +155,9 @@ ObObjectPrivMysqlRecycleSchemaExecutor::~ObObjectPrivMysqlRecycleSchemaExecutor(
 
 bool ObObjectPrivMysqlRecycleSchemaExecutor::is_valid() const
 {
-  bool bret = true;
-  if (OB_INVALID_TENANT_ID == tenant_id_
-      || OB_SYS_TENANT_ID == tenant_id_
-      || !ObSchemaService::is_formal_version(schema_version_)
-      || OB_ISNULL(table_name_)
-      || OB_ISNULL(sql_proxy_)
-      || OB_ISNULL(recycler_)) {
-    bret = false;
-    LOG_WARN_RET(OB_INVALID_ARGUMENT, "invalid argument", K(bret), K_(tenant_id), K_(schema_version),
-             KP_(table_name), KP_(sql_proxy), KP_(recycler));
-  }
+  bool bret = false;
+  LOG_WARN_RET(OB_INVALID_ARGUMENT, "invalid argument", K(bret), K_(schema_version),
+           KP_(table_name), KP_(sql_proxy), KP_(recycler));
   return bret;
 }
 
@@ -184,7 +175,7 @@ int ObObjectPrivMysqlRecycleSchemaExecutor::gen_fill_schema_history_sql(
     "limit %ld, %ld",
     table_name_,  schema_version_,
     start_idx, SCHEMA_HISTORY_BATCH_FETCH_NUM))) {
-    LOG_WARN("fail to assign sql", KR(ret), K_(tenant_id), K_(schema_version));
+    LOG_WARN("fail to assign sql", KR(ret), K_(schema_version));
   }
   return ret;
 }
@@ -233,15 +224,15 @@ int ObObjectPrivMysqlRecycleSchemaExecutor::gen_batch_recycle_schema_history_sql
   } else {
     if (OB_FAIL(sql.assign_fmt(
         " delete from %s where schema_version <= %ld"
-        " and (tenant_id, user_id, obj_name, obj_type, all_priv, grantor, grantor_host) in ( ",
+        " and (user_id, obj_name, obj_type, all_priv, grantor, grantor_host) in ( ",
          table_name_, schema_version_))) {
-      LOG_WARN("fail to assign sql", KR(ret), K_(tenant_id), K_(schema_version));
+      LOG_WARN("fail to assign sql", KR(ret), K_(schema_version));
     }
     for (int64_t i = 0; OB_SUCC(ret) && i < dropped_schema_keys.count(); i++) {
       const ObObjectPrivMysqlSchemaKey &key = dropped_schema_keys.at(i);
       if (OB_FAIL(check_stop())) {
         LOG_WARN("schema history recycler is stopped", KR(ret));
-      } else if (OB_FAIL(sql.append_fmt("%s (0, %ld, '%.*s', %ld, %ld, '%.*s', '%.*s')", 0 == i ? "" : ",",
+      } else if (OB_FAIL(sql.append_fmt("%s (%ld, '%.*s', %ld, %ld, '%.*s', '%.*s')", 0 == i ? "" : ",",
                                         key.user_id_,
                                         key.obj_name_.length(), key.obj_name_.ptr(),
                                         key.obj_type_,
@@ -253,7 +244,7 @@ int ObObjectPrivMysqlRecycleSchemaExecutor::gen_batch_recycle_schema_history_sql
     }
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(sql.append_fmt(")"))) {
-      LOG_WARN("fail to append fmt", KR(ret), K_(tenant_id), K_(schema_version));
+      LOG_WARN("fail to append fmt", KR(ret), K_(schema_version));
     }
   }
   return ret;
@@ -271,7 +262,7 @@ int ObObjectPrivMysqlRecycleSchemaExecutor::gen_batch_compress_schema_history_sq
   } else {
     if (OB_FAIL(sql.assign_fmt("delete from %s where ( ",
                                 table_name_))) {
-      LOG_WARN("fail to assign sql", KR(ret), K_(tenant_id), K_(schema_version));
+      LOG_WARN("fail to assign sql", KR(ret), K_(schema_version));
     }
     for (int64_t i = 0; OB_SUCC(ret) && i < compress_schema_infos.count(); i++) {
       if (OB_FAIL(check_stop())) {
@@ -296,7 +287,7 @@ int ObObjectPrivMysqlRecycleSchemaExecutor::gen_batch_compress_schema_history_sq
     }
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(sql.append_fmt(")"))) {
-      LOG_WARN("fail to append fmt", KR(ret), K_(tenant_id), K_(schema_version));
+      LOG_WARN("fail to append fmt", KR(ret), K_(schema_version));
     }
   }
   return ret;

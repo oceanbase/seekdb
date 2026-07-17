@@ -28,7 +28,7 @@ namespace schema
 class ObMultiVersionSchemaService;
 }
 }
-namespace obrpc
+namespace obcall
 {
 class ObSetCommentArg;
 class ObSetCommenttRes;
@@ -40,9 +40,8 @@ class ObSetCommentHelper : public ObDDLHelper
 public:
   ObSetCommentHelper(
     share::schema::ObMultiVersionSchemaService *schema_service,
-    const uint64_t tenant_id,
-    const obrpc::ObSetCommentArg &arg,
-    obrpc::ObParallelDDLRes &res);
+    const obcall::ObSetCommentArg &arg,
+    obcall::ObParallelDDLRes &res);
   virtual ~ObSetCommentHelper();
 private:
   virtual int check_inner_stat_() override;
@@ -61,8 +60,8 @@ private:
   virtual int operation_before_commit_() override;
   virtual int clean_on_fail_commit_() override;
 private:
-  const obrpc::ObSetCommentArg &arg_;
-  obrpc::ObParallelDDLRes &res_;
+  const obcall::ObSetCommentArg &arg_;
+  obcall::ObParallelDDLRes &res_;
   uint64_t database_id_;
   uint64_t table_id_;
   const ObTableSchema* orig_table_schema_;

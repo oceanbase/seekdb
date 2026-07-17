@@ -35,7 +35,7 @@ struct ObStackHeader
   ObStackHeader()
     : magic_(MAGIC) {}
   uint64_t magic_;
-  uint64_t tenant_id_;
+  
   ssize_t size_;
   // use thread instead of alloc
   uint64_t pth_;
@@ -48,15 +48,15 @@ struct ObStackHeader
 class ProtectedStackAllocator
 {
 public:
-  void *alloc(const uint64_t tenant_id, const ssize_t size);
-  void *smart_call_alloc(const uint64_t tenant_id, const ssize_t size);
+  void *alloc(const ssize_t size);
+  void *smart_call_alloc(const ssize_t size);
   void dealloc(void *ptr);
   static ObStackHeader *stack_header(void *ptr);
   static ssize_t page_size();
 private:
-  void *_alloc(const uint64_t tenant_id, const uint64_t ctx_id, const ssize_t size,
+  void *_alloc(const uint64_t ctx_id, const ssize_t size,
                const bool guard_page);
-  void *__alloc(const uint64_t tenant_id, const uint64_t ctx_id, const ssize_t size,
+  void *__alloc(const uint64_t ctx_id, const ssize_t size,
                 const bool guard_page);
 };
 

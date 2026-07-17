@@ -30,25 +30,13 @@
 #include "lib/thread/protected_stack_allocator.h"
 #include "lib/utility/ob_hang_fatal_error.h"
 #include "lib/signal/ob_signal_struct.h"
-#include "lib/ash/ob_active_session_guard.h"
-#include "lib/stat/ob_session_stat.h"
+#include "lib/thread_local/ob_tsi_factory.h"
 #include "lib/resource/ob_affinity_ctrl.h"
 
 using namespace oceanbase;
 using namespace oceanbase::common;
 using namespace oceanbase::lib;
-thread_local int64_t Thread::loop_ts_ = 0;
-#ifdef _WIN32
-thread_local pthread_t Thread::thread_joined_ = pthread_null();
-#else
-thread_local pthread_t Thread::thread_joined_ = 0;
-#endif
-thread_local int64_t Thread::sleep_us_ = 0;
-thread_local int64_t Thread::blocking_ts_ = 0;
 thread_local bool Thread::is_doing_ddl_ = false;
-thread_local ObAddr Thread::rpc_dest_addr_;
-thread_local obrpc::ObRpcPacketCode Thread::pcode_ = obrpc::ObRpcPacketCode::OB_INVALID_RPC_CODE;
-thread_local uint8_t Thread::wait_event_ = 0;
 thread_local Thread* Thread::current_thread_ = nullptr;
 int64_t Thread::total_thread_count_ = 0;
 
@@ -98,7 +86,7 @@ int Thread::start()
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid stack_size", K(ret), K(stack_size_));
 #if !defined(OB_USE_ASAN) && !defined(__APPLE__) && !defined(__ANDROID__) && !defined(_WIN32)
-  } else if (OB_ISNULL(stack_addr_ = g_stack_allocer.alloc(0 == GET_TENANT_ID() ? OB_SERVER_TENANT_ID : GET_TENANT_ID(), stack_size_))) {
+  } else if (OB_ISNULL(stack_addr_ = g_stack_allocer.alloc(stack_size_))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_ERROR("alloc stack memory failed", K(stack_size_));
 #endif
@@ -124,7 +112,7 @@ int Thread::start()
       pret = pthread_attr_setstacksize(&attr, stack_size_);
       if (pret != 0) {
         // Fallback to default if setstacksize fails
-        pret = 0;
+        pret = 0; 
       } else {
         size_t actual_stack_size = 0;
         pthread_attr_getstacksize(&attr, &actual_stack_size);
@@ -204,22 +192,14 @@ void Thread::stop()
   stop_ = true;
 }
 
-uint64_t Thread::get_tenant_id() const
-{
-  uint64_t tenant_id = OB_SERVER_TENANT_ID;
-  IRunWrapper *run_wrapper_ = threads_->get_run_wrapper();
-  if (OB_NOT_NULL(run_wrapper_)) {
-    tenant_id = run_wrapper_->id();
-  }
-  return tenant_id;
-}
+
 
 void Thread::run()
 {
   if (OB_NUMA_SHARED_INDEX != numa_node_) {
     AFFINITY_CTRL.thread_bind_to_node(numa_node_);
   }
-  IRunWrapper *run_wrapper_ = threads_->get_run_wrapper();
+  IRunWrapper *run_wrapper_ = threads_->get_effective_run_wrapper();
   if (OB_NOT_NULL(run_wrapper_)) {
     {
       ObDisableDiagnoseGuard disable_guard;
@@ -387,7 +367,6 @@ void* Thread::__th_start(void *arg)
   setpriority(PRIO_DARWIN_THREAD, 0, 0);
   ATOMIC_STORE(&th->create_ret_, OB_SUCCESS);
 #endif
-  ob_set_thread_tenant_id(th->get_tenant_id());
   current_thread_ = th;
   th->tid_ = gettid();
 
@@ -409,7 +388,7 @@ void* Thread::__th_start(void *arg)
     LOG_ERROR("invalid argument", K(th), K(ret));
   } else {
     ObPageManager pm;
-    ret = pm.set_tenant_ctx(common::OB_SERVER_TENANT_ID, common::ObCtxIds::GLIBC);
+    ret = pm.set_tenant_ctx(common::ObCtxIds::GLIBC);
     if (OB_FAIL(ret)) {
       LOG_ERROR("set tenant ctx failed", K(ret));
     } else {

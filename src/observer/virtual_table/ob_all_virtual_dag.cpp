@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX STORAGE
 #include "ob_all_virtual_dag.h"
+#include "share/rc/ob_module_provider.h"
 
 namespace oceanbase
 {
@@ -29,39 +30,32 @@ namespace observer
  * */
 
 template <typename T>
-int ObDagInfoIterator<T>::open(const int64_t tenant_id)
+int ObDagInfoIterator<T>::open()
 {
   int ret = common::OB_SUCCESS;
-  omt::TenantIdList all_tenants;
-  all_tenants.set_label(ObModIds::OB_TENANT_ID_LIST);
   if (is_opened_) {
     ret = OB_INIT_TWICE;
     STORAGE_LOG(WARN, "The ObDagInfoIterator has been opened", K(ret));
   } else if (typeid(T) != typeid(share::ObDagInfo) && typeid(T) != typeid(share::ObDagSchedulerInfo)) {
     ret = OB_ERR_UNEXPECTED;
     STORAGE_LOG(WARN, "invalid typeid", K(ret));
-  } else if (!::is_valid_tenant_id(tenant_id)) {
+  } else if (!true) {
     ret = OB_INVALID_ARGUMENT;
-    STORAGE_LOG(WARN, "invalid argument", K(ret), K(tenant_id));
-  } else if (OB_SYS_TENANT_ID == tenant_id) { // sys tenant can get all tenants' info
-    GCTX.omt_->get_tenant_ids(all_tenants);
-  } else if (OB_FAIL(all_tenants.push_back(tenant_id))) { // non-sys tenant
-    STORAGE_LOG(WARN, "failed to push back", K(ret), K(tenant_id));
+    STORAGE_LOG(WARN, "invalid argument", K(ret));
   }
-  for (int64_t i = 0; OB_SUCC(ret) && i < all_tenants.size(); ++i) {
-    uint64_t tenant_id = all_tenants[i];
-    if (!is_virtual_tenant_id(tenant_id)) { // skip virtual tenant
-      MTL_SWITCH(tenant_id) {
+  if (OB_SUCC(ret)) {
+    { // skip virtual tenant
+      MOD_SCOPE {
         if (typeid(T) == typeid(share::ObDagInfo)) {
-          if (OB_FAIL(MTL(ObTenantDagScheduler *)->get_all_dag_info(allocator_, all_tenants_dag_infos_))) {
+          if (OB_FAIL(share::g_mp->tenant_dag_scheduler()->get_all_dag_info(allocator_, all_tenants_dag_infos_))) {
             STORAGE_LOG(WARN, "failed to get all dag info", K(ret));
           }
-        } else if (OB_FAIL(MTL(ObTenantDagScheduler *)->get_all_dag_scheduler_info(allocator_, all_tenants_dag_infos_))) {
+        } else if (OB_FAIL(share::g_mp->tenant_dag_scheduler()->get_all_dag_scheduler_info(allocator_, all_tenants_dag_infos_))) {
           STORAGE_LOG(WARN, "failed to get all dag info", K(ret));
         }
       } else {
         if (OB_TENANT_NOT_IN_SERVER != ret) {
-          STORAGE_LOG(WARN, "switch tenant failed", K(ret), K(tenant_id));
+          STORAGE_LOG(WARN, "switch tenant failed", K(ret));
         } else {
           ret = OB_SUCCESS;
           continue;
@@ -117,7 +111,7 @@ int ObAllVirtualDag::init()
   if (is_inited_) {
     ret = OB_INIT_TWICE;
     SERVER_LOG(WARN, "ObAllVirtualDag has been inited, ", K(ret));
-  } else if (OB_FAIL(dag_info_iter_.open(effective_tenant_id_))) {
+  } else if (OB_FAIL(dag_info_iter_.open())) {
     SERVER_LOG(WARN, "Fail to open merge info iter, ", K(ret));
   } else {
     is_inited_ = true;
@@ -162,10 +156,6 @@ int ObAllVirtualDag::fill_cells(share::ObDagInfo &dag_info)
       //dag type
       if (dag_info.dag_type_ >= ObDagType::DAG_TYPE_MINI_MERGE && dag_info.dag_type_ < ObDagType::DAG_TYPE_MAX) {
         cells[i].set_varchar(share::ObIDag::get_dag_type_str(dag_info.dag_type_));
-        cells[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
-      } else if (dag_info.dag_net_type_ >= ObDagNetType::DAG_NET_TYPE_MIGRATION
-          && dag_info.dag_net_type_ < ObDagNetType::DAG_NET_TYPE_MAX) {
-        cells[i].set_varchar(share::ObIDagNet::get_dag_net_type_str(dag_info.dag_net_type_));
         cells[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
       } else {
         ret = OB_ERR_UNEXPECTED;
@@ -254,7 +244,7 @@ int ObAllVirtualDagScheduler::init()
   if (is_inited_) {
     ret = OB_INIT_TWICE;
     SERVER_LOG(WARN, "ObAllVirtualDagScheduler has been inited, ", K(ret));
-  } else if (OB_FAIL(dag_scheduler_info_iter_.open(effective_tenant_id_))) {
+  } else if (OB_FAIL(dag_scheduler_info_iter_.open())) {
     SERVER_LOG(WARN, "Fail to open merge info iter, ", K(ret));
   } else {
     is_inited_ = true;

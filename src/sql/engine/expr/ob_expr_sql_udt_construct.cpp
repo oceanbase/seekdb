@@ -32,8 +32,7 @@ namespace sql
 OB_SERIALIZE_MEMBER((ObExprUdtConstruct, ObFuncExprOperator), udt_id_, root_udt_id_, attr_pos_);
 
 ObExprUdtConstruct::ObExprUdtConstruct(common::ObIAllocator &alloc)
-    : ObFuncExprOperator(alloc, T_FUN_SYS_PRIV_SQL_UDT_CONSTRUCT, N_PRIV_SQL_UDT_CONSTRUCT, PARAM_NUM_UNKNOWN, NOT_VALID_FOR_GENERATED_COL, NOT_ROW_DIMENSION,
-                         false, INTERNAL_IN_ORACLE_MODE),
+    : ObFuncExprOperator(alloc, T_FUN_SYS_PRIV_SQL_UDT_CONSTRUCT, N_PRIV_SQL_UDT_CONSTRUCT, PARAM_NUM_UNKNOWN, NOT_VALID_FOR_GENERATED_COL, NOT_ROW_DIMENSION, false),
       udt_id_(OB_INVALID_ID),
       root_udt_id_(OB_INVALID_ID),
       attr_pos_(0) {}
@@ -177,8 +176,8 @@ int ObExprUdtConstruct::eval_udt_construct(const ObExpr &expr, ObEvalCtx &ctx, O
   ObDatum *null_bit = NULL;
   bool is_null = false;
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
-  uint64_t tenant_id = ObMultiModeExprHelper::get_tenant_id(ctx.exec_ctx_.get_my_session());
-  MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator(), expr.type_, tenant_id, ret, N_PRIV_SQL_UDT_CONSTRUCT);
+  
+  MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator(), expr.type_, ret, N_PRIV_SQL_UDT_CONSTRUCT);
   ObSqlUdtNullBitMap sub_nested_bitmap;
   const ObExprUdtConstructInfo *info
                   = static_cast<ObExprUdtConstructInfo *>(expr.extra_info_);

@@ -31,7 +31,7 @@ using namespace table;
 ObDirectLoadMultipleExternalRow::ObDirectLoadMultipleExternalRow()
   : allocator_("TLD_MExtRow"), is_delete_(false), is_ack_(false), buf_size_(0), buf_(nullptr)
 {
-  allocator_.set_tenant_id(MTL_ID());
+  
 }
 
 void ObDirectLoadMultipleExternalRow::reset()

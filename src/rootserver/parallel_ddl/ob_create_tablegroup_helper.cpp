@@ -25,11 +25,10 @@ using namespace oceanbase::rootserver;
 
 ObCreateTablegroupHelper::ObCreateTablegroupHelper(
   share::schema::ObMultiVersionSchemaService *schema_service,
-  const uint64_t tenant_id,
-  const obrpc::ObCreateTablegroupArg &arg,
-  obrpc::ObCreateTableGroupRes &res,
+  const obcall::ObCreateTablegroupArg &arg,
+  obcall::ObCreateTableGroupRes &res,
   ObDDLSQLTransaction *external_trans)
-  : ObDDLHelper(schema_service, tenant_id, "[paralle create tablegroup]", external_trans),
+  : ObDDLHelper(schema_service, "[paralle create tablegroup]", external_trans),
   arg_(arg),
   res_(res),
   tablegroup_schema_(nullptr)
@@ -69,11 +68,11 @@ int ObCreateTablegroupHelper::lock_objects_()
   if (OB_FAIL(check_inner_stat_())) {
     LOG_WARN("fail to check inner stat", KR(ret));
   } else if (OB_FAIL(add_lock_object_by_tablegroup_name_(tablegroup_name, transaction::tablelock::EXCLUSIVE))) { // lock tablegroup name
-    LOG_WARN("fail to add tablegroup lock by obj name", KR(ret), K_(tenant_id));
+    LOG_WARN("fail to add tablegroup lock by obj name", KR(ret));
   } else if (OB_FAIL(lock_existed_objects_by_name_())) {
-    LOG_WARN("fail to lock objects by name", KR(ret), K_(tenant_id));
+    LOG_WARN("fail to lock objects by name", KR(ret));
   } else if (OB_FAIL(check_tablegroup_name_())) { // check tablegroup name
-    LOG_WARN("fail to check tablegroup legitimacy", KR(ret), K_(tenant_id));
+    LOG_WARN("fail to check tablegroup legitimacy", KR(ret));
   }
   return ret;
 }
@@ -106,8 +105,8 @@ int ObCreateTablegroupHelper::generate_schemas_()
   } else if (OB_ISNULL(schema_service_impl = schema_service_->get_schema_service())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("schema_service impl is null", KR(ret));
-  } else if (OB_FAIL(schema_service_impl->fetch_new_tablegroup_id(tenant_id_, new_tablegroup_id))) {
-    LOG_WARN("fail to gen new tablegroup id", KR(ret), K_(tenant_id));
+  } else if (OB_FAIL(schema_service_impl->fetch_new_tablegroup_id(new_tablegroup_id))) {
+    LOG_WARN("fail to gen new tablegroup id", KR(ret));
   } else {
     tablegroup_schema_->set_tablegroup_id(new_tablegroup_id);
   }
@@ -142,8 +141,8 @@ int ObCreateTablegroupHelper::operate_schemas_()
   } else if (OB_ISNULL(schema_service_impl = schema_service_->get_schema_service())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("schema_service impl is null", KR(ret));
-  } else if (OB_FAIL(schema_service_->gen_new_schema_version(tenant_id_, new_schema_version))) {
-    LOG_WARN("fail to gen new schema version", KR(ret), K_(tenant_id));
+  } else if (OB_FAIL(schema_service_->gen_new_schema_version(new_schema_version))) {
+    LOG_WARN("fail to gen new schema version", KR(ret));
   } else {
     tablegroup_schema_->set_schema_version(new_schema_version);
     if (OB_FAIL(schema_service_impl->get_tablegroup_sql_service().insert_tablegroup(
@@ -183,12 +182,11 @@ int ObCreateTablegroupHelper::construct_and_adjust_result_(int &return_ret)
       ret = OB_SUCCESS;
       res_.tablegroup_id_ = tablegroup.get_tablegroup_id();
       LOG_USER_NOTE(OB_TABLEGROUP_EXIST);
-      LOG_INFO("tablegroup already exists, not need to create", "tenant_id",
-        tablegroup.get_tenant_id(), "tablegroup_name",
+      LOG_INFO("tablegroup already exists, not need to create",  "tablegroup_name",
         tablegroup.get_tablegroup_name_str());
     } else {
       LOG_USER_ERROR(OB_TABLEGROUP_EXIST);
-      LOG_WARN("tablegroup already exists", KR(ret), "tenant_id", tablegroup.get_tenant_id(),
+      LOG_WARN("tablegroup already exists", KR(ret), 
         "tablegroup_name", tablegroup.get_tablegroup_name_str());
     }
   }

@@ -17,7 +17,7 @@
 #define USING_LOG_PREFIX RS
 
 #include "ob_thread_idling.h"
-#include "deps/oblib/src/lib/container/ob_array.h"
+#include "lib/container/ob_array.h"
 
 namespace oceanbase
 {
@@ -65,7 +65,6 @@ int ObThreadIdling::idle(const int64_t max_idle_time_us)
       break;
     }
     wait_time_ms = std::min(static_cast<int64_t>(1000), wait_time_ms);
-    ObBKGDSessInActiveGuard inactive_guard;
     if (OB_FAIL(cond_.wait(static_cast<int>(wait_time_ms)))) {
       ret = OB_SUCCESS;
     } else {

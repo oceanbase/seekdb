@@ -20,7 +20,6 @@
 #include "storage/direct_load/ob_direct_load_batch_rows.h"
 #include "storage/direct_load/ob_direct_load_insert_table_ctx.h"
 #include "storage/direct_load/ob_direct_load_insert_table_row_handler.h"
-#include "storage/direct_load/ob_direct_load_row_iterator.h"
 
 namespace oceanbase
 {
@@ -114,31 +113,6 @@ private:
   ObDirectLoadInsertTabletWriteCtx write_ctx_;
   blocksstable::ObBatchDatumRows direct_datum_rows_;
   int64_t expect_column_count_;
-};
-
-class ObDirectLoadInsertTableBatchRowStoreWriter final
-  : public ObDirectLoadInsertTableBatchRowBufferWriter
-{
-  static const int64_t DEFAULT_MAX_BYTES_SIZE = 2LL << 20; // 2M
-public:
-  ObDirectLoadInsertTableBatchRowStoreWriter()
-    : ObDirectLoadInsertTableBatchRowBufferWriter(), dml_row_handler_(nullptr), job_stat_(nullptr)
-  {
-  }
-  virtual ~ObDirectLoadInsertTableBatchRowStoreWriter() = default;
-  int init(ObDirectLoadInsertTabletContext *insert_tablet_ctx,
-           const ObDirectLoadInsertTableRowInfo &row_info,
-           const int64_t slice_id,
-           ObDirectLoadDMLRowHandler *dml_row_handler,
-           sql::ObLoadDataStat *job_stat);
-  int write(ObDirectLoadIStoreRowIterator *row_iter);
-
-private:
-  int after_flush_batch(blocksstable::ObBatchDatumRows &datum_rows) override;
-
-private:
-  ObDirectLoadDMLRowHandler *dml_row_handler_;
-  sql::ObLoadDataStat *job_stat_;
 };
 
 } // namespace storage

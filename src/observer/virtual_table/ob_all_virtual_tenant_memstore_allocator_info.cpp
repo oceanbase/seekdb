@@ -15,8 +15,9 @@
  */
 
 #include "ob_all_virtual_tenant_memstore_allocator_info.h"
+#include "share/rc/ob_module_provider.h"
 #include "observer/ob_server_utils.h"
-#include "share/allocator/ob_shared_memory_allocator_mgr.h"
+#include "storage/allocator/ob_shared_memory_allocator_mgr.h"
 
 namespace oceanbase
 {
@@ -50,10 +51,8 @@ public:
 
 ObAllVirtualTenantMemstoreAllocatorInfo::ObAllVirtualTenantMemstoreAllocatorInfo()
     : ObVirtualTableIterator(),
-      tenant_ids_(),
       memstore_infos_(),
       memstore_infos_idx_(0),
-      tenant_ids_idx_(0),
       col_count_(0),
       retire_clock_(INT64_MAX)
 {
@@ -68,17 +67,12 @@ int ObAllVirtualTenantMemstoreAllocatorInfo::inner_open()
 {
   int ret = OB_SUCCESS;
   reset();
-  if (OB_FAIL(tenant_ids_.reserve(OB_MAX_RESERVED_TENANT_ID - OB_INVALID_TENANT_ID))) {
-    SERVER_LOG(WARN, "failed to reserve tenant_ids_", K(ret));
-  } else if (OB_FAIL(fill_tenant_ids())) {
-    SERVER_LOG(WARN, "fail to fill tenant ids", K(ret));
-  } else if (tenant_ids_.count() < 1) {
-    ret = OB_ERR_UNEXPECTED;
-    SERVER_LOG(WARN, "got tenant ids is empty", K(ret));
-  } else if (OB_FAIL(fill_memstore_infos(tenant_ids_.at(0)))) {
+  if (OB_UNLIKELY(NULL == GCTX.omt_)) {
+    ret = OB_NOT_INIT;
+    SERVER_LOG(WARN, "GCTX.omt_ shouldn't be NULL", K(ret));
+  } else if (OB_FAIL(fill_memstore_infos())) {
     SERVER_LOG(WARN, "fail to fill memstore info", K(ret));
   } else {
-    tenant_ids_idx_ = 0;
     col_count_ = output_column_ids_.count();
   }
   return ret;
@@ -87,49 +81,24 @@ int ObAllVirtualTenantMemstoreAllocatorInfo::inner_open()
 void ObAllVirtualTenantMemstoreAllocatorInfo::reset()
 
 {
-  tenant_ids_.reset();
   memstore_infos_.reset();
-  tenant_ids_idx_ = 0;
   memstore_infos_idx_ = 0;
   col_count_ = 0;
 }
 
-int ObAllVirtualTenantMemstoreAllocatorInfo::fill_tenant_ids()
-{
-  int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(NULL == GCTX.omt_)) {
-    ret = OB_NOT_INIT;
-    SERVER_LOG(WARN, "GCTX.omt_ shouldn't be NULL", K_(GCTX.omt), K(GCTX), K(ret));
-  } else {
-    omt::TenantIdList ids(NULL, ObModIds::OMT_VIRTUAL_TABLE);
-    GCTX.omt_->get_tenant_ids(ids);
-    for (int64_t i = 0; OB_SUCC(ret) && i < ids.size(); i++) {
-      if (OB_FAIL(tenant_ids_.push_back(ids[i]))) {
-        SERVER_LOG(WARN, "failed to push back tenant_id", K(ret));
-      }
-    }
-  }
-  return ret;
-}
-
-int ObAllVirtualTenantMemstoreAllocatorInfo::fill_memstore_infos(const uint64_t tenant_id)
+int ObAllVirtualTenantMemstoreAllocatorInfo::fill_memstore_infos()
 {
   int ret = OB_SUCCESS;
   memstore_infos_.reset();
-  if (tenant_id <= 0) {
-    ret = OB_INVALID_ARGUMENT;
-    SERVER_LOG(WARN, "invalid tenant_id", K(tenant_id), K(ret));
-  } else {
-    MTL_SWITCH(tenant_id)
-    {
-      ObMemstoreAllocator &memstore_allocator = MTL(ObSharedMemAllocMgr *)->memstore_allocator();
-      MemstoreInfoFill fill_func(memstore_infos_);
-      if (OB_FAIL(memstore_allocator.for_each(fill_func))) {
-        SERVER_LOG(WARN, "fill memstore info fail", K(ret));
-      } else {
-        retire_clock_ = memstore_allocator.get_retire_clock();
-        memstore_infos_idx_ = 0;
-      }
+  MOD_SCOPE
+  {
+    ObMemstoreAllocator &memstore_allocator = share::g_mp->shared_mem_alloc_mgr()->memstore_allocator();
+    MemstoreInfoFill fill_func(memstore_infos_);
+    if (OB_FAIL(memstore_allocator.for_each(fill_func))) {
+      SERVER_LOG(WARN, "fill memstore info fail", K(ret));
+    } else {
+      retire_clock_ = memstore_allocator.get_retire_clock();
+      memstore_infos_idx_ = 0;
     }
   }
 
@@ -143,21 +112,14 @@ int ObAllVirtualTenantMemstoreAllocatorInfo::inner_get_next_row(ObNewRow *&row)
     ret = OB_NOT_INIT;
     SERVER_LOG(WARN, "allocator_ shouldn't be NULL", K(ret));
   } else {
-    while (OB_SUCC(ret) && memstore_infos_idx_ >= memstore_infos_.count()) {
-      int64_t tenant_id = 0;
-      if (tenant_ids_idx_ >= tenant_ids_.count() - 1) {
-        ret = OB_ITER_END;
-      } else if (FALSE_IT(tenant_id = tenant_ids_.at(++tenant_ids_idx_))) {
-      } else if (is_virtual_tenant_id(tenant_id)) {
-        // do nothing
-      } else if (OB_FAIL(fill_memstore_infos(tenant_id))) {
-        SERVER_LOG(WARN, "fail to fill_memstore_infos", K(ret));
-      } else {/*do nothing*/}
+    if (memstore_infos_idx_ >= memstore_infos_.count()) {
+      // single sys tenant exhausted
+      ret = OB_ITER_END;
     }
 
     if (OB_SUCC(ret)) {
       ObObj *cells = cur_row_.cells_;
-      const uint64_t tenant_id = tenant_ids_.at(tenant_ids_idx_);
+      
       if (OB_ISNULL(cells)) {
         ret = OB_ERR_UNEXPECTED;
         SERVER_LOG(ERROR, "cur row cell is NULL", K(ret));

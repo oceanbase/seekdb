@@ -204,7 +204,6 @@ void ob_gcvt_help2(int *width, int *len, char **dend, char **src,
       *dst_ptr++ = '-';
     if (dst_ptr < dend_ptr)
       *dst_ptr++ = *src_ptr++;
-    // oracle mode has been deprecated, is_zero is always false
     if ((*len) > 1 && dst_ptr < dend_ptr) {
       *dst_ptr++ = '.';
       while (src_ptr < (*end) && dst_ptr < dend_ptr)
@@ -237,7 +236,6 @@ void ob_gcvt_help2(int *width, int *len, char **dend, char **src,
     if (sign)
       *dst_ptr++ = '-';
     *dst_ptr++ = *src_ptr++;
-    // oracle mode has been deprecated, is_zero is always false
     if ((*len) > 1) {
       *dst_ptr++ = '.';
       while (src_ptr < (*end))
@@ -290,8 +288,6 @@ size_t ob_gcvt_strict(double x, ob_gcvt_arg_type type, int width, char *to,
   }
   if (x < 0.)
     width--;
-  const int ORACLE_FLT_DIG = 9;
-  const int ORACLE_DBL_DIG = 17;
   const int CURR_FLT_DIG = FLT_DIG;
   const int dtoa_width = (type == OB_GCVT_ARG_DOUBLE
                           ? width

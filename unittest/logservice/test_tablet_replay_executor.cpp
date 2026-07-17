@@ -22,6 +22,7 @@
 #define private public
 
 #include "logservice/replayservice/ob_tablet_replay_executor.h"
+#include "share/rc/ob_module_provider.h"
 
 namespace oceanbase
 {
@@ -39,14 +40,21 @@ public:
   virtual bool is_replay_update_tablet_status_() const override;
   virtual int do_replay_(storage::ObTabletHandle &tablet_handle) override;
   virtual bool is_replay_update_mds_table_() const override;
+
+private:
+  oceanbase::share::ObIModuleProvider stub_mp_;
+  oceanbase::share::ObIModuleProvider *old_mp_ = nullptr;
 };
 
 void TestTabletReplayexecutor::SetUp()
 {
+  old_mp_ = oceanbase::share::g_mp;
+  oceanbase::share::g_mp = &stub_mp_;
 }
 
 void TestTabletReplayexecutor::TearDown()
 {
+  oceanbase::share::g_mp = old_mp_;
 }
 
 bool TestTabletReplayexecutor::is_replay_update_tablet_status_() const
@@ -70,8 +78,7 @@ int ObTabletReplayExecutor::replay_to_mds_table_(
     storage::ObTabletHandle &tablet_handle,
     const ObTabletCreateDeleteMdsUserData &mds,
     storage::mds::MdsCtx &ctx,
-    const share::SCN &scn,
-    const bool for_old_mds)
+    const share::SCN &scn)
 {
   int ret = 123;
   UNUSEDx(tablet_handle, mds, ctx, scn);
@@ -82,8 +89,7 @@ int ObTabletReplayExecutor::replay_to_mds_table_(
     storage::ObTabletHandle &tablet_handle,
     const ObTabletBindingMdsUserData &mds,
     storage::mds::MdsCtx &ctx,
-    const share::SCN &scn,
-    const bool for_old_mds)
+    const share::SCN &scn)
 {
   int ret = 456;
   UNUSEDx(tablet_handle, mds, ctx, scn);

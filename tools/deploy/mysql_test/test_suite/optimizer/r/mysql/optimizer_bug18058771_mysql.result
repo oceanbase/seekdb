@@ -92,7 +92,7 @@ Outputs & filters:
       force partition granule
   6 - output([a.__pk_increment], [a.grp_id], [a.row_id], [a.trx_grp]), filter([a.trx_grp IN (167271, 167271 + 1, 167271 + 2)]), rowset=16
       access([a.__pk_increment], [a.grp_id], [a.row_id], [a.trx_grp]), partitions(p[0-9])
-      limit(6), offset(nil), is_index_back=true, is_global_index=false, filter_before_indexback[false],
+      limit(6), offset(nil), is_index_back=true, is_global_index=false, filter_before_indexback[false], 
       range_key([a.row_id], [a.__pk_increment]), range(MIN,MIN ; MAX,MAX)always true
 delete /*+ index(a obright_part1) */ from obright_part a where trx_grp in (167271,167271+1,167271+2) order by row_id limit 6;
 select /*+ index(a obright_part1) */ * from obright_part a order by row_id;
@@ -153,7 +153,7 @@ Outputs & filters:
       force partition granule
   6 - output([a.__pk_increment], [a.grp_id], [a.trx_grp], [a.row_id]), filter([a.trx_grp IN (167271, 167271 + 1, 167271 + 2)]), rowset=16
       access([a.__pk_increment], [a.grp_id], [a.trx_grp], [a.row_id]), partitions(p[0-9])
-      limit(6), offset(nil), is_index_back=true, is_global_index=false, filter_before_indexback[false],
+      limit(6), offset(nil), is_index_back=true, is_global_index=false, filter_before_indexback[false], 
       range_key([a.row_id], [a.__pk_increment]), range(MIN,MIN ; MAX,MAX)always true
 update /*+ index(a obright_part1) */ obright_part a set trx_grp = 42 where trx_grp in (167271,167271+1,167271+2) order by row_id limit 6;
 select /*+ index(a obright_part1) */ * from obright_part a order by row_id;

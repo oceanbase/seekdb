@@ -33,31 +33,11 @@ class ObColExtend;
 using namespace share::schema;
 namespace storage {
 class ObStorageSchema;
-class ObCGReadInfo;
-class ObTenantCGReadInfoMgr;
 
 typedef ObFixedMetaObjArray<ObColumnParam *> Columns;
 typedef ObFixedMetaObjArray<int32_t> ColumnsIndex;
-typedef ObFixedMetaObjArray<int32_t> CGIndex;
 typedef ObFixedMetaObjArray<ObColDesc> ColDescArray;
 typedef ObFixedMetaObjArray<ObColExtend> ColExtendArray;
-/*
-  ObITableReadInfo: basic interface
-  --ObReadInfoStruct: basic struct, implement get* func
-  ----ObTableReadInfo:  for access, may not get all column
-  ----ObRowkeyReadInfo: for compaction, get all column | for mid-index, get rowkey
-  --ObCGReadInfo: for cg sstable
-    ObReadInfoStruct ptr which point to common cg read info in ObTenantCGReadInfoMgr
-    ObColumnParam array ptr record padding column info
-
-  ObTenantCGReadInfoMgr: record common cg_read_info & provide alloc string_cg_read_info with padding
-
-  row_store SSTable
-    use ObRowkeyReadInfo on tablet to read data & mid-index
-  col_store SSTable
-    use ObTenantCGReadInfoMgr::index_read_info to read mid-index
-    get ObCGReadInfo from ObTenantCGReadInfoMgr to read data
-*/
 struct ObColumnIndexArray
 {
 public:
@@ -119,14 +99,12 @@ class ObITableReadInfo
 public:
   ObITableReadInfo() = default;
   virtual ~ObITableReadInfo() = default;
-  virtual bool is_oracle_mode() const = 0;
   virtual int64_t get_schema_column_count() const = 0;
   virtual int64_t get_seq_read_column_count() const = 0;
   virtual int64_t get_request_count() const = 0;
   virtual int64_t get_schema_rowkey_count() const = 0;
   virtual int64_t get_rowkey_count() const = 0;
   virtual int64_t get_group_idx_col_index() const = 0;
-  virtual int64_t get_mview_old_new_col_index() const = 0;
   virtual int64_t get_trans_col_index() const = 0;
   virtual const common::ObIArray<ObColDesc> &get_columns_desc() const = 0;
   virtual const ObColumnIndexArray &get_columns_index() const = 0;
@@ -134,9 +112,7 @@ public:
   virtual const blocksstable::ObStorageDatumUtils &get_datum_utils() const = 0;
   virtual const common::ObIArray<ObColumnParam *> *get_columns() const = 0;
   virtual const common::ObIArray<ObColExtend> *get_columns_extend() const = 0;
-  virtual const common::ObIArray<int32_t> *get_cg_idxs() const = 0;
   virtual bool is_access_rowkey_only() const = 0;
-  virtual bool has_all_column_group() const = 0;
   virtual bool need_truncate_filter() const = 0;
   virtual bool is_valid() const = 0;
   virtual void reset() = 0;
@@ -149,11 +125,9 @@ public:
   ObReadInfoStruct(const bool rowkey_mode = false)
     : ObITableReadInfo(),
       is_inited_(false),
-      is_oracle_mode_(false),
       allocator_(nullptr),
       schema_column_count_(0),
       compat_version_(READ_INFO_VERSION_V5),
-      is_cs_replica_compat_(false),
       is_delete_insert_table_(false),
       reserved_(0),
       schema_rowkey_cnt_(0),
@@ -175,7 +149,6 @@ public:
   }
   virtual void reset() override;
 
-  OB_INLINE virtual bool is_oracle_mode() const override { return is_oracle_mode_; }
   OB_INLINE virtual int64_t get_schema_column_count() const override { return schema_column_count_; }
   OB_INLINE virtual int64_t get_schema_rowkey_count() const override { return schema_rowkey_cnt_; }
   OB_INLINE virtual int64_t get_rowkey_count() const override { return rowkey_cnt_; }
@@ -189,10 +162,6 @@ public:
   { return memtable_cols_index_; }
   OB_INLINE virtual const blocksstable::ObStorageDatumUtils &get_datum_utils() const override { return datum_utils_; }
   OB_INLINE virtual int64_t get_group_idx_col_index() const override
-  {
-    return OB_INVALID_INDEX;
-  }
-  OB_INLINE virtual int64_t get_mview_old_new_col_index() const override
   {
     return OB_INVALID_INDEX;
   }
@@ -211,11 +180,6 @@ public:
     OB_ASSERT_MSG(false, "ObReadInfoStruct dose not promise columns array");
     return nullptr;
   }
-  OB_INLINE virtual const common::ObIArray<int32_t> *get_cg_idxs() const override
-  {
-    OB_ASSERT_MSG(false, "ObReadInfoStruct dose not promise cg index array");
-    return nullptr;
-  }
   OB_INLINE virtual bool is_access_rowkey_only() const override
   {
     OB_ASSERT_MSG(false, "ObReadInfoStruct dose not promise rowkey info");
@@ -226,27 +190,15 @@ public:
     OB_ASSERT_MSG(false, "ObReadInfoStruct dose not promise columns extend array");
     return nullptr;
   }
-  virtual bool has_all_column_group() const override
-  {
-    OB_ASSERT_MSG(false, "ObReadInfoStruct dose not promise all column group");
-    return false;
-  }
   virtual bool need_truncate_filter() const override
   {
     OB_ASSERT_MSG(false, "ObReadInfoStruct dose not promise need truncate filter");
     return false;
   }
-  OB_INLINE bool is_cs_replica_compat() const { return is_cs_replica_compat_; }
   OB_INLINE bool is_delete_insert_table() const { return is_delete_insert_table_; }
   DECLARE_VIRTUAL_TO_STRING;
-  int generate_for_column_store(ObIAllocator &allocator,
-                                const ObColDesc &desc,
-                                const bool is_oracle_mode);
   void init_basic_info(const int64_t schema_column_count,
                        const int64_t schema_rowkey_cnt,
-                       const bool is_oracle_mode,
-                       const bool is_cg_sstable,
-                       const bool is_cs_replica_compat,
                        const bool is_delete_insert_table,
                        const bool is_global_index_table);
   int prepare_arrays(common::ObIAllocator &allocator,
@@ -257,10 +209,9 @@ protected:
   static const int64_t READ_INFO_VERSION_V5 = 5;
   static const int64_t READ_INFO_VERSION_LATEST = READ_INFO_VERSION_V5;
   static const int32_t READ_INFO_ONE_BIT = 1;
-  static const int32_t READ_INFO_RESERVED_BITS = 13;
+  static const int32_t READ_INFO_RESERVED_BITS = 14;
 
   bool is_inited_;
-  bool is_oracle_mode_;
   ObIAllocator *allocator_;
   // distinguish schema changed by schema column count
   union {
@@ -268,7 +219,6 @@ protected:
     struct {
       uint32_t schema_column_count_;
       uint16_t compat_version_;
-      uint16_t is_cs_replica_compat_   : READ_INFO_ONE_BIT; // only used for rowkey_read_info in ObTablet
       uint16_t is_delete_insert_table_ : READ_INFO_ONE_BIT;
       uint16_t is_global_index_table_  : READ_INFO_ONE_BIT; // only used for rowkey_read_info in ObTablet
       uint16_t reserved_               : READ_INFO_RESERVED_BITS;
@@ -284,7 +234,6 @@ protected:
 
 class ObTableReadInfo : public ObReadInfoStruct
 {
-friend class ObTenantCGReadInfoMgr;
 public:
   ObTableReadInfo();
   virtual ~ObTableReadInfo();
@@ -292,7 +241,7 @@ public:
   /*
    * schema_rowkey_cnt: schema row key count
    * cols_desc: access col descs
-   * storage_cols_index: access column store index in storage file row
+   * storage_cols_index: access-column index in the stored row
    * cols_param: access column params
    */
   // could used for query memtable/sstable
@@ -300,25 +249,12 @@ public:
       common::ObIAllocator &allocator,
       const int64_t schema_column_count,
       const int64_t schema_rowkey_cnt,
-      const bool is_oracle_mode,
       const common::ObIArray<ObColDesc> &cols_desc,
       const common::ObIArray<int32_t> *storage_cols_index,
       const common::ObIArray<ObColumnParam *> *cols_param = nullptr,
-      const common::ObIArray<int32_t> *cg_idxs = nullptr,
       const common::ObIArray<ObColExtend> *cols_extend = nullptr,
-      const bool has_all_column_group = true,
-      const bool is_cg_sstable = false,
       const bool need_truncate_filter = false,
       const bool is_delete_insert_table = false);
-  int mock_for_sstable_query(
-    common::ObIAllocator &allocator,
-    const int64_t schema_column_count,
-    const int64_t schema_rowkey_cnt,
-    const bool is_oracle_mode,
-    const common::ObIArray<ObColDesc> &cols_desc,
-    const common::ObIArray<int32_t> &storage_cols_index,
-    const common::ObIArray<ObColumnParam *> &cols_param,
-    const common::ObIArray<int32_t> &cg_idxs);
   virtual OB_INLINE bool is_valid() const override
   {
     return ObReadInfoStruct::is_valid()
@@ -330,16 +266,10 @@ public:
   { return trans_col_index_; }
   OB_INLINE int64_t get_group_idx_col_index() const
   { return group_idx_col_index_; }
-  OB_INLINE int64_t get_mview_old_new_col_index() const
-  { return mview_old_new_col_index_; }
   OB_INLINE int64_t get_seq_read_column_count() const
   { return seq_read_column_count_; }
   virtual const common::ObIArray<ObColumnParam *> *get_columns() const
   { return &cols_param_; }
-  OB_INLINE bool need_access_cg() const
-  { return cg_idxs_.count() > 0; }
-  OB_INLINE const common::ObIArray<int32_t> *get_cg_idxs() const override
-  { return cg_idxs_.count() > 0 ? &cg_idxs_ : nullptr; }
   OB_INLINE bool is_access_rowkey_only() const override
   { return max_col_index_ < rowkey_cnt_; }
   OB_INLINE virtual const ObColumnIndexArray &get_memtable_columns_index() const override
@@ -354,8 +284,6 @@ public:
   // this func only called in query
   OB_INLINE virtual int64_t get_request_count() const override
   { return cols_desc_.count(); }
-  virtual bool has_all_column_group() const override
-  { return has_all_column_group_; }
   virtual bool need_truncate_filter() const override
   { return need_truncate_filter_; }
   int deserialize(
@@ -372,32 +300,27 @@ public:
 
 private:
   DISALLOW_COPY_AND_ASSIGN(ObTableReadInfo);
-  int init_datum_utils(common::ObIAllocator &allocator, const bool is_cg_sstable);
+  int init_datum_utils(common::ObIAllocator &allocator);
   int init_pre_check(
       const int64_t schema_column_count,
       const int64_t schema_rowkey_cnt,
       const common::ObIArray<ObColDesc> &cols_desc,
       const common::ObIArray<int32_t> *storage_cols_index,
       const common::ObIArray<ObColumnParam *> *cols_param = nullptr,
-      const common::ObIArray<int32_t> *cg_idxs = nullptr,
       const common::ObIArray<ObColExtend> *cols_extend = nullptr);
   void inner_gene_cols_index_by_col_descs(
     const int64_t schema_rowkey_cnt,
     const common::ObIArray<ObColDesc> &cols_desc,
-    const common::ObIArray<int32_t> *storage_cols_index,
-    const bool is_cg_sstable);
+    const common::ObIArray<int32_t> *storage_cols_index);
 private:
   // distinguish schema changed by schema column count
   int64_t trans_col_index_;
   int64_t group_idx_col_index_;
-  int64_t mview_old_new_col_index_;
   // the count of common prefix between request columns and store columns
   int64_t seq_read_column_count_;
   int64_t max_col_index_;
   Columns cols_param_;
-  CGIndex cg_idxs_;
   ColExtendArray cols_extend_;
-  bool has_all_column_group_;
   bool mock_sstable_query_;
   bool need_truncate_filter_;
 };
@@ -412,11 +335,8 @@ public:
       common::ObIAllocator &allocator,
       const int64_t schema_column_count,
       const int64_t schema_rowkey_cnt,
-      const bool is_oracle_mode,
       const common::ObIArray<ObColDesc> &rowkey_col_descs,
-      const bool is_cg_sstable = false,
       const bool use_default_compat_version = false,
-      const bool is_cs_replica_compat = false,
       const bool is_delete_insert_table = false,
       const bool is_global_index = false);
   OB_INLINE virtual int64_t get_seq_read_column_count() const override
@@ -444,240 +364,6 @@ public:
   DISALLOW_COPY_AND_ASSIGN(ObRowkeyReadInfo);
 };
 
-class ObCGReadInfo : public ObITableReadInfo
-{
-public:
-  const static int64_t CG_COL_CNT = 1;
-  const static int64_t CG_ROWKEY_COL_CNT = 0;
-  const static int64_t LOCAL_MAX_CG_READ_INFO_CNT = 256;
-  const static uint64_t CG_READ_INFO_MEMORY_BASE = 32_GB;
-  const static int16_t MIX_READ_INFO_LOCAL_CACHE = 1;
-public:
-  ObCGReadInfo();
-  virtual ~ObCGReadInfo();
-  OB_INLINE virtual bool is_valid() const override { return nullptr != cg_basic_info_ && cg_basic_info_->is_valid(); }
-  OB_INLINE virtual void reset() override
-  { // alloc info should be release in ObTenantCGReadInfoMgr, just clear ptr here
-    cg_basic_info_ = nullptr;
-    cols_param_ = nullptr;
-    cols_extend_.reset();
-  }
-  OB_INLINE static bool is_cg_sstable(const int64_t schema_rowkey_cnt, const int64_t schema_column_count)
-  {
-    return ObCGReadInfo::CG_COL_CNT == schema_rowkey_cnt && ObCGReadInfo::CG_ROWKEY_COL_CNT == schema_column_count;
-  }
-  static uint64_t get_local_max_cg_cnt()
-  {
-    double local_max_cg_read_info_cnt = 0.0;
-    double tenant_memory_limit = static_cast<double>(lib::get_tenant_memory_limit(MTL_ID()));
-    local_max_cg_read_info_cnt = (tenant_memory_limit / CG_READ_INFO_MEMORY_BASE) * LOCAL_MAX_CG_READ_INFO_CNT;
-    return MAX(static_cast<uint64_t>(local_max_cg_read_info_cnt), LOCAL_MAX_CG_READ_INFO_CNT);
-  }
-  OB_INLINE virtual bool is_oracle_mode() const override { return cg_basic_info_->is_oracle_mode(); }
-  OB_INLINE virtual int64_t get_schema_column_count() const override { return CG_COL_CNT; }
-  OB_INLINE virtual int64_t get_schema_rowkey_count() const override { return CG_ROWKEY_COL_CNT; }
-  OB_INLINE virtual int64_t get_rowkey_count() const override { return CG_ROWKEY_COL_CNT; }
-  OB_INLINE virtual const common::ObIArray<ObColDesc> &get_columns_desc() const override
-  { return cg_basic_info_->get_columns_desc(); }
-  OB_INLINE virtual int64_t get_request_count() const override { return CG_COL_CNT; }
-  OB_INLINE virtual const ObColumnIndexArray &get_columns_index() const override
-  { return cg_basic_info_->get_columns_index(); }
-  OB_INLINE virtual const ObColumnIndexArray &get_memtable_columns_index() const override
-  { return cg_basic_info_->get_memtable_columns_index(); }
-  OB_INLINE virtual const blocksstable::ObStorageDatumUtils &get_datum_utils() const override
-  {
-    return cg_basic_info_->get_datum_utils();
-  }
-  OB_INLINE virtual const common::ObIArray<ObColumnParam *> *get_columns() const override
-  {
-    return cols_param_;
-  }
-  OB_INLINE virtual const common::ObIArray<ObColExtend> *get_columns_extend() const override
-  {
-    return &cols_extend_;
-  }
-  virtual int64_t get_group_idx_col_index() const
-  {
-    return OB_INVALID_INDEX;
-  }
-  OB_INLINE virtual int64_t get_mview_old_new_col_index() const override
-  {
-    return OB_INVALID_INDEX;
-  }
-  virtual int64_t get_trans_col_index() const
-  {
-    OB_ASSERT_MSG(false, "ObCGReadInfo dose not promise trans col index");
-    return OB_INVALID_INDEX;
-  }
-  virtual int64_t get_seq_read_column_count() const
-  {
-    return CG_COL_CNT;
-  }
-  virtual const common::ObIArray<int32_t> *get_cg_idxs() const override
-  {
-    OB_ASSERT_MSG(false, "ObCGReadInfo dose not promise cg index");
-    return nullptr;
-  }
-  virtual bool is_access_rowkey_only() const override
-  {
-    OB_ASSERT_MSG(false, "ObCGReadInfo dose not promise rowkey info");
-    return false;
-  }
-  virtual bool has_all_column_group() const override
-  {
-    OB_ASSERT_MSG(false, "ObCGReadInfo dose not promise all column group");
-    return false;
-  }
-  virtual bool need_truncate_filter() const override
-  {
-    OB_ASSERT_MSG(false, "ObCGReadInfo dose not promise need truncate filter");
-    return false;
-  }
-  TO_STRING_KV(K_(need_release), KPC(cg_basic_info_), K_(cols_extend));
-protected:
-  friend class ObTenantCGReadInfoMgr;
-  bool need_release_;
-  ObReadInfoStruct *cg_basic_info_; // for normal cg, only use basic info
-  Columns *cols_param_; // for string cg, need different padding col param
-  ColExtendArray cols_extend_;
-};
-
-// bind the ObRowkeyReadInfo on tablet, and only read rowkey columns
-class ObCGRowkeyReadInfo : public ObITableReadInfo
-{
-public:
-  ObCGRowkeyReadInfo(const ObRowkeyReadInfo &rowkey_read_info)
-    : rowkey_read_info_(rowkey_read_info)
-  {}
-  virtual ~ObCGRowkeyReadInfo() = default;
-  virtual bool is_oracle_mode() const override { return rowkey_read_info_.is_oracle_mode(); }
-  virtual int64_t get_schema_column_count() const override { return rowkey_read_info_.get_schema_rowkey_count(); }
-  virtual int64_t get_seq_read_column_count() const override
-  {
-    return get_request_count();
-  }
-  virtual int64_t get_request_count() const override { return rowkey_read_info_.get_rowkey_count(); }
-  virtual int64_t get_schema_rowkey_count() const override { return rowkey_read_info_.get_schema_rowkey_count(); }
-  virtual int64_t get_rowkey_count() const override { return rowkey_read_info_.get_rowkey_count(); }
-  virtual int64_t get_group_idx_col_index() const override
-  {
-    return OB_INVALID_INDEX;
-  }
-  OB_INLINE virtual int64_t get_mview_old_new_col_index() const override
-  {
-    return OB_INVALID_INDEX;
-  }
-  virtual int64_t get_trans_col_index() const override { return rowkey_read_info_.get_trans_col_index(); }
-  virtual const common::ObIArray<ObColDesc> &get_columns_desc() const override
-  {
-    return rowkey_read_info_.get_columns_desc();
-  }
-  virtual const ObColumnIndexArray &get_columns_index() const override
-  {
-    return rowkey_read_info_.get_columns_index();
-  }
-  virtual const ObColumnIndexArray &get_memtable_columns_index() const override
-  {
-    return rowkey_read_info_.get_memtable_columns_index();
-  }
-  virtual const blocksstable::ObStorageDatumUtils &get_datum_utils() const override
-  {
-    return rowkey_read_info_.get_datum_utils();
-  }
-  virtual const common::ObIArray<ObColumnParam *> *get_columns() const override
-  {
-    return rowkey_read_info_.get_columns();
-  }
-  OB_INLINE virtual const common::ObIArray<int32_t> *get_cg_idxs() const override
-  {
-    OB_ASSERT_MSG(false, "ObCGRowkeyReadInfo dose not promise cg index array");
-    return nullptr;
-  }
-  OB_INLINE virtual bool is_access_rowkey_only() const override
-  { return true; }
-  virtual const common::ObIArray<ObColExtend> *get_columns_extend() const override
-  {
-    return rowkey_read_info_.get_columns_extend();
-  }
-  virtual bool has_all_column_group() const override
-  {
-    OB_ASSERT_MSG(false, "ObCGRowkeyReadInfo dose not promise all column group");
-    return false;
-  }
-  virtual bool need_truncate_filter() const override
-  {
-    OB_ASSERT_MSG(false, "ObCGRowkeyReadInfo dose not promise need truncate filter");
-    return false;
-  }
-  virtual bool is_valid() const override { return rowkey_read_info_.is_valid(); }
-  virtual void reset() { OB_ASSERT_MSG(false, "ObCGRowkeyReadInfo dose not allow reset"); }
-  TO_STRING_KV(K_(rowkey_read_info))
-private:
-  const ObRowkeyReadInfo &rowkey_read_info_;
-  DISALLOW_COPY_AND_ASSIGN(ObCGRowkeyReadInfo);
-};
-
-struct ObCGReadInfoHandle final
-{
-public:
-  ObCGReadInfoHandle()
-    : cg_read_info_(nullptr)
-  {}
-  ~ObCGReadInfoHandle();
-  void reset();
-  bool is_valid() const { return nullptr != cg_read_info_; }
-  void set_read_info(ObCGReadInfo *cg_read_info) { cg_read_info_ = cg_read_info; }
-  const ObCGReadInfo *get_read_info() const { return cg_read_info_; }
-private:
-  ObCGReadInfo *cg_read_info_;
-
-  DISALLOW_COPY_AND_ASSIGN(ObCGReadInfoHandle);
-};
-
-class ObTenantCGReadInfoMgr final
-{
-public:
-  ObTenantCGReadInfoMgr();
-  ~ObTenantCGReadInfoMgr();
-  int init();
-  void destroy();
-  int get_index_read_info(const ObITableReadInfo *&index_read_info);
-  int get_cg_read_info(const ObColDesc &col_desc, ObColumnParam *col_param,
-                       const ObTabletID &tablet_id, ObCGReadInfoHandle &cg_read_info_handle);
-  int release_cg_read_info(ObCGReadInfo *&cg_read_info);
-  static int mtl_init(ObTenantCGReadInfoMgr *&read_info_mgr);
-  static int construct_index_read_info(common::ObIAllocator &allocator, ObRowkeyReadInfo &index_read_info);
-  static int construct_cg_read_info(
-      common::ObIAllocator &allocator,
-      const bool is_oracle_mode,
-      const ObColDesc &col_desc,
-      ObColumnParam *cols_param,
-      ObTableReadInfo &cg_read_info);
-  int gc_cg_info_array();
-private:
-  int construct_normal_cg_read_infos();
-  int alloc_spec_cg_read_info(const ObColDesc &col_desc, const ObColumnParam *col_param, ObCGReadInfoHandle &cg_read_info_handle);
-  void free_cg_info(ObCGReadInfo *&cg_read_info, const bool free_ptr_flag);
-  static void set_col_desc(const ObObjType type, ObColDesc &col_desc);
-  static bool skip_type(const ObObjType type);
-  static bool not_in_normal_cg_array(const ObObjType type)
-  {
-    return skip_type(type) || is_lob_storage(type) || ob_is_string_type(type) || ob_is_decimal_int(type);
-  }
-  const static int64_t DEFAULT_CG_READ_INFO_ARRAY_SIZE = 256;
-  const static int64_t PRINT_LOG_INVERVAL = 3 * 60 * 1000L * 1000L; // 3 mins
-private:
-  common::ObFIFOAllocator allocator_;
-  ObRowkeyReadInfo index_read_info_;
-  ObFixedArray<ObCGReadInfo *, ObIAllocator> normal_cg_read_infos_;
-  ObSEArray<ObCGReadInfo *, DEFAULT_CG_READ_INFO_ARRAY_SIZE> release_cg_read_info_array_;
-  lib::ObMutex lock_;
-  int64_t hold_cg_read_info_cnt_; // wait dec_cnt to 0 before destroy
-  int64_t in_progress_cnt_; // wait dec_cnt to 0 before destroy
-  void *alloc_buf_;
-  bool is_inited_;
-  DISALLOW_COPY_AND_ASSIGN(ObTenantCGReadInfoMgr);
-};
 
 }
 }

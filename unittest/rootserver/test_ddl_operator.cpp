@@ -19,13 +19,13 @@
 #define  private public
 #define  protected public
 
-#include "lib/stat/ob_session_stat.h"
+#include "lib/stat/ob_diagnose_info.h"
 #include "../share/schema/db_initializer.h"
 #include "share/schema/ob_schema_getter_guard.h"
 #include "share/schema/ob_multi_version_schema_service.h"
-#include "share/schema/ob_schema_service_sql_impl.h"
+#include "observer/schema/ob_schema_service_sql_impl.h"
 #include "share/inner_table/ob_inner_table_schema.h"
-#include "lib/mysqlclient/ob_mysql_transaction.h"
+#include "common/mysqlclient/ob_mysql_transaction.h"
 #include "lib/string/ob_sql_string.h"
 #include "share/ob_srv_rpc_proxy.h"
 #include "rootserver/ob_ddl_operator.h"
@@ -35,7 +35,7 @@
 namespace oceanbase
 {
 using namespace common;
-using namespace obrpc;
+using namespace obcall;
 using namespace share;
 using namespace share::schema;
 
@@ -75,7 +75,6 @@ TestDDLOperator::TestDDLOperator()
     srv_rpc_proxy_(),
     ddl_operator_(multi_schema_service_, db_initer_.get_sql_proxy())
 {
-  ObCompatModeGetter::instance().init(&db_initer_.get_sql_proxy());
 }
 
 void TestDDLOperator::TearDown()

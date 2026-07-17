@@ -18,6 +18,7 @@
 
 #include "storage/slog/ob_storage_log_reader.h"
 #include "storage/slog/ob_storage_log_replayer.h"
+#include "share/ob_force_print_log.h"
 
 namespace oceanbase
 {
@@ -43,8 +44,7 @@ ObStorageLogReader::~ObStorageLogReader()
 int ObStorageLogReader::init(
     const char *log_dir,
     const ObLogCursor cursor,
-    const blocksstable::ObLogFileSpec &log_file_spec,
-    const uint64_t tenant_id)
+    const blocksstable::ObLogFileSpec &log_file_spec)
 {
   int ret = OB_SUCCESS;
 
@@ -61,7 +61,7 @@ int ObStorageLogReader::init(
       STORAGE_REDO_LOG(WARN, "Log buffer's data has been set",
           K(ret), KP(log_buffer_.get_data()));
     } else {
-      const ObMemAttr attr(tenant_id, ObModIds::OB_LOG_READER);
+      const ObMemAttr attr(ObModIds::OB_LOG_READER);
       char *buf = static_cast<char *>(ob_malloc_align(OB_DIRECT_IO_ALIGN,
           ObLogConstants::LOG_ITEM_MAX_LENGTH, attr));
       if (nullptr == buf) {
@@ -75,7 +75,7 @@ int ObStorageLogReader::init(
   }
 
   if (OB_SUCC(ret)) {
-    if (OB_FAIL(file_handler_.init(log_dir, LOG_FILE_MAX_SIZE, tenant_id))) {
+    if (OB_FAIL(file_handler_.init(log_dir, LOG_FILE_MAX_SIZE))) {
       STORAGE_REDO_LOG(WARN, "Fail to create file handler.", K(ret));
     } else {
       cursor_ = cursor;
@@ -391,8 +391,7 @@ int ObStorageLogReader::read_log(
     const ObMetaDiskAddr &disk_addr,
     const int64_t buf_len,
     void *buf,
-    int64_t &pos,
-    const uint64_t tenant_id)
+    int64_t &pos)
 {
   int ret = OB_SUCCESS;
   int64_t file_id = 0;
@@ -412,7 +411,7 @@ int ObStorageLogReader::read_log(
       !disk_addr.is_file() || nullptr == buf)) {
     ret = OB_INVALID_ARGUMENT;
     STORAGE_REDO_LOG(WARN, "Invalid arguments.", K(ret));
-  } else if (OB_FAIL(handler.init(log_dir, 256 << 20/*file_size*/, tenant_id))) {
+  } else if (OB_FAIL(handler.init(log_dir, 256 << 20))) {
     STORAGE_REDO_LOG(WARN, "Fail to init log file handler.", K(ret));
   } else if (OB_FAIL(disk_addr.get_file_addr(file_id, offset, size))) {
     STORAGE_REDO_LOG(WARN, "Fail to get file address.", K(ret), K(disk_addr));

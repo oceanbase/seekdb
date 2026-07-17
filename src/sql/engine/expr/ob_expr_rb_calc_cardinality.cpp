@@ -65,7 +65,7 @@ int ObExprRbCalcCardinality::eval_rb_calc_cardinality(const ObExpr &expr, ObEval
   INIT_SUCC(ret);
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
   common::ObArenaAllocator &tmp_allocator = tmp_alloc_g.get_allocator();
-  lib::ObMallocHookAttrGuard malloc_guard(lib::ObMemAttr(ObRbExprHelper::get_tenant_id(ctx.exec_ctx_.get_my_session()), "ROARINGBITMAP"));
+  lib::ObMallocHookAttrGuard malloc_guard(lib::ObMemAttr("ROARINGBITMAP"));
   ObExpr *rb1_arg = expr.args_[0];
   ObExpr *rb2_arg = expr.args_[1];
   bool is_rb1_null = false;

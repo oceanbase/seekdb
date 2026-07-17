@@ -11,7 +11,7 @@ grant all on *.* to 'admin' WITH GRANT OPTION;
 alter system set _use_odps_jni_connector = false;
 set @@session.ob_query_timeout = 200000000;
 
-set @mysqltest_mode = 'both';
+set @mysqltest_mode = 'mysql';
 
 delimiter /
 drop procedure if exists exec_sql;/
@@ -38,7 +38,6 @@ delimiter ;
 set @@session.ob_query_timeout = 10000000;
 system sleep 5;
 set global recyclebin = 'on';
-set global ob_enable_truncate_flashback = 'on';
 set global _nlj_batching_enabled = true;
 alter system set ob_compaction_schedule_interval = '10s' tenant sys;
 alter system set ob_compaction_schedule_interval = '10s' tenant all_user;
@@ -68,9 +67,6 @@ alter system set_tp tp_no = 565, error_code = 4007, frequency = 1;
 alter system set_tp tp_no = 408, error_code = 4016, frequency = 1;
 alter system set_tp tp_name = ERRSIM_FAST_NLJ_RANGE_GENERATOR_CHECK, error_code = 4016, frequency = 1;
 alter system set_tp tp_name = EN_THROW_DS_ERROR, error_code = 4016, frequency = 1;
-alter system set partition_balance_schedule_interval = 0 tenant sys;
-alter system set partition_balance_schedule_interval = 0 tenant all_user;
-alter system set partition_balance_schedule_interval = 0 tenant all_meta;
 alter system set _enable_var_assign_use_das = true tenant = sys;
 alter system set _enable_var_assign_use_das = true tenant = all_user;
 alter system set _enable_var_assign_use_das = true tenant = all_meta;
@@ -78,8 +74,6 @@ alter system set _enable_spf_batch_rescan = true tenant = sys;
 alter system set _enable_spf_batch_rescan = true tenant = all_user;
 alter system set _enable_spf_batch_rescan = true tenant = all_meta;
 -- alter system set _use_hash_rollup = "forced" tenant = mysql;
--- alter system set _use_hash_rollup = "forced" tenant = oracle;
--- alter tenant oracle set variables ob_plan_cache_percentage = 20;
 -- alter tenant mysql set variables ob_plan_cache_percentage = 20;
 alter system set _max_px_workers_per_cpu = 10 tenant = all_user;
 alter system set _force_enable_plan_tracing = false tenant sys;

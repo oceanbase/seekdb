@@ -22,7 +22,7 @@ namespace oceanbase
 using namespace common;
 using namespace share::schema;
 using namespace share;
-using namespace obrpc;
+using namespace obcall;
 namespace sql
 {
 int ObDDLResolver::get_storage_cache_tbl_schema(const ObTableSchema *&tbl_schema)
@@ -46,7 +46,7 @@ int ObDDLResolver::get_storage_cache_tbl_schema(const ObTableSchema *&tbl_schema
     if (OB_ISNULL(alter_table_stmt)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("alter table stmt is null", KR(ret));
-    } else if (OB_FAIL(schema_checker_->get_table_schema(session_info_->get_effective_tenant_id(),
+    } else if (OB_FAIL(schema_checker_->get_table_schema(
                                                         alter_table_stmt->get_org_database_name(),
                                                         alter_table_stmt->get_org_table_name(),
                                                         false,
@@ -90,7 +90,7 @@ int ObDDLResolver::set_default_storage_cache_policy(const bool is_alter_add_inde
         use_default_storage_cache_policy = true;
       }
     } else if (stmt::T_CREATE_INDEX == stmt_->get_stmt_type()) {
-      if (LOCAL_INDEX == index_scope_ || (NOT_SPECIFIED == index_scope_ && is_mysql_mode())) {
+      if (LOCAL_INDEX == index_scope_ || NOT_SPECIFIED == index_scope_) {
         // When create local index, the default storage cache policy is NONE
         // In mysql mode, if the index scope is not specified, the index is regarded as local index
         storage_cache_policy.set_global_policy(ObStorageCacheGlobalPolicy::PolicyType::NONE_POLICY);
@@ -104,7 +104,7 @@ int ObDDLResolver::set_default_storage_cache_policy(const bool is_alter_add_inde
         LOG_WARN("alter table stmt is null", K(ret));
       } else if (GLOBAL_INDEX == index_scope_) {
         use_default_storage_cache_policy = true;
-      } else if (LOCAL_INDEX == index_scope_ || (NOT_SPECIFIED == index_scope_ && is_mysql_mode())) {
+      } else if (LOCAL_INDEX == index_scope_ || NOT_SPECIFIED == index_scope_) {
         storage_cache_policy.set_global_policy(ObStorageCacheGlobalPolicy::PolicyType::NONE_POLICY);
       } else {
         ret = OB_ERR_UNEXPECTED;
@@ -114,11 +114,10 @@ int ObDDLResolver::set_default_storage_cache_policy(const bool is_alter_add_inde
   }
   if (OB_SUCC(ret) && use_default_storage_cache_policy) {
     ObString default_storage_cache_policy;
-    omt::ObTenantConfigGuard tenant_config(TENANT_CONF(session_info_->get_effective_tenant_id()));
-    if (OB_UNLIKELY(!tenant_config.is_valid())) {
+    if (OB_UNLIKELY(!true)) {
       ret = OB_INVALID_ARGUMENT;
       OB_LOG(WARN, "tenant config is invalid", K(ret));
-    } else if (FALSE_IT(default_storage_cache_policy = tenant_config->default_storage_cache_policy.str())) {
+    } else if (FALSE_IT(default_storage_cache_policy = GCONF.default_storage_cache_policy.str())) {
     } else if (default_storage_cache_policy.empty()) {
       ret = OB_ERR_UNEXPECTED;
       OB_LOG(WARN, "tenant config is invalid", K(ret), K(default_storage_cache_policy));
@@ -164,9 +163,9 @@ int ObDDLResolver::resolve_storage_cache_attribute(const ParseNode *node, ObReso
     LOG_USER_ERROR(OB_NOT_SUPPORTED, "storage cache policy can only be specified once");
   } else if (OB_FAIL(get_storage_cache_tbl_schema(tbl_schema))) {
     LOG_WARN("failed to get storage cache table schema", K(ret));
-  } else if (!tbl_schema->is_user_table() || tbl_schema->is_external_table()) {
+  } else if (!tbl_schema->is_user_table()) {
     ret = OB_NOT_SUPPORTED;
-    SQL_RESV_LOG(WARN, "only allow to alter storage cache policy for user table or external table", K(ret));
+    SQL_RESV_LOG(WARN, "only allow to alter storage cache policy for user table", K(ret));
   }
   if (OB_SUCC(ret)) {
     ObStorageCachePolicy cache_policy;
@@ -335,7 +334,7 @@ int ObDDLResolver::check_and_set_default_storage_cache_policy()
         SQL_RESV_LOG(WARN, "load storage cache policy failed", K(ret), K_(storage_cache_policy));
       } else if (ObStorageCacheGlobalPolicy::NONE_POLICY == storage_cache_policy.get_global_policy()) {
         if (stmt::T_CREATE_INDEX == stmt_->get_stmt_type()) {
-          if (!(LOCAL_INDEX == index_scope_ || (is_mysql_mode() && NOT_SPECIFIED == index_scope_))) {
+          if (!(LOCAL_INDEX == index_scope_ || NOT_SPECIFIED == index_scope_)) {
             ret = OB_NOT_SUPPORTED;
             LOG_WARN("only allow to set NONE_POLICY for local index", K(ret));
           }
@@ -370,8 +369,8 @@ int ObDDLResolver::check_alter_stmt_storage_cache_policy(const ObTableSchema *or
 {
   int ret = OB_SUCCESS;
   ObAlterTableStmt *alter_table_stmt = static_cast<ObAlterTableStmt*>(stmt_);
-  ObSArray<obrpc::ObCreateIndexArg*> &add_index_arg_list = alter_table_stmt->get_index_arg_list();
-  const ObSArray<obrpc::ObIndexArg*> &alter_index_arg_list = alter_table_stmt->get_alter_index_arg_list();
+  ObSArray<obcall::ObCreateIndexArg*> &add_index_arg_list = alter_table_stmt->get_index_arg_list();
+  const ObSArray<obcall::ObIndexArg*> &alter_index_arg_list = alter_table_stmt->get_alter_index_arg_list();
   const ObTableSchema *tbl_schema = nullptr;
 
   if (stmt::T_ALTER_TABLE == stmt_->get_stmt_type()) {
@@ -390,7 +389,7 @@ int ObDDLResolver::check_alter_stmt_storage_cache_policy(const ObTableSchema *or
           if (OB_ISNULL(add_index_arg)) {
             ret = OB_ERR_UNEXPECTED;
             LOG_WARN("index arg is null", K(ret));
-          } else if (obrpc::ObIndexArg::ADD_INDEX == add_index_arg->index_action_type_) {
+          } else if (obcall::ObIndexArg::ADD_INDEX == add_index_arg->index_action_type_) {
             add_index_arg->index_option_.storage_cache_policy_ = storage_cache_policy_;
           }
         }
@@ -405,7 +404,7 @@ int ObDDLResolver::check_alter_stmt_storage_cache_policy(const ObTableSchema *or
             if (OB_ISNULL(create_index_arg)) {
               ret = OB_ERR_UNEXPECTED;
               LOG_WARN("index arg is null", K(ret));
-            } else if (obrpc::ObIndexArg::ADD_INDEX == create_index_arg->index_action_type_) {
+            } else if (obcall::ObIndexArg::ADD_INDEX == create_index_arg->index_action_type_) {
               tbl_schema = &create_index_arg->index_schema_;
             }
           } else if (add_index_arg_list.count() > 0 && 1 != add_index_arg_list.count()) {
@@ -420,7 +419,7 @@ int ObDDLResolver::check_alter_stmt_storage_cache_policy(const ObTableSchema *or
             if (OB_ISNULL(alter_index_arg)) {
               ret = OB_ERR_UNEXPECTED;
               LOG_WARN("index arg is null", K(ret));
-            } else if (obrpc::ObIndexArg::ALTER_INDEX == alter_index_arg->index_action_type_) {
+            } else if (obcall::ObIndexArg::ALTER_INDEX == alter_index_arg->index_action_type_) {
               // Since the alter table on the resolver side cannot distinguish between various behaviors, 
               // alter_index_arg_list will be reused by other behaviors.
               // Therefore, no judgment is made here on behaviors other than alter_index.
@@ -433,7 +432,7 @@ int ObDDLResolver::check_alter_stmt_storage_cache_policy(const ObTableSchema *or
                                                                       alter_index_arg->index_name_,
                                                                       index_table_name))) {
                 LOG_WARN("build_index_table_name failed", K(ret), K(ori_table_schema->get_table_id()), K(alter_index_arg->index_name_));
-              } else if (OB_FAIL(schema_checker_->get_table_schema(session_info_->get_effective_tenant_id(),
+              } else if (OB_FAIL(schema_checker_->get_table_schema(
                                                                   alter_table_stmt->get_org_database_name(),
                                                                   index_table_name,
                                                                   true /* index table */,
@@ -450,7 +449,7 @@ int ObDDLResolver::check_alter_stmt_storage_cache_policy(const ObTableSchema *or
           // Check alter table storage_cache_policy
           if (OB_FAIL(ret)) {
           } else if (OB_ISNULL(tbl_schema)) {
-            if (OB_FAIL(schema_checker_->get_table_schema(session_info_->get_effective_tenant_id(),
+            if (OB_FAIL(schema_checker_->get_table_schema(
                                                           alter_table_stmt->get_org_database_name(),
                                                           alter_table_stmt->get_org_table_name(),
                                                           false,
@@ -787,14 +786,14 @@ int ObAlterTableResolver::resolve_alter_index_storage_cache_policy(const ParseNo
       // construct ObAlterIndexArg
       ObAlterIndexArg *alter_index_arg = nullptr;
       void *tmp_ptr = nullptr;
-      if (OB_UNLIKELY(nullptr == (tmp_ptr = allocator_->alloc(sizeof(obrpc::ObAlterIndexArg))))) {
+      if (OB_UNLIKELY(nullptr == (tmp_ptr = allocator_->alloc(sizeof(obcall::ObAlterIndexArg))))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
         SQL_RESV_LOG(ERROR, "failed to allocate memory", K(ret));
       } else if (OB_FAIL(resolve_storage_cache_attribute(policy_node, params_))) {
         LOG_WARN("fail to resolve storage cache policy attribute", K(ret));
       } else {
         alter_index_arg = new (tmp_ptr) ObAlterIndexArg();
-        alter_index_arg->tenant_id_ = session_info_->get_effective_tenant_id();
+        
         alter_index_arg->index_name_ = alter_index_name;
         alter_index_arg->storage_cache_policy_ = storage_cache_policy_;
       }
@@ -935,7 +934,7 @@ bool ObStorageCacheUtil::is_type_change_allow(const ObObjType &src_type, const O
 }
 
 int ObStorageCacheUtil::check_alter_partiton_storage_cache_policy(const share::schema::ObTableSchema &orig_table_schema,
-                                                             const obrpc::ObAlterTableArg &alter_table_arg)
+                                                             const obcall::ObAlterTableArg &alter_table_arg)
 {
   int ret = OB_SUCCESS;
   const ObPartitionLevel part_level = orig_table_schema.get_part_level();
@@ -974,7 +973,7 @@ int ObStorageCacheUtil::check_alter_partiton_storage_cache_policy(const share::s
 }
 
 int ObStorageCacheUtil::check_alter_subpartiton_storage_cache_policy(const share::schema::ObTableSchema &orig_table_schema,
-                                                                const obrpc::ObAlterTableArg &alter_table_arg)
+                                                                const obcall::ObAlterTableArg &alter_table_arg)
 {
   int ret = OB_SUCCESS;
   const ObPartitionLevel part_level = orig_table_schema.get_part_level();

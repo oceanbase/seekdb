@@ -193,7 +193,7 @@ protected:
                               bool& is_all_default);
   int build_row_for_empty_brackets(common::ObArray<ObRawExpr*> &value_row,
                                    ObInsertTableInfo& table_info);
-
+  
   int check_vec_hnsw_index_vid_opt(const ObTableAssignment &ta,
                                    const ObTableSchema *table_schema,
                                    bool &is_vec_hnsw_index_vid_opt);
@@ -244,15 +244,10 @@ protected:
   int mark_json_partial_update_flag(const ObColumnRefRawExpr *ref_expr, ObRawExpr *expr, int depth, bool &allow_json_partial_update);
   int add_select_item_func(ObSelectStmt &select_stmt, ColumnItem &col);
   int select_items_is_pk(const ObSelectStmt& select_stmt, bool &has_pk);
-  int is_external_table_partition_column(const TableItem &table_item,
-                                         uint64_t column_id,
-                                         bool &is_part_column);
 
 private:
   common::hash::ObPlacementHashSet<uint64_t, 4229> insert_column_ids_;
   bool is_column_specify_;
-  bool is_oracle_tmp_table_; // whether to create oracle's temporary table
-  int64_t oracle_tmp_table_type_;
 protected:
   bool is_resolve_insert_update_;
 };

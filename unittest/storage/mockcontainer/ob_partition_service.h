@@ -37,8 +37,6 @@ struct ObStorageEnv;
 
 namespace share
 {
-class ObSplitPartition;
-class ObSplitPartitionPair;
 class ObServerLocality;
 }
 
@@ -77,18 +75,8 @@ public:
                int(const ObCbTask &revoke_task));
   MOCK_METHOD1(internal_leader_takeover,
                int(const ObCbTask &takeover_task));
-  MOCK_CONST_METHOD2(get_server_region, int(const common::ObAddr &server,
-                                            common::ObRegion &region));
-  MOCK_CONST_METHOD2(get_server_idc, int(const common::ObAddr &server,
-                                         common::ObIDC &idc));
   MOCK_CONST_METHOD2(get_server_cluster_id, int(const common::ObAddr &server,
                                                 int64_t &cluster_id));
-  MOCK_METHOD2(record_server_region,
-               int(const common::ObAddr &server,
-                   const common::ObRegion &region));
-  MOCK_METHOD2(record_server_idc,
-               int(const common::ObAddr &server,
-                   const common::ObIDC &idc));
   MOCK_METHOD2(record_server_cluster_id,
                int(const common::ObAddr &server,
                    const int64_t cluster_id));
@@ -147,7 +135,6 @@ public:
     return common::OB_SUCCESS;
   }
   MOCK_METHOD0(garbage_clean, void());
-  MOCK_METHOD0(get_rs_rpc_proxy, obrpc::ObCommonRpcProxy & ());
   MOCK_METHOD2(get_frozen_status,
                int(const int64_t major_version, ObFrozenStatus &frozen_status));
   MOCK_METHOD1(insert_frozen_status, int(const ObFrozenStatus &src));
@@ -157,7 +144,6 @@ public:
 
   MOCK_METHOD0(admin_wash_ilog_cache, int());
   MOCK_METHOD1(set_zone_priority, void(const int64_t zone_priority));
-  MOCK_METHOD1(set_region, int(const common::ObRegion &region));
 private:
   // disallow copy
   DISALLOW_COPY_AND_ASSIGN(ObPartitionService);

@@ -28,8 +28,7 @@ class ObDirectLoadPartitionExchange : public ObPartitionExchange
 public:
   explicit ObDirectLoadPartitionExchange(ObDDLService &ddl_service);
   virtual ~ObDirectLoadPartitionExchange();
-  int exchange_multipart_table_partitions(const uint64_t tenant_id,
-                                          ObDDLSQLTransaction &trans,
+  int exchange_multipart_table_partitions(ObDDLSQLTransaction &trans,
                                           share::schema::ObSchemaGetterGuard &schema_guard,
                                           const share::schema::ObTableSchema &base_table_schema,
                                           const share::schema::ObTableSchema &inc_table_schema,
@@ -37,14 +36,12 @@ public:
                                           const common::ObIArray<common::ObTabletID> &inc_table_tablet_ids);
 private:
   virtual int check_table_conditions_in_common_(const share::schema::ObTableSchema &base_table_schema,
-                                                const share::schema::ObTableSchema &inc_table_schema,
-                                                const bool is_oracle_mode) override;
+                                                const share::schema::ObTableSchema &inc_table_schema) override;
   int check_multipart_exchange_conditions(share::schema::ObSchemaGetterGuard &schema_guard,
                                           const share::schema::ObTableSchema &base_table_schema,
                                           const share::schema::ObTableSchema &inc_table_schema,
                                           const common::ObIArray<common::ObTabletID> &base_tablet_ids,
-                                          const common::ObIArray<common::ObTabletID> &inc_tablet_ids,
-                                          const bool is_oracle_mode);
+                                          const common::ObIArray<common::ObTabletID> &inc_tablet_ids);
 private:
   DISALLOW_COPY_AND_ASSIGN(ObDirectLoadPartitionExchange);
 };

@@ -72,7 +72,7 @@ public:
 
 TEST(TestObPluginMgr, test_find_plugin_with_version)
 {
-  ObMemAttr mem_attr(OB_SYS_TENANT_ID, "test");
+  ObMemAttr mem_attr("test");
   ObPluginMgr *plugin_mgr = OB_NEW(ObPluginMgr, mem_attr);
   ASSERT_EQ(OB_SUCCESS, plugin_mgr->init(ObString()));
 

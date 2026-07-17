@@ -16,7 +16,7 @@
 
 #define USING_LOG_PREFIX SERVER
 #include "observer/virtual_table/ob_show_create_procedure.h"
-#include "share/schema/ob_schema_printer.h"
+#include "sql/printer/ob_schema_printer.h"
 #include "sql/session/ob_sql_session_info.h"
 using namespace oceanbase::common;
 using namespace oceanbase::share::schema;
@@ -53,8 +53,8 @@ int ObShowCreateProcedure::inner_get_next_row(common::ObNewRow *&row)
     } else if (OB_UNLIKELY(OB_INVALID_ID == show_procedure_id)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_USER_ERROR(OB_ERR_UNEXPECTED, "this procedure is used for show clause, can't be selected");
-    } else if (OB_FAIL(schema_guard_->get_routine_info(effective_tenant_id_, show_procedure_id, proc_info))) {
-      SERVER_LOG(WARN, "fail to get table schema", K(ret), K_(effective_tenant_id), K(show_procedure_id));
+    } else if (OB_FAIL(schema_guard_->get_routine_info( show_procedure_id, proc_info))) {
+      SERVER_LOG(WARN, "fail to get table schema", K(ret), K(show_procedure_id));
     } else if (OB_UNLIKELY(NULL == proc_info)) {
       ret = OB_ERR_SP_DOES_NOT_EXIST;
       SERVER_LOG(WARN, "fail to get procedure info", K(ret), K(show_procedure_id));
@@ -156,10 +156,9 @@ int ObShowCreateProcedure::fill_row_cells(uint64_t show_procedure_id, const ObRo
           bool sql_quote_show_create = true;
           bool ansi_quotes = false;
           bool print_column_priv = false;
-          bool is_mysql_mode = lib::is_mysql_mode();
-          if (is_mysql_mode && OB_FAIL(has_show_create_function_priv(proc_info, print_column_priv))) {
+          if (OB_FAIL(has_show_create_function_priv(proc_info, print_column_priv))) {
             SERVER_LOG(WARN, "failed to check print column priv", K(ret), K(proc_info));
-          } else if (is_mysql_mode && !print_column_priv) {
+          } else if (!print_column_priv) {
             cur_row_.cells_[cell_idx].set_null();
           } else if (OB_FAIL(session_->get_sql_quote_show_create(sql_quote_show_create))) {
             SERVER_LOG(WARN, "failed to get sql_quote_show_create", K(ret), K(session_));
@@ -168,8 +167,7 @@ int ObShowCreateProcedure::fill_row_cells(uint64_t show_procedure_id, const ObRo
           } else {
             ObSchemaPrinter schema_printer(*schema_guard_, false, sql_quote_show_create, ansi_quotes);
             int64_t pos = 0;
-            if (OB_FAIL(schema_printer.print_routine_definition(effective_tenant_id_,
-                                                                show_procedure_id,
+            if (OB_FAIL(schema_printer.print_routine_definition(show_procedure_id,
                                                                 exec_env,
                                                                 routine_def_buf,
                                                                 OB_MAX_VARCHAR_LENGTH,

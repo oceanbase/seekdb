@@ -27,13 +27,12 @@ namespace obmysql
 class ObSqlNioServer
 {
 public:
-  ObSqlNioServer(ObISMConnectionCallback &conn_cb,
-                 const uint64_t tenant_id = common::OB_INVALID_ID)
+  ObSqlNioServer(ObISMConnectionCallback &conn_cb)
       : thread_processor_(),
-        io_handler_(conn_cb, thread_processor_, nio_), tenant_id_(tenant_id) {}
+        io_handler_(conn_cb, thread_processor_, nio_) {}
   virtual ~ObSqlNioServer() {}
   ObSqlNio *get_nio() { return &nio_; }
-  int start(int port, rpc::frame::ObReqDeliver* deliver, int n_thread, bool enable_numa_aware);
+  int start(int port, rpc::frame::ObReqDeliver* deliver, int n_thread, bool enable_numa_aware, bool disable_tcp);
   void revert_sock(void* sess);
   int peek_data(void* sess, int64_t limit, const char*& buf, int64_t& sz);
   int consume_data(void* sess, int64_t sz);
@@ -50,7 +49,7 @@ private:
   ObSqlSockProcessor thread_processor_; // for tenant worker
   ObSqlSockHandler io_handler_; // for io thread
   ObSqlNio nio_;
-  uint64_t tenant_id_;
+  
 };
 extern ObSqlNioServer* global_sql_nio_server;
 }; // end namespace obmysql

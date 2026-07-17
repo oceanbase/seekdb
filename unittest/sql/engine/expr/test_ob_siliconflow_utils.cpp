@@ -84,7 +84,7 @@ TEST_F(ObSiliconflowUtilsTest, test_get_body)
     ObStringBuffer model_buf(&allocator);
     model_node->print(model_buf, 0);
     ASSERT_EQ(model, model_buf.string());
-
+    
     ObJsonNode *query_node = body->get_value("query");
     ObStringBuffer query_buf(&allocator);
     query_node->print(query_buf, 0);
@@ -166,3 +166,4 @@ int main(int argc, char **argv)
     ::testing::InitGoogleTest(&argc,argv);
     return RUN_ALL_TESTS();
 }
+  

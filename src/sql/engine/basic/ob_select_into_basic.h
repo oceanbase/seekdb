@@ -18,9 +18,9 @@
 #define SRC_SQL_ENGINE_BASIC_OB_SELECT_INTO_BASIC_H_
 
 
-#include "common/storage/ob_io_device.h"
-#include "share/backup/ob_backup_struct.h"
-#include "share/backup/ob_backup_io_adapter.h"
+#include "lib/restore/ob_io_device.h"
+#include "share/io/ob_backup_storage_info.h"
+#include "share/io/ob_backup_io_adapter.h"
 #include "sql/engine/cmd/ob_load_data_parser.h"
 #include "lib/file/ob_file.h"
 

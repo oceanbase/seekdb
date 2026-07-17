@@ -17,7 +17,7 @@
 #ifndef OCEANBASE_LOGSERVICE_LOG_SHARED_QUEUE_THREAD_
 #define OCEANBASE_LOGSERVICE_LOG_SHARED_QUEUE_THREAD_
 
-#include "lib/thread/thread_mgr_interface.h"
+#include "lib/thread/ob_simple_thread_pool.h"
 #include "lib/utility/ob_print_utils.h"
 #include "palf_callback.h"
 
@@ -28,9 +28,8 @@ namespace palf
 class IPalfEnvImpl;
 class LogSharedTask;
 class LogHandleSubmitTask;
-class LogFillCacheTask;
 
-class LogSharedQueueTh : public lib::TGTaskHandler
+class LogSharedQueueTh
 {
 public:
   LogSharedQueueTh();
@@ -43,17 +42,25 @@ public:
   void destroy();
   int push_submit_log_task(LogHandleSubmitTask *task);
   int push_task(LogSharedTask *task);
-  virtual void handle(void *task);
-  int get_tg_id() const;
+  void handle(void *task);
 public:
   static constexpr int64_t THREAD_NUM = 1;
   static constexpr int64_t MINI_MODE_THREAD_NUM = 1;
-  static constexpr int64_t MAX_LOG_HANDLE_TASK_NUM = 10 * OB_MAX_LS_NUM_PER_TENANT_PER_SERVER;
+  static constexpr int64_t MAX_LOG_HANDLE_TASK_NUM = 10;
 private:
+  class TaskQueue : public common::ObSimpleThreadPool
+  {
+  public:
+    explicit TaskQueue(LogSharedQueueTh &owner) : owner_(owner) {}
+  protected:
+    void handle(void *task) override { owner_.handle(task); }
+  private:
+    LogSharedQueueTh &owner_;
+  };
   DISALLOW_COPY_AND_ASSIGN(LogSharedQueueTh);
 private:
-  int submit_log_tg_id_;
-  int shared_tg_id_;
+  TaskQueue submit_log_queue_;
+  TaskQueue shared_queue_;
   IPalfEnvImpl *palf_env_impl_;
   bool is_inited_;
 };

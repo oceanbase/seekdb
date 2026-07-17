@@ -16,9 +16,9 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 #include "sql/engine/expr/ob_expr_array_slice.h"
-#include "lib/udt/ob_array_type.h"
-#include "lib/udt/ob_collection_type.h"
-#include "sql/engine/expr/ob_array_cast.h"
+#include "common/udt/ob_array_type.h"
+#include "common/udt/ob_collection_type.h"
+#include "share/object/ob_array_cast.h"
 #include "sql/engine/expr/ob_array_expr_utils.h"
 #include "sql/engine/expr/ob_expr_lob_utils.h"
 #include "sql/engine/ob_exec_context.h"

@@ -20,11 +20,11 @@
 #define private public
 #define protected public
 
-#include "lib/stat/ob_session_stat.h"
+#include "lib/stat/ob_diagnose_info.h"
 #include "../share/schema/db_initializer.h"
 #include "lib/time/ob_time_utility.h"
 #include "share/ob_define.h"
-#include "lib/mysqlclient/ob_mysql_result.h"
+#include "common/mysqlclient/ob_mysql_result.h"
 #include "rootserver/ob_rs_event_history_table_operator.h"
 #include "share/partition_table/fake_part_property_getter.h"
 

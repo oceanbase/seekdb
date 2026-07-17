@@ -17,21 +17,19 @@
 #define USING_LOG_PREFIX SERVER
 
 #include "ob_server_reload_config.h"
+#include "storage/tx_storage/ob_tenant_freezer.h"  // previously hidden behind the allocator_mgr.h include chain, make the dependency explicit
+#include "share/ob_encryption_util.h"  // ObTdeEncryptEngineLoader(moved from config_manager)
+#include "share/rc/ob_module_provider.h"
 #include "lib/alloc/ob_malloc_sample_struct.h"
 #include "lib/allocator/ob_mem_leak_checker.h"
 #include "share/ob_resource_limit.h"
 #include "observer/ob_server.h"
 #include "observer/ob_server_utils.h"
-#include "share/allocator/ob_shared_memory_allocator_mgr.h"
+#include "storage/allocator/ob_shared_memory_allocator_mgr.h"
 #include "storage/compaction/ob_tenant_tablet_scheduler.h"
 #include "storage/meta_store/ob_server_storage_meta_service.h"
-#include "share/ash/ob_active_sess_hist_list.h"
-#ifdef OB_BUILD_SHARED_STORAGE
-#include "storage/compaction/ob_tenant_ls_merge_scheduler.h"
-#include "share/compaction/ob_shared_storage_compaction_util.h"
-#endif
-#include "lib/stat/ob_diagnostic_info_container.h"
-#include "rpc/obrpc/ob_rpc_net_handler.h"
+#include "rpc/frame/ob_net_consts.h"
+#include "rpc/frame/ob_req_packet_code.h"  // rpc::frame::ObReqCheckSumCheckLevel (relocated)
 
 using namespace oceanbase::lib;
 using namespace oceanbase::common;
@@ -47,12 +45,12 @@ namespace observer
 int set_cluster_name_hash(const ObString &cluster_name)
 {
   int ret = OB_SUCCESS;
-  uint64_t cluster_name_hash = obrpc::ObRpcPacket::INVALID_CLUSTER_NAME_HASH;
+  uint64_t cluster_name_hash = 0/*INVALID_CLUSTER_NAME_HASH*/;
 
   if (OB_FAIL(calc_cluster_name_hash(cluster_name, cluster_name_hash))) {
     LOG_WARN("failed to calc_cluster_name_hash", KR(ret), K(cluster_name));
   } else {
-    obrpc::ObRpcNetHandler::CLUSTER_NAME_HASH = cluster_name_hash;
+    rpc::frame::ObNetConsts::CLUSTER_NAME_HASH = cluster_name_hash;
     LOG_INFO("set cluster_name_hash", KR(ret), K(cluster_name), K(cluster_name_hash));
   }
   return ret;
@@ -61,10 +59,10 @@ int set_cluster_name_hash(const ObString &cluster_name)
 int calc_cluster_name_hash(const ObString &cluster_name, uint64_t &cluster_name_hash)
 {
   int ret = OB_SUCCESS;
-  cluster_name_hash = obrpc::ObRpcPacket::INVALID_CLUSTER_NAME_HASH;
+  cluster_name_hash = 0/*INVALID_CLUSTER_NAME_HASH*/;
 
   if (0 == cluster_name.length()) {
-    cluster_name_hash = obrpc::ObRpcPacket::INVALID_CLUSTER_NAME_HASH;
+    cluster_name_hash = 0/*INVALID_CLUSTER_NAME_HASH*/;
     LOG_INFO("set cluster_name_hash to invalid", K(cluster_name));
   } else {
     cluster_name_hash = common::murmurhash(cluster_name.ptr(), cluster_name.length(), 0);
@@ -118,20 +116,9 @@ int ObServerReloadConfig::operator()()
     if (OB_TMP_FAIL(ObSrvNetworkFrame::reload_rpc_auth_method())) {
       LOG_WARN("reload config for rpc auth method fail", K(tmp_ret));
     }
-    if (OB_TMP_FAIL(ObActiveSessHistList::get_instance().resize_ash_size())) {
-      LOG_WARN("failed to change ash size", K(tmp_ret));
-    }
-    ObDiagnosticInfoContainer::get_di_experimental_feature_flag().set_flags(
-        GCONF._enable_di_experimental_feature_flags);
+
   }
   {
-#ifdef OB_BUILD_SHARED_STORAGE
-    if (GCTX.is_shared_storage_mode()) {
-      OB_SERVER_DISK_SPACE_MGR.reload_hidden_sys_data_disk_config(GCONF);
-      OB_SERVER_DISK_SPACE_MGR.reload_ss_cache_max_percentage_config(GCONF);
-      OB_SERVER_DISK_SPACE_MGR.reload_ss_cache_maxsize_percpu_config(GCONF);
-    }
-#endif
     enable_malloc_v2(GCONF._enable_malloc_v2);
     GMEMCONF.reload_config(GCONF);
     OB_LOGGER.set_info_as_wdiag(false);
@@ -159,17 +146,19 @@ int ObServerReloadConfig::operator()()
       // After version 3.1, use the data_storage_io_timeout configuration item.
       io_config.data_storage_io_timeout_ms_ = GCONF._data_storage_io_timeout / 1000L;
       io_config.data_storage_warning_tolerance_time_ = GCONF.data_storage_warning_tolerance_time;
-      io_config.data_storage_error_tolerance_time_ = GCONF.data_storage_error_tolerance_time;
       if (OB_TMP_FAIL(ObIOManager::get_instance().set_io_config(io_config))) {
         LOG_WARN("reload io manager config fail, ", K(tmp_ret));
       }
 
       (void)reload_diagnose_info_config(GCONF.enable_perf_event);
       (void)reload_trace_log_config(GCONF.enable_record_trace_log);
-      (void)reload_ash_config(GCONF._ob_ash_enable);
+
 
       reload_tenant_freezer_config_();
       reload_tenant_scheduler_config_();
+      if (OB_NOT_NULL(GCTX.omt_)) {
+        GCTX.omt_->reload_tenant_task_queue_size();
+      }
   }
 
   int64_t cache_size = GCONF.memory_chunk_cache_size;
@@ -206,13 +195,6 @@ int ObServerReloadConfig::operator()()
     }
   }
 
-  {
-    static char last_storage_check_mod[MAX_CACHE_NAME_LENGTH];
-    if (0 != STRNCMP(last_storage_check_mod, GCONF._storage_leak_check_mod.str(), sizeof(last_storage_check_mod))) {
-      ObKVGlobalCache::get_instance().set_storage_leak_check_mod(GCONF._storage_leak_check_mod.str());
-      STRNCPY(last_storage_check_mod, GCONF._storage_leak_check_mod.str(), sizeof(last_storage_check_mod));
-    }
-  }
 #ifndef ENABLE_SANITY
   {
     ObMallocAllocator::get_instance()->force_explict_500_malloc_ =
@@ -239,17 +221,17 @@ int ObServerReloadConfig::operator()()
   }
 
   {
-    auto new_level = obrpc::get_rpc_checksum_check_level_from_string(GCONF._rpc_checksum.str());
-    auto orig_level = obrpc::get_rpc_checksum_check_level();
+    auto new_level = rpc::frame::get_rpc_checksum_check_level_from_string(GCONF._rpc_checksum.str());
+    auto orig_level = rpc::frame::get_rpc_checksum_check_level();
     if (new_level != orig_level) {
       LOG_INFO("rpc_checksum_check_level changed",
                "orig", orig_level,
                "new", new_level);
     }
-    obrpc::set_rpc_checksum_check_level(new_level);
+    rpc::frame::set_rpc_checksum_check_level(new_level);
   }
 
-    auto new_upgrade_stage = obrpc::get_upgrade_stage(GCONF._upgrade_stage.str());
+    auto new_upgrade_stage = obcall::get_upgrade_stage(GCONF._upgrade_stage.str());
     auto orig_upgrade_stage = GCTX.get_upgrade_stage();
     if (new_upgrade_stage != orig_upgrade_stage) {
       LOG_INFO("_upgrade_stage changed", K(new_upgrade_stage), K(orig_upgrade_stage));
@@ -296,50 +278,31 @@ int ObServerReloadConfig::operator()()
   {
     ObSigFaststack::get_instance().set_min_interval(GCONF._faststack_min_interval.get_value());
   }
+  // moved from share ObConfigManager::reload_config(share base must not touch observer components;
+  // this function is the original reload_config_func_ call site,order and fail-fast semantics are preserved)
+  if (OB_FAIL(ret)) {
+  } else if (OB_FAIL(OBSERVER.get_net_frame().reload_ssl_config())) {
+    LOG_WARN("reload ssl config for net frame fail", K(ret));
+  } else if (OB_FAIL(OBSERVER.get_net_frame().reload_sql_thread_config())) {
+    LOG_WARN("reload config for mysql login thread count failed", K(ret));
+  } else if (OB_FAIL(ObTdeEncryptEngineLoader::get_instance().reload_config())) {
+    LOG_WARN("reload config for tde encrypt engine fail", K(ret));
+  } else if (OB_FAIL(GCTX.omt_->update_hidden_sys_tenant())) {
+    LOG_WARN("update hidden sys tenant failed", K(ret));
+  }
   return ret;
 }
 
 void ObServerReloadConfig::reload_tenant_scheduler_config_()
 {
-  int ret = OB_SUCCESS;
-  omt::ObMultiTenant *omt = GCTX.omt_;
-  if (OB_ISNULL(omt)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("omt should not be null", K(ret));
-  } else {
-    auto f = [] () {
-      (void) MTL(ObTenantDagScheduler *)->reload_config();
-      (void) MTL(compaction::ObTenantTabletScheduler *)->reload_tenant_config();
-#ifdef OB_BUILD_SHARED_STORAGE
-    if (GCTX.is_shared_storage_mode()) {
-      (void) MTL(compaction::ObTenantLSMergeScheduler *)->reload_tenant_config();
-    }
-#endif
-
-      return OB_SUCCESS;
-    };
-    omt->operate_in_each_tenant(f);
-  }
+  (void) share::g_mp->tenant_dag_scheduler()->reload_config();
+  (void) share::g_mp->tenant_tablet_scheduler()->reload_tenant_config();
 }
 
-int ObServerReloadConfig::ObReloadTenantFreezerConfOp::operator()()
-{
-  int ret = OB_SUCCESS;
-  // NOTICE: tenant freezer should update before ObSharedMemAllocMgr.
-  MTL(ObTenantFreezer *)->reload_config();
-  MTL(ObSharedMemAllocMgr*)->update_throttle_config();
-  return ret;
-}
 
 void ObServerReloadConfig::reload_tenant_freezer_config_()
 {
-  int ret = OB_SUCCESS;
-  omt::ObMultiTenant *omt = GCTX.omt_;
-  if (OB_ISNULL(omt)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("omt should not be null", K(ret));
-  } else {
-    ObReloadTenantFreezerConfOp f;
-    omt->operate_in_each_tenant(f);
-  }
+  // NOTICE: tenant freezer should update before ObSharedMemAllocMgr.
+  share::g_mp->tenant_freezer()->reload_config();
+  share::g_mp->shared_mem_alloc_mgr()->update_throttle_config();
 }

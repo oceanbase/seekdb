@@ -446,10 +446,10 @@ int ObRepartSliceIdxCalc::get_previous_row_tablet_id(ObObj &tablet_id)
   return ret;
 }
 
-int ObSlaveMapRepartIdxCalcBase::init(uint64_t tenant_id)
+int ObSlaveMapRepartIdxCalcBase::init()
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(ObRepartSliceIdxCalc::init(tenant_id))) {
+  if (OB_FAIL(ObRepartSliceIdxCalc::init())) {
     LOG_WARN("fail init base", K(ret));
   }
   // In pkey random case, a partition can be processed by all workers on its SQC,
@@ -465,8 +465,7 @@ int ObSlaveMapRepartIdxCalcBase::init(uint64_t tenant_id)
   if (OB_SUCC(ret)) {
     if (OB_FAIL(part_to_task_array_map_.create(max(1, part_ch_array.count()),
                                                ObModIds::OB_SQL_PX,
-                                               ObModIds::OB_HASH_NODE,
-                                               tenant_id))) {
+                                               ObModIds::OB_HASH_NODE))) {
       LOG_WARN("fail create part to task array map", "count", part_ch_array.count(), K(ret));
     }
   }
@@ -514,9 +513,9 @@ int ObSlaveMapRepartIdxCalcBase::destroy()
   return ret;
 }
 
-int ObSlaveMapPkeyRandomIdxCalc::init(uint64_t tenant_id)
+int ObSlaveMapPkeyRandomIdxCalc::init()
 {
-  return ObSlaveMapRepartIdxCalcBase::init(tenant_id);
+  return ObSlaveMapRepartIdxCalcBase::init();
 }
 
 int ObSlaveMapPkeyRandomIdxCalc::destroy()
@@ -746,13 +745,13 @@ int ObAffinitizedRepartSliceIdxCalc::get_slice_idx_batch_inner(const ObIArray<Ob
   return ret;
 }
 
-int ObRepartSliceIdxCalc::init(uint64_t tenant_id)
+int ObRepartSliceIdxCalc::init()
 {
   int ret = OB_SUCCESS;
   if (px_repart_ch_map_.created()) {
     ret = OB_INIT_TWICE;
     LOG_WARN("this map has been init twice", K(ret));
-  } else if (OB_FAIL(build_repart_ch_map(px_repart_ch_map_, tenant_id))) {
+  } else if (OB_FAIL(build_repart_ch_map(px_repart_ch_map_))) {
     LOG_WARN("failed to build affi hash map", K(ret));
   } else if (OB_FAIL(setup_one_side_one_level_info())) {
     LOG_WARN("fail to build one side on level map", K(ret));
@@ -792,14 +791,13 @@ int ObRepartSliceIdxCalc::setup_one_side_one_level_info()
   return ret;
 }
 
-int ObRepartSliceIdxCalc::build_repart_ch_map(ObPxPartChMap &affinity_map, uint64_t tenant_id)
+int ObRepartSliceIdxCalc::build_repart_ch_map(ObPxPartChMap &affinity_map)
 {
   int ret = OB_SUCCESS;
   const ObPxPartChMapTMArray &part_ch_array = part_ch_info_.part_ch_array_;
   if (OB_FAIL(affinity_map.create(max(1, part_ch_array.count()),
                                   ObModIds::OB_SQL_PX,
-                                  ObModIds::OB_HASH_NODE,
-                                  tenant_id))) {
+                                  ObModIds::OB_HASH_NODE))) {
     LOG_WARN("fail create hashmap", "count", part_ch_array.count(), K(ret));
   }
 
@@ -1417,13 +1415,13 @@ ObSlaveMapPkeyRangeIdxCalc::~ObSlaveMapPkeyRangeIdxCalc()
   destroy();
 }
 
-int ObSlaveMapPkeyRangeIdxCalc::init(uint64_t tenant_id)
+int ObSlaveMapPkeyRangeIdxCalc::init()
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
     LOG_WARN("init twice", K(ret), K(is_inited_));
-  } else if (OB_FAIL(ObSlaveMapRepartIdxCalcBase::init(tenant_id))) {
+  } else if (OB_FAIL(ObSlaveMapRepartIdxCalcBase::init())) {
     LOG_WARN("fail init base repart class", K(ret));
   } else if (OB_UNLIKELY(nullptr == calc_part_id_expr_ || sort_exprs_.count() <= 0)) {
     ret = OB_INVALID_ARGUMENT;
@@ -1681,10 +1679,10 @@ int ObSlaveMapPkeyRangeIdxCalc::get_slice_indexes_inner(const ObIArray<ObExpr*> 
 //TODO:shanting2.0 implement pkey range vectorization 1.0 and 2.0 interfaces
 
 /*******************                 ObSlaveMapPkeyHashIdxCalc                 ********************/
-int ObSlaveMapPkeyHashIdxCalc::init(uint64_t tenant_id)
+int ObSlaveMapPkeyHashIdxCalc::init()
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(ObSlaveMapRepartIdxCalcBase::init(tenant_id))) {
+  if (OB_FAIL(ObSlaveMapRepartIdxCalcBase::init())) {
     LOG_WARN("fail init base repart class", K(ret));
   } else if (affi_hash_map_.created()) {
     ret = OB_INIT_TWICE;
@@ -2244,10 +2242,10 @@ int ObNullAwareHashSliceIdCalc::get_multi_slice_idx_vector_inner(const ObIArray<
   return ret;
 }
 
-int ObNullAwareAffinitizedRepartSliceIdxCalc::init(uint64_t tenant_id)
+int ObNullAwareAffinitizedRepartSliceIdxCalc::init()
 {
   int ret = OB_SUCCESS;
-  OZ (ObRepartSliceIdxCalc::init(tenant_id));
+  OZ (ObRepartSliceIdxCalc::init());
   return ret;
 }
 

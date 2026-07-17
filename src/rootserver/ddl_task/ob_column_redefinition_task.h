@@ -33,16 +33,14 @@ public:
   ObColumnRedefinitionTask();
   virtual ~ObColumnRedefinitionTask();
   int init(
-      const uint64_t tenant_id,
       const int64_t task_id,
       const share::ObDDLType &ddl_type,
       const int64_t data_table_id,
       const int64_t dest_table_id,
       const int64_t schema_version,
       const int64_t parallelism,
-      const int64_t consumer_group_id,
       const int32_t sub_task_trace_id,
-      const obrpc::ObAlterTableArg &alter_table_arg,
+      const obcall::ObAlterTableArg &alter_table_arg,
       const uint64_t tenant_data_version,
       const int64_t task_status = share::ObDDLTaskStatus::PREPARE,
       const int64_t snapshot_version = 0);
@@ -58,7 +56,7 @@ public:
   virtual int collect_longops_stat(share::ObLongopsValue &value) override;
   virtual bool support_longops_monitoring() const { return true; }
   virtual int serialize_params_to_message(char *buf, const int64_t buf_len, int64_t &pos) const override;
-  virtual int deserialize_params_from_message(const uint64_t tenant_id, const char *buf, const int64_t data_len, int64_t &pos) override;
+  virtual int deserialize_params_from_message(const char *buf, const int64_t data_len, int64_t &pos) override;
   virtual int64_t get_serialize_param_size() const override;
 
   INHERIT_TO_STRING_KV("ObDDLRedefinitionTask", ObDDLRedefinitionTask,

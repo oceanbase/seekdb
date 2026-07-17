@@ -18,8 +18,7 @@
 #define OCEANBASE_MYSQL_OBMP_PACKET_SENDER_H_
 #include "observer/ob_server_struct.h"
 #include "rpc/obmysql/obsm_struct.h"
-#include "rpc/obmysql/ob_2_0_protocol_utils.h"
-#include "rpc/obmysql/obp20_extra_info.h"
+#include "rpc/obmysql/ob_i_cs_mem_pool.h"
 
 namespace oceanbase
 {
@@ -30,14 +29,7 @@ class ObSQLSessionInfo;
 namespace obmysql
 {
 class obmysqlpacket;
-struct ObProtoEncodeParam;
-class Obp20Encoder;
 } // end of namespace obmysql
-
-namespace share
-{
-class ObFeedbackRerouteInfo;
-}
 
 namespace observer
 {
@@ -58,8 +50,7 @@ struct ObOKPParam
       cursor_exist_(false),
       send_last_row_(false),
       has_pl_out_(false),
-      lii_(0),
-      reroute_info_(NULL)
+      lii_(0)
   { }
   void reset();
   int64_t to_string(char *buf, const int64_t buf_len) const;
@@ -86,8 +77,6 @@ struct ObOKPParam
   // Attention, in this case, lii is in ok packet's last insert id field
   // (encode by int<lenenc>), not in session track field;
   uint64_t lii_;
-
-  share::ObFeedbackRerouteInfo *reroute_info_;
 };
 
 class ObIMPPacketSender
@@ -96,7 +85,6 @@ public:
   virtual ~ObIMPPacketSender() { }
   virtual void disconnect() = 0;
   virtual void force_disconnect() = 0;
-  virtual int update_last_pkt_pos() = 0;
 
   /**
    * read a mysql packet from the socket channel
@@ -120,7 +108,6 @@ public:
   virtual int send_eof_packet(const sql::ObSQLSessionInfo &session,
                               const ObMySQLResultSet &result,
                               ObOKPParam *ok_param = NULL) = 0;
-  virtual bool need_send_extra_ok_packet() = 0;
   virtual int flush_buffer(const bool is_last) = 0;
   virtual ObSMConnection* get_conn() const = 0;
 };
@@ -134,15 +121,9 @@ public:
   void reset();
   virtual void disconnect() override;
   virtual void force_disconnect() override;
-  virtual int update_last_pkt_pos() override;
   virtual int read_packet(obmysql::ObICSMemPool& mem_pool, obmysql::ObMySQLPacket *&pkt) override;
   virtual int release_packet(obmysql::ObMySQLPacket* pkt) override;
   virtual int response_packet(obmysql::ObMySQLPacket &pkt, sql::ObSQLSessionInfo* session) override;
-  // when connect with proxy, need to append extra ok packet to last statu packet
-  int response_compose_packet(obmysql::ObMySQLPacket &pkt,
-                              obmysql::ObMySQLPacket &okp,
-                              sql::ObSQLSessionInfo* session,
-                              bool update_comp_pos);
   virtual int send_error_packet(int err,
                                 const char* errmsg,
                                 bool is_partition_hit = true,
@@ -151,10 +132,8 @@ public:
   virtual int send_eof_packet(const sql::ObSQLSessionInfo &session,
                               const ObMySQLResultSet &result,
                               ObOKPParam *ok_param = NULL) override;
-  virtual bool need_send_extra_ok_packet() override
-  { return OB_NOT_NULL(get_conn()) && get_conn()->need_send_extra_ok_packet(); }
   virtual int flush_buffer(const bool is_last);
-  int clone_from(ObMPPacketSender& that, int64_t com_offset = 0/*for prexecute it will be 1*/);
+  int clone_from(ObMPPacketSender& that, int64_t com_offset = 0);
   int init(rpc::ObRequest* req);
   int do_init(rpc::ObRequest *req,
            uint8_t packet_seq,
@@ -189,9 +168,6 @@ private:
                       int64_t &seri_size,
                       int64_t try_steps,
                       bool is_composed_ok_pkt = false);
-  int build_encode_param_(obmysql::ObProtoEncodeParam &param,
-                          obmysql::ObMySQLPacket *pkt,
-                          const bool is_last);
   bool need_flush_buffer() const;
   int resize_ezbuf(const int64_t size);
 protected:
@@ -199,7 +175,6 @@ protected:
   uint8_t seq_;
   void * read_handle_;
   obmysql::ObCompressionContext comp_context_;
-  obmysql::ObProto20Context proto20_context_;
   easy_buf_t *ez_buf_;
   bool conn_valid_;
   uint32_t sessid_;
@@ -207,8 +182,6 @@ protected:
   int64_t query_receive_ts_;
   int nio_protocol_;
   ObSMConnection *conn_;
-  common::ObSEArray<obmysql::ObObjKV, 4> extra_info_kvs_;
-  common::ObSEArray<obmysql::Obp20Encoder*, 4> extra_info_ecds_;
 private:
   DISALLOW_COPY_AND_ASSIGN(ObMPPacketSender);
 };
@@ -217,4 +190,3 @@ private:
 }; // end namespace oceanbase
 
 #endif /* OCEANBASE_MYSQL_OBMP_PACKET_SENDER_H_ */
-

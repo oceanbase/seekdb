@@ -28,7 +28,7 @@ namespace sql{
 ObExprOutputPack::ObExprOutputPack(ObIAllocator &alloc)
     : ObExprOperator(alloc, T_OP_OUTPUT_PACK, N_OUTPUT_PACK,
                      MORE_THAN_ONE, VALID_FOR_GENERATED_COL, NOT_ROW_DIMENSION,
-                     INTERNAL_IN_MYSQL_MODE, INTERNAL_IN_ORACLE_MODE)
+                     INTERNAL_IN_MYSQL_MODE)
 {
 }
 
@@ -213,8 +213,7 @@ int ObExprOutputPack::encode_cell(const ObObj &cell, const common::ObIArray<ObFi
   const ObDataTypeCastParams dtc_params = ObBasicSessionInfo::create_dtc_params(session);
   CK (OB_NOT_NULL(session));
   OZ (ObSMUtils::cell_str(buf, len, cell, encode_type, pos, column_num, bitmap,
-                            dtc_params, &param_fields.at(column_num), *session, schema_guard,
-                            session->get_effective_tenant_id()));
+                            dtc_params, &param_fields.at(column_num), *session, schema_guard));
   return ret;
 }
 
@@ -346,7 +345,7 @@ int ObExprOutputPack::process_lob_locator_results(common::ObObj& value,
   bool is_support_outrow_locator_v2 = my_session.is_client_support_lob_locatorv2();
   if (!(value.is_lob() || value.is_json() || value.is_geometry() || value.is_roaringbitmap())) {
     // not lob types, do nothing
-  } else if (lib::is_mysql_mode()) {
+  } else {
     ObString raw_str = value.get_string();
     // remove locator header and read full lob data
     ObString data;
@@ -369,7 +368,7 @@ int ObExprOutputPack::process_lob_locator_results(common::ObObj& value,
       // remove has lob header flag
       value.set_lob_value(dst_type, data.ptr(), static_cast<int32_t>(data.length()));
     }
-  } else { /* do nothing */ }
+  }
   return ret;
 }
 

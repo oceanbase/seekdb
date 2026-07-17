@@ -21,7 +21,7 @@ using namespace oceanbase::common;
 using namespace oceanbase::observer;
 using namespace oceanbase::transaction;
 
-ObAllVirtualServerObjectPool::ObAllVirtualServerObjectPool() : addr_(NULL)
+ObAllVirtualServerObjectPool::ObAllVirtualServerObjectPool()
 {
 }
 

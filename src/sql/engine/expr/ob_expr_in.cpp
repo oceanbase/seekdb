@@ -20,7 +20,7 @@
 #include "sql/engine/expr/ob_expr_subquery_ref.h"
 #include "sql/engine/expr/ob_expr_multiset.h"
 #include "sql/engine/subquery/ob_subplan_filter_op.h"
-#include "share/vector/expr_cmp_func.h"
+#include "sql/engine/vector/expr_cmp_func.h"
 
 
 namespace oceanbase
@@ -228,7 +228,7 @@ int ObExprInHashMap<T>::set_refactored(const Row<T> &row)
       arr_ptr = const_cast<ObArray<Row<T>> *> (map_.get(tmp_row_key));
       CK (OB_NOT_NULL(arr_ptr));
       if (OB_SUCC(ret)) {
-        arr_ptr->set_tenant_id(MTL_ID());
+        
         if (OB_FAIL(arr_ptr->push_back(row))) {
           LOG_WARN("failed to push row", K(ret));
         }
@@ -356,9 +356,9 @@ int ObExprInOrNotIn::ObExprInCtx::init_hashset(VecValueTypeClass vec_tc,
   if (use_colhashset) {
     row_dimension_ = 1;
     if (vec_tc == VEC_TC_STRING) {
-      ret = str_ht_.init(param_num, MTL_ID(), cs_type, cmp_end_space);
+      ret = str_ht_.init(param_num, cs_type, cmp_end_space);
     } else {
-      ret = int_ht_.init(param_num, MTL_ID());
+      ret = int_ht_.init(param_num);
     }
   } else {
     ret = this->init_static_engine_hashset(param_num);
@@ -604,11 +604,8 @@ int ObExprInOrNotIn::calc_result_typeN(ObExprResType &type,
 }
 
 /* Comparison rules:
- * Oracle document:
- * Two nested table variables are equal if and only if they have the same set of elements (in any order).
-
- * the problem is how to define "the same set of elements", which is not documented by Oracle.
- * the rules we follow here are:
+ * Two nested table variables are equal if and only if they have the same set
+ * of elements in any order. The rules we follow here are:
  * 1. if the elements are of an uncomparable type, such as Record, return an error
  * 2. when NULL (NULL can be a nested table itself or its element) is compared with any other element, return NULL
  * 3. nt in (nt1, nt2, ...) returns:
@@ -807,7 +804,7 @@ int ObExprInOrNotIn::cg_expr_without_row(ObExprCGCtx &expr_cg_ctx,
       DatumCmpFunc func_ptr;
       // hash table use self as left, so here right param is left for cmp func
       func_ptr = ObExprCmpFuncsHelper::get_datum_expr_cmp_func(
-        right_type, left_type, scale2, scale1, prec2, prec1, false, left_cs, has_lob_header);
+        right_type, left_type, scale2, scale1, prec2, prec1, left_cs, has_lob_header);
       for (int i = 0; i < rt_expr.inner_func_cnt_; i++) {
         rt_expr.inner_functions_[i] = (void *)func_ptr;
       }
@@ -911,7 +908,7 @@ int ObExprInOrNotIn::cg_expr_with_row(ObExprCGCtx &expr_cg_ctx,
           // hash table use self as left, so here right param is left for cmp func
           func_ptr = ObExprCmpFuncsHelper::get_datum_expr_cmp_func(
             right_types.at(i), left_types.at(i), right_scales.at(i), left_scales.at(i),
-            rigth_precs.at(i), left_precs.at(i), false, left_cs_arr.at(i),
+            rigth_precs.at(i), left_precs.at(i), left_cs_arr.at(i),
             has_lob_headers.at(i));
           func_buf[i] = (void *)func_ptr;
           is_string_text_cmp |= (ob_is_string_tc(left_types.at(i)) && ob_is_text_tc(right_types.at(i))) ||
@@ -984,7 +981,7 @@ int ObExprInOrNotIn::cg_expr_with_subquery(ObExprCGCtx &expr_cg_ctx,
           // hash table use self as left, so here right param is left for cmp func
           funcs[i] = (void *)ObExprCmpFuncsHelper::get_datum_expr_cmp_func(
             r.get_type(), l.get_type(), r_datum_meta_.scale_, l.get_scale(), r_datum_meta_.precision_,
-            l.get_precision(), false, l.get_collation_type(),
+            l.get_precision(), l.get_collation_type(),
             has_lob_header);
           CK(NULL != funcs[i]);
         }
@@ -1551,7 +1548,6 @@ int ObExprInOrNotIn::eval_in_with_row(const ObExpr &expr,
                                   LEFT_ROW_ELE(j)->datum_meta_.scale_,
                                   RIGHT_ROW_ELE(0, j)->datum_meta_.precision_,
                                   LEFT_ROW_ELE(j)->datum_meta_.precision_,
-                                  false,
                                   LEFT_ROW_ELE(j)->datum_meta_.cs_type_,
                                   LEFT_ROW_ELE(j)->obj_meta_.has_lob_header() ||
                                   RIGHT_ROW_ELE(0, j)->obj_meta_.has_lob_header());
@@ -1657,7 +1653,6 @@ int ObExprInOrNotIn::eval_in_without_row(const ObExpr &expr,
                                 expr.args_[0]->datum_meta_.scale_,
                                 expr.args_[1]->args_[0]->datum_meta_.precision_,
                                 expr.args_[0]->datum_meta_.precision_,
-                                false,
                                 expr.args_[0]->datum_meta_.cs_type_,
                                 expr.args_[0]->obj_meta_.has_lob_header() ||
                                 expr.args_[1]->args_[0]->obj_meta_.has_lob_header());
@@ -1759,7 +1754,6 @@ int ObExprInOrNotIn::eval_batch_in_without_row(const ObExpr &expr,
                                 expr.args_[0]->datum_meta_.scale_,
                                 expr.args_[1]->args_[0]->datum_meta_.precision_,
                                 expr.args_[0]->datum_meta_.precision_,
-                                false,
                                 expr.args_[0]->datum_meta_.cs_type_,
                                 expr.args_[0]->obj_meta_.has_lob_header() ||
                                 expr.args_[1]->args_[0]->obj_meta_.has_lob_header());
@@ -1888,7 +1882,6 @@ int ObExprInOrNotIn::inner_eval_vector_in_without_row(const ObExpr &expr,
                                   expr.args_[0]->datum_meta_.scale_,
                                   expr.args_[1]->args_[0]->datum_meta_.precision_,
                                   expr.args_[0]->datum_meta_.precision_,
-                                  false,
                                   expr.args_[0]->datum_meta_.cs_type_,
                                   expr.args_[0]->obj_meta_.has_lob_header() ||
                                   expr.args_[1]->args_[0]->obj_meta_.has_lob_header());

@@ -34,11 +34,6 @@ public:
   int get_autoinc_seq(share::ObTabletAutoincSeq &inc_seq, ObIAllocator &allocator);
 
   // customized get_latest
-  int get_latest_split_data(ObTabletSplitMdsUserData &data,
-                            mds::MdsWriter &writer,
-                            mds::TwoPhaseCommitState &trans_stat,
-                            share::SCN &trans_version,
-                            const int64_t read_seq = 0) const;
   int get_latest_autoinc_seq(ObTabletAutoincSeq &data,
                              ObIAllocator &allocator,
                              mds::MdsWriter &writer,
@@ -49,7 +44,7 @@ public:
                        ObIAllocator &allocator,
                        ObTabletDDLCompleteMdsUserData &data,
                        const int64_t timeout = ObTabletCommon::DEFAULT_GET_TABLET_DURATION_US) const;
-
+  
   int get_latest_committed_tablet_status(ObTabletCreateDeleteMdsUserData &data) const;
   int get_latest_binding_info(ObTabletBindingMdsUserData &data,
     mds::MdsWriter &writer,

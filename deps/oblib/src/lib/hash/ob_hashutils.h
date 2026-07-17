@@ -40,12 +40,12 @@ inline int gettimeofday(struct timeval* tp, void* tzp) {
   const uint64_t EPOCH_DIFFERENCE = 11644473600ULL;
   FILETIME file_time;
   GetSystemTimePreciseAsFileTime(&file_time);
-
+  
   // Convert FILETIME (100-nanosecond intervals) to timeval
   uint64_t time = ((uint64_t)file_time.dwHighDateTime << 32) | file_time.dwLowDateTime;
   time /= 10;  // Convert to microseconds
   time -= EPOCH_DIFFERENCE * 1000000ULL;  // Adjust epoch
-
+  
   tp->tv_sec = (long)(time / 1000000ULL);
   tp->tv_usec = (long)(time % 1000000ULL);
   return 0;
@@ -201,7 +201,7 @@ public:
   ~MutexWaiter() {}
   int operator()(pthread_cond_t &cond, pthread_mutex_t &lock, struct timespec &ts)
   {
-    return ob_pthread_cond_timedwait(&cond, &lock, &ts);
+    return pthread_cond_timedwait(&cond, &lock, &ts);
   }
 };
 
@@ -1287,10 +1287,9 @@ void do_destroy(Array &array, NormalPointerTag, BucketAllocator &alloc)
 struct DefaultSimpleAllocerAllocator
 {
 public:
-  explicit DefaultSimpleAllocerAllocator(uint64_t tenant_id = OB_SERVER_TENANT_ID,
-                                         const lib::ObLabel &label = ObModIds::OB_HASH_NODE)
+  explicit DefaultSimpleAllocerAllocator(const lib::ObLabel &label = ObModIds::OB_HASH_NODE)
   {
-    attr_.tenant_id_ = tenant_id;
+    
     attr_.label_ = label;
   }
   void *alloc(const int64_t sz)

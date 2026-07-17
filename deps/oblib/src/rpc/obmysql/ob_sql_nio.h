@@ -33,11 +33,9 @@ class ObSqlNio: public lib::Threads
 {
 public:
   ObSqlNio()
-      : impl_(NULL), port_(0), handler_(NULL), dispatch_idx_(0),
-        tenant_id_(common::OB_INVALID_ID) {}
+      : impl_(NULL), port_(0), handler_(NULL), dispatch_idx_(0) {}
   virtual ~ObSqlNio() {}
-  int start(int port, ObISqlSockHandler *handler, int n_thread,
-            const uint64_t tenant_id);
+  int start(int port, ObISqlSockHandler *handler, int n_thread, bool disable_tcp);
   bool has_error(void* sess);
   void destroy_sock(void* sess);
   void revert_sock(void* sess);
@@ -73,7 +71,7 @@ private:
   int port_;
   ObISqlSockHandler* handler_;
   uint64_t dispatch_idx_;
-  uint64_t tenant_id_;
+  
 };
 }; // end namespace obmysql
 }; // end namespace oceanbase

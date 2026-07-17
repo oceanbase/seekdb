@@ -39,7 +39,7 @@ const int MAX_DOUBLE_PRINT_SIZE = 512;
 ObExprInnerDoubleToInt::ObExprInnerDoubleToInt(ObIAllocator &alloc)
     : ObFuncExprOperator(alloc, T_FUN_SYS_INNER_DOUBLE_TO_INT, N_INNER_DOUBLE_TO_INT, 1, 
                          NOT_VALID_FOR_GENERATED_COL, NOT_ROW_DIMENSION,
-                         INTERNAL_IN_MYSQL_MODE, INTERNAL_IN_ORACLE_MODE)
+                         INTERNAL_IN_MYSQL_MODE)
 {
 }
 /**

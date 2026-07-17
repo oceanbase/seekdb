@@ -16,9 +16,9 @@
 #define USING_LOG_PREFIX SHARE
 #include <gtest/gtest.h>
 #define private public
-#include "lib/json_type/ob_json_bin.h"
-#include "lib/json_type/ob_json_parse.h"
-#include "lib/json_type/ob_json_diff.h"
+#include "common/json_type/ob_json_bin.h"
+#include "common/json_type/ob_json_parse.h"
+#include "common/json_type/ob_json_diff.h"
 #undef private
 
  
@@ -3178,7 +3178,7 @@ TEST_F(TestJsonBin, test_type)
   ObJsonDecimal j_dec_1(res_nmb, res_precision, res_scale);
   ASSERT_EQ(OB_SUCCESS, tree.add("j_dec_1", &j_dec_1));
 
-  nmb_str.assign_ptr("-1.1234e9", static_cast<int64_t>(STRLEN("-1.1234e9")));
+  nmb_str.assign_ptr("-1.1234e9", static_cast<int64_t>(STRLEN("-1.1234e9")));  
   res_precision = 10;
   res_scale = 4;
   ASSERT_EQ(OB_SUCCESS, res_nmb.from_sci_opt(nmb_str.ptr(), nmb_str.length(), allocator, &res_precision, &res_scale));

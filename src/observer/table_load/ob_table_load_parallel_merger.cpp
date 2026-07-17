@@ -17,7 +17,6 @@
 #define USING_LOG_PREFIX SERVER
 
 #include "observer/table_load/ob_table_load_parallel_merger.h"
-#include "observer/table_load/ob_table_load_merge_rescan_op.h"
 #include "observer/table_load/ob_table_load_merge_table_op.h"
 #include "observer/table_load/ob_table_load_schema.h"
 #include "observer/table_load/ob_table_load_service.h"
@@ -55,13 +54,12 @@ int ObTableLoadParallelMerger::init_merge_ctx(ObTableLoadMergeTableBaseOp *op)
   param.datum_utils_ = &store_table_ctx->schema_->datum_utils_;
   param.lob_column_idxs_ = &store_table_ctx->schema_->lob_column_idxs_;
   param.merge_mode_ = op->merge_table_ctx_->merge_mode_;
-  param.use_batch_mode_ = op->merge_table_ctx_->use_batch_mode_;
   param.dml_row_handler_ = op->merge_table_ctx_->dml_row_handler_;
   param.insert_table_ctx_ = op->merge_table_ctx_->insert_table_ctx_;
   param.trans_param_ = op->merge_phase_ctx_->trans_param_;
   param.file_mgr_ = op->store_ctx_->tmp_file_mgr_;
   param.ctx_ = op->ctx_;
-  if (OB_FAIL(merge_ctx_.init(param, store_table_ctx->ls_partition_ids_))) {
+  if (OB_FAIL(merge_ctx_.init(param, store_table_ctx->partition_ids_))) {
     LOG_WARN("fail to init merge ctx", KR(ret), K(param));
   }
   return ret;
@@ -101,29 +99,6 @@ int ObTableLoadParallelMerger::init_merge_task(ObTableLoadMergeTableBaseOp *op)
         is_inited_ = true;
       }
     }
-  }
-  return ret;
-}
-
-int ObTableLoadParallelMerger::init_rescan_task(ObTableLoadMergeTableBaseOp *op)
-{
-  int ret = OB_SUCCESS;
-  if (IS_INIT) {
-    ret = OB_INIT_TWICE;
-    LOG_WARN("ObTableLoadParallelMerger init twice", KR(ret), KP(this));
-  } else if (OB_ISNULL(op)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid args", KR(ret), KP(op));
-  } else if (OB_FAIL(init_merge_ctx(op))) {
-    LOG_WARN("fail to init merge ctx", KR(ret));
-  } else if (OB_FAIL(merge_ctx_.build_rescan_task(op->store_ctx_->thread_cnt_))) {
-    LOG_WARN("fail to build rescan task", KR(ret));
-  } else if (OB_FAIL(task_iter_.init(&merge_ctx_))) {
-    LOG_WARN("fail to init task iter", KR(ret));
-  } else {
-    store_ctx_ = op->store_ctx_;
-    op_ = op;
-    is_inited_ = true;
   }
   return ret;
 }
@@ -219,10 +194,7 @@ int ObTableLoadParallelMerger::handle_merge_task_finish(ObDirectLoadIMergeTask *
     LOG_WARN("fail to inc finish count", KR(ret));
   } else if (is_ready) {
     ObDirectLoadInsertTabletContext *insert_tablet_ctx = tablet_merge_ctx->get_insert_tablet_ctx();
-    if (op_->merge_table_ctx_->need_calc_range_ &&
-        OB_FAIL(insert_tablet_ctx->calc_range(store_ctx_->thread_cnt_))) {
-      LOG_WARN("fail to calc range", KR(ret));
-    } else if (op_->merge_table_ctx_->need_close_insert_tablet_ctx_ &&
+    if (op_->merge_table_ctx_->need_close_insert_tablet_ctx_ &&
                OB_FAIL(insert_tablet_ctx->close())) {
       LOG_WARN("fail to close", KR(ret));
     } else {

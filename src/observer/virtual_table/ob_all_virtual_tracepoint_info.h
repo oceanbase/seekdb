@@ -17,8 +17,7 @@
 #ifndef OCEANBASE_OBSERVER_VIRTUAL_TABLE_ALL_TRACEPOINT_INFO_
 #define OCEANBASE_OBSERVER_VIRTUAL_TABLE_ALL_TRACEPOINT_INFO_
 
-#include "share/ob_virtual_table_scanner_iterator.h"
-#include "lib/net/ob_addr.h"
+#include "observer/virtual_table/ob_virtual_table_scanner_iterator.h"
 #include "lib/utility/ob_tracepoint.h"
 
 namespace oceanbase
@@ -31,11 +30,8 @@ class ObAllTracepointInfo : public common::ObVirtualTableScannerIterator
 public:
   ObAllTracepointInfo();
   virtual ~ObAllTracepointInfo();
-  virtual void reset();
   virtual int inner_get_next_row(common::ObNewRow *&row) override;
-  inline void set_addr(common::ObAddr &addr) { addr_ = &addr; }
 private:
-  common::ObAddr *addr_;
   enum INSPECT_COLUMN
   {
         TP_NO = common::OB_APP_MIN_COLUMN_ID,
@@ -56,4 +52,3 @@ private:
 } // namespace observer
 } // namespace oceanbase
 #endif // OCEANBASE_OBSERVER_VIRTUAL_TABLE_ALL_TRACEPOINT_INFO_
-

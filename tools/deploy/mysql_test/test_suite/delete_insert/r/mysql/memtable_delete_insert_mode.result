@@ -9,14 +9,14 @@ alter system set freeze_trigger_percentage = 59;
 create table memtable_delete_insert_test_t (col_0 bigint primary key, col_1 bigint, col_2 bigint, col_3 bigint, col_4 bigint, col_5 varchar(20)) merge_engine = delete_insert;
 create sequence s1 cache 1000000 noorder;
 create sequence s2 cache 1000000 noorder;
-INSERT INTO memtable_delete_insert_test_t SELECT
+INSERT INTO memtable_delete_insert_test_t SELECT 
 s1.nextval col_0,
 s2.nextval col_1,
 zipf(1, 100, random(269381)) col_2,
 normal(0, 1, random(269381)) col_3,
 uniform(1, 100, random(269381)) col_4,
 randstr(1+zipf(1, 20, random(269381)), random(269381)) col_5
-FROM
+FROM 
 table(generator(500));
 SELECT * FROM memtable_delete_insert_test_t WHERE col_1 >= 100 and col_1 <= 110;
 col_0	col_1	col_2	col_3	col_4	col_5

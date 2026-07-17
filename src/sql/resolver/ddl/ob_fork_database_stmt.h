@@ -31,14 +31,14 @@ public:
   ObForkDatabaseStmt();
   virtual ~ObForkDatabaseStmt();
 
-  const obrpc::ObForkDatabaseArg &get_fork_database_arg() const { return fork_database_arg_; }
-  obrpc::ObForkDatabaseArg &get_fork_database_arg() { return fork_database_arg_; }
+  const obcall::ObForkDatabaseArg &get_fork_database_arg() const { return fork_database_arg_; }
+  obcall::ObForkDatabaseArg &get_fork_database_arg() { return fork_database_arg_; }
   virtual bool cause_implicit_commit() const { return true; }
-  virtual obrpc::ObDDLArg &get_ddl_arg() { return fork_database_arg_; }
+  virtual obcall::ObDDLArg &get_ddl_arg() { return fork_database_arg_; }
 
   TO_STRING_KV(K_(stmt_type), K_(fork_database_arg));
 private:
-  obrpc::ObForkDatabaseArg fork_database_arg_;
+  obcall::ObForkDatabaseArg fork_database_arg_;
   DISALLOW_COPY_AND_ASSIGN(ObForkDatabaseStmt);
 };
 

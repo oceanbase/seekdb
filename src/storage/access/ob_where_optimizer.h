@@ -13,10 +13,9 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-#ifndef OB_STORAGE_COLUMN_STORE_OB_WHERE_OPTIMIZER_H_
-#define OB_STORAGE_COLUMN_STORE_OB_WHERE_OPTIMIZER_H_ 
+#ifndef OB_STORAGE_ACCESS_OB_WHERE_OPTIMIZER_H_
+#define OB_STORAGE_ACCESS_OB_WHERE_OPTIMIZER_H_
 #include "sql/engine/basic/ob_pushdown_filter.h"
-#include "storage/column_store/ob_i_cg_iterator.h"
 
 namespace oceanbase
 {
@@ -29,18 +28,15 @@ public:
   virtual ~ObWhereOptimizer() { reset(); };
   int init(
     const ObTableIterParam *iter_param,
-    sql::ObPushdownFilterExecutor *filter,
-    ObSEArray<ObICGIterator*, 4> *filter_iters = nullptr,
-    ObSEArray<sql::ObPushdownFilterExecutor*, 4> *iter_filter_node = nullptr);
+    sql::ObPushdownFilterExecutor *filter);
   void reset();
   void reuse();
   OB_INLINE bool is_disable_bypass()  // Disable bypass in this batch and collect real-time statistics, then reorder filter before next batch.
   { return reorder_filter_times_ == reorder_filter_interval_; }
   OB_INLINE bool is_first_batch()
   { return batch_num_ == 1; }
-  int reorder_co_filter();
   int reorder_row_filter();
-  TO_STRING_KV(KP(this), KP_(iter_param), KP_(filter), KP_(filter_iters), KP_(iter_filter_node),
+  TO_STRING_KV(KP(this), KP_(iter_param), KP_(filter),
     K_(batch_num), K_(reorder_filter_times), K_(reorder_filter_interval), K_(disable_bypass), K_(is_inited));
 
 private:
@@ -51,8 +47,6 @@ private:
     uint64_t filtered_row_cnt_;
     uint64_t skip_index_skip_mb_cnt_;
     sql::ObPushdownFilterExecutor *filter_;
-    ObICGIterator *filter_iter_;
-    sql::ObPushdownFilterExecutor *filter_node_;
   
     bool operator< (const ObFilterCondition &filter_condition) const {
       bool ret = false;
@@ -79,8 +73,6 @@ private:
 private:
   const ObTableIterParam *iter_param_;
   sql::ObPushdownFilterExecutor *filter_;
-  ObSEArray<ObICGIterator*, 4> *filter_iters_;
-  ObSEArray<sql::ObPushdownFilterExecutor*, 4> *iter_filter_node_;
   ObSEArray<ObFilterCondition, 4> filter_conditions_;
   uint32_t batch_num_;
   uint32_t reorder_filter_times_;

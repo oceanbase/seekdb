@@ -17,7 +17,7 @@
 #ifndef OCEANBASE_SQL_OB_GEO_FUNC_TESTY_H_
 #define OCEANBASE_SQL_OB_GEO_FUNC_TESTY_H_
 
-#include "lib/geo/ob_geo_func_common.h"
+#include "share/geo/ob_geo_func_common.h"
 
 namespace oceanbase
 {

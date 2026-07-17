@@ -57,7 +57,7 @@ public:
   MGR_DEFINE_FUNC(progressive_merge_round);
   MGR_DEFINE_FUNC(progressive_merge_num);
   MGR_DEFINE_FUNC(progressive_merge_step);
-  int64_t get_result_progressive_merge_step(const common::ObTabletID &tablet_id, const int64_t column_group_idx) const;
+  int64_t get_result_progressive_merge_step(const common::ObTabletID &tablet_id) const;
   bool need_calc_progressive_merge() const { return progressive_merge_round_ > 1 && progressive_merge_step_ < progressive_merge_num_; }
   void mark_progressive_round_unfinish();
   static const int64_t INIT_PROGRESSIVE_MERGE_ROUND = 1;
@@ -112,7 +112,6 @@ private:
     const ObMergeParameter &merge_param,
     ObIAllocator &allocator,
     blocksstable::ObSSTableSecMetaIterator *&sec_meta_iter);
-  const static int64_t CG_TABLE_CHECK_REWRITE_CNT_ = 4;
   const static int64_t DEFAULT_MACRO_BLOCK_REWRTIE_THRESHOLD = 30;
   constexpr static float REWRITE_MACRO_SIZE_THRESHOLD = OB_DEFAULT_MACRO_BLOCK_SIZE * DEFAULT_MACRO_BLOCK_REWRTIE_THRESHOLD / 100;
 private:

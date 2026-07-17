@@ -37,14 +37,14 @@ public:
     : ObDDLStmt(stmt::T_DROP_ROUTINE) {}
   virtual ~ObDropRoutineStmt() {}
 
-  obrpc::ObDropRoutineArg &get_routine_arg() { return routine_arg_; }
-  const obrpc::ObDropRoutineArg &get_routine_arg() const { return routine_arg_; }
-  virtual obrpc::ObDDLArg &get_ddl_arg() { return routine_arg_; }
+  obcall::ObDropRoutineArg &get_routine_arg() { return routine_arg_; }
+  const obcall::ObDropRoutineArg &get_routine_arg() const { return routine_arg_; }
+  virtual obcall::ObDDLArg &get_ddl_arg() { return routine_arg_; }
   TO_STRING_KV(K_(routine_arg));
 private:
   DISALLOW_COPY_AND_ASSIGN(ObDropRoutineStmt);
 private:
-  obrpc::ObDropRoutineArg routine_arg_;
+  obcall::ObDropRoutineArg routine_arg_;
 };
 
 }

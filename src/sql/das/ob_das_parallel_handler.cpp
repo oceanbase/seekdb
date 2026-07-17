@@ -15,8 +15,8 @@
  */
 #define USING_LOG_PREFIX SQL_DAS
 #include "sql/das/ob_das_parallel_handler.h"
+#include "share/rc/ob_module_provider.h"
 #include "sql/das/ob_data_access_service.h"
-#include "share/resource_manager/ob_cgroup_ctrl.h"
 #include "lib/profile/ob_trace_id.h"
 #include "sql/engine/ob_exec_context.h"
 using namespace oceanbase;
@@ -49,7 +49,7 @@ int ObDASParallelHandler::deep_copy_all_das_tasks(ObDASTaskFactory &das_factory,
                                                   ObDasAggregatedTask &das_task_wrapper)
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(MTL(ObDataAccessService *)->collect_das_task_info(src_task_list, remote_info))) {
+  if (OB_FAIL(share::g_mp->data_access_service()->collect_das_task_info(src_task_list, remote_info))) {
     LOG_WARN("fail to collect das task info", K(ret));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < src_task_list.count(); i++) {
@@ -142,13 +142,15 @@ int ObDASParallelHandler::run()
   lib::MemoryContext mem_context = nullptr;
   common::ObCurTraceId::set(task->get_trace_id());
   THIS_WORKER.set_timeout_ts(task->get_timeout_ts());
-  CREATE_WITH_TEMP_ENTITY(RESOURCE_OWNER, MTL_ID()) {
+  // single process owner id (de-tenant: replaces former sys-tenant resource-owner arg)
+  static const uint64_t PROCESS_OWNER_ID = 1;
+  CREATE_WITH_TEMP_ENTITY(RESOURCE_OWNER, PROCESS_OWNER_ID) {
     int interrupted_code = task->get_das_ref_count_ctx().get_interrupted_err_code();
     if (interrupted_code != OB_SUCCESS) {
       task->get_agg_task()->set_save_ret(interrupted_code);
       LOG_WARN("this task is interrupted,ret_code is", K(interrupted_code));
     } else if (OB_FAIL(ROOT_CONTEXT->CREATE_CONTEXT(mem_context,
-        lib::ContextParam().set_mem_attr(MTL_ID(), "DASParallelTask")))) {
+        lib::ContextParam().set_mem_attr("DASParallelTask")))) {
       LOG_WARN("create memory entity failed", K(ret));
     } else {
       WITH_CONTEXT(mem_context) {
@@ -166,7 +168,7 @@ int ObDASParallelHandler::run()
                                             remote_info,
                                             das_task_wrapper))) {
           LOG_WARN("fail to deep copy all das tasks", K(ret));
-        } else if (OB_FAIL(MTL(ObDataAccessService *)->parallel_execute_das_task(new_task_list))) {
+        } else if (OB_FAIL(share::g_mp->data_access_service()->parallel_execute_das_task(new_task_list))) {
           LOG_WARN("fail to parallel execute das task", K(ret), KPC(task));
         } else {
           // do nothing

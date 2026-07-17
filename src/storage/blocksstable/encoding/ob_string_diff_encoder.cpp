@@ -33,9 +33,9 @@ ObStringDiffEncoder::ObStringDiffEncoder()
     : string_size_(0), common_size_(0), row_store_size_(0),
     null_cnt_(0), nope_cnt_(0), first_string_(NULL),
     header_(NULL), last_change_diff_row_id_(0),
-    allocator_(blocksstable::OB_ENCODING_LABEL_STRING_DIFF, OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID())
+    allocator_(blocksstable::OB_ENCODING_LABEL_STRING_DIFF, OB_MALLOC_NORMAL_BLOCK_SIZE)
 {
-  diff_descs_.set_attr(ObMemAttr(MTL_ID(), "StrDiffEnc"));
+  diff_descs_.set_attr(ObMemAttr("StrDiffEnc"));
 }
 
 int ObStringDiffEncoder::init(
@@ -280,9 +280,9 @@ int ObStringDiffEncoder::store_meta(ObBufferWriter &buf_writer)
   return ret;
 }
 
-struct ObStringDiffEncoder::ColumnStoreFiller
+struct ObStringDiffEncoder::FixedDataFiller
 {
-  explicit ColumnStoreFiller(ObStringDiffEncoder &encoder) : enc_(encoder) {}
+  explicit FixedDataFiller(ObStringDiffEncoder &encoder) : enc_(encoder) {}
 
   // fill fix store value
   OB_INLINE int operator()(
@@ -328,7 +328,7 @@ int ObStringDiffEncoder::store_data(
             K(ret), K_(column_header), K_(extend_value_bit), K(ext_val));
       }
     } else {
-      ColumnStoreFiller filler(*this);
+      FixedDataFiller filler(*this);
       if (OB_FAIL(filler(row_id, datum, buf, len))) {
         LOG_WARN("fill data failed", K(ret), K(row_id), K(datum), KP(buf), K(len));
       }
@@ -412,9 +412,9 @@ int ObStringDiffEncoder::store_fix_data(ObBufferWriter &buf_writer)
       header_->length_ = static_cast<uint32_t>(desc_.fix_data_length_);
     }
     EmptyGetter getter;
-    ColumnStoreFiller filler(*this);
-    if (OB_FAIL(fill_column_store(buf_writer, *ctx_->col_datums_, getter, filler))) {
-      LOG_WARN("fill column store failed", K(ret));
+    FixedDataFiller filler(*this);
+    if (OB_FAIL(fill_fixed_data(buf_writer, *ctx_->col_datums_, getter, filler))) {
+      LOG_WARN("fill fixed data failed", K(ret));
     }
   }
   return ret;

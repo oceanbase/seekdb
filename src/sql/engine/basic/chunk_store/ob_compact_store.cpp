@@ -258,12 +258,13 @@ int ObCompactStore::add_row(const common::ObIArray<ObExpr *> &exprs, ObEvalCtx &
   return ret;
 }
 
-int ObCompactStore::add_row(const blocksstable::ObDatumRow &datum_row, const ObStorageColumnGroupSchema &cg_schema,
-                            const int64_t extra_size, ObChunkDatumStore::StoredRow **stored_row)
+int ObCompactStore::add_row(const blocksstable::ObDatumRow &datum_row, const int64_t extra_size,
+                            ObChunkDatumStore::StoredRow **stored_row)
 {
   int ret = OB_SUCCESS;
   if (inited_) {
-    if (OB_FAIL(writer_->add_row(datum_row.storage_datums_, cg_schema, extra_size, stored_row))) {
+    if (OB_FAIL(writer_->add_row(
+            datum_row.storage_datums_, datum_row.get_column_count(), extra_size, stored_row))) {
       LOG_WARN("fail to add row", K(ret));
     } else {
       row_cnt_++;
@@ -348,7 +349,6 @@ int ObCompactStore::init_batch_ctx(const int64_t col_cnt, const int64_t max_batc
 }
 
 int ObCompactStore::init(const int64_t mem_limit,
-                         const uint64_t tenant_id,
                          const int64_t mem_ctx_id,
                          const char *label,
                          const bool enable_dump,
@@ -359,7 +359,7 @@ int ObCompactStore::init(const int64_t mem_limit,
 {
   int ret = OB_SUCCESS;
   inited_ = true;
-  OZ(ObTempBlockStore::init(mem_limit, enable_dump, tenant_id, mem_ctx_id, label, compress_type, enable_trunc));
+  OZ(ObTempBlockStore::init(mem_limit, enable_dump, mem_ctx_id, label, compress_type, enable_trunc));
   OZ(block_reader_.init(this));
   if (OB_NOT_NULL(exprs)) {
     OZ(row_meta_.init(*exprs, row_extra_size));
@@ -372,7 +372,6 @@ int ObCompactStore::init(const int64_t mem_limit,
 
 int ObCompactStore::init(const int64_t mem_limit,
                          const ObIArray<storage::ObColumnSchemaItem> &col_array,
-                         const uint64_t tenant_id,
                          const int64_t mem_ctx_id,
                          const char *label,
                          const bool enable_dump,
@@ -382,9 +381,9 @@ int ObCompactStore::init(const int64_t mem_limit,
 {
   int ret = OB_SUCCESS;
   inited_ = true;
-  ObTempBlockStore::set_inner_allocator_attr(ObMemAttr(tenant_id, "CompactStore"));
+  ObTempBlockStore::set_inner_allocator_attr(ObMemAttr("CompactStore"));
   OZ(row_meta_.init(col_array, row_extra_size));
-  OZ(ObTempBlockStore::init(mem_limit, enable_dump, tenant_id, mem_ctx_id, label, compress_type, enable_trunc));
+  OZ(ObTempBlockStore::init(mem_limit, enable_dump, mem_ctx_id, label, compress_type, enable_trunc));
   OZ(block_reader_.init(this));
   OZ(init_writer_reader());
   LOG_INFO("success to init compact store", K(enable_dump), K(enable_trunc), K(compress_type),

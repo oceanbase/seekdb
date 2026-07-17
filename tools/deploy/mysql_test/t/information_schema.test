@@ -17,6 +17,11 @@ let $iops = 100000;
 let $session = 64;
 
 use information_schema;
+--disable_query_log
+--disable_warnings
+drop table if exists oceanbase.t1, oceanbase.t2, oceanbase.t3;
+--enable_warnings
+--enable_query_log
 desc information_schema.columns;
 desc information_schema.tables;
 desc information_schema.session_variables;
@@ -78,9 +83,11 @@ select * from information_schema.views where table_schema in ('oceanbase', 'mysq
 connect (conn_sys,$OBMYSQL_MS0,root@sys,,*NO-ONE*,$OBMYSQL_PORT);
 set @@session.ob_query_timeout = 60000000;
 use information_schema;
+--disable_query_log
 --disable_warnings
-drop table if exists t1, t2, t3;
+drop table if exists oceanbase.t1, oceanbase.t2, oceanbase.t3;
 --enable_warnings
+--enable_query_log
 #select * from information_schema.schemata;
 #select * from information_schema.columns;
 #select * from information_schema.session_variables where variable_name != 'version_comment' and variable_name != 'version' order by VARIABLE_NAME;

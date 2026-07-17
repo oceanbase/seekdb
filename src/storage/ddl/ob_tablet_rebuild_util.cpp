@@ -57,7 +57,6 @@ int ObTabletRebuildUtil::get_clipped_storage_schema_on_demand(
     if (OB_FAIL(clipped_schemas_map.get_refactored(table_key, target_storage_schema))) {
       void *buf = nullptr;
       target_storage_schema = nullptr;
-      ObUpdateCSReplicaSchemaParam update_param;
       if (OB_HASH_NOT_EXIST != ret) {
         LOG_WARN("get storage schema failed", K(ret), K(table_key));
       } else if (OB_UNLIKELY(!try_create)) {
@@ -67,17 +66,11 @@ int ObTabletRebuildUtil::get_clipped_storage_schema_on_demand(
         ret = OB_ALLOCATE_MEMORY_FAILED;
         LOG_WARN("alloc mem failed", K(ret));
       } else if (OB_FALSE_IT(target_storage_schema = new(buf) ObStorageSchema())) {
-      } else if (OB_FAIL(update_param.init(tablet_id,
-          schema_stored_cols_cnt + ObMultiVersionRowkeyHelpper::get_extra_rowkey_col_cnt(),
-          ObUpdateCSReplicaSchemaParam::UpdateType::TRUNCATE_COLUMN_ARRAY))) {
-        LOG_WARN("update param init failed", K(ret), K(tablet_id));
       } else if (OB_FAIL(target_storage_schema->init(allocator,
           latest_schema/*old_schema*/,
           false/*skip_column_info*/,
-          nullptr/*column_group_schema*/,
-          false/*generate_cs_replica_cg_array*/,
-          &update_param))) {
-        LOG_WARN("init storage schema failed", K(ret), K(update_param));
+          schema_stored_cols_cnt))) {
+        LOG_WARN("init storage schema failed", K(ret), K(schema_stored_cols_cnt));
       } else if (OB_FAIL(clipped_schemas_map.set_refactored(table_key, target_storage_schema))) {
         LOG_WARN("set clipped schema failed", K(ret), K(table_key));
       } else {
@@ -107,7 +100,7 @@ int ObTabletRebuildUtil::get_clipped_storage_schema_on_demand(
 }
 
 int ObTabletRebuildUtil::check_need_fill_empty_sstable(
-    ObLSHandle &ls_handle,
+    ObLS *ls,
     const bool is_minor_sstable,
     const ObITable::TableKey &table_key,
     const common::ObTabletID &dst_tablet_id,
@@ -121,7 +114,7 @@ int ObTabletRebuildUtil::check_need_fill_empty_sstable(
   end_scn.reset();
 
   if (is_minor_sstable) {
-    if (OB_FAIL(ObDDLUtil::ddl_get_tablet(ls_handle, dst_tablet_id, dst_tablet_handle,
+    if (OB_FAIL(ObDDLUtil::ddl_get_tablet(ls, dst_tablet_id, dst_tablet_handle,
         ObMDSGetTabletMode::READ_ALL_COMMITED))) {
       LOG_WARN("get tablet failed", K(ret), K(dst_tablet_id));
     } else if (OB_FAIL(dst_tablet_handle.get_obj()->fetch_table_store(table_store_handle))) {
@@ -151,7 +144,7 @@ int ObTabletRebuildUtil::build_create_empty_sstable_param(
   if (OB_UNLIKELY(!meta.is_valid() || !table_key.is_valid() || !dst_tablet_id.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arg", K(ret), K(meta), K(table_key), K(dst_tablet_id));
-  } else if (OB_FAIL(create_sstable_param.init_for_split_empty_minor_sstable(
+  } else if (OB_FAIL(create_sstable_param.init_for_empty_minor_sstable(
       dst_tablet_id,
       table_key.get_end_scn()/*start_scn*/,
       end_scn,

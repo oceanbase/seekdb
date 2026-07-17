@@ -15,13 +15,11 @@
  */
 
 #include "lib/utility/ob_macro_utils.h"
-#include "storage/ob_storage_leak_checker.h"
 #define USING_LOG_PREFIX COMMON
 
 #include "share/cache/ob_kv_storecache.h"
 #include "share/ob_task_define.h"
 #include "share/ob_debug_sync.h"             // DEBUG_SYNC
-#include "share/ob_thread_mgr.h"
 #include "share/config/ob_server_config.h"
 
 namespace oceanbase
@@ -29,8 +27,6 @@ namespace oceanbase
 using namespace lib;
 namespace common
 {
-
-ERRSIM_POINT_DEF(ERRSIM_CACHE_HANDLE_TRACE);
 
 ObKVCacheHandle::ObKVCacheHandle()
   : hazptr_holder_()
@@ -46,15 +42,8 @@ ObKVCacheHandle::~ObKVCacheHandle()
 void ObKVCacheHandle::move_from(ObKVCacheHandle &other)
 {
   if (&other != this) {
-    int ret = OB_SUCCESS;
     reset();
-    if (OB_UNLIKELY(other.is_traced())) {
-      storage::ObStorageLeakChecker::get_instance().handle_reset(&other);
-      hazptr_holder_.move_from(other.hazptr_holder_);
-      storage::ObStorageLeakChecker::get_instance().handle_hold(this, true);
-    } else {
-      hazptr_holder_.move_from(other.hazptr_holder_);
-    }
+    hazptr_holder_.move_from(other.hazptr_holder_);
   }
 }
 
@@ -64,8 +53,6 @@ int ObKVCacheHandle::assign(const ObKVCacheHandle& other)
   reset();
   if (OB_FAIL(this->hazptr_holder_.assign(other.hazptr_holder_))) {
     COMMON_LOG(WARN, "Fail to assign hazptr_holder, ", K(ret));
-  } else {
-    storage::ObStorageLeakChecker::get_instance().handle_hold(this);
   }
   return ret;
 }
@@ -73,16 +60,9 @@ int ObKVCacheHandle::assign(const ObKVCacheHandle& other)
 void ObKVCacheHandle::reset()
 {
   if (hazptr_holder_.is_valid()) {
-    storage::ObStorageLeakChecker::get_instance().handle_reset(this);
     hazptr_holder_.release();
   }
 }
-
-bool ObKVCacheHandle::need_trace() const
-{
-  return is_valid() && OB_SUCCESS != ERRSIM_CACHE_HANDLE_TRACE;
-}
-
 
 /*
  * ----------------------------------------ObKVCacheMapIterator---------------------------------------------------------
@@ -123,7 +103,6 @@ int ObKVCacheIterator::init(const int64_t cache_id, ObKVCacheMap * const map)
 //TODO bucket num level map should be system parameter
 const int64_t ObKVGlobalCache::bucket_num_array_[MAX_BUCKET_NUM_LEVEL] =
     {
-#ifdef OB_BUILD_EMBED_MODE
       196613l,      // more than 2G, 1.5M kvcache meta
       393241l,      // more than 4G, 3M kvcache meta
       786433l,      // more than 8G, 6M kvcache meta
@@ -134,18 +113,6 @@ const int64_t ObKVGlobalCache::bucket_num_array_[MAX_BUCKET_NUM_LEVEL] =
       25165843l,    // more than 256G, 200M kvcache meta
       50331653l,    // more than 512G, 500M kvcache meta
       100663319l,   // more than 1024G, 1G kvcache meta
-#else
-      786433l,      // more than 2G, 6M kvcache meta
-      1572869l,     // more than 4G, 12M kvcache meta
-      3145739l,     // more than 8G, 25M kvcache meta
-      6291469l,     // more than 16G, 50M kvcache meta
-      12582917l,    // more than 32G, 100M kvcache meta
-      25165843l,    // more than 64G, 200M kvcache meta
-      50331653l,   // more than 128G, 500M kvcache meta
-      100663319l,   // more than 256G, 1G kvcache meta
-      201326611l,   // more than 512G, 2G kvcache meta
-      402653189ll   // more than 1024G, 4G kvcache meta
-#endif
     };
 
 ObKVGlobalCache::ObKVGlobalCache()
@@ -158,6 +125,8 @@ ObKVGlobalCache::ObKVGlobalCache()
       map_replace_pos_(0),
       map_once_replace_num_(0),
       map_replace_skip_count_(0),
+      wash_timer_(),
+      replace_timer_(),
       stopped_(true),
       cache_wash_interval_(0)
 {
@@ -230,11 +199,11 @@ int ObKVGlobalCache::init(
     COMMON_LOG(WARN, "Fail to init store, ", K(ret));
   } else if (OB_FAIL(map_.init(hash::cal_next_prime(bucket_num), &store_))) {
     COMMON_LOG(WARN, "Fail to init map, ", K(ret), K(bucket_num));
-  } else if (OB_FAIL(insts_.init(MAX_CACHE_NUM, configs_, *mem_limit_getter))) {
+  } else if (OB_FAIL(insts_.init(MAX_CACHE_NUM, configs_, *mem_limit_getter, map_.get_node_allocator()))) {
     COMMON_LOG(WARN, "Fail to init insts, ", K(ret));
-  } else if (OB_FAIL(TG_START(lib::TGDefIDs::KVCacheWash))) {
+  } else if (OB_FAIL(wash_timer_.init("KVCacheWash", ObMemAttr("KVCacheWash")))) {
     COMMON_LOG(WARN, "Fail to init wash timer, ", K(ret));
-  } else if (OB_FAIL(TG_START(lib::TGDefIDs::KVCacheRep))) {
+  } else if (OB_FAIL(replace_timer_.init("KVCacheRep", ObMemAttr("KVCacheRep")))) {
     COMMON_LOG(WARN, "Fail to init replace timer", K(ret));
   } else if (FALSE_IT(cache_wash_interval_ = cache_wash_interval)) {
   } else if (OB_FAIL(reload_wash_interval())) {
@@ -249,10 +218,6 @@ int ObKVGlobalCache::init(
     }
     map_once_replace_num_ = min(MAX_MAP_ONCE_REPLACE_NUM, bucket_num / MAP_ONCE_REPLACE_RATIO);
     inited_ = true;
-    int tmp_ret = OB_SUCCESS;
-    if (OB_TMP_FAIL(set_storage_leak_check_mod(GCONF._storage_leak_check_mod.str()))) {
-      COMMON_LOG(WARN, "[STORAGE-CHECKER] Fail to set check cache name", K(tmp_ret));
-    }
   }
 
   if (OB_UNLIKELY(!inited_)) {
@@ -269,16 +234,16 @@ void ObKVGlobalCache::stop()
 {
   if (inited_) {
     stopped_ = true;
-    TG_STOP(lib::TGDefIDs::KVCacheWash);
-    TG_STOP(lib::TGDefIDs::KVCacheRep);
+    wash_timer_.stop();
+    replace_timer_.stop();
   }
 }
 
 void ObKVGlobalCache::wait()
 {
   if (inited_) {
-    TG_WAIT(lib::TGDefIDs::KVCacheWash);
-    TG_WAIT(lib::TGDefIDs::KVCacheRep);
+    wash_timer_.wait();
+    replace_timer_.wait();
   }
 }
 
@@ -290,6 +255,8 @@ void ObKVGlobalCache::destroy()
     // cache in wash thread.
     stop();
     wait();
+    wash_timer_.destroy();
+    replace_timer_.destroy();
     map_.destroy();
     store_.destroy();
     hazard_domain_.reset_retire_list();
@@ -376,20 +343,18 @@ int ObKVGlobalCache::put(
 
 int ObKVGlobalCache::alloc(
     const int64_t cache_id,
-    const uint64_t tenant_id,
     const int64_t key_size,
     const int64_t value_size,
     ObKVCachePair *&kvpair,
     HazptrHolder &hazptr_holder,
     ObKVCacheInstHandle &inst_handle)
 {
-  return alloc(store_, cache_id, tenant_id, key_size, value_size, kvpair, hazptr_holder, inst_handle);
+  return alloc(store_, cache_id, key_size, value_size, kvpair, hazptr_holder, inst_handle);
 }
 
 int ObKVGlobalCache::alloc(
     ObIKVCacheStore &store,
     const int64_t cache_id,
-    const uint64_t tenant_id,
     const int64_t key_size,
     const int64_t value_size,
     ObKVCachePair *&kvpair,
@@ -459,7 +424,7 @@ int ObKVGlobalCache::erase_cache()
     ret = OB_NOT_INIT;
     COMMON_LOG(WARN, "The ObKVCacheMap has not been inited, ", K(ret));
   } else {
-    store_.flush_washable_mbs();
+    store_.flush_washable_mbs(false);
     if (OB_FAIL(map_.erase_all())) {
       COMMON_LOG(WARN, "fail to erase cache, ", K(ret));
     }
@@ -467,78 +432,31 @@ int ObKVGlobalCache::erase_cache()
   return ret;
 }
 
-int ObKVGlobalCache::erase_cache(const uint64_t tenant_id)
-{
-  int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(!inited_)) {
-    ret = OB_NOT_INIT;
-    COMMON_LOG(WARN, "The ObKVCacheMap has not been inited, ", K(ret));
-  } else {
-    store_.flush_washable_mbs(tenant_id);
-    if (OB_FAIL(map_.erase_tenant(tenant_id))) {
-      COMMON_LOG(WARN, "fail to erase cache, ", K(ret), K(tenant_id));
-    }
-  }
-  return ret;
-}
-
-int ObKVGlobalCache::sync_flush_tenant(const uint64_t tenant_id)
+int ObKVGlobalCache::sync_flush_tenant()
 {
   int ret = OB_SUCCESS;
 
   if (OB_UNLIKELY(!inited_)) {
     ret = OB_NOT_INIT;
     COMMON_LOG(WARN, "The global kvcache has not been inited", K(ret));
-  } else if (OB_UNLIKELY(OB_INVALID_TENANT_ID == tenant_id)) {
-    ret = OB_INVALID_ARGUMENT;
-    COMMON_LOG(WARN, "Invalid argument", K(ret), K(tenant_id));
   } else if (OB_ISNULL(mem_limit_getter_)) {
     ret = OB_ERR_UNEXPECTED;
     COMMON_LOG(WARN, "Unexpected null mem limit getter", K(ret), KP(mem_limit_getter_));
-  } else if (mem_limit_getter_->has_tenant(tenant_id)) {  // check tenant
+  } else if (mem_limit_getter_->has_tenant()) {  // check tenant
     ret = OB_ERR_UNEXPECTED;
-    COMMON_LOG(WARN, "The tenant is still existed", K(ret), K(tenant_id));
-  } else if (OB_FAIL(insts_.mark_tenant_delete(tenant_id))) {
-    COMMON_LOG(WARN, "Fail to mark tenant cache inst delete", K(ret), K(tenant_id));
-  } else if (OB_FAIL(store_.flush_washable_mbs(tenant_id, true /* force flush */))) {
-    COMMON_LOG(WARN, "Fail to erase tenant from store", K(ret), K(tenant_id));
-  } else if (OB_FAIL(map_.erase_tenant(tenant_id, true /* force_erase */))) {
-    COMMON_LOG(WARN, "Fail to retire cache node from map", K(ret), K(tenant_id));
-  } else if (OB_FAIL(insts_.erase_tenant(tenant_id))) {
-    COMMON_LOG(WARN, "Fail to erase tenant from insts", K(ret), K(tenant_id));
+    COMMON_LOG(WARN, "The tenant is still existed", K(ret));
+  } else if (OB_FAIL(insts_.mark_tenant_delete())) {
+    COMMON_LOG(WARN, "Fail to mark tenant cache inst delete", K(ret));
+  } else if (OB_FAIL(store_.flush_washable_mbs(true /* force flush */))) {
+    COMMON_LOG(WARN, "Fail to erase tenant from store", K(ret));
+  } else if (OB_FAIL(map_.erase_tenant(true /* force_erase */))) {
+    COMMON_LOG(WARN, "Fail to retire cache node from map", K(ret));
+  } else if (OB_FAIL(insts_.erase_tenant())) {
+    COMMON_LOG(WARN, "Fail to erase tenant from insts", K(ret));
   }
 
-  COMMON_LOG(INFO, "erase tenant cache details", K(ret), K(tenant_id));
+  COMMON_LOG(INFO, "erase tenant cache details", K(ret));
 
-  return ret;
-}
-
-int ObKVGlobalCache::erase_cache(const uint64_t tenant_id, const char *cache_name)
-{
-  int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(!inited_)) {
-    ret = OB_NOT_INIT;
-    COMMON_LOG(WARN, "The ObKVCacheMap has not been inited, ", K(ret));
-  } else {
-    int64_t cache_id = -1;
-    for (int16_t i = 0; i < MAX_CACHE_NUM; ++i) {
-      if (configs_[i].is_valid_) {
-        if (0 == STRNCMP(configs_[i].cache_name_, cache_name, MAX_CACHE_NAME_LENGTH)) {
-          cache_id = i;
-          break;
-        }
-      }
-    }
-    if (-1 != cache_id) {
-      store_.flush_washable_mbs(tenant_id, cache_id);
-      if (OB_FAIL(map_.erase_tenant_cache(tenant_id, cache_id))) {
-        COMMON_LOG(WARN, "fail to erase cache, ", K(ret), K(tenant_id));
-      }
-    } else {
-      ret = OB_INVALID_ARGUMENT;
-      COMMON_LOG(WARN, "Invalid argument, ", K(ret));
-    }
-  }
   return ret;
 }
 
@@ -559,7 +477,7 @@ int ObKVGlobalCache::erase_cache(const char *cache_name)
       }
     }
     if (-1 != cache_id) {
-      store_.flush_washable_mbs(cache_id);
+      store_.flush_washable_mbs(false);
       if (OB_FAIL(map_.erase_all(cache_id))) {
         COMMON_LOG(WARN, "fail to erase cache, ", K(ret), K(cache_id));
       }
@@ -642,7 +560,7 @@ void ObKVGlobalCache::wash()
     }
     int sec = -ERRSIM_FLUSH_KVCACHE;
     if (sec != 0 && REACH_TIME_INTERVAL(sec * 1000000)) {
-      store_.flush_washable_mbs();
+      store_.flush_washable_mbs(false);
     }
   }
 }
@@ -678,75 +596,63 @@ int ObKVGlobalCache::reload_wash_interval()
   int ret = OB_SUCCESS;
   if (0 == cache_wash_interval_) {
     const int64_t wash_interval = GCONF._cache_wash_interval;
-    bool is_exist = false;
-    if (OB_FAIL(TG_TASK_EXIST(lib::TGDefIDs::KVCacheWash, wash_task_, is_exist))) {
-      COMMON_LOG(WARN, "failed to check wash task exist", K(ret));
-    } else if (is_exist && OB_FAIL(TG_CANCEL_R(lib::TGDefIDs::KVCacheWash, wash_task_))) {
+    bool is_exist = wash_timer_.task_exist(wash_task_);
+    if (is_exist && OB_FAIL(wash_timer_.cancel_task(wash_task_))) {
       COMMON_LOG(WARN, "failed to cancel wash task", K(ret));
-    } else if (OB_FAIL(TG_SCHEDULE(lib::TGDefIDs::KVCacheWash, wash_task_, wash_interval, true))) {
+    } else if (OB_FAIL(wash_timer_.schedule(wash_task_, wash_interval, true))) {
       COMMON_LOG(WARN, "failed to schedule wash task", K(ret));
     }
 
     is_exist = false;
     if (OB_FAIL(ret)) {
-    } else if (OB_FAIL(TG_TASK_EXIST(lib::TGDefIDs::KVCacheRep, replace_task_, is_exist))) {
-      COMMON_LOG(WARN, "failed to check replace task exist", K(ret));
-    } else if (is_exist && OB_FAIL(TG_CANCEL_R(lib::TGDefIDs::KVCacheRep, replace_task_))) {
+    } else if (FALSE_IT(is_exist = replace_timer_.task_exist(replace_task_))) {
+    } else if (is_exist && OB_FAIL(replace_timer_.cancel_task(replace_task_))) {
       COMMON_LOG(WARN, "failed to cancel replace task", K(ret));
-    } else if (OB_FAIL(TG_SCHEDULE(lib::TGDefIDs::KVCacheRep, replace_task_, wash_interval, true))) {
+    } else if (OB_FAIL(replace_timer_.schedule(replace_task_, wash_interval, true))) {
       COMMON_LOG(WARN, "failed to schedule replace task", K(ret));
     }
     if (OB_SUCC(ret)) {
       COMMON_LOG(INFO, "success to reload_wash_interval", K(wash_interval));
     }
   } else if (!inited_) {
-    if (OB_FAIL(TG_SCHEDULE(lib::TGDefIDs::KVCacheWash, wash_task_, cache_wash_interval_, true))) {
+    if (OB_FAIL(wash_timer_.schedule(wash_task_, cache_wash_interval_, true))) {
       COMMON_LOG(WARN, "failed to schedule wash task", K(ret));
-    } else if (OB_FAIL(TG_SCHEDULE(lib::TGDefIDs::KVCacheRep, replace_task_,
-                                   cache_wash_interval_, true))) {
+    } else if (OB_FAIL(replace_timer_.schedule(replace_task_,
+                                               cache_wash_interval_, true))) {
       COMMON_LOG(WARN, "failed to schedule replace task", K(ret));
     }
   }
   return ret;
 }
 
-int ObKVGlobalCache::get_washable_size(const uint64_t tenant_id, int64_t &washable_size)
+int ObKVGlobalCache::get_washable_size(int64_t &washable_size)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!inited_)) {
     ret = OB_NOT_INIT;
     COMMON_LOG(WARN, "not init", K(ret));
-  } else if (OB_UNLIKELY(OB_INVALID_TENANT_ID == tenant_id)) {
-    ret = OB_INVALID_ARGUMENT;
-    COMMON_LOG(WARN, "invalid arguments", K(ret), K(tenant_id));
-  } else if (OB_FAIL(store_.get_washable_size(tenant_id, washable_size))) {
-    COMMON_LOG(WARN, "get tenant washable size failed", K(ret), K(tenant_id), K(washable_size));
+  } else if (OB_FAIL(store_.get_washable_size(washable_size))) {
+    COMMON_LOG(WARN, "get tenant washable size failed", K(ret), K(washable_size));
   }
   return ret;
 }
 
-int ObKVGlobalCache::sync_wash_mbs(const uint64_t tenant_id, const int64_t wash_size,
+int ObKVGlobalCache::sync_wash_mbs(const int64_t wash_size,
                                    ObICacheWasher::ObCacheMemBlock *&wash_blocks)
 {
   int ret = OB_SUCCESS;
   if (!inited_) {
     ret = OB_NOT_INIT;
     COMMON_LOG(WARN, "not init", K(ret));
-  } else if (OB_INVALID_ID == tenant_id || wash_size <= 0) {
+  } else if (wash_size <= 0) {
     ret = OB_INVALID_ARGUMENT;
-    COMMON_LOG(WARN, "invalid arguments", K(ret), K(tenant_id), K(wash_size));
-  } else if (OB_FAIL(store_.sync_wash_mbs(tenant_id, wash_size, wash_blocks))) {
+    COMMON_LOG(WARN, "invalid arguments", K(ret), K(wash_size));
+  } else if (OB_FAIL(store_.sync_wash_mbs(wash_size, wash_blocks))) {
     if (ret != OB_CACHE_FREE_BLOCK_NOT_ENOUGH) {
-      COMMON_LOG(WARN, "sync_wash_mbs failed", K(ret), K(tenant_id), K(wash_size));
+      COMMON_LOG(WARN, "sync_wash_mbs failed", K(ret), K(wash_size));
     }
   }
   return ret;
-}
-
-int ObKVGlobalCache::set_storage_leak_check_mod(const char *check_mod)
-{
-  storage::ObStorageLeakChecker::get_instance().reset();
-  return OB_SUCCESS;
 }
 
 void ObKVGlobalCache::print_all_cache_info()
@@ -774,16 +680,13 @@ int ObKVGlobalCache::get_cache_inst_info(ObIArray<ObKVCacheInstHandle> &inst_han
   return ret;
 }
 
-int ObKVGlobalCache::get_memblock_info(const uint64_t tenant_id, ObIArray<ObKVCacheStoreMemblockInfo> &memblock_infos)
+int ObKVGlobalCache::get_memblock_info(ObIArray<ObKVCacheStoreMemblockInfo> &memblock_infos)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!inited_)) {
     ret = OB_NOT_INIT;
     COMMON_LOG(WARN, "The ObKVGlobalCache has not been inited", K(ret));
-  } else if (0 == tenant_id) {
-    ret = OB_INVALID_ARGUMENT;
-    COMMON_LOG(WARN, "Invalid argument", K(ret), K(tenant_id));
-  } else if (OB_FAIL(store_.get_memblock_info(tenant_id, memblock_infos))) {
+  } else if (OB_FAIL(store_.get_memblock_info(memblock_infos))) {
     COMMON_LOG(WARN, "Fail to get all memblock info", K(ret));
   }
   return ret;

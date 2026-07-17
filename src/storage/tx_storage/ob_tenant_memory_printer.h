@@ -44,15 +44,13 @@ public:
   static ObTenantMemoryPrinter &get_instance();
   // register memstore printer to a timer thread,
   // which thread is used to print the tenant memstore usage.
-  // @param[in] tg_id, the thread tg id.
-  int register_timer_task(int tg_id);
+  int register_timer_task(common::ObTimer &timer);
   // print all the tenant memstore usage.
   int print_tenant_usage();
 private:
   ObTenantMemoryPrinter() : print_mutex_(common::ObLatchIds::TENANT_MEM_USAGE_LOCK) {}
   virtual ~ObTenantMemoryPrinter() {}
-  int print_tenant_usage_(const uint64_t tenant_id,
-                          char *print_buf,
+  int print_tenant_usage_(char *print_buf,
                           int64_t buf_len,
                           int64_t &pos);
 private:

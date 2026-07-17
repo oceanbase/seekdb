@@ -296,15 +296,6 @@ public:
       "recursive",
       "unknown",
     };
-    static const char *set_operator_name_oracle[SET_OP_NUM + 1] =
-    {
-      "none",
-      "union",
-      "intersect",
-      "minus",
-      "unknown",
-      "unknown",
-    };
     return set_operator_name[op];
   }
 
@@ -314,7 +305,6 @@ public:
     ObShowStmtCtx()
         : is_from_show_stmt_(false),
           global_scope_(false),
-          tenant_id_(common::OB_INVALID_ID),
           show_database_id_(common::OB_INVALID_ID),
           show_table_id_(common::OB_INVALID_ID),
           grants_user_id_(common::OB_INVALID_ID),
@@ -325,7 +315,6 @@ public:
     void assign(const ObShowStmtCtx &other) {
       is_from_show_stmt_ = other.is_from_show_stmt_;
       global_scope_ = other.global_scope_;
-      tenant_id_ = other.tenant_id_;
       show_database_id_ = other.show_database_id_;
       show_table_id_ = other.show_table_id_;
       grants_user_id_ = other.grants_user_id_;
@@ -334,7 +323,6 @@ public:
 
     bool      is_from_show_stmt_; // whether it is converted from a show statement
     bool      global_scope_;
-    uint64_t  tenant_id_;
     uint64_t  show_database_id_;
     uint64_t  show_table_id_; // ex: show columns from t1, and show_table_id_ is the table id of t1
     uint64_t grants_user_id_; // for show grants
@@ -342,7 +330,6 @@ public:
 
     TO_STRING_KV(K_(is_from_show_stmt),
                  K_(global_scope),
-                 K_(tenant_id),
                  K_(show_database_id),
                  K_(show_table_id),
                  K_(grants_user_id),
@@ -370,7 +357,7 @@ public:
   void assign_set_all() { is_set_distinct_ = false; }
   void set_is_from_show_stmt(bool is_from_show_stmt) { show_stmt_ctx_.is_from_show_stmt_ = is_from_show_stmt; }
   void set_global_scope(bool global_scope) { show_stmt_ctx_.global_scope_ = global_scope; }
-  void set_tenant_id(uint64_t tenant_id) { show_stmt_ctx_.tenant_id_ = tenant_id; }
+  
   void set_show_seed(bool show_seed) { show_stmt_ctx_.show_seed_ = show_seed; }
   void set_show_database_id(uint64_t show_database_id) { show_stmt_ctx_.show_database_id_ = show_database_id; }
   void set_show_table_id(uint64_t show_table_id) { show_stmt_ctx_.show_table_id_ = show_table_id; }
@@ -380,7 +367,7 @@ public:
   int check_alias_name(ObStmtResolver &ctx, const common::ObString &alias) const;
   int check_using_column(ObStmtResolver &ctx, const common::ObString &column_name) const;
   bool get_global_scope() const { return show_stmt_ctx_.global_scope_; }
-  uint64_t get_tenant_id() const { return show_stmt_ctx_.tenant_id_; }
+  
   bool get_show_seed() const { return show_stmt_ctx_.show_seed_; }
   uint64_t get_show_database_id() const { return show_stmt_ctx_.show_database_id_; }
   uint64_t get_show_table_id() const { return show_stmt_ctx_.show_table_id_; }
@@ -412,10 +399,6 @@ public:
                                                  get_aggr_item_size() > 0; }
 
   inline bool has_recursive_cte() const { return is_recursive_cte_; }
-  inline void set_expanded_mview(bool is_expanded_mview) { is_expanded_mview_ = is_expanded_mview; }
-  inline bool is_expanded_mview() const { return is_expanded_mview_; }
-  void set_has_reverse_link(bool has_reverse_link) { has_reverse_link_ = has_reverse_link; }
-  bool has_reverse_link() const { return has_reverse_link_; }
   // return single row
   inline bool is_single_set_query() const { return get_aggr_item_size() > 0 &&
                                                    group_exprs_.empty() &&
@@ -480,16 +463,6 @@ public:
       ret = false;
     }
     return ret;
-  }
-  virtual bool has_link_table() const
-  {
-    bool bret = ObDMLStmt::has_link_table();
-    for (int64_t i = 0; !bret && i < set_query_.count(); i++) {
-      if (OB_NOT_NULL(set_query_.at(i))) {
-        bret = set_query_.at(i)->has_link_table();
-      }
-    }
-    return bret;
   }
   void set_select_type(SelectTypeAffectFoundRows type) { select_type_ = type; }
   int check_having_ident(ObStmtResolver &ctx,
@@ -569,7 +542,6 @@ public:
   share::schema::ViewCheckOption get_check_option() const { return check_option_; }
   void set_check_option(share::schema::ViewCheckOption check_option) { check_option_ = check_option; }
   // this function will only be called while resolving with clause.
-  bool has_external_table() const;
   int get_pure_set_exprs(ObIArray<ObRawExpr*> &pure_set_exprs) const;
   static ObRawExpr* get_pure_set_expr(ObRawExpr *expr);
   void set_select_straight_join(bool flag) { is_select_straight_join_ = flag; }
@@ -583,9 +555,6 @@ public:
   inline void set_implicit_distinct(bool v) { is_implicit_distinct_ = v; }
   inline void reset_implicit_distinct() { is_implicit_distinct_ = false; }
   int is_query_deterministic(bool &is_deterministic) const;
-  inline bool is_oracle_compat_groupby() const {return is_oracle_compat_groupby_; }
-  inline void set_is_oracle_compat_groupby(bool v) { is_oracle_compat_groupby_ = v; }
-
 private:
   SetOperator set_op_;
   /* these var is only used for recursive union */
@@ -605,7 +574,7 @@ private:
   //select a,b,sum(d) from t group by a desc, b asc with rollup.
   common::ObSEArray<ObOrderDirection, 8, common::ModulePageAllocator, true> rollup_directions_;
 
-  // for oracle mode only, for stmt print only
+  // Used for statement printing.
   common::ObSEArray<ObColumnRefRawExpr*, 4, common::ModulePageAllocator, true> for_update_columns_;
 
   /* These fields are only used by set select */
@@ -626,14 +595,11 @@ private:
   bool children_swapped_;
   share::schema::ViewCheckOption check_option_;
   bool contain_ab_param_;
-  bool has_reverse_link_;
-  bool is_expanded_mview_;
   //denote if the query option 'STRAIGHT_JOIN' has been specified
   bool is_select_straight_join_;
   // denote if the duplicate value of this stmt will not change the query result
   // optimizer can assign or remove DISTINCT for this stmt 
   bool is_implicit_distinct_;
-  bool is_oracle_compat_groupby_; // true if has rollup/cube/grouping sets in mysql mode
 };
 }
 }

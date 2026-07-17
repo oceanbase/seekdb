@@ -373,7 +373,7 @@ int ObIndexBlockTreeTraverser::PathNodeCaches::find(const int64_t level,
     // root node
     is_in_cache = caches_[0].is_inited_;
   } else {
-    ObMicroBlockCacheKey key(MTL_ID(), *micro_index_info);
+    ObMicroBlockCacheKey key(*micro_index_info);
     is_in_cache = (key == caches_[level].key_);
   }
 
@@ -416,7 +416,7 @@ int ObIndexBlockTreeTraverser::PathNodeCaches::get(const int64_t level,
                        : cache_node->context_.init(cache_node->micro_data_, micro_index_info, traverser))) {
       LOG_WARN("Fail to init root node context", KR(ret), K(cache_node->micro_data_));
     } else if (OB_FAIL(
-                   cache_node->key_.assign(ObMicroBlockCacheKey(MTL_ID(), *micro_index_info)))) {
+                   cache_node->key_.assign(ObMicroBlockCacheKey(*micro_index_info)))) {
       LOG_WARN("Fail to assign cache key", KR(ret), KPC(micro_index_info));
     } else {
       cache_node->is_inited_ = true;
@@ -435,7 +435,7 @@ int ObIndexBlockTreeTraverser::PathNodeCaches::prefetch(const ObMicroIndexInfo &
   micro_handle.reset();
   micro_handle.allocator_ = &allocator_;
 
-  ObMicroBlockCacheKey key(MTL_ID(), micro_index_info);
+  ObMicroBlockCacheKey key(micro_index_info);
   ObIMicroBlockCache *cache
       = micro_index_info.is_data_block()
             ? &blocksstable::ObStorageCacheSuite::get_instance().get_block_cache()
@@ -459,15 +459,14 @@ int ObIndexBlockTreeTraverser::PathNodeCaches::prefetch(const ObMicroIndexInfo &
     if (OB_FAIL(micro_index_info.row_header_->fill_micro_des_meta(true /* deep_copy_key */,
                                                                   micro_handle.des_meta_))) {
       LOG_WARN("Fail to fill micro block deserialize meta", KR(ret));
-    } else if (OB_FAIL(cache->prefetch(MTL_ID(),
-                                       micro_index_info.get_macro_id(),
+    } else if (OB_FAIL(cache->prefetch(micro_index_info.get_macro_id(),
                                        micro_index_info,
                                        /* use_cache */ true,
                                        micro_handle.io_handle_,
                                        &allocator_))) {
       LOG_WARN("Fail to prefetch data micro block", KR(ret), K(micro_index_info));
     } else if (ObSSTableMicroBlockState::UNKNOWN_STATE == micro_handle.block_state_) {
-      micro_handle.tenant_id_ = MTL_ID();
+      
       micro_handle.macro_block_id_ = micro_index_info.get_macro_id();
       micro_handle.block_state_ = ObSSTableMicroBlockState::IN_BLOCK_IO;
       micro_handle.micro_info_.set(micro_index_info.get_block_offset(),
@@ -858,7 +857,7 @@ int ObMultiRangeSplitContext::on_inner_node(const ObMicroIndexInfo &index_row,
 
   int64_t &curr_row_count = ranges_.at(curr_range_idx_).row_count_;
   int64_t inc_row_count = 0;
-
+  
   if (is_coverd_by_range) {
     inc_row_count = index_row.get_row_count();
     operation = curr_row_count + inc_row_count > split_row_upper_limit_ ? GOTO_NEXT_LEVEL : NOTHING;
@@ -965,16 +964,7 @@ int ObPartitionMultiRangeSpliter::get_tables(ObTableStoreIterator &table_iter,
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("Fail to get valid table", KR(ret), K(table_iter));
     } else if (table->is_major_sstable()) {
-      if (table->is_co_sstable()) {
-        ObCOSSTableV2 *co_sstable = static_cast<ObCOSSTableV2 *>(table);
-        if (co_sstable->is_rowkey_cg_base() && !co_sstable->is_cgs_empty_co_table()) {
-          major_size = co_sstable->get_cs_meta().occupy_size_;
-        } else {
-          major_size = co_sstable->get_occupy_size();
-        }
-      } else {
-        major_size = static_cast<ObSSTable *>(table)->get_occupy_size();
-      }
+      major_size = static_cast<ObSSTable *>(table)->get_occupy_size();
       last_major_sstable = table;
     } else if (table->is_minor_sstable()) {
       if (static_cast<ObSSTable *>(table)->get_occupy_size() <= MIN_SPLIT_TABLE_SIZE) {
@@ -1144,7 +1134,7 @@ int ObPartitionMultiRangeSpliterHelper::deepcopy_rowkey(const ObDatumRowkey &row
   if constexpr (std::is_same_v<ObStoreRowkey, ObTemplateRowkey>) {
     if (for_compaction) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("Fail to deepcopy rowkey, type must be datum rowkey when for compaction", KR(ret));
+      LOG_ERROR("Fail to deepcopy rowkey, type must be datum rowkey when for compaction", KR(ret));
     } else if (rowkey.is_min_rowkey()) {
       target.set_min();
     } else if (rowkey.is_max_rowkey()) {
@@ -1160,7 +1150,7 @@ int ObPartitionMultiRangeSpliterHelper::deepcopy_rowkey(const ObDatumRowkey &row
     ObDatumRowkey tmp_rowkey;
     if (!for_compaction) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("Fail to deepcopy rowkey, type must be store rowkey when not for compaction", KR(ret));
+      LOG_ERROR("Fail to deepcopy rowkey, type must be store rowkey when not for compaction", KR(ret));
     } else if (rowkey.is_min_rowkey()) {
       target.set_min_rowkey();
     } else if (rowkey.is_max_rowkey()) {
@@ -1376,7 +1366,7 @@ int ObPartitionMultiRangeSpliter::split_ranges_for_memtable(
   if (OB_ISNULL(iter = heap_element_iters.alloc_place_holder())) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("Fail to alloc place holder", KR(ret));
-  }
+  } 
 
   // step 1. estimate rows
   int64_t sample_step = max(1, 100 / range_precision);
@@ -1428,7 +1418,7 @@ int ObPartitionMultiRangeSpliter::split_ranges_for_memtable(
         LOG_WARN("Fail to push back to store ranges", KR(ret));
       }
     }
-
+    
     if (OB_FAIL(ret)) {
     } else {
       for (int j = 0; OB_SUCC(ret) && j < store_ranges.count(); j++) {
@@ -2284,7 +2274,7 @@ int ObPartitionIncrementalRangeSpliter::ObIncrementalIterator::prepare_table_acc
     STORAGE_LOG(WARN, "Failed to get rowkey column ids", KR(ret));
   } else if (OB_FAIL(tbl_read_info_.init(allocator_, storage_schema->get_column_count(),
                                          storage_schema->get_rowkey_column_num(),
-                                         lib::is_oracle_mode(), rowkey_col_ids_))) {
+                                         rowkey_col_ids_))) {
     STORAGE_LOG(WARN, "Failed to init columns info", KR(ret));
   } else if (OB_FAIL(tbl_xs_param_.init_merge_param(merge_ctx_.get_tablet_id().id(), 
                                                     merge_ctx_.get_tablet_id(), 
@@ -2307,17 +2297,15 @@ int ObPartitionIncrementalRangeSpliter::ObIncrementalIterator::prepare_table_acc
 int ObPartitionIncrementalRangeSpliter::ObIncrementalIterator::prepare_store_ctx()
 {
   int ret = OB_SUCCESS;
-  const ObLSID &ls_id = merge_ctx_.get_ls_id();
   int64_t snapshot = merge_ctx_.get_snapshot();
   SCN scn;
   if (OB_FAIL(scn.convert_for_tx(snapshot))) {
-    STORAGE_LOG(WARN, "convert for tx fail", K(ret), K(ls_id), K(snapshot));
-  } else if (OB_FAIL(store_ctx_.init_for_read(ls_id,
-                                              merge_ctx_.get_tablet_id(),
+    STORAGE_LOG(WARN, "convert for tx fail", K(ret), K(snapshot));
+  } else if (OB_FAIL(store_ctx_.init_for_read(merge_ctx_.get_tablet_id(),
                                               INT64_MAX,
                                               -1,
                                               scn))) {
-    STORAGE_LOG(WARN, "init store ctx fail", K(ret), K(ls_id), K(snapshot));
+    STORAGE_LOG(WARN, "init store ctx fail", K(ret), K(snapshot));
   }
   return ret;
 }

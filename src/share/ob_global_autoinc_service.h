@@ -20,35 +20,22 @@
 #include "lib/hash/ob_hashmap.h"
 #include "lib/hash/ob_link_hashmap.h"
 #include "lib/lock/ob_spin_lock.h"
-#include "lib/mysqlclient/ob_mysql_proxy.h"
-#include "logservice/ob_log_base_type.h"
-#include "share/scn.h"
+#include "common/mysqlclient/ob_mysql_proxy.h"
 #include "share/ob_autoincrement_param.h"
 #include "share/ob_autoincrement_service.h"
 #include "share/ob_gais_msg.h"
-#include "share/ob_gais_rpc.h"
 
 namespace oceanbase
 {
-namespace obrpc
-{
-struct ObGAISReqRpcResult;
-struct ObGAISGetRpcResult;
-}
-
 namespace share
 {
 struct ObGAISNextAutoIncValReq;
 struct ObGAISAutoIncKeyArg;
 struct ObGAISPushAutoIncValReq;
-struct ObGAISBroadcastAutoIncCacheReq;
-
 struct ObAutoIncCacheNode
 {
-  OB_UNIS_VERSION(1);
 public:
-  ObAutoIncCacheNode() : start_(0), end_(0), sync_value_(0), autoinc_version_(OB_INVALID_VERSION),
-    is_received_(false) {}
+  ObAutoIncCacheNode() : start_(0), end_(0), sync_value_(0), autoinc_version_(OB_INVALID_VERSION) {}
   int init(const uint64_t start,
            const uint64_t end,
            const uint64_t sync_value,
@@ -64,7 +51,6 @@ public:
   {
     return new_sync_value > sync_value_ && new_sync_value > end_;
   }
-  inline bool is_received() const { return is_received_; }
   int with_new_start(const uint64_t new_start);
   int with_new_end(const uint64_t new_end);
   void reset() {
@@ -72,33 +58,24 @@ public:
     end_ = 0;
     sync_value_ = 0;
     autoinc_version_ = OB_INVALID_VERSION;
-    is_received_ = false;
   }
-  TO_STRING_KV(K_(start), K_(end), K_(sync_value), K_(autoinc_version), K_(is_received));
+  TO_STRING_KV(K_(start), K_(end), K_(sync_value), K_(autoinc_version));
 
   uint64_t start_; // next auto_increment value can be used
   uint64_t end_;   // last available value in the cache(included)
   uint64_t sync_value_;
   int64_t autoinc_version_;
-  bool is_received_;
 };
 
-class ObGlobalAutoIncService : public logservice::ObIReplaySubHandler,
-                               public logservice::ObICheckpointSubHandler,
-                               public logservice::ObIRoleChangeSubHandler
+class ObGlobalAutoIncService
 {
 public:
-  ObGlobalAutoIncService() : is_inited_(false), is_leader_(false),
-    cache_ls_lock_(common::ObLatchIds::AUTO_INCREMENT_LEADER_LOCK), cache_ls_(NULL),
-    gais_request_rpc_(NULL), is_switching_(false),
-    switching_mutex_(common::ObLatchIds::AUTO_INCREMENT_LEADER_LOCK)
-    {}
+  ObGlobalAutoIncService() : is_inited_(false) {}
   virtual ~ObGlobalAutoIncService() {}
 
   const static int MUTEX_NUM = 1024;
   const static int INIT_HASHMAP_SIZE = 1000;
-  const static int64_t BROADCAST_OP_TIMEOUT = 1000 * 1000; // 1000ms, for broadcast auto increment cache
-  int init(const common::ObAddr &addr, common::ObMySQLProxy *mysql_proxy);
+  int init(common::ObMySQLProxy *mysql_proxy);
   static int mtl_init(ObGlobalAutoIncService *&gais);
   void destroy();
   int clear();
@@ -110,7 +87,7 @@ public:
    * and then consume the auto-increment in the cache.
    */
   int handle_next_autoinc_request(const ObGAISNextAutoIncValReq &request,
-                                  obrpc::ObGAISNextValRpcResult &result);
+                                  obcall::ObGAISNextValResult &result);
 
   /*
    * This method handles the request for getting current auto-increment value. If it exists
@@ -118,7 +95,7 @@ public:
    * Note: the cache will not be updated during this method.
    */
   int handle_curr_autoinc_request(const ObGAISAutoIncKeyArg &request,
-                                  obrpc::ObGAISCurrValRpcResult &result);
+                                  obcall::ObGAISCurrValResult &result);
 
   /*
    * This method handles the request for push local sync value to global. If the local sync
@@ -129,8 +106,6 @@ public:
                                   uint64_t &sync_value);
 
   int handle_clear_autoinc_cache_request(const ObGAISAutoIncKeyArg &request);
-  int receive_global_autoinc_cache(const ObGAISBroadcastAutoIncCacheReq &request);
-
     /*
    * This method handles the request for getting next (batch) sequence value.
    * If the cache can satisfy the request, use the sequence in the cache to return,
@@ -138,63 +113,11 @@ public:
    * and then consume the sequence in the cache.
    */
   int handle_next_sequence_request(const ObGAISNextSequenceValReq &request,
-                                  obrpc::ObGAISNextSequenceValRpcResult &result);
+                                  obcall::ObGAISNextSequenceValResult &result);
 
-public:
-  void switch_to_follower_forcedly()
-  {
-    inner_switch_to_follower();
-  }
-  int switch_to_follower_gracefully()
-  {
-    return inner_switch_to_follower();
-  }
-  int resume_leader() {
-    ATOMIC_STORE(&is_leader_, true);
-    return common::OB_SUCCESS;
-  }
-  int switch_to_leader() {
-    ATOMIC_STORE(&is_leader_, true);
-    return common::OB_SUCCESS;
-  }
-
-  // for replay, do nothing
-  int replay(const void *buffer,
-             const int64_t nbytes,
-             const palf::LSN &lsn,
-             const SCN &scn) override final
-  {
-    int ret = OB_SUCCESS;
-    UNUSED(buffer);
-    UNUSED(nbytes);
-    UNUSED(lsn);
-    UNUSED(scn);
-    return ret;
-  }
-
-  // for checkpoint, do nothing
-  SCN get_rec_scn() override final
-  {
-    return share::SCN::max_scn();;
-  }
-
-  int flush(share::SCN &scn) override final
-  {
-    int ret = OB_SUCCESS;
-    UNUSED(scn);
-    return ret;
-  }
-
-  void set_cache_ls(storage::ObLS * ls_ptr) {
-    ObSpinLockGuard lock(cache_ls_lock_);
-    cache_ls_ = ls_ptr;
-  }
-
-  TO_STRING_KV(K_(is_inited), K_(is_leader), K_(self), K(autoinc_map_.size()), KP_(cache_ls),
-    K_(is_switching));
+  TO_STRING_KV(K_(is_inited), K(autoinc_map_.size()));
 
 private:
-  int check_leader_(const uint64_t tenant_id, bool &is_leader);
   int fetch_next_node_(const ObGAISNextAutoIncValReq &request, ObAutoIncCacheNode &node);
   int read_value_from_inner_table_(const share::AutoincKey &key,
                                    const int64_t &inner_autoinc_version,
@@ -215,33 +138,11 @@ private:
     }
     return next_cache_boundary;
   }
-  int inner_switch_to_follower();
-  int broadcast_global_autoinc_cache();
-  int64_t serialize_size_autoinc_cache();
-  int serialize_autoinc_cache(SERIAL_PARAMS);
-  int deserialize_autoinc_cache(DESERIAL_PARAMS);
-  int wait_all_requests_to_finish();
-  /*
-   * The function will check whether the data of the received node and inner table are consistent.
-   * If they are consistent, the inner table will be pushed up by increasing seq_value.
-   * Otherwise, the node will be set as invalid.
-   */
-  int read_and_push_inner_table(const AutoincKey &key,
-                                const uint64_t max_value,
-                                ObAutoIncCacheNode &received_node);
-
 private:
   bool is_inited_;
-  bool is_leader_;
-  common::ObAddr self_;
   share::ObAutoIncInnerTableProxy inner_table_proxy_;
   common::hash::ObHashMap<uint64_t, ObAutoIncCacheNode> autoinc_map_; // table_id -> node
-  common::ObSpinLock cache_ls_lock_;
-  storage::ObLS *cache_ls_;
   lib::ObMutex op_mutex_[MUTEX_NUM];
-  ObGAISRequestRpc* gais_request_rpc_;
-  bool is_switching_;
-  lib::ObMutex switching_mutex_;
 };
 
 } // share

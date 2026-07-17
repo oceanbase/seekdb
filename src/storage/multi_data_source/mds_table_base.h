@@ -16,6 +16,7 @@
 #ifndef STORAGE_MULTI_DATA_SOURCE_MDS_TABLE_BASE_H
 #define STORAGE_MULTI_DATA_SOURCE_MDS_TABLE_BASE_H
 
+#include "lib/atomic/ob_atomic.h"
 #include "lib/container/ob_array.h"
 #include "lib/ob_define.h"
 #include "lib/profile/ob_trace_id.h"
@@ -27,8 +28,6 @@
 #include "storage/multi_data_source/runtime_utility/common_define.h"
 #include "storage/multi_data_source/runtime_utility/list_helper.h"
 #include "storage/multi_data_source/runtime_utility/mds_tlocal_info.h"
-#include "storage/checkpoint/ob_checkpoint_diagnose.h"
-
 namespace oceanbase
 {
 namespace share
@@ -103,7 +102,6 @@ protected:
 public:
   MdsTableBase()
   : state_(State::UNKNOWN),
-  ls_id_(),
   tablet_id_(),
   flushing_scn_(),
   last_inner_recycled_scn_(share::SCN::min_scn()),
@@ -111,14 +109,9 @@ public:
   max_aborted_scn_(share::SCN::min_scn()),
   total_node_cnt_(0),
   construct_sequence_(0),
-  lock_(),
-  trace_id_(checkpoint::INVALID_TRACE_ID) { construct_sequence_ = ObMdsGlobalSequencer::generate_senquence(); }
-  virtual ~MdsTableBase()
-  {
-    REPORT_CHECKPOINT_DIAGNOSE_INFO(update_start_gc_time_for_checkpoint_unit, this);
-  }
+  lock_() { construct_sequence_ = ObMdsGlobalSequencer::generate_senquence(); }
+  virtual ~MdsTableBase() {}
   int init(const ObTabletID tablet_id,
-           const share::ObLSID ls_id,
            const share::SCN mds_ckpt_scn_from_tablet,// this is used to filter replayed nodes after removed action
            ObTabletPointer *pointer,
            ObMdsTableMgr *p_mgr);
@@ -177,7 +170,6 @@ public:
                                      const ScanNodeOrder scan_node_order) const = 0;
   virtual void on_flush(const share::SCN &flushed_scn, const int flush_ret) = 0;
   virtual int try_recycle(const share::SCN recycle_scn) = 0;
-  share::ObLSID get_ls_id() const;
   int64_t get_node_cnt() const;
   virtual share::SCN get_rec_scn();
   virtual int operate(const ObFunction<int(MdsTableBase &)> &operation) = 0;
@@ -192,11 +184,6 @@ public:
   bool is_removed_from_t3m() const;
   bool is_construct_sequence_matched(const int64_t seq) const { return seq == construct_sequence_; }
   int64_t get_removed_from_t3m_ts() const;
-  int64_t get_trace_id() const { return trace_id_; }
-  void set_trace_id(int64_t trace_id)
-  {
-    ADD_CHECKPOINT_DIAGNOSE_INFO_AND_SET_TRACE_ID(checkpoint::ObCheckpointUnitDiagnoseInfo, trace_id);
-  }
   VIRTUAL_TO_STRING_KV(KP(this));
 protected:
   void inc_valid_node_cnt();
@@ -217,9 +204,7 @@ protected:
     event.record_thread_info_();
     event.info_str_.reset();
     event.event_ = "CONSTRUCTED";
-    observer::MdsEventKey key(MTL_ID(),
-                              ls_id_,
-                              tablet_id_);
+    observer::MdsEventKey key(tablet_id_);
     observer::ObMdsEventBuffer::append(key, event, this, file, line, function_name);
   }
   void report_destruct_event_(const char *file = __builtin_FILE(),
@@ -230,9 +215,7 @@ protected:
     event.record_thread_info_();
     event.info_str_.reset();
     event.event_ = "DESTRUCTED";
-    observer::MdsEventKey key(MTL_ID(),
-                              ls_id_,
-                              tablet_id_);
+    observer::MdsEventKey key(tablet_id_);
     observer::ObMdsEventBuffer::append(key, event, this, file, line, function_name);
   }
   template <int N>
@@ -253,9 +236,7 @@ protected:
     event.record_thread_info_();
     event.info_str_.assign(stack_buffer, pos);
     event.event_ = event_str;
-    observer::MdsEventKey key(MTL_ID(),
-                              ls_id_,
-                              tablet_id_);
+    observer::MdsEventKey key(tablet_id_);
     observer::ObMdsEventBuffer::append(key, event, this, file, line, function_name);
   }
   template <int N>
@@ -274,12 +255,8 @@ protected:
     event.record_thread_info_();
     event.info_str_.assign(stack_buffer, pos);
     event.event_ = event_str;
-    observer::MdsEventKey key(MTL_ID(),
-                              ls_id_,
-                              tablet_id_);
+    observer::MdsEventKey key(tablet_id_);
     observer::ObMdsEventBuffer::append(key, event, this, file, line, function_name);
-
-    REPORT_CHECKPOINT_DIAGNOSE_INFO(update_schedule_dag_info, this, rec_scn_, rec_scn_, flushing_scn_);
 
   }
   template <int N>
@@ -298,13 +275,10 @@ protected:
     event.record_thread_info_();
     event.info_str_.assign(stack_buffer, pos);
     event.event_ = event_str;
-    observer::MdsEventKey key(MTL_ID(),
-                              ls_id_,
-                              tablet_id_);
+    observer::MdsEventKey key(tablet_id_);
     observer::ObMdsEventBuffer::append(key, event, this, file, line, function_name);
     observer::ObMdsEventBuffer::append(key, event, this, file, line, function_name);
 
-    REPORT_CHECKPOINT_DIAGNOSE_INFO(update_merge_info_for_checkpoint_unit, this);
   }
   void report_recycle_event_(share::SCN recycle_scn,
                              const char *file = __builtin_FILE(),
@@ -320,9 +294,7 @@ protected:
     event.record_thread_info_();
     event.info_str_.assign(stack_buffer, pos);
     event.event_ = "RECYCLE";
-    observer::MdsEventKey key(MTL_ID(),
-                              ls_id_,
-                              tablet_id_);
+    observer::MdsEventKey key(tablet_id_);
     observer::ObMdsEventBuffer::append(key, event, this, file, line, function_name);
   }
 public:
@@ -350,7 +322,6 @@ public:
     ObCurTraceId::TraceId remove_trace_id_;
   } debug_info_;// 120B
   mutable State state_;
-  share::ObLSID ls_id_;
   ObTabletID tablet_id_;
   share::SCN flushing_scn_;// To tell if this mds table is flushing
   share::SCN last_inner_recycled_scn_;// To filter repeated release operation, and filter replay operation
@@ -360,8 +331,6 @@ public:
   int64_t construct_sequence_;// To filter invalid dump DAG
   MdsTableMgrHandle mgr_handle_;
   mutable MdsLock lock_;
-  // a round checkpoint identifier for checkpoint diagnose
-  int64_t trace_id_;
 };
 
 bool check_node_scn_beflow_flush(const MdsNode &node, const share::SCN &flush_scn);

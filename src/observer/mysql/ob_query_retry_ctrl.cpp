@@ -17,10 +17,12 @@
 #define USING_LOG_PREFIX SERVER
 
 #include "ob_query_retry_ctrl.h"
+#include "share/rc/ob_module_provider.h"
 #include "pl/ob_pl.h"
 #include "storage/memtable/ob_lock_wait_mgr.h"
 #include "observer/mysql/obmp_query.h"
 #include "observer/ob_server_event_history_table_operator.h"
+#include "sql/resolver/cmd/ob_load_data_stmt.h"
 
 namespace oceanbase
 {
@@ -155,7 +157,7 @@ public:
   virtual void test(ObRetryParam &v) const override
   {
     if (v.session_.get_retry_info_for_update()
-        .should_fast_fail(v.session_.get_effective_tenant_id())) {
+        .should_fast_fail()) {
       v.client_ret_ = v.err_;
       v.retry_type_ = RETRY_TYPE_NONE;
       v.no_more_test_ = true;
@@ -186,24 +188,6 @@ public:
       v.retry_type_ = RETRY_TYPE_LOCAL;
     } else {
       v.retry_type_ = RETRY_TYPE_NONE;
-    }
-  }
-};
-
-class ObSwitchConsumerGroupRetryPolicy : public ObRetryPolicy
-{
-public:
-  ObSwitchConsumerGroupRetryPolicy() = default;
-  ~ObSwitchConsumerGroupRetryPolicy() = default;
-  virtual void test(ObRetryParam &v) const override
-  {
-    try_packet_retry(v);
-    if (RETRY_TYPE_LOCAL == v.retry_type_) {
-      LOG_WARN_RET(v.err_, "set retry packet failed, retry at local",
-        K(v.ctx_.multi_stmt_item_.is_part_of_multi_stmt()),
-        K(v.ctx_.multi_stmt_item_.get_seq_num()));
-      v.session_.set_group_id_not_expected(true);
-      v.result_.get_exec_context().set_need_disconnect(false);
     }
   }
 };
@@ -345,27 +329,27 @@ public:
       int64_t local_tenant_version_latest = 0;
       int64_t local_sys_version_latest = 0;
       if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(
-                  v.session_.get_effective_tenant_id(), schema_guard))) {
+                  schema_guard))) {
         // No need to retry, and let it return the error code from get_schema_guard because it is the cause of not retrying
         LOG_WARN("get schema guard failed", K(v), K(ret));
         v.client_ret_ = ret;
         v.retry_type_ = RETRY_TYPE_NONE;
         v.no_more_test_ = true;
       } else if (OB_FAIL(schema_guard.get_schema_version(
-                  v.session_.get_effective_tenant_id(), local_tenant_version_latest))) {
+                  local_tenant_version_latest))) {
         LOG_WARN("fail get tenant schema version", K(v), K(ret));
         v.client_ret_ = ret;
         v.retry_type_ = RETRY_TYPE_NONE;
         v.no_more_test_ = true;
       } else if (OB_FAIL(schema_guard.get_schema_version(
-                  OB_SYS_TENANT_ID, local_sys_version_latest))) {
+                  local_sys_version_latest))) {
         LOG_WARN("fail get sys schema version", K(v), K(ret));
         v.client_ret_ = ret;
         v.retry_type_ = RETRY_TYPE_NONE;
         v.no_more_test_ = true;
       } else {
         bool local_schema_not_full = GCTX.schema_service_->is_schema_error_need_retry(
-                                     &schema_guard, v.session_.get_effective_tenant_id());
+                                     &schema_guard);
         int64_t local_tenant_version_start = v.curr_query_tenant_local_schema_version_;
         int64_t global_tenant_version_start = v.curr_query_tenant_global_schema_version_;
         int64_t local_sys_version_start = v.curr_query_sys_local_schema_version_;
@@ -430,18 +414,16 @@ public:
       ObSchemaGetterGuard schema_guard;
       const ObTenantSchema *tenant_schema = NULL;
       if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(
-          OB_SYS_TENANT_ID,
           schema_guard))) {
         LOG_TRACE("get sys tenant schema guard failed", KR(ret), K(v));
       } else if (OB_FAIL(schema_guard.get_tenant_info(
-          v.session_.get_effective_tenant_id(),
           tenant_schema))) {
         LOG_TRACE("fail get tenant info", KR(ret),
-            "tenant_id", v.session_.get_effective_tenant_id(), K(v));
+             K(v));
       } else if (OB_ISNULL(tenant_schema) || !tenant_schema->is_normal()) {
         // use LOG_TRACE to prevent too much warning during creating tenant
         LOG_TRACE("tenant status is abnormal, do not retry",
-            "tenant_id", v.session_.get_effective_tenant_id(), KPC(tenant_schema), K(v));
+             KPC(tenant_schema), K(v));
         // tenant status is abnormal, do not retry and return v.err_
         v.client_ret_ = v.err_;
         v.retry_type_ = RETRY_TYPE_NONE;
@@ -560,7 +542,7 @@ public:
         v.client_ret_ = v.err_;
         v.retry_type_ = RETRY_TYPE_NONE;
         v.no_more_test_ = true;
-        LOG_WARN_RET(v.client_ret_, "can not retry local. need to terminate to prevent thread resouce deadlock", K(v));
+        LOG_ERROR_RET(v.client_ret_, "can not retry local. need to terminate to prevent thread resouce deadlock", K(v));
       }
     }
   }
@@ -577,7 +559,7 @@ public:
   {
     int ret = OB_SUCCESS;
     bool local_schema_not_full = GSCHEMASERVICE.is_schema_error_need_retry(
-                                 NULL, v.session_.get_effective_tenant_id());
+                                 NULL);
     if (local_schema_not_full || OB_ERR_REMOTE_SCHEMA_NOT_FULL == v.err_) {
       v.no_more_test_ = true;
       v.retry_type_ = RETRY_TYPE_LOCAL;
@@ -655,8 +637,7 @@ public:
   virtual void test(ObRetryParam &v) const override
   {
     int ret = OB_SUCCESS;
-    if ((v.session_.get_ddl_info().is_ddl() && !v.session_.get_ddl_info().is_retryable_ddl()) ||
-                                            v.session_.get_ddl_info().is_mview_complete_refresh()) {
+    if (v.session_.get_ddl_info().is_ddl() && !v.session_.get_ddl_info().is_retryable_ddl()) {
       v.client_ret_ = v.err_;
       v.retry_type_ = RETRY_TYPE_NONE;
       v.no_more_test_ = true;
@@ -743,9 +724,6 @@ void ObQueryRetryCtrl::px_thread_not_enough_proc(ObRetryParam &v)
   ObRetryObject retry_obj(v);
   ObPxThreadNotEnoughRetryPolicy thread_not_enough;
   retry_obj.test(thread_not_enough);
-  if (can_start_retry_wait_event(v.retry_type_)) {
-    start_px_worker_insufficient_retry_wait_event(v.session_ ,v.ctx_);
-  }
 }
 
 void ObQueryRetryCtrl::trx_set_violation_proc(ObRetryParam &v)
@@ -768,9 +746,6 @@ void ObQueryRetryCtrl::try_lock_row_conflict_proc(ObRetryParam &v)
   ObRetryObject retry_obj(v);
   ObLockRowConflictRetryPolicy lock_conflict;
   retry_obj.test(lock_conflict);
-  if (can_start_retry_wait_event(v.retry_type_)) {
-    start_rowlock_retry_wait_event(v.session_);
-  }
 }
 
 
@@ -786,9 +761,6 @@ void ObQueryRetryCtrl::location_error_proc(ObRetryParam &v)
   } else {
     ObRefreshLocationCacheNonblockPolicy nonblock_refresh;
     retry_obj.test(nonblock_refresh);
-  }
-  if (can_start_retry_wait_event(v.retry_type_)) {
-    start_location_error_retry_wait_event(v.session_ ,v.err_);
   }
 }
 
@@ -809,9 +781,6 @@ void ObQueryRetryCtrl::location_error_nothing_readable_proc(ObRetryParam &v)
   // But we still need to keep the inited state for defensive checks, so we cannot call reset, but should call clear), and then retry.
   v.session_.get_retry_info_for_update().clear();
   location_error_proc(v);
-  if (can_start_retry_wait_event(v.retry_type_)) {
-    start_location_error_retry_wait_event(v.session_ ,v.err_);
-  }
 }
 
 void ObQueryRetryCtrl::peer_server_status_uncertain_proc(ObRetryParam &v)
@@ -829,9 +798,6 @@ void ObQueryRetryCtrl::schema_error_proc(ObRetryParam &v)
   ObRetryObject retry_obj(v);
   ObCheckSchemaUpdatePolicy schema_update_policy;
   retry_obj.test(schema_update_policy);
-  if (can_start_retry_wait_event(v.retry_type_)) {
-    start_schema_error_retry_wait_event(v.session_ ,v.err_);
-  }
 }
 
 void ObQueryRetryCtrl::autoinc_cache_not_equal_retry_proc(ObRetryParam &v)
@@ -840,9 +806,6 @@ void ObQueryRetryCtrl::autoinc_cache_not_equal_retry_proc(ObRetryParam &v)
   ObAutoincCacheNotEqualRetryPolicy autoinc_retry_policy;
   ObCommonRetryLinearShortWaitPolicy retry_short_wait;
   retry_obj.test(autoinc_retry_policy).test(retry_short_wait);
-  if (can_start_retry_wait_event(v.retry_type_)) {
-    start_schema_error_retry_wait_event(v.session_ ,v.err_);
-  }
 }
 
 void ObQueryRetryCtrl::snapshot_discard_proc(ObRetryParam &v)
@@ -872,9 +835,6 @@ void ObQueryRetryCtrl::long_wait_retry_proc(ObRetryParam &v)
   ObCommonRetryIndexLongWaitPolicy long_wait_retry;
   retry_obj.test(long_wait_retry);
   if ( OB_REPLICA_NOT_READABLE == v.err_) {
-    if (can_start_retry_wait_event(v.retry_type_)) {
-      start_replica_not_readable_retry_wait_event(v.session_);
-    }
   }
 }
 
@@ -883,17 +843,6 @@ void ObQueryRetryCtrl::short_wait_retry_proc(ObRetryParam &v)
   ObRetryObject retry_obj(v);
   ObCommonRetryLinearShortWaitPolicy short_wait_retry;
   retry_obj.test(short_wait_retry);
-  if (can_start_retry_wait_event(v.retry_type_)) {
-    if (OB_ERR_INSUFFICIENT_PX_WORKER == v.err_)  {
-      start_px_worker_insufficient_retry_wait_event(v.session_ ,v.ctx_);
-    } else if (OB_GTS_NOT_READY == v.err_ || OB_GTI_NOT_READY == v.err_) {
-      start_gts_not_ready_retry_wait_event(v.session_ ,v.err_);
-    } else if (OB_TX_PENDING_LOG_OVERFLOW == v.err_) {
-      start_log_cb_not_ready_retry_wait_event(v.session_, v.err_);
-    } else if ( OB_REPLICA_NOT_READABLE == v.err_) {
-      start_replica_not_readable_retry_wait_event(v.session_);
-    }
-  }
 }
 
 void ObQueryRetryCtrl::force_local_retry_proc(ObRetryParam &v)
@@ -910,13 +859,6 @@ void ObQueryRetryCtrl::batch_execute_opt_retry_proc(ObRetryParam &v)
   retry_obj.test(batch_opt_retry);
 }
 
-void ObQueryRetryCtrl::switch_consumer_group_retry_proc(ObRetryParam &v)
-{
-  ObRetryObject retry_obj(v);
-  ObSwitchConsumerGroupRetryPolicy switch_group_retry;
-  retry_obj.test(switch_group_retry);
-}
-
 void ObQueryRetryCtrl::timeout_proc(ObRetryParam &v)
 {
   if (is_try_lock_row_err(v.session_.get_retry_info().get_last_query_retry_err())) {
@@ -931,9 +873,6 @@ void ObQueryRetryCtrl::inner_try_lock_row_conflict_proc(ObRetryParam &v)
   ObRetryObject retry_obj(v);
   ObInnerLockRowConflictRetryPolicy lock_conflict;
   retry_obj.test(lock_conflict);
-  if (can_start_retry_wait_event(v.retry_type_)) {
-    start_rowlock_retry_wait_event(v.session_);
-  }
 }
 
 void ObQueryRetryCtrl::inner_table_location_error_proc(ObRetryParam &v)
@@ -943,9 +882,6 @@ void ObQueryRetryCtrl::inner_table_location_error_proc(ObRetryParam &v)
   ObRetryObject retry_obj(v);
   ObCommonRetryIndexLongWaitPolicy retry_long_wait;
   retry_obj.test(retry_long_wait);
-  if (can_start_retry_wait_event(v.retry_type_)) {
-    start_location_error_retry_wait_event(v.session_ ,v.err_);
-  }
 }
 
 void ObQueryRetryCtrl::inner_location_error_proc(ObRetryParam &v)
@@ -971,9 +907,6 @@ void ObQueryRetryCtrl::inner_location_error_proc(ObRetryParam &v)
     // case 4: do nothing for other inner sql
     empty_proc(v);
   }
-  if (can_start_retry_wait_event(v.retry_type_)) {
-    start_location_error_retry_wait_event(v.session_ ,v.err_);
-  }
 }
 
 void ObQueryRetryCtrl::inner_location_error_nothing_readable_proc(ObRetryParam &v)
@@ -984,9 +917,6 @@ void ObQueryRetryCtrl::inner_location_error_nothing_readable_proc(ObRetryParam &
   // But we still need to keep the inited state for defensive checks, so we cannot call reset, but should call clear), and then retry.
   v.session_.get_retry_info_for_update().clear();
   inner_location_error_proc(v);
-  if (can_start_retry_wait_event(v.retry_type_)) {
-    start_location_error_retry_wait_event(v.session_ ,v.err_);
-  }
 }
 
 void ObQueryRetryCtrl::inner_common_schema_error_proc(ObRetryParam &v)
@@ -994,9 +924,6 @@ void ObQueryRetryCtrl::inner_common_schema_error_proc(ObRetryParam &v)
   ObRetryObject retry_obj(v);
   ObInnerCommonCheckSchemaPolicy common_schema_policy;
   retry_obj.test(common_schema_policy);
-  if (can_start_retry_wait_event(v.retry_type_)) {
-    start_schema_error_retry_wait_event(v.session_ ,v.err_);
-  }
 }
 
 
@@ -1006,9 +933,6 @@ void ObQueryRetryCtrl::inner_schema_error_proc(ObRetryParam &v)
   ObInnerCommonCheckSchemaPolicy common_schema_policy;
   ObInnerCheckSchemaPolicy schema_policy;
   retry_obj.test(common_schema_policy).test(schema_policy);
-  if (can_start_retry_wait_event(v.retry_type_)) {
-    start_schema_error_retry_wait_event(v.session_ ,v.err_);
-  }
 }
 
 void ObQueryRetryCtrl::inner_peer_server_status_uncertain_proc(ObRetryParam &v)
@@ -1040,10 +964,6 @@ void ObQueryRetryCtrl::empty_proc(ObRetryParam &v)
 
 void ObQueryRetryCtrl::before_func(ObRetryParam &v)
 {
-  ObDiagnosticInfo *di = ObLocalDiagnosticInfo::get();
-  if (OB_NOT_NULL(di)) {
-    di->get_ash_stat().record_last_query_exec_use_time_us();
-  }
   if (OB_UNLIKELY(v.is_inner_sql_)) {
     ObRetryObject retry_obj(v);
     ObInnerBeforeRetryCheckPolicy before_retry;
@@ -1070,12 +990,6 @@ void ObQueryRetryCtrl::after_func(ObRetryParam &v)
   if (RETRY_TYPE_NONE != v.retry_type_) {
     v.session_.get_retry_info_for_update().set_last_query_retry_err(v.err_);
     v.session_.get_retry_info_for_update().inc_retry_cnt();
-    ObDiagnosticInfo *di = ObLocalDiagnosticInfo::get();
-    if (OB_NOT_NULL(di) && di->get_ash_stat().retry_wait_event_no_ == 0) {
-      if (can_start_retry_wait_event(v.retry_type_)) {
-        start_other_retry_wait_event(v.session_ ,v.err_);
-      }
-    }
     if (OB_UNLIKELY(v.err_ != v.client_ret_)) {
       LOG_ERROR_RET(OB_ERR_UNEXPECTED, "when need retry, v.client_ret_ must be equal to err", K(v));
     }
@@ -1085,7 +999,7 @@ void ObQueryRetryCtrl::after_func(ObRetryParam &v)
   }
   // bug fix, reset lock_wait_mgr node before doing local retry
   if (RETRY_TYPE_LOCAL == v.retry_type_) {
-    rpc::ObLockWaitNode* node = MTL(memtable::ObLockWaitMgr*)->get_thread_node();
+    rpc::ObLockWaitNode* node = share::g_mp->lock_wait_mgr()->get_thread_node();
     if (NULL != node) {
       node->reset_need_wait();
     }
@@ -1182,7 +1096,6 @@ int ObQueryRetryCtrl::init()
   ERR_RETRY_FUNC("STORAGE",  OB_SNAPSHOT_DISCARDED,              snapshot_discard_proc,         short_wait_retry_proc,                             nullptr);
   ERR_RETRY_FUNC("STORAGE",  OB_DATA_NOT_UPTODATE,               long_wait_retry_proc,          short_wait_retry_proc,                             nullptr);
   ERR_RETRY_FUNC("STORAGE",  OB_REPLICA_NOT_READABLE,            long_wait_retry_proc,          short_wait_retry_proc,                             ObDASRetryCtrl::tablet_nothing_readable_proc);
-  ERR_RETRY_FUNC("STORAGE",  OB_PARTITION_IS_SPLITTING,          short_wait_retry_proc,         short_wait_retry_proc,                             nullptr);
   ERR_RETRY_FUNC("STORAGE",  OB_DISK_HUNG,                       nonblock_location_error_proc,  empty_proc,                                        nullptr);
 
   /* trx */
@@ -1202,7 +1115,6 @@ int ObQueryRetryCtrl::init()
   ERR_RETRY_FUNC("SQL",      OB_NO_PARTITION_FOR_INTERVAL_PART,  short_wait_retry_proc,             short_wait_retry_proc,                         nullptr);
   ERR_RETRY_FUNC("SQL",      OB_BATCHED_MULTI_STMT_ROLLBACK,     batch_execute_opt_retry_proc,      batch_execute_opt_retry_proc,                  nullptr);
   ERR_RETRY_FUNC("SQL",      OB_SQL_RETRY_SPM,                   force_local_retry_proc,            force_local_retry_proc,                        nullptr);
-  ERR_RETRY_FUNC("SQL",      OB_NEED_SWITCH_CONSUMER_GROUP,      switch_consumer_group_retry_proc,  empty_proc,                                    nullptr);
 
   /* timeout */
   ERR_RETRY_FUNC("SQL",      OB_TIMEOUT,                         timeout_proc,                timeout_proc,                                        nullptr);
@@ -1373,83 +1285,5 @@ void ObQueryRetryCtrl::on_close_resultset_fail_(const int err, int &client_ret)
   }
 }
 
-bool ObQueryRetryCtrl::can_start_retry_wait_event(const ObQueryRetryType &retry_type)
-{
-  return retry_type != RETRY_TYPE_NONE;
-}
-void ObQueryRetryCtrl::start_schema_error_retry_wait_event(ObSQLSessionInfo &session, const int error_code)
-{
-  GET_DIAGNOSTIC_INFO->get_ash_stat().begin_retry_wait_event(
-        ObWaitEventIds::SCHEMA_RETRY_WAIT,
-        error_code,
-        ACTIVE_SESSION_RETRY_DIAG_INFO_GETTER(table_id_),
-        ACTIVE_SESSION_RETRY_DIAG_INFO_GETTER(table_schema_version_));
-}
-
-void ObQueryRetryCtrl::start_location_error_retry_wait_event(ObSQLSessionInfo &session, const int error_code)
-{
-  GET_DIAGNOSTIC_INFO->get_ash_stat().begin_retry_wait_event(
-        ObWaitEventIds::LOCATION_RETRY_WAIT,
-        error_code,
-        ACTIVE_SESSION_RETRY_DIAG_INFO_GETTER(ls_id_),
-        0);
-}
-
-void ObQueryRetryCtrl::start_rowlock_retry_wait_event(ObSQLSessionInfo &session)
-{
-  GET_DIAGNOSTIC_INFO->get_ash_stat().begin_retry_wait_event(
-        ObWaitEventIds::ROW_LOCK_WAIT,
-        ACTIVE_SESSION_RETRY_DIAG_INFO_GETTER(holder_tx_id_),
-        ACTIVE_SESSION_RETRY_DIAG_INFO_GETTER(holder_data_seq_num_),
-        ACTIVE_SESSION_RETRY_DIAG_INFO_GETTER(holder_lock_timestamp_));
-}
-
-void ObQueryRetryCtrl::start_px_worker_insufficient_retry_wait_event(
-    ObSQLSessionInfo &session, const ObSqlCtx &sql_ctx)
-{
-  GET_DIAGNOSTIC_INFO->get_ash_stat().begin_retry_wait_event(
-      ObWaitEventIds::INSUFFICIENT_PX_WORKER_RETRY_WAIT,
-      ACTIVE_SESSION_RETRY_DIAG_INFO_GETTER(dop_),
-      ACTIVE_SESSION_RETRY_DIAG_INFO_GETTER(required_px_workers_number_),
-      ACTIVE_SESSION_RETRY_DIAG_INFO_GETTER(admitted_px_workers_number_));
-}
-
-void ObQueryRetryCtrl::start_gts_not_ready_retry_wait_event(ObSQLSessionInfo &session, const int error_code)
-{
-  GET_DIAGNOSTIC_INFO->get_ash_stat().begin_retry_wait_event(
-        ObWaitEventIds::GTS_NOT_READEY_RETRY_WAIT,
-        error_code,
-        ACTIVE_SESSION_RETRY_DIAG_INFO_GETTER(sys_ls_leader_addr_),
-        0);
-}
-
-void ObQueryRetryCtrl::start_log_cb_not_ready_retry_wait_event(ObSQLSessionInfo &session, const int error_code)
-{
-  GET_DIAGNOSTIC_INFO->get_ash_stat().begin_retry_wait_event(
-        ObWaitEventIds::TX_PENDING_LOG_OVERFLOW_RETRY_WAIT,
-        error_code,
-        ACTIVE_SESSION_RETRY_DIAG_INFO_GETTER(ls_id_),
-        0);
-}
-
-void ObQueryRetryCtrl::start_replica_not_readable_retry_wait_event(ObSQLSessionInfo &session)
-{
-  common::ObDiagnosticInfo *di = common::ObLocalDiagnosticInfo::get();
-  if (OB_NOT_NULL(di)) {
-    di->get_ash_stat().begin_retry_wait_event(ObWaitEventIds::REPLICA_NOT_READABLE_RETRY_WAIT,
-        ACTIVE_SESSION_RETRY_DIAG_INFO_GETTER(ls_id_),
-        ACTIVE_SESSION_RETRY_DIAG_INFO_GETTER(tablet_id_),
-        0);
-  }
-}
-
-void ObQueryRetryCtrl::start_other_retry_wait_event(ObSQLSessionInfo &session, const int error_code)
-{
-  GET_DIAGNOSTIC_INFO->get_ash_stat().begin_retry_wait_event(
-        ObWaitEventIds::OTHER_RETRY_WAIT,
-        error_code,
-        0,
-        0);
-}
 }/* ns observer*/
 }/* ns oceanbase */

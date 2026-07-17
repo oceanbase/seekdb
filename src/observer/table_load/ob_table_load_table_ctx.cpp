@@ -30,7 +30,7 @@ namespace observer
 using namespace common;
 using namespace sql;
 using namespace table;
-using namespace obrpc;
+using namespace obcall;
 
 ObTableLoadTableCtx::ObTableLoadTableCtx()
   : coordinator_ctx_(nullptr),
@@ -48,7 +48,7 @@ ObTableLoadTableCtx::ObTableLoadTableCtx()
     des_exec_ctx_(nullptr)
 {
   free_session_ctx_.sessid_ = sql::ObSQLSessionInfo::INVALID_SESSID;
-  allocator_.set_tenant_id(MTL_ID());
+  
 }
 
 ObTableLoadTableCtx::~ObTableLoadTableCtx()
@@ -96,12 +96,12 @@ int ObTableLoadTableCtx::init(const ObTableLoadParam &param,
   } else {
     param_ = param;
     ddl_param_ = ddl_param;
-    if (OB_FAIL(schema_.init(param_.tenant_id_, param_.table_id_, ddl_param.schema_version_))) {
-      LOG_WARN("fail to init table load schema", KR(ret), K(param_.tenant_id_),
+    if (OB_FAIL(schema_.init(param_.table_id_, ddl_param.schema_version_))) {
+      LOG_WARN("fail to init table load schema", KR(ret),
                K(param_.table_id_), K(ddl_param.schema_version_));
-    } else if (OB_FAIL(task_allocator_.init("TLD_TaskPool", param_.tenant_id_))) {
+    } else if (OB_FAIL(task_allocator_.init("TLD_TaskPool"))) {
       LOG_WARN("fail to init allocator", KR(ret));
-    } else if (OB_FAIL(trans_ctx_allocator_.init("TLD_TCtxPool", param_.tenant_id_))) {
+    } else if (OB_FAIL(trans_ctx_allocator_.init("TLD_TCtxPool"))) {
       LOG_WARN("fail to init allocator", KR(ret));
     } else if (OB_FAIL(register_job_stat())) {
       LOG_WARN("fail to register job stat", KR(ret));
@@ -136,7 +136,7 @@ int ObTableLoadTableCtx::register_job_stat()
   } else {
     ObLoadDataGID temp_gid;
     ObLoadDataGID::generate_new_id(temp_gid);
-    job_stat->tenant_id_ = param_.tenant_id_;
+    
     job_stat->job_id_ = param_.table_id_;
     job_stat->job_type_ = "direct";
     job_stat->table_column_ = param_.column_count_;
@@ -145,7 +145,7 @@ int ObTableLoadTableCtx::register_job_stat()
     job_stat->start_time_ = ObTimeUtil::current_time();
     job_stat->max_allowed_error_rows_ = param_.max_error_row_count_;
     job_stat->detected_error_rows_ = 0;
-    job_stat->allocator_.set_tenant_id(param_.tenant_id_);
+    
     if (OB_FAIL(ObTableLoadUtils::deep_copy(schema_.table_name_, job_stat->table_name_,
                                             job_stat->allocator_))) {
       LOG_WARN("fail to deep copy table name", KR(ret));
@@ -233,8 +233,8 @@ int ObTableLoadTableCtx::init_coordinator_ctx(const ObIArray<uint64_t> &column_i
 }
 
 int ObTableLoadTableCtx::init_store_ctx(
-  const ObTableLoadArray<ObTableLoadLSIdAndPartitionId> &partition_id_array,
-  const ObTableLoadArray<ObTableLoadLSIdAndPartitionId> &target_partition_id_array)
+  const ObTableLoadArray<ObTableLoadTabletId> &partition_id_array,
+  const ObTableLoadArray<ObTableLoadTabletId> &target_partition_id_array)
 {
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
@@ -300,7 +300,7 @@ int ObTableLoadTableCtx::alloc_task(ObTableLoadTask *&task)
     ret = OB_NOT_INIT;
     LOG_WARN("ObTableLoadTableCtx not init", KR(ret));
   } else {
-    if (OB_ISNULL(task = task_allocator_.alloc(param_.tenant_id_))) {
+    if (OB_ISNULL(task = task_allocator_.alloc())) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("fail to alloc task", KR(ret));
     }

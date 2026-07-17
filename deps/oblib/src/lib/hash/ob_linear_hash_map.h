@@ -142,7 +142,7 @@
 #include "lib/lock/ob_spin_lock.h"
 #include "lib/container/ob_array.h"
 #include "lib/allocator/ob_malloc.h"
-#include "lib/allocator/ob_mod_define.h"
+#include "lib/utility/ob_mod_define.h"
 #include "lib/allocator/ob_small_allocator.h"
 #include "lib/allocator/ob_concurrent_fifo_allocator.h"
 #include "lib/allocator/ob_external_ref.h"
@@ -225,7 +225,7 @@ private:
     HashMapMemMgrCore();
     ~HashMapMemMgrCore();
     static HashMapMemMgrCore& get_instance();
-    int init(const int64_t tenant_id);
+    int init();
     ObExternalRef* get_external_ref();
     ObSmallAllocator& get_node_alloc();
     ObIAllocator& get_dir_alloc();
@@ -250,7 +250,7 @@ private:
     typedef HashMapMemMgrCore Core;
     HashMapMemMgr() {}
     virtual ~HashMapMemMgr() {}
-    int init(const int64_t tenant_id) { UNUSED(tenant_id); return OB_SUCCESS; }
+    int init() { return OB_SUCCESS; }
     ObExternalRef* get_external_ref();
     ObSmallAllocator& get_node_alloc();
     ObIAllocator& get_dir_alloc();
@@ -268,7 +268,7 @@ private:
   public:
     HashMapMemMgr() : core_() {}
     virtual ~HashMapMemMgr() {}
-    int init(const int64_t tenant_id);
+    int init();
     typedef HashMapMemMgrCore Core;
     ObExternalRef* get_external_ref();
     ObSmallAllocator& get_node_alloc();
@@ -400,7 +400,7 @@ public:
   // Set m_seg_sz = 0 to disable micro-segment.
   // dir_init_sz is the initial size of directory, it doubles when overflows.
   int init(const ObMemAttr &mem_attr);
-  int init(const lib::ObLabel &label = LABEL, uint64_t tenant_id = TENANT_ID);
+  int init(const lib::ObLabel &label = LABEL);
   int init(uint64_t m_seg_sz, uint64_t s_seg_sz, uint64_t dir_init_sz, const ObMemAttr &mem_attr);
   int destroy();
   // Load factor control.
@@ -580,9 +580,9 @@ constexpr const char *ObLinearHashMap<Key, Value, MemMgrTag>::LABEL;
 
 template <typename Key, typename Value, typename MemMgrTag>
 template <typename Dummy>
-int ObLinearHashMap<Key, Value, MemMgrTag>::HashMapMemMgr<UniqueMemMgrTag, Dummy>::init(const int64_t tenant_id)
+int ObLinearHashMap<Key, Value, MemMgrTag>::HashMapMemMgr<UniqueMemMgrTag, Dummy>::init()
 {
-  return core_.init(tenant_id);
+  return core_.init();
 }
 
 template <typename Key, typename Value, typename MemMgrTag>
@@ -649,15 +649,15 @@ ObLinearHashMap<Key, Value, MemMgrTag>::HashMapMemMgrCore::HashMapMemMgrCore()
 
 /* Hash Map memory manager. */
 template <typename Key, typename Value, typename MemMgrTag>
-int ObLinearHashMap<Key, Value, MemMgrTag>::HashMapMemMgrCore::init(const int64_t tenant_id)
+int ObLinearHashMap<Key, Value, MemMgrTag>::HashMapMemMgrCore::init()
 {
   int ret = OB_SUCCESS;
-  dir_alloc_.set_attr(ObMemAttr(tenant_id, "LinearHashMapDi"));
-  cnter_alloc_.set_attr(ObMemAttr(tenant_id, "LinearHashMapCn"));
+  dir_alloc_.set_attr(ObMemAttr("LinearHashMapDi"));
+  cnter_alloc_.set_attr(ObMemAttr("LinearHashMapCn"));
   map_array_.set_attr(SET_USE_500("HashMapArray"));
   // Init node alloc.
   ret = node_alloc_.init(static_cast<int64_t>(sizeof(Node)),
-                         SET_USE_500(ObMemAttr(tenant_id, "LinearHashMapNo")));
+                         SET_USE_500(ObMemAttr("LinearHashMapNo")));
   if (OB_FAIL(ret)) {
     LIB_LOG(WARN, "failed to init node alloc", K(ret));
   }
@@ -687,7 +687,7 @@ ObLinearHashMap<Key, Value, MemMgrTag>::HashMapMemMgrCore::get_instance()
     InitCore(HashMapMemMgrCore &core)
     {
       int ret = OB_SUCCESS;
-      if (OB_FAIL(core.init(OB_SERVER_TENANT_ID))) {
+      if (OB_FAIL(core.init())) {
         LIB_LOG(ERROR, "failed to init MemMgrCore", K(ret));
       }
     }
@@ -904,10 +904,9 @@ int ObLinearHashMap<Key, Value, MemMgrTag>::init(const ObMemAttr &mem_attr)
 }
 
 template <typename Key, typename Value, typename MemMgrTag>
-int ObLinearHashMap<Key, Value, MemMgrTag>::init(const lib::ObLabel &label /*= LABEL*/,
-                                                 uint64_t tenant_id /*=TENANT_ID*/)
+int ObLinearHashMap<Key, Value, MemMgrTag>::init(const lib::ObLabel &label /*=TENANT_ID*/)
 {
-  return init(ObMemAttr(tenant_id, label));
+  return init(ObMemAttr(label));
 }
 
 template <typename Key, typename Value, typename MemMgrTag>
@@ -918,7 +917,7 @@ int ObLinearHashMap<Key, Value, MemMgrTag>::init(uint64_t m_seg_sz, uint64_t s_s
   const double LOAD_FCT_DEF_L_LMT = 0.01;
 
   int ret = OB_SUCCESS;
-  /* Memory alloc from MemMgr, and its static, so label and tenant_id no longer used. */
+  /* Memory alloc from MemMgr, and its static, so label no longer used. */
   memattr_ = mem_attr;
   load_factor_u_limit_ = LOAD_FCT_DEF_U_LMT;
   load_factor_l_limit_ = LOAD_FCT_DEF_L_LMT;
@@ -926,7 +925,7 @@ int ObLinearHashMap<Key, Value, MemMgrTag>::init(uint64_t m_seg_sz, uint64_t s_s
   set_Lp_(0, 0);
   init_haz_();
   init_foreach_();
-  if (OB_SUCCESS != (ret = mem_mgr_.init(mem_attr.tenant_id_)))
+  if (OB_SUCCESS != (ret = mem_mgr_.init()))
   { }
   else if (OB_SUCCESS != (ret = init_d_arr_(m_seg_sz, s_seg_sz, dir_init_sz)))
   { }

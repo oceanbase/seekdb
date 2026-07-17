@@ -3,7 +3,7 @@
 # SUMMARY
 #
 #    Waits for fork-table DDL tasks (DDL_FORK_TABLE=10009) in
-#    `oceanbase.__all_virtual_ddl_task_status`.
+#    `oceanbase.__all_ddl_task_status`.
 #    Supports:
 #    - wait all fork tasks to complete (default)
 #    - wait a specific fork task (source table -> target table)
@@ -168,12 +168,12 @@ while ($wait_counter > 0)
   # - status mode: wait until ALL matching tasks reach target status
   if ($wait_mode == 0)
   {
-    let $fork_task_cnt= `select count(*) from oceanbase.__all_virtual_ddl_task_status where ddl_type = 10009 and ($resolved_src_table_id = 0 or object_id = $resolved_src_table_id) and ($resolved_dest_table_id = 0 or target_object_id = $resolved_dest_table_id)`;
+    let $fork_task_cnt= `select count(*) from oceanbase.__all_ddl_task_status where ddl_type = 10009 and ($resolved_src_table_id = 0 or object_id = $resolved_src_table_id) and ($resolved_dest_table_id = 0 or target_object_id = $resolved_dest_table_id)`;
   }
   if ($wait_mode == 1)
   {
     # mysqltest treats SQL-assigned vars as strings, so do comparisons inside SQL and return a 0/1 flag.
-    let $fork_task_all_reached= `select case when count(*) > 0 and ($resolved_wait_task_cnt = 0 or count(*) >= $resolved_wait_task_cnt) and ifnull(sum(case when status < $resolved_wait_status then 1 else 0 end), 0) = 0 then 1 else 0 end from oceanbase.__all_virtual_ddl_task_status where ddl_type = 10009 and ($resolved_src_table_id = 0 or object_id = $resolved_src_table_id) and ($resolved_dest_table_id = 0 or target_object_id = $resolved_dest_table_id)`;
+    let $fork_task_all_reached= `select case when count(*) > 0 and ($resolved_wait_task_cnt = 0 or count(*) >= $resolved_wait_task_cnt) and ifnull(sum(case when status < $resolved_wait_status then 1 else 0 end), 0) = 0 then 1 else 0 end from oceanbase.__all_ddl_task_status where ddl_type = 10009 and ($resolved_src_table_id = 0 or object_id = $resolved_src_table_id) and ($resolved_dest_table_id = 0 or target_object_id = $resolved_dest_table_id)`;
   }
 
   if ($wait_mode == 0)
@@ -211,7 +211,7 @@ if ($wait_satisfied == 0)
   --echo #   src_table_id=$resolved_src_table_id, dest_table_id=$resolved_dest_table_id
   --echo #   wait_mode=$wait_mode (0=complete, 1=status>=wait_status), wait_status=$resolved_wait_status
   --echo # Current matching ddl tasks:
-  --eval select ddl_type, status, object_id, target_object_id, task_id, gmt_create, gmt_modified from oceanbase.__all_virtual_ddl_task_status where ddl_type = 10009 and ($resolved_src_table_id = 0 or object_id = $resolved_src_table_id) and ($resolved_dest_table_id = 0 or target_object_id = $resolved_dest_table_id) order by gmt_create desc, task_id desc
+  --eval select ddl_type, status, object_id, target_object_id, task_id, gmt_create, gmt_modified from oceanbase.__all_ddl_task_status where ddl_type = 10009 and ($resolved_src_table_id = 0 or object_id = $resolved_src_table_id) and ($resolved_dest_table_id = 0 or target_object_id = $resolved_dest_table_id) order by gmt_create desc, task_id desc
   disconnect obsys_wait;
   connection default;
   die Timeout waiting for ddl tasks (fork table) to complete / reach status;
@@ -234,3 +234,4 @@ let $resolved_dest_table_id=;
 let $wait_src_table_id= 0;
 let $wait_dest_table_id= 0;
 let $wait_task_cnt= 0;
+

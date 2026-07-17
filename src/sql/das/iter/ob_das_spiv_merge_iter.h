@@ -22,8 +22,8 @@
 #include "sql/das/ob_das_ir_define.h"
 #include "sql/engine/expr/ob_expr_vector.h"
 #include "lib/hash/ob_hashset.h"
-#include "share/vector_index/ob_plugin_vector_index_util.h"
-#include "share/vector_type/ob_vector_common_util.h"
+#include "observer/vector_index/ob_plugin_vector_index_util.h"
+#include "storage/vector_type/ob_vector_common_util.h"
 #include "storage/retrieval/ob_spiv_dim_iter.h"
 #include "storage/retrieval/ob_spiv_daat_iter.h"
 #include "storage/retrieval/ob_block_max_iter.h"
@@ -53,7 +53,6 @@ struct ObDASSPIVMergeIterParam : public ObDASIterParam
 public:
   ObDASSPIVMergeIterParam()
     : ObDASIterParam(ObDASIterType::DAS_ITER_SPIV_MERGE),
-      ls_id_(),
       tx_desc_(nullptr),
       snapshot_(nullptr),
       inv_idx_scan_iter_(nullptr),
@@ -70,14 +69,12 @@ public:
 
   virtual bool is_valid() const override
   {
-    return ls_id_.is_valid() &&
-           nullptr != tx_desc_ &&
+    return nullptr != tx_desc_ &&
            nullptr != snapshot_ && 
            nullptr != vec_aux_ctdef_ &&
            nullptr != vec_aux_rtdef_;
   }
 
-  share::ObLSID ls_id_;
   transaction::ObTxDesc *tx_desc_;
   transaction::ObTxReadSnapshot *snapshot_;
 
@@ -92,7 +89,7 @@ public:
   const ObDASSortCtDef *sort_ctdef_;
   ObDASSortRtDef *sort_rtdef_;
   const ObDASScanCtDef *block_max_scan_ctdef_;
-  ObDASScanRtDef *block_max_scan_rtdef_;
+  ObDASScanRtDef *block_max_scan_rtdef_;  
 };
 
 class ObDASSPIVMergeIter : public ObDASIter
@@ -101,8 +98,7 @@ public:
     ObDASSPIVMergeIter()
     : ObDASIter(ObDASIterType::DAS_ITER_SPIV_MERGE),
       mem_context_(nullptr),
-      allocator_(lib::ObMemAttr(MTL_ID(), "SPIVMergeIter"), OB_MALLOC_NORMAL_BLOCK_SIZE), 
-      ls_id_(),
+      allocator_(lib::ObMemAttr("SPIVMergeIter"), OB_MALLOC_NORMAL_BLOCK_SIZE), 
       tx_desc_(nullptr),
       snapshot_(nullptr),
       inv_idx_scan_iter_(nullptr),
@@ -127,13 +123,13 @@ public:
       distance_calc_(nullptr),
       algo_(SPIVAlgo::BLOCK_MAX_WAND),
       set_datum_func_(nullptr),
-      docid_lt_func_(nullptr),
+      docid_lt_func_(nullptr), 
       docid_gt_func_(nullptr),
       spiv_iter_(nullptr),
       is_pre_processed_(false)
       {
-        result_docids_.set_attr(ObMemAttr(MTL_ID(), "SPIVResultDocid"));
-        saved_rowkeys_.set_attr(ObMemAttr(MTL_ID(), "VecIdxKeyRanges"));
+        result_docids_.set_attr(ObMemAttr("SPIVResultDocid"));
+        saved_rowkeys_.set_attr(ObMemAttr("VecIdxKeyRanges"));
       }
   
   virtual ~ObDASSPIVMergeIter() {}
@@ -153,13 +149,12 @@ public:
     dim_docid_value_tablet_id_ = related_tablet_ids.dim_docid_value_tablet_id_;
   }
 
-  void set_ls_id(const share::ObLSID &ls_id) { ls_id_ = ls_id; }
   ObMapType* get_qvec() { return qvec_; };
   int get_aux_data_tbl_idx() {
     int idx = vec_aux_ctdef_->get_spiv_aux_data_tbl_idx();
     if (!is_use_docid()) {
-      idx -= 1;
-    }
+      idx -= 1; 
+    } 
     return idx;
   }
   int push_inv_scan_iter(ObDASScanIter *iter)
@@ -195,8 +190,8 @@ private:
 
   int do_aux_data_table_scan();
   int do_rowkey_docid_table_scan();
-  int reuse_aux_data_iter() { return ObDasVecScanUtils::reuse_iter(ls_id_, aux_data_iter_, aux_data_scan_param_, aux_data_tablet_id_); }
-  int reuse_rowkey_docid_iter() { return ObDasVecScanUtils::reuse_iter(ls_id_, rowkey_docid_iter_, rowkey_docid_scan_param_, rowkey_docid_tablet_id_); }
+  int reuse_aux_data_iter() { return ObDasVecScanUtils::reuse_iter(aux_data_iter_, aux_data_scan_param_, aux_data_tablet_id_); }
+  int reuse_rowkey_docid_iter() { return ObDasVecScanUtils::reuse_iter(rowkey_docid_iter_, rowkey_docid_scan_param_, rowkey_docid_tablet_id_); }
   
   int get_ctdef_with_rowkey_exprs(const ObDASScanCtDef *&ctdef, ObDASScanRtDef *&rtdef);
   int get_rowkey_pre_filter(ObIAllocator &allocator, bool is_vectorized, int64_t batch_count);
@@ -247,7 +242,6 @@ private:
 
   lib::MemoryContext mem_context_;
   ObArenaAllocator allocator_;
-  share::ObLSID ls_id_;
   transaction::ObTxDesc *tx_desc_;
   transaction::ObTxReadSnapshot *snapshot_;
 

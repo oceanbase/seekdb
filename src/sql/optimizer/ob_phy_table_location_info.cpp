@@ -18,7 +18,6 @@
 
 #include "ob_phy_table_location_info.h"
 #include "sql/das/ob_das_location_router.h"
-#include "storage/tx/wrs/ob_black_list.h"
 using namespace oceanbase::common;
 using namespace oceanbase::share;
 using namespace oceanbase::transaction;
@@ -30,7 +29,8 @@ namespace sql
 ObOptTabletLoc::ObOptTabletLoc()
     : partition_id_(OB_INVALID_INDEX),
       first_level_part_id_(OB_INVALID_INDEX),
-      replica_locations_("SqlOptimLocaCac", OB_MALLOC_NORMAL_BLOCK_SIZE)
+      tablet_id_(),
+      local_replica_()
 {
 }
 
@@ -43,103 +43,45 @@ void ObOptTabletLoc::reset()
   partition_id_ = OB_INVALID_INDEX;
   first_level_part_id_ = OB_INVALID_INDEX;
   tablet_id_.reset();
-  ls_id_.reset();
-  replica_locations_.reset();
+  local_replica_.reset();
 }
 
 int ObOptTabletLoc::assign(const ObOptTabletLoc &other)
 {
   int ret = OB_SUCCESS;
   tablet_id_ = other.tablet_id_;
-  ls_id_ = other.ls_id_;
   partition_id_ = other.partition_id_;
   first_level_part_id_ = other.first_level_part_id_;
-  if (OB_FAIL(replica_locations_.assign(other.replica_locations_))) {
-    LOG_WARN("Failed to assign replica locations", K(ret));
-  }
+  local_replica_ = other.local_replica_;
   return ret;
 }
 
-int ObOptTabletLoc::assign_with_only_readable_replica(const ObObjectID &partition_id,
-                                                      const ObObjectID &first_level_part_id,
-                                                      const common::ObTabletID &tablet_id,
-                                                      const ObLSLocation &ls_location,
-                                                      const ObRoutePolicyType route_policy)
+int ObOptTabletLoc::assign_local_replica(const ObObjectID &partition_id,
+                                         const ObObjectID &first_level_part_id,
+                                         const common::ObTabletID &tablet_id,
+                                         const ObLSReplicaLocation &replica)
 {
   int ret = OB_SUCCESS;
   reset();
   partition_id_ = partition_id;
   first_level_part_id_ = first_level_part_id;
   tablet_id_ = tablet_id;
-  ls_id_ = ls_location.get_ls_id();
-  int64_t leader_replica_idx = OB_INVALID_INDEX;
-  for (int64_t i = 0; OB_SUCC(ret) && i < ls_location.get_replica_locations().count(); ++i) {
-    const ObLSReplicaLocation &replica_loc = ls_location.get_replica_locations().at(i);
-    if (replica_loc.is_strong_leader()) {
-      leader_replica_idx = i;
-    }
-    if (ObReplicaTypeCheck::is_readable_replica(replica_loc.get_replica_type())) {
-      transaction::ObBLKey bl_key;
-      bool in_black_list = false;
-      if (OB_FAIL(bl_key.init(replica_loc.get_server(), ls_location.get_tenant_id(), ls_location.get_ls_id()))) {
-        LOG_WARN("init black list key failed", K(ret));
-      } else if (OB_FAIL(ObBLService::get_instance().check_in_black_list(bl_key, in_black_list))) {
-        LOG_WARN("check in black list failed", K(ret));
-      } else if (!in_black_list) {
-        if ((route_policy == COLUMN_STORE_ONLY && replica_loc.get_replica_type() != REPLICA_TYPE_COLUMNSTORE) ||
-            (route_policy != COLUMN_STORE_ONLY && replica_loc.get_replica_type() == REPLICA_TYPE_COLUMNSTORE) ||
-            (route_policy == FORCE_READONLY_ZONE && replica_loc.get_replica_type() != REPLICA_TYPE_READONLY)) {
-          // skip the tmp_replica_loc
-          LOG_TRACE("skip the replica due to the replica policy.", K(ret), K(replica_loc));
-        } else if (OB_FAIL(replica_locations_.push_back(replica_loc))) {
-          LOG_WARN("Failed to push back replica locations",
-                   K(ret), K(i), K(replica_loc), K(replica_locations_));
-        }
-      } else {
-        LOG_INFO("the replica location is invalid", K(bl_key), K(replica_loc));
-      }
-    }
-  }
-
-  // all replicas are in blacklist, add leader replica forcibly.
-  if (OB_SUCC(ret) && 0 == replica_locations_.count()) {
-    if (OB_INVALID_INDEX == leader_replica_idx) {
-      LOG_INFO("there is no leader replica");
-    } else if (OB_FAIL(replica_locations_.push_back(ls_location.get_replica_locations().at(leader_replica_idx)))) {
-      LOG_WARN("failed to push back leader replica", K(ret));
-    }
-  }
-
-  if (OB_SUCC(ret)) {
-    if (OB_UNLIKELY(0 == replica_locations_.count())) {
-      ret = OB_NO_READABLE_REPLICA;
-      LOG_WARN("there has no readable replica", K(ret), K(ls_location.get_replica_locations()));
-    }
-  }
+  local_replica_ = replica;
   return ret;
 }
 
 bool ObOptTabletLoc::is_valid() const
 {
-  // For compatibility considerations, after upgrading from 1.4.x and 2.1 to 2.2, pg_key may be invalid, therefore pg_key is not checked here
-  return OB_INVALID_INDEX != partition_id_;
+  return OB_INVALID_INDEX != partition_id_
+      && tablet_id_.is_valid()
+      && local_replica_.is_valid();
 }
 
 int ObOptTabletLoc::get_strong_leader(ObLSReplicaLocation &replica_location, int64_t &replica_idx) const
 {
-  int ret = OB_LS_LOCATION_LEADER_NOT_EXIST;
-  if (!is_valid()) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), "self", *this);
-  } else {
-    ARRAY_FOREACH_X(replica_locations_, i, cnt, OB_LS_LOCATION_LEADER_NOT_EXIST == ret) {
-      if (replica_locations_.at(i).is_strong_leader()) {
-        replica_location = replica_locations_.at(i);
-        replica_idx = i;
-        ret = OB_SUCCESS;
-      }
-    }
-  }
+  int ret = OB_SUCCESS;
+  replica_location = local_replica_;
+  replica_idx = 0;
   return ret;
 }
 
@@ -150,9 +92,7 @@ int ObOptTabletLoc::get_strong_leader(ObLSReplicaLocation &replica_location) con
 }
 
 ObCandiTabletLoc::ObCandiTabletLoc()
-  : opt_tablet_loc_(),
-    selected_replica_idx_(OB_INVALID_INDEX),
-    priority_replica_idxs_()
+  : opt_tablet_loc_()
 {
 }
 
@@ -164,206 +104,32 @@ ObCandiTabletLoc::~ObCandiTabletLoc()
 int ObCandiTabletLoc::assign(const ObCandiTabletLoc &other)
 {
   int ret = OB_SUCCESS;
-  /*
-  if (OB_UNLIKELY(other.selected_replica_idx_ < 0
-                  || other.selected_replica_idx_ >=
-                  other.opt_tablet_loc_.get_replica_locations().count())) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_ERROR("other select replica idx is invalid", K(ret), K(other.selected_replica_idx_),
-              K(other.opt_tablet_loc_.get_replica_locations().count()),
-              K(other.opt_tablet_loc_));
-  } else
-  */
-
   if (OB_FAIL(opt_tablet_loc_.assign(other.opt_tablet_loc_))) {
     LOG_WARN("fail to assign other opt_tablet_loc_", K(ret), K(other.opt_tablet_loc_));
-  } else if (OB_FAIL(priority_replica_idxs_.assign(other.priority_replica_idxs_))) {
-    LOG_WARN("fail to assign replica idxs", K(ret), K(other.priority_replica_idxs_));
-  } else {
-    selected_replica_idx_ = other.selected_replica_idx_;
   }
   return ret;
 }
 
-int ObCandiTabletLoc::set_selected_replica_idx(int64_t selected_replica_idx)
+bool ObCandiTabletLoc::is_local_server(const ObAddr &server) const
 {
-  int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(selected_replica_idx < 0
-                  || selected_replica_idx >=
-                  opt_tablet_loc_.get_replica_locations().count())) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_ERROR("select replica idx is invalid", K(ret), K(selected_replica_idx),
-              K(opt_tablet_loc_.get_replica_locations().count()), K(opt_tablet_loc_));
-  } else {
-    selected_replica_idx_ = selected_replica_idx;
-  }
-  return ret;
-}
-
-int ObCandiTabletLoc::set_selected_replica_idx_with_priority()
-{
-  int ret = OB_SUCCESS;
-  ObRoutePolicy::CandidateReplica selected_replica;
-  ObRoutePolicy::CandidateReplica cur_replica;
-  int64_t selected_idx = OB_INVALID_INDEX;
-  if (OB_UNLIKELY(priority_replica_idxs_.count() <= 0)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid priority replica count", K(priority_replica_idxs_), K(ret));
-  } else if (priority_replica_idxs_.count() == 1) {
-    selected_idx = priority_replica_idxs_.at(0);
-    if (OB_FAIL(set_selected_replica_idx(selected_idx))) {
-      LOG_WARN("fail to set selected replica idx", K(priority_replica_idxs_), K(ret));
-    }
-  } else if (priority_replica_idxs_.count() > 1) {
-    // Multiple priorities, local priority first; if priorities of multiple replicas are the same, select randomly
-    ObSEArray<int64_t, 16> same_priority_ids;
-    bool is_first = true;
-    selected_replica.attr_.pos_type_ = ObRoutePolicy::POSITION_TYPE_MAX;
-    for (int64_t i = 0; OB_SUCC(ret) && i < priority_replica_idxs_.count(); ++i) {
-      int64_t cur_priority_idx = priority_replica_idxs_.at(i);
-      cur_replica.reset();
-      if (OB_FAIL(get_priority_replica(cur_priority_idx, cur_replica))) {
-        LOG_WARN("fail to get priority replca", K(cur_priority_idx), K(ret));
-      } else if (is_first) {
-        is_first = false;
-        selected_replica = cur_replica;
-        if (OB_FAIL(same_priority_ids.push_back(cur_priority_idx))) {
-          LOG_WARN("fail to push back id", K(same_priority_ids), K(cur_priority_idx), K(ret));
-        }
-      } else if (cur_replica.attr_.pos_type_ == selected_replica.attr_.pos_type_) {
-        if (OB_FAIL(same_priority_ids.push_back(cur_priority_idx))) {
-          LOG_WARN("fail to push back id", K(same_priority_ids), K(cur_priority_idx), K(ret));
-        }
-      } else if (cur_replica.attr_.pos_type_ < selected_replica.attr_.pos_type_) {
-        selected_replica = cur_replica;
-        same_priority_ids.reset();
-        if (OB_FAIL(same_priority_ids.push_back(cur_priority_idx))) {
-          LOG_WARN("fail to push back id", K(same_priority_ids), K(cur_priority_idx), K(ret));
-        }
-      } else {
-        /*cur_replica.attr_.pos_type_ < selected_replica.attr_.pos_type_ do nothing*/
-      }
-    }
-    if (OB_SUCC(ret)) {
-      int64_t rand_idx = rand() % same_priority_ids.count();
-      selected_idx = same_priority_ids.at(rand_idx);
-      if (OB_FAIL(set_selected_replica_idx(selected_idx))) {
-        LOG_WARN("fail to set selected replica idx", K(priority_replica_idxs_), K(ret));
-      }
-    }
-  } else {/*do nothing*/}
-
-  return ret;
-}
-
-int ObCandiTabletLoc::add_priority_replica_idx(int64_t priority_replica_idx)
-{
-  int ret = OB_SUCCESS;
-  if (OB_FAIL(priority_replica_idxs_.push_back(priority_replica_idx))) {
-    LOG_WARN("fail to push back priority replica idx", K(priority_replica_idx), K(ret));
-  }
-  return ret;
-}
-
-int ObCandiTabletLoc::get_priority_replica(int64_t selected_replica_idx,
-                                           share::ObLSReplicaLocation &replica_loc) const
-{
-  int ret = OB_SUCCESS;
-  if (OB_FAIL(get_priority_replica_base(selected_replica_idx, replica_loc))) {
-    LOG_WARN("fail to get priority replica", K(replica_loc), K(ret));
-  }
-  return ret;
-}
-
-int ObCandiTabletLoc::get_priority_replica(int64_t selected_replica_idx,
-                                           ObRoutePolicy::CandidateReplica &replica_loc) const
-{
-  int ret = OB_SUCCESS;
-  if (OB_FAIL(get_priority_replica_base(selected_replica_idx, replica_loc))) {
-    LOG_WARN("fail to get priority replica", K(replica_loc), K(ret));
-  }
-  return ret;
-}
-
-template<class T>
-int ObCandiTabletLoc::get_priority_replica_base(int64_t selected_replica_idx, T &replica_loc) const
-{
-  int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(OB_INVALID_INDEX == selected_replica_idx)) {
-    ret = OB_NOT_INIT;
-    LOG_ERROR("ObCandiTabletLoc is not inited", K(ret), K(opt_tablet_loc_));
-  } else {
-    const ObIArray<ObRoutePolicy::CandidateReplica> &replica_loc_list = opt_tablet_loc_.get_replica_locations();
-    if (OB_UNLIKELY(selected_replica_idx < 0 || selected_replica_idx >= replica_loc_list.count())) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_ERROR("select replica idx is invalid", K(ret),
-                K(selected_replica_idx), K(replica_loc_list.count()));
-    } else {
-      replica_loc = replica_loc_list.at(selected_replica_idx);
-    }
-  }
-  return ret;
-}
-
-bool ObCandiTabletLoc::is_server_in_replica(const ObAddr &server,
-                                                      int64_t &idx) const
-{
-  int ret = OB_SUCCESS;
-  bool found_flag = false;
-  ObRoutePolicy::CandidateReplica tmp_replica;
-  idx = 0;
-  for (int64_t replica_idx = 0;
-       !found_flag && OB_SUCC(ret) && replica_idx < get_partition_location().get_replica_locations().count();
-       ++replica_idx) {
-    tmp_replica.reset();
-    if (OB_FAIL(get_priority_replica(replica_idx, tmp_replica))) {
-      LOG_WARN("fail to get priority replica", K(replica_idx), K(ret));
-    } else if (tmp_replica.get_server() == server) {
-      idx = replica_idx;
-      found_flag = true;
-    }
-  }
-  return found_flag;
+  return opt_tablet_loc_.get_local_replica().get_server() == server;
 }
 
 int ObCandiTabletLoc::get_selected_replica(share::ObLSReplicaLocation &replica_loc) const
 {
-  int ret = OB_SUCCESS;
-  if (OB_FAIL(get_priority_replica(selected_replica_idx_, replica_loc))) {
-    LOG_WARN("fail to get priority replica", K(replica_loc), K(selected_replica_idx_), K(ret));
-  }
-  return ret;
+  replica_loc = opt_tablet_loc_.get_local_replica();
+  return OB_SUCCESS;
 }
 
-int ObCandiTabletLoc::get_selected_replica(ObRoutePolicy::CandidateReplica &replica_loc) const
+int ObCandiTabletLoc::set_local_tablet_loc(const ObObjectID &partition_id,
+                                           const ObObjectID &first_level_part_id,
+                                           const common::ObTabletID &tablet_id,
+                                           const ObLSReplicaLocation &replica)
 {
-  int ret = OB_SUCCESS;
-  if (OB_FAIL(get_priority_replica(selected_replica_idx_, replica_loc))) {
-    LOG_WARN("fail to get priority replica", K(replica_loc), K(selected_replica_idx_), K(ret));
-  }
-  return ret;
-}
-
-int ObCandiTabletLoc::set_part_loc_with_only_readable_replica(const ObObjectID &partition_id,
-                                                              const ObObjectID &first_level_part_id,
-                                                              const common::ObTabletID &tablet_id,
-                                                              const ObLSLocation &partition_location,
-                                                              const ObRoutePolicyType route_policy)
-{
-  int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(has_selected_replica())) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_ERROR("partition location has not been set yet, but replica idx has been selected",
-              K(ret), K(*this), K(partition_location));
-  } else if (OB_FAIL(opt_tablet_loc_.assign_with_only_readable_replica(partition_id,
-                                                                       first_level_part_id,
-                                                                       tablet_id,
-                                                                       partition_location,
-                                                                       route_policy))) {
-    LOG_WARN("fail to assign partition location with only readable replica",
-             K(ret), K(partition_location));
-  }
-  return ret;
+  return opt_tablet_loc_.assign_local_replica(partition_id,
+                                              first_level_part_id,
+                                              tablet_id,
+                                              replica);
 }
 
 ObCandiTableLoc::ObCandiTableLoc()
@@ -398,43 +164,13 @@ int ObCandiTableLoc::all_select_local_replica_or_leader(bool &is_on_same_server,
   int ret = OB_SUCCESS;
   is_on_same_server = true;
   ObAddr first_server;
-  ObLSReplicaLocation replica_location;
-  int64_t replica_idx = OB_INVALID_INDEX;
-  int64_t local_replica_idx = OB_INVALID_INDEX;
-  ObAddr replica_addr;
   for (int64_t i = 0; OB_SUCC(ret) && i < candi_tablet_locs_.count(); ++i) {
-    replica_location.reset();
-    replica_idx = OB_INVALID_INDEX;
-    local_replica_idx = OB_INVALID_INDEX;
-    ObCandiTabletLoc &phy_part_loc_info = candi_tablet_locs_.at(i);
-    replica_addr.reset();
-    if (OB_FAIL(phy_part_loc_info.get_partition_location().get_strong_leader(replica_location, replica_idx))) {
-      LOG_WARN("fail to get leader", K(ret), K(phy_part_loc_info.get_partition_location()));
-    } else {
-      replica_addr = replica_location.get_server();
-      if (phy_part_loc_info.is_server_in_replica(local_server, local_replica_idx)) {
-        if (replica_idx != local_replica_idx) {
-          LOG_TRACE("about to choose local replica rather than leader replica for duplicate table", K(replica_idx), K(local_replica_idx));
-          replica_idx = local_replica_idx;
-          replica_addr = local_server;
-        }
-      }
-    }
-    if (OB_FAIL(ret)) {
-      //do nothing ...
-    } else if (phy_part_loc_info.has_selected_replica()
-        && phy_part_loc_info.get_selected_replica_idx() != replica_idx) {
-      // FIXME qianfu The weak attribute of the subquery and the main query are different, which might cause this error, it will be fixed later
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("selected replica is not leader", K(ret), K(phy_part_loc_info));
-    } else if (OB_FAIL(phy_part_loc_info.set_selected_replica_idx(replica_idx))) {
-      LOG_WARN("fail to set selected replica idx", K(ret), K(replica_idx), K(phy_part_loc_info));
-    } else {
-      if (0 == i) {
-        first_server = replica_addr;
-      } else if (first_server != replica_addr) {
-        is_on_same_server = false;
-      }
+    const ObAddr &replica_addr =
+        candi_tablet_locs_.at(i).get_partition_location().get_local_replica().get_server();
+    if (0 == i) {
+      first_server = replica_addr;
+    } else if (first_server != replica_addr) {
+      is_on_same_server = false;
     }
   }
   if (OB_SUCC(ret) && is_on_same_server) {
@@ -449,27 +185,13 @@ int ObCandiTableLoc::all_select_leader(bool &is_on_same_server,
   int ret = OB_SUCCESS;
   is_on_same_server = true;
   ObAddr first_server;
-  ObLSReplicaLocation replica_location;
-  int64_t replica_idx = OB_INVALID_INDEX;
   for (int64_t i = 0; OB_SUCC(ret) && i < candi_tablet_locs_.count(); ++i) {
-    replica_location.reset();
-    replica_idx = OB_INVALID_INDEX;
-    ObCandiTabletLoc &phy_part_loc_info = candi_tablet_locs_.at(i);
-    if (OB_FAIL(phy_part_loc_info.get_partition_location().get_strong_leader(replica_location, replica_idx))) {
-      LOG_WARN("fail to get leader", K(ret), K(phy_part_loc_info.get_partition_location()));
-    } else if (phy_part_loc_info.has_selected_replica()
-               && phy_part_loc_info.get_selected_replica_idx() != replica_idx) {
-      // FIXME qianfu The weak attribute of the subquery and the main query are different, which might cause this error, it will be fixed later
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("selected replica is not leader", K(ret), K(phy_part_loc_info));
-    } else if (OB_FAIL(phy_part_loc_info.set_selected_replica_idx(replica_idx))) {
-      LOG_WARN("fail to set selected replica idx", K(ret), K(replica_idx), K(phy_part_loc_info));
-    } else {
-      if (0 == i) {
-        first_server = replica_location.get_server();
-      } else if (first_server != replica_location.get_server()) {
-        is_on_same_server = false;
-      }
+    const ObAddr &replica_addr =
+        candi_tablet_locs_.at(i).get_partition_location().get_local_replica().get_server();
+    if (0 == i) {
+      first_server = replica_addr;
+    } else if (first_server != replica_addr) {
+      is_on_same_server = false;
     }
   }
   if (OB_SUCC(ret) && is_on_same_server) {
@@ -477,9 +199,6 @@ int ObCandiTableLoc::all_select_leader(bool &is_on_same_server,
   }
   return ret;
 }
-// Currently only used for mv, if to be used elsewhere, note the OB_NO_READABLE_REPLICA return code,
-// Check if the usage is appropriate, as it involves retries.
-
 int ObCandiTableLoc::get_all_servers(common::ObIArray<common::ObAddr> &servers) const
 {
   int ret = OB_SUCCESS;

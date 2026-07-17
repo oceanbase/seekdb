@@ -39,8 +39,6 @@ public:
   TestMicroBlockDecoder(): tenant_ctx_(500)
   {
     share::ObTenantEnv::set_tenant(&tenant_ctx_);
-    encoder_.data_buffer_.allocator_.set_tenant_id(500);
-    encoder_.row_buf_holder_.allocator_.set_tenant_id(500);
   }
   static const int64_t ROWKEY_CNT = 1;
   static const int64_t COLUMN_CNT = ObExtendType - 1;
@@ -86,7 +84,6 @@ void TestMicroBlockDecoder::SetUp()
   ObTableSchema table;
   ObColumnSchemaV2 col;
   table.reset();
-  table.set_tenant_id(1);
   table.set_tablegroup_id(1);
   table.set_database_id(1);
   table.set_table_id(tid);
@@ -111,9 +108,7 @@ void TestMicroBlockDecoder::SetUp()
         || ObTextType == type){
       col.set_collation_type(CS_TYPE_UTF8MB4_GENERAL_CI);
       if (ObCharType == type) {
-        const int64_t max_char_length = lib::is_oracle_mode()
-                                        ? OB_MAX_ORACLE_CHAR_LENGTH_BYTE
-                                        : OB_MAX_CHAR_LENGTH;
+        const int64_t max_char_length = OB_MAX_CHAR_LENGTH;
         col.set_data_length(max_char_length);
       }
     } else {

@@ -189,3 +189,4 @@ DEF_TO_STRING(ObBatchSelector)
   J_OBJ_END();
   return pos;
 }
+

@@ -116,18 +116,10 @@ bool ObPackageStateVersion::operator ==(const ObPackageStateVersion &other) cons
 
 void ObPackageStateVersion::set_merge_version_and_public_syn_cnt(const ObPLPackage &head, const ObPLPackage *body)
 {
-  if (OB_SYS_TENANT_ID == get_tenant_id_by_object_id(head.get_id())) {
-    header_merge_version_ = head.get_sys_schema_version();
-  } else {
-    header_merge_version_ = head.get_tenant_schema_version();
-  }
+  header_merge_version_ = head.get_sys_schema_version();
   header_public_syn_count_ = head.get_public_syn_count();
   if (OB_NOT_NULL(body)) {
-    if (OB_SYS_TENANT_ID == get_tenant_id_by_object_id(body->get_id())) {
-      body_merge_version_ = body->get_sys_schema_version();
-    } else {
-      body_merge_version_ = body->get_tenant_schema_version();
-    }
+    body_merge_version_ = body->get_sys_schema_version();
     body_public_syn_count_ = body->get_public_syn_count();
   }
 }
@@ -509,7 +501,7 @@ int ObPLPackageState::encode_pkg_var_value(ObPLExecCtx &pl_ctx,
     LOG_WARN("fail to check value oversize", K(ret));
   } else if (is_oversize_value) {
     value = *cur_ser_val;
-  } else if (OB_FAIL(value_map.create(4, ObModIds::OB_PL_TEMP, ObModIds::OB_HASH_NODE, MTL_ID()))) {
+  } else if (OB_FAIL(value_map.create(4, ObModIds::OB_PL_TEMP, ObModIds::OB_HASH_NODE))) {
     LOG_WARN("fail to create hash map", K(ret));
   } else if (OB_FAIL(decode_pkg_var_value(*cur_ser_val, state_version, value_map))) {
     LOG_WARN("fail to decode pkg var value", K(ret));
@@ -568,9 +560,8 @@ int ObPLPackageState::encode_pkg_var_value(ObPLExecCtx &pl_ctx,
 
     if (OB_SUCC(ret)) {
       int64_t max_serialize_size = 0;
-      omt::ObTenantConfigGuard tenant_config(TENANT_CONF(MTL_ID()));
-      if (OB_LIKELY(tenant_config.is_valid())) {
-        max_serialize_size = tenant_config->package_state_sync_max_size;
+      if (OB_LIKELY(true)) {
+        max_serialize_size = GCONF.package_state_sync_max_size;
       } else {
         ret = OB_ERR_UNEXPECTED;
         LOG_ERROR("invalid tenant_config", K(ret));
@@ -723,7 +714,7 @@ int ObPLPackageState::encode_info_to_string_kvs(ObPLExecCtx &pl_ctx,
   return ret;
 }
 
-int ObPLPackageState::need_use_new_sync_policy(int64_t tenant_id, bool &use_new)
+int ObPLPackageState::need_use_new_sync_policy(bool &use_new)
 {
   int ret = OB_SUCCESS;
   uint64_t data_version = 0;
@@ -746,18 +737,18 @@ int ObPLPackageState::convert_changed_info_to_string_kvs(ObPLExecCtx &pl_ctx, Ob
   ObSEArray<ObString, 4> old_keys;
   const share::schema::ObPackageInfo *package_info = NULL;
   bool is_valid = false;
-  const uint64_t tenant_id = get_tenant_id_by_object_id(package_id_);
+  
   share::schema::ObSchemaGetterGuard schema_guard;
-  ObPLPackageGuard package_guard(MTL_ID());
+  ObPLPackageGuard package_guard{};
 
   if (OB_ISNULL(pl_ctx.exec_ctx_) || OB_ISNULL(pl_ctx.exec_ctx_->get_my_session())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected pointer", K(ret));
   } else if (OB_FAIL(package_guard.init())) {
     LOG_WARN("fail to init package guard", K(ret));
-  } else if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(MTL_ID(), schema_guard))) {
+  } else if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(schema_guard))) {
     LOG_WARN("fail to get tenant schema guard", K(ret));
-  } else if (OB_FAIL(schema_guard.get_package_info(tenant_id, package_id_, package_info))) {
+  } else if (OB_FAIL(schema_guard.get_package_info( package_id_, package_info))) {
     LOG_WARN("fail to get package info", K(ret));
   }
   if (OB_SUCC(ret) && OB_NOT_NULL(package_info)) {
@@ -777,7 +768,7 @@ int ObPLPackageState::convert_changed_info_to_string_kvs(ObPLExecCtx &pl_ctx, Ob
       } else if (OB_FAIL(disable_expired_user_variables(*pl_ctx.exec_ctx_->get_my_session(), key))) {
         LOG_WARN("fail to disable expired user var", K(ret));
       }
-    } else if (OB_FAIL(need_use_new_sync_policy(MTL_ID(), use_new))) {
+    } else if (OB_FAIL(need_use_new_sync_policy(use_new))) {
       LOG_WARN("fail to get sync policy", K(ret));
     } else if (use_new) {
       if (is_package_info_changed()) {

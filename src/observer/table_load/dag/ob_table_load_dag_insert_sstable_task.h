@@ -17,7 +17,7 @@
 #pragma once
 
 #include "observer/table_load/dag/ob_table_load_dag_task.h"
-#include "storage/ddl/ob_cg_macro_block_write_task.h"
+#include "storage/ddl/ob_ddl_macro_block_write_task.h"
 
 namespace oceanbase
 {
@@ -121,52 +121,6 @@ private:
   int64_t thread_idx_;
 };
 
-class ObTableLoadMemoryFriendWriteMacroBlockPipeline
-  : public ObDDLMemoryFriendWriteMacroBlockPipeline
-{
-public:
-  ObTableLoadMemoryFriendWriteMacroBlockPipeline();
-  // for unittest
-  ObTableLoadMemoryFriendWriteMacroBlockPipeline(ObITabletSliceRowIterator *row_iterator);
-  virtual ~ObTableLoadMemoryFriendWriteMacroBlockPipeline();
-  virtual int init();
-  virtual int get_next_chunk(ObChunk *&chunk) override;
-  virtual void postprocess(int &ret_code);
-  virtual int finish_chunk(ObChunk *chunk)
-  {
-    UNUSED(chunk);
-    return OB_SUCCESS;
-  }
-  void reset();
-
-protected:
-  bool is_inited_;
-  ObITabletSliceRowIterator *row_iterator_;
-  ObChunk chunk_;
-  ObBatchDatumRowsWriteOp batch_datum_rows_write_op_;
-  ObCGRowFileWriterOp cg_row_file_writer_op_;
-};
-
-class ObTableLoadMemoryFriendWriteMacroBlockTask final
-  : public ObTableLoadMemoryFriendWriteMacroBlockPipeline,
-    public ObTableLoadDagInsertSSTableTaskBase
-{
-  using ObTableLoadDagTaskBase::dag_;
-
-public:
-  ObTableLoadMemoryFriendWriteMacroBlockTask(ObTableLoadDagInsertSSTableTaskBase *parent,
-                                             storage::ObDirectLoadIMergeTask *merge_task);
-  virtual ~ObTableLoadMemoryFriendWriteMacroBlockTask() = default;
-  int init() override;
-  int generate_next_task(share::ObITask *&next_task) override;
-  void postprocess(int &ret_code) override;
-
-protected:
-  storage::ObDirectLoadIMergeTask *merge_task_;
-};
-
-// for the sorting path of direct laod, incremental direct load, row storage, and column storage
-// replica writes all use ObTableLoadMacroBlockWriteTask
 class ObTableLoadMacroBlockWriteTask final : public share::ObITask,
                                              public ObTableLoadDagInsertSSTableTaskBase
 {

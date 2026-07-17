@@ -17,6 +17,7 @@
 #define _OCEANBASE_ROOTSERVER_OB_SYS_TENANT_LOAD_SYS_PACKAGE_SERVICE_H_ 1
 
 #include "lib/utility/ob_macro_utils.h"
+#include "lib/task/ob_timer.h"
 #include "logservice/ob_log_base_type.h"
 #include "observer/ob_sys_tenant_load_sys_package_task.h"
 #include "share/scn.h"
@@ -25,7 +26,7 @@ namespace oceanbase
 {
 namespace rootserver
 {
-class ObSysTenantLoadSysPackageService : public logservice::ObIRoleChangeSubHandler,
+class ObSysTenantLoadSysPackageService : public logservice::ObILocalLogHandler,
                                          public logservice::ObICheckpointSubHandler,
                                          public logservice::ObIReplaySubHandler
 {
@@ -41,11 +42,9 @@ public:
   int wait();
   void destroy();
 
-  // for ObIRoleChangeSubHandler
-  virtual int switch_to_leader() override;
-  virtual void switch_to_follower_forcedly() override;
-  virtual int switch_to_follower_gracefully() override;
-  virtual int resume_leader() override { return switch_to_leader(); }
+  // for ObILocalLogHandler
+  int activate() override;
+  void deactivate() override;
 
   // for checkpoint/replay
   virtual share::SCN get_rec_scn() override { return share::SCN::max_scn(); }
@@ -59,7 +58,7 @@ public:
 
 private:
   bool inited_;
-  int tg_id_;
+  common::ObTimer timer_;
   ObSysTenantLoadSysPackageTask task_;
 
 private:

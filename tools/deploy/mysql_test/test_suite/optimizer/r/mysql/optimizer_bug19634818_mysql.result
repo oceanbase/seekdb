@@ -45,7 +45,7 @@ Outputs & filters:
       group([t1.a]), agg_func([T_FUN_SUM(t1.b)])
  11 - output([t1.b], [t1.a]), filter(nil), rowset=16
       access([t1.__pk_increment], [t1.b], [t1.a]), partitions(p[0-4])
-      is_index_back=true, is_global_index=false,
+      is_index_back=true, is_global_index=false, 
       range_key([t1.a], [t1.__pk_increment]), range(MIN,MIN ; MAX,MAX)always true
 select /*+ index(t1 I1) */ distinct sum(b) a from t1 group by a;
 +------+

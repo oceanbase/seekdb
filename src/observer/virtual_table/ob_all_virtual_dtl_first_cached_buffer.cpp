@@ -25,10 +25,9 @@ using namespace oceanbase::observer;
 using namespace oceanbase::share;
 
 ObAllVirtualDtlFirstCachedBufferIterator::ObAllVirtualDtlFirstCachedBufferIterator(ObArenaAllocator *allocator) :
-  cur_tenant_idx_(0),
+  done_(false),
   cur_buffer_idx_(0),
   iter_allocator_(allocator),
-  tenant_ids_(),
   buffer_infos_()
 {}
 
@@ -39,29 +38,26 @@ ObAllVirtualDtlFirstCachedBufferIterator::~ObAllVirtualDtlFirstCachedBufferItera
 
 void ObAllVirtualDtlFirstCachedBufferIterator::reset()
 {
-  cur_tenant_idx_ = 0;
+  
+  done_ = false;
   cur_buffer_idx_ = 0;
-  tenant_ids_.reset();
   buffer_infos_.reset();
   iter_allocator_->reuse();
 }
 
 void ObAllVirtualDtlFirstCachedBufferIterator::destroy()
 {
-  tenant_ids_.reset();
   buffer_infos_.reset();
   iter_allocator_ = nullptr;
 }
 
-int ObAllVirtualDtlFirstCachedBufferIterator::get_tenant_ids()
+int ObAllVirtualDtlFirstCachedBufferIterator::prepare_tenants()
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(NULL == GCTX.omt_)) {
     ret = OB_NOT_INIT;
     SERVER_LOG(WARN, "GCTX.omt_ shouldn't be NULL",
         K_(GCTX.omt), K(GCTX), K(ret));
-  } else if (OB_FAIL(GCTX.omt_->get_mtl_tenant_ids(tenant_ids_))) {
-    LOG_WARN("failed to get_mtl_tenant_ids", K(ret));
   }
   return ret;
 }
@@ -70,15 +66,14 @@ int ObAllVirtualDtlFirstCachedBufferIterator::init()
 {
   int ret = OB_SUCCESS;
   buffer_infos_.set_block_allocator(ObWrapperAllocator(iter_allocator_));
-  if (OB_FAIL(get_tenant_ids())) {
+  if (OB_FAIL(prepare_tenants())) {
     LOG_WARN("failed to get tenant ids", K(ret));
   }
   return ret;
 }
 
-int ObAllVirtualDtlFirstCachedBufferIterator::get_tenant_buffer_infos(uint64_t tenant_id)
+int ObAllVirtualDtlFirstCachedBufferIterator::get_tenant_buffer_infos()
 {
-  UNUSED(tenant_id);
   return OB_SUCCESS;
 }
 
@@ -88,14 +83,11 @@ int ObAllVirtualDtlFirstCachedBufferIterator::get_next_tenant_buffer_infos()
   if (0 != buffer_infos_.count()) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("mem pool infos must be empty", K(ret));
-  } else if (cur_tenant_idx_ < tenant_ids_.count()) {
-    do {
-      if (OB_FAIL(get_tenant_buffer_infos(tenant_ids_.at(cur_tenant_idx_)))) {
-        LOG_WARN("failed to get dtl memory pool infos", K(ret));
-      } else {
-        ++cur_tenant_idx_;
-      }
-    } while (OB_SUCC(ret) && 0 == buffer_infos_.count() && cur_tenant_idx_ < tenant_ids_.count());
+  } else if (!done_) {
+    done_ = true;
+    if (OB_FAIL(get_tenant_buffer_infos())) {
+      LOG_WARN("failed to get dtl memory pool infos", K(ret));
+    }
   } else {
     ret = OB_ITER_END;
   }

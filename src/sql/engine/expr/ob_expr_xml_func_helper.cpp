@@ -18,7 +18,7 @@
 #include "sql/engine/expr/ob_expr_xml_func_helper.h"
 #include "sql/engine/expr/ob_expr_sql_udt_utils.h"
 #include "sql/ob_spi.h"
-#include "lib/xml/ob_binary_aggregate.h"
+#include "common/xml/ob_binary_aggregate.h"
 
 using namespace oceanbase::common;
 using namespace oceanbase::sql;
@@ -27,17 +27,6 @@ namespace oceanbase
 {
 namespace sql
 {
-uint64_t ObXMLExprHelper::get_tenant_id(ObSQLSessionInfo *session)
-{
-  uint64_t tenant_id = 0;
-  if (OB_ISNULL(session)) {
-  } else if (session->get_ddl_info().is_ddl_check_default_value()) {
-    tenant_id = OB_SERVER_TENANT_ID;
-  } else {
-    tenant_id = session->get_effective_tenant_id();
-  }
-  return tenant_id;
-}
 
 int ObXMLExprHelper::add_binary_to_element(ObMulModeMemCtx* mem_ctx, ObString binary_value, ObXmlElement &element)
 {
@@ -559,7 +548,7 @@ int ObXMLExprHelper::get_xml_base_from_expr(const ObExpr *expr,
     } else {
       ret = OB_ERR_INVALID_TYPE_FOR_OP;
       LOG_USER_ERROR(OB_ERR_INVALID_TYPE_FOR_OP, ob_obj_type_str(val_type), "xmltype");
-      LOG_WARN("inconsistent datatypes", K(ret), K(ob_obj_type_str(val_type)));
+      LOG_ERROR("inconsistent datatypes", K(ret), K(ob_obj_type_str(val_type)));
     }
   }
   return ret;
@@ -632,12 +621,12 @@ int ObXMLExprHelper::check_xpath_valid(ObPathExprIter &xpath_iter, bool is_root)
     switch (first_axis) {
       case ObPathNodeAxis::ANCESTOR: {
         if (is_root) {
-          ret = OB_ERR_XPATH_INVALID_NODE; // ORA-19276: XPST0005 - XPath step specifies an invalid element/attribute name:
+          ret = OB_ERR_XPATH_INVALID_NODE; // XPST0005 - XPath step specifies an invalid element/attribute name:
           LOG_USER_ERROR(OB_ERR_TOO_MANY_PREFIX_DECLARE, xpath_iter.get_path_str().length(), xpath_iter.get_path_str().ptr());
         } else if (xpath_iter.get_path_str()[0] == '/') {
           break;  // '/' in first will not report error
         } else {
-          ret = OB_ERR_XQUERY_UNSUPPORTED; // ORA-19110: unsupported XQuery expression
+          ret = OB_ERR_XQUERY_UNSUPPORTED; // unsupported XQuery expression
           LOG_WARN("xquery unsupported", K(ret));
         }
         break;
@@ -645,30 +634,30 @@ int ObXMLExprHelper::check_xpath_valid(ObPathExprIter &xpath_iter, bool is_root)
       case ObPathNodeAxis::SELF:
       case ObPathNodeAxis::ANCESTOR_OR_SELF: {
         if (is_root && first_type != ObSeekType::TEXT && first_type != ObSeekType::NODES) {
-          ret = OB_ERR_XPATH_INVALID_NODE; // ORA-19276: XPST0005 - XPath step specifies an invalid element/attribute name:
+          ret = OB_ERR_XPATH_INVALID_NODE; // XPST0005 - XPath step specifies an invalid element/attribute name:
           LOG_USER_ERROR(OB_ERR_TOO_MANY_PREFIX_DECLARE, xpath_iter.get_path_str().length(), xpath_iter.get_path_str().ptr());
         } else if (is_root) {
         } else if (xpath_iter.get_path_str()[0] == '.' || xpath_iter.get_path_str()[0] == '/') {
              // '.' or '/' in first will not report error
         } else {
-          ret = OB_ERR_XQUERY_UNSUPPORTED; // ORA-19110: unsupported XQuery expression
+          ret = OB_ERR_XQUERY_UNSUPPORTED; // unsupported XQuery expression
           LOG_WARN("xquery unsupported", K(ret));
         }
         break;
       }
       case ObPathNodeAxis::PARENT: {
         if (is_root) {
-          ret = OB_ERR_XPATH_NO_NODE; // ORA-19277: XPST0005 - XPath step specifies an item type matching no node:
+          ret = OB_ERR_XPATH_NO_NODE; // XPST0005 - XPath step specifies an item type matching no node:
           LOG_USER_ERROR(OB_ERR_TOO_MANY_PREFIX_DECLARE, xpath_iter.get_path_str().length(), xpath_iter.get_path_str().ptr());
         } else {
-          ret = OB_ERR_XQUERY_UNSUPPORTED; // ORA-19110: unsupported XQuery expression
+          ret = OB_ERR_XQUERY_UNSUPPORTED; // unsupported XQuery expression
           LOG_WARN("xquery unsupported", K(ret));
         }
         break;
       }
       case ObPathNodeAxis::ATTRIBUTE: {
         if (is_root) {
-          ret = OB_ERR_XPATH_INVALID_NODE; // ORA-19276: XPST0005 - XPath step specifies an invalid element/attribute name:
+          ret = OB_ERR_XPATH_INVALID_NODE; // XPST0005 - XPath step specifies an invalid element/attribute name:
           LOG_USER_ERROR(OB_ERR_TOO_MANY_PREFIX_DECLARE, xpath_iter.get_path_str().length(), xpath_iter.get_path_str().ptr());
         }
         break;
@@ -682,7 +671,7 @@ int ObXMLExprHelper::check_xpath_valid(ObPathExprIter &xpath_iter, bool is_root)
     switch (first_type) {
       case ObSeekType::TEXT: {
         if (is_root && first_axis == ObPathNodeAxis::CHILD) {
-          ret = OB_ERR_XPATH_NO_NODE; // ORA-19277: XPST0005 - XPath step specifies an item type matching no node:
+          ret = OB_ERR_XPATH_NO_NODE; // XPST0005 - XPath step specifies an item type matching no node:
           LOG_USER_ERROR(OB_ERR_TOO_MANY_PREFIX_DECLARE, xpath_iter.get_path_str().length(), xpath_iter.get_path_str().ptr());
         }
         break;
@@ -751,7 +740,7 @@ int ObXMLExprHelper::binary_agg_xpath_result(ObPathExprIter &xpath_iter,
   xpath_iter.set_add_ns(add_ns);
   ObBinAggSerializer bin_agg(mem_ctx->allocator_, ObBinAggType::AGG_XML, static_cast<uint8_t>(M_CONTENT));
   bin_agg.close_merge_text();
-  if (add_ns && OB_FAIL(ns_map.create(10, lib::ObMemAttr(MTL_ID(), "XMLModule")))) {
+  if (add_ns && OB_FAIL(ns_map.create(10, lib::ObMemAttr("XMLModule")))) {
     LOG_WARN("ns map create failed", K(ret));
   }
   while (OB_SUCC(ret)) {
@@ -1019,10 +1008,7 @@ int ObXMLExprHelper::process_sql_udt_results(common::ObObj& value,
     OB_LOG(WARN, "not supported udt type", K(ret),
            K(value.get_type()), K(value.get_udt_subschema_id()));
   } else if (value.is_geometry()) {
-    if (lib::is_mysql_mode()) {
-    } else if (is_ps_protocol) {
-      ret = OB_NOT_SUPPORTED;
-    }
+    // mysql mode: no-op
   } else {
     if (OB_ISNULL(exec_context)) {
       ret = OB_BAD_NULL_ERROR;
@@ -1030,7 +1016,7 @@ int ObXMLExprHelper::process_sql_udt_results(common::ObObj& value,
                || !exec_context->get_physical_plan_ctx()->is_subschema_ctx_inited()) {
       // condition 1: no physical plan, build new one
       // condition 2: tmp physical plan exists,
-      //  but subschema_ctx isn't initialized(for ps protocal in jdbc, tmp physical plan created in ObMPStmtPrexecute::execute_response)
+      //  but subschema_ctx isn't initialized for ps protocol in jdbc.
       //  
       if (OB_ISNULL(fields)) {
         ret = OB_ERR_UNEXPECTED;

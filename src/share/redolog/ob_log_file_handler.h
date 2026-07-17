@@ -20,7 +20,7 @@
 #include <stdint.h>
 #include "share/redolog/ob_log_file_group.h"
 #include "share/redolog/ob_log_definition.h"
-#include "common/storage/ob_io_device.h"
+#include "lib/restore/ob_io_device.h"
 #include "share/redolog/ob_log_policy.h"
 #include "share/ob_io_device_helper.h"
 #include "lib/ob_define.h"
@@ -63,8 +63,7 @@ public:
   // interface
   int init(
       const char *log_dir,
-      int64_t file_size,
-      const uint64_t tenant_id = OB_SERVER_TENANT_ID);
+      int64_t file_size);
   void destroy();
 
   int open(const int64_t file_id, const int flag = ObLogDefinition::LOG_WRITE_FLAG);
@@ -129,7 +128,6 @@ private:
   ObIOFd io_fd_;
   ObLogFileGroup file_group_;
   int64_t file_size_;
-  uint64_t tenant_id_;
 };
 
 OB_INLINE void ObNormalRetryWriteParam::destroy()

@@ -18,6 +18,7 @@
 #define OCEANBASE_ROOTSERVICE_OB_DDL_SINGLE_REPLICA_EXECUTOR_H
 
 #include "lib/container/ob_array.h"
+#include "storage/ob_storage_rpc_arg.h"
 #include "common/ob_tablet_id.h"
 #include "share/ob_ddl_common.h"
 #include "share/ob_rpc_struct.h"
@@ -31,9 +32,7 @@ struct ObDDLReplicaBuildExecutorParam final
 {
 public:
   ObDDLReplicaBuildExecutorParam ()
-    : tenant_id_(OB_INVALID_TENANT_ID),
-      dest_tenant_id_(OB_INVALID_TENANT_ID),
-      ddl_type_(share::DDL_INVALID),
+    : ddl_type_(share::DDL_INVALID),
       source_tablet_ids_(),
       dest_tablet_ids_(),
       source_table_ids_(OB_INVALID_ID),
@@ -45,19 +44,12 @@ public:
       parallelism_(0),
       execution_id_(-1),
       data_format_version_(0),
-      consumer_group_id_(0),
-      compaction_scns_(),
       lob_col_idxs_(),
-      can_reuse_macro_blocks_(),
-      parallel_datum_rowkey_list_(),
-      min_split_start_scn_(),
       is_no_logging_(false)
   {}
   ~ObDDLReplicaBuildExecutorParam () = default;
   bool is_valid() const {
-    bool is_valid =  tenant_id_ != OB_INVALID_TENANT_ID &&
-                     dest_tenant_id_ != OB_INVALID_TENANT_ID &&
-                     ddl_type_ != share::DDL_INVALID &&
+    bool is_valid = ddl_type_ != share::DDL_INVALID &&
                      source_tablet_ids_.count() > 0 &&
                      dest_tablet_ids_.count() == source_tablet_ids_.count() &&
                      source_table_ids_.count() == source_tablet_ids_.count() &&
@@ -67,27 +59,17 @@ public:
                      snapshot_version_ > 0 &&
                      task_id_ > 0 &&
                      execution_id_ >= 0 &&
-                     data_format_version_ > 0 &&
-                     consumer_group_id_ >= 0;
-    if (is_tablet_split(ddl_type_)) {
-      is_valid = is_valid && compaction_scns_.count() == source_tablet_ids_.count()
-                          && can_reuse_macro_blocks_.count() == source_tablet_ids_.count()
-                          && min_split_start_scn_.is_valid_and_not_min();
-    } else {
-      is_valid = (is_valid && compaction_scns_.count() == 0);
-    }
+                     data_format_version_ > 0;
     return is_valid;
   }
 
-  TO_STRING_KV(K_(tenant_id), K_(dest_tenant_id), K_(ddl_type), K_(source_tablet_ids),
+  TO_STRING_KV(K_(ddl_type), K_(source_tablet_ids),
                K_(dest_tablet_ids), K_(source_table_ids), K_(dest_table_ids),
                K_(source_schema_versions), K_(dest_schema_versions), K_(snapshot_version),
                K_(task_id), K_(parallelism), K_(execution_id), 
-               K_(data_format_version), K_(consumer_group_id), K_(can_reuse_macro_blocks),
-               K_(parallel_datum_rowkey_list), K(min_split_start_scn_), K_(is_no_logging));
+               K_(data_format_version), K_(is_no_logging));
 public:
-  uint64_t tenant_id_;
-  uint64_t dest_tenant_id_;
+  
   share::ObDDLType ddl_type_;
   ObArray<ObTabletID> source_tablet_ids_;
   ObSArray<ObTabletID> dest_tablet_ids_;
@@ -100,12 +82,7 @@ public:
   int64_t parallelism_;
   int64_t execution_id_;
   int64_t data_format_version_;
-  int64_t consumer_group_id_;
-  ObSArray<int64_t> compaction_scns_;
   ObSArray<uint64_t> lob_col_idxs_;
-  ObSArray<bool> can_reuse_macro_blocks_;
-  common::ObSEArray<common::ObSEArray<blocksstable::ObDatumRowkey, 8>, 8> parallel_datum_rowkey_list_;
-  share::SCN min_split_start_scn_;
   int64_t is_no_logging_;
 };
 
@@ -131,11 +108,8 @@ public:
       src_schema_version_(0),
       dest_schema_version_(0),
       tablet_task_id_(0),
-      compaction_scn_(0),
       src_tablet_id_(ObTabletID::INVALID_TABLET_ID),
       dest_tablet_id_(),
-      can_reuse_macro_block_(false),
-      parallel_datum_rowkey_list_(),
       stat_(ObReplicaBuildStat::BUILD_INIT),
       ret_code_(OB_SUCCESS),
       heart_beat_time_(0),
@@ -152,20 +126,16 @@ public:
            const int64_t src_schema_version,
            const int64_t dest_schema_version,
            const int64_t tablet_task_id,
-           const int64_t compaction_scn,
            const ObTabletID &src_tablet_id,
-           const ObTabletID &dest_tablet_ids,
-           const bool can_reuse_macro_block,
-           const ObIArray<blocksstable::ObDatumRowkey> &parallel_datum_rowkey_list);
+           const ObTabletID &dest_tablet_ids);
   void reset_build_stat();
   bool is_valid() const;
   int assign(const ObSingleReplicaBuildCtx &other);
   int check_need_schedule(bool &need_schedule) const;
   TO_STRING_KV(K(is_inited_), K(addr_), K(ddl_type_), K(src_table_id_),
                K(src_schema_version_), K(dest_schema_version_),
-               K(dest_table_id_), K(tablet_task_id_), K(compaction_scn_),
-               K(src_tablet_id_), K(dest_tablet_id_), K_(can_reuse_macro_block), 
-               K(parallel_datum_rowkey_list_), K(stat_), K(ret_code_),
+               K(dest_table_id_), K(tablet_task_id_),
+               K(src_tablet_id_), K(dest_tablet_id_), K(stat_), K(ret_code_),
                K(heart_beat_time_), K(row_inserted_), K(row_scanned_), K(physical_row_count_),
                K(sess_not_found_times_));
 
@@ -178,11 +148,8 @@ public:
   int64_t src_schema_version_;
   int64_t dest_schema_version_;
   int64_t tablet_task_id_;
-  int64_t compaction_scn_;
   ObTabletID src_tablet_id_;
   ObTabletID dest_tablet_id_;
-  bool can_reuse_macro_block_;
-  common::ObSEArray<blocksstable::ObDatumRowkey, 8> parallel_datum_rowkey_list_;
   ObReplicaBuildStat stat_;
   int64_t ret_code_;
   int64_t heart_beat_time_;
@@ -199,20 +166,16 @@ class ObDDLReplicaBuildExecutor
 public:
   ObDDLReplicaBuildExecutor()
     : is_inited_(false),
-      tenant_id_(OB_INVALID_TENANT_ID),
-      dest_tenant_id_(OB_INVALID_TENANT_ID),
       ddl_type_(share::ObDDLType::DDL_INVALID),
       ddl_task_id_(0),
       snapshot_version_(0),
       parallelism_(0),
       execution_id_(0),
       data_format_version_(0),
-      consumer_group_id_(0),
       lob_col_idxs_(),
       src_tablet_ids_(),
       dest_tablet_ids_(),
       replica_build_ctxs_(),
-      min_split_start_scn_(),
       lock_()
   {}
   ~ObDDLReplicaBuildExecutor() = default;
@@ -226,34 +189,27 @@ public:
                             const int64_t physical_row_count);
   int get_progress(int64_t &row_inserted, int64_t &physical_row_count_, double& percent);
   
-  TO_STRING_KV(K(is_inited_), K(tenant_id_), K(dest_tenant_id_), K(ddl_type_),
+  TO_STRING_KV(K(is_inited_), K(ddl_type_),
                K(ddl_task_id_), K(snapshot_version_), K(parallelism_),
-               K(execution_id_), K(data_format_version_), K(consumer_group_id_),
+               K(execution_id_), K(data_format_version_),
                K(lob_col_idxs_), K(src_tablet_ids_), K(dest_tablet_ids_),
-               K(replica_build_ctxs_), K(min_split_start_scn_));
+               K(replica_build_ctxs_));
 private:
   int schedule_task();
   int process_rpc_results(
       const ObArray<ObTabletID> &tablet_ids,
       const ObArray<ObAddr> addrs,
-      const ObIArray<const obrpc::ObDDLBuildSingleReplicaRequestResult *> &result_array,
+      const ObIArray<const obcall::ObDDLBuildSingleReplicaRequestResult *> &result_array,
       const ObArray<int> &ret_array);
   int construct_rpc_arg(
       const ObSingleReplicaBuildCtx &replica_build_ctx,
-      obrpc::ObDDLBuildSingleReplicaRequestArg &arg) const;
+      obcall::ObDDLBuildSingleReplicaRequestArg &arg) const;
   int construct_replica_build_ctxs(
       const ObDDLReplicaBuildExecutorParam &param,
       ObArray<ObSingleReplicaBuildCtx> &replica_build_ctxs) const;
-  int get_refreshed_replica_addrs(
-      const bool send_to_all_replicas,
-      ObArray<ObTabletID> &replica_tablet_ids,
-      ObArray<ObAddr> &replica_addrs) const;
-  int refresh_replica_build_ctxs(
-      const ObArray<ObTabletID> &replica_tablet_ids,
-      const ObArray<ObAddr> &replica_addrs);
   int update_build_ctx(
       ObSingleReplicaBuildCtx &build_ctx,
-      const obrpc::ObDDLBuildSingleReplicaRequestResult *result,
+      const obcall::ObDDLBuildSingleReplicaRequestResult *result,
       const int ret_code);
   int update_replica_build_ctx(
       ObSingleReplicaBuildCtx &build_ctx,
@@ -271,20 +227,17 @@ private:
 
 private:
   bool is_inited_;
-  uint64_t tenant_id_;
-  uint64_t dest_tenant_id_;
+  
   share::ObDDLType ddl_type_;
   int64_t ddl_task_id_;
   int64_t snapshot_version_;
   int64_t parallelism_;
   int64_t execution_id_;
   int64_t data_format_version_;
-  int64_t consumer_group_id_;
   ObSArray<uint64_t> lob_col_idxs_;
   ObArray<ObTabletID> src_tablet_ids_;
   ObSArray<ObTabletID> dest_tablet_ids_;
   ObArray<ObSingleReplicaBuildCtx> replica_build_ctxs_; // NOTE hold lock before access
-  share::SCN min_split_start_scn_;
   ObSpinLock lock_; // NOTE keep rpc send out of lock scope
   bool is_no_logging_;
 };

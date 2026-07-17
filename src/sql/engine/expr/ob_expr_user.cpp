@@ -45,7 +45,7 @@ int ObExprUser::calc_result_type0(ObExprResType &type,
   type.set_collation_level(CS_LEVEL_SYSCONST);
   type.set_length(static_cast<ObLength>((OB_MAX_HOST_NAME_LENGTH
                                            + OB_MAX_USER_NAME_LENGTH + 1)));
-  const ObLengthSemantics default_length_semantics = (OB_NOT_NULL(type_ctx.get_session()) ? type_ctx.get_session()->get_actual_nls_length_semantics() : LS_BYTE);
+  const ObLengthSemantics default_length_semantics = (OB_NOT_NULL(type_ctx.get_session()) ? type_ctx.get_session()->get_actual_length_semantics() : LS_BYTE);
   type.set_length_semantics(default_length_semantics);
   return OB_SUCCESS;
 }

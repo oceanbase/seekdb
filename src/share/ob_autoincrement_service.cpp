@@ -16,12 +16,14 @@
 
 #define USING_LOG_PREFIX SHARE
 
+#include "lib/stat/ob_diagnostic_info_guard.h"
 #include "share/ob_autoincrement_service.h"
-#include "observer/ob_sql_client_decorator.h"
-#include "lib/ash/ob_active_session_guard.h"
+#include "share/ob_global_autoinc_service.h"
+#include "share/ob_sql_client_decorator.h"
+#include "share/rc/ob_module_provider.h"
 #include "lib/wait_event/ob_inner_sql_wait_type.h"
 
-using namespace oceanbase::obrpc;
+using namespace oceanbase::obcall;
 using namespace oceanbase::common;
 using namespace oceanbase::common::hash;
 using namespace oceanbase::common::sqlclient;
@@ -41,11 +43,6 @@ namespace share
 #ifndef UINT24_MAX
 #define UINT24_MAX    (16777215U)
 #endif
-
-static bool is_rpc_error(int error_code)
-{
-  return (is_timeout_err(error_code) || is_server_down_error(error_code));
-}
 
 int CacheNode::combine_cache_node(CacheNode &new_node)
 {
@@ -224,7 +221,6 @@ ObAutoincrementService::ObAutoincrementService()
   : node_allocator_(),
     handle_allocator_(),
     mysql_proxy_(NULL),
-    srv_proxy_(NULL),
     schema_service_(NULL),
     map_mutex_(common::ObLatchIds::AUTO_INCREMENT_INIT_LOCK)
 {
@@ -240,24 +236,17 @@ ObAutoincrementService &ObAutoincrementService::get_instance()
   return autoinc_service;
 }
 
-int ObAutoincrementService::init(ObAddr &addr,
-                                 ObMySQLProxy *mysql_proxy,
-                                 ObSrvRpcProxy *srv_proxy,
-                                 ObMultiVersionSchemaService *schema_service,
-                                 rpc::frame::ObReqTransport *req_transport)
+int ObAutoincrementService::init(ObMySQLProxy *mysql_proxy,
+                                 ObMultiVersionSchemaService *schema_service)
 {
   int ret = OB_SUCCESS;
-  my_addr_ = addr;
   mysql_proxy_ = mysql_proxy;
-  srv_proxy_ = srv_proxy;
   schema_service_ = schema_service;
 
-  ObMemAttr attr(OB_SERVER_TENANT_ID, ObModIds::OB_AUTOINCREMENT);
+  ObMemAttr attr(ObModIds::OB_AUTOINCREMENT);
   SET_USE_500(attr);
   if (OB_FAIL(distributed_autoinc_service_.init(mysql_proxy))) {
     LOG_WARN("fail init distributed_autoinc_service_ service", K(ret));
-  } else if (OB_FAIL(global_autoinc_service_.init(my_addr_, req_transport))) {
-    LOG_WARN("fail init auto inc global service", K(ret));
   } else if (OB_FAIL(node_allocator_.init(sizeof(TableNode), attr))) {
     LOG_WARN("failed to init table node allocator", K(ret));
   } else if (OB_FAIL(handle_allocator_.init(sizeof(CacheHandle), attr))) {
@@ -297,7 +286,7 @@ int ObAutoincrementService::get_handle(const ObSequenceSchema &schema, ObSequenc
 int ObAutoincrementService::get_handle_order(AutoincParam &param, CacheHandle *&handle)
 {
   int ret = OB_SUCCESS;
-  const uint64_t tenant_id     = param.tenant_id_;
+  
   const uint64_t table_id      = param.autoinc_table_id_;
   const uint64_t column_id     = param.autoinc_col_id_;
   const ObObjType column_type  = param.autoinc_col_type_;
@@ -328,7 +317,7 @@ int ObAutoincrementService::get_handle_order(AutoincParam &param, CacheHandle *&
   desired_count = param.autoinc_desired_count_;
   const uint64_t batch_count = increment * desired_count;
 
-  AutoincKey key(tenant_id, table_id, column_id);
+  AutoincKey key(table_id, column_id);
   uint64_t table_auto_increment = param.autoinc_auto_increment_;
   if (OB_UNLIKELY(offset > 1 && increment >= offset)) {
     // If auto_increment_offset has been set, the base_value should be the maximum value of
@@ -411,7 +400,7 @@ int ObAutoincrementService::get_handle_order(AutoincParam &param, CacheHandle *&
 int ObAutoincrementService::get_handle_noorder(AutoincParam &param, CacheHandle *&handle)
 {
   int ret = OB_SUCCESS;
-  const uint64_t tenant_id     = param.tenant_id_;
+  
   const uint64_t table_id      = param.autoinc_table_id_;
   const uint64_t column_id     = param.autoinc_col_id_;
   const ObObjType column_type  = param.autoinc_col_type_;
@@ -446,8 +435,7 @@ int ObAutoincrementService::get_handle_noorder(AutoincParam &param, CacheHandle 
   }
 
   if (OB_SUCC(ret)) {
-    int ignore_ret = try_periodic_refresh_global_sync_value(tenant_id,
-                                                            table_id,
+    int ignore_ret = try_periodic_refresh_global_sync_value(table_id,
                                                             column_id,
                                                             *table_node);
     if (OB_SUCCESS != ignore_ret) {
@@ -540,7 +528,6 @@ int ObAutoincrementService::get_handle_noorder(AutoincParam &param, CacheHandle 
 }
 
 int ObAutoincrementService::try_periodic_refresh_global_sync_value(
-    uint64_t tenant_id,
     uint64_t table_id,
     uint64_t column_id,
     TableNode &table_node)
@@ -560,7 +547,7 @@ int ObAutoincrementService::try_periodic_refresh_global_sync_value(
       delta = cur_time - ATOMIC_LOAD(&table_node.last_refresh_ts_);
       if (delta * PRE_OP_THRESHOLD < cache_refresh_interval) {
         // do nothing; refreshed already
-      } else if (OB_FAIL(fetch_global_sync(tenant_id, table_id, column_id, table_node, true))) {
+      } else if (OB_FAIL(fetch_global_sync(table_id, column_id, table_node, true))) {
         LOG_WARN("failed to get global sync", K(table_node), K(ret));
       }
       table_node.sync_mutex_.unlock();
@@ -573,7 +560,7 @@ int ObAutoincrementService::try_periodic_refresh_global_sync_value(
       delta = cur_time - ATOMIC_LOAD(&table_node.last_refresh_ts_);
       if (delta * PRE_OP_THRESHOLD < cache_refresh_interval) {
         // do nothing; refreshed already
-      } else if (OB_FAIL(fetch_global_sync(tenant_id, table_id, column_id, table_node))) {
+      } else if (OB_FAIL(fetch_global_sync(table_id, column_id, table_node))) {
         LOG_WARN("failed to get global sync", K(table_node), K(ret));
       }
       table_node.sync_mutex_.unlock();
@@ -589,20 +576,18 @@ void ObAutoincrementService::release_handle(CacheHandle *&handle)
   handle = NULL;
 }
 
-int ObAutoincrementService::refresh_sync_value(const obrpc::ObAutoincSyncArg &arg)
+int ObAutoincrementService::refresh_sync_value_(const uint64_t table_id,
+                                                const uint64_t column_id,
+                                                const uint64_t sync_value)
 {
   int ret = OB_SUCCESS;
-  LOG_DEBUG("begin to get global sync", K(arg));
+  LOG_DEBUG("begin to refresh local sync value", K(table_id), K(column_id), K(sync_value));
   TableNode *table_node = NULL;
-  AutoincKey key;
-  key.tenant_id_ = arg.tenant_id_;
-  key.table_id_  = arg.table_id_;
-  key.column_id_ = arg.column_id_;
+  const AutoincKey key(table_id, column_id);
   if (OB_ENTRY_NOT_EXIST == (ret = node_map_.get(key, table_node))) {
-    LOG_TRACE("there is no cache here", K(arg));
+    LOG_TRACE("there is no local cache", K(key));
     ret = OB_SUCCESS;
   } else if (OB_SUCC(ret)) {
-    const uint64_t sync_value = arg.sync_value_;
     lib::ObMutexGuard guard(table_node->sync_mutex_);
     atomic_update(table_node->local_sync_, sync_value);
     atomic_update(table_node->last_refresh_ts_, ObTimeUtility::current_time());
@@ -616,8 +601,7 @@ int ObAutoincrementService::refresh_sync_value(const obrpc::ObAutoincSyncArg &ar
   return ret;
 }
 
-int ObAutoincrementService::lock_autoinc_row(const uint64_t &tenant_id,
-                                             const uint64_t &table_id,
+int ObAutoincrementService::lock_autoinc_row(const uint64_t &table_id,
                                              const uint64_t &column_id,
                                              common::ObMySQLTransaction &trans)
 {
@@ -631,10 +615,10 @@ int ObAutoincrementService::lock_autoinc_row(const uint64_t &tenant_id,
                                     "FROM %s WHERE sequence_key = %lu "
                                     "AND column_id = %lu FOR UPDATE",
                                     OB_ALL_AUTO_INCREMENT_TNAME,
-                                    ObSchemaUtils::get_extract_schema_id(tenant_id, table_id),
+                                    ObSchemaUtils::get_extract_schema_id(table_id),
                                     column_id))) {
       LOG_WARN("failed to assign sql", KR(ret));
-    } else if (OB_FAIL(trans.read(res, tenant_id, lock_sql.ptr()))) {
+    } else if (OB_FAIL(trans.read(res, lock_sql.ptr()))) {
       LOG_WARN("failded to execute sql", KR(ret), K(lock_sql));
     } else if (OB_ISNULL(result = res.get_result())) {
       ret = OB_ERR_UNEXPECTED;
@@ -651,8 +635,7 @@ int ObAutoincrementService::lock_autoinc_row(const uint64_t &tenant_id,
 }
 
 //This implement is only for Truncate, table need to reset autoinc version after truncate
-int ObAutoincrementService::reset_autoinc_row(const uint64_t &tenant_id,
-                                              const uint64_t &table_id,
+int ObAutoincrementService::reset_autoinc_row(const uint64_t &table_id,
                                               const uint64_t &column_id,
                                               const int64_t &autoinc_version,
                                               common::ObMySQLTransaction &trans)
@@ -666,10 +649,10 @@ int ObAutoincrementService::reset_autoinc_row(const uint64_t &tenant_id,
                                     autoinc_version))) {
     LOG_WARN("failed to assign sql", KR(ret));
   } else if (OB_FAIL(update_sql.append_fmt(" WHERE sequence_key = %lu AND column_id = %lu",
-                                            ObSchemaUtils::get_extract_schema_id(tenant_id, table_id),
+                                            ObSchemaUtils::get_extract_schema_id(table_id),
                                             column_id))) {
     LOG_WARN("failed to append sql", KR(ret));
-  } else if (OB_FAIL(trans.write(tenant_id, update_sql.ptr(), affected_rows))) {
+  } else if (OB_FAIL(trans.write(update_sql.ptr(), affected_rows))) {
     LOG_WARN("failed to update __all_auto_increment", KR(ret), K(update_sql));
   } else if (OB_UNLIKELY(affected_rows > 1)) {
     ret = OB_ERR_UNEXPECTED;
@@ -679,25 +662,23 @@ int ObAutoincrementService::reset_autoinc_row(const uint64_t &tenant_id,
 }
 
 // for new truncate table
-int ObAutoincrementService::reinit_autoinc_row(const uint64_t &tenant_id,
-                                               const uint64_t &table_id,
+int ObAutoincrementService::reinit_autoinc_row(const uint64_t &table_id,
                                                const uint64_t &column_id,
                                                const int64_t &autoinc_version,
                                                common::ObMySQLTransaction &trans)
 {
   int ret = OB_SUCCESS;
 
-  if (OB_FAIL(lock_autoinc_row(tenant_id, table_id, column_id, trans))) {
+  if (OB_FAIL(lock_autoinc_row(table_id, column_id, trans))) {
     LOG_WARN("failed to select for update", KR(ret));
-  } else if (OB_FAIL(reset_autoinc_row(tenant_id, table_id, column_id, autoinc_version, trans))) {
+  } else if (OB_FAIL(reset_autoinc_row(table_id, column_id, autoinc_version, trans))) {
     LOG_WARN("failed to update auto increment", KR(ret));
   }
   return ret;
 }
 
 // use for alter table add autoincrement
-int ObAutoincrementService::try_lock_autoinc_row(const uint64_t &tenant_id,
-                                                 const uint64_t &table_id,
+int ObAutoincrementService::try_lock_autoinc_row(const uint64_t &table_id,
                                                  const uint64_t &column_id,
                                                  const int64_t &autoinc_version,
                                                  bool &need_update_inner_table,
@@ -708,19 +689,18 @@ int ObAutoincrementService::try_lock_autoinc_row(const uint64_t &tenant_id,
   need_update_inner_table = false;
   SMART_VAR(ObMySQLProxy::MySQLResult, res) {
     ObMySQLResult *result = NULL;
-    if (OB_UNLIKELY(OB_INVALID_TENANT_ID == tenant_id
-                    || OB_INVALID_ID == table_id
+    if (OB_UNLIKELY(OB_INVALID_ID == table_id
                     || 0 == column_id)) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("arg is not invalid", KR(ret), K(tenant_id), K(table_id), K(column_id));
+      LOG_WARN("arg is not invalid", KR(ret), K(table_id), K(column_id));
     } else if (OB_FAIL(lock_sql.assign_fmt("SELECT truncate_version "
                                     "FROM %s WHERE sequence_key = %lu "
                                     "AND column_id = %lu FOR UPDATE",
                                     OB_ALL_AUTO_INCREMENT_TNAME,
-                                    ObSchemaUtils::get_extract_schema_id(tenant_id, table_id),
+                                    ObSchemaUtils::get_extract_schema_id(table_id),
                                     column_id))) {
       LOG_WARN("failed to assign sql", KR(ret));
-    } else if (OB_FAIL(trans.read(res, tenant_id, lock_sql.ptr()))) {
+    } else if (OB_FAIL(trans.read(res, lock_sql.ptr()))) {
       LOG_WARN("failded to execute sql", KR(ret), K(lock_sql));
     } else if (OB_ISNULL(result = res.get_result())) {
       ret = OB_ERR_UNEXPECTED;
@@ -728,7 +708,7 @@ int ObAutoincrementService::try_lock_autoinc_row(const uint64_t &tenant_id,
     } else if (OB_FAIL(result->next())) {
       if (OB_ITER_END == ret) {
         ret = OB_SUCCESS;
-        LOG_INFO("autoinc row not exist", K(tenant_id), K(table_id), K(column_id));
+        LOG_INFO("autoinc row not exist", K(table_id), K(column_id));
       } else {
         LOG_WARN("iterate next result fail", KR(ret), K(lock_sql));
       }
@@ -739,15 +719,15 @@ int ObAutoincrementService::try_lock_autoinc_row(const uint64_t &tenant_id,
       } else if (inner_autoinc_version > autoinc_version) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("autoincrement's newest version can not less than inner version",
-                  KR(ret), K(tenant_id), K(table_id), K(column_id),
+                  KR(ret), K(table_id), K(column_id),
                   K(inner_autoinc_version), K(autoinc_version));
       } else if (inner_autoinc_version < autoinc_version) {
         need_update_inner_table = true;
         LOG_INFO("inner autoinc version is old, we need to update inner table",
-                  K(tenant_id), K(table_id), K(column_id), K(inner_autoinc_version), K(autoinc_version));
+                  K(table_id), K(column_id), K(inner_autoinc_version), K(autoinc_version));
       } else {
         LOG_TRACE("inner autoinc version is equal, not need to update inner table",
-                   K(tenant_id), K(table_id), K(column_id));
+                   K(table_id), K(column_id));
       }
     }
   }
@@ -796,64 +776,16 @@ int ObAutoincrementService::calculate_idempotent_autoinc_val_for_ddl(
   return ret;
 }
 
-int ObAutoincrementService::clear_autoinc_cache_all(const uint64_t tenant_id,
-                                                    const uint64_t table_id,
-                                                    const uint64_t column_id,
-                                                    const bool autoinc_is_order,
-                                                    const bool ignore_rpc_errors /*true*/)
+int ObAutoincrementService::clear_autoinc_cache(const uint64_t table_id,
+                                                const uint64_t column_id)
 {
   int ret = OB_SUCCESS;
-  if (OB_SUCC(ret)) {
-    // sync observer where table partitions exist
-    LOG_INFO("begin to clear all sever's auto-increment cache",
-             K(tenant_id), K(table_id), K(column_id), K(autoinc_is_order));
-    ObAutoincSyncArg arg;
-    arg.tenant_id_ = tenant_id;
-    arg.table_id_  = table_id;
-    arg.column_id_ = column_id;
-    ObHashSet<ObAddr> server_set;
-    if (OB_FAIL(server_set.create(PARTITION_LOCATION_SET_BUCKET_NUM))) {
-      LOG_WARN("failed to create hash set", K(ret));
-    } else if (OB_FAIL(get_server_set(tenant_id, table_id, server_set, true))) {
-      SHARE_LOG(WARN, "failed to get table partitions server set", K(ret));
-    }
-    if (OB_SUCC(ret)) {
-      const int64_t sync_timeout = SYNC_OP_TIMEOUT + TIME_SKEW;
-      ObHashSet<ObAddr>::iterator iter;
-      for(iter = server_set.begin(); OB_SUCC(ret) && iter != server_set.end(); ++iter) {
-        LOG_INFO("send rpc call to other observers", "server", iter->first, K(tenant_id), K(table_id));
-        if (OB_FAIL(srv_proxy_->to(iter->first)
-                              .by(tenant_id)
-                              .timeout(sync_timeout)
-                              .clear_autoinc_cache(arg))) {
-          if (ignore_rpc_errors && (is_rpc_error(ret) || autoinc_is_order)) {
-            // ignore time out and clear ordered auto increment cache error, go on
-            LOG_WARN("rpc call time out, ignore the error", "server", iter->first,
-                     K(tenant_id), K(table_id), K(autoinc_is_order), K(ret));
-            ret = OB_SUCCESS;
-          } else {
-            LOG_WARN("failed to send rpc call", K(tenant_id), K(table_id), K(ret));
-          }
-        }
-      }
-    }
-  }
-  return ret;
-}
-
-int ObAutoincrementService::clear_autoinc_cache(const obrpc::ObAutoincSyncArg &arg)
-{
-  int ret = OB_SUCCESS;
-  LOG_INFO("begin to clear local auto-increment cache", K(arg));
-  // auto-increment key
-  AutoincKey key;
-  key.tenant_id_ = arg.tenant_id_;
-  key.table_id_  = arg.table_id_;
-  key.column_id_ = arg.column_id_;
+  LOG_INFO("begin to clear local auto-increment cache", K(table_id), K(column_id));
+  const AutoincKey key(table_id, column_id);
 
   map_mutex_.lock();
   if (OB_FAIL(node_map_.del(key))) {
-    LOG_WARN("failed to erase table node", K(arg), K(ret));
+    LOG_WARN("failed to erase table node", K(key), K(ret));
   }
   map_mutex_.unlock();
 
@@ -916,12 +848,12 @@ uint64_t ObAutoincrementService::get_max_value(const common::ObObjType type)
 int ObAutoincrementService::get_table_node(const AutoincParam &param, TableNode *&table_node)
 {
   int ret = OB_SUCCESS;
-  uint64_t tenant_id     = param.tenant_id_;
+  
   uint64_t table_id      = param.autoinc_table_id_;
   uint64_t column_id     = param.autoinc_col_id_;
   // auto-increment key
   AutoincKey key;
-  key.tenant_id_ = tenant_id;
+  
   key.table_id_  = table_id;
   key.column_id_ = column_id;
   int64_t autoinc_version = get_modify_autoinc_version(param.autoinc_version_);
@@ -1008,7 +940,7 @@ int ObAutoincrementService::fetch_table_node(const AutoincParam &param,
                                              const bool fetch_prefetch)
 {
   int ret = OB_SUCCESS;
-  const uint64_t tenant_id     = param.tenant_id_;
+  
   const uint64_t table_id      = param.autoinc_table_id_;
   const uint64_t column_id     = param.autoinc_col_id_;
   const ObObjType column_type  = param.autoinc_col_type_;
@@ -1041,7 +973,7 @@ int ObAutoincrementService::fetch_table_node(const AutoincParam &param,
     } else {
       batch_count = increment * desired_count;
     }
-    AutoincKey key(tenant_id, table_id, column_id);
+    AutoincKey key(table_id, column_id);
     uint64_t table_auto_increment = param.autoinc_auto_increment_;
     if (OB_UNLIKELY(table_auto_increment > max_value)) {
       ret = OB_ERR_REACH_AUTOINC_MAX;
@@ -1115,98 +1047,12 @@ int ObAutoincrementService::set_pre_op_timeout(common::ObTimeoutCtx &ctx)
 
   return ret;
 }
-//FIXME: use location_service instead
-// TODO shengle
-int ObAutoincrementService::get_server_set(const uint64_t tenant_id,
-                                           const uint64_t table_id,
-                                           common::hash::ObHashSet<ObAddr> &server_set,
-                                           const bool get_follower)
-{
-  int ret = OB_SUCCESS;
-  const int64_t expire_renew_time = INT64_MAX; // means must renew location
-  bool is_cache_hit = false;
-  ObSchemaGetterGuard schema_guard;
-  bool is_found = false;
-  ObLSID ls_id;
-  ObLSLocation ls_loc;
-  ObSEArray<ObTabletID, 4> tablet_ids;
-  ObSEArray<ObLSLocation, 4> ls_locations;
-  const ObSimpleTableSchemaV2 *table_schema = nullptr;
-
-  if (OB_ISNULL(schema_service_)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(schema_service_));
-  } else if (OB_FAIL(schema_service_->get_tenant_schema_guard(tenant_id,
-                                                              schema_guard))) {
-    LOG_WARN("failed to get tenant schema guard", K(ret), K(tenant_id));
-  } else if (OB_FAIL(schema_guard.get_simple_table_schema(tenant_id, table_id, table_schema))) {
-    LOG_WARN("fail to get table schema", K(ret),K(table_id));
-  } else if (OB_ISNULL(table_schema)) {
-    ret = OB_SCHEMA_EAGAIN;
-    LOG_WARN("fail to get table schema", KR(ret));
-  } else if (OB_FAIL(table_schema->get_tablet_ids(tablet_ids))) {
-    LOG_WARN("fail to get tablet ids", K(ret));
-  } else {
-    ObLSLocation ls_loc;
-    for (int64_t i = 0; OB_SUCC(ret) && i < tablet_ids.count(); i++) {
-      if (OB_FAIL(GCTX.location_service_->get(tenant_id,
-                                              tablet_ids.at(i),
-                                              expire_renew_time,
-                                              is_cache_hit,
-                                              ls_id))) {
-        LOG_WARN("fail to get ls id", K(ret), K(tenant_id), K(tablet_ids.at(i)));
-      } else if (OB_FAIL(GCTX.location_service_->get(GCONF.cluster_id,
-                                                    tenant_id,
-                                                    ls_id,
-                                                    0, /*not force to renew*/
-                                                    is_cache_hit,
-                                                    ls_loc))) {
-        LOG_WARN("failed to get all partitions' locations", K(table_id), K(ret));
-      }
-      OZ(ls_locations.push_back(ls_loc));
-    }
-  }
-
-  if (OB_SUCC(ret)) {
-    LOG_TRACE("get partition locations", K(ls_locations), K(ret));
-    ObLSReplicaLocation location;
-    for(int64_t i = 0; OB_SUCC(ret) && i < ls_locations.count(); ++i) {
-      if (!get_follower) {
-        location.reset();
-        if (OB_FAIL(ls_locations.at(i).get_leader(location))) {
-          LOG_WARN("failed to get partition leader", "location", ls_locations.at(i), K(ret));
-        } else {
-          int err = OB_SUCCESS;
-          err = server_set.set_refactored(location.get_server());
-          if (OB_SUCCESS != err && OB_HASH_EXIST != err) {
-            ret = err;
-            LOG_WARN("failed to add element to set", "server", location.get_server(), K(ret));
-          }
-        }
-      } else {
-        const ObIArray<ObLSReplicaLocation> &replica_locations = ls_locations.at(i).get_replica_locations();
-        for (int j = 0; j < replica_locations.count(); ++j) {
-          int err = OB_SUCCESS;
-          err = server_set.set_refactored(replica_locations.at(j).get_server());
-          if (OB_SUCCESS != err && OB_HASH_EXIST != err) {
-            ret = err;
-            LOG_WARN("failed to add element to set",
-                     "server", replica_locations.at(j).get_server(), K(ret));
-          }
-        }
-      }
-    }
-  }
-  LOG_DEBUG("sync server_set", K(server_set), K(ret));
-  return ret;
-}
-
 int ObAutoincrementService::sync_insert_value_order(AutoincParam &param,
                                                     CacheHandle *&cache_handle,
                                                     const uint64_t insert_value)
 {
   int ret = OB_SUCCESS;
-  const uint64_t tenant_id     = param.tenant_id_;
+  
   const uint64_t table_id      = param.autoinc_table_id_;
   const uint64_t column_id     = param.autoinc_col_id_;
   const ObObjType column_type  = param.autoinc_col_type_;
@@ -1215,7 +1061,7 @@ int ObAutoincrementService::sync_insert_value_order(AutoincParam &param,
   const int64_t autoinc_version = param.autoinc_version_;
 
   uint64_t global_sync_value = 0;
-  AutoincKey key(tenant_id, table_id, column_id);
+  AutoincKey key(table_id, column_id);
   uint64_t value_to_sync = insert_value;
   if (value_to_sync > max_value) {
     value_to_sync = max_value;
@@ -1259,7 +1105,7 @@ int ObAutoincrementService::sync_insert_value_noorder(AutoincParam &param,
                                                       const uint64_t insert_value)
 {
   int ret = OB_SUCCESS;
-  const uint64_t tenant_id     = param.tenant_id_;
+  
   const uint64_t table_id      = param.autoinc_table_id_;
   const uint64_t column_id     = param.autoinc_col_id_;
   const ObObjType column_type  = param.autoinc_col_type_;
@@ -1284,7 +1130,7 @@ int ObAutoincrementService::sync_insert_value_noorder(AutoincParam &param,
     //    we can write insert_value into global storage. otherwise, don't sync
     //
     uint64_t global_sync_value = 0; // piggy back global value when we sync out insert_value
-    AutoincKey key(tenant_id, table_id, column_id);
+    AutoincKey key(table_id, column_id);
     // compare insert_value with local_sync/global_sync
     if (insert_value <= ATOMIC_LOAD(&table_node->local_sync_)) {
       // do nothing
@@ -1304,9 +1150,7 @@ int ObAutoincrementService::sync_insert_value_noorder(AutoincParam &param,
             atomic_update(table_node->last_refresh_ts_, ObTimeUtility::current_time());
           } else {
             atomic_update(table_node->local_sync_, value_to_sync);
-            if (OB_FAIL(sync_value_to_other_servers(param, value_to_sync))) {
-              LOG_WARN("fail sync value to other servers", K(ret));
-            }
+            atomic_update(table_node->last_refresh_ts_, ObTimeUtility::current_time());
           }
           table_node->alloc_mutex_.unlock();
         }
@@ -1378,73 +1222,6 @@ int ObAutoincrementService::sync_insert_value_noorder(AutoincParam &param,
   return ret;
 }
 
-int ObAutoincrementService::sync_value_to_other_servers(
-    AutoincParam &param,
-    uint64_t insert_value)
-{
-  int ret = OB_SUCCESS;
-  // sync observer where table partitions exist
-  LOG_DEBUG("begin to sync other servers", K(param));
-  ObAutoincSyncArg arg;
-  arg.tenant_id_ = param.tenant_id_;
-  arg.table_id_  = param.autoinc_table_id_;
-  arg.column_id_ = param.autoinc_col_id_;
-  arg.sync_value_ = insert_value;
-  ObHashSet<ObAddr> server_set;
-  if (OB_FAIL(server_set.create(PARTITION_LOCATION_SET_BUCKET_NUM))) {
-    LOG_WARN("failed to create hash set", K(param), K(ret));
-  } else {
-    if (OB_FAIL(get_server_set(param.tenant_id_, param.autoinc_table_id_, server_set))) {
-      SHARE_LOG(WARN, "failed to get table partitions server set", K(ret));
-    }
-
-    if (OB_SUCC(ret)) {
-      LOG_DEBUG("server_set after remove self", K(server_set), K(ret));
-      ObHashSet<ObAddr>::iterator iter;
-      // this operation succeeds in two case:
-      //   1. sync to all servers (without timeout)
-      //   2. reach SYNC_TIMEOUT  (without worker timeout)
-      // other cases won't succeed:
-      //   1. worker timeout
-      //   2. rpc calls return failure (not OB_TIMEOUT)
-      int64_t sync_us = 0;
-      const int64_t start_us = ObTimeUtility::current_time();
-      const int64_t sync_timeout = SYNC_OP_TIMEOUT + TIME_SKEW;
-      for(iter = server_set.begin(); OB_SUCC(ret) && iter != server_set.end(); ++iter) {
-        LOG_INFO("send rpc call to other observers", "server", iter->first);
-        sync_us = THIS_WORKER.get_timeout_remain();
-        if (sync_us > sync_timeout) {
-          sync_us = sync_timeout;
-        }
-        // TODO: send sync_value to other servers
-        if (OB_FAIL(srv_proxy_->to(iter->first)
-                               .timeout(sync_us)
-                               .refresh_sync_value(arg))) {
-          if (is_rpc_error(ret)) {
-            LOG_WARN("sync rpc call time out", "server", iter->first, K(sync_us), K(param), K(ret));
-            if (!THIS_WORKER.is_timeout()) {
-              // reach SYNC_TIMEOUT, go on
-              // ignore time out
-              ret = OB_SUCCESS;
-              break;
-            }
-          } else {
-            LOG_WARN("failed to send rpc call", K(param), K(ret));
-          }
-        } else if (ObTimeUtility::current_time() - start_us >= sync_timeout) {
-          // reach SYNC_TIMEOUT, go on
-          LOG_INFO("reach SYNC_TIMEOUT, go on", "server", iter->first, K(param), K(ret));
-          break;
-        } else if (THIS_WORKER.is_timeout()) {
-          ret = OB_TIMEOUT;
-          LOG_WARN("failed to sync insert value; worker timeout", K(param), K(ret));
-          break;
-        }
-      }
-    }
-  }
-  return ret;
-}
 // sync last user specified value first(compatible with MySQL)
 int ObAutoincrementService::sync_insert_value_global(AutoincParam &param)
 {
@@ -1485,67 +1262,16 @@ int ObAutoincrementService::sync_insert_value_local(AutoincParam &param)
   return ret;
 }
 
-int ObAutoincrementService::sync_auto_increment_all(const uint64_t tenant_id,
-                                                    const uint64_t table_id,
-                                                    const uint64_t column_id,
-                                                    const uint64_t sync_value)
+int ObAutoincrementService::refresh_auto_increment_cache(const uint64_t table_id,
+                                                         const uint64_t column_id,
+                                                         const uint64_t sync_value)
 {
-  int ret = OB_SUCCESS;
-  LOG_INFO("begin to sync auto_increment value", K(sync_value), K(tenant_id), K(table_id));
-
-  // if (OB_SUCC(ret)) {
-  //   AutoincKey key(tenant_id, table_id, column_id);
-  //   if(OB_FAIL(sync_table_auto_increment(tenant_id, key, sync_value))) {
-  //     LOG_WARN("fail sync table auto increment value", K(ret));
-  //   }
-  // }
-
-  if (OB_SUCC(ret)) {
-    // sync observer where table partitions exist
-    ObAutoincSyncArg arg;
-    arg.tenant_id_ = tenant_id;
-    arg.table_id_  = table_id;
-    arg.column_id_ = column_id;
-    arg.sync_value_ = sync_value;
-    ObHashSet<ObAddr> server_set;
-    if (OB_FAIL(server_set.create(PARTITION_LOCATION_SET_BUCKET_NUM))) {
-      LOG_WARN("failed to create hash set", K(ret));
-    } else {
-      if (OB_FAIL(get_server_set(tenant_id, table_id, server_set, true))) {
-        SHARE_LOG(WARN, "failed to get table partitions server set", K(ret));
-      }
-      LOG_DEBUG("sync server_set", K(server_set), K(ret));
-      if (OB_SUCC(ret)) {
-        const int64_t sync_timeout = SYNC_OP_TIMEOUT + TIME_SKEW;
-        ObHashSet<ObAddr>::iterator iter;
-        for(iter = server_set.begin(); OB_SUCC(ret) && iter != server_set.end(); ++iter) {
-          LOG_DEBUG("send rpc call to other observers", "server", iter->first);
-          if (OB_FAIL(srv_proxy_->to(iter->first)
-                                .timeout(sync_timeout)
-                                .refresh_sync_value(arg))) {
-            if (is_rpc_error(ret)) {
-              // ignore time out, go on
-              LOG_WARN("rpc call time out", "server", iter->first, K(ret));
-              if (!THIS_WORKER.is_timeout()) {
-                // reach SYNC_TIMEOUT, go on
-                // ignore time out
-                ret = OB_SUCCESS;
-                break;
-              }
-            } else {
-              LOG_WARN("failed to send rpc call", K(ret));
-            }
-          }
-        }
-      }
-    }
-  }
-  return ret;
+  LOG_INFO("begin to refresh auto_increment cache", K(sync_value), K(table_id), K(column_id));
+  return refresh_sync_value_(table_id, column_id, sync_value);
 }
 
 
-int ObAutoincrementService::fetch_global_sync(const uint64_t tenant_id,
-                                              const uint64_t table_id,
+int ObAutoincrementService::fetch_global_sync(const uint64_t table_id,
                                               const uint64_t column_id,
                                               TableNode &table_node,
                                               const bool sync_presync)
@@ -1562,7 +1288,7 @@ int ObAutoincrementService::fetch_global_sync(const uint64_t tenant_id,
   }
 
   if (OB_SUCC(ret)) {
-    AutoincKey key(tenant_id, table_id, column_id);
+    AutoincKey key(table_id, column_id);
     if (OB_FAIL(distributed_autoinc_service_.local_sync_with_global_value(key, table_node.autoinc_version_, sync_value))) {
       LOG_WARN("fail refresh global value", K(ret));
     } else {
@@ -1672,8 +1398,7 @@ int ObAutoincrementService::calc_prev_value(const uint64_t max_value,
   return ret;
 }
 
-int ObAutoincrementService::get_sequence_value(const uint64_t tenant_id,
-                                               const uint64_t table_id,
+int ObAutoincrementService::get_sequence_value(const uint64_t table_id,
                                                const uint64_t column_id,
                                                const bool is_order,
                                                const int64_t autoinc_version,
@@ -1681,7 +1406,8 @@ int ObAutoincrementService::get_sequence_value(const uint64_t tenant_id,
 {
   int ret = OB_SUCCESS;
   AutoincKey key;
-  key.tenant_id_ = tenant_id;
+  
+  
   key.table_id_  = table_id;
   key.column_id_ = column_id;
   if (is_order && OB_FAIL(global_autoinc_service_.get_sequence_value(key, autoinc_version, seq_value))) {
@@ -1694,9 +1420,7 @@ int ObAutoincrementService::get_sequence_value(const uint64_t tenant_id,
 }
 
 // used for __tenant_virtual_all_table only
-int ObAutoincrementService::get_sequence_values(
-    const uint64_t tenant_id,
-    const ObIArray<AutoincKey> &order_autokeys,
+int ObAutoincrementService::get_sequence_values(const ObIArray<AutoincKey> &order_autokeys,
     const ObIArray<AutoincKey> &noorder_autokeys,
     const ObIArray<int64_t> &order_autoinc_versions,
     const ObIArray<int64_t> &noorder_autoinc_versions,
@@ -1704,10 +1428,10 @@ int ObAutoincrementService::get_sequence_values(
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(global_autoinc_service_.get_auto_increment_values(
-                tenant_id, order_autokeys, order_autoinc_versions, seq_values))) {
+                order_autokeys, order_autoinc_versions, seq_values))) {
     LOG_WARN("global_autoinc_service_ get sequence values failed", K(ret));
   } else if (OB_FAIL(distributed_autoinc_service_.get_auto_increment_values(
-                       tenant_id, noorder_autokeys, noorder_autoinc_versions, seq_values))) {
+                       noorder_autokeys, noorder_autoinc_versions, seq_values))) {
     LOG_WARN("distributed_autoinc_service_ get sequence values failed", K(ret));
   }
   return ret;
@@ -1751,13 +1475,12 @@ int ObInnerTableGlobalAutoIncrementService::get_sequence_value(const AutoincKey 
 }
 
 int ObInnerTableGlobalAutoIncrementService::get_auto_increment_values(
-    const uint64_t tenant_id,
     const common::ObIArray<AutoincKey> &autoinc_keys,
     const common::ObIArray<int64_t> &autoinc_versions,
     common::hash::ObHashMap<AutoincKey, uint64_t> &seq_values)
 {
   UNUSED(autoinc_versions);
-  return inner_table_proxy_.get_autoinc_value_in_batch(tenant_id, autoinc_keys, seq_values);
+  return inner_table_proxy_.get_autoinc_value_in_batch(autoinc_keys, seq_values);
 }
 
 int ObInnerTableGlobalAutoIncrementService::local_push_to_global_value(
@@ -1783,28 +1506,7 @@ int ObInnerTableGlobalAutoIncrementService::local_sync_with_global_value(
   return inner_table_proxy_.get_autoinc_value(key, autoinc_version, seq_value, sync_value);
 }
 
-int ObRpcGlobalAutoIncrementService::init(
-    const common::ObAddr &addr,
-    rpc::frame::ObReqTransport *req_transport)
-{
-  int ret = OB_SUCCESS;
-  if (is_inited_) {
-    ret = OB_INIT_TWICE;
-    LOG_WARN("ObRpcGlobalAutoIncrementService inited twice", KR(ret));
-  } else if (!addr.is_valid()) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), K(addr));
-  } else if (OB_FAIL(gais_request_rpc_proxy_.init(req_transport, addr))) {
-    LOG_WARN("rpc proxy init failed", K(ret), K(req_transport), K(addr));
-  } else if (OB_FAIL(gais_request_rpc_.init(&gais_request_rpc_proxy_, addr))) {
-    LOG_WARN("response rpc init failed", K(ret), K(addr));
-  } else if (OB_FAIL(gais_client_.init(addr, &gais_request_rpc_))) {
-    LOG_WARN("init client failed", K(ret));
-  }
-  return ret;
-}
-
-int ObRpcGlobalAutoIncrementService::get_value(
+int ObCallGlobalAutoIncrementService::get_value(
     const AutoincKey &key,
     const uint64_t offset,
     const uint64_t increment,
@@ -1817,36 +1519,82 @@ int ObRpcGlobalAutoIncrementService::get_value(
     uint64_t &start_inclusive,
     uint64_t &end_inclusive)
 {
-  return gais_client_.get_value(key, offset, increment, max_value, table_auto_increment,
-                                desired_count, cache_size, autoinc_version,sync_value,
-                                start_inclusive, end_inclusive);
+  int ret = OB_SUCCESS;
+  ObGAISNextAutoIncValReq request;
+  obcall::ObGAISNextValResult result;
+  if (OB_FAIL(request.init(key, offset, increment, table_auto_increment, max_value,
+                           desired_count, cache_size, autoinc_version))) {
+    LOG_WARN("fail to init auto increment request", KR(ret));
+  } else if (OB_FAIL(share::g_mp->global_auto_inc_service()->handle_next_autoinc_request(
+                       request, result))) {
+    LOG_WARN("fail to allocate auto increment value", KR(ret), K(request));
+  } else {
+    start_inclusive = result.start_inclusive_;
+    end_inclusive = result.end_inclusive_;
+    sync_value = result.sync_value_;
+  }
+  return ret;
 }
 
-int ObRpcGlobalAutoIncrementService::get_sequence_next_value(
+int ObCallGlobalAutoIncrementService::get_sequence_next_value(
     const ObSequenceSchema &schema,
     ObSequenceValue &nextval)
 {
-  return gais_client_.get_sequence_next_value(schema, nextval);
+  int ret = OB_SUCCESS;
+  ObGAISNextSequenceValReq request;
+  obcall::ObGAISNextSequenceValResult result;
+  if (OB_FAIL(request.init(schema))) {
+    LOG_WARN("fail to init sequence request", KR(ret));
+  } else if (OB_FAIL(share::g_mp->global_auto_inc_service()->handle_next_sequence_request(
+                       request, result))) {
+    LOG_WARN("fail to allocate sequence value", KR(ret));
+  } else {
+    nextval.assign(result.nextval_);
+  }
+  return ret;
 }
 
-int ObRpcGlobalAutoIncrementService::get_sequence_value(const AutoincKey &key,
+int ObCallGlobalAutoIncrementService::get_sequence_value(const AutoincKey &key,
                                                         const int64_t &autoinc_version,
                                                         uint64_t &sequence_value)
 {
-  return gais_client_.get_sequence_value(key, autoinc_version, sequence_value);
+  int ret = OB_SUCCESS;
+  ObGAISAutoIncKeyArg request;
+  obcall::ObGAISCurrValResult result;
+  if (OB_FAIL(request.init(key, autoinc_version))) {
+    LOG_WARN("fail to init auto increment key", KR(ret));
+  } else if (OB_FAIL(share::g_mp->global_auto_inc_service()->handle_curr_autoinc_request(
+                       request, result))) {
+    LOG_WARN("fail to get auto increment value", KR(ret), K(key));
+  } else {
+    sequence_value = result.sequence_value_;
+  }
+  return ret;
 }
 
-int ObRpcGlobalAutoIncrementService::get_auto_increment_values(
-    const uint64_t tenant_id,
+int ObCallGlobalAutoIncrementService::get_auto_increment_values(
     const common::ObIArray<AutoincKey> &autoinc_keys,
     const common::ObIArray<int64_t> &autoinc_versions,
-    common::hash::ObHashMap<AutoincKey, uint64_t> &seq_valuesm)
+    common::hash::ObHashMap<AutoincKey, uint64_t> &seq_values)
 {
-  UNUSED(tenant_id);
-  return gais_client_.get_auto_increment_values(autoinc_keys, autoinc_versions, seq_valuesm);
+  int ret = OB_SUCCESS;
+  ObGAISAutoIncKeyArg request;
+  obcall::ObGAISCurrValResult result;
+  for (int64_t i = 0; OB_SUCC(ret) && i < autoinc_keys.count(); ++i) {
+    result.reset();
+    if (OB_FAIL(request.init(autoinc_keys.at(i), autoinc_versions.at(i)))) {
+      LOG_WARN("fail to init auto increment key", KR(ret));
+    } else if (OB_FAIL(share::g_mp->global_auto_inc_service()->handle_curr_autoinc_request(
+                         request, result))) {
+      LOG_WARN("fail to get auto increment value", KR(ret), K(request));
+    } else if (OB_FAIL(seq_values.set_refactored(autoinc_keys.at(i), result.sequence_value_))) {
+      LOG_WARN("fail to save auto increment value", KR(ret));
+    }
+  }
+  return ret;
 }
 
-int ObRpcGlobalAutoIncrementService::local_push_to_global_value(
+int ObCallGlobalAutoIncrementService::local_push_to_global_value(
     const AutoincKey &key,
     const uint64_t max_value,
     const uint64_t value,
@@ -1854,22 +1602,47 @@ int ObRpcGlobalAutoIncrementService::local_push_to_global_value(
     const int64_t cache_size,
     uint64_t &global_sync_value)
 {
-  return gais_client_.local_push_to_global_value(key, max_value, value, autoinc_version,
-            cache_size,
-            global_sync_value);
+  int ret = OB_SUCCESS;
+  ObGAISPushAutoIncValReq request;
+  if (OB_FAIL(request.init(key, value, max_value, autoinc_version, cache_size))) {
+    LOG_WARN("fail to init auto increment sync request", KR(ret));
+  } else if (OB_FAIL(share::g_mp->global_auto_inc_service()->handle_push_autoinc_request(
+                       request, global_sync_value))) {
+    LOG_WARN("fail to sync auto increment value", KR(ret), K(request));
+  }
+  return ret;
 }
 
-int ObRpcGlobalAutoIncrementService::local_sync_with_global_value(
+int ObCallGlobalAutoIncrementService::local_sync_with_global_value(
     const AutoincKey &key,
     const int64_t &autoinc_version,
     uint64_t &value)
 {
-  return gais_client_.local_sync_with_global_value(key, autoinc_version, value);
+  int ret = OB_SUCCESS;
+  ObGAISAutoIncKeyArg request;
+  obcall::ObGAISCurrValResult result;
+  if (OB_FAIL(request.init(key, autoinc_version))) {
+    LOG_WARN("fail to init auto increment key", KR(ret));
+  } else if (OB_FAIL(share::g_mp->global_auto_inc_service()->handle_curr_autoinc_request(
+                       request, result))) {
+    LOG_WARN("fail to get auto increment value", KR(ret), K(request));
+  } else {
+    value = result.sync_value_;
+  }
+  return ret;
 }
 
-int ObRpcGlobalAutoIncrementService::clear_global_autoinc_cache(const AutoincKey &key)
+int ObCallGlobalAutoIncrementService::clear_global_autoinc_cache(const AutoincKey &key)
 {
-  return gais_client_.clear_global_autoinc_cache(key);
+  int ret = OB_SUCCESS;
+  ObGAISAutoIncKeyArg request;
+  if (OB_FAIL(request.init(key, OB_INVALID_VERSION))) {
+    LOG_WARN("fail to init auto increment key", KR(ret));
+  } else if (OB_FAIL(share::g_mp->global_auto_inc_service()->handle_clear_autoinc_cache_request(
+                       request))) {
+    LOG_WARN("fail to clear auto increment cache", KR(ret), K(request));
+  }
+  return ret;
 }
 
 int ObAutoIncInnerTableProxy::check_inner_autoinc_version(const int64_t &request_autoinc_version,
@@ -1908,7 +1681,7 @@ int ObAutoIncInnerTableProxy::next_autoinc_value(const AutoincKey &key,
   int ret = OB_SUCCESS;
   ObMySQLTransaction trans;
   bool with_snap_shot = true;
-  const uint64_t tenant_id = key.tenant_id_;
+  
   const uint64_t table_id = key.table_id_;
   const uint64_t column_id = key.column_id_;
   uint64_t sequence_value = 0;
@@ -1917,17 +1690,17 @@ int ObAutoIncInnerTableProxy::next_autoinc_value(const AutoincKey &key,
   if (OB_ISNULL(mysql_proxy_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("mysql proxy is null", K(ret));
-  } else if (OB_FAIL(trans.start(mysql_proxy_, tenant_id, with_snap_shot))) {
-    LOG_WARN("failed to start transaction", K(ret), K(tenant_id));
+  } else if (OB_FAIL(trans.start(mysql_proxy_, with_snap_shot))) {
+    LOG_WARN("failed to start transaction", K(ret));
   } else {
     int sql_len = 0;
     SMART_VAR(char[OB_MAX_SQL_LENGTH], sql) {
-      const uint64_t exec_tenant_id = tenant_id;
+      
       const char *table_name = OB_ALL_AUTO_INCREMENT_TNAME;
       sql_len = snprintf(sql, OB_MAX_SQL_LENGTH,
                          " SELECT sequence_key, sequence_value, sync_value, truncate_version FROM %s WHERE sequence_key = %lu AND column_id = %lu FOR UPDATE",
                          table_name,
-                         ObSchemaUtils::get_extract_schema_id(tenant_id, table_id),
+                         ObSchemaUtils::get_extract_schema_id(table_id),
                          column_id);
       if (sql_len >= OB_MAX_SQL_LENGTH || sql_len <= 0) {
         ret = OB_SIZE_OVERFLOW;
@@ -1938,12 +1711,9 @@ int ObAutoIncInnerTableProxy::next_autoinc_value(const AutoincKey &key,
           SMART_VAR(ObMySQLProxy::MySQLResult, res) {
             ObMySQLResult *result = NULL;
             ObISQLClient *sql_client = &trans;
-            uint64_t sequence_table_id = OB_ALL_AUTO_INCREMENT_TID;
             ObASHSetInnerSqlWaitGuard ash_inner_sql_guard(ObInnerSqlWaitTypeId::SEQUENCE_LOAD);
-            ObSQLClientRetryWeak sql_client_retry_weak(sql_client,
-                                                       exec_tenant_id,
-                                                       sequence_table_id);
-            if (OB_FAIL(sql_client_retry_weak.read(res, exec_tenant_id, sql))) {
+            ObSQLClientRetryWeak sql_client_retry_weak(sql_client);
+            if (OB_FAIL(sql_client_retry_weak.read(res, sql))) {
               LOG_WARN(" failed to read data", K(ret));
             } else if (NULL == (result = res.get_result())) {
               LOG_WARN("failed to get result", K(ret));
@@ -1981,10 +1751,10 @@ int ObAutoIncInnerTableProxy::next_autoinc_value(const AutoincKey &key,
                 if (OB_ITER_END != (tmp_ret = result->next())) {
                   if (OB_SUCCESS == tmp_ret) {
                     ret = OB_ERR_UNEXPECTED;
-                    LOG_WARN("more than one row", K(ret), K(tenant_id), K(table_id), K(column_id));
+                    LOG_WARN("more than one row", K(ret), K(table_id), K(column_id));
                   } else {
                     ret = tmp_ret;
-                    LOG_WARN("fail to iter next row", K(ret), K(tenant_id), K(table_id),
+                    LOG_WARN("fail to iter next row", K(ret), K(table_id),
                                                       K(column_id));
                   }
                 }
@@ -2029,11 +1799,11 @@ int ObAutoIncInnerTableProxy::next_autoinc_value(const AutoincKey &key,
             if (sql_len >= OB_MAX_SQL_LENGTH || sql_len <= 0) {
               ret = OB_SIZE_OVERFLOW;
               LOG_WARN("failed to format sql. size not enough", K(ret), K(sql_len));
-            } else if (OB_FAIL(trans.write(exec_tenant_id, sql, affected_rows))) {
+            } else if (OB_FAIL(trans.write(sql, affected_rows))) {
               LOG_WARN("failed to write data", K(ret));
             } else if (affected_rows != 1) {
               LOG_WARN("failed to update sequence value",
-                      K(tenant_id), K(table_id), K(column_id), K(ret));
+                      K(table_id), K(column_id), K(ret));
             }
           }
         }
@@ -2062,32 +1832,29 @@ int ObAutoIncInnerTableProxy::get_autoinc_value(const AutoincKey &key,
                                                 uint64_t &sync_value)
 {
   int ret = OB_SUCCESS;
-  const uint64_t tenant_id = key.tenant_id_;
+  
   const int64_t tmp_autoinc_version = get_modify_autoinc_version(autoinc_version);
   SMART_VARS_2((ObMySQLProxy::MySQLResult, res), (char[OB_MAX_SQL_LENGTH], sql)) {
     ObASHSetInnerSqlWaitGuard ash_inner_sql_guard(ObInnerSqlWaitTypeId::SEQUENCE_LOAD);
     ObMySQLResult *result = NULL;
     int sql_len = 0;
-    const uint64_t exec_tenant_id = tenant_id;
+    
     const char *table_name = OB_ALL_AUTO_INCREMENT_TNAME;
     sql_len = snprintf(sql, OB_MAX_SQL_LENGTH,
                         " SELECT sequence_value, sync_value, truncate_version FROM %s"
                         " WHERE sequence_key = %lu AND column_id = %lu",
                         table_name,
-                        ObSchemaUtils::get_extract_schema_id(exec_tenant_id, key.table_id_),
+                        ObSchemaUtils::get_extract_schema_id(key.table_id_),
                         key.column_id_);
     ObISQLClient *sql_client = mysql_proxy_;
-    uint64_t sequence_table_id = OB_ALL_AUTO_INCREMENT_TID;
-    ObSQLClientRetryWeak sql_client_retry_weak(sql_client,
-                                                exec_tenant_id,
-                                                sequence_table_id);
+    ObSQLClientRetryWeak sql_client_retry_weak(sql_client);
     if (OB_ISNULL(mysql_proxy_)) {
       ret = OB_NOT_INIT;
       LOG_WARN("mysql proxy is null", K(ret));
     } else if (sql_len >= OB_MAX_SQL_LENGTH || sql_len <= 0) {
       ret = OB_SIZE_OVERFLOW;
       LOG_WARN("failed to format sql. size not enough", K(ret), K(sql_len));
-    } else if (OB_FAIL(sql_client_retry_weak.read(res, exec_tenant_id, sql))) {
+    } else if (OB_FAIL(sql_client_retry_weak.read(res, sql))) {
       LOG_WARN(" failed to read data", K(ret));
     } else if (NULL == (result = res.get_result())) {
       LOG_WARN("failed to get result", K(ret));
@@ -2132,9 +1899,7 @@ int ObAutoIncInnerTableProxy::get_autoinc_value(const AutoincKey &key,
 // TODO: (xingrui.cwh)
 // If this interface is used by another function except for __tenant_virtual_all_table,
 // this interface will need to verfiy autoinc_version for correctness
-int ObAutoIncInnerTableProxy::get_autoinc_value_in_batch(
-    const uint64_t tenant_id,
-    const common::ObIArray<AutoincKey> &keys,
+int ObAutoIncInnerTableProxy::get_autoinc_value_in_batch(const common::ObIArray<AutoincKey> &keys,
     common::hash::ObHashMap<AutoincKey, uint64_t> &seq_values)
 {
   int ret = OB_SUCCESS;
@@ -2180,10 +1945,8 @@ int ObAutoIncInnerTableProxy::get_autoinc_value_in_batch(
         int64_t column_id = 0;
         uint64_t seq_value = 0;
         ObISQLClient *sql_client = mysql_proxy_;
-        ObSQLClientRetryWeak sql_client_retry_weak(sql_client,
-                                                   tenant_id,
-                                                   OB_ALL_AUTO_INCREMENT_TID);
-        if (OB_FAIL(sql_client_retry_weak.read(res, tenant_id, sql.ptr()))) {
+        ObSQLClientRetryWeak sql_client_retry_weak(sql_client);
+        if (OB_FAIL(sql_client_retry_weak.read(res, sql.ptr()))) {
           LOG_WARN(" failed to read data", K(ret));
         } else if (NULL == (result = res.get_result())) {
           LOG_WARN("failed to get result", K(ret));
@@ -2198,7 +1961,8 @@ int ObAutoIncInnerTableProxy::get_autoinc_value_in_batch(
               LOG_WARN("fail to get int_value.", K(ret));
             } else {
               AutoincKey key;
-              key.tenant_id_ = tenant_id;
+              
+              
               key.table_id_  = table_id;
               key.column_id_ = static_cast<uint64_t>(column_id);
               if (OB_FAIL(seq_values.set_refactored(key, seq_value))) {
@@ -2230,7 +1994,7 @@ int ObAutoIncInnerTableProxy::sync_autoinc_value(const AutoincKey &key,
                                                  uint64_t &sync_value)
 {
   int ret = OB_SUCCESS;
-  const uint64_t tenant_id = key.tenant_id_;
+  
   const uint64_t table_id = key.table_id_;
   const uint64_t column_id = key.column_id_;
   ObMySQLTransaction trans;
@@ -2242,16 +2006,16 @@ int ObAutoIncInnerTableProxy::sync_autoinc_value(const AutoincKey &key,
   if (OB_ISNULL(mysql_proxy_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("mysql proxy is null", K(ret));
-  } else if (OB_FAIL(trans.start(mysql_proxy_, tenant_id, with_snap_shot))) {
-    LOG_WARN("failed to start transaction", K(ret), K(tenant_id));
+  } else if (OB_FAIL(trans.start(mysql_proxy_, with_snap_shot))) {
+    LOG_WARN("failed to start transaction", K(ret));
   } else {
-    const uint64_t exec_tenant_id = tenant_id;
+    
     const char *table_name = OB_ALL_AUTO_INCREMENT_TNAME;
     int64_t fetch_table_id = OB_INVALID_ID;
     if (OB_FAIL(sql.assign_fmt(" SELECT sequence_key, sequence_value, sync_value, truncate_version FROM %s WHERE sequence_key = %lu"
                                " AND column_id = %lu FOR UPDATE",
                                table_name,
-                               ObSchemaUtils::get_extract_schema_id(exec_tenant_id, table_id),
+                               ObSchemaUtils::get_extract_schema_id(table_id),
                                column_id))) {
       LOG_WARN("failed to assign sql", K(ret));
     }
@@ -2260,11 +2024,8 @@ int ObAutoIncInnerTableProxy::sync_autoinc_value(const AutoincKey &key,
         ObASHSetInnerSqlWaitGuard ash_inner_sql_guard(ObInnerSqlWaitTypeId::SEQUENCE_LOAD);
         ObMySQLResult *result = NULL;
         ObISQLClient *sql_client = &trans;
-        uint64_t sequence_table_id = OB_ALL_AUTO_INCREMENT_TID;
-        ObSQLClientRetryWeak sql_client_retry_weak(sql_client,
-                                                   exec_tenant_id,
-                                                   sequence_table_id);
-        if (OB_FAIL(sql_client_retry_weak.read(res, exec_tenant_id, sql.ptr()))) {
+        ObSQLClientRetryWeak sql_client_retry_weak(sql_client);
+        if (OB_FAIL(sql_client_retry_weak.read(res, sql.ptr()))) {
           LOG_WARN("failed to read data", K(ret));
         } else if (NULL == (result = res.get_result())) {
           LOG_WARN("failed to get result", K(ret));
@@ -2292,10 +2053,10 @@ int ObAutoIncInnerTableProxy::sync_autoinc_value(const AutoincKey &key,
           if (OB_ITER_END != (tmp_ret = result->next())) {
             if (OB_SUCCESS == tmp_ret) {
               ret = OB_ERR_UNEXPECTED;
-              LOG_WARN("more than one row", K(ret), K(tenant_id), K(table_id), K(column_id));
+              LOG_WARN("more than one row", K(ret), K(table_id), K(column_id));
             } else {
               ret = tmp_ret;
-              LOG_WARN("fail to iter next row", K(ret), K(tenant_id), K(table_id), K(column_id));
+              LOG_WARN("fail to iter next row", K(ret), K(table_id), K(column_id));
             }
           }
         }
@@ -2326,7 +2087,7 @@ int ObAutoIncInnerTableProxy::sync_autoinc_value(const AutoincKey &key,
                     table_name, sync_value, new_seq_value,
                     table_id, column_id, inner_autoinc_version))) {
           LOG_WARN("failed to assign sql", K(ret));
-        } else if (OB_FAIL((trans.write(exec_tenant_id, sql.ptr(), affected_rows)))) {
+        } else if (OB_FAIL((trans.write(sql.ptr(), affected_rows)))) {
           LOG_WARN("failed to execute", K(sql), K(ret));
         } else if (!is_single_row(affected_rows)) {
           ret = OB_ERR_UNEXPECTED;
@@ -2376,7 +2137,7 @@ int ObAutoIncInnerTableProxy::read_and_push_inner_table(const AutoincKey &key,
                                                         uint64_t &new_end)
 {
   int ret = OB_SUCCESS;
-  const uint64_t tenant_id = key.tenant_id_;
+  
   const uint64_t table_id = key.table_id_;
   const uint64_t column_id = key.column_id_;
   is_valid = false;
@@ -2389,16 +2150,16 @@ int ObAutoIncInnerTableProxy::read_and_push_inner_table(const AutoincKey &key,
   if (OB_ISNULL(mysql_proxy_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("mysql proxy is null", K(ret));
-  } else if (OB_FAIL(trans.start(mysql_proxy_, tenant_id, with_snap_shot))) {
-    LOG_WARN("failed to start transaction", K(ret), K(tenant_id));
+  } else if (OB_FAIL(trans.start(mysql_proxy_, with_snap_shot))) {
+    LOG_WARN("failed to start transaction", K(ret));
   } else {
-    const uint64_t exec_tenant_id = tenant_id;
+    
     const char *table_name = OB_ALL_AUTO_INCREMENT_TNAME;
     int64_t fetch_table_id = OB_INVALID_ID;
     if (OB_FAIL(sql.assign_fmt(" SELECT sequence_value, truncate_version FROM %s WHERE sequence_key = %lu"
                                " AND column_id = %lu FOR UPDATE",
                                table_name,
-                               ObSchemaUtils::get_extract_schema_id(exec_tenant_id, table_id),
+                               ObSchemaUtils::get_extract_schema_id(table_id),
                                column_id))) {
       LOG_WARN("failed to assign sql", K(ret));
     }
@@ -2406,11 +2167,8 @@ int ObAutoIncInnerTableProxy::read_and_push_inner_table(const AutoincKey &key,
       SMART_VAR(ObMySQLProxy::MySQLResult, res) {
         ObMySQLResult *result = NULL;
         ObISQLClient *sql_client = &trans;
-        uint64_t sequence_table_id = OB_ALL_AUTO_INCREMENT_TID;
-        ObSQLClientRetryWeak sql_client_retry_weak(sql_client,
-                                                   exec_tenant_id,
-                                                   sequence_table_id);
-        if (OB_FAIL(sql_client_retry_weak.read(res, exec_tenant_id, sql.ptr()))) {
+        ObSQLClientRetryWeak sql_client_retry_weak(sql_client);
+        if (OB_FAIL(sql_client_retry_weak.read(res, sql.ptr()))) {
           LOG_WARN("failed to read data", K(ret));
         } else if (NULL == (result = res.get_result())) {
           LOG_WARN("failed to get result", K(ret));
@@ -2432,10 +2190,10 @@ int ObAutoIncInnerTableProxy::read_and_push_inner_table(const AutoincKey &key,
           if (OB_ITER_END != (tmp_ret = result->next())) {
             if (OB_SUCCESS == tmp_ret) {
               ret = OB_ERR_UNEXPECTED;
-              LOG_WARN("more than one row", K(ret), K(tenant_id), K(table_id), K(column_id));
+              LOG_WARN("more than one row", K(ret), K(table_id), K(column_id));
             } else {
               ret = tmp_ret;
-              LOG_WARN("fail to iter next row", K(ret), K(tenant_id), K(table_id), K(column_id));
+              LOG_WARN("fail to iter next row", K(ret), K(table_id), K(column_id));
             }
           }
         }
@@ -2465,7 +2223,7 @@ int ObAutoIncInnerTableProxy::read_and_push_inner_table(const AutoincKey &key,
                       table_name, new_seq_value,
                       table_id, column_id, inner_autoinc_version))) {
             LOG_WARN("failed to assign sql", K(ret));
-          } else if (OB_FAIL((trans.write(exec_tenant_id, sql.ptr(), affected_rows)))) {
+          } else if (OB_FAIL((trans.write(sql.ptr(), affected_rows)))) {
             LOG_WARN("failed to execute", K(sql), K(ret));
           } else if (!is_single_row(affected_rows)) {
             ret = OB_ERR_UNEXPECTED;

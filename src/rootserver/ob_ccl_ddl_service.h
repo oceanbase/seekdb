@@ -27,14 +27,14 @@ class ObCclDDLService {
 public:
   ObCclDDLService(ObDDLService *ddl_service) : ddl_service_(ddl_service) {}
   virtual ~ObCclDDLService() {}
-  int create_ccl_ddl(const obrpc::ObCreateCCLRuleArg &arg);
-  int drop_ccl_ddl(const obrpc::ObDropCCLRuleArg &arg);
+  int create_ccl_ddl(const obcall::ObCreateCCLRuleArg &arg);
+  int drop_ccl_ddl(const obcall::ObDropCCLRuleArg &arg);
 
 private:
-  int check_create_ccl_valid(const obrpc::ObCreateCCLRuleArg &arg,
+  int check_create_ccl_valid(const obcall::ObCreateCCLRuleArg &arg,
                              ObSchemaGetterGuard &schema_guard,
                              const ObCCLRuleSchema *&exist_ccl_rule_schema);
-  int check_drop_ccl_valid(const obrpc::ObDropCCLRuleArg &arg,
+  int check_drop_ccl_valid(const obcall::ObDropCCLRuleArg &arg,
                            ObSchemaGetterGuard &schema_guard,
                            const ObCCLRuleSchema *&ccl_rule_schema);
 

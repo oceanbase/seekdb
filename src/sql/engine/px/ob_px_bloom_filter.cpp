@@ -16,13 +16,12 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 #include "ob_px_bloom_filter.h"
-#include "share/ob_rpc_share.h"
 #include "storage/blocksstable/encoding/ob_encoding_query_util.h"
 
 using namespace oceanbase;
 using namespace common;
 using namespace sql;
-using namespace obrpc;
+using namespace obcall;
 
 #define MIN_FILTER_SIZE 256
 #define MAX_BIT_COUNT 17179869184// 2^34 due to the memory single alloc limit
@@ -71,11 +70,11 @@ ObPxBloomFilter::ObPxBloomFilter() : data_length_(0), max_bit_count_(0), bits_co
 
 }
 
-int ObPxBloomFilter::init(int64_t data_length, ObIAllocator &allocator, int64_t tenant_id,
+int ObPxBloomFilter::init(int64_t data_length, ObIAllocator &allocator,
                           double fpp /*= 0.01 */, int64_t max_filter_size /* =2147483648 */)
 {
   int ret = OB_SUCCESS;
-  set_allocator_attr(tenant_id);
+  set_allocator_attr();
   data_length = max(data_length, 1);
   if (fpp <= 0) {
     ret = OB_ERR_UNEXPECTED;
@@ -109,10 +108,10 @@ int ObPxBloomFilter::init(int64_t data_length, ObIAllocator &allocator, int64_t 
   return ret;
 }
 
-int ObPxBloomFilter::assign(const ObPxBloomFilter &filter, int64_t tenant_id)
+int ObPxBloomFilter::assign(const ObPxBloomFilter &filter)
 {
   int ret = OB_SUCCESS;
-  set_allocator_attr(tenant_id);
+  set_allocator_attr();
   data_length_ = filter.data_length_;
   max_bit_count_ = filter.max_bit_count_;
   block_mask_ = filter.block_mask_;
@@ -138,9 +137,9 @@ int ObPxBloomFilter::assign(const ObPxBloomFilter &filter, int64_t tenant_id)
   return ret;
 }
 
-void ObPxBloomFilter::set_allocator_attr(int64_t tenant_id)
+void ObPxBloomFilter::set_allocator_attr()
 {
-  ObMemAttr attr(tenant_id, "PxBfAlloc", ObCtxIds::DEFAULT_CTX_ID);
+  ObMemAttr attr("PxBfAlloc", ObCtxIds::DEFAULT_CTX_ID);
   allocator_.set_attr(attr);
 }
 
@@ -619,7 +618,7 @@ int ObPxBloomFilter::might_contain_vector(const ObExpr &expr, ObEvalCtx &ctx,
   return ret;
 }
 //-------------------------------------division line----------------------------
-int ObPxBFStaticInfo::init(int64_t tenant_id, int64_t filter_id,
+int ObPxBFStaticInfo::init(int64_t filter_id,
     int64_t server_id, bool is_shared,
     bool skip_subpart, int64_t p2p_dh_id,
     bool is_shuffle, ObLogJoinFilter *log_join_filter_create_op)
@@ -629,7 +628,7 @@ int ObPxBFStaticInfo::init(int64_t tenant_id, int64_t filter_id,
     ret = OB_INIT_TWICE;
     LOG_WARN("twice init bf static info", K(ret));
   } else {
-    tenant_id_ = tenant_id;
+    
     filter_id_ = filter_id;
     server_id_ = server_id;
     is_shared_ = is_shared;
@@ -642,5 +641,5 @@ int ObPxBFStaticInfo::init(int64_t tenant_id, int64_t filter_id,
   return ret;
 }
 
-OB_SERIALIZE_MEMBER(ObPxBFStaticInfo, is_inited_, tenant_id_, filter_id_,
+OB_SERIALIZE_MEMBER(ObPxBFStaticInfo, is_inited_, filter_id_,
     server_id_, is_shared_, skip_subpart_, p2p_dh_id_, is_shuffle_);

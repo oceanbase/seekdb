@@ -32,7 +32,7 @@ public:
   ObOLAPAsyncSubmitJobStmt();
   virtual ~ObOLAPAsyncSubmitJobStmt() = default;
 
-  inline void set_tenant_id(const uint64_t id) { tenant_id_ = id; }
+  
   inline void set_database_id(const uint64_t id) { database_id_ = id; }
   inline void set_user_id(const uint64_t id) { user_id_ = id; }
   inline void set_job_id(const int64_t id) { job_id_ = id; }
@@ -42,7 +42,7 @@ public:
   inline void set_job_database(const common::ObString &job_database) {  job_database_ = job_database; }
   inline void set_job_action(const common::ObString &job_action) {  job_action_ = job_action; }
   inline void set_exec_env(const common::ObString &exec_env) {  exec_env_ = exec_env; }
-  inline uint64_t get_tenant_id() const { return tenant_id_; }
+  
   inline uint64_t get_database_id() const { return database_id_; }
   inline uint64_t get_user_id() const { return user_id_; }
   inline int64_t get_job_id() const { return job_id_; }
@@ -55,7 +55,6 @@ public:
   DECLARE_VIRTUAL_TO_STRING;
 private:
   // data members
-  uint64_t tenant_id_;
   uint64_t database_id_;
   uint64_t user_id_;
   int64_t job_id_;
@@ -77,16 +76,15 @@ public:
   ObOLAPAsyncCancelJobStmt();
   virtual ~ObOLAPAsyncCancelJobStmt() = default;
 
-  inline void set_tenant_id(const uint64_t id) { tenant_id_ = id; }
+  
   inline void set_user_id(const uint64_t id) { user_id_ = id; }
   inline void set_job_name(const common::ObString &job_name) {  job_name_ = job_name; }
-  inline uint64_t get_tenant_id() const { return tenant_id_; }
+  
   inline uint64_t get_user_id() const { return user_id_; }
   inline const common::ObString &get_job_name() const { return job_name_; }
   DECLARE_VIRTUAL_TO_STRING;
 private:
   // data members
-  uint64_t tenant_id_;
   uint64_t user_id_;
   common::ObString job_name_;
 private:

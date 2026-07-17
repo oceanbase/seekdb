@@ -69,18 +69,18 @@ static inline ssize_t posix_pread(int fd, void* buf, size_t count, off_t offset)
     if (orig_pos == -1) {
         return -1;
     }
-
+    
     // Seek to offset
     if (_lseeki64(fd, offset, SEEK_SET) == -1) {
         return -1;
     }
-
+    
     // Read
     int bytes_read = _read(fd, buf, (unsigned int)count);
-
+    
     // Restore position
     _lseeki64(fd, orig_pos, SEEK_SET);
-
+    
     return bytes_read;
 }
 
@@ -91,18 +91,18 @@ static inline ssize_t posix_pwrite(int fd, const void* buf, size_t count, off_t 
     if (orig_pos == -1) {
         return -1;
     }
-
+    
     // Seek to offset
     if (_lseeki64(fd, offset, SEEK_SET) == -1) {
         return -1;
     }
-
+    
     // Write
     int bytes_written = _write(fd, buf, (unsigned int)count);
-
+    
     // Restore position
     _lseeki64(fd, orig_pos, SEEK_SET);
-
+    
     return bytes_written;
 }
 
@@ -806,7 +806,7 @@ int ObStorageFileUtil::list_directories(
         int pret = snprintf(sub_dir_path, OB_MAX_URI_LENGTH, "%s/%s", dir_path, entry.d_name);
         if (pret < 0 || pret >= OB_MAX_URI_LENGTH) {
           ret = OB_BUF_NOT_ENOUGH;
-          OB_LOG(WARN, "format tenant_id fail", K(ret), KCSTRING(dir_path));
+          OB_LOG(WARN, "format dir path fail", K(ret), KCSTRING(dir_path));
         } else {
           struct stat sb;
           if (-1 == stat(sub_dir_path, &sb)) {

@@ -26,7 +26,7 @@
 #include "sql/resolver/expr/ob_raw_expr.h"
 #include "sql/resolver/ob_stmt_type.h"
 #include "share/schema/ob_dependency_info.h"      // ObReferenceObjTable
-#include "lib/allocator/ob_pooled_allocator.h"
+#include "lib/objectpool/ob_pooled_allocator.h"
 namespace oceanbase
 {
 namespace sql
@@ -273,7 +273,7 @@ public:
             || stmt_type == stmt::T_SET_COLUMN_COMMENT
             // audit and noaudit
             || stmt_type == stmt::T_AUDIT
-            // analyze, this in oracle belongs to ddl, but ob determines it as ddl there will be some issues
+            // analyze needs special handling before it can be treated as DDL here
             // TODO: wait for Xi Feng to finish handling the analyze issue then uncomment
             //|| stmt_type == stmt::T_ANALYZE
             // optimize
@@ -287,14 +287,9 @@ public:
             // index
             || stmt_type == stmt::T_CREATE_INDEX
             || stmt_type == stmt::T_DROP_INDEX
-            // materialized view log
-            || stmt_type == stmt::T_CREATE_MLOG
-            || stmt_type == stmt::T_DROP_MLOG
-            // flashback
-            || stmt_type == stmt::T_FLASHBACK_DATABASE
-            || stmt_type == stmt::T_FLASHBACK_TABLE_FROM_RECYCLEBIN
-            || stmt_type == stmt::T_FLASHBACK_TABLE_TO_SCN
-            || stmt_type == stmt::T_FLASHBACK_INDEX
+            // recyclebin restore
+            || stmt_type == stmt::T_RECYCLEBIN_RESTORE_DATABASE
+            || stmt_type == stmt::T_RECYCLEBIN_RESTORE_TABLE
             // purge
             || stmt_type == stmt::T_PURGE_RECYCLEBIN
             || stmt_type == stmt::T_PURGE_DATABASE
@@ -325,7 +320,6 @@ public:
             // package
             || stmt_type == stmt::T_CREATE_PACKAGE
             || stmt_type == stmt::T_CREATE_PACKAGE_BODY
-            || stmt_type == stmt::T_ALTER_PACKAGE
             || stmt_type == stmt::T_DROP_PACKAGE
 
             // trigger
@@ -395,7 +389,7 @@ public:
         // || stmt_type == stmt::T_SET_COLUMN_COMMENT
         // audit and noaudit
         stmt_type == stmt::T_AUDIT
-        // analyze, this in oracle belongs to ddl, but ob determines it as ddl there will be some issues
+        // analyze needs special handling before it can be treated as DDL here
         // TODO: wait for Xi Feng to finish the analyze issue before releasing
         //|| stmt_type == stmt::T_ANALYZE
         // optimize
@@ -409,14 +403,9 @@ public:
         // index
         // || stmt_type == stmt::T_CREATE_INDEX
         // || stmt_type == stmt::T_DROP_INDEX
-        // materialized view log
-        // || stmt_type == stmt::T_CREATE_MLOG
-        // || stmt_type == stmt::T_DROP_MLOG
-        // flashback
-        // || stmt_type == stmt::T_FLASHBACK_DATABASE
-        // || stmt_type == stmt::T_FLASHBACK_TABLE_FROM_RECYCLEBIN
-        // || stmt_type == stmt::T_FLASHBACK_TABLE_TO_SCN
-        // || stmt_type == stmt::T_FLASHBACK_INDEX
+        // recyclebin restore
+        // || stmt_type == stmt::T_RECYCLEBIN_RESTORE_DATABASE
+        // || stmt_type == stmt::T_RECYCLEBIN_RESTORE_TABLE
         // purge
         // || stmt_type == stmt::T_PURGE_RECYCLEBIN
         // || stmt_type == stmt::T_PURGE_DATABASE
@@ -467,8 +456,6 @@ public:
         // || stmt_type == stmt::T_CREATE_TRIGGER
         // || stmt_type == stmt::T_DROP_TRIGGER
         // || stmt_type == stmt::T_ALTER_TRIGGER
-        // || stmt_type == stmt::T_CREATE_DBLINK
-        // || stmt_type == stmt::T_DROP_DBLINK
 
         // keystore
         // || stmt_type == stmt::T_CREATE_KEYSTORE
@@ -515,7 +502,6 @@ public:
            || stmt_type == stmt::T_SHOW_CHARSET
            || stmt_type == stmt::T_SHOW_COLLATION
            || stmt_type == stmt::T_SHOW_STATUS
-           || stmt_type == stmt::T_SHOW_TENANT
            || stmt_type == stmt::T_SHOW_CREATE_TENANT
            || stmt_type == stmt::T_SHOW_TRACE
            || stmt_type == stmt::T_SHOW_ENGINES
@@ -605,8 +591,7 @@ public:
            || stmt_type == stmt::T_USE_DATABASE
            || stmt_type == stmt::T_EMPTY_QUERY
            // TODO: When T_LOCK_TABLE is actually implemented, needs to be checked for legitimacy
-           || stmt_type == stmt::T_LOCK_TABLE
-           || stmt_type == stmt::T_CHANGE_EXTERNAL_STORAGE_DEST;
+           || stmt_type == stmt::T_LOCK_TABLE;
   }
 
   // following stmt don't do retry

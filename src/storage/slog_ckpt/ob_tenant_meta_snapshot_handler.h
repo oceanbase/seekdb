@@ -50,36 +50,18 @@ public:
 
   // create snapshot
   static int create_tenant_snapshot(const ObTenantSnapshotID &snapshot_id);
-  static int create_single_ls_snapshot(const ObTenantSnapshotID &snapshot_id,
-                                       const ObLSID &ls_id,
-                                       share::SCN &clog_max_scn);
-
   // delete snapshot
   static int delete_tenant_snapshot(const ObTenantSnapshotID &snapshot_id);
-  static int delete_single_ls_snapshot(const ObTenantSnapshotID &snapshot_id, const ObLSID &ls_id);
-
-  // clone snapshot
-  static int get_ls_snapshot(
-      const ObTenantSnapshotID &snapshot_id, 
-      const ObLSID &ls_id,
-      blocksstable::MacroBlockId &tablet_meta_entry);
   static int create_all_tablet(observer::ObStartupAccelTaskHandler* startup_accel_handler,
                                const blocksstable::MacroBlockId &tablet_meta_entry);
   static int get_ls_meta_entry(const ObTenantSnapshotID &snapshot_id, blocksstable::MacroBlockId &ls_meta_entry);
   
   // recover snapshot for restart
   static int get_all_tenant_snapshot(ObIArray<ObTenantSnapshotID> &snapshot_ids);
-  static int get_all_ls_snapshot(const ObTenantSnapshotID &snapshot_id, ObIArray<ObLSID> &ls_ids);
-  
   // increase ref cnt for linked blocks
   static int inc_linked_block_ref(const ObIArray<blocksstable::MacroBlockId> &meta_block_list, bool &inc_success);
   
 private:
-  static int find_tablet_meta_entry(
-      const blocksstable::MacroBlockId &ls_meta_entry,
-      const ObLSID &ls_id,
-      blocksstable::MacroBlockId &tablet_meta_entry);
-  static int push_ls_snapshot(const ObMetaDiskAddr &addr, const char *buf, const int64_t buf_len, ObIArray<ObLSID> &ls_ids);
   static int inc_all_linked_block_ref(
       ObTenantStorageCheckpointWriter &tenant_storage_meta_writer, 
       bool &inc_ls_blocks_ref_succ,

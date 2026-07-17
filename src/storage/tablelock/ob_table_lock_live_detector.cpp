@@ -1,3 +1,5 @@
+#include "share/ob_ex_rpc.h"
+#include "share/ob_dml_sql_splicer.h"
 /*
  * Copyright (c) 2025 OceanBase.
  *
@@ -68,7 +70,7 @@ int ObTableLockDetectFuncList::detect_session_alive(const uint32_t session_id, b
   return ret;
 }
 
-int ObTableLockDetectFuncList::detect_session_alive_for_rpc(const uint32_t session_id, obrpc::Bool &is_alive)
+int ObTableLockDetectFuncList::detect_session_alive_for_rpc(const uint32_t session_id, obcall::Bool &is_alive)
 {
   int ret = OB_SUCCESS;
   int tmp_ret = OB_SUCCESS;
@@ -96,7 +98,6 @@ int ObTableLockDetectFuncList::do_session_alive_detect()
   ObTableLockOwnerID owner_id;
   uint32_t client_session_id = sql::ObSQLSessionInfo::INVALID_SESSID;
   ObArenaAllocator allocator;
-  lib::CompatModeGuard compat_guard(lib::Worker::CompatMode::MYSQL);
 
   if (OB_FAIL(get_owner_id_list_from_table_(allocator, owner_ids))) {
     LOG_WARN("get owner_id_list from table failed", K(ret));
@@ -162,44 +163,9 @@ int ObTableLockDetectFuncList::do_session_alive_detect_for_a_server_session_(con
                                                                              bool &is_alive)
 {
   int ret = OB_SUCCESS;
-  obrpc::ObSrvRpcProxy *srv_rpc_proxy = nullptr;
-  obrpc::Bool tmp_is_alive(true);
-  int64_t retry_times = 0;
-
   is_alive = true;
-
-  // In this branch, we don't persist svr_ip/svr_port in __all_client_to_server_session_info anymore.
-  // For local server sessions, avoid RPC and just check by local session mgr.
-  if (addr == GCTX.self_addr()) {
-    ret = detect_session_alive(static_cast<uint32_t>(server_session_id), is_alive);
-  } else if (OB_ISNULL(srv_rpc_proxy = GCTX.srv_rpc_proxy_)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_ERROR("srv_rpc_proxy is null");
-  } else {
-    do {
-      ret = OB_SUCCESS;
-      if (OB_FAIL(srv_rpc_proxy->to(addr).detect_session_alive(server_session_id, tmp_is_alive))) {
-        if (!tmp_is_alive) {
-          LOG_INFO("find server session is not alive", K(ret), K(addr), K(server_session_id), K(tmp_is_alive));
-          is_alive = false;
-          ret = OB_SUCCESS;
-          break;
-        } else {
-          retry_times++;
-          LOG_WARN("fail to call detect_session_alive by rpc",
-                   KR(ret),
-                   K(retry_times),
-                   K(addr),
-                   K(server_session_id),
-                   K(tmp_is_alive));
-          ob_usleep(RPC_INTERVAL_TIME_US);
-        }
-      } else {
-        is_alive = tmp_is_alive;
-      }
-    } while (OB_FAIL(ret) && retry_times <= RETRY_RPC_TIMES);
-  }
-
+  // seekdb single-node: all sessions are local, no RPC needed.
+  ret = detect_session_alive(static_cast<uint32_t>(server_session_id), is_alive);
   return ret;
 }
 
@@ -221,7 +187,7 @@ int ObTableLockDetectFuncList::get_active_server_session_list_(const int64_t &cl
     LOG_WARN("generate full table_name failed", K(OB_SYS_DATABASE_NAME), K(OB_ALL_CLIENT_TO_SERVER_SESSION_INFO_TNAME));
   } else if (OB_FAIL(databuff_printf(where_cond, 128, "WHERE client_session_id = %ld", client_session_id))) {
     LOG_WARN("generate where condition failed", K(client_session_id));
-  } else if (OB_FAIL(ObTableAccessHelper::read_multi_row(MTL_ID(),
+  } else if (OB_FAIL(ObTableAccessHelper::read_multi_row(
                                                          {"server_session_id"},
                                                          full_table_name,
                                                          where_cond,
@@ -229,7 +195,7 @@ int ObTableLockDetectFuncList::get_active_server_session_list_(const int64_t &cl
     if (OB_ITER_END == ret) {
       ret = OB_SUCCESS;
     } else {
-      LOG_WARN("read from inner table __all_client_to_server_session_info failed", K(ret), K(MTL_ID()));
+      LOG_WARN("read from inner table __all_client_to_server_session_info failed", K(ret));
     }
   } else {
     const ObAddr &self_addr = GCTX.self_addr();
@@ -266,7 +232,7 @@ int ObTableLockDetectFuncList::get_owner_id_list_from_table_(ObIAllocator &alloc
     LOG_WARN("generate full table_name failed");
   } else {
     ObArray<ObTuple<int64_t, int64_t>> tmp_owner_ids;
-    if (OB_FAIL(ObTableAccessHelper::read_multi_row(MTL_ID(), {"owner_type", "owner_id"}, table_name, where_cond, tmp_owner_ids))) {
+    if (OB_FAIL(ObTableAccessHelper::read_multi_row({"owner_type", "owner_id"}, table_name, where_cond, tmp_owner_ids))) {
       if (OB_ITER_END == ret) {
         ret = OB_SUCCESS;
       } else {
@@ -309,7 +275,6 @@ int ObTableLockDetector::record_detect_info_to_inner_table(sql::ObSQLSessionInfo
   bool is_existed = false;
 
   need_record_to_lock_table = true;
-  lib::CompatModeGuard guard(lib::Worker::CompatMode::MYSQL);
   if (!(LOCK_OBJECT == task_type || LOCK_TABLE == task_type)) {
     ret = OB_NOT_SUPPORTED;
     LOG_WARN("do not support detect task type", K(ret), K(task_type));
@@ -358,7 +323,6 @@ int ObTableLockDetector::remove_detect_info_from_inner_table(sql::ObSQLSessionIn
   bool need_release_conn = false;
   share::ObDMLSqlSplicer dml;
 
-  lib::CompatModeGuard guard(lib::Worker::CompatMode::MYSQL);
   // Only when delete_record successfully, it needs to be removed from lock_table.
   // So we initialize it to false here, if delete failed, we will try to removed
   // it next time.
@@ -423,7 +387,6 @@ int ObTableLockDetector::remove_detect_info_from_inner_table(sql::ObSQLSessionIn
   bool need_release_conn = false;
   int64_t cnt_in_new_table = 0;
 
-  lib::CompatModeGuard guard(lib::Worker::CompatMode::MYSQL);
   if (OB_ISNULL(inner_conn = static_cast<observer::ObInnerSQLConnection *>(session_info->get_inner_conn()))) {
     LOG_INFO("there is no inner connection in the session, we will try to create one", K(session_info->get_server_sid()));
     if (OB_FAIL(ObInnerConnectionLockUtil::create_inner_conn(session_info, GCTX.sql_proxy_, inner_conn))) {
@@ -497,7 +460,7 @@ int ObTableLockDetector::remove_expired_lock_id()
                             now,
                             detect_table_cond.ptr(),
                             delete_limit));
-  OZ (ObTableAccessHelper::delete_row(MTL_ID(), dbms_lock_table_name, where_cond.string()));
+  OZ (ObTableAccessHelper::delete_row(dbms_lock_table_name, where_cond.string()));
   return ret;
 }
 
@@ -631,7 +594,7 @@ int ObTableLockDetector::get_lock_owner_by_lock_id(const uint64_t &lock_id, ObTa
 {
   int ret = OB_SUCCESS;
   ObSqlString where_cond;
-  uint64_t tenant_id = MTL_ID();
+  
   char table_name[OB_MAX_TABLE_NAME_BUF_LENGTH] = {0};
   int64_t owner_id = 0;
   int64_t owner_type = 0;
@@ -643,7 +606,7 @@ int ObTableLockDetector::get_lock_owner_by_lock_id(const uint64_t &lock_id, ObTa
                             static_cast<int>(EXCLUSIVE)));
   OZ (get_table_name(table_name));
   OZ (ObTableAccessHelper::read_single_row(
-      tenant_id, {"owner_id", "owner_type"}, table_name, where_cond.string(), owner_id, owner_type));
+      {"owner_id", "owner_type"}, table_name, where_cond.string(), owner_id, owner_type));
   OX (lock_owner.convert_from_value(static_cast<ObLockOwnerType>(owner_type), owner_id));
 
   return ret;

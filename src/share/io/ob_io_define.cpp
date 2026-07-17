@@ -15,11 +15,15 @@
  */
 
 #define USING_LOG_PREFIX COMMON
+#include "lib/stat/ob_diagnostic_info_guard.h"
+#include "share/unit/ob_unit_config.h"
+#include "share/ob_force_print_log.h"
+#include "lib/ob_define.h"
+#include "share/config/ob_server_config.h"
 #include "ob_io_define.h"
 #include "share/io/ob_io_manager.h"
-#include "storage/backup/ob_backup_factory.h"
-#include "src/storage/ob_file_system_router.h"
-#include "src/observer/ob_server.h"
+#include "lib/restore/ob_object_device.h"
+using namespace oceanbase::share;
 using namespace oceanbase::lib;
 using namespace oceanbase::common;
 /******************             IOMode              **********************/
@@ -85,51 +89,6 @@ ObIOMode oceanbase::common::get_io_mode_enum(const char *mode_string)
   return mode;
 }
 
-class DiskChecker
-{
-private:
-  DiskChecker() : is_clog_data_in_same_disk_(false)
-  {}
-  ~DiskChecker()
-  {}
-  int get_major_device(const char *path) const
-  {
-    struct stat fileStat;
-    if (stat(path, &fileStat) != 0) {
-      LOG_ERROR_RET(OB_IO_ERROR, "read file stat failed", K(path));
-    }
-    return (fileStat.st_dev >> 8) & 0xFF;
-  }
-  bool is_same_disk(const char *path1, const char *path2)
-  {
-    bool is_same_disk = false;
-    if (OB_ISNULL(path1) || OB_ISNULL(path2)) {
-      LOG_ERROR_RET(OB_INVALID_ARGUMENT, "clog or data path is nullptr", K(path1), K(path2));
-    } else {
-      const int dev1 = get_major_device(path1);
-      const int dev2 = get_major_device(path1);
-      is_same_disk = (dev1 == dev2);
-    }
-    return is_same_disk;
-  }
-public:
-  static DiskChecker &get_instance()
-  {
-    static DiskChecker instance_;
-    return instance_;
-  }
-  bool is_clog_data_in_same_disk()
-  {
-    int ret = OB_SUCCESS;
-    if (REACH_TIME_INTERVAL(60 * 1000L * 1000L)) {
-      is_clog_data_in_same_disk_ = is_same_disk(oceanbase::ObFileSystemRouter::get_instance().get_data_dir(),
-          oceanbase::ObFileSystemRouter::get_instance().get_clog_dir());
-    }
-    return is_clog_data_in_same_disk_;
-  }
-private:
-  bool is_clog_data_in_same_disk_;
-};
 const char *oceanbase::common::get_io_sys_group_name(ObIOModule module)
 {
   const char *ret_name = "UNKNOWN";
@@ -212,7 +171,6 @@ const char *oceanbase::common::get_io_sys_group_name(ObIOModule module)
 /******************             IOFlag              **********************/
 ObIOFlag::ObIOFlag()
     : mode_(0),
-      func_type_(oceanbase::share::ObFunctionType::DEFAULT_FUNCTION),
       wait_event_id_(0),
       is_sync_(false),
       is_unlimited_(false),
@@ -221,7 +179,6 @@ ObIOFlag::ObIOFlag()
       is_sealed_(true),
       need_close_dev_and_fd_(false),
       reserved_(0),
-      group_id_(USER_RESOURCE_OTHER_GROUP_ID),
       sys_module_id_(OB_INVALID_ID)
 {
 }
@@ -234,7 +191,6 @@ ObIOFlag::~ObIOFlag()
 void ObIOFlag::reset()
 {
   mode_ = 0;
-  group_id_ = USER_RESOURCE_OTHER_GROUP_ID;
   sys_module_id_ = OB_INVALID_ID;
   wait_event_id_ = 0;
   is_sync_ = false;
@@ -244,14 +200,12 @@ void ObIOFlag::reset()
   is_sealed_ = true;
   need_close_dev_and_fd_ = false;
   reserved_ = 0;
-  group_id_ = USER_RESOURCE_OTHER_GROUP_ID;
   sys_module_id_ = OB_INVALID_ID;
 }
 
 bool ObIOFlag::is_valid() const
 {
   return mode_ >= 0 && mode_ < static_cast<int>(ObIOMode::MAX_MODE)
-    && is_valid_group(group_id_)
     && wait_event_id_ > 0;
 }
 
@@ -265,33 +219,9 @@ ObIOMode ObIOFlag::get_mode() const
   return static_cast<ObIOMode>(mode_);
 }
 
-void ObIOFlag::set_resource_group_id(const uint64_t group_id)
-{
-  if (!is_valid_resource_group(group_id)) {
-    group_id_ = USER_RESOURCE_OTHER_GROUP_ID;
-  } else {
-    group_id_ = group_id;
-  }
-}
-
-void ObIOFlag::set_func_type(const uint8_t func_type)
-{
-  func_type_ = func_type;
-}
-
-uint8_t ObIOFlag::get_func_type() const
-{
-  return func_type_;
-}
-
 void ObIOFlag::set_wait_event(int64_t wait_event_id)
 {
   wait_event_id_ = wait_event_id;
-}
-
-uint64_t ObIOFlag::get_resource_group_id() const
-{
-  return group_id_;
 }
 
 uint64_t ObIOFlag::get_sys_module_id() const
@@ -306,8 +236,7 @@ void ObIOFlag::set_sys_module_id(const uint64_t sys_module_id)
 
 bool ObIOFlag::is_sys_module() const
 {
-  return USER_RESOURCE_OTHER_GROUP_ID == group_id_ 
-          && sys_module_id_ >= SYS_MODULE_START_ID
+  return sys_module_id_ >= SYS_MODULE_START_ID
           && sys_module_id_ < SYS_MODULE_END_ID;
 }
 
@@ -457,8 +386,7 @@ int ObIOCallback::alloc_and_copy_data(const char *io_data_buffer, const int64_t 
 
 /******************             SNIOInfo              **********************/
 ObSNIOInfo::ObSNIOInfo()
-  : tenant_id_(OB_INVALID_TENANT_ID),
-    fd_(),
+  : fd_(),
     offset_(0),
     size_(0),
     timeout_us_(DEFAULT_IO_WAIT_TIME_US),
@@ -483,7 +411,7 @@ ObSNIOInfo::~ObSNIOInfo()
 
 void ObSNIOInfo::reset()
 {
-  tenant_id_ = 0;
+  
   fd_.reset();
   offset_ = 0;
   size_ = 0;
@@ -497,13 +425,12 @@ void ObSNIOInfo::reset()
 
 bool ObSNIOInfo::is_valid() const
 {
-  return tenant_id_ > 0
-    && fd_.is_valid()
+  return fd_.is_valid()
     && offset_ >= 0
     // in order to address concurrent write issues, archive checkpoint module would write
     // multiple non-content objects (it stores content in object name) whose size = 0
     && (flag_.is_sync() ? size_ >= 0 : size_ > 0)
-    && timeout_us_ >= 0 //todo qilu: reopen after column_store steady
+    && timeout_us_ >= 0
     && flag_.is_valid()
     && (flag_.is_read() || nullptr != buf_);
 }
@@ -512,7 +439,7 @@ ObSNIOInfo &ObSNIOInfo::operator=(const ObSNIOInfo &other)
 {
   if (&other != this) {
     reset();
-    tenant_id_ = other.tenant_id_;
+    
     fd_ = other.fd_;
     offset_ = other.offset_;
     size_ = other.size_;
@@ -528,57 +455,6 @@ ObSNIOInfo &ObSNIOInfo::operator=(const ObSNIOInfo &other)
 
 
 /******************             S2IOInfo              **********************/
-#ifdef OB_BUILD_SHARED_STORAGE
-ObSSIOInfo::ObSSIOInfo() : ObSNIOInfo(), phy_block_handle_(), fd_cache_handle_(), tmp_file_valid_length_(0)
-{
-}
-
-ObSSIOInfo::ObSSIOInfo(const ObSSIOInfo &other)
-{
-  *this = other;
-}
-
-ObSSIOInfo::~ObSSIOInfo()
-{
-}
-
-void ObSSIOInfo::reset()
-{
-  ObSNIOInfo::reset();
-  phy_block_handle_.reset();
-  fd_cache_handle_.reset();
-  tmp_file_valid_length_ = 0;
-}
-
-ObSSIOInfo &ObSSIOInfo::operator=(const ObSSIOInfo &other)
-{
-  int ret = OB_SUCCESS;
-  if (&other != this) {
-    reset();
-    tenant_id_ = other.tenant_id_;
-    fd_ = other.fd_;
-    offset_ = other.offset_;
-    size_ = other.size_;
-    timeout_us_ = other.timeout_us_;
-    flag_ = other.flag_;
-    callback_ = other.callback_;
-    buf_ = other.buf_;
-    user_data_buf_ = other.user_data_buf_;
-    part_id_ = other.part_id_;
-    tmp_file_valid_length_ = other.tmp_file_valid_length_;
-    // ignore ret, cuz assign fails only when other.phy_block_handle_/fd_cache_handle_ is invalid.
-    // in case when other.phy_block_handle_/fd_cache_handle_ is invalid, ret is unnecessary.
-    int tmp_ret = OB_SUCCESS;
-    if (OB_TMP_FAIL(phy_block_handle_.assign(other.phy_block_handle_))) {
-      LOG_WARN("fail to assign phy block handle", KR(tmp_ret), KPC(this), K(other));
-    }
-    if (OB_TMP_FAIL(fd_cache_handle_.assign(other.fd_cache_handle_))) {
-      LOG_WARN("fail to assign fd cache handle", KR(tmp_ret), KPC(this), K(other));
-    }
-  }
-  return (*this);
-}
-#endif
 
 /******************             IOTimeLog              **********************/
 
@@ -686,7 +562,7 @@ bool ObIOResult::is_valid() const
     // in order to address concurrent write issues, archive checkpoint module would write
     // multiple non-content objects (it stores content in object name) whose size = 0
     && (flag_.is_sync() ? size_ >= 0 : size_ > 0)
-    && timeout_us_ >= 0 //todo qilu: reopen after column_store steady
+    && timeout_us_ >= 0
     && flag_.is_valid()
     && (flag_.is_read() ? (nullptr != io_callback_ || nullptr != user_data_buf_ || flag_.is_detect()) : nullptr != buf_);
 }
@@ -722,12 +598,10 @@ int ObIOResult::init(const ObIOInfo &info)
   }
   if (OB_SUCC(ret)) {
     //init info and check valid
-    tenant_id_ = info.tenant_id_;
+    
     offset_ = info.offset_;
     size_ = info.size_;
     flag_ = info.flag_;
-    flag_.set_func_type(GET_FUNC_TYPE());
-    flag_.set_resource_group_id(GET_GROUP_ID());
     timeout_us_ = info.timeout_us_;
     if (timeout_us_ <= 0) {
       if (REACH_TIME_INTERVAL(10 * 1000 * 1000L)) {  // 10s
@@ -810,7 +684,7 @@ ObIOMode ObIOResult::get_mode() const
 
 ObIOGroupKey ObIOResult::get_group_key() const
 {
-  return ObIOGroupKey(flag_.get_resource_group_id(), is_object_device_req_ ? get_mode() : ObIOMode::MAX_MODE);
+  return ObIOGroupKey(0, is_object_device_req_ ? get_mode() : ObIOMode::MAX_MODE);
 }
 
 uint64_t ObIOResult::get_sys_module_id() const
@@ -924,18 +798,14 @@ void ObIOResult::finish(const ObIORetCode &ret_code, ObIORequest *req)
             OB_IO_MANAGER.get_tc().calc_usage(*req);
           }
         }
-        tenant_io_mgr_->io_func_infos_.accumulate(*req);
-        // do not detect backup io
-        if (!req->fd_.is_backup_block_file()) {
-          // record io error
-          if (OB_UNLIKELY(OB_IO_ERROR == ret_code_.io_ret_)) {
-            OB_IO_MANAGER.get_device_health_detector().record_io_error(*this, *req); 
-          }
-          // record timeout
-          if (OB_UNLIKELY(ObTimeUtility::current_time() > req->timeout_ts())) {
-            OB_IO_MANAGER.get_device_health_detector().record_io_timeout(*this, *req);
-          }
-	      }
+        // record io error
+        if (OB_UNLIKELY(OB_IO_ERROR == ret_code_.io_ret_)) {
+          OB_IO_MANAGER.get_device_health_detector().record_io_error(*this, *req);
+        }
+        // record timeout
+        if (OB_UNLIKELY(ObTimeUtility::current_time() > req->timeout_ts())) {
+          OB_IO_MANAGER.get_device_health_detector().record_io_timeout(*this, *req);
+        }
       }
       if (OB_FAIL(guard.get_ret())) {
         LOG_ERROR("lock io result condition failed", K(ret), K(*this));
@@ -1037,7 +907,6 @@ ObIORequest::ObIORequest()
     ref_cnt_(0),
     raw_buf_(nullptr),
     control_block_(nullptr),
-    tenant_id_(OB_INVALID_TENANT_ID),
     tenant_io_mgr_(),
     storage_accesser_(),
     fd_(),
@@ -1056,7 +925,6 @@ bool ObIORequest::is_valid() const
 {
   return nullptr != io_result_
       && io_result_->is_valid()
-      && tenant_id_ > 0
       && fd_.is_valid();
 }
 
@@ -1079,7 +947,7 @@ int ObIORequest::init(const ObIOInfo &info, ObIOResult *result)
     io_result_->inc_ref("request");
     trace_id_ = *ObCurTraceId::get_trace_id();
     //init info and check valid
-    tenant_id_ = info.tenant_id_;
+    
     fd_ = info.fd_;
     part_id_ = info.part_id_;
     char *io_buf = nullptr;
@@ -1148,15 +1016,12 @@ void ObIORequest::reset() //only for test, not dec resut_ref
   retry_count_ = 0;
   // only read need destroy here
   // TODO(yanfeng): works now, need refactor
-  if (fd_.is_backup_block_file() && nullptr != io_result_ && io_result_->flag_.is_read()) {
-    backup::ObLSBackupFactory::free(static_cast<backup::ObBackupWrapperIODevice *>(fd_.device_handle_));
-  }
   if (nullptr != control_block_ && nullptr != fd_.device_handle_) {
     fd_.device_handle_->free_iocb(control_block_);
     control_block_ = nullptr;
   }
   
-  tenant_id_ = 0;
+  
   free_io_buffer();
   ref_cnt_ = 0;
   trace_id_.reset();
@@ -1178,7 +1043,7 @@ void ObIORequest::destroy()
   }
 
   fd_.reset();
-  tenant_id_ = 0;
+  
   free_io_buffer();
   ref_cnt_ = 0;
   trace_id_.reset();
@@ -1219,42 +1084,6 @@ int64_t ObIORequest::timeout_ts() const
   return nullptr == io_result_ ? 0 : io_result_->time_log_.begin_ts_ > 0 ? io_result_->time_log_.begin_ts_ + io_result_->timeout_us_ : 0;
 }
 
-
-oceanbase::share::ObFunctionType ObIORequest::get_func_type() const
-{
-  oceanbase::share::ObFunctionType func_type = oceanbase::share::ObFunctionType::DEFAULT_FUNCTION;
-  if (io_result_ != nullptr) {
-    func_type = static_cast<oceanbase::share::ObFunctionType>(get_flag().get_func_type());
-  }
-  return func_type;
-}
-
-bool ObIORequest::is_local_clog_not_isolated()
-{
-  bool clog_not_isolated = false;
-  const int64_t clog_io_isolation_mode = GCONF.clog_io_isolation_mode;
-  const ObIOGroupKey group_key = get_group_key();
-  const oceanbase::share::ObFunctionType func_type = get_func_type();
-  if (group_key.mode_ != ObIOMode::MAX_MODE) {
-  } else if (clog_io_isolation_mode == 0 || clog_io_isolation_mode > 2) {
-    if ((func_type == ObFunctionType::PRIO_CLOG_HIGH ||
-         func_type == ObFunctionType::PRIO_CLOG_MID ||
-         func_type == ObFunctionType::PRIO_CLOG_LOW)) {
-      clog_not_isolated = !DiskChecker::get_instance().is_clog_data_in_same_disk();
-    }
-  } else if (clog_io_isolation_mode == 1) {
-    if ((func_type == ObFunctionType::PRIO_CLOG_HIGH ||
-         func_type == ObFunctionType::PRIO_CLOG_MID ||
-         func_type == ObFunctionType::PRIO_CLOG_LOW)) {
-      clog_not_isolated = true;
-    }
-  } else if (clog_io_isolation_mode == 2) {
-  }
-  if (REACH_TIME_INTERVAL(60 * 1000L * 1000L)) { // 60s
-    LOG_INFO("clog_not_isolated", K(clog_not_isolated), K(clog_io_isolation_mode), K(group_key), K(func_type));
-  }
-  return clog_not_isolated;
-}
 
 bool ObIORequest::is_sys_module() const
 {
@@ -1441,7 +1270,7 @@ int ObIORequest::prepare(char *next_buffer, int64_t next_size, int64_t next_offs
     LOG_WARN("device handle is null", K(ret), K(*this));
   } else if (fd_.device_handle_->is_object_device()) {
     // do nothing
-  } else if (OB_ISNULL(control_block_) && OB_ISNULL(control_block_ = fd_.device_handle_->alloc_iocb(tenant_id_))) {
+  } else if (OB_ISNULL(control_block_) && OB_ISNULL(control_block_ = fd_.device_handle_->alloc_iocb())) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("alloc io control block failed", K(ret), K(*this));
   } else if (FALSE_IT(tg.click("alloc_iocb"))) {
@@ -1453,9 +1282,7 @@ int ObIORequest::prepare(char *next_buffer, int64_t next_size, int64_t next_offs
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("io result is null", K(ret));
   } else {
-    if (fd_.is_backup_block_file()) {
-      // ignore
-    } else if (io_result_->flag_.is_read()) {
+    if (io_result_->flag_.is_read()) {
       if (OB_FAIL(fd_.device_handle_->io_prepare_pread(
               fd_,
               io_buf,
@@ -1514,17 +1341,6 @@ int ObIORequest::recycle_buffer()
 }
 
 
-int ObIORequest::retry_io()
-{
-  int ret = OB_SUCCESS;
-  if(OB_ISNULL(tenant_io_mgr_)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("tenant io mgr is null", K(ret), K(*this));
-  } else if (OB_FAIL(tenant_io_mgr_->retry_io(*this))) {
-    LOG_WARN("retry io failed", K(ret), K(*this));
-  }
-  return ret;
-}
 int ObIORequest::try_alloc_buf_until_timeout(char *&io_buf)
 {
   int ret = OB_SUCCESS;
@@ -1695,8 +1511,6 @@ void ObPhyQueue::destroy()
 
 /******************             IOHandle              **********************/
 
-ERRSIM_POINT_DEF(ERRSIM_IO_HANDLE_TRACE);
-
 ObIOHandle::ObIOHandle()
   : result_(nullptr)
 {
@@ -1733,7 +1547,6 @@ int ObIOHandle::set_result(ObIOResult &result)
   result.inc_ref("handle_inc"); // ref for handle
   result.inc_out_ref();
   result_ = &result;
-  storage::ObStorageLeakChecker::get_instance().handle_hold(this);
   return ret;
 }
 
@@ -1811,7 +1624,6 @@ int ObIOHandle::wait(const int64_t wait_timeout_ms)
                 ? result_->time_log_.begin_ts_ + result_->timeout_us_ - ObTimeUtility::current_time()
                 : 0)) /
         1000L;
-    ObWaitEventGuard wait_guard(result_->flag_.get_wait_event(), timeout_ms);
     const int64_t real_wait_timeout = (result_->is_object_device_req_
                                        ? timeout_ms
                                        : min(OB_IO_MANAGER.get_io_config().data_storage_io_timeout_ms_, timeout_ms));
@@ -1832,14 +1644,8 @@ int ObIOHandle::wait(const int64_t wait_timeout_ms)
             "real_wait_timeout is unexpected < 0", K(ret), K(real_wait_timeout), K(timeout_ms), K(result_), K(lbt()));
       }
     }
-    ObLocalDiagnosticInfo::set_io_time(
-      get_io_interval(result_->time_log_.dequeue_ts_, result_->time_log_.enqueue_ts_),
-      get_io_interval(result_->time_log_.return_ts_, result_->time_log_.submit_ts_),
-      get_io_interval(static_cast<int64_t>(result_->time_log_.callback_finish_ts_), static_cast<int64_t>(result_->time_log_.callback_enqueue_ts_))
-    );
   } else {
     int64_t wait_ms = wait_timeout_ms;
-    ObWaitEventGuard wait_guard(result_->flag_.get_wait_event(), wait_ms);
     if (OB_FAIL(result_->wait(wait_ms))) {
       if (OB_TIMEOUT == ret) {
         const int64_t real_wait_timeout = min(OB_IO_MANAGER.get_io_config().data_storage_io_timeout_ms_, result_->timeout_us_ / 1000L);
@@ -1848,11 +1654,6 @@ int ObIOHandle::wait(const int64_t wait_timeout_ms)
         }
       }
     }
-    ObLocalDiagnosticInfo::set_io_time(
-      get_io_interval(result_->time_log_.dequeue_ts_, result_->time_log_.enqueue_ts_),
-      get_io_interval(result_->time_log_.return_ts_, result_->time_log_.submit_ts_),
-      get_io_interval(static_cast<int64_t>(result_->time_log_.callback_finish_ts_), static_cast<int64_t>(result_->time_log_.callback_enqueue_ts_))
-    );
   }
 
   if (OB_SUCC(ret)) {
@@ -1933,7 +1734,6 @@ int64_t ObIOHandle::get_rt() const
 void ObIOHandle::reset()
 {
   if (OB_NOT_NULL(result_)) {
-    storage::ObStorageLeakChecker::get_instance().handle_reset(this);
     result_->dec_out_ref();
     result_->dec_ref("handle_dec"); // ref for handle
     result_ = nullptr;
@@ -1955,11 +1755,6 @@ ObIOCallback *ObIOHandle::get_io_callback()
     callback = result_->io_callback_;
   }
   return callback;
-}
-
-bool ObIOHandle::need_trace() const
-{
-  return is_valid() && OB_SUCCESS != ERRSIM_IO_HANDLE_TRACE;
 }
 
 /******************             TenantIOConfig              **********************/
@@ -2110,115 +1905,7 @@ int ObTenantIOConfig::deep_copy(const ObTenantIOConfig &other_config)
   return ret;
 }
 
-//for unittest and performance test script
-int ObTenantIOConfig::parse_group_config(const char *config_str)
-{
-  int ret = OB_SUCCESS;
-  const int64_t max_config_length = 512;
-  char copied_str[max_config_length] = { 0 };
-  if (OB_ISNULL(config_str) || strlen(config_str) > max_config_length) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), KCSTRING(config_str));
-  } else if (0 > snprintf(copied_str, max_config_length, "%s", config_str)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("copy config string failed", K(ret), KCSTRING(config_str));
-  } else {
-    str_trim(copied_str);
-    int pos = 0;
-    const int64_t len = strlen(copied_str);
-    for (int64_t i = 0; OB_SUCC(ret) && i < len; ++i) {
-      if (';' == copied_str[i]) {
-        copied_str[i] = '\0';
-      } else if (':' == copied_str[i]) {
-        copied_str[i] = ' ';
-      }
-    }
-    while (OB_SUCC(ret) && pos < len) {
-      const char *tmp_config_str = copied_str + pos;
-      int64_t group_id = 0;
-      char group_idx[max_config_length] = { 0 };
-      char group_namex[max_config_length] = { 0 };
-      ObTenantIOConfig::GroupConfig tmp_group_config;
-      int scan_count = sscanf(tmp_config_str, "%s %s %ld,%ld,%ld",
-                              group_idx,
-                              group_namex,
-                              &tmp_group_config.min_percent_,
-                              &tmp_group_config.max_percent_,
-                              &tmp_group_config.weight_percent_);
-      if (5 != scan_count) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("scan current group config failed", K(ret), K(scan_count), KCSTRING(tmp_config_str), K(tmp_group_config));
-      } else {
-        tmp_group_config.group_id_ = atoi(group_idx);
-        if (0 == tmp_group_config.group_id_) {
-          group_configs_.at((uint8_t)ObIOMode::MAX_MODE) = tmp_group_config;
-        } else if (OB_FAIL(group_configs_.push_back(tmp_group_config))) {
-          LOG_WARN("push back group config failed", K(ret), K(tmp_group_config));
-        }
-        pos += strlen(tmp_config_str) + 1;
-      }
-    }
-    if (OB_SUCC(ret)) {
-      // decide the config of other group
-      int64_t sum_min_percent = 0;
-      int64_t sum_weight_percent = 0;
-      for (uint8_t i = (uint8_t)ObIOMode::READ; i <= (uint8_t)ObIOMode::MAX_MODE; ++i) {
-        for (int64_t j = 0; j < group_configs_.count(); ++j) {
-          if (group_configs_.at(j).is_valid() && group_configs_.at(j).group_id_ != 0) {
-            sum_min_percent += group_configs_.at(j).min_percent_;
-            sum_weight_percent += group_configs_.at(j).weight_percent_;
-          }
-        }
-        if (0 == group_configs_.at(i).group_id_
-            && 0 == group_configs_.at(i).min_percent_
-            && 0 == group_configs_.at(i).max_percent_
-            && 0 == group_configs_.at(i).weight_percent_
-            && sum_weight_percent < 100) {
-          group_configs_.at(i).min_percent_ = 100 - sum_min_percent;
-          group_configs_.at(i).max_percent_ = 100;
-          group_configs_.at(i).weight_percent_ = 100 - sum_weight_percent;
-        }
-      }
-    }
-  }
-  return ret;
-}
-
-int ObTenantIOConfig::add_single_group_config(const uint64_t tenant_id,
-                                              const ObIOGroupKey &key,
-                                              const char *group_name,
-                                              int64_t min_percent,
-                                              int64_t max_percent,
-                                              int64_t weight_percent)
-{
-  int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(!is_resource_manager_group(key.group_id_)) || !is_valid_tenant_id(tenant_id) ||
-      min_percent < 0 || min_percent > 100 ||
-      max_percent < 0 || max_percent > 100 ||
-      weight_percent < 0 || weight_percent > 100 || 
-      min_percent > max_percent) {
-    ret = OB_INVALID_CONFIG;
-    LOG_WARN("invalid group config", K(ret), K(tenant_id), K(key.group_id_), K(min_percent), K(max_percent), K(weight_percent));
-  } else {
-    ObTenantIOConfig::GroupConfig tmp_group_config;
-    strncpy(tmp_group_config.group_name_, group_name, common::OB_MAX_RESOURCE_PLAN_NAME_LENGTH);
-    tmp_group_config.group_name_[common::OB_MAX_RESOURCE_PLAN_NAME_LENGTH - 1] = '\0';
-    tmp_group_config.min_percent_ = min_percent;
-    tmp_group_config.max_percent_ = max_percent;
-    tmp_group_config.weight_percent_ = weight_percent;
-    tmp_group_config.group_id_ = key.group_id_;
-    tmp_group_config.mode_ = key.mode_;
-    if (OB_UNLIKELY(!tmp_group_config.is_valid())) {
-      ret = OB_INVALID_CONFIG;
-      LOG_WARN("invalid group config", K(ret), K(tmp_group_config));
-    } else if (OB_FAIL(group_configs_.push_back(tmp_group_config))) {
-      LOG_WARN("push back group config failed", K(ret), K(tmp_group_config));
-    }
-  }
-  return ret;
-}
-
-int ObTenantIOConfig::get_group_config(const uint64_t index, int64_t &min, int64_t &max, int64_t &weight) const
+int ObTenantIOConfig::calc_group_config(const uint64_t index, int64_t &min, int64_t &max, int64_t &weight) const
 {
   int ret = OB_SUCCESS;
   min = 0;
@@ -2283,7 +1970,3 @@ int64_t ObTenantIOConfig::to_string(char* buf, const int64_t buf_len) const
   J_OBJ_END();
   return pos;
 }
-
-
-
-

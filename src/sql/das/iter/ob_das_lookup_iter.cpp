@@ -44,7 +44,7 @@ int ObDASLookupIter::inner_init(ObDASIterParam &param)
     lookup_ctdef_ = lookup_param.lookup_ctdef_;
     lookup_rtdef_ = lookup_param.lookup_rtdef_;
     lib::ContextParam param;
-    param.set_mem_attr(MTL_ID(), ObModIds::OB_SQL_TABLE_LOOKUP, ObCtxIds::DEFAULT_CTX_ID)
+    param.set_mem_attr(ObModIds::OB_SQL_TABLE_LOOKUP, ObCtxIds::DEFAULT_CTX_ID)
          .set_properties(lib::USE_TL_PAGE_OPTIONAL);
     if (OB_FAIL(CURRENT_CONTEXT->CREATE_CONTEXT(lookup_memctx_, param))) {
       LOG_WARN("failed to create lookup memctx", K(ret));

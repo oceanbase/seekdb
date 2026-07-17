@@ -18,8 +18,8 @@
 
 #include "storage/direct_load/ob_direct_load_discrete_vector.h"
 #include "share/rc/ob_tenant_base.h"
-#include "share/vector/ob_continuous_base.h"
-#include "share/vector/ob_uniform_base.h"
+#include "sql/engine/vector/ob_continuous_base.h"
+#include "sql/engine/vector/ob_uniform_base.h"
 
 namespace oceanbase
 {
@@ -35,7 +35,7 @@ ObDirectLoadDiscreteVector::ObDirectLoadDiscreteVector(ObDiscreteBase *discrete_
     ptrs_(vec_ptrs_),
     allocator_("TLD_Discrete")
 {
-  allocator_.set_tenant_id(MTL_ID());
+  
 }
 
 void ObDirectLoadDiscreteVector::reuse(const int64_t batch_size)

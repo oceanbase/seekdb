@@ -15,6 +15,7 @@
  */
 
 #define USING_LOG_PREFIX SQL_ENG
+#include "lib/stat/ob_diagnostic_info_guard.h"
 #include "sql/engine/ob_des_exec_context.h"
 
 using namespace oceanbase::common;
@@ -52,7 +53,6 @@ void ObDesExecContext::cleanup_session()
       GCTX.session_mgr_->revert_session(my_session_);
       GCTX.session_mgr_->free_session(free_session_ctx_);
       my_session_ = NULL;
-      GCTX.session_mgr_->mark_sessid_unused(free_session_ctx_.sessid_);
     }
   }
   OB_ASSERT(ObQueryRetryAshGuard::get_info_ptr() == nullptr);
@@ -72,7 +72,7 @@ void ObDesExecContext::hide_session()
   }
 }
 
-int ObDesExecContext::create_my_session(uint64_t tenant_id)
+int ObDesExecContext::create_my_session()
 {
   int ret = OB_SUCCESS;
   ObSQLSessionInfo *local_session = NULL;
@@ -84,18 +84,15 @@ int ObDesExecContext::create_my_session(uint64_t tenant_id)
     LOG_WARN("session manager is NULL", K(ret));
   } else {
     uint32_t sid = ObSQLSessionInfo::INVALID_SESSID;
-    uint64_t proxy_sid = 0;
     if (OB_FAIL(GCTX.session_mgr_->create_sessid(sid))) {
       LOG_WARN("alloc session id failed", K(ret));
-    } else if (OB_FAIL(GCTX.session_mgr_->create_session(tenant_id, sid, proxy_sid,
+    } else if (OB_FAIL(GCTX.session_mgr_->create_session(sid,
                                                     ObTimeUtility::current_time(),
                                                     my_session_))) {
       LOG_WARN("create session failed", K(ret), K(sid));
-      GCTX.session_mgr_->mark_sessid_unused(sid);
       my_session_ = NULL;
     } else {
       free_session_ctx_.sessid_ = sid;
-      free_session_ctx_.proxy_sessid_ = proxy_sid;
     }
     if (OB_FAIL(ret)) {
       // fail back to local session allocating, avoid remote/distribute executing fail
@@ -108,11 +105,9 @@ int ObDesExecContext::create_my_session(uint64_t tenant_id)
       } else {
         local_session = new (local_session) ObSQLSessionInfo();
         uint32_t tmp_sid = 0;
-        uint64_t tmp_proxy_sessid = proxy_sid;
-        bool session_in_mgr = false;
-        if (OB_FAIL(GCTX.session_mgr_->create_sessid(tmp_sid, session_in_mgr))) {
+        if (OB_FAIL(GCTX.session_mgr_->create_sessid(tmp_sid))) {
           LOG_WARN("failed to mock session id", K(ret));
-        } else if (OB_FAIL(local_session->init(tmp_sid, tmp_proxy_sessid, NULL))) {
+        } else if (OB_FAIL(local_session->init(tmp_sid, NULL))) {
           LOG_WARN("my session init failed", K(ret));
           local_session->~ObSQLSessionInfo();
         } else {
@@ -139,10 +134,6 @@ DEFINE_DESERIALIZE(ObDesExecContext)
   ObPhyOperatorType phy_op_type;
   int64_t tmp_phy_op_type = 0;
   uint64_t phy_op_size = 0;
-  uint64_t tenant_id = OB_INVALID_TENANT_ID;
-  if (ser_version == SER_VERSION_1) {
-    OB_UNIS_DECODE(tenant_id);
-  }
   OB_UNIS_DECODE(phy_op_size);
   //now to init ObExecContext container
   if (OB_SUCC(ret)) {
@@ -151,7 +142,7 @@ DEFINE_DESERIALIZE(ObDesExecContext)
     } else if (OB_ISNULL(phy_plan_ctx_)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_ERROR("succ to create phy plan ctx, but phy plan ctx is NULL", K(ret));
-    } else if (OB_FAIL(create_my_session(tenant_id))) {
+    } else if (OB_FAIL(create_my_session())) {
       LOG_WARN("create my session failed", K(ret));
     } else if (OB_ISNULL(my_session_)) {
       ret = OB_ERR_UNEXPECTED;
@@ -172,7 +163,7 @@ DEFINE_DESERIALIZE(ObDesExecContext)
       }
       // alloc from session manager, increase active session number
       if (OB_SUCC(ret) && free_session_ctx_.sessid_ != ObSQLSessionInfo::INVALID_SESSID) {
-        free_session_ctx_.tenant_id_ = my_session_->get_effective_tenant_id();
+        
         EVENT_INC(ACTIVE_SESSIONS);
         free_session_ctx_.has_inc_active_num_ = true;
       }
@@ -180,7 +171,7 @@ DEFINE_DESERIALIZE(ObDesExecContext)
   }
 
   if (OB_SUCC(ret)) {
-    set_mem_attr(ObMemAttr(my_session_->get_effective_tenant_id(), ObModIds::OB_SQL_EXEC_CONTEXT, ObCtxIds::EXECUTE_CTX_ID));
+    set_mem_attr(ObMemAttr(ObModIds::OB_SQL_EXEC_CONTEXT, ObCtxIds::EXECUTE_CTX_ID));
     // init operator context need session info, initialized after session deserialized.
     if (OB_FAIL(init_phy_op(phy_op_size))) {
       LOG_WARN("init exec context phy op failed", K(ret), K_(phy_op_size));

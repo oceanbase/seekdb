@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 #include "ob_px_worker.h"
+#include "share/rc/ob_module_provider.h"
 #include "sql/engine/px/ob_px_sqc_handler.h"
 #include "sql/engine/px/ob_px_admission.h"
 #include "observer/omt/ob_tenant.h"
@@ -31,32 +32,6 @@ using namespace oceanbase::share;
 //////////////////////////////////////////////////////////////////////////////
 //////////////////////////////////////////////////////////////////////////////
 //////////////////////////////////////////////////////////////////////////////
-
-ObPxRpcWorker::ObPxRpcWorker(const observer::ObGlobalContext &gctx,
-                             obrpc::ObPxRpcProxy &rpc_proxy,
-                             common::ObIAllocator &alloc)
-  : gctx_(gctx),
-    rpc_proxy_(rpc_proxy),
-    alloc_(alloc)
-{
-}
-
-ObPxRpcWorker::~ObPxRpcWorker()
-{
-}
-
-int ObPxRpcWorker::run(ObPxRpcInitTaskArgs &arg)
-{
-  int ret = OB_SUCCESS;
-  // Within 50ms a task thread must be allocated, if the queue time exceeds 50ms, it fails and falls back to 1 thread
-  int64_t timeout_us = 50 * 1000;
-  ret = rpc_proxy_
-      .to(arg.task_.get_exec_addr())
-      .by(THIS_WORKER.get_rpc_tenant())
-      .timeout(timeout_us)
-      .init_task(arg, resp_);
-  return ret;
-}
 
 //////////////////////////////////////////////////////////////////////////////
 //////////////////////////////////////////////////////////////////////////////
@@ -157,7 +132,6 @@ void PxWorkerFunctor::operator ()(bool need_exec)
   }
   ObDIActionGuard action_guard(px_parallel_rule_str);
   ObCurTraceId::set(env_arg_.get_trace_id());
-  GET_DIAGNOSTIC_INFO->get_ash_stat().trace_id_ = env_arg_.get_trace_id();
   /**
    * The interrupt must cover the release handler, because its process involves sqc sending messages to qc,
    * requiring a check for interrupts. The interrupt itself is thread-local and should not depend on tenant space.
@@ -175,17 +149,6 @@ void PxWorkerFunctor::operator ()(bool need_exec)
   } else if (OB_NOT_NULL(sqc_handler) && OB_LIKELY(!sqc_handler->has_interrupted())) {
     THIS_WORKER.set_worker_level(sqc_handler->get_rpc_level());
     THIS_WORKER.set_curr_request_level(sqc_handler->get_rpc_level());
-    LOG_TRACE("init flt ctx", K(sqc_handler->get_flt_ctx()));
-    if (sqc_handler->get_flt_ctx().trace_id_.is_inited()) {
-      OBTRACE->init(sqc_handler->get_flt_ctx());
-    }
-    FLTSpanGuard(px_task);
-
-    FLT_SET_TAG(task_id, task_arg_.task_.get_task_id(),
-                dfo_id, task_arg_.task_.get_dfo_id(),
-                sqc_id, task_arg_.task_.get_sqc_id(),
-                qc_id, task_arg_.task_.get_qc_id(),
-                group_id, THIS_WORKER.get_group_id());
     // Do not set thread local log level while log level upgrading (OB_LOGGER.is_info_as_wdiag)
     if (OB_LOGGER.is_info_as_wdiag()) {
       ObThreadLogLevelUtils::clear();
@@ -194,12 +157,12 @@ void PxWorkerFunctor::operator ()(bool need_exec)
         ObThreadLogLevelUtils::init(env_arg_.get_log_level());
       }
     }
-    // When deserialize expr, sql mode will affect basic function of expr.
-    CompatModeGuard mode_guard(Worker::CompatMode::MYSQL);
-    MTL_SWITCH(sqc_handler->get_tenant_id()) {
-      CREATE_WITH_TEMP_ENTITY(RESOURCE_OWNER, sqc_handler->get_tenant_id()) {
+    // single process owner id (de-tenant: replaces former sys-tenant resource-owner arg)
+    static const uint64_t PROCESS_OWNER_ID = 1;
+    MOD_SCOPE {
+      CREATE_WITH_TEMP_ENTITY(RESOURCE_OWNER, PROCESS_OWNER_ID) {
         if (OB_FAIL(ROOT_CONTEXT->CREATE_CONTEXT(mem_context,
-            lib::ContextParam().set_mem_attr(MTL_ID(), ObModIds::OB_SQL_PX)))) {
+            lib::ContextParam().set_mem_attr(ObModIds::OB_SQL_PX)))) {
           LOG_WARN("create memory entity failed", K(ret));
         } else {
           WITH_CONTEXT(mem_context) {
@@ -242,12 +205,6 @@ void PxWorkerFunctor::operator ()(bool need_exec)
     LOG_WARN("already interrupted");
   }
 
-  if (OB_ISNULL(sqc_handler)) {
-    // do nothing
-  } else if (sqc_handler->get_flt_ctx().trace_id_.is_inited()) {
-    OBTRACE->reset();
-  }
-
   //if start worker failed, still need set task state, interrupt qc
   if (OB_FAIL(ret)) {
     if (task_arg_.sqc_task_ptr_ != NULL) {
@@ -282,8 +239,8 @@ ObPxThreadWorker::~ObPxThreadWorker()
 int ObPxThreadWorker::run(ObPxRpcInitTaskArgs &task_arg)
 {
   int ret = OB_SUCCESS;
-  int64_t group_id = THIS_WORKER.get_group_id();
-  omt::ObPxPools* px_pools = MTL(omt::ObPxPools*);
+  int64_t group_id = 0;
+  omt::ObPxPools* px_pools = share::g_mp->px_pools();
   if (OB_ISNULL(px_pools)) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("fail get px pools", K(ret));
@@ -355,42 +312,18 @@ int ObPxLocalWorker::run(ObPxRpcInitTaskArgs &task_arg)
 {
   int ret = OB_SUCCESS;
   ObDIActionGuard action_guard("FastDFO");
-  ObPxSqcHandler *h = task_arg.get_sqc_handler();
-  if (OB_ISNULL(h)) {
-  } else if (h->get_flt_ctx().trace_id_.is_inited()) {
-    OBTRACE->init(h->get_flt_ctx());
-  }
 
   {
-    FLTSpanGuard(px_task);
     ObPxTaskProcess task_proc(gctx_, task_arg);
     ret = task_proc.process();
   }
 
-  if (OB_ISNULL(h)) {
-  } else if (h->get_flt_ctx().trace_id_.is_inited()) {
-    OBTRACE->reset();
-  }
   return ret;
 }
 
 //////////////////////////////////////////////////////////////////////////////
 //////////////////////////////////////////////////////////////////////////////
 //////////////////////////////////////////////////////////////////////////////
-
-
-void ObPxRpcWorkerFactory::destroy()
-{
-  for (int64_t i = 0; i < workers_.count(); ++i) {
-    workers_.at(i)->~ObPxRpcWorker();
-  }
-  workers_.reset();
-}
-
-ObPxRpcWorkerFactory::~ObPxRpcWorkerFactory()
-{
-  destroy();
-}
 
 
 //////////////////////////////////////////////////////////////////////////////

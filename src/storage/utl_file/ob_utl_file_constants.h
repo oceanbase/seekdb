@@ -45,7 +45,7 @@ typedef int mode_t;
 #include <sys/stat.h>
 #include <sys/types.h>
 #endif
-#include "lib/alloc/alloc_assist.h"
+#include "lib/utility/alloc_assist.h"
 
 namespace oceanbase
 {

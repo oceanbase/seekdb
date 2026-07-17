@@ -210,7 +210,6 @@ public:
                                        ObLogicalOperator *op,
                                        bool is_root_job = true);
   inline static void exprs_not_support_vectorize(const ObIArray<ObRawExpr *> &exprs,
-                                                 const bool is_column_store_tbl,
                                                  const bool need_return_lob_locator,
                                                  bool &found);
   inline uint64_t get_cur_cluster_version() { return cur_cluster_version_; }
@@ -598,12 +597,7 @@ private:
   int generate_sort_exprs(const bool is_store_sortkey_separately, ObLogSort &op, ObSortVecSpec &spec,
                           ObIArray<OrderItem> &sk_keys);
 
-  int extract_all_mview_ids(const ObIArray<ObRawExpr *> &exprs);
-  int extract_all_mview_ids(const ObRawExpr *expr);
   int check_is_insert_overwrite_stmt(const ObLogPlan *plan, bool &is_insert_overwrite);
-  int check_refreshing_mview_session_var(ObSchemaGetterGuard &schema_guard,
-                                         ObSQLSessionInfo &session,
-                                         const ObDMLStmt *dml_stmt);
 private:
   struct BatchExecParamCache {
     BatchExecParamCache(ObExecParamRawExpr* expr, ObOpSpec* spec, bool is_left)
@@ -634,13 +628,12 @@ private:
   ObSEArray<ObRawExpr *, 8> cur_op_exprs_;
   // all self_produced exprs of current operator
   ObSEArray<ObRawExpr *, 8> cur_op_self_produced_exprs_;
-  //For recursive CTE use only, because Oracle's CTE does not allow nesting, this approach can be used
+  // Used by recursive CTE planning when nested CTE specs need to be lifted.
   common::ObSEArray<ObOpSpec *, 10> fake_cte_specs_;
   ObDmlCgService dml_cg_service_;
   ObTscCgService tsc_cg_service_;
   uint64_t cur_cluster_version_;
   common::ObSEArray<BatchExecParamCache, 8> batch_exec_param_caches_;
-  common::ObSEArray<uint64_t, 4> mview_ids_;
 
 };
 
@@ -648,4 +641,3 @@ private:
 } // end namespace oceanbase
 
 #endif // OCEANBASE_SRC_OB_STATIC_ENGINE_CG_H_
-

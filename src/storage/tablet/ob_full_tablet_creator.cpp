@@ -15,7 +15,8 @@
  */
 
 #include "ob_full_tablet_creator.h"
-#include "src/storage/tx_storage/ob_ls_map.h"
+#include "share/rc/ob_module_provider.h"
+#include "storage/tablet/ob_tablet.h"
 
 #define USING_LOG_PREFIX STORAGE
 
@@ -32,7 +33,7 @@ ObFullTabletCreator::ObFullTabletCreator()
 {
 }
 
-int ObFullTabletCreator::init(const uint64_t tenant_id)
+int ObFullTabletCreator::init()
 {
   /* We use two fifo allocators to minimize the memory hole caused by tablets of different lifetime.
     1. MSTXAllocator is used to alloc tablets. To ensure that each tablet can occupy one whole page, we set the page_size = 8K.
@@ -42,13 +43,13 @@ int ObFullTabletCreator::init(const uint64_t tenant_id)
     ret = OB_INIT_TWICE;
     LOG_WARN("ObTenantMetaMemMgr has been initialized", K(ret));
   } else if (OB_FAIL(tiny_allocator_.init(lib::ObMallocAllocator::get_instance(),
-      OB_MALLOC_NORMAL_BLOCK_SIZE/2, ObMemAttr(tenant_id, "TinyAllocator", ObCtxIds::DEFAULT_CTX_ID)))) {
+      OB_MALLOC_NORMAL_BLOCK_SIZE/2, ObMemAttr("TinyAllocator", ObCtxIds::DEFAULT_CTX_ID)))) {
     LOG_WARN("fail to init tenant tiny allocator", K(ret));
   } else {
-    ContextParam param;
-    param.set_mem_attr(tenant_id, "MSTXCTX", common::ObCtxIds::DEFAULT_CTX_ID)
+    lib::ContextParam param;
+    param.set_mem_attr("MSTXCTX", common::ObCtxIds::DEFAULT_CTX_ID)
       .set_ablock_size(lib::INTACT_MIDDLE_AOBJECT_SIZE)
-      .set_properties(ALLOC_THREAD_SAFE);
+      .set_properties(lib::ALLOC_THREAD_SAFE);
     if (OB_FAIL(ROOT_CONTEXT->CREATE_CONTEXT(mstx_mem_ctx_, param))) {
       LOG_WARN("fail to create entity", K(ret));
     } else if (nullptr == mstx_mem_ctx_) {
@@ -93,7 +94,7 @@ int ObFullTabletCreator::throttle_tablet_creation()
   int ret = OB_SUCCESS;
 
   bool need_wait = false;
-  const int64_t limit_size = get_tenant_memory_limit(MTL_ID()) / 20; // 5%
+  const int64_t limit_size = lib::get_tenant_memory_limit() / 20; // 5%
   const int64_t timeout = 5 * 1000L; // 5ms for effective replay
   const int64_t log_timeout = 1 * 1000 * 1000L; // 1s
   const int64_t start_time = ObTimeUtility::fast_current_time();
@@ -137,7 +138,6 @@ int ObFullTabletCreator::create_tablet(ObTabletHandle &tablet_handle)
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("fail to new arena allocator", K(ret));
   } else if (FALSE_IT(allocator->set_label("MSTXAllocator"))) {
-  } else if (FALSE_IT(allocator->set_tenant_id(MTL_ID()))) {
   } else if (FALSE_IT(allocator->set_ctx_id(ObCtxIds::DEFAULT_CTX_ID))) {
   } else if (OB_ISNULL(tablet = OB_NEWx(ObTablet, allocator))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
@@ -150,7 +150,7 @@ int ObFullTabletCreator::create_tablet(ObTabletHandle &tablet_handle)
     ATOMIC_INC(&created_tablets_cnt_);
   }
   if (OB_SUCC(ret)) {
-    ObTenantMetaMemMgr *t3m = MTL(ObTenantMetaMemMgr *);
+    ObTenantMetaMemMgr *t3m = share::g_mp->tenant_meta_mem_mgr();
     tablet_handle.set_obj(tablet, allocator, t3m);
     tablet_handle.set_wash_priority(WashTabletPriority::WTP_LOW);
   } else {

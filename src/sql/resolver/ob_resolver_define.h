@@ -28,7 +28,7 @@
 #include "sql/resolver/ob_schema_checker.h"
 #include "sql/plan_cache/ob_plan_cache_util.h"
 #include "sql/plan_cache/ob_plan_cache_struct.h"
-#include "objit/common/ob_item_type.h"
+#include "sql/parser/ob_item_type.h"
 #include "sql/plan_cache/ob_cache_object_factory.h"
 
 namespace oceanbase
@@ -65,7 +65,6 @@ enum ObStmtScope
   T_NAMED_WINDOWS_SCOPE,
   T_PL_SCOPE,
   T_LOAD_DATA_SCOPE,
-  T_DBLINK_SCOPE,
   T_CURRENT_OF_SCOPE
 };
 
@@ -333,15 +332,13 @@ struct ObResolverParams
        force_trace_log_(false),
        expr_factory_(NULL),
        stmt_factory_(NULL),
-       show_tenant_id_(common::OB_INVALID_ID),
        show_seed_(false),
        is_from_show_resolver_(false),
        is_restore_(false),
        is_from_create_view_(false),
-       is_from_create_mview_(false),
        is_from_create_table_(false),
        is_prepare_protocol_(false),
-       is_pre_execute_(false),
+       is_mock_prepare_(false),
        is_prepare_stage_(false),
        is_dynamic_sql_(false),
        is_dbms_sql_(false),
@@ -375,11 +372,9 @@ struct ObResolverParams
        is_resolve_lateral_derived_table_(false),
        package_guard_(NULL),
        star_expansion_infos_(),
-       is_for_rt_mv_(false),
        is_resolve_fake_cte_table_(false),
        is_returning_(false),
-       is_in_view_(false),
-       is_htable_(false)
+       is_in_view_(false)
   {}
   bool is_force_trace_log() { return force_trace_log_; }
 
@@ -400,17 +395,16 @@ public:
   bool force_trace_log_;
   ObRawExprFactory *expr_factory_;
   ObStmtFactory *stmt_factory_;
-  uint64_t show_tenant_id_;
+  
   bool show_seed_;
   bool is_from_show_resolver_;
   bool is_restore_;
   // Query table creation, creating views cannot include temporary tables;
   // The former is an implementation issue, the latter is for MySQL compatibility;
   bool is_from_create_view_;
-  bool is_from_create_mview_;
   bool is_from_create_table_;
   bool is_prepare_protocol_;
-  bool is_pre_execute_;
+  bool is_mock_prepare_;
   bool is_prepare_stage_;
   bool is_dynamic_sql_;
   bool is_dbms_sql_;
@@ -449,11 +443,9 @@ public:
   bool is_resolve_lateral_derived_table_; // used to mark resolve lateral derived table.
   pl::ObPLPackageGuard *package_guard_;
   common::ObArray<ObStarExpansionInfo> star_expansion_infos_;
-  bool is_for_rt_mv_; // call resolve in transformation for expanding inline real-time materialized view
   bool is_resolve_fake_cte_table_;
   bool is_returning_;
   bool is_in_view_;
-  bool is_htable_;
 };
 } // end namespace sql
 } // end namespace oceanbase

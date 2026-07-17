@@ -184,7 +184,7 @@ bool ObXAFlag::is_valid(const int64_t flag, const int64_t xa_req_type)
       break;
     }
     case ObXAReqType::XA_PREPARE: {
-      // oracle would not carry flag in a xa prepare req
+      // xa prepare requests do not carry flags
       ret_bool = true;
       TRANS_LOG(INFO, "no need to check flag for xa prepare", K(xa_req_type), K(flag));
       break;
@@ -199,7 +199,7 @@ bool ObXAFlag::is_valid(const int64_t flag, const int64_t xa_req_type)
       break;
     }
     case ObXAReqType::XA_ROLLBACK: {
-      // oracle would not carry flag in a xa rollback req
+      // xa rollback requests do not carry flags
       ret_bool = true;
       TRANS_LOG(INFO, "no need to check flag for xa rollback", K(xa_req_type), K(flag));
       break;
@@ -226,13 +226,9 @@ void ObXAStatistics::reset()
   ATOMIC_STORE(&total_failure_xa_prepare_, 0);
   ATOMIC_STORE(&total_success_xa_1pc_commit_, 0);
   ATOMIC_STORE(&total_failure_xa_1pc_commit_, 0);
-  ATOMIC_STORE(&total_success_xa_2pc_commit_, 0);
-  ATOMIC_STORE(&total_failure_xa_2pc_commit_, 0);
+  ATOMIC_STORE(&total_success_xa_prepared_commit_, 0);
+  ATOMIC_STORE(&total_failure_xa_prepared_commit_, 0);
   ATOMIC_STORE(&total_xa_rollback_, 0);
-  ATOMIC_STORE(&total_success_dblink_promotion_, 0);
-  ATOMIC_STORE(&total_failure_dblink_promotion_, 0);
-  ATOMIC_STORE(&total_success_dblink_, 0);
-  ATOMIC_STORE(&total_failure_dblink_, 0);
 }
 
 

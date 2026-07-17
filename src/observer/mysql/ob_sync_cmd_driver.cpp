@@ -37,9 +37,8 @@ ObSyncCmdDriver::ObSyncCmdDriver(const ObGlobalContext &gctx,
                                  const ObSqlCtx &ctx,
                                  sql::ObSQLSessionInfo &session,
                                  ObQueryRetryCtrl &retry_ctrl,
-                                 ObIMPPacketSender &sender,
-                                 bool is_prexecute)
-    : ObQueryDriver(gctx, ctx, session, retry_ctrl, sender, is_prexecute)
+                                 ObIMPPacketSender &sender)
+    : ObQueryDriver(gctx, ctx, session, retry_ctrl, sender)
 {
 }
 
@@ -78,19 +77,11 @@ int ObSyncCmdDriver::seal_eof_packet(bool has_more_result, OMPKEOF& eofp)
   flags.status_flags_.OB_SERVER_STATUS_AUTOCOMMIT = (session_.get_local_autocommit() ? 1 : 0);
   flags.status_flags_.OB_SERVER_MORE_RESULTS_EXISTS = has_more_result;
   // flags.status_flags_.OB_SERVER_PS_OUT_PARAMS = 1;
-  if (!session_.is_obproxy_mode()) {
-    // in java client or others, use slow query bit to indicate partition hit or not
-    flags.status_flags_.OB_SERVER_QUERY_WAS_SLOW = !session_.partition_hit().get_bool();
-  }
+  // in java client or others, use slow query bit to indicate partition hit or not
+  flags.status_flags_.OB_SERVER_QUERY_WAS_SLOW = !session_.partition_hit().get_bool();
 
   eofp.set_server_status(flags);
 
-  // for proxy
-  // in multi-stmt, send extra ok packet in the last stmt(has no more result)
-  if (!is_prexecute_ && !has_more_result
-        && OB_FAIL(sender_.update_last_pkt_pos())) {
-    LOG_WARN("failed to update last packet pos", K(ret));
-  }
   return ret;
 }
 
@@ -165,16 +156,6 @@ int ObSyncCmdDriver::response_result(ObMySQLResultSet &result)
         need_send_eof = true;
       }
     }
-  } else if (is_prexecute_) { 
-    if (OB_FAIL(response_query_header(result, false, false , // in prexecute , has_more_result and has_ps out is no matter, it will be recalc
-                                      true))) {
-      // need close result set
-      int close_ret = OB_SUCCESS;
-      if (OB_SUCCESS != (close_ret = result.close())) {
-        LOG_WARN("close result failed", K(close_ret));
-      }
-      LOG_WARN("prexecute response query head fail. ", K(ret));
-    } 
   }
 
   if (OB_SUCC(ret)) {
@@ -184,10 +165,7 @@ int ObSyncCmdDriver::response_result(ObMySQLResultSet &result)
     free_output_row(result);
     if (OB_FAIL(result.close())) {
       LOG_WARN("close result set fail", K(ret));
-    } else if (!result.is_with_rows()
-                || (sender_.need_send_extra_ok_packet() && !result.has_more_result())
-                || is_prexecute_
-                || (is_mysql_mode() && session_.client_non_standard())) {
+    } else if (!result.is_with_rows()) {
       process_ok = true;
       ObOKPParam ok_param;
       ok_param.message_ = const_cast<char*>(result.get_message());
@@ -203,7 +181,6 @@ int ObSyncCmdDriver::response_result(ObMySQLResultSet &result)
       }
       ok_param.is_partition_hit_ = session_.partition_hit().get_bool();
       ok_param.has_more_result_ = result.has_more_result();
-      ok_param.has_pl_out_ = is_prexecute_ && result.is_with_rows() ? true : false;
       if (need_send_eof) {
         if (OB_FAIL(sender_.send_ok_packet(session_, ok_param, &eofp))) {
           LOG_WARN("send ok packet fail", K(ok_param), K(ret));
@@ -243,7 +220,7 @@ int ObSyncCmdDriver::process_schema_version_changes(
     ret = OB_INVALID_ARGUMENT;
     LOG_ERROR("invalid schema service", K(ret));
   } else {
-    uint64_t tenant_id = session_.get_effective_tenant_id();
+    
     // - set session last_schema_version to proxy for DDL
     if (ObStmt::is_ddl_stmt(result.get_stmt_type(), result.has_global_variable())) {
       if (OB_FAIL(ObSQLUtils::update_session_last_schema_version(*gctx_.schema_service_,
@@ -267,8 +244,8 @@ int ObSyncCmdDriver::process_schema_version_changes(
             } else {
               if (ObCharset::case_insensitive_equal(var_node.variable_name_,
                                                     set_var_name)) {
-                if (OB_FAIL(check_and_refresh_schema(tenant_id))) {
-                  LOG_WARN("failed to check_and_refresh_schema", K(ret), K(tenant_id));
+                if (OB_FAIL(check_and_refresh_schema())) {
+                  LOG_WARN("failed to check_and_refresh_schema", K(ret));
                 }
                 break;
               }
@@ -283,7 +260,7 @@ int ObSyncCmdDriver::process_schema_version_changes(
 // FIXME: Execute set @@ob_last_schema_version = 123456; on the target tenant;
 //        Should schema brushing be triggered afterwards?
 //        The current behavior is, as long as it is actively set through SQL, it will follow the setting.
-int ObSyncCmdDriver::check_and_refresh_schema(uint64_t tenant_id)
+int ObSyncCmdDriver::check_and_refresh_schema()
 {
   int ret = OB_SUCCESS;
   int64_t local_version = 0;
@@ -293,14 +270,14 @@ int ObSyncCmdDriver::check_and_refresh_schema(uint64_t tenant_id)
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("null schema service", K(ret), K(gctx_));
   } else {
-    if (OB_FAIL(gctx_.schema_service_->get_tenant_refreshed_schema_version(tenant_id, local_version))) {
+    if (OB_FAIL(gctx_.schema_service_->get_tenant_refreshed_schema_version(local_version))) {
       LOG_WARN("fail to get tenant refreshed schema version", K(ret));
     } else if (OB_FAIL(session_.get_ob_last_schema_version(last_version))) {
       LOG_WARN("failed to get_sys_variable", K(OB_SV_LAST_SCHEMA_VERSION));
     } else if (local_version >= last_version) {
       // skip
-    } else if (OB_FAIL(gctx_.schema_service_->async_refresh_schema(tenant_id, last_version))) {
-      LOG_WARN("failed to refresh schema", K(ret), K(tenant_id), K(last_version));
+    } else if (OB_FAIL(gctx_.schema_service_->async_refresh_schema(last_version))) {
+      LOG_WARN("failed to refresh schema", K(ret), K(last_version));
     }
   }
   return ret;
@@ -358,8 +335,7 @@ int ObSyncCmdDriver::response_query_result(ObMySQLResultSet &result)
                      dtc_params,
                      *tmp_session,
                      result.get_field_columns(),
-                     ctx_.schema_guard_,
-                     tmp_session->get_effective_tenant_id());
+                     ctx_.schema_guard_);
       OMPKRow rp(sm_row);
       if (OB_FAIL(sender_.response_packet(rp, const_cast<ObSQLSessionInfo *>(tmp_session)))) {
         LOG_WARN("response packet fail", K(ret), KP(row));

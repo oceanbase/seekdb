@@ -18,8 +18,8 @@
 #define OCEANBASE_SQL_ENGINE_AGGREGATE_UTIL_H
 #include <type_traits>
 
-#include "common/data_buffer.h"
-#include "lib/number/ob_number_v2.h"
+#include "lib/utility/data_buffer.h"
+#include "common/number/ob_number_v2.h"
 
 namespace oceanbase
 {

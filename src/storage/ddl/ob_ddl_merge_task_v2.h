@@ -19,7 +19,7 @@
 
 #include "share/scn.h"
 #include "storage/meta_mem/ob_tablet_handle.h"
-#include "share/scheduler/ob_tenant_dag_scheduler.h"
+#include "observer/scheduler/ob_tenant_dag_scheduler.h"
 #include "storage/blocksstable/index_block/ob_index_block_builder.h"
 #include "storage/blocksstable/ob_macro_block_struct.h"
 #include "storage/ddl/ob_ddl_struct.h"
@@ -36,18 +36,18 @@ namespace storage
 {
 class ObIDDLMergeHelper;
 /*
-new ddl merge task sequence can be describle as the following graph
-for  a data tablet, it has three parts, prepare , merge_cg & assemble
+new ddl merge task sequence can be described as the following graph
+for a data tablet, it has three parts: prepare, merge slices, and assemble
 at the same time data tablet should also control the dependency on lob tablet
                 +--------------------+
                 | prepare_for_merge()|
                 +--------------------+
-                              |
+                              |  
             +-----------------+----------------------+
             |                 |                      |
             v                 v                      |
 +-------------------+  +-------------------+         |
-| merge_slice_cg()  |  | merge_slice_cg()  |         |
+| merge_slice()     |  | merge_slice()     |         |
 +-------------------+  +-------------------+         |
           |                   |                      |
           |                   |                      |
@@ -65,13 +65,13 @@ at the same time data tablet should also control the dependency on lob tablet
                       | assemble_task()   |          |
                       +-------------------+          |
                               |                      |
-                              +----------------------+
+                              +----------------------+ 
                               |
                               |
                               v
-                      +-------------------+
-                      | guard_task()      |
-                      +-------------------+
+                      +-------------------+ 
+                      | guard_task()      | 
+                      +-------------------+ 
 
 
 
@@ -98,7 +98,7 @@ class ObDDLMergePrepareTask: public share::ObITask
 public:
   ObDDLMergePrepareTask();
   ~ObDDLMergePrepareTask();
-
+  
   int init(const ObDDLTabletMergeDagParamV2 &merge_param);
   int inner_process();
   virtual int process() override;
@@ -112,20 +112,18 @@ private:
   DISALLOW_COPY_AND_ASSIGN(ObDDLMergePrepareTask);
 };
 
-class ObDDLMergeCgSliceTask: public share::ObITask
+class ObDDLMergeSliceTask: public share::ObITask
 {
 public:
-  ObDDLMergeCgSliceTask();
+  ObDDLMergeSliceTask();
   int init(const ObDDLTabletMergeDagParamV2 &ddl_merge_param,
-           const int64_t cg_idx,
-           const int64_t start_slice_idx,
+           const int64_t start_slice_idx, 
            const int64_t end_slice_idx);
   virtual int process() override;
   virtual void task_debug_info_to_string(char *buf, const int64_t buf_len, int64_t &pos) const override;
-  INHERIT_TO_STRING_KV("MergeCgSliceTask", share::ObITask, K(merge_param_), K(cg_idx_), K(start_slice_idx_), K(is_inited_));
+  INHERIT_TO_STRING_KV("MergeSliceTask", share::ObITask, K(merge_param_), K(start_slice_idx_), K(is_inited_));
 private:
   ObDDLTabletMergeDagParamV2 merge_param_;
-  int64_t cg_idx_;
   int64_t start_slice_idx_;
   int64_t end_slice_idx_;
   bool is_inited_;

@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SQL
 
 #include "sql/monitor/ob_sql_stat_record.h"
+#include "share/rc/ob_module_provider.h"
 #include "sql/engine/ob_physical_plan.h"
 #include "lib/stat/ob_diagnose_info.h"
 #include "sql/session/ob_sql_session_info.h"
@@ -191,28 +192,6 @@ ObExecutingSqlStatRecord::ObExecutingSqlStatRecord()
 #define RECORD_ITEM(se, di)                                                                        \
   do {                                                                                             \
     elapsed_time_##se##_ = rdtsc() * 1000 / OBSERVER.get_cpu_frequency_khz();                      \
-    if (OB_NOT_NULL(di)) {                                                                         \
-      ObStatEventAddStatArray &arr = di->get_add_stat_stats();                                     \
-      disk_reads_##se##_ = EVENT_STAT_GET(arr, ObStatEventIds::IO_READ_COUNT);                     \
-      buffer_gets_##se##_ = EVENT_STAT_GET(arr, ObStatEventIds::ROW_CACHE_HIT) * 2 +               \
-                            EVENT_STAT_GET(arr, ObStatEventIds::FUSE_ROW_CACHE_HIT) * 2 +          \
-                            EVENT_STAT_GET(arr, ObStatEventIds::BLOOM_FILTER_FILTS) * 2 +          \
-                            EVENT_STAT_GET(arr, ObStatEventIds::BLOCK_CACHE_HIT) +                 \
-                            disk_reads_##se##_;                                                    \
-      cpu_time_##se##_ = EVENT_STAT_GET(arr, ObStatEventIds::SYS_TIME_MODEL_DB_CPU);               \
-      ccwait_##se##_ = EVENT_STAT_GET(arr, ObStatEventIds::CCWAIT_TIME);                           \
-      userio_wait_##se##_ = EVENT_STAT_GET(arr, ObStatEventIds::USER_IO_WAIT_TIME);                \
-      apwait_##se##_ = EVENT_STAT_GET(arr, ObStatEventIds::APWAIT_TIME);                           \
-      physical_read_requests_##se##_ = EVENT_STAT_GET(arr, ObStatEventIds::IO_READ_COUNT);         \
-      physical_read_bytes_##se##_ = EVENT_STAT_GET(arr, ObStatEventIds::IO_READ_BYTES);            \
-      write_throttle_##se##_ = EVENT_STAT_GET(arr, ObStatEventIds::STORAGE_WRITING_THROTTLE_TIME); \
-      memstore_read_rows_##se##_ = EVENT_STAT_GET(arr, ObStatEventIds::MEMSTORE_READ_ROW_COUNT);   \
-      minor_ssstore_read_rows_##se##_ =                                                            \
-          EVENT_STAT_GET(arr, ObStatEventIds::MINOR_SSSTORE_READ_ROW_COUNT);                       \
-      major_ssstore_read_rows_##se##_ =                                                            \
-          EVENT_STAT_GET(arr, ObStatEventIds::MAJOR_SSSTORE_READ_ROW_COUNT);                       \
-      rpc_##se##_ = EVENT_STAT_GET(arr, ObStatEventIds::RPC_PACKET_OUT);                           \
-    }                                                                                              \
   } while (0);
 
 void ObExecutingSqlStatRecord::reset()
@@ -277,8 +256,7 @@ int ObExecutingSqlStatRecord::assign(const ObExecutingSqlStatRecord& other)
 int ObExecutingSqlStatRecord::record_sqlstat_start_value()
 {
 
-  ObDiagnosticInfo *di_info = ObLocalDiagnosticInfo::get();
-  RECORD_ITEM(start, di_info);
+  RECORD_ITEM(start, nullptr);
   return OB_SUCCESS;
 }
 
@@ -287,8 +265,7 @@ int ObExecutingSqlStatRecord::record_sqlstat_end_value(ObDiagnoseSessionInfo* di
   if (OB_NOT_NULL(di)) {
     RECORD_ITEM(end, di);
   } else {
-    ObDiagnosticInfo *di_info = ObLocalDiagnosticInfo::get();
-    RECORD_ITEM(end, di_info);
+    RECORD_ITEM(end, nullptr);
   }
   return OB_SUCCESS;
 }
@@ -615,7 +592,7 @@ int ObSqlStatRecordUtil::get_cache_obj(ObSqlStatRecordKey &key, ObCacheObjGuard&
   if (OB_ISNULL(GCTX.omt_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("fail to get multi tenant from GCTX", K(ret));
-  } else if (OB_ISNULL(lib_cache = MTL(ObPlanCache*))) {
+  } else if (OB_ISNULL(lib_cache = share::g_mp->plan_cache())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("failed to get plan cache", K(ret));
   } else if (OB_FAIL(lib_cache->get_cache_obj(cache_ctx, &key, guard))) {
@@ -638,12 +615,11 @@ int ObSqlStatRecordUtil::create_cache_obj(ObSqlStatRecordKey &key, ObCacheObjGua
   if (OB_ISNULL(GCTX.omt_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("fail to get multi tenant from GCTX", K(ret));
-  } else if (OB_ISNULL(lib_cache = MTL(ObPlanCache*))) {
+  } else if (OB_ISNULL(lib_cache = share::g_mp->plan_cache())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("failed to get plan cache", K(ret));
   } else if (OB_FAIL(ObCacheObjectFactory::alloc(guard,
-                                                 ObLibCacheNameSpace::NS_SQLSTAT,
-                                                 lib_cache->get_tenant_id()))) {
+                                                 ObLibCacheNameSpace::NS_SQLSTAT))) {
     LOG_WARN("fail to alloc new cache obj", K(ret));
   } else if (OB_ISNULL(cache_obj = static_cast<ObSqlStatRecordObj *>(guard.get_cache_obj()))) {
     ret = OB_ERR_UNEXPECTED;

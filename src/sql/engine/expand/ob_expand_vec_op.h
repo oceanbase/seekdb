@@ -80,8 +80,7 @@ public:
     ObOperator(exec_ctx, spec, input), dup_status_(DupStatus::Init), expr_iter_idx_(-1),
     child_input_size_(0), child_input_skip_(nullptr),
     child_all_rows_active_(false), vec_holder_(nullptr),
-    allocator_("ValueExpansion", OB_MALLOC_NORMAL_BLOCK_SIZE,
-               exec_ctx.get_my_session()->get_effective_tenant_id(), ObCtxIds::WORK_AREA)
+    allocator_("ValueExpansion", OB_MALLOC_NORMAL_BLOCK_SIZE, ObCtxIds::WORK_AREA)
   {}
   virtual ~ObExpandVecOp() {}
   virtual int inner_open() override;

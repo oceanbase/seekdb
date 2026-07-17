@@ -22,11 +22,23 @@
 #include "src/storage/meta_store/ob_server_storage_meta_service.h"
 #include "src/storage/ob_file_system_router.h"
 #include "ob_test_config.h"
+#include "share/rc/ob_module_provider.h"
+#include "sql/das/ob_data_access_service.h"
 
 using namespace oceanbase::sql;
 namespace test
 {
-TestOpEngine::TestOpEngine() : tbase_{sys_tenant_id_}, vec_2_exec_ctx_(vec_2_alloc_)
+// Single-tenant module provider for the engine test: exposes the mock
+// ObDataAccessService and ObTenantIOManager through share::g_mp.
+class TestOpEngineModuleProvider : public share::ObIModuleProvider
+{
+public:
+  sql::ObDataAccessService *data_access_service() override { return das_; }
+  common::ObTenantIOManager *tenant_io_manager() override { return io_mgr_; }
+  sql::ObDataAccessService *das_ = nullptr;
+  common::ObTenantIOManager *io_mgr_ = nullptr;
+};
+TestOpEngine::TestOpEngine() : tbase_(), vec_2_exec_ctx_(vec_2_alloc_)
 {
   vec_2_exec_ctx_.set_sql_ctx(&sql_ctx_);
 }
@@ -45,17 +57,20 @@ void TestOpEngine::SetUp()
   ASSERT_EQ(prepare_io(ObTestOpConfig::get_instance().test_filename_prefix_), OB_SUCCESS);
 
   // init mock location service, used in optimizer compute table property
-  GCTX.location_service_ = &mock_location_service_;
-  // init MTL, used in ObTableScanOp::ObTableScanOp constructor
-  static ObDataAccessService instance;
-  tbase_.inner_set(&instance);
+  // Single-tenant seekdb: low-layer modules are reached through share::g_mp
+  // (ObIModuleProvider). Publish a test provider exposing the ObDataAccessService
+  // (used in ObTableScanOp ctor) and the ObTenantIOManager.
   ASSERT_EQ(tbase_.init(), 0);
   ObTenantEnv::set_tenant(&tbase_);
+  static ObDataAccessService das_instance;
   common::ObTenantIOManager *io_service = nullptr;
   EXPECT_EQ(OB_SUCCESS, common::ObTenantIOManager::mtl_new(io_service));
   EXPECT_EQ(OB_SUCCESS, common::ObTenantIOManager::mtl_init(io_service));
   EXPECT_EQ(OB_SUCCESS, io_service->start());
-  tbase_.set(io_service);
+  static TestOpEngineModuleProvider mp;
+  mp.das_ = &das_instance;
+  mp.io_mgr_ = io_service;
+  share::g_mp = &mp;
   ObTenantEnv::set_tenant(&tbase_);
 
   out_origin_result_stream_.open(ObTestOpConfig::get_instance().test_filename_origin_output_file_, std::ios::out | std::ios::trunc);
@@ -173,8 +188,9 @@ int TestOpEngine::prepare_io(const std::string & test_data_name_suffix)
     LOG_WARN("add device channel failed", K(ret));
   } else if (OB_FAIL(SERVER_STORAGE_META_SERVICE.init())) {
     LOG_WARN("fail to init storage meta service", K(ret));
-  } else if (FALSE_IT(SERVER_STORAGE_META_SERVICE.get_slogger_manager().need_reserved_ = false)) {
-  } else if (OB_FAIL(OB_STORAGE_OBJECT_MGR.init(false, storage_env_.default_block_size_))) {
+  } else if (OB_FAIL(SERVER_STORAGE_META_SERVICE.set_need_reserved_for_test(false))) {
+    LOG_WARN("fail to set need reserved for test", K(ret));
+  } else if (OB_FAIL(OB_STORAGE_OBJECT_MGR.init(storage_env_.default_block_size_))) {
     LOG_WARN("init block manager fail", K(ret));
   } else if (OB_FAIL(ObIOManager::get_instance().start())) {
     LOG_WARN("fail to start io manager", K(ret));
@@ -241,7 +257,7 @@ int TestOpEngine::do_optimize(ObStmt *stmt, ObLogPlan *&plan, ObPhyPlanType dist
     &sql_schema_guard_,
     //&stat_manager_, // statistics manager
     NULL, // statistics manager
-    static_cast<ObIAllocator &>(allocator_), &param_store_, addr_, NULL, dml_stmt->get_query_ctx()->get_global_hint(),
+    static_cast<ObIAllocator &>(allocator_), &param_store_, addr_, dml_stmt->get_query_ctx()->get_global_hint(),
     expr_factory_, dml_stmt, false, stmt_factory_.get_query_ctx());
   opt_ctx->set_opt_stat_manager(&opt_stat_manager_);
   opt_ctx->disable_batch_rpc();
@@ -490,7 +506,7 @@ int TestOpEngine::generate_physical_plan(ObLogPlan *log_plan, ObPhysicalPlan &ph
     }
     */
     // So we need set here to support rich_format
-    ObCodeGenerator code_gen(false /*use_jit*/, CLUSTER_VERSION_1_0_0_0, &(pctx->get_datum_param_store()));
+    ObCodeGenerator code_gen(CLUSTER_VERSION_1_0_0_0, &(pctx->get_datum_param_store()));
     log_plan->get_optimizer_context().get_session_info()->sys_vars_cache_.set_enable_rich_vector_format(enable_rich_format);
     log_plan->get_optimizer_context().get_session_info()->init_use_rich_format();
     phy_plan.set_use_rich_format(enable_rich_format);

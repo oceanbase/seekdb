@@ -57,7 +57,7 @@ public:
   RingBufferAlloc() : mem_attr_()
   {
     mem_attr_.label_ = ObModIds::OB_RING_BUFFER;
-    mem_attr_.tenant_id_ = OB_SERVER_TENANT_ID;
+    
   }
   virtual ~RingBufferAlloc() { }
   virtual void* alloc(const int64_t size) { return alloc(size, mem_attr_); }

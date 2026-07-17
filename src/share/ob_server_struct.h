@@ -23,7 +23,7 @@
 #include "share/ob_cluster_role.h"              // ObClusterRole
 #include "share/ob_rpc_struct.h"
 #include "share/ob_server_status.h"
-#include "observer/omt/ob_multi_tenant.h"
+#include "share/config/ob_config_manager.h"
 
 namespace oceanbase
 {
@@ -32,22 +32,15 @@ namespace common
 class ObServerConfig;
 class ObConfigManager;
 class ObMySQLProxy;
+class ObCommonSqlProxy;
 class ObTimer;
 class ObITabletScan;
 class ObMysqlRandom;
 } // end of namespace common
 
-namespace obrpc
+namespace obcall
 {
-class ObSrvRpcProxy;
 class ObStorageRpcProxy;
-class ObCommonRpcProxy;
-class ObLoadDataRpcProxy;
-class ObDBMSJobRpcProxy;
-class ObBatchRpc;
-class ObInnerSQLRpcProxy;
-class ObDBMSSchedJobRpcProxy;
-class ObExtenralTableRpcProxy;
 } // end of namespace rpc
 
 namespace rootserver
@@ -73,12 +66,10 @@ class ObPL;
 namespace storage
 {
 class ObPtfMgr;
-class ObLocalityManager;
 }
 
 namespace transaction
 {
-class ObIWeakReadService;
 }
 
 namespace obmysql
@@ -100,17 +91,12 @@ namespace observer
 {
 class ObService;
 class ObVTIterCreator;
-class ObTableService;
 class ObSrvNetworkFrame;
 class ObIDiskReport;
 class ObResourceInnerSQLConnectionPool;
 class ObStartupAccelTaskHandler;
 } // end of namespace observer
 
-namespace obgrpc
-{
-class ObGrpcServer;
-} // end of namespace obgrpc
 
 namespace plugin
 {
@@ -119,16 +105,11 @@ class ObPluginMgr;
 
 namespace share
 {
-class ObResourcePlanManager;
 class ObTabletTableOperator;
 class ObSQLiteConnectionPool;
 class ObRsMgr;
-class ObLocationService;
 class ObSchemaStatusProxy;
 class ObKVStorage;
-
-class ObCgroupCtrl;
-class ObWorkloadRepositoryService;
 
 namespace schema
 {
@@ -146,27 +127,18 @@ struct ObGlobalContext
   common::ObConfigManager *config_mgr_;
   share::ObTabletTableOperator *tablet_operator_;
   share::ObSQLiteConnectionPool *meta_db_pool_;
-  obrpc::ObSrvRpcProxy *srv_rpc_proxy_;
-  obrpc::ObStorageRpcProxy *storage_rpc_proxy_;
-  obrpc::ObDBMSJobRpcProxy *dbms_job_rpc_proxy_;
-  obrpc::ObInnerSQLRpcProxy *inner_sql_rpc_proxy_;
-  obrpc::ObDBMSSchedJobRpcProxy *dbms_sched_job_rpc_proxy_;
-  obrpc::ObCommonRpcProxy *rs_rpc_proxy_;
-  obrpc::ObLoadDataRpcProxy *load_data_proxy_;
+  obcall::ObStorageRpcProxy *storage_rpc_proxy_;
   sql::ObExecutorRpcImpl *executor_rpc_;
   common::ObMySQLProxy *sql_proxy_;
   common::ObMySQLProxy *ddl_sql_proxy_;
-  common::ObOracleSqlProxy *ddl_oracle_sql_proxy_;
   observer::ObResourceInnerSQLConnectionPool *res_inner_conn_pool_;
   common::ObInOutBandwidthThrottle *bandwidth_throttle_;
   common::ObITabletScan *vt_par_ser_;
-  common::ObITabletScan *et_access_service_;
   sql::ObSQLSessionMgr *session_mgr_;
   sql::ObSql *sql_engine_;
   pl::ObPL *pl_engine_;
   omt::ObMultiTenant *omt_;
   observer::ObVTIterCreator *vt_iter_creator_;
-  share::ObLocationService *location_service_;
   int64_t start_time_;
   int64_t *warm_up_start_time_;
   ObServiceStatus status_;
@@ -175,24 +147,16 @@ struct ObGlobalContext
   int64_t start_service_time_;
   obmysql::ObDiag *diag_;
   common::ObMysqlRandom *scramble_rand_;
-  observer::ObTableService *table_service_;
-  share::ObCgroupCtrl *cgroup_ctrl_;
   observer::ObSrvNetworkFrame *net_frame_;
-  obgrpc::ObGrpcServer *grpc_server_;
 
-  obrpc::ObBatchRpc *batch_rpc_;
   observer::ObIDiskReport *disk_reporter_;
   logservice::ObServerLogBlockMgr *log_block_mgr_;
 
   bool inited_;
-  transaction::ObIWeakReadService *weak_read_service_;
   share::ObSchemaStatusProxy *schema_status_proxy_;
-  int64_t flashback_scn_;
   int64_t ssl_key_expired_time_;
   sql::ObConnectResourceMgr* conn_res_mgr_;
-  storage::ObLocalityManager *locality_manager_;
-  obrpc::ObExtenralTableRpcProxy *external_table_proxy_;
-  share::ObWorkloadRepositoryService *wr_service_;
+
   observer::ObStartupAccelTaskHandler* startup_accel_handler_;
   bool in_bootstrap_;
   bool sys_package_ready_;
@@ -200,13 +164,15 @@ struct ObGlobalContext
 
   // Primary-Standby configuration
   common::ObClusterRole server_role_;
-
+  
   // KV storage for simple information (cluster role, switchover status, etc.)
   share::ObKVStorage *kv_storage_;
 
   static ObGlobalContext& get_instance();
   void init();
   bool is_inited() const { return inited_; }
+  bool is_embedded_mode() const { return embedded_; }
+  void set_embedded_mode(const bool embedded) { embedded_ = embedded; }
   bool is_standby_cluster() const { return common::STANDBY_CLUSTER == server_role_; }
   // Refer to the high availability zone design document
   // 
@@ -229,19 +195,15 @@ struct ObGlobalContext
   In such cases, you need to carefully consider how to resolve this problem by yourself.
   */
   uint64_t get_server_index() const;
-  void set_upgrade_stage(obrpc::ObUpgradeStage upgrade_stage) { upgrade_stage_ = upgrade_stage; }
-  obrpc::ObUpgradeStage get_upgrade_stage() { return upgrade_stage_; }
+  void set_upgrade_stage(obcall::ObUpgradeStage upgrade_stage) { upgrade_stage_ = upgrade_stage; }
+  obcall::ObUpgradeStage get_upgrade_stage() { return upgrade_stage_; }
   DECLARE_TO_STRING;
   // instead of self_addr_
   const ObAddr &self_addr() const { return self_addr_seq_.get_addr(); }
   const int64_t &self_seq() const { return self_addr_seq_.get_seq(); }
   bool is_shared_storage_mode() const
   {
-#ifdef OB_BUILD_SHARED_STORAGE
-    return (ObServerMode::SHARED_STORAGE_MODE == startup_mode_);
-#else
     return false;
-#endif
   }
 private:
   ObGlobalContext() { MEMSET(this, 0, sizeof(*this)); init(); }
@@ -249,8 +211,9 @@ private:
   volatile int64_t server_status_;
   bool has_start_service() const { return 0 < start_service_time_; }
 
-  obrpc::ObUpgradeStage upgrade_stage_;
+  obcall::ObUpgradeStage upgrade_stage_;
   uint64_t server_id_;
+  bool embedded_;
 };
 
 } // end of namespace share

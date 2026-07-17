@@ -27,7 +27,7 @@
 #define protected public
 #include "lib/allocator/page_arena.h"
 #include "lib/allocator/ob_fifo_allocator.h"
-#include "lib/utility/ob_test_util.h"
+#include "lib/thread/ob_test_util.h"
 #include "lib/json/ob_json_print_utils.h"  // for SJ
 #include "share/inner_table/ob_inner_table_schema.h"
 #include "share/ob_rpc_struct.h"
@@ -52,7 +52,7 @@ using namespace oceanbase;
 using namespace oceanbase::common;
 using namespace oceanbase::share;
 using namespace oceanbase::share::schema;
-using namespace oceanbase::obrpc;
+using namespace oceanbase::obcall;
 using namespace oceanbase::sql;
 
 #define CSJ(x) (static_cast<const char *>(SJ((x))))

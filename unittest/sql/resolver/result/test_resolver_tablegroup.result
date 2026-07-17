@@ -357,7 +357,6 @@ alter table t1 tablegroup = 'tg1';
       "origin_table_name":"t1",
       "new_database_name":"tablegroup_db",
       "origin_database_name":"tablegroup_db",
-      "split_partition_name":"",
       "alter_table_schema": {
         "simple_table_schema": {
           "tenant_id":1,
@@ -503,7 +502,6 @@ alter table t2 tablegroup = 'tg2';
       "origin_table_name":"t2",
       "new_database_name":"tablegroup_db",
       "origin_database_name":"tablegroup_db",
-      "split_partition_name":"",
       "alter_table_schema": {
         "simple_table_schema": {
           "tenant_id":1,
@@ -649,7 +647,6 @@ alter table t2 drop tablegroup;
       "origin_table_name":"t2",
       "new_database_name":"tablegroup_db",
       "origin_database_name":"tablegroup_db",
-      "split_partition_name":"",
       "alter_table_schema": {
         "simple_table_schema": {
           "tenant_id":1,

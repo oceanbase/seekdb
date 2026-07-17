@@ -18,8 +18,8 @@
 #define OCEANBASE_SRC_SQL_ENGINE_EXPR_OB_EXPR_JSON_QUERY_H
 
 #include "sql/engine/expr/ob_expr_operator.h"
-#include "lib/json_type/ob_json_tree.h"
-#include "lib/json_type/ob_json_base.h"
+#include "common/json_type/ob_json_tree.h"
+#include "common/json_type/ob_json_base.h"
 #include "ob_json_param_type.h"
 #include "ob_expr_json_utils.h"
 #include "ob_expr_json_func_helper.h"
@@ -88,7 +88,7 @@ private:
                             uint8_t &type,
                             uint8_t size_para);
   /*
-  oracle mode get json path to JsonBase in static_typing_engine
+  Get json path to JsonBase in static_typing_engine.
   @param[in]  expr       the input arguments
   @param[in]  ctx        the eval context
   @param[in]  allocator  the Allocator in context
@@ -104,7 +104,7 @@ private:
                           ObDatum*& json_datum);
 
     /*
-  oracle mode get json doc to JsonBase in static_typing_engine
+  Get json doc to JsonBase in static_typing_engine.
   @param[in]  expr       the input arguments
   @param[in]  ctx        the eval context
   @param[in]  allocator  the Allocator in context

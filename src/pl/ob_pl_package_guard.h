@@ -28,13 +28,13 @@ namespace pl
 class ObPLPackageGuard
 {
 public:
-  ObPLPackageGuard(uint64_t tenant_id)
+  ObPLPackageGuard()
     : alloc_(),
       req_time_guard_()
   {
     lib::ObMemAttr attr;
     attr.label_ = "PLPKGGuard";
-    attr.tenant_id_ = tenant_id;
+    
     attr.ctx_id_ = common::ObCtxIds::EXECUTE_CTX_ID;
     alloc_.set_attr(attr);
   }

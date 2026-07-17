@@ -17,7 +17,7 @@ Outputs & filters:
       sort_keys([t1.a, ASC])
   1 - output([t1.a], [t1.b], [t1.c]), filter([t1.a = t1.b]), rowset=16
       access([t1.a], [t1.b], [t1.c]), partitions(p0)
-      is_index_back=false, is_global_index=false, filter_before_indexback[false],
+      is_index_back=false, is_global_index=false, filter_before_indexback[false], 
       range_key([t1.__pk_increment]), range(MIN ; MAX)always true
 select * from (select * from t1 where t1.a = t1.b order by t1.a) t2 order by t2.a;
 +------+------+------+
@@ -41,7 +41,7 @@ Outputs & filters:
       sort_keys([t1.a, ASC])
   1 - output([t1.a], [t1.b], [t1.c]), filter([t1.a = t1.b]), rowset=16
       access([t1.a], [t1.b], [t1.c]), partitions(p0)
-      is_index_back=false, is_global_index=false, filter_before_indexback[false],
+      is_index_back=false, is_global_index=false, filter_before_indexback[false], 
       range_key([t1.__pk_increment]), range(MIN ; MAX)always true
 select * from (select * from t1 where t1.a = t1.b order by t1.a) t2 order by t2.a, t2.b;
 +------+------+------+

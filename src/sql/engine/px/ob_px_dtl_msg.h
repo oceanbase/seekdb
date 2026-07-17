@@ -26,6 +26,7 @@
 #include "sql/ob_sql_trans_util.h"
 #include "sql/engine/px/ob_px_row_store.h"
 #include "sql/engine/px/ob_px_bloom_filter.h"
+#include "rpc/frame/ob_result_code.h"
 #include "common/row/ob_row.h"
 #include "lib/compress/ob_compress_util.h"
 #include "storage/tx/ob_trans_define.h"
@@ -37,7 +38,7 @@ namespace oceanbase
 namespace sql
 {
 
-typedef obrpc::ObRpcResultCode ObPxUserErrorMsg;
+typedef rpc::frame::ObResultCode ObPxUserErrorMsg;
 
 struct ObPxTabletInfo
 {

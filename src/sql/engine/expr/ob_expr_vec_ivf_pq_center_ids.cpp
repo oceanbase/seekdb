@@ -17,13 +17,14 @@
 #define USING_LOG_PREFIX COMMON
 
 #include "sql/engine/expr/ob_expr_vec_ivf_pq_center_ids.h"
+#include "share/rc/ob_module_provider.h"
 #include "sql/engine/expr/ob_expr_calc_partition_id.h"
 #include "sql/engine/expr/ob_array_expr_utils.h"
 #include "sql/engine/ob_exec_context.h"
-#include "share/vector_index/ob_vector_index_util.h"
-#include "share/vector_index/ob_plugin_vector_index_service.h"
-#include "share/vector_type/ob_vector_common_util.h"
-#include "share/ob_vec_index_builder_util.h"
+#include "observer/vector_index/ob_vector_index_util.h"
+#include "observer/vector_index/ob_plugin_vector_index_service.h"
+#include "storage/vector_type/ob_vector_common_util.h"
+#include "sql/resolver/ddl/ob_vec_index_builder_util.h"
 #include "sql/engine/ob_exec_context.h"
 
 namespace oceanbase
@@ -130,7 +131,7 @@ int ObExprVecIVFPQCenterIds::calc_pq_center_ids(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", K(ret), K(expr), KP(expr.args_));
   } else {
-    common::ObArenaAllocator tmp_allocator("IVFPQExprPqCID", OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID());
+    common::ObArenaAllocator tmp_allocator("IVFPQExprPqCID", OB_MALLOC_NORMAL_BLOCK_SIZE);
     ObExpr *calc_vector_expr = expr.args_[0];
     ObExpr *calc_centroid_table_id_expr = expr.args_[1];
     ObExpr *calc_centroid_part_id_expr = expr.args_[2];
@@ -198,17 +199,17 @@ int ObExprVecIVFPQCenterIds::calc_pq_center_ids(
       LOG_WARN("fail to calc location ids", 
                 K(ret), K(pq_cent_table_id), K(pq_cent_tablet_id), KP(calc_pq_centroid_table_id_expr), KP(calc_pq_centroid_part_id_expr));
     } else if (OB_FAIL(ObVectorIndexUtil::calc_location_ids(
-          eval_ctx,
-          calc_centroid_table_id_expr,
-          calc_centroid_part_id_expr,
-          cent_table_id,
+          eval_ctx, 
+          calc_centroid_table_id_expr, 
+          calc_centroid_part_id_expr, 
+          cent_table_id, 
           cent_tablet_id))) {
       LOG_WARN("fail to calc location ids", K(ret), K(cent_table_id), K(cent_tablet_id), KP(calc_centroid_table_id_expr), KP(calc_centroid_part_id_expr));
     } else if (is_empty_pq_ids) {
       // need get center prefix
       uint64_t center_prefix = 0;
       ObSEArray<float *, 64> pq_centers;
-      share::ObPluginVectorIndexService *service = MTL(ObPluginVectorIndexService*);
+      share::ObPluginVectorIndexService *service = share::g_mp->plugin_vector_index_service();
       ObExprVecIvfCenterIdCache *cache = nullptr;
       ObExprVecIvfCenterIdCache *pq_cache = nullptr;
       ObVectorIndexUtil::get_ivf_pq_center_id_cache_ctx(expr.expr_ctx_id_, &eval_ctx.exec_ctx_, cache, pq_cache);
@@ -241,7 +242,7 @@ int ObExprVecIVFPQCenterIds::calc_pq_center_ids(
     // 3. calc residul vec
     int64_t center_idx = 0;
     float *residual_vec = nullptr;
-    share::ObPluginVectorIndexService *service = MTL(ObPluginVectorIndexService*);
+    share::ObPluginVectorIndexService *service = share::g_mp->plugin_vector_index_service();
     ObVectorNormalizeInfo norm_info;
     ObArray<float *> splited_residual;
     ObExprVecIvfCenterIdCache *cache = nullptr;
@@ -285,7 +286,7 @@ int ObExprVecIVFPQCenterIds::calc_pq_center_ids(
       } else {
         center_size_per_m = pq_centers.count() / pq_m;
       }
-      ObVectorClusterHelper helper;
+      ObVectorKmeansClusterHelper helper;
       int64_t pq_center_idx = 0;
       // version
       *(int32_t*)vb_buf = ObVecIVFPQCenterIDS::CUR_VERSION;

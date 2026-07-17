@@ -18,7 +18,7 @@
 #define OCEANBASE_STORAGE_OB_LS_FREEZE_THREAD_
 
 #include "lib/lock/ob_spin_lock.h"
-#include "lib/thread/thread_mgr_interface.h"
+#include "lib/thread/ob_simple_thread_pool.h"
 #include "share/scn.h"
 
 namespace oceanbase
@@ -49,7 +49,7 @@ private:
   checkpoint::ObDataCheckpoint *data_checkpoint_;
 };
 
-class ObLSFreezeThread : public TGTaskHandler
+class ObLSFreezeThread : public common::ObSimpleThreadPool
 {
   friend class ObLSFreezeTask;
 
@@ -61,18 +61,19 @@ public:
   ObLSFreezeThread();
   virtual ~ObLSFreezeThread();
 
-  int init(int64_t tenant_id, int tg_id);
+  int init();
+  void stop();
+  void wait();
   void destroy();
 
   int add_task(checkpoint::ObDataCheckpoint *data_checkpoint, share::SCN rec_scn);
-  void handle(void *task);
-  int get_tg_id() { return tg_id_; }
 
 private:
+  void handle(void *task) override;
   int push_back_(ObLSFreezeTask *task);
+  int64_t get_thread_num_() const;
 
   bool inited_;
-  int tg_id_;  // thread group id
   ObLSFreezeTask *task_array_[MAX_FREE_TASK_NUM];
   int64_t available_index_;
   ObSpinLock lock_;

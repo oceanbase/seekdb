@@ -25,18 +25,16 @@ namespace rootserver
 using namespace oceanbase::share;
 
 int ObTenantMajorMergeStrategy::init(
-    const uint64_t tenant_id,
     ObZoneMergeManager *zone_merge_mgr)
 {
   int ret = OB_SUCCESS;
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("fail to init, not init again", KR(ret), K(tenant_id));
+    LOG_WARN("fail to init, not init again", KR(ret));
   } else if (OB_ISNULL(zone_merge_mgr)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("fail to init, invalid argument", KR(ret), K(tenant_id));
+    LOG_WARN("fail to init, invalid argument", KR(ret));
   } else {
-    tenant_id_ = tenant_id;
     zone_merge_mgr_ = zone_merge_mgr;
     is_inited_ = true;
   }
@@ -49,24 +47,24 @@ int ObTenantMajorMergeStrategy::filter_merging_zones(common::ObIArray<common::Ob
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", KR(ret), K_(tenant_id));
+    LOG_WARN("not init", KR(ret));
   } else {
     HEAP_VAR(ObZoneMergeInfo, merge_info) {
       SCN global_broadcast_scn;
       if (OB_FAIL(zone_merge_mgr_->get_global_broadcast_scn(global_broadcast_scn))) {
-        LOG_WARN("fail to get get_global_broadcast_scn", KR(ret), K_(tenant_id));
+        LOG_WARN("fail to get get_global_broadcast_scn", KR(ret));
       }
       for (int64_t i = 0; (i < to_merge_zones.count()) && OB_SUCC(ret); i++) {
-        merge_info.tenant_id_ = tenant_id_;
+        
         if (OB_FAIL(zone_merge_mgr_->get_zone_merge_info(merge_info))) {
-          LOG_WARN("fail to get merge info", KR(ret), K(tenant_id_), "zone", to_merge_zones.at(i));
+          LOG_WARN("fail to get merge info", KR(ret), "zone", to_merge_zones.at(i));
           if (OB_ENTRY_NOT_EXIST == ret) {
             ret = OB_SUCCESS;
             LOG_WARN("zone not exist, maybe dropped, treat as success");
           }
         } else if (merge_info.broadcast_scn() == global_broadcast_scn) {
           if (OB_FAIL(to_merge_zones.remove(i))) {
-            LOG_WARN("fail to remove to merge zone", KR(ret), K_(tenant_id), K(i));
+            LOG_WARN("fail to remove to merge zone", KR(ret), K(i));
           } else {
             i--;
           }

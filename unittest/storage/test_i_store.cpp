@@ -61,7 +61,6 @@ void TestIStore::prepare_schema()
   //init table schema
   table_schema_.reset();
   ASSERT_EQ(OB_SUCCESS, table_schema_.set_table_name("test_i_store"));
-  table_schema_.set_tenant_id(1);
   table_schema_.set_tablegroup_id(1);
   table_schema_.set_database_id(1);
   table_schema_.set_table_id(table_id);

@@ -35,7 +35,6 @@ enum ObMergeType : uint8_t
   MDS_MINI_MERGE,
   MDS_MINOR_MERGE,
   BATCH_EXEC, // for ObBatchExecDag
-  CONVERT_CO_MAJOR_MERGE, // convert row store major into columnar store cg sstables
   INC_MAJOR_MERGE,
   // add new merge type here
   // fix merge_type_to_str & ObPartitionMergePolicy::get_merge_tables
@@ -55,13 +54,9 @@ inline bool is_medium_merge(const ObMergeType &merge_type)
 {
   return MEDIUM_MERGE == merge_type;
 }
-inline bool is_convert_co_major_merge(const ObMergeType &merge_type)
-{
-  return CONVERT_CO_MAJOR_MERGE == merge_type;
-}
 inline bool is_major_merge_type(const ObMergeType &merge_type)
 {
-  return is_convert_co_major_merge(merge_type) || is_medium_merge(merge_type) || is_major_merge(merge_type);
+  return is_medium_merge(merge_type) || is_major_merge(merge_type);
 }
 inline bool is_mini_merge(const ObMergeType &merge_type)
 {
@@ -170,8 +165,6 @@ enum ObGetMacroSeqStage : uint8_t
 bool is_valid_get_macro_seq_stage(const ObGetMacroSeqStage stage);
 
 const int64_t MAX_MERGE_THREAD = 64;
-const int64_t DEFAULT_CG_MERGE_BATCH_SIZE = 10;
-const int64_t ALL_CG_IN_ONE_BATCH_CNT = DEFAULT_CG_MERGE_BATCH_SIZE * 2;
 
 } // namespace compaction
 } // namespace oceanbase

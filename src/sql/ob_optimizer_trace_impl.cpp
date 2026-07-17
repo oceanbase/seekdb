@@ -551,7 +551,7 @@ int ObOptimizerTraceImpl::append(const Path *path)
         append("is index merge: False, index id:", ap.index_id_, ", global index:", ap.is_global_index_, ", unique index:", index_info.is_unique_index_);
       }
       new_line();
-      append("use column store:", ap.use_column_store_, ", use das:", ap.use_das_, ", index back:", index_info.is_index_back_);
+      append("use das:", ap.use_das_, ", index back:", index_info.is_index_back_);
       new_line();
       append("table rows:", ap.get_table_row_count(), ",phy_query_range_row_count:", ap.get_phy_query_range_row_count());
       new_line();
@@ -898,8 +898,8 @@ int ObOptimizerTraceImpl::append(const ObCandiTabletLoc& candi_tablet_loc)
 int ObOptimizerTraceImpl::append(const ObBatchEstTasks& task)
 {
   int ret = OB_SUCCESS;
-  const ObIArray<obrpc::ObEstPartArgElement> &params = task.arg_.index_params_;
-  const ObIArray<obrpc::ObEstPartResElement> &res = task.res_.index_param_res_;
+  const ObIArray<obcall::ObEstPartArgElement> &params = task.arg_.index_params_;
+  const ObIArray<obcall::ObEstPartResElement> &res = task.res_.index_param_res_;
   int64_t cnt = MIN(params.count(), res.count());
   for (int64_t i = 0; OB_SUCC(ret) && i < cnt; i ++) {
     const ObIArray<ObEstRowCountRecord> &est_records = res.at(i).est_records_;
@@ -1005,12 +1005,11 @@ int ObOptimizerTraceImpl::trace_parameters()
 {
   int ret = OB_SUCCESS;
   if (OB_NOT_NULL(session_info_)) {
-    int64_t tenant_id = session_info_->get_effective_tenant_id();
-    omt::ObTenantConfigGuard tenant_config(TENANT_CONF(tenant_id));
-    if (tenant_config.is_valid()) {
-      new_line();
-      append("tenant config:");
-    }
+    
+
+    new_line();
+    append("tenant config:");
+
     new_line();
     append("system variables:");
     session_info_->trace_all_sys_vars();
@@ -1024,7 +1023,6 @@ int ObOptimizerTraceImpl::trace_session_info()
   if (OB_NOT_NULL(session_info_)) {
     ObSQLSessionInfo *session = session_info_;
     const common::ObAddr &client_addr = session->get_peer_addr();
-    common::ObAddr proxy_addr = session->get_proxy_addr();
     char trace_id[common::OB_MAX_TRACE_ID_BUFFER_SIZE];
     int64_t trace_len = session->get_current_trace_id().to_string(trace_id, sizeof(trace_id));
     char buf[1024];
@@ -1035,12 +1033,6 @@ int ObOptimizerTraceImpl::trace_session_info()
     } else if (OB_FAIL(client_addr.addr_to_buffer(buf, len, buf_len))) {
       LOG_WARN("failed to print addr", K(ret));
     } else if (OB_FAIL(append_key_value("Client Address", ObString(buf_len,buf)))) {
-      LOG_WARN("failed to append msg", K(ret));
-    } else if (OB_FAIL(new_line())) {
-      LOG_WARN("failed to append msg", K(ret));
-    } else if (OB_FAIL(proxy_addr.addr_to_buffer(buf, len, buf_len))) {
-      LOG_WARN("failed to print addr", K(ret));
-    } else if (OB_FAIL(append_key_value("Proxy Address", ObString(buf_len,buf)))) {
       LOG_WARN("failed to append msg", K(ret));
     } else if (OB_FAIL(new_line())) {
       LOG_WARN("failed to append msg", K(ret));
@@ -1139,10 +1131,6 @@ int ObOptimizerTraceImpl::trace_static(const ObDMLStmt *stmt, OptTableMetas &tab
         } else if (OB_FAIL(new_line())) {
           LOG_WARN("failed to append msg", K(ret));
         } else if (OB_FAIL(append("Max:", col_meta->get_max_value()))) {
-          LOG_WARN("failed to append msg", K(ret));
-        } else if (OB_FAIL(new_line())) {
-          LOG_WARN("failed to append msg", K(ret));
-        } else if (OB_FAIL(append("column group micro block count:", col_meta->get_cg_micro_blk_cnt()))) {
           LOG_WARN("failed to append msg", K(ret));
         } else if (OB_FAIL(new_line())) {
           LOG_WARN("failed to append msg", K(ret));

@@ -16,7 +16,7 @@
 
 #define USING_LOG_PREFIX SERVER_OMT
 #include "ob_tenant_ai_service.h"
-#include "share/ai_service/ob_ai_service_executor.h"
+#include "observer/ai_service/ob_ai_service_executor.h"
 #include "sql/privilege_check/ob_ai_model_priv_util.h"
 #include "sql/session/ob_sql_session_info.h"
 #include "sql/engine/ob_exec_context.h"
@@ -75,7 +75,7 @@ int ObTenantAiService::get_ai_service_guard(ObAiServiceGuard &ai_service_guard)
 }
 
 ObAiServiceGuard::ObAiServiceGuard()
-  : local_allocator_(ObMemAttr(MTL_ID(), "AiServiceGuard", ObCtxIds::DEFAULT_CTX_ID))
+  : local_allocator_(ObMemAttr("AiServiceGuard", ObCtxIds::DEFAULT_CTX_ID))
 {
 }
 
@@ -87,7 +87,7 @@ int ObAiServiceGuard::check_access_privilege()
 {
   int ret = OB_SUCCESS;
   bool has_priv = false;
-
+  
   sql::ObSQLSessionInfo *session = nullptr;
   if (OB_ISNULL(session = THIS_WORKER.get_session())) {
     // system background task thread do not have session, skip check
@@ -101,10 +101,10 @@ int ObAiServiceGuard::check_access_privilege()
       sql::ObAIServiceEndpointPrivUtil priv_util(*schema_guard);
       share::schema::ObSessionPrivInfo session_priv;
       uint64_t user_id = session->get_priv_user_id();
-      if (user_id == OB_INVALID_ID && session->get_priv_tenant_id() == OB_SYS_TENANT_ID) {
+      if (user_id == OB_INVALID_ID) {
         user_id = OB_SYS_USER_ID;
       }
-      if (OB_FAIL(schema_guard->get_session_priv_info(session->get_priv_tenant_id(),
+      if (OB_FAIL(schema_guard->get_session_priv_info(
                                                     user_id,
                                                     session->get_database_name(),
                                                     session_priv))) {
@@ -118,7 +118,7 @@ int ObAiServiceGuard::check_access_privilege()
       }
     }
   }
-
+  
   return ret;
 }
 
@@ -126,7 +126,7 @@ int ObAiServiceGuard::get_ai_endpoint(const common::ObString &name, const share:
 {
   int ret = OB_SUCCESS;
   ObAiModelEndpointInfo *tmp_endpoint_info = nullptr;
-
+  
   if (OB_FAIL(check_access_privilege())) {
     LOG_WARN("failed to check access privilege", K(ret));
   } else if (OB_ISNULL(tmp_endpoint_info = OB_NEWx(ObAiModelEndpointInfo, &local_allocator_))) {
@@ -144,7 +144,7 @@ int ObAiServiceGuard::get_ai_endpoint_by_ai_model_name(const common::ObString &a
 {
   int ret = OB_SUCCESS;
   ObAiModelEndpointInfo *tmp_endpoint_info = nullptr;
-
+  
   if (need_check && OB_FAIL(check_access_privilege())) {
     LOG_WARN("failed to check access privilege", K(ret));
   } else if (OB_ISNULL(tmp_endpoint_info = OB_NEWx(ObAiModelEndpointInfo, &local_allocator_))) {

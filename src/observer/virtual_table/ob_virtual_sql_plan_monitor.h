@@ -17,9 +17,9 @@
 #ifndef OCEANBASE_OBSERVER_OB_VIRTUAL_SQL_PLAN_MONITOR_H
 #define OCEANBASE_OBSERVER_OB_VIRTUAL_SQL_PLAN_MONITOR_H
 #include "lib/container/ob_se_array.h"
-#include "share/ob_virtual_table_scanner_iterator.h"
+#include "observer/virtual_table/ob_virtual_table_scanner_iterator.h"
 #include "lib/net/ob_addr.h"
-#include "share/diagnosis/ob_sql_plan_monitor_node_list.h"
+#include "sql/monitor/ob_sql_plan_monitor_node_list.h"
 
 namespace oceanbase
 {
@@ -53,9 +53,7 @@ public:
   bool is_index_scan() const { return is_use_index_; }
 private:
   int convert_node_to_row(sql::ObMonitorNode &node, ObNewRow *&row);
-  int extract_tenant_ids();
-  int extract_request_ids(const uint64_t tenant_id,
-                          int64_t &start_id,
+  int extract_request_ids(int64_t &start_id,
                           int64_t &end_id,
                           bool &is_valid);
   int switch_tenant_monitor_node_list();
@@ -131,8 +129,8 @@ private:
   char trace_id_[common::OB_MAX_TRACE_ID_BUFFER_SIZE];
   bool is_first_get_;
   bool is_use_index_;
-  common::ObSEArray<uint64_t, 16> tenant_id_array_;
-  int64_t tenant_id_array_idx_;
+  // Sys-scope single pass cursor flag
+  bool sys_scope_done_;
   share::ObTenantSpaceFetcher *with_tenant_ctx_;
   bool need_rt_node_;
   common::ObArray<sql::ObMonitorNode> rt_nodes_;

@@ -17,7 +17,7 @@
 #define USING_LOG_PREFIX SQL_REWRITE
 #include "sql/rewrite/ob_transform_conditional_aggr_coalesce.h"
 #include "sql/rewrite/ob_transform_utils.h"
-#include "share/stat/ob_opt_stat_manager.h"
+#include "sql/optimizer/stat/ob_opt_stat_manager.h"
 #include "sql/optimizer/ob_log_plan.h"
 using namespace oceanbase::sql;
 using namespace oceanbase::common;
@@ -458,8 +458,7 @@ int ObTransformConditionalAggrCoalesce::check_statistics_threshold(ObSelectStmt 
     LOG_WARN("failed to extract column exprs", K(ret));
   } else if (OB_FAIL(append(cols_in_groupby, trans_param.extra_dep_cols_))) {
     LOG_WARN("failed to append exprs", K(ret));
-  } else if (OB_FAIL(ctx_->schema_checker_->get_table_schema(
-                                      ctx_->session_info_->get_effective_tenant_id(), 
+  } else if (OB_FAIL(ctx_->schema_checker_->get_table_schema( 
                                       base_table->ref_id_, table_schema))) {
     LOG_WARN("get table schema failed", K(ret));
   } else if (OB_ISNULL(table_schema)) {
@@ -479,7 +478,6 @@ int ObTransformConditionalAggrCoalesce::check_statistics_threshold(ObSelectStmt 
       } else if (OB_FALSE_IT(column_id = col->get_column_id())) {
       } else if (OB_FALSE_IT(table_id = col->get_table_id())) {
       } else if (OB_FAIL(ctx_->opt_stat_mgr_->get_column_stat(
-                        ctx_->session_info_->get_effective_tenant_id(),
                         base_table->ref_id_,
                         table_schema->is_partitioned_table() ? -1 : base_table->ref_id_,
                         column_id, handle))) {
@@ -504,7 +502,6 @@ int ObTransformConditionalAggrCoalesce::check_statistics_threshold(ObSelectStmt 
       } else if (OB_FAIL(append(int64_partition_ids, partition_ids))) {
         LOG_WARN("failed to append partition ids", K(ret));
       } else if (OB_FAIL(ctx_->opt_stat_mgr_->get_table_stat(
-                                              ctx_->session_info_->get_effective_tenant_id(),
                                               table_schema->get_table_id(),
                                               int64_partition_ids,
                                               table_stats))) {

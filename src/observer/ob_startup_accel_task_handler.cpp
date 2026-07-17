@@ -16,7 +16,6 @@
 
 #define USING_LOG_PREFIX SERVER
 #include "observer/ob_startup_accel_task_handler.h"
-#include "share/ob_thread_mgr.h"
 #include "share/rc/ob_tenant_base.h"
 
 namespace oceanbase
@@ -28,7 +27,7 @@ const int64_t ObStartupAccelTaskHandler::MAX_THREAD_NUM = 64;
 
 ObStartupAccelTaskHandler::ObStartupAccelTaskHandler()
   : is_inited_(false),
-    tg_id_(-1),
+    accel_type_(SERVER_ACCEL),
     task_allocator_()
 {}
 
@@ -40,8 +39,7 @@ ObStartupAccelTaskHandler::~ObStartupAccelTaskHandler()
 int ObStartupAccelTaskHandler::init(ObStartupAccelType accel_type)
 {
   int ret = OB_SUCCESS;
-  ObMemAttr mem_attr = ObMemAttr(SERVER_ACCEL == accel_type ? OB_SERVER_TENANT_ID : MTL_ID(),
-                                 "StartupTask",
+  ObMemAttr mem_attr = ObMemAttr("StartupTask",
                                  ObCtxIds::DEFAULT_CTX_ID);
   if (is_inited_) {
     ret = OB_INIT_TWICE;
@@ -49,15 +47,16 @@ int ObStartupAccelTaskHandler::init(ObStartupAccelType accel_type)
   } else if (OB_FAIL(task_allocator_.init(lib::ObMallocAllocator::get_instance(),
       OB_MALLOC_NORMAL_BLOCK_SIZE, mem_attr))) {
     LOG_WARN("fail to init tenant tiny allocator", K(ret));
-  } else if (SERVER_ACCEL == accel_type &&
-      OB_FAIL(TG_CREATE(lib::TGDefIDs::StartupAccelHandler, tg_id_))) {
-    LOG_WARN("lib::TGDefIDs::StartupAccelHandler tg create", K(ret));
-  } else if (TENANT_ACCEL == accel_type &&
-      OB_FAIL(TG_CREATE_TENANT(lib::TGDefIDs::StartupAccelHandler, tg_id_))) {
-    LOG_WARN("lib::TGDefIDs::StartupAccelHandler tg create", K(ret));
+  } else if (FALSE_IT(accel_type_ = accel_type)) {
+  } else if (OB_FAIL(common::ObSimpleThreadPool::init(get_thread_cnt(),
+                                                      MAX_QUEUED_TASK_NUM,
+                                                      "StartupAccel"))) {
+    LOG_WARN("fail to init startup accel thread pool", K(ret), K(accel_type), K(get_thread_cnt()));
   } else {
     is_inited_ = true;
-    accel_type_ = accel_type;
+  }
+  if (OB_FAIL(ret) && OB_INIT_TWICE != ret) {
+    task_allocator_.reset();
   }
   return ret;
 }
@@ -84,12 +83,6 @@ int ObStartupAccelTaskHandler::start()
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     LOG_WARN("ObStartupAccelTaskHandler not inited", K(ret));
-  } else if (OB_FAIL(TG_SET_HANDLER(tg_id_, *this))) {
-    LOG_WARN("tg set handler failed", K(ret), K(tg_id_));
-  } else if (OB_FAIL(TG_SET_THREAD_CNT(tg_id_, get_thread_cnt()))) {
-    LOG_WARN("tg set thread cnt failed", K(ret), K(tg_id_), K(get_thread_cnt()));
-  } else if (OB_FAIL(TG_START(tg_id_))) {
-    LOG_WARN("fail to start ObStartupAccelTaskHandler", K(ret));
   }
   return ret;
 }
@@ -97,24 +90,21 @@ int ObStartupAccelTaskHandler::start()
 void ObStartupAccelTaskHandler::stop()
 {
   if (IS_INIT) {
-    TG_STOP(tg_id_);
+    common::ObSimpleThreadPool::stop();
   }
 }
 
 void ObStartupAccelTaskHandler::wait()
 {
   if (IS_INIT) {
-    TG_WAIT(tg_id_);
+    common::ObSimpleThreadPool::wait();
   }
 }
 
 void ObStartupAccelTaskHandler::destroy()
 {
   if (IS_INIT) {
-    TG_STOP(tg_id_);
-    TG_WAIT(tg_id_);
-    TG_DESTROY(tg_id_);
-    tg_id_ = -1;
+    common::ObSimpleThreadPool::destroy();
     task_allocator_.reset();
     is_inited_ = false;
   }
@@ -126,7 +116,7 @@ int ObStartupAccelTaskHandler::push_task(ObStartupAccelTask *task)
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     LOG_WARN("ObStartupAccelTaskHandler not inited", K(ret));
-  } else if (OB_FAIL(TG_PUSH_TASK(tg_id_, task))) {
+  } else if (OB_FAIL(common::ObSimpleThreadPool::push(task))) {
     LOG_WARN("fail to push startup accel task", K(ret), KPC(task));
   }
   return ret;

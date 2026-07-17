@@ -19,11 +19,10 @@
 #include "common/ob_tablet_id.h"
 #include "lib/utility/ob_print_utils.h"
 #include "lib/utility/ob_unify_serialize.h"
-#include "share/ob_ls_id.h"
 #include "lib/oblog/ob_log_module.h"
 #include "lib/utility/ob_print_utils.h"
 #include "share/rc/ob_tenant_base.h"
-#include "sql/resolver/cmd/ob_load_data_stmt.h"
+#include "sql/resolver/cmd/ob_load_dup_action_type.h"
 
 namespace oceanbase
 {
@@ -117,56 +116,29 @@ public:
   TO_STRING_KV(K_(partition_id), K_(tablet_id));
 };
 
-struct ObTableLoadLSIdAndPartitionId
+struct ObTableLoadTabletId
 {
   OB_UNIS_VERSION(1);
 public:
-  ObTableLoadLSIdAndPartitionId() {}
-  ObTableLoadLSIdAndPartitionId(const share::ObLSID &ls_id, const ObTableLoadPartitionId &partition_id)
-    : ls_id_(ls_id), part_tablet_id_(partition_id)
+  ObTableLoadTabletId() {}
+  explicit ObTableLoadTabletId(const ObTableLoadPartitionId &partition_id)
+    : part_tablet_id_(partition_id)
   {
   }
-  share::ObLSID ls_id_;
   ObTableLoadPartitionId part_tablet_id_;
 
-  ObTableLoadLSIdAndPartitionId &operator=(const ObTableLoadLSIdAndPartitionId &other)
+  ObTableLoadTabletId &operator=(const ObTableLoadTabletId &other)
   {
-    ls_id_ = other.ls_id_;
     part_tablet_id_ = other.part_tablet_id_;
     return *this;
   }
 
   bool is_valid() const
   {
-    return ls_id_.is_valid() && part_tablet_id_.is_valid();
+    return part_tablet_id_.is_valid();
   }
 
-  TO_STRING_KV(K_(ls_id), K_(part_tablet_id));
-};
-
-struct ObTableLoadLSTabletID
-{
-  OB_UNIS_VERSION(1);
-public:
-  ObTableLoadLSTabletID() {}
-  ObTableLoadLSTabletID(const share::ObLSID &ls_id, const common::ObTabletID &tablet_id)
-    : ls_id_(ls_id), tablet_id_(tablet_id)
-  {
-  }
-  ObTableLoadLSTabletID &operator=(const ObTableLoadLSTabletID &other)
-  {
-    ls_id_ = other.ls_id_;
-    tablet_id_ = other.tablet_id_;
-    return *this;
-  }
-  bool is_valid() const
-  {
-    return ls_id_.is_valid() && tablet_id_.is_valid();
-  }
-  TO_STRING_KV(K_(ls_id), K_(tablet_id));
-public:
-  share::ObLSID ls_id_;
-  common::ObTabletID tablet_id_;
+  TO_STRING_KV(K_(part_tablet_id));
 };
 
 enum class ObTableLoadStatusType : int64_t

@@ -40,8 +40,7 @@ public:
       int32_t param_num,
       ObValidForGeneratedColFlag valid_for_generated_col,
       int32_t dimension,
-      bool is_internal_for_mysql = false,
-      bool is_internal_for_oracle = false);
+      bool is_internal_for_mysql = false);
   virtual ~ObExprAutoincNextval();
 
   virtual int calc_result_typeN(ObExprResType &type,

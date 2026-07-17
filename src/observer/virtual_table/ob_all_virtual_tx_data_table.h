@@ -17,15 +17,17 @@
 #ifndef OB_ALL_VIRTUAL_TX_DATA_TABLE_H_
 #define OB_ALL_VIRTUAL_TX_DATA_TABLE_H_
 
-#include "share/ob_virtual_table_scanner_iterator.h"
-#include "storage/tx_storage/ob_ls_map.h"
-#include "observer/omt/ob_multi_tenant_operator.h"
+#include "observer/virtual_table/ob_virtual_table_scanner_iterator.h"
 
 namespace oceanbase
 {
+namespace storage
+{
+class ObLS;
+}
 namespace observer
 {
-class ObAllVirtualTxDataTable : public common::ObVirtualTableScannerIterator, public omt::ObMultiTenantOperator {
+class ObAllVirtualTxDataTable : public common::ObVirtualTableScannerIterator {
 private:
   struct RowData {
     const char *state_;
@@ -48,40 +50,26 @@ public:
   ObAllVirtualTxDataTable();
   ~ObAllVirtualTxDataTable();
 
-  TO_STRING_KV(K(MTL_ID()), K_(memtable_array_pos), K_(sstable_array_pos));
+  TO_STRING_KV(K_(memtable_array_pos), K_(sstable_array_pos));
 public:
-  virtual int inner_get_next_row(common::ObNewRow *&row) { return execute(row);}
+  virtual int inner_get_next_row(common::ObNewRow *&row);
   virtual void reset();
-  inline void set_addr(common::ObAddr &addr)
-  {
-    addr_ = addr;
-  }
 
 private:
   int get_next_tx_data_table_(ObITable *&tx_data_memtable);
 
   int prepare_row_data_(ObITable *tx_data_table, RowData &row_data);
 
-  virtual bool is_need_process(uint64_t tenant_id) override;
-
-  virtual int process_curr_tenant(common::ObNewRow *&row) override;
-
-  virtual void release_last_tenant() override;
-
 private:
-  common::ObAddr addr_;
-  char ip_buf_[common::OB_IP_STR_BUFF];
-
-  /****************   NOTE : These resources must be released in their own tenant    *****************/
   int64_t memtable_array_pos_;
   int64_t sstable_array_pos_;
-  ObSharedGuard<storage::ObLSIterator> ls_iter_guard_;
+  storage::ObLS *ls_;
+  bool tables_loaded_;
   ObTabletHandle tablet_handle_;
   ObTabletMemberWrapper<ObTabletTableStore> table_store_wrapper_;
   ObMemtableMgrHandle mgr_handle_;
   common::ObSEArray<ObTableHandleV2, 1> memtable_handles_;
   common::ObSEArray<ObITable *, 8> sstable_handles_;
-  /****************   NOTE : These resources must be released in their own tenant    *****************/
 
 private:
   DISALLOW_COPY_AND_ASSIGN(ObAllVirtualTxDataTable);

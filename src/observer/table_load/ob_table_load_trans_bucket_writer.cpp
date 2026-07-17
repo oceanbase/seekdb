@@ -40,10 +40,10 @@ using namespace table;
 using namespace common::number;
 
 ObTableLoadTransBucketWriter::SessionContext::SessionContext()
-  : session_id_(0), allocator_("TLD_TB_SessCtx"), last_receive_sequence_no_(0)
+  : session_id_(0), last_receive_sequence_no_(0)
 {
-  allocator_.set_tenant_id(MTL_ID());
-  load_bucket_array_.set_tenant_id(MTL_ID());
+  
+  
 }
 
 ObTableLoadTransBucketWriter::SessionContext::~SessionContext()
@@ -53,13 +53,7 @@ ObTableLoadTransBucketWriter::SessionContext::~SessionContext()
 
 void ObTableLoadTransBucketWriter::SessionContext::reset() 
 {
-  for (int64_t i = 0; i < load_bucket_array_.count(); ++i) {
-    ObTableLoadBucket *load_bucket = load_bucket_array_.at(i);
-    load_bucket->~ObTableLoadBucket();
-    allocator_.free(load_bucket);
-  }
-  load_bucket_array_.reset();
-  load_bucket_map_.reuse();
+  load_bucket_.reset();
 }
 
 ObTableLoadTransBucketWriter::ObTableLoadTransBucketWriter(ObTableLoadTransCtx *trans_ctx)
@@ -75,7 +69,7 @@ ObTableLoadTransBucketWriter::ObTableLoadTransBucketWriter(ObTableLoadTransCtx *
     flush_count_(0),
     is_inited_(false)
 {
-  allocator_.set_tenant_id(MTL_ID());
+  
 }
 
 ObTableLoadTransBucketWriter::~ObTableLoadTransBucketWriter()
@@ -132,23 +126,12 @@ int ObTableLoadTransBucketWriter::init_session_ctx_array()
       SessionContext *session_ctx = session_ctx_array_ + i;
       session_ctx->session_id_ = i + 1;
       if (!is_partitioned_) {
-        ObTableLoadPartitionLocation::PartitionLocationInfo info;
         if (OB_UNLIKELY(1 != coordinator_ctx_->partition_ids_.count())) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("unexpected partition id num in non partitioned table", KR(ret), "count",
                    coordinator_ctx_->partition_ids_.count());
         } else if (FALSE_IT(session_ctx->partition_id_ =
                               coordinator_ctx_->partition_ids_[0])) {
-        } else if (OB_FAIL(coordinator_ctx_->partition_location_.get_leader(
-                     session_ctx->partition_id_.tablet_id_, info))) {
-          LOG_WARN("failed to get leader addr", K(ret));
-        } else if (OB_FAIL(session_ctx->load_bucket_.init(info.leader_addr_))) {
-          LOG_WARN("fail to init bucket", KR(ret));
-        }
-      } else {
-        if (OB_FAIL(session_ctx->load_bucket_map_.create(1024, "TLD_BucketMap", "TLD_BucketMap",
-                                                         param_.tenant_id_))) {
-          LOG_WARN("fail to init partition bucket map", KR(ret));
         }
       }
     }
@@ -198,7 +181,7 @@ int ObTableLoadTransBucketWriter::handle_partition_with_autoinc_identity(
 {
   int ret = OB_SUCCESS;
   const int64_t row_count = obj_rows.count();
-  ObArenaAllocator autoinc_allocator("TLD_Autoinc", OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID());
+  ObArenaAllocator autoinc_allocator("TLD_Autoinc", OB_MALLOC_NORMAL_BLOCK_SIZE);
   ObDataTypeCastParams cast_params(coordinator_ctx_->partition_calc_.session_info_->get_timezone_info());
   ObCastCtx cast_ctx(&autoinc_allocator, &cast_params, cast_mode_,
                       ObCharset::get_system_collation());
@@ -364,7 +347,7 @@ int ObTableLoadTransBucketWriter::write_for_partitioned(SessionContext &session_
   ObArray<int64_t> row_idxs;
   ObTableLoadErrorRowHandler *error_row_handler =
         coordinator_ctx_->error_row_handler_;
-  allocator.set_tenant_id(MTL_ID());
+  
   partition_ids.set_block_allocator(common::ModulePageAllocator(allocator));
   part_keys.set_block_allocator(common::ModulePageAllocator(allocator));
   row_idxs.set_block_allocator(common::ModulePageAllocator(allocator));
@@ -402,7 +385,7 @@ int ObTableLoadTransBucketWriter::write_for_partitioned(SessionContext &session_
   for (int64_t i = 0; OB_SUCC(ret) && i < row_idxs.count(); ++i) {
     const ObTableLoadPartitionId &partition_id = partition_ids.at(i);
     const ObTableLoadObjRow &row = obj_rows.at(row_idxs.at(i));
-    ObTableLoadBucket *load_bucket = nullptr;
+    ObTableLoadBucket *load_bucket = &session_ctx.load_bucket_;
     bool need_write = false;
     if (OB_UNLIKELY(!partition_id.is_valid())) {
       ret = OB_NO_PARTITION_FOR_GIVEN_VALUE;
@@ -412,9 +395,6 @@ int ObTableLoadTransBucketWriter::write_for_partitioned(SessionContext &session_
       } else {
         ret = OB_SUCCESS;
       }
-    } else if (OB_FAIL(get_load_bucket(session_ctx, partition_id, load_bucket))) {
-      LOG_WARN("fail to get partition bucket", KR(ret), K(session_ctx.session_id_),
-               K(partition_id));
     } else if (OB_FAIL(load_bucket->add_row(partition_id.tablet_id_,
                                             row,
                                             param_.batch_size_,
@@ -440,21 +420,10 @@ int ObTableLoadTransBucketWriter::flush(int32_t session_id, bool &is_finished)
     LOG_WARN("invalid args", KR(ret), K(session_id));
   } else {
     SessionContext &session_ctx = session_ctx_array_[session_id - 1];
-    if (!is_partitioned_) {
-      ObTableLoadBucket *load_bucket = &session_ctx.load_bucket_;
-      if (!(load_bucket->row_array_.empty())) {
-        if (OB_FAIL(write_load_bucket(session_ctx, load_bucket))) {
-          LOG_WARN("fail to write partition bucket", KR(ret), KPC(load_bucket));
-        }
-      }
-    } else {
-      for (int64_t i = 0; OB_SUCC(ret) && i < session_ctx.load_bucket_array_.count(); ++i) {
-        ObTableLoadBucket *load_bucket = session_ctx.load_bucket_array_.at(i);
-        if (!(load_bucket->row_array_.empty())) {
-          if (OB_FAIL(write_load_bucket(session_ctx, load_bucket))) {
-            LOG_WARN("fail to write partition bucket", KR(ret), KPC(load_bucket));
-          }
-        }
+    ObTableLoadBucket *load_bucket = &session_ctx.load_bucket_;
+    if (!load_bucket->row_array_.empty()) {
+      if (OB_FAIL(write_load_bucket(session_ctx, load_bucket))) {
+        LOG_WARN("fail to write tablet bucket", KR(ret), KPC(load_bucket));
       }
     }
     if (OB_SUCC(ret)) {
@@ -463,50 +432,6 @@ int ObTableLoadTransBucketWriter::flush(int32_t session_id, bool &is_finished)
     }
     // release memory
     session_ctx.reset();
-  }
-  return ret;
-}
-
-int ObTableLoadTransBucketWriter::get_load_bucket(SessionContext &session_ctx,
-                                                  const ObTableLoadPartitionId &partition_id,
-                                                  ObTableLoadBucket *&load_bucket)
-{
-  OB_TABLE_LOAD_STATISTICS_TIME_COST(DEBUG, get_part_bucket_time_us);
-  int ret = OB_SUCCESS;
-  load_bucket = nullptr;
-  if (OB_UNLIKELY(!is_partitioned_)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected non partitioned table", KR(ret));
-  } else {
-    ObTableLoadPartitionLocation::PartitionLocationInfo info;
-    if (OB_FAIL(coordinator_ctx_->partition_location_.get_leader(partition_id.tablet_id_, info))) {
-      LOG_WARN("failed to get leader addr", K(ret));
-    }
-    if (OB_SUCC(ret)) {
-      ret = session_ctx.load_bucket_map_.get_refactored(info.leader_addr_, load_bucket);
-      if (OB_HASH_NOT_EXIST == ret) {
-        ret = OB_SUCCESS;
-        if (OB_ISNULL(load_bucket = OB_NEWx(ObTableLoadBucket, (&session_ctx.allocator_)))) {
-          ret = OB_ALLOCATE_MEMORY_FAILED;
-          LOG_WARN("failed to new partition bucket", KR(ret));
-        } else if (OB_FAIL(load_bucket->init(info.leader_addr_))) {
-          LOG_WARN("fail to init", KR(ret));
-        } else if (OB_FAIL(session_ctx.load_bucket_map_.set_refactored(info.leader_addr_, load_bucket))) {
-          LOG_WARN("fail to put bucket", KR(ret));
-        } else if (OB_FAIL(session_ctx.load_bucket_array_.push_back(load_bucket))) {
-          LOG_WARN("fail to push back bucket", KR(ret));
-        }
-        if (OB_FAIL(ret)) {
-          if (nullptr != load_bucket) {
-            load_bucket->~ObTableLoadBucket();
-            session_ctx.allocator_.free(load_bucket);
-            load_bucket = nullptr;
-          }
-        }
-      } else if (OB_FAIL(ret)) {
-        LOG_WARN("fail to get bucket", KR(ret), K(partition_id));
-      }
-    }
   }
   return ret;
 }
@@ -522,10 +447,10 @@ int ObTableLoadTransBucketWriter::write_load_bucket(SessionContext &session_ctx,
     ObTableLoadCoordinator coordinator(coordinator_ctx_->ctx_);
     if (OB_FAIL(coordinator.init())) {
       LOG_WARN("fail to init coordinator", KR(ret));
-    } else if (OB_FAIL(coordinator.write_peer_leader(
+    } else if (OB_FAIL(coordinator.write_local(
                  trans_ctx_->trans_id_, session_ctx.session_id_, ++load_bucket->sequence_no_,
-                 load_bucket->row_array_, load_bucket->leader_addr_))) {
-      LOG_WARN("fail to coordinator write peer leader", KR(ret), K(session_ctx.session_id_),
+                 load_bucket->row_array_))) {
+      LOG_WARN("fail to write local tablet rows", KR(ret), K(session_ctx.session_id_),
                KPC(load_bucket));
     }
   }

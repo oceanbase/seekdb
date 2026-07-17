@@ -967,16 +967,8 @@ int generate_window_functions_plan(WinFuncOpHelper &win_func_helper,
                                                   ObIArray<uint64_t> &used_column_ids,
                                                   bool &need);
 
-  int if_column_store_plan_need_late_materialization(ObLogSort *child_sort,
-                                                    ObLogTableScan *table_scan,
-                                                    ObIArray<uint64_t> &used_column_ids,
-                                                    bool &need);
-
   int adjust_est_info_for_index_back_plan(ObLogTableScan *table_scan,
                                           ObIArray<uint64_t> &used_column_ids);
-
-  int adjust_est_cost_info_for_column_store_plan(ObLogTableScan *table_scan,
-                                                 ObIArray<uint64_t> &used_column_ids);
 
   int if_stmt_need_late_materialization(bool &need);
 
@@ -993,8 +985,6 @@ int generate_window_functions_plan(WinFuncOpHelper &win_func_helper,
                                     const DistAlgo algo,
                                     bool &ignore_plan,
                                     bool can_ignore_merge = false);
-
-  int check_external_table_scan(ObSelectStmt *stmt, bool &has_external_table);
 
   int contain_enum_set_rowkeys(const ObLogTableScan &table_scan, bool &contain);
   int candi_allocate_order_by_if_losted(ObIArray<OrderItem> &order_items);

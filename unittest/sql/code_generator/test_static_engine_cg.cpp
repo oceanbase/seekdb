@@ -276,17 +276,9 @@ TEST_F(TestCodeGenerator, basic_test)
     params_.reset();
     OB_LOG(INFO, "case:", K(line.c_str()));
 
-    // if sql start with "oracle", use oracle compact mode.
-    auto mode =  lib::Worker::CompatMode::MYSQL;
-    std::string oracle("oracle");
     // trim left
     line.erase(line.begin(),std::find_if(line.begin(), line.end(),
                                          [](int ch) { return !std::isspace(ch); }));
-    if (strncasecmp(oracle.c_str(), line.c_str(), oracle.size()) == 0) {
-      mode = lib::Worker::CompatMode::ORACLE;
-      line.erase(line.begin(), line.begin() + oracle.size());
-    }
-    lib::CompatModeGuard g(mode);
 
     ObPhysicalPlanCtx *pctx = exec_ctx_.get_physical_plan_ctx();
     ASSERT_TRUE(NULL != pctx);

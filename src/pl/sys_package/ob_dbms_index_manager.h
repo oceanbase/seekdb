@@ -19,7 +19,7 @@
 
 #include "pl/ob_pl.h"
 
-namespace oceanbase
+namespace oceanbase 
 {
 namespace pl
 {

@@ -21,7 +21,7 @@
 #include <cctype>
 
 #include "share/ob_define.h"
-#include "lib/stat/ob_session_stat.h"
+#include "lib/stat/ob_diagnose_info.h"
 #define private public
 #define protected public
 #include "lib/file/file_directory_utils.h"
@@ -36,8 +36,8 @@
 #include "storage/compaction/ob_tenant_freeze_info_mgr.h"
 #include "share/ob_simple_mem_limit_getter.h"
 #include "storage/blocksstable/ob_storage_cache_suite.h"
-#include "storage/slog/ob_storage_logger_manager.h"
 #include "storage/meta_store/ob_server_storage_meta_service.h"
+#include "share/rc/ob_module_provider.h"
 
 namespace oceanbase
 {
@@ -95,6 +95,8 @@ protected:
   const int64_t macro_block_size_;
   const int64_t macro_block_count_;
   ObITenantMemLimitGetter *getter_;
+  oceanbase::share::ObIModuleProvider mock_module_provider_;
+  oceanbase::share::ObIModuleProvider *old_g_mp_ = nullptr;
 };
 
 TestDataFilePrepare::TestDataFilePrepare(ObITenantMemLimitGetter *getter,
@@ -117,6 +119,8 @@ TestDataFilePrepare::~TestDataFilePrepare()
 
 void TestDataFilePrepare::SetUp()
 {
+  old_g_mp_ = oceanbase::share::g_mp;
+  oceanbase::share::g_mp = &mock_module_provider_;
   ASSERT_EQ(OB_SUCCESS, util_.init(getter_, test_name_, macro_block_size_, macro_block_count_));
   ASSERT_EQ(OB_SUCCESS, util_.open());
 }
@@ -124,6 +128,7 @@ void TestDataFilePrepare::SetUp()
 void TestDataFilePrepare::TearDown()
 {
   util_.destory();
+  oceanbase::share::g_mp = old_g_mp_;
 }
 
 
@@ -294,8 +299,9 @@ int TestDataFilePrepareUtil::open()
     } else {
       if (OB_FAIL(SERVER_STORAGE_META_SERVICE.init())) {
         STORAGE_LOG(WARN, "fail to init storage meta service", K(ret));
-      } else if (FALSE_IT(SERVER_STORAGE_META_SERVICE.get_slogger_manager().need_reserved_ = false)) {
-      } else if (OB_FAIL(OB_STORAGE_OBJECT_MGR.init(false, storage_env_.default_block_size_))) {
+      } else if (OB_FAIL(SERVER_STORAGE_META_SERVICE.set_need_reserved_for_test(false))) {
+        STORAGE_LOG(WARN, "fail to set need reserved for test", K(ret));
+      } else if (OB_FAIL(OB_STORAGE_OBJECT_MGR.init(storage_env_.default_block_size_))) {
         STORAGE_LOG(WARN, "init block manager fail", K(ret));
       } else if (OB_FAIL(OB_STORE_CACHE.init(storage_env_.bf_cache_miss_count_threshold_))) {
         STORAGE_LOG(WARN, "Fail to init OB_STORE_CACHE, ", K(ret), K(storage_env_.data_dir_));
@@ -305,8 +311,15 @@ int TestDataFilePrepareUtil::open()
         STORAGE_LOG(WARN, "Fail to start server block mgr", K(ret));
       } else if (OB_FAIL(OB_SERVER_BLOCK_MGR.first_mark_device())) {
         STORAGE_LOG(WARN, "Fail to start first mark device", K(ret));
-      } else if (OB_FAIL(SERVER_STORAGE_META_SERVICE.get_slogger_manager().start())) {
-        STORAGE_LOG(WARN, "fail to start slogger manager", K(ret));
+      } else {
+        ObStorageLogger *server_slogger = nullptr;
+        if (OB_FAIL(SERVER_STORAGE_META_SERVICE.get_server_slogger(server_slogger))) {
+          STORAGE_LOG(WARN, "fail to get server slogger", K(ret));
+        } else if (OB_FAIL(server_slogger->start())) {
+          STORAGE_LOG(WARN, "fail to start server slogger", K(ret));
+        }
+      }
+      if (OB_FAIL(ret)) {
       } else if (OB_FAIL(ObClusterVersion::get_instance().init(CLUSTER_VERSION_1_0_0_0))) {
         STORAGE_LOG(WARN, "Fail to init cluster version", K(ret));
       } else if (OB_FAIL(clog_file_handler_.init(storage_env_.clog_dir_, storage_env_.log_spec_.max_log_file_size_))) {

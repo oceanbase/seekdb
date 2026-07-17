@@ -27,7 +27,7 @@ namespace oceanbase
 using namespace common;
 using namespace share::schema;
 using namespace share;
-using namespace obrpc;
+using namespace obcall;
 namespace sql
 {
 
@@ -57,13 +57,14 @@ int ObForkDatabaseResolver::resolve(const ParseNode &parse_tree)
     SQL_RESV_LOG(ERROR, "create fork database stmt failed", K(ret));
   } else {
     stmt_ = fork_database_stmt;
-    obrpc::ObForkDatabaseArg &fork_database_arg = fork_database_stmt->get_fork_database_arg();
-    fork_database_arg.tenant_id_ = session_info_->get_effective_tenant_id();
+    obcall::ObForkDatabaseArg &fork_database_arg = fork_database_stmt->get_fork_database_arg();
+    
+    
     fork_database_arg.if_not_exist_ = false;
   }
 
   if (OB_SUCC(ret)) {
-    obrpc::ObForkDatabaseArg &fork_database_arg = fork_database_stmt->get_fork_database_arg();
+    obcall::ObForkDatabaseArg &fork_database_arg = fork_database_stmt->get_fork_database_arg();
     ParseNode *dst_database_node = parse_tree.children_[DST_DATABASE_NODE];
     ParseNode *src_database_node = parse_tree.children_[SRC_DATABASE_NODE];
     ObString dst_database_name;

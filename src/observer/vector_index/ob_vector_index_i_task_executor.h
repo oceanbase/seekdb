@@ -1,0 +1,66 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef OCEANBASE_SHARE_OB_VECTOR_INDEX_I_TASK_EXECUTOR_H_
+#define OCEANBASE_SHARE_OB_VECTOR_INDEX_I_TASK_EXECUTOR_H_
+
+#include "observer/vector_index/ob_vector_index_async_task_util.h"
+
+namespace oceanbase 
+{
+namespace share 
+{
+
+class ObVecITaskExecutor
+{
+public: 
+  ObVecITaskExecutor() 
+    : is_inited_(false),
+      vector_index_service_(nullptr),
+      ls_(nullptr),
+      async_task_ref_cnt_(0)
+  {}
+  virtual ~ObVecITaskExecutor() {}
+  virtual int init(storage::ObLS *ls);
+  int resume_task();
+  int load_task_from_inner_table();
+  int start_task();
+  int clear_task_ctxs(ObVecIndexAsyncTaskOption &task_opt, const ObVecIndexTaskCtxArray &task_ctx_array);
+  int clear_old_task_ctx_if_need();
+  virtual int load_task(uint64_t &task_trace_base_num) = 0;
+  virtual int check_and_set_thread_pool() = 0;
+
+protected:
+  static const int64_t VEC_INDEX_TASK_MAX_RETRY_TIME = 3; // 200
+  static const int64_t MAX_ASYNC_TASK_PROCESSING_COUNT = 128; // the thread pool max paralell processing cnt is 8
+
+  int get_index_mgr(ObPluginVectorIndexMgr *&index_mgr);
+  virtual bool check_operation_allow() = 0;
+  int update_status_and_ret_code(ObVecIndexAsyncTaskCtx *task_ctx);
+  int clear_task_ctx(ObVecIndexAsyncTaskOption &task_opt, ObVecIndexAsyncTaskCtx *task_ctx);
+  int check_task_result(ObVecIndexAsyncTaskCtx *task_ctx);
+  int insert_new_task(ObVecIndexTaskCtxArray &task_ctx_array);
+
+  bool is_inited_;
+  ObPluginVectorIndexService *vector_index_service_;
+  storage::ObLS *ls_;
+  volatile int64_t async_task_ref_cnt_;
+};
+
+} // namespace share
+} // namespace oceanbase
+
+#endif // OCEANBASE_SHARE_OB_VECTOR_INDEX_I_TASK_EXECUTOR_H_

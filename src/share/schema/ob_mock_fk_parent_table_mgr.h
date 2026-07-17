@@ -37,25 +37,23 @@ class ObMockFKParentTableHashWrapper
 {
 public:
   ObMockFKParentTableHashWrapper()
-    : tenant_id_(common::OB_INVALID_ID),
-      database_id_(common::OB_INVALID_ID),
+    : database_id_(common::OB_INVALID_ID),
       mock_table_name_() {}
   ObMockFKParentTableHashWrapper(
-      uint64_t tenant_id, uint64_t database_id, const common::ObString &mock_table_name)
-    : tenant_id_(tenant_id), database_id_(database_id), mock_table_name_(mock_table_name) {}
+      uint64_t database_id, const common::ObString &mock_table_name)
+    : database_id_(database_id), mock_table_name_(mock_table_name) {}
   ~ObMockFKParentTableHashWrapper() {}
   inline uint64_t hash() const;
   inline bool operator==(const ObMockFKParentTableHashWrapper &rv) const;
-  inline void set_tenant_id(uint64_t tenant_id) { tenant_id_ = tenant_id; }
+  
   inline void set_database_id(uint64_t database_id) { database_id_ = database_id; }
   inline void set_mock_fk_parent_table_name(const common::ObString &name) { mock_table_name_ = name; }
-  inline uint64_t get_tenant_id() const { return tenant_id_; }
+  
   inline uint64_t get_database_id() const { return database_id_; }
   inline const common::ObString &get_mock_table_name() const { return mock_table_name_; }
-  TO_STRING_KV(K_(tenant_id), K_(database_id), K_(mock_table_name));
+  TO_STRING_KV(K_(database_id), K_(mock_table_name));
 
 private:
-  uint64_t tenant_id_;
   uint64_t database_id_;
   common::ObString mock_table_name_;
 };
@@ -63,15 +61,13 @@ private:
 inline bool ObMockFKParentTableHashWrapper::operator == (
     const ObMockFKParentTableHashWrapper &rv) const
 {
-  return (tenant_id_ == rv.get_tenant_id())
-      && (database_id_ == rv.get_database_id())
+  return (database_id_ == rv.get_database_id())
       && (mock_table_name_ == rv.get_mock_table_name());
 }
 
 inline uint64_t ObMockFKParentTableHashWrapper::hash() const
 {
   uint64_t hash_ret = 0;
-  hash_ret = common::murmurhash(&tenant_id_, sizeof(uint64_t), 0);
   hash_ret = common::murmurhash(&database_id_, sizeof(uint64_t), 0);
   hash_ret = common::murmurhash(mock_table_name_.ptr(), mock_table_name_.length(), hash_ret);
   return hash_ret;
@@ -121,7 +117,6 @@ public:
   int add_mock_fk_parent_table(const ObSimpleMockFKParentTableSchema &schema);
   int add_mock_fk_parent_tables(const common::ObIArray<ObSimpleMockFKParentTableSchema> &schemas);
   int del_mock_fk_parent_table(const ObMockFKParentTableKey &key);
-  int del_schemas_in_tenant(const uint64_t tenant_id);
 
   template<typename Filter, typename Acation, typename EarlyStopCondition>
     int for_each(Filter &filter, Acation &action, EarlyStopCondition &condition);
@@ -129,19 +124,14 @@ public:
   int get_schema_statistics(ObSchemaStatisticsInfo &schema_info) const;
   int get_mock_fk_parent_table_schema_count(int64_t &count) const;
   int get_mock_fk_parent_table_schema(
-      const uint64_t tenant_id,
       const uint64_t mock_fk_parent_table_id,
       const ObSimpleMockFKParentTableSchema *&schema) const;
   int get_mock_fk_parent_table_schemas_in_tenant(
-      const uint64_t tenant_id,
       common::ObIArray<const ObSimpleMockFKParentTableSchema *> &schemas) const;
   int get_mock_fk_parent_table_schemas_in_database(
-      const uint64_t tenant_id,
       const uint64_t database_id,
       common::ObIArray<const ObSimpleMockFKParentTableSchema *> &schemas) const;
-  int get_mock_fk_parent_table_schema_with_name(
-      const uint64_t tenant_id,
-      const uint64_t database_id,
+  int get_mock_fk_parent_table_schema_with_name(const uint64_t database_id,
       const common::ObString &mock_table_name,
       const ObSimpleMockFKParentTableSchema *&schema) const;
 

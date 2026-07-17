@@ -17,6 +17,7 @@
 #ifndef OCEANBASE_STORAGE_OB_TABLET_CREATE_MDS_HELPER
 #define OCEANBASE_STORAGE_OB_TABLET_CREATE_MDS_HELPER
 
+#include "storage/tablet/ob_batch_create_tablet_arg.h"
 #include <stdint.h>
 #include "lib/worker.h"
 #include "lib/container/ob_iarray.h"
@@ -33,7 +34,6 @@ namespace schema
 class ObTableSchema;
 }
 
-class ObLSID;
 class SCN;
 }
 
@@ -42,7 +42,7 @@ namespace common
 class ObTabletID;
 }
 
-namespace obrpc
+namespace obcall
 {
 struct ObBatchCreateTabletArg;
 struct ObCreateTabletInfo;
@@ -56,7 +56,7 @@ namespace mds
 struct BufferCtx;
 }
 
-class ObLSHandle;
+class ObLS;
 class ObTabletHandle;
 class ObLSTabletService;
 
@@ -86,25 +86,21 @@ public:
       const int64_t len,
       const share::SCN &scn,
       mds::BufferCtx &ctx);
-  static int on_commit_for_old_mds(
-    const char* buf,
-    const int64_t len,
-    const transaction::ObMulSourceDataNotifyArg &arg);
   static int register_process(
-      const obrpc::ObBatchCreateTabletArg &arg,
+      const obcall::ObBatchCreateTabletArg &arg,
       mds::BufferCtx &ctx);
   static int replay_process(
-      const obrpc::ObBatchCreateTabletArg &arg,
+      const obcall::ObBatchCreateTabletArg &arg,
       const share::SCN &scn,
       mds::BufferCtx &ctx);
   static int check_create_new_tablets(const int64_t inc_tablet_cnt, const ObTabletCreateThrottlingLevel level);
 private:
-  static int check_create_new_tablets(const obrpc::ObBatchCreateTabletArg &arg, const bool is_replay = false);
+  static int check_create_new_tablets(const obcall::ObBatchCreateTabletArg &arg, const bool is_replay = false);
   static int check_create_arg(
-      const obrpc::ObBatchCreateTabletArg &arg,
+      const obcall::ObBatchCreateTabletArg &arg,
       bool &valid);
   static int create_tablets(
-    const obrpc::ObBatchCreateTabletArg &arg,
+    const obcall::ObBatchCreateTabletArg &arg,
     const bool for_replay,
     const share::SCN &scn,
     mds::BufferCtx &ctx,
@@ -113,81 +109,73 @@ private:
       const common::ObTabletID &tablet_id,
       const common::ObIArray<common::ObTabletID> &tablet_ids,
       int64_t &index);
-  static bool is_pure_data_tablets(const obrpc::ObCreateTabletInfo &info);
-  static bool is_mixed_tablets(const obrpc::ObCreateTabletInfo &info);
-  static bool is_pure_aux_tablets(const obrpc::ObCreateTabletInfo &info);
-  static bool is_bind_hidden_tablets(const obrpc::ObCreateTabletInfo &info);
+  static bool is_pure_data_tablets(const obcall::ObCreateTabletInfo &info);
+  static bool is_mixed_tablets(const obcall::ObCreateTabletInfo &info);
+  static bool is_pure_aux_tablets(const obcall::ObCreateTabletInfo &info);
+  static bool is_bind_hidden_tablets(const obcall::ObCreateTabletInfo &info);
   static int check_pure_data_or_mixed_tablets_info(
-      const share::ObLSID &ls_id,
-      const obrpc::ObCreateTabletInfo &info,
+      const obcall::ObCreateTabletInfo &info,
       bool &valid);
   static int check_pure_aux_tablets_info(
-      const share::ObLSID &ls_id,
-      const obrpc::ObCreateTabletInfo &info,
+      const obcall::ObCreateTabletInfo &info,
       bool &valid);
   static int check_hidden_tablets_info(
-      const share::ObLSID &ls_id,
-      const obrpc::ObCreateTabletInfo &hidden_info,
-      const obrpc::ObCreateTabletInfo *aux_info,
+      const obcall::ObCreateTabletInfo &hidden_info,
+      const obcall::ObCreateTabletInfo *aux_info,
       bool &valid);
   static bool find_aux_info_for_hidden_tablets(
-      const obrpc::ObBatchCreateTabletArg &arg,
+      const obcall::ObBatchCreateTabletArg &arg,
       const common::ObTabletID &tablet_id,
       int64_t &aux_info_idx);
   static int build_pure_data_tablet(
-      const obrpc::ObBatchCreateTabletArg &arg,
-      const obrpc::ObCreateTabletInfo &info,
+      const obcall::ObBatchCreateTabletArg &arg,
+      const obcall::ObCreateTabletInfo &info,
       const bool for_replay,
       const share::SCN &scn,
       mds::BufferCtx &ctx,
       common::ObIArray<common::ObTabletID> &tablet_id_array);
   static int build_mixed_tablets(
-      const obrpc::ObBatchCreateTabletArg &arg,
-      const obrpc::ObCreateTabletInfo &info,
+      const obcall::ObBatchCreateTabletArg &arg,
+      const obcall::ObCreateTabletInfo &info,
       const bool for_replay,
       const share::SCN &scn,
       mds::BufferCtx &ctx,
       common::ObIArray<common::ObTabletID> &tablet_id_array);
   static int build_pure_aux_tablets(
-      const obrpc::ObBatchCreateTabletArg &arg,
-      const obrpc::ObCreateTabletInfo &info,
+      const obcall::ObBatchCreateTabletArg &arg,
+      const obcall::ObCreateTabletInfo &info,
       const bool for_replay,
       const share::SCN &scn,
       mds::BufferCtx &ctx,
       common::ObIArray<common::ObTabletID> &tablet_id_array);
   static int build_bind_hidden_tablets(
-      const obrpc::ObBatchCreateTabletArg &arg,
-      const obrpc::ObCreateTabletInfo &info,
+      const obcall::ObBatchCreateTabletArg &arg,
+      const obcall::ObCreateTabletInfo &info,
       const bool for_replay,
       const share::SCN &scn,
       mds::BufferCtx &ctx,
       common::ObIArray<common::ObTabletID> &tablet_id_array);
   static int rollback_remove_tablets(
-      const share::ObLSID &ls_id,
       const common::ObIArray<common::ObTabletID> &tablet_id_array);
-  static int get_ls(
-      const share::ObLSID &ls_id,
-      ObLSHandle &ls_handle);
+  static int get_ls(ObLS *&tenant_ls);
   static int set_tablet_status(
       ObLSTabletService *ls_tablet_service,
       ObTabletHandle &tablet_handle,
       const bool for_replay,
       const share::SCN &scn,
       mds::BufferCtx &ctx,
-      const bool for_old_mds,
       const storage::ObTabletMdsUserDataType &create_type,
       const int64_t create_commit_version);
   static void handle_ret_for_replay(int &ret);
-  static int convert_schemas(obrpc::ObBatchCreateTabletArg &arg);
+  static int convert_schemas(obcall::ObBatchCreateTabletArg &arg);
   static int check_and_get_create_tablet_schema_info(
       const ObSArray<ObCreateTabletSchema*> &create_tablet_schemas,
-      const ObSArray<obrpc::ObCreateTabletExtraInfo> &create_tablet_extra_infos,
-      const obrpc::ObCreateTabletInfo &info,
+      const ObSArray<obcall::ObCreateTabletExtraInfo> &create_tablet_extra_infos,
+      const obcall::ObCreateTabletInfo &info,
       const int64_t index,
       const ObCreateTabletSchema *&create_tablet_schema,
       bool &need_create_empty_major_sstable,
-      bool &micro_index_clustered,
-      ObTabletID &split_src_tablet_id);
+      bool &micro_index_clustered);
 };
 } // namespace storage
 } // namespace oceanbase

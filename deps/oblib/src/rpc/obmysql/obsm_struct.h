@@ -22,8 +22,6 @@
 #include "rpc/ob_packet.h"
 #include "lib/lock/ob_latch.h"
 #include "rpc/obmysql/ob_packet_record.h"
-#include "rpc/obmysql/ob_2_0_protocol_struct.h"
-#include "lib/stat/ob_diagnostic_info_guard.h"
 
 namespace oceanbase
 {
@@ -34,10 +32,6 @@ class ObSQLSessionInfo;
 namespace omt
 {
 class ObTenant;
-}
-namespace common
-{
-class ObDiagnosticInfo;
 }
 namespace observer
 {
@@ -51,10 +45,6 @@ public:
   ObSMConnection()
   {
     cap_flags_.capability_ = 0;
-    is_proxy_ = false;
-    is_java_client_ = false;
-    is_oci_client_ = false;
-    is_jdbc_client_ = false;
     is_sess_alloc_ = false;
     is_sess_free_ = false;
     has_inc_active_num_ = false;
@@ -62,11 +52,7 @@ public:
     is_tenant_locked_ = false;
     connection_phase_ = rpc::ConnectionPhaseEnum::CPE_CONNECTED;
     sessid_ = INITIAL_SESSID;
-    proxy_sessid_ = 0;
     sess_create_time_ = 0;
-    resource_group_id_ = 0;
-    tenant_id_ = 0;
-    proxy_cap_flags_.capability_ = 0,
     tenant_ = NULL;
     MEMSET(tenant_name_buf_, 0, sizeof(tenant_name_buf_));
     MEMSET(user_name_buf_, 0, sizeof(user_name_buf_));
@@ -76,18 +62,11 @@ public:
     connect_in_bytes_ = 0;
     ret_ = common::OB_SUCCESS;
     scramble_buf_[SCRAMBLE_BUF_SIZE] = '\0';
-    proxy_version_ = 0;
     group_id_ = 0;
     client_cs_type_ = 0;
-    sql_req_level_ = 0;
     pkt_rec_wrapper_.init();
-    client_type_ = common::OB_CLIENT_INVALID_TYPE;
     client_version_ = 0;
-    client_sessid_ = INVALID_SESSID;
-    client_addr_port_ = 0;
-    client_create_time_ = 0;
     has_service_name_ = false;
-    di_ = nullptr;
     logined_ = false;
   }
 
@@ -96,59 +75,10 @@ public:
     //unauthed connection, treat it do not use compress
     //if during change user(is logined) and need compress, need return COMPRESS here
     if ((is_in_authed_phase() || (is_in_auth_switch_phase() && is_logined())) &&
-        (1 == cap_flags_.cap_flags_.OB_CLIENT_COMPRESS
-        || proxy_cap_flags_.is_ob_protocol_v2_compress())) {
-      if (is_proxy_) {
-        if (1 == proxy_cap_flags_.cap_flags_.OB_CAP_CHECKSUM) {
-          type_ret = obmysql::ObCompressType::PROXY_CHECKSUM;
-        } else {
-          type_ret = obmysql::ObCompressType::PROXY_COMPRESS;
-        }
-      } else if (is_java_client_) {
-        if (1 == proxy_cap_flags_.cap_flags_.OB_CAP_CHECKSUM) {
-          type_ret = obmysql::ObCompressType::DEFAULT_CHECKSUM;
-        } else {
-          type_ret = obmysql::ObCompressType::DEFAULT_COMPRESS;
-        }
-      } else if (is_oci_client_) {
-        if (1 == proxy_cap_flags_.cap_flags_.OB_CAP_CHECKSUM) {
-          type_ret = obmysql::ObCompressType::DEFAULT_CHECKSUM;
-        } else {
-          type_ret = obmysql::ObCompressType::DEFAULT_COMPRESS;
-        }
-      } else if (is_jdbc_client_) {
-        if (1 == proxy_cap_flags_.cap_flags_.OB_CAP_CHECKSUM) {
-          type_ret = obmysql::ObCompressType::DEFAULT_CHECKSUM;
-        } else {
-          type_ret = obmysql::ObCompressType::DEFAULT_COMPRESS;
-        }
-      } else {
-        type_ret = obmysql::ObCompressType::DEFAULT_COMPRESS;
-      }
+        (1 == cap_flags_.cap_flags_.OB_CLIENT_COMPRESS)) {
+      type_ret = obmysql::ObCompressType::DEFAULT_COMPRESS;
     }
     return type_ret;
-  }
-
-  bool need_send_extra_ok_packet() const {
-    return (is_proxy_ || (is_java_client_ && proxy_cap_flags_.is_extra_ok_packet_for_ocj_support()));
-  }
-
-  bool is_normal_client() const {
-    return (!is_proxy_ && !is_java_client_ && !is_oci_client_ && !is_jdbc_client_);
-  }
-
-  bool is_driver_client() const {
-    return is_oci_client_ || is_jdbc_client_;
-  }
-
-  bool is_support_proxy_reroute() const {
-    return (1 == proxy_cap_flags_.cap_flags_.OB_CAP_OB_PROTOCOL_V2
-            && 1 == proxy_cap_flags_.cap_flags_.OB_CAP_PROXY_REROUTE);
-  }
-
-  bool is_support_sessinfo_sync() const {
-    return (1 == proxy_cap_flags_.cap_flags_.OB_CAP_OB_PROTOCOL_V2
-            && 1 == proxy_cap_flags_.cap_flags_.OB_CAP_PROXY_SESSIOIN_SYNC);
   }
 
   common::ObCSProtocolType get_cs_protocol_type() const
@@ -157,8 +87,6 @@ public:
     if (is_in_auth_switch_phase() && !is_logined()) {
       // if is change user, must is logined
       type = common::OB_MYSQL_CS_TYPE;
-    } else if (proxy_cap_flags_.is_ob_protocol_v2_support()) {
-      type = common::OB_2_0_CS_TYPE;
     } else if (1 == cap_flags_.cap_flags_.OB_CLIENT_COMPRESS) {
       type = common::OB_MYSQL_COMPRESS_CS_TYPE;
     } else {
@@ -181,31 +109,8 @@ public:
   inline void set_connect_phase() { connection_phase_ = rpc::ConnectionPhaseEnum::CPE_CONNECTED; }
   inline bool is_logined() const { return logined_; }
   inline void set_logined(bool logined) { logined_ = logined; }
-  common::ObDiagnosticInfo *get_diagnostic_info()
-  {
-    return di_;
-  };
-  void set_diagnostic_info(common::ObDiagnosticInfo *ptr)
-  {
-    if (OB_NOT_NULL(ptr)) {
-      OB_ASSERT(di_ == nullptr);
-      common::ObLocalDiagnosticInfo::inc_ref(ptr);
-      di_ = ptr;
-    }
-  };
-  void reset_diagnostic_info()
-  {
-    if (OB_NOT_NULL(di_)) {
-      common::ObLocalDiagnosticInfo::dec_ref(di_);
-      di_ = nullptr;
-    }
-  };
 public:
   obmysql::ObMySQLCapabilityFlags cap_flags_;
-  bool is_proxy_;
-  bool is_java_client_;
-  bool is_oci_client_;
-  bool is_jdbc_client_;
   bool is_sess_alloc_;
   bool is_sess_free_;
   bool has_inc_active_num_;
@@ -215,11 +120,8 @@ public:
   rpc::ConnectionPhaseEnum connection_phase_;
   uint32_t sessid_;
   uint32_t version_;
-  uint64_t proxy_sessid_;
   int64_t sess_create_time_; // proxy connection mode, record the session connection time from client to proxy
-  uint64_t tenant_id_;
-  uint64_t resource_group_id_;
-  obmysql::ObProxyCapabilityFlags proxy_cap_flags_;
+  
   // Errors may occur during the ObSMHandler::on_connect stage, and these error messages need to be returned to the client;
   // And in on_connect, accurate error information cannot be returned to the client, therefore it is recorded here, and processed in ObMPConnect::Process
   int ret_;
@@ -232,23 +134,14 @@ public:
   int64_t connect_in_bytes_;
   obmysql::ObMysqlPktContext mysql_pkt_context_;
   obmysql::ObCompressedPktContext compressed_pkt_context_;
-  obmysql::ObProto20PktContext proto20_pkt_context_;
   char scramble_buf_[SCRAMBLE_BUF_SIZE + 1];
-  uint64_t proxy_version_;
   int32_t group_id_;
   int32_t client_cs_type_;
-  int64_t sql_req_level_;
   obmysql::ObPacketRecordWrapper pkt_rec_wrapper_;
-  ObClientType client_type_;
   uint64_t client_version_;
-  // The client establishes a connection ID to ensure that the tenant is globally unique.
-  uint32_t client_sessid_;
-  int32_t client_addr_port_;
-  int64_t client_create_time_;
   bool has_service_name_;
 private:
   bool logined_;
-  common::ObDiagnosticInfo *di_;
 };
 } // end of namespace observer
 } // end of namespace oceanbase

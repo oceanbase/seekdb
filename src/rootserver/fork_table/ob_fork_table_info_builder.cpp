@@ -118,15 +118,15 @@ int ObForkTableInfoBuilder::generate_fork_table_infos_(
     LOG_WARN("main fork table info is invalid", KR(ret), K(main_fork_table_info));
   } else if (FALSE_IT(src_main_table_id = main_fork_table_info.get_fork_src_table_id())) {
   } else if (FALSE_IT(fork_snapshot_version = main_fork_table_info.get_fork_snapshot_version())) {
-  } else if (OB_FAIL(schema_guard.get_table_schema(tenant_id_,
+  } else if (OB_FAIL(schema_guard.get_table_schema(
                                                    src_main_table_id,
                                                    src_main_table_schema))) {
-    LOG_WARN("fail to main table schema", KR(ret), K(tenant_id_), K(src_main_table_id));
+    LOG_WARN("fail to main table schema", KR(ret), K(src_main_table_id));
   } else if (OB_ISNULL(src_main_table_schema)) {
     ret = OB_TABLE_NOT_EXIST;
     LOG_WARN("src main table not exist", KR(ret), K(src_main_table_id));
   } else if (OB_FAIL(share::ObForkTableUtil::collect_table_ids_from_table(
-      schema_guard, tenant_id_, *src_main_table_schema, src_table_ids))) {
+      schema_guard, *src_main_table_schema, src_table_ids))) {
     LOG_WARN("fail to collect src table ids", KR(ret), KPC(src_main_table_schema));
   } else if (OB_UNLIKELY(src_table_ids.count() != dest_table_ids.count())) {
     ret = OB_ERR_UNEXPECTED;
@@ -170,8 +170,8 @@ int ObForkTableInfoBuilder::generate_fork_tablet_info_(
   if (OB_UNLIKELY(!fork_table_info.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid fork table info", KR(ret), K(fork_table_info));
-  } else if (OB_FAIL(schema_guard.get_table_schema(tenant_id_, fork_table_info.get_fork_src_table_id(), src_table_schema))) {
-    LOG_WARN("fail to get source table schema", KR(ret), K(tenant_id_), K(fork_table_info.get_fork_src_table_id()));
+  } else if (OB_FAIL(schema_guard.get_table_schema( fork_table_info.get_fork_src_table_id(), src_table_schema))) {
+    LOG_WARN("fail to get source table schema", KR(ret), K(fork_table_info.get_fork_src_table_id()));
   } else if (OB_ISNULL(src_table_schema)) {
     ret = OB_TABLE_NOT_EXIST;
     LOG_WARN("source table not exist", KR(ret), K(fork_table_info.get_fork_src_table_id()));
@@ -202,3 +202,5 @@ int ObForkTableInfoBuilder::generate_fork_tablet_info_(
 
 } // rootserver
 } // oceanbase
+
+

@@ -19,7 +19,7 @@
 
 #include "lib/ob_errno.h"
 #include "lib/utility/ob_macro_utils.h"
-#include "ob_clock_generator.h"
+#include "lib/time/ob_clock_generator.h"
 #include "share/ob_errno.h"
 #include "storage/multi_data_source/compile_utility/mds_dummy_key.h"
 #include "storage/multi_data_source/mds_table_base.h"
@@ -585,7 +585,7 @@ int MdsTableImpl<MdsTableType>::get_latest(int64_t unit_id,
   return ret;
 }
 
-// only normal mds table support this method, and only for transfer
+// Only normal mds table supports tablet status node inspection.
 template <typename MdsTableType>
 int MdsTableImpl<MdsTableType>::get_tablet_status_node(ObFunction<int(void *)> &op, const int64_t read_seq) const
 {
@@ -1260,7 +1260,7 @@ template <typename DUMP_OP,
                                                             int(const MdsDumpKV &)), bool>::type>
 int MdsTableImpl<MdsTableType>::scan_all_nodes_to_dump(DUMP_OP &&for_each_op,
                                                        const int64_t mds_construct_sequence,
-                                                       /*false is for transfer to bring mds data from old tablet to new*/
+                                                       /*false is used by non-flush dump paths to copy mds data*/
                                                        const bool for_flush,
                                                        const ScanRowOrder scan_row_order,
                                                        const ScanNodeOrder scan_node_order) {

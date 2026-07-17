@@ -15,8 +15,9 @@
  */
 
 #include "common_define.h"
+#include "share/rc/ob_module_provider.h"
 #include "storage/tablet/ob_mds_schema_helper.h"
-#include "share/allocator/ob_shared_memory_allocator_mgr.h"
+#include "storage/allocator/ob_shared_memory_allocator_mgr.h"
 namespace oceanbase
 {
 namespace storage
@@ -34,7 +35,7 @@ int64_t DefaultAllocator::get_free_times() { return ATOMIC_LOAD(&get_instance().
 
 OB_WEAK_SYMBOL void *MdsAllocator::alloc(const int64_t size)
 {
-  void *ptr = MTL(share::ObSharedMemAllocMgr *)->mds_allocator().alloc(size);
+  void *ptr = share::g_mp->shared_mem_alloc_mgr()->mds_allocator().alloc(size);
   if (OB_NOT_NULL(ptr)) {
     ATOMIC_INC(&alloc_times_);
   }
@@ -43,13 +44,13 @@ OB_WEAK_SYMBOL void *MdsAllocator::alloc(const int64_t size)
 
 void *MdsAllocator::alloc(const int64_t size, const ObMemAttr &attr)
 {
-  return MTL(share::ObSharedMemAllocMgr *)->mds_allocator().alloc(size, attr);
+  return share::g_mp->shared_mem_alloc_mgr()->mds_allocator().alloc(size, attr);
 }
 
 OB_WEAK_SYMBOL void MdsAllocator::free(void *ptr) {
   if (OB_NOT_NULL(ptr)) {
     ATOMIC_INC(&free_times_);
-    MTL(share::ObSharedMemAllocMgr *)->mds_allocator().free(ptr);
+    share::g_mp->shared_mem_alloc_mgr()->mds_allocator().free(ptr);
   }
 }
 
@@ -73,7 +74,7 @@ int compare_mds_serialized_buffer(const char *lhs_buffer,
   ObDatum rhs_datum;
   lhs_datum.set_string((const char *)lhs_buffer, lhs_buffer_len);
   rhs_datum.set_string((const char *)rhs_buffer, rhs_buffer_len);
-  bool is_null_last = ObMdsSchemaHelper::get_instance().get_rowkey_read_info()->is_oracle_mode();
+  bool is_null_last = false; // MySQL mode: null first
   sql::ObExprBasicFuncs *basic_funcs = ObDatumFuncs::get_basic_func(binary_meta.get_type(),
                                                                     binary_meta.get_collation_type());
   common::ObDatumCmpFuncType cmp_func = is_null_last ? basic_funcs->null_last_cmp_ : basic_funcs->null_first_cmp_;

@@ -15,6 +15,7 @@
  */
 
 #include "observer/virtual_table/ob_all_virtual_tx_scheduler_stat.h"
+#include "share/rc/ob_module_provider.h"
 #include "observer/ob_server.h"
 
 using namespace oceanbase::common;
@@ -39,29 +40,12 @@ ObGVTxSchedulerStat::~ObGVTxSchedulerStat()
 
 void ObGVTxSchedulerStat::reset()
 {
-  // release tenant resources first
-  omt::ObMultiTenantOperator::reset();
+  tx_scheduler_stat_iter_.reset();
   parts_buffer_[0] = '\0';
   tx_desc_addr_buffer_[0] = '\0';
   savepoints_buffer_[0] = '\0';
   xid_.reset();
   ObVirtualTableScannerIterator::reset();
-}
-
-void ObGVTxSchedulerStat::release_last_tenant()
-{
-  // resources related with tenant must be released by this function
-  tx_scheduler_stat_iter_.reset();
-}
-
-bool ObGVTxSchedulerStat::is_need_process(uint64_t tenant_id)
-{
-  bool bool_ret = false;
-  if (is_sys_tenant(effective_tenant_id_) || tenant_id == effective_tenant_id_) {
-    bool_ret = true;
-  }
-
-  return bool_ret;
 }
 
 int ObGVTxSchedulerStat::get_next_tx_info_(ObTxSchedulerStat &tx_scheduler_stat)
@@ -78,7 +62,7 @@ int ObGVTxSchedulerStat::get_next_tx_info_(ObTxSchedulerStat &tx_scheduler_stat)
 
 }
 
-int ObGVTxSchedulerStat::process_curr_tenant(common::ObNewRow *&row)
+int ObGVTxSchedulerStat::inner_get_next_row(common::ObNewRow *&row)
 {
   int ret = OB_SUCCESS;
   ObTxSchedulerStat tx_scheduler_stat;
@@ -88,11 +72,12 @@ int ObGVTxSchedulerStat::process_curr_tenant(common::ObNewRow *&row)
     SERVER_LOG(WARN, "allocator_ shouldn't be nullptr", K(allocator_), KR(ret));
   } else if (FALSE_IT(start_to_read_ = true)) {
   } else if (!tx_scheduler_stat_iter_.is_ready()) {
-    if (OB_FAIL(MTL(ObTransService*)->iterate_tx_scheduler_stat(tx_scheduler_stat_iter_))) {
+    transaction::ObTransService *txs = share::g_mp->trans_service();
+    if (OB_ISNULL(txs)) {
+      ret = OB_ERR_UNEXPECTED;
+      SERVER_LOG(WARN, "transaction service is null", KR(ret));
+    } else if (OB_FAIL(txs->iterate_tx_scheduler_stat(tx_scheduler_stat_iter_))) {
       SERVER_LOG(WARN, "iterate transaction scheduler error", KR(ret));
-      if (OB_NOT_RUNNING == ret || OB_NOT_INIT == ret) {
-        ret = OB_SUCCESS;
-      }
     }
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(tx_scheduler_stat_iter_.set_ready())) {
@@ -123,11 +108,8 @@ int ObGVTxSchedulerStat::process_curr_tenant(common::ObNewRow *&row)
         case CLUSTER_ID:
           cur_row_.cells_[i].set_int(tx_scheduler_stat.cluster_id_);
           break;
-        case COORDINATOR:
-          cur_row_.cells_[i].set_int(tx_scheduler_stat.coord_id_.id());
-          break;
-        case PARTICIPANTS:
-          if (0 < tx_scheduler_stat.parts_.count()) {
+        case WRITE_STATE:
+          if (tx_scheduler_stat.has_write_state_) {
             tx_scheduler_stat.get_parts_str(parts_buffer_, OB_MAX_BUFFER_SIZE);
             cur_row_.cells_[i].set_varchar(parts_buffer_);
             cur_row_.cells_[i].set_default_collation_type();

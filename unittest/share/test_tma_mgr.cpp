@@ -15,8 +15,8 @@
  */
 
 #include <gtest/gtest.h>
-#include "share/allocator/ob_tenant_mutil_allocator_mgr.h"
-#include "share/allocator/ob_tenant_mutil_allocator.h"
+#include "logservice/ob_tenant_mutil_allocator_mgr.h"
+#include "logservice/ob_tenant_mutil_allocator.h"
 
 namespace oceanbase
 {
@@ -25,60 +25,29 @@ using namespace common;
 namespace unittest
 {
 
-static const int64_t TENANT_CNT = 10000;
-
 TEST(TestTMAMgr, test_tma_mgr)
 {
-  ObTenantMutilAllocator *null_p = NULL;
-  ObTenantMutilAllocator **cur = &null_p;
-  PALF_LOG(INFO, "test_tma_mgr begin", "cur", (NULL == cur), "*cur", (NULL == (*cur)));
-
   PALF_LOG(INFO, "test_tma_mgr begin", "TMA size", sizeof(ObTenantMutilAllocator));
   ObMallocAllocator *malloc_allocator = ObMallocAllocator::get_instance();
   ASSERT_EQ(OB_SUCCESS, TMA_MGR_INSTANCE.init());
-  int64_t tenant_id = 1;
-  for (tenant_id = 1; tenant_id <= TENANT_CNT; ++tenant_id) {
-    ObILogAllocator *tenant_allocator = NULL;
-    EXPECT_EQ(OB_SUCCESS, TMA_MGR_INSTANCE.get_tenant_log_allocator(tenant_id, tenant_allocator));
-  }
-  PALF_LOG(INFO, "after create all TMA", "TMA size", sizeof(ObTenantMutilAllocator), "500 tenant hold", \
-      malloc_allocator->get_tenant_hold(OB_SERVER_TENANT_ID));
-  // delete TMA by increasing order
-  for (tenant_id = 1; tenant_id <= TENANT_CNT; ++tenant_id) {
-    EXPECT_EQ(OB_SUCCESS, TMA_MGR_INSTANCE.delete_tenant_log_allocator(tenant_id));
-  }
-  PALF_LOG(INFO, "after delete all TMA", "TMA size", sizeof(ObTenantMutilAllocator), "500 tenant hold", \
-      malloc_allocator->get_tenant_hold(OB_SERVER_TENANT_ID));
 
-  for (tenant_id = 1; tenant_id <= TENANT_CNT; ++tenant_id) {
-    ObILogAllocator *tenant_allocator = NULL;
-    EXPECT_EQ(OB_SUCCESS, TMA_MGR_INSTANCE.get_tenant_log_allocator(tenant_id, tenant_allocator));
-  }
-  PALF_LOG(INFO, "after create all TMA", "TMA size", sizeof(ObTenantMutilAllocator), "500 tenant hold", \
-      malloc_allocator->get_tenant_hold(OB_SERVER_TENANT_ID));
-  // delete TMA by decreasing order
-  for (tenant_id = TENANT_CNT; tenant_id >= 1; --tenant_id) {
-    EXPECT_EQ(OB_SUCCESS, TMA_MGR_INSTANCE.delete_tenant_log_allocator(tenant_id));
-  }
-  PALF_LOG(INFO, "after delete all TMA", "TMA size", sizeof(ObTenantMutilAllocator), "500 tenant hold", \
-      malloc_allocator->get_tenant_hold(OB_SERVER_TENANT_ID));
+  // single-tenant: create the log allocator (idempotent)
+  ObILogAllocator *tenant_allocator = NULL;
+  EXPECT_EQ(OB_SUCCESS, TMA_MGR_INSTANCE.get_tenant_log_allocator(tenant_allocator));
+  EXPECT_TRUE(NULL != tenant_allocator);
+  ObILogAllocator *tenant_allocator2 = NULL;
+  EXPECT_EQ(OB_SUCCESS, TMA_MGR_INSTANCE.get_tenant_log_allocator(tenant_allocator2));
+  EXPECT_EQ(tenant_allocator, tenant_allocator2);
+  PALF_LOG(INFO, "after create TMA", "TMA size", sizeof(ObTenantMutilAllocator), "tenant hold", \
+      malloc_allocator->get_tenant_hold());
 
-  for (tenant_id = 1; tenant_id <= TENANT_CNT; ++tenant_id) {
-    ObILogAllocator *tenant_allocator = NULL;
-    EXPECT_EQ(OB_SUCCESS, TMA_MGR_INSTANCE.get_tenant_log_allocator(tenant_id, tenant_allocator));
-  }
-  PALF_LOG(INFO, "after create all TMA", "TMA size", sizeof(ObTenantMutilAllocator), "500 tenant hold", \
-      malloc_allocator->get_tenant_hold(OB_SERVER_TENANT_ID));
-  ObRandom random;
-  // delete TMA by RANDOM order
-  for (int64_t loop_cnt = 1; loop_cnt <= TENANT_CNT / 2; ++loop_cnt) {
-    int64_t tmp_tenant_id = random.rand(1, TENANT_CNT);
-    EXPECT_EQ(OB_SUCCESS, TMA_MGR_INSTANCE.delete_tenant_log_allocator(tmp_tenant_id));
-    ObILogAllocator *tenant_allocator = NULL;
-    EXPECT_EQ(OB_SUCCESS, TMA_MGR_INSTANCE.get_tenant_log_allocator(tmp_tenant_id, tenant_allocator));
-  }
-  PALF_LOG(INFO, "after delete all TMA", "TMA size", sizeof(ObTenantMutilAllocator), "500 tenant hold", \
-      malloc_allocator->get_tenant_hold(OB_SERVER_TENANT_ID));
+  // delete then re-create
+  EXPECT_EQ(OB_SUCCESS, TMA_MGR_INSTANCE.delete_tenant_log_allocator());
+  tenant_allocator = NULL;
+  EXPECT_EQ(OB_SUCCESS, TMA_MGR_INSTANCE.get_tenant_log_allocator(tenant_allocator));
+  EXPECT_TRUE(NULL != tenant_allocator);
+  PALF_LOG(INFO, "after delete TMA", "TMA size", sizeof(ObTenantMutilAllocator), "tenant hold", \
+      malloc_allocator->get_tenant_hold());
   PALF_LOG(INFO, "test_tma_mgr end");
 }
 

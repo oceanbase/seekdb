@@ -15,6 +15,13 @@
  */
 
 #include <gtest/gtest.h>
+#define USING_LOG_PREFIX STORAGE
+#define protected public
+#define private public
+#include "mtlenv/mock_tenant_module_env.h"
+#include "share/schema/ob_schema_getter_guard.h"
+using namespace oceanbase::share;
+using namespace oceanbase::share::schema;
 #include "storage/compaction/ob_sstable_merge_info_mgr.h"
 
 namespace oceanbase
@@ -34,47 +41,32 @@ class TestSSTableMergeInfoMgr : public ::testing::Test
 {
 public:
   TestSSTableMergeInfoMgr()
-    : tenant_id_(1),
-      merge_info_mgr_(nullptr),
-      tenant_base_(tenant_id_)
   { }
   ~TestSSTableMergeInfoMgr() {}
+  static void SetUpTestCase()
+  {
+    ASSERT_EQ(OB_SUCCESS, ObTimerService::get_instance().start());
+    EXPECT_EQ(OB_SUCCESS, MockTenantModuleEnv::get_instance().init());
+  }
+  static void TearDownTestCase()
+  {
+    MockTenantModuleEnv::get_instance().destroy();
+    ObTimerService::get_instance().stop();
+    ObTimerService::get_instance().wait();
+    ObTimerService::get_instance().destroy();
+  }
   void SetUp()
   {
-    ObMallocAllocator::get_instance()->create_and_add_tenant_allocator(tenant_id_);
-    ObUnitInfoGetter::ObTenantConfig unit_config;
-    unit_config.mode_ = lib::Worker::CompatMode::MYSQL;
-    unit_config.tenant_id_ = tenant_id_;
-    TenantUnits units;
-    ASSERT_EQ(OB_SUCCESS, units.push_back(unit_config));
-
-    merge_info_mgr_ = OB_NEW(ObTenantSSTableMergeInfoMgr, ObModIds::TEST);
-    tenant_base_.set(merge_info_mgr_);
-
-    ObTenantEnv::set_tenant(&tenant_base_);
-    ASSERT_EQ(OB_SUCCESS, tenant_base_.init());
-
-    ObMallocAllocator *ma = ObMallocAllocator::get_instance();
-    ASSERT_EQ(OB_SUCCESS, ma->set_tenant_limit(tenant_id_, 1LL << 30));
   }
   void TearDown()
   {
-    merge_info_mgr_->~ObTenantSSTableMergeInfoMgr();
-    merge_info_mgr_ = nullptr;
-    tenant_base_.destroy();
-    ObTenantEnv::set_tenant(nullptr);
-    ObMallocAllocator::get_instance()->recycle_tenant_allocator(tenant_id_);
   }
 private:
-  const uint64_t tenant_id_;
-  ObTenantSSTableMergeInfoMgr *merge_info_mgr_;
-  ObTenantBase tenant_base_;
   DISALLOW_COPY_AND_ASSIGN(TestSSTableMergeInfoMgr);
 };
 
 void init_merge_history(ObSSTableMergeHistory &merge_info)
 {
-  merge_info.static_info_.ls_id_ = 1;
   merge_info.static_info_.tablet_id_ = 3;
   merge_info.static_info_.compaction_scn_ = 100;
   merge_info.static_info_.merge_type_ = ObMergeType::MINOR_MERGE;
@@ -121,6 +113,7 @@ TEST_F(TestSSTableMergeInfoMgr, iterator)
   ObTenantSSTableMergeInfoMgr *merge_info_mgr = MTL(ObTenantSSTableMergeInfoMgr*);
   ASSERT_TRUE(nullptr != merge_info_mgr);
 
+  MTL(ObTenantSSTableMergeInfoMgr*)->destroy();
   ret = MTL(ObTenantSSTableMergeInfoMgr*)->init(MERGE_INFO_PAGE_SIZE);
   ASSERT_EQ(OB_SUCCESS, ret);
 
@@ -210,6 +203,7 @@ TEST_F(TestSSTableMergeInfoMgr, resize)
   ObTenantSSTableMergeInfoMgr *merge_info_mgr = MTL(ObTenantSSTableMergeInfoMgr*);
   ASSERT_TRUE(nullptr != merge_info_mgr);
 
+  MTL(ObTenantSSTableMergeInfoMgr*)->destroy();
   ret = MTL(ObTenantSSTableMergeInfoMgr*)->init(MERGE_INFO_PAGE_SIZE);
   ASSERT_EQ(OB_SUCCESS, ret);
 

@@ -16,6 +16,7 @@
 #define USING_LOG_PREFIX STORAGE
 
 #include "ob_storage_clog_recorder.h"
+#include "share/rc/ob_module_provider.h"
 #include "storage/tx_storage/ob_ls_service.h"
 
 namespace oceanbase
@@ -154,10 +155,10 @@ int ObIStorageClogRecorder::try_update_with_lock(
       logcb_ptr_->set_update_version(update_version);
       if (OB_FAIL(submit_log(update_version, clog_buf, clog_len))) {
         if (OB_BLOCK_FROZEN != ret) {
-          LOG_WARN("fail to submit log", K(ret), K(update_version), K(max_saved_version_));
+          LOG_ERROR("fail to submit log", K(ret), K(update_version), K(max_saved_version_));
         } else if (ObTimeUtility::fast_current_time() >= expire_ts) {
           ret = OB_EAGAIN;
-          LOG_WARN("failed to sync clog", K(ret), K(update_version),
+          LOG_ERROR("failed to sync clog", K(ret), K(update_version),
               K(max_saved_version_), K(expire_ts));
         }
       } else {
@@ -170,7 +171,7 @@ int ObIStorageClogRecorder::try_update_with_lock(
   return ret;
 }
 
-int ObIStorageClogRecorder::try_update_for_leader(
+int ObIStorageClogRecorder::try_update(
     const int64_t update_version,
     ObIAllocator *allocator,
     const int64_t timeout_ts)
@@ -230,7 +231,7 @@ int ObIStorageClogRecorder::replay_clog(
       if (OB_NO_NEED_UPDATE == ret) { // not update max_saved_version_
         ret = OB_SUCCESS;
       } else {
-        LOG_WARN("fail to replay clog", K(ret), KPC(this));
+        LOG_ERROR("fail to replay clog", K(ret), KPC(this));
       }
     } else {
       ATOMIC_STORE(&max_saved_version_, update_version);
@@ -243,7 +244,7 @@ int ObIStorageClogRecorder::replay_clog(
 
 void ObIStorageClogRecorder::clog_update_fail()
 {
-  sync_clog_failed_for_leader();
+  on_sync_clog_failure();
   WEAK_BARRIER();
   ATOMIC_STORE(&logcb_finish_flag_, true);
 }
@@ -262,7 +263,7 @@ void ObIStorageClogRecorder::clog_update_succ(
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("clog ts is invalid", K(ret), K_(clog_scn));
   } else {
-    if (OB_FAIL(sync_clog_succ_for_leader(update_version))) {
+    if (OB_FAIL(on_sync_clog_success(update_version))) {
       LOG_WARN("failed to save for leader", K(ret), KPC(this));
     } else {
       finish_flag = true;
@@ -296,40 +297,38 @@ int ObIStorageClogRecorder::write_clog(
 }
 
 int ObIStorageClogRecorder::get_tablet_handle(
-    const share::ObLSID &ls_id,
     const ObTabletID &tablet_id,
     ObTabletHandle &tablet_handle)
 {
   int ret = OB_SUCCESS;
-  ObLSHandle ls_handle;
-  if (OB_FAIL(MTL(ObLSService *)->get_ls(ls_id, ls_handle, ObLSGetMod::STORAGE_MOD))) {
-    LOG_WARN("failed to get log stream", K(ret), K(ls_id));
-  } else if (OB_FAIL(ls_handle.get_ls()->get_tablet(tablet_id, tablet_handle))) {
-    LOG_WARN("failed to get tablet", K(ret), K(ls_id), K(tablet_id));
+  ObLS *tenant_ls = nullptr;
+  if (OB_FAIL(share::g_mp->ls_service()->get_ls(tenant_ls))) {
+    LOG_WARN("failed to get log stream", K(ret));
+  } else if (OB_FAIL(tenant_ls->get_tablet(tablet_id, tablet_handle))) {
+    LOG_WARN("failed to get tablet", K(ret), K(tablet_id));
   }
   return ret;
 }
 
 int ObIStorageClogRecorder::replay_get_tablet_handle(
-    const share::ObLSID &ls_id,
     const ObTabletID &tablet_id,
     const share::SCN &scn,
     ObTabletHandle &tablet_handle)
 {
   int ret = OB_SUCCESS;
-  ObLSHandle ls_handle;
+  ObLS *tenant_ls = nullptr;
   const bool is_update_mds_table = false;
-  if (OB_FAIL(MTL(ObLSService *)->get_ls(ls_id, ls_handle, ObLSGetMod::STORAGE_MOD))) {
-    LOG_WARN("failed to get log stream", K(ret), K(ls_id));
-  } else if (OB_FAIL(ls_handle.get_ls()->replay_get_tablet(tablet_id, scn, is_update_mds_table, tablet_handle))) {
+  if (OB_FAIL(share::g_mp->ls_service()->get_ls(tenant_ls))) {
+    LOG_WARN("failed to get log stream", K(ret));
+  } else if (OB_FAIL(tenant_ls->replay_get_tablet(tablet_id, scn, is_update_mds_table, tablet_handle))) {
     if (OB_OBSOLETE_CLOG_NEED_SKIP == ret) {
-      LOG_INFO("clog is obsolete, should skip replay", K(ret), K(ls_id), K(tablet_id), K(scn));
+      LOG_INFO("clog is obsolete, should skip replay", K(ret), K(tablet_id), K(scn));
       ret = OB_SUCCESS;
     } else if (OB_TIMEOUT == ret) {
       ret = OB_EAGAIN;
-      LOG_INFO("retry get tablet for timeout error", K(ret), K(ls_id), K(tablet_id), K(scn));
+      LOG_INFO("retry get tablet for timeout error", K(ret), K(tablet_id), K(scn));
     } else {
-      LOG_WARN("failed to get tablet", K(ret), K(ls_id), K(tablet_id), K(scn));
+      LOG_WARN("failed to get tablet", K(ret), K(tablet_id), K(scn));
     }
   }
   return ret;

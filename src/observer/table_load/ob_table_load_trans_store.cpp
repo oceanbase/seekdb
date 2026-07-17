@@ -115,8 +115,8 @@ ObTableLoadTransStoreWriter::StoreWriter::StoreWriter()
     is_closed_(false),
     is_inited_(false)
 {
-  allocator_.set_tenant_id(MTL_ID());
-  table_builders_.set_attr(ObMemAttr(MTL_ID(), "TLD_SW"));
+  
+  table_builders_.set_attr(ObMemAttr("TLD_SW"));
 }
 
 ObTableLoadTransStoreWriter::StoreWriter::~StoreWriter()
@@ -154,7 +154,7 @@ int ObTableLoadTransStoreWriter::StoreWriter::init(ObTableLoadStoreCtx *store_ct
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid args", KR(ret), KP(store_ctx), KP(trans_store), K(session_id));
   } else {
-    if (OB_FAIL(table_builder_map_.create(64, "TLD_SW_Map", "TLD_SW_Map", MTL_ID()))) {
+    if (OB_FAIL(table_builder_map_.create(64, "TLD_SW_Map", "TLD_SW_Map"))) {
       LOG_WARN("fail to create hashmap", KR(ret));
     } else if (OB_FAIL(datum_row_.init(store_ctx->write_ctx_.table_data_desc_.column_count_))) {
       LOG_WARN("fail to init datum row", KR(ret));
@@ -163,7 +163,7 @@ int ObTableLoadTransStoreWriter::StoreWriter::init(ObTableLoadStoreCtx *store_ct
       trans_store_ = trans_store;
       session_id_ = session_id;
       is_single_part_ = (store_ctx_->write_ctx_.is_multiple_mode_ ||
-                         1 == store_ctx->data_store_table_ctx_->ls_partition_ids_.count());
+                         1 == store_ctx->data_store_table_ctx_->partition_ids_.count());
       is_inited_ = true;
     }
   }
@@ -420,9 +420,9 @@ ObTableLoadTransStoreWriter::DirectWriter::DirectWriter()
     is_closed_(false),
     is_inited_(false)
 {
-  allocator_.set_tenant_id(MTL_ID());
-  lob_allocator_.set_tenant_id(MTL_ID());
-  batch_writers_.set_attr(ObMemAttr(MTL_ID(), "TLD_DW"));
+  
+  
+  batch_writers_.set_attr(ObMemAttr("TLD_DW"));
 }
 
 ObTableLoadTransStoreWriter::DirectWriter::~DirectWriter()
@@ -457,12 +457,12 @@ int ObTableLoadTransStoreWriter::DirectWriter::init(ObTableLoadStoreCtx *store_c
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid args", KR(ret), KP(store_ctx));
   } else {
-    if (OB_FAIL(batch_writer_map_.create(64, "TLD_DW_Map", "TLD_DW_Map", MTL_ID()))) {
+    if (OB_FAIL(batch_writer_map_.create(64, "TLD_DW_Map", "TLD_DW_Map"))) {
       LOG_WARN("fail to create hashmap", KR(ret));
     } else {
       store_ctx_ = store_ctx;
       max_batch_size_ = store_ctx->ctx_->param_.batch_size_;
-      is_single_part_ = (1 == store_ctx->data_store_table_ctx_->ls_partition_ids_.count());
+      is_single_part_ = (1 == store_ctx->data_store_table_ctx_->partition_ids_.count());
       is_inited_ = true;
     }
   }
@@ -646,7 +646,7 @@ int ObTableLoadTransStoreWriter::DirectWriter::get_batch_writer(
     /**
      * SessionContext
      */
-ObTableLoadTransStoreWriter::SessionContext::SessionContext(int32_t session_id, uint64_t tenant_id, ObDataTypeCastParams cast_params)
+ObTableLoadTransStoreWriter::SessionContext::SessionContext(int32_t session_id, ObDataTypeCastParams cast_params)
   : session_id_(session_id),
     cast_allocator_("TLD_TS_Caster"),
     cast_params_(cast_params),
@@ -655,7 +655,7 @@ ObTableLoadTransStoreWriter::SessionContext::SessionContext(int32_t session_id, 
     last_receive_sequence_no_(0),
     processed_rows_(0)
 {
-  cast_allocator_.set_tenant_id(MTL_ID());
+  
 }
 
 ObTableLoadTransStoreWriter::SessionContext::~SessionContext()
@@ -687,8 +687,8 @@ ObTableLoadTransStoreWriter::ObTableLoadTransStoreWriter(ObTableLoadStoreTrans *
     flush_count_(0),
     is_inited_(false)
 {
-  allocator_.set_tenant_id(MTL_ID());
-  column_schemas_.set_tenant_id(MTL_ID());
+  
+  
 }
 
 ObTableLoadTransStoreWriter::~ObTableLoadTransStoreWriter()
@@ -731,7 +731,7 @@ int ObTableLoadTransStoreWriter::init_column_schemas_and_lob_info()
   int ret = OB_SUCCESS;
   const ObIArray<ObColDesc> &column_descs = store_ctx_->data_store_table_ctx_->schema_->column_descs_;
   const ObTableSchema *table_schema = nullptr;
-  if (OB_FAIL(ObTableLoadSchema::get_table_schema(param_.tenant_id_, param_.table_id_, schema_guard_,
+  if (OB_FAIL(ObTableLoadSchema::get_table_schema( param_.table_id_, schema_guard_,
                                                   table_schema))) {
     LOG_WARN("fail to get table schema", KR(ret), K(param_));
   }
@@ -765,7 +765,7 @@ int ObTableLoadTransStoreWriter::init_session_ctx_array()
   } else {
     session_ctx_array_ = static_cast<SessionContext *>(buf);
     for (int64_t i = 0; i < session_count_; ++i) {
-      new (session_ctx_array_ + i) SessionContext(i + 1, param_.tenant_id_, cast_params);
+      new (session_ctx_array_ + i) SessionContext(i + 1, cast_params);
     }
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < session_count_; ++i) {
@@ -1078,7 +1078,6 @@ int ObTableLoadTransStoreWriter::cast_column(
     } else if (datum.is_null()) {
     } else if (OB_FAIL(ObDASUtils::reshape_datum_value(column_schema->get_meta_type(),
                                                        column_schema->get_accuracy(),
-                                                       false /*enable_oracle_empty_char_reshape_to_null*/,
                                                        cast_allocator,
                                                        datum))) {
       LOG_WARN("fail to reshape datum value", KR(ret));

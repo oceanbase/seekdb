@@ -19,7 +19,7 @@
 #include "sql/engine/expr/ob_datum_cast.h"
 #include "sql/engine/expr/ob_expr_type_to_str.h"
 #include "sql/resolver/expr/ob_raw_expr_util.h"
-#include "lib/geo/ob_geo_utils.h"
+#include "share/geo/ob_geo_utils.h"
 
 using namespace oceanbase::common;
 
@@ -30,7 +30,7 @@ namespace sql
 
 static bool is_string_text_cast(const ObExpr &expr)
 {
-  return lib::is_mysql_mode() && ob_is_text_tc(expr.datum_meta_.type_)
+  return ob_is_text_tc(expr.datum_meta_.type_)
       && T_FUN_SYS_CAST == expr.args_[4]->type_ && ob_is_string_tc(expr.args_[4]->args_[0]->datum_meta_.type_);
 }
 
@@ -104,7 +104,7 @@ OB_SERIALIZE_MEMBER(ObExprColumnConv, row_dimension_, real_param_num_, result_ty
 ObExprColumnConv::ObExprColumnConv(ObIAllocator &alloc)
     : ObBaseExprColumnConv(alloc),
       ObFuncExprOperator(alloc, T_FUN_COLUMN_CONV, N_COLUMN_CONV, -1, NOT_VALID_FOR_GENERATED_COL, NOT_ROW_DIMENSION,
-                         INTERNAL_IN_MYSQL_MODE, INTERNAL_IN_ORACLE_MODE)
+                         INTERNAL_IN_MYSQL_MODE)
 {
   disable_operand_auto_cast();
   // obexprcolumnconv has its own special handling, does not go through the character set auto-conversion framework
@@ -295,8 +295,7 @@ int ObExprColumnConv::calc_result_typeN(ObExprResType &type,
       } else if (ob_is_user_defined_type(type.get_type())
           || ob_is_collection_sql_type(type.get_type())) { // if calc meta is udt, set calc udt id
         types[4].set_calc_accuracy(type.get_accuracy());
-      } else if (lib::is_mysql_mode() &&
-          ob_is_double_tc(types[4].get_type()) && ob_is_string_tc(type.get_type())) {
+      } else if (ob_is_double_tc(types[4].get_type()) && ob_is_string_tc(type.get_type())) {
         types[4].set_calc_accuracy(type.get_accuracy());
       }
     }
@@ -417,7 +416,7 @@ static OB_INLINE int column_convert_datum_accuracy_check(const ObExpr &expr,
                                    warning))) {
     LOG_WARN("fail to check accuracy", K(ret), K(expr), K(warning));
   }
-  if (OB_SUCC(ret) && lib::is_mysql_mode() && OB_ERR_DATA_TOO_LONG == warning) {
+  if (OB_SUCC(ret) && OB_ERR_DATA_TOO_LONG == warning) {
     ObDatum *column_info = NULL;
     int64_t rownum = ctx.exec_ctx_.get_cur_rownum();
     if (rownum > 0
@@ -453,7 +452,7 @@ static OB_INLINE int column_convert_vector_accuracy_check(const ObExpr &expr,
                                    warning))) {
     LOG_WARN("fail to check accuracy", K(ret), K(expr), K(warning));
   }
-  if (OB_SUCC(ret) && lib::is_mysql_mode() && OB_ERR_DATA_TOO_LONG == warning) {
+  if (OB_SUCC(ret) && OB_ERR_DATA_TOO_LONG == warning) {
     ObDatum *column_info = NULL;
     int64_t rownum = ctx.exec_ctx_.get_cur_rownum();
     ObEvalCtx::BatchInfoScopeGuard batch_info_guard(ctx);

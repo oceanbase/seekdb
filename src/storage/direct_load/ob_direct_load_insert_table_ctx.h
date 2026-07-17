@@ -17,7 +17,6 @@
 
 #include "lib/hash/ob_hashmap.h"
 #include "lib/lock/ob_mutex.h"
-#include "share/ob_ls_id.h"
 #include "share/ob_tablet_autoincrement_param.h"
 #include "share/table/ob_table_load_define.h"
 #include "sql/engine/px/ob_sub_trans_ctrl.h"
@@ -171,19 +170,10 @@ protected:
   static int refresh_pk_cache(const common::ObTabletID &tablet_id,
                               share::ObTabletCacheInterval &pk_cache);
   virtual int get_pk_interval(uint64_t count, share::ObTabletCacheInterval &pk_interval);
-
-  //////////////////////// rescan interface ////////////////////////
-public:
-  virtual int calc_range(const int64_t thread_cnt) { return OB_ERR_UNEXPECTED; }
-  virtual int fill_column_group(const int64_t thread_cnt, const int64_t thread_id)
-  {
-    return OB_ERR_UNEXPECTED;
-  }
-
   //////////////////////// params ////////////////////////
+public:
   OB_INLINE ObDirectLoadInsertTableContext *get_table_ctx() { return table_ctx_; }
   OB_INLINE const ObDirectLoadInsertTableParam *get_param() const { return param_; }
-  OB_INLINE const share::ObLSID &get_ls_id() const { return ls_id_; }
   OB_INLINE const common::ObTabletID &get_origin_tablet_id() const { return origin_tablet_id_; }
   OB_INLINE const common::ObTabletID &get_tablet_id() const { return tablet_id_; }
 
@@ -240,13 +230,12 @@ public:
   void inc_row_count(const int64_t row_count) { ATOMIC_AAF(&row_count_, row_count); }
   int64_t get_row_count() const { return ATOMIC_LOAD(&row_count_); }
 
-  VIRTUAL_TO_STRING_KV(KP_(table_ctx), KP_(param), K_(ls_id), K_(origin_tablet_id), K_(tablet_id),
+  VIRTUAL_TO_STRING_KV(KP_(table_ctx), KP_(param), K_(origin_tablet_id), K_(tablet_id),
                        K_(pk_tablet_id), KP_(lob_tablet_ctx), K_(row_count), K_(is_inited));
 
 protected:
   ObDirectLoadInsertTableContext *table_ctx_;
   const ObDirectLoadInsertTableParam *param_;
-  share::ObLSID ls_id_;
   common::ObTabletID origin_tablet_id_;
   common::ObTabletID tablet_id_;
   common::ObTabletID pk_tablet_id_; // get auto-increment pk from which tablet_id

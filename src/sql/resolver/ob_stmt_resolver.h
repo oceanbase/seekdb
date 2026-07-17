@@ -53,8 +53,6 @@ public:
   virtual int resolve(const ParseNode &parse_tree) = 0;
   inline ObStmt *get_basic_stmt() { return stmt_; }
   inline void set_basic_stmt(ObStmt *stmt) { stmt_ = stmt; }
-  int resolve_table_relation_factor(const ParseNode *node, uint64_t tenant_id, uint64_t &database_id,
-                                    common::ObString &table_name, common::ObString &synonym_name, common::ObString &db_name);
   int resolve_table_relation_factor(const ParseNode *node, uint64_t &database_id,
                                     common::ObString &table_name, common::ObString &synonym_name, common::ObString &db_name);
 
@@ -65,45 +63,30 @@ public:
                                      common::ObString &db_name,
                                      common::ObString &catalog_name,
                                      bool &is_db_explicit,
-                                     bool org = false,
-                                     bool is_oracle_sys_view = false,
-                                     char **dblink_name_ptr = NULL,
-                                     int32_t *dblink_name_len = NULL,
-                                     bool *has_dblink_node = NULL);
+                                     bool org = false);
 
   int resolve_table_relation_node(const ParseNode *node,
                                 common::ObString &table_name,
                                 common::ObString &db_name,
                                 common::ObString &catalog_name,
-                                bool org = false,
-                                bool is_oracle_sys_view = false,
-                                char **dblink_name_ptr = NULL,
-                                int32_t *dblink_name_len = NULL,
-                                bool *has_dblink_node = NULL);
+                                bool org = false);
 
   int resolve_table_relation_node(const ParseNode *node,
                                   common::ObString &table_name,
                                   common::ObString &db_name,
-                                  bool org = false,
-                                  bool is_oracle_sys_view = false,
-                                  char **dblink_name_ptr = NULL,
-                                  int32_t *dblink_name_len = NULL,
-                                  bool *has_dblink_node = NULL);
+                                  bool org = false);
   /**
    * @brief  Parse a T_REF_FACTOR node to get database name and table name
    * @param [in] node  - syntax node
    * @param [in] session_info  - session information
    * @param [out] table_name  - table name
    * @param [out] db_name  - database name
-   * @param [in] dblink_name_ptr  - dblink name, used to determine if certain ddl references dblink, if referenced, this ddl should return error ORA-02021
-   * @param [in] dblink_name_len  - dblink name length, used for partition "drop table t1@;" and "drop table t1@q;", should return different errors
    * @retval OB_SUCCESS execute success
    * @retval OB_SOME_ERROR special errno need to handle
    *
    */
   static int resolve_ref_factor(const ParseNode *node, ObSQLSessionInfo *session_info, common::ObString &table_name, common::ObString &db_name);
   int resolve_database_factor(const ParseNode *node,
-                              const uint64_t tenant_id,
                               const uint64_t catalog_id,
                               uint64_t &database_id,
                               common::ObString &db_name);

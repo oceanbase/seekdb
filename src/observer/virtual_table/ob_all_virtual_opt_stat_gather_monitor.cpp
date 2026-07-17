@@ -81,7 +81,6 @@ int ObAllVirtualOptStatGatherMonitor::inner_get_next_row(ObNewRow *&row)
       if (OB_FAIL(set_ip())) {
         SERVER_LOG(WARN, "failed to set ip", K(ret));
       } else if (OB_FAIL(ObOptStatGatherStatList::instance().list_to_array(*allocator_,
-                                                                           effective_tenant_id_,
                                                                            stat_array_))) {
         SERVER_LOG(WARN, "failed to list to array", K(ret));
       }

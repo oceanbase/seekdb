@@ -27,7 +27,6 @@ MockObAccessService::MockObAccessService(ObLSTabletService *tablet_service)
 }
 
 int MockObAccessService::insert_rows(
-    const share::ObLSID &ls_id,
     const common::ObTabletID &tablet_id,
     transaction::ObTxDesc &tx_desc,
     const ObDMLBaseParam &dml_param,
@@ -38,27 +37,25 @@ int MockObAccessService::insert_rows(
   int ret = OB_SUCCESS;
   ObTabletHandle tablet_handle;
 
-  if (OB_UNLIKELY(!ls_id.is_valid())
-      || OB_UNLIKELY(!tablet_id.is_valid())
+  if (OB_UNLIKELY(!tablet_id.is_valid())
       || OB_UNLIKELY(!tx_desc.is_valid())
       || OB_UNLIKELY(!dml_param.is_valid())
       || OB_UNLIKELY(column_ids.count() <= 0)
       || OB_ISNULL(row_iter)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(ls_id), K(tablet_id), K(tx_desc),
+    LOG_WARN("invalid argument", K(ret), K(tablet_id), K(tx_desc),
              K(dml_param), K(column_ids), K(row_iter));
   } else if (OB_ISNULL(tablet_service_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("tablet service is null", K(ret));
-  } else if (OB_FAIL(check_write_allowed_(ls_id,
-                                          tablet_id,
+  } else if (OB_FAIL(check_write_allowed_(tablet_id,
                                           ObStoreAccessType::MODIFY,
                                           dml_param,
                                           dml_param.timeout_,
                                           tx_desc,
                                           tablet_handle,
                                           *dml_param.store_ctx_guard_))) {
-    LOG_WARN("fail to check query allowed", K(ret), K(ls_id), K(tablet_id));
+    LOG_WARN("fail to check query allowed", K(ret), K(tablet_id));
   } else {
     ret = tablet_service_->insert_rows(tablet_handle,
                                        dml_param.store_ctx_guard_->get_store_ctx(),

@@ -19,6 +19,7 @@
 #include "sql/engine/table/ob_table_scan_op.h"
 #include "sql/optimizer/ob_access_path_estimation.h"
 #include "sql/optimizer/ob_storage_estimator.h"
+#include "observer/ob_service.h"
 
 using namespace oceanbase::common;
 
@@ -32,7 +33,7 @@ int ObAdaptiveAutoDop::calculate_table_auto_dop(const ObPhysicalPlan &plan, Auto
   int ret = OB_SUCCESS;
   is_single_part = false;
   int64_t table_dop = -1;
-  ObMemAttr attr(MTL_ID(), "AutoDopMap");
+  ObMemAttr attr("AutoDopMap");
   const ObOpSpec *root_spec = plan.get_root_op_spec();
   if (OB_ISNULL(root_spec)) {
     ret = OB_ERR_UNEXPECTED;
@@ -97,12 +98,12 @@ int ObAdaptiveAutoDop::calculate_tsc_auto_dop(const ObOpSpec &spec, int64_t &tab
   common::ObIAllocator &allocator = ctx_.get_allocator();
   const ObTableScanSpec &tsc_spec = static_cast<const ObTableScanSpec &>(spec);
   const ObCostTableScanSimpleInfo &cost_tsc_info = tsc_spec.get_est_cost_simple_info();
-  bool is_oracle_agent_table =
-    share::is_oracle_mapping_real_virtual_table(tsc_spec.get_ref_table_id());
+  bool is_real_agent_table =
+    share::is_real_table_mapping_virtual_table(tsc_spec.get_ref_table_id());
   ObQueryRangeArray key_ranges;
   const ObQueryRangeProvider &query_range_provider = tsc_spec.get_query_range_provider();
 
-  if (is_oracle_agent_table || cost_tsc_info.get_is_spatial_index()) {
+  if (is_real_agent_table || cost_tsc_info.get_is_spatial_index()) {
     // step1: calculate query range.
   } else if (query_range_provider.has_range()
              && OB_FAIL(ObSQLUtils::extract_pre_query_range(
@@ -186,8 +187,8 @@ int ObAdaptiveAutoDop::build_storage_estimation_tasks(
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("is null", K(ret), K(sql_ctx), K(match_table_loc));
   } else if (OB_FAIL(
-               sql_ctx->schema_guard_->get_simple_table_schema(MTL_ID(), index_id, table_schema))) {
-    LOG_WARN("failed to get simple table schema", K(ret), K(MTL_ID()), K(index_id));
+               sql_ctx->schema_guard_->get_simple_table_schema( index_id, table_schema))) {
+    LOG_WARN("failed to get simple table schema", K(ret), K(index_id));
   } else if (OB_ISNULL(table_schema)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("null schema", K(ret));
@@ -250,7 +251,7 @@ int ObAdaptiveAutoDop::add_estimation_tasks(const ObTableScanSpec &tsc_spec,
   ObBatchEstTasks *task = nullptr;
   ObSqlCtx *sql_ctx = ctx_.get_sql_ctx();
   common::ObIAllocator &allocator = ctx_.get_allocator();
-  obrpc::ObEstPartArgElement *index_est_arg = NULL;
+  obcall::ObEstPartArgElement *index_est_arg = NULL;
   if (OB_FAIL(get_task(tasks, tablet_loc->server_, task))) {
     LOG_WARN("failed to get task", K(ret));
   } else if (NULL != task) {
@@ -273,8 +274,8 @@ int ObAdaptiveAutoDop::add_estimation_tasks(const ObTableScanSpec &tsc_spec,
     index_est_arg->scan_flag_ = tsc_spec.get_query_flag();
     index_est_arg->range_columns_count_ = cost_tsc_info.get_range_columns_count();
     index_est_arg->tablet_id_ = tablet_loc->tablet_id_;
-    index_est_arg->ls_id_ = tablet_loc->ls_id_;
-    index_est_arg->tenant_id_ = MTL_ID();
+    
+    
     index_est_arg->tx_id_ = sql_ctx->session_info_->get_tx_id();
     if (OB_FAIL(construct_scan_range_batch(allocator, ranges, index_est_arg->batch_))) {
       LOG_WARN("failed to construct scan range batch", K(ret));
@@ -344,26 +345,22 @@ int ObAdaptiveAutoDop::do_storage_estimation(ObBatchEstTasks &tasks)
 {
   int ret = OB_SUCCESS;
   const ObAddr &addr = tasks.addr_;
-  const obrpc::ObEstPartArg &arg = tasks.arg_;
-  obrpc::ObEstPartRes &result = tasks.res_;
+  const obcall::ObEstPartArg &arg = tasks.arg_;
+  obcall::ObEstPartRes &result = tasks.res_;
   ObSqlCtx *sql_ctx = ctx_.get_sql_ctx();
   if (addr == GCTX.self_addr()) {
     if (OB_FAIL(ObStorageEstimator::estimate_row_count(arg, result))) {
       LOG_WARN("failed to estimate partition rows", K(ret));
     }
   } else {
-    obrpc::ObSrvRpcProxy *rpc_proxy = GCTX.srv_rpc_proxy_;
     int64_t timeout = -1;
-    if (OB_ISNULL(sql_ctx->session_info_) || OB_ISNULL(rpc_proxy)) {
+    if (OB_ISNULL(sql_ctx->session_info_)) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("rpc_proxy or session is null", K(ret), K(rpc_proxy), K(sql_ctx->session_info_));
+      LOG_WARN("session is null", K(ret), K(sql_ctx->session_info_));
     } else if (0 >= (timeout = THIS_WORKER.get_timeout_remain())) {
       ret = OB_TIMEOUT;
       LOG_WARN("query timeout is reached", K(ret), K(timeout));
-    } else if (OB_FAIL(rpc_proxy->to(addr)
-                         .timeout(timeout)
-                         .by(sql_ctx->session_info_->get_rpc_tenant_id())
-                         .estimate_partition_rows(arg, result))) {
+    } else if (OB_FAIL(GCTX.ob_service_->estimate_partition_rows(arg, result))) {
       LOG_WARN("OPT:[REMOTE STORAGE EST FAILED]", K(ret));
     }
   }
@@ -409,10 +406,8 @@ int ObAdaptiveAutoDop::calculate_tsc_auto_dop(const ObIArray<ObBatchEstTasks *> 
       LOG_WARN("unexpected null", K(ret));
     } else if (sql_ctx->session_info_->is_user_session()
                && OB_FAIL(ObSchemaUtils::get_tenant_int_variable(
-                    sql_ctx->session_info_->get_effective_tenant_id(),
                     SYS_VAR_PARALLEL_SERVERS_TARGET, parallel_servers_target))) {
-      LOG_WARN("fail read tenant variable", K(ret),
-               K(sql_ctx->session_info_->get_effective_tenant_id()));
+      LOG_WARN("fail read tenant variable", K(ret));
     } else {
       unit_min_cpu = std::max(tenant->unit_min_cpu(), 0.0);
       parallel_servers_target = std::max(parallel_servers_target, static_cast<int64_t>(0));

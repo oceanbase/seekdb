@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SERVER
 
+#include "lib/stat/ob_diagnostic_info_guard.h"
 #include "obmp_disconnect.h"
 
 
@@ -64,32 +65,19 @@ int ObMPDisconnect::kill_unfinished_session(uint32_t sessid)
 int ObMPDisconnect::run()
 {
   int ret = OB_SUCCESS;
-  bool is_need_clear = false;
   if (ctx_.sessid_ != 0) {
     if (OB_ISNULL(GCTX.session_mgr_)) {
       ret = OB_INVALID_ARGUMENT;
       LOG_WARN("invalid session mgr", K(GCTX.session_mgr_), K(ret));
     } else {
-      ObSMConnection conn;
-      conn.sessid_ = ctx_.sessid_;
-      conn.is_need_clear_sessid_ = true;
       // bugfix: 
       (void) kill_unfinished_session(ctx_.sessid_); // ignore ret
       if (OB_FAIL(GCTX.session_mgr_->free_session(ctx_))) {
         LOG_WARN("free session fail", K(ctx_));
       } else {
-        common::ObTenantDiagnosticInfoSummaryGuard guard(ctx_.tenant_id_);
+        common::ObTenantDiagnosticInfoSummaryGuard guard{};
         EVENT_INC(SQL_USER_LOGOUTS_CUMULATIVE);
         LOG_INFO("free session successfully", "sessid", ctx_.sessid_);
-        if (OB_UNLIKELY(OB_FAIL(sql::ObSQLSessionMgr::is_need_clear_sessid(&conn, is_need_clear)))) {
-          LOG_ERROR("fail to judge need clear", K(ret), "sessid", conn.sessid_);
-        } else if (is_need_clear) {
-          if (OB_FAIL(GCTX.session_mgr_->mark_sessid_unused(conn.sessid_))) {
-            LOG_WARN("mark session id unused failed", K(ret), "sessid", conn.sessid_);
-          } else {
-            LOG_INFO("mark session id unused", "sessid", conn.sessid_);
-          }
-        }
       }
     }
   }

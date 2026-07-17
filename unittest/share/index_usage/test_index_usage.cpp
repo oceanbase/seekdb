@@ -46,13 +46,15 @@ public:
   {
     mgr_.is_enabled_ = true;
     mgr_.is_sample_mode_=false;
-    ASSERT_EQ(OB_SUCCESS, mgr_.init(1888)); // mock user tenant id
+    ASSERT_EQ(OB_SUCCESS, mgr_.init()); // single-tenant: init() no longer takes tenant id
     ASSERT_EQ(OB_SUCCESS, mgr_.start());
   }
   void TearDown()
   {
-    mgr_.stop();
-    mgr_.destroy();
+    if (mgr_.is_inited_) {
+      mgr_.stop();
+      mgr_.destroy();
+    }
   }
   int64_t check_size() {
     int64_t i = 0;
@@ -96,7 +98,7 @@ TEST_F(TestIndexUsageInfo, test_update)
   mgr_.is_sample_mode_=false;
   mgr_.is_enabled_=true;
   mgr_.min_tenant_data_version_=DATA_VERSION_1_0_0_0;
-  mgr_.update(mock_tenant_id, mock_index_id);
+  mgr_.update(mock_index_id); // single-tenant: update() no longer takes tenant id
   ASSERT_EQ(1, check_size());
 }
 

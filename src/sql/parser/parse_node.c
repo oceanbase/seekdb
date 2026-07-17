@@ -16,7 +16,7 @@
 
 #include "sql/parser/parse_node.h"
 #include <string.h>
-#include "lib/alloc/alloc_assist.h"
+#include "lib/utility/alloc_assist.h"
 #include "sql/parser/parse_node_hash.h"
 #include "sql/parser/sql_parser_base.h"
 #include "sql/executor/ob_memory_tracker_wrapper.h"

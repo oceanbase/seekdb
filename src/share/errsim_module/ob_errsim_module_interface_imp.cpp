@@ -28,27 +28,27 @@ namespace oceanbase {
 namespace common {
 
 int build_tenant_errsim_moulde(
-    const uint64_t tenant_id,
+    const uint64_t xid,
     const int64_t config_version,
     const common::ObArray<ObFixedLengthString<ObErrsimModuleTypeHelper::MAX_TYPE_NAME_LENGTH>> &module_array,
     const int64_t percentage)
 {
   int ret = OB_SUCCESS;
-  const uint64_t tmp_tenant_id = is_virtual_tenant_id(tenant_id) ? MTL_ID() : tenant_id;
+  const uint64_t tmp_tid = xid;
 
-  if (OB_INVALID_ID == tmp_tenant_id || config_version < 0) {
+  if (OB_INVALID_ID == tmp_tid || config_version < 0) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("build tenant module get invalid argument", K(ret), K(tmp_tenant_id), K(config_version));
-  } else if (is_virtual_tenant_id(tmp_tenant_id) || OB_INVALID_TENANT_ID == tmp_tenant_id) {
+    LOG_WARN("build tenant module get invalid argument", K(ret), K(config_version));
+  } else if (false || OB_INVALID_TENANT_ID == tmp_tid) {
     //do nothing
   } else {
-    MTL_SWITCH(tmp_tenant_id) {
+    MOD_SCOPE {
       ObTenantErrsimModuleMgr *errsim_module_mgr = nullptr;
       if (OB_ISNULL(errsim_module_mgr = MTL(ObTenantErrsimModuleMgr *))) {
         ret = OB_ERR_UNEXPECTED;
         STORAGE_LOG(WARN, "errsim module mgr should not be NULL", K(ret), KP(errsim_module_mgr));
-      } else if (OB_FAIL(errsim_module_mgr->build_tenant_moulde(tmp_tenant_id, config_version, module_array, percentage))) {
-        LOG_WARN("failed to build tenant module", K(ret), K(tmp_tenant_id), K(config_version));
+      } else if (OB_FAIL(errsim_module_mgr->build_tenant_moulde(config_version, module_array, percentage))) {
+        LOG_WARN("failed to build tenant module", K(ret), K(config_version));
       }
     }
   }
@@ -56,21 +56,21 @@ int build_tenant_errsim_moulde(
 }
 
 bool is_errsim_module(
-    const uint64_t tenant_id,
+    const uint64_t xid,
     const ObErrsimModuleType::TYPE &type)
 {
   bool b_ret = false;
   int ret = OB_SUCCESS;
-  const uint64_t tmp_tenant_id = is_virtual_tenant_id(tenant_id) ? MTL_ID() : tenant_id;
-  if (OB_INVALID_ID == tmp_tenant_id || !ObErrsimModuleTypeHelper::is_valid(type)) {
+  const uint64_t tmp_tid = xid;
+  if (OB_INVALID_ID == tmp_tid || !ObErrsimModuleTypeHelper::is_valid(type)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("is errsim module get invalid argument", K(ret), K(tenant_id), K(tmp_tenant_id), K(type));
-  } else if (is_virtual_tenant_id(tmp_tenant_id) || OB_INVALID_TENANT_ID == tmp_tenant_id) {
+    LOG_WARN("is errsim module get invalid argument", K(ret), K(type));
+  } else if (false || OB_INVALID_TENANT_ID == tmp_tid) {
     b_ret = false;
   } else if (ObErrsimModuleType::ERRSIM_MODULE_NONE == type) {
     b_ret = false;
   } else {
-    MTL_SWITCH(tmp_tenant_id) {
+    MOD_SCOPE {
       ObTenantErrsimModuleMgr *errsim_module_mgr = nullptr;
       if (OB_ISNULL(errsim_module_mgr = MTL(ObTenantErrsimModuleMgr *))) {
         ret = OB_ERR_UNEXPECTED;
@@ -84,19 +84,19 @@ bool is_errsim_module(
 }
 
 int add_tenant_errsim_event(
-    const uint64_t tenant_id,
+    const uint64_t xid,
     const ObTenantErrsimEvent &event)
 {
   bool b_ret = false;
   int ret = OB_SUCCESS;
-  const uint64_t tmp_tenant_id = is_virtual_tenant_id(tenant_id) ? MTL_ID() : tenant_id;
-  if (OB_INVALID_ID == tmp_tenant_id || !event.is_valid()) {
+  const uint64_t tmp_tid = xid;
+  if (OB_INVALID_ID == tmp_tid || !event.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("is errsim module get invalid argument", K(ret), K(tmp_tenant_id), K(event));
-  } else if (is_virtual_tenant_id(tmp_tenant_id) || OB_INVALID_TENANT_ID == tmp_tenant_id) {
+    LOG_WARN("is errsim module get invalid argument", K(ret), K(event));
+  } else if (false || OB_INVALID_TENANT_ID == tmp_tid) {
     //do nothing
   } else {
-    MTL_SWITCH(tmp_tenant_id) {
+    MOD_SCOPE {
       ObTenantErrsimEventMgr *errsim_event_mgr = nullptr;
       if (OB_ISNULL(errsim_event_mgr = MTL(ObTenantErrsimEventMgr *))) {
         ret = OB_ERR_UNEXPECTED;

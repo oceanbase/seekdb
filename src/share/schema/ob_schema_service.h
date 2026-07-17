@@ -88,16 +88,14 @@ enum ObSchemaOperationCategory
   ACT(OB_DDL_TRUNCATE_TABLE_DROP,)                               \
   ACT(OB_DDL_DROP_TABLE_TO_RECYCLEBIN, = 25)                     \
   ACT(OB_DDL_DROP_VIEW_TO_RECYCLEBIN,)                           \
-  ACT(OB_DDL_FLASHBACK_TABLE,)                                   \
-  ACT(OB_DDL_FLASHBACK_VIEW,)                                    \
+  ACT(OB_DDL_RESTORE_TABLE_FROM_RECYCLEBIN,)                                   \
+  ACT(OB_DDL_RESTORE_VIEW_FROM_RECYCLEBIN,)                                    \
   ACT(OB_DDL_ADD_PARTITION,)                                     \
   ACT(OB_DDL_DROP_PARTITION, = 30)                               \
   ACT(OB_DDL_TRUNCATE_DROP_TABLE_TO_RECYCLEBIN,)                 \
   ACT(OB_DDL_RENAME_INDEX,)                                      \
   ACT(OB_DDL_DROP_INDEX_TO_RECYCLEBIN,)                          \
-  ACT(OB_DDL_FLASHBACK_INDEX,)                                   \
-  ACT(OB_DDL_PARTITIONED_TABLE, = 35)                            \
-  ACT(OB_DDL_FINISH_SPLIT,)                                      \
+  ACT(OB_DDL_RECOVER_INDEX_FROM_RECYCLEBIN,)                     \
   ACT(OB_DDL_ADD_CONSTRAINT,)                                    \
   ACT(OB_DDL_DROP_CONSTRAINT,)                                   \
   ACT(OB_DDL_TRUNCATE_PARTITION, = 39)                           \
@@ -106,8 +104,6 @@ enum ObSchemaOperationCategory
   ACT(OB_DDL_RENAME_GLOBAL_INDEX,)                               \
   ACT(OB_DDL_DROP_GLOBAL_INDEX,)                                 \
   ACT(OB_DDL_MODIFY_GLOBAL_INDEX_STATUS,)                        \
-  ACT(OB_DDL_FINISH_LOGICAL_SPLIT, = 45)                         \
-  ACT(OB_DDL_SPLIT_PARTITION, = 46)                              \
   ACT(OB_DDL_STANDBY_REPLAY_CREATE_TABLE, = 47)                  \
   ACT(OB_DDL_DELAY_DELETE_TABLE, = 48)                           \
   ACT(OB_DDL_DELAY_DELETE_TABLE_PARTITION, = 49)                 \
@@ -123,16 +119,11 @@ enum ObSchemaOperationCategory
   ACT(OB_DDL_TRUNCATE_TABLE, = 59)                               \
   ACT(OB_DDL_RENAME_PARTITION, = 60)                             \
   ACT(OB_DDL_RENAME_SUB_PARTITION, = 61)                         \
-  ACT(OB_DDL_MODIFY_MATERIALIZED_VIEW_STATUS, = 62)              \
-  ACT(OB_DDL_ADD_COLUMN_GROUP, = 63)                             \
-  ACT(OB_DDL_DROP_COLUMN_GROUP, = 64)                            \
   ACT(OB_DDL_EXCHANGE_PARTITION, = 65)                           \
-  ACT(OB_DDL_MODIFY_MVIEW_REFERENCE_TABLE_STATUS, = 66)          \
   ACT(OB_DDL_MODIFY_INDEX_TYPE, = 67)                            \
   ACT(OB_DDL_RECOVER_TABLE_END, = 68)                            \
   ACT(OB_DDL_ALTER_PARTITION_POLICY, = 69)                       \
   ACT(OB_DDL_ALTER_SUBPARTITION_POLICY, = 70)                    \
-  ACT(OB_DDL_MODIFY_MLOG_STATUS, = 71)                           \
   ACT(OB_DDL_TABLE_OPERATION_END, = 100)                         \
   ACT(OB_DDL_TENANT_OPERATION_BEGIN, = 101)                      \
   ACT(OB_DDL_ADD_TENANT,)                                        \
@@ -144,7 +135,6 @@ enum ObSchemaOperationCategory
   ACT(OB_DDL_ADD_TENANT_END,)                                    \
   ACT(OB_DDL_RENAME_TENANT,)                                     \
   ACT(OB_DDL_DROP_TENANT_TO_RECYCLEBIN,)                         \
-  ACT(OB_DDL_FLASHBACK_TENANT,)                                  \
   ACT(OB_DDL_TENANT_OPERATION_END, = 200)                        \
   ACT(OB_DDL_DATABASE_OPERATION_BEGIN, = 201)                    \
   ACT(OB_DDL_ADD_DATABASE,)                                      \
@@ -152,7 +142,7 @@ enum ObSchemaOperationCategory
   ACT(OB_DDL_DEL_DATABASE,)                                      \
   ACT(OB_DDL_RENAME_DATABASE,)                                   \
   ACT(OB_DDL_DROP_DATABASE_TO_RECYCLEBIN,)                       \
-  ACT(OB_DDL_FLASHBACK_DATABASE,)                                \
+  ACT(OB_DDL_RESTORE_DATABASE_FROM_RECYCLEBIN,)                                \
   ACT(OB_DDL_DELAY_DELETE_DATABASE,)                             \
   ACT(OB_DDL_DATABASE_OPERATION_END, = 300)                      \
   ACT(OB_DDL_TABLEGROUP_OPERATION_BEGIN, = 301)                  \
@@ -161,10 +151,6 @@ enum ObSchemaOperationCategory
   ACT(OB_DDL_RENAME_TABLEGROUP,)                                 \
   ACT(OB_DDL_ALTER_TABLEGROUP,)                                  \
   ACT(OB_DDL_ALTER_TABLEGROUP_PARTITION,)                        \
-  ACT(OB_DDL_FINISH_SPLIT_TABLEGROUP,)                           \
-  ACT(OB_DDL_FINISH_LOGICAL_SPLIT_TABLEGROUP, = 308)             \
-  ACT(OB_DDL_SPLIT_TABLEGROUP_PARTITION, = 309)                  \
-  ACT(OB_DDL_PARTITIONED_TABLEGROUP_TABLE, = 310)                \
   ACT(OB_DDL_DELAY_DELETE_TABLEGROUP, = 311)                     \
   ACT(OB_DDL_DELAY_DELETE_TABLEGROUP_PARTITION, = 312)           \
   ACT(OB_DDL_TABLEGROUP_OPERATION_END, = 400)                    \
@@ -251,7 +237,6 @@ enum ObSchemaOperationCategory
   ACT(OB_DDL_REFRESH_SCHEMA_VERSION,)                            \
   ACT(OB_DDL_FINISH_BOOTSTRAP,)                                  \
   ACT(OB_DDL_FINISH_SCHEMA_SPLIT_V2,)                            \
-  ACT(OB_DDL_FINISH_PHYSICAL_RESTORE_MODIFY_SCHEMA,)             \
   ACT(OB_DDL_ONLY_SIGNAL_OPERATION_END, = 1600)                  \
   ACT(OB_DDL_STANDBY_FINISH_REPLAY_SCHEMA_SNAPSHOT, = 1601)      \
   ACT(OB_DDL_KEYSTORE_OPERATION_BEGIN, = 1650)                   \
@@ -294,7 +279,7 @@ enum ObSchemaOperationCategory
   ACT(OB_DDL_ALTER_TRIGGER,)                                     \
   ACT(OB_DDL_DROP_TRIGGER,)                                      \
   ACT(OB_DDL_DROP_TRIGGER_TO_RECYCLEBIN,)                        \
-  ACT(OB_DDL_FLASHBACK_TRIGGER,)                                 \
+  ACT(OB_DDL_RESTORE_TRIGGER_FROM_RECYCLEBIN,)                                 \
   ACT(OB_DDL_TRIGGER_OPERATION_END, = 1960)                      \
   ACT(OB_DDL_PROFILE_OPERATION_BEGIN, = 1961)                    \
   ACT(OB_DDL_CREATE_PROFILE,)                                    \
@@ -309,10 +294,6 @@ enum ObSchemaOperationCategory
   ACT(OB_DDL_OBJ_PRIV_GRANT_REVOKE,)                             \
   ACT(OB_DDL_OBJ_PRIV_DELETE,)                                   \
   ACT(OB_DDL_OBJ_PRIV_OPERATION_END, = 1990)                     \
-  ACT(OB_DDL_DBLINK_OPERATION_BEGIN, = 1991)                     \
-  ACT(OB_DDL_CREATE_DBLINK,)                                     \
-  ACT(OB_DDL_DROP_DBLINK,)                                       \
-  ACT(OB_DDL_DBLINK_OPERATION_END, = 2000)                       \
   ACT(OB_DDL_DIRECTORY_OPERATION_BEGIN, = 2001)                  \
   ACT(OB_DDL_CREATE_DIRECTORY,)                                  \
   ACT(OB_DDL_ALTER_DIRECTORY,)                                   \
@@ -425,7 +406,6 @@ public:
   ObSchemaOperation();
   virtual ~ObSchemaOperation() = default;
   int64_t  schema_version_;
-  uint64_t tenant_id_;
   union {
     uint64_t user_id_;
     uint64_t grantee_id_;
@@ -444,7 +424,6 @@ public:
     uint64_t udt_id_;
     uint64_t sequence_id_;
     uint64_t trigger_id_;
-    uint64_t dblink_id_;
     uint64_t directory_id_;
     uint64_t context_id_;
     uint64_t mock_fk_parent_table_id_;
@@ -517,7 +496,6 @@ public:
       next_column_name_(),
       prev_column_name_(),
       is_first_(false),
-      column_group_name_(),
       is_set_comment_(false)
   {}
 
@@ -536,7 +514,6 @@ public:
       next_column_name_(),
       prev_column_name_(),
       is_first_(false),
-      column_group_name_(),
       is_set_comment_(false)
   {}
   AlterColumnSchema &operator=(const AlterColumnSchema &alter_column_schema);
@@ -550,9 +527,6 @@ public:
   const common::ObString& get_prev_column_name() const { return prev_column_name_;};
   int set_prev_column_name(const common::ObString& prev_column_name)
     { return deep_copy_str(prev_column_name, prev_column_name_); }
-  const common::ObString& get_column_group_name() const { return column_group_name_;};
-  int set_column_group_name(const common::ObString& column_group_name)
-    { return deep_copy_str(column_group_name, column_group_name_); }
   void reset();
 
   ObSchemaOperationType alter_type_;
@@ -568,7 +542,6 @@ public:
   common::ObString next_column_name_;
   common::ObString prev_column_name_;
   bool is_first_;
-  common::ObString column_group_name_;
   bool is_set_comment_;
   DECLARE_VIRTUAL_TO_STRING;
 };
@@ -586,9 +559,6 @@ public:
       origin_tablegroup_id_(common::OB_INVALID_ID),
       alter_option_bitset_(),
       sql_mode_(SMO_DEFAULT),
-      split_partition_name_(),
-      split_high_bound_val_(),
-      split_list_row_values_(),
       new_part_name_()
   {
   }
@@ -601,9 +571,6 @@ public:
       origin_tablegroup_id_(common::OB_INVALID_ID),
       alter_option_bitset_(),
       sql_mode_(SMO_DEFAULT),
-      split_partition_name_(),
-      split_high_bound_val_(),
-      split_list_row_values_(),
       new_part_name_()
   {
   }
@@ -617,13 +584,6 @@ public:
   inline void set_origin_tablegroup_id(const uint64_t origin_tablegroup_id);
   inline void set_sql_mode(ObSQLMode sql_mode) { sql_mode_ = sql_mode; }
   inline ObSQLMode get_sql_mode() const { return sql_mode_; }
-  inline int set_split_partition_name(const common::ObString &partition_name);
-  inline const common::ObString &get_split_partition_name() const { return split_partition_name_; }
-  inline int set_split_high_bound_value(const common::ObRowkey &high_value);
-  inline const common::ObRowkey &get_split_high_bound_value() const { return split_high_bound_val_; }
-  inline const common::ObRowkey& get_split_list_row_values() const {
-    return split_list_row_values_;
-  }
   inline const common::ObString &get_new_part_name() const { return new_part_name_; }
   inline int set_new_part_name(const common::ObString &new_part_name);
   int assign_subpartition_key_info(const common::ObPartitionKeyInfo& src_info);
@@ -639,13 +599,6 @@ public:
   uint64_t origin_tablegroup_id_;
   common::ObBitSet<> alter_option_bitset_;
   ObSQLMode sql_mode_;
-  // Record the split source partition_name;
-  // If it is a sub-table operation, partition_name is empty;
-  // if it is a hash partition repartition, partition_name is empty;
-  common::ObString split_partition_name_;
-  // for tablegroup
-  common::ObRowkey split_high_bound_val_;
-  common::ObRowkey split_list_row_values_;
   common::ObString new_part_name_;
   int assign(const ObTableSchema &src_schema);
   //virtual int add_partition(const ObPartition &part);
@@ -656,11 +609,6 @@ public:
 
   DECLARE_VIRTUAL_TO_STRING;
 };
-
-int AlterTableSchema::set_split_partition_name(const common::ObString &partition_name)
-{
-  return deep_copy_str(partition_name, split_partition_name_);
-}
 
 int AlterTableSchema::set_new_part_name(const common::ObString &new_part_name)
 {
@@ -685,11 +633,6 @@ int AlterTableSchema::set_origin_database_name(const common::ObString &origin_db
 void AlterTableSchema::set_origin_tablegroup_id(const uint64_t origin_tablegroup_id)
 {
   origin_tablegroup_id_ = origin_tablegroup_id;
-}
-
-int AlterTableSchema::set_split_high_bound_value(const common::ObRowkey &high_value)
-{
-  return high_value.deep_copy(split_high_bound_val_, *get_allocator());
 }
 
 // new cache
@@ -740,7 +683,6 @@ class ObSchemaService
 public:
   //default false, only use for liboblog to control compatable
   static bool g_ignore_column_retrieve_error_;
-  static bool g_liboblog_mode_;
   typedef common::ObSEArrayImpl<ObSchemaOperation, 0>  ObSchemaOperationSet;
   class SchemaOperationSetWithAlloc: public ObSchemaOperationSet
   {
@@ -846,7 +788,6 @@ public:
 
   virtual int get_batch_tenants(common::ObISQLClient &client,
                                 const int64_t schema_version,
-                                common::ObArray<uint64_t> &tenant_ids,
                                 common::ObIArray<ObTenantSchema> &schema_array) = 0;
 
   virtual int get_tablegroup_schema(const ObRefreshSchemaStatus &schema_status,
@@ -858,7 +799,6 @@ public:
 
   virtual int get_sys_variable_schema(common::ObISQLClient &sql_client,
                                       const ObRefreshSchemaStatus &schema_status,
-                                      const uint64_t tenant_id,
                                       const int64_t schema_version,
                                       share::schema::ObSysVariableSchema &sys_variable_schema) = 0;
 
@@ -867,7 +807,6 @@ public:
                                common::ObIArray<ObSimpleTenantSchema> &tenant_schema_array) = 0;
   virtual int get_sys_variable(common::ObISQLClient &client,
                                const ObRefreshSchemaStatus &schema_status,
-                               const uint64_t tenant_id,
                                const int64_t schema_version,
                                ObSimpleSysVariableSchema &schema) = 0;
   #define GET_ALL_SCHEMA_WITH_ALLOCATOR_FUNC_DECLARE_PURE_VIRTUAL(SCHEMA, SCHEMA_TYPE)    \
@@ -875,7 +814,6 @@ public:
                                     common::ObIAllocator &allocator,  \
                                     const ObRefreshSchemaStatus &schema_status,\
                                     const int64_t schema_version,      \
-                                    const uint64_t tenant_id,           \
                                     common::ObIArray<SCHEMA_TYPE *> &schema_array) = 0;
   GET_ALL_SCHEMA_WITH_ALLOCATOR_FUNC_DECLARE_PURE_VIRTUAL(table, ObSimpleTableSchemaV2);
 
@@ -883,7 +821,6 @@ public:
     virtual int get_all_##SCHEMA##s(common::ObISQLClient &sql_client, \
                                     const ObRefreshSchemaStatus &schema_status,\
                                     const int64_t schema_version,      \
-                                    const uint64_t tenant_id,           \
                                     common::ObIArray<SCHEMA_TYPE> &schema_array) = 0;
   GET_ALL_SCHEMA_FUNC_DECLARE_PURE_VIRTUAL(user, ObSimpleUserSchema);
   GET_ALL_SCHEMA_FUNC_DECLARE_PURE_VIRTUAL(database, ObSimpleDatabaseSchema);
@@ -936,48 +873,40 @@ public:
                                const ObRefreshSchemaStatus &schema_status,
                                int64_t &core_schema_version) = 0;
   virtual int get_core_and_sys_version(common::ObISQLClient &sql_client,
-                               const uint64_t &tenant_id,
                                int64_t &core_schema_version,
                                int64_t &sys_schema_version) = 0;
   virtual int get_baseline_schema_version(common::ObISQLClient &sql_client,
                                           const ObRefreshSchemaStatus &schema_status,
                                           int64_t &baseline_schema_version) = 0;
 
-  virtual int fetch_new_object_ids(
-              const uint64_t tenant_id,
-              const int64_t object_cnt,
+  virtual int fetch_new_object_ids(const int64_t object_cnt,
               uint64_t &max_object_id) = 0;
-  virtual int fetch_new_partition_ids(
-              const uint64_t tenant_id,
-              const int64_t partition_num,
+  virtual int fetch_new_partition_ids(const int64_t partition_num,
               uint64_t &max_partition_id) = 0;
-  virtual int fetch_new_tablet_ids(
-              const uint64_t tenant_id,
-              const bool gen_normal_tablet,
+  virtual int fetch_new_tablet_ids(const bool gen_normal_tablet,
               const uint64_t size,
               uint64_t &min_tablet_id) = 0;
-  virtual int fetch_new_table_id(const uint64_t tenant_id, uint64_t &new_table_id) = 0;
-  virtual int fetch_new_tenant_id(uint64_t &new_tenant_id) = 0;
-  virtual int fetch_new_database_id(const uint64_t tenant_id, uint64_t &new_database_id) = 0;
-  virtual int fetch_new_tablegroup_id(const uint64_t tenant_id, uint64_t &new_tablegroup_id) = 0;
-  virtual int fetch_new_user_id(const uint64_t tenant_id, uint64_t &new_user_id) = 0;
-  virtual int fetch_new_outline_id(const uint64_t tenant_id, uint64_t &new_outline_id) = 0;
-  virtual int fetch_new_udf_id(const uint64_t tenant_id, uint64_t &new_udf_id) = 0;
-  virtual int fetch_new_constraint_id(const uint64_t tenant_id, uint64_t &new_constraint_id) = 0;
-  virtual int fetch_new_sequence_id(const uint64_t tenant_id, uint64_t &new_sequence_id) = 0;
-  virtual int fetch_new_udt_id(const uint64_t tenant_id, uint64_t &new_udt_id) = 0;
-  virtual int fetch_new_routine_id(const uint64_t tenant_id, uint64_t &new_routine_id) = 0;
-  virtual int fetch_new_package_id(const uint64_t tenant_id, uint64_t &new_package_id) = 0;
-  virtual int fetch_new_sys_pl_object_id(const uint64_t tenant_id, uint64_t &new_object_id) = 0;
-  virtual int fetch_new_trigger_id(const uint64_t tenant_id, uint64_t &new_trigger_id) = 0;
+  virtual int fetch_new_table_id(uint64_t &new_table_id) = 0;
+  virtual int fetch_new_database_id(uint64_t &new_database_id) = 0;
+  virtual int fetch_new_tablegroup_id(uint64_t &new_tablegroup_id) = 0;
+  virtual int fetch_new_user_id(uint64_t &new_user_id) = 0;
+  virtual int fetch_new_outline_id(uint64_t &new_outline_id) = 0;
+  virtual int fetch_new_udf_id(uint64_t &new_udf_id) = 0;
+  virtual int fetch_new_constraint_id(uint64_t &new_constraint_id) = 0;
+  virtual int fetch_new_sequence_id(uint64_t &new_sequence_id) = 0;
+  virtual int fetch_new_udt_id(uint64_t &new_udt_id) = 0;
+  virtual int fetch_new_routine_id(uint64_t &new_routine_id) = 0;
+  virtual int fetch_new_package_id(uint64_t &new_package_id) = 0;
+  virtual int fetch_new_sys_pl_object_id(uint64_t &new_object_id) = 0;
+  virtual int fetch_new_trigger_id(uint64_t &new_trigger_id) = 0;
 
-  virtual int fetch_new_directory_id(const uint64_t tenant_id, uint64_t &new_directory_id) = 0;
-  virtual int fetch_new_location_id(const uint64_t tenant_id, uint64_t &new_location_id) = 0;
-  virtual int fetch_new_context_id(const uint64_t tenant_id, uint64_t &new_context_id) = 0;
-  virtual int fetch_new_priv_id(const uint64_t tenant_id, uint64_t &new_priv_id) = 0;
-  virtual int fetch_new_catalog_id(const uint64_t tenant_id, uint64_t &new_catalog_id) = 0;
-  virtual int fetch_new_ccl_rule_id(const uint64_t tenant_id, uint64_t &new_ccl_rule_id) = 0;
-  virtual int fetch_new_ai_model_id(const uint64_t tenant_id, uint64_t &new_ai_model_id) = 0;
+  virtual int fetch_new_directory_id(uint64_t &new_directory_id) = 0;
+  virtual int fetch_new_location_id(uint64_t &new_location_id) = 0; 
+  virtual int fetch_new_context_id(uint64_t &new_context_id) = 0;
+  virtual int fetch_new_priv_id(uint64_t &new_priv_id) = 0;
+  virtual int fetch_new_catalog_id(uint64_t &new_catalog_id) = 0;
+  virtual int fetch_new_ccl_rule_id(uint64_t &new_ccl_rule_id) = 0;
+  virtual int fetch_new_ai_model_id(uint64_t &new_ai_model_id) = 0;
 
 //------------------For managing privileges-----------------------------//
   #define GET_BATCH_SCHEMAS_WITH_ALLOCATOR_FUNC_DECLARE_PURE_VIRTUAL(SCHEMA, SCHEMA_TYPE)  \
@@ -995,7 +924,6 @@ public:
                                       common::ObIArray<SCHEMA_TYPE> &schema_array) = 0;
   virtual int get_batch_tenants(common::ObISQLClient &client,
                                 const int64_t schema_version,
-                                common::ObArray<SchemaKey> &schema_keys,
                                 common::ObIArray<ObSimpleTenantSchema> &schema_array) = 0;
   GET_BATCH_SCHEMAS_FUNC_DECLARE_PURE_VIRTUAL(user, ObSimpleUserSchema);
   GET_BATCH_SCHEMAS_FUNC_DECLARE_PURE_VIRTUAL(database, ObSimpleDatabaseSchema);
@@ -1029,24 +957,16 @@ public:
   virtual int insert_recyclebin_object(
       const ObRecycleObject &recycle_obj,
       common::ObISQLClient &sql_client) = 0;
-  virtual int fetch_recycle_object(
-      const uint64_t tenant_id,
-      const common::ObString &object_name,
+  virtual int fetch_recycle_object(const common::ObString &object_name,
       const ObRecycleObject::RecycleObjType recycle_obj_type,
       common::ObISQLClient &sql_client,
       common::ObIArray<ObRecycleObject> &recycle_objs) = 0;
-  virtual int delete_recycle_object(
-      const uint64_t tenant_id,
-      const ObRecycleObject &recycle_object,
+  virtual int delete_recycle_object(const ObRecycleObject &recycle_object,
       common::ObISQLClient &sql_client) = 0;
-  virtual int fetch_expire_recycle_objects(
-      const uint64_t tenant_id,
-      const int64_t expire_time,
+  virtual int fetch_expire_recycle_objects(const int64_t expire_time,
       common::ObISQLClient &sql_client,
       common::ObIArray<ObRecycleObject> &recycle_objs) = 0;
-  virtual int fetch_recycle_objects_of_db(
-      const uint64_t tenant_id,
-      const uint64_t database_id,
+  virtual int fetch_recycle_objects_of_db(const uint64_t database_id,
       common::ObISQLClient &sql_client,
       common::ObIArray<ObRecycleObject> &recycle_objs) = 0;
 
@@ -1062,7 +982,6 @@ public:
       ObRecycleObject &recycle_object) = 0;
 
   virtual int fetch_aux_tables(const ObRefreshSchemaStatus &schema_status,
-      const uint64_t tenant_id,
       const uint64_t table_id,
       const int64_t schema_version,
       common::ObISQLClient &sql_client,
@@ -1101,28 +1020,23 @@ public:
       common::ObISQLClient &sql_client,
       ObMockFKParentTableSchema &mock_fk_parent_table_schema) = 0;
   virtual void set_refreshed_schema_version(const int64_t schema_version) = 0;
-  virtual int gen_new_schema_version(const uint64_t tenant_id,
-                                     const int64_t refreshed_schema_version,
+  virtual int gen_new_schema_version(const int64_t refreshed_schema_version,
                                      int64_t &schema_version) = 0;
 
   // gen schema versions in [start_version, end_version] with specified schema version cnt.
   // @param[out]:
   // - schema_version: end_version
-  virtual int gen_batch_new_schema_versions(
-              const uint64_t tenant_id,
-              const int64_t refreshed_schema_version,
+  virtual int gen_batch_new_schema_versions(const int64_t refreshed_schema_version,
               const int64_t version_cnt,
               int64_t &schema_version) = 0;
-  virtual int get_new_schema_version(uint64_t tenant_id, int64_t &schema_version) = 0;
+  virtual int get_new_schema_version(int64_t &schema_version) = 0;
 
   virtual int get_ori_schema_version(const ObRefreshSchemaStatus &schema_status,
-                                     const uint64_t tenant_id,
                                      const uint64_t table_id,
                                      int64_t &last_schema_version) = 0;
 
   virtual int get_table_latest_schema_versions(
       common::ObISQLClient &sql_client,
-      const uint64_t tenant_id,
       const common::ObIArray<uint64_t> &table_ids,
       common::ObIArray<ObTableLatestSchemaVersion> &table_schema_versions) = 0;
 
@@ -1135,21 +1049,11 @@ public:
     return common::OB_SUCCESS;
   }
 
-  virtual int get_drop_tenant_infos(
-      common::ObISQLClient &sql_client,
-      int64_t schema_version,
-      common::ObIArray<ObDropTenantInfo> &drop_tenant_infos) = 0;
-
   // for liboblog used
   virtual int get_schema_version_by_timestamp(
       common::ObISQLClient &sql_client,
       const ObRefreshSchemaStatus &schema_status,
-      const uint64_t tenant_id,
       int64_t timestamp,
-      int64_t &schema_version) = 0;
-  virtual int get_first_trans_end_schema_version(
-      common::ObISQLClient &sql_client,
-      const uint64_t tenant_id,
       int64_t &schema_version) = 0;
   static bool is_formal_version(const int64_t schema_version);
   static int gen_core_temp_version(const int64_t schema_version,
@@ -1162,19 +1066,16 @@ public:
   /*----------- interfaces for latest schema start -----------*/
   virtual int get_tablegroup_id(
               common::ObISQLClient &sql_client,
-              const uint64_t tenant_id,
               const ObString &tablegroup_name,
               uint64_t &tablegroup_id) = 0;
 
   virtual int get_database_id(
               common::ObISQLClient &sql_client,
-              const uint64_t tenant_id,
               const ObString &database_name,
               uint64_t &database_id) = 0;
 
   virtual int get_table_id(
               common::ObISQLClient &sql_client,
-              const uint64_t tenant_id,
               const uint64_t database_id,
               const uint64_t session_id,
               const ObString &table_name,
@@ -1184,35 +1085,30 @@ public:
 
   virtual int get_index_id(
               common::ObISQLClient &sql_client,
-              const uint64_t tenant_id,
               const uint64_t database_id,
               const ObString &index_name,
               uint64_t &index_id) = 0;
 
   virtual int get_mock_fk_parent_table_id(
               common::ObISQLClient &sql_client,
-              const uint64_t tenant_id,
               const uint64_t database_id,
               const ObString &table_name,
               uint64_t &mock_fk_parent_table_id) = 0;
 
   virtual int get_constraint_id(
               common::ObISQLClient &sql_client,
-              const uint64_t tenant_id,
               const uint64_t database_id,
               const ObString &constraint_name,
               uint64_t &constraint_id) = 0;
 
   virtual int get_foreign_key_id(
               common::ObISQLClient &sql_client,
-              const uint64_t tenant_id,
               const uint64_t database_id,
               const ObString &foreign_key_name,
               uint64_t &foreign_key_id) = 0;
 
   virtual int get_sequence_id(
               common::ObISQLClient &sql_client,
-              const uint64_t tenant_id,
               const uint64_t database_id,
               const ObString &sequence_name,
               uint64_t &sequence_id,
@@ -1220,7 +1116,6 @@ public:
 
   virtual int get_package_id(
               common::ObISQLClient &sql_client,
-              const uint64_t tenant_id,
               const uint64_t database_id,
               const ObString &package_name,
               const ObPackageType package_type,
@@ -1229,7 +1124,6 @@ public:
 
   virtual int get_routine_id(
               common::ObISQLClient &sql_client,
-              const uint64_t tenant_id,
               const uint64_t database_id,
               const uint64_t package_id,
               const uint64_t overload,
@@ -1238,20 +1132,17 @@ public:
 
   virtual int get_table_schema_versions(
               common::ObISQLClient &sql_client,
-              const uint64_t tenant_id,
               const common::ObIArray<uint64_t> &table_ids,
               common::ObIArray<ObSchemaIdVersion> &versions) = 0;
 
   virtual int get_mock_fk_parent_table_schema_versions(
               common::ObISQLClient &sql_client,
-              const uint64_t tenant_id,
               const common::ObIArray<uint64_t> &table_ids,
               common::ObIArray<ObSchemaIdVersion> &versions) = 0;
 
   virtual int get_table_index_infos(
               common::ObIAllocator &allocator,
               common::ObISQLClient &sql_client,
-              const uint64_t tenant_id,
               const uint64_t database_id,
               const uint64_t data_table_id,
               common::ObIArray<ObIndexSchemaInfo> &index_infos) = 0;
@@ -1263,7 +1154,6 @@ public:
 
   virtual int get_obj_priv_with_obj_id(
               common::ObISQLClient &sql_client,
-              const uint64_t tenant_id,
               const uint64_t obj_id,
               const uint64_t obj_type,
               ObIArray<ObObjPriv> &obj_privs) = 0;
@@ -1271,20 +1161,17 @@ public:
   virtual int get_table_schemas_in_tablegroup(
               common::ObIAllocator &allocator,
               common::ObISQLClient &sql_client,
-              const uint64_t tenant_id,
               const uint64_t tablegroup_id,
               common::ObIArray<const ObTableSchema *> &table_schemas) = 0;
 
   virtual int check_database_exists_in_tablegroup(
               common::ObISQLClient &sql_client,
-              const uint64_t tenant_id,
               const uint64_t tablegroup_id,
               bool &exists) = 0;
   
   virtual int get_table_id_and_table_name_in_tablegroup(
               common::ObIAllocator &allocator,
               common::ObISQLClient &sql_client,
-              const uint64_t tenant_id,
               const uint64_t tablegroup_id,
               common::ObIArray<ObString> &table_names,
               common::ObIArray<uint64_t> &table_ids) = 0;
@@ -1293,6 +1180,22 @@ public:
   {
     return 0 == STRCASECMP(PARALLEL_DDL_THREAD_NAME, ob_get_origin_thread_name());
   }
+};
+
+// factory injection: implementation ObSchemaServiceSQLImpl now lives in the observer layer(can legally call sql),
+// observer registers creator/destroyer early during startup, so share-layer ObServerSchemaService does not need to
+// directly name the concrete class(avoids share->observer inversion)。
+typedef ObSchemaService *(*ObSchemaServiceCreator)();
+typedef void (*ObSchemaServiceDestroyer)(ObSchemaService *schema_service);
+class ObSchemaServiceFactory
+{
+public:
+  static void register_creator(ObSchemaServiceCreator creator, ObSchemaServiceDestroyer destroyer);
+  static ObSchemaService *create();
+  static void destroy(ObSchemaService *schema_service);
+private:
+  static ObSchemaServiceCreator creator_;
+  static ObSchemaServiceDestroyer destroyer_;
 };
 }//namespace schema
 }//namespace share

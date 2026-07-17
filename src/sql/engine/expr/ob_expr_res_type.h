@@ -19,7 +19,7 @@
 
 #include "common/object/ob_object.h"
 #include "common/ob_field.h"
-#include "rpc/obmysql/ob_mysql_global.h"
+#include "common/mysqlclient/ob_mysql_global.h"
 #include "lib/container/ob_iarray.h"
 #include "lib/container/ob_se_array.h"
 #include "lib/container/ob_fixed_array.h"
@@ -27,7 +27,7 @@
 #include "lib/utility/utility.h"
 #include "common/ob_accuracy.h"
 #include "common/object/ob_obj_type.h"
-#include "lib/enumset/ob_enum_set_meta.h"
+#include "common/enumset/ob_enum_set_meta.h"
 #include "share/object/ob_obj_cast.h"
 
 namespace oceanbase
@@ -202,8 +202,6 @@ public:
   OB_INLINE bool is_null() const { return common::ObNullType == get_type(); }
   OB_INLINE bool is_mysql_question_mark_type() const
   { return is_varbinary() && 0 == get_length(); }
-  OB_INLINE bool is_oracle_question_mark_type() const
-  { return is_char() && common::ObAccuracy::PS_QUESTION_MARK_DEDUCE_LEN == get_length(); }
 
   OB_INLINE bool is_not_null_for_read() const { return has_result_flag(NOT_NULL_FLAG); }
   OB_INLINE bool is_not_null_for_write() const { return has_result_flag(NOT_NULL_WRITE_FLAG); }

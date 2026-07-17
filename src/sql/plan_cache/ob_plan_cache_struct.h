@@ -366,8 +366,7 @@ struct ObPlanCacheCtx : public ObILibCacheCtx
                  const PlanCacheMode mode,
                  common::ObIAllocator &allocator,
                  ObSqlCtx &sql_ctx,
-                 ObExecContext &exec_ctx,
-                 uint64_t tenant_id)
+                 ObExecContext &exec_ctx)
     : mode_(mode),
       raw_sql_(sql),
       allocator_(allocator),

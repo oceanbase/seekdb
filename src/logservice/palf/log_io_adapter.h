@@ -17,8 +17,8 @@
 #ifndef OCEANBASE_LOGSERVICE_LOG_IO_ADAPTER_
 #define OCEANBASE_LOGSERVICE_LOG_IO_ADAPTER_
 
-#include "common/storage/ob_io_device.h"
-#include "common/storage/ob_device_common.h"
+#include "lib/restore/ob_io_device.h"
+#include "lib/restore/ob_device_common.h"
 #include "log_io_context.h"                                   // LogIOContext
 
 namespace oceanbase
@@ -31,7 +31,6 @@ class ObDeviceManager;
 namespace share
 {
 class ObLocalDevice;
-class ObResourceManager;
 }
 namespace palf
 {
@@ -61,18 +60,15 @@ private:
 class LogIOAdapter
 {
 public:
-  LogIOAdapter() : tenant_id_(OB_INVALID_TENANT_ID), log_local_device_(NULL), 
-                   resource_manager_(NULL), io_manager_(NULL), is_inited_(false) {}
+  LogIOAdapter() : log_local_device_(NULL), io_manager_(NULL), is_inited_(false) {}
   ~LogIOAdapter() {
     destroy();
   }
-  int init(const int64_t tenant_id, 
-           common::ObIODevice *log_local_device,
-           share::ObResourceManager *resource_manager,
+  int init(common::ObIODevice *log_local_device,
            common::ObIOManager *io_manager);
   void destroy();
   bool is_valid() const {
-    return is_valid_tenant_id(tenant_id_) && NULL != log_local_device_ && NULL != resource_manager_ && NULL != io_manager_;
+    return true && NULL != log_local_device_ && NULL != io_manager_;
   }
   int open(const char *block_path, 
            const int flags, 
@@ -98,9 +94,8 @@ public:
             int64_t &out_read_size);
   int truncate(const ObIOFd &fd, const int64_t offset);
 private:
-  int64_t tenant_id_;
+  
   common::ObIODevice *log_local_device_;
-  share::ObResourceManager *resource_manager_;
   common::ObIOManager *io_manager_;
   bool is_inited_;
 };

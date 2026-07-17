@@ -29,8 +29,8 @@ create table t1 (c1 int, c2 int unsigned,
     c19 datetime, c20 timestamp, 
     c21 varchar(30), c22 char(30),
     c23 varchar(30) charset utf8,
-    c24 varchar(30) charset utf16,
-    c25 varchar(30) charset gbk);
+    c24 varchar(30) charset utf8mb4,
+    c25 varchar(30) charset utf8mb4);
     
 insert into t1 values(1, 2, 
     1, 2, 
@@ -69,7 +69,7 @@ while ($left <= $cnt)
 --echo // test set_collation expr
 --echo // set_collation表达式检查charset与collate不匹配，报错
 --error 1253
-select _utf8mb4'a' collate gbk_bin;
+select _binary'a' collate utf8mb4_bin;
 --echo // 下面的是等号表达式在类型推导时，进行aggregate collation发现collation不一致报错
 --error 1267
 select _utf8mb4'a' collate utf8mb4_general_ci = _utf8mb4'A' collate utf8mb4_bin;

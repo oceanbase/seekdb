@@ -23,7 +23,7 @@
 #include "ob_log_print_kv.h"
 #include "lib/hash/fnv_hash.h"
 #include "ob_log_time_fmt.h"
-#include "share/ob_errno.h"
+#include "lib/oblog/ob_log_user_msg.h"
 
 namespace oceanbase
 {
@@ -67,7 +67,6 @@ DEFINE_LOG_SUB_MOD(STORAGETEST)          // storagetest
 DEFINE_LOG_SUB_MOD(LOGTOOL)              // logtool
 DEFINE_LOG_SUB_MOD(WRS)                  // weak read service
 DEFINE_LOG_SUB_MOD(ARCHIVE)              // archive log
-DEFINE_LOG_SUB_MOD(PHYSICAL_RESTORE_ARCHIVE)      // physical restore log
 DEFINE_LOG_SUB_MOD(EASY)                 // libeasy
 DEFINE_LOG_SUB_MOD(DETECT)               // dead lock
 DEFINE_LOG_SUB_MOD(PALF)                 // palf
@@ -395,8 +394,6 @@ LOG_MOD_END(PL)
 #define _WRS_LOG(level, _fmt_, args...) _OB_MOD_LOG(WRS, level, _fmt_, ##args)
 #define ARCHIVE_LOG(level, info_string, args...) OB_MOD_LOG(ARCHIVE, level, info_string, ##args)
 #define _ARCHIVE_LOG(level, _fmt_, args...) _OB_MOD_LOG(ARCHIVE, level, _fmt_, ##args)
-#define PHYSICAL_RESTORE_ARCHIVE_LOG(level, info_string, args...) OB_MOD_LOG(PHYSICAL_RESTORE_ARCHIVE, level, info_string, ##args)
-#define _PHYSICAL_RESTORE_ARCHIVE_LOG(level, _fmt_, args...) _OB_MOD_LOG(PHYSICAL_RESTORE_ARCHIVE, level, _fmt_, ##args)
 #define LIB_LOG(level, info_string, args...) OB_MOD_LOG(LIB, level, info_string, ##args)
 #define _LIB_LOG(level, _fmt_, args...) _OB_MOD_LOG(LIB, level, _fmt_, ##args)
 #define MEMT_LOG(level, info_string, args...) OB_MOD_LOG(MEMT, level, info_string, ##args)
@@ -657,10 +654,10 @@ LOG_MOD_END(PL)
 #define _RPC_FRAME_LOG(level, _fmt_, args...)   \
   _OB_SUB_MOD_LOG(RPC, FRAME, level, _fmt_, ##args)
 
-#define RPC_OBRPC_LOG(level, _fmt_, args...)    \
+#define RPC_OBCALL_LOG(level, _fmt_, args...)    \
   OB_SUB_MOD_LOG(RPC, OBRPC, level, _fmt_, ##args)
 
-#define _RPC_OBRPC_LOG(level, _fmt_, args...)   \
+#define _RPC_OBCALL_LOG(level, _fmt_, args...)   \
   _OB_SUB_MOD_LOG(RPC, OBRPC, level, _fmt_, ##args)
 
 #define RPC_OBMYSQL_LOG(level, _fmt_, args...)  \
@@ -908,8 +905,6 @@ LOG_MOD_END(PL)
 #define _WRS_LOG_RET(level, errcode, args...) { int __ret__ = errcode; int ret = __ret__; _WRS_LOG(level, ##args); }
 #define ARCHIVE_LOG_RET(level, errcode, args...) { int __ret__ = errcode; int ret = __ret__; ARCHIVE_LOG(level, ##args); }
 #define _ARCHIVE_LOG_RET(level, errcode, args...) { int __ret__ = errcode; int ret = __ret__; _ARCHIVE_LOG(level, ##args); }
-#define PHYSICAL_RESTORE_ARCHIVE_LOG_RET(level, errcode, args...) { int __ret__ = errcode; int ret = __ret__; PHYSICAL_RESTORE_ARCHIVE_LOG(level, ##args); }
-#define _PHYSICAL_RESTORE_ARCHIVE_LOG_RET(level, errcode, args...) { int __ret__ = errcode; int ret = __ret__; _PHYSICAL_RESTORE_ARCHIVE_LOG(level, ##args); }
 #define LIB_LOG_RET(level, errcode, args...) { int __ret__ = errcode; int ret = __ret__; LIB_LOG(level, ##args); }
 #define _LIB_LOG_RET(level, errcode, args...) { int __ret__ = errcode; int ret = __ret__; _LIB_LOG(level, ##args); }
 #define MEMT_LOG_RET(level, errcode, args...) { int __ret__ = errcode; int ret = __ret__; MEMT_LOG(level, ##args); }
@@ -1059,8 +1054,8 @@ LOG_MOD_END(PL)
 #define _PL_CACHE_LOG_RET(level, errcode, args...) { int __ret__ = errcode; int ret = __ret__; _PL_CACHE_LOG(level, ##args); }
 #define RPC_FRAME_LOG_RET(level, errcode, args...) { int __ret__ = errcode; int ret = __ret__; RPC_FRAME_LOG(level, ##args); }
 #define _RPC_FRAME_LOG_RET(level, errcode, args...) { int __ret__ = errcode; int ret = __ret__; _RPC_FRAME_LOG(level, ##args); }
-#define RPC_OBRPC_LOG_RET(level, errcode, args...) { int __ret__ = errcode; int ret = __ret__; RPC_OBRPC_LOG(level, ##args); }
-#define _RPC_OBRPC_LOG_RET(level, errcode, args...) { int __ret__ = errcode; int ret = __ret__; _RPC_OBRPC_LOG(level, ##args); }
+#define RPC_OBCALL_LOG_RET(level, errcode, args...) { int __ret__ = errcode; int ret = __ret__; RPC_OBCALL_LOG(level, ##args); }
+#define _RPC_OBCALL_LOG_RET(level, errcode, args...) { int __ret__ = errcode; int ret = __ret__; _RPC_OBCALL_LOG(level, ##args); }
 #define RPC_OBMYSQL_LOG_RET(level, errcode, args...) { int __ret__ = errcode; int ret = __ret__; RPC_OBMYSQL_LOG(level, ##args); }
 #define _RPC_OBMYSQL_LOG_RET(level, errcode, args...) { int __ret__ = errcode; int ret = __ret__; _RPC_OBMYSQL_LOG(level, ##args); }
 #define RPC_TEST_LOG_RET(level, errcode, args...) { int __ret__ = errcode; int ret = __ret__; RPC_TEST_LOG(level, ##args); }
@@ -1178,14 +1173,7 @@ LOG_MOD_END(PL)
 
 
 // used for the log return for user;
-// if you want to return ERROR message for user, and the error message parameters returned
-// in mysql mode and oracle mode are the same. you should use LOG_USER_ERROR or FORWARD_USER_ERROR.
-// otherwise, you should use it like below
-// if (lib::is_oracle_mode()) {
-//  LOG_ORACLE_USER_ERROR(...);
-// } else {
-//  LOG_MYSQL_USER_ERROR(...);
-// }
+// if you want to return ERROR message for user, use LOG_USER_ERROR or FORWARD_USER_ERROR.
 // the LOG_USER_* supports string format,
 // while the LOG_USER_*_MSG dose not support and only can be used for rpc proxy on the remote/distribute msg.
 #define _LOG_USER_MSG(level, errcode, umsg, args...)                      \
@@ -1214,15 +1202,7 @@ LOG_MOD_END(PL)
   do                                                                    \
   {                                                                     \
     CHECK_LOG_USER_CONST_FMT(errcode)                                   \
-    if (lib::is_oracle_mode()) {                                                 \
-      if (!g_enable_ob_error_msg_style) {                               \
-        _LOG_USER_MSG(level, errcode, LOG_MACRO_JOIN(errcode, __ORA_USER_ERROR_MSG), ##args); \
-      } else {                                                          \
-        _LOG_USER_MSG(level, errcode, LOG_MACRO_JOIN(errcode, __OBE_USER_ERROR_MSG), ##args); \
-      }                                                                 \
-    } else {                                                                            \
-      _LOG_USER_MSG(level, errcode, LOG_MACRO_JOIN(errcode, __USER_ERROR_MSG), ##args); \
-    }                                                                   \
+    _LOG_USER_MSG(level, errcode, LOG_MACRO_JOIN(errcode, __USER_ERROR_MSG), ##args); \
   } while(0)
 #define LOG_USER_MYSQL(level, errcode, args...)                                \
   do                                                                    \
@@ -1230,28 +1210,12 @@ LOG_MOD_END(PL)
     CHECK_LOG_USER_CONST_FMT(errcode)                                   \
     _LOG_USER_MSG(level, errcode, LOG_MACRO_JOIN(errcode, __USER_ERROR_MSG), ##args); \
   } while(0)
-#define LOG_USER_ORACLE(level, errcode, args...)                                \
-  do                                                                    \
-  {                                                                     \
-    CHECK_LOG_USER_CONST_FMT(errcode)                                   \
-    if (!g_enable_ob_error_msg_style) {                                 \
-      _LOG_USER_MSG(level, errcode, LOG_MACRO_JOIN(errcode, __ORA_USER_ERROR_MSG), ##args); \
-    } else {                                                            \
-      _LOG_USER_MSG(level, errcode, LOG_MACRO_JOIN(errcode, __OBE_USER_ERROR_MSG), ##args); \
-    }                                                                   \
-  } while(0)
 #define LOG_MYSQL_USER_ERROR(errcode, args...)                                \
   LOG_USER_MYSQL(::oceanbase::common::ObLogger::USER_ERROR, errcode, ##args)
 #define LOG_MYSQL_USER_WARN(errcode, args...)                                 \
   LOG_USER_MYSQL(::oceanbase::common::ObLogger::USER_WARN, errcode, ##args)
 #define LOG_MYSQL_USER_NOTE(errcode, args...)                                 \
   LOG_USER_MYSQL(::oceanbase::common::ObLogger::USER_NOTE, errcode, ##args)
-#define LOG_ORACLE_USER_ERROR(errcode, args...)                                \
-  LOG_USER_ORACLE(::oceanbase::common::ObLogger::USER_ERROR, errcode, ##args)
-#define LOG_ORACLE_USER_WARN(errcode, args...)                                 \
-  LOG_USER_ORACLE(::oceanbase::common::ObLogger::USER_WARN, errcode, ##args)
-#define LOG_ORACLE_USER_NOTE(errcode, args...)                                 \
-  LOG_USER_ORACLE(::oceanbase::common::ObLogger::USER_NOTE, errcode, ##args)
 #define LOG_USER_ERROR(errcode, args...)                                \
   LOG_USER(::oceanbase::common::ObLogger::USER_ERROR, errcode, ##args)
 #define LOG_USER_WARN(errcode, args...)                                 \
@@ -1275,7 +1239,7 @@ LOG_MOD_END(PL)
 //   The rpc initiator needs to faithfully return the rcode content to the client, and cannot rebuild it based on errcode.
 // That is to say: LOG_USER_* is used for the error record of the initial error point, and FORWARD_USER_* is used to pass the error record
 //
-// For details, refer to deps/oblib/src/rpc/obrpc/ob_rpc_proxy.cpp: log_user_error_and_warn() usage
+// For details, refer to the former obcall ob_call_proxy log_user_error_and_warn() usage (RPC transport removed)
 //
 #define FORWARD_USER_ERROR(errcode, args...)                       \
     _LOG_USER_MSG(::oceanbase::common::ObLogger::USER_ERROR, errcode, "%s", ##args)

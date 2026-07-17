@@ -25,7 +25,6 @@ namespace sql
 //////////////////// start ObHashPartInfrasVecGroup //////////////////
 void ObHashPartInfrasVecGroup::reset()
 {
-  tenant_id_ = UINT64_MAX;
   enable_sql_dumped_ = false;
   est_rows_ = 0;
   width_ = 0;
@@ -44,7 +43,7 @@ void ObHashPartInfrasVecGroup::reset()
   hp_infras_free_list_.reset();
 }
 
-int ObHashPartInfrasVecGroup::init(uint64_t tenant_id, bool enable_sql_dumped,
+int ObHashPartInfrasVecGroup::init(bool enable_sql_dumped,
                                    const int64_t est_rows, const int64_t width, const bool unique,
                                    const int64_t ways, ObEvalCtx *eval_ctx,
                                    ObSqlMemMgrProcessor *sql_mem_processor,
@@ -56,7 +55,6 @@ int ObHashPartInfrasVecGroup::init(uint64_t tenant_id, bool enable_sql_dumped,
     ret = OB_ERR_UNEXPECTED;
     SQL_ENG_LOG(WARN, "unexpected status: is null", K(ret));
   } else {
-    tenant_id_ = tenant_id;
     enable_sql_dumped_ = enable_sql_dumped;
     est_rows_ = est_rows;
     width_ = width;
@@ -101,7 +99,7 @@ int ObHashPartInfrasVecGroup::init_one_hp_infras(
       SQL_ENG_LOG(WARN, "failed to alloc hash partition infrastructure", K(ret));
     } else {
       hp_infras = new (hp_infras) HashPartInfrasVec();
-      if (OB_FAIL(hp_infras->init(tenant_id_, enable_sql_dumped_, unique_, true, ways_, batch_size,
+      if (OB_FAIL(hp_infras->init(enable_sql_dumped_, unique_, true, ways_, batch_size,
                                   exprs, sql_mem_processor_, compressor_type_, need_rewind))) {
         SQL_ENG_LOG(WARN, "failed to init hash partition infrastructure", K(ret));
       } else if (OB_FAIL(hp_infras->set_funcs(sort_collations, eval_ctx_))) {
@@ -214,7 +212,7 @@ int ObHashPartInfrasVecGroup::alloc_hp_infras(HashPartInfrasVec *&hp_infras)
 
 //////////////////// start ObHashPartInfrasVecMgr /////////////////////
 
-int ObHashPartInfrasVecMgr::init(uint64_t tenant_id, bool enable_sql_dumped, const int64_t est_rows,
+int ObHashPartInfrasVecMgr::init(bool enable_sql_dumped, const int64_t est_rows,
                                  const int64_t width, const bool unique, const int64_t ways,
                                  ObEvalCtx *eval_ctx, ObSqlMemMgrProcessor *sql_mem_processor,
                                  ObIOEventObserver *io_event_observer,
@@ -224,7 +222,7 @@ int ObHashPartInfrasVecMgr::init(uint64_t tenant_id, bool enable_sql_dumped, con
   if (inited_) {
     ret = OB_INIT_TWICE;
     SQL_ENG_LOG(WARN, "init twice", K(ret));
-  } else if (OB_FAIL(hp_infras_group_.init(tenant_id, enable_sql_dumped, est_rows, width, unique,
+  } else if (OB_FAIL(hp_infras_group_.init(enable_sql_dumped, est_rows, width, unique,
                                            ways, eval_ctx, sql_mem_processor, io_event_observer,
                                            compressor_type))) {
     SQL_ENG_LOG(WARN, "failed to init hash infras group", K(ret));

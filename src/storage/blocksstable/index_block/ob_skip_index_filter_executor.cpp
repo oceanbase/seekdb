@@ -651,7 +651,7 @@ int ObSkipIndexFilterExecutor::black_filter_on_min_max(
              K(null_count), K(min_datum), K(max_datum));
   } else if (use_vectorize &&
              filter.get_op().enable_rich_format_ &&
-             OB_FAIL(init_exprs_uniform_header(filter.get_cg_col_exprs(),
+             OB_FAIL(init_exprs_uniform_header(filter.get_column_exprs(),
                                                filter.get_op().get_eval_ctx(),
                                                filter.get_op().get_eval_ctx().max_batch_size_))) {
     LOG_WARN("Failed to init exprs vector header", K(ret));

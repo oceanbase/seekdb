@@ -111,8 +111,7 @@ public:
   static const int64_t MAX_BATCH_SIZE = 65536;
   static const int64_t DEFAULT_BATCH_SIZE = 256;
   ObTableLoadParam()
-    : tenant_id_(common::OB_INVALID_ID),
-      table_id_(common::OB_INVALID_ID),
+    : table_id_(common::OB_INVALID_ID),
       parallel_(0),
       session_count_(0),
       batch_size_(0),
@@ -149,8 +148,7 @@ public:
 
   bool is_valid() const
   {
-    return common::OB_INVALID_ID != tenant_id_ &&
-           common::OB_INVALID_ID != table_id_ &&
+    return common::OB_INVALID_ID != table_id_ &&
            parallel_ > 0 &&
            session_count_ > 0 &&
            batch_size_ > 0 && batch_size_ <= MAX_BATCH_SIZE &&
@@ -172,8 +170,7 @@ public:
            storage::ObDirectLoadLevel::is_type_valid(load_level_);
   }
 
-  TO_STRING_KV(K_(tenant_id),
-               K_(table_id),
+  TO_STRING_KV(K_(table_id),
                K_(parallel),
                K_(session_count),
                K_(batch_size),
@@ -196,7 +193,6 @@ public:
                K_(task_need_sort));
 
 public:
-  uint64_t tenant_id_;
   uint64_t table_id_;
   int64_t parallel_;
   int32_t session_count_;

@@ -28,6 +28,7 @@
 #else
 #include <icu/i18n/unicode/uregex.h>
 #endif
+#include <unicode/ustring.h>
 #include "sql/engine/expr/ob_expr_operator.h"
 
 // this regex is compatible with mysql 8.0
@@ -125,6 +126,33 @@ public:
                               uint32_t &flags);
 
   static int check_need_utf8(ObRawExpr *expr, bool &is_nstring);
+
+  static inline common::ObCollationType get_regexp_calc_collation(const common::ObCollationType res_cs_type,
+                                                                  const bool is_case_sensitive)
+  {
+    return common::CS_TYPE_BINARY == res_cs_type
+        ? common::CS_TYPE_BINARY
+        : (is_case_sensitive ? common::CS_TYPE_UTF8MB4_BIN : common::CS_TYPE_UTF8MB4_GENERAL_CI);
+  }
+
+  static inline bool is_regexp_calc_collation(const common::ObCollationType cs_type)
+  {
+    return common::CS_TYPE_BINARY == cs_type
+        || common::CS_TYPE_UTF8MB4_GENERAL_CI == cs_type
+        || common::CS_TYPE_UTF8MB4_BIN == cs_type
+        || common::CS_TYPE_UTF16_GENERAL_CI == cs_type
+        || common::CS_TYPE_UTF16_BIN == cs_type;
+  }
+
+  static int convert_to_regexp_utf16(common::ObIAllocator &alloc,
+                                     const common::ObString &src,
+                                     const common::ObCollationType src_coll,
+                                     common::ObString &dst);
+
+  static int convert_from_regexp_utf16(common::ObIAllocator &alloc,
+                                       const common::ObString &src,
+                                       const common::ObCollationType dst_coll,
+                                       common::ObString &dst);
 
   static inline bool is_binary_string(const ObExprResType &type) {
     return CS_TYPE_BINARY == type.get_collation_type() && (ObVarcharType == type.get_type() || ObHexStringType == type.get_type());

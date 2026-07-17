@@ -167,7 +167,6 @@ TEST_F(TestMdsTableFlush, flusher_for_all_order_with_enough_memory) {
     MdsTableHandle mds_table;
     ASSERT_EQ(OB_SUCCESS, mds_table.init<UnitTestMdsTable>(MdsAllocator::get_instance(),
                                                             v_key[i].tablet_id_,
-                                                            share::ObLSID(1),
                                                             share::SCN::min_scn(),
                                                             (ObTabletPointer*)0x111,
                                                             &mgr));
@@ -208,7 +207,6 @@ TEST_F(TestMdsTableFlush, flusher_for_all_order_with_limitted_memory_reserve_fai
     MdsTableHandle mds_table;
     ASSERT_EQ(OB_SUCCESS, mds_table.init<UnitTestMdsTable>(MdsAllocator::get_instance(),
                                                             v_key[i].tablet_id_,
-                                                            share::ObLSID(1),
                                                             share::SCN::min_scn(),
                                                             (ObTabletPointer*)0x111,
                                                             &mgr));
@@ -253,7 +251,6 @@ TEST_F(TestMdsTableFlush, flusher_for_one) {
 //     MdsTableHandle mds_table;
 //     ASSERT_EQ(OB_SUCCESS, mds_table.init<UnitTestMdsTable>(MdsAllocator::get_instance(),
 //                                                            v_key[i].tablet_id_,
-//                                                            share::ObLSID(1),
 //                                                            share::SCN::min_scn(),
 //                                                            (ObTabletPointer*)0x111,
 //                                                            &mgr));
@@ -280,7 +277,6 @@ TEST_F(TestMdsTableFlush, flusher_for_one) {
 //       MdsTableHandle mds_table;
 //       ASSERT_EQ(OB_SUCCESS, mds_table.init<UnitTestMdsTable>(MdsAllocator::get_instance(),
 //                                                              v_key[i].tablet_id_,
-//                                                              share::ObLSID(1),
 //                                                              share::SCN::min_scn(),
 //                                                              (ObTabletPointer*)0x111,
 //                                                              &mgr));

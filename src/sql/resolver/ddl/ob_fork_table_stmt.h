@@ -31,14 +31,14 @@ public:
   ObForkTableStmt();
   virtual ~ObForkTableStmt();
 
-  const obrpc::ObForkTableArg &get_fork_table_arg() const { return fork_table_arg_; }
-  obrpc::ObForkTableArg &get_fork_table_arg() { return fork_table_arg_; }
+  const obcall::ObForkTableArg &get_fork_table_arg() const { return fork_table_arg_; }
+  obcall::ObForkTableArg &get_fork_table_arg() { return fork_table_arg_; }
   virtual bool cause_implicit_commit() const { return true; }
-  virtual obrpc::ObDDLArg &get_ddl_arg() { return fork_table_arg_; }
+  virtual obcall::ObDDLArg &get_ddl_arg() { return fork_table_arg_; }
 
   TO_STRING_KV(K_(stmt_type), K_(fork_table_arg));
 private:
-  obrpc::ObForkTableArg fork_table_arg_;
+  obcall::ObForkTableArg fork_table_arg_;
   DISALLOW_COPY_AND_ASSIGN(ObForkTableStmt);
 };
 
@@ -46,3 +46,4 @@ private:
 }
 
 #endif //OCEANBASE_SQL_RESOLVER_DDL_OB_FORK_TABLE_STMT_
+

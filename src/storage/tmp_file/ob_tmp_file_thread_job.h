@@ -64,7 +64,7 @@ private:
   ObThreadCond swap_cond_;
 };
 
-// record statistics for flush tasks in flushTG thread
+// record statistics for flush tasks in flush thread thread
 class ObTmpFileFlushMonitor
 {
 public:
@@ -94,7 +94,7 @@ private:
   int64_t f5_cnt_;
 };
 
-// record statistics for swap tasks in swapTG thread
+// record statistics for swap tasks in swap thread thread
 class ObTmpFileSwapMonitor
 {
 public:

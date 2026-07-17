@@ -71,15 +71,15 @@ int ObBlockInfoSet::init(
       const int64_t shared_data_bucket_num)
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(meta_block_info_set_.create(meta_bucket_num, "ObBlockInfoSet", "ObBlockSetNode", MTL_ID()))) {
+  if (OB_FAIL(meta_block_info_set_.create(meta_bucket_num, "ObBlockInfoSet", "ObBlockSetNode"))) {
     LOG_WARN("fail to create meta block id set", K(ret), K(meta_bucket_num));
-  } else if (OB_FAIL(data_block_info_set_.create(data_bucket_num, "ObBlockInfoSet", "ObBlockSetNode", MTL_ID()))) {
+  } else if (OB_FAIL(data_block_info_set_.create(data_bucket_num, "ObBlockInfoSet", "ObBlockSetNode"))) {
     LOG_WARN("fail to create data block id set", K(ret), K(data_bucket_num));
-  } else if (OB_FAIL(backup_block_info_set_.create(data_bucket_num, "ObBlockInfoSet", "ObBlockSetNode", MTL_ID()))) {
+  } else if (OB_FAIL(backup_block_info_set_.create(data_bucket_num, "ObBlockInfoSet", "ObBlockSetNode"))) {
     LOG_WARN("fail to create quick_resotre_remote_block id set", K(ret), K(data_bucket_num));
-  } else if (OB_FAIL(shared_meta_block_info_set_.create(shared_meta_bucket_num, "ObBlockInfoSet", "ObBlockSetNode", MTL_ID()))) {
+  } else if (OB_FAIL(shared_meta_block_info_set_.create(shared_meta_bucket_num, "ObBlockInfoSet", "ObBlockSetNode"))) {
     LOG_WARN("fail to create shared meta block id set", K(ret), K(shared_meta_bucket_num));
-  } else if (OB_FAIL(clustered_data_block_info_map_.create(shared_data_bucket_num, "ObBlockInfoMap", "ObBlockMapNode", MTL_ID()))) {
+  } else if (OB_FAIL(clustered_data_block_info_map_.create(shared_data_bucket_num, "ObBlockInfoMap", "ObBlockMapNode"))) {
     LOG_WARN("fail to create shared data block id set", K(ret), K(shared_meta_bucket_num));
   }
   return ret;
@@ -349,7 +349,7 @@ int ObTabletMacroInfo::deserialize(ObArenaAllocator &allocator, const char *buf,
   } else if (FALSE_IT(crc = ob_crc64(buf + new_pos, meta_header.payload_size_))) {
   } else if (OB_UNLIKELY(crc != meta_header.checksum_)) {
     ret = OB_PHYSIC_CHECKSUM_ERROR;
-    LOG_WARN("tablet macro info's checksum doesn't match", K(ret), K(meta_header), K(crc));
+    LOG_ERROR("tablet macro info's checksum doesn't match", K(ret), K(meta_header), K(crc));
   } else if (OB_FAIL(serialization::decode_i64(buf, data_len, new_pos, &version))) {
     LOG_WARN("fail to deserialize version", K(ret), KP(buf), K(data_len));
   } else if (OB_UNLIKELY(TABLET_MACRO_INFO_VERSION != version)) {

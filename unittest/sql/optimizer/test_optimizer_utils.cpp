@@ -91,8 +91,7 @@ int TestOptimizerUtils::generate_logical_plan(ObResultSet &result, //ObIAllocato
   session_info_.set_user_session();
   if (OB_FAIL(schema_checker.init(sql_schema_guard_))) {
     LOG_WARN("fail to init schema_checker", K(ret));
-  } else if (OB_FAIL(MockCacheObjectFactory::alloc(
-              phy_plan, session_info_.get_effective_tenant_id()))) {
+  } else if (OB_FAIL(MockCacheObjectFactory::alloc(phy_plan))) {
   } else if (OB_ISNULL(phy_plan)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("Failed to allocate phy plan", K(ret));
@@ -234,7 +233,6 @@ int TestOptimizerUtils::generate_logical_plan(ObResultSet &result, //ObIAllocato
                     static_cast<ObIAllocator &>(allocator_),
                     &param_store,
                     addr,
-                    NULL,
                     stmt->get_query_ctx()->get_global_hint(),
                     expr_factory_,
                     sql_stmt,
@@ -486,13 +484,12 @@ void TestOptimizerUtils::formalize_tmp_file(const char *tmp_file)
   }
 }
 
-int MockCacheObjectFactory::alloc(ObPhysicalPlan *&plan,
-                                uint64_t tenant_id)
+int MockCacheObjectFactory::alloc(ObPhysicalPlan *&plan)
 {
   int ret = OB_SUCCESS;
   ObILibCacheObject *cache_obj = NULL;
-  if (OB_FAIL(alloc(cache_obj, ObLibCacheNameSpace::NS_CRSR, tenant_id))) {
-    LOG_WARN("alloc physical plan failed", K(ret), K(tenant_id));
+  if (OB_FAIL(alloc(cache_obj, ObLibCacheNameSpace::NS_CRSR))) {
+    LOG_WARN("alloc physical plan failed", K(ret));
   } else if (OB_ISNULL(cache_obj) ||
              OB_UNLIKELY(ObLibCacheNameSpace::NS_CRSR != cache_obj->get_ns())) {
     ret = OB_ERR_UNEXPECTED;
@@ -508,13 +505,12 @@ int MockCacheObjectFactory::alloc(ObPhysicalPlan *&plan,
 }
 
 int MockCacheObjectFactory::alloc(ObPLFunction *&func,
-                                ObLibCacheNameSpace ns,
-                                uint64_t tenant_id)
+                                ObLibCacheNameSpace ns)
 {
   int ret = OB_SUCCESS;
   ObILibCacheObject *cache_obj = NULL;
-  if (OB_FAIL(alloc(cache_obj, ns, tenant_id))) {
-    LOG_WARN("alloc cache object failed", K(ret), K(tenant_id));
+  if (OB_FAIL(alloc(cache_obj, ns))) {
+    LOG_WARN("alloc cache object failed", K(ret));
   } else if (OB_ISNULL(cache_obj) ||
              OB_UNLIKELY(ObLibCacheNameSpace::NS_PRCR != cache_obj->get_ns())) {
     ret = OB_ERR_UNEXPECTED;
@@ -529,13 +525,12 @@ int MockCacheObjectFactory::alloc(ObPLFunction *&func,
   return ret;
 }
 
-int MockCacheObjectFactory::alloc(ObPLPackage *&package,
-                                uint64_t tenant_id)
+int MockCacheObjectFactory::alloc(ObPLPackage *&package)
 {
   int ret = OB_SUCCESS;
   ObILibCacheObject *cache_obj = NULL;
-  if (OB_FAIL(alloc(cache_obj, ObLibCacheNameSpace::NS_PKG, tenant_id))) {
-    LOG_WARN("alloc cache object failed", K(ret), K(tenant_id));
+  if (OB_FAIL(alloc(cache_obj, ObLibCacheNameSpace::NS_PKG))) {
+    LOG_WARN("alloc cache object failed", K(ret));
   } else if (OB_ISNULL(cache_obj) ||
              OB_UNLIKELY(ObLibCacheNameSpace::NS_PKG != cache_obj->get_ns())) {
     ret = OB_ERR_UNEXPECTED;
@@ -551,13 +546,12 @@ int MockCacheObjectFactory::alloc(ObPLPackage *&package,
 }
 
 int MockCacheObjectFactory::alloc(ObILibCacheObject *&cache_obj,
-                                ObLibCacheNameSpace ns, uint64_t tenant_id)
+                                ObLibCacheNameSpace ns)
 {
   int ret = OB_SUCCESS;
   void *buf = NULL;
 
   ObMemAttr mem_attr;
-  mem_attr.tenant_id_ = tenant_id;
   if (ObLibCacheNameSpace::NS_PRCR == ns
     || ObLibCacheNameSpace::NS_PKG == ns
     || ObLibCacheNameSpace::NS_ANON == ns) {
@@ -610,7 +604,6 @@ int MockCacheObjectFactory::alloc(ObILibCacheObject *&cache_obj,
       OB_LOG(ERROR, "fail to alloc cache obj", K(ret), KP(buf), K(ns));
     } else {
       cache_obj->inc_ref_count(PLAN_GEN_HANDLE);
-      cache_obj->set_tenant_id(tenant_id);
     }
   }
 

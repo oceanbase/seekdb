@@ -122,11 +122,6 @@
       ],
       "tenant": [
         {
-          "name": "default_table_store_format",
-          "value": "column",
-          "comment": "default to column format for AP"
-        },
-        {
           "name": "_io_read_batch_size",
           "value": "128K",
           "comment": "Maximum batch size in one read io request"
@@ -176,7 +171,7 @@
   },
   {
     "scenario": "kv",
-    "comment": "for key-value workloads and hbase-like wide-column workloads, which commonly experience very high throughput and are sensitive to latency",
+    "comment": "for key-value workloads with very high throughput and latency sensitivity",
     "parameters": {
       "cluster": [
         {
@@ -210,11 +205,6 @@
           "name": "default_table_merge_engine",
           "value": "PARTIAL_UPDATE",
           "comment": "use partial_update merge engine for kv mode"
-        },
-        {
-          "name": "enable_auto_split",
-          "value": true,
-          "comment": "open auto split for kv mode"
         }
       ]
     }

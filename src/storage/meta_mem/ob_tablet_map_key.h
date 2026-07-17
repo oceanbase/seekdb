@@ -19,7 +19,6 @@
 
 #include <stdint.h>
 #include "lib/utility/ob_print_utils.h"
-#include "share/ob_ls_id.h"
 #include "common/ob_tablet_id.h"
 
 namespace oceanbase
@@ -30,7 +29,7 @@ class ObTabletMapKey final
 {
 public:
   ObTabletMapKey();
-  ObTabletMapKey(const share::ObLSID &ls_id, const common::ObTabletID &tablet_id);
+  explicit ObTabletMapKey(const common::ObTabletID &tablet_id);
   ~ObTabletMapKey();
 
   void reset();
@@ -42,20 +41,19 @@ public:
   int hash(uint64_t &hash_val) const;
   uint64_t hash() const;
 
-  TO_STRING_KV(K_(ls_id), K_(tablet_id));
+  TO_STRING_KV(K_(tablet_id));
 public:
-  share::ObLSID ls_id_;
   common::ObTabletID tablet_id_;
 };
 
 inline bool ObTabletMapKey::is_valid() const
 {
-  return ls_id_.is_valid() && tablet_id_.is_valid();
+  return tablet_id_.is_valid();
 }
 
 inline bool ObTabletMapKey::operator ==(const ObTabletMapKey &other) const
 {
-  return ls_id_ == other.ls_id_ && tablet_id_ == other.tablet_id_;
+  return tablet_id_ == other.tablet_id_;
 }
 
 inline bool ObTabletMapKey::operator !=(const ObTabletMapKey &other) const
@@ -65,15 +63,15 @@ inline bool ObTabletMapKey::operator !=(const ObTabletMapKey &other) const
 
 inline bool ObTabletMapKey::operator <(const ObTabletMapKey &other) const
 {
-  return ls_id_ < other.ls_id_ && tablet_id_ < other.tablet_id_;
+  return tablet_id_ < other.tablet_id_;
 }
 
 class ObDieingTabletMapKey final
 {
 public:
   ObDieingTabletMapKey();
-  ObDieingTabletMapKey(const uint64_t tablet_id, const int64_t transfer_seq);
-  ObDieingTabletMapKey(const ObTabletMapKey &tablet_map_key, const int64_t transfer_seq);
+  explicit ObDieingTabletMapKey(const uint64_t tablet_id);
+  explicit ObDieingTabletMapKey(const ObTabletMapKey &tablet_map_key);
   ~ObDieingTabletMapKey();
 
   void reset();
@@ -85,20 +83,19 @@ public:
   int hash(uint64_t &hash_val) const;
   uint64_t hash() const;
 
-  TO_STRING_KV(K_(tablet_id), K_(transfer_seq));
+  TO_STRING_KV(K_(tablet_id));
 private:
   uint64_t tablet_id_;
-  int64_t transfer_seq_;
 };
 
 inline bool ObDieingTabletMapKey::is_valid() const
 {
-  return ObTabletID::INVALID_TABLET_ID != tablet_id_ && transfer_seq_ >= 0;
+  return ObTabletID::INVALID_TABLET_ID != tablet_id_;
 }
 
 inline bool ObDieingTabletMapKey::operator ==(const ObDieingTabletMapKey &other) const
 {
-  return tablet_id_ == other.tablet_id_ && transfer_seq_ == other.transfer_seq_;
+  return tablet_id_ == other.tablet_id_;
 }
 
 inline bool ObDieingTabletMapKey::operator !=(const ObDieingTabletMapKey &other) const
@@ -108,7 +105,7 @@ inline bool ObDieingTabletMapKey::operator !=(const ObDieingTabletMapKey &other)
 
 inline bool ObDieingTabletMapKey::operator <(const ObDieingTabletMapKey &other) const
 {
-  return tablet_id_ < other.tablet_id_ && transfer_seq_ < other.transfer_seq_;
+  return tablet_id_ < other.tablet_id_;
 }
 
 } // namespace storage

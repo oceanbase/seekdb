@@ -24,21 +24,21 @@ Please refer to [build-and-run](./build-and-run.md) to compile the seekdb databa
 You can choose to test in full or specify a `case` or `suite` for testing. For the specific meaning of parameters used when executing the obd.sh script, please refer to [Appendix](#Appendix).
 
 * Full test, that is, run all suites in the `mysql_test/test_suite` directory, please refer to the following command.
-
+  
   ```shell
   [admin@obtest ~]$ cd oceanbase/tools/deploy
   [admin@obtest deploy]$ ./obd.sh mysqltest -n test --all
   ```
 
 * Specify case for testing, for example, specify `mysql_test/test_suite/alter/t/alter_log_archive_option.test`. Please refer to the following command.
-
+  
   ```shell
   [admin@obtest ~]$ cd oceanbase/tools/deploy
   [admin@obtest deploy]$ ./obd.sh mysqltest -n test --test-dir ./mysql_test/test_suite/alter/t --result-dir ./mysql_test/test_suite/alter/r --test-set alter_log_archive_option
   ```
 
 * To specify a suite test, for example, to execute a test on a specified suite in the `mysql_test/test_suite` directory, please refer to the following command.
-
+  
   ```shell
   [admin@obtest ~]$ cd oceanbase/tools/deploy
   [admin@obtest deploy]$ ./obd.sh mysqltest -n test --suite acs

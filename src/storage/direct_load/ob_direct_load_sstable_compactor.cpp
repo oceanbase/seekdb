@@ -54,9 +54,9 @@ ObDirectLoadSSTableCompactor::ObDirectLoadSSTableCompactor()
     end_key_allocator_("TLD_ERowkey"),
     is_inited_(false)
 {
-  fragments_.set_tenant_id(MTL_ID());
-  start_key_allocator_.set_tenant_id(MTL_ID());
-  end_key_allocator_.set_tenant_id(MTL_ID());
+  
+  
+  
 }
 
 ObDirectLoadSSTableCompactor::~ObDirectLoadSSTableCompactor()

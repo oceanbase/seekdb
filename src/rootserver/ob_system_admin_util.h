@@ -36,12 +36,8 @@ class ObMySQLProxy;
 class ObConfigManager;
 }
 
-namespace obrpc
+namespace obcall
 {
-class ObSrvRpcProxy;
-class ObCommonRpcProxy;
-struct ObAdminChangeReplicaArg;
-struct ObAdminMigrateReplicaArg;
 struct ObServerZoneArg;
 struct ObAdminMergeArg;
 struct ObAdminClearRoottableArg;
@@ -83,7 +79,7 @@ const static char * const NOT_ALLOW_ENABLE_ONE_PHASE_COMMIT = "enable_one_phase_
 struct ObSystemAdminCtx
 {
   ObSystemAdminCtx()
-      : rs_status_(NULL), rpc_proxy_(NULL), sql_proxy_(NULL),
+      : rs_status_(NULL), sql_proxy_(NULL),
       schema_service_(NULL),
       ddl_service_(NULL), config_mgr_(NULL),
       root_service_(NULL),
@@ -93,7 +89,6 @@ struct ObSystemAdminCtx
   bool is_inited() const { return inited_; }
 
   ObRsStatus *rs_status_;
-  obrpc::ObSrvRpcProxy *rpc_proxy_;
   common::ObMySQLProxy *sql_proxy_;
   share::schema::ObMultiVersionSchemaService *schema_service_;
   ObDDLService *ddl_service_;
@@ -124,8 +119,8 @@ public:
   explicit ObAdminCallServer(const ObSystemAdminCtx &ctx) : ObSystemAdminUtil(ctx) {}
   virtual ~ObAdminCallServer() {}
 
-  int get_server_list(const obrpc::ObServerZoneArg &arg, ObIArray<ObAddr> &server_list);
-  int call_all(const obrpc::ObServerZoneArg &arg);
+  int get_server_list(const obcall::ObServerZoneArg &arg, ObIArray<ObAddr> &server_list);
+  int call_all(const obcall::ObServerZoneArg &arg);
 
   virtual int call_server(const common::ObAddr &server) = 0;
 private:
@@ -138,22 +133,10 @@ public:
   explicit ObAdminRefreshMemStat(const ObSystemAdminCtx &ctx) : ObAdminCallServer(ctx) {}
   virtual ~ObAdminRefreshMemStat() {}
 
-  int execute(const obrpc::ObAdminRefreshMemStatArg &arg);
+  int execute(const obcall::ObAdminRefreshMemStatArg &arg);
   virtual int call_server(const common::ObAddr &server);
 private:
   DISALLOW_COPY_AND_ASSIGN(ObAdminRefreshMemStat);
-};
-
-class ObAdminWashMemFragmentation : public ObAdminCallServer
-{
-public:
-  explicit ObAdminWashMemFragmentation(const ObSystemAdminCtx &ctx) : ObAdminCallServer(ctx) {}
-  virtual ~ObAdminWashMemFragmentation() {}
-
-  int execute(const obrpc::ObAdminWashMemFragmentationArg &arg);
-  virtual int call_server(const common::ObAddr &server);
-private:
-  DISALLOW_COPY_AND_ASSIGN(ObAdminWashMemFragmentation);
 };
 
 class ObAdminClearMergeError: public ObSystemAdminUtil
@@ -162,7 +145,7 @@ public:
   explicit ObAdminClearMergeError(const ObSystemAdminCtx &ctx) : ObSystemAdminUtil(ctx) {}
   virtual ~ObAdminClearMergeError() {}
 
-  int execute(const obrpc::ObAdminMergeArg &arg);
+  int execute(const obcall::ObAdminMergeArg &arg);
 private:
   DISALLOW_COPY_AND_ASSIGN(ObAdminClearMergeError);
 };
@@ -173,7 +156,7 @@ public:
   explicit ObAdminMerge(const ObSystemAdminCtx &ctx) : ObSystemAdminUtil(ctx) {}
   virtual ~ObAdminMerge() {}
 
-  int execute(const obrpc::ObAdminMergeArg &arg);
+  int execute(const obcall::ObAdminMergeArg &arg);
 private:
   DISALLOW_COPY_AND_ASSIGN(ObAdminMerge);
 };
@@ -184,7 +167,7 @@ public:
   explicit ObAdminClearRoottable(const ObSystemAdminCtx &ctx) : ObSystemAdminUtil(ctx) {}
   virtual ~ObAdminClearRoottable() {}
 
-  int execute(const obrpc::ObAdminClearRoottableArg &arg);
+  int execute(const obcall::ObAdminClearRoottableArg &arg);
 private:
   DISALLOW_COPY_AND_ASSIGN(ObAdminClearRoottable);
 };
@@ -196,7 +179,7 @@ public:
       : ObAdminCallServer(ctx), schema_version_(0), schema_info_() {}
   virtual ~ObAdminRefreshSchema() {}
 
-  int execute(const obrpc::ObAdminRefreshSchemaArg &arg);
+  int execute(const obcall::ObAdminRefreshSchemaArg &arg);
 
   virtual int call_server(const common::ObAddr &server);
 private:
@@ -213,7 +196,7 @@ public:
   explicit ObAdminSetConfig(const ObSystemAdminCtx &ctx) : ObSystemAdminUtil(ctx) {}
   virtual ~ObAdminSetConfig() {}
 
-  int execute(obrpc::ObAdminSetConfigArg &arg);
+  int execute(obcall::ObAdminSetConfigArg &arg);
 
 private:
   class ObServerConfigChecker : public common::ObServerConfig
@@ -221,34 +204,12 @@ private:
   };
 
 private:
-  int verify_config(obrpc::ObAdminSetConfigArg &arg);
-  int update_config(obrpc::ObAdminSetConfigArg &arg);
-  int update_sys_config_(const obrpc::ObAdminSetConfigItem &item);
+  int verify_config(obcall::ObAdminSetConfigArg &arg);
+  int update_config(obcall::ObAdminSetConfigArg &arg);
+  int update_sys_config_(const obcall::ObAdminSetConfigItem &item);
 
 private:
   DISALLOW_COPY_AND_ASSIGN(ObAdminSetConfig);
-};
-
-class ObAdminUpgradeCmd : public ObSystemAdminUtil
-{
-public:
-  explicit ObAdminUpgradeCmd(const ObSystemAdminCtx &ctx) : ObSystemAdminUtil(ctx) {}
-  virtual ~ObAdminUpgradeCmd() {}
-
-  int execute(const obrpc::Bool &upgrade);
-private:
-  DISALLOW_COPY_AND_ASSIGN(ObAdminUpgradeCmd);
-};
-
-class ObAdminRollingUpgradeCmd : public ObSystemAdminUtil
-{
-public:
-  explicit ObAdminRollingUpgradeCmd(const ObSystemAdminCtx &ctx) : ObSystemAdminUtil(ctx) {}
-  virtual ~ObAdminRollingUpgradeCmd() {}
-
-  int execute(const obrpc::ObAdminRollingUpgradeArg &arg);
-private:
-  DISALLOW_COPY_AND_ASSIGN(ObAdminRollingUpgradeCmd);
 };
 
 #define OB_INNER_JOB_DEF(JOB)                                \
@@ -269,7 +230,7 @@ public:
     : ObAdminCallServer(ctx) {}
   virtual ~ObAdminRefreshIOCalibration() {}
 
-  int execute(const obrpc::ObAdminRefreshIOCalibrationArg &arg);
+  int execute(const obcall::ObAdminRefreshIOCalibrationArg &arg);
   int call_server(const common::ObAddr &server);
 
 private:
@@ -284,7 +245,7 @@ public:
   {}
 
   int get_all_servers(common::ObIArray<ObAddr> &servers);
-  int get_tenant_servers(const uint64_t tenant_id, common::ObIArray<ObAddr> &servers);
+  int get_tenant_servers(common::ObIArray<ObAddr> &servers);
 
 private:
   DISALLOW_COPY_AND_ASSIGN(ObTenantServerAdminUtil);
@@ -298,9 +259,9 @@ public:
   {}
   virtual ~ObAdminFlushCache() {}
 
-  int call_server(const common::ObAddr &addr, const obrpc::ObFlushCacheArg &arg);
+  int call_server(const common::ObAddr &addr, const obcall::ObFlushCacheArg &arg);
 
-  int execute(const obrpc::ObAdminFlushCacheArg &arg);
+  int execute(const obcall::ObAdminFlushCacheArg &arg);
 private:
   DISALLOW_COPY_AND_ASSIGN(ObAdminFlushCache);
 };
@@ -309,16 +270,16 @@ class ObAdminSetTP : public ObAdminCallServer
 {
 public:
   explicit ObAdminSetTP(const ObSystemAdminCtx &ctx,
-                        obrpc::ObAdminSetTPArg arg)
+                        obcall::ObAdminSetTPArg arg)
      : ObAdminCallServer(ctx),
        arg_(arg)
        {}
   virtual ~ObAdminSetTP() {}
 
-  int execute(const obrpc::ObAdminSetTPArg &arg);
+  int execute(const obcall::ObAdminSetTPArg &arg);
   virtual int call_server(const common::ObAddr &server);
 private:
-  obrpc::ObAdminSetTPArg arg_;
+  obcall::ObAdminSetTPArg arg_;
   DISALLOW_COPY_AND_ASSIGN(ObAdminSetTP);
 };
 

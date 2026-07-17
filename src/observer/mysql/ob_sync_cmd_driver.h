@@ -43,8 +43,7 @@ public:
                   const sql::ObSqlCtx &ctx,
                   sql::ObSQLSessionInfo &session,
                   ObQueryRetryCtrl &retry_ctrl,
-                  ObIMPPacketSender &sender,
-                  bool is_prexecute = false);
+                  ObIMPPacketSender &sender);
   virtual ~ObSyncCmdDriver();
 
   int send_eof_packet(bool has_more_result);
@@ -59,7 +58,7 @@ public:
 private:
   /* functions */
   int process_schema_version_changes(const ObMySQLResultSet &result);
-  int check_and_refresh_schema(uint64_t tenant_id);
+  int check_and_refresh_schema();
   int response_query_result(ObMySQLResultSet &result);
   void free_output_row(ObMySQLResultSet &result);
   /* variables */
@@ -73,4 +72,3 @@ private:
 }
 #endif /* OCEANBASE_OBSERVER_MYSQL_SYNC_CMD_DRIVER_ */
 //// end of header file
-

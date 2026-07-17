@@ -16,9 +16,9 @@
 
 #pragma once
 
-#include "share/vector/ob_bitmap_null_vector_base.h"
-#include "share/vector/ob_discrete_base.h"
-#include "share/vector/ob_uniform_base.h"
+#include "sql/engine/vector/ob_bitmap_null_vector_base.h"
+#include "sql/engine/vector/ob_discrete_base.h"
+#include "sql/engine/vector/ob_uniform_base.h"
 #include "storage/direct_load/ob_direct_load_vector.h"
 
 namespace oceanbase
@@ -414,7 +414,7 @@ private:
   inline void _adapt_vector_batch(VEC *vec, const int64_t offset, const int64_t size);
   template <typename VEC>
   inline void _adapt_vector_selective(VEC *vec, const uint16_t *selector, const int64_t size);
-  // ObDiscreteBase: 将null对应的len设置为0
+  // ObDiscreteBase: set len to 0 for null
   template <>
   inline void _adapt_vector_batch(ObDiscreteBase *vec, const int64_t offset, const int64_t size)
   {

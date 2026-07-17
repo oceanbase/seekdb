@@ -145,7 +145,7 @@ public:
       ret = OB_BUF_NOT_ENOUGH;
     } else {
       buf[pos++] = MAGIC_NUMBER;
-      ret = mds::ObMdsSerializeUtil::mds_key_serialize(medium_snapshot_, buf, buf_len, pos);
+      ret = storage::mds::ObMdsSerializeUtil::mds_key_serialize(medium_snapshot_, buf, buf_len, pos);
     }
     return ret;
   }
@@ -160,7 +160,7 @@ public:
       if (magic_number != MAGIC_NUMBER) {
         ob_abort();// compat case, just abort for fast fail
       } else {
-        ret = mds::ObMdsSerializeUtil::mds_key_deserialize(buf, buf_len, pos, tmp);
+        ret = storage::mds::ObMdsSerializeUtil::mds_key_deserialize(buf, buf_len, pos, tmp);
       }
     }
     if (OB_SUCC(ret)) {
@@ -168,7 +168,7 @@ public:
     }
     return ret;
   }
-  int64_t mds_get_serialize_size() const { return sizeof(MAGIC_NUMBER) + mds::ObMdsSerializeUtil::mds_key_get_serialize_size(medium_snapshot_); }
+  int64_t mds_get_serialize_size() const { return sizeof(MAGIC_NUMBER) + storage::mds::ObMdsSerializeUtil::mds_key_get_serialize_size(medium_snapshot_); }
 
   TO_STRING_KV(K_(medium_snapshot));
 private:
@@ -210,7 +210,6 @@ public:
   static inline bool is_major_compaction(const ObCompactionType type) { return MAJOR_COMPACTION == type; }
   inline bool is_major_compaction() const { return is_major_compaction((ObCompactionType)compaction_type_); }
   inline bool is_medium_compaction() const { return is_medium_compaction((ObCompactionType)compaction_type_); }
-  inline bool is_invalid_mview_compaction() const { return storage_schema_.is_mv_major_refresh_table() && medium_merge_reason_ != ObAdaptiveMergePolicy::TENANT_MAJOR; }
   void clear_parallel_range()
   {
     parallel_merge_info_.clear();
@@ -218,7 +217,7 @@ public:
   }
   void reset();
   bool is_valid() const;
-  bool from_cur_cluster() const { return cluster_id_ == GCONF.cluster_id && tenant_id_ == MTL_ID(); }
+  bool from_cur_cluster() const { return cluster_id_ == GCONF.cluster_id && true; }
   bool cluster_id_equal() const { return cluster_id_ == GCONF.cluster_id; } // for compat
   bool should_throw_for_standby_cluster() const;
   // serialize & deserialize
@@ -254,8 +253,8 @@ public:
       uint64_t contain_parallel_range_          : SCS_ONE_BIT;
       uint64_t medium_merge_reason_             : 8;
       uint64_t is_schema_changed_               : SCS_ONE_BIT;
-      uint64_t tenant_id_                       : 16; // record tenant_id of ls primary_leader, just for throw medium
-      uint64_t co_major_merge_type_             : 4;
+       // record tenant of ls primary_leader, just for throw medium
+      uint64_t unused_co_major_merge_type_      : 4;
       uint64_t is_skip_tenant_major_            : SCS_ONE_BIT;
       uint64_t contain_mds_filter_info_         : SCS_ONE_BIT;
       uint64_t reserved_                        : SCS_RESERVED_BITS;

@@ -19,7 +19,6 @@
 
 #include "share/ob_rpc_struct.h"
 #include "share/config/ob_server_config.h"
-#include "rootserver/ob_rs_async_rpc_proxy.h"
 
 namespace oceanbase 
 {
@@ -58,14 +57,14 @@ struct ObSysStat
   ObSysStat();
 
   // set values after bootstrap
-  int set_initial_values(const uint64_t tenant_id);
+  int set_initial_values();
 
   TO_STRING_KV(K_(item_list));
 
   ItemList item_list_;
 
   // only root tenant own
-  Item ob_max_used_tenant_id_;
+  Item ob_max_used_id_;
   Item ob_max_used_unit_config_id_;
   Item ob_max_used_resource_pool_id_;
   Item ob_max_used_unit_id_;
@@ -76,8 +75,6 @@ struct ObSysStat
   // all tenant own
   Item ob_max_used_normal_rowid_table_tablet_id_;
   Item ob_max_used_extended_rowid_table_tablet_id_;
-  Item ob_max_used_ls_id_;
-  Item ob_max_used_ls_group_id_;
   Item ob_max_used_sys_pl_object_id_;
   Item ob_max_used_object_id_;
   Item ob_max_used_rewrite_rule_version_;
@@ -86,10 +83,10 @@ class ObTenantDDLService
 {
 public:
   ObTenantDDLService() : inited_(false), stopped_(false), ddl_service_(NULL),
-  rpc_proxy_(NULL), common_rpc_(NULL), schema_service_(NULL),
+  schema_service_(NULL),
   ddl_trans_controller_(NULL) {}
 
-  virtual int create_sys_tenant(const obrpc::ObCreateTenantArg &arg,
+  virtual int create_sys_tenant(const obcall::ObCreateTenantArg &arg,
                                 share::schema::ObTenantSchema &tenant_schema);
   void stop() { stopped_ = true; }
   void restart() { stopped_ = false; }
@@ -97,8 +94,6 @@ public:
 
   int init(
       ObDDLService &ddl_service,
-      obrpc::ObSrvRpcProxy &rpc_proxy,
-      obrpc::ObCommonRpcProxy &common_rpc,
       common::ObMySQLProxy &sql_proxy,
       share::schema::ObMultiVersionSchemaService &schema_service);
 
@@ -119,46 +114,34 @@ public:
   };
 
 public:
-  static int gen_tenant_init_config(
-             const uint64_t tenant_id,
-             const uint64_t compatible_version,
+  static int gen_tenant_init_config(const uint64_t compatible_version,
              common::ObConfigPairs &tenant_config);
   static int notify_init_tenant_config(
-      obrpc::ObSrvRpcProxy &rpc_proxy,
       const common::ObIArray<common::ObConfigPairs> &init_configs);
 
-  static int replace_sys_stat(const uint64_t tenant_id,
-      ObSysStat &sys_stat,
+  static int replace_sys_stat(ObSysStat &sys_stat,
       common::ObISQLClient &trans);
 
 private:
-  int insert_tenant_merge_info_(const share::schema::ObSchemaOperationType op,
-                               const share::schema::ObTenantSchema &tenant_schema,
+  int insert_tenant_merge_info_(const share::schema::ObTenantSchema &tenant_schema,
                                common::ObMySQLTransaction &trans);
-  int set_tenant_compatibility_(const obrpc::ObCreateTenantArg &arg, ObTenantSchema &tenant_schema);
+  int set_tenant_compatibility_(const obcall::ObCreateTenantArg &arg, ObTenantSchema &tenant_schema);
 
-  int init_tenant_sys_stats_(const uint64_t tenant_id,
-      common::ObMySQLTransaction &trans);
+  int init_tenant_sys_stats_(common::ObMySQLTransaction &trans);
 
 private:
   int check_inner_stat();
 
-  int get_tenant_schema_guard_with_version_in_inner_table(const uint64_t tenant_id,
-      share::schema::ObSchemaGetterGuard &schema_guard);
+  int get_tenant_schema_guard_with_version_in_inner_table(share::schema::ObSchemaGetterGuard &schema_guard);
 
-  int publish_schema(const uint64_t tenant_id);
-  int publish_schema(const uint64_t tenant_id, const common::ObAddrIArray &addrs);
+  int publish_schema();
+  int publish_schema(const common::ObAddrIArray &addrs);
 
   int init_system_variables(
-      const obrpc::ObCreateTenantArg &arg,
+      const obcall::ObCreateTenantArg &arg,
       const ObTenantSchema &tenant_schema,
       ObSysVariableSchema &sys_variable_schema);
   int update_mysql_tenant_sys_var(
-      const share::schema::ObTenantSchema &tenant_schema,
-      const share::schema::ObSysVariableSchema &sys_variable,
-      share::schema::ObSysParam *sys_params,
-      int64_t params_capacity);
-  int update_oracle_tenant_sys_var(
       const share::schema::ObTenantSchema &tenant_schema,
       const share::schema::ObSysVariableSchema &sys_variable,
       share::schema::ObSysParam *sys_params,
@@ -172,8 +155,6 @@ private:
   bool inited_;
   volatile bool stopped_;
   ObDDLService *ddl_service_;
-  obrpc::ObSrvRpcProxy *rpc_proxy_;
-  obrpc::ObCommonRpcProxy *common_rpc_;
   common::ObMySQLProxy *sql_proxy_;
   share::schema::ObMultiVersionSchemaService *schema_service_;
   share::schema::ObDDLTransController *ddl_trans_controller_;

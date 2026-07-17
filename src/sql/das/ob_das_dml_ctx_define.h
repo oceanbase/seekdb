@@ -21,7 +21,7 @@
 #include "sql/engine/expr/ob_expr.h"
 #include "sql/engine/basic/ob_chunk_datum_store.h"
 #include "sql/das/ob_das_define.h"
-#include "share/schema/ob_table_dml_param.h"
+#include "storage/ob_table_dml_param.h"
 #include "sql/engine/ob_operator.h"
 #include "sql/resolver/dml/ob_hint.h"
 #include "storage/fts/ob_fts_plugin_helper.h"
@@ -63,7 +63,6 @@ public:
                        K_(is_ignore),
                        K_(is_batch_stmt),
                        K_(is_insert_up),
-                       K_(is_table_api),
                        K_(is_main_table_in_fts_ddl),
                        K_(tz_info),
                        K_(table_param));
@@ -86,8 +85,8 @@ public:
       uint64_t is_ignore_                       : 1;
       uint64_t is_batch_stmt_                   : 1;
       uint64_t is_insert_up_                    : 1;
-      uint64_t is_table_api_                    : 1;
-      uint64_t is_access_mlog_as_master_table_  : 1;
+      uint64_t reserved_compat_flag_0_          : 1;
+      uint64_t is_access_main_table_            : 1;
       uint64_t is_access_vidx_as_master_table_  : 1; // FARM COMPAT WHITELIST for 4_2_1_release compatibility
       uint64_t is_update_partition_key_         : 1; // FARM COMPAT WHITELIST for 4_2_1_release compatibility
       uint64_t is_update_uk_                    : 1;
@@ -148,7 +147,7 @@ protected:
   ObDASDMLBaseRtDef(ObDASOpType op_type)
     : ObDASBaseRtDef(op_type),
       timeout_ts_(-1),
-      sql_mode_(DEFAULT_OCEANBASE_MODE),
+      sql_mode_(DEFAULT_MYSQL_MODE),
       prelock_(false),
       tenant_schema_version_(0),
       is_for_foreign_key_check_(false),
@@ -206,7 +205,7 @@ public:
   bool is_duplicated_;
   // used in direct-insert mode
   int64_t direct_insert_task_id_;
-  // use put, only use in obkv for overlay writting.
+  // use put semantics for overlay writing.
   bool use_put_;
   int64_t ddl_task_id_;
 };
@@ -402,7 +401,6 @@ public:
 
   int init(common::ObIAllocator &das_alloc,
            uint32_t row_extend_size = 0,
-           uint64_t tenant_id = common::OB_SERVER_TENANT_ID,
            const char *label = "DasWriteBuffer",
            int64_t mem_ctx_id = common::ObCtxIds::DEFAULT_CTX_ID);
   OB_INLINE bool is_inited() const { return das_alloc_ != nullptr; }
@@ -418,7 +416,7 @@ public:
   {
     return buffer_list_.header_.next_ != nullptr ? buffer_list_.header_.next_->cnt_ : 0;
   }
-  inline uint64_t get_tenant_id() const { return mem_attr_.tenant_id_; } 
+   
   int add_row(const common::ObIArray<ObExpr*> &exprs,
               ObEvalCtx *ctx,
               DmlRow *&stored_row,
@@ -521,39 +519,6 @@ private:
   int64_t batch_size_;
 };
 
-class ObDASMLogDMLIterator : public blocksstable::ObDatumRowIterator
-{
-public:
-  // support get next datum row
-  ObDASMLogDMLIterator(
-      const share::ObLSID &ls_id,
-      const ObTabletID &tablet_id,
-      const storage::ObDMLBaseParam &dml_param,
-      ObDatumRowIterator *iter,
-      ObDASOpType op_type)
-    : ls_id_(ls_id),
-      tablet_id_(tablet_id),
-      dml_param_(dml_param),
-      row_iter_(iter),
-      op_type_(op_type),
-      is_old_row_(false)
-  {
-    if ((DAS_OP_TABLE_UPDATE == op_type_)
-        || (DAS_OP_TABLE_INSERT == op_type_)) {
-      is_old_row_ = true;
-    }
-  }
-  virtual ~ObDASMLogDMLIterator() {}
-  virtual int get_next_row(blocksstable::ObDatumRow *&datum_row) override;
-
-private:
-  const share::ObLSID &ls_id_;
-  const ObTabletID &tablet_id_;
-  const storage::ObDMLBaseParam &dml_param_;
-  ObDatumRowIterator *row_iter_;
-  ObDASOpType op_type_;
-  bool is_old_row_;
-};
 }  // namespace sql
 }  // namespace oceanbase
 #endif /* DEV_SRC_SQL_DAS_OB_DAS_DML_CTX_DEFINE_H_ */

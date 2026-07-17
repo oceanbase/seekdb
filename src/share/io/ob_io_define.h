@@ -17,7 +17,7 @@
 #ifndef OCEANBASE_LIB_STORAGE_IO_DEFINE
 #define OCEANBASE_LIB_STORAGE_IO_DEFINE
 
-#include "common/storage/ob_io_device.h"
+#include "lib/restore/ob_io_device.h"
 #include "lib/container/ob_array_iterator.h"
 #include "lib/container/ob_array_wrap.h"
 #include "lib/container/ob_heap.h"
@@ -26,15 +26,9 @@
 #include "lib/lock/ob_thread_cond.h"
 #include "lib/profile/ob_trace_id.h"
 #include "lib/restore/ob_storage.h"
-#include "lib/tc/ob_tc.h"
-#include "lib/thread/thread_mgr_interface.h"
+#include "lib/thread/ob_link_task.h"
 #include "lib/worker.h"
-#include "share/resource_manager/ob_resource_plan_info.h"
-#include "storage/ob_storage_checked_object_base.h"
-#ifdef OB_BUILD_SHARED_STORAGE
-#include "storage/shared_storage/micro_cache/ob_ss_micro_cache_common_meta.h"
-#include "storage/shared_storage/ob_ss_fd_cache_struct.h"
-#endif
+#include "share/ob_define.h"
 
 namespace oceanbase
 {
@@ -50,6 +44,8 @@ class ObBackupDeviceHelper;
 namespace common
 {
 
+// default NIC bandwidth 10000Mbit→1250MBps(moved down from observer ObServer:base vocabulary for IO scheduling)
+constexpr int64_t OB_DEFAULT_ETHERNET_SPEED = 10000 / 8 * 1024 * 1024;
 class ObObjectDevice;
 class ObIOCallbackManager;
 
@@ -60,7 +56,6 @@ static constexpr int64_t MAX_IO_WAIT_TIME_MS = 300L * 1000L;     // 5min
 static constexpr int64_t GROUP_START_NUM = 1L;
 static constexpr int64_t DEFAULT_IO_WAIT_TIME_US = 5000L * 1000L;  // 5s
 static constexpr int64_t MAX_DETECT_READ_WARN_TIMES = 10L;
-static constexpr int64_t MAX_DETECT_READ_ERROR_TIMES = 100L;
 static constexpr int64_t DEFAULT_OBJECT_STORAGE_IO_TIMEOUT_MS = 20 * 1000L;
 
 enum class ObIOMode : uint8_t { READ = 0, WRITE = 1, MAX_MODE };
@@ -119,7 +114,6 @@ public:
   ObIOFlag &operator=(const ObIOFlag &other)
   {
     this->flag_ = other.flag_;
-    this->group_id_ = other.group_id_;
     this->sys_module_id_ = other.sys_module_id_;
     return *this;
   }
@@ -128,11 +122,9 @@ public:
   void set_mode(ObIOMode mode);
   ObIOMode get_mode() const;
   void set_wait_event(int64_t wait_event_id);
-  uint64_t get_resource_group_id() const;
   void set_sys_module_id(const uint64_t sys_module_id);
   uint64_t get_sys_module_id() const;
   bool is_sys_module() const;
-  uint8_t get_func_type() const;
   int64_t get_wait_event() const;
   void set_read();
   bool is_read() const;
@@ -158,16 +150,13 @@ public:
   bool is_dirty() const;
   void set_need_close_dev_and_fd();
   bool is_need_close_dev_and_fd() const;
-  TO_STRING_KV("mode", common::get_io_mode_string(static_cast<ObIOMode>(mode_)), K(group_id_), K(func_type_),
+  TO_STRING_KV("mode", common::get_io_mode_string(static_cast<ObIOMode>(mode_)),
       K(wait_event_id_), K(is_sync_), K(is_unlimited_), K(is_detect_), K(is_write_through_), K(is_sealed_),
       K(is_time_detect_), K(need_close_dev_and_fd_), K(reserved_));
 
 private:
   friend struct ObIOResult;
-  void set_func_type(const uint8_t func_type);
-  void set_resource_group_id(const uint64_t group_id);
   static constexpr int64_t IO_MODE_BIT = 4; // read, write, append
-  static constexpr int64_t IO_FUNC_TYPE_BIT = 8;
   static constexpr int64_t IO_WAIT_EVENT_BIT = 32; // for performance monitor
   static constexpr int64_t IO_SYNC_FLAG_BIT = 1; // indicate if the caller is waiting io finished
   static constexpr int64_t IO_DETECT_FLAG_BIT = 1; // notify a retry task
@@ -185,7 +174,6 @@ private:
   // needs to close device and fd.
   static constexpr int64_t IO_CLOSE_DEV_AND_FD_BIT = 1;
   static constexpr int64_t IO_RESERVED_BIT = 64 - IO_MODE_BIT
-                                                - IO_FUNC_TYPE_BIT
                                                 - IO_WAIT_EVENT_BIT
                                                 - IO_SYNC_FLAG_BIT
                                                 - IO_DETECT_FLAG_BIT
@@ -199,7 +187,6 @@ private:
     int64_t flag_;
     struct {
       int64_t mode_ : IO_MODE_BIT;
-      int64_t func_type_ : IO_FUNC_TYPE_BIT;
       int64_t wait_event_id_ : IO_WAIT_EVENT_BIT;
       int64_t is_sync_ : IO_SYNC_FLAG_BIT;
       int64_t is_unlimited_ : IO_UNLIMITED_FLAG_BIT;
@@ -211,7 +198,6 @@ private:
       int64_t reserved_ : IO_RESERVED_BIT;
     };
   };
-  uint64_t group_id_;
   uint64_t sys_module_id_;
 };
 
@@ -287,11 +273,11 @@ public:
   virtual void reset();
   bool is_valid() const;
   ObSNIOInfo &operator=(const ObSNIOInfo &other);
-  TO_STRING_KV(K(tenant_id_), K(fd_), K(offset_), K(size_), K(timeout_us_), K(flag_), KP(callback_), KP(buf_),
+  TO_STRING_KV(K(fd_), K(offset_), K(size_), K(timeout_us_), K(flag_), KP(callback_), KP(buf_),
       KP(user_data_buf_), K_(part_id));
 
 public:
-  uint64_t tenant_id_;
+  
   ObIOFd fd_;
   int64_t offset_;
   int64_t size_;
@@ -303,30 +289,8 @@ public:
   int64_t part_id_;      // multipart upload's part id
 };
 
-#ifdef OB_BUILD_SHARED_STORAGE
-struct ObSSIOInfo : public ObSNIOInfo
-{
-public:
-  ObSSIOInfo();
-  ObSSIOInfo(const ObSSIOInfo &other);
-  virtual ~ObSSIOInfo();
-  virtual void reset() override;
-  ObSSIOInfo &operator=(const ObSSIOInfo &other);
 
-public:
-  storage::ObSSPhysicalBlockHandle phy_block_handle_;  // hold ref_cnt
-  storage::ObSSFdCacheHandle fd_cache_handle_;
-  int64_t tmp_file_valid_length_;
-
-  INHERIT_TO_STRING_KV("SNIOInfo", ObSNIOInfo, K_(phy_block_handle), K_(fd_cache_handle),  K_(tmp_file_valid_length));
-};
-#endif
-
-#ifdef OB_BUILD_SHARED_STORAGE
-#define ObIOInfo ObSSIOInfo
-#else
 #define ObIOInfo ObSNIOInfo
-#endif
 
 template <typename T>
 class ObRefHolder final
@@ -449,13 +413,13 @@ struct ObIOGroupKey
 
 struct ObIOSSGrpKey
 {
-  ObIOSSGrpKey() : tenant_id_(0), group_key_()
+  ObIOSSGrpKey() : group_key_()
   {}
-  ObIOSSGrpKey(const int64_t tenant_id, const ObIOGroupKey group_key) : tenant_id_(tenant_id), group_key_(group_key)
+  ObIOSSGrpKey(const ObIOGroupKey group_key) : group_key_(group_key)
   {}
   uint64_t hash() const
   {
-    uint64_t hash_val = static_cast<uint64_t>(tenant_id_);
+    uint64_t hash_val = 0;
     uint64_t hash_val_2 = static_cast<uint64_t>(group_key_.hash());
     hash_val = common::murmurhash(&hash_val_2, sizeof(hash_val_2), hash_val);
     return hash_val;
@@ -467,20 +431,20 @@ struct ObIOSSGrpKey
   }
   bool operator==(const ObIOSSGrpKey &that) const
   {
-    return tenant_id_ == that.tenant_id_ && group_key_ == that.group_key_;
+    return true && group_key_ == that.group_key_;
   }
   ObIOSSGrpKey& operator=(const ObIOSSGrpKey &other)
   {
     if (this != &other) {
-      tenant_id_ = other.tenant_id_;
+      
       group_key_ = other.group_key_;
     }
     return *this;
   }
   ObIOMode get_mode() const { return group_key_.mode_; };
-  int64_t tenant_id_;
+  
   ObIOGroupKey group_key_;
-  TO_STRING_KV(K(tenant_id_), K(group_key_));
+  TO_STRING_KV(K(group_key_));
 };
 
 
@@ -514,13 +478,10 @@ public:
   ObThreadCond &get_cond() { return cond_; }
 
   TO_STRING_KV(K(is_inited_), K(is_finished_), K(is_canceled_), K(has_estimated_), K(complete_size_), K(offset_), K(size_),
-               K(timeout_us_), K(result_ref_cnt_), K(out_ref_cnt_), K(flag_), K(ret_code_), K(tenant_id_), KP(tenant_io_mgr_),
+               K(timeout_us_), K(result_ref_cnt_), K(out_ref_cnt_), K(flag_), K(ret_code_), KP(tenant_io_mgr_),
                KP(user_data_buf_), KP(buf_), KP(io_callback_), K_(time_log));
   DISALLOW_COPY_AND_ASSIGN(ObIOResult);
 private:
-#ifdef OB_BUILD_SHARED_STORAGE
-  friend class ObSSIORequest;
-#endif
   friend class ObIORequest;
   friend class ObIOHandle;
   friend class ObIOFaultDetector;
@@ -540,7 +501,7 @@ private:
   int64_t offset_;
   int64_t size_;
   int64_t timeout_us_;
-  uint64_t tenant_id_;
+  
   int64_t aligned_size_;
   ObTenantIOManager *tenant_io_mgr_;
   const char *buf_;
@@ -570,8 +531,6 @@ public:
   int64_t get_data_size() const;
   ObIOGroupKey get_group_key() const;
   bool is_sys_module() const;
-  oceanbase::share::ObFunctionType get_func_type() const;
-  bool is_local_clog_not_isolated();
   bool is_object_device_req() const;
   char *calc_io_buf();  // calc the aligned io_buf of raw_buf_, which interact with the operating system
   const ObIOFlag &get_flag() const;
@@ -584,7 +543,6 @@ public:
   int64_t get_align_offset() const;
   int prepare(char *next_buffer = nullptr, int64_t next_size = 0, int64_t next_offset = 0);
   int recycle_buffer();
-  int retry_io();
   int try_alloc_buf_until_timeout(char *&io_buf);
   bool can_callback() const;
   void free_io_buffer();
@@ -593,7 +551,7 @@ public:
 
   int64_t get_remained_io_timeout_us();
 
-  TO_STRING_KV(K(is_inited_), K(tenant_id_), KP(control_block_), K(ref_cnt_), KP(raw_buf_), K(fd_), K(is_object_device_req()),
+  TO_STRING_KV(K(is_inited_), KP(control_block_), K(ref_cnt_), KP(raw_buf_), K(fd_), K(is_object_device_req()),
                K(trace_id_), K(retry_count_), KP(tenant_io_mgr_), K_(storage_accesser),
                KPC(io_result_), K_(part_id));
 private:
@@ -619,7 +577,6 @@ private:
 public:
   common::LinkTask req_node_;
   ObIOResult *io_result_;
-  TCRequest qsched_req_;
 protected:
   bool is_inited_;
   int8_t retry_count_;
@@ -629,7 +586,7 @@ protected:
   int64_t align_size_; // align io size, use this and don't use calc_io_offset_and_size_()
   int64_t align_offset_;
   ObIOCB *control_block_;
-  uint64_t tenant_id_;
+  
   ObTenantIOManager *tenant_io_mgr_;
   ObRefHolder<ObStorageAccesser> storage_accesser_;
   ObIOFd fd_;
@@ -669,7 +626,7 @@ public:
   IOReqList req_list_;
 };
 
-class ObIOHandle final : public storage::ObStorageCheckedObjectBase
+class ObIOHandle final
 {
 public:
   ObIOHandle();
@@ -696,8 +653,6 @@ public:
   int check_is_finished(bool &is_finished);
   void clear_io_callback();
   ObIOCallback *get_io_callback();
-  bool need_trace() const;
-  storage::ObStorageCheckID get_check_id() const { return storage::ObStorageCheckID::IO_HANDLE; }
   TO_STRING_KV_WITH_HELPER("io_result", helper.convert(result_));
 
 private:
@@ -763,10 +718,7 @@ public:
   static const ObTenantIOConfig &default_instance();
   bool is_valid() const;
   int deep_copy(const ObTenantIOConfig &other_config);
-  int parse_group_config(const char *config_str);
-  int add_single_group_config(const uint64_t tenant_id, const ObIOGroupKey &key, const char *group_name,
-      int64_t min_percent, int64_t max_percent, int64_t weight_percent);
-  int get_group_config(const uint64_t index, int64_t &min, int64_t &max, int64_t &weight) const;
+  int calc_group_config(const uint64_t index, int64_t &min, int64_t &max, int64_t &weight) const;
   int64_t get_callback_thread_count() const;
   int64_t to_string(char *buf, const int64_t buf_len) const;
 

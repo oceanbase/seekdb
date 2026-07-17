@@ -19,7 +19,7 @@
 #include "storage/ob_relative_table.h"
 
 #include "share/ob_unique_index_row_transformer.h"
-#include "share/schema/ob_table_dml_param.h"
+#include "storage/ob_table_dml_param.h"
 #include "storage/truncate_info/ob_truncate_partition_filter.h"
 
 namespace oceanbase
@@ -492,7 +492,6 @@ int ObRelativeTable::prepare_truncate_part_filter(
       LOG_WARN("unexpected major sstable", K(ret), KPC(table_ptr));
     } else if (OB_FAIL(ObTruncatePartitionFilterFactory::build_truncate_partition_filter(
         *tablet_handle->get_obj(),
-        tablet_iter_.get_split_extra_tablet_handles_ptr(),
         read_info.get_columns_desc(),
         read_info.get_columns(),
         read_version_range,

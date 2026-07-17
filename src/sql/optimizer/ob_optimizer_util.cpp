@@ -19,7 +19,7 @@
 #include "sql/engine/expr/ob_expr_version.h"
 #include "sql/rewrite/ob_transform_utils.h"
 #include "sql/optimizer/ob_log_table_scan.h"
-#include "share/ob_order_perserving_encoder.h"
+#include "storage/ob_order_perserving_encoder.h"
 #include "sql/rewrite/ob_predicate_deduce.h"
 #include "sql/optimizer/ob_log_join.h"
 
@@ -5444,7 +5444,7 @@ int ObOptimizerUtil::is_lossless_column_cast(const ObRawExpr *expr,
     LOG_WARN("get unexpected null", K(ret));
   } else if (T_FUN_SYS_CAST != expr->get_expr_type()) {
     // do nothing
-  } else if (CM_IS_ORA_SYS_VIEW_CAST(expr->get_cast_mode())) {
+  } else if (CM_IS_INTERNAL_CAST_IGNORE(expr->get_cast_mode())) {
     is_lossless = true;
   } else if (expr->is_const_expr() && CM_IS_CONST_TO_DECIMAL_INT(expr->get_cast_mode())) {
     // do nothing
@@ -5804,7 +5804,7 @@ int ObOptimizerUtil::get_set_res_types(ObIAllocator *allocator,
       } else if (1 == types.count() || all_types_is_decint) {
         ret = res_types.push_back(types.at(0));
       } else if (OB_FAIL(dummy_op.aggregate_result_type_for_merge(res_type, &types.at(0),
-                                                    types.count(), false,
+                                                    types.count(),
                                                     type_ctx))) {
         LOG_WARN("failed to aggregate result type for merge", K(ret));
       } else if (OB_FAIL(res_types.push_back(res_type))) {
@@ -5885,7 +5885,7 @@ int ObOptimizerUtil::try_add_cast_to_set_child_list(ObIAllocator *allocator,
   } else if (OB_FAIL(session_info->get_collation_connection(coll_type))) {
     LOG_WARN("failed to get collation connection", K(ret));
   } else {
-    const ObLengthSemantics length_semantics = session_info->get_actual_nls_length_semantics();
+    const ObLengthSemantics length_semantics = session_info->get_actual_length_semantics();
     const bool is_ps_prepare_stage = session_info->is_varparams_sql_prepare();
     const int64_t num = left_types.count();
     ObExprTypeCtx type_ctx;
@@ -5909,8 +5909,7 @@ int ObOptimizerUtil::try_add_cast_to_set_child_list(ObIAllocator *allocator,
           res_type = left_type;
         } else if (OB_FAIL(types.push_back(left_type)) || OB_FAIL(types.push_back(right_type))) {
           LOG_WARN("failed to push back", K(ret));
-        } else if (OB_FAIL(dummy_op.aggregate_result_type_for_merge(res_type, &types.at(0), 2,
-                                                                    false, type_ctx))) {
+        } else if (OB_FAIL(dummy_op.aggregate_result_type_for_merge(res_type, &types.at(0), 2, type_ctx))) {
           LOG_WARN("failed to aggregate result type for merge", K(ret));
         }
         if (OB_FAIL(ret) || skip_add_cast) {
@@ -6117,7 +6116,7 @@ int ObOptimizerUtil::try_add_cast_to_select_list(ObIAllocator *allocator,
     if (NULL != res_types) {
       res_types->reuse();
     }
-    const ObLengthSemantics length_semantics = session_info->get_actual_nls_length_semantics();
+    const ObLengthSemantics length_semantics = session_info->get_actual_length_semantics();
     const bool is_ps_prepare_stage = session_info->is_varparams_sql_prepare();
     const int64_t row_cnt = select_exprs.count() / column_cnt;
     ObExprTypeCtx type_ctx;
@@ -6150,8 +6149,7 @@ int ObOptimizerUtil::try_add_cast_to_select_list(ObIAllocator *allocator,
               /* left_type is res_type */
             } else if (OB_FAIL(types.push_back(left_type)) || OB_FAIL(types.push_back(right_type))) {
               LOG_WARN("failed to push back", K(ret));
-            } else if (OB_FAIL(dummy_op.aggregate_result_type_for_merge(result_type, &types.at(0), 2,
-                                                                        false, type_ctx))) {
+            } else if (OB_FAIL(dummy_op.aggregate_result_type_for_merge(result_type, &types.at(0), 2, type_ctx))) {
               LOG_WARN("failed to aggregate result type for merge", K(ret));
             } else if (OB_UNLIKELY(ObMaxType == result_type.get_type())) {
               ret = OB_ERR_INVALID_TYPE_FOR_OP;
@@ -7353,12 +7351,9 @@ int ObOptimizerUtil::get_duplicate_table_replica(const ObCandiTableLoc &phy_tabl
     LOG_WARN("get unexpected partition count", K(ret), K(phy_table_loc.get_partition_cnt()));
   } else {
     const ObCandiTabletLoc &phy_part_loc = phy_table_loc.get_phy_part_loc_info_list().at(0);
-    const ObIArray<ObRoutePolicy::CandidateReplica> &replicas =
-        phy_part_loc.get_partition_location().get_replica_locations();
-    for (int64_t i = 0; OB_SUCC(ret) && i < replicas.count(); ++i) {
-      if (OB_FAIL(valid_addrs.push_back(replicas.at(i).get_server()))) {
-        LOG_WARN("failed to push back replica address", K(ret));
-      } else { /*do nothing*/ }
+    if (OB_FAIL(valid_addrs.push_back(
+            phy_part_loc.get_partition_location().get_local_replica().get_server()))) {
+      LOG_WARN("failed to push back local address", K(ret));
     }
   }
   return ret;
@@ -7373,7 +7368,6 @@ int ObOptimizerUtil::compute_duplicate_table_sharding(const ObAddr &local_addr,
 {
   int ret = OB_SUCCESS;
   ObCandiTableLoc *phy_table_loc = NULL;
-  int64_t replica_index = OB_INVALID_INDEX;
   target_sharding = NULL;
   if (OB_ISNULL(target_sharding = reinterpret_cast<ObShardingInfo*>(
                                   allocator.alloc(sizeof(ObShardingInfo))))) {
@@ -7399,14 +7393,12 @@ int ObOptimizerUtil::compute_duplicate_table_sharding(const ObAddr &local_addr,
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected partition count", K(ret));
   } else {
-    int64_t dup_table_pos = OB_INVALID_INDEX;
     ObCandiTabletLoc &phy_part_loc =
           phy_table_loc->get_phy_part_loc_info_list_for_update().at(0);
-    if (!phy_part_loc.is_server_in_replica(selected_addr, dup_table_pos)) {
+    if (!phy_part_loc.is_local_server(selected_addr)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("no server in replica", K(selected_addr), K(ret));
     } else {
-      phy_part_loc.set_selected_replica_idx(dup_table_pos);
       if (local_addr == selected_addr) {
         target_sharding->set_local();
       } else {
@@ -7438,19 +7430,12 @@ int ObOptimizerUtil::generate_duplicate_table_replicas(ObIAllocator &allocator,
     // do nothing
   } else if (OB_FAIL(target_table_loc->assign(*source_table_loc))) {
     LOG_WARN("failed to assign table location", K(ret));
-  } else {
-    ObCandiTabletLoc &phy_part_loc =
-          target_table_loc->get_phy_part_loc_info_list_for_update().at(0);
-    ObOptTabletLoc &opt_tablet_loc = phy_part_loc.get_partition_location();
-    ObIArray<ObRoutePolicy::CandidateReplica> &replica_loc_list = opt_tablet_loc.get_replica_locations();
-    for (int64_t i = replica_loc_list.count() - 1; OB_SUCC(ret) && i >= 0; --i) {
-      if (ObOptimizerUtil::find_item(valid_addrs,
-                                     replica_loc_list.at(i).get_server())) {
-        // do nothing
-      } else if (OB_FAIL(replica_loc_list.remove(i))) {
-        LOG_WARN("failed to remove relica loc list", K(ret));
-      }
-    }
+  } else if (!ObOptimizerUtil::find_item(
+                 valid_addrs,
+                 target_table_loc->get_phy_part_loc_info_list().at(0)
+                     .get_partition_location().get_local_replica().get_server())) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("local replica is not valid for duplicate table", K(ret), K(valid_addrs));
   }
   return ret;
 }
@@ -9464,9 +9449,7 @@ int ObOptimizerUtil::can_extract_implicit_cast_range(ObItemType cmp_type,
   ObObjTypeClass column_tc = column_expr.get_result_type().get_type_class();
   ObObjTypeClass const_tc = target_expr.get_result_type().get_type_class();
   can_extract = false;
-  if (lib::is_oracle_mode()) {
-    can_extract = false;
-  } else if (column_expr.get_result_type().get_type() ==
+  if (column_expr.get_result_type().get_type() ==
              target_expr.get_result_type().get_type() &&
              column_expr.get_result_type().is_string_type()) {
     if (OB_FAIL(is_implicit_collation_range_valid(cmp_type,

@@ -13,7 +13,7 @@ create database fts_parser_properies;
 
 use fts_parser_properies;
 
-let $database_id = query_get_value(SELECT database_id FROM oceanbase.__all_virtual_database WHERE database_name = 'fts_parser_properies' AND tenant_id = 1, database_id, 1);
+let $database_id = query_get_value(SELECT database_id FROM oceanbase.__all_database WHERE database_name = 'fts_parser_properies', database_id, 1);
 
 --result_format 3
 
@@ -25,7 +25,7 @@ create table create_index_with_parser_properties(
   a varchar(100),
   b varchar(100),
   fulltext index fidx1(a) PARSER_PROPERTIES=(min_token_size=2, max_token_size=84)
-) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_bin WITH COLUMN GROUP(each column);
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_bin;
 
 insert into create_index_with_parser_properties(a, b) values ('3aaa', '3aaa'), ('1a', '1a'), ('2aa', '2aa'),('4aaaa', '4aaaa');
 
@@ -121,7 +121,7 @@ CREATE TABLE fts_basic_article (
     title VARCHAR(200),
     content TEXT,
     FULLTEXT INDEX ctx(title, content) PARSER_PROPERTIES=(min_token_size=9)
-) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_bin WITH COLUMN GROUP(each column);
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_bin;
 
 INSERT INTO fts_basic_article (title, content) VALUES
 ('OceanBase Tutorial', 'This is a tutorial about Oceanbase Fulltext.'),
@@ -156,7 +156,7 @@ CREATE TABLE table_create_with_ngram2(text CHAR(255), FULLTEXT(text) WITH PARSER
 CREATE TABLE table_create_with_ngram2(text CHAR(255), FULLTEXT(text) WITH PARSER ngram2 PARSER_PROPERTIES=(min_ngram_size=5));
 
 CREATE TABLE table_create_with_ngram2(text CHAR(255), FULLTEXT(text) WITH PARSER ngram2 PARSER_PROPERTIES=(min_ngram_size=2, max_ngram_size=4))
-ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_bin WITH COLUMN GROUP(each column);
+ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_bin;
 
 --replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
 SHOW CREATE TABLE table_create_with_ngram2;

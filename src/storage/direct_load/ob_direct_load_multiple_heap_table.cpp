@@ -68,7 +68,7 @@ ObDirectLoadMultipleHeapTableCreateParam::ObDirectLoadMultipleHeapTableCreatePar
     row_count_(0),
     max_data_block_size_(0)
 {
-  data_fragments_.set_tenant_id(MTL_ID());
+  
 }
 
 ObDirectLoadMultipleHeapTableCreateParam::~ObDirectLoadMultipleHeapTableCreateParam()
@@ -128,7 +128,7 @@ void ObDirectLoadMultipleHeapTableMeta::reset()
 ObDirectLoadMultipleHeapTable::ObDirectLoadMultipleHeapTable()
   : is_inited_(false)
 {
-  data_fragments_.set_tenant_id(MTL_ID());
+  
   table_type_ = ObDirectLoadTableType::MULTIPLE_HEAP_TABLE;
 }
 

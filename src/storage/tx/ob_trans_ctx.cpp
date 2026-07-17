@@ -45,7 +45,6 @@ void ObTransCtx::print_trace_log_()
 void ObTransCtx::before_unlock(CtxLockArg &arg)
 {
   arg.trans_id_ = trans_id_;
-  arg.ls_id_ = ls_id_;
   opid_++;
   if (has_pending_callback_) {
     arg.commit_cb_ = commit_cb_;
@@ -123,7 +122,7 @@ void ObTransCtx::print_trace_log_if_necessary_()
   static const int64_t SAMPLING_SEED = 128 * 64;
   // freectx
   if (!is_exiting_) {
-    TRANS_LOG_RET(WARN, OB_ERROR, "ObPartTransCtx not exiting", "context", *this, K(lbt()));
+    TRANS_LOG_RET(WARN, OB_ERROR, "ObTxCtx not exiting", "context", *this, K(lbt()));
     FORCE_PRINT_TRACE(tlog_, "[trans debug] ");
   }
 
@@ -191,14 +190,13 @@ MonotonicTs ObTransCtx::get_stc_()
 
 
 
-bool ObTransCtx::has_callback_scheduler_()
+bool ObTransCtx::has_commit_callback_()
 {
   return !commit_cb_.is_enabled() // callback scheduler has accomplished by others
     || commit_cb_.is_inited();    // callback has been defered
 }
 
-// callback scheduler commit result
-int ObTransCtx::defer_callback_scheduler_(const int retcode, const SCN &commit_version)
+int ObTransCtx::defer_commit_callback_(const int retcode, const SCN &commit_version)
 {
   int ret = OB_SUCCESS;
   if (!commit_cb_.is_enabled()) {
@@ -294,15 +292,20 @@ int ObTransCtx::unregister_timeout_task_()
   return ret;
 }
 
-void ObTransCtx::update_trans_2pc_timeout_()
+void ObTransCtx::update_commit_retry_timeout_()
 {
-  const int64_t timeout_new = 2 * trans_2pc_timeout_;
+  const int64_t timeout_new = 2 * commit_retry_timeout_;
 
-  if (MAX_TRANS_2PC_TIMEOUT_US > timeout_new) {
-    trans_2pc_timeout_ = timeout_new;
+  if (MAX_TRANS_COMMIT_RETRY_TIMEOUT_US > timeout_new) {
+    commit_retry_timeout_ = timeout_new;
   } else {
-    trans_2pc_timeout_ = MAX_TRANS_2PC_TIMEOUT_US;
+    commit_retry_timeout_ = MAX_TRANS_COMMIT_RETRY_TIMEOUT_US;
   }
+}
+
+int64_t ObTransCtx::get_commit_retry_interval_us_()
+{
+  return ObServerConfig::get_instance().trx_commit_retry_interval;
 }
 
 int ObTransCtx::set_app_trace_info_(const ObString &app_trace_info)

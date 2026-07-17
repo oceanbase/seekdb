@@ -47,7 +47,6 @@ public:
   void reset();
   void rescan();
   int init(const int64_t mem_limit,
-           const uint64_t tenant_id = common::OB_SERVER_TENANT_ID,
            const int64_t mem_ctx_id = common::ObCtxIds::DEFAULT_CTX_ID,
            const char *label = common::ObModIds::OB_SQL_ROW_STORE,
            const bool enable_dump = true,
@@ -58,7 +57,6 @@ public:
 
   int init(const int64_t mem_limit,
            const ObIArray<storage::ObColumnSchemaItem> &col_array,
-           const uint64_t tenant_id = common::OB_SERVER_TENANT_ID,
            const int64_t mem_ctx_id = common::ObCtxIds::DEFAULT_CTX_ID,
            const char *label = common::ObModIds::OB_SQL_ROW_STORE,
            const bool enable_dump = true,
@@ -78,8 +76,8 @@ public:
   int add_row(const common::ObIArray<ObExpr *> &exprs, ObEvalCtx &ctx, ObChunkDatumStore::StoredRow **stored_row = nullptr);
   int add_row(const ObChunkDatumStore::StoredRow &src_sr, ObChunkDatumStore::StoredRow **dst_sr = nullptr);
   // for chunkslicestore.
-  int add_row(const blocksstable::ObDatumRow &datum_row, const ObStorageColumnGroupSchema &cg_schema,
-              const int64_t extra_size, ObChunkDatumStore::StoredRow **stored_row = nullptr);
+  int add_row(const blocksstable::ObDatumRow &datum_row, const int64_t extra_size,
+              ObChunkDatumStore::StoredRow **stored_row = nullptr);
   int get_next_row(const ObChunkDatumStore::StoredRow *&sr);
 
   int finish_write();

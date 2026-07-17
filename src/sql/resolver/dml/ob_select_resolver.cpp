@@ -24,10 +24,10 @@
 #include "sql/engine/expr/ob_expr_version.h"
 #include "sql/optimizer/ob_optimizer_util.h"
 #include "sql/rewrite/ob_transform_utils.h"
+#include "sql/resolver/cmd/ob_load_data_stmt.h"
 #include "sql/engine/expr/ob_expr_regexp_context.h"
 #include "sql/engine/expr/ob_json_param_type.h"
 #include "sql/parser/ob_parser_utils.h"
-#include "sql/resolver/mv/ob_major_refresh_mjv_printer.h"
 
 #include "sql/executor/ob_memory_tracker.h"
 namespace oceanbase
@@ -155,10 +155,10 @@ int ObSelectResolver::do_check_node_in_cte_recursive_union(const ParseNode* curr
  *  with cte(c1) as (select c1+1 from cte where c1 < 100 union all select 1 from dual)
  *  select * from cte;
  *
- *  oracle supports both of these writing styles. Previously, in the implementation of cte, it was misjudged that only the left side could be the anchor member.
- *  For the revolver parsing of recursive cte, the parsing of the left and right branches is sensitive, the parsing of the right branch depends on the left branch being
- *  parsed first. Why? Because if we start parsing the right branch without parsing the left branch, we have no idea what type the c1 column of the cte table is.
- *  Therefore, we first determine whether it is necessary to swap the left and right branches.
+ *  Recursive CTE parsing is sensitive to branch order: the recursive branch
+ *  depends on the non-recursive branch being parsed first, because otherwise
+ *  the type of the cte table column is unknown. Therefore, first determine
+ *  whether the set query shape is recursive.
  */
 int ObSelectResolver::check_query_is_recursive_union(const ParseNode &parse_tree,
                                                      bool &recursive_union)
@@ -186,9 +186,9 @@ int ObSelectResolver::check_query_is_recursive_union(const ParseNode &parse_tree
   return ret;
 }
 
-/* 1. recursive can only use union all syntax
- * 2. recursive mysql mode, cte can only be on the right side of the last UNION ALL, the left side can be anything as long as it does not contain a cte
- * 3. recursive oracle mode, cte can appear in either the left or right side, but not in subqueries, and neither the left nor right side can be a set.
+/* 1. recursive can only use union all syntax.
+ * 2. recursive query blocks must follow non-recursive query blocks.
+ * 3. recursive query blocks cannot appear in subqueries.
 */
 int ObSelectResolver::do_resolve_set_query_in_recursive_cte(const ParseNode &parse_tree)
 {
@@ -425,7 +425,7 @@ int ObSelectResolver::do_resolve_set_query_in_normal(const ParseNode &parse_tree
 
   if (OB_FAIL(ret)) {
     //do nothing
-  } else if (OB_FAIL(session_info_->is_serial_set_order_forced(force_serial_set_order, false))) {
+  } else if (OB_FAIL(session_info_->is_serial_set_order_forced(force_serial_set_order))) {
     LOG_WARN("fail to get explicit_defaults_for_timestamp", K(ret));
   } else if (force_serial_set_order && T_SET_UNION_ALL == parse_tree.children_[PARSE_SELECT_SET]->type_) {
     // for set query except union-all/recursive, when force serial set order, will add select expr as order by expr
@@ -620,12 +620,8 @@ int ObSelectResolver::check_recursive_cte_limited()
 }
 
 
-// checker is different between mysql and oracle mode
-// oracle mode:
-//   resolve path: from -> where -> connect by -> group by -> having -> select_items -> order by
-//   so after group by, exprs in having, select items and order by must exists on group by exprs
-// mysql mode
-//   resolve path: from -> where -> select_items -> group by -> having -> order by
+// Group-by checker validates expressions after the group-by clause against
+// group-by expressions.
 int ObSelectResolver::check_group_by()
 {
   int ret = OB_SUCCESS;
@@ -649,7 +645,7 @@ int ObSelectResolver::check_group_by()
                                                  having_has_self_column_,
                                                  has_group_by_clause(),
                                                  only_need_constraints))) {
-      LOG_WARN("failed to check group by in oracle mode");
+      LOG_WARN("failed to check group by");
     }
   }
 
@@ -733,11 +729,11 @@ int ObSelectResolver::check_aggr_in_select_scope(ObSelectStmt *select_stmt) {
       if (OB_ISNULL(select_items.at(i).expr_)) {
         ret = OB_INVALID_ARGUMENT;
         LOG_WARN("invalid expr in select items.", K(ret));
-        //compatible oracle: select 1, sum(max(c1)) from t1 group by c1;
+        // Example: select 1, sum(max(c1)) from t1 group by c1;
       } else if (select_items.at(i).expr_->is_const_expr()) {
         //do nothing
       } else if (!select_items.at(i).expr_->has_flag(CNT_AGG)) {
-        //in oracle it's "not a single-group group function."
+        // Report "not a single-group group function" for this shape.
         // select id, max(max(id))
         ret = OB_ERR_WRONG_FIELD_WITH_GROUP;
         ObString column_name = select_items.at(i).is_real_alias_ ?
@@ -898,7 +894,7 @@ int ObSelectResolver::mark_aggr_in_order_by_scope(ObSelectStmt *select_stmt) {
       if (OB_ISNULL(order_items.at(i).expr_)) {
         ret = OB_INVALID_ARGUMENT;
         LOG_WARN("invalid expr in select items.", K(ret));
-        //compatible oracle: select 1, sum(max(c1)) from t1 group by c1;
+        // Example: select 1, sum(max(c1)) from t1 group by c1;
       } else if (order_items.at(i).expr_->is_const_expr()) {
         // do nothing
       } else if (OB_FAIL(ObTransformUtils::extract_aggr_expr(order_items.at(i).expr_, aggrs))) {
@@ -921,7 +917,7 @@ int ObSelectResolver::mark_aggr_in_order_by_scope(ObSelectStmt *select_stmt) {
               // select max(id) from test group by id order by max(id),max(max(data));
               // select sum(b) + sum(c) from t3 group by b,c having sum(b)+sum(c) > 1 order by 1,sum(b) + sum(sum(e + c));
               // select sum(b) + sum(c),sum(sum(b)) from t3 group by b,c having sum(b)+sum(c) > 1 order by 1,sum(b) + sum(sum(e + c));
-              // In oracle next stmt can be compiled but running with error.
+              // The following statement can compile but fails at execution.
               // select sum(b) + sum(c) from t3 group by b,c having sum(b)+sum(c) > 1 order by 1,sum(b) + sum(sum(e + c)) + sum(e);
               if (!has_exist_in_array(select_agg_expr, aggr_expr)) {
                 aggr_expr->set_nested_aggr_inner_stmt(true);
@@ -1008,14 +1004,14 @@ int ObSelectResolver::resolve_normal_query(const ParseNode &parse_tree)
   OZ( resolve_for_update_clause(parse_tree.children_[PARSE_SELECT_FOR_UPD]) );
 
   if (OB_SUCC(ret)) {
-    bool has_flashback_query = false;
-    //select for update requires that no flashback query related attributes appear anywhere in stmt
+    bool has_snapshot_query = false;
+    //select for update requires that no snapshot query related attributes appear anywhere in stmt
     if (select_stmt->has_for_update() &&
-        OB_FAIL(check_stmt_has_flashback_query(select_stmt, true, has_flashback_query))) {
-      LOG_WARN("failed to check stmt has flashback query", K(ret));
-    } else if (has_flashback_query) {
-      ret = OB_ERR_FLASHBACK_QUERY_WITH_UPDATE;
-      LOG_WARN("select for update and flashback query exists", K(ret));
+        OB_FAIL(check_stmt_has_snapshot_query(select_stmt, true, has_snapshot_query))) {
+      LOG_WARN("failed to check stmt has snapshot query", K(ret));
+    } else if (has_snapshot_query) {
+      ret = OB_ERR_SNAPSHOT_QUERY_WITH_UPDATE;
+      LOG_WARN("select for update and snapshot query exists", K(ret));
     }
   }
 
@@ -1093,7 +1089,7 @@ int ObSelectResolver::resolve_normal_query(const ParseNode &parse_tree)
       }
     }
   }
-  // rowscn pseudo-column cannot be used in flashback query and view
+  // rowscn pseudo-column cannot be used in snapshot query and view
   if (OB_SUCC(ret)) {
     bool has_ora_rowscn = false;
     const common::ObIArray<SelectItem> &items = select_stmt->get_select_items();
@@ -1107,22 +1103,17 @@ int ObSelectResolver::resolve_normal_query(const ParseNode &parse_tree)
     }
 
     if (has_ora_rowscn) {
-      bool has_flashback_query = false;
-      if (OB_FAIL(check_stmt_has_flashback_query(select_stmt, false, has_flashback_query))) {
-        LOG_WARN("failed to check stmt has flashback query", K(ret));
-      } else if (has_flashback_query) {
+      bool has_snapshot_query = false;
+      if (OB_FAIL(check_stmt_has_snapshot_query(select_stmt, false, has_snapshot_query))) {
+        LOG_WARN("failed to check stmt has snapshot query", K(ret));
+      } else if (has_snapshot_query) {
         ret = OB_NOT_SUPPORTED;
-        LOG_USER_ERROR(OB_NOT_SUPPORTED, "rowscn used with flashback query");
-        LOG_WARN("rowscn can't use with flashback query", K(ret));
+        LOG_USER_ERROR(OB_NOT_SUPPORTED, "rowscn used with snapshot query");
+        LOG_WARN("rowscn can't use with snapshot query", K(ret));
       }
     }
   }
 
-  if (OB_SUCC(ret) && session_info_->get_ddl_info().is_major_refreshing_mview()
-      && !is_substmt() && !is_in_set_query() && !is_in_exists_subquery()
-      && OB_FAIL(ObMajorRefreshMJVPrinter::set_refresh_table_scan_flag_for_mr_mv(*select_stmt))) {
-    LOG_WARN("failed to set refresh table scan flag for mr mv", K(ret));
-  }
   return ret;
 }
 
@@ -1143,8 +1134,8 @@ int ObSelectResolver::resolve(const ParseNode &parse_tree)
     ret = OB_SIZE_OVERFLOW;
     LOG_WARN("too deep recursive", K(ret), K(is_stack_overflow));
   } else {
-    if (OB_INVALID_TENANT_ID != params_.show_tenant_id_) {
-      select_stmt->set_tenant_id(params_.show_tenant_id_);
+    {
+      
     }
     select_stmt->set_show_seed(params_.show_seed_);
     /* -----------------------------------------------------------------
@@ -1162,7 +1153,7 @@ int ObSelectResolver::resolve(const ParseNode &parse_tree)
      * 8. having clause
      * 9. order by clause
      * 10.limit clause
-     * 11.fetch clause(oracle mode)
+     * 11.fetch clause
      * -----------------------------------------------------------------
      */
 
@@ -1300,16 +1291,13 @@ int ObSelectResolver::set_for_update_mysql(ObSelectStmt &stmt, const int64_t wai
       table_item->for_update_ = true;
       table_item->for_update_wait_us_ = wait_us;
       table_item->skip_locked_ = skip_locked;
-    } else if (table_item->is_link_table()) {
-      ret = OB_NOT_SUPPORTED;
-      LOG_WARN("mysql dblink not support select for update", K(ret));
     }
   }
   return ret;
 }
 
 /**
- * @brief ObSelectResolver::set_for_update_oracle
+ * @brief ObSelectResolver::set_for_update_recursive
  * @param stmt: the targe stmt
  * @param wait_us: for update wait ts
  * @param skip_locked: skip locked
@@ -1317,10 +1305,10 @@ int ObSelectResolver::set_for_update_mysql(ObSelectStmt &stmt, const int64_t wai
  *             if col = NULL, all tables in the stmt should be locked
  * @return
  */
-int ObSelectResolver::set_for_update_oracle(ObSelectStmt &stmt,
-                                            const int64_t wait_us,
-                                            bool skip_locked,
-                                            ObColumnRefRawExpr *col)
+int ObSelectResolver::set_for_update_recursive(ObSelectStmt &stmt,
+                                               const int64_t wait_us,
+                                               bool skip_locked,
+                                               ObColumnRefRawExpr *col)
 {
   int ret = OB_SUCCESS;
   if (stmt.is_set_stmt()) {
@@ -1374,7 +1362,7 @@ int ObSelectResolver::set_for_update_oracle(ObSelectStmt &stmt,
             view_col = static_cast<ObColumnRefRawExpr*>(sel_expr);
           }
         }
-        if (OB_SUCC(ret) && OB_FAIL(set_for_update_oracle(*view, wait_us, skip_locked, view_col))) {
+        if (OB_SUCC(ret) && OB_FAIL(set_for_update_recursive(*view, wait_us, skip_locked, view_col))) {
           LOG_WARN("failed to set for update", K(ret));
         }
       }
@@ -1501,16 +1489,14 @@ int ObSelectResolver::resolve_field_list(const ParseNode &node)
     // the special case is the column ref, which expr_name will be replaced with unqualified column name.
     select_item.expr_name_.assign_ptr(node.children_[i]->str_value_,
                                       static_cast<int32_t>(node.children_[i]->str_len_));
-    // In Oracle ps mode, the alias name of the bind variable is ":" + num, not the actual value. As follows:
+    // In PS mode, the alias name of the bind variable is ":" + num, not the actual value. As follows:
     // PREPARE STMT FROM 'SELECT ?, ?, ? FROM DUAL';
     // SET @I1 = 1;
     // EXECUTE STMT USING @I1, @I1, @I1;
     // col_name1 is ":1", col_name2 is ":2", col_name3 is ":3"
-    if (is_mysql_mode()
-        && OB_FAIL(prepare_get_child_at(node.children_[i], 0))) {
+    if (OB_FAIL(prepare_get_child_at(node.children_[i], 0))) {
       LOG_WARN("unexpected parse tree", K(ret));
-    } else if (is_mysql_mode()
-               && node.children_[i]->children_[0]->type_ == T_NULL
+    } else if (node.children_[i]->children_[0]->type_ == T_NULL
                && enable_modify_null_name) {
       // MySQL sets the alias of standalone null value("\N","null"...) to "NULL" during projection.
       // Note: when null value is in a composite expression, its alias is not modified.
@@ -1538,7 +1524,7 @@ int ObSelectResolver::resolve_field_list(const ParseNode &node)
           is_bald_star = true;
         }
       }
-      //oracle does not allow select item to reference its columns when there are base tables with the same table name, for example:
+      // A star select item is ambiguous when base tables share the same name, for example:
       //select * from t1,t1 ==> NO
       //select 1 from t1,t1 ==> YES
       //select * from (select * from t1), (select * from t1) ==> YES
@@ -1675,10 +1661,7 @@ int ObSelectResolver::resolve_field_list(const ParseNode &node)
               break;
             }
           } while (true);
-          if (T_REMOTE_SEQUENCE == project_node->type_) {
-            ret = OB_NOT_IMPLEMENT;
-            LOG_WARN("remote sequence not support", K(ret));
-          } else {
+          {
             // mysql mode
             if (T_COLUMN_REF != project_node->type_ || project_node->num_child_ < 3) {
               ret = OB_ERR_UNEXPECTED;
@@ -1908,8 +1891,6 @@ int ObSelectResolver::transfer_rb_iterate_items()
     // add table_item to select_stmt
     OZ( column_namespace_checker_.add_reference_table(table_item), table_item );
     OZ( select_stmt->add_from_item(table_item->table_id_, table_item->is_joined_table()) );
-    OZ( add_from_items_order(table_item), table_item );
-    OX( select_stmt->set_has_reverse_link(table_item->is_reverse_link_) );
   }
 
   return ret;
@@ -1959,7 +1940,7 @@ int ObSelectResolver::expand_target_list(
 {
   int ret = OB_SUCCESS;
   ObArray<ColumnItem> column_items;
-  if (table_item.is_basic_table() || table_item.is_link_table()) {
+  if (table_item.is_basic_table()) {
     if (OB_FAIL(resolve_all_basic_table_columns(table_item, false, &column_items))) {
       LOG_WARN("resolve all basic table columns failed", K(ret), K(table_item));
     }
@@ -2120,14 +2101,13 @@ int ObSelectResolver::find_joined_table_group_for_table(
 // joined table group: tree of joined table in one table group
 // join group: short of joined table group
 //
-int ObSelectResolver::resolve_star_for_table_groups(ObStarExpansionInfo &star_expansion_info)
+int ObSelectResolver::resolve_star_for_table_groups()
 {
   ObSelectStmt *select_stmt = get_select_stmt();
   int ret = OB_SUCCESS;
   int64_t num = 0;
   int64_t jointable_idx = -1;
   ObSEArray<int64_t, 4> visited_jointable_idx;
-  bool oracle_star_expand = false;
   if (OB_ISNULL(select_stmt)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("select stmt is null");
@@ -2140,27 +2120,6 @@ int ObSelectResolver::resolve_star_for_table_groups(ObStarExpansionInfo &star_ex
     if (OB_ISNULL(table_item)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("table item is null");
-    } else if (has_oracle_join()) {
-      table_item = get_from_items_order(i);
-      if (OB_ISNULL(table_item) || table_item->is_joined_table()) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("table_item has wrong type", K(table_item));
-      } else {
-        if (OB_FAIL(expand_target_list(*table_item, target_list))) {
-          LOG_WARN("resolve table columns failed", K(ret), K(table_item));
-        }
-        for (int64_t i = 0; OB_SUCC(ret) && i < target_list.count(); ++i) {
-          if (OB_FAIL(select_stmt->add_select_item(target_list.at(i)))) {
-            LOG_WARN("add select item to select stmt failed", K(ret));
-          } else if (is_only_full_group_by_on(session_info_->get_sql_mode())) {
-            // If it is only full group by, all columns in the target list must be checked to see if they satisfy the group constraint
-            if (OB_FAIL(standard_group_checker_.add_unsettled_expr(target_list.at(i).expr_))) {
-              LOG_WARN("add unsettled expr failed", K(ret));
-            }
-            // Same as above
-          }
-        }
-      }
     } else {
       if (OB_FAIL(find_joined_table_group_for_table(table_item->table_id_, jointable_idx))) {
         LOG_WARN("find_joined_table_group_for_table failed", K(ret), K(table_item));
@@ -2201,13 +2160,6 @@ int ObSelectResolver::resolve_star_for_table_groups(ObStarExpansionInfo &star_ex
             // If it is only full group by, all columns in the target list must be checked to satisfy the group constraint
             OZ( standard_group_checker_.add_unsettled_expr(target_list.at(i).expr_) );
           }
-        }
-      }
-    }
-    if (OB_SUCC(ret) && oracle_star_expand) {
-      for (int64_t i = 0; OB_SUCC(ret) && i < target_list.count(); ++i) {
-        if (OB_FAIL(star_expansion_info.column_name_list_.push_back(target_list.at(i).expr_name_))) {
-          LOG_WARN("failed to push back select item expr name", K(ret));
         }
       }
     }
@@ -2307,16 +2259,11 @@ int ObSelectResolver::resolve_star(const ParseNode *node)
 {
   int ret = OB_SUCCESS;
   ObSelectStmt *select_stmt = get_select_stmt();
-  bool oracle_star_expand = false;
   const share::schema::ObTableSchema *table_schema = NULL;
-  ObStarExpansionInfo star_expansion_info;
   if (OB_ISNULL(node) || OB_ISNULL(session_info_)
       || OB_ISNULL(select_stmt) || OB_ISNULL(params_.expr_factory_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid status", K(node), K_(session_info), K(select_stmt), K(params_.expr_factory_));
-  } else {
-    star_expansion_info.start_pos_ = node->stmt_loc_.first_column_;
-    star_expansion_info.end_pos_ = node->stmt_loc_.last_column_;
   }
   if (OB_FAIL(ret)) {
   } else if (node->type_ == T_STAR) {
@@ -2325,63 +2272,20 @@ int ObSelectResolver::resolve_star(const ParseNode *node)
       // select *
       // select * from dual
       SelectItem select_item;
-      if (lib::is_mysql_mode()) {
-        ObConstRawExpr *c_expr = NULL;
-        select_item.alias_name_ = "1";
-        select_item.expr_name_ = "1";
-        if (!is_in_exists_subquery()) {
-          ret = OB_ERR_NO_TABLES_USED;
-          LOG_WARN("No tables used");
-        } else if (OB_FAIL(ObRawExprUtils::build_const_int_expr(*params_.expr_factory_,
-                                                        ObIntType, 1, c_expr))) {
-          LOG_WARN("fail to build const int expr", K(ret));
-        } else if (OB_FALSE_IT(select_item.expr_ = c_expr)) {
-        } else if (OB_FAIL(select_stmt->add_select_item(select_item))) {
-          LOG_WARN("failed to add select item", K(ret));
-        } else {/*do nothing*/}
-      } else {
-        // (select * from dual) is legitimate for oracle ==> output: X
-        ObConstRawExpr *c_expr = NULL;
-        const char *ptr_value = "X";
-        const char *ptr_name = "DUMMY";
-        ObString string_value(1, ptr_value);
-        ObString string_name(ptr_name);
-        if (select_stmt->has_group_by() || has_group_by_clause()) {
-          ret = OB_ERR_WRONG_FIELD_WITH_GROUP;
-          LOG_DEBUG("not a GROUP BY expression", K(ret));
-        } else if (OB_FAIL(ObRawExprUtils::build_const_string_expr(*params_.expr_factory_,
-                   ObCharType,ptr_value, session_info_->get_nls_collation(), c_expr))){
-          LOG_WARN("fail to create const string c_expr", K(ret));
-        } else {
-          ObSysFunRawExpr *cast_expr = NULL;
-          ObRawExprResType res_type;
-          res_type.set_type(ObVarcharType);
-          res_type.set_length(1);
-          res_type.set_length_semantics(LS_BYTE);
-          res_type.set_collation_level(CS_LEVEL_IMPLICIT);
-          res_type.set_collation_type(session_info_->get_nls_collation());
-          if (OB_FAIL(ObRawExprUtils::create_cast_expr(*params_.expr_factory_, c_expr,
-                      res_type, cast_expr, session_info_))) {
-            LOG_WARN("create cast expr for dummy failed", K(ret));
-          } else if (OB_FAIL(cast_expr->clear_flag(IS_INNER_ADDED_EXPR))) {
-            LOG_WARN("failed to clear flag for cast expr", K(ret));
-          } else if (OB_FAIL(cast_expr->formalize(session_info_))) {
-            LOG_WARN("failed to formalize cast expr", K(ret));
-          } else {
-            select_item.expr_ = cast_expr;
-            select_item.expr_name_ = string_name;
-            select_item.alias_name_ = string_name;
-            select_item.is_real_alias_ = true;
-            if (OB_FAIL(select_stmt->add_select_item(select_item))) {
-              LOG_WARN("failed to add select item", K(ret));
-            } else if (oracle_star_expand
-                       && OB_FAIL(star_expansion_info.column_name_list_.push_back(string_name))) {
-              LOG_WARN("failed to push back dummy", K(ret));
-            } else {/*do nothing*/}
-          }
-        }
-      }
-    } else if (OB_FAIL(resolve_star_for_table_groups(star_expansion_info))) {
+      ObConstRawExpr *c_expr = NULL;
+      select_item.alias_name_ = "1";
+      select_item.expr_name_ = "1";
+      if (!is_in_exists_subquery()) {
+        ret = OB_ERR_NO_TABLES_USED;
+        LOG_WARN("No tables used");
+      } else if (OB_FAIL(ObRawExprUtils::build_const_int_expr(*params_.expr_factory_,
+                                                      ObIntType, 1, c_expr))) {
+        LOG_WARN("fail to build const int expr", K(ret));
+      } else if (OB_FALSE_IT(select_item.expr_ = c_expr)) {
+      } else if (OB_FAIL(select_stmt->add_select_item(select_item))) {
+        LOG_WARN("failed to add select item", K(ret));
+      } else {/*do nothing*/}
+    } else if (OB_FAIL(resolve_star_for_table_groups())) {
       LOG_WARN("resolve star for table groups failed", K(ret));
     }
   } else if (node->type_ == T_COLUMN_REF
@@ -2395,7 +2299,7 @@ int ObSelectResolver::resolve_star(const ParseNode *node)
     const TableItem* tab_item = NULL;
     ObNameCaseMode case_mode = OB_NAME_CASE_INVALID;
     if (is_in_exists_subquery()) {
-      // Oracle and MySQL support use any.* as EXISTS subquery select item.
+      // Any qualified star can be used as an EXISTS subquery select item.
       // Consider SQL: SELECT ... FROM T1 WHERE EXISTS (SELECT T3.* FROM T2);
       // Even if T3 does not exist, this SQL statement can still be executed
       // successfully.
@@ -2422,18 +2326,9 @@ int ObSelectResolver::resolve_star(const ParseNode *node)
                                                            column_ref.tbl_name_, table_items))) {
         LOG_WARN("get all matched table failed", K(ret));
       } else if (table_items.count() <= 0) {
-        ret = OB_SUCCESS;
-        ObString db_name;
-        if (lib::is_mysql_mode() || table_items.count() <= 0) {
-          ret = OB_ERR_BAD_TABLE;
-        } else {
-          is_json_wildcard_column = true;
-        }
-        if (ret != 0) {  // according to oracle , need cover error code
-          ret = OB_ERR_BAD_TABLE;
-          ObString table_name = concat_table_name(column_ref.database_name_, column_ref.tbl_name_);
-          LOG_USER_ERROR(OB_ERR_BAD_TABLE, table_name.length(), table_name.ptr());
-        }
+        ret = OB_ERR_BAD_TABLE;
+        ObString table_name = concat_table_name(column_ref.database_name_, column_ref.tbl_name_);
+        LOG_USER_ERROR(OB_ERR_BAD_TABLE, table_name.length(), table_name.ptr());
       }
       for (int64_t i = 0; OB_SUCC(ret) && i < table_items.count(); ++i) {
         target_list.reset();
@@ -2444,7 +2339,7 @@ int ObSelectResolver::resolve_star(const ParseNode *node)
         } else if (OB_FAIL(expand_target_list(*tab_item, target_list))) {
           LOG_WARN("resolve table columns failed", K(ret), K(tab_item), K(i));
         } else if (is_json_wildcard_column) {
-          if (OB_FAIL(schema_checker_->get_table_schema(session_info_->get_effective_tenant_id(), tab_item->ref_id_, table_schema))) {
+          if (OB_FAIL(schema_checker_->get_table_schema( tab_item->ref_id_, table_schema))) {
             ret = OB_TABLE_NOT_EXIST;
             LOG_WARN("get table schema failed", K_(tab_item->table_name), K(tab_item->ref_id_), K(ret));
           } else if (OB_ISNULL(table_schema)) {
@@ -2460,9 +2355,6 @@ int ObSelectResolver::resolve_star(const ParseNode *node)
           is_column_name_equal = is_json_wildcard_column & (0 != column_ref.tbl_name_.case_compare(target_list.at(j).alias_name_));
           if (!is_column_name_equal && OB_FAIL(select_stmt->add_select_item(target_list.at(j)))) {
             LOG_WARN("add select item to select stmt failed", K(ret));
-          } else if (oracle_star_expand
-                     && OB_FAIL(star_expansion_info.column_name_list_.push_back(target_list.at(j).expr_name_))) {
-            LOG_WARN("failed to push back select item expr name", K(ret));
           } else if (is_only_full_group_by_on(session_info_->get_sql_mode())) {
             // If it is only full group by, all columns in the target list must be checked to satisfy the group constraint
             if (is_column_name_equal) {    // target column not equal with current column without judge
@@ -2479,10 +2371,6 @@ int ObSelectResolver::resolve_star(const ParseNode *node)
     }
   } else {
     /* won't be here */
-  }
-  if (OB_SUCC(ret) && oracle_star_expand
-      && OB_FAIL(params_.star_expansion_infos_.push_back(star_expansion_info))) {
-    LOG_WARN("failed to push back star expansion info", K(ret));
   }
   return ret;
 }
@@ -2734,10 +2622,7 @@ int ObSelectResolver::resolve_from_clause(const ParseNode *node)
       session_info_->set_table_name_hidden(old_flag);
       OZ( column_namespace_checker_.add_reference_table(table_item), table_item );
       OZ( select_stmt->add_from_item(table_item->table_id_, table_item->is_joined_table()) );
-      // oracle outer join will change from items
-      OZ( add_from_items_order(table_item), table_item );
       if (OB_SUCC(ret)) {
-        select_stmt->set_has_reverse_link(table_item->is_reverse_link_);
       }
     }
     OZ( check_recursive_cte_usage(*select_stmt) );
@@ -2768,10 +2653,9 @@ int ObSelectResolver::resolve_group_clause(const ParseNode *node)
         LOG_WARN("failed to push back to order items.", K(ret));
       } else {/* do nothing. */}
     }
-    omt::ObTenantConfigGuard tenant_config(TENANT_CONF(session_info_->get_effective_tenant_id()));
-    bool enable_hash_rollup = tenant_config.is_valid()
-                              && (tenant_config->_use_hash_rollup.case_compare("auto") == 0
-                                  || tenant_config->_use_hash_rollup.case_compare("forced") == 0);
+    bool enable_hash_rollup = true
+                              && (GCONF._use_hash_rollup.case_compare("auto") == 0
+                                  || GCONF._use_hash_rollup.case_compare("forced") == 0);
     if (OB_SUCC(ret) && enable_hash_rollup) {
       if (OB_FAIL(append(select_stmt->get_order_items(), order_items))) {
         LOG_WARN("append order items failed", K(ret));
@@ -2829,7 +2713,7 @@ int ObSelectResolver::resolve_group_by_element(const ParseNode *node,
   } else {
     switch (node->type_) {
       case T_NULL: {
-        /*compatible oracle: select c1 from t1 group by c1, (); do nothing, just skip*/
+        /* select c1 from t1 group by c1, (); do nothing, just skip */
         break;
       }
       case T_GROUPBY_KEY: {
@@ -2918,7 +2802,7 @@ int ObSelectResolver::resolve_with_rollup_clause(const ParseNode *node,
   ObSelectStmt *select_stmt = get_select_stmt();
   // for: select a, sum(b) from t group by a with rollup.
   // with rollup is the children[0] and sort key list is children[1].
-  if (OB_ISNULL(node) || OB_ISNULL(select_stmt) || OB_UNLIKELY(!lib::is_mysql_mode()) ||
+  if (OB_ISNULL(node) || OB_ISNULL(select_stmt) ||
       OB_UNLIKELY(T_WITH_ROLLUP_CLAUSE != node->type_ || node->num_child_ != 2) ||
       OB_ISNULL(sort_list_node = node->children_[1])) {
     ret = OB_INVALID_ARGUMENT;
@@ -3056,7 +2940,7 @@ int ObSelectResolver::resolve_groupby_node(const ParseNode *group_node,
     LOG_WARN("too deep recursive", K(ret), K(is_stack_overflow));
   } else if (group_node->type_ == T_EXPR_LIST) {
     /****************************************************************************
-    suppport row in oracle,such as (by jiangxiu):
+    Support row-shaped group-by expressions such as:
     select c1 from t1 group by ((c1)); ==> select c1 from t1 group by c1;
     select c1,c2 from t1 group by (c1, c2); ==> select c1,c2 from t1 group by c1, c2;
     select c1,c2 from t1 group by (c1, c2), c3; ==> select c1,c2 from t1 group by c1, c2, c3;
@@ -3611,7 +3495,6 @@ int ObSelectResolver::resolve_into_outfile_with_format(const ParseNode *node, Ob
     }
   }
   if (OB_SUCC(ret) && node->num_child_ > 2 && NULL != (format_node = node->children_[2])) { // format
-    // TODO(bitao): handle other parquet property
     ObResolverUtils::FileFormatContext ff_ctx;
     for (int i = 0; OB_SUCC(ret) && i < format_node->num_child_; ++i) {
       if (OB_ISNULL(option_node = format_node->children_[i])) {
@@ -3631,11 +3514,9 @@ int ObSelectResolver::resolve_into_outfile_with_format(const ParseNode *node, Ob
       ret = OB_NOT_SUPPORTED;
       LOG_WARN("should set file format type", K(ret));
       LOG_USER_ERROR(OB_NOT_SUPPORTED, "format without type");
-    } else if (ObExternalFileFormat::PARQUET_FORMAT != external_format.format_type_
-               && ObExternalFileFormat::CSV_FORMAT != external_format.format_type_) {
+    } else if (ObExternalFileFormat::CSV_FORMAT != external_format.format_type_) {
       ret = OB_NOT_SUPPORTED;
-      LOG_WARN("select into only support parquet/orc/csv format type now", K(ret),
-               K(external_format.format_type_));
+      LOG_WARN("select into only supports csv format type", K(ret), K(external_format.format_type_));
       LOG_USER_ERROR(OB_NOT_SUPPORTED, "this format type");
     } else if (ObExternalFileFormat::CSV_FORMAT == external_format.format_type_) {
       ObCollationType file_cs_type = has_cs_type
@@ -3746,10 +3627,10 @@ int ObSelectResolver::resolve_into_clause(const ParseNode *node)
     } else if (OB_UNLIKELY(is_sub_stmt_)) { //in subquery
       ret = OB_INAPPROPRIATE_INTO;
       LOG_WARN("select into can not in subquery", K(ret));
-    } else if (OB_UNLIKELY(is_mysql_mode() && is_in_set_query())) {
+    } else if (OB_UNLIKELY(is_in_set_query())) {
       ret = OB_INAPPROPRIATE_INTO;
       LOG_WARN("select into can not in set query", K(ret));
-    } else if (is_mysql_mode() && params_.is_from_create_view_) {
+    } else if (params_.is_from_create_view_) {
       ret = OB_ERR_VIEW_SELECT_CONTAIN_INTO;
       LOG_WARN("View's SELECT contains a 'INTO' clause.", K(ret));
     } else {
@@ -3810,7 +3691,7 @@ int ObSelectResolver::resolve_column_ref_in_all_namespace(
   // If the ordinary column and alias name are duplicate, then prioritize the base column in the group by, having clause, and report WARNING
   //order by clause, prioritize using alias name
   if (OB_UNLIKELY(T_ORDER_SCOPE == current_scope_)) {
-    if (lib::is_mysql_mode() && params_.is_column_ref_) {
+    if (params_.is_column_ref_) {
       // should raise an error
       // select id + 1 as data, data from test order by data
       // select id as data, data from test order by data
@@ -3978,12 +3859,10 @@ int ObSelectResolver::resolve_alias_column_ref(
         cur_item = &select_stmt->get_select_item(i);
         if (ObCharset::case_insensitive_equal(q_name.col_name_, cur_item->alias_name_)) {
           /*
-           * for oracle mode, column uniqueness is checked among all tables
-           * for mysql mode, column uniqueness is only checked among select items
+           * Column uniqueness is checked among select items for this path.
            * for example, create table t1(a int, b int, c int); create table t2(a int, b int, c int);
            * select t1.a, t1.b from t1 left join t2 on t1.a = t2.a order by b
-           * for mysql mode, it is ok, and b refer to t1.b
-           * for oracle mode, it will get error "column ambiguously defined"
+           * b refers to t1.b.
            */
           if (NULL == real_ref_expr) {
             if (OB_SUCC(ret)) {
@@ -4199,7 +4078,7 @@ int ObSelectResolver::resolve_column_ref_table_first(
       if (OB_FAIL(resolve_alias_column_ref(q_name, real_ref_expr))) {
         LOG_WARN_IGNORE_COL_NOTFOUND(ret, "resolve alias column ref failed", K(ret), K(q_name));
       }
-    } else if (OB_NON_UNIQ_ERROR == ret && lib::is_mysql_mode() &&
+    } else if (OB_NON_UNIQ_ERROR == ret &&
                T_GROUP_SCOPE == current_scope_) {
       // in mysql mode, for t1(c1, c2), t2(c1, c2), select t1.c1 from t1, t2 group by c1;
       // the c1 in group by is resolved as t1.c1 in select items.
@@ -4400,10 +4279,8 @@ int ObSelectResolver::mark_nested_aggr_if_required(
   if (OB_SUCC(ret) && has_nested_aggr_) {
     ObArray<ObAggFunRawExpr*> param_aggrs;
     ObArray<ObWinFunRawExpr *> param_winfuncs;
-    if (OB_UNLIKELY(is_mysql_mode())) {
-      ret = OB_ERR_INVALID_GROUP_FUNC_USE;
-      LOG_WARN("invalid scope for agg function", K(ret));
-    }
+    ret = OB_ERR_INVALID_GROUP_FUNC_USE;
+    LOG_WARN("invalid scope for agg function", K(ret));
     for (int64_t i = 0; OB_SUCC(ret) && i < aggr_exprs.count(); ++i) {
       ObAggFunRawExpr *aggr = NULL;
       if (OB_ISNULL(aggr = aggr_exprs.at(i))) {
@@ -4609,33 +4486,14 @@ int ObSelectResolver::check_column_ref_in_group_by_or_field_list(const ObRawExpr
   }
   return ret;
 }
-// use_sys_tenant flag indicates whether to obtain schema as a system tenant
-int ObSelectResolver::check_need_use_sys_tenant(bool &use_sys_tenant) const
-{
-  int ret = OB_SUCCESS;
-  if (params_.is_from_show_resolver_) {
-    // If the current tenant is already the system tenant, then ignore
-    if (OB_ISNULL(session_info_)) {
-      ret = OB_NOT_INIT;
-      LOG_WARN("session info is null");
-    } else if (OB_SYS_TENANT_ID == session_info_->get_effective_tenant_id()) {
-      use_sys_tenant = false;
-    } else {
-      use_sys_tenant = true;
-    }
-  } else {
-    use_sys_tenant = false;
-  }
-  return ret;
-}
-
 int ObSelectResolver::check_in_sysview(bool &in_sysview) const
 {
   int ret = OB_SUCCESS;
   in_sysview = params_.is_from_show_resolver_ || params_.is_in_sys_view_;
   return ret;
 }
-// Same as oracle, ntile(arg1) (partition by arg2...) requires arg1 = arg2 or calculations based on arg2, like group by and select validity checks
+// ntile(arg1) (partition by arg2...) requires arg1 = arg2 or calculations
+// based on arg2, like group by and select validity checks.
 int ObSelectResolver::check_win_func_arg_valid(ObSelectStmt *select_stmt,
                                                const ObItemType func_type,
                                                common::ObIArray<ObRawExpr *> &arg_exp_arr,
@@ -4721,7 +4579,7 @@ int ObSelectResolver::check_window_exprs()
                                                            const_cast<ObIArray<ObRawExpr *>&>(partition_exprs)))) {
         LOG_WARN("argument should be a function of expressions in PARTITION BY", K(ret));
       }
-      // Check the validity of data type when frame is range, rules are the same as Oracle
+      // Check data type validity when frame is range.
       if (OB_SUCC(ret) && need_check_order_datatype) {
         if (1 != order_items.count()) {
           ret = OB_ERR_INVALID_WINDOW_FUNC_USE;
@@ -4858,12 +4716,8 @@ int ObSelectResolver::check_recursive_cte_usage(const ObSelectStmt &select_stmt)
     }
   }
   if (cte_ctx_.invalid_recursive_union() && fake_cte_table_count >= 1) {
-    if (lib::is_mysql_mode()) {
-      ret = OB_NOT_SUPPORTED;
-      LOG_USER_ERROR(OB_NOT_SUPPORTED, "recursive UNION DISTINCT in Recursive Common Table Expression");
-    } else {
-      ret = OB_ERR_NEED_UNION_ALL_IN_RECURSIVE_CTE;
-    }
+    ret = OB_NOT_SUPPORTED;
+    LOG_USER_ERROR(OB_NOT_SUPPORTED, "recursive UNION DISTINCT in Recursive Common Table Expression");
     LOG_WARN("recursive WITH clause must use a UNION ALL operation", K(ret));
   } else if (fake_cte_table_count > 1) {
     ret = OB_ERR_CTE_RECURSIVE_QUERY_NAME_REFERENCED_MORE_THAN_ONCE;
@@ -4908,7 +4762,7 @@ int ObSelectResolver::check_ntile_compatiable_with_mysql(ObWinFunRawExpr *win_ex
   if (OB_ISNULL(win_expr)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("win expr is null.", K(ret));
-  } else if (T_WIN_FUN_NTILE == win_expr->get_func_type() && lib::is_mysql_mode()) {
+  } else if (T_WIN_FUN_NTILE == win_expr->get_func_type()) {
     if (1 != win_expr->get_func_params().count()) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("ntile param count should be 1", K(ret));
@@ -4996,8 +4850,9 @@ int ObSelectResolver::check_ntile_validity(const ObSelectStmt *stmt,
 }
 
 /**
- * oracle allows subqueries to return multiple columns in select items
- * when and only when the subquery is a parameter for exists or not exists.
+ * Subqueries may return multiple columns in select items only when the
+ * subquery is a parameter for EXISTS or NOT EXISTS, or when it is wrapped
+ * as a cursor parameter.
  */
 int ObSelectResolver::check_subquery_return_one_column(const ObRawExpr &expr, bool is_exists_param)
 {
@@ -5064,8 +4919,7 @@ int ObSelectResolver::resolve_check_option_clause(const ParseNode *node)
 /* ObSelectResolver::check_auto_gen_column_names()
  *
  * For a long expr with no alias
- * MySQL will rename the overlong auto generated alias to "Name_exp_x",
- * but Oracle will throw "identifier is too long" error.
+ * rename the overlong auto generated alias to "Name_exp_x".
  */
 int ObSelectResolver::check_auto_gen_column_names() {
   int ret = OB_SUCCESS;
@@ -5154,8 +5008,8 @@ int ObSelectResolver::recursive_update_column_name(ObSelectStmt *select_stmt,
     } else if (OB_FAIL(ob_write_string(*allocator_, ref_select_item->alias_name_, col_name))) {
       LOG_WARN("Can not malloc space for constraint name", K(ret));
     } else if (col_name.length() > 0) {
-      // some columns such as ROWID in oracle mode may not have alias name, hence only
-      // replace column name when the ref column's alias name (col_name) is not empty.
+      // Some columns may not have alias names, so only replace the column name
+      // when the ref column's alias name (col_name) is not empty.
       col_ref_expr->get_column_name().assign_ptr(col_name.ptr(), col_name.length());
     }
   } else {
@@ -5207,7 +5061,7 @@ int ObSelectResolver::recursive_check_grouping_columns(ObSelectStmt *stmt, ObRaw
     } else if (c_expr->get_real_param_count() < 1) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("check grouping_id has unexpected err", K(ret));
-    } else if (lib::is_mysql_mode() && c_expr->get_real_param_count() > max_param_num_mysql) {
+    } else if (c_expr->get_real_param_count() > max_param_num_mysql) {
       ret = ret = OB_ERR_PARAM_SIZE;
       LOG_WARN("invalid number of arguments", K(ret), KPC(c_expr));
       LOG_USER_WARN(OB_NOT_SUPPORTED, "grouping_id() with more than 63 arguments");

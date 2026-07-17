@@ -15,12 +15,13 @@
  */
 
 #include "storage/ddl/ob_lob_macro_block_writer.h"
+#include "storage/ddl/ob_ddl_storage_util.h"
 #include "storage/ddl/ob_ddl_tablet_context.h"
 #include "storage/ddl/ob_ddl_independent_dag.h"
 #include "storage/lob/ob_lob_access_param.h"
-#include "storage/ddl/ob_cg_macro_block_writer.h"
+#include "storage/ddl/ob_ddl_macro_block_writer.h"
 #include "share/ob_ddl_common.h"
-#include "share/ob_tablet_autoincrement_service.h"
+#include "storage/ob_tablet_autoincrement_service.h"
 #include "storage/ddl/ob_tablet_ddl_kv_mgr.h"
 
 #define USING_LOG_PREFIX STORAGE
@@ -34,7 +35,7 @@ using namespace oceanbase::sql;
 
 ObLobMacroBlockWriter::ObLobMacroBlockWriter()
   : is_inited_(false), lob_column_count_(0),
-    lob_arena_("lob_meta_iter", OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID()),
+    lob_arena_("lob_meta_iter", OB_MALLOC_NORMAL_BLOCK_SIZE),
     meta_write_iter_(&lob_arena_, ObLobMetaUtil::LOB_OPER_PIECE_DATA_SIZE),
     macro_block_writer_(nullptr), total_lob_cell_count_(0), inrow_lob_cell_count_(0)
 {
@@ -44,7 +45,7 @@ ObLobMacroBlockWriter::ObLobMacroBlockWriter()
 ObLobMacroBlockWriter::~ObLobMacroBlockWriter()
 {
   if (nullptr != macro_block_writer_) {
-    macro_block_writer_->~ObCgMacroBlockWriter();
+    macro_block_writer_->~ObDDLMacroBlockWriter();
     ob_free(macro_block_writer_);
     macro_block_writer_ = nullptr;
   }
@@ -71,7 +72,6 @@ int ObLobMacroBlockWriter::init(const ObWriteMacroParam &param,
     lob_column_count_ = param.ddl_table_schema_.lob_column_idxs_.count();
     lob_id_cache_.tablet_id_ = lob_meta_tablet_id_;
     lob_inrow_threshold_ = param.ddl_table_schema_.table_item_.lob_inrow_threshold_;
-    ls_id_ = param.ls_id_;
     tablet_id_ = param.tablet_id_;
     param_ = param;
 
@@ -131,7 +131,6 @@ int ObLobMacroBlockWriter::write(const ObColumnSchemaItem &column_schema, ObIAll
                                                                   lob_arena_/*lob_allocator*/,
                                                                   param_.tx_info_.tx_desc_,
                                                                   lob_id_cache_,
-                                                                  ls_id_,
                                                                   tablet_id_,
                                                                   lob_meta_tablet_id_,
                                                                   column_schema.col_type_.get_type(),
@@ -140,7 +139,6 @@ int ObLobMacroBlockWriter::write(const ObColumnSchemaItem &column_schema, ObIAll
                                                                   datum,
                                                                   timeout_ts,
                                                                   true/*has_lob_header*/,
-                                                                  MTL_ID(),
                                                                   meta_write_iter_))) {
       LOG_WARN("insert lob column failed", K(ret));
     }
@@ -196,7 +194,7 @@ int ObLobMacroBlockWriter::transform_lob_meta_row(ObLobMetaWriteResult &lob_meta
     if (OB_UNLIKELY(!lob_meta_row_.is_valid())) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("invalid lob meta row", KR(ret), K(lob_meta_row_));
-    } else if (OB_FAIL(ObDDLUtil::check_null_and_length(false/*is_index_table*/,
+    } else if (OB_FAIL(ObDDLStorageUtil::check_null_and_length(false/*is_index_table*/,
                                                         false/*has_lob_rowkey*/,
                                                         ObLobMetaUtil::LOB_META_SCHEMA_ROWKEY_COL_CNT,
                                                         lob_meta_row_))) {
@@ -214,7 +212,7 @@ int ObLobMacroBlockWriter::prepare_macro_block_writer()
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
   } else if (OB_ISNULL(macro_block_writer_)) {
-    if (OB_ISNULL(macro_block_writer_ = OB_NEW(ObCgMacroBlockWriter, ObMemAttr(MTL_ID(), "lob_mb_writer")))) {
+    if (OB_ISNULL(macro_block_writer_ = OB_NEW(ObDDLMacroBlockWriter, ObMemAttr("lob_mb_writer")))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("alocate memory for cg macro block writer failed", K(ret));
     }
@@ -222,20 +220,18 @@ int ObLobMacroBlockWriter::prepare_macro_block_writer()
   if (OB_SUCC(ret) && OB_UNLIKELY(!macro_block_writer_->is_inited())) {
     ObITable::TableKey lob_table_key;
     lob_table_key.tablet_id_ = lob_meta_tablet_id_;
-    if (is_incremental_minor_direct_load(param_.direct_load_type_)) { // 增量
+    if (is_incremental_minor_direct_load(param_.direct_load_type_)) { // incremental
       lob_table_key.table_type_ = ObITable::MINI_SSTABLE;
       lob_table_key.scn_range_.start_scn_.convert_for_tx(1);
       lob_table_key.scn_range_.end_scn_.convert_for_tx(param_.snapshot_version_); // for logic version
-    } else if (is_incremental_major_direct_load(param_.direct_load_type_)) { // 增量
+    } else if (is_incremental_major_direct_load(param_.direct_load_type_)) { // incremental
       lob_table_key.table_type_ = ObITable::INC_MAJOR_SSTABLE;
-      lob_table_key.column_group_idx_ = 0;
       // slice idx is not the same order with the rowkey of lob. set slice idx 0 here to compare rowkey when merge major sstable
       lob_table_key.slice_range_.start_slice_idx_ = 0;
       lob_table_key.slice_range_.end_slice_idx_ = 0;
       lob_table_key.version_range_.snapshot_version_ = param_.snapshot_version_;
-    } else { // 全量
+    } else { // full
       lob_table_key.table_type_ = ObITable::MAJOR_SSTABLE;
-      lob_table_key.column_group_idx_ = 0;
       // slice idx is not the same order with the rowkey of lob. set slice idx 0 here to compare rowkey when merge major sstable
       lob_table_key.slice_range_.start_slice_idx_ = 0;
       lob_table_key.slice_range_.end_slice_idx_ = 0;
@@ -275,8 +271,8 @@ int ObLobMacroBlockWriter::switch_lob_id_cache()
       static const int64_t AUTO_INC_CACHE_INTERVAL = 5000000L; // 500w.
       ObTabletAutoincrementService &auto_inc = ObTabletAutoincrementService::get_instance();
       lob_id_cache_.cache_size_ = AUTO_INC_CACHE_INTERVAL;
-      if (OB_FAIL(auto_inc.get_tablet_cache_interval(MTL_ID(), lob_id_cache_))) {
-        LOG_WARN("autoinc service get tablet cache failed", K(ret), K(MTL_ID()));
+      if (OB_FAIL(auto_inc.get_tablet_cache_interval(lob_id_cache_))) {
+        LOG_WARN("autoinc service get tablet cache failed", K(ret));
       }
     }
     FLOG_INFO("switch lob id cache", K(ret), K(tablet_id_), K(slice_idx_), "is_idem", lob_id_generator_.is_inited(), K(old_value), K(total_lob_cell_count_), K(inrow_lob_cell_count_), "new_cache", lob_id_cache_);
@@ -298,7 +294,7 @@ int ObLobMacroBlockWriter::close()
     uint64_t last_lob_id = 0;
     if (OB_FAIL(lob_id_cache_.get_value(last_lob_id))) {
       LOG_WARN("get last lob id failed", K(ret));
-    } else if (OB_FAIL(ObDDLUtil::set_tablet_autoinc_seq(ls_id_, lob_meta_tablet_id_, last_lob_id))) {
+    } else if (OB_FAIL(ObDDLUtil::set_tablet_autoinc_seq(lob_meta_tablet_id_, last_lob_id))) {
       LOG_WARN("update max lob id failed", K(ret), K(last_lob_id));
     }
   }

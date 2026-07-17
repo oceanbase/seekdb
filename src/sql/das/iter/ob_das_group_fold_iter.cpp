@@ -186,7 +186,7 @@ int ObDASGroupFoldIter::inner_init(ObDASIterParam &param)
     need_check_output_datum_ = group_fold_param.need_check_output_datum_;
     iter_tree_ = group_fold_param.iter_tree_;
     iter_alloc_ = new (iter_alloc_buf_) common::ObArenaAllocator();
-    iter_alloc_->set_attr(ObMemAttr(MTL_ID(), "ScanDASCtx"));
+    iter_alloc_->set_attr(ObMemAttr("ScanDASCtx"));
 
     /********* init group store rows *********/
     int64_t group_id_idx = OB_INVALID_INDEX;

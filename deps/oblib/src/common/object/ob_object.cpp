@@ -484,11 +484,6 @@ int ObLobLocatorV2::get_inrow_data(ObString &inrow_data) const
       COMMON_LOG(WARN, "Lob: Maybe a bug, get inrow data of outrow lob", K(ret), K(lbt()));
     }
   }
-  if (OB_SUCC(ret) && inrow_data.length() == 0 && lib::is_oracle_mode()) {
-    // Compatible with null string without header (old impliemnt of orale empty lob)
-    // refer to mysqltest regula_expression_sqlqa.regular_replace_mysql
-    inrow_data.assign_ptr(NULL, 0);
-  } 
   return ret;
 }
 
@@ -1020,8 +1015,7 @@ bool ObObj::is_zero() const
 {
   bool ret = is_numeric_type();
   if (ret) {
-    // float/double comparison using "==" or "!=" matches MySQL
-    // and Oracle doesn't support raw float/double
+    // float/double comparison using "==" or "!=" is the numeric-object behavior.
     switch(meta_.get_type()) {
       case ObTinyIntType:
         // fall through
@@ -1339,20 +1333,9 @@ int ObObj::check_collation_free_and_compare(const ObObj &other, int &cmp) const
     const int32_t lhs_len = get_val_len();
     const int32_t rhs_len = other.get_val_len();
     const int32_t cmp_len = std::min(lhs_len, rhs_len);
-    const bool is_oracle = lib::is_oracle_mode();
     bool need_skip_tail_space = false;
     cmp = memcmp(get_string_ptr(), other.get_string_ptr(), cmp_len);
-    if (is_oracle) {
-      if (0 == cmp) {
-        // If two strings differ only by trailing spaces, they are considered different in Oracle varchar mode
-        if (!is_varying_len_char_type()) {
-          // If two strings differ only by trailing spaces, they are considered the same in Oracle char mode
-          need_skip_tail_space = true;
-        } else if (lhs_len != cmp_len || rhs_len != cmp_len) {
-          cmp = lhs_len > cmp_len ? 1 : -1;
-        }
-      }
-    } else if (0 == cmp && (lhs_len != cmp_len || rhs_len != cmp_len)) {
+    if (0 == cmp && (lhs_len != cmp_len || rhs_len != cmp_len)) {
       // If two strings differ only at the end with spaces, they are considered the same in MySQL mode
       need_skip_tail_space = true;
     }
@@ -1403,20 +1386,9 @@ int ObObj::check_collation_free_and_compare(const ObObj &other) const
     const int32_t lhs_len = get_val_len();
     const int32_t rhs_len = other.get_val_len();
     const int32_t cmp_len = std::min(lhs_len, rhs_len);
-    const bool is_oracle = lib::is_oracle_mode();
     bool need_skip_tail_space = false;
     cmp = memcmp(get_string_ptr(), other.get_string_ptr(), cmp_len);
-    if (is_oracle) {
-      if (0 == cmp) {
-        // If two strings differ only by trailing spaces, in Oracle varchar mode, the strings are considered different
-        if (!is_varying_len_char_type()) {
-          // If two strings differ only by trailing spaces, they are considered the same in Oracle char mode
-          need_skip_tail_space = true;
-        } else if (lhs_len != cmp_len || rhs_len != cmp_len) {
-          cmp = lhs_len > cmp_len ? 1 : -1;
-        }
-      }
-    } else if (0 == cmp && (lhs_len != cmp_len || rhs_len != cmp_len)) {
+    if (0 == cmp && (lhs_len != cmp_len || rhs_len != cmp_len)) {
       // If two strings differ only at the trailing spaces, they are considered the same in MySQL mode
       need_skip_tail_space = true;
     }
@@ -1998,10 +1970,8 @@ int ObObj::get_set_str_val(ObSqlString &str_val, const ObIArray<ObString> &type_
   }
   return ret;
 }
-// When the tenant mode is mysql, return the character length of char
-// When the tenant mode is oracle, if the len type of char is char, return the character length of char
-// When the tenant mode is oracle, if the len type of char is byte, return the byte length of char
-int ObObj::get_char_length(const ObAccuracy accuracy, int32_t &char_len, bool is_oracle_mode) const
+// In MySQL-only mode, return the character length of char.
+int ObObj::get_char_length(const ObAccuracy accuracy, int32_t &char_len) const
 {
   int ret = OB_SUCCESS;
 
@@ -2009,10 +1979,7 @@ int ObObj::get_char_length(const ObAccuracy accuracy, int32_t &char_len, bool is
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("type must be char", K(get_type()));
   } else {
-    if (is_oracle_byte_length(is_oracle_mode, accuracy.get_length_semantics())) {
-      // get byte length
-      char_len = static_cast<int32_t>(get_val_len());
-    } else {
+    {
       // get char length
       char_len = static_cast<int32_t>(ObCharset::strlen_char(
                  get_collation_type(), get_string_ptr(), get_val_len()));
@@ -2229,10 +2196,10 @@ DEF_TO_STRING(ObHexEscapeSqlStr)
   int64_t buf_pos = 0;
   if (buf != NULL && buf_len > 0 && !str_.empty()) {
     const char *end = str_.ptr() + str_.length();
-    if (do_oracle_mode_escape_) {
+    if (do_single_quote_escape_) {
       for (const char *cur = str_.ptr(); cur < end && buf_pos < buf_len; ++cur) {
         if ('\'' == *cur) {
-          // In oracle mode, only handle single quote escape
+          // Only handle single quote escape in this escape mode.
           buf[buf_pos++] = '\'';
           if (buf_pos < buf_len) {
             buf[buf_pos++] = *cur;
@@ -2309,7 +2276,7 @@ int64_t ObHexEscapeSqlStr::get_extra_length() const
   int64_t ret_length = 0;
   if (!str_.empty()) {
     const char *end = str_.ptr() + str_.length();
-    if (do_oracle_mode_escape_) {
+    if (do_single_quote_escape_) {
       for (const char *cur = str_.ptr(); cur < end; ++cur) {
         if ('\'' == *cur) {
           ++ret_length;
@@ -2426,40 +2393,6 @@ int ObObjUDTUtil::ob_udt_obj_value_get_serialize_size(const ObObj &obj, int64_t 
   return ret;
 }
 
-int ObObjCharacterUtil::print_safe_hex_represent_oracle(const ObObj &obj, char *buffer, int64_t length, int64_t &pos,
-    const ObAccuracy &accuracy)
-{
-  int ret = OB_SUCCESS;
-  const char *CAST_PREFIX = "CAST(UTL_RAW.CAST_TO_%s(HEXTORAW('";
-  const char *CAST_CHAR_SUFFIX = "')) AS %s(%d %s))";
-  const char *CAST_NCHAR_SUFFIX = "')) AS %s(%d))";
-  const char *CAST_VARCHAR_TYPE_STR = "VARCHAR2";
-  const char *LENGTH_SEMANTICS_STR = get_length_semantics_str(accuracy.get_length_semantics());
-  const char *type_str = "";
-  switch (obj.get_type()) {
-    case ObCharType:
-      type_str = "CHAR";
-      break;
-    case ObVarcharType:
-      type_str = "VARCHAR2";
-      break;
-    default:
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexcepted obj type", K(ret), K(obj.get_type()));
-  }
-  if (OB_FAIL(ret)) {
-  } else if (OB_FAIL(databuff_printf(buffer, length, pos, CAST_PREFIX, CAST_VARCHAR_TYPE_STR))) {
-    LOG_WARN("fail to print string", K(ret), KP(CAST_PREFIX), K(CAST_VARCHAR_TYPE_STR));
-  } else if (OB_FAIL(hex_print(obj.get_string_ptr(), obj.get_string_len(), buffer, length, pos))) {
-    LOG_WARN("fail to print hex", K(ret));
-  } else if (OB_FAIL(databuff_printf(buffer, length, pos, CAST_CHAR_SUFFIX, type_str,
-    accuracy.get_length(), LENGTH_SEMANTICS_STR))) {
-      LOG_WARN("fail to print string", K(ret), K(CAST_CHAR_SUFFIX), K(type_str),
-        K(accuracy.get_length()), K(LENGTH_SEMANTICS_STR));
-  }
-  return ret;
-}
-
 int ObObjCharacterUtil::print_safe_hex_represent_mysql(const ObObj &obj, char *buffer, int64_t length, int64_t &pos)
 {
   int ret = OB_SUCCESS;
@@ -2495,9 +2428,9 @@ int ObObjCharacterUtil::print_safe_hex_represent(const ObObj &obj, char* buf, co
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected obj type", K(ret), K(obj.get_type()), K(obj.get_collation_type()));
   } else {
-    ret = lib::is_oracle_mode() ? print_safe_hex_represent_oracle(obj, buf, buf_len, pos, accuracy)
-            : print_safe_hex_represent_mysql(obj, buf, buf_len, pos);
+    ret = print_safe_hex_represent_mysql(obj, buf, buf_len, pos);
   }
   return ret;
 }
 
+ 

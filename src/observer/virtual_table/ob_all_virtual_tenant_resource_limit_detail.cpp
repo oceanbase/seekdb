@@ -41,8 +41,8 @@ ObResourceLimitDetailTable::~ObResourceLimitDetailTable()
 
 void ObResourceLimitDetailTable::reset()
 {
-  // Note that cross-tenant resources must be released by ObMultiTenantOperator, it should be called at first.
-  omt::ObMultiTenantOperator::reset();
+  constraint_iter_.reset();
+  iter_.reset();
   addr_.reset();
   ObVirtualTableScannerIterator::reset();
 }
@@ -56,29 +56,6 @@ int ObResourceLimitDetailTable::set_addr(common::ObAddr &addr)
     LOG_WARN("get ip buffer failed", K(ret), K(addr_));
   }
   return ret;
-}
-
-void ObResourceLimitDetailTable::release_last_tenant()
-{
-  constraint_iter_.reset();
-  iter_.reset();
-}
-
-int ObResourceLimitDetailTable::inner_get_next_row(ObNewRow *&row)
-{
-  int ret = OB_SUCCESS;
-  if (OB_FAIL(execute(row))) {
-    LOG_WARN("execute fail", K(ret));
-  }
-  return ret;
-}
-
-bool ObResourceLimitDetailTable::is_need_process(uint64_t tenant_id)
-{
-  if (is_sys_tenant(effective_tenant_id_) || tenant_id == effective_tenant_id_) {
-    return true;
-  }
-  return false;
 }
 
 int ObResourceLimitDetailTable::get_next_resource_limit_val_(int64_t &val)
@@ -114,7 +91,7 @@ int ObResourceLimitDetailTable::get_next_resource_limit_val_(int64_t &val)
   return ret;
 }
 
-int ObResourceLimitDetailTable::process_curr_tenant(ObNewRow *&row)
+int ObResourceLimitDetailTable::inner_get_next_row(ObNewRow *&row)
 {
   int ret = OB_SUCCESS;
   int64_t limit_value;

@@ -166,7 +166,6 @@ public:
       mem_ctx_(),
       get_next_row_(nullptr),
       get_next_rows_(nullptr),
-      ls_id_(),
       merge_ctdef_(nullptr),
       merge_rtdef_(nullptr),
       tx_desc_(nullptr),
@@ -182,7 +181,7 @@ public:
   virtual int do_table_scan() override;
   virtual int rescan() override;
   virtual void clear_evaluated_flag() override;
-  int set_ls_tablet_ids(const ObLSID &ls_id, const ObDASRelatedTabletID &related_tablet_ids);
+  int set_tablet_ids(const ObDASRelatedTabletID &related_tablet_ids);
   ObTableScanParam *get_child_scan_param(int64_t idx) { return child_scan_params_.at(idx); }
 
 protected:
@@ -198,8 +197,7 @@ private:
   int intersect_get_next_rows(int64_t &count, int64_t capacity);
   int union_get_next_row();
   int union_get_next_rows(int64_t &count, int64_t capacity);
-  int init_scan_param(const share::ObLSID &ls_id,
-                      const common::ObTabletID &tablet_id,
+  int init_scan_param(const common::ObTabletID &tablet_id,
                       const sql::ObDASScanCtDef *ctdef,
                       sql::ObDASScanRtDef *rtdef,
                       ObTableScanParam &scan_param);
@@ -224,7 +222,6 @@ private:
   lib::MemoryContext mem_ctx_;
   int (ObDASIndexMergeIter::*get_next_row_)();
   int (ObDASIndexMergeIter::*get_next_rows_)(int64_t&, int64_t);
-  ObLSID ls_id_;
   const ObDASIndexMergeCtDef *merge_ctdef_;
   ObDASIndexMergeRtDef *merge_rtdef_;
   transaction::ObTxDesc *tx_desc_;

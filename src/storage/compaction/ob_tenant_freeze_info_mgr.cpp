@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX STORAGE
 #include "ob_tenant_freeze_info_mgr.h"
+#include "share/rc/ob_module_provider.h"
 #include "share/ob_zone_merge_info.h"
 #include "share/ob_global_merge_table_operator.h"
 #include "storage/compaction/ob_compaction_schedule_util.h"
@@ -24,6 +25,7 @@
 #include "storage/tx_storage/ob_tenant_freezer.h"
 #include "storage/meta_store/ob_server_storage_meta_service.h"
 #include "storage/compaction/ob_compaction_schedule_util.h"
+#include "share/ob_tablet_replica_checksum_operator.h"  // verify_column_checksum real user FreezeInfoMgr
 
 namespace oceanbase
 {
@@ -43,8 +45,7 @@ const char *ObStorageSnapshotInfo::ObSnapShotTypeStr[] = {
     "MULTI_VERSION_START_ON_TABLET",
     "SNAPSHOT_ON_TABLET",
     "LS_RESERVED",
-    "MIN_MEDIUM",
-    "SPLIT"
+    "MIN_MEDIUM"
 };
 
 ObStorageSnapshotInfo::ObStorageSnapshotInfo()
@@ -87,8 +88,7 @@ ObTenantFreezeInfoMgr::ObTenantFreezeInfoMgr()
     lock_(),
     cur_idx_(0),
     last_change_ts_(0),
-    tenant_id_(OB_INVALID_ID),
-    tg_id_(-1),
+    reload_timer_(),
     inited_(false)
 {
 }
@@ -104,33 +104,27 @@ int ObTenantFreezeInfoMgr::mtl_init(ObTenantFreezeInfoMgr* &freeze_info_mgr)
   if (OB_ISNULL(GCTX.sql_proxy_)) {
     ret = OB_ERR_UNEXPECTED;
     STORAGE_LOG(WARN, "failed to get sql proxy from GCTX, cannot init FreezeInfoMgr", K(ret));
-  } else if (OB_FAIL(freeze_info_mgr->init(MTL_ID(), *GCTX.sql_proxy_))) {
-    STORAGE_LOG(WARN, "failed to init freeze info mgr", K(ret), K(MTL_ID()));
+  } else if (OB_FAIL(freeze_info_mgr->init(*GCTX.sql_proxy_))) {
+    STORAGE_LOG(WARN, "failed to init freeze info mgr", K(ret));
   } else {
-    STORAGE_LOG(INFO, "success to init TenantFreezeInfoMgr", K(MTL_ID()));
+    STORAGE_LOG(INFO, "success to init TenantFreezeInfoMgr");
   }
   return ret;
 }
 
-int ObTenantFreezeInfoMgr::init(const uint64_t tenant_id, ObISQLClient &sql_proxy)
+int ObTenantFreezeInfoMgr::init(ObISQLClient &sql_proxy)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(inited_)) {
     ret = OB_INIT_TWICE;
     STORAGE_LOG(WARN, "init twice", K(ret));
-  } else if (OB_INVALID_ID == tenant_id) {
-    ret = OB_INVALID_ARGUMENT;
-    STORAGE_LOG(WARN, "get invalid arguments", K(ret), K(tenant_id));
-  } else if (OB_FAIL(freeze_info_mgr_.init(tenant_id, *GCTX.sql_proxy_))) {
-    STORAGE_LOG(WARN, "fail to init freeze info mgr", K(ret), K(tenant_id));
+  } else if (OB_FAIL(freeze_info_mgr_.init(*GCTX.sql_proxy_))) {
+    STORAGE_LOG(WARN, "fail to init freeze info mgr", K(ret));
   } else if (OB_FAIL(reload_task_.init())) {
     STORAGE_LOG(ERROR, "fail to init reload task", K(ret));
-  } else if (OB_FAIL(TG_CREATE_TENANT(lib::TGDefIDs::FreInfoReload, tg_id_))) {
-    STORAGE_LOG(ERROR, "fail to init timer", K(ret));
-  } else if (OB_FAIL(TG_START(tg_id_))) {
+  } else if (OB_FAIL(reload_timer_.init("FreInfoReload", ObMemAttr("FreInfoReload")))) {
     STORAGE_LOG(ERROR, "fail to init timer", K(ret));
   } else {
-    tenant_id_ = tenant_id;
     last_change_ts_ = ObTimeUtility::current_time();
     inited_ = true;
   }
@@ -144,9 +138,9 @@ int ObTenantFreezeInfoMgr::start()
   if (OB_UNLIKELY(!inited_)) {
     ret = OB_NOT_INIT;
     STORAGE_LOG(WARN, "not init", K(ret));
-  } else if (OB_FAIL(TG_SCHEDULE(tg_id_, reload_task_, RELOAD_INTERVAL, true))) {
+  } else if (OB_FAIL(reload_timer_.schedule(reload_task_, RELOAD_INTERVAL, true))) {
     STORAGE_LOG(ERROR, "fail to schedule reload task", K(ret));
-  } else if (OB_FAIL(TG_SCHEDULE(tg_id_, update_reserved_snapshot_task_, UPDATE_LS_RESERVED_SNAPSHOT_INTERVAL, true))) {
+  } else if (OB_FAIL(reload_timer_.schedule(update_reserved_snapshot_task_, UPDATE_LS_RESERVED_SNAPSHOT_INTERVAL, true))) {
     STORAGE_LOG(ERROR, "fail to schedule update reserved snapshot task", K(ret));
   }
   return ret;
@@ -154,18 +148,17 @@ int ObTenantFreezeInfoMgr::start()
 
 void ObTenantFreezeInfoMgr::wait()
 {
-  TG_WAIT(tg_id_);
+  reload_timer_.wait();
 }
 
 void ObTenantFreezeInfoMgr::stop()
 {
-  TG_STOP(tg_id_);
+  reload_timer_.stop();
 }
 
 void ObTenantFreezeInfoMgr::destroy()
 {
-  TG_DESTROY(tg_id_);
-  tg_id_ = -1;
+  reload_timer_.destroy();
 }
 
 int64_t ObTenantFreezeInfoMgr::get_latest_frozen_version()
@@ -322,16 +315,16 @@ int is_snapshot_related_to_tablet(
 {
   int ret = OB_SUCCESS;
   related = false;
-  uint64_t tenant_id = MTL_ID();
+  
 
-  if (!snapshot.is_valid() || !is_valid_tenant_id(tenant_id)) {
+  if (!snapshot.is_valid() || !true) {
     ret = OB_INVALID_ARGUMENT;
-    STORAGE_LOG(WARN, "invalid argument", K(ret), K(snapshot), K(tenant_id));
+    STORAGE_LOG(WARN, "invalid argument", K(ret), K(snapshot));
   } else if (snapshot.snapshot_type_ == share::SNAPSHOT_FOR_RESTORE_POINT
       || snapshot.snapshot_type_ == share::SNAPSHOT_FOR_BACKUP_POINT) {
     if (snapshot.snapshot_type_ == share::SNAPSHOT_FOR_RESTORE_POINT && tablet_id.is_inner_tablet()) {
       related = false;
-    } else if (tenant_id == snapshot.tenant_id_) {
+    } else {
 //      TODO (@yanyuan) fix restore point
 //      related = true;
 //      bool is_complete = false;
@@ -343,9 +336,8 @@ int is_snapshot_related_to_tablet(
 //      }
     }
   } else {
-    // when tenant_id_ equals to 0, it means need all tenants
-    if (0 == snapshot.tenant_id_
-        || tenant_id == snapshot.tenant_id_) {
+    // when tenant_ equals to 0, it means need all tenants
+    {
       // when tablet_id_ equals to 0, it means need all tablets in tenant
       if (0 == snapshot.tablet_id_
           || snapshot.tablet_id_ == tablet_id.id()) {
@@ -360,12 +352,7 @@ int ObTenantFreezeInfoMgr::get_multi_version_duration(int64_t &duration) const
 {
   int ret = OB_SUCCESS;
 
-  omt::ObTenantConfigGuard tenant_config(TENANT_CONF(MTL_ID()));
-  if (tenant_config.is_valid()) {
-    duration = tenant_config->undo_retention;
-  } else {
-    ret = OB_TENANT_NOT_EXIST;
-  }
+  duration = GCONF.undo_retention;
 
   return ret;
 }
@@ -378,63 +365,25 @@ int64_t ObTenantFreezeInfoMgr::get_min_reserved_snapshot_for_tx()
 
   // is_gc_disabled means whether gc using globally reserved snapshot is disabled,
   // and it may be because of disk usage or lost connection to inner table
-  bool is_gc_disabled = MTL(concurrency_control::ObMultiVersionGarbageCollector *)->
+  bool is_gc_disabled = share::g_mp->multi_version_garbage_collector()->
     is_gc_disabled();
 
-  omt::ObTenantConfigGuard tenant_config(TENANT_CONF(MTL_ID()));
 
-  if (OB_FAIL(GET_MIN_DATA_VERSION(gen_meta_tenant_id(MTL_ID()),
-                                   data_version))) {
-    STORAGE_LOG(WARN, "get min data version failed", KR(ret),
-                K(gen_meta_tenant_id(MTL_ID())));
+  if (OB_FAIL(GET_MIN_DATA_VERSION(data_version))) {
+    STORAGE_LOG(WARN, "get min data version failed", KR(ret));
     // we disable the gc when fetch min data version failed
     is_gc_disabled = true;
   }
 
-  if (tenant_config->_mvcc_gc_using_min_txn_snapshot
+  if (GCONF._mvcc_gc_using_min_txn_snapshot
       && !is_gc_disabled) {
     share::SCN snapshot_for_active_tx =
-      MTL(concurrency_control::ObMultiVersionGarbageCollector *)->
+      share::g_mp->multi_version_garbage_collector()->
       get_reserved_snapshot_for_active_txn();
     snapshot_version = snapshot_for_active_tx.get_val_for_tx();
   }
 
   return snapshot_version;
-}
-
-void ObTenantFreezeInfoMgr::check_tenant_in_restore_with_mv_(
-    bool &need_check_mview,
-    ObSchemaGetterGuard &schema_guard,
-    const ObSimpleTenantSchema *&tenant_schema)
-{
-  need_check_mview = false; 
-  int ret = OB_SUCCESS;
-  if (MTL_TENANT_ROLE_CACHE_IS_RESTORE() || MTL_TENANT_ROLE_CACHE_IS_INVALID()) {
-    need_check_mview = true;
-  } else if (MTL_TENANT_ROLE_CACHE_IS_PRIMARY()) {
-    need_check_mview = false;
-  } else {
-    // get tenant schema if pointer is nullptr
-    const uint64_t tenant_id = MTL_ID();
-    if (OB_ISNULL(tenant_schema)) {
-      if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(tenant_id, schema_guard))) {
-        LOG_WARN("failed to get schema guard", K(ret), K(tenant_id));
-      } else if (OB_FAIL(schema_guard.get_tenant_info(tenant_id, tenant_schema))) {
-        LOG_WARN("failed to get tenant info", K(ret), K(tenant_id));
-      }
-    }
-    if (OB_FAIL(ret)) {
-      need_check_mview = true;
-      LOG_WARN("failed to get tenant schema, need check mview", K(ret),
-                K(tenant_id), K(need_check_mview), KP(tenant_schema));
-    } else if (OB_ISNULL(tenant_schema)) {
-      need_check_mview = true;
-      LOG_WARN("tenant schema is null, need check mview", K(ret),
-                K(tenant_id), K(need_check_mview), KP(tenant_schema));
-    } else if (tenant_schema->is_restore()) {
-      need_check_mview = true; 
-    }
-  }
 }
 
 // get smallest kept snapshot
@@ -448,9 +397,6 @@ int ObTenantFreezeInfoMgr::get_min_reserved_snapshot(
   int64_t duration = 0;
   bool unused = false;
   snapshot_info.reset();
-  const ObSimpleTenantSchema *tenant_schema = nullptr;
-  ObSchemaGetterGuard schema_guard;
-
   const int64_t abs_timeout_us = common::ObTimeUtility::current_time() + RLOCK_TIMEOUT_US;
   RLockGuardWithTimeout lock_guard(lock_, abs_timeout_us, ret);
   ObIArray<ObSnapshotInfo> &snapshots = snapshots_[cur_idx_];
@@ -479,27 +425,13 @@ int ObTenantFreezeInfoMgr::get_min_reserved_snapshot(
     snapshot_info.update_by_smaller_snapshot(ObStorageSnapshotInfo::SNAPSHOT_FOR_UNDO_RETENTION, snapshot_for_undo_retention);
     snapshot_info.update_by_smaller_snapshot(ObStorageSnapshotInfo::SNAPSHOT_FOR_TX, snapshot_for_tx);
     snapshot_info.update_by_smaller_snapshot(ObStorageSnapshotInfo::SNAPSHOT_FOR_MAJOR_FREEZE_TS, freeze_info.frozen_scn_.get_val_for_tx());
-    bool exit_loop = false;
-    for (int64_t i = 0; i < snapshots.count() && OB_SUCC(ret) && !exit_loop; ++i) {
+    for (int64_t i = 0; i < snapshots.count() && OB_SUCC(ret); ++i) {
       bool related = false;
       const ObSnapshotInfo &snapshot = snapshots.at(i);
       if (OB_FAIL(is_snapshot_related_to_tablet(tablet_id, snapshot, related))) {
         STORAGE_LOG(WARN, "fail to check snapshot relation", K(ret), K(tablet_id), K(snapshot));
       } else if (related) {
         snapshot_info.update_by_smaller_snapshot(snapshot.snapshot_type_, snapshot.snapshot_scn_.get_val_for_tx());
-        if (ObSnapShotType::SNAPSHOT_FOR_MAJOR_REFRESH_MV == snapshot.snapshot_type_) {
-          // if exist mview snapshot type and tenant in restore
-          // if tenant is invalid or restore, need check mview snapshot
-          // TODO siyu:: use tenant_status_cache
-          bool need_check_mview = false;
-          IGNORE_RETURN check_tenant_in_restore_with_mv_(need_check_mview, schema_guard, tenant_schema);
-          if (need_check_mview) {
-            exit_loop = true;
-            snapshot_info.update_by_smaller_snapshot(ObSnapShotType::SNAPSHOT_FOR_MAJOR_REFRESH_MV, static_cast<int64_t>(0));
-            LOG_INFO("exist new mv in restore", K(ret), K(snapshot_info), K(tablet_id), K(merged_version), K(need_check_mview));
-          }
-          LOG_INFO("exist new mview when calc multi_version_start", K(ret), K(tablet_id), K(need_check_mview), K(snapshot_info), K(exit_loop));
-        }
       }
     }
     LOG_TRACE("check_freeze_info_mgr", K(ret), K(snapshot_info), K(duration), K(snapshot_for_undo_retention),
@@ -540,7 +472,7 @@ share::SCN ObTenantFreezeInfoMgr::get_snapshot_gc_scn()
 
 ObTenantFreezeInfoMgr::ReloadTask::ReloadTask(ObTenantFreezeInfoMgr &mgr)
   : inited_(false),
-    check_tenant_status_(true),
+    check_tenant_status_(),
     mgr_(mgr)
 {
 }
@@ -561,37 +493,26 @@ int ObTenantFreezeInfoMgr::ReloadTask::refresh_merge_info()
 {
   int ret = OB_SUCCESS;
 
-  const uint64_t tenant_id = MTL_ID();
+  
 
   // remove zone_merge_info // only use global_merge_info
   ObGlobalMergeInfo global_merge_info;
-  global_merge_info.tenant_id_ = tenant_id;
+  
   int64_t cur_broadcast_version = 0;
   int64_t global_broadcast_version = 0;
 
-  if (OB_FAIL(ObGlobalMergeTableOperator::load_global_merge_info(*GCTX.sql_proxy_, tenant_id, global_merge_info))) {
+  if (OB_FAIL(ObGlobalMergeTableOperator::load_global_merge_info(*GCTX.sql_proxy_, global_merge_info))) {
     LOG_WARN("failed to load global merge info", KR(ret), K(global_merge_info));
   } else {
     // set merged version
     MERGE_SCHEDULER_PTR->set_inner_table_merged_scn(global_merge_info.last_merged_scn_.get_scn().get_val_for_tx());
     if (global_merge_info.suspend_merging_.get_value()) { // suspend_merge
       MERGE_SCHEDULER_PTR->stop_major_merge();
-      LOG_INFO("schedule zone to stop major merge", K(tenant_id), K(global_merge_info));
+      LOG_INFO("schedule zone to stop major merge", K(global_merge_info));
     } else {
       if (check_tenant_status_) {
-        if (is_sys_tenant(tenant_id) || is_meta_tenant(tenant_id)) {
+        {
           check_tenant_status_ = false;
-        } else if (is_virtual_tenant_id(tenant_id)) { // skip virtual tenant
-          ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("tenant is unexpected virtual tenant", KR(ret), K(tenant_id));
-        } else {
-          const ObTenantRole::Role &role = MTL_GET_TENANT_ROLE_CACHE();
-          if (is_primary_tenant(role) || is_standby_tenant(role)) {
-            check_tenant_status_ = false;
-            LOG_INFO("finish check tenant restore", K(tenant_id), K(role));
-          } else if (REACH_THREAD_TIME_INTERVAL(10L * 1000L * 1000L)) {
-            LOG_INFO("skip restoring tenant to schedule major merge", K(tenant_id), K(role));
-          }
         }
       }
       if (!check_tenant_status_) {
@@ -599,10 +520,10 @@ int ObTenantFreezeInfoMgr::ReloadTask::refresh_merge_info()
         cur_broadcast_version = MERGE_SCHEDULER_PTR->get_frozen_version();
         global_broadcast_version = global_merge_info.global_broadcast_scn_.get_scn().get_val_for_tx();
         if (global_broadcast_version > cur_broadcast_version) {
-          FLOG_INFO("try to schedule merge", K(tenant_id), "zone", GCTX.config_->zone.str(), K(global_broadcast_version), K(cur_broadcast_version));
+          FLOG_INFO("try to schedule merge", "zone", GCTX.config_->zone.str(), K(global_broadcast_version), K(cur_broadcast_version));
           if (OB_FAIL(MERGE_SCHEDULER_PTR->schedule_merge(global_broadcast_version))) {
             LOG_WARN("fail to schedule merge", K(ret), "zone", GCTX.config_->zone.str(), K(global_broadcast_version));
-          } else if (OB_FAIL(MTL(ObTenantFreezer*)->update_frozen_scn(global_broadcast_version))) {
+          } else if (OB_FAIL(share::g_mp->tenant_freezer()->update_frozen_scn(global_broadcast_version))) {
             LOG_WARN("update frozen scn failed", K(ret), "zone", GCTX.config_->zone.str(), K(global_broadcast_version));
           }
         }
@@ -611,7 +532,7 @@ int ObTenantFreezeInfoMgr::ReloadTask::refresh_merge_info()
   }
 
   if (OB_SUCC(ret)) {
-    LOG_TRACE("refresh merge info", K(tenant_id), "zone", GCTX.config_->zone.str(), K(global_merge_info));
+    LOG_TRACE("refresh merge info", "zone", GCTX.config_->zone.str(), K(global_merge_info));
   }
   return ret;
 }
@@ -627,9 +548,9 @@ int ObTenantFreezeInfoMgr::try_update_info()
   share::ObSnapshotTableProxy snapshot_proxy;
   
   if (OB_FAIL(ObFreezeInfoManager::fetch_new_freeze_info(
-        MTL_ID(), share::SCN::base_scn(), *GCTX.sql_proxy_, freeze_infos, new_snapshot_gc_scn))) {
+        share::SCN::base_scn(), *GCTX.sql_proxy_, freeze_infos, new_snapshot_gc_scn))) {
     STORAGE_LOG(WARN, "failed to load updated info", K(ret));
-  } else if (OB_FAIL(snapshot_proxy.get_all_snapshots(*GCTX.sql_proxy_, MTL_ID(), snapshots))) {
+  } else if (OB_FAIL(snapshot_proxy.get_all_snapshots(*GCTX.sql_proxy_, snapshots))) {
     STORAGE_LOG(WARN, "failed to get snapshots", K(ret));
   } else if (OB_FAIL(inner_update_info(new_snapshot_gc_scn, freeze_infos, snapshots))) {
     STORAGE_LOG(WARN, "failed to update info", K(ret), K(freeze_infos), K(new_snapshot_gc_scn), K(snapshots));
@@ -738,32 +659,23 @@ int ObTenantFreezeInfoMgr::try_update_reserved_snapshot()
     }
   } // end of lock
 
-  // loop all ls, try update reserved snapshot
-  ObSharedGuard<ObLSIterator> ls_iter_guard;
+  // Try to update the reserved snapshot on the log stream.
   ObLS *ls = nullptr;
   if (OB_FAIL(ret) || reserved_snapshot <= 0) {
-  } else if (OB_FAIL(MTL(ObLSService *)->get_ls_iter(ls_iter_guard, ObLSGetMod::COMPACT_MODE))) {
-    LOG_WARN("failed to get ls iterator", K(ret));
+  } else if (OB_ISNULL(share::g_mp->ls_service())) {
+    ret = OB_ERR_UNEXPECTED;
+    STORAGE_LOG(WARN, "ls service is null", K(ret));
+  } else if (OB_FAIL(share::g_mp->ls_service()->get_ls(ls))) {
+    LOG_WARN("failed to get single log stream", K(ret));
   } else {
     int tmp_ret = OB_SUCCESS;
-    while (OB_SUCC(ret)) {
-      if (OB_FAIL(ls_iter_guard.get_ptr()->get_next(ls))) {
-        if (OB_ITER_END == ret) {
-          ret = OB_SUCCESS;
-          break;
-        }
-      } else if (OB_ISNULL(ls)) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("ls is null", K(ret), KP(ls));
-      } else if (OB_TMP_FAIL(ls->try_sync_reserved_snapshot(reserved_snapshot, true/*update_flag*/))) {
-        LOG_WARN("failed to update min reserved snapshot", K(tmp_ret), KPC(ls), K(reserved_snapshot));
-      }
-    } // end of while
+    if (OB_TMP_FAIL(ls->try_sync_reserved_snapshot(reserved_snapshot, true/*update_flag*/))) {
+      LOG_WARN("failed to update min reserved snapshot", K(tmp_ret), KPC(ls), K(reserved_snapshot));
+    }
   }
   cost_ts = ObTimeUtility::fast_current_time() - cost_ts;
   STORAGE_LOG(INFO, "update reserved snapshot finished", K(cost_ts), K(reserved_snapshot));
   return ret;
 }
-
 } // storage
 } // oceanbase

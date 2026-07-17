@@ -15,6 +15,7 @@
  */
 
 #include "ob_zlib_compressor.h"
+#include "lib/compress/ob_compress_util.h"
 
 namespace oceanbase
 {
@@ -206,7 +207,7 @@ int ObZlibCompressor::set_compress_level(const int64_t compress_level)
 }
 const char *ObZlibCompressor::get_compressor_name() const
 {
-  return all_compressor_name[ObCompressorType::ZLIB_COMPRESSOR];
+  return all_compressor_name[ZLIB_COMPRESSOR];
 }
 
 ObCompressorType ObZlibCompressor::get_compressor_type() const

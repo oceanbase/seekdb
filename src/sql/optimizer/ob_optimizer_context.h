@@ -18,12 +18,12 @@
 #define _OB_OPTIMIZER_CONTEXT_H 1
 #include "sql/resolver/expr/ob_raw_expr_util.h"
 #include "share/schema/ob_schema_getter_guard.h"
-#include "share/stat/ob_opt_stat_monitor_manager.h"
+#include "sql/optimizer/stat/ob_opt_stat_monitor_manager.h"
 #include "sql/session/ob_sql_session_info.h"
 #include "sql/optimizer/ob_table_location.h"
 #include "sql/engine/ob_exec_context.h"
 #include "sql/optimizer/ob_fd_item.h"
-#include "observer/omt/ob_tenant_config_mgr.h"
+#include "share/config/ob_tenant_config_mgr.h"
 #include "sql/optimizer/ob_sharding_info.h"
 #include "sql/optimizer/ob_opt_est_cost.h"
 #include "sql/engine/expr/ob_expr_join_filter.h"
@@ -50,13 +50,6 @@ enum class ObEstCorrelationType
   INDEPENDENT,
   PARTIAL,
   FULL,
-  MAX
-};
-
-enum class ObTableAccessPolicy {
-  ROW_STORE,
-  COLUMN_STORE,
-  AUTO,
   MAX
 };
 
@@ -222,7 +215,6 @@ ObOptimizerContext(ObSQLSessionInfo *session_info,
                    common::ObIAllocator &allocator,
                    const ParamStore *params,
                    const common::ObAddr &addr,
-                   obrpc::ObSrvRpcProxy *srv_proxy,
                    const ObGlobalHint &global_hint,
                    ObRawExprFactory &expr_factory,
                    ObDMLStmt *root_stmt,
@@ -236,7 +228,6 @@ ObOptimizerContext(ObSQLSessionInfo *session_info,
     allocator_(allocator),
     table_location_list_(), // declared as auto free
     server_(addr),
-    srv_proxy_(srv_proxy), // for `estimate storage` only
     params_(params),
     global_hint_(global_hint),
     expr_factory_(expr_factory),
@@ -299,9 +290,7 @@ ObOptimizerContext(ObSQLSessionInfo *session_info,
     is_skip_scan_enabled_(false),
     enable_better_inlist_costing_(false),
     correlation_type_(ObEstCorrelationType::MAX),
-    use_column_store_replica_(false),
     push_join_pred_into_view_enabled_(true),
-    table_access_policy_(ObTableAccessPolicy::AUTO),
     partition_wise_plan_enabled_(true),
     enable_px_ordered_coord_(false),
     enable_opt_row_goal_(ObEnableOptRowGoal::MAX),
@@ -353,8 +342,6 @@ ObOptimizerContext(ObSQLSessionInfo *session_info,
   const common::ObAddr &get_local_server_addr() const { return server_;}
   common::ObAddr &get_local_server_addr() { return server_; }
   void set_local_server_addr(const char *ip, const int32_t port) { server_.set_ip_addr(ip, port); }
-  obrpc::ObSrvRpcProxy* get_srv_proxy() { return srv_proxy_; }
-  void set_srv_proxy(obrpc::ObSrvRpcProxy *srv_proxy) { srv_proxy_ = srv_proxy; }
   common::ObIArray<ObTablePartitionInfo *> & get_table_partition_info() { return table_partition_infos_; }
   ObTablePartitionInfo *get_table_part_info_by_id(uint64_t table_loc_id, uint64_t ref_table_id)
   {
@@ -461,11 +448,7 @@ ObOptimizerContext(ObSQLSessionInfo *session_info,
   double enable_px_batch_rescan()
   {
     if (-1 == enable_px_batch_rescan_) {
-      omt::ObTenantConfigGuard tenant_config(
-            TENANT_CONF(session_info_->get_effective_tenant_id()));
-      if (OB_UNLIKELY(!tenant_config.is_valid())) {
-        enable_px_batch_rescan_ = 0;
-      } else if (tenant_config->_enable_px_batch_rescan) {
+      if (GCONF._enable_px_batch_rescan) {
         enable_px_batch_rescan_ = 1;
       } else {
         enable_px_batch_rescan_ = 0;
@@ -549,13 +532,7 @@ ObOptimizerContext(ObSQLSessionInfo *session_info,
   int get_px_object_sample_rate()
   {
     if (-1 == px_object_sample_rate_) {
-      omt::ObTenantConfigGuard tenant_config(
-            TENANT_CONF(session_info_->get_effective_tenant_id()));
-      if (OB_UNLIKELY(!tenant_config.is_valid())) {
-        px_object_sample_rate_ = 10;
-      } else {
-        px_object_sample_rate_ = tenant_config->_px_object_sampling;
-      }
+      px_object_sample_rate_ = GCONF._px_object_sampling;
     }
     return px_object_sample_rate_;
   }
@@ -752,8 +729,6 @@ ObOptimizerContext(ObSQLSessionInfo *session_info,
   bool has_pl_udf() const { return has_pl_udf_; }
   void set_has_cursor_expression(bool v) { has_cursor_expression_ = v; }
   bool has_cursor_expression() const { return has_cursor_expression_; }
-  void set_has_dblink(bool v) { has_dblink_ = v; }
-  bool has_dblink() const { return has_dblink_; }
   void set_has_subquery_in_function_table(bool v) { has_subquery_in_function_table_ = v; }
   bool has_subquery_in_function_table() const { return has_subquery_in_function_table_; }
   bool contain_nested_sql() const { return nested_sql_flags_ > 0; }
@@ -788,15 +763,11 @@ ObOptimizerContext(ObSQLSessionInfo *session_info,
   inline void set_is_skip_scan_enabled(bool v) { is_skip_scan_enabled_ = v; }
   inline bool get_enable_better_inlist_costing() const { return enable_better_inlist_costing_; }
   inline void set_enable_better_inlist_costing(bool v) { enable_better_inlist_costing_ = v; }
-  inline bool use_column_store_replica() const { return use_column_store_replica_; }
-  inline void set_use_column_store_replica(bool use) { use_column_store_replica_ = use; }
 
   inline void set_correlation_type(ObEstCorrelationType type) { correlation_type_ = type; }
   inline ObEstCorrelationType get_correlation_type() const { return correlation_type_; }
   inline bool is_push_join_pred_into_view_enabled() const { return push_join_pred_into_view_enabled_; }
   inline void set_push_join_pred_into_view_enabled(bool enabled) { push_join_pred_into_view_enabled_ = enabled; }
-  inline void set_table_access_policy(ObTableAccessPolicy policy) { table_access_policy_ = policy; }
-  inline ObTableAccessPolicy get_table_acces_policy() const { return table_access_policy_; }
   inline void set_enable_opt_row_goal(int64_t type) { enable_opt_row_goal_ = static_cast<ObEnableOptRowGoal>(type); }
   inline ObEnableOptRowGoal get_enable_opt_row_goal() const { return enable_opt_row_goal_; }
   inline ObPxNodePolicy get_px_node_policy() const { return px_node_policy_; }
@@ -819,7 +790,6 @@ private:
   common::ObArray<ObTableLocation, common::ModulePageAllocator, true> table_location_list_;
   common::ObSEArray<ObTablePartitionInfo *, 1, common::ModulePageAllocator, true> table_partition_infos_;
   common::ObAddr server_;
-  obrpc::ObSrvRpcProxy *srv_proxy_;
   const ParamStore *params_;
   ObDirectLoadOptimizerCtx direct_load_optimizer_ctx_; // for direct load
   const ObGlobalHint &global_hint_;
@@ -901,7 +871,6 @@ private:
       int8_t has_trigger_                      : 1; //this sql has trigger object
       int8_t has_pl_udf_                       : 1; //this sql has pl user defined function
       int8_t has_subquery_in_function_table_   : 1; //this stmt has function table
-      int8_t has_dblink_                       : 1; //this stmt has dblink table
       int8_t has_cursor_expression_            : 1; //this sql has cursor expression
     };
   };
@@ -923,9 +892,7 @@ private:
   bool is_skip_scan_enabled_;
   bool enable_better_inlist_costing_;
   ObEstCorrelationType correlation_type_;
-  bool use_column_store_replica_;
   bool push_join_pred_into_view_enabled_;
-  ObTableAccessPolicy table_access_policy_;
   bool partition_wise_plan_enabled_;
   bool enable_px_ordered_coord_;
   ObEnableOptRowGoal enable_opt_row_goal_;

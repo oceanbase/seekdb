@@ -34,7 +34,7 @@
 #include "lib/thread_local/ob_tsi_factory.h"
 #include "lib/list/ob_dlist.h"
 #include "lib/hash/ob_hashmap.h"
-#include "common/ob_clock_generator.h"
+#include "lib/time/ob_clock_generator.h"
 
 #ifdef OB_USE_ASAN
 #include "lib/allocator/ob_asan_allocator.h"
@@ -220,6 +220,11 @@ public:
   ContextParam &set_mem_attr(Args && ... args)
   {
     attr_ = ObMemAttr(args...);
+    return *this;
+  }
+  ContextParam &set_mem_attr(const ObMemAttr &attr)
+  {
+    attr_ = attr;
     return *this;
   }
   ContextParam &set_label(const ObLabel &label)
@@ -414,13 +419,13 @@ public:
   {
     tree_node_.init();
     int ret = common::OB_SUCCESS;
-    // change tenant_id
+    // change tenant context
     ObMemAttr inner_attr = param_.attr_;
     auto *ma = ObMallocAllocator::get_instance();
     // tenant_allocator is created synchronously when the tenant is built, and 500 tenant memory is used when there is no such tenant
-    auto ta = ma->get_tenant_ctx_allocator(inner_attr.tenant_id_, inner_attr.ctx_id_);
+    auto ta = ma->get_tenant_ctx_allocator(inner_attr.ctx_id_);
     if (nullptr == ta) {
-      inner_attr.tenant_id_ = common::OB_SERVER_TENANT_ID;
+      
     }
     attr_ = inner_attr;
     // init allocator

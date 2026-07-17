@@ -238,9 +238,6 @@ public:
   TestRawDecoder() : tenant_ctx_(OB_SERVER_TENANT_ID)
   {
     share::ObTenantEnv::set_tenant(&tenant_ctx_);
-    encoder_.encoding_meta_allocator_.set_tenant_id(OB_SERVER_TENANT_ID);
-    encoder_.data_buffer_.allocator_.set_tenant_id(OB_SERVER_TENANT_ID);
-    encoder_.row_buf_holder_.allocator_.set_tenant_id(OB_SERVER_TENANT_ID);
   }
   virtual ~TestRawDecoder() {}
 
@@ -297,7 +294,6 @@ void TestRawDecoder::SetUp()
   ObTableSchema table;
   ObColumnSchemaV2 col;
   table.reset();
-  table.set_tenant_id(1);
   table.set_tablegroup_id(1);
   table.set_database_id(1);
   table.set_table_id(tid);
@@ -349,7 +345,6 @@ void TestRawDecoder::SetUp()
       allocator_,
       table.get_column_count(),
       table.get_rowkey_column_num(),
-      lib::is_oracle_mode(),
       col_descs_));
 
   const int64_t extra_rowkey_cnt = ObMultiVersionRowkeyHelpper::get_extra_rowkey_col_cnt();

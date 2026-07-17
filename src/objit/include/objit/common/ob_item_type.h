@@ -195,15 +195,14 @@ typedef enum ObItemType
   T_OBJ_ACCESS_REF = 167,
   T_OP_CONNECT_BY_ROOT = 168,
 
-  /*regexp_substr this function registration has been replaced by T_FUN_SYS_REGEXP_SUBSTR, because registering it here would cause Oracle to fail to recognize this function,
-  therefore it is also uncertain whether deletion would affect others, so the decision was made to retain it
+  /* regexp_substr registration has been replaced by T_FUN_SYS_REGEXP_SUBSTR.
   T_OP_REGEXP_SUBSTR = 169,*/
   T_OP_GET_PACKAGE_VAR = 170,
   T_OP_SHADOW_UK_PROJECT = 171,
 
   T_OP_XOR = 172,
-  /* oracle outer join symbol as a dummy op*/
-  T_OP_ORACLE_OUTER_JOIN_SYMBOL = 173,
+  /* outer join symbol as a dummy op */
+  T_OP_OUTER_JOIN_SYMBOL = 173,
   T_OP_RANGE_PARAM = 174,
   T_OP_GET_SUBPROGRAM_VAR = 175,
   T_OP_MULTISET = 176,
@@ -286,7 +285,6 @@ typedef enum ObItemType
   T_FUN_SYS_INSTR = 556,
   T_FUN_SYS_LNNVL = 557,
   T_FUN_SYS_LOCATE = 558,
-  T_FUN_SYS_EFFECTIVE_TENANT = 559,
   T_FUN_SYS_CURRENT_USER = 560,
   T_FUN_SYS_USER = 561,
   T_FUN_SYS_VERSION = 562,
@@ -296,7 +294,6 @@ typedef enum ObItemType
   T_FUN_SYS_COERCIBILITY = 566,
   T_FUN_SYS_REVERSE = 567,
   T_FUN_SYS_RIGHT = 568,
-  T_FUN_SYS_EFFECTIVE_TENANT_ID = 569,
   T_FUN_SYS_VALUES = 570,
   T_FUN_SYS_OCT = 571,
   T_FUN_SYS_RPAD = 572,
@@ -320,7 +317,6 @@ typedef enum ObItemType
   T_FUN_SYS_IF = 591,
   T_FUN_SYS_ISNULL = 592,
   T_FUN_SYS_TIMESTAMP_NVL = 593,
-  T_FUN_IS_SERVING_TENANT = 594,
   T_FUN_SYS_POSITION = 595,
   T_FUN_SYS_ORA_DECODE = 596,
   T_FUN_SYS_ELT = 597,
@@ -430,7 +426,7 @@ typedef enum ObItemType
   T_FUN_SYS_SQL_MODE_CONVERT = 698,
   T_FUN_SYS_PREFIX_PATTERN = 699,
 
-  ///< @note add new mysql/oracle function type before this line
+  ///< @note add new common function type before this line
   T_COMMON_FUN_SYS_END = 700,
 
   // system function for mysql only
@@ -524,7 +520,7 @@ typedef enum ObItemType
   ///< @note add new mysql only function type before this line
   T_MYSQL_ONLY_SYS_MAX_OP = 800,
 
-  // system function for oracle only
+  // legacy PL/system function range
   T_FUN_SYS_CONNECT_BY_PATH = 1401,
   T_FUN_SYS_SYSTIMESTAMP = 1402,
   T_FUN_SYS_TO_DATE = 1403,
@@ -565,7 +561,7 @@ typedef enum ObItemType
   T_FUN_SYS_DBMS_LOB_CONVERTTOBLOB = 1438,
   T_FUN_SYS_DBMS_LOB_CAST_CLOB_TO_BLOB = 1439,
   T_FUN_SYS_DBMS_LOB_CONVERT_CLOB_CHARSET = 1440,
-  //Lable Security, only used in oracle PL
+  // Label Security PL helpers
   T_FUN_LABEL_SE_POLICY_CREATE = 1441,
   T_FUN_LABEL_SE_POLICY_ALTER = 1442,
   T_FUN_LABEL_SE_POLICY_DISABLE = 1443,
@@ -760,7 +756,7 @@ typedef enum ObItemType
   T_FUN_JSON_OBJECTAGG = 1631,
 // please modify need_calc_json_as_text if other json functions are added
   T_FUN_SYS_INNER_AGGR_CODE = 1632,
-  //T_FUN_SYS_TIMESTAMP_TO_SCN and T_FUN_SYS_SCN_TO_TIMESTAMP are supported both in mysql and oracle
+  // T_FUN_SYS_TIMESTAMP_TO_SCN and T_FUN_SYS_SCN_TO_TIMESTAMP are shared timestamp helpers.
   T_FUN_SYS_TIMESTAMP_TO_SCN = 1633,
   T_FUN_SYS_SCN_TO_TIMESTAMP = 1634,
 
@@ -925,7 +921,7 @@ typedef enum ObItemType
   T_FUN_SYS_VECTOR_L2_SIMILARITY = 1790,
   T_FUN_SYS_VECTOR_IP_SIMILARITY = 1791,
   T_FUN_SYS_VECTOR_COS_SIMILARITY = 1792,
-  ///< @note add new oracle only function type before this line
+  ///< @note add new legacy PL/system function type before this line
 
   T_FUN_SYS_TABLET_AUTOINC_NEXTVAL = 1801, // add only for heap table
   T_FUN_SYS_GENERATOR = 1802,
@@ -989,7 +985,6 @@ typedef enum ObItemType
   T_FUN_SYS_GTID_SUBTRACT = 2013,
   T_FUN_SYS_WAIT_FOR_EXECUTED_GTID_SET = 2014,
   T_FUN_SYS_WAIT_UNTIL_SQL_THREAD_AFTER_GTIDS = 2015,
-  T_FUN_SYS_LAST_REFRESH_SCN = 2016,
   T_FUN_SUM_OPNSIZE = 2017,
   T_FUN_SYS_GET_LOCK = 2018,
   T_FUN_SYS_IS_FREE_LOCK = 2019,
@@ -1213,7 +1208,6 @@ typedef enum ObItemType
   T_TABLE_ELEMENT_LIST = 3362,
   T_TABLE_OPTION_LIST = 3363,
   T_PRIMARY_KEY = 3364,
-  T_SPLIT_KEY = 3365,
   T_COLUMN_DEFINITION = 3366,
   T_COLUMN_ATTRIBUTES = 3367,
   T_CONSTR_NOT_NULL = 3368,
@@ -1407,7 +1401,7 @@ typedef enum ObItemType
   T_SHOW_COLLATION = 3549,
   T_SHOW_TABLEGROUPS = 3550,
   T_SHOW_STATUS = 3551,
-  T_SHOW_TENANT = 3552,
+  // 3552: T_SHOW_TENANT abandoned, id reserved
   T_SHOW_CREATE_TENANT = 3553,
   T_SHOW_TRACE = 3554,
   T_SHOW_ENGINES = 3555,
@@ -1418,7 +1412,7 @@ typedef enum ObItemType
   T_SHOW_PROCEDURE_STATUS = 3560,
   T_SHOW_FUNCTION_STATUS = 3561,
   T_SHOW_CREATE_TABLEGROUP = 3562,
-  T_SHOW_RESTORE_PREVIEW = 3563,
+  // 3563: T_SHOW_RESTORE_PREVIEW abandoned, id reserved
   T_SHOW_CREATE_TRIGGER = 3564,
   T_SHOW_QUERY_RESPONSE_TIME = 3565,
   T_SHOW_SEQUENCES = 3566,
@@ -1462,9 +1456,8 @@ typedef enum ObItemType
   T_DROP_INDEX = 3602,
 
   //recycle related
-  T_FLASHBACK_DATABASE = 3604,
-  T_FLASHBACK_TABLE_FROM_RECYCLEBIN = 3605,
-  T_FLASHBACK_INDEX = 3606,
+  T_RECYCLEBIN_RESTORE_DATABASE = 3604,
+  T_RECYCLEBIN_RESTORE_TABLE = 3605,
   T_PURGE_RECYCLEBIN = 3607,
   T_PURGE_DATABASE = 3609,
   T_PURGE_TABLE = 3610,
@@ -1478,7 +1471,6 @@ typedef enum ObItemType
   T_CLIENT_VERSION = 3617,
   T_MYSQL_DRIVER = 3618,
   T_QUERY_TIMEOUT = 3619,
-  T_DBLINK_INFO = 3620,
   T_LOG_LEVEL = 3621,
   T_LEADING = 3622,
   T_ORDERED = 3623,
@@ -1550,7 +1542,6 @@ typedef enum ObItemType
   T_FLUSH_KVCACHE = 3688,
   T_FLUSH_ILOGCACHE = 3689,
   T_ADMIN_SERVER = 3690,
-  T_FLASHBACK_READ_TX_UNCOMMITTED = 3692,
   T_CS_DISKMAINTAIN = 3693,
   T_DISK_OP_PARAM = 3694,
   T_CS_ADMIN_PARAMS = 3695,
@@ -1637,7 +1628,7 @@ typedef enum ObItemType
   T_LS_SERVER_TENANT = 3786,
   T_ZONE_TENANT = 3787,
   T_CREATE_TIMESTAMP = 3790,
-  T_RECYCLE_REPLICA = 3791,
+  T_RESERVED_3791 = 3791,
   T_MERGE_CONTROL = 3792,
   T_TENANT_NAME = 3793,
   T_CACHE_NAME = 3794,
@@ -1690,7 +1681,6 @@ typedef enum ObItemType
   T_CHANGE_LIST = 3852,
   T_REPLICA_TYPE = 3853,
   T_PCTFREE = 3854,
-  T_SET_DISK_VALID = 3855,
 
   T_SQL_STATE = 3856,
   T_SQL_EXCEPTION = 3857,
@@ -1795,7 +1785,6 @@ typedef enum ObItemType
   T_SP_FORALL = 3954,
   T_SP_TYPE = 3955,
   T_SP_ROWTYPE = 3956,
-  T_SP_DBLINK_TYPE = 3957,
   T_SP_DECL_USER_SUBTYPE = 3958,
   T_SP_USER_SUBTYPE_RANGE = 3959,
   T_SP_USER_SUBTYPE_BASETYPE = 3960,
@@ -1871,8 +1860,8 @@ typedef enum ObItemType
   T_EVENT_JOB_ALTER = 4023,
   T_EVENT_JOB_DROP = 4024,
 
-  T_CLEAR_BALANCE_TASK = 4025,
-  T_BALANCE_TASK_TYPE = 4026,
+  T_RESERVED_4025 = 4025,
+  T_RESERVED_4026 = 4026,
   T_CREATE_SYNONYM = 4027,
   T_DROP_SYNONYM = 4028,
   T_CREATE_FUNC = 4029,
@@ -1928,9 +1917,7 @@ typedef enum ObItemType
   T_SWTICH_CLUSTER_ROLE = 4077,
 
   // partition manager
-  T_ALTER_PARTITION_SPLIT = 4078,
   T_SPLIT_ACTION = 4079,
-  T_ALTER_PARTITION_REORGANIZE = 4080,
   T_ALTER_PARTITION_TRUNCATE = 4081,
   T_ALTER_SUBPARTITION_ADD = 4082,
   T_ALTER_SUBPARTITION_DROP = 4083,
@@ -1961,9 +1948,6 @@ typedef enum ObItemType
   T_PURGE = 4113,
   T_STORE_FORMAT = 4114,
 
-  //split partition
-  T_SPLIT_RANGE = 4115,
-  T_SPLIT_LIST = 4116,
   T_OPTIMIZE_TABLE = 4117,
   T_OPTIMIZE_TENANT = 4118,
   T_OPTIMIZE_ALL = 4119,
@@ -1976,9 +1960,8 @@ typedef enum ObItemType
   //cluster mgr
   T_REMOVE_CLUSTER = 4125,
   T_ADD_CLUSTER = 4126,
-  T_TABLE_FLASHBACK_QUERY_TIMESTAMP = 4127,
-  T_TABLE_FLASHBACK_QUERY_SCN = 4128,
-  T_TABLE_FLASHBACK_QUERY = 4129,
+  T_TABLE_SNAPSHOT_QUERY_SCN = 4128,
+  T_TABLE_SNAPSHOT_QUERY = 4129,
   T_FAILOVER_TO_PRIMARY = 4130,
   T_ENABLE_ROW_MOVEMENT = 4131,
   T_ORA_ROWSCN = 4132,
@@ -2147,8 +2130,6 @@ typedef enum ObItemType
   T_TG_REF_LIST = 4280,
   T_USE_NL_MATERIALIZATION = 4281,
   T_NO_USE_NL_MATERIALIZATION = 4282,
-  T_FLASHBACK_TABLE_TO_TIMESTAMP = 4283,
-  T_FLASHBACK_TABLE_TO_SCN = 4284,
   T_RELATION_FACTORS = 4285,
 
   //ssl
@@ -2175,14 +2156,11 @@ typedef enum ObItemType
   T_AUDIT_ALTER_SYSTEM = 4302,
   T_AUDIT_CLUSTER = 4303,
   T_AUDIT_CONTEXT = 4304,
-  T_AUDIT_DBLINK = 4305,
   T_AUDIT_INDEX = 4306,
-  T_AUDIT_MATERIALIZED_VIEW = 4307,
   T_AUDIT_NOT_EXIST = 4308,
   T_AUDIT_OUTLINE = 4309,
   T_AUDIT_PROCEDURE = 4310,
   T_AUDIT_PROFILE = 4311,
-  T_AUDIT_PUBLIC_DBLINK = 4312,
   T_AUDIT_PUBLIC_SYNONYM = 4313,
   T_AUDIT_ROLE = 4314,
   T_AUDIT_SEQUENCE = 4315,
@@ -2216,7 +2194,6 @@ typedef enum ObItemType
   T_AUDIT_COMMENT = 4341,
   T_AUDIT_DELETE = 4342,
   T_AUDIT_EXECUTE = 4343,
-  T_AUDIT_FLASHBACK = 4344,
   T_AUDIT_GRANT = 4345,
   T_AUDIT_INSERT = 4346,
   T_AUDIT_LOCK = 4347,
@@ -2229,24 +2206,24 @@ typedef enum ObItemType
   T_CLUSTER_INFO = 4353,
   T_CONVERT_TO_STANDBY = 4354,
   T_MEMSTORE_PERCENT = 4355,
-  T_GRANT_SYS_PRIV_ORACLE = 4356,
-  T_ORACLE_SYS_PRIV_TYPE = 4357,
+  T_GRANT_SYS_PRIV_COMPAT = 4356,
+  T_COMPAT_SYS_PRIV_TYPE = 4357,
   T_DISCONNECT_CLUSTER = 4358,
   T_VERIFY = 4359,
   T_OBCONFIG_URL = 4360,
-  T_ARCHIVE_LOG = 4361,
-  T_BACKUP_DATABASE = 4362,
-  T_RECOVER_TABLE = 4363,
+  // 4361: T_ARCHIVE_LOG abandoned, id reserved
+  // 4362: T_BACKUP_DATABASE abandoned, id reserved
+  // 4363: T_RECOVER_TABLE abandoned, id reserved
   T_REMAP_TABLE = 4364,
   T_REMAP_TABLEGROUP = 4365,
   T_REMAP_TABLESPACE = 4366,
-  T_BACKUP_MANAGE = 4367,
-  T_BACKUP_CLEAN = 4368,
-  T_DELETE_POLICY = 4369,
-  T_BACKUP_KEY = 4370,
+  // 4367: T_BACKUP_MANAGE abandoned, id reserved
+  // 4368: T_BACKUP_CLEAN abandoned, id reserved
+  // 4369: T_DELETE_POLICY abandoned, id reserved
+  // 4370: T_BACKUP_KEY abandoned, id reserved
   T_RESTORE_TENANT_2 = 4371,
-  T_CANCEL_RESTORE = 4372,
-  T_CANCEL_RECOVER_TABLE = 4373,
+  // 4372: T_CANCEL_RESTORE abandoned, id reserved
+  // 4373: T_CANCEL_RECOVER_TABLE abandoned, id reserved
   T_GEN_ROWS = 4374,
   T_LOAD_BATCH_SIZE = 4375,
   T_DIRECT = 4376, // direct load data
@@ -2288,7 +2265,7 @@ typedef enum ObItemType
   T_FORCE_REFRESH_LOCATION_CACHE = 4405,
   T_PROFILE_VERIFY_FUNCTION_NAME = 4406,
   T_ADMIN_ROLLING_UPGRADE_CMD = 4407,
-  T_ALTER_INDEX_OPTION_ORACLE = 4408,
+  T_ALTER_INDEX_OPTION_EXTENDED = 4408,
 
   T_PIVOT = 4409,//check
   T_UNPIVOT = 4410,
@@ -2310,11 +2287,6 @@ typedef enum ObItemType
   T_SP_OBJ_ELEMENT_SPEC_LIST = 4425,
   T_FETCH_CLAUSE = 4426, //use to support fetch next rows only
   T_FETCH_TIES_CLAUSE = 4427, //use to support fetch next rows with tie
-  T_DBLINK_NAME = 4428,
-  T_CREATE_DBLINK = 4429,
-  T_REVERSE_DBLINK = 4430,
-  T_DROP_DBLINK = 4431,
-  T_ALTER_DBLINK = 4432,
   T_LABEL_LIST = 4433,
   T_PRIMARY_ROOTSERVICE_LIST = 4434,
   T_ALTER_USER = 4435,
@@ -2322,7 +2294,6 @@ typedef enum ObItemType
   T_DEFAULT_ROLE = 4437,
   T_REVERSE = 4438,
   T_AUTO = 4439,
-  T_AUTO_PARTITION = 4440,
 
   // sql throttling
   T_ENABLE_SQL_THROTTLE = 4441,
@@ -2334,8 +2305,8 @@ typedef enum ObItemType
   T_LOGICAL_READS = 4447,
   T_QUEUE_TIME = 4448,
   T_SQL_THROTTLE_METRICS = 4449,
-  T_BACKUP_SET_ENCRYPTION = 4450,
-  T_BACKUP_SET_DECRYPTION = 4451,
+  // 4450: T_BACKUP_SET_ENCRYPTION abandoned, id reserved
+  // 4451: T_BACKUP_SET_DECRYPTION abandoned, id reserved
   T_GROUPING_SETS_LIST = 4452,
   T_CUBE_LIST = 4453,
   T_MODIFY_READ_TRANSPORT = 4454,
@@ -2344,8 +2315,8 @@ typedef enum ObItemType
   T_RECOVERY_CONTROL = 4457,
   T_INDEX_ALTER_PARALLEL = 4458,
 
-  T_CREATE_RESTORE_POINT = 4459,
-  T_DROP_RESTORE_POINT = 4460,
+  // 4459: T_CREATE_RESTORE_POINT abandoned, id reserved
+  // 4460: T_DROP_RESTORE_POINT abandoned, id reserved
 
   T_ADMIN_RUN_UPGRADE_JOB = 4461,
   T_ADMIN_STOP_UPGRADE_JOB = 4462,
@@ -2392,14 +2363,14 @@ typedef enum ObItemType
 
   T_PRIMARY_KEY_DROP = 4495,
   T_PRIMARY_KEY_ALTER = 4496,
-  T_BACKUP_BACKUPSET = 4497,
-  T_BACKUP_ARCHIVELOG = 4498,
+  // 4497: T_BACKUP_BACKUPSET abandoned, id reserved
+  // 4498: T_BACKUP_ARCHIVELOG abandoned, id reserved
   T_COPY_ID = 4499,
   T_CREATE_DIRECTORY = 4500,
   T_DROP_DIRECTORY = 4501,
-  T_BACKUP_BACKUPPIECE = 4502,
-  T_ADD_RESTORE_SOURCE = 4503,
-  T_CLEAR_RESTORE_SOURCE = 4504,
+  // 4502: T_BACKUP_BACKUPPIECE abandoned, id reserved
+  // 4503: T_ADD_RESTORE_SOURCE abandoned, id reserved
+  // 4504: T_CLEAR_RESTORE_SOURCE abandoned, id reserved
 
   T_PREVIEW = 4505,
 
@@ -2432,11 +2403,6 @@ typedef enum ObItemType
   T_ODBC_ESCAPE_SEQUENCES = 4533,
   T_SP_DATA_ACCESS = 4534,
 
-  // column group
-  T_COLUMN_GROUP = 4535,
-  T_ALL_COLUMN_GROUP = 4536,
-  T_SINGLE_COLUMN_GROUP = 4537,
-  T_NORMAL_COLUMN_GROUP = 4538,
   T_TRACE_FORMAT = 4539,
   T_TG_ALTER_OPTIONS = 4540,
 
@@ -2462,7 +2428,7 @@ typedef enum ObItemType
   T_CONSTR_LOB_CHUNK_SIZE = 4558,
   T_LOB_CHUNK_SIZE = 4559,
 
-  T_ALTER_SYSTEM_KILL = 4560, // used to support kill session in oracle
+  T_ALTER_SYSTEM_KILL = 4560, // used to support kill session
 
   T_ACTIVATE_STANDBY = 4561, // ALTER SYSTEM ACTIVATE STANDBY (failover)
   T_SWITCHOVER_TO_STANDBY = 4571, // ALTER SYSTEM SWITCHOVER TO STANDBY
@@ -2485,36 +2451,7 @@ typedef enum ObItemType
   T_MYSQL_ANALYZE = 4578,
   T_DECORRELATE = 4579,
   T_NO_DECORRELATE = 4580,
-  T_DBLINK_UDF = 4581,
   T_COLUMN_ADD_WITH_LOB_PARAMS = 4582,
-
-  //for materialized view
-  T_MV_REFRESH_INFO = 4583,
-  T_MV_REFRESH_ON_CLAUSE = 4584,
-  T_MV_REFRESH_METHOD = 4585,
-  T_MV_REFRESH_INTERVAL = 4586,
-  T_MV_REFRESH_START_EXPR = 4587,
-
-  // for materialized view log
-  T_CREATE_MLOG = 4588,
-  T_MLOG_WITH = 4589,
-  T_MLOG_WITH_VALUES = 4590,
-  T_MLOG_WITH_SPECIAL_COLUMN_LIST = 4591,
-  T_MLOG_WITH_SPECIAL_COLUMN = 4592,
-  T_MLOG_WITH_REFERENCE_COLUMN = 4593,
-  T_MLOG_WITH_PRIMARY_KEY = 4594,
-  T_MLOG_WITH_ROWID = 4595,
-  T_MLOG_WITH_SEQUENCE = 4596,
-  T_MLOG_NEW_VALUES = 4597,
-  T_MLOG_INCLUDING_NEW_VALUES = 4598,
-  T_MLOG_EXCLUDING_NEW_VALUES = 4599,
-  T_MLOG_PURGE = 4600,
-  T_MLOG_PURGE_IMMEDIATE = 4601,
-  T_MLOG_PURGE_IMMEDIATE_SYNC = 4602,
-  T_MLOG_PURGE_IMMEDIATE_ASYNC = 4603,
-  T_MLOG_PURGE_START_NEXT = 4604,
-  T_MLOG_PURGE_START_TIME_EXPR = 4605,
-  T_DROP_MLOG = 4606,
 
   T_COL_SKIP_INDEX = 4607,
   T_COL_SKIP_INDEX_LIST = 4608,
@@ -2529,18 +2466,10 @@ typedef enum ObItemType
   T_FULLTEXT_COLUMN_LIST = 4619,
   T_MATCH_COLUMN_LIST = 4620,
 
-  T_USE_COLUMN_STORE_HINT = 4621,
-  T_NO_USE_COLUMN_STORE_HINT = 4622,
-  T_REBUILD_COLUMN_STORE = 4623,
-  T_COLUMN_GROUP_ADD = 4624,
-  T_COLUMN_GROUP_DROP = 4625,
-  T_ALTER_COLUMN_GROUP_OPTION = 4626,
   T_BLOCKING = 4627,
   T_PQ_SUBQUERY = 4628,
   T_FLUSH_PRIVILEGES = 4629,
   T_SCHEMA_ID = 4630,
-  T_AUTO_SPLIT_TABLET_SIZE = 4633,
-
   T_DATA_DISK_SIZE = 4634,
   T_COALESCE_AGGR = 4641,
   T_NO_COALESCE_AGGR = 4642,
@@ -2552,14 +2481,11 @@ typedef enum ObItemType
   T_SHOW_PROCEDURE_CODE = 4647,
   T_SHOW_FUNCTION_CODE = 4648,
 
-  T_CHANGE_EXTERNAL_STORAGE_DEST = 4649,
+  // 4649: T_CHANGE_EXTERNAL_STORAGE_DEST abandoned, id reserved
   T_ALTER_USER_PROXY = 4650,
   T_PARALLEL_DAS_DML = 4651,
   T_DISABLE_PARALLEL_DAS_DML = 4652,
   T_ENABLE_LOB_PREFETCH = 4653,
-  T_MV_OPTIONS = 4654,
-  T_MV_REWRITE = 4655,
-  T_MV_NO_REWRITE = 4656,
   // select into outfile
   T_INTO_FILE_LIST = 4657,
   T_SINGLE_OPT = 4658,
@@ -2597,10 +2523,7 @@ typedef enum ObItemType
   T_VEC_INDEX_PARAMS = 4690,
   T_VEC_INDEX_COLUMN = 4691,
   T_VEC_INDEX_COLUMN_EXPR = 4692,
-  T_BACKUP_CLUSTER_PARAMETERS = 4693,
-  // create mv build deferred
-  T_MV_REFRESH_OPT = 4694,
-  T_MV_BUILD_OPT = 4695,
+  // 4693: T_BACKUP_CLUSTER_PARAMETERS abandoned, id reserved
   T_PSEUDO_EXTERNAL_FILE_ROW = 4696,
   T_EXTERNAL_TABLE_AUTO_REFRESH = 4697,
 
@@ -2615,8 +2538,6 @@ typedef enum ObItemType
   T_PARTITION_EXPR = 4702,
   T_CACHE_INDEX = 4703,
   T_LOAD_INDEX_INTO_CACHE = 4704,
-
-  T_RESOURCE_GROUP = 4705,
   //olap async job
   T_OLAP_ASYNC_JOB_SUBMIT = 4706,
   T_OLAP_ASYNC_JOB_CANCEL = 4707,
@@ -2624,7 +2545,6 @@ typedef enum ObItemType
   T_USE_ADAPTIVE = 4709,
   T_NO_USE_ADAPTIVE = 4710,
   T_SHOW_CHECK_PARTITION = 4711,
-  T_ALTER_COLUMN_GROUP_DELAYED = 4712,
   T_DUPLICATE_READ_CONSISTENCY = 4713,
   T_NO_DIRECT = 4714,
 
@@ -2647,10 +2567,6 @@ typedef enum ObItemType
 
   T_MICRO_INDEX_CLUSTERED = 4728,
 
-  // Parquet related
-  T_ROW_GROUP_SIZE = 4729,    // FARM COMPAT WHITELIST, renamed
-  T_COMPRESSION_ALGORITHM = 4730,//Deprecated, use T_COMPRESSION
-
   // Erase micro cache
   T_FLUSH_SS_MICRO_CACHE = 4731,
 
@@ -2668,7 +2584,6 @@ typedef enum ObItemType
 
   T_UNION_MERGE_HINT = 4740,
   T_UNION_MERGE_LIST = 4741,
-  T_PSEUDO_OLD_NEW_COL = 4742,
 
   T_TRANSFORM_DISTINCT_AGG = 4743,
   T_NO_TRANSFORM_DISTINCT_AGG = 4744,
@@ -2723,7 +2638,6 @@ typedef enum ObItemType
   T_PARSER_DICT_TABLE = 4783,
   T_PARSER_QUANTIFIER_TABLE = 4784,
 
-  T_ALTER_MLOG_OPTIONS = 4785,
   // macro block bloom filter
   T_ENABLE_MACRO_BLOCK_BLOOM_FILTER = 4786,
   T_DISTRIBUTE_HASH_LOCAL = 4787,
@@ -2741,7 +2655,6 @@ typedef enum ObItemType
   T_ORGANIZATION_HEAP = 4795,
   T_PARSE_HEADER = 4796,
   T_SP_OBJ_PERSISTABLE = 4797,
-  T_FLASHBACK_STANDBY_LOG = 4798,
   T_BINARY_FORMAT = 4799,
 
   // parser config: ik_mode
@@ -2787,15 +2700,6 @@ typedef enum ObItemType
   T_MERGE_ENGINE = 4831,
   T_SEMISTRUCT_ENCODING_TYPE = 4832,
 
-  // dynamic partition manage
-  T_DYNAMIC_PARTITION_POLICY = 4833,
-  T_DYNAMIC_PARTITION_ENABLE = 4834,
-  T_DYNAMIC_PARTITION_TIME_UNIT = 4835,
-  T_DYNAMIC_PARTITION_PRECREATE_TIME = 4836,
-  T_DYNAMIC_PARTITION_EXPIRE_TIME = 4837,
-  T_DYNAMIC_PARTITION_TIME_ZONE = 4838,
-  T_DYNAMIC_PARTITION_BIGINT_PRECISION = 4839,
-
   T_DATABASE_FACTOR = 4840,
   T_IGNORE_LAST_EMPTY_COLUMN = 4841,
   T_LOG_ERROR_LIMIT = 4842,
@@ -2835,7 +2739,6 @@ typedef enum ObItemType
   T_UDF_PROPERTY_LIST = 4866,
 
   T_MICRO_BLOCK_FORMAT_VERSION = 4867,
-  T_MV_NESTED_REFRESH_CLAUSE = 4868, // placeholder for mview
   T_ALTER_SUBPARTITION_EXCHANGE = 4869,
   T_CREATE_SENSITIVE_RULE       = 4870,
   T_DROP_SENSITIVE_RULE         = 4871,
@@ -2865,7 +2768,6 @@ typedef enum ObItemType
   T_INDEX_MERGE_HINT = 4891,
   T_NO_INDEX_MERGE_HINT = 4892,
 
-  T_TABLE_FLASHBACK_PROCTIME = 4893,
   // hint for disable rich format of operators
   T_DISABLE_OP_RICH_FORMAT = 4894,
 
@@ -2966,7 +2868,7 @@ typedef enum ObOutlineType
     || ((op) == T_FUN_SYS_ST_CROSSES) \
     || ((op) == T_FUN_SYS_ST_OVERLAPS)) \
 
-//in oracle mode, only lists exprs can accept bool(tinyint) param
+// Only selected list expressions can accept bool(tinyint) param.
 #define ALLOW_BOOL_INPUT(op) \
   ((IS_BOOL_OP((op))) \
     || ((op) == T_FUN_COLUMN_CONV) \
@@ -3001,8 +2903,7 @@ typedef enum ObOutlineType
 #define IS_CONST_TYPE(op) ((op) > T_INVALID && (op) < T_MAX_CONST)
 #define IS_FUN_SYS_TYPE(op) (((op) >= T_FUN_SYS && (op) < T_FUN_SYS_END) \
                             || ((op) > T_MIN_OP && (op) <= T_OP_CONST_VAL) \
-                            || T_OP_CONNECT_BY_ROOT == (op) \
-                            || (lib::is_oracle_mode() && (op) == T_OP_BIT_AND))
+                            || T_OP_CONNECT_BY_ROOT == (op))
 
 #define IS_FUN_STYLE(op) (((op) >= T_FUN_SYS && (op) < T_FUN_SYS_END) \
     || ((op) >= T_FUN_MAX && (op) <= T_FUN_APPROX_COUNT_DISTINCT_SYNOPSIS_MERGE) \
@@ -3040,8 +2941,7 @@ typedef enum ObOutlineType
                            || (op) == T_SHOW_PLUGINS || (op) == T_SHOW_CHECK_TABLE \
                            || (op) == T_SHOW_OLAP_ASYNC_JOB_STATUS                \
                            || (op) == T_SHOW_CREATE_LOCATION \
-                           || (op) == T_SHOW_LOCATIONS       \
-                           || (op) == T_LOCATION_UTILS_LIST)
+                           || (op) == T_SHOW_LOCATIONS)
 
 #define EXPR_OP_NUM (T_MAX_OP-T_MIN_OP-1)
 extern const char *get_type_name(int type);

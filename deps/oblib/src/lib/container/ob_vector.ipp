@@ -39,7 +39,7 @@ ObVector<T, Allocator>::ObVector(Allocator *alloc, const lib::ObLabel &label)
 
 template <typename T, typename Allocator>
 ObVector<T, Allocator>::ObVector(int64_t size, Allocator *alloc, const lib::ObLabel &label)
-    : ObVector(size, alloc, ObMemAttr(common::OB_SERVER_TENANT_ID, label)) {}
+    : ObVector(size, alloc, ObMemAttr(label)) {}
 
 template <typename T, typename Allocator>
 ObVector<T, Allocator>::ObVector(int64_t size, Allocator *alloc, const lib::ObMemAttr &attr)

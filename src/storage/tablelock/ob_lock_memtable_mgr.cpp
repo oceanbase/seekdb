@@ -32,12 +32,11 @@ namespace tablelock
 {
 
 ObLockMemtableMgr::ObLockMemtableMgr()
-  : ls_id_(),
-    lock_def_()
+  : lock_def_()
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(lock_def_.init(lib::ObMemAttr(MTL_ID(), "LockMemtableMgr")))) {
-    LOG_WARN("lock memtable mgr lock init error", K(ret), "tenant_id", MTL_ID());
+  if (OB_FAIL(lock_def_.init(lib::ObMemAttr("LockMemtableMgr")))) {
+    LOG_WARN("lock memtable mgr lock init error", K(ret));
   }
   lock_.lock_type_ = LockType::OB_QSYNC_LOCK;
   lock_.lock_ = &lock_def_;
@@ -53,19 +52,17 @@ void ObLockMemtableMgr::destroy()
   int ret = OB_SUCCESS;
   const int64_t ref_cnt = get_ref();
   if (OB_UNLIKELY(0 != ref_cnt)) {
-    LOG_ERROR("ref cnt is NOT 0", K(ret), K(ref_cnt), K_(ls_id), KPC(this));
+    LOG_ERROR("ref cnt is NOT 0", K(ret), K(ref_cnt), KPC(this));
   }
 
   MemMgrWLockGuard lock_guard(lock_);
   reset_tables();
-  ls_id_.reset();
   freezer_ = NULL;
   is_inited_ = false;
 }
 
 int ObLockMemtableMgr::init(
     const common::ObTabletID &tablet_id,
-    const ObLSID &ls_id,
     ObFreezer *freezer,
     ObTenantMetaMemMgr *t3m)
 {
@@ -73,21 +70,19 @@ int ObLockMemtableMgr::init(
   int ret = OB_SUCCESS;
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("lock memtable mgr init twice.", K(ret), K_(ls_id));
-  } else if (OB_UNLIKELY(!ls_id.is_valid()) ||
-             OB_ISNULL(freezer) ||
+    LOG_WARN("lock memtable mgr init twice.", K(ret));
+  } else if (OB_ISNULL(freezer) ||
              OB_ISNULL(t3m)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(ls_id), KP(freezer), KP(t3m));
+    LOG_WARN("invalid argument", K(ret), KP(freezer), KP(t3m));
   } else if (!lock_def_.is_inited()) {
     ret = OB_NOT_INIT;
-    LOG_WARN("lock memtable mgr lock not init", K(ret), K(tablet_id), K(ls_id));
+    LOG_WARN("lock memtable mgr lock not init", K(ret), K(tablet_id));
   } else {
-    ls_id_ = ls_id;
     freezer_ = freezer;
     t3m_ = t3m;
     is_inited_ = true;
-    LOG_INFO("lock memtable mgr init successfully", K(ls_id), K(tablet_id), K(this));
+    LOG_INFO("lock memtable mgr init successfully", K(tablet_id), K(this));
   }
   return ret;
 }
@@ -111,7 +106,7 @@ int ObLockMemtableMgr::create_memtable(const CreateMemtableArg &arg)
 
   if (get_memtable_count_() > 0) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("lock memtable already exists, should not create again", K(ret), K_(ls_id));
+    LOG_WARN("lock memtable already exists, should not create again", K(ret));
   } else if (OB_FAIL(t3m_->acquire_lock_memtable(handle))) {
     LOG_WARN("failed to create memtable", K(ret));
   } else if (OB_ISNULL(table = handle.get_table())) {
@@ -120,7 +115,7 @@ int ObLockMemtableMgr::create_memtable(const CreateMemtableArg &arg)
   } else if (OB_ISNULL(memtable = static_cast<ObLockMemtable *>(table))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("this is not lock memtable", K(ret), KPC(table));
-  } else if (OB_FAIL(memtable->init(table_key, ls_id_, freezer_))) {
+  } else if (OB_FAIL(memtable->init(table_key, freezer_))) {
     LOG_WARN("memtable init fail.", K(ret));
   } else if (OB_FAIL(add_memtable_(handle))) {
     LOG_WARN("add memtable fail.", K(ret));
@@ -128,7 +123,7 @@ int ObLockMemtableMgr::create_memtable(const CreateMemtableArg &arg)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("ls_tx_svr is null", K(ret));
   } else {
-    LOG_INFO("create lock memtable successfully", K_(ls_id), K(memtable), KPC(this));
+    LOG_INFO("create lock memtable successfully", K(memtable), KPC(this));
   }
 
   return ret;
@@ -187,10 +182,10 @@ int ObLockMemtableMgr::release_head_memtable_(storage::ObIMemtable *imemtable,
     // for force
     const int64_t idx = get_memtable_idx(memtable_head_);
     if (nullptr != tables_[idx] && memtable == tables_[idx]) {
-      LOG_INFO("release head memtable", K(ret), K_(ls_id), KP(memtable));
+      LOG_INFO("release head memtable", K(ret), KP(memtable));
       release_head_memtable();
       FLOG_INFO("succeed to release head lock table memtable", K(ret),
-                K_(ls_id), KP(imemtable), K(memtable_head_), K(memtable_tail_));
+                KP(imemtable), K(memtable_head_), K(memtable_tail_));
     }
   } else if (!force) {
     // just for flush

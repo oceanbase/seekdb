@@ -199,7 +199,7 @@ int build_hashmap(ObEvalCtx &ctx,
   int64_t str_list_pos = 0;
   int64_t comma_pos = 0;
   ObString comma_str = ObCharsetUtils::get_const_str(cs_type, ',');
-  ObMemAttr mem_attr(MTL_ID(), "HashMap");
+  ObMemAttr mem_attr("HashMap");
   ObArray<ObString> sortkeys;
 
   OZ (sortkeys.reserve(16));

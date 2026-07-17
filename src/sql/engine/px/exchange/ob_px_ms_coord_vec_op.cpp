@@ -143,11 +143,10 @@ int ObPxMSCoordVecOp::inner_open()
       msg_proc_.set_scheduler(&parallel_scheduler_);
     }
     alloc_.set_label(common::ObModIds::OB_SQL_PX);
-    alloc_.set_tenant_id(ctx_.get_my_session()->get_effective_tenant_id());
+    
     metric_.set_id(MY_SPEC.id_);
     void *mem = NULL;
-    ObMemAttr attr(ctx_.get_my_session()->get_effective_tenant_id(),
-                    "PxMsOutputStore", ObCtxIds::EXECUTE_CTX_ID);
+    ObMemAttr attr("PxMsOutputStore", ObCtxIds::EXECUTE_CTX_ID);
     if (OB_FAIL(output_store_.init(MY_SPEC.all_exprs_, get_spec().max_batch_size_,
                                     attr, 0 /*mem_limit*/, false/*enable_dump*/,
                                     0 /*row_extra_size*/, NONE_COMPRESSOR))) {
@@ -202,7 +201,7 @@ int ObPxMSCoordVecOp::setup_loop_proc()
       .register_processor(sp_winfunc_px_piece_msg_proc_)
       .register_processor(join_filter_count_row_piece_msg_proc_)
       .register_interrupt_processor(interrupt_proc_);
-  msg_loop_.set_tenant_id(ctx_.get_my_session()->get_effective_tenant_id());
+  
   return ret;
 }
 
@@ -574,7 +573,7 @@ int ObPxMSCoordVecOp::next_row_from_heap(ObReceiveRowReader &reader, bool &wait_
   // (2) Pop the maximum value from the heap
   if (OB_SUCC(ret)) {
     if (0 == row_heap_.capacity()) {
-      if (GCONF.enable_sql_audit) {
+      {
         op_monitor_info_.otherstat_2_id_ = ObSqlMonitorStatIds::EXCHANGE_EOF_TIMESTAMP;
         op_monitor_info_.otherstat_2_value_ = oceanbase::common::ObClockGenerator::getClock();
       }

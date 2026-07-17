@@ -48,9 +48,7 @@
 #include "sql/rewrite/ob_transform_count_to_exists.h"
 #include "sql/rewrite/ob_transform_expr_pullup.h"
 #include "sql/rewrite/ob_transform_conditional_aggr_coalesce.h"
-#include "sql/rewrite/ob_transform_mv_rewrite.h"
 #include "sql/rewrite/ob_transform_decorrelate.h"
-#include "sql/rewrite/ob_transform_mv_rewrite_prepare.h"
 #include "sql/rewrite/ob_transform_late_materialization.h"
 #include "sql/rewrite/ob_transform_distinct_aggregate.h"
 
@@ -82,8 +80,6 @@ int ObTransformerImpl::transform(ObDMLStmt *&stmt)
     LOG_WARN("failed to formalize query ref exprs");
   } else if (OB_FAIL(stmt->formalize_stmt_expr_reference(ctx_->expr_factory_, ctx_->session_info_))) {
     LOG_WARN("failed to formalize stmt reference", K(ret));
-  } else if (OB_FAIL(do_prepare_mv_rewrite(stmt))) {
-    LOG_WARN("failed to do prepare mv rewrite", K(ret));
   } else if (OB_FAIL(do_transform(stmt))) {
     LOG_WARN("failed to do transform", K(ret));
   } else if (OB_FAIL(stmt->formalize_stmt_expr_reference(ctx_->expr_factory_, ctx_->session_info_))) {
@@ -137,17 +133,16 @@ int ObTransformerImpl::set_transformation_parameters(ObQueryCtx *query_ctx)
     ctx_->cbqt_policy_ = static_cast<TransPolicy>(opt_param_val);
   }
   if (OB_SUCC(ret)) {
-    uint64_t tenant_id = session_info->get_effective_tenant_id();
-    omt::ObTenantConfigGuard tenant_config(TENANT_CONF(tenant_id));
-    if (tenant_config.is_valid()) {
-      ctx_->complex_cbqt_table_num_ = tenant_config->_complex_cbqt_table_num;
-      ctx_->force_subquery_unnest_ = tenant_config->_force_subquery_unnest;
-      ctx_->nested_loop_join_enabled_ = tenant_config->_nested_loop_join_enabled;
-      if (OB_FAIL(query_ctx->get_global_hint().opt_params_.get_bool_opt_param(ObOptParamHint::NESTED_LOOP_JOIN_ENABLED, 
-                                                                              ctx_->nested_loop_join_enabled_))) {
-        LOG_WARN("fail to get bool opt param", K(ret));
-      }
+    
+
+    ctx_->complex_cbqt_table_num_ = GCONF._complex_cbqt_table_num;
+    ctx_->force_subquery_unnest_ = GCONF._force_subquery_unnest;
+    ctx_->nested_loop_join_enabled_ = GCONF._nested_loop_join_enabled;
+    if (OB_FAIL(query_ctx->get_global_hint().opt_params_.get_bool_opt_param(ObOptParamHint::NESTED_LOOP_JOIN_ENABLED, 
+                                                                            ctx_->nested_loop_join_enabled_))) {
+      LOG_WARN("fail to get bool opt param", K(ret));
     }
+
   }
   return ret;
 }
@@ -369,24 +364,6 @@ int ObTransformerImpl::do_transform_pre_precessing(ObDMLStmt *&stmt)
   return ret;
 }
 
-int ObTransformerImpl::do_prepare_mv_rewrite(const ObDMLStmt *stmt)
-{
-  int ret = OB_SUCCESS;
-  if (OB_ISNULL(stmt) || OB_ISNULL(ctx_)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(stmt), K(ret));
-  } else {
-    ObTransformMVRewritePrepare trans(ctx_);
-    OPT_TRACE_TITLE("start prepare mv rewrite info");
-    if (OB_FAIL(trans.prepare_mv_rewrite_info(stmt))) {
-      LOG_WARN("failed to do transform mv rewrite prepare", K(ret));
-    } else {
-      LOG_TRACE("succeed to do transform mv rewrite prepare");
-    }
-  }
-  return ret;
-}
-
 int ObTransformerImpl::transform_heuristic_rule(ObDMLStmt *&stmt)
 {
   int ret = OB_SUCCESS;
@@ -543,7 +520,6 @@ int ObTransformerImpl::transform_rule_set_in_one_iteration(ObDMLStmt *&stmt,
      * The ordering to apply the following rules is important,
      * think carefully when new rules are added
      */
-    APPLY_RULE_IF_NEEDED(MV_REWRITE, ObTransformMVRewrite);
     APPLY_RULE_IF_NEEDED(SIMPLIFY_EXPR, ObTransformSimplifyExpr);
     APPLY_RULE_IF_NEEDED(SIMPLIFY_DISTINCT, ObTransformSimplifyDistinct);
     APPLY_RULE_IF_NEEDED(SIMPLIFY_GROUPBY, ObTransformSimplifyGroupby);
@@ -680,38 +656,13 @@ int ObTransformerImpl::choose_rewrite_rules(ObDMLStmt *stmt, uint64_t &need_type
     if (func.update_global_index_) {
       ObTransformRule::add_trans_type(disable_list, WIN_MAGIC);
     }
-    if (func.contain_link_table_) {
-      // some rules might generate filter which contains constant values which has implicit types,
-      // which can not be printed in the link sql.
-      // example：
-      // create table t (c1 varchar(10), c2 char(10))
-      // select * from t where c1 = 'a' and c2 = c1;
-      // => select * from t where c1 = 'a' and c2 = implicit cast('a' as varchar);
-      uint64_t dblink_enable_list = 0;
-      ObTransformRule::add_trans_type(dblink_enable_list, SIMPLIFY_DISTINCT);
-      ObTransformRule::add_trans_type(dblink_enable_list, SIMPLIFY_ORDERBY);
-      ObTransformRule::add_trans_type(dblink_enable_list, SIMPLIFY_LIMIT);
-      ObTransformRule::add_trans_type(dblink_enable_list, PROJECTION_PRUNING);
-      ObTransformRule::add_trans_type(dblink_enable_list, VIEW_MERGE);
-      ObTransformRule::add_trans_type(dblink_enable_list, COUNT_TO_EXISTS);
-      ObTransformRule::add_trans_type(dblink_enable_list, WHERE_SQ_PULL_UP);
-      ObTransformRule::add_trans_type(dblink_enable_list, SIMPLIFY_SUBQUERY);
-      ObTransformRule::add_trans_type(dblink_enable_list, QUERY_PUSH_DOWN);
-      ObTransformRule::add_trans_type(dblink_enable_list, ELIMINATE_OJ);
-      ObTransformRule::add_trans_type(dblink_enable_list, JOIN_ELIMINATION);
-      ObTransformRule::add_trans_type(dblink_enable_list, JOIN_LIMIT_PUSHDOWN);
-      ObTransformRule::add_trans_type(dblink_enable_list, LEFT_JOIN_TO_ANTI);
-      ObTransformRule::add_trans_type(dblink_enable_list, AGGR_SUBQUERY);
-      ObTransformRule::add_trans_type(dblink_enable_list, FASTMINMAX);
-      disable_list |= (~dblink_enable_list);
-    }
     if (func.contain_json_table_) {
       // json table ban group by pushdown && join limit pushdown && left join pushdown
       ObTransformRule::add_trans_type(disable_list, GROUPBY_PUSHDOWN);
       ObTransformRule::add_trans_type(disable_list, JOIN_LIMIT_PUSHDOWN);
       ObTransformRule::add_trans_type(disable_list, LEFT_JOIN_TO_ANTI);
     }
-    //dblink trace point
+    // reconstruct-sql trace point
     if ((OB_E(EventTable::EN_GENERATE_PLAN_WITH_RECONSTRUCT_SQL) OB_SUCCESS) != OB_SUCCESS) {
       ObTransformRule::add_trans_type(disable_list, SELECT_EXPR_PULLUP);
     }
@@ -765,16 +716,6 @@ int ObTransformerImpl::check_stmt_functions(const ObDMLStmt *stmt, StmtFunc &fun
     } else {
       func.contain_enum_set_values_ |= ob_is_enumset_tc(col.get_expr()->get_data_type());
       func.contain_geometry_values_ |= ob_is_geometry_tc(col.get_expr()->get_data_type());
-    }
-  }
-  for (int64_t i = 0; OB_SUCC(ret) && !func.contain_link_table_ && 
-                      i < stmt->get_table_items().count(); ++i) {
-    const TableItem *table = stmt->get_table_item(i);
-    if (OB_ISNULL(table)) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpect null table item", K(ret));
-    } else if (table->is_link_table()) {
-      func.contain_link_table_ = true;
     }
   }
   for (int64_t i = 0; OB_SUCC(ret) && !func.contain_json_table_ && 
@@ -1020,8 +961,6 @@ int ObTransformerImpl::add_all_rowkey_columns_to_stmt(const ObTableSchema &table
       if (OB_FAIL(column_items.push_back(*exists_col_item))) {
         LOG_WARN("failed to push back column item", K(ret));
       }
-    } else if (OB_MOCK_LINK_TABLE_PK_COLUMN_ID == column_id && table_item.is_link_table()) {		
-      continue;
     } else if (OB_ISNULL(column_schema = (table_schema.get_column_schema(column_id)))) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("failed to get column schema", K(column_id), K(ret));

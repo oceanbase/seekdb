@@ -15,6 +15,8 @@
  */
  
 #include "observer/ob_server_utils.h"
+#include "observer/omt/ob_multi_tenant.h"  // previously hidden behind the server_struct include chain, make the dependency explicit
+#include "share/rc/ob_module_provider.h"
 #include "ob_all_virtual_sql_plan.h"
 
 using namespace oceanbase::common;
@@ -39,7 +41,7 @@ ObAllVirtualSqlPlan::PlanInfo::~PlanInfo()
 void ObAllVirtualSqlPlan::PlanInfo::reset()
 {
   plan_id_ = OB_INVALID_ID;
-  tenant_id_ = OB_INVALID_ID;
+  
 }
 
 ObAllVirtualSqlPlan::DumpAllPlan::DumpAllPlan()
@@ -55,7 +57,7 @@ ObAllVirtualSqlPlan::DumpAllPlan::~DumpAllPlan()
 void ObAllVirtualSqlPlan::DumpAllPlan::reset()
 {
   plan_ids_ = NULL;
-  tenant_id_ = OB_INVALID_ID;
+  
 }
 
 int ObAllVirtualSqlPlan::DumpAllPlan::operator()(
@@ -73,7 +75,7 @@ int ObAllVirtualSqlPlan::DumpAllPlan::operator()(
     //do nothing
   } else if (NULL != plan->get_logical_plan().logical_plan_) {
     PlanInfo info;
-    info.tenant_id_ = tenant_id_;
+    
     info.plan_id_ = plan->get_plan_id();
     if (OB_FAIL(plan_ids_->push_back(info))) {
       SERVER_LOG(WARN, "failed to push back plan id", K(ret));
@@ -92,7 +94,6 @@ ObAllVirtualSqlPlan::ObAllVirtualSqlPlan() :
     db_id_(0),
     plan_hash_(0),
     gmt_create_(0),
-    tenant_id_(0),
     plan_id_(0)
 {
 }
@@ -398,7 +399,7 @@ int ObAllVirtualSqlPlan::extract_tenant_and_plan_id(const common::ObIArray<commo
   bool is_always_true = false;
   bool is_always_false = false;
   plan_ids_.reuse();
-  const int64_t tenant_id = effective_tenant_id_;
+  
   for (int64_t i = 0; OB_SUCC(ret) && !is_always_true && !is_always_false && i < N; i++) {
     start_key.reset();
     end_key.reset();
@@ -414,10 +415,10 @@ int ObAllVirtualSqlPlan::extract_tenant_and_plan_id(const common::ObIArray<commo
     } else if (OB_ISNULL(start_key_obj_ptr) || OB_ISNULL(end_key_obj_ptr)) {
       ret = OB_INVALID_ARGUMENT;
       SERVER_LOG(WARN, "invalid arguments", K(ret));
-    } else if (start_key_obj_ptr[KEY_PLAN_ID_IDX].is_min_value() &&
+    } else if (start_key_obj_ptr[KEY_PLAN_ID_IDX].is_min_value() && 
                end_key_obj_ptr[KEY_PLAN_ID_IDX].is_max_value()) {
       is_always_true = true;
-      if (OB_FAIL(dump_tenant_plans(tenant_id))) {
+      if (OB_FAIL(dump_tenant_plans())) {
         SERVER_LOG(WARN, "failed to dump tenant plans", K(ret));
       }
     } else if (start_key_obj_ptr[KEY_PLAN_ID_IDX].is_max_value() &&
@@ -429,7 +430,7 @@ int ObAllVirtualSqlPlan::extract_tenant_and_plan_id(const common::ObIArray<commo
       ret = OB_NOT_IMPLEMENT;
       SERVER_LOG(WARN, "plan id only supports exact value", K(ret));
     } else if (start_key_obj_ptr[KEY_PLAN_ID_IDX] == end_key_obj_ptr[KEY_PLAN_ID_IDX]) {
-      if (ObIntType != start_key_obj_ptr[KEY_PLAN_ID_IDX].get_type() ||
+      if (ObIntType != start_key_obj_ptr[KEY_PLAN_ID_IDX].get_type() || 
           (start_key_obj_ptr[KEY_PLAN_ID_IDX].get_type() != end_key_obj_ptr[KEY_PLAN_ID_IDX].get_type())) {
         ret = OB_ERR_UNEXPECTED;
         SERVER_LOG(WARN, "expect plan id type to be int",
@@ -438,7 +439,7 @@ int ObAllVirtualSqlPlan::extract_tenant_and_plan_id(const common::ObIArray<commo
       } else {
         int64_t plan_id = start_key_obj_ptr[KEY_PLAN_ID_IDX].get_int();
         PlanInfo info;
-        info.tenant_id_ = tenant_id;
+        
         info.plan_id_ = plan_id;
         if (OB_FAIL(plan_ids_.push_back(info))) {
           SERVER_LOG(WARN, "failed to push back plan info", K(ret));
@@ -452,34 +453,24 @@ int ObAllVirtualSqlPlan::extract_tenant_and_plan_id(const common::ObIArray<commo
 int ObAllVirtualSqlPlan::dump_all_tenant_plans()
 {
   int ret = OB_SUCCESS;
-  // get all tenant ids
-  ObSEArray<uint64_t, 4> all_tenant_ids;
-  if (OB_FAIL(GCTX.omt_->get_mtl_tenant_ids(all_tenant_ids))) {
-    SERVER_LOG(WARN, "failed to get all tenant ids", K(ret));
-  }
-  for (int64_t i = 0; OB_SUCC(ret) && i < all_tenant_ids.count(); i++) {
-    if (all_tenant_ids.at(i) != effective_tenant_id_ && 
-        !is_sys_tenant(effective_tenant_id_)) {
-      //do nothing
-    } else if (OB_FAIL(dump_tenant_plans(all_tenant_ids.at(i)))) {
-      SERVER_LOG(WARN, "failed to dump tenant` plan", K(ret), K(i));
-    }
+  if (OB_FAIL(dump_tenant_plans())) {
+    SERVER_LOG(WARN, "failed to dump tenant` plan", K(ret));
   }
   return ret;
 }
 
-int ObAllVirtualSqlPlan::dump_tenant_plans(int64_t tenant_id)
+int ObAllVirtualSqlPlan::dump_tenant_plans()
 {
   int ret = OB_SUCCESS;
-  if (!is_virtual_tenant_id(tenant_id)) {
+  {
     DumpAllPlan dump_plan;
-    dump_plan.tenant_id_ = tenant_id;
+    
     dump_plan.plan_ids_ = &plan_ids_;
     // !!!Before referencing plan cache resources, ObReqTimeGuard must be added
     ObReqTimeGuard req_timeinfo_guard;
     ObPlanCache *plan_cache = NULL;
-    MTL_SWITCH(tenant_id) {
-      plan_cache = MTL(ObPlanCache*);
+    MOD_SCOPE {
+      plan_cache = share::g_mp->plan_cache();
       if (OB_ISNULL(plan_cache)) {
         ret = OB_ERR_UNEXPECTED;
         SERVER_LOG(WARN, "unexpect null plan cache", K(ret));
@@ -503,13 +494,13 @@ int ObAllVirtualSqlPlan::prepare_next_plan()
   if (plan_idx_ >= plan_ids_.count()) {
     ret = OB_ERR_UNEXPECTED;
     SERVER_LOG(WARN, "no more plan", K(ret));
-  } else if (OB_INVALID_INDEX == plan_ids_.at(plan_idx_).tenant_id_ || 
+  } else if (OB_INVALID_INDEX == 1UL || 
              OB_INVALID_INDEX == plan_ids_.at(plan_idx_).plan_id_) {
-    SERVER_LOG(DEBUG, "invalid tenant_id or plan_id");
+    SERVER_LOG(DEBUG, "invalid plan_id");
     //next plan
     ++plan_idx_;
   } else {
-    tenant_id_ = plan_ids_.at(plan_idx_).tenant_id_;
+    
     plan_id_ = plan_ids_.at(plan_idx_).plan_id_;
     //next plan
     ++plan_idx_;
@@ -519,8 +510,8 @@ int ObAllVirtualSqlPlan::prepare_next_plan()
     ObPlanCache *plan_cache = NULL;
     ObCacheObjGuard guard(PC_DIAG_HANDLE);
     int tmp_ret = OB_SUCCESS;
-    MTL_SWITCH(tenant_id_) {
-      plan_cache = MTL(ObPlanCache*);
+    MOD_SCOPE {
+      plan_cache = share::g_mp->plan_cache();
       if (OB_SUCCESS != (tmp_ret = plan_cache->ref_alloc_plan(plan_id_, guard))) {
         // should not panic
       } else if (FALSE_IT(plan = static_cast<ObPhysicalPlan*>(guard.get_cache_obj()))) {

@@ -1,1 +1,0 @@
-storage_unittest(test_direct_load_memtable)

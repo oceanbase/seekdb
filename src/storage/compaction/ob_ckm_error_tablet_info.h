@@ -16,7 +16,6 @@
 #ifndef OB_STORAGE_COMPACTION_CKM_ERROR_TABLET_INFO_H_
 #define OB_STORAGE_COMPACTION_CKM_ERROR_TABLET_INFO_H_
 #include "common/ob_tablet_id.h"
-#include "share/tablet/ob_tablet_info.h"
 namespace oceanbase
 {
 namespace compaction
@@ -44,7 +43,6 @@ public:
   int64_t compaction_scn_;
 };
 typedef ObCkmErrorStruct<ObTabletID> ObCkmErrorTabletInfo;
-typedef ObCkmErrorStruct<share::ObTabletLSPair> ObCkmErrorTabletLSInfo;
 
 } // namespace compaction
 } // namespace oceanbase

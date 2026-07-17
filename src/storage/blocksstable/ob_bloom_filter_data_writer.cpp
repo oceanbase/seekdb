@@ -367,7 +367,7 @@ int ObBloomFilterMacroBlockWriter::flush_macro_block() {
     macro_write_info.io_desc_.set_sys_module_id(ObIOModule::BLOOM_FILTER_IO);
     macro_write_info.io_desc_.set_sealed();
     macro_write_info.io_timeout_ms_ = GCONF._data_storage_io_timeout / 1000L;
-    macro_write_info.mtl_tenant_id_ = MTL_ID();
+    
 
     if (OB_FAIL(ObObjectManager::write_object(opt, macro_write_info,
                                               macro_handle))) {

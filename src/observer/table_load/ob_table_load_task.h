@@ -34,7 +34,7 @@ class ObTableLoadTask
   friend class ObITableLoadTaskProcessor;
   friend class ObITableLoadTaskCallback;
 public:
-  ObTableLoadTask(uint64_t tenant_id);
+  ObTableLoadTask();
   ~ObTableLoadTask();
   template<typename Processor, typename... Args>
   int set_processor(Args&&... args);

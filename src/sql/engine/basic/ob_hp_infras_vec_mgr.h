@@ -30,8 +30,8 @@ class ObHashPartInfrasVecGroup
 {
 using HashPartInfrasVecList = common::ObDList<HashPartInfrasVec>;
 public:
-  ObHashPartInfrasVecGroup(common::ObIAllocator &allocator, const uint64_t tenant_id) :
-    allocator_(allocator), tenant_id_(tenant_id), enable_sql_dumped_(false), est_rows_(0),
+  ObHashPartInfrasVecGroup(common::ObIAllocator &allocator) :
+    allocator_(allocator), enable_sql_dumped_(false), est_rows_(0),
     width_(0), unique_(false), ways_(1), eval_ctx_(nullptr), compressor_type_(NONE_COMPRESSOR),
     sql_mem_processor_(nullptr), io_event_observer_(nullptr), est_bucket_num_(0),
     initial_hp_size_(0), hp_infras_buffer_(nullptr), hp_infras_buffer_idx_(MAX_HP_INFRAS_CNT)
@@ -49,7 +49,7 @@ public:
     initial_hp_size_ = size;
     return ret;
   }
-  int init(uint64_t tenant_id, bool enable_sql_dumped, const int64_t est_rows, const int64_t width,
+  int init(bool enable_sql_dumped, const int64_t est_rows, const int64_t width,
            const bool unique, const int64_t ways, ObEvalCtx *eval_ctx,
            ObSqlMemMgrProcessor *sql_mem_processor, ObIOEventObserver *io_event_observer,
            common::ObCompressorType compressor_type);
@@ -57,8 +57,7 @@ public:
                          const common::ObIArray<ObSortFieldCollation> *sort_collations,
                          bool need_rewind);
   int free_one_hp_infras(HashPartInfrasVec *&hp_infras);
-  OB_INLINE uint64_t get_tenant_id()
-  { return tenant_id_; }
+  
   OB_INLINE ObSqlMemMgrProcessor *get_sql_mem_mgr_processor()
   { return sql_mem_processor_; }
   OB_INLINE void set_io_event_observer(ObIOEventObserver *io_event_observer)
@@ -134,7 +133,6 @@ private:
 private:
   const static int64_t RATIO = 30;
   common::ObIAllocator &allocator_;
-  uint64_t tenant_id_;
   bool enable_sql_dumped_;
   int64_t est_rows_;
   int64_t width_;
@@ -157,15 +155,15 @@ class ObHashPartInfrasVecMgr
 public:
   static const int64_t MIN_BUCKET_COUNT = 1L << 1;  //2;
   static const int64_t MAX_BUCKET_COUNT = 1L << 19; //524288;
-  ObHashPartInfrasVecMgr(const uint64_t tenant_id) :
-    arena_alloc_("HPInfrasVec", OB_MALLOC_NORMAL_BLOCK_SIZE, tenant_id), inited_(false),
-    hp_infras_group_(arena_alloc_, tenant_id)
+  ObHashPartInfrasVecMgr() :
+    arena_alloc_("HPInfrasVec", OB_MALLOC_NORMAL_BLOCK_SIZE), inited_(false),
+    hp_infras_group_(arena_alloc_)
   {}
   ~ObHashPartInfrasVecMgr()
   {
     destroy();
   }
-  int init(uint64_t tenant_id, bool enable_sql_dumped, const int64_t est_rows, const int64_t width,
+  int init(bool enable_sql_dumped, const int64_t est_rows, const int64_t width,
            const bool unique, const int64_t ways, ObEvalCtx *eval_ctx,
            ObSqlMemMgrProcessor *sql_mem_processor, ObIOEventObserver *io_event_observer,
            common::ObCompressorType compressor_type);

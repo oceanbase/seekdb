@@ -1,0 +1,109 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#define USING_LOG_PREFIX LIB
+#include "ob_geo_cache.h"
+#include "share/geo/ob_geo_vertex_collect_visitor.h"
+#include "share/geo/ob_geo_func_register.h"
+#include "share/geo/ob_geo_point_location_visitor.h"
+
+namespace oceanbase
+{
+namespace common
+{
+
+int ObCachedGeomBase::init()
+{
+  int ret = OB_SUCCESS;
+  if (OB_ISNULL(origin_geo_) || OB_ISNULL(allocator_)) {
+    ret = OB_BAD_NULL_ERROR;
+    LOG_WARN("should not be null.", KP(origin_geo_), KP(allocator_), K(ret));
+  } else if (!is_inited_) {
+    ObGeoVertexCollectVisitor vertex_visitor(vertexes_);
+    if (OB_FAIL(origin_geo_->do_visit(vertex_visitor))) {
+      LOG_WARN("failed to collect geo vertexes", K(ret));
+    } else {
+      x_min_ = vertex_visitor.get_x_min();
+      x_max_ = vertex_visitor.get_x_max();
+      is_inited_ = true;
+    }
+  }
+  
+  return ret;
+}
+
+int ObCachedGeomBase::intersects(ObGeometry& geo, ObGeoEvalCtx& gis_context, bool &res)
+{
+  int ret = OB_SUCCESS;
+  if (OB_FAIL(ObGeoFunc<ObGeoFuncType::Intersects>::geo_func::eval(gis_context, res))) {
+    LOG_WARN("eval st intersection failed", K(ret));
+  } else if (geo.type() == ObGeoType::POINT
+            && origin_geo_->type() == ObGeoType::POINT
+            && res == true
+            && OB_FAIL(ObGeoTypeUtil::eval_point_box_intersects(gis_context.get_srs(), &geo, origin_geo_, res))) {
+    LOG_WARN("eval box intersection failed", K(ret));
+  }
+  return ret;
+}
+int ObCachedGeomBase::contains(ObGeometry& geo, ObGeoEvalCtx& gis_context, bool &res)
+{
+  int ret = OB_SUCCESS;
+  if (OB_FAIL(ObGeoFunc<ObGeoFuncType::Within>::gis_func::eval(gis_context, res))) {
+    LOG_WARN("eval Within functor failed", K(ret));
+  }
+  return ret;
+}
+int ObCachedGeomBase::cover(ObGeometry& geo, ObGeoEvalCtx& gis_context, bool &res)
+{
+  int ret = OB_SUCCESS;
+  if (OB_FAIL(ObGeoFunc<ObGeoFuncType::CoveredBy>::geo_func::eval(gis_context, res))) {
+    LOG_WARN("eval st coveredBy failed", K(ret));
+  }
+  return ret;
+}
+int ObCachedGeomBase::within(ObGeometry& geo, ObGeoEvalCtx& gis_context, bool &res)
+{
+  int ret = OB_SUCCESS;
+  if (OB_FAIL(ObGeoFunc<ObGeoFuncType::Within>::gis_func::eval(gis_context, res))) {
+    LOG_WARN("eval st withIn failed", K(ret));
+  }
+  return ret;
+}
+
+// check whether is there any point from cached poly in geo
+int ObCachedGeomBase::check_any_vertexes_in_geo(ObGeometry& geo, bool &res)
+{
+  int ret = OB_SUCCESS;
+  if (!is_inited_) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("cached polygon must be inited", K(ret));
+  } else {
+    int size = get_vertexes().size();
+    for (uint32_t i = 0; i < size && OB_SUCC(ret) && !res; i++) {
+      ObGeoPointLocationVisitor point_loc_visitor(get_vertexes()[i]);
+      if (OB_FAIL(geo.do_visit(point_loc_visitor))) {
+        LOG_WARN("failed to do point location visitor", K(ret));
+      } else if (point_loc_visitor.get_point_location() == ObPointLocation::INTERIOR
+                || point_loc_visitor.get_point_location() == ObPointLocation::BOUNDARY) {
+        res = true;
+      }
+    }
+  }
+  return ret;
+}
+
+} // namespace common
+} // namespace oceanbase

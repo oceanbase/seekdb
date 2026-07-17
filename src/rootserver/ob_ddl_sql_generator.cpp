@@ -22,7 +22,7 @@ namespace oceanbase
 {
 using namespace common;
 using namespace share::schema;
-using namespace obrpc;
+using namespace obcall;
 
 namespace rootserver
 {
@@ -80,8 +80,6 @@ int ObDDLSqlGenerator::get_priv_name(const int64_t priv, const char *&name)
       name = "RENAME"; break;
     case OB_PRIV_REFERENCES:
       name = "REFERENCES"; break;
-    case OB_PRIV_FLASHBACK:
-      name = "FLASHBACK"; break;
     case OB_PRIV_READ:
       name = "READ"; break;
     case OB_PRIV_WRITE:
@@ -174,14 +172,14 @@ int ObDDLSqlGenerator::gen_create_user_sql(const ObAccountArg &account,
       char NEW_CREATE_USER_SQL[] = "CREATE USER %s `%.*s`@`%.*s`";
       if (0 == account.host_name_.compare(OB_DEFAULT_HOST_NAME)) {
         if (OB_FAIL(sql_string.append_fmt(adjust_ddl_format_str(CREATE_USER_SQL),
-                                          lib::is_oracle_mode() ? "" : IF_NOT_EXIST,
+                                          IF_NOT_EXIST,
                                           account.user_name_.length(),
                                           account.user_name_.ptr()))) {
           LOG_WARN("append sql failed", K(account), K(password), K(ret));
         }
       } else {
         if (OB_FAIL(sql_string.append_fmt(adjust_ddl_format_str(NEW_CREATE_USER_SQL),
-                                          lib::is_oracle_mode() ? "" : IF_NOT_EXIST,
+                                          IF_NOT_EXIST,
                                           account.user_name_.length(),
                                           account.user_name_.ptr(),
                                           account.host_name_.length(),
@@ -192,25 +190,11 @@ int ObDDLSqlGenerator::gen_create_user_sql(const ObAccountArg &account,
     }
   }
   // mysql mode and password is not an empty string
-  if (OB_SUCC(ret) && !lib::is_oracle_mode() && !password.empty()) {
+  if (OB_SUCC(ret) && !password.empty()) {
     if (OB_FAIL(sql_string.append_fmt(" IDENTIFIED BY PASSWORD '%.*s'",
                                       password.length(),
                                       password.ptr()))) {
       LOG_WARN("append sql failed", K(password), K(ret), K(account));
-    }
-  } else if (OB_SUCC(ret) && lib::is_oracle_mode() 
-             && !password.empty()) {
-    // oracle mode and password is not an empty string
-    if (OB_FAIL(sql_string.append_fmt(" IDENTIFIED BY VALUES \"%.*s\"",
-                                      password.length(),
-                                      password.ptr()))) {
-      LOG_WARN("append sql failed", K(password), K(ret), K(account));
-    }
-  } else if (OB_SUCC(ret) && lib::is_oracle_mode() 
-             && password.empty()) {
-    // oracle mode and password is an empty string
-    if (OB_FAIL(sql_string.append(" IDENTIFIED BY \"\""))) {
-      LOG_WARN("append sql failed", K(ret), K(account));
     }
   }
 
@@ -399,8 +383,8 @@ int ObDDLSqlGenerator::gen_set_max_connections_sql(const ObAccountArg &account,
   return ret;
 }
 
-int ObDDLSqlGenerator::gen_alter_user_require_sql(const obrpc::ObAccountArg &account,
-    const obrpc::ObSetPasswdArg &arg, common::ObSqlString &sql_string)
+int ObDDLSqlGenerator::gen_alter_user_require_sql(const obcall::ObAccountArg &account,
+    const obcall::ObSetPasswdArg &arg, common::ObSqlString &sql_string)
 {
   int ret = OB_SUCCESS;
   const share::schema::ObSSLType ssl_type = arg.ssl_type_;
@@ -460,16 +444,11 @@ int ObDDLSqlGenerator::gen_drop_user_sql(const ObAccountArg &account,
         }
       }
     }
-    if (OB_SUCC(ret) && lib::is_oracle_mode() && !account.is_role_) {
-      if (OB_FAIL(sql_string.append_fmt(" CASCADE"))) {
-        LOG_WARN("append sql failed", K(ret), K(account));
-      }
-    }
   }
   return ret;
 }
 
-int ObDDLSqlGenerator::gen_lock_user_sql(const obrpc::ObAccountArg &account,
+int ObDDLSqlGenerator::gen_lock_user_sql(const obcall::ObAccountArg &account,
                                          const bool locked,
                                          ObSqlString &sql_string)
 {
@@ -602,7 +581,7 @@ int ObDDLSqlGenerator::raw_privs_to_name_ora(const share::ObRawObjPrivArray &obj
   return ret;
 }
 
-int ObDDLSqlGenerator::gen_table_priv_sql(const obrpc::ObAccountArg &account,
+int ObDDLSqlGenerator::gen_table_priv_sql(const obcall::ObAccountArg &account,
                                           const ObNeedPriv &need_priv,
                                           const bool is_grant,
                                           ObSqlString &sql_string)
@@ -677,7 +656,7 @@ int ObDDLSqlGenerator::gen_table_priv_sql(const obrpc::ObAccountArg &account,
   return ret;
 }
 
-int ObDDLSqlGenerator::gen_column_priv_sql(const obrpc::ObAccountArg &account,
+int ObDDLSqlGenerator::gen_column_priv_sql(const obcall::ObAccountArg &account,
                                           const ObNeedPriv &need_priv,
                                           const bool is_grant,
                                           ObSqlString &sql_string)
@@ -765,7 +744,7 @@ int ObDDLSqlGenerator::gen_column_priv_sql(const obrpc::ObAccountArg &account,
   return ret;
 }
 
-int ObDDLSqlGenerator::gen_table_priv_sql_ora(const obrpc::ObAccountArg &account,
+int ObDDLSqlGenerator::gen_table_priv_sql_ora(const obcall::ObAccountArg &account,
                                               const ObTablePrivSortKey &table_priv_key,
                                               const bool revoke_all_flag,
                                               const share::ObRawObjPrivArray &obj_priv_array,
@@ -825,7 +804,7 @@ int ObDDLSqlGenerator::gen_table_priv_sql_ora(const obrpc::ObAccountArg &account
   return ret;
 }
 
-int ObDDLSqlGenerator::gen_routine_priv_sql(const obrpc::ObAccountArg &account,
+int ObDDLSqlGenerator::gen_routine_priv_sql(const obcall::ObAccountArg &account,
                                           const ObNeedPriv &need_priv,
                                           const bool is_grant,
                                           ObSqlString &sql_string)
@@ -896,7 +875,7 @@ int ObDDLSqlGenerator::gen_routine_priv_sql(const obrpc::ObAccountArg &account,
   return ret;
 }
 
-int ObDDLSqlGenerator::gen_catalog_priv_sql(const obrpc::ObAccountArg &account,
+int ObDDLSqlGenerator::gen_catalog_priv_sql(const obcall::ObAccountArg &account,
                                             const ObNeedPriv &need_priv,
                                             const bool is_grant,
                                             ObSqlString &sql_string)
@@ -967,7 +946,7 @@ int ObDDLSqlGenerator::gen_catalog_priv_sql(const obrpc::ObAccountArg &account,
   return ret;
 }
 
-int ObDDLSqlGenerator::gen_db_priv_sql(const obrpc::ObAccountArg &account,
+int ObDDLSqlGenerator::gen_db_priv_sql(const obcall::ObAccountArg &account,
                                        const ObNeedPriv &need_priv,
                                        const bool is_grant,
                                        ObSqlString &sql_string)
@@ -1036,7 +1015,7 @@ int ObDDLSqlGenerator::gen_db_priv_sql(const obrpc::ObAccountArg &account,
   return ret;
 }
 
-int ObDDLSqlGenerator::gen_revoke_all_sql(const obrpc::ObAccountArg &account,
+int ObDDLSqlGenerator::gen_revoke_all_sql(const obcall::ObAccountArg &account,
                                           ObSqlString &sql_string)
 {
   int ret = OB_SUCCESS;
@@ -1067,7 +1046,7 @@ int ObDDLSqlGenerator::gen_revoke_all_sql(const obrpc::ObAccountArg &account,
   return ret;
 }
 
-int ObDDLSqlGenerator::gen_user_priv_sql(const obrpc::ObAccountArg &account,
+int ObDDLSqlGenerator::gen_user_priv_sql(const obcall::ObAccountArg &account,
                                          const ObNeedPriv &need_priv,
                                          const bool is_grant,
                                          ObSqlString &sql_string)
@@ -1134,7 +1113,7 @@ int ObDDLSqlGenerator::gen_user_priv_sql(const obrpc::ObAccountArg &account,
   return ret;
 }
 
-int ObDDLSqlGenerator::gen_object_priv_sql(const obrpc::ObAccountArg &account,
+int ObDDLSqlGenerator::gen_object_priv_sql(const obcall::ObAccountArg &account,
   const ObNeedPriv &need_priv,
   const bool is_grant,
   ObSqlString &sql_string)
@@ -1198,17 +1177,6 @@ int ObDDLSqlGenerator::gen_object_priv_sql(const obrpc::ObAccountArg &account,
 
 char *ObDDLSqlGenerator::adjust_ddl_format_str(char *ori_format_str)
 {
-  if (OB_ISNULL(ori_format_str)) {
-    //do nothing
-  } else if (lib::is_oracle_mode()) {
-    for (int i = 0; i < strlen(ori_format_str); ++i) {
-      if (*(ori_format_str + i) == '`') {
-        *(ori_format_str + i) = '"';
-      }
-    }
-  } else {
-    //do nothing
-  }
   return ori_format_str;
 }
 

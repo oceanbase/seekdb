@@ -150,7 +150,6 @@ int ObMemtableBlockReader::filter_pushdown_filter(
   const bool has_lob_out_row = param->has_lob_column_out();
   if (OB_UNLIKELY(pd_filter_info.start_ < 0 ||
                   pd_filter_info.start_ + pd_filter_info.count_ > row_count_ ||
-                  pd_filter_info.is_pd_to_cg_ ||
                   (has_lob_out_row && nullptr == context->lob_locator_helper_))) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("Invalid argument", K(ret), K_(row_count), K(pd_filter_info),

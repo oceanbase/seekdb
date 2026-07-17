@@ -49,3 +49,4 @@ private:
 } // namespace oceanbase
 
 #endif // OCEANBASE_SRC_SQL_ENGINE_CMD_OB_LOCATION_EXECUTOR_H_
+

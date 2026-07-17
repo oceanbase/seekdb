@@ -15,6 +15,7 @@
  */
 
 #include "observer/virtual_table/ob_gv_sql.h"
+#include "share/rc/ob_module_provider.h"
 
 #include "src/sql/plan_cache/ob_pcv_set.h"
 
@@ -49,31 +50,17 @@ void ObGVSql::reset()
 int ObGVSql::inner_open()
 {
   int ret = OB_SUCCESS;
-  // sys tenant show all tenant plan cache stat
-  if (is_sys_tenant(effective_tenant_id_)) {
-    if (OB_FAIL(GCTX.omt_->get_mtl_tenant_ids(tenant_id_array_))) {
-      SERVER_LOG(WARN, "failed to add tenant id", K(ret));
-    }
-  } else {
-    tenant_id_array_.reset();
-    // user tenant show self tenant stat
-    if (OB_FAIL(tenant_id_array_.push_back(effective_tenant_id_))) {
-      SERVER_LOG(WARN, "fail to push back effective_tenant_id_", KR(ret), K(effective_tenant_id_),
-          K(tenant_id_array_));
-    }
-  }
-  SERVER_LOG(TRACE,"get tenant_id array", K(effective_tenant_id_), K(is_sys_tenant(effective_tenant_id_)), K(tenant_id_array_));
   return ret;
 }
 
-int ObGVSql::get_row_from_specified_tenant(uint64_t tenant_id, bool &is_end)
+int ObGVSql::get_row_from_specified_tenant(bool &is_end)
 {
   int ret = OB_SUCCESS;
   // !!! Must add ObReqTimeGuard before referencing plan cache resources
   ObReqTimeGuard req_timeinfo_guard;
   is_end = false;
   if (OB_INVALID_ID == static_cast<uint64_t>(plan_id_array_idx_)) {
-    plan_cache_ = MTL(ObPlanCache*);
+    plan_cache_ = share::g_mp->plan_cache();
     NG_TRACE(trav_ps_map_start);
     ObGetAllCacheIdOp plan_id_op(&plan_id_array_);
     if (OB_FAIL(plan_cache_->foreach_alloc_cache_obj(plan_id_op))) {
@@ -117,7 +104,7 @@ int ObGVSql::get_row_from_specified_tenant(uint64_t tenant_id, bool &is_end)
           ret = OB_ERR_UNEXPECTED;
           //SERVER_LOG(WARN, "cache object is NULL", K(ret));
         } else if (OB_FAIL(fill_cells(guard.get_cache_obj(), *plan_cache_))) { //plan exist
-          SERVER_LOG(WARN, "fail to fill cells", KPC(guard.get_cache_obj()), K(tenant_id));
+          SERVER_LOG(WARN, "fail to fill cells", KPC(guard.get_cache_obj()));
         } else {
           is_filled = true;
         }
@@ -126,8 +113,7 @@ int ObGVSql::get_row_from_specified_tenant(uint64_t tenant_id, bool &is_end)
   }
   SERVER_LOG(DEBUG,
              "add plan from a tenant",
-             K(ret),
-             K(tenant_id));
+             K(ret));
   return ret;
 }
 
@@ -926,16 +912,6 @@ int ObGVSql::fill_cells(const ObILibCacheObject *cache_obj, const ObPlanCache &p
       }
       break;
     }
-    case share::ALL_VIRTUAL_PLAN_STAT_CDE::IS_USE_JIT: {
-      if (!cache_stat_updated) {
-        cells[i].set_null();
-      } else if (cache_obj->is_sql_crsr()) {
-        cells[i].set_bool(plan->stat_.is_use_jit_);
-      } else {
-        cells[i].set_bool(false);
-      }
-      break;
-    }
     case share::ALL_VIRTUAL_PLAN_STAT_CDE::OBJECT_TYPE: {
       ObString type_name;
       if (NS_PKG == cache_obj->get_ns()) {
@@ -1152,32 +1128,18 @@ int ObGVSql::get_row_from_tenants()
 {
   int ret = OB_SUCCESS;
   bool is_sub_end = false;
-  do {
-    is_sub_end = false;
-    if (tenant_id_array_idx_ < 0) {
-      ret = OB_ERR_UNEXPECTED;
-      SERVER_LOG(WARN, "invalid tenant_id_array idx", K(ret), K(tenant_id_array_idx_));
-    } else if (tenant_id_array_idx_ >= tenant_id_array_.count()) {
-      ret = OB_ITER_END;
-      tenant_id_array_idx_ = 0;
-    } else {
-      uint64_t tenant_id = tenant_id_array_.at(tenant_id_array_idx_);
-      MTL_SWITCH(tenant_id) {
-        if (OB_FAIL(get_row_from_specified_tenant(tenant_id,
-                                                  is_sub_end))) {
-          SERVER_LOG(WARN,
-                     "fail to insert plan by tenant id",
-                     K(ret),
-                     "tenant id",
-                     tenant_id_array_.at(tenant_id_array_idx_),
-                     K(tenant_id_array_idx_));
-        } else {
-          if (is_sub_end) {
-            ++tenant_id_array_idx_;
-          }
-        }
+  // At most one MOD_SCOPE pass
+  if (iter_end_) {
+    ret = OB_ITER_END;
+  } else {
+    MOD_SCOPE {
+      if (OB_FAIL(get_row_from_specified_tenant(is_sub_end))) {
+        SERVER_LOG(WARN, "fail to insert plan by tenant id", K(ret));
+      } else if (is_sub_end) {
+        iter_end_ = true;
+        ret = OB_ITER_END;
       }
     }
-  } while(is_sub_end && OB_SUCCESS == ret);
+  }
   return ret;
 }

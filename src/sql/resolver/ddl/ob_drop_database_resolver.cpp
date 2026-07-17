@@ -61,7 +61,7 @@ int ObDropDatabaseResolver::resolve(const ParseNode &parse_tree)
       LOG_ERROR("failed to create drop_database_stmt", K(ret));
     } else {
       stmt_ = drop_database_stmt;
-      drop_database_stmt->set_tenant_id(session_info_->get_effective_tenant_id());
+      
     }
     //resolve if exist
     if (OB_SUCC(ret)) {

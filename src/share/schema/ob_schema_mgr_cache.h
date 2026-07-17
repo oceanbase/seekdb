@@ -27,25 +27,24 @@ namespace oceanbase
 class ObSchemaSlot
 {
 public:
-  ObSchemaSlot(): tenant_id_(OB_INVALID_TENANT_ID), slot_id_(OB_INVALID_INDEX),
+  ObSchemaSlot(): slot_id_(OB_INVALID_INDEX),
                   schema_version_(OB_INVALID_VERSION), schema_count_(OB_INVALID_COUNT),
                   ref_cnt_(OB_INVALID_COUNT), mod_ref_infos_(), allocator_idx_(OB_INVALID_INDEX) {}
   ~ObSchemaSlot() {}
   void reset();
-  void init(const uint64_t &tenant_id, const int64_t &slot_id,
+  void init(const int64_t &slot_id,
             const int64_t &schema_version, const int64_t &schema_count,
             const int64_t &ref_cnt, const common::ObString &str, const int64_t &allocator_idx);
-  uint64_t get_tenant_id() const { return tenant_id_; }
+  
   int64_t get_slot_id() const { return slot_id_; }
   int64_t get_schema_version() const { return schema_version_; }
   int64_t get_schema_count() const { return schema_count_; }
   int64_t get_ref_cnt() const { return ref_cnt_;}
   const common::ObString& get_mod_ref_infos() const { return mod_ref_infos_; }
   int64_t get_allocator_idx() const { return allocator_idx_; }
-  TO_STRING_KV(K_(tenant_id), K_(slot_id), K_(schema_version),
+  TO_STRING_KV(K_(slot_id), K_(schema_version),
                K_(schema_count), K_(ref_cnt), K_(mod_ref_infos));
 private:
-  uint64_t tenant_id_;
   int64_t slot_id_;
   int64_t schema_version_;
   int64_t schema_count_;
@@ -74,15 +73,14 @@ struct ObSchemaMgrItem
     MOD_REMOTE_EXE           = 5,
     MOD_CACHED_GUARD         = 6,
     MOD_UNIQ_CHECK           = 7,
-    MOD_SSTABLE_SPLIT_CTX    = 8,
-    MOD_RELATIVE_TABLE       = 9,
-    MOD_VIRTUAL_TABLE        = 10,
-    MOD_DAS_CTX              = 11,
-    MOD_SCHEMA_RECORDER      = 12,
-    MOD_SPI_RESULT_SET       = 13,
-    MOD_PL_PREPARE_RESULT    = 14,
-    MOD_PARTITION_BALANCE    = 15,
-    MOD_RS_MAJOR_CHECK       = 16,
+    MOD_RELATIVE_TABLE       = 8,
+    MOD_VIRTUAL_TABLE        = 9,
+    MOD_DAS_CTX              = 10,
+    MOD_SCHEMA_RECORDER      = 11,
+    MOD_SPI_RESULT_SET       = 12,
+    MOD_PL_PREPARE_RESULT    = 13,
+    MOD_PARTITION_BALANCE    = 14,
+    MOD_RS_MAJOR_CHECK       = 15,
     MOD_MAX
   };
   ObSchemaMgrItem()

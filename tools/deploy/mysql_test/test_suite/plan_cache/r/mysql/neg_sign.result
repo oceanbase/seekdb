@@ -11,7 +11,7 @@ begin;
 insert into t1 values (1, 1), (1, -1);
 insert into t1 values (-1, 1), (1, 1);
 
-select hit_count, sql_id, query_sql from oceanbase.GV$OB_PLAN_CACHE_PLAN_STAT where statement like 'insert into t1 values (?, ?)';
+select hit_count, sql_id, query_sql from oceanbase.V$OB_PLAN_CACHE_PLAN_STAT where statement like 'insert into t1 values (?, ?)';
 +-----------+----------------------------------+---------------------------------------+
 | hit_count | sql_id                           | query_sql                             |
 +-----------+----------------------------------+---------------------------------------+
@@ -19,7 +19,7 @@ select hit_count, sql_id, query_sql from oceanbase.GV$OB_PLAN_CACHE_PLAN_STAT wh
 +-----------+----------------------------------+---------------------------------------+
 
 insert into t1 values (-  1, 1), (1, 1);
-select hit_count, sql_id, query_sql from oceanbase.GV$OB_PLAN_CACHE_PLAN_STAT where statement like 'insert into t1 values (?, ?)';
+select hit_count, sql_id, query_sql from oceanbase.V$OB_PLAN_CACHE_PLAN_STAT where statement like 'insert into t1 values (?, ?)';
 +-----------+----------------------------------+---------------------------------------+
 | hit_count | sql_id                           | query_sql                             |
 +-----------+----------------------------------+---------------------------------------+
@@ -28,7 +28,7 @@ select hit_count, sql_id, query_sql from oceanbase.GV$OB_PLAN_CACHE_PLAN_STAT wh
 
 insert into t1 values (- -1, 1), (1, 1);
 insert into t1 values (- - 2, 1), (1, 1);
-select hit_count, sql_id from oceanbase.GV$OB_PLAN_CACHE_PLAN_STAT where statement like 'insert into t1 values (- ?, ?)%';
+select hit_count, sql_id from oceanbase.V$OB_PLAN_CACHE_PLAN_STAT where statement like 'insert into t1 values (- ?, ?)%';
 +-----------+----------------------------------+
 | hit_count | sql_id                           |
 +-----------+----------------------------------+
@@ -58,7 +58,7 @@ select -  1 from dual;
 |   -1 |
 +------+
 
-select hit_count, sql_id from oceanbase.GV$OB_PLAN_CACHE_PLAN_STAT where statement like 'select ? from dual';
+select hit_count, sql_id from oceanbase.V$OB_PLAN_CACHE_PLAN_STAT where statement like 'select ? from dual';
 +-----------+----------------------------------+
 | hit_count | sql_id                           |
 +-----------+----------------------------------+
@@ -76,7 +76,7 @@ select - -   1 from dual;
 +---------+
 |       1 |
 +---------+
-select hit_count, sql_id from oceanbase.GV$OB_PLAN_CACHE_PLAN_STAT where statement like 'select - ? from dual';
+select hit_count, sql_id from oceanbase.V$OB_PLAN_CACHE_PLAN_STAT where statement like 'select - ? from dual';
 +-----------+----------------------------------+
 | hit_count | sql_id                           |
 +-----------+----------------------------------+
@@ -102,7 +102,7 @@ select - +1 from dual;
 |   -1 |
 +------+
 
-select hit_count, sql_id from oceanbase.GV$OB_PLAN_CACHE_PLAN_STAT where statement like "select -+  ? from dual" or
+select hit_count, sql_id from oceanbase.V$OB_PLAN_CACHE_PLAN_STAT where statement like "select -+  ? from dual" or
                                                                      statement like "select -+ ? from dual" or
                                                                      statement like "select - +? from dual";
 +-----------+----------------------------------+
@@ -134,7 +134,7 @@ select  +-
 |     1 |
 +-------+
 
-select hit_count, sql_id from oceanbase.GV$OB_PLAN_CACHE_PLAN_STAT where statement like '%from dual';
+select hit_count, sql_id from oceanbase.V$OB_PLAN_CACHE_PLAN_STAT where statement like '%from dual';
 +-----------+----------------------------------+
 | hit_count | sql_id                           |
 +-----------+----------------------------------+
@@ -155,7 +155,7 @@ select -2, -3, -2-1, 1-4 from dual;
 | -2 | -3 |   -3 |  -3 |
 +----+----+------+-----+
 
-select hit_count, sql_id from oceanbase.GV$OB_PLAN_CACHE_PLAN_STAT where statement like 'select ?, ?, ?-?, ?-? from dual';
+select hit_count, sql_id from oceanbase.V$OB_PLAN_CACHE_PLAN_STAT where statement like 'select ?, ?, ?-?, ?-? from dual';
 +-----------+----------------------------------+
 | hit_count | sql_id                           |
 +-----------+----------------------------------+
@@ -181,13 +181,13 @@ select -1  - 3 from dual;
 |      -4 |
 +---------+
 
-select hit_count, sql_id from oceanbase.GV$OB_PLAN_CACHE_PLAN_STAT where statement like 'select ? - ? from dual';
+select hit_count, sql_id from oceanbase.V$OB_PLAN_CACHE_PLAN_STAT where statement like 'select ? - ? from dual';
 +-----------+----------------------------------+
 | hit_count | sql_id                           |
 +-----------+----------------------------------+
 |         1 | 194260B34EAC68561906B08E2D769030 |
 +-----------+----------------------------------+
-select hit_count, sql_id from oceanbase.GV$OB_PLAN_CACHE_PLAN_STAT where statement like 'select ?  - ? from dual';
+select hit_count, sql_id from oceanbase.V$OB_PLAN_CACHE_PLAN_STAT where statement like 'select ?  - ? from dual';
 +-----------+----------------------------------+
 | hit_count | sql_id                           |
 +-----------+----------------------------------+
@@ -208,7 +208,7 @@ select - '-1' from dual;
 |      1 |
 +--------+
 
-select hit_count, sql_id from oceanbase.GV$OB_PLAN_CACHE_PLAN_STAT where statement like 'select - ? from dual';
+select hit_count, sql_id from oceanbase.V$OB_PLAN_CACHE_PLAN_STAT where statement like 'select - ? from dual';
 +-----------+----------------------------------+
 | hit_count | sql_id                           |
 +-----------+----------------------------------+
@@ -240,7 +240,7 @@ select * from t1 where a = 1.1 or b = -1;
 |    1 |   -1 |
 +------+------+
 
-select hit_count, sql_id from oceanbase.GV$OB_PLAN_CACHE_PLAN_STAT where statement like 'select * from t1 where a = ? or b = ?';
+select hit_count, sql_id from oceanbase.V$OB_PLAN_CACHE_PLAN_STAT where statement like 'select * from t1 where a = ? or b = ?';
 +-----------+----------------------------------+
 | hit_count | sql_id                           |
 +-----------+----------------------------------+
@@ -267,13 +267,13 @@ select * from t1 where a = -  1;
 |   -1 |    1 |
 +------+------+
 
-select hit_count, sql_id from oceanbase.GV$OB_PLAN_CACHE_PLAN_STAT where statement like 'select * from t1 where a = -  ?';
+select hit_count, sql_id from oceanbase.V$OB_PLAN_CACHE_PLAN_STAT where statement like 'select * from t1 where a = -  ?';
 +-----------+----------------------------------+
 | hit_count | sql_id                           |
 +-----------+----------------------------------+
 |         0 | 662F288B940A72626905FC94439EC7AF |
 +-----------+----------------------------------+
-select hit_count, sql_id from oceanbase.GV$OB_PLAN_CACHE_PLAN_STAT where statement like 'select * from t1 where a = ?';
+select hit_count, sql_id from oceanbase.V$OB_PLAN_CACHE_PLAN_STAT where statement like 'select * from t1 where a = ?';
 +-----------+----------------------------------+
 | hit_count | sql_id                           |
 +-----------+----------------------------------+
@@ -298,7 +298,7 @@ select - @user_var from dual;
 +-------------+
 |          -1 |
 +-------------+
-select hit_count, sql_id from oceanbase.GV$OB_PLAN_CACHE_PLAN_STAT where statement like 'select - @user_var from dual';
+select hit_count, sql_id from oceanbase.V$OB_PLAN_CACHE_PLAN_STAT where statement like 'select - @user_var from dual';
 +-----------+----------------------------------+
 | hit_count | sql_id                           |
 +-----------+----------------------------------+
@@ -366,13 +366,13 @@ select - a - b from t1;
 |      -3 |
 +---------+
 
-select hit_count, sql_id from oceanbase.GV$OB_PLAN_CACHE_PLAN_STAT where statement like 'select - a from t1';
+select hit_count, sql_id from oceanbase.V$OB_PLAN_CACHE_PLAN_STAT where statement like 'select - a from t1';
 +-----------+----------------------------------+
 | hit_count | sql_id                           |
 +-----------+----------------------------------+
 |         1 | 9FCE9145FE5809139737E48BE7731599 |
 +-----------+----------------------------------+
-select hit_count, sql_id from oceanbase.GV$OB_PLAN_CACHE_PLAN_STAT where statement like 'select - a - b from t1';
+select hit_count, sql_id from oceanbase.V$OB_PLAN_CACHE_PLAN_STAT where statement like 'select - a - b from t1';
 +-----------+----------------------------------+
 | hit_count | sql_id                           |
 +-----------+----------------------------------+
@@ -391,7 +391,7 @@ select - @@IS_RESULT_ACCURATE from dual;
 +------------------------+
 |                     -1 |
 +------------------------+
-select hit_count, sql_id from oceanbase.GV$OB_PLAN_CACHE_PLAN_STAT where statement like 'select - @@IS_RESULT_ACCURATE from dual';
+select hit_count, sql_id from oceanbase.V$OB_PLAN_CACHE_PLAN_STAT where statement like 'select - @@IS_RESULT_ACCURATE from dual';
 +-----------+----------------------------------+
 | hit_count | sql_id                           |
 +-----------+----------------------------------+
@@ -415,7 +415,7 @@ select 22 - 22 * 3 from dual;
 |         -44 |
 +-------------+
 
-select hit_count, sql_id from oceanbase.GV$OB_PLAN_CACHE_PLAN_STAT where statement like 'select ? - ? * ? from dual';
+select hit_count, sql_id from oceanbase.V$OB_PLAN_CACHE_PLAN_STAT where statement like 'select ? - ? * ? from dual';
 +-----------+----------------------------------+
 | hit_count | sql_id                           |
 +-----------+----------------------------------+
@@ -435,7 +435,7 @@ select 1 - 4 / 3 from dual;
 |   -0.3333 |
 +-----------+
 
-select hit_count, sql_id from oceanbase.GV$OB_PLAN_CACHE_PLAN_STAT where statement like 'select ? - ? / ? from dual';
+select hit_count, sql_id from oceanbase.V$OB_PLAN_CACHE_PLAN_STAT where statement like 'select ? - ? / ? from dual';
 +-----------+----------------------------------+
 | hit_count | sql_id                           |
 +-----------+----------------------------------+
@@ -455,7 +455,7 @@ select 1 - 2 % 3 from dual;
 |        -1 |
 +-----------+
 
-select hit_count, sql_id from oceanbase.GV$OB_PLAN_CACHE_PLAN_STAT where statement like 'select ? - ? % ? from dual';
+select hit_count, sql_id from oceanbase.V$OB_PLAN_CACHE_PLAN_STAT where statement like 'select ? - ? % ? from dual';
 +-----------+----------------------------------+
 | hit_count | sql_id                           |
 +-----------+----------------------------------+
@@ -477,7 +477,7 @@ select 1 - 2 mod 3 from dual;
 |          -1 |
 +-------------+
 
-select hit_count, sql_id from oceanbase.GV$OB_PLAN_CACHE_PLAN_STAT where statement like 'select ? - ? mod ? from dual';
+select hit_count, sql_id from oceanbase.V$OB_PLAN_CACHE_PLAN_STAT where statement like 'select ? - ? mod ? from dual';
 +-----------+----------------------------------+
 | hit_count | sql_id                           |
 +-----------+----------------------------------+
@@ -497,7 +497,7 @@ select 1--2 from dual;
 |    3 |
 +------+
 
-select hit_count, sql_id from oceanbase.GV$OB_PLAN_CACHE_PLAN_STAT where statement like 'select ?-? from dual';
+select hit_count, sql_id from oceanbase.V$OB_PLAN_CACHE_PLAN_STAT where statement like 'select ?-? from dual';
 +-----------+----------------------------------+
 | hit_count | sql_id                           |
 +-----------+----------------------------------+
@@ -529,7 +529,7 @@ select -9223372036854775808 from dual;
 +----------------------+
 
 // expect hit same plan
-select hit_count, sql_id from oceanbase.GV$OB_PLAN_CACHE_PLAN_STAT where statement like 'select ? from dual';
+select hit_count, sql_id from oceanbase.V$OB_PLAN_CACHE_PLAN_STAT where statement like 'select ? from dual';
 +-----------+----------------------------------+
 | hit_count | sql_id                           |
 +-----------+----------------------------------+
@@ -570,7 +570,7 @@ select -(-(9223372036854775807)) from dual;
 |       9223372036854775807 |
 +---------------------------+
 // expect 2 records, one uint, one int
-select hit_count, sql_id, param_infos from oceanbase.GV$OB_PLAN_CACHE_PLAN_STAT where statement like 'select -(-(?)) from dual';
+select hit_count, sql_id, param_infos from oceanbase.V$OB_PLAN_CACHE_PLAN_STAT where statement like 'select -(-(?)) from dual';
 +-----------+----------------------------------+--------------+
 | hit_count | sql_id                           | param_infos  |
 +-----------+----------------------------------+--------------+
@@ -598,7 +598,7 @@ select -(-(-(-1))) from dual;
 +-------------+
 
 // expect 2 records
-select hit_count, sql_id, param_infos from oceanbase.GV$OB_PLAN_CACHE_PLAN_STAT where statement like 'select -(-(-(?))) from dual';
+select hit_count, sql_id, param_infos from oceanbase.V$OB_PLAN_CACHE_PLAN_STAT where statement like 'select -(-(-(?))) from dual';
 +-----------+----------------------------------+--------------+
 | hit_count | sql_id                           | param_infos  |
 +-----------+----------------------------------+--------------+
@@ -623,7 +623,7 @@ select * from t1 limit 0, 1;
 |    1 |    1 |
 +------+------+
 
-select hit_count, sql_id from oceanbase.GV$OB_PLAN_CACHE_PLAN_STAT where statement like 'select * from t1 limit ?, ?';
+select hit_count, sql_id from oceanbase.V$OB_PLAN_CACHE_PLAN_STAT where statement like 'select * from t1 limit ?, ?';
 +-----------+----------------------------------+
 | hit_count | sql_id                           |
 +-----------+----------------------------------+
@@ -648,7 +648,7 @@ select * from t1 limit 1 offset 0;
 |    1 |    1 |
 +------+------+
 
-select hit_count, sql_id from oceanbase.GV$OB_PLAN_CACHE_PLAN_STAT where statement like 'select * from t1 limit ? offset ?';
+select hit_count, sql_id from oceanbase.V$OB_PLAN_CACHE_PLAN_STAT where statement like 'select * from t1 limit ? offset ?';
 +-----------+----------------------------------+
 | hit_count | sql_id                           |
 +-----------+----------------------------------+
@@ -674,7 +674,7 @@ select 1 - (1) from dual;
 |       0 |
 +---------+
 
-select hit_count, sql_id from oceanbase.GV$OB_PLAN_CACHE_PLAN_STAT where statement like 'select ? - (?) from dual';
+select hit_count, sql_id from oceanbase.V$OB_PLAN_CACHE_PLAN_STAT where statement like 'select ? - (?) from dual';
 +-----------+----------------------------------+
 | hit_count | sql_id                           |
 +-----------+----------------------------------+
@@ -694,7 +694,7 @@ select (1-(-1-(2-3-4-(5-(6-(7)))))) from dual;
 |                           -9 |
 +------------------------------+
 
-select hit_count, sql_id from oceanbase.GV$OB_PLAN_CACHE_PLAN_STAT where statement like 'select (?-(?-(?-?-?-(?-(?-(?)))))) from dual';
+select hit_count, sql_id from oceanbase.V$OB_PLAN_CACHE_PLAN_STAT where statement like 'select (?-(?-(?-?-?-(?-(?-(?)))))) from dual';
 +-----------+----------------------------------+
 | hit_count | sql_id                           |
 +-----------+----------------------------------+
@@ -714,7 +714,7 @@ select 1--2/3 from dual;
 | 1.6667 |
 +--------+
 
-select hit_count, sql_id from oceanbase.GV$OB_PLAN_CACHE_PLAN_STAT where statement like 'select ?-?/? from dual';
+select hit_count, sql_id from oceanbase.V$OB_PLAN_CACHE_PLAN_STAT where statement like 'select ?-?/? from dual';
 +-----------+----------------------------------+
 | hit_count | sql_id                           |
 +-----------+----------------------------------+
@@ -746,7 +746,7 @@ select  1-(-2)/3 from dual;
 |   1.6667 |
 +----------+
 
-select hit_count, sql_id from oceanbase.GV$OB_PLAN_CACHE_PLAN_STAT where statement like 'select  ?-(?)/? from dual';
+select hit_count, sql_id from oceanbase.V$OB_PLAN_CACHE_PLAN_STAT where statement like 'select  ?-(?)/? from dual';
 +-----------+----------------------------------+
 | hit_count | sql_id                           |
 +-----------+----------------------------------+
@@ -779,7 +779,7 @@ select 1 - (-2/3)/-4 from dual;
 |    0.83333333 |
 +---------------+
 
-select hit_count, sql_id from oceanbase.GV$OB_PLAN_CACHE_PLAN_STAT where statement like 'select ? - (?/?)/? from dual';
+select hit_count, sql_id from oceanbase.V$OB_PLAN_CACHE_PLAN_STAT where statement like 'select ? - (?/?)/? from dual';
 +-----------+----------------------------------+
 | hit_count | sql_id                           |
 +-----------+----------------------------------+
@@ -812,7 +812,7 @@ select 1 - (-2%3)%-4 from dual;
 |             3 |
 +---------------+
 
-select hit_count, sql_id from oceanbase.GV$OB_PLAN_CACHE_PLAN_STAT where statement like 'select ? - (?%?)%? from dual';
+select hit_count, sql_id from oceanbase.V$OB_PLAN_CACHE_PLAN_STAT where statement like 'select ? - (?%?)%? from dual';
 +-----------+----------------------------------+
 | hit_count | sql_id                           |
 +-----------+----------------------------------+
@@ -846,7 +846,7 @@ select 1 - (-2*3)*-4 from dual;
 |           -23 |
 +---------------+
 
-select hit_count, sql_id from oceanbase.GV$OB_PLAN_CACHE_PLAN_STAT where statement like 'select ? - (?*?)*? from dual';
+select hit_count, sql_id from oceanbase.V$OB_PLAN_CACHE_PLAN_STAT where statement like 'select ? - (?*?)*? from dual';
 +-----------+----------------------------------+
 | hit_count | sql_id                           |
 +-----------+----------------------------------+
@@ -866,7 +866,7 @@ select 1 - (2/(3/4)/(-(2/3/4 - (2/3/4/5/6/7/8/9)))) from dual;
 |                                  17.00105833 |
 +----------------------------------------------+
 
-select hit_count, sql_id from oceanbase.GV$OB_PLAN_CACHE_PLAN_STAT where statement like 'select ? - (?/(?/?)/(-(?/?/? - (?/?/?/?/?/?/?/?)))) from dual';
+select hit_count, sql_id from oceanbase.V$OB_PLAN_CACHE_PLAN_STAT where statement like 'select ? - (?/(?/?)/(-(?/?/? - (?/?/?/?/?/?/?/?)))) from dual';
 +-----------+----------------------------------+
 | hit_count | sql_id                           |
 +-----------+----------------------------------+
@@ -886,7 +886,7 @@ select -(-2/3/4 - (((2/3/4) + 2) + 2)) from dual;
 |                      4.33333333 |
 +---------------------------------+
 
-select hit_count, sql_id from oceanbase.GV$OB_PLAN_CACHE_PLAN_STAT where statement like 'select -(?/?/? - (((?/?/?) + ?) + ?)) from dual';
+select hit_count, sql_id from oceanbase.V$OB_PLAN_CACHE_PLAN_STAT where statement like 'select -(?/?/? - (((?/?/?) + ?) + ?)) from dual';
 +-----------+----------------------------------+
 | hit_count | sql_id                           |
 +-----------+----------------------------------+
@@ -907,7 +907,7 @@ select (1 + 2) - 1 * 2 * 3 from dual;
 |                  -3 |
 +---------------------+
 
-select hit_count, sql_id from oceanbase.GV$OB_PLAN_CACHE_PLAN_STAT where statement like 'select (? + ?) - ? * ? * ? from dual';
+select hit_count, sql_id from oceanbase.V$OB_PLAN_CACHE_PLAN_STAT where statement like 'select (? + ?) - ? * ? * ? from dual';
 +-----------+----------------------------------+
 | hit_count | sql_id                           |
 +-----------+----------------------------------+
@@ -927,7 +927,7 @@ select (1 + 2) - 1/2/3 from dual;
 |      2.83333333 |
 +-----------------+
 
-select hit_count, sql_id from oceanbase.GV$OB_PLAN_CACHE_PLAN_STAT where statement like 'select (? + ?) - ?/?/? from dual';
+select hit_count, sql_id from oceanbase.V$OB_PLAN_CACHE_PLAN_STAT where statement like 'select (? + ?) - ?/?/? from dual';
 +-----------+----------------------------------+
 | hit_count | sql_id                           |
 +-----------+----------------------------------+
@@ -947,7 +947,7 @@ select (1 + 2) - 9%2%3 from dual;
 |               2 |
 +-----------------+
 
-select hit_count, sql_id from oceanbase.GV$OB_PLAN_CACHE_PLAN_STAT where statement like 'select (? + ?) - ?%?%? from dual';
+select hit_count, sql_id from oceanbase.V$OB_PLAN_CACHE_PLAN_STAT where statement like 'select (? + ?) - ?%?%? from dual';
 +-----------+----------------------------------+
 | hit_count | sql_id                           |
 +-----------+----------------------------------+
@@ -969,7 +969,7 @@ select 3/2 - (1 * 2 / 3) + 18/-2/3 - 1 * 2 * 3 from dual;
 |                             -8.16666667 |
 +-----------------------------------------+
 
-select hit_count, sql_id from oceanbase.GV$OB_PLAN_CACHE_PLAN_STAT where statement like 'select ?/? - (? * ? / ?) + ?/?/? - ? * ? * ? from dual';
+select hit_count, sql_id from oceanbase.V$OB_PLAN_CACHE_PLAN_STAT where statement like 'select ?/? - (? * ? / ?) + ?/?/? - ? * ? * ? from dual';
 +-----------+----------------------------------+
 | hit_count | sql_id                           |
 +-----------+----------------------------------+
@@ -989,7 +989,7 @@ select -9%2/3 * 3 - (10/3%2 + 2/3/4) + (1 * (2 * (3/4/4/4) )) from dual;
 |                                        -2.406249998000 |
 +--------------------------------------------------------+
 
-select hit_count, sql_id from oceanbase.GV$OB_PLAN_CACHE_PLAN_STAT where statement like 'select ?%?/? * ? - (?/?%? + ?/?/?) + (? * (? * (?/?/?/?) )) from dual';
+select hit_count, sql_id from oceanbase.V$OB_PLAN_CACHE_PLAN_STAT where statement like 'select ?%?/? * ? - (?/?%? + ?/?/?) + (? * (? * (?/?/?/?) )) from dual';
 +-----------+----------------------------------+
 | hit_count | sql_id                           |
 +-----------+----------------------------------+
@@ -1009,7 +1009,7 @@ select (1-(2-(3-(1 * (-2 / (-2 % (4 - (1 + 2 - 3 % 4)))))))) / (1 + 2 + 3 - (2 *
 |                                                                                                                         1.08333333 |
 +------------------------------------------------------------------------------------------------------------------------------------+
 
-select hit_count, sql_id from oceanbase.GV$OB_PLAN_CACHE_PLAN_STAT where statement like 'select (?-(?-(?-(? * (? / (? % (? - (? + ? - ? % ?)))))))) / (? + ? + ? - (? * ? * ? / ? % (? * ? + ?))) - (? /? * ? + ? / ? * ?) from dual';
+select hit_count, sql_id from oceanbase.V$OB_PLAN_CACHE_PLAN_STAT where statement like 'select (?-(?-(?-(? * (? / (? % (? - (? + ? - ? % ?)))))))) / (? + ? + ? - (? * ? * ? / ? % (? * ? + ?))) - (? /? * ? + ? / ? * ?) from dual';
 +-----------+----------------------------------+
 | hit_count | sql_id                           |
 +-----------+----------------------------------+
@@ -1029,7 +1029,7 @@ select (1+(-2*3-5/5+6%2))*(1/((-2-3)/(-3*(4/(5*(-1-3+3))))))/(1-(5%2-(2/3/4/5/6/
 |                                                              29030.400116121602 |
 +---------------------------------------------------------------------------------+
 
-select hit_count, sql_id from oceanbase.GV$OB_PLAN_CACHE_PLAN_STAT where statement like 'select (?+(?*?-?/?+?%?))*(?/((?-?)/(?*(?/(?*(?-?+?))))))/(?-(?%?-(?/?/?/?/?/?/?))) from dual';
+select hit_count, sql_id from oceanbase.V$OB_PLAN_CACHE_PLAN_STAT where statement like 'select (?+(?*?-?/?+?%?))*(?/((?-?)/(?*(?/(?*(?-?+?))))))/(?-(?%?-(?/?/?/?/?/?/?))) from dual';
 +-----------+----------------------------------+
 | hit_count | sql_id                           |
 +-----------+----------------------------------+

@@ -213,8 +213,21 @@ int ObSqlString::vappend(const char *fmt, va_list ap)
           while (*src == '-' || *src == '+' || *src == ' ' || *src == '#' || *src == '0' || *src == '\'') {
             if (*src == '\'') { src++; } else { *dst++ = *src++; }
           }
-          while (*src >= '0' && *src <= '9') { *dst++ = *src++; }
-          if (*src == '.') { *dst++ = *src++; while (*src >= '0' && *src <= '9') { *dst++ = *src++; } }
+          // width: either '*' or digits
+          if (*src == '*') {
+            *dst++ = *src++;
+          } else {
+            while (*src >= '0' && *src <= '9') { *dst++ = *src++; }
+          }
+          // precision: '.' followed by '*' or digits
+          if (*src == '.') {
+            *dst++ = *src++;
+            if (*src == '*') {
+              *dst++ = *src++;
+            } else {
+              while (*src >= '0' && *src <= '9') { *dst++ = *src++; }
+            }
+          }
           if (*src == 'l' && *(src+1) == 'l') {
             *dst++ = *src++; *dst++ = *src++;
           } else if (*src == 'l' && (*(src+1) == 'd' || *(src+1) == 'i' || *(src+1) == 'o' ||

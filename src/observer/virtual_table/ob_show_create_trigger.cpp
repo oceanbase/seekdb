@@ -17,7 +17,7 @@
 #define USING_LOG_PREFIX SERVER
 
 #include "observer/virtual_table/ob_show_create_trigger.h"
-#include "share/schema/ob_schema_printer.h"
+#include "sql/printer/ob_schema_printer.h"
 #include "sql/session/ob_sql_session_info.h"
 
 using namespace oceanbase::common;
@@ -55,8 +55,8 @@ int ObShowCreateTrigger::inner_get_next_row(common::ObNewRow *&row)
     } else if (OB_UNLIKELY(OB_INVALID_ID == tg_id)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_USER_ERROR(OB_ERR_UNEXPECTED, "this trigger is used for show clause, can't be selected");
-    } else if (OB_FAIL(schema_guard_->get_trigger_info(effective_tenant_id_, tg_id, tg_info))) {
-      SERVER_LOG(WARN, "fail to get trigger schema", K(ret), K_(effective_tenant_id), K(tg_id));
+    } else if (OB_FAIL(schema_guard_->get_trigger_info( tg_id, tg_info))) {
+      SERVER_LOG(WARN, "fail to get trigger schema", K(ret), K(tg_id));
     } else if (OB_UNLIKELY(NULL == tg_info)) {
       ret = OB_ERR_TRIGGER_NOT_EXIST;
       SERVER_LOG(WARN, "fail to get trigger info", K(ret), K(tg_id));

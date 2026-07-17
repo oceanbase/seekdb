@@ -17,7 +17,6 @@
 #define USING_LOG_PREFIX SERVER
 
 #include "observer/mysql/obmp_set_option.h"
-#include "src/sql/monitor/flt/ob_flt_control_info_mgr.h"
 
 using namespace oceanbase::common;
 using namespace oceanbase::obmysql;
@@ -56,8 +55,6 @@ int ObMPSetOption::process()
 
   if (OB_FAIL(packet_sender_.alloc_ezbuf())) {
     LOG_WARN("failed to alloc easy buf", K(ret));
-  } else if (OB_FAIL(packet_sender_.update_last_pkt_pos())) {
-    LOG_WARN("failed to update last packet pos", K(ret));
   } else if (OB_FAIL(get_session(session))) {
     LOG_WARN("get session  fail", K(ret));
   } else if (OB_ISNULL(session)) {
@@ -66,10 +63,6 @@ int ObMPSetOption::process()
   } else if (OB_ISNULL(conn = get_conn())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get connection fail", K(conn), K(ret));
-  } else {
-    if (OB_FAIL(process_extra_info(*session, mysql_pkt, need_response_error))) {
-      LOG_WARN("fail get process extra info", K(ret));
-    }
   }
 
   if (OB_SUCC(ret)) {

@@ -30,14 +30,12 @@ class ObISQLClient;
 }
 namespace share
 {
-class ObTabletLSPair;
-
 class ObTabletChecksumIterator
 {
 
 public:
   ObTabletChecksumIterator() 
-    : is_inited_(false), tenant_id_(OB_INVALID_TENANT_ID),
+    : is_inited_(false),
       compaction_scn_(), checksum_items_(), cur_idx_(0), 
       sql_proxy_(NULL)
   {}
@@ -59,7 +57,6 @@ private:
   static const int64_t BATCH_FETCH_COUNT = 99;
 
   bool is_inited_;
-  uint64_t tenant_id_;
   SCN compaction_scn_;
   common::ObSEArray<ObTabletChecksumItem, BATCH_FETCH_COUNT> checksum_items_;
   int64_t cur_idx_;

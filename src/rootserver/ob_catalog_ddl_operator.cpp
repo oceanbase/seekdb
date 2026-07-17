@@ -34,7 +34,7 @@ int ObCatalogDDLOperator::handle_catalog_function(ObCatalogSchema &schema,
                                                   uint64_t user_id)
 {
   int ret = OB_SUCCESS;
-  uint64_t tenant_id = schema.get_tenant_id();
+  
   ObSchemaService *schema_sql_service = NULL;
   int64_t new_schema_version = OB_INVALID_VERSION;
   uint64_t catalog_id = OB_INVALID_ID;
@@ -46,14 +46,14 @@ int ObCatalogDDLOperator::handle_catalog_function(ObCatalogSchema &schema,
     LOG_ERROR("schema_sql_service must not null", K(ret));
   }
   if (OB_SUCC(ret)) {
-    if (OB_FAIL(schema_service_.gen_new_schema_version(tenant_id, new_schema_version))) {
+    if (OB_FAIL(schema_service_.gen_new_schema_version(new_schema_version))) {
       LOG_WARN("fail to gen new schema_version", K(ret));
     } else {
       schema.set_schema_version(new_schema_version);
     }
   }
   if (OB_SUCC(ret)) {
-    if (OB_FAIL(schema_guard.get_catalog_schema_by_name(tenant_id,
+    if (OB_FAIL(schema_guard.get_catalog_schema_by_name(
                                                         schema.get_catalog_name_str(),
                                                         old_schema))) {
       LOG_WARN("fail to check schema exist", K(ret));
@@ -78,8 +78,8 @@ int ObCatalogDDLOperator::handle_catalog_function(ObCatalogSchema &schema,
                           schema.get_catalog_name_str().ptr());
             LOG_WARN("catalog already exist", K(ret));
           }
-        } else if (OB_FAIL(schema_sql_service->fetch_new_catalog_id(tenant_id, catalog_id))) {
-          LOG_WARN("fail to fetch new catalog id", K(tenant_id), K(ret));
+        } else if (OB_FAIL(schema_sql_service->fetch_new_catalog_id(catalog_id))) {
+          LOG_WARN("fail to fetch new catalog id", K(ret));
         } else {
           schema.set_catalog_id(catalog_id);
         }
@@ -135,26 +135,23 @@ int ObCatalogDDLOperator::grant_or_revoke_after_ddl(ObCatalogSchema &schema,
                                                     uint64_t user_id)
 {
   int ret = OB_SUCCESS;
-  uint64_t tenant_id = schema.get_tenant_id();
-  lib::Worker::CompatMode compat_mode = lib::Worker::CompatMode::INVALID;
+  lib::Worker::CompatMode compat_mode = lib::Worker::CompatMode::MYSQL;
   ObSchemaService *schema_sql_service = NULL;
   ObDDLOperator ddl_operator(schema_service_, sql_proxy_);
-  if (OB_FAIL(share::ObCompatModeGetter::get_tenant_mode(tenant_id, compat_mode))) {
-    LOG_WARN("fail to get tenant mode", K(ret));
-  } else if (OB_ISNULL(schema_sql_service = schema_service_.get_schema_service())) {
+  if (OB_ISNULL(schema_sql_service = schema_service_.get_schema_service())) {
     ret = OB_ERR_SYS;
     LOG_ERROR("schema_sql_service must not null", K(ret));
   }
   if (OB_SUCC(ret) && ddl_type == OB_DDL_CREATE_CATALOG) {
     if (lib::Worker::CompatMode::MYSQL == compat_mode) {
-      ObCatalogPrivSortKey catalog_priv_key(tenant_id, user_id, schema.get_catalog_name_str());
+      ObCatalogPrivSortKey catalog_priv_key(user_id, schema.get_catalog_name_str());
       ObPrivSet priv_set = OB_PRIV_USE_CATALOG;
       OZ(grant_revoke_catalog(catalog_priv_key, priv_set, true, ObString(), trans));
     } else {
-      ObObjPrivSortKey obj_priv_key(tenant_id, schema.get_catalog_id(),
+      ObObjPrivSortKey obj_priv_key(schema.get_catalog_id(),
                                     static_cast<uint64_t>(ObObjectType::CATALOG),
                                     OBJ_LEVEL_FOR_TAB_PRIV,
-                                    OB_ORA_SYS_USER_ID,
+                                    OB_EXTENDED_SYS_USER_ID,
                                     user_id);
       share::ObRawObjPrivArray new_obj_priv_array;
       share::ObRawObjPrivArray obj_priv_array;
@@ -163,7 +160,7 @@ int ObCatalogDDLOperator::grant_or_revoke_after_ddl(ObCatalogSchema &schema,
       OZ(ddl_operator.set_need_flush_ora(schema_guard, obj_priv_key, 0, obj_priv_array,
                                          new_obj_priv_array));
       if (new_obj_priv_array.count() > 0) {
-        OZ(schema_service_.gen_new_schema_version(tenant_id, new_schema_version_ora));
+        OZ(schema_service_.gen_new_schema_version(new_schema_version_ora));
         OZ(schema_sql_service->get_priv_sql_service().grant_table_ora_only(
             NULL, trans, new_obj_priv_array, 0, obj_priv_key,
             new_schema_version_ora, false, false));
@@ -171,11 +168,6 @@ int ObCatalogDDLOperator::grant_or_revoke_after_ddl(ObCatalogSchema &schema,
     }
   }
   if (OB_SUCC(ret) && ddl_type == OB_DDL_DROP_CATALOG) {
-    if (lib::Worker::CompatMode::ORACLE == compat_mode) {
-      OZ(ddl_operator.drop_obj_privs(tenant_id, schema.get_catalog_id(),
-                                     static_cast<uint64_t>(ObObjectType::CATALOG), trans,
-                                     schema_service_, schema_guard));
-    }
   }
   return ret;
 }
@@ -193,17 +185,17 @@ int ObCatalogDDLOperator::grant_revoke_catalog(const ObCatalogPrivSortKey &catal
   ObPrivSet new_priv = priv_set;
   bool need_flush = true;
   ObPrivSet catalog_priv_set = OB_PRIV_SET_EMPTY;
-  uint64_t tenant_id = catalog_priv_key.tenant_id_;
+  
   uint64_t user_id = catalog_priv_key.user_id_;
-  if (OB_INVALID_ID == tenant_id || OB_INVALID_ID == user_id) {
+  if (OB_INVALID_ID == user_id) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid tenant_id or user_id", K(tenant_id), K(user_id), K(ret));
+    LOG_WARN("invalid user_id", K(user_id), K(ret));
   } else if (OB_ISNULL(schema_sql_service = schema_service_.get_schema_service())) {
     ret = OB_ERR_SYS;
     LOG_ERROR("schema_sql_service must not null", K(ret));
   } else if (0 == priv_set) {
     //do nothing
-  } else if (OB_FAIL(schema_service_.get_tenant_schema_guard(tenant_id, schema_guard))) {
+  } else if (OB_FAIL(schema_service_.get_tenant_schema_guard(schema_guard))) {
     LOG_WARN("failed to get schema guard", K(ret));
   } else if (OB_FAIL(schema_guard.get_catalog_priv_set(catalog_priv_key,
                                                        catalog_priv_set))) {
@@ -219,8 +211,8 @@ int ObCatalogDDLOperator::grant_revoke_catalog(const ObCatalogPrivSortKey &catal
     }
     need_flush = (new_priv != catalog_priv_set);
     if (need_flush) {
-      if (OB_FAIL(schema_service_.gen_new_schema_version(tenant_id, new_schema_version))) {
-        LOG_WARN("failed to gen new schema_version", K(ret), K(tenant_id));
+      if (OB_FAIL(schema_service_.gen_new_schema_version(new_schema_version))) {
+        LOG_WARN("failed to gen new schema_version", K(ret));
       } else if (OB_FAIL(schema_sql_service->get_catalog_sql_service()
                               .grant_revoke_catalog(catalog_priv_key, new_priv, new_schema_version,
                                                     ddl_stmt_str, trans))) {

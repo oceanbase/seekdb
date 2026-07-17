@@ -237,7 +237,7 @@ int ObSortVecOp::init_prescan_row_store()
   int ret = OB_SUCCESS;
   sk_row_store_.reset();
   addon_row_store_.reset();
-  ObMemAttr mem_attr(ctx_.get_my_session()->get_effective_tenant_id(), "SORT_VEC_CTX",
+  ObMemAttr mem_attr("SORT_VEC_CTX",
                      ObCtxIds::WORK_AREA);
   if (OB_FAIL(init_temp_row_store(MY_SPEC.sk_exprs_, MY_SPEC.max_batch_size_, mem_attr, true,
                                   MY_SPEC.compress_type_, sk_row_store_))) {
@@ -391,11 +391,11 @@ int ObSortVecOp::sort_component_next_batch(const int64_t max_cnt)
   return ret;
 }
 
-int ObSortVecOp::init_sort(int64_t tenant_id, int64_t row_count, int64_t topn_cnt)
+int ObSortVecOp::init_sort(int64_t row_count, int64_t topn_cnt)
 {
   int ret = OB_SUCCESS;
   ObSortVecOpContext context;
-  context.tenant_id_ = tenant_id;
+  
   context.sk_exprs_ = &MY_SPEC.sk_exprs_;
   context.addon_exprs_ = &MY_SPEC.addon_exprs_;
   context.sk_collations_ = &MY_SPEC.sk_collations_;
@@ -441,7 +441,7 @@ int ObSortVecOp::inner_get_next_batch(const int64_t max_row_cnt)
     is_first_ = false;
     int64_t topn_cnt = INT64_MAX;
     int64_t row_count = MY_SPEC.rows_;
-    const int64_t tenant_id = ctx_.get_my_session()->get_effective_tenant_id();
+    
     if (OB_FAIL(ObPxEstimateSizeUtil::get_px_size(&ctx_, MY_SPEC.px_est_size_factor_, MY_SPEC.rows_,
                                                   row_count))) {
       LOG_WARN("failed to get px size", K(ret));
@@ -450,7 +450,7 @@ int ObSortVecOp::inner_get_next_batch(const int64_t max_row_cnt)
     } else if (topn_cnt <= 0) {
       brs_.end_ = true;
       brs_.size_ = 0;
-    } else if (OB_FAIL(init_sort(tenant_id, row_count, topn_cnt))) {
+    } else if (OB_FAIL(init_sort(row_count, topn_cnt))) {
       LOG_WARN("failed to init batch sort", K(ret));
     } else if (OB_FAIL(process_sort_batch())) {
       LOG_WARN("process sort failed", K(ret));

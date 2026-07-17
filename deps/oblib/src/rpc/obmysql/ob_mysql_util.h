@@ -18,14 +18,15 @@
 #define _OB_MYSQL_UTIL_H_
 
 #include <inttypes.h>
+#include "common/timezone/ob_time_convert.h"
 #include <stdint.h>
 #include <float.h>              // for FLT_DIG and DBL_DIG
 #include "lib/oblog/ob_log.h"
 #include "lib/string/ob_string.h"
 #include "lib/utility/ob_print_utils.h"
-#include "lib/number/ob_number_v2.h"
-#include "lib/timezone/ob_timezone_info.h"
-#include "rpc/obmysql/ob_mysql_global.h"
+#include "common/number/ob_number_v2.h"
+#include "common/timezone/ob_timezone_info.h"
+#include "common/mysqlclient/ob_mysql_global.h"
 
 using namespace oceanbase::common;
 namespace oceanbase
@@ -403,8 +404,7 @@ public:
    *
    * @return Returns OB_SUCCESS on success, returns oceanbase error code on failure
    */
-  static int varchar_cell_str(char *buf, int64_t len, const ObString &val,
-                              const bool is_oracle_raw, int64_t &pos);
+  static int varchar_cell_str(char *buf, int64_t len, const ObString &val, int64_t &pos);
   /**
    * Serialize a floating-point type cell to the position of buf + pos.
    * (ObFloatType, ObDoubleType)
@@ -424,8 +424,8 @@ public:
                              bool zerofill, int32_t zflength);
   static int bit_cell_str(char *buf, const int64_t len, uint64_t val,
                           int32_t bit_len, MYSQL_PROTOCOL_TYPE type, int64_t &pos);
-  static int json_cell_str(uint64_t tenant_id, char *buf, const int64_t len, const ObString &val, int64_t &pos);
-  static int sql_utd_cell_str(uint64_t tenant_id, char *buf, const int64_t len, const ObString &val, int64_t &pos);
+  static int json_cell_str(char *buf, const int64_t len, const ObString &val, int64_t &pos);
+  static int sql_utd_cell_str(char *buf, const int64_t len, const ObString &val, int64_t &pos);
 
   static int decimalint_cell_str(char *buf, const int64_t len,
                                  const ObDecimalInt *decint, const int32_t int_bytes, int16_t scale,

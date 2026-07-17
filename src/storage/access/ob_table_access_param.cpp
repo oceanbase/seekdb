@@ -19,7 +19,7 @@
 #include "ob_table_access_param.h"
 #include "storage/ob_relative_table.h"
 #include "storage/tablet/ob_tablet.h"
-#include "share/schema/ob_table_dml_param.h"
+#include "storage/ob_table_dml_param.h"
 
 namespace oceanbase
 {
@@ -30,12 +30,9 @@ namespace storage
 ObTableIterParam::ObTableIterParam()
     : table_id_(0),
       tablet_id_(),
-      ls_id_(),
       read_info_(nullptr),
       rowkey_read_info_(nullptr),
       tablet_handle_(nullptr),
-      cg_read_info_handle_(),
-      cg_read_infos_(nullptr),
       out_cols_project_(NULL),
       agg_cols_project_(NULL),
       group_by_cols_project_(NULL),
@@ -60,18 +57,12 @@ ObTableIterParam::ObTableIterParam()
       ss_rowkey_prefix_cnt_(0),
       pd_storage_flag_(),
       table_scan_opt_(),
-      auto_split_filter_type_(OB_INVALID_ID),
-      auto_split_filter_(nullptr),
-      auto_split_params_(nullptr),
-      is_tablet_spliting_(false),
-      is_column_replica_table_(false),
       is_delete_insert_(false),
       need_update_tablet_param_(nullptr)
 {}
 
 ObTableIterParam::~ObTableIterParam()
 {
-  cg_read_info_handle_.reset();
   if (nullptr != pushdown_filter_) {
     pushdown_filter_->clear();
     pushdown_filter_ = nullptr;
@@ -88,12 +79,9 @@ void ObTableIterParam::reset()
 {
   table_id_ = 0;
   tablet_id_.reset();
-  ls_id_.reset();
   read_info_ = nullptr;
   rowkey_read_info_ = nullptr;
   tablet_handle_ = nullptr;
-  cg_read_info_handle_.reset();
-  cg_read_infos_ = nullptr;
   out_cols_project_ = NULL;
   agg_cols_project_ = NULL;
   group_by_cols_project_ = NULL;
@@ -120,11 +108,6 @@ void ObTableIterParam::reset()
   is_non_unique_local_index_ = false;
   is_advance_skip_scan_ = false;
   table_scan_opt_.reset();
-  auto_split_filter_type_ = OB_INVALID_ID;
-  auto_split_filter_ = nullptr;
-  auto_split_params_ = nullptr;
-  is_tablet_spliting_ = false;
-  is_column_replica_table_ = false;
   is_delete_insert_ = false;
   ObSSTableIndexFilterFactory::destroy_sstable_index_filter(sstable_index_filter_);
   need_update_tablet_param_ = nullptr;
@@ -146,10 +129,10 @@ int ObTableIterParam::refresh_lob_column_out_status()
   return ret;
 }
 
-bool ObTableIterParam::enable_fuse_row_cache(const ObQueryFlag &query_flag, const StorageScanType scan_type) const
+bool ObTableIterParam::enable_fuse_row_cache(const ObQueryFlag &query_flag) const
 {
   bool bret = query_flag.is_use_fuse_row_cache() && !query_flag.is_read_latest() &&
-              nullptr != rowkey_read_info_ && (!need_scn_ || is_mview_table_scan(scan_type)) &&
+              nullptr != rowkey_read_info_ && !need_scn_ &&
               is_same_schema_column_ && !has_virtual_columns_ && !has_lob_column_out_;
   return bret;
 }
@@ -164,26 +147,11 @@ bool ObTableIterParam::need_trans_info() const
   return bret;
 }
 
-int ObTableIterParam::get_cg_column_param(const share::schema::ObColumnParam *&column_param) const
-{
-  int ret = OB_SUCCESS;
-  column_param = nullptr;
-  if (OB_UNLIKELY(nullptr == cg_col_param_)) {
-    ret = OB_ERR_UNEXPECTED;
-    STORAGE_LOG(WARN, "unexpected read info", K(ret), KPC(read_info_));
-  } else {
-    column_param = cg_col_param_;
-  }
-  return ret;
-}
-
 int ObTableIterParam::build_index_filter_for_row_store(common::ObIAllocator *allocator)
 {
   int ret = OB_SUCCESS;
-  if (!is_use_column_store() && enable_pd_blockscan()
-      && enable_pd_filter() && enable_skip_index() && nullptr != pushdown_filter_) {
+  if (enable_pd_blockscan() && enable_pd_filter() && enable_skip_index() && nullptr != pushdown_filter_) {
     if (OB_FAIL(ObSSTableIndexFilterFactory::build_sstable_index_filter(
-                  false,
                   get_read_info(),
                   *pushdown_filter_,
                   allocator,
@@ -200,8 +168,6 @@ DEF_TO_STRING(ObTableIterParam)
   J_OBJ_START();
   J_KV(K_(table_id),
        K_(tablet_id),
-       K_(ls_id),
-       K_(cg_idx),
        KPC_(read_info),
        KPC_(rowkey_read_info),
        KPC_(out_cols_project),
@@ -210,7 +176,6 @@ DEF_TO_STRING(ObTableIterParam)
        KPC_(pushdown_filter),
        KP_(op),
        KP_(sstable_index_filter),
-       KP_(cg_read_infos),
        KPC_(output_exprs),
        KPC_(aggregate_exprs),
        KPC_(output_sel_mask),
@@ -228,11 +193,6 @@ DEF_TO_STRING(ObTableIterParam)
        K_(is_advance_skip_scan),
        K_(ss_rowkey_prefix_cnt),
        K_(table_scan_opt),
-       K_(auto_split_filter_type),
-       KP_(auto_split_filter),
-       KPC_(auto_split_params),
-       K_(is_tablet_spliting),
-       K_(is_column_replica_table),
        K_(is_delete_insert),
        KP_(need_update_tablet_param));
   J_OBJ_END();
@@ -295,7 +255,6 @@ int ObTableAccessParam::init(
     const share::schema::ObTableParam &table_param = *scan_param.table_param_;
     iter_param_.table_id_ = table_param.get_table_id();
     iter_param_.tablet_id_ = scan_param.tablet_id_;
-    iter_param_.ls_id_ = scan_param.ls_id_;
     iter_param_.read_info_ = &table_param.get_read_info();
 
     if (nullptr == tablet_handle) {
@@ -306,7 +265,6 @@ int ObTableAccessParam::init(
       iter_param_.set_tablet_handle(tablet_handle);
     }
 
-    iter_param_.cg_read_infos_ = table_param.get_cg_read_infos();
     iter_param_.out_cols_project_ = &table_param.get_output_projector();
     iter_param_.agg_cols_project_ = &table_param.get_aggregate_projector();
     iter_param_.group_by_cols_project_ = &table_param.get_group_by_projector();
@@ -343,35 +301,20 @@ int ObTableAccessParam::init(
       iter_param_.table_scan_opt_.storage_rowsets_size_ = 1;
     }
     iter_param_.pushdown_filter_ = scan_param.pd_storage_filters_;
-    iter_param_.ls_id_ = scan_param.ls_id_;
-    iter_param_.is_column_replica_table_ = table_param.is_column_replica_table();
-     // disable blockscan if scan order is KeepOrder(for iterator iterator and table api)
+     // disable blockscan if scan order is KeepOrder
      // disable blockscan if use index skip scan as no large range to scan
     if (OB_UNLIKELY(ObQueryFlag::KeepOrder == scan_param.scan_flag_.scan_order_ ||
                     scan_param.use_index_skip_scan() ||
                     !scan_param.scan_flag_.is_use_block_cache())) {
       iter_param_.disable_blockscan();
     }
-    iter_param_.auto_split_filter_type_ = scan_param.auto_split_filter_type_;
-    iter_param_.auto_split_filter_ = scan_param.auto_split_filter_;
-    iter_param_.auto_split_params_ = scan_param.auto_split_params_;
-    iter_param_.is_tablet_spliting_ = scan_param.is_tablet_spliting_;
     iter_param_.has_virtual_columns_ = table_param.has_virtual_column();
     // vectorize requires blockscan is enabled(_pushdown_storage_level > 0)
     iter_param_.vectorized_enabled_ = nullptr != get_op() && get_op()->is_vectorized();
     iter_param_.limit_prefetch_ = (nullptr == op_filters_ || op_filters_->empty());
     iter_param_.is_mds_query_ = scan_param.is_mds_query_;
 
-    if (iter_param_.is_use_column_store() &&
-        nullptr != table_param.get_read_info().get_cg_idxs() &&
-        !iter_param_.need_fill_group_idx()) { // not use column store in group rescan
-      iter_param_.set_use_column_store();
-    } else {
-      iter_param_.set_not_use_column_store();
-    }
-    if (scan_param.need_switch_param_ ||
-        iter_param_.is_use_column_store() ||
-        scan_param.is_mview_query()) {
+    if (scan_param.need_switch_param_) {
       iter_param_.set_use_stmt_iter_pool();
     }
 
@@ -404,12 +347,10 @@ int ObTableAccessParam::check_valid_before_query_init(
 {
   int ret = OB_SUCCESS;
   ObTablet *tablet = nullptr;
+  UNUSED(table_param);
   if (OB_UNLIKELY(!tablet_handle.is_valid() || OB_ISNULL(tablet = tablet_handle.get_obj()))) {
     ret = OB_INVALID_ARGUMENT;
     STORAGE_LOG(WARN, "invalid table handle", K(ret), K(tablet_handle), KPC(tablet));
-  } else if (OB_UNLIKELY(tablet->is_cs_replica_compat() && !table_param.is_column_replica_table() && !table_param.is_normal_cgs_at_the_end())) {
-    ret = OB_INVALID_ARGUMENT;
-    STORAGE_LOG(WARN, "invalid table param for cs replica tablet", K(ret), K(table_param), KPC(tablet));
   }
   return ret;
 }
@@ -474,11 +415,9 @@ int ObTableAccessParam::init_dml_access_param(
     iter_param_.table_id_ = table.get_table_id();
     iter_param_.tablet_id_ = table.get_tablet_id();
     if (nullptr != table.tablet_iter_.get_tablet()) {
-      iter_param_.ls_id_ = table.tablet_iter_.get_tablet()->get_tablet_meta().ls_id_;
     }
     iter_param_.read_info_ = &schema_param.get_read_info();
     iter_param_.rowkey_read_info_ = &rowkey_read_info;
-    iter_param_.cg_read_infos_ = schema_param.get_cg_read_infos();
     iter_param_.set_tablet_handle(table.tablet_iter_.get_tablet_handle_ptr());
     iter_param_.is_same_schema_column_ =
         iter_param_.read_info_->get_schema_column_count() == iter_param_.rowkey_read_info_->get_schema_column_count();

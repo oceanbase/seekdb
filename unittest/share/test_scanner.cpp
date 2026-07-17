@@ -14,9 +14,9 @@
  * limitations under the License.
  */
 
-#include "share/ob_scanner.h"
+#include "sql/ob_scanner.h"
 #include <gtest/gtest.h>
-#include "lib/utility/ob_test_util.h"
+#include "lib/thread/ob_test_util.h"
 using namespace oceanbase::common;
 class TestScanner: public ::testing::Test
 {

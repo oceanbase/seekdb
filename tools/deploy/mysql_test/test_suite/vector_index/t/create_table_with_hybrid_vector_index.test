@@ -174,14 +174,6 @@ CREATE TABLE t_vec(id int NOT NULL PRIMARY KEY, c1 int, c2 vector(100),  vector 
 --error 1235
 create table t_vec(c1 int, c2 varchar(100), c3 int, primary key(c1), vector index vec_idx1(c2) storing (c3) with (distance=L2, type=hnsw, model=ob_embed, dim=1024));
 
-# with column group
---error 1064
-create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c2) with (distance=L2, type=hnsw, model=ob_embed, dim=1024) WITH COLUMN GROUP(all column, each column));
---error 1064
-create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c2) with (distance=L2, type=hnsw, model=ob_embed, dim=1024) WITH COLUMN GROUP(all column));
---error 1064
-create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c2) with (distance=L2, type=hnsw, model=ob_embed, dim=1024) WITH COLUMN GROUP(each column));
-
 # show create table/index
 echo "------------------------------------------ show create table -------------------------------------------------------";
 alter system set ob_vector_memory_limit_percentage = 20;
@@ -245,7 +237,7 @@ create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_id
 show create table t_vec;
 show index from t_vec;
 
-# partition table
+# partition table 
 drop table if exists t_vec;
 CREATE TABLE t_vec (id int NOT NULL PRIMARY KEY, c2 varchar(100), vector index vec_idx1(c2) with (distance=L2, type=hnsw, lib=vsag, m=20, ef_construction=200, ef_search=200, model=ob_embed, dim=1024, sync_mode=immediate)) partition by hash(id) partitions 2;
 --replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
@@ -393,14 +385,6 @@ CREATE TABLE t_vec(id int NOT NULL PRIMARY KEY, c1 int, c2 vector(100),  vector 
 --error 1235
 create table t_vec(c1 int, c2 varchar(100), c3 int, primary key(c1), vector index vec_idx1(c2) storing (c3) with (distance=L2, type=hnsw, model=ob_embed, dim=1024)) ORGANIZATION HEAP;
 
-# with column group
---error 1064
-create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c2) with (distance=L2, type=hnsw, model=ob_embed, dim=1024) WITH COLUMN GROUP(all column, each column)) ORGANIZATION HEAP;
---error 1064
-create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c2) with (distance=L2, type=hnsw, model=ob_embed, dim=1024) WITH COLUMN GROUP(all column)) ORGANIZATION HEAP;
---error 1064
-create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c2) with (distance=L2, type=hnsw, model=ob_embed, dim=1024) WITH COLUMN GROUP(each column)) ORGANIZATION HEAP;
-
 # show create table/index
 echo "------------------------------------------ show create table -------------------------------------------------------";
 alter system set ob_vector_memory_limit_percentage = 20;
@@ -464,7 +448,7 @@ create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_id
 show create table t_vec;
 show index from t_vec;
 
-# partition table
+# partition table 
 drop table if exists t_vec;
 CREATE TABLE t_vec (id int NOT NULL PRIMARY KEY, c2 varchar(100), vector index vec_idx1(c2) with (distance=L2, type=hnsw, lib=vsag, m=20, ef_construction=200, ef_search=200, model=ob_embed, dim=1024, sync_mode=immediate)) ORGANIZATION HEAP partition by hash(id) partitions 2;
 --replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g

@@ -34,7 +34,7 @@ public:
                       ObMySQLTransaction &trans,
                       const ObString *ddl_stmt_str);
 
-  int drop_ccl_rule(uint64_t tenant_id, const ObCCLRuleSchema &ccl_rule_schema,
+  int drop_ccl_rule(const ObCCLRuleSchema &ccl_rule_schema,
                     ObMySQLTransaction &trans,
                     const ObString *ddl_stmt_str);
 

@@ -16,18 +16,18 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 #include "ob_ai_func.h"
-#include "share/ai_service/ob_ai_service_struct.h"
+#include "observer/ai_service/ob_ai_service_struct.h"
 #include "observer/omt/ob_tenant_ai_service.h"
 
-namespace oceanbase
+namespace oceanbase 
 {
-namespace common
+namespace common 
 {
 
 OB_SERIALIZE_MEMBER(ObAIFuncExprInfo, name_, type_, model_);
 int ObAIFuncExprInfo::deep_copy(common::ObIAllocator &allocator,
                                 const ObExprOperatorType type,
-                                ObIExprExtraInfo *&copied_info) const
+                                ObIExprExtraInfo *&copied_info) const 
 {
   int ret = OB_SUCCESS;
   ObAIFuncExprInfo *other = NULL;
@@ -44,19 +44,19 @@ int ObAIFuncExprInfo::deep_copy(common::ObIAllocator &allocator,
   return ret;
 }
 
-int ObAIFuncExprInfo::init(ObIAllocator &allocator, const ObString &model_id, share::schema::ObSchemaGetterGuard &schema_guard)
+int ObAIFuncExprInfo::init(ObIAllocator &allocator, const ObString &model_id, share::schema::ObSchemaGetterGuard &schema_guard) 
 {
   int ret = OB_SUCCESS;
   const ObAiModelSchema *ai_model_schema = NULL;
-  if (model_id.empty()) {
+  if (model_id.empty()) { 
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("model id is empty", KR(ret), K(model_id));
     LOG_USER_ERROR(OB_INVALID_ARGUMENT, "model id is empty");
-  } else if (OB_FAIL(schema_guard.get_ai_model_schema(MTL_ID(), model_id, ai_model_schema))) {
-    LOG_WARN("fail to get ai model schema", KR(ret), K(MTL_ID()), K(model_id));
+  } else if (OB_FAIL(schema_guard.get_ai_model_schema( model_id, ai_model_schema))) {
+    LOG_WARN("fail to get ai model schema", KR(ret), K(model_id));
   } else if (OB_ISNULL(ai_model_schema)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("ai model schema is null", KR(ret), K(MTL_ID()), K(model_id));
+    LOG_WARN("ai model schema is null", KR(ret), K(model_id));
     LOG_USER_ERROR(OB_INVALID_ARGUMENT, "ai_function, ai model not found, please check if the model exists");
   } else {
     OZ(ob_write_string(allocator, ai_model_schema->get_name(), name_));

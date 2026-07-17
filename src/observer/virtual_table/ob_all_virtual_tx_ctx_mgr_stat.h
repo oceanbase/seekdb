@@ -17,12 +17,9 @@
 #ifndef OB_ALL_VIRTUAL_TX_CTX_MGR_STAT
 #define OB_ALL_VIRTUAL_TX_CTX_MGR_STAT
 
-#include "share/ob_virtual_table_scanner_iterator.h"
-#include "share/ob_scanner.h"
+#include "observer/virtual_table/ob_virtual_table_scanner_iterator.h"
+#include "sql/ob_scanner.h"
 #include "common/row/ob_row.h"
-#include "lib/container/ob_se_array.h"
-#include "common/ob_simple_iterator.h"
-#include "storage/tx/ob_tx_ls_log_writer.h"
 #include "storage/tx/ob_trans_ctx.h"
 #include "storage/tx/ob_trans_ctx_mgr_v4.h"
 
@@ -39,7 +36,10 @@ class ObGVTxCtxMgrStat: public common::ObVirtualTableScannerIterator
 {
 public:
   explicit ObGVTxCtxMgrStat(transaction::ObTransService *trans_service)
-      : trans_service_(trans_service) { reset(); }
+      : trans_service_(trans_service), tx_ctx_mgr_stat_(),
+        is_stat_outputted_(false) {
+    reset();
+  }
   virtual ~ObGVTxCtxMgrStat() { destroy(); }
 public:
   int inner_get_next_row(common::ObNewRow *&row);
@@ -51,7 +51,8 @@ private:
   char memstore_version_buffer_[common::MAX_VERSION_LENGTH];
 private:
   transaction::ObTransService *trans_service_;
-  transaction::ObTxCtxMgrStatIterator tx_ctx_mgr_stat_iter_;
+  transaction::ObLSTxCtxMgrStat tx_ctx_mgr_stat_;
+  bool is_stat_outputted_;
 private:
   DISALLOW_COPY_AND_ASSIGN(ObGVTxCtxMgrStat);
 };

@@ -37,7 +37,6 @@ public:
   static int handle_tx_after_rpc(ObScanner *scanner,
                                  ObSQLSessionInfo *session,
                                  const bool has_sent_task,
-                                 const bool has_transfer_err,
                                  const ObPhysicalPlan *phy_plan,
                                  ObExecContext &exec_ctx);
 private:
@@ -52,4 +51,3 @@ private:
 }
 #endif /* OCEANBASE_SQL_EXECUTOR_REMOTE_TASK_EXECUTOR_ */
 //// end of header file
-

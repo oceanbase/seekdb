@@ -19,12 +19,8 @@
 #include "ob_index_block_aggregator.h"
 #include "storage/blocksstable/ob_data_store_desc.h"
 #include "storage/blocksstable/encoding/ob_encoding_hash_util.h"
-#include "storage/blocksstable/cs_encoding/ob_column_datum_iter.h"
-#include "storage/blocksstable/cs_encoding/ob_dict_encoding_hash_table.h"
+#include "storage/blocksstable/encoding/ob_column_datum_iter.h"
 #include "src/sql/session/ob_sql_session_info.h"
-#include "storage/blocksstable/encoding/ob_encoding_hash_util.h"
-#include "storage/blocksstable/cs_encoding/ob_column_datum_iter.h"
-#include "storage/blocksstable/cs_encoding/ob_dict_encoding_hash_table.h"
 #include "sql/engine/expr/ob_expr_bm25.h"
 
 namespace oceanbase
@@ -252,9 +248,9 @@ void ObColNullCountAggregator::reuse()
 int ObColNullCountAggregator::eval(const ObStorageDatum &datum, const ObSkipIndexDatumAttr &agg_datum_attr)
 {
   int ret = OB_SUCCESS;
-
+  
   if (!can_aggregate_) {
-    // Skip
+    // Skip 
   } else if (datum.is_nop()) {
     // null count on nop data not supported
     set_not_aggregate();
@@ -462,9 +458,8 @@ int ObColMaxAggregator::cmp_with_prefix(
           const ObString &long_str = left_shorter ? right_str : left_str;
           const int64_t prefix_length = ObCharset::charpos(coll, long_str.ptr(), long_str.length(), prefix_char_num);
           ObString prefix_str(prefix_length, long_str.ptr());
-          const bool end_with_space = common::is_calc_with_end_space(obj_type, obj_type, lib::is_oracle_mode(), coll, coll);
           const bool prefix_match = (0 == ObCharset::strcmpsp(
-              coll, long_str.ptr(), prefix_length, short_str.ptr(), short_str.length(), end_with_space));
+              coll, long_str.ptr(), prefix_length, short_str.ptr(), short_str.length(), false));
           if (!prefix_match) {
             cmp_res = tmp_res;
           } else {
@@ -882,8 +877,7 @@ int ObColSumAggregator::eval_float(const common::ObDatum &datum)
       result_->set_float(right_f);
     } else {
       float left_f = result_->get_float();
-      if (OB_UNLIKELY(sql::ObArithExprOperator::is_float_out_of_range(left_f + right_f))
-        && !lib::is_oracle_mode()) {
+      if (OB_UNLIKELY(sql::ObArithExprOperator::is_float_out_of_range(left_f + right_f))) {
           // out of range
           set_not_aggregate();
       } else {
@@ -1732,10 +1726,6 @@ int ObSkipIndexDataAggregator::eval(const ObIMicroBlockWriter &data_micro_writer
             if (OB_FAIL(col_aggs_.at(single_col_agg_idx)->eval(tmp_result, false))) {
               LOG_WARN("failed to evaluate all null column", K(ret), K(pre_agg_param));
             }
-          } else if (pre_agg_param.use_cs_encoding_ht()) {
-            if (OB_FAIL(do_col_agg(single_col_agg_idx, *pre_agg_param.cs_encoding_ht_))) {
-              LOG_WARN("failed to do column aggregation with cs encoding hashtable", K(ret));
-            }
           } else if (pre_agg_param.use_encoding_ht()) {
             if (OB_FAIL(do_col_agg(single_col_agg_idx, *pre_agg_param.encoding_ht_))) {
               LOG_WARN("failed to do column aggregation with encoding hashtable", K(ret));
@@ -1839,7 +1829,6 @@ int ObSkipIndexDataAggregator::do_col_agg_with_pre_agg_integer(
 template <typename IterParamType>
 struct SkipIndexDatumIterTypeTrait { typedef void IterType; };
 template<> struct SkipIndexDatumIterTypeTrait<ObPodFix2dArray<ObDatum, 1 << 20, common::OB_MALLOC_NORMAL_BLOCK_SIZE>> { typedef ObColumnDatumIter IterType; };
-template<> struct SkipIndexDatumIterTypeTrait<ObDictEncodingHashTable> { typedef ObDictDatumIter IterType; };
 template<> struct SkipIndexDatumIterTypeTrait<ObEncodingHashTable> { typedef ObEncodingHashTableDatumIter IterType; };
 
 template<typename IterParamType>

@@ -15,6 +15,8 @@
  */
 
 #include "observer/virtual_table/ob_all_virtual_memstore_info.h"
+#include "share/rc/ob_module_provider.h"
+#include "storage/ls/ob_ls.h"
 #include "storage/tx_storage/ob_ls_service.h"
 
 using namespace oceanbase::common;
@@ -27,10 +29,8 @@ namespace observer
 
 ObAllVirtualMemstoreInfo::ObAllVirtualMemstoreInfo()
   : ObVirtualTableScannerIterator(),
-    ObMultiTenantOperator(),
-    addr_(),
-    ls_iter_guard_(),
-    ls_tablet_iter_(ObMDSGetTabletMode::READ_ALL_COMMITED),
+    ls_(nullptr),
+    tablet_iter_(ObMDSGetTabletMode::READ_ALL_COMMITED),
     tables_handle_(),
     memtable_array_pos_(0)
 {
@@ -43,96 +43,34 @@ ObAllVirtualMemstoreInfo::~ObAllVirtualMemstoreInfo()
 
 void ObAllVirtualMemstoreInfo::reset()
 {
-  omt::ObMultiTenantOperator::reset();
-  addr_.reset();
-  ls_tablet_iter_.reset();
-  ls_iter_guard_.reset();
+  tablet_iter_.reset();
+  ls_ = nullptr;
   tables_handle_.reset();
   memtable_array_pos_ = 0;
   memset(freeze_time_dist_, 0, OB_MAX_CHAR_LENGTH);
-  memset(compaction_info_buf_, 0, sizeof(compaction_info_buf_));
   ObVirtualTableScannerIterator::reset();
-}
-
-void ObAllVirtualMemstoreInfo::release_last_tenant()
-{
-  ls_iter_guard_.reset();
-  ls_tablet_iter_.reset();
-  tables_handle_.reset();
-  memtable_array_pos_ = 0;
-  memset(freeze_time_dist_, 0, OB_MAX_CHAR_LENGTH);
-}
-
-int ObAllVirtualMemstoreInfo::inner_get_next_row(ObNewRow *&row)
-{
-  int ret = OB_SUCCESS;
-  if (OB_FAIL(execute(row))) {
-    SERVER_LOG(WARN, "execute fail", K(ret));
-  }
-  return ret;
-}
-
-bool ObAllVirtualMemstoreInfo::is_need_process(uint64_t tenant_id)
-{
-  if (!is_virtual_tenant_id(tenant_id) &&
-      (is_sys_tenant(effective_tenant_id_) || tenant_id == effective_tenant_id_)) {
-    return true;
-  }
-  return false;
-}
-
-int ObAllVirtualMemstoreInfo::get_next_ls(ObLS *&ls)
-{
-  int ret = OB_SUCCESS;
-
-  while (OB_SUCC(ret)) {
-    if (!ls_iter_guard_.get_ptr()
-        || OB_FAIL(ls_iter_guard_->get_next(ls))) {
-      if (OB_ITER_END != ret) {
-        SERVER_LOG(WARN, "fail to switch tenant", K(ret));
-      }
-      // switch to next tenant
-      ret = OB_ITER_END;
-    } else if (OB_ISNULL(ls)) {
-      ret = OB_ERR_UNEXPECTED;
-      SERVER_LOG(ERROR, "ls is null", K(ret));
-    } else {
-      break;
-    }
-  }
-
-  return ret;
 }
 
 int ObAllVirtualMemstoreInfo::get_next_tablet(ObTabletHandle &tablet_handle)
 {
   int ret = OB_SUCCESS;
-
-  while (OB_SUCC(ret)) {
-    if (!ls_tablet_iter_.is_valid()) {
-      ObLS *ls = nullptr;
-      if (OB_FAIL(get_next_ls(ls))) {
-        if (OB_ITER_END != ret) {
-          SERVER_LOG(WARN, "fail to get next ls", K(ret));
-        }
-      } else if (OB_FAIL(ls->build_tablet_iter(ls_tablet_iter_, true /* except_ls_inner_tablet */))) {
-        SERVER_LOG(WARN, "fail to build tablet iter", K(ret));
-      }
-    }
-
-    if (OB_FAIL(ret)) {
-    } else if (OB_FAIL(ls_tablet_iter_.get_next_tablet(tablet_handle))) {
-      if (OB_ITER_END == ret) {
-        ls_tablet_iter_.reset();
-        ret = OB_SUCCESS;
-      } else {
-        SERVER_LOG(WARN, "fail to get next tablet", K(ret));
-      }
-    } else {
-      break;
+  if (!tablet_iter_.is_valid()) {
+    ObLSService *ls_service = share::g_mp->ls_service();
+    if (OB_ISNULL(ls_service)) {
+      ret = OB_ERR_UNEXPECTED;
+      SERVER_LOG(WARN, "ls service is null", K(ret));
+    } else if (OB_FAIL(ls_service->get_ls(ls_))) {
+      SERVER_LOG(WARN, "get log stream failed", K(ret));
+    } else if (OB_FAIL(ls_->build_tablet_iter(
+        tablet_iter_, true /* except_ls_inner_tablet */))) {
+      SERVER_LOG(WARN, "fail to build tablet iter", K(ret));
     }
   }
-
+  if (OB_SUCC(ret) && OB_FAIL(tablet_iter_.get_next_tablet(tablet_handle))) {
+    if (OB_ITER_END != ret) {
+      SERVER_LOG(WARN, "fail to get next tablet", K(ret));
+    }
+  }
   return ret;
 }
 
@@ -197,7 +135,7 @@ void ObAllVirtualMemstoreInfo::get_freeze_time_dist(const ObMtStat& mt_stat)
   }
 }
 
-int ObAllVirtualMemstoreInfo::process_curr_tenant(ObNewRow *&row)
+int ObAllVirtualMemstoreInfo::inner_get_next_row(ObNewRow *&row)
 {
   int ret = OB_SUCCESS;
   ObITabletMemtable *mt = NULL;
@@ -205,8 +143,6 @@ int ObAllVirtualMemstoreInfo::process_curr_tenant(ObNewRow *&row)
     ret = OB_NOT_INIT;
     SERVER_LOG(WARN, "allocator_ shouldn't be NULL", K(allocator_), K(ret));
   } else if (FALSE_IT(start_to_read_ = true)) {
-  } else if (ls_iter_guard_.get_ptr() == nullptr && OB_FAIL(MTL(ObLSService*)->get_ls_iter(ls_iter_guard_, ObLSGetMod::OBSERVER_MOD))) {
-    SERVER_LOG(WARN, "get_ls_iter fail", K(ret));
   } else if (OB_FAIL(get_next_memtable(mt))) {
     if (OB_ITER_END != ret) {
       SERVER_LOG(WARN, "get_next_memtable failed", K(ret));
@@ -268,22 +204,6 @@ int ObAllVirtualMemstoreInfo::process_curr_tenant(ObNewRow *&row)
           cur_row_.cells_[i].set_int(mt->get_occupied_size());
           break;
         case OB_APP_MIN_COLUMN_ID + 10:
-          // hash_item_count
-          if (nullptr != data_memtable) {
-            cur_row_.cells_[i].set_int(data_memtable->get_hash_item_count());
-          } else {
-            cur_row_.cells_[i].set_int(0);
-          }
-          break;
-        case OB_APP_MIN_COLUMN_ID + 11:
-          // hash_mem_used
-          if (nullptr != data_memtable) {
-            cur_row_.cells_[i].set_int(data_memtable->get_hash_alloc_memory());
-          } else {
-            cur_row_.cells_[i].set_int(0);
-          }
-          break;
-        case OB_APP_MIN_COLUMN_ID + 12:
           // btree_item_count
           if (nullptr != data_memtable) {
             cur_row_.cells_[i].set_int(data_memtable->get_btree_item_count());
@@ -291,7 +211,7 @@ int ObAllVirtualMemstoreInfo::process_curr_tenant(ObNewRow *&row)
             cur_row_.cells_[i].set_int(0);
           }
           break;
-        case OB_APP_MIN_COLUMN_ID + 13:
+        case OB_APP_MIN_COLUMN_ID + 11:
           // btree_mem_used
           if (nullptr != data_memtable) {
             cur_row_.cells_[i].set_int(data_memtable->get_btree_alloc_memory());
@@ -299,33 +219,33 @@ int ObAllVirtualMemstoreInfo::process_curr_tenant(ObNewRow *&row)
             cur_row_.cells_[i].set_int(0);
           }
           break;
-        case OB_APP_MIN_COLUMN_ID + 14:
+        case OB_APP_MIN_COLUMN_ID + 12:
           // insert_row_count
           cur_row_.cells_[i].set_int(mt_stat.insert_row_count_);
           break;
-        case OB_APP_MIN_COLUMN_ID + 15:
+        case OB_APP_MIN_COLUMN_ID + 13:
           // update_row_count
           cur_row_.cells_[i].set_int(mt_stat.update_row_count_);
           break;
-        case OB_APP_MIN_COLUMN_ID + 16:
+        case OB_APP_MIN_COLUMN_ID + 14:
           // delete_row_count
           cur_row_.cells_[i].set_int(mt_stat.delete_row_count_);
           break;
-        case OB_APP_MIN_COLUMN_ID + 17:
+        case OB_APP_MIN_COLUMN_ID + 15:
           cur_row_.cells_[i].set_int(mt_stat.frozen_time_);
           break;
-        case OB_APP_MIN_COLUMN_ID + 18:
+        case OB_APP_MIN_COLUMN_ID + 16:
           // freeze_state
           cur_row_.cells_[i].set_varchar(storage::TABLET_MEMTABLE_FREEZE_STATE_TO_STR(mt->get_freeze_state()));
           cur_row_.cells_[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
           break;
-        case OB_APP_MIN_COLUMN_ID + 19:
+        case OB_APP_MIN_COLUMN_ID + 17:
           // freeze_time_dist
           get_freeze_time_dist(mt_stat);
           cur_row_.cells_[i].set_varchar(freeze_time_dist_);
           cur_row_.cells_[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
           break;
-        case OB_APP_MIN_COLUMN_ID + 20: {
+        case OB_APP_MIN_COLUMN_ID + 18: {
           // compaction info list
           cur_row_.cells_[i].set_varchar("-");
           cur_row_.cells_[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));

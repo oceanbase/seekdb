@@ -49,11 +49,10 @@ int ObRestoreSchema::init()
     STORAGE_LOG(WARN, "schema_guard init fail", K(ret));
   } else {
     table_id_ = 3001;
-    tenant_id_ = OB_SYS_TENANT_ID;
+    tenant_id_ = OB_SERVER_TENANT_ID;
     database_id_ = OB_SYS_TABLEGROUP_ID;
     ObDatabaseSchema db_schema;
     //ObString tenant;
-    db_schema.set_tenant_id(tenant_id_);
     db_schema.set_database_id(database_id_);
     db_schema.set_charset_type(CHARSET_UTF8MB4);
     db_schema.set_collation_type(CS_TYPE_UTF8MB4_GENERAL_CI);
@@ -84,12 +83,12 @@ int ObRestoreSchema::add_database_schema(ObDatabaseSchema &database_schema)
   const ObTenantSchema *tenant_schema = NULL;
   const ObSysVariableSchema *sys_variable= NULL;
   if (OB_SUCC(ret)) {
-    if (OB_FAIL(schema_guard_.get_tenant_info(database_schema.get_tenant_id(), tenant_schema))) {
+    if (OB_FAIL(schema_guard_.get_tenant_info(tenant_schema))) {
       STORAGE_LOG(WARN, "get tenant info failed", K(database_schema), K(ret));
     } else if (OB_ISNULL(tenant_schema)) {
       ret = OB_TENANT_NOT_EXIST;
       STORAGE_LOG(WARN, "tenant schema is null", K(ret));
-    } else if (OB_FAIL(schema_guard_.get_sys_variable_schema(database_schema.get_tenant_id(), sys_variable))) {
+    } else if (OB_FAIL(schema_guard_.get_sys_variable_schema(sys_variable))) {
       OB_LOG(WARN, "get sys variable failed", K(sys_variable), K(ret));
     } else if (OB_ISNULL(sys_variable)) {
       ret = OB_TENANT_NOT_EXIST;
@@ -118,12 +117,12 @@ int ObRestoreSchema::add_table_schema(ObTableSchema &table_schema)
   const ObTenantSchema *tenant_schema = NULL;
   const ObSysVariableSchema *sys_variable= NULL;
   if (OB_SUCC(ret)) {
-    if (OB_FAIL(schema_guard_.get_tenant_info(table_schema.get_tenant_id(), tenant_schema))) {
+    if (OB_FAIL(schema_guard_.get_tenant_info(tenant_schema))) {
       STORAGE_LOG(WARN, "get tenant info failed", K(table_schema), K(ret));
     } else if (OB_ISNULL(tenant_schema)) {
       ret = OB_TENANT_NOT_EXIST;
       STORAGE_LOG(WARN, "tenant schema is null", K(ret));
-    } else if (OB_FAIL(schema_guard_.get_sys_variable_schema(table_schema.get_tenant_id(), sys_variable))) {
+    } else if (OB_FAIL(schema_guard_.get_sys_variable_schema(sys_variable))) {
       OB_LOG(WARN, "get sys variable failed", K(sys_variable), K(ret));
     } else if (OB_ISNULL(sys_variable)) {
       ret = OB_TENANT_NOT_EXIST;
@@ -156,7 +155,6 @@ int ObRestoreSchema::do_create_table(ObStmt *stmt)
   } else {
     ObTableSchema &table_schema = create_table_stmt->get_create_table_arg().schema_;
     ObSEArray<ObColDesc, 512> col_descs;
-    table_schema.set_tenant_id(tenant_id_);
     table_schema.set_database_id(database_id_);
     table_schema.set_tablegroup_id(0);
     table_schema.set_table_id(table_id_++);
@@ -181,15 +179,14 @@ int ObRestoreSchema::gen_columns(ObCreateIndexStmt &stmt,
   int64_t index_rowkey_num = 0;
   uint64_t max_column_id = 0;
   const ObTableSchema *table_schema = NULL;
-  obrpc::ObCreateIndexArg &index_arg = stmt.get_create_index_arg();
+  obcall::ObCreateIndexArg &index_arg = stmt.get_create_index_arg();
 
   //bool is_index = false;
   //table_schema = schema_manager_.get_table_schema(index_arg.tenant_id_,
   //                                                index_arg.database_name_,
   //                                                index_arg.table_name_,
   //                                                is_index);
-  if (OB_FAIL(schema_guard_.get_table_schema(index_arg.tenant_id_,
-                                             index_arg.database_name_,
+  if (OB_FAIL(schema_guard_.get_table_schema(index_arg.database_name_,
                                              index_arg.table_name_,
                                              false,
                                              table_schema))) {
@@ -318,15 +315,14 @@ int ObRestoreSchema::do_create_index(ObStmt *stmt)
     ret = OB_INVALID_ARGUMENT;
     STORAGE_LOG(WARN, "not create statement", K(ret));
   } else {
-    obrpc::ObCreateIndexArg &index_arg = crt_idx_stmt->get_create_index_arg();
+    obcall::ObCreateIndexArg &index_arg = crt_idx_stmt->get_create_index_arg();
     //const bool is_index = false;
     const ObTableSchema *data_schema = NULL;
     //const ObTableSchema *data_schema = schema_manager_.get_table_schema(index_arg.tenant_id_,
     //                                                                     index_arg.database_name_,
     //                                                                     index_arg.table_name_,
     //                                                                     is_index);
-    if (OB_FAIL(schema_guard_.get_table_schema(index_arg.tenant_id_,
-                                               index_arg.database_name_,
+    if (OB_FAIL(schema_guard_.get_table_schema(index_arg.database_name_,
                                                index_arg.table_name_,
                                                false,
                                                data_schema))) {
@@ -351,7 +347,6 @@ int ObRestoreSchema::do_create_index(ObStmt *stmt)
         index_schema.set_data_table_id(data_schema->get_table_id());
         index_schema.set_table_type(USER_INDEX);
         index_schema.set_index_type(index_arg.index_type_);
-        index_schema.set_tenant_id(tenant_id_);
         index_schema.set_database_id(database_id_);
         index_schema.set_tablegroup_id(0);
         index_schema.set_table_id(table_id_++);
@@ -437,11 +432,11 @@ int ObRestoreSchema::do_parse_line(ObArenaAllocator &allocator, const char *quer
     resolver_ctx.expr_factory_ = &expr_factory;
     resolver_ctx.stmt_factory_ = &stmt_factory;
     resolver_ctx.query_ctx_ = stmt_factory.get_query_ctx();
-    if (OB_FAIL(session_info.init_tenant(tenant, tenant_id_))) {
+    if (OB_FAIL(session_info.init_tenant(tenant))) {
       STORAGE_LOG(WARN, "fail to init sql session info", K(ret), K(tenant_id_));
     } else if (OB_FAIL(session_info.set_default_database(db_name))) {
       STORAGE_LOG(WARN, "fail to set default database", K(ret));
-    } else if (OB_FAIL(session_info.test_init(version, 0, 0, &allocator))) {
+    } else if (OB_FAIL(session_info.test_init(version, 0, &allocator))) {
       STORAGE_LOG(WARN, "fail to init session info", K(ret));
     } else if (OB_SUCCESS != (ret= session_info.load_default_sys_variable(false, true))) {
       STORAGE_LOG(WARN, "fail to load default sys variable");

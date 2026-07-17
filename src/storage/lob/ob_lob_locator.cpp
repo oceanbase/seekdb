@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX STORAGE
 #include "ob_lob_locator.h"
+#include "share/rc/ob_module_provider.h"
 #include "observer/ob_server.h"
 #include "storage/tx_storage/ob_ls_service.h"
 
@@ -30,11 +31,10 @@ namespace storage
 ObLobLocatorHelper::ObLobLocatorHelper()
   : table_id_(OB_INVALID_ID),
     tablet_id_(OB_INVALID_ID),
-    ls_id_(OB_INVALID_ID),
     tx_read_snapshot_(),
     fb_snapshot_(),
     rowid_objs_(),
-    locator_allocator_(ObModIds::OB_LOB_READER, OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID()),
+    locator_allocator_(ObModIds::OB_LOB_READER, OB_MALLOC_NORMAL_BLOCK_SIZE),
     rowkey_str_(),
     enable_locator_v2_(),
     is_inited_(false),
@@ -51,7 +51,6 @@ ObLobLocatorHelper::~ObLobLocatorHelper()
 
 int ObLobLocatorHelper::init(const ObTableScanParam &scan_param,
                              const ObStoreCtx &ctx,
-                             const share::ObLSID &ls_id,
                              const int64_t snapshot_version)
 {
   int ret = OB_SUCCESS;
@@ -63,15 +62,13 @@ int ObLobLocatorHelper::init(const ObTableScanParam &scan_param,
     ret = OB_INVALID_ARGUMENT;
     STORAGE_LOG(WARN, "Invalid argument to init ObLobLocatorHelper", K(ret), K(table_param), K(snapshot_version));
   } else {
-    if (OB_UNLIKELY(!table_param.enable_lob_locator_v2())
-        && OB_UNLIKELY(!lib::is_oracle_mode() || is_sys_table(table_param.get_table_id()))) {
-      // only oracle mode user table support lob locator if lob locator v2 not enabled
+    if (OB_UNLIKELY(!table_param.enable_lob_locator_v2())) {
+      // LOB locator v2 is required in MySQL-only mode.
       ret = OB_ERR_UNEXPECTED;
       STORAGE_LOG(WARN, "Unexpected tenant mode to init ObLobLocatorHelper", K(ret), K(table_param));
     } else {
       table_id_ = table_param.get_table_id();
       tablet_id_ = scan_param.tablet_id_.id();
-      ls_id_ = ls_id.id();
       enable_locator_v2_ = table_param.enable_lob_locator_v2();
       scan_flag_ = scan_param.scan_flag_;
       tx_seq_base_ = scan_param.tx_seq_base_;
@@ -95,7 +92,6 @@ int ObLobLocatorHelper::init(const ObTableScanParam &scan_param,
 int ObLobLocatorHelper::init(const uint64_t table_id,
                              const uint64_t tablet_id,
                              const ObStoreCtx &ctx,
-                             const share::ObLSID &ls_id,
                              const int64_t snapshot_version)
 {
   int ret = OB_SUCCESS;
@@ -104,14 +100,13 @@ int ObLobLocatorHelper::init(const uint64_t table_id,
     STORAGE_LOG(WARN, "ObLobLocatorHelper init twice", K(ret), K(*this));
   } else if (OB_UNLIKELY(snapshot_version <= 0)) {
     ret = OB_INVALID_ARGUMENT;
-    STORAGE_LOG(WARN, "Invalid argument to init ObLobLocatorHelper", K(ret), K(ls_id), K(snapshot_version));
-  } else if (OB_FAIL(tx_read_snapshot_.build_snapshot_for_lob(ctx.mvcc_acc_ctx_.snapshot_, ls_id))) {
-    STORAGE_LOG(WARN, "build_snapshot_for_lob fail", K(ret), K(ls_id), K(snapshot_version), K(ctx.mvcc_acc_ctx_.snapshot_));
+    STORAGE_LOG(WARN, "Invalid argument to init ObLobLocatorHelper", K(ret), K(snapshot_version));
+  } else if (OB_FAIL(tx_read_snapshot_.build_snapshot_for_lob(ctx.mvcc_acc_ctx_.snapshot_))) {
+    STORAGE_LOG(WARN, "build_snapshot_for_lob fail", K(ret), K(snapshot_version), K(ctx.mvcc_acc_ctx_.snapshot_));
   } else {
     // table id is only used to determine if it is a systable, this interface created locator will not construct a real rowid
     table_id_ = table_id;
     tablet_id_ = tablet_id;
-    ls_id_ = ls_id.id();
     enable_locator_v2_ = true; // must be called en locator v2 enabled
     is_inited_ = true;
     is_access_index_ = false;
@@ -138,12 +133,9 @@ int ObLobLocatorHelper::fill_lob_locator(ObDatumRow &row,
   } else if (OB_ISNULL(col_descs = access_param.iter_param_.get_out_col_descs())) {
     ret = OB_ERR_UNEXPECTED;
     STORAGE_LOG(WARN, "Unexpected null col_descs", K(ret), K(access_param.iter_param_));
-  } else if (!lib::is_oracle_mode() || is_sys_table(access_param.iter_param_.table_id_)) {
+  } else {
     ret = OB_ERR_UNEXPECTED;
-    STORAGE_LOG(WARN, "Only oracle mode need build lob locator", K(ret));
-  } else if (OB_ISNULL(access_param.output_exprs_) || OB_ISNULL(access_param.get_op())) {
-    ret = OB_ERR_UNEXPECTED;
-    STORAGE_LOG(WARN, "output expr or op is null", K(ret), K(access_param));
+    STORAGE_LOG(WARN, "LOB locator build is unavailable without locator v2", K(ret));
   }
 
   return ret;
@@ -155,7 +147,7 @@ bool ObLobLocatorHelper::can_skip_build_mem_lob_locator(const common::ObString &
   const ObLobCommon *lob_common = reinterpret_cast<const ObLobCommon *>(payload.ptr());
   if (payload.length() == 0) {
     // do nothing
-  } else if (lob_common->in_row_ && lib::is_mysql_mode()) {
+  } else if (lob_common->in_row_) {
     // mysql mode inrow lob can skip build mem lob locator
     bret = true;
   }
@@ -187,10 +179,8 @@ int ObLobLocatorHelper::fill_lob_locator_v2(ObDatumRow &row,
       ObLobLocatorV2 locator;
       if (datum_meta.is_lob_storage()) {
         if (datum.is_null() || datum.is_nop()) {
-        // read sys table is changed to mysql mode for normal oracle tenant
-        // and that may return disk lob lob locator to jdbc
-        // and cause jdbc error because jdbc can not handle disk lob locator
-        // so sys table can not skip build mem lob locator
+        // Reading sys tables may return disk LOB locators to JDBC, which JDBC
+        // cannot handle, so sys tables cannot skip building memory LOB locators.
         } else if (! is_sys_table(access_param.iter_param_.table_id_) && can_skip_build_mem_lob_locator(datum.get_string())) {
         } else if (OB_FAIL(build_lob_locatorv2(locator,
                                                 datum.get_string(), 
@@ -262,7 +252,7 @@ int ObLobLocatorHelper::fuse_mem_lob_header(ObObj &def_obj, uint64_t col_id, boo
       int64_t payload_size = def_obj.get_string().length();
       payload_size += sizeof(ObLobCommon);
       // mysql inrow lobs & systable lobs do not have extern fields
-      bool has_extern = (lib::is_oracle_mode() && !is_systable);
+      bool has_extern = false;
       ObMemLobExternFlags extern_flags(has_extern);
       extern_flags.has_retry_info_ = 0; // default obj should only be inrow, no need retry info
       ObLobCommon lob_common;
@@ -270,7 +260,7 @@ int ObLobLocatorHelper::fuse_mem_lob_header(ObObj &def_obj, uint64_t col_id, boo
       int64_t read_snapshot_size = 0;
       ObString read_snapshot_data;
       if (extern_flags.has_read_snapshot_) {
-        read_snapshot_size = tx_read_snapshot_.get_serialize_size_for_lob(share::ObLSID(ls_id_), fb_snapshot_);
+        read_snapshot_size = tx_read_snapshot_.get_serialize_size_for_lob(fb_snapshot_);
       }
 
       int64_t full_loc_size = ObLobLocatorV2::calc_locator_full_len(extern_flags,
@@ -299,7 +289,7 @@ int ObLobLocatorHelper::fuse_mem_lob_header(ObObj &def_obj, uint64_t col_id, boo
           ObMemLobTxInfo tx_info(tx_read_snapshot_.version().get_val_for_tx(),
                                  tx_read_snapshot_.tx_id().get_id(),
                                  tx_read_snapshot_.tx_seq().cast_to_int());
-          ObMemLobLocationInfo location_info(tablet_id_, ls_id_, def_obj.get_collation_type());
+          ObMemLobLocationInfo location_info(tablet_id_, def_obj.get_collation_type());
           if (OB_FAIL(locator.set_table_info(table_id_, col_id))) { // ToDo: @gehao should be column idx
             STORAGE_LOG(WARN, "Lob: set table info failed", K(ret), K(table_id_), K(col_id));
           } else if (extern_flags.has_tx_info_ && OB_FAIL(locator.set_tx_info(tx_info))) {
@@ -311,8 +301,8 @@ int ObLobLocatorHelper::fuse_mem_lob_header(ObObj &def_obj, uint64_t col_id, boo
             int64_t pos = 0;
             if (OB_FAIL(locator.get_read_snapshot_data(read_snapshot_data))) {
               STORAGE_LOG(WARN, "Lob: get_read_snapshot_data failed", K(ret), K(locator));
-            } else if (OB_FAIL(tx_read_snapshot_.serialize_for_lob(share::ObLSID(ls_id_), fb_snapshot_,
-                read_snapshot_data.ptr(), read_snapshot_data.length(), pos))) {
+            } else if (OB_FAIL(tx_read_snapshot_.serialize_for_lob(fb_snapshot_,
+                read_snapshot_data.ptr(), read_snapshot_data.length(), pos))) { 
               STORAGE_LOG(WARN, "Lob: serialize_for_lob failed", K(ret), K(locator));
             }
           }
@@ -357,8 +347,8 @@ int ObLobLocatorHelper::build_lob_locatorv2(ObLobLocatorV2 &locator,
       // let lob obj force inrow for hash/cmp cannot handle error
       is_dst_inrow = true;
     }
-    // oracle user table lobs and mysql user table outrow lobs need extern.
-    bool has_extern = (!is_simple) && (lib::is_oracle_mode() || !is_dst_inrow);
+    // User table outrow LOBs need extern metadata.
+    bool has_extern = (!is_simple) && (!is_dst_inrow);
     ObMemLobExternFlags extern_flags(has_extern);
 
     bool padding_char_size = false;
@@ -394,7 +384,7 @@ int ObLobLocatorHelper::build_lob_locatorv2(ObLobLocatorV2 &locator,
     }
 
     if (OB_SUCC(ret) && extern_flags.has_read_snapshot_) {
-      read_snapshot_size = tx_read_snapshot_.get_serialize_size_for_lob(share::ObLSID(ls_id_), fb_snapshot_);
+      read_snapshot_size = tx_read_snapshot_.get_serialize_size_for_lob(fb_snapshot_);
     }
 
     int64_t full_loc_size = 0;
@@ -448,21 +438,17 @@ int ObLobLocatorHelper::build_lob_locatorv2(ObLobLocatorV2 &locator,
         // if scan with index, get data tablet id
         common::ObTabletID target_tablet_id(tablet_id_);
         if (is_access_index_) {
-          share::ObLSID tmp_ls_id(ls_id_);
-          ObLSHandle ls_handle;
+          ObLS *tenant_ls = nullptr;
           ObTabletHandle tablet_handle;
-          if (OB_FAIL(MTL(ObLSService *)->get_ls(tmp_ls_id, ls_handle, ObLSGetMod::STORAGE_MOD))) {
-            LOG_WARN("failed to get log stream", K(ret), K(ls_id_));
-          } else if (OB_ISNULL(ls_handle.get_ls())) {
-            ret = OB_ERR_UNEXPECTED;
-            LOG_ERROR("ls should not be null", K(ret));
-          } else if (OB_FAIL(ls_handle.get_ls()->get_tablet(target_tablet_id, tablet_handle))) {
+          if (OB_FAIL(share::g_mp->ls_service()->get_ls(tenant_ls))) {
+            LOG_WARN("failed to get log stream", K(ret));
+          } else if (OB_FAIL(tenant_ls->get_tablet(target_tablet_id, tablet_handle))) {
             LOG_WARN("fail to get tablet handle", K(ret), K(target_tablet_id));
           } else {
             target_tablet_id = tablet_handle.get_obj()->get_data_tablet_id();
           }
         }
-        ObMemLobLocationInfo location_info(target_tablet_id.id(), ls_id_, cs_type);
+        ObMemLobLocationInfo location_info(target_tablet_id.id(), cs_type);
         if (OB_FAIL(ret)) {
         } else if (has_extern && OB_FAIL(locator.set_table_info(table_id_, column_id))) { // should be column idx
           STORAGE_LOG(WARN, "Lob: set table info failed", K(ret), K(table_id_), K(column_id));
@@ -478,8 +464,8 @@ int ObLobLocatorHelper::build_lob_locatorv2(ObLobLocatorV2 &locator,
           int64_t pos = 0;
           if (OB_FAIL(locator.get_read_snapshot_data(read_snapshot_data))) {
             STORAGE_LOG(WARN, "Lob: get_read_snapshot_data failed", K(ret), K(locator));
-          } else if (OB_FAIL(tx_read_snapshot_.serialize_for_lob(share::ObLSID(ls_id_), fb_snapshot_,
-              read_snapshot_data.ptr(), read_snapshot_data.length(), pos))) {
+          } else if (OB_FAIL(tx_read_snapshot_.serialize_for_lob(fb_snapshot_,
+              read_snapshot_data.ptr(), read_snapshot_data.length(), pos))) { 
             STORAGE_LOG(WARN, "Lob: serialize_for_lob failed", K(ret), K(locator));
           }
         }
@@ -504,7 +490,7 @@ int ObLobLocatorHelper::build_lob_locatorv2(ObLobLocatorV2 &locator,
           } 
         } else if ((!is_src_inrow) && is_dst_inrow) { //src outrow, load to inrow result
           OB_ASSERT(payload.length() >= sizeof(ObLobCommon));
-          storage::ObLobManager* lob_mngr = MTL(storage::ObLobManager*);
+          storage::ObLobManager* lob_mngr = share::g_mp->lob_manager();
           ObString disk_loc_str;
           if (OB_FAIL(locator.get_disk_locator(disk_loc_str))) {
             STORAGE_LOG(WARN, "Lob: get disk locator failed", K(ret), K(column_id));
@@ -523,10 +509,9 @@ int ObLobLocatorHelper::build_lob_locatorv2(ObLobLocatorV2 &locator,
 
             // read full data to new locator
             // use tmp allocator for read lob col instead of batch level allocator
-            ObArenaAllocator tmp_lob_allocator(ObModIds::OB_LOB_READER, OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID());
+            ObArenaAllocator tmp_lob_allocator(ObModIds::OB_LOB_READER, OB_MALLOC_NORMAL_BLOCK_SIZE);
             ObLobAccessParam param;
             param.tx_desc_ = NULL;
-            param.ls_id_ = share::ObLSID(ls_id_);
             param.sql_mode_ = access_ctx.sql_mode_;
             param.tablet_id_ = ObTabletID(tablet_id_);
 

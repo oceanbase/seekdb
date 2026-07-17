@@ -20,7 +20,7 @@
 #include "sql/engine/expr/ob_expr_operator.h"
 #include "lib/container/ob_iarray.h"
 
-//see oracle doc Number Format Models: https://docs.oracle.com/cd/B19306_01/server.102/b14200/sql_elements004.htm
+// Number format model reference.
 
 namespace oceanbase
 {
@@ -196,7 +196,7 @@ struct OBNFMDesc
                 output_len_(0), zero_start_(-1),
                 zero_end_(-1), last_separator_(-1), elem_flag_(0), upper_case_flag_(0),
                 sign_appear_pos_(INVALID_POS), currency_appear_pos_(INVALID_POS),
-                elem_x_count_(0), nls_currency_(), iso_grouping_() {}
+                elem_x_count_(0), currency_symbol_(), iso_grouping_() {}
 
   int32_t digital_start_;                   // offset of the first digit
   int32_t digital_end_;                     // offset of the last digit
@@ -213,7 +213,7 @@ struct OBNFMDesc
   ElemPos sign_appear_pos_;                 // position the sign class appears
   ElemPos currency_appear_pos_;             // position the currency class appears
   int32_t elem_x_count_;                    // number of 'X'
-  common::ObString nls_currency_;
+  common::ObString currency_symbol_;
   common::ObString iso_grouping_;
 };
 
@@ -346,7 +346,7 @@ public:
                      char *buf, const int64_t len, int64_t &pos, bool is_tm) const;
   int get_integer_part_len(const common::ObString &num_str, int32_t &integer_part_len) const;
   int hex_to_num(const char c, int32_t &val) const;
-  int get_nls_currency(const ObSQLSessionInfo &session);
+  int get_currency_symbol(const ObSQLSessionInfo &session);
   int get_iso_grouping(const ObSQLSessionInfo &session);
   int remove_leading_zero(char *buf, int64_t &offset);
   int process_fillmode(char *buf, const int64_t buf_len, int64_t &pos) const;

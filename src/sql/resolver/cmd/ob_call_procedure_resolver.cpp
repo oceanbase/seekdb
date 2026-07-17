@@ -37,10 +37,10 @@ int ObCallProcedureResolver::check_param_expr_legal(ObRawExpr *param)
       LOG_USER_ERROR(OB_NOT_SUPPORTED, "subqueries or stored function calls here");
     } else if (T_FUN_SYS_PL_SEQ_NEXT_VALUE == param->get_expr_type()) {
       ret = OB_NOT_SUPPORTED;
-      LOG_USER_ERROR(OB_NOT_SUPPORTED, "OBE-06576 : not a valid function or procedure name");
+      LOG_USER_ERROR(OB_NOT_SUPPORTED, "not a valid function or procedure name");
     } /* else if (T_OP_GET_PACKAGE_VAR == param->get_expr_type()) {
       ret = OB_NOT_SUPPORTED;
-      LOG_USER_ERROR(OB_NOT_SUPPORTED, "PLS-221: not procedure or not defined!");
+      LOG_USER_ERROR(OB_NOT_SUPPORTED, "not procedure or not defined!");
     } */
     for (int64_t i = 0; OB_SUCC(ret) && i < param->get_param_count(); ++i) {
       OZ (check_param_expr_legal(param->get_param_expr(i)));
@@ -188,7 +188,7 @@ int ObCallProcedureResolver::resolve_cparam_with_assign(const ParseNode *param_n
       name_node = param_node->children_[0]->children_[2];
     } else {
       ret = OB_ERR_CALL_WRONG_ARG;
-      LOG_WARN("PLS-00306: wrong number or types of arguments in call", K(ret));
+      LOG_WARN("wrong number or types of arguments in call", K(ret));
       LOG_USER_ERROR(OB_ERR_CALL_WRONG_ARG, routine_info->get_routine_name().length(),
                     routine_info->get_routine_name().ptr());
     }
@@ -321,12 +321,10 @@ int ObCallProcedureResolver::resolve(const ParseNode &parse_tree)
   int ret = OB_SUCCESS;
   ObCallProcedureStmt *stmt = NULL;
   ParseNode *name_node = parse_tree.children_[0];
-  ParseNode *dblink_node = NULL;
   ParseNode *params_node = parse_tree.children_[1];
   ObString db_name;
   ObString package_name;
   ObString sp_name;
-  ObString dblink_name;
   ObCallProcedureInfo *call_proc_info = NULL;
   const ObRoutineInfo *proc_info = NULL;
   if (OB_ISNULL(schema_checker_) || OB_ISNULL(session_info_)) {
@@ -354,8 +352,7 @@ int ObCallProcedureResolver::resolve(const ParseNode &parse_tree)
     }
     int64_t compile_start = ObTimeUtility::current_time();
     OZ (ObCacheObjectFactory::alloc(stmt->get_cacheobj_guard(),
-                                  ObLibCacheNameSpace::NS_CALLSTMT,
-                                  session_info_->get_effective_tenant_id()));
+                                  ObLibCacheNameSpace::NS_CALLSTMT));
     OX (call_proc_info = static_cast<ObCallProcedureInfo*>(stmt->get_cacheobj_guard().get_cache_obj()));
     CK (OB_NOT_NULL(call_proc_info));
     // Wait for sys package to be loaded if not ready yet
@@ -365,13 +362,12 @@ int ObCallProcedureResolver::resolve(const ParseNode &parse_tree)
       if (T_SP_ACCESS_NAME != name_node->type_) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("Invalid procedure name node", K(name_node->type_), K(ret));
-      } else if (OB_ISNULL(dblink_node)) {
+      } else {
         if (OB_FAIL(ObResolverUtils::resolve_sp_access_name(*schema_checker_,
-                                                            session_info_->get_effective_tenant_id(),
                                                             session_info_->get_database_name(),
                                                             *name_node,
                                                             db_name, package_name, sp_name,
-                                                            dblink_name))) {
+                                                            nullptr))) {
           LOG_WARN("resolve sp name failed", K(ret));
         } else if (db_name.empty() && session_info_->get_database_name().empty()) {
           ret = OB_ERR_NO_DB_SELECTED;
@@ -395,7 +391,6 @@ int ObCallProcedureResolver::resolve(const ParseNode &parse_tree)
         LOG_WARN("failed to resolve param exprs", K(ret));
       } else if (OB_FAIL(ObResolverUtils::get_routine(*params_.package_guard_,
                                                       params_,
-                                                      (*session_info_).get_effective_tenant_id(),
                                                       (*session_info_).get_database_name(),
                                                       db_name,
                                                       package_name,
@@ -403,7 +398,6 @@ int ObCallProcedureResolver::resolve(const ParseNode &parse_tree)
                                                       ROUTINE_PROCEDURE_TYPE,
                                                       expr_params,
                                                       proc_info,
-                                                      dblink_name,
                                                       &(call_proc_info->get_allocator())))) {
         LOG_WARN("failed to get routine info", K(ret), K(db_name), K(package_name), K(sp_name));
       } else if (OB_ISNULL(proc_info)) {
@@ -411,7 +405,7 @@ int ObCallProcedureResolver::resolve(const ParseNode &parse_tree)
         LOG_WARN("proc info is null", K(ret), K(db_name), K(package_name), K(sp_name), K(proc_info));
       } else if (proc_info->has_accessible_by_clause()) {
         ret = OB_ERR_MISMATCH_SUBPROGRAM;
-        LOG_WARN("PLS-00263: mismatch between string on a subprogram specification and body",
+        LOG_WARN("mismatch between string on a subprogram specification and body",
                 K(ret), KPC(proc_info));
       }
       if (OB_SUCC(ret) && proc_info->is_udt_routine() && !proc_info->is_udt_static_routine()) {
@@ -427,12 +421,12 @@ int ObCallProcedureResolver::resolve(const ParseNode &parse_tree)
         obj_version.object_id_ = proc_info->get_routine_id();
         obj_version.object_type_ = DEPENDENCY_PROCEDURE;
         obj_version.version_ = proc_info->get_schema_version();
-        int64_t tenant_id = session_info_->get_effective_tenant_id();
+        
         int64_t tenant_schema_version = OB_INVALID_VERSION;
         int64_t sys_schema_version = OB_INVALID_VERSION;
         CK (OB_NOT_NULL(schema_checker_->get_schema_mgr()));
-        OZ (schema_checker_->get_schema_mgr()->get_schema_version(tenant_id, tenant_schema_version));
-        OZ (schema_checker_->get_schema_mgr()->get_schema_version(OB_SYS_TENANT_ID, sys_schema_version));
+        OZ (schema_checker_->get_schema_mgr()->get_schema_version(tenant_schema_version));
+        OZ (schema_checker_->get_schema_mgr()->get_schema_version(sys_schema_version));
         OX (call_proc_info->set_tenant_schema_version(tenant_schema_version));
         OX (call_proc_info->set_sys_schema_version(sys_schema_version));
         OZ (deps.push_back(obj_version));
@@ -477,8 +471,7 @@ int ObCallProcedureResolver::resolve(const ParseNode &parse_tree)
         if (OB_SUCC(ret)) {
           if (param_info->is_out_sp_param() || param_info->is_inout_sp_param()) {
             const ObRawExpr* param = params.at(i);
-            if (lib::is_mysql_mode()
-                && param->get_expr_type() != T_OP_GET_USER_VAR
+            if (param->get_expr_type() != T_OP_GET_USER_VAR
                 && param->get_expr_type() != T_OP_GET_SYS_VAR
                 && !(param->get_expr_type() == T_QUESTIONMARK && params_.is_prepare_protocol_)) {
               ret = OB_ER_SP_NOT_VAR_ARG;
@@ -502,12 +495,8 @@ int ObCallProcedureResolver::resolve(const ParseNode &parse_tree)
               LOG_WARN("not supported other type as out parameter except udt", K(ret), K(pl_type.is_user_type()));
               LOG_USER_ERROR(OB_NOT_SUPPORTED, "other complex type as out parameter except user define type");
             } else {
-              // no need to response parameters for client_non_standard when user/sys variable
-              bool is_client_out_param =
-                  !(lib::is_mysql_mode()
-                    && params_.session_info_->client_non_standard()
-                    && (param->get_expr_type() == T_OP_GET_USER_VAR
-                        || param->get_expr_type() == T_OP_GET_SYS_VAR));
+              const bool is_client_out_param =
+                  (param->get_expr_type() == T_QUESTIONMARK && params_.is_prepare_protocol_);
               OZ (call_proc_info->add_out_param(i,
                                                 param_info->get_mode(),
                                                 param_info->get_param_name(),
@@ -526,9 +515,8 @@ int ObCallProcedureResolver::resolve(const ParseNode &parse_tree)
     OZ (call_proc_info->final_expression(params, session_info_, schema_checker_->get_schema_mgr()));
     OX (stmt->set_call_proc_info(call_proc_info));
     int64_t compile_end = ObTimeUtility::current_time();
-    if (params_.is_execute_call_stmt_ 
-        && 0 != params_.cur_sql_.length()
-        && NULL == stmt->get_dblink_routine_info()) {
+    if (params_.is_execute_call_stmt_
+        && 0 != params_.cur_sql_.length()) {
       if (NULL != params_.param_list_) {
         OZ (call_proc_info->set_params_info(*params_.param_list_));
       }

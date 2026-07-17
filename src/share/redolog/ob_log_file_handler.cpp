@@ -30,8 +30,7 @@ ObLogFileHandler::ObLogFileHandler()
     file_id_(OB_INVALID_FILE_ID),
     io_fd_(),
     file_group_(),
-    file_size_(0),
-    tenant_id_(OB_INVALID_TENANT_ID)
+    file_size_(0)
 {
 }
 
@@ -42,8 +41,7 @@ ObLogFileHandler::~ObLogFileHandler()
 
 int ObLogFileHandler::init(
     const char *log_dir,
-    int64_t file_size,
-    const uint64_t tenant_id)
+    int64_t file_size)
 {
   int ret = OB_SUCCESS;
   if (IS_INIT) {
@@ -53,7 +51,6 @@ int ObLogFileHandler::init(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid log dir", K(ret), KP(log_dir));
   } else {
-    tenant_id_ = tenant_id;
     log_dir_ = log_dir;
     file_size_ = file_size;
   }
@@ -231,8 +228,9 @@ int ObLogFileHandler::inner_read(const ObIOFd &io_fd, void *buf, const int64_t s
     int cnt =0;
     while (OB_SUCC(ret) && read_sz < size && cnt++ < retry_cnt) {
       ObIOInfo io_info;
-      io_info.tenant_id_ = tenant_id_;
+      
       io_info.fd_ = io_fd;
+      
       io_info.fd_.device_handle_ = &LOCAL_DEVICE_INSTANCE;
       io_info.offset_ = offset + read_sz;
       io_info.size_ = size - read_sz;
@@ -319,8 +317,9 @@ int ObLogFileHandler::normal_retry_write(void *buf, int64_t size, int64_t offset
     do {
       ObIOInfo io_info;
       io_info.flag_.set_write();
-      io_info.tenant_id_ = tenant_id_;
+      
       io_info.fd_ = io_fd_;
+      
       io_info.fd_.device_handle_ = &LOCAL_DEVICE_INSTANCE;
       io_info.offset_ = offset;
       io_info.size_ = size;

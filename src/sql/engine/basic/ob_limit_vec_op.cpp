@@ -204,7 +204,7 @@ int ObLimitVecOp::inner_get_next_batch(const int64_t max_row_cnt)
                 LOG_WARN("failed to deep copy limit last rows", K(ret));
               }
             }
-          } else if (OB_UNLIKELY(limit_ != -1 /*limit=-1 means no limit in oracle mode*/
+          } else if (OB_UNLIKELY(limit_ != -1 /* -1 means no limit */
                                  && output_cnt_ > limit_)) {
             // Notice: here is the error hanlding branch
             // Child branch should NOT return rows more than batch_cnt.
@@ -368,7 +368,7 @@ int ObLimitVecOp::convert_limit_percent()
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("get invalid child op row count", K(tot_count), K(ret));
     } else if (percent < 100) {
-      //Compatible with oracle, rounded up
+      // Round up fractional percentage results.
       int64_t percent_int64 = static_cast<int64_t>(percent);
       int64_t offset = (tot_count * percent / 100 - tot_count * percent_int64 / 100) > 0 ? 1 : 0;
       limit_ = tot_count * percent_int64 / 100 +  offset;

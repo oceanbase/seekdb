@@ -103,7 +103,6 @@ static int ob_fallocate(int fd, int, int64_t, int64_t len) {
 static int ob_ftruncate(int fd, int64_t len) {
   return _chsize_s(fd, len) == 0 ? 0 : -1;
 }
-#define ftruncate ob_ftruncate
 static ssize_t ob_pwrite(int fd, const void *buf, size_t count, int64_t offset) {
   long long prev = _lseeki64(fd, 0, SEEK_CUR);
   _lseeki64(fd, offset, SEEK_SET);
@@ -111,7 +110,6 @@ static ssize_t ob_pwrite(int fd, const void *buf, size_t count, int64_t offset) 
   _lseeki64(fd, prev, SEEK_SET);
   return written;
 }
-#define pwrite ob_pwrite
 static ssize_t ob_pread(int fd, void *buf, size_t count, int64_t offset) {
   long long prev = _lseeki64(fd, 0, SEEK_CUR);
   _lseeki64(fd, offset, SEEK_SET);
@@ -119,7 +117,6 @@ static ssize_t ob_pread(int fd, void *buf, size_t count, int64_t offset) {
   _lseeki64(fd, prev, SEEK_SET);
   return nread;
 }
-#define pread ob_pread
 #else
 #include <unistd.h>
 #endif
@@ -422,12 +419,9 @@ int GetBlockCountFunctor::func(const dirent *entry)
     PALF_LOG(WARN, "invalid args", K(ret), KP(entry));
   } else {
     const char *entry_name = entry->d_name;
-		// NB: if there is '0123' or 'xxx.flashback' in log directory,
-		// restart will be failed, the solution is that read block.
-    if (false == is_number(entry_name) && false == is_flashback_block(entry_name)) {
+    if (false == is_number(entry_name)) {
       ret = OB_ERR_UNEXPECTED;
       PALF_LOG(WARN, "this is block is not used for palf!!!", K(ret), K(entry_name));
-      // do nothing, skip invalid block like tmp
     } else {
       count_ ++;
     }
@@ -443,73 +437,18 @@ int TrimLogDirectoryFunctor::func(const dirent *entry)
     PALF_LOG(WARN, "invalid args", K(ret), KP(entry));
   } else {
     const char *entry_name = entry->d_name;
-    bool str_is_number = is_number(entry_name);
-    bool str_is_flashback_block = is_flashback_block(entry_name);
-    if (false == str_is_number && false == str_is_flashback_block) {
+    if (false == is_number(entry_name)) {
       ret = OB_ERR_UNEXPECTED;
       PALF_LOG(WARN, "this is block is not used for palf!!!", K(ret), K(entry_name));
-      // do nothing, skip invalid block like tmp
     } else {
-      if (true == str_is_flashback_block 
-        && OB_FAIL(rename_flashback_to_normal_(entry_name))) {
-        PALF_LOG(ERROR, "rename_flashback_to_normal failed", K(ret), K(dir_), K(entry_name));
+      uint32_t block_id = static_cast<uint32_t>(strtol(entry->d_name, nullptr, 10));
+      if (LOG_INVALID_BLOCK_ID == min_block_id_ || block_id < min_block_id_) {
+        min_block_id_ = block_id;
       }
-      if (OB_SUCC(ret)) {
-        uint32_t block_id = static_cast<uint32_t>(strtol(entry->d_name, nullptr, 10));
-        if (LOG_INVALID_BLOCK_ID == min_block_id_ || block_id < min_block_id_) {
-          min_block_id_ = block_id;
-        }
-        if (LOG_INVALID_BLOCK_ID == max_block_id_ || block_id > max_block_id_) {
-          max_block_id_ = block_id;
-        }
+      if (LOG_INVALID_BLOCK_ID == max_block_id_ || block_id > max_block_id_) {
+        max_block_id_ = block_id;
       }
     }
-  }
-  return ret;
-}
-
-int TrimLogDirectoryFunctor::rename_flashback_to_normal_(const char *file_name)
-{
-  int ret = OB_SUCCESS;
-  int dir_fd = -1;
-  char normal_file_name[OB_MAX_FILE_NAME_LENGTH] = {'\0'};
-  MEMCPY(normal_file_name, file_name, strlen(file_name) - strlen(FLASHBACK_SUFFIX));
-  const int64_t SLEEP_TS_US = 10 * 1000;
-  if (-1 == (dir_fd = open_directory(dir_))) {
-    ret = convert_sys_errno();
-  } else if (OB_FAIL(try_to_remove_block_(dir_fd, normal_file_name))) {
-    PALF_LOG(ERROR, "try_to_remove_block_ failed", K(file_name), K(normal_file_name));
-  } else if (OB_FAIL(renameat_with_retry(dir_fd, file_name, dir_fd, normal_file_name))) {
-    PALF_LOG(ERROR, "renameat_with_retry failed", K(file_name), K(normal_file_name));
-  } else {}
-  if (-1 != dir_fd) {
-    ::close(dir_fd);
-  }
-
-  return ret;
-}
-
-int TrimLogDirectoryFunctor::try_to_remove_block_(const int dir_fd, const char *file_name)
-{
-  int ret = OB_SUCCESS;
-  int fd = -1;
-  if (-1 == (fd = ::openat(dir_fd, file_name, LOG_READ_FLAG))) {
-    ret = convert_sys_errno();
-  }
-  // if file not exist, return OB_SUCCESS;
-  if (OB_FAIL(ret)) {
-    if (OB_NO_SUCH_FILE_OR_DIRECTORY == ret) {
-      ret = OB_SUCCESS;
-      PALF_LOG(INFO, "before rename flashback to normal and after delete normal file, restart!!!", K(file_name));
-    } else {
-      PALF_LOG(ERROR, "open file failed", K(file_name)); 
-    }
-  } else if (OB_FAIL(log_block_pool_->remove_block_at(dir_fd, file_name))) {
-    PALF_LOG(ERROR, "remove_block_at failed", K(dir_fd), K(file_name));
-  }
-  if (-1 != fd && -1 == ::close(fd)) {
-    ret = convert_sys_errno();
-    PALF_LOG(ERROR, "close fd failed", K(file_name));
   }
   return ret;
 }
@@ -536,7 +475,7 @@ int reuse_block_at(const int dir_fd, const char *block_path)
       int64_t remain = PALF_PHY_BLOCK_SIZE;
       while (OB_SUCC(ret) && remain > 0) {
         int64_t to_write = (remain > 64 * 1024) ? 64 * 1024 : remain;
-        ssize_t n = pwrite(fd, zero_buf, to_write, written);
+        ssize_t n = ob_pwrite(fd, zero_buf, to_write, written);
         if (n != to_write) {
           ret = convert_sys_errno();
           PALF_LOG(ERROR, "pwrite failed", K(ret), K(block_path));

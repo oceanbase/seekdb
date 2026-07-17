@@ -22,7 +22,6 @@
 #include "lib/lock/ob_thread_cond.h"
 #include "lib/thread/thread_pool.h"
 #include "lib/container/ob_se_array.h"
-#include "lib/thread/thread_mgr_interface.h"
 
 namespace oceanbase
 {
@@ -100,7 +99,7 @@ public:
   static const int64_t MAX_THREAD_NUM = 1024;
   ObSimpleDynamicThreadPool()
     : has_bind_(false), min_thread_cnt_(-1), max_thread_cnt_(-1),
-      name_("unknown"), tenant_id_(OB_SERVER_TENANT_ID), ref_cnt_(0)
+      name_("unknown"), ref_cnt_(0)
   {}
   virtual ~ObSimpleDynamicThreadPool();
   void inc_ref() { ATOMIC_INC(&ref_cnt_); }
@@ -113,27 +112,27 @@ public:
   virtual int64_t worker_count() const = 0;
   virtual void notify_stop() {}
 
-  TO_STRING_KV(KCSTRING_(name), KP(this), K_(min_thread_cnt), K_(max_thread_cnt), K_(tenant_id));
+  TO_STRING_KV(KCSTRING_(name), KP(this), K_(min_thread_cnt), K_(max_thread_cnt));
 
   bool has_bind_;
   int64_t min_thread_cnt_;
   int64_t max_thread_cnt_;
   const char* name_;
-  int64_t tenant_id_;
+  
 private:
   int64_t ref_cnt_;
 };
 
-class ObSimpleThreadPoolDynamicMgr : public lib::TGRunnable {
+class ObSimpleThreadPoolDynamicMgr : public lib::ThreadPool {
 public:
-  static const int64_t CHECK_INTERVAL_US = 200 * 1000;
-  ObSimpleThreadPoolDynamicMgr() : pool_list_(), pool_list_lock_(), is_inited_(false) {}
+  static const int64_t CHECK_INTERVAL_US = 3 * 1000 * 1000;
+  ObSimpleThreadPoolDynamicMgr() : lib::ThreadPool(1), pool_list_(), pool_list_lock_(), is_inited_(false) {}
   virtual ~ObSimpleThreadPoolDynamicMgr();
   int init();
   void stop();
   void wait();
   void destroy();
-  void run1();
+  void run1() override;
   int bind(ObSimpleDynamicThreadPool *pool);
   int unbind(ObSimpleDynamicThreadPool *pool);
   static ObSimpleThreadPoolDynamicMgr &get_instance();
@@ -146,15 +145,8 @@ private:
 class ObResetThreadTenantIdGuard {
 public:
   DISABLE_COPY_ASSIGN(ObResetThreadTenantIdGuard);
-  ObResetThreadTenantIdGuard() {
-    tenant_id_ = ob_get_tenant_id();
-    ob_get_tenant_id() = 0;
-  }
-  ~ObResetThreadTenantIdGuard() {
-    ob_get_tenant_id() = tenant_id_;
-  }
-private:
-  int64_t tenant_id_;
+  ObResetThreadTenantIdGuard() = default;
+  ~ObResetThreadTenantIdGuard() = default;
 };
 }
 }

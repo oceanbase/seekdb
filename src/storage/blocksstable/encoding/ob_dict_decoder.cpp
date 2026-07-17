@@ -750,7 +750,6 @@ bool ObDictDecoder::fast_string_equal_valid(
 {
   return 0 == ref_datum.len_
            && col_ctx.obj_meta_.is_varying_len_char_type()
-           && lib::is_mysql_mode()
            && !meta_header_->is_sorted_dict()
            && !meta_header_->is_fix_length_dict()
            && meta_header_->count_ > 0;
@@ -1047,7 +1046,7 @@ int ObDictDecoder::fast_eq_ne_operator(
                      pd_filter_info.start_ + pd_filter_info.count_);
       }
     } else {
-      raw_compare_function_with_null cmp_funtion = RawCompareFunctionFactory::instance().get_cs_cmp_function_with_null(
+      raw_compare_function_with_null cmp_funtion = RawCompareFunctionFactory::instance().get_cmp_function_with_null(
                                                      fix_len_tag,
                                                      filter.get_op_type());
       if (OB_ISNULL(cmp_funtion)) {
@@ -1440,7 +1439,7 @@ int ObDictDecoder::fast_cmp_ref_and_set_res(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("Invalid argument", K(ret), KP(col_data), K(meta_header_->row_ref_size_));
   } else {
-    raw_compare_function_with_null cmp_funtion = RawCompareFunctionFactory::instance().get_cs_cmp_function_with_null(
+    raw_compare_function_with_null cmp_funtion = RawCompareFunctionFactory::instance().get_cmp_function_with_null(
                                                    static_cast<int32_t>(meta_header_->row_ref_size_ - 1),
                                                    op_type);
     if (OB_ISNULL(cmp_funtion)) {

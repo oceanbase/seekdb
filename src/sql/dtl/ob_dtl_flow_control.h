@@ -87,7 +87,7 @@ class ObDtlFlowControl
 {
 public:
   ObDtlFlowControl() :
-  tenant_id_(OB_INVALID_ID), timeout_ts_(0), communicate_flag_(0),
+  timeout_ts_(0), communicate_flag_(0),
   compressor_type_(common::ObCompressorType::NONE_COMPRESSOR), is_init_(false), block_ch_cnt_(0),
   total_memory_size_(0), total_buffer_cnt_(0), accumulated_blocked_cnt_(0), blocks_(), chans_(), drain_ch_cnt_(0),
   dfo_key_(), op_metric_(nullptr),
@@ -99,7 +99,7 @@ public:
   bool is_all_channel_act();
   bool is_init() { return is_init_; }
 
-  OB_INLINE uint64_t get_tenant_id() const { return tenant_id_; }
+  
   OB_INLINE int64_t get_timeout_ts() const { return timeout_ts_; }
   OB_INLINE void set_timeout_ts(int64_t timeout_ts) { timeout_ts_ = timeout_ts; }
 
@@ -168,7 +168,7 @@ public:
     }
     return ret;
   }
-  virtual int init(uint64_t tenant_id, int64_t chan_cnt);
+  virtual int init(int64_t chan_cnt);
   virtual void destroy() {
     chans_.reset();
     blocks_.reset();
@@ -225,7 +225,6 @@ private:
   static const int64_t THRESHOLD_SIZE = 2097152;
   static const int64_t MAX_BUFFER_CNT = 3;
   static const int64_t MAX_BUFFER_FACTOR = 2;
-  uint64_t tenant_id_;
   int64_t timeout_ts_;
   // Identify whether it is transmit, receive, qc, etc.
   int communicate_flag_;

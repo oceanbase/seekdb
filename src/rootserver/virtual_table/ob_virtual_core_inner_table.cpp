@@ -66,45 +66,39 @@ int ObVritualCoreInnerTable::inner_open()
 {
   int ret = OB_SUCCESS;
   const ObTableSchema *table_schema = NULL;
-  ObArray<uint64_t> tenant_ids;
   if (!inited_) {
     ret = OB_NOT_INIT;
     LOG_WARN("not init", KR(ret));
   } else if (NULL == allocator_) {
     ret = OB_NOT_INIT;
     LOG_WARN("not init, allocator is null", KR(ret));
-  } else if (OB_FAIL(schema_guard_->get_tenant_ids(tenant_ids))) {
-    LOG_WARN("fail to get tenant_ids", KR(ret), K_(effective_tenant_id));
-  } else if (OB_FAIL(schema_guard_->get_table_schema(
-             effective_tenant_id_, table_id_, table_schema))) {
+  } else if (OB_FAIL(schema_guard_->get_table_schema( table_id_, table_schema))) {
     LOG_WARN("fail to get table schema", KR(ret), K_(table_id));
   } else if (NULL == table_schema) {
     ret = OB_TABLE_NOT_EXIST;
     LOG_WARN("get_table_schema failed", KT_(table_id), KR(ret));
   } else {
-    for (int64_t i = 0; OB_SUCC(ret) && i < tenant_ids.count(); i++) {
-      const uint64_t tenant_id = tenant_ids.at(i);
+    {
+      
       const ObSimpleTenantSchema *tenant = NULL;
-      if (!is_sys_tenant(effective_tenant_id_) && effective_tenant_id_ != tenant_id) {
-        // user tenant can see its own data
-      } else if (OB_FAIL(schema_guard_->get_tenant_info(tenant_id, tenant))) {
-        LOG_WARN("fail to get tenant info", KR(ret), K(tenant_id));
+      if (OB_FAIL(schema_guard_->get_tenant_info(tenant))) {
+        LOG_WARN("fail to get tenant info", KR(ret));
       } else if (OB_ISNULL(tenant) || !tenant->is_normal()) {
         // skip
       } else {
-        ObCoreTableProxy core_table(table_name_, *sql_proxy_, tenant_id);
+        ObCoreTableProxy core_table(table_name_, *sql_proxy_);
         if (OB_FAIL(core_table.load())) {
-          LOG_WARN("core_table load failed", KR(ret), K(tenant_id));
+          LOG_WARN("core_table load failed", KR(ret));
         } else {
           ObArray<Column> columns;
           while (OB_SUCC(ret) && OB_SUCC(core_table.next())) {
             columns.reuse();
-            if (OB_FAIL(get_full_row(tenant_id, table_schema, core_table, columns))) {
-              LOG_WARN("get_full_row failed", K(tenant_id), K(table_schema), KR(ret));
+            if (OB_FAIL(get_full_row(table_schema, core_table, columns))) {
+              LOG_WARN("get_full_row failed", K(table_schema), KR(ret));
             } else if (OB_FAIL(project_row(columns, cur_row_))) {
-              LOG_WARN("project_row failed", K(tenant_id), K(columns), KR(ret));
+              LOG_WARN("project_row failed", K(columns), KR(ret));
             } else if (OB_FAIL(scanner_.add_row(cur_row_))) {
-              LOG_WARN("add_row failed", K(tenant_id), K_(cur_row), KR(ret));
+              LOG_WARN("add_row failed", K_(cur_row), KR(ret));
             }
           } // end while
           if (OB_ITER_END == ret) {
@@ -136,9 +130,7 @@ int ObVritualCoreInnerTable::inner_get_next_row(ObNewRow *&row)
   return ret;
 }
 
-int ObVritualCoreInnerTable::get_full_row(
-    const uint64_t tenant_id,
-    const ObTableSchema *table,
+int ObVritualCoreInnerTable::get_full_row(const ObTableSchema *table,
     const ObCoreTableProxy &core_table,
     ObIArray<Column> &columns)
 {
@@ -185,9 +177,6 @@ int ObVritualCoreInnerTable::get_full_row(
           int64_t int_column = 0;
           if (OB_SUCCESS == (inner_ret = core_table.get_int(
               column_name, int_column))) {
-            if (0 == column_schema->get_column_name_str().case_compare("tenant_id")) {
-              int_column = tenant_id;
-            }
             if (ObIntType == column_schema->get_data_type()) {
               ADD_COLUMN(set_int, table, column_name, int_column, columns);
             } else if (ObTinyIntType == column_schema->get_data_type()) {

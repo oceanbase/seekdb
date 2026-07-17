@@ -28,7 +28,6 @@ class ObUpdateAutoincSequenceTask : public share::ObAsyncTask
 {
 public:
   ObUpdateAutoincSequenceTask(
-    const uint64_t tenant_id,
     const int64_t data_table_id,
     const int64_t dest_table_id,
     const int64_t schema_version,
@@ -42,7 +41,6 @@ public:
   virtual int64_t get_deep_copy_size() const override { return sizeof(*this); }
   virtual ObAsyncTask *deep_copy(char *buf, const int64_t buf_size) const override;
 private:
-  uint64_t tenant_id_;
   int64_t data_table_id_;
   int64_t dest_table_id_;
   int64_t schema_version_;
@@ -58,19 +56,17 @@ class ObModifyAutoincTask : public ObDDLTask
 public:
   ObModifyAutoincTask();
   virtual ~ObModifyAutoincTask() = default;
-  int init(const uint64_t tenant_id,
-           const int64_t task_id,
+  int init(const int64_t task_id,
            const int64_t table_id,
            const int64_t schema_version,
-           const int64_t consumer_group_id,
            const int32_t sub_task_trace_id,
-           const obrpc::ObAlterTableArg &alter_table_arg,
+           const obcall::ObAlterTableArg &alter_table_arg,
            const int64_t task_status = share::ObDDLTaskStatus::MODIFY_AUTOINC,
            const int64_t snapshot_version = 0);
   int init(const ObDDLTaskRecord &task_record);
   virtual int process() override;
   virtual int serialize_params_to_message(char *buf, const int64_t buf_size, int64_t &pos) const override;
-  virtual int deserialize_params_from_message(const uint64_t tenant_id, const char *buf, const int64_t buf_size, int64_t &pos) override;
+  virtual int deserialize_params_from_message(const char *buf, const int64_t buf_size, int64_t &pos) override;
   virtual int64_t get_serialize_param_size() const override;
   int notify_update_autoinc_finish(const uint64_t autoinc_val, const int ret_code);
 private:
@@ -87,7 +83,7 @@ private:
 private:
   static const int64_t OB_MODIFY_AUTOINC_TASK_VERSION = 1L; 
   common::TCRWLock lock_;
-  obrpc::ObAlterTableArg alter_table_arg_;
+  obcall::ObAlterTableArg alter_table_arg_;
   int64_t update_autoinc_job_ret_code_;
   int64_t update_autoinc_job_time_;
 };

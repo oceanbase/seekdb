@@ -16,9 +16,13 @@
 
 #pragma once
 
-#include "share/table/ob_table_load_row_array.h"
+#include "observer/table_load/ob_table_load_row_array.h"
+#include "storage/tablelock/ob_table_lock_rpc_struct.h"  // ObLockTableRequest(previously hidden behind a transitive include)
+#include "observer/table_load/ob_table_load_struct.h"  // ObTableLoadDDLParam(previously hidden behind a transitive include)
 #include "share/table/ob_table_load_define.h"
 #include "sql/engine/cmd/ob_load_data_utils.h"
+#include "observer/table_load/ob_table_load_struct.h"
+#include "storage/tablelock/ob_table_lock_rpc_struct.h"
 
 namespace oceanbase
 {
@@ -109,8 +113,7 @@ private:
   {
   public:
     StmtCtx()
-      : tenant_id_(OB_INVALID_TENANT_ID),
-        table_id_(OB_INVALID_ID),
+      : table_id_(OB_INVALID_ID),
         session_info_(nullptr),
         tx_desc_(nullptr),
         is_incremental_(false),
@@ -121,7 +124,7 @@ private:
     }
     void reset()
     {
-      tenant_id_ = OB_INVALID_TENANT_ID;
+      
       table_id_ = OB_INVALID_ID;
       ddl_param_.reset();
       session_info_ = nullptr;
@@ -133,7 +136,7 @@ private:
       has_added_tx_result_ = false;
     }
     bool is_started() const { return is_started_; }
-    TO_STRING_KV(K_(tenant_id),
+    TO_STRING_KV(
                  K_(table_id),
                  K_(ddl_param),
                  KP_(session_info),
@@ -144,7 +147,7 @@ private:
                  K_(is_started),
                  K_(has_added_tx_result));
   public:
-    uint64_t tenant_id_;
+    
     uint64_t table_id_;
     ObTableLoadDDLParam ddl_param_;
     sql::ObSQLSessionInfo *session_info_;

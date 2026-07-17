@@ -83,7 +83,7 @@ int ObLoadDataStorageInfo::parse_load_data_params(const char *storage_info)
     char *str = nullptr;
     char *saved_ptr = nullptr;
     ObArenaAllocator allocator("LoadDataTmp");
-    allocator.set_tenant_id(MTL_ID());
+    
     if (OB_ISNULL(str = static_cast<char *>(allocator.alloc(len)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("fail to alloc buf", KR(ret), K(len));

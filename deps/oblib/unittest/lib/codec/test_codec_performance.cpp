@@ -66,20 +66,6 @@ public:
       ObUniversalCompression *uc = new ObUniversalCompression();
       uc->set_compressor_type(ZSTD_1_3_8_COMPRESSOR);
       codec.reset(uc);
-    } else if (name == "LZ4_191") {
-      ObUniversalCompression *uc = new ObUniversalCompression();
-      uc->set_compressor_type(LZ4_191_COMPRESSOR);
-      codec.reset(uc);
-    } else if (name == "SNAPPY") {
-      ObUniversalCompression *uc = new ObUniversalCompression();
-      uc->set_compressor_type(SNAPPY_COMPRESSOR);
-      uc->set_allocator(alloc_);
-      codec.reset(uc);
-    } else if (name == "ZLIB") {
-      ObUniversalCompression *uc = new ObUniversalCompression();
-      uc->set_allocator(alloc_);
-      uc->set_compressor_type(LZ4_COMPRESSOR);
-      codec.reset(uc);
     }
     else {
       throw new std::logic_error("Unknown codec " + name);

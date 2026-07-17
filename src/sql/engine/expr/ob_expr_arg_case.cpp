@@ -28,7 +28,7 @@ namespace sql
 ObExprArgCase::ObExprArgCase(ObIAllocator &alloc)
     : ObExprOperator(alloc, T_OP_ARG_CASE,
                      N_ARG_CASE, MORE_THAN_ONE, VALID_FOR_GENERATED_COL, NOT_ROW_DIMENSION,
-                     INTERNAL_IN_MYSQL_MODE, INTERNAL_IN_ORACLE_MODE), need_cast_(true)
+                     INTERNAL_IN_MYSQL_MODE), need_cast_(true)
 {
   disable_operand_auto_cast();
 }
@@ -136,7 +136,6 @@ int ObExprArgCase::calc_result_typeN(ObExprResType &type,
                   tmp_res_type,
                   types_stack,
                   cond_type_count,
-                  false,
                   type_ctx,
                   FALSE, FALSE,
                   is_called_in_sql_))) {
@@ -145,7 +144,6 @@ int ObExprArgCase::calc_result_typeN(ObExprResType &type,
                          type,
                          types_stack + cond_type_count,
                          val_type_count,
-                         false,
                          type_ctx,
                          true, false,
                          is_called_in_sql_))) {

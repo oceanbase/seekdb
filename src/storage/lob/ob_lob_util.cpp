@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX STORAGE
 
 #include "ob_lob_util.h"
+#include "share/rc/ob_module_provider.h"
 #include "storage/tx/ob_trans_service.h"
 
 namespace oceanbase
@@ -47,8 +48,7 @@ void ObLobCharsetUtil::transform_query_result_charset(
   byte_len = ObCharset::charpos(coll_type, data + byte_st, len - byte_st, byte_len);
 }
 
-int ObInsertLobColumnHelper::start_trans(const share::ObLSID &ls_id,
-                                         const bool is_for_read,
+int ObInsertLobColumnHelper::start_trans(const bool is_for_read,
                                          const int64_t timeout_ts,
                                          ObTxDesc *&tx_desc)
 {
@@ -59,7 +59,7 @@ int ObInsertLobColumnHelper::start_trans(const share::ObLSID &ls_id,
   tx_param.isolation_ = transaction::ObTxIsolationLevel::RC;
   tx_param.timeout_us_ = std::max(static_cast<int64_t>(0), timeout_ts - ObTimeUtility::current_time());
 
-  ObTransService *txs = MTL(ObTransService*);
+  ObTransService *txs = share::g_mp->trans_service();
   if (OB_FAIL(txs->acquire_tx(tx_desc))) {
     LOG_WARN("fail to acquire tx", K(ret));
   } else if (OB_FAIL(txs->start_tx(*tx_desc, tx_param))) {
@@ -75,7 +75,7 @@ int ObInsertLobColumnHelper::end_trans(transaction::ObTxDesc *tx_desc,
   int ret = OB_SUCCESS;
   int tmp_ret = OB_SUCCESS;
   transaction::ObTxExecResult trans_result;
-  ObTransService *txs = MTL(ObTransService*);
+  ObTransService *txs = share::g_mp->trans_service();
 
   if (OB_ISNULL(tx_desc)) {
     ret = OB_INVALID_ARGUMENT;
@@ -90,7 +90,7 @@ int ObInsertLobColumnHelper::end_trans(transaction::ObTxDesc *tx_desc,
       ACTIVE_SESSION_FLAG_SETTER_GUARD(in_committing);
       if (OB_SUCCESS != (tmp_ret = txs->commit_tx(*tx_desc, timeout_ts))) {
         ret = tmp_ret;
-        LOG_WARN("fail commit trans", K(ret), KPC(tx_desc), K(timeout_ts));
+        LOG_ERROR("fail commit trans", K(ret), KPC(tx_desc), K(timeout_ts));
       }
     }
     if (OB_SUCCESS != (tmp_ret = txs->release_tx(*tx_desc))) {
@@ -102,22 +102,20 @@ int ObInsertLobColumnHelper::end_trans(transaction::ObTxDesc *tx_desc,
 }
 
 int ObInsertLobColumnHelper::insert_lob_column(ObIAllocator &allocator,
-                                               const share::ObLSID ls_id,
                                                const common::ObTabletID tablet_id,
                                                const ObObjType &obj_type,
                                                const ObCollationType &cs_type,
                                                const ObLobStorageParam &lob_storage_param,
                                                blocksstable::ObStorageDatum &datum,
                                                const int64_t timeout_ts,
-                                               const bool has_lob_header,
-                                               const uint64_t src_tenant_id)
+                                               const bool has_lob_header)
 {
   int ret = OB_SUCCESS;
   int tmp_ret = OB_SUCCESS;
 
   ObTxDesc *tx_desc = nullptr;
-  ObLobManager *lob_mngr = MTL(ObLobManager*);
-  ObTransService *txs = MTL(transaction::ObTransService*);
+  ObLobManager *lob_mngr = share::g_mp->lob_manager();
+  ObTransService *txs = share::g_mp->trans_service();
   ObTxReadSnapshot snapshot;
   if (OB_ISNULL(lob_mngr)) {
     ret = OB_ERR_UNEXPECTED;
@@ -146,20 +144,19 @@ int ObInsertLobColumnHelper::insert_lob_column(ObIAllocator &allocator,
         }
       }
     } else {
-      if (OB_FAIL(start_trans(ls_id, false/*is_for_read*/, timeout_ts, tx_desc))) {
+      if (OB_FAIL(start_trans(false/*is_for_read*/, timeout_ts, tx_desc))) {
         LOG_WARN("fail to get tx_desc", K(ret));
-      } else if (OB_FAIL(txs->get_ls_read_snapshot(*tx_desc, transaction::ObTxIsolationLevel::RC, ls_id, timeout_ts, snapshot))) {
+      } else if (OB_FAIL(txs->get_read_snapshot(*tx_desc, transaction::ObTxIsolationLevel::RC, timeout_ts, snapshot))) {
         LOG_WARN("fail to get snapshot", K(ret));
       } else {
         // 4.0 text tc compatiable
         ObLobAccessParam lob_param;
-        lob_param.src_tenant_id_ = src_tenant_id;
+        
         lob_param.tx_desc_ = tx_desc;
         if (OB_FAIL(lob_param.snapshot_.assign(snapshot))) {
           LOG_WARN("assign snapshot fail", K(ret));
         } else {
           lob_param.sql_mode_ = SMO_DEFAULT;
-          lob_param.ls_id_ = ls_id;
           lob_param.tablet_id_ = tablet_id;
           lob_param.coll_type_ = ObLobCharsetUtil::get_collation_type(obj_type, cs_type);
           lob_param.allocator_ = &allocator;
@@ -196,7 +193,6 @@ int ObInsertLobColumnHelper::insert_lob_column(ObIAllocator &allocator,
                                                ObIAllocator &lob_allocator,
                                                transaction::ObTxDesc *tx_desc,
                                                share::ObTabletCacheInterval &lob_id_geneator,
-                                               const share::ObLSID ls_id,
                                                const common::ObTabletID tablet_id,
                                                const common::ObTabletID lob_meta_tablet_id,
                                                const ObObjType &obj_type,
@@ -205,13 +201,12 @@ int ObInsertLobColumnHelper::insert_lob_column(ObIAllocator &allocator,
                                                blocksstable::ObStorageDatum &datum,
                                                const int64_t timeout_ts,
                                                const bool has_lob_header,
-                                               const uint64_t src_tenant_id,
                                                ObLobMetaWriteIter &iter)
 {
   int ret = OB_SUCCESS;
   int tmp_ret = OB_SUCCESS;
 
-  ObLobManager *lob_mngr = MTL(ObLobManager*);
+  ObLobManager *lob_mngr = share::g_mp->lob_manager();
   if (OB_ISNULL(lob_mngr)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("failed to get lob manager handle.", K(ret));
@@ -251,12 +246,11 @@ int ObInsertLobColumnHelper::insert_lob_column(ObIAllocator &allocator,
         }
       }
     } else {
-      ObTransService *txs = MTL(transaction::ObTransService*);
+      ObTransService *txs = share::g_mp->trans_service();
       ObLobAccessParam lob_param;
       lob_param.tx_desc_ = tx_desc;
       // lob_param.snapshot_ = snapshot;
       lob_param.sql_mode_ = SMO_DEFAULT;
-      lob_param.ls_id_ = ls_id;
       lob_param.tablet_id_ = tablet_id;
       lob_param.coll_type_ = ObLobCharsetUtil::get_collation_type(obj_type, collation_type);
       lob_param.allocator_ = &allocator;
@@ -269,7 +263,7 @@ int ObInsertLobColumnHelper::insert_lob_column(ObIAllocator &allocator,
       lob_param.inrow_threshold_ = lob_storage_param.inrow_threshold_;
       lob_param.is_index_table_ = lob_storage_param.is_index_table_;
       lob_param.main_table_rowkey_col_ = !lob_storage_param.is_index_table_ && lob_storage_param.is_rowkey_col_;
-      lob_param.src_tenant_id_ = src_tenant_id;
+      
       lob_param.set_tmp_allocator(&lob_allocator);
       if (!src.is_valid()) {
         ret = OB_ERR_UNEXPECTED;
@@ -285,7 +279,6 @@ int ObInsertLobColumnHelper::insert_lob_column(ObIAllocator &allocator,
 }
 
 int ObInsertLobColumnHelper::delete_lob_column(ObIAllocator &allocator,
-                                              const share::ObLSID ls_id,
                                               const common::ObTabletID tablet_id,
                                               const ObCollationType& collation_type,
                                               blocksstable::ObStorageDatum &datum,
@@ -296,8 +289,8 @@ int ObInsertLobColumnHelper::delete_lob_column(ObIAllocator &allocator,
   int tmp_ret = OB_SUCCESS;
 
   ObTxDesc *tx_desc = nullptr;
-  ObLobManager *lob_mngr = MTL(ObLobManager*);
-  ObTransService *txs = MTL(transaction::ObTransService*);
+  ObLobManager *lob_mngr = share::g_mp->lob_manager();
+  ObTransService *txs = share::g_mp->trans_service();
   ObTxReadSnapshot snapshot;
   if (OB_ISNULL(lob_mngr)) {
     ret = OB_ERR_UNEXPECTED;
@@ -311,9 +304,9 @@ int ObInsertLobColumnHelper::delete_lob_column(ObIAllocator &allocator,
     if (lob.has_inrow_data()) {
       // delete inrow lob no need to use the lob manager
     } else {
-      if (OB_FAIL(start_trans(ls_id, false/*is_for_read*/, timeout_ts, tx_desc))) {
+      if (OB_FAIL(start_trans(false/*is_for_read*/, timeout_ts, tx_desc))) {
         LOG_WARN("fail to get tx_desc", K(ret));
-      } else if (OB_FAIL(txs->get_ls_read_snapshot(*tx_desc, transaction::ObTxIsolationLevel::RC, ls_id, timeout_ts, snapshot))) {
+      } else if (OB_FAIL(txs->get_read_snapshot(*tx_desc, transaction::ObTxIsolationLevel::RC, timeout_ts, snapshot))) {
         LOG_WARN("fail to get snapshot", K(ret));
       } else {
         // 4.0 text tc compatiable

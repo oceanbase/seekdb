@@ -20,8 +20,8 @@
 #include "sql/das/iter/ob_das_iter_define.h"
 #include "sql/das/ob_das_attach_define.h"
 #include "sql/das/ob_das_scan_op.h"
-#include "share/domain_id/ob_domain_id.h"
-#include "share/vector_index/ob_vector_index_util.h"
+#include "sql/das/ob_domain_id.h"
+#include "observer/vector_index/ob_vector_index_util.h"
 
 using namespace oceanbase::common;
 
@@ -32,7 +32,6 @@ namespace sql
 
 ObDASDomainIdMergeIterParam::ObDASDomainIdMergeIterParam()
   : ObDASIterParam(DAS_ITER_DOMAIN_ID_MERGE),
-    rowkey_domain_ls_id_(),
     rowkey_domain_tablet_ids_(),
     data_table_iter_(nullptr),
     data_table_ctdef_(nullptr),
@@ -50,8 +49,7 @@ ObDASDomainIdMergeIterParam::~ObDASDomainIdMergeIterParam()
 bool ObDASDomainIdMergeIterParam::is_valid() const
 {
   bool bret = true;
-  bret = rowkey_domain_ls_id_.is_valid() &&
-         data_table_iter_ != nullptr &&
+  bret = data_table_iter_ != nullptr &&
          data_table_ctdef_ != nullptr &&
          data_table_rtdef_ != nullptr &&
          snapshot_ != nullptr &&
@@ -79,7 +77,6 @@ ObDASDomainIdMergeIter::ObDASDomainIdMergeIter()
     rowkey_domain_rtdefs_(),
     data_table_rtdef_(nullptr),
     rowkey_domain_tablet_ids_(),
-    rowkey_domain_ls_id_(),
     merge_memctx_(),
     is_need_multi_get_(false)
 {}
@@ -123,7 +120,6 @@ int ObDASDomainIdMergeIter::rescan()
     LOG_WARN("fail to rescan data table iter", K(ret), KPC(data_table_iter_));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < rowkey_domain_iters_.count(); i++) {
-      rowkey_domain_scan_params_.at(i)->ls_id_ = rowkey_domain_ls_id_;
       rowkey_domain_scan_params_.at(i)->tablet_id_ = rowkey_domain_tablet_ids_.at(i);
       if (OB_ISNULL(rowkey_domain_iters_.at(i))) {
         ret = OB_ERR_UNEXPECTED;
@@ -171,7 +167,7 @@ int ObDASDomainIdMergeIter::inner_init(ObDASIterParam &param)
   } else {
     ObDASDomainIdMergeIterParam &merge_param = static_cast<ObDASDomainIdMergeIterParam &>(param);
     lib::ContextParam param;
-    param.set_mem_attr(MTL_ID(), "DomainIdMerge", ObCtxIds::DEFAULT_CTX_ID).set_properties(lib::USE_TL_PAGE_OPTIONAL);
+    param.set_mem_attr("DomainIdMerge", ObCtxIds::DEFAULT_CTX_ID).set_properties(lib::USE_TL_PAGE_OPTIONAL);
     if (OB_FAIL(CURRENT_CONTEXT->CREATE_CONTEXT(merge_memctx_, param))) {
       LOG_WARN("failed to create merge memctx", K(ret));
     } else {
@@ -183,7 +179,6 @@ int ObDASDomainIdMergeIter::inner_init(ObDASIterParam &param)
           LOG_WARN("failed to new rowkey scan param", K(sizeof(ObTableScanParam)), K(ret));
         } else if (OB_FAIL(init_rowkey_domain_scan_param(
             merge_param.rowkey_domain_tablet_ids_.at(i),
-            merge_param.rowkey_domain_ls_id_,
             merge_param.rowkey_domain_ctdefs_.at(i),
             merge_param.rowkey_domain_rtdefs_.at(i),
             merge_param.trans_desc_, merge_param.snapshot_,
@@ -207,7 +202,6 @@ int ObDASDomainIdMergeIter::inner_init(ObDASIterParam &param)
       data_table_iter_  = merge_param.data_table_iter_;
       data_table_ctdef_ = merge_param.data_table_ctdef_;
       data_table_rtdef_ = merge_param.data_table_rtdef_;
-      rowkey_domain_ls_id_ = merge_param.rowkey_domain_ls_id_;
       need_filter_rowkey_domain_ = true;
     }
   }
@@ -215,15 +209,13 @@ int ObDASDomainIdMergeIter::inner_init(ObDASIterParam &param)
 }
 
 int ObDASDomainIdMergeIter::set_domain_id_merge_related_ids(
-    const ObDASRelatedTabletID &tablet_ids,
-    const share::ObLSID &ls_id)
+    const ObDASRelatedTabletID &tablet_ids)
 {
   int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(!ls_id.is_valid() || tablet_ids.domain_tablet_ids_.count() != rowkey_domain_tablet_ids_.count())) {
+  if (OB_UNLIKELY(tablet_ids.domain_tablet_ids_.count() != rowkey_domain_tablet_ids_.count())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid ls id", K(ret), K(ls_id), K(tablet_ids.domain_tablet_ids_), K(rowkey_domain_tablet_ids_));
+    LOG_WARN("unexpected domain tablet count", K(ret), K(tablet_ids.domain_tablet_ids_), K(rowkey_domain_tablet_ids_));
   } else {
-    rowkey_domain_ls_id_ = ls_id;
     for (int64_t i = 0; OB_SUCC(ret) && i < tablet_ids.domain_tablet_ids_.count(); i++) {
       if (OB_UNLIKELY(!tablet_ids.domain_tablet_ids_.at(i).is_valid())) {
         ret = OB_INVALID_ARGUMENT;
@@ -459,7 +451,6 @@ int ObDASDomainIdMergeIter::build_rowkey_domain_range()
         }
         if (OB_SUCC(ret)) {
           scan_param.tablet_id_ = rowkey_domain_tablet_ids_.at(k);
-          scan_param.ls_id_ = rowkey_domain_ls_id_;
           scan_param.sample_info_ = data_table_iter_->get_scan_param().sample_info_;
           scan_param.scan_flag_.scan_order_ = data_table_iter_->get_scan_param().scan_flag_.scan_order_;
           scan_param.enable_new_false_range_ = data_table_iter_->get_scan_param().enable_new_false_range_;
@@ -486,7 +477,6 @@ int ObDASDomainIdMergeIter::build_rowkey_domain_range()
 
 int ObDASDomainIdMergeIter::init_rowkey_domain_scan_param(
     const common::ObTabletID &tablet_id,
-    const share::ObLSID &ls_id,
     const ObDASScanCtDef *ctdef,
     ObDASScanRtDef *rtdef,
     transaction::ObTxDesc *trans_desc,
@@ -494,19 +484,18 @@ int ObDASDomainIdMergeIter::init_rowkey_domain_scan_param(
     storage::ObTableScanParam &scan_param)
 {
   int ret = OB_SUCCESS;
-  uint64_t tenant_id = MTL_ID();
-  scan_param.tenant_id_ = tenant_id;
-  scan_param.key_ranges_.set_attr(ObMemAttr(tenant_id, "SParamKR"));
-  scan_param.ss_key_ranges_.set_attr(ObMemAttr(tenant_id, "SParamSSKR"));
-  if (OB_UNLIKELY(!tablet_id.is_valid() || !ls_id.is_valid())) {
+  
+  
+  scan_param.key_ranges_.set_attr(ObMemAttr("SParamKR"));
+  scan_param.ss_key_ranges_.set_attr(ObMemAttr("SParamSSKR"));
+  if (OB_UNLIKELY(!tablet_id.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(ret), K(tablet_id), K(ls_id));
+    LOG_WARN("invalid tablet id", K(ret), K(tablet_id));
   } else if (OB_ISNULL(ctdef) || OB_ISNULL(rtdef)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected nullptr ctdef or rtdef", K(ret), KPC(ctdef), KPC(rtdef));
   } else {
     scan_param.tablet_id_ = tablet_id;
-    scan_param.ls_id_ = ls_id;
     scan_param.scan_allocator_ = &rtdef->scan_allocator_;
     scan_param.allocator_ = &rtdef->stmt_allocator_;
     scan_param.tx_lock_timeout_ = rtdef->tx_lock_timeout_;
@@ -521,8 +510,6 @@ int ObDASDomainIdMergeIter::init_rowkey_domain_scan_param(
     scan_param.force_refresh_lc_ = rtdef->force_refresh_lc_;
     scan_param.output_exprs_ = &(ctdef->pd_expr_spec_.access_exprs_);
     scan_param.aggregate_exprs_ = &(ctdef->pd_expr_spec_.pd_storage_aggregate_output_);
-    scan_param.ext_file_column_exprs_ = &(ctdef->pd_expr_spec_.ext_file_column_exprs_);
-    scan_param.ext_column_convert_exprs_ = &(ctdef->pd_expr_spec_.ext_column_convert_exprs_);
     scan_param.calc_exprs_ = &(ctdef->pd_expr_spec_.calc_exprs_);
     scan_param.table_param_ = &(ctdef->table_param_);
     scan_param.op_ = rtdef->p_pd_expr_op_;
@@ -533,7 +520,6 @@ int ObDASDomainIdMergeIter::init_rowkey_domain_scan_param(
     scan_param.need_scn_ = rtdef->need_scn_;
     scan_param.pd_storage_flag_ = ctdef->pd_expr_spec_.pd_storage_flag_.pd_flag_;
     scan_param.fb_snapshot_ = rtdef->fb_snapshot_;
-    scan_param.fb_read_tx_uncommitted_ = rtdef->fb_read_tx_uncommitted_;
     if (rtdef->is_for_foreign_check_) {
       scan_param.trans_desc_ = trans_desc;
     }
@@ -570,7 +556,7 @@ int ObDASDomainIdMergeIter::init_rowkey_domain_scan_param(
 int ObDASDomainIdMergeIter::concat_row()
 {
   int ret = OB_SUCCESS;
-  ObArenaAllocator allocator(ObMemAttr(MTL_ID(), "DomainIDCR"));
+  ObArenaAllocator allocator(ObMemAttr("DomainIDCR"));
   if (OB_FAIL(data_table_iter_->get_next_row())) {
     if (OB_ITER_END == ret && is_no_sample_) {
       int tmp_ret = ret;
@@ -632,7 +618,7 @@ int ObDASDomainIdMergeIter::concat_row()
 int ObDASDomainIdMergeIter::concat_rows(int64_t &count, int64_t capacity)
 {
   int ret = OB_SUCCESS;
-  ObArenaAllocator allocator(ObMemAttr(MTL_ID(), "DomainIDCRS"));
+  ObArenaAllocator allocator(ObMemAttr("DomainIDCRS"));
   int64_t data_row_cnt = 0;
   int64_t rowkey_domain_row_cnt = 0;
   ObArray<share::ObDomainIdUtils::DomainIds> domain_ids;
@@ -725,7 +711,7 @@ int ObDASDomainIdMergeIter::concat_rows(int64_t &count, int64_t capacity)
 int ObDASDomainIdMergeIter::sorted_merge_join_row()
 {
   int ret = OB_SUCCESS;
-  ObArenaAllocator allocator(ObMemAttr(MTL_ID(), "DomainIDMR"));
+  ObArenaAllocator allocator(ObMemAttr("DomainIDMR"));
   common::ObRowkey data_table_rowkey;
   if (OB_FAIL(data_table_iter_->get_next_row()) && OB_ITER_END != ret) {
     LOG_WARN("fail to get next data table row", K(ret));
@@ -771,7 +757,7 @@ int ObDASDomainIdMergeIter::sorted_merge_join_row()
 int ObDASDomainIdMergeIter::sorted_merge_join_rows(int64_t &count, int64_t capacity)
 {
   int ret = OB_SUCCESS;
-  ObArenaAllocator allocator(ObMemAttr(MTL_ID(), "DomainIdMRs"));
+  ObArenaAllocator allocator(ObMemAttr("DomainIdMRs"));
   common::ObArray<common::ObRowkey> rowkeys_in_data_table;
   common::ObArray<share::ObDomainIdUtils::DomainIds> domain_ids;
   bool is_iter_end = false;
@@ -1162,7 +1148,7 @@ int ObDASDomainIdMergeIter::get_rowkeys_and_domain_ids(
 int ObDASDomainIdMergeIter::multi_get_row()
 {
   int ret = OB_SUCCESS;
-  ObArenaAllocator allocator(ObMemAttr(MTL_ID(), "DomainIDMGR"));
+  ObArenaAllocator allocator(ObMemAttr("DomainIDMGR"));
   common::ObRowkey data_table_rowkey;
   if (OB_FAIL(data_table_iter_->get_next_row())) {
     if (OB_ITER_END != ret) {
@@ -1207,7 +1193,7 @@ int ObDASDomainIdMergeIter::multi_get_row()
               } else if (rowkey_domain_rowkey.equal(data_table_rowkey, is_found)) {
                 LOG_WARN("fail to equal rowkey between data table and rowkey", K(ret));
               }
-              LOG_TRACE("compare one row in rowkey domain", K(ret), "need_skip=", !is_found,
+              LOG_TRACE("compare one row in rowkey domain", K(ret), "need_skip=", !is_found, 
                        K(data_table_rowkey), K(rowkey_domain_rowkey));
             }
 
@@ -1250,7 +1236,7 @@ int ObDASDomainIdMergeIter::multi_get_row()
 int ObDASDomainIdMergeIter::multi_get_rows(int64_t &count, int64_t capacity)
 {
   int ret = OB_SUCCESS;
-  ObArenaAllocator allocator(ObMemAttr(MTL_ID(), "DomainIDMGRS"));
+  ObArenaAllocator allocator(ObMemAttr("DomainIDMGRS"));
   int64_t data_row_cnt = 0;
   ObArray<share::ObDomainIdUtils::DomainIds> domain_ids;
 
@@ -1295,7 +1281,7 @@ int ObDASDomainIdMergeIter::multi_get_rows(int64_t &count, int64_t capacity)
               }
             }
           }
-
+          
           if (OB_SUCC(ret)) {
             ret = expect_iter_end ? OB_ITER_END : OB_SUCCESS;
           }
@@ -1420,7 +1406,7 @@ int ObDASDomainIdMergeIter::fill_null_domain_id_in_data_table(
     common::ObIAllocator &allocator)
 {
   int ret = OB_SUCCESS;
-
+  
   if (OB_ISNULL(ctdef) || OB_ISNULL(rtdef) || OB_ISNULL(data_table_ctdef_) || OB_ISNULL(data_table_rtdef_)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", K(ret), KP(ctdef), KP(rtdef), KP(data_table_ctdef_), KP(data_table_rtdef_));
@@ -1465,7 +1451,7 @@ int ObDASDomainIdMergeIter::fill_null_domain_id_in_data_table(
 int ObDASDomainIdMergeIter::reset_rowkey_domain_iter_scan_range(int64_t iter_idx, const common::ObRowkey &data_table_rowkey)
 {
   int ret = OB_SUCCESS;
-
+  
   if (iter_idx < 0 || iter_idx >= rowkey_domain_scan_params_.count()) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid iter index", K(ret), K(iter_idx), K(rowkey_domain_scan_params_.count()));
@@ -1508,7 +1494,7 @@ int ObDASDomainIdMergeIter::reset_rowkey_domain_iter_scan_range(int64_t iter_idx
             }
             extend_end_key_obj_ptr[data_table_rowkey.get_obj_cnt()].set_max_value();
             key_range.end_key_.assign(extend_end_key_obj_ptr, data_table_rowkey.get_obj_cnt() + 1);
-
+            
             if (OB_FAIL(scan_param.key_ranges_.push_back(key_range))) {
               LOG_WARN("fail to push back key range for emb_vec scan param", K(ret), K(key_range));
             }
@@ -1524,7 +1510,6 @@ int ObDASDomainIdMergeIter::reset_rowkey_domain_iter_scan_range(int64_t iter_idx
     }
     if (OB_SUCC(ret)) {
       scan_param.tablet_id_ = rowkey_domain_tablet_ids_.at(iter_idx);
-      scan_param.ls_id_ = rowkey_domain_ls_id_;
       scan_param.sample_info_ = data_table_iter_->get_scan_param().sample_info_;
       scan_param.scan_flag_.scan_order_ = data_table_iter_->get_scan_param().scan_flag_.scan_order_;
       if (!data_table_iter_->get_scan_param().need_switch_param_) {
@@ -1533,11 +1518,11 @@ int ObDASDomainIdMergeIter::reset_rowkey_domain_iter_scan_range(int64_t iter_idx
       if (OB_FAIL(iter->rescan())) {
         LOG_WARN("fail to rescan rowkey domain iter", K(ret), K(iter_idx));
       }
-      LOG_INFO("reset domain iter scan range", K(ret), K(iter_idx), K(is_emb_vec_domain),
+      LOG_INFO("reset domain iter scan range", K(ret), K(iter_idx), K(is_emb_vec_domain), 
                 K(scan_param.key_ranges_), K(data_table_rowkey));
     }
   }
-
+  
   return ret;
 }
 

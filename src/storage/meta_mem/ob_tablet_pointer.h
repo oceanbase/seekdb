@@ -21,7 +21,6 @@
 #include "storage/meta_mem/ob_meta_obj_struct.h"
 #include "storage/multi_data_source/runtime_utility/mds_lock.h"
 #include "storage/tablet/ob_tablet_ddl_info.h"
-#include "storage/tx_storage/ob_ls_handle.h"
 #include "storage/multi_data_source/mds_table_handler.h"
 #include "storage/ob_i_memtable_mgr.h"
 #include "storage/ob_protected_memtable_mgr_handle.h"
@@ -31,6 +30,7 @@ namespace oceanbase
 {
 namespace storage
 {
+class ObLS;
 class ObTablet;
 class ObTabletDDLKvMgr;
 struct ObTabletResidentInfo;
@@ -41,7 +41,7 @@ struct ObTabletAttr final
 public:
   ObTabletAttr()
     :v_(0),
-     ha_status_(0),
+     restore_state_(0),
      all_sstable_data_occupy_size_(0),
      all_sstable_data_required_size_(0),
      tablet_meta_size_(0),
@@ -52,7 +52,7 @@ public:
   void reset() 
   { 
     v_ = 0; 
-    ha_status_ = 0; 
+    restore_state_ = 0;
     all_sstable_data_occupy_size_ = 0; 
     all_sstable_data_required_size_ = 0; 
     tablet_meta_size_ = 0; 
@@ -60,8 +60,8 @@ public:
     backup_bytes_ = 0;
   }
   bool is_valid() const { return valid_; }
-  TO_STRING_KV(K_(valid), K_(is_empty_shell), K_(has_transfer_table),
-      K_(has_next_tablet), K_(has_nested_table), K_(ha_status), 
+  TO_STRING_KV(K_(valid), K_(is_empty_shell),
+      K_(has_next_tablet), K_(has_nested_table), K_(restore_state),
       K_(all_sstable_data_occupy_size), K_(all_sstable_data_required_size), K_(tablet_meta_size),
       K_(ss_public_sstable_occupy_size), K_(backup_bytes)
       );
@@ -71,13 +71,12 @@ public:
     struct {
         bool valid_ : 1; // valid_ = true means attr is filled
         bool is_empty_shell_ : 1;
-        bool has_transfer_table_ : 1;
         bool has_next_tablet_ : 1;
         bool has_nested_table_: 1;
     };
   };
 
-  int64_t ha_status_;
+  int64_t restore_state_;
   // all sstable data occupy_size, include major sstable
   // <data_block real_size> + <small_sstable_nest_size (in share_nothing)>
   int64_t all_sstable_data_occupy_size_;
@@ -102,7 +101,7 @@ class ObTabletPointer final
   friend class ObFlyingTabletPointerMap;
 public:
   ObTabletPointer();
-  ObTabletPointer(const ObLSHandle &ls_handle,
+  ObTabletPointer(ObLS *tenant_ls,
       const ObMemtableMgrHandle &memtable_mgr_handle);
   ~ObTabletPointer();
   int get_in_memory_obj(ObMetaObjGuard<ObTablet> &guard);
@@ -137,14 +136,14 @@ public:
   int dump_meta_obj(ObMetaObjGuard<ObTablet> &guard, void *&free_obj);
 
   // do not KPC memtable_mgr, may dead lock
-  TO_STRING_KV(K_(phy_addr), K_(obj), K_(ls_handle), K_(ddl_kv_mgr_handle), K_(attr),
+  TO_STRING_KV(K_(phy_addr), K_(obj), KP_(ls), K_(ddl_kv_mgr_handle), K_(attr),
       K_(protected_memtable_mgr_handle), K_(ddl_info), K_(initial_state), KP_(old_version_chain), K_(flying));
 public:
   bool get_initial_state() const;
   ObTabletResidentInfo get_tablet_resident_info(const ObTabletMapKey &key) const;
   ObTabletMDSTruncateLock &get_mds_truncate_lock() const { return mds_lock_; }
   void set_initial_state(const bool initial_state);
-  int create_ddl_kv_mgr(const share::ObLSID &ls_id, const ObTabletID &tablet_id, ObDDLKvMgrHandle &ddl_kv_mgr_handle, bool &is_created);
+  int create_ddl_kv_mgr(const ObTabletID &tablet_id, ObDDLKvMgrHandle &ddl_kv_mgr_handle, bool &is_created);
   void get_ddl_kv_mgr(ObDDLKvMgrHandle &ddl_kv_mgr_handle);
   int set_ddl_kv_mgr(const ObDDLKvMgrHandle &ddl_kv_mgr_handle);
   int remove_ddl_kv_mgr(const ObDDLKvMgrHandle &ddl_kv_mgr_handle);
@@ -168,8 +167,6 @@ public:
   int set_tablet_attr(const ObTabletAttr &attr);
   bool is_old_version_chain_empty() const { return OB_ISNULL(old_version_chain_); }
   bool is_attr_valid() const { return attr_.is_valid(); }
-  int64_t get_auto_part_size() const;
-  void set_auto_part_size(const int64_t auto_part_size);
 private:
   int scan_all_tablets_on_chain(const ObFunction<int(ObTablet &)> &op);// must be called under t3m bucket lock's protection
   int wash_obj();
@@ -182,7 +179,7 @@ private:
 private:
   ObMetaDiskAddr phy_addr_; // 48B
   ObMetaObj<ObTablet> obj_; // 40B
-  ObLSHandle ls_handle_; // 24B
+  ObLS *ls_; // 8B
   ObDDLKvMgrHandle ddl_kv_mgr_handle_; // 48B
   ObProtectedMemtableMgrHandle protected_memtable_mgr_handle_; // 32B
   ObTabletDDLInfo ddl_info_; // 32B
@@ -194,7 +191,7 @@ private:
   ObTablet *old_version_chain_; // 8B
   ObTabletAttr attr_; // 32B // protected by rw lock of tablet_map_
   int64_t auto_part_size_; // 8B
-  DISALLOW_COPY_AND_ASSIGN(ObTabletPointer); // 376B
+  DISALLOW_COPY_AND_ASSIGN(ObTabletPointer); // 344B, 360B with ENABLE_OBJ_LEAK_CHECK
 };
 
 struct ObTabletResidentInfo final
@@ -204,13 +201,11 @@ public:
   ObTabletResidentInfo(
     const ObTabletAttr &attr, 
     const ObMetaDiskAddr &tablet_addr, 
-    const share::ObLSID &ls_id,
     const ObTabletID &tablet_id)
-  : attr_(attr), tablet_addr_(tablet_addr), ls_id_(ls_id), tablet_id_(tablet_id)
+  : attr_(attr), tablet_addr_(tablet_addr), tablet_id_(tablet_id)
     {}
   ~ObTabletResidentInfo() { reset(); };
   bool is_valid() const { return attr_.valid_ && tablet_id_.is_valid() && tablet_addr_.is_valid(); }
-  bool has_transfer_table() const { return attr_.has_transfer_table_; }
   bool is_empty_shell() const { return attr_.is_empty_shell_; }
   bool has_next_tablet() const { return attr_.has_next_tablet_; }
   bool has_nested_table() const { return attr_.has_nested_table_; }
@@ -224,13 +219,11 @@ public:
     attr_.reset();
     tablet_addr_.set_none_addr();
     tablet_id_ = ObTabletID::INVALID_TABLET_ID;
-    ls_id_ = ObLSID::INVALID_LS_ID;
   }
-  TO_STRING_KV(K_(ls_id), K_(tablet_id), K_(tablet_addr), K_(attr));
+  TO_STRING_KV(K_(tablet_id), K_(tablet_addr), K_(attr));
 public:
   ObTabletAttr attr_;
   ObMetaDiskAddr tablet_addr_; // used to identify one tablet
-  share::ObLSID ls_id_;
   ObTabletID tablet_id_;
 };
 
@@ -277,4 +270,3 @@ struct ScanAllVersionTabletsOp
 } // namespace oceanbase
 
 #endif // OCEANBASE_STORAGE_OB_TABLET_POINTER
-

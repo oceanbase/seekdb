@@ -32,13 +32,12 @@ public:
 
   int init(const int64_t obj_size,
            const lib::ObLabel &label = nullptr,
-           const uint64_t tenant_id = OB_SERVER_TENANT_ID,
            const int64_t block_size = OB_MALLOC_NORMAL_BLOCK_SIZE,
            const int64_t min_obj_count_on_block = DEFAULT_MIN_OBJ_COUNT_ON_BLOCK,
            const int64_t limit_num = INT64_MAX) {
     lib::ObMemAttr attr;
     attr.label_ = label;
-    attr.tenant_id_ = tenant_id;
+    
     return init(obj_size, attr, block_size, min_obj_count_on_block, limit_num);
   }
   int init(const int64_t obj_size,

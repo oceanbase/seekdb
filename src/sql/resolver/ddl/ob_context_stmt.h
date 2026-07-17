@@ -62,10 +62,7 @@ public:
   {
     arg_.set_schema_name(db_name);
   }
-  void set_tenant_id(uint64_t tenant_id)
-  {
-    arg_.set_tenant_id(tenant_id);
-  }
+  
   void set_context_type(ObContextType type)
   {
     arg_.set_context_type(type);
@@ -74,10 +71,10 @@ public:
   {
     arg_.set_package_name(package_name);
   }
-  virtual obrpc::ObDDLArg &get_ddl_arg() { return arg_; }
-  obrpc::ObContextDDLArg &get_arg() { return arg_; }
+  virtual obcall::ObDDLArg &get_ddl_arg() { return arg_; }
+  obcall::ObContextDDLArg &get_arg() { return arg_; }
 private:
-  obrpc::ObContextDDLArg arg_;
+  obcall::ObContextDDLArg arg_;
   DISALLOW_COPY_AND_ASSIGN(ObContextDDLStmt);
 };
 

@@ -99,8 +99,8 @@ int ObOLAPAsyncJobResolver::resolve_submit_job_stmt(const ParseNode &parse_tree,
     } 
 
     if (OB_SUCC(ret)) {
-      const uint64_t tenant_id = params_.session_info_->get_effective_tenant_id();
-      stmt.set_tenant_id(tenant_id);
+      
+      
       stmt.set_user_id(session_info_->get_user_id());
       stmt.set_job_database(session_info_->get_database_name());
       stmt.set_database_id(session_info_->get_database_id());
@@ -138,8 +138,8 @@ int ObOLAPAsyncJobResolver::resolve_submit_job_stmt(const ParseNode &parse_tree,
 
     if (OB_SUCC(ret)) {
       int64_t job_id = OB_INVALID_ID;
-      if (OB_FAIL(dbms_scheduler::ObDBMSSchedJobUtils::generate_job_id(stmt.get_tenant_id(), job_id))) {
-          LOG_WARN("generate_job_id failed", KR(ret), K(stmt.get_tenant_id()));
+      if (OB_FAIL(dbms_scheduler::ObDBMSSchedJobUtils::generate_job_id(job_id))) {
+          LOG_WARN("generate_job_id failed", KR(ret));
       } else {
         stmt.set_job_id(job_id);
         char *job_name_buf = static_cast<char*>(allocator_->alloc(OB_JOB_NAME_MAX_LENGTH));
@@ -159,8 +159,8 @@ int ObOLAPAsyncJobResolver::resolve_submit_job_stmt(const ParseNode &parse_tree,
 int ObOLAPAsyncJobResolver::resolve_cancel_job_stmt(const ParseNode &parse_tree, ObOLAPAsyncCancelJobStmt *stmt)
 {
   int ret = OB_SUCCESS;
-  const uint64_t tenant_id = params_.session_info_->get_effective_tenant_id();
-  stmt->set_tenant_id(tenant_id);
+  
+  
   stmt->set_user_id(session_info_->get_user_id());
   if (parse_tree.num_child_ != 1) {
     ret = OB_INVALID_ARGUMENT;
@@ -193,14 +193,11 @@ ERRSIM_POINT_DEF(ERRSIM_SUBMIT_ERR_JOB_START_TIME);
 int ObOLAPAsyncJobResolver::execute_submit_job(ObOLAPAsyncSubmitJobStmt &stmt)
 {
   int ret = OB_SUCCESS;
-  if (OB_INVALID_TENANT_ID == stmt.get_tenant_id()) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid tenant id", KR(ret), K(stmt.get_tenant_id()));
-  } else {
+  {
     int64_t start_date_us = ObTimeUtility::current_time();
     int64_t end_date_us = 64060560000000000; // 4000-01-01
     HEAP_VAR(dbms_scheduler::ObDBMSSchedJobInfo, job_info) {
-      job_info.tenant_id_ = stmt.get_tenant_id();
+      
       job_info.user_id_ = stmt.get_user_id();
       job_info.database_id_ = stmt.get_database_id();
       job_info.job_ = stmt.get_job_id();
@@ -233,16 +230,16 @@ int ObOLAPAsyncJobResolver::execute_submit_job(ObOLAPAsyncSubmitJobStmt &stmt)
       #endif
 
       ObMySQLTransaction trans;
-      if (OB_FAIL(trans.start(GCTX.sql_proxy_, stmt.get_tenant_id()))) {
-        LOG_WARN("failed to start trans", KR(ret), K(stmt.get_tenant_id()));
+      if (OB_FAIL(trans.start(GCTX.sql_proxy_))) {
+        LOG_WARN("failed to start trans", KR(ret));
       } else if (OB_FAIL(dbms_scheduler::ObDBMSSchedJobUtils::create_dbms_sched_job(
-          trans, stmt.get_tenant_id(), stmt.get_job_id(), job_info))) {
+          trans, stmt.get_job_id(), job_info))) {
         LOG_WARN("failed to create dbms scheduler job", KR(ret));
       }
       if (trans.is_started()) {
         int tmp_ret = OB_SUCCESS;
         if (OB_SUCCESS != (tmp_ret = trans.end(OB_SUCC(ret)))) {
-          LOG_WARN("failed to commit trans", KR(ret), KR(tmp_ret));
+          LOG_ERROR("failed to commit trans", KR(ret), KR(tmp_ret));
           ret = OB_SUCC(ret) ? tmp_ret : ret;
         }
       }

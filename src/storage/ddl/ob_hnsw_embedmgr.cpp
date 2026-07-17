@@ -16,10 +16,11 @@
 
 #define USING_LOG_PREFIX STORAGE
 #include "lib/allocator/ob_malloc.h"
+#include "share/rc/ob_module_provider.h"
 #include "lib/oblog/ob_log.h"
 #include "storage/ddl/ob_ddl_pipeline.h"
 #include "sql/engine/expr/ob_expr_ai/ob_ai_func_utils.h"
-#include "share/vector_index/ob_plugin_vector_index_service.h"
+#include "observer/vector_index/ob_plugin_vector_index_service.h"
 #include "storage/ddl/ob_hnsw_embedmgr.h"
 
 using namespace oceanbase::storage;
@@ -35,7 +36,7 @@ bool ObEmbeddingConfig::is_valid() const
   }
   return is_valid;
 }
-void ObEmbeddingConfig::set_config(const ObString &model_url, const ObString &model_name,
+void ObEmbeddingConfig::set_config(const ObString &model_url, const ObString &model_name, 
                                     const ObString &user_key, const ObString &provider)
 {
   model_url_ = model_url;
@@ -210,7 +211,7 @@ int ObTaskBatchInfo::init(const int64_t batch_size, const int64_t vec_dim)
     batch_size_ = batch_size;
     vec_dim_ = vec_dim;
     current_count_ = 0;
-
+    
     if (OB_FAIL(results_.reserve(batch_size))) {
       LOG_WARN("reserve results array failed", K(ret), K(batch_size));
     } else {
@@ -255,7 +256,7 @@ int ObTaskBatchInfo::add_item(const blocksstable::ObStorageDatum &text,
         need_embedding_count_++;
       }
     }
-
+    
     // pre-allocate space (will be filled by embedding task)
     if (OB_SUCC(ret)) {
       float *vec_buf = static_cast<float*>(allocator_.alloc(vec_dim_ * sizeof(float)));
@@ -309,7 +310,7 @@ int ObTaskSlotRing::init(const int64_t capacity)
 {
   int ret = OB_SUCCESS;
   ObSpinLockGuard guard(lock_);
-
+  
   if (capacity <= 0) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid capacity", K(ret), K(capacity));
@@ -359,7 +360,7 @@ int ObTaskSlotRing::mark_ready(const int64_t slot_idx, const int ret_code)
 {
   int ret = OB_SUCCESS;
   ObSpinLockGuard guard(lock_);
-
+  
   if (slot_idx < 0 || slot_idx >= slots_.count()) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid slot idx", K(ret), K(slot_idx), K(slots_.count()));
@@ -375,7 +376,7 @@ int ObTaskSlotRing::pop_ready_in_order(ObTaskBatchInfo *&batch_info, int &ret_co
   int ret = OB_SUCCESS;
   batch_info = nullptr;
   ObSpinLockGuard guard(lock_);
-
+  
   if (head_idx_ != next_idx_ && slots_.at(head_idx_).ready_) {
     Slot &slot = slots_.at(head_idx_);
     if (!slot.ready_) {
@@ -396,7 +397,7 @@ int ObTaskSlotRing::pop_ready_in_order(ObTaskBatchInfo *&batch_info, int &ret_co
       slot.task_->release_if_managed();
       slot.task_ = nullptr;
     }
-
+    
     if (OB_SUCC(ret) || OB_NOT_NULL(batch_info)) {
       slot.ready_ = false;
       head_idx_ = (head_idx_ + 1) % slots_.count();
@@ -462,7 +463,7 @@ int ObTaskSlotRing::wait_for_head_completion()
 {
   int ret = OB_SUCCESS;
   share::ObEmbeddingTask *task_to_wait = nullptr;
-
+  
   {
     ObSpinLockGuard guard(lock_);
     if (head_idx_ != next_idx_) {
@@ -472,7 +473,7 @@ int ObTaskSlotRing::wait_for_head_completion()
       }
     }
   }
-
+  
   if (OB_NOT_NULL(task_to_wait)) {
     if (OB_FAIL(task_to_wait->wait_for_completion())) {
       LOG_WARN("wait for head embedding task completion failed", K(ret));
@@ -502,7 +503,7 @@ void ObTaskSlotRing::reset()
 // -------------------------------- ObEmbeddingIOCallbackHandle --------------------------------
 ObEmbeddingIOCallbackHandle *ObEmbeddingIOCallbackHandle::create(ObEmbeddingIOCallback *cb)
 {
-  void *mem = ob_malloc(sizeof(ObEmbeddingIOCallbackHandle), ObMemAttr(MTL_ID(), "EmbedCbHandle"));
+  void *mem = ob_malloc(sizeof(ObEmbeddingIOCallbackHandle), ObMemAttr("EmbedCbHandle"));
   if (nullptr == mem) {
     return nullptr;
   } else {
@@ -574,7 +575,7 @@ int ObEmbeddingTaskMgr::init(const ObString &model_id)
   } else if (OB_FAIL(get_ai_config(model_id))) {
     LOG_WARN("load cfg from sys table failed", K(ret));
   } else {
-    ObPluginVectorIndexService *service = MTL(ObPluginVectorIndexService *);
+    ObPluginVectorIndexService *service = share::g_mp->plugin_vector_index_service();
     if (OB_ISNULL(service)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("plugin vector index service is null", K(ret));
@@ -584,15 +585,8 @@ int ObEmbeddingTaskMgr::init(const ObString &model_id)
   }
 
   if (OB_SUCC(ret)) {
-    omt::ObTenantConfigGuard tenant_config(TENANT_CONF(MTL_ID()));
-    if (tenant_config.is_valid()) {
-      model_request_timeout_us_ = tenant_config->model_request_timeout;
-      model_max_retries_ = tenant_config->model_max_retries;
-    } else {
-      SHARE_LOG_RET(WARN, OB_INVALID_CONFIG, "init model request timeout and max retries config with default value");
-      model_request_timeout_us_ = 60 * 1000 * 1000; // 60 seconds
-      model_max_retries_ = 2;
-    }
+    model_request_timeout_us_ = GCONF.model_request_timeout;
+    model_max_retries_ = GCONF.model_max_retries;
   }
 
   if (OB_SUCC(ret)) {
@@ -643,10 +637,10 @@ int ObEmbeddingTaskMgr::submit_batch_info(ObTaskBatchInfo *&batch_info)
           }
         }
       }
-
+      
       if (OB_SUCC(ret) && embedding_count > 0) {
         // Only create embedding task if there are items to embed
-        void *cb_buf = ob_malloc(sizeof(ObEmbeddingIOCallback), ObMemAttr(MTL_ID(), "EmbedCb"));
+        void *cb_buf = ob_malloc(sizeof(ObEmbeddingIOCallback), ObMemAttr("EmbedCb"));
         if (OB_ISNULL(cb_buf)) {
           ret = OB_ALLOCATE_MEMORY_FAILED;
           LOG_WARN("alloc embedding callback failed", K(ret));
@@ -654,25 +648,25 @@ int ObEmbeddingTaskMgr::submit_batch_info(ObTaskBatchInfo *&batch_info)
           ObEmbeddingIOCallback *cb = new (cb_buf) ObEmbeddingIOCallback();
           ObEmbeddingIOCallbackHandle *cb_handle = nullptr;
           share::ObEmbeddingTask *task = nullptr;
-
+          
           if (OB_ISNULL(cb_handle = ObEmbeddingIOCallbackHandle::create(cb))) {
             ret = OB_ALLOCATE_MEMORY_FAILED;
             LOG_WARN("create callback handle failed", K(ret));
           } else {
-            void *task_mem = ob_malloc(sizeof(share::ObEmbeddingTask), ObMemAttr(MTL_ID(), "EmbeddingTask"));
+            void *task_mem = ob_malloc(sizeof(share::ObEmbeddingTask), ObMemAttr("EmbeddingTask"));
             if (OB_ISNULL(task_mem)) {
               ret = OB_ALLOCATE_MEMORY_FAILED;
               LOG_WARN("failed to allocate memory for EmbeddingTask", K(ret));
             } else {
               task = new (task_mem) share::ObEmbeddingTask();
               const int64_t vec_dim = results.at(0)->get_vector_dim();
-              if (OB_FAIL(task->init(cfg_.model_url_, cfg_.model_name_, cfg_.provider_,
+              if (OB_FAIL(task->init(cfg_.model_url_, cfg_.model_name_, cfg_.provider_, 
                                    cfg_.user_key_, texts, vec_dim, model_request_timeout_us_, model_max_retries_, cb_handle))) {
                 LOG_WARN("failed to initialize EmbeddingTask", K(ret));
               }
             }
           }
-
+          
           if (OB_SUCC(ret) && OB_NOT_NULL(task)) {
             if (OB_FAIL(cb->init(this, slot_idx, batch_info, task, results.at(0)->get_vector_dim()))) {
               LOG_WARN("init callback failed", K(ret));
@@ -684,7 +678,7 @@ int ObEmbeddingTaskMgr::submit_batch_info(ObTaskBatchInfo *&batch_info)
               }
             }
           }
-
+          
           if (OB_SUCC(ret)) {
             slot_ring_.set_task(slot_idx, task);
             slot_ring_.set_batch_info(slot_idx, batch_info); // Take ownership
@@ -749,7 +743,7 @@ int ObEmbeddingTaskMgr::get_ai_config(const common::ObString &model_id)
     ObAIFuncExprInfo *info = nullptr;
     const share::ObAiModelEndpointInfo *endpoint_info = nullptr;
     omt::ObAiServiceGuard ai_service_guard;
-    omt::ObTenantAiService *ai_service = MTL(omt::ObTenantAiService*);
+    omt::ObTenantAiService *ai_service = share::g_mp->tenant_ai_service();
     bool use_request_model_name = false;
     if (OB_FAIL(ObAIFuncUtils::get_ai_func_info(allocator_, const_cast<common::ObString&>(model_id), info))) {
       LOG_WARN("failed to get ai func info", K(ret), K(model_id));

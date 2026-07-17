@@ -15,7 +15,7 @@
  */
 
 #include "ob_async_log_struct.h"
-#include "deps/oblib/src/lib/allocator/ob_slice_alloc.h"
+#include "lib/allocator/ob_slice_alloc.h"
 #ifdef _WIN32
 #include <fcntl.h>
 #endif
@@ -30,7 +30,8 @@ namespace oceanbase
 namespace common
 {
 ObPLogItem::ObPLogItem()
-  : ObIBaseLogItem(), fd_type_(MAX_FD_FILE),
+  : ObIBaseLogItem(), ring_offset_(0),
+    fd_type_(MAX_FD_FILE),
     log_level_(OB_LOG_LEVEL_NONE), tl_type_(common::OB_INVALID_INDEX), is_force_allow_(false),
     is_size_overflow_(false), timestamp_(0), header_pos_(0), buf_size_(0), pos_(0)
 {

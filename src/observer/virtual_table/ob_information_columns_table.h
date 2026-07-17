@@ -17,7 +17,7 @@
 #ifndef OCEANBASE_OBSERVER_VIRTUAL_TABLE_OB_INFORMATION_COLUMNS_TABLE_
 #define OCEANBASE_OBSERVER_VIRTUAL_TABLE_OB_INFORMATION_COLUMNS_TABLE_
 
-#include "share/ob_virtual_table_scanner_iterator.h"
+#include "observer/virtual_table/ob_virtual_table_scanner_iterator.h"
 #include "share/schema/ob_schema_struct.h"
 #include "share/schema/ob_table_schema.h"
 
@@ -74,10 +74,7 @@ public:
   virtual int inner_get_next_row(common::ObNewRow *&row);
   virtual void reset();
 
-  inline void set_tenant_id(uint64_t tenant_id)
-  {
-    tenant_id_ = tenant_id;
-  }
+  
 private:
   DISALLOW_COPY_AND_ASSIGN(ObInfoSchemaColumnsTable);
   int fill_row_cells(const common::ObString &database_name,
@@ -124,7 +121,6 @@ private:
       int64_t &pos);
   inline int init_mem_context();
 private:
-  uint64_t tenant_id_;
   int64_t last_schema_idx_;
   int64_t last_table_idx_;
   int64_t last_column_idx_;

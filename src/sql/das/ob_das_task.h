@@ -18,13 +18,13 @@
 #define OBDEV_SRC_SQL_DAS_OB_DAS_TASK_H_
 #include "share/ob_define.h"
 #include "storage/tx/ob_trans_define.h"
-#include "rpc/obrpc/ob_rpc_result_code.h"
+#include "rpc/frame/ob_result_code.h"
 #include "sql/das/ob_das_define.h"
 #include "storage/access/ob_dml_param.h"
 #include "sql/engine/basic/ob_chunk_datum_store.h"
 #include "sql/engine/basic/ob_temp_row_store.h"
 #include "lib/list/ob_obj_store.h"
-#include "rpc/obrpc/ob_rpc_processor.h"
+#include "rpc/frame/ob_req_packet_code.h"
 namespace oceanbase
 {
 namespace common
@@ -45,11 +45,11 @@ struct ObDASTCBInterruptInfo;
 typedef ObDLinkNode<ObIDASTaskOp*> DasTaskNode;
 typedef ObDList<DasTaskNode> DasTaskLinkedList;
 
-struct ObDASGTSOptInfo
+struct ObDASSnapshotOptInfo
 {
   OB_UNIS_VERSION(1);
 public:
-  ObDASGTSOptInfo(common::ObIAllocator &alloc)
+  ObDASSnapshotOptInfo(common::ObIAllocator &alloc)
     : alloc_(alloc),
       use_specify_snapshot_(false),
       isolation_level_(),
@@ -58,7 +58,7 @@ public:
   {
   }
 
-  ~ObDASGTSOptInfo()
+  ~ObDASSnapshotOptInfo()
   {
     if (specify_snapshot_ != nullptr) {
       specify_snapshot_->~ObTxReadSnapshot();
@@ -147,7 +147,7 @@ public:
 class ObIDASTaskOp
 {
   friend class ObDataAccessService;
-  template<obrpc::ObRpcPacketCode pcode>
+  template<rpc::frame::ObReqPacketCode pcode>
   friend class ObDASBaseAccessP;
   friend class ObDASRef;
   friend class ObDataAccessService;
@@ -158,7 +158,6 @@ public:
     : errcode_(OB_SUCCESS),
       trans_desc_(nullptr),
       snapshot_(nullptr),
-      tenant_id_(common::OB_INVALID_ID),
       task_id_(common::OB_INVALID_ID),
       op_type_(DAS_OP_INVALID),
       task_flag_(0),
@@ -175,7 +174,7 @@ public:
       op_result_(nullptr),
       attach_ctdef_(nullptr),
       attach_rtdef_(nullptr),
-      das_gts_opt_info_(op_alloc),
+      das_snapshot_opt_info_(op_alloc),
       plan_line_id_(0),
       das_task_start_timestamp_(0)
   {
@@ -191,8 +190,6 @@ public:
   const common::ObTabletID &get_tablet_id() const { return tablet_id_; }
   void set_task_id(const int64_t task_id) { task_id_ = task_id; }
   int64_t get_task_id() const { return task_id_; }
-  void set_ls_id(const share::ObLSID &ls_id) { ls_id_ = ls_id; }
-  const share::ObLSID &get_ls_id() const { return ls_id_; }
   void set_tablet_loc(const ObDASTabletLoc *tablet_loc) { tablet_loc_ = tablet_loc; }
   // tablet_loc_ will not be serialized, therefore it cannot be accessed during the execution phase
   // of DASTaskOp. It can only be touched through das_ref and data_access_service layer.
@@ -230,8 +227,7 @@ public:
   void set_attach_ctdef(const ObDASBaseCtDef *attach_ctdef) { attach_ctdef_ = attach_ctdef; }
   void set_attach_rtdef(ObDASBaseRtDef *attach_rtdef) { attach_rtdef_ = attach_rtdef; }
   ObDASBaseRtDef *get_attach_rtdef() { return attach_rtdef_; }
-  VIRTUAL_TO_STRING_KV(K_(tenant_id),
-                       K_(task_id),
+  VIRTUAL_TO_STRING_KV(K_(task_id),
                        K_(op_type),
                        K_(errcode),
                        K_(can_part_retry),
@@ -242,7 +238,6 @@ public:
                        KPC_(trans_desc),
                        KPC_(snapshot),
                        K_(tablet_id),
-                       K_(ls_id),
                        KPC_(tablet_loc),
                        K_(related_ctdefs),
                        K_(related_rtdefs),
@@ -251,8 +246,8 @@ public:
                        K_(das_task_node),
                        K_(plan_line_id));
 public:
-  void set_tenant_id(uint64_t tenant_id) { tenant_id_ = tenant_id; }
-  uint64_t get_tenant_id() const { return tenant_id_; }
+  
+  
   void set_type(ObDASOpType op_type) { op_type_ = op_type; }
   ObDASOpType get_type() const { return op_type_; }
   void set_trans_desc(transaction::ObTxDesc *trans_desc) { trans_desc_ = trans_desc; }
@@ -287,8 +282,8 @@ public:
   void set_inner_rescan(bool flag) { inner_rescan_ = flag; }
   void set_write_buff_full(bool v) { write_buff_full_ = v; }
   bool is_write_buff_full() { return write_buff_full_; }
-  ObDASGTSOptInfo &get_das_gts_opt_info() { return das_gts_opt_info_; }
-  int init_das_gts_opt_info(transaction::ObTxIsolationLevel isolation_level);
+  ObDASSnapshotOptInfo &get_das_snapshot_opt_info() { return das_snapshot_opt_info_; }
+  int init_das_snapshot_opt_info(transaction::ObTxIsolationLevel isolation_level);
 
 protected:
   int start_das_task();
@@ -300,7 +295,6 @@ public:
   transaction::ObTxReadSnapshot *snapshot_; // Mvcc snapshot
 
 protected:
-  uint64_t tenant_id_;
   int64_t task_id_;
   ObDASOpType op_type_; // DAS provided operation type
 protected:
@@ -325,7 +319,6 @@ protected:
   };
   int16_t write_branch_id_;  // branch id for parallel write, required for partially rollback
   common::ObTabletID tablet_id_;
-  share::ObLSID ls_id_;
   // tablet_loc_ will not be serialized, therefore it cannot be accessed during the execution phase
   // of DASTaskOp. It can only be touched through das_ref and data_access_service layer.
   const ObDASTabletLoc *tablet_loc_;
@@ -352,7 +345,7 @@ protected:
   //rowkey merging for index merge operations, and so on.
   const ObDASBaseCtDef *attach_ctdef_;
   ObDASBaseRtDef *attach_rtdef_;
-  ObDASGTSOptInfo das_gts_opt_info_;
+  ObDASSnapshotOptInfo das_snapshot_opt_info_;
   int64_t plan_line_id_; //plan operator id
 public:
   int64_t das_task_start_timestamp_;
@@ -469,7 +462,7 @@ public:
   common::ObSEArray<ObIDASTaskResult*, 2> &get_op_results() { return op_results_; };
   void set_err_code(int err_code) { rcode_.rcode_ = err_code; }
   int get_err_code() const { return rcode_.rcode_; }
-  const obrpc::ObRpcResultCode &get_rcode() const { return rcode_; }
+  const rpc::frame::ObResultCode &get_rcode() const { return rcode_; }
   void store_err_msg(const common::ObString &msg);
   const char *get_err_msg() const { return rcode_.msg_; }
   int store_warning_msg(const common::ObWarningBuffer &wb);
@@ -492,7 +485,7 @@ private:
   common::ObAddr ctrl_svr_; // DAS Task control server address
   common::ObAddr runner_svr_; // DAS Task execution endpoint address
   common::ObSEArray<ObIDASTaskResult*, 2> op_results_;  // Corresponding operation result information, this is an interface class, the specific definition is parsed by DML Service
-  obrpc::ObRpcResultCode rcode_; // returned error information
+  rpc::frame::ObResultCode rcode_; // returned error information
   transaction::ObTxExecResult trans_result_;
   ObDASTaskFactory *das_factory_;  // no need to serialize
 };
@@ -611,15 +604,14 @@ class ObDASDataFetchReq
 {
   OB_UNIS_VERSION(1);
 public:
-  ObDASDataFetchReq() : tenant_id_(0), task_id_(0) {}
+  ObDASDataFetchReq() : task_id_(0) {}
   ~ObDASDataFetchReq() {}
-  int init(const uint64_t tenant_id, const int64_t task_id);
+  int init(const int64_t task_id);
 public:
-  uint64_t get_tenant_id() { return tenant_id_; }
+  
   int64_t get_task_id() { return task_id_; }
-  TO_STRING_KV(K_(tenant_id), K_(task_id));
+  TO_STRING_KV(K_(task_id));
 private:
-  uint64_t tenant_id_;
   int64_t task_id_;
 };
 
@@ -629,19 +621,18 @@ class ObDASDataFetchRes
 public:
   ObDASDataFetchRes();
   ~ObDASDataFetchRes() { datum_store_.reset(); };
-  int init(const uint64_t tenant_id, const int64_t task_id);
+  int init(const int64_t task_id);
 public:
   ObChunkDatumStore &get_datum_store() { return datum_store_; }
   ObTempRowStore &get_vec_row_store() { return vec_row_store_; }
   void set_has_more(const bool has_more) { has_more_ = has_more; }
   bool has_more() { return has_more_; }
   int64_t get_task_id() const { return task_id_; }
-  TO_STRING_KV(K_(tenant_id), K_(task_id), K_(has_more), K_(datum_store),
+  TO_STRING_KV(K_(task_id), K_(has_more), K_(datum_store),
                K_(io_read_bytes), K_(ssstore_read_bytes),
                K_(ssstore_read_row_cnt), K_(memstore_read_row_cnt));
 private:
   ObChunkDatumStore datum_store_;
-  uint64_t tenant_id_;
   int64_t task_id_;
   bool has_more_;
   bool enable_rich_format_;
@@ -657,15 +648,14 @@ class ObDASDataEraseReq
 {
   OB_UNIS_VERSION(1);
 public:
-  ObDASDataEraseReq() : tenant_id_(0), task_id_(0) {}
+  ObDASDataEraseReq() : task_id_(0) {}
   ~ObDASDataEraseReq() {}
-  int init(const uint64_t tenant_id, const int64_t task_id);
+  int init(const int64_t task_id);
 public:
-  uint64_t get_tenant_id() { return tenant_id_; }
+  
   int64_t get_task_id() { return task_id_; }
-  TO_STRING_KV(K_(tenant_id), K_(task_id));
+  TO_STRING_KV(K_(task_id));
 private:
-  uint64_t tenant_id_;
   int64_t task_id_;
 };
 }  // namespace sql

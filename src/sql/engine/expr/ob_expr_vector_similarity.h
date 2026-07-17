@@ -19,10 +19,10 @@
 
 #include "sql/engine/expr/ob_expr_operator.h"
 #include "sql/engine/expr/ob_expr_vector.h"
-#include "lib/udt/ob_array_type.h"
-#include "share/vector_type/ob_vector_l2_similarity.h"
-#include "share/vector_type/ob_vector_cosine_similarity.h"
-#include "share/vector_type/ob_vector_ip_similarity.h"
+#include "common/udt/ob_array_type.h"
+#include "storage/vector_type/ob_vector_l2_similarity.h"
+#include "storage/vector_type/ob_vector_cosine_similarity.h"
+#include "storage/vector_type/ob_vector_ip_similarity.h"
 
 
 namespace oceanbase
@@ -46,7 +46,7 @@ public:
   };
 public:
   explicit ObExprVectorSimilarity(common::ObIAllocator &alloc);
-  explicit ObExprVectorSimilarity(common::ObIAllocator &alloc, ObExprOperatorType type,
+  explicit ObExprVectorSimilarity(common::ObIAllocator &alloc, ObExprOperatorType type, 
                                 const char *name, int32_t param_num, int32_t dimension);
   virtual ~ObExprVectorSimilarity() {};
   virtual int calc_result_typeN(ObExprResType &type,
@@ -65,7 +65,7 @@ private:
 };
 
 template <typename T>
-typename ObExprVectorSimilarity::SimilarityFunc<T>::FuncPtrType ObExprVectorSimilarity::SimilarityFunc<T>::similarity_funcs[] =
+typename ObExprVectorSimilarity::SimilarityFunc<T>::FuncPtrType ObExprVectorSimilarity::SimilarityFunc<T>::similarity_funcs[] = 
 {
   ObVectorCosineSimilarity<T>::cosine_similarity_func,
   ObVectorIPSimilarity<T>::ip_similarity_func,

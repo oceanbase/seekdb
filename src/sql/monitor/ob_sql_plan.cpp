@@ -18,6 +18,7 @@
 #define USING_LOG_PREFIX SQL
 
 #include "observer/ob_inner_sql_connection_pool.h"
+#include "share/rc/ob_module_provider.h"
 #include "sql/optimizer/ob_del_upd_log_plan.h"
 #include "ob_sql_plan.h"
 using namespace oceanbase::common;
@@ -466,8 +467,7 @@ int ObSqlPlan::inner_store_sql_plan_for_explain(ObExecContext *ctx,
       plan_item->other_xml_
       ))) {
       LOG_WARN("failed to assign sql string", K(ret));
-    } else if (OB_FAIL(conn->execute_write(session->get_effective_tenant_id(), 
-                                          sql.ptr(), 
+    } else if (OB_FAIL(conn->execute_write(sql.ptr(), 
                                           affected_rows))) {
       LOG_WARN("failed to exec inner sql", K(ret));
     }
@@ -483,7 +483,7 @@ int ObSqlPlan::inner_store_sql_plan_for_explain(ObExecContext *ctx,
                                   save_tx_desc,
                                   save_nested_count);
     if (OB_SUCCESS != end_ret) {
-      LOG_WARN("failed to restore session", K(end_ret), K(ret));
+      LOG_ERROR("failed to restore session", K(end_ret), K(ret));
       if (OB_SUCCESS == ret) {
         ret = end_ret;
       }
@@ -567,8 +567,7 @@ int ObSqlPlan::escape_quotes(ObSqlPlanItem &plan_item)
 
 /**
  * escape quotes for string value
- * oracle: '  => ''
- * mysql:  '  => \'
+ * escape single quote with backslash for generated INSERT SQL
  */
 int ObSqlPlan::inner_escape_quotes(char* &ptr, int64_t &length)
 {
@@ -589,11 +588,7 @@ int ObSqlPlan::inner_escape_quotes(char* &ptr, int64_t &length)
     } else {
       for (int64_t i = 0; i < length; ++i) {
         if (ptr[i] == '\'') {
-          if (lib::is_mysql_mode()) {
-            buf[pos++] = '\\';
-          } else {
-            buf[pos++] = '\'';
-          }
+          buf[pos++] = '\\';
         }
         buf[pos++] = ptr[i];
       }
@@ -2517,7 +2512,7 @@ int ObSqlPlan::restore_session(ObSQLSessionInfo *session,
     session_value = 0;
     // release curr
     if (OB_NOT_NULL(new_tx_desc)) {
-      auto txs = MTL(transaction::ObTransService*);
+      auto txs = share::g_mp->trans_service();
       if (OB_ISNULL(txs)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_ERROR("can not acquire MTL TransService", KR(ret));

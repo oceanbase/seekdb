@@ -17,6 +17,7 @@
 #ifndef OBDEV_SRC_SQL_DAS_OB_DAS_REF_H_
 #define OBDEV_SRC_SQL_DAS_OB_DAS_REF_H_
 #include "sql/das/ob_das_task.h"
+#include "share/rc/ob_module_provider.h"
 #include "sql/das/ob_das_define.h"
 #include "sql/das/ob_das_factory.h"
 #include "sql/das/ob_das_def_reg.h"
@@ -28,7 +29,7 @@ namespace sql
 {
 class ObDASScanOp;
 class ObDASInsertOp;
-class ObRpcDasAsyncAccessCallBack;
+class ObCallDasAsyncAccessCallBack;
 
 enum ObDasAggTaskStartStatus
 {
@@ -74,7 +75,7 @@ public:
     parallel_type_ = DAS_SERIALIZATION;
     submitted_task_count_ = 0;
     if (OB_NOT_NULL(tx_desc_bak_)) {
-      transaction::ObTransService *txs = MTL(transaction::ObTransService*);
+      transaction::ObTransService *txs = share::g_mp->trans_service();
       txs->release_tx(*tx_desc_bak_);
       tx_desc_bak_ = NULL;
     }
@@ -231,7 +232,6 @@ public:
   explicit ObDASRef(ObEvalCtx &eval_ctx, ObExecContext &exec_ctx);
   ~ObDASRef() { reset(); }
 
-  bool check_tasks_same_ls_and_is_local(share::ObLSID &ls_id);
   DASOpResultIter begin_result_iter();
   DASTaskIter begin_task_iter() { return batched_tasks_.begin(); }
   ObDASTaskFactory &get_das_factory() { return das_factory_; }
@@ -265,8 +265,8 @@ public:
   int retry_all_fail_tasks(common::ObIArray<ObIDASTaskOp *> &failed_tasks);
   int close_all_task();
   bool is_all_local_task() const;
-  bool is_do_gts_opt() { return do_gts_opt_; }
-  void set_do_gts_opt(bool v) { do_gts_opt_ = v; }
+  bool is_snapshot_opt_enabled() { return use_snapshot_opt_; }
+  void set_use_snapshot_opt(bool v) { use_snapshot_opt_ = v; }
   void set_execute_directly(bool v) { execute_directly_ = v; }
   bool is_execute_directly() const { return execute_directly_; }
   common::ObIAllocator &get_das_alloc() { return das_alloc_; }
@@ -320,7 +320,7 @@ public:
     struct { // FARM COMPAT WHITELIST
       uint64_t execute_directly_                : 1;
       uint64_t enable_rich_format_              : 1; 
-      uint64_t do_gts_opt_                      : 1;
+      uint64_t use_snapshot_opt_               : 1;
       uint64_t reserved_                        : 62;
     };
   };
@@ -354,4 +354,3 @@ OB_INLINE int ObDASRef::prepare_das_task(const ObDASTabletLoc *tablet_loc, DASOp
 }  // namespace sql
 }  // namespace oceanbase
 #endif /* OBDEV_SRC_SQL_DAS_OB_DAS_REF_H_ */
-

@@ -18,7 +18,7 @@
 #include "storage/tablelock/ob_table_lock_live_detect_func.h"
 #include "storage/tablelock/ob_table_lock_common.h"
 #include "storage/tablelock/ob_table_lock_rpc_struct.h"
-#include "deps/oblib/src/lib/mysqlclient/ob_isql_client.h"
+#include "common/mysqlclient/ob_isql_client.h"
 
 namespace oceanbase
 {
@@ -26,7 +26,7 @@ namespace observer
 {
 class ObInnerSQLConnection;
 }
-namespace obrpc
+namespace obcall
 {
 class Bool;
 }
@@ -59,7 +59,7 @@ class ObTableLockDetectFuncList
 
 public:
   static int detect_session_alive(const uint32_t session_id, bool &is_alive);
-  static int detect_session_alive_for_rpc(const uint32_t session_id, obrpc::Bool &is_alive);
+  static int detect_session_alive_for_rpc(const uint32_t session_id, obcall::Bool &is_alive);
   static int do_session_alive_detect();
 
 private:

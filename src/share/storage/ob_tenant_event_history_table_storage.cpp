@@ -64,7 +64,7 @@ int ObTenantEventHistoryTableStorage::create_table_if_not_exists()
     if (!guard) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("failed to acquire connection", K(ret));
-    } else if (OB_FAIL(guard->execute(SQLITE_CREATE_TABLE_TENANT_EVENT_HISTORY, nullptr))) {
+    } else if (OB_FAIL(guard->execute(SQLITE_CREATE_TABLE_EVENT_HISTORY, nullptr))) {
       LOG_WARN("failed to create table", K(ret));
     }
   }
@@ -79,7 +79,7 @@ int ObTenantEventHistoryTableStorage::insert(const ObTenantEventHistoryEntry &en
     LOG_WARN("not init", K(ret));
   } else {
     const char *insert_sql =
-      "INSERT INTO __all_tenant_event_history "
+      "INSERT INTO __all_event_history "
       "(gmt_create, module, event, "
       "name1, value1, name2, value2, name3, value3, "
       "name4, value4, name5, value5, name6, value6, extra_info, "
@@ -132,7 +132,7 @@ int ObTenantEventHistoryTableStorage::insert_all(const ObIArray<ObTenantEventHis
     // do nothing
   } else {
     const char *insert_sql =
-      "INSERT INTO __all_tenant_event_history "
+      "INSERT INTO __all_event_history "
       "(gmt_create, module, event, "
       "name1, value1, name2, value2, name3, value3, "
       "name4, value4, name5, value5, name6, value6, extra_info, "
@@ -205,7 +205,7 @@ int ObTenantEventHistoryTableStorage::delete_expired(int64_t gmt_create_before, 
     LOG_WARN("not init", K(ret));
   } else {
     const char *delete_sql =
-      "DELETE FROM __all_tenant_event_history "
+      "DELETE FROM __all_event_history "
       "WHERE gmt_create < ? "
       "LIMIT ?;";
 
@@ -227,3 +227,4 @@ int ObTenantEventHistoryTableStorage::delete_expired(int64_t gmt_create_before, 
 
 } // namespace share
 } // namespace oceanbase
+

@@ -15,27 +15,23 @@
  */
 
 #include "storage/tx/ob_tx_log_cb_mgr.h"
-#include "storage/tx/ob_trans_part_ctx.h"
+#include "storage/tx/ob_tx_ctx.h"
 
 namespace oceanbase
 {
 namespace transaction
 {
 
-int ObTxLogCbPoolMgr::init(const int64_t tenant_id, const ObLSID ls_id)
+int ObTxLogCbPoolMgr::init()
 {
   int ret = OB_SUCCESS;
 
-  if (tenant_id <= 0) {
-    ret = OB_INVALID_ARGUMENT;
-    TRANS_LOG(WARN, "invalid argument", K(ret), K(tenant_id));
-  } else if (ATOMIC_LOAD(&is_inited_)) {
+  if (ATOMIC_LOAD(&is_inited_)) {
     ret = OB_INIT_TWICE;
     TRANS_LOG(WARN, "init twice", K(ret), KPC(this));
   } else {
     clear_sync_size_history_();
-    allocator_.set_tenant_id(tenant_id);
-    ls_id_ = ls_id;
+    
     ATOMIC_STORE(&is_inited_, true);
   }
 
@@ -46,7 +42,7 @@ void ObTxLogCbPoolMgr::reset()
 {
   ATOMIC_STORE(&is_inited_, false);
   ATOMIC_STORE(&idle_pool_ptr_, nullptr);
-  ATOMIC_STORE(&ls_occupying_cnt_, 0);
+  ATOMIC_STORE(&occupying_cnt_, 0);
   ATOMIC_STORE(&acquire_extra_log_cb_group_failed_cnt_, 0);
   clear_sync_size_history_();
   {
@@ -100,44 +96,6 @@ int ObTxLogCbPoolMgr::clear_log_cb_pool(const bool for_replay)
   return ret;
 }
 
-int ObTxLogCbPoolMgr::switch_to_leader(const int64_t active_tx_cnt)
-{
-  int ret = OB_SUCCESS;
-  ATOMIC_STORE(&allow_expand_, true);
-
-  const int64_t active_tx_default_log_pool_cnt =
-      ObTxLogCbGroup::ACTIVE_TX_DEFAULT_LOG_GROUP_COUNT * active_tx_cnt
-                  % ObTxLogCbPool::MAX_LOG_CB_GROUP_COUNT_IN_POOL
-              == 0
-          ? ObTxLogCbGroup::ACTIVE_TX_DEFAULT_LOG_GROUP_COUNT * active_tx_cnt
-                / ObTxLogCbPool::MAX_LOG_CB_GROUP_COUNT_IN_POOL
-          : ObTxLogCbGroup::ACTIVE_TX_DEFAULT_LOG_GROUP_COUNT * active_tx_cnt
-                    / ObTxLogCbPool::MAX_LOG_CB_GROUP_COUNT_IN_POOL
-                + 1;
-  int64_t target_log_pool_cnt =
-      active_tx_default_log_pool_cnt <= 0 ? 1 : active_tx_default_log_pool_cnt;
-
-  if (OB_SUCC(ret)) {
-    int64_t pool_list_size = 0;
-    {
-      SpinRLockGuard guard(pool_list_rw_lock_);
-      const int64_t pool_list_size = pool_list_.get_size();
-    }
-    if (target_log_pool_cnt >= pool_list_size) {
-      // do nothing
-    } else {
-      for (int i = pool_list_size; OB_SUCC(ret) && i < target_log_pool_cnt; i++) {
-        if (OB_FAIL(append_new_log_cb_pool_())) {
-          TRANS_LOG(WARN, "append a new log cb pool failed", K(ret), K(i), K(target_log_pool_cnt),
-                    K(active_tx_default_log_pool_cnt), K(pool_list_size), KPC(this));
-        }
-      }
-    }
-  }
-
-  return ret;
-}
-
 #ifdef ERRSIM
 ERRSIM_POINT_DEF(EN_ADJUST_TX_LOG_CB_POOL)
 #endif
@@ -175,13 +133,12 @@ int ObTxLogCbPoolMgr::adjust_log_cb_pool(const int64_t active_tx_cnt)
 
   int64_t removed_cnt = 0;
 
-  const int64_t tenant_memory_limit = ::oceanbase::lib::get_tenant_memory_limit(MTL_ID());
+  const int64_t tenant_memory_limit = ::oceanbase::lib::get_tenant_memory_limit();
 
   common::ObLabelItem item;
   ObLabel mem_label("TxLogCbPool");
-  (void)::oceanbase::lib::get_tenant_label_memory(MTL_ID(), mem_label, item);
+  (void)::oceanbase::lib::get_tenant_label_memory(mem_label, item);
   const int64_t log_cb_pool_mem_used = item.hold_;
-  // ::oceanbase::lib::get_tenant_label_memory(MTL_ID(), ObLabel &label, common::ObLabelItem &item);
 
   if (OB_SUCC(ret)) {
     SpinRLockGuard guard(pool_list_rw_lock_);
@@ -336,7 +293,7 @@ int ObTxLogCbPoolMgr::adjust_log_cb_pool(const int64_t active_tx_cnt)
   return ret;
 }
 
-int ObTxLogCbPoolMgr::acquire_idle_log_cb_group(ObTxLogCbGroup *&group_ptr, ObPartTransCtx *tx_ctx)
+int ObTxLogCbPoolMgr::acquire_idle_log_cb_group(ObTxLogCbGroup *&group_ptr, ObTxCtx *tx_ctx)
 {
   int ret = OB_SUCCESS;
 
@@ -359,11 +316,11 @@ int ObTxLogCbPoolMgr::acquire_idle_log_cb_group(ObTxLogCbGroup *&group_ptr, ObPa
               KPC(this));
   } else {
     TRANS_LOG(INFO, "[Log Cb Group Life] occupy a idle group by tx", K(ret),
-              K(tx_ctx->get_trans_id()), K(tx_ctx->get_ls_id()), K(ref_guard), KPC(group_ptr));
+              K(tx_ctx->get_trans_id()), K(ref_guard), KPC(group_ptr));
   }
 
   if (OB_SUCC(ret)) {
-    ATOMIC_INC(&ls_occupying_cnt_);
+    ATOMIC_INC(&occupying_cnt_);
   } else if (OB_TX_NOLOGCB == ret) {
     ATOMIC_INC(&acquire_extra_log_cb_group_failed_cnt_);
   }
@@ -378,7 +335,7 @@ bool ObTxLogCbPoolMgr::is_all_busy()
 
   return pool_list_.get_size() == 0
          || (pool_list_.get_size() > 0
-             && ATOMIC_LOAD(&ls_occupying_cnt_)
+             && ATOMIC_LOAD(&occupying_cnt_)
                     == pool_list_.get_size() * ObTxLogCbPool::MAX_LOG_CB_GROUP_COUNT_IN_POOL);
 }
 
@@ -573,8 +530,7 @@ int ObTxLogCbPoolMgr::print_sync_size_history_()
     }
   }
 
-  _TRANS_LOG(INFO, "[LogCbPool Adjust] print sync size history <ls_id:%ld> : { %s }", ls_id_.id(),
-             sync_size_his_print_buf);
+  _TRANS_LOG(INFO, "[LogCbPool Adjust] print sync size history: { %s }", sync_size_his_print_buf);
 
   return ret;
 }

@@ -25,12 +25,12 @@ namespace oceanbase {
 namespace sql {
 namespace dtl {
 
-OB_SERIALIZE_MEMBER(ObDtlChannelInfo, chid_, type_, peer_, role_, tenant_id_);
+OB_SERIALIZE_MEMBER(ObDtlChannelInfo, chid_, type_, peer_, role_);
 OB_SERIALIZE_MEMBER(ObDtlChSet, exec_addr_, ch_info_set_);
 OB_SERIALIZE_MEMBER(ObDtlTask, jobid_, taskid_, cis_, chans_cnt_);
 OB_SERIALIZE_MEMBER(ObDtlExecServer, total_task_cnt_, exec_addrs_, prefix_task_counts_);
 OB_SERIALIZE_MEMBER(ObDtlChTotalInfo, start_channel_id_, transmit_exec_server_,
-                    receive_exec_server_, channel_count_, tenant_id_, is_local_shuffle_);
+                    receive_exec_server_, channel_count_, is_local_shuffle_);
 
 
 int ObDtlChSet::add_channel_info(const ObDtlChannelInfo &info)
@@ -98,7 +98,6 @@ int ObDtlChTotalInfo::assign(const ObDtlChTotalInfo &other)
   int ret = OB_SUCCESS;
   start_channel_id_ = other.start_channel_id_;
   channel_count_ = other.channel_count_;
-  tenant_id_ = other.tenant_id_;
   OZ(transmit_exec_server_.assign(other.transmit_exec_server_));
   OZ(receive_exec_server_.assign(other.receive_exec_server_));
   is_local_shuffle_ = other.is_local_shuffle_;
@@ -141,7 +140,7 @@ int ObDtlExecServer::add_exec_addr(const common::ObAddr &exec_addr)
 //       }
 //     } else {
 //       auto proxy = DTL.get_rpc_proxy().to(GCTX.self_addr());
-//       obrpc::ObDtlRpcChanArgs args;
+//       obcall::ObDtlRpcChanArgs args;
 //       args.chid_ = ci.chid_;
 //       args.peer_ = ci.peer_;
 //       if (OB_FAIL(proxy.create_channel(args))) {

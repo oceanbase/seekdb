@@ -30,7 +30,6 @@ using namespace blocksstable;
 using namespace share;
 
 static int turn = 0;
-static ObTxData src_tx_data;
 static ObTxData dst_tx_data;
 
 namespace storage {
@@ -39,13 +38,8 @@ int ObTxTable::check_with_tx_data(ObReadTxDataArg &read_tx_data_arg,
 {
   TRANS_LOG(INFO, "turn is", K(turn));
   if (turn == 0) {
-    // use dst
     turn++;
     return fn(dst_tx_data, NULL);
-  } else if (turn == 1) {
-    // use src
-    turn++;
-    return fn(src_tx_data, NULL);
   } else {
     return OB_SUCCESS;
   }
@@ -64,7 +58,6 @@ public:
   virtual void SetUp() override
   {
     turn = 0;
-    src_tx_data.reset();
     dst_tx_data.reset();
     TRANS_LOG(INFO, "setup success");
   }
@@ -72,7 +65,6 @@ public:
   virtual void TearDown() override
   {
     turn = 0;
-    src_tx_data.reset();
     dst_tx_data.reset();
     TRANS_LOG(INFO, "teardown success");
   }
@@ -80,7 +72,6 @@ public:
   static void SetUpTestCase()
   {
     turn = 0;
-    src_tx_data.reset();
     dst_tx_data.reset();
 
     TRANS_LOG(INFO, "SetUpTestCase");
@@ -88,7 +79,6 @@ public:
   static void TearDownTestCase()
   {
     turn = 0;
-    src_tx_data.reset();
     dst_tx_data.reset();
 
     TRANS_LOG(INFO, "TearDownTestCase");
@@ -141,94 +131,6 @@ TEST_F(TestTxTableGuards, check_on_single_dest_2) {
   EXPECT_EQ(trans_version, SCN::max_scn());
   EXPECT_EQ(state, ObTxData::RUNNING);
 }
-
-TEST_F(TestTxTableGuards, check_on_dest_and_src_1) {
-  ObTxTable dst_tx_table;
-  ObTxTable src_tx_table;
-  ObTxTableGuards guards;
-  share::SCN scn;
-  int64_t state;
-  share::SCN trans_version;
-
-  scn.convert_from_ts(100);
-
-  guards.tx_table_guard_.tx_table_ = &dst_tx_table;
-  guards.src_tx_table_guard_.tx_table_ = &src_tx_table;
-  dst_tx_data.commit_version_.convert_from_ts(1);
-  dst_tx_data.end_scn_.convert_from_ts(90);
-  dst_tx_data.state_ = ObTxData::COMMIT;
-
-  src_tx_data.commit_version_.convert_from_ts(2);
-  src_tx_data.end_scn_.convert_from_ts(90);
-  src_tx_data.state_ = ObTxData::COMMIT;
-
-  EXPECT_EQ(OB_SUCCESS, guards.get_tx_state_with_scn(ObTransID(1),
-                                                     scn,
-                                                     state,
-                                                     trans_version));
-
-  EXPECT_EQ(dst_tx_data.commit_version_, trans_version);
-  EXPECT_EQ(dst_tx_data.state_, ObTxData::COMMIT);
-}
-
-TEST_F(TestTxTableGuards, check_on_dest_and_src_2) {
-  ObTxTable dst_tx_table;
-  ObTxTable src_tx_table;
-  ObTxTableGuards guards;
-  share::SCN scn;
-  int64_t state;
-  share::SCN trans_version;
-
-  scn.convert_from_ts(100);
-
-  guards.tx_table_guard_.tx_table_ = &dst_tx_table;
-  guards.src_tx_table_guard_.tx_table_ = &src_tx_table;
-  dst_tx_data.commit_version_.convert_from_ts(1);
-  dst_tx_data.end_scn_.convert_from_ts(110);
-  dst_tx_data.state_ = ObTxData::ABORT;
-
-  src_tx_data.commit_version_.convert_from_ts(2);
-  src_tx_data.end_scn_.convert_from_ts(90);
-  src_tx_data.state_ = ObTxData::COMMIT;
-
-  EXPECT_EQ(OB_SUCCESS, guards.get_tx_state_with_scn(ObTransID(1),
-                                                     scn,
-                                                     state,
-                                                     trans_version));
-
-  EXPECT_EQ(SCN::max_scn(), trans_version);
-  EXPECT_EQ(state, ObTxData::RUNNING);
-}
-
-TEST_F(TestTxTableGuards, check_on_dest_and_src_3) {
-  ObTxTable dst_tx_table;
-  ObTxTable src_tx_table;
-  ObTxTableGuards guards;
-  share::SCN scn;
-  int64_t state;
-  share::SCN trans_version;
-
-  scn.convert_from_ts(100);
-
-  guards.tx_table_guard_.tx_table_ = &dst_tx_table;
-  guards.src_tx_table_guard_.tx_table_ = &src_tx_table;
-  dst_tx_data.commit_version_.convert_from_ts(1);
-  dst_tx_data.end_scn_.convert_from_ts(110);
-  dst_tx_data.state_ = ObTxData::COMMIT;
-
-  src_tx_data.commit_version_.convert_from_ts(2);
-  src_tx_data.end_scn_.convert_from_ts(90);
-  src_tx_data.state_ = ObTxData::ABORT;
-
-  EXPECT_EQ(OB_SUCCESS, guards.get_tx_state_with_scn(ObTransID(1),
-                                                     scn,
-                                                     state,
-                                                     trans_version));
-
-  EXPECT_EQ(SCN::min_scn(), trans_version);
-  EXPECT_EQ(src_tx_data.state_, state);
-}
-
 
 } // namespace unittest
 } // namespace oceanbase
