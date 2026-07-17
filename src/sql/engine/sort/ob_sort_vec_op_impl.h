@@ -275,18 +275,27 @@ protected:
       const int64_t bucket_cnt = next_pow2(std::max(static_cast<int64_t>(16), row_cnt));
       const int64_t payload_size = row_cnt * FIXED_PART_NODE_SIZE
                                  + bucket_cnt * FIXED_PART_BKT_SIZE;
+      const int64_t hash_partition_sort_size = payload_size + payload_size / 8;
       // Segment-array metadata and block rounding need some headroom, but the
       // old 2x estimate forced premature dumps. One eighth tracks the actual
       // allocation closely while keeping the work-area decision conservative.
-      partition_sort_size = payload_size + payload_size / 8;
+      partition_sort_size = hash_partition_sort_size;
       if (enable_encode_sortkey_) {
         if (is_fixed_key_sort_enabled_) {
           const int64_t item_size = fixed_sort_key_len_ + sizeof(Store_Row *);
           partition_sort_size += row_cnt * item_size * 2
                                + 257 * sizeof(int64_t) * fixed_sort_key_len_;
         } else {
-          partition_sort_size +=
+          const int64_t encoded_sort_payload =
               row_cnt * sizeof(typename ObAdaptiveQS<Store_Row>::AQSItem);
+          const int64_t encoded_sort_size = encoded_sort_payload + encoded_sort_payload / 8;
+          if (can_use_global_encoded_partition_sort()) {
+            // The global encoded path releases its AQS workspace before falling
+            // back to hash partitioning, so the two reservations are exclusive.
+            partition_sort_size = std::max(hash_partition_sort_size, encoded_sort_size);
+          } else {
+            partition_sort_size += encoded_sort_size;
+          }
         }
       }
     }
@@ -311,6 +320,13 @@ protected:
   // partition sort for window function
   int is_equal_part(const Store_Row *l, const Store_Row *r, const RowMeta &row_meta,
                     bool &is_equal);
+  bool can_use_global_encoded_partition_sort() const;
+  int try_global_encoded_partition_sort(
+      const RowMeta &row_meta,
+      common::ObIArray<Store_Row *> &rows,
+      const int64_t rows_begin,
+      const int64_t rows_end,
+      bool &sorted);
   int do_partition_sort(const RowMeta &row_meta, common::ObIArray<Store_Row *> &rows,
                         const int64_t rows_begin, const int64_t rows_end);
   void set_blk_holder(ObTempRowStore::BlockHolder *blk_holder);
