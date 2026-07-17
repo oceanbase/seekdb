@@ -162,10 +162,10 @@ ObITokenStream *ObITextAnalyzer::get_tail_token_stream()
 int ObEnglishTextAnalyzer::inner_init(const ObTextAnalysisCtx &ctx, ObIAllocator &allocator)
 {
   int ret = OB_SUCCESS;
-  UNUSEDx(ctx); // TODO: generate specific analyse pipeline by ctx
+  UNUSED(allocator);
   if (OB_FAIL(add_tokenizer(ObTextTokenizer::WHITESPACE))) {
     LOG_WARN("failed to add white space tokenizer", K(ret));
-  } else if (ctx.filter_stopword_ && OB_FAIL(add_normalizer(ObTokenNormalizer::STOPWORD_FILTER, ctx))) {
+  } else if (ctx.filter_stop_token_ && OB_FAIL(add_normalizer(ObTokenNormalizer::STOPWORD_FILTER, ctx))) {
     LOG_WARN("failed to add stop word filter", K(ret));
   } else if (OB_FAIL(add_normalizer(ObTokenNormalizer::ENG_BASIC_NORM, ctx))) {
     LOG_WARN("failed to add basic english normalizer", K(ret));

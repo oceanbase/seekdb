@@ -28,7 +28,7 @@ struct ObTextAnalysisCtx final
 public:
   ObTextAnalysisCtx()
     : cs_(nullptr),
-      filter_stopword_(true),
+      filter_stop_token_(false),
       need_grouping_(false)
   {}
   ~ObTextAnalysisCtx() = default;
@@ -36,13 +36,17 @@ public:
   void reset()
   {
     cs_ = nullptr;
-    filter_stopword_ = true;
+    filter_stop_token_ = false;
     need_grouping_ = false;
   }
-  TO_STRING_KV(KP_(cs), K_(filter_stopword), K_(need_grouping));
+  TO_STRING_KV(KP_(cs), K_(filter_stop_token), K_(need_grouping));
 public:
   const ObCharsetInfo *cs_;
-  bool filter_stopword_;
+  // 停止词过滤默认关闭，由统一 token processor 完成；旧字段名共享同一存储以兼容查询分析调用点。
+  union {
+    bool filter_stop_token_;
+    bool filter_stopword_;
+  };
   bool need_grouping_;
   // language type
   // word segment plugin type

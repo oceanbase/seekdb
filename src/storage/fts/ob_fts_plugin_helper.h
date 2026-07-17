@@ -21,6 +21,7 @@
 #include "lib/charset/ob_charset.h"
 #include "lib/string/ob_string.h"
 #include "object/ob_object.h"
+#include "plugin/interface/ob_plugin_ftparser_intf.h"
 #include "share/ob_plugin_helper.h"
 #include "storage/fts/ob_fts_parser_property.h"
 #include "storage/fts/ob_fts_struct.h"
@@ -41,9 +42,9 @@ class ObPluginParam;
 namespace storage
 {
 
-class ObStopWordChecker;
+class ObStopTokenCheckerGen;
+class ObStopTokenChecker;
 class ObFTDictHub;
-class ObAddWord;
 
 #define FTS_BUILD_IN_PARSER_LIST                                                                   \
   FT_PARSER_TYPE(FTP_SPACE, space)                                                                 \
@@ -82,6 +83,11 @@ public:
   OB_INLINE int64_t get_parser_version() const { return parser_version_; }
   OB_INLINE bool is_valid() const { return parser_name_.is_valid() && parser_version_ >= 0; }
   OB_INLINE bool is_type_before_4_3_5_1() const { return is_space() || is_beng() || is_ngram(); }
+  // 内置解析器可以安全暴露给后续复用路径；外部插件仍遵守原有一次 segment 一次释放的 ABI。
+  OB_INLINE bool is_builtin_parser() const
+  {
+    return is_space() || is_ngram() || is_beng() || is_ik() || is_ngram2();
+  }
   OB_INLINE void set_name_and_version(const share::ObPluginName &name, const int64_t version)
   {
     parser_name_ = name;
@@ -105,7 +111,9 @@ private:
 class ObFTParsePluginData final
 {
 public:
-  ObFTParsePluginData() = default;
+  ObFTParsePluginData()
+      : stop_token_checker_gen_(nullptr), dict_hub_(nullptr), handler_allocator_(), is_inited_(false)
+  {}
   ~ObFTParsePluginData();
 
   /**
@@ -119,18 +127,20 @@ public:
   void destroy();
 
 public:
-  ObStopWordChecker *stop_word_checker() const { return stop_word_checker_; }
+  // checker 只借用进程级只读表，调用方不得跨越 deinit_global 生命周期保存。
+  int get_stop_token_checker(const ObCollationType coll,
+                             ObStopTokenChecker &stop_token_checker);
   int get_dict_hub(ObFTDictHub *&hub);
 
 private:
-  int init_and_set_stopword_list();
+  int init_stop_token_checker_gen();
   int init_dict_hub();
 
 private:
-  ObStopWordChecker *     stop_word_checker_ = nullptr;
-  ObFTDictHub *           dict_hub_          = nullptr;
+  ObStopTokenCheckerGen *stop_token_checker_gen_;
+  ObFTDictHub *dict_hub_;
   common::ObFIFOAllocator handler_allocator_;
-  bool                    is_inited_         = false;
+  bool is_inited_;
 };
 
 class ObFTParseHelper final
@@ -163,6 +173,12 @@ public:
       common::ObIAllocator *allocator,
       const common::ObString &plugin_name,
       const common::ObString &plugin_properties);
+  // need_position_list 是 seekdb 单机适配入口；Task 4 可直接映射 phrase 索引类型，避免引入上游分布式 schema 依赖。
+  int init(
+      common::ObIAllocator *allocator,
+      const common::ObString &plugin_name,
+      const common::ObString &plugin_properties,
+      const bool need_position_list);
   /**
    * Split document into multiple words
    *
@@ -177,10 +193,22 @@ public:
       const char *fulltext,
       const int64_t fulltext_len,
       int64_t &doc_length,
+      ObFTTokenMap &ft_token_map) const;
+  // 兼容尚由 Task 4 迁移的构建调用点；内部仍走同一 token 热路径，再投影为旧词频布局。
+  int segment(
+      const common::ObObjMeta &meta,
+      const char *fulltext,
+      const int64_t fulltext_len,
+      int64_t &doc_length,
       ObFTWordMap &words) const;
   int check_is_the_same(
       const common::ObString &plugin_name,
       const common::ObString &plugin_properties,
+      bool &is_same) const;
+  int check_is_the_same(
+      const common::ObString &plugin_name,
+      const common::ObString &plugin_properties,
+      const bool need_position_list,
       bool &is_same) const;
   /**
    * Make json document for fulltext search
@@ -189,6 +217,10 @@ public:
    * @param[in] doc_length, length of document by word count
    * @param[out] json_root, json document
    */
+  int make_detail_json(
+      const ObFTTokenMap &ft_token_map,
+      const int64_t doc_length,
+      common::ObIJsonBase *&json_root);
   int make_detail_json(
       const ObFTWordMap &words,
       const int64_t doc_length,
@@ -201,32 +233,33 @@ public:
    * @param[out] json_root, json document
    */
   int make_token_array_json(
+      const ObFTTokenMap &ft_token_map,
+      common::ObIJsonBase *&json_root);
+  int make_token_array_json(
       const ObFTWordMap &words,
       common::ObIJsonBase *&json_root);
 
   void reset();
 
-  TO_STRING_KV(KP_(allocator), K_(parser_name), KP_(parser_desc), K_(is_inited));
+  const ObFTParser &get_parser_name() const { return parser_name_; }
+  plugin::ObPluginParam *get_plugin_param() const { return plugin_param_; }
+  const ObFTParserProperty &get_parser_property() const { return parser_property_; }
+  const plugin::ObIFTParserDesc *get_parser_desc() const { return parser_desc_; }
+  const ObProcessTokenFlag &get_process_token_flags() const { return process_token_flag_; }
+  bool is_builtin_parser() const { return parser_name_.is_builtin_parser(); }
+
+  TO_STRING_KV(KP_(allocator), K_(parser_name), KP_(parser_desc), K_(need_position_list), K_(is_inited));
 
 private:
-  static int segment(
-      const ObFTParserProperty &property,
-      const int64_t parser_version,
-      const plugin::ObIFTParserDesc *parser_desc,
-      plugin::ObPluginParam *plugin_param,
-      const ObCharsetInfo *cs,
-      const char *fulltext,
-      const int64_t fulltext_len,
-      common::ObIAllocator &allocator,
-      ObAddWord &add_word);
-  int set_add_word_flag(const plugin::ObIFTParserDesc &ftparser_desc);
+  int set_process_token_flag(const plugin::ObIFTParserDesc &ftparser_desc);
 private:
   common::ObIAllocator *allocator_;
   plugin::ObIFTParserDesc *parser_desc_;
   plugin::ObPluginParam *plugin_param_;
   ObFTParser parser_name_;
-  ObAddWordFlag add_word_flag_;
+  ObProcessTokenFlag process_token_flag_;
   ObFTParserProperty parser_property_;
+  bool need_position_list_;
   bool is_inited_;
 
 private:

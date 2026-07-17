@@ -17,16 +17,13 @@
 #pragma once
 
 #include "plugin/interface/ob_plugin_intf.h"
+#include "storage/fts/ob_fts_struct.h"
 
 struct ObCharsetInfo;
 
 namespace oceanbase
 {
 
-namespace storage
-{
-class ObAddWordFlag;
-}
 namespace plugin
 {
 
@@ -87,6 +84,10 @@ public:
   {
   }
 
+  // 词典身份参与诊断输出，便于确认 Task 3 的表 ID 没有在复用参数链中丢失。
+  TO_STRING_KV(K_(mode), K_(main_dict), K_(quan_dict), K_(stopword_dict),
+      K_(main_dict_table_id), K_(quantifier_dict_table_id), K_(stopword_dict_table_id));
+
 public:
   Mode mode_;
   common::ObString main_dict_;
@@ -111,6 +112,10 @@ public:
 public:
   ObFTParserParam()
       : ObFTParserParamExport(),
+        metadata_alloc_(nullptr),
+        scratch_alloc_(nullptr),
+        allocator_(nullptr),
+        ik_param_(),
         ngram_token_size_(NGRAM_TOKEN_SIZE),
         min_ngram_size_(NGRAM_TOKEN_SIZE),
         max_ngram_size_(NGRAM_TOKEN_SIZE)
@@ -121,13 +126,25 @@ public:
   inline void reset()
   {
     ObFTParserParamExport::reset();
+    metadata_alloc_ = nullptr;
+    scratch_alloc_ = nullptr;
     allocator_ = nullptr;
+    ik_param_ = ObFTIKParam();
     ngram_token_size_ = NGRAM_TOKEN_SIZE;
+    min_ngram_size_ = NGRAM_TOKEN_SIZE;
+    max_ngram_size_ = NGRAM_TOKEN_SIZE;
   }
 
-  INHERIT_TO_STRING_KV("base", ObFTParserParamExport, KP_(allocator), K_(ngram_token_size));
+  INHERIT_TO_STRING_KV("ObFTParserParamExport", ObFTParserParamExport,
+      KP_(metadata_alloc), KP_(scratch_alloc), KP_(allocator), K_(ngram_token_size),
+      K_(min_ngram_size), K_(max_ngram_size), K_(ik_param));
 
 public:
+  // metadata allocator 持有解析器对象、字典句柄和分析器元数据，生命周期跨多篇文档。
+  common::ObIAllocator *metadata_alloc_;
+  // scratch allocator 只持有单篇文档 token/临时字符串；复用前须保证旧输出不再被引用。
+  common::ObIAllocator *scratch_alloc_;
+  // 兼容尚由后续任务迁移的旧插件调用；新内置路径只使用上面两个明确生命周期的 allocator。
   common::ObIAllocator *allocator_ = nullptr;
 
   // ik parser params
@@ -184,10 +201,10 @@ public:
 
   /**
    * get AddWordFlag
-   * @details ref to ObAddWordFlag for more details
-   * @param[out] flag the AddWordFlag
+   * @details ref to ObProcessTokenFlag for more details
+   * @param[out] flag token processing flags
    */
-  virtual int get_add_word_flag(storage::ObAddWordFlag &flag) const = 0;
+  virtual int get_add_word_flag(storage::ObProcessTokenFlag &flag) const = 0;
 
   virtual int check_if_charset_supported(const ObCharsetInfo *cs) const { return OB_SUCCESS; }
 };
