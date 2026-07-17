@@ -57,6 +57,12 @@ private:
   // Task4 Op2：解析器使用独立的长生命周期 allocator，不能随每行输出缓存一起回收。
   common::ObArenaAllocator parser_allocator_;
   storage::ObFTParseHelper helper_;
+  // Task4 Op11：保留解析器配置，用于在 word-doc 和 doc-word 之间精确匹配共享分词结果。
+  common::ObString parser_name_;
+  common::ObString parser_properties_;
+  // Task4 Op11：按扫描算子统计共享分词缓存命中率，避免在逐文档热路径输出日志。
+  int64_t task4_op11_cache_hit_count_;
+  int64_t task4_op11_cache_miss_count_;
   bool is_inited_;
 
   DISALLOW_COPY_AND_ASSIGN(ObFTIndexRowCache);
