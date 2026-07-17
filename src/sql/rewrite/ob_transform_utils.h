@@ -1976,6 +1976,14 @@ public:
                                             bool check_current_stmt,
                                             bool check_basic_deterministic,
                                             bool &strict_deterministic);
+  // A MATCH expression used only as a boolean predicate does not need its
+  // BM25 score materialized. Collect the constraint that preserves the
+  // predicate while allowing text retrieval to skip score calculation.
+  static int check_need_calc_match_score(ObExecContext *exec_ctx,
+                                         const ObDMLStmt *stmt,
+                                         ObRawExpr *match_expr,
+                                         bool &need_calc,
+                                         common::ObIArray<ObExprConstraint> &constraints);
 
 private:
   static int inner_get_lazy_left_join(ObDMLStmt *stmt,

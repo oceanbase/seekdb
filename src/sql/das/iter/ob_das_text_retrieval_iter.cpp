@@ -469,7 +469,15 @@ int ObDASTextRetrievalIter::init_inv_idx_scan_param()
       snapshot_,
       inv_idx_scan_param_))) {
     LOG_WARN("fail to init inverted index scan param", K(ret), KPC_(ir_ctdef));
-  } else if (need_inv_idx_agg_) {
+  } else {
+    // DAAT merges the posting lists with a min-heap keyed by document id, so
+    // every token iterator must advance in ascending order.  Relevance plans
+    // used to set this only while initializing the auxiliary aggregation
+    // scan; score-free MATCH plans skip that scan and could inherit Reverse.
+    inv_idx_scan_param_.scan_flag_.scan_order_ = ObQueryFlag::Forward;
+  }
+
+  if (OB_SUCC(ret) && need_inv_idx_agg_) {
     if (OB_FAIL(init_base_idx_scan_param(
         ls_id_,
         inv_idx_tablet_id_,
@@ -480,9 +488,6 @@ int ObDASTextRetrievalIter::init_inv_idx_scan_param()
         inv_idx_agg_param_))) {
       LOG_WARN("fail to init inverted index count aggregate param", K(ret), KPC_(ir_ctdef));
     } else {
-      // for some cases, the default scan_order_ may be the 'Reverse'.
-      inv_idx_scan_param_.scan_flag_.scan_order_ = ObQueryFlag::Forward;
-
       if (OB_UNLIKELY(!static_cast<sql::ObStoragePushdownFlag>(
           ir_ctdef_->get_inv_idx_agg_ctdef()->pd_expr_spec_.pd_storage_flag_).is_aggregate_pushdown())) {
         ret = OB_NOT_IMPLEMENT;

@@ -10,6 +10,7 @@ set -euo pipefail
 CONTAINER="${CONTAINER:-seekdb-dev}"
 WORKDIR="${WORKDIR:-/workspace/seekdb}"
 BUILD_JOBS="${BUILD_JOBS:-$(nproc)}"
+SKIP_BUILD="${SKIP_BUILD:-0}"
 READY_TIMEOUT_SEC="${READY_TIMEOUT_SEC:-300}"
 DEPLOY_NAME="ftsbench"
 MYSQL_PORT=10000
@@ -29,6 +30,7 @@ echo "Refreshing the FTS benchmark environment in ${CONTAINER}..."
 
 exec docker exec --interactive --user root --workdir "${WORKDIR}" \
   --env "BUILD_JOBS=${BUILD_JOBS}" \
+  --env "SKIP_BUILD=${SKIP_BUILD}" \
   --env "READY_TIMEOUT_SEC=${READY_TIMEOUT_SEC}" \
   --env "DEPLOY_NAME=${DEPLOY_NAME}" \
   --env "MYSQL_PORT=${MYSQL_PORT}" \
@@ -82,8 +84,12 @@ fi
 echo "[2/4] Remove only the old ftsbench data directory: ${DATA_DIR}"
 rm -rf "${DATA_DIR}"
 
-echo "[3/4] Build current source (debug, ${BUILD_JOBS} jobs)"
-./build.sh debug --make -j"${BUILD_JOBS}"
+if [[ "${SKIP_BUILD}" == "1" ]]; then
+  echo '[3/4] Reuse the existing debug binary (SKIP_BUILD=1)'
+else
+  echo "[3/4] Build current source (debug, ${BUILD_JOBS} jobs)"
+  ./build.sh debug --make -j"${BUILD_JOBS}"
+fi
 
 BIN=build_debug/src/observer/seekdb
 [[ -x "${BIN}" ]] || { echo "Build completed but ${BIN} is missing" >&2; exit 1; }
