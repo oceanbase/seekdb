@@ -1,0 +1,35 @@
+# ==== additional Document AI coverage ====
+# group two sentences per chunk
+SELECT chunk_id, chunk_offset, chunk_length, chunk_text
+FROM AI_SPLIT_DOCUMENT('S1 one. S2 two. S3 three. S4 four. S5 five.',
+'{"type":"text","by":"sentence","max":2}');
+chunk_id	chunk_offset	chunk_length	chunk_text
+0	0	15	S1 one. S2 two.
+1	16	18	S3 three. S4 four.
+2	35	8	S5 five.
+# word overlap retains source byte offsets and lengths
+SELECT chunk_id, chunk_offset, chunk_length, chunk_text
+FROM AI_SPLIT_DOCUMENT('alpha beta gamma delta epsilon zeta eta theta',
+'{"type":"text","by":"word","max":3,"overlap":1}');
+chunk_id	chunk_offset	chunk_length	chunk_text
+0	0	16	alpha beta gamma
+1	11	19	gamma delta epsilon
+2	23	16	epsilon zeta eta
+3	36	9	eta theta
+# NULL and empty documents produce empty tables
+SELECT count(*) AS null_chunk_count
+FROM AI_SPLIT_DOCUMENT(NULL, '{"type":"text"}');
+null_chunk_count
+0
+SELECT count(*) AS empty_chunk_count
+FROM AI_SPLIT_DOCUMENT('', '{"type":"text"}');
+empty_chunk_count
+0
+# default configuration is markdown split by sentence
+SELECT chunk_id, chunk_text
+FROM AI_SPLIT_DOCUMENT('# Heading\nFirst. Second.');
+chunk_id	chunk_text
+0	# Heading
+First.
+1	# Heading
+Second.

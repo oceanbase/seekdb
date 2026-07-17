@@ -1159,6 +1159,7 @@ static const NonReservedKeyword Mysql_none_reserved_keywords[] =
   {"tablets", TABLETS},
   {"enable_macro_block_bloom_filter", ENABLE_MACRO_BLOCK_BLOOM_FILTER},
   {"api_mode", API_MODE},
+  {"ai_split_document", AI_SPLIT_DOCUMENT},
   {"url", URL},
   {"credential", CREDENTIAL},
   {"INCONSISTENT", INCONSISTENT},

@@ -19,6 +19,7 @@
 #include "sql/engine/basic/ob_function_table_op.h"
 #include "sql/engine/ob_exec_context.h"
 #include "sql/engine/expr/ob_expr_lob_utils.h"
+#include "sql/engine/expr/ob_expr_ai/ob_expr_ai_split_document.h"
 
 
 namespace oceanbase
@@ -39,6 +40,9 @@ int ObFunctionTableOp::inner_open()
     LOG_WARN("value expr is not init", K(ret));
   } else if (ObExtendType == MY_SPEC.value_expr_->datum_meta_.type_) {
     next_row_func_ = &ObFunctionTableOp::inner_get_next_row_udf;
+  } else if (T_FUN_SYS_AI_SPLIT_DOCUMENT == MY_SPEC.value_expr_->type_) {
+    next_row_func_ = &ObFunctionTableOp::inner_get_next_row_ai_split_document;
+    ret = ObExprAISplitDocument::reset_context(*MY_SPEC.value_expr_, ctx_);
   } else {
     next_row_func_ = &ObFunctionTableOp::inner_get_next_row_sys_func;
   }
@@ -52,6 +56,10 @@ int ObFunctionTableOp::inner_rescan()
     LOG_WARN("failed to inner rescan", K(ret));
   } else {
     node_idx_ = 0;
+    if (OB_NOT_NULL(MY_SPEC.value_expr_)
+        && T_FUN_SYS_AI_SPLIT_DOCUMENT == MY_SPEC.value_expr_->type_) {
+      OZ (ObExprAISplitDocument::reset_context(*MY_SPEC.value_expr_, ctx_));
+    }
     if (MY_SPEC.has_correlated_expr_) {
       row_count_ = 0;
       col_count_ = 0;
@@ -69,6 +77,10 @@ int ObFunctionTableOp::inner_close()
   row_count_ = 0;
   col_count_ = 0;
   value_table_ = NULL;
+  if (OB_NOT_NULL(MY_SPEC.value_expr_)
+      && T_FUN_SYS_AI_SPLIT_DOCUMENT == MY_SPEC.value_expr_->type_) {
+    OZ (ObExprAISplitDocument::reset_context(*MY_SPEC.value_expr_, ctx_));
+  }
   return ret;
 }
 
@@ -244,6 +256,43 @@ int ObFunctionTableOp::inner_get_next_row_sys_func()
   } else {
     MY_SPEC.column_exprs_.at(0)->locate_datum_for_write(eval_ctx_).set_datum(*value);
     MY_SPEC.column_exprs_.at(0)->set_evaluated_projected(eval_ctx_);
+  }
+  return ret;
+}
+
+int ObFunctionTableOp::inner_get_next_row_ai_split_document()
+{
+  int ret = OB_SUCCESS;
+  int64_t chunk_id = 0;
+  int64_t chunk_offset = 0;
+  int64_t chunk_length = 0;
+  ObString chunk_text;
+  clear_evaluated_flag();
+  if (OB_ISNULL(MY_SPEC.value_expr_)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("ai_split_document expression is null", K(ret));
+  } else if (MY_SPEC.column_exprs_.count() < 4) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("ai_split_document output columns are incomplete", K(ret), K(MY_SPEC.column_exprs_.count()));
+  } else if (OB_FAIL(ctx_.check_status())) {
+    LOG_WARN("query was interrupted while splitting document", K(ret));
+  } else if (OB_FAIL(ObExprAISplitDocument::eval_next_chunk(*MY_SPEC.value_expr_,
+                                                            eval_ctx_,
+                                                            chunk_id,
+                                                            chunk_offset,
+                                                            chunk_length,
+                                                            chunk_text))) {
+    if (OB_ITER_END != ret) {
+      LOG_WARN("failed to get next document chunk", K(ret));
+    }
+  } else {
+    MY_SPEC.column_exprs_.at(0)->locate_datum_for_write(eval_ctx_).set_int(chunk_id);
+    MY_SPEC.column_exprs_.at(1)->locate_datum_for_write(eval_ctx_).set_int(chunk_offset);
+    MY_SPEC.column_exprs_.at(2)->locate_datum_for_write(eval_ctx_).set_int(chunk_length);
+    MY_SPEC.column_exprs_.at(3)->locate_datum_for_write(eval_ctx_).set_string(chunk_text);
+    for (int64_t i = 0; i < 4; ++i) {
+      MY_SPEC.column_exprs_.at(i)->set_evaluated_projected(eval_ctx_);
+    }
   }
   return ret;
 }
