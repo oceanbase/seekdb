@@ -2320,7 +2320,8 @@ int ObDDLOperator::delete_single_column(ObMySQLTransaction &trans,
 int ObDDLOperator::alter_table_create_index(const ObTableSchema &new_table_schema,
                                             ObIArray<ObColumnSchemaV2*> &gen_columns,
                                             ObTableSchema &index_schema,
-                                            common::ObMySQLTransaction &trans)
+                                            common::ObMySQLTransaction &trans,
+                                            const obcall::ObIndexOption *index_option)
 {
   int ret = OB_SUCCESS;
   
@@ -2372,6 +2373,12 @@ int ObDDLOperator::alter_table_create_index(const ObTableSchema &new_table_schem
             }
           }
         }
+      }
+      if (OB_SUCC(ret) && OB_NOT_NULL(index_option)
+          && OB_FAIL(share::ObFtsIndexBuilderUtil::record_fts_dict_table_dependencies(
+              index_schema, *index_option, trans))) {
+        LOG_WARN("fail to record fulltext dictionary dependencies",
+                 K(ret), K(index_schema.get_table_id()));
       }
     }
   }
@@ -4212,7 +4219,14 @@ int ObDDLOperator::drop_table(
 {
   int ret = OB_SUCCESS;
   bool tmp = false;
-  if (OB_FAIL(ObDependencyDDLHelper::modify_dep_obj_status(trans, table_schema.get_table_id(),
+  if (table_schema.is_fulltext_dict()
+      && OB_FAIL(share::ObFtsIndexBuilderUtil::check_can_drop_dict_table(
+          table_schema.get_table_id(), trans))) {
+    if (OB_OP_NOT_ALLOW != ret) {
+      LOG_WARN("fail to check whether dictionary table can be dropped",
+               K(ret), K(table_schema.get_table_id()));
+    }
+  } else if (OB_FAIL(ObDependencyDDLHelper::modify_dep_obj_status(trans, table_schema.get_table_id(),
                                                       *this, schema_service_))) {
     LOG_WARN("failed to modify obj status", K(ret));
   } else if (OB_FAIL(drop_table_for_not_dropped_schema(
@@ -4227,6 +4241,14 @@ int ObDDLOperator::drop_table(
                       ObObjectType::VIEW))) {
     LOG_WARN("failed to delete_schema_object_dependency", K(ret), K(1UL),
     K(table_schema.get_table_id()));
+  } else if (table_schema.is_fts_index_aux()
+             && OB_FAIL(ObDependencyInfo::delete_schema_object_dependency(
+                 trans,
+                 table_schema.get_table_id(),
+                 table_schema.get_schema_version(),
+                 ObObjectType::INDEX))) {
+    LOG_WARN("failed to delete fulltext dictionary dependency",
+             K(ret), K(table_schema.get_table_id()));
   }
 
   if (OB_FAIL(ret)) {
@@ -4434,6 +4456,13 @@ int ObDDLOperator::drop_table_to_recyclebin(const ObTableSchema &table_schema,
   } else if (OB_UNLIKELY(table_schema.get_table_type() == MATERIALIZED_VIEW_LOG)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("materialized view log should not come to recyclebin", KR(ret));
+  } else if (table_schema.is_fulltext_dict()
+             && OB_FAIL(share::ObFtsIndexBuilderUtil::check_can_drop_dict_table(
+                 table_schema.get_table_id(), trans))) {
+    if (OB_OP_NOT_ALLOW != ret) {
+      LOG_WARN("fail to check dictionary table before recyclebin drop",
+               K(ret), K(table_schema.get_table_id()));
+    }
   } else if (OB_ISNULL(schema_service_impl)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("schema_service_impl must not null", K(ret));

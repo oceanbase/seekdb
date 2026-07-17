@@ -23,6 +23,8 @@
 #include "share/ob_autoincrement_service.h"
 #include "share/ob_rpc_struct.h"
 #include "share/schema/ob_table_sql_service.h"
+#include "share/schema/ob_dependency_info.h"
+#include "sql/resolver/ddl/ob_fts_index_builder_util.h"
 #include "storage/tablelock/ob_lock_inner_connection_util.h"
 
 using namespace oceanbase::rootserver;
@@ -176,6 +178,13 @@ int ObDropTableHelper::check_legitimacy_()
         ret = OB_NOT_SUPPORTED;
         LOG_WARN("drop table required by materialized view is not supported", KR(ret));
         LOG_USER_ERROR(OB_NOT_SUPPORTED, "drop table required by materialized view is");
+      } else if (table_schema->is_fulltext_dict()
+                 && OB_FAIL(share::ObFtsIndexBuilderUtil::check_can_drop_dict_table(
+                     table_schema->get_table_id(), get_trans_()))) {
+        if (OB_OP_NOT_ALLOW != ret) {
+          LOG_WARN("fail to check whether dictionary table can be dropped",
+                   KR(ret), K(table_schema->get_table_id()));
+        }
       }
     }
   }
@@ -1411,6 +1420,14 @@ int ObDropTableHelper::drop_table_(const ObTableSchema &table_schema, const ObSt
       LOG_WARN("fail to sync version for cascade tables", KR(ret));
     } else if (OB_FAIL(sync_version_for_cascade_mock_fk_parent_table_(table_schema.get_depend_mock_fk_parent_table_ids()))) {
       LOG_WARN("fail to sync version for cascade mock fk parent table", KR(ret));
+    } else if (table_schema.is_fts_index_aux()
+               && OB_FAIL(ObDependencyInfo::delete_schema_object_dependency(
+                   get_trans_(),
+                   table_schema.get_table_id(),
+                   table_schema.get_schema_version(),
+                   ObObjectType::INDEX))) {
+      LOG_WARN("fail to delete fulltext dictionary dependency",
+               KR(ret), K(table_schema.get_table_id()));
     }
 
     if (OB_SUCC(ret)) {

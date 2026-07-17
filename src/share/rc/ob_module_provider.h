@@ -43,6 +43,7 @@ public:
   virtual oceanbase::sql::ObTenantSQLSessionMgr * tenant_sql_session_mgr() { return nullptr; }
   virtual storage::ObTenantMetaMemMgr * tenant_meta_mem_mgr() { return nullptr; }
   virtual storage::ObTenantFTPluginMgr * tenant_ft_plugin_mgr() { return nullptr; }
+  virtual storage::ObFTDictMgr * ft_dict_mgr() { return nullptr; }
   virtual ObPartTransCtxObjPool * part_trans_ctx_obj_pool() { return nullptr; }
   virtual ObTableScanIteratorObjPool * table_scan_iterator_obj_pool() { return nullptr; }
   virtual common::ObTenantIOManager * tenant_io_manager() { return nullptr; }

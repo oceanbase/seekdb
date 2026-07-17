@@ -27,8 +27,8 @@
 #include "storage/fts/ob_fts_plugin_helper.h"
 #include "storage/fts/dict/ob_ft_dict.h"
 #include "storage/fts/dict/ob_ft_dict_def.h"
-#include "storage/fts/dict/ob_ft_dict_hub.h"
 #include "storage/fts/dict/ob_ft_range_dict.h"
+#include "storage/fts/dict/ob_ft_dict_cache_loader.h"
 #include "storage/fts/ik/ob_ik_arbitrator.h"
 #include "storage/fts/ik/ob_ik_cjk_processor.h"
 #include "storage/fts/ik/ob_ik_letter_processor.h"
@@ -103,11 +103,10 @@ int ObIKFTParser::get_next_token(const char *&word,
         }
       } else {
         bool is_stop = false;
-        // if (!OB_ISNULL(dict_stop_)
-        //     && OB_FAIL(dict_stop_->match(ObString(len, output_word + offset), is_stop))) {
-        //   LOG_WARN("Failed to match stopwords", K(ret));
-        // } else
-        if (!is_stop) {
+        if (!OB_ISNULL(dict_stop_)
+            && OB_FAIL(dict_stop_->match(ObString(len, output_word + offset), is_stop))) {
+          LOG_WARN("Failed to match stopwords", K(ret));
+        } else if (!is_stop) {
           word = output_word + offset;
           word_len = len;
           char_cnt = cnt;
@@ -226,16 +225,16 @@ int ObIKFTParserDesc::segment(ObFTParserParam *param, ObITokenIterator *&iter) c
 {
   int ret = OB_SUCCESS;
   ObIKFTParser *parser = nullptr;
-  ObFTDictHub *hub = nullptr;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("default ft parser desc hasn't be initialized", K(ret), K(is_inited_));
   } else if (OB_ISNULL(param) || OB_UNLIKELY(!param->is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), KPC(param));
-  } else if (OB_FAIL(ObFTParsePluginData::instance().get_dict_hub(hub))) {
-    LOG_WARN("Failed to get dict hub.", K(ret));
-  } else if (OB_ISNULL(parser = OB_NEWx(ObIKFTParser, param->allocator_, *(param->allocator_), hub))) {
+  } else if (OB_ISNULL(param->allocator_)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("parser allocator is null", K(ret));
+  } else if (OB_ISNULL(parser = OB_NEWx(ObIKFTParser, param->allocator_, *(param->allocator_)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("fail to allocate ik ft parser", K(ret));
   } else if (OB_FAIL(parser->init(*param))) {
@@ -244,7 +243,7 @@ int ObIKFTParserDesc::segment(ObFTParserParam *param, ObITokenIterator *&iter) c
     iter = parser;
   }
 
-  if (OB_FAIL(ret)) {
+  if (OB_FAIL(ret) && OB_NOT_NULL(param) && OB_NOT_NULL(param->allocator_)) {
     OB_DELETEx(ObIKFTParser, param->allocator_, parser);
   }
 
@@ -270,43 +269,25 @@ int ObIKFTParserDesc::get_add_word_flag(ObAddWordFlag &flag) const
 int ObIKFTParser::init_dict(const plugin::ObFTParserParam &param)
 {
   int ret = OB_SUCCESS;
-  ObIFTDict *tmp_dict = nullptr;
+  const ObFTDictDesc::BuildMode build_mode = param.is_ddl_mode_
+      ? ObFTDictDesc::DDL_EXE : ObFTDictDesc::DML_OR_SELECT_EXE;
+  const ObCharsetType charset = ObCharsetType::CHARSET_UTF8MB4;
+  const ObCollationType collation = ObCollationType::CS_TYPE_UTF8MB4_BIN;
+  ObFTDictDesc main_dict_desc(charset, collation, param.ik_param_.main_dict_id_,
+                              param.ik_param_.main_dict_name_, param.need_casedown_);
+  ObFTDictDesc quan_dict_desc(charset, collation, param.ik_param_.quan_dict_id_,
+                              param.ik_param_.quan_dict_name_, param.need_casedown_);
+  ObFTDictDesc stopword_dict_desc(charset, collation, param.ik_param_.stopword_dict_id_,
+                                  param.ik_param_.stopword_dict_name_, param.need_casedown_);
 
-  if (OB_ISNULL(hub_)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("Dict hub is not inited", K(ret));
-  }
-
-  ObFTRangeDict *dict = nullptr;
-  ObFTDictDesc main_dict_desc("main_dict",
-                              ObFTDictType::DICT_IK_MAIN,
-                              ObCharsetType::CHARSET_UTF8MB4,
-                              ObCollationType::CS_TYPE_UTF8MB4_BIN);
-
-  ObFTDictDesc quan_dict_desc("quan_dict",
-                              ObFTDictType::DICT_IK_QUAN,
-                              ObCharsetType::CHARSET_UTF8MB4,
-                              ObCollationType::CS_TYPE_UTF8MB4_BIN);
-
-  ObFTDictDesc stopword_dict_desc("stopword",
-                                  ObFTDictType::DICT_IK_STOP,
-                                  ObCharsetType::CHARSET_UTF8MB4,
-                                  ObCollationType::CS_TYPE_UTF8MB4_BIN);
-
-  if (should_read_newest_table()) {
-    // clear dict cache, always false now
-  } else {
-    if (OB_FAIL(init_single_dict(main_dict_desc, cache_main_))) {
-      LOG_WARN("Failed to init main dict", K(ret));
-    } else if (OB_FAIL(init_single_dict(quan_dict_desc, cache_quan_))) {
-      LOG_WARN("Failed to init quantifier dict", K(ret));
-    } else if (OB_FAIL(init_single_dict(stopword_dict_desc, cache_stop_))) {
-      LOG_WARN("Failed to init stopword dict", K(ret));
-    }
-  }
-
-  if (OB_FAIL(ret)) {
-    // already logged.
+  if (OB_FAIL(init_cache_loader(build_mode))) {
+    LOG_WARN("Failed to init cache loader", K(ret), K(build_mode));
+  } else if (OB_FAIL(init_single_dict(main_dict_desc, cache_main_))) {
+    LOG_WARN("Failed to init main dict", K(ret), K(main_dict_desc));
+  } else if (OB_FAIL(init_single_dict(quan_dict_desc, cache_quan_))) {
+    LOG_WARN("Failed to init quantifier dict", K(ret), K(quan_dict_desc));
+  } else if (OB_FAIL(init_single_dict(stopword_dict_desc, cache_stop_))) {
+    LOG_WARN("Failed to init stopword dict", K(ret), K(stopword_dict_desc));
   } else if (OB_FAIL(build_dict_from_cache(main_dict_desc, cache_main_, dict_main_))) {
     LOG_WARN("Failed to build dict main", K(ret));
   } else if (OB_FAIL(build_dict_from_cache(quan_dict_desc, cache_quan_, dict_quan_))) {
@@ -318,16 +299,41 @@ int ObIKFTParser::init_dict(const plugin::ObFTParserParam &param)
   return ret;
 }
 
-int ObIKFTParser::init_single_dict(ObFTDictDesc desc, ObFTCacheRangeContainer &container)
+int ObIKFTParser::init_cache_loader(const ObFTDictDesc::BuildMode build_mode)
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(hub_->load_cache(desc, container))) {
-    if (OB_ENTRY_NOT_EXIST == ret) {
-      if (OB_FAIL(hub_->build_cache(desc, container))) {
-        LOG_WARN("Failed to read newest main table", K(ret));
-      }
+  if (OB_NOT_NULL(cache_loader_)) {
+    ret = OB_INIT_TWICE;
+    LOG_WARN("cache loader already initialized", K(ret));
+  } else if (ObFTDictDesc::DDL_EXE == build_mode) {
+    cache_loader_ = OB_NEWx(ObFTDictCacheLoaderDDL, &allocator_);
+  } else if (ObFTDictDesc::DML_OR_SELECT_EXE == build_mode) {
+    cache_loader_ = OB_NEWx(ObFTDictCacheLoaderExec, &allocator_);
+  } else {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unsupported dictionary build mode", K(ret), K(build_mode));
+  }
+  if (OB_SUCC(ret) && OB_ISNULL(cache_loader_)) {
+    ret = OB_ALLOCATE_MEMORY_FAILED;
+    LOG_WARN("failed to allocate dictionary cache loader", K(ret), K(build_mode));
+  }
+  return ret;
+}
+
+int ObIKFTParser::init_single_dict(const ObFTDictDesc &desc, ObFTCacheRangeContainer &container)
+{
+  int ret = OB_SUCCESS;
+  constexpr int64_t MAX_RETRY_COUNT = 3;
+  int64_t retry_count = 0;
+  while (OB_SUCC(ret) && retry_count < MAX_RETRY_COUNT) {
+    if (OB_FAIL(cache_loader_->load_cache(desc, container)) && OB_ENTRY_NOT_EXIST != ret) {
+      LOG_WARN("Failed to load dictionary cache", K(ret), K(desc));
+    } else if (OB_ENTRY_NOT_EXIST == ret) {
+      ++retry_count;
+      ret = OB_SUCCESS;
+      container.reset();
     } else {
-      LOG_WARN("Failed to load cache", K(ret));
+      break;
     }
   }
   return ret;
@@ -440,19 +446,21 @@ void ObIKFTParser::reset()
     allocator_.free(dict_stop_);
   }
 
+  if (OB_NOT_NULL(cache_loader_)) {
+    cache_loader_->~ObFTDictCacheLoaderBase();
+    allocator_.free(cache_loader_);
+    cache_loader_ = nullptr;
+  }
+
   is_inited_ = false;
 }
 
-bool ObIKFTParser::should_read_newest_table() const { return false; }
 int ObIKFTParser::build_dict_from_cache(const ObFTDictDesc &desc,
                                         ObFTCacheRangeContainer &container,
                                         ObIFTDict *&dict)
 {
   int ret = OB_SUCCESS;
-  if (OB_ISNULL(hub_)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("Hub is null", K(ret));
-  } else if (OB_ISNULL(dict = OB_NEWx(ObFTRangeDict, &allocator_, allocator_, &container, desc))) {
+  if (OB_ISNULL(dict = OB_NEWx(ObFTRangeDict, &allocator_, &container, desc))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("Failed to alloc dict", K(ret));
   } else if (OB_FAIL(dict->init())) {

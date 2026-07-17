@@ -279,6 +279,8 @@ LATCH_DEF(DIRECT_LOAD_SLICE_WRITER_LOCK, 332, "direct load slice writer lock", L
 LATCH_DEF(COLUMN_STORE_DDL_RESCAN_LOCK, 333, "column store ddl rescan lock", LATCH_FIFO, INT64_MAX, 0, true)
 LATCH_DEF(TABLET_DIRECT_LOAD_MGR_SCHEMA_LOCK, 334, "tablet direct load manager schema lock", LATCH_FIFO, 2000, 0, true)
 LATCH_DEF(SQL_AUDIT, 335, "sql audit release second level queue lock", LATCH_FIFO, 2000, 0, true)
+LATCH_DEF(FT_DICT_BUILD_SLOTS_LOCK, 336, "fulltext dict build slots lock", LATCH_FIFO, 2000, 0, true)
+LATCH_DEF(FT_DICT_ROW_SCN_CACHE_LOCK, 337, "fulltext dict row scn cache lock", LATCH_FIFO, 2000, 0, true)
 
 LATCH_DEF(SEQUENCE_VALUE_FETCH_LOCK, 339, "sequence value fetch lock", LATCH_FIFO, 2000, 0, true)
 LATCH_DEF(DI_SUMMARY_LOCK, 340, "diagnostic info summary lock", LATCH_FIFO, 2000, 0, true)

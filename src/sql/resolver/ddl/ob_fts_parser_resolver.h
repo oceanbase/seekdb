@@ -20,11 +20,13 @@
 #include "sql/resolver/ddl/ob_ddl_resolver.h"
 #include "storage/fts/ob_fts_parser_property.h"
 #include "storage/fts/ob_fts_plugin_helper.h"
+#include "share/schema/ob_schema_getter_guard.h"
 
 namespace oceanbase
 {
 namespace sql
 {
+class ObSchemaChecker;
 class ObFTParserResolverHelper final
 {
 public:
@@ -32,13 +34,35 @@ public:
   ~ObFTParserResolverHelper() = default;
 
   static int resolve_parser_properties(
+      const common::ObString &index_database_name,
       const ParseNode &parse_tree,
       common::ObIAllocator &allocator,
+      sql::ObSchemaChecker *schema_checker,
       common::ObString &parser_property);
 
+  static int resolve_dict_table_name_and_id(
+      const common::ObString &index_database_name,
+      const common::ObString &table_name,
+      share::schema::ObSchemaGetterGuard &schema_guard,
+      common::ObIAllocator &allocator,
+      const bool check_database_name,
+      uint64_t &table_id,
+      common::ObString &full_table_name);
+
 private:
-  static int resolve_fts_index_parser_properties(const ParseNode *node,
-                                                 storage::ObFTParserJsonProps &property);
+  static int resolve_fts_index_parser_properties(
+      const common::ObString &index_database_name,
+      const ParseNode *node,
+      storage::ObFTParserJsonProps &property,
+      common::ObIAllocator &allocator,
+      sql::ObSchemaChecker *schema_checker);
+  static int resolve_table_config(
+      const common::ObString &index_database_name,
+      const ParseNode *node,
+      const char *table_id_config_name,
+      storage::ObFTParserJsonProps &property,
+      common::ObIAllocator &allocator,
+      sql::ObSchemaChecker &schema_checker);
 };
 
 } // end namespace sql

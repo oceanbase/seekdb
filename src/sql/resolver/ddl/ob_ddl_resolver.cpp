@@ -1602,9 +1602,11 @@ int ObDDLResolver::resolve_table_option(const ParseNode *option_node, const bool
         break;
       }
       case T_PARSER_PROPERTIES: {
-        if (OB_FAIL(ObFTParserResolverHelper::resolve_parser_properties(*option_node,
-                                                                               *allocator_,
-                                                                               parser_properties_))) {
+        if (OB_FAIL(ObFTParserResolverHelper::resolve_parser_properties(database_name_,
+                                                                        *option_node,
+                                                                        *allocator_,
+                                                                        schema_checker_,
+                                                                        parser_properties_))) {
           LOG_WARN("fail to resolve parser properties", K(ret));
         }
         break;
@@ -1733,6 +1735,33 @@ int ObDDLResolver::resolve_table_option(const ParseNode *option_node, const bool
               table_mode_.table_organization_mode_ = tbl_schema->get_table_mode_struct().table_organization_mode_;
             }
           }
+        }
+        break;
+      }
+      case T_FULLTEXT_DICT: {
+        if (OB_ISNULL(option_node->children_[0])) {
+          ret = OB_ERR_UNEXPECTED;
+          SQL_RESV_LOG(WARN, "fulltext dictionary option value is null", K(ret));
+        } else if (stmt_->get_stmt_type() == stmt::T_ALTER_TABLE) {
+          ret = OB_NOT_SUPPORTED;
+          LOG_WARN("custom fulltext dictionary table is not supported in alter table", K(ret));
+          LOG_USER_ERROR(OB_NOT_SUPPORTED,
+                         "custom fulltext dictionary table in the alter table statement");
+        } else if (stmt_->get_stmt_type() == stmt::T_CREATE_TABLE) {
+          ObCreateTableArg &arg =
+              static_cast<ObCreateTableStmt *>(stmt_)->get_create_table_arg();
+          ObString value(static_cast<int32_t>(option_node->children_[0]->str_len_),
+                         option_node->children_[0]->str_value_);
+          if (0 == value.case_compare("Y")) {
+            arg.schema_.set_fulltext_dict();
+          } else {
+            ret = OB_ERR_PARSER_SYNTAX;
+            SQL_RESV_LOG(WARN, "invalid fulltext dictionary option value", K(ret), K(value));
+          }
+        } else {
+          ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("unexpected statement type for fulltext dictionary option",
+                   K(ret), K(stmt_->get_stmt_type()));
         }
         break;
       }
@@ -6847,6 +6876,11 @@ int ObDDLResolver::generate_global_index_schema(
     ObTableType table_type = table_schema->get_table_type();
     LOG_WARN("Not support to create index on non-normal table", K(ret), K(table_type),
              "arg", crt_idx_stmt->get_create_index_arg());
+  } else if (table_schema->is_fulltext_dict()) {
+    ret = OB_NOT_SUPPORTED;
+    LOG_USER_ERROR(OB_NOT_SUPPORTED, "create index on fulltext dictionary table is");
+    SQL_RESV_LOG(WARN, "create index on fulltext dictionary table is not supported",
+                 K(ret), K(table_schema->get_table_id()));
   } else {
     ObArray<ObColumnSchemaV2 *> gen_columns;
     ObCreateIndexArg &create_index_arg = crt_idx_stmt->get_create_index_arg();
