@@ -96,7 +96,8 @@ protected:
   int init_merge_heap(const int64_t count);
   OB_INLINE bool predicate_only_fast_path() const
   {
-    return !iter_param_->need_project_relevance() && !iter_param_->need_filter()
+    return iter_param_->topk_limit_ <= 0 && !iter_param_->need_project_relevance()
+           && !iter_param_->need_filter()
            && relevance_collector_->can_skip_for_predicate_only();
   }
 protected:

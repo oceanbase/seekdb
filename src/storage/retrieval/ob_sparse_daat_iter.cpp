@@ -384,12 +384,16 @@ int ObSRDaaTIterImpl::collect_dims_by_id(const ObDatum *&id_datum, double &relev
     if (OB_ISNULL(id_datum)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected null id datum", K(ret));
-    } else if (predicate_only_fast_path()) {
-      got_valid_id = true;
-    } else if (OB_FAIL(relevance_collector_->get_result(relevance, got_valid_id))) {
-      LOG_WARN("failed to get result", K(ret));
-    } else if (got_valid_id && OB_FAIL(process_collected_row(*id_datum, relevance))) {
-      LOG_WARN("failed to process collected row", K(ret));
+    } else {
+      if (predicate_only_fast_path()) {
+        got_valid_id = true;
+      } else if (OB_FAIL(relevance_collector_->get_result(relevance, got_valid_id))) {
+        LOG_WARN("failed to get result", K(ret));
+      }
+      if (OB_FAIL(ret)) {
+      } else if (got_valid_id && OB_FAIL(process_collected_row(*id_datum, relevance))) {
+        LOG_WARN("failed to process collected row", K(ret));
+      }
     }
   }
 
