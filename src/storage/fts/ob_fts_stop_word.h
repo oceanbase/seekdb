@@ -81,6 +81,8 @@ public:
   int check_stopword(const ObFTWord &word, bool &is_stopword);
 
 private:
+  int check_stopword_set(const ObFTWord &word, bool &is_stopword);
+
   static const int64_t DEFAULT_STOPWORD_BUCKET_NUM = 37L;
   typedef common::hash::ObHashSet<storage::ObFTWord> StopWordSet;
 

@@ -78,9 +78,6 @@ void ObStopWordChecker::destroy()
 int ObStopWordChecker::check_stopword(const ObFTWord &word, bool &is_stopword)
 {
   int ret = OB_SUCCESS;
-  
-  
-  common::ObArenaAllocator allocator(lib::ObMemAttr("ChkStopWord"));
   if (OB_UNLIKELY(!inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("ObStopWordChecker hasn't been initialized", K(ret), K(inited_));
@@ -88,31 +85,41 @@ int ObStopWordChecker::check_stopword(const ObFTWord &word, bool &is_stopword)
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("word is empty", K(ret), K(word));
   } else {
-    common::ObString cmp_str;
-    // do nothing set out with in if type is the same.
-    if (OB_FAIL(common::ObCharset::charset_convert(
-                                       allocator,
-                                       word.get_word().get_string(),
-                                       word.get_collation_type(),
-                                       stopword_type_.get_collation_type(),
-                                       cmp_str))) {
-      LOG_WARN("fail to convert charset", K(ret), K(word), K(stopword_type_));
+    if (word.get_collation_type() == stopword_type_.get_collation_type()) {
+      ret = check_stopword_set(word, is_stopword);
     } else {
-      ObFTWord converted(cmp_str.length(), cmp_str.ptr(), stopword_type_);
-      ret = stopword_set_.exist_refactored(converted);
-      if (OB_HASH_NOT_EXIST == ret) {
-        is_stopword = false;
-        ret = OB_SUCCESS;
-      } else if (OB_HASH_EXIST == ret) {
-        is_stopword = true;
-        ret = OB_SUCCESS;
-      } else if (OB_SUCC(ret)) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("the exist of hastset shouldn't return success", K(ret), K(word), K(converted));
+      common::ObArenaAllocator allocator(lib::ObMemAttr("ChkStopWord"));
+      common::ObString cmp_str;
+      if (OB_FAIL(common::ObCharset::charset_convert(
+              allocator,
+              word.get_word().get_string(),
+              word.get_collation_type(),
+              stopword_type_.get_collation_type(),
+              cmp_str))) {
+        LOG_WARN("fail to convert charset", K(ret), K(word), K(stopword_type_));
       } else {
-        LOG_WARN("fail to do exist", K(ret), K(word), K(converted));
+        ObFTWord converted(cmp_str.length(), cmp_str.ptr(), stopword_type_);
+        ret = check_stopword_set(converted, is_stopword);
       }
     }
+  }
+  return ret;
+}
+
+int ObStopWordChecker::check_stopword_set(const ObFTWord &word, bool &is_stopword)
+{
+  int ret = stopword_set_.exist_refactored(word);
+  if (OB_HASH_NOT_EXIST == ret) {
+    is_stopword = false;
+    ret = OB_SUCCESS;
+  } else if (OB_HASH_EXIST == ret) {
+    is_stopword = true;
+    ret = OB_SUCCESS;
+  } else if (OB_SUCC(ret)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("the exist of hashset shouldn't return success", K(ret), K(word));
+  } else {
+    LOG_WARN("fail to do exist", K(ret), K(word));
   }
   return ret;
 }
@@ -219,7 +226,15 @@ int ObAddWord::check_stopword(const ObFTWord &ft_word, bool &is_stopword)
 int ObAddWord::groupby_word(const ObFTWord &word, const int64_t word_freq)
 {
   int ret = OB_SUCCESS;
-  int64_t word_count = 0;
+  struct AddWordFrequency final
+  {
+    explicit AddWordFrequency(const int64_t word_freq) : word_freq_(word_freq) {}
+    void operator()(common::hash::HashMapPair<ObFTWord, int64_t> &word) const
+    {
+      word.second += word_freq_;
+    }
+    int64_t word_freq_;
+  };
   if (OB_UNLIKELY(word.empty() || word_freq <= 0)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", K(ret), K(word), K(word_freq));
@@ -227,16 +242,10 @@ int ObAddWord::groupby_word(const ObFTWord &word, const int64_t word_freq)
     if (OB_FAIL(word_map_.set_refactored(word, 1/*word count*/))) {
       LOG_WARN("fail to set fulltext word and count", K(ret), K(word));
     }
-  } else if (OB_FAIL(word_map_.get_refactored(word, word_count)) && OB_HASH_NOT_EXIST != ret) {
-    LOG_WARN("fail to get fulltext word", K(ret), K(word));
   } else {
-    if (OB_HASH_NOT_EXIST == ret) {
-      word_count = 1;
-    } else {
-      word_count += word_freq;
-    }
-    if (OB_FAIL(word_map_.set_refactored(word, word_count, 1/*overwrite*/))) {
-      LOG_WARN("fail to set fulltext word and count", K(ret), K(word), K(word_count));
+    AddWordFrequency add_word_freq(word_freq);
+    if (OB_FAIL(word_map_.set_or_update(word, 1/*initial word count*/, add_word_freq))) {
+      LOG_WARN("fail to add fulltext word into word map", K(ret), K(word), K(word_freq));
     }
   }
   return ret;

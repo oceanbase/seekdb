@@ -24,6 +24,7 @@
 #include "storage/compaction/ob_column_checksum_calculator.h"
 #include "storage/ddl/ob_cg_macro_block_write_task.h"
 #include "storage/ddl/ob_tablet_slice_row_iterator.h"
+#include "storage/direct_load/ob_direct_load_batch_rows.h"
 
 namespace oceanbase
 {
@@ -277,10 +278,12 @@ private:
 class ObComplementWriteMacroOperator : public ObWriteMacroBaseOperator
 {
 public:
+  static const int64_t WRITE_BATCH_SIZE = 1024;
   explicit ObComplementWriteMacroOperator(ObPipeline *pipeline)
-    : ObWriteMacroBaseOperator(pipeline)
+    : ObWriteMacroBaseOperator(pipeline), batch_rows_(), datum_rows_(), is_batch_inited_(false)
   {}
   virtual ~ObComplementWriteMacroOperator() = default;
+  int init(const ObWriteMacroParam &param);
   virtual int execute(
       const ObChunk &input_chunk,
       ResultState &result_state,
@@ -288,6 +291,12 @@ public:
   virtual int try_execute_finish(const ObChunk &input_chunk,
                                  ResultState &result_state,
                                  ObChunk &output_chunk);
+private:
+  int flush_batch();
+private:
+  ObDirectLoadBatchRows batch_rows_;
+  blocksstable::ObBatchDatumRows datum_rows_;
+  bool is_batch_inited_;
 };
 
 class ObComplementRowIterator : public ObIStoreRowIterator
