@@ -238,7 +238,7 @@ int ObTransformPreProcess::transform_one_stmt(common::ObIArray<ObParentDMLStmt> 
     }
     if (OB_SUCC(ret)) {
       if (stmt->get_match_exprs().count() > 0 &&
-          OB_FAIL(preserve_order_for_fulltext_search(stmt, is_happened))) {
+          OB_FAIL(preserve_order_for_fulltext_search(parent_stmts, stmt, is_happened))) {
         LOG_WARN("failed to preserve order for fulltext search", K(ret));
       } else {
         trans_happened |= is_happened;
@@ -4615,15 +4615,58 @@ int ObTransformPreProcess::do_flatten_conditions(ObDMLStmt *stmt, ObIArray<ObRaw
 
 // full-text index queries on a single base table are processed with order preservation. 
 // (Order is not preserved in multi-table join scenarios.)
-int ObTransformPreProcess::preserve_order_for_fulltext_search(ObDMLStmt *stmt, bool& trans_happened)
+int ObTransformPreProcess::preserve_order_for_fulltext_search(
+    const ObIArray<ObParentDMLStmt> &parent_stmts,
+    ObDMLStmt *stmt,
+    bool &trans_happened)
 {
   int ret = OB_SUCCESS;
   trans_happened = false;
   TableItem *table_item = NULL;
   ObRawExpr *match_expr = nullptr;
+  bool count_limited_rows_only = false;
   if (OB_ISNULL(stmt)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected null", K(ret));
+  } else if (parent_stmts.count() == 1 && stmt->is_select_stmt()) {
+    const ObSelectStmt *child = static_cast<const ObSelectStmt *>(stmt);
+    const ObDMLStmt *parent_stmt = parent_stmts.at(0).stmt_;
+    if (OB_NOT_NULL(parent_stmt) && parent_stmt->is_select_stmt()) {
+      const ObSelectStmt *parent = static_cast<const ObSelectStmt *>(parent_stmt);
+      const ObAggFunRawExpr *aggregate = parent->get_aggr_item_size() == 1
+          ? parent->get_aggr_item(0) : nullptr;
+      const TableItem *source = parent->get_table_size() == 1
+          ? parent->get_table_item(0) : nullptr;
+      count_limited_rows_only = child->has_limit()
+          && child->get_order_item_size() == 0
+          && !child->is_calc_found_rows()
+          && !child->is_fetch_with_ties()
+          && OB_ISNULL(child->get_limit_percent_expr())
+          && parent->is_scala_group_by()
+          && parent->get_select_item_size() == 1
+          && parent->get_from_item_size() == 1
+          && parent->get_condition_exprs().empty()
+          && !parent->has_having()
+          && !parent->has_order_by()
+          && !parent->has_distinct()
+          && !parent->has_window_function()
+          && !parent->has_limit()
+          && !parent->has_select_into()
+          && OB_NOT_NULL(aggregate)
+          && aggregate->get_expr_type() == T_FUN_COUNT
+          && aggregate->get_real_param_count() == 0
+          && parent->get_select_item(0).expr_ == aggregate
+          && OB_NOT_NULL(source)
+          && source->is_generated_table()
+          && source->ref_query_ == child;
+    }
+  }
+
+  if (OB_FAIL(ret)) {
+  } else if (count_limited_rows_only) {
+    // FTS PERF OPT 2: the outer COUNT(*) observes only how many rows LIMIT
+    // returns. With no explicit ORDER BY, the identity and relevance order of
+    // those rows are not observable, so retain the child's streaming order.
   } else if (stmt->get_table_items().count() != 1 || stmt->get_order_item_size() != 0) {
     // do nothing
   } else if (stmt->is_select_stmt() && 
