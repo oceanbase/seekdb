@@ -180,6 +180,43 @@ int ObIKFTParser::process_one_char(TokenizeContext &ctx,
   return ret;
 }
 
+int ObIKFTParser::process_ascii_tail(bool &do_seg)
+{
+  int ret = OB_SUCCESS;
+  if (OB_ISNULL(ctx_) || OB_ISNULL(letter_segmenter_)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected null parser state", K(ret), KP(ctx_), KP(letter_segmenter_));
+  } else {
+    while (OB_SUCC(ret) && !do_seg && !ctx_->iter_end() && ctx_->is_ascii_fast_path()) {
+      const char *ch = nullptr;
+      uint8_t char_len = 0;
+      ObFTCharUtil::CharType type = ObFTCharUtil::CharType::USELESS;
+      if (OB_FAIL(ctx_->current_char_and_type(ch, char_len, type))) {
+        LOG_WARN("failed to get current ascii char", K(ret));
+      } else if (OB_UNLIKELY(1 != char_len || 0 != (static_cast<uint8_t>(ch[0]) & 0x80))) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("ascii fast path encountered non-ascii char",
+                 K(ret),
+                 K(char_len),
+                 K(ctx_->get_cursor()),
+                 K(ctx_->get_ascii_run_end()));
+      } else if (OB_FAIL(letter_segmenter_->process(*ctx_, ch, char_len, type))) {
+        LOG_WARN("failed to process ascii tail with letter segmenter", K(ret), K(type));
+      } else {
+        if (ctx_->handle_size() > SEGMENT_LIMIT && type == ObFTCharUtil::CharType::USELESS) {
+          do_seg = true;
+        } else if (OB_FAIL(ctx_->step_next())) {
+          if (OB_ITER_END == ret) {
+          } else {
+            LOG_WARN("failed to step next in ascii fast path", K(ret));
+          }
+        }
+      }
+    }
+  }
+  return ret;
+}
+
 int ObIKFTParser::add_segmenter(ObIIKProcessor *segmenter)
 {
   int ret = OB_SUCCESS;
@@ -217,16 +254,19 @@ int ObIKFTParser::process_next_batch()
       } else if (OB_FAIL(process_one_char(*ctx_, ch, char_len, type))) {
         LOG_WARN("Failed to process one char", K(ret));
       } else {
+        const bool current_is_ascii_fast = ctx_->is_ascii_fast_path();
         // 1. check segmention
         if (ctx_->handle_size() > SEGMENT_LIMIT && type == ObFTCharUtil::CharType::USELESS) {
           do_seg = true;
-        }
-
-        // 2. move to next;
-        if (OB_FAIL(ctx_->step_next())) {
+        } else if (OB_FAIL(ctx_->step_next())) {
           if (OB_ITER_END == ret) {
           } else {
             LOG_WARN("Failed to step next", K(ret));
+          }
+        } else if (current_is_ascii_fast && OB_FAIL(process_ascii_tail(do_seg))) {
+          if (OB_ITER_END == ret) {
+          } else {
+            LOG_WARN("failed to process ascii tail", K(ret));
           }
         }
       } // end of one batch
@@ -441,6 +481,7 @@ int ObIKFTParser::init_segmenter(const ObFTParserParam &param)
     LOG_WARN("Failed to alloc surrogate segmenter", K(ret));
   } else if (OB_FAIL(add_segmenter(letter_seg))) {
     LOG_WARN("Failed to push back letter segmenter", K(ret));
+  } else if (FALSE_IT(letter_segmenter_ = letter_seg)) {
   } else if (FALSE_IT(letter_seg = nullptr)) {
   } else if (OB_FAIL(add_segmenter(cnqsg))) {
     LOG_WARN("Failed to push back cn quantifier segmenter", K(ret));
@@ -480,6 +521,7 @@ void ObIKFTParser::reset()
   segmenters_.clear();
   MEMSET(segmenter_cache_, 0, sizeof(segmenter_cache_));
   segmenter_cnt_ = 0;
+  letter_segmenter_ = nullptr;
 
   cache_main_.reset();
   cache_quan_.reset();

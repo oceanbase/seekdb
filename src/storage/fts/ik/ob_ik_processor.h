@@ -62,10 +62,12 @@ public:
   const char *fulltext() const;
   int64_t fulltext_len() const;
   int64_t get_cursor() const;
+  int64_t get_ascii_run_end() const;
 
   bool is_last() const;
   bool iter_end() const;
   bool is_smart() const;
+  bool is_ascii_fast_path() const;
 
   int add_chain(ObIKTokenChain *chain);
   int add_token(const char *fulltext,
@@ -84,6 +86,7 @@ private:
   int prepare_next_char();
 
   ObCollationType coll_type_;
+  ObCharsetType charset_type_;
   const ObCharsetInfo *cs_;
   WellFormedLenFunc well_formed_len_func_;
   const char *fulltext_;
@@ -92,6 +95,7 @@ private:
   int64_t cursor_;
   int64_t next_char_len_;
   ObFTCharUtil::CharType next_char_type_;
+  int64_t ascii_run_end_;
 
   uint32_t handle_size_;
   bool is_smart_;

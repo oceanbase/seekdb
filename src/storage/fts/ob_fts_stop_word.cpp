@@ -23,21 +23,12 @@
 #include "storage/fts/ob_fts_plugin_helper.h"
 #include "storage/fts/ob_fts_parser_property.h"
 #include "storage/fts/ob_fts_plugin_helper.h"
+#include "storage/fts/utils/ob_ft_ascii_utils.h"
 
 namespace oceanbase
 {
 namespace storage
 {
-
-namespace
-{
-
-OB_INLINE char to_ascii_lower_char(const char ch)
-{
-  return (ch >= 'A' && ch <= 'Z') ? static_cast<char>(ch - 'A' + 'a') : ch;
-}
-
-} // namespace
 
 ////////////////////////////////////////////////////////////////////////////////
 // class ObStopWordChecker
@@ -107,18 +98,14 @@ int ObStopWordChecker::check_stopword_set_(const ObFTWord &word, bool &is_stopwo
 
 bool ObStopWordChecker::is_ascii_string_(const ObString &word)
 {
-  bool is_ascii = true;
-  for (int64_t i = 0; is_ascii && i < word.length(); ++i) {
-    is_ascii = static_cast<unsigned char>(word.ptr()[i]) < 0x80;
-  }
-  return is_ascii;
+  return ascii::is_ascii_string(word.ptr(), word.length());
 }
 
 bool ObStopWordChecker::equals_ascii_ci_(const ObString &word, const char *literal)
 {
   bool is_equal = word.length() == STRLEN(literal);
   for (int64_t i = 0; is_equal && i < word.length(); ++i) {
-    is_equal = to_ascii_lower_char(word.ptr()[i]) == literal[i];
+    is_equal = ascii::to_ascii_lower_char(word.ptr()[i]) == literal[i];
   }
   return is_equal;
 }
@@ -128,7 +115,7 @@ bool ObStopWordChecker::match_ascii_stopword_(const ObString &word)
   bool is_match = false;
   if (word.empty()) {
   } else {
-    const char lead = to_ascii_lower_char(word.ptr()[0]);
+    const char lead = ascii::to_ascii_lower_char(word.ptr()[0]);
     switch (word.length()) {
       case 1:
         is_match = 'a' == lead || 'i' == lead;
@@ -348,16 +335,32 @@ int ObAddWord::casedown_word(const ObFTWord &src, ObFTWord &dst)
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid src ft word", K(ret), K(src));
   } else if (has_casedown_) {
-    ObString dst_str;
-    if (OB_FAIL(ObCharset::tolower(
-                    word_meta_.get_collation_type(),
-                    src.get_word().get_string(),
-                    dst_str,
-                    allocator_))) {
-      LOG_WARN("fail to tolower", K(ret), K(src), K(word_meta_));
+    const ObString src_str = src.get_word().get_string();
+    const ObCharsetType charset_type = ObCharset::charset_type_by_coll(word_meta_.get_collation_type());
+    if (CHARSET_UTF8MB4 == charset_type && ascii::is_ascii_string(src_str.ptr(), src_str.length())) {
+      if (ascii::has_ascii_upper(src_str.ptr(), src_str.length())) {
+        char *buf = static_cast<char *>(allocator_.alloc(src_str.length()));
+        if (OB_ISNULL(buf)) {
+          ret = OB_ALLOCATE_MEMORY_FAILED;
+          LOG_WARN("failed to allocate ascii casedown buffer", K(ret), K(src_str));
+        } else {
+          ascii::lowercase_ascii_copy(src_str.ptr(), src_str.length(), buf);
+          ObFTWord tmp(src_str.length(), buf, word_meta_);
+          dst = tmp;
+        }
+      } else {
+        ObFTWord tmp(src_str.length(), src_str.ptr(), word_meta_);
+        dst = tmp;
+      }
     } else {
-      ObFTWord tmp(dst_str.length(), dst_str.ptr(), word_meta_);
-      dst = tmp;
+      ObString dst_str;
+      if (OB_FAIL(ObCharset::tolower(
+                      word_meta_.get_collation_type(), src_str, dst_str, allocator_))) {
+        LOG_WARN("fail to tolower", K(ret), K(src), K(word_meta_));
+      } else {
+        ObFTWord tmp(dst_str.length(), dst_str.ptr(), word_meta_);
+        dst = tmp;
+      }
     }
   } else {
     dst = src;

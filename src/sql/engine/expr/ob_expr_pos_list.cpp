@@ -69,6 +69,7 @@ int build_fulltext_input(
   int64_t res_str_len = 0;
   const ObCharsetInfo *cs = nullptr;
   ObSEArray<ObString, 1> ft_parts;
+  int64_t part_count = 0;
   all_null = true;
   fulltext.reset();
   if (OB_UNLIKELY(raw_ctx.arg_cnt_ <= 0) || OB_ISNULL(raw_ctx.args_)) {
@@ -77,10 +78,9 @@ int build_fulltext_input(
   } else if (OB_ISNULL(cs = ObCharset::get_charset(raw_ctx.args_[0]->obj_meta_.get_collation_type()))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected null charset info", K(ret), K(raw_ctx.args_[0]->obj_meta_));
+  } else if (OB_FAIL(ft_parts.prepare_allocate(raw_ctx.arg_cnt_))) {
+    LOG_WARN("failed to prepare fulltext parts array", K(ret), K(raw_ctx.arg_cnt_));
   } else {
-    const int64_t mb_max_len = cs->mbmaxlen;
-    char mb_separator[mb_max_len];
-    int32_t length_of_separator = 0;
     for (int64_t i = 0; OB_SUCC(ret) && i < raw_ctx.arg_cnt_; ++i) {
       ObString res;
       common::ObDatum *datum = nullptr;
@@ -101,39 +101,48 @@ int build_fulltext_input(
                                                                    raw_ctx.args_[i]->obj_meta_.has_lob_header(),
                                                                    res))) {
         LOG_WARN("failed to read real string data", K(ret), K(i), K(res));
-      } else if (OB_FAIL(ft_parts.push_back(res))) {
-        LOG_WARN("failed to push fulltext part", K(ret), K(i), K(res));
       } else {
-        res_str_len += ft_parts.at(ft_parts.count() - 1).length();
+        ft_parts.at(part_count++) = res;
+        res_str_len += res.length();
       }
     }
-    wchar_t wide_char = L' ';
     if (OB_FAIL(ret) || all_null) {
-    } else if (OB_FAIL(ObCharset::wc_mb(raw_ctx.args_[0]->obj_meta_.get_collation_type(),
-                                        wide_char,
-                                        mb_separator,
-                                        mb_max_len,
-                                        length_of_separator))) {
-      LOG_WARN("failed to build separator", K(ret), K(mb_max_len));
+    } else if (1 == part_count) {
+      fulltext = ft_parts.at(0);
     } else {
-      res_str_len += length_of_separator * (ft_parts.count() - 1);
-      if (res_str_len > 0) {
-        char *ptr = static_cast<char *>(allocator.alloc(res_str_len));
-        if (OB_ISNULL(ptr)) {
-          ret = OB_ALLOCATE_MEMORY_FAILED;
-          LOG_WARN("failed to allocate fulltext buffer", K(ret), K(res_str_len));
-        } else {
-          char *cur_ptr = ptr;
-          for (int64_t i = 0; OB_SUCC(ret) && i < ft_parts.count(); ++i) {
-            if (0 != i) {
-              MEMCPY(cur_ptr, mb_separator, length_of_separator);
-              cur_ptr += length_of_separator;
+      const int64_t mb_max_len = cs->mbmaxlen;
+      char mb_separator[mb_max_len];
+      int32_t length_of_separator = 0;
+      if (CHARSET_UTF8MB4 == ObCharset::charset_type_by_coll(raw_ctx.args_[0]->obj_meta_.get_collation_type())) {
+        mb_separator[0] = ' ';
+        length_of_separator = 1;
+      } else if (OB_FAIL(ObCharset::wc_mb(raw_ctx.args_[0]->obj_meta_.get_collation_type(),
+                                          L' ',
+                                          mb_separator,
+                                          mb_max_len,
+                                          length_of_separator))) {
+        LOG_WARN("failed to build separator", K(ret), K(mb_max_len));
+      }
+      if (OB_SUCC(ret)) {
+        res_str_len += length_of_separator * (part_count - 1);
+        if (res_str_len > 0) {
+          char *ptr = static_cast<char *>(allocator.alloc(res_str_len));
+          if (OB_ISNULL(ptr)) {
+            ret = OB_ALLOCATE_MEMORY_FAILED;
+            LOG_WARN("failed to allocate fulltext buffer", K(ret), K(res_str_len));
+          } else {
+            char *cur_ptr = ptr;
+            for (int64_t i = 0; OB_SUCC(ret) && i < part_count; ++i) {
+              if (0 != i) {
+                MEMCPY(cur_ptr, mb_separator, length_of_separator);
+                cur_ptr += length_of_separator;
+              }
+              MEMCPY(cur_ptr, ft_parts.at(i).ptr(), ft_parts.at(i).length());
+              cur_ptr += ft_parts.at(i).length();
             }
-            MEMCPY(cur_ptr, ft_parts.at(i).ptr(), ft_parts.at(i).length());
-            cur_ptr += ft_parts.at(i).length();
-          }
-          if (OB_SUCC(ret)) {
-            fulltext.assign_ptr(ptr, static_cast<int32_t>(res_str_len));
+            if (OB_SUCC(ret)) {
+              fulltext.assign_ptr(ptr, static_cast<int32_t>(res_str_len));
+            }
           }
         }
       }

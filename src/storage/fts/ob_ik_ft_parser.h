@@ -33,6 +33,7 @@ namespace oceanbase
 namespace storage
 {
 class ObFTDictHub;
+class ObIKLetterProcessor;
 
 class ObIKFTParser final : public ObIReusableFTParser
 {
@@ -44,6 +45,7 @@ public:
         coll_type_(ObCollationType::CS_TYPE_INVALID),
         ctx_(nullptr),
         hub_(hub),
+        letter_segmenter_(nullptr),
         segmenters_(allocator_),
         cache_main_(allocator),
         cache_quan_(allocator),
@@ -75,6 +77,7 @@ private:
                        const char *ch,
                        const uint8_t char_len,
                        const ObFTCharUtil::CharType type);
+  int process_ascii_tail(bool &do_seg);
 
   int add_segmenter(ObIIKProcessor *segmenter);
 
@@ -107,6 +110,7 @@ private:
   ObCollationType coll_type_;
   TokenizeContext *ctx_;
   ObFTDictHub *hub_;
+  ObIKLetterProcessor *letter_segmenter_;
   ObList<ObIIKProcessor *, ObIAllocator> segmenters_;
   ObIIKProcessor *segmenter_cache_[MAX_SEGMENTER_CNT] = {};
   int64_t segmenter_cnt_ = 0;

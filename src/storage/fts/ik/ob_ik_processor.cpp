@@ -26,11 +26,34 @@
 #include "storage/fts/ik/ob_ik_arbitrator.h"
 #include "storage/fts/ik/ob_ik_char_util.h"
 #include "storage/fts/ik/ob_ik_token.h"
+#include "storage/fts/utils/ob_ft_ascii_utils.h"
 
 namespace oceanbase
 {
 namespace storage
 {
+namespace
+{
+
+OB_INLINE ObFTCharUtil::CharType classify_ascii_char_type(const char ch)
+{
+  ObFTCharUtil::CharType type = ObFTCharUtil::CharType::USELESS;
+  switch (ascii::classify_ascii_byte(static_cast<uint8_t>(ch))) {
+    case ascii::CharType::ARABIC:
+      type = ObFTCharUtil::CharType::ARABIC_LETTER;
+      break;
+    case ascii::CharType::ENGLISH:
+      type = ObFTCharUtil::CharType::ENGLISH_LETTER;
+      break;
+    case ascii::CharType::USELESS:
+    default:
+      break;
+  }
+  return type;
+}
+
+} // namespace
+
 int ObIIKProcessor::process(TokenizeContext &ctx)
 {
   int ret = OB_SUCCESS;
@@ -63,9 +86,10 @@ TokenizeContext::TokenizeContext(ObCollationType coll_type,
                                  const char *fulltext,
                                  int64_t fulltext_len,
                                  bool is_smart)
-    : coll_type_(coll_type), cs_(nullptr), well_formed_len_func_(nullptr), fulltext_(fulltext),
-      fulltext_len_(fulltext_len), cursor_(0), next_char_len_(0), handle_size_(0), is_smart_(is_smart), token_list_(allocator),
-      result_list_(allocator)
+    : coll_type_(coll_type), charset_type_(CHARSET_INVALID), cs_(nullptr), well_formed_len_func_(nullptr),
+      fulltext_(fulltext), fulltext_len_(fulltext_len), cursor_(0), next_char_len_(0),
+      next_char_type_(ObFTCharUtil::CharType::USELESS), ascii_run_end_(0), handle_size_(0),
+      is_smart_(is_smart), token_list_(allocator), result_list_(allocator)
 {
 }
 
@@ -78,6 +102,7 @@ int TokenizeContext::init()
   } else if (OB_ISNULL(cs_ = ObCharset::get_charset(coll_type_))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("charset info is null", K(ret), K(coll_type_));
+  } else if (FALSE_IT(charset_type_ = ObCharset::charset_type_by_coll(coll_type_))) {
   } else if (OB_ISNULL(cs_->cset) || OB_ISNULL(cs_->cset->well_formed_len)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("charset handler is invalid", K(ret), K(coll_type_), KP(cs_), KP(cs_ != nullptr ? cs_->cset : nullptr));
@@ -99,6 +124,8 @@ int TokenizeContext::reuse_context(const char *fulltext, const int64_t fulltext_
     fulltext_len_ = fulltext_len;
     cursor_ = 0;
     next_char_len_ = 0;
+    next_char_type_ = ObFTCharUtil::CharType::USELESS;
+    ascii_run_end_ = 0;
     handle_size_ = 0;
     if (OB_FAIL(prepare_next_char())) {
       LOG_WARN("failed to prepare first char for reused context", K(ret));
@@ -163,6 +190,18 @@ int TokenizeContext::prepare_next_char()
     LOG_WARN("tokenize context charset is not ready", K(ret), K(coll_type_), KP(cs_), KP(well_formed_len_func_));
   } else if (OB_UNLIKELY(cursor_ >= fulltext_len_)) {
     ret = OB_ITER_END;
+  } else if (CHARSET_UTF8MB4 == charset_type_
+             && 0 == (static_cast<uint8_t>(fulltext_[cursor_]) & 0x80)) {
+    if (cursor_ >= ascii_run_end_) {
+      ascii_run_end_ = cursor_ + ascii::count_ascii_prefix(fulltext_ + cursor_, fulltext_len_ - cursor_);
+    }
+    if (OB_UNLIKELY(ascii_run_end_ <= cursor_)) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("unexpected ascii run end", K(ret), K(cursor_), K(ascii_run_end_), K(fulltext_len_));
+    } else {
+      next_char_len_ = 1;
+      next_char_type_ = classify_ascii_char_type(fulltext_[cursor_]);
+    }
   } else if (FALSE_IT(char_len = well_formed_len_func_(
                            cs_,
                            fulltext_ + cursor_,
@@ -181,6 +220,7 @@ int TokenizeContext::prepare_next_char()
                                                        next_char_type_))) {
     LOG_WARN("failed to classify first char", K(ret), K(char_len), K(cursor_), K(fulltext_len_));
   } else {
+    ascii_run_end_ = cursor_;
     next_char_len_ = static_cast<uint8_t>(char_len);
   }
   return ret;
@@ -220,11 +260,18 @@ int64_t TokenizeContext::fulltext_len() const { return fulltext_len_; }
 
 int64_t TokenizeContext::get_cursor() const { return cursor_; }
 
+int64_t TokenizeContext::get_ascii_run_end() const { return ascii_run_end_; }
+
 bool TokenizeContext::is_last() const { return cursor_ + next_char_len_ >= fulltext_len_; }
 
 bool TokenizeContext::iter_end() const { return cursor_ >= fulltext_len_; }
 
 bool TokenizeContext::is_smart() const { return is_smart_; }
+
+bool TokenizeContext::is_ascii_fast_path() const
+{
+  return CHARSET_UTF8MB4 == charset_type_ && cursor_ < ascii_run_end_;
+}
 
 int TokenizeContext::add_token(const char *fulltext,
                                int64_t offset,
