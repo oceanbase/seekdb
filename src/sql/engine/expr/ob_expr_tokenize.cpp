@@ -82,27 +82,22 @@ public:
   }
 
   int get(const ObTokenizeCacheKey &key,
-          ObIAllocator &allocator,
-          ObString &result,
+          const ObExpr &expr,
+          ObEvalCtx &ctx,
+          ObDatum &result,
           bool &found)
   {
     int ret = OB_SUCCESS;
     found = false;
-    result.reset();
     common::ObSpinLockGuard guard(lock_);
     for (int64_t i = 0; OB_SUCC(ret) && !found && i < CACHE_ENTRY_COUNT; ++i) {
       CacheEntry &entry = entries_[i];
       if (entry.matches(key)) {
-        char *buf = nullptr;
-        if (entry.result_length_ > 0
-            && OB_ISNULL(buf = static_cast<char *>(allocator.alloc(entry.result_length_)))) {
-          ret = OB_ALLOCATE_MEMORY_FAILED;
-          LOG_WARN("fail to allocate cached tokenize result", K(ret), K(entry.result_length_));
+        ObString cached_result(entry.result_length_, entry.result_);
+        if (OB_FAIL(ObJsonExprHelper::pack_json_str_res(
+                expr, ctx, result, cached_result))) {
+          LOG_WARN("fail to pack cached tokenize result", K(ret), K(entry.result_length_));
         } else {
-          if (entry.result_length_ > 0) {
-            MEMCPY(buf, entry.result_, entry.result_length_);
-          }
-          result.assign_ptr(buf, entry.result_length_);
           entry.access_clock_ = ++access_clock_;
           found = true;
         }
@@ -279,7 +274,6 @@ int ObExprTokenize::eval_tokenize(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &e
   ObIJsonBase *json_result = nullptr;
   TokenizeParam param;
   ObTokenizeCacheKey cache_key;
-  ObString cached_result;
   bool cacheable = false;
   bool cache_hit = false;
 
@@ -291,13 +285,10 @@ int ObExprTokenize::eval_tokenize(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &e
     LOG_WARN("fail to build tokenize cache key", K(ret));
   } else if (cacheable
       && OB_FAIL(ObTokenizeResultCache::instance().get(
-          cache_key, temp_allocator, cached_result, cache_hit))) {
+          cache_key, expr, ctx, expr_datum, cache_hit))) {
     LOG_WARN("fail to get cached tokenize result", K(ret));
   } else if (cache_hit) {
-    if (OB_FAIL(ObJsonExprHelper::pack_json_str_res(
-        expr, ctx, expr_datum, cached_result))) {
-      LOG_WARN("fail to pack cached tokenize result", K(ret));
-    }
+    // Result was packed directly from the cache entry.
   } else if (OB_FAIL(parse_param(expr, ctx, temp_allocator, param))) {
     LOG_WARN("Fail to parse param", K(ret));
   } else if (OB_FAIL(tokenize_fulltext(param, param.output_mode_, temp_allocator, json_result))) {

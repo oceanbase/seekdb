@@ -4625,11 +4625,13 @@ int ObTransformPreProcess::preserve_order_for_fulltext_search(
   TableItem *table_item = NULL;
   ObRawExpr *match_expr = nullptr;
   bool parent_only_counts_rows = false;
+  bool can_prune_counted_projection = false;
+  ObSelectStmt *child_stmt = nullptr;
   if (OB_ISNULL(stmt)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected null", K(ret));
   } else if (parent_stmts.count() == 1 && stmt->is_select_stmt()) {
-    const ObSelectStmt *child_stmt = static_cast<const ObSelectStmt *>(stmt);
+    child_stmt = static_cast<ObSelectStmt *>(stmt);
     const ObDMLStmt *parent_stmt = parent_stmts.at(0).stmt_;
     if (OB_NOT_NULL(parent_stmt) && parent_stmt->is_select_stmt()) {
       const ObSelectStmt *parent_select = static_cast<const ObSelectStmt *>(parent_stmt);
@@ -4658,6 +4660,18 @@ int ObTransformPreProcess::preserve_order_for_fulltext_search(
           && OB_NOT_NULL(parent_table)
           && parent_table->is_generated_table()
           && parent_table->ref_query_ == child_stmt;
+      can_prune_counted_projection = parent_only_counts_rows
+          && !child_stmt->is_set_stmt()
+          && child_stmt->get_select_item_size() == 1
+          && OB_NOT_NULL(child_stmt->get_select_item(0).expr_)
+          && child_stmt->get_select_item(0).expr_->is_column_ref_expr()
+          && child_stmt->get_table_items().count() == 1
+          && child_stmt->get_order_item_size() == 0
+          && !child_stmt->has_group_by()
+          && !child_stmt->has_having()
+          && !child_stmt->has_distinct()
+          && !child_stmt->has_window_function()
+          && child_stmt->get_aggr_item_size() == 0;
     }
   }
 
@@ -4666,6 +4680,22 @@ int ObTransformPreProcess::preserve_order_for_fulltext_search(
     // COUNT(*) only observes the number of rows produced by LIMIT, not which
     // equally sized subset is selected.  Avoid the implicit relevance order
     // so the full-text scan can stop as soon as the limit is satisfied.
+    if (can_prune_counted_projection) {
+      ObConstRawExpr *one_expr = nullptr;
+      if (OB_ISNULL(ctx_) || OB_ISNULL(ctx_->expr_factory_)) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("transform context is null", K(ret), KP(ctx_));
+      } else if (OB_FAIL(ObRawExprUtils::build_const_int_expr(
+                     *ctx_->expr_factory_, ObIntType, 1, one_expr))) {
+        LOG_WARN("failed to build constant projection", K(ret));
+      } else {
+        // The parent does not consume the generated-table column.  Replacing
+        // it with a constant lets the FTS scan satisfy LIMIT without fetching
+        // base-table rows only to discard their values in COUNT(*).
+        child_stmt->get_select_item(0).expr_ = one_expr;
+        trans_happened = true;
+      }
+    }
   } else if (stmt->get_table_items().count() != 1 || stmt->get_order_item_size() != 0) {
     // do nothing
   } else if (stmt->is_select_stmt() && 
