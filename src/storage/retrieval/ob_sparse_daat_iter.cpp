@@ -392,7 +392,9 @@ int ObSRDaaTIterImpl::collect_dims_by_id(const ObDatum *&id_datum, double &relev
     }
     if (OB_FAIL(merge_heap_->top(top_item))) {
       LOG_WARN("failed to get top item from merge heap", K(ret));
-    } else if (OB_FAIL(relevance_collector_->collect_one_dim(top_item->iter_idx_, top_item->relevance_))) {
+    } else if (!iter_param_->accept_any_match_
+        && OB_FAIL(relevance_collector_->collect_one_dim(
+            top_item->iter_idx_, top_item->relevance_))) {
       LOG_WARN("failed to collect one dimension", K(ret));
     } else if (FALSE_IT(iter_idx = top_item->iter_idx_)) {
     } else if (OB_FAIL(merge_heap_->pop())) {
@@ -408,6 +410,10 @@ int ObSRDaaTIterImpl::collect_dims_by_id(const ObDatum *&id_datum, double &relev
     if (OB_ISNULL(id_datum)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected null id datum", K(ret));
+    } else if (iter_param_->accept_any_match_) {
+      // FTS PERF OPT 4: the heap already proves membership in at least one
+      // posting list; no score or matched-dimension count is observed.
+      got_valid_id = true;
     } else if (OB_FAIL(relevance_collector_->get_result(relevance, got_valid_id))) {
       LOG_WARN("failed to get result", K(ret));
     } else if (got_valid_id && OB_FAIL(process_collected_row(*id_datum, relevance))) {

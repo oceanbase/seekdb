@@ -483,6 +483,11 @@ int ObDASTRMergeIter::create_sparse_retrieval_iter()
   sr_iter_param_.relevance_proj_expr_ = ir_ctdef_->relevance_proj_col_;
   sr_iter_param_.filter_expr_ = ir_ctdef_->match_filter_;
   sr_iter_param_.topk_limit_ = topk_limit_;
+  // FTS PERF OPT 4: natural-language predicate retrieval is OR semantics by
+  // default. Once scoring is disabled, a posting-list hit is already enough.
+  sr_iter_param_.accept_any_match_ = !sr_iter_param_.need_calc_relevance()
+      && NATURAL_LANGUAGE_MODE == ir_ctdef_->mode_flag_
+      && ir_rtdef_->minimum_should_match_ <= 1;
   if (OB_NOT_NULL(ir_ctdef_->field_boost_expr_)) {
     ObDatum *boost_datum = nullptr;
     if (OB_FAIL(ir_ctdef_->field_boost_expr_->eval(*ir_rtdef_->eval_ctx_, boost_datum))) {
