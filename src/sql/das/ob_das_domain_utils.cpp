@@ -311,14 +311,16 @@ int ObDASDomainUtils::build_ft_doc_word_infos(
                                                              const ObDatum &doc_id_datum,
                                                              const ObString &fulltext,
                                                              const bool is_fts_index_aux,
-                                                             ObDomainIndexRow &word_rows)
+                                                             ObDomainIndexRow &word_rows,
+                                                             storage::ObFTWordMap *reusable_word_map)
 {
   int ret = OB_SUCCESS;
   static int64_t FT_WORD_DOC_COL_CNT = 4;
   static constexpr int64_t FT_MAX_WORD_BUCKET = 997;
-  const int64_t ft_word_bkt_cnt = MIN(MAX(fulltext.length() / 10, 2), FT_MAX_WORD_BUCKET);
+  const int64_t ft_word_bkt_cnt = MIN(MAX(fulltext.length() / 3, 2), FT_MAX_WORD_BUCKET);
   int64_t doc_length = 0;
-  ObFTWordMap ft_word_map;
+  ObFTWordMap local_word_map;
+  ObFTWordMap &ft_word_map = nullptr == reusable_word_map ? local_word_map : *reusable_word_map;
   void *rows_buf = nullptr;
   blocksstable::ObDatumRow *rows = nullptr;
   if (OB_ISNULL(helper) || OB_UNLIKELY(!ft_obj_meta.is_valid())) {
@@ -326,7 +328,11 @@ int ObDASDomainUtils::build_ft_doc_word_infos(
     LOG_WARN("invalid arguments", K(ret), KPC(helper), K(ft_obj_meta), K(doc_id_datum));
   } else if (0 == fulltext.length()) {
     ret = OB_ITER_END;
-  } else if (OB_FAIL(ft_word_map.create(ft_word_bkt_cnt, common::ObMemAttr("FTWordMap")))) {
+  } else if (ft_word_map.created() && ft_word_map.bucket_count() < ft_word_bkt_cnt
+             && OB_FAIL(ft_word_map.destroy())) {
+    LOG_WARN("fail to grow reusable ft word map", K(ret), K(ft_word_bkt_cnt));
+  } else if (!ft_word_map.created()
+             && OB_FAIL(ft_word_map.create(ft_word_bkt_cnt, common::ObMemAttr("FTWordMap")))) {
     LOG_WARN("fail to create ft word map", K(ret), K(ft_word_bkt_cnt));
   } else if (OB_FAIL(segment_and_calc_word_count(allocator,
                                                  helper,
@@ -338,12 +344,19 @@ int ObDASDomainUtils::build_ft_doc_word_infos(
         K(ft_obj_meta.get_collation_type()), K(fulltext));
   } else if (0 == ft_word_map.size()) {
     ret = OB_ITER_END;
+  } else if (OB_FAIL(word_rows.reserve(word_rows.count() + ft_word_map.size()))) {
+    LOG_WARN("failed to reserve full text index row pointers", K(ret), K(word_rows.count()), K(ft_word_map.size()));
   } else if (OB_ISNULL(rows_buf = reinterpret_cast<char *>(
                            allocator.alloc(ft_word_map.size() * sizeof(blocksstable::ObDatumRow))))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("failed to alloc memory for full text index rows buffer", K(ret));
   } else {
     int64_t i = 0;
+    // Both FTS auxiliary tables use these same four values; only word/doc-id positions differ.
+    const int64_t word_idx = is_fts_index_aux ? 0 : 1;
+    const int64_t doc_id_idx = is_fts_index_aux ? 1 : 0;
+    static constexpr int64_t WORD_COUNT_IDX = 2;
+    static constexpr int64_t DOC_LENGTH_IDX = 3;
     rows = new (rows_buf) blocksstable::ObDatumRow[ft_word_map.size()];
     for (ObFTWordMap::const_iterator iter = ft_word_map.begin();
          OB_SUCC(ret) && iter != ft_word_map.end();
@@ -356,14 +369,10 @@ int ObDASDomainUtils::build_ft_doc_word_infos(
         // index row format
         //  -    FTS_INDEX: [WORD], [DOC_ID], [WORD_COUNT], [DOC_LENGTH]
         //  - FTS_DOC_WORD: [DOC_ID], [WORD], [WORD_COUNT], [DOC_LENGTH]
-        const int64_t word_idx = is_fts_index_aux ? 0 : 1;
-        const int64_t doc_id_idx = is_fts_index_aux ? 1 : 0;
-        const int64_t word_cnt_idx = 2;
-        const int64_t doc_len_idx = 3;
         rows[i].storage_datums_[word_idx].set_datum(ft_word.get_word());
         rows[i].storage_datums_[doc_id_idx].shallow_copy_from_datum(doc_id_datum);
-        rows[i].storage_datums_[word_cnt_idx].set_uint(word_cnt);
-        rows[i].storage_datums_[doc_len_idx].set_uint(doc_length);
+        rows[i].storage_datums_[WORD_COUNT_IDX].set_uint(word_cnt);
+        rows[i].storage_datums_[DOC_LENGTH_IDX].set_uint(doc_length);
         if (OB_FAIL(word_rows.push_back(&rows[i]))) {
           LOG_WARN("fail to push back row", K(ret), K(rows[i]));
         } else {
@@ -924,6 +933,9 @@ void ObFTDMLIterator::reset()
   is_inited_ = false;
   ft_doc_word_iter_.reset();
   ft_parse_helper_.reset();
+  if (ft_word_map_.created()) {
+    (void)ft_word_map_.destroy();
+  }
   ObDomainDMLIterator::reset();
 }
 
@@ -1126,7 +1138,8 @@ int ObFTDMLIterator::generate_ft_word_rows(const ObChunkDatumStore::StoredRow *s
                                                                    doc_id_datum,
                                                                    ft,
                                                                    is_fts_index_aux,
-                                                                   rows_))) {
+                                                                   rows_,
+                                                                   &ft_word_map_))) {
     if (OB_UNLIKELY(OB_ITER_END != ret)) {
       LOG_WARN("fail to generate fulltext word rows",
                K(ret),
@@ -1302,15 +1315,23 @@ int ObFTDMLIterator::build_ft_word_row(
   } else if (OB_FAIL(tmp_row->init(src_row->count_))) {
   } else if (OB_FAIL(tmp_row->copy_attributes_except_datums(*src_row))) {
     LOG_WARN("fail to copy attributes expcept datums", K(ret), KPC(src_row));
-  } else if (OB_FAIL(tmp_row->storage_datums_[DOC_ID_IDX].deep_copy(src_row->storage_datums_[0], allocator_))) {
+  } else if (src_row->storage_datums_[0].get_deep_copy_size() > 0
+             && OB_FAIL(tmp_row->storage_datums_[DOC_ID_IDX].deep_copy(src_row->storage_datums_[0], allocator_))) {
     LOG_WARN("fail to deep copy doc id datum", K(ret), K(DOC_ID_IDX));
-  } else if (OB_FAIL(tmp_row->storage_datums_[WORD_SEGMENT_IDX].deep_copy(src_row->storage_datums_[1], allocator_))) {
+  } else if (src_row->storage_datums_[0].get_deep_copy_size() == 0) {
+    tmp_row->storage_datums_[DOC_ID_IDX].set_datum(src_row->storage_datums_[0]);
+  }
+  if (OB_SUCC(ret) && src_row->storage_datums_[1].get_deep_copy_size() > 0
+      && OB_FAIL(tmp_row->storage_datums_[WORD_SEGMENT_IDX].deep_copy(src_row->storage_datums_[1], allocator_))) {
     LOG_WARN("fail to deep copy word segment datum", K(ret), K(WORD_SEGMENT_IDX));
-  } else if (OB_FAIL(tmp_row->storage_datums_[WORD_COUNT_IDX].deep_copy(src_row->storage_datums_[2], allocator_))) {
-    LOG_WARN("fail to deep copy word count datum", K(ret), K(WORD_COUNT_IDX));
-  } else if (OB_FAIL(tmp_row->storage_datums_[DOC_LENGTH_IDX].deep_copy(src_row->storage_datums_[3], allocator_))) {
-    LOG_WARN("fail to deep copy doc lenght datum", K(ret), K(DOC_LENGTH_IDX));
-  } else {
+  } else if (OB_SUCC(ret) && src_row->storage_datums_[1].get_deep_copy_size() == 0) {
+    tmp_row->storage_datums_[WORD_SEGMENT_IDX].set_datum(src_row->storage_datums_[1]);
+  }
+  if (OB_SUCC(ret)) {
+    // The final two FTS_DOC_WORD columns are fixed-width counters.  Copy their
+    // datum value directly; deep_copy only adds work and cannot allocate here.
+    tmp_row->storage_datums_[WORD_COUNT_IDX].set_datum(src_row->storage_datums_[2]);
+    tmp_row->storage_datums_[DOC_LENGTH_IDX].set_datum(src_row->storage_datums_[3]);
     dest_row = tmp_row;
   }
   return ret;

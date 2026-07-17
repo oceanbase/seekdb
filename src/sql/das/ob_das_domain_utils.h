@@ -182,7 +182,8 @@ public:
                                          const ObDatum &doc_id_datum,
                                          const ObString &fulltext,
                                          const bool is_fts_index_aux,
-                                         ObDomainIndexRow &word_rows);
+                                         ObDomainIndexRow &word_rows,
+                                         storage::ObFTWordMap *reusable_word_map = nullptr);
   static int generate_multivalue_index_rows(
       ObIAllocator &allocator,
       const ObDASDMLBaseCtDef &das_ctdef,
@@ -340,6 +341,7 @@ public:
     doc_word_info_(ft_doc_word_info),
     ft_doc_word_iter_(),
     ft_parse_helper_(),
+    ft_word_map_(),
     is_inited_(false)
   {
     ObDomainDMLIterator::mode_ = mode;
@@ -372,6 +374,9 @@ private:
   const ObFTDocWordInfo *doc_word_info_;
   storage::ObFTDocWordScanIterator ft_doc_word_iter_;
   storage::ObFTParseHelper ft_parse_helper_;
+  // The map only lives while rows_ are consumed.  Keeping its bucket array across
+  // documents avoids recreating it for every FTS_DOC_WORD batch.
+  storage::ObFTWordMap ft_word_map_;
   bool is_inited_;
 };
 

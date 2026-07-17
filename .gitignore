@@ -404,3 +404,12 @@ test/var
 .worktrees/
 .claude/
 CLAUDE.md
+
+# Local test files
+*.txt
+fts_architecture.md
+src/observer/virtual_table/ob_all_virtual_sqlite_tables.*
+src/share/inner_table/*.cpp
+src/share/inner_table/*.h
+src/share/inner_table/*.ipp
+src/share/inner_table/table_id_to_name

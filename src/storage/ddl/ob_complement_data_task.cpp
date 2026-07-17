@@ -55,6 +55,8 @@ using namespace blocksstable;
 namespace storage
 {
 
+const int64_t ObComplementWriteMacroOperator::WRITE_BATCH_SIZE;
+
 void add_ddl_event(const ObComplementDataParam *param, const ObString &stmt)
 {
   if (OB_NOT_NULL(param)) {
@@ -866,6 +868,50 @@ int ObComplementPrepareTask::process()
   return ret;
 }
 
+int ObComplementWriteMacroOperator::init(const ObWriteMacroParam &param)
+{
+  int ret = OB_SUCCESS;
+  ObDirectLoadRowFlag row_flag;
+  if (OB_FAIL(ObWriteMacroBaseOperator::init(param))) {
+    LOG_WARN("init slice writer failed", K(ret));
+  } else if (OB_FAIL(batch_rows_.init(param.ddl_table_schema_.column_items_, WRITE_BATCH_SIZE, row_flag))) {
+    LOG_WARN("init complement write batch failed", K(ret), K(WRITE_BATCH_SIZE));
+  } else if (OB_FAIL(datum_rows_.vectors_.prepare_allocate(batch_rows_.get_column_count()))) {
+    LOG_WARN("prepare complement write batch vectors failed", K(ret), K(batch_rows_));
+  } else {
+    const ObIArray<ObDirectLoadVector *> &vectors = batch_rows_.get_vectors();
+    datum_rows_.row_flag_.set_flag(ObDmlFlag::DF_INSERT);
+    for (int64_t i = 0; i < vectors.count(); ++i) {
+      if (OB_ISNULL(vectors.at(i))) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("complement write batch vector is null", K(ret), K(i));
+      } else {
+        datum_rows_.vectors_.at(i) = vectors.at(i)->get_vector();
+      }
+    }
+    is_batch_inited_ = OB_SUCC(ret);
+  }
+  return ret;
+}
+
+int ObComplementWriteMacroOperator::flush_batch()
+{
+  int ret = OB_SUCCESS;
+  if (OB_UNLIKELY(!is_batch_inited_)) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("complement write batch is not initialized", K(ret));
+  } else if (batch_rows_.size() > 0) {
+    datum_rows_.row_count_ = batch_rows_.size();
+    if (OB_FAIL(slice_writer_.append_batch(datum_rows_))) {
+      LOG_WARN("append complement write batch failed", K(ret), K(datum_rows_));
+    } else {
+      // Keep vector allocations for the next chunk; only payload storage is reused.
+      batch_rows_.reuse();
+    }
+  }
+  return ret;
+}
+
 int ObComplementWriteMacroOperator::execute(
     const ObChunk &input_chunk,
     ResultState &result_state,
@@ -873,7 +919,9 @@ int ObComplementWriteMacroOperator::execute(
 {
   int ret = OB_SUCCESS;
   if (input_chunk.is_end_chunk()) {
-    if (OB_FAIL(slice_writer_.close())) {
+    if (OB_FAIL(flush_batch())) {
+      LOG_WARN("flush complement write batch failed", K(ret));
+    } else if (OB_FAIL(slice_writer_.close())) {
       LOG_WARN("close slice writer failed", K(ret));
     } else {
       output_chunk.set_end_chunk();
@@ -882,8 +930,10 @@ int ObComplementWriteMacroOperator::execute(
   } else if (!input_chunk.is_valid() || input_chunk.type_ != ObChunk::DATUM_ROW) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", K(ret), K(input_chunk));
-  } else if (OB_FAIL(slice_writer_.append_row(*input_chunk.datum_row_))) {
-    LOG_WARN("append row failed", K(ret));
+  } else if (OB_FAIL(batch_rows_.append_row(*input_chunk.datum_row_))) {
+    LOG_WARN("append row to complement write batch failed", K(ret));
+  } else if (batch_rows_.full() && OB_FAIL(flush_batch())) {
+    LOG_WARN("flush full complement write batch failed", K(ret));
   } else {
     result_state = ObPipelineOperator::NEED_MORE_INPUT;
   }
