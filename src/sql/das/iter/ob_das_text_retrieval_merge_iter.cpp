@@ -29,6 +29,17 @@ using namespace share;
 namespace sql
 {
 
+namespace
+{
+OB_INLINE bool need_runtime_match_filter(const ObDASIRScanCtDef *ir_ctdef,
+                                         const ObDASTextRetrievalMergeIter::TokenRelationType relation_type)
+{
+  return nullptr != ir_ctdef
+      && nullptr != ir_ctdef->match_filter_
+      && (ObDASTextRetrievalMergeIter::BOOLEAN == relation_type || ir_ctdef->need_calc_relevance());
+}
+} // namespace
+
 ObIRIterLoserTreeItem::ObIRIterLoserTreeItem()
   : relevance_(0), iter_idx_(-1)
 {
@@ -659,7 +670,8 @@ int ObDASTextRetrievalMergeIter::project_docid()
 
 void ObDASTextRetrievalMergeIter::clear_evaluated_infos()
 {
-  ObExpr *match_filter = ir_ctdef_->match_filter_;
+  ObExpr *match_filter = need_runtime_match_filter(ir_ctdef_, relation_type_)
+      ? ir_ctdef_->match_filter_ : nullptr;
   ObEvalCtx *eval_ctx = ir_rtdef_->eval_ctx_;
   if (nullptr != match_filter) {
     if (match_filter->is_batch_result()) {
@@ -1104,7 +1116,8 @@ int ObDASTRTaatIter::fill_output_exprs(int64_t &count, int64_t safe_capacity)
   int ret = OB_SUCCESS;
   const bool need_relevance = ir_ctdef_->need_proj_relevance_score();
   ObDatum *filter_res = nullptr;
-  ObExpr *match_filter = ir_ctdef_->match_filter_;
+  ObExpr *match_filter = need_runtime_match_filter(ir_ctdef_, relation_type_)
+      ? ir_ctdef_->match_filter_ : nullptr;
   ObDASTRTaatHashMap *map = hash_maps_[cur_map_idx_];
   ObEvalCtx *eval_ctx = ir_rtdef_->eval_ctx_;
   ObExpr *relevance_proj_col = ir_ctdef_->relevance_proj_col_;
@@ -1954,7 +1967,8 @@ int ObDASTRDaatIter::inner_get_next_row()
     bool filter_valid = false;
     bool got_valid_document = false;
     bool doc_valid = false;
-    ObExpr *match_filter = ir_ctdef_->match_filter_;
+    ObExpr *match_filter = need_runtime_match_filter(ir_ctdef_, relation_type_)
+        ? ir_ctdef_->match_filter_ : nullptr;
     ObDatum *filter_res = nullptr;
     const bool is_batch = false;
     while (OB_SUCC(ret) && !got_valid_document) {
@@ -2001,7 +2015,8 @@ int ObDASTRDaatIter::inner_get_next_rows(int64_t &count, int64_t capacity)
   } else if (0 == capacity) {
     count = 0;
   } else {
-    ObExpr *match_filter = ir_ctdef_->match_filter_;
+    ObExpr *match_filter = need_runtime_match_filter(ir_ctdef_, relation_type_)
+        ? ir_ctdef_->match_filter_ : nullptr;
     int64_t real_capacity = min(capacity, ir_rtdef_->eval_ctx_->max_batch_size_);
     ObDatum *filter_res = nullptr;
     const bool is_batch = true;
