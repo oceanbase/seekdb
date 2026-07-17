@@ -207,21 +207,11 @@ int ObExprTokenize::eval_tokenize(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &e
 
   ObIJsonBase *json_result = nullptr;
   TokenizeParam param;
-  ObString memo_text;
-  ObString memo_parser;
-  uint64_t dictionary_generation = 0;
-  bool result_restored = false;
 
   // check param num, which is checked in ObExprOperator::calc_result_typeN.
   if (OB_UNLIKELY(expr.arg_cnt_ < 1 || expr.arg_cnt_ > 3)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("Args count invalid.", K(ret), K(expr.arg_cnt_));
-  } else if (OB_FAIL(try_restore_literal_tokenize_result(
-                 expr, ctx, expr_datum, result_restored,
-                 memo_text, memo_parser, dictionary_generation))) {
-    LOG_WARN("failed to check tokenize literal memo", K(ret));
-  } else if (result_restored) {
-    // The cached binary JSON has already been written to expr_datum.
   } else if (OB_FAIL(parse_param(expr, ctx, param))) {
     LOG_WARN("Fail to parse param", K(ret));
   } else if (OB_FAIL(tokenize_fulltext(param, param.output_mode_, temp_allocator, json_result))) {
@@ -232,10 +222,6 @@ int ObExprTokenize::eval_tokenize(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &e
                                                      json_result,
                                                      expr_datum))) {
     LOG_WARN("fail to pack json result", K(ret));
-  } else if (!memo_text.empty()) {
-    get_tokenize_literal_result_memo().store(
-        memo_text, memo_parser, expr.args_[0]->obj_meta_.get_collation_type(),
-        dictionary_generation, expr_datum);
   }
 
   return ret;

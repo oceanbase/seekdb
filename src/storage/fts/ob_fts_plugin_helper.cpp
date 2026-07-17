@@ -19,8 +19,6 @@
 #define USING_LOG_PREFIX STORAGE_FTS
 
 #include "storage/fts/ob_fts_plugin_helper.h"
-#include "storage/fts/ob_beng_ft_parser.h"
-#include "storage/fts/ob_ik_ft_parser.h"
 
 #include "common/json_type/ob_json_tree.h"
 #include "plugin/interface/ob_plugin_ftparser_intf.h"
@@ -258,27 +256,14 @@ int ObFTParseHelper::segment(
     param.min_ngram_size_ = parser_property_.min_ngram_token_size_;
     param.max_ngram_size_ = parser_property_.max_ngram_token_size_;
 
-    const bool reuse_ik_session = parser_name_.is_ik();
-    const bool reuse_beng_session = parser_name_.is_beng();
-    const bool reuse_parser_session = reuse_ik_session || reuse_beng_session;
-    plugin::ObITokenIterator *&session_iter = reuse_ik_session ? ik_session_iter_ : beng_session_iter_;
-    if (reuse_ik_session && OB_NOT_NULL(session_iter)) {
-      iter = session_iter;
-      if (OB_FAIL(static_cast<ObIKFTParser *>(iter)->reset_document(param))) {
-        LOG_WARN("fail to reset ik parser document state", K(ret), K(param));
-      }
-    } else if (reuse_beng_session && OB_NOT_NULL(session_iter)) {
-      iter = session_iter;
-      if (OB_FAIL(static_cast<ObBEngFTParser *>(iter)->reset_document(param))) {
-        LOG_WARN("failed to reset basic-English parser document", K(ret), K(param));
-      }
-    } else if (OB_FAIL(parser_desc_->segment(&param, iter))) {
+    // A parse helper can be reached by multiple DDL workers during an FTS
+    // index build.  Token iterators retain document-local cursors and scratch
+    // storage, so keeping one on the helper would race between workers.
+    if (OB_FAIL(parser_desc_->segment(&param, iter))) {
       LOG_WARN("fail to segment", K(ret), K(param));
     } else if (OB_ISNULL(iter)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected error, token iterator is nullptr", K(ret), KP(iter));
-    } else if (reuse_parser_session) {
-      session_iter = iter;
     }
     if (OB_SUCC(ret) && OB_NOT_NULL(iter)) {
       const char *word = nullptr;
@@ -298,11 +283,8 @@ int ObFTParseHelper::segment(
         ret = OB_SUCCESS;
       }
     }
-    if (OB_NOT_NULL(iter) && (!reuse_parser_session || OB_FAIL(ret))) {
+    if (OB_NOT_NULL(iter)) {
       parser_desc_->free_token_iter(&param, iter);
-      if (reuse_parser_session) {
-        session_iter = nullptr;
-      }
       iter = nullptr;
     }
   }
@@ -316,8 +298,6 @@ ObFTParseHelper::ObFTParseHelper()
     parser_name_(),
     add_word_flag_(),
     parser_property_(),
-    ik_session_iter_(nullptr),
-    beng_session_iter_(nullptr),
     is_inited_(false)
 {
 }
@@ -368,18 +348,6 @@ int ObFTParseHelper::init(
 
 void ObFTParseHelper::reset()
 {
-  if (OB_NOT_NULL(ik_session_iter_) && OB_NOT_NULL(parser_desc_) && OB_NOT_NULL(allocator_)) {
-    ObFTParserParam param;
-    param.allocator_ = allocator_;
-    parser_desc_->free_token_iter(&param, ik_session_iter_);
-  }
-  if (OB_NOT_NULL(beng_session_iter_) && OB_NOT_NULL(parser_desc_) && OB_NOT_NULL(allocator_)) {
-    ObFTParserParam param;
-    param.allocator_ = allocator_;
-    parser_desc_->free_token_iter(&param, beng_session_iter_);
-  }
-  ik_session_iter_ = nullptr;
-  beng_session_iter_ = nullptr;
   parser_desc_ = nullptr;
   plugin_param_ = nullptr;
   allocator_ = nullptr;
