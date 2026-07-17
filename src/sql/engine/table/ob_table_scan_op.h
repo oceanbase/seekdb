@@ -722,8 +722,13 @@ private:
   int inner_rescan_for_tsc();
 
   int inner_get_next_fts_index_row();
+  int inner_get_next_fts_index_batch(const int64_t max_row_cnt);
   int fetch_next_fts_index_rows();
+  int init_fts_output_exprs();
   int fill_generated_fts_cols(ObDatumRow *row);
+  int fill_generated_fts_cols_batch(ObDatumRow *first_row,
+                                    const int64_t max_row_cnt,
+                                    int64_t &row_count);
   int get_output_fts_col_expr_by_type(const ObExprOperatorType &type, ObExpr *&expr);
   bool is_resume_point_saved();
 protected:
@@ -754,6 +759,9 @@ protected:
   bool in_rescan_;
   ObDomainIndexCache domain_index_;
   ObFTIndexRowCache fts_index_;
+  // FTS DDL optimization: resolve the four generated columns once per open,
+  // instead of scanning MY_SPEC.output_ for every emitted token.
+  ObExpr *fts_output_exprs_[share::ObFtsIndexBuilderUtil::OB_FTS_INDEX_OR_DOC_WORD_TABLE_COL_CNT];
 
   // output_ is used to output data, TSC operator directly invokes output_::get_next_row(s),
   // it points to fold_iter_ in group rescan and iter_tree_ in normal scan.

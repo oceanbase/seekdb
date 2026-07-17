@@ -5339,10 +5339,14 @@ int ObStaticEngineCG::generate_normal_tsc(ObLogTableScan &op, ObTableScanSpec &s
       } else if (ddl_table_schema->is_fts_index_aux() || ddl_table_schema->is_fts_doc_word_aux()) {
         spec.is_fts_ddl_ = true;
         spec.is_fts_index_aux_ = ddl_table_schema->is_fts_index_aux();
-        // FTS post-building still emits a variable number of rows for every
-        // source row.  Keep the scalar path until the row-expansion operator
-        // has a native vectorized implementation.
-        spec.max_batch_size_ = 0;
+        // FTS DDL optimization: post-building expands one source document into
+        // multiple token rows. The table scan has a native datum-batch path;
+        // keep rich-format disabled until the row expander writes rich vectors
+        // directly as well.
+        if (phy_plan_->is_vectorized()) {
+          spec.max_batch_size_ = phy_plan_->get_batch_size();
+          spec.use_rich_format_ = false;
+        }
         if (OB_UNLIKELY(ddl_table_schema->get_parser_name_str().empty())) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("unexpected error, parser name is empty", K(ret), KPC(ddl_table_schema));
