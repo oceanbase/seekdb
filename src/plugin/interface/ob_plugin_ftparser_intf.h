@@ -112,13 +112,15 @@ public:
   {
     ObFTParserParamExport::reset();
     allocator_ = nullptr;
+    scratch_allocator_ = nullptr;
     ngram_token_size_ = NGRAM_TOKEN_SIZE;
   }
 
-  INHERIT_TO_STRING_KV("base", ObFTParserParamExport, KP_(allocator), K_(ngram_token_size));
+  INHERIT_TO_STRING_KV("base", ObFTParserParamExport, KP_(allocator), KP_(scratch_allocator), K_(ngram_token_size));
 
 public:
   common::ObIAllocator *allocator_ = nullptr;
+  common::ObIAllocator *scratch_allocator_ = nullptr;
 
   // ik parser params
   ObFTIKParam ik_param_;
@@ -132,11 +134,19 @@ class ObITokenIterator
 public:
   ObITokenIterator() = default;
   virtual ~ObITokenIterator() = default;
+  virtual int reuse(ObFTParserParam *param) { UNUSED(param); return OB_NOT_SUPPORTED; }
   virtual int get_next_token(
       const char *&word,
       int64_t &word_len,
       int64_t &char_cnt,
       int64_t &word_freq) = 0;
+  // Task4 Op2：内置解析器可覆盖该接口跨文档复用；外部插件默认保持原行为。
+  virtual int reuse_parser(const char *fulltext, const int64_t fulltext_len)
+  {
+    UNUSED(fulltext);
+    UNUSED(fulltext_len);
+    return OB_NOT_SUPPORTED;
+  }
   DECLARE_PURE_VIRTUAL_TO_STRING;
 };
 

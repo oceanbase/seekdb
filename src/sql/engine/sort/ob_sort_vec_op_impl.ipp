@@ -22,6 +22,8 @@ namespace sql
 template <typename Compare, typename Store_Row, bool has_addon>
 void ObSortVecOpImpl<Compare, Store_Row, has_addon>::reset()
 {
+  // Task4 Op9：必须在注销 profile 前保存指标，否则峰值与外排信息会丢失。
+  record_task4_op9_sort_monitor();
   sql_mem_processor_.unregister_profile();
   reuse();
   all_exprs_.reset();
@@ -39,6 +41,10 @@ void ObSortVecOpImpl<Compare, Store_Row, has_addon>::reset()
   topn_cnt_ = INT64_MAX;
   outputted_rows_cnt_ = 0;
   is_fetch_with_ties_ = false;
+  is_task4_op9_fts_ddl_sort_ = false;
+  task4_op9_dump_count_ = 0;
+  task4_op9_merge_pass_count_ = 0;
+  task4_op9_max_merge_ways_ = 0;
   rows_ = nullptr;
   ties_array_pos_ = 0;
   sort_exprs_getter_.reset();
@@ -114,6 +120,30 @@ void ObSortVecOpImpl<Compare, Store_Row, has_addon>::reset()
   io_event_observer_ = nullptr;
   is_fixed_key_sort_enabled_ = false;
   fixed_sort_key_len_ = 0;
+}
+
+template <typename Compare, typename Store_Row, bool has_addon>
+void ObSortVecOpImpl<Compare, Store_Row, has_addon>::record_task4_op9_sort_monitor()
+{
+  if (is_task4_op9_fts_ddl_sort_) {
+    const ObSqlWorkAreaProfile &profile = sql_mem_processor_.get_profile();
+    const int64_t ddl_task_id = op_monitor_info_.otherstat_5_value_;
+    const int64_t temp_write_bytes = op_monitor_info_.otherstat_6_value_;
+    const bool has_spill = task4_op9_dump_count_ > 0 || temp_write_bytes > 0
+        || profile.get_dumped_size() > 0 || profile.get_max_dumped_size() > 0
+        || task4_op9_merge_pass_count_ > 0 || profile.get_number_pass() > 0;
+    if (has_spill) {
+      // Task4 Op9：仅在实际发生外排时记录详细排序指标，避免无外排任务产生 INFO 日志。
+      SQL_ENG_LOG(INFO, "Task4 Op9 vector FTS DDL sort spill monitor", K(ddl_task_id),
+                  "op_id", op_monitor_info_.op_id_, K(task4_op9_dump_count_), K(temp_write_bytes),
+                  "dumped_bytes", profile.get_dumped_size(),
+                  "max_dumped_bytes", profile.get_max_dumped_size(),
+                  K(task4_op9_merge_pass_count_), K(task4_op9_max_merge_ways_),
+                  "workarea_pass_count", profile.get_number_pass(),
+                  "peak_memory_bytes", profile.get_max_mem_used(),
+                  "approved_memory_bytes", sql_mem_processor_.get_mem_bound());
+    }
+  }
 }
 
 template <typename Compare, typename Store_Row, bool has_addon>
@@ -286,6 +316,8 @@ int ObSortVecOpImpl<Compare, Store_Row, has_addon>::init(ObSortVecOpContext &ctx
     cmp_sort_collations_ = (enable_encode_sortkey_  && has_addon) ? addon_collations_ : sk_collations_;
     eval_ctx_ = ctx.eval_ctx_;
     exec_ctx_ = ctx.exec_ctx_;
+    // Task4 Op9：保留向量化 FTS DDL 识别和监控，不再调整排序内存策略。
+    is_task4_op9_fts_ddl_sort_ = is_task4_op9_fts_ddl_sort(exec_ctx_);
     part_cnt_ = ctx.part_cnt_;
     topn_cnt_ = ctx.topn_cnt_;
     use_heap_sort_ = is_topn_sort();
@@ -1732,6 +1764,10 @@ int ObSortVecOpImpl<Compare, Store_Row, has_addon>::do_dump()
     }
 
     if (OB_SUCC(ret)) {
+      if (is_task4_op9_fts_ddl_sort_) {
+        // Task4 Op9：仅统计成功完成的外排分片。
+        ++task4_op9_dump_count_;
+      }
       heap_iter_begin_ = false;
       row_idx_ = 0;
       quick_sort_array_.reset();
@@ -1864,20 +1900,20 @@ int ObSortVecOpImpl<Compare, Store_Row, has_addon>::build_ems_heap(int64_t &merg
       ems_heap_->reset();
     }
     if (OB_SUCC(ret)) {
-      merge_ways = get_memory_limit() / ObTempBlockStore::BLOCK_SIZE;
-      merge_ways = std::max(static_cast<int64_t>(2), merge_ways);
-      if (merge_ways < max_ways) {
-        bool dumped = false;
-        int64_t need_size = max_ways * ObTempBlockStore::BLOCK_SIZE;
-        if (OB_FAIL(sql_mem_processor_.extend_max_memory_size(
-              &mem_context_->get_malloc_allocator(),
-              [&](int64_t max_memory_size) { return max_memory_size < need_size; }, dumped,
-              mem_context_->used()))) {
-          SQL_ENG_LOG(WARN, "failed to extend memory size", K(ret));
-        }
-        merge_ways = std::max(merge_ways, get_memory_limit() / ObTempBlockStore::BLOCK_SIZE);
+      if (OB_FAIL(ObSortMemoryPolicy::calc_adaptive_merge_ways(
+            sql_mem_processor_,
+            mem_context_->get_malloc_allocator(),
+            mem_context_->used(),
+            ObTempBlockStore::BLOCK_SIZE,
+            max_ways,
+            merge_ways))) {
+        SQL_ENG_LOG(WARN, "failed to calculate adaptive merge ways", K(ret));
       }
-      merge_ways = std::min(merge_ways, max_ways);
+      if (is_task4_op9_fts_ddl_sort_) {
+        // Task4 Op9：记录实际发生的归并轮次及最大归并路数。
+        ++task4_op9_merge_pass_count_;
+        task4_op9_max_merge_ways_ = std::max(task4_op9_max_merge_ways_, merge_ways);
+      }
       LOG_TRACE("do merge sort ", K(first->level_), K(merge_ways), K(sort_chunks_.get_size()),
                 K(get_memory_limit()), K(sql_mem_processor_.get_profile()));
     }

@@ -25,6 +25,7 @@
 #include "storage/direct_load/ob_direct_load_datum_row.h"
 #include "storage/direct_load/ob_direct_load_external_multi_partition_row.h"
 #include "storage/direct_load/ob_direct_load_mem_chunk.h"
+#include "storage/direct_load/ob_direct_load_multiple_heap_table_map.h"
 
 namespace oceanbase
 {
@@ -520,6 +521,43 @@ TEST_F(TestChunkSort, test_seq)
                                         int_rowkey_count, table_schema));
   ASSERT_EQ(OB_SUCCESS, prepare_utils(table_schema, allocator, datum_util, enc_params, compare));
   ASSERT_EQ(OB_SUCCESS, sort_test(test_row_num, &rand, table_schema, enc_params, compare, allocator));
+}
+
+TEST_F(TestChunkSort, test_multiple_heap_table_map_reuse_clears_rows)
+{
+  ObTableSchema table_schema;
+  Sequence rand(0);
+  RowGenerate row_generate;
+  ObDirectLoadConstExternalMultiPartitionRow const_row;
+  ObDirectLoadMultipleHeapTableMap map;
+
+  ASSERT_EQ(OB_SUCCESS, prepare_schecma(1, 2, 1, 0, table_schema));
+  ASSERT_EQ(OB_SUCCESS, row_generate.init(table_schema, &rand));
+  ASSERT_EQ(OB_SUCCESS, map.init());
+
+  ASSERT_EQ(OB_SUCCESS, row_generate.generate_row(const_row));
+  const_row.tablet_id_ = 1;
+  ASSERT_EQ(OB_SUCCESS, map.add_row(const_row.tablet_id_, const_row));
+  ASSERT_FALSE(map.empty());
+
+  ObArray<const ObDirectLoadConstExternalMultiPartitionRow *> bag;
+  ASSERT_EQ(OB_SUCCESS, map.get(const_row.tablet_id_, bag));
+  ASSERT_EQ(1, bag.count());
+
+  map.reuse();
+  ASSERT_TRUE(map.empty());
+
+  ASSERT_EQ(OB_SUCCESS, row_generate.generate_row(const_row));
+  const_row.tablet_id_ = 2;
+  ASSERT_EQ(OB_SUCCESS, map.add_row(const_row.tablet_id_, const_row));
+
+  ObArray<ObTabletID> keys;
+  ASSERT_EQ(OB_SUCCESS, map.get_all_key_sorted(keys));
+  ASSERT_EQ(1, keys.count());
+  ASSERT_EQ(const_row.tablet_id_, keys.at(0));
+  bag.reset();
+  ASSERT_EQ(OB_SUCCESS, map.get(const_row.tablet_id_, bag));
+  ASSERT_EQ(1, bag.count());
 }
 
 TEST_F(TestChunkSort, test_random)

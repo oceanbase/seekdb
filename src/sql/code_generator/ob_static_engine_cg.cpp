@@ -2295,6 +2295,40 @@ int ObStaticEngineCG::generate_sort_exprs(const bool is_store_sortkey_separately
   return ret;
 }
 
+int ObStaticEngineCG::check_is_fts_ddl_sort(const ObLogSort &op, bool &is_fts_ddl_sort)
+{
+  int ret = OB_SUCCESS;
+  is_fts_ddl_sort = false;
+  const ObDMLStmt *root_stmt = nullptr;
+  const TableItem *insert_table_item = nullptr;
+  ObSchemaGetterGuard *schema_guard = nullptr;
+  const ObTableSchema *ddl_table_schema = nullptr;
+  if (OB_ISNULL(opt_ctx_)) {
+    LOG_WARN_RET(OB_ERR_UNEXPECTED, "optimizer context is null");
+  } else if (!opt_ctx_->is_insert_stmt_in_online_ddl()) {
+    // Task4 Op10：普通查询和非在线 DDL 继续使用通用宽度阈值。
+  } else if (OB_ISNULL(root_stmt = opt_ctx_->get_root_stmt())
+             || OB_ISNULL(insert_table_item = root_stmt->get_table_item(0))
+             || OB_ISNULL(schema_guard = opt_ctx_->get_schema_guard())) {
+    LOG_WARN_RET(OB_ERR_UNEXPECTED, "failed to resolve online DDL target",
+             KP(root_stmt), KP(insert_table_item),
+             KP(schema_guard), K(op.get_type()));
+  } else if (OB_SUCCESS != (ret = schema_guard->get_table_schema(insert_table_item->ddl_table_id_,
+                                                                  ddl_table_schema))) {
+    LOG_WARN("failed to get online DDL target schema, fallback to generic policy", K(ret),
+             K(insert_table_item->ddl_table_id_));
+    ret = OB_SUCCESS;
+  } else if (OB_ISNULL(ddl_table_schema)) {
+    LOG_WARN_RET(OB_TABLE_NOT_EXIST, "online DDL target schema does not exist",
+             K(insert_table_item->ddl_table_id_));
+  } else {
+    // Task4 Op10：FTS 倒排表和 doc-word 表都只用排序键参与归并。
+    is_fts_ddl_sort = ddl_table_schema->is_fts_index_aux()
+        || ddl_table_schema->is_fts_doc_word_aux();
+  }
+  return ret;
+}
+
 template<bool USE_RICH_FORMAT>
 int ObStaticEngineCG::prepare_topn_runtime_filter_info(ObLogSort &op, ObOpSpec &spec)
 {
@@ -2384,7 +2418,13 @@ int ObStaticEngineCG::generate_spec(ObLogSort &op, ObSortVecSpec &spec, const bo
     }
     if (OB_SUCC(ret)) {
       bool is_store_sortkey_separately = false;
-      if (std::ceil(op.get_width() / op.get_sort_key_width())
+      bool is_fts_ddl_sort = false;
+      if (OB_FAIL(check_is_fts_ddl_sort(op, is_fts_ddl_sort))) {
+        LOG_WARN("failed to check FTS DDL sort", K(ret));
+      } else if (is_fts_ddl_sort) {
+        // Task4 Op10：FTS 强制分离，归并阶段仅移动 (word, doc_id) 等排序键。
+        is_store_sortkey_separately = true;
+      } else if (std::ceil(op.get_width() / op.get_sort_key_width())
           > ObSortVecOp::SORTKEY_STORE_SEPARATELY_THRESHOLD) {
         is_store_sortkey_separately = true;
       }
@@ -2430,6 +2470,12 @@ int ObStaticEngineCG::generate_spec(ObLogSort &op, ObSortVecSpec &spec, const bo
         }
         spec.has_addon_ = (spec.addon_exprs_.count() != 0);
         spec.enable_encode_sortkey_opt_ = enable_encode_sortkey_opt;
+        if (is_fts_ddl_sort) {
+          // Task4 Op10：记录实际拆分列数，便于确认 FTS 计划命中新路径。
+          LOG_INFO("Task4 Op10 enabled FTS sort-key payload separation",
+                   K(spec.sk_exprs_.count()), K(spec.addon_exprs_.count()),
+                   K(spec.has_addon_), K(spec.enable_encode_sortkey_opt_));
+        }
         spec.part_cnt_ = op.get_part_cnt();
         spec.enable_single_col_compare_opt_ = false;
         LOG_TRACE("trace order by", K(spec.sk_exprs_.count()), K(spec.addon_exprs_.count()),

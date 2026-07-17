@@ -149,7 +149,7 @@ int ObDDLService::force_drop_lonely_lob_aux_table(const obcall::ObForceDropLonel
         LOG_WARN("get ls of lob meta table fail", KR(ret), K(arg), K(tmp_lob_table_schema));
       } else if (OB_FAIL(ddl_operator.drop_table(tmp_lob_table_schema, trans, nullptr/*ddl_stmt_str*/, false/*is_truncate_table*/,
           nullptr/*drop_table_set*/, false/*is_drop_db*/, true/*delete_priv*/, true/*is_force_drop_lonely_lob_aux_table*/))) {
-        LOG_WARN("fail to drop lob meta table", KR(ret), K(tmp_lob_table_schema));
+        LOG_ERROR("fail to drop lob meta table", KR(ret), K(tmp_lob_table_schema));
         if (OB_LS_NOT_EXIST == ret || OB_LS_IS_DELETED == ret) {
           int tmp_ret = OB_SUCCESS;
           if (OB_TMP_FAIL(check_ls_not_exist(lob_meta_ls_ids))) {
@@ -198,7 +198,7 @@ int ObDDLService::force_drop_lonely_lob_aux_table(const obcall::ObForceDropLonel
     if (trans.is_started()) {
       int temp_ret = OB_SUCCESS;
       if (OB_SUCCESS != (temp_ret = trans.end(OB_SUCC(ret)))) {
-        LOG_WARN_RET(temp_ret, "trans end failed", "is_commit", OB_SUCCESS == ret, K(temp_ret));
+        LOG_ERROR_RET(temp_ret, "trans end failed", "is_commit", OB_SUCCESS == ret, K(temp_ret));
         ret = (OB_SUCC(ret)) ? temp_ret : ret;
       }
     }

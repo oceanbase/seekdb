@@ -398,7 +398,7 @@ int ObLogReplayService::add_ls(const share::ObLSID &id)
     if (OB_FAIL(replay_status->init(id, palf_env_, this))) {
       mtl_free(replay_status);
       replay_status = NULL;
-      CLOG_LOG(WARN, "failed to init replay status", K(ret), K(id), K(palf_env_), K(this));
+      CLOG_LOG(ERROR, "failed to init replay status", K(ret), K(id), K(palf_env_), K(this));
     } else {
       replay_status->inc_ref();
       if (OB_FAIL(replay_status_map_.insert(id, replay_status))) {
@@ -421,7 +421,7 @@ int ObLogReplayService::remove_ls(const share::ObLSID &id)
     ret = OB_NOT_INIT;
     CLOG_LOG(WARN, "replay service not inited", K(ret), K(id));
   } else if (OB_FAIL(replay_status_map_.erase_if(id, functor))) {
-    CLOG_LOG(WARN, "failed to remove log stream", K(ret), K(id));
+    CLOG_LOG(ERROR, "failed to remove log stream", K(ret), K(id));
     if (OB_ENTRY_NOT_EXIST == ret) {
       ret = OB_SUCCESS;
     }
@@ -631,7 +631,7 @@ int ObLogReplayService::get_max_replayed_scn(const share::ObLSID &id, SCN &scn)
     if (OB_STATE_NOT_MATCH != ret) {
       CLOG_LOG(WARN, "get_max_replayed_scn failed", K(ret), K(id));
     } else if (REACH_TIME_INTERVAL(1000 * 1000)) {
-      CLOG_LOG(WARN, "get_max_replayed_scn failed, replay status is not enabled", K(ret), K(id));
+      CLOG_LOG(ERROR, "get_max_replayed_scn failed, replay status is not enabled", K(ret), K(id));
     }
   }
   return ret;
@@ -661,7 +661,7 @@ int ObLogReplayService::get_min_unreplayed_scn(const share::ObLSID &id, SCN &scn
     if (OB_STATE_NOT_MATCH != ret) {
       CLOG_LOG(WARN, "get_min_unreplayed_log_info failed", K(ret), K(id));
     } else if (REACH_TIME_INTERVAL(1000 * 1000)) {
-      CLOG_LOG(WARN, "get_min_unreplayed_log_info failed, replay status is not enabled", K(ret), K(id));
+      CLOG_LOG(ERROR, "get_min_unreplayed_log_info failed, replay status is not enabled", K(ret), K(id));
     }
   } else {}
   return ret;
@@ -1271,7 +1271,7 @@ int ObLogReplayService::handle_submit_task_(ObReplayServiceSubmitTask *submit_ta
         } else if (OB_EAGAIN == ret) {
           // do nothing
         } else {
-          CLOG_LOG(WARN, "failed to fetch and submit single log", K(to_submit_lsn), KPC(replay_status), K(ret));
+          CLOG_LOG(ERROR, "failed to fetch and submit single log", K(to_submit_lsn), KPC(replay_status), K(ret));
         }
       }
       if (OB_SUCCESS != ret) {

@@ -149,12 +149,12 @@ int ObBatchFreezeTabletsTask::inner_process()
                                                                  max_retry_time_us,
                                                                  true,/*need_rewrite_meta*/
                                                                  ObFreezeSourceFlag::MAJOR_FREEZE))) {
-      LOG_WARN_RET(tmp_ret, "failed to force freeze tablet", K(param), K(cur_pair));
+      LOG_ERROR_RET(tmp_ret, "failed to force freeze tablet", K(param), K(cur_pair));
       ++cnt_.failure_cnt_;
     } else if (FALSE_IT(++cnt_.success_cnt_)) {
     } else if (OB_TMP_FAIL(schedule_tablet_major_after_freeze(*ls, cur_pair))) {
       if (OB_SIZE_OVERFLOW != tmp_ret && OB_EAGAIN != tmp_ret) {
-        LOG_WARN_RET(tmp_ret, "failed to schedule medium merge dag", K(param), K(cur_pair));
+        LOG_ERROR_RET(tmp_ret, "failed to schedule medium merge dag", K(param), K(cur_pair));
       }
     }
 
@@ -195,7 +195,7 @@ int ObBatchFreezeTabletsTask::schedule_tablet_major_after_freeze(
                  ls.get_ls_id(), *tablet, MEDIUM_MERGE,
                  cur_pair.schedule_merge_scn_, EXEC_MODE_LOCAL, nullptr/*dag_net_id*/, cur_pair.co_major_merge_type_))) {
     if (OB_SIZE_OVERFLOW != ret && OB_EAGAIN != ret) {
-      LOG_WARN("failed to schedule medium merge dag", K(ret), "ls_id", ls.get_ls_id(), K(cur_pair));
+      LOG_ERROR("failed to schedule medium merge dag", K(ret), "ls_id", ls.get_ls_id(), K(cur_pair));
     }
   }
   return ret;

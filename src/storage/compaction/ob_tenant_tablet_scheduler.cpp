@@ -464,7 +464,7 @@ int ObTenantTabletScheduler::update_upper_trans_version_and_gc_sstable()
     } else if (ls->is_stopped()) {
     } else if (OB_TMP_FAIL(try_update_upper_trans_version_and_gc_sstable(*ls, gc_sst_tablet_iter_))) {
       gc_sst_tablet_iter_.skip_cur_ls();
-      LOG_WARN("failed to update upper trans version", K(tmp_ret), "ls_id", ls->get_ls_id());
+      LOG_ERROR("failed to update upper trans version", K(tmp_ret), "ls_id", ls->get_ls_id());
     }
   }
   return ret;
@@ -571,7 +571,7 @@ int ObTenantTabletScheduler::schedule_all_tablets_minor()
         LOG_TRACE("meet error when schedule", K(tmp_ret), K(minor_ls_tablet_iter_));
         minor_ls_tablet_iter_.skip_cur_ls();
         if (!schedule_ignore_error(tmp_ret)) {
-          LOG_WARN("failed to schedule ls minor merge", K(tmp_ret), K(ls_id));
+          LOG_ERROR("failed to schedule ls minor merge", K(tmp_ret), K(ls_id));
         }
       }
     }
@@ -776,7 +776,7 @@ int ObTenantTabletScheduler::schedule_merge_dag(
       LOG_WARN("failed to fill param", KR(ret));
     } else if (OB_FAIL(compaction::ObScheduleDagFunc::schedule_tablet_co_merge_dag_net(param))) {
       if (OB_EAGAIN != ret && OB_SIZE_OVERFLOW != ret) {
-        LOG_WARN("failed to schedule tablet merge dag", K(ret));
+        LOG_ERROR("failed to schedule tablet merge dag", K(ret));
       }
     }
     FLOG_INFO("schedule co merge dag", K(ret), K(param), K(tablet.is_row_store()), K(merge_type), K(co_major_merge_type), K(cs_replica_status));
@@ -787,7 +787,7 @@ int ObTenantTabletScheduler::schedule_merge_dag(
       LOG_WARN("failed to fill param", KR(ret));
     } else if (OB_FAIL(ObScheduleDagFunc::schedule_tablet_merge_dag(param))) {
       if (OB_EAGAIN != ret && OB_SIZE_OVERFLOW != ret) {
-        LOG_WARN("failed to schedule tablet merge dag", K(ret));
+        LOG_ERROR("failed to schedule tablet merge dag", K(ret));
       }
     }
     FLOG_INFO("schedule merge dag", K(ret), K(param), K(tablet.is_row_store()), K(merge_type), K(co_major_merge_type), K(cs_replica_status));
@@ -839,7 +839,7 @@ int ObTenantTabletScheduler::schedule_convert_co_merge_dag_net(
                                                                           co_major_merge_type))) {
     if (OB_SIZE_OVERFLOW != tmp_ret && OB_EAGAIN != tmp_ret) {
       ret = tmp_ret;
-      LOG_WARN("failed to schedule co merge dag net for cs replica", K(ret), K(ls_id), "tablet_id", tablet.get_tablet_id());
+      LOG_ERROR("failed to schedule co merge dag net for cs replica", K(ret), K(ls_id), "tablet_id", tablet.get_tablet_id());
     } else {
       schedule_ret = tmp_ret;
     }
@@ -912,7 +912,7 @@ int ObTenantTabletScheduler::schedule_tablet_meta_merge(
         } else if (OB_FAIL(schedule_merge_execute_dag<ObTabletMergeExecuteDag>(
                 dag_param, ls_handle, tablet_handle, result))) {
           if (OB_SIZE_OVERFLOW != ret && OB_EAGAIN != ret) {
-            LOG_WARN("failed to schedule tablet meta merge dag", K(ret), K(dag_param));
+            LOG_ERROR("failed to schedule tablet meta merge dag", K(ret), K(dag_param));
           }
         } else {
           has_created_dag = true;
@@ -1248,13 +1248,13 @@ int ObTenantTabletScheduler::schedule_tablet_minor(
     if (OB_SIZE_OVERFLOW == tmp_ret) {
       schedule_minor_flag = false;
     } else if (OB_EAGAIN != tmp_ret) {
-      LOG_WARN("failed to schedule tablet merge", K(tmp_ret), K(ls_id), K(tablet_id));
+      LOG_ERROR("failed to schedule tablet merge", K(tmp_ret), K(ls_id), K(tablet_id));
     }
   }
   if (!tablet_id.is_ls_inner_tablet()) { // data tablet
     if (OB_TMP_FAIL(schedule_ddl_tablet_merge(ls_handle, tablet_handle))) {
       if (OB_SIZE_OVERFLOW != tmp_ret && OB_EAGAIN != tmp_ret) {
-        LOG_WARN("failed to schedule tablet ddl merge", K(tmp_ret), K(ls_id), K(tablet_handle));
+        LOG_ERROR("failed to schedule tablet ddl merge", K(tmp_ret), K(ls_id), K(tablet_handle));
       }
     }
 
@@ -1295,7 +1295,7 @@ int ObTenantTabletScheduler::schedule_ddl_tablet_merge(
   } else {
     if (OB_FAIL(schedule_tablet_ddl_major_merge(ls_handle, tablet_handle))) {
       if (OB_SIZE_OVERFLOW != ret && OB_EAGAIN != ret) {
-        LOG_WARN("failed to schedule tablet ddl merge", K(ret), K(ls_id), K(tablet_id));
+        LOG_ERROR("failed to schedule tablet ddl merge", K(ret), K(ls_id), K(tablet_id));
       } else {
         LOG_TRACE("schedule ddl major merge failed", K(ret), K(ls_id), K(tablet_id));
       }
@@ -1363,7 +1363,7 @@ int ObTenantTabletScheduler::user_request_schedule_medium_merge(
     ObScheduleTabletFunc func(merge_version, reason);
     if (OB_FAIL(func.switch_ls(ls_handle))) {
       if (OB_STATE_NOT_MATCH != ret) {
-        LOG_WARN("failed to switch ls", KR(ret), K(ls_id), K(func));
+        LOG_ERROR("failed to switch ls", KR(ret), K(ls_id), K(func));
       } else {
         LOG_WARN("not support schedule medium for ls", K(ret), K(ls_id), K(tablet_id), K(func));
       }
@@ -1471,14 +1471,14 @@ int ObTenantTabletScheduler::try_schedule_adaptive_merge(
       bool unused_tablet_merge_finish = false;
       if (OB_TMP_FAIL(func.switch_ls(ls_handle))) {
         if (OB_STATE_NOT_MATCH != tmp_ret) {
-          LOG_WARN("failed to switch ls", KR(tmp_ret), K(ls_id));
+          LOG_ERROR("failed to switch ls", KR(tmp_ret), K(ls_id));
         }
       } else if (OB_TMP_FAIL(func.schedule_tablet(tablet_handle, unused_tablet_merge_finish))) {
         LOG_WARN("failed to schedule tablet", KR(tmp_ret), K(ls_id), K(tablet_id));
       }
     } else if (ObAdaptiveMergePolicy::is_schedule_meta(mode)) {
       if (OB_TMP_FAIL(ObTenantTabletScheduler::schedule_tablet_meta_merge(ls_handle, tablet_handle, create_dag))) {
-        LOG_WARN_RET(tmp_ret, "failed to schedule meta merge for tablet", K(ls_id), K(tablet_id));
+        LOG_ERROR_RET(tmp_ret, "failed to schedule meta merge for tablet", K(ls_id), K(tablet_id));
       } else if (create_dag) {
          LOG_INFO("[Buffer-Opt] Try to schedule tablet meta merge background", K(ret), K(ls_id), K(tablet_id));
       }

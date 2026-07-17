@@ -1093,7 +1093,7 @@ int ObDDLKV::set_macro_block(
     if (macro_block.ddl_start_scn_ != ddl_start_scn_) {
       if (is_inc_minor_ddl_kv()) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("macro block in different task cannot insert to same inc ddlkv", K(ret), KPC(this), K(macro_block), K(snapshot_version), K(data_format_version));
+        LOG_ERROR("macro block in different task cannot insert to same inc ddlkv", K(ret), KPC(this), K(macro_block), K(snapshot_version), K(data_format_version));
       } else if (macro_block.ddl_start_scn_ > ddl_start_scn_) {
         ret = OB_EAGAIN;
         LOG_INFO("ddl start scn too large, retry", K(ret),
@@ -1585,7 +1585,7 @@ int ObDDLKV::flush(share::ObLSID ls_id)
 
     if (OB_FAIL(compaction::ObScheduleDagFunc::schedule_ddl_table_merge_dag(param))) {
       if (OB_EAGAIN != ret && OB_SIZE_OVERFLOW != ret) {
-        TRANS_LOG(WARN, "failed to schedule tablet merge dag", K(ret));
+        TRANS_LOG(ERROR, "failed to schedule tablet merge dag", K(ret));
       }
     }
   }

@@ -90,7 +90,7 @@ int ObMacroMetaTempStore::StoreItem::deserialize(const char *buf, const int64_t 
       = ob_crc64_sse42(0, buf + init_pos + sizeof(StoreItemHeader), header_.total_length_ - sizeof(StoreItemHeader));
   if (OB_UNLIKELY(new_checksum != header_.checksum_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("fail to deserialize store item, un-expected checksum", K(ret), K(new_checksum), K(header_.checksum_));
+    LOG_ERROR("fail to deserialize store item, un-expected checksum", K(ret), K(new_checksum), K(header_.checksum_));
   } else {
     LST_DO_CODE(OB_UNIS_DECODE,
                 index_block_buf_size_,

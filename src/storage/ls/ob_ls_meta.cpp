@@ -389,7 +389,7 @@ int ObLSMeta::set_migration_status(
              K(migration_status));
   } else if (!can_change) {
     ret = OB_OP_NOT_ALLOW;
-    LOG_WARN("ls can not change to migrate status", K(ret), K(migration_status_),
+    LOG_ERROR("ls can not change to migrate status", K(ret), K(migration_status_),
              K(migration_status));
   } else {
     ObLSMeta tmp(*this);
@@ -484,7 +484,7 @@ int ObLSMeta::get_restore_status(ObRestoreStatus &restore_status) const
   ObReentrantRLockGuard guard(rw_lock_);
   if (!is_valid()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("log stream meta is not valid, cannot get restore status", K(ret), K(*this));
+    LOG_ERROR("log stream meta is not valid, cannot get restore status", K(ret), K(*this));
   } else {
     restore_status = restore_status_;
   }
@@ -609,7 +609,7 @@ int ObLSMeta::set_ls_rebuild(const int64_t ls_epoch)
       LOG_WARN("failed to check can change status", K(ret), K(migration_status_), K(change_status));
     } else if (!can_change) {
       ret = OB_OP_NOT_ALLOW;
-      LOG_WARN("ls can not change to rebuild status", K(ret), K(tmp), K(change_status));
+      LOG_ERROR("ls can not change to rebuild status", K(ret), K(tmp), K(change_status));
     } else {
       tmp.migration_status_ = change_status;
       tmp.rebuild_seq_++;
@@ -791,7 +791,7 @@ int ObLSMeta::check_can_update_()
     LOG_WARN("state not match, cannot update ls meta", K(ret), KPC(this));
   } else if (!is_valid()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("ls meta is not valid, cannot update", K(ret), K(*this));
+    LOG_ERROR("ls meta is not valid, cannot update", K(ret), K(*this));
   } else {
   }
   return ret;
@@ -853,7 +853,7 @@ int ObLSMeta::get_rebuild_info(ObLSRebuildInfo &rebuild_info) const
   ObReentrantRLockGuard guard(rw_lock_);
   if (!is_valid()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("ls meta is not valid, cannot get rebuild info", K(ret), K(*this));
+    LOG_ERROR("ls meta is not valid, cannot get rebuild info", K(ret), K(*this));
   } else {
     rebuild_info = rebuild_info_;
   }
@@ -869,7 +869,7 @@ int ObLSMeta::get_create_type(int64_t &create_type) const
   create_type = ObLSCreateType::NORMAL;
   if (!is_valid()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("log stream meta is not valid, cannot get restore status", K(ret), K(*this));
+    LOG_ERROR("log stream meta is not valid, cannot get restore status", K(ret), K(*this));
   } else if (!ObMigrationStatusHelper::need_online(migration_status_)) {
     create_type = ObLSCreateType::MIGRATE;
   } else if (restore_status_.is_restore_doing()) {

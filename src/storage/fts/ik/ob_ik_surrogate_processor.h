@@ -35,6 +35,9 @@ public:
                  const uint8_t char_len,
                  const ObFTCharUtil::CharType type) override;
 
+  // Task4 Op2：丢弃上一文档未闭合的代理字符状态。
+  void reuse() override { reset(); }
+
 private:
   void reset()
   {

@@ -615,7 +615,7 @@ int ObTransformOrExpansion::try_do_transform_left_join(ObIArray<ObParentDMLStmt>
                                                                   not_null_side_table->table_id_,
                                                                   flag_view_sel_count,
                                                                   orig_flag_stmt))) {
-      LOG_WARN("failed to recover flag temp table", K(ret));
+      LOG_ERROR("failed to recover flag temp table", K(ret));
     } else if (OB_FAIL(try_trans_helper1.finish(trans_happened, stmt->get_query_ctx(), ctx_))) {
       LOG_WARN("failed to finish try trans helper", K(ret));
     } else {

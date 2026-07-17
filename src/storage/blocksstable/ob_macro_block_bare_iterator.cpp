@@ -759,7 +759,7 @@ int ObMicroBlockBareIterator::check_macro_block_data_integrity(
   int32_t payload_checksum = static_cast<int32_t>(ob_crc64(payload_buf, payload_size));
   if (OB_UNLIKELY(payload_checksum != common_header_.get_payload_checksum())) {
     ret = OB_INVALID_DATA;
-    LOG_WARN("macro block checksum inconsistant", K(ret), K(payload_checksum), K_(common_header));
+    LOG_ERROR("macro block checksum inconsistant", K(ret), K(payload_checksum), K_(common_header));
   }
   return ret;
 }

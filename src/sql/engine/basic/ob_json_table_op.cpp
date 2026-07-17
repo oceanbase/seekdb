@@ -15,6 +15,7 @@
  */
 
 #define USING_LOG_PREFIX SQL_ENG
+#include <algorithm>
 #include "ob_json_table_op.h"
 #include "sql/engine/expr/ob_expr_multi_mode_func_helper.h"
 #include "sql/engine/expr/ob_expr_json_value.h"
@@ -22,6 +23,7 @@
 #include "common/xml/ob_binary_aggregate.h"
 #include "sql/engine/expr/ob_expr_rb_func_helper.h"
 #include "sql/engine/expr/ob_array_expr_utils.h"
+#include "sql/engine/expr/ob_expr_lob_utils.h"
 #include "share/roaringbitmap/ob_rb_utils.h"
 
 namespace oceanbase
@@ -29,6 +31,321 @@ namespace oceanbase
 using namespace common;
 namespace sql
 {
+
+// Task2: 文档切分运行时使用的内部数据结构和纯切分辅助函数。
+namespace
+{
+enum class ObDocumentSplitBy
+{
+  SENTENCE,
+  WORD
+};
+
+struct ObDocumentSplitOptions
+{
+  ObDocumentSplitOptions()
+    : is_markdown_(true), by_(ObDocumentSplitBy::SENTENCE), max_(1), overlap_(0)
+  {}
+
+  bool is_markdown_;
+  ObDocumentSplitBy by_;
+  int64_t max_;
+  int64_t overlap_;
+};
+
+struct ObDocumentUnit
+{
+  int64_t start_;
+  int64_t end_;
+  // Task2: 适配 OceanBase 容器的统一日志打印接口。
+  TO_STRING_KV(K_(start), K_(end));
+};
+
+struct ObDocumentChunk
+{
+  int64_t id_;
+  int64_t offset_;
+  int64_t length_;
+  ObString text_;
+  // Task2: 适配 OceanBase 容器的统一日志打印接口。
+  TO_STRING_KV(K_(id), K_(offset), K_(length), K_(text));
+};
+
+struct ObSplitDocumentInput
+{
+  ObDocumentChunk *chunks_;
+  int64_t count_;
+};
+
+bool is_document_space(const char ch)
+{
+  return ch == ' ' || ch == '\t' || ch == '\r' || ch == '\n' || ch == '\f';
+}
+
+int64_t sentence_punctuation_length(const char *ptr, const int64_t remain)
+{
+  int64_t len = 0;
+  if (remain > 0 && (ptr[0] == '.' || ptr[0] == '!' || ptr[0] == '?')) {
+    len = 1;
+  } else if (remain >= 3 &&
+             ((0 == MEMCMP(ptr, "。", 3)) ||
+              (0 == MEMCMP(ptr, "！", 3)) ||
+              (0 == MEMCMP(ptr, "？", 3)))) {
+    len = 3;
+  }
+  return len;
+}
+
+int append_document_chunk(const ObString &content,
+                          const ObString &heading,
+                          const int64_t start,
+                          const int64_t end,
+                          ObIAllocator &allocator,
+                          ObIArray<ObDocumentChunk> &chunks)
+{
+  int ret = OB_SUCCESS;
+  ObDocumentChunk chunk;
+  chunk.id_ = chunks.count();
+  chunk.offset_ = start;
+  chunk.length_ = end - start;
+  const ObString body(static_cast<int32_t>(chunk.length_), content.ptr() + start);
+
+  if (heading.empty()) {
+    if (OB_FAIL(ob_write_string(allocator, body, chunk.text_))) {
+      LOG_WARN("failed to copy document chunk", K(ret), K(start), K(end));
+    }
+  } else {
+    const int64_t output_len = heading.length() + 1 + body.length();
+    char *buf = static_cast<char *>(allocator.alloc(output_len));
+    if (OB_ISNULL(buf)) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+      LOG_WARN("failed to allocate markdown chunk", K(ret), K(output_len));
+    } else {
+      MEMCPY(buf, heading.ptr(), heading.length());
+      buf[heading.length()] = '\n';
+      MEMCPY(buf + heading.length() + 1, body.ptr(), body.length());
+      chunk.text_.assign_ptr(buf, static_cast<int32_t>(output_len));
+    }
+  }
+
+  if (OB_SUCC(ret) && OB_FAIL(chunks.push_back(chunk))) {
+    LOG_WARN("failed to store document chunk", K(ret));
+  }
+  return ret;
+}
+
+int split_document_segment(const ObString &content,
+                           const int64_t segment_start,
+                           const int64_t segment_end,
+                           const ObString &heading,
+                           const ObDocumentSplitOptions &options,
+                           ObIAllocator &allocator,
+                           ObIArray<ObDocumentChunk> &chunks)
+{
+  int ret = OB_SUCCESS;
+  ObSEArray<ObDocumentUnit, 32> units;
+  int64_t pos = segment_start;
+
+  // Task2: 先生成句子或单词的原文区间，offset 始终相对于完整文档。
+  while (OB_SUCC(ret) && pos < segment_end) {
+    while (pos < segment_end && is_document_space(content.ptr()[pos])) {
+      ++pos;
+    }
+    if (pos >= segment_end) {
+      break;
+    }
+    ObDocumentUnit unit;
+    unit.start_ = pos;
+    if (options.by_ == ObDocumentSplitBy::WORD) {
+      while (pos < segment_end && !is_document_space(content.ptr()[pos])) {
+        ++pos;
+      }
+      unit.end_ = pos;
+    } else {
+      bool found_end = false;
+      while (pos < segment_end && !found_end) {
+        const int64_t punctuation_len =
+            sentence_punctuation_length(content.ptr() + pos, segment_end - pos);
+        if (punctuation_len > 0) {
+          pos += punctuation_len;
+          found_end = true;
+        } else {
+          ++pos;
+        }
+      }
+      unit.end_ = pos;
+      while (unit.end_ > unit.start_ &&
+             is_document_space(content.ptr()[unit.end_ - 1])) {
+        --unit.end_;
+      }
+    }
+    if (unit.end_ > unit.start_ && OB_FAIL(units.push_back(unit))) {
+      LOG_WARN("failed to store document unit", K(ret));
+    }
+  }
+
+  // Task2: 使用 max/overlap 形成稳定的滑动窗口，并保持原文中的内部空白。
+  const int64_t step = options.max_ - options.overlap_;
+  for (int64_t first = 0; OB_SUCC(ret) && first < units.count(); first += step) {
+    const int64_t last = std::min(first + options.max_, units.count()) - 1;
+    if (OB_FAIL(append_document_chunk(content, heading, units.at(first).start_,
+                                      units.at(last).end_, allocator, chunks))) {
+      LOG_WARN("failed to append document chunk", K(ret), K(first), K(last));
+    }
+  }
+  return ret;
+}
+
+bool is_markdown_heading(const ObString &content,
+                         const int64_t line_start,
+                         const int64_t line_end,
+                         int64_t &heading_start)
+{
+  bool is_heading = false;
+  heading_start = line_start;
+  int64_t pos = line_start;
+  int64_t leading_spaces = 0;
+  while (pos < line_end && content.ptr()[pos] == ' ' && leading_spaces < 3) {
+    ++pos;
+    ++leading_spaces;
+  }
+  heading_start = pos;
+  int64_t hash_count = 0;
+  while (pos < line_end && content.ptr()[pos] == '#' && hash_count < 6) {
+    ++pos;
+    ++hash_count;
+  }
+  if (hash_count > 0 &&
+      (pos == line_end || content.ptr()[pos] == ' ' || content.ptr()[pos] == '\t')) {
+    is_heading = true;
+  }
+  return is_heading;
+}
+
+int split_document(const ObString &content,
+                   const ObDocumentSplitOptions &options,
+                   ObIAllocator &allocator,
+                   ObIArray<ObDocumentChunk> &chunks)
+{
+  int ret = OB_SUCCESS;
+  if (!options.is_markdown_) {
+    ret = split_document_segment(content, 0, content.length(), ObString(),
+                                 options, allocator, chunks);
+  } else {
+    ObString heading;
+    int64_t body_start = 0;
+    int64_t line_start = 0;
+    while (OB_SUCC(ret) && line_start < content.length()) {
+      int64_t line_end = line_start;
+      while (line_end < content.length() && content.ptr()[line_end] != '\n') {
+        ++line_end;
+      }
+      int64_t visible_end = line_end;
+      if (visible_end > line_start && content.ptr()[visible_end - 1] == '\r') {
+        --visible_end;
+      }
+      int64_t heading_start = line_start;
+      if (is_markdown_heading(content, line_start, visible_end, heading_start)) {
+        if (OB_FAIL(split_document_segment(content, body_start, line_start, heading,
+                                           options, allocator, chunks))) {
+          LOG_WARN("failed to split markdown section", K(ret), K(body_start),
+                   K(line_start));
+        } else {
+          heading.assign_ptr(content.ptr() + heading_start,
+                             static_cast<int32_t>(visible_end - heading_start));
+          body_start = line_end < content.length() ? line_end + 1 : line_end;
+        }
+      }
+      line_start = line_end < content.length() ? line_end + 1 : line_end;
+    }
+    if (OB_SUCC(ret) &&
+        OB_FAIL(split_document_segment(content, body_start, content.length(), heading,
+                                       options, allocator, chunks))) {
+      LOG_WARN("failed to split final markdown section", K(ret), K(body_start));
+    }
+  }
+  return ret;
+}
+
+int parse_document_split_options(const ObString &parameters,
+                                 ObIAllocator &allocator,
+                                 ObDocumentSplitOptions &options)
+{
+  int ret = OB_SUCCESS;
+  ObIJsonBase *root = NULL;
+  if (parameters.empty()) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("document split parameters must not be empty", K(ret));
+  } else if (OB_FAIL(ObJsonBaseFactory::get_json_base(
+                 &allocator, parameters, ObJsonInType::JSON_TREE,
+                 ObJsonInType::JSON_TREE, root))) {
+    LOG_WARN("failed to parse document split parameters", K(ret));
+  } else if (OB_ISNULL(root) || root->json_type() != ObJsonNodeType::J_OBJECT) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("document split parameters must be a json object", K(ret));
+  }
+
+  for (uint64_t i = 0; OB_SUCC(ret) && i < root->element_count(); ++i) {
+    ObString key;
+    ObIJsonBase *value = NULL;
+    if (OB_FAIL(root->get_object_value(i, key, value)) || OB_ISNULL(value)) {
+      LOG_WARN("failed to read document split parameter", K(ret), K(i));
+    } else if (0 == key.case_compare("type")) {
+      if (value->json_type() != ObJsonNodeType::J_STRING) {
+        ret = OB_INVALID_ARGUMENT;
+      } else {
+        const ObString type(value->get_data_length(), value->get_data());
+        if (0 == type.case_compare("text")) {
+          options.is_markdown_ = false;
+        } else if (0 == type.case_compare("markdown")) {
+          options.is_markdown_ = true;
+        } else {
+          ret = OB_INVALID_ARGUMENT;
+        }
+      }
+    } else if (0 == key.case_compare("by")) {
+      if (value->json_type() != ObJsonNodeType::J_STRING) {
+        ret = OB_INVALID_ARGUMENT;
+      } else {
+        const ObString by(value->get_data_length(), value->get_data());
+        if (0 == by.case_compare("sentence")) {
+          options.by_ = ObDocumentSplitBy::SENTENCE;
+        } else if (0 == by.case_compare("word")) {
+          options.by_ = ObDocumentSplitBy::WORD;
+        } else {
+          ret = OB_INVALID_ARGUMENT;
+        }
+      }
+    } else if (0 == key.case_compare("max") || 0 == key.case_compare("overlap")) {
+      int64_t number = 0;
+      if ((value->json_type() != ObJsonNodeType::J_INT &&
+           value->json_type() != ObJsonNodeType::J_UINT) ||
+          OB_FAIL(value->to_int(number, true))) {
+        if (OB_SUCC(ret)) {
+          ret = OB_INVALID_ARGUMENT;
+        }
+      } else if (0 == key.case_compare("max")) {
+        options.max_ = number;
+      } else {
+        options.overlap_ = number;
+      }
+    } else {
+      ret = OB_INVALID_ARGUMENT;
+      LOG_WARN("unknown document split parameter", K(ret), K(key));
+    }
+  }
+
+  // Task2: 防止零步长、倒退窗口和异常巨大的单个窗口。
+  if (OB_SUCC(ret) &&
+      (options.max_ <= 0 || options.max_ > 1000000 || options.overlap_ < 0 ||
+       options.overlap_ >= options.max_)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid document split window", K(ret), K(options.max_),
+             K(options.overlap_));
+  }
+  return ret;
+}
+} // namespace
 
 /* json value  mismatch type { MISSING : 0, EXTRA : 1, TYPE : 2, EMPTY : 3} */
 const static int32_t JSN_VALUE_TYPE_MISSING_DATA    = 0;
@@ -332,8 +649,10 @@ OB_DEF_SERIALIZE(ObJsonTableSpec)
     OB_UNIS_ENCODE(info);
   }
   if (OB_FAIL(ret)) {
+  // Task2: 文档切分和现有多模态表函数一样，需要序列化全部输入表达式。
   } else if (table_type_ == MulModeTableType::OB_RB_ITERATE_TABLE_TYPE
-             || table_type_ == MulModeTableType::OB_UNNEST_TABLE_TYPE) {
+             || table_type_ == MulModeTableType::OB_UNNEST_TABLE_TYPE
+             || table_type_ == MulModeTableType::OB_AI_SPLIT_DOCUMENT_TABLE_TYPE) {
     OB_UNIS_ENCODE(table_type_);
     int32_t value_exprs_count = value_exprs_.count() - 1;
     OB_UNIS_ENCODE(value_exprs_count);
@@ -361,8 +680,10 @@ OB_DEF_SERIALIZE_SIZE(ObJsonTableSpec)
     const ObJtColInfo& info = *cols_def_.at(i);
     OB_UNIS_ADD_LEN(info);
   }
+  // Task2: 序列化长度必须包含文档切分的类型及可选 parameters 表达式。
   if (table_type_ == MulModeTableType::OB_RB_ITERATE_TABLE_TYPE
-      || table_type_ == MulModeTableType::OB_UNNEST_TABLE_TYPE) {
+      || table_type_ == MulModeTableType::OB_UNNEST_TABLE_TYPE
+      || table_type_ == MulModeTableType::OB_AI_SPLIT_DOCUMENT_TABLE_TYPE) {
     OB_UNIS_ADD_LEN(table_type_);
     int32_t value_exprs_count = value_exprs_.count() - 1;
     OB_UNIS_ADD_LEN(value_exprs_count);
@@ -408,12 +729,18 @@ OB_DEF_DESERIALIZE(ObJsonTableSpec)
         table_type_flag = OB_RB_ITERATE_TABLE;
       } else if (col_info->col_type_ == COL_TYPE_UNNEST) {
         table_type_flag = OB_UNNEST_TABLE;
+      // Task2: 通过固定输出列类型恢复文档切分表函数。
+      } else if (col_info->col_type_ == COL_TYPE_AI_SPLIT_DOCUMENT) {
+        table_type_flag = OB_AI_SPLIT_DOCUMENT_TABLE;
       }
     }
   }
 
   if (OB_FAIL(ret)) {
-  } else if (table_type_flag == OB_RB_ITERATE_TABLE || table_type_flag == OB_UNNEST_TABLE) {
+  // Task2: 反序列化文档切分表函数的全部输入表达式。
+  } else if (table_type_flag == OB_RB_ITERATE_TABLE
+             || table_type_flag == OB_UNNEST_TABLE
+             || table_type_flag == OB_AI_SPLIT_DOCUMENT_TABLE) {
     OB_UNIS_DECODE(table_type_);
     int32_t value_exprs_count = 0;
     OB_UNIS_DECODE(value_exprs_count);
@@ -733,6 +1060,17 @@ int ObJsonTableOp::init()
       } else if (OB_ISNULL(jt_ctx_.table_func_ = new (table_func_buf) UnnestTableFunc())) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("failed to new unnest node", K(ret));
+      }
+    // Task2: 为文档切分表类型创建专用运行时实现。
+    } else if (jt_ctx_.is_ai_split_document_table_func()) {
+      table_func_buf = jt_ctx_.op_exec_alloc_->alloc(sizeof(AiSplitDocumentTableFunc));
+      if (OB_ISNULL(table_func_buf)) {
+        ret = OB_ALLOCATE_MEMORY_FAILED;
+        LOG_WARN("failed to allocate ai_split_document table func", K(ret));
+      } else if (OB_ISNULL(jt_ctx_.table_func_ =
+                               new (table_func_buf) AiSplitDocumentTableFunc())) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("failed to create ai_split_document table func", K(ret));
       }
     }
   }
@@ -1198,6 +1536,135 @@ int UnnestTableFunc::get_iter_value(ObRegCol &col_node, JtScanCtx* ctx, bool &is
   return ret;
 }
 
+// Task2: 计算文档切片并把结果保存为当前算子的行输入。
+int AiSplitDocumentTableFunc::eval_input(ObJsonTableOp &jt,
+                                        JtScanCtx &ctx,
+                                        ObEvalCtx &eval_ctx)
+{
+  int ret = OB_SUCCESS;
+  const int64_t arg_count = ctx.spec_ptr_->value_exprs_.count();
+  ObDatum *content_datum = NULL;
+  ObString content;
+  ObDocumentSplitOptions options;
+  ObSEArray<ObDocumentChunk, 16> chunks;
+
+  if (!ctx.is_ai_split_document_table_func() || arg_count < 1 || arg_count > 2) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("invalid ai_split_document runtime arguments", K(ret), K(arg_count));
+  } else {
+    jt.reset_columns();
+    ObExpr *content_expr = ctx.spec_ptr_->value_exprs_.at(0);
+    if (OB_FAIL(content_expr->eval(eval_ctx, content_datum))) {
+      LOG_WARN("failed to evaluate document content", K(ret));
+    } else if (content_datum->is_null()) {
+      ret = OB_ITER_END;
+    } else if (!ob_is_string_type(content_expr->datum_meta_.type_)) {
+      ret = OB_ERR_INVALID_TYPE_FOR_ARGUMENT;
+      LOG_WARN("document content must be a string", K(ret),
+               K(content_expr->datum_meta_.type_));
+    } else if (OB_FAIL(ObTextStringHelper::read_real_string_data(
+                   ctx.row_alloc_, *content_datum, content_expr->datum_meta_,
+                   content_expr->obj_meta_.has_lob_header(), content, ctx.exec_ctx_))) {
+      LOG_WARN("failed to read document content", K(ret));
+    } else if (content.empty()) {
+      ret = OB_ITER_END;
+    }
+  }
+
+  if (OB_SUCC(ret) && arg_count == 2) {
+    ObExpr *parameters_expr = ctx.spec_ptr_->value_exprs_.at(1);
+    ObDatum *parameters_datum = NULL;
+    ObString parameters;
+    if (OB_FAIL(parameters_expr->eval(eval_ctx, parameters_datum))) {
+      LOG_WARN("failed to evaluate document split parameters", K(ret));
+    } else if (parameters_datum->is_null()) {
+      // Task2: NULL parameters 与省略参数一致，使用默认配置。
+    } else if (!ob_is_string_type(parameters_expr->datum_meta_.type_)) {
+      ret = OB_ERR_INVALID_TYPE_FOR_ARGUMENT;
+      LOG_WARN("document split parameters must be a string", K(ret),
+               K(parameters_expr->datum_meta_.type_));
+    } else if (OB_FAIL(ObTextStringHelper::read_real_string_data(
+                   ctx.row_alloc_, *parameters_datum, parameters_expr->datum_meta_,
+                   parameters_expr->obj_meta_.has_lob_header(), parameters,
+                   ctx.exec_ctx_))) {
+      LOG_WARN("failed to read document split parameters", K(ret));
+    } else if (OB_FAIL(parse_document_split_options(parameters, ctx.row_alloc_, options))) {
+      LOG_WARN("invalid document split parameters", K(ret));
+    }
+  }
+
+  if (OB_SUCC(ret) &&
+      OB_FAIL(split_document(content, options, ctx.row_alloc_, chunks))) {
+    LOG_WARN("failed to split document", K(ret));
+  } else if (OB_SUCC(ret) && chunks.empty()) {
+    ret = OB_ITER_END;
+  } else if (OB_SUCC(ret)) {
+    ObSplitDocumentInput *input = static_cast<ObSplitDocumentInput *>(
+        ctx.row_alloc_.alloc(sizeof(ObSplitDocumentInput)));
+    ObDocumentChunk *stored_chunks = static_cast<ObDocumentChunk *>(
+        ctx.row_alloc_.alloc(sizeof(ObDocumentChunk) * chunks.count()));
+    if (OB_ISNULL(input) || OB_ISNULL(stored_chunks)) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+      LOG_WARN("failed to allocate document split result", K(ret), K(chunks.count()));
+    } else {
+      for (int64_t i = 0; i < chunks.count(); ++i) {
+        stored_chunks[i] = chunks.at(i);
+      }
+      input->chunks_ = stored_chunks;
+      input->count_ = chunks.count();
+      jt.input_ = input;
+    }
+  }
+  return ret;
+}
+
+int AiSplitDocumentTableFunc::init_ctx(ObRegCol &scan_node, JtScanCtx*& ctx)
+{
+  // Task2: 将扫描节点绑定到文档切分表函数类型。
+  UNUSED(ctx);
+  scan_node.tab_type_ = MulModeTableType::OB_AI_SPLIT_DOCUMENT_TABLE_TYPE;
+  return OB_SUCCESS;
+}
+
+int AiSplitDocumentTableFunc::reset_ctx(ObRegCol &scan_node, JtScanCtx*& ctx)
+{
+  // Task2: 重扫前清除上一轮保存的切片输入。
+  UNUSED(ctx);
+  scan_node.iter_ = NULL;
+  return OB_SUCCESS;
+}
+
+int AiSplitDocumentTableFunc::reset_path_iter(ObRegCol &scan_node,
+                                              void *in,
+                                              JtScanCtx*& ctx,
+                                              ScanType init_flag,
+                                              bool &is_null_value)
+{
+  // Task2: 让每个输出列共享本轮生成的切片数组。
+  UNUSED(ctx);
+  UNUSED(init_flag);
+  ObSplitDocumentInput *input = static_cast<ObSplitDocumentInput *>(in);
+  is_null_value = OB_ISNULL(input) || input->count_ == 0;
+  scan_node.iter_ = in;
+  return OB_SUCCESS;
+}
+
+int AiSplitDocumentTableFunc::get_iter_value(ObRegCol &col_node,
+                                             JtScanCtx *ctx,
+                                             bool &is_null_value)
+{
+  // Task2: 每次推进一个切片；全部消费后向执行器返回 OB_ITER_END。
+  UNUSED(ctx);
+  int ret = OB_SUCCESS;
+  ObSplitDocumentInput *input = static_cast<ObSplitDocumentInput *>(col_node.iter_);
+  is_null_value = false;
+  ++col_node.cur_pos_;
+  if (OB_ISNULL(input) || col_node.cur_pos_ >= input->count_) {
+    ret = OB_ITER_END;
+  }
+  return ret;
+}
+
 // default value cast type check
 bool RegularCol::check_cast_allowed(const ObObjType orig_type,
                                     const ObCollationType orig_cs_type,
@@ -1382,6 +1849,35 @@ int ObRegCol::eval_regular_col(void *in, JtScanCtx* ctx, bool& is_null_value)
   } else if (col_type == COL_TYPE_UNNEST) {
     if (OB_FAIL(RegularCol::eval_unnest_col(*this, in, ctx, col_expr))) {
       LOG_WARN("fail to eval unnest col", K(ret), K(col_type), K(cur_pos_), K(col_info_.output_column_idx_));
+    }
+  // Task2: 根据固定列 id 从当前 chunk 写出一列数据。
+  } else if (col_type == COL_TYPE_AI_SPLIT_DOCUMENT) {
+    ++cur_pos_;
+    ObSplitDocumentInput *input = static_cast<ObSplitDocumentInput *>(in);
+    if (OB_ISNULL(input) || cur_pos_ < 0 || cur_pos_ >= input->count_) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("invalid ai_split_document row index", K(ret), K(cur_pos_));
+    } else {
+      const ObDocumentChunk &chunk = input->chunks_[cur_pos_];
+      ObDatum &datum = col_expr->locate_datum_for_write(*ctx->eval_ctx_);
+      switch (col_info_.id_) {
+        case 1:
+          datum.set_int(chunk.id_);
+          break;
+        case 2:
+          datum.set_int(chunk.offset_);
+          break;
+        case 3:
+          datum.set_int(chunk.length_);
+          break;
+        case 4:
+          datum.set_string(chunk.text_);
+          break;
+        default:
+          ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("invalid ai_split_document column id", K(ret), K(col_info_.id_));
+          break;
+      }
     }
   } else if (col_type == COL_TYPE_ORDINALITY) {
     if (OB_ISNULL(in)) {
@@ -1713,7 +2209,9 @@ int ObJsonTableOp::inner_get_next_row()
   bool is_root_null = false;
   if (!(jt_ctx_.is_json_table_func()
         || jt_ctx_.is_rb_iterate_table_func()
-        || jt_ctx_.is_unnest_table_func())) {
+        || jt_ctx_.is_unnest_table_func()
+        // Task2: 允许文档切分进入通用表函数逐行执行流程。
+        || jt_ctx_.is_ai_split_document_table_func())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unsupport table function", K(ret));
   } else if (is_evaled_) {

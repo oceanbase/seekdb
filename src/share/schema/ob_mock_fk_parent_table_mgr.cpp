@@ -308,7 +308,7 @@ int ObMockFKParentTableMgr::del_mock_fk_parent_table(const ObMockFKParentTableKe
       ret = OB_SUCCESS;
       LOG_INFO("failed to remove mock_fk_parent_table schema, item may not exist", K(ret));
     } else {
-      LOG_WARN("failed to remove mock_fk_parent_table schema", K(ret), K(key.mock_fk_parent_table_id_));
+      LOG_ERROR("failed to remove mock_fk_parent_table schema", K(ret), K(key.mock_fk_parent_table_id_));
     }
   } else if (OB_ISNULL(schema_to_del)) {
     ret = OB_ERR_UNEXPECTED;

@@ -6207,7 +6207,7 @@ int ObBasicSessionInfo::set_session_state_(ObSQLSessionState state)
                          && SESSION_KILLED != state)) {
     if (QUERY_DEADLOCKED == thread_data_.state_) {
       ret = OB_DEAD_LOCK;
-      LOG_WARN("query is deadlocked", K(ret), K(sessid_), K(state));
+      LOG_ERROR("query is deadlocked", K(ret), K(sessid_), K(state));
     } else if (QUERY_KILLED == thread_data_.state_) {
       ret = OB_ERR_QUERY_INTERRUPTED;
       LOG_WARN("query is killed", K(ret), K(sessid_), K(state));
@@ -6243,7 +6243,7 @@ int ObBasicSessionInfo::check_session_status()
     LOG_WARN("query is killed", K(ret), K(sessid_));
   } else if (OB_UNLIKELY(QUERY_DEADLOCKED == thread_data_.state_)) {
     ret = OB_DEAD_LOCK;
-    LOG_WARN("query is deadlocked", K(ret), K(sessid_));
+    LOG_ERROR("query is deadlocked", K(ret), K(sessid_));
   }
 
   return ret;
@@ -6405,11 +6405,11 @@ int ObBasicSessionInfo::stmt_restore_session(StmtSavedValue &saved_value)
   int tmp_ret = OB_SUCCESS;
   thread_data_.cur_query_start_time_ = saved_value.cur_query_start_time_;
   if (OB_TMP_FAIL(tx_result_.merge_result(saved_value.tx_result_))) {
-    LOG_WARN("failed to merge trans result", K(tmp_ret));
+    LOG_ERROR("failed to merge trans result", K(tmp_ret));
     ret = COVER_SUCC(tmp_ret);
   }
   if (OB_TMP_FAIL(base_restore_session(saved_value))) {
-    LOG_WARN("failed to restore base session", K(tmp_ret));
+    LOG_ERROR("failed to restore base session", K(tmp_ret));
     ret = COVER_SUCC(tmp_ret);       
 	}
   stmt_type_ = saved_value.stmt_type_;
@@ -6470,7 +6470,7 @@ int ObBasicSessionInfo::trans_restore_session(TransSavedValue &saved_value)
   }
   tx_desc_ = saved_value.tx_desc_;
   if (OB_TMP_FAIL(base_restore_session(saved_value))) {
-    LOG_WARN("failed to restore base session", K(tmp_ret));
+    LOG_ERROR("failed to restore base session", K(tmp_ret));
     ret = COVER_SUCC(tmp_ret);
   }
   xid_ = saved_value.xid_;

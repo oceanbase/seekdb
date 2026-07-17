@@ -359,7 +359,7 @@ int ObRedisHelper::gen_meta_scan_range(ObIAllocator &allocator,
         last_rkey = rkey;
         if (OB_FAIL(ObRedisMetaUtil::build_meta_rowkey_by_model(allocator, 
           tb_ctx.redis_ttl_ctx()->get_model(), db, rkey, meta_range.start_key_))) {
-          LOG_WARN("fail to build meta rowkey by model", K(ret));
+          LOG_ERROR("fail to build meta rowkey by model", K(ret));
         } else if (OB_FALSE_IT(meta_range.end_key_.assign(
                         meta_range.start_key_.get_obj_ptr(), data_range.start_key_.get_obj_cnt()))) {
         } else {

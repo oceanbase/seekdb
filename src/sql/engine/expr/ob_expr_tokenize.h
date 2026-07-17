@@ -64,6 +64,7 @@ private:
 
     // check and reform parser properties to standard format
     int reform_parser_properties(const ObString &properties);
+    int normalize_ik_dict_table_names(const ObString &default_database_name);
     int try_load_dictionary_for_ik();
 
   public:

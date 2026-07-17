@@ -31,8 +31,10 @@ namespace storage
 class ObFTWord final
 {
 public:
-  ObFTWord() : word_(), meta_() {}
-  ObFTWord(const int64_t length, const char *ptr, const ObObjMeta &meta) : meta_(meta)
+  // Task4 Op5：哈希随 key 一同复制，避免同一 token 在 map 查询和写入时重复计算。
+  ObFTWord() : word_(), meta_(), is_hash_cached_(false), hash_val_(0) {}
+  ObFTWord(const int64_t length, const char *ptr, const ObObjMeta &meta)
+      : word_(), meta_(meta), is_hash_cached_(false), hash_val_(0)
   {
     word_.set_string(ptr, length);
   }
@@ -50,6 +52,9 @@ public:
 private:
   ObDatum word_;
   ObObjMeta meta_;
+  // Task4 Op5：hash() 是哈希容器要求的 const 接口，因此缓存字段使用 mutable。
+  mutable bool is_hash_cached_;
+  mutable uint64_t hash_val_;
 };
 
 typedef common::hash::ObHashMap<ObFTWord, int64_t> ObFTWordMap;

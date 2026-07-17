@@ -622,7 +622,7 @@ int ObDirectLoadMgrAgent::close(const int64_t context_id, const bool need_commit
         LOG_WARN("close tablet direct load failed", K(ret), KPC(mgr_handle_.get_base_obj()));
       }
   } else if (need_commit && OB_FAIL(close_for_idem())) {
-    LOG_WARN("failed to close tablet direct load mgr", K(ret));
+    LOG_ERROR("failed to close tablet direct load mgr", K(ret));
   }
   return ret;
 }

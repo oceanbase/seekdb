@@ -20,6 +20,7 @@
 #include "storage/direct_load/ob_direct_load_i_table.h"
 #include "storage/direct_load/ob_direct_load_mem_context.h"
 #include "storage/direct_load/ob_direct_load_mem_worker.h"
+#include "lib/container/ob_se_array.h"
 
 namespace oceanbase
 {
@@ -51,9 +52,13 @@ public:
   VIRTUAL_TO_STRING_KV(KP(mem_ctx_), K_(fragments));
 
 private:
+  static const int64_t MAX_CACHED_CHUNK_COUNT = 2;
   int acquire_chunk(ObDirectLoadMultipleHeapTableMap *&chunk);
   int close_chunk(ObDirectLoadMultipleHeapTableMap *&chunk);
   int get_tables(ObIDirectLoadPartitionTableBuilder &table_builder);
+  void recycle_chunk(ObDirectLoadMultipleHeapTableMap *&chunk);
+  void destroy_chunk(ObDirectLoadMultipleHeapTableMap *&chunk);
+  void drain_chunk_pool();
 
 private:
   // data members
@@ -64,6 +69,7 @@ private:
   int64_t index_dir_id_;
   int64_t data_dir_id_;
   ObDirectLoadTableHandleArray *heap_table_array_;
+  common::ObSEArray<ObDirectLoadMultipleHeapTableMap *, MAX_CACHED_CHUNK_COUNT> chunk_pool_;
 
   DISALLOW_COPY_AND_ASSIGN(ObDirectLoadMultipleHeapTableSorter);
 };

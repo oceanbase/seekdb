@@ -292,7 +292,7 @@ int ObDDLStartReplayExecutor::replay_ddl_start(ObTabletHandle &tablet_handle, co
     LOG_WARN("invalid arguments", K(ret), K_(log));
   } else if (OB_FAIL(check_need_replay_ddl_log_(ls_, tablet_handle, scn_, scn_, need_replay))) {
     if (OB_EAGAIN != ret) {
-      LOG_WARN("fail to check need replay ddl log", K(ret), K(tablet_id), K_(scn));
+      LOG_ERROR("fail to check need replay ddl log", K(ret), K(tablet_id), K_(scn));
     }
   } else if (!need_replay) {
     // do nothing
@@ -428,7 +428,7 @@ int ObDDLRedoReplayExecutor::do_replay_(ObTabletHandle &tablet_handle)
       } else if (can_skip) {
         FLOG_INFO("skip to replay inc major redo log", K(redo_info));
       } else if (OB_FAIL(do_inc_replay_(tablet_handle, write_info, macro_block, redo_info.type_))) {
-        LOG_WARN("fail to do inc replay", K(ret));
+        LOG_ERROR("fail to do inc replay", K(ret));
         if (OB_TABLET_NOT_EXIST == ret || OB_NO_NEED_UPDATE == ret) {
           LOG_INFO("no need to replay ddl inc redo log", K(ret));
           ret = OB_SUCCESS;
@@ -467,7 +467,7 @@ int ObDDLRedoReplayExecutor::do_inc_replay_(
     LOG_WARN("only support incremental direct load", KR(ret), K(direct_load_type));
   } else if (OB_FAIL(check_need_replay_ddl_inc_log_(ls_, tablet_handle, scn_, direct_load_type, need_replay))) {
     if (OB_EAGAIN != ret) {
-      LOG_WARN("fail to check need replay ddl log", K(ret), K(scn_), K(log_));
+      LOG_ERROR("fail to check need replay ddl log", K(ret), K(scn_), K(log_));
     }
   } else if (!need_replay) {
     // do nothing
@@ -603,7 +603,7 @@ int ObDDLRedoReplayExecutor::do_full_replay_(
   ObDDLKvMgrHandle ddl_kv_mgr_handle;
   if (OB_FAIL(check_need_replay_ddl_log_(ls_, tablet_handle, log_->get_redo_info().start_scn_, scn_, need_replay))) {
     if (OB_EAGAIN != ret) {
-      LOG_WARN("fail to check need replay ddl log", K(ret), K_(tablet_id), K_(scn));
+      LOG_ERROR("fail to check need replay ddl log", K(ret), K_(tablet_id), K_(scn));
     }
   } else if (!need_replay) {
     // do nothing
@@ -844,7 +844,7 @@ int ObDDLCommitReplayExecutor::replay_ddl_commit(ObTabletHandle &tablet_handle)
     LOG_WARN("invalid arguments", K(ret), K_(log));
   } else if (OB_FAIL(check_need_replay_ddl_log_(ls_, tablet_handle, log_->get_start_scn(), scn_, need_replay))) {
     if (OB_EAGAIN != ret) {
-      LOG_WARN("fail to check need replay ddl log", K(ret), K_(scn), K_(log), "tablet", PC(tablet_handle.get_obj()));
+      LOG_ERROR("fail to check need replay ddl log", K(ret), K_(scn), K_(log), "tablet", PC(tablet_handle.get_obj()));
     }
   } else if (!need_replay) {
     // do nothing
@@ -1396,7 +1396,7 @@ int ObTabletForkStartReplayExecutor::do_replay_(ObTabletHandle &handle)
       }
     } else if (OB_FAIL(compaction::ObScheduleDagFunc::schedule_tablet_fork_dag(fork_param, false /* is_emergency */))) {
       if (OB_SIZE_OVERFLOW != ret && OB_EAGAIN != ret) {
-        LOG_WARN("failed to schedule tablet fork dag from start log", K(ret), K(fork_param), K(fork_info));
+        LOG_ERROR("failed to schedule tablet fork dag from start log", K(ret), K(fork_param), K(fork_info));
       } else if (OB_EAGAIN == ret) {
         LOG_DEBUG("exists same fork dag, wait the dag to finish", K(ret), K(fork_param));
         ret = OB_SUCCESS;
@@ -1459,7 +1459,7 @@ int ObTabletForkFinishReplayExecutor::do_replay_(ObTabletHandle &handle)
       }
     } else if (OB_FAIL(compaction::ObScheduleDagFunc::schedule_tablet_fork_dag(fork_param, false /* is_emergency */))) {
       if (OB_SIZE_OVERFLOW != ret && OB_EAGAIN != ret) {
-        LOG_WARN("failed to try schedule fork dag from finish log", K(ret), K(fork_param), K(fork_info));
+        LOG_ERROR("failed to try schedule fork dag from finish log", K(ret), K(fork_param), K(fork_info));
       } else if (OB_EAGAIN == ret) {
         ret = OB_SUCCESS;
       }
@@ -1523,7 +1523,7 @@ int ObDDLIncMinorStartReplayExecutor::do_replay_(ObTabletHandle &tablet_handle)
     LOG_WARN("invalid arguments", K(ret), K(tablet_handle));
   } else if (OB_FAIL(check_need_replay_ddl_inc_log_(ls_, tablet_handle, scn_, ObDirectLoadType::DIRECT_LOAD_INCREMENTAL, need_replay))) {
     if (OB_EAGAIN != ret) {
-      LOG_WARN("fail to check need replay ddl log", K(ret), K(scn_), K(tablet_id_));
+      LOG_ERROR("fail to check need replay ddl log", K(ret), K(scn_), K(tablet_id_));
     }
   } else if (!need_replay) {
     // do nothing
@@ -1588,7 +1588,7 @@ int ObDDLIncMinorCommitReplayExecutor::do_replay_(ObTabletHandle &tablet_handle)
     LOG_WARN("invalid arguments", K(ret), K(tablet_handle));
   } else if (OB_FAIL(check_need_replay_ddl_inc_log_(ls_, tablet_handle, scn_, ObDirectLoadType::DIRECT_LOAD_INCREMENTAL, need_replay))) {
     if (OB_EAGAIN != ret) {
-      LOG_WARN("fail to check need replay ddl log", K(ret), K(scn_), K(tablet_id_));
+      LOG_ERROR("fail to check need replay ddl log", K(ret), K(scn_), K(tablet_id_));
     }
   } else if (!need_replay) {
     // do nothing

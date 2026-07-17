@@ -168,7 +168,7 @@ void ObDiagnoseTabletMgr::remove_diagnose_tablets(ObIArray<ObDiagnoseTablet> &ta
     for (int64_t i = 0; i < tablets.count(); ++i) {
       const ObDiagnoseTablet &tablet = tablets.at(i);
       if (OB_TMP_FAIL(diagnose_tablet_map_.erase_refactored(tablet))) {
-        LOG_WARN_RET(tmp_ret, "fail to delete diagnose tablet", K(tmp_ret), K(tablet));
+        LOG_ERROR_RET(tmp_ret, "fail to delete diagnose tablet", K(tmp_ret), K(tablet));
       }
     }
   }

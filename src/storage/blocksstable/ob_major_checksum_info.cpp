@@ -123,7 +123,7 @@ int ObMajorChecksumInfo::init_from_merge_result(
       LOG_WARN("fail to assign column checksum array", K(ret), KPC(this), K(res));
     } else if (OB_UNLIKELY(!is_valid())) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("after init from merge result, major checksum info is not valid", KR(ret), KPC(this));
+      LOG_ERROR("after init from merge result, major checksum info is not valid", KR(ret), KPC(this));
     } else {
       LOG_INFO("success to init ckm info from merge result", KR(ret), KPC(this));
     }
@@ -160,7 +160,7 @@ int ObMajorChecksumInfo::init_from_sstable(
       LOG_WARN("fail to assign column checksum array", K(ret), KPC(this), K(sstable));
     } else if (OB_UNLIKELY(!is_valid())) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("after init from sstable, major checksum info is not valid", KR(ret), KPC(this));
+      LOG_ERROR("after init from sstable, major checksum info is not valid", KR(ret), KPC(this));
     } else {
       LOG_INFO("success to init ckm info from sstable", KR(ret), KPC(this));
     }
@@ -297,7 +297,7 @@ int ObCOMajorChecksumInfo::init_from_merge_result(
   } // for
   if (OB_SUCC(ret) && OB_UNLIKELY(!is_valid())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("after init from merge result, major checksum info is not valid", KR(ret), KPC(this), K(res));
+    LOG_ERROR("after init from merge result, major checksum info is not valid", KR(ret), KPC(this), K(res));
   }
   return ret;
 }

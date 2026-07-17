@@ -663,7 +663,7 @@ int ObMViewRefresher::fast_refresh()
   int tmp_ret = OB_SUCCESS;
   if (OB_TMP_FAIL(restore_session_dml_dop_( data_version, has_updated_dml_dop,
                                            orig_dml_dop, trans))) {
-    LOG_WARN("failed to restore session dml dop", KR(ret), K(has_updated_dml_dop), K(orig_dml_dop));
+    LOG_ERROR("failed to restore session dml dop", KR(ret), K(has_updated_dml_dop), K(orig_dml_dop));
     if (OB_SUCC(ret)) {
       ret = tmp_ret;
     }

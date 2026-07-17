@@ -466,16 +466,22 @@ int ObFTRangeDict::build_cache(const ObFTDictDesc &desc, ObFTCacheRangeContainer
 {
   int ret = OB_SUCCESS;
 
-  ObString table_name;
+  ObString table_name = desc.name_;
   switch (desc.type_) {
   case ObFTDictType::DICT_IK_MAIN: {
-    table_name = ObString(share::OB_FT_DICT_IK_UTF8_TNAME);
+    if (table_name.empty()) {
+      table_name = ObString(share::OB_FT_DICT_IK_UTF8_TNAME);
+    }
   } break;
   case ObFTDictType::DICT_IK_QUAN: {
-    table_name = ObString(share::OB_FT_QUANTIFIER_IK_UTF8_TNAME);
+    if (table_name.empty()) {
+      table_name = ObString(share::OB_FT_QUANTIFIER_IK_UTF8_TNAME);
+    }
   } break;
   case ObFTDictType::DICT_IK_STOP: {
-    table_name = ObString(share::OB_FT_STOPWORD_IK_UTF8_TNAME);
+    if (table_name.empty()) {
+      table_name = ObString(share::OB_FT_STOPWORD_IK_UTF8_TNAME);
+    }
   } break;
   default:
     ret = OB_NOT_SUPPORTED;
@@ -502,7 +508,7 @@ int ObFTRangeDict::try_load_cache(const ObFTDictDesc &desc,
                                   ObFTCacheRangeContainer &range_container)
 {
   int ret = OB_SUCCESS;
-  uint64_t name = static_cast<uint64_t>(desc.type_);
+  uint64_t name = desc.name_.hash();
 
   for (int64_t i = 0; OB_SUCC(ret) && i < range_count; ++i) {
     ObDictCacheKey key(name, desc.type_, i);

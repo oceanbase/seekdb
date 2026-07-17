@@ -317,7 +317,7 @@ int ObAiModelMgr::add_ai_model(const ObAiModelSchema &ai_model_schema, common::O
   // if not equal, rebuild the hashmap
   if (ai_model_infos_.count() != ai_model_id_map_.item_count()
       || ai_model_infos_.count() != ai_model_name_map_.item_count()) {
-    LOG_WARN("ai model schema is inconsistent",
+    LOG_ERROR("ai model schema is inconsistent",
              K(ret),
              K(ai_model_infos_.count()),
              K(ai_model_id_map_.item_count()),
@@ -373,7 +373,7 @@ int ObAiModelMgr::del_ai_model(const ObTenantAiModelId &tenant_ai_model_id)
   // always check
   if (ai_model_infos_.count() != ai_model_id_map_.item_count()
       || ai_model_infos_.count() != ai_model_name_map_.item_count()) {
-    LOG_WARN("ai model schema is inconsistent",
+    LOG_ERROR("ai model schema is inconsistent",
              K(ret),
              K(ai_model_infos_.count()),
              K(ai_model_id_map_.item_count()),

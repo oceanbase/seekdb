@@ -39,12 +39,16 @@ public:
       english_analyzer_(),
       doc_(),
       token_stream_(nullptr),
+      scratch_allocator_(nullptr),
       is_inited_(false)
   {}
   ~ObBEngFTParser() { reset(); }
 
   int init(plugin::ObFTParserParam *param);
+  // Task4 Op2：复用 English analyzer，仅重新分析新文档。
+  int reuse_parser(const char *fulltext, const int64_t fulltext_len) override;
   void reset();
+  virtual int reuse(plugin::ObFTParserParam *param) override;
   virtual int get_next_token(
       const char *&word,
       int64_t &word_len,
@@ -62,6 +66,7 @@ private:
   share::ObEnglishTextAnalyzer english_analyzer_;
   common::ObDatum doc_;
   share::ObITokenStream *token_stream_;
+  common::ObIAllocator *scratch_allocator_;
   bool is_inited_;
 
   DISALLOW_COPY_AND_ASSIGN(ObBEngFTParser);

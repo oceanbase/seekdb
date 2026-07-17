@@ -2279,7 +2279,7 @@ void ObIOFaultDetector::set_device_warning()
 {
   last_device_warning_ts_ = ObTimeUtility::fast_current_time();
   is_device_warning_ = true;
-  LOG_WARN_RET(OB_IO_ERROR, "disk maybe corrupted");
+  LOG_ERROR_RET(OB_IO_ERROR, "disk maybe corrupted");
 }
 
 ObIOTracer::ObIOTracer()

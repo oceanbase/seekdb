@@ -954,7 +954,7 @@ void ObLSService::remove_ls_(ObLS *ls, const bool remove_from_disk, const bool w
     if (success_step < 2 && OB_SUCC(ret)) {
       // todo zk250686_ copy tablet_id_set to tablet_free_pending_array
       if(write_slog && OB_FAIL(TENANT_STORAGE_META_PERSISTER.delete_ls(ls_id, ls->get_ls_epoch()))) {
-        LOG_WARN("fail to write remove ls slog", K(ret));
+        LOG_ERROR("fail to write remove ls slog", K(ret));
       } else {
         success_step = 2;
       }
@@ -1032,7 +1032,7 @@ int ObLSService::create_ls_(const ObCreateLSCommonArg &arg)
       LOG_WARN("check ls exist failed", K(ret));
     } else if (ls_exist) {
       ret = OB_LS_EXIST;
-      LOG_WARN("ls exist, cannot create ls now", K(ret));
+      LOG_ERROR("ls exist, cannot create ls now", K(ret));
     } else if (OB_BREAK_FAIL(check_ls_waiting_safe_destroy(share::SYS_LS,
                                                            waiting_destroy))) {
       LOG_WARN("check ls waiting safe destroy failed", K(ret));
@@ -1057,7 +1057,7 @@ int ObLSService::create_ls_(const ObCreateLSCommonArg &arg)
       } else if (FALSE_IT(state = ObLSCreateState::CREATE_STATE_ADDED_TO_MAP)) {
         // do nothing
       } else if (OB_BREAK_FAIL(TENANT_STORAGE_META_PERSISTER.prepare_create_ls(ls_meta, ls_epoch))) {
-        LOG_WARN("fail to write create log stream slog", K(ls_meta));
+        LOG_ERROR("fail to write create log stream slog", K(ls_meta));
       } else if (OB_FAIL(ls->set_ls_epoch(ls_epoch))) {
         LOG_WARN("fail to set ls epoch", K(ret));
       } else if (FALSE_IT(state = ObLSCreateState::CREATE_STATE_WRITE_PREPARE_SLOG)) {
@@ -1071,7 +1071,7 @@ int ObLSService::create_ls_(const ObCreateLSCommonArg &arg)
       } else if (FALSE_IT(state = ObLSCreateState::CREATE_STATE_INNER_TABLET_CREATED)) {
       } else if (OB_BREAK_FAIL(TENANT_STORAGE_META_PERSISTER.commit_create_ls(
           ls->get_ls_id(), ls->get_ls_epoch()))) {
-        LOG_WARN("fail to write create log stream commit slog", K(ret), K(ls_meta));
+        LOG_ERROR("fail to write create log stream commit slog", K(ret), K(ls_meta));
       } else if (OB_BREAK_FAIL(ls->finish_create_ls())) {
         LOG_WARN("finish create ls failed", KR(ret));
       } else if (FALSE_IT(state = ObLSCreateState::CREATE_STATE_FINISH)) {

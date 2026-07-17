@@ -257,7 +257,7 @@ int ObSNDDLMergeHelperV2::process_prepare_task(ObIDag *dag,
                                                 table_store_wrapper.get_member()->get_major_sstables().get_boundary_table(false/*first*/)))) {
   }else if (nullptr != first_major_sstable) {          /* if major exist, do nothing */
   } else if (for_major && !ddl_merge_param.for_replay_ && OB_FAIL(set_ddl_complete(dag, *(tablet_handle.get_obj()), ddl_merge_param))) {
-    LOG_WARN("failed to set ddl complete", K(ret));
+    LOG_ERROR("failed to set ddl complete", K(ret));
   }
 
   /* if for major need to wait ddl complete take effect */
@@ -722,7 +722,7 @@ int ObSNDDLMergeHelperV2::assemble_sstable(ObDDLTabletMergeDagParamV2 &merge_par
                                                                        merge_param.ddl_task_param_.execution_id_,
                                                                        merge_param.ddl_task_param_.ddl_task_id_,
                                                                        merge_param.ddl_task_param_.tenant_data_version_))) {
-    LOG_WARN("failed to report ddl checksum", K(ret), K(merge_param));
+    LOG_ERROR("failed to report ddl checksum", K(ret), K(merge_param));
   }
 
   /* release ddl kv when build major sstable */
@@ -743,7 +743,7 @@ int ObSNDDLMergeHelperV2::assemble_sstable(ObDDLTabletMergeDagParamV2 &merge_par
   /* remove tablet from log handler */
   if (OB_FAIL(ret)) {
   } else if (merge_param.for_major_ && OB_FAIL(ObIDDLMergeHelper::remove_tablet_from_log_handler(target_ls_id, target_tablet_id))) {
-      LOG_WARN("failed to remove tablet from log handler", K(ret), K(target_ls_id), K(target_tablet_id));
+      LOG_ERROR("failed to remove tablet from log handler", K(ret), K(target_ls_id), K(target_tablet_id));
   }
   return ret;
 }

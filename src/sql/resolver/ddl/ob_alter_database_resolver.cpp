@@ -123,7 +123,7 @@ int ObAlterDatabaseResolver::resolve(const ParseNode &parse_tree)
               LOG_WARN("Failed to check sync_ddl_user", K(ret));
             } else if (is_sync_ddl_user) {
               ret = OB_IGNORE_SQL_IN_RESTORE;
-              LOG_WARN("Cannot support for sync ddl user to alter primary zone", K(ret), K(session_info_->get_user_name()));
+              LOG_ERROR("Cannot support for sync ddl user to alter primary zone", K(ret), K(session_info_->get_user_name()));
             }
           }
           if (OB_SUCC(ret)) {

@@ -622,7 +622,7 @@ int ObTenantDirectLoadMgr::close_tablet_direct_load_for_sn(
       ObTabletID lob_meta_tablet_id = handle.get_obj()->get_lob_meta_tablet_id();
       ObTabletDirectLoadMgrKey lob_meta_mgr_key(lob_meta_tablet_id, type, context_id);
       if (lob_meta_mgr_key.is_valid() && OB_FAIL(remove_tablet_direct_load(lob_meta_mgr_key))) {
-        LOG_WARN("fail to remove lob meta tablet direct load", K(ret), K(lob_meta_mgr_key));
+        LOG_ERROR("fail to remove lob meta tablet direct load", K(ret), K(lob_meta_mgr_key));
       } else if (OB_FAIL(remove_tablet_direct_load(data_mgr_key))) {
         LOG_WARN("fail to remove tablet direct load", K(ret), K(data_mgr_key));
       }

@@ -60,7 +60,7 @@ inline const char *ObZoneStatus::get_status_str(const ObZoneStatus::Status statu
       str = "INACTIVE";
       break;
     default:
-      SERVER_LOG_RET(WARN, common::OB_ERR_UNEXPECTED, "unknown zone status, fatal error", K(status));
+      SERVER_LOG_RET(ERROR, common::OB_ERR_UNEXPECTED, "unknown zone status, fatal error", K(status));
       break;
   }
 

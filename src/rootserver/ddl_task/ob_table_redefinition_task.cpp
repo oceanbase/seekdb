@@ -897,7 +897,7 @@ int ObTableRedefinitionTask::take_effect(const ObDDLTaskStatus next_task_status)
       ret = OB_SUCCESS;
       new_status = ObDDLTaskStatus::TAKE_EFFECT;
     } else {
-      LOG_WARN("fail to sync tablet autoinc seq", K(ret));
+      LOG_ERROR("fail to sync tablet autoinc seq", K(ret));
     }
   } else if (OB_FAIL(sync_auto_increment_position())) {
     if (OB_NOT_MASTER == ret) {

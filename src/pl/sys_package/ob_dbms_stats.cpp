@@ -2512,7 +2512,7 @@ int ObDbmsStats::restore_table_stats(sql::ObExecContext &ctx,
       LOG_WARN("failed to get timestamp", K(ret));
     } else if (specify_time < min_savetime) {
       ret = OB_ERR_DBMS_STATS_PL;
-      LOG_WARN("Unable to restore statistics, statistics history not available", K(ret));
+      LOG_ERROR("Unable to restore statistics, statistics history not available", K(ret));
       LOG_USER_ERROR(OB_ERR_DBMS_STATS_PL, "Unable to restore statistics, statistics history not available");
     } else if (specify_time > current_time) {
       ret = OB_ERR_DBMS_STATS_PL;

@@ -388,7 +388,7 @@ ObMvccWriteGuard::~ObMvccWriteGuard()
       ret = tx_ctx->submit_redo_after_write(is_freeze/*force*/, write_seq_no_);
       if (OB_FAIL(ret)) {
         if (REACH_TIME_INTERVAL(100 * 1000)) {
-          TRANS_LOG(WARN, "failed to submit log if neccesary", K(ret), K(is_freeze), KPC(tx_ctx));
+          TRANS_LOG(ERROR, "failed to submit log if neccesary", K(ret), K(is_freeze), KPC(tx_ctx));
         }
         if (is_freeze && OB_BLOCK_FROZEN != ret) {
           memtable_->get_freezer()->set_need_resubmit_log(true);

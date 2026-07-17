@@ -1536,7 +1536,7 @@ int ObPLPackageManager::get_package_item_state(const ObPLResolveCtx &resolve_ctx
         }
         exec_ctx_bak.restore(exec_ctx);
         if (OB_SUCCESS != (tmp_ret = exec_env_bak.store(resolve_ctx.session_info_))) {
-          LOG_WARN("failed to restore package exec env", K(ret), K(tmp_ret));
+          LOG_ERROR("failed to restore package exec env", K(ret), K(tmp_ret));
           ret = OB_SUCCESS == ret ? tmp_ret : ret;
         }
         if (need_destruct_package_state) {
