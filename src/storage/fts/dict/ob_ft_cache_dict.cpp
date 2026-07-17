@@ -21,6 +21,7 @@
 
 #include "lib/allocator/ob_allocator.h"
 #include "lib/charset/ob_charset.h"
+#include "lib/hash_func/murmur_hash.h"
 #include "lib/ob_errno.h"
 #include "lib/oblog/ob_log_module.h"
 #include "lib/string/ob_string.h"
@@ -87,7 +88,7 @@ int ObFTCacheDict::make_and_fetch_cache_entry(const ObFTDictDesc &desc,
 {
   int ret = OB_SUCCESS;
   ObDictCache &cache = ObDictCache::get_instance();
-  uint64_t name = static_cast<uint64_t>(desc.type_);
+  uint64_t name = common::murmurhash(desc.name_.ptr(), desc.name_.length(), 0);
   const ObDictCacheKey put_key(name, desc.type_, range_id);
   const ObDictCacheValue put_value(dat_buff);
   if (OB_FAIL(cache.put_and_fetch_dict(put_key, put_value, value, handle))) {

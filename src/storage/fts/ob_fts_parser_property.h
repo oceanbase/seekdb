@@ -22,6 +22,7 @@
 #include "lib/json/ob_json.h"
 #include "common/json_type/ob_json_base.h"
 #include "lib/oblog/ob_log_module.h"
+#include "lib/string/ob_fixed_length_string.h"
 #include "lib/string/ob_string.h"
 #include "lib/utility/ob_macro_utils.h"
 #include "storage/fts/ob_fts_literal.h"
@@ -67,7 +68,8 @@ public:
 
   int rebuild_props_for_ddl(const ObString &parser_name,
                             const common::ObCollationType &type,
-                            const bool log_to_user);
+                            const bool log_to_user,
+                            const ObString &default_database = ObString());
 
   int check_unsupported_config(const char **config_array,
                                int32_t config_count,
@@ -117,12 +119,15 @@ public:
   TO_STRING_KV(K_(is_inited));
 
 private:
-  int ik_rebuild_props_for_ddl(bool log_to_user);
+  int ik_rebuild_props_for_ddl(bool log_to_user, const ObString &default_database);
   int ngram_rebuild_props_for_ddl(bool log_to_user);
   int space_rebuild_props_for_ddl(bool log_to_user);
   int beng_rebuild_props_for_ddl(bool log_to_user);
   int ngram2_rebuild_props_for_ddl(bool log_to_user);
   int plugin_rebuild_props_for_ddl(bool log_to_user);
+  int normalize_dict_table_name(const ObString &table_name,
+                                const ObString &default_database,
+                                ObString &normalized_table_name);
 
 private:
   common::ObArenaAllocator allocator_;
@@ -138,6 +143,9 @@ public:
   ObFTParserProperty();
   ~ObFTParserProperty() = default;
   int parse_for_parser_helper(const ObFTParser &parser, const ObString &json_str);
+  int set_stopword_table(const common::ObString &str);
+  int set_dict_table(const common::ObString &str);
+  int set_quantifier_table(const common::ObString &str);
 
   bool is_equal(const ObFTParserProperty &other) const
   {
@@ -160,6 +168,7 @@ public:
                K_(ik_mode_smart));
 
 public:
+  static constexpr int64_t MAX_DICT_TABLE_NAME_LENGTH = 2048;
   int64_t min_token_size_;
   int64_t max_token_size_;
   int64_t ngram_token_size_;
@@ -169,6 +178,11 @@ public:
   common::ObString quantifier_table_;
   int64_t min_ngram_token_size_;
   int64_t max_ngram_token_size_;
+
+private:
+  common::ObFixedLengthString<MAX_DICT_TABLE_NAME_LENGTH> stopword_table_holder_;
+  common::ObFixedLengthString<MAX_DICT_TABLE_NAME_LENGTH> dict_table_holder_;
+  common::ObFixedLengthString<MAX_DICT_TABLE_NAME_LENGTH> quantifier_table_holder_;
 };
 
 } // end namespace storage

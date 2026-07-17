@@ -1357,6 +1357,30 @@ int ObDDLResolver::resolve_table_option(const ParseNode *option_node, const bool
         }
         break;
       }
+      case T_FULLTEXT_DICT: {
+        ObString fulltext_dict_flag;
+        if (is_index_option) {
+          ret = OB_NOT_SUPPORTED;
+          LOG_WARN("index option should not specify fulltext dict", K(ret));
+          LOG_USER_ERROR(OB_NOT_SUPPORTED, "specify fulltext dict in index option");
+        } else if (OB_ISNULL(option_node->children_) || 1 != option_node->num_child_) {
+          ret = OB_INVALID_ARGUMENT;
+          SQL_RESV_LOG(WARN, "invalid fulltext dict option", K(ret), K(option_node->num_child_));
+        } else if (OB_ISNULL(option_node->children_[0])) {
+          ret = OB_ERR_UNEXPECTED;
+          SQL_RESV_LOG(WARN, "option node child is null", K(ret));
+        } else {
+          fulltext_dict_flag.assign_ptr(const_cast<char *>(option_node->children_[0]->str_value_),
+                                        static_cast<int32_t>(option_node->children_[0]->str_len_));
+          fulltext_dict_flag = fulltext_dict_flag.trim();
+          if (0 != ObString::make_string("Y").case_compare(fulltext_dict_flag)) {
+            ret = OB_INVALID_ARGUMENT;
+            LOG_WARN("invalid fulltext dict option", K(ret), K(fulltext_dict_flag));
+            LOG_USER_ERROR(OB_INVALID_ARGUMENT, "fulltext_dict");
+          }
+        }
+        break;
+      }
       case T_STORE_FORMAT: {
         if (!is_index_option) {
           if (OB_ISNULL(option_node->children_[0])) {

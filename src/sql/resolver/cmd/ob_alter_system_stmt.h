@@ -195,6 +195,19 @@ private:
   obcall::ObAdminRefreshIOCalibrationArg rpc_arg_;
 };
 
+class ObRefreshFullTextDictStmt : public ObSystemCmdStmt
+{
+public:
+  ObRefreshFullTextDictStmt() : ObSystemCmdStmt(stmt::T_REFRESH_FULLTEXT_DICT) {}
+  virtual ~ObRefreshFullTextDictStmt() {}
+
+  obcall::ObAdminRefreshFullTextDictArg &get_rpc_arg() { return rpc_arg_; }
+
+  TO_STRING_KV(N_STMT_TYPE, ((int)stmt_type_), K_(rpc_arg));
+private:
+  obcall::ObAdminRefreshFullTextDictArg rpc_arg_;
+};
+
 class ObSetConfigStmt : public ObSystemCmdStmt
 {
 public:

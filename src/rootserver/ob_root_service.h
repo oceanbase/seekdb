@@ -355,6 +355,7 @@ public:
   int admin_refresh_memory_stat(const obcall::ObAdminRefreshMemStatArg &arg);
   int admin_wash_memory_fragmentation(const obcall::ObAdminWashMemFragmentationArg &arg);
   int admin_refresh_io_calibration(const obcall::ObAdminRefreshIOCalibrationArg &arg);
+  int admin_refresh_fulltext_dict(const obcall::ObAdminRefreshFullTextDictArg &arg);
   int admin_clear_merge_error(const obcall::ObAdminMergeArg &arg);
   int admin_upgrade_virtual_schema();
   int admin_flush_cache(const obcall::ObAdminFlushCacheArg &arg);

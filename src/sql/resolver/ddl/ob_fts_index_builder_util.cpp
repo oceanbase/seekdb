@@ -2120,7 +2120,8 @@ int ObFtsIndexBuilderUtil::generate_fts_parser_property(
       LOG_WARN("fail to parse json props", K(ret), K(arg.index_option_.parser_properties_));
     } else if (OB_FAIL(json_props.rebuild_props_for_ddl(arg.index_option_.parser_name_,
                                                         collation_type,
-                                                        true))) {
+                                                        true,
+                                                        data_schema.get_database_name_str()))) {
       LOG_WARN("fail to rebuild props for ddl",
                K(ret),
                K(arg.index_option_.parser_properties_),

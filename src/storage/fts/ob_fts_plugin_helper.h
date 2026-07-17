@@ -154,7 +154,7 @@ public:
    *                                 "ngram_token_size":2,
    *                                 "stopword_table":"default",
    *                                 "dict_table":"none",
-   *                                 "quanitfier_table":"none"
+   *                                 "quantifier_table":"none"
    *                               }
    *
    * @return error code
