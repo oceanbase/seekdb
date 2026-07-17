@@ -7966,7 +7966,8 @@ int ObStaticEngineCG::generate_spec(ObLogFunctionTable &op, ObFunctionTableSpec 
       CK (OB_NOT_NULL(col_item->expr_));
       if (OB_SUCC(ret)
           && col_item->table_id_ == op.get_table_id()
-          && col_item->expr_->is_explicited_reference()) {
+          && (col_item->expr_->is_explicited_reference()
+              || T_FUN_SYS_AI_SPLIT_DOCUMENT == value_raw_expr->get_expr_type())) {
         OZ (mark_expr_self_produced(col_item->expr_));
         OZ (generate_rt_expr(*col_item->expr_, rt_expr));
         OZ (spec.column_exprs_.push_back(rt_expr));

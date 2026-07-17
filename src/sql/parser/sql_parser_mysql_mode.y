@@ -13401,6 +13401,36 @@ relation_factor %prec LOWER_PARENS
 {
   malloc_non_terminal_node($$, result->malloc_pool_, T_TABLE_COLLECTION_EXPRESSION, 2, $3, $6);
 }
+| function_name '(' opt_expr_as_list ')' %prec LOWER_PARENS
+{
+  ParseNode *params = NULL;
+  ParseNode *function_expr = NULL;
+  if (NULL != $3) {
+    merge_nodes(params, result, T_EXPR_LIST, $3);
+  }
+  malloc_non_terminal_node(function_expr, result->malloc_pool_, T_FUN_SYS, 2, $1, params);
+  malloc_non_terminal_node($$, result->malloc_pool_, T_TABLE_COLLECTION_EXPRESSION, 2, function_expr, NULL);
+}
+| function_name '(' opt_expr_as_list ')' relation_name
+{
+  ParseNode *params = NULL;
+  ParseNode *function_expr = NULL;
+  if (NULL != $3) {
+    merge_nodes(params, result, T_EXPR_LIST, $3);
+  }
+  malloc_non_terminal_node(function_expr, result->malloc_pool_, T_FUN_SYS, 2, $1, params);
+  malloc_non_terminal_node($$, result->malloc_pool_, T_TABLE_COLLECTION_EXPRESSION, 2, function_expr, $5);
+}
+| function_name '(' opt_expr_as_list ')' AS relation_name
+{
+  ParseNode *params = NULL;
+  ParseNode *function_expr = NULL;
+  if (NULL != $3) {
+    merge_nodes(params, result, T_EXPR_LIST, $3);
+  }
+  malloc_non_terminal_node(function_expr, result->malloc_pool_, T_FUN_SYS, 2, $1, params);
+  malloc_non_terminal_node($$, result->malloc_pool_, T_TABLE_COLLECTION_EXPRESSION, 2, function_expr, $6);
+}
 ;
 
 dml_table_name:
