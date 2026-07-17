@@ -61,6 +61,8 @@ public:
 
   VIRTUAL_TO_STRING_KV(K(is_inited_));
 
+  friend class ObIKFTParserDesc;
+
 private:
   int produce();
 
