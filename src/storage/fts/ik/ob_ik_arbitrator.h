@@ -39,6 +39,8 @@ public:
   int output_result(TokenizeContext &ctx);
 
 private:
+  int reuse(int64_t fulltext_len);
+
   int prepare(TokenizeContext &ctx);
 
   int add_chain(ObIKTokenChain *chain);
@@ -58,6 +60,7 @@ private:
   int remove_conflict(const ObIKToken &token, ObIKTokenChain *option);
 
   bool keep_single() const { return true; }
+  static int64_t calc_bucket_num(int64_t fulltext_len);
 
 private:
   ObArenaAllocator alloc_;

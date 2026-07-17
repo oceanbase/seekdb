@@ -1141,6 +1141,8 @@ int ObFtsIndexBuildTask::serialize_params_to_message(
   int8_t is_retryable_ddl = static_cast<int8_t>(is_retryable_ddl_);
   int8_t use_doc_id = static_cast<int8_t>(use_doc_id_);
   int64_t charset_type = static_cast<int64_t>(charset_type_);
+  int8_t fts_index_aux_is_trans_end = static_cast<int8_t>(fts_index_aux_is_trans_end_);
+  int8_t fts_doc_word_aux_is_trans_end = static_cast<int8_t>(fts_doc_word_aux_is_trans_end_);
 
   if (OB_UNLIKELY(nullptr == buf || buf_len <= 0)) {
     ret = OB_INVALID_ARGUMENT;
@@ -1259,6 +1261,16 @@ int ObFtsIndexBuildTask::serialize_params_to_message(
                                                pos,
                                                charset_type))) {
     LOG_WARN("serialize charset type failed", K(ret));
+  } else if (OB_FAIL(serialization::encode_i8(buf,
+                                              buf_len,
+                                              pos,
+                                              fts_index_aux_is_trans_end))) {
+    LOG_WARN("serialize fts index aux trans end failed", K(ret));
+  } else if (OB_FAIL(serialization::encode_i8(buf,
+                                              buf_len,
+                                              pos,
+                                              fts_doc_word_aux_is_trans_end))) {
+    LOG_WARN("serialize fts doc word trans end failed", K(ret));
   }
   return ret;
 }
@@ -1283,6 +1295,8 @@ int ObFtsIndexBuildTask::deserialize_params_from_message(
   int8_t is_retryable_ddl = true;
   int8_t use_doc_id = true;
   int64_t charset_type = 0;
+  int8_t fts_index_aux_is_trans_end = false;
+  int8_t fts_doc_word_aux_is_trans_end = false;
   SMART_VAR(obcall::ObCreateIndexArg, tmp_arg) {
     if (OB_UNLIKELY(!true ||
                     nullptr == buf ||
@@ -1390,22 +1404,42 @@ int ObFtsIndexBuildTask::deserialize_params_from_message(
                                                 pos,
                                                 &is_retryable_ddl))) {
       LOG_WARN("fail to deserialize is retryable ddl", K(ret));
-    } else if (pos >= data_len) {
-    } else if (OB_FAIL(serialization::decode_i8(buf,
-                                                data_len,
-                                                pos,
-                                                &use_doc_id))) {
+    }
+
+    if (OB_SUCC(ret) && pos < data_len
+        && OB_FAIL(serialization::decode_i8(buf,
+                                            data_len,
+                                            pos,
+                                            &use_doc_id))) {
       LOG_WARN("fail to deserialize use doc id", K(ret));
-    } else if (OB_FAIL(serialization::decode_i64(buf,
-                                                 data_len,
-                                                 pos,
-                                                 &rowkey_doc_schema_version_))) {
+    }
+    if (OB_SUCC(ret) && pos < data_len
+        && OB_FAIL(serialization::decode_i64(buf,
+                                             data_len,
+                                             pos,
+                                             &rowkey_doc_schema_version_))) {
       LOG_WARN("fail to deserialize rowkey doc table schema version", K(ret));
-    } else if (OB_FAIL(serialization::decode_i64(buf,
-                                                 data_len,
-                                                 pos,
-                                                 &charset_type))) {
+    }
+    if (OB_SUCC(ret) && pos < data_len
+        && OB_FAIL(serialization::decode_i64(buf,
+                                             data_len,
+                                             pos,
+                                             &charset_type))) {
       LOG_WARN("fail to deserialize charset type", K(ret));
+    }
+    if (OB_SUCC(ret) && pos < data_len
+        && OB_FAIL(serialization::decode_i8(buf,
+                                            data_len,
+                                            pos,
+                                            &fts_index_aux_is_trans_end))) {
+      LOG_WARN("fail to deserialize fts index aux trans end", K(ret));
+    }
+    if (OB_SUCC(ret) && pos < data_len
+        && OB_FAIL(serialization::decode_i8(buf,
+                                            data_len,
+                                            pos,
+                                            &fts_doc_word_aux_is_trans_end))) {
+      LOG_WARN("fail to deserialize fts doc word trans end", K(ret));
     }
 
     if (OB_SUCC(ret) && !dependent_task_result_map_.created()
@@ -1464,6 +1498,8 @@ int ObFtsIndexBuildTask::deserialize_params_from_message(
     is_retryable_ddl_ = is_retryable_ddl;
     use_doc_id_ = use_doc_id;
     charset_type_ = static_cast<ObCharsetType>(charset_type);
+    fts_index_aux_is_trans_end_ = static_cast<bool>(fts_index_aux_is_trans_end);
+    fts_doc_word_aux_is_trans_end_ = static_cast<bool>(fts_doc_word_aux_is_trans_end);
   }
   return ret;
 }
@@ -1483,6 +1519,8 @@ int64_t ObFtsIndexBuildTask::get_serialize_param_size() const
   int8_t is_retryable_ddl = static_cast<int8_t>(is_retryable_ddl_);
   int8_t use_doc_id = static_cast<int8_t>(use_doc_id_);
   int64_t charset_type = static_cast<int64_t>(charset_type_);
+  int8_t fts_index_aux_is_trans_end = static_cast<int8_t>(fts_index_aux_is_trans_end_);
+  int8_t fts_doc_word_aux_is_trans_end = static_cast<int8_t>(fts_doc_word_aux_is_trans_end_);
 
   return create_index_arg_.get_serialize_size() + ObDDLTask::get_serialize_param_size()
       + serialization::encoded_length(rowkey_doc_aux_table_id_)
@@ -1506,7 +1544,9 @@ int64_t ObFtsIndexBuildTask::get_serialize_param_size() const
       + serialization::encoded_length_i8(is_retryable_ddl)
       + serialization::encoded_length_i8(use_doc_id)
       + serialization::encoded_length_i64(rowkey_doc_schema_version_)
-      + serialization::encoded_length_i64(charset_type);
+      + serialization::encoded_length_i64(charset_type)
+      + serialization::encoded_length_i8(fts_index_aux_is_trans_end)
+      + serialization::encoded_length_i8(fts_doc_word_aux_is_trans_end);
 }
 
 int ObFtsIndexBuildTask::get_task_status(int64_t task_id, uint64_t aux_table_id, bool& is_succ)
@@ -1662,6 +1702,199 @@ int ObFtsIndexBuildTask::get_task_status()
   } else if (fts_doc_word_task_id_ > 0 &&
       OB_FAIL(get_task_status(fts_doc_word_task_id_, fts_doc_word_aux_table_id_, is_fts_doc_word_succ_))) {
     LOG_WARN("get task status", K(ret), K(fts_doc_word_task_id_), K(fts_doc_word_aux_table_id_));
+  }
+  return ret;
+}
+
+
+int ObFtsIndexBuildTask::get_child_task_monitor_status(
+    const uint64_t aux_table_id,
+    const int64_t child_task_id,
+    const bool succ_hint,
+    bool &is_finished,
+    int64_t &ret_code)
+{
+  int ret = OB_SUCCESS;
+  is_finished = false;
+  ret_code = INT64_MAX;
+  if (succ_hint || child_task_id <= 0) {
+    is_finished = true;
+    ret_code = OB_SUCCESS;
+  } else {
+    DependTaskStatus status;
+    if (dependent_task_result_map_.created()) {
+      if (OB_FAIL(dependent_task_result_map_.get_refactored(aux_table_id, status))) {
+        if (OB_HASH_NOT_EXIST == ret) {
+          ret = OB_SUCCESS;
+        } else {
+          LOG_WARN("failed to get child task status from map", K(ret), K(aux_table_id), K(child_task_id));
+        }
+      } else if (status.ret_code_ != INT64_MAX) {
+        is_finished = true;
+        ret_code = status.ret_code_;
+      }
+    }
+    if (OB_SUCC(ret) && !is_finished && child_task_id > 0 && OB_NOT_NULL(GCTX.sql_proxy_)) {
+      HEAP_VAR(ObDDLErrorMessageTableOperator::ObBuildDDLErrorMessage, error_message) {
+        const int64_t target_object_id = -1;
+        int64_t unused_user_msg_len = 0;
+        ObAddr unused_addr;
+        if (OB_FAIL(ObDDLErrorMessageTableOperator::get_ddl_error_message(child_task_id,
+                                                                          target_object_id,
+                                                                          unused_addr,
+                                                                          false /* is_ddl_retry_task */,
+                                                                          *GCTX.sql_proxy_,
+                                                                          error_message,
+                                                                          unused_user_msg_len))) {
+          if (OB_ENTRY_NOT_EXIST == ret) {
+            ret = OB_SUCCESS;
+          } else {
+            LOG_WARN("failed to get child ddl error message", K(ret), K(aux_table_id), K(child_task_id));
+          }
+        } else {
+          is_finished = true;
+          ret_code = error_message.ret_code_;
+        }
+      }
+    }
+  }
+  return ret;
+}
+
+int ObFtsIndexBuildTask::append_single_child_monitor_info(
+    const char *task_name,
+    const bool submitted,
+    const uint64_t aux_table_id,
+    const int64_t child_task_id,
+    const bool is_finished,
+    const int64_t ret_code,
+    const bool has_trans_end,
+    const bool is_trans_end,
+    int64_t &pos)
+{
+  int ret = OB_SUCCESS;
+  char ret_code_buf[32];
+  int64_t ret_code_pos = 0;
+  ObString ret_code_str;
+  if (is_finished) {
+    if (OB_FAIL(databuff_printf(ret_code_buf, sizeof(ret_code_buf), ret_code_pos, "%ld", ret_code))) {
+      LOG_WARN("failed to print child ret code", K(ret), K(ret_code));
+    } else {
+      ret_code_str.assign_ptr(ret_code_buf, static_cast<int32_t>(ret_code_pos));
+    }
+  } else {
+    ret_code_str = ObString::make_string("pending");
+  }
+  if (OB_FAIL(ret)) {
+  } else if (has_trans_end) {
+    ret = databuff_printf(stat_info_.message_,
+                          MAX_LONG_OPS_MESSAGE_LENGTH,
+                          pos,
+                          ", %s{submitted=%d,table_id=%lu,task_id=%ld,finished=%d,ret_code=%.*s,trans_end=%d}",
+                          task_name,
+                          submitted ? 1 : 0,
+                          static_cast<unsigned long>(aux_table_id),
+                          child_task_id,
+                          is_finished ? 1 : 0,
+                          ret_code_str.length(),
+                          ret_code_str.ptr(),
+                          is_trans_end ? 1 : 0);
+  } else {
+    ret = databuff_printf(stat_info_.message_,
+                          MAX_LONG_OPS_MESSAGE_LENGTH,
+                          pos,
+                          ", %s{submitted=%d,table_id=%lu,task_id=%ld,finished=%d,ret_code=%.*s}",
+                          task_name,
+                          submitted ? 1 : 0,
+                          static_cast<unsigned long>(aux_table_id),
+                          child_task_id,
+                          is_finished ? 1 : 0,
+                          ret_code_str.length(),
+                          ret_code_str.ptr());
+  }
+  if (OB_FAIL(ret)) {
+    LOG_WARN("failed to append child monitor info", K(ret), K(task_name), K(aux_table_id), K(child_task_id));
+  }
+  return ret;
+}
+
+int ObFtsIndexBuildTask::append_child_task_monitor_info(
+    const bool include_rowkey_doc,
+    const bool include_doc_rowkey,
+    const bool include_domain_index_aux,
+    const bool include_fts_doc_word,
+    int64_t &pos)
+{
+  int ret = OB_SUCCESS;
+  const bool need_trans_end = static_cast<ObDDLTaskStatus>(task_status_) >= ObDDLTaskStatus::TAKE_EFFECT;
+  struct ChildTaskMonitorSnapshot final
+  {
+    const char *task_name_;
+    bool include_;
+    bool submitted_;
+    uint64_t aux_table_id_;
+    int64_t child_task_id_;
+    bool succ_hint_;
+    bool has_trans_end_;
+    bool is_trans_end_;
+    bool relevant_;
+    bool is_finished_;
+    int64_t ret_code_;
+  } snapshots[] = {
+    {"ROWKEY_DOC", include_rowkey_doc, rowkey_doc_task_submitted_, rowkey_doc_aux_table_id_, rowkey_doc_task_id_, is_rowkey_doc_succ_, false, false, false, false, INT64_MAX},
+    {"DOC_ROWKEY", include_doc_rowkey, doc_rowkey_task_submitted_, doc_rowkey_aux_table_id_, doc_rowkey_task_id_, is_doc_rowkey_succ_, false, false, false, false, INT64_MAX},
+    {"DOMAIN_INDEX_AUX", include_domain_index_aux, domain_index_aux_task_submitted_, domain_index_aux_table_id_, domain_index_aux_task_id_, is_domain_aux_succ_, need_trans_end, fts_index_aux_is_trans_end_, false, false, INT64_MAX},
+    {"FTS_DOC_WORD", include_fts_doc_word && is_fts_task(), fts_doc_word_task_submitted_, fts_doc_word_aux_table_id_, fts_doc_word_task_id_, is_fts_doc_word_succ_, need_trans_end, fts_doc_word_aux_is_trans_end_, false, false, INT64_MAX}
+  };
+  int64_t total_task_cnt = 0;
+  int64_t finished_task_cnt = 0;
+  int64_t failed_task_cnt = 0;
+  const int64_t snapshot_cnt = static_cast<int64_t>(sizeof(snapshots) / sizeof(snapshots[0]));
+  for (int64_t i = 0; OB_SUCC(ret) && i < snapshot_cnt; ++i) {
+    ChildTaskMonitorSnapshot &snapshot = snapshots[i];
+    snapshot.relevant_ = snapshot.include_
+        && (snapshot.submitted_ || snapshot.aux_table_id_ != OB_INVALID_ID || snapshot.child_task_id_ > 0 || snapshot.succ_hint_);
+    if (snapshot.relevant_) {
+      ++total_task_cnt;
+      if (OB_FAIL(get_child_task_monitor_status(snapshot.aux_table_id_,
+                                                snapshot.child_task_id_,
+                                                snapshot.succ_hint_,
+                                                snapshot.is_finished_,
+                                                snapshot.ret_code_))) {
+        LOG_WARN("failed to get child task monitor status", K(ret), K(snapshot.task_name_), K(snapshot.aux_table_id_), K(snapshot.child_task_id_));
+      } else if (snapshot.is_finished_) {
+        ++finished_task_cnt;
+        if (snapshot.ret_code_ != OB_SUCCESS) {
+          ++failed_task_cnt;
+        }
+      }
+    }
+  }
+  if (OB_FAIL(ret) || total_task_cnt <= 0) {
+  } else if (OB_FAIL(databuff_printf(stat_info_.message_,
+                                     MAX_LONG_OPS_MESSAGE_LENGTH,
+                                     pos,
+                                     "CHILD_PROGRESS: %ld/%ld, CHILD_FAILED: %ld",
+                                     finished_task_cnt,
+                                     total_task_cnt,
+                                     failed_task_cnt))) {
+    LOG_WARN("failed to append child summary", K(ret), K(finished_task_cnt), K(total_task_cnt), K(failed_task_cnt));
+  }
+  for (int64_t i = 0; OB_SUCC(ret) && i < snapshot_cnt; ++i) {
+    ChildTaskMonitorSnapshot &snapshot = snapshots[i];
+    if (snapshot.relevant_) {
+      if (OB_FAIL(append_single_child_monitor_info(snapshot.task_name_,
+                                                   snapshot.submitted_,
+                                                   snapshot.aux_table_id_,
+                                                   snapshot.child_task_id_,
+                                                   snapshot.is_finished_,
+                                                   snapshot.ret_code_,
+                                                   snapshot.has_trans_end_,
+                                                   snapshot.is_trans_end_,
+                                                   pos))) {
+        LOG_WARN("failed to append child detail", K(ret), K(snapshot.task_name_));
+      }
+    }
   }
   return ret;
 }
@@ -1887,95 +2120,103 @@ int ObFtsIndexBuildTask::collect_longops_stat(ObLongopsValue &value)
   int ret = OB_SUCCESS;
   int64_t pos = 0;
   const ObDDLTaskStatus status = static_cast<ObDDLTaskStatus>(task_status_);
-  databuff_printf(stat_info_.message_, MAX_LONG_OPS_MESSAGE_LENGTH, pos, "TENANT_ID: 1, TASK_ID: %ld, ", task_id_);
-  switch(status) {
-    case ObDDLTaskStatus::PREPARE: {
-      if (OB_FAIL(OB_FAIL(databuff_printf(stat_info_.message_,
-                                          MAX_LONG_OPS_MESSAGE_LENGTH,
-                                          pos,
-                                          "STATUS: PREPARE")))) {
-        LOG_WARN("failed to print", K(ret));
+  if (OB_FAIL(databuff_printf(stat_info_.message_,
+                              MAX_LONG_OPS_MESSAGE_LENGTH,
+                              pos,
+                              "TENANT_ID: 1, TASK_ID: %ld, ",
+                              task_id_))) {
+    LOG_WARN("failed to print longops prefix", K(ret), K(task_id_));
+  } else {
+    switch (status) {
+      case ObDDLTaskStatus::PREPARE: {
+        ret = databuff_printf(stat_info_.message_, MAX_LONG_OPS_MESSAGE_LENGTH, pos, "STATUS: PREPARE");
+        break;
       }
-      break;
-    }
-    case ObDDLTaskStatus::GENERATE_ROWKEY_DOC_SCHEMA: {
-      if (OB_FAIL(databuff_printf(stat_info_.message_,
-                                  MAX_LONG_OPS_MESSAGE_LENGTH,
-                                  pos,
-                                  "STATUS: GENERATE_ROWKEY_DOC_SCHEMA, ROWKEY_DOC_TASK_ID: %ld", rowkey_doc_task_id_))) {
-        LOG_WARN("failed to print", K(ret));
+      case ObDDLTaskStatus::GENERATE_ROWKEY_DOC_SCHEMA: {
+        ret = databuff_printf(stat_info_.message_,
+                              MAX_LONG_OPS_MESSAGE_LENGTH,
+                              pos,
+                              "STATUS: GENERATE_ROWKEY_DOC_SCHEMA, ROWKEY_DOC_TABLE_ID: %lu, ROWKEY_DOC_TASK_ID: %ld",
+                              static_cast<unsigned long>(rowkey_doc_aux_table_id_),
+                              rowkey_doc_task_id_);
+        break;
       }
-      break;
-    }
-    case ObDDLTaskStatus::WAIT_ROWKEY_DOC_TABLE_COMPLEMENT: {
-      if (OB_FAIL(databuff_printf(stat_info_.message_,
-                  MAX_LONG_OPS_MESSAGE_LENGTH,
-                  pos,
-                  "STATUS: WAIT_ROWKEY_DOC_TABLE_COMPLEMENT, \
-                  DOC_ROWKEY_TASK_ID: %ld, DOMAIN_INDEX_AUX_TASK_ID: %ld, FTS_DOC_WORD_TASK_ID: %ld", \
-                  doc_rowkey_task_id_, domain_index_aux_task_id_, fts_doc_word_task_id_))) {
-        LOG_WARN("failed to print", K(ret));
+      case ObDDLTaskStatus::WAIT_ROWKEY_DOC_TABLE_COMPLEMENT: {
+        if (OB_FAIL(databuff_printf(stat_info_.message_,
+                                    MAX_LONG_OPS_MESSAGE_LENGTH,
+                                    pos,
+                                    "STATUS: WAIT_ROWKEY_DOC_TABLE_COMPLEMENT, "))) {
+          LOG_WARN("failed to print", K(ret));
+        } else if (OB_FAIL(append_child_task_monitor_info(true, false, false, false, pos))) {
+          LOG_WARN("failed to append rowkey child monitor info", K(ret));
+        }
+        break;
       }
-      break;
-    }
-    case ObDDLTaskStatus::LOAD_DICTIONARY: {
-      if (OB_FAIL(databuff_printf(stat_info_.message_,
-                          MAX_LONG_OPS_MESSAGE_LENGTH,
-                          pos,
-                          "STATUS: LOAD_DICTIONARY"))) {
-        LOG_WARN("failed to print", K(ret));
+      case ObDDLTaskStatus::LOAD_DICTIONARY: {
+        ret = databuff_printf(stat_info_.message_, MAX_LONG_OPS_MESSAGE_LENGTH, pos, "STATUS: LOAD_DICTIONARY");
+        break;
       }
-      break;
-    }
-    case ObDDLTaskStatus::GENERATE_DOC_AUX_SCHEMA: {
-      if (OB_FAIL(databuff_printf(stat_info_.message_,
-                          MAX_LONG_OPS_MESSAGE_LENGTH,
-                          pos,
-                          "STATUS: GENERATE_DOC_AUX_SCHEMA"))) {
-        LOG_WARN("failed to print", K(ret));
+      case ObDDLTaskStatus::GENERATE_DOC_AUX_SCHEMA: {
+        if (OB_FAIL(databuff_printf(stat_info_.message_,
+                                    MAX_LONG_OPS_MESSAGE_LENGTH,
+                                    pos,
+                                    "STATUS: GENERATE_DOC_AUX_SCHEMA, "))) {
+          LOG_WARN("failed to print", K(ret));
+        } else if (OB_FAIL(append_child_task_monitor_info(true, true, true, true, pos))) {
+          LOG_WARN("failed to append child monitor info", K(ret));
+        }
+        break;
       }
-      break;
-    }
-    case ObDDLTaskStatus::WAIT_AUX_TABLE_COMPLEMENT: {
-      if (OB_FAIL(databuff_printf(stat_info_.message_,
-                          MAX_LONG_OPS_MESSAGE_LENGTH,
-                          pos,
-                          "STATUS: WAIT_AUX_TABLE_COMPLEMENT"))) {
-        LOG_WARN("failed to print", K(ret));
+      case ObDDLTaskStatus::WAIT_AUX_TABLE_COMPLEMENT: {
+        if (OB_FAIL(databuff_printf(stat_info_.message_,
+                                    MAX_LONG_OPS_MESSAGE_LENGTH,
+                                    pos,
+                                    "STATUS: WAIT_AUX_TABLE_COMPLEMENT, "))) {
+          LOG_WARN("failed to print", K(ret));
+        } else if (OB_FAIL(append_child_task_monitor_info(true, true, true, true, pos))) {
+          LOG_WARN("failed to append child monitor info", K(ret));
+        }
+        break;
       }
-      break;
-    }
-    case ObDDLTaskStatus::TAKE_EFFECT:{
-      if (OB_FAIL(databuff_printf(stat_info_.message_,
-                          MAX_LONG_OPS_MESSAGE_LENGTH,
-                          pos,
-                          "STATUS: TAKE_EFFECT"))) {
-        LOG_WARN("failed to print", K(ret));
+      case ObDDLTaskStatus::TAKE_EFFECT: {
+        if (OB_FAIL(databuff_printf(stat_info_.message_,
+                                    MAX_LONG_OPS_MESSAGE_LENGTH,
+                                    pos,
+                                    "STATUS: TAKE_EFFECT, "))) {
+          LOG_WARN("failed to print", K(ret));
+        } else if (OB_FAIL(append_child_task_monitor_info(true, true, true, true, pos))) {
+          LOG_WARN("failed to append child monitor info", K(ret));
+        }
+        break;
       }
-      break;
-    }
-    case ObDDLTaskStatus::FAIL: {
-      if (OB_FAIL(databuff_printf(stat_info_.message_,
-                          MAX_LONG_OPS_MESSAGE_LENGTH,
-                          pos,
-                          "STATUS: CLEAN ON FAIL"))) {
-        LOG_WARN("failed to print", K(ret));
+      case ObDDLTaskStatus::FAIL: {
+        if (OB_FAIL(databuff_printf(stat_info_.message_,
+                                    MAX_LONG_OPS_MESSAGE_LENGTH,
+                                    pos,
+                                    "STATUS: CLEAN ON FAIL, "))) {
+          LOG_WARN("failed to print", K(ret));
+        } else if (OB_FAIL(append_child_task_monitor_info(true, true, true, true, pos))) {
+          LOG_WARN("failed to append child monitor info", K(ret));
+        }
+        break;
       }
-      break;
-    }
-    case ObDDLTaskStatus::SUCCESS: {
-      if (OB_FAIL(databuff_printf(stat_info_.message_,
-                          MAX_LONG_OPS_MESSAGE_LENGTH,
-                          pos,
-                          "STATUS: CLEAN ON SUCCESS"))) {
-        LOG_WARN("failed to print", K(ret));
+      case ObDDLTaskStatus::SUCCESS: {
+        if (OB_FAIL(databuff_printf(stat_info_.message_,
+                                    MAX_LONG_OPS_MESSAGE_LENGTH,
+                                    pos,
+                                    "STATUS: CLEAN ON SUCCESS, "))) {
+          LOG_WARN("failed to print", K(ret));
+        } else if (OB_FAIL(append_child_task_monitor_info(true, true, true, true, pos))) {
+          LOG_WARN("failed to append child monitor info", K(ret));
+        }
+        break;
       }
-      break;
+      default: {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("not expected status", K(ret), K(status), K(*this));
+        break;
+      }
     }
-    default:
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("not expected status", K(ret), K(status), K(*this));
-      break;
   }
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(DDL_SIM(task_id_, DDL_TASK_COLLECT_LONGOPS_STAT_FAILED))) {

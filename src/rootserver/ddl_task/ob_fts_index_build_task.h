@@ -162,7 +162,29 @@ private:
       const obcall::ObCreateIndexArg &source_arg,
       obcall::ObCreateIndexArg &dest_arg);
   int get_task_status();
-  int get_task_status(int64_t task_id, uint64_t aux_table_id, bool& is_succ);
+  int get_task_status(int64_t task_id, uint64_t aux_table_id, bool &is_succ);
+  int get_child_task_monitor_status(
+      const uint64_t aux_table_id,
+      const int64_t child_task_id,
+      const bool succ_hint,
+      bool &is_finished,
+      int64_t &ret_code);
+  int append_single_child_monitor_info(
+      const char *task_name,
+      const bool submitted,
+      const uint64_t aux_table_id,
+      const int64_t child_task_id,
+      const bool is_finished,
+      const int64_t ret_code,
+      const bool has_trans_end,
+      const bool is_trans_end,
+      int64_t &pos);
+  int append_child_task_monitor_info(
+      const bool include_rowkey_doc,
+      const bool include_doc_rowkey,
+      const bool include_domain_index_aux,
+      const bool include_fts_doc_word,
+      int64_t &pos);
   int wait_schema_refresh_and_trans_end();
   int check_schema_and_trans_end(
       const int64_t ddl_task_id,

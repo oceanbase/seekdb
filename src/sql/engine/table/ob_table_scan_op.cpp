@@ -4047,7 +4047,11 @@ int ObTableScanOp::fetch_next_fts_index_rows()
     ObDatum *ft_datum = nullptr;
     ObDatum *doc_id_datum = nullptr;
 
-    if (OB_FAIL(ObTableScanOp::inner_get_next_row_implement())) {
+    const bool saved_report_checksum = report_checksum_;
+    report_checksum_ = false;
+    ret = ObTableScanOp::inner_get_next_row_implement();
+    report_checksum_ = saved_report_checksum;
+    if (OB_FAIL(ret)) {
       if (OB_ITER_END != ret) {
         LOG_WARN("fail to get next row implement", K(ret));
       }

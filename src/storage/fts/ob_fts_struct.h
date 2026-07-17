@@ -23,6 +23,7 @@
 #include "object/ob_object.h"
 #include "plugin/interface/ob_plugin_ftparser_intf.h"
 #include "share/datum/ob_datum_funcs.h"
+#include "sql/engine/expr/ob_expr_basic_funcs.h"
 
 namespace oceanbase
 {
@@ -32,14 +33,27 @@ namespace storage
 class ObFTWord final
 {
 public:
-  ObFTWord() : word_(), meta_() {}
-  ObFTWord(const int64_t length, const char *ptr, const ObObjMeta &meta) : meta_(meta)
+  ObFTWord()
+      : word_(),
+        meta_(),
+        hash_func_(nullptr),
+        cmp_func_(nullptr),
+        hash_value_(0),
+        hash_valid_(false)
+  {}
+  ObFTWord(const int64_t length, const char *ptr, const ObObjMeta &meta)
+      : meta_(meta),
+        hash_func_(nullptr),
+        cmp_func_(nullptr),
+        hash_value_(0),
+        hash_valid_(false)
   {
     word_.set_string(ptr, length);
   }
   ~ObFTWord() = default;
 
   OB_INLINE const ObDatum &get_word() const { return word_; }
+  OB_INLINE const ObObjMeta &get_obj_meta() const { return meta_; }
   OB_INLINE ObCollationType get_collation_type() const { return meta_.get_collation_type(); }
   OB_INLINE bool empty() const { return word_.get_string().empty(); }
   int hash(uint64_t &hash_val) const;
@@ -49,8 +63,15 @@ public:
   TO_STRING_KV(K_(meta), K_(word));
 
 private:
+  int init_funcs_() const;
+
+private:
   ObDatum word_;
   ObObjMeta meta_;
+  mutable sql::ObExprHashFuncType hash_func_;
+  mutable ObDatumCmpFuncType cmp_func_;
+  mutable uint64_t hash_value_;
+  mutable bool hash_valid_;
 };
 
 typedef common::hash::ObHashMap<ObFTWord, int64_t> ObFTWordMap;

@@ -148,13 +148,27 @@ int ObIKFTParser::process_one_char(TokenizeContext &ctx,
                                    const ObFTCharUtil::CharType type)
 {
   int ret = OB_SUCCESS;
-  // proces by char with all segmenters
-  for (ObList<ObIIKProcessor *, ObIAllocator>::iterator iter = segmenters_.begin();
-       OB_SUCC(ret) && iter != segmenters_.end();
-       iter++) {
-    if (OB_FAIL((*iter)->process(ctx, ch, char_len, type))) {
+  for (int64_t i = 0; OB_SUCC(ret) && i < segmenter_cnt_; ++i) {
+    if (OB_FAIL(segmenter_cache_[i]->process(ctx, ch, char_len, type))) {
       LOG_WARN("Failed to process segmenter", K(ret));
     }
+  }
+  return ret;
+}
+
+int ObIKFTParser::add_segmenter(ObIIKProcessor *segmenter)
+{
+  int ret = OB_SUCCESS;
+  if (OB_ISNULL(segmenter)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("segmenter is null", K(ret));
+  } else if (OB_UNLIKELY(segmenter_cnt_ >= MAX_SEGMENTER_CNT)) {
+    ret = OB_SIZE_OVERFLOW;
+    LOG_WARN("too many segmenters", K(ret), K(segmenter_cnt_));
+  } else if (OB_FAIL(segmenters_.push_back(segmenter))) {
+    LOG_WARN("Failed to push back segmenter", K(ret));
+  } else {
+    segmenter_cache_[segmenter_cnt_++] = segmenter;
   }
   return ret;
 }
@@ -195,10 +209,9 @@ int ObIKFTParser::process_next_batch()
     }
 
     if (OB_SUCC(ret) || OB_ITER_END == ret) {
-      ObIKArbitrator arb;
-      if (OB_FAIL(arb.process(*ctx_))) {
+      if (OB_FAIL(arbitrator_.process(*ctx_))) {
         LOG_WARN("Failed to process arbitrator", K(ret));
-      } else if (OB_FAIL(arb.output_result(*ctx_))) {
+      } else if (OB_FAIL(arbitrator_.output_result(*ctx_))) {
         LOG_WARN("Failed to make result list");
       }
     } else {
@@ -391,16 +404,16 @@ int ObIKFTParser::init_segmenter(const ObFTParserParam &param)
   } else if (OB_ISNULL(surrogate_seg = OB_NEWx(ObIKSurrogateProcessor, &allocator_))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("Failed to alloc surrogate segmenter", K(ret));
-  } else if (OB_FAIL(segmenters_.push_back(letter_seg))) {
+  } else if (OB_FAIL(add_segmenter(letter_seg))) {
     LOG_WARN("Failed to push back letter segmenter", K(ret));
   } else if (FALSE_IT(letter_seg = nullptr)) {
-  } else if (OB_FAIL(segmenters_.push_back(cnqsg))) {
+  } else if (OB_FAIL(add_segmenter(cnqsg))) {
     LOG_WARN("Failed to push back cn quantifier segmenter", K(ret));
   } else if (FALSE_IT(cnqsg = nullptr)) {
-  } else if (OB_FAIL(segmenters_.push_back(cjksg))) {
+  } else if (OB_FAIL(add_segmenter(cjksg))) {
     LOG_WARN("Failed to push back cjk segmenter", K(ret));
   } else if (FALSE_IT(cjksg = nullptr)) {
-  } else if (OB_FAIL(segmenters_.push_back(surrogate_seg))) {
+  } else if (OB_FAIL(add_segmenter(surrogate_seg))) {
     LOG_WARN("Failed to push back surrogate segmenter");
   } else if (OB_FALSE_IT(surrogate_seg = nullptr)) {
   }
@@ -420,6 +433,7 @@ void ObIKFTParser::reset()
   if (!OB_ISNULL(ctx_)) {
     ctx_->~TokenizeContext();
     allocator_.free(ctx_);
+    ctx_ = nullptr;
   }
 
   for (ObIIKProcessor *segmenter : segmenters_) {
@@ -429,6 +443,8 @@ void ObIKFTParser::reset()
     }
   }
   segmenters_.clear();
+  MEMSET(segmenter_cache_, 0, sizeof(segmenter_cache_));
+  segmenter_cnt_ = 0;
 
   cache_main_.reset();
   cache_quan_.reset();
@@ -437,16 +453,20 @@ void ObIKFTParser::reset()
   if (!OB_ISNULL(dict_main_)) {
     dict_main_->~ObIFTDict();
     allocator_.free(dict_main_);
+    dict_main_ = nullptr;
   }
   if (!OB_ISNULL(dict_quan_)) {
     dict_quan_->~ObIFTDict();
     allocator_.free(dict_quan_);
+    dict_quan_ = nullptr;
   }
   if (!OB_ISNULL(dict_stop_)) {
     dict_stop_->~ObIFTDict();
     allocator_.free(dict_stop_);
+    dict_stop_ = nullptr;
   }
 
+  coll_type_ = ObCollationType::CS_TYPE_INVALID;
   is_inited_ = false;
 }
 

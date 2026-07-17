@@ -77,7 +77,9 @@ public:
   const ObDDLTableSchema &get_fts_word_doc_ddl_table_schema() const { return fts_word_doc_ddl_table_schema_; }
   const ObDirectLoadTxInfo &get_tx_info() const { return tx_info_; }
   const ObIArray<std::pair<share::ObLSID, ObTabletID>> &get_ls_tablet_ids() { return ls_tablet_ids_; }
+  const ObIArray<std::pair<share::ObLSID, ObTabletID>> &get_ls_tablet_ids() const { return ls_tablet_ids_; }
   const ObIArray<std::pair<share::ObLSID, ObTabletID>> &get_sort_ls_tablet_ids() { return sort_ls_tablet_ids_; }
+  const ObIArray<std::pair<share::ObLSID, ObTabletID>> &get_sort_ls_tablet_ids() const { return sort_ls_tablet_ids_; }
   int64_t get_pipeline_count() const { return ATOMIC_LOAD(&pipeline_count_); }
   void inc_pipeline_count() { ATOMIC_INC(&pipeline_count_); }
   void dec_pipeline_count() { ATOMIC_DEC(&pipeline_count_); }
@@ -180,9 +182,16 @@ public:
 private:
   int64_t ddl_task_id_;
   int64_t execution_id_;
+  uint64_t target_table_id_;
+  uint64_t index_table_id_;
+  int64_t index_type_;
   int64_t direct_load_type_;
   int64_t ddl_thread_cnt_;
+  int64_t tablet_count_;
+  int64_t sort_tablet_count_;
   bool is_fts_build_;
+  bool is_partition_local_;
+  bool is_inc_major_log_;
   ObFTSBuildStat fts_stat_;
   int ret_code_;
 };

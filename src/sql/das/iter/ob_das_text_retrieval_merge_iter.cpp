@@ -1045,7 +1045,6 @@ int ObDASTRTaatIter::inner_get_next_rows(int64_t &count, int64_t capacity)
 int ObDASTRTaatIter::get_next_batch_rows(int64_t &count, int64_t capacity)
 {
   int ret = OB_SUCCESS;
-  const bool need_relevance = ir_ctdef_->need_proj_relevance_score();
   int64_t real_capacity = ir_rtdef_->eval_ctx_->max_batch_size_ > 0 ? min(capacity, ir_rtdef_->eval_ctx_->max_batch_size_) : 1;
   if (capacity > real_capacity || count != 0) {
     ret = OB_ERR_UNEXPECTED;
@@ -1152,7 +1151,7 @@ int ObDASTRTaatIter::fill_output_exprs(int64_t &count, int64_t safe_capacity)
           }
         }
       }
-  }
+    }
   if (OB_SUCC(ret) && need_relevance) {
     relevance_proj_col->set_evaluated_projected(*eval_ctx);
   }
@@ -1329,13 +1328,14 @@ int ObDASTRTaatIter::fill_chunk_store_by_tr_iter()
             }
           }
           if (OB_SUCC(ret)) {
+            ObExpr *doc_id_expr = ir_ctdef_->inv_scan_domain_id_col_;
+            ObDatum *doc_id_datums = doc_id_expr->locate_batch_datums(*ir_rtdef_->get_inv_idx_scan_rtdef()->eval_ctx_);
             // handle skips // TODO: use batch skip like hashjoin
             for (int64_t i = 0; i < hash_map_size_; ++i) {
               skips[i]->set_all(capacity);
             }
             for (int64_t i = 0; OB_SUCC(ret) && i < count; ++i) {
-              ObExpr *doc_id_expr = ir_ctdef_->inv_scan_domain_id_col_;
-              const ObDatum &doc_id_datum = doc_id_expr->locate_expr_datum(*ir_rtdef_->get_inv_idx_scan_rtdef()->eval_ctx_, i);
+              const ObDatum &doc_id_datum = doc_id_datums[i];
               if (OB_UNLIKELY(doc_id_datum.is_null()) || OB_ISNULL(doc_id_datum.ptr_)) {
                 ret = OB_ERR_UNEXPECTED;
                 LOG_WARN("unexpected nullptr", K(ret));

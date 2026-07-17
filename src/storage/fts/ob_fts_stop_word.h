@@ -81,11 +81,18 @@ public:
   int check_stopword(const ObFTWord &word, bool &is_stopword);
 
 private:
+  int check_stopword_set_(const ObFTWord &word, bool &is_stopword) const;
+  static bool is_ascii_string_(const ObString &word);
+  static bool equals_ascii_ci_(const ObString &word, const char *literal);
+  static bool match_ascii_stopword_(const ObString &word);
+
+private:
   static const int64_t DEFAULT_STOPWORD_BUCKET_NUM = 37L;
   typedef common::hash::ObHashSet<storage::ObFTWord> StopWordSet;
 
   StopWordSet stopword_set_;
   ObObjMeta stopword_type_;
+  int64_t max_stopword_len_ = 0;
 
   bool inited_ = false;
 
@@ -145,6 +152,11 @@ private:
   int64_t max_token_size_;
   ObAddWordFlag flag_;
   int64_t position_seq_;
+  ObStopWordChecker *stop_word_checker_;
+  bool has_min_max_word_;
+  bool has_stopword_;
+  bool has_casedown_;
+  bool has_groupby_word_;
 };
 
 } // end namespace storage

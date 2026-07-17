@@ -117,6 +117,9 @@ void ObDDLIndependentDag::reuse()
   is_inc_major_log_ = false;
   OB_DELETEx(ObDDLSortProvider, &arena_, sort_provider_);
   arena_.reset();
+  if (OB_NOT_NULL(monitor_node_)) {
+    monitor_node_->mark_finished();
+  }
   if (OB_NOT_NULL(root_monitor_info_)) {
     root_monitor_info_->set_ret_code(get_dag_ret());
     root_monitor_info_->mark_finished();
@@ -1316,9 +1319,16 @@ ObDDLIndependentDagRootMonitorInfo::ObDDLIndependentDagRootMonitorInfo(ObIAlloca
   : ObDDLDagMonitorInfo(allocator, task),
     ddl_task_id_(0),
     execution_id_(0),
+    target_table_id_(OB_INVALID_ID),
+    index_table_id_(OB_INVALID_ID),
+    index_type_(INDEX_TYPE_IS_NOT),
     direct_load_type_(0),
     ddl_thread_cnt_(0),
+    tablet_count_(0),
+    sort_tablet_count_(0),
     is_fts_build_(false),
+    is_partition_local_(false),
+    is_inc_major_log_(false),
     fts_stat_(),
     ret_code_(OB_SUCCESS)
 {
@@ -1328,9 +1338,16 @@ void ObDDLIndependentDagRootMonitorInfo::init_dag_info(const ObDDLIndependentDag
 {
   ddl_task_id_ = dag.get_ddl_task_param().ddl_task_id_;
   execution_id_ = dag.get_ddl_task_param().execution_id_;
+  target_table_id_ = dag.get_ddl_task_param().target_table_id_;
+  index_table_id_ = dag.get_ddl_table_schema().table_id_;
+  index_type_ = static_cast<int64_t>(dag.get_ddl_table_schema().table_item_.index_type_);
   direct_load_type_ = static_cast<int64_t>(dag.get_direct_load_type());
   ddl_thread_cnt_ = dag.get_ddl_thread_count();
-  is_fts_build_ = dag.get_ddl_task_param().is_partition_local_ && is_fts_doc_word_aux(dag.get_ddl_table_schema().table_item_.index_type_);
+  tablet_count_ = dag.get_ls_tablet_ids().count();
+  sort_tablet_count_ = dag.get_sort_ls_tablet_ids().count();
+  is_partition_local_ = dag.get_ddl_task_param().is_partition_local_;
+  is_inc_major_log_ = dag.is_inc_major_log();
+  is_fts_build_ = is_partition_local_ && is_fts_doc_word_aux(dag.get_ddl_table_schema().table_item_.index_type_);
 }
 
 int ObDDLIndependentDagRootMonitorInfo::convert_to_monitor_entry(ObDDLDagMonitorEntry &entry) const
@@ -1347,8 +1364,15 @@ int ObDDLIndependentDagRootMonitorInfo::convert_to_monitor_entry(ObDDLDagMonitor
     ObJsonObject *json_obj = nullptr;
     ObJsonInt *ddl_task_id_node = nullptr;
     ObJsonInt *execution_id_node = nullptr;
+    ObJsonInt *target_table_id_node = nullptr;
+    ObJsonInt *index_table_id_node = nullptr;
+    ObJsonInt *index_type_node = nullptr;
     ObJsonInt *direct_load_type_node = nullptr;
     ObJsonInt *ddl_thread_cnt_node = nullptr;
+    ObJsonInt *tablet_count_node = nullptr;
+    ObJsonInt *sort_tablet_count_node = nullptr;
+    ObJsonInt *is_partition_local_node = nullptr;
+    ObJsonInt *is_inc_major_log_node = nullptr;
     ObJsonInt *ret_code_node = nullptr;
     ObString json_str = entry.get_message();
     common::ObArenaAllocator &allocator = entry.get_allocator();
@@ -1360,12 +1384,33 @@ int ObDDLIndependentDagRootMonitorInfo::convert_to_monitor_entry(ObDDLDagMonitor
     } else if (OB_FAIL(ObAIFuncJsonUtils::get_json_int(allocator, execution_id_, execution_id_node))
                || OB_FAIL(json_obj->add("execution_id", execution_id_node))) {
       LOG_WARN("failed to add execution_id to json", K(ret));
+    } else if (OB_FAIL(ObAIFuncJsonUtils::get_json_int(allocator, static_cast<int64_t>(target_table_id_), target_table_id_node))
+               || OB_FAIL(json_obj->add("target_table_id", target_table_id_node))) {
+      LOG_WARN("failed to add target_table_id to json", K(ret));
+    } else if (OB_FAIL(ObAIFuncJsonUtils::get_json_int(allocator, static_cast<int64_t>(index_table_id_), index_table_id_node))
+               || OB_FAIL(json_obj->add("index_table_id", index_table_id_node))) {
+      LOG_WARN("failed to add index_table_id to json", K(ret));
+    } else if (OB_FAIL(ObAIFuncJsonUtils::get_json_int(allocator, index_type_, index_type_node))
+               || OB_FAIL(json_obj->add("index_type", index_type_node))) {
+      LOG_WARN("failed to add index_type to json", K(ret));
     } else if (OB_FAIL(ObAIFuncJsonUtils::get_json_int(allocator, static_cast<int>(direct_load_type_), direct_load_type_node))
                || OB_FAIL(json_obj->add("direct_load_type", direct_load_type_node))) {
       LOG_WARN("failed to add direct_load_type to json", K(ret));
     } else if (OB_FAIL(ObAIFuncJsonUtils::get_json_int(allocator, ddl_thread_cnt_, ddl_thread_cnt_node))
                || OB_FAIL(json_obj->add("ddl_thread_cnt", ddl_thread_cnt_node))) {
       LOG_WARN("failed to add ddl_thread_cnt to json", K(ret));
+    } else if (OB_FAIL(ObAIFuncJsonUtils::get_json_int(allocator, tablet_count_, tablet_count_node))
+               || OB_FAIL(json_obj->add("tablet_count", tablet_count_node))) {
+      LOG_WARN("failed to add tablet_count to json", K(ret));
+    } else if (OB_FAIL(ObAIFuncJsonUtils::get_json_int(allocator, sort_tablet_count_, sort_tablet_count_node))
+               || OB_FAIL(json_obj->add("sort_tablet_count", sort_tablet_count_node))) {
+      LOG_WARN("failed to add sort_tablet_count to json", K(ret));
+    } else if (OB_FAIL(ObAIFuncJsonUtils::get_json_int(allocator, is_partition_local_ ? 1 : 0, is_partition_local_node))
+               || OB_FAIL(json_obj->add("is_partition_local", is_partition_local_node))) {
+      LOG_WARN("failed to add is_partition_local to json", K(ret));
+    } else if (OB_FAIL(ObAIFuncJsonUtils::get_json_int(allocator, is_inc_major_log_ ? 1 : 0, is_inc_major_log_node))
+               || OB_FAIL(json_obj->add("is_inc_major_log", is_inc_major_log_node))) {
+      LOG_WARN("failed to add is_inc_major_log to json", K(ret));
     } else if (OB_FAIL(ObAIFuncJsonUtils::get_json_int(allocator, ret_code_, ret_code_node))
                || OB_FAIL(json_obj->add("ret_code", ret_code_node))) {
       LOG_WARN("failed to add ret_code to json", K(ret));

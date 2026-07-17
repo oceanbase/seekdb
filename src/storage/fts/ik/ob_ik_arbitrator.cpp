@@ -32,6 +32,34 @@ namespace oceanbase
 {
 namespace storage
 {
+int64_t ObIKArbitrator::calc_bucket_num(int64_t fulltext_len)
+{
+  return MIN(MAX(fulltext_len / 100, 10), 100);
+}
+
+int ObIKArbitrator::reuse(int64_t fulltext_len)
+{
+  int ret = OB_SUCCESS;
+  const int64_t bucket_num = calc_bucket_num(fulltext_len);
+  if (chains_.created() && chains_.bucket_count() < bucket_num) {
+    if (OB_FAIL(chains_.destroy())) {
+      LOG_WARN("destroy chain map failed", K(ret), K(bucket_num));
+    }
+  } else if (chains_.created() && OB_FAIL(chains_.clear())) {
+    LOG_WARN("clear chain map failed", K(ret), K(bucket_num));
+  }
+
+  if (OB_SUCC(ret) && !chains_.created()
+      && OB_FAIL(chains_.create(bucket_num, ObMemAttr("IK ARBITRATE")))) {
+    LOG_WARN("create chain map failed", K(ret), K(bucket_num));
+  }
+
+  if (OB_SUCC(ret)) {
+    alloc_.reuse();
+  }
+  return ret;
+}
+
 int ObIKArbitrator::process(TokenizeContext &ctx)
 {
   int ret = OB_SUCCESS;
@@ -124,16 +152,12 @@ int ObIKArbitrator::output_result(TokenizeContext &ctx)
   for (int64_t current = 0; OB_SUCC(ret) && current < ctx.fulltext_len();) {
     ObFTCharUtil::CharType type;
     // maybe not so good to keep single, check it later
-    if (OB_FAIL(ObCharset::first_valid_char(ctx.collation(),
-                                            ctx.fulltext() + current,
-                                            ctx.fulltext_len() - current,
-                                            char_len))) {
-      LOG_WARN("Failed to get next valid char", K(ret));
-    } else if (OB_FAIL(ObFTCharUtil::classify_first_char(ctx.collation(),
-                                                         ctx.fulltext() + current,
-                                                         char_len,
-                                                         type))) {
-      LOG_WARN("Failed to classify first char", K(ret));
+    if (OB_FAIL(ObFTCharUtil::classify_first_valid_char(ctx.collation(),
+                                                        ctx.fulltext() + current,
+                                                        ctx.fulltext_len() - current,
+                                                        char_len,
+                                                        type))) {
+      LOG_WARN("Failed to classify first valid char", K(ret));
     } else if (ObFTCharUtil::CharType::USELESS == type) {
       current += char_len; // skip useless char
     } else if (OB_FAIL(chains_.get_refactored(current, chain)) && OB_HASH_NOT_EXIST != ret) {
@@ -180,35 +204,43 @@ int ObIKArbitrator::output_result(TokenizeContext &ctx)
         } else {
           // output single word between two token
           while (OB_SUCC(ret) && current < token.offset_) {
-            if (OB_FAIL(ObCharset::first_valid_char(ctx.collation(),
-                                                    ctx.fulltext() + current,
-                                                    ctx.fulltext_len() - current,
-                                                    char_len))) {
-              LOG_WARN("Failed to get next valid char, ", K(ret));
-              break;
+            ObFTCharUtil::CharType current_type = ObFTCharUtil::CharType::USELESS;
+            if (OB_FAIL(ObFTCharUtil::classify_first_valid_char(ctx.collation(),
+                                                                ctx.fulltext() + current,
+                                                                ctx.fulltext_len() - current,
+                                                                char_len,
+                                                                current_type))) {
+              LOG_WARN("Failed to classify first valid char", K(ret));
+            } else if (ObFTCharUtil::CharType::USELESS == current_type) {
+              current += char_len;
             } else {
-              ObIKToken token;
-              token.offset_ = current;
-              token.length_ = char_len;
-              token.ptr_ = ctx.fulltext();
-              token.char_cnt_ = 1;
+              ObIKToken single_token;
+              single_token.offset_ = current;
+              single_token.length_ = char_len;
+              single_token.ptr_ = ctx.fulltext();
+              single_token.char_cnt_ = 1;
               bool is_ignore = false;
-              if (ObFTCharUtil::CharType::CHINESE == type) {
-                token.type_ = ObIKTokenType::IK_CHINESE_TOKEN;
-                ctx.result_list().push_back(token);
-              } else if (ObFTCharUtil::CharType::OTHER_CJK == type) {
+              if (ObFTCharUtil::CharType::CHINESE == current_type) {
+                single_token.type_ = ObIKTokenType::IK_CHINESE_TOKEN;
+                if (OB_FAIL(ctx.result_list().push_back(single_token))) {
+                  LOG_WARN("Failed to add single chinese token", K(ret));
+                }
+              } else if (ObFTCharUtil::CharType::OTHER_CJK == current_type) {
                 if (OB_FAIL(ObFTCharUtil::is_ignore_single_cjk(ctx.collation(),
                                                                ctx.fulltext() + current,
                                                                char_len,
                                                                is_ignore))) {
                   LOG_WARN("Failed to check ignore", K(ret));
                 } else if (!is_ignore) {
-                  token.type_ = ObIKTokenType::IK_OTHER_CJK_TOKEN;
-                  ctx.result_list().push_back(token);
-                } else {
+                  single_token.type_ = ObIKTokenType::IK_OTHER_CJK_TOKEN;
+                  if (OB_FAIL(ctx.result_list().push_back(single_token))) {
+                    LOG_WARN("Failed to add single other cjk token", K(ret));
+                  }
                 }
               }
-              current += char_len;
+              if (OB_SUCC(ret)) {
+                current += char_len;
+              }
             }
           }
         }
@@ -216,9 +248,10 @@ int ObIKArbitrator::output_result(TokenizeContext &ctx)
         if (OB_FAIL(ret)) {
         } else if (OB_FAIL(ctx.result_list().push_back(token))) {
           LOG_WARN("Failed to add token to ctx result", K(ret));
-        } else
+        } else {
           // output the token
           current = token.offset_ + token.length_;
+        }
       }
     }
     if (OB_FAIL(ret)) {
@@ -326,14 +359,7 @@ int ObIKArbitrator::remove_conflict(const ObIKToken &token, ObIKTokenChain *opti
 
 int ObIKArbitrator::prepare(TokenizeContext &ctx)
 {
-  int ret = OB_SUCCESS;
-
-  int cal_bucket_num = MAX(ctx.fulltext_len() / 100, 10);
-  cal_bucket_num = MIN(cal_bucket_num, 100);
-  if (OB_FAIL(chains_.create(cal_bucket_num, ObMemAttr("IK ARBITRATE")))) {
-    LOG_WARN("create chain map failed", K(ret));
-  }
-  return ret;
+  return reuse(ctx.fulltext_len());
 }
 
 ObIKArbitrator::ObIKArbitrator() : alloc_(lib::ObMemAttr("IK Arbitrator")) {}

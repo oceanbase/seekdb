@@ -30,6 +30,11 @@ namespace storage
 class TokenizeContext
 {
 public:
+  typedef size_t (*WellFormedLenFunc)(const ObCharsetInfo *,
+                                      const char *,
+                                      const char *,
+                                      size_t,
+                                      int *);
   TokenizeContext(ObCollationType coll_type,
                   ObIAllocator &allocator,
                   const char *fulltext,
@@ -78,6 +83,8 @@ private:
   int prepare_next_char();
 
   ObCollationType coll_type_;
+  const ObCharsetInfo *cs_;
+  WellFormedLenFunc well_formed_len_func_;
   const char *fulltext_;
   int64_t fulltext_len_;
 
