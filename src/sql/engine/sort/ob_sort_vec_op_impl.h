@@ -331,11 +331,16 @@ protected:
           SQL_ENG_LOG(WARN, "copy row to row store failed");
         } else {
           stored_row_cnt++;
-          if (level > 0) {
+          if (level > 0 && !is_task4_op9_fts_ddl_sort_) {
             op_monitor_info_.otherstat_1_id_ = ObSqlMonitorStatIds::SORT_SORTED_ROW_COUNT;
             op_monitor_info_.otherstat_1_value_ += 1;
           }
         }
+      }
+      if (OB_SUCC(ret) && level > 0 && is_task4_op9_fts_ddl_sort_ && stored_row_cnt > 0) {
+        // Task4 Op10：FTS DDL 外部归并中按 chunk 批量更新监控，避免热循环逐行写 otherstat。
+        op_monitor_info_.otherstat_1_id_ = ObSqlMonitorStatIds::SORT_SORTED_ROW_COUNT;
+        op_monitor_info_.otherstat_1_value_ += stored_row_cnt;
       }
       // Must force dump first, then finish dump is effective
       if (OB_FAIL(ret)) {
