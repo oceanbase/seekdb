@@ -1,0 +1,30 @@
+FTS Large Benchmark Report
+========================================
+timestamp:              2026-07-17 23:00:00
+label:                  stream_rows_baseline_avg
+rows:                   20000
+batch:                  500
+rounds:                 3000
+query_rounds:           200
+samples:                3
+warmup:                 30
+skip_load:              0
+----------------------------------------
+select1_avg_ms:         0.183667
+build_ik_all_sec:       19.835000
+build_ik_content_sec:   16.024000
+build_beng_en_sec:      8.624000
+build_total_sec:        44.494333
+----------------------------------------
+tokenize_ik_avg_ms:     0.272900
+tokenize_beng_avg_ms:   0.238600
+----------------------------------------
+query_cn_hits:          8001
+query_cn_avg_ms:        10.773833
+query_beng_hits:        11000
+query_beng_avg_ms:      15.566467
+query_mixed_hits:       7332
+query_mixed_avg_ms:     11.091667
+query_limit_hits:       20
+query_limit_avg_ms:     13.656367
+========================================

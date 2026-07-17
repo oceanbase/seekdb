@@ -22,6 +22,7 @@
 #include "lib/hash/ob_hashset.h"
 #include "common/datum/ob_datum.h"
 #include "sql/das/ob_das_dml_ctx_define.h"
+#include "storage/blocksstable/ob_datum_row.h"
 #include "storage/fts/ob_fts_doc_word_iterator.h"
 #include "storage/fts/ob_fts_plugin_helper.h"
 
@@ -48,11 +49,16 @@ public:
   int get_next_row(blocksstable::ObDatumRow *&row);
   void reset();
   void reuse();
-  TO_STRING_KV(K_(row_idx), K_(is_fts_index_aux), K_(helper), K_(is_inited), K_(rows));
+  TO_STRING_KV(K_(row_idx), K_(doc_length), K_(is_fts_index_aux), K_(helper), K_(is_inited));
 private:
   lib::MemoryContext merge_memctx_;
-  ObDomainIndexRow rows_;
+  storage::ObFTWordMap ft_word_map_;
+  storage::ObFTWordMap::const_iterator ft_word_iter_;
+  storage::ObFTWordMap::const_iterator ft_word_end_;
+  blocksstable::ObDatumRow row_;
+  ObDatum doc_id_datum_;
   uint64_t row_idx_;
+  int64_t doc_length_;
   bool is_fts_index_aux_;
   storage::ObFTParseHelper helper_;
   bool is_inited_;
