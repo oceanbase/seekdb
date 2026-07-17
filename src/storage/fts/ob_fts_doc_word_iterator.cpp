@@ -224,7 +224,7 @@ int ObFTDocWordScanIterator::build_table_param(
     common::ObIArray<uint64_t> &column_ids)
 {
   int ret = OB_SUCCESS;
-  static const int64_t LEGACY_FTS_DOC_WORD_TABLE_COL_CNT = 4;
+  static const int64_t LEGACY_FTS_DOC_WORD_TABLE_COL_CNT = 5;
   
   share::schema::ObSchemaGetterGuard schema_guard;
   const share::schema::ObTableSchema *table_schema = nullptr;

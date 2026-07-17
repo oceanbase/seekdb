@@ -44,6 +44,7 @@ public:
   ~TokenizeContext();
 
   int init();
+  int reuse_context(const char *fulltext, const int64_t fulltext_len);
   int reset_resource();
 
   int get_next_token(const char *&word, int64_t &word_len, int64_t &offset, int64_t &char_cnt);
@@ -120,6 +121,8 @@ public:
                          const uint8_t char_len,
                          const ObFTCharUtil::CharType type)
       = 0;
+
+  virtual void reuse() = 0;
 };
 
 } // namespace storage

@@ -41,6 +41,12 @@ public:
                  const uint8_t char_len,
                  const ObFTCharUtil::CharType type);
 
+  void reuse() override
+  {
+    count_hits_.reset();
+    reset();
+  }
+
 private:
   int process_CN_number(TokenizeContext &ctx,
                         const char *ch,

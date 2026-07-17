@@ -75,20 +75,6 @@ private:
 };
 
 typedef common::hash::ObHashMap<ObFTWord, int64_t> ObFTWordMap;
-typedef common::ObArray<int64_t, common::ObIAllocator &> ObFTPositionArray;
-
-class ObFTWordPositionInfo final
-{
-public:
-  ObFTWordPositionInfo() : word_count_(0), positions_(nullptr) {}
-  ~ObFTWordPositionInfo() = default;
-  TO_STRING_KV(K_(word_count), KP_(positions));
-
-  int64_t word_count_;
-  ObFTPositionArray *positions_;
-};
-
-typedef common::hash::ObHashMap<ObFTWord, ObFTWordPositionInfo> ObFTWordPositionMap;
 
 class ObAddWordFlag final
 {

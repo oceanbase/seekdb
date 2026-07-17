@@ -290,39 +290,12 @@ ObAddWord::ObAddWord(
   : word_meta_(meta),
     allocator_(allocator),
     word_map_(&word_map),
-    word_pos_map_(nullptr),
     min_max_word_cnt_(0),
     non_stopword_cnt_(0),
     stopword_cnt_(0),
     min_token_size_(property.min_token_size_),
     max_token_size_(property.max_token_size_),
     flag_(flag),
-    position_seq_(0),
-    stop_word_checker_(nullptr),
-    has_min_max_word_(flag.min_max_word()),
-    has_stopword_(flag.stopword()),
-    has_casedown_(flag.casedown()),
-    has_groupby_word_(flag.groupby_word())
-{
-}
-
-ObAddWord::ObAddWord(
-    const ObFTParserProperty &property,
-    const ObObjMeta &meta,
-    const ObAddWordFlag &flag,
-    common::ObIAllocator &allocator,
-    ObFTWordPositionMap &word_pos_map)
-  : word_meta_(meta),
-    allocator_(allocator),
-    word_map_(nullptr),
-    word_pos_map_(&word_pos_map),
-    min_max_word_cnt_(0),
-    non_stopword_cnt_(0),
-    stopword_cnt_(0),
-    min_token_size_(property.min_token_size_),
-    max_token_size_(property.max_token_size_),
-    flag_(flag),
-    position_seq_(0),
     stop_word_checker_(nullptr),
     has_min_max_word_(flag.min_max_word()),
     has_stopword_(flag.stopword()),
@@ -359,9 +332,6 @@ int ObAddWord::process_word(
   } else {
     non_stopword_cnt_ += word_freq;
     LOG_DEBUG("add word", K(ret), KP(word), K(word_len), K(char_cnt), K(word_freq), K(src_word), K(dst_word));
-  }
-  if (OB_SUCC(ret) && OB_NOT_NULL(word_pos_map_)) {
-    position_seq_ += word_freq;
   }
   return ret;
 }
@@ -422,28 +392,9 @@ int ObAddWord::groupby_word(const ObFTWord &word, const int64_t word_freq)
   if (OB_UNLIKELY(word.empty() || word_freq <= 0)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", K(ret), K(word), K(word_freq));
-  } else if (OB_NOT_NULL(word_pos_map_)) {
-    ObFTWordPositionInfo *word_info = word_pos_map_->get(word);
-    if (OB_ISNULL(word_info)) {
-      ObFTWordPositionInfo new_word_info;
-      if (OB_FAIL(append_positions(new_word_info, word_freq))) {
-        LOG_WARN("fail to append positions", K(ret), K(word), K(word_freq), K(new_word_info));
-      } else {
-        new_word_info.word_count_ = word_freq;
-        if (OB_FAIL(word_pos_map_->set_refactored(word, new_word_info))) {
-          LOG_WARN("fail to set word position info", K(ret), K(word), K(new_word_info));
-        }
-      }
-    } else {
-      if (OB_FAIL(append_positions(*word_info, word_freq))) {
-        LOG_WARN("fail to append positions", K(ret), K(word), K(word_freq), K(*word_info));
-      } else {
-        word_info->word_count_ += word_freq;
-      }
-    }
   } else if (OB_ISNULL(word_map_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("word map and word pos map are both null", K(ret));
+    LOG_WARN("word map is null", K(ret));
   } else if (!has_groupby_word_) {
     if (OB_FAIL(word_map_->set_refactored(word, word_freq))) {
       LOG_WARN("fail to set fulltext word and count", K(ret), K(word));
@@ -457,38 +408,6 @@ int ObAddWord::groupby_word(const ObFTWord &word, const int64_t word_freq)
       }
     } else {
       *exist_word_count += word_freq;
-    }
-  }
-  return ret;
-}
-
-int ObAddWord::alloc_position_array(ObFTPositionArray *&positions)
-{
-  int ret = OB_SUCCESS;
-  static const int64_t FTS_POS_ARRAY_BLOCK_SIZE = sizeof(int64_t) * 16;
-  void *buf = allocator_.alloc(sizeof(ObFTPositionArray));
-  if (OB_ISNULL(buf)) {
-    ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("failed to allocate position array", K(ret));
-  } else {
-    positions = new (buf) ObFTPositionArray(FTS_POS_ARRAY_BLOCK_SIZE, allocator_);
-  }
-  return ret;
-}
-
-int ObAddWord::append_positions(ObFTWordPositionInfo &word_info, const int64_t word_freq)
-{
-  int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(word_freq <= 0)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid word frequency", K(ret), K(word_freq));
-  } else if (OB_ISNULL(word_info.positions_) && OB_FAIL(alloc_position_array(word_info.positions_))) {
-    LOG_WARN("failed to allocate positions", K(ret), K(word_info));
-  } else {
-    for (int64_t i = 0; OB_SUCC(ret) && i < word_freq; ++i) {
-      if (OB_FAIL(word_info.positions_->push_back(position_seq_ + i + 1))) {
-        LOG_WARN("failed to push back position", K(ret), K(i), K(position_seq_), K(word_freq));
-      }
     }
   }
   return ret;

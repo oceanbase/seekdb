@@ -23,7 +23,6 @@
 #include "common/datum/ob_datum.h"
 #include "sql/das/ob_das_dml_ctx_define.h"
 #include "storage/fts/ob_fts_doc_word_iterator.h"
-#include "storage/fts/ob_fts_parser_property.h"
 #include "storage/fts/ob_fts_plugin_helper.h"
 
 namespace oceanbase
@@ -31,42 +30,13 @@ namespace oceanbase
 namespace sql
 {
 
-class ObFTPosListParser final
-{
-public:
-  ObFTPosListParser();
-  ~ObFTPosListParser();
-  int init(
-      common::ObIAllocator *allocator,
-      const common::ObString &parser_name,
-      const common::ObString &parser_properties);
-  int segment(
-      const common::ObObjMeta &meta,
-      const char *fulltext,
-      const int64_t fulltext_len,
-      int64_t &doc_length,
-      storage::ObFTWordPositionMap &word_infos) const;
-  void reset();
-
-private:
-  common::ObIAllocator *allocator_;
-  plugin::ObIFTParserDesc *parser_desc_;
-  plugin::ObPluginParam *plugin_param_;
-  storage::ObFTParser parser_name_;
-  storage::ObAddWordFlag add_word_flag_;
-  common::ObArenaAllocator property_allocator_;
-  storage::ObFTParserProperty parser_property_;
-  bool is_inited_;
-};
-
-
 class ObFTIndexRowCache final
 {
 public:
-  static ObObjDatumMapType FTS_INDEX_TYPES[5];
-  static ObObjDatumMapType FTS_DOC_WORD_TYPES[5];
-  static ObExprOperatorType FTS_INDEX_EXPR_TYPE[5];
-  static ObExprOperatorType FTS_DOC_WORD_EXPR_TYPE[5];
+  static ObObjDatumMapType FTS_INDEX_TYPES[4];
+  static ObObjDatumMapType FTS_DOC_WORD_TYPES[4];
+  static ObExprOperatorType FTS_INDEX_EXPR_TYPE[4];
+  static ObExprOperatorType FTS_DOC_WORD_EXPR_TYPE[4];
 
   ObFTIndexRowCache();
   ~ObFTIndexRowCache();
@@ -85,9 +55,6 @@ private:
   uint64_t row_idx_;
   bool is_fts_index_aux_;
   storage::ObFTParseHelper helper_;
-  ObFTPosListParser pos_list_parser_;
-  common::ObString parser_name_;
-  common::ObString parser_properties_;
   bool is_inited_;
 
   DISALLOW_COPY_AND_ASSIGN(ObFTIndexRowCache);
@@ -211,9 +178,6 @@ public:
       ObDomainIndexRow &spat_rows);
   static int generate_fulltext_word_rows(common::ObIAllocator &allocator,
                                          storage::ObFTParseHelper *helper,
-                                         ObFTPosListParser *pos_list_parser,
-                                         const common::ObString &parser_name,
-                                         const common::ObString &parser_properties,
                                          const common::ObObjMeta &ft_obj_meta,
                                          const ObDatum &doc_id_datum,
                                          const ObString &fulltext,
@@ -230,15 +194,11 @@ public:
       ObDomainIndexRow &domain_rows);
 private:
   static int segment_and_calc_word_count(
-      common::ObIAllocator &allocator,
       storage::ObFTParseHelper *helper,
-      ObFTPosListParser *pos_list_parser,
-      const common::ObString &parser_name,
-      const common::ObString &parser_properties,
       const common::ObObjMeta &meta,
       const ObString &fulltext,
       int64_t &doc_length,
-      storage::ObFTWordPositionMap &words_count);
+      storage::ObFTWordMap &words_count);
   static int calc_save_rowkey_policy(
     ObIAllocator &allocator,
     const ObDASDMLBaseCtDef &das_ctdef,
@@ -379,7 +339,6 @@ public:
     doc_word_info_(ft_doc_word_info),
     ft_doc_word_iter_(),
     ft_parse_helper_(),
-    pos_list_parser_(),
     is_inited_(false)
   {
     ObDomainDMLIterator::mode_ = mode;
@@ -412,7 +371,6 @@ private:
   const ObFTDocWordInfo *doc_word_info_;
   storage::ObFTDocWordScanIterator ft_doc_word_iter_;
   storage::ObFTParseHelper ft_parse_helper_;
-  ObFTPosListParser pos_list_parser_;
   bool is_inited_;
 };
 

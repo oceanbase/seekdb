@@ -109,12 +109,6 @@ public:
       const ObAddWordFlag &flag,
       common::ObIAllocator &allocator,
       ObFTWordMap &word_map);
-  ObAddWord(
-      const ObFTParserProperty &property,
-      const ObObjMeta &meta,
-      const ObAddWordFlag &flag,
-      common::ObIAllocator &allocator,
-      ObFTWordPositionMap &word_pos_map);
   ~ObAddWord() = default;
   int process_word(
       const char *word,
@@ -129,29 +123,23 @@ public:
       K_(stopword_cnt),
       K_(min_token_size),
       K_(max_token_size),
-      KP_(word_map),
-      KP_(word_pos_map),
-      K_(position_seq));
+      KP_(word_map));
 
 private:
   bool is_min_max_word(const int64_t c_len) const;
   int casedown_word(const ObFTWord &src, ObFTWord &dst);
   int check_stopword(const ObFTWord &word, bool &is_stopword);
   int groupby_word(const ObFTWord &word, const int64_t word_cnt);
-  int alloc_position_array(ObFTPositionArray *&positions);
-  int append_positions(ObFTWordPositionInfo &word_info, const int64_t word_cnt);
 private:
   ObObjMeta word_meta_;
   common::ObIAllocator &allocator_;
   ObFTWordMap *word_map_;
-  ObFTWordPositionMap *word_pos_map_;
   int64_t min_max_word_cnt_;
   int64_t non_stopword_cnt_;
   int64_t stopword_cnt_;
   int64_t min_token_size_;
   int64_t max_token_size_;
   ObAddWordFlag flag_;
-  int64_t position_seq_;
   ObStopWordChecker *stop_word_checker_;
   bool has_min_max_word_;
   bool has_stopword_;
