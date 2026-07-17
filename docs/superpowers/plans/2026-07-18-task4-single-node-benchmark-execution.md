@@ -4,7 +4,7 @@
 
 **Goal:** Improve the single-node `fts_large_bench.sh` build, tokenize, and MATCH categories without changing its workload or regressing Task2/Task3 behavior.
 
-**Architecture:** Retain the already-landed parser reuse path, complete its dictionary lookup fast path, then use the benchmark report to admit only local sort, build-buffer, encoded-key/position-list, plan, and observability changes that improve a measured category. Each of the six Task4 areas has one local implementation boundary; all distributed PX/GI/shuffle/DAG code is excluded.
+**Architecture:** Retain the already-landed parser reuse path, complete its dictionary lookup fast path, then implement one minimal, testable single-node subfeature for each of the remaining five Task4 areas. The benchmark determines the priority and whether a local fast path remains enabled, but does not permit skipping an area; all distributed PX/GI/shuffle/DAG code is excluded.
 
 **Tech Stack:** C++17, seekdb FTS/storage code, Google Test, CMake, existing mysqltest runner, Bash/Python benchmark scorer.
 
@@ -187,7 +187,7 @@ git add src/storage/fts/dict unittest/task4 unittest/CMakeLists.txt docs/superpo
 git commit -m "perf(fts): accelerate local dictionary lookup"
 ```
 
-### Task 3: Admit local build-path optimizations only with benchmark evidence
+### Task 3: Implement all remaining five single-node Task4 areas
 
 **Files:**
 - Modify only after a failing Task4-only test: `src/storage/fts/ob_fts_plugin_helper.*`, `src/storage/fts/ob_fts_struct.*`, or one new focused helper under `src/storage/fts/`.
@@ -196,31 +196,47 @@ git commit -m "perf(fts): accelerate local dictionary lookup"
 
 **Interfaces:**
 - Consumes: parser cache `cached_builtin_parser_`, `ObFTTokenProcessor`, and `ObFTPositionListHolder`.
-- Produces: one of parser/token scratch reuse, compact local sort key, variable-int64 position-list encoding, or local stage counter, only if benchmark evidence identifies it as beneficial.
+- Produces: five separately testable single-node subfeatures: local sort/buffer reuse, local build-pipeline reuse, encoded sort key or variable-int64 position list, local FTS plan ordering/range helper, and local build-stage counters.
 
-- [ ] **Step 1: Select one bottleneck from the latest report**
 
-Use the report category with the smallest improvement or largest share of build time. Do not choose a distributed upstream component. Record its baseline metric and the exact source call path with `rg -n` in the audit.
+- [ ] **Step 1: Add five Task4-only red tests, one per remaining area**
 
-- [ ] **Step 2: Write one Task4-only failing behavior test**
+Add tests named `LocalSortKeepsCollationOrder`, `LocalBuildBufferReuseKeepsTokenOutput`, `PositionListRoundTripsVariableInts`, `LocalFtsPlanKeepsDocWordOrder`, and `BuildStageCountersAreMonotonic`. They respectively assert sorting `{ "b", "a", "c" }` yields `{ "a", "b", "c" }`, reused build buffers preserve token output, `{0, 1, 127, 128, 4096}` round-trips and corrupt magic fails, doc-word keys remain ordered by existing collation/doc-id semantics, and per-stage counters never decrease.
 
-For parser reuse, assert two consecutive documents emit identical token sequences to separately constructed parsers. For a position list, assert encode/decode preserves `{0, 1, 127, 128, 4096}` and rejects a corrupt magic. For a compact sort key, assert sorting `{ "b", "a", "c" }` yields `{ "a", "b", "c" }` under the existing collation. The test must exercise the selected public helper directly.
+- [ ] **Step 2: Run each new test red**
 
-- [ ] **Step 3: Run the selected test red**
+Run: `cmake --build build_debug --target test_task4_fts_perf -j4 && build_debug/unittest/task4/test_task4_fts_perf --gtest_filter='Task4FtsPerf.Local*:Task4FtsPerf.PositionListRoundTripsVariableInts:Task4FtsPerf.BuildStageCountersAreMonotonic'`
 
-Run: `cmake --build build_debug --target test_task4_fts_perf -j4 && build_debug/unittest/task4/test_task4_fts_perf --gtest_filter=Task4FtsPerf.<SelectedCase>`
+Expected: every new case fails only because its single-node helper or behavior is absent.
 
-Expected: the selected case fails solely because the local helper or behavior is missing.
+- [ ] **Step 3: Implement the local sorting subfeature and rerun its green test**
 
-- [ ] **Step 4: Implement exactly one local optimization and rerun green**
+Add a compact in-memory FTS key path that uses the existing collation comparator as fallback; do not introduce generic SQL partition/TopN sorting. Run `Task4FtsPerf.LocalSortKeepsCollationOrder`; expected: PASS.
 
-Keep allocations in the existing scratch allocator, preserve token order and positions, use the existing collation comparator whenever an encoded key cannot preserve order, and avoid schema/RPC/PX changes. Run the Step 3 command again; expected: PASS.
+- [ ] **Step 4: Implement the local pipeline-reuse subfeature and rerun its green test**
 
-- [ ] **Step 5: Measure and retain only a positive result**
+Reuse parser/token scratch state and build buffers within one local index-build task, with no PX, slice queue, or remote handoff. Run `Task4FtsPerf.LocalBuildBufferReuseKeepsTokenOutput`; expected: PASS.
 
-Run the exact benchmark and scorer commands from Task 1. Retain the optimization only when hit counts are unchanged and the repeated score exceeds the preceding result beyond the documented noise band; otherwise revert only this task's uncommitted hunk with `apply_patch` and record the exclusion in the audit.
+- [ ] **Step 5: Implement encoded key or variable-int64 position-list subfeature and rerun its green test**
 
-- [ ] **Step 6: Commit the admitted local optimization**
+Use an order-preserving encoding only when the existing comparator order is preserved; otherwise use variable-int64 position-list encode/decode with magic/version validation. Run `Task4FtsPerf.PositionListRoundTripsVariableInts`; expected: PASS.
+
+- [ ] **Step 6: Implement the local plan-ordering subfeature and rerun its green test**
+
+Keep only the local FTS doc-word sort/range helper needed by the current DDL path; do not add GI, PX coordinator, or doc-id redistribution. Run `Task4FtsPerf.LocalFtsPlanKeepsDocWordOrder`; expected: PASS.
+
+- [ ] **Step 7: Implement the low-overhead build-stage counter subfeature and rerun its green test**
+
+Record local parse, sort, and write counters/timestamps in the owning build object; do not add tenant monitor maps, virtual tables, or TTL cleanup. Run `Task4FtsPerf.BuildStageCountersAreMonotonic`; expected: PASS.
+
+- [ ] **Step 8: Measure each admitted subfeature and commit the complete single-node set**
+
+After each subfeature, run the exact benchmark and scorer commands from Task 1. Preserve hit counts and record both the result and any score change. Keep the simple local implementation even when a score change is inside the noise band, unless it causes a regression outside that band or harms compatibility.
+
+```bash
+git add src/storage/fts src/sql unittest/task4 docs/superpowers/plans/2026-07-17-task4-upstream-port-audit.md
+git commit -m "perf(fts): optimize six single-node build paths"
+```
 
 ```bash
 git add src/storage/fts unittest/task4 docs/superpowers/plans/2026-07-17-task4-upstream-port-audit.md
