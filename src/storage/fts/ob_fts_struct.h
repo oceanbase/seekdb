@@ -52,7 +52,11 @@ private:
   ObObjMeta meta_;
 };
 
-typedef common::hash::ObHashMap<ObFTWord, int64_t> ObFTWordMap;
+// A word map is owned by one parser/DDL worker and is never accessed concurrently.
+// Avoid paying for a rwlock on every token lookup in the hot segmentation path.
+typedef common::hash::ObHashMap<ObFTWord,
+                                int64_t,
+                                common::hash::NoPthreadDefendMode> ObFTWordMap;
 
 class ObAddWordFlag final
 {
