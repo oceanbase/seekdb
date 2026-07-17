@@ -48,6 +48,11 @@ ob_set_subtarget(ob_share vector
   ob_mysql_proc_statement.cpp
 )
 
+ob_set_subtarget(ob_share ai_split_document
+  ai_split_document/ob_ai_split_document.cpp
+  ai_split_document/ob_ai_split_document_util.cpp
+)
+
 ob_set_subtarget(ob_share ALONE
   ob_tenant_timezone.cpp
   ob_tenant_timezone_mgr.cpp
