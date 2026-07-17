@@ -21,6 +21,8 @@
 #include "lib/lock/ob_bucket_lock.h"
 #include "storage/fts/dict/ob_ft_dict_def.h"
 
+#include <atomic>
+
 namespace oceanbase
 {
 namespace storage
@@ -100,7 +102,7 @@ class ObFTCacheRangeContainer;
 class ObFTDictHub
 {
 public:
-  ObFTDictHub() : is_inited_(false), dict_map_(), rw_dict_lock_() {}
+  ObFTDictHub() : is_inited_(false), dict_map_(), rw_dict_lock_(), dictionary_epoch_(1) {}
   ~ObFTDictHub() {}
 
   int init();
@@ -111,6 +113,10 @@ public:
 
   int load_cache(const ObFTDictDesc &desc, ObFTCacheRangeContainer &container);
   int refresh_cache(const ObFTDictDesc &desc);
+  uint64_t get_dictionary_epoch() const
+  {
+    return dictionary_epoch_.load(std::memory_order_acquire);
+  }
 
 private:
   int get_dict_info(const ObFTDictInfoKey &key, ObFTDictInfo &info);
@@ -123,6 +129,7 @@ private:
   // holds info of dict
   hash::ObHashMap<ObFTDictInfoKey, ObFTDictInfo> dict_map_;
   ObBucketLock rw_dict_lock_;
+  std::atomic<uint64_t> dictionary_epoch_;
 };
 
 } //  namespace storage

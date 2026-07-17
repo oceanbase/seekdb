@@ -24,8 +24,10 @@
 #include "lib/utility/ob_macro_utils.h"
 #include "share/cache/ob_kv_storecache.h"
 #include "share/cache/ob_kvcache_struct.h"
+#include "lib/lock/ob_spin_lock.h"
 #include "storage/fts/dict/ob_ft_dat_dict.h"
 #include "storage/fts/dict/ob_ft_dict_def.h"
+#include "storage/fts/ob_fts_struct.h"
 
 #include <cstdint>
 
@@ -33,6 +35,8 @@ namespace oceanbase
 {
 namespace storage
 {
+
+class ObFTParseHelper;
 class ObDictCacheKey : public common::ObIKVCacheKey
 {
 public:
@@ -143,6 +147,102 @@ public:
 
 private:
   DISALLOW_COPY_AND_ASSIGN(ObDictCache);
+};
+
+class ObFTSegmentCacheKey final : public common::ObIKVCacheKey
+{
+public:
+  ObFTSegmentCacheKey();
+  ObFTSegmentCacheKey(uint64_t tenant_id,
+                      uint64_t dictionary_epoch,
+                      common::ObCollationType collation_type,
+                      const common::ObString &parser_name,
+                      const common::ObString &parser_properties,
+                      const common::ObString &fulltext);
+  ~ObFTSegmentCacheKey() override = default;
+
+  int equal(const common::ObIKVCacheKey &other, bool &equal) const override;
+  int hash(uint64_t &hash_value) const override;
+  int64_t size() const override;
+  int deep_copy(char *buf, int64_t buf_len, common::ObIKVCacheKey *&key) const override;
+  bool is_valid() const;
+
+  TO_STRING_KV(K_(tenant_id), K_(dictionary_epoch), K_(collation_type),
+               K_(parser_name), K_(parser_properties), K_(fulltext));
+
+private:
+  uint64_t tenant_id_;
+  uint64_t dictionary_epoch_;
+  common::ObCollationType collation_type_;
+  common::ObString parser_name_;
+  common::ObString parser_properties_;
+  common::ObString fulltext_;
+};
+
+class ObFTSegmentCacheValue final : public common::ObIKVCacheValue
+{
+public:
+  ObFTSegmentCacheValue();
+  ObFTSegmentCacheValue(int64_t document_length,
+                        int64_t token_count,
+                        const common::ObString &payload);
+  ~ObFTSegmentCacheValue() override = default;
+
+  int64_t size() const override;
+  int deep_copy(char *buf, int64_t buf_len, common::ObIKVCacheValue *&value) const override;
+  bool is_valid() const;
+  int restore(common::ObIAllocator &allocator,
+              const common::ObObjMeta &word_meta,
+              ObFTWordMap &word_map) const;
+  static int build(common::ObIAllocator &allocator,
+                   int64_t document_length,
+                   const ObFTWordMap &word_map,
+                   ObFTSegmentCacheValue &value);
+
+  int64_t get_document_length() const { return document_length_; }
+  int64_t get_token_count() const { return token_count_; }
+  const common::ObString &get_payload() const { return payload_; }
+
+  TO_STRING_KV(K_(document_length), K_(token_count), K_(payload));
+
+private:
+  int64_t document_length_;
+  int64_t token_count_;
+  common::ObString payload_;
+};
+
+class ObFTSegmentCache final
+    : public common::ObKVCache<ObFTSegmentCacheKey, ObFTSegmentCacheValue>
+{
+public:
+  static ObFTSegmentCache &get_instance()
+  {
+    static ObFTSegmentCache instance;
+    return instance;
+  }
+
+  int get_segment(const ObFTSegmentCacheKey &key,
+                  const ObFTSegmentCacheValue *&value,
+                  common::ObKVCacheHandle &handle);
+  int put_segment(const ObFTSegmentCacheKey &key, const ObFTSegmentCacheValue &value);
+  int segment_with_cache(common::ObIAllocator &allocator,
+                         ObFTParseHelper &helper,
+                         const common::ObObjMeta &word_meta,
+                         const common::ObString &parser_name,
+                         const common::ObString &parser_properties,
+                         const common::ObString &fulltext,
+                         int64_t &document_length,
+                         ObFTWordMap &word_map);
+
+private:
+  static constexpr int64_t LOCK_COUNT = 64;
+  static constexpr int64_t MAX_CACHE_TEXT_LENGTH = 1L << 20;
+  common::ObSpinLock &get_lock(const ObFTSegmentCacheKey &key);
+
+  ObFTSegmentCache() = default;
+  ~ObFTSegmentCache() override = default;
+  common::ObSpinLock locks_[LOCK_COUNT];
+  DISALLOW_COPY_AND_ASSIGN(ObFTSegmentCache);
 };
 
 } //  namespace storage

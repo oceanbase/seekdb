@@ -160,7 +160,11 @@ int ObFTDictHub::refresh_cache(const ObFTDictDesc &desc)
       info.charset_ = desc.charset_;
       info.version_++;
       info.range_count_ = static_cast<int32_t>(container.get_handles().size());
-      ret = put_dict_info(key, info);
+      if (OB_FAIL(put_dict_info(key, info))) {
+        LOG_WARN("failed to update refreshed dictionary info", K(ret), K(desc.name_));
+      } else {
+        dictionary_epoch_.fetch_add(1, std::memory_order_acq_rel);
+      }
     }
   }
   return ret;
