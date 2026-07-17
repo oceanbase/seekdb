@@ -18466,13 +18466,13 @@ alter_with_opt_hint SYSTEM REFRESH IO CALIBRATION opt_storage_name opt_calibrati
   malloc_non_terminal_node($$, result->malloc_pool_, T_REFRESH_IO_CALIBRATION, 3, $6, $7, NULL);
 }
 |
-alter_with_opt_hint SYSTEM REFRESH FULLTEXT DICT relation_factor
+alter_with_opt_hint SYSTEM REFRESH FULLTEXT DICT relation_name
 {
   (void)($1);
   malloc_non_terminal_node($$, result->malloc_pool_, T_REFRESH_FULLTEXT_DICT, 1, $6);
 }
 |
-alter_with_opt_hint SYSTEM REFRESH FULLTEXT DICT STRING_VALUE
+alter_with_opt_hint SYSTEM REFRESH FULLTEXT DICT id_dot_id
 {
   (void)($1);
   malloc_non_terminal_node($$, result->malloc_pool_, T_REFRESH_FULLTEXT_DICT, 1, $6);
