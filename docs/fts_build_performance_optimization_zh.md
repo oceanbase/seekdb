@@ -14,6 +14,7 @@
 - batch/文档切换使用 `reuse()` 保留已分配 block，仅在 parser 析构时执行 `reset()`。
 - FTS 辅助表构建启用新排序器，范围字典查找改为二分查找。
 - BEng 对纯 ASCII 文档使用轻量分词路径，ASCII 停用词跳过字符集转换和 hash 查找。
+- MATCH 仅作为谓词时跳过未使用的 BM25 和聚合；DAAT 合并使用紧凑数据布局和小规模快速合并器。
 - 完整 `seekdb` 目标通过 `/Werror` 编译和链接，模块向上依赖为 0。
 - IK、space、ngram、ngram2、BEng 连续多行构建回归通过，自定义 IK 词典和动态刷新回归通过。
 
@@ -211,6 +212,38 @@ allocator_.reuse();
 | 三个索引合计 | 37.315s | 29.894s | 30.757s | 30.326s | 18.7% |
 
 两轮 MATCH 命中数仍为 8001、11000、7332、20。`TOKENIZE()` 和 MATCH 查询不经过 FTS DDL 批量输出路径，因此它们只用于正确性和负载监测，不应随本批代码产生可归因的性能变化。
+
+### 6.3 第五批：MATCH 查询执行热路径
+
+第五批把查询优化作为一个完整执行链处理，而不是按上游 commit 边界逐项堆叠：
+
+```text
+SQL rewrite/optimizer
+  -> 判断调用方是否真正读取 MATCH relevance
+  -> DAS 选择 DaaT/TaaT 和 lookup 树
+  -> token iterator 扫描倒排 posting list
+  -> DAAT merge 按 doc-id 合并多个 token 流
+  -> 可选 BM25 / filter / relevance projection
+```
+
+主要变化如下：
+
+1. 优化器遍历关系表达式，区分“MATCH 只作为布尔谓词”和“调用方需要数值分数”。前者不再构建文档数、平均文档长度和 forward-index 聚合，也不计算 BM25。BOOLEAN mode、`minimum_should_match > 1`、显式 relevance 投影和排序仍保留评分/collector 路径。
+2. `COUNT(*) FROM (... MATCH ... LIMIT N)` 的父查询只观察子查询行数，不观察等分文档之间的隐式 relevance 顺序，也不使用子查询投影值。满足严格结构条件时把子查询投影替换为常量，并允许 DaaT 按 doc-id 流式输出，到达 LIMIT 后立即停止。
+3. DAAT 合并初始化时缓存 iterator、doc-id、next-round index 和结果缓冲的连续首地址。常见 2-3 个 query token 使用栈内小规模有序数组，超过阈值才使用 loser tree，避免为很小的 k 支付通用堆结构成本。
+4. binary doc-id 的排序规则就是逐字节比较后比较长度。`compare_binary_datum()` 统一封装该逻辑，merge comparator、token iterator 和通用 domain-id comparator 复用同一个内联实现；NULL、扩展 datum 和非 binary 类型仍调用原比较函数。
+5. BM25 batch evaluator 直接访问 datum vector 和 bit-vector word，避免逐元素 `at()`/`contain()`；热循环中的 `LOG_DEBUG` 被移除。只有确实需要分数时才分配 relevance buffer、估算 token 文档数和文档长度。
+
+查询批次在第四批代码上测试。第四批两个样本的查询均值作为对照，结果如下：
+
+| 指标 | 第四批均值 | 查询批次样本 1 | 查询批次样本 2 | 查询批次均值 | 均值改善 |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| 中文 MATCH | 12.362ms | 6.074ms | 6.219ms | 6.146ms | 50.3% |
+| BEng MATCH | 16.270ms | 7.431ms | 7.474ms | 7.452ms | 54.2% |
+| mixed MATCH | 13.101ms | 6.594ms | 6.406ms | 6.500ms | 50.4% |
+| MATCH + LIMIT 20 | 14.545ms | 3.615ms | 3.662ms | 3.638ms | 75.0% |
+
+两轮命中数继续保持 8001、11000、7332、20。额外测试确认：显式投影并按 relevance 排序仍产生非零且有序的分数；`MATCH(...) > 0` 继续走评分路径；BOOLEAN `+database -slow` 的排除语义正确。这里采用保守边界：只有表达式引擎生成的隐式 `BOOL(MATCH)` 可以完全省略 score，MATCH 被数值比较或算术表达式包裹时仍计算 relevance，避免 functional lookup 缺少 score/doc-id 投影。
 
 ## 7. 已执行的正确性验证
 

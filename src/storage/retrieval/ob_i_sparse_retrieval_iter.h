@@ -109,11 +109,13 @@ struct ObSparseRetrievalMergeParam
       topk_limit_(0),
       field_boost_(1.0),
       max_batch_size_(1),
-      stream_daat_mode_(false)
+      stream_daat_mode_(false),
+      need_collect_dims_(true)
   {}
   ~ObSparseRetrievalMergeParam() {}
   bool need_project_relevance() const { return relevance_proj_expr_ != nullptr; }
   bool need_filter() const { return filter_expr_ != nullptr; }
+  bool need_calc_relevance() const { return need_project_relevance() || need_filter(); }
   bool need_pushdown_topk() const { return topk_limit_ > 0; }
   // Fast-path: caller doesn't care about per-doc BM25 score and only needs
   // matching doc ids in DAAT streaming order. Skip relevance computation
@@ -122,7 +124,7 @@ struct ObSparseRetrievalMergeParam
   bool stream_daat_mode() const { return stream_daat_mode_; }
   TO_STRING_KV(KPC_(dim_weights), KPC(limit_param_), KP_(eval_ctx),
       KP_(id_proj_expr), KP_(relevance_expr), KP_(relevance_proj_expr), KP_(filter_expr),
-      K_(topk_limit), K_(max_batch_size), K_(stream_daat_mode));
+      K_(topk_limit), K_(max_batch_size), K_(stream_daat_mode), K_(need_collect_dims));
   const ObIArray<double> *dim_weights_; // score weight for each dimension
   const common::ObLimitParam *limit_param_;
   sql::ObEvalCtx *eval_ctx_;
@@ -136,6 +138,7 @@ struct ObSparseRetrievalMergeParam
   // Set true for "MATCH(...)" callers that don't read relevance / score
   // and don't apply score-side filters — see stream_daat_mode().
   bool stream_daat_mode_;
+  bool need_collect_dims_;
 };
 
 class ObISparseRetrievalMergeIter

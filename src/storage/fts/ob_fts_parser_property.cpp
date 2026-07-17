@@ -1159,7 +1159,10 @@ int ObFTParserProperty::parse_for_parser_helper(const ObFTParser &parser,
 {
   int ret = OB_SUCCESS;
   ObFTParserJsonProps props;
-  if (OB_FAIL(props.init())) {
+  if (json_str.empty()) {
+    // All parser defaults are initialized by ObFTParserProperty's constructor.  Keep
+    // empty IK table names here so the parser selects its built-in dictionaries.
+  } else if (OB_FAIL(props.init())) {
     LOG_WARN("fail to init props", K(ret));
   } else if (OB_FAIL(props.parse_from_valid_str(json_str))) {
     LOG_WARN("fail to parse from json str", K(ret), K(json_str));
