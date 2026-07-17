@@ -252,6 +252,22 @@ public:
            const bool reorder_fixed_expr = true,
            const bool enable_trunc = false);
 
+  int init(const ObExprPtrIArray &exprs,
+           const int64_t max_batch_size,
+           const lib::ObMemAttr &mem_attr,
+           const int64_t mem_limit,
+           bool enable_dump,
+           uint32_t row_extra_size,
+           const common::ObCompressorType compressor_type,
+           const bool reorder_fixed_expr,
+           const bool enable_trunc,
+           const int64_t tempstore_read_alignment_size)
+  {
+    UNUSED(tempstore_read_alignment_size);
+    return init(exprs, max_batch_size, mem_attr, mem_limit, enable_dump,
+                row_extra_size, compressor_type, reorder_fixed_expr, enable_trunc);
+  }
+
   int init(const RowMeta &row_meta,
            const int64_t max_batch_size,
            const lib::ObMemAttr &mem_attr,
@@ -259,6 +275,20 @@ public:
            bool enable_dump,
            const common::ObCompressorType compressor_type,
            const bool enable_trunc = false);
+
+  int init(const RowMeta &row_meta,
+           const int64_t max_batch_size,
+           const lib::ObMemAttr &mem_attr,
+           const int64_t mem_limit,
+           bool enable_dump,
+           const common::ObCompressorType compressor_type,
+           const bool enable_trunc,
+           const int64_t tempstore_read_alignment_size)
+  {
+    UNUSED(tempstore_read_alignment_size);
+    return init(row_meta, max_batch_size, mem_attr, mem_limit, enable_dump,
+                compressor_type, enable_trunc);
+  }
 
   int init_batch_ctx(const ObExprPtrIArray *exprs = NULL);
 
@@ -467,4 +497,3 @@ private:
 } // end namespace oceanbase
 
 #endif // OCEANBASE_BASIC_OB_TEMP_ROW_STORE_H_
-
