@@ -1,10 +1,12 @@
 # Task4 Fulltext Index Build Performance Implementation Plan
 
+> **2026-07-18 当前执行范围**：此计划不再执行“完整移植上游六大体系/283 文件”的历史目标。以 seekdb 单机全文索引构建功能和 `tools/benchmark/fts_large_bench.sh` 实测提升为验收：先完成分词器/解析器热路径与其真实建索引调用链，再根据基准定位结果，只实现能改善建索引、TOKENIZE 或保持正确性的排序/编码/辅助表改动。PX、跨分区 DAG、GI、租户级 DDL DAG 监控及其上游目录映射不作为必做任务。
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** 将 OceanBase 上游提交 `81c822ca5cb2d88c3495192d21e6006d6785fbb4` 的六类全文索引构建优化完整适配到 seekdb `vldb_2026`，保持 Task2/Task3 能力和检索结果不变，并取得正向 benchmark 改善。
+**Goal:** 在 seekdb `vldb_2026` 上实现直接影响单机全文索引构建的 Task4 功能，保持 Task2/Task3 能力和检索结果不变，并以 `fts_large_bench.sh` 的正向实测改善为主要验收。
 
-**Architecture:** 以上游父子提交差异作为功能真值，但不覆盖当前分支文件；按“热路径基础 → 排序 → 编码 → DDL 流水线 → SQL 计划 → 监控 → 兼容收口”逐块移植。每个任务先引入能证明缺口的测试并观察失败，再用 `apply_patch` 将对应上游实现按 seekdb 当前目录和 API 手工合并，最后独立构建、测试、注释审计并提交。
+**Architecture:** 以上游提交作为性能实现参考而非逐文件移植目标。按“热路径基础与真实调用链 → Release 服务端 → `fts_large_bench.sh` 基线/优化对比 → 瓶颈驱动的最小后续改动”推进；每项保留中文注释、必要的功能验证和可复现的基准结果。
 
 **Tech Stack:** C++17、OceanBase/seekdb allocator 与 MTL、Google Test、CMake/Make、DDL DAG scheduler、PX、CG macro-block writer、Bash/Python benchmark。
 
@@ -12,13 +14,21 @@
 
 - 实现基线固定为 seekdb `vldb_2026` 分支；设计文档基线提交为 `a0ffb3c3`，设计提交为 `1e2eeef63`。
 - 功能来源固定为上游 `81c822ca5cb2d88c3495192d21e6006d6785fbb4`，差异父提交固定为 `b786266ba3fc07b8437d07c8d1d177580e788cd0`。
-- 完整覆盖分词热路径、排序框架、FTS 流水线、encoded sort key/position list、SQL 执行计划和 DDL DAG 监控六类功能。
+- 必做范围是分词热路径、解析器跨文档复用、token/停止词处理及其真实单机建索引调用链；排序、编码和位置列表仅在基准确认瓶颈后按最小范围实施。
 - 不改变用户可见的分词结果、MATCH 命中集合、排序结果和 `fts_large_bench.sh` 计时口径。
 - Task2、Task3 已有能力必须保留；当前工作区中的未跟踪文件属于用户，不允许删除或覆盖。
 - 不启用 delta + zigzag + PFor position-list 编码；当前只启用 variable-int64。
 - 每个新增类、公开接口、关键内部接口以及行为修改块必须写中文职责/修改说明注释。
 - 所有实现文件只能通过 `apply_patch` 修改；格式化和生成器命令只用于机械生成其声明的产物。
-- 每个生产代码任务执行严格 RED → GREEN → REFACTOR；未观察到预期失败不得进入实现步骤。
+- 功能改动先以最小测试或现有回归证明，再实现并运行针对性验证；避免与 `fts_large_bench.sh` 无关的大范围移植。
+
+## 当前执行任务（替代后文历史 Task 3–8）
+
+1. 完成并验证 `ObFastSegmentArray`、`ObFastList`、`ObIFTParser::reuse_parser`、五种内置解析器复用、token/停止词快路径及其中文注释。
+2. 将内置解析器复用接入连续文档的真实单机索引构建调用链；外部插件保留原有 ABI 和生命周期。
+3. 构建并启动隔离的 Release seekdb 实例，运行固定配置的 `fts_large_bench.sh`，记录 build、TOKENIZE、MATCH 指标与命中数。
+4. 仅对基准中可复现的主要瓶颈实现下一项最小优化；每次优化后复跑同配置基准，保留提升证据。
+5. 最终提交只包含实际采用的功能、中文接口/修改注释、必要测试和基准报告；历史 283 行审计保留作参考但不再作为完成门槛。
 
 ---
 
