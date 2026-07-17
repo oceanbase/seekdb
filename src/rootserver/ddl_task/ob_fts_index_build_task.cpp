@@ -130,10 +130,10 @@ int ObFtsIndexBuildTask::init(
                                          create_index_arg,
                                          create_index_arg_))) {
     LOG_WARN("fail to copy create index arg", K(ret), K(create_index_arg));
-  } else if (OB_FAIL(ObFtsIndexBuilderUtil::decide_parallelism(create_index_arg.index_type_, parallelism, parallelism_))) {
-    // TODO (youchuan.yc): after change aux build task sequentially, remove decide_parallelism and use original value instead
-    LOG_WARN("fail to decide parallelism", K(ret), K(create_index_arg.index_type_), K(parallelism));
   } else {
+    // FTS auxiliary indexes are built sequentially, so each task can use the
+    // full requested DDL parallelism without multiplying resource usage.
+    parallelism_ = parallelism;
     LOG_INFO("create_index_arg.index_type_x", K(create_index_arg.index_type_), K(create_index_arg.index_key_));
 
     if (INDEX_TYPE_NORMAL_MULTIVALUE_LOCAL == create_index_arg.index_type_ ||

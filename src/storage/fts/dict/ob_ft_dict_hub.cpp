@@ -45,6 +45,7 @@ int ObFTDictHub::init()
 int ObFTDictHub::destroy()
 {
   int ret = OB_SUCCESS;
+  ATOMIC_STORE(&generation_epoch_, 0);
   is_inited_ = false;
   return ret;
 }
@@ -144,6 +145,8 @@ int ObFTDictHub::put_dict_info(const ObFTDictInfoKey &key, const ObFTDictInfo &i
   const int cover_exist_flag = 1;
   if (OB_FAIL(dict_map_.set_refactored(key, info, cover_exist_flag))) {
     LOG_WARN("put dict info failed", K(ret));
+  } else {
+    ATOMIC_INC(&generation_epoch_);
   }
 
   return ret;
