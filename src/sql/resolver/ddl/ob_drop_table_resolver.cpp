@@ -138,8 +138,7 @@ int ObDropTableResolver::resolve(const ParseNode &parse_tree)
                     && OB_NOT_NULL(tbl_schema) && tbl_schema->get_is_fulltext_dict_table()) {
                   common::ObSEArray<uint64_t, 16> ref_index_ids;
                   if (OB_FAIL(ObFtsIndexBuilderUtil::find_fts_indexes_referencing_dict_table(
-                      *sg, session_info_->get_effective_tenant_id(),
-                      tbl_schema->get_table_id(), ref_index_ids))) {
+                      *sg, tbl_schema->get_table_id(), ref_index_ids))) {
                     SQL_RESV_LOG(WARN, "fail to check dict table references", K(ret));
                   } else if (!ref_index_ids.empty()) {
                     ret = OB_OP_NOT_ALLOW;

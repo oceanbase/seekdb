@@ -169,8 +169,7 @@ int ObAlterTableResolver::resolve(const ParseNode &parse_tree)
             ret = OB_ERR_UNEXPECTED;
             LOG_WARN("schema guard is null", K(ret));
           } else if (OB_FAIL(ObFtsIndexBuilderUtil::find_fts_indexes_referencing_dict_table(
-              *sg, session_info_->get_effective_tenant_id(),
-              table_schema_->get_table_id(), ref_index_ids))) {
+              *sg, table_schema_->get_table_id(), ref_index_ids))) {
             LOG_WARN("fail to check dict table references", K(ret));
           } else if (!ref_index_ids.empty()) {
             ret = OB_NOT_SUPPORTED;

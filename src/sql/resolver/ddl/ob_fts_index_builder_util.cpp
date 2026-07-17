@@ -2630,12 +2630,10 @@ int ObFtsIndexBuilderUtil::add_skip_index_for_index_column(schema::ObColumnSchem
 
 int ObFtsIndexBuilderUtil::find_fts_indexes_referencing_dict_table(
     share::schema::ObSchemaGetterGuard &schema_guard,
-    const uint64_t tenant_id,
     const uint64_t dict_table_id,
     common::ObIArray<uint64_t> &referencing_index_ids)
 {
   int ret = OB_SUCCESS;
-  UNUSED(tenant_id);
   UNUSED(dict_table_id);
   common::ObSEArray<const ObTableSchema *, 64> table_schemas;
   if (OB_FAIL(schema_guard.get_table_schemas_in_tenant(table_schemas))) {
