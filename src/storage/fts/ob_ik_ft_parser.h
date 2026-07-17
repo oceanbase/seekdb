@@ -18,6 +18,7 @@
 #define _OCEANBASE_STORAGE_FTS_OB_IK_FT_PARSER_H_
 
 #include "lib/allocator/ob_allocator.h"
+#include "lib/lock/ob_mutex.h"
 #include "storage/fts/dict/ob_ft_cache_container.h"
 #include "storage/fts/dict/ob_ft_dict.h"
 #include "storage/fts/dict/ob_ft_dict_def.h"
@@ -37,6 +38,7 @@ public:
   ObIKFTParser(ObIAllocator &allocator, ObFTDictHub *hub)
       : allocator_(allocator),
         is_inited_(false),
+        owns_dicts_(false),
         coll_type_(ObCollationType::CS_TYPE_INVALID),
         ctx_(nullptr),
         hub_(hub),
@@ -53,6 +55,10 @@ public:
   virtual ~ObIKFTParser() { reset(); }
 
   int init(const plugin::ObFTParserParam &param);
+
+  // Reset per-text state and recreate context/processors for a new text.
+  // Dicts are kept from the previous init. Used for parser instance reuse.
+  int reuse(const plugin::ObFTParserParam &param);
 
   int get_next_token(const char *&word,
                      int64_t &word_len,
@@ -84,6 +90,23 @@ private:
 
   void reset();
 
+  // Reset per-text state (context + processors) but keep dicts for reuse.
+  void reset_for_reuse()
+  {
+    if (!OB_ISNULL(ctx_)) {
+      ctx_->~TokenizeContext();
+      allocator_.free(ctx_);
+      ctx_ = nullptr;
+    }
+    for (ObIIKProcessor *segmenter : segmenters_) {
+      if (!OB_ISNULL(segmenter)) {
+        segmenter->~ObIIKProcessor();
+        allocator_.free(segmenter);
+      }
+    }
+    segmenters_.clear();
+  }
+
   bool should_read_newest_table() const;
 
   int build_dict_from_cache(const ObFTDictDesc &desc,
@@ -105,6 +128,9 @@ private:
   static constexpr int SEGMENT_LIMIT = 1000;
   ObIAllocator &allocator_;
   bool is_inited_;
+  // True when dict_main_/quan_/stop_ are custom (allocated from allocator_ and
+  // must be freed in reset()); false when they are hub-owned cached dicts.
+  bool owns_dicts_;
 
   ObCollationType coll_type_;
   TokenizeContext *ctx_;
@@ -127,7 +153,7 @@ class ObIKFTParserDesc final : public plugin::ObIFTParserDesc
 {
 public:
   ObIKFTParserDesc() {}
-  virtual ~ObIKFTParserDesc() = default;
+  virtual ~ObIKFTParserDesc() {}
   virtual int init(plugin::ObPluginParam *param) override;
   virtual int deinit(plugin::ObPluginParam *param) override;
   virtual int segment(plugin::ObFTParserParam *param, plugin::ObITokenIterator *&iter) const override;
@@ -138,6 +164,12 @@ public:
 
 private:
   bool is_inited_;
+
+  // Process-global cached parser for reuse across tokenize calls.
+  static ObIKFTParser *cached_parser_;
+  static common::ObArenaAllocator *cached_alloc_;
+  static lib::ObMutex cache_mutex_;
+  static bool cache_inited_;
 };
 
 } //  namespace storage
