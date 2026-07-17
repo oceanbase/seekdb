@@ -25,6 +25,11 @@ namespace oceanbase
 {
 namespace sql
 {
+class ObExecContext;
+
+// Task4 Op9：识别属于 FTS 辅助表 DDL 计划的排序算子。
+bool is_task4_op9_fts_ddl_sort(ObExecContext *exec_ctx);
+
 struct ObSortFieldCollation
 {
   OB_UNIS_VERSION(1);

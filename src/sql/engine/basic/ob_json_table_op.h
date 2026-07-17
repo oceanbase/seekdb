@@ -50,6 +50,7 @@ enum table_type : int8_t {
   OB_XML_TABLE = 2,
   OB_RB_ITERATE_TABLE = 3,
   OB_UNNEST_TABLE = 4,
+  OB_AI_SPLIT_DOCUMENT_TABLE = 5, // Task2: 文档切分运行时类型
 };
 
 typedef enum JtNodeType {
@@ -166,6 +167,11 @@ struct JtScanCtx {
 
   bool is_unnest_table_func() {
     return spec_ptr_->table_type_ == OB_UNNEST_TABLE_TYPE;
+  }
+
+  // Task2: 判断当前算子是否为文档切分表函数。
+  bool is_ai_split_document_table_func() {
+    return spec_ptr_->table_type_ == OB_AI_SPLIT_DOCUMENT_TABLE_TYPE;
   }
 
   ObJsonTableSpec* spec_ptr_;
@@ -329,6 +335,21 @@ public:
   int eval_input(ObJsonTableOp &jt, JtScanCtx& ctx, ObEvalCtx &eval_ctx);
   int reset_path_iter(ObRegCol &scan_node, void* in, JtScanCtx*& ctx, ScanType init_flag, bool &is_null_value);
   int get_iter_value(ObRegCol &col_node, JtScanCtx* ctx, bool &is_null_value);
+  int reset_ctx(ObRegCol &scan_node, JtScanCtx*& ctx);
+};
+
+// Task2: 在现有多模态表函数框架中实现文档切分和逐行迭代。
+class AiSplitDocumentTableFunc : public MulModeTableFunc {
+public:
+  AiSplitDocumentTableFunc()
+    : MulModeTableFunc() {}
+  ~AiSplitDocumentTableFunc() {}
+
+  int init_ctx(ObRegCol &scan_node, JtScanCtx*& ctx);
+  int eval_input(ObJsonTableOp &jt, JtScanCtx &ctx, ObEvalCtx &eval_ctx);
+  int reset_path_iter(ObRegCol &scan_node, void *in, JtScanCtx*& ctx,
+                      ScanType init_flag, bool &is_null_value);
+  int get_iter_value(ObRegCol &col_node, JtScanCtx *ctx, bool &is_null_value);
   int reset_ctx(ObRegCol &scan_node, JtScanCtx*& ctx);
 };
 

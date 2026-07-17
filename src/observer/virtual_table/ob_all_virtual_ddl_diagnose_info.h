@@ -24,6 +24,7 @@
 #include "storage/ob_i_store.h"
 #include "lib/utility/ob_print_utils.h"
 #include "observer/virtual_table/ob_all_virtual_diag_index_scan.h"
+#include "storage/ddl/ob_ddl_dag_monitor.h"
 
 namespace oceanbase
 {
@@ -68,7 +69,8 @@ class ObAllVirtualDDLDiagnoseInfo : public common::ObVirtualTableScannerIterator
 public:
   ObAllVirtualDDLDiagnoseInfo() 
     : is_inited_(false), sql_proxy_(nullptr), ddl_scan_result_(), ddl_scan_idx_(0), diagnose_info_(), 
-      sql_monitor_stats_collector_(), diagnose_values_(), idx_(0), value_(), pos_(0)
+      sql_monitor_stats_collector_(), diagnose_values_(), idx_(0), dag_monitor_values_(),
+      dag_monitor_idx_(0), value_(), pos_(0)
   {}
   virtual ~ObAllVirtualDDLDiagnoseInfo() = default;
   int init(ObMySQLProxy *sql_proxy);
@@ -81,6 +83,9 @@ protected:
 private:
   virtual int process();
   int get_next_diagnose_info_row();
+  // Task4 Op9：输出当前用户可见的 DDL DAG 阶段监控记录。
+  int get_next_dag_monitor_row();
+  bool is_dag_monitor_task_visible(const int64_t ddl_task_id) const;
   int collect_task_info();
   int fill_cells();
   int collect_task_gmt_create_time();
@@ -104,6 +109,9 @@ private:
   share::ObSqlMonitorStatsCollector sql_monitor_stats_collector_;
   ObArray<observer::ObDDLDiagnoseValue> diagnose_values_;
   int64_t idx_;
+  // Task4 Op9：保存本次虚拟表扫描使用的阶段快照及游标。
+  ObArray<storage::ObDDLDagMonitorInfo> dag_monitor_values_;
+  int64_t dag_monitor_idx_;
   ObDDLDiagnoseValue value_;
   char message_[common::OB_DIAGNOSE_INFO_LENGTH];
   int64_t pos_;

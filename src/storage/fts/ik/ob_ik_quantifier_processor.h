@@ -41,6 +41,13 @@ public:
                  const uint8_t char_len,
                  const ObFTCharUtil::CharType type);
 
+  // Task4 Op2：清除量词匹配链和数字状态。
+  void reuse() override
+  {
+    count_hits_.clear();
+    reset();
+  }
+
 private:
   int process_CN_number(TokenizeContext &ctx,
                         const char *ch,

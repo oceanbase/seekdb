@@ -25,6 +25,7 @@
 #include "lib/string/ob_string.h"
 #include "lib/utility/ob_macro_utils.h"
 #include "lib/utility/alloc_assist.h"
+#include "lib/time/ob_time_utility.h"
 
 
 namespace oceanbase
@@ -48,6 +49,8 @@ int ObAllVirtualDDLDiagnoseInfo::init(ObMySQLProxy *sql_proxy)
   } else if (FALSE_IT(sql_proxy_ = sql_proxy)) {
   } else if (OB_FAIL(process())) {
     SERVER_LOG(WARN, "Fail to process!", K(ret));
+  } else if (OB_FAIL(ObDDLDagMonitorMgr::get_instance().get_snapshot(dag_monitor_values_))) {
+    SERVER_LOG(WARN, "Task4 Op9 failed to collect DDL DAG monitor snapshot", K(ret));
   } else {
     is_inited_ = true;
   }
@@ -252,6 +255,61 @@ int ObAllVirtualDDLDiagnoseInfo::get_next_diagnose_info_row()
     if (OB_SUCC(ret) && is_valid_diagnose) {
       break;
     }
+  }
+  if (OB_ITER_END == ret) {
+    ret = get_next_dag_monitor_row();
+  }
+  return ret;
+}
+
+bool ObAllVirtualDDLDiagnoseInfo::is_dag_monitor_task_visible(const int64_t ddl_task_id) const
+{
+  // Task4 Op9：沿用 DDL 诊断表的可见性结果过滤阶段监控记录。
+  bool is_visible = false;
+  for (int64_t i = 0; !is_visible && i < ddl_scan_result_.count(); ++i) {
+    is_visible = ddl_scan_result_.at(i).ddl_task_id_ == static_cast<uint64_t>(ddl_task_id);
+  }
+  return is_visible;
+}
+
+int ObAllVirtualDDLDiagnoseInfo::get_next_dag_monitor_row()
+{
+  // Task4 Op9：把 DDL DAG 阶段快照转换为现有诊断虚拟表记录。
+  int ret = OB_ITER_END;
+  while (dag_monitor_idx_ < dag_monitor_values_.count()) {
+    const ObDDLDagMonitorInfo &info = dag_monitor_values_.at(dag_monitor_idx_++);
+    if (!is_dag_monitor_task_visible(info.ddl_task_id_)) {
+      continue;
+    }
+
+    value_.reset();
+    value_.ddl_task_id_ = info.ddl_task_id_;
+    value_.object_id_ = info.target_table_id_;
+    value_.start_time_ = info.create_time_us_;
+    value_.finish_time_ = info.is_closed_ ? info.finish_time_us_ : 0;
+    const char *stage_name = get_ddl_dag_monitor_stage_name(info.stage_);
+    const char *status = info.running_count_ > 0 ? "RUNNING" : (info.is_closed_ ? "FINISHED" : "WAITING");
+    const int64_t wall_time_us = info.create_time_us_ > 0
+        ? (info.is_closed_ ? info.finish_time_us_ : ObTimeUtility::current_time()) - info.create_time_us_
+        : 0;
+    message_[0] = '\0';
+    pos_ = 0;
+    if (OB_FAIL(databuff_printf(value_.op_name_, common::MAX_LONG_OPS_NAME_LENGTH,
+                                "%s", stage_name))) {
+      LOG_WARN("Task4 Op9 failed to format DDL DAG monitor stage", K(ret), K(info.ddl_task_id_));
+    } else if (OB_FAIL(databuff_printf(
+                   message_, common::OB_DIAGNOSE_INFO_LENGTH, pos_,
+                   "Task4 Op9 DDL DAG monitor: tenant_id=%lu, dag=0x%lx, status=%s, "
+                   "schedule_count=%ld, running_count=%ld, wall_time_us=%ld, "
+                   "execution_time_us=%ld, ret_code=%d",
+                   info.tenant_id_, static_cast<unsigned long>(info.dag_id_), status,
+                   info.schedule_count_, info.running_count_, wall_time_us,
+                   info.execution_time_us_, info.ret_code_))) {
+      LOG_WARN("Task4 Op9 failed to format DDL DAG monitor detail", K(ret), K(info.ddl_task_id_));
+    } else {
+      ret = OB_SUCCESS;
+    }
+    break;
   }
   return ret;
 }

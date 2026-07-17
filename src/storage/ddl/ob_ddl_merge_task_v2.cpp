@@ -29,6 +29,7 @@
 #include "storage/ddl/ob_direct_load_mgr_utils.h"
 #include "observer/ob_server_event_history_table_operator.h"
 #include "storage/ddl/ob_ddl_merge_schedule.h"
+#include "storage/ddl/ob_ddl_dag_monitor.h"
 using namespace oceanbase::observer;
 using namespace oceanbase::share::schema;
 using namespace oceanbase::share;
@@ -267,6 +268,9 @@ int ObDDLMergePrepareTask::inner_process()
 int ObDDLMergePrepareTask::process()
 {
   int ret = OB_SUCCESS;
+  // Task4 Op9：分别观测归并准备、分片归并和组装阶段。
+  ObDDLDagStageGuard monitor_guard(
+      merge_param_.ddl_task_param_, get_dag(), TASK4_OP9_MERGE_PREPARE);
   bool has_lob = false;
   ObLSID target_ls_id;
   ObTabletID target_tablet_id;
@@ -281,6 +285,7 @@ int ObDDLMergePrepareTask::process()
   }
 
   FLOG_INFO("[DDL_MERGE_TASK] finish merge prepare task", K(ret), K(merge_param_));
+  monitor_guard.set_ret_code(ret);
   return ret;
 }
 
@@ -326,6 +331,9 @@ int ObDDLMergeCgSliceTask::init(const ObDDLTabletMergeDagParamV2 &merge_param,
 int ObDDLMergeCgSliceTask::process()
 {
   int ret = OB_SUCCESS;
+  // Task4 Op9：记录分片归并阶段的执行次数和耗时。
+  ObDDLDagStageGuard monitor_guard(
+      merge_param_.ddl_task_param_, get_dag(), TASK4_OP9_MERGE_SLICE);
   ObIDag *dag = get_dag();
   ObArenaAllocator allocator("MergeSlice");
   ObIDDLMergeHelper *merge_helper = nullptr;
@@ -344,6 +352,7 @@ int ObDDLMergeCgSliceTask::process()
   }
 
   FLOG_INFO("[DDL_MERGE_TASK] finish mrege cg slice", K(ret), K(cg_idx_), K(start_slice_idx_), K(end_slice_idx_), K(merge_param_));
+  monitor_guard.set_ret_code(ret);
   return ret;
 }
 
@@ -384,6 +393,9 @@ int ObDDLMergeAssembleTask::init(const ObDDLTabletMergeDagParamV2 &ddl_merge_par
 int ObDDLMergeAssembleTask::process()
 {
   int ret = OB_SUCCESS;
+  // Task4 Op9：记录最终 SSTable 组装阶段的执行次数和耗时。
+  ObDDLDagStageGuard monitor_guard(
+      merge_param_.ddl_task_param_, get_dag(), TASK4_OP9_MERGE_ASSEMBLE);
   ObIDDLMergeHelper *merge_helper = nullptr;
   ObArenaAllocator allocator(ObMemAttr("Ddl_Assm_Task"));
   ObLSID target_ls_id;
@@ -408,6 +420,7 @@ int ObDDLMergeAssembleTask::process()
     LOG_WARN("failed to assemble major sstable", K(ret));
   }
   FLOG_INFO("[DDL_MERGE_TASK]  ddl update table store finish", K(ret), K(merge_param_));
+  monitor_guard.set_ret_code(ret);
   return ret;
 }
 

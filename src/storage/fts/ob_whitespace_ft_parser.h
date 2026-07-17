@@ -34,6 +34,8 @@ public:
   virtual ~ObSpaceFTParser();
 
   int init(plugin::ObFTParserParam *param);
+  // Task4 Op2：复用空白分词器的字符集配置并替换输入范围。
+  int reuse_parser(const char *fulltext, const int64_t fulltext_len) override;
   void reset();
   virtual int get_next_token(
       const char *&word,
