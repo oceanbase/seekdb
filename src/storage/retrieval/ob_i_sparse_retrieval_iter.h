@@ -113,6 +113,10 @@ struct ObSparseRetrievalMergeParam
   ~ObSparseRetrievalMergeParam() {}
   bool need_project_relevance() const { return relevance_proj_expr_ != nullptr; }
   bool need_filter() const { return filter_expr_ != nullptr; }
+  bool need_calc_relevance() const
+  {
+    return relevance_expr_ != nullptr || need_project_relevance() || need_filter();
+  }
   bool need_pushdown_topk() const { return topk_limit_ > 0; }
   TO_STRING_KV(KPC_(dim_weights), KPC(limit_param_), KP_(eval_ctx),
       KP_(id_proj_expr), KP_(relevance_expr), KP_(relevance_proj_expr), KP_(filter_expr),

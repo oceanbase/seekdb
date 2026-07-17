@@ -14771,6 +14771,72 @@ bool ObTransformUtils::is_full_group_by(ObSelectStmt& stmt, ObSQLMode mode)
   return !stmt.has_order_by() && is_only_full_group_by_on(mode);
 }
 
+int ObTransformUtils::check_match_score_required(const ObDMLStmt *stmt,
+                                                  ObRawExpr *match_expr,
+                                                  bool &score_required)
+{
+  int ret = OB_SUCCESS;
+  ObSEArray<ObRawExpr *, 16> relation_exprs;
+  bool found_target = false;
+  bool all_uses_are_predicates = true;
+  score_required = true;
+  if (OB_ISNULL(stmt) || OB_ISNULL(match_expr)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument", K(ret), KP(stmt), KP(match_expr));
+  } else if (OB_FAIL(stmt->get_relation_exprs(relation_exprs))) {
+    LOG_WARN("failed to collect relation expressions", K(ret));
+  }
+
+  for (int64_t i = 0;
+       OB_SUCC(ret) && all_uses_are_predicates && i < relation_exprs.count();
+       ++i) {
+    ObSEArray<ObMatchFunRawExpr *, 2> matches;
+    bool contains_target = false;
+    bool used_as_condition = false;
+    if (OB_ISNULL(relation_exprs.at(i))) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("unexpected null relation expression", K(ret), K(i));
+    } else if (OB_FAIL(ObRawExprUtils::extract_match_exprs(relation_exprs.at(i), matches))) {
+      LOG_WARN("failed to extract match expressions", K(ret), K(i));
+    }
+    for (int64_t j = 0; OB_SUCC(ret) && !contains_target && j < matches.count(); ++j) {
+      contains_target = matches.at(j) == match_expr;
+    }
+    if (OB_FAIL(ret) || !contains_target) {
+      // This relation expression belongs to another MATCH or has no MATCH.
+    } else if (FALSE_IT(found_target = true)) {
+    } else if (ObOptimizerUtil::find_item(stmt->get_condition_exprs(), relation_exprs.at(i))) {
+      // A shared MATCH can still be classified safely when its relation root
+      // is itself a top-level WHERE predicate.
+      used_as_condition = true;
+    } else if (stmt->is_select_stmt()
+        && ObOptimizerUtil::find_item(
+            static_cast<const ObSelectStmt *>(stmt)->get_having_exprs(),
+            relation_exprs.at(i))) {
+      used_as_condition = true;
+    } else if (OB_FAIL(check_expr_used_as_condition(stmt,
+                                                    relation_exprs.at(i),
+                                                    match_expr,
+                                                    used_as_condition))) {
+      LOG_WARN("failed to inspect nested MATCH usage", K(ret), K(i));
+    } else if (!used_as_condition) {
+      all_uses_are_predicates = false;
+    } else if (relation_exprs.at(i)->get_expr_type() != T_OP_BOOL
+        || relation_exprs.at(i)->get_param_count() != 1
+        || relation_exprs.at(i)->get_param_expr(0) != match_expr) {
+      // Comparisons and nested expressions may observe the numeric score.
+      // Keep them on the original relevance path even when used in WHERE.
+      all_uses_are_predicates = false;
+    }
+  }
+
+  if (OB_SUCC(ret)) {
+    // Unknown/missing usage stays on the old, safe path.
+    score_required = !found_target || !all_uses_are_predicates;
+  }
+  return ret;
+}
+
 int ObTransformUtils::inner_check_need_calc_match_score(ObExecContext *exec_ctx,
                                                         ObRawExpr* expr, 
                                                         ObRawExpr* match_expr, 
@@ -14876,7 +14942,7 @@ int ObTransformUtils::check_expr_eq_zero(ObExecContext *ctx,
   return ret;
 }
 
-int ObTransformUtils::check_expr_used_as_condition(ObDMLStmt *stmt, 
+int ObTransformUtils::check_expr_used_as_condition(const ObDMLStmt *stmt,
                                                   ObRawExpr *root_expr, 
                                                   ObRawExpr *expr, 
                                                   bool &used_as_condition)
@@ -14894,7 +14960,7 @@ int ObTransformUtils::check_expr_used_as_condition(ObDMLStmt *stmt,
   } else if (ObOptimizerUtil::find_item(stmt->get_condition_exprs(), cur_expr)) {
     parent_as_condition = true;
   } else if (stmt->is_select_stmt() && ObOptimizerUtil::find_item(
-             static_cast<ObSelectStmt*>(stmt)->get_having_exprs(), cur_expr)) {
+             static_cast<const ObSelectStmt*>(stmt)->get_having_exprs(), cur_expr)) {
     parent_as_condition = true;
   }
   if (OB_SUCC(ret)) {

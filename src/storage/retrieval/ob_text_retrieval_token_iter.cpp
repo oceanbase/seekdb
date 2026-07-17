@@ -370,7 +370,9 @@ int ObTextRetrievalTokenIter::get_next_row()
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     LOG_WARN("retrieval token iterator not inited", K(ret));
-  } else if (!token_doc_cnt_calculated_ && OB_FAIL(estimate_token_doc_cnt())) {
+  } else if (need_calc_relevance()
+      && !token_doc_cnt_calculated_
+      && OB_FAIL(estimate_token_doc_cnt())) {
     LOG_WARN("failed to estimate token doc cnt", K(ret));
   } else if (OB_FAIL(inv_idx_scan_iter_->get_next_row())) {
     if (OB_UNLIKELY(OB_ITER_END != ret)) {
@@ -455,7 +457,9 @@ int ObTextRetrievalTokenIter::get_next_batch(const int64_t capacity, int64_t &co
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     LOG_WARN("retrieval token iterator not inited", K(ret));
-  } else if (!token_doc_cnt_calculated_ && OB_FAIL(estimate_token_doc_cnt())) {
+  } else if (need_calc_relevance()
+      && !token_doc_cnt_calculated_
+      && OB_FAIL(estimate_token_doc_cnt())) {
     LOG_WARN("failed to estimate token doc cnt", K(ret));
   } else if (OB_FAIL(inv_idx_scan_iter_->get_next_rows(count, OB_MIN(max_batch_size_, capacity)))) {
     if (OB_UNLIKELY(OB_ITER_END != ret)) {
@@ -817,10 +821,10 @@ int ObTextRetrievalDaaTTokenIter::save_docids()
     cur_idx_ = 0;
     const ObDatumVector &doc_id_datum = inv_scan_domain_id_col_->locate_expr_datumvector(*eval_ctx_);
     for (int64_t i = 0; OB_SUCC(ret) && i < count_; ++i) {
-      if (OB_LIKELY(!token_iter_->get_skip()->at(i))) {
-        if (OB_FAIL(doc_id_[i].from_datum(*doc_id_datum.at(i)))) {
-          LOG_WARN("failed to get doc id", K(ret));
-        };
+      // FTS PERF OPT 1: skip_ exists only for score evaluation. A truth-only
+      // scan has no score rows to discard, so copy every document id.
+      if (OB_FAIL(doc_id_[i].from_datum(*doc_id_datum.at(i)))) {
+        LOG_WARN("failed to get doc id", K(ret));
       }
     }
   }
