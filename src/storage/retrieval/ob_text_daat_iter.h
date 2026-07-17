@@ -54,18 +54,27 @@ public:
   ObTextDaaTIter() : ObSRDaaTIterImpl(),
       bm25_param_estimator_(),
       mode_flag_(ObMatchAgainstMode::NATURAL_LANGUAGE_MODE),
-      function_lookup_mode_(false) {}
+      function_lookup_mode_(false),
+      batch_union_finished_(),
+      use_batch_union_(false) {}
   virtual ~ObTextDaaTIter() { reset(); }
 
   int init(const ObTextDaaTParam &param);
+  virtual int get_next_rows(const int64_t capacity, int64_t &count) override;
   virtual void reuse(const bool switch_tablet = false) override;
   virtual void reset() override;
 protected:
   virtual int pre_process() override;
+private:
+  int get_next_rows_batch_union(const int64_t capacity, int64_t &count);
+  int get_next_union_doc_id(ObDocIdExt &doc_id);
+  int compare_doc_id(const ObDocIdExt &left, const ObDocIdExt &right, int64_t &cmp_ret) const;
 protected:
   ObBM25ParamEstimator bm25_param_estimator_;
   ObMatchAgainstMode mode_flag_;
   bool function_lookup_mode_;
+  common::ObSEArray<uint8_t, 4> batch_union_finished_;
+  bool use_batch_union_;
 private:
   DISALLOW_COPY_AND_ASSIGN(ObTextDaaTIter);
 };

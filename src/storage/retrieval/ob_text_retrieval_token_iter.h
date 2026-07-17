@@ -155,6 +155,12 @@ public:
   virtual int get_curr_score(double &score) const override;
   virtual int get_curr_id(const ObDatum *&id_datum) const override;
 public:
+  // Plain DaaT union can consume the vectorized inverted-index batch directly.
+  // This avoids one virtual get_next_row()/get_curr_id() pair for every hit.
+  int load_next_doc_id_batch();
+  bool has_current_doc_id() const { return cur_idx_ >= 0 && cur_idx_ < count_; }
+  const ObDocIdExt &get_current_doc_id() const { return doc_id_[cur_idx_]; }
+  void advance_current_doc_id() { ++cur_idx_; }
   int get_token_doc_cnt(int64_t &token_doc_cnt) const { return token_iter_->get_token_doc_cnt(token_doc_cnt); }
   virtual int get_dim_max_score(double &score) override {
     int ret = OB_SUCCESS;
@@ -168,6 +174,7 @@ public:
 private:
   int save_relevances_and_docids();
   int save_docids();
+  int save_union_docids();
   ObArenaAllocator *allocator_;
   ObTextRetrievalTokenIter *token_iter_;
   sql::ObEvalCtx *eval_ctx_;

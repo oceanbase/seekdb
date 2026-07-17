@@ -836,6 +836,40 @@ int ObTextRetrievalDaaTTokenIter::get_next_batch(const int64_t capacity, int64_t
   return OB_NOT_IMPLEMENT;
 }
 
+int ObTextRetrievalDaaTTokenIter::load_next_doc_id_batch()
+{
+  int ret = OB_SUCCESS;
+  count_ = 0;
+  cur_idx_ = 0;
+  if (OB_FAIL(token_iter_->get_next_batch(max_batch_size_, count_))) {
+    if (OB_ITER_END == ret && count_ > 0) {
+      ret = OB_SUCCESS;
+    } else if (OB_ITER_END != ret) {
+      LOG_WARN("failed to load inverted-index document batch", K(ret), K_(count));
+    }
+  }
+  if (OB_SUCC(ret) && count_ > 0 && OB_FAIL(save_union_docids())) {
+    LOG_WARN("failed to materialize union document ids", K(ret), K_(count));
+  } else if (OB_SUCC(ret) && 0 == count_) {
+    ret = OB_ITER_END;
+  }
+  return ret;
+}
+
+int ObTextRetrievalDaaTTokenIter::save_union_docids()
+{
+  int ret = OB_SUCCESS;
+  cur_idx_ = 0;
+  const ObDatumVector &doc_id_datum =
+      inv_scan_domain_id_col_->locate_expr_datumvector(*eval_ctx_);
+  for (int64_t i = 0; OB_SUCC(ret) && i < count_; ++i) {
+    if (OB_FAIL(doc_id_[i].from_datum(*doc_id_datum.at(i)))) {
+      LOG_WARN("failed to copy union document id", K(ret), K(i));
+    }
+  }
+  return ret;
+}
+
 int ObTextRetrievalDaaTTokenIter::advance_to(const ObDatum &id_datum)
 {
   int ret = OB_SUCCESS;
