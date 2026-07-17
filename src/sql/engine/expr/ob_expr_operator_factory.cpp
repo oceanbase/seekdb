@@ -442,6 +442,7 @@
 #include "sql/engine/expr/ob_expr_ai/ob_expr_ai_embed.h"
 #include "sql/engine/expr/ob_expr_ai/ob_expr_ai_rerank.h"
 #include "sql/engine/expr/ob_expr_ai/ob_expr_ai_prompt.h"
+#include "sql/engine/expr/ob_expr_ai/ob_expr_load_file.h"
 #include "sql/engine/expr/ob_expr_vector_similarity.h"
 #include "sql/engine/expr/ob_expr_check_location_access.h"
 
@@ -1150,6 +1151,7 @@ void ObExprOperatorFactory::register_expr_operators()
     REG_OP(ObExprAIEmbed);
     REG_OP(ObExprAIRerank);
     REG_OP(ObExprAIPrompt);
+    REG_OP(ObExprLoadFile);
     REG_OP(ObExprCheckLocationAccess);
   }();
 }
