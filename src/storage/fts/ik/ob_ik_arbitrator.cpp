@@ -338,6 +338,12 @@ int ObIKArbitrator::prepare(TokenizeContext &ctx)
 
 ObIKArbitrator::ObIKArbitrator() : alloc_(lib::ObMemAttr("IK Arbitrator")) {}
 
+void ObIKArbitrator::reuse()
+{
+  chains_.destroy();
+  alloc_.reuse();
+}
+
 int ObIKArbitrator::add_chain(ObIKTokenChain *chain)
 {
   int ret = OB_SUCCESS;
