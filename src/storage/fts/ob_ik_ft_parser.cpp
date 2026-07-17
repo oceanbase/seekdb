@@ -98,26 +98,17 @@ int ObIKFTParser::reuse(const ObFTParserParam &param)
     ret = OB_NOT_INIT;
     LOG_WARN("Parser not inited for reuse", K(ret));
   } else {
-    if (!OB_ISNULL(ctx_)) {
-      ctx_->~TokenizeContext();
-      allocator_.free(ctx_);
-      ctx_ = nullptr;
+    // Reuse ctx and processors in-place: update text pointer, reset state.
+    // This avoids 5 heap allocations (ctx + 4 processors) per call.
+    coll_type_ = ObCharset::collation_type(param.cs_->name);
+    bool is_smart = (param.ik_param_.mode_ == ObFTIKParam::Mode::SMART);
+    if (OB_FAIL(ctx_->set_text(param.fulltext_, param.ft_length_, coll_type_, is_smart))) {
+      LOG_WARN("Failed to set text for reuse", K(ret));
     }
     for (ObIIKProcessor *segmenter : segmenters_) {
-      if (!OB_ISNULL(segmenter)) {
-        segmenter->~ObIIKProcessor();
-        allocator_.free(segmenter);
+      if (OB_SUCC(ret) && segmenter != nullptr) {
+        segmenter->reset_state();
       }
-    }
-    segmenters_.clear();
-    coll_type_ = ObCharset::collation_type(param.cs_->name);
-    if (OB_FAIL(init_ctx(param))) {
-      LOG_WARN("Failed to reinit ctx for reuse", K(ret));
-    } else if (OB_FAIL(init_segmenter(param))) {
-      LOG_WARN("Failed to reinit segmenter for reuse", K(ret));
-    }
-    if (OB_FAIL(ret)) {
-      is_inited_ = false;
     }
   }
   return ret;

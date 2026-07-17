@@ -80,6 +80,26 @@ int TokenizeContext::reset_resource()
   return OB_SUCCESS;
 }
 
+int TokenizeContext::set_text(const char *fulltext, int64_t fulltext_len,
+                              ObCollationType coll_type, bool is_smart)
+{
+  int ret = OB_SUCCESS;
+  coll_type_ = coll_type;
+  fulltext_ = fulltext;
+  fulltext_len_ = fulltext_len;
+  cursor_ = 0;
+  next_char_len_ = 0;
+  handle_size_ = 0;
+  is_smart_ = is_smart;
+  reset_resource();
+  if (OB_ISNULL(fulltext_) || fulltext_len_ <= 0) {
+    // empty text — don't call prepare_next_char
+  } else if (OB_FAIL(prepare_next_char())) {
+    LOG_WARN("Failed to prepare next char for reuse", K(ret));
+  }
+  return ret;
+}
+
 int TokenizeContext::current_char(const char *&ch, uint8_t &char_len)
 {
   int ret = OB_SUCCESS;

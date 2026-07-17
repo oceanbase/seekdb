@@ -41,6 +41,9 @@ public:
   int init();
   int reset_resource();
 
+  // Update text pointer and reset cursor/state for reuse without reallocation.
+  int set_text(const char *fulltext, int64_t fulltext_len, ObCollationType coll_type, bool is_smart);
+
   int get_next_token(const char *&word, int64_t &word_len, int64_t &offset, int64_t &char_cnt);
 
   int compound(ObIKToken &result);
@@ -108,6 +111,8 @@ public:
                          const uint8_t char_len,
                          const ObFTCharUtil::CharType type)
       = 0;
+
+  virtual void reset_state() {}
 };
 
 } // namespace storage

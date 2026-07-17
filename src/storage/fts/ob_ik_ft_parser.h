@@ -89,18 +89,16 @@ private:
 
   void reset_for_reuse()
   {
+    // Light reset: just clear ctx state and processor state for caching.
+    // Full reset (with deallocation) is done in reset().
     if (!OB_ISNULL(ctx_)) {
-      ctx_->~TokenizeContext();
-      allocator_.free(ctx_);
-      ctx_ = nullptr;
+      ctx_->reset_resource();
     }
     for (ObIIKProcessor *segmenter : segmenters_) {
       if (!OB_ISNULL(segmenter)) {
-        segmenter->~ObIIKProcessor();
-        allocator_.free(segmenter);
+        segmenter->reset_state();
       }
     }
-    segmenters_.clear();
   }
 
   bool should_read_newest_table() const;
