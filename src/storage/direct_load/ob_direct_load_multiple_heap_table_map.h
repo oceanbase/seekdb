@@ -46,6 +46,7 @@ public:
 
   void set_mem_limit(const int64_t mem_limit) { mem_limit_ = mem_limit; }
   bool empty() const { return tablet_map_.empty(); }
+  TO_STRING_EMPTY();
 
 private:
   DISALLOW_COPY_AND_ASSIGN(ObDirectLoadMultipleHeapTableMap);
@@ -62,5 +63,4 @@ private:
 }
 
 #endif /* OB_DIRECT_LOAD_MULTIPLE_HEAP_TABLE_MAP_H_ */
-
 

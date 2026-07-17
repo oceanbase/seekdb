@@ -67,13 +67,15 @@ ObDirectLoadMultipleHeapTableSorter::ObDirectLoadMultipleHeapTableSorter(
     allocator_("TLD_Sorter"),
     index_dir_id_(-1),
     data_dir_id_(-1),
-    heap_table_array_(nullptr)
+    heap_table_array_(nullptr),
+    chunk_pool_()
 {
   
 }
 
 ObDirectLoadMultipleHeapTableSorter::~ObDirectLoadMultipleHeapTableSorter()
 {
+  drain_chunk_pool();
 }
 
 int ObDirectLoadMultipleHeapTableSorter::add_table(const ObDirectLoadTableHandle &table_handle)
@@ -100,6 +102,12 @@ int ObDirectLoadMultipleHeapTableSorter::acquire_chunk(ObDirectLoadMultipleHeapT
   int64_t sort_memory = 0;
   if (OB_FAIL(ObDirectLoadSortMemoryPolicy::get_chunk_sort_memory(mem_ctx_, sort_memory))) {
     LOG_WARN("fail to get direct load chunk sort memory", KR(ret));
+  } else if (chunk_pool_.count() > 0) {
+    chunk = chunk_pool_.at(chunk_pool_.count() - 1);
+    chunk_pool_.pop_back();
+    chunk->set_mem_limit(sort_memory);
+    chunk->reuse();
+    LOG_TRACE("reuse direct load heap table map chunk", K(sort_memory), K(chunk_pool_.count()));
   } else {
     if (OB_ISNULL(chunk = OB_NEW(ObDirectLoadMultipleHeapTableMap, mem_attr, sort_memory))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
@@ -110,8 +118,7 @@ int ObDirectLoadMultipleHeapTableSorter::acquire_chunk(ObDirectLoadMultipleHeapT
   }
   if (OB_FAIL(ret)) {
     if (nullptr != chunk) {
-      OB_DELETE(ObDirectLoadMultipleHeapTableMap, mem_attr, chunk);
-      chunk = nullptr;
+      destroy_chunk(chunk);
     }
   }
   return ret;
@@ -168,11 +175,49 @@ int ObDirectLoadMultipleHeapTableSorter::close_chunk(ObDirectLoadMultipleHeapTab
   }
 
   if (chunk != nullptr) {
-    chunk->~ObDirectLoadMultipleHeapTableMap();
-    ob_free(chunk);
-    chunk = nullptr;
+    if (OB_SUCC(ret)) {
+      recycle_chunk(chunk);
+    } else {
+      destroy_chunk(chunk);
+    }
   }
   return ret;
+}
+
+void ObDirectLoadMultipleHeapTableSorter::recycle_chunk(ObDirectLoadMultipleHeapTableMap *&chunk)
+{
+  int ret = OB_SUCCESS;
+  if (OB_ISNULL(chunk)) {
+    // do nothing
+  } else if (chunk_pool_.count() >= MAX_CACHED_CHUNK_COUNT) {
+    destroy_chunk(chunk);
+  } else {
+    chunk->reuse();
+    if (OB_FAIL(chunk_pool_.push_back(chunk))) {
+      LOG_WARN("fail to cache direct load heap table map chunk", KR(ret), K(chunk_pool_.count()));
+      destroy_chunk(chunk);
+    } else {
+      chunk = nullptr;
+    }
+  }
+}
+
+void ObDirectLoadMultipleHeapTableSorter::destroy_chunk(ObDirectLoadMultipleHeapTableMap *&chunk)
+{
+  if (OB_NOT_NULL(chunk)) {
+    ObMemAttr mem_attr("TLD_MemChunk");
+    OB_DELETE(ObDirectLoadMultipleHeapTableMap, mem_attr, chunk);
+    chunk = nullptr;
+  }
+}
+
+void ObDirectLoadMultipleHeapTableSorter::drain_chunk_pool()
+{
+  while (chunk_pool_.count() > 0) {
+    ObDirectLoadMultipleHeapTableMap *chunk = chunk_pool_.at(chunk_pool_.count() - 1);
+    chunk_pool_.pop_back();
+    destroy_chunk(chunk);
+  }
 }
 
 int ObDirectLoadMultipleHeapTableSorter::get_tables(
@@ -251,9 +296,7 @@ int ObDirectLoadMultipleHeapTableSorter::work()
   }
 
   if (chunk != nullptr) {
-    chunk->~ObDirectLoadMultipleHeapTableMap();
-    ob_free(chunk);
-    chunk = nullptr;
+    destroy_chunk(chunk);
   }
 
   return ret;
