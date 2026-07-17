@@ -26,6 +26,7 @@ namespace storage
 ObSRMergeCmp::ObSRMergeCmp()
   : cmp_func_(nullptr),
     iter_ids_(nullptr),
+    is_uint64_id_(false),
     is_inited_(false)
 {
 }
@@ -44,6 +45,7 @@ int ObSRMergeCmp::init(ObDatumMeta id_meta, const ObFixedArray<const ObDatum *, 
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("failed to init IRIterLoserTreeCmp", K(ret));
     } else {
+      is_uint64_id_ = id_meta.type_ == common::ObUInt64Type;
       is_inited_ = true;
     }
   }
@@ -61,7 +63,14 @@ int ObSRMergeCmp::cmp(
     LOG_WARN("not inited", K(ret));
   } else {
     int tmp_ret = 0;
-    if (OB_FAIL(cmp_func_(get_id_datum(l.iter_idx_), get_id_datum(r.iter_idx_), tmp_ret))) {
+    const ObDatum &left = get_id_datum(l.iter_idx_);
+    const ObDatum &right = get_id_datum(r.iter_idx_);
+    if (OB_LIKELY(is_uint64_id_ && !left.is_null() && !right.is_null())) {
+      const uint64_t left_id = left.get_uint64();
+      const uint64_t right_id = right.get_uint64();
+      tmp_ret = left_id < right_id ? -1 : (left_id > right_id ? 1 : 0);
+      cmp_ret = tmp_ret;
+    } else if (OB_FAIL(cmp_func_(left, right, tmp_ret))) {
       LOG_WARN("failed to compare doc id by datum", K(ret));
     } else {
       cmp_ret = tmp_ret;
@@ -354,13 +363,18 @@ int ObSRDaaTIterImpl::collect_dims_by_id(const ObDatum *&id_datum, double &relev
     }
     if (OB_FAIL(merge_heap_->top(top_item))) {
       LOG_WARN("failed to get top item from merge heap", K(ret));
-    } else if (OB_FAIL(relevance_collector_->collect_one_dim(top_item->iter_idx_, top_item->relevance_))) {
-      LOG_WARN("failed to collect one dimension", K(ret));
-    } else if (FALSE_IT(iter_idx = top_item->iter_idx_)) {
-    } else if (OB_FAIL(merge_heap_->pop())) {
-      LOG_WARN("failed to pop top item in heap", K(ret));
     } else {
-      next_round_iter_idxes_[next_round_cnt_++] = iter_idx;
+      iter_idx = top_item->iter_idx_;
+      if (!predicate_only_fast_path()
+          && OB_FAIL(relevance_collector_->collect_one_dim(iter_idx, top_item->relevance_))) {
+        LOG_WARN("failed to collect one dimension", K(ret));
+      }
+      if (OB_FAIL(ret)) {
+      } else if (OB_FAIL(merge_heap_->pop())) {
+        LOG_WARN("failed to pop top item in heap", K(ret));
+      } else {
+        next_round_iter_idxes_[next_round_cnt_++] = iter_idx;
+      }
     }
   }
 
@@ -370,6 +384,8 @@ int ObSRDaaTIterImpl::collect_dims_by_id(const ObDatum *&id_datum, double &relev
     if (OB_ISNULL(id_datum)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected null id datum", K(ret));
+    } else if (predicate_only_fast_path()) {
+      got_valid_id = true;
     } else if (OB_FAIL(relevance_collector_->get_result(relevance, got_valid_id))) {
       LOG_WARN("failed to get result", K(ret));
     } else if (got_valid_id && OB_FAIL(process_collected_row(*id_datum, relevance))) {
@@ -440,7 +456,9 @@ int ObSRDaaTIterImpl::cache_result(int64_t &count, const ObDatum &id_datum, cons
     LOG_WARN("invalid buffered idx", K(ret), K(count), K(buffered_domain_ids_.count()), K(buffered_relevances_.count()));
   } else {
     buffered_domain_ids_[count].from_datum(id_datum);
-    buffered_relevances_[count] = relevance;
+    if (!predicate_only_fast_path()) {
+      buffered_relevances_[count] = relevance;
+    }
     ++count;
     ++output_row_cnt_;
     if (limit_param->is_valid() && output_row_cnt_ >= limit) {
@@ -485,9 +503,11 @@ int ObSRDaaTIterImpl::project_results(const int64_t count)
     ObDatum &id_proj_datum = id_proj_expr->locate_datum_for_write(*eval_ctx);
     set_datum_func_(id_proj_datum, buffered_domain_ids_[0]);
     id_proj_expr->set_evaluated_projected(*eval_ctx);
-    ObDatum &relevance_proj_datum = relevance_proj_expr->locate_datum_for_write(*eval_ctx);
-    relevance_proj_datum.set_double(buffered_relevances_[0]);
-    relevance_proj_expr->set_evaluated_projected(*eval_ctx);
+    if (iter_param_->need_project_relevance()) {
+      ObDatum &relevance_proj_datum = relevance_proj_expr->locate_datum_for_write(*eval_ctx);
+      relevance_proj_datum.set_double(buffered_relevances_[0]);
+      relevance_proj_expr->set_evaluated_projected(*eval_ctx);
+    }
   }
   return ret;
 }

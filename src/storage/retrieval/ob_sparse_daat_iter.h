@@ -57,6 +57,7 @@ private:
   // TODO: if memory lifetime of docid datum is guaranteed by dim_iters, we can use pointer to datum directly
   //       and avoid deep copy into merge heap here
   const ObFixedArray<const ObDatum *, ObIAllocator> *iter_ids_;
+  bool is_uint64_id_;
   bool is_inited_;
 };
 
@@ -93,6 +94,11 @@ protected:
   virtual int cache_result(int64_t &count, const ObDatum &id_datum, const double relevance);
   virtual int project_results(const int64_t count);
   int init_merge_heap(const int64_t count);
+  OB_INLINE bool predicate_only_fast_path() const
+  {
+    return !iter_param_->need_project_relevance() && !iter_param_->need_filter()
+           && relevance_collector_->can_skip_for_predicate_only();
+  }
 protected:
   ObIAllocator *iter_allocator_;
   ObSparseRetrievalMergeParam *iter_param_;
