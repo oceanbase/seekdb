@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_RESV
 #include "sql/resolver/ddl/ob_rename_table_resolver.h"
+#include "sql/resolver/ddl/ob_fts_index_builder_util.h"
 
 namespace oceanbase
 {
@@ -116,6 +117,8 @@ int ObRenameTableResolver::resolve_rename_action(const ParseNode &rename_action_
                                                                origin_table_name,
                                                                false, /*is_index*/
                                                                table_schema));
+      bool dict_is_referenced = false;
+      ObSchemaGetterGuard *schema_guard = schema_checker_->get_schema_guard();
       ParseNode *new_db_node = new_node->children_[0];
       obcall::ObRenameTableItem rename_table_item;
       rename_table_item.origin_db_name_ = origin_db_name;
@@ -123,7 +126,17 @@ int ObRenameTableResolver::resolve_rename_action(const ParseNode &rename_action_
       rename_table_item.new_db_name_ = new_db_name;
       rename_table_item.new_table_name_ = new_table_name;
       rename_table_item.origin_table_id_ = NULL != table_schema ? table_schema->get_table_id() : common::OB_INVALID_ID;
-      if (OB_FAIL(rename_table_stmt->add_rename_table_item(rename_table_item))) {
+      if (OB_NOT_NULL(table_schema) && table_schema->is_fulltext_dict() && OB_ISNULL(schema_guard)) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("schema guard is null", K(ret));
+      } else if (OB_NOT_NULL(table_schema) && table_schema->is_fulltext_dict()
+                 && OB_FAIL(share::ObFtsIndexBuilderUtil::check_fulltext_dict_referenced(
+                     *schema_guard, origin_db_name, origin_table_name, dict_is_referenced))) {
+        LOG_WARN("failed to check fulltext dictionary references", K(ret));
+      } else if (dict_is_referenced) {
+        ret = OB_NOT_SUPPORTED;
+        LOG_USER_ERROR(OB_NOT_SUPPORTED, "Rename referenced fulltext dictionary table");
+      } else if (OB_FAIL(rename_table_stmt->add_rename_table_item(rename_table_item))) {
         LOG_WARN("failed to add rename table item", K(rename_table_item), K(ret));
       } else if (OB_NOT_NULL(table_schema)) {
         if (table_schema->is_mlog_table()) {

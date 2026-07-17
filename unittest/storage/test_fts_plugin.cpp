@@ -458,7 +458,7 @@ private:
 };
 
 const char *ObTestFTParseHelper::name_ = "space.1";
-const char *ObTestFTParseHelper::properties_ = "{\"min_token_size\":3,\"max_token_size\":84,\"stopword_table\":\"default\",\"dict_table\":\"none\",\"quanitfier_table\":\"none\",\"ngram_token_size\":2}";
+const char *ObTestFTParseHelper::properties_ = "{\"min_token_size\":3,\"max_token_size\":84,\"stopword_table\":\"default\",\"dict_table\":\"none\",\"quantifier_table\":\"none\",\"ngram_token_size\":2}";
 ObTestFTParseHelper::ObTestFTParseHelper()
   : plugin_name_(STRLEN(name_), name_),
     plugin_properties_(STRLEN(properties_), properties_),
@@ -688,7 +688,7 @@ private:
 };
 
 const char *ObTestNgramFTParseHelper::name_ = "ngram.1";
-const char *ObTestNgramFTParseHelper::properties_ = "{\"min_token_size\":3,\"max_token_size\":84,\"stopword_table\":\"default\",\"dict_table\":\"none\",\"quanitfier_table\":\"none\",\"ngram_token_size\":2}";
+const char *ObTestNgramFTParseHelper::properties_ = "{\"min_token_size\":3,\"max_token_size\":84,\"stopword_table\":\"default\",\"dict_table\":\"none\",\"quantifier_table\":\"none\",\"ngram_token_size\":2}";
 
 ObTestNgramFTParseHelper::ObTestNgramFTParseHelper()
   : plugin_name_(STRLEN(name_), name_),

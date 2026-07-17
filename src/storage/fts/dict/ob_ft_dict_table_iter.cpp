@@ -30,7 +30,7 @@ namespace oceanbase
 namespace storage
 {
 ObFTDictTableIter::ObFTDictTableIter(ObISQLClient::ReadResult &result)
-    : ObIFTDictIterator(), is_inited_(false), res_(result)
+    : ObIFTDictIterator(), is_inited_(false), is_iter_end_(false), res_(result)
 {
 }
 
@@ -40,6 +40,8 @@ int ObFTDictTableIter::get_key(ObString &str)
   if (!IS_INIT) {
     ret = OB_NOT_INIT;
     LOG_WARN("Not inited.", K(ret));
+  } else if (is_iter_end_) {
+    ret = OB_ITER_END;
   } else if (OB_FAIL(res_.get_result()->get_varchar("word", str))) {
     LOG_WARN("Failed to get varchar", K(ret));
   }
@@ -58,9 +60,13 @@ int ObFTDictTableIter::next()
   if (!IS_INIT) {
     ret = OB_NOT_INIT;
     LOG_WARN("Not inited.", K(ret));
+  } else if (is_iter_end_) {
+    ret = OB_ITER_END;
   } else if (OB_FAIL(res_.get_result()->next())) {
     if (OB_ITER_END != ret) {
       LOG_WARN("Failed to get next row", K(ret));
+    } else {
+      is_iter_end_ = true;
     }
   }
   return ret;
@@ -77,7 +83,7 @@ int ObFTDictTableIter::init(const ObString &table_name)
   } else {
     SMART_VAR(ObSqlString, sql_string)
     {
-      if (OB_FAIL(sql_string.append("SELECT word FROM oceanbase."))) {
+      if (OB_FAIL(sql_string.append("SELECT word FROM "))) {
         LOG_WARN("Failed to append sql", K(ret));
       } else if (OB_FAIL(sql_string.append(table_name))) {
         LOG_WARN("Failed to append sql", K(ret));
@@ -98,6 +104,8 @@ int ObFTDictTableIter::init(const ObString &table_name)
         LOG_WARN("Failed to get next row", K(ret));
       } else {
         is_inited_ = true;
+        is_iter_end_ = true;
+        ret = OB_SUCCESS;
       }
     } else {
       is_inited_ = true;
@@ -111,6 +119,7 @@ void ObFTDictTableIter::reset()
 {
   res_.close();
   is_inited_ = false;
+  is_iter_end_ = false;
 }
 
 } //  namespace storage

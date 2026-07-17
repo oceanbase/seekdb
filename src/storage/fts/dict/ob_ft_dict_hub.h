@@ -52,11 +52,12 @@ struct ObFTDictInfoKey
 {
 public:
   ObFTDictInfoKey()
-      : type_(static_cast<uint64_t>(ObFTDictType::DICT_TYPE_INVALID))
+      : name_hash_(0), type_(static_cast<uint64_t>(ObFTDictType::DICT_TYPE_INVALID)), tenant_id_(0)
   {
   } // default constructor
-  ObFTDictInfoKey(const uint64_t type)
-      : type_(type)
+  explicit ObFTDictInfoKey(const ObFTDictDesc &desc)
+      : name_hash_(desc.name_.hash()), type_(static_cast<uint64_t>(desc.type_)),
+        tenant_id_(desc.tenant_id_)
   {
   }
   int hash(uint64_t &hash_value) const
@@ -69,26 +70,42 @@ public:
   uint64_t hash() const
   {
     uint64_t hash = 0;
+    hash = common::murmurhash(&name_hash_, sizeof(name_hash_), hash);
     hash = common::murmurhash(&type_, sizeof(int64_t), hash);
+    hash = common::murmurhash(&tenant_id_, sizeof(tenant_id_), hash);
     return hash;
   }
 
   bool operator==(const ObFTDictInfoKey &other) const
   {
-    return type_ == other.type_ && true;
+    return name_hash_ == other.name_hash_ && type_ == other.type_ && tenant_id_ == other.tenant_id_;
   }
 
   int compare(const ObFTDictInfoKey &other) const
   {
     int ret = 0;
-    if (0 == ret) {
-      ret = type_ - other.type_;
+    if (name_hash_ < other.name_hash_) {
+      ret = -1;
+    } else if (name_hash_ > other.name_hash_) {
+      ret = 1;
+    } else if (tenant_id_ < other.tenant_id_) {
+      ret = -1;
+    } else if (tenant_id_ > other.tenant_id_) {
+      ret = 1;
+    } else if (type_ < other.type_) {
+      ret = -1;
+    } else if (type_ > other.type_) {
+      ret = 1;
+    } else {
+      ret = 0;
     }
     return ret;
   }
 
 private:
+  uint64_t name_hash_;
   uint64_t type_;
+  uint64_t tenant_id_;
   // name
 };
 
@@ -106,6 +123,8 @@ public:
   int build_cache(const ObFTDictDesc &desc, ObFTCacheRangeContainer &container);
 
   int load_cache(const ObFTDictDesc &desc, ObFTCacheRangeContainer &container);
+
+  int refresh_cache(const common::ObString &dict_table_name);
 
 private:
   int get_dict_info(const ObFTDictInfoKey &key, ObFTDictInfo &info);

@@ -155,7 +155,7 @@ int ObFTParserResolverHelper::resolve_fts_index_parser_properties(
         } else if (OB_UNLIKELY(node->children_[0]->str_len_ <= 0)) {
           ret = OB_INVALID_ARGUMENT;
           LOG_WARN("invalid argument", K(ret), K(node->children_[0]->str_len_));
-          LOG_USER_ERROR(OB_INVALID_ARGUMENT, "the quanitfier table is empty");
+          LOG_USER_ERROR(OB_INVALID_ARGUMENT, "the quantifier table is empty");
         } else {
           int32_t str_len = static_cast<int32_t>(node->children_[0]->str_len_);
           if (OB_FAIL(property.config_set_quantifier_table(

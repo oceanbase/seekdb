@@ -24,6 +24,7 @@
 #include "storage/fts/dict/ob_ft_cache_container.h"
 #include "storage/fts/dict/ob_ft_dict_def.h"
 #include "storage/fts/dict/ob_ft_range_dict.h"
+#include "share/rc/ob_tenant_base.h"
 namespace oceanbase
 {
 namespace storage
@@ -51,8 +52,9 @@ int ObFTDictHub::destroy()
 int ObFTDictHub::build_cache(const ObFTDictDesc &desc, ObFTCacheRangeContainer &container)
 {
   int ret = OB_SUCCESS;
-  ObFTDictInfoKey key(static_cast<uint64_t>(desc.type_));
+  ObFTDictInfoKey key(desc);
   ObFTDictInfo info;
+  ObFTDictDesc versioned_desc(desc);
   container.reset();
 
   if (!is_inited_) {
@@ -64,12 +66,17 @@ int ObFTDictHub::build_cache(const ObFTDictDesc &desc, ObFTCacheRangeContainer &
     // try if valid with no recursive lock
     if (OB_FAIL(get_dict_info(key, info))) {
       if (OB_HASH_NOT_EXIST == ret) {
-        // dict not exist, make new one, by caller
+        info.version_ = 1;
+        info.type_ = desc.type_;
+        info.charset_ = desc.charset_;
         ret = OB_ENTRY_NOT_EXIST;
       } else {
         LOG_WARN("Failed to get dict info", K(ret));
       }
-    } else if (OB_FAIL(ObFTRangeDict::try_load_cache(desc, info.range_count_, container))) {
+    } else if (info.range_count_ <= 0) {
+      ret = OB_ENTRY_NOT_EXIST;
+    } else if (FALSE_IT(versioned_desc.version_ = info.version_)) {
+    } else if (OB_FAIL(ObFTRangeDict::try_load_cache(versioned_desc, info.range_count_, container))) {
       if (OB_ENTRY_NOT_EXIST == ret) {
       } else {
         LOG_WARN("Failed to load cache", K(ret));
@@ -78,7 +85,10 @@ int ObFTDictHub::build_cache(const ObFTDictDesc &desc, ObFTCacheRangeContainer &
 
     if (OB_FAIL(ret)) {
       if (OB_ENTRY_NOT_EXIST == ret) {
-        if (OB_FAIL(ObFTRangeDict::build_cache_from_ik_dict(desc, container))) {
+        versioned_desc.version_ = info.version_;
+        if (OB_FAIL(desc.is_builtin_
+                    ? ObFTRangeDict::build_cache_from_ik_dict(versioned_desc, container)
+                    : ObFTRangeDict::build_cache(versioned_desc, container))) {
           LOG_WARN("Failed to build cache", K(ret));
         } else if (FALSE_IT(info.range_count_ = container.get_handles().size())) {
         } else if (OB_FAIL(put_dict_info(key, info))) {
@@ -95,7 +105,8 @@ int ObFTDictHub::load_cache(const ObFTDictDesc &desc, ObFTCacheRangeContainer &c
   int ret = OB_SUCCESS;
   ObFTDictInfo info;
   container.reset();
-  ObFTDictInfoKey key(static_cast<uint64_t>(desc.type_));
+  ObFTDictInfoKey key(desc);
+  ObFTDictDesc versioned_desc(desc);
   if (!is_inited_) {
     ret = OB_NOT_INIT;
     LOG_WARN("dict hub not init", K(ret));
@@ -112,7 +123,10 @@ int ObFTDictHub::load_cache(const ObFTDictDesc &desc, ObFTCacheRangeContainer &c
       }
     }
     if (OB_FAIL(ret)) {
-    } else if (OB_FAIL(ObFTRangeDict::try_load_cache(desc, info.range_count_, container))) {
+    } else if (info.range_count_ <= 0) {
+      ret = OB_ENTRY_NOT_EXIST;
+    } else if (FALSE_IT(versioned_desc.version_ = info.version_)) {
+    } else if (OB_FAIL(ObFTRangeDict::try_load_cache(versioned_desc, info.range_count_, container))) {
       if (OB_ENTRY_NOT_EXIST == ret) {
         // dict not exist, make new one, by caller
       } else {
@@ -121,6 +135,43 @@ int ObFTDictHub::load_cache(const ObFTDictDesc &desc, ObFTCacheRangeContainer &c
     }
   }
 
+  return ret;
+}
+
+int ObFTDictHub::refresh_cache(const ObString &dict_table_name)
+{
+  int ret = OB_SUCCESS;
+  if (!is_inited_ || dict_table_name.empty()) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid dictionary cache refresh request", K(ret), K(dict_table_name), K(is_inited_));
+  }
+  for (uint32_t type_value = static_cast<uint32_t>(ObFTDictType::DICT_IK_MAIN);
+       OB_SUCC(ret) && type_value <= static_cast<uint32_t>(ObFTDictType::DICT_IK_STOP);
+       ++type_value) {
+    const ObFTDictDesc desc(dict_table_name,
+                            static_cast<ObFTDictType>(type_value),
+                            CHARSET_UTF8MB4,
+                            CS_TYPE_UTF8MB4_BIN,
+                            false,
+                            0,
+                            MTL_ID());
+    const ObFTDictInfoKey key(desc);
+    ObBucketHashWLockGuard guard(rw_dict_lock_, key.hash());
+    ObFTDictInfo info;
+    int tmp_ret = get_dict_info(key, info);
+    if (OB_HASH_NOT_EXIST == tmp_ret) {
+      // A dictionary which has never been used has no stale cache to invalidate.
+    } else if (OB_SUCCESS != tmp_ret) {
+      ret = tmp_ret;
+      LOG_WARN("failed to find dictionary cache during refresh", K(ret), K(dict_table_name));
+    } else {
+      ++info.version_;
+      info.range_count_ = 0;
+      if (OB_FAIL(put_dict_info(key, info))) {
+        LOG_WARN("failed to invalidate dictionary cache", K(ret), K(dict_table_name));
+      }
+    }
+  }
   return ret;
 }
 

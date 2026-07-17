@@ -48,10 +48,7 @@ public:
     already_calc_(false),
     row_count_(0),
     col_count_(0),
-    value_table_(NULL),
-    split_chunk_idx_(0),
-    split_initialized_(false),
-    split_chunks_()
+    value_table_(NULL) 
   {}
 
   virtual int inner_open() override;
@@ -62,55 +59,8 @@ public:
   virtual int inner_close() override;
   virtual void destroy() override;
 private:
-  struct SplitDocumentOptions
-  {
-    SplitDocumentOptions()
-      : is_markdown_(true), by_sentence_(false), max_units_(256), overlap_(0)
-    {}
-    bool is_markdown_;
-    bool by_sentence_;
-    int64_t max_units_;
-    int64_t overlap_;
-  };
-  struct DocumentUnit
-  {
-    DocumentUnit() : start_(0), end_(0) {}
-    DocumentUnit(int64_t start, int64_t end) : start_(start), end_(end) {}
-    int64_t start_;
-    int64_t end_;
-    TO_STRING_KV(K_(start), K_(end));
-  };
-  struct SplitDocumentChunk
-  {
-    SplitDocumentChunk() : id_(0), offset_(0), length_(0), text_() {}
-    int64_t id_;
-    int64_t offset_;
-    int64_t length_;
-    common::ObString text_;
-    TO_STRING_KV(K_(id), K_(offset), K_(length), K_(text));
-  };
   int inner_get_next_row_udf();
   int inner_get_next_row_sys_func();
-  int inner_get_next_row_ai_split_document();
-  int init_split_document();
-  int parse_split_options(const common::ObString &json_text,
-                          SplitDocumentOptions &options);
-  int split_document(const common::ObString &content,
-                     const SplitDocumentOptions &options);
-  int split_document_range(const common::ObString &content,
-                           int64_t range_start,
-                           int64_t range_end,
-                           const common::ObString &heading,
-                           const SplitDocumentOptions &options);
-  int build_document_units(const common::ObString &content,
-                           int64_t range_start,
-                           int64_t range_end,
-                           bool by_sentence,
-                           common::ObIArray<DocumentUnit> &units);
-  int append_split_chunk(const common::ObString &content,
-                         const common::ObString &heading,
-                         const DocumentUnit &first_unit,
-                         const DocumentUnit &last_unit);
   int get_current_result(common::ObObj &result);
   int64_t node_idx_;
   bool already_calc_;
@@ -118,9 +68,6 @@ private:
   int64_t col_count_;
   common::ObObj value_;
   pl::ObPLCollection *value_table_;
-  int64_t split_chunk_idx_;
-  bool split_initialized_;
-  common::ObSEArray<SplitDocumentChunk, 16> split_chunks_;
   int (ObFunctionTableOp::*next_row_func_)();
 };
 

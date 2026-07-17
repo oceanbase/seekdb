@@ -28,7 +28,10 @@
 #include "object/ob_object.h"
 #include "plugin/sys/ob_plugin_helper.h"
 #include "sql/resolver/ddl/ob_fts_index_builder_util.h"
+#include "sql/session/ob_sql_session_info.h"
+#include "share/ob_server_struct.h"
 #include "share/ob_json_access_utils.h"
+#include "share/schema/ob_multi_version_schema_service.h"
 #include "storage/fts/dict/ob_gen_dic_loader.h"
 #include "storage/fts/ob_fts_parser_property.h"
 #include "storage/fts/ob_fts_plugin_helper.h"
@@ -239,6 +242,12 @@ int ObExprTokenize::parse_param(const ObExpr &expr,
     LOG_WARN("Fail to parse parser params.", K(ret));
   } else if (OB_FAIL(param.reform_parser_properties(param.properties_))) {
     LOG_WARN("Fail to reform parser params.", K(ret));
+  } else if (OB_ISNULL(ctx.exec_ctx_.get_my_session())) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("session is null", K(ret));
+  } else if (OB_FAIL(param.qualify_ik_dict_tables(
+                 ctx.exec_ctx_.get_my_session()->get_database_name()))) {
+    LOG_WARN("Fail to qualify IK dictionary table names.", K(ret));
   } else if (OB_FAIL(param.try_load_dictionary_for_ik())) {
     LOG_WARN("fail to try load dictionary for ik", K(ret));
   }
@@ -433,6 +442,99 @@ int ObExprTokenize::TokenizeParam::reform_parser_properties(const ObString &prop
     LOG_WARN("fail to serialize to string", K(ret), K(parser_properties));
   }
 
+  return ret;
+}
+
+int ObExprTokenize::TokenizeParam::qualify_ik_dict_tables(const ObString &database_name)
+{
+  int ret = OB_SUCCESS;
+  storage::ObFTParser parser;
+  storage::ObFTParserJsonProps parser_properties;
+  share::schema::ObSchemaGetterGuard schema_guard;
+  if (OB_FAIL(parser.parse_from_str(parser_name_.ptr(), parser_name_.length()))) {
+    LOG_WARN("fail to parse fulltext parser name", K(ret), K(parser_name_));
+  } else if (!parser.is_ik()) {
+    // Dictionary table properties are IK-only.
+  } else if (OB_ISNULL(GCTX.schema_service_)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("schema service is null", K(ret));
+  } else if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(schema_guard))) {
+    LOG_WARN("fail to get tenant schema guard", K(ret));
+  } else if (OB_FAIL(parser_properties.init())) {
+    LOG_WARN("fail to initialize parser properties", K(ret));
+  } else if (OB_FAIL(parser_properties.parse_from_valid_str(properties_))) {
+    LOG_WARN("fail to parse parser properties", K(ret), K(properties_));
+  }
+
+  for (int64_t i = 0; OB_SUCC(ret) && parser.is_ik() && i < 3; ++i) {
+    ObString configured_name;
+    const char *default_name = nullptr;
+    if (0 == i) {
+      default_name = storage::ObFTSLiteral::FT_DEFAULT_IK_DICT_UTF8_TABLE;
+      ret = parser_properties.config_get_dict_table(configured_name);
+    } else if (1 == i) {
+      default_name = storage::ObFTSLiteral::FT_DEFAULT_IK_QUANTIFIER_UTF8_TABLE;
+      ret = parser_properties.config_get_quantifier_table(configured_name);
+    } else {
+      default_name = storage::ObFTSLiteral::FT_DEFAULT_IK_STOPWORD_UTF8_TABLE;
+      ret = parser_properties.config_get_stopword_table(configured_name);
+    }
+    if (OB_FAIL(ret)) {
+      LOG_WARN("fail to read IK dictionary table property", K(ret), K(i));
+    } else if (0 == configured_name.case_compare(default_name)) {
+      // Keep built-in dictionary names unchanged.
+    } else {
+      ObString configured_database;
+      ObString configured_table;
+      const char *dot = configured_name.find('.');
+      if (OB_ISNULL(dot)) {
+        configured_database = database_name;
+        configured_table = configured_name;
+      } else {
+        configured_database.assign_ptr(configured_name.ptr(),
+            static_cast<int32_t>(dot - configured_name.ptr()));
+        configured_table.assign_ptr(dot + 1,
+            static_cast<int32_t>(configured_name.ptr() + configured_name.length() - dot - 1));
+      }
+      const share::schema::ObTableSchema *dict_schema = nullptr;
+      const share::schema::ObDatabaseSchema *dict_database = nullptr;
+      ObSqlString qualified_name;
+      if (configured_database.empty() || configured_table.empty()
+          || OB_NOT_NULL(configured_table.find('.'))) {
+        ret = OB_INVALID_ARGUMENT;
+        LOG_USER_ERROR(OB_INVALID_ARGUMENT, "IK dictionary table name");
+      } else if (OB_FAIL(schema_guard.get_table_schema(
+                     configured_database, configured_table, false, dict_schema))) {
+        LOG_WARN("fail to get IK dictionary table schema", K(ret),
+                 K(configured_database), K(configured_table));
+      } else if (OB_ISNULL(dict_schema) || !dict_schema->is_fulltext_dict()) {
+        ret = OB_INVALID_ARGUMENT;
+        LOG_USER_ERROR(OB_INVALID_ARGUMENT, "IK dictionary table must use FULLTEXT_DICT='Y'");
+      } else if (OB_FAIL(schema_guard.get_database_schema(
+                     dict_schema->get_database_id(), dict_database))) {
+        LOG_WARN("fail to get IK dictionary database schema", K(ret), KPC(dict_schema));
+      } else if (OB_ISNULL(dict_database)) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("IK dictionary database schema is null", K(ret), KPC(dict_schema));
+      } else if (OB_FAIL(qualified_name.append_fmt("%.*s.%.*s",
+                     dict_database->get_database_name_str().length(),
+                     dict_database->get_database_name_str().ptr(),
+                     dict_schema->get_table_name_str().length(),
+                     dict_schema->get_table_name_str().ptr()))) {
+        LOG_WARN("fail to build qualified IK dictionary table name", K(ret));
+      } else if (0 == i) {
+        ret = parser_properties.config_set_dict_table(qualified_name.string());
+      } else if (1 == i) {
+        ret = parser_properties.config_set_quantifier_table(qualified_name.string());
+      } else {
+        ret = parser_properties.config_set_stopword_table(qualified_name.string());
+      }
+    }
+  }
+  if (OB_SUCC(ret) && parser.is_ik()
+      && OB_FAIL(parser_properties.to_format_json(allocator_, properties_))) {
+    LOG_WARN("fail to serialize qualified IK parser properties", K(ret));
+  }
   return ret;
 }
 

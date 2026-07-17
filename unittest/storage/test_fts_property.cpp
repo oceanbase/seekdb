@@ -200,7 +200,7 @@ TEST_F(TestFTParserJsonProperty, test_parse_from_string)
 
   // okay to parse, but not valid for parser.
   const ObString prebuild_result
-      = R"({"min_token_size": 3, "max_token_size": 84, "stopword_table": "a_stopword_table_name", "ngram_token_size": 2, "quanitfier_table": "a_quantifier_table_name"})";
+      = R"({"min_token_size": 3, "max_token_size": 84, "stopword_table": "a_stopword_table_name", "ngram_token_size": 2, "quantifier_table": "a_quantifier_table_name"})";
 
   ObFTParserJsonProps json_props;
   ret = json_props.init();
@@ -230,9 +230,9 @@ TEST_F(TestFTParserJsonProperty, test_parse_from_string)
   ret = json_props.config_get_stopword_table(stopword_table);
   ASSERT_EQ(stopword_table, ObString("a_stopword_table_name"));
 
-  ObString quanitfier_table;
-  ret = json_props.config_get_quantifier_table(quanitfier_table);
-  ASSERT_EQ(quanitfier_table, ObString("a_quantifier_table_name"));
+  ObString quantifier_table;
+  ret = json_props.config_get_quantifier_table(quantifier_table);
+  ASSERT_EQ(quantifier_table, ObString("a_quantifier_table_name"));
 
   ObString parse_string;
   ObArenaAllocator allocator;
@@ -530,7 +530,7 @@ TEST_F(TestFTParserProperty, test_parse_for_ddl)
     ASSERT_EQ(OB_SUCCESS, ret);
 
     const common::ObString ik_str
-        = R"({"stopword_table": "a_stopword_table_name", "quanitfier_table": "a_quantifier_table_name"})";
+        = R"({"stopword_table": "a_stopword_table_name", "quantifier_table": "a_quantifier_table_name"})";
     ret = json_props.parse_from_valid_str(ik_str);
     ASSERT_EQ(OB_SUCCESS, ret);
 

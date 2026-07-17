@@ -63,9 +63,27 @@ public:
   ObFTDictDesc(const ObString &name,
                const ObFTDictType type,
                const ObCharsetType charset,
-               const ObCollationType coll_type)
-      : name_(name), type_(type), charset_(charset), coll_type_(coll_type)
+               const ObCollationType coll_type,
+               const bool is_builtin = true,
+               const int64_t version = 0,
+               const uint64_t tenant_id = 0)
+      : name_(name), type_(type), charset_(charset), coll_type_(coll_type),
+        is_builtin_(is_builtin), version_(version), tenant_id_(tenant_id)
   {
+  }
+
+  uint64_t identity_hash() const
+  {
+    uint64_t hash = name_.hash();
+    const uint64_t type = static_cast<uint64_t>(type_);
+    hash = common::murmurhash(&type, sizeof(type), hash);
+    return common::murmurhash(&tenant_id_, sizeof(tenant_id_), hash);
+  }
+
+  uint64_t cache_id() const
+  {
+    uint64_t hash = identity_hash();
+    return common::murmurhash(&version_, sizeof(version_), hash);
   }
 
 public:
@@ -73,6 +91,9 @@ public:
   ObFTDictType type_;
   ObCharsetType charset_;
   ObCollationType coll_type_;
+  bool is_builtin_;
+  int64_t version_;
+  uint64_t tenant_id_;
 };
 
 } //  namespace storage

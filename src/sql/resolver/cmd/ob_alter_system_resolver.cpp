@@ -2539,5 +2539,90 @@ int resolve_tenant_name(
   return ret;
 }
 
+int ObRefreshFulltextDictResolver::resolve(const ParseNode &parse_tree)
+{
+  int ret = OB_SUCCESS;
+  ObRefreshFulltextDictStmt *stmt = nullptr;
+  ObString database_name;
+  ObString table_name;
+  if (T_REFRESH_FULLTEXT_DICT != parse_tree.type_
+      || 1 != parse_tree.num_child_
+      || OB_ISNULL(parse_tree.children_)
+      || OB_ISNULL(parse_tree.children_[0])) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("invalid REFRESH FULLTEXT DICT parse tree", K(ret), K(parse_tree.type_));
+  } else {
+    const ParseNode &name_node = *parse_tree.children_[0];
+    if (T_RELATION_FACTOR == name_node.type_
+        && name_node.num_child_ >= 2
+        && OB_NOT_NULL(name_node.children_)
+        && OB_NOT_NULL(name_node.children_[1])) {
+      if (OB_NOT_NULL(name_node.children_[0])) {
+        database_name.assign_ptr(name_node.children_[0]->str_value_,
+                                 static_cast<int32_t>(name_node.children_[0]->str_len_));
+      }
+      table_name.assign_ptr(name_node.children_[1]->str_value_,
+                            static_cast<int32_t>(name_node.children_[1]->str_len_));
+    } else if (T_VARCHAR == name_node.type_) {
+      ObString qualified(static_cast<int32_t>(name_node.str_len_), name_node.str_value_);
+      const char *dot = qualified.find('.');
+      if (OB_ISNULL(dot)) {
+        table_name = qualified;
+      } else {
+        database_name.assign_ptr(qualified.ptr(), static_cast<int32_t>(dot - qualified.ptr()));
+        table_name.assign_ptr(dot + 1,
+                              static_cast<int32_t>(qualified.ptr() + qualified.length() - dot - 1));
+        if (OB_NOT_NULL(table_name.find('.'))) {
+          ret = OB_INVALID_ARGUMENT;
+          LOG_USER_ERROR(OB_INVALID_ARGUMENT, "FULLTEXT dictionary table name");
+        }
+      }
+    } else {
+      ret = OB_INVALID_ARGUMENT;
+      LOG_USER_ERROR(OB_INVALID_ARGUMENT, "FULLTEXT dictionary table name");
+    }
+  }
+  if (OB_SUCC(ret) && database_name.empty()) {
+    database_name = session_info_->get_database_name();
+  }
+  if (OB_SUCC(ret) && (database_name.empty() || table_name.empty())) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_USER_ERROR(OB_INVALID_ARGUMENT, "FULLTEXT dictionary table name");
+  }
+  const ObTableSchema *table_schema = nullptr;
+  const ObDatabaseSchema *database_schema = nullptr;
+  if (OB_SUCC(ret)
+      && OB_FAIL(schema_checker_->get_table_schema(database_name, table_name, false, table_schema))) {
+    LOG_WARN("failed to get FULLTEXT dictionary table schema", K(ret), K(database_name), K(table_name));
+  } else if (OB_SUCC(ret) && (OB_ISNULL(table_schema) || !table_schema->is_fulltext_dict())) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_USER_ERROR(OB_INVALID_ARGUMENT, "table is not a FULLTEXT_DICT table");
+  } else if (OB_SUCC(ret)
+             && OB_FAIL(schema_checker_->get_database_schema(
+                    table_schema->get_database_id(), database_schema))) {
+    LOG_WARN("failed to get FULLTEXT dictionary database schema", K(ret), KPC(table_schema));
+  } else if (OB_SUCC(ret) && OB_ISNULL(database_schema)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("FULLTEXT dictionary database schema is null", K(ret), KPC(table_schema));
+  }
+  ObSqlString qualified_name;
+  if (OB_SUCC(ret)
+      && OB_FAIL(qualified_name.append_fmt("%.*s.%.*s",
+                                           database_schema->get_database_name_str().length(),
+                                           database_schema->get_database_name_str().ptr(),
+                                           table_schema->get_table_name_str().length(),
+                                           table_schema->get_table_name_str().ptr()))) {
+    LOG_WARN("failed to build qualified dictionary table name", K(ret));
+  } else if (OB_SUCC(ret) && OB_ISNULL(stmt = create_stmt<ObRefreshFulltextDictStmt>())) {
+    ret = OB_ALLOCATE_MEMORY_FAILED;
+    LOG_WARN("failed to create REFRESH FULLTEXT DICT statement", K(ret));
+  } else if (OB_SUCC(ret) && OB_FAIL(stmt->set_dict_table_name(qualified_name.string()))) {
+    LOG_WARN("failed to store dictionary table name", K(ret), K(qualified_name));
+  } else if (OB_SUCC(ret)) {
+    stmt_ = stmt;
+  }
+  return ret;
+}
+
 } // end namespace sql
 } // end namespace oceanbase

@@ -89,33 +89,21 @@ int ObResolverUtils::get_all_function_table_column_names(const TableItem &table_
   ObRawExpr *table_expr = NULL;
   ObPLPackageGuard *package_guard = nullptr;
   const ObUserDefinedType *user_type = NULL;
+  ObExecContext *exec_ctx = params.session_info_->get_cur_exec_ctx();
+  CK (OB_NOT_NULL(exec_ctx));
+  OZ (exec_ctx->get_package_guard(package_guard));
+  CK (OB_NOT_NULL(package_guard));
   CK (OB_LIKELY(table_item.is_function_table()));
   CK (OB_NOT_NULL(table_expr = table_item.function_table_expr_));
-  if (OB_SUCC(ret) && T_FUN_SYS_AI_SPLIT_DOCUMENT == table_expr->get_expr_type()) {
-    OZ (column_names.push_back(ObString("CHUNK_ID")));
-    OZ (column_names.push_back(ObString("CHUNK_OFFSET")));
-    OZ (column_names.push_back(ObString("CHUNK_LENGTH")));
-    OZ (column_names.push_back(ObString("CHUNK_TEXT")));
-  } else if (OB_SUCC(ret) && T_FUN_SYS_GENERATOR == table_expr->get_expr_type()) {
-    OZ (column_names.push_back(ObString("COLUMN_VALUE")));
-  } else if (OB_SUCC(ret)) {
-    ObExecContext *exec_ctx = params.session_info_->get_cur_exec_ctx();
-    CK (OB_NOT_NULL(exec_ctx));
-    OZ (exec_ctx->get_package_guard(package_guard));
-    CK (OB_NOT_NULL(package_guard));
-    CK (table_expr->get_udt_id() != OB_INVALID_ID);
-    CK (OB_NOT_NULL(params.schema_checker_));
-    OZ (ObResolverUtils::get_user_type(
-      params.allocator_, params.session_info_, params.sql_proxy_,
-      params.schema_checker_->get_schema_guard(),
-      *package_guard,
-      table_expr->get_udt_id(), user_type));
-    CK (OB_NOT_NULL(user_type));
-  }
-  if (OB_SUCC(ret) && (T_FUN_SYS_AI_SPLIT_DOCUMENT == table_expr->get_expr_type()
-                       || T_FUN_SYS_GENERATOR == table_expr->get_expr_type())) {
-    return ret;
-  }
+  CK (table_expr->get_udt_id() != OB_INVALID_ID);
+
+  CK (OB_NOT_NULL(params.schema_checker_));
+  OZ (ObResolverUtils::get_user_type(
+    params.allocator_, params.session_info_, params.sql_proxy_,
+    params.schema_checker_->get_schema_guard(),
+    *package_guard,
+    table_expr->get_udt_id(), user_type));
+  CK (OB_NOT_NULL(user_type));
   if (OB_SUCC(ret) && !user_type->is_collection_type()) {
     ret = OB_NOT_SUPPORTED;
     LOG_WARN("function table get udf with return type not table type",
@@ -2991,9 +2979,8 @@ bool ObResolverUtils::is_expr_can_be_used_in_table_function(const ObRawExpr &exp
   if (expr.get_result_type().is_ext()) {
     // for UDF
     bret = true;
-  } else if (T_FUN_SYS_GENERATOR == expr.get_expr_type()
-             || T_FUN_SYS_AI_SPLIT_DOCUMENT == expr.get_expr_type()) {
-    // for built-in stream functions
+  } else if (T_FUN_SYS_GENERATOR == expr.get_expr_type()) {
+    // for generator(N) stream function
     bret = true;
   }
   return bret;

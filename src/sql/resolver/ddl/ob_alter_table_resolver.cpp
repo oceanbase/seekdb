@@ -170,10 +170,23 @@ int ObAlterTableResolver::resolve(const ParseNode &parse_tree)
       }
     }
     if (OB_SUCC(ret)) {
-      
-      alter_table_stmt->set_table_id(table_schema_->get_table_id());
-      alter_table_stmt->get_alter_table_arg().alter_table_schema_.set_charset_type(table_schema_->get_charset_type());
-      alter_table_stmt->get_alter_table_arg().alter_table_schema_.set_collation_type(table_schema_->get_collation_type());
+      bool dict_is_referenced = false;
+      ObSchemaGetterGuard *schema_guard = schema_checker_->get_schema_guard();
+      if (table_schema_->is_fulltext_dict() && OB_ISNULL(schema_guard)) {
+        ret = OB_ERR_UNEXPECTED;
+        SQL_RESV_LOG(WARN, "schema guard is null", K(ret));
+      } else if (table_schema_->is_fulltext_dict()
+                 && OB_FAIL(share::ObFtsIndexBuilderUtil::check_fulltext_dict_referenced(
+                     *schema_guard, database_name_, table_name_, dict_is_referenced))) {
+        SQL_RESV_LOG(WARN, "failed to check fulltext dictionary references", K(ret));
+      } else if (dict_is_referenced) {
+        ret = OB_NOT_SUPPORTED;
+        LOG_USER_ERROR(OB_NOT_SUPPORTED, "Alter referenced fulltext dictionary table");
+      } else {
+        alter_table_stmt->set_table_id(table_schema_->get_table_id());
+        alter_table_stmt->get_alter_table_arg().alter_table_schema_.set_charset_type(table_schema_->get_charset_type());
+        alter_table_stmt->get_alter_table_arg().alter_table_schema_.set_collation_type(table_schema_->get_collation_type());
+      }
     }
     //resolve action list
     if (OB_SUCCESS == ret && NULL != parse_tree.children_[ACTION_LIST]){

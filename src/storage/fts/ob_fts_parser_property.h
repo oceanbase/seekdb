@@ -23,6 +23,7 @@
 #include "common/json_type/ob_json_base.h"
 #include "lib/oblog/ob_log_module.h"
 #include "lib/string/ob_string.h"
+#include "lib/string/ob_fixed_length_string.h"
 #include "lib/utility/ob_macro_utils.h"
 #include "storage/fts/ob_fts_literal.h"
 
@@ -135,6 +136,7 @@ private:
 struct ObFTParserProperty final
 {
 public:
+  static const int64_t MAX_DICT_TABLE_NAME_LENGTH = 1024;
   ObFTParserProperty();
   ~ObFTParserProperty() = default;
   int parse_for_parser_helper(const ObFTParser &parser, const ObString &json_str);
@@ -164,9 +166,9 @@ public:
   int64_t max_token_size_;
   int64_t ngram_token_size_;
   bool ik_mode_smart_;
-  common::ObString stopword_table_;
-  common::ObString dict_table_;
-  common::ObString quantifier_table_;
+  common::ObFixedLengthString<MAX_DICT_TABLE_NAME_LENGTH> stopword_table_;
+  common::ObFixedLengthString<MAX_DICT_TABLE_NAME_LENGTH> dict_table_;
+  common::ObFixedLengthString<MAX_DICT_TABLE_NAME_LENGTH> quantifier_table_;
   int64_t min_ngram_token_size_;
   int64_t max_ngram_token_size_;
 };

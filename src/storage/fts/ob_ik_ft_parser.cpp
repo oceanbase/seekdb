@@ -24,6 +24,7 @@
 #include "lib/utility/ob_macro_utils.h"
 #include "lib/utility/utility.h"
 #include "storage/fts/ob_fts_struct.h"
+#include "storage/fts/ob_fts_literal.h"
 #include "storage/fts/ob_fts_plugin_helper.h"
 #include "storage/fts/dict/ob_ft_dict.h"
 #include "storage/fts/dict/ob_ft_dict_def.h"
@@ -36,6 +37,9 @@
 #include "storage/fts/ik/ob_ik_quantifier_processor.h"
 #include "storage/fts/ik/ob_ik_surrogate_processor.h"
 #include "plugin/sys/ob_plugin_mgr.h"
+#include "share/ob_server_struct.h"
+#include "share/rc/ob_tenant_base.h"
+#include "share/schema/ob_multi_version_schema_service.h"
 
 using namespace oceanbase::plugin;
 
@@ -43,6 +47,56 @@ namespace oceanbase
 {
 namespace storage
 {
+namespace
+{
+int get_dict_collation(const ObString &qualified_name,
+                       const bool is_builtin,
+                       ObCollationType &collation_type)
+{
+  int ret = OB_SUCCESS;
+  collation_type = CS_TYPE_UTF8MB4_BIN;
+  if (is_builtin) {
+  } else {
+    const char *dot = qualified_name.find('.');
+    share::schema::ObSchemaGetterGuard schema_guard;
+    const share::schema::ObTableSchema *table_schema = nullptr;
+    if (OB_ISNULL(dot) || dot == qualified_name.ptr()
+        || dot == qualified_name.ptr() + qualified_name.length() - 1) {
+      ret = OB_INVALID_ARGUMENT;
+      LOG_WARN("custom dictionary table name is not qualified", K(ret), K(qualified_name));
+    } else if (OB_ISNULL(GCTX.schema_service_)) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("schema service is null", K(ret));
+    } else {
+      const ObString database_name(static_cast<int32_t>(dot - qualified_name.ptr()),
+                                   qualified_name.ptr());
+      const ObString table_name(
+          static_cast<int32_t>(qualified_name.ptr() + qualified_name.length() - dot - 1),
+          dot + 1);
+      if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(schema_guard))) {
+        LOG_WARN("failed to get tenant schema guard", K(ret));
+      } else if (OB_FAIL(schema_guard.get_table_schema(
+                     database_name, table_name, false, table_schema))) {
+        LOG_WARN("failed to get custom dictionary table schema", K(ret), K(qualified_name));
+      } else if (OB_ISNULL(table_schema)) {
+        ret = OB_TABLE_NOT_EXIST;
+        LOG_WARN("custom dictionary table does not exist", K(ret), K(qualified_name));
+      } else {
+        const share::schema::ObColumnSchemaV2 *word_column
+            = table_schema->get_column_schema(ObString::make_string("word"));
+        if (OB_ISNULL(word_column)) {
+          ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("custom dictionary word column is missing", K(ret), K(qualified_name));
+        } else {
+          collation_type = word_column->get_collation_type();
+        }
+      }
+    }
+  }
+  return ret;
+}
+}
+
 int ObIKFTParser::init(const ObFTParserParam &param)
 {
   int ret = OB_SUCCESS;
@@ -103,11 +157,10 @@ int ObIKFTParser::get_next_token(const char *&word,
         }
       } else {
         bool is_stop = false;
-        // if (!OB_ISNULL(dict_stop_)
-        //     && OB_FAIL(dict_stop_->match(ObString(len, output_word + offset), is_stop))) {
-        //   LOG_WARN("Failed to match stopwords", K(ret));
-        // } else
-        if (!is_stop) {
+        if (!OB_ISNULL(dict_stop_)
+            && OB_FAIL(dict_stop_->match(ObString(len, output_word + offset), is_stop))) {
+          LOG_WARN("Failed to match stopwords", K(ret));
+        } else if (!is_stop) {
           word = output_word + offset;
           word_len = len;
           char_cnt = cnt;
@@ -277,21 +330,53 @@ int ObIKFTParser::init_dict(const plugin::ObFTParserParam &param)
     LOG_WARN("Dict hub is not inited", K(ret));
   }
 
+  const ObString main_dict_name = param.ik_param_.main_dict_.empty()
+      ? ObString(ObFTSLiteral::FT_DEFAULT_IK_DICT_UTF8_TABLE) : param.ik_param_.main_dict_;
+  const ObString quan_dict_name = param.ik_param_.quan_dict_.empty()
+      ? ObString(ObFTSLiteral::FT_DEFAULT_IK_QUANTIFIER_UTF8_TABLE) : param.ik_param_.quan_dict_;
+  const ObString stopword_dict_name = param.ik_param_.stopword_dict_.empty()
+      ? ObString(ObFTSLiteral::FT_DEFAULT_IK_STOPWORD_UTF8_TABLE) : param.ik_param_.stopword_dict_;
+  const bool main_builtin = 0 == main_dict_name.case_compare(ObFTSLiteral::FT_DEFAULT_IK_DICT_UTF8_TABLE);
+  const bool quan_builtin = 0 == quan_dict_name.case_compare(ObFTSLiteral::FT_DEFAULT_IK_QUANTIFIER_UTF8_TABLE);
+  const bool stop_builtin = 0 == stopword_dict_name.case_compare(ObFTSLiteral::FT_DEFAULT_IK_STOPWORD_UTF8_TABLE);
+
+  ObCollationType main_collation = CS_TYPE_UTF8MB4_BIN;
+  ObCollationType quan_collation = CS_TYPE_UTF8MB4_BIN;
+  ObCollationType stop_collation = CS_TYPE_UTF8MB4_BIN;
+  if (OB_SUCC(ret) && OB_FAIL(get_dict_collation(main_dict_name, main_builtin, main_collation))) {
+    LOG_WARN("failed to get main dictionary collation", K(ret), K(main_dict_name));
+  } else if (OB_SUCC(ret)
+             && OB_FAIL(get_dict_collation(quan_dict_name, quan_builtin, quan_collation))) {
+    LOG_WARN("failed to get quantifier dictionary collation", K(ret), K(quan_dict_name));
+  } else if (OB_SUCC(ret)
+             && OB_FAIL(get_dict_collation(stopword_dict_name, stop_builtin, stop_collation))) {
+    LOG_WARN("failed to get stopword dictionary collation", K(ret), K(stopword_dict_name));
+  }
+
   ObFTRangeDict *dict = nullptr;
-  ObFTDictDesc main_dict_desc("main_dict",
+  ObFTDictDesc main_dict_desc(main_dict_name,
                               ObFTDictType::DICT_IK_MAIN,
                               ObCharsetType::CHARSET_UTF8MB4,
-                              ObCollationType::CS_TYPE_UTF8MB4_BIN);
+                              main_collation,
+                              main_builtin,
+                              0,
+                              MTL_ID());
 
-  ObFTDictDesc quan_dict_desc("quan_dict",
+  ObFTDictDesc quan_dict_desc(quan_dict_name,
                               ObFTDictType::DICT_IK_QUAN,
                               ObCharsetType::CHARSET_UTF8MB4,
-                              ObCollationType::CS_TYPE_UTF8MB4_BIN);
+                              quan_collation,
+                              quan_builtin,
+                              0,
+                              MTL_ID());
 
-  ObFTDictDesc stopword_dict_desc("stopword",
+  ObFTDictDesc stopword_dict_desc(stopword_dict_name,
                                   ObFTDictType::DICT_IK_STOP,
                                   ObCharsetType::CHARSET_UTF8MB4,
-                                  ObCollationType::CS_TYPE_UTF8MB4_BIN);
+                                  stop_collation,
+                                  stop_builtin,
+                                  0,
+                                  MTL_ID());
 
   if (should_read_newest_table()) {
     // clear dict cache, always false now

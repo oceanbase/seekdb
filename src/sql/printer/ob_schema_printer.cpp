@@ -1654,6 +1654,12 @@ int ObSchemaPrinter::print_table_definition_table_options(const ObTableSchema &t
       SHARE_SCHEMA_LOG(WARN, "fail to print table read only", K(ret));
     }
   }
+  if (OB_SUCC(ret) && !strict_compat_ && !is_index_tbl
+      && table_schema.is_fulltext_dict() && !is_no_table_options(sql_mode)) {
+    if (OB_FAIL(databuff_printf(buf, buf_len, pos, "FULLTEXT_DICT = 'Y' "))) {
+      SHARE_SCHEMA_LOG(WARN, "fail to print FULLTEXT_DICT table option", K(ret));
+    }
+  }
   ObString table_mode_str = "";
   if (OB_SUCC(ret) && !strict_compat_ && !is_index_tbl && !is_no_table_options(sql_mode)) {
     if (!agent_mode) {
@@ -2119,6 +2125,11 @@ int ObSchemaPrinter::print_table_definition_table_options(
   if (OB_SUCC(ret) && !strict_compat_ && !is_index_tbl && table_schema.is_read_only()) {
     if (OB_FAIL(databuff_printf(buf, buf_len, pos, "READ ONLY "))) {
       SHARE_SCHEMA_LOG(WARN, "fail to print table read only", K(ret));
+    }
+  }
+  if (OB_SUCC(ret) && !strict_compat_ && !is_index_tbl && table_schema.is_fulltext_dict()) {
+    if (OB_FAIL(databuff_printf(buf, buf_len, pos, "FULLTEXT_DICT = 'Y' "))) {
+      OB_LOG(WARN, "fail to print FULLTEXT_DICT table option", K(ret));
     }
   }
   // backup table mode
