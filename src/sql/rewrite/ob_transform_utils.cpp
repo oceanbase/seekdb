@@ -14830,7 +14830,7 @@ int ObTransformUtils::inner_check_need_calc_match_score(ObExecContext *exec_ctx,
 }
 
 int ObTransformUtils::check_need_calc_match_score(ObExecContext *exec_ctx,
-                                                  const ObDMLStmt *root_stmt,
+                                                  const bool generated_table_count_only,
                                                   const ObDMLStmt *stmt,
                                                   ObRawExpr *match_expr,
                                                   bool &need_calc,
@@ -14844,103 +14844,8 @@ int ObTransformUtils::check_need_calc_match_score(ObExecContext *exec_ctx,
   if (OB_ISNULL(exec_ctx) || OB_ISNULL(stmt) || OB_ISNULL(match_expr)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), KP(exec_ctx), KP(stmt), KP(match_expr));
-  } else if (stmt->has_limit()) {
-    const ObDMLStmt *parent_stmt = nullptr;
-    const ObSelectStmt *parent_select = nullptr;
-    const ObSelectStmt *child_select = nullptr;
-    const TableItem *parent_table = nullptr;
-    int64_t table_id = OB_INVALID_ID;
-    bool is_generated_table = false;
-    bool is_count_only_parent = false;
-    if (OB_ISNULL(root_stmt)) {
-      // Without parent context a LIMIT may still imply relevance Top-K.
-    } else if (OB_FAIL(get_parent_stmt(root_stmt,
-                                       stmt,
-                                       parent_stmt,
-                                       table_id,
-                                       is_generated_table))) {
-      LOG_WARN("failed to get parent statement", K(ret));
-    } else if (!is_generated_table
-        || OB_ISNULL(parent_stmt)
-        || !parent_stmt->is_select_stmt()
-        || !stmt->is_select_stmt()) {
-      // Keep the conservative relevance Top-K behavior.
-    } else if (FALSE_IT(parent_select = static_cast<const ObSelectStmt *>(parent_stmt))) {
-    } else if (FALSE_IT(child_select = static_cast<const ObSelectStmt *>(stmt))) {
-    } else if (!parent_select->is_single_table_stmt()) {
-      // The parent must observe exactly this generated table.
-    } else if (OB_ISNULL(parent_table = parent_select->get_table_item(0))) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected null generated table", K(ret), K(table_id));
-    } else {
-      is_count_only_parent = !child_select->is_set_stmt()
-          && child_select->is_single_table_stmt()
-          && !child_select->has_order_by()
-          && !child_select->has_group_by()
-          && !child_select->has_rollup()
-          && !child_select->has_having()
-          && !child_select->has_window_function()
-          && !child_select->has_distinct()
-          && !child_select->has_sequence()
-          && !child_select->has_fetch()
-          && nullptr == child_select->get_limit_percent_expr()
-          && !child_select->is_calc_found_rows()
-          && !child_select->has_select_into()
-          && parent_table->table_id_ == static_cast<uint64_t>(table_id)
-          && parent_table->is_generated_table()
-          && parent_table->ref_query_ == child_select
-          && parent_select->is_scala_group_by()
-          && 0 == parent_select->get_group_expr_size()
-          && !parent_select->has_rollup()
-          && 1 == parent_select->get_aggr_item_size()
-          && T_FUN_COUNT == parent_select->get_aggr_item(0)->get_expr_type()
-          && !parent_select->get_aggr_item(0)->is_param_distinct()
-          && 0 == parent_select->get_aggr_item(0)->get_real_param_count()
-          && 1 == parent_select->get_select_item_size()
-          && parent_select->get_select_item(0).expr_ == parent_select->get_aggr_item(0)
-          && 0 == parent_select->get_condition_size()
-          && !parent_select->has_having()
-          && !parent_select->has_order_by()
-          && !parent_select->has_limit()
-          && !parent_select->has_window_function()
-          && !parent_select->has_distinct()
-          && !parent_select->has_sequence()
-          && !parent_select->has_fetch()
-          && !parent_select->has_select_into()
-          && !parent_select->is_calc_found_rows();
-    }
-
-    if (OB_SUCC(ret) && is_count_only_parent) {
-      if (OB_FAIL(stmt->get_relation_exprs(relation_exprs))) {
-        LOG_WARN("failed to get statement relation expressions", K(ret));
-      } else {
-        bool score_is_observed = false;
-        for (int64_t i = 0; OB_SUCC(ret) && !score_is_observed && i < relation_exprs.count(); ++i) {
-          ObRawExpr *expr = relation_exprs.at(i);
-          bool expr_need_calc = false;
-          if (OB_ISNULL(expr)) {
-            ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("unexpected null relation expression", K(ret), K(i));
-          } else if (!expr->has_flag(CNT_MATCH_EXPR) && expr != match_expr) {
-            // This expression tree cannot reference MATCH.
-          } else if (OB_FAIL(inner_check_need_calc_match_score(exec_ctx,
-                                                              expr,
-                                                              match_expr,
-                                                              expr_need_calc,
-                                                              constraints))) {
-            LOG_WARN("failed to check whether MATCH score is required", K(ret), KPC(expr));
-          } else if (expr_need_calc) {
-            score_is_observed = true;
-          }
-        }
-        if (OB_SUCC(ret) && !score_is_observed) {
-          // The parent observes only the number of rows. Match-only execution
-          // is safe regardless of where a separate result LIMIT is applied.
-          cardinality_only_limit = true;
-          need_calc = false;
-        }
-      }
-    }
+  } else if (stmt->has_limit() && !generated_table_count_only) {
+    // A LIMIT can imply relevance Top-K unless the parent observes only row count.
   } else if (OB_FAIL(stmt->get_relation_exprs(relation_exprs))) {
     LOG_WARN("failed to get statement relation expressions", K(ret));
   } else {
@@ -14962,6 +14867,9 @@ int ObTransformUtils::check_need_calc_match_score(ObExecContext *exec_ctx,
       } else if (expr_need_calc) {
         need_calc = true;
       }
+    }
+    if (OB_SUCC(ret) && stmt->has_limit() && !need_calc) {
+      cardinality_only_limit = true;
     }
   }
   return ret;

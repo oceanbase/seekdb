@@ -188,13 +188,13 @@ public:
   inline common::ObString &get_sql_text() {return sql_text_;}
   // @brief Get the corresponding stmt
   inline virtual const ObDMLStmt *get_stmt() const { return stmt_; }
-  inline void set_generated_table_parent_stmt(const ObDMLStmt *stmt)
+  inline void set_generated_table_count_only(const bool count_only)
   {
-    generated_table_parent_stmt_ = stmt;
+    generated_table_count_only_ = count_only;
   }
-  inline const ObDMLStmt *get_generated_table_parent_stmt() const
+  inline bool is_generated_table_count_only() const
   {
-    return generated_table_parent_stmt_;
+    return generated_table_count_only_;
   }
 
   inline int get_stmt_type(stmt::StmtType &stmt_type) const
@@ -1867,7 +1867,7 @@ protected: // member variable
   ObOptimizerContext &optimizer_context_;
   common::ObIAllocator &allocator_;
   const ObDMLStmt *stmt_;
-  const ObDMLStmt *generated_table_parent_stmt_;
+  bool generated_table_count_only_; // parent observes this generated table only through COUNT(*)
   ObLogOperatorFactory log_op_factory_;
   All_Candidate_Plans candidates_;
   common::ObSEArray<std::pair<ObRawExpr *, ObRawExpr *>, 4, common::ModulePageAllocator, true > group_replaced_exprs_;

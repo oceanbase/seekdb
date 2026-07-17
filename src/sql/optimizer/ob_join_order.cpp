@@ -10964,6 +10964,63 @@ int ObJoinOrder::generate_normal_subquery_paths()
   return ret;
 }
 
+static bool is_count_only_generated_table(const ObDMLStmt *parent_stmt,
+                                          const ObDMLStmt *child_stmt,
+                                          const uint64_t generated_table_id)
+{
+  bool count_only = false;
+  if (OB_NOT_NULL(parent_stmt)
+      && OB_NOT_NULL(child_stmt)
+      && parent_stmt->is_select_stmt()
+      && child_stmt->is_select_stmt()) {
+    const ObSelectStmt *parent_select = static_cast<const ObSelectStmt *>(parent_stmt);
+    const ObSelectStmt *child_select = static_cast<const ObSelectStmt *>(child_stmt);
+    const TableItem *parent_table = parent_select->get_table_item_by_id(generated_table_id);
+    const ObAggFunRawExpr *count_expr = 1 == parent_select->get_aggr_item_size()
+        ? parent_select->get_aggr_item(0) : nullptr;
+    const ObRawExpr *select_expr = 1 == parent_select->get_select_item_size()
+        ? parent_select->get_select_item(0).expr_ : nullptr;
+    count_only = child_select->is_single_table_stmt()
+        && !child_select->is_set_stmt()
+        && OB_NOT_NULL(child_select->get_limit_expr())
+        && !child_select->has_order_by()
+        && !child_select->has_group_by()
+        && !child_select->has_rollup()
+        && !child_select->has_having()
+        && !child_select->has_window_function()
+        && !child_select->has_distinct()
+        && !child_select->has_sequence()
+        && !child_select->has_fetch()
+        && nullptr == child_select->get_limit_percent_expr()
+        && !child_select->is_calc_found_rows()
+        && !child_select->has_select_into()
+        && parent_select->is_single_table_stmt()
+        && OB_NOT_NULL(parent_table)
+        && parent_table->is_generated_table()
+        && parent_table->table_id_ == generated_table_id
+        && parent_select->is_scala_group_by()
+        && 0 == parent_select->get_group_expr_size()
+        && !parent_select->has_rollup()
+        && OB_NOT_NULL(count_expr)
+        && T_FUN_COUNT == count_expr->get_expr_type()
+        && !count_expr->is_param_distinct()
+        && 0 == count_expr->get_real_param_count()
+        && OB_NOT_NULL(select_expr)
+        && (select_expr == count_expr || select_expr->same_as(*count_expr))
+        && 0 == parent_select->get_condition_size()
+        && !parent_select->has_having()
+        && !parent_select->has_order_by()
+        && !parent_select->has_limit()
+        && !parent_select->has_window_function()
+        && !parent_select->has_distinct()
+        && !parent_select->has_sequence()
+        && !parent_select->has_fetch()
+        && !parent_select->has_select_into()
+        && !parent_select->is_calc_found_rows();
+  }
+  return count_only;
+}
+
 int ObJoinOrder::generate_subquery_paths(PathHelper &helper)
 {
   int ret = OB_SUCCESS;
@@ -10981,7 +11038,8 @@ int ObJoinOrder::generate_subquery_paths(PathHelper &helper)
              get_plan()->get_optimizer_context(), *child_stmt))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("failed to create plan", K(ret));
-  } else if (OB_FALSE_IT(log_plan->set_generated_table_parent_stmt(parent_stmt))) {
+  } else if (OB_FALSE_IT(log_plan->set_generated_table_count_only(
+      is_count_only_generated_table(parent_stmt, child_stmt, table_id_)))) {
   } else if (OB_FAIL(log_plan->add_pushdown_filters(helper.pushdown_filters_))) {
     LOG_WARN("failed to add pushdown filters", K(ret));
   } else if (OB_FAIL(log_plan->add_exec_params_meta(helper.exec_params_,

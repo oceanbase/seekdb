@@ -75,7 +75,7 @@ ObLogPlan::ObLogPlan(ObOptimizerContext &ctx, const ObDMLStmt *stmt)
   : optimizer_context_(ctx),
     allocator_(ctx.get_allocator()),
     stmt_(stmt),
-    generated_table_parent_stmt_(nullptr),
+    generated_table_count_only_(false),
     log_op_factory_(allocator_),
     candidates_(),
     group_replaced_exprs_(),
@@ -7983,8 +7983,11 @@ int ObLogPlan::try_push_limit_into_table_scan(ObLogicalOperator *top,
     const ObTextRetrievalInfo &tr_info = table_scan->get_text_retrieval_info();
     const ObIArray<ObRawExpr *> &pushdown_filters = table_scan->get_pushdown_filter_exprs();
     for (int64_t i = 0; !has_extra_pushdown_filter && i < pushdown_filters.count(); ++i) {
-      has_extra_pushdown_filter = OB_ISNULL(pushdown_filters.at(i))
-          || pushdown_filters.at(i) != tr_info.pushdown_match_filter_;
+      const ObRawExpr *filter = pushdown_filters.at(i);
+      const ObRawExpr *match_filter = tr_info.pushdown_match_filter_;
+      has_extra_pushdown_filter = OB_ISNULL(filter)
+          || OB_ISNULL(match_filter)
+          || (filter != match_filter && !filter->same_as(*match_filter));
     }
     //if TSC contains filters that cannot be pushdown to the storage
     //the limit clause cannot be pushed down either.
@@ -7995,33 +7998,26 @@ int ObLogPlan::try_push_limit_into_table_scan(ObLogicalOperator *top,
         && !is_virtual_table(table_scan->get_ref_table_id())
         && !get_stmt()->is_calc_found_rows()
         && !table_scan->is_sample_scan()
+        && OB_NOT_NULL(tr_info.pushdown_match_filter_)
         && table_scan->get_filter_exprs().empty()
         && !has_extra_pushdown_filter
+        && !(table_scan->get_is_index_global()
+             && table_scan->get_index_back()
+             && table_scan->has_index_lookup_filter())
         && NULL == table_scan->get_limit_expr()
         && NULL == table_scan->get_text_retrieval_info().topk_limit_expr_) {
       // Apply LIMIT to the IR merge result. Truncating every token scan here
       // could lose valid intersections for AND and Boolean queries.
-      bool has_valid_das_location = true;
-      bool das_multi_partition = false;
-      if (table_scan->use_das()) {
-        if (OB_ISNULL(table_scan->get_table_partition_info())) {
-          has_valid_das_location = false;
-        } else {
-          das_multi_partition = 1 != table_scan->get_table_partition_info()
-              ->get_phy_tbl_location_info().get_phy_part_loc_info_list().count();
-        }
-      }
-      if (has_valid_das_location) {
-        const bool need_global_limit = das_multi_partition || !table_scan->is_single()
-            || top->is_distributed();
-        ObTextRetrievalInfo &mutable_tr_info = table_scan->get_text_retrieval_info();
-        mutable_tr_info.topk_limit_expr_ = need_global_limit ? pushed_expr : limit_expr;
-        mutable_tr_info.topk_offset_expr_ = need_global_limit ? NULL : offset_expr;
-        mutable_tr_info.need_calc_relevance_ = false;
-        is_pushed = !need_global_limit;
-        LOG_TRACE("push cardinality-only limit into text retrieval merge",
-                  K(need_global_limit), K(das_multi_partition), K(is_pushed));
-      }
+      // Keep the logical LIMIT as the correctness boundary. Each local IR merge
+      // may produce at most limit + offset rows; the outer LIMIT applies the
+      // final global OFFSET/LIMIT after partition results are combined.
+      ObTextRetrievalInfo &mutable_tr_info = table_scan->get_text_retrieval_info();
+      mutable_tr_info.topk_limit_expr_ = pushed_expr;
+      mutable_tr_info.topk_offset_expr_ = NULL;
+      mutable_tr_info.need_calc_relevance_ = false;
+      is_pushed = false;
+      LOG_TRACE("push local cardinality limit into text retrieval merge",
+                K(is_pushed), KPC(pushed_expr));
     } else if (!has_npd_filter
         && !table_scan->get_text_retrieval_info().cardinality_only_limit_
         && !is_virtual_table(table_scan->get_ref_table_id()) &&
@@ -8062,11 +8058,9 @@ int ObLogPlan::try_push_limit_into_table_scan(ObLogicalOperator *top,
       if (!table_scan->get_text_retrieval_info().cardinality_only_limit_) {
         is_pushed = true;
       } else {
-        const bool das_multi_partition = table_scan->use_das()
-            && (OB_ISNULL(table_scan->get_table_partition_info())
-                || 1 != table_scan->get_table_partition_info()->get_phy_tbl_location_info()
-                            .get_phy_part_loc_info_list().count());
-        is_pushed = !das_multi_partition && table_scan->is_single() && !top->is_distributed();
+        // The result limit is local to the IR merge. Preserve the logical
+        // LIMIT for final global LIMIT/OFFSET semantics.
+        is_pushed = false;
       }
     } else if (OB_NOT_NULL(table_scan->get_vector_index_info().topk_limit_expr_)) {
       is_pushed = true;
@@ -14946,10 +14940,8 @@ int ObLogPlan::prepare_text_retrieval_info(const uint64_t ref_table_id,
     }
   }
   if (OB_SUCC(ret)) {
-    const ObDMLStmt *match_root_stmt = OB_NOT_NULL(get_generated_table_parent_stmt())
-        ? get_generated_table_parent_stmt() : get_optimizer_context().get_root_stmt();
     if (OB_FAIL(ObTransformUtils::check_need_calc_match_score(get_optimizer_context().get_exec_ctx(),
-                                                              match_root_stmt,
+                                                              is_generated_table_count_only(),
                                                               get_stmt(),
                                                               match_against,
                                                               need_calc_relevance,
