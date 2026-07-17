@@ -30,7 +30,7 @@ namespace oceanbase
 namespace storage
 {
 ObFTDictTableIter::ObFTDictTableIter(ObISQLClient::ReadResult &result)
-    : ObIFTDictIterator(), is_inited_(false), res_(result)
+    : ObIFTDictIterator(), is_inited_(false), is_empty_(false), res_(result)
 {
 }
 
@@ -40,6 +40,8 @@ int ObFTDictTableIter::get_key(ObString &str)
   if (!IS_INIT) {
     ret = OB_NOT_INIT;
     LOG_WARN("Not inited.", K(ret));
+  } else if (is_empty_) {
+    ret = OB_ITER_END;
   } else if (OB_FAIL(res_.get_result()->get_varchar("word", str))) {
     LOG_WARN("Failed to get varchar", K(ret));
   }
@@ -58,6 +60,8 @@ int ObFTDictTableIter::next()
   if (!IS_INIT) {
     ret = OB_NOT_INIT;
     LOG_WARN("Not inited.", K(ret));
+  } else if (is_empty_) {
+    ret = OB_ITER_END;
   } else if (OB_FAIL(res_.get_result()->next())) {
     if (OB_ITER_END != ret) {
       LOG_WARN("Failed to get next row", K(ret));
@@ -77,12 +81,20 @@ int ObFTDictTableIter::init(const ObString &table_name)
   } else {
     SMART_VAR(ObSqlString, sql_string)
     {
-      if (OB_FAIL(sql_string.append("SELECT word FROM oceanbase."))) {
-        LOG_WARN("Failed to append sql", K(ret));
-      } else if (OB_FAIL(sql_string.append(table_name))) {
-        LOG_WARN("Failed to append sql", K(ret));
-      } else if (OB_FAIL(sql_string.append(" ORDER BY word"))) {
-        LOG_WARN("Failed to append sql", K(ret));
+      ObString database_name = ObString::make_string("oceanbase");
+      ObString local_table_name = table_name;
+      const char *separator = local_table_name.find('.');
+      if (nullptr != separator) {
+        database_name = local_table_name.split_on(separator);
+      }
+      if (database_name.empty() || local_table_name.empty()
+          || nullptr != local_table_name.find('.')) {
+        ret = OB_INVALID_ARGUMENT;
+        LOG_WARN("invalid dictionary table name", K(ret), K(table_name));
+      } else if (OB_FAIL(sql_string.append_fmt("SELECT word FROM `%.*s`.`%.*s` ORDER BY word",
+                                               database_name.length(), database_name.ptr(),
+                                               local_table_name.length(), local_table_name.ptr()))) {
+        LOG_WARN("Failed to build dictionary query", K(ret));
       } else if (OB_FAIL(sql_proxy->read(res_, sql_string.ptr()))) {
         LOG_WARN("Failed to execute sql", K(ret));
       }
@@ -97,7 +109,9 @@ int ObFTDictTableIter::init(const ObString &table_name)
       if (OB_ITER_END != ret) {
         LOG_WARN("Failed to get next row", K(ret));
       } else {
+        ret = OB_SUCCESS;
         is_inited_ = true;
+        is_empty_ = true;
       }
     } else {
       is_inited_ = true;
@@ -111,6 +125,7 @@ void ObFTDictTableIter::reset()
 {
   res_.close();
   is_inited_ = false;
+  is_empty_ = false;
 }
 
 } //  namespace storage

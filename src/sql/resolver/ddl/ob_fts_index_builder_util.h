@@ -21,6 +21,7 @@
 #include "share/ob_rpc_struct.h"
 #include "share/schema/ob_schema_struct.h"
 namespace oceanbase { namespace sql { class ObSchemaChecker; class ObSqlSchemaGuard; } }
+namespace oceanbase { namespace storage { class ObFTParserJsonProps; } }
 #include "storage/fts/ob_fts_literal.h"
 namespace oceanbase { namespace sql { class ObRawExprFactory; } }  // fwd: previously re-exported through the share schema include chain
 
@@ -152,6 +153,16 @@ public:
       ObIAllocator *allocator);
   static int check_need_to_load_dic(const ObString &parser_name,
       bool &need_to_load_dic);
+  static int check_custom_dictionary_table(
+      const ObTableSchema &table_schema,
+      const bool log_to_user = true);
+  static int normalize_and_check_ik_dictionary_tables(
+      const ObString &parser_name,
+      const ObString &database_name,
+      storage::ObFTParserJsonProps &properties);
+  static int check_dictionary_table_not_referenced(
+      ObSchemaGetterGuard &schema_guard,
+      const ObTableSchema &table_schema);
   static int try_load_and_lock_dictionary_tables(
       const ObTableSchema &index_schema,
       ObMySQLTransaction &trans);

@@ -52,11 +52,11 @@ struct ObFTDictInfoKey
 {
 public:
   ObFTDictInfoKey()
-      : type_(static_cast<uint64_t>(ObFTDictType::DICT_TYPE_INVALID))
+      : identity_(0)
   {
   } // default constructor
-  ObFTDictInfoKey(const uint64_t type)
-      : type_(type)
+  ObFTDictInfoKey(const uint64_t identity)
+      : identity_(identity)
   {
   }
   int hash(uint64_t &hash_value) const
@@ -69,26 +69,26 @@ public:
   uint64_t hash() const
   {
     uint64_t hash = 0;
-    hash = common::murmurhash(&type_, sizeof(int64_t), hash);
+    hash = common::murmurhash(&identity_, sizeof(identity_), hash);
     return hash;
   }
 
   bool operator==(const ObFTDictInfoKey &other) const
   {
-    return type_ == other.type_ && true;
+    return identity_ == other.identity_;
   }
 
   int compare(const ObFTDictInfoKey &other) const
   {
     int ret = 0;
     if (0 == ret) {
-      ret = type_ - other.type_;
+      ret = identity_ < other.identity_ ? -1 : (identity_ > other.identity_ ? 1 : 0);
     }
     return ret;
   }
 
 private:
-  uint64_t type_;
+  uint64_t identity_;
   // name
 };
 
@@ -106,6 +106,10 @@ public:
   int build_cache(const ObFTDictDesc &desc, ObFTCacheRangeContainer &container);
 
   int load_cache(const ObFTDictDesc &desc, ObFTCacheRangeContainer &container);
+
+  int refresh_cache(const ObFTDictDesc &desc);
+
+  int refresh_cache(const ObFTDictDesc &desc, ObFTCacheRangeContainer &container);
 
 private:
   int get_dict_info(const ObFTDictInfoKey &key, ObFTDictInfo &info);

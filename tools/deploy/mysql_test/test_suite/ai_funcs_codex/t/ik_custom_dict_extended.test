@@ -1,0 +1,60 @@
+--echo # ==== additional IK custom dictionary coverage ====
+--disable_warnings
+DROP DATABASE IF EXISTS ai_ik_ext_test;
+--enable_warnings
+CREATE DATABASE ai_ik_ext_test;
+USE ai_ik_ext_test;
+
+--echo # FULLTEXT_DICT tables enforce their documented schema contract
+--error 1210
+CREATE TABLE bad_heap (word varchar(10) primary key)
+  DEFAULT CHARSET=utf8mb4 FULLTEXT_DICT='Y';
+--error 1210
+CREATE TABLE bad_name (term varchar(10) primary key)
+  ORGANIZATION INDEX DEFAULT CHARSET=utf8mb4 FULLTEXT_DICT='Y';
+--error 1210
+CREATE TABLE bad_extra (word varchar(10) primary key, extra int)
+  ORGANIZATION INDEX DEFAULT CHARSET=utf8mb4 FULLTEXT_DICT='Y';
+--error 1210
+CREATE TABLE bad_length (word varchar(501) primary key)
+  ORGANIZATION INDEX DEFAULT CHARSET=utf8mb4 FULLTEXT_DICT='Y';
+--error 1115
+CREATE TABLE bad_charset (word varchar(10) primary key)
+  ORGANIZATION INDEX DEFAULT CHARSET=latin1 FULLTEXT_DICT='Y';
+
+--echo # varchar(500), unqualified names, and all three IK dictionary roles
+CREATE TABLE main_dict (word varchar(500) primary key)
+  ORGANIZATION INDEX DEFAULT CHARSET=utf8mb4 FULLTEXT_DICT='Y';
+CREATE TABLE stop_dict (word varchar(100) primary key)
+  ORGANIZATION INDEX DEFAULT CHARSET=utf8mb4 FULLTEXT_DICT='Y';
+CREATE TABLE quantifier_dict (word varchar(100) primary key)
+  ORGANIZATION INDEX DEFAULT CHARSET=utf8mb4 FULLTEXT_DICT='Y';
+INSERT INTO main_dict VALUES ('超级数据库');
+INSERT INTO stop_dict VALUES ('是');
+INSERT INTO quantifier_dict VALUES ('个');
+ALTER SYSTEM REFRESH FULLTEXT DICT main_dict;
+ALTER SYSTEM REFRESH FULLTEXT DICT stop_dict;
+ALTER SYSTEM REFRESH FULLTEXT DICT quantifier_dict;
+
+SELECT TOKENIZE('这是超级数据库', 'ik',
+  '[{"output":"all"},{"additional_args":[{"ik_mode":"max_word"},{"dict_table":"main_dict"},{"stopword_table":"stop_dict"},{"quantifier_table":"quantifier_dict"}]}]') AS tokens;
+SELECT TOKENIZE('三个超级数据库', 'ik',
+  '[{"output":"all"},{"additional_args":[{"dict_table":"main_dict"},{"quantifier_table":"quantifier_dict"}]}]') AS quantifier_tokens;
+
+--echo # referenced dictionary tables are protected from structural DDL
+CREATE TABLE docs (id int primary key, title varchar(100)) DEFAULT CHARSET=utf8mb4;
+ALTER TABLE docs ADD FULLTEXT INDEX ft_title(title)
+  WITH PARSER ik PARSER_PROPERTIES=(dict_table='main_dict',
+                                    stopword_table='stop_dict',
+                                    quantifier_table='quantifier_dict',
+                                    ik_mode='max_word');
+--error 1235
+ALTER TABLE main_dict ADD COLUMN extra int;
+--error 1235
+RENAME TABLE main_dict TO renamed_dict;
+--error 4179
+DROP TABLE main_dict;
+
+DROP INDEX ft_title ON docs;
+DROP TABLE main_dict, stop_dict, quantifier_dict;
+DROP DATABASE ai_ik_ext_test;

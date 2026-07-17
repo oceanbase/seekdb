@@ -415,6 +415,33 @@ int ObCreateTableResolver::resolve(const ParseNode &parse_tree)
           }
         }
 
+        if (OB_SUCC(ret)) {
+          ObTableSchema &table_schema = create_table_stmt->get_create_table_arg().schema_;
+          bool has_explicit_index_organization = false;
+          const ParseNode *table_options = create_table_node->children_[4];
+          if (nullptr != table_options && T_TABLE_OPTION_LIST == table_options->type_) {
+            for (int64_t i = 0; !has_explicit_index_organization
+                                && i < table_options->num_child_; ++i) {
+              const ParseNode *option = table_options->children_[i];
+              has_explicit_index_organization = nullptr != option
+                  && T_ORGANIZATION == option->type_
+                  && nullptr != option->children_
+                  && nullptr != option->children_[0]
+                  && T_ORGANIZATION_INDEX == option->children_[0]->type_;
+            }
+          }
+          if (table_schema.is_fulltext_dict_table()
+              && !has_explicit_index_organization) {
+            ret = OB_INVALID_ARGUMENT;
+            LOG_USER_ERROR(OB_INVALID_ARGUMENT,
+                           "a FULLTEXT_DICT table must explicitly specify ORGANIZATION INDEX");
+            SQL_RESV_LOG(WARN, "FULLTEXT_DICT table omitted ORGANIZATION INDEX", K(ret));
+          } else if (table_schema.is_fulltext_dict_table()
+                     && OB_FAIL(ObFtsIndexBuilderUtil::check_custom_dictionary_table(table_schema))) {
+            SQL_RESV_LOG(WARN, "invalid fulltext dictionary table", K(ret), K(table_schema));
+          }
+        }
+
         // !!Attention!! resolve_partition_option should always call after resolve_table_options
         if (OB_SUCC(ret)) {
           ObTableSchema &table_schema = create_table_stmt->get_create_table_arg().schema_;

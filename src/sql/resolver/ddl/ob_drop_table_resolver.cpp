@@ -15,9 +15,11 @@
  */
 
 #include "sql/resolver/ddl/ob_drop_table_resolver.h"
+#include "sql/resolver/ddl/ob_fts_index_builder_util.h"
 namespace oceanbase
 {
 using namespace common;
+using namespace share::schema;
 using common::hash::ObPlacementHashSet;
 using obcall::ObTableItem;
 namespace sql
@@ -129,6 +131,22 @@ int ObDropTableResolver::resolve(const ParseNode &parse_tree)
                 SQL_RESV_LOG(WARN, "failed to add table item!", K(table_item), K(ret));
               } else if (OB_FAIL(drop_table_stmt->add_table_item(table_item))) {
                 SQL_RESV_LOG(WARN, "failed to add table item!", K(table_item), K(ret));
+              } else {
+                const ObTableSchema *table_schema = nullptr;
+                ObSchemaGetterGuard *schema_guard = schema_checker_->get_schema_guard();
+                if (OB_ISNULL(schema_guard)) {
+                  ret = OB_ERR_UNEXPECTED;
+                  SQL_RESV_LOG(WARN, "schema guard is null", K(ret));
+                } else if (OB_FAIL(schema_guard->get_table_schema(db_name,
+                                                                  table_name,
+                                                                  false,
+                                                                  table_schema))) {
+                  SQL_RESV_LOG(WARN, "get dropped table schema failed", K(ret), K(db_name), K(table_name));
+                } else if (OB_NOT_NULL(table_schema)
+                           && OB_FAIL(share::ObFtsIndexBuilderUtil::check_dictionary_table_not_referenced(
+                               *schema_guard, *table_schema))) {
+                  SQL_RESV_LOG(WARN, "dictionary table is referenced", K(ret), KPC(table_schema));
+                }
               }
             }
           }

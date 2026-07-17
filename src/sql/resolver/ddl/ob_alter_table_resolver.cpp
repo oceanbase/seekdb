@@ -170,8 +170,14 @@ int ObAlterTableResolver::resolve(const ParseNode &parse_tree)
       }
     }
     if (OB_SUCC(ret)) {
-      
-      alter_table_stmt->set_table_id(table_schema_->get_table_id());
+      if (table_schema_->is_fulltext_dict_table()) {
+        ret = OB_NOT_SUPPORTED;
+        LOG_USER_ERROR(OB_NOT_SUPPORTED, "alter a FULLTEXT_DICT table");
+      } else {
+        alter_table_stmt->set_table_id(table_schema_->get_table_id());
+      }
+    }
+    if (OB_SUCC(ret)) {
       alter_table_stmt->get_alter_table_arg().alter_table_schema_.set_charset_type(table_schema_->get_charset_type());
       alter_table_stmt->get_alter_table_arg().alter_table_schema_.set_collation_type(table_schema_->get_collation_type());
     }
