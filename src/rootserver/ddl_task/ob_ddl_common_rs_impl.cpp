@@ -58,6 +58,22 @@ using namespace oceanbase::share::schema;
 using namespace oceanbase::obcall;
 using namespace oceanbase::sql;
 
+namespace
+{
+
+bool should_prefer_vector_sort_for_fts_build(const ObTableSchema &table_schema)
+{
+  // These tables have the constrained key layout produced by FTS DDL.  Keep
+  // the general DDL default unchanged for every other table type.
+  const bool is_fts_auxiliary = table_schema.is_fts_index_aux()
+      || table_schema.is_fts_doc_word_aux();
+  const bool is_fts_key_table = table_schema.is_rowkey_doc_id()
+      || table_schema.is_doc_id_rowkey();
+  return is_fts_auxiliary || is_fts_key_table;
+}
+
+} // namespace
+
 int ObDDLUtil::get_sys_log_handler_role_and_proposal_id(
     common::ObRole &role,
     int64_t &proposal_id)
@@ -776,10 +792,13 @@ int ObDDLUtil::generate_build_replica_sql(const int64_t data_table_id,
         if (dest_table_schema->is_vec_vid_rowkey_type()) {
           src_table_schema_version_hint_sql_string.reset();
         }
+        const char *newsort_mode = should_prefer_vector_sort_for_fts_build(*dest_table_schema)
+            ? "true" : "false";
         if (OB_FAIL(ret)) {
         } else {
-          if (OB_FAIL(sql_string.assign_fmt("INSERT /*+ monitor enable_parallel_dml parallel(%ld) opt_param('ddl_execution_id', %ld) opt_param('ddl_task_id', %ld) opt_param('enable_newsort', 'false') %.*s use_px */INTO `%.*s`.`%.*s` %.*s(%.*s) SELECT /*+ index(`%.*s` primary) %.*s */ %.*s from `%.*s`.`%.*s` %.*s as of snapshot %ld %.*s",
+          if (OB_FAIL(sql_string.assign_fmt("INSERT /*+ monitor enable_parallel_dml parallel(%ld) opt_param('ddl_execution_id', %ld) opt_param('ddl_task_id', %ld) opt_param('enable_newsort', '%s') %.*s use_px */INTO `%.*s`.`%.*s` %.*s(%.*s) SELECT /*+ index(`%.*s` primary) %.*s */ %.*s from `%.*s`.`%.*s` %.*s as of snapshot %ld %.*s",
               real_parallelism, execution_id, task_id,
+              newsort_mode,
               static_cast<int>(strlen(io_read_hint)), io_read_hint,
               static_cast<int>(new_dest_database_name.length()), new_dest_database_name.ptr(), static_cast<int>(new_dest_table_name.length()), new_dest_table_name.ptr(),
               static_cast<int>(partition_names.length()), partition_names.ptr(),

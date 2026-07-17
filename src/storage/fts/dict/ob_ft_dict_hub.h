@@ -100,7 +100,7 @@ class ObFTCacheRangeContainer;
 class ObFTDictHub
 {
 public:
-  ObFTDictHub() : is_inited_(false), dict_map_(), rw_dict_lock_() {}
+  ObFTDictHub() : is_inited_(false), cache_generation_(1), dict_map_(), rw_dict_lock_() {}
   ~ObFTDictHub() {}
 
   int init();
@@ -113,6 +113,11 @@ public:
 
   int refresh_cache(const ObString &table_name);
 
+  // TOKENIZE keeps a small per-worker memo for immutable calls. Refreshing a
+  // dictionary advances this generation so memoized entries are never reused
+  // after the dictionary contents have changed.
+  uint64_t get_cache_generation() const { return ATOMIC_LOAD(&cache_generation_); }
+
 private:
   int get_dict_info(const ObFTDictInfoKey &key, ObFTDictInfo &info);
 
@@ -121,6 +126,7 @@ private:
 
 private:
   bool is_inited_;
+  volatile uint64_t cache_generation_;
   // holds info of dict
   hash::ObHashMap<ObFTDictInfoKey, ObFTDictInfo> dict_map_;
   ObBucketLock rw_dict_lock_;

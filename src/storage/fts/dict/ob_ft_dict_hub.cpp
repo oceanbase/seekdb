@@ -174,6 +174,9 @@ int ObFTDictHub::refresh_cache(const ObString &table_name)
         LOG_WARN("failed to refresh dictionary cache generation", K(ret), K(table_name));
       }
     }
+    if (OB_SUCC(ret)) {
+      ATOMIC_AAF(&cache_generation_, 1);
+    }
   }
   return ret;
 }

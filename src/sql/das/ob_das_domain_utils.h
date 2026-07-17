@@ -48,10 +48,21 @@ public:
   int get_next_row(blocksstable::ObDatumRow *&row);
   void reset();
   void reuse();
-  TO_STRING_KV(K_(row_idx), K_(is_fts_index_aux), K_(helper), K_(is_inited), K_(rows));
+  TO_STRING_KV(K_(row_idx), K_(is_fts_index_aux), K_(helper), K_(is_inited),
+               K_(word_map_bucket_count), K_(row_slot_capacity), K_(rows));
 private:
+  int prepare_word_map(const int64_t fulltext_len);
+  int ensure_row_slots(const int64_t row_count);
+  int materialize_word_rows(const ObDatum &doc_id, const int64_t doc_length);
+
+private:
+  lib::MemoryContext parser_memctx_;
   lib::MemoryContext merge_memctx_;
   ObDomainIndexRow rows_;
+  ObFTWordMap word_map_;
+  int64_t word_map_bucket_count_;
+  blocksstable::ObDatumRow *row_slots_;
+  int64_t row_slot_capacity_;
   uint64_t row_idx_;
   bool is_fts_index_aux_;
   storage::ObFTParseHelper helper_;

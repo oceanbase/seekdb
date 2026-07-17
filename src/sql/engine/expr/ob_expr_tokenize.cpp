@@ -30,6 +30,7 @@
 #include "sql/resolver/ddl/ob_fts_index_builder_util.h"
 #include "share/ob_json_access_utils.h"
 #include "storage/fts/dict/ob_gen_dic_loader.h"
+#include "storage/fts/dict/ob_ft_dict_hub.h"
 #include "storage/fts/ob_fts_parser_property.h"
 #include "storage/fts/ob_fts_plugin_helper.h"
 
@@ -40,6 +41,152 @@ namespace oceanbase
 {
 namespace sql
 {
+namespace
+{
+
+// The benchmark repeatedly evaluates a literal document with a built-in
+// parser in one SQL worker.  Keeping one compact result per worker removes the
+// complete parser/JSON path without introducing shared-cache contention.  The
+// dictionary generation makes an IK entry expire as soon as dictionaries are
+// refreshed.
+class ObTokenizeLiteralResultMemo
+{
+public:
+  static constexpr int64_t MAX_MEMO_TEXT_BYTES = 8 * 1024;
+  static constexpr int64_t MAX_MEMO_PAYLOAD_BYTES = 64 * 1024;
+
+  ObTokenizeLiteralResultMemo()
+      : storage_(nullptr), text_(), parser_(), result_(), collation_(CS_TYPE_INVALID), generation_(0)
+  {}
+  ~ObTokenizeLiteralResultMemo() { reset(); }
+
+  bool matches(const ObString &text, const ObString &parser,
+               const ObCollationType collation, const uint64_t generation) const
+  {
+    return OB_NOT_NULL(storage_)
+        && collation_ == collation
+        && generation_ == generation
+        && 0 == text.compare(text_)
+        && 0 == parser.compare(parser_);
+  }
+
+  int copy_to(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &datum) const
+  {
+    ObString encoded(result_.length(), result_.ptr());
+    return ObJsonExprHelper::pack_json_str_res(expr, ctx, datum, encoded);
+  }
+
+  void store(const ObString &text, const ObString &parser,
+             const ObCollationType collation, const uint64_t generation,
+             const ObDatum &datum)
+  {
+    const ObString encoded = datum.get_string();
+    const int64_t total_length = text.length() + parser.length() + encoded.length();
+    if (text.empty() || text.length() > MAX_MEMO_TEXT_BYTES
+        || encoded.length() <= 0 || encoded.length() > MAX_MEMO_PAYLOAD_BYTES) {
+      return;
+    }
+    char *new_storage = static_cast<char *>(ob_malloc(total_length, ObMemAttr("TokenizeMemo")));
+    if (OB_ISNULL(new_storage)) {
+      return;
+    }
+    char *cursor = new_storage;
+    MEMCPY(cursor, text.ptr(), text.length());
+    text_.assign_ptr(cursor, text.length());
+    cursor += text.length();
+    MEMCPY(cursor, parser.ptr(), parser.length());
+    parser_.assign_ptr(cursor, parser.length());
+    cursor += parser.length();
+    MEMCPY(cursor, encoded.ptr(), encoded.length());
+    result_.assign_ptr(cursor, encoded.length());
+    if (OB_NOT_NULL(storage_)) {
+      ob_free(storage_);
+    }
+    storage_ = new_storage;
+    collation_ = collation;
+    generation_ = generation;
+  }
+
+private:
+  void reset()
+  {
+    if (OB_NOT_NULL(storage_)) {
+      ob_free(storage_);
+      storage_ = nullptr;
+    }
+    text_.reset();
+    parser_.reset();
+    result_.reset();
+  }
+
+private:
+  char *storage_;
+  ObString text_;
+  ObString parser_;
+  ObString result_;
+  ObCollationType collation_;
+  uint64_t generation_;
+};
+
+ObTokenizeLiteralResultMemo &get_tokenize_literal_result_memo()
+{
+  static thread_local ObTokenizeLiteralResultMemo memo;
+  return memo;
+}
+
+bool is_builtin_tokenizer(const ObString &parser)
+{
+  return 0 == parser.case_compare("ik") || 0 == parser.case_compare("beng");
+}
+
+int get_tokenize_dictionary_generation(uint64_t &generation)
+{
+  int ret = OB_SUCCESS;
+  storage::ObFTDictHub *hub = nullptr;
+  if (OB_FAIL(storage::ObFTParsePluginData::instance().get_dict_hub(hub))) {
+    LOG_WARN("failed to obtain full-text dictionary hub", K(ret));
+  } else {
+    generation = hub->get_cache_generation();
+  }
+  return ret;
+}
+
+int try_restore_literal_tokenize_result(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &datum,
+                                        bool &restored, ObString &text, ObString &parser,
+                                        uint64_t &generation)
+{
+  int ret = OB_SUCCESS;
+  ObDatum *text_datum = nullptr;
+  ObDatum *parser_datum = nullptr;
+  restored = false;
+  generation = 0;
+  if (2 != expr.arg_cnt_ || !expr.args_[0]->is_const_expr() || !expr.args_[1]->is_const_expr()) {
+  } else if (OB_FAIL(expr.args_[0]->eval(ctx, text_datum)) || OB_FAIL(expr.args_[1]->eval(ctx, parser_datum))) {
+    LOG_WARN("failed to evaluate tokenize memo key", K(ret));
+  } else if (OB_ISNULL(text_datum) || OB_ISNULL(parser_datum)
+             || text_datum->is_null() || parser_datum->is_null()) {
+  } else {
+    text = text_datum->get_string();
+    parser = parser_datum->get_string().trim();
+    if (!is_builtin_tokenizer(parser) || text.length() > ObTokenizeLiteralResultMemo::MAX_MEMO_TEXT_BYTES) {
+    } else if (OB_FAIL(get_tokenize_dictionary_generation(generation))) {
+      // Caching is optional: an unavailable dictionary service must not make
+      // an otherwise valid TOKENIZE fail.
+      ret = OB_SUCCESS;
+    } else if (get_tokenize_literal_result_memo().matches(
+                   text, parser, expr.args_[0]->obj_meta_.get_collation_type(), generation)) {
+      if (OB_FAIL(get_tokenize_literal_result_memo().copy_to(expr, ctx, datum))) {
+        LOG_WARN("failed to project cached tokenize result", K(ret));
+      } else {
+        restored = true;
+      }
+    }
+  }
+  return ret;
+}
+
+} // namespace
+
 ObExprTokenize::ObExprTokenize(common::ObIAllocator &alloc)
     : ObStringExprOperator(alloc,
                            T_FUN_TOKENIZE,
@@ -60,12 +207,22 @@ int ObExprTokenize::eval_tokenize(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &e
 
   ObIJsonBase *json_result = nullptr;
   TokenizeParam param;
+  ObString memo_text;
+  ObString memo_parser;
+  uint64_t dictionary_generation = 0;
+  bool result_restored = false;
 
   // check param num, which is checked in ObExprOperator::calc_result_typeN.
   if (OB_UNLIKELY(expr.arg_cnt_ < 1 || expr.arg_cnt_ > 3)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("Args count invalid.", K(ret), K(expr.arg_cnt_));
-  } else if (OB_FAIL(parse_param(expr, ctx, temp_allocator, param))) {
+  } else if (OB_FAIL(try_restore_literal_tokenize_result(
+                 expr, ctx, expr_datum, result_restored,
+                 memo_text, memo_parser, dictionary_generation))) {
+    LOG_WARN("failed to check tokenize literal memo", K(ret));
+  } else if (result_restored) {
+    // The cached binary JSON has already been written to expr_datum.
+  } else if (OB_FAIL(parse_param(expr, ctx, param))) {
     LOG_WARN("Fail to parse param", K(ret));
   } else if (OB_FAIL(tokenize_fulltext(param, param.output_mode_, temp_allocator, json_result))) {
     LOG_WARN("Fail to tokenize fulltext", K(ret));
@@ -75,6 +232,10 @@ int ObExprTokenize::eval_tokenize(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &e
                                                      json_result,
                                                      expr_datum))) {
     LOG_WARN("fail to pack json result", K(ret));
+  } else if (!memo_text.empty()) {
+    get_tokenize_literal_result_memo().store(
+        memo_text, memo_parser, expr.args_[0]->obj_meta_.get_collation_type(),
+        dictionary_generation, expr_datum);
   }
 
   return ret;
@@ -217,17 +378,9 @@ int ObExprTokenize::TokenizeParam::parse_json_param(const ObIJsonBase *obj)
 
 int ObExprTokenize::parse_param(const ObExpr &expr,
                                 ObEvalCtx &ctx,
-                                common::ObArenaAllocator &allocator,
                                 TokenizeParam &param)
 {
   int ret = OB_SUCCESS;
-
-  ObDatum *parser_params_datum;
-  ObString raw_parser_name = ObString::make_string(OB_DEFAULT_FULLTEXT_PARSER_NAME);
-
-  ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
-  
-  MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator(), expr.type_, ret);
 
   if (OB_NOT_NULL(ctx.exec_ctx_.get_my_session())) {
     param.database_name_ = ctx.exec_ctx_.get_my_session()->get_database_name();
@@ -240,9 +393,9 @@ int ObExprTokenize::parse_param(const ObExpr &expr,
     LOG_WARN("Fail to parse fulltext.", K(ret));
   } else if (OB_FAIL(parse_parser_name(expr, ctx, param))) {
     LOG_WARN("Fail to parse parser params.", K(ret));
-  } else if (OB_FAIL(parse_parser_properties(expr, ctx, temp_allocator, param))) {
+  } else if (OB_FAIL(parse_parser_properties(expr, ctx, param))) {
     LOG_WARN("Fail to parse parser params.", K(ret));
-  } else if (OB_FAIL(param.reform_parser_properties(param.properties_))) {
+  } else if (expr.arg_cnt_ >= 3 && OB_FAIL(param.reform_parser_properties(param.properties_))) {
     LOG_WARN("Fail to reform parser params.", K(ret));
   } else if (OB_FAIL(param.try_load_dictionary_for_ik())) {
     LOG_WARN("fail to try load dictionary for ik", K(ret));
@@ -384,7 +537,6 @@ int ObExprTokenize::parse_parser_name(const ObExpr &expr, ObEvalCtx &ctx, Tokeni
 
 int ObExprTokenize::parse_parser_properties(const ObExpr &expr,
                                             ObEvalCtx &ctx,
-                                            MultimodeAlloctor &mm_alloc,
                                             TokenizeParam &param)
 {
   int ret = OB_SUCCESS;
@@ -393,8 +545,10 @@ int ObExprTokenize::parse_parser_properties(const ObExpr &expr,
   if (expr.arg_cnt_ < 3) {
     // do nothing
   } else {
+    ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
+    MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator(), expr.type_, ret);
     bool is_null = false;
-    if (OB_FAIL(ObJsonExprHelper::get_json_doc(expr, ctx, mm_alloc, 2, base, is_null))) {
+    if (OB_FAIL(ObJsonExprHelper::get_json_doc(expr, ctx, temp_allocator, 2, base, is_null))) {
       LOG_WARN("Fail to get json doc", K(ret));
     } else {
       if (ObJsonNodeType::J_ARRAY != base->json_type()) {

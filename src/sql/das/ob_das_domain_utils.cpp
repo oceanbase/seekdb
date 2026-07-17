@@ -42,7 +42,13 @@ ObExprOperatorType ObFTIndexRowCache::FTS_INDEX_EXPR_TYPE[] = {T_FUN_SYS_WORD_SE
 ObExprOperatorType ObFTIndexRowCache::FTS_DOC_WORD_EXPR_TYPE[] = {T_FUN_SYS_DOC_ID, T_FUN_SYS_WORD_SEGMENT, T_FUN_SYS_WORD_COUNT, T_FUN_SYS_DOC_LENGTH};
 
 ObFTIndexRowCache::ObFTIndexRowCache()
-  : rows_(),
+  : parser_memctx_(nullptr),
+    merge_memctx_(nullptr),
+    rows_(),
+    word_map_(),
+    word_map_bucket_count_(0),
+    row_slots_(nullptr),
+    row_slot_capacity_(0),
     row_idx_(0),
     is_fts_index_aux_(true),
     helper_(),
@@ -66,11 +72,16 @@ int ObFTIndexRowCache::init(
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
     LOG_WARN("init fulltext dml iterator twice", K(ret), K(is_inited_));
+  } else if (OB_FAIL(CURRENT_CONTEXT->CREATE_CONTEXT(parser_memctx_, param))) {
+    LOG_WARN("failed to create full-text parser memctx", K(ret));
   } else if (OB_FAIL(CURRENT_CONTEXT->CREATE_CONTEXT(merge_memctx_, param))) {
     LOG_WARN("failed to create merge memctx", K(ret));
-  } else if (OB_FAIL(helper_.init(&(merge_memctx_->get_arena_allocator()), parser_name, parser_properties))) {
+  } else if (OB_FAIL(word_map_.create(8, common::ObMemAttr("FTReuseWordMap")))) {
+    LOG_WARN("failed to create reusable full-text word map", K(ret));
+  } else if (OB_FAIL(helper_.init(&(parser_memctx_->get_arena_allocator()), parser_name, parser_properties))) {
     LOG_WARN("fail to init full-text parser helper", K(ret));
   } else {
+    word_map_bucket_count_ = 8;
     row_idx_ = 0;
     is_fts_index_aux_ = is_fts_index_aux;
     is_inited_ = true;
@@ -90,15 +101,26 @@ int ObFTIndexRowCache::segment(const common::ObObjMeta &ft_obj_meta,
     ret = OB_NOT_INIT;
     LOG_WARN("ObFTIndexRowCache hasn't be initialized", K(ret), K(is_inited_));
   } else if (FALSE_IT(reuse())) {
-  } else if (OB_FAIL(ObDASDomainUtils::generate_fulltext_word_rows(merge_memctx_->get_arena_allocator(),
-                                                                   &helper_,
-                                                                   ft_obj_meta,
-                                                                   doc_id_datum,
-                                                                   fulltext,
-                                                                   is_fts_index_aux_,
-                                                                   rows_))) {
-    LOG_WARN("fail to generate fulltext word rows", K(ret), K(helper_), K(is_fts_index_aux_));
+  } else if (OB_UNLIKELY(fulltext.empty())) {
+    ret = OB_ITER_END;
+  } else if (OB_FAIL(prepare_word_map(fulltext.length()))) {
+    LOG_WARN("failed to prepare reusable full-text word map", K(ret), K(fulltext.length()));
   } else {
+    int64_t doc_length = 0;
+    if (OB_FAIL(helper_.segment(ft_obj_meta,
+                                fulltext.ptr(),
+                                fulltext.length(),
+                                merge_memctx_->get_arena_allocator(),
+                                doc_length,
+                                word_map_))) {
+      LOG_WARN("failed to segment full-text document", K(ret), K(helper_), K(is_fts_index_aux_));
+    } else if (0 == word_map_.size()) {
+      ret = OB_ITER_END;
+    } else if (OB_FAIL(materialize_word_rows(doc_id_datum, doc_length))) {
+      LOG_WARN("failed to materialize reusable full-text rows", K(ret), K(word_map_.size()));
+    }
+  }
+  if (OB_SUCC(ret)) {
     row_idx_ = 0;
   }
   LOG_TRACE("word segment", K(ret), K(row_idx_), K(rows_.count()), K(doc_id_datum), K(fulltext));
@@ -124,9 +146,17 @@ int ObFTIndexRowCache::get_next_row(blocksstable::ObDatumRow *&row)
 void ObFTIndexRowCache::reset()
 {
   rows_.reset();
+  word_map_.destroy();
+  word_map_bucket_count_ = 0;
+  row_slots_ = nullptr;
+  row_slot_capacity_ = 0;
   row_idx_ = 0;
   is_fts_index_aux_ = true;
   helper_.reset();
+  if (OB_NOT_NULL(parser_memctx_)) {
+    DESTROY_CONTEXT(parser_memctx_);
+    parser_memctx_ = nullptr;
+  }
   if (OB_NOT_NULL(merge_memctx_)) {
     DESTROY_CONTEXT(merge_memctx_);
     merge_memctx_ = nullptr;
@@ -138,9 +168,100 @@ void ObFTIndexRowCache::reuse()
 {
   rows_.reuse();
   row_idx_ = 0;
+  if (word_map_.created()) {
+    word_map_.reuse();
+  }
+  if (OB_NOT_NULL(parser_memctx_) && !helper_.can_reuse_parser_session()) {
+    parser_memctx_->reset_remain_one_page();
+  }
   if (OB_NOT_NULL(merge_memctx_)) {
     merge_memctx_->reset_remain_one_page();
   }
+}
+
+int ObFTIndexRowCache::prepare_word_map(const int64_t fulltext_len)
+{
+  int ret = OB_SUCCESS;
+  static const int64_t MIN_WORD_BUCKET_COUNT = 8;
+  static const int64_t MAX_WORD_BUCKET_COUNT = 1024;
+  static const int64_t ESTIMATED_CHARS_PER_WORD = 12;
+  const int64_t wanted_bucket_count = MIN(
+      MAX(fulltext_len / ESTIMATED_CHARS_PER_WORD, MIN_WORD_BUCKET_COUNT),
+      MAX_WORD_BUCKET_COUNT);
+  if (OB_UNLIKELY(fulltext_len <= 0)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid full-text document length", K(ret), K(fulltext_len));
+  } else if (wanted_bucket_count > word_map_bucket_count_) {
+    word_map_.destroy();
+    word_map_bucket_count_ = 0;
+    if (OB_FAIL(word_map_.create(wanted_bucket_count, common::ObMemAttr("FTReuseWordMap")))) {
+      LOG_WARN("failed to grow reusable full-text word map", K(ret), K(wanted_bucket_count));
+    } else {
+      word_map_bucket_count_ = wanted_bucket_count;
+    }
+  }
+  return ret;
+}
+
+int ObFTIndexRowCache::ensure_row_slots(const int64_t row_count)
+{
+  int ret = OB_SUCCESS;
+  if (OB_UNLIKELY(row_count <= 0 || OB_ISNULL(parser_memctx_))) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid reusable full-text row request", K(ret), K(row_count));
+  } else if (row_count <= row_slot_capacity_) {
+    // The current slot array is large enough and its datum storage is stable.
+  } else {
+    const int64_t grown_capacity = MAX(row_count, MAX(row_slot_capacity_ * 2, 32L));
+    void *buffer = parser_memctx_->get_arena_allocator().alloc(
+        sizeof(blocksstable::ObDatumRow) * grown_capacity);
+    blocksstable::ObDatumRow *new_slots = static_cast<blocksstable::ObDatumRow *>(buffer);
+    if (OB_ISNULL(new_slots)) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+      LOG_WARN("failed to allocate reusable full-text row slots", K(ret), K(grown_capacity));
+    } else {
+      new (new_slots) blocksstable::ObDatumRow[grown_capacity];
+      for (int64_t idx = 0; OB_SUCC(ret) && idx < grown_capacity; ++idx) {
+        if (OB_FAIL(new_slots[idx].init(parser_memctx_->get_arena_allocator(), 4))) {
+          LOG_WARN("failed to initialize reusable full-text row slot", K(ret), K(idx), K(grown_capacity));
+        }
+      }
+      if (OB_SUCC(ret)) {
+        row_slots_ = new_slots;
+        row_slot_capacity_ = grown_capacity;
+      }
+    }
+  }
+  return ret;
+}
+
+int ObFTIndexRowCache::materialize_word_rows(const ObDatum &doc_id, const int64_t doc_length)
+{
+  int ret = OB_SUCCESS;
+  static const int64_t WORD_DOC_COLUMN_COUNT = 4;
+  if (OB_UNLIKELY(0 == word_map_.size())) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("cannot materialize an empty full-text word map", K(ret));
+  } else if (OB_FAIL(ensure_row_slots(word_map_.size()))) {
+    LOG_WARN("failed to reserve reusable full-text row slots", K(ret), K(word_map_.size()));
+  } else {
+    const int64_t word_idx = is_fts_index_aux_ ? 0 : 1;
+    const int64_t doc_id_idx = is_fts_index_aux_ ? 1 : 0;
+    int64_t slot_idx = 0;
+    for (ObFTWordMap::const_iterator iter = word_map_.begin();
+         OB_SUCC(ret) && iter != word_map_.end(); ++iter, ++slot_idx) {
+      blocksstable::ObDatumRow &row = row_slots_[slot_idx];
+      row.storage_datums_[word_idx].set_datum(iter->first.get_word());
+      row.storage_datums_[doc_id_idx].shallow_copy_from_datum(doc_id);
+      row.storage_datums_[2].set_uint(iter->second);
+      row.storage_datums_[3].set_uint(doc_length);
+      if (OB_FAIL(rows_.push_back(&row))) {
+        LOG_WARN("failed to append reusable full-text row", K(ret), K(slot_idx),
+                 K(word_map_.size()), K(WORD_DOC_COLUMN_COUNT));
+      }
+    }
+  }
+  return ret;
 }
 
 int ObDASDomainUtils::generate_spatial_index_rows(
@@ -392,7 +513,7 @@ int ObDASDomainUtils::build_ft_doc_word_infos(
       || OB_UNLIKELY(!words_count.created())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", K(ret), KPC(helper), K(type), K(words_count.created()));
-  } else if (OB_FAIL(helper->segment(meta, fulltext.ptr(), fulltext.length(), doc_length, words_count))) {
+  } else if (OB_FAIL(helper->segment(meta, fulltext.ptr(), fulltext.length(), allocator, doc_length, words_count))) {
     LOG_WARN("fail to segment", K(ret), KPC(helper), K(type), K(fulltext));
   }
 

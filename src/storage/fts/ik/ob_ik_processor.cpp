@@ -66,6 +66,26 @@ int TokenizeContext::init()
   return ret;
 }
 
+int TokenizeContext::reset_document(const char *fulltext, const int64_t fulltext_len)
+{
+  int ret = OB_SUCCESS;
+  if (OB_ISNULL(fulltext) || fulltext_len <= 0) {
+    ret = OB_INVALID_ARGUMENT;
+  } else {
+    fulltext_ = fulltext;
+    fulltext_len_ = fulltext_len;
+    cursor_ = 0;
+    next_char_len_ = 0;
+    next_char_type_ = ObFTCharUtil::CharType::USELESS;
+    if (OB_FAIL(reset_resource())) {
+      LOG_WARN("failed to reset token resources", K(ret));
+    } else if (OB_FAIL(prepare_next_char())) {
+      LOG_WARN("failed to prepare first character", K(ret));
+    }
+  }
+  return ret;
+}
+
 int TokenizeContext::reset_resource()
 {
   handle_size_ = 0;

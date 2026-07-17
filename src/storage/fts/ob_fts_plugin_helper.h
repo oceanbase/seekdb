@@ -36,6 +36,7 @@ namespace plugin
 {
 class ObIFTParserDesc;
 class ObPluginParam;
+class ObITokenIterator;
 }
 
 namespace storage
@@ -178,10 +179,21 @@ public:
       const int64_t fulltext_len,
       int64_t &doc_length,
       ObFTWordMap &words) const;
+  int segment(
+      const common::ObObjMeta &meta,
+      const char *fulltext,
+      const int64_t fulltext_len,
+      common::ObIAllocator &output_allocator,
+      int64_t &doc_length,
+      ObFTWordMap &words) const;
   int check_is_the_same(
       const common::ObString &plugin_name,
       const common::ObString &plugin_properties,
       bool &is_same) const;
+  bool can_reuse_parser_session() const
+  {
+    return is_inited_ && (parser_name_.is_ik() || parser_name_.is_beng());
+  }
   /**
    * Make json document for fulltext search
    *
@@ -209,16 +221,11 @@ public:
   TO_STRING_KV(KP_(allocator), K_(parser_name), KP_(parser_desc), K_(is_inited));
 
 private:
-  static int segment(
-      const ObFTParserProperty &property,
-      const int64_t parser_version,
-      const plugin::ObIFTParserDesc *parser_desc,
-      plugin::ObPluginParam *plugin_param,
+  int segment(
       const ObCharsetInfo *cs,
       const char *fulltext,
       const int64_t fulltext_len,
-      common::ObIAllocator &allocator,
-      ObAddWord &add_word);
+      ObAddWord &add_word) const;
   int set_add_word_flag(const plugin::ObIFTParserDesc &ftparser_desc);
 private:
   common::ObIAllocator *allocator_;
@@ -227,6 +234,8 @@ private:
   ObFTParser parser_name_;
   ObAddWordFlag add_word_flag_;
   ObFTParserProperty parser_property_;
+  mutable plugin::ObITokenIterator *ik_session_iter_;
+  mutable plugin::ObITokenIterator *beng_session_iter_;
   bool is_inited_;
 
 private:

@@ -18,6 +18,7 @@
 #define _OCEANBASE_STORAGE_FTS_OB_IK_FT_PARSER_H_
 
 #include "lib/allocator/ob_allocator.h"
+#include "lib/allocator/page_arena.h"
 #include "storage/fts/dict/ob_ft_cache_container.h"
 #include "storage/fts/dict/ob_ft_dict.h"
 #include "storage/fts/dict/ob_ft_dict_def.h"
@@ -42,6 +43,7 @@ public:
         ctx_(nullptr),
         hub_(hub),
         segmenters_(allocator_),
+        scratch_allocator_(allocator),
         arbitrator_(),
         cache_main_(allocator),
         cache_quan_(allocator),
@@ -55,6 +57,7 @@ public:
   virtual ~ObIKFTParser() { reset(); }
 
   int init(const plugin::ObFTParserParam &param);
+  int reset_document(const plugin::ObFTParserParam &param);
 
   int get_next_token(const char *&word,
                      int64_t &word_len,
@@ -81,6 +84,8 @@ private:
   int init_segmenter(const plugin::ObFTParserParam &param);
 
   int init_ctx(const plugin::ObFTParserParam &param);
+  void reset_ctx();
+  void reset_segmenters();
 
   void reset();
 
@@ -99,6 +104,7 @@ private:
   TokenizeContext *ctx_;
   ObFTDictHub *hub_;
   ObList<ObIIKProcessor *, ObIAllocator> segmenters_;
+  ObArenaAllocator scratch_allocator_;
   ObIKArbitrator arbitrator_;
 
   // For now there's no change of dict in one query, so we can pin dict this level.
