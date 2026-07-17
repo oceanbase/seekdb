@@ -164,32 +164,6 @@ int ObGlobalStatProxy::set_normal_schema_version(const int64_t normal_schema_ver
   return ret;
 }
 
-int ObGlobalStatProxy::advance_normal_schema_version(
-    common::ObISQLClient &sql_client,
-    const int64_t normal_schema_version,
-    int64_t &affected_rows)
-{
-  int ret = OB_SUCCESS;
-  affected_rows = 0;
-  if (normal_schema_version <= 0) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), K(normal_schema_version));
-  } else {
-    ObSqlString sql;
-    if (OB_FAIL(sql.assign_fmt(
-        "UPDATE %s SET column_value = %ld WHERE table_name = '%s' AND "
-        "column_name = '%s' AND (column_value IS NULL OR "
-        "CAST(column_value AS SIGNED) < %ld)",
-        OB_ALL_CORE_TABLE_TNAME, normal_schema_version,
-        OB_ALL_GLOBAL_STAT_TNAME, "normal_schema_version", normal_schema_version))) {
-      LOG_WARN("fail to assign sql", KR(ret), K(normal_schema_version));
-    } else if (OB_FAIL(sql_client.write(sql.ptr(), affected_rows))) {
-      LOG_WARN("fail to execute sql", KR(ret), K(sql));
-    }
-  }
-  return ret;
-}
-
 int ObGlobalStatProxy::set_baseline_schema_version(const int64_t baseline_schema_version)
 {
   int ret = OB_SUCCESS;
