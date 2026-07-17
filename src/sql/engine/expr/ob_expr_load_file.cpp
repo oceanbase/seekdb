@@ -27,7 +27,7 @@ namespace sql
 
 ObExprLoadFile::ObExprLoadFile(ObIAllocator &alloc)
   : ObStringExprOperator(alloc, T_FUN_SYS_LOAD_FILE, N_LOAD_FILE, 2,
-                         NOT_VALID_FOR_GENERATED_COL, NOT_ROW_DIMENSION)
+                         NOT_VALID_FOR_GENERATED_COL)
 {
 }
 
@@ -102,15 +102,11 @@ int ObExprLoadFile::eval_load_file(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &
       } else {
         std::string content((std::istreambuf_iterator<char>(input)),
                             std::istreambuf_iterator<char>());
-        char *buf = NULL;
-        if (content.empty()) {
-          expr_datum.set_string("");
-        } else if (OB_ISNULL(buf = expr.get_str_res_mem(ctx, content.length()))) {
-          ret = OB_ALLOCATE_MEMORY_FAILED;
-          LOG_WARN("failed to allocate load_file result", K(ret), K(content.length()));
-        } else {
-          MEMCPY(buf, content.data(), content.length());
-          expr_datum.set_string(buf, static_cast<ObString::obstr_size_t>(content.length()));
+        const ObString file_content(static_cast<ObString::obstr_size_t>(content.length()),
+                                    content.data());
+        if (OB_FAIL(ObExprUtil::set_expr_ascii_result(expr, ctx, expr_datum,
+                                                      file_content, true, CS_TYPE_BINARY))) {
+          LOG_WARN("failed to build load_file lob result", K(ret), K(content.length()));
         }
       }
     }

@@ -8251,6 +8251,9 @@ int ObDMLResolver::resolve_function_table_column_item(const TableItem &table_ite
   OX (col_expr->set_ref_id(table_item.table_id_, column_id));
   OX (result_type.set_meta(meta_type));
   OX (result_type.set_accuracy(accuracy));
+  if (ob_is_string_tc(result_type.get_type())) {
+    OX (result_type.set_collation_level(CS_LEVEL_IMPLICIT));
+  }
   OX (col_expr->set_result_type(result_type));
   if (table_item.get_object_name().empty()) {
     OX (col_expr->set_column_name(column_name));
