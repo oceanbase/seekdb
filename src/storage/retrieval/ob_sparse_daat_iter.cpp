@@ -159,10 +159,13 @@ int ObSRDaaTIterImpl::init(
       LOG_WARN("failed to init buffered domain ids array", K(ret));
     } else if (OB_FAIL(buffered_domain_ids_.prepare_allocate(max_batch_size))) {
       LOG_WARN("failed to prepare allocate buffered domain ids array", K(ret));
-    } else if (FALSE_IT(buffered_relevances_.set_allocator(iter_allocator_))) {
-    } else if (OB_FAIL(buffered_relevances_.init(max_batch_size))) {
+    } else if (iter_param_->need_project_relevance()
+        && FALSE_IT(buffered_relevances_.set_allocator(iter_allocator_))) {
+    } else if (iter_param_->need_project_relevance()
+        && OB_FAIL(buffered_relevances_.init(max_batch_size))) {
       LOG_WARN("failed to init buffered relevances array", K(ret));
-    } else if (OB_FAIL(buffered_relevances_.prepare_allocate(max_batch_size))) {
+    } else if (iter_param_->need_project_relevance()
+        && OB_FAIL(buffered_relevances_.prepare_allocate(max_batch_size))) {
       LOG_WARN("failed to prepare allocate buffered relevances array", K(ret));
     } else if (OB_FAIL(merge_cmp_.init(iter_param_->id_proj_expr_->datum_meta_, &iter_domain_ids_))) {
       LOG_WARN("failed to init loser tree comparator", K(ret));
@@ -479,12 +482,17 @@ int ObSRDaaTIterImpl::cache_result(int64_t &count, const ObDatum &id_datum, cons
   if (limit_param->is_valid() && input_row_cnt_ <= offset) {
     // TODO: Maybe we should not process offset logic here
     // don't need to project
-  } else if (OB_UNLIKELY(count >= buffered_domain_ids_.count() || count >= buffered_relevances_.count())) {
+  } else if (OB_UNLIKELY(count >= buffered_domain_ids_.count()
+      || (iter_param_->need_project_relevance() && count >= buffered_relevances_.count()))) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid buffered idx", K(ret), K(count), K(buffered_domain_ids_.count()), K(buffered_relevances_.count()));
   } else {
     buffered_domain_ids_[count].from_datum(id_datum);
-    buffered_relevances_[count] = relevance;
+    if (iter_param_->need_project_relevance()) {
+      // FTS PERF OPT 5: relevance is buffered only when a downstream output
+      // expression will read it after the merge batch is complete.
+      buffered_relevances_[count] = relevance;
+    }
     ++count;
     ++output_row_cnt_;
     if (limit_param->is_valid() && output_row_cnt_ >= limit) {
