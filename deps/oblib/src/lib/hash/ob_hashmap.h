@@ -166,6 +166,22 @@ public:
   {
     return ht_.get_bucket_count();
   }
+  OB_INLINE void prefetch_hash_read(const uint64_t hash_value, const bool prefetch_node = true) const
+  {
+    ht_.prefetch_hash_read(hash_value, prefetch_node);
+  }
+  OB_INLINE void prefetch_hash_write(const uint64_t hash_value, const bool prefetch_node = true) const
+  {
+    ht_.prefetch_hash_write(hash_value, prefetch_node);
+  }
+  OB_INLINE void prefetch_read(const _key_type &key, const bool prefetch_node = true) const
+  {
+    ht_.prefetch_read(key, prefetch_node);
+  }
+  OB_INLINE void prefetch_write(const _key_type &key, const bool prefetch_node = true) const
+  {
+    ht_.prefetch_write(key, prefetch_node);
+  }
   bool empty() const
   {
     return 0 == ht_.size();
@@ -277,6 +293,19 @@ public:
     //return ht_.atomic(key, callback, preproc_);
     return ht_.atomic_refactored(key, callback);
   };
+  template <class _callback>
+  int set_or_update_refactored(const _key_type &key, const _value_type &value, _callback &callback)
+  {
+    int ret = OB_SUCCESS;
+    pair_type pair;
+    preproc processor;
+    if (OB_FAIL(pair.init(key, value))) {
+      HASH_WRITE_LOG(HASH_WARNING, "init pair failed, ret=%d", ret);
+    } else {
+      ret = ht_.set_or_update(key, pair, callback, processor);
+    }
+    return ret;
+  }
 
   // this operation will rdlock on bucket, if there is writing in callback, keep atomic by yourself.
   template <class _callback>

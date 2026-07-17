@@ -115,6 +115,16 @@ public:
       const int64_t word_len,
       const int64_t char_cnt,
       const int64_t word_freq);
+  int prepare_word(
+      const char *word,
+      const int64_t word_len,
+      const int64_t char_cnt,
+      const int64_t word_freq,
+      ObFTWord &dst_word,
+      int64_t &dst_word_freq,
+      bool &need_commit);
+  int commit_prepared_word(const ObFTWord &word, const int64_t word_freq);
+  void prefetch_word_map_key(const ObFTWord &word) const;
   virtual int64_t get_add_word_count() const { return non_stopword_cnt_; }
   VIRTUAL_TO_STRING_KV(
       K_(word_meta),

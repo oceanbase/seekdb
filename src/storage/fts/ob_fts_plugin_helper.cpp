@@ -36,6 +36,21 @@ namespace oceanbase
 namespace storage
 {
 
+namespace
+{
+
+OB_INLINE void prefetch_next_token_bytes(const char *word, const int64_t word_len)
+{
+  if (OB_NOT_NULL(word) && word_len > 0) {
+    __builtin_prefetch(word, 0 /* read */, 1 /* low locality */);
+    if (word_len > 64) {
+      __builtin_prefetch(word + 64, 0 /* read */, 1 /* low locality */);
+    }
+  }
+}
+
+} // namespace
+
 const char *ObFTParser::NAME_STR[ObFTParser::ParserType::FTP_MAX + 1] = {
   "non-builtin",
 #define FT_PARSER_TYPE(ftp_type, parser_name) #parser_name,
@@ -287,13 +302,58 @@ int ObFTParseHelper::segment(
       int64_t word_len = 0;
       int64_t char_cnt = 0;
       int64_t word_freq = 0;
-      while (OB_SUCC(ret)) {
-        if (OB_FAIL(iter->get_next_token(word, word_len, char_cnt, word_freq))) {
-          if (OB_ITER_END != ret) {
+      if (OB_FAIL(iter->get_next_token(word, word_len, char_cnt, word_freq))) {
+        if (OB_ITER_END != ret) {
+          LOG_WARN("fail to get next token", K(ret), KPC(iter));
+        }
+      } else {
+        ObFTWord curr_dst_word;
+        int64_t curr_dst_word_freq = 0;
+        bool curr_need_commit = false;
+        if (OB_FAIL(add_word.prepare_word(
+                word, word_len, char_cnt, word_freq, curr_dst_word, curr_dst_word_freq, curr_need_commit))) {
+          LOG_WARN("fail to prepare first token", K(ret), KP(word), K(word_len), K(char_cnt), K(word_freq));
+        }
+        while (OB_SUCC(ret)) {
+          const char *next_word = nullptr;
+          int64_t next_word_len = 0;
+          int64_t next_char_cnt = 0;
+          int64_t next_word_freq = 0;
+          const int next_ret = iter->get_next_token(next_word, next_word_len, next_char_cnt, next_word_freq);
+          if (OB_UNLIKELY(OB_ITER_END != next_ret && OB_SUCCESS != next_ret)) {
+            ret = next_ret;
             LOG_WARN("fail to get next token", K(ret), KPC(iter));
+          } else {
+            if (OB_SUCCESS == next_ret) {
+              prefetch_next_token_bytes(next_word, next_word_len);
+            }
+            if (curr_need_commit) {
+              add_word.prefetch_word_map_key(curr_dst_word);
+            }
+            ObFTWord next_dst_word;
+            int64_t next_dst_word_freq = 0;
+            bool next_need_commit = false;
+            if (OB_SUCCESS == next_ret
+                && OB_FAIL(add_word.prepare_word(next_word,
+                                                 next_word_len,
+                                                 next_char_cnt,
+                                                 next_word_freq,
+                                                 next_dst_word,
+                                                 next_dst_word_freq,
+                                                 next_need_commit))) {
+              LOG_WARN(
+                  "fail to prepare next token", K(ret), KP(next_word), K(next_word_len), K(next_char_cnt), K(next_word_freq));
+            } else if (curr_need_commit
+                       && OB_FAIL(add_word.commit_prepared_word(curr_dst_word, curr_dst_word_freq))) {
+              LOG_WARN("fail to commit current token", K(ret), K(curr_dst_word), K(curr_dst_word_freq));
+            } else if (OB_ITER_END == next_ret) {
+              break;
+            } else {
+              curr_dst_word = next_dst_word;
+              curr_dst_word_freq = next_dst_word_freq;
+              curr_need_commit = next_need_commit;
+            }
           }
-        } else if (OB_FAIL(add_word.process_word(word, word_len, char_cnt, word_freq))) {
-          LOG_WARN("fail to process one word", K(ret), KP(word), K(word_len), K(char_cnt), K(word_freq));
         }
       }
       if (OB_ITER_END == ret) {

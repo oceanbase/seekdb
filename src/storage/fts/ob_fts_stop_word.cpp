@@ -30,6 +30,21 @@ namespace oceanbase
 namespace storage
 {
 
+namespace
+{
+
+struct ObWordCountAccumulator
+{
+  explicit ObWordCountAccumulator(const int64_t delta) : delta_(delta) {}
+  void operator()(int64_t &count) const
+  {
+    count += delta_;
+  }
+  int64_t delta_;
+};
+
+} // namespace
+
 ////////////////////////////////////////////////////////////////////////////////
 // class ObStopWordChecker
 ObStopWordChecker::~ObStopWordChecker()
@@ -298,9 +313,31 @@ int ObAddWord::process_word(
     const int64_t word_freq)
 {
   int ret = OB_SUCCESS;
+  ObFTWord dst_word;
+  int64_t dst_word_freq = 0;
+  bool need_commit = false;
+  if (OB_FAIL(prepare_word(word, word_len, char_cnt, word_freq, dst_word, dst_word_freq, need_commit))) {
+    LOG_WARN("fail to prepare one word", K(ret), KP(word), K(word_len), K(char_cnt), K(word_freq));
+  } else if (need_commit && OB_FAIL(commit_prepared_word(dst_word, dst_word_freq))) {
+    LOG_WARN("fail to commit one word", K(ret), K(dst_word), K(dst_word_freq));
+  }
+  return ret;
+}
+
+int ObAddWord::prepare_word(
+    const char *word,
+    const int64_t word_len,
+    const int64_t char_cnt,
+    const int64_t word_freq,
+    ObFTWord &dst_word,
+    int64_t &dst_word_freq,
+    bool &need_commit)
+{
+  int ret = OB_SUCCESS;
   bool is_stopword = false;
   ObFTWord src_word(word_len, word, word_meta_);
-  ObFTWord dst_word;
+  dst_word_freq = 0;
+  need_commit = false;
   if (OB_ISNULL(word) || OB_UNLIKELY(0 >= word_len || 0 >= char_cnt || 0 >= word_freq)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", K(ret), KP(word), K(word_len), K(char_cnt), K(word_freq));
@@ -314,11 +351,9 @@ int ObAddWord::process_word(
   } else if (OB_UNLIKELY(is_stopword)) {
     ++stopword_cnt_;
     LOG_DEBUG("skip stopword", K(ret), K(dst_word));
-  } else if (OB_FAIL(groupby_word(dst_word, word_freq))) {
-    LOG_WARN("fail to groupby word into word map", K(ret), K(dst_word), K(word_freq));
   } else {
-    non_stopword_cnt_ += word_freq;
-    LOG_DEBUG("add word", K(ret), KP(word), K(word_len), K(char_cnt), K(word_freq), K(src_word), K(dst_word));
+    dst_word_freq = word_freq;
+    need_commit = true;
   }
   return ret;
 }
@@ -388,10 +423,31 @@ int ObAddWord::check_stopword(const ObFTWord &ft_word, bool &is_stopword)
   return ret;
 }
 
+int ObAddWord::commit_prepared_word(const ObFTWord &word, const int64_t word_freq)
+{
+  int ret = OB_SUCCESS;
+  if (OB_UNLIKELY(word.empty() || word_freq <= 0)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid arguments", K(ret), K(word), K(word_freq));
+  } else if (OB_FAIL(groupby_word(word, word_freq))) {
+    LOG_WARN("fail to groupby word into word map", K(ret), K(word), K(word_freq));
+  } else {
+    non_stopword_cnt_ += word_freq;
+    LOG_DEBUG("add word", K(ret), K(word), K(word_freq));
+  }
+  return ret;
+}
+
+void ObAddWord::prefetch_word_map_key(const ObFTWord &word) const
+{
+  if (!word.empty() && OB_NOT_NULL(word_map_)) {
+    word_map_->prefetch_write(word, true /* prefetch head node */);
+  }
+}
+
 int ObAddWord::groupby_word(const ObFTWord &word, const int64_t word_freq)
 {
   int ret = OB_SUCCESS;
-  int64_t word_count = 0;
   if (OB_UNLIKELY(word.empty() || word_freq <= 0)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", K(ret), K(word), K(word_freq));
@@ -403,14 +459,9 @@ int ObAddWord::groupby_word(const ObFTWord &word, const int64_t word_freq)
       LOG_WARN("fail to set fulltext word and count", K(ret), K(word));
     }
   } else {
-    int64_t *exist_word_count = word_map_->get(word);
-    if (OB_ISNULL(exist_word_count)) {
-      word_count = word_freq;
-      if (OB_FAIL(word_map_->set_refactored(word, word_count))) {
-        LOG_WARN("fail to set fulltext word and count", K(ret), K(word), K(word_count));
-      }
-    } else {
-      *exist_word_count += word_freq;
+    ObWordCountAccumulator updater(word_freq);
+    if (OB_FAIL(word_map_->set_or_update_refactored(word, word_freq, updater))) {
+      LOG_WARN("fail to set or update fulltext word count", K(ret), K(word), K(word_freq));
     }
   }
   return ret;
