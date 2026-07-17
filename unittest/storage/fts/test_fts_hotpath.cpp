@@ -44,6 +44,69 @@ static_assert(std::is_base_of<ObIFTParser, ObNgram2FTParser>::value, "ngram2 par
 static_assert(std::is_base_of<ObIFTParser, ObBEngFTParser>::value, "beng parser must support reuse");
 static_assert(std::is_base_of<ObIFTParser, ObSpaceFTParser>::value, "space parser must support reuse");
 
+struct ObFastSegmentArrayLifetimeProbe
+{
+  static int64_t live_count_;
+  static int64_t copy_construct_count_;
+  static int64_t destruct_count_;
+  static int64_t assign_count_;
+
+  ObFastSegmentArrayLifetimeProbe() : value_(0) { ++live_count_; }
+  explicit ObFastSegmentArrayLifetimeProbe(const int64_t value) : value_(value) { ++live_count_; }
+  ObFastSegmentArrayLifetimeProbe(const ObFastSegmentArrayLifetimeProbe &other) : value_(other.value_)
+  {
+    ++live_count_;
+    ++copy_construct_count_;
+  }
+  ObFastSegmentArrayLifetimeProbe &operator=(const ObFastSegmentArrayLifetimeProbe &other)
+  {
+    value_ = other.value_;
+    ++assign_count_;
+    return *this;
+  }
+  ~ObFastSegmentArrayLifetimeProbe()
+  {
+    --live_count_;
+    ++destruct_count_;
+  }
+
+  static void reset_counters()
+  {
+    live_count_ = 0;
+    copy_construct_count_ = 0;
+    destruct_count_ = 0;
+    assign_count_ = 0;
+  }
+
+  int64_t value_;
+};
+
+int64_t ObFastSegmentArrayLifetimeProbe::live_count_ = 0;
+int64_t ObFastSegmentArrayLifetimeProbe::copy_construct_count_ = 0;
+int64_t ObFastSegmentArrayLifetimeProbe::destruct_count_ = 0;
+int64_t ObFastSegmentArrayLifetimeProbe::assign_count_ = 0;
+
+TEST(FTSHotPath, FastSegmentArrayConstructsAndDestroysNonTrivialElements)
+{
+  ObFastSegmentArrayLifetimeProbe::reset_counters();
+  {
+    common::ObArenaAllocator allocator("FtsHotPath");
+    ObFastSegmentArray<ObFastSegmentArrayLifetimeProbe, 4> values(allocator);
+    ObFastSegmentArrayLifetimeProbe input(7);
+    ASSERT_EQ(OB_SUCCESS, values.push_back(input));
+    ASSERT_EQ(2, ObFastSegmentArrayLifetimeProbe::live_count_);
+    ASSERT_EQ(1, ObFastSegmentArrayLifetimeProbe::copy_construct_count_);
+
+    values.reuse();
+    ASSERT_EQ(1, ObFastSegmentArrayLifetimeProbe::live_count_);
+    ASSERT_EQ(1, ObFastSegmentArrayLifetimeProbe::destruct_count_);
+    ASSERT_EQ(OB_SUCCESS, values.push_back(input));
+    ASSERT_EQ(2, ObFastSegmentArrayLifetimeProbe::live_count_);
+  }
+  ASSERT_EQ(0, ObFastSegmentArrayLifetimeProbe::live_count_);
+  ASSERT_EQ(3, ObFastSegmentArrayLifetimeProbe::destruct_count_);
+}
+
 TEST(FTSHotPath, FastSegmentArrayCrossBlockAccessAndReuseKeepsAllocatedBlocks)
 {
   common::ObArenaAllocator allocator("FtsHotPath");
@@ -87,6 +150,34 @@ TEST(FTSHotPath, FastListPreservesBidirectionalOrderAfterReuse)
   ASSERT_EQ(7, values.get_first());
   // reuse 按节点池分配顺序复用；push_front 改变逻辑首节点但不改变首个分配槽。
   ASSERT_EQ(first_allocated, &values.get_first());
+}
+
+TEST(FTSHotPath, FastListKeepsIKTokenBidirectionalOrderAcrossReuse)
+{
+  common::ObArenaAllocator allocator("FtsHotPath");
+  ObFastList<ObIKToken, 4> values(allocator);
+  const char text[] = "abcdef";
+  ObIKToken first{text, 1, 1, 1, ObIKTokenType::IK_ENGLISH_TOKEN};
+  ObIKToken second{text, 2, 1, 1, ObIKTokenType::IK_ENGLISH_TOKEN};
+  ObIKToken third{text, 3, 1, 1, ObIKTokenType::IK_ENGLISH_TOKEN};
+  ASSERT_EQ(OB_SUCCESS, values.push_back(second));
+  ASSERT_EQ(OB_SUCCESS, values.push_front(first));
+  ASSERT_EQ(OB_SUCCESS, values.push_back(third));
+
+  std::vector<int64_t> reverse_offsets;
+  for (auto iter = values.last(); iter != values.end(); --iter) {
+    reverse_offsets.push_back(iter->offset_);
+  }
+  ASSERT_EQ((std::vector<int64_t>{3, 2, 1}), reverse_offsets);
+
+  values.reuse();
+  ASSERT_EQ(OB_SUCCESS, values.push_back(first));
+  ASSERT_EQ(OB_SUCCESS, values.push_back(second));
+  reverse_offsets.clear();
+  for (auto iter = values.last(); iter != values.end(); --iter) {
+    reverse_offsets.push_back(iter->offset_);
+  }
+  ASSERT_EQ((std::vector<int64_t>{2, 1}), reverse_offsets);
 }
 
 template <typename Parser>

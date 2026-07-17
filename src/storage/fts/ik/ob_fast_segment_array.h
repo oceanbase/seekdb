@@ -23,6 +23,8 @@
 #include "lib/ob_errno.h"
 #include "lib/oblog/ob_log_module.h"
 
+#include <new>
+
 namespace oceanbase
 {
 namespace storage
@@ -67,13 +69,14 @@ public:
       LOG_WARN("failed to ensure segment block", K(ret), K(block_idx));
     } else {
       const int64_t inner_idx = size_ & BLOCK_LOCATOR;
-      block_arr_[block_idx][inner_idx] = value;
+      // allocator 返回的是原始存储，必须显式开始对象生命周期后才能写入非平凡 T。
+      new (&block_arr_[block_idx][inner_idx]) T(value);
       ++size_;
     }
     return ret;
   }
 
-  // 预留一个未初始化槽位并返回稳定地址，调用者须在下一次 reset 前完成赋值。
+  // 预留并默认构造一个槽位，调用者可在下一次 reset 前通过返回地址写入。
   int alloc(T *&ptr)
   {
     int ret = OB_SUCCESS;
@@ -83,6 +86,7 @@ public:
     } else {
       const int64_t inner_idx = size_ & BLOCK_LOCATOR;
       ptr = &block_arr_[block_idx][inner_idx];
+      new (ptr) T();
       ++size_;
     }
     return ret;
@@ -96,6 +100,7 @@ public:
       ret = OB_ERR_UNEXPECTED;
     } else {
       --size_;
+      at(size_).~T();
     }
     return ret;
   }
@@ -115,12 +120,17 @@ public:
   int64_t count() const { return size_; }
   bool empty() const { return 0 == size_; }
 
-  // 文档间复用只清零逻辑长度，保留所有块和元素地址，避免重复分配。
-  void reuse() { size_ = 0; }
+  // 文档间复用析构逻辑元素但保留块与地址，避免重复分配且满足非平凡 T 的生命周期。
+  void reuse()
+  {
+    destroy_constructed_objects_();
+    size_ = 0;
+  }
 
   // reset 才归还全部块；调用后此前取得的元素地址全部失效。
   void reset()
   {
+    destroy_constructed_objects_();
     for (int64_t i = 0; i < block_count_; ++i) {
       if (nullptr != block_arr_[i]) {
         allocator_.free(block_arr_[i]);
@@ -137,6 +147,13 @@ public:
   }
 
 private:
+  void destroy_constructed_objects_()
+  {
+    for (int64_t i = 0; i < size_; ++i) {
+      at(i).~T();
+    }
+  }
+
   int ensure_block_(const int64_t block_idx)
   {
     int ret = OB_SUCCESS;
