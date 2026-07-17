@@ -1560,7 +1560,7 @@ int ObAlterTableResolver::resolve_add_index(const ParseNode &node)
                   ret = OB_NOT_SUPPORTED;
                   LOG_WARN("specify partition option of local index not supported", K(ret));
                   LOG_USER_ERROR(OB_NOT_SUPPORTED, "Specify partition option of local index");
-                } else if (NOT_SPECIFIED == index_scope_) {
+                } else if (NOT_SPECIFIED == index_scope_ && FTS_KEY != index_keyname_) {
                   index_scope_ = GLOBAL_INDEX;
                 }
                 is_index_part_specified = true;

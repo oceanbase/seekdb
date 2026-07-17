@@ -2199,6 +2199,58 @@ int ObFtsIndexBuilderUtil::get_dict_table_ids(
   return ret;
 }
 
+static int has_custom_dict_table_ids(
+    const ObString &parser_properties,
+    bool &has_custom_dict_tables)
+{
+  int ret = OB_SUCCESS;
+  has_custom_dict_tables = false;
+  storage::ObFTParserJsonProps props;
+  if (parser_properties.empty()) {
+    // Ordinary built-in IK parser without custom dictionary properties.
+  } else if (OB_FAIL(props.init())) {
+    LOG_WARN("fail to init parser properties", K(ret));
+  } else if (OB_FAIL(props.parse_from_valid_str(parser_properties))) {
+    LOG_WARN("fail to parse parser properties", K(ret), K(parser_properties));
+  } else {
+    uint64_t table_id = OB_INVALID_ID;
+    if (OB_FAIL(props.config_get_dict_table_id(table_id))) {
+      if (OB_SEARCH_NOT_FOUND == ret) {
+        ret = OB_SUCCESS;
+      } else {
+        LOG_WARN("fail to get dict table id", K(ret));
+      }
+    } else {
+      has_custom_dict_tables = !is_inner_table(table_id);
+    }
+    if (OB_SUCC(ret) && !has_custom_dict_tables) {
+      table_id = OB_INVALID_ID;
+      if (OB_FAIL(props.config_get_quantifier_table_id(table_id))) {
+        if (OB_SEARCH_NOT_FOUND == ret) {
+          ret = OB_SUCCESS;
+        } else {
+          LOG_WARN("fail to get quantifier table id", K(ret));
+        }
+      } else {
+        has_custom_dict_tables = !is_inner_table(table_id);
+      }
+    }
+    if (OB_SUCC(ret) && !has_custom_dict_tables) {
+      table_id = OB_INVALID_ID;
+      if (OB_FAIL(props.config_get_stopword_table_id(table_id))) {
+        if (OB_SEARCH_NOT_FOUND == ret) {
+          ret = OB_SUCCESS;
+        } else {
+          LOG_WARN("fail to get stopword table id", K(ret));
+        }
+      } else {
+        has_custom_dict_tables = !is_inner_table(table_id);
+      }
+    }
+  }
+  return ret;
+}
+
 int ObFtsIndexBuilderUtil::check_need_to_load_dic(const ObString &parser_name,
     bool &need_to_load_dic)
 {
@@ -2233,8 +2285,12 @@ int ObFtsIndexBuilderUtil::try_load_and_lock_dictionary_tables(
     if (OB_FAIL(check_need_to_load_dic(parser_name, need_to_load_dic))) {
       LOG_WARN("fail to check need to load dic", K(ret), K(parser_name), K(need_to_load_dic));
     } else if (need_to_load_dic) {
+      bool has_custom_dict_tables = false;
       ObSEArray<uint64_t, 3> dict_table_ids;
-      if (OB_FAIL(get_dict_table_ids(parser_properties, dict_table_ids))) {
+      if (OB_FAIL(has_custom_dict_table_ids(parser_properties, has_custom_dict_tables))) {
+        LOG_WARN("fail to check custom dictionary tables", K(ret), K(parser_properties));
+      } else if (has_custom_dict_tables
+          && OB_FAIL(get_dict_table_ids(parser_properties, dict_table_ids))) {
         LOG_WARN("fail to get dictionary table ids", K(ret), K(parser_properties));
       }
       for (; OB_SUCC(ret) && tmp_begin != tmp_end; tmp_begin++) {
@@ -2264,11 +2320,17 @@ int ObFtsIndexBuilderUtil::try_load_and_lock_dictionary_tables(
           LOG_WARN("the dic loader handle is not valid", K(ret), K(dic_loader_handle));
         } else if (OB_FAIL(dic_loader_handle.get_loader()->try_load_dictionary_in_trans())) {
           LOG_WARN("fail to try load dictionary", K(ret), K(dic_loader_handle));
-        } else if (OB_FAIL(storage::ObDicLock::lock_dic_tables_in_trans(1UL,
-                                                                        dict_table_ids,
-                                                                        transaction::tablelock::SHARE,
-                                                                        trans))) {
+        } else if (has_custom_dict_tables
+            && OB_FAIL(storage::ObDicLock::lock_dic_tables_in_trans(1UL,
+                                                                    dict_table_ids,
+                                                                    transaction::tablelock::SHARE,
+                                                                    trans))) {
           LOG_WARN("fail to lock dictionary tables", K(ret), K(dict_table_ids));
+        } else if (!has_custom_dict_tables
+            && OB_FAIL(storage::ObDicLock::lock_dic_tables_in_trans(*dic_loader_handle.get_loader(),
+                                                                    transaction::tablelock::SHARE,
+                                                                    trans))) {
+          LOG_WARN("fail to lock all dictionaries", K(ret), K(dic_loader_handle));
         }
       }
     }

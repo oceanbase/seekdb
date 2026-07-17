@@ -675,46 +675,28 @@ int ObFTParserJsonProps::ik_rebuild_props_for_ddl(bool log_to_user)
   if (OB_FAIL(ret)) {
     // do nothing
   } else {
-    // Process dict_table_id and table_name
-    // For system default tables, table_name is empty (will be resolved from table_id if needed)
-    ObString empty_table_name;
-    if (OB_FAIL(set_default_table_info(share::OB_FT_DICT_IK_UTF8_TID,
-                                       ObString(ObFTSLiteral::FT_DEFAULT_IK_DICT_UTF8_TABLE)))) {
-      LOG_WARN("Failed to process main dict table_id and table_name", K(ret));
-    } else if (OB_FAIL(set_default_table_info(share::OB_FT_QUANTIFIER_IK_UTF8_TID,
-                                              ObString(ObFTSLiteral::FT_DEFAULT_IK_QUANTIFIER_UTF8_TABLE)))) {
-      LOG_WARN("Failed to process quantifier table_id and table_name", K(ret));
-    } else if (OB_FAIL(set_default_table_info(share::OB_FT_STOPWORD_IK_UTF8_TID,
-                                              ObString(ObFTSLiteral::FT_DEFAULT_IK_STOPWORD_UTF8_TABLE)))) {
-      LOG_WARN("Failed to process stopword table_id and table_name", K(ret));
-    }
-
-    if (OB_FAIL(ret)) {
-      // do nothing
-    } else {
-      ObString ik_mode;
-      if (OB_FAIL(config_get_ik_mode(ik_mode))) {
-        if (OB_SEARCH_NOT_FOUND == ret) {
-          if (OB_FAIL(config_set_ik_mode(ObFTSLiteral::FT_IK_MODE_SMART))) {
-            LOG_WARN("Failed to set ik mode", K(ret));
-          }
-        } else {
-          LOG_WARN("Fail to get ik mode", K(ret));
-          if (log_to_user) {
-            LOG_USER_ERROR(OB_INVALID_ARGUMENT, ObFTSLiteral::IK_MODE_SCOPE_STR);
-          }
+    ObString ik_mode;
+    if (OB_FAIL(config_get_ik_mode(ik_mode))) {
+      if (OB_SEARCH_NOT_FOUND == ret) {
+        if (OB_FAIL(config_set_ik_mode(ObFTSLiteral::FT_IK_MODE_SMART))) {
+          LOG_WARN("Failed to set ik mode", K(ret));
         }
       } else {
-        if (0 == ObString(ObFTSLiteral::FT_IK_MODE_SMART).case_compare(ik_mode)) {
-          // okay
-        } else if (0 == ObString(ObFTSLiteral::FT_IK_MODE_MAX_WORD).case_compare(ik_mode)) {
-          // okay
-        } else {
-          ret = OB_INVALID_ARGUMENT;
-          LOG_WARN("Invalid ik mode", K(ret), K(ik_mode));
-          if (log_to_user) {
-            LOG_USER_ERROR(OB_INVALID_ARGUMENT, ObFTSLiteral::IK_MODE_SCOPE_STR);
-          }
+        LOG_WARN("Fail to get ik mode", K(ret));
+        if (log_to_user) {
+          LOG_USER_ERROR(OB_INVALID_ARGUMENT, ObFTSLiteral::IK_MODE_SCOPE_STR);
+        }
+      }
+    } else {
+      if (0 == ObString(ObFTSLiteral::FT_IK_MODE_SMART).case_compare(ik_mode)) {
+        // okay
+      } else if (0 == ObString(ObFTSLiteral::FT_IK_MODE_MAX_WORD).case_compare(ik_mode)) {
+        // okay
+      } else {
+        ret = OB_INVALID_ARGUMENT;
+        LOG_WARN("Invalid ik mode", K(ret), K(ik_mode));
+        if (log_to_user) {
+          LOG_USER_ERROR(OB_INVALID_ARGUMENT, ObFTSLiteral::IK_MODE_SCOPE_STR);
         }
       }
     }
