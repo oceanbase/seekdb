@@ -1516,6 +1516,11 @@ int ObSchemaPrinter::print_table_definition_table_options(const ObTableSchema &t
       SHARE_SCHEMA_LOG(WARN, "fail to print collate", K(ret), K(table_schema));
     }
   }
+  if (OB_SUCC(ret) && !is_index_tbl && table_schema.is_fulltext_dict_table()) {
+    if (OB_FAIL(databuff_printf(buf, buf_len, pos, "FULLTEXT_DICT = 'Y' "))) {
+      SHARE_SCHEMA_LOG(WARN, "fail to print FULLTEXT_DICT table option", K(ret), K(table_schema));
+    }
+  }
   if (OB_SUCC(ret) && table_schema.is_fts_index()
       && !is_no_key_options(sql_mode) && !table_schema.get_parser_name_str().empty()) {
     if (OB_FAIL(ObFtsIndexSchemaPrinter::print_fts_parser_info(table_schema, strict_compat_, buf, buf_len, pos))) {

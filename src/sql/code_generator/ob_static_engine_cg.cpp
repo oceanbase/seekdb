@@ -7952,6 +7952,8 @@ int ObStaticEngineCG::generate_spec(ObLogFunctionTable &op, ObFunctionTableSpec 
   } else if (OB_FAIL(generate_rt_expr(*value_raw_expr, value_expr))) {
     LOG_WARN("failed to generate rt expr", K(ret));
   } else {
+    const bool is_ai_split_document =
+        T_FUN_SYS_AI_SPLIT_DOCUMENT == value_raw_expr->get_expr_type();
     spec.has_correlated_expr_ = value_raw_expr->has_flag(CNT_DYNAMIC_PARAM);
     spec.value_expr_ = value_expr;
     for (int64_t i = 0; OB_SUCC(ret) && i < op.get_output_exprs().count(); ++i) {
@@ -7966,7 +7968,7 @@ int ObStaticEngineCG::generate_spec(ObLogFunctionTable &op, ObFunctionTableSpec 
       CK (OB_NOT_NULL(col_item->expr_));
       if (OB_SUCC(ret)
           && col_item->table_id_ == op.get_table_id()
-          && col_item->expr_->is_explicited_reference()) {
+          && (is_ai_split_document || col_item->expr_->is_explicited_reference())) {
         OZ (mark_expr_self_produced(col_item->expr_));
         OZ (generate_rt_expr(*col_item->expr_, rt_expr));
         OZ (spec.column_exprs_.push_back(rt_expr));

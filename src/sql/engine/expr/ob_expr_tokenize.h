@@ -63,7 +63,7 @@ private:
     int parse_json_param(const ObIJsonBase *obj);
 
     // check and reform parser properties to standard format
-    int reform_parser_properties(const ObString &properties);
+    int reform_parser_properties(const ObString &properties, const ObString &database_name);
     int try_load_dictionary_for_ik();
 
   public:

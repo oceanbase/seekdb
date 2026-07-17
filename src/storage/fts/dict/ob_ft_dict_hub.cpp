@@ -51,7 +51,7 @@ int ObFTDictHub::destroy()
 int ObFTDictHub::build_cache(const ObFTDictDesc &desc, ObFTCacheRangeContainer &container)
 {
   int ret = OB_SUCCESS;
-  ObFTDictInfoKey key(static_cast<uint64_t>(desc.type_));
+  ObFTDictInfoKey key(desc.identity_hash());
   ObFTDictInfo info;
   container.reset();
 
@@ -69,16 +69,25 @@ int ObFTDictHub::build_cache(const ObFTDictDesc &desc, ObFTCacheRangeContainer &
       } else {
         LOG_WARN("Failed to get dict info", K(ret));
       }
-    } else if (OB_FAIL(ObFTRangeDict::try_load_cache(desc, info.range_count_, container))) {
-      if (OB_ENTRY_NOT_EXIST == ret) {
-      } else {
-        LOG_WARN("Failed to load cache", K(ret));
+    } else {
+      ObFTDictDesc effective_desc(desc);
+      effective_desc.version_ = info.version_;
+      if (OB_FAIL(ObFTRangeDict::try_load_cache(effective_desc, info.range_count_, container))) {
+        if (OB_ENTRY_NOT_EXIST == ret) {
+        } else {
+          LOG_WARN("Failed to load cache", K(ret));
+        }
       }
     }
 
     if (OB_FAIL(ret)) {
       if (OB_ENTRY_NOT_EXIST == ret) {
-        if (OB_FAIL(ObFTRangeDict::build_cache_from_ik_dict(desc, container))) {
+        info.version_ = MAX(info.version_ + 1, 1);
+        ObFTDictDesc effective_desc(desc);
+        effective_desc.version_ = info.version_;
+        if (OB_FAIL(effective_desc.is_builtin_
+                      ? ObFTRangeDict::build_cache_from_ik_dict(effective_desc, container)
+                      : ObFTRangeDict::build_cache(effective_desc, container))) {
           LOG_WARN("Failed to build cache", K(ret));
         } else if (FALSE_IT(info.range_count_ = container.get_handles().size())) {
         } else if (OB_FAIL(put_dict_info(key, info))) {
@@ -95,7 +104,7 @@ int ObFTDictHub::load_cache(const ObFTDictDesc &desc, ObFTCacheRangeContainer &c
   int ret = OB_SUCCESS;
   ObFTDictInfo info;
   container.reset();
-  ObFTDictInfoKey key(static_cast<uint64_t>(desc.type_));
+  ObFTDictInfoKey key(desc.identity_hash());
   if (!is_inited_) {
     ret = OB_NOT_INIT;
     LOG_WARN("dict hub not init", K(ret));
@@ -112,15 +121,66 @@ int ObFTDictHub::load_cache(const ObFTDictDesc &desc, ObFTCacheRangeContainer &c
       }
     }
     if (OB_FAIL(ret)) {
-    } else if (OB_FAIL(ObFTRangeDict::try_load_cache(desc, info.range_count_, container))) {
-      if (OB_ENTRY_NOT_EXIST == ret) {
-        // dict not exist, make new one, by caller
-      } else {
-        LOG_WARN("Failed to load cache", K(ret));
+    } else {
+      ObFTDictDesc effective_desc(desc);
+      effective_desc.version_ = info.version_;
+      if (OB_FAIL(ObFTRangeDict::try_load_cache(effective_desc, info.range_count_, container))) {
+        if (OB_ENTRY_NOT_EXIST == ret) {
+          // dict not exist, make new one, by caller
+        } else {
+          LOG_WARN("Failed to load cache", K(ret));
+        }
       }
     }
   }
 
+  return ret;
+}
+
+int ObFTDictHub::refresh_cache(const ObFTDictDesc &desc)
+{
+  ObArenaAllocator allocator(ObMemAttr("RefreshFTDict"));
+  ObFTCacheRangeContainer container(allocator);
+  return refresh_cache(desc, container);
+}
+
+int ObFTDictHub::refresh_cache(const ObFTDictDesc &desc,
+                               ObFTCacheRangeContainer &container)
+{
+  int ret = OB_SUCCESS;
+  ObFTDictInfoKey key(desc.identity_hash());
+  ObFTDictInfo old_info;
+  ObFTDictInfo new_info;
+  container.reset();
+  if (!is_inited_) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("dict hub not init", K(ret));
+  } else if (desc.is_builtin_) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("built-in dictionary cannot be refreshed as a custom dictionary", K(ret), K(desc.name_));
+  } else {
+    ObBucketHashWLockGuard guard(rw_dict_lock_, key.hash());
+    if (OB_FAIL(get_dict_info(key, old_info))) {
+      if (OB_HASH_NOT_EXIST == ret) {
+        ret = OB_SUCCESS;
+      } else {
+        LOG_WARN("get old dictionary info failed", K(ret));
+      }
+    }
+    if (OB_SUCC(ret)) {
+      new_info.version_ = MAX(old_info.version_ + 1, 1);
+      ObFTDictDesc effective_desc(desc);
+      effective_desc.version_ = new_info.version_;
+      if (OB_FAIL(ObFTRangeDict::build_cache(effective_desc, container))) {
+        LOG_WARN("build refreshed custom dictionary failed", K(ret), K(desc.name_));
+      } else {
+        new_info.range_count_ = container.get_handles().size();
+        if (OB_FAIL(put_dict_info(key, new_info))) {
+          LOG_WARN("publish refreshed dictionary info failed", K(ret));
+        }
+      }
+    }
+  }
   return ret;
 }
 

@@ -1,0 +1,25 @@
+--echo # ==== additional LOAD_FILE coverage ====
+--disable_warnings
+DROP DATABASE IF EXISTS ai_lf_ext_test;
+--enable_warnings
+CREATE DATABASE ai_lf_ext_test;
+USE ai_lf_ext_test;
+
+--write_file $MYSQL_TMP_DIR/ai_lf_ext.txt
+Extended load file.
+EOF
+
+--disable_query_log
+eval CREATE LOCATION lf_ext_loc URL = 'file://$MYSQL_TMP_DIR/';
+--enable_query_log
+
+--echo # LOAD_FILE returns binary data without changing its bytes
+SELECT hex(load_file('lf_ext_loc', 'ai_lf_ext.txt')) AS content_hex;
+
+--echo # NULL arguments produce NULL without accessing a location
+SELECT load_file(NULL, 'ai_lf_ext.txt') IS NULL AS null_location;
+SELECT load_file('lf_ext_loc', NULL) IS NULL AS null_file;
+
+DROP LOCATION lf_ext_loc;
+DROP DATABASE ai_lf_ext_test;
+--remove_file $MYSQL_TMP_DIR/ai_lf_ext.txt

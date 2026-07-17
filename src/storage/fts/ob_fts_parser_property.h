@@ -18,6 +18,7 @@
 #define OB_FTS_PARSER_PROPERTY_H_
 
 #include "lib/allocator/ob_allocator.h"
+#include "lib/allocator/page_arena.h"
 #include "lib/charset/ob_charset.h"
 #include "lib/json/ob_json.h"
 #include "common/json_type/ob_json_base.h"
@@ -160,6 +161,7 @@ public:
                K_(ik_mode_smart));
 
 public:
+  common::ObArenaAllocator allocator_;
   int64_t min_token_size_;
   int64_t max_token_size_;
   int64_t ngram_token_size_;

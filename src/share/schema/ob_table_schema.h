@@ -1995,6 +1995,9 @@ public:
   inline bool has_table_flag(uint64_t flag) const { return table_flags_ & flag; }
   inline void set_table_flags(uint64_t flags) { table_flags_ = flags; }
   inline uint64_t get_table_flags() const { return table_flags_; }
+  inline void set_fulltext_dict_table() { table_flags_ |= FULLTEXT_DICT_TABLE_FLAG; }
+  inline bool is_fulltext_dict_table() const
+  { return 0 != (table_flags_ & FULLTEXT_DICT_TABLE_FLAG); }
   void set_mlog_tid(const uint64_t& table_id) { mlog_tid_ = table_id; }
   uint64_t get_mlog_tid() const { return mlog_tid_; }
   void set_tmp_mlog_tid(const uint64_t& table_id) { tmp_mlog_tid_ = table_id; }

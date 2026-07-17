@@ -1736,6 +1736,26 @@ int ObDDLResolver::resolve_table_option(const ParseNode *option_node, const bool
         }
         break;
       }
+      case T_FULLTEXT_DICT: {
+        if (is_index_option || stmt::T_CREATE_TABLE != stmt_->get_stmt_type()) {
+          ret = OB_NOT_SUPPORTED;
+          LOG_USER_ERROR(OB_NOT_SUPPORTED, "FULLTEXT_DICT outside CREATE TABLE");
+        } else if (OB_ISNULL(option_node->children_[0])) {
+          ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("FULLTEXT_DICT option value is null", K(ret));
+        } else {
+          const ObString value(static_cast<int32_t>(option_node->children_[0]->str_len_),
+                               option_node->children_[0]->str_value_);
+          if (0 != value.case_compare("Y")) {
+            ret = OB_INVALID_ARGUMENT;
+            LOG_USER_ERROR(OB_INVALID_ARGUMENT, "FULLTEXT_DICT must be 'Y'");
+          } else {
+            ObCreateTableArg &arg = static_cast<ObCreateTableStmt *>(stmt_)->get_create_table_arg();
+            arg.schema_.set_fulltext_dict_table();
+          }
+        }
+        break;
+      }
       case T_CHARSET: {
         if (!is_index_option) {
           if (CHARSET_INVALID == charset_type_) {

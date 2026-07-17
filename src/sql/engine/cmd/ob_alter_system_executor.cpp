@@ -35,6 +35,10 @@
 #include "sql/engine/cmd/ob_timezone_importer.h"
 #include "sql/engine/cmd/ob_srs_importer.h"
 #include "share/ob_internal_table_change_notifier.h"
+#include "share/schema/ob_multi_version_schema_service.h"
+#include "sql/resolver/ddl/ob_fts_index_builder_util.h"
+#include "storage/fts/ob_fts_plugin_helper.h"
+#include "storage/fts/dict/ob_ft_dict_hub.h"
 
 namespace oceanbase
 {
@@ -471,6 +475,59 @@ int ObRefreshMemStatExecutor::execute(ObExecContext &ctx, ObRefreshMemStatStmt &
   } else if (OB_FAIL(GCTX.root_service_->admin_refresh_memory_stat(
                          stmt.get_rpc_arg()))) {
     LOG_WARN("refresh memory stat failed", K(ret), "rpc_arg", stmt.get_rpc_arg());
+  }
+  return ret;
+}
+
+int ObRefreshFulltextDictExecutor::execute(ObExecContext &ctx,
+                                           ObRefreshFulltextDictStmt &stmt)
+{
+  int ret = OB_SUCCESS;
+  const share::schema::ObTableSchema *table_schema = nullptr;
+  share::schema::ObSchemaGetterGuard schema_guard;
+  ObFTDictHub *dict_hub = nullptr;
+  ObSqlString qualified_name;
+  if (OB_ISNULL(GCTX.schema_service_)) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("schema service is null", K(ret));
+  } else if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(schema_guard))) {
+    LOG_WARN("get schema guard failed", K(ret));
+  } else if (OB_FAIL(schema_guard.get_table_schema(stmt.get_database_name(),
+                                                   stmt.get_table_name(),
+                                                   false,
+                                                   table_schema))) {
+    LOG_WARN("get dictionary table schema failed", K(ret), K(stmt));
+  } else if (OB_ISNULL(table_schema)) {
+    ret = OB_TABLE_NOT_EXIST;
+    LOG_USER_ERROR(OB_TABLE_NOT_EXIST,
+                   stmt.get_database_name().length(), stmt.get_database_name().ptr(),
+                   stmt.get_table_name().length(), stmt.get_table_name().ptr());
+  } else if (OB_FAIL(ObFtsIndexBuilderUtil::check_custom_dictionary_table(*table_schema))) {
+    LOG_WARN("invalid custom dictionary table", K(ret), KPC(table_schema));
+  } else if (OB_FAIL(qualified_name.append_fmt("%.*s.%.*s",
+                                              stmt.get_database_name().length(),
+                                              stmt.get_database_name().ptr(),
+                                              stmt.get_table_name().length(),
+                                              stmt.get_table_name().ptr()))) {
+    LOG_WARN("build qualified dictionary name failed", K(ret));
+  } else if (OB_FAIL(ObFTParsePluginData::instance().get_dict_hub(dict_hub))) {
+    LOG_WARN("get dictionary hub failed", K(ret));
+  } else {
+    const ObFTDictType types[] = {
+      ObFTDictType::DICT_IK_MAIN,
+      ObFTDictType::DICT_IK_QUAN,
+      ObFTDictType::DICT_IK_STOP
+    };
+    for (int64_t i = 0; OB_SUCC(ret) && i < ARRAYSIZEOF(types); ++i) {
+      const ObFTDictDesc desc(qualified_name.string(),
+                              types[i],
+                              CHARSET_UTF8MB4,
+                              CS_TYPE_UTF8MB4_BIN,
+                              false);
+      if (OB_FAIL(dict_hub->refresh_cache(desc))) {
+        LOG_WARN("refresh custom dictionary cache failed", K(ret), K(qualified_name), K(i));
+      }
+    }
   }
   return ret;
 }

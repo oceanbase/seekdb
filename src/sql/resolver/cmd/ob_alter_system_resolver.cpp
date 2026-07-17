@@ -1145,6 +1145,40 @@ int ObRefreshMemStatResolver::resolve(const ParseNode &parse_tree)
   return ret;
 }
 
+int ObRefreshFulltextDictResolver::resolve(const ParseNode &parse_tree)
+{
+  int ret = OB_SUCCESS;
+  ObRefreshFulltextDictStmt *stmt = nullptr;
+  ObString table_name;
+  ObString database_name;
+  if (OB_UNLIKELY(T_REFRESH_FULLTEXT_DICT != parse_tree.type_)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("type is not T_REFRESH_FULLTEXT_DICT", K(ret), K(parse_tree.type_));
+  } else if (OB_ISNULL(parse_tree.children_) || 1 != parse_tree.num_child_
+             || OB_ISNULL(parse_tree.children_[0])) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("invalid refresh fulltext dict parse tree", K(ret), K(parse_tree.num_child_));
+  } else if (OB_ISNULL(stmt = create_stmt<ObRefreshFulltextDictStmt>())) {
+    ret = OB_ALLOCATE_MEMORY_FAILED;
+    LOG_WARN("create ObRefreshFulltextDictStmt failed", K(ret));
+  } else if (OB_FAIL(resolve_table_relation_node(parse_tree.children_[0], table_name, database_name))) {
+    LOG_WARN("resolve dictionary table name failed", K(ret));
+  } else {
+    if (database_name.empty()) {
+      database_name = session_info_->get_database_name();
+    }
+    if (database_name.empty()) {
+      ret = OB_ERR_NO_DB_SELECTED;
+      LOG_USER_ERROR(OB_ERR_NO_DB_SELECTED);
+    } else {
+      stmt->set_database_name(database_name);
+      stmt->set_table_name(table_name);
+      stmt_ = stmt;
+    }
+  }
+  return ret;
+}
+
 int ObWashMemFragmentationResolver::resolve(const ParseNode &parse_tree)
 {
   int ret = OB_SUCCESS;

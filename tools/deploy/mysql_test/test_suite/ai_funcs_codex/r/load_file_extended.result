@@ -1,0 +1,17 @@
+# ==== additional LOAD_FILE coverage ====
+DROP DATABASE IF EXISTS ai_lf_ext_test;
+CREATE DATABASE ai_lf_ext_test;
+USE ai_lf_ext_test;
+# LOAD_FILE returns binary data without changing its bytes
+SELECT hex(load_file('lf_ext_loc', 'ai_lf_ext.txt')) AS content_hex;
+content_hex
+457874656E646564206C6F61642066696C652E0A
+# NULL arguments produce NULL without accessing a location
+SELECT load_file(NULL, 'ai_lf_ext.txt') IS NULL AS null_location;
+null_location
+1
+SELECT load_file('lf_ext_loc', NULL) IS NULL AS null_file;
+null_file
+1
+DROP LOCATION lf_ext_loc;
+DROP DATABASE ai_lf_ext_test;

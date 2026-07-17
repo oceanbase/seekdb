@@ -140,10 +140,13 @@ int ObFTParserJsonProps::config_set_dict_table(const ObString &str)
 {
   int ret = OB_SUCCESS;
   ObJsonString *dict_table = nullptr;
+  ObString copied_str;
   if (!IS_INIT) {
     ret = OB_NOT_INIT;
     LOG_WARN("Props not init", K(ret));
-  } else if (OB_ISNULL(dict_table = OB_NEWx(ObJsonString, &allocator_, str))) {
+  } else if (OB_FAIL(ob_write_string(allocator_, str, copied_str))) {
+    LOG_WARN("fail to copy dict table name", K(ret), K(str));
+  } else if (OB_ISNULL(dict_table = OB_NEWx(ObJsonString, &allocator_, copied_str))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("Fail to new ObJsonString", K(ret));
   } else if (OB_FAIL(
@@ -163,10 +166,13 @@ int ObFTParserJsonProps::config_set_stopword_table(const ObString &str)
 {
   int ret = OB_SUCCESS;
   ObJsonString *stopword_table = nullptr;
+  ObString copied_str;
   if (!IS_INIT) {
     ret = OB_NOT_INIT;
     LOG_WARN("Props not init", K(ret));
-  } else if (OB_ISNULL(stopword_table = OB_NEWx(ObJsonString, &allocator_, str))) {
+  } else if (OB_FAIL(ob_write_string(allocator_, str, copied_str))) {
+    LOG_WARN("fail to copy stopword table name", K(ret), K(str));
+  } else if (OB_ISNULL(stopword_table = OB_NEWx(ObJsonString, &allocator_, copied_str))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("Fail to new ObJsonString", K(ret));
   } else if (OB_FAIL(root_->object_add(ObString(ObFTSLiteral::CONFIG_NAME_STOPWORD_TABLE),
@@ -186,10 +192,13 @@ int ObFTParserJsonProps::config_set_quantifier_table(const ObString &str)
 {
   int ret = OB_SUCCESS;
   ObJsonString *quantifier_table = nullptr;
+  ObString copied_str;
   if (!IS_INIT) {
     ret = OB_NOT_INIT;
     LOG_WARN("Props not init", K(ret));
-  } else if (OB_ISNULL(quantifier_table = OB_NEWx(ObJsonString, &allocator_, str))) {
+  } else if (OB_FAIL(ob_write_string(allocator_, str, copied_str))) {
+    LOG_WARN("fail to copy quantifier table name", K(ret), K(str));
+  } else if (OB_ISNULL(quantifier_table = OB_NEWx(ObJsonString, &allocator_, copied_str))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("Fail to new ObJsonString", K(ret));
   } else if (OB_FAIL(root_->object_add(ObString(ObFTSLiteral::CONFIG_NAME_QUANTIFIER_TABLE),
@@ -209,10 +218,13 @@ int ObFTParserJsonProps::config_set_ik_mode(const ObString &ik_mode)
 {
   int ret = OB_SUCCESS;
   ObJsonString *ik_mode_node = nullptr;
+  ObString copied_mode;
   if (!IS_INIT) {
     ret = OB_NOT_INIT;
     LOG_WARN("Props not init", K(ret));
-  } else if (OB_ISNULL(ik_mode_node = OB_NEWx(ObJsonString, &allocator_, ik_mode))) {
+  } else if (OB_FAIL(ob_write_string(allocator_, ik_mode, copied_mode))) {
+    LOG_WARN("fail to copy IK mode", K(ret), K(ik_mode));
+  } else if (OB_ISNULL(ik_mode_node = OB_NEWx(ObJsonString, &allocator_, copied_mode))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("Fail to new json string", K(ret));
   } else if (OB_FAIL(root_->object_add(ObString(ObFTSLiteral::CONFIG_NAME_IK_MODE),
@@ -660,11 +672,11 @@ int ObFTParserJsonProps::ik_rebuild_props_for_ddl(const bool log_to_user)
 
     if (OB_FAIL(ret)) {
       // do nothing
-    } else if (OB_FAIL(config_get_quantifier_table(table_name))) {
+    } else if (OB_FAIL(config_get_stopword_table(table_name))) {
       if (OB_SEARCH_NOT_FOUND == ret) {
         if (OB_FAIL(
-                config_set_quantifier_table(ObFTSLiteral::FT_DEFAULT_IK_QUANTIFIER_UTF8_TABLE))) {
-          LOG_WARN("Failed to set default quantifier table", K(ret));
+                config_set_stopword_table(ObFTSLiteral::FT_DEFAULT_IK_STOPWORD_UTF8_TABLE))) {
+          LOG_WARN("Failed to set default stopword table", K(ret));
         }
       }
     } else {
@@ -1158,12 +1170,23 @@ int ObFTParserProperty::parse_for_parser_helper(const ObFTParser &parser, const 
     LOG_WARN("fail to parse from json str", K(ret), K(json_str));
   } else {
     if (parser.is_ik()) {
-      // set dict tables and copy dict name
-      dict_table_ = ObString(ObFTSLiteral::CONFIG_NAME_DICT_TABLE);
-      stopword_table_ = ObString(ObFTSLiteral::CONFIG_NAME_STOPWORD_TABLE);
-      quantifier_table_ = ObString(ObFTSLiteral::CONFIG_NAME_QUANTIFIER_TABLE);
+      ObString dict_table;
+      ObString stopword_table;
+      ObString quantifier_table;
       ObString ik_smart;
-      if (OB_FAIL(props.config_get_ik_mode(ik_smart))) {
+      if (OB_FAIL(props.config_get_dict_table(dict_table))) {
+        LOG_WARN("fail to get IK main dictionary table", K(ret));
+      } else if (OB_FAIL(props.config_get_stopword_table(stopword_table))) {
+        LOG_WARN("fail to get IK stopword table", K(ret));
+      } else if (OB_FAIL(props.config_get_quantifier_table(quantifier_table))) {
+        LOG_WARN("fail to get IK quantifier table", K(ret));
+      } else if (OB_FAIL(ob_write_string(allocator_, dict_table, dict_table_))) {
+        LOG_WARN("fail to copy IK main dictionary table", K(ret));
+      } else if (OB_FAIL(ob_write_string(allocator_, stopword_table, stopword_table_))) {
+        LOG_WARN("fail to copy IK stopword table", K(ret));
+      } else if (OB_FAIL(ob_write_string(allocator_, quantifier_table, quantifier_table_))) {
+        LOG_WARN("fail to copy IK quantifier table", K(ret));
+      } else if (OB_FAIL(props.config_get_ik_mode(ik_smart))) {
         if (OB_SEARCH_NOT_FOUND == ret) {
           // from old version, ik_mode is not set, so use default value
           ik_mode_smart_ = true;
@@ -1220,7 +1243,8 @@ int ObFTParserProperty::parse_for_parser_helper(const ObFTParser &parser, const 
 }
 
 ObFTParserProperty::ObFTParserProperty()
-    : min_token_size_(ObFTSLiteral::FT_DEFAULT_MIN_TOKEN_SIZE),
+    : allocator_(ObMemAttr("FTParserProp")),
+      min_token_size_(ObFTSLiteral::FT_DEFAULT_MIN_TOKEN_SIZE),
       max_token_size_(ObFTSLiteral::FT_DEFAULT_MAX_TOKEN_SIZE),
       ngram_token_size_(ObFTSLiteral::FT_DEFAULT_NGRAM_TOKEN_SIZE),
       ik_mode_smart_(true),
