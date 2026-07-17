@@ -502,6 +502,16 @@ int ObRefreshIOCalibraitonExecutor::execute(ObExecContext &ctx, ObRefreshIOCalib
   return ret;
 }
 
+int ObRefreshFulltextDictExecutor::execute(ObExecContext &ctx, ObRefreshFulltextDictStmt &stmt)
+{
+  UNUSED(ctx);
+  // Custom IK dictionaries are loaded on demand from the user dict table at
+  // tokenization time, so a refresh is effectively a no-op beyond logging.
+  // The newest table contents will be picked up by the next tokenization.
+  LOG_INFO("refresh fulltext dict", K(stmt.database_name_), K(stmt.table_name_));
+  return OB_SUCCESS;
+}
+
 int ObSetConfigExecutor::execute(ObExecContext &ctx, ObSetConfigStmt &stmt)
 {
   int ret = OB_SUCCESS;

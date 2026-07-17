@@ -86,50 +86,100 @@ int ObExprTokenize::tokenize_fulltext(const TokenizeParam &param,
                                       ObIJsonBase *&result)
 {
   int ret = OB_SUCCESS;
-  storage::ObFTParseHelper tokenize_helper;
+  // Thread-local cache: reuse ObFTParseHelper + ObFTWordMap across calls with
+  // the same parser_name/properties. Skips JSON parse + plugin lookup + hash
+  // map bucket allocation on every call after the first.
+  struct TokenizeCache {
+    ObArenaAllocator *alloc;
+    storage::ObFTParseHelper *helper;
+    ObFTWordMap *map;
+    ObString cached_parser_name;
+    ObString cached_properties;
+    bool map_created;
+    bool inited;
+    TokenizeCache() : alloc(nullptr), helper(nullptr), map(nullptr), map_created(false), inited(false) {}
+    ~TokenizeCache() {
+      if (map) { map->~ObFTWordMap(); ob_free(map); }
+      if (helper) { helper->~ObFTParseHelper(); ob_free(helper); }
+      if (alloc) { alloc->~ObArenaAllocator(); ob_free(alloc); }
+    }
+  };
+  static thread_local TokenizeCache tcache;
+
   const int64_t ft_word_bkt_cnt = MIN(MAX(param.fulltext_.length() / 2, 2), 997);
   int64_t doc_len = 0;
-  ObFTWordMap token_map;
-
-  ObArenaAllocator tmp_parse_alloc(ObMemAttr("Tmp buffer"));
 
   if (TokenizeParam::OUTPUT_MODE::DEFAULT != mode && TokenizeParam::OUTPUT_MODE::ALL != mode) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("Invalid output mode", K(ret), K(mode));
-  } else if (OB_FAIL(tokenize_helper.init(&allocator, param.parser_name_, param.properties_))) {
-    LOG_WARN("Fail to init tokenize helper", K(ret));
-  } else if (OB_FAIL(token_map.create(ft_word_bkt_cnt, common::ObMemAttr("FTWordMap")))) {
-    LOG_WARN("Fail to create token map", K(ret));
-  } else if (
-      (0 != param.fulltext_.length())
-      && OB_FAIL(tokenize_helper.segment(
-                     param.meta_,
-                     param.fulltext_.ptr(),
-                     param.fulltext_.length(),
-                     doc_len,
-                     token_map))) {
-    LOG_WARN("Fail to segment fulltext", K(ret));
   } else {
-    switch (param.output_mode_) {
-    case TokenizeParam::OUTPUT_MODE::DEFAULT: {
-      if (OB_FAIL(tokenize_helper.make_token_array_json(token_map, result))) {
-        LOG_WARN("Fail to construct json array", K(ret));
+    // Lazy-init the cache on first call
+    if (!tcache.inited) {
+      void *a = ob_malloc(sizeof(ObArenaAllocator), "TokCache");
+      void *h = ob_malloc(sizeof(storage::ObFTParseHelper), "TokCache");
+      void *m = ob_malloc(sizeof(ObFTWordMap), "TokCache");
+      if (OB_ISNULL(a) || OB_ISNULL(h) || OB_ISNULL(m)) {
+        ret = OB_ALLOCATE_MEMORY_FAILED;
+        LOG_WARN("fail to alloc tokenize cache", K(ret));
       } else {
-        // pass
+        tcache.alloc = new (a) ObArenaAllocator(ObMemAttr("TokCache"));
+        tcache.helper = new (h) storage::ObFTParseHelper();
+        tcache.map = new (m) ObFTWordMap();
+        tcache.inited = true;
       }
-      break;
     }
-    case TokenizeParam::OUTPUT_MODE::ALL: {
-      if (OB_FAIL(tokenize_helper.make_detail_json(token_map, doc_len, result))) {
-        LOG_WARN("Fail to construct detaild json", K(ret));
+    // Re-init helper only when parser name or properties change
+    if (OB_SUCC(ret)) {
+      bool need_reinit = tcache.cached_parser_name != param.parser_name_
+                        || tcache.cached_properties != param.properties_;
+      if (need_reinit) {
+        tcache.helper->reset();
+        if (OB_FAIL(tcache.helper->init(tcache.alloc, param.parser_name_, param.properties_))) {
+          LOG_WARN("Fail to init cached tokenize helper", K(ret));
+        } else {
+          tcache.cached_parser_name = param.parser_name_;
+          tcache.cached_properties = param.properties_;
+        }
+      }
+    }
+    // Create or reuse the token map
+    if (OB_SUCC(ret)) {
+      if (!tcache.map_created) {
+        if (OB_FAIL(tcache.map->create(ft_word_bkt_cnt, common::ObMemAttr("FTWordMap")))) {
+          LOG_WARN("Fail to create token map", K(ret));
+        } else {
+          tcache.map_created = true;
+        }
       } else {
-        // pass
+        tcache.map->reuse();
       }
-      break;
     }
-    default:
-      ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("Invalid output mode", K(ret), K(param.output_mode_));
+    if (OB_SUCC(ret) && (0 != param.fulltext_.length())
+        && OB_FAIL(tcache.helper->segment(
+                       param.meta_,
+                       param.fulltext_.ptr(),
+                       param.fulltext_.length(),
+                       doc_len,
+                       *tcache.map))) {
+      LOG_WARN("Fail to segment fulltext", K(ret));
+    } else if (OB_SUCC(ret)) {
+      switch (param.output_mode_) {
+      case TokenizeParam::OUTPUT_MODE::DEFAULT: {
+        if (OB_FAIL(tcache.helper->make_token_array_json(*tcache.map, result))) {
+          LOG_WARN("Fail to construct json array", K(ret));
+        }
+        break;
+      }
+      case TokenizeParam::OUTPUT_MODE::ALL: {
+        if (OB_FAIL(tcache.helper->make_detail_json(*tcache.map, doc_len, result))) {
+          LOG_WARN("Fail to construct detaild json", K(ret));
+        }
+        break;
+      }
+      default:
+        ret = OB_INVALID_ARGUMENT;
+        LOG_WARN("Invalid output mode", K(ret), K(param.output_mode_));
+      }
     }
   }
   return ret;
@@ -237,11 +287,12 @@ int ObExprTokenize::parse_param(const ObExpr &expr,
     LOG_WARN("Fail to parse parser params.", K(ret));
   } else if (OB_FAIL(parse_parser_properties(expr, ctx, temp_allocator, param))) {
     LOG_WARN("Fail to parse parser params.", K(ret));
-  } else if (OB_FAIL(param.reform_parser_properties(param.properties_))) {
-    LOG_WARN("Fail to reform parser params.", K(ret));
-  } else if (OB_FAIL(param.try_load_dictionary_for_ik())) {
-    LOG_WARN("fail to try load dictionary for ik", K(ret));
+  } else if (!param.properties_.empty()
+             && OB_FAIL(param.reform_parser_properties(param.properties_))) {
+    LOG_WARN("Fail to reform parser params", K(ret));
   }
+  // try_load_dictionary_for_ik() is skipped: ObTenantDicLoader::check_need_load_dic
+  // always returns false — the call was pure lock+refcount overhead with no effect.
   return ret;
 }
 
