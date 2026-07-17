@@ -2635,6 +2635,8 @@ int ObFtsIndexBuilderUtil::find_fts_indexes_referencing_dict_table(
     common::ObIArray<uint64_t> &referencing_index_ids)
 {
   int ret = OB_SUCCESS;
+  UNUSED(tenant_id);
+  UNUSED(dict_table_id);
   common::ObSEArray<const ObTableSchema *, 64> table_schemas;
   if (OB_FAIL(schema_guard.get_table_schemas_in_tenant(table_schemas))) {
     LOG_WARN("fail to get table schemas in tenant", K(ret));
@@ -2653,11 +2655,8 @@ int ObFtsIndexBuilderUtil::find_fts_indexes_referencing_dict_table(
         continue;
       }
       // Parse the JSON properties to extract dict_table
-      storage::ObFTParserProperty prop;
-      // Need the parser to resolve - use a simple string search instead
       // Search for "dict_table":"db.table_name" or "dict_table":"table_name" in the JSON
       ObString search_key = ObString::make_string("\"dict_table\":\"");
-      const char *found = NULL;
       // Since ObString doesn't have substring search, use a manual loop
       for (int64_t pos = 0; pos + search_key.length() <= props.length(); ++pos) {
         if (0 == MEMCMP(props.ptr() + pos, search_key.ptr(), search_key.length())) {
