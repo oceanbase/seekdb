@@ -29,6 +29,7 @@
 #include "plugin/sys/ob_plugin_mgr.h"
 #include "share/rc/ob_tenant_base.h"
 #include "sql/das/ob_das_utils.h"
+#include "storage/fts/ob_beng_ft_parser.h"
 #include "storage/fts/ob_fts_plugin_helper.h"
 #include "storage/fts/ob_fts_stop_word.h"
 #include "storage/fts/ob_whitespace_ft_parser.h"
@@ -287,6 +288,48 @@ TEST_F(TestDefaultFTParser, test_space_ft_parser_reuse)
     tokens.push_back(std::string(word, word_len));
   }
   ASSERT_EQ((std::vector<std::string>{"gamma", "delta", "epsilon"}), tokens);
+}
+
+TEST_F(TestDefaultFTParser, test_beng_ft_parser_ascii_fast_path_reuse)
+{
+  common::ObArenaAllocator metadata_allocator;
+  common::ObArenaAllocator scratch_allocator;
+  ObBEngFTParser parser(metadata_allocator, scratch_allocator);
+  const char *first_doc = "OceanBase, FULL-text 123";
+  ft_parser_param_.fulltext_ = first_doc;
+  ft_parser_param_.ft_length_ = strlen(first_doc);
+  ft_parser_param_.metadata_alloc_ = &metadata_allocator;
+  ft_parser_param_.scratch_alloc_ = &scratch_allocator;
+  ASSERT_EQ(OB_SUCCESS, parser.init(&ft_parser_param_));
+
+  const char *word = nullptr;
+  int64_t word_len = 0;
+  int64_t char_len = 0;
+  int64_t word_freq = 0;
+  std::vector<std::string> tokens;
+  while (OB_SUCCESS == parser.get_next_token(
+             word, word_len, char_len, word_freq)) {
+    tokens.push_back(std::string(word, word_len));
+  }
+  ASSERT_EQ((std::vector<std::string>{"oceanbase", "full", "text", "123"}), tokens);
+
+  const char *second_doc = "数据库";
+  ASSERT_EQ(OB_SUCCESS, parser.reuse_parser(second_doc, strlen(second_doc)));
+  tokens.clear();
+  while (OB_SUCCESS == parser.get_next_token(
+             word, word_len, char_len, word_freq)) {
+    tokens.push_back(std::string(word, word_len));
+  }
+  ASSERT_EQ((std::vector<std::string>{"数据库"}), tokens);
+
+  const char *third_doc = "Already lower";
+  ASSERT_EQ(OB_SUCCESS, parser.reuse_parser(third_doc, strlen(third_doc)));
+  tokens.clear();
+  while (OB_SUCCESS == parser.get_next_token(
+             word, word_len, char_len, word_freq)) {
+    tokens.push_back(std::string(word, word_len));
+  }
+  ASSERT_EQ((std::vector<std::string>{"already", "lower"}), tokens);
 }
 
 TEST_F(TestDefaultFTParser, test_space_ft_parser_segment_bug_56324268)

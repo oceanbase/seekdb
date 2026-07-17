@@ -44,6 +44,8 @@ int ObBEngFTParser::get_next_token(
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("beng ft parser isn't initialized", K(ret), K(is_inited_));
+  } else if (use_ascii_fast_path_) {
+    ret = get_next_ascii_token(word, word_len, char_len, word_freq);
   } else if (OB_ISNULL(token_stream_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("token stream is nullptr", K(ret), KP(token_stream_));
@@ -68,6 +70,72 @@ int ObBEngFTParser::get_next_token(
   return ret;
 }
 
+bool ObBEngFTParser::is_ascii_alnum(const unsigned char ch)
+{
+  return ('0' <= ch && '9' >= ch)
+      || ('A' <= ch && 'Z' >= ch)
+      || ('a' <= ch && 'z' >= ch);
+}
+
+bool ObBEngFTParser::is_ascii_document(const char *text, const int64_t text_len)
+{
+  bool is_ascii = OB_NOT_NULL(text) && 0 < text_len;
+  for (int64_t i = 0; is_ascii && i < text_len; ++i) {
+    is_ascii = 0 == (static_cast<unsigned char>(text[i]) & 0x80);
+  }
+  return is_ascii;
+}
+
+int ObBEngFTParser::get_next_ascii_token(
+    const char *&word,
+    int64_t &word_len,
+    int64_t &char_len,
+    int64_t &word_freq)
+{
+  int ret = OB_SUCCESS;
+  const char *text = doc_.ptr_;
+  const int64_t text_len = doc_.len_;
+  while (ascii_pos_ < text_len
+      && !is_ascii_alnum(static_cast<unsigned char>(text[ascii_pos_]))) {
+    ++ascii_pos_;
+  }
+  if (ascii_pos_ >= text_len) {
+    ret = OB_ITER_END;
+  } else {
+    const int64_t token_start = ascii_pos_;
+    bool need_lower = false;
+    while (ascii_pos_ < text_len
+        && is_ascii_alnum(static_cast<unsigned char>(text[ascii_pos_]))) {
+      const unsigned char ch = static_cast<unsigned char>(text[ascii_pos_]);
+      need_lower = need_lower || ('A' <= ch && 'Z' >= ch);
+      ++ascii_pos_;
+    }
+    const int64_t token_len = ascii_pos_ - token_start;
+    if (need_lower) {
+      char *buf = static_cast<char *>(scratch_allocator_.alloc(token_len));
+      if (OB_ISNULL(buf)) {
+        ret = OB_ALLOCATE_MEMORY_FAILED;
+        LOG_WARN("fail to allocate ascii token memory", K(ret), K(token_len));
+      } else {
+        for (int64_t i = 0; i < token_len; ++i) {
+          const unsigned char ch = static_cast<unsigned char>(text[token_start + i]);
+          buf[i] = ('A' <= ch && 'Z' >= ch)
+              ? static_cast<char>(ch + ('a' - 'A')) : static_cast<char>(ch);
+        }
+        word = buf;
+      }
+    } else {
+      word = text + token_start;
+    }
+    if (OB_SUCC(ret)) {
+      word_len = token_len;
+      char_len = token_len;
+      word_freq = 1;
+    }
+  }
+  return ret;
+}
+
 int ObBEngFTParser::reuse_parser(const char *fulltext, const int64_t fulltext_len)
 {
   int ret = OB_SUCCESS;
@@ -82,7 +150,11 @@ int ObBEngFTParser::reuse_parser(const char *fulltext, const int64_t fulltext_le
     LOG_WARN("document is too large for english analyzer", K(ret), K(fulltext_len));
   } else {
     doc_.set_string(fulltext, fulltext_len);
-    if (OB_FAIL(segment(doc_, token_stream_))) {
+    ascii_pos_ = 0;
+    use_ascii_fast_path_ = is_ascii_document(fulltext, fulltext_len);
+    if (use_ascii_fast_path_) {
+      token_stream_ = nullptr;
+    } else if (OB_FAIL(segment(doc_, token_stream_))) {
       LOG_WARN("fail to segment fulltext", K(ret));
     } else if (OB_ISNULL(token_stream_)) {
       ret = OB_ERR_UNEXPECTED;
@@ -109,11 +181,13 @@ int ObBEngFTParser::init(ObFTParserParam *param)
     analysis_ctx_.cs_ = param->cs_;
     analysis_ctx_.filter_stopword_ = false;
     analysis_ctx_.need_grouping_ = false;
+    ascii_pos_ = 0;
+    use_ascii_fast_path_ = is_ascii_document(param->fulltext_, param->ft_length_);
     if (OB_FAIL(english_analyzer_.init(analysis_ctx_, metadata_allocator_))) {
       LOG_WARN("fail to init english analyzer", K(ret), KPC(param), K(analysis_ctx_));
-    } else if (OB_FAIL(segment(doc_, token_stream_))) {
+    } else if (!use_ascii_fast_path_ && OB_FAIL(segment(doc_, token_stream_))) {
       LOG_WARN("fail to segment fulltext by parser", K(ret), KP(param->fulltext_), K(param->ft_length_));
-    } else if (OB_ISNULL(token_stream_)) {
+    } else if (!use_ascii_fast_path_ && OB_ISNULL(token_stream_)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("token stream is nullptr", K(ret), KP(token_stream_));
     } else {
@@ -150,6 +224,8 @@ void ObBEngFTParser::reset()
   english_analyzer_.reset();
   doc_.reset();
   token_stream_ = nullptr;
+  ascii_pos_ = 0;
+  use_ascii_fast_path_ = false;
   is_inited_ = false;
 }
 
