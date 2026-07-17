@@ -17,11 +17,12 @@
 #define USING_LOG_PREFIX STORAGE_FTS
 
 #include "sql/engine/expr/ob_expr_pos_list.h"
+#include "lib/checksum/ob_crc64.h"
 #include "lib/container/ob_se_array.h"
+#include "lib/utility/serialization.h"
 #include "plugin/sys/ob_plugin_helper.h"
 #include "objit/common/ob_item_type.h"
 #include "share/ob_fts_pos_list_codec.h"
-#include "sql/das/ob_das_domain_utils.h"
 #include "sql/engine/expr/ob_expr_lob_utils.h"
 #include "storage/fts/ob_fts_plugin_helper.h"
 
@@ -33,6 +34,10 @@ namespace sql
 
 namespace
 {
+
+constexpr int64_t POS_LIST_INLINE_ENCODED_LIMIT = 16 * 1024;
+static_assert(POS_LIST_INLINE_ENCODED_LIMIT == share::ObFTSPositionListStore::MAX_INLINE_ENCODED_LENGTH,
+              "pos list inline length limit mismatch");
 
 int construct_default_ft_parser_name(ObIAllocator &allocator, ObString &parser_name)
 {
@@ -137,26 +142,99 @@ int build_fulltext_input(
   return ret;
 }
 
-int build_dense_pos_list(
+int calc_dense_pos_list_payload_len(
+    const int64_t doc_length,
+    int64_t &payload_len)
+{
+  int ret = OB_SUCCESS;
+  if (doc_length < 0) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid doc length", K(ret), K(doc_length));
+  } else {
+    payload_len = 0;
+    int64_t range_begin = 1;
+    for (int64_t byte_len = 1; byte_len <= 9 && range_begin <= doc_length; ++byte_len) {
+      const int64_t range_end = MIN(doc_length, (1LL << (7 * byte_len)) - 1);
+      payload_len += (range_end - range_begin + 1) * byte_len;
+      range_begin = range_end + 1;
+    }
+    if (range_begin <= doc_length) {
+      payload_len += (doc_length - range_begin + 1) * 10;
+    }
+  }
+  return ret;
+}
+
+int encode_dense_pos_list(
     const int64_t doc_length,
     ObIAllocator &allocator,
     ObString &encoded_pos_list)
 {
   int ret = OB_SUCCESS;
-  common::ObArray<int64_t, common::ObIAllocator &> positions(OB_MALLOC_NORMAL_BLOCK_SIZE, allocator);
-  if (doc_length < 0) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid doc length", K(ret), K(doc_length));
-  } else if (OB_FAIL(positions.reserve(doc_length))) {
-    LOG_WARN("failed to reserve position array", K(ret), K(doc_length));
+  int64_t payload_len = 0;
+  int64_t total_len = 0;
+  int64_t pos = 0;
+  int64_t checksum_pos = 0;
+  const share::ObFTSPositionListStore::CodecType codec_type = share::ObFTSPositionListStore::VARIABLE_INT64;
+  if (OB_FAIL(calc_dense_pos_list_payload_len(doc_length, payload_len))) {
+    LOG_WARN("failed to calculate dense pos list payload length", K(ret), K(doc_length));
+  } else if (FALSE_IT(total_len =
+                          serialization::encoded_length_i16(share::ObFTSPositionListStore::MAGIC_NUMBER)
+                        + serialization::encoded_length_i16(share::ObFTSPositionListStore::VERSION)
+                        + serialization::encoded_length_i16(codec_type)
+                        + serialization::encoded_length_vi64(payload_len)
+                        + serialization::encoded_length_i64(static_cast<int64_t>(0))
+                        + serialization::encoded_length_vi64(doc_length)
+                        + payload_len)) {
+  } else if (OB_UNLIKELY(total_len > POS_LIST_INLINE_ENCODED_LIMIT)) {
+    ret = OB_SIZE_OVERFLOW;
+    LOG_WARN("dense pos list exceeds inline length limit",
+             K(ret),
+             K(doc_length),
+             K(payload_len),
+             K(total_len),
+             "max_inline_len",
+             POS_LIST_INLINE_ENCODED_LIMIT);
   } else {
-    for (int64_t i = 0; OB_SUCC(ret) && i < doc_length; ++i) {
-      if (OB_FAIL(positions.push_back(i + 1))) {
-        LOG_WARN("failed to push position", K(ret), K(i), K(doc_length));
+    char *buf = static_cast<char *>(allocator.alloc(total_len));
+    if (OB_ISNULL(buf)) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+      LOG_WARN("failed to allocate dense pos list buffer", K(ret), K(total_len), K(doc_length));
+    } else if (OB_FAIL(serialization::encode_i16(buf, total_len, pos, share::ObFTSPositionListStore::MAGIC_NUMBER))
+               || OB_FAIL(serialization::encode_i16(buf, total_len, pos, share::ObFTSPositionListStore::VERSION))
+               || OB_FAIL(serialization::encode_i16(buf, total_len, pos, codec_type))
+               || OB_FAIL(serialization::encode_vi64(buf, total_len, pos, payload_len))) {
+      LOG_WARN("failed to encode dense pos list header", K(ret), K(total_len), K(doc_length));
+    } else {
+      checksum_pos = pos;
+      int64_t checksum_placeholder = 0;
+      if (OB_FAIL(serialization::encode_i64(buf, total_len, pos, checksum_placeholder))
+          || OB_FAIL(serialization::encode_vi64(buf, total_len, pos, doc_length))) {
+        LOG_WARN("failed to encode dense pos list metadata", K(ret), K(total_len), K(doc_length));
+      } else {
+        for (int64_t i = 1; OB_SUCC(ret) && i <= doc_length; ++i) {
+          if (OB_FAIL(serialization::encode_vi64(buf, total_len, pos, i))) {
+            LOG_WARN("failed to encode dense pos list element", K(ret), K(i), K(doc_length), K(total_len), K(pos));
+          }
+        }
       }
-    }
-    if (OB_SUCC(ret) && OB_FAIL(share::ObFTSPositionListStore::encode(positions, allocator, encoded_pos_list))) {
-      LOG_WARN("failed to encode position list", K(ret), K(doc_length));
+      if (OB_SUCC(ret)) {
+        const int64_t header_len = checksum_pos + serialization::encoded_length_i64(static_cast<int64_t>(0))
+            + serialization::encoded_length_vi64(doc_length);
+        const int64_t actual_payload_len = pos - header_len;
+        if (OB_UNLIKELY(actual_payload_len != payload_len)) {
+          ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("unexpected dense pos list payload length", K(ret), K(actual_payload_len), K(payload_len), K(doc_length));
+        } else {
+          const int64_t checksum = payload_len <= 0 ? 0 : static_cast<int64_t>(common::ob_crc64(buf + header_len, payload_len));
+          int64_t tmp_pos = checksum_pos;
+          if (OB_FAIL(serialization::encode_i64(buf, total_len, tmp_pos, checksum))) {
+            LOG_WARN("failed to patch dense pos list checksum", K(ret), K(checksum), K(total_len), K(doc_length));
+          } else {
+            encoded_pos_list.assign_ptr(buf, static_cast<int32_t>(pos));
+          }
+        }
+      }
     }
   }
   return ret;
@@ -183,7 +261,7 @@ int ObExprPosList::calc_result_typeN(
     LOG_WARN("invalid argument for pos list expr", K(ret), K(param_num));
   } else {
     type.set_varbinary();
-    type.set_length(share::ObFTSPositionListStore::MAX_INLINE_ENCODED_LENGTH);
+    type.set_length(POS_LIST_INLINE_ENCODED_LIMIT);
     type.set_collation_level(CS_LEVEL_COERCIBLE);
   }
   return ret;
@@ -227,8 +305,8 @@ int ObExprPosList::generate_pos_list(
   ObString parser_name;
   ObString encoded_pos_list;
   ObObjMeta token_meta;
-  ObFTPosListParser pos_list_parser;
-  storage::ObFTWordPositionMap word_infos;
+  storage::ObFTParseHelper parse_helper;
+  storage::ObFTWordMap word_counts;
   bool all_null = true;
   int64_t doc_length = 0;
   static constexpr int64_t FT_MAX_WORD_BUCKET = 997;
@@ -244,7 +322,7 @@ int ObExprPosList::generate_pos_list(
   } else if (all_null) {
     expr_datum.set_null();
   } else if (fulltext.empty()) {
-    if (OB_FAIL(build_dense_pos_list(0, res_alloc, encoded_pos_list))) {
+    if (OB_FAIL(encode_dense_pos_list(0, res_alloc, encoded_pos_list))) {
       LOG_WARN("failed to encode empty position list", K(ret));
     } else {
       expr_datum.set_string(encoded_pos_list);
@@ -255,17 +333,17 @@ int ObExprPosList::generate_pos_list(
     token_meta.set_collation_type(raw_ctx.args_[0]->obj_meta_.get_collation_type());
     if (OB_FAIL(construct_default_ft_parser_name(tmp_alloc_guard.get_allocator(), parser_name))) {
       LOG_WARN("failed to construct default parser name", K(ret));
-    } else if (OB_FAIL(pos_list_parser.init(&tmp_alloc_guard.get_allocator(), parser_name, ObString()))) {
-      LOG_WARN("failed to init pos list parser", K(ret), K(parser_name));
-    } else if (OB_FAIL(word_infos.create(ft_word_bkt_cnt, common::ObMemAttr("ExprPosList")))) {
-      LOG_WARN("failed to create word position map", K(ret), K(ft_word_bkt_cnt));
-    } else if (OB_FAIL(pos_list_parser.segment(token_meta,
-                                               fulltext.ptr(),
-                                               fulltext.length(),
-                                               doc_length,
-                                               word_infos))) {
+    } else if (OB_FAIL(parse_helper.init(&tmp_alloc_guard.get_allocator(), parser_name, ObString()))) {
+      LOG_WARN("failed to init parse helper", K(ret), K(parser_name));
+    } else if (OB_FAIL(word_counts.create(ft_word_bkt_cnt, common::ObMemAttr("ExprPosList")))) {
+      LOG_WARN("failed to create word count map", K(ret), K(ft_word_bkt_cnt));
+    } else if (OB_FAIL(parse_helper.segment(token_meta,
+                                            fulltext.ptr(),
+                                            fulltext.length(),
+                                            doc_length,
+                                            word_counts))) {
       LOG_WARN("failed to segment fulltext for pos list", K(ret), K(parser_name), K(fulltext));
-    } else if (OB_FAIL(build_dense_pos_list(doc_length, res_alloc, encoded_pos_list))) {
+    } else if (OB_FAIL(encode_dense_pos_list(doc_length, res_alloc, encoded_pos_list))) {
       LOG_WARN("failed to encode dense position list", K(ret), K(doc_length));
     } else {
       expr_datum.set_string(encoded_pos_list);

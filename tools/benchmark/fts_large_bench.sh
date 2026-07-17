@@ -14,6 +14,7 @@
 #   MYSQL          mysql 客户端命令（默认 -h127.0.0.1 -P2881 -uroot -N -s --default-character-set=utf8mb4）
 #   MYSQL_VERBOSE  mysql 客户端命令，保留普通输出（默认 -h127.0.0.1 -P2881 -uroot --default-character-set=utf8mb4）
 #   LABEL          结果标签，如 before / after（默认 unknown）
+#   DIAG           设为 0 关闭关键路径诊断输出；默认 1，打印运行环境/索引/分词/EXPLAIN 快照
 #   ROWS           插入文档数（默认 20000）
 #   BATCH          每批 INSERT 行数（默认 500）
 #   ROUNDS         TOKENIZE 压测轮次（默认 3000）
@@ -29,6 +30,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 MYSQL="${MYSQL:-mysql -h127.0.0.1 -P2881 -uroot -N -s --default-character-set=utf8mb4}"
 MYSQL_VERBOSE="${MYSQL_VERBOSE:-mysql -h127.0.0.1 -P2881 -uroot --default-character-set=utf8mb4}"
 LABEL="${LABEL:-unknown}"
+DIAG="${DIAG:-1}"
 ROWS="${ROWS:-20000}"
 BATCH="${BATCH:-500}"
 ROUNDS="${ROUNDS:-3000}"
@@ -40,6 +42,10 @@ OUTPUT="${OUTPUT:-}"
 
 IK_TEXT="OceanBase是一款非常稳定的数据库，全文索引的分词器热路径优化包括解析器实例复用、停用词全局单例、内存池化数据结构等技术，在大量文档索引和查询场景下可以显著降低 CPU 开销。"
 BENG_TEXT="The quick brown fox jumps over the lazy dog. Full-text search indexing requires efficient tokenization on the hot path."
+QUERY_CN_SQL="SELECT COUNT(*) FROM fts_large_bench.docs WHERE MATCH(title, content) AGAINST('全文索引 分词器')"
+QUERY_BENG_SQL="SELECT COUNT(*) FROM fts_large_bench.docs WHERE MATCH(title_en, content_en) AGAINST('database performance audit')"
+QUERY_MIXED_SQL="SELECT COUNT(*) FROM fts_large_bench.docs WHERE MATCH(title, content) AGAINST('OceanBase 稳定 database')"
+QUERY_LIMIT_SQL="SELECT COUNT(*) FROM (SELECT id FROM fts_large_bench.docs WHERE MATCH(content) AGAINST('倒排索引 tokenizer') LIMIT 20) t"
 
 declare -A METRICS
 TMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/fts_large_bench.XXXXXX")"
@@ -62,6 +68,115 @@ elapsed_ms() {
 }
 
 mysql_exec() { $MYSQL -e "SET NAMES utf8mb4; SET ob_query_timeout = 100000000000; SET ob_trx_timeout = 100000000000; $1"; }
+mysql_exec_verbose() { $MYSQL_VERBOSE -e "SET NAMES utf8mb4; SET ob_query_timeout = 100000000000; SET ob_trx_timeout = 100000000000; $1"; }
+
+print_prefixed_output() {
+  local prefix="$1" text="${2:-}"
+  if [[ -z "${text}" ]]; then
+    log "${prefix}<empty>"
+    return
+  fi
+  while IFS= read -r line; do
+    log "${prefix}${line}"
+  done <<< "${text}"
+}
+
+run_diag_shell() {
+  local title="$1" cmd="$2"
+  local output rc
+  if [[ "${DIAG}" == "0" ]]; then
+    return 0
+  fi
+  log "  ${title}:"
+  set +e
+  output=$(LC_ALL=C LANG=C bash -lc "${cmd}" 2>&1)
+  rc=$?
+  set -e
+  if (( rc == 0 )); then
+    print_prefixed_output "    " "${output}"
+  else
+    log "    WARN: shell diagnostic failed with rc=${rc}"
+    print_prefixed_output "      " "${output}"
+  fi
+}
+
+run_diag_sql() {
+  local title="$1" sql="$2"
+  local output rc
+  if [[ "${DIAG}" == "0" ]]; then
+    return 0
+  fi
+  log "  ${title}:"
+  set +e
+  output=$(mysql_exec_verbose "${sql}" 2>&1)
+  rc=$?
+  set -e
+  if (( rc == 0 )); then
+    print_prefixed_output "    " "${output}"
+  else
+    log "    WARN: SQL diagnostic failed with rc=${rc}"
+    print_prefixed_output "      " "${output}"
+  fi
+}
+
+diag_explain_query() {
+  local name="$1" sql="$2"
+  if [[ "${DIAG}" == "0" ]]; then
+    return 0
+  fi
+  log "  ${name}_sql: ${sql}"
+  run_diag_sql "${name}_explain" "EXPLAIN ${sql};"
+}
+
+print_runtime_context() {
+  if [[ "${DIAG}" == "0" ]]; then
+    return 0
+  fi
+  log "[diag] runtime context ..."
+  log "  diag=${DIAG}"
+  log "  mysql_cmd=${MYSQL}"
+  log "  mysql_verbose_cmd=${MYSQL_VERBOSE}"
+  run_diag_shell "pwd" "pwd"
+  run_diag_shell "uname" "uname -a"
+  run_diag_shell "cpu_count" "nproc 2>/dev/null || getconf _NPROCESSORS_ONLN"
+  run_diag_shell "workspace_fs" "df -T \"${SCRIPT_DIR}/../..\" 2>/dev/null | tail -n +2"
+  run_diag_sql "server_version" "SELECT VERSION();"
+  run_diag_sql "show_parameters_stack_size" "SHOW PARAMETERS LIKE 'stack_size';"
+  run_diag_sql "show_parameters_cpu_count" "SHOW PARAMETERS LIKE 'cpu_count';"
+  run_diag_sql "show_parameters_memory_limit" "SHOW PARAMETERS LIKE 'memory_limit';"
+  run_diag_sql "show_parameters_system_memory" "SHOW PARAMETERS LIKE 'system_memory';"
+  run_diag_sql "show_parameters_workers_per_cpu_quota" "SHOW PARAMETERS LIKE 'workers_per_cpu_quota';"
+}
+
+print_schema_snapshot() {
+  if [[ "${DIAG}" == "0" ]]; then
+    return 0
+  fi
+  log "[diag] schema snapshot ..."
+  run_diag_sql "docs_row_count" "USE fts_large_bench; SELECT COUNT(*) AS docs_count FROM docs;"
+  run_diag_sql "show_create_table_docs" "USE fts_large_bench; SHOW CREATE TABLE docs;"
+  run_diag_sql "show_index_docs" "USE fts_large_bench; SHOW INDEX FROM docs;"
+}
+
+print_tokenize_snapshot() {
+  if [[ "${DIAG}" == "0" ]]; then
+    return 0
+  fi
+  log "[diag] tokenize snapshot ..."
+  run_diag_sql "tokenize_ik_once" "SELECT tokenize('${IK_TEXT}', 'ik') AS ik_tokens;"
+  run_diag_sql "tokenize_beng_once" "SELECT tokenize('${BENG_TEXT}', 'beng') AS beng_tokens;"
+}
+
+print_query_plan_snapshot() {
+  if [[ "${DIAG}" == "0" ]]; then
+    return 0
+  fi
+  log "[diag] query plan snapshot ..."
+  diag_explain_query "query_cn" "${QUERY_CN_SQL}"
+  diag_explain_query "query_beng" "${QUERY_BENG_SQL}"
+  diag_explain_query "query_mixed" "${QUERY_MIXED_SQL}"
+  diag_explain_query "query_limit" "${QUERY_LIMIT_SQL}"
+}
 
 validate_positive_int() {
   local name="$1" value="$2"
@@ -82,9 +197,10 @@ write_session_header() {
 
 append_repeated_sql() {
   local file="$1" rounds="$2" sql="$3"
+  local stmt="${sql%;}"
   local i
   for ((i = 0; i < rounds; i++)); do
-    echo "${sql}" >> "${file}"
+    echo "${stmt};" >> "${file}"
   done
 }
 
@@ -218,6 +334,7 @@ write_report() {
     echo "samples:                ${SAMPLES}"
     echo "warmup:                 ${WARMUP}"
     echo "skip_load:              ${SKIP_LOAD}"
+    echo "diag:                   ${DIAG}"
     echo "----------------------------------------"
     echo "select1_avg_ms:         ${METRICS[select1_avg_ms]:-N/A}"
     echo "select1_stdev_ms:       ${METRICS[select1_stdev_ms]:-N/A}"
@@ -270,6 +387,7 @@ fi
 
 log "=== FTS Large Benchmark (label=${LABEL}) ==="
 log "rows=${ROWS} batch=${BATCH} rounds=${ROUNDS} query_rounds=${QUERY_ROUNDS} samples=${SAMPLES}"
+print_runtime_context
 
 log "[0/5] SQL baseline ..."
 run_repeated_sql_bench "select1" "${ROUNDS}" "SELECT 1;"
@@ -280,7 +398,8 @@ if [[ "${SKIP_LOAD}" != "1" ]]; then
 
   log "[2/5] raw bulk load ${ROWS} docs (batch=${BATCH}) ..."
   load_start_ns=$(now_ns)
-  python3 "${SCRIPT_DIR}/fts_large_bench_gen.py" --rows "${ROWS}" --batch "${BATCH}" | $MYSQL_VERBOSE >/dev/null
+  PYTHONIOENCODING="${PYTHONIOENCODING:-utf-8}" \
+    python3 "${SCRIPT_DIR}/fts_large_bench_gen.py" --rows "${ROWS}" --batch "${BATCH}" | $MYSQL_VERBOSE >/dev/null
   load_end_ns=$(now_ns)
   load_sec=$(elapsed_sec "${load_start_ns}" "${load_end_ns}")
   rps=$(awk "BEGIN {printf \"%.1f\", ${ROWS} / ${load_sec}}")
@@ -312,19 +431,20 @@ else
   ROWS="${loaded}"
 fi
 
+print_schema_snapshot
+print_tokenize_snapshot
+
 log "[4/5] TOKENIZE hot-path ..."
 run_tokenize_bench "tokenize_ik" "ik" "${IK_TEXT}"
 run_tokenize_bench "tokenize_beng" "beng" "${BENG_TEXT}"
 
+print_query_plan_snapshot
+
 log "[5/5] MATCH query ..."
-run_query_bench "query_cn" \
-  "SELECT COUNT(*) FROM fts_large_bench.docs WHERE MATCH(title, content) AGAINST('全文索引 分词器');"
-run_query_bench "query_beng" \
-  "SELECT COUNT(*) FROM fts_large_bench.docs WHERE MATCH(title_en, content_en) AGAINST('database performance audit');"
-run_query_bench "query_mixed" \
-  "SELECT COUNT(*) FROM fts_large_bench.docs WHERE MATCH(title, content) AGAINST('OceanBase 稳定 database');"
-run_query_bench "query_limit" \
-  "SELECT COUNT(*) FROM (SELECT id FROM fts_large_bench.docs WHERE MATCH(content) AGAINST('倒排索引 tokenizer') LIMIT 20) t;"
+run_query_bench "query_cn" "${QUERY_CN_SQL}"
+run_query_bench "query_beng" "${QUERY_BENG_SQL}"
+run_query_bench "query_mixed" "${QUERY_MIXED_SQL}"
+run_query_bench "query_limit" "${QUERY_LIMIT_SQL}"
 
 report=$(write_report)
 echo "${report}"
