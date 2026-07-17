@@ -48,28 +48,34 @@ int ObFTRangeDict::build_cache_from_ik_dict(const ObFTDictDesc &desc, ObFTCacheR
 {
   int ret = OB_SUCCESS;
 
-  ObIKDictLoader::RawDict raw_dict;
-  switch (desc.type_) {
-  case ObFTDictType::DICT_IK_MAIN: {
-    raw_dict = ObIKDictLoader::dict_text();
-  } break;
-  case ObFTDictType::DICT_IK_QUAN: {
-    raw_dict = ObIKDictLoader::dict_quen_text();
-  } break;
-  case ObFTDictType::DICT_IK_STOP: {
-    raw_dict = ObIKDictLoader::dict_stop();
-  } break;
-  default:
-    ret = OB_NOT_SUPPORTED;
-    LOG_WARN("Not supported dict type.", K(ret));
-  }
+  if (!desc.name_.empty()) {
+    if (OB_FAIL(ObFTRangeDict::build_cache(desc, range_container))) {
+      LOG_WARN("Failed to build cache from user dict table", K(ret), K(desc.name_));
+    }
+  } else {
+    ObIKDictLoader::RawDict raw_dict;
+    switch (desc.type_) {
+    case ObFTDictType::DICT_IK_MAIN: {
+      raw_dict = ObIKDictLoader::dict_text();
+    } break;
+    case ObFTDictType::DICT_IK_QUAN: {
+      raw_dict = ObIKDictLoader::dict_quen_text();
+    } break;
+    case ObFTDictType::DICT_IK_STOP: {
+      raw_dict = ObIKDictLoader::dict_stop();
+    } break;
+    default:
+      ret = OB_NOT_SUPPORTED;
+      LOG_WARN("Not supported dict type.", K(ret));
+    }
 
-  if (OB_SUCC(ret)) {
-    ObIKDictIterator iter(raw_dict);
-    if (OB_FAIL(iter.init())) {
-      LOG_WARN("Failed to init iterator.", K(ret));
-    } else if (OB_FAIL(ObFTRangeDict::build_ranges_concurrently_thread_pool(desc, iter, range_container))) {
-      LOG_WARN("Failed to build ranges.", K(ret));
+    if (OB_SUCC(ret)) {
+      ObIKDictIterator iter(raw_dict);
+      if (OB_FAIL(iter.init())) {
+        LOG_WARN("Failed to init iterator.", K(ret));
+      } else if (OB_FAIL(ObFTRangeDict::build_ranges_concurrently_thread_pool(desc, iter, range_container))) {
+        LOG_WARN("Failed to build ranges.", K(ret));
+      }
     }
   }
 
@@ -467,19 +473,23 @@ int ObFTRangeDict::build_cache(const ObFTDictDesc &desc, ObFTCacheRangeContainer
   int ret = OB_SUCCESS;
 
   ObString table_name;
-  switch (desc.type_) {
-  case ObFTDictType::DICT_IK_MAIN: {
-    table_name = ObString(share::OB_FT_DICT_IK_UTF8_TNAME);
-  } break;
-  case ObFTDictType::DICT_IK_QUAN: {
-    table_name = ObString(share::OB_FT_QUANTIFIER_IK_UTF8_TNAME);
-  } break;
-  case ObFTDictType::DICT_IK_STOP: {
-    table_name = ObString(share::OB_FT_STOPWORD_IK_UTF8_TNAME);
-  } break;
-  default:
-    ret = OB_NOT_SUPPORTED;
-    LOG_WARN("Not supported dict type.", K(ret));
+  if (!desc.name_.empty()) {
+    table_name = desc.name_;
+  } else {
+    switch (desc.type_) {
+    case ObFTDictType::DICT_IK_MAIN: {
+      table_name = ObString(share::OB_FT_DICT_IK_UTF8_TNAME);
+    } break;
+    case ObFTDictType::DICT_IK_QUAN: {
+      table_name = ObString(share::OB_FT_QUANTIFIER_IK_UTF8_TNAME);
+    } break;
+    case ObFTDictType::DICT_IK_STOP: {
+      table_name = ObString(share::OB_FT_STOPWORD_IK_UTF8_TNAME);
+    } break;
+    default:
+      ret = OB_NOT_SUPPORTED;
+      LOG_WARN("Not supported dict type.", K(ret));
+    }
   }
 
   if (OB_SUCC(ret)) {

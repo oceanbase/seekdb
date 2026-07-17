@@ -1310,6 +1310,7 @@ int ObSimpleTableSchemaV2::check_if_tablet_exists(const ObTabletID &tablet_id, b
 ObTableSchema::ObTableSchema()
     : ObSimpleTableSchemaV2(),
       parser_properties_(),
+      is_fulltext_dict_table_(false),
       local_session_vars_(get_allocator())
 {
   reset();
@@ -1318,6 +1319,7 @@ ObTableSchema::ObTableSchema()
 ObTableSchema::ObTableSchema(ObIAllocator *allocator)
   : ObSimpleTableSchemaV2(allocator),
     parser_properties_(),
+    is_fulltext_dict_table_(false),
     view_schema_(allocator),
     base_table_ids_(SCHEMA_SMALL_MALLOC_BLOCK_SIZE, ModulePageAllocator(*allocator)),
     depend_table_ids_(SCHEMA_SMALL_MALLOC_BLOCK_SIZE, ModulePageAllocator(*allocator)),
@@ -1453,6 +1455,7 @@ int ObTableSchema::assign(const ObTableSchema &src_schema)
       } else if (OB_FAIL(deep_copy_str(src_schema.external_sub_path_, external_sub_path_))) {
         LOG_WARN("deep copy external_sub_path failed", K(ret));
       }
+      is_fulltext_dict_table_ = src_schema.is_fulltext_dict_table_;
       //view schema
       if (OB_SUCC(ret)) {
         view_schema_ = src_schema.view_schema_;
@@ -3221,6 +3224,7 @@ void ObTableSchema::reset()
   reset_string(expire_info_);
   reset_string(parser_name_);
   reset_string(parser_properties_);
+  is_fulltext_dict_table_ = false;
   view_schema_.reset();
 
   aux_vp_tid_array_.reset();
@@ -6260,6 +6264,7 @@ OB_DEF_SERIALIZE(ObTableSchema)
   OB_UNIS_ENCODE(external_sub_path_);
   OB_UNIS_ENCODE(micro_block_format_version_);
   OB_UNIS_ENCODE(tmp_mlog_tid_);
+  OB_UNIS_ENCODE(is_fulltext_dict_table_);
   // !!! end static check
   /*
    * Add deserialized members before this end static check comment
@@ -6501,6 +6506,7 @@ OB_DEF_DESERIALIZE(ObTableSchema)
   OB_UNIS_DECODE_AND_FUNC(external_sub_path_, deep_copy_str);
   OB_UNIS_DECODE(micro_block_format_version_);
   OB_UNIS_DECODE(tmp_mlog_tid_);
+  OB_UNIS_DECODE(is_fulltext_dict_table_);
   // !!! end static check
   /*
    * Add deserialized members before this end static check comment
@@ -6642,6 +6648,7 @@ OB_DEF_SERIALIZE_SIZE(ObTableSchema)
   OB_UNIS_ADD_LEN(external_sub_path_);
   OB_UNIS_ADD_LEN(micro_block_format_version_);
   OB_UNIS_ADD_LEN(tmp_mlog_tid_);
+  OB_UNIS_ADD_LEN(is_fulltext_dict_table_);
   // !!! end static check
   /*
    * Add deserialized members before this end static check comment
