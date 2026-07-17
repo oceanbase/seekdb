@@ -40,6 +40,7 @@
 #include "sql/engine/expr/ob_expr_get_path.h"
 #include "sql/engine/expr/ob_expr_array_map.h"
 #include "sql/engine/expr/ob_expr_ai/ob_ai_func.h"
+#include "sql/engine/expr/ob_expr_tokenize.h"
 
 namespace oceanbase
 {
@@ -123,6 +124,7 @@ void ObExprExtraInfoFactory::register_expr_extra_infos()
   REG_EXTRA_INFO(T_FUN_SYS_AI_COMPLETE, ObAIFuncExprInfo);
   REG_EXTRA_INFO(T_FUN_SYS_AI_EMBED, ObAIFuncExprInfo);
   REG_EXTRA_INFO(T_FUN_SYS_AI_RERANK, ObAIFuncExprInfo);
+  REG_EXTRA_INFO(T_FUN_TOKENIZE, ObTokenizeFixedConfig);
 }
 
 } // end namespace sql
