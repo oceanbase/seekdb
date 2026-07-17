@@ -74,17 +74,20 @@ int ObFTDictTableIter::init(const ObString &table_name)
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
     LOG_WARN("Inited twice.", K(ret));
+  } else if (OB_ISNULL(sql_proxy)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("Sql proxy is null.", K(ret));
   } else {
     SMART_VAR(ObSqlString, sql_string)
     {
-      if (OB_FAIL(sql_string.append("SELECT word FROM oceanbase."))) {
+      if (OB_FAIL(sql_string.append("SELECT word FROM "))) {
         LOG_WARN("Failed to append sql", K(ret));
       } else if (OB_FAIL(sql_string.append(table_name))) {
         LOG_WARN("Failed to append sql", K(ret));
       } else if (OB_FAIL(sql_string.append(" ORDER BY word"))) {
         LOG_WARN("Failed to append sql", K(ret));
       } else if (OB_FAIL(sql_proxy->read(res_, sql_string.ptr()))) {
-        LOG_WARN("Failed to execute sql", K(ret));
+        LOG_WARN("Failed to execute sql", K(ret), K(table_name));
       }
     }
 

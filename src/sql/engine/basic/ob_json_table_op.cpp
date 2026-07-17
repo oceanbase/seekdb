@@ -734,6 +734,15 @@ int ObJsonTableOp::init()
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("failed to new unnest node", K(ret));
       }
+    } else if (jt_ctx_.is_ai_split_table_func()) {
+      table_func_buf = jt_ctx_.op_exec_alloc_->alloc(sizeof(AiSplitTableFunc));
+      if (OB_ISNULL(table_func_buf)) {
+        ret = OB_ALLOCATE_MEMORY_FAILED;
+        LOG_WARN("failed to allocate table func buf", K(ret));
+      } else if (OB_ISNULL(jt_ctx_.table_func_ = new (table_func_buf) AiSplitTableFunc())) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("failed to new ai split node", K(ret));
+      }
     }
   }
   jt_ctx_.is_cover_error_ = false;
@@ -1102,6 +1111,420 @@ int RbIterateTableFunc::get_iter_value(ObRegCol &col_node, JtScanCtx* ctx, bool 
   return ret;
 }
 
+
+// ==================== AI_SPLIT_DOCUMENT ====================
+static bool ai_split_is_space(char c)
+{
+  return c == ' ' || c == '\t' || c == '\r' || c == '\n';
+}
+
+static bool ai_split_json_find(const ObString &js, const char *key, int64_t &pos_out)
+{
+  bool found = false;
+  const int64_t klen = static_cast<int64_t>(STRLEN(key));
+  const char *p = js.ptr();
+  const int64_t len = js.length();
+  for (int64_t i = 0; !found && i + klen + 2 <= len; ++i) {
+    if (p[i] == '"' && 0 == MEMCMP(p + i + 1, key, klen) && (i + klen + 1) < len && p[i + klen + 1] == '"') {
+      int64_t j = i + klen + 2;
+      while (j < len && (p[j] == ' ' || p[j] == '\t')) {
+        ++j;
+      }
+      if (j < len && p[j] == ':') {
+        ++j;
+        while (j < len && (p[j] == ' ' || p[j] == '\t')) {
+          ++j;
+        }
+        pos_out = j;
+        found = true;
+      }
+    }
+  }
+  return found;
+}
+
+static bool ai_split_json_get_str(const ObString &js, const char *key, ObString &val)
+{
+  bool found = false;
+  int64_t pos = 0;
+  if (ai_split_json_find(js, key, pos)) {
+    const char *p = js.ptr();
+    const int64_t len = js.length();
+    if (pos < len && p[pos] == '"') {
+      int64_t b = pos + 1;
+      int64_t e = b;
+      while (e < len && p[e] != '"') {
+        ++e;
+      }
+      if (e <= len) {
+        val.assign_ptr(p + b, static_cast<int32_t>(e - b));
+        found = true;
+      }
+    }
+  }
+  return found;
+}
+
+static bool ai_split_json_get_int(const ObString &js, const char *key, int64_t &val)
+{
+  bool found = false;
+  int64_t pos = 0;
+  if (ai_split_json_find(js, key, pos)) {
+    const char *p = js.ptr();
+    const int64_t len = js.length();
+    bool neg = false;
+    if (pos < len && (p[pos] == '-' || p[pos] == '+')) {
+      neg = (p[pos] == '-');
+      ++pos;
+    }
+    int64_t v = 0;
+    bool has_digit = false;
+    while (pos < len && p[pos] >= '0' && p[pos] <= '9') {
+      v = v * 10 + (p[pos] - '0');
+      ++pos;
+      has_digit = true;
+    }
+    if (has_digit) {
+      val = neg ? -v : v;
+      found = true;
+    }
+  }
+  return found;
+}
+
+int AiSplitTableFunc::parse_params(ObIAllocator &alloc, const ObString &json_str, ObAiSplitParam &param)
+{
+  INIT_SUCC(ret);
+  ObJsonNode *root = NULL;
+  if (json_str.empty()) {
+    // use default
+  } else if (OB_FAIL(ObJsonParser::get_tree(&alloc, json_str, root))) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("failed to parse ai split params", K(ret), K(json_str));
+  } else if (OB_ISNULL(root) || root->json_type() != ObJsonNodeType::J_OBJECT) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("ai split params should be a json object", K(ret), K(json_str));
+  } else {
+    ObIJsonBase *base = root;
+    ObIJsonBase *val = NULL;
+    int tmp_ret = OB_SUCCESS;
+
+    val = NULL;
+    tmp_ret = base->get_object_value(ObString("type"), val);
+    if (OB_SUCCESS == tmp_ret && OB_NOT_NULL(val) && val->json_type() == ObJsonNodeType::J_STRING) {
+      ObString v = static_cast<ObJsonString *>(val)->get_str();
+      param.is_markdown_ = (0 != v.case_compare("text"));
+    }
+
+    val = NULL;
+    tmp_ret = base->get_object_value(ObString("by"), val);
+    if (OB_SUCCESS == tmp_ret && OB_NOT_NULL(val) && val->json_type() == ObJsonNodeType::J_STRING) {
+      ObString v = static_cast<ObJsonString *>(val)->get_str();
+      param.by_sentence_ = (0 == v.case_compare("sentence"));
+    }
+
+    val = NULL;
+    tmp_ret = base->get_object_value(ObString("max"), val);
+    if (OB_SUCCESS == tmp_ret && OB_NOT_NULL(val)
+        && (val->json_type() == ObJsonNodeType::J_INT || val->json_type() == ObJsonNodeType::J_UINT)) {
+      param.max_ = val->get_int();
+    }
+
+    val = NULL;
+    tmp_ret = base->get_object_value(ObString("overlap"), val);
+    if (OB_SUCCESS == tmp_ret && OB_NOT_NULL(val)
+        && (val->json_type() == ObJsonNodeType::J_INT || val->json_type() == ObJsonNodeType::J_UINT)) {
+      param.overlap_ = val->get_int();
+    }
+  }
+
+  if (OB_SUCC(ret)) {
+    if (param.max_ <= 0) {
+      param.max_ = 1;
+    }
+    if (param.overlap_ < 0) {
+      param.overlap_ = 0;
+    }
+    if (param.overlap_ >= param.max_) {
+      param.overlap_ = param.max_ - 1;
+    }
+  }
+  return ret;
+}
+
+// split content into units, absolute offset in doc
+static int ai_split_collect_units(const ObString &content,
+                                  int64_t base_offset,
+                                  bool by_sentence,
+                                  ObIArray<int64_t> &starts,
+                                  ObIArray<int64_t> &ends)
+{
+  INIT_SUCC(ret);
+  const char *p = content.ptr();
+  const int64_t len = content.length();
+  int64_t i = 0;
+  while (OB_SUCC(ret) && i < len) {
+    while (i < len && ai_split_is_space(p[i])) {
+      ++i;
+    }
+    if (i >= len) {
+      break;
+    }
+    int64_t s = i;
+    if (by_sentence) {
+      while (i < len && p[i] != '.' && p[i] != '!' && p[i] != '?') {
+        ++i;
+      }
+      if (i < len) {
+        ++i;  // include the terminator
+      }
+    } else {
+      while (i < len && !ai_split_is_space(p[i])) {
+        ++i;
+      }
+    }
+    int64_t e = i;
+    while (e > s && ai_split_is_space(p[e - 1])) {
+      --e;
+    }
+    if (e > s) {
+      if (OB_FAIL(starts.push_back(base_offset + s))) {
+        LOG_WARN("failed to push start", K(ret));
+      } else if (OB_FAIL(ends.push_back(base_offset + e))) {
+        LOG_WARN("failed to push end", K(ret));
+      }
+    }
+  }
+  return ret;
+}
+
+int AiSplitTableFunc::split_plain(ObIAllocator &alloc,
+                                  const ObString &content,
+                                  int64_t base_offset,
+                                  const ObString &title,
+                                  const ObAiSplitParam &param,
+                                  ObIArray<ObAiSplitChunk> &chunks)
+{
+  INIT_SUCC(ret);
+  ObSEArray<int64_t, 32> starts;
+  ObSEArray<int64_t, 32> ends;
+  const char *doc = content.ptr() - base_offset;
+  if (OB_FAIL(ai_split_collect_units(content, base_offset, param.by_sentence_, starts, ends))) {
+    LOG_WARN("failed to collect units", K(ret));
+  } else {
+    const int64_t unit_cnt = starts.count();
+    const int64_t step = param.max_ - param.overlap_;
+    for (int64_t b = 0; OB_SUCC(ret) && b < unit_cnt; b += step) {
+      int64_t e = MIN(b + param.max_, unit_cnt);
+      int64_t off = starts.at(b);
+      int64_t end = ends.at(e - 1);
+      ObAiSplitChunk chunk;
+      chunk.id_ = chunks.count();
+      chunk.offset_ = off;
+      chunk.length_ = end - off;
+      if (title.empty()) {
+        chunk.text_.assign_ptr(doc + off, static_cast<int32_t>(end - off));
+      } else {
+        const int64_t buf_len = title.length() + 1 + (end - off);
+        char *buf = static_cast<char *>(alloc.alloc(buf_len));
+        if (OB_ISNULL(buf)) {
+          ret = OB_ALLOCATE_MEMORY_FAILED;
+          LOG_WARN("failed to alloc chunk text", K(ret), K(buf_len));
+        } else {
+          MEMCPY(buf, title.ptr(), title.length());
+          buf[title.length()] = '\n';
+          MEMCPY(buf + title.length() + 1, doc + off, end - off);
+          chunk.text_.assign_ptr(buf, static_cast<int32_t>(buf_len));
+        }
+      }
+      if (OB_FAIL(ret)) {
+      } else if (OB_FAIL(chunks.push_back(chunk))) {
+        LOG_WARN("failed to push back chunk", K(ret));
+      }
+      if (e >= unit_cnt) {
+        break;
+      }
+    }
+  }
+  return ret;
+}
+
+int AiSplitTableFunc::do_split(ObIAllocator &alloc,
+                               const ObString &content,
+                               const ObAiSplitParam &param,
+                               ObIArray<ObAiSplitChunk> &chunks)
+{
+  INIT_SUCC(ret);
+  if (!param.is_markdown_) {
+    ret = split_plain(alloc, content, 0, ObString(), param, chunks);
+  } else {
+    const char *p = content.ptr();
+    const int64_t len = content.length();
+    int64_t i = 0;
+    ObString cur_title;
+    int64_t seg_start = -1;
+    while (OB_SUCC(ret) && i <= len) {
+      int64_t line_start = i;
+      while (i < len && p[i] != '\n') {
+        ++i;
+      }
+      int64_t line_end = i;
+      bool is_title = false;
+      int64_t t = line_start;
+      while (t < line_end && (p[t] == ' ' || p[t] == '\t')) {
+        ++t;
+      }
+      if (t < line_end && p[t] == '#') {
+        is_title = true;
+      }
+      if (is_title) {
+        if (seg_start >= 0 && line_start > seg_start) {
+          ObString seg(static_cast<int32_t>(line_start - seg_start), p + seg_start);
+          if (OB_FAIL(split_plain(alloc, seg, seg_start, cur_title, param, chunks))) {
+            LOG_WARN("failed to split segment", K(ret));
+          }
+        }
+        int64_t te = line_end;
+        while (te > t && ai_split_is_space(p[te - 1])) {
+          --te;
+        }
+        cur_title.assign_ptr(p + t, static_cast<int32_t>(te - t));
+        seg_start = -1;
+      } else if (seg_start < 0) {
+        seg_start = line_start;
+      }
+      if (i >= len) {
+        break;
+      }
+      ++i;  // skip '\n'
+    }
+    if (OB_SUCC(ret) && seg_start >= 0 && len > seg_start) {
+      ObString seg(static_cast<int32_t>(len - seg_start), p + seg_start);
+      if (OB_FAIL(split_plain(alloc, seg, seg_start, cur_title, param, chunks))) {
+        LOG_WARN("failed to split tail segment", K(ret));
+      }
+    }
+  }
+  return ret;
+}
+
+int AiSplitTableFunc::eval_input(ObJsonTableOp &jt, JtScanCtx &ctx, ObEvalCtx &eval_ctx)
+{
+  INIT_SUCC(ret);
+  ObAiSplitCtx *split_ctx = NULL;
+  ObString content;
+  ObString params_str;
+  ObAiSplitParam param;
+  const int64_t expr_cnt = ctx.spec_ptr_->value_exprs_.count();
+  bool is_null = false;
+
+  if (!ctx.is_ai_split_table_func()) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("invalid table func", K(ret));
+  } else if (OB_UNLIKELY(expr_cnt < 1)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("no input expr", K(ret));
+  } else {
+    jt.reset_columns();
+  }
+
+  if (OB_FAIL(ret)) {
+  } else {
+    ObExpr *content_expr = ctx.spec_ptr_->value_exprs_.at(0);
+    ObDatum *datum = NULL;
+    if (OB_FAIL(content_expr->eval(eval_ctx, datum))) {
+      LOG_WARN("failed to eval content", K(ret));
+    } else if (datum->is_null()) {
+      is_null = true;
+    } else if (OB_FAIL(ObTextStringHelper::read_real_string_data(ctx.row_alloc_,
+                                                                 *datum,
+                                                                 content_expr->datum_meta_,
+                                                                 content_expr->obj_meta_.has_lob_header(),
+                                                                 content))) {
+      LOG_WARN("failed to read content string", K(ret));
+    }
+  }
+
+  if (OB_FAIL(ret) || is_null) {
+  } else if (expr_cnt > 1) {
+    ObExpr *param_expr = ctx.spec_ptr_->value_exprs_.at(1);
+    ObDatum *datum = NULL;
+    if (OB_FAIL(param_expr->eval(eval_ctx, datum))) {
+      LOG_WARN("failed to eval params", K(ret));
+    } else if (datum->is_null()) {
+      // use default
+    } else if (OB_FAIL(ObTextStringHelper::read_real_string_data(ctx.row_alloc_,
+                                                                 *datum,
+                                                                 param_expr->datum_meta_,
+                                                                 param_expr->obj_meta_.has_lob_header(),
+                                                                 params_str))) {
+      LOG_WARN("failed to read params string", K(ret));
+    }
+  }
+
+  if (OB_FAIL(ret)) {
+  } else if (is_null) {
+    ret = OB_ITER_END;
+  } else if (OB_FAIL(parse_params(ctx.row_alloc_, params_str, param))) {
+    LOG_WARN("failed to parse params", K(ret), K(params_str));
+  } else if (OB_ISNULL(split_ctx = OB_NEWx(ObAiSplitCtx, &ctx.row_alloc_))) {
+    ret = OB_ALLOCATE_MEMORY_FAILED;
+    LOG_WARN("failed to alloc split ctx", K(ret));
+  } else if (OB_FAIL(do_split(ctx.row_alloc_, content, param, split_ctx->chunks_))) {
+    LOG_WARN("failed to split document", K(ret));
+  } else if (split_ctx->chunks_.count() <= 0) {
+    ret = OB_ITER_END;
+  } else {
+    split_ctx->cursor_ = 0;
+    jt.input_ = split_ctx;
+  }
+  return ret;
+}
+
+int AiSplitTableFunc::init_ctx(ObRegCol &scan_node, JtScanCtx*& ctx)
+{
+  INIT_SUCC(ret);
+  scan_node.tab_type_ = MulModeTableType::OB_AI_SPLIT_TABLE_TYPE;
+  return ret;
+}
+
+int AiSplitTableFunc::reset_ctx(ObRegCol &scan_node, JtScanCtx*& ctx)
+{
+  INIT_SUCC(ret);
+  return ret;
+}
+
+int AiSplitTableFunc::reset_path_iter(ObRegCol &scan_node, void* in, JtScanCtx*& ctx,
+                                      ScanType init_flag, bool &is_null_value)
+{
+  INIT_SUCC(ret);
+  ObAiSplitCtx *split_ctx = reinterpret_cast<ObAiSplitCtx *>(in);
+  if (OB_ISNULL(split_ctx) || split_ctx->chunks_.count() <= 0) {
+    is_null_value = true;
+  } else {
+    is_null_value = false;
+    split_ctx->cursor_ = 0;
+    scan_node.iter_ = split_ctx;
+  }
+  return ret;
+}
+
+int AiSplitTableFunc::get_iter_value(ObRegCol &col_node, JtScanCtx* ctx, bool &is_null_value)
+{
+  UNUSED(is_null_value);
+  INIT_SUCC(ret);
+  ObAiSplitCtx *split_ctx = reinterpret_cast<ObAiSplitCtx *>(col_node.iter_);
+  if (OB_ISNULL(split_ctx)) {
+    ret = OB_ITER_END;
+  } else if (split_ctx->cursor_ + 1 >= split_ctx->chunks_.count()) {
+    ret = OB_ITER_END;
+  } else {
+    split_ctx->cursor_++;
+    col_node.cur_pos_++;
+  }
+  return ret;
+}
+
 int UnnestTableFunc::eval_input(ObJsonTableOp &jt, JtScanCtx &ctx, ObEvalCtx &eval_ctx)
 {
   INIT_SUCC(ret);
@@ -1383,6 +1806,34 @@ int ObRegCol::eval_regular_col(void *in, JtScanCtx* ctx, bool& is_null_value)
     if (OB_FAIL(RegularCol::eval_unnest_col(*this, in, ctx, col_expr))) {
       LOG_WARN("fail to eval unnest col", K(ret), K(col_type), K(cur_pos_), K(col_info_.output_column_idx_));
     }
+  } else if (col_type == COL_TYPE_AI_SPLIT) {
+    ObAiSplitCtx *split_ctx = reinterpret_cast<ObAiSplitCtx *>(in);
+    ObDatum &res_datum = col_expr->locate_datum_for_write(*ctx->eval_ctx_);
+    if (OB_ISNULL(split_ctx)
+        || split_ctx->cursor_ < 0
+        || split_ctx->cursor_ >= split_ctx->chunks_.count()) {
+      res_datum.set_null();
+    } else {
+      const ObAiSplitChunk &chunk = split_ctx->chunks_.at(split_ctx->cursor_);
+      const int64_t idx = col_info_.output_column_idx_;
+      if (0 == idx) {
+        res_datum.set_int(chunk.id_);
+      } else if (1 == idx) {
+        res_datum.set_int(chunk.offset_);
+      } else if (2 == idx) {
+        res_datum.set_int(chunk.length_);
+      } else {
+        ObTextStringDatumResult text_result(col_expr->datum_meta_.type_, col_expr, ctx->eval_ctx_, &res_datum);
+        if (OB_FAIL(text_result.init(chunk.text_.length()))) {
+          LOG_WARN("failed to init text result", K(ret), K(chunk));
+        } else if (OB_FAIL(text_result.append(chunk.text_.ptr(), chunk.text_.length()))) {
+          LOG_WARN("failed to append chunk text", K(ret), K(chunk));
+        } else {
+          text_result.set_result();
+        }
+      }
+    }
+    col_expr->get_eval_info(*ctx->eval_ctx_).evaluated_ = true;
   } else if (col_type == COL_TYPE_ORDINALITY) {
     if (OB_ISNULL(in)) {
       col_expr->locate_datum_for_write(*ctx->eval_ctx_).set_null();
@@ -1713,7 +2164,8 @@ int ObJsonTableOp::inner_get_next_row()
   bool is_root_null = false;
   if (!(jt_ctx_.is_json_table_func()
         || jt_ctx_.is_rb_iterate_table_func()
-        || jt_ctx_.is_unnest_table_func())) {
+        || jt_ctx_.is_unnest_table_func()
+        || jt_ctx_.is_ai_split_table_func())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unsupport table function", K(ret));
   } else if (is_evaled_) {

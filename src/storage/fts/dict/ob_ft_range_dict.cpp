@@ -466,28 +466,15 @@ int ObFTRangeDict::build_cache(const ObFTDictDesc &desc, ObFTCacheRangeContainer
 {
   int ret = OB_SUCCESS;
 
-  ObString table_name;
-  switch (desc.type_) {
-  case ObFTDictType::DICT_IK_MAIN: {
-    table_name = ObString(share::OB_FT_DICT_IK_UTF8_TNAME);
-  } break;
-  case ObFTDictType::DICT_IK_QUAN: {
-    table_name = ObString(share::OB_FT_QUANTIFIER_IK_UTF8_TNAME);
-  } break;
-  case ObFTDictType::DICT_IK_STOP: {
-    table_name = ObString(share::OB_FT_STOPWORD_IK_UTF8_TNAME);
-  } break;
-  default:
-    ret = OB_NOT_SUPPORTED;
-    LOG_WARN("Not supported dict type.", K(ret));
-  }
-
-  if (OB_SUCC(ret)) {
+  if (OB_UNLIKELY(desc.name_.empty())) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("Dict table name is empty.", K(ret));
+  } else {
     SMART_VAR(ObISQLClient::ReadResult, result)
     {
       ObFTDictTableIter iter_table(result);
-      if (OB_FAIL(iter_table.init(table_name))) {
-        LOG_WARN("Failed to init iterator.", K(ret));
+      if (OB_FAIL(iter_table.init(desc.name_))) {
+        LOG_WARN("Failed to init iterator.", K(ret), K(desc.name_));
       } else if (OB_FAIL(ObFTRangeDict::build_ranges(desc, iter_table, range_container))) {
         LOG_WARN("Failed to build ranges.", K(ret));
       }
@@ -502,7 +489,7 @@ int ObFTRangeDict::try_load_cache(const ObFTDictDesc &desc,
                                   ObFTCacheRangeContainer &range_container)
 {
   int ret = OB_SUCCESS;
-  uint64_t name = static_cast<uint64_t>(desc.type_);
+  uint64_t name = desc.name_hash();
 
   for (int64_t i = 0; OB_SUCC(ret) && i < range_count; ++i) {
     ObDictCacheKey key(name, desc.type_, i);

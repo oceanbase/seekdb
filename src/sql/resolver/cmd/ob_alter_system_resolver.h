@@ -86,6 +86,8 @@ DEF_SIMPLE_CMD_RESOLVER(ObFlushCacheResolver);
 
 DEF_SIMPLE_CMD_RESOLVER(ObFlushKVCacheResolver);
 
+DEF_SIMPLE_CMD_RESOLVER(ObRefreshFullTextDictResolver);
+
 DEF_SIMPLE_CMD_RESOLVER(ObFlushIlogCacheResolver);
 
 DEF_SIMPLE_CMD_RESOLVER(ObFlushDagWarningsResolver);

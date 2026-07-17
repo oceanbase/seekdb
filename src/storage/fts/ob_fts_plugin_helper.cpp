@@ -257,6 +257,9 @@ int ObFTParseHelper::segment(
         = (property.ik_mode_smart_ ? ObFTIKParam::Mode::SMART : ObFTIKParam::Mode::MAX_WORD);
     param.min_ngram_size_ = property.min_ngram_token_size_;
     param.max_ngram_size_ = property.max_ngram_token_size_;
+    param.ik_param_.main_dict_ = property.dict_table_;
+    param.ik_param_.quan_dict_ = property.quantifier_table_;
+    param.ik_param_.stopword_dict_ = property.stopword_table_;
 
     if (OB_FAIL(parser_desc->segment(&param, iter))) {
       LOG_WARN("fail to segment", K(ret), K(param));
