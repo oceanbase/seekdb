@@ -28,31 +28,43 @@ namespace oceanbase
 namespace storage
 {
 
-class ObFTWord final
+class ObFTToken final
 {
 public:
-  ObFTWord() : word_(), meta_() {}
-  ObFTWord(const int64_t length, const char *ptr, const ObObjMeta &meta) : meta_(meta)
+  ObFTToken() : word_(), meta_(), hash_cached_(false), hash_val_(0), cmp_func_(nullptr) {}
+  ObFTToken(const int64_t length, const char *ptr, const ObObjMeta &meta) : meta_(meta), hash_cached_(false), hash_val_(0), cmp_func_(nullptr)
   {
     word_.set_string(ptr, length);
   }
-  ~ObFTWord() = default;
+  ~ObFTToken() = default;
 
   OB_INLINE const ObDatum &get_word() const { return word_; }
   OB_INLINE ObCollationType get_collation_type() const { return meta_.get_collation_type(); }
   OB_INLINE bool empty() const { return word_.get_string().empty(); }
   int hash(uint64_t &hash_val) const;
-  bool operator==(const ObFTWord &other) const;
-  OB_INLINE bool operator !=(const ObFTWord &other) const { return !(other == *this); }
+  bool operator==(const ObFTToken &other) const;
+  OB_INLINE bool operator !=(const ObFTToken &other) const { return !(other == *this); }
+
+  OB_INLINE uint64_t cached_hash() const { return hash_val_; }
+  OB_INLINE bool hash_cached() const { return hash_cached_; }
+  OB_INLINE void set_cached_hash(const uint64_t hv) const
+  {
+    hash_cached_ = true;
+    hash_val_ = hv;
+  }
+  OB_INLINE void clear_cached_hash() { hash_cached_ = false; }
 
   TO_STRING_KV(K_(meta), K_(word));
 
 private:
   ObDatum word_;
   ObObjMeta meta_;
+  mutable bool hash_cached_;
+  mutable uint64_t hash_val_;
+  mutable ObDatumCmpFuncType cmp_func_;
 };
 
-typedef common::hash::ObHashMap<ObFTWord, int64_t> ObFTWordMap;
+typedef common::hash::ObHashMap<ObFTToken, int64_t> ObFTTokenMap;
 
 class ObAddWordFlag final
 {

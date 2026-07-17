@@ -19,6 +19,7 @@
 
 #include "lib/container/ob_iarray.h"
 #include "lib/hash/ob_hashset.h"
+#include "lib/hash/ob_hashmap.h"
 #include "object/ob_object.h"
 #include "storage/fts/ob_fts_struct.h"
 
@@ -78,11 +79,11 @@ public:
 
   int init();
   void destroy();
-  int check_stopword(const ObFTWord &word, bool &is_stopword);
+  int check_stopword(const ObFTToken &word, bool &is_stopword);
 
 private:
   static const int64_t DEFAULT_STOPWORD_BUCKET_NUM = 37L;
-  typedef common::hash::ObHashSet<storage::ObFTWord> StopWordSet;
+  typedef common::hash::ObHashSet<storage::ObFTToken> StopWordSet;
 
   StopWordSet stopword_set_;
   ObObjMeta stopword_type_;
@@ -93,16 +94,37 @@ private:
               "ob_stop_word_list's number shouldn't be greater than DEFAULT_STOPWORD_BUCKET_NUM");
 };
 
-class ObAddWord final
+class ObStopTokenChecker final
 {
 public:
-  ObAddWord(
+  static ObStopTokenChecker &instance();
+
+  int check_stopword(const ObFTToken &word, bool &is_stopword);
+
+private:
+  ObStopTokenChecker() : is_inited_(false) {}
+  ~ObStopTokenChecker();
+  int init();
+  void destroy();
+
+  static const int64_t DEFAULT_BUCKET_NUM = 256;
+  typedef common::hash::ObHashMap<ObString, bool> StopTokenMap;
+
+  StopTokenMap token_map_;
+  ObObjMeta stopword_type_;
+  bool is_inited_;
+};
+
+class ObFTTokenProcessor final
+{
+public:
+  ObFTTokenProcessor(
       const ObFTParserProperty &property,
       const ObObjMeta &meta,
       const ObAddWordFlag &flag,
       common::ObIAllocator &allocator,
-      ObFTWordMap &word_map);
-  ~ObAddWord() = default;
+      ObFTTokenMap &word_map);
+  ~ObFTTokenProcessor() = default;
   int process_word(
       const char *word,
       const int64_t word_len,
@@ -120,13 +142,13 @@ public:
 
 private:
   bool is_min_max_word(const int64_t c_len) const;
-  int casedown_word(const ObFTWord &src, ObFTWord &dst);
-  int check_stopword(const ObFTWord &word, bool &is_stopword);
-  int groupby_word(const ObFTWord &word, const int64_t word_cnt);
+  int casedown_token(const ObFTToken &src, ObFTToken &dst);
+  int check_stopword(const ObFTToken &word, bool &is_stopword);
+  int groupby_token(const ObFTToken &word, const int64_t word_cnt);
 private:
   ObObjMeta word_meta_;
   common::ObIAllocator &allocator_;
-  ObFTWordMap &word_map_;
+  ObFTTokenMap &word_map_;
   int64_t min_max_word_cnt_;
   int64_t non_stopword_cnt_;
   int64_t stopword_cnt_;
@@ -134,6 +156,8 @@ private:
   int64_t max_token_size_;
   ObAddWordFlag flag_;
 };
+
+typedef ObFTTokenProcessor ObAddWord;
 
 } // end namespace storage
 } // end namespace oceanbase

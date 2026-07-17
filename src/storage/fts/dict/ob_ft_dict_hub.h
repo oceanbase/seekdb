@@ -87,6 +87,16 @@ public:
     return ret;
   }
 
+  int64_t to_string(char *buf, const int64_t buf_len) const
+  {
+    int64_t pos = 0;
+    if (OB_ISNULL(buf) || buf_len <= 0) {
+    } else {
+      databuff_printf(buf, buf_len, pos, "ObFTDictInfoKey{type=%lu}", type_);
+    }
+    return pos;
+  }
+
 private:
   uint64_t type_;
   // name
@@ -106,6 +116,15 @@ public:
   int build_cache(const ObFTDictDesc &desc, ObFTCacheRangeContainer &container);
 
   int load_cache(const ObFTDictDesc &desc, ObFTCacheRangeContainer &container);
+
+  /**
+   * invalidate cached info entries whose source table name matches @p full_name.
+   * After this call, the next segment() against the same dict table will rebuild
+   * the DAT cache from the underlying SQL table.
+   *
+   * @p full_name should be the qualified "db.tbl" form. An empty name reloads all.
+   */
+  int reload_by_name(const common::ObString &full_name);
 
 private:
   int get_dict_info(const ObFTDictInfoKey &key, ObFTDictInfo &info);

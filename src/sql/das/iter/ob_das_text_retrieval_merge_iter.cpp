@@ -251,8 +251,8 @@ int ObDASTextRetrievalMergeIter::build_query_tokens(const ObDASIRScanCtDef *ir_c
     const ObObjMeta &meta = search_text->obj_meta_;
     int64_t doc_length = 0;
     storage::ObFTParseHelper tokenize_helper;
-    common::ObSEArray<ObFTWord, 16> tokens;
-    hash::ObHashMap<ObFTWord, int64_t> token_map;
+    common::ObSEArray<ObFTToken, 16> tokens;
+    hash::ObHashMap<ObFTToken, int64_t> token_map;
     const int64_t ft_word_bkt_cnt = MAX(search_text_string.length() / 10, 2);
     if (OB_FAIL(tokenize_helper.init(&alloc, parser_name, parser_properties))) {
       LOG_WARN("failed to init tokenize helper", K(ret));
@@ -266,10 +266,10 @@ int ObDASTextRetrievalMergeIter::build_query_tokens(const ObDASIRScanCtDef *ir_c
                            token_map))) {
       LOG_WARN("failed to segment");
     } else {
-      for (hash::ObHashMap<ObFTWord, int64_t>::const_iterator iter = token_map.begin();
+      for (hash::ObHashMap<ObFTToken, int64_t>::const_iterator iter = token_map.begin();
           OB_SUCC(ret) && iter != token_map.end();
           ++iter) {
-        const ObFTWord &token = iter->first;
+        const ObFTToken &token = iter->first;
         ObString token_string;
         if (OB_FAIL(ob_write_string(alloc, token.get_word().get_string(), token_string))) {
           LOG_WARN("failed to deep copy query token", K(ret));

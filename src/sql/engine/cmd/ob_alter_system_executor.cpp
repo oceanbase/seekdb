@@ -35,6 +35,8 @@
 #include "sql/engine/cmd/ob_timezone_importer.h"
 #include "sql/engine/cmd/ob_srs_importer.h"
 #include "share/ob_internal_table_change_notifier.h"
+#include "storage/fts/ob_fts_plugin_helper.h"
+#include "storage/fts/dict/ob_ft_dict_hub.h"
 
 namespace oceanbase
 {
@@ -498,6 +500,43 @@ int ObRefreshIOCalibraitonExecutor::execute(ObExecContext &ctx, ObRefreshIOCalib
     LOG_WARN("get task executor context failed");
   } else if (OB_FAIL(GCTX.root_service_->admin_refresh_io_calibration(stmt.get_rpc_arg()))) {
     LOG_WARN("refresh io calibration failed", K(ret), "rpc_arg", stmt.get_rpc_arg());
+  }
+  return ret;
+}
+
+int ObRefreshFulltextDictExecutor::execute(ObExecContext &ctx, ObRefreshFulltextDictStmt &stmt)
+{
+  int ret = OB_SUCCESS;
+  UNUSED(ctx);
+  const ObString &db_name = stmt.get_database_name();
+  const ObString &tbl_name = stmt.get_table_name();
+  if (db_name.empty() || tbl_name.empty()) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("REFRESH FULLTEXT DICT requires qualified db.tbl",
+             K(ret), K(db_name), K(tbl_name));
+  } else {
+    // Build "db.tbl" qualified name to match what the parser stored in dict_table.
+    char full_name_buf[OB_MAX_TABLE_NAME_LENGTH + 1];
+    int64_t pos = 0;
+    if (OB_FAIL(databuff_printf(full_name_buf, sizeof(full_name_buf), pos, "%.*s.%.*s",
+                                db_name.length(), db_name.ptr(),
+                                tbl_name.length(), tbl_name.ptr()))) {
+      LOG_WARN("failed to build qualified dict name", K(ret));
+    } else {
+      ObString full_name(static_cast<int32_t>(pos), full_name_buf);
+      storage::ObFTDictHub *hub = nullptr;
+      if (OB_FAIL(storage::ObFTParsePluginData::instance().get_dict_hub(hub))) {
+        LOG_WARN("failed to get dict hub", K(ret));
+      } else if (OB_ISNULL(hub)) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("dict hub is null", K(ret));
+      } else if (OB_FAIL(hub->reload_by_name(full_name))) {
+        LOG_WARN("failed to reload fulltext dict", K(ret), K(full_name));
+      } else {
+        LOG_INFO("reload fulltext dict cache via REFRESH",
+                 K(full_name), "database_name", db_name, "table_name", tbl_name);
+      }
+    }
   }
   return ret;
 }

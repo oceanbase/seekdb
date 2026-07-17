@@ -318,7 +318,7 @@ int ObDASDomainUtils::build_ft_doc_word_infos(
   static constexpr int64_t FT_MAX_WORD_BUCKET = 997;
   const int64_t ft_word_bkt_cnt = MIN(MAX(fulltext.length() / 10, 2), FT_MAX_WORD_BUCKET);
   int64_t doc_length = 0;
-  ObFTWordMap ft_word_map;
+  ObFTTokenMap ft_word_map;
   void *rows_buf = nullptr;
   blocksstable::ObDatumRow *rows = nullptr;
   if (OB_ISNULL(helper) || OB_UNLIKELY(!ft_obj_meta.is_valid())) {
@@ -345,13 +345,13 @@ int ObDASDomainUtils::build_ft_doc_word_infos(
   } else {
     int64_t i = 0;
     rows = new (rows_buf) blocksstable::ObDatumRow[ft_word_map.size()];
-    for (ObFTWordMap::const_iterator iter = ft_word_map.begin();
+    for (ObFTTokenMap::const_iterator iter = ft_word_map.begin();
          OB_SUCC(ret) && iter != ft_word_map.end();
          ++iter) {
       if (OB_FAIL(rows[i].init(allocator, FT_WORD_DOC_COL_CNT))) {
         LOG_WARN("init datum row failed", K(ret), K(FT_WORD_DOC_COL_CNT));
       } else {
-        const ObFTWord &ft_word = iter->first;
+        const ObFTToken &ft_word = iter->first;
         const int64_t word_cnt = iter->second;
         // index row format
         //  -    FTS_INDEX: [WORD], [DOC_ID], [WORD_COUNT], [DOC_LENGTH]
@@ -382,7 +382,7 @@ int ObDASDomainUtils::build_ft_doc_word_infos(
     const common::ObObjMeta &meta,
     const ObString &fulltext,
     int64_t &doc_length,
-    ObFTWordMap &words_count)
+    ObFTTokenMap &words_count)
 {
   int ret = OB_SUCCESS;
   ObCollationType type = meta.get_collation_type();

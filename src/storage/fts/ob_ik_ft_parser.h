@@ -22,6 +22,7 @@
 #include "storage/fts/dict/ob_ft_dict.h"
 #include "storage/fts/dict/ob_ft_dict_def.h"
 #include "storage/fts/ik/ob_ik_processor.h"
+#include "storage/fts/ik/ob_ik_arbitrator.h"
 #include "plugin/interface/ob_plugin_ftparser_intf.h"
 
 #include <cstdint>
@@ -107,6 +108,8 @@ private:
   ObIFTDict *dict_quan_;
   ObIFTDict *dict_stop_;
 
+  ObIKArbitrator arb_;
+
   DISABLE_COPY_ASSIGN(ObIKFTParser);
 };
 
@@ -121,6 +124,7 @@ public:
   virtual void free_token_iter(plugin::ObFTParserParam *param,
                                plugin::ObITokenIterator *&iter) const override;
   virtual int get_add_word_flag(ObAddWordFlag &flag) const override;
+  virtual int reuse_parser(plugin::ObFTParserParam *param) const override;
   OB_INLINE void reset() { is_inited_ = false; }
 
 private:

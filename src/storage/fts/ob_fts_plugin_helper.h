@@ -24,6 +24,7 @@
 #include "share/ob_plugin_helper.h"
 #include "storage/fts/ob_fts_parser_property.h"
 #include "storage/fts/ob_fts_struct.h"
+#include "storage/fts/ob_fts_stop_word.h"
 
 namespace oceanbase
 {
@@ -43,7 +44,6 @@ namespace storage
 
 class ObStopWordChecker;
 class ObFTDictHub;
-class ObAddWord;
 
 #define FTS_BUILD_IN_PARSER_LIST                                                                   \
   FT_PARSER_TYPE(FTP_SPACE, space)                                                                 \
@@ -177,7 +177,7 @@ public:
       const char *fulltext,
       const int64_t fulltext_len,
       int64_t &doc_length,
-      ObFTWordMap &words) const;
+      ObFTTokenMap &words) const;
   int check_is_the_same(
       const common::ObString &plugin_name,
       const common::ObString &plugin_properties,
@@ -190,7 +190,7 @@ public:
    * @param[out] json_root, json document
    */
   int make_detail_json(
-      const ObFTWordMap &words,
+      const ObFTTokenMap &words,
       const int64_t doc_length,
       common::ObIJsonBase *&json_root);
 
@@ -201,7 +201,7 @@ public:
    * @param[out] json_root, json document
    */
   int make_token_array_json(
-      const ObFTWordMap &words,
+      const ObFTTokenMap &words,
       common::ObIJsonBase *&json_root);
 
   void reset();

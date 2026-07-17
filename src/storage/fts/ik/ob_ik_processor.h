@@ -47,6 +47,7 @@ public:
 
   int current_char(const char *&ch, uint8_t &char_len);
   int current_char_type(ObFTCharUtil::CharType &type);
+  int current_char_and_type(const char *&ch, uint8_t &char_len, ObFTCharUtil::CharType &type);
 
   int step_next();
 
@@ -77,6 +78,7 @@ private:
   int prepare_next_char();
 
   ObCollationType coll_type_;
+  const ObCharsetInfo *cached_cs_; // cached for well_formed_len fast path
   const char *fulltext_;
   int64_t fulltext_len_;
 

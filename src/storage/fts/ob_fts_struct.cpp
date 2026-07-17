@@ -25,20 +25,28 @@ namespace oceanbase
 namespace storage
 {
 
-int ObFTWord::hash(uint64_t &hash_val) const
+int ObFTToken::hash(uint64_t &hash_val) const
 {
   int ret = OB_SUCCESS;
-  sql::ObExprBasicFuncs *funcs = ObDatumFuncs::get_basic_func(meta_.get_type(), meta_.get_collation_type());
-  if (OB_ISNULL(funcs)) {
-    ret = OB_ERR_UNEXPECTED;
-  } else if (funcs->default_hash_ == nullptr) {
-    ret = OB_ERR_UNEXPECTED;
+  if (hash_cached_) {
+    hash_val = hash_val_;
   } else {
-    ret = funcs->default_hash_(word_, 0, hash_val);
+    sql::ObExprBasicFuncs *funcs = ObDatumFuncs::get_basic_func(meta_.get_type(), meta_.get_collation_type());
+    if (OB_ISNULL(funcs)) {
+      ret = OB_ERR_UNEXPECTED;
+    } else if (funcs->default_hash_ == nullptr) {
+      ret = OB_ERR_UNEXPECTED;
+    } else {
+      ret = funcs->default_hash_(word_, 0, hash_val);
+      if (OB_SUCC(ret)) {
+        set_cached_hash(hash_val);
+      }
+    }
   }
   return ret;
 }
-bool ObFTWord::operator==(const ObFTWord &other) const
+
+bool ObFTToken::operator==(const ObFTToken &other) const
 {
   bool is_equal = false;
   int ret = OB_SUCCESS;
@@ -53,5 +61,6 @@ bool ObFTWord::operator==(const ObFTWord &other) const
   }
   return is_equal;
 }
+
 } // namespace storage
 } // namespace oceanbase

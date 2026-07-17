@@ -302,6 +302,7 @@ END_P SET_VAR DELIMITER
 
         FAIL FAILOVER FAST FAULTS FILE_BLOCK_SIZE FIELDS FILEX FINAL_COUNT FIRST FIRST_VALUE FIXED FLUSH FOLLOWER FORMAT
         FOUND FORK FREEZE FREQUENCY FUNCTION FOLLOWING FLASHBACK FULL FRAGMENTATION FROZEN FILE_ID FILTER
+FULLTEXT_DICT DICT
         FIELD_OPTIONALLY_ENCLOSED_BY FIELD_DELIMITER FIELD_ENCLOSED_BY FILE_EXTENSION
 
         GENERAL GEOMETRY GEOMCOLLECTION GEOMETRYCOLLECTION GET_FORMAT GLOBAL GRANTS GRANULARITY GROUP_CONCAT GROUPING GTS
@@ -6942,6 +6943,11 @@ TABLE_MODE opt_equal_mark STRING_VALUE
 {
   (void)($2); /*  make bison mute*/
   malloc_non_terminal_node($$, result->malloc_pool_, T_COMMENT, 1, $3);
+}
+| FULLTEXT_DICT opt_equal_mark STRING_VALUE
+{
+  (void)($2) ; /* make bison mute */
+  malloc_non_terminal_node($$, result->malloc_pool_, T_FULLTEXT_DICT, 1, $3);
 }
 | TABLEGROUP opt_equal_mark relation_name_or_string
 {
@@ -18443,6 +18449,12 @@ alter_with_opt_hint SYSTEM REFRESH MEMORY STAT
 {
   (void)($1);
   malloc_non_terminal_node($$, result->malloc_pool_, T_REFRESH_MEMORY_STAT, 1, NULL);
+}
+|
+alter_with_opt_hint SYSTEM REFRESH FULLTEXT DICT normal_relation_factor
+{
+  (void)($1);
+  malloc_non_terminal_node($$, result->malloc_pool_, T_REFRESH_FULLTEXT_DICT, 1, $6);
 }
 |
 alter_with_opt_hint SYSTEM WASH MEMORY FRAGMENTATION

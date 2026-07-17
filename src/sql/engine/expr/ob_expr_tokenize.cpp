@@ -89,7 +89,7 @@ int ObExprTokenize::tokenize_fulltext(const TokenizeParam &param,
   storage::ObFTParseHelper tokenize_helper;
   const int64_t ft_word_bkt_cnt = MIN(MAX(param.fulltext_.length() / 2, 2), 997);
   int64_t doc_len = 0;
-  ObFTWordMap token_map;
+  ObFTTokenMap token_map;
 
   ObArenaAllocator tmp_parse_alloc(ObMemAttr("Tmp buffer"));
 

@@ -1043,6 +1043,7 @@ protected:
   int64_t table_dop_; // default value is 1
   int64_t hash_subpart_num_;
   bool is_external_table_;
+  bool is_fulltext_dict_table_;
   common::ObString ttl_definition_;
   common::ObString storage_cache_policy_;
   ObNameGeneratedType name_generated_type_;
