@@ -51,7 +51,6 @@ class ObFtsDDLTokenCache final
   static constexpr int64_t SLOT_COUNT = 65536;
   static constexpr int64_t LOCK_COUNT = 64;
   static constexpr int64_t PRODUCER_LOCK_COUNT = 8192;
-  static constexpr int64_t PROBE_COUNT = 8;
   static constexpr int64_t MAX_ENTRY_SIZE = 256L * 1024L;
   struct EntryHeader
   {
@@ -74,17 +73,27 @@ class ObFtsDDLTokenCache final
   };
   struct Slot
   {
-    Slot() : data_(nullptr), size_(0) {}
+    Slot() : data_(nullptr), size_(0), next_(nullptr) {}
     char *data_;
     int64_t size_;
+    Slot *next_;
   };
 public:
-  ObFtsDDLTokenCache() = default;
+  ObFtsDDLTokenCache()
+  {
+    MEMSET(slots_, 0, sizeof(slots_));
+  }
   ~ObFtsDDLTokenCache()
   {
     for (int64_t i = 0; i < SLOT_COUNT; ++i) {
-      if (nullptr != slots_[i].data_) {
-        ob_free(slots_[i].data_);
+      Slot *slot = slots_[i];
+      while (nullptr != slot) {
+        Slot *next = slot->next_;
+        if (nullptr != slot->data_) {
+          ob_free(slot->data_);
+        }
+        ob_free(slot);
+        slot = next;
       }
     }
   }
@@ -149,6 +158,7 @@ private:
                           const ObObjMeta &ft_obj_meta,
                           const ObString &doc_id,
                           const ObString &fulltext,
+                          const bool is_fts_index_aux,
                           const EntryHeader *&header,
                           const char *&token_pos);
   static int materialize_rows(const EntryHeader &header,
@@ -162,7 +172,7 @@ private:
   lib::ObMutex locks_[LOCK_COUNT];
   // Task4 Op11：同一文档只允许一个输出进入“检查、分词、发布”流程，消除同步扫描时的双生产竞态。
   lib::ObMutex producer_locks_[PRODUCER_LOCK_COUNT];
-  Slot slots_[SLOT_COUNT];
+  Slot *slots_[SLOT_COUNT];
   DISALLOW_COPY_AND_ASSIGN(ObFtsDDLTokenCache);
 };
 
@@ -173,6 +183,7 @@ bool ObFtsDDLTokenCache::match_entry(const Slot &slot,
                                      const ObObjMeta &ft_obj_meta,
                                      const ObString &doc_id,
                                      const ObString &fulltext,
+                                     const bool is_fts_index_aux,
                                      const EntryHeader *&header,
                                      const char *&token_pos)
 {
@@ -192,6 +203,7 @@ bool ObFtsDDLTokenCache::match_entry(const Slot &slot,
     matched = header->hash_ == hash && valid_lengths
         && header->obj_type_ == static_cast<int32_t>(ft_obj_meta.get_type())
         && header->collation_type_ == static_cast<int32_t>(ft_obj_meta.get_collation_type())
+        && header->reserved_ != static_cast<int32_t>(is_fts_index_aux)
         && match_string(pos, parser_name)
         && match_string(pos, parser_properties)
         && match_string(pos, doc_id)
@@ -263,29 +275,37 @@ int ObFtsDDLTokenCache::get(const ObString &parser_name,
   const ObString doc_id_str = doc_id.get_string();
   const uint64_t hash = calc_hash(
       parser_name, parser_properties, ft_obj_meta, doc_id_str, fulltext);
-  const int64_t lock_idx = hash % LOCK_COUNT;
-  const int64_t shard_slot_count = SLOT_COUNT / LOCK_COUNT;
-  const int64_t shard_base = (hash / LOCK_COUNT) % shard_slot_count;
+  const int64_t slot_idx = hash % SLOT_COUNT;
+  const int64_t lock_idx = slot_idx % LOCK_COUNT;
   char *hit_data = nullptr;
   int64_t hit_size = 0;
   const char *hit_token_pos = nullptr;
   {
     lib::ObMutexGuard guard(locks_[lock_idx]);
-    for (int64_t probe = 0; OB_SUCC(ret) && !hit && probe < PROBE_COUNT; ++probe) {
-      const int64_t slot_idx = lock_idx
-          + ((shard_base + probe) % shard_slot_count) * LOCK_COUNT;
-      Slot &slot = slots_[slot_idx];
+    Slot *prev = nullptr;
+    Slot *slot = slots_[slot_idx];
+    while (OB_SUCC(ret) && !hit && nullptr != slot) {
       const EntryHeader *header = nullptr;
       const char *token_pos = nullptr;
-      if (match_entry(slot, hash, parser_name, parser_properties, ft_obj_meta,
-                      doc_id_str, fulltext, header, token_pos)) {
+      if (match_entry(*slot, hash, parser_name, parser_properties, ft_obj_meta,
+                      doc_id_str, fulltext, is_fts_index_aux, header, token_pos)) {
         // Task4 Op11：命中后先摘出槽位，释放分片锁，再做行物化拷贝。
         hit = true;
-        hit_data = slot.data_;
-        hit_size = slot.size_;
+        hit_data = slot->data_;
+        hit_size = slot->size_;
         hit_token_pos = token_pos;
-        slot.data_ = nullptr;
-        slot.size_ = 0;
+        if (nullptr == prev) {
+          slots_[slot_idx] = slot->next_;
+        } else {
+          prev->next_ = slot->next_;
+        }
+        slot->data_ = nullptr;
+        slot->size_ = 0;
+        slot->next_ = nullptr;
+        ob_free(slot);
+      } else {
+        prev = slot;
+        slot = slot->next_;
       }
     }
   }
@@ -333,7 +353,8 @@ void ObFtsDDLTokenCache::put(const ObString &parser_name,
       header->doc_id_len_ = doc_id_str.length();
       header->fulltext_len_ = fulltext.length();
       header->token_count_ = rows.count();
-      header->reserved_ = 0;
+      // Task4 Op11：记录生产侧，缓存只允许另一张 FTS 辅助表消费。
+      header->reserved_ = static_cast<int32_t>(is_fts_index_aux);
       header->doc_length_ = rows.empty() ? 0 : rows.at(0)->storage_datums_[3].get_uint();
       char *pos = data + sizeof(EntryHeader);
       MEMCPY(pos, parser_name.ptr(), parser_name.length());
@@ -354,27 +375,19 @@ void ObFtsDDLTokenCache::put(const ObString &parser_name,
         MEMCPY(pos, word.ptr(), word.length());
         pos += word.length();
       }
-      const int64_t lock_idx = hash % LOCK_COUNT;
-      const int64_t shard_slot_count = SLOT_COUNT / LOCK_COUNT;
-      const int64_t shard_base = (hash / LOCK_COUNT) % shard_slot_count;
+      const int64_t slot_idx = hash % SLOT_COUNT;
+      const int64_t lock_idx = slot_idx % LOCK_COUNT;
       lib::ObMutexGuard guard(locks_[lock_idx]);
-      Slot *target_slot = nullptr;
-      for (int64_t probe = 0; nullptr == target_slot && probe < PROBE_COUNT; ++probe) {
-        const int64_t slot_idx = lock_idx
-            + ((shard_base + probe) % shard_slot_count) * LOCK_COUNT;
-        if (nullptr == slots_[slot_idx].data_) {
-          target_slot = &slots_[slot_idx];
-        }
+      void *slot_buf = ob_malloc(sizeof(Slot), ObMemAttr("FtsDDLToken"));
+      if (nullptr == slot_buf) {
+        ob_free(data);
+      } else {
+        Slot *slot = new (slot_buf) Slot();
+        slot->data_ = data;
+        slot->size_ = entry_size;
+        slot->next_ = slots_[slot_idx];
+        slots_[slot_idx] = slot;
       }
-      // Task4 Op11：极端哈希拥塞时只覆盖同一探测组的首槽，不影响其他分片。
-      if (nullptr == target_slot) {
-        target_slot = &slots_[lock_idx + shard_base * LOCK_COUNT];
-      }
-      if (nullptr != target_slot->data_) {
-        ob_free(target_slot->data_);
-      }
-      target_slot->data_ = data;
-      target_slot->size_ = entry_size;
     }
   }
 }
