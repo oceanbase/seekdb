@@ -97,27 +97,6 @@ class ObTxMultiDataSourceLog;
 enum class NotifyType : int64_t;
 typedef palf::LSN LogOffSet;
 enum { MAX_CALLBACK_LIST_COUNT = 64 };
-class ObTransErrsim
-{
-public:
-  static inline bool is_memory_errsim()
-  {
-    bool ret = false;
-#ifdef TRANS_MODULE_TEST
-    int per = GCONF.module_test_trx_memory_errsim_percentage;
-    if (OB_LIKELY(0 == per)) {
-      ret = false;
-    } else {
-      int rand = common::ObRandom::rand(0, 100);
-      if (rand < per) {
-        ret = true;
-      }
-    }
-#endif
-    return ret;
-  }
-};
-
 class ObReserveAllocator : public ObIAllocator
 {
 public:
@@ -180,23 +159,11 @@ public:
   virtual ~TransModulePageAllocator() {}
   void *alloc(const int64_t sz)
   {
-    void *ret = NULL;
-    if (OB_UNLIKELY(ObTransErrsim::is_memory_errsim())) {
-      ret = NULL;
-    } else {
-      ret = inner_alloc_(sz, attr_);
-    }
-    return ret;
+    return inner_alloc_(sz, attr_);
   }
   void *alloc(const int64_t sz, const ObMemAttr &attr)
   {
-    void *ret = NULL;
-    if (OB_UNLIKELY(ObTransErrsim::is_memory_errsim())) {
-      ret = NULL;
-    } else {
-      ret = inner_alloc_(sz, attr);
-    }
-    return ret;
+    return inner_alloc_(sz, attr);
   }
   void free(void *ptr)
   {

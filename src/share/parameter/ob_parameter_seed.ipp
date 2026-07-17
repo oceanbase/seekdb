@@ -1133,12 +1133,6 @@ DEF_PARAM(px_task_size, CAP, OB_CLUSTER_PARAMETER, "2M", "[1K,)", "to be removed
 DEF_PARAM(_max_elr_dependent_trx_count, INT, OB_CLUSTER_PARAMETER, "0", "[0,)", "max elr dependent transaction count",
         ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 
-#ifdef TRANS_MODULE_TEST
-DEF_PARAM(module_test_trx_memory_errsim_percentage, INT, OB_CLUSTER_PARAMETER, "0", "[0, 100]",
-        "the percentage of memory errsim. Rang:[0,100]",
-        ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
-#endif
-
 DEF_PARAM(sql_work_area, CAP, OB_CLUSTER_PARAMETER, "1G", "[10M,)",
         "Work area memory limitation for tenant",
         ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::STATIC_EFFECTIVE));
@@ -1485,11 +1479,6 @@ DEF_PARAM(arbitration_timeout, TIME, OB_CLUSTER_PARAMETER, "5s", "[3s,]",
 DEF_PARAM(_ignore_system_memory_over_limit_error, BOOL, OB_CLUSTER_PARAMETER, "False",
          "When the hold of observer tenant is over the system_memory, print ERROR with False, or WARN with True",
          ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
-#ifdef OB_USE_ASAN
-DEF_PARAM(enable_asan_for_memory_context, BOOL, OB_CLUSTER_PARAMETER, "False",
-        "when use ob_asan, user can specifies whether to allow ObAsanAllocator(default is ObAllocator as allocator of MemoryContext",
-        ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
-#endif
 DEF_PARAM(sql_login_thread_count, INT, OB_CLUSTER_PARAMETER, "0", "[0,32]",
         "the number of threads for sql login request. Range: [0, 32] in integer, 0 stands for the built-in default."
         "the built-in default thread count for login request is normal:6 mini-mode:2",
@@ -1635,17 +1624,6 @@ DEF_PARAM(_schema_memory_recycle_interval, TIME, OB_CLUSTER_PARAMETER, "15m", "[
         "and other schema memory recycle task's interval will be 15mins. "
         "Range [0s,)",
         ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
-#ifdef ENABLE_500_MEMORY_LIMIT
-DEF_PARAM(_enable_system_tenant_memory_limit, BOOL, OB_CLUSTER_PARAMETER, "True",
-         "specifies whether allowed to limit the memory of tenant 500",
-         ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
-DEF_PARAM(_system_tenant_limit_mode, INT, OB_CLUSTER_PARAMETER, "1", "[0,2]",
-        "specifies the limit mode for the memory hold of system tenant, "
-        "0: not limit the memory hold of system tenant, "
-        "1: only limit the DEFAULT_CTX_ID memory of system tenant, "
-        "2: besides limit the DEFAULT_CTX_ID memory, the total hold of system tenant is also limited.",
-        ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
-#endif
 DEF_PARAM(_force_malloc_for_absent_tenant, BOOL, OB_CLUSTER_PARAMETER, "False",
          "force malloc even if tenant does not exist in observer",
          ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));

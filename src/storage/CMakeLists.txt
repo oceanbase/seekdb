@@ -730,7 +730,6 @@ ob_set_subtarget(ob_storage multi_data_source
   multi_data_source/ob_mds_minor_compaction_filter.cpp
   multi_data_source/ob_tablet_create_mds_ctx.cpp
   multi_data_source/ob_tablet_mds_merge_ctx.cpp
-  multi_data_source/test/example_user_helper_define.cpp
   multi_data_source/mds_key_serialize_util.cpp
 )
 

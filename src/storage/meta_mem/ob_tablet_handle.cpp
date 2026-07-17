@@ -32,7 +32,6 @@ ObTabletHandle::ObTabletHandle(const char *file /* __builtin_FILE() */,
 {
   // tablet leak checker related
   register_into_leak_checker(file, line, func);
-  INIT_OBJ_LEAK_DEBUG_NODE(node_, this, share::LEAK_CHECK_OBJ_TABLET_HANDLE);
 }
 
 ObTabletHandle::ObTabletHandle(const ObTabletHandle &other)
@@ -41,7 +40,6 @@ ObTabletHandle::ObTabletHandle(const ObTabletHandle &other)
     wash_priority_(WashTabletPriority::WTP_MAX),
     allow_copy_and_assign_(true)
 {
-  INIT_OBJ_LEAK_DEBUG_NODE(node_, this, share::LEAK_CHECK_OBJ_TABLET_HANDLE);
   *this = other;
 }
 

@@ -60,8 +60,6 @@
 #include "share/scn.h"//SCN
 #include "share/ob_server_status.h"  // ObServerMode
 #include "share/resource_limit_calculator/ob_resource_limit_calculator.h"//ObUserResourceCalculateArg
-#ifdef OB_BUILD_SHARED_STORAGE
-#endif
 #include "share/sequence/ob_sequence_cache.h" // ObSeqCleanCacheRes
 #include "share/schema/ob_catalog_schema_struct.h"
 #include "share/schema/ob_ccl_schema_struct.h"

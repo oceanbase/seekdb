@@ -370,7 +370,6 @@ _enable_spf_batch_rescan
 _enable_sql_ccl_rule
 _enable_ss_migration_prewarm
 _enable_ss_replica_prewarm
-_enable_system_tenant_memory_limit
 _enable_tenant_sql_net_thread
 _enable_topn_runtime_filter
 _enable_trace_session_leak
@@ -520,7 +519,6 @@ _stall_threshold_for_dynamic_worker
 _storage_meta_memory_limit_percentage
 _storage_stream_rpc_buffer_size
 _stream_rpc_max_wait_timeout
-_system_tenant_limit_mode
 _temporary_file_io_area_size
 _trace_control_info
 _trx_max_log_cb_limit

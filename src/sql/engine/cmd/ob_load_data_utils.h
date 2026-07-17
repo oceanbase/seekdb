@@ -207,34 +207,6 @@ private:
 };
 
 
-class ObLoadDataTimer
-{
-public:
-  ObLoadDataTimer(): total_time_us_(0), temp_start_time_us_(-1) {}
-  OB_INLINE void start_stat()
-  {
-    UNUSED(temp_start_time_us_);
-#ifdef TIME_STAT_ON
-    temp_start_time_us_ = ObTimeUtility::current_time();
-#endif
-  }
-  OB_INLINE void end_stat() {
-#ifdef TIME_STAT_ON
-    if (temp_start_time_us_ != -1) {
-      total_time_us_ += (ObTimeUtility::current_time() - temp_start_time_us_);
-      temp_start_time_us_ = -1;
-    }
-#endif
-  }
-  int64_t get_wait_secs() const {
-    return total_time_us_/1000000;
-  }
-  TO_STRING_KV("secs", get_wait_secs());
-private:
-  int64_t total_time_us_;
-  int64_t temp_start_time_us_;
-};
-
 /*
  * ObKMPStateMachine is a str matcher
  * efficiently implemented using KMP algorithm

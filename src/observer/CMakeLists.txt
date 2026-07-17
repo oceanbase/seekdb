@@ -333,11 +333,6 @@ add_library(oceanbase_static
 target_link_libraries(oceanbase_static
   PUBLIC ob_base "${ob_objects}" ob_sql_static ob_storage_static ob_share_static oblib ob_plugin)
 
-if (OB_GPERF_MODE)
-  target_link_libraries(oceanbase_static
-  PRIVATE libprofiler.a)
-endif()
-
 if (OB_SO_CACHE)
   add_library(oceanbase SHARED IMPORTED GLOBAL)
   set_target_properties(oceanbase PROPERTIES
@@ -372,16 +367,14 @@ if(STDC_SHARED_LIB)
   target_link_options(oceanbase INTERFACE "-Wl,-rpath=${STDC_SHARED_LIB_DIR}")
 endif()
 
-if (NOT OB_USE_ASAN)
-  # On macOS, malloc_hook conflicts with linked LLVM
-  # LLVM's global constructors run before main() and use hooked malloc,
-  # but free with system free, causing crashes
-  if (NOT APPLE AND NOT WIN32 AND NOT ANDROID)
-    set(link_malloc_hook malloc_hook)
-  else()
-    message(STATUS "Disabling malloc_hook on macOS/Windows/Android")
-    set(link_malloc_hook "")
-  endif()
+# On macOS, malloc_hook conflicts with linked LLVM
+# LLVM's global constructors run before main() and use hooked malloc,
+# but free with system free, causing crashes
+if (NOT APPLE AND NOT WIN32 AND NOT ANDROID)
+  set(link_malloc_hook malloc_hook)
+else()
+  message(STATUS "Disabling malloc_hook on macOS/Windows/Android")
+  set(link_malloc_hook "")
 endif()
 
 if(WIN32)

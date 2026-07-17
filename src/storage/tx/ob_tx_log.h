@@ -166,11 +166,7 @@ public:
   }
   static bool can_be_spilt(const ObTxLogType log_type)
   {
-    return ObTxLogType::TX_MULTI_DATA_SOURCE_LOG == log_type
-  #ifdef OB_TX_LOG_TEST
-           || ObTxLogType::TX_COMMIT_INFO_LOG == log_type
-  #endif
-        ;
+    return ObTxLogType::TX_MULTI_DATA_SOURCE_LOG == log_type;
   }
 
   static logservice::ObReplayBarrierType

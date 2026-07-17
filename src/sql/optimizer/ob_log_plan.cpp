@@ -10558,9 +10558,6 @@ int ObLogPlan::check_enable_plan_expiration(bool &enable) const
              opt_ctx.get_phy_plan_type() != OB_PHY_PLAN_DISTRIBUTED) {
     // do nothing
   } else if (opt_ctx.get_query_ctx()->get_query_hint().has_outline_data()
-#ifdef OB_BUILD_SPM
-             && !opt_ctx.get_query_ctx()->is_spm_evolution_
-#endif
             ) {
     // do nothing
   } else {
