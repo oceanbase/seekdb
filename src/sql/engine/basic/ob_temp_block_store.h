@@ -363,7 +363,15 @@ public:
 public:
   const static int64_t BLOCK_SIZE = (64L << 10) - sizeof(LinkNode);
   const static int64_t BIG_BLOCK_SIZE = (256L << 10) - sizeof(LinkNode);
+  const static int64_t BLOCK_CAPACITY = BLOCK_SIZE;
+  const static int64_t MIN_READ_BUFFER_SIZE = BLOCK_SIZE;
   const static int64_t DEFAULT_BLOCK_CNT = (1L << 20) / BLOCK_SIZE;
+
+  static int64_t get_read_alignment_size_config(const uint64_t tenant_id)
+  {
+    UNUSED(tenant_id);
+    return MIN_READ_BUFFER_SIZE;
+  }
 
   explicit ObTempBlockStore(common::ObIAllocator *alloc = NULL);
   virtual ~ObTempBlockStore() { reset(); }
