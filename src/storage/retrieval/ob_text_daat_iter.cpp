@@ -33,7 +33,10 @@ int ObTextDaaTIter::init(const ObTextDaaTParam &param)
   } else if (OB_FAIL(ObSRDaaTIterImpl::init(*param.base_param_, *param.dim_iters_,
                                             *param.allocator_, *param.relevance_collector_))) {
     LOG_WARN("failed to init sr daat iter", K(ret));
-  } else if (OB_FAIL(bm25_param_estimator_.init(param.bm25_param_est_ctx_))) {
+  } else if (param.bm25_param_est_ctx_.is_valid()
+             && OB_FAIL(bm25_param_estimator_.init(param.bm25_param_est_ctx_))) {
+    // when relevance calculation is skipped there is no estimation context,
+    // and BM25 parameters are not needed
     LOG_WARN("failed to init bm25 param estimator", K(ret));
   } else {
     mode_flag_ = param.mode_flag_;
@@ -74,7 +77,7 @@ int ObTextDaaTIter::pre_process()
   int ret = OB_SUCCESS;
   if (dim_iters_->count() == 0) {
     ret = OB_ITER_END;
-  } else if (iter_param_->need_project_relevance()) {
+  } else if (iter_param_->need_project_relevance() && bm25_param_estimator_.is_inited()) {
     if (OB_FAIL(bm25_param_estimator_.do_estimation(*iter_param_->eval_ctx_))) {
       LOG_WARN("failed to do bm25 param estimation", K(ret));
     }
