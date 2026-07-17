@@ -86,8 +86,16 @@ public:
 protected:
   virtual int pre_process();
   virtual int do_one_merge_round(int64_t &count);
+  // Streaming variant of do_one_merge_round: fills the heap, pops until
+  // the next doc id, then writes that doc id directly into the eval ctx
+  // at position `count` (no relevance collection, no buffered cache).
+  // Caller is responsible for not invoking project_results afterwards.
+  virtual int do_one_merge_round_streaming(int64_t &count, const int64_t capacity);
   virtual int fill_merge_heap();
   virtual int collect_dims_by_id(const ObDatum *&id_datum, double &relevance, bool &got_valid_id);
+  // Streaming variant: same as collect_dims_by_id but skips relevance
+  // collection since streaming mode does not project relevance.
+  virtual int collect_dims_by_id_streaming(const ObDatum *&id_datum, bool &got_valid_id);
   virtual int process_collected_row(const ObDatum &id_datum, const double relevance);
   virtual int filter_on_demand(const int64_t count, const double relevance, bool &need_project);
   virtual int cache_result(int64_t &count, const ObDatum &id_datum, const double relevance);
@@ -106,6 +114,12 @@ protected:
   ObFixedArray<int64_t, ObIAllocator> next_round_iter_idxes_;
   int64_t next_round_cnt_;
   void (*set_datum_func_)(ObDatum &, const ObDocIdExt &);
+  // K2 (batched Union Scan): cached pointers extracted from iter_param_ in
+  // init() so the per-round hot loop avoids a class-member deref + virtual
+  // dispatch per emitted doc. Only populated for the streaming DAAT path;
+  // non-streaming callers keep using iter_param_->X directly via project_results.
+  sql::ObExpr *id_proj_expr_cached_;
+  sql::ObEvalCtx *eval_ctx_cached_;
 private:
   DISALLOW_COPY_AND_ASSIGN(ObSRDaaTIterImpl);
 };

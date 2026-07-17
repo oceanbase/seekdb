@@ -1,0 +1,24 @@
+{
+  "timestamp": "2026-07-09 19:52:51",
+  "git_head": "15867eba",
+  "metrics": {
+    "select1_avg_ms": 0.2655,
+    "raw_load_rows_per_sec": 12970.2,
+    "build_ik_all_sec": 35.2836,
+    "build_ik_content_sec": 28.3764,
+    "build_beng_en_sec": 14.7578,
+    "build_total_sec": 27.216,
+    "tokenize_ik_avg_ms": 78.4178,
+    "tokenize_ik_stdev_ms": 0.76478,
+    "tokenize_beng_avg_ms": 0.42262,
+    "tokenize_beng_stdev_ms": 1.1874,
+    "query_cn_avg_ms": 16.6628,
+    "query_cn_stdev_ms": 0.0123,
+    "query_beng_avg_ms": 24.3042,
+    "query_beng_stdev_ms": 0.0097,
+    "query_mixed_avg_ms":  17.5593,
+    "query_mixed_stdev_ms": 0.0306,
+    "query_limit_avg_ms": 16.2334,
+    "query_limit_stdev_ms": 0.0023
+  }
+}

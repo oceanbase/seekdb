@@ -1,0 +1,44 @@
+========================================
+FTS Large Benchmark Report
+========================================
+timestamp:              2026-07-17 03:28:35
+label:                  post_bmw_prune_dedup
+git_head:               7ca89811
+git_dirty:              1
+rows:                   2000
+batch:                  200
+rounds:                 500
+query_rounds:           50
+samples:                2
+warmup:                 10
+skip_load:              0
+----------------------------------------
+select1_avg_ms:         1.1443
+select1_stdev_ms:       0.0302
+raw_load_sec:           0.608
+raw_load_rows_per_sec:  3289.5
+build_ik_all_sec:       25.991
+build_ik_content_sec:   20.912
+build_beng_en_sec:      12.861
+build_total_sec:        59.819
+----------------------------------------
+tokenize_ik_avg_ms:     1.5707
+tokenize_ik_median_ms:  1.5707
+tokenize_ik_stdev_ms:   0.0210
+tokenize_beng_avg_ms:   1.5338
+tokenize_beng_median_ms:1.5338
+tokenize_beng_stdev_ms: 0.0998
+----------------------------------------
+query_cn_hits:          801
+query_cn_avg_ms:        6.8928
+query_cn_stdev_ms:      0.6980
+query_beng_hits:        1100
+query_beng_avg_ms:      7.9744
+query_beng_stdev_ms:    0.2731
+query_mixed_hits:       732
+query_mixed_avg_ms:     6.0851
+query_mixed_stdev_ms:   0.5527
+query_limit_hits:       20
+query_limit_avg_ms:     10.0739
+query_limit_stdev_ms:   0.4298
+========================================

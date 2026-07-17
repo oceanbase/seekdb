@@ -74,7 +74,11 @@ int ObTextDaaTIter::pre_process()
   int ret = OB_SUCCESS;
   if (dim_iters_->count() == 0) {
     ret = OB_ITER_END;
-  } else if (iter_param_->need_project_relevance()) {
+  } else if (iter_param_->need_project_relevance()
+             && !bm25_param_estimator_.is_estimated()) {
+    // Idempotent: only run the (relatively expensive) doc-count / avg-doc-len
+    // estimation once per query. Subsequent pre_process() calls within the
+    // same iterator instance reuse the cached numbers.
     if (OB_FAIL(bm25_param_estimator_.do_estimation(*iter_param_->eval_ctx_))) {
       LOG_WARN("failed to do bm25 param estimation", K(ret));
     }
@@ -133,7 +137,13 @@ int ObTextBMWIter::get_next_rows(const int64_t capacity, int64_t &count)
     LOG_WARN("not inited", K(ret));
   } else if (dim_iters_->count() == 0) {
     ret = OB_ITER_END;
-  } else if (OB_FAIL(bm25_param_estimator_.do_estimation(*iter_param_->eval_ctx_))) {
+  } else if (!bm25_param_estimator_.is_estimated()
+             && OB_FAIL(bm25_param_estimator_.do_estimation(*iter_param_->eval_ctx_))) {
+    // Skip re-estimation on subsequent get_next_rows() calls within the
+    // same query — total_doc_cnt and avg_doc_token_cnt are query-scoped
+    // constants. BMW pruning uses the same numbers every iteration, so the
+    // first call is enough. This is the hot path for topk_limit queries
+    // (MATCH ... LIMIT k) which call get_next_rows in a loop until k docs.
     LOG_WARN("failed to do bm25 param estimation", K(ret));
   }
 

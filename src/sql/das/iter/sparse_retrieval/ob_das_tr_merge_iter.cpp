@@ -481,6 +481,15 @@ int ObDASTRMergeIter::create_sparse_retrieval_iter()
   sr_iter_param_.relevance_proj_expr_ = ir_ctdef_->relevance_proj_col_;
   sr_iter_param_.filter_expr_ = ir_ctdef_->match_filter_;
   sr_iter_param_.topk_limit_ = topk_limit_;
+  // Enable the streaming DAAT fast-path whenever the caller only needs
+  // matching doc ids: skip relevance collection, skip the buffered cache,
+  // and project rows directly into the eval ctx as they are produced.
+  // Activates for "MATCH(...) AGAINST(...)" without relevance projection
+  // and without score-side filters (boolean relevance must still be
+  // computed for Boolean-mode ranking, but that's done in pre_process).
+  sr_iter_param_.stream_daat_mode_ =
+      (nullptr == sr_iter_param_.relevance_proj_expr_)
+      && (nullptr == sr_iter_param_.filter_expr_);
   if (OB_NOT_NULL(ir_ctdef_->field_boost_expr_)) {
     ObDatum *boost_datum = nullptr;
     if (OB_FAIL(ir_ctdef_->field_boost_expr_->eval(*ir_rtdef_->eval_ctx_, boost_datum))) {

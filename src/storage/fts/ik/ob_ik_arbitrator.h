@@ -38,6 +38,12 @@ public:
 
   int output_result(TokenizeContext &ctx);
 
+  // Reset per-batch state and recycle the chain map and arena allocator
+  // without tearing down the underlying bucket array. Call this between
+  // batches (or documents) when the arbitrator is reused as a persistent
+  // member; pairs with init/prepare done on the first call.
+  int reuse(TokenizeContext &ctx);
+
 private:
   int prepare(TokenizeContext &ctx);
 
