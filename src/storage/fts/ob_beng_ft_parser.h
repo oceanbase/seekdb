@@ -40,6 +40,9 @@ public:
       english_analyzer_(),
       doc_(),
       token_stream_(nullptr),
+      ascii_cur_(nullptr),
+      ascii_end_(nullptr),
+      use_ascii_fast_path_(false),
       is_inited_(false)
   {}
   ~ObBEngFTParser() { reset(); }
@@ -58,12 +61,21 @@ private:
   int segment(
       const common::ObDatum &doc,
       share::ObITokenStream *&token_stream);
+  int get_next_ascii_token(const char *&word,
+                           int64_t &word_len,
+                           int64_t &char_len,
+                           int64_t &word_freq);
+  bool is_ascii_document(const char *fulltext, int64_t fulltext_len) const;
+  bool is_ascii_delimiter(char ch) const;
 private:
   common::ObArenaAllocator scratch_allocator_;
   share::ObTextAnalysisCtx analysis_ctx_;
   share::ObEnglishTextAnalyzer english_analyzer_;
   common::ObDatum doc_;
   share::ObITokenStream *token_stream_;
+  const char *ascii_cur_;
+  const char *ascii_end_;
+  bool use_ascii_fast_path_;
   bool is_inited_;
 
   DISALLOW_COPY_AND_ASSIGN(ObBEngFTParser);
