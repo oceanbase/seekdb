@@ -181,6 +181,49 @@ int ObFTIndexRowCache::get_next_row(blocksstable::ObDatumRow *&row)
   return ret;
 }
 
+int ObFTIndexRowCache::append_next_batch_rows(
+    common::ObIAllocator &allocator,
+    ObFTIndexRowCache::BatchRow *batch_rows,
+    const int64_t capacity,
+    int64_t &row_count,
+    bool &document_end)
+{
+  int ret = OB_SUCCESS;
+  document_end = false;
+  if (OB_UNLIKELY(!is_inited_)) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("ObFTIndexRowCache hasn't be initialized", K(ret), K(is_inited_));
+  } else if (OB_ISNULL(batch_rows)
+             || OB_UNLIKELY(capacity <= 0 || row_count < 0 || row_count > capacity)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid fulltext batch row arguments", K(ret), KP(batch_rows),
+        K(capacity), K(row_count));
+  } else if (!words_.created() || word_iter_ == word_end_iter_) {
+    document_end = true;
+  } else {
+    common::ObDatum stable_doc_id;
+    if (OB_FAIL(stable_doc_id.deep_copy(doc_id_datum_, allocator))) {
+      LOG_WARN("failed to copy fulltext document id for batch", K(ret), K(doc_id_datum_));
+    }
+    while (OB_SUCC(ret) && row_count < capacity && word_iter_ != word_end_iter_) {
+      ObFTIndexRowCache::BatchRow &batch_row = batch_rows[row_count];
+      const storage::ObFTWord &ft_word = word_iter_->first;
+      if (OB_FAIL(batch_row.word_.deep_copy(ft_word.get_word(), allocator))) {
+        LOG_WARN("failed to copy fulltext word for batch", K(ret), K(ft_word), K(row_count));
+      } else {
+        batch_row.doc_id_.set_datum(stable_doc_id);
+        batch_row.word_count_ = static_cast<uint64_t>(word_iter_->second);
+        batch_row.doc_length_ = static_cast<uint64_t>(doc_length_);
+        ++word_iter_;
+        ++row_idx_;
+        ++row_count;
+      }
+    }
+    document_end = (word_iter_ == word_end_iter_);
+  }
+  return ret;
+}
+
 void ObFTIndexRowCache::reset()
 {
   reuse();

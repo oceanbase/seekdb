@@ -34,6 +34,17 @@ class ObFTIndexRowCache final
 {
 public:
   static constexpr int64_t FTS_COL_CNT = 4;
+  struct BatchRow final
+  {
+    BatchRow()
+      : word_(), doc_id_(), word_count_(0), doc_length_(0)
+    {}
+    common::ObDatum word_;
+    common::ObDatum doc_id_;
+    uint64_t word_count_;
+    uint64_t doc_length_;
+  };
+
   static ObObjDatumMapType FTS_INDEX_TYPES[FTS_COL_CNT];
   static ObObjDatumMapType FTS_DOC_WORD_TYPES[FTS_COL_CNT];
   static ObExprOperatorType FTS_INDEX_EXPR_TYPE[FTS_COL_CNT];
@@ -47,6 +58,12 @@ public:
       const common::ObString &parser_properties);
   int segment(const common::ObObjMeta &ft_obj_meta, const ObDatum &doc_id, const common::ObString &fulltext);
   int get_next_row(blocksstable::ObDatumRow *&row);
+  int append_next_batch_rows(
+      common::ObIAllocator &allocator,
+      BatchRow *batch_rows,
+      const int64_t capacity,
+      int64_t &row_count,
+      bool &document_end);
   void reset();
   void reuse();
   TO_STRING_KV(K_(row_idx), K_(is_fts_index_aux), K_(helper), K_(is_inited),

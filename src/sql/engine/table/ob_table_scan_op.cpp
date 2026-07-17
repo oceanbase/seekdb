@@ -763,6 +763,12 @@ ObTableScanOp::ObTableScanOp(ObExecContext &exec_ctx, const ObOpSpec &spec, ObOp
     in_rescan_(false),
     domain_index_(),
     fts_index_(),
+    fts_batch_allocator_("FTDDLBatch", OB_MALLOC_NORMAL_BLOCK_SIZE),
+    fts_source_allocator_("FTDDLSource", OB_MALLOC_NORMAL_BLOCK_SIZE),
+    fts_source_rows_(nullptr),
+    fts_source_row_count_(0),
+    fts_source_row_idx_(0),
+    fts_source_scan_end_(false),
     fts_output_exprs_(),
     output_   (nullptr),
     fold_iter_(nullptr),
@@ -1777,6 +1783,12 @@ int ObTableScanOp::inner_close()
 
   if (OB_SUCC(ret)) {
     fts_index_.reuse();
+    fts_batch_allocator_.reuse();
+    fts_source_allocator_.reuse();
+    fts_source_rows_ = nullptr;
+    fts_source_row_count_ = 0;
+    fts_source_row_idx_ = 0;
+    fts_source_scan_end_ = false;
     iter_end_ = false;
     need_init_before_get_row_ = true;
     rand_scan_processor_.reset();
@@ -1838,6 +1850,12 @@ void ObTableScanOp::destroy()
   output_ = nullptr;
   scan_iter_ = nullptr;
   domain_index_.~ObDomainIndexCache();
+  fts_batch_allocator_.reset();
+  fts_source_allocator_.reset();
+  fts_source_rows_ = nullptr;
+  fts_source_row_count_ = 0;
+  fts_source_row_idx_ = 0;
+  fts_source_scan_end_ = false;
   fts_output_exprs_.reset();
   das_tasks_key_.reset();
   rand_scan_processor_.reset();
@@ -1948,6 +1966,15 @@ int ObTableScanOp::inner_rescan_for_tsc()
   input_row_cnt_ = 0;
   output_row_cnt_ = 0;
   iter_end_ = false;
+  if (MY_SPEC.is_fts_ddl_) {
+    fts_index_.reuse();
+    fts_batch_allocator_.reuse();
+    fts_source_allocator_.reuse();
+    fts_source_rows_ = nullptr;
+    fts_source_row_count_ = 0;
+    fts_source_row_idx_ = 0;
+    fts_source_scan_end_ = false;
+  }
   MY_INPUT.key_ranges_.reuse();
   MY_INPUT.ss_key_ranges_.reuse();
   MY_INPUT.mbr_filters_.reuse();
@@ -4051,52 +4078,49 @@ int ObTableScanOp::inner_get_next_fts_index_batch(const int64_t max_row_cnt)
   int ret = OB_SUCCESS;
   const int64_t batch_size = min(max_row_cnt, MY_SPEC.max_batch_size_);
   int64_t row_idx = 0;
+  ObFTIndexRowCache::BatchRow *batch_rows = nullptr;
   clear_evaluated_flag();
   brs_.size_ = 0;
   brs_.end_ = false;
   if (OB_UNLIKELY(batch_size <= 0)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid fulltext batch size", K(ret), K(max_row_cnt), K(MY_SPEC.max_batch_size_));
+  } else {
+    fts_batch_allocator_.reuse();
+    void *buf = fts_batch_allocator_.alloc(sizeof(*batch_rows) * batch_size);
+    if (OB_ISNULL(buf)) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+      LOG_WARN("failed to allocate fulltext batch rows", K(ret), K(batch_size));
+    } else {
+      batch_rows = new (buf) ObFTIndexRowCache::BatchRow[batch_size];
+    }
   }
 
-  // Keep one document in each output batch. Its token strings and doc-id datum
-  // then share the same lifetime, and the downstream vector sorter receives a
-  // dense batch without requiring a per-token row-mode call.
+  const bool fill_multiple_documents = can_fill_multiple_fts_documents();
   while (OB_SUCC(ret) && row_idx < batch_size) {
-    blocksstable::ObDatumRow *row = nullptr;
-    if (OB_FAIL(fts_index_.get_next_row(row))) {
-      if (OB_UNLIKELY(OB_ITER_END != ret)) {
-        LOG_WARN("failed to read fulltext token row", K(ret));
-      } else if (row_idx > 0) {
-        ret = OB_SUCCESS;
-        break;
-      } else if (OB_FAIL(fetch_next_fts_index_batch_data_row())) {
-        LOG_WARN("failed to fetch source document for fulltext batch", K(ret));
-      } else if (iter_end_) {
-        break;
-      } else if (OB_FAIL(fts_index_.get_next_row(row))) {
-        if (OB_ITER_END == ret) {
-          ret = OB_SUCCESS;
-          continue;
-        } else {
-          LOG_WARN("failed to read first token row", K(ret));
-        }
-      }
-    }
-
-    if (OB_SUCC(ret) && OB_NOT_NULL(row)) {
-      ObEvalCtx::BatchInfoScopeGuard guard(eval_ctx_);
-      guard.set_batch_idx(row_idx);
-      guard.set_batch_size(batch_size);
-      if (OB_FAIL(fill_generated_fts_cols(row))) {
-        LOG_WARN("failed to fill generated fulltext columns", K(ret), K(row_idx));
-      } else {
-        ++row_idx;
-      }
+    bool document_end = false;
+    if (OB_FAIL(fts_index_.append_next_batch_rows(
+        fts_batch_allocator_, batch_rows, batch_size, row_idx, document_end))) {
+      LOG_WARN("failed to append fulltext batch rows", K(ret), K(row_idx), K(batch_size));
+    } else if (row_idx >= batch_size) {
+      // The output batch is full; keep the current document cursor for next call.
+    } else if (!document_end) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("fulltext document did not fill batch or reach end", K(ret),
+          K(row_idx), K(batch_size));
+    } else if (row_idx > 0 && !fill_multiple_documents) {
+      // Extra passthrough columns still require one source document per batch.
+      break;
+    } else if (OB_FAIL(fetch_next_fts_index_batch_data_row())) {
+      LOG_WARN("failed to fetch source document for fulltext batch", K(ret));
+    } else if (iter_end_) {
+      break;
     }
   }
 
-  if (OB_SUCC(ret) && OB_FAIL(fill_fts_passthrough_cols(row_idx))) {
+  if (OB_SUCC(ret) && OB_FAIL(fill_fts_batch_rows(batch_rows, row_idx))) {
+    LOG_WARN("failed to materialize fulltext batch rows", K(ret), K(row_idx));
+  } else if (OB_SUCC(ret) && OB_FAIL(fill_fts_passthrough_cols(row_idx))) {
     LOG_WARN("failed to fill fulltext passthrough columns", K(ret), K(row_idx));
   } else if (OB_SUCC(ret)) {
     brs_.size_ = row_idx;
@@ -4107,10 +4131,108 @@ int ObTableScanOp::inner_get_next_fts_index_batch(const int64_t max_row_cnt)
   return ret;
 }
 
+int ObTableScanOp::fill_fts_batch_rows(
+    const ObFTIndexRowCache::BatchRow *batch_rows,
+    const int64_t row_count)
+{
+  int ret = OB_SUCCESS;
+  if (OB_UNLIKELY(row_count < 0)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid fulltext batch row count", K(ret), K(row_count));
+  } else if (0 == row_count) {
+    // Nothing to materialize.
+  } else if (OB_ISNULL(batch_rows)
+             || OB_UNLIKELY(ObFTIndexRowCache::FTS_COL_CNT != fts_output_exprs_.count())) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid fulltext batch rows", K(ret), KP(batch_rows), K(row_count),
+        K(fts_output_exprs_.count()));
+  } else {
+    ObDatum *output_datums[ObFTIndexRowCache::FTS_COL_CNT] = {};
+    for (int64_t col_idx = 0; OB_SUCC(ret) && col_idx < ObFTIndexRowCache::FTS_COL_CNT; ++col_idx) {
+      ObExpr *expr = fts_output_exprs_.at(col_idx);
+      if (OB_ISNULL(expr)) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("fulltext output expression is null", K(ret), K(col_idx));
+      } else if (OB_ISNULL(output_datums[col_idx] =
+                              expr->locate_datums_for_update(eval_ctx_, row_count))) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("failed to locate fulltext output datums", K(ret), K(col_idx), K(row_count));
+      }
+    }
+
+    if (OB_SUCC(ret)) {
+      const int64_t word_idx = MY_SPEC.is_fts_index_aux_ ? 0 : 1;
+      const int64_t doc_id_idx = MY_SPEC.is_fts_index_aux_ ? 1 : 0;
+      for (int64_t row_idx = 0; row_idx < row_count; ++row_idx) {
+        output_datums[word_idx][row_idx].set_datum(batch_rows[row_idx].word_);
+        output_datums[doc_id_idx][row_idx].set_datum(batch_rows[row_idx].doc_id_);
+        output_datums[2][row_idx].set_uint(batch_rows[row_idx].word_count_);
+        output_datums[3][row_idx].set_uint(batch_rows[row_idx].doc_length_);
+      }
+      for (int64_t col_idx = 0; col_idx < ObFTIndexRowCache::FTS_COL_CNT; ++col_idx) {
+        fts_output_exprs_.at(col_idx)->set_evaluated_projected(eval_ctx_);
+      }
+    }
+  }
+  return ret;
+}
+
+bool ObTableScanOp::can_fill_multiple_fts_documents() const
+{
+  bool matched[ObFTIndexRowCache::FTS_COL_CNT] = {};
+  bool can_fill = ObFTIndexRowCache::FTS_COL_CNT == MY_SPEC.output_.count()
+               && ObFTIndexRowCache::FTS_COL_CNT == fts_output_exprs_.count();
+  for (int64_t i = 0; can_fill && i < MY_SPEC.output_.count(); ++i) {
+    bool found = false;
+    ObExpr *output_expr = MY_SPEC.output_.at(i);
+    for (int64_t j = 0; OB_NOT_NULL(output_expr) && !found && j < fts_output_exprs_.count(); ++j) {
+      if (!matched[j]
+          && OB_NOT_NULL(fts_output_exprs_.at(j))
+          && output_expr == fts_output_exprs_.at(j)) {
+        matched[j] = true;
+        found = true;
+      }
+    }
+    can_fill = found;
+  }
+  return can_fill;
+}
+
 int ObTableScanOp::fetch_next_fts_index_batch_data_row()
 {
   int ret = OB_SUCCESS;
-  while (OB_SUCC(ret) && !iter_end_) {
+  const bool use_source_batch = can_fill_multiple_fts_documents();
+  while (OB_SUCC(ret) && !iter_end_ && use_source_batch) {
+    if (fts_source_row_idx_ >= fts_source_row_count_) {
+      if (fts_source_scan_end_) {
+        iter_end_ = true;
+      } else if (OB_FAIL(prefetch_fts_source_rows())) {
+        LOG_WARN("failed to prefetch fulltext source rows", K(ret));
+      } else if (0 == fts_source_row_count_ && fts_source_scan_end_) {
+        iter_end_ = true;
+      }
+    }
+    if (OB_SUCC(ret) && !iter_end_ && fts_source_row_idx_ < fts_source_row_count_) {
+      const FtsSourceRow &source_row = fts_source_rows_[fts_source_row_idx_++];
+      ObExpr *ft_expr = fts_output_exprs_.at(MY_SPEC.is_fts_index_aux_ ? 0 : 1);
+      if (OB_ISNULL(ft_expr)) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("fulltext source expression is null", K(ret));
+      } else if (OB_FAIL(fts_index_.segment(
+                     ft_expr->obj_meta_, source_row.doc_id_, source_row.fulltext_))) {
+        if (OB_ITER_END == ret) {
+          ret = OB_SUCCESS;
+        } else {
+          LOG_WARN("failed to segment prefetched fulltext source row", K(ret),
+              K(fts_source_row_idx_), K(fts_source_row_count_));
+        }
+      } else {
+        break;
+      }
+    }
+  }
+
+  while (OB_SUCC(ret) && !iter_end_ && !use_source_batch) {
     if (OB_FAIL(inner_get_next_batch_for_tsc(1))) {
       LOG_WARN("failed to fetch source fulltext row", K(ret));
     } else if (iter_end_) {
@@ -4168,6 +4290,98 @@ int ObTableScanOp::fetch_next_fts_index_batch_data_row()
   return ret;
 }
 
+int ObTableScanOp::prefetch_fts_source_rows()
+{
+  int ret = OB_SUCCESS;
+  const int64_t source_batch_size = MIN(FTS_SOURCE_BATCH_SIZE, MY_SPEC.max_batch_size_);
+  fts_source_allocator_.reuse();
+  fts_source_rows_ = nullptr;
+  fts_source_row_count_ = 0;
+  fts_source_row_idx_ = 0;
+  if (OB_UNLIKELY(source_batch_size <= 0) || !can_fill_multiple_fts_documents()) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid fulltext source batch state", K(ret), K(source_batch_size),
+        K(MY_SPEC.output_.count()), K(fts_output_exprs_.count()));
+  } else if (OB_FAIL(inner_get_next_batch_for_tsc(source_batch_size))) {
+    LOG_WARN("failed to fetch fulltext source batch", K(ret), K(source_batch_size));
+  } else {
+    const bool scan_end = iter_end_;
+    const int64_t scanned_row_count = brs_.size_;
+    ObExpr *ft_expr = fts_output_exprs_.at(MY_SPEC.is_fts_index_aux_ ? 0 : 1);
+    ObExpr *doc_id_expr = fts_output_exprs_.at(MY_SPEC.is_fts_index_aux_ ? 1 : 0);
+    if (scanned_row_count > 0) {
+      void *buf = fts_source_allocator_.alloc(sizeof(*fts_source_rows_) * scanned_row_count);
+      if (OB_ISNULL(buf)) {
+        ret = OB_ALLOCATE_MEMORY_FAILED;
+        LOG_WARN("failed to allocate fulltext source rows", K(ret), K(scanned_row_count));
+      } else if (OB_ISNULL(ft_expr) || OB_ISNULL(doc_id_expr)) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("fulltext source expressions are null", K(ret), KP(ft_expr), KP(doc_id_expr));
+      } else if (OB_ISNULL(brs_.skip_)) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("fulltext source batch skip vector is null", K(ret), K(scanned_row_count));
+      } else {
+        fts_source_rows_ = new (buf) FtsSourceRow[scanned_row_count];
+        ObArenaAllocator lob_allocator(ObModIds::OB_LOB_ACCESS_BUFFER,
+                                       OB_MALLOC_NORMAL_BLOCK_SIZE);
+        ObEvalCtx::BatchInfoScopeGuard guard(eval_ctx_);
+        guard.set_batch_size(scanned_row_count);
+        guard.set_batch_idx(0);
+        if (OB_FAIL(ft_expr->eval_batch(eval_ctx_, *brs_.skip_, scanned_row_count))) {
+          LOG_WARN("failed to evaluate batched fulltext expression", K(ret), K(scanned_row_count));
+        } else if (OB_FAIL(doc_id_expr->eval_batch(
+                       eval_ctx_, *brs_.skip_, scanned_row_count))) {
+          LOG_WARN("failed to evaluate batched fulltext document id", K(ret), K(scanned_row_count));
+        }
+        for (int64_t i = 0; OB_SUCC(ret) && i < scanned_row_count; ++i) {
+          if (brs_.skip_->at(i)) {
+            continue;
+          }
+          ObDatum *ft_datum = nullptr;
+          ObDatum *doc_id_datum = nullptr;
+          guard.set_batch_idx(i);
+          lob_allocator.reuse();
+          if (OB_FAIL(ft_expr->eval(eval_ctx_, ft_datum))) {
+            LOG_WARN("failed to evaluate batched fulltext expression", K(ret), K(i));
+          } else if (OB_FAIL(doc_id_expr->eval(eval_ctx_, doc_id_datum))) {
+            LOG_WARN("failed to evaluate batched fulltext document id", K(ret), K(i));
+          } else if (OB_ISNULL(ft_datum) || OB_ISNULL(doc_id_datum)) {
+            ret = OB_ERR_UNEXPECTED;
+            LOG_WARN("fulltext source datum is null", K(ret), K(i),
+                KP(ft_datum), KP(doc_id_datum));
+          } else {
+            ObString fulltext = ft_datum->get_string();
+            FtsSourceRow &source_row = fts_source_rows_[fts_source_row_count_];
+            if (OB_FAIL(ObTextStringHelper::read_real_string_data(
+                    lob_allocator,
+                    *ft_datum,
+                    ft_expr->datum_meta_,
+                    ft_expr->obj_meta_.has_lob_header(),
+                    fulltext))) {
+              LOG_WARN("failed to read batched fulltext data", K(ret), K(i));
+            } else if (OB_FAIL(source_row.doc_id_.deep_copy(
+                           *doc_id_datum, fts_source_allocator_))) {
+              LOG_WARN("failed to copy batched fulltext document id", K(ret), K(i));
+            } else if (OB_FAIL(ob_write_string(
+                           fts_source_allocator_, fulltext, source_row.fulltext_))) {
+              LOG_WARN("failed to copy batched fulltext data", K(ret), K(i), K(fulltext.length()));
+            } else {
+              ++fts_source_row_count_;
+            }
+          }
+        }
+      }
+    }
+    if (OB_SUCC(ret)) {
+      fts_source_scan_end_ = scan_end;
+      // The table scan may already know it reached EOF, but buffered documents
+      // must be consumed before the FTS producer exposes its own end state.
+      iter_end_ = scan_end && 0 == fts_source_row_count_;
+    }
+  }
+  return ret;
+}
+
 int ObTableScanOp::fill_fts_passthrough_cols(const int64_t batch_size)
 {
   int ret = OB_SUCCESS;
@@ -4176,14 +4390,15 @@ int ObTableScanOp::fill_fts_passthrough_cols(const int64_t batch_size)
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < MY_SPEC.output_.count(); ++i) {
       ObExpr *expr = MY_SPEC.output_.at(i);
+      bool is_generated_fts_expr = false;
+      for (int64_t j = 0; !is_generated_fts_expr && j < fts_output_exprs_.count(); ++j) {
+        is_generated_fts_expr = expr == fts_output_exprs_.at(j);
+      }
       if (OB_ISNULL(expr)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("fulltext output expression is null", K(ret), K(i));
-      } else if (T_FUN_SYS_WORD_SEGMENT == expr->type_
-                 || T_FUN_SYS_DOC_ID == expr->type_
-                 || T_FUN_SYS_WORD_COUNT == expr->type_
-                 || T_FUN_SYS_DOC_LENGTH == expr->type_) {
-        // Generated fulltext columns were filled one token at a time above.
+      } else if (is_generated_fts_expr) {
+        // Generated fulltext columns were materialized by fill_fts_batch_rows().
       } else {
         ObDatum *first_datum = nullptr;
         ObEvalCtx::BatchInfoScopeGuard guard(eval_ctx_);

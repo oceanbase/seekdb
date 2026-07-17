@@ -715,6 +715,14 @@ protected:
     return range_buffers;
   }
 private:
+  struct FtsSourceRow final
+  {
+    FtsSourceRow() : doc_id_(), fulltext_() {}
+    common::ObDatum doc_id_;
+    common::ObString fulltext_;
+  };
+  static constexpr int64_t FTS_SOURCE_BATCH_SIZE = 64;
+
   const ObTableScanSpec& get_tsc_spec() {return MY_SPEC;}
   const ObTableScanCtDef& get_tsc_ctdef() {return MY_SPEC.tsc_ctdef_;}
   int inner_get_next_row_for_tsc();
@@ -725,7 +733,11 @@ private:
   int fetch_next_fts_index_rows();
   int inner_get_next_fts_index_batch(const int64_t max_row_cnt);
   int fetch_next_fts_index_batch_data_row();
+  int prefetch_fts_source_rows();
+  int fill_fts_batch_rows(const ObFTIndexRowCache::BatchRow *batch_rows,
+                          const int64_t row_count);
   int fill_fts_passthrough_cols(const int64_t batch_size);
+  bool can_fill_multiple_fts_documents() const;
   int init_fts_output_exprs();
   int fill_generated_fts_cols(ObDatumRow *row);
   int get_output_fts_col_expr_by_type(const ObExprOperatorType &type, ObExpr *&expr);
@@ -758,6 +770,12 @@ protected:
   bool in_rescan_;
   ObDomainIndexCache domain_index_;
   ObFTIndexRowCache fts_index_;
+  common::ObArenaAllocator fts_batch_allocator_;
+  common::ObArenaAllocator fts_source_allocator_;
+  FtsSourceRow *fts_source_rows_;
+  int64_t fts_source_row_count_;
+  int64_t fts_source_row_idx_;
+  bool fts_source_scan_end_;
   common::ObSEArray<ObExpr *, 4> fts_output_exprs_;
 
   // output_ is used to output data, TSC operator directly invokes output_::get_next_row(s),

@@ -1359,70 +1359,6 @@ void ObSortVecOpImpl<Compare, Store_Row, has_addon>::set_blk_holder(
 }
 
 template <typename Compare, typename Store_Row, bool has_addon>
-bool ObSortVecOpImpl<Compare, Store_Row, has_addon>::can_use_global_encoded_partition_sort() const
-{
-  return part_cnt_ > 0
-      && enable_encode_sortkey_
-      && !has_addon
-      && INT64_MAX == topn_cnt_
-      && !is_fetch_with_ties_
-      && !is_fixed_key_sort_enabled_
-      && OB_NOT_NULL(sk_exprs_)
-      && OB_NOT_NULL(sk_collations_)
-      && OB_NOT_NULL(cmp_sk_exprs_)
-      && OB_NOT_NULL(cmp_sort_collations_)
-      && OB_NOT_NULL(sk_row_meta_)
-      && sk_exprs_ == cmp_sk_exprs_
-      && sk_collations_ == cmp_sort_collations_
-      && sk_exprs_->count() > 0
-      && sk_collations_->count() > part_cnt_ + 1
-      && OB_NOT_NULL(sk_exprs_->at(0))
-      && T_FUN_SYS_ENCODE_SORTKEY == sk_exprs_->at(0)->type_;
-}
-
-template <typename Compare, typename Store_Row, bool has_addon>
-int ObSortVecOpImpl<Compare, Store_Row, has_addon>::try_global_encoded_partition_sort(
-    const RowMeta &row_meta,
-    common::ObIArray<Store_Row *> &rows,
-    const int64_t rows_begin,
-    const int64_t rows_end,
-    bool &sorted)
-{
-  int ret = OB_SUCCESS;
-  sorted = false;
-  if (!can_use_global_encoded_partition_sort()) {
-    // Keep the established hash partition sort for every other shape.
-  } else if (OB_UNLIKELY(rows_begin < 0 || rows_end < rows_begin || rows_end > rows.count())) {
-    ret = OB_INVALID_ARGUMENT;
-    SQL_ENG_LOG(WARN, "invalid global encoded partition sort range",
-        K(ret), K(rows_begin), K(rows_end), K(rows.count()));
-  } else if (rows_end - rows_begin <= 1) {
-    sorted = true;
-  } else {
-    bool can_encode = true;
-    ObAdaptiveQS<Store_Row> aqs(rows, row_meta, mem_context_->get_malloc_allocator());
-    if (OB_FAIL(aqs.init(
-        rows, mem_context_->get_malloc_allocator(), rows_begin, rows_end, can_encode))) {
-      SQL_ENG_LOG(WARN, "failed to init global encoded partition sort", K(ret));
-    } else if (can_encode) {
-      aqs.sort(rows_begin, rows_end);
-      sorted = true;
-      SQL_ENG_LOG(TRACE, "use global encoded partition sort",
-          K(rows_begin), K(rows_end), K(part_cnt_));
-    } else {
-      // A NULL encoded key means the runtime encoder could not preserve the
-      // complete ordering. AQS has not changed %rows yet, so the old path is a
-      // side-effect-free fallback.
-      enable_encode_sortkey_ = false;
-      comp_.fallback_to_disable_encode_sortkey();
-      SQL_ENG_LOG(TRACE, "fallback from global encoded partition sort",
-          K(rows_begin), K(rows_end), K(part_cnt_));
-    }
-  }
-  return ret;
-}
-
-template <typename Compare, typename Store_Row, bool has_addon>
 int ObSortVecOpImpl<Compare, Store_Row, has_addon>::do_partition_sort(
   const RowMeta &row_meta, common::ObIArray<Store_Row *> &rows, const int64_t rows_begin,
   const int64_t rows_end)
@@ -1571,14 +1507,7 @@ int ObSortVecOpImpl<Compare, Store_Row, has_addon>::sort_inmem_data()
         }
       }
       if (part_cnt_ > 0) {
-        bool globally_sorted = false;
-        if (OB_FAIL(try_global_encoded_partition_sort(
-            *sk_row_meta_, *rows_, begin, rows_->count(), globally_sorted))) {
-          SQL_ENG_LOG(WARN, "failed to try global encoded partition sort", K(ret));
-        } else if (!globally_sorted
-            && OB_FAIL(do_partition_sort(*sk_row_meta_, *rows_, begin, rows_->count()))) {
-          SQL_ENG_LOG(WARN, "failed to do partition sort", K(ret));
-        }
+        OZ(do_partition_sort(*sk_row_meta_, *rows_, begin, rows_->count()));
       } else if (enable_encode_sortkey_) {
           if (is_fixed_key_sort_enabled_) {
             if (OB_FAIL(do_fixed_key_sort(begin))) {
