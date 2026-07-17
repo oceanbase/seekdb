@@ -15,6 +15,7 @@
 #   MYSQL_VERBOSE  mysql 客户端命令，保留普通输出（默认 -h127.0.0.1 -P2881 -uroot --default-character-set=utf8mb4）
 #   LABEL          结果标签，如 before / after（默认 unknown）
 #   DIAG           设为 0 关闭关键路径诊断输出；默认 1，打印运行环境/索引/分词/EXPLAIN 快照
+#   HEARTBEAT_SEC  长耗时 mysql 命令的心跳输出间隔秒数（默认 5）
 #   ROWS           插入文档数（默认 20000）
 #   BATCH          每批 INSERT 行数（默认 500）
 #   ROUNDS         TOKENIZE 压测轮次（默认 3000）
@@ -31,6 +32,7 @@ MYSQL="${MYSQL:-mysql -h127.0.0.1 -P2881 -uroot -N -s --default-character-set=ut
 MYSQL_VERBOSE="${MYSQL_VERBOSE:-mysql -h127.0.0.1 -P2881 -uroot --default-character-set=utf8mb4}"
 LABEL="${LABEL:-unknown}"
 DIAG="${DIAG:-1}"
+HEARTBEAT_SEC="${HEARTBEAT_SEC:-5}"
 ROWS="${ROWS:-20000}"
 BATCH="${BATCH:-500}"
 ROUNDS="${ROUNDS:-3000}"
@@ -69,6 +71,33 @@ elapsed_ms() {
 
 mysql_exec() { $MYSQL -e "SET NAMES utf8mb4; SET ob_query_timeout = 100000000000; SET ob_trx_timeout = 100000000000; $1"; }
 mysql_exec_verbose() { $MYSQL_VERBOSE -e "SET NAMES utf8mb4; SET ob_query_timeout = 100000000000; SET ob_trx_timeout = 100000000000; $1"; }
+
+run_mysql_file_with_heartbeat() {
+  local name="$1" sql_file="$2"
+  local heartbeat_sec="${3:-${HEARTBEAT_SEC}}"
+  local start_ns now_elapsed rc mysql_pid heartbeat_pid
+
+  start_ns=$(now_ns)
+  set +e
+  $MYSQL < "${sql_file}" >/dev/null &
+  mysql_pid=$!
+  (
+    while kill -0 "${mysql_pid}" 2>/dev/null; do
+      sleep "${heartbeat_sec}"
+      if kill -0 "${mysql_pid}" 2>/dev/null; then
+        now_elapsed=$(elapsed_sec "${start_ns}" "$(now_ns)")
+        log "    ${name}: running ${now_elapsed}s ..."
+      fi
+    done
+  ) &
+  heartbeat_pid=$!
+  wait "${mysql_pid}"
+  rc=$?
+  set -e
+  kill "${heartbeat_pid}" 2>/dev/null || true
+  wait "${heartbeat_pid}" 2>/dev/null || true
+  return "${rc}"
+}
 
 print_prefixed_output() {
   local prefix="$1" text="${2:-}"
@@ -134,6 +163,7 @@ print_runtime_context() {
   fi
   log "[diag] runtime context ..."
   log "  diag=${DIAG}"
+  log "  heartbeat_sec=${HEARTBEAT_SEC}"
   log "  mysql_cmd=${MYSQL}"
   log "  mysql_verbose_cmd=${MYSQL_VERBOSE}"
   run_diag_shell "pwd" "pwd"
@@ -300,9 +330,12 @@ run_query_bench() {
 
 time_mysql_command() {
   local name="$1" sql="$2"
-  local start_ns end_ns total_sec
+  local start_ns end_ns total_sec sql_file
+  sql_file="${TMP_DIR}/${name}.single.sql"
+  write_session_header "${sql_file}"
+  printf '%s;\n' "${sql%;}" >> "${sql_file}"
   start_ns=$(now_ns)
-  mysql_exec "${sql}" >/dev/null
+  run_mysql_file_with_heartbeat "${name}" "${sql_file}"
   end_ns=$(now_ns)
   total_sec=$(elapsed_sec "${start_ns}" "${end_ns}")
   METRICS["${name}_sec"]="${total_sec}"
