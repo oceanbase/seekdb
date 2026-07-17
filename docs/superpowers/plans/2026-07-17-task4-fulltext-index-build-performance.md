@@ -760,7 +760,7 @@ Apply the upstream changes for every exact production path listed above, using t
 
 - [ ] **Step 3: Close the 283-row audit**
 
-Run the upstream `git diff --name-status` command and inspect every audit row. No row may remain `未移植`. The only permitted `功能排除` rows are build/test infrastructure absent from seekdb (`mittest/simple_server`, `src/objit/CMakeLists.txt`) and Table API-only adapters; each exclusion row must point to the seekdb test or SQL/DDL implementation that covers the same six-system requirement.
+Run the upstream `git diff --name-status` command and inspect every audit row. No row may remain `未移植`. Permitted `功能排除` rows are build/test infrastructure absent from seekdb (`mittest/simple_server`, `src/objit/CMakeLists.txt`) and Table API-only adapters; each such exclusion row must point to the seekdb test or SQL/DDL implementation that covers the same six-system requirement. In addition, an incidental hunk may be excluded only when all three conditions hold: it has no runtime-behavior relationship to the six optimization systems, seekdb has not introduced the corresponding module, and the upstream hunk is limited to a compile dependency or syntax cleanup. This exception must be justified with per-hunk evidence and must not be generalized to adjacent files or directories. Audit row 020 (`src/observer/virtual_table/ob_all_virtual_logservice_cluster_info.cpp`) is one candidate because its only upstream hunk adds the compile-only `src/logservice/ipalf/ipalf_env.h` include and seekdb has no `ObAllVirtualLogServiceClusterInfo` module; only Task 8 may update its final state to `功能排除` after confirming that evidence.
 
 - [ ] **Step 4: Audit Chinese comments and forbidden legacy symbols**
 
