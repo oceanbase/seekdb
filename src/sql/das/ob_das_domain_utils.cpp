@@ -214,8 +214,6 @@ int ObFtsDDLTokenCache::materialize_rows(const EntryHeader &header,
   void *rows_buf = nullptr;
   if (header.token_count_ <= 0) {
     ret = OB_ITER_END;
-  } else if (OB_FAIL(rows.reserve(header.token_count_))) {
-    LOG_WARN("reserve cached fulltext row array failed", K(ret), K(header.token_count_));
   } else if (OB_ISNULL(rows_buf = allocator.alloc(
                  header.token_count_ * sizeof(blocksstable::ObDatumRow)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
@@ -703,8 +701,8 @@ int ObDASDomainUtils::build_ft_doc_word_infos(
 {
   int ret = OB_SUCCESS;
   static int64_t FT_WORD_DOC_COL_CNT = 4;
-  static constexpr int64_t FT_MAX_WORD_BUCKET = 4099;
-  const int64_t ft_word_bkt_cnt = MIN(MAX(fulltext.length() / 8, 2), FT_MAX_WORD_BUCKET);
+  static constexpr int64_t FT_MAX_WORD_BUCKET = 997;
+  const int64_t ft_word_bkt_cnt = MIN(MAX(fulltext.length() / 10, 2), FT_MAX_WORD_BUCKET);
   int64_t doc_length = 0;
   ObFTWordMap ft_word_map;
   void *rows_buf = nullptr;
@@ -726,8 +724,6 @@ int ObDASDomainUtils::build_ft_doc_word_infos(
         K(ft_obj_meta.get_collation_type()), K(fulltext));
   } else if (0 == ft_word_map.size()) {
     ret = OB_ITER_END;
-  } else if (OB_FAIL(word_rows.reserve(word_rows.count() + ft_word_map.size()))) {
-    LOG_WARN("reserve fulltext word row array failed", K(ret), K(ft_word_map.size()));
   } else if (OB_ISNULL(rows_buf = reinterpret_cast<char *>(
                            allocator.alloc(ft_word_map.size() * sizeof(blocksstable::ObDatumRow))))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
