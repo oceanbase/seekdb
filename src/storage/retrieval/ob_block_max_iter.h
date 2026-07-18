@@ -17,6 +17,8 @@
 #ifndef OB_BLOCK_MAX_ITER_H_
 #define OB_BLOCK_MAX_ITER_H_
 
+#include "lib/allocator/page_arena.h"
+#include "lib/container/ob_se_array.h"
 #include "sql/das/ob_das_ir_define.h"
 #include "sql/das/ob_das_vec_define.h"
 #include "sql/engine/expr/ob_expr_bm25.h"
@@ -159,6 +161,9 @@ public:
   virtual ~ObBlockMaxScoreIterator() { reset(); }
   void reset();
   void reuse();
+  void enable_replay_cache() { replay_cache_enabled_ = true; }
+  int rewind_to_replay_cache(bool &rewound);
+  bool is_replaying_cache() const { return replaying_cache_; }
   template<typename RankingParam>
   int init(
       const RankingParam &ranking_param,
@@ -170,7 +175,7 @@ public:
    */
   int get_next(const ObMaxScoreTuple *&max_score_tuple);
   int get_curr_max_score_tuple(const ObMaxScoreTuple *&max_score_tuple);
-  int advance_to(const ObDatum &domin_id, const bool inclusive);
+  int advance_to(const ObDatum &domain_id, const bool inclusive);
 private:
   // TableScanParam as input param currently for:
   // 1. reuse essential input parameter for accessing data in tablet
@@ -181,7 +186,22 @@ private:
   int init_advance_rowkey(const ObBlockMaxScoreIterParam &iter_param, ObTableScanParam &scan_param);
   int init_cmp_funcs(const ObBlockMaxScoreIterParam &block_max_scan_param);
   int calc_domain_id_range(const ObDatumRow &agg_row, const ObDatumRowkey &endkey);
+  int cache_curr_max_score_tuple();
+  int load_cached_max_score_tuple(const int64_t cache_idx);
+  int advance_replay_cache_to(const ObDatum &domain_id, const bool inclusive);
+  void disable_replay_cache();
 private:
+  struct ObCachedMaxScoreTuple
+  {
+    ObCachedMaxScoreTuple()
+      : max_score_(0.0), min_domain_id_(), max_domain_id_() {}
+    double max_score_;
+    ObDatum min_domain_id_;
+    ObDatum max_domain_id_;
+    TO_STRING_KV(K_(max_score), K_(min_domain_id), K_(max_domain_id));
+  };
+  static constexpr int64_t MAX_REPLAY_CACHE_TUPLE_COUNT = 2048;
+  static constexpr int64_t MAX_REPLAY_CACHE_DATUM_BYTES = 512 * 1024;
   typedef int (*CalcMaxScoreFunc)(const ObDatumRow &agg_row, ObIBlockMaxScoreCalc &scorer, double &max_score);
   static constexpr int64_t MAX_SCORE_CALC_BUF_SIZE = 
       sizeof(ObBlockMaxScoreCalc<ObBlockMaxBM25RankingParam>) > sizeof(ObBlockMaxScoreCalc<ObBlockMaxIPRankingParam>) ?
@@ -210,7 +230,13 @@ private:
   ObIBlockMaxScoreCalc *scorer_;
   CalcMaxScoreFunc calc_max_score_;
   ObStorageDatum scan_dim_datum_;
-  bool first_tuple_iterated_;
+  ObArenaAllocator replay_cache_allocator_;
+  ObSEArray<ObCachedMaxScoreTuple, 16> max_score_cache_;
+  int64_t replay_cache_pos_;
+  int64_t replay_cache_datum_bytes_;
+  bool replay_cache_enabled_;
+  bool replay_cache_complete_;
+  bool replaying_cache_;
   bool has_been_advanced_;
   bool is_inited_;
   DISALLOW_COPY_AND_ASSIGN(ObBlockMaxScoreIterator);

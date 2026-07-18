@@ -412,6 +412,9 @@ int ObCreateTableResolver::resolve(const ParseNode &parse_tree)
               //  //do nothing
               //}
             }
+            if (OB_SUCC(ret) && OB_FAIL(check_fulltext_dict_table(table_schema))) {
+              SQL_RESV_LOG(WARN, "invalid fulltext dictionary table", K(ret), K(table_schema));
+            }
           }
         }
 
@@ -543,6 +546,19 @@ int ObCreateTableResolver::resolve(const ParseNode &parse_tree)
       }
     }
 
+  }
+  return ret;
+}
+
+int ObCreateTableResolver::check_fulltext_dict_table(const ObTableSchema &table_schema) const
+{
+  int ret = OB_SUCCESS;
+  if (!table_schema.is_fulltext_dict()) {
+  } else if (!has_explicit_organization_index()) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_USER_ERROR(OB_INVALID_ARGUMENT, "FULLTEXT_DICT table must specify ORGANIZATION INDEX");
+  } else if (OB_FAIL(table_schema.check_fulltext_dict_structure())) {
+    SQL_RESV_LOG(WARN, "invalid fulltext dictionary structure", K(ret), K(table_schema));
   }
   return ret;
 }
@@ -1690,6 +1706,8 @@ int ObCreateTableResolver::set_index_option_to_arg()
     SQL_RESV_LOG(WARN, "allocator is null.", K(ret));
   } else {
     index_arg_.index_option_.block_size_ = block_size_;
+    index_arg_.database_name_ = database_name_;
+    index_arg_.table_name_ = table_name_;
     if (OB_FAIL(ob_write_string(*allocator_, compress_method_,
                                 index_arg_.index_option_.compress_method_))) {
       SQL_RESV_LOG(WARN, "set compress func name failed", K(ret));

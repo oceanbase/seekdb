@@ -75,6 +75,7 @@ ObLogPlan::ObLogPlan(ObOptimizerContext &ctx, const ObDMLStmt *stmt)
   : optimizer_context_(ctx),
     allocator_(ctx.get_allocator()),
     stmt_(stmt),
+    generated_table_count_only_(false),
     log_op_factory_(allocator_),
     candidates_(),
     group_replaced_exprs_(),
@@ -7978,11 +7979,48 @@ int ObLogPlan::try_push_limit_into_table_scan(ObLogicalOperator *top,
     ObRawExpr *new_offset_expr = NULL;
 
     bool has_npd_filter = false; //has non-pushdown filter
+    bool has_extra_pushdown_filter = false;
+    const ObTextRetrievalInfo &tr_info = table_scan->get_text_retrieval_info();
+    const ObIArray<ObRawExpr *> &pushdown_filters = table_scan->get_pushdown_filter_exprs();
+    for (int64_t i = 0; !has_extra_pushdown_filter && i < pushdown_filters.count(); ++i) {
+      const ObRawExpr *filter = pushdown_filters.at(i);
+      const ObRawExpr *match_filter = tr_info.pushdown_match_filter_;
+      has_extra_pushdown_filter = OB_ISNULL(filter)
+          || OB_ISNULL(match_filter)
+          || (filter != match_filter && !filter->same_as(*match_filter));
+    }
     //if TSC contains filters that cannot be pushdown to the storage
     //the limit clause cannot be pushed down either.
     if (OB_FAIL(table_scan->has_nonpushdown_filter(has_npd_filter))) {
       LOG_WARN("check whether has non-pushdown filter failed", K(ret));
-    } else if (!has_npd_filter && !is_virtual_table(table_scan->get_ref_table_id()) &&
+    } else if (!has_npd_filter
+        && table_scan->get_text_retrieval_info().cardinality_only_limit_
+        && !is_virtual_table(table_scan->get_ref_table_id())
+        && !get_stmt()->is_calc_found_rows()
+        && !table_scan->is_sample_scan()
+        && OB_NOT_NULL(tr_info.pushdown_match_filter_)
+        && table_scan->get_filter_exprs().empty()
+        && !has_extra_pushdown_filter
+        && !(table_scan->get_is_index_global()
+             && table_scan->get_index_back()
+             && table_scan->has_index_lookup_filter())
+        && NULL == table_scan->get_limit_expr()
+        && NULL == table_scan->get_text_retrieval_info().topk_limit_expr_) {
+      // Apply LIMIT to the IR merge result. Truncating every token scan here
+      // could lose valid intersections for AND and Boolean queries.
+      // Keep the logical LIMIT as the correctness boundary. Each local IR merge
+      // may produce at most limit + offset rows; the outer LIMIT applies the
+      // final global OFFSET/LIMIT after partition results are combined.
+      ObTextRetrievalInfo &mutable_tr_info = table_scan->get_text_retrieval_info();
+      mutable_tr_info.topk_limit_expr_ = pushed_expr;
+      mutable_tr_info.topk_offset_expr_ = NULL;
+      mutable_tr_info.need_calc_relevance_ = false;
+      is_pushed = false;
+      LOG_TRACE("push local cardinality limit into text retrieval merge",
+                K(is_pushed), KPC(pushed_expr));
+    } else if (!has_npd_filter
+        && !table_scan->get_text_retrieval_info().cardinality_only_limit_
+        && !is_virtual_table(table_scan->get_ref_table_id()) &&
         !get_stmt()->is_calc_found_rows() && !table_scan->is_sample_scan() &&
         !(table_scan->get_is_index_global() && table_scan->get_index_back() && table_scan->has_index_lookup_filter()) &&
         (NULL == table_scan->get_limit_expr() ||
@@ -8017,7 +8055,13 @@ int ObLogPlan::try_push_limit_into_table_scan(ObLogicalOperator *top,
         is_pushed = false;
       }
     } else if (OB_NOT_NULL(table_scan->get_text_retrieval_info().topk_limit_expr_)) {
-      is_pushed = true;
+      if (!table_scan->get_text_retrieval_info().cardinality_only_limit_) {
+        is_pushed = true;
+      } else {
+        // The result limit is local to the IR merge. Preserve the logical
+        // LIMIT for final global LIMIT/OFFSET semantics.
+        is_pushed = false;
+      }
     } else if (OB_NOT_NULL(table_scan->get_vector_index_info().topk_limit_expr_)) {
       is_pushed = true;
     }
@@ -14651,12 +14695,37 @@ int ObLogPlan::prepare_text_retrieval_scan(const ObIArray<ObRawExpr *> &scan_mat
     ObTextRetrievalInfo &tr_info = table_scan->get_text_retrieval_info();
     tr_info.match_expr_ = match_against;
     tr_info.pushdown_match_filter_ = match_pred;
+    if (tr_info.cardinality_only_limit_
+        && scan_filters.empty()
+        && 1 == scan_match_filters.count()
+        && 1 == all_match_filters.count()
+        && OB_NOT_NULL(get_stmt()->get_limit_expr())) {
+      // The outer LIMIT remains the global correctness boundary. This local
+      // limit + offset bound lets match-only execution stop or safely bound
+      // posting scans without changing the cardinality observed by COUNT(*).
+      ObRawExpr *local_limit_expr = nullptr;
+      if (OB_FAIL(ObTransformUtils::make_pushdown_limit_count(
+              get_optimizer_context().get_expr_factory(),
+              *get_optimizer_context().get_session_info(),
+              get_stmt()->get_limit_expr(),
+              get_stmt()->get_offset_expr(),
+              local_limit_expr))) {
+        LOG_WARN("failed to build local text retrieval result limit", K(ret));
+      } else {
+        tr_info.topk_limit_expr_ = local_limit_expr;
+        tr_info.topk_offset_expr_ = nullptr;
+      }
+    }
     // in new version, doc_id_idx_tid_ is invalid.
-    table_scan->set_doc_id_index_table_id(tr_info.doc_id_idx_tid_);
-    if (table_scan->is_vec_adaptive_scan() || table_scan->is_vec_idx_scan_post_filter()) {
+    if (OB_SUCC(ret)) {
+      table_scan->set_doc_id_index_table_id(tr_info.doc_id_idx_tid_);
+    }
+    if (OB_SUCC(ret)
+        && (table_scan->is_vec_adaptive_scan() || table_scan->is_vec_idx_scan_post_filter())) {
       table_scan->set_rowkey_doc_table_id(tr_info.rowkey_idx_tid_);
     }
-    if (OB_FAIL(table_scan->set_is_skip_rowkey_doc(tr_info.doc_id_idx_tid_ == OB_INVALID_ID))) {
+    if (OB_FAIL(ret)) {
+    } else if (OB_FAIL(table_scan->set_is_skip_rowkey_doc(tr_info.doc_id_idx_tid_ == OB_INVALID_ID))) {
       LOG_WARN("failed to set skip rowkey doc flag", K(ret));
     } else if (OB_FAIL(table_scan->set_is_skip_rowkey_doc(tr_info.rowkey_idx_tid_ == OB_INVALID_ID))) {
       LOG_WARN("failed to set skip rowkey doc flag", K(ret));
@@ -14815,6 +14884,7 @@ int ObLogPlan::prepare_text_retrieval_info(const uint64_t ref_table_id,
   uint64_t inv_idx_tid = OB_INVALID_ID;
   ObSEArray<ObAuxTableMetaInfo, 4> index_infos;
   bool need_calc_relevance = true;
+  bool cardinality_only_limit = false;
   ObSEArray<ObExprConstraint, 2> constraints;
   uint64_t docid_col_id = OB_INVALID_ID;
   if (OB_ISNULL(match_against) || OB_ISNULL(get_stmt()) || OB_ISNULL(get_optimizer_context().get_query_ctx())) {
@@ -14895,18 +14965,20 @@ int ObLogPlan::prepare_text_retrieval_info(const uint64_t ref_table_id,
     }
   }
   if (OB_SUCC(ret)) {
-    /*
     if (OB_FAIL(ObTransformUtils::check_need_calc_match_score(get_optimizer_context().get_exec_ctx(),
+                                                              is_generated_table_count_only(),
                                                               get_stmt(),
                                                               match_against,
                                                               need_calc_relevance,
+                                                              cardinality_only_limit,
                                                               constraints))) {
       LOG_WARN("failed to check need calc relevance", K(ret));
-    } else if (!need_calc_relevance &&
+    } else if ((!need_calc_relevance || cardinality_only_limit) &&
                OB_FAIL(append_array_no_dup(get_optimizer_context().get_query_ctx()->all_expr_constraints_, constraints))) {
       LOG_WARN("failed to append array no dup", K(ret));
     }
-    */
+  }
+  if (OB_SUCC(ret)) {
     tr_info.match_expr_ = match_against;
     tr_info.inv_idx_tid_ = inv_idx_tid;
     tr_info.fwd_idx_tid_ = fwd_idx_tid;
@@ -14915,6 +14987,7 @@ int ObLogPlan::prepare_text_retrieval_info(const uint64_t ref_table_id,
     tr_info.data_table_id_ = ref_table_id;
     tr_info.pushdown_match_filter_ = nullptr;
     tr_info.need_calc_relevance_ = need_calc_relevance;
+    tr_info.cardinality_only_limit_ = cardinality_only_limit;
   }
   return ret;
 }

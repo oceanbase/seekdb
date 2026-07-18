@@ -60,6 +60,9 @@ private:
     return static_cast<ObISRDimBlockMaxIter *>(dim_iters_->at(iter_idx));
   }
   int fill_merge_heap_with_shallow_dims(const ObDatum *last_range_border_id, const bool inclusive);
+  int update_minimum_domain_id(
+      const ObDatum *candidate_domain_id,
+      const ObDatum *&minimum_domain_id);
   int try_generate_next_range_from_merge_heap(
       bool &is_candidate_range,
       const ObDatum *&min_domain_id_with_pivot,

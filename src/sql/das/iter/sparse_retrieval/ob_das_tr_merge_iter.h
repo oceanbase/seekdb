@@ -23,6 +23,7 @@
 #include "storage/retrieval/ob_text_daat_iter.h"
 #include "storage/retrieval/ob_text_taat_iter.h"
 #include "storage/retrieval/ob_sparse_lookup_iter.h"
+#include "share/ob_i_tablet_scan.h"
 
 namespace oceanbase
 {
@@ -146,6 +147,7 @@ private:
   int gen_inv_idx_scan_one_range(const ObString &query_token, const ObDocIdExt &doc_id, ObNewRange &scan_range);
   int gen_fwd_idx_scan_feak_range(ObNewRange &scan_range);
   int init_topk_limit();
+  int init_result_limit();
   int init_block_max_iter_param();
   int init_doc_length_est_param();
 private:
@@ -176,6 +178,7 @@ private:
   ObBlockStatScanParam doc_length_est_param_;
   ObFixedArray<ObSkipIndexColMeta, ObIAllocator> doc_length_est_stat_cols_;
   int64_t topk_limit_;
+  common::ObLimitParam result_limit_param_;
   ObLSID ls_id_;
   ObTabletID total_doc_cnt_tablet_id_;
   ObTabletID inv_idx_tablet_id_;

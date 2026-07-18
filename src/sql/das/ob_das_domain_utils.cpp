@@ -41,8 +41,47 @@ ObObjDatumMapType ObFTIndexRowCache::FTS_DOC_WORD_TYPES[] = {OBJ_DATUM_STRING, O
 ObExprOperatorType ObFTIndexRowCache::FTS_INDEX_EXPR_TYPE[] = {T_FUN_SYS_WORD_SEGMENT, T_FUN_SYS_DOC_ID, T_FUN_SYS_WORD_COUNT, T_FUN_SYS_DOC_LENGTH};
 ObExprOperatorType ObFTIndexRowCache::FTS_DOC_WORD_EXPR_TYPE[] = {T_FUN_SYS_DOC_ID, T_FUN_SYS_WORD_SEGMENT, T_FUN_SYS_WORD_COUNT, T_FUN_SYS_DOC_LENGTH};
 
+static constexpr int64_t FT_WORD_DOC_COL_CNT = 4;
+static constexpr int64_t FT_MIN_WORD_BUCKET_COUNT = 2;
+static constexpr int64_t FT_MAX_WORD_BUCKET_COUNT = 997;
+static constexpr int64_t FT_ESTIMATED_BYTES_PER_TOKEN = 10;
+static constexpr int64_t FT_MIN_RESERVED_WORD_NODES = 128;
+
+static int64_t estimate_ft_word_bucket_count(const int64_t fulltext_length)
+{
+  return MIN(MAX(fulltext_length / FT_ESTIMATED_BYTES_PER_TOKEN,
+                 FT_MIN_WORD_BUCKET_COUNT),
+             FT_MAX_WORD_BUCKET_COUNT);
+}
+
+static int prepare_ft_word_map(storage::ObFTWordMap &words, const int64_t bucket_count)
+{
+  int ret = OB_SUCCESS;
+  const bool need_grow = words.created() && bucket_count > words.bucket_count();
+  const bool need_create = !words.created() || need_grow;
+  const int64_t old_bucket_count = words.created() ? words.bucket_count() : 0;
+  if (need_grow && OB_FAIL(words.destroy())) {
+    LOG_WARN("fail to destroy undersized fulltext word map", K(ret),
+        K(bucket_count), K(old_bucket_count));
+  } else if (need_create
+             && OB_FAIL(words.create(bucket_count, common::ObMemAttr("FTWordMap")))) {
+    LOG_WARN("fail to create fulltext word map", K(ret), K(bucket_count));
+  } else if (need_create
+             && OB_FAIL(words.get_local_allocer().reserve(
+                 MAX(words.bucket_count(), FT_MIN_RESERVED_WORD_NODES)))) {
+    LOG_WARN("fail to reserve fulltext word map nodes", K(ret), K(bucket_count),
+        "actual_bucket_count", words.bucket_count());
+  }
+  return ret;
+}
+
 ObFTIndexRowCache::ObFTIndexRowCache()
-  : rows_(),
+  : words_(),
+    word_iter_(),
+    word_end_iter_(),
+    row_(),
+    doc_id_datum_(),
+    doc_length_(0),
     row_idx_(0),
     is_fts_index_aux_(true),
     helper_(),
@@ -70,6 +109,8 @@ int ObFTIndexRowCache::init(
     LOG_WARN("failed to create merge memctx", K(ret));
   } else if (OB_FAIL(helper_.init(&(merge_memctx_->get_arena_allocator()), parser_name, parser_properties))) {
     LOG_WARN("fail to init full-text parser helper", K(ret));
+  } else if (OB_FAIL(row_.init(FT_WORD_DOC_COL_CNT))) {
+    LOG_WARN("fail to init streaming fulltext index row", K(ret), K(FT_WORD_DOC_COL_CNT));
   } else {
     row_idx_ = 0;
     is_fts_index_aux_ = is_fts_index_aux;
@@ -86,58 +127,136 @@ int ObFTIndexRowCache::segment(const common::ObObjMeta &ft_obj_meta,
                                const ObString &fulltext)
 {
   int ret = OB_SUCCESS;
+  const int64_t ft_word_bkt_cnt = estimate_ft_word_bucket_count(fulltext.length());
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("ObFTIndexRowCache hasn't be initialized", K(ret), K(is_inited_));
   } else if (FALSE_IT(reuse())) {
-  } else if (OB_FAIL(ObDASDomainUtils::generate_fulltext_word_rows(merge_memctx_->get_arena_allocator(),
-                                                                   &helper_,
-                                                                   ft_obj_meta,
-                                                                   doc_id_datum,
-                                                                   fulltext,
-                                                                   is_fts_index_aux_,
-                                                                   rows_))) {
-    LOG_WARN("fail to generate fulltext word rows", K(ret), K(helper_), K(is_fts_index_aux_));
+  } else if (0 == fulltext.length()) {
+    ret = OB_ITER_END;
+  } else if (OB_FAIL(prepare_ft_word_map(words_, ft_word_bkt_cnt))) {
+    LOG_WARN("fail to prepare fulltext word map", K(ret), K(ft_word_bkt_cnt));
+  } else if (OB_FAIL(helper_.segment(ft_obj_meta,
+                                    fulltext.ptr(),
+                                    fulltext.length(),
+                                    doc_length_,
+                                    words_))) {
+    LOG_WARN("fail to segment fulltext", K(ret), K(helper_), K(ft_obj_meta), K(fulltext));
+  } else if (0 == words_.size()) {
+    ret = OB_ITER_END;
   } else {
+    doc_id_datum_ = doc_id_datum;
+    word_iter_ = words_.begin();
+    word_end_iter_ = words_.end();
     row_idx_ = 0;
   }
-  LOG_TRACE("word segment", K(ret), K(row_idx_), K(rows_.count()), K(doc_id_datum), K(fulltext));
+  LOG_TRACE("word segment", K(ret), K(row_idx_), K(words_.size()), K(doc_id_datum), K(fulltext));
   return ret;
 }
 
 int ObFTIndexRowCache::get_next_row(blocksstable::ObDatumRow *&row)
 {
   int ret = OB_SUCCESS;
+  row = nullptr;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("ObFTIndexRowCache hasn't be initialized", K(ret), K(is_inited_));
-  } else if (row_idx_ >= rows_.count()) {
+  } else if (!words_.created() || word_iter_ == word_end_iter_) {
     ret = OB_ITER_END;
   } else {
-    row = (rows_[row_idx_]);
+    const storage::ObFTWord &ft_word = word_iter_->first;
+    const int64_t word_cnt = word_iter_->second;
+    const int64_t word_idx = is_fts_index_aux_ ? 0 : 1;
+    const int64_t doc_id_idx = is_fts_index_aux_ ? 1 : 0;
+    row_.reuse();
+    row_.storage_datums_[word_idx].set_datum(ft_word.get_word());
+    row_.storage_datums_[doc_id_idx].shallow_copy_from_datum(doc_id_datum_);
+    row_.storage_datums_[2].set_uint(word_cnt);
+    row_.storage_datums_[3].set_uint(doc_length_);
+    row = &row_;
+    ++word_iter_;
     ++row_idx_;
   }
-  LOG_TRACE("get next row", K(ret), KPC(row), K(row_idx_), K(rows_.count()));
+  LOG_TRACE("get next row", K(ret), KPC(row), K(row_idx_), K(words_.size()));
+  return ret;
+}
+
+int ObFTIndexRowCache::append_next_batch_rows(
+    common::ObIAllocator &allocator,
+    ObFTIndexRowCache::BatchRow *batch_rows,
+    const int64_t capacity,
+    int64_t &row_count,
+    bool &document_end)
+{
+  int ret = OB_SUCCESS;
+  document_end = false;
+  if (OB_UNLIKELY(!is_inited_)) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("ObFTIndexRowCache hasn't be initialized", K(ret), K(is_inited_));
+  } else if (OB_ISNULL(batch_rows)
+             || OB_UNLIKELY(capacity <= 0 || row_count < 0 || row_count > capacity)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid fulltext batch row arguments", K(ret), KP(batch_rows),
+        K(capacity), K(row_count));
+  } else if (!words_.created() || word_iter_ == word_end_iter_) {
+    document_end = true;
+  } else {
+    common::ObDatum stable_doc_id;
+    if (OB_FAIL(stable_doc_id.deep_copy(doc_id_datum_, allocator))) {
+      LOG_WARN("failed to copy fulltext document id for batch", K(ret), K(doc_id_datum_));
+    }
+    while (OB_SUCC(ret) && row_count < capacity && word_iter_ != word_end_iter_) {
+      ObFTIndexRowCache::BatchRow &batch_row = batch_rows[row_count];
+      const storage::ObFTWord &ft_word = word_iter_->first;
+      if (OB_FAIL(batch_row.word_.deep_copy(ft_word.get_word(), allocator))) {
+        LOG_WARN("failed to copy fulltext word for batch", K(ret), K(ft_word), K(row_count));
+      } else {
+        batch_row.doc_id_.set_datum(stable_doc_id);
+        batch_row.word_count_ = static_cast<uint64_t>(word_iter_->second);
+        batch_row.doc_length_ = static_cast<uint64_t>(doc_length_);
+        ++word_iter_;
+        ++row_idx_;
+        ++row_count;
+      }
+    }
+    document_end = (word_iter_ == word_end_iter_);
+  }
   return ret;
 }
 
 void ObFTIndexRowCache::reset()
 {
-  rows_.reset();
-  row_idx_ = 0;
-  is_fts_index_aux_ = true;
+  reuse();
+  if (words_.created()) {
+    const int tmp_ret = words_.destroy();
+    if (OB_SUCCESS != tmp_ret) {
+      LOG_WARN_RET(tmp_ret, "fail to destroy fulltext word map");
+    }
+  }
+  row_.reset();
   helper_.reset();
   if (OB_NOT_NULL(merge_memctx_)) {
     DESTROY_CONTEXT(merge_memctx_);
     merge_memctx_ = nullptr;
   }
+  is_fts_index_aux_ = true;
   is_inited_ = false;
 }
 
 void ObFTIndexRowCache::reuse()
 {
-  rows_.reuse();
+  if (words_.created()) {
+    const int tmp_ret = words_.reuse();
+    if (OB_SUCCESS != tmp_ret) {
+      LOG_WARN_RET(tmp_ret, "fail to reuse fulltext word map");
+    }
+  }
+  word_iter_ = storage::ObFTWordMap::const_iterator();
+  word_end_iter_ = storage::ObFTWordMap::const_iterator();
+  doc_id_datum_.reset();
+  doc_length_ = 0;
   row_idx_ = 0;
+  row_.reuse();
   if (OB_NOT_NULL(merge_memctx_)) {
     merge_memctx_->reset_remain_one_page();
   }

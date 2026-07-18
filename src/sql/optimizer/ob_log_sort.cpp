@@ -45,11 +45,16 @@ int ObLogSort::create_encode_sortkey_expr(const common::ObIArray<OrderItem> &ord
     LOG_WARN("get unexpected null", K(get_plan()), K(ret));
   } else {
     int64_t ecd_pos = 0;
+    ObSEArray<OrderItem, 8> full_part_order_keys;
+    const common::ObIArray<OrderItem> *encode_order_keys = &order_keys;
 
-    // Prefix sort and hash-based sort both can combine with encode sort.
-    // And prefix sort is prior to hash-based sort(part sort).
-    if (is_prefix_sort() || is_part_sort()) {
-      int64_t orig_pos = is_prefix_sort() ? get_prefix_pos() : get_part_cnt();
+    // Prefix sort only encodes the suffix because its prefix is already ordered
+    // by the child. Partition sort is different: dumped chunks are merged by a
+    // global comparator, so the encoded key must describe the complete order.
+    // Keep the raw hash/partition columns in the stored row for grouping, and
+    // encode [partition hash, partition keys, order-by suffix] for comparisons.
+    if (is_prefix_sort()) {
+      const int64_t orig_pos = get_prefix_pos();
       for (int64_t i = 0; OB_SUCC(ret) && i < orig_pos; ++i) {
         if (OB_FAIL(encode_sortkeys_.push_back(order_keys.at(i)))) {
           LOG_WARN("failed to add encodekey", K(ret));
@@ -57,14 +62,26 @@ int ObLogSort::create_encode_sortkey_expr(const common::ObIArray<OrderItem> &ord
           ecd_pos++;
         }
       }
+    } else if (is_part_sort()) {
+      if (OB_ISNULL(hash_sortkey_.expr_)) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("partition hash sort key is null", K(ret), K(part_cnt_));
+      } else if (OB_FAIL(full_part_order_keys.push_back(hash_sortkey_))) {
+        LOG_WARN("failed to add partition hash sort key", K(ret));
+      } else if (OB_FAIL(append(full_part_order_keys, order_keys))) {
+        LOG_WARN("failed to add partition sort keys", K(ret));
+      } else {
+        encode_order_keys = &full_part_order_keys;
+      }
     } else {
       ecd_pos = 0;
     }
     ObRawExprFactory &expr_factory = get_plan()->get_optimizer_context().get_expr_factory();
     ObExecContext* exec_ctx = get_plan()->get_optimizer_context().get_exec_ctx();
     OrderItem encode_sortkey;
-    if (OB_FAIL(ObSQLUtils::create_encode_sortkey_expr(
-        expr_factory, exec_ctx, order_keys, ecd_pos, encode_sortkey))) {
+    if (OB_FAIL(ret)) {
+    } else if (OB_FAIL(ObSQLUtils::create_encode_sortkey_expr(
+        expr_factory, exec_ctx, *encode_order_keys, ecd_pos, encode_sortkey))) {
       LOG_WARN("failed to create encode sortkey expr", K(ret));
     } else if (OB_FAIL(encode_sortkeys_.push_back(encode_sortkey))) {
       LOG_WARN("failed to push back encode sortkey", K(ret));

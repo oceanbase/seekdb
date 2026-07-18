@@ -2395,9 +2395,15 @@ int ObStaticEngineCG::generate_spec(ObLogSort &op, ObSortVecSpec &spec, const bo
       ObSEArray<OrderItem, 1> sk_keys;
       ObSEArray<OrderItem, 1> addon_keys;
       bool enable_encode_sortkey_opt = op.enable_encode_sortkey_opt();
-      if (op.get_part_cnt() > 0 || nullptr != op.get_topn_expr()
-          || nullptr != op.get_topk_limit_expr()) {
+      if (nullptr != op.get_topn_expr() || nullptr != op.get_topk_limit_expr()
+          || (op.get_part_cnt() > 0 && !opt_ctx_->is_online_ddl())) {
         enable_encode_sortkey_opt = false;
+      }
+      // Partition encoded keys retain raw partition columns next to the encoded
+      // key. Keeping all fields in one row also gives the fallback comparator a
+      // complete key if encoding encounters an unsupported value at runtime.
+      if (enable_encode_sortkey_opt && op.get_part_cnt() > 0) {
+        is_store_sortkey_separately = false;
       }
       if (OB_ISNULL(spec.get_child())) {
         ret = OB_ERR_UNEXPECTED;
@@ -5339,7 +5345,6 @@ int ObStaticEngineCG::generate_normal_tsc(ObLogTableScan &op, ObTableScanSpec &s
       } else if (ddl_table_schema->is_fts_index_aux() || ddl_table_schema->is_fts_doc_word_aux()) {
         spec.is_fts_ddl_ = true;
         spec.is_fts_index_aux_ = ddl_table_schema->is_fts_index_aux();
-        spec.max_batch_size_ = 0; // TODO: @jinzhu, remove me later after support post-building fts index vectorization.
         if (OB_UNLIKELY(ddl_table_schema->get_parser_name_str().empty())) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("unexpected error, parser name is empty", K(ret), KPC(ddl_table_schema));

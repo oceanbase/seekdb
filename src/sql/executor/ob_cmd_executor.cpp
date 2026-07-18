@@ -535,6 +535,10 @@ int ObCmdExecutor::execute(ObExecContext &ctx, ObICmd &cmd)
         DEFINE_EXECUTE_CMD(ObClearMergeErrorStmt, ObClearMergeErrorExecutor);
         break;
       }
+      case stmt::T_REFRESH_FULLTEXT_DICT: {
+        DEFINE_EXECUTE_CMD(ObRefreshFulltextDictStmt, ObRefreshFulltextDictExecutor);
+        break;
+      }
       case stmt::T_UPGRADE_VIRTUAL_SCHEMA: {
         DEFINE_EXECUTE_CMD(ObUpgradeVirtualSchemaStmt, ObUpgradeVirtualSchemaExecutor);
         break;

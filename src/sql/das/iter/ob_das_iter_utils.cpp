@@ -1661,13 +1661,17 @@ int ObDASIterUtils::create_text_retrieval_sub_tree(
     if (ir_scan_ctdef->has_pushdown_topk() && !has_duplicate_boolean_tokens) {
       merge_iter_param.topk_mode_ = 1;
       merge_iter_param.daat_mode_ = 1;
-    } else if (merge_iter_param.query_tokens_.count() > OB_MAX_TEXT_RETRIEVAL_TOKEN_CNT
-        || (!is_func_lookup && !ir_scan_ctdef->need_proj_relevance_score())) {
+    } else if (merge_iter_param.query_tokens_.count() > OB_MAX_TEXT_RETRIEVAL_TOKEN_CNT) {
       if (BOOLEAN_MODE == ir_scan_ctdef->mode_flag_) {
         ret = OB_NOT_SUPPORTED;
         LOG_WARN("boolean mode with too many tokens not supported", K(ret), K(merge_iter_param.query_tokens_.count()));
         LOG_USER_ERROR(OB_NOT_SUPPORTED, "Boolean mode with more than 256 tokens is");
       }
+      merge_iter_param.taat_mode_ = 1;
+    } else if (ir_scan_ctdef->is_match_only()) {
+      merge_iter_param.daat_mode_ = 1;
+    } else if (!is_func_lookup && !ir_scan_ctdef->need_proj_relevance_score()) {
+      // Compatibility path for plans serialized before match_only_ existed.
       merge_iter_param.taat_mode_ = 1;
     } else {
       merge_iter_param.daat_mode_ = 1;
@@ -4426,4 +4430,3 @@ int ObDASIterUtils::create_vec_ivf_lookup_tree(ObTableScanParam &scan_param,
 
 } // namespace sql
 } // namespace oceanbase
-

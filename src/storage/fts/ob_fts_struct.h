@@ -31,12 +31,26 @@ namespace storage
 class ObFTWord final
 {
 public:
-  ObFTWord() : word_(), meta_() {}
-  ObFTWord(const int64_t length, const char *ptr, const ObObjMeta &meta) : meta_(meta)
+  ObFTWord()
+      : hash_calculated_(false),
+        hash_value_(0),
+        hash_func_(nullptr),
+        cmp_func_(nullptr),
+        word_(),
+        meta_()
+  {}
+  ObFTWord(const int64_t length, const char *ptr, const ObObjMeta &meta) : ObFTWord()
   {
-    word_.set_string(ptr, length);
+    (void)init(ptr, length, meta);
   }
   ~ObFTWord() = default;
+
+  int init(const char *ptr, const int64_t length, const ObObjMeta &meta);
+  int init(const char *ptr,
+           const int64_t length,
+           const ObObjMeta &meta,
+           const ObDatumHashFuncType hash_func,
+           const ObDatumCmpFuncType cmp_func);
 
   OB_INLINE const ObDatum &get_word() const { return word_; }
   OB_INLINE ObCollationType get_collation_type() const { return meta_.get_collation_type(); }
@@ -48,11 +62,20 @@ public:
   TO_STRING_KV(K_(meta), K_(word));
 
 private:
+  int compare_(const ObFTWord &other, bool &is_equal) const;
+
+private:
+  mutable bool hash_calculated_;
+  mutable uint64_t hash_value_;
+  ObDatumHashFuncType hash_func_;
+  ObDatumCmpFuncType cmp_func_;
   ObDatum word_;
   ObObjMeta meta_;
 };
 
 typedef common::hash::ObHashMap<ObFTWord, int64_t> ObFTWordMap;
+typedef ObFTWord ObFTToken;
+typedef ObFTWordMap ObFTTokenMap;
 
 class ObAddWordFlag final
 {

@@ -112,6 +112,8 @@ public:
   {
     ObFTParserParamExport::reset();
     allocator_ = nullptr;
+    metadata_allocator_ = nullptr;
+    scratch_allocator_ = nullptr;
     ngram_token_size_ = NGRAM_TOKEN_SIZE;
   }
 
@@ -119,6 +121,8 @@ public:
 
 public:
   common::ObIAllocator *allocator_ = nullptr;
+  common::ObIAllocator *metadata_allocator_ = nullptr;
+  common::ObIAllocator *scratch_allocator_ = nullptr;
 
   // ik parser params
   ObFTIKParam ik_param_;
@@ -137,6 +141,11 @@ public:
       int64_t &word_len,
       int64_t &char_cnt,
       int64_t &word_freq) = 0;
+  virtual int reuse_parser(const char *fulltext, const int64_t fulltext_len)
+  {
+    UNUSEDx(fulltext, fulltext_len);
+    return OB_NOT_SUPPORTED;
+  }
   DECLARE_PURE_VIRTUAL_TO_STRING;
 };
 

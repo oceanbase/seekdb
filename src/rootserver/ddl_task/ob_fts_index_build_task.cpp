@@ -155,7 +155,10 @@ int ObFtsIndexBuildTask::init(
     target_object_id_ = index_schema->get_table_id();
     index_table_id_ = index_schema->get_table_id();
     
-    create_index_arg_.parallelism_ = parallelism_;
+    // The rowkey-doc stage runs before the remaining auxiliary-table builds, so
+    // it can use the full requested parallelism without competing with them.
+    // The concurrent stages are assigned parallelism_ in their constructors.
+    create_index_arg_.parallelism_ = is_fts_task() ? parallelism : parallelism_;
     if (index_schema->is_rowkey_doc_id()) {
       rowkey_doc_aux_table_id_ = index_table_id_;
       rowkey_doc_schema_version_ = index_schema->get_schema_version();
@@ -786,6 +789,7 @@ int ObFtsIndexBuildTask::construct_doc_rowkey_arg(obcall::ObCreateIndexArg &arg)
   if (OB_FAIL(deep_copy_index_arg(allocator_, create_index_arg_, arg))) {
     LOG_WARN("failed to deep copy index arg", K(ret));
   } else if (FALSE_IT(arg.index_type_ = INDEX_TYPE_DOC_ID_ROWKEY_LOCAL)) {
+  } else if (FALSE_IT(arg.parallelism_ = get_aux_build_parallelism())) {
   } else if (FALSE_IT(arg.index_option_.parser_name_.reset())) {
   } else if (OB_FAIL(ObFtsIndexBuilderUtil::generate_fts_aux_index_name(arg,
                                                                         &allocator_))) {
@@ -799,6 +803,7 @@ int ObFtsIndexBuildTask::construct_domain_index_aux_arg(obcall::ObCreateIndexArg
   int ret = OB_SUCCESS;
   if (OB_FAIL(deep_copy_index_arg(allocator_, create_index_arg_, arg))) {
     LOG_WARN("failed to deep copy index arg", K(ret));
+  } else if (FALSE_IT(arg.parallelism_ = get_aux_build_parallelism())) {
   } else if (is_fts_task()) {
     if (OB_FAIL(ObFtsIndexBuilderUtil::generate_fts_aux_index_name(arg, &allocator_))) {
       LOG_WARN("failed to generate index name", K(ret));
@@ -813,6 +818,7 @@ int ObFtsIndexBuildTask::construct_fts_doc_word_arg(obcall::ObCreateIndexArg &ar
   if (OB_FAIL(deep_copy_index_arg(allocator_, create_index_arg_, arg))) {
     LOG_WARN("failed to deep copy index arg", K(ret));
   } else if (FALSE_IT(arg.index_type_ = INDEX_TYPE_FTS_DOC_WORD_LOCAL)) {
+  } else if (FALSE_IT(arg.parallelism_ = get_aux_build_parallelism())) {
   } else if (OB_FAIL(ObFtsIndexBuilderUtil::generate_fts_aux_index_name(arg,
                                                                         &allocator_))) {
     LOG_WARN("failed to generate index name", K(ret));

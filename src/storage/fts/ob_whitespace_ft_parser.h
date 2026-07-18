@@ -35,6 +35,7 @@ public:
 
   int init(plugin::ObFTParserParam *param);
   void reset();
+  int reuse_parser(const char *fulltext, const int64_t fulltext_len) override;
   virtual int get_next_token(
       const char *&word,
       int64_t &word_len,

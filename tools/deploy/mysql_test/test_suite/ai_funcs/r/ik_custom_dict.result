@@ -2,36 +2,146 @@
 DROP DATABASE IF EXISTS ai_ik_test;
 CREATE DATABASE ai_ik_test;
 USE ai_ik_test;
-# dictionary table (FULLTEXT_DICT='Y') loaded with custom words, then refreshed into memory
+# invalid dictionary table definitions are rejected
+CREATE TABLE invalid_no_iot (word varchar(100) primary key)
+DEFAULT CHARSET=utf8mb4 FULLTEXT_DICT='Y';
+ERROR HY000: Incorrect arguments to FULLTEXT_DICT table must specify ORGANIZATION INDEX
+CREATE TABLE invalid_column_name (term varchar(100) primary key)
+ORGANIZATION INDEX DEFAULT CHARSET=utf8mb4 FULLTEXT_DICT='Y';
+ERROR HY000: Incorrect arguments to FULLTEXT_DICT table column must be named word
+CREATE TABLE invalid_without_pk (word varchar(100))
+ORGANIZATION INDEX DEFAULT CHARSET=utf8mb4 FULLTEXT_DICT='Y';
+ERROR HY000: Incorrect arguments to FULLTEXT_DICT word column must be the primary key
+CREATE TABLE invalid_type (word int primary key)
+ORGANIZATION INDEX DEFAULT CHARSET=utf8mb4 FULLTEXT_DICT='Y';
+ERROR HY000: Incorrect arguments to FULLTEXT_DICT word column must be VARCHAR
+CREATE TABLE invalid_extra_column (word varchar(100) primary key, extra int)
+ORGANIZATION INDEX DEFAULT CHARSET=utf8mb4 FULLTEXT_DICT='Y';
+ERROR HY000: Incorrect arguments to FULLTEXT_DICT table must contain only the word column
+CREATE TABLE invalid_length (word varchar(501) primary key)
+ORGANIZATION INDEX DEFAULT CHARSET=utf8mb4 FULLTEXT_DICT='Y';
+ERROR HY000: Incorrect arguments to FULLTEXT_DICT word column length must be between 1 and 500
+CREATE TABLE invalid_flag (word varchar(100) primary key)
+ORGANIZATION INDEX DEFAULT CHARSET=utf8mb4 FULLTEXT_DICT='N';
+ERROR HY000: Incorrect arguments to FULLTEXT_DICT must be 'Y'
+# create main, stopword, and quantifier dictionary tables
 CREATE TABLE my_dict (word varchar(100) primary key)
 ORGANIZATION INDEX DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci FULLTEXT_DICT='Y';
+CREATE TABLE my_stopwords (word varchar(100) primary key)
+ORGANIZATION INDEX DEFAULT CHARSET=utf8mb4 FULLTEXT_DICT='Y';
+CREATE TABLE my_quantifiers (word varchar(100) primary key)
+ORGANIZATION INDEX DEFAULT CHARSET=utf8mb4 FULLTEXT_DICT='Y';
 INSERT INTO my_dict (word) VALUES ('OceanBase'),('分布式数据库'),('全文索引');
-ALTER SYSTEM REFRESH FULLTEXT DICT ai_ik_test.my_dict;
-# business table + fulltext index that uses the custom dictionary
+INSERT INTO my_stopwords (word) VALUES ('全文索引');
+INSERT INTO my_quantifiers (word) VALUES ('盒');
+# SHOW CREATE persists the dictionary flag
+SHOW CREATE TABLE my_dict;
+Table	Create Table
+my_dict	CREATE TABLE `my_dict` (
+  `word` varchar(100) NOT NULL,
+  PRIMARY KEY (`word`)
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 FULLTEXT_DICT = 'Y'<TABLE_OPTIONS>
+# REFRESH accepts qualified and current-database table names
+ALTER SYSTEM REFRESH FULLTEXT DICT my_dict;
+ALTER SYSTEM REFRESH FULLTEXT DICT ai_ik_test.my_stopwords;
+ALTER SYSTEM REFRESH FULLTEXT DICT my_quantifiers;
+CREATE TABLE ordinary (word varchar(100) primary key) DEFAULT CHARSET=utf8mb4;
+ALTER SYSTEM REFRESH FULLTEXT DICT ordinary;
+ERROR HY000: Incorrect arguments to table is not a FULLTEXT_DICT table
+ALTER SYSTEM REFRESH FULLTEXT DICT missing_dict;
+ERROR 42S02: Table doesn't exist
+# non-qualified parser properties are persisted as database-qualified names
 CREATE TABLE articles (
 id int unsigned NOT NULL AUTO_INCREMENT,
 title varchar(200) NOT NULL,
 PRIMARY KEY (id)
 ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin;
 ALTER TABLE articles ADD FULLTEXT INDEX ft_title(title)
-WITH PARSER ik PARSER_PROPERTIES=(dict_table='ai_ik_test.my_dict');
+WITH PARSER ik PARSER_PROPERTIES=(dict_table='my_dict',
+stopword_table='my_stopwords',
+quantifier_table='my_quantifiers',
+ik_mode='max_word');
+SHOW CREATE TABLE articles;
+Table	Create Table
+articles	CREATE TABLE `articles` (
+  `id` int(10) unsigned NOT NULL AUTO_INCREMENT,
+  `title` varchar(200) COLLATE utf8mb4_bin NOT NULL,
+  PRIMARY KEY (`id`),
+  FULLTEXT KEY `ft_title` (`title`) WITH PARSER ik PARSER_PROPERTIES=(dict_table="ai_ik_test.my_dict",stopword_table="ai_ik_test.my_stopwords",quantifier_table="ai_ik_test.my_quantifiers",ik_mode="max_word") BLOCK_SIZE 16384
+) ORGANIZATION INDEX AUTO_INCREMENT = 1 AUTO_INCREMENT_MODE = 'ORDER' DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_bin<TABLE_OPTIONS>
 INSERT INTO articles (title) VALUES ('OceanBase数据库介绍'),('全文索引使用指南');
-# custom-dictionary words match their rows
+# custom main dictionary matches, custom stopword filters
 SELECT id, title FROM articles WHERE MATCH(title) AGAINST('OceanBase' IN BOOLEAN MODE) ORDER BY id;
 id	title
 1	OceanBase数据库介绍
 SELECT id, title FROM articles WHERE MATCH(title) AGAINST('全文索引' IN BOOLEAN MODE) ORDER BY id;
 id	title
-2	全文索引使用指南
 # a custom dict_table REPLACES the built-in main dict: 数据库 is not listed, so it breaks
 # into single characters and matches nothing
 SELECT id, title FROM articles WHERE MATCH(title) AGAINST('数据库' IN BOOLEAN MODE) ORDER BY id;
 id	title
-# dynamic update: add a word -> REFRESH -> index a new row -> it matches
+# TOKENIZE supports all three custom tables and max_word mode
+SELECT TOKENIZE('这是全文索引的介绍', 'ik',
+'[{"output":"all"},{"additional_args":[{"dict_table":"my_dict"},{"stopword_table":"my_stopwords"},{"quantifier_table":"my_quantifiers"},{"ik_mode":"max_word"}]}]') AS tokens;
+tokens
+{"tokens": [{"绍": 1}, {"介": 1}, {"这": 1}, {"是": 1}, {"的": 1}], "doc_len": 5}
+SELECT TOKENIZE('3盒', 'ik',
+'[{"output":"all"},{"additional_args":[{"dict_table":"my_dict"},{"stopword_table":"my_stopwords"},{"quantifier_table":"my_quantifiers"},{"ik_mode":"smart"}]}]') AS quantity_tokens;
+quantity_tokens
+{"tokens": [{"3盒": 1}], "doc_len": 1}
+# dynamic update affects only rows indexed after REFRESH
 INSERT INTO my_dict (word) VALUES ('新词汇');
-ALTER SYSTEM REFRESH FULLTEXT DICT ai_ik_test.my_dict;
+INSERT INTO articles (title) VALUES ('刷新前新词汇');
+SELECT id, title FROM articles WHERE MATCH(title) AGAINST('新词汇' IN BOOLEAN MODE) ORDER BY id;
+id	title
+ALTER SYSTEM REFRESH FULLTEXT DICT my_dict;
 INSERT INTO articles (title) VALUES ('包含新词汇的标题');
 SELECT id, title FROM articles WHERE MATCH(title) AGAINST('新词汇' IN BOOLEAN MODE) ORDER BY id;
 id	title
-3	包含新词汇的标题
+4	包含新词汇的标题
+# referenced dictionaries reject structural DDL and DROP
+ALTER TABLE my_dict ADD COLUMN extra int;
+ERROR 0A000: structural ALTER on a referenced FULLTEXT_DICT table is not supported
+ALTER TABLE my_dict MODIFY COLUMN word varchar(101);
+ERROR 0A000: structural ALTER on a referenced FULLTEXT_DICT table is not supported
+ALTER TABLE my_dict RENAME COLUMN word TO term;
+ERROR 0A000: structural ALTER on a referenced FULLTEXT_DICT table is not supported
+ALTER TABLE my_dict RENAME TO my_dict_renamed;
+ERROR 0A000: structural ALTER on a referenced FULLTEXT_DICT table is not supported
+RENAME TABLE my_stopwords TO my_stopwords_renamed;
+ERROR 0A000: renaming a referenced FULLTEXT_DICT table is not supported
+DROP TABLE my_quantifiers;
+ERROR HY000: dropping a referenced FULLTEXT_DICT table is not allowed
+# non-structural ALTER preserves FULLTEXT_DICT and dependencies are released with the index
+ALTER TABLE my_dict COMMENT='still a dictionary';
+SHOW CREATE TABLE my_dict;
+Table	Create Table
+my_dict	CREATE TABLE `my_dict` (
+  `word` varchar(100) NOT NULL,
+  PRIMARY KEY (`word`)
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 FULLTEXT_DICT = 'Y'<TABLE_OPTIONS>
+ALTER TABLE articles DROP INDEX ft_title;
+DROP TABLE my_dict, my_stopwords, my_quantifiers;
+# an unreferenced dictionary table can be dropped directly
+CREATE TABLE unused_dict (word varchar(100) primary key)
+ORGANIZATION INDEX DEFAULT CHARSET=utf8mb4 FULLTEXT_DICT='Y';
+DROP TABLE unused_dict;
+# an unreferenced dictionary may be altered, but an invalid structure cannot be loaded
+CREATE TABLE invalidated_dict (word varchar(100) primary key)
+ORGANIZATION INDEX DEFAULT CHARSET=utf8mb4 FULLTEXT_DICT='Y';
+INSERT INTO invalidated_dict VALUES ('domain_term');
+ALTER TABLE invalidated_dict ADD COLUMN extra int;
+ALTER SYSTEM REFRESH FULLTEXT DICT invalidated_dict;
+ERROR HY000: Incorrect arguments to FULLTEXT_DICT table must contain only the word column
+SELECT TOKENIZE('domain_term', 'ik',
+'[{"output":"all"},{"additional_args":[{"dict_table":"invalidated_dict"}]}]');
+ERROR HY000: Incorrect arguments to FULLTEXT_DICT table must contain only the word column
+CREATE TABLE invalid_articles (
+id int primary key,
+title varchar(200) NOT NULL
+) DEFAULT CHARSET=utf8mb4;
+ALTER TABLE invalid_articles ADD FULLTEXT INDEX ft_invalid(title)
+WITH PARSER ik PARSER_PROPERTIES=(dict_table='invalidated_dict');
+ERROR HY000: Invalid argument
+DROP TABLE invalid_articles, invalidated_dict;
 DROP DATABASE ai_ik_test;

@@ -48,6 +48,7 @@ ObDASTRMergeIter::ObDASTRMergeIter()
     doc_length_est_param_(),
     doc_length_est_stat_cols_(),
     topk_limit_(0),
+    result_limit_param_(),
     ls_id_(),
     total_doc_cnt_tablet_id_(),
     inv_idx_tablet_id_(),
@@ -94,6 +95,8 @@ int ObDASTRMergeIter::inner_init(ObDASIterParam &param)
       LOG_WARN("unexpected null pointer", K(ret), KP_(ir_ctdef), KP_(ir_rtdef));
     } else if (topk_mode_ && OB_FAIL(init_topk_limit())) {
       LOG_WARN("failed to init topk limit", K(ret));
+    } else if (ir_ctdef_->has_result_limit() && OB_FAIL(init_result_limit())) {
+      LOG_WARN("failed to init text retrieval result limit", K(ret));
     } else if (OB_UNLIKELY(!ir_ctdef_->need_inv_idx_agg() && ir_ctdef_->need_fwd_idx_agg())) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("inv idx agg and fwd idx agg are not both needed", K(ret));
@@ -116,7 +119,9 @@ int ObDASTRMergeIter::init_das_iter_scan_params()
 {
   int ret = OB_SUCCESS;
   const int64_t dim_iter_cnt = taat_mode_ ? 1 : query_tokens_.count();
-  if (!ir_ctdef_->need_estimate_total_doc_cnt() && 0 != dim_iter_cnt) {
+  if (ir_ctdef_->need_calc_relevance()
+      && !ir_ctdef_->need_estimate_total_doc_cnt()
+      && 0 != dim_iter_cnt) {
     void *buf = nullptr;
     if (OB_ISNULL(buf = myself_allocator_.alloc(sizeof(ObTableScanParam)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
@@ -465,6 +470,13 @@ int ObDASTRMergeIter::init_dim_iter_param(ObTextRetrievalScanIterParam &iter_par
     iter_param.relevance_expr_ = ir_ctdef_->relevance_expr_;
     iter_param.inv_scan_doc_length_col_ = ir_ctdef_->inv_scan_doc_length_col_;
     iter_param.inv_scan_domain_id_col_ = ir_ctdef_->inv_scan_domain_id_col_;
+    const bool can_limit_posting_rows = ir_ctdef_->has_result_limit()
+        && ir_ctdef_->is_match_only()
+        && NATURAL_LANGUAGE_MODE == ir_ctdef_->mode_flag_
+        && ir_rtdef_->minimum_should_match_ <= 1
+        && result_limit_param_.is_valid()
+        && 0 == result_limit_param_.offset_;
+    iter_param.row_limit_ = can_limit_posting_rows ? result_limit_param_.limit_ : -1;
     iter_param.inv_idx_agg_cache_mode_ = function_lookup_mode_ && !taat_mode_;
   }
   return ret;
@@ -473,15 +485,33 @@ int ObDASTRMergeIter::init_dim_iter_param(ObTextRetrievalScanIterParam &iter_par
 int ObDASTRMergeIter::create_sparse_retrieval_iter()
 {
   int ret = OB_SUCCESS;
+  const bool has_result_limit = ir_ctdef_->has_result_limit();
+  const bool can_limit_posting_rows = has_result_limit
+      && ir_ctdef_->is_match_only()
+      && NATURAL_LANGUAGE_MODE == ir_ctdef_->mode_flag_
+      && ir_rtdef_->minimum_should_match_ <= 1
+      && result_limit_param_.is_valid()
+      && 0 == result_limit_param_.offset_;
   sr_iter_param_.dim_weights_ = dim_weights_.count() >= 1 ? &dim_weights_ : nullptr;
-  sr_iter_param_.limit_param_ = &ir_rtdef_->get_inv_idx_scan_rtdef()->limit_param_;
+  sr_iter_param_.limit_param_ = has_result_limit
+      ? &result_limit_param_ : &ir_rtdef_->get_inv_idx_scan_rtdef()->limit_param_;
   sr_iter_param_.eval_ctx_ = ir_rtdef_->eval_ctx_;
   sr_iter_param_.id_proj_expr_ = ir_ctdef_->inv_scan_domain_id_col_;
   sr_iter_param_.relevance_expr_ = ir_ctdef_->relevance_expr_;
-  sr_iter_param_.relevance_proj_expr_ = ir_ctdef_->relevance_proj_col_;
-  sr_iter_param_.filter_expr_ = ir_ctdef_->match_filter_;
+  sr_iter_param_.relevance_proj_expr_ = ir_ctdef_->is_match_only()
+      ? nullptr : ir_ctdef_->relevance_proj_col_;
+  sr_iter_param_.filter_expr_ = ir_ctdef_->is_match_only()
+      ? nullptr : ir_ctdef_->match_filter_;
   sr_iter_param_.topk_limit_ = topk_limit_;
-  if (OB_NOT_NULL(ir_ctdef_->field_boost_expr_)) {
+  sr_iter_param_.match_only_ = ir_ctdef_->is_match_only();
+  sr_iter_param_.drain_after_limit_ = can_limit_posting_rows;
+  // For a natural-language OR, limiting every posting list to N rows preserves
+  // whether the union contains at least N rows. The outer logical LIMIT still
+  // chooses the final N rows across tokens and partitions. Boolean/AND modes
+  // cannot use posting prefixes safely and therefore keep their full inputs.
+  if (sr_iter_param_.match_only_) {
+    // Token presence is sufficient; field and token boosts affect only score.
+  } else if (OB_NOT_NULL(ir_ctdef_->field_boost_expr_)) {
     ObDatum *boost_datum = nullptr;
     if (OB_FAIL(ir_ctdef_->field_boost_expr_->eval(*ir_rtdef_->eval_ctx_, boost_datum))) {
       LOG_WARN("failed to eval field boost expr", K(ret));
@@ -592,26 +622,38 @@ int ObDASTRMergeIter::init_daat_iter_param(ObTextDaaTParam &iter_param)
   iter_param.allocator_ = &myself_allocator_;
   iter_param.mode_flag_ = ir_ctdef_->mode_flag_;
   iter_param.function_lookup_mode_ = function_lookup_mode_;
-  iter_param.bm25_param_est_ctx_.total_doc_cnt_expr_
-      = ir_ctdef_->get_doc_agg_ctdef()->pd_expr_spec_.pd_storage_aggregate_output_.at(0);
-  iter_param.bm25_param_est_ctx_.estimated_total_doc_cnt_ = ir_ctdef_->estimated_total_doc_cnt_;
-  iter_param.bm25_param_est_ctx_.need_est_avg_doc_token_cnt_ = ir_ctdef_->need_avg_doc_len_est();
-  iter_param.bm25_param_est_ctx_.can_est_by_sum_skip_index_ = ir_ctdef_->avg_doc_len_est_spec_.can_est_by_sum_skip_index_;
-  iter_param.bm25_param_est_ctx_.avg_doc_token_cnt_expr_ = ir_ctdef_->avg_doc_token_cnt_expr_;
-  iter_param.bm25_param_est_ctx_.doc_length_est_param_ = &doc_length_est_param_;
   if (query_tokens_.count() == 0) {
     // do nothing
-  } else if (OB_ISNULL(iter_param.bm25_param_est_ctx_.total_doc_cnt_expr_)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected null total doc cnt expr", K(ret));
-  } else if (OB_FAIL(init_doc_length_est_param())) {
-    LOG_WARN("failed to init doc length est param", K(ret));
-  } else if (!ir_ctdef_->need_estimate_total_doc_cnt()) {
-    if (OB_UNLIKELY(!static_cast<sql::ObStoragePushdownFlag>(total_doc_cnt_scan_param_->pd_storage_flag_).is_aggregate_pushdown())) {
-      ret = OB_NOT_IMPLEMENT;
-      LOG_ERROR("aggregate without pushdown not implemented", K(ret));
+  } else if (ir_ctdef_->need_calc_relevance()) {
+    const ObDASScanCtDef *doc_agg_ctdef = ir_ctdef_->get_doc_agg_ctdef();
+    if (OB_ISNULL(doc_agg_ctdef)
+        || OB_UNLIKELY(1 != doc_agg_ctdef->pd_expr_spec_.pd_storage_aggregate_output_.count())) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("unexpected total document count descriptor", K(ret), KP(doc_agg_ctdef));
     } else {
-      iter_param.bm25_param_est_ctx_.total_doc_cnt_iter_ = static_cast<sql::ObDASScanIter*>(children_[children_cnt_ - 1]);
+      iter_param.bm25_param_est_ctx_.total_doc_cnt_expr_
+          = doc_agg_ctdef->pd_expr_spec_.pd_storage_aggregate_output_.at(0);
+      iter_param.bm25_param_est_ctx_.estimated_total_doc_cnt_ = ir_ctdef_->estimated_total_doc_cnt_;
+      iter_param.bm25_param_est_ctx_.need_est_avg_doc_token_cnt_ = ir_ctdef_->need_avg_doc_len_est();
+      iter_param.bm25_param_est_ctx_.can_est_by_sum_skip_index_
+          = ir_ctdef_->avg_doc_len_est_spec_.can_est_by_sum_skip_index_;
+      iter_param.bm25_param_est_ctx_.avg_doc_token_cnt_expr_ = ir_ctdef_->avg_doc_token_cnt_expr_;
+      iter_param.bm25_param_est_ctx_.doc_length_est_param_ = &doc_length_est_param_;
+    }
+    if (OB_FAIL(ret)) {
+    } else if (OB_FAIL(init_doc_length_est_param())) {
+      LOG_WARN("failed to init doc length est param", K(ret));
+    } else if (!ir_ctdef_->need_estimate_total_doc_cnt()) {
+      if (OB_ISNULL(total_doc_cnt_scan_param_)) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("unexpected null total document count scan parameter", K(ret));
+      } else if (OB_UNLIKELY(!static_cast<sql::ObStoragePushdownFlag>(total_doc_cnt_scan_param_->pd_storage_flag_).is_aggregate_pushdown())) {
+        ret = OB_NOT_IMPLEMENT;
+        LOG_ERROR("aggregate without pushdown not implemented", K(ret));
+      } else {
+        iter_param.bm25_param_est_ctx_.total_doc_cnt_iter_
+            = static_cast<sql::ObDASScanIter*>(children_[children_cnt_ - 1]);
+      }
     }
   }
   if (OB_SUCC(ret)) {
@@ -649,27 +691,39 @@ int ObDASTRMergeIter::init_taat_iter_param(ObTextTaaTParam &iter_param)
   iter_param.allocator_ = &myself_allocator_;
   iter_param.mode_flag_ = ir_ctdef_->mode_flag_;
   iter_param.function_lookup_mode_ = function_lookup_mode_;
-  iter_param.bm25_param_est_ctx_.total_doc_cnt_expr_
-      = ir_ctdef_->get_doc_agg_ctdef()->pd_expr_spec_.pd_storage_aggregate_output_.at(0);
-  iter_param.bm25_param_est_ctx_.estimated_total_doc_cnt_ = ir_ctdef_->estimated_total_doc_cnt_;
-  iter_param.bm25_param_est_ctx_.need_est_avg_doc_token_cnt_ = ir_ctdef_->need_avg_doc_len_est();
-  iter_param.bm25_param_est_ctx_.can_est_by_sum_skip_index_ = ir_ctdef_->avg_doc_len_est_spec_.can_est_by_sum_skip_index_;
-  iter_param.bm25_param_est_ctx_.avg_doc_token_cnt_expr_ = ir_ctdef_->avg_doc_token_cnt_expr_;
-  iter_param.bm25_param_est_ctx_.doc_length_est_param_ = &doc_length_est_param_;
   if (OB_ISNULL(iter_param.dim_iter_ = dim_iter_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected null dim iter", K(ret));
-  } else if (OB_ISNULL(iter_param.bm25_param_est_ctx_.total_doc_cnt_expr_)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected null total doc cnt expr", K(ret));
-  } else if (OB_FAIL(init_doc_length_est_param())) {
-    LOG_WARN("failed to init doc length est param", K(ret));
-  } else if (!ir_ctdef_->need_estimate_total_doc_cnt()) {
-    if (OB_UNLIKELY(!static_cast<sql::ObStoragePushdownFlag>(total_doc_cnt_scan_param_->pd_storage_flag_).is_aggregate_pushdown())) {
-      ret = OB_NOT_IMPLEMENT;
-      LOG_ERROR("aggregate without pushdown not implemented", K(ret));
+  } else if (ir_ctdef_->need_calc_relevance()) {
+    const ObDASScanCtDef *doc_agg_ctdef = ir_ctdef_->get_doc_agg_ctdef();
+    if (OB_ISNULL(doc_agg_ctdef)
+        || OB_UNLIKELY(1 != doc_agg_ctdef->pd_expr_spec_.pd_storage_aggregate_output_.count())) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("unexpected total document count descriptor", K(ret), KP(doc_agg_ctdef));
     } else {
-      iter_param.bm25_param_est_ctx_.total_doc_cnt_iter_ = static_cast<sql::ObDASScanIter*>(children_[children_cnt_ - 1]);
+      iter_param.bm25_param_est_ctx_.total_doc_cnt_expr_
+          = doc_agg_ctdef->pd_expr_spec_.pd_storage_aggregate_output_.at(0);
+      iter_param.bm25_param_est_ctx_.estimated_total_doc_cnt_ = ir_ctdef_->estimated_total_doc_cnt_;
+      iter_param.bm25_param_est_ctx_.need_est_avg_doc_token_cnt_ = ir_ctdef_->need_avg_doc_len_est();
+      iter_param.bm25_param_est_ctx_.can_est_by_sum_skip_index_
+          = ir_ctdef_->avg_doc_len_est_spec_.can_est_by_sum_skip_index_;
+      iter_param.bm25_param_est_ctx_.avg_doc_token_cnt_expr_ = ir_ctdef_->avg_doc_token_cnt_expr_;
+      iter_param.bm25_param_est_ctx_.doc_length_est_param_ = &doc_length_est_param_;
+    }
+    if (OB_FAIL(ret)) {
+    } else if (OB_FAIL(init_doc_length_est_param())) {
+      LOG_WARN("failed to init doc length est param", K(ret));
+    } else if (!ir_ctdef_->need_estimate_total_doc_cnt()) {
+      if (OB_ISNULL(total_doc_cnt_scan_param_)) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("unexpected null total document count scan parameter", K(ret));
+      } else if (OB_UNLIKELY(!static_cast<sql::ObStoragePushdownFlag>(total_doc_cnt_scan_param_->pd_storage_flag_).is_aggregate_pushdown())) {
+        ret = OB_NOT_IMPLEMENT;
+        LOG_ERROR("aggregate without pushdown not implemented", K(ret));
+      } else {
+        iter_param.bm25_param_est_ctx_.total_doc_cnt_iter_
+            = static_cast<sql::ObDASScanIter*>(children_[children_cnt_ - 1]);
+      }
     }
   }
   return ret;
@@ -1407,6 +1461,34 @@ int ObDASTRMergeIter::init_topk_limit()
         offset = (topk_offset_datum->is_null() || topk_offset_datum->get_int() < 0) ? 0 : topk_offset_datum->get_int();
       }
       topk_limit_ = limit + offset;
+    }
+  }
+  return ret;
+}
+
+int ObDASTRMergeIter::init_result_limit()
+{
+  int ret = OB_SUCCESS;
+  ObExpr *limit_expr = ir_ctdef_->topk_limit_expr_;
+  ObExpr *offset_expr = ir_ctdef_->topk_offset_expr_;
+  ObDatum *limit_datum = nullptr;
+  ObDatum *offset_datum = nullptr;
+  result_limit_param_.limit_ = -1;
+  result_limit_param_.offset_ = 0;
+  if (OB_UNLIKELY(!ir_ctdef_->has_result_limit()) || OB_ISNULL(limit_expr)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected result limit state", K(ret), KPC_(ir_ctdef));
+  } else if (OB_FAIL(limit_expr->eval(*ir_rtdef_->eval_ctx_, limit_datum))) {
+    LOG_WARN("failed to eval result limit", K(ret));
+  } else if (nullptr != offset_expr
+      && OB_FAIL(offset_expr->eval(*ir_rtdef_->eval_ctx_, offset_datum))) {
+    LOG_WARN("failed to eval result offset", K(ret));
+  } else {
+    result_limit_param_.limit_ =
+        (limit_datum->is_null() || limit_datum->get_int() < 0) ? 0 : limit_datum->get_int();
+    if (nullptr != offset_datum) {
+      result_limit_param_.offset_ =
+          (offset_datum->is_null() || offset_datum->get_int() < 0) ? 0 : offset_datum->get_int();
     }
   }
   return ret;

@@ -52,6 +52,19 @@ public:
                                  const uint8_t char_len,
                                  CharType &type);
 
+  static int classify_first_valid_char(
+      ObCharsetType cs_type,
+      const char *buf,
+      int64_t buf_size,
+      size_t (*well_formed_len_fn)(const ObCharsetInfo *,
+                                   const char *,
+                                   const char *,
+                                   size_t,
+                                   int *),
+      const ObCharsetInfo *cs,
+      int64_t &char_len,
+      CharType &type);
+
   static int check_cn_number(ObCollationType coll_type,
                              const char *input,
                              const uint8_t char_len,
@@ -455,32 +468,69 @@ template <ObCharsetType CS_TYPE>
 inline int ObFTCharUtil::do_classify(const char *input, const uint8_t char_len, CharType &type)
 {
   int ret = OB_SUCCESS;
-  bool checker = false;
   type = CharType::USELESS;
-
-  if (OB_FAIL(is_alpha<CS_TYPE>(input, char_len, checker))) {
-  } else if (checker) {
-    type = CharType::ENGLISH_LETTER;
-  } else if (OB_FAIL(is_arabic<CS_TYPE>(input, char_len, checker))) {
-    STORAGE_FTS_LOG(WARN, "Failed to check arabic letter", K(ret));
-  } else if (checker) {
-    type = CharType::ARABIC_LETTER;
-  } else if (OB_FAIL(is_chinese<CS_TYPE>(input, char_len, checker))) {
-    STORAGE_FTS_LOG(WARN, "Failed to check chinese letter", K(ret));
-  } else if (checker) {
+  ob_wc_t unicode = 0;
+  if (OB_FAIL(decode_unicode<CS_TYPE>(input, char_len, unicode))) {
+    STORAGE_FTS_LOG(WARN, "Failed to decode unicode", K(ret));
+  } else if (ObUnicodeBlockUtils::is_chinese(unicode)) {
     type = CharType::CHINESE;
-  } else if (OB_FAIL(is_other_cjk<CS_TYPE>(input, char_len, checker))) {
-    STORAGE_FTS_LOG(WARN, "Failed to check other cjk letter", K(ret));
-  } else if (checker) {
+  } else if (ObUnicodeBlockUtils::is_alpha(unicode)) {
+    type = CharType::ENGLISH_LETTER;
+  } else if (ObUnicodeBlockUtils::is_arabic(unicode)) {
+    type = CharType::ARABIC_LETTER;
+  } else if (ObUnicodeBlockUtils::is_other_cjk(unicode)) {
     type = CharType::OTHER_CJK;
-  } else if (OB_FAIL(is_surrogate_high<CS_TYPE>(input, char_len, checker))) {
-    STORAGE_FTS_LOG(WARN, "Failed to check surrogate high letter", K(ret));
-  } else if (checker) {
+  } else if (!(CS_TYPE == CHARSET_UTF16 || CS_TYPE == CHARSET_UTF16LE)) {
+    type = CharType::USELESS;
+  } else if (ObUnicodeBlockUtils::check_high_surrogate(unicode)) {
     type = CharType::SURROGATE_HIGH;
-  } else if (OB_FAIL(is_surrogate_low<CS_TYPE>(input, char_len, checker))) {
-    STORAGE_FTS_LOG(WARN, "Failed to check surrogate low letter", K(ret));
-  } else if (checker) {
+  } else if (ObUnicodeBlockUtils::check_low_surrogate(unicode)) {
     type = CharType::SURROGATE_LOW;
+  }
+  return ret;
+}
+
+inline int ObFTCharUtil::classify_first_valid_char(
+    ObCharsetType cs_type,
+    const char *buf,
+    int64_t buf_size,
+    size_t (*well_formed_len_fn)(const ObCharsetInfo *,
+                                 const char *,
+                                 const char *,
+                                 size_t,
+                                 int *),
+    const ObCharsetInfo *cs,
+    int64_t &char_len,
+    CharType &type)
+{
+  int ret = OB_SUCCESS;
+  char_len = 0;
+  type = CharType::USELESS;
+  if (OB_UNLIKELY(nullptr == buf || buf_size <= 0 || nullptr == well_formed_len_fn
+                  || nullptr == cs)) {
+    ret = OB_INVALID_ARGUMENT;
+  } else {
+    int error = 0;
+    char_len = static_cast<int64_t>(well_formed_len_fn(cs, buf, buf + buf_size, 1, &error));
+    if (OB_UNLIKELY(0 != error || char_len <= 0)) {
+      ret = OB_ITER_END;
+    } else {
+      switch (cs_type) {
+        case CHARSET_UTF8MB4:
+          ret = do_classify<CHARSET_UTF8MB4>(buf, static_cast<uint8_t>(char_len), type);
+          break;
+        case CHARSET_UTF16:
+          ret = do_classify<CHARSET_UTF16>(buf, static_cast<uint8_t>(char_len), type);
+          break;
+        case CHARSET_UTF16LE:
+          ret = do_classify<CHARSET_UTF16LE>(buf, static_cast<uint8_t>(char_len), type);
+          break;
+        default:
+          ret = OB_NOT_SUPPORTED;
+          STORAGE_FTS_LOG(WARN, "Not supported charset type", K(ret), K(cs_type));
+          break;
+      }
+    }
   }
   return ret;
 }

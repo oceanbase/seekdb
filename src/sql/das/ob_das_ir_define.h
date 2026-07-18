@@ -87,7 +87,9 @@ public:
   bool need_inv_idx_agg() const { return has_inv_agg_ && need_calc_relevance(); }
   bool need_block_max_scan() const { return has_block_max_scan_; }
   bool need_avg_doc_len_est() const { return has_avg_doc_len_est_ && nullptr != avg_doc_token_cnt_expr_; }
-  bool has_pushdown_topk() const { return nullptr != topk_limit_expr_; }
+  bool has_pushdown_topk() const { return nullptr != topk_limit_expr_ && !cardinality_only_limit_; }
+  bool has_result_limit() const { return cardinality_only_limit_; }
+  bool is_match_only() const { return match_only_; }
   bool is_block_scan_valid() const
   {
     return has_block_max_scan_
@@ -202,7 +204,9 @@ public:
       uint8_t has_fwd_agg_:1;
       uint8_t has_block_max_scan_:1;
       uint8_t has_avg_doc_len_est_:1;
-      uint8_t reserved_:3;
+      uint8_t cardinality_only_limit_:1;
+      uint8_t match_only_:1;
+      uint8_t reserved_:1;
     };
   };
   ObExpr *field_boost_expr_;

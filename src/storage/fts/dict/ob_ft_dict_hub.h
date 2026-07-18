@@ -20,6 +20,7 @@
 #include "lib/charset/ob_charset.h"
 #include "lib/lock/ob_bucket_lock.h"
 #include "storage/fts/dict/ob_ft_dict_def.h"
+#include "storage/fts/dict/ob_ft_user_dict.h"
 
 namespace oceanbase
 {
@@ -96,7 +97,7 @@ class ObFTCacheRangeContainer;
 class ObFTDictHub
 {
 public:
-  ObFTDictHub() : is_inited_(false), dict_map_(), rw_dict_lock_() {}
+  ObFTDictHub() : is_inited_(false), dict_map_(), rw_dict_lock_(), user_dict_manager_() {}
   ~ObFTDictHub() {}
 
   int init();
@@ -106,6 +107,14 @@ public:
   int build_cache(const ObFTDictDesc &desc, ObFTCacheRangeContainer &container);
 
   int load_cache(const ObFTDictDesc &desc, ObFTCacheRangeContainer &container);
+  int get_user_dict(const common::ObString &table_name, ObFTUserDictHandle &handle)
+  { return user_dict_manager_.get_dict(table_name, handle); }
+  int refresh_user_dict(const common::ObString &table_name)
+  { return user_dict_manager_.refresh(table_name); }
+  int refresh_user_dict(const common::ObString &database_name,
+                        const common::ObString &table_name,
+                        const uint64_t table_id)
+  { return user_dict_manager_.refresh(database_name, table_name, table_id); }
 
 private:
   int get_dict_info(const ObFTDictInfoKey &key, ObFTDictInfo &info);
@@ -118,6 +127,7 @@ private:
   // holds info of dict
   hash::ObHashMap<ObFTDictInfoKey, ObFTDictInfo> dict_map_;
   ObBucketLock rw_dict_lock_;
+  ObFTUserDictManager user_dict_manager_;
 };
 
 } //  namespace storage

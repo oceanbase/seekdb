@@ -16,6 +16,8 @@
 
 #define USING_LOG_PREFIX SQL_RESV
 #include "sql/resolver/ddl/ob_rename_table_resolver.h"
+#include "share/schema/ob_dependency_info.h"
+#include "share/ob_server_struct.h"
 
 namespace oceanbase
 {
@@ -126,7 +128,24 @@ int ObRenameTableResolver::resolve_rename_action(const ParseNode &rename_action_
       if (OB_FAIL(rename_table_stmt->add_rename_table_item(rename_table_item))) {
         LOG_WARN("failed to add rename table item", K(rename_table_item), K(ret));
       } else if (OB_NOT_NULL(table_schema)) {
-        if (table_schema->is_mlog_table()) {
+        bool has_dictionary_dependency = false;
+        if (table_schema->is_fulltext_dict()) {
+          ObArray<ObDependencyInfo> dependencies;
+          if (OB_ISNULL(GCTX.sql_proxy_)) {
+            ret = OB_ERR_UNEXPECTED;
+          } else if (OB_FAIL(ObDependencyInfo::collect_dep_infos(
+                                 table_schema->get_table_id(), *GCTX.sql_proxy_, dependencies))) {
+            LOG_WARN("fail to collect dictionary dependencies", K(ret), KPC(table_schema));
+          } else {
+            for (int64_t i = 0; !has_dictionary_dependency && i < dependencies.count(); ++i) {
+              has_dictionary_dependency = ObObjectType::INDEX == dependencies.at(i).get_dep_obj_type();
+            }
+          }
+        }
+        if (OB_SUCC(ret) && has_dictionary_dependency) {
+          ret = OB_NOT_SUPPORTED;
+          LOG_USER_ERROR(OB_NOT_SUPPORTED, "renaming a referenced FULLTEXT_DICT table is");
+        } else if (table_schema->is_mlog_table()) {
           ret = OB_NOT_SUPPORTED;
           LOG_WARN("rename materialized view log is not supported", KR(ret));
           LOG_USER_ERROR(OB_NOT_SUPPORTED, "rename materialized view log is");

@@ -2226,6 +2226,14 @@ int ObTscCgService::generate_text_ir_ctdef(const ObLogTableScan &op,
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected ir scan type for inverted index scan", K(ret), K(scan_ctdef));
   } else {
+    const bool is_primary_ir_scan = !cg_ctx.is_vec_iter_func_lookup_
+        && !cg_ctx.is_func_lookup_
+        && !cg_ctx.is_es_match_
+        && !cg_ctx.is_merge_fts_index_;
+    ir_scan_ctdef->cardinality_only_limit_ =
+        is_primary_ir_scan && tr_info.cardinality_only_limit_
+        && !tr_info.need_calc_relevance_ && OB_NOT_NULL(tr_info.topk_limit_expr_);
+    ir_scan_ctdef->match_only_ = is_primary_ir_scan && !tr_info.need_calc_relevance_;
     if (!(cg_ctx.is_func_lookup_ || cg_ctx.is_es_match_)) {
       inv_idx_scan_ctdef = &scan_ctdef;
     } else if (OB_FAIL(ObDASTaskFactory::alloc_das_ctdef(DAS_OP_TABLE_SCAN, ctdef_alloc, inv_idx_scan_ctdef))) {
@@ -2368,7 +2376,7 @@ int ObTscCgService::generate_text_ir_ctdef(const ObLogTableScan &op,
     }
   }
 
-  if (OB_SUCC(ret) && tr_info.need_sort()) {
+  if (OB_SUCC(ret) && tr_info.need_sort() && !tr_info.cardinality_only_limit_) {
     ObSEArray<OrderItem, 2> order_items;
     if (OB_FAIL(order_items.push_back(tr_info.sort_key_))) {
       LOG_WARN("append order item array failed", K(ret));
@@ -3737,7 +3745,8 @@ int ObTscCgService::generate_text_ir_spec_exprs(const ObTextRetrievalInfo &tr_in
     }
   }
 
-  if (OB_SUCC(ret) && nullptr != tr_info.pushdown_match_filter_) {
+  if (OB_SUCC(ret) && nullptr != tr_info.pushdown_match_filter_
+      && !text_ir_scan_ctdef.is_match_only()) {
     if (OB_FAIL(cg_.generate_rt_expr(*tr_info.pushdown_match_filter_, text_ir_scan_ctdef.match_filter_))) {
       LOG_WARN("cg rt expr for match filter failed", K(ret));
     }
@@ -3759,7 +3768,8 @@ int ObTscCgService::generate_text_ir_spec_exprs(const ObTextRetrievalInfo &tr_in
     }
   }
 
-  if (OB_SUCC(ret) && (tr_info.need_calc_relevance_ || nullptr != tr_info.pushdown_match_filter_)) {
+  if (OB_SUCC(ret) && !text_ir_scan_ctdef.is_match_only()
+      && (tr_info.need_calc_relevance_ || nullptr != tr_info.pushdown_match_filter_)) {
     if (OB_FAIL(cg_.generate_rt_expr(*tr_info.match_expr_,
                                             text_ir_scan_ctdef.relevance_proj_col_))) {
       LOG_WARN("cg rt expr for relevance score proejction failed", K(ret));
@@ -3768,6 +3778,17 @@ int ObTscCgService::generate_text_ir_spec_exprs(const ObTextRetrievalInfo &tr_in
       LOG_WARN("unexpected relevance pseudo score colum not found", K(ret));
     } else if (OB_FAIL(result_output.push_back(text_ir_scan_ctdef.relevance_proj_col_))) {
       LOG_WARN("failed to append relevance expr", K(ret));
+    }
+  }
+
+  if (OB_SUCC(ret) && text_ir_scan_ctdef.has_result_limit()) {
+    if (OB_FAIL(cg_.generate_rt_expr(*tr_info.topk_limit_expr_,
+                                     text_ir_scan_ctdef.topk_limit_expr_))) {
+      LOG_WARN("cg rt expr for result limit failed", K(ret));
+    } else if (nullptr != tr_info.topk_offset_expr_
+        && OB_FAIL(cg_.generate_rt_expr(*tr_info.topk_offset_expr_,
+                                        text_ir_scan_ctdef.topk_offset_expr_))) {
+      LOG_WARN("cg rt expr for result offset failed", K(ret));
     }
   }
 

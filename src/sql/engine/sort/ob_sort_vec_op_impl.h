@@ -163,14 +163,17 @@ public:
 
   struct PartHashNode
   {
-    PartHashNode() : hash_node_next_(nullptr), part_row_next_(nullptr), store_row_(nullptr)
+    PartHashNode()
+      : hash_value_(0), hash_node_next_(nullptr), part_row_next_(nullptr), store_row_(nullptr)
     {}
     ~PartHashNode()
     {
+      hash_value_ = 0;
       hash_node_next_ = nullptr;
       part_row_next_ = nullptr;
       store_row_ = nullptr;
     }
+    uint64_t hash_value_;
     PartHashNode *hash_node_next_;
     PartHashNode *part_row_next_;
     Store_Row *store_row_;
@@ -180,13 +183,68 @@ public:
   class HashNodeComparer
   {
   public:
-    HashNodeComparer(Compare &compare) : compare_(compare)
+    HashNodeComparer(const common::ObIArray<ObExpr *> &sk_exprs,
+                     const ObIArray<ObSortFieldCollation> &sk_collations,
+                     const int64_t part_cnt,
+                     const RowMeta &row_meta,
+                     int &ret)
+      : sk_exprs_(sk_exprs), sk_collations_(sk_collations),
+        part_cnt_(part_cnt), row_meta_(row_meta), ret_(ret)
     {}
     bool operator()(const PartHashNode *l, const PartHashNode *r)
     {
-      return compare_(l->store_row_, r->store_row_);
+      int &ret = ret_;
+      bool less = false;
+      if (OB_UNLIKELY(OB_SUCCESS != ret)) {
+      } else if (OB_ISNULL(l) || OB_ISNULL(r)
+                 || OB_ISNULL(l->store_row_) || OB_ISNULL(r->store_row_)) {
+        ret = OB_ERR_UNEXPECTED;
+      } else if (l->hash_value_ != r->hash_value_) {
+        less = l->hash_value_ < r->hash_value_;
+      } else {
+        int cmp = 0;
+        ObLength l_len = 0;
+        ObLength r_len = 0;
+        bool l_null = false;
+        bool r_null = false;
+        const char *l_data = nullptr;
+        const char *r_data = nullptr;
+        for (int64_t i = 1;
+             0 == cmp && OB_SUCCESS == ret && i <= part_cnt_;
+             ++i) {
+          const ObSortFieldCollation &collation = sk_collations_.at(i);
+          const int64_t idx = collation.field_idx_;
+          const ObExpr *expr = sk_exprs_.at(idx);
+          if (OB_ISNULL(expr)) {
+            ret = OB_ERR_UNEXPECTED;
+          } else {
+            NullSafeRowCmpFunc cmp_func = NULL_FIRST == collation.null_pos_
+                ? expr->basic_funcs_->row_null_first_cmp_
+                : expr->basic_funcs_->row_null_last_cmp_;
+            l_null = l->store_row_->is_null(idx);
+            r_null = r->store_row_->is_null(idx);
+            l->store_row_->get_cell_payload(row_meta_, idx, l_data, l_len);
+            r->store_row_->get_cell_payload(row_meta_, idx, r_data, r_len);
+            const int cmp_ret = cmp_func(expr->obj_meta_, expr->obj_meta_,
+                                         l_data, l_len, l_null,
+                                         r_data, r_len, r_null, cmp);
+            if (OB_UNLIKELY(OB_SUCCESS != cmp_ret)) {
+              ret = cmp_ret;
+              SQL_ENG_LOG(WARN, "failed to compare partition keys", K(ret), K(i), K(idx));
+            } else if (!collation.is_ascending_) {
+              cmp = -cmp;
+            }
+          }
+        }
+        less = cmp < 0;
+      }
+      return less;
     }
-    Compare &compare_;
+    const common::ObIArray<ObExpr *> &sk_exprs_;
+    const ObIArray<ObSortFieldCollation> &sk_collations_;
+    int64_t part_cnt_;
+    const RowMeta &row_meta_;
+    int &ret_;
   };
 
 protected:
@@ -212,9 +270,27 @@ protected:
   int64_t get_total_used_size()
   {
     int64_t row_cnt = sk_store_.get_row_cnt();
-    return mem_context_->used() + ((part_cnt_ == 0) ? 0 :
-          ((row_cnt * FIXED_PART_NODE_SIZE * 2) +                         // size of(part_hash_nodes_)
-          (next_pow2(std::max(static_cast<int64_t>(16), row_cnt)) * FIXED_PART_BKT_SIZE * 2))); // size of(buckets_)
+    int64_t partition_sort_size = 0;
+    if (part_cnt_ > 0 && row_cnt > 0) {
+      const int64_t bucket_cnt = next_pow2(std::max(static_cast<int64_t>(16), row_cnt));
+      const int64_t payload_size = row_cnt * FIXED_PART_NODE_SIZE
+                                 + bucket_cnt * FIXED_PART_BKT_SIZE;
+      // Segment-array metadata and block rounding need some headroom, but the
+      // old 2x estimate forced premature dumps. One eighth tracks the actual
+      // allocation closely while keeping the work-area decision conservative.
+      partition_sort_size = payload_size + payload_size / 8;
+      if (enable_encode_sortkey_) {
+        if (is_fixed_key_sort_enabled_) {
+          const int64_t item_size = fixed_sort_key_len_ + sizeof(Store_Row *);
+          partition_sort_size += row_cnt * item_size * 2
+                               + 257 * sizeof(int64_t) * fixed_sort_key_len_;
+        } else {
+          partition_sort_size +=
+              row_cnt * sizeof(typename ObAdaptiveQS<Store_Row>::AQSItem);
+        }
+      }
+    }
+    return mem_context_->used() + partition_sort_size;
   }
   inline int64_t get_tmp_buffer_mem_bound() {
     // The memory reserved for ObSortVecOpEagerFilter should be deducted when topn filter is enabled.
