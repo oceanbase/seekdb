@@ -29,6 +29,7 @@
 #endif
 // Windows: define useconds_t and usleep
 typedef unsigned int useconds_t;
+typedef unsigned int uint;
 inline int usleep(useconds_t usec) {
   Sleep(usec / 1000);  // Sleep takes milliseconds
   return 0;

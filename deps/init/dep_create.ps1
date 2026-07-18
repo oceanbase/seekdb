@@ -141,7 +141,11 @@ foreach ($sect in $sections.Keys) {
 
         # -- Extract -------------------------------------------------
         Write-Log "  extracting ..."
-        & tar -xzf $pkgPath -C $DEPS_3RD --strip-components=1
+        $tarExe = "C:\Windows\System32\tar.exe"
+        if (-not (Test-Path $tarExe)) {
+            $tarExe = "tar"
+        }
+        & $tarExe -xzf $pkgPath -C $DEPS_3RD --strip-components=1
         if ($LASTEXITCODE -ne 0) {
             Write-Err "Failed to extract: $pkgFile"
             exit 5

@@ -515,16 +515,16 @@ int ObCmdExecutor::execute(ObExecContext &ctx, ObICmd &cmd)
         DEFINE_EXECUTE_CMD(ObRefreshMemStatStmt, ObRefreshMemStatExecutor);
         break;
       }
+      case stmt::T_REFRESH_FULLTEXT_DICT: {
+        DEFINE_EXECUTE_CMD(ObRefreshFulltextDictStmt, ObRefreshFulltextDictExecutor);
+        break;
+      }
       case stmt::T_WASH_MEMORY_FRAGMENTATION: {
         DEFINE_EXECUTE_CMD(ObWashMemFragmentationStmt, ObWashMemFragmentationExecutor);
         break;
       }
       case stmt::T_REFRESH_IO_CALIBRATION: {
         DEFINE_EXECUTE_CMD(ObRefreshIOCalibraitonStmt, ObRefreshIOCalibraitonExecutor);
-        break;
-      }
-      case stmt::T_REFRESH_FULLTEXT_DICT: {
-        DEFINE_EXECUTE_CMD(ObRefreshFulltextDictStmt, ObRefreshFulltextDictExecutor);
         break;
       }
       case stmt::T_ALTER_SYSTEM_SET_PARAMETER: {

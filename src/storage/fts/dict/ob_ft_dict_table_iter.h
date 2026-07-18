@@ -44,7 +44,6 @@ private:
 
 private:
   bool is_inited_;
-  bool is_iter_end_;
   ObISQLClient::ReadResult &res_;
 };
 

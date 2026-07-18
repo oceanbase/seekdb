@@ -21,7 +21,6 @@
 #include "share/ob_rpc_struct.h"
 #include "observer/scheduler/ob_sys_task_stat.h"
 #include "sql/engine/cmd/ob_redis_importer.h"
-#include "lib/string/ob_fixed_length_string.h"
 
 namespace oceanbase
 {
@@ -170,6 +169,18 @@ private:
   obcall::ObAdminRefreshMemStatArg rpc_arg_;
 };
 
+class ObRefreshFulltextDictStmt : public ObSystemCmdStmt
+{
+public:
+  ObRefreshFulltextDictStmt() : ObSystemCmdStmt(stmt::T_REFRESH_FULLTEXT_DICT) {}
+  virtual ~ObRefreshFulltextDictStmt() {}
+  const common::ObString get_table_name() const { return table_name_.str(); }
+  int set_table_name(const common::ObString &table_name) { return table_name_.assign(table_name); }
+  TO_STRING_KV(N_STMT_TYPE, ((int)stmt_type_), K_(table_name));
+private:
+  common::ObFixedLengthString<512> table_name_;
+};
+
 class ObWashMemFragmentationStmt : public ObSystemCmdStmt
 {
 public:
@@ -194,21 +205,6 @@ public:
   TO_STRING_KV(N_STMT_TYPE, ((int)stmt_type_), K_(rpc_arg));
 private:
   obcall::ObAdminRefreshIOCalibrationArg rpc_arg_;
-};
-
-class ObRefreshFulltextDictStmt : public ObSystemCmdStmt
-{
-public:
-  static const int64_t MAX_QUALIFIED_DICT_NAME_LENGTH = 1024;
-  ObRefreshFulltextDictStmt() : ObSystemCmdStmt(stmt::T_REFRESH_FULLTEXT_DICT) {}
-  virtual ~ObRefreshFulltextDictStmt() {}
-
-  int set_dict_table_name(const common::ObString &name) { return dict_table_name_.assign(name); }
-  common::ObString get_dict_table_name() const { return dict_table_name_.str(); }
-  TO_STRING_KV(N_STMT_TYPE, ((int)stmt_type_), K_(dict_table_name));
-
-private:
-  common::ObFixedLengthString<MAX_QUALIFIED_DICT_NAME_LENGTH> dict_table_name_;
 };
 
 class ObSetConfigStmt : public ObSystemCmdStmt

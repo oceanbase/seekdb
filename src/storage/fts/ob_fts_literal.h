@@ -36,7 +36,7 @@ public:
   static constexpr const char *CONFIG_NAME_NGRAM_TOKEN_SIZE = "ngram_token_size";
   static constexpr const char *CONFIG_NAME_STOPWORD_TABLE = "stopword_table";
   static constexpr const char *CONFIG_NAME_DICT_TABLE = "dict_table";
-  static constexpr const char *CONFIG_NAME_QUANTIFIER_TABLE = "quantifier_table";
+  static constexpr const char *CONFIG_NAME_QUANTIFIER_TABLE = "quanitfier_table";
   static constexpr const char *CONFIG_NAME_IK_MODE = "ik_mode";
   static constexpr const char *CONFIG_NAME_MIN_NGRAM_SIZE = "min_ngram_size";
   static constexpr const char *CONFIG_NAME_MAX_NGRAM_SIZE = "max_ngram_size";

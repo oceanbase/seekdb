@@ -39,6 +39,7 @@ public:
   ~TokenizeContext();
 
   int init();
+  int reuse_context(const char *fulltext, const int64_t fulltext_len);
   int reset_resource();
 
   int get_next_token(const char *&word, int64_t &word_len, int64_t &offset, int64_t &char_cnt);
@@ -47,6 +48,9 @@ public:
 
   int current_char(const char *&ch, uint8_t &char_len);
   int current_char_type(ObFTCharUtil::CharType &type);
+  int current_char_and_type(const char *&ch,
+                            uint8_t &char_len,
+                            ObFTCharUtil::CharType &type);
 
   int step_next();
 
@@ -87,9 +91,12 @@ private:
   uint32_t handle_size_;
   bool is_smart_;
 
+  // Cached charset metadata to avoid repeated lookups on the per-character path.
+  const ObCharsetInfo *cs_info_;
+  size_t (*well_formed_len_)(const struct ObCharsetInfo *, const char *, const char *, int, int *);
+
   ObFTSortList token_list_;
   ObList<ObIKToken, ObIAllocator> result_list_;
-
 private:
   DISALLOW_COPY_AND_ASSIGN(TokenizeContext);
 };
@@ -108,6 +115,8 @@ public:
                          const uint8_t char_len,
                          const ObFTCharUtil::CharType type)
       = 0;
+
+  virtual void reuse() = 0;
 };
 
 } // namespace storage

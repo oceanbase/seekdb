@@ -1993,10 +1993,6 @@ public:
     }
   }
   inline bool has_table_flag(uint64_t flag) const { return table_flags_ & flag; }
-  inline void set_fulltext_dict(const bool is_fulltext_dict)
-  { add_or_del_table_flag(FULLTEXT_DICT_TABLE_FLAG, is_fulltext_dict); }
-  inline bool is_fulltext_dict() const
-  { return has_table_flag(FULLTEXT_DICT_TABLE_FLAG); }
   inline void set_table_flags(uint64_t flags) { table_flags_ = flags; }
   inline uint64_t get_table_flags() const { return table_flags_; }
   void set_mlog_tid(const uint64_t& table_id) { mlog_tid_ = table_id; }

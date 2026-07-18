@@ -136,7 +136,6 @@ private:
 struct ObFTParserProperty final
 {
 public:
-  static const int64_t MAX_DICT_TABLE_NAME_LENGTH = 1024;
   ObFTParserProperty();
   ~ObFTParserProperty() = default;
   int parse_for_parser_helper(const ObFTParser &parser, const ObString &json_str);
@@ -166,9 +165,9 @@ public:
   int64_t max_token_size_;
   int64_t ngram_token_size_;
   bool ik_mode_smart_;
-  common::ObFixedLengthString<MAX_DICT_TABLE_NAME_LENGTH> stopword_table_;
-  common::ObFixedLengthString<MAX_DICT_TABLE_NAME_LENGTH> dict_table_;
-  common::ObFixedLengthString<MAX_DICT_TABLE_NAME_LENGTH> quantifier_table_;
+  common::ObFixedLengthString<512> stopword_table_;
+  common::ObFixedLengthString<512> dict_table_;
+  common::ObFixedLengthString<512> quantifier_table_;
   int64_t min_ngram_token_size_;
   int64_t max_ngram_token_size_;
 };

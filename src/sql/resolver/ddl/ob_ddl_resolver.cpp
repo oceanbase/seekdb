@@ -1604,6 +1604,7 @@ int ObDDLResolver::resolve_table_option(const ParseNode *option_node, const bool
       case T_PARSER_PROPERTIES: {
         if (OB_FAIL(ObFTParserResolverHelper::resolve_parser_properties(*option_node,
                                                                                *allocator_,
+                                                                               database_name_,
                                                                                parser_properties_))) {
           LOG_WARN("fail to resolve parser properties", K(ret));
         }
@@ -1732,6 +1733,25 @@ int ObDDLResolver::resolve_table_option(const ParseNode *option_node, const bool
               table_mode_.pk_exists_ = tbl_schema->get_table_mode_struct().pk_exists_;
               table_mode_.table_organization_mode_ = tbl_schema->get_table_mode_struct().table_organization_mode_;
             }
+          }
+        }
+        break;
+      }
+      case T_FULLTEXT_DICT: {
+        if (is_index_option || stmt::T_CREATE_TABLE != stmt_->get_stmt_type()) {
+          ret = OB_NOT_SUPPORTED;
+          LOG_USER_ERROR(OB_NOT_SUPPORTED, "FULLTEXT_DICT outside CREATE TABLE");
+        } else if (OB_ISNULL(option_node->children_[0])) {
+          ret = OB_ERR_UNEXPECTED;
+          SQL_RESV_LOG(WARN, "FULLTEXT_DICT option value is null", K(ret));
+        } else {
+          const ObString value(static_cast<int32_t>(option_node->children_[0]->str_len_),
+                               option_node->children_[0]->str_value_);
+          if (0 != value.case_compare("Y")) {
+            ret = OB_INVALID_ARGUMENT;
+            LOG_USER_ERROR(OB_INVALID_ARGUMENT, "FULLTEXT_DICT must be 'Y'");
+          } else {
+            fulltext_dict_ = true;
           }
         }
         break;
@@ -2159,26 +2179,6 @@ int ObDDLResolver::resolve_table_option(const ParseNode *option_node, const bool
       case T_VISIBLE: {
         /*do nothing default is visible*/
         index_attributes_set_ &= ~((uint64_t)1 << ObTableSchema::INDEX_VISIBILITY);
-        break;
-      }
-      case T_FULLTEXT_DICT: {
-        if (is_index_option || stmt::T_CREATE_TABLE != stmt_->get_stmt_type()) {
-          ret = OB_NOT_SUPPORTED;
-          LOG_USER_ERROR(OB_NOT_SUPPORTED, "FULLTEXT_DICT outside CREATE TABLE");
-        } else if (OB_ISNULL(option_node->children_[0])) {
-          ret = OB_ERR_UNEXPECTED;
-          SQL_RESV_LOG(WARN, "FULLTEXT_DICT option value is null", K(ret));
-        } else {
-          const ObString value(static_cast<int32_t>(option_node->children_[0]->str_len_),
-                               option_node->children_[0]->str_value_);
-          if (0 != value.case_compare("Y")) {
-            ret = OB_INVALID_ARGUMENT;
-            LOG_USER_ERROR(OB_INVALID_ARGUMENT, "FULLTEXT_DICT must be 'Y'");
-          } else {
-            ObCreateTableStmt *create_table_stmt = static_cast<ObCreateTableStmt *>(stmt_);
-            create_table_stmt->get_create_table_arg().schema_.set_fulltext_dict(true);
-          }
-        }
         break;
       }
       case T_DUPLICATE_SCOPE: {
@@ -4298,6 +4298,7 @@ void ObDDLResolver::reset() {
   index_params_.reset();
   mv_refresh_dop_ = 0;
   enable_macro_block_bloom_filter_ = false;
+  fulltext_dict_ = false;
   semistruct_encoding_type_.reset();
   dynamic_partition_policy_.reset();
 }

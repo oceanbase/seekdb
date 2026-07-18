@@ -18,7 +18,9 @@
 #define OB_FTS_PLUGIN_HELPER_H_
 
 #include "lib/allocator/ob_fifo_allocator.h"
+#include "lib/allocator/page_arena.h"
 #include "lib/charset/ob_charset.h"
+#include "lib/charset/ob_charset_string_helper.h"
 #include "lib/string/ob_string.h"
 #include "object/ob_object.h"
 #include "share/ob_plugin_helper.h"
@@ -35,6 +37,7 @@ class ObIJsonBase;
 namespace plugin
 {
 class ObIFTParserDesc;
+class ObITokenIterator;
 class ObPluginParam;
 }
 
@@ -154,7 +157,7 @@ public:
    *                                 "ngram_token_size":2,
    *                                 "stopword_table":"default",
    *                                 "dict_table":"none",
-   *                                 "quantifier_table":"none"
+   *                                 "quanitfier_table":"none"
    *                               }
    *
    * @return error code
@@ -206,6 +209,11 @@ public:
 
   void reset();
 
+  // Allow callers that keep a long-lived helper to redirect the scratch
+  // allocator used for per-row JSON/token buffers without re-initializing
+  // the parser metadata.
+  void set_allocator(common::ObIAllocator *allocator) { allocator_ = allocator; }
+
   TO_STRING_KV(KP_(allocator), K_(parser_name), KP_(parser_desc), K_(is_inited));
 
 private:
@@ -218,6 +226,9 @@ private:
       const char *fulltext,
       const int64_t fulltext_len,
       common::ObIAllocator &allocator,
+      common::ObIAllocator &metadata_allocator,
+      const bool reuse_parser,
+      plugin::ObITokenIterator *&iter,
       ObAddWord &add_word);
   int set_add_word_flag(const plugin::ObIFTParserDesc &ftparser_desc);
 private:
@@ -227,6 +238,10 @@ private:
   ObFTParser parser_name_;
   ObAddWordFlag add_word_flag_;
   ObFTParserProperty parser_property_;
+  mutable common::ObArenaAllocator parser_allocator_;
+  mutable plugin::ObITokenIterator *token_iterator_;
+  mutable common::ObCollationType cs_type_;
+  mutable const ObCharsetInfo *cs_info_;
   bool is_inited_;
 
 private:

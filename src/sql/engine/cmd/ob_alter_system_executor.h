@@ -56,11 +56,11 @@ DEF_SIMPLE_EXECUTOR(ObAdminMerge);
 
 DEF_SIMPLE_EXECUTOR(ObRefreshMemStat);
 
+DEF_SIMPLE_EXECUTOR(ObRefreshFulltextDict);
+
 DEF_SIMPLE_EXECUTOR(ObWashMemFragmentation);
 
 DEF_SIMPLE_EXECUTOR(ObRefreshIOCalibraiton);
-
-DEF_SIMPLE_EXECUTOR(ObRefreshFulltextDict);
 
 DEF_SIMPLE_EXECUTOR(ObSetConfig);
 

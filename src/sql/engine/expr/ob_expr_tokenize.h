@@ -22,6 +22,7 @@
 #include "lib/string/ob_string.h"
 #include "sql/engine/expr/ob_expr_operator.h"
 #include "storage/fts/ob_fts_parser_property.h"
+#include "storage/fts/ob_fts_plugin_helper.h"
 
 namespace oceanbase
 {
@@ -64,8 +65,10 @@ private:
 
     // check and reform parser properties to standard format
     int reform_parser_properties(const ObString &properties);
-    int qualify_ik_dict_tables(const ObString &database_name);
     int try_load_dictionary_for_ik();
+
+    // Update the row-dependent part without re-parsing parser configuration.
+    void set_fulltext(const common::ObString &fulltext, const common::ObObjMeta &meta);
 
   public:
     // for property and tmp json string
@@ -84,14 +87,12 @@ private:
 private:
   static int parse_param(const ObExpr &expr,
                          ObEvalCtx &ctx,
-                         common::ObArenaAllocator &allocator,
                          TokenizeParam &param);
 
   static int parse_fulltext(const ObExpr &expr, ObEvalCtx &ctx, TokenizeParam &param);
   static int parse_parser_name(const ObExpr &expr, ObEvalCtx &ctx, TokenizeParam &param);
   static int parse_parser_properties(const ObExpr &expr,
                                      ObEvalCtx &ctx,
-                                     MultimodeAlloctor &mm_alloc,
                                      TokenizeParam &param);
 
   static int tokenize_fulltext(const TokenizeParam &param,
@@ -99,9 +100,19 @@ private:
                                common::ObIAllocator &allocator,
                                ObIJsonBase *&result);
 
+  // Version that reuses an already initialized parser helper and token map.
+  static int tokenize_fulltext_with_helper(const TokenizeParam &param,
+                                           storage::ObFTParseHelper &helper,
+                                           storage::ObFTWordMap &word_map,
+                                           ObIJsonBase *&result);
+
   static int construct_ft_parser_inner_name(const ObString &input_str, TokenizeParam &param);
 
 private:
+  // Defined in the .cpp; holds a parsed parser configuration and reusable
+  // helper objects so that index builds do not recreate the parser per row.
+  friend struct ObTokenizeParserCache;
+
   DISALLOW_COPY_AND_ASSIGN(ObExprTokenize);
 };
 

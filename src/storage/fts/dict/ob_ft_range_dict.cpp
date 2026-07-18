@@ -76,6 +76,23 @@ int ObFTRangeDict::build_cache_from_ik_dict(const ObFTDictDesc &desc, ObFTCacheR
   return ret;
 }
 
+int ObFTRangeDict::build_cache_from_table(const ObFTDictDesc &desc,
+                                          const ObString &table_name,
+                                          ObFTCacheRangeContainer &range_container)
+{
+  int ret = OB_SUCCESS;
+  SMART_VAR(ObISQLClient::ReadResult, result)
+  {
+    ObFTDictTableIter iter_table(result);
+    if (OB_FAIL(iter_table.init(table_name))) {
+      LOG_WARN("Failed to init custom dictionary iterator", K(ret), K(table_name));
+    } else if (OB_FAIL(build_ranges_concurrently_thread_pool(desc, iter_table, range_container))) {
+      LOG_WARN("Failed to build custom dictionary ranges", K(ret), K(table_name));
+    }
+  }
+  return ret;
+}
+
 // Thread pool for building DATs concurrently
 class DATBuilderThreadPool : public lib::Threads
 {
@@ -416,22 +433,27 @@ int ObFTRangeDict::match_with_hit(const ObString &single_word,
 int ObFTRangeDict::find_first_char_range(const ObString &single_word, ObIFTDict *&dict) const
 {
   int ret = OB_SUCCESS;
-  bool found = false;
-  for (int i = 0; OB_SUCC(ret) && !found && i < range_dicts_.size(); ++i) {
-    if (ObCharset::strcmp(desc_.coll_type_,
-                          range_dicts_[i].start_.get_word(),
-                          single_word)
-            <= 0
-        && ObCharset::strcmp(desc_.coll_type_,
-                             range_dicts_[i].end_.get_word(),
-                             single_word)
-               >= 0) {
-      dict = range_dicts_[i].dict_;
-      found = true;
+  dict = nullptr;
+
+  // Ranges are emitted in dictionary order and use UTF8MB4_BIN boundaries.
+  // Find the last range whose start is <= the character, then perform one end
+  // check.  Besides changing O(N) to O(log N), ObString::compare is exactly
+  // the bytewise ordering required here and avoids the generic charset layer.
+  int64_t left = 0;
+  int64_t right = range_dicts_.size();
+  while (left < right) {
+    const int64_t mid = left + ((right - left) >> 1);
+    if (range_dicts_[mid].start_.get_word().compare(single_word) <= 0) {
+      left = mid + 1;
+    } else {
+      right = mid;
     }
   }
-  if (!found) {
-    // not found, dis match
+  const int64_t candidate = left - 1;
+  if (candidate >= 0
+      && range_dicts_[candidate].end_.get_word().compare(single_word) >= 0) {
+    dict = range_dicts_[candidate].dict_;
+  } else {
     ret = OB_ENTRY_NOT_EXIST;
   }
   return ret;
@@ -446,7 +468,7 @@ int ObFTRangeDict::build_dict_from_cache(const ObFTCacheRangeContainer &range_co
     ObFTCacheRangeHandle *ptr = *iter;
     ObFTCacheDict *dict = nullptr;
     ObFTDAT *dat = ptr->value_->dat_block_;
-    if (OB_ISNULL(dict = OB_NEWx(ObFTCacheDict, &range_alloc_, desc_.coll_type_, dat))) {
+    if (OB_ISNULL(dict = OB_NEWx(ObFTCacheDict, &range_alloc_, ObCollationType::CS_TYPE_UTF8MB4_BIN, dat))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("Failed to alloc memory.", K(ret));
     } else {
@@ -466,12 +488,17 @@ int ObFTRangeDict::build_cache(const ObFTDictDesc &desc, ObFTCacheRangeContainer
 {
   int ret = OB_SUCCESS;
 
-  const ObString &table_name = desc.name_;
+  ObString table_name;
   switch (desc.type_) {
-  case ObFTDictType::DICT_IK_MAIN:
-  case ObFTDictType::DICT_IK_QUAN:
-  case ObFTDictType::DICT_IK_STOP:
-    break;
+  case ObFTDictType::DICT_IK_MAIN: {
+    table_name = ObString(share::OB_FT_DICT_IK_UTF8_TNAME);
+  } break;
+  case ObFTDictType::DICT_IK_QUAN: {
+    table_name = ObString(share::OB_FT_QUANTIFIER_IK_UTF8_TNAME);
+  } break;
+  case ObFTDictType::DICT_IK_STOP: {
+    table_name = ObString(share::OB_FT_STOPWORD_IK_UTF8_TNAME);
+  } break;
   default:
     ret = OB_NOT_SUPPORTED;
     LOG_WARN("Not supported dict type.", K(ret));
@@ -497,7 +524,7 @@ int ObFTRangeDict::try_load_cache(const ObFTDictDesc &desc,
                                   ObFTCacheRangeContainer &range_container)
 {
   int ret = OB_SUCCESS;
-  uint64_t name = desc.cache_id();
+  uint64_t name = desc.name_.empty() ? static_cast<uint64_t>(desc.type_) : desc.name_.hash();
 
   for (int64_t i = 0; OB_SUCC(ret) && i < range_count; ++i) {
     ObDictCacheKey key(name, desc.type_, i);

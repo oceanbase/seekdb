@@ -274,7 +274,7 @@ END_P SET_VAR DELIMITER
 //-----------------------------reserved keyword end-------------------------------------------------
 %token <non_reserved_keyword>
 //-----------------------------non_reserved keyword begin-------------------------------------------
-        ACCESS ACCESS_INFO ACCESSID ACCESSKEY ACCESSTYPE ACCOUNT ACTION ACTIVE ADDDATE AFTER AGAINST AGGREGATE AI ALGORITHM ALL_META ALL_USER ALWAYS ALLOW ANALYSE ANY
+        ACCESS ACCESS_INFO ACCESSID ACCESSKEY ACCESSTYPE ACCOUNT ACTION ACTIVE ADDDATE AFTER AGAINST AGGREGATE AI AI_SPLIT_DOCUMENT ALGORITHM ALL_META ALL_USER ALWAYS ALLOW ANALYSE ANY
         APPID APPROX_COUNT_DISTINCT APPROX_COUNT_DISTINCT_SYNOPSIS APPROX_COUNT_DISTINCT_SYNOPSIS_MERGE
         ARRAY ASCII ASIS AT ATTRIBUTE AUTHORS AUTO AUTOEXTEND_SIZE AUTO_INCREMENT AUTO_INCREMENT_MODE AUTO_INCREMENT_CACHE_SIZE
         AVG AVG_ROW_LENGTH ACTIVATE AVAILABILITY ARCHIVELOG ASYNCHRONOUS AUDIT ADMIN AUTO_REFRESH API_MODE APPROX APPROXIMATE ARRAY_AGG ARRAY_FILTER ARRAY_FIRST ARRAY_MAP ARRAY_SORTBY 
@@ -472,7 +472,6 @@ END_P SET_VAR DELIMITER
 %type <node> alter_system_stmt alter_system_set_parameter_actions alter_system_settp_actions settp_option alter_system_set_parameter_action alter_system_reset_parameter_actions alter_system_reset_parameter_action
 %type <node> opt_comment opt_as
 %type <node> column_name relation_name relation_name_list opt_relation_name function_name column_label var_name relation_name_or_string row_format_option compression_name merge_engine_types
-%type <node> fulltext_dict_name
 %type <node> opt_hint_list hint_option select_with_opt_hint update_with_opt_hint delete_with_opt_hint hint_list_with_end global_hint transform_hint optimize_hint
 %type <node> create_index_stmt index_name sort_column_list sort_column_key opt_index_option_list opt_fulltext_index_option_list index_option fulltext_index_option opt_sort_column_key_length opt_index_using_algorithm index_using_algorithm visibility_option opt_constraint_name constraint_name create_with_opt_hint index_expr alter_with_opt_hint
 %type <node> opt_when check_state constraint_definition
@@ -559,7 +558,7 @@ END_P SET_VAR DELIMITER
 %type <node> column_list_with_boost with_param_column_ref
 %type <node> es_sql_opt
 %type <node> operator_list
-%type <node> hybrid_search_expr hybrid_search_param
+%type <node> hybrid_search_expr hybrid_search_param ai_split_document_expr
 %type <node> create_location_stmt alter_location_stmt drop_location_stmt location_name location_url credential_option_list credential_option opt_credential
 
 %type <node> vector_similarity_expr vector_similarity_metric
@@ -7428,17 +7427,6 @@ relation_name
 }
 ;
 
-fulltext_dict_name:
-normal_relation_factor
-{
-  $$ = $1;
-}
-| STRING_VALUE
-{
-  $$ = $1;
-}
-;
-
 
 opt_equal_mark:
 COMP_EQ     { $$ = NULL; }
@@ -13008,6 +12996,10 @@ tbl_name
 {
   $$ = $1;
 }
+| ai_split_document_expr
+{
+  $$ = $1;
+}
 ;
 
 tbl_name:
@@ -18379,6 +18371,17 @@ DUMP MEMORY LEAK
  *
  *****************************************************************************/
 alter_system_stmt:
+alter_with_opt_hint SYSTEM REFRESH FULLTEXT DICT relation_factor
+{
+  (void)($1);
+  malloc_non_terminal_node($$, result->malloc_pool_, T_REFRESH_FULLTEXT_DICT, 1, $6);
+}
+| alter_with_opt_hint SYSTEM REFRESH FULLTEXT DICT STRING_VALUE
+{
+  (void)($1);
+  malloc_non_terminal_node($$, result->malloc_pool_, T_REFRESH_FULLTEXT_DICT, 1, $6);
+}
+|
 alter_with_opt_hint SYSTEM FLUSH cache_type CACHE opt_namespace opt_sql_id_or_schema_id opt_databases opt_tenant_list flush_scope
 {
   (void)($1);
@@ -18460,12 +18463,6 @@ alter_with_opt_hint SYSTEM REFRESH MEMORY STAT
 {
   (void)($1);
   malloc_non_terminal_node($$, result->malloc_pool_, T_REFRESH_MEMORY_STAT, 1, NULL);
-}
-|
-alter_with_opt_hint SYSTEM REFRESH FULLTEXT DICT fulltext_dict_name
-{
-  (void)($1);
-  malloc_non_terminal_node($$, result->malloc_pool_, T_REFRESH_FULLTEXT_DICT, 1, $6);
 }
 |
 alter_with_opt_hint SYSTEM WASH MEMORY FRAGMENTATION
@@ -21895,6 +21892,33 @@ literal
 }
 ;
 
+ai_split_document_expr:
+AI_SPLIT_DOCUMENT '(' simple_expr_list ')'
+{
+  ParseNode *name = NULL;
+  ParseNode *function = NULL;
+  make_name_node(name, result->malloc_pool_, "ai_split_document");
+  malloc_non_terminal_node(function, result->malloc_pool_, T_FUN_SYS, 2, name, $3);
+  malloc_non_terminal_node($$, result->malloc_pool_, T_TABLE_COLLECTION_EXPRESSION, 2, function, NULL);
+}
+| AI_SPLIT_DOCUMENT '(' simple_expr_list ')' relation_name
+{
+  ParseNode *name = NULL;
+  ParseNode *function = NULL;
+  make_name_node(name, result->malloc_pool_, "ai_split_document");
+  malloc_non_terminal_node(function, result->malloc_pool_, T_FUN_SYS, 2, name, $3);
+  malloc_non_terminal_node($$, result->malloc_pool_, T_TABLE_COLLECTION_EXPRESSION, 2, function, $5);
+}
+| AI_SPLIT_DOCUMENT '(' simple_expr_list ')' AS relation_name
+{
+  ParseNode *name = NULL;
+  ParseNode *function = NULL;
+  make_name_node(name, result->malloc_pool_, "ai_split_document");
+  malloc_non_terminal_node(function, result->malloc_pool_, T_FUN_SYS, 2, name, $3);
+  malloc_non_terminal_node($$, result->malloc_pool_, T_TABLE_COLLECTION_EXPRESSION, 2, function, $6);
+}
+;
+
 create_ccl_rule_stmt:
 CREATE CONCURRENT_LIMITING_RULE opt_if_not_exists relation_name 
 ON ccl_database_table_optition
@@ -22906,6 +22930,7 @@ ACCESS_INFO
 |       INCONSISTENT 
 |       INDIVIDUAL
 |       HYBRID_SEARCH
+|       AI_SPLIT_DOCUMENT
 ;
 
 unreserved_keyword_special:

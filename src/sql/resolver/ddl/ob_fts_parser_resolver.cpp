@@ -28,6 +28,7 @@ namespace sql
 int ObFTParserResolverHelper::resolve_parser_properties(
     const ParseNode &parse_tree,
     common::ObIAllocator &allocator,
+    const common::ObString &database_name,
     common::ObString &parser_property)
 {
   int ret = OB_SUCCESS;
@@ -44,7 +45,10 @@ int ObFTParserResolverHelper::resolve_parser_properties(
       if (OB_ISNULL(parse_tree.children_[i])) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("option_node child is nullptr", K(ret));
-      } else if (OB_FAIL(resolve_fts_index_parser_properties(parse_tree.children_[i], property))) {
+      } else if (OB_FAIL(resolve_fts_index_parser_properties(parse_tree.children_[i],
+                                                             allocator,
+                                                             database_name,
+                                                             property))) {
         LOG_WARN("fail to resolve fts index parser properties", K(ret));
       }
     }
@@ -58,6 +62,8 @@ int ObFTParserResolverHelper::resolve_parser_properties(
 
 int ObFTParserResolverHelper::resolve_fts_index_parser_properties(
     const ParseNode *node,
+    common::ObIAllocator &allocator,
+    const common::ObString &database_name,
     storage::ObFTParserJsonProps &property)
 {
   int ret = OB_SUCCESS;
@@ -124,8 +130,19 @@ int ObFTParserResolverHelper::resolve_fts_index_parser_properties(
           LOG_USER_ERROR(OB_INVALID_ARGUMENT, "the stopword table is empty");
         } else {
           int32_t str_len = static_cast<int32_t>(node->children_[0]->str_len_);
-          if (OB_FAIL(property.config_set_stopword_table(
-                  common::ObString(str_len, node->children_[0]->str_value_)))) {
+          ObString table_name(str_len, node->children_[0]->str_value_);
+          ObString qualified_name;
+          ObSqlString qualified_sql;
+          if (OB_ISNULL(table_name.find('.')) && !database_name.empty()
+              && OB_FAIL(qualified_sql.append_fmt("%.*s.%.*s",
+                                                  database_name.length(), database_name.ptr(),
+                                                  table_name.length(), table_name.ptr()))) {
+            LOG_WARN("fail to qualify stopword table", K(ret));
+          } else if (OB_ISNULL(table_name.find('.')) && !database_name.empty()
+                     && OB_FAIL(ob_write_string(allocator, qualified_sql.string(), qualified_name))) {
+            LOG_WARN("fail to copy qualified stopword table", K(ret));
+          } else if (OB_FAIL(property.config_set_stopword_table(
+                         qualified_name.empty() ? table_name : qualified_name))) {
             LOG_WARN("fail to set stopword table", K(ret));
           }
         }
@@ -141,8 +158,19 @@ int ObFTParserResolverHelper::resolve_fts_index_parser_properties(
           LOG_USER_ERROR(OB_INVALID_ARGUMENT, "the dict table is empty");
         } else {
           int32_t str_len = static_cast<int32_t>(node->children_[0]->str_len_);
-          if (OB_FAIL(property.config_set_dict_table(
-                  common::ObString(str_len, node->children_[0]->str_value_)))) {
+          ObString table_name(str_len, node->children_[0]->str_value_);
+          ObString qualified_name;
+          ObSqlString qualified_sql;
+          if (OB_ISNULL(table_name.find('.')) && !database_name.empty()
+              && OB_FAIL(qualified_sql.append_fmt("%.*s.%.*s",
+                                                  database_name.length(), database_name.ptr(),
+                                                  table_name.length(), table_name.ptr()))) {
+            LOG_WARN("fail to qualify dict table", K(ret));
+          } else if (OB_ISNULL(table_name.find('.')) && !database_name.empty()
+                     && OB_FAIL(ob_write_string(allocator, qualified_sql.string(), qualified_name))) {
+            LOG_WARN("fail to copy qualified dict table", K(ret));
+          } else if (OB_FAIL(property.config_set_dict_table(
+                         qualified_name.empty() ? table_name : qualified_name))) {
             LOG_WARN("fail to set dict table", K(ret));
           }
         }
@@ -155,11 +183,22 @@ int ObFTParserResolverHelper::resolve_fts_index_parser_properties(
         } else if (OB_UNLIKELY(node->children_[0]->str_len_ <= 0)) {
           ret = OB_INVALID_ARGUMENT;
           LOG_WARN("invalid argument", K(ret), K(node->children_[0]->str_len_));
-          LOG_USER_ERROR(OB_INVALID_ARGUMENT, "the quantifier table is empty");
+          LOG_USER_ERROR(OB_INVALID_ARGUMENT, "the quanitfier table is empty");
         } else {
           int32_t str_len = static_cast<int32_t>(node->children_[0]->str_len_);
-          if (OB_FAIL(property.config_set_quantifier_table(
-                  common::ObString(str_len, node->children_[0]->str_value_)))) {
+          ObString table_name(str_len, node->children_[0]->str_value_);
+          ObString qualified_name;
+          ObSqlString qualified_sql;
+          if (OB_ISNULL(table_name.find('.')) && !database_name.empty()
+              && OB_FAIL(qualified_sql.append_fmt("%.*s.%.*s",
+                                                  database_name.length(), database_name.ptr(),
+                                                  table_name.length(), table_name.ptr()))) {
+            LOG_WARN("fail to qualify quantifier table", K(ret));
+          } else if (OB_ISNULL(table_name.find('.')) && !database_name.empty()
+                     && OB_FAIL(ob_write_string(allocator, qualified_sql.string(), qualified_name))) {
+            LOG_WARN("fail to copy qualified quantifier table", K(ret));
+          } else if (OB_FAIL(property.config_set_quantifier_table(
+                         qualified_name.empty() ? table_name : qualified_name))) {
             LOG_WARN("fail to set quantifier table", K(ret));
           }
         }

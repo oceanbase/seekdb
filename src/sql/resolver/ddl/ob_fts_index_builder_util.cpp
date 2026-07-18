@@ -21,13 +21,10 @@
 #include "sql/resolver/expr/ob_raw_expr_util.h"
 #include "storage/fts/dict/ob_gen_dic_loader.h"
 #include "storage/fts/dict/ob_dic_lock.h"
-#include "storage/fts/ob_fts_plugin_helper.h"
-#include "storage/fts/dict/ob_ft_dict_hub.h"
 #include "share/ob_server_struct.h"
 #include "rootserver/ob_root_service.h"
 #include "plugin/sys/ob_plugin_helper.h"
 #include "share/schema/ob_schema_utils.h"  // relocated-definition owner
-#include "share/schema/ob_multi_version_schema_service.h"
 
 namespace oceanbase
 {
@@ -39,102 +36,6 @@ namespace share
 {
 namespace
 {
-int validate_and_qualify_ik_dict_tables(const ObTableSchema &data_schema,
-                                        storage::ObFTParserJsonProps &json_props)
-{
-  int ret = OB_SUCCESS;
-  ObSchemaGetterGuard schema_guard;
-  const ObDatabaseSchema *data_database = nullptr;
-  if (OB_ISNULL(GCTX.schema_service_)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("schema service is null", K(ret));
-  } else if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(schema_guard))) {
-    LOG_WARN("failed to get tenant schema guard", K(ret));
-  } else if (OB_FAIL(schema_guard.get_database_schema(data_schema.get_database_id(), data_database))) {
-    LOG_WARN("failed to get database schema for fulltext index", K(ret), K(data_schema));
-  } else if (OB_ISNULL(data_database)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("database schema is null", K(ret), K(data_schema));
-  }
-
-  for (int64_t i = 0; OB_SUCC(ret) && i < 3; ++i) {
-    ObString configured_name;
-    const char *default_name = nullptr;
-    if (0 == i) {
-      default_name = storage::ObFTSLiteral::FT_DEFAULT_IK_DICT_UTF8_TABLE;
-      ret = json_props.config_get_dict_table(configured_name);
-    } else if (1 == i) {
-      default_name = storage::ObFTSLiteral::FT_DEFAULT_IK_QUANTIFIER_UTF8_TABLE;
-      ret = json_props.config_get_quantifier_table(configured_name);
-    } else {
-      default_name = storage::ObFTSLiteral::FT_DEFAULT_IK_STOPWORD_UTF8_TABLE;
-      ret = json_props.config_get_stopword_table(configured_name);
-    }
-    if (OB_FAIL(ret)) {
-      LOG_WARN("failed to read IK dictionary table property", K(ret), K(i));
-    } else if (0 == configured_name.case_compare(default_name)) {
-      // Built-in dictionaries do not use user dictionary table metadata.
-    } else {
-      ObString database_name;
-      ObString table_name;
-      const char *dot = configured_name.find('.');
-      if (OB_ISNULL(dot)) {
-        database_name = data_database->get_database_name_str();
-        table_name = configured_name;
-      } else {
-        database_name.assign_ptr(configured_name.ptr(),
-                                 static_cast<int32_t>(dot - configured_name.ptr()));
-        table_name.assign_ptr(dot + 1,
-                              static_cast<int32_t>(configured_name.ptr()
-                                                   + configured_name.length() - dot - 1));
-      }
-      const ObTableSchema *dict_schema = nullptr;
-      const ObDatabaseSchema *dict_database = nullptr;
-      ObSqlString qualified_name;
-      if (database_name.empty() || table_name.empty() || OB_NOT_NULL(table_name.find('.'))) {
-        ret = OB_INVALID_ARGUMENT;
-        LOG_USER_ERROR(OB_INVALID_ARGUMENT, "IK dictionary table name");
-      } else if (OB_FAIL(schema_guard.get_table_schema(database_name, table_name, false, dict_schema))) {
-        LOG_WARN("failed to get IK dictionary table schema", K(ret), K(database_name), K(table_name));
-      } else if (OB_ISNULL(dict_schema) || !dict_schema->is_fulltext_dict()) {
-        ret = OB_INVALID_ARGUMENT;
-        LOG_USER_ERROR(OB_INVALID_ARGUMENT, "IK dictionary table must use FULLTEXT_DICT='Y'");
-      } else if (OB_FAIL(schema_guard.get_database_schema(
-                     dict_schema->get_database_id(), dict_database))) {
-        LOG_WARN("failed to get IK dictionary database schema", K(ret), KPC(dict_schema));
-      } else if (OB_ISNULL(dict_database)) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("IK dictionary database schema is null", K(ret), KPC(dict_schema));
-      } else if (OB_FAIL(qualified_name.append_fmt("%.*s.%.*s",
-                                                   dict_database->get_database_name_str().length(),
-                                                   dict_database->get_database_name_str().ptr(),
-                                                   dict_schema->get_table_name_str().length(),
-                                                   dict_schema->get_table_name_str().ptr()))) {
-        LOG_WARN("failed to build qualified IK dictionary table name", K(ret));
-      } else if (0 == i) {
-        ret = json_props.config_set_dict_table(qualified_name.string());
-      } else if (1 == i) {
-        ret = json_props.config_set_quantifier_table(qualified_name.string());
-      } else {
-        ret = json_props.config_set_stopword_table(qualified_name.string());
-      }
-      if (OB_SUCC(ret)) {
-        storage::ObFTDictHub *hub = nullptr;
-        if (OB_FAIL(storage::ObFTParsePluginData::instance().get_dict_hub(hub))) {
-          LOG_WARN("failed to get dictionary hub while creating fulltext index", K(ret));
-        } else if (OB_ISNULL(hub)) {
-          ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("dictionary hub is null while creating fulltext index", K(ret));
-        } else if (OB_FAIL(hub->refresh_cache(qualified_name.string()))) {
-          LOG_WARN("failed to load latest custom dictionary for new fulltext index",
-                   K(ret), K(qualified_name));
-        }
-      }
-    }
-  }
-  return ret;
-}
-
 bool get_function_args(const ObString &expr_string,
                        const ObString &func_name,
                        ObString &args)
@@ -489,86 +390,6 @@ int ObFtsIndexBuilderUtil::generate_fts_aux_index_name(
       LOG_WARN("failed to build fts aux index name", K(ret));
     } else {
       arg.index_name_.assign_ptr(name_buf, static_cast<int32_t>(pos));
-    }
-  }
-  return ret;
-}
-
-int ObFtsIndexBuilderUtil::check_fulltext_dict_referenced(
-    ObSchemaGetterGuard &schema_guard,
-    const ObString &database_name,
-    const ObString &table_name,
-    bool &is_referenced)
-{
-  int ret = OB_SUCCESS;
-  ObSEArray<const ObTableSchema *, 64> table_schemas;
-  is_referenced = false;
-  if (database_name.empty() || table_name.empty()) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid fulltext dictionary table name", K(ret), K(database_name), K(table_name));
-  } else if (OB_FAIL(schema_guard.get_table_schemas_in_tenant(table_schemas))) {
-    LOG_WARN("failed to get table schemas while checking fulltext dictionary references", K(ret));
-  }
-
-  for (int64_t i = 0; OB_SUCC(ret) && !is_referenced && i < table_schemas.count(); ++i) {
-    const ObTableSchema *index_schema = table_schemas.at(i);
-    if (OB_ISNULL(index_schema) || index_schema->get_parser_name_str().empty()
-        || index_schema->get_parser_property_str().empty()) {
-      // Only fulltext auxiliary schemas have both parser fields.
-    } else {
-      storage::ObFTParser parser;
-      const ObString &parser_name = index_schema->get_parser_name_str();
-      if (OB_FAIL(parser.parse_from_str(parser_name.ptr(), parser_name.length()))) {
-        LOG_WARN("failed to parse fulltext parser name", K(ret), K(parser_name));
-      } else if (!parser.is_ik()) {
-        // Custom dictionary tables are an IK-only property.
-      } else {
-        storage::ObFTParserJsonProps json_props;
-        if (OB_FAIL(json_props.init())) {
-          LOG_WARN("failed to initialize fulltext parser properties", K(ret));
-        } else if (OB_FAIL(json_props.parse_from_valid_str(index_schema->get_parser_property_str()))) {
-          LOG_WARN("failed to parse fulltext parser properties", K(ret), KPC(index_schema));
-        } else {
-          for (int64_t j = 0; OB_SUCC(ret) && !is_referenced && j < 3; ++j) {
-            ObString configured_name;
-            if (0 == j) {
-              ret = json_props.config_get_dict_table(configured_name);
-            } else if (1 == j) {
-              ret = json_props.config_get_quantifier_table(configured_name);
-            } else {
-              ret = json_props.config_get_stopword_table(configured_name);
-            }
-            if (OB_FAIL(ret)) {
-              LOG_WARN("failed to read IK dictionary table property", K(ret), K(j));
-            } else {
-              ObString configured_database;
-              ObString configured_table;
-              const char *dot = configured_name.find('.');
-              if (OB_ISNULL(dot)) {
-                const ObDatabaseSchema *index_database = nullptr;
-                if (OB_FAIL(schema_guard.get_database_schema(index_schema->get_database_id(), index_database))) {
-                  LOG_WARN("failed to get index database schema", K(ret), KPC(index_schema));
-                } else if (OB_ISNULL(index_database)) {
-                  ret = OB_ERR_UNEXPECTED;
-                  LOG_WARN("index database schema is null", K(ret), KPC(index_schema));
-                } else {
-                  configured_database = index_database->get_database_name_str();
-                  configured_table = configured_name;
-                }
-              } else {
-                configured_database.assign_ptr(configured_name.ptr(),
-                    static_cast<int32_t>(dot - configured_name.ptr()));
-                configured_table.assign_ptr(dot + 1,
-                    static_cast<int32_t>(configured_name.ptr() + configured_name.length() - dot - 1));
-              }
-              if (OB_SUCC(ret)) {
-                is_referenced = 0 == configured_database.case_compare(database_name)
-                                && 0 == configured_table.case_compare(table_name);
-              }
-            }
-          }
-        }
-      }
     }
   }
   return ret;
@@ -2247,7 +2068,6 @@ int ObFtsIndexBuilderUtil::generate_fts_parser_property(
     LOG_WARN("invalid arguments", K(ret), K(arg.index_columns_));
   } else {
     ObCollationType collation_type = CS_TYPE_INVALID;
-    bool is_ik_parser = false;
     for (int64_t i = 0; OB_SUCC(ret) && i < arg.index_columns_.count(); ++i) {
       const ObString &column_name = arg.index_columns_.at(i).column_name_;
       const ObColumnSchemaV2 *col_schema = nullptr;
@@ -2276,7 +2096,6 @@ int ObFtsIndexBuilderUtil::generate_fts_parser_property(
       } else if (OB_FAIL(parser.parse_from_str(arg.index_option_.parser_name_.ptr(),
                                                arg.index_option_.parser_name_.length()))) {
         LOG_WARN("failed to parser name and version", K(arg.index_option_.parser_name_), K(ret));
-      } else if (FALSE_IT(is_ik_parser = parser.is_ik())) {
       } else if (OB_FAIL(plugin::ObPluginHelper::find_ftparser(parser.get_parser_name().str(), ftparser_desc, param))) {
         LOG_WARN("failed to find ftparser", K(parser), K(ret));
       } else if (OB_ISNULL(ftparser_desc)) {
@@ -2300,15 +2119,12 @@ int ObFtsIndexBuilderUtil::generate_fts_parser_property(
     } else if (OB_FAIL(json_props.parse_from_valid_str(arg.index_option_.parser_properties_))) {
       LOG_WARN("fail to parse json props", K(ret), K(arg.index_option_.parser_properties_));
     } else if (OB_FAIL(json_props.rebuild_props_for_ddl(arg.index_option_.parser_name_,
-                                                         collation_type,
-                                                         true))) {
+                                                        collation_type,
+                                                        true))) {
       LOG_WARN("fail to rebuild props for ddl",
                K(ret),
-                K(arg.index_option_.parser_properties_),
-                K(collation_type));
-    } else if (is_ik_parser
-               && OB_FAIL(validate_and_qualify_ik_dict_tables(data_schema, json_props))) {
-      LOG_WARN("failed to validate IK dictionary table properties", K(ret));
+               K(arg.index_option_.parser_properties_),
+               K(collation_type));
     } else if (OB_FAIL(json_props.to_format_json(allocator,
                                                  arg.index_option_.parser_properties_))) {
       LOG_WARN("fail to to format json", K(ret));

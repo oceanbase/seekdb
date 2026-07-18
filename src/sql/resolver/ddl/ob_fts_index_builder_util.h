@@ -150,11 +150,6 @@ public:
       const share::schema::ObTableSchema &data_schema,
       obcall::ObCreateIndexArg &arg,
       ObIAllocator *allocator);
-  static int check_fulltext_dict_referenced(
-      share::schema::ObSchemaGetterGuard &schema_guard,
-      const common::ObString &database_name,
-      const common::ObString &table_name,
-      bool &is_referenced);
   static int check_need_to_load_dic(const ObString &parser_name,
       bool &need_to_load_dic);
   static int try_load_and_lock_dictionary_tables(

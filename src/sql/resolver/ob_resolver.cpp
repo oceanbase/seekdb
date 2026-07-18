@@ -365,16 +365,16 @@ int ObResolver::resolve(IsPrepared if_prepared, const ParseNode &parse_tree, ObS
         REGISTER_STMT_RESOLVER(RefreshMemStat);
         break;
       }
+      case T_REFRESH_FULLTEXT_DICT: {
+        REGISTER_STMT_RESOLVER(RefreshFulltextDict);
+        break;
+      }
       case T_WASH_MEMORY_FRAGMENTATION: {
         REGISTER_STMT_RESOLVER(WashMemFragmentation);
         break;
       }
       case T_REFRESH_IO_CALIBRATION: {
         REGISTER_STMT_RESOLVER(RefreshIOCalibration);
-        break;
-      }
-      case T_REFRESH_FULLTEXT_DICT: {
-        REGISTER_STMT_RESOLVER(RefreshFulltextDict);
         break;
       }
       case T_ALTER_SYSTEM_SET_PARAMETER: {
