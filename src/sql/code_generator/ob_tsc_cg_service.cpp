@@ -2376,7 +2376,7 @@ int ObTscCgService::generate_text_ir_ctdef(const ObLogTableScan &op,
     }
   }
 
-  if (OB_SUCC(ret) && tr_info.need_sort()) {
+  if (OB_SUCC(ret) && tr_info.need_sort() && !tr_info.cardinality_only_limit_) {
     ObSEArray<OrderItem, 2> order_items;
     if (OB_FAIL(order_items.push_back(tr_info.sort_key_))) {
       LOG_WARN("append order item array failed", K(ret));

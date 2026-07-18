@@ -770,6 +770,7 @@ void ObTextRetrievalDaaTTokenIter::reset()
 int ObTextRetrievalDaaTTokenIter::get_next_row() {
   int ret = OB_SUCCESS;
   bool need_load = false;
+  int64_t raw_count = 0;
   const int64_t remaining = row_limit_ < 0 ? max_batch_size_
       : row_limit_ - loaded_row_count_;
   if (OB_LIKELY((++cur_idx_) < count_)) {
@@ -781,10 +782,10 @@ int ObTextRetrievalDaaTTokenIter::get_next_row() {
     }
   } else if (!eval_ctx_->is_vectorized() && FALSE_IT(count_ = 1)) {
   } else if (eval_ctx_->is_vectorized()
-      && OB_FAIL(token_iter_->get_next_batch(OB_MIN(max_batch_size_, remaining), count_))) {
+      && OB_FAIL(token_iter_->get_next_batch(max_batch_size_, raw_count))) {
     if (OB_UNLIKELY(OB_ITER_END != ret)) {
       LOG_WARN("failed to get batch rows from inverted index", K(ret));
-    } else if (count_ != 0) {
+    } else if (raw_count != 0) {
       ret = OB_SUCCESS;
       need_load = true;
     }
@@ -792,8 +793,17 @@ int ObTextRetrievalDaaTTokenIter::get_next_row() {
     need_load = true;
   }
   if (OB_SUCC(ret) && need_load) {
+    if (eval_ctx_->is_vectorized()) {
+      // Keep the storage scan's native vector capacity. Some vectorized scan
+      // operators bind their datum buffers to that capacity, so requesting a
+      // smaller final batch can leave invalid datum pointers. The DaaT wrapper
+      // owns deep-copied doc ids and can safely expose only the required prefix.
+      count_ = OB_MIN(raw_count, remaining);
+    }
     loaded_row_count_ += count_;
-    if (OB_NOT_NULL(relevance_expr_)) {
+    if (OB_UNLIKELY(count_ <= 0)) {
+      ret = OB_ITER_END;
+    } else if (OB_NOT_NULL(relevance_expr_)) {
       if (OB_FAIL(save_relevances_and_docids())) {
         LOG_WARN("failed to evaluate simarity expr", K(ret));
       }
