@@ -14650,7 +14650,7 @@ int ObLogPlan::prepare_text_retrieval_scan(const ObIArray<ObRawExpr *> &scan_mat
   } else {
     ObTextRetrievalInfo &tr_info = table_scan->get_text_retrieval_info();
     tr_info.match_expr_ = match_against;
-    tr_info.pushdown_match_filter_ = match_pred;
+    tr_info.pushdown_match_filter_ = tr_info.need_calc_relevance_ ? match_pred : nullptr;
     // in new version, doc_id_idx_tid_ is invalid.
     table_scan->set_doc_id_index_table_id(tr_info.doc_id_idx_tid_);
     if (table_scan->is_vec_adaptive_scan() || table_scan->is_vec_idx_scan_post_filter()) {
@@ -14895,7 +14895,9 @@ int ObLogPlan::prepare_text_retrieval_info(const uint64_t ref_table_id,
     }
   }
   if (OB_SUCC(ret)) {
-    if (OB_FAIL(ObTransformUtils::check_need_calc_match_score(get_optimizer_context().get_exec_ctx(),
+    if (BOOLEAN_MODE == match_against->get_mode_flag()) {
+      need_calc_relevance = true;
+    } else if (OB_FAIL(ObTransformUtils::check_need_calc_match_score(get_optimizer_context().get_exec_ctx(),
                                                               get_stmt(),
                                                               match_against,
                                                               need_calc_relevance,
