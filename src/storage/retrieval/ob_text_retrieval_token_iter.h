@@ -155,6 +155,12 @@ public:
   virtual int get_curr_score(double &score) const override;
   virtual int get_curr_id(const ObDatum *&id_datum) const override;
 public:
+  int ensure_count_row(bool &has_row);
+  int get_count_doc_id(const ObDocIdExt *&doc_id) const;
+  int compare_count_doc_ids(const ObDocIdExt &left, const ObDocIdExt &right, int64_t &cmp_ret) const;
+  int count_cached_docs_before(const ObDocIdExt &upper_bound, int64_t &count) const;
+  int consume_cached_docs(const int64_t count);
+  int64_t get_cached_doc_count() const { return cur_idx_ >= 0 && cur_idx_ < count_ ? count_ - cur_idx_ : 0; }
   int get_token_doc_cnt(int64_t &token_doc_cnt) const { return token_iter_->get_token_doc_cnt(token_doc_cnt); }
   virtual int get_dim_max_score(double &score) override {
     int ret = OB_SUCCESS;

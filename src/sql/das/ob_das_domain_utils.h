@@ -50,6 +50,8 @@ public:
   void reuse();
   TO_STRING_KV(K_(row_idx), K_(is_fts_index_aux), K_(helper), K_(is_inited), K_(rows));
 private:
+  int ensure_word_map(const int64_t bucket_count);
+
   lib::MemoryContext merge_memctx_;
   common::ObArenaAllocator cache_key_allocator_;
   common::ObString parser_name_;
@@ -58,6 +60,7 @@ private:
   uint64_t row_idx_;
   bool is_fts_index_aux_;
   storage::ObFTParseHelper helper_;
+  ObFTWordMap word_map_;
   bool is_inited_;
 
   DISALLOW_COPY_AND_ASSIGN(ObFTIndexRowCache);

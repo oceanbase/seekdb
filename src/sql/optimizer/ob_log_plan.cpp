@@ -5585,14 +5585,21 @@ int ObLogPlan::try_push_aggr_into_table_scan(ObLogicalOperator *top,
     ObLogTableScan *scan_op = static_cast<ObLogTableScan*>(top);
     bool is_get = false;
     bool has_npd_filter = false; //has non-pushdown filter
+    const bool is_fts_count_star = scan_op->is_text_retrieval_scan()
+        && groupby_columns.empty()
+        && 1 == aggr_items.count()
+        && nullptr != aggr_items.at(0)
+        && T_FUN_COUNT == aggr_items.at(0)->get_expr_type()
+        && 0 == aggr_items.at(0)->get_real_param_count()
+        && !aggr_items.at(0)->is_param_distinct();
     if (OB_FAIL(scan_op->is_table_get(is_get))) {
       LOG_WARN("failed to check is get", K(ret));
     } else if (OB_FAIL(scan_op->has_nonpushdown_filter(has_npd_filter))) {
       LOG_WARN("check whether hash non-pushdown filter failed", K(ret));
     } else if (is_get ||
                has_npd_filter ||
-               scan_op->get_index_back() ||
-               scan_op->is_text_retrieval_scan() ||
+               (scan_op->get_index_back() && !is_fts_count_star) ||
+               (scan_op->is_text_retrieval_scan() && !is_fts_count_star) ||
                scan_op->is_sample_scan() ||
                (scan_op->is_index_scan() && !groupby_columns.empty()) ||
                (is_descending_direction(scan_op->get_scan_direction()) && !groupby_columns.empty())) {

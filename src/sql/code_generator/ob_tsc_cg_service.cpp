@@ -2344,6 +2344,31 @@ int ObTscCgService::generate_text_ir_ctdef(const ObLogTableScan &op,
     root_ctdef = ir_scan_ctdef;
     if (OB_FAIL(generate_text_ir_spec_exprs(tr_info, *ir_scan_ctdef))) {
       LOG_WARN("failed to generate text ir spec exprs", K(ret), KPC(match_against));
+    } else if (!op.get_pushdown_aggr_exprs().empty()) {
+      ObAggFunRawExpr *count_raw_expr = op.get_pushdown_aggr_exprs().at(0);
+      if (OB_UNLIKELY(1 != op.get_pushdown_aggr_exprs().count()
+          || OB_ISNULL(count_raw_expr)
+          || T_FUN_COUNT != count_raw_expr->get_expr_type()
+          || 0 != count_raw_expr->get_real_param_count()
+          || count_raw_expr->is_param_distinct())) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("unexpected aggregate pushed into text retrieval scan",
+            K(ret), K(op.get_pushdown_aggr_exprs()));
+      } else if (OB_FAIL(cg_.generate_rt_expr(*count_raw_expr, ir_scan_ctdef->count_agg_expr_))) {
+        LOG_WARN("failed to generate text retrieval count aggregate expr", K(ret));
+      } else if (OB_ISNULL(ir_scan_ctdef->count_agg_expr_)) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("unexpected null text retrieval count aggregate expr", K(ret));
+      } else {
+        ir_scan_ctdef->result_output_.reset();
+        if (OB_FAIL(ir_scan_ctdef->result_output_.init(1))) {
+          LOG_WARN("failed to initialize text retrieval count output", K(ret));
+        } else if (OB_FAIL(ir_scan_ctdef->result_output_.push_back(ir_scan_ctdef->count_agg_expr_))) {
+          LOG_WARN("failed to append text retrieval count output", K(ret));
+        } else if (OB_FAIL(cg_.mark_expr_self_produced(count_raw_expr))) {
+          LOG_WARN("failed to mark text retrieval count aggregate expr", K(ret));
+        }
+      }
     } else {
       const ObCostTableScanInfo *est_cost_info = op.get_est_cost_info();
       int partition_row_cnt = 0;
@@ -2385,7 +2410,12 @@ int ObTscCgService::generate_text_ir_ctdef(const ObLogTableScan &op,
     }
   }
 
-  if (OB_SUCC(ret) && op.get_index_back() && !cg_ctx.is_func_lookup_ && !cg_ctx.is_es_match_ && !op.need_skip_rowkey_doc()) {
+  if (OB_SUCC(ret)
+      && op.get_index_back()
+      && op.get_pushdown_aggr_exprs().empty()
+      && !cg_ctx.is_func_lookup_
+      && !cg_ctx.is_es_match_
+      && !op.need_skip_rowkey_doc()) {
     ObDASIRAuxLookupCtDef *aux_lookup_ctdef = nullptr;
     ObDASBaseCtDef *ir_output_ctdef = nullptr == sort_ctdef ?
         static_cast<ObDASBaseCtDef *>(ir_scan_ctdef) : static_cast<ObDASBaseCtDef *>(sort_ctdef);

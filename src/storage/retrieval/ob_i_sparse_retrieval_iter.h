@@ -139,6 +139,11 @@ public:
   virtual void reset() = 0;
   virtual int get_next_row() = 0;
   virtual int get_next_rows(const int64_t capacity, int64_t &count) = 0;
+  virtual int get_total_count(int64_t &count)
+  {
+    count = 0;
+    return OB_NOT_SUPPORTED;
+  }
   virtual int get_query_max_score(double &score) {
     return OB_NOT_SUPPORTED;
   }

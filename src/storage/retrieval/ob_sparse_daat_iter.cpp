@@ -271,6 +271,51 @@ int ObSRDaaTIterImpl::get_next_rows(const int64_t capacity, int64_t &count)
   return ret;
 }
 
+int ObSRDaaTIterImpl::get_total_count(int64_t &count)
+{
+  int ret = OB_SUCCESS;
+  count = 0;
+  if (IS_NOT_INIT) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("sparse retrieval count iterator is not initialized", K(ret));
+  } else if (OB_ISNULL(iter_param_) || OB_ISNULL(dim_iters_)
+      || OB_ISNULL(iter_param_->limit_param_)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected null sparse retrieval count state", K(ret), KP_(iter_param), KP_(dim_iters),
+             KP(iter_param_->limit_param_));
+  } else if (iter_param_->need_project_relevance()
+      || iter_param_->need_filter()
+      || iter_param_->need_pushdown_topk()
+      || iter_param_->limit_param_->is_valid()) {
+    ret = OB_NOT_SUPPORTED;
+  } else if (OB_FAIL(pre_process())) {
+    if (OB_ITER_END == ret) {
+      ret = OB_SUCCESS;
+    } else {
+      LOG_WARN("failed to prepare sparse retrieval count", K(ret));
+    }
+  } else {
+    while (OB_SUCC(ret)) {
+      const ObDatum *id_datum = nullptr;
+      double relevance = 0.0;
+      bool is_valid = false;
+      if (OB_FAIL(fill_merge_heap())) {
+        if (OB_ITER_END == ret) {
+          ret = OB_SUCCESS;
+          break;
+        } else {
+          LOG_WARN("failed to fill sparse retrieval count heap", K(ret));
+        }
+      } else if (OB_FAIL(collect_dims_by_id(id_datum, relevance, is_valid))) {
+        LOG_WARN("failed to collect sparse retrieval count dimensions", K(ret));
+      } else if (is_valid) {
+        ++count;
+      }
+    }
+  }
+  return ret;
+}
+
 int ObSRDaaTIterImpl::pre_process()
 {
   return OB_NOT_IMPLEMENT;
