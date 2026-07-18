@@ -19,13 +19,10 @@
 
 #include "lib/allocator/ob_allocator.h"
 #include "lib/list/ob_list.h"
-#include "storage/fts/ik/ob_fast_list.h"
 namespace oceanbase
 {
 namespace storage
 {
-static constexpr int64_t IK_TOKEN_BLOCK_CAPACITY = 64;
-
 enum class ObIKTokenType : int8_t
 {
   IK_CHINESE_TOKEN = 0,
@@ -74,7 +71,6 @@ public:
   }
 };
 
-template <typename ListType>
 class ObFTSortList
 {
 public:
@@ -91,19 +87,16 @@ public:
 
   int64_t max();
 
-  ListType &tokens() { return tokens_; }
-  const ListType &tokens() const { return tokens_; }
+  ObList<ObIKToken, ObIAllocator> &tokens() { return tokens_; }
+  const ObList<ObIKToken, ObIAllocator> &tokens() const { return tokens_; }
 
 public:
-  typedef typename ListType::iterator CellIter;
-  typedef typename ListType::const_iterator ConstCellIter;
+  typedef ObList<ObIKToken, ObIAllocator>::iterator CellIter;
+  typedef ObList<ObIKToken, ObIAllocator>::const_iterator ConstCellIter;
 
 private:
-  ListType tokens_;
+  ObList<ObIKToken, ObIAllocator> tokens_;
 };
-
-typedef ObFTSortList<ObList<ObIKToken, ObIAllocator>> ObFTLightSortList;
-typedef ObFTSortList<ObFastList<ObIKToken, IK_TOKEN_BLOCK_CAPACITY>> ObFTFastSortList;
 
 class ObIKTokenChain
 {
@@ -120,7 +113,7 @@ public:
 
   bool check_conflict(const ObIKToken &token);
 
-  ObFTLightSortList &list() { return list_; }
+  ObFTSortList &list() { return list_; }
 
   bool better_than(const ObIKTokenChain &other) const;
 
@@ -142,7 +135,7 @@ private:
   int min_offset_ = -1;
   int max_offset_ = -1;
   int payload_ = -1;
-  ObFTLightSortList list_;
+  ObFTSortList list_;
 };
 
 } //  namespace storage

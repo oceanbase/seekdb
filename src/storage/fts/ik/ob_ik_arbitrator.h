@@ -47,15 +47,15 @@ private:
 
   int optimize(TokenizeContext &ctx,
                ObIKTokenChain *option,
-               ObFTLightSortList::CellIter iter,
+               ObFTSortList::CellIter iter,
                int64_t fulltext_len,
                ObIKTokenChain *&best);
 
   int try_add_next_words(ObIKTokenChain *chain,
-                         ObFTLightSortList::CellIter iter,
+                         ObFTSortList::CellIter iter,
                          ObIKTokenChain *option,
                          bool need_conflict,
-                         ObList<ObFTLightSortList::CellIter, ObIAllocator> &conflict_stack);
+                         ObList<ObFTSortList::CellIter, ObIAllocator> &conflict_stack);
 
   int remove_conflict(const ObIKToken &token, ObIKTokenChain *option);
 
