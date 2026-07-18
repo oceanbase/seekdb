@@ -150,7 +150,9 @@ int ObExprTokenize::tokenize_fulltext(const TokenizeParam &param,
 {
   int ret = OB_SUCCESS;
   storage::ObFTParseHelper tokenize_helper;
-  const int64_t ft_word_bkt_cnt = MIN(MAX(param.fulltext_.length() / 2, 2), 997);
+  // a bucket per ~4 bytes still keeps the load factor below one for typical
+  // token densities while making the per-statement map cheaper to create
+  const int64_t ft_word_bkt_cnt = MIN(MAX(param.fulltext_.length() / 4, 2), 997);
   int64_t doc_len = 0;
   ObFTWordMap token_map;
 

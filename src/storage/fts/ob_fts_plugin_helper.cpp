@@ -21,6 +21,7 @@
 #include "storage/fts/ob_fts_plugin_helper.h"
 
 #include "common/json_type/ob_json_tree.h"
+#include "lib/lock/ob_mutex.h"
 #include "plugin/interface/ob_plugin_ftparser_intf.h"
 #include "plugin/sys/ob_plugin_helper.h"
 #include "share/ob_force_print_log.h"
@@ -37,6 +38,78 @@ namespace oceanbase
 {
 namespace storage
 {
+namespace
+{
+// The parser property is fully determined by (parser name, property json)
+// and both repeat across statements, so cache the parsed result and skip
+// the per-call json parse. Entries are parsed in place and never mutated
+// afterwards, so the ObString members of a copied property may keep
+// pointing at the immortal entry buffers.
+class ObFTParserPropertyCache final
+{
+public:
+  int get_or_parse(const common::ObString &plugin_name,
+                   const ObFTParser &parser,
+                   const common::ObString &props,
+                   ObFTParserProperty &out)
+  {
+    int ret = OB_SUCCESS;
+    const int64_t key_len = plugin_name.length() + 1 + props.length();
+    bool served = false;
+    if (key_len > 0 && key_len <= MAX_KEY_LEN) {
+      lib::ObMutexGuard guard(lock_);
+      int64_t idx = -1;
+      for (int64_t i = 0; -1 == idx && i < cnt_; ++i) {
+        if (entries_[i].key_len_ == key_len
+            && 0 == MEMCMP(entries_[i].key_, plugin_name.ptr(), plugin_name.length())
+            && '\n' == entries_[i].key_[plugin_name.length()]
+            && 0 == MEMCMP(entries_[i].key_ + plugin_name.length() + 1,
+                           props.ptr(), props.length())) {
+          idx = i;
+        }
+      }
+      if (-1 != idx) {
+        out = entries_[idx].prop_;
+        served = true;
+      } else if (cnt_ < MAX_ENTRY) {
+        Entry &entry = entries_[cnt_];
+        entry.prop_ = ObFTParserProperty();
+        if (OB_FAIL(entry.prop_.parse_for_parser_helper(parser, props))) {
+          // keep the slot unpublished; the caller falls back below
+          ret = OB_SUCCESS;
+        } else {
+          MEMCPY(entry.key_, plugin_name.ptr(), plugin_name.length());
+          entry.key_[plugin_name.length()] = '\n';
+          MEMCPY(entry.key_ + plugin_name.length() + 1, props.ptr(), props.length());
+          entry.key_len_ = key_len;
+          ++cnt_;
+          out = entry.prop_;
+          served = true;
+        }
+      }
+    }
+    if (!served) {
+      ret = out.parse_for_parser_helper(parser, props);
+    }
+    return ret;
+  }
+
+private:
+  static const int64_t MAX_ENTRY = 8;
+  static const int64_t MAX_KEY_LEN = 1024;
+  struct Entry
+  {
+    char key_[MAX_KEY_LEN];
+    int64_t key_len_;
+    ObFTParserProperty prop_;
+  };
+  lib::ObMutex lock_;
+  Entry entries_[MAX_ENTRY];
+  int64_t cnt_ = 0;
+};
+
+ObFTParserPropertyCache g_ft_parser_property_cache;
+} // namespace
 
 const char *ObFTParser::NAME_STR[ObFTParser::ParserType::FTP_MAX + 1] = {
   "non-builtin",
@@ -440,7 +513,10 @@ int ObFTParseHelper::init(
     LOG_WARN("invalid argument", K(ret), KP(allocator), K(plugin_name));
   } else if (OB_FAIL(parser_name_.parse_from_str(plugin_name.ptr(), plugin_name.length()))) {
     LOG_WARN("fail to parse name from cstring", K(ret), K(plugin_name));
-  } else if (OB_FAIL(parser_property_.parse_for_parser_helper(parser_name_, plugin_properties))) {
+  } else if (OB_FAIL(g_ft_parser_property_cache.get_or_parse(plugin_name,
+                                                             parser_name_,
+                                                             plugin_properties,
+                                                             parser_property_))) {
     LOG_WARN("fail to parse parser property from cstring", K(ret), K(plugin_properties), K(parser_name_));
   } else if (OB_FAIL(ObPluginHelper::find_ftparser(parser_name_.get_parser_name().str(),
                                                    parser_desc_, plugin_param_))) {
