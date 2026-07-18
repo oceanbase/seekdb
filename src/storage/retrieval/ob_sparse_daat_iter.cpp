@@ -222,7 +222,11 @@ int ObSRDaaTIterImpl::get_next_row()
   int ret = OB_SUCCESS;
   int64_t count = 0;
   if (OB_FAIL(get_next_rows(1, count))) {
-    if (OB_UNLIKELY(OB_ITER_END != ret)) {
+    if (OB_ITER_END == ret && 1 == count) {
+      // get_next_rows() may finish draining bounded posting scans after it has
+      // projected the last scalar row. Return that row before reporting end.
+      ret = OB_SUCCESS;
+    } else if (OB_UNLIKELY(OB_ITER_END != ret)) {
       LOG_WARN("failed to get next row", K(ret));
     } else if (OB_UNLIKELY(count != 0)) {
       ret = OB_ERR_UNEXPECTED;
@@ -258,7 +262,12 @@ int ObSRDaaTIterImpl::get_next_rows(const int64_t capacity, int64_t &count)
   } else {
     count = 0;
     const int64_t real_capacity = MIN(capacity, iter_param_->max_batch_size_);
-    while (OB_SUCC(ret) && count < real_capacity) {
+    const bool has_limit = iter_param_->limit_param_->is_valid();
+    while (OB_SUCC(ret)
+        && (count < real_capacity
+            || (iter_param_->drain_after_limit_
+                && has_limit
+                && output_row_cnt_ >= iter_param_->limit_param_->limit_))) {
       if (OB_FAIL(do_one_merge_round(count))) {
         if (OB_UNLIKELY(OB_ITER_END != ret)) {
           LOG_WARN("failed to do one merge round", K(ret), K(count));
@@ -442,18 +451,26 @@ int ObSRDaaTIterImpl::cache_result(int64_t &count, const ObDatum &id_datum, cons
   if (limit_param->is_valid() && input_row_cnt_ <= offset) {
     // TODO: Maybe we should not process offset logic here
     // don't need to project
+  } else if (iter_param_->drain_after_limit_
+      && limit_param->is_valid()
+      && output_row_cnt_ >= limit) {
+    // The caller already has enough rows. Consume the remaining bounded
+    // posting input so that vectorized child scans can be safely reused.
   } else if (OB_UNLIKELY(count >= buffered_domain_ids_.count()
       || (!iter_param_->match_only_ && count >= buffered_relevances_.count()))) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid buffered idx", K(ret), K(count), K(buffered_domain_ids_.count()), K(buffered_relevances_.count()));
+  } else if (OB_FAIL(buffered_domain_ids_[count].from_datum(id_datum))) {
+    LOG_WARN("failed to cache sparse retrieval domain id", K(ret), K(id_datum), K(count));
   } else {
-    buffered_domain_ids_[count].from_datum(id_datum);
     if (!iter_param_->match_only_) {
       buffered_relevances_[count] = relevance;
     }
     ++count;
     ++output_row_cnt_;
-    if (limit_param->is_valid() && output_row_cnt_ >= limit) {
+    if (!iter_param_->drain_after_limit_
+        && limit_param->is_valid()
+        && output_row_cnt_ >= limit) {
       ret = OB_ITER_END;
     }
   }

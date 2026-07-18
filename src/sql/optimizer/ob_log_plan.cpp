@@ -14695,12 +14695,37 @@ int ObLogPlan::prepare_text_retrieval_scan(const ObIArray<ObRawExpr *> &scan_mat
     ObTextRetrievalInfo &tr_info = table_scan->get_text_retrieval_info();
     tr_info.match_expr_ = match_against;
     tr_info.pushdown_match_filter_ = match_pred;
+    if (tr_info.cardinality_only_limit_
+        && scan_filters.empty()
+        && 1 == scan_match_filters.count()
+        && 1 == all_match_filters.count()
+        && OB_NOT_NULL(get_stmt()->get_limit_expr())) {
+      // The outer LIMIT remains the global correctness boundary. This local
+      // limit + offset bound lets match-only execution stop or safely bound
+      // posting scans without changing the cardinality observed by COUNT(*).
+      ObRawExpr *local_limit_expr = nullptr;
+      if (OB_FAIL(ObTransformUtils::make_pushdown_limit_count(
+              get_optimizer_context().get_expr_factory(),
+              *get_optimizer_context().get_session_info(),
+              get_stmt()->get_limit_expr(),
+              get_stmt()->get_offset_expr(),
+              local_limit_expr))) {
+        LOG_WARN("failed to build local text retrieval result limit", K(ret));
+      } else {
+        tr_info.topk_limit_expr_ = local_limit_expr;
+        tr_info.topk_offset_expr_ = nullptr;
+      }
+    }
     // in new version, doc_id_idx_tid_ is invalid.
-    table_scan->set_doc_id_index_table_id(tr_info.doc_id_idx_tid_);
-    if (table_scan->is_vec_adaptive_scan() || table_scan->is_vec_idx_scan_post_filter()) {
+    if (OB_SUCC(ret)) {
+      table_scan->set_doc_id_index_table_id(tr_info.doc_id_idx_tid_);
+    }
+    if (OB_SUCC(ret)
+        && (table_scan->is_vec_adaptive_scan() || table_scan->is_vec_idx_scan_post_filter())) {
       table_scan->set_rowkey_doc_table_id(tr_info.rowkey_idx_tid_);
     }
-    if (OB_FAIL(table_scan->set_is_skip_rowkey_doc(tr_info.doc_id_idx_tid_ == OB_INVALID_ID))) {
+    if (OB_FAIL(ret)) {
+    } else if (OB_FAIL(table_scan->set_is_skip_rowkey_doc(tr_info.doc_id_idx_tid_ == OB_INVALID_ID))) {
       LOG_WARN("failed to set skip rowkey doc flag", K(ret));
     } else if (OB_FAIL(table_scan->set_is_skip_rowkey_doc(tr_info.rowkey_idx_tid_ == OB_INVALID_ID))) {
       LOG_WARN("failed to set skip rowkey doc flag", K(ret));

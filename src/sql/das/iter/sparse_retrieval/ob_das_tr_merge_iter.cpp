@@ -478,8 +478,14 @@ int ObDASTRMergeIter::init_dim_iter_param(ObTextRetrievalScanIterParam &iter_par
 int ObDASTRMergeIter::create_sparse_retrieval_iter()
 {
   int ret = OB_SUCCESS;
+  const bool has_result_limit = ir_ctdef_->has_result_limit();
+  const bool can_limit_posting_scans = has_result_limit
+      && NATURAL_LANGUAGE_MODE == ir_ctdef_->mode_flag_
+      && ir_rtdef_->minimum_should_match_ <= 1
+      && result_limit_param_.is_valid()
+      && 0 == result_limit_param_.offset_;
   sr_iter_param_.dim_weights_ = dim_weights_.count() >= 1 ? &dim_weights_ : nullptr;
-  sr_iter_param_.limit_param_ = ir_ctdef_->has_result_limit()
+  sr_iter_param_.limit_param_ = has_result_limit
       ? &result_limit_param_ : &ir_rtdef_->get_inv_idx_scan_rtdef()->limit_param_;
   sr_iter_param_.eval_ctx_ = ir_rtdef_->eval_ctx_;
   sr_iter_param_.id_proj_expr_ = ir_ctdef_->inv_scan_domain_id_col_;
@@ -490,7 +496,22 @@ int ObDASTRMergeIter::create_sparse_retrieval_iter()
       ? nullptr : ir_ctdef_->match_filter_;
   sr_iter_param_.topk_limit_ = topk_limit_;
   sr_iter_param_.match_only_ = ir_ctdef_->is_match_only();
-  if (sr_iter_param_.match_only_) {
+  sr_iter_param_.drain_after_limit_ = has_result_limit;
+  // For a natural-language OR, limiting every posting list to N rows preserves
+  // whether the union contains at least N rows. The outer logical LIMIT still
+  // chooses the final N rows across tokens and partitions. Boolean/AND modes
+  // cannot use posting prefixes safely and therefore keep their full inputs.
+  for (int64_t i = 0; OB_SUCC(ret) && can_limit_posting_scans
+      && i < inv_scan_params_.count(); ++i) {
+    if (OB_ISNULL(inv_scan_params_.at(i))) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("unexpected null inverted index scan parameter", K(ret), K(i));
+    } else {
+      inv_scan_params_.at(i)->limit_param_ = result_limit_param_;
+    }
+  }
+  if (OB_FAIL(ret)) {
+  } else if (sr_iter_param_.match_only_) {
     // Token presence is sufficient; field and token boosts affect only score.
   } else if (OB_NOT_NULL(ir_ctdef_->field_boost_expr_)) {
     ObDatum *boost_datum = nullptr;

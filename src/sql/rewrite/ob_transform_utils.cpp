@@ -14845,8 +14845,14 @@ int ObTransformUtils::check_need_calc_match_score(ObExecContext *exec_ctx,
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), KP(exec_ctx), KP(stmt), KP(match_expr));
   } else if (stmt->has_limit() && !generated_table_count_only) {
-    // A LIMIT can imply relevance Top-K unless the parent observes only row count.
-  } else if (OB_FAIL(stmt->get_relation_exprs(relation_exprs))) {
+    // A LIMIT can imply relevance Top-K when the selected rows are observed.
+  } else if (stmt->has_limit()
+      && OB_FAIL(relation_exprs.assign(stmt->get_condition_exprs()))) {
+    // The outer COUNT(*) observes only cardinality, so select and order
+    // expressions are irrelevant. WHERE expressions must still be checked
+    // because a predicate can compare the MATCH score against a threshold.
+    LOG_WARN("failed to assign condition expressions", K(ret));
+  } else if (!stmt->has_limit() && OB_FAIL(stmt->get_relation_exprs(relation_exprs))) {
     LOG_WARN("failed to get statement relation expressions", K(ret));
   } else {
     need_calc = false;

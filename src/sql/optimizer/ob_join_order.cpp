@@ -10983,7 +10983,6 @@ static bool is_count_only_generated_table(const ObDMLStmt *parent_stmt,
     count_only = child_select->is_single_table_stmt()
         && !child_select->is_set_stmt()
         && OB_NOT_NULL(child_select->get_limit_expr())
-        && !child_select->has_order_by()
         && !child_select->has_group_by()
         && !child_select->has_rollup()
         && !child_select->has_having()
