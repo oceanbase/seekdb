@@ -71,6 +71,7 @@ int ObServer::get_lower_bound_freeze_info(const int64_t snapshot_version, share:
 #include "observer/vector_index/ob_plugin_vector_index_utils.h"
 #include "share/roaringbitmap/ob_rb_memory_mgr.h"
 #include "storage/fts/dict/ob_ft_cache.h"
+#include "sql/engine/expr/ob_expr_tokenize.h"
 #include "lib/utility/ob_target_specific.h"
 #include "storage/fts/dict/ob_gen_dic_loader.h"
 #include "plugin/sys/ob_plugin_mgr.h"
@@ -454,6 +455,8 @@ int ObServer::init(const ObServerOptions &opts, const ObPLogWriterCfg &log_cfg)
       LOG_ERROR("init px target mgr failed", KR(ret));
     } else if (OB_FAIL(ObDictCache::get_instance().init("dict_cache"))) {
       LOG_ERROR("init dict cache failed", KR(ret));
+    } else if (OB_FAIL(sql::ObTokenizeResultCache::get_instance().init())) {
+      LOG_ERROR("init tokenize result cache failed", KR(ret));
 
 #ifndef OB_BUILD_LITE
     } else if (OB_FAIL(ObServerBlacklist::get_instance().init(self_addr_))) {
@@ -676,6 +679,7 @@ void ObServer::destroy()
     FLOG_INFO("server startup task handler destroyed");
 
     FLOG_INFO("begin to destroy dict cache");
+    sql::ObTokenizeResultCache::get_instance().destroy();
     ObDictCache::get_instance().destroy();
     FLOG_INFO("dict cache destroyed");
 
