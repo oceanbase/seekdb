@@ -72,8 +72,7 @@ int ObBEngFTParser::get_next_token(
 
 bool ObBEngFTParser::is_ascii_document(const char *fulltext, const int64_t fulltext_len) const
 {
-  bool is_ascii = ObCharset::charset_type_by_coll(
-                      static_cast<ObCollationType>(analysis_ctx_.cs_->number)) == CHARSET_UTF8MB4;
+  bool is_ascii = (cs_type_ == CHARSET_UTF8MB4);
   for (int64_t i = 0; is_ascii && i < fulltext_len; ++i) {
     is_ascii = 0 == (static_cast<unsigned char>(fulltext[i]) & 0x80);
   }
@@ -82,9 +81,16 @@ bool ObBEngFTParser::is_ascii_document(const char *fulltext, const int64_t fullt
 
 bool ObBEngFTParser::is_ascii_delimiter(const char ch) const
 {
-  return ob_isspace(analysis_ctx_.cs_, ch)
-         || ob_iscntrl(analysis_ctx_.cs_, ch)
-         || ob_ispunct(analysis_ctx_.cs_, ch);
+  // ASCII fast path: avoid three charset function dispatches per character.
+  // A byte is a delimiter if it is a control character (<= 0x20), DEL (0x7F),
+  // or in one of the ASCII punctuation ranges.
+  const unsigned char c = static_cast<unsigned char>(ch);
+  return (c <= 0x20)
+         || (c == 0x7F)
+         || (c >= 0x21 && c <= 0x2F)
+         || (c >= 0x3A && c <= 0x40)
+         || (c >= 0x5B && c <= 0x60)
+         || (c >= 0x7B && c <= 0x7E);
 }
 
 int ObBEngFTParser::get_next_ascii_token(const char *&word,
@@ -202,6 +208,8 @@ int ObBEngFTParser::init(ObFTParserParam *param)
     analysis_ctx_.cs_ = param->cs_;
     analysis_ctx_.filter_stopword_ = false;
     analysis_ctx_.need_grouping_ = false;
+    cs_type_ = ObCharset::charset_type_by_coll(
+                 static_cast<ObCollationType>(analysis_ctx_.cs_->number));
     if (OB_FAIL(prepare_document(param->fulltext_, param->ft_length_))) {
       LOG_WARN("fail to prepare document by parser", K(ret), KP(param->fulltext_), K(param->ft_length_));
     } else {
@@ -244,6 +252,7 @@ void ObBEngFTParser::reset()
   use_ascii_fast_path_ = false;
   analyzer_inited_ = false;
   is_inited_ = false;
+  cs_type_ = CHARSET_INVALID;
 }
 
 ObBasicEnglishFTParserDesc::ObBasicEnglishFTParserDesc()

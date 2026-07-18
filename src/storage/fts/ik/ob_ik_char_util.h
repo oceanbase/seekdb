@@ -51,6 +51,10 @@ public:
                                  const char *input,
                                  const uint8_t char_len,
                                  CharType &type);
+  static int classify_first_char(ObCharsetType cs_type,
+                                 const char *input,
+                                 const uint8_t char_len,
+                                 CharType &type);
 
   static int check_cn_number(ObCollationType coll_type,
                              const char *input,
@@ -487,8 +491,16 @@ inline int ObFTCharUtil::classify_first_char(ObCollationType coll_type,
                                              const uint8_t char_len,
                                              CharType &type)
 {
+  const ObCharsetType cs_type = ObCharset::charset_type_by_coll(coll_type);
+  return classify_first_char(cs_type, input, char_len, type);
+}
+
+inline int ObFTCharUtil::classify_first_char(ObCharsetType cs_type,
+                                             const char *input,
+                                             const uint8_t char_len,
+                                             CharType &type)
+{
   int ret = OB_SUCCESS;
-  ObCharsetType cs_type = ObCharset::charset_type_by_coll(coll_type);
 
   switch (cs_type) {
   case CHARSET_UTF8MB4: {

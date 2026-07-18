@@ -105,11 +105,12 @@ int ObIKFTParser::get_next_token(const char *&word,
         }
       } else {
         bool is_stop = false;
+        const char *token_start = output_word + offset;
         if (!OB_ISNULL(dict_stop_)
-            && OB_FAIL(dict_stop_->match(ObString(len, output_word + offset), is_stop))) {
+            && OB_FAIL(dict_stop_->match(ObString(len, token_start), is_stop))) {
           LOG_WARN("Failed to match stopwords", K(ret));
         } else if (!is_stop) {
-          word = output_word + offset;
+          word = token_start;
           word_len = len;
           char_cnt = cnt;
           word_freq = 1;
@@ -207,8 +208,9 @@ int ObIKFTParser::process_next_batch()
       } else if (OB_FAIL(process_one_char(*ctx_, ch, char_len, type))) {
         LOG_WARN("Failed to process one char", K(ret));
       } else {
-        // 1. check segmention
-        if (ctx_->handle_size() > SEGMENT_LIMIT && type == ObFTCharUtil::CharType::USELESS) {
+        // 1. check segmention. Test the cheaper character-type predicate first;
+        // most characters are not USELESS, so we avoid the handle_size compare.
+        if (type == ObFTCharUtil::CharType::USELESS && ctx_->handle_size() > SEGMENT_LIMIT) {
           do_seg = true;
         }
 

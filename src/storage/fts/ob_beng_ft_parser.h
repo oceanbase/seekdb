@@ -20,6 +20,7 @@
 #include "lib/utility/ob_macro_utils.h"
 #include "lib/utility/ob_print_utils.h"
 #include "lib/allocator/page_arena.h"
+#include "lib/charset/ob_charset.h"
 #include "share/text_analysis/ob_text_analyzer.h"
 #include "plugin/interface/ob_plugin_ftparser_intf.h"
 #include "storage/fts/ob_i_reusable_ft_parser.h"
@@ -46,7 +47,8 @@ public:
       ascii_end_(nullptr),
       use_ascii_fast_path_(false),
       analyzer_inited_(false),
-      is_inited_(false)
+      is_inited_(false),
+      cs_type_(common::CHARSET_INVALID)
   {}
   ~ObBEngFTParser() { reset(); }
 
@@ -84,6 +86,7 @@ private:
   bool use_ascii_fast_path_;
   bool analyzer_inited_;
   bool is_inited_;
+  common::ObCharsetType cs_type_;
 
   DISALLOW_COPY_AND_ASSIGN(ObBEngFTParser);
 };
