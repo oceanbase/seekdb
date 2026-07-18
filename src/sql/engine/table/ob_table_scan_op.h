@@ -722,6 +722,9 @@ private:
   int inner_rescan_for_tsc();
 
   int inner_get_next_fts_index_row();
+  int inner_get_next_fts_index_batch(const int64_t max_row_cnt);
+  int prepare_next_fts_document();
+  int replicate_fts_input_columns(const int64_t batch_size);
   int fetch_next_fts_index_rows();
   int fill_generated_fts_cols(ObDatumRow *row);
   int init_fts_output_exprs();
