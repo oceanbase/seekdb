@@ -1346,22 +1346,22 @@ int AiSplitDocumentTableFunc::eval_input(ObJsonTableOp &jt, JtScanCtx &ctx, ObEv
       } else if (!params_datum->is_null()) {
         params = params_datum->get_string();
         ObString value;
-        if (json_string("\"type\"", value)) {
+        if (json_string("type", value)) {
           markdown = (0 == value.case_compare("markdown"));
           if (!markdown && 0 != value.case_compare("text")) {
             ret = OB_INVALID_ARGUMENT;
           }
         }
-        if (OB_SUCC(ret) && json_string("\"by\"", value)) {
+        if (OB_SUCC(ret) && json_string("by", value)) {
           by_word = (0 == value.case_compare("word"));
           if (!by_word && 0 != value.case_compare("sentence")) {
             ret = OB_INVALID_ARGUMENT;
           }
         }
-        if (OB_SUCC(ret) && json_int("\"max\"", max_chunk_size) && max_chunk_size <= 0) {
+        if (OB_SUCC(ret) && json_int("max", max_chunk_size) && max_chunk_size <= 0) {
           ret = OB_INVALID_ARGUMENT;
         }
-        if (OB_SUCC(ret) && json_int("\"overlap\"", overlap) && (overlap < 0 || overlap >= max_chunk_size)) {
+        if (OB_SUCC(ret) && json_int("overlap", overlap) && (overlap < 0 || overlap >= max_chunk_size)) {
           ret = OB_INVALID_ARGUMENT;
         }
       }
