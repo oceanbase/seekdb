@@ -129,7 +129,22 @@ int ObIKFTParser::get_next_token(const char *&word,
   } else {
     bool accept_token = false;
     while (OB_SUCC(ret) && !accept_token) {
-      if (OB_FAIL(produce())) {
+      if (current_segment_cache_hit_) {
+        if (OB_ISNULL(current_cached_segment_)) {
+          ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("unexpected null cached ik segment", K(ret));
+        } else if (current_cached_token_idx_ < current_cached_segment_->tokens_.count()) {
+          const CachedToken &cached =
+              current_cached_segment_->tokens_.at(current_cached_token_idx_++);
+          word = document_fulltext_ + current_segment_offset_ + cached.relative_offset_;
+          word_len = cached.length_;
+          char_cnt = cached.char_cnt_;
+          word_freq = cached.word_freq_;
+          accept_token = true;
+        } else {
+          ret = init_next_segment();
+        }
+      } else if (OB_FAIL(produce())) {
         LOG_WARN("Failed to produce new token", K(ret));
       } else if (OB_FAIL(ctx_->get_next_token(output_word, len, offset, cnt))) {
         if (OB_ITER_END == ret) {
@@ -482,41 +497,25 @@ int ObIKFTParser::lookup_segment_cache(const char *text,
   return ret;
 }
 
-int ObIKFTParser::replay_segment(const CachedSegment &entry)
-{
-  int ret = OB_SUCCESS;
-  for (int64_t i = 0; OB_SUCC(ret) && i < entry.tokens_.count(); ++i) {
-    const CachedToken &cached = entry.tokens_.at(i);
-    ObIKToken token;
-    token.ptr_ = document_fulltext_ + current_segment_offset_;
-    token.offset_ = cached.relative_offset_;
-    token.length_ = cached.length_;
-    token.char_cnt_ = cached.char_cnt_;
-    token.type_ = cached.type_;
-    if (OB_FAIL(ctx_->result_list().push_back(token))) {
-      LOG_WARN("failed to replay cached ik token", K(ret), K(i));
-    }
-  }
-  return ret;
-}
-
 void ObIKFTParser::reset_segment_state()
 {
   if (OB_NOT_NULL(ctx_)) {
     ctx_->~TokenizeContext();
     scratch_allocator_.free(ctx_);
     ctx_ = nullptr;
-  }
-  for (ObIIKProcessor *segmenter : segmenters_) {
-    if (OB_NOT_NULL(segmenter)) {
-      segmenter->reset_document();
+    for (ObIIKProcessor *segmenter : segmenters_) {
+      if (OB_NOT_NULL(segmenter)) {
+        segmenter->reset_document();
+      }
     }
+    const int ret = arbitrator_.reuse();
+    if (OB_SUCCESS != ret) {
+      LOG_WARN("failed to reuse arbitrator between ik segments", K(ret));
+    }
+    scratch_allocator_.reuse();
   }
-  const int ret = arbitrator_.reuse();
-  if (OB_SUCCESS != ret) {
-    LOG_WARN("failed to reuse arbitrator between ik segments", K(ret));
-  }
-  scratch_allocator_.reuse();
+  current_cached_segment_ = nullptr;
+  current_cached_token_idx_ = 0;
 }
 
 int ObIKFTParser::init_next_segment()
@@ -531,39 +530,33 @@ int ObIKFTParser::init_next_segment()
   } else {
     current_segment_offset_ = next_segment_offset_;
     next_segment_offset_ += current_segment_len_;
-    if (OB_ISNULL(ctx_ = OB_NEWx(TokenizeContext,
-                                 &scratch_allocator_,
-                                 coll_type_,
-                                 scratch_allocator_,
-                                 document_fulltext_ + current_segment_offset_,
-                                 current_segment_len_,
-                                 document_is_smart_))) {
-      ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("failed to allocate ik segment context", K(ret));
-    } else if (OB_FAIL(ctx_->init())) {
-      LOG_WARN("failed to initialize ik segment context", K(ret));
-    } else if (use_segment_cache_) {
+    if (use_segment_cache_) {
       CachedSegment *entry = nullptr;
       const int cache_ret = lookup_segment_cache(document_fulltext_ + current_segment_offset_,
                                                  current_segment_len_,
                                                  entry);
       if (OB_SUCCESS == cache_ret) {
         current_segment_cache_hit_ = true;
-        ++segment_cache_hit_;
-        if (OB_FAIL(replay_segment(*entry))) {
-          LOG_WARN("failed to replay ik segment cache", K(ret));
-        }
+        current_cached_segment_ = entry;
+        current_cached_token_idx_ = 0;
       } else if (OB_ENTRY_NOT_EXIST == cache_ret) {
-        ++segment_cache_miss_;
       } else {
         ret = cache_ret;
         LOG_WARN("failed to lookup ik segment cache", K(ret));
       }
-      const int64_t total = segment_cache_hit_ + segment_cache_miss_;
-      if (OB_SUCC(ret) && total > 0 && 0 == total % 1000) {
-        LOG_INFO("ik segment cache statistics",
-                 "ik_segment_cache_hit", segment_cache_hit_,
-                 "ik_segment_cache_miss", segment_cache_miss_);
+    }
+    if (OB_SUCC(ret) && !current_segment_cache_hit_) {
+      if (OB_ISNULL(ctx_ = OB_NEWx(TokenizeContext,
+                                   &scratch_allocator_,
+                                   coll_type_,
+                                   scratch_allocator_,
+                                   document_fulltext_ + current_segment_offset_,
+                                   current_segment_len_,
+                                   document_is_smart_))) {
+        ret = OB_ALLOCATE_MEMORY_FAILED;
+        LOG_WARN("failed to allocate ik segment context", K(ret));
+      } else if (OB_FAIL(ctx_->init())) {
+        LOG_WARN("failed to initialize ik segment context", K(ret));
       }
     }
   }
@@ -575,7 +568,14 @@ int ObIKFTParser::save_current_segment()
   int ret = OB_SUCCESS;
   const int64_t token_bytes = ctx_->result_list().count() * sizeof(CachedToken);
   const int64_t entry_bytes = sizeof(CachedSegment) + current_segment_len_ + token_bytes;
+  bool cache_candidate = true;
+  for (int64_t i = 0; cache_candidate && i < current_segment_len_; ++i) {
+    const char ch = document_fulltext_[current_segment_offset_ + i];
+    cache_candidate = ch < '0' || ch > '9';
+  }
   if (current_segment_cache_hit_) {
+  } else if (!cache_candidate) {
+    // Per-document identifiers are not reusable and would evict hot segments.
   } else {
     if (segment_cache_.count() >= MAX_SEGMENT_CACHE_ENTRIES
         || segment_cache_bytes_ + entry_bytes > MAX_SEGMENT_CACHE_BYTES) {
@@ -698,6 +698,8 @@ void ObIKFTParser::reset_document_state()
   current_segment_offset_ = 0;
   current_segment_len_ = 0;
   current_segment_cache_hit_ = false;
+  current_cached_segment_ = nullptr;
+  current_cached_token_idx_ = 0;
 }
 
 void ObIKFTParser::reset()

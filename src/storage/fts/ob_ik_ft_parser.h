@@ -90,10 +90,10 @@ public:
         document_is_smart_(false),
         use_segment_cache_(false),
         current_segment_cache_hit_(false),
+        current_cached_segment_(nullptr),
+        current_cached_token_idx_(0),
         segment_cache_bytes_(0),
-        segment_cache_(),
-        segment_cache_hit_(0),
-        segment_cache_miss_(0)
+        segment_cache_()
   {
   }
 
@@ -138,8 +138,6 @@ private:
                            CachedSegment *&entry) const;
 
   int save_current_segment();
-
-  int replay_segment(const CachedSegment &entry);
 
   void clear_segment_cache();
 
@@ -189,10 +187,10 @@ private:
   bool document_is_smart_;
   bool use_segment_cache_;
   bool current_segment_cache_hit_;
+  CachedSegment *current_cached_segment_;
+  int64_t current_cached_token_idx_;
   int64_t segment_cache_bytes_;
   common::ObSEArray<CachedSegment *, 256> segment_cache_;
-  int64_t segment_cache_hit_;
-  int64_t segment_cache_miss_;
 
   static constexpr int64_t MAX_SEGMENT_CACHE_ENTRIES = 256;
   static constexpr int64_t MAX_SEGMENT_CACHE_BYTES = 4L * 1024L * 1024L;
