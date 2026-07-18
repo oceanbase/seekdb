@@ -665,6 +665,8 @@ protected:
                                          const ObString &column_name,
                                          uint64_t column_id,
                                          ColumnItem *&col_item);
+  int resolve_ai_split_document_column_items(const TableItem &table_item,
+                                             ObIArray<ColumnItem> &col_items);
   int resolve_generated_table_column_item(const TableItem &table_item,
                                           const common::ObString &column_name,
                                           ColumnItem *&col_item,

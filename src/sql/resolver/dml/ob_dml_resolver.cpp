@@ -9071,6 +9071,50 @@ int ObDMLResolver::resolve_function_table_column_item(const TableItem &table_ite
   return ret;
 }
 
+int ObDMLResolver::resolve_ai_split_document_column_items(const TableItem &table_item,
+                                                          ObIArray<ColumnItem> &col_items)
+{
+  int ret = OB_SUCCESS;
+  ObDMLStmt *stmt = get_stmt();
+  ColumnItem *col_item = NULL;
+  common::ObObjMeta int_meta;
+  common::ObObjMeta text_meta;
+  const ObAccuracy int_accuracy = ObAccuracy::DDL_DEFAULT_ACCURACY[ObIntType];
+  const ObAccuracy text_accuracy = ObAccuracy::DDL_DEFAULT_ACCURACY[ObLongTextType];
+  const ObString column_names[] = {
+      ObString("CHUNK_ID"),
+      ObString("CHUNK_OFFSET"),
+      ObString("CHUNK_LENGTH"),
+      ObString("CHUNK_TEXT")
+  };
+  int_meta.set_int();
+  text_meta.set_clob();
+  text_meta.set_collation_type(CS_TYPE_UTF8MB4_BIN);
+
+  CK (OB_NOT_NULL(stmt));
+  CK (OB_LIKELY(table_item.is_function_table()));
+  for (int64_t i = 0; OB_SUCC(ret) && i < ARRAYSIZEOF(column_names); ++i) {
+    const bool is_text_column = (3 == i);
+    const common::ObObjMeta &meta = is_text_column ? text_meta : int_meta;
+    const ObAccuracy &accuracy = is_text_column ? text_accuracy : int_accuracy;
+    OX (col_item = NULL);
+    if (OB_FAIL(ret)) {
+    } else if (NULL != (col_item = stmt->get_column_item(table_item.table_id_, column_names[i]))) {
+      // exist, ignore resolve...
+    } else {
+      OZ (resolve_function_table_column_item(table_item,
+                                             meta,
+                                             accuracy,
+                                             column_names[i],
+                                             OB_APP_MIN_COLUMN_ID + i,
+                                             col_item));
+    }
+    CK (OB_NOT_NULL(col_item));
+    OZ (col_items.push_back(*col_item));
+  }
+  return ret;
+}
+
 int ObDMLResolver::resolve_function_table_column_item_udf(const TableItem &table_item,
                                                           ObIArray<ColumnItem> &col_items)
 {
@@ -9236,6 +9280,8 @@ int ObDMLResolver::resolve_function_table_column_item_sys_func(const TableItem &
   } else if (!ObResolverUtils::is_expr_can_be_used_in_table_function(*table_expr)) {
     ret = OB_NOT_SUPPORTED;
     LOG_USER_ERROR(OB_NOT_SUPPORTED, "access rows from a non-nested table item");
+  } else if (T_FUN_SYS_AI_SPLIT_DOCUMENT == table_expr->get_expr_type()) {
+    OZ (resolve_ai_split_document_column_items(table_item, col_items));
   } else if (NULL != (col_item = stmt->get_column_item(table_item.table_id_, ObString("COLUMN_VALUE")))) {
     //exist, ignore resolve...
   } else {
