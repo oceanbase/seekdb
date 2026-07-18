@@ -1222,10 +1222,7 @@ int ObDASTRTaatIter::init_stores_by_partition()
         LOG_WARN("failed to allocate enough memory", K(sizeof(ObDASTRTaatHashMap)), K(ret));
       } else {
         ObDASTRTaatHashMap *hash_map = new(buf) ObDASTRTaatHashMap();
-        // each partition map is designed to hold about OB_HASHMAP_DEFAULT_SIZE
-        // docs; size the buckets accordingly instead of forcing long chains
-        if (OB_FAIL(hash_map->create(2 * OB_HASHMAP_DEFAULT_SIZE,
-                                     common::ObMemAttr("FTTaatMap")))) {
+        if (OB_FAIL(hash_map->create(10, common::ObMemAttr("FTTaatMap")))) {
           LOG_WARN("failed to create token map", K(ret));
         } else {
           hash_maps_[i] = hash_map;
@@ -1500,6 +1497,7 @@ int ObDASTRTaatIter::inner_load_next_hashmap()
 
   ObDocIdExt doc_id;
   double cur_relevance = 0;
+  double last_relevance = 0;
   while (OB_SUCC(ret)) {
     if (OB_FAIL(store_iter->get_next_row(*ctx, exprs))) {
       if (OB_UNLIKELY(OB_ITER_END != ret)) {
@@ -1512,11 +1510,13 @@ int ObDASTRTaatIter::inner_load_next_hashmap()
       } else if (need_relevance) {
         ObDatum &relevance_datum = relevance_expr->locate_expr_datum(*ir_rtdef_->eval_ctx_);
         cur_relevance = relevance_datum.get_double();
-        // insert-or-accumulate with a single bucket pass
-        auto accumulate = [cur_relevance](hash::HashMapPair<ObDocIdExt, double> &pair) {
-          pair.second += cur_relevance;
-        };
-        if (OB_FAIL(map->set_or_update(doc_id, cur_relevance, accumulate))) {
+        if (OB_FAIL(map->get_refactored(doc_id, last_relevance))) {
+          if (OB_HASH_NOT_EXIST != ret) {
+            LOG_WARN("fail to get relevance", K(ret), K(last_relevance));
+          } else if (OB_FAIL(map->set_refactored(doc_id, cur_relevance, 1/*overwrite*/))) {
+            LOG_WARN("failed to push data", K(ret));
+          }
+        } else if (OB_FAIL(map->set_refactored(doc_id, cur_relevance + last_relevance, 1/*overwrite*/))) {
           LOG_WARN("failed to push data", K(ret));
         }
       } else {

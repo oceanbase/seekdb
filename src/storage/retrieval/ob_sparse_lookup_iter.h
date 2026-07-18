@@ -102,8 +102,7 @@ protected:
   int load_results() override;
   int project_results(const int64_t capacity, int64_t &count) override;
 protected:
-  // only touched by the executing query thread; skip per-bucket latching
-  typedef hash::ObHashMap<ObDocIdExt, double, hash::NoPthreadDefendMode> ObSRTaaTHashMap;
+  typedef hash::ObHashMap<ObDocIdExt, double> ObSRTaaTHashMap;
   ObSRTaaTHashMap hash_map_;
 private:
   DISALLOW_COPY_AND_ASSIGN(ObSRHashLookupIter);

@@ -49,9 +49,7 @@ protected:
   virtual int project_results(const int64_t safe_capacity, int64_t &count);
   virtual int update_dim_iter(const int64_t dim_idx); // should return OB_ITER_END if no more dimensions
 protected:
-  // the maps are only touched by the executing query thread, so skip the
-  // per-bucket latching of the default defend mode
-  typedef hash::ObHashMap<ObDocIdExt, double, hash::NoPthreadDefendMode> ObSRTaaTHashMap;
+  typedef hash::ObHashMap<ObDocIdExt, double> ObSRTaaTHashMap;
   static const int64_t OB_MAX_HASHMAP_COUNT = 20;
   static const int64_t OB_HASHMAP_DEFAULT_SIZE = 1000;
   ObIAllocator *iter_allocator_;
