@@ -327,8 +327,6 @@ USER_IO_WAIT_TIME	bigint(20) unsigned	NO		NULL
 ROWS_PROCESSED	bigint(20)	NO		NULL	
 ELAPSED_TIME	bigint(20) unsigned	NO		NULL	
 CPU_TIME	bigint(20) unsigned	NO		NULL	
-LARGE_QUERYS	bigint(20)	NO		NULL	
-DELAYED_LARGE_QUERYS	bigint(20)	NO		NULL	
 DELAYED_PX_QUERYS	bigint(20)	NO		NULL	
 OUTLINE_VERSION	bigint(20)	NO		NULL	
 OUTLINE_ID	bigint(20)	NO		NULL	
@@ -1989,7 +1987,6 @@ Field	Type	Null	Key	Default	Extra
 SESSION_ID	bigint(20)	NO		NULL	
 TX_ID	bigint(20)	NO		NULL	
 STATE	varchar(18)	NO			
-CLUSTER_ID	bigint(20)	NO		NULL	
 WRITE_STATE	varchar(1024)	YES		NULL	
 ISOLATION_LEVEL	varchar(16)	NO			
 SNAPSHOT_VERSION	bigint(20) unsigned	YES		NULL	
@@ -2350,15 +2347,6 @@ Column_name	varchar(128)	NO		NULL
 Column_priv	varchar(31)	NO			
 Timestamp	datetime	YES			
 select /*+QUERY_TIMEOUT(60000000)*/ count(*) as cnt from (select * from mysql.columns_priv limit 1);
-cnt
-1
-desc oceanbase.V$OB_COMPATIBILITY_CONTROL;
-Field	Type	Null	Key	Default	Extra
-NAME	varchar(128)	NO		NULL	
-DESCRIPTION	varchar(4096)	NO		NULL	
-IS_ENABLE	varchar(5)	NO		NULL	
-ENABLE_VERSIONS	longtext	NO		NULL	
-select /*+QUERY_TIMEOUT(60000000)*/ count(*) as cnt from (select * from oceanbase.V$OB_COMPATIBILITY_CONTROL limit 1);
 cnt
 1
 desc information_schema.INNODB_LOCK_WAITS;

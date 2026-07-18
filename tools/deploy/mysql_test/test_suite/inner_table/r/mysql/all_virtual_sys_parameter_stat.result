@@ -108,8 +108,6 @@ job_queue_processes
 json_document_max_depth
 kv_ttl_duty_duration
 kv_ttl_history_recycle_interval
-large_query_threshold
-large_query_worker_percentage
 leak_mod_to_check
 lease_time
 lob_enable_block_cache_threshold
@@ -165,7 +163,6 @@ ob_event_history_recycle_interval
 ob_java_connector_path
 ob_java_home
 ob_java_opts
-ob_proxy_readonly_transaction_routing_policy
 ob_query_switch_leader_retry_timeout
 ob_ratelimit_stat_period
 ob_result_cache_evict_percentage
@@ -453,7 +450,6 @@ _ob_obj_dep_maint_task_interval
 _ob_plan_cache_auto_flush_interval
 _ob_plan_cache_gc_strategy
 _ob_pl_compile_max_concurrency
-_ob_query_rate_limit
 _ob_sqlstat_enable
 _ob_ssl_invited_nodes
 _optimizer_ads_time_limit
