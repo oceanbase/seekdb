@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_REWRITE
 #include "sql/rewrite/ob_transform_pre_process.h"
+#include "sql/rewrite/ob_transform_utils.h"
 #include "sql/optimizer/ob_optimizer_util.h"
 #include "sql/engine/expr/ob_expr_arg_case.h"
 #include "sql/resolver/dml/ob_select_resolver.h"
@@ -32,6 +33,86 @@ namespace oceanbase
 using namespace common;
 namespace sql
 {
+
+namespace
+{
+
+int try_prune_count_limited_view(ObTransformerCtx *ctx,
+                                 const ObIArray<ObParentDMLStmt> &parent_stmts,
+                                 ObDMLStmt *stmt,
+                                 bool &pruned)
+{
+  int ret = OB_SUCCESS;
+  pruned = false;
+  ObDMLStmt *parent_stmt = nullptr;
+  ObSelectStmt *child_stmt = nullptr;
+  ObSelectStmt *upper_stmt = nullptr;
+  TableItem *view_table = nullptr;
+  ObRawExpr *select_expr = nullptr;
+  bool can_prune = false;
+  if (OB_ISNULL(ctx) || OB_ISNULL(stmt)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid count view prune arguments", K(ret), KP(ctx), KP(stmt));
+  } else if (parent_stmts.empty()) {
+    // do nothing
+  } else if (OB_ISNULL(parent_stmt = parent_stmts.at(parent_stmts.count() - 1).stmt_)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected null parent statement", K(ret));
+  } else if (!stmt->is_select_stmt() || !parent_stmt->is_select_stmt()) {
+    // do nothing
+  } else if (OB_FALSE_IT(child_stmt = static_cast<ObSelectStmt *>(stmt))
+             || OB_FALSE_IT(upper_stmt = static_cast<ObSelectStmt *>(parent_stmt))) {
+    // do nothing
+  } else if (!child_stmt->has_limit()
+             || child_stmt->is_fetch_with_ties()
+             || nullptr != child_stmt->get_limit_percent_expr()
+             || 0 != child_stmt->get_order_item_size()
+             || 0 == child_stmt->get_select_item_size()
+             || 1 != upper_stmt->get_from_item_size()
+             || upper_stmt->get_from_item(0).is_joined_
+             || 0 != upper_stmt->get_condition_size()
+             || 0 != upper_stmt->get_semi_info_size()
+             || 1 != upper_stmt->get_select_item_size()
+             || 1 != upper_stmt->get_aggr_item_size()
+             || !upper_stmt->is_scala_group_by()
+             || upper_stmt->has_distinct()
+             || upper_stmt->has_having()
+             || upper_stmt->has_window_function()
+             || upper_stmt->has_order_by()
+             || OB_ISNULL(select_expr = upper_stmt->get_select_item(0).expr_)) {
+    // do nothing
+  } else if (T_FUN_COUNT != select_expr->get_expr_type()
+             || 0 != select_expr->get_param_count()) {
+    // do nothing
+  } else if (OB_ISNULL(view_table = upper_stmt->get_table_item_by_id(
+                 upper_stmt->get_from_item(0).table_id_))) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("failed to find generated table for count view", K(ret));
+  } else if (!view_table->is_generated_table() || view_table->ref_query_ != child_stmt) {
+    // do nothing
+  } else if (OB_FAIL(ObTransformUtils::check_project_pruning_validity(*child_stmt, can_prune))) {
+    LOG_WARN("failed to check count view projection pruning validity", K(ret));
+  } else if (!can_prune) {
+    // do nothing
+  } else {
+    ObSqlBitSet<> removed_idx;
+    for (int64_t i = 0; OB_SUCC(ret) && i < child_stmt->get_select_item_size(); ++i) {
+      if (OB_FAIL(removed_idx.add_member(i))) {
+        LOG_WARN("failed to mark dead count-view projection", K(ret), K(i));
+      }
+    }
+    if (OB_SUCC(ret) && OB_FAIL(ObTransformUtils::remove_select_items(
+                            ctx, view_table->table_id_, *child_stmt, *upper_stmt, removed_idx))) {
+      LOG_WARN("failed to prune count-limited view projections", K(ret));
+    } else if (OB_SUCC(ret)) {
+      pruned = true;
+    }
+  }
+  return ret;
+}
+
+} // namespace
+
 int ObTransformPreProcess::transform_one_stmt(common::ObIArray<ObParentDMLStmt> &parent_stmts,
                                               ObDMLStmt *&stmt,
                                               bool &trans_happened)
@@ -238,7 +319,7 @@ int ObTransformPreProcess::transform_one_stmt(common::ObIArray<ObParentDMLStmt> 
     }
     if (OB_SUCC(ret)) {
       if (stmt->get_match_exprs().count() > 0 &&
-          OB_FAIL(preserve_order_for_fulltext_search(stmt, is_happened))) {
+          OB_FAIL(preserve_order_for_fulltext_search(parent_stmts, stmt, is_happened))) {
         LOG_WARN("failed to preserve order for fulltext search", K(ret));
       } else {
         trans_happened |= is_happened;
@@ -4615,7 +4696,10 @@ int ObTransformPreProcess::do_flatten_conditions(ObDMLStmt *stmt, ObIArray<ObRaw
 
 // full-text index queries on a single base table are processed with order preservation. 
 // (Order is not preserved in multi-table join scenarios.)
-int ObTransformPreProcess::preserve_order_for_fulltext_search(ObDMLStmt *stmt, bool& trans_happened)
+int ObTransformPreProcess::preserve_order_for_fulltext_search(
+    const ObIArray<ObParentDMLStmt> &parent_stmts,
+    ObDMLStmt *stmt,
+    bool& trans_happened)
 {
   int ret = OB_SUCCESS;
   trans_happened = false;
@@ -4780,8 +4864,11 @@ int ObTransformPreProcess::preserve_order_for_fulltext_search(ObDMLStmt *stmt, b
     }
   }
   if (OB_SUCC(ret) && nullptr != match_expr && !static_cast<ObMatchFunRawExpr*>(match_expr)->is_es_match()) {
+    bool count_view_pruned = false;
     OrderItem item(match_expr, default_desc_direction());
-    if (OB_FAIL(stmt->add_order_item(item))) {
+    if (OB_FAIL(try_prune_count_limited_view(ctx_, parent_stmts, stmt, count_view_pruned))) {
+      LOG_WARN("failed to prune limited count view", K(ret));
+    } else if (OB_FAIL(stmt->add_order_item(item))) {
       LOG_WARN("failed to add order item", K(ret), K(item));
     } else {
       trans_happened = true;
