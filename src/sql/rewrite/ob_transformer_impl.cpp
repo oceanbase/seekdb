@@ -689,6 +689,12 @@ int ObTransformerImpl::choose_rewrite_rules(ObDMLStmt *stmt, uint64_t &need_type
     if ((OB_E(EventTable::EN_GENERATE_PLAN_WITH_RECONSTRUCT_SQL) OB_SUCCESS) != OB_SUCCESS) {
       ObTransformRule::add_trans_type(disable_list, SELECT_EXPR_PULLUP);
     }
+    if (func.contain_fulltext_search_ && stmt->is_select_stmt()
+        && !func.contain_geometry_values_ && !func.contain_vec_index_approx_) {
+      // Keep the existing conservative FTS rewrite gate, but allow generated-table
+      // projection pruning so count-only LIMIT subqueries can drop unused user columns.
+      disable_list &= ~(1ULL << PROJECTION_PRUNING);
+    }
     need_types = ObTransformRule::ALL_TRANSFORM_RULES & (~disable_list);
   }
   return ret;
