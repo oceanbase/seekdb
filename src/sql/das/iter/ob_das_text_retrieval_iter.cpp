@@ -25,11 +25,6 @@ namespace oceanbase
 namespace sql
 {
 
-bool ObDASTextRetrievalIter::need_calc_relevance() const
-{
-  return nullptr != ir_ctdef_ && ir_ctdef_->need_calc_relevance();
-}
-
 ObDASTextRetrievalIter::ObDASTextRetrievalIter()
   : ObDASIter(ObDASIterType::DAS_ITER_TEXT_RETRIEVAL),
     mem_context_(nullptr),
@@ -1226,8 +1221,6 @@ int ObDASTRCacheIter::get_cur_row(double &relevance, ObDocIdExt &doc_id) const
     // once: relevance_[cur_idx_],doc_id_[cur_idx_]=>item{relevance,doc_id}. tiwce: item=>losetree
     if (ir_ctdef_->need_calc_relevance()) {
       relevance = relevance_[cur_idx_];
-    } else {
-      relevance = 1.0;
     }
     doc_id = doc_id_[cur_idx_];
   }
