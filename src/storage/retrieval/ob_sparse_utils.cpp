@@ -23,11 +23,12 @@ namespace oceanbase
 namespace storage
 {
 
-int ObSRDaaTInnerProductRelevanceCollector::init(int64_t should_match)
+int ObSRDaaTInnerProductRelevanceCollector::init(int64_t should_match, bool collect_relevance)
 {
   int ret = OB_SUCCESS;
   total_relevance_ = 0.0;
   should_match_ = should_match;
+  collect_relevance_ = collect_relevance;
   return ret;
 }
 
@@ -46,7 +47,9 @@ void ObSRDaaTInnerProductRelevanceCollector::reuse()
 int ObSRDaaTInnerProductRelevanceCollector::collect_one_dim(const int64_t dim_idx, const double relevance)
 {
   int ret = OB_SUCCESS;
-  total_relevance_ += relevance;
+  if (collect_relevance_) {
+    total_relevance_ += relevance;
+  }
   matched_cnt_ ++;
   return ret;
 }
@@ -54,7 +57,7 @@ int ObSRDaaTInnerProductRelevanceCollector::collect_one_dim(const int64_t dim_id
 int ObSRDaaTInnerProductRelevanceCollector::get_result(double &relevance, bool &is_valid)
 {
   int ret = OB_SUCCESS;
-  relevance = total_relevance_;
+  relevance = collect_relevance_ ? total_relevance_ : 0.0;
   is_valid = matched_cnt_ >= should_match_;
   total_relevance_ = 0.0;
   matched_cnt_ = 0;

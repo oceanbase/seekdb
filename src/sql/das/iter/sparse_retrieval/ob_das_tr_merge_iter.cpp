@@ -629,11 +629,12 @@ int ObDASTRMergeIter::init_daat_iter_param(ObTextDaaTParam &iter_param)
       }
     } else {
       int64_t should_match = ir_rtdef_->minimum_should_match_;
+      const bool need_score = sr_iter_param_.need_project_relevance() || sr_iter_param_.need_filter();
       ObSRDaaTInnerProductRelevanceCollector *inner_product_relevance_collector = nullptr;
       if (OB_ISNULL(inner_product_relevance_collector = OB_NEWx(ObSRDaaTInnerProductRelevanceCollector, &myself_allocator_))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
         LOG_WARN("failed to allocate memory for inner product relevance collector", K(ret));
-      } else if (OB_FAIL(inner_product_relevance_collector->init(should_match))) {
+      } else if (OB_FAIL(inner_product_relevance_collector->init(should_match, need_score))) {
         LOG_WARN("failed to init boolean relevance collector", K(ret));
       } else {
         iter_param.relevance_collector_ = inner_product_relevance_collector;
