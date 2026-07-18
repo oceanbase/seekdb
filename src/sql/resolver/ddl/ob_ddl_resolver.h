@@ -1060,6 +1060,7 @@ protected:
   common::ObString vec_column_name_;
   ObIndexType vec_index_type_;
   bool enable_macro_block_bloom_filter_;
+  bool fulltext_dict_;
   ObSemiStructEncodingType semistruct_encoding_type_;
   common::ObString dynamic_partition_policy_;
 private:

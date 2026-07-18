@@ -1145,6 +1145,73 @@ int ObRefreshMemStatResolver::resolve(const ParseNode &parse_tree)
   return ret;
 }
 
+int ObRefreshFulltextDictResolver::resolve(const ParseNode &parse_tree)
+{
+  int ret = OB_SUCCESS;
+  ObRefreshFulltextDictStmt *stmt = nullptr;
+  const ParseNode *relation_node = nullptr;
+  const ParseNode *database_node = nullptr;
+  const ParseNode *table_node = nullptr;
+  if (OB_UNLIKELY(T_REFRESH_FULLTEXT_DICT != parse_tree.type_)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("type is not T_REFRESH_FULLTEXT_DICT", "type", get_type_name(parse_tree.type_));
+  } else if (OB_ISNULL(stmt = create_stmt<ObRefreshFulltextDictStmt>())) {
+    ret = OB_ALLOCATE_MEMORY_FAILED;
+    LOG_ERROR("create ObRefreshFulltextDictStmt failed", K(ret));
+  } else if (1 != parse_tree.num_child_
+             || OB_ISNULL(parse_tree.children_)
+             || OB_ISNULL(relation_node = parse_tree.children_[0])) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("invalid fulltext dictionary relation", K(ret));
+  } else {
+    if (T_RELATION_FACTOR == relation_node->type_
+        && relation_node->num_child_ >= 2
+        && OB_NOT_NULL(relation_node->children_)) {
+      database_node = relation_node->children_[0];
+      table_node = relation_node->children_[1];
+    } else if (T_VARCHAR == relation_node->type_ || T_CHAR == relation_node->type_) {
+      table_node = relation_node;
+    } else {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("invalid fulltext dictionary name node", K(ret), K(relation_node->type_));
+    }
+
+    if (OB_SUCC(ret) && OB_ISNULL(table_node)) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("fulltext dictionary table node is null", K(ret));
+    }
+    ObString table_name;
+    if (OB_SUCC(ret)) {
+      table_name.assign_ptr(table_node->str_value_, static_cast<int32_t>(table_node->str_len_));
+    }
+    if (OB_SUCC(ret) && OB_NOT_NULL(table_name.find('.'))) {
+      if (OB_FAIL(stmt->set_table_name(table_name))) {
+        LOG_WARN("fail to set quoted fulltext dictionary table name", K(ret), K(table_name));
+      }
+    } else if (OB_SUCC(ret)) {
+      const ObString database_name = OB_NOT_NULL(database_node)
+                                         ? ObString(static_cast<int32_t>(database_node->str_len_),
+                                                    database_node->str_value_)
+                                         : session_info_->get_database_name();
+      ObSqlString qualified_name;
+      if (database_name.empty()) {
+        ret = OB_ERR_NO_DB_SELECTED;
+        LOG_WARN("No database selected for fulltext dictionary refresh", K(ret));
+      } else if (OB_FAIL(qualified_name.append_fmt("%.*s.%.*s",
+                                                   database_name.length(), database_name.ptr(),
+                                                   table_name.length(), table_name.ptr()))) {
+        LOG_WARN("fail to qualify fulltext dictionary table", K(ret));
+      } else if (OB_FAIL(stmt->set_table_name(qualified_name.string()))) {
+        LOG_WARN("fail to set fulltext dictionary table name", K(ret), K(qualified_name));
+      }
+    }
+    if (OB_SUCC(ret)) {
+      stmt_ = stmt;
+    }
+  }
+  return ret;
+}
+
 int ObWashMemFragmentationResolver::resolve(const ParseNode &parse_tree)
 {
   int ret = OB_SUCCESS;

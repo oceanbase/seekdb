@@ -39,26 +39,62 @@ public:
   ~TokenizeContext();
 
   int init();
+  int reuse_context(const char *fulltext, const int64_t fulltext_len);
   int reset_resource();
 
   int get_next_token(const char *&word, int64_t &word_len, int64_t &offset, int64_t &char_cnt);
 
   int compound(ObIKToken &result);
 
-  int current_char(const char *&ch, uint8_t &char_len);
-  int current_char_type(ObFTCharUtil::CharType &type);
+  OB_INLINE int current_char(const char *&ch, uint8_t &char_len)
+  {
+    int ret = OB_SUCCESS;
+    if (cursor_ >= fulltext_len_) {
+      ret = OB_ITER_END;
+    } else {
+      ch = fulltext_ + cursor_;
+      char_len = static_cast<uint8_t>(next_char_len_);
+    }
+    return ret;
+  }
+
+  OB_INLINE int current_char_type(ObFTCharUtil::CharType &type)
+  {
+    int ret = OB_SUCCESS;
+    if (cursor_ >= fulltext_len_) {
+      ret = OB_ITER_END;
+    } else {
+      type = next_char_type_;
+    }
+    return ret;
+  }
+
+  OB_INLINE int current_char_and_type(const char *&ch,
+                                      uint8_t &char_len,
+                                      ObFTCharUtil::CharType &type)
+  {
+    int ret = OB_SUCCESS;
+    if (cursor_ >= fulltext_len_) {
+      ret = OB_ITER_END;
+    } else {
+      ch = fulltext_ + cursor_;
+      char_len = static_cast<uint8_t>(next_char_len_);
+      type = next_char_type_;
+    }
+    return ret;
+  }
 
   int step_next();
 
-  ObCollationType collation() const;
-  int64_t get_end_cursor() const;
-  const char *fulltext() const;
-  int64_t fulltext_len() const;
-  int64_t get_cursor() const;
+  OB_INLINE ObCollationType collation() const { return coll_type_; }
+  OB_INLINE int64_t get_end_cursor() const { return cursor_ + next_char_len_; }
+  OB_INLINE const char *fulltext() const { return fulltext_; }
+  OB_INLINE int64_t fulltext_len() const { return fulltext_len_; }
+  OB_INLINE int64_t get_cursor() const { return cursor_; }
 
-  bool is_last() const;
-  bool iter_end() const;
-  bool is_smart() const;
+  OB_INLINE bool is_last() const { return cursor_ + next_char_len_ >= fulltext_len_; }
+  OB_INLINE bool iter_end() const { return cursor_ >= fulltext_len_; }
+  OB_INLINE bool is_smart() const { return is_smart_; }
 
   int add_chain(ObIKTokenChain *chain);
   int add_token(const char *fulltext,
@@ -77,6 +113,7 @@ private:
   int prepare_next_char();
 
   ObCollationType coll_type_;
+  common::ObCharsetType cs_type_;
   const char *fulltext_;
   int64_t fulltext_len_;
 
@@ -89,7 +126,6 @@ private:
 
   ObFTSortList token_list_;
   ObList<ObIKToken, ObIAllocator> result_list_;
-
 private:
   DISALLOW_COPY_AND_ASSIGN(TokenizeContext);
 };
@@ -108,6 +144,8 @@ public:
                          const uint8_t char_len,
                          const ObFTCharUtil::CharType type)
       = 0;
+
+  virtual void reuse() = 0;
 };
 
 } // namespace storage
