@@ -43,7 +43,7 @@ namespace oceanbase
 {
 namespace sql
 {
-static constexpr int64_t TOKENIZE_RESULT_CACHE_MIN_TEXT_LENGTH = 256;
+static constexpr int64_t TOKENIZE_RESULT_CACHE_MIN_TEXT_LENGTH = 128;
 
 OB_SERIALIZE_MEMBER(ObTokenizeFixedConfig,
                     is_valid_,
@@ -217,6 +217,8 @@ int ObTokenizeResultCacheValue::deep_copy(char *buf,
 ObTokenizeResultCache &ObTokenizeResultCache::get_instance()
 {
   static ObTokenizeResultCache cache;
+  static const int cache_init_ret = cache.init();
+  UNUSED(cache_init_ret);
   return cache;
 }
 
@@ -426,7 +428,8 @@ int ObExprTokenize::eval_tokenize(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &e
     if (OB_FAIL(parse_param(expr, ctx, temp_allocator, param))) {
       LOG_WARN("Fail to parse param", K(ret));
     } else {
-      cacheable = can_use_result_cache(expr, param, parser_version);
+      cacheable = can_use_result_cache(expr, param, parser_version)
+                  && param.fulltext_.length() >= TOKENIZE_RESULT_CACHE_MIN_TEXT_LENGTH;
     }
 
     if (OB_SUCC(ret)) {
