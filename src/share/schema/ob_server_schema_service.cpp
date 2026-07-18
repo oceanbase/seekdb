@@ -4357,13 +4357,13 @@ int ObServerSchemaService::refresh_increment_schema(
             K(local_schema_version));
       } else if (core_schema_change && OB_FAIL(refresh_increment_core_schema_(schema_status,
               sql_client, local_schema_version, core_schema_version))) {
-        LOG_WARN("failed to refresh core schema", KR(ret), K(schema_status), K(local_schema_version),
+        LOG_ERROR("failed to refresh core schema", KR(ret), K(schema_status), K(local_schema_version),
               K(core_schema_version), K(core_schema_change));
       } else if (OB_FAIL(get_schema_version_in_inner_table(sql_client, schema_status, schema_version))) {
         LOG_WARN("fail to get schema version in inner table", KR(ret), K(schema_status));
       } else if ((core_schema_change || sys_schema_change) && OB_FAIL(refresh_increment_sys_schema_(
               schema_status, sql_client, local_schema_version, core_schema_version, schema_version))) {
-        LOG_WARN("failed to refresh sys schema", KR(ret), K(schema_status), K(local_schema_version),
+        LOG_ERROR("failed to refresh sys schema", KR(ret), K(schema_status), K(local_schema_version),
             K(core_schema_version), K(schema_version), K(core_schema_change), K(sys_schema_change));
       } else if (OB_FAIL(check_core_schema_change_(sql_client, schema_status, core_schema_version, core_schema_change))) {
         LOG_WARN("failed to check core schema change", KR(ret), K(schema_status), K(core_schema_version));

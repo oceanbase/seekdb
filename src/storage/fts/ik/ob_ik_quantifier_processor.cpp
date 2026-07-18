@@ -99,10 +99,14 @@ int ObIKQuantifierProcessor::process_CN_count(TokenizeContext &ctx,
     if (ObFTCharUtil::CharType::CHINESE == type) {
       // handle existing
       if (!count_hits_.empty()) {
-        for (ObDATrieHit &hit : count_hits_) {
-          if (OB_FAIL(ret)) {
-            break;
-          } else if (OB_FAIL(quan_dict_.match({char_len, ch}, hit))) {
+        for (ObList<ObDATrieHit, ObIAllocator>::iterator iter = count_hits_.begin();
+             OB_SUCC(ret) && iter != count_hits_.end();) {
+          // FTS next-stage optimization (Op2): preserve the next iterator and
+          // erase the current node directly; FIFO-backed parser reuse makes
+          // post-erase iterator access invalid.
+          ObList<ObDATrieHit, ObIAllocator>::iterator current = iter++;
+          ObDATrieHit &hit = *current;
+          if (OB_FAIL(quan_dict_.match({char_len, ch}, hit))) {
             LOG_WARN("Failed to match quantifier.", K(ret));
           } else if (hit.is_match()) {
             if (OB_FAIL(ctx.add_token(ctx.fulltext(),
@@ -117,7 +121,9 @@ int ObIKQuantifierProcessor::process_CN_count(TokenizeContext &ctx,
           } else if (hit.is_prefix()) {
             // wait another match
           } else if (hit.is_unmatch()) {
-            count_hits_.erase(hit);
+            if (OB_FAIL(count_hits_.erase(current))) {
+              LOG_WARN("failed to erase unmatched quantifier hit", K(ret));
+            }
           } else {
             ret = OB_UNEXPECT_INTERNAL_ERROR;
             LOG_WARN("Reached an imposible state.");

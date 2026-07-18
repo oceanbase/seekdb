@@ -286,7 +286,7 @@ int ObTableCkmItems::check_tail_column_checksums_legal(
     LOG_WARN("column checksums cnt between differnt parts should be equal on non-data table", K(ret), K(base_column_checksums), K(check_column_checksums));
   } else if (OB_UNLIKELY(check_column_checksums.count() < base_column_checksums.count())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("column checksums cnt is relatively small", K(ret), K(base_column_checksums), K(check_column_checksums));
+    LOG_ERROR("column checksums cnt is relatively small", K(ret), K(base_column_checksums), K(check_column_checksums));
   } else {
     for (int64_t idx = base_column_checksums.count(); OB_SUCC(ret) && idx < check_column_checksums.count(); idx++) {
       if (OB_UNLIKELY(0 != check_column_checksums.at(idx))) {
@@ -416,7 +416,7 @@ int ObTableCkmItems::validate_column_ckm_sum(
                  index_ckm.ckm_sum_array_,
                  ckm_error_info))) {
     if (OB_CHECKSUM_ERROR != ret) {
-      LOG_WARN("failed to compare column checksum for global index", KR(ret),
+      LOG_ERROR("failed to compare column checksum for global index", KR(ret),
                K(ckm_error_info), K(data_ckm.ckm_items_),
                K(index_ckm.ckm_items_));
     }
@@ -472,7 +472,7 @@ int ObTableCkmItems::validate_tablet_column_ckm(
           LOG_INFO("failed to find replica_checksum idx of data tablet, skip verify", KR(ret), K(idx),
             "tablet_id", data_ckm.tablet_pairs_.at(idx).get_tablet_id());
         } else {
-          LOG_WARN("failed to find replica_checksum idx of data tablet", KR(ret), K(data_ckm), K(idx),
+          LOG_ERROR("failed to find replica_checksum idx of data tablet", KR(ret), K(data_ckm), K(idx),
             "tablet_id", data_ckm.tablet_pairs_.at(idx).get_tablet_id());
         }
       } else if (OB_FAIL(index_ckm.ckm_items_.get(
@@ -482,7 +482,7 @@ int ObTableCkmItems::validate_tablet_column_ckm(
           LOG_INFO("failed to find replica_checksum idx of index tablet, skip verify", KR(ret), K(idx),
             "tablet_id", index_ckm.tablet_pairs_.at(idx).get_tablet_id());
         } else {
-          LOG_WARN("failed to find replica_checksum idx of index tablet", KR(ret), KPC(data_replica_ckm), K(idx),
+          LOG_ERROR("failed to find replica_checksum idx of index tablet", KR(ret), KPC(data_replica_ckm), K(idx),
             "tablet_id", index_ckm.tablet_pairs_.at(idx).get_tablet_id(), K(index_ckm.tablet_pairs_));
         }
       } else {
@@ -510,7 +510,7 @@ int ObTableCkmItems::validate_tablet_column_ckm(
             index_replica_ckm->column_meta_.column_checksums_,
             ckm_error_info))) {
           if (OB_CHECKSUM_ERROR != ret) {
-            LOG_WARN("failed to compare column checksum", KR(ret),
+            LOG_ERROR("failed to compare column checksum", KR(ret),
               "data_tablet", data_ckm.tablet_pairs_.at(idx), KPC(data_replica_ckm),
               "index_tablet", index_ckm.tablet_pairs_.at(idx), KPC(index_replica_ckm),
               K(data_ckm.ckm_items_), K(index_ckm.ckm_items_));

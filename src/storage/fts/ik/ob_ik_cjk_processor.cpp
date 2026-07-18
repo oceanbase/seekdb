@@ -39,9 +39,13 @@ int ObIKCJKProcessor::do_process(TokenizeContext &ctx,
   if (ObFTCharUtil::CharType::USELESS != type) {
     // handle previous hits_ first and then check from this char
     for (ObList<ObDATrieHit, ObIAllocator>::iterator iter = hits_.begin();
-         OB_SUCC(ret) && iter != hits_.end();
-         iter++) {
-      ObDATrieHit &hit = *iter;
+         OB_SUCC(ret) && iter != hits_.end();) {
+      // FTS next-stage optimization (Op2): advance before a possible erase.
+      // Parser reuse gives this list a real free-capable allocator, so the old
+      // erase-by-value followed by iter++ could touch a released node and also
+      // performed an unnecessary linear search from the list head.
+      ObList<ObDATrieHit, ObIAllocator>::iterator current = iter++;
+      ObDATrieHit &hit = *current;
       if (OB_FAIL(dict_main_.match_with_hit({char_len, ch}, hit, hit))) {
         LOG_WARN("fail to match with hit", K(ret));
       } else if (hit.is_match()) {
@@ -57,7 +61,9 @@ int ObIKCJKProcessor::do_process(TokenizeContext &ctx,
       } else if (hit.is_prefix()) {
         // nothing
       } else if (hit.is_unmatch()) {
-        hits_.erase(hit);
+        if (OB_FAIL(hits_.erase(current))) {
+          LOG_WARN("failed to erase unmatched dictionary hit", K(ret));
+        }
       } else {
         ret = OB_UNEXPECT_INTERNAL_ERROR;
         LOG_WARN("Match dict reach impossible path.", K(ret));

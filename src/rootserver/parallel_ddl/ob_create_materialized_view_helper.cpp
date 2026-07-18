@@ -265,7 +265,7 @@ int ObCreateMaterializedViewHelper::construct_and_adjust_result_(int &return_ret
   if (FAILEDx(ObCreateViewHelper::construct_and_adjust_result_(ret))) {
     LOG_WARN("fail to construnct and adjust result", KR(ret));
   } else if (task_record_.is_valid() && OB_FAIL(ObSysDDLSchedulerUtil::schedule_ddl_task(task_record_))) {
-    LOG_WARN("fail to schedule ddl task", KR(ret), K_(task_record));
+    LOG_ERROR("fail to schedule ddl task", KR(ret), K_(task_record));
   } else {
     res_.task_id_ = task_record_.task_id_;
   }

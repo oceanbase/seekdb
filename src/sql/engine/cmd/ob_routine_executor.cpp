@@ -385,7 +385,7 @@ int ObAlterRoutineExecutor::execute(ObExecContext &ctx, ObAlterRoutineStmt &stmt
     if (trans.is_started()) {
       int tmp_ret = OB_SUCCESS;
       if (OB_SUCCESS != (tmp_ret = trans.end(OB_SUCCESS == ret))) {
-        LOG_WARN("trans end failed", K(ret), K(tmp_ret));
+        LOG_ERROR("trans end failed", K(ret), K(tmp_ret));
         ret = OB_SUCCESS == ret ? tmp_ret : ret;
       }
     }

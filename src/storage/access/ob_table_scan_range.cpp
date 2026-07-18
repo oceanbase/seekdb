@@ -326,7 +326,7 @@ int ObTableScanRange::init_ranges(
       ObPartitionSplitQuery split_query;
       if (is_tablet_spliting && 
           OB_FAIL(split_query.get_tablet_split_info(tablet, *allocator_))) {
-        STORAGE_LOG(WARN, "fail to check tablet in spliting", K(ret), K(tablet_id));
+        STORAGE_LOG(ERROR, "fail to check tablet in spliting", K(ret), K(tablet_id));
       }
       for (int64_t i = 0; OB_SUCC(ret) && i < range_cnt; i++) {
         ObDatumRange datum_range;

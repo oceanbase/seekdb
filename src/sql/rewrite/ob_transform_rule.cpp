@@ -986,7 +986,7 @@ int ObTryTransHelper::recover(ObQueryCtx *query_ctx)
     LOG_WARN("failed to revover qb name info", K(ret));
   } else if (NULL != unique_key_provider_
              && OB_FAIL(unique_key_provider_->recover_useless_unique_for_temp_table())) {
-    LOG_WARN("failed to recover useless unique for temp table", K(ret));
+    LOG_ERROR("failed to recover useless unique for temp table", K(ret));
   } else {
     unique_key_provider_ = NULL;
     query_ctx->available_tb_id_ = available_tb_id_;

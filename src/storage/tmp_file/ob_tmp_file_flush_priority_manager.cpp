@@ -268,7 +268,7 @@ int ObTmpFileFlushPriorityManager::remove_file(ObITmpFile &file)
   int ret = OB_SUCCESS;
   if (file.get_mode() == ObITmpFile::ObTmpFileMode::SHARED_NOTHING &&
       OB_FAIL(remove_file(true /*is_meta*/, file))) {
-    LOG_WARN("fail to remove file from meta flush list", KR(ret));
+    LOG_ERROR("fail to remove file from meta flush list", KR(ret));
   } else if (OB_FAIL(remove_file(false /*is_meta*/, file))) {
     LOG_WARN("fail to remove file from data flush list", KR(ret));
   }

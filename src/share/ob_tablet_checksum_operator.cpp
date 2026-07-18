@@ -264,7 +264,7 @@ int ObTabletChecksumOperator::load_tablet_checksum_items(
                 if (OB_FAIL(ret)) {
                   ret = OB_SUCCESS;
                   if (OB_FAIL(ObTabletReplicaChecksumOperator::recover_mock_column_meta(item.column_meta_))) {
-                    LOG_WARN("fail to recover mock large column meta", KR(ret));
+                    LOG_ERROR("fail to recover mock large column meta", KR(ret));
                   } else {
                     LOG_INFO("ERRSIM EN_MOCK_LARGE_COLUMN_META", K(ret));
                   }

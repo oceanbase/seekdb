@@ -492,7 +492,7 @@ int ObPartTransCtx::handle_timeout(const int64_t delay)
             TRANS_LOG(WARN, "fail to check clog disk status", KR(ret));
           } else if (clog_is_full || clog_is_hang) {
             tmp_ret = post_tx_commit_resp_(OB_NOT_MASTER);
-            TRANS_LOG(WARN, "clog disk has fatal error, make scheduler retry commit", K(tmp_ret), KPC(this));
+            TRANS_LOG(ERROR, "clog disk has fatal error, make scheduler retry commit", K(tmp_ret), KPC(this));
           }
         }
       }
@@ -1387,7 +1387,7 @@ int ObPartTransCtx::recover_tx_ctx_table_info(ObTxCtxTableInfo &ctx_info)
     } else if (exec_info_.need_checksum_ &&
                OB_FAIL(mt_ctx_.update_checksum(exec_info_.checksum_,
                                                exec_info_.checksum_scn_))) {
-      TRANS_LOG(WARN, "recover checksum failed", K(ret), KPC(this), K(ctx_info));
+      TRANS_LOG(ERROR, "recover checksum failed", K(ret), KPC(this), K(ctx_info));
     } else {
       is_ctx_table_merged_ = true;
       replay_completeness_.set(true);
@@ -1756,7 +1756,7 @@ int ObPartTransCtx::submit_redo_log_for_freeze_(bool &submitted, const uint32_t 
     ObTxRedoSubmitter submitter(*this, mt_ctx_);
     if (OB_FAIL(submitter.submit_for_freeze(freeze_clock, true /*display blocked info*/))) {
       if (OB_BLOCK_FROZEN != ret) {
-        TRANS_LOG(WARN, "fail to submit redo log for freeze", K(ret));
+        TRANS_LOG(ERROR, "fail to submit redo log for freeze", K(ret));
         // for some error, txn will be aborted immediately
         handle_submit_log_err_(ObTxLogType::TX_REDO_LOG, ret);
       }
@@ -2608,7 +2608,7 @@ int ObPartTransCtx::on_failure(ObTxLogCb *log_cb)
       }
       if (busy_cbs_.is_empty() && !has_persisted_log_()) {
         // busy callback array is empty and trx has not persisted any log, exit here
-        TRANS_LOG(WARN, "log sync failed, txn aborted without persisted log", KPC(this));
+        TRANS_LOG(ERROR, "log sync failed, txn aborted without persisted log", KPC(this));
         if (OB_FAIL(do_local_tx_end_(TxEndAction::ABORT_TX))) {
           TRANS_LOG(WARN, "do local tx abort failed", K(ret));
         }
@@ -2850,7 +2850,7 @@ int ObPartTransCtx::submit_redo_commit_info_log_()
   if (need_force_abort_() || is_force_abort_logging_()
       || get_downstream_state() == ObTxState::ABORT) {
     ret = OB_TRANS_KILLED;
-    TRANS_LOG(WARN, "tx has been aborting, can not submit prepare log", K(ret));
+    TRANS_LOG(ERROR, "tx has been aborting, can not submit prepare log", K(ret));
   } else if (sub_state_.is_info_log_submitted()) {
     // state log already submitted, do nothing
   } else if (OB_FAIL(submit_redo_if_parallel_logging_())) {
@@ -2876,7 +2876,7 @@ int ObPartTransCtx::submit_redo_commit_info_log_()
   } else if (OB_FAIL(acquire_ctx_ref_())) {
     TRANS_LOG(ERROR, "acquire ctx ref failed", KR(ret), K(*this));
   } else if (OB_FAIL(submit_log_block_out_(log_block, SCN::min_scn(), log_cb, replay_hint, barrier))) {
-    TRANS_LOG(WARN, "submit log to clog adapter failed", KR(ret), K(*this));
+    TRANS_LOG(ERROR, "submit log to clog adapter failed", KR(ret), K(*this));
     return_log_cb_(log_cb);
     log_cb = NULL;
     release_ctx_ref_();
@@ -2952,7 +2952,7 @@ int ObPartTransCtx::submit_redo_commit_info_log_(ObTxLogBlock &log_block,
         } else if (OB_FAIL(acquire_ctx_ref_())) {
           TRANS_LOG(ERROR, "acquire ctx ref failed", KR(ret), K(*this));
         } else if (OB_FAIL(submit_log_block_out_(log_block, SCN::min_scn(), log_cb))) {
-          TRANS_LOG(WARN, "submit log failed", KR(ret), K(*this));
+          TRANS_LOG(ERROR, "submit log failed", KR(ret), K(*this));
           return_log_cb_(log_cb);
           log_cb = NULL;
           release_ctx_ref_();
@@ -3040,7 +3040,7 @@ int ObPartTransCtx::submit_redo_active_info_log_()
     } else if (OB_FAIL(acquire_ctx_ref_())) {
       TRANS_LOG(ERROR, "acquire ctx ref failed", KR(ret), K(*this));
     } else if (OB_FAIL(submit_log_block_out_(log_block, SCN::min_scn(), log_cb))) {
-      TRANS_LOG(WARN, "submit log to clog adapter failed", KR(ret), K(*this));
+      TRANS_LOG(ERROR, "submit log to clog adapter failed", KR(ret), K(*this));
       return_log_cb_(log_cb);
       log_cb = nullptr;
       release_ctx_ref_();
@@ -3068,7 +3068,7 @@ int ObPartTransCtx::submit_prepare_log_()
   if (need_force_abort_() || is_force_abort_logging_()
       || get_downstream_state() == ObTxState::ABORT) {
     ret = OB_TRANS_KILLED;
-    TRANS_LOG(WARN, "tx has been aborting, can not submit prepare log", K(ret));
+    TRANS_LOG(ERROR, "tx has been aborting, can not submit prepare log", K(ret));
   }
 
   bool contain_commit_info = false;
@@ -3134,7 +3134,7 @@ int ObPartTransCtx::submit_prepare_log_()
           TRANS_LOG(ERROR, "acquire ctx ref failed", KR(ret), K(*this));
         } else if (OB_FAIL(submit_log_block_out_(log_block, SCN::min_scn(), log_cb, replay_hint,
                                                  compound_log_barrier))) {
-          TRANS_LOG(WARN, "submit log to clog adapter failed", KR(ret), K(*this));
+          TRANS_LOG(ERROR, "submit log to clog adapter failed", KR(ret), K(*this));
           return_log_cb_(log_cb);
           log_cb = NULL;
           release_ctx_ref_();
@@ -3160,7 +3160,7 @@ int ObPartTransCtx::submit_prepare_log_()
           } else if (OB_FAIL(acquire_ctx_ref_())) {
             TRANS_LOG(ERROR, "acquire ctx ref failed", KR(ret), K(*this));
           } else if (OB_FAIL(submit_log_block_out_(log_block, exec_info_.prepare_version_, log_cb))) {
-            TRANS_LOG(WARN, "submit log to clog adapter failed", KR(ret), K(*this));
+            TRANS_LOG(ERROR, "submit log to clog adapter failed", KR(ret), K(*this));
             return_log_cb_(log_cb);
             log_cb = NULL;
             release_ctx_ref_();
@@ -3187,7 +3187,7 @@ int ObPartTransCtx::submit_prepare_log_()
     } else if (OB_FAIL(acquire_ctx_ref_())) {
       TRANS_LOG(ERROR, "acquire ctx ref failed", KR(ret), K(*this));
     } else if (OB_FAIL(submit_log_block_out_(log_block, exec_info_.prepare_version_, log_cb, replay_hint, compound_log_barrier))) {
-      TRANS_LOG(WARN, "submit log to clog adapter failed", KR(ret), K(*this));
+      TRANS_LOG(ERROR, "submit log to clog adapter failed", KR(ret), K(*this));
       return_log_cb_(log_cb);
       log_cb = NULL;
       release_ctx_ref_();
@@ -3218,7 +3218,7 @@ int ObPartTransCtx::submit_commit_log_()
   if (need_force_abort_() || is_force_abort_logging_()
       || get_downstream_state() == ObTxState::ABORT) {
     ret = OB_TRANS_KILLED;
-    TRANS_LOG(WARN, "tx has been aborting, can not submit prepare log", K(ret));
+    TRANS_LOG(ERROR, "tx has been aborting, can not submit prepare log", K(ret));
   } else if (OB_FAIL(mds_cache_.reserve_final_notify_array(exec_info_.multi_data_source_))) {
     TRANS_LOG(WARN, "reserve mds cache memory failed", KR(ret), K(*this));
   } else if (OB_FAIL(mds_cache_.generate_final_notify_array(exec_info_.multi_data_source_,
@@ -3275,7 +3275,7 @@ int ObPartTransCtx::submit_commit_log_()
     if (exec_info_.need_checksum_
         && replay_completeness_.is_complete()
         && OB_FAIL(mt_ctx_.calc_checksum_all(checksum_arr))) {
-      TRANS_LOG(WARN, "calc checksum failed", K(ret));
+      TRANS_LOG(ERROR, "calc checksum failed", K(ret));
     } else if (!local_tx) {
       log_commit_version = ctx_tx_data_.get_commit_version();
       prev_log_type.set_prepare();
@@ -3343,7 +3343,7 @@ int ObPartTransCtx::submit_commit_log_()
           TRANS_LOG(ERROR, "acquire ctx ref failed", KR(ret), K(*this));
         } else if (OB_FAIL(submit_log_block_out_(log_block, SCN::min_scn(), log_cb, replay_hint,
                                                  commit_info_log_barrier))) {
-          TRANS_LOG(WARN, "submit log to clog adapter failed", KR(ret), K(*this));
+          TRANS_LOG(ERROR, "submit log to clog adapter failed", KR(ret), K(*this));
           return_log_cb_(log_cb);
           log_cb = NULL;
           release_ctx_ref_();
@@ -3382,7 +3382,7 @@ int ObPartTransCtx::submit_commit_log_()
                                                    log_cb,
                                                    replay_hint,
                                                    commit_log_barrier_type))) {
-            TRANS_LOG(WARN, "submit log to clog adapter failed", KR(ret), K(*this));
+            TRANS_LOG(ERROR, "submit log to clog adapter failed", KR(ret), K(*this));
             return_log_cb_(log_cb);
             log_cb = NULL;
             release_ctx_ref_();
@@ -3425,7 +3425,7 @@ int ObPartTransCtx::submit_commit_log_()
                                              log_cb,
                                              replay_hint,
                                              compound_log_barrier_type))) {
-      TRANS_LOG(WARN, "submit log to clog adapter failed", KR(ret), K(*this));
+      TRANS_LOG(ERROR, "submit log to clog adapter failed", KR(ret), K(*this));
       release_ctx_ref_();
       return_log_cb_(log_cb);
       log_cb = NULL;
@@ -3517,7 +3517,7 @@ int ObPartTransCtx::submit_abort_log_()
   } else if (OB_FAIL(acquire_ctx_ref_())) {
     TRANS_LOG(ERROR, "acquire ctx ref failed", KR(ret), K(*this));
   } else if (OB_FAIL(submit_log_block_out_(log_block, SCN::min_scn(), log_cb, replay_hint, abort_log_barrier_type, 50 * 1000))) {
-    TRANS_LOG(WARN, "submit log to clog adapter failed", KR(ret), K(*this));
+    TRANS_LOG(ERROR, "submit log to clog adapter failed", KR(ret), K(*this));
     return_log_cb_(log_cb);
     log_cb = NULL;
     release_ctx_ref_();
@@ -3557,7 +3557,7 @@ int ObPartTransCtx::submit_clear_log_()
   } else if (OB_FAIL(submit_log_block_out_(log_block,
                  share::SCN::max(ctx_tx_data_.get_end_log_ts(), max_2pc_commit_scn_),
                  log_cb))) {
-    TRANS_LOG(WARN, "submit log to clog adapter failed", KR(ret), K(*this));
+    TRANS_LOG(ERROR, "submit log to clog adapter failed", KR(ret), K(*this));
     return_log_cb_(log_cb);
     log_cb = NULL;
     release_ctx_ref_();
@@ -3595,7 +3595,7 @@ int ObPartTransCtx::submit_record_log_()
   } else if (OB_FAIL(acquire_ctx_ref_())) {
     TRANS_LOG(ERROR, "acquire ctx ref failed", KR(ret), K(*this));
   } else if (OB_FAIL(submit_log_block_out_(log_block, SCN::min_scn(), log_cb))) {
-    TRANS_LOG(WARN, "submit log to clog adapter failed", KR(ret), K(*this));
+    TRANS_LOG(ERROR, "submit log to clog adapter failed", KR(ret), K(*this));
     return_log_cb_(log_cb);
     log_cb = NULL;
     release_ctx_ref_();
@@ -3884,7 +3884,7 @@ int ObPartTransCtx::submit_big_segment_log_()
                                              0,
                                              ObReplayBarrierType::NO_NEED_BARRIER,
                                              INT64_MAX))) {
-      TRANS_LOG(WARN, "submit log to clog adapter failed", KR(ret), K(*this));
+      TRANS_LOG(ERROR, "submit log to clog adapter failed", KR(ret), K(*this));
       return_log_cb_(log_cb);
       log_cb = NULL;
       release_ctx_ref_();
@@ -4014,7 +4014,7 @@ int ObPartTransCtx::submit_log_block_out_(ObTxLogBlock &log_block,
              && (is_force_abort_logging_()
                  || get_downstream_state() == ObTxState::ABORT)) {
     ret = OB_TRANS_KILLED;
-    TRANS_LOG(WARN, "tx has been aborting, can not submit other log", K(ret), KPC(this));
+    TRANS_LOG(ERROR, "tx has been aborting, can not submit other log", K(ret), KPC(this));
   } else if (big_segment_info_.segment_buf_.is_active()
              && !is_contain(log_block.get_cb_arg_array(), ObTxLogType::TX_BIG_SEGMENT_LOG)) {
     ret = OB_LOG_TOO_LARGE;
@@ -4108,7 +4108,7 @@ int ObPartTransCtx::submit_log_impl_(const ObTxLogType log_type)
         break;
       }
       default: {
-        TRANS_LOG(WARN, "unknown submit log type");
+        TRANS_LOG(ERROR, "unknown submit log type");
       }
       }
     }
@@ -5318,7 +5318,7 @@ int ObPartTransCtx::replay_commit(const ObTxCommitLog &commit_log,
       if ((!commit_log.get_multi_source_data().empty() || !exec_info_.multi_data_source_.empty())
           && replay_completeness_.is_incomplete()) {
         // ret = OB_ERR_UNEXPECTED;
-        TRANS_LOG(WARN, "mds part_ctx can not replay from the middle", K(ret), K(timestamp), K(offset),
+        TRANS_LOG(ERROR, "mds part_ctx can not replay from the middle", K(ret), K(timestamp), K(offset),
                   K(commit_log), KPC(this));
       }
     }
@@ -5513,7 +5513,7 @@ int ObPartTransCtx::replay_abort(const ObTxAbortLog &abort_log,
       if ((!abort_log.get_multi_source_data().empty() || !exec_info_.multi_data_source_.empty())
           && replay_completeness_.is_incomplete()) {
         // ret = OB_ERR_UNEXPECTED;
-        TRANS_LOG(WARN, "mds part_ctx can not replay from the middle", K(ret), K(timestamp), K(offset),
+        TRANS_LOG(ERROR, "mds part_ctx can not replay from the middle", K(ret), K(timestamp), K(offset),
                   K(abort_log), KPC(this));
       }
     }
@@ -5631,7 +5631,7 @@ int ObPartTransCtx::replay_multi_data_source(const ObTxMultiDataSourceLog &log,
   if (OB_SUCC(ret)) {
     if (replay_completeness_.is_incomplete()) {
       // ret = OB_ERR_UNEXPECTED;
-      TRANS_LOG(WARN, "mds part_ctx can not replay from the middle", K(ret), K(timestamp), K(lsn),
+      TRANS_LOG(ERROR, "mds part_ctx can not replay from the middle", K(ret), K(timestamp), K(lsn),
                 K(log), KPC(this));
     }
   }
@@ -6725,7 +6725,7 @@ int ObPartTransCtx::submit_multi_data_source_(ObTxLogBlock &log_block)
   if (is_force_abort_logging_()
       || get_downstream_state() == ObTxState::ABORT) {
     ret = OB_TRANS_KILLED;
-    TRANS_LOG(WARN, "tx has been aborting, can not submit prepare log", K(ret));
+    TRANS_LOG(ERROR, "tx has been aborting, can not submit prepare log", K(ret));
   } else if (sub_state_.is_info_log_submitted()) {
     // state log already submitted, do nothing
   } else if (mds_cache_.count() > 0) {
@@ -6799,7 +6799,7 @@ int ObPartTransCtx::submit_multi_data_source_(ObTxLogBlock &log_block)
 
       } else if ((mds_base_scn.is_valid() ? OB_FALSE_IT(mds_base_scn = share::SCN::scn_inc(mds_base_scn)) : OB_FALSE_IT(mds_base_scn.set_min()))) {
       } else if (OB_FAIL(submit_log_block_out_(log_block, mds_base_scn, log_cb, replay_hint, barrier_type))) {
-        TRANS_LOG(WARN, "submit log to clog adapter failed", KR(ret), K(*this));
+        TRANS_LOG(ERROR, "submit log to clog adapter failed", KR(ret), K(*this));
         release_ctx_ref_();
       } else if (OB_FAIL(after_submit_log_(log_block, log_cb, NULL))) {
         log_cb = nullptr;
@@ -7030,11 +7030,11 @@ int ObPartTransCtx::register_multi_data_source(const ObTxDataSourceType data_sou
       TRANS_LOG(WARN, "tx force aborted due to data incomplete", K(ret), KPC(this));
     } else if (is_follower_()) {
       ret = OB_NOT_MASTER;
-      TRANS_LOG(WARN, "can not register mds on a follower", K(ret), K(data_source_type), K(len),
+      TRANS_LOG(ERROR, "can not register mds on a follower", K(ret), K(data_source_type), K(len),
                 KPC(this));
     } else if (is_committing_()) {
       ret = OB_TRANS_HAS_DECIDED;
-      TRANS_LOG(WARN, "can not register mds in committing part_ctx", K(ret), KPC(this));
+      TRANS_LOG(ERROR, "can not register mds in committing part_ctx", K(ret), KPC(this));
     } else if (OB_FAIL(mds_cache_.try_recover_max_register_no(exec_info_.multi_data_source_))) {
       TRANS_LOG(WARN, "recover max register no failed", K(ret), K(mds_cache_), KPC(this));
     } else if (OB_FALSE_IT(tx_print_guard.click_start("register_mds", 1))) {
@@ -7225,7 +7225,7 @@ int ObPartTransCtx::submit_pending_log_block_(ObTxLogBlock &log_block,
     } else if (OB_FAIL(acquire_ctx_ref_())) {
       TRANS_LOG(ERROR, "acquire ctx ref failed", KR(ret), K(*this));
     } else if (OB_FAIL(submit_log_block_out_(log_block, share::SCN::min_scn(), log_cb, replay_hint, barrier))) {
-      TRANS_LOG(WARN, "submit log to clog adapter failed", KR(ret), K(*this));
+      TRANS_LOG(ERROR, "submit log to clog adapter failed", KR(ret), K(*this));
       return_log_cb_(log_cb);
       log_cb = NULL;
       release_ctx_ref_();
@@ -7676,7 +7676,7 @@ int ObPartTransCtx::submit_rollback_to_log_(const ObTxSEQ from_scn,
   } else if (FALSE_IT(new (undo_node) ObUndoStatusNode())) {
   } else if (FALSE_IT(log_cb->get_undo_node() = undo_node)) {
   } else if (OB_FAIL(submit_log_block_out_(log_block, SCN::min_scn(), log_cb, replay_hint, barrier))) {
-    TRANS_LOG(WARN, "submit log fail", K(ret), K(log_block), KPC(this));
+    TRANS_LOG(ERROR, "submit log fail", K(ret), K(log_block), KPC(this));
     return_log_cb_(log_cb);
   } else if (OB_FAIL(acquire_ctx_ref())) {
     // inc for log_cb calling back

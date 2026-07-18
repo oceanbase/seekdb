@@ -1225,7 +1225,7 @@ int ObTabletPersister::fetch_and_persist_large_co_sstable(
           && OB_FAIL(batch_write_sstable_info(cg_write_infos, cg_write_ctxs, cg_addrs,
                                               sstable_persist_ctx.sstable_meta_write_ctxs_,
                                               sstable_persist_ctx.block_info_set_))) {
-        LOG_WARN("failed to batch write sstable", K(ret));
+        LOG_ERROR("failed to batch write sstable", K(ret));
       } else if (OB_UNLIKELY(cg_addrs.count() != cg_sstables.count())) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("get unexpected cg addrs count", K(ret), K(cg_addrs.count()), K(cg_sstables.count()));
@@ -1490,7 +1490,7 @@ int ObTabletPersister::fetch_and_persist_sstable(
     LOG_WARN("fail to convert shared data block info map", K(ret));
   } else if (sstable_persist_ctx.write_infos_.count() > 0
       && OB_FAIL(batch_write_sstable_info(sstable_persist_ctx.write_infos_, write_ctxs, addrs, sstable_meta_write_ctxs, block_info_set))) {
-    LOG_WARN("failed to batch write sstable", K(ret));
+    LOG_ERROR("failed to batch write sstable", K(ret));
   } else if (FALSE_IT(time_stats->click("batch_write_sstable_info"))) {
   } else if (OB_FAIL(new_table_store.init(allocator_, sstable_persist_ctx.tables_, addrs, major_ckm_info))) {
     LOG_WARN("fail to init new table store", K(ret), K(sstable_persist_ctx), K(addrs));

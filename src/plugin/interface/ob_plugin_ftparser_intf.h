@@ -112,13 +112,18 @@ public:
   {
     ObFTParserParamExport::reset();
     allocator_ = nullptr;
+    metadata_allocator_ = nullptr;
     ngram_token_size_ = NGRAM_TOKEN_SIZE;
   }
 
-  INHERIT_TO_STRING_KV("base", ObFTParserParamExport, KP_(allocator), K_(ngram_token_size));
+  INHERIT_TO_STRING_KV("base", ObFTParserParamExport, KP_(allocator),
+                       KP_(metadata_allocator), K_(ngram_token_size));
 
 public:
+  // FTS next-stage optimization (reference 5bebabc): allocator_ is scoped to
+  // one document; metadata_allocator_ owns parser state reused across rows.
   common::ObIAllocator *allocator_ = nullptr;
+  common::ObIAllocator *metadata_allocator_ = nullptr;
 
   // ik parser params
   ObFTIKParam ik_param_;
@@ -137,6 +142,15 @@ public:
       int64_t &word_len,
       int64_t &char_cnt,
       int64_t &word_freq) = 0;
+  // FTS next-stage optimization (Op2): built-in iterators may replace their
+  // input document without rebuilding immutable parser state. Third-party
+  // plugins keep the existing create/free behavior by default.
+  virtual int reuse_parser(const char *fulltext, const int64_t fulltext_len)
+  {
+    UNUSED(fulltext);
+    UNUSED(fulltext_len);
+    return OB_NOT_SUPPORTED;
+  }
   DECLARE_PURE_VIRTUAL_TO_STRING;
 };
 

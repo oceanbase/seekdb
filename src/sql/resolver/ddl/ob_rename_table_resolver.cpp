@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_RESV
 #include "sql/resolver/ddl/ob_rename_table_resolver.h"
+#include "sql/resolver/ddl/ob_fts_index_builder_util.h"
 
 namespace oceanbase
 {
@@ -116,28 +117,47 @@ int ObRenameTableResolver::resolve_rename_action(const ParseNode &rename_action_
                                                                origin_table_name,
                                                                false, /*is_index*/
                                                                table_schema));
-      ParseNode *new_db_node = new_node->children_[0];
-      obcall::ObRenameTableItem rename_table_item;
-      rename_table_item.origin_db_name_ = origin_db_name;
-      rename_table_item.origin_table_name_ = origin_table_name;
-      rename_table_item.new_db_name_ = new_db_name;
-      rename_table_item.new_table_name_ = new_table_name;
-      rename_table_item.origin_table_id_ = NULL != table_schema ? table_schema->get_table_id() : common::OB_INVALID_ID;
-      if (OB_FAIL(rename_table_stmt->add_rename_table_item(rename_table_item))) {
-        LOG_WARN("failed to add rename table item", K(rename_table_item), K(ret));
-      } else if (OB_NOT_NULL(table_schema)) {
-        if (table_schema->is_mlog_table()) {
+      if (OB_NOT_NULL(table_schema) && table_schema->is_fulltext_dict_table()) {
+        bool referenced = false;
+        if (OB_ISNULL(schema_checker_->get_schema_guard())) {
+          ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("schema guard is null", K(ret));
+        } else if (OB_FAIL(share::ObFtsIndexBuilderUtil::check_fulltext_dict_table_referenced(
+                   origin_db_name,
+                   origin_table_name,
+                   *schema_checker_->get_schema_guard(),
+                   referenced))) {
+          LOG_WARN("failed to check fulltext dict table reference", K(ret), K(origin_db_name), K(origin_table_name));
+        } else if (referenced) {
           ret = OB_NOT_SUPPORTED;
-          LOG_WARN("rename materialized view log is not supported", KR(ret));
-          LOG_USER_ERROR(OB_NOT_SUPPORTED, "rename materialized view log is");
-        } else if (table_schema->has_mlog_table()) {
-          ret = OB_NOT_SUPPORTED;
-          LOG_WARN("rename table required with materialized view log is not supported", KR(ret));
-          LOG_USER_ERROR(OB_NOT_SUPPORTED, "rename table with materialized view log is");
-        } else if (table_schema->table_referenced_by_fast_lsm_mv()) {
-          ret = OB_NOT_SUPPORTED;
-          LOG_WARN("rename table required by materialized view is not supported", KR(ret));
-          LOG_USER_ERROR(OB_NOT_SUPPORTED, "rename table required by materialized view is");
+          LOG_WARN("rename referenced fulltext dict table is not supported", K(ret), K(origin_db_name), K(origin_table_name));
+          LOG_USER_ERROR(OB_NOT_SUPPORTED, "rename referenced FULLTEXT_DICT table");
+        }
+      }
+      if (OB_FAIL(ret)) {
+      } else {
+        obcall::ObRenameTableItem rename_table_item;
+        rename_table_item.origin_db_name_ = origin_db_name;
+        rename_table_item.origin_table_name_ = origin_table_name;
+        rename_table_item.new_db_name_ = new_db_name;
+        rename_table_item.new_table_name_ = new_table_name;
+        rename_table_item.origin_table_id_ = NULL != table_schema ? table_schema->get_table_id() : common::OB_INVALID_ID;
+        if (OB_FAIL(rename_table_stmt->add_rename_table_item(rename_table_item))) {
+          LOG_WARN("failed to add rename table item", K(rename_table_item), K(ret));
+        } else if (OB_NOT_NULL(table_schema)) {
+          if (table_schema->is_mlog_table()) {
+            ret = OB_NOT_SUPPORTED;
+            LOG_WARN("rename materialized view log is not supported", KR(ret));
+            LOG_USER_ERROR(OB_NOT_SUPPORTED, "rename materialized view log is");
+          } else if (table_schema->has_mlog_table()) {
+            ret = OB_NOT_SUPPORTED;
+            LOG_WARN("rename table required with materialized view log is not supported", KR(ret));
+            LOG_USER_ERROR(OB_NOT_SUPPORTED, "rename table with materialized view log is");
+          } else if (table_schema->table_referenced_by_fast_lsm_mv()) {
+            ret = OB_NOT_SUPPORTED;
+            LOG_WARN("rename table required by materialized view is not supported", KR(ret));
+            LOG_USER_ERROR(OB_NOT_SUPPORTED, "rename table required by materialized view is");
+          }
         }
       }
     }

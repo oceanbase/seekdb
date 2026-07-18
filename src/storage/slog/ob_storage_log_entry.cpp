@@ -111,7 +111,7 @@ int ObStorageLogEntry::check_entry_integrity(bool dump_content) const
     STORAGE_REDO_LOG(WARN, "Magic doesn't match", K(ret), K_(magic));
   } else if (entry_checksum_ != calc_entry_checksum()) {
     ret = OB_CHECKSUM_ERROR;
-    STORAGE_REDO_LOG(WARN, "Checksum error", K(ret), K_(entry_checksum));
+    STORAGE_REDO_LOG(ERROR, "Checksum error", K(ret), K_(entry_checksum));
   }
   if (OB_FAIL(ret) && dump_content) {
     STORAGE_REDO_LOG(WARN, "check_entry_integrity error: ", K(*this));

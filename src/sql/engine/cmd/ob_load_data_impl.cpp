@@ -823,7 +823,7 @@ int ObLoadDataSPImpl::exec_shuffle(int64_t task_id, ObShuffleTaskHandle *handle)
   
   void *expr_buf = NULL;
   ObLoadFileBuffer *expr_buffer = NULL;
-  ObArrayHashMap<ObTabletID, ObDataFrag *> part_buf_mgr;
+  common::ObArrayHashMap<ObTabletID, ObDataFrag *> part_buf_mgr;
   ObSEArray<ObString, 32> insert_values;
   int64_t parsed_line_num = 0;
   ObStringBuf str_buf("LoadDataStrBuf", OB_MALLOC_MIDDLE_BLOCK_SIZE);
@@ -1205,7 +1205,7 @@ int ObLoadDataSPImpl::handle_returned_shuffle_task(ToolBox &box, ObShuffleTaskHa
              K(handle.result.task_id_), K(box.file_buf_row_num.count()));
   } else if (!box.file_appender.is_opened()
              && OB_FAIL(create_log_file(box))) {
-    LOG_WARN("fail to create log file", K(ret));
+    LOG_ERROR("fail to create log file", K(ret));
   }
 
   for (int64_t i = 0; OB_SUCC(ret) && i < handle.err_records.count(); ++i) {
@@ -1504,7 +1504,7 @@ int ObLoadDataSPImpl::log_failed_insert_task(ToolBox &box, ObInsertTask &task)
 
   if (!box.file_appender.is_opened()
       && OB_FAIL(create_log_file(box))) {
-    LOG_WARN("fail to create log file", K(ret));
+    LOG_ERROR("fail to create log file", K(ret));
   } else {
     log_err = task.result_.exec_ret_;
     LOG_DEBUG("check task result", K(task.result_));

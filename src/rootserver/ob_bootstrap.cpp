@@ -405,7 +405,7 @@ int ObBootstrap::prepare_create_partitions(
         ls_id_array,
         DATA_CURRENT_VERSION,
         need_create_empty_majors/*need_create_empty_major_sstable*/))) {
-      LOG_WARN("fail to add create tablet arg", KR(ret));
+      LOG_ERROR("fail to add create tablet arg", KR(ret));
     }
   }
 
@@ -517,7 +517,7 @@ int ObBootstrap::create_core_related_partitions()
       bool commit = OB_SUCC(ret);
       if (OB_SUCCESS != (temp_ret = trans.end(commit))) {
         ret = (OB_SUCC(ret)) ? temp_ret : ret;
-        LOG_WARN("trans end failed", K(commit), K(temp_ret));
+        LOG_ERROR("trans end failed", K(commit), K(temp_ret));
       }
     }
   }
@@ -624,7 +624,7 @@ int ObBootstrap::create_sys_table_partitions(const common::ObIArray<share::schem
       bool commit = OB_SUCC(ret);
       if (OB_SUCCESS != (temp_ret = trans.end(commit))) {
         ret = (OB_SUCC(ret)) ? temp_ret : ret;
-        LOG_WARN("trans end failed", K(commit), K(temp_ret));
+        LOG_ERROR("trans end failed", K(commit), K(temp_ret));
       }
     }
   }
@@ -816,7 +816,7 @@ int ObBootstrap::init_global_stat()
 
     int temp_ret = OB_SUCCESS;
     if (OB_SUCCESS != (temp_ret = trans.end(OB_SUCCESS == ret))) {
-      LOG_WARN("trans end failed", "commit", OB_SUCCESS == ret, KR(temp_ret));
+      LOG_ERROR("trans end failed", "commit", OB_SUCCESS == ret, KR(temp_ret));
       ret = (OB_SUCCESS == ret) ? temp_ret : ret;
     }
 

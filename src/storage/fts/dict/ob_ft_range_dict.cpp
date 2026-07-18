@@ -416,22 +416,26 @@ int ObFTRangeDict::match_with_hit(const ObString &single_word,
 int ObFTRangeDict::find_first_char_range(const ObString &single_word, ObIFTDict *&dict) const
 {
   int ret = OB_SUCCESS;
-  bool found = false;
-  for (int i = 0; OB_SUCC(ret) && !found && i < range_dicts_.size(); ++i) {
-    if (ObCharset::strcmp(ObCollationType::CS_TYPE_UTF8MB4_BIN,
-                          range_dicts_[i].start_.get_word(),
-                          single_word)
-            <= 0
-        && ObCharset::strcmp(ObCollationType::CS_TYPE_UTF8MB4_BIN,
-                             range_dicts_[i].end_.get_word(),
-                             single_word)
-               >= 0) {
-      dict = range_dicts_[i].dict_;
-      found = true;
+  dict = nullptr;
+
+  // FTS next-stage optimization (reference d325f95): dictionary ranges are
+  // emitted in UTF8MB4_BIN order. Locate the last start <= key in O(log N),
+  // then perform one end-bound check. ObString::compare is the byte ordering
+  // required by this binary collation and avoids the generic charset layer.
+  int64_t left = 0;
+  int64_t right = range_dicts_.size();
+  while (left < right) {
+    const int64_t mid = left + ((right - left) >> 1);
+    if (range_dicts_[mid].start_.get_word().compare(single_word) <= 0) {
+      left = mid + 1;
+    } else {
+      right = mid;
     }
   }
-  if (!found) {
-    // not found, dis match
+  const int64_t candidate = left - 1;
+  if (candidate >= 0 && range_dicts_[candidate].end_.get_word().compare(single_word) >= 0) {
+    dict = range_dicts_[candidate].dict_;
+  } else {
     ret = OB_ENTRY_NOT_EXIST;
   }
   return ret;
@@ -466,16 +470,22 @@ int ObFTRangeDict::build_cache(const ObFTDictDesc &desc, ObFTCacheRangeContainer
 {
   int ret = OB_SUCCESS;
 
-  ObString table_name;
+  ObString table_name = desc.name_;
   switch (desc.type_) {
   case ObFTDictType::DICT_IK_MAIN: {
-    table_name = ObString(share::OB_FT_DICT_IK_UTF8_TNAME);
+    if (table_name.empty()) {
+      table_name = ObString(share::OB_FT_DICT_IK_UTF8_TNAME);
+    }
   } break;
   case ObFTDictType::DICT_IK_QUAN: {
-    table_name = ObString(share::OB_FT_QUANTIFIER_IK_UTF8_TNAME);
+    if (table_name.empty()) {
+      table_name = ObString(share::OB_FT_QUANTIFIER_IK_UTF8_TNAME);
+    }
   } break;
   case ObFTDictType::DICT_IK_STOP: {
-    table_name = ObString(share::OB_FT_STOPWORD_IK_UTF8_TNAME);
+    if (table_name.empty()) {
+      table_name = ObString(share::OB_FT_STOPWORD_IK_UTF8_TNAME);
+    }
   } break;
   default:
     ret = OB_NOT_SUPPORTED;
@@ -502,7 +512,7 @@ int ObFTRangeDict::try_load_cache(const ObFTDictDesc &desc,
                                   ObFTCacheRangeContainer &range_container)
 {
   int ret = OB_SUCCESS;
-  uint64_t name = static_cast<uint64_t>(desc.type_);
+  uint64_t name = desc.name_.hash();
 
   for (int64_t i = 0; OB_SUCC(ret) && i < range_count; ++i) {
     ObDictCacheKey key(name, desc.type_, i);

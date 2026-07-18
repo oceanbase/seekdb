@@ -180,7 +180,7 @@ int ObTabletReplayExecutor::replay_to_mds_table_(
   storage::ObTablet *tablet = tablet_handle.get_obj();
   if (!is_replay_update_mds_table_()) {
     ret = OB_ERR_UNEXPECTED;
-    CLOG_LOG(WARN, "replay log do not update mds table, cannot replay to mds table", K(ret), K(tablet_handle));
+    CLOG_LOG(ERROR, "replay log do not update mds table, cannot replay to mds table", K(ret), K(tablet_handle));
   } else if (OB_ISNULL(tablet)) {
     ret = OB_ERR_UNEXPECTED;
     CLOG_LOG(WARN, "tablet should not be NULL", KR(ret));
@@ -205,7 +205,7 @@ int ObTabletReplayExecutor::replay_to_mds_table_(
   storage::ObTablet *tablet = tablet_handle.get_obj();
   if (!is_replay_update_mds_table_()) {
     ret = OB_ERR_UNEXPECTED;
-    CLOG_LOG(WARN, "replay log do not update mds table, cannot replay to mds table", K(ret), K(tablet_handle));
+    CLOG_LOG(ERROR, "replay log do not update mds table, cannot replay to mds table", K(ret), K(tablet_handle));
   } else if (OB_ISNULL(tablet)) {
     ret = OB_ERR_UNEXPECTED;
     CLOG_LOG(WARN, "tablet should not be NULL", KR(ret));
@@ -229,7 +229,7 @@ int ObTabletReplayExecutor::replay_remove_to_mds_table_(
   storage::ObTablet *tablet = tablet_handle.get_obj();
   if (!is_replay_update_mds_table_()) {
     ret = OB_ERR_UNEXPECTED;
-    CLOG_LOG(WARN, "replay log do not remove mds table, cannot replay to mds table", K(ret), K(tablet_handle));
+    CLOG_LOG(ERROR, "replay log do not remove mds table, cannot replay to mds table", K(ret), K(tablet_handle));
   } else if (OB_ISNULL(tablet)) {
     ret = OB_ERR_UNEXPECTED;
     CLOG_LOG(WARN, "tablet should not be NULL", KR(ret));
@@ -237,7 +237,7 @@ int ObTabletReplayExecutor::replay_remove_to_mds_table_(
     ret = OB_NOT_SUPPORTED;
     CLOG_LOG(WARN, "inner tablets have no mds table", KR(ret));
   } else if (OB_SUCCESS != (ret = tablet->replay_remove<K, V>(key, ctx, scn))) {
-    CLOG_LOG(WARN, "failed to do tablet replay", KR(ret));
+    CLOG_LOG(ERROR, "failed to do tablet replay", KR(ret));
   }
   return ret;
 }

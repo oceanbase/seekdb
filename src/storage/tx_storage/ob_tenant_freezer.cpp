@@ -361,7 +361,7 @@ int ObTenantFreezer::tenant_freeze_data_()
         if (OB_SUCCESS == first_fail_ret) {
           first_fail_ret = ret;
         }
-        LOG_WARN("[TenantFreezer] fail to freeze logstream", KR(ret), K(ls->get_ls_id()));
+        LOG_ERROR("[TenantFreezer] fail to freeze logstream", KR(ret), K(ls->get_ls_id()));
       }
     }
     if (ret == OB_ITER_END) {
@@ -495,7 +495,7 @@ int ObTenantFreezer::tablet_freeze(share::ObLSID ls_id,
                                        abs_timeout_ts,
                                        need_rewrite_tablet_meta,
                                        source))) {
-    LOG_WARN("[TenantFreezer] fail to freeze tablet", KR(ret), K(ls_id), K(tablet_id));
+    LOG_ERROR("[TenantFreezer] fail to freeze tablet", KR(ret), K(ls_id), K(tablet_id));
     if (OB_NOT_RUNNING == ret) {
       ret = OB_SUCCESS;
     }
@@ -1429,7 +1429,7 @@ int ObTenantFreezer::async_freeze_(const ObTenantFreezeArg &arg)
     });
   if (OB_ISNULL(handle)) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("[TenantFreezer] fail to dispatch async freeze", KR(ret), K(arg));
+    LOG_ERROR("[TenantFreezer] fail to dispatch async freeze", KR(ret), K(arg));
   }
   return ret;
 }
@@ -1629,7 +1629,7 @@ int ObTenantFreezer::do_minor_freeze_data_(const ObTenantFreezeCtx &ctx)
     bool rollback_freeze_cnt = false;
     if (OB_FAIL(tenant_freeze_data_())) {
       rollback_freeze_cnt = true;
-      LOG_WARN("fail to minor freeze", K(ret));
+      LOG_ERROR("fail to minor freeze", K(ret));
     } else {
       tenant_info_.update_slow_freeze_interval();
       LOG_INFO("finish tenant minor freeze", K(ret));

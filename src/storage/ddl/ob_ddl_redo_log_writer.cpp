@@ -607,7 +607,7 @@ int ObDDLRedoLogWriter::local_write_ddl_start_log(
                                          cb,
                                          lsn,
                                          scn))) {
-    LOG_WARN("fail to submit ddl start log", K(ret), K(buffer_size));
+    LOG_ERROR("fail to submit ddl start log", K(ret), K(buffer_size));
     if (ObDDLUtil::need_remote_write(ret)) {
       ret = OB_NOT_MASTER;
       LOG_INFO("overwrite return to OB_NOT_MASTER");
@@ -802,7 +802,7 @@ int ObDDLRedoLogWriter::write_auto_split_log(
                                          cb,
                                          lsn,
                                          scn))) {
-    LOG_WARN("fail to submit ddl start log", K(ret), K(buffer_size));
+    LOG_ERROR("fail to submit ddl start log", K(ret), K(buffer_size));
     if (ObDDLUtil::need_remote_write(ret)) {
       ret = OB_NOT_MASTER;
       LOG_INFO("overwrite return to OB_NOT_MASTER");
@@ -925,7 +925,7 @@ int ObDDLRedoLogWriter::write_auto_fork_log(
                                          cb,
                                          lsn,
                                          scn))) {
-    LOG_WARN("fail to submit ddl fork log", K(ret), K(buffer_size));
+    LOG_ERROR("fail to submit ddl fork log", K(ret), K(buffer_size));
     if (ObDDLUtil::need_remote_write(ret)) {
       ret = OB_NOT_MASTER;
       LOG_INFO("overwrite return to OB_NOT_MASTER");
@@ -1271,7 +1271,7 @@ int ObDDLRedoLogWriter::write_macro_block_log(
           LOG_WARN("fail to switch to remote write", K(ret));
         }
       } else {
-        LOG_WARN("fail to write ddl redo clog", K(ret), K(MTL_GET_TENANT_ROLE_CACHE()));
+        LOG_ERROR("fail to write ddl redo clog", K(ret), K(MTL_GET_TENANT_ROLE_CACHE()));
       }
     } else {
       LOG_INFO("local write redo log of macro block", K(redo_info), K(macro_block_id));
@@ -1418,7 +1418,7 @@ int ObDDLRedoLogWriter::write_commit_log(
           LOG_WARN("fail to switch to remote write", K(ret), K(table_key));
         }
       } else {
-        LOG_WARN("fail to write ddl commit log", K(ret), K(table_key));
+        LOG_ERROR("fail to write ddl commit log", K(ret), K(table_key));
       }
     } else if (OB_FAIL(handle.wait())) {
       LOG_WARN("wait ddl commit log finish failed", K(ret), K(table_key));
@@ -1842,7 +1842,7 @@ int ObDDLRedoLogWriterCallback::inner_write(const ObDDLMacroBlockRedoInfo &redo_
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(redo_info));
   } else if (OB_FAIL(ddl_writer_.write_macro_block_log(redo_info, redo_info.macro_block_id_, true/*allow remote write*/, param_.task_id_))) {
-    LOG_WARN("fail to write ddl redo log", K(ret), K(redo_info), K(param_.task_id_));
+    LOG_ERROR("fail to write ddl redo log", K(ret), K(redo_info), K(param_.task_id_));
     if (ObDDLRedoLogWriter::need_retry(ret)) {
       int tmp_ret = OB_SUCCESS;
       if (OB_TMP_FAIL(retry(ObDDLRedoLogWriter::DEFAULT_RETRY_TIMEOUT_US, redo_info, redo_info.macro_block_id_))) {

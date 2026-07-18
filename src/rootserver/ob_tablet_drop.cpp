@@ -137,10 +137,10 @@ int ObTabletDrop::add_drop_tablets_of_table_arg(
             } else if (PARTITION_LEVEL_ONE == part_level) {
               if (is_hidden && OB_FAIL(drop_tablet_(schemas, ls_ids.at(ls_idx++), i - part_num,
                           OB_INVALID_INDEX, is_hidden))) {
-                LOG_WARN("fail to drop tablet", K(table_schema), KR(ret));
+                LOG_ERROR("fail to drop tablet", K(table_schema), KR(ret));
               } else if (!is_hidden && OB_FAIL(drop_tablet_(schemas, ls_ids.at(ls_idx++), i,
                           OB_INVALID_INDEX, is_hidden))) {
-                LOG_WARN("fail to drop tablet", K(table_schema), KR(ret));
+                LOG_ERROR("fail to drop tablet", K(table_schema), KR(ret));
               }
             } else if (PARTITION_LEVEL_TWO == part_level) {
               ObSubPartition **subpart_array = part->get_subpart_array();

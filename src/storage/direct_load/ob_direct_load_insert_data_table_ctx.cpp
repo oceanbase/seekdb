@@ -130,7 +130,7 @@ int ObDirectLoadInsertDataTabletContext::open()
           if (OB_FAIL(create_tablet_direct_load())) {
             LOG_WARN("fail to create tablet direct load", KR(ret));
           } else if (OB_FAIL(open_tablet_direct_load())) {
-            LOG_WARN("fail to open tablet direct load", KR(ret));
+            LOG_ERROR("fail to open tablet direct load", KR(ret));
             if (ret == OB_EAGAIN || ret == OB_MINOR_FREEZE_NOT_ALLOW) {
               LOG_WARN("retry to open tablet context");
               ret = OB_SUCCESS;

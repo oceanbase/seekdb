@@ -46,6 +46,7 @@ enum MulModeTableType {
   OB_ORA_XML_TABLE_TYPE = 2,
   OB_RB_ITERATE_TABLE_TYPE = 3,
   OB_UNNEST_TABLE_TYPE = 4,
+  OB_AI_SPLIT_DOCUMENT_TABLE_TYPE = 5, // Task2
 };
 
 typedef struct ObJtColBaseInfo

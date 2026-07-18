@@ -382,7 +382,7 @@ int ObArrayFixedSize<T>::insert_from(const ObIArrayType &src, uint32_t begin, ui
   if (src.get_format() != get_format()
       || src.get_element_type() != this->element_type_) {
     ret = OB_ERR_UNEXPECTED;
-    OB_LOG(WARN, "inconsistent array type", K(ret), K(src.get_format()), K(src.get_element_type()),
+    OB_LOG(ERROR, "inconsistent array type", K(ret), K(src.get_format()), K(src.get_element_type()),
                                             K(get_format()), K(this->element_type_));
   } else if (OB_ISNULL(this->data_container_)) {
     ret = OB_ERR_UNEXPECTED;

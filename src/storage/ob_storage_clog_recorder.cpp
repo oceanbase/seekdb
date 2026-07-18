@@ -155,10 +155,10 @@ int ObIStorageClogRecorder::try_update_with_lock(
       logcb_ptr_->set_update_version(update_version);
       if (OB_FAIL(submit_log(update_version, clog_buf, clog_len))) {
         if (OB_BLOCK_FROZEN != ret) {
-          LOG_WARN("fail to submit log", K(ret), K(update_version), K(max_saved_version_));
+          LOG_ERROR("fail to submit log", K(ret), K(update_version), K(max_saved_version_));
         } else if (ObTimeUtility::fast_current_time() >= expire_ts) {
           ret = OB_EAGAIN;
-          LOG_WARN("failed to sync clog", K(ret), K(update_version),
+          LOG_ERROR("failed to sync clog", K(ret), K(update_version),
               K(max_saved_version_), K(expire_ts));
         }
       } else {
@@ -231,7 +231,7 @@ int ObIStorageClogRecorder::replay_clog(
       if (OB_NO_NEED_UPDATE == ret) { // not update max_saved_version_
         ret = OB_SUCCESS;
       } else {
-        LOG_WARN("fail to replay clog", K(ret), KPC(this));
+        LOG_ERROR("fail to replay clog", K(ret), KPC(this));
       }
     } else {
       ATOMIC_STORE(&max_saved_version_, update_version);

@@ -149,7 +149,7 @@ int ObMdsTableMergeTask::process()
     } else if (FALSE_IT(ctx.static_desc_.tablet_transfer_seq_ = tablet->get_transfer_seq())) {
     } else if (MDS_FAIL(build_mds_sstable(ctx, mds_construct_sequence, table_handle))) {
       if (OB_EMPTY_RESULT != ret) {
-        LOG_WARN("fail to build mds sstable", K(ret), K(ls_id), K(tablet_id), KPC(mds_merge_dag_));
+        LOG_ERROR("fail to build mds sstable", K(ret), K(ls_id), K(tablet_id), KPC(mds_merge_dag_));
       } else {
         // abort transaction may trigger an empty mds table dump to relase mem and clog scn
         // however, an uncommitted tablet for example create/transfer in/split dest, need to
@@ -174,7 +174,7 @@ int ObMdsTableMergeTask::process()
         table_handle,
         flush_scn,
         new_tablet_handle))) {
-      LOG_WARN("failed to build new tablet from mds table", K(ret), K(ctx), K(ls_id), K(tablet_id), 
+      LOG_ERROR("failed to build new tablet from mds table", K(ret), K(ctx), K(ls_id), K(tablet_id), 
               K(flush_scn), KPC(mds_merge_dag_));
     }
 
@@ -218,7 +218,7 @@ void ObMdsTableMergeTask::try_schedule_compaction_after_mds_mini(compaction::ObT
     } else if (OB_FAIL(ObTenantTabletScheduler::schedule_tablet_minor_merge<ObTabletMergeExecuteDag>(
         compaction::MDS_MINOR_MERGE, ctx.static_param_.ls_handle_, tablet_handle))) {
       if (OB_SIZE_OVERFLOW != ret) {
-        LOG_WARN("failed to schedule special tablet minor merge which triggle mds",
+        LOG_ERROR("failed to schedule special tablet minor merge which triggle mds",
             K(ret), K(ls_id), K(tablet_id), KPC(mds_merge_dag_));
       }
     } else {

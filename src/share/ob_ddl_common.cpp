@@ -1655,7 +1655,7 @@ int ObDDLUtil::check_table_column_checksum_error(const int64_t table_id)
         ret = OB_SUCCESS;
       } else {
         ret = OB_NOT_SUPPORTED; // we expect the sql to return an empty result
-        LOG_WARN("table index checksum error", K(ret), K(table_id));
+        LOG_ERROR("table index checksum error", K(ret), K(table_id));
         LOG_USER_ERROR(OB_NOT_SUPPORTED, "Redefinition on compaction checksum error table is");
       }
     }
@@ -1711,7 +1711,7 @@ int ObDDLUtil::batch_check_tablet_checksum(const int64_t start_idx,
       LOG_WARN("failed to batch check checksum from storage", K(ret), K(start_idx), K(end_idx));
     } else if (has_error) {
       ret = OB_CHECKSUM_ERROR;
-      LOG_WARN("tablet checksum error detected", K(ret));
+      LOG_ERROR("tablet checksum error detected", K(ret));
     }
   }
   return ret;
@@ -3043,7 +3043,7 @@ int ObCheckTabletDataComplementOp::check_finish_report_checksum(const uint64_t i
   if (OB_UNLIKELY(OB_INVALID_ID == index_table_id ||
       ddl_task_id == OB_INVALID_ID || execution_id < 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("fail to check report checksum finished", K(ret), K(index_table_id), K(execution_id), K(ddl_task_id));
+    LOG_ERROR("fail to check report checksum finished", K(ret), K(index_table_id), K(execution_id), K(ddl_task_id));
   } else if (OB_FAIL(ObDDLUtil::get_tablets(index_table_id, dest_tablet_ids))) {
     LOG_WARN("fail to get tablets", K(ret), K(index_table_id));
   } else if (OB_FALSE_IT(lib::ob_sort(dest_tablet_ids.begin(), dest_tablet_ids.end()))) { // sort in ASC order.
@@ -3051,7 +3051,7 @@ int ObCheckTabletDataComplementOp::check_finish_report_checksum(const uint64_t i
     LOG_WARN("fail to check tablet checksum update status, maybe EAGAIN", K(ret), K(dest_tablet_ids), K(execution_id));
   } else if (!is_checksums_all_report) {
     ret = OB_EAGAIN;
-    LOG_WARN("tablets checksum not all report!", K(is_checksums_all_report), K(ret));
+    LOG_ERROR("tablets checksum not all report!", K(is_checksums_all_report), K(ret));
   }
   return ret;
 }

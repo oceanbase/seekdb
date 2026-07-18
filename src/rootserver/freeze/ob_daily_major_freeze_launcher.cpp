@@ -191,7 +191,7 @@ int ObDailyMajorFreezeLauncher::try_launch_major_freeze()
               LOG_WARN("may be ddl confilict, will try to launch major freeze again", KR(ret), K(param),
                        "sleep_us", MAJOR_FREEZE_RETRY_INTERVAL_US * MAJOR_FREEZE_RETRY_LIMIT);
             } else {
-              LOG_WARN("fail to major freeze", K(param), KR(ret));
+              LOG_ERROR("fail to major freeze", K(param), KR(ret));
             }
           } else {
             already_launch_ = true;

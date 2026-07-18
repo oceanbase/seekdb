@@ -452,9 +452,9 @@ int ObMdsTableMiniMerger::generate_mds_mini_sstable(
       } else if (OB_FAIL(sstable_builder_.close(res))) {
         LOG_WARN("fail to close sstable builder", K(ret), K(sstable_builder_));
       } else if (CLICK_FAIL(param.init_for_mds(*ctx_, res, *storage_schema_))) {
-        LOG_WARN("fail to create sstable param for mds", K(ret));
+        LOG_ERROR("fail to create sstable param for mds", K(ret));
       } else if (CLICK_FAIL(ObTabletCreateDeleteHelper::create_sstable(param, allocator, table_handle))) {
-        LOG_WARN("fail to create sstable", K(ret), K(param));
+        LOG_ERROR("fail to create sstable", K(ret), K(param));
         CTX_SET_DIAGNOSE_LOCATION(*ctx_);
       } else {
         // need macro block count for try schedule mds minor after mds mini
@@ -569,12 +569,12 @@ int ObMdsDataCompatHelper::generate_mds_mini_sstable(
     } else {
       SMART_VARS_2((ObMdsTableMiniMerger, mds_mini_merger), (ObTabletDumpMds2MiniOperator, op)) {
         if (CLICK_FAIL(mds_mini_merger.init(*ctx, op))) {
-          LOG_WARN("fail to init mds mini merger", K(ret), KPC(ctx), K(ls_id), K(tablet_id));
+          LOG_ERROR("fail to init mds mini merger", K(ret), KPC(ctx), K(ls_id), K(tablet_id));
         } else if (CLICK_FAIL((data.scan_all_mds_data_with_op(tablet.get_mds_checkpoint_scn(), op)))) {
           LOG_WARN("failed to handle full memory mds data", K(ret),
               K(ls_id), K(tablet_id), "mds_checkpoint_scn", tablet.get_mds_checkpoint_scn());
         } else if (CLICK_FAIL(mds_mini_merger.generate_mds_mini_sstable(allocator, table_handle))) {
-          LOG_WARN("fail to generate mds mini sstable with mini merger", K(ret), K(mds_mini_merger));
+          LOG_ERROR("fail to generate mds mini sstable with mini merger", K(ret), K(mds_mini_merger));
         } else {
           has_tablet_status = !data.tablet_status_committed_kv_.v_.user_data_.empty() ? true : false;
           LOG_INFO("succeed to generate mds mini sstable for compat", K(ret), K(ls_id), K(tablet_id), K(has_tablet_status), K(data));

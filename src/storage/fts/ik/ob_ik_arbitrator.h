@@ -38,6 +38,10 @@ public:
 
   int output_result(TokenizeContext &ctx);
 
+  // FTS next-stage optimization (parser/sort): retain hash buckets and arena
+  // pages after each batch while clearing all references to old chains.
+  int reuse();
+
 private:
   int prepare(TokenizeContext &ctx);
 
@@ -45,15 +49,15 @@ private:
 
   int optimize(TokenizeContext &ctx,
                ObIKTokenChain *option,
-               ObFTSortList::CellIter iter,
+               ObFTLightSortList::CellIter iter,
                int64_t fulltext_len,
                ObIKTokenChain *&best);
 
   int try_add_next_words(ObIKTokenChain *chain,
-                         ObFTSortList::CellIter iter,
+                         ObFTLightSortList::CellIter iter,
                          ObIKTokenChain *option,
                          bool need_conflict,
-                         ObList<ObFTSortList::CellIter, ObIAllocator> &conflict_stack);
+                         ObList<ObFTLightSortList::CellIter, ObIAllocator> &conflict_stack);
 
   int remove_conflict(const ObIKToken &token, ObIKTokenChain *option);
 

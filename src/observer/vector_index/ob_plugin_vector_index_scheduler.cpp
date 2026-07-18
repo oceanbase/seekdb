@@ -1193,7 +1193,7 @@ int ObPluginVectorIndexLoadScheduler::check_and_execute_tasks(ObIArray<uint64_t>
         && (current_memory_config_ != 0)
         && can_schedule(ObVectorTaskScheduleType::FOLLOWER_SYNC)
         && OB_FAIL(log_tablets_need_memdata_sync(index_ls_mgr))) { // Tips: check if need check to follower
-      LOG_WARN("fail to log tablets need memdata sync", KR(ret), K(ls_->get_ls_id()));
+      LOG_ERROR("fail to log tablets need memdata sync", KR(ret), K(ls_->get_ls_id()));
     }
 
     // explicit cover error code

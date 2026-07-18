@@ -261,7 +261,7 @@ int ObErrorInfo::del_error(common::ObMySQLProxy *sql_proxy)
         int temp_ret = OB_SUCCESS;
         bool is_commit = (OB_SUCCESS == ret);
         if (OB_SUCCESS != (temp_ret = trans.end(is_commit))) {
-          LOG_WARN("trans end failed", "is_commit", is_commit, K(temp_ret));
+          LOG_ERROR("trans end failed", "is_commit", is_commit, K(temp_ret));
           ret = (OB_SUCC(ret)) ? temp_ret : ret;
         }
     }
@@ -393,7 +393,7 @@ int ObErrorInfo::handle_error_info(const IObErrorInfo *info,
   if (trans.is_started()) {
     int tmp_ret = OB_SUCCESS;
     if (OB_SUCCESS != (tmp_ret = trans.end(OB_SUCCESS == ret))) {
-      LOG_WARN("trans end failed", K(ret), K(tmp_ret));
+      LOG_ERROR("trans end failed", K(ret), K(tmp_ret));
       ret = OB_SUCCESS == ret ? tmp_ret : ret;
     }
   }

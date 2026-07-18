@@ -403,7 +403,7 @@ int ObTabletReplayCreateHandler::replay_discrete_tablets(const ObIArray<ObTablet
           }
         } while (OB_FAIL(ret) && OB_TIMEOUT == ret && max_retry_time-- > 0);
         if (OB_SUCC(ret) && OB_FAIL(do_replay(replay_item, buf, buf_len, io_allocator))) {
-          LOG_WARN("fail to do replay", K(ret), K(replay_item));
+          LOG_ERROR("fail to do replay", K(ret), K(replay_item));
         }
       }
     }

@@ -31,8 +31,11 @@ namespace storage
 class ObFTWord final
 {
 public:
-  ObFTWord() : word_(), meta_() {}
-  ObFTWord(const int64_t length, const char *ptr, const ObObjMeta &meta) : meta_(meta)
+  // FTS next-stage optimization (Op5): keep the collation-aware hash beside
+  // the token so stop-word lookup and word aggregation do not hash it again.
+  ObFTWord() : word_(), meta_(), is_hash_cached_(false), hash_val_(0) {}
+  ObFTWord(const int64_t length, const char *ptr, const ObObjMeta &meta)
+      : word_(), meta_(meta), is_hash_cached_(false), hash_val_(0)
   {
     word_.set_string(ptr, length);
   }
@@ -50,9 +53,17 @@ public:
 private:
   ObDatum word_;
   ObObjMeta meta_;
+  // Hash containers expose hash() as const; these fields only memoize the
+  // immutable word/meta pair and therefore do not alter its key semantics.
+  mutable bool is_hash_cached_;
+  mutable uint64_t hash_val_;
 };
 
-typedef common::hash::ObHashMap<ObFTWord, int64_t> ObFTWordMap;
+// A word map is owned by one parser/DDL worker and is never accessed concurrently.
+// Avoid paying for a rwlock on every token lookup in the hot segmentation path.
+typedef common::hash::ObHashMap<ObFTWord,
+                                int64_t,
+                                common::hash::NoPthreadDefendMode> ObFTWordMap;
 
 class ObAddWordFlag final
 {
