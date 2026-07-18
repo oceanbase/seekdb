@@ -489,6 +489,8 @@ ob_set_subtarget(ob_sql engine_expr
   engine/expr/ob_batch_eval_util.cpp
   engine/expr/ob_expr.cpp
   engine/expr/ob_expr_acos.cpp
+  engine/expr/ob_expr_load_file.cpp
+  engine/expr/ob_expr_ai/ob_expr_ai_split_document.cpp
   engine/expr/ob_expr_symmetric_encrypt.cpp
   engine/expr/ob_expr_agg_param_list.cpp
   engine/expr/ob_expr_and.cpp

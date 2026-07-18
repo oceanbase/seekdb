@@ -19,6 +19,7 @@
 #include "sql/engine/basic/ob_function_table_op.h"
 #include "sql/engine/ob_exec_context.h"
 #include "sql/engine/expr/ob_expr_lob_utils.h"
+#include "sql/engine/expr/ob_expr_ai/ob_expr_ai_split_document.h"
 
 
 namespace oceanbase
@@ -232,6 +233,13 @@ int ObFunctionTableOp::inner_get_next_row_sys_func()
   ObPhysicalPlanCtx *plan_ctx = nullptr;
   ObDatum *value = nullptr;
   clear_evaluated_flag();
+  // value_expr_ drives the rt_ctx (one chunk per eval) but is NOT in this op's
+  // eval_infos_, so clear_evaluated_flag() above does not reset it. Without this
+  // the framework returns the cached first-chunk datum on every row -> infinite
+  // rows. Force re-eval so eval_func_ advances the rt_ctx each call.
+  if (OB_NOT_NULL(MY_SPEC.value_expr_)) {
+    MY_SPEC.value_expr_->get_eval_info(eval_ctx_).clear_evaluated_flag();
+  }
   if (OB_ISNULL(plan_ctx = ctx_.get_physical_plan_ctx())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("failed to get plan ctx", K(ret), K(plan_ctx));
@@ -241,9 +249,35 @@ int ObFunctionTableOp::inner_get_next_row_sys_func()
     if (OB_ITER_END != ret) {
       LOG_WARN("failed to eval value expr", K(ret));
     }
-  } else {
+  } else if (MY_SPEC.column_exprs_.count() <= 1) {
+    // GENERATOR / single-column path (unchanged)
     MY_SPEC.column_exprs_.at(0)->locate_datum_for_write(eval_ctx_).set_datum(*value);
     MY_SPEC.column_exprs_.at(0)->set_evaluated_projected(eval_ctx_);
+  } else if (T_FUN_SYS_AI_SPLIT_DOCUMENT == MY_SPEC.value_expr_->type_) {
+    // AI_SPLIT_DOCUMENT multi-column path: eval advanced the rt_ctx; read 4 values.
+    // Guard on item type, not just count(): count()>1 alone is unsafe if a future
+    // multi-column sys_func table function is added (would mis-cast the rt_ctx).
+    ObExprAISplitDocumentCtx *split_ctx = static_cast<ObExprAISplitDocumentCtx *>(
+        ctx_.get_expr_op_ctx(MY_SPEC.value_expr_->expr_ctx_id_));
+    if (OB_ISNULL(split_ctx)) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("ai_split_document: rt_ctx is null after eval", K(ret));
+    } else {
+      // locate_datum_for_write/set_int/set_string do not fail; nothing to propagate.
+      auto set_int = [&](int64_t idx, int64_t v) {
+        MY_SPEC.column_exprs_.at(idx)->locate_datum_for_write(eval_ctx_).set_int(v);
+        MY_SPEC.column_exprs_.at(idx)->set_evaluated_projected(eval_ctx_);
+      };
+      set_int(0, split_ctx->curr_chunk_id_);
+      set_int(1, split_ctx->curr_chunk_offset_);
+      set_int(2, split_ctx->curr_chunk_length_);
+      MY_SPEC.column_exprs_.at(3)->locate_datum_for_write(eval_ctx_).set_string(split_ctx->curr_chunk_text_);
+      MY_SPEC.column_exprs_.at(3)->set_evaluated_projected(eval_ctx_);
+    }
+  } else {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unsupported multi-column sys_func table function", K(ret),
+             K(MY_SPEC.value_expr_->type_), K(MY_SPEC.column_exprs_.count()));
   }
   return ret;
 }
