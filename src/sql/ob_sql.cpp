@@ -2948,8 +2948,7 @@ int ObSql::generate_physical_plan(ParseResult &parse_result,
   } else if (basic_stmt->is_dml_stmt()
             || basic_stmt->is_explain_stmt()
             || basic_stmt->is_help_stmt()) {
-#ifdef __ANDROID__
-    // On Android: if the outline's max_concurrent is stricter than all DATABASE_AND_TABLE CCL
+    // If the outline's max_concurrent is stricter than all DATABASE_AND_TABLE CCL
     // rules, skip level-3 CCL check (outline is the binding constraint).
     bool skip_level3_ccl = false;
     if (OB_NOT_NULL(pc_ctx) && basic_stmt->is_dml_stmt() && OB_NOT_NULL(sql_ctx.schema_guard_)) {
@@ -2992,12 +2991,9 @@ int ObSql::generate_physical_plan(ParseResult &parse_result,
         skip_level3_ccl = all_above;
       }
     }
-#endif
     //ccl check level-3: after resolve sql
     if (OB_NOT_NULL(pc_ctx)
-#ifdef __ANDROID__
         && !skip_level3_ccl
-#endif
         && OB_FAIL(ObSQLUtils::match_ccl_rule(
              pc_ctx->allocator_, result.get_session(), sql_ctx, ObString(parse_result.input_sql_len_, parse_result.input_sql_),
              mode == PC_PS_MODE, pc_ctx->fp_result_.parameterized_params_, pc_ctx->sql_ctx_.format_sql_id_, CclRuleContainsInfo::DATABASE_AND_TABLE, &parse_result, basic_stmt))) {
@@ -3868,7 +3864,6 @@ int ObSql::pc_get_plan(ObPlanCacheCtx &pc_ctx,
       }
 
       if (OB_SUCC(ret) && (PC_TEXT_MODE == pc_ctx.mode_ || PC_PS_MODE == pc_ctx.mode_)) {
-#ifdef __ANDROID__
         bool skip_level3_ccl = false;
         share::schema::ObSchemaGetterGuard *sg = pc_ctx.sql_ctx_.schema_guard_;
         if (OB_NOT_NULL(sg)) {
@@ -3916,9 +3911,8 @@ int ObSql::pc_get_plan(ObPlanCacheCtx &pc_ctx,
             skip_level3_ccl = all_above;
           }
         }
-        if (!skip_level3_ccl)
-#endif
-        if (OB_FAIL(ObSQLUtils::match_ccl_rule(&pc_ctx, *session, PC_PS_MODE == pc_ctx.mode_,
+        if (!skip_level3_ccl
+            && OB_FAIL(ObSQLUtils::match_ccl_rule(&pc_ctx, *session, PC_PS_MODE == pc_ctx.mode_,
                                                plan->get_dependency_table()))) {
           LOG_WARN("fail to match ccl rule in plan cache", K(ret), K(pc_ctx.mode_),
                    K(pc_ctx.raw_sql_));
