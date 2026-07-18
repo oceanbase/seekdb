@@ -75,12 +75,10 @@ void ObStopWordChecker::destroy()
   }
 }
 
-int ObStopWordChecker::check_stopword(const ObFTWord &word, bool &is_stopword)
+int ObStopWordChecker::check_stopword(const ObFTWord &word, bool &is_stopword, common::ObIAllocator *scratch_alloc)
 {
   int ret = OB_SUCCESS;
-  
-  
-  common::ObArenaAllocator allocator(lib::ObMemAttr("ChkStopWord"));
+
   if (OB_UNLIKELY(!inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("ObStopWordChecker hasn't been initialized", K(ret), K(inited_));
@@ -89,15 +87,25 @@ int ObStopWordChecker::check_stopword(const ObFTWord &word, bool &is_stopword)
     LOG_WARN("word is empty", K(ret), K(word));
   } else {
     common::ObString cmp_str;
-    // do nothing set out with in if type is the same.
-    if (OB_FAIL(common::ObCharset::charset_convert(
-                                       allocator,
-                                       word.get_word().get_string(),
-                                       word.get_collation_type(),
-                                       stopword_type_.get_collation_type(),
-                                       cmp_str))) {
-      LOG_WARN("fail to convert charset", K(ret), K(word), K(stopword_type_));
+    if (word.get_collation_type() == stopword_type_.get_collation_type()) {
+      // Fast path: same collation, skip expensive charset_convert
+      cmp_str = word.get_word().get_string();
     } else {
+      common::ObArenaAllocator fallback_alloc(lib::ObMemAttr("ChkStopWord"));
+      common::ObIAllocator *alloc_to_use = (scratch_alloc != nullptr) ? scratch_alloc : &fallback_alloc;
+      if (scratch_alloc != nullptr) {
+        scratch_alloc->reuse();
+      }
+      if (OB_FAIL(common::ObCharset::charset_convert(
+                                         *alloc_to_use,
+                                         word.get_word().get_string(),
+                                         word.get_collation_type(),
+                                         stopword_type_.get_collation_type(),
+                                         cmp_str))) {
+        LOG_WARN("fail to convert charset", K(ret), K(word), K(stopword_type_));
+      }
+    }
+    if (OB_SUCC(ret)) {
       ObFTWord converted(cmp_str.length(), cmp_str.ptr(), stopword_type_);
       ret = stopword_set_.exist_refactored(converted);
       if (OB_HASH_NOT_EXIST == ret) {
@@ -133,7 +141,8 @@ ObAddWord::ObAddWord(
     stopword_cnt_(0),
     min_token_size_(property.min_token_size_),
     max_token_size_(property.max_token_size_),
-    flag_(flag)
+    flag_(flag),
+    scratch_alloc_(lib::ObMemAttr("AddWordScratch"))
 {
 }
 
@@ -209,7 +218,7 @@ int ObAddWord::check_stopword(const ObFTWord &ft_word, bool &is_stopword)
     if (OB_ISNULL(stop_word_checker)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("got null stop word checker", K(ret));
-    } else if (OB_FAIL(stop_word_checker->check_stopword(ft_word, is_stopword))) {
+    } else if (OB_FAIL(stop_word_checker->check_stopword(ft_word, is_stopword, &scratch_alloc_))) {
       LOG_WARN("fail to check stopword", K(ret));
     }
   }

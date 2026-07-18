@@ -78,6 +78,7 @@ ObDDLResolver::ObDDLResolver(ObResolverParams &params)
     virtual_column_id_(OB_INVALID_ID),
     read_only_(false),
     with_rowid_(false),
+    is_fulltext_dict_table_(false),
     table_name_(),
     database_name_(),
     partition_func_type_(PARTITION_FUNC_TYPE_HASH),
@@ -1601,11 +1602,68 @@ int ObDDLResolver::resolve_table_option(const ParseNode *option_node, const bool
         }
         break;
       }
+      case T_FULLTEXT_DICT: {
+        if (is_index_option || OB_ISNULL(option_node->children_[0])) {
+          ret = OB_INVALID_ARGUMENT;
+          LOG_WARN("invalid FULLTEXT_DICT table option", K(ret), K(is_index_option));
+        } else {
+          ObString value(static_cast<int32_t>(option_node->children_[0]->str_len_),
+                         option_node->children_[0]->str_value_);
+          if (0 != value.case_compare("Y")) {
+            ret = OB_INVALID_ARGUMENT;
+            LOG_USER_ERROR(OB_INVALID_ARGUMENT, "FULLTEXT_DICT must be 'Y'");
+          } else {
+            is_fulltext_dict_table_ = true;
+          }
+        }
+        break;
+      }
       case T_PARSER_PROPERTIES: {
         if (OB_FAIL(ObFTParserResolverHelper::resolve_parser_properties(*option_node,
                                                                                *allocator_,
+                                                                               database_name_,
                                                                                parser_properties_))) {
           LOG_WARN("fail to resolve parser properties", K(ret));
+        } else if (0 == parser_name_.case_compare(storage::ObFTSLiteral::PARSER_NAME_IK)) {
+          storage::ObFTParserJsonProps props;
+          ObString table_names[3];
+          if (OB_FAIL(props.init())
+              || OB_FAIL(props.parse_from_valid_str(parser_properties_))
+              || OB_FAIL(props.rebuild_props_for_ddl(parser_name_,
+                                                     ObCollationType::CS_TYPE_UTF8MB4_BIN,
+                                                     true))
+              || OB_FAIL(props.config_get_dict_table(table_names[0]))
+              || OB_FAIL(props.config_get_stopword_table(table_names[1]))
+              || OB_FAIL(props.config_get_quantifier_table(table_names[2]))) {
+            LOG_WARN("failed to parse IK dictionary properties", K(ret));
+          }
+          for (int64_t i = 0; OB_SUCC(ret) && i < ARRAYSIZEOF(table_names); ++i) {
+            const bool is_default = 0 == table_names[i].case_compare(
+                                        storage::ObFTSLiteral::FT_DEFAULT_IK_DICT_UTF8_TABLE)
+                                    || 0 == table_names[i].case_compare(
+                                        storage::ObFTSLiteral::FT_DEFAULT_IK_STOPWORD_UTF8_TABLE)
+                                    || 0 == table_names[i].case_compare(
+                                        storage::ObFTSLiteral::FT_DEFAULT_IK_QUANTIFIER_UTF8_TABLE);
+            if (!is_default) {
+              const char *dot = table_names[i].find('.');
+              const int64_t dot_pos = OB_ISNULL(dot) ? -1 : dot - table_names[i].ptr();
+              ObString db_name(static_cast<int32_t>(dot_pos), table_names[i].ptr());
+              ObString tb_name(static_cast<int32_t>(table_names[i].length() - dot_pos - 1),
+                               table_names[i].ptr() + dot_pos + 1);
+              uint64_t db_id = OB_INVALID_ID;
+              const ObTableSchema *dict_schema = nullptr;
+              if (dot_pos <= 0
+                  || OB_FAIL(schema_checker_->get_database_id(db_name, db_id))
+                  || OB_FAIL(schema_checker_->get_table_schema(db_id, tb_name, false, false,
+                                                               false, dict_schema))) {
+                LOG_WARN("failed to resolve custom IK dictionary table", K(ret), K(table_names[i]));
+              } else if (OB_ISNULL(dict_schema) || !dict_schema->is_fulltext_dict_table()) {
+                ret = OB_INVALID_ARGUMENT;
+                LOG_USER_ERROR(OB_INVALID_ARGUMENT,
+                               "IK custom dictionary must reference a FULLTEXT_DICT table");
+              }
+            }
+          }
         }
         break;
       }
@@ -4245,6 +4303,7 @@ void ObDDLResolver::reset() {
   compress_method_.reset();
   parser_name_.reset();
   parser_properties_.reset();
+  is_fulltext_dict_table_ = false;
   comment_.reset();
   tablegroup_name_.reset();
   primary_zone_.reset();

@@ -21,6 +21,8 @@
 #include "lib/lock/ob_bucket_lock.h"
 #include "storage/fts/dict/ob_ft_dict_def.h"
 
+#include <atomic>
+
 namespace oceanbase
 {
 namespace storage
@@ -52,11 +54,11 @@ struct ObFTDictInfoKey
 {
 public:
   ObFTDictInfoKey()
-      : type_(static_cast<uint64_t>(ObFTDictType::DICT_TYPE_INVALID))
+      : type_(static_cast<uint64_t>(ObFTDictType::DICT_TYPE_INVALID)), name_hash_(0)
   {
   } // default constructor
-  ObFTDictInfoKey(const uint64_t type)
-      : type_(type)
+  ObFTDictInfoKey(const uint64_t type, const uint64_t name_hash = 0)
+      : type_(type), name_hash_(name_hash)
   {
   }
   int hash(uint64_t &hash_value) const
@@ -70,12 +72,13 @@ public:
   {
     uint64_t hash = 0;
     hash = common::murmurhash(&type_, sizeof(int64_t), hash);
+    hash = common::murmurhash(&name_hash_, sizeof(name_hash_), hash);
     return hash;
   }
 
   bool operator==(const ObFTDictInfoKey &other) const
   {
-    return type_ == other.type_ && true;
+    return type_ == other.type_ && name_hash_ == other.name_hash_;
   }
 
   int compare(const ObFTDictInfoKey &other) const
@@ -84,19 +87,22 @@ public:
     if (0 == ret) {
       ret = type_ - other.type_;
     }
+    if (0 == ret) {
+      ret = name_hash_ < other.name_hash_ ? -1 : (name_hash_ > other.name_hash_ ? 1 : 0);
+    }
     return ret;
   }
 
 private:
   uint64_t type_;
-  // name
+  uint64_t name_hash_;
 };
 
 class ObFTCacheRangeContainer;
 class ObFTDictHub
 {
 public:
-  ObFTDictHub() : is_inited_(false), dict_map_(), rw_dict_lock_() {}
+  ObFTDictHub() : is_inited_(false), dict_map_(), rw_dict_lock_(), dictionary_epoch_(1) {}
   ~ObFTDictHub() {}
 
   int init();
@@ -106,6 +112,11 @@ public:
   int build_cache(const ObFTDictDesc &desc, ObFTCacheRangeContainer &container);
 
   int load_cache(const ObFTDictDesc &desc, ObFTCacheRangeContainer &container);
+  int refresh_cache(const ObFTDictDesc &desc);
+  uint64_t get_dictionary_epoch() const
+  {
+    return dictionary_epoch_.load(std::memory_order_acquire);
+  }
 
 private:
   int get_dict_info(const ObFTDictInfoKey &key, ObFTDictInfo &info);
@@ -118,6 +129,7 @@ private:
   // holds info of dict
   hash::ObHashMap<ObFTDictInfoKey, ObFTDictInfo> dict_map_;
   ObBucketLock rw_dict_lock_;
+  std::atomic<uint64_t> dictionary_epoch_;
 };
 
 } //  namespace storage

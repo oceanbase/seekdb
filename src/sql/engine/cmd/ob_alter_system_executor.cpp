@@ -35,6 +35,8 @@
 #include "sql/engine/cmd/ob_timezone_importer.h"
 #include "sql/engine/cmd/ob_srs_importer.h"
 #include "share/ob_internal_table_change_notifier.h"
+#include "storage/fts/ob_fts_plugin_helper.h"
+#include "storage/fts/dict/ob_ft_dict_hub.h"
 
 namespace oceanbase
 {
@@ -471,6 +473,31 @@ int ObRefreshMemStatExecutor::execute(ObExecContext &ctx, ObRefreshMemStatStmt &
   } else if (OB_FAIL(GCTX.root_service_->admin_refresh_memory_stat(
                          stmt.get_rpc_arg()))) {
     LOG_WARN("refresh memory stat failed", K(ret), "rpc_arg", stmt.get_rpc_arg());
+  }
+  return ret;
+}
+
+int ObRefreshFulltextDictExecutor::execute(ObExecContext &ctx,
+                                           ObRefreshFulltextDictStmt &stmt)
+{
+  UNUSED(ctx);
+  int ret = OB_SUCCESS;
+  storage::ObFTDictHub *hub = nullptr;
+  if (OB_FAIL(storage::ObFTParsePluginData::instance().get_dict_hub(hub))) {
+    LOG_WARN("failed to get fulltext dictionary hub", K(ret));
+  } else {
+    const storage::ObFTDictType types[] = {
+      storage::ObFTDictType::DICT_IK_MAIN,
+      storage::ObFTDictType::DICT_IK_QUAN,
+      storage::ObFTDictType::DICT_IK_STOP
+    };
+    for (int64_t i = 0; OB_SUCC(ret) && i < ARRAYSIZEOF(types); ++i) {
+      storage::ObFTDictDesc desc(stmt.get_table_name(), types[i], CHARSET_UTF8MB4,
+                                 CS_TYPE_UTF8MB4_BIN);
+      if (OB_FAIL(hub->refresh_cache(desc))) {
+        LOG_WARN("failed to refresh fulltext dictionary", K(ret), K(stmt.get_table_name()), K(i));
+      }
+    }
   }
   return ret;
 }

@@ -723,7 +723,7 @@ int load_file_to_string(const char *path, Allocator &allocator, ObString &str)
   } else if (0 != ::fstat(fd, &st)) {
     _OB_LOG(WARN, "fstat %s failed, errno %d", path, errno);
     ret = OB_ERROR;
-  } else if (NULL == (buf = allocator.alloc(st.st_size + 1))) {
+  } else if (NULL == (buf = static_cast<char *>(allocator.alloc(st.st_size + 1)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
   } else if ((size = static_cast<int64_t>(::read(fd, buf, st.st_size))) < 0) {
     _OB_LOG(WARN, "read %s failed, errno %d", path, errno);

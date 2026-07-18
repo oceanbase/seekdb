@@ -1669,6 +1669,12 @@ int ObSchemaPrinter::print_table_definition_table_options(const ObTableSchema &t
       SHARE_SCHEMA_LOG(WARN, "fail to print table table_mode", K(ret));
     }
   }
+  if (OB_SUCC(ret) && !is_index_tbl && table_schema.is_fulltext_dict_table()
+      && !is_no_table_options(sql_mode)) {
+    if (OB_FAIL(databuff_printf(buf, buf_len, pos, "FULLTEXT_DICT = 'Y' "))) {
+      SHARE_SCHEMA_LOG(WARN, "fail to print FULLTEXT_DICT table option", K(ret));
+    }
+  }
   if (OB_SUCC(ret) && !strict_compat_ && agent_mode) {
     if (OB_FAIL(!is_index_tbl ?
                 databuff_printf(buf, buf_len, pos, "TABLE_ID = %lu ", table_schema.get_table_id()) :
@@ -2135,6 +2141,11 @@ int ObSchemaPrinter::print_table_definition_table_options(
   if (OB_SUCC(ret) && !strict_compat_ && table_mode_str.length() > 0) {
     if (OB_FAIL(databuff_printf(buf, buf_len, pos, "TABLE_MODE = '%s' ", table_mode_str.ptr()))) {
       SHARE_SCHEMA_LOG(WARN, "fail to print table table_mode", K(ret));
+    }
+  }
+  if (OB_SUCC(ret) && !is_index_tbl && table_schema.is_fulltext_dict_table()) {
+    if (OB_FAIL(databuff_printf(buf, buf_len, pos, "FULLTEXT_DICT = 'Y' "))) {
+      OB_LOG(WARN, "fail to print FULLTEXT_DICT table option", K(ret));
     }
   }
 

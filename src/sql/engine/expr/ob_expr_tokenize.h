@@ -73,6 +73,7 @@ private:
     ObString properties_;
     ObObjMeta meta_;
     ObString fulltext_;
+    ObString database_name_;
     enum OUTPUT_MODE
     {
       DEFAULT,

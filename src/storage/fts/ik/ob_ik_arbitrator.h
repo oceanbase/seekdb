@@ -38,6 +38,8 @@ public:
 
   int output_result(TokenizeContext &ctx);
 
+  void reuse();
+
 private:
   int prepare(TokenizeContext &ctx);
 

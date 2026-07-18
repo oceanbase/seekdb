@@ -591,9 +591,25 @@ int ObFTParserJsonProps::rebuild_props_for_ddl(const ObString &parser_name,
   } else if (parser_name.empty()) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("parser_name is empty", K(ret));
+  } else if (OB_ISNULL(parser_name.find('.'))) {
+    // Parser names coming directly from SQL (for example, WITH PARSER ik) do not
+    // carry the plugin version yet.  The version is added later by
+    // generate_fts_parser_name(), while property validation must also work at
+    // resolve time.  Only the parser kind is needed below, so use a placeholder
+    // non-negative version for an unqualified name.
+    share::ObPluginName plugin_name;
+    if (OB_FAIL(plugin_name.set_name(parser_name))) {
+      LOG_WARN("fail to set parser name", K(ret), K(parser_name));
+    } else {
+      parser.set_name_and_version(plugin_name, 0);
+    }
   } else if (OB_FAIL(parser.parse_from_str(parser_name.ptr(), parser_name.length()))) {
-    LOG_WARN("fail to parse name from cstring", K(ret), K(parser_name));
+    LOG_WARN("fail to parse versioned parser name", K(ret), K(parser_name));
   } else {
+    // The parser name is ready for property dispatch.
+  }
+
+  if (OB_SUCC(ret)) {
     if (parser.is_ik()) {
       if (OB_FAIL(ik_rebuild_props_for_ddl(log_to_user))) {
         LOG_WARN("fail to rebuild props for ddl", K(ret));
@@ -660,11 +676,11 @@ int ObFTParserJsonProps::ik_rebuild_props_for_ddl(const bool log_to_user)
 
     if (OB_FAIL(ret)) {
       // do nothing
-    } else if (OB_FAIL(config_get_quantifier_table(table_name))) {
+    } else if (OB_FAIL(config_get_stopword_table(table_name))) {
       if (OB_SEARCH_NOT_FOUND == ret) {
         if (OB_FAIL(
-                config_set_quantifier_table(ObFTSLiteral::FT_DEFAULT_IK_QUANTIFIER_UTF8_TABLE))) {
-          LOG_WARN("Failed to set default quantifier table", K(ret));
+                config_set_stopword_table(ObFTSLiteral::FT_DEFAULT_IK_STOPWORD_UTF8_TABLE))) {
+          LOG_WARN("Failed to set default stopword table", K(ret));
         }
       }
     } else {
@@ -1148,7 +1164,9 @@ int ObFTParserJsonProps::show_parser_properties(const ObFTParserJsonProps &prope
 
 #undef __FT_PARSER_PROPERTY_SHOW_COMMA
 
-int ObFTParserProperty::parse_for_parser_helper(const ObFTParser &parser, const ObString &json_str)
+int ObFTParserProperty::parse_for_parser_helper(const ObFTParser &parser,
+                                                const ObString &json_str,
+                                                ObIAllocator &allocator)
 {
   int ret = OB_SUCCESS;
   ObFTParserJsonProps props;
@@ -1158,12 +1176,24 @@ int ObFTParserProperty::parse_for_parser_helper(const ObFTParser &parser, const 
     LOG_WARN("fail to parse from json str", K(ret), K(json_str));
   } else {
     if (parser.is_ik()) {
-      // set dict tables and copy dict name
-      dict_table_ = ObString(ObFTSLiteral::CONFIG_NAME_DICT_TABLE);
-      stopword_table_ = ObString(ObFTSLiteral::CONFIG_NAME_STOPWORD_TABLE);
-      quantifier_table_ = ObString(ObFTSLiteral::CONFIG_NAME_QUANTIFIER_TABLE);
+      ObString dict_table;
+      ObString stopword_table;
+      ObString quantifier_table;
+      if (OB_FAIL(props.config_get_dict_table(dict_table))) {
+        LOG_WARN("fail to get IK main dictionary", K(ret));
+      } else if (OB_FAIL(props.config_get_stopword_table(stopword_table))) {
+        LOG_WARN("fail to get IK stopword dictionary", K(ret));
+      } else if (OB_FAIL(props.config_get_quantifier_table(quantifier_table))) {
+        LOG_WARN("fail to get IK quantifier dictionary", K(ret));
+      } else if (OB_FAIL(ob_write_string(allocator, dict_table, dict_table_))) {
+        LOG_WARN("fail to copy IK main dictionary", K(ret));
+      } else if (OB_FAIL(ob_write_string(allocator, stopword_table, stopword_table_))) {
+        LOG_WARN("fail to copy IK stopword dictionary", K(ret));
+      } else if (OB_FAIL(ob_write_string(allocator, quantifier_table, quantifier_table_))) {
+        LOG_WARN("fail to copy IK quantifier dictionary", K(ret));
+      }
       ObString ik_smart;
-      if (OB_FAIL(props.config_get_ik_mode(ik_smart))) {
+      if (OB_SUCC(ret) && OB_FAIL(props.config_get_ik_mode(ik_smart))) {
         if (OB_SEARCH_NOT_FOUND == ret) {
           // from old version, ik_mode is not set, so use default value
           ik_mode_smart_ = true;

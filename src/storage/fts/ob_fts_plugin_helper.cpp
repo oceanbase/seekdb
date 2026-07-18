@@ -255,6 +255,9 @@ int ObFTParseHelper::segment(
     param.ngram_token_size_ = property.ngram_token_size_;
     param.ik_param_.mode_
         = (property.ik_mode_smart_ ? ObFTIKParam::Mode::SMART : ObFTIKParam::Mode::MAX_WORD);
+    param.ik_param_.main_dict_ = property.dict_table_;
+    param.ik_param_.quan_dict_ = property.quantifier_table_;
+    param.ik_param_.stopword_dict_ = property.stopword_table_;
     param.min_ngram_size_ = property.min_ngram_token_size_;
     param.max_ngram_size_ = property.max_ngram_token_size_;
 
@@ -295,6 +298,7 @@ ObFTParseHelper::ObFTParseHelper()
     plugin_param_(nullptr),
     parser_name_(),
     add_word_flag_(),
+    parser_property_allocator_("FTParserProp"),
     parser_property_(),
     is_inited_(false)
 {
@@ -319,7 +323,8 @@ int ObFTParseHelper::init(
     LOG_WARN("invalid argument", K(ret), KP(allocator), K(plugin_name));
   } else if (OB_FAIL(parser_name_.parse_from_str(plugin_name.ptr(), plugin_name.length()))) {
     LOG_WARN("fail to parse name from cstring", K(ret), K(plugin_name));
-  } else if (OB_FAIL(parser_property_.parse_for_parser_helper(parser_name_, plugin_properties))) {
+  } else if (OB_FAIL(parser_property_.parse_for_parser_helper(parser_name_, plugin_properties,
+                                                              parser_property_allocator_))) {
     LOG_WARN("fail to parse parser property from cstring", K(ret), K(plugin_properties), K(parser_name_));
   } else if (OB_FAIL(ObPluginHelper::find_ftparser(parser_name_.get_parser_name().str(),
                                                    parser_desc_, plugin_param_))) {
@@ -350,6 +355,7 @@ void ObFTParseHelper::reset()
   plugin_param_ = nullptr;
   allocator_ = nullptr;
   add_word_flag_.clear();
+  parser_property_allocator_.reset();
   is_inited_ = false;
 }
 
@@ -407,6 +413,7 @@ int ObFTParseHelper::check_is_the_same(
   int ret = OB_SUCCESS;
   is_same = false;
   if (is_inited_) {
+    ObArenaAllocator allocator("FTPropCmp");
     storage::ObFTParser parser_name;
     ObFTParserProperty parser_property;
     if (OB_UNLIKELY(plugin_name.empty())) {
@@ -414,7 +421,8 @@ int ObFTParseHelper::check_is_the_same(
       LOG_WARN("invalid argument", K(ret), K(plugin_name));
     } else if (OB_FAIL(parser_name.parse_from_str(plugin_name.ptr(), plugin_name.length()))) {
       LOG_WARN("fail to parse name from cstring", K(ret), K(plugin_name));
-    } else if (OB_FAIL(parser_property.parse_for_parser_helper(parser_name, plugin_properties))) {
+    } else if (OB_FAIL(parser_property.parse_for_parser_helper(parser_name, plugin_properties,
+                                                               allocator))) {
       LOG_WARN("fail to parse parser property from cstring", K(ret), K(plugin_properties), K(parser_name_));
     } else if (parser_name == parser_name_ && parser_property.is_equal(parser_property_)) {
       is_same = true;
