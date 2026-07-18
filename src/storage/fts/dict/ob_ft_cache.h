@@ -48,7 +48,8 @@ public:
   {
     const ObDictCacheKey &other_key = reinterpret_cast<const ObDictCacheKey &>(other);
     return (&other == this)
-           || ((other_key.name_ == name_) && (other_key.dict_type_ == dict_type_));
+           || ((other_key.name_ == name_) && (other_key.dict_type_ == dict_type_)
+               && (other_key.range_id_ == range_id_));
   }
 
   uint64_t hash() const override

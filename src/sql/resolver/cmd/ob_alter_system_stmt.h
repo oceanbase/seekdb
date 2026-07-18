@@ -169,6 +169,18 @@ private:
   obcall::ObAdminRefreshMemStatArg rpc_arg_;
 };
 
+class ObRefreshFulltextDictStmt : public ObSystemCmdStmt
+{
+public:
+  ObRefreshFulltextDictStmt() : ObSystemCmdStmt(stmt::T_REFRESH_FULLTEXT_DICT) {}
+  virtual ~ObRefreshFulltextDictStmt() {}
+  const common::ObString get_table_name() const { return table_name_.str(); }
+  int set_table_name(const common::ObString &table_name) { return table_name_.assign(table_name); }
+  TO_STRING_KV(N_STMT_TYPE, ((int)stmt_type_), K_(table_name));
+private:
+  common::ObFixedLengthString<512> table_name_;
+};
+
 class ObWashMemFragmentationStmt : public ObSystemCmdStmt
 {
 public:

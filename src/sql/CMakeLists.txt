@@ -660,6 +660,8 @@ ob_set_subtarget(ob_sql engine_expr
   engine/expr/ob_expr_mod.cpp
   engine/expr/ob_expr_multiset.cpp
   engine/expr/ob_expr_tokenize.cpp
+  engine/expr/ob_expr_load_file.cpp
+  engine/expr/ob_expr_ai_split_document.cpp
   engine/expr/ob_expr_gtid.cpp
   engine/expr/ob_expr_inner_table_option_printer.cpp
   engine/expr/ob_expr_rb_build_empty.cpp

@@ -29,6 +29,20 @@ namespace oceanbase
 {
 namespace storage
 {
+namespace
+{
+bool is_valid_identifier(const ObString &identifier)
+{
+  bool valid = !identifier.empty();
+  for (int64_t i = 0; valid && i < identifier.length(); ++i) {
+    const char c = identifier.ptr()[i];
+    valid = ('a' <= c && c <= 'z') || ('A' <= c && c <= 'Z')
+            || ('0' <= c && c <= '9') || '_' == c || '$' == c;
+  }
+  return valid;
+}
+}
+
 ObFTDictTableIter::ObFTDictTableIter(ObISQLClient::ReadResult &result)
     : ObIFTDictIterator(), is_inited_(false), res_(result)
 {
@@ -70,21 +84,48 @@ int ObFTDictTableIter::init(const ObString &table_name)
 {
   int ret = OB_SUCCESS;
   common::ObMySQLProxy *sql_proxy = GCTX.sql_proxy_;
+  ObString database_name;
+  ObString pure_table_name;
+  const char *dot = table_name.find('.');
 
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
     LOG_WARN("Inited twice.", K(ret));
+  } else if (OB_ISNULL(sql_proxy)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("SQL proxy is null", K(ret));
+  } else if (OB_NOT_NULL(dot)) {
+    database_name.assign_ptr(table_name.ptr(), static_cast<int32_t>(dot - table_name.ptr()));
+    pure_table_name.assign_ptr(dot + 1,
+                               static_cast<int32_t>(table_name.ptr() + table_name.length() - dot - 1));
+    if (OB_NOT_NULL(pure_table_name.find('.'))
+        || !is_valid_identifier(database_name)
+        || !is_valid_identifier(pure_table_name)) {
+      ret = OB_INVALID_ARGUMENT;
+      LOG_WARN("Invalid qualified dictionary table name", K(ret), K(table_name));
+    }
+  } else if (!is_valid_identifier(table_name)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("Invalid dictionary table name", K(ret), K(table_name));
+  } else {
+    pure_table_name = table_name;
+  }
+
+  if (OB_FAIL(ret)) {
   } else {
     SMART_VAR(ObSqlString, sql_string)
     {
-      if (OB_FAIL(sql_string.append("SELECT word FROM oceanbase."))) {
-        LOG_WARN("Failed to append sql", K(ret));
-      } else if (OB_FAIL(sql_string.append(table_name))) {
-        LOG_WARN("Failed to append sql", K(ret));
-      } else if (OB_FAIL(sql_string.append(" ORDER BY word"))) {
-        LOG_WARN("Failed to append sql", K(ret));
+      if (!database_name.empty()
+          && OB_FAIL(sql_string.append_fmt("SELECT word FROM `%.*s`.`%.*s` ORDER BY word",
+                                           database_name.length(), database_name.ptr(),
+                                           pure_table_name.length(), pure_table_name.ptr()))) {
+        LOG_WARN("Failed to format qualified dictionary query", K(ret));
+      } else if (database_name.empty()
+                 && OB_FAIL(sql_string.append_fmt("SELECT word FROM `%.*s` ORDER BY word",
+                                                  pure_table_name.length(), pure_table_name.ptr()))) {
+        LOG_WARN("Failed to format dictionary query", K(ret));
       } else if (OB_FAIL(sql_proxy->read(res_, sql_string.ptr()))) {
-        LOG_WARN("Failed to execute sql", K(ret));
+        LOG_WARN("Failed to execute dictionary query", K(ret), K(sql_string));
       }
     }
 

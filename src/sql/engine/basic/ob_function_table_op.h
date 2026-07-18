@@ -20,6 +20,7 @@
 #include "sql/engine/ob_operator.h"
 #include "sql/engine/basic/ob_chunk_datum_store.h"
 #include "lib/charset/ob_charset.h"
+#include "lib/container/ob_se_array.h"
 
 namespace oceanbase
 {
@@ -48,7 +49,10 @@ public:
     already_calc_(false),
     row_count_(0),
     col_count_(0),
-    value_table_(NULL) 
+    value_table_(NULL),
+    split_prepared_(false),
+    split_row_idx_(0),
+    split_chunks_()
   {}
 
   virtual int inner_open() override;
@@ -59,8 +63,30 @@ public:
   virtual int inner_close() override;
   virtual void destroy() override;
 private:
+  struct DocumentChunk
+  {
+    DocumentChunk() : offset_(0), length_(0), text_() {}
+    DocumentChunk(int64_t offset, int64_t length, const common::ObString &text)
+      : offset_(offset), length_(length), text_(text) {}
+    TO_STRING_KV(K_(offset), K_(length), K_(text));
+    int64_t offset_;
+    int64_t length_;
+    common::ObString text_;
+  };
   int inner_get_next_row_udf();
   int inner_get_next_row_sys_func();
+  int inner_get_next_row_split_document();
+  int prepare_split_document();
+  int split_plain_text(const common::ObString &content,
+                       bool by_sentence,
+                       int64_t max_units,
+                       int64_t overlap,
+                       const common::ObString &heading = common::ObString(),
+                       int64_t base_offset = 0);
+  int split_markdown(const common::ObString &content,
+                     bool by_sentence,
+                     int64_t max_units,
+                     int64_t overlap);
   int get_current_result(common::ObObj &result);
   int64_t node_idx_;
   bool already_calc_;
@@ -69,6 +95,9 @@ private:
   common::ObObj value_;
   pl::ObPLCollection *value_table_;
   int (ObFunctionTableOp::*next_row_func_)();
+  bool split_prepared_;
+  int64_t split_row_idx_;
+  common::ObSEArray<DocumentChunk, 16> split_chunks_;
 };
 
 } // end namespace sql
