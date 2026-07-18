@@ -53,8 +53,8 @@ TokenizeContext::TokenizeContext(ObCollationType coll_type,
                                  int64_t fulltext_len,
                                  bool is_smart)
     : coll_type_(coll_type), fulltext_(fulltext), fulltext_len_(fulltext_len), cursor_(0),
-      next_char_len_(0), handle_size_(0), is_smart_(is_smart), cs_info_(nullptr),
-      well_formed_len_(nullptr), token_list_(allocator), result_list_(allocator)
+      next_char_len_(0), handle_size_(0), is_smart_(is_smart), token_list_(allocator),
+      result_list_(allocator)
 {
 }
 
@@ -64,20 +64,8 @@ int TokenizeContext::init()
 
   if (OB_ISNULL(fulltext_) || fulltext_len_ <= 0) {
     ret = OB_INVALID_ARGUMENT;
-  } else if (OB_UNLIKELY(coll_type_ <= CS_TYPE_INVALID || coll_type_ >= CS_TYPE_MAX)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid collation type", K(ret), K(coll_type_));
-  } else if (OB_ISNULL(cs_info_ = common::ObCharset::get_charset(coll_type_))) {
-    ret = OB_NOT_SUPPORTED;
-    LOG_WARN("unsupported charset or collation", K(ret), K(coll_type_));
-  } else if (OB_ISNULL(cs_info_->cset)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid charset cset", K(ret), K(coll_type_));
-  } else {
-    well_formed_len_ = cs_info_->cset->well_formed_len;
-    if (OB_FAIL(prepare_next_char())) {
-      LOG_WARN("Failed to prepare next char", K(ret));
-    }
+  } else if (OB_FAIL(prepare_next_char())) {
+    LOG_WARN("Failed to prepare next char", K(ret));
   }
   return ret;
 }
@@ -88,9 +76,6 @@ int TokenizeContext::reuse_context(const char *fulltext, const int64_t fulltext_
   if (OB_ISNULL(fulltext) || fulltext_len <= 0) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid fulltext for tokenize context reuse", K(ret), KP(fulltext), K(fulltext_len));
-  } else if (OB_UNLIKELY(nullptr == cs_info_ || nullptr == well_formed_len_)) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("charset cache not initialized", K(ret));
   } else {
     fulltext_ = fulltext;
     fulltext_len_ = fulltext_len;
@@ -153,35 +138,16 @@ int TokenizeContext::current_char_and_type(const char *&ch,
 int TokenizeContext::prepare_next_char()
 {
   int ret = OB_SUCCESS;
-  const int64_t remain = fulltext_len_ - cursor_;
-  if (OB_UNLIKELY(remain <= 0)) {
-    next_char_len_ = 0;
-    ret = OB_ITER_END;
-  } else if (OB_UNLIKELY(nullptr == cs_info_ || nullptr == well_formed_len_)) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("charset cache not initialized", K(ret));
-  } else {
-    int error = 0;
-    const int64_t len = static_cast<int64_t>(well_formed_len_(cs_info_,
-                                                              fulltext_ + cursor_,
-                                                              fulltext_ + fulltext_len_,
-                                                              1,
-                                                              &error));
-    if (OB_UNLIKELY(0 != error)) {
-      ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("invalid encoding found", K(ret), K(coll_type_));
-    } else if (OB_UNLIKELY(len <= 0)) {
-      ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("invalid char length", K(ret), K(len));
-    } else {
-      next_char_len_ = len;
-      if (OB_FAIL(ObFTCharUtil::classify_first_char(coll_type_,
-                                                    fulltext_ + cursor_,
-                                                    static_cast<uint8_t>(len),
-                                                    next_char_type_))) {
-        LOG_WARN("Failed to classify first char", K(ret));
-      }
-    }
+  if (OB_FAIL(ObCharset::first_valid_char(coll_type_,
+                                          fulltext_ + cursor_,
+                                          fulltext_len_ - cursor_,
+                                          next_char_len_))) {
+    LOG_WARN("Failed to get first valid char, ", K(ret));
+  } else if (OB_FAIL(ObFTCharUtil::classify_first_char(coll_type_,
+                                                       fulltext_ + cursor_,
+                                                       next_char_len_,
+                                                       next_char_type_))) {
+    LOG_WARN("Failed to classify first char", K(ret));
   }
   return ret;
 }

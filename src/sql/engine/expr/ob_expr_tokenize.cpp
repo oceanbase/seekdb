@@ -37,8 +37,6 @@
 #include "storage/fts/ob_fts_parser_property.h"
 #include "storage/fts/ob_fts_plugin_helper.h"
 
-#include <new>
-
 #define USING_LOG_PREFIX SQL_ENG
 #include "sql/engine/expr/ob_expr_json_func_helper.h" // file not self-contained, there're logs inside.
 
@@ -114,10 +112,8 @@ public:
 
   void put(const ObTokenizeCacheKey &key, const ObDatum &result)
   {
-    // The built-in parsers use global dictionaries, so the result is independent
-    // of the tenant name.  Allow caching even when the session has no tenant
-    // name set, which is common for root benchmark connections.
-    if (key.text_.empty()
+    if (key.tenant_name_.empty()
+        || key.text_.empty()
         || result.is_null()
         || result.len_ <= 0
         || result.len_ > MAX_RESULT_LENGTH) {
@@ -159,8 +155,8 @@ private:
         && parser_ == key.parser_
         && tenant_name_length_ == key.tenant_name_.length()
         && text_length_ == key.text_.length()
-        && (0 == tenant_name_length_ || 0 == MEMCMP(buffer_, key.tenant_name_.ptr(), tenant_name_length_))
-        && (0 == text_length_ || 0 == MEMCMP(buffer_ + tenant_name_length_, key.text_.ptr(), text_length_));
+        && 0 == MEMCMP(buffer_, key.tenant_name_.ptr(), tenant_name_length_)
+        && 0 == MEMCMP(buffer_ + tenant_name_length_, key.text_.ptr(), text_length_);
   }
 
   const char *result_ptr() const
@@ -211,8 +207,8 @@ class ObTokenizeResultCache final
           && parser_ == key.parser_
           && tenant_name_length_ == key.tenant_name_.length()
           && text_length_ == key.text_.length()
-          && (0 == tenant_name_length_ || 0 == MEMCMP(buffer_, key.tenant_name_.ptr(), tenant_name_length_))
-          && (0 == text_length_ || 0 == MEMCMP(buffer_ + tenant_name_length_, key.text_.ptr(), text_length_));
+          && 0 == MEMCMP(buffer_, key.tenant_name_.ptr(), tenant_name_length_)
+          && 0 == MEMCMP(buffer_ + tenant_name_length_, key.text_.ptr(), text_length_);
     }
 
     const char *result() const
@@ -276,9 +272,8 @@ public:
 
   void put(const ObTokenizeCacheKey &key, const ObDatum &result)
   {
-    // The built-in parsers use global dictionaries, so the tenant name is not
-    // needed to identify a cached result.
     if (!is_cacheable_text(key.text_)
+        || key.tenant_name_.empty()
         || result.is_null()
         || result.len_ <= 0
         || result.len_ > MAX_RESULT_LENGTH) {
@@ -422,59 +417,12 @@ int build_tokenize_cache_key(const ObExpr &expr,
     key.collation_ = expr.args_[0]->obj_meta_.get_collation_type();
     key.tenant_name_ = session->get_tenant_name();
     key.text_ = text_datum->get_string();
-    // The two-argument built-in parser (ik/beng/space) uses global dictionaries,
-    // so the result is independent of the tenant name.  Allow caching even when
-    // the session has no tenant name set, which is common in benchmark/root
-    // connections.
-    cacheable = ObTokenizeResultCache::is_cacheable_text(key.text_);
+    cacheable = !key.tenant_name_.empty()
+        && ObTokenizeResultCache::is_cacheable_text(key.text_);
   }
   return ret;
 }
 } // namespace
-
-// Cache for the expensive-to-build parser state (plugin lookup, property
-// parsing, dictionary handles) and the per-document token hash map.  This is
-// a thread-local singleton because expression evaluation is bound to a single
-// thread and the helper/map are not safe to share across threads.  It lives in
-// the sql namespace so that it matches the friend declaration inside
-// ObExprTokenize and can access the private TokenizeParam type.
-struct ObTokenizeParserCache
-{
-  ObTokenizeParserCache()
-    : inited_(false),
-      map_created_(false),
-      parser_(ObBuiltinTokenizer::INVALID),
-      collation_(CS_TYPE_INVALID),
-      allocator_(ObMemAttr("TokParserCache")),
-      param_(),
-      helper_(),
-      token_map_()
-  {
-  }
-
-  ~ObTokenizeParserCache()
-  {
-    helper_.reset();
-    if (map_created_) {
-      token_map_.destroy();
-    }
-  }
-
-  bool inited_;
-  bool map_created_;
-  ObBuiltinTokenizer parser_;
-  ObCollationType collation_;
-  common::ObArenaAllocator allocator_;
-  ObExprTokenize::TokenizeParam param_;
-  storage::ObFTParseHelper helper_;
-  storage::ObFTWordMap token_map_;
-};
-
-ObTokenizeParserCache &get_tokenize_parser_cache()
-{
-  static thread_local ObTokenizeParserCache cache;
-  return cache;
-}
 
 ObExprTokenize::ObExprTokenize(common::ObIAllocator &alloc)
     : ObStringExprOperator(alloc,
@@ -516,74 +464,19 @@ int ObExprTokenize::eval_tokenize(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &e
                  cache_key, expr, ctx, expr_datum))) {
   } else if (cache_hit) {
     thread_cache.put(cache_key, expr_datum);
+  } else if (OB_FAIL(parse_param(expr, ctx, param))) {
+    LOG_WARN("Fail to parse param", K(ret));
+  } else if (OB_FAIL(tokenize_fulltext(param, param.output_mode_, temp_allocator, json_result))) {
+    LOG_WARN("Fail to tokenize fulltext", K(ret));
+  } else if (OB_FAIL(ObJsonExprHelper::pack_json_res(expr,
+                                                     ctx,
+                                                     temp_allocator,
+                                                     json_result,
+                                                     expr_datum))) {
+    LOG_WARN("fail to pack json result", K(ret));
   } else if (cacheable) {
-    // The parser configuration is constant for the duration of an index build
-    // or a repeated tokenize() call.  Keep a parsed helper and a reusable
-    // token map per thread so we do not pay plugin lookup, property parsing,
-    // and parser object construction costs for every row.
-    ObTokenizeParserCache &pcache = get_tokenize_parser_cache();
-    if (!pcache.inited_
-        || pcache.parser_ != cache_key.parser_
-        || pcache.collation_ != cache_key.collation_) {
-      // Reset any state left from a previous parser configuration (or from a
-      // partially-failed initialization) before rebuilding the cache.
-      pcache.helper_.reset();
-      if (pcache.map_created_) {
-        pcache.token_map_.destroy();
-        pcache.map_created_ = false;
-      }
-      pcache.allocator_.reset();
-      pcache.param_.~TokenizeParam();
-      new (&pcache.param_) TokenizeParam();
-      if (OB_FAIL(parse_param(expr, ctx, pcache.param_))) {
-        LOG_WARN("Fail to init parser cache param", K(ret));
-      } else if (OB_FAIL(pcache.helper_.init(&pcache.allocator_,
-                                             pcache.param_.parser_name_,
-                                             pcache.param_.properties_))) {
-        LOG_WARN("Fail to init parser cache helper", K(ret));
-      } else if (OB_FAIL(pcache.token_map_.create(1999, common::ObMemAttr("FTWordMap")))) {
-        LOG_WARN("Fail to create parser cache token map", K(ret));
-      } else {
-        pcache.inited_ = true;
-        pcache.map_created_ = true;
-        pcache.parser_ = cache_key.parser_;
-        pcache.collation_ = cache_key.collation_;
-      }
-    }
-    if (OB_SUCC(ret)) {
-      if (OB_FAIL(parse_fulltext(expr, ctx, pcache.param_))) {
-        LOG_WARN("Fail to parse fulltext for cached parser", K(ret));
-      } else {
-        pcache.helper_.set_allocator(&temp_allocator);
-        if (OB_FAIL(tokenize_fulltext_with_helper(pcache.param_,
-                                                  pcache.helper_,
-                                                  pcache.token_map_,
-                                                  json_result))) {
-          LOG_WARN("Fail to tokenize fulltext with cached helper", K(ret));
-        } else if (OB_FAIL(ObJsonExprHelper::pack_json_res(expr,
-                                                           ctx,
-                                                           temp_allocator,
-                                                           json_result,
-                                                           expr_datum))) {
-          LOG_WARN("fail to pack json result", K(ret));
-        } else {
-          ObTokenizeResultCache::instance().put(cache_key, expr_datum);
-          thread_cache.put(cache_key, expr_datum);
-        }
-      }
-    }
-  } else {
-    if (OB_FAIL(parse_param(expr, ctx, param))) {
-      LOG_WARN("Fail to parse param", K(ret));
-    } else if (OB_FAIL(tokenize_fulltext(param, param.output_mode_, temp_allocator, json_result))) {
-      LOG_WARN("Fail to tokenize fulltext", K(ret));
-    } else if (OB_FAIL(ObJsonExprHelper::pack_json_res(expr,
-                                                       ctx,
-                                                       temp_allocator,
-                                                       json_result,
-                                                       expr_datum))) {
-      LOG_WARN("fail to pack json result", K(ret));
-    }
+    ObTokenizeResultCache::instance().put(cache_key, expr_datum);
+    thread_cache.put(cache_key, expr_datum);
   }
 
   return ret;
@@ -642,49 +535,6 @@ int ObExprTokenize::tokenize_fulltext(const TokenizeParam &param,
   return ret;
 }
 
-int ObExprTokenize::tokenize_fulltext_with_helper(const TokenizeParam &param,
-                                                  storage::ObFTParseHelper &helper,
-                                                  storage::ObFTWordMap &word_map,
-                                                  ObIJsonBase *&result)
-{
-  int ret = OB_SUCCESS;
-  int64_t doc_len = 0;
-
-  if (TokenizeParam::OUTPUT_MODE::DEFAULT != param.output_mode_
-      && TokenizeParam::OUTPUT_MODE::ALL != param.output_mode_) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Invalid output mode", K(ret), K(param.output_mode_));
-  } else if (
-      (0 != param.fulltext_.length())
-      && OB_FAIL(helper.segment(
-                     param.meta_,
-                     param.fulltext_.ptr(),
-                     param.fulltext_.length(),
-                     doc_len,
-                     word_map))) {
-    LOG_WARN("Fail to segment fulltext", K(ret));
-  } else {
-    switch (param.output_mode_) {
-    case TokenizeParam::OUTPUT_MODE::DEFAULT: {
-      if (OB_FAIL(helper.make_token_array_json(word_map, result))) {
-        LOG_WARN("Fail to construct json array", K(ret));
-      }
-      break;
-    }
-    case TokenizeParam::OUTPUT_MODE::ALL: {
-      if (OB_FAIL(helper.make_detail_json(word_map, doc_len, result))) {
-        LOG_WARN("Fail to construct detaild json", K(ret));
-      }
-      break;
-    }
-    default:
-      ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("Invalid output mode", K(ret), K(param.output_mode_));
-    }
-  }
-  return ret;
-}
-
 ObExprTokenize::TokenizeParam ::TokenizeParam()
   : allocator_(ObMemAttr("TokenizeParam")),
     parser_name_(ObString(OB_DEFAULT_FULLTEXT_PARSER_NAME)),
@@ -692,14 +542,6 @@ ObExprTokenize::TokenizeParam ::TokenizeParam()
     fulltext_(),
     output_mode_(OUTPUT_MODE::DEFAULT)
 {
-}
-
-void ObExprTokenize::TokenizeParam::set_fulltext(const common::ObString &fulltext,
-                                                 const common::ObObjMeta &meta)
-{
-  fulltext_ = fulltext;
-  meta_ = meta;
-  meta_.set_varchar();
 }
 
 int ObExprTokenize::TokenizeParam::parse_json_param(const ObIJsonBase *obj)

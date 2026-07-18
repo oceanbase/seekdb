@@ -52,15 +52,6 @@ public:
                                  const uint8_t char_len,
                                  CharType &type);
 
-  // Combine ObCharset::first_valid_char and classify_first_char into one call.
-  // Returns the length of the first valid character and its classification.
-  static int classify_first_valid_char(ObCollationType coll_type,
-                                       const char *input,
-                                       const int64_t buf_size,
-                                       const char *&ch,
-                                       int64_t &char_len,
-                                       CharType &type);
-
   static int check_cn_number(ObCollationType coll_type,
                              const char *input,
                              const uint8_t char_len,
@@ -516,43 +507,6 @@ inline int ObFTCharUtil::classify_first_char(ObCollationType coll_type,
     ret = OB_NOT_SUPPORTED;
     STORAGE_FTS_LOG(WARN, "Not supported charset type", K(ret), K(cs_type));
     break;
-  }
-  return ret;
-}
-
-inline int ObFTCharUtil::classify_first_valid_char(ObCollationType coll_type,
-                                                   const char *input,
-                                                   const int64_t buf_size,
-                                                   const char *&ch,
-                                                   int64_t &char_len,
-                                                   CharType &type)
-{
-  int ret = OB_SUCCESS;
-  char_len = 0;
-  if (OB_UNLIKELY(coll_type <= CS_TYPE_INVALID || coll_type >= CS_TYPE_MAX)) {
-    ret = OB_ERR_UNEXPECTED;
-    STORAGE_FTS_LOG(WARN, "unexpected error. invalid argument(s)", K(ret), K(coll_type));
-  } else if (OB_ISNULL(input) || buf_size <= 0) {
-    ret = OB_ITER_END;
-  } else {
-    const ObCharsetInfo *cs = common::ObCharset::get_charset(coll_type);
-    if (OB_ISNULL(cs) || OB_ISNULL(cs->cset)) {
-      ret = OB_NOT_SUPPORTED;
-      STORAGE_FTS_LOG(WARN, "unsupported charset or collation", K(ret), K(coll_type));
-    } else {
-      int error = 0;
-      int64_t len = static_cast<int64_t>(cs->cset->well_formed_len(cs, input, input + buf_size, 1, &error));
-      if (OB_UNLIKELY(0 != error)) {
-        ret = OB_INVALID_ARGUMENT;
-        STORAGE_FTS_LOG(WARN, "invalid encoding found", K(ret), K(coll_type));
-      } else if (OB_UNLIKELY(len <= 0)) {
-        ret = OB_ITER_END;
-      } else {
-        ch = input;
-        char_len = len;
-        ret = classify_first_char(coll_type, input, static_cast<uint8_t>(len), type);
-      }
-    }
   }
   return ret;
 }

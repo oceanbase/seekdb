@@ -317,8 +317,6 @@ ObFTParseHelper::ObFTParseHelper()
     parser_property_(),
     parser_allocator_("FTParserMeta"),
     token_iterator_(nullptr),
-    cs_type_(CS_TYPE_INVALID),
-    cs_info_(nullptr),
     is_inited_(false)
 {
 }
@@ -381,8 +379,6 @@ void ObFTParseHelper::reset()
   allocator_ = nullptr;
   add_word_flag_.clear();
   parser_allocator_.reset();
-  cs_type_ = CS_TYPE_INVALID;
-  cs_info_ = nullptr;
   is_inited_ = false;
 }
 
@@ -394,6 +390,7 @@ int ObFTParseHelper::segment(
     ObFTWordMap &words) const
 {
   int ret = OB_SUCCESS;
+  const ObCharsetInfo *cs = nullptr;
   ObCollationType type = meta.get_collation_type();
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
@@ -404,18 +401,10 @@ int ObFTParseHelper::segment(
   } else if (OB_UNLIKELY(CS_TYPE_INVALID == type || type >= CS_TYPE_PINYIN_BEGIN_MARK)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(type));
-  } else if (cs_type_ != type) {
-    // Cache the charset lookup: an index build calls segment() once per row
-    // with the same collation, so avoid the repeated global hash lookup.
-    cs_info_ = common::ObCharset::get_charset(type);
-    if (OB_ISNULL(cs_info_)) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected error, charset info is nullptr", K(ret), K(type));
-    } else {
-      cs_type_ = type;
-    }
-  }
-  if (OB_SUCC(ret)) {
+  } else if (OB_ISNULL(cs = common::ObCharset::get_charset(type))) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected error, charset info is nullptr", K(ret), K(type));
+  } else {
     words.reuse();
     ObAddWord add_word(parser_property_, meta, add_word_flag_, *allocator_, words);
     if (OB_FAIL(segment(
@@ -423,7 +412,7 @@ int ObFTParseHelper::segment(
                     parser_name_.get_parser_version(),
                     parser_desc_,
                     plugin_param_,
-                    cs_info_,
+                    cs,
                     fulltext,
                     fulltext_len,
                     *allocator_,
@@ -431,7 +420,7 @@ int ObFTParseHelper::segment(
                     parser_name_.is_ik() || parser_name_.is_beng(),
                     token_iterator_,
                     add_word))) {
-      LOG_WARN("fail to segment fulltext", K(ret), K(parser_name_), KP(parser_desc_), KP(cs_info_), KP(fulltext),
+      LOG_WARN("fail to segment fulltext", K(ret), K(parser_name_), KP(parser_desc_), KP(cs), KP(fulltext),
           K(fulltext_len), KP(allocator_), K(parser_property_));
     } else {
       doc_length = add_word.get_add_word_count();

@@ -270,44 +270,16 @@ int ObAddWord::casedown_word(const ObFTWord &src, ObFTWord &dst)
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid src ft word", K(ret), K(src));
   } else if (flag_.casedown()) {
-    const ObString src_str = src.get_word().get_string();
-    bool is_ascii = true;
-    bool needs_casedown = false;
-    for (int64_t i = 0; i < src_str.length(); ++i) {
-      const unsigned char ch = static_cast<unsigned char>(src_str.ptr()[i]);
-      is_ascii = is_ascii && (ch < 0x80);
-      needs_casedown = needs_casedown || (ch >= 'A' && ch <= 'Z');
-    }
-    if (is_ascii && !needs_casedown) {
-      // Already lowercase ASCII: avoid allocation and charset conversion.
-      dst = src;
-    } else if (is_ascii) {
-      // Lowercase ASCII in place using scratch allocator; the common case for
-      // mixed Chinese/English documents contains only a few English words.
-      char *buf = static_cast<char *>(allocator_.alloc(src_str.length()));
-      if (OB_ISNULL(buf)) {
-        ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("fail to allocate casedown buffer", K(ret), K(src_str.length()));
-      } else {
-        for (int64_t i = 0; i < src_str.length(); ++i) {
-          const unsigned char ch = static_cast<unsigned char>(src_str.ptr()[i]);
-          buf[i] = (ch >= 'A' && ch <= 'Z') ? static_cast<char>(ch + ('a' - 'A')) : src_str.ptr()[i];
-        }
-        ObFTWord tmp(src_str.length(), buf, word_meta_);
-        dst = tmp;
-      }
+    ObString dst_str;
+    if (OB_FAIL(ObCharset::tolower(
+                    word_meta_.get_collation_type(),
+                    src.get_word().get_string(),
+                    dst_str,
+                    allocator_))) {
+      LOG_WARN("fail to tolower", K(ret), K(src), K(word_meta_));
     } else {
-      ObString dst_str;
-      if (OB_FAIL(ObCharset::tolower(
-                      word_meta_.get_collation_type(),
-                      src_str,
-                      dst_str,
-                      allocator_))) {
-        LOG_WARN("fail to tolower", K(ret), K(src), K(word_meta_));
-      } else {
-        ObFTWord tmp(dst_str.length(), dst_str.ptr(), word_meta_);
-        dst = tmp;
-      }
+      ObFTWord tmp(dst_str.length(), dst_str.ptr(), word_meta_);
+      dst = tmp;
     }
   } else {
     dst = src;

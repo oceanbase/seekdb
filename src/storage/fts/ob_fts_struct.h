@@ -31,14 +31,10 @@ namespace storage
 class ObFTWord final
 {
 public:
-  ObFTWord() : word_(), meta_(), hash_val_(0), hash_cached_(false),
-               hash_func_(nullptr), cmp_func_(nullptr) {}
-  ObFTWord(const int64_t length, const char *ptr, const ObObjMeta &meta)
-      : word_(), meta_(meta), hash_val_(0), hash_cached_(false),
-        hash_func_(nullptr), cmp_func_(nullptr)
+  ObFTWord() : word_(), meta_() {}
+  ObFTWord(const int64_t length, const char *ptr, const ObObjMeta &meta) : meta_(meta)
   {
     word_.set_string(ptr, length);
-    init_cached_funcs();
   }
   ~ObFTWord() = default;
 
@@ -52,15 +48,8 @@ public:
   TO_STRING_KV(K_(meta), K_(word));
 
 private:
-  void init_cached_funcs();
-
-private:
   ObDatum word_;
   ObObjMeta meta_;
-  uint64_t hash_val_;
-  bool hash_cached_;
-  common::ObDatumHashFuncType hash_func_;
-  common::ObDatumCmpFuncType cmp_func_;
 };
 
 typedef common::hash::ObHashMap<ObFTWord, int64_t> ObFTWordMap;

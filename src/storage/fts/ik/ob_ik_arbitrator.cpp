@@ -122,15 +122,17 @@ int ObIKArbitrator::output_result(TokenizeContext &ctx)
   ObIKTokenChain *chain = nullptr;
   for (int64_t current = 0; OB_SUCC(ret) && current < ctx.fulltext_len();) {
     ObFTCharUtil::CharType type;
-    const char *ch = nullptr;
     // maybe not so good to keep single, check it later
-    if (OB_FAIL(ObFTCharUtil::classify_first_valid_char(ctx.collation(),
-                                                        ctx.fulltext() + current,
-                                                        ctx.fulltext_len() - current,
-                                                        ch,
-                                                        char_len,
-                                                        type))) {
-      LOG_WARN("Failed to classify first valid char", K(ret));
+    if (OB_FAIL(ObCharset::first_valid_char(ctx.collation(),
+                                            ctx.fulltext() + current,
+                                            ctx.fulltext_len() - current,
+                                            char_len))) {
+      LOG_WARN("Failed to get next valid char", K(ret));
+    } else if (OB_FAIL(ObFTCharUtil::classify_first_char(ctx.collation(),
+                                                         ctx.fulltext() + current,
+                                                         char_len,
+                                                         type))) {
+      LOG_WARN("Failed to classify first char", K(ret));
     } else if (ObFTCharUtil::CharType::USELESS == type) {
       current += char_len; // skip useless char
     } else if (OB_FAIL(chains_.get_refactored(current, chain)) && OB_HASH_NOT_EXIST != ret) {

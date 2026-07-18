@@ -91,10 +91,6 @@ private:
   uint32_t handle_size_;
   bool is_smart_;
 
-  // Cached charset metadata to avoid repeated lookups on the per-character path.
-  const ObCharsetInfo *cs_info_;
-  size_t (*well_formed_len_)(const struct ObCharsetInfo *, const char *, const char *, int, int *);
-
   ObFTSortList token_list_;
   ObList<ObIKToken, ObIAllocator> result_list_;
 private:
