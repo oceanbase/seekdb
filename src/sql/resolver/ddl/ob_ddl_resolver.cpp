@@ -2394,6 +2394,29 @@ int ObDDLResolver::resolve_table_option(const ParseNode *option_node, const bool
         }
         break;
       }
+      case T_FULLTEXT_DICT: {
+        if (stmt_->get_stmt_type() == stmt::T_ALTER_TABLE) {
+          ret = OB_NOT_SUPPORTED;
+          LOG_WARN("fulltext_dict is not supported in the alter table statement", K(ret));
+          LOG_USER_ERROR(OB_NOT_SUPPORTED, "fulltext_dict in the alter table statement");
+        } else if (option_node->num_child_ != 1 || OB_ISNULL(option_node->children_[0])) {
+          ret = OB_ERR_UNEXPECTED;
+          SQL_RESV_LOG(WARN, "option_node child is null", K(ret));
+        } else {
+          ObString value(static_cast<int32_t>(option_node->children_[0]->str_len_),
+                         option_node->children_[0]->str_value_);
+          if (0 == value.case_compare("Y") || 0 == value.case_compare("N")) {
+            // the mark is accepted; a fulltext dictionary table is read by name
+            // when it is referenced from PARSER_PROPERTIES, so nothing needs to
+            // be persisted in the table schema for it.
+          } else {
+            ret = OB_INVALID_ARGUMENT;
+            LOG_WARN("invalid fulltext_dict option value", K(ret), K(value));
+            LOG_USER_ERROR(OB_INVALID_ARGUMENT, "FULLTEXT_DICT, should be 'Y' or 'N'");
+          }
+        }
+        break;
+      }
       case T_SEMISTRUCT_ENCODING_TYPE: {
         ret = resolve_semistruct_encoding_type(option_node, is_index_option);
         break;

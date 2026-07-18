@@ -55,6 +55,9 @@ private:
   uint64_t row_idx_;
   bool is_fts_index_aux_;
   storage::ObFTParseHelper helper_;
+  // reused across documents so each segment() call doesn't have to
+  // create/destroy a hash map; cleared via reuse() inside the parse helper
+  ObFTWordMap ft_word_map_;
   bool is_inited_;
 
   DISALLOW_COPY_AND_ASSIGN(ObFTIndexRowCache);
@@ -157,6 +160,9 @@ public:
 
   static const uint64_t MVI_FULL_ROWKEY_THRESHOLD = 6;
   static const uint64_t MVI_ROWKEY_SIZE_THRESHOLD = 48;
+  // bucket count for a reusable per-document word map; sized for typical
+  // document token counts to avoid rehashing on every doc
+  static const int64_t FT_WORD_ROW_MAP_BUCKET = 128;
 
   ObDASDomainUtils() = default;
   ~ObDASDomainUtils() = default;
@@ -182,6 +188,16 @@ public:
                                          const ObDatum &doc_id_datum,
                                          const ObString &fulltext,
                                          const bool is_fts_index_aux,
+                                         ObDomainIndexRow &word_rows);
+  // variant that reuses a caller-owned word map to avoid re-creating the
+  // hash buckets for every document
+  static int generate_fulltext_word_rows(common::ObIAllocator &allocator,
+                                         storage::ObFTParseHelper *helper,
+                                         const common::ObObjMeta &ft_obj_meta,
+                                         const ObDatum &doc_id_datum,
+                                         const ObString &fulltext,
+                                         const bool is_fts_index_aux,
+                                         ObFTWordMap &ft_word_map,
                                          ObDomainIndexRow &word_rows);
   static int generate_multivalue_index_rows(
       ObIAllocator &allocator,
