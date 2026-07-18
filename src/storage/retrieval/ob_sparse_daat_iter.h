@@ -123,6 +123,8 @@ protected:
   const ObDatum **iter_domain_id_data_;
   ObFixedArray<ObDocIdExt, ObIAllocator> buffered_domain_ids_; // cache for output
   ObDocIdExt *buffered_domain_id_data_;
+  ObFixedArray<uint64_t, ObIAllocator> buffered_fixed_doc_ids_;
+  uint64_t *buffered_fixed_doc_id_data_;
   ObFixedArray<double, ObIAllocator> buffered_relevances_;
   ObFixedArray<int64_t, ObIAllocator> next_round_iter_idxes_;
   int64_t next_round_cnt_;
@@ -141,6 +143,7 @@ protected:
   int64_t small_batch_positions_[SMALL_ANY_MATCH_MAX_ITER_CNT];
   bool small_batch_ended_[SMALL_ANY_MATCH_MAX_ITER_CNT];
   bool use_small_any_match_batch_merge_;
+  bool use_fixed_doc_id_batch_output_;
   void (*set_datum_func_)(ObDatum &, const ObDocIdExt &);
 private:
   DISALLOW_COPY_AND_ASSIGN(ObSRDaaTIterImpl);

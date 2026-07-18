@@ -113,6 +113,8 @@ ObSRDaaTIterImpl::ObSRDaaTIterImpl()
     iter_domain_id_data_(nullptr),
     buffered_domain_ids_(),
     buffered_domain_id_data_(nullptr),
+    buffered_fixed_doc_ids_(),
+    buffered_fixed_doc_id_data_(nullptr),
     buffered_relevances_(),
     next_round_iter_idxes_(),
     next_round_cnt_(0),
@@ -124,6 +126,7 @@ ObSRDaaTIterImpl::ObSRDaaTIterImpl()
     small_batch_positions_{},
     small_batch_ended_{},
     use_small_any_match_batch_merge_(false),
+    use_fixed_doc_id_batch_output_(false),
     set_datum_func_(nullptr)
 {
 }
@@ -151,6 +154,9 @@ int ObSRDaaTIterImpl::init(
         && dim_iter_cnt_ <= SMALL_ANY_MATCH_MAX_ITER_CNT;
     relevance_collector_ = &relevance_collector;
     const int64_t max_batch_size = OB_MAX(iter_param_->eval_ctx_->max_batch_size_, iter_param_->max_batch_size_);
+    const bool can_use_fixed_doc_id_output =
+        ObDatumFuncs::is_string_type(iter_param_->id_proj_expr_->datum_meta_.type_)
+        && CS_TYPE_BINARY == iter_param_->id_proj_expr_->datum_meta_.cs_type_;
     if (iter_param_->id_proj_expr_->datum_meta_.type_ == common::ObUInt64Type) {
       set_datum_func_ = ObISparseRetrievalMergeIter::set_datum_int;
     } else {
@@ -182,6 +188,16 @@ int ObSRDaaTIterImpl::init(
     } else if (OB_FAIL(buffered_domain_ids_.prepare_allocate(max_batch_size))) {
       LOG_WARN("failed to prepare allocate buffered domain ids array", K(ret));
     } else if (FALSE_IT(buffered_domain_id_data_ = &buffered_domain_ids_[0])) {
+    } else if (can_use_fixed_doc_id_output
+        && FALSE_IT(buffered_fixed_doc_ids_.set_allocator(iter_allocator_))) {
+    } else if (can_use_fixed_doc_id_output
+        && OB_FAIL(buffered_fixed_doc_ids_.init(max_batch_size * 2))) {
+      LOG_WARN("failed to init fixed DocID output buffer", K(ret), K(max_batch_size));
+    } else if (can_use_fixed_doc_id_output
+        && OB_FAIL(buffered_fixed_doc_ids_.prepare_allocate(max_batch_size * 2))) {
+      LOG_WARN("failed to allocate fixed DocID output buffer", K(ret), K(max_batch_size));
+    } else if (can_use_fixed_doc_id_output
+        && FALSE_IT(buffered_fixed_doc_id_data_ = &buffered_fixed_doc_ids_[0])) {
     } else if (iter_param_->need_project_relevance()
         && FALSE_IT(buffered_relevances_.set_allocator(iter_allocator_))) {
     } else if (iter_param_->need_project_relevance()
@@ -210,6 +226,8 @@ int ObSRDaaTIterImpl::init(
       for (int64_t i = 0; use_small_any_match_batch_merge_ && i < dim_iter_cnt_; ++i) {
         use_small_any_match_batch_merge_ = dim_iter_data_[i]->supports_id_batch();
       }
+      use_fixed_doc_id_batch_output_ = use_small_any_match_batch_merge_
+          && can_use_fixed_doc_id_output;
     }
 
     if (OB_SUCC(ret)) {
@@ -239,6 +257,8 @@ void ObSRDaaTIterImpl::reset()
   iter_domain_id_data_ = nullptr;
   buffered_domain_ids_.reset();
   buffered_domain_id_data_ = nullptr;
+  buffered_fixed_doc_ids_.reset();
+  buffered_fixed_doc_id_data_ = nullptr;
   buffered_relevances_.reset();
   next_round_iter_idxes_.reset();
   next_round_cnt_ = 0;
@@ -251,6 +271,7 @@ void ObSRDaaTIterImpl::reset()
     small_batch_ended_[i] = false;
   }
   use_small_any_match_batch_merge_ = false;
+  use_fixed_doc_id_batch_output_ = false;
   input_row_cnt_ = 0;
   output_row_cnt_ = 0;
   is_inited_ = false;
@@ -452,7 +473,25 @@ int ObSRDaaTIterImpl::do_small_any_match_batch_merge(
         if (0 == cmp_ret && !small_batch_ended_[1 - winner_iter_idx]) {
           ++small_batch_positions_[1 - winner_iter_idx];
         }
-        if (OB_FAIL(cache_result(count, winner_id, 0.0))) {
+        if (use_fixed_doc_id_batch_output_) {
+          // FTS PERF OPT 14: the two-token truth-only path emits generated
+          // 16-byte DocIDs. Cache only those bytes instead of materializing a
+          // second ObDocIdExt for every merged hit; project the stable compact
+          // buffer shallowly after the posting batches have been consumed.
+          if (OB_UNLIKELY(winner_id.is_null()
+              || OB_DOC_ID_COLUMN_BYTE_LENGTH != winner_id.len_
+              || count * 2 + 1 >= buffered_fixed_doc_ids_.count())) {
+            ret = OB_ERR_UNEXPECTED;
+            LOG_WARN("unexpected fixed DocID merge output", K(ret), K(winner_id), K(count),
+                K(buffered_fixed_doc_ids_.count()));
+          } else {
+            MEMCPY(buffered_fixed_doc_id_data_ + count * 2,
+                winner_id.ptr_, OB_DOC_ID_COLUMN_BYTE_LENGTH);
+            ++input_row_cnt_;
+            ++output_row_cnt_;
+            ++count;
+          }
+        } else if (OB_FAIL(cache_result(count, winner_id, 0.0))) {
           if (OB_ITER_END != ret) {
             LOG_WARN("failed to cache two-way posting merge result", K(ret));
           }
@@ -768,11 +807,19 @@ int ObSRDaaTIterImpl::project_results(const int64_t count)
   if (eval_ctx->is_vectorized()) {
     sql::ObBitVector &id_evaluated_flags = id_proj_expr->get_evaluated_flags(*eval_ctx);
     ObDatum *id_proj_datums = id_proj_expr->locate_batch_datums(*eval_ctx);
-    for (int64_t i = 0; i < count; ++i) {
-      // FTS PERF OPT 6: the output expression owns a contiguous datum array in
-      // vectorized mode.  Address it once per batch instead of switching the
-      // evaluation context and locating the same expression for every DocID.
-      set_datum_func_(id_proj_datums[i], buffered_domain_id_data_[i]);
+    if (use_fixed_doc_id_batch_output_) {
+      for (int64_t i = 0; i < count; ++i) {
+        id_proj_datums[i].set_string(
+            reinterpret_cast<const char *>(buffered_fixed_doc_id_data_ + i * 2),
+            OB_DOC_ID_COLUMN_BYTE_LENGTH);
+      }
+    } else {
+      for (int64_t i = 0; i < count; ++i) {
+        // FTS PERF OPT 6: the output expression owns a contiguous datum array
+        // in vectorized mode. Address it once per batch instead of switching
+        // the evaluation context and locating it for every DocID.
+        set_datum_func_(id_proj_datums[i], buffered_domain_id_data_[i]);
+      }
     }
     id_evaluated_flags.set_all(count);
     id_proj_expr->set_evaluated_projected(*eval_ctx);
