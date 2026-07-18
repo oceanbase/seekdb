@@ -45,10 +45,11 @@ struct ObSRMergeCmp
 
   int init(ObDatumMeta id_meta, const ObFixedArray<const ObDatum *, ObIAllocator> *iter_ids);
   int cmp(const ObSRMergeItem &l, const ObSRMergeItem &r, int64_t &cmp_ret);
+  int cmp(int64_t l_iter_idx, int64_t r_iter_idx, int64_t &cmp_ret);
 private:
-  inline const ObDatum &get_id_datum(const int64_t iter_idx)
+  OB_INLINE const ObDatum &get_id_datum(const int64_t iter_idx)
   {
-    const ObDatum *datum = iter_ids_->at(iter_idx);
+    const ObDatum *datum = iter_id_data_[iter_idx];
     OB_ASSERT(nullptr != datum);
     return *datum;
   }
@@ -57,6 +58,7 @@ private:
   // TODO: if memory lifetime of docid datum is guaranteed by dim_iters, we can use pointer to datum directly
   //       and avoid deep copy into merge heap here
   const ObFixedArray<const ObDatum *, ObIAllocator> *iter_ids_;
+  const ObDatum *const *iter_id_data_;
   bool is_uint64_id_;
   bool is_inited_;
 };

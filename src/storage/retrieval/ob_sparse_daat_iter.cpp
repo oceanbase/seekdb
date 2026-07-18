@@ -26,6 +26,7 @@ namespace storage
 ObSRMergeCmp::ObSRMergeCmp()
   : cmp_func_(nullptr),
     iter_ids_(nullptr),
+    iter_id_data_(nullptr),
     is_uint64_id_(false),
     is_inited_(false)
 {
@@ -37,8 +38,12 @@ int ObSRMergeCmp::init(ObDatumMeta id_meta, const ObFixedArray<const ObDatum *, 
   if (OB_ISNULL(iter_ids)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected nullptr", K(ret), KP(iter_ids));
+  } else if (OB_UNLIKELY(iter_ids->empty())) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("unexpected empty iter ids", K(ret));
   } else {
     iter_ids_ = iter_ids;
+    iter_id_data_ = &iter_ids_->at(0);
     sql::ObExprBasicFuncs *basic_funcs = ObDatumFuncs::get_basic_func(id_meta.type_, id_meta.cs_type_);
     cmp_func_ = basic_funcs->null_first_cmp_;
     if (OB_ISNULL(cmp_func_)) {
@@ -57,14 +62,22 @@ int ObSRMergeCmp::cmp(
     const ObSRMergeItem &r,
     int64_t &cmp_ret)
 {
+  return cmp(l.iter_idx_, r.iter_idx_, cmp_ret);
+}
+
+int ObSRMergeCmp::cmp(
+    const int64_t l_iter_idx,
+    const int64_t r_iter_idx,
+    int64_t &cmp_ret)
+{
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     LOG_WARN("not inited", K(ret));
   } else {
     int tmp_ret = 0;
-    const ObDatum &left = get_id_datum(l.iter_idx_);
-    const ObDatum &right = get_id_datum(r.iter_idx_);
+    const ObDatum &left = get_id_datum(l_iter_idx);
+    const ObDatum &right = get_id_datum(r_iter_idx);
     if (OB_LIKELY(is_uint64_id_ && !left.is_null() && !right.is_null())) {
       const uint64_t left_id = left.get_uint64();
       const uint64_t right_id = right.get_uint64();
@@ -139,10 +152,13 @@ int ObSRDaaTIterImpl::init(
       LOG_WARN("failed to init buffered domain ids array", K(ret));
     } else if (OB_FAIL(buffered_domain_ids_.prepare_allocate(max_batch_size))) {
       LOG_WARN("failed to prepare allocate buffered domain ids array", K(ret));
-    } else if (FALSE_IT(buffered_relevances_.set_allocator(iter_allocator_))) {
-    } else if (OB_FAIL(buffered_relevances_.init(max_batch_size))) {
+    } else if (iter_param_->need_project_relevance()
+        && FALSE_IT(buffered_relevances_.set_allocator(iter_allocator_))) {
+    } else if (iter_param_->need_project_relevance()
+        && OB_FAIL(buffered_relevances_.init(max_batch_size))) {
       LOG_WARN("failed to init buffered relevances array", K(ret));
-    } else if (OB_FAIL(buffered_relevances_.prepare_allocate(max_batch_size))) {
+    } else if (iter_param_->need_project_relevance()
+        && OB_FAIL(buffered_relevances_.prepare_allocate(max_batch_size))) {
       LOG_WARN("failed to prepare allocate buffered relevances array", K(ret));
     } else if (OB_FAIL(merge_cmp_.init(iter_param_->id_proj_expr_->datum_meta_, &iter_domain_ids_))) {
       LOG_WARN("failed to init loser tree comparator", K(ret));
@@ -332,7 +348,6 @@ int ObSRDaaTIterImpl::fill_merge_heap()
     } else if (OB_FAIL(merge_heap_->push(item))) {
       LOG_WARN("fail to push item to merge heap", K(ret), K(item));
     } else {
-      LOG_DEBUG("push item to merge heap", K(ret), K(i), K(iter_idx), K(next_round_cnt_), K(item), K(iter_domain_ids_[iter_idx]));
     }
   }
 
@@ -380,7 +395,6 @@ int ObSRDaaTIterImpl::collect_dims_by_id(const ObDatum *&id_datum, double &relev
 
   if (OB_SUCC(ret)) {
     id_datum = iter_domain_ids_[iter_idx];
-    LOG_DEBUG("collect one dim", KPC(id_datum));
     if (OB_ISNULL(id_datum)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected null id datum", K(ret));
@@ -455,12 +469,14 @@ int ObSRDaaTIterImpl::cache_result(int64_t &count, const ObDatum &id_datum, cons
   if (limit_param->is_valid() && input_row_cnt_ <= offset) {
     // TODO: Maybe we should not process offset logic here
     // don't need to project
-  } else if (OB_UNLIKELY(count >= buffered_domain_ids_.count() || count >= buffered_relevances_.count())) {
+  } else if (OB_UNLIKELY(count >= buffered_domain_ids_.count()
+      || (iter_param_->need_project_relevance()
+          && count >= buffered_relevances_.count()))) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid buffered idx", K(ret), K(count), K(buffered_domain_ids_.count()), K(buffered_relevances_.count()));
   } else {
     buffered_domain_ids_[count].from_datum(id_datum);
-    if (!predicate_only_fast_path()) {
+    if (iter_param_->need_project_relevance()) {
       buffered_relevances_[count] = relevance;
     }
     ++count;
@@ -482,22 +498,20 @@ int ObSRDaaTIterImpl::project_results(const int64_t count)
 
   if (eval_ctx->is_vectorized()) {
     sql::ObBitVector &id_evaluated_flags = id_proj_expr->get_evaluated_flags(*eval_ctx);
+    ObDatum *id_proj_datums = id_proj_expr->locate_batch_datums(*eval_ctx);
     for (int64_t i = 0; i < count; ++i) {
-      guard.set_batch_idx(i);
-      ObDatum &id_proj_datum = id_proj_expr->locate_datum_for_write(*eval_ctx);
-      set_datum_func_(id_proj_datum, buffered_domain_ids_[i]);
-      id_evaluated_flags.set(i);
-      id_proj_expr->set_evaluated_projected(*eval_ctx);
+      set_datum_func_(id_proj_datums[i], buffered_domain_ids_[i]);
     }
+    id_evaluated_flags.set_all(count);
+    id_proj_expr->set_evaluated_projected(*eval_ctx);
     if (iter_param_->need_project_relevance()) {
       sql::ObBitVector &relevance_evaluated_flags = relevance_proj_expr->get_evaluated_flags(*eval_ctx);
+      ObDatum *relevance_proj_datums = relevance_proj_expr->locate_batch_datums(*eval_ctx);
       for (int64_t i = 0; i < count; ++i) {
-        guard.set_batch_idx(i);
-        ObDatum &relevance_proj_datum = relevance_proj_expr->locate_datum_for_write(*eval_ctx);
-        relevance_proj_datum.set_double(buffered_relevances_[i]);
-        relevance_evaluated_flags.set(i);
-        relevance_proj_expr->set_evaluated_projected(*eval_ctx);
+        relevance_proj_datums[i].set_double(buffered_relevances_[i]);
       }
+      relevance_evaluated_flags.set_all(count);
+      relevance_proj_expr->set_evaluated_projected(*eval_ctx);
     }
   } else if (OB_UNLIKELY(1 != count)) {
     ret = OB_ERR_UNEXPECTED;

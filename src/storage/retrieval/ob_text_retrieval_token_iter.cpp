@@ -291,7 +291,6 @@ int ObTextRetrievalTokenIter::do_token_cnt_agg(const ObDocIdExt &doc_id)
     } else {
       token_count = fwd_idx_agg_expr_->locate_expr_datum(*eval_ctx_).get_int();
     }
-    LOG_DEBUG("retrieval iterator get token cnt for doc", K(ret), K(doc_id), K(token_count));
   }
   return ret;
 }
@@ -757,10 +756,13 @@ int ObTextRetrievalDaaTTokenIter::init(const ObTextRetrievalScanIterParam &iter_
       if (OB_ISNULL(cmp_func_)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("failed to init IRIterLoserTreeCmp", K(ret));
-      } else if (FALSE_IT(relevance_.set_allocator(allocator_))) {
-      } else if (OB_FAIL(relevance_.init(max_batch_size_))) {
+      } else if (OB_NOT_NULL(relevance_expr_)
+          && FALSE_IT(relevance_.set_allocator(allocator_))) {
+      } else if (OB_NOT_NULL(relevance_expr_)
+          && OB_FAIL(relevance_.init(max_batch_size_))) {
         LOG_WARN("failed to init next batch iter idxes array", K(ret));
-      } else if (OB_FAIL(relevance_.prepare_allocate(max_batch_size_))) {
+      } else if (OB_NOT_NULL(relevance_expr_)
+          && OB_FAIL(relevance_.prepare_allocate(max_batch_size_))) {
         LOG_WARN("failed to prepare allocate next batch iter idxes array", K(ret));
       } else if (FALSE_IT(doc_id_.set_allocator(allocator_))) {
       } else if (OB_FAIL(doc_id_.init(max_batch_size_))) {
@@ -1053,7 +1055,6 @@ int ObTextRetrievalBlockMaxIter::advance_to(const ObDatum &id_datum)
 int ObTextRetrievalBlockMaxIter::advance_shallow(const ObDatum &id_datum, const bool inclusive)
 {
   int ret = OB_SUCCESS;
-  LOG_DEBUG("[Sparse Retrieval] advance shallow", K(ret), K(id_datum), K(inclusive));
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     LOG_WARN("not initialized", K(ret));
@@ -1165,8 +1166,6 @@ int ObTextRetrievalBlockMaxIter::calc_dim_max_score(
       LOG_WARN("unexpected nullptr to max score tuple", K(ret), KP_(max_score_tuple));
     } else {
       dim_max_score_ = std::max(dim_max_score_, max_score_tuple->max_score_);
-      LOG_DEBUG("[Text Retrieval] calc dim max score", K(ret), K(dim_max_score_), K(max_score_tuple->max_score_),
-        KPC(max_score_tuple->max_domain_id_), KPC(max_score_tuple->min_domain_id_));
     }
   }
 
