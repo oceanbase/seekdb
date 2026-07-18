@@ -316,9 +316,20 @@ int ObDASDomainUtils::build_ft_doc_word_infos(
   int ret = OB_SUCCESS;
   static int64_t FT_WORD_DOC_COL_CNT = 4;
   static constexpr int64_t FT_MAX_WORD_BUCKET = 997;
-  const int64_t ft_word_bkt_cnt = MIN(MAX(fulltext.length() / 10, 2), FT_MAX_WORD_BUCKET);
+  const int64_t ft_word_bkt_cnt = MIN(MAX(fulltext.length() / 2, 2), FT_MAX_WORD_BUCKET);
   int64_t doc_length = 0;
-  ObFTWordMap ft_word_map;
+  // Thread-local word map to avoid per-row hash bucket allocation during FTS build.
+  static thread_local ObFTWordMap *tl_word_map = nullptr;
+  static thread_local bool tl_map_created = false;
+  if (tl_word_map == nullptr) {
+    void *buf = ob_malloc(sizeof(ObFTWordMap), "FTWordMapTL");
+    if (OB_ISNULL(buf)) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+      LOG_WARN("fail to alloc thread-local word map", K(ret));
+    } else {
+      tl_word_map = new (buf) ObFTWordMap();
+    }
+  }
   void *rows_buf = nullptr;
   blocksstable::ObDatumRow *rows = nullptr;
   if (OB_ISNULL(helper) || OB_UNLIKELY(!ft_obj_meta.is_valid())) {
@@ -326,36 +337,42 @@ int ObDASDomainUtils::build_ft_doc_word_infos(
     LOG_WARN("invalid arguments", K(ret), KPC(helper), K(ft_obj_meta), K(doc_id_datum));
   } else if (0 == fulltext.length()) {
     ret = OB_ITER_END;
-  } else if (OB_FAIL(ft_word_map.create(ft_word_bkt_cnt, common::ObMemAttr("FTWordMap")))) {
-    LOG_WARN("fail to create ft word map", K(ret), K(ft_word_bkt_cnt));
+  } else if (!tl_map_created) {
+    if (OB_FAIL(tl_word_map->create(ft_word_bkt_cnt, common::ObMemAttr("FTWordMap")))) {
+      LOG_WARN("fail to create ft word map", K(ret), K(ft_word_bkt_cnt));
+    } else {
+      tl_map_created = true;
+    }
+  } else {
+    tl_word_map->reuse();
+  }
+  if (OB_FAIL(ret)) {
+    // already logged
   } else if (OB_FAIL(segment_and_calc_word_count(allocator,
                                                  helper,
                                                  ft_obj_meta,
                                                  fulltext,
                                                  doc_length,
-                                                 ft_word_map))) {
+                                                 *tl_word_map))) {
     LOG_WARN("fail to segment and calculate word count", K(ret), KPC(helper),
         K(ft_obj_meta.get_collation_type()), K(fulltext));
-  } else if (0 == ft_word_map.size()) {
+  } else if (0 == tl_word_map->size()) {
     ret = OB_ITER_END;
   } else if (OB_ISNULL(rows_buf = reinterpret_cast<char *>(
-                           allocator.alloc(ft_word_map.size() * sizeof(blocksstable::ObDatumRow))))) {
+                            allocator.alloc(tl_word_map->size() * sizeof(blocksstable::ObDatumRow))))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("failed to alloc memory for full text index rows buffer", K(ret));
   } else {
     int64_t i = 0;
-    rows = new (rows_buf) blocksstable::ObDatumRow[ft_word_map.size()];
-    for (ObFTWordMap::const_iterator iter = ft_word_map.begin();
-         OB_SUCC(ret) && iter != ft_word_map.end();
+    rows = new (rows_buf) blocksstable::ObDatumRow[tl_word_map->size()];
+    for (ObFTWordMap::const_iterator iter = tl_word_map->begin();
+         OB_SUCC(ret) && iter != tl_word_map->end();
          ++iter) {
       if (OB_FAIL(rows[i].init(allocator, FT_WORD_DOC_COL_CNT))) {
         LOG_WARN("init datum row failed", K(ret), K(FT_WORD_DOC_COL_CNT));
       } else {
         const ObFTWord &ft_word = iter->first;
         const int64_t word_cnt = iter->second;
-        // index row format
-        //  -    FTS_INDEX: [WORD], [DOC_ID], [WORD_COUNT], [DOC_LENGTH]
-        //  - FTS_DOC_WORD: [DOC_ID], [WORD], [WORD_COUNT], [DOC_LENGTH]
         const int64_t word_idx = is_fts_index_aux ? 0 : 1;
         const int64_t doc_id_idx = is_fts_index_aux ? 1 : 0;
         const int64_t word_cnt_idx = 2;
@@ -367,11 +384,14 @@ int ObDASDomainUtils::build_ft_doc_word_infos(
         if (OB_FAIL(word_rows.push_back(&rows[i]))) {
           LOG_WARN("fail to push back row", K(ret), K(rows[i]));
         } else {
-          LOG_DEBUG("succeed to add word row", K(ret), K(is_fts_index_aux), K(ft_word), K(word_cnt), K(i), K(rows[i]));
           ++i;
         }
       }
     }
+  }
+  // Reuse the map for the next row (clears entries, keeps buckets)
+  if (OB_NOT_NULL(tl_word_map)) {
+    tl_word_map->reuse();
   }
   return ret;
 }

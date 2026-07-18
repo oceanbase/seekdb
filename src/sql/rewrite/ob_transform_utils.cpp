@@ -14771,6 +14771,64 @@ bool ObTransformUtils::is_full_group_by(ObSelectStmt& stmt, ObSQLMode mode)
   return !stmt.has_order_by() && is_only_full_group_by_on(mode);
 }
 
+int ObTransformUtils::check_need_calc_match_score(ObExecContext *exec_ctx,
+                                                  const ObDMLStmt *stmt,
+                                                  ObRawExpr *match_expr,
+                                                  bool &need_calc,
+                                                  ObIArray<ObExprConstraint> &constraints)
+{
+  int ret = OB_SUCCESS;
+  ObSEArray<ObRawExpr *, 16> relation_exprs;
+  need_calc = false;
+  if (OB_ISNULL(exec_ctx) || OB_ISNULL(stmt) || OB_ISNULL(match_expr)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument", K(ret), KP(exec_ctx), KP(stmt), KP(match_expr));
+  } else if (OB_FAIL(stmt->get_relation_exprs(relation_exprs))) {
+    LOG_WARN("failed to collect relation expressions", K(ret));
+  }
+  for (int64_t i = 0; OB_SUCC(ret) && !need_calc && i < relation_exprs.count(); ++i) {
+    ObRawExpr *root_expr = relation_exprs.at(i);
+    ObSEArray<ObMatchFunRawExpr *, 2> match_exprs;
+    bool references_target = false;
+    bool used_as_condition = false;
+    bool root_needs_score = false;
+    if (OB_FAIL(ObRawExprUtils::extract_match_exprs(root_expr, match_exprs))) {
+      LOG_WARN("failed to extract match expressions", K(ret), K(i));
+    }
+    for (int64_t j = 0; OB_SUCC(ret) && !references_target && j < match_exprs.count(); ++j) {
+      references_target = match_exprs.at(j) == match_expr;
+    }
+    if (OB_FAIL(ret) || !references_target) {
+      // This relation expression does not use the target MATCH expression.
+    } else {
+      if (ObOptimizerUtil::find_item(stmt->get_condition_exprs(), root_expr)) {
+        used_as_condition = true;
+      } else if (stmt->is_select_stmt() && ObOptimizerUtil::find_item(
+          static_cast<const ObSelectStmt *>(stmt)->get_having_exprs(), root_expr)) {
+        used_as_condition = true;
+      } else if (OB_FAIL(check_expr_used_as_condition(stmt,
+                                                      root_expr,
+                                                      match_expr,
+                                                      used_as_condition))) {
+        LOG_WARN("failed to classify match expression usage", K(ret), K(i));
+      }
+      if (OB_FAIL(ret)) {
+      } else if (!used_as_condition) {
+        need_calc = true;
+      } else if (OB_FAIL(inner_check_need_calc_match_score(exec_ctx,
+                                                           root_expr,
+                                                           match_expr,
+                                                           root_needs_score,
+                                                           constraints))) {
+        LOG_WARN("failed to inspect match score usage", K(ret), K(i));
+      } else if (root_needs_score) {
+        need_calc = true;
+      }
+    }
+  }
+  return ret;
+}
+
 int ObTransformUtils::inner_check_need_calc_match_score(ObExecContext *exec_ctx,
                                                         ObRawExpr* expr, 
                                                         ObRawExpr* match_expr, 
@@ -14787,23 +14845,13 @@ int ObTransformUtils::inner_check_need_calc_match_score(ObExecContext *exec_ctx,
     need_calc = true;
     need_check_child = false;
   } else if (expr->get_expr_type() == T_OP_GT || expr->get_expr_type() == T_OP_LT) {
-    ObRawExpr *gt_param = NULL;
-    ObRawExpr *lt_param = NULL;
-    bool is_param_zero = false;
     if (expr->get_param_count() != 2 || OB_ISNULL(expr->get_param_expr(0)) || 
         OB_ISNULL(expr->get_param_expr(1))) {
       ret = OB_INVALID_ARGUMENT;
       LOG_WARN("invalid argument", K(ret));
-    } else if (OB_FALSE_IT(gt_param = expr->get_expr_type() == T_OP_GT ? expr->get_param_expr(0) : 
-                                                                         expr->get_param_expr(1))) {
-    } else if (OB_FALSE_IT(lt_param = expr->get_expr_type() == T_OP_GT ? expr->get_param_expr(1) : 
-                                                                         expr->get_param_expr(0))) {
-    } else if (gt_param != match_expr) {
-      /* do nothing */
-    } else if (OB_FAIL(check_expr_eq_zero(exec_ctx, lt_param, is_param_zero, constraints))) {
-      LOG_WARN("failed to check param eq zero", K(ret));
-    } else if (is_param_zero) {
-      need_calc = false;
+    } else if (expr->get_param_expr(0) == match_expr || expr->get_param_expr(1) == match_expr) {
+      // Comparisons consume the numeric MATCH value, even when the constant happens to be zero.
+      need_calc = true;
       need_check_child = false;
     }
   } else if (expr->get_expr_type() == T_OP_BOOL) {
@@ -14876,7 +14924,7 @@ int ObTransformUtils::check_expr_eq_zero(ObExecContext *ctx,
   return ret;
 }
 
-int ObTransformUtils::check_expr_used_as_condition(ObDMLStmt *stmt, 
+int ObTransformUtils::check_expr_used_as_condition(const ObDMLStmt *stmt,
                                                   ObRawExpr *root_expr, 
                                                   ObRawExpr *expr, 
                                                   bool &used_as_condition)
@@ -14894,7 +14942,7 @@ int ObTransformUtils::check_expr_used_as_condition(ObDMLStmt *stmt,
   } else if (ObOptimizerUtil::find_item(stmt->get_condition_exprs(), cur_expr)) {
     parent_as_condition = true;
   } else if (stmt->is_select_stmt() && ObOptimizerUtil::find_item(
-             static_cast<ObSelectStmt*>(stmt)->get_having_exprs(), cur_expr)) {
+             static_cast<const ObSelectStmt*>(stmt)->get_having_exprs(), cur_expr)) {
     parent_as_condition = true;
   }
   if (OB_SUCC(ret)) {

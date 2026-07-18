@@ -91,8 +91,6 @@ int ObExprTokenize::tokenize_fulltext(const TokenizeParam &param,
   int64_t doc_len = 0;
   ObFTWordMap token_map;
 
-  ObArenaAllocator tmp_parse_alloc(ObMemAttr("Tmp buffer"));
-
   if (TokenizeParam::OUTPUT_MODE::DEFAULT != mode && TokenizeParam::OUTPUT_MODE::ALL != mode) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("Invalid output mode", K(ret), K(mode));
@@ -114,16 +112,12 @@ int ObExprTokenize::tokenize_fulltext(const TokenizeParam &param,
     case TokenizeParam::OUTPUT_MODE::DEFAULT: {
       if (OB_FAIL(tokenize_helper.make_token_array_json(token_map, result))) {
         LOG_WARN("Fail to construct json array", K(ret));
-      } else {
-        // pass
       }
       break;
     }
     case TokenizeParam::OUTPUT_MODE::ALL: {
       if (OB_FAIL(tokenize_helper.make_detail_json(token_map, doc_len, result))) {
         LOG_WARN("Fail to construct detaild json", K(ret));
-      } else {
-        // pass
       }
       break;
     }
@@ -237,11 +231,12 @@ int ObExprTokenize::parse_param(const ObExpr &expr,
     LOG_WARN("Fail to parse parser params.", K(ret));
   } else if (OB_FAIL(parse_parser_properties(expr, ctx, temp_allocator, param))) {
     LOG_WARN("Fail to parse parser params.", K(ret));
-  } else if (OB_FAIL(param.reform_parser_properties(param.properties_))) {
-    LOG_WARN("Fail to reform parser params.", K(ret));
-  } else if (OB_FAIL(param.try_load_dictionary_for_ik())) {
-    LOG_WARN("fail to try load dictionary for ik", K(ret));
+  } else if (!param.properties_.empty()
+             && OB_FAIL(param.reform_parser_properties(param.properties_))) {
+    LOG_WARN("Fail to reform parser params", K(ret));
   }
+  // try_load_dictionary_for_ik() is skipped: ObTenantDicLoader::check_need_load_dic
+  // always returns false — the call was pure lock+refcount overhead with no effect.
   return ret;
 }
 

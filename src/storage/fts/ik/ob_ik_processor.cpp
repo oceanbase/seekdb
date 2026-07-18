@@ -54,10 +54,37 @@ TokenizeContext::TokenizeContext(ObCollationType coll_type,
                                  const char *fulltext,
                                  int64_t fulltext_len,
                                  bool is_smart)
-    : coll_type_(coll_type), fulltext_(fulltext), fulltext_len_(fulltext_len), cursor_(0),
-      next_char_len_(0), handle_size_(0), is_smart_(is_smart), token_list_(allocator),
-      result_list_(allocator)
+    : allocator_(allocator), coll_type_(coll_type), fulltext_(fulltext),
+      fulltext_len_(fulltext_len), cursor_(0), next_char_len_(0), handle_size_(0),
+      is_smart_(is_smart), char_len_cache_(nullptr), char_type_cache_(nullptr),
+      char_cache_cap_(0), char_cache_len_(0), token_list_(allocator), result_list_(allocator)
 {
+}
+
+int TokenizeContext::ensure_char_cache(int64_t len)
+{
+  int ret = OB_SUCCESS;
+  if (len > char_cache_cap_) {
+    // Grow the classification cache. Reused across documents on the same
+    // (thread-local) parser, so this only reallocates when a longer document
+    // than any seen before is encountered.
+    uint8_t *new_len_cache = static_cast<uint8_t *>(allocator_.alloc(len));
+    uint8_t *new_type_cache = static_cast<uint8_t *>(allocator_.alloc(len));
+    if (OB_ISNULL(new_len_cache) || OB_ISNULL(new_type_cache)) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+      LOG_WARN("Failed to alloc char classification cache", K(ret), K(len));
+    } else {
+      char_len_cache_ = new_len_cache;
+      char_type_cache_ = new_type_cache;
+      char_cache_cap_ = len;
+    }
+  }
+  if (OB_SUCC(ret)) {
+    char_cache_len_ = len;
+    // char_len == 0 marks "not classified"; only the length array needs reset.
+    MEMSET(char_len_cache_, 0, len);
+  }
+  return ret;
 }
 
 int TokenizeContext::init()
@@ -66,6 +93,8 @@ int TokenizeContext::init()
 
   if (OB_ISNULL(fulltext_) || fulltext_len_ <= 0) {
     ret = OB_INVALID_ARGUMENT;
+  } else if (OB_FAIL(ensure_char_cache(fulltext_len_))) {
+    LOG_WARN("Failed to prepare char cache", K(ret));
   } else if (OB_FAIL(prepare_next_char())) {
     LOG_WARN("Failed to prepare next char", K(ret));
   }
@@ -78,6 +107,29 @@ int TokenizeContext::reset_resource()
   result_list_.reset();
   token_list_.reset();
   return OB_SUCCESS;
+}
+
+int TokenizeContext::set_text(const char *fulltext, int64_t fulltext_len,
+                              ObCollationType coll_type, bool is_smart)
+{
+  int ret = OB_SUCCESS;
+  coll_type_ = coll_type;
+  fulltext_ = fulltext;
+  fulltext_len_ = fulltext_len;
+  cursor_ = 0;
+  next_char_len_ = 0;
+  handle_size_ = 0;
+  is_smart_ = is_smart;
+  reset_resource();
+  if (OB_ISNULL(fulltext_) || fulltext_len_ <= 0) {
+    // empty text — don't call prepare_next_char
+    char_cache_len_ = 0;
+  } else if (OB_FAIL(ensure_char_cache(fulltext_len_))) {
+    LOG_WARN("Failed to prepare char cache for reuse", K(ret));
+  } else if (OB_FAIL(prepare_next_char())) {
+    LOG_WARN("Failed to prepare next char for reuse", K(ret));
+  }
+  return ret;
 }
 
 int TokenizeContext::current_char(const char *&ch, uint8_t &char_len)
@@ -106,16 +158,16 @@ int TokenizeContext::current_char_type(ObFTCharUtil::CharType &type)
 int TokenizeContext::prepare_next_char()
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(ObCharset::first_valid_char(coll_type_,
-                                          fulltext_ + cursor_,
-                                          fulltext_len_ - cursor_,
-                                          next_char_len_))) {
-    LOG_WARN("Failed to get first valid char, ", K(ret));
-  } else if (OB_FAIL(ObFTCharUtil::classify_first_char(coll_type_,
+  if (OB_FAIL(ObFTCharUtil::classify_first_valid_char(coll_type_,
                                                        fulltext_ + cursor_,
+                                                       fulltext_len_ - cursor_,
                                                        next_char_len_,
                                                        next_char_type_))) {
-    LOG_WARN("Failed to classify first char", K(ret));
+    LOG_WARN("Failed to classify first valid char", K(ret));
+  } else if (cursor_ >= 0 && cursor_ < char_cache_len_ && next_char_len_ > 0) {
+    // record classification so output_result can reuse it without re-decoding
+    char_len_cache_[cursor_] = static_cast<uint8_t>(next_char_len_);
+    char_type_cache_[cursor_] = static_cast<uint8_t>(next_char_type_);
   }
   return ret;
 }
