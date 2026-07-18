@@ -17,6 +17,9 @@
 #define USING_LOG_PREFIX SQL_ENG
 
 #include "sql/engine/cmd/ob_alter_system_executor.h"
+#include "storage/fts/dict/ob_ft_dict_def.h"
+#include "storage/fts/dict/ob_ft_dict_hub.h"
+#include "storage/fts/ob_fts_plugin_helper.h"
 #include "share/rc/ob_module_provider.h"
 #include "rootserver/ob_rs_serial_call.h"
 #include "share/ob_ex_rpc.h"
@@ -498,6 +501,50 @@ int ObRefreshIOCalibraitonExecutor::execute(ObExecContext &ctx, ObRefreshIOCalib
     LOG_WARN("get task executor context failed");
   } else if (OB_FAIL(GCTX.root_service_->admin_refresh_io_calibration(stmt.get_rpc_arg()))) {
     LOG_WARN("refresh io calibration failed", K(ret), "rpc_arg", stmt.get_rpc_arg());
+  }
+  return ret;
+}
+
+int ObRefreshFulltextDictExecutor::execute(ObExecContext &ctx, ObRefreshFulltextDictStmt &stmt)
+{
+  int ret = OB_SUCCESS;
+  const ObSQLSessionInfo *session = ctx.get_my_session();
+  ObSchemaGetterGuard schema_guard;
+  const ObTableSchema *table_schema = nullptr;
+  ObString db_name = stmt.get_database_name();
+  ObString tbl_name = stmt.get_table_name();
+
+  if (OB_FAIL(ret)) {
+  } else if (OB_ISNULL(session)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("session is null", K(ret));
+  } else if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(schema_guard))) {
+    LOG_WARN("fail to get schema guard", K(ret));
+  } else if (FALSE_IT(db_name = (db_name.empty() ? session->get_database_name() : db_name))) {
+    // empty on purpose
+  } else if (OB_FAIL(schema_guard.get_table_schema(db_name, tbl_name, false/*is_index*/, table_schema))) {
+    LOG_WARN("fail to get table schema", K(ret), K(db_name), K(tbl_name));
+  } else if (OB_ISNULL(table_schema)) {
+    ret = OB_TABLE_NOT_EXIST;
+    LOG_WARN("table not exist", K(ret), K(db_name), K(tbl_name));
+  } else if (!table_schema->get_is_fulltext_dict_table()) {
+    ret = OB_OP_NOT_ALLOW;
+    LOG_USER_ERROR(OB_OP_NOT_ALLOW, "table is not a FULLTEXT DICT table");
+  } else {
+    storage::ObFTDictHub *hub = nullptr;
+    if (OB_FAIL(storage::ObFTParsePluginData::instance().get_dict_hub(hub))) {
+      LOG_WARN("fail to get dict hub", K(ret));
+    } else if (OB_ISNULL(hub)) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("dict hub is null", K(ret));
+    } else {
+      // Use table_id=0 to match the key stored by ObFTDictHub::build_cache/load_cache
+      // (those methods construct keys with table_id defaulting to 0).
+      storage::ObFTDictInfoKey key(static_cast<uint64_t>(storage::ObFTDictType::DICT_IK_CUSTOM), 0);
+      if (OB_FAIL(hub->invalidate(key))) {
+        LOG_WARN("fail to invalidate dict cache", K(ret));
+      }
+    }
   }
   return ret;
 }

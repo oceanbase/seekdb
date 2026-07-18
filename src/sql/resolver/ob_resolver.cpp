@@ -373,6 +373,10 @@ int ObResolver::resolve(IsPrepared if_prepared, const ParseNode &parse_tree, ObS
         REGISTER_STMT_RESOLVER(RefreshIOCalibration);
         break;
       }
+      case T_REFRESH_FULLTEXT_DICT: {
+        REGISTER_STMT_RESOLVER(RefreshFulltextDict);
+        break;
+      }
       case T_ALTER_SYSTEM_SET_PARAMETER: {
         REGISTER_STMT_RESOLVER(SetConfig);
         break;

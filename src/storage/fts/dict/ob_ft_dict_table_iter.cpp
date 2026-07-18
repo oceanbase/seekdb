@@ -77,8 +77,14 @@ int ObFTDictTableIter::init(const ObString &table_name)
   } else {
     SMART_VAR(ObSqlString, sql_string)
     {
-      if (OB_FAIL(sql_string.append("SELECT word FROM oceanbase."))) {
+      // If table_name already contains a '.' (e.g. "ai_ik_test.my_dict"),
+      // it's already qualified with a database name, so use it as-is.
+      // Otherwise prepend "oceanbase." for built-in dict tables.
+      bool has_dot = (NULL != memchr(table_name.ptr(), '.', table_name.length()));
+      if (OB_FAIL(sql_string.append("SELECT word FROM "))) {
         LOG_WARN("Failed to append sql", K(ret));
+      } else if (!has_dot && OB_FAIL(sql_string.append("oceanbase."))) {
+        LOG_WARN("Failed to append oceanbase prefix", K(ret));
       } else if (OB_FAIL(sql_string.append(table_name))) {
         LOG_WARN("Failed to append sql", K(ret));
       } else if (OB_FAIL(sql_string.append(" ORDER BY word"))) {

@@ -3251,6 +3251,15 @@ int ObDMLResolver::resolve_table(const ParseNode &parse_tree,
         }
         break;
       }
+      case T_AI_SPLIT_DOCUMENT_EXPRESSION: {
+        if (OB_ISNULL(session_info_)) {
+          ret = OB_INVALID_ARGUMENT;
+          LOG_WARN("invalid argument", K(ret));
+        } else if (OB_FAIL(resolve_ai_split_document_item(*table_node, table_item))) {
+          LOG_WARN("failed to resolve ai split document item", K(ret));
+        }
+        break;
+      }
       case T_HYBRID_SEARCH_EXPRESSION: {
         if (OB_ISNULL(session_info_)) {
           ret = OB_INVALID_ARGUMENT;
@@ -4301,6 +4310,132 @@ int ObDMLResolver::resolve_unnest_item(const ParseNode &parse_tree, TableItem *&
   return ret;
 }
 
+int ObDMLResolver::resolve_ai_split_document_item(const ParseNode &parse_tree, TableItem *&tbl_item)
+{
+  INIT_SUCC(ret);
+  TableItem *item = NULL;
+  ObRawExpr *content_expr = NULL;
+  ObRawExpr *params_expr = NULL;
+  ObString table_name("ai_split_document");
+  ColumnItem *chunk_id_col = NULL;
+  ColumnItem *chunk_offset_col = NULL;
+  ColumnItem *chunk_length_col = NULL;
+  ColumnItem *chunk_text_col = NULL;
+  static const ObString CHUNK_ID("chunk_id");
+  static const ObString CHUNK_OFFSET("chunk_offset");
+  static const ObString CHUNK_LENGTH("chunk_length");
+  static const ObString CHUNK_TEXT("chunk_text");
+
+  if (parse_tree.type_ != T_AI_SPLIT_DOCUMENT_EXPRESSION || parse_tree.num_child_ != 3
+      || OB_ISNULL(parse_tree.children_[0])) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("invalid ai split document parse tree", K(ret), K(parse_tree.type_), K(parse_tree.num_child_));
+  } else if (T_EXPR_LIST == parse_tree.children_[0]->type_) {
+    // Two arguments: children_[0] is T_EXPR_LIST with content and params
+    if (parse_tree.children_[0]->num_child_ != 2) {
+      ret = OB_INVALID_ARGUMENT;
+      LOG_WARN("ai split document requires 1 or 2 arguments", K(ret));
+    } else if (OB_FAIL(resolve_sql_expr(*parse_tree.children_[0]->children_[0], content_expr))) {
+      LOG_WARN("failed to resolve ai split document content", K(ret));
+    } else if (OB_ISNULL(content_expr)) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("ai split document content is null", K(ret));
+    } else if (OB_FAIL(content_expr->deduce_type(session_info_))) {
+      LOG_WARN("failed to deduce content type", K(ret));
+    } else if (!ob_is_string_type(content_expr->get_result_type().get_type())) {
+      ret = OB_ERR_INVALID_TYPE_FOR_OP;
+      LOG_WARN("ai split document content must be a string", K(ret), K(content_expr->get_result_type()));
+    } else if (OB_FAIL(resolve_sql_expr(*parse_tree.children_[0]->children_[1], params_expr))) {
+      LOG_WARN("failed to resolve ai split document parameters", K(ret));
+    } else if (OB_NOT_NULL(params_expr) && OB_FAIL(params_expr->deduce_type(session_info_))) {
+      LOG_WARN("failed to deduce parameters type", K(ret));
+    } else if (OB_NOT_NULL(params_expr) && !ob_is_string_type(params_expr->get_result_type().get_type())
+               && !ob_is_json(params_expr->get_result_type().get_type())) {
+      ret = OB_ERR_INVALID_TYPE_FOR_OP;
+      LOG_WARN("ai split document parameters must be JSON or a string", K(ret), K(params_expr->get_result_type()));
+    }
+  } else {
+    // Single argument: children_[0] is the content expression directly
+    if (OB_FAIL(resolve_sql_expr(*parse_tree.children_[0], content_expr))) {
+      LOG_WARN("failed to resolve ai split document content", K(ret));
+    } else if (OB_ISNULL(content_expr)) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("ai split document content is null", K(ret));
+    } else if (OB_FAIL(content_expr->deduce_type(session_info_))) {
+      LOG_WARN("failed to deduce content type", K(ret));
+    } else if (!ob_is_string_type(content_expr->get_result_type().get_type())) {
+      ret = OB_ERR_INVALID_TYPE_FOR_OP;
+      LOG_WARN("ai split document content must be a string", K(ret), K(content_expr->get_result_type()));
+    }
+  }
+
+  if (OB_SUCC(ret)) {
+    // handle alias name
+    if (OB_NOT_NULL(parse_tree.children_[2])) {
+      table_name.assign_ptr(parse_tree.children_[2]->str_value_, parse_tree.children_[2]->str_len_);
+    }
+  }
+
+  if (OB_FAIL(ret)) {
+  } else if (OB_FAIL(create_ai_split_document_table_item(item, table_name))) {
+    LOG_WARN("failed to create ai split document table", K(ret));
+  } else if (OB_FAIL(item->json_table_def_->doc_exprs_.push_back(content_expr))) {
+    LOG_WARN("failed to add content expression", K(ret));
+  } else if (OB_NOT_NULL(params_expr)
+             && OB_FAIL(item->json_table_def_->doc_exprs_.push_back(params_expr))) {
+    LOG_WARN("failed to add parameters expression", K(ret));
+  } else if (OB_FAIL(ai_split_document_table_add_column(item, chunk_id_col, CHUNK_ID, ObIntType))
+             || OB_FAIL(ai_split_document_table_add_column(item, chunk_offset_col, CHUNK_OFFSET, ObIntType))
+             || OB_FAIL(ai_split_document_table_add_column(item, chunk_length_col, CHUNK_LENGTH, ObIntType))
+             || OB_FAIL(ai_split_document_table_add_column(item, chunk_text_col, CHUNK_TEXT, ObVarcharType))) {
+    LOG_WARN("failed to add ai split document output column", K(ret));
+  } else {
+    tbl_item = item;
+  }
+  return ret;
+}
+
+int ObDMLResolver::create_ai_split_document_table_item(TableItem *&table_item, ObString table_name)
+{
+  return create_unnest_table_item(table_item, T_AI_SPLIT_DOCUMENT_EXPRESSION, table_name);
+}
+
+int ObDMLResolver::ai_split_document_table_add_column(TableItem *&table_item,
+                                                       ColumnItem *&col_item,
+                                                       ObString col_name,
+                                                       ObObjType obj_type)
+{
+  INIT_SUCC(ret);
+  ObDmlJtColDef *col_def = NULL;
+  ObDataType data_type;
+  const int64_t col_id = table_item->json_table_def_->all_cols_.count();
+  if (OB_ISNULL(col_def = static_cast<ObDmlJtColDef*>(allocator_->alloc(sizeof(ObDmlJtColDef))))) {
+    ret = OB_ALLOCATE_MEMORY_FAILED;
+    LOG_WARN("failed to allocate column definition", K(ret));
+  } else {
+    col_def = new (col_def) ObDmlJtColDef();
+    col_def->col_base_info_.col_name_ = col_name;
+    col_def->col_base_info_.col_type_ = COL_TYPE_AI_SPLIT_DOCUMENT;
+    col_def->col_base_info_.parent_id_ = 0;
+    col_def->col_base_info_.id_ = col_id;
+    col_def->col_base_info_.output_column_idx_ = col_id - 1;
+    data_type.set_obj_type(obj_type);
+    data_type.set_collation_level(CS_LEVEL_IMPLICIT);
+    if (obj_type == ObLongTextType) {
+      data_type.set_collation_type(CS_TYPE_UTF8MB4_BIN);
+    }
+    data_type.set_accuracy(ObAccuracy::DDL_DEFAULT_ACCURACY[obj_type]);
+    col_def->col_base_info_.data_type_ = data_type;
+  }
+  if (OB_SUCC(ret) && OB_FAIL(generate_json_table_output_column_item(table_item, data_type, col_name, col_id, col_item))) {
+    LOG_WARN("failed to create output column", K(ret));
+  } else if (OB_SUCC(ret) && OB_FALSE_IT(col_item->col_idx_ = table_item->json_table_def_->all_cols_.count())) {
+  } else if (OB_SUCC(ret) && OB_FAIL(table_item->json_table_def_->all_cols_.push_back(&col_def->col_base_info_))) {
+    LOG_WARN("failed to add output column definition", K(ret));
+  }
+  return ret;
+}
+
 int ObDMLResolver::create_rb_iterate_table_item(TableItem *&table_item, ObString alias_name)
 {
   INIT_SUCC(ret);
@@ -4405,6 +4540,8 @@ int ObDMLResolver::create_unnest_table_item(TableItem *&table_item, ObItemType i
       table_def->table_type_ = MulModeTableType::OB_RB_ITERATE_TABLE_TYPE;
     } else if (item_type == T_UNNEST_EXPRESSION) {
       table_def->table_type_ = MulModeTableType::OB_UNNEST_TABLE_TYPE;
+    } else if (item_type == T_AI_SPLIT_DOCUMENT_EXPRESSION) {
+      table_def->table_type_ = MulModeTableType::OB_AI_SPLIT_DOCUMENT_TABLE_TYPE;
     } else {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected item_type", K(ret), K(item_type));

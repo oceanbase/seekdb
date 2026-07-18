@@ -195,6 +195,22 @@ private:
   obcall::ObAdminRefreshIOCalibrationArg rpc_arg_;
 };
 
+class ObRefreshFulltextDictStmt : public ObSystemCmdStmt
+{
+public:
+  ObRefreshFulltextDictStmt()
+      : ObSystemCmdStmt(stmt::T_REFRESH_FULLTEXT_DICT), database_name_(), table_name_() {}
+  virtual ~ObRefreshFulltextDictStmt() {}
+  const ObString &get_database_name() const { return database_name_; }
+  const ObString &get_table_name() const { return table_name_; }
+  void set_database_name(const ObString &name) { database_name_ = name; }
+  void set_table_name(const ObString &name) { table_name_ = name; }
+  TO_STRING_KV(N_STMT_TYPE, ((int)stmt_type_), K_(database_name), K_(table_name));
+private:
+  ObString database_name_;
+  ObString table_name_;
+};
+
 class ObSetConfigStmt : public ObSystemCmdStmt
 {
 public:

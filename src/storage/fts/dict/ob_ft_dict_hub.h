@@ -52,11 +52,13 @@ struct ObFTDictInfoKey
 {
 public:
   ObFTDictInfoKey()
-      : type_(static_cast<uint64_t>(ObFTDictType::DICT_TYPE_INVALID))
+      : type_(static_cast<uint64_t>(ObFTDictType::DICT_TYPE_INVALID)),
+        table_id_(0)
   {
-  } // default constructor
-  ObFTDictInfoKey(const uint64_t type)
-      : type_(type)
+  }
+  ObFTDictInfoKey(const uint64_t type, const uint64_t table_id = 0)
+      : type_(type),
+        table_id_(table_id)
   {
   }
   int hash(uint64_t &hash_value) const
@@ -70,12 +72,13 @@ public:
   {
     uint64_t hash = 0;
     hash = common::murmurhash(&type_, sizeof(int64_t), hash);
+    hash = common::murmurhash(&table_id_, sizeof(uint64_t), hash);
     return hash;
   }
 
   bool operator==(const ObFTDictInfoKey &other) const
   {
-    return type_ == other.type_ && true;
+    return type_ == other.type_ && table_id_ == other.table_id_;
   }
 
   int compare(const ObFTDictInfoKey &other) const
@@ -84,12 +87,19 @@ public:
     if (0 == ret) {
       ret = type_ - other.type_;
     }
+    if (0 == ret) {
+      ret = table_id_ - other.table_id_;
+    }
     return ret;
   }
+
+  uint64_t get_type() const { return type_; }
+  uint64_t get_table_id() const { return table_id_; }
 
 private:
   uint64_t type_;
   // name
+  uint64_t table_id_;
 };
 
 class ObFTCacheRangeContainer;
@@ -104,8 +114,8 @@ public:
   int destroy();
 
   int build_cache(const ObFTDictDesc &desc, ObFTCacheRangeContainer &container);
-
   int load_cache(const ObFTDictDesc &desc, ObFTCacheRangeContainer &container);
+  int invalidate(const ObFTDictInfoKey &key);
 
 private:
   int get_dict_info(const ObFTDictInfoKey &key, ObFTDictInfo &info);

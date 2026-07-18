@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_RESV
 #include "sql/resolver/ddl/ob_alter_table_resolver.h"
+#include "sql/resolver/ddl/ob_fts_index_builder_util.h"
 #include "sql/resolver/expr/ob_raw_expr_part_expr_checker.h"
 #include "sql/resolver/dml/ob_delete_resolver.h"
 #include "sql/resolver/ddl/ob_index_builder_util.h"
@@ -160,6 +161,21 @@ int ObAlterTableResolver::resolve(const ParseNode &parse_tree)
           }
         }
         if (OB_FAIL(ret)) {
+        } else if (OB_NOT_NULL(table_schema_) && table_schema_->get_is_fulltext_dict_table()) {
+          // Prevent ALTER TABLE operations on dict tables that are referenced by FTS indexes
+          ObSchemaGetterGuard *sg = schema_checker_->get_schema_guard();
+          common::ObSEArray<uint64_t, 16> ref_index_ids;
+          if (OB_ISNULL(sg)) {
+            ret = OB_ERR_UNEXPECTED;
+            LOG_WARN("schema guard is null", K(ret));
+          } else if (OB_FAIL(ObFtsIndexBuilderUtil::find_fts_indexes_referencing_dict_table(
+              *sg, table_schema_->get_table_id(), ref_index_ids))) {
+            LOG_WARN("fail to check dict table references", K(ret));
+          } else if (!ref_index_ids.empty()) {
+            ret = OB_NOT_SUPPORTED;
+            LOG_USER_ERROR(OB_NOT_SUPPORTED, "ALTER TABLE on a fulltext dict table referenced by FULLTEXT INDEX");
+            LOG_WARN("cannot alter dict table referenced by FTS indexes", K(ret), K(ref_index_ids));
+          }
         } else if (OB_ISNULL(table_schema_)) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("table schema is NULL", K(ret));

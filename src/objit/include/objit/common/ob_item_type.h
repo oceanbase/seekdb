@@ -1057,6 +1057,7 @@ typedef enum ObItemType
   T_FUN_SYS_AI_RERANK = 2084,
   T_FUN_MD5_CNN_WS = 2085,
   T_FUN_SYS_BUCKET = 2086,
+  T_FUN_SYS_LOAD_FILE = 2087,
   T_MAX_OP = 3000,
 
   //pseudo column, to mark the group iterator id
@@ -2508,6 +2509,7 @@ typedef enum ObItemType
   T_COL_SKIP_INDEX_SUM = 4610,
   T_ALTER_SYSTEM_RESET = 4611,
   T_ALTER_SYSTEM_RESET_PARAMETER = 4612,
+  T_REFRESH_FULLTEXT_DICT = 4613,
 
   // fulltext index
   T_FUN_MATCH_AGAINST = 4617,
@@ -2878,6 +2880,8 @@ typedef enum ObItemType
   T_FUN_ES_SCORE = 4913, // fulltext index for ES SQL
   T_FUN_ES_MATCH = 4914, // fulltext index for ES SQL
   T_HYBRID_SEARCH_EXPRESSION = 4915,
+  T_AI_SPLIT_DOCUMENT_EXPRESSION = 4920,
+  T_FULLTEXT_DICT = 4921,
   T_FORK_TABLE = 4916,
   T_FORK_DATABASE = 4917,
   T_DIFF_TABLE = 4918,

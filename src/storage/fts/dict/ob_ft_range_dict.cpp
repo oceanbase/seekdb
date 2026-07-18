@@ -477,6 +477,10 @@ int ObFTRangeDict::build_cache(const ObFTDictDesc &desc, ObFTCacheRangeContainer
   case ObFTDictType::DICT_IK_STOP: {
     table_name = ObString(share::OB_FT_STOPWORD_IK_UTF8_TNAME);
   } break;
+  case ObFTDictType::DICT_IK_CUSTOM: {
+    // desc.name_ contains the user-specified table name (e.g. "ai_ik_test.my_dict")
+    table_name = desc.name_;
+  } break;
   default:
     ret = OB_NOT_SUPPORTED;
     LOG_WARN("Not supported dict type.", K(ret));

@@ -1336,6 +1336,7 @@ ObTableSchema::ObTableSchema(ObIAllocator *allocator)
     micro_block_format_version_(storage::ObMicroBlockFormatVersionHelper::DEFAULT_VERSION),
     micro_index_clustered_(false),
     enable_macro_block_bloom_filter_(false),
+    is_fulltext_dict_table_(false),
     local_session_vars_(allocator),
     index_params_(),
     exec_env_(),
@@ -1421,6 +1422,7 @@ int ObTableSchema::assign(const ObTableSchema &src_schema)
       max_used_column_group_id_ = src_schema.max_used_column_group_id_;
       micro_index_clustered_ = src_schema.micro_index_clustered_;
       enable_macro_block_bloom_filter_ = src_schema.enable_macro_block_bloom_filter_;
+      is_fulltext_dict_table_ = src_schema.is_fulltext_dict_table_;
       mlog_tid_ = src_schema.mlog_tid_;
       catalog_id_ = src_schema.catalog_id_;
       merge_engine_type_ = src_schema.merge_engine_type_;
@@ -3244,6 +3246,7 @@ void ObTableSchema::reset()
   virtual_column_cnt_ = 0;
   micro_index_clustered_ = false;
   enable_macro_block_bloom_filter_ = false;
+  is_fulltext_dict_table_ = false;
   micro_block_format_version_ = storage::ObMicroBlockFormatVersionHelper::DEFAULT_VERSION;
 
   cst_cnt_ = 0;
@@ -6250,6 +6253,7 @@ OB_DEF_SERIALIZE(ObTableSchema)
   OB_UNIS_ENCODE(micro_index_clustered_);
   OB_UNIS_ENCODE(mv_mode_);
   OB_UNIS_ENCODE(enable_macro_block_bloom_filter_);
+  OB_UNIS_ENCODE(is_fulltext_dict_table_);
   OB_UNIS_ENCODE(parser_properties_);
   OB_UNIS_ENCODE(storage_cache_policy_type_);
   OB_UNIS_ENCODE(storage_cache_policy_);
@@ -6491,6 +6495,7 @@ OB_DEF_DESERIALIZE(ObTableSchema)
   OB_UNIS_DECODE(micro_index_clustered_);
   OB_UNIS_DECODE(mv_mode_);
   OB_UNIS_DECODE(enable_macro_block_bloom_filter_);
+  OB_UNIS_DECODE(is_fulltext_dict_table_);
   OB_UNIS_DECODE_AND_FUNC(parser_properties_, deep_copy_str);
   OB_UNIS_DECODE(storage_cache_policy_type_);
   OB_UNIS_DECODE_AND_FUNC(storage_cache_policy_, deep_copy_str);

@@ -1620,6 +1620,8 @@ public:
   {
     enable_macro_block_bloom_filter_ = enable_macro_block_bloom_filter;
   }
+  inline bool get_is_fulltext_dict_table() const { return is_fulltext_dict_table_; }
+  inline void set_is_fulltext_dict_table(const bool v) { is_fulltext_dict_table_ = v; }
   inline int64_t get_virtual_column_cnt() const { return virtual_column_cnt_; }
   inline const_column_iterator column_begin() const { return column_array_; }
   inline const_column_iterator column_end() const { return NULL == column_array_ ? NULL : &(column_array_[column_cnt_]); }
@@ -2229,6 +2231,7 @@ protected:
   int64_t micro_block_format_version_;
   bool micro_index_clustered_;
   bool enable_macro_block_bloom_filter_;
+  bool is_fulltext_dict_table_;
 
   // column group
   bool is_column_store_supported_;

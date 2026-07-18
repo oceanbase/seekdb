@@ -2384,6 +2384,26 @@ int ObDDLResolver::resolve_table_option(const ParseNode *option_node, const bool
         }
         break;
       }
+      case T_FULLTEXT_DICT: {
+        if (OB_ISNULL(option_node->children_) || OB_ISNULL(option_node->children_[0])) {
+          ret = OB_ERR_UNEXPECTED;
+          SQL_RESV_LOG(WARN, "option_node child is null", K(ret));
+        } else {
+          ObString val_str(option_node->children_[0]->str_len_, option_node->children_[0]->str_value_);
+          bool is_dict = (0 == val_str.case_compare("Y"));
+          if (stmt::T_CREATE_TABLE == stmt_->get_stmt_type()) {
+            ObCreateTableArg &arg = static_cast<ObCreateTableStmt*>(stmt_)->get_create_table_arg();
+            arg.schema_.set_is_fulltext_dict_table(is_dict);
+          } else if (stmt::T_ALTER_TABLE == stmt_->get_stmt_type()) {
+            ret = OB_NOT_SUPPORTED;
+            SQL_RESV_LOG(WARN, "ALTER TABLE FULLTEXT_DICT is not supported", K(ret));
+            LOG_USER_ERROR(OB_NOT_SUPPORTED, "ALTER TABLE FULLTEXT_DICT");
+          } else {
+            ret = OB_ERR_UNEXPECTED;
+          }
+        }
+        break;
+      }
       case T_ORGANIZATION: {
         if (stmt_->get_stmt_type() == stmt::T_ALTER_TABLE) {
           ret = OB_NOT_SUPPORTED;

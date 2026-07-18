@@ -278,41 +278,82 @@ int ObIKFTParser::init_dict(const plugin::ObFTParserParam &param)
   }
 
   ObFTRangeDict *dict = nullptr;
-  ObFTDictDesc main_dict_desc("main_dict",
-                              ObFTDictType::DICT_IK_MAIN,
-                              ObCharsetType::CHARSET_UTF8MB4,
-                              ObCollationType::CS_TYPE_UTF8MB4_BIN);
-
-  ObFTDictDesc quan_dict_desc("quan_dict",
-                              ObFTDictType::DICT_IK_QUAN,
-                              ObCharsetType::CHARSET_UTF8MB4,
-                              ObCollationType::CS_TYPE_UTF8MB4_BIN);
-
-  ObFTDictDesc stopword_dict_desc("stopword",
-                                  ObFTDictType::DICT_IK_STOP,
+  const bool is_default_dict = (0 == param.ik_param_.main_dict_.case_compare("oceanbase.__ft_dict_ik_utf8"));
+  const bool has_custom_dict = !param.ik_param_.main_dict_.empty() && !is_default_dict;
+  // When dict_table_ is set to a user-specified table (not the default built-in),
+  // load custom words from that table as the main dictionary, REPLACING the built-in.
+  if (has_custom_dict) {
+    ObFTDictDesc custom_dict_desc(param.ik_param_.main_dict_,
+                                  ObFTDictType::DICT_IK_CUSTOM,
                                   ObCharsetType::CHARSET_UTF8MB4,
                                   ObCollationType::CS_TYPE_UTF8MB4_BIN);
-
-  if (should_read_newest_table()) {
-    // clear dict cache, always false now
+    if (OB_FAIL(init_single_dict(custom_dict_desc, cache_main_))) {
+      LOG_WARN("Failed to init custom dict", K(ret), K(param.ik_param_.main_dict_));
+    } else if (OB_FAIL(build_dict_from_cache(custom_dict_desc, cache_main_, dict_main_))) {
+      LOG_WARN("Failed to build custom dict", K(ret));
+    }
   } else {
+    ObFTDictDesc main_dict_desc("main_dict",
+                                ObFTDictType::DICT_IK_MAIN,
+                                ObCharsetType::CHARSET_UTF8MB4,
+                                ObCollationType::CS_TYPE_UTF8MB4_BIN);
     if (OB_FAIL(init_single_dict(main_dict_desc, cache_main_))) {
       LOG_WARN("Failed to init main dict", K(ret));
-    } else if (OB_FAIL(init_single_dict(quan_dict_desc, cache_quan_))) {
-      LOG_WARN("Failed to init quantifier dict", K(ret));
-    } else if (OB_FAIL(init_single_dict(stopword_dict_desc, cache_stop_))) {
-      LOG_WARN("Failed to init stopword dict", K(ret));
+    } else if (OB_FAIL(build_dict_from_cache(main_dict_desc, cache_main_, dict_main_))) {
+      LOG_WARN("Failed to build dict main", K(ret));
     }
   }
 
-  if (OB_FAIL(ret)) {
-    // already logged.
-  } else if (OB_FAIL(build_dict_from_cache(main_dict_desc, cache_main_, dict_main_))) {
-    LOG_WARN("Failed to build dict main", K(ret));
-  } else if (OB_FAIL(build_dict_from_cache(quan_dict_desc, cache_quan_, dict_quan_))) {
-    LOG_WARN("Failed to build dict quantifier", K(ret));
-  } else if (OB_FAIL(build_dict_from_cache(stopword_dict_desc, cache_stop_, dict_stop_))) {
-    LOG_WARN("Failed to build dict stopword", K(ret));
+  // Always load quantifier dict (from user table if specified, or built-in)
+  if (OB_SUCC(ret)) {
+    if (!param.ik_param_.quan_dict_.empty()
+        && 0 != param.ik_param_.quan_dict_.case_compare("oceanbase.__ft_quantifier_ik_utf8")) {
+      ObFTDictDesc quan_dict_desc(param.ik_param_.quan_dict_,
+                                  ObFTDictType::DICT_IK_CUSTOM,
+                                  ObCharsetType::CHARSET_UTF8MB4,
+                                  ObCollationType::CS_TYPE_UTF8MB4_BIN);
+      if (OB_FAIL(init_single_dict(quan_dict_desc, cache_quan_))) {
+        LOG_WARN("Failed to init custom quantifier dict", K(ret));
+      } else if (OB_FAIL(build_dict_from_cache(quan_dict_desc, cache_quan_, dict_quan_))) {
+        LOG_WARN("Failed to build custom quantifier dict", K(ret));
+      }
+    } else {
+      ObFTDictDesc quan_dict_desc("quan_dict",
+                                  ObFTDictType::DICT_IK_QUAN,
+                                  ObCharsetType::CHARSET_UTF8MB4,
+                                  ObCollationType::CS_TYPE_UTF8MB4_BIN);
+      if (OB_FAIL(init_single_dict(quan_dict_desc, cache_quan_))) {
+        LOG_WARN("Failed to init quantifier dict", K(ret));
+      } else if (OB_FAIL(build_dict_from_cache(quan_dict_desc, cache_quan_, dict_quan_))) {
+        LOG_WARN("Failed to build dict quantifier", K(ret));
+      }
+    }
+  }
+
+  // Stopword dict
+  if (OB_SUCC(ret)) {
+    if (!param.ik_param_.stopword_dict_.empty()
+        && 0 != param.ik_param_.stopword_dict_.case_compare("oceanbase.__ft_stopword_ik_utf8")) {
+      ObFTDictDesc stopword_dict_desc(param.ik_param_.stopword_dict_,
+                                      ObFTDictType::DICT_IK_CUSTOM,
+                                      ObCharsetType::CHARSET_UTF8MB4,
+                                      ObCollationType::CS_TYPE_UTF8MB4_BIN);
+      if (OB_FAIL(init_single_dict(stopword_dict_desc, cache_stop_))) {
+        LOG_WARN("Failed to init custom stopword dict", K(ret));
+      } else if (OB_FAIL(build_dict_from_cache(stopword_dict_desc, cache_stop_, dict_stop_))) {
+        LOG_WARN("Failed to build custom stopword dict", K(ret));
+      }
+    } else {
+      ObFTDictDesc stopword_dict_desc("stopword",
+                                      ObFTDictType::DICT_IK_STOP,
+                                      ObCharsetType::CHARSET_UTF8MB4,
+                                      ObCollationType::CS_TYPE_UTF8MB4_BIN);
+      if (OB_FAIL(init_single_dict(stopword_dict_desc, cache_stop_))) {
+        LOG_WARN("Failed to init stopword dict", K(ret));
+      } else if (OB_FAIL(build_dict_from_cache(stopword_dict_desc, cache_stop_, dict_stop_))) {
+        LOG_WARN("Failed to build dict stopword", K(ret));
+      }
+    }
   }
 
   return ret;
