@@ -92,7 +92,10 @@ int ObExprWordSegment::cg_expr(
   } else {
     ObEvalCtx::TempAllocGuard alloc_guard(eval_ctx);
     int64_t res_str_len = 0;
-    ObSEArray<ObString, 1> ft_parts;
+    // Most full-text indexes cover two or more columns.  Keep the common case
+    // inline so every source row does not allocate merely to concatenate the
+    // second indexed column.
+    ObSEArray<ObString, 4> ft_parts;
     const int64_t mb_max_len = cs->mbmaxlen;
     char mb_separator[mb_max_len];
     int32_t length_of_separator = 0;
@@ -124,8 +127,14 @@ int ObExprWordSegment::cg_expr(
     } else if (0 == ft_parts.count()) {
       expr_datum.set_null();
       LOG_TRACE("generate fulltext column is null", K(raw_ctx), K(eval_ctx), K(expr_datum));
-    } else if (OB_FAIL(ObCharset::wc_mb(raw_ctx.args_[0]->obj_meta_.get_collation_type(), wide_char, mb_separator,
-              mb_max_len, length_of_separator))) {
+    } else if (1 == ft_parts.count()) {
+      // The expanded string remains valid for the current row evaluation.
+      // Avoid allocating and copying the whole document for a single-column
+      // full-text index.
+      expr_datum.set_string(ft_parts.at(0));
+    } else if (ft_parts.count() > 1
+        && OB_FAIL(ObCharset::wc_mb(raw_ctx.args_[0]->obj_meta_.get_collation_type(), wide_char, mb_separator,
+                                   mb_max_len, length_of_separator))) {
       LOG_WARN("fail to wc_mb", K(ret), K(mb_max_len), KPHEX(mb_separator, mb_max_len));
     } else {
       res_str_len = res_str_len + length_of_separator * (ft_parts.count() - 1);

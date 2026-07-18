@@ -74,6 +74,9 @@ public:
   // Check if we can use rowkey instead of doc id.
   // if we want to add more types, make this one condition of them.
   static int determine_docid_type(const ObTableSchema &table_schema, ObDocIDType &doc_id_type);
+  static int check_fulltext_dict_schema(
+      const share::schema::ObTableSchema &table_schema,
+      const int64_t inline_index_count);
   static int check_need_doc_id(
       const ObTableSchema &table_schema,
       bool &need_doc_id);
@@ -154,6 +157,12 @@ public:
       bool &need_to_load_dic);
   static int try_load_and_lock_dictionary_tables(
       const ObTableSchema &index_schema,
+      ObMySQLTransaction &trans);
+  static int record_fts_dict_table_dependencies(
+      const ObTableSchema &index_schema,
+      ObMySQLTransaction &trans);
+  static int check_can_drop_dict_table(
+      const uint64_t dict_table_id,
       ObMySQLTransaction &trans);
   static int try_load_dictionary_for_all_tenants();
   static int check_supportability_for_loader_key(const ObString &parser_name,

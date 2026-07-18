@@ -250,6 +250,7 @@ static const NonReservedKeyword Mysql_none_reserved_keywords[] =
   {"deterministic", DETERMINISTIC},
   {"dense_rank", DENSE_RANK},
   {"diagnostics", DIAGNOSTICS},
+  {"dict", DICT},
   {"dict_table", DICT_TABLE},
   {"diff", DIFF},
   {"disallow", DISALLOW},
@@ -1162,6 +1163,8 @@ static const NonReservedKeyword Mysql_none_reserved_keywords[] =
   {"INCONSISTENT", INCONSISTENT},
   {"INDIVIDUAL", INDIVIDUAL},
   {"hybrid_search", HYBRID_SEARCH},
+  {"fulltext_dict", FULLTEXT_DICT},
+  {"ai_split_document", AI_SPLIT_DOCUMENT},
 };
 
 /** https://dev.mysql.com/doc/refman/5.7/en/sql-syntax-prepared-statements.html

@@ -18,11 +18,14 @@
 #define OCEANBASE_DAS_DOMAIN_UTILS_H
 
 #include "lib/allocator/page_arena.h"
+#include "lib/container/ob_se_array.h"
 #include "lib/hash/ob_hashset.h"
 #include "common/datum/ob_datum.h"
 #include "sql/das/ob_das_dml_ctx_define.h"
 #include "storage/fts/ob_fts_doc_word_iterator.h"
 #include "storage/fts/ob_fts_plugin_helper.h"
+#include "storage/fts/ob_ft_token_processor.h"
+#include "storage/fts/ob_i_ft_parser.h"
 
 namespace oceanbase
 {
@@ -48,12 +51,38 @@ public:
   int get_next_row(blocksstable::ObDatumRow *&row);
   void reset();
   void reuse();
-  TO_STRING_KV(K_(row_idx), K_(is_fts_index_aux), K_(helper), K_(is_inited), K_(rows));
+  TO_STRING_KV(K_(row_idx), K_(is_fts_index_aux), K_(helper), K_(is_inited),
+      K(token_map_.size()));
 private:
-  lib::MemoryContext merge_memctx_;
-  ObDomainIndexRow rows_;
+  int segment_with_builtin_parser(
+      const common::ObObjMeta &ft_obj_meta,
+      const char *fulltext,
+      const int64_t fulltext_len,
+      int64_t &doc_length);
+  int prepare_builtin_parser(
+      const common::ObObjMeta &ft_obj_meta,
+      const char *fulltext,
+      const int64_t fulltext_len);
+  int prepare_token_map(const int64_t fulltext_len);
+
+  static const int64_t FT_WORD_DOC_COL_CNT = 4;
+  static const int64_t FT_CHARS_PER_TOKEN = 4;
+  static const int64_t FT_TOKEN_MIN_BUCKET_COUNT = 2;
+  static const int64_t FT_TOKEN_MAX_BUCKET_COUNT = 997;
+  common::ObArenaAllocator metadata_allocator_;
+  common::ObArenaAllocator scratch_allocator_;
+  storage::ObFTTokenProcessor token_processor_;
+  blocksstable::ObDatumRow datum_row_;
+  storage::ObFTTokenMap token_map_;
+  storage::ObFTTokenMap::const_iterator token_iter_;
+  storage::ObFTTokenMap::const_iterator token_end_iter_;
+  int64_t token_map_bucket_count_;
   uint64_t row_idx_;
   bool is_fts_index_aux_;
+  bool is_builtin_parser_;
+  bool token_processor_inited_;
+  plugin::ObFTParserParam parser_param_;
+  plugin::ObITokenIterator *token_iterator_;
   storage::ObFTParseHelper helper_;
   bool is_inited_;
 
@@ -199,7 +228,7 @@ private:
       const common::ObObjMeta &meta,
       const ObString &fulltext,
       int64_t &doc_length,
-      ObFTWordMap &words_count);
+      storage::ObFTTokenMap &tokens);
   static int calc_save_rowkey_policy(
     ObIAllocator &allocator,
     const ObDASDMLBaseCtDef &das_ctdef,

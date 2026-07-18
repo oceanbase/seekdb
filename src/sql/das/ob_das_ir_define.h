@@ -510,6 +510,20 @@ public:
   int hash(uint64_t &hash_val) const;
   const ObDatum &get_datum() const;
   int from_datum(const ObDatum &datum);
+  OB_INLINE int from_datum_fast(const ObDatum &datum)
+  {
+    int ret = common::OB_SUCCESS;
+    datum_ = datum;
+    if (!datum_.is_null()) {
+      if (OB_UNLIKELY(datum_.len_ > OB_DOC_ID_EXT_SIZE)) {
+        ret = common::OB_BUF_NOT_ENOUGH;
+      } else {
+        MEMCPY(buf_, datum.ptr_, datum.len_);
+        datum_.ptr_ = buf_;
+      }
+    }
+    return ret;
+  }
   int from_obj(const ObObj &obj);
 
   ObDocIdExt &operator=(const ObDocIdExt &other);

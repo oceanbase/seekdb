@@ -286,6 +286,8 @@ ob_set_subtarget(ob_storage fts
   fts/ob_fts_doc_word_iterator.cpp
   fts/ob_fts_parser_property.cpp
   fts/ob_fts_plugin_helper.cpp
+  fts/ob_ft_token_processor.cpp
+  fts/ob_fts_stop_token_check.cpp
   fts/ob_fts_stop_word.cpp
   fts/ob_fts_struct.cpp
   fts/ob_ngram_ft_parser.cpp

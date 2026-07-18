@@ -18,6 +18,7 @@
 #define _OCEANBASE_STORAGE_FTS_OB_FTS_LITERAL_H_
 
 #include <cstdint>
+#include "share/inner_table/ob_inner_table_schema_constants.h"
 namespace oceanbase
 {
 namespace storage
@@ -36,7 +37,12 @@ public:
   static constexpr const char *CONFIG_NAME_NGRAM_TOKEN_SIZE = "ngram_token_size";
   static constexpr const char *CONFIG_NAME_STOPWORD_TABLE = "stopword_table";
   static constexpr const char *CONFIG_NAME_DICT_TABLE = "dict_table";
-  static constexpr const char *CONFIG_NAME_QUANTIFIER_TABLE = "quanitfier_table";
+  static constexpr const char *CONFIG_NAME_QUANTIFIER_TABLE = "quantifier_table";
+  // Compatibility for parser properties written before the spelling was fixed.
+  static constexpr const char *CONFIG_NAME_QUANTIFIER_TABLE_LEGACY = "quanitfier_table";
+  static constexpr const char *CONFIG_NAME_STOPWORD_TABLE_ID = "stopword_table_id";
+  static constexpr const char *CONFIG_NAME_DICT_TABLE_ID = "dict_table_id";
+  static constexpr const char *CONFIG_NAME_QUANTIFIER_TABLE_ID = "quantifier_table_id";
   static constexpr const char *CONFIG_NAME_IK_MODE = "ik_mode";
   static constexpr const char *CONFIG_NAME_MIN_NGRAM_SIZE = "min_ngram_size";
   static constexpr const char *CONFIG_NAME_MAX_NGRAM_SIZE = "max_ngram_size";

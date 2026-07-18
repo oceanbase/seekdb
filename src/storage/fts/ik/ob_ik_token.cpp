@@ -25,7 +25,8 @@ namespace oceanbase
 {
 namespace storage
 {
-int ObFTSortList::add_token(const ObIKToken &token)
+template <typename ListType>
+int ObFTSortListImpl<ListType>::add_token(const ObIKToken &token)
 {
   int ret = OB_SUCCESS;
 
@@ -44,7 +45,8 @@ int ObFTSortList::add_token(const ObIKToken &token)
       LOG_WARN("fail to push back token", K(ret));
     }
   } else {
-    for (ObFTSortList::CellIter iter = tokens_.last(); OB_SUCC(ret) && iter != tokens_.end();
+    for (typename ObFTSortListImpl<ListType>::CellIter iter = tokens_.last();
+         OB_SUCC(ret) && iter != tokens_.end();
          --iter) {
       if (token < *iter) {
         continue;
@@ -218,19 +220,24 @@ int ObIKTokenChain::pop_back(ObIKToken &token)
   return ret;
 }
 
-int64_t ObFTSortList::max()
+template <typename ListType>
+int64_t ObFTSortListImpl<ListType>::max()
 {
   if (tokens_.empty()) {
     return 0;
   }
   return tokens_.get_last().offset_ + tokens_.get_last().length_;
 }
-int64_t ObFTSortList::min()
+template <typename ListType>
+int64_t ObFTSortListImpl<ListType>::min()
 {
   if (tokens_.empty()) {
     return 0;
   }
   return tokens_.get_first().offset_;
 }
+
+template class ObFTSortListImpl<ObList<ObIKToken, ObIAllocator>>;
+template class ObFTSortListImpl<ObFastList<ObIKToken, IK_HANDLE_SIZE_LIMIT>>;
 } //  namespace storage
 } //  namespace oceanbase

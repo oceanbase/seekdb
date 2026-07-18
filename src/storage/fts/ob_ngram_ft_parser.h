@@ -19,7 +19,7 @@
 
 #include "lib/utility/ob_macro_utils.h"
 #include "lib/utility/ob_print_utils.h"
-#include "plugin/interface/ob_plugin_ftparser_intf.h"
+#include "storage/fts/ob_i_ft_parser.h"
 #include "storage/fts/utils/ob_ft_ngram_impl.h"
 
 namespace oceanbase
@@ -27,7 +27,7 @@ namespace oceanbase
 namespace storage
 {
 
-class ObNgramFTParser final : public plugin::ObITokenIterator
+class ObNgramFTParser final : public ObIFTParser
 {
 public:
   ObNgramFTParser();
@@ -40,6 +40,7 @@ public:
       int64_t &word_len,
       int64_t &char_len,
       int64_t &word_freq) override;
+  virtual int reuse_parser(const char *fulltext, const int64_t fulltext_len) override;
 
   VIRTUAL_TO_STRING_KV(K_(is_inited));
 

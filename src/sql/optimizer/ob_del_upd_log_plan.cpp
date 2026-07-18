@@ -1257,11 +1257,15 @@ int ObDelUpdLogPlan::get_ddl_sample_sort_column_count(int64_t &sample_sort_colum
     } else if (OB_ISNULL(table_item)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("table item of insert stmt is null", K(ret));
-    } else if (OB_FAIL(schema_guard->get_table_schema( table_item->ddl_table_id_, table_schema))) {
+    } else if (OB_FAIL(schema_guard->get_table_schema(table_item->ddl_table_id_, table_schema))) {
       LOG_WARN("get target table schema failed", K(ret), KPC(table_item));
     } else if (OB_ISNULL(table_schema)) {
       ret = OB_TABLE_NOT_EXIST;
       LOG_WARN("target table not exist", K(ret), KPC(table_item));
+    } else if (table_schema->is_fts_doc_word_aux()) {
+      // Repartition FTS doc-word rows by doc_id ranges while preserving the
+      // complete sort key for the final local sort performed by each worker.
+      sample_sort_column_count = 1;
     } else if (table_schema->is_unique_index()) {
       sample_sort_column_count = table_schema->get_index_column_num();
     }
