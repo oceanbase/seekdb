@@ -71,6 +71,7 @@ public:
       match_filter_(nullptr),
       relevance_expr_(nullptr),
       relevance_proj_col_(nullptr),
+      count_expr_(nullptr),
       avg_doc_token_cnt_expr_(nullptr),
       estimated_total_doc_cnt_(0),
       topk_limit_expr_(nullptr),
@@ -83,6 +84,7 @@ public:
       field_boost_expr_(nullptr) {}
   bool need_calc_relevance() const { return nullptr != relevance_expr_; }
   bool need_proj_relevance_score() const { return nullptr != relevance_proj_col_; }
+  bool is_count_only() const { return nullptr != count_expr_; }
   bool need_fwd_idx_agg() const { return has_fwd_agg_ && need_calc_relevance(); }
   bool need_inv_idx_agg() const { return has_inv_agg_ && need_calc_relevance(); }
   bool need_block_max_scan() const { return has_block_max_scan_; }
@@ -169,6 +171,7 @@ public:
                        KPC_(match_filter),
                        KPC_(relevance_expr),
                        KPC_(relevance_proj_col),
+                       KPC_(count_expr),
                        KPC_(avg_doc_token_cnt_expr),
                        K_(estimated_total_doc_cnt),
                        KPC_(topk_limit_expr),
@@ -184,6 +187,7 @@ public:
   ObExpr *match_filter_;
   ObExpr *relevance_expr_;
   ObExpr *relevance_proj_col_;
+  ObExpr *count_expr_;
   ObExpr *avg_doc_token_cnt_expr_;
   int64_t estimated_total_doc_cnt_;
   ObExpr *topk_limit_expr_;

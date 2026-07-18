@@ -95,6 +95,8 @@ protected:
   virtual int filter_on_demand(const int64_t count, const double relevance, bool &need_project);
   virtual int cache_result(int64_t &count, const ObDatum &id_datum, const double relevance);
   virtual int project_results(const int64_t count);
+  int get_next_count(int64_t &count);
+  int project_count(const int64_t matched_count);
   int init_merge_heap(const int64_t count);
   OB_INLINE bool predicate_only_fast_path() const
   {
@@ -114,6 +116,7 @@ protected:
   ObFixedArray<double, ObIAllocator> buffered_relevances_;
   ObFixedArray<int64_t, ObIAllocator> next_round_iter_idxes_;
   int64_t next_round_cnt_;
+  bool count_emitted_;
   void (*set_datum_func_)(ObDatum &, const ObDocIdExt &);
 private:
   DISALLOW_COPY_AND_ASSIGN(ObSRDaaTIterImpl);

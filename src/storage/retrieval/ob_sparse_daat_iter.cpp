@@ -105,6 +105,7 @@ ObSRDaaTIterImpl::ObSRDaaTIterImpl()
     buffered_relevances_(),
     next_round_iter_idxes_(),
     next_round_cnt_(0),
+    count_emitted_(false),
     set_datum_func_(nullptr)
 {
 }
@@ -147,10 +148,13 @@ int ObSRDaaTIterImpl::init(
       LOG_WARN("failed to init next round iter idxes array", K(ret));
     } else if (OB_FAIL(next_round_iter_idxes_.prepare_allocate(dim_iters.count()))) {
       LOG_WARN("failed to prepare allocate next round iter idxes array", K(ret));
-    } else if (FALSE_IT(buffered_domain_ids_.set_allocator(iter_allocator_))) {
-    } else if (OB_FAIL(buffered_domain_ids_.init(max_batch_size))) {
+    } else if (!iter_param_->is_count_only()
+        && FALSE_IT(buffered_domain_ids_.set_allocator(iter_allocator_))) {
+    } else if (!iter_param_->is_count_only()
+        && OB_FAIL(buffered_domain_ids_.init(max_batch_size))) {
       LOG_WARN("failed to init buffered domain ids array", K(ret));
-    } else if (OB_FAIL(buffered_domain_ids_.prepare_allocate(max_batch_size))) {
+    } else if (!iter_param_->is_count_only()
+        && OB_FAIL(buffered_domain_ids_.prepare_allocate(max_batch_size))) {
       LOG_WARN("failed to prepare allocate buffered domain ids array", K(ret));
     } else if (iter_param_->need_project_relevance()
         && FALSE_IT(buffered_relevances_.set_allocator(iter_allocator_))) {
@@ -172,6 +176,7 @@ int ObSRDaaTIterImpl::init(
 
     if (OB_SUCC(ret)) {
       next_round_cnt_ = dim_iters.count();
+      count_emitted_ = false;
       input_row_cnt_ = 0;
       output_row_cnt_ = 0;
       is_inited_ = true;
@@ -195,6 +200,7 @@ void ObSRDaaTIterImpl::reset()
   buffered_relevances_.reset();
   next_round_iter_idxes_.reset();
   next_round_cnt_ = 0;
+  count_emitted_ = false;
   input_row_cnt_ = 0;
   output_row_cnt_ = 0;
   is_inited_ = false;
@@ -215,6 +221,7 @@ void ObSRDaaTIterImpl::reuse(const bool switch_tablet)
   if (OB_NOT_NULL(relevance_collector_)) {
     relevance_collector_->reuse();
   }
+  count_emitted_ = false;
   input_row_cnt_ = 0;
   output_row_cnt_ = 0;
 }
@@ -265,6 +272,8 @@ int ObSRDaaTIterImpl::get_next_rows(const int64_t capacity, int64_t &count)
     LOG_WARN("not inited", K(ret));
   } else if (OB_UNLIKELY(0 == capacity)) {
     count = 0;
+  } else if (iter_param_->is_count_only()) {
+    ret = get_next_count(count);
   } else if (0 == dim_iters_->count()) {
     ret = OB_ITER_END;
   } else if (iter_param_->limit_param_->is_valid() && output_row_cnt_ >= iter_param_->limit_param_->limit_) {
@@ -292,6 +301,75 @@ int ObSRDaaTIterImpl::get_next_rows(const int64_t capacity, int64_t &count)
       }
     }
 
+  }
+  return ret;
+}
+
+int ObSRDaaTIterImpl::get_next_count(int64_t &count)
+{
+  int ret = OB_SUCCESS;
+  int64_t matched_count = 0;
+  count = 0;
+  if (count_emitted_) {
+    ret = OB_ITER_END;
+  } else if (0 == dim_iters_->count()) {
+    // A pushed COUNT(*) must still emit one partial row for an empty query.
+  } else if (OB_FAIL(pre_process())) {
+    if (OB_ITER_END == ret) {
+      ret = OB_SUCCESS;
+    } else {
+      LOG_WARN("failed to pre process count-only retrieval", K(ret));
+    }
+  }
+
+  while (OB_SUCC(ret) && dim_iters_->count() > 0) {
+    bool got_valid_id = false;
+    double relevance = 0.0;
+    const ObDatum *id_datum = nullptr;
+    if (OB_FAIL(fill_merge_heap())) {
+      if (OB_ITER_END == ret) {
+        ret = OB_SUCCESS;
+        break;
+      } else {
+        LOG_WARN("failed to fill count-only merge heap", K(ret));
+      }
+    } else if (OB_FAIL(collect_dims_by_id(id_datum, relevance, got_valid_id))) {
+      LOG_WARN("failed to collect count-only dimensions", K(ret));
+    } else if (got_valid_id) {
+      ++matched_count;
+    }
+  }
+
+  if (OB_SUCC(ret)) {
+    input_row_cnt_ += matched_count;
+    output_row_cnt_ += matched_count;
+    if (OB_FAIL(project_count(matched_count))) {
+      LOG_WARN("failed to project count-only result", K(ret), K(matched_count));
+    } else {
+      count = 1;
+      count_emitted_ = true;
+    }
+  }
+  return ret;
+}
+
+int ObSRDaaTIterImpl::project_count(const int64_t matched_count)
+{
+  int ret = OB_SUCCESS;
+  ObExpr *count_expr = iter_param_->count_expr_;
+  ObEvalCtx *eval_ctx = iter_param_->eval_ctx_;
+  if (OB_ISNULL(count_expr) || OB_ISNULL(eval_ctx)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected null count-only projection", K(ret), KP(count_expr), KP(eval_ctx));
+  } else {
+    ObEvalCtx::BatchInfoScopeGuard guard(*eval_ctx);
+    guard.set_batch_idx(0);
+    ObDatum &count_datum = count_expr->locate_datum_for_write(*eval_ctx);
+    count_datum.set_int(matched_count);
+    if (eval_ctx->is_vectorized()) {
+      count_expr->get_evaluated_flags(*eval_ctx).set(0);
+    }
+    count_expr->set_evaluated_projected(*eval_ctx);
   }
   return ret;
 }
