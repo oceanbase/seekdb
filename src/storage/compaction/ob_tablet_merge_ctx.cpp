@@ -183,7 +183,7 @@ void ObTabletMiniMergeCtx::try_schedule_compaction_after_mini(ObTabletHandle &ta
                               info_collector_.tnode_stat_.update_row_count_,
                               info_collector_.tnode_stat_.delete_row_count_,
                               create_dag))) {
-      LOG_WARN_RET(tmp_ret, "failed to schedule meta merge", K(get_dag_param()), "tnode_stat", info_collector_.tnode_stat_);
+      LOG_ERROR_RET(tmp_ret, "failed to schedule meta merge", K(get_dag_param()), "tnode_stat", info_collector_.tnode_stat_);
     }
 
     if (create_dag || 0 == get_merge_info().get_merge_history().get_macro_block_count()) {
@@ -191,7 +191,7 @@ void ObTabletMiniMergeCtx::try_schedule_compaction_after_mini(ObTabletHandle &ta
     } else if (OB_TMP_FAIL(ObTenantTabletScheduler::schedule_tablet_minor_merge<ObTabletMergeExecuteDag>(
         static_param_.ls_handle_, tablet_handle))) {
       if (OB_SIZE_OVERFLOW != tmp_ret) {
-        LOG_WARN_RET(tmp_ret, "failed to schedule special tablet minor merge",
+        LOG_ERROR_RET(tmp_ret, "failed to schedule special tablet minor merge",
                      "ls_id", get_ls_id(), "tablet_id", get_tablet_id());
       }
     }

@@ -528,7 +528,7 @@ int ObVectorIndexRefresher::do_refresh() {
             LOG_WARN("fail to assign sql", KR(ret));
           } else if (OB_FAIL(refresh_ctx_->trans_->write(freeze_sql.ptr(), affected_rows))) {
             ret = OB_SUCCESS;
-            LOG_WARN("fail to execute major freeze sql, continue other tablet id", K(tablet_id),
+            LOG_ERROR("fail to execute major freeze sql, continue other tablet id", K(tablet_id),
                       K(freeze_sql));
           } else {
             LOG_INFO("execute major freeze success", K(tablet_id), K(affected_rows));

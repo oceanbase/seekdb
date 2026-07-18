@@ -1107,7 +1107,7 @@ int ObResolverUtils::check_type_match(const pl::ObPLResolveCtx &resolve_ctx,
       if (!cast_supported(
         src_type, src_coll_type, dst_type, dst_pl_type.get_meta_type()->get_collation_type())) {
         ret = OB_ERR_INVALID_TYPE_FOR_OP;
-        LOG_WARN("inconsistent datatypes",
+        LOG_ERROR("inconsistent datatypes",
           K(ret), K(src_type), K(src_coll_type),
           K(dst_type), K(dst_pl_type.get_meta_type()->get_collation_type()));
       }
@@ -3431,7 +3431,7 @@ int ObResolverUtils::resolve_partition_list_value_expr(ObResolverParams &params,
   if (node.type_ == T_EXPR_LIST) {
     if (node.num_child_ != part_func_exprs.count()) {
       ret = OB_ERR_PARTITION_COLUMN_LIST_ERROR;
-      LOG_WARN("Inconsistency in usage of column lists for partitioning near", K(ret),
+      LOG_ERROR("Inconsistency in usage of column lists for partitioning near", K(ret),
                "node_child_num", node.num_child_, "part_func_expr", part_func_exprs.count());
     }
     for (int64_t i = 0; OB_SUCC(ret) && i < node.num_child_; i ++) {
@@ -3574,7 +3574,7 @@ int ObResolverUtils::resolve_partition_list_value_expr(ObResolverParams &params,
     if (OB_INVALID_COUNT != expr_num
         && node.num_child_ != expr_num) {
       ret = OB_ERR_PARTITION_COLUMN_LIST_ERROR;
-      LOG_WARN("Inconsistency in usage of column lists for partitioning near", K(ret), K(expr_num), "child_num", node.num_child_);
+      LOG_ERROR("Inconsistency in usage of column lists for partitioning near", K(ret), K(expr_num), "child_num", node.num_child_);
     } else {
       expr_num = node.num_child_;
     }

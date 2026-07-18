@@ -128,7 +128,7 @@ int ObForkTableUtil::collect_complete_domain_index_schemas(
           if (OB_HASH_EXIST == ret) {
             ret = OB_SUCCESS;
           } else {
-            LOG_WARN("fail to set complete index schema", K(ret), K(schema.get_table_id()));
+            LOG_ERROR("fail to set complete index schema", K(ret), K(schema.get_table_id()));
           }
         }
       }

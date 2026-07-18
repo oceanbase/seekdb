@@ -499,7 +499,7 @@ int ObFreezer::logstream_freeze()
     STORAGE_LOG(WARN, "[Freezer] not inited", K(ret), K(ls_id));
   } else if (OB_UNLIKELY(!enable_)) {
     ret = OB_NOT_RUNNING;
-    STORAGE_LOG(WARN, "freezer is offline, can not freeze now", K(ret), K(ls_id));
+    STORAGE_LOG(ERROR, "freezer is offline, can not freeze now", K(ret), K(ls_id));
   } else if (OB_FAIL(decide_max_decided_scn(max_decided_scn))) {
     STORAGE_LOG(WARN, "[Freezer] decide max decided log ts failure", K(ret), K(ls_id));
   } else if (OB_FAIL(get_ls_weak_read_scn(freeze_snapshot_version))) {
@@ -510,7 +510,7 @@ int ObFreezer::logstream_freeze()
     STORAGE_LOG(WARN, "[Freezer] invalid weak read scn", K(ret), K(ls_id), K(freeze_snapshot_version));
 #ifdef ERRSIM
   } else if (OB_FAIL(ret = ERRSIM_FREEZER_FREEZE_FAILURE)) {
-    LOG_WARN("[Freezer] errsim failure during freezer freeze", K(ret));
+    LOG_ERROR("[Freezer] errsim failure during freezer freeze", K(ret));
 #endif
   } else if (OB_FAIL(set_freeze_flag())) {
     FLOG_INFO("[Freezer] freeze is running", K(ret), K(ls_id));
@@ -539,7 +539,7 @@ void ObFreezer::try_submit_log_for_freeze_(const bool is_tablet_freeze)
   int ret = OB_SUCCESS;
 
   if (OB_FAIL(submit_log_for_freeze(is_tablet_freeze, true/*try*/))) {
-    TRANS_LOG(WARN, "fail to try submit log for freeze", K(ret));
+    TRANS_LOG(ERROR, "fail to try submit log for freeze", K(ret));
     set_need_resubmit_log(true);
   }
 }
@@ -690,7 +690,7 @@ void ObFreezer::submit_an_async_freeze_task(const bool is_ls_freeze)
 
   if (OB_UNLIKELY(!enable_) || OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_RUNNING;
-    LOG_WARN("freezer is offline, can not freeze now", K(ret), K(ls_id));
+    LOG_ERROR("freezer is offline, can not freeze now", K(ret), K(ls_id));
   } else if (OB_ISNULL(tenant_freezer = share::g_mp->tenant_freezer())) {
     ret = OB_ERR_UNEXPECTED;
     TRANS_LOG(WARN, "ObTenantFreezer is null", K(ret), K(ls_id));
@@ -866,7 +866,7 @@ int ObFreezer::tablet_freeze(const ObIArray<ObTabletID> &tablet_ids,
     ret = OB_NOT_INIT;
     STORAGE_LOG(WARN, "[Freezer] not inited", K(ret), K(ls_id), K(tablet_ids));
   } else if (OB_UNLIKELY(!enable_)) {
-    STORAGE_LOG(WARN, "[Freezer] freezer is offline, can not freeze now", K(ret), K(ls_id));
+    STORAGE_LOG(ERROR, "[Freezer] freezer is offline, can not freeze now", K(ret), K(ls_id));
   } else if (OB_FAIL(frozen_memtable_handles.reserve(tablet_ids.count()))) {
     TRANS_LOG(WARN, "fail to reserve memtable handles", K(ret), K(tablet_ids));
   } else if (OB_FAIL(freeze_failed_tablets.reserve(tablet_ids.count()))) {
@@ -1015,7 +1015,7 @@ int ObFreezer::set_tablet_freeze_flag_(const ObTabletID tablet_id,
     LOG_WARN("[Freezer] failed to get_protected_memtable_mgr_handle", K(ret), KPC(tablet));
 #ifdef ERRSIM
   } else if (frozen_memtable_handles.count() >= 1 && OB_FAIL(ret = ERRSIM_BATCH_TABLET_FREEZE_FAILURE)) {
-    LOG_WARN("[Freezer] errsim failure during freezer freeze", K(ret));
+    LOG_ERROR("[Freezer] errsim failure during freezer freeze", K(ret));
 #endif
   } else if (OB_FAIL(protected_handle->set_is_tablet_freeze_for_active_memtable(frozen_memtable_handle))) {
     (void)handle_set_tablet_freeze_failed(need_rewrite_meta, tablet_id, ls_id, tablet, freeze_snapshot_version, ret);
@@ -1051,7 +1051,7 @@ void ObFreezer::handle_set_tablet_freeze_failed(const bool need_rewrite_meta,
       stat_.add_diagnose_info("no need to freeze");
     }
   } else {
-    TRANS_LOG(WARN, "[Freezer] fail to set is_tablet_freeze", K(ret), K(ls_id), K(tablet_id));
+    TRANS_LOG(ERROR, "[Freezer] fail to set is_tablet_freeze", K(ret), K(ls_id), K(tablet_id));
     stat_.add_diagnose_info("fail to set is_tablet_freeze");
   }
 }
@@ -1165,7 +1165,7 @@ int ObFreezer::handle_no_active_memtable_(const ObTabletID &tablet_id,
                                                                                      co_major_merge_type))) {
         if (OB_SIZE_OVERFLOW != tmp_ret && OB_EAGAIN != tmp_ret) {
           ret = tmp_ret;
-          LOG_WARN("failed to schedule medium merge dag", K(ret), K(ls_id), K(tablet_id));
+          LOG_ERROR("failed to schedule medium merge dag", K(ret), K(ls_id), K(tablet_id));
         }
       } else {
         TRANS_LOG(INFO, "[Freezer] memtable_mgr doesn't have memtable", K(ret), K(ls_id), K(tablet_id));
@@ -1577,7 +1577,7 @@ int ObFreezer::get_max_consequent_callbacked_scn(SCN &max_consequent_callbacked_
       max_consequent_callbacked_scn.set_min();
       ret = OB_SUCCESS;
     } else {
-      TRANS_LOG(WARN, "[Freezer] fail to get min_unreplay_scn", K(ret), K(ls_id), K(max_consequent_callbacked_scn));
+      TRANS_LOG(ERROR, "[Freezer] fail to get min_unreplay_scn", K(ret), K(ls_id), K(max_consequent_callbacked_scn));
     }
   } else {
     TRANS_LOG(TRACE, "[Freezer] get_max_decided_scn", K(ret), K(ls_id), K(max_consequent_callbacked_scn));

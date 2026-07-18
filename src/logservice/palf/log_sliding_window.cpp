@@ -452,7 +452,7 @@ int LogSlidingWindow::submit_log(const char *buf,
              || !leader_can_submit_larger_log_(get_max_log_id() + 1)) {
     ret = OB_EAGAIN;
     if (REACH_TIME_INTERVAL(1000 * 1000)) {
-      PALF_LOG(WARN, "cannot submit new log now, try again", K(ret), K_(palf_id), K_(self),
+      PALF_LOG(ERROR, "cannot submit new log now, try again", K(ret), K_(palf_id), K_(self),
           K(valid_log_size), K(buf_len), "start_id", get_start_id(), "max_log_id", get_max_log_id());
     }
     // sw_ cannot submit larger log
@@ -1116,7 +1116,7 @@ int LogSlidingWindow::handle_next_submit_log_(bool &is_committed_lsn_updated)
               PALF_LOG(ERROR, "rollback_accum_checksum failed", K(ret), K_(palf_id), K_(self), KPC(log_task),
                   K(group_entry_header));
             }
-            PALF_LOG(WARN, "submit log failed", K(ret), K_(palf_id), K_(self), KPC(log_task), K(is_accum_checksum_acquired));
+            PALF_LOG(ERROR, "submit log failed", K(ret), K_(palf_id), K_(self), KPC(log_task), K(is_accum_checksum_acquired));
           }
           PALF_LOG(TRACE, "handle one submit log", K(ret), K_(palf_id), K_(self), K(tmp_log_id), K(is_committed_lsn_updated),
               K(is_need_submit), K(is_submitted));
@@ -3167,7 +3167,7 @@ int LogSlidingWindow::receive_log(const common::ObAddr &src_server,
       // and it's not continuous with last_submit_log_id, we cannot receive it.
       // Only logs whose proposal_id is equal to last_submit_log_pid can be cached into sw.
       ret = OB_EAGAIN;
-      PALF_LOG(WARN, "new log's proposal_id does not equal to last submit log's, and log_id is not continuous with last "\
+      PALF_LOG(ERROR, "new log's proposal_id does not equal to last submit log's, and log_id is not continuous with last "\
           "submit log, cannot receive(cache) it", K(ret), K_(palf_id), K_(self), K(log_id), K(log_proposal_id),
           K(prev_log_proposal_id), K(is_prev_log_exist), K(group_entry_header), K(last_submit_log_id), K(last_submit_log_pid));
     }
@@ -3440,7 +3440,7 @@ int LogSlidingWindow::submit_group_log(const LSN &lsn,
         ret = OB_EAGAIN;
       }
       if (REACH_TIME_INTERVAL(1000 * 1000)) {
-        PALF_LOG(WARN, "leader cannot submit group log", K(ret), K_(palf_id), K_(self), K(lsn), K(buf_len));
+        PALF_LOG(ERROR, "leader cannot submit group log", K(ret), K_(palf_id), K_(self), K(lsn), K(buf_len));
       }
     } else if (!group_entry_header.check_integrity(buf + LogGroupEntryHeader::HEADER_SER_SIZE,
           buf_len - LogGroupEntryHeader::HEADER_SER_SIZE, group_log_data_checksum)) {

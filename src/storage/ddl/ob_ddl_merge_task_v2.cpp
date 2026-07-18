@@ -53,7 +53,7 @@ int ObDDLMergeGuardTask::init(const bool for_replay, const ObTabletID &tablet_id
     LOG_WARN("bucket lock should not be null", K(ret));
   } else if (OB_FAIL(mtl_bucket_lock->lock(tablet_id))) {
     if (OB_EAGAIN == ret && !for_replay) {
-      LOG_WARN("failed to lock tablet, but execute again", K(ret), K(tablet_id));
+      LOG_ERROR("failed to lock tablet, but execute again", K(ret), K(tablet_id));
       ret = OB_DAG_TASK_IS_SUSPENDED;
     } else {
       LOG_WARN("failed to lock tablet", K(ret), K(tablet_id));

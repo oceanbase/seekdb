@@ -78,7 +78,7 @@ int ObMySQLTransaction::start(
     if (OB_FAIL(start_transaction(with_snapshot))) {
       set_errno(ret);
       close();
-      LOG_WARN("failed to start transaction", K(ret), K(with_snapshot));
+      LOG_ERROR("failed to start transaction", K(ret), K(with_snapshot));
     } else {
       in_trans_ = true;
       LOG_DEBUG("start transaction success", K(with_snapshot));
@@ -142,7 +142,7 @@ int ObMySQLTransaction::handle_trans_in_the_end(const int err_no)
   if (is_started()) {
     int tmp_ret = OB_SUCCESS;
     if (OB_TMP_FAIL(end(OB_SUCCESS == err_no))) {
-      LOG_WARN("trans end failed", "is_commit", OB_SUCCESS == err_no, K(tmp_ret));
+      LOG_ERROR("trans end failed", "is_commit", OB_SUCCESS == err_no, K(tmp_ret));
       ret = OB_SUCCESS == err_no ? tmp_ret : err_no;
     } else {
       ret = err_no;

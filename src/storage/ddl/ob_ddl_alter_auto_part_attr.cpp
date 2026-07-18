@@ -286,7 +286,7 @@ int ObAlterAutoPartAttrOp::alter_table_auto_part_attr_if_need(
       // for example, enable_auto_partition may change part_func_type if data table is not partitioned,
       // so need to sync aux tables' partition option
       } else if (!table_schema.is_partitioned_table() && OB_FAIL(sync_aux_tables_partition_option(table_schema, schema_guard, ddl_operator, trans, modified_index_type_ids))) {
-        LOG_WARN("failed to sync aux tables partition schema", K(ret));
+        LOG_ERROR("failed to sync aux tables partition schema", K(ret));
       } else if (OB_FAIL(ddl_operator.update_partition_option(trans, table_schema, alter_table_arg.ddl_stmt_str_))) {  // update main table
         LOG_WARN("fail to update partition option", K(ret), K(table_schema));
       } 

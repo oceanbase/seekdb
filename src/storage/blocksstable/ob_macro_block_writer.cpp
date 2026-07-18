@@ -1205,7 +1205,7 @@ int ObMacroBlockWriter::close(ObDagSliceMacroFlusher *macro_block_flusher)
     ret = OB_ERR_UNEXPECTED;
     STORAGE_LOG(WARN, "exceptional situation", K(ret), K_(data_store_desc), K_(micro_writer));
   } else if (micro_writer_->get_row_count() > 0 && OB_FAIL(build_micro_block())) {
-    STORAGE_LOG(WARN, "macro block writer fail to build current micro block.", K(ret));
+    STORAGE_LOG(ERROR, "macro block writer fail to build current micro block.", K(ret));
   } else {
     ObMacroBlock &current_block = macro_blocks_[current_index_];
     if (OB_SUCC(ret) && current_block.is_dirty()) {

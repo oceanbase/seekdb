@@ -44,7 +44,7 @@ int ObDicLock::lock_dic_tables_out_trans(const ObTenantDicLoader &dic_loader,
   if (trans.is_started()) {
     int tmp_ret = OB_SUCCESS;
     if (OB_SUCCESS != (tmp_ret = trans.end(OB_SUCC(ret)))) {
-      LOG_WARN("failed to commit trans", K(ret), K(tmp_ret));
+      LOG_ERROR("failed to commit trans", K(ret), K(tmp_ret));
       ret = OB_SUCC(ret) ? tmp_ret : ret;
     }
   }

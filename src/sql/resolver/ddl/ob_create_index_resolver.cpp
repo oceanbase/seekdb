@@ -794,7 +794,10 @@ int ObCreateIndexResolver::set_table_option_to_stmt(
       LOG_WARN("generate vec parser name failed", K(ret), K(index_arg));
     } else if (FTS_KEY == index_keyname_ &&
                OB_FAIL(ObFtsIndexBuilderUtil::generate_fts_parser_name_and_property(tbl_schema, index_arg,
-                                                                       allocator_))) {
+                                                                       allocator_,
+                                                                       OB_ISNULL(schema_checker_)
+                                                                           ? nullptr
+                                                                           : schema_checker_->get_schema_guard()))) {
       LOG_WARN("generate fts parser name failed", K(ret), K(index_arg));
     }
   }

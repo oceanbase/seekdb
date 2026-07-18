@@ -197,7 +197,7 @@ int ObDirectLoadDataBlockDecoder<Header>::prepare_data_block(char *buf, int64_t 
       const int64_t checksum = ob_crc64_sse42(0, buf + pos_, header_.occupy_size_ - pos_);
       if (OB_UNLIKELY(checksum != header_.checksum_)) {
         ret = common::OB_CHECKSUM_ERROR;
-        STORAGE_LOG(WARN, "fail to valid checksum", KR(ret), K(header_), K(checksum));
+        STORAGE_LOG(ERROR, "fail to valid checksum", KR(ret), K(header_), K(checksum));
       }
     }
     // do decompress

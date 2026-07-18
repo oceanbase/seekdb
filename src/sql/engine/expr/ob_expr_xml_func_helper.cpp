@@ -548,7 +548,7 @@ int ObXMLExprHelper::get_xml_base_from_expr(const ObExpr *expr,
     } else {
       ret = OB_ERR_INVALID_TYPE_FOR_OP;
       LOG_USER_ERROR(OB_ERR_INVALID_TYPE_FOR_OP, ob_obj_type_str(val_type), "xmltype");
-      LOG_WARN("inconsistent datatypes", K(ret), K(ob_obj_type_str(val_type)));
+      LOG_ERROR("inconsistent datatypes", K(ret), K(ob_obj_type_str(val_type)));
     }
   }
   return ret;

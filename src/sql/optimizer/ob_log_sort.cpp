@@ -25,6 +25,26 @@ using namespace oceanbase::common;
 
 #define MIN_TSC_OUTPUT_ROWS_FOR_PD_TOPN_FILTER 256
 
+namespace
+{
+bool is_fts_word_segment_sort_key(const ObRawExpr *expr)
+{
+  return OB_NOT_NULL(expr)
+      && (T_FUN_SYS_WORD_SEGMENT == expr->get_expr_type()
+          || (expr->is_column_ref_expr()
+              && static_cast<const ObColumnRefRawExpr *>(expr)->is_word_segment_column()));
+}
+
+bool has_fts_word_segment_sort_key(const ObIArray<OrderItem> &sort_keys)
+{
+  bool found = false;
+  for (int64_t i = 0; !found && i < sort_keys.count(); ++i) {
+    found = is_fts_word_segment_sort_key(sort_keys.at(i).expr_);
+  }
+  return found;
+}
+}
+
 int ObLogSort::set_sort_keys(const common::ObIArray<OrderItem> &order_keys)
 {
   int ret = OB_SUCCESS;
@@ -89,6 +109,7 @@ int ObLogSort::get_op_exprs(ObIArray<ObRawExpr*> &all_exprs)
   int ret = OB_SUCCESS;
   ObLogicalOperator *child = NULL;
   bool can_sort_opt = true;
+  bool force_fts_sortkey = false;
   if (OB_ISNULL(get_plan()) ||
       OB_ISNULL(child = get_child(ObLogicalOperator::first_child))) {
     ret = OB_ERR_UNEXPECTED;
@@ -99,9 +120,18 @@ int ObLogSort::get_op_exprs(ObIArray<ObRawExpr*> &all_exprs)
     LOG_WARN("failed to push back expr", K(ret));
   } else if (NULL != topk_offset_expr_ && OB_FAIL(all_exprs.push_back(topk_offset_expr_))) {
     LOG_WARN("failed to push back expr", K(ret));
+  } else if (FALSE_IT(force_fts_sortkey =
+      get_plan()->get_optimizer_context().is_online_ddl()
+      && has_fts_word_segment_sort_key(sort_keys_))) {
   } else if (OB_FAIL(ObOptimizerUtil::check_can_encode_sortkey(sort_keys_,
                               can_sort_opt, *get_plan(), child->get_card()))) {
     LOG_WARN("failed to check encode sortkey expr", K(ret));
+  } else if (FALSE_IT(can_sort_opt = can_sort_opt || force_fts_sortkey)) {
+    // Online index build disables the generic newsort path.  FTS word keys are
+    // a special case: they are variable-length VARCHAR values with a costly
+    // collation comparator, while the order-preserving encoder supports the
+    // exact VARCHAR/collation combination.  Precompute one binary sort key per
+    // posting instead of recalculating collation weights for every comparison.
   } else if (NULL != topn_expr_ && FALSE_IT(can_sort_opt = false)) {
     // do nothing
   } else if ((is_prefix_sort() ? get_prefix_pos() : get_part_cnt() == sort_keys_.count()) && 

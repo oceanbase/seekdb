@@ -132,7 +132,7 @@ int ObDDLHelperUtils::end_ddl_trans(ObMultiVersionSchemaService *schema_service,
     int tmp_ret = OB_SUCCESS;
     bool is_commit = OB_SUCC(ret);
     if (OB_TMP_FAIL(trans.end(is_commit))) {
-      LOG_WARN("trans end failed", KR(ret), KR(tmp_ret), K(is_commit));
+      LOG_ERROR("trans end failed", KR(ret), KR(tmp_ret), K(is_commit));
       ret = is_commit ? tmp_ret : ret;
     }
   }
@@ -433,7 +433,7 @@ int ObDDLHelper::execute()
    */
   if (OB_FAIL(ret)) {
   } else if (OB_ISNULL(external_trans_) && OB_FAIL(start_ddl_trans_())) {
-    LOG_WARN("fail to start ddl trans", KR(ret));
+    LOG_ERROR("fail to start ddl trans", KR(ret));
   }
   /* ----------------------------------------------
    * 2. lock object by name/object_id

@@ -973,10 +973,10 @@ int ObTabletForkReuseTask::process_reuse_sstable()
       LOG_WARN("init for fork failed", K(ret), K(param_->dest_tablet_id_), K(src_table_key), K(fork_snapshot_scn));
     } else if (param.table_key().is_co_sstable()
         && OB_FAIL(context_->create_sstable<ObCOSSTableV2>(param, table_handle))) {
-      LOG_WARN("failed to create co sstable with reused blocks", K(ret));
+      LOG_ERROR("failed to create co sstable with reused blocks", K(ret));
     } else if (!param.table_key().is_co_sstable()
         && OB_FAIL(context_->create_sstable(param, table_handle))) {
-      LOG_WARN("failed to create sstable with reused blocks", K(ret));
+      LOG_ERROR("failed to create sstable with reused blocks", K(ret));
     }
 
     if (OB_SUCC(ret)) {
@@ -1083,10 +1083,10 @@ int ObTabletForkRewriteTask::process()
           LOG_WARN("init create param failed", K(ret), K(max_end_scn));
         } else if (create_param.table_key().is_co_sstable()
             && OB_FAIL(context_->create_sstable<ObCOSSTableV2>(create_param, table_handle))) {
-          LOG_WARN("failed to create co sstable", K(ret));
+          LOG_ERROR("failed to create co sstable", K(ret));
         } else if (!create_param.table_key().is_co_sstable()
             && OB_FAIL(context_->create_sstable(create_param, table_handle))) {
-          LOG_WARN("failed to create sstable", K(ret));
+          LOG_ERROR("failed to create sstable", K(ret));
         }
         if (OB_SUCC(ret)) {
           if (OB_FAIL(context_->add_created_sstable(table_handle))) {
@@ -1731,7 +1731,7 @@ int ObTabletForkUtil::try_schedule_fork_dags(const ObTableForkInfo &fork_info)
       if (OB_FAIL(compaction::ObScheduleDagFunc::schedule_tablet_fork_dag(fork_param, false /* is_emergency */))) {
         if (OB_SIZE_OVERFLOW != ret && OB_EAGAIN != ret) {
           ++fail_cnt;
-          LOG_WARN("failed to schedule tablet fork dag", K(ret), K(fork_param));
+          LOG_ERROR("failed to schedule tablet fork dag", K(ret), K(fork_param));
         } else if (OB_EAGAIN == ret) {
           ++exist_cnt;
           LOG_DEBUG("exists same dag, wait the dag to finish", K(ret), K(fork_param));
@@ -1783,7 +1783,7 @@ int ObTabletForkUtil::freeze_tablet(
         ret = OB_SUCCESS;
         LOG_INFO("tablet freeze in progress", K(tablet_id));
       } else {
-        LOG_WARN("failed to freeze tablet", K(ret), K(tablet_id));
+        LOG_ERROR("failed to freeze tablet", K(ret), K(tablet_id));
       }
     } else {
       LOG_INFO("tablet freeze completed", K(tablet_id));

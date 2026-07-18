@@ -790,7 +790,7 @@ int ObVectorRefreshIndexExecutor::do_refresh() {
   if (trans.is_started()) {
     int tmp_ret = OB_SUCCESS;
     if (OB_SUCCESS != (tmp_ret = trans.end(OB_SUCC(ret)))) {
-      LOG_WARN("failed to commit trans", KR(ret), KR(tmp_ret));
+      LOG_ERROR("failed to commit trans", KR(ret), KR(tmp_ret));
       ret = COVER_SUCC(tmp_ret);
     }
   }
@@ -828,7 +828,7 @@ int ObVectorRefreshIndexExecutor::do_refresh_with_retry()
     if (trans.is_started()) {
       int tmp_ret = OB_SUCCESS;
       if (OB_SUCCESS != (tmp_ret = trans.end(OB_SUCC(ret)))) {
-        LOG_WARN("failed to commit trans", KR(ret), KR(tmp_ret));
+        LOG_ERROR("failed to commit trans", KR(ret), KR(tmp_ret));
         ret = COVER_SUCC(tmp_ret);
       }
     }
@@ -876,7 +876,7 @@ int ObVectorRefreshIndexExecutor::do_rebuild() {
   if (trans.is_started()) {
     int tmp_ret = OB_SUCCESS;
     if (OB_SUCCESS != (tmp_ret = trans.end(OB_SUCC(ret)))) {
-      LOG_WARN("failed to commit trans", KR(ret), KR(tmp_ret));
+      LOG_ERROR("failed to commit trans", KR(ret), KR(tmp_ret));
       ret = COVER_SUCC(tmp_ret);
     }
   }
@@ -918,7 +918,7 @@ int ObVectorRefreshIndexExecutor::do_rebuild_with_retry()
     if (trans.is_started()) {
       int tmp_ret = OB_SUCCESS;
       if (OB_SUCCESS != (tmp_ret = trans.end(OB_SUCC(ret)))) {
-        LOG_WARN("failed to commit trans", KR(ret), KR(tmp_ret));
+        LOG_ERROR("failed to commit trans", KR(ret), KR(tmp_ret));
         ret = COVER_SUCC(tmp_ret);
       }
     }

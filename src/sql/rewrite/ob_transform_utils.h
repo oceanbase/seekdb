@@ -1885,6 +1885,11 @@ public:
   static int check_contain_lost_deterministic_expr(const ObIArray<ObRawExpr*> &exprs,
                                                    bool &is_contain);
   // check whether the score calculated by match expr is actually utilized
+  // FTS PERF OPT 1: keep this analysis conservative. A score is considered
+  // required unless every occurrence of MATCH is a truth-only predicate.
+  static int check_match_score_required(const ObDMLStmt *stmt,
+                                        ObRawExpr *match_expr,
+                                        bool &score_required);
   static int check_expr_eq_zero(ObExecContext *ctx,
                                 ObRawExpr *expr, 
                                 bool &eq_zero, 
@@ -1893,7 +1898,7 @@ public:
                                            const ObIArray<ObRawExpr*> &raw_having_exprs,
                                            const ObIArray<ObRawExpr*> &group_clause_exprs,
                                            ObIArray<ObRawExpr*> &having_exprs_for_deduce);
-  static int check_expr_used_as_condition(ObDMLStmt *stmt, 
+  static int check_expr_used_as_condition(const ObDMLStmt *stmt,
                                           ObRawExpr *root_expr, 
                                           ObRawExpr *expr,
                                           bool &used_as_condition);

@@ -660,7 +660,7 @@ int ObFtsIndexBuildTask::prepare_aux_index_tables()
     if (trans.is_started()) {
       int tmp_ret = OB_SUCCESS;
       if (OB_SUCCESS != (tmp_ret = trans.end(OB_SUCC(ret)))) {
-        LOG_WARN("failed to commit trans", K(ret), K(tmp_ret));
+        LOG_ERROR("failed to commit trans", K(ret), K(tmp_ret));
         ret = OB_SUCC(ret) ? tmp_ret : ret;
       }
     }
@@ -897,7 +897,7 @@ int ObFtsIndexBuildTask::load_dictionary()
   if (trans.is_started()) {
     int tmp_ret = OB_SUCCESS;
     if (OB_SUCCESS != (tmp_ret = trans.end(OB_SUCC(ret)))) {
-      LOG_WARN("failed to commit trans", K(ret), K(tmp_ret));
+      LOG_ERROR("failed to commit trans", K(ret), K(tmp_ret));
       ret = OB_SUCC(ret) ? tmp_ret : ret;
     }
   }
@@ -2022,7 +2022,7 @@ int ObFtsIndexBuildTask::cleanup_impl()
     if (trans.is_started()) {
       int tmp_ret = OB_SUCCESS;
       if (OB_SUCCESS != (tmp_ret = trans.end(OB_SUCC(ret)))) {
-        LOG_WARN("failed to commit trans", KR(ret), KR(tmp_ret));
+        LOG_ERROR("failed to commit trans", KR(ret), KR(tmp_ret));
         ret = OB_SUCC(ret) ? tmp_ret : ret;
       }
     }

@@ -689,7 +689,7 @@ int ObPLBuilder::update_schema_object_dep_info(ObIArray<ObSchemaObjVersion> &dp_
     if (trans.is_started()) {
       int temp_ret = OB_SUCCESS;
       if (OB_SUCCESS != (temp_ret = trans.end(OB_SUCC(ret)))) {
-        LOG_WARN("trans end failed", "is_commit", OB_SUCCESS == ret, K(ret), K(temp_ret));
+        LOG_ERROR("trans end failed", "is_commit", OB_SUCCESS == ret, K(ret), K(temp_ret));
         ret = OB_SUCC(ret) ? temp_ret : ret;
       }
     }
@@ -1520,7 +1520,7 @@ ObPLBuilderEnvGuard::~ObPLBuilderEnvGuard()
   if (need_reset_exec_env_) {
     if ((ret = old_exec_env_.store(session_info_)) != OB_SUCCESS) {
       ret_ = OB_SUCCESS == ret_ ? ret : ret_;
-      LOG_WARN("failed to restore exec env in pl env guard", K(ret), K(ret_), K(old_exec_env_));
+      LOG_ERROR("failed to restore exec env in pl env guard", K(ret), K(ret_), K(old_exec_env_));
     }
   }
   if (need_reset_default_database_) {

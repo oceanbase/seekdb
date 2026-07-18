@@ -370,7 +370,9 @@ int ObTextRetrievalTokenIter::get_next_row()
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     LOG_WARN("retrieval token iterator not inited", K(ret));
-  } else if (!token_doc_cnt_calculated_ && OB_FAIL(estimate_token_doc_cnt())) {
+  } else if (need_calc_relevance()
+      && !token_doc_cnt_calculated_
+      && OB_FAIL(estimate_token_doc_cnt())) {
     LOG_WARN("failed to estimate token doc cnt", K(ret));
   } else if (OB_FAIL(inv_idx_scan_iter_->get_next_row())) {
     if (OB_UNLIKELY(OB_ITER_END != ret)) {
@@ -455,7 +457,9 @@ int ObTextRetrievalTokenIter::get_next_batch(const int64_t capacity, int64_t &co
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     LOG_WARN("retrieval token iterator not inited", K(ret));
-  } else if (!token_doc_cnt_calculated_ && OB_FAIL(estimate_token_doc_cnt())) {
+  } else if (need_calc_relevance()
+      && !token_doc_cnt_calculated_
+      && OB_FAIL(estimate_token_doc_cnt())) {
     LOG_WARN("failed to estimate token doc cnt", K(ret));
   } else if (OB_FAIL(inv_idx_scan_iter_->get_next_rows(count, OB_MIN(max_batch_size_, capacity)))) {
     if (OB_UNLIKELY(OB_ITER_END != ret)) {
@@ -687,6 +691,7 @@ ObTextRetrievalDaaTTokenIter::ObTextRetrievalDaaTTokenIter()
     count_(0),
     relevance_(),
     doc_id_(),
+    doc_id_data_(nullptr),
     cmp_func_(nullptr),
     is_inited_(false)
 {
@@ -717,16 +722,20 @@ int ObTextRetrievalDaaTTokenIter::init(const ObTextRetrievalScanIterParam &iter_
       if (OB_ISNULL(cmp_func_)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("failed to init IRIterLoserTreeCmp", K(ret));
-      } else if (FALSE_IT(relevance_.set_allocator(allocator_))) {
-      } else if (OB_FAIL(relevance_.init(max_batch_size_))) {
+      } else if (OB_NOT_NULL(relevance_expr_)
+          && FALSE_IT(relevance_.set_allocator(allocator_))) {
+      } else if (OB_NOT_NULL(relevance_expr_)
+          && OB_FAIL(relevance_.init(max_batch_size_))) {
         LOG_WARN("failed to init next batch iter idxes array", K(ret));
-      } else if (OB_FAIL(relevance_.prepare_allocate(max_batch_size_))) {
+      } else if (OB_NOT_NULL(relevance_expr_)
+          && OB_FAIL(relevance_.prepare_allocate(max_batch_size_))) {
         LOG_WARN("failed to prepare allocate next batch iter idxes array", K(ret));
       } else if (FALSE_IT(doc_id_.set_allocator(allocator_))) {
       } else if (OB_FAIL(doc_id_.init(max_batch_size_))) {
         LOG_WARN("failed to init next batch iter idxes array", K(ret));
       } else if (OB_FAIL(doc_id_.prepare_allocate(max_batch_size_))) {
         LOG_WARN("failed to prepare allocate next batch iter idxes array", K(ret));
+      } else if (FALSE_IT(doc_id_data_ = &doc_id_[0])) {
       } else {
         is_inited_ = true;
       }
@@ -746,6 +755,7 @@ void ObTextRetrievalDaaTTokenIter::reset()
 {
   relevance_.reset();
   doc_id_.reset();
+  doc_id_data_ = nullptr;
   token_iter_->reset();
   cur_idx_ = -1;
   count_ = 0;
@@ -798,7 +808,7 @@ int ObTextRetrievalDaaTTokenIter::save_relevances_and_docids()
     for (int64_t i = 0; OB_SUCC(ret) && i < count_; ++i) {
       if (OB_LIKELY(!token_iter_->get_skip()->at(i))) {
         relevance_[i] = relevance_datum.at(i)->get_double();
-        if (OB_FAIL(doc_id_[i].from_datum(*doc_id_datum.at(i)))) {
+        if (OB_FAIL(doc_id_data_[i].from_datum(*doc_id_datum.at(i)))) {
           LOG_WARN("failed to get doc id", K(ret), K(doc_id_datum.at(i)));
         }
       }
@@ -817,12 +827,49 @@ int ObTextRetrievalDaaTTokenIter::save_docids()
     cur_idx_ = 0;
     const ObDatumVector &doc_id_datum = inv_scan_domain_id_col_->locate_expr_datumvector(*eval_ctx_);
     for (int64_t i = 0; OB_SUCC(ret) && i < count_; ++i) {
-      if (OB_LIKELY(!token_iter_->get_skip()->at(i))) {
-        if (OB_FAIL(doc_id_[i].from_datum(*doc_id_datum.at(i)))) {
-          LOG_WARN("failed to get doc id", K(ret));
-        };
+      // FTS PERF OPT 1: skip_ exists only for score evaluation. A truth-only
+      // scan has no score rows to discard, so copy every document id.
+      if (OB_FAIL(doc_id_data_[i].from_datum(*doc_id_datum.at(i)))) {
+        LOG_WARN("failed to get doc id", K(ret));
       }
     }
+  }
+  return ret;
+}
+
+bool ObTextRetrievalDaaTTokenIter::supports_id_batch() const
+{
+  return is_inited_ && nullptr != eval_ctx_ && eval_ctx_->is_vectorized()
+      && nullptr == relevance_expr_;
+}
+
+int ObTextRetrievalDaaTTokenIter::get_next_id_batch(
+    const ObDocIdExt *&doc_ids,
+    int64_t &count)
+{
+  int ret = OB_SUCCESS;
+  doc_ids = nullptr;
+  count = 0;
+  count_ = 0;
+  cur_idx_ = -1;
+  if (OB_UNLIKELY(!supports_id_batch())) {
+    ret = OB_NOT_SUPPORTED;
+    LOG_WARN("id batch is not supported by token iterator", K(ret), K_(is_inited),
+             KP_(eval_ctx), KP_(relevance_expr));
+  } else if (OB_FAIL(token_iter_->get_next_batch(max_batch_size_, count_))) {
+    if (OB_UNLIKELY(OB_ITER_END != ret)) {
+      LOG_WARN("failed to get posting batch", K(ret));
+    }
+  } else if (OB_UNLIKELY(count_ <= 0)) {
+    ret = OB_ITER_END;
+  } else if (OB_FAIL(save_docids())) {
+    LOG_WARN("failed to retain posting batch doc ids", K(ret), K_(count));
+  } else {
+    // FTS PERF OPT 9: doc_id_ owns the batch, so the merge iterator can keep
+    // direct cursors until it requests the next batch from this dimension.
+    doc_ids = doc_id_data_;
+    count = count_;
+    cur_idx_ = count_;
   }
   return ret;
 }
@@ -844,7 +891,7 @@ int ObTextRetrievalDaaTTokenIter::advance_to(const ObDatum &id_datum)
   }
   while (OB_SUCC(ret) && !find) {
     if (cur_idx_ < count_) {
-      if (OB_FAIL(cmp_func_(id_datum, doc_id_[cur_idx_].get_datum(), result))) {
+      if (OB_FAIL(cmp_func_(id_datum, doc_id_data_[cur_idx_].get_datum(), result))) {
         LOG_WARN("failed to compare datum", K(ret));
       } else if (result <= 0) {
         find = true;
@@ -862,7 +909,7 @@ int ObTextRetrievalDaaTTokenIter::advance_to(const ObDatum &id_datum)
     } else if (cur_idx_ != 0) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected result", K(ret), K(result));
-    } else if (OB_FAIL(cmp_func_(id_datum, doc_id_[cur_idx_].get_datum(), result))) {
+    } else if (OB_FAIL(cmp_func_(id_datum, doc_id_data_[cur_idx_].get_datum(), result))) {
       LOG_WARN("failed to compare datum", K(ret));
     } else if (result <= 0) {
       find = true;
@@ -893,7 +940,7 @@ int ObTextRetrievalDaaTTokenIter::get_curr_id(const ObDatum *&id_datum) const
     ret = OB_ARRAY_OUT_OF_RANGE;
     LOG_WARN("array index out of bounds", K(ret), K_(cur_idx), K_(count));
   } else {
-    id_datum = &doc_id_[cur_idx_].get_datum();
+    id_datum = &doc_id_data_[cur_idx_].get_datum();
   }
   return ret;
 }

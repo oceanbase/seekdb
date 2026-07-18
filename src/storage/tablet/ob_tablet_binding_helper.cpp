@@ -402,10 +402,10 @@ int ObTabletBindingHelper::modify_tablet_binding_new_mds(
     if (replay_scn.is_valid()) {
       ObTabletBindingReplayExecutor replay_executor;
       if (CLICK_FAIL(replay_executor.init(ctx, data, replay_scn, for_old_mds))) {
-        LOG_WARN("failed to init replay executor", K(ret));
+        LOG_ERROR("failed to init replay executor", K(ret));
       } else if (CLICK_FAIL(replay_executor.execute(replay_scn, ls.get_ls_id(), tablet_id))) {
         if (OB_EAGAIN != ret) {
-          LOG_WARN("failed to replay tablet binding log", K(ret));
+          LOG_ERROR("failed to replay tablet binding log", K(ret));
         }
       }
     } else {
@@ -1020,10 +1020,10 @@ int ObTabletBindingMdsHelper::set_tablet_binding_mds_(
   } else {
     ObTabletBindingReplayExecutor replay_executor;
     if (CLICK_FAIL(replay_executor.init(ctx, data, replay_scn, false/*for_old_mds*/))) {
-      LOG_WARN("failed to init replay executor", K(ret));
+      LOG_ERROR("failed to init replay executor", K(ret));
     } else if (CLICK_FAIL(replay_executor.execute(replay_scn, ls.get_ls_id(), tablet_id))) {
       if (OB_EAGAIN != ret) {
-        LOG_WARN("failed to replay tablet binding log", K(ret));
+        LOG_ERROR("failed to replay tablet binding log", K(ret));
       }
     }
   }

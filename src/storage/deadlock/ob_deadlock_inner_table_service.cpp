@@ -105,7 +105,7 @@ int ObDeadLockInnerTableService::insert(const ObDetectorInnerReportInfo &inner_i
     }
 
     if (CLICK() && OB_FAIL(storage_.insert(entry))) {
-      DETECT_LOG(WARN, "failed to insert deadlock event", KR(ret));
+      DETECT_LOG(ERROR, "failed to insert deadlock event", KR(ret));
     } else {
       DETECT_LOG(INFO, "insert deadlock event success", KR(ret));
     }
@@ -175,7 +175,7 @@ int ObDeadLockInnerTableService::insert_all(const ObIArray<ObDetectorInnerReport
 
     if (OB_SUCC(ret) && !entries.empty()) {
       if (CLICK() && OB_FAIL(storage_.insert_all(entries))) {
-        DETECT_LOG(WARN, "failed to insert all deadlock events", KR(ret));
+        DETECT_LOG(ERROR, "failed to insert all deadlock events", KR(ret));
       } else {
         DETECT_LOG(INFO, "insert all deadlock events success", KR(ret), K(entries.count()));
       }

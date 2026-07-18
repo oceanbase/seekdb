@@ -1242,7 +1242,7 @@ int ObDDLScheduler::create_ddl_task(const ObCreateDDLTaskParam &param,
       LOG_WARN("unexpected error in check_table_compaction_checksum_error, choose to suppress the error", K(ret), K(param));
       ret = OB_SUCCESS;
     } else {
-      LOG_WARN("check_table_compaction_checksum_error fail", K(ret), K(param));
+      LOG_ERROR("check_table_compaction_checksum_error fail", K(ret), K(param));
     }
   }
   if (OB_SUCC(ret)) {
@@ -4008,9 +4008,9 @@ int ObDDLScheduler::on_column_checksum_calc_reply(
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("ddl task type not global index", K(ret), K(task));
         } else if (OB_FAIL(DDL_SIM(task.get_task_id(), ON_COLUMN_CHECKSUM_REPLY_FAILED))) {
-          LOG_WARN("sim column checksum reply failed", K(ret));
+          LOG_ERROR("sim column checksum reply failed", K(ret));
         } else if (OB_FAIL(reinterpret_cast<ObIndexBuildTask *>(&task)->update_column_checksum_calc_status(tablet_id, ret_code))) {
-          LOG_WARN("update column checksum calc status failed", K(ret));
+          LOG_ERROR("update column checksum calc status failed", K(ret));
         }
         return ret;
       task.add_event_info("on column checksum calc reply");

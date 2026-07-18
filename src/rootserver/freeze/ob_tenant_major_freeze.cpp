@@ -224,11 +224,11 @@ int ObTenantMajorFreeze::launch_major_freeze(const ObMajorFreezeReason freeze_re
     ret = OB_LEADER_NOT_EXIST;
     LOG_WARN("leader may switch", KR(ret));
   } else if (OB_FAIL(check_freeze_info())) {
-    LOG_WARN("fail to check freeze info", KR(ret));
+    LOG_ERROR("fail to check freeze info", KR(ret));
     if ((OB_MAJOR_FREEZE_NOT_FINISHED == ret) || (OB_FROZEN_INFO_ALREADY_EXIST == ret)) {
       LOG_INFO("should not launch major freeze again", KR(ret));
     } else {
-      LOG_WARN("fail to check freeze info", KR(ret));
+      LOG_ERROR("fail to check freeze info", KR(ret));
     }
   } else if (FALSE_IT(/*ignore ret*/(void)try_schedule_minor_before_major_())) {
   } else if (OB_FAIL(set_freeze_info(freeze_reason))) {
@@ -362,7 +362,7 @@ int ObTenantMajorFreeze::check_freeze_info()
         } else {
           ret = OB_MAJOR_FREEZE_NOT_FINISHED;
         }
-        LOG_WARN("cannot do major freeze now, need wait current major_freeze finish", KR(ret),
+        LOG_ERROR("cannot do major freeze now, need wait current major_freeze finish", KR(ret),
                 K(global_last_merged_scn), K(latest_frozen_scn));
       } else if (merge_scheduler_.is_paused()) {
         ret = OB_LEADER_NOT_EXIST;

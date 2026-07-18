@@ -829,7 +829,7 @@ int ObPrivMgr::del_column_priv(const ObColumnPrivIdKey &column_priv_key)
       ret = OB_SUCCESS;
       LOG_INFO("failed to remove column priv schema, item may not exist", K(ret));
     } else {
-      LOG_WARN("failed to remove column priv schema", K(ret));
+      LOG_ERROR("failed to remove column priv schema", K(ret));
     }
   } else if (OB_ISNULL(column_priv)) {
     // if item can be found, schema should not be null
@@ -853,7 +853,7 @@ int ObPrivMgr::del_column_priv(const ObColumnPrivIdKey &column_priv_key)
       ret = OB_SUCCESS;
       LOG_INFO("failed to remove column priv schema, item may not exist", K(ret));
     } else {
-      LOG_WARN("failed to remove column priv schema", K(ret));
+      LOG_ERROR("failed to remove column priv schema", K(ret));
     }
   } else if (OB_ISNULL(column_priv_from_name_vec)) {
     // if item can be found, schema should not be null

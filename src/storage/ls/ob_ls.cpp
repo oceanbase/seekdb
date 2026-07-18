@@ -1343,7 +1343,7 @@ int ObLS::build_tablet_with_batch_tables(
     while (OB_EAGAIN == ret && retry_count < MAX_RETRY_NUM) {
       if (OB_FAIL(inner_build_tablet_with_batch_tables_(tablet_id, param))) {
         if (OB_EAGAIN != ret) {
-          LOG_WARN("failed to build tablet with batch tables", KR(ret), K(tablet_id));
+          LOG_ERROR("failed to build tablet with batch tables", KR(ret), K(tablet_id));
         } else {
           ob_usleep(SLEEP_TS);
         }

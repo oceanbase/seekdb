@@ -2397,7 +2397,7 @@ int ObOBJLock::submit_log_(ObLockTableSplitLogCb &callback,
     LOG_WARN("callback is logging, but hasn't submitted log", K(ret), K(callback));
   } else if (ObTimeUtility::current_time() - callback.last_submit_log_ts_ >
     SUBMIT_LOG_ALARM_INTERVAL && REACH_TIME_INTERVAL(1000L * 1000L)) {
-    LOG_WARN("maybe submit log callback use too mush time", K(ret), K(callback));
+    LOG_ERROR("maybe submit log callback use too mush time", K(ret), K(callback));
   }
 
   return ret;

@@ -245,7 +245,7 @@ int ObTxRedoSubmitter::_submit_redo_pipeline_(const bool display_blocked_info)
   while (OB_SUCC(ret) && !stop) {
     if (submit_if_not_full_ && OB_FAIL(prepare_())) {
       if (OB_TX_NOLOGCB != ret) {
-        TRANS_LOG(WARN, "prepare for submit log fail", K(ret));
+        TRANS_LOG(ERROR, "prepare for submit log fail", K(ret));
       }
     } else {
       bool skip_submit = false;
