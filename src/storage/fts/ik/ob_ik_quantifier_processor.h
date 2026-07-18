@@ -43,6 +43,7 @@ public:
 
   void reset_state() override
   {
+    count_hits_.reset();
     reset();
   }
 

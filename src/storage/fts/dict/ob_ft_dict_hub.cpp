@@ -71,42 +71,45 @@ int ObFTDictHub::get_cached_builtin_dict(const ObFTDictDesc &desc, ObIFTDict *&d
   if (OB_UNLIKELY(idx < 1 || idx > 3)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid dict type for cached builtin dict", K(ret), K(idx));
-  } else if (cached_dicts_[idx] != nullptr) {
-    dict = cached_dicts_[idx];
   } else {
-    ObFTCacheRangeContainer *container = nullptr;
-    if (OB_ISNULL(container = OB_NEWx(ObFTCacheRangeContainer, &hub_alloc_, hub_alloc_))) {
-      ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("fail to alloc cached container", K(ret));
-    } else if (OB_FAIL(load_cache(desc, *container))) {
-      if (OB_ENTRY_NOT_EXIST == ret) {
-        if (OB_FAIL(build_cache(desc, *container))) {
-          LOG_WARN("Failed to build cache for caching", K(ret));
-        }
-      } else {
-        LOG_WARN("Failed to load cache for caching", K(ret));
-      }
-    }
-    if (OB_SUCC(ret)) {
-      ObFTRangeDict *range_dict = nullptr;
-      if (OB_ISNULL(range_dict = OB_NEWx(ObFTRangeDict, &hub_alloc_, hub_alloc_, container, desc))) {
+    ObSpinLockGuard guard(cached_dict_lock_);
+    if (cached_dicts_[idx] != nullptr) {
+      dict = cached_dicts_[idx];
+    } else {
+      ObFTCacheRangeContainer *container = nullptr;
+      if (OB_ISNULL(container = OB_NEWx(ObFTCacheRangeContainer, &hub_alloc_, hub_alloc_))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("fail to alloc cached range dict", K(ret));
-      } else if (OB_FAIL(range_dict->init())) {
-        LOG_WARN("fail to init cached range dict", K(ret));
-      } else {
-        cached_dicts_[idx] = range_dict;
-        cached_containers_[idx] = container;
-        dict = range_dict;
-        container = nullptr;
-        LOG_INFO("succeed to cache builtin dict", K(idx));
+        LOG_WARN("fail to alloc cached container", K(ret));
+      } else if (OB_FAIL(load_cache(desc, *container))) {
+        if (OB_ENTRY_NOT_EXIST == ret) {
+          if (OB_FAIL(build_cache(desc, *container))) {
+            LOG_WARN("Failed to build cache for caching", K(ret));
+          }
+        } else {
+          LOG_WARN("Failed to load cache for caching", K(ret));
+        }
       }
-      if (OB_FAIL(ret) && range_dict != nullptr) {
-        OB_DELETEx(ObFTRangeDict, &hub_alloc_, range_dict);
+      if (OB_SUCC(ret)) {
+        ObFTRangeDict *range_dict = nullptr;
+        if (OB_ISNULL(range_dict = OB_NEWx(ObFTRangeDict, &hub_alloc_, hub_alloc_, container, desc))) {
+          ret = OB_ALLOCATE_MEMORY_FAILED;
+          LOG_WARN("fail to alloc cached range dict", K(ret));
+        } else if (OB_FAIL(range_dict->init())) {
+          LOG_WARN("fail to init cached range dict", K(ret));
+        } else {
+          cached_dicts_[idx] = range_dict;
+          cached_containers_[idx] = container;
+          dict = range_dict;
+          container = nullptr;
+          LOG_INFO("succeed to cache builtin dict", K(idx));
+        }
+        if (OB_FAIL(ret) && range_dict != nullptr) {
+          OB_DELETEx(ObFTRangeDict, &hub_alloc_, range_dict);
+        }
       }
-    }
-    if (OB_FAIL(ret) && container != nullptr) {
-      OB_DELETEx(ObFTCacheRangeContainer, &hub_alloc_, container);
+      if (OB_FAIL(ret) && container != nullptr) {
+        OB_DELETEx(ObFTCacheRangeContainer, &hub_alloc_, container);
+      }
     }
   }
   return ret;

@@ -358,6 +358,23 @@ void ObFTParseHelper::reset()
   is_inited_ = false;
 }
 
+int ObFTParseHelper::bind_allocator(common::ObIAllocator &allocator)
+{
+  int ret = OB_SUCCESS;
+  if (OB_UNLIKELY(!is_inited_)) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("this fulltext parse helper hasn't been initialized", K(ret), K(is_inited_));
+  } else {
+    allocator_ = &allocator;
+  }
+  return ret;
+}
+
+void ObFTParseHelper::unbind_allocator()
+{
+  allocator_ = nullptr;
+}
+
 int ObFTParseHelper::segment(
     const ObObjMeta &meta,
     const char *fulltext,
@@ -380,8 +397,9 @@ int ObFTParseHelper::segment(
   } else if (OB_ISNULL(cs = common::ObCharset::get_charset(type))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected error, charset info is nullptr", K(ret), K(type));
+  } else if (!words.empty() && OB_FAIL(words.reuse())) {
+    LOG_WARN("fail to reuse fulltext word map", K(ret), K(words.size()));
   } else {
-    words.reuse();
     ObAddWord add_word(parser_property_, meta, add_word_flag_, *allocator_, words);
     if (OB_FAIL(segment(
                     parser_property_,

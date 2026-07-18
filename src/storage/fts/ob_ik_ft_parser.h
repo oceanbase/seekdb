@@ -18,6 +18,7 @@
 #define _OCEANBASE_STORAGE_FTS_OB_IK_FT_PARSER_H_
 
 #include "lib/allocator/ob_allocator.h"
+#include "lib/allocator/page_arena.h"
 #include "storage/fts/dict/ob_ft_cache_container.h"
 #include "storage/fts/dict/ob_ft_dict.h"
 #include "storage/fts/dict/ob_ft_dict_def.h"
@@ -36,8 +37,11 @@ class ObIKFTParser final : public plugin::ObITokenIterator
 public:
   ObIKFTParser(ObIAllocator &allocator, ObFTDictHub *hub)
       : allocator_(allocator),
+        scratch_allocator_(lib::ObMemAttr("IKParserTmp")),
         is_inited_(false),
-        owns_dicts_(false),
+        owns_main_dict_(false),
+        owns_quan_dict_(false),
+        owns_stop_dict_(false),
         coll_type_(ObCollationType::CS_TYPE_INVALID),
         ctx_(nullptr),
         hub_(hub),
@@ -99,6 +103,7 @@ private:
         segmenter->reset_state();
       }
     }
+    scratch_allocator_.reuse();
   }
 
   bool should_read_newest_table() const;
@@ -117,12 +122,19 @@ private:
   // Returns true when the given table name refers to a user custom dict table
   // (i.e. not the built-in oceanbase.__ft_* system table and not empty).
   static bool is_custom_dict_table(const common::ObString &table_name);
+  bool owns_any_dict() const
+  {
+    return owns_main_dict_ || owns_quan_dict_ || owns_stop_dict_;
+  }
 
 private:
   static constexpr int SEGMENT_LIMIT = 1000;
   ObIAllocator &allocator_;
+  common::ObArenaAllocator scratch_allocator_;
   bool is_inited_;
-  bool owns_dicts_;
+  bool owns_main_dict_;
+  bool owns_quan_dict_;
+  bool owns_stop_dict_;
 
   ObCollationType coll_type_;
   TokenizeContext *ctx_;

@@ -17,6 +17,7 @@
 #include "object/ob_object.h"
 #define USING_LOG_PREFIX STORAGE_FTS
 
+#include "lib/charset/ob_charset_string_helper.h"
 #include "share/rc/ob_tenant_base.h"
 #include "plugin/sys/ob_plugin_mgr.h"
 #include "storage/fts/ob_fts_stop_word.h"
@@ -31,6 +32,38 @@ namespace storage
 
 namespace
 {
+bool is_uncased_cjk_ideograph(const ob_wc_t unicode)
+{
+  return (unicode >= 0x3400 && unicode <= 0x4DBF)
+         || (unicode >= 0x4E00 && unicode <= 0x9FFF)
+         || (unicode >= 0xF900 && unicode <= 0xFAFF)
+         || (unicode >= 0x20000 && unicode <= 0x2FFFF)
+         || (unicode >= 0x30000 && unicode <= 0x3FFFF);
+}
+
+bool can_skip_casedown(const ObString &word, const bool is_utf8)
+{
+  bool can_skip = true;
+  const unsigned char *pos = reinterpret_cast<const unsigned char *>(word.ptr());
+  const unsigned char *end = pos + word.length();
+  while (can_skip && pos < end) {
+    if (*pos < 0x80) {
+      can_skip = !(*pos >= 'A' && *pos <= 'Z');
+      ++pos;
+    } else {
+      ob_wc_t unicode = 0;
+      const int char_len = is_utf8
+                               ? common::ob_charset_decode_unicode<common::CHARSET_UTF8MB4>(pos, end, unicode)
+                               : 0;
+      can_skip = char_len > 0 && is_uncased_cjk_ideograph(unicode);
+      if (can_skip) {
+        pos += char_len;
+      }
+    }
+  }
+  return can_skip;
+}
+
 class ObWordFrequencyUpdater
 {
 public:
@@ -157,8 +190,7 @@ ObAddWord::ObAddWord(
     min_token_size_(property.min_token_size_),
     max_token_size_(property.max_token_size_),
     flag_(flag)
-{
-}
+{}
 
 int ObAddWord::process_word(
     const char *word,
@@ -205,12 +237,9 @@ int ObAddWord::casedown_word(const ObFTWord &src, ObFTWord &dst)
     LOG_WARN("invalid src ft word", K(ret), K(src));
   } else if (flag_.casedown()) {
     const ObString &src_str = src.get_word().get_string();
-    bool is_lower_ascii = true;
-    for (int64_t i = 0; is_lower_ascii && i < src_str.length(); ++i) {
-      const unsigned char ch = static_cast<unsigned char>(src_str.ptr()[i]);
-      is_lower_ascii = ch < 0x80 && !(ch >= 'A' && ch <= 'Z');
-    }
-    if (is_lower_ascii) {
+    const bool is_utf8 = ObCharset::charset_type_by_coll(word_meta_.get_collation_type()) == CHARSET_UTF8MB4;
+    const bool skip_casedown = can_skip_casedown(src_str, is_utf8);
+    if (skip_casedown) {
       dst = src;
     } else {
       ObString dst_str;

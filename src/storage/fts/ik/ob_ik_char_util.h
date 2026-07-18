@@ -529,15 +529,15 @@ inline int ObFTCharUtil::classify_first_char(ObCollationType coll_type,
 
   switch (cs_type) {
   case CHARSET_UTF8MB4: {
-    ret = do_classify<CHARSET_UTF8MB4>(input, char_len, type);
+    ret = do_classify_single_decode<CHARSET_UTF8MB4>(input, char_len, type);
     break;
   }
   case CHARSET_UTF16: {
-    ret = do_classify<CHARSET_UTF16>(input, char_len, type);
+    ret = do_classify_single_decode<CHARSET_UTF16>(input, char_len, type);
     break;
   }
   case CHARSET_UTF16LE: {
-    ret = do_classify<CHARSET_UTF16LE>(input, char_len, type);
+    ret = do_classify_single_decode<CHARSET_UTF16LE>(input, char_len, type);
     break;
   }
   default:

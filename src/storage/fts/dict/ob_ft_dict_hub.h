@@ -19,6 +19,7 @@
 
 #include "lib/charset/ob_charset.h"
 #include "lib/lock/ob_bucket_lock.h"
+#include "lib/lock/ob_spin_lock.h"
 #include "lib/allocator/ob_allocator.h"
 #include "storage/fts/dict/ob_ft_dict_def.h"
 
@@ -121,6 +122,7 @@ private:
   bool is_inited_;
   hash::ObHashMap<ObFTDictInfoKey, ObFTDictInfo> dict_map_;
   ObBucketLock rw_dict_lock_;
+  common::ObSpinLock cached_dict_lock_;
   common::ObArenaAllocator hub_alloc_;
   ObIFTDict *cached_dicts_[4];
   ObFTCacheRangeContainer *cached_containers_[4];

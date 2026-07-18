@@ -50,6 +50,14 @@ public:
 
   int current_char(const char *&ch, uint8_t &char_len);
   int current_char_type(ObFTCharUtil::CharType &type);
+  int current_char_and_type(const char *&ch,
+                            uint8_t &char_len,
+                            ObFTCharUtil::CharType &type);
+
+  int classify_char_at(int64_t offset,
+                       int64_t end_offset,
+                       int64_t &char_len,
+                       ObFTCharUtil::CharType &type) const;
 
   int step_next();
 
@@ -62,6 +70,7 @@ public:
   bool is_last() const;
   bool iter_end() const;
   bool is_smart() const;
+  bool is_results_exhaust() const { return result_idx_ >= results_.count(); }
 
   int add_chain(ObIKTokenChain *chain);
   int add_token(const char *fulltext,
@@ -70,16 +79,29 @@ public:
                 int64_t char_cnt,
                 ObIKTokenType type);
 
-  ObFTSortList &token_list() { return token_list_; }
+  ObFTFastSortList &token_list() { return token_list_; }
 
-  ObList<ObIKToken, ObIAllocator> &result_list() { return result_list_; }
+  ObFastSegmentArray<ObIKToken> &result_list() { return results_; }
 
   int32_t handle_size() const { return handle_size_; }
 
+  void mark_batch_start() { batch_start_cursor_ = cursor_; }
+  int64_t batch_start_cursor() const { return batch_start_cursor_; }
+  int64_t batch_end_cursor() const { return cursor_; }
+
 private:
+  typedef size_t (*WellFormedLenFunc)(const ObCharsetInfo *,
+                                      const char *,
+                                      const char *,
+                                      size_t,
+                                      int *);
+
+  int init_charset();
   int prepare_next_char();
 
   ObCollationType coll_type_;
+  const ObCharsetInfo *charset_;
+  WellFormedLenFunc well_formed_len_;
   const char *fulltext_;
   int64_t fulltext_len_;
 
@@ -90,8 +112,10 @@ private:
   uint32_t handle_size_;
   bool is_smart_;
 
-  ObFTSortList token_list_;
-  ObList<ObIKToken, ObIAllocator> result_list_;
+  ObFTFastSortList token_list_;
+  ObFastSegmentArray<ObIKToken> results_;
+  int64_t result_idx_;
+  int64_t batch_start_cursor_;
 
 private:
   DISALLOW_COPY_AND_ASSIGN(TokenizeContext);

@@ -723,6 +723,9 @@ private:
 
   int inner_get_next_fts_index_row();
   int fetch_next_fts_index_rows();
+  int inner_get_next_fts_index_batch(const int64_t max_row_cnt);
+  int fetch_next_fts_index_batch();
+  int fill_fts_batch_other_exprs(const int64_t batch_size);
   int fill_generated_fts_cols(ObDatumRow *row);
   int init_fts_expr_cache();
   int get_output_fts_col_expr_by_type(const ObExprOperatorType &type, ObExpr *&expr);
