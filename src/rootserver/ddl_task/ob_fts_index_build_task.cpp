@@ -29,6 +29,7 @@
 #include "storage/fts/dict/ob_gen_dic_loader.h"
 #include "storage/fts/dict/ob_dic_loader.h"
 #include "storage/fts/dict/ob_dic_lock.h"
+#include "lib/cpu/ob_cpu_topology.h" // for common::get_cpu_count
 
 using namespace oceanbase::share;
 
@@ -36,6 +37,15 @@ namespace oceanbase
 {
 namespace rootserver
 {
+// Upper bound for the CPU-scaled default FTS index build parallelism used when
+// the DDL carries no explicit PARALLEL hint. The root task divides this by 3 for
+// the doc_rowkey / fts_index_aux / fts_doc_word aux builds (see
+// ObFtsIndexBuilderUtil::decide_parallelism) and every child inherits that value,
+// so a cap of 32 gives each aux build a per-statement degree of ~10 while keeping
+// the concurrent aux phase near the configured budget. The effective degree is
+// still bounded by the source table's block-range granule count, so this is a
+// ceiling rather than a forced degree. Tunable if CI shows a different sweet spot.
+static const int64_t OB_FTS_BUILD_DEFAULT_MAX_DOP = 32;
 /***************         ObFtsIndexBuildTask        *************/
 
 ObFtsIndexBuildTask::ObFtsIndexBuildTask()
@@ -91,6 +101,18 @@ int ObFtsIndexBuildTask::init(
 {
   int ret = OB_SUCCESS;
   ObDocIDType docid_type = ObDocIDType::INVALID;
+  // FTS index build (scan -> IK tokenize -> sort -> SSTable write) is otherwise
+  // serialized at DOP=1 when the DDL carries no explicit PARALLEL hint, which
+  // leaves the embarrassingly-parallel per-document tokenization single-threaded.
+  // When the caller did not request a degree (parallelism <= 1), scale a default
+  // build parallelism from the tenant/observer CPU budget (capped) so the aux
+  // table builds can fan out across block-range granules. An explicit
+  // parallel(N>1) hint is always honored as-is.
+  int64_t effective_parallelism = parallelism;
+  if (effective_parallelism <= 1) {
+    const int64_t cpu_cnt = common::get_cpu_count();
+    effective_parallelism = MAX(1L, MIN(cpu_cnt, OB_FTS_BUILD_DEFAULT_MAX_DOP));
+  }
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
     LOG_WARN("init twice", K(ret));
@@ -130,9 +152,9 @@ int ObFtsIndexBuildTask::init(
                                          create_index_arg,
                                          create_index_arg_))) {
     LOG_WARN("fail to copy create index arg", K(ret), K(create_index_arg));
-  } else if (OB_FAIL(ObFtsIndexBuilderUtil::decide_parallelism(create_index_arg.index_type_, parallelism, parallelism_))) {
+  } else if (OB_FAIL(ObFtsIndexBuilderUtil::decide_parallelism(create_index_arg.index_type_, effective_parallelism, parallelism_))) {
     // TODO (youchuan.yc): after change aux build task sequentially, remove decide_parallelism and use original value instead
-    LOG_WARN("fail to decide parallelism", K(ret), K(create_index_arg.index_type_), K(parallelism));
+    LOG_WARN("fail to decide parallelism", K(ret), K(create_index_arg.index_type_), K(parallelism), K(effective_parallelism));
   } else {
     LOG_INFO("create_index_arg.index_type_x", K(create_index_arg.index_type_), K(create_index_arg.index_key_));
 

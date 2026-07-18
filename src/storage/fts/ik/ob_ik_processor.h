@@ -41,6 +41,9 @@ public:
   int init();
   int reset_resource();
 
+  // Update text pointer and reset cursor/state for reuse without reallocation.
+  int set_text(const char *fulltext, int64_t fulltext_len, ObCollationType coll_type, bool is_smart);
+
   int get_next_token(const char *&word, int64_t &word_len, int64_t &offset, int64_t &char_cnt);
 
   int compound(ObIKToken &result);
@@ -73,9 +76,27 @@ public:
 
   int32_t handle_size() const { return handle_size_; }
 
+  // Char classification cache: during the main scan each character is classified
+  // exactly once (prepare_next_char). The arbitrator's output_result would
+  // otherwise re-decode the whole text a second time. This lets it reuse the
+  // already-computed (char_len, type) via an O(1) byte-offset lookup.
+  // Returns true when the offset was classified during the scan (char_len != 0).
+  bool get_cached_char(int64_t offset, uint8_t &char_len, ObFTCharUtil::CharType &type) const
+  {
+    bool cached = false;
+    if (offset >= 0 && offset < char_cache_len_ && 0 != char_len_cache_[offset]) {
+      char_len = char_len_cache_[offset];
+      type = static_cast<ObFTCharUtil::CharType>(char_type_cache_[offset]);
+      cached = true;
+    }
+    return cached;
+  }
+
 private:
   int prepare_next_char();
+  int ensure_char_cache(int64_t len);
 
+  ObIAllocator &allocator_;
   ObCollationType coll_type_;
   const char *fulltext_;
   int64_t fulltext_len_;
@@ -86,6 +107,12 @@ private:
 
   uint32_t handle_size_;
   bool is_smart_;
+
+  // byte-offset-indexed classification cache (see get_cached_char)
+  uint8_t *char_len_cache_;
+  uint8_t *char_type_cache_;
+  int64_t char_cache_cap_;
+  int64_t char_cache_len_;
 
   ObFTSortList token_list_;
   ObList<ObIKToken, ObIAllocator> result_list_;
@@ -108,6 +135,8 @@ public:
                          const uint8_t char_len,
                          const ObFTCharUtil::CharType type)
       = 0;
+
+  virtual void reset_state() {}
 };
 
 } // namespace storage

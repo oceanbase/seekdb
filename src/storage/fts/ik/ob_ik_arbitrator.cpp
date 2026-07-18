@@ -123,17 +123,20 @@ int ObIKArbitrator::output_result(TokenizeContext &ctx)
   ObIKTokenChain *chain = nullptr;
   for (int64_t current = 0; OB_SUCC(ret) && current < ctx.fulltext_len();) {
     ObFTCharUtil::CharType type;
+    uint8_t cached_len = 0;
+    // Reuse the classification computed during the main scan; only re-decode
+    // for offsets not covered by the current batch (multi-batch documents).
+    if (ctx.get_cached_char(current, cached_len, type)) {
+      char_len = cached_len;
+    } else if (OB_FAIL(ObFTCharUtil::classify_first_valid_char(ctx.collation(),
+                                                               ctx.fulltext() + current,
+                                                               ctx.fulltext_len() - current,
+                                                               char_len,
+                                                               type))) {
+      LOG_WARN("Failed to classify first valid char", K(ret));
+    }
     // maybe not so good to keep single, check it later
-    if (OB_FAIL(ObCharset::first_valid_char(ctx.collation(),
-                                            ctx.fulltext() + current,
-                                            ctx.fulltext_len() - current,
-                                            char_len))) {
-      LOG_WARN("Failed to get next valid char", K(ret));
-    } else if (OB_FAIL(ObFTCharUtil::classify_first_char(ctx.collation(),
-                                                         ctx.fulltext() + current,
-                                                         char_len,
-                                                         type))) {
-      LOG_WARN("Failed to classify first char", K(ret));
+    if (OB_FAIL(ret)) {
     } else if (ObFTCharUtil::CharType::USELESS == type) {
       current += char_len; // skip useless char
     } else if (OB_FAIL(chains_.get_refactored(current, chain)) && OB_HASH_NOT_EXIST != ret) {
@@ -180,7 +183,13 @@ int ObIKArbitrator::output_result(TokenizeContext &ctx)
         } else {
           // output single word between two token
           while (OB_SUCC(ret) && current < token.offset_) {
-            if (OB_FAIL(ObCharset::first_valid_char(ctx.collation(),
+            uint8_t inner_len = 0;
+            ObFTCharUtil::CharType inner_type;
+            const bool inner_cached = ctx.get_cached_char(current, inner_len, inner_type);
+            if (inner_cached) {
+              char_len = inner_len;
+            }
+            if (!inner_cached && OB_FAIL(ObCharset::first_valid_char(ctx.collation(),
                                                     ctx.fulltext() + current,
                                                     ctx.fulltext_len() - current,
                                                     char_len))) {
@@ -327,11 +336,23 @@ int ObIKArbitrator::remove_conflict(const ObIKToken &token, ObIKTokenChain *opti
 int ObIKArbitrator::prepare(TokenizeContext &ctx)
 {
   int ret = OB_SUCCESS;
-
-  int cal_bucket_num = MAX(ctx.fulltext_len() / 100, 10);
-  cal_bucket_num = MIN(cal_bucket_num, 100);
-  if (OB_FAIL(chains_.create(cal_bucket_num, ObMemAttr("IK ARBITRATE")))) {
-    LOG_WARN("create chain map failed", K(ret));
+  // The arbitrator instance is reused across batches/documents. Clear the
+  // previous batch's chains and reclaim its arena instead of destroying and
+  // recreating the hash map and allocator every call.
+  if (chains_.created()) {
+    if (OB_FAIL(chains_.reuse())) {
+      LOG_WARN("reuse chain map failed", K(ret));
+    }
+  } else {
+    int cal_bucket_num = MAX(ctx.fulltext_len() / 100, 10);
+    cal_bucket_num = MIN(cal_bucket_num, 100);
+    if (OB_FAIL(chains_.create(cal_bucket_num, ObMemAttr("IK ARBITRATE")))) {
+      LOG_WARN("create chain map failed", K(ret));
+    }
+  }
+  if (OB_SUCC(ret)) {
+    // safe now that chains_ no longer references the arena-allocated chains
+    alloc_.reuse();
   }
   return ret;
 }

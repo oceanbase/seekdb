@@ -417,18 +417,34 @@ int ObFTRangeDict::find_first_char_range(const ObString &single_word, ObIFTDict 
 {
   int ret = OB_SUCCESS;
   bool found = false;
-  for (int i = 0; OB_SUCC(ret) && !found && i < range_dicts_.size(); ++i) {
+  // range_dicts_ is built from the sorted dictionary (ascending, non-overlapping
+  // first-char ranges), so the containing range can be located with a binary
+  // search instead of scanning every range with two strcmp each. This is called
+  // once per new-word start (every char in the CJK hot path).
+  const int64_t range_cnt = range_dicts_.size();
+  int64_t lo = 0;
+  int64_t hi = range_cnt - 1;
+  int64_t cand = -1;
+  while (lo <= hi) {
+    const int64_t mid = (lo + hi) / 2;
+    // start_ <= word ? then mid is a candidate, look right for a tighter one
     if (ObCharset::strcmp(ObCollationType::CS_TYPE_UTF8MB4_BIN,
-                          range_dicts_[i].start_.get_word(),
+                          range_dicts_[mid].start_.get_word(),
                           single_word)
-            <= 0
-        && ObCharset::strcmp(ObCollationType::CS_TYPE_UTF8MB4_BIN,
-                             range_dicts_[i].end_.get_word(),
-                             single_word)
-               >= 0) {
-      dict = range_dicts_[i].dict_;
-      found = true;
+        <= 0) {
+      cand = mid;
+      lo = mid + 1;
+    } else {
+      hi = mid - 1;
     }
+  }
+  if (cand >= 0
+      && ObCharset::strcmp(ObCollationType::CS_TYPE_UTF8MB4_BIN,
+                           range_dicts_[cand].end_.get_word(),
+                           single_word)
+             >= 0) {
+    dict = range_dicts_[cand].dict_;
+    found = true;
   }
   if (!found) {
     // not found, dis match

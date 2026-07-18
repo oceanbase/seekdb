@@ -21,6 +21,7 @@
 #include "storage/fts/dict/ob_ft_cache_container.h"
 #include "storage/fts/dict/ob_ft_dict.h"
 #include "storage/fts/dict/ob_ft_dict_def.h"
+#include "storage/fts/ik/ob_ik_arbitrator.h"
 #include "storage/fts/ik/ob_ik_processor.h"
 #include "plugin/interface/ob_plugin_ftparser_intf.h"
 
@@ -37,6 +38,7 @@ public:
   ObIKFTParser(ObIAllocator &allocator, ObFTDictHub *hub)
       : allocator_(allocator),
         is_inited_(false),
+        owns_dicts_(false),
         coll_type_(ObCollationType::CS_TYPE_INVALID),
         ctx_(nullptr),
         hub_(hub),
@@ -54,12 +56,16 @@ public:
 
   int init(const plugin::ObFTParserParam &param);
 
+  int reuse(const plugin::ObFTParserParam &param);
+
   int get_next_token(const char *&word,
                      int64_t &word_len,
                      int64_t &char_cnt,
                      int64_t &word_freq) override;
 
   VIRTUAL_TO_STRING_KV(K(is_inited_));
+
+  friend class ObIKFTParserDesc;
 
 private:
   int produce();
@@ -82,6 +88,20 @@ private:
 
   void reset();
 
+  void reset_for_reuse()
+  {
+    // Light reset: just clear ctx state and processor state for caching.
+    // Full reset (with deallocation) is done in reset().
+    if (!OB_ISNULL(ctx_)) {
+      ctx_->reset_resource();
+    }
+    for (ObIIKProcessor *segmenter : segmenters_) {
+      if (!OB_ISNULL(segmenter)) {
+        segmenter->reset_state();
+      }
+    }
+  }
+
   bool should_read_newest_table() const;
 
   int build_dict_from_cache(const ObFTDictDesc &desc,
@@ -103,11 +123,15 @@ private:
   static constexpr int SEGMENT_LIMIT = 1000;
   ObIAllocator &allocator_;
   bool is_inited_;
+  bool owns_dicts_;
 
   ObCollationType coll_type_;
   TokenizeContext *ctx_;
   ObFTDictHub *hub_;
   ObList<ObIIKProcessor *, ObIAllocator> segmenters_;
+  // Reused across batches and documents to avoid per-batch hash map + arena
+  // (re)construction in process_next_batch.
+  ObIKArbitrator arbitrator_;
 
   // For now there's no change of dict in one query, so we can pin dict this level.
   ObFTCacheRangeContainer cache_main_;
@@ -125,7 +149,7 @@ class ObIKFTParserDesc final : public plugin::ObIFTParserDesc
 {
 public:
   ObIKFTParserDesc() {}
-  virtual ~ObIKFTParserDesc() = default;
+  virtual ~ObIKFTParserDesc() {}
   virtual int init(plugin::ObPluginParam *param) override;
   virtual int deinit(plugin::ObPluginParam *param) override;
   virtual int segment(plugin::ObFTParserParam *param, plugin::ObITokenIterator *&iter) const override;

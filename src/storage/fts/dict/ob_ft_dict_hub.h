@@ -19,6 +19,7 @@
 
 #include "lib/charset/ob_charset.h"
 #include "lib/lock/ob_bucket_lock.h"
+#include "lib/allocator/ob_allocator.h"
 #include "storage/fts/dict/ob_ft_dict_def.h"
 
 namespace oceanbase
@@ -93,10 +94,11 @@ private:
 };
 
 class ObFTCacheRangeContainer;
+class ObIFTDict;
 class ObFTDictHub
 {
 public:
-  ObFTDictHub() : is_inited_(false), dict_map_(), rw_dict_lock_() {}
+  ObFTDictHub() : is_inited_(false), dict_map_(), rw_dict_lock_(), hub_alloc_(lib::ObMemAttr("FTHubCache")), cached_dicts_{}, cached_containers_{} {}
   ~ObFTDictHub() {}
 
   int init();
@@ -107,6 +109,8 @@ public:
 
   int load_cache(const ObFTDictDesc &desc, ObFTCacheRangeContainer &container);
 
+  int get_cached_builtin_dict(const ObFTDictDesc &desc, ObIFTDict *&dict);
+
 private:
   int get_dict_info(const ObFTDictInfoKey &key, ObFTDictInfo &info);
 
@@ -115,9 +119,11 @@ private:
 
 private:
   bool is_inited_;
-  // holds info of dict
   hash::ObHashMap<ObFTDictInfoKey, ObFTDictInfo> dict_map_;
   ObBucketLock rw_dict_lock_;
+  common::ObArenaAllocator hub_alloc_;
+  ObIFTDict *cached_dicts_[4];
+  ObFTCacheRangeContainer *cached_containers_[4];
 };
 
 } //  namespace storage
