@@ -14650,7 +14650,9 @@ int ObLogPlan::prepare_text_retrieval_scan(const ObIArray<ObRawExpr *> &scan_mat
   } else {
     ObTextRetrievalInfo &tr_info = table_scan->get_text_retrieval_info();
     tr_info.match_expr_ = match_against;
-    tr_info.pushdown_match_filter_ = match_pred;
+    // MATCH used only as a boolean predicate is already enforced by the
+    // retrieval hit set.  Do not evaluate the score predicate again.
+    tr_info.pushdown_match_filter_ = tr_info.need_calc_relevance_ ? match_pred : nullptr;
     // in new version, doc_id_idx_tid_ is invalid.
     table_scan->set_doc_id_index_table_id(tr_info.doc_id_idx_tid_);
     if (table_scan->is_vec_adaptive_scan() || table_scan->is_vec_idx_scan_post_filter()) {
@@ -14696,6 +14698,9 @@ int ObLogPlan::prepare_text_retrieval_lookup(const ObIArray<ObRawExpr *> &lookup
                                                    curr_match_expr,
                                                    tr_info))) {
       LOG_WARN("failed to prepare text retrieval info", K(ret));
+    } else if (FALSE_IT(tr_info.need_calc_relevance_ = true)) {
+      // Functional lookup projects zero for non-matches and a score for
+      // matches; retain relevance until it has a score-free projection.
     } else if (OB_FAIL(table_scan->get_lookup_tr_infos().push_back(tr_info))) {
       LOG_WARN("failed to append lookup text retrieval infos", K(ret));
     }
@@ -14741,6 +14746,8 @@ int ObLogPlan::prepare_text_retrieval_match_score(const ObIArray<ObRawExpr *> &m
     } else if (prev_match_expr != curr_match_expr && FALSE_IT(column_boost_idx = 0)) {
     } else if (FALSE_IT(prev_match_expr = curr_match_expr)) {
     } else if (FALSE_IT(tr_info.column_boost_idx_ = column_boost_idx)) {
+    } else if (FALSE_IT(tr_info.need_calc_relevance_ = true)) {
+      // MATCH_SCORE combines child scores, so every child must retain BM25.
     } else if (OB_FAIL(table_scan->get_match_tr_infos().push_back(tr_info))) {
       LOG_WARN("failed to append lookup text retrieval infos", K(ret));
     }
@@ -14895,7 +14902,6 @@ int ObLogPlan::prepare_text_retrieval_info(const uint64_t ref_table_id,
     }
   }
   if (OB_SUCC(ret)) {
-    /*
     if (OB_FAIL(ObTransformUtils::check_need_calc_match_score(get_optimizer_context().get_exec_ctx(),
                                                               get_stmt(),
                                                               match_against,
@@ -14906,7 +14912,8 @@ int ObLogPlan::prepare_text_retrieval_info(const uint64_t ref_table_id,
                OB_FAIL(append_array_no_dup(get_optimizer_context().get_query_ctx()->all_expr_constraints_, constraints))) {
       LOG_WARN("failed to append array no dup", K(ret));
     }
-    */
+  }
+  if (OB_SUCC(ret)) {
     tr_info.match_expr_ = match_against;
     tr_info.inv_idx_tid_ = inv_idx_tid;
     tr_info.fwd_idx_tid_ = fwd_idx_tid;

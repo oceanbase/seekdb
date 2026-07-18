@@ -122,7 +122,7 @@ protected:
   int gen_inv_idx_scan_range(const ObString &query_token, const ObDocIdExt &doc_id, ObNewRange &scan_range);
 
   int gen_fwd_idx_scan_range(const ObDocIdExt &doc_id, ObNewRange &scan_range);
-  inline bool need_calc_relevance() { return true; } // TODO: reduce tsc ops if no need to calc relevance
+  bool need_calc_relevance() const;
   int init_calc_exprs();
   void clear_row_wise_evaluated_flag();
   void clear_batch_wise_evaluated_flag(const int64_t &count);

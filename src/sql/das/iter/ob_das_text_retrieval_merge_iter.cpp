@@ -977,7 +977,10 @@ int ObDASTRTaatIter::check_and_prepare()
     LOG_DEBUG("get row with limit finished",
         K(ret), K_(limit_param), K_(output_row_cnt), K_(input_row_cnt));
   } else if (!doc_cnt_calculated_) {
-    if (OB_FAIL(do_total_doc_cnt())) {
+    if (!ir_ctdef_->need_calc_relevance()) {
+      doc_cnt_calculated_ = true;
+      total_doc_cnt_ = OB_HASHMAP_DEFAULT_SIZE * OB_MAX_HASHMAP_COUNT;
+    } else if (OB_FAIL(do_total_doc_cnt())) {
       if (OB_UNLIKELY(OB_ITER_END != ret)) {
         LOG_WARN("failed to do total document count", K(ret), KPC_(ir_ctdef));
       } else {
@@ -993,7 +996,7 @@ int ObDASTRTaatIter::check_and_prepare()
 int ObDASTRTaatIter::inner_get_next_row()
 {
   int ret = OB_SUCCESS;
-  bool need_fill_doc_cnt = !doc_cnt_calculated_;
+  bool need_fill_doc_cnt = !doc_cnt_calculated_ && ir_ctdef_->need_calc_relevance();
   if (OB_FAIL(check_and_prepare())) {
     if (OB_ITER_END != ret) {
       LOG_WARN("failed to prepare to get next row", K(ret));
@@ -1023,7 +1026,7 @@ int ObDASTRTaatIter::inner_get_next_row()
 int ObDASTRTaatIter::inner_get_next_rows(int64_t &count, int64_t capacity)
 {
   int ret = OB_SUCCESS;
-  bool need_fill_doc_cnt = !doc_cnt_calculated_;
+  bool need_fill_doc_cnt = !doc_cnt_calculated_ && ir_ctdef_->need_calc_relevance();
   if (OB_FAIL(check_and_prepare())) {
     if (OB_ITER_END != ret) {
       LOG_WARN("failed to prepare to get next row", K(ret));
@@ -1650,7 +1653,7 @@ int ObDASTRTaatLookupIter::fill_output_exprs(int64_t &count, int64_t safe_capaci
 int ObDASTRTaatLookupIter::inner_get_next_row()
 {
   int ret = OB_SUCCESS;
-  bool need_fill_doc_cnt = !doc_cnt_calculated_;
+  bool need_fill_doc_cnt = !doc_cnt_calculated_ && ir_ctdef_->need_calc_relevance();
   if (OB_UNLIKELY(1 != rangekey_size_)) { // if rangekey_size_ > 1, UNSUPPORTED
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected rangekey size", K(ret), K_(rangekey_size));
@@ -1697,7 +1700,7 @@ int ObDASTRTaatLookupIter::inner_get_next_rows(int64_t &count, int64_t capacity)
 {
   int ret = OB_SUCCESS;
   count = 0;
-  bool need_fill_doc_cnt = !doc_cnt_calculated_;
+  bool need_fill_doc_cnt = !doc_cnt_calculated_ && ir_ctdef_->need_calc_relevance();
   if (OB_UNLIKELY(capacity == 0)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected capacity size", K(ret), K(capacity));
@@ -2145,6 +2148,8 @@ int ObDASTRDaatIter::fill_loser_tree_item(
     ObExpr *relevance_expr = ir_ctdef_->relevance_expr_;
     const ObDatum &relevance_datum = relevance_expr->locate_expr_datum(*ir_rtdef_->eval_ctx_);
     item.relevance_ = relevance_datum.get_double();
+  } else {
+    item.relevance_ = 1.0;
   }
   return ret;
 }

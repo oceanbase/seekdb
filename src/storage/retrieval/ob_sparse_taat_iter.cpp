@@ -463,7 +463,9 @@ int ObSRTaaTIterImpl::load_next_hash_map()
             LOG_WARN("failed to set relevance in hash map", K(ret));
           }
         } else {
-          if (OB_FAIL(map->set_refactored(id, 1.0, 0 /* overwrite */))) {
+          // A document may be emitted by multiple query tokens.  Score-free
+          // retrieval only tracks membership, so duplicate ids are idempotent.
+          if (OB_FAIL(map->set_refactored(id, 1.0, 1 /* overwrite */))) {
             LOG_WARN("failed to set relevance in hash map", K(ret));
           }
         }

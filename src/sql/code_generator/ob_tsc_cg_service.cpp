@@ -2336,7 +2336,7 @@ int ObTscCgService::generate_text_ir_ctdef(const ObLogTableScan &op,
       LOG_WARN("allocate ir scan ctdef children failed", K(ret));
     } else {
       ir_scan_ctdef->children_cnt_ = 1;
-      ir_scan_ctdef->children_[0] = &scan_ctdef;
+      ir_scan_ctdef->children_[0] = inv_idx_scan_ctdef;
     }
   }
 
@@ -2355,7 +2355,8 @@ int ObTscCgService::generate_text_ir_ctdef(const ObLogTableScan &op,
       } else {
         partition_row_cnt = est_cost_info->table_meta_info_->table_row_count_ / est_cost_info->table_meta_info_->part_count_;
       }
-      ir_scan_ctdef->estimated_total_doc_cnt_ = partition_row_cnt;
+      ir_scan_ctdef->estimated_total_doc_cnt_
+          = tr_info.need_calc_relevance_ ? partition_row_cnt : 0;
       if (tr_info.match_expr_->get_columns_boosts().count() > 0) {
         if (tr_info.column_boost_idx_ < 0 || tr_info.column_boost_idx_ >= tr_info.match_expr_->get_columns_boosts().count()) {
           ret = OB_ERR_UNEXPECTED;
@@ -2865,11 +2866,13 @@ int ObTscCgService::extract_text_ir_access_columns(
   } else {
     switch (scan_ctdef.ir_scan_type_) {
     case ObTSCIRScanType::OB_IR_INV_IDX_SCAN:
-      if (OB_FAIL(add_var_to_array_no_dup(access_exprs, static_cast<ObRawExpr*>(tr_info.token_cnt_column_)))) {
+      if (tr_info.need_calc_relevance_
+          && OB_FAIL(add_var_to_array_no_dup(access_exprs, static_cast<ObRawExpr*>(tr_info.token_cnt_column_)))) {
         LOG_WARN("failed to push token cnt column to access exprs", K(ret));
       } else if (OB_FAIL(add_var_to_array_no_dup(access_exprs, static_cast<ObRawExpr*>(tr_info.docid_or_rowkey_column_)))) {
         LOG_WARN("failed to push document id column to access exprs", K(ret));
-      } else if (OB_FAIL(add_var_to_array_no_dup(access_exprs, static_cast<ObRawExpr*>(tr_info.doc_length_column_)))) {
+      } else if (tr_info.need_calc_relevance_
+          && OB_FAIL(add_var_to_array_no_dup(access_exprs, static_cast<ObRawExpr*>(tr_info.doc_length_column_)))) {
         LOG_WARN("failed to add document length column to access exprs", K(ret));
       }
       break;
@@ -3319,13 +3322,13 @@ int ObTscCgService::extract_text_ir_das_output_column_ids(
 {
   int ret = OB_SUCCESS;
   if (ObTSCIRScanType::OB_IR_INV_IDX_SCAN == scan_ctdef.ir_scan_type_) {
-    if (OB_FAIL(output_cids.push_back(
+    if (tr_info.need_calc_relevance_ && OB_FAIL(output_cids.push_back(
         static_cast<ObColumnRefRawExpr *>(tr_info.token_cnt_column_)->get_column_id()))) {
       LOG_WARN("failed to push output token cnt col id", K(ret));
     } else if (OB_FAIL(output_cids.push_back(
         static_cast<ObColumnRefRawExpr *>(tr_info.docid_or_rowkey_column_)->get_column_id()))) {
       LOG_WARN("failed to push output doc id col id", K(ret));
-    } else if (OB_FAIL(output_cids.push_back(
+    } else if (tr_info.need_calc_relevance_ && OB_FAIL(output_cids.push_back(
         static_cast<ObColumnRefRawExpr *>(tr_info.doc_length_column_)->get_column_id()))) {
       LOG_WARN("failed to push output doc length col id", K(ret));
     }
@@ -3712,15 +3715,18 @@ int ObTscCgService::generate_text_ir_spec_exprs(const ObTextRetrievalInfo &tr_in
         doc_length_col_idx = i;
       }
     }
-    if (OB_UNLIKELY(-1 == doc_id_col_idx || -1 == doc_length_col_idx)) {
+    if (OB_UNLIKELY(-1 == doc_id_col_idx
+        || (tr_info.need_calc_relevance_ && -1 == doc_length_col_idx))) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected doc id not found in inverted index scan access columns",
           K(ret), K(text_ir_scan_ctdef), K(doc_id_col_idx), K(doc_length_col_idx));
     } else {
       text_ir_scan_ctdef.inv_scan_domain_id_col_ =
           text_ir_scan_ctdef.get_inv_idx_scan_ctdef()->pd_expr_spec_.access_exprs_.at(doc_id_col_idx);
-      text_ir_scan_ctdef.inv_scan_doc_length_col_ =
-          text_ir_scan_ctdef.get_inv_idx_scan_ctdef()->pd_expr_spec_.access_exprs_.at(doc_length_col_idx);
+      if (tr_info.need_calc_relevance_) {
+        text_ir_scan_ctdef.inv_scan_doc_length_col_ =
+            text_ir_scan_ctdef.get_inv_idx_scan_ctdef()->pd_expr_spec_.access_exprs_.at(doc_length_col_idx);
+      }
       if (OB_FAIL(result_output.push_back(text_ir_scan_ctdef.inv_scan_domain_id_col_))) {
         LOG_WARN("failed to append output exprs", K(ret));
       }
